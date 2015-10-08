@@ -1,316 +1,7 @@
+!> This is the main routine for MOM  
 module MOM
-!***********************************************************************
-!*                   GNU General Public License                        *
-!* This file is a part of MOM.                                         *
-!*                                                                     *
-!* MOM is free software; you can redistribute it and/or modify it and  *
-!* are expected to follow the terms of the GNU General Public License  *
-!* as published by the Free Software Foundation; either version 2 of   *
-!* the License, or (at your option) any later version.                 *
-!*                                                                     *
-!* MOM is distributed in the hope that it will be useful, but WITHOUT  *
-!* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY  *
-!* or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public    *
-!* License for more details.                                           *
-!*                                                                     *
-!* For the full text of the GNU General Public License,                *
-!* write to: Free Software Foundation, Inc.,                           *
-!*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
-!* or see:   http://www.gnu.org/licenses/gpl.html                      *
-!***********************************************************************
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*            The Modular Ocean Model, Version 6.0                     *
-!*                               MOM                                   *
-!*                                                                     *
-!*  By Alistair Adcroft, Stephen Griffies, and Robert Hallberg         *
-!*                                                                     *
-!*  With software contributions from:                                  *
-!*    Whit Anderson, Brian Arbic, Will Cooke, Anand Gnanadesikan,      *
-!*    Matthew Harrison, Mehmet Ilicak, Laura Jackson, Jasmine John,    *
-!*    John Krasting, Bonnie Samuels, Harper Simmons, Laurent White     *
-!*    Zhi Liang, and Niki Zadeh                                        *       
-!*                                                                     *
-!*  MOM ice-shelf code by Daniel Goldberg, Robert Hallberg             *
-!*    Chris Little, and Olga Sergienko                                 *
-!*                                                                     *
-!*  This file was first released in 2012.                              *
-!*                                                                     *
-!*    This program (MOM) simulates the ocean by numerically solving    *
-!*  the hydrostatic primitive equations in generalized Lagrangian      *
-!*  vertical coordinates, typically tracking stretched pressure (p*)   *
-!*  surfaces or following isopycnals in the ocean's interior, and      *
-!*  general orthogonal horizontal coordinates. Unlike earlier versions *
-!*  of MOM, in MOM6 these equations are horizontally discretized on an *
-!*  Arakawa C-grid.  (It remains to be seen whether a B-grid dynamic   *
-!*  core will be revived in MOM6 at a later date; for now applications *
-!*  requiring a B-grid discretization should use MOM5.1.)  MOM6 offers *
-!*  a range of options for the physical parameterizations, from those  *
-!*  most appropriate to highly idealized models for geophysical fluid  *
-!*  dynamics studies to a rich suite of processes appropriate for      *
-!*  realistic ocean simulations.  The thermodynamic options typically  *
-!*  use conservative temperature and preformed salinity as conservative*
-!*  state variables and a full nonlinear equation of state, but there  *
-!*  are also idealized adiabatic configurations of the model that use  *
-!*  fixed density layers.  Version 6.0 of MOM continues in the long    *
-!*  tradition of a commitment to climate-quality ocean simulations     *
-!*  embodied in previous versions of MOM, even as it draws extensively *
-!*  on the lessons learned in the development of the Generalized Ocean *
-!*  Layered Dynamics (GOLD) ocean model, which was also primarily      *
-!*  developed at NOAA/GFDL.  MOM has also benefited tremendously from  *
-!*  the FMS infrastructure, which it utilizes and shares with other    *
-!*  component models developed at NOAA/GFDL.                           *
-!*                                                                     *
-!*    When run is isopycnal-coordinate mode, the uppermost few layers  *
-!*  are often used to describe a bulk mixed layer, including the       *
-!*  effects of penetrating shortwave radiation.  Either a split-       *
-!*  explicit time stepping scheme or a non-split scheme may be used    *
-!*  for the dynamics, while the time stepping may be split (and use    *
-!*  different numbers of steps to cover the same interval) for the     *
-!*  forcing, the thermodynamics, and for the dynamics.  Most of the    *
-!*  numerics are second order accurate in space.  MOM can run with an  *
-!*  absurdly thin minimum layer thickness. A variety of non-isopycnal  *
-!*  vertical coordinate options are under development, but all exploit *
-!*  the advantages of a Lagrangian vertical coordinate, as discussed   *
-!*  in detail by Adcroft and Hallberg (Ocean Modelling, 2006).         *
-!*                                                                     *
-!*    Details of the numerics and physical parameterizations are       *
-!*  provided in the appropriate source files.  All of the available    *
-!*  options are selected at run-time by parsing the input files,       *
-!*  usually MOM_input and MOM_override, and the options choices are    *
-!*  then documented for each run in MOM_param_docs.                    *
-!*                                                                     *
-!*    MOM6 integrates the equations forward in time in three distinct  *
-!*  phases.  In one phase, the dynamic equations for the velocities    *
-!*  and layer thicknesses are advanced, capturing the propagation of   *
-!*  external and internal inertia-gravity waves, Rossby waves, and     *
-!*  other strictly adiabatic processes, including lateral stresses,    *
-!*  vertical viscosity and momentum forcing, and interface height      *
-!*  diffusion (commonly called Gent-McWilliams diffusion in depth-     *
-!*  coordinate models).  In the second phase, all tracers are advected *
-!*  and diffused along the layers.  The third phase applies diabatic   *
-!*  processes, vertical mixing of water properties, and perhaps        *
-!*  vertical remapping to cause the layers to track the desired        *
-!*  vertical coordinate.                                               *
-!*                                                                     *
-!*    The present file (MOM.F90) orchestrates the main time stepping   *
-!*  loops. One time integration option for the dynamics uses a split   *
-!*  explicit time stepping scheme to rapidly step the barotropic       *
-!*  pressure and velocity fields. The barotropic velocities are        *
-!*  averaged over the baroclinic time step before they are used to     *
-!*  advect thickness and determine the baroclinic accelerations.  As   *
-!*  described in Hallberg and Adcroft (2009), a barotropic correction  *
-!*  is applied to the time-mean layer velocities to ensure that the    *
-!*  sum of the layer transports agrees with the time-mean barotropic   *
-!*  transport, thereby ensuring that the estimates of the free surface *
-!*  from the sum of the layer thicknesses agrees with the final free   *
-!*  surface height as calculated by the barotropic solver.  The        *
-!*  barotropic and baroclinic velocities are kept consistent by        *
-!*  recalculating the barotropic velocities from the baroclinic        *
-!*  transports each time step. This scheme is described in Hallberg,   *
-!*  1997, J. Comp. Phys. 135, 54-65 and in Hallberg and Adcroft, 2009, *
-!*  Ocean Modelling, 29, 15-26.                                        *
-!*                                                                     *
-!*    The other time integration options use non-split time stepping   *
-!*  schemes based on the 3-step third order Runge-Kutta scheme         *
-!*  described in Matsuno, 1966, J. Met. Soc. Japan, 44, 85-88, or on   *
-!*  a two-step quasi-2nd order Runge-Kutta scheme.  These are much     *
-!*  slower than the split time-stepping scheme, but they are useful    *
-!*  for providing a more robust solution for debugging cases where the *
-!*  more complicated split time-stepping scheme may be giving suspect  *
-!*  solutions.                                                         *
-!*                                                                     *
-!*    There are a range of closure options available.  Horizontal      *
-!*  velocities are subject to a combination of horizontal biharmonic   *
-!*  and Laplacian friction (based on a stress tensor formalism) and a  *
-!*  vertical Fickian viscosity (perhaps using the kinematic viscosity  *
-!*  of water).  The horizontal viscosities may be constant, spatially  *
-!*  varying or may be dynamically calculated using Smagorinsky's       *
-!*  approach.  A diapycnal diffusion of density and thermodynamic      *
-!*  quantities is also allowed, but not required, as is horizontal     *
-!*  diffusion of interface heights (akin to the Gent-McWilliams        *
-!*  closure of geopotential coordinate models).  The diapycnal mixing  *
-!*  may use a fixed diffusivity or it may use the shear Richardson     *
-!*  number dependent closure, like that described in Jackson et al.    *
-!*  (JPO, 2008).  When there is diapycnal diffusion, it applies to     *
-!*  momentum as well. As this is in addition to the vertical viscosity,*
-!*  the vertical Prandtl always exceeds 1.  A refined bulk-mixed layer *
-!*  is often used to describe the planetary boundary layer in realistic*
-!*  ocean simulations.                                                 *
-!*                                                                     *
-!*    MOM has a number of noteworthy debugging capabilities.           *
-!*  Excessively large velocities are truncated and MOM will stop       *
-!*  itself after a number of such instances to keep the model from     *
-!*  crashing altogether.  This is useful in diagnosing failures,       *
-!*  or (by accepting some truncations) it may be useful for getting    *
-!*  the model past the adjustment from an ill-balanced initial         *
-!*  condition.  In addition, all of the accelerations in the columns   *
-!*  with excessively large velocities may be directed to a text file.  *
-!*  Parallelization errors may be diagnosed using the DEBUG option,    *
-!*  which causes extensive checksums to be written out along with      *
-!*  comments indicating where in the algorithm the sums originate and  *
-!*  what variable is being summed.  The point where these checksums    *
-!*  differ between runs is usually a good indication of where in the   *
-!*  code the problem lies.  All of the test cases provided with MOM    *
-!*  are routinely tested to ensure that they give bitwise identical    *
-!*  results regardless of the domain decomposition, or whether they    *
-!*  use static or dynamic memory allocation.                           *
-!*                                                                     *
-!*    About 115 other files of source code and 4 header files comprise *
-!*  the MOM code, although there are several hundred more files that   *
-!*  make up the FMS infrastructure upon which MOM is built.  Each of   *
-!*  the MOM files contains comments documenting what it does, and      *
-!*  most of the file names are fairly self-evident. In addition, all   *
-!*  subroutines and data types are referenced via a module use, only   *
-!*  statement, and the module names are consistent with the file names,*
-!*  so it is not too hard to find the source file for a subroutine.    *
-!*                                                                     *
-!*    The typical MOM directory tree is as follows:                    *
-!*        ../MOM                                                       *
-!*        |-- config_src                                               *
-!*        |   |-- coupled_driver                                       *
-!*        |   |-- dynamic                                              *
-!*        |   `-- solo_driver                                          *
-!*        |-- examples                                                 *
-!*        |   |-- CM2G                                                 *
-!*        |   |-- ...                                                  *
-!*        |   `-- torus_advection_test                                 *
-!*        `-- src                                                      *
-!*            |-- core                                                 *
-!*            |-- diagnostics                                          *
-!*            |-- equation_of_state                                    *
-!*            |-- framework                                            *
-!*            |-- ice_shelf                                            *
-!*            |-- initialization                                       *
-!*            |-- parameterizations                                    *
-!*            |   |-- lateral                                          *
-!*            |   `-- vertical                                         *
-!*            |-- tracer                                               *
-!*            `-- user                                                 *
-!*  Rather than describing each file here, each directory's contents   *
-!*  will be described to give a broad overview of the MOM code         *
-!*  structure.                                                         *
-!*                                                                     *
-!*    The directories under config_src contain files that are used for *
-!*  configuring the code, for instance for coupled or ocean-only runs. *
-!*  Only one or two of these directories are used in compiling any,    *
-!*  particular run.                                                    *
-!*                                                                     *
-!*  config_src/coupled_driver:                                         *
-!*    The files here are used to couple MOM as a component in a larger *
-!*    run driven by the FMS coupler.  This includes code that converts *
-!*    various forcing fields into the code structures and flux and unit*
-!*    conventions used by MOM, and converts the MOM surface fields     *
-!*    back to the forms used by other FMS components.                  *
-!*  config_src/dynamic:                                                *
-!*    The only file here is the version of MOM_memory.h that is used   *
-!*    for dynamic memory configurations of MOM.                        *
-!*  config_src/solo_driver:                                            *
-!*    The files here are include the _main driver that is used when    *
-!*    MOM is configured as an ocean-only model, as well as the files   *
-!*    that specify the surface forcing in this configuration.          *
-!*                                                                     *
-!*    The directories under examples provide a large number of working *
-!*  configurations of MOM, along with reference solutions for several  *
-!*  different compilers on GFDL's latest large computer.  The versions *
-!*  of MOM_memory.h in these directories need not be used if dynamic   *
-!*  memory allocation is desired, and the answers should be unchanged. *
-!*                                                                     *
-!*    The directories under src contain most of the MOM files.  These  *
-!*  files are used in every configuration using MOM.                   *
-!*                                                                     *
-!*  src/core:                                                          *
-!*    The files here constitute the MOM dynamic core.  This directory  *
-!*    also includes files with the types that describe the model's     *
-!*    lateral grid and have defined types that are shared across       *
-!*    various MOM modules to allow for more succinct and flexible      *
-!*    subroutine argument lists.                                       *
-!*  src/diagnostics:                                                   *
-!*    The files here calculate various diagnostics that are anciliary  *
-!*    to the model itself.  While most of these diagnostics do not     *
-!*    directly affect the model's solution, there are some, like the   *
-!*    calculation of the deformation radius, that are used in some     *
-!*    of the process parameterizations.                                *
-!*  src/equation_of_state:                                             *
-!*    These files describe the physical properties of sea-water,       *
-!*    including both the equation of state and when it freezes.        *
-!*  src/framework:                                                     *
-!*    These files provide infrastructure utilities for MOM.  Many are  *
-!*    simply wrappers for capabilities provided by FMS, although others*
-!*    provide capabilities (like the file_parser) that are unique to   *
-!*    MOM. When MOM is adapted to use a modeling infrastructure        *
-!*    distinct from FMS, most of the required changes are in this      *
-!*    directory.                                                       *
-!*  src/initialization:                                                *
-!*    These are the files that are used to initialize the MOM grid     *
-!*    or provide the initial physical state for MOM.  These files are  *
-!*    not intended to be modified, but provide a means for calling     *
-!*    user-specific initialization code like the examples in src/user. *
-!*  src/parameterizations/lateral:                                     *
-!*    These files implement a number of quasi-lateral (along-layer)    *
-!*    process parameterizations, including lateral viscosities,        *
-!*    parameterizations of eddy effects, and the calculation of tidal  *
-!*    forcing.                                                         *
-!*  src/parameterizations/vertical:                                    *
-!*    These files implement a number of vertical mixing or diabatic    *
-!*    processes, including the effects of vertical viscosity and       *
-!*    code to parameterize the planetary boundary layer.  There is a   *
-!*    separate driver that orchestrates this portion of the algorithm, *
-!*    and there is a diversity of parameterizations to be found here.  *
-!*  src/tracer:                                                        *
-!*    These files handle the lateral transport and diffusion of        *
-!*    tracers, or are the code to implement various passive tracer     *
-!*    packages.  Additional tracer packages are readily accomodated.   *
-!*  src/user:                                                          *
-!*    These are either stub routines that a user could use to change   *
-!*    the model's initial conditions or forcing, or are examples that  *
-!*    implement specific test cases.  These files can easily  be hand  *
-!*    edited to create new analytically specified configurations.      *
-!*                                                                     *
-!*                                                                     *
-!*    Most simulations can be set up by modifying only the files       *
-!*  MOM_input, and possibly one or two of the files in src/user.       *
-!*  In addition, the diag_table (MOM_diag_table) will commonly be      *
-!*  modified to tailor the output to the needs of the question at      *
-!*  hand.  The FMS utility mkmf works with a file called path_names    *
-!*  to build an appropriate makefile, and path_names should be edited  *
-!*  to reflect the actual location of the desired source code.         *
-!*                                                                     *
-!*                                                                     *
-!*    There are 3 publicly visible subroutines in this file (MOM.F90). *
-!*  step_MOM steps MOM over a specified interval of time.              *
-!*  MOM_initialize calls initialize and does other initialization      *
-!*    that does not warrant user modification.                         *
-!*  calculate_surface_state determines the surface (bulk mixed layer   *
-!*  if traditional isoycnal vertical coordinate) properties of the     *
-!*  current model state and packages pointers to these fields into an  *
-!*  exported structure.                                                *
-!*                                                                     *
-!*    The remaining subroutines in this file (src/core/MOM.F90) are:   *
-!*  find_total_transport determines the barotropic mass transport.     *
-!*  register_diags registers many diagnostic fields for the dynamic    *
-!*    solver, or of the main model variables.                          *
-!*  MOM_timing_init initializes various CPU time clocks.               *
-!*  write_static_fields writes out various time-invariant fields.      *
-!*  set_restart_fields is used to specify those fields that are        *
-!*    written to and read from the restart file.                       *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, CoriolisBu                            *
-!*    j+1  > o > o >   At ^:  v, PFv, CAv, vh, diffv, tauy, vbt, vhtr  *
-!*    j    x ^ x ^ x   At >:  u, PFu, CAu, uh, diffu, taux, ubt, uhtr  *
-!*    j    > o > o >   At o:  h, bathyT, eta, T, S, tr                 *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1                                                  *
-!*           i  i+1                                                    *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
+! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_variables, only : vertvisc_type, ocean_OBC_type
 
@@ -425,115 +116,114 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
+!> Control structure for this module 
 type, public :: MOM_control_struct
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_) :: &
-    h, &      ! layer thickness (m or kg/m2 (H))
-    T, &      ! potential temperature (degrees C)
-    S         ! salinity (ppt)
+    h, &      !< layer thickness (m or kg/m2 (H))
+    T, &      !< potential temperature (degrees C)
+    S         !< salinity (ppt)
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
-    u,  &     ! zonal velocity component (m/s)
-    uh, &     ! uh = u * h * dy at u grid points (m3/s or kg/s)
-    uhtr      ! accumulated zonal thickness fluxes to advect tracers (m3 or kg)
+    u,  &     !< zonal velocity component (m/s)
+    uh, &     !< uh = u * h * dy at u grid points (m3/s or kg/s)
+    uhtr      !< accumulated zonal thickness fluxes to advect tracers (m3 or kg)
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
-    v,  &     ! meridional velocity (m/s)
-    vh, &     ! vh = v * h * dx at v grid points (m3/s or kg/s)
-    vhtr      ! accumulated meridional thickness fluxes to advect tracers (m3 or kg)
+    v,  &     !< meridional velocity (m/s)
+    vh, &     !< vh = v * h * dx at v grid points (m3/s or kg/s)
+    vhtr      !< accumulated meridional thickness fluxes to advect tracers (m3 or kg)
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    ave_ssh   ! time-averaged (ave over baroclinic time steps) sea surface height (meter)
+    ave_ssh   !< time-averaged (ave over baroclinic time steps) sea surface height (meter)
 
   real, pointer, dimension(:,:,:) :: &
-    u_prev => NULL(), &  ! previous value of u stored for diagnostics 
-    v_prev => NULL()     ! previous value of v stored for diagnostics 
+    u_prev => NULL(), &  !< previous value of u stored for diagnostics 
+    v_prev => NULL()     !< previous value of v stored for diagnostics 
 
-  type(ocean_grid_type) :: G       ! structure containing metrics and grid info
-  type(thermo_var_ptrs) :: tv      ! structure containing pointers to available 
-                                   ! thermodynamic fields
-  type(diag_ctrl)       :: diag    ! structure to regulate diagnostic output timing
-  type(vertvisc_type)   :: visc    ! structure containing vertical viscosities,
-                                   ! bottom drag viscosities, and related fields
-  type(MEKE_type), pointer :: MEKE => NULL()  !  structure containing fields
-                                   ! related to the Mesoscale Eddy Kinetic Energy
-  type(accel_diag_ptrs) :: ADp     ! structure containing pointers to accelerations, 
-                                   ! for derived diagnostics (e.g., energy budgets)
-  type(cont_diag_ptrs)  :: CDp     ! structure containing pointers continuity equation 
-                                   ! terms, for derived diagnostics (e.g., energy budgets)
+  type(ocean_grid_type) :: G       !< structure containing metrics and grid info
+  type(thermo_var_ptrs) :: tv      !< structure containing pointers to available 
+                                   !! thermodynamic fields
+  type(diag_ctrl)       :: diag    !< structure to regulate diagnostic output timing
+  type(vertvisc_type)   :: visc    !< structure containing vertical viscosities,
+                                   !! bottom drag viscosities, and related fields
+  type(MEKE_type), pointer :: MEKE => NULL()  !<  structure containing fields
+                                   !! related to the Mesoscale Eddy Kinetic Energy
+  type(accel_diag_ptrs) :: ADp     !< structure containing pointers to accelerations, 
+                                   !! for derived diagnostics (e.g., energy budgets)
+  type(cont_diag_ptrs)  :: CDp     !< structure containing pointers continuity equation 
+                                   !! terms, for derived diagnostics (e.g., energy budgets)
 
-  logical :: split                   ! If true, use the split time stepping scheme.
-  logical :: legacy_split            ! If true, use the legacy split time stepping
-                                     ! code with all the options that were available in
-                                     ! the predecessor isopycnal model "GOLD".
-  logical :: use_RK2                 ! If true, use RK2 instead of RK3 in unsplit mode 
-                                     ! (i.e., no split between barotropic and baroclinic).
-  logical :: adiabatic               ! If true, then no diapycnal mass fluxes, with no calls 
-                                     ! to routines to calculate or apply diapycnal fluxes.
-  logical :: use_temperature         ! If true, temp and saln used as state variables.
-  logical :: use_frazil              ! If true, liquid seawater freezes if temp below freezing, 
-                                     ! with accumulated heat deficit returned to surface ocean.
-  logical :: bound_salinity          ! If true, salt is added to keep salinity above
-                                     ! a minimum value, and the deficit is reported.
-  logical :: bulkmixedlayer          ! If true, a refined bulk mixed layer scheme is used 
-                                     ! with nkml sublayers and nkbl buffer layer.
-  logical :: diabatic_first          ! If true, apply diabatic and thermodynamic
-                                     ! processes before time stepping the dynamics.
-  logical :: thickness_diffuse       ! If true, diffuse interface height w/ a diffusivity KHTH.
-  logical :: thickness_diffuse_first ! If true, diffuse thickness before dynamics.
-  logical :: mixedlayer_restrat      ! If true, use submesoscale mixed layer restratifying scheme. 
-  logical :: useMEKE                 ! If true, call the MEKE parameterization.
-  logical :: debug                   ! If true, write verbose checksums for debugging purposes.
-  logical :: debug_truncations       ! If true, turn on diagnostics useful for debugging truncations.
-  logical :: use_ALE_algorithm       ! If true, use the ALE algorithm rather than layered
-                                     ! isopycnal/stacked shallow water mode. This logical is
-                                     ! set by calling the function useRegridding() from the
-                                     ! MOM_regridding module.
-  logical :: do_dynamics             ! If false, does not call step_MOM_dyn_*. This is an
-                                     ! undocumented run-time flag that is fragile.
+  logical :: split                   !< If true, use the split time stepping scheme.
+  logical :: legacy_split            !< If true, use the legacy split time stepping
+                                     !! code with all the options that were available in
+                                     !! the predecessor isopycnal model "GOLD".
+  logical :: use_RK2                 !< If true, use RK2 instead of RK3 in unsplit mode 
+                                     !! (i.e., no split between barotropic and baroclinic).
+  logical :: adiabatic               !< If true, then no diapycnal mass fluxes, with no calls 
+                                     !! to routines to calculate or apply diapycnal fluxes.
+  logical :: use_temperature         !< If true, temp and saln used as state variables.
+  logical :: use_frazil              !< If true, liquid seawater freezes if temp below freezing, 
+                                     !! with accumulated heat deficit returned to surface ocean.
+  logical :: bound_salinity          !< If true, salt is added to keep salinity above
+                                     !! a minimum value, and the deficit is reported.
+  logical :: bulkmixedlayer          !< If true, a refined bulk mixed layer scheme is used 
+                                     !! with nkml sublayers and nkbl buffer layer.
+  logical :: diabatic_first          !< If true, apply diabatic and thermodynamic
+                                     !! processes before time stepping the dynamics.
+  logical :: thickness_diffuse       !< If true, diffuse interface height w/ a diffusivity KHTH.
+  logical :: thickness_diffuse_first !< If true, diffuse thickness before dynamics.
+  logical :: mixedlayer_restrat      !< If true, use submesoscale mixed layer restratifying scheme. 
+  logical :: useMEKE                 !< If true, call the MEKE parameterization.
+  logical :: debug                   !< If true, write verbose checksums for debugging purposes.
+  logical :: debug_truncations       !< If true, turn on diagnostics useful for debugging truncations.
+  logical :: use_ALE_algorithm       !< If true, use the ALE algorithm rather than layered
+                                     !! isopycnal/stacked shallow water mode. This logical is
+                                     !! set by calling the function useRegridding() from the
+                                     !! MOM_regridding module.
+  logical :: do_dynamics             !< If false, does not call step_MOM_dyn_*. This is an
+                                     !! undocumented run-time flag that is fragile.
 
-  real    :: dt                      ! (baroclinic) dynamics time step (seconds)
-  real    :: dt_therm                ! thermodynamics time step (seconds)
-  logical :: thermo_spans_coupling   ! If true, thermodynamic and tracer time
-                                     ! steps can span multiple coupled time steps.
-  real    :: dt_trans                ! The elapsed time since updating the tracers and
-                                     ! applying diabatic processes (sec); may 
-                                     ! span multiple timesteps.
-  type(time_type) :: Z_diag_interval ! amount of time between calculating Z-space diagnostics
-  type(time_type) :: Z_diag_time     ! next time to compute Z-space diagnostics
-  type(time_type), pointer :: Time   ! pointer to ocean clock
-  real :: rel_time = 0.0             ! relative time (sec) since start of current execution
-  real :: dtbt_reset_period          ! The time interval in seconds between dynamic
-                                     ! recalculation of the barotropic time step.  If
-                                     ! this is negative, it is never calculated, and
-                                     ! if it is 0, it is calculated every step.
+  real    :: dt                      !< (baroclinic) dynamics time step (seconds)
+  real    :: dt_therm                !< thermodynamics time step (seconds)
+  logical :: thermo_spans_coupling   !< If true, thermodynamic and tracer time
+                                     !! steps can span multiple coupled time steps.
+  real    :: dt_trans                !< The elapsed time since updating the tracers and
+                                     !! applying diabatic processes (sec); may 
+                                     !! span multiple timesteps.
+  type(time_type) :: Z_diag_interval !< amount of time between calculating Z-space diagnostics
+  type(time_type) :: Z_diag_time     !< next time to compute Z-space diagnostics
+  type(time_type), pointer :: Time   !< pointer to ocean clock
+  real :: rel_time = 0.0             !< relative time (sec) since start of current execution
+  real :: dtbt_reset_period          !< The time interval in seconds between dynamic
+                                     !! recalculation of the barotropic time step.  If
+                                     !! this is negative, it is never calculated, and
+                                     !! if it is 0, it is calculated every step.
 
-  logical :: interp_p_surf           ! If true, linearly interpolate surface pressure 
-                                     ! over the coupling time step, using specified value
-                                     ! at the end of the coupling step. False by default.
-  logical :: p_surf_prev_set         ! If true, p_surf_prev has been properly set from
-                                     ! a previous time-step or the ocean restart file.
-                                     ! This is only valid when interp_p_surf is true.
+  logical :: interp_p_surf           !< If true, linearly interpolate surface pressure 
+                                     !! over the coupling time step, using specified value
+                                     !! at the end of the coupling step. False by default.
+  logical :: p_surf_prev_set         !< If true, p_surf_prev has been properly set from
+                                     !! a previous time-step or the ocean restart file.
+                                     !! This is only valid when interp_p_surf is true.
 
-  real :: Hmix                       ! diagnostic mixed layer thickness (meter) when
-                                     ! bulk mixed layer is not used.
-  real :: missing=-1.0e34            ! missing data value for masked fields
+  real :: Hmix                       !< diagnostic mixed layer thickness (meter) when
+                                     !! bulk mixed layer is not used.
+  real :: missing=-1.0e34            !< missing data value for masked fields
 
-  integer :: ntrunc                  ! number u,v truncations since last call to write_energy
-  logical :: check_bad_surface_vals  ! If true, scan surface state for ridiculous values.
-  real    :: bad_val_ssh_max         ! Maximum SSH before triggering bad value message
-  real    :: bad_val_sst_max         ! Maximum SST before triggering bad value message
-  real    :: bad_val_sst_min         ! Minimum SST before triggering bad value message
-  real    :: bad_val_sss_max         ! Maximum SSS before triggering bad value message
+  integer :: ntrunc                  !< number u,v truncations since last call to write_energy
+  logical :: check_bad_surface_vals  !< If true, scan surface state for ridiculous values.
+  real    :: bad_val_ssh_max         !< Maximum SSH before triggering bad value message
+  real    :: bad_val_sst_max         !< Maximum SST before triggering bad value message
+  real    :: bad_val_sst_min         !< Minimum SST before triggering bad value message
+  real    :: bad_val_sss_max         !< Maximum SSS before triggering bad value message
 
   real, pointer, dimension(:,:) :: &
-    p_surf_prev  => NULL(), & ! surface pressure (Pa) at end  previous call to step_MOM
-    p_surf_begin => NULL(), & ! surface pressure (Pa) at start of step_MOM_dyn_...
-    p_surf_end   => NULL()    ! surface pressure (Pa) at end   of step_MOM_dyn_... 
+    p_surf_prev  => NULL(), & !< surface pressure (Pa) at end  previous call to step_MOM
+    p_surf_begin => NULL(), & !< surface pressure (Pa) at start of step_MOM_dyn_...
+    p_surf_end   => NULL()    !< surface pressure (Pa) at end   of step_MOM_dyn_... 
 
-  ! arrays that store advective and diffusive tracer fluxes
-  real, pointer, dimension(:,:,:) :: &
+  real, pointer, dimension(:,:,:) :: &  !< arrays with advective/diffusive tracer fluxes
     T_adx => NULL(), T_ady => NULL(), T_diffx => NULL(), T_diffy => NULL(), &
     S_adx => NULL(), S_ady => NULL(), S_diffx => NULL(), S_diffy => NULL()
 
-  ! arrays that store vertically integrated advective and diffusive tracer fluxes
-  real, pointer, dimension(:,:) :: &
+  real, pointer, dimension(:,:) :: & !< arrays with vertically integrated advective/diffusive fluxes
     T_adx_2d => NULL(), T_ady_2d => NULL(), T_diffx_2d => NULL(), T_diffy_2d => NULL(), &
     S_adx_2d => NULL(), S_ady_2d => NULL(), S_diffx_2d => NULL(), S_diffy_2d => NULL(), &
     SST_sq => NULL()
@@ -601,7 +291,7 @@ type, public :: MOM_control_struct
   integer :: id_S_preale = -1
   integer :: id_e_preale = -1
 
-  ! The remainder provides pointers to child modules' control structures.
+  ! The remainder provides pointers to child module control structures.
   type(MOM_dyn_unsplit_CS),      pointer :: dyn_unsplit_CSp      => NULL()
   type(MOM_dyn_unsplit_RK2_CS),  pointer :: dyn_unsplit_RK2_CSp  => NULL()
   type(MOM_dyn_split_RK2_CS),    pointer :: dyn_split_RK2_CSp    => NULL()
@@ -662,26 +352,19 @@ integer :: id_clock_other
 contains
 
 
-! This subroutine orchestrates the time stepping of MOM.  The adiabatic
-! dynamics are stepped by one of the calls to one of the step_MOM_dyn_...
-! routines.  The action of lateral processes on tracers occur in the calls to
-! advect_tracer and tracer_hordiff.  The vertical mixing and possibly remapping
-! occur inside of diabatic.
+!> This subroutine orchestrates the time stepping of MOM.  The adiabatic
+!! dynamics are stepped by one of the calls to one of the step_MOM_dyn_...
+!! routines.  The action of lateral processes on tracers occur in the calls to
+!! advect_tracer and tracer_hordiff.  The vertical mixing and possibly remapping
+!! occur inside of diabatic.
 subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
-  type(forcing),    intent(inout)    :: fluxes
-  type(surface),    intent(inout)    :: state
-  type(time_type),  intent(in)       :: Time_start
-  real,             intent(in)       :: time_interval
-  type(MOM_control_struct), pointer  :: CS
+  type(forcing),    intent(inout)    :: fluxes          !< pointers to forcing fields
+  type(surface),    intent(inout)    :: state           !< surface ocean state
+  type(time_type),  intent(in)       :: Time_start      !< starting time of a segment, as a time type
+  real,             intent(in)       :: time_interval   !< time interval 
+  type(MOM_control_struct), pointer  :: CS              !< control structure from initialize_MOM
 
-! Arguments: 
-!  (inout)   fluxes        - structure w/ pointers to forcing fields
-!  (inout)   state         - structure with fields describing surface ocean state 
-!  (in)      Time_start    - starting time of a run segment, as a time type
-!  (in)      time_interval - time interval over which to integrate (sec)
-!  (in)      CS            - control structure returned by a previous call to
-!                            initialize_MOM
-
+  ! local 
   type(ocean_grid_type), pointer :: G ! pointer to a structure containing
                                       ! metrics and related information
   integer, save :: nt = 1 ! running number of iterations
@@ -1113,6 +796,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       endif
       if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_split (step_MOM)")
 
+      
     elseif (CS%do_dynamics) then ! --------------------------------------------------- not SPLIT
       !   This section uses an unsplit stepping scheme for the dynamic
       ! equations; basically the stacked shallow water equations with viscosity. 
@@ -1569,23 +1253,18 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
 end subroutine step_MOM
 
-! ============================================================================
 
+
+!> This subroutine initializes MOM. 
 subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
-  type(time_type), target,   intent(inout) :: Time
-  type(param_file_type),     intent(out)   :: param_file
-  type(directories),         intent(out)   :: dirs
-  type(MOM_control_struct),  pointer       :: CS
-  type(time_type), optional, intent(in)    :: Time_in
+  type(time_type), target,   intent(inout) :: Time        !< model time, set in this routine
+  type(param_file_type),     intent(out)   :: param_file  !< structure indicating paramater file to parse
+  type(directories),         intent(out)   :: dirs        !< structure with directory paths
+  type(MOM_control_struct),  pointer       :: CS          !< pointer set in this routine to MOM control structure
+  type(time_type), optional, intent(in)    :: Time_in     !< time passed to MOM_initialize_state when
+                                                          !! model is not being started from a restart file
 
-! Arguments: 
-!  (inout)   Time       - model time, set in this routine.
-!  (out)     param_file - structure indicating the ile to parse for parameters
-!  (out)     dirs       - structure containing several relevant directory paths
-!  (out)     CS         - pointer set in this routine to the MOM control structure
-!  (in)      Time_in    - optional time passed to MOM_initialize_state when
-!                         model is not being started from a restart file.
-
+  ! local 
   type(ocean_grid_type), pointer :: G ! pointer to a structure with metrics and related
   type(diag_ctrl),       pointer :: diag
 
@@ -1599,6 +1278,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   real    :: dtbt
   real    :: Z_diag_int      ! minimum interval between calculations of
                              ! depth-space diagnostic quantities (sec)
+  
   real, allocatable, dimension(:,:,:) :: e   ! interface heights (meter)
   real, allocatable, dimension(:,:)   :: eta ! free surface height (m) or bottom press (Pa)
   type(MOM_restart_CS),  pointer      :: restart_CSp_tmp => NULL()
@@ -2216,13 +1896,14 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
 end subroutine initialize_MOM
 
-! This s/r calls unit tests for other modules. These are NOT normally invoked
-! and so we provide the module use statments here rather than in the module
-! header. This is an exception to our usual coding standards.
-! Note that if a unit test returns true, a FATAL error is triggered.
+
+!> This s/r calls unit tests for other modules. These are NOT normally invoked
+!! and so we provide the module use statments here rather than in the module
+!! header. This is an exception to our usual coding standards.
+!! Note that if a unit test returns true, a FATAL error is triggered.
 subroutine unitTests
-  use MOM_string_functions, only : stringFunctionsUnitTests
-  use MOM_remapping, only : remappingUnitTests
+  use MOM_string_functions,  only : stringFunctionsUnitTests
+  use MOM_remapping,         only : remappingUnitTests
   use MOM_neutral_diffusion, only : neutralDiffusionUnitTests
 
   if (is_root_pe()) then ! The following need only be tested on 1 PE
@@ -2236,17 +1917,13 @@ subroutine unitTests
 
 end subroutine unitTests
 
-subroutine register_diags(Time, G, CS, ADp)
-  type(time_type),           intent(in)    :: Time
-  type(ocean_grid_type),     intent(inout) :: G
-  type(MOM_control_struct),  pointer       :: CS
-  type(accel_diag_ptrs),     intent(inout) :: ADp
 
-! Arguments: 
-!  (in)      Time - current model time
-!  (in)      G    - ocean grid structure
-!  (in)      CS   - control structure set up by initialize_MOM
-!  (inout)   ADp  - structure pointing to accelerations in momentum equation
+!> Register the diagnostics 
+subroutine register_diags(Time, G, CS, ADp)
+  type(time_type),           intent(in)    :: Time    !< current model time
+  type(ocean_grid_type),     intent(inout) :: G       !< ocean grid structure
+  type(MOM_control_struct),  pointer       :: CS      !< control structure set up by initialize_MOM
+  type(accel_diag_ptrs),     intent(inout) :: ADp     !< structure pointing to accelerations in momentum equation
 
   character(len=48) :: thickness_units, flux_units, T_flux_units, S_flux_units
   type(diag_ctrl), pointer :: diag
@@ -2432,10 +2109,9 @@ subroutine register_diags(Time, G, CS, ADp)
 
 end subroutine register_diags
 
+!> This subroutine sets up clock IDs for timing various subroutines.
 subroutine MOM_timing_init(CS)
-  type(MOM_control_struct), intent(in)    :: CS
-! Arguments: CS - The control structure set up by initialize_MOM.
-  ! This subroutine sets up clock IDs for timing various subroutines.
+  type(MOM_control_struct), intent(in)    :: CS  !< control structure set up by initialize_MOM.
 
  id_clock_ocean = cpu_clock_id('Ocean', grain=CLOCK_COMPONENT)
  id_clock_dynamics = cpu_clock_id('Ocean dynamics', grain=CLOCK_SUBCOMPONENT)
@@ -2459,15 +2135,11 @@ subroutine MOM_timing_init(CS)
 
 end subroutine MOM_timing_init
 
-! ============================================================================
-
+!> Offers the static fields in the ocean grid type
+!! for output via the diag_manager.
 subroutine write_static_fields(G, diag)
-  type(ocean_grid_type),   intent(in) :: G
-  type(diag_ctrl), target, intent(in) :: diag
-!   This subroutine offers the static fields in the ocean grid type
-! for output via the diag_manager.
-! Arguments: G - The ocean's grid structure.  Effectively intent in.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
+  type(ocean_grid_type),   intent(in) :: G      !< ocean grid structure 
+  type(diag_ctrl), target, intent(in) :: diag   !< regulates diagnostic output 
 
   ! The out_X arrays are needed because some of the elements of the grid
   ! type may be reduced rank macros.
@@ -2547,25 +2219,21 @@ subroutine write_static_fields(G, diag)
 
 end subroutine write_static_fields
 
-! ============================================================================
 
-subroutine set_restart_fields(G, param_file, CS)
-  type(ocean_grid_type),    intent(in) :: G
-  type(param_file_type),    intent(in) :: param_file
-  type(MOM_control_struct), intent(in) :: CS
-!   Set the fields that are needed for bitwise identical restarting
-! the time stepping scheme.  In addition to those specified here
-! directly, there may be fields related to the forcing or to the
-! barotropic solver that are needed; these are specified in sub-
-! routines that are called from this one.
-!   This routine should be altered if there are any changes to the
-! time stepping scheme.  The CHECK_RESTART facility may be used to
-! confirm that all needed restart fields have been included.
-!
-! Arguments: G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      CS - The control structure set up by initialize_MOM.
+!> Set the fields that are needed for bitwise identical restarting
+!! the time stepping scheme.  In addition to those specified here
+!! directly, there may be fields related to the forcing or to the
+!! barotropic solver that are needed; these are specified in sub-
+!! routines that are called from this one.
+!!
+!! This routine should be altered if there are any changes to the
+!! time stepping scheme.  The CHECK_RESTART facility may be used to
+!! confirm that all needed restart fields have been included.
+subroutine set_restart_fields(G, param_file, CS)      
+  type(ocean_grid_type),    intent(in) :: G             !< ocean grid structure  
+  type(param_file_type),    intent(in) :: param_file    !< opened file for parsing to get parameters 
+  type(MOM_control_struct), intent(in) :: CS            !< control structure set up by inialize_MOM
+
   type(vardesc) :: vd
   character(len=48) :: thickness_units, flux_units
 
@@ -2604,32 +2272,21 @@ subroutine set_restart_fields(G, param_file, CS)
 
 end subroutine set_restart_fields
 
-! ============================================================================
 
+!> This subroutine sets the surface (return) properties of the ocean
+!! model by setting the appropriate pointers in state.  Unused fields
+!! are set to NULL.
 subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
-  type(surface),                                  intent(inout) :: state
-  real, target, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u
-  real, target, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v
-  real, target, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
-  real, target, dimension(NIMEM_,NJMEM_),         intent(inout) :: ssh
-  type(ocean_grid_type),                          intent(inout) :: G
-  type(MOM_control_struct),                       intent(inout) :: CS
-  real, optional, pointer, dimension(:,:)                       :: p_atm
+  type(surface),                                  intent(inout) :: state  !< ocean surface state 
+  real, target, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u      !< zonal velocity (m/s)
+  real, target, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v      !< meridional velocity (m/s)
+  real, target, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h      !< layer thickness (m or kg/m2)
+  real, target, dimension(NIMEM_,NJMEM_),         intent(inout) :: ssh    !< time mean surface height (m)  
+  type(ocean_grid_type),                          intent(inout) :: G      !< ocean grid structure 
+  type(MOM_control_struct),                       intent(inout) :: CS     !< control structure 
+  real, optional, pointer, dimension(:,:)                       :: p_atm  !< atmospheric pressure (Pascal)
 
-! This subroutine sets the surface (return) properties of the ocean
-! model by setting the appropriate pointers in state.  Unused fields
-! are set to NULL.
-!
-! Arguments: 
-!  (in)      u     - zonal velocity component (m/s)
-!  (in)      v     - meridional velocity component (m/s)
-!  (in)      h     - layer thickness (meter)
-!  (inout)   ssh   - time mean sea surface height (meter)
-!  (inout)   G     - ocean grid structure
-!  (inout)   CS    - control structure set up by initialize_MOM
-!  (inout)   state - structure containing fields describing ocean surface state 
-!  (in)      p_atm - atmospheric pressure (Pascal)
-
+  ! local 
   real :: depth(SZI_(G))    ! distance from the surface (meter)
   real :: depth_ml          ! depth over which to average to
                             ! determine mixed layer properties (meter)
@@ -2861,9 +2518,9 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
 end subroutine calculate_surface_state
 
 
-! ============================================================================
+!> End of model
 subroutine MOM_end(CS)
-  type(MOM_control_struct), pointer      :: CS
+  type(MOM_control_struct), pointer :: CS   !< MOM control structure 
 
   if (CS%use_ALE_algorithm) then
     call end_ALE(CS%ALE_CSp)
@@ -2898,5 +2555,342 @@ subroutine MOM_end(CS)
   deallocate(CS)
 
 end subroutine MOM_end
+
+!> \namespace mom
+!!
+!! Modular Ocean Model (MOM) Version 6.0 (MOM6)
+!!
+!! \authors Alistair Adcroft, Robert Hallberg, and Stephen Griffies
+!!                                                                     
+!!  Additional contributions from:
+!!    * Whit Anderson
+!!    * Brian Arbic
+!!    * Will Cooke
+!!    * Anand Gnanadesikan
+!!    * Matthew Harrison
+!!    * Mehmet Ilicak
+!!    * Laura Jackson
+!!    * Jasmine John    
+!!    * John Krasting
+!!    * Zhi Liang
+!!    * Bonnie Samuels
+!!    * Harper Simmons
+!!    * Laurent White     
+!!    * Niki Zadeh                                               
+!!                                                                     
+!!  MOM ice-shelf code was developed by
+!!  * Daniel Goldberg
+!!  * Robert Hallberg             
+!!  * Chris Little
+!!  * Olga Sergienko                                 
+!!                                                                     
+!!  \section section_overview Overview of MOM
+!!
+!!  This program (MOM) simulates the ocean by numerically solving    
+!!  the hydrostatic primitive equations in generalized Lagrangian      
+!!  vertical coordinates, typically tracking stretched pressure (p*)   
+!!  surfaces or following isopycnals in the ocean's interior, and      
+!!  general orthogonal horizontal coordinates. Unlike earlier versions 
+!!  of MOM, in MOM6 these equations are horizontally discretized on an 
+!!  Arakawa C-grid.  (It remains to be seen whether a B-grid dynamic   
+!!  core will be revived in MOM6 at a later date; for now applications 
+!!  requiring a B-grid discretization should use MOM5.1.)  MOM6 offers 
+!!  a range of options for the physical parameterizations, from those  
+!!  most appropriate to highly idealized models for geophysical fluid  
+!!  dynamics studies to a rich suite of processes appropriate for      
+!!  realistic ocean simulations.  The thermodynamic options typically  
+!!  use conservative temperature and preformed salinity as conservative
+!!  state variables and a full nonlinear equation of state, but there  
+!!  are also idealized adiabatic configurations of the model that use  
+!!  fixed density layers.  Version 6.0 of MOM continues in the long    
+!!  tradition of a commitment to climate-quality ocean simulations     
+!!  embodied in previous versions of MOM, even as it draws extensively 
+!!  on the lessons learned in the development of the Generalized Ocean 
+!!  Layered Dynamics (GOLD) ocean model, which was also primarily      
+!!  developed at NOAA/GFDL.  MOM has also benefited tremendously from  
+!!  the FMS infrastructure, which it utilizes and shares with other    
+!!  component models developed at NOAA/GFDL.                           
+!!                                                                     
+!!    When run is isopycnal-coordinate mode, the uppermost few layers  
+!!  are often used to describe a bulk mixed layer, including the       
+!!  effects of penetrating shortwave radiation.  Either a split-       
+!!  explicit time stepping scheme or a non-split scheme may be used    
+!!  for the dynamics, while the time stepping may be split (and use    
+!!  different numbers of steps to cover the same interval) for the     
+!!  forcing, the thermodynamics, and for the dynamics.  Most of the    
+!!  numerics are second order accurate in space.  MOM can run with an  
+!!  absurdly thin minimum layer thickness. A variety of non-isopycnal  
+!!  vertical coordinate options are under development, but all exploit 
+!!  the advantages of a Lagrangian vertical coordinate, as discussed   
+!!  in detail by Adcroft and Hallberg (Ocean Modelling, 2006).         
+!!                                                                     
+!!    Details of the numerics and physical parameterizations are       
+!!  provided in the appropriate source files.  All of the available    
+!!  options are selected at run-time by parsing the input files,       
+!!  usually MOM_input and MOM_override, and the options choices are    
+!!  then documented for each run in MOM_param_docs.                    
+!!                                                                     
+!!    MOM6 integrates the equations forward in time in three distinct  
+!!  phases.  In one phase, the dynamic equations for the velocities    
+!!  and layer thicknesses are advanced, capturing the propagation of   
+!!  external and internal inertia-gravity waves, Rossby waves, and     
+!!  other strictly adiabatic processes, including lateral stresses,    
+!!  vertical viscosity and momentum forcing, and interface height      
+!!  diffusion (commonly called Gent-McWilliams diffusion in depth-     
+!!  coordinate models).  In the second phase, all tracers are advected 
+!!  and diffused along the layers.  The third phase applies diabatic   
+!!  processes, vertical mixing of water properties, and perhaps        
+!!  vertical remapping to cause the layers to track the desired        
+!!  vertical coordinate.                                               
+!!                                                                     
+!!    The present file (MOM.F90) orchestrates the main time stepping   
+!!  loops. One time integration option for the dynamics uses a split   
+!!  explicit time stepping scheme to rapidly step the barotropic       
+!!  pressure and velocity fields. The barotropic velocities are        
+!!  averaged over the baroclinic time step before they are used to     
+!!  advect thickness and determine the baroclinic accelerations.  As   
+!!  described in Hallberg and Adcroft (2009), a barotropic correction  
+!!  is applied to the time-mean layer velocities to ensure that the    
+!!  sum of the layer transports agrees with the time-mean barotropic   
+!!  transport, thereby ensuring that the estimates of the free surface 
+!!  from the sum of the layer thicknesses agrees with the final free   
+!!  surface height as calculated by the barotropic solver.  The        
+!!  barotropic and baroclinic velocities are kept consistent by        
+!!  recalculating the barotropic velocities from the baroclinic        
+!!  transports each time step. This scheme is described in Hallberg,   
+!!  1997, J. Comp. Phys. 135, 54-65 and in Hallberg and Adcroft, 2009, 
+!!  Ocean Modelling, 29, 15-26.                                        
+!!                                                                     
+!!    The other time integration options use non-split time stepping   
+!!  schemes based on the 3-step third order Runge-Kutta scheme         
+!!  described in Matsuno, 1966, J. Met. Soc. Japan, 44, 85-88, or on   
+!!  a two-step quasi-2nd order Runge-Kutta scheme.  These are much     
+!!  slower than the split time-stepping scheme, but they are useful    
+!!  for providing a more robust solution for debugging cases where the 
+!!  more complicated split time-stepping scheme may be giving suspect  
+!!  solutions.                                                         
+!!                                                                     
+!!    There are a range of closure options available.  Horizontal      
+!!  velocities are subject to a combination of horizontal biharmonic   
+!!  and Laplacian friction (based on a stress tensor formalism) and a  
+!!  vertical Fickian viscosity (perhaps using the kinematic viscosity  
+!!  of water).  The horizontal viscosities may be constant, spatially  
+!!  varying or may be dynamically calculated using Smagorinsky's       
+!!  approach.  A diapycnal diffusion of density and thermodynamic      
+!!  quantities is also allowed, but not required, as is horizontal     
+!!  diffusion of interface heights (akin to the Gent-McWilliams        
+!!  closure of geopotential coordinate models).  The diapycnal mixing  
+!!  may use a fixed diffusivity or it may use the shear Richardson     
+!!  number dependent closure, like that described in Jackson et al.    
+!!  (JPO, 2008).  When there is diapycnal diffusion, it applies to     
+!!  momentum as well. As this is in addition to the vertical viscosity,
+!!  the vertical Prandtl always exceeds 1.  A refined bulk-mixed layer 
+!!  is often used to describe the planetary boundary layer in realistic
+!!  ocean simulations.                                                 
+!!                                                                     
+!!    MOM has a number of noteworthy debugging capabilities.           
+!!  Excessively large velocities are truncated and MOM will stop       
+!!  itself after a number of such instances to keep the model from     
+!!  crashing altogether.  This is useful in diagnosing failures,       
+!!  or (by accepting some truncations) it may be useful for getting    
+!!  the model past the adjustment from an ill-balanced initial         
+!!  condition.  In addition, all of the accelerations in the columns   
+!!  with excessively large velocities may be directed to a text file.  
+!!  Parallelization errors may be diagnosed using the DEBUG option,    
+!!  which causes extensive checksums to be written out along with      
+!!  comments indicating where in the algorithm the sums originate and  
+!!  what variable is being summed.  The point where these checksums    
+!!  differ between runs is usually a good indication of where in the   
+!!  code the problem lies.  All of the test cases provided with MOM    
+!!  are routinely tested to ensure that they give bitwise identical    
+!!  results regardless of the domain decomposition, or whether they    
+!!  use static or dynamic memory allocation.                           
+!!
+!!  \section section_structure Structure of MOM
+!! 
+!!  About 115 other files of source code and 4 header files comprise 
+!!  the MOM code, although there are several hundred more files that   
+!!  make up the FMS infrastructure upon which MOM is built.  Each of   
+!!  the MOM files contains comments documenting what it does, and      
+!!  most of the file names are fairly self-evident. In addition, all   
+!!  subroutines and data types are referenced via a module use, only   
+!!  statement, and the module names are consistent with the file names,
+!!  so it is not too hard to find the source file for a subroutine.    
+!!                                                                     
+!!    The typical MOM directory tree is as follows:
+!!
+!! \verbatim
+!!        ../MOM
+!!        |-- config_src
+!!        |   |-- coupled_driver
+!!        |   |-- dynamic
+!!        |   `-- solo_driver
+!!        |-- examples
+!!        |   |-- CM2G
+!!        |   |-- ...
+!!        |   `-- torus_advection_test
+!!        `-- src
+!!            |-- core
+!!            |-- diagnostics
+!!            |-- equation_of_state
+!!            |-- framework
+!!            |-- ice_shelf
+!!            |-- initialization
+!!            |-- parameterizations
+!!            |   |-- lateral
+!!            |   `-- vertical
+!!            |-- tracer
+!!            `-- user
+!! \endverbatim
+!!
+!!  Rather than describing each file here, each directory contents   
+!!  will be described to give a broad overview of the MOM code         
+!!  structure.                                                         
+!!                                                                     
+!!    The directories under config_src contain files that are used for 
+!!  configuring the code, for instance for coupled or ocean-only runs. 
+!!  Only one or two of these directories are used in compiling any,    
+!!  particular run.                                                    
+!!                                                                     
+!!  * config_src/coupled_driver:                                         
+!!    The files here are used to couple MOM as a component in a larger 
+!!    run driven by the FMS coupler.  This includes code that converts 
+!!    various forcing fields into the code structures and flux and unit
+!!    conventions used by MOM, and converts the MOM surface fields     
+!!    back to the forms used by other FMS components.
+!!
+!!  * config_src/dynamic:                                                
+!!    The only file here is the version of MOM_memory.h that is used   
+!!    for dynamic memory configurations of MOM.
+!!
+!!  * config_src/solo_driver:                                            
+!!    The files here are include the _main driver that is used when    
+!!    MOM is configured as an ocean-only model, as well as the files   
+!!    that specify the surface forcing in this configuration.          
+!!                                                                     
+!!    The directories under examples provide a large number of working 
+!!  configurations of MOM, along with reference solutions for several  
+!!  different compilers on GFDL's latest large computer.  The versions 
+!!  of MOM_memory.h in these directories need not be used if dynamic   
+!!  memory allocation is desired, and the answers should be unchanged. 
+!!                                                                     
+!!    The directories under src contain most of the MOM files.  These  
+!!  files are used in every configuration using MOM.                   
+!!                                                                     
+!!  * src/core:                                                          
+!!    The files here constitute the MOM dynamic core.  This directory  
+!!    also includes files with the types that describe the model's     
+!!    lateral grid and have defined types that are shared across       
+!!    various MOM modules to allow for more succinct and flexible      
+!!    subroutine argument lists.                                       
+!!
+!!  * src/diagnostics:                                                   
+!!    The files here calculate various diagnostics that are anciliary  
+!!    to the model itself.  While most of these diagnostics do not     
+!!    directly affect the model's solution, there are some, like the   
+!!    calculation of the deformation radius, that are used in some     
+!!    of the process parameterizations.                                
+!!
+!!  * src/equation_of_state:                                             
+!!    These files describe the physical properties of sea-water,       
+!!    including both the equation of state and when it freezes.        
+!!
+!!  * src/framework:                                                     
+!!    These files provide infrastructure utilities for MOM.  Many are  
+!!    simply wrappers for capabilities provided by FMS, although others
+!!    provide capabilities (like the file_parser) that are unique to   
+!!    MOM. When MOM is adapted to use a modeling infrastructure        
+!!    distinct from FMS, most of the required changes are in this      
+!!    directory.                                                       
+!!
+!!  * src/initialization:                                                
+!!    These are the files that are used to initialize the MOM grid     
+!!    or provide the initial physical state for MOM.  These files are  
+!!    not intended to be modified, but provide a means for calling     
+!!    user-specific initialization code like the examples in src/user. 
+!!
+!!  * src/parameterizations/lateral:                                     
+!!    These files implement a number of quasi-lateral (along-layer)    
+!!    process parameterizations, including lateral viscosities,        
+!!    parameterizations of eddy effects, and the calculation of tidal  
+!!    forcing.                                                         
+!!
+!!  * src/parameterizations/vertical:                                    
+!!    These files implement a number of vertical mixing or diabatic    
+!!    processes, including the effects of vertical viscosity and       
+!!    code to parameterize the planetary boundary layer.  There is a   
+!!    separate driver that orchestrates this portion of the algorithm, 
+!!    and there is a diversity of parameterizations to be found here.  
+!!
+!!  * src/tracer:                                                        
+!!    These files handle the lateral transport and diffusion of        
+!!    tracers, or are the code to implement various passive tracer     
+!!    packages.  Additional tracer packages are readily accomodated.   
+!!
+!!  * src/user:                                                          
+!!    These are either stub routines that a user could use to change   
+!!    the model's initial conditions or forcing, or are examples that  
+!!    implement specific test cases.  These files can easily  be hand  
+!!    edited to create new analytically specified configurations.      
+!!                                                                     
+!!                                                                     
+!!  Most simulations can be set up by modifying only the files       
+!!  MOM_input, and possibly one or two of the files in src/user.       
+!!  In addition, the diag_table (MOM_diag_table) will commonly be      
+!!  modified to tailor the output to the needs of the question at      
+!!  hand.  The FMS utility mkmf works with a file called path_names    
+!!  to build an appropriate makefile, and path_names should be edited  
+!!  to reflect the actual location of the desired source code.         
+!!                                                                     
+!!                                                                     
+!!  There are 3 publicly visible subroutines in this file (MOM.F90). 
+!!  * step_MOM steps MOM over a specified interval of time.              
+!!  * MOM_initialize calls initialize and does other initialization      
+!!    that does not warrant user modification.                         
+!!  * calculate_surface_state determines the surface (bulk mixed layer   
+!!    if traditional isoycnal vertical coordinate) properties of the     
+!!    current model state and packages pointers to these fields into an  
+!!    exported structure.                                                
+!!                                                                     
+!!    The remaining subroutines in this file (src/core/MOM.F90) are:   
+!!  * find_total_transport determines the barotropic mass transport.     
+!!  * register_diags registers many diagnostic fields for the dynamic    
+!!    solver, or of the main model variables.                          
+!!  * MOM_timing_init initializes various CPU time clocks.               
+!!  * write_static_fields writes out various time-invariant fields.      
+!!  * set_restart_fields is used to specify those fields that are        
+!!    written to and read from the restart file.                       
+!!                                                                     
+!!  Macros written all in capital letters are defined in MOM_memory.h. 
+!!
+!!  \section section_gridlayout MOM grid layout
+!! 
+!!  A small fragment of the grid is shown below:                    
+!!
+!! \verbatim
+!!    j+1  x ^ x ^ x   
+!!
+!!    j+1  > o > o >  
+!!
+!!    j    x ^ x ^ x  
+!!
+!!    j    > o > o >  
+!!
+!!    j-1  x ^ x ^ x
+!!
+!!        i-1  i  i+1
+!!
+!!           i  i+1                                                    
+!!
+!! \endverbatim
+!!
+!!  Fields at each point
+!!  * x =  q, CoriolisBu
+!!  * ^ =  v, PFv, CAv, vh, diffv, tauy, vbt, vhtr
+!!  * > =  u, PFu, CAu, uh, diffu, taux, ubt, uhtr
+!!  * o =  h, bathyT, eta, T, S, tr
+!!
+!!  The boundaries always run through q grid points (x).               
+!!                                                                     
 
 end module MOM
