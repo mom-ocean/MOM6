@@ -33,7 +33,7 @@ use P3M_functions, only : P3M_interpolation, P3M_boundary_extrapolation
 use MOM_regridding, only : initialize_regridding, regridding_main , end_regridding
 use MOM_regridding, only : uniformResolution
 use MOM_regridding, only : inflate_vanished_layers_old, setCoordinateResolution
-use MOM_regridding, only : set_target_densities_from_G
+use MOM_regridding, only : set_target_densities_from_G, set_target_densities
 use MOM_regridding, only : regriddingCoordinateModeDoc, DEFAULT_COORDINATE_MODE
 use MOM_regridding, only : regriddingInterpSchemeDoc, regriddingDefaultInterpScheme
 use MOM_regridding, only : setRegriddingBoundaryExtrapolation
@@ -52,7 +52,7 @@ use MOM_tracer_registry, only : tracer_registry_type
 use regrid_defs, only : PRESSURE_RECONSTRUCTION_PLM
 !use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts, only : coordinateUnits, coordinateMode
-use regrid_consts, only : REGRIDDING_ZSTAR
+use regrid_consts, only : REGRIDDING_ZSTAR, REGRIDDING_RHO, REGRIDDING_HYCOM1
 
 
 implicit none ; private
@@ -291,6 +291,8 @@ subroutine ALE_main( G, h, u, v, tv, Reg, CS )
   ! Both are needed for the subsequent remapping of variables.
   call regridding_main( CS%remapCS, CS%regridCS, G, h, tv, CS%dzRegrid )
 
+  call check_remapping_grid( G, h, CS%dzRegrid, 'in ALE_main()' )
+
   if (CS%show_call_tree) call callTree_waypoint("new grid generated (ALE_main)")
 
   ! Remap all variables from old grid h onto new grid h_new
@@ -433,6 +435,7 @@ subroutine remapping_main( CS, G, h, dxInterface, Reg, u, v, debug )
 !$OMP parallel default(none) shared(G,h,dxInterface,CS,nz,tv,u,v) &
 !$OMP                       private(h1,dx,u_column)
   if (ntr>0) then
+    if (show_call_tree) call callTree_waypoint("remapping tracers (remapping_main)")
 !$OMP do
     do j = G%jsc,G%jec
       do i = G%isc,G%iec
@@ -769,6 +772,7 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
   integer :: ke
   logical :: tmpLogical
   real :: tmpReal
+  real :: rho_target(G%ke+1) ! Target density used in HYCOM1 mode
 
   ke = size(dz) ! Number of levels in resolution vector
 
@@ -801,6 +805,11 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
                  "               by a comma or space, e.g. FILE:lev.nc,Z\n"//&
                  " FNC1:string - FNC1:dz_min,H_total,power,precision",&
                  default='UNIFORM')
+!                " FNC1:string - FNC1:dz_min,H_total,power,precision\n"//&
+!                " HYBRID:strg  - read from a file. The string specifies\n"//&
+!                "               the filename and two variable names, separated\n"//&
+!                "               by a comma or space, for sigma-2 and dz. e.g.\n"//&
+!                "               HYBRID:vgrid.nc,sigma2,dz",&
   message = "The distribution of vertical resolution for the target\n"//&
             "grid used for Eulerian-like coordinates. For example,\n"//&
             "in z-coordinate mode, the parameter is a list of level\n"//&
@@ -847,12 +856,37 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
                    trim(message), units=coordinateUnits(coordMode))
       elseif (index(trim(string),'FNC1:')==1) then
         call dz_function1( trim(string(6:)), dz )
+        call log_param(param_file, mod, "!ALE_RESOLUTION", dz, &
+                   trim(message), units=coordinateUnits(coordMode))
+      elseif (index(trim(string),'HYBRID:')==1) then
+        call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
+        inputdir = slasher(inputdir)
+
+        fileName = trim( extractWord(trim(string(8:)), 1) )
+        if (fileName(1:1)/='.' .and. filename(1:1)/='/') fileName = trim(inputdir) // trim( fileName )
+        if (.not. file_exists(fileName)) call MOM_error(FATAL,"ALE_initRegridding: HYCOM1 "// &
+          "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
+        varName = trim( extractWord(trim(string(8:)), 2) )
+        if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,"ALE_initRegridding: HYCOM1 "// &
+          "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
+        call MOM_read_data(trim(fileName), trim(varName), rho_target)
+        call set_target_densities( regridCS, rho_target )
+        varName = trim( extractWord(trim(string(8:)), 3) )
+        if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,"ALE_initRegridding: HYCOM1 "// &
+          "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
+        call MOM_read_data(trim(fileName), trim(varName), dz)
+        call log_param(param_file, mod, "!ALE_RESOLUTION", dz, &
+                   trim(message), units=coordinateUnits(coordMode))
+        call log_param(param_file, mod, "!TARGET_DENSITIES", rho_target, &
+                   'HYBRID target densities for itnerfaces', units=coordinateUnits(coordMode))
+
       else
         call MOM_error(FATAL,"ALE_initRegridding: "// &
           "Unrecognized coordinate configuraiton"//trim(string))
       endif
   end select
-  if (coordinateMode(coordMode) == REGRIDDING_ZSTAR) then
+  if (coordinateMode(coordMode) == REGRIDDING_ZSTAR .or. &
+      coordinateMode(coordMode) == REGRIDDING_HYCOM1) then
     ! Adjust target grid to be consistent with G%max_depth
     ! This is a work around to the from_Z initialization...  ???
     tmpReal = sum( dz(:) )
@@ -868,7 +902,7 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
     endif
   endif
   call setCoordinateResolution( dz, regridCS )
-  call set_target_densities_from_G( G, regridCS )
+  if (coordinateMode(coordMode) == REGRIDDING_RHO) call set_target_densities_from_G( G, regridCS )
 
   call get_param(param_file, mod, "MIN_THICKNESS", tmpReal, &
                  "When regridding, this is the minimum layer\n"//&

@@ -23,7 +23,7 @@ use MOM_remapping, only : remapping_CS
 use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
 use regrid_consts, only : REGRIDDING_RHO, REGRIDDING_SIGMA
-use regrid_consts, only : REGRIDDING_ARBITRARY
+use regrid_consts, only : REGRIDDING_ARBITRARY, REGRIDDING_HYCOM1
 
 implicit none ; private
 
@@ -95,11 +95,13 @@ public build_zstar_column
 public DEFAULT_COORDINATE_MODE
 
 !> Documentation for coordinate options
-character(len=158), parameter, public :: regriddingCoordinateModeDoc = &
+character(len=258), parameter, public :: regriddingCoordinateModeDoc = &
                  " LAYER - Isopycnal or stacked shallow water layers\n"//&
                  " Z*    - stetched geopotential z*\n"//&
                  " SIGMA - terrain following coordinates\n"//&
                  " RHO   - continuous isopycnal"
+!                " RHO   - continuous isopycnal\n"//&
+!                " HYCOM1 - HyCOM-like hybrid coordinate"
 
 ! Documentation for regridding interpolation schemes
 character(len=338), parameter, public :: regriddingInterpSchemeDoc = &
@@ -150,7 +152,7 @@ real, parameter    :: NR_TOLERANCE = 1e-12
 real, parameter    :: NR_OFFSET = 1e-6
 
 ! This CPP macro embeds some safety checks
-#undef __DO_SAFETY_CHECKS__
+#define __DO_SAFETY_CHECKS__
 
 contains
 
@@ -246,6 +248,9 @@ subroutine regridding_main( remapCS, CS, G, h, tv, dzInterface )
 
     case ( REGRIDDING_ARBITRARY )
       call build_grid_arbitrary( G, h, dzInterface, trickGnuCompiler, CS )
+
+    case ( REGRIDDING_HYCOM1 )
+      call build_grid_HyCOM1( G, h, tv, dzInterface, remapCS, CS )
 
     case default
       call MOM_error(FATAL,'MOM_regridding, regridding_main: '//&
@@ -351,7 +356,7 @@ subroutine build_zstar_grid( CS, G, h, dzInterface )
   ! Local variables
   integer :: i, j, k
   integer :: nz
-  real    :: nominalDepth, totalThickness, stretching, dh
+  real    :: nominalDepth, totalThickness, dh
   real, dimension(SZK_(G)+1) :: zOld, zNew
   real :: minThickness
 
@@ -360,7 +365,7 @@ subroutine build_zstar_grid( CS, G, h, dzInterface )
   
 !$OMP parallel do default(none) shared(G,dzInterface,CS,nz,h)                    &
 !$OMP                          private(nominalDepth,totalThickness,minThickness, &
-!$OMP                                  stretching,zNew,dh,zOld)
+!$OMP                                  zNew,dh,zOld)
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
 
@@ -401,14 +406,15 @@ subroutine build_zstar_grid( CS, G, h, dzInterface )
         do k=1,nz+1
           write(0,*) k,zOld(k),zNew(k)
         enddo
-        write(0,*) 'stretching=',stretching
         do k=1,nz
-          write(0,*) k,h(i,j,k),zNew(k)-zNew(k+1),stretching * CS%coordinateResolution(k),CS%coordinateResolution(k)
+          write(0,*) k,h(i,j,k),zNew(k)-zNew(k+1),CS%coordinateResolution(k)
         enddo
         call MOM_error( FATAL, &
                'MOM_regridding, build_zstar_grid(): top surface has moved!!!' )
       endif
 #endif
+
+      call adjust_interface_motion( nz, CS%min_thickness, h(i,j,:), dzInterface(i,j,:) )
 
     end do
   end do
@@ -762,6 +768,90 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
 
 end subroutine buildGridRho
 
+!> Builds a simple HyCOM-like grid with potential density interpolated from
+!! the column profile and a clipping of depth for each interface to a fixed
+!! z* or p* grid.
+!! \remark { Based on Bleck, 2002: An oceanice general circulation model framed in
+!! hybrid isopycnic-Cartesian coordinates, Ocean Modelling 37, 55-88.
+!! http://dx.doi.org/10.1016/S1463-5003(01)00012-9 }
+subroutine build_grid_HyCOM1( G, h, tv, dzInterface, remapCS, CS )
+  type(ocean_grid_type),                        intent(in)    :: G !< Grid structure
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: h !< Existing model thickness
+  type(thermo_var_ptrs),                        intent(in)    :: tv !< Thermodynamics structure
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: dzInterface !< Changes in interface position
+  type(remapping_CS),                           intent(in)    :: remapCS !< Remapping control structure
+  type(regridding_CS),                          intent(in)    :: CS !< Regridding control structure
+  ! Local variables
+  integer   :: i, j, k, nz
+  real, dimension(SZK_(G)) :: T_column, S_column, p_column, rho_column, h_column_new ! Layer quantities
+  real, dimension(SZK_(G)+1) :: z_column, z_column_new ! Interface positions in H units (m or Pa)
+  real, dimension(CS%nk,2) :: ppoly_i_E ! Edge value of polynomial
+  real, dimension(CS%nk,2) :: ppoly_i_S ! Edge slope of polynomial
+  real, dimension(CS%nk,CS%degree_i+1) :: ppoly_i_coefficients ! Coefficients of polynomial
+  real :: nominal_z ! Nominal depth of interface is using z* (m or Pa)
+  real :: stretching ! z* stretching, converts z* to z.
+  real :: hNew
+
+  nz = G%ke
+
+  ! Build grid based on target interface densities
+  do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
+    if (G%mask2dT(i,j)>0.) then
+
+      ! Copy T and S onto new variables so as to not alter the original values
+      ! of T and S (these are remapped at the end of the regridding iterations
+      ! once the final grid has been determined).
+      T_column(:) = tv%T(i,j,:)
+      S_column(:) = tv%S(i,j,:)
+      p_column(:) = CS%ref_pressure
+      z_column(1) = 0. ! Work downward rather than bottom up
+      do K = 1, nz
+        z_column(K+1) = z_column(K) + h(i,j,k) ! Work in units of h (m or Pa)
+      enddo
+
+      ! Work bottom recording potential density
+      call calculate_density(T_column, S_column, p_column, &
+                             rho_column, 1, nz, tv%eqn_of_state )
+      ! This ensures the potential density profile is monotonic
+      ! although not necessarily single valued.
+      do k = nz-1, 1, -1
+        rho_column(k) = min( rho_column(k), rho_column(k+1) )
+      enddo
+
+      ! Interpolates for the target interface position with the rho_column profile
+      call regridding_iteration( rho_column, CS%target_density, CS,    &
+                                 nz, h(i,j,:), z_column,                     &
+                                 ppoly_i_E, ppoly_i_S, ppoly_i_coefficients, &
+                                 nz, h_column_new, z_column_new)
+
+      ! Sweep down the interfaces and make sure that the interface is at least
+      ! as deep as a nominal target z* grid
+      nominal_z = 0.
+      stretching = z_column(nz+1) / G%bathyT(i,j) * G%m_to_H ! Stretches z* to z
+      do k = 2, nz+1
+        nominal_z = nominal_z + CS%coordinateResolution(k-1) * stretching
+        z_column_new(k) = max( z_column_new(k), nominal_z )
+        z_column_new(k) = min( z_column_new(k), z_column(nz+1) )
+      enddo
+
+      ! Finally calculate the change in position of the interface
+      do k = 1,nz+1
+        dzInterface(i,j,k) = z_column(k) - z_column_new(k)
+      enddo
+#ifdef __DO_SAFETY_CHECKS__
+     if (dzInterface(i,j,1) /= 0.) stop 'build_grid_HyCOM1: Surface moved?!'
+     if (dzInterface(i,j,nz+1) /= 0.) stop 'build_grid_HyCOM1: Bottom moved?!'
+#endif
+
+     ! This adjusts  things robust to round-off errors
+     call adjust_interface_motion( nz, CS%min_thickness, h(i,j,:), dzInterface(i,j,:) )
+
+    else ! on land
+      dzInterface(i,j,:) = 0.
+    endif ! mask2dT
+  enddo; enddo ! i,j
+
+end subroutine build_grid_HyCOM1
 
 !> Adjust dz_Interface to ensure non-negative future thicknesses
 subroutine adjust_interface_motion( nk, min_thickness, h_old, dz_int )
@@ -1070,7 +1160,7 @@ subroutine regridding_iteration( densities, target_values, CS, &
           call P1M_boundary_extrapolation( n0, h0, densities, ppoly0_E, ppoly0_coefficients )
         end if  
       end if
-    
+
     case ( INTERPOLATION_PQM_IH6IH5 )
       if ( n0 .ge. 6 ) then
         degree = DEGREE_4
@@ -1347,7 +1437,6 @@ subroutine inflate_vanished_layers_old( CS, G, h )
 
 end subroutine inflate_vanished_layers_old
 
-
 !------------------------------------------------------------------------------
 ! Inflate vanished layers to finite (nonzero) width
 !------------------------------------------------------------------------------
@@ -1507,7 +1596,7 @@ function uniformResolution(nk,coordMode,maxDepth,rhoLight,rhoHeavy)
   scheme = coordinateMode(coordMode)
   select case ( scheme )
 
-    case ( REGRIDDING_ZSTAR )
+    case ( REGRIDDING_ZSTAR, REGRIDDING_HYCOM1 )
       uniformResolution(:) = maxDepth / real(nk)
 
     case ( REGRIDDING_RHO )  
@@ -1603,7 +1692,7 @@ function getCoordinateUnits( CS )
   character(len=20)               :: getCoordinateUnits
 
   select case ( CS%regridding_scheme )
-    case ( REGRIDDING_ZSTAR )
+    case ( REGRIDDING_ZSTAR, REGRIDDING_HYCOM1 )
       getCoordinateUnits = 'meter'
     case ( REGRIDDING_SIGMA )
       getCoordinateUnits = 'fraction'
@@ -1636,6 +1725,8 @@ function getCoordinateShortName( CS )
       getCoordinateShortName = 'rho'
     case ( REGRIDDING_ARBITRARY )
       getCoordinateShortName = 'coordinate'
+    case ( REGRIDDING_HYCOM1 )
+      getCoordinateShortName = 'z-rho'
     case default
       call MOM_error(FATAL,'MOM_regridding, getCoordinateShortName: '//&
                      'Unknown regridding scheme selected!')
@@ -1678,7 +1769,7 @@ function getStaticThickness( CS, SSH, depth )
   real :: z, dz
 
   select case ( CS%regridding_scheme )
-    case ( REGRIDDING_ZSTAR )
+    case ( REGRIDDING_ZSTAR, REGRIDDING_HYCOM1 )
       if (depth>0.) then
         z = ssh
         do k = 1, CS%nk
