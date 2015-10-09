@@ -94,7 +94,7 @@ end function neutral_diffusion_init
 !! a shared coordinate space.
 subroutine neutral_diffusion_calc_coeffs(G, h, T, S, EOS, CS)
   type(ocean_grid_type),                 intent(in) :: G !< Ocean grid structure
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h !< Layer thickness (H units, m or Pa)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h !< Layer thickness (H units)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: T !< Potential temperature (degC)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: S !< Salinity (ppt)
   type(EOS_type),                        pointer    :: EOS !< Equation of state structure
@@ -148,9 +148,10 @@ subroutine neutral_diffusion_calc_coeffs(G, h, T, S, EOS, CS)
 
 end subroutine neutral_diffusion_calc_coeffs
 
+!> Updates a tracer due to the effect of along neutral surface diffusion
 subroutine neutral_diffusion(G, h, Coef_x, Coef_y, Tracer, CS)
   type(ocean_grid_type),                  intent(in)    :: G      !< Ocean grid structure
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h      !< Layer thickness (H units, m or Pa)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h      !< Layer thickness (H units)
   real, dimension(NIMEMB_,NJMEM_),        intent(in)    :: Coef_x !< dt * Kh * dy / dx at u-points (m^2)
   real, dimension(NIMEM_,NJMEMB_),        intent(in)    :: Coef_y !< dt * Kh * dx / dy at u-points (m^2)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: Tracer !< Tracer concentration
@@ -212,7 +213,7 @@ end subroutine neutral_diffusion
 !> Returns interface scalar, Si, for a column of layer values, S.
 subroutine interface_scalar(nk, h, S, Si, i_method)
   integer,               intent(in)    :: nk !< Number of levels
-  real, dimension(nk),   intent(in)    :: h  !< Layer thickness (H, m or Pa)
+  real, dimension(nk),   intent(in)    :: h  !< Layer thickness (H)
   real, dimension(nk),   intent(in)    :: S  !< Layer scalar (conc, e.g. ppt)
   real, dimension(nk+1), intent(inout) :: Si !< Interface scalar (conc, e.g. ppt)
   integer,               intent(in)    :: i_method !< =1 use average of PLM edges
@@ -316,7 +317,7 @@ end function ppm_ave
 !! The limiting follows equation 1.8 in Colella & Woodward, 1984: JCP 54, 174-201.
 subroutine PLM_diff(nk, h, S, c_method, b_method, diff)
   integer,             intent(in)    :: nk       !< Number of levels
-  real, dimension(nk), intent(in)    :: h        !< Layer thickness (H, m or Pa)
+  real, dimension(nk), intent(in)    :: h        !< Layer thickness (H)
   real, dimension(nk), intent(in)    :: S        !< Layer salinity (conc, e.g. ppt)
   integer,             intent(in)    :: c_method !< Method to use for the centered difference
   integer,             intent(in)    :: b_method !< =1, use PCM in first/last cell, =2 uses linear extrapolation
