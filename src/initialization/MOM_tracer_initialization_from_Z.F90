@@ -184,7 +184,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, PF, src_file, src_var_nam, &
       endif ! mask2dT
     enddo ; enddo
 
-    call initialize_remapping( nz, remappingScheme, remapCS ) ! Reconstruction parameters
+    call initialize_remapping( nz, remapScheme, remapCS ) ! Reconstruction parameters
     call remapDisableBoundaryExtrapolation( remapCS )
     call remap_scalar_h_to_h( remapCS, G, kd, h1, tr_z, h, tr, all_cells=.false. )
     deallocate( h1 )
