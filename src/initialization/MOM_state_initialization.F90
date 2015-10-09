@@ -65,8 +65,8 @@ use midas_vertmap, only : find_interfaces, tracer_Z_init
 use midas_vertmap, only : determine_temperature
 
 use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord
-use MOM_ALE, only : remap_scalar_h_to_h
-use MOM_regridding, only : regridding_CS
+use MOM_ALE, only : remap_scalar_h_to_h, regrid_only
+use MOM_regridding, only : regridding_CS, set_regrid_min_thickness
 use MOM_remapping, only : remapping_CS, remapping_core, initialize_remapping
 use MOM_remapping, only : dzFromH1H2, remapDisableBoundaryExtrapolation
 use MOM_tracer_initialization_from_Z, only : horiz_interp_and_extrap_tracer
@@ -1963,7 +1963,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   type(regridding_CS) :: regridCS ! Regridding parameters and work arrays
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
 
-  logical :: homogenize, useALEremapping, remap_full_column
+  logical :: homogenize, useALEremapping, remap_full_column, remap_general
   character(len=10) :: remappingScheme
   real :: tempAvg, saltAvg
   integer :: nPoints, ans
@@ -2021,10 +2021,14 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
   call get_param(PF, mod, "Z_INIT_REMAPPING_SCHEME", remappingScheme, &
                  "The remapping scheme to use if using Z_INIT_ALE_REMAPPING\n"//&
                  "is True.", default="PPM_IH4")
+  call get_param(PF, mod, "Z_INIT_REMAP_GENERAL", remap_general, &
+                 "If false, only initializes to z* coordinates.\n"//&
+                 "If true, allows initialization directly to general coordinates.",&
+                 default=.false., do_not_log=.true.)
   call get_param(PF, mod, "Z_INIT_REMAP_FULL_COLUMN", remap_full_column, &
                  "If false, only reconstructsa for valid data points.\n"//&
                  "If true, inserts vanished layers below the valid data.",&
-                 default=.false., do_not_log=.true.)
+                 default=remap_general, do_not_log=.true.)
 
 !   Read input grid coordinates for temperature and salinity field
 !   in z-coordinate dataset. The file is REQUIRED to contain the
@@ -2081,9 +2085,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
          "Data has more levels than the model - this has not been coded yet!")
     ! Build the source grid and copy data onto model-shaped arrays with vanished layers
     allocate( tmp_mask_in(isd:ied,jsd:jed,nz) ) ; tmp_mask_in(is:ie,js:je,:) = 0.
-    allocate( h1(isd:ied,jsd:jed,nz) ) ; h1(is:ie,js:je,:) = 0.
-    allocate( tmpT1dIn(isd:ied,jsd:jed,nz) ) ; tmpT1dIn(is:ie,js:je,:) = 0.
-    allocate( tmpS1dIn(isd:ied,jsd:jed,nz) ) ; tmpS1dIn(is:ie,js:je,:) = 0.
+    allocate( h1(isd:ied,jsd:jed,nz) ) ; h1(:,:,:) = 0.
+    allocate( tmpT1dIn(isd:ied,jsd:jed,nz) ) ; tmpT1dIn(:,:,:) = 0.
+    allocate( tmpS1dIn(isd:ied,jsd:jed,nz) ) ; tmpS1dIn(:,:,:) = 0.
     do j = js, je ; do i = is, ie
       if (G%mask2dT(i,j)>0.) then
         zTopOfCell = 0. ; zBottomOfCell = 0. ; nPoints = 0
@@ -2114,25 +2118,34 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
     allocate( hTarget(nz) )
     ! This call can be more general but is hard-coded for z* coordinates...  ????
     call ALE_initRegridding( G, PF, mod, regridCS, hTarget ) ! sets regridCS and hTarget(1:nz)
-    do j = js, je ; do i = is, ie
-      h(i,j,:) = 0.
-      if (G%mask2dT(i,j)>0.) then
-        ! Build the target grid combining hTarget and topography
-        zTopOfCell = 0. ; zBottomOfCell = 0.
-        do k = 1, nz
-          zBottomOfCell = max( zTopOfCell - hTarget(k), -G%bathyT(i,j) )
-          h(i,j,k) = zTopOfCell - zBottomOfCell
-          zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
-        enddo
-      else
+
+    if (.not. remap_general) then
+      ! This is the old way of initializing to z* coordinates only
+      do j = js, je ; do i = is, ie
         h(i,j,:) = 0.
-      endif ! mask2dT
-    enddo ; enddo
-    deallocate( hTarget )
+        if (G%mask2dT(i,j)>0.) then
+          ! Build the target grid combining hTarget and topography
+          zTopOfCell = 0. ; zBottomOfCell = 0.
+          do k = 1, nz
+            zBottomOfCell = max( zTopOfCell - hTarget(k), -G%bathyT(i,j) )
+            h(i,j,k) = zTopOfCell - zBottomOfCell
+            zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
+          enddo
+        else
+          h(i,j,:) = 0.
+        endif ! mask2dT
+      enddo ; enddo
+      deallocate( hTarget )
+    endif
 
     ! Now remap from source grid to target grid
     call initialize_remapping( nz, remappingScheme, remapCS ) ! Reconstruction parameters
     call remapDisableBoundaryExtrapolation( remapCS )
+    if (remap_general) then
+      call set_regrid_min_thickness( 0., regridCS )
+      h(:,:,:) = h1(:,:,:) ; tv%T(:,:,:) = tmpT1dIn(:,:,:) ; tv%S(:,:,:) = tmpS1dIn(:,:,:)
+      call regrid_only( G, regridCS, remapCS, h, tv, .true. )
+    endif
     call remap_scalar_h_to_h( remapCS, G, nz, h1, tmpT1dIn, h, tv%T, all_cells=remap_full_column )
     call remap_scalar_h_to_h( remapCS, G, nz, h1, tmpS1dIn, h, tv%S, all_cells=remap_full_column )
     deallocate( h1 )
