@@ -1,5 +1,7 @@
-!> A column-wise toolbox for implementing neutral (horizontal) diffusion
+!> A column-wise toolbox for implementing neutral diffusion
 module MOM_neutral_diffusion
+
+! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_MODULE, CLOCK_ROUTINE
@@ -15,7 +17,9 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public neutral_diffusion, neutral_diffusion_init, neutral_diffusion_end
+public neutral_diffusion
+public neutral_diffusion_init
+public neutral_diffusion_end
 public neutral_diffusion_calc_coeffs
 public neutralDiffusionUnitTests
 
@@ -98,7 +102,8 @@ subroutine neutral_diffusion_calc_coeffs(G, h, T, S, EOS, CS)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: T !< Potential temperature (degC)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: S !< Salinity (ppt)
   type(EOS_type),                        pointer    :: EOS !< Equation of state structure
-  type(neutral_diffusion_CS),            pointer    :: CS !< Neutral diffusion constrol structure
+  type(neutral_diffusion_CS),            pointer    :: CS  !< Neutral diffusion control structure
+
   ! Local variables
   integer :: i, j, k
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: Tint ! Interface T (degC)
@@ -155,7 +160,8 @@ subroutine neutral_diffusion(G, h, Coef_x, Coef_y, Tracer, CS)
   real, dimension(NIMEMB_,NJMEM_),        intent(in)    :: Coef_x !< dt * Kh * dy / dx at u-points (m^2)
   real, dimension(NIMEM_,NJMEMB_),        intent(in)    :: Coef_y !< dt * Kh * dx / dy at u-points (m^2)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: Tracer !< Tracer concentration
-  type(neutral_diffusion_CS),             pointer       :: CS     !< Neutral diffusion constrol structure
+  type(neutral_diffusion_CS),             pointer       :: CS     !< Neutral diffusion control structure
+
   ! Local variables
   real, dimension(SZIB_(G),SZJ_(G),2*G%ke+1) :: uFlx ! Zonal flux of tracer (conc Pa)
   real, dimension(SZI_(G),SZJB_(G),2*G%ke+1) :: vFlx ! Meridional flux of tracer (conc Pa)
@@ -210,10 +216,11 @@ subroutine neutral_diffusion(G, h, Coef_x, Coef_y, Tracer, CS)
 
 end subroutine neutral_diffusion
 
+
 !> Returns interface scalar, Si, for a column of layer values, S.
 subroutine interface_scalar(nk, h, S, Si, i_method)
   integer,               intent(in)    :: nk !< Number of levels
-  real, dimension(nk),   intent(in)    :: h  !< Layer thickness (H)
+  real, dimension(nk),   intent(in)    :: h  !< Layer thickness (H units)
   real, dimension(nk),   intent(in)    :: S  !< Layer scalar (conc, e.g. ppt)
   real, dimension(nk+1), intent(inout) :: Si !< Interface scalar (conc, e.g. ppt)
   integer,               intent(in)    :: i_method !< =1 use average of PLM edges
@@ -257,6 +264,7 @@ real function ppm_edge(hkm1, hk, hkp1, hkp2,  Ak, Akp1, Pk, Pkp1)
   real, intent(in) :: Akp1 !< Average scalar value of cell k+1
   real, intent(in) :: Pk   !< PLM slope for cell k
   real, intent(in) :: Pkp1 !< PLM slope for cell k+1
+
   ! Local variables
   real :: R_hk_hkp1, R_2hk_hkp1, R_hk_2hkp1, f1, f2, f3, f4
   real, parameter :: h_neglect = 1.e-30
@@ -293,6 +301,7 @@ real function ppm_ave(xL, xR, aL, aR, aMean)
   real, intent(in) :: aL    !< Left edge scalar value, at x=0
   real, intent(in) :: aR    !< Right edge scalar value, at x=1
   real, intent(in) :: aMean !< Average scalar value of cell
+
   ! Local variables
   real :: dx, xave, a6, a6o3
 
@@ -317,7 +326,7 @@ end function ppm_ave
 !! The limiting follows equation 1.8 in Colella & Woodward, 1984: JCP 54, 174-201.
 subroutine PLM_diff(nk, h, S, c_method, b_method, diff)
   integer,             intent(in)    :: nk       !< Number of levels
-  real, dimension(nk), intent(in)    :: h        !< Layer thickness (H)
+  real, dimension(nk), intent(in)    :: h        !< Layer thickness (H units)
   real, dimension(nk), intent(in)    :: S        !< Layer salinity (conc, e.g. ppt)
   integer,             intent(in)    :: c_method !< Method to use for the centered difference
   integer,             intent(in)    :: b_method !< =1, use PCM in first/last cell, =2 uses linear extrapolation
@@ -328,6 +337,7 @@ subroutine PLM_diff(nk, h, S, c_method, b_method, diff)
                                                  !!   3. Finite-volume weighted least squares linear fit
                                                  !! \todo  The use of c_method to choose a scheme is inefficient
                                                  !! and should eventually be moved up the call tree.
+
   ! Local variables
   integer :: k
   real :: hkm1, hk, hkp1, Skm1, Sk, Skp1, diff_l, diff_r, diff_c
@@ -388,6 +398,7 @@ real function fv_diff(hkm1, hk, hkp1, Skm1, Sk, Skp1)
   real, intent(in) :: Skm1 !< Left cell average value
   real, intent(in) :: Sk   !< Center cell average value
   real, intent(in) :: Skp1 !< Right cell average value
+
   ! Local variables
   real :: h_sum, hp, hm
 
@@ -412,6 +423,7 @@ real function fvlsq_slope(hkm1, hk, hkp1, Skm1, Sk, Skp1)
   real, intent(in) :: Skm1 !< Left cell average value
   real, intent(in) :: Sk   !< Center cell average value
   real, intent(in) :: Skp1 !< Right cell average value
+
   ! Local variables
   real :: xkm1, xkp1
   real :: h_sum, hx_sum, hxsq_sum, hxy_sum, hy_sum, det
@@ -432,6 +444,7 @@ real function fvlsq_slope(hkm1, hk, hkp1, Skm1, Sk, Skp1)
   endif
 end function fvlsq_slope
 
+
 !> Returns positions within left/right columns of combined interfaces
 subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, Sr, dRdTr, dRdSr, PoL, PoR, KoL, KoR, hEff)
   integer,                    intent(in)    :: nk    !< Number of levels
@@ -450,6 +463,7 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
   integer, dimension(2*nk+2), intent(inout) :: KoL   !< Index of first left interface above neutral surface
   integer, dimension(2*nk+2), intent(inout) :: KoR   !< Index of first right interface above neutral surface
   real, dimension(2*nk+1),    intent(inout) :: hEff  !< Effective thickness between two neutral surfaces (Pa)
+
   ! Local variables
   integer :: k_surface ! Index of neutral surface
   integer :: kl ! Index of left interface
@@ -627,6 +641,7 @@ real function absolute_position(n,Pint,Karr,NParr,k_surface)
   real,    intent(in) :: Pint(n+1)    !< Position of interfaces (Pa)
   integer, intent(in) :: Karr(2*n+2)  !< Index of interface above position
   real,    intent(in) :: NParr(2*n+2) !< Non-dimensional position within layer Karr(:)
+
   ! Local variables
   integer :: k_surface, k
 
@@ -643,6 +658,7 @@ function absolute_positions(n,Pint,Karr,NParr)
   integer, intent(in) :: Karr(2*n+2)  !< Indexes of interfaces about positions
   real,    intent(in) :: NParr(2*n+2) !< Non-dimensional positions within layers Karr(:)
   real,  dimension(2*n+2) :: absolute_positions ! Absolute positions (Pa)
+
   ! Local variables
   integer :: k_surface, k
 
@@ -682,6 +698,7 @@ real function interpolate_for_nondim_position(dRhoNeg, Pneg, dRhoPos, Ppos)
   if ( interpolate_for_nondim_position > 1. ) stop 'interpolate_for_nondim_position: Houston, we have a problem! Pint > Ppos'
 end function interpolate_for_nondim_position
 
+
 !> Returns a single column of neutral diffusion fluxes of a tracer.
 subroutine neutral_surface_flux(nk, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Flx)
   integer,                    intent(in)    :: nk    !< Number of levels
@@ -695,6 +712,7 @@ subroutine neutral_surface_flux(nk, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Fl
   integer, dimension(2*nk+2), intent(in)    :: KoR   !< Index of first right interface below neutral surface
   real, dimension(2*nk+1),    intent(in)    :: hEff  !< Effective thickness between two neutral surfaces (Pa)
   real, dimension(2*nk+1),    intent(inout) :: Flx   !< Flux of tracer between pairs of neutral layers (conc H)
+
   ! Local variables
   integer :: k_sublayer, klb, klt, krb, krt
   real :: T_right_top, T_right_bottom, T_right_layer
@@ -1002,6 +1020,7 @@ logical function neutralDiffusionUnitTests()
     real,             intent(in) :: Skp1 !< Right cell average value
     real,             intent(in) :: Ptrue  !< True answer (Pa)
     character(len=*), intent(in) :: title !< Title for messages
+
     ! Local variables
     integer :: stdunit
     real :: Pret
@@ -1032,6 +1051,7 @@ logical function neutralDiffusionUnitTests()
     real,             intent(in) :: Skp1 !< Right cell average value
     real,             intent(in) :: Ptrue  !< True answer (Pa)
     character(len=*), intent(in) :: title !< Title for messages
+
     ! Local variables
     integer :: stdunit
     real :: Pret
@@ -1060,6 +1080,7 @@ logical function neutralDiffusionUnitTests()
     real,             intent(in) :: Ppos   !< Interface position of heavier density (pa)
     real,             intent(in) :: Ptrue  !< True answer (Pa)
     character(len=*), intent(in) :: title !< Title for messages
+
     ! Local variables
     integer :: stdunit
     real :: Pret
@@ -1086,6 +1107,7 @@ logical function neutralDiffusionUnitTests()
     real, dimension(nk), intent(in) :: Po !< Calculated answer
     real, dimension(nk), intent(in) :: Ptrue !< True answer
     character(len=*),    intent(in) :: title !< Title for messages
+
     ! Local variables
     integer :: k, stdunit
 
@@ -1117,6 +1139,7 @@ logical function neutralDiffusionUnitTests()
     integer, dimension(nk), intent(in) :: Po !< Calculated answer
     integer, dimension(nk), intent(in) :: Ptrue !< True answer
     character(len=*),       intent(in) :: title !< Title for messages
+
     ! Local variables
     integer :: k, stdunit
 
@@ -1156,6 +1179,7 @@ logical function neutralDiffusionUnitTests()
     real, dimension(2*nk+2),    intent(in) :: pR0   !< Correct value for pR
     real, dimension(2*nk+1),    intent(in) :: hEff0 !< Correct value for hEff
     character(len=*),       intent(in) :: title !< Title for messages
+
     ! Local variables
     integer :: k, stdunit
     logical :: this_row_failed
