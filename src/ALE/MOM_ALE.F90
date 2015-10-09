@@ -102,6 +102,8 @@ end type
 public initialize_ALE
 public end_ALE
 public ALE_main 
+public regrid_only
+public regrid_remap_T_S
 public remap_scalar_h_to_h
 public pressure_gradient_plm
 public pressure_gradient_ppm
@@ -295,9 +297,94 @@ subroutine ALE_main( G, h, u, v, tv, Reg, CS )
       h(i,j,k) = h(i,j,k) + ( CS%dzRegrid(i,j,k) - CS%dzRegrid(i,j,k+1) )
     enddo ; enddo
   enddo
+!$OMP end parallel
 
   if (CS%show_call_tree) call callTree_leave("ALE_main()")
 end subroutine ALE_main
+
+!> Generates new grid
+subroutine regrid_only( G, regridCS, remapCS, h, tv, debug )
+  type(ocean_grid_type),                   intent(in)    :: G !< Ocean grid informations
+  type(regridding_CS),                     intent(in)    :: regridCS !< Regridding parameters and options
+  type(remapping_CS),                      intent(in)    :: remapCS !< Remapping parameters and options
+  type(thermo_var_ptrs),                   intent(inout) :: tv !< Thermodynamical variable structure
+  real, dimension(NIMEM_,NJMEM_, NKMEM_),  intent(inout) :: h !< Current 3D grid obtained after the last time step (m or Pa)
+  logical,                       optional, intent(in)    :: debug !< If true, show the call tree
+  ! Local variables
+  integer :: nk, i, j, k, isd, ied, jsd, jed
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: dzRegrid ! The changein grid interface positions
+  logical :: show_call_tree
+
+  show_call_tree = .false.
+  if (present(debug)) show_call_tree = debug
+  if (show_call_tree) call callTree_enter("regrid_only(), MOM_ALE.F90")
+
+  ! Build new grid. The new grid is stored in h_new. The old grid is h.
+  ! Both are needed for the subsequent remapping of variables.
+  call regridding_main( remapCS, regridCS, G, h, tv, dzRegrid )
+
+  call check_remapping_grid( G, h, dzRegrid, 'in regrid_only()' )
+
+  ! Override old grid with new one. The new grid 'h_new' is built in
+  ! one of the 'build_...' routines above.
+!$OMP parallel do default(none) shared(isd,ied,jsd,jed,nk,h,CS)
+  do k = 1,G%ke
+    do j = G%jsd,G%jed ; do i = G%isd,G%ied
+      h(i,j,k) = h(i,j,k) + ( dzRegrid(i,j,k) - dzRegrid(i,j,k+1) )
+    enddo ; enddo
+  enddo
+!$OMP end parallel
+
+  if (show_call_tree) call callTree_leave("regrid_only()")
+end subroutine regrid_only
+
+!> Generates new grid and remaps T and S.
+subroutine regrid_remap_T_S( G, regridCS, remapCS, h, tv, debug )
+  type(ocean_grid_type),                   intent(in)    :: G !< Ocean grid informations
+  type(regridding_CS),                     intent(in)    :: regridCS !< Regridding parameters and options
+  type(remapping_CS),                      intent(in)    :: remapCS !< Remapping parameters and options
+  real, dimension(NIMEM_,NJMEM_, NKMEM_),  intent(inout) :: h !< Current 3D grid obtained after the last time step (m or Pa)
+  type(thermo_var_ptrs),                   intent(inout) :: tv !< Thermodynamical variable structure
+  logical,                       optional, intent(in)    :: debug !< If true, show the call tree
+  ! Local variables
+  integer :: nk, i, j, k, isd, ied, jsd, jed
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: h_old ! The source grid
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: scalar ! The source data
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: dzRegrid ! The changein grid interface positions
+  logical :: show_call_tree
+
+  show_call_tree = .false.
+  if (present(debug)) show_call_tree = debug
+  if (show_call_tree) call callTree_enter("regrid_map_T_S(), MOM_ALE.F90")
+
+  ! Build new grid. The new grid is stored in h_new. The old grid is h.
+  ! Both are needed for the subsequent remapping of variables.
+  call regridding_main( remapCS, regridCS, G, h, tv, dzRegrid )
+
+  call check_remapping_grid( G, h, dzRegrid, 'in regrid_map_T_S()' )
+
+  ! Override old grid with new one. The new grid 'h_new' is built in
+  ! one of the 'build_...' routines above.
+  nk = G%ke; isd = G%isd; ied = G%ied; jsd = G%jsd; jed = G%jed
+!$OMP parallel do default(none) shared(isd,ied,jsd,jed,nk,h,CS)
+  do k = 1,nk
+    do j = jsd,jed ; do i = isd,ied
+      h_old(i,j,k) = h(i,j,k)
+      h(i,j,k) = h(i,j,k) + ( dzRegrid(i,j,k) - dzRegrid(i,j,k+1) )
+    enddo ; enddo
+  enddo
+!$OMP end parallel
+
+  if (show_call_tree) call callTree_waypoint("new grid generated (regrid_map_T_S)")
+
+  ! Remap T and S from old grid h_old onto new grid h
+  scalar(:,:,:) = tv%T(:,:,:)
+  call remap_scalar_h_to_h( remapCS, G, nk, h_old, scalar, h, tv%T )
+  scalar(:,:,:) = tv%S(:,:,:)
+  call remap_scalar_h_to_h( remapCS, G, nk, h_old, scalar, h, tv%S )
+
+  if (show_call_tree) call callTree_leave("regrid_map_T_S()")
+end subroutine regrid_remap_T_S
 
 !> This routine takes care of remapping all variable between the old and the
 !! new grids. When velocity components need to be remapped, thicknesses at
