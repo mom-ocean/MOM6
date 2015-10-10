@@ -2113,6 +2113,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
       endif ! mask2dT
     enddo ; enddo
     deallocate( tmp_mask_in )
+    call pass_var(h1, G%Domain)
+    call pass_var(tmpT1dIn, G%Domain)
+    call pass_var(tmpS1dIn, G%Domain)
 
     ! Build the target grid (and set the model thickness to it)
     allocate( hTarget(nz) )
@@ -2135,6 +2138,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
           h(i,j,:) = 0.
         endif ! mask2dT
       enddo ; enddo
+      call pass_var(h, G%Domain)
       deallocate( hTarget )
     endif
 
