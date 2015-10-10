@@ -58,7 +58,7 @@ use MOM_time_manager,         only : operator(-), operator(>), operator(*), oper
 ! MOM core modules
 use MOM_ALE,                   only : initialize_ALE, end_ALE, ALE_main, ALE_CS, adjustGridForIntegrity
 use MOM_ALE,                   only : ALE_getCoordinate, ALE_getCoordinateUnits, ALE_writeCoordinateFile
-use MOM_ALE,                   only : ALE_updateVerticalGridType
+use MOM_ALE,                   only : ALE_updateVerticalGridType, remap_init_conds
 use MOM_continuity,            only : continuity, continuity_init, continuity_CS
 use MOM_CoriolisAdv,           only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
 use MOM_diabatic_driver,       only : diabatic, diabatic_driver_init, diabatic_CS
@@ -1675,30 +1675,26 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call cpu_clock_end(id_clock_MOM_init)
   call callTree_waypoint("returned from MOM_initialize_state() (initialize_MOM)")
 
-  if (CS%use_ALE_algorithm) then
-    ! For now, this has to follow immediately after MOM_initialize_state because
-    ! the call to initialize_ALE can change CS%h, etc.  initialize_ALE should
-    ! be broken into two separate steps, with the regridding step optionally
-    ! occuring inside of MOM_initialize_state.
+  if (remap_init_conds(CS%ALE_CSp) .and. .not. query_initialized(CS%h,"h",CS%restart_CSp)) then
+    ! This block is controlled by the ALE parameter REMAP_AFTER_INITIALIZATION.
+    ! \todo This block exists for legacy reasons and we should phase it out of
+    ! all examples.
     if (CS%debug) then
-      call uchksum(CS%u,"Pre initialize_ALE u", G, haloshift=1)
-      call vchksum(CS%v,"Pre initialize_ALE v", G, haloshift=1)
-      call hchksum(CS%h*G%H_to_m,"Pre initialize_ALE h", G, haloshift=1)
+      call uchksum(CS%u,"Pre ALE adjust init cond u", G, haloshift=1)
+      call vchksum(CS%v,"Pre ALE adjust init cond v", G, haloshift=1)
+      call hchksum(CS%h*G%H_to_m,"Pre ALE adjust init cond h", G, haloshift=1)
     endif
-    if (.not. query_initialized(CS%h,"h",CS%restart_CSp)) then
-      ! This is a not a restart so we do the following...
-      call callTree_waypoint("Calling adjustGridForIntegrity() to remap initial conditions (initialize_MOM)")
-      call adjustGridForIntegrity(CS%ALE_CSp, G, CS%h )
-      call callTree_waypoint("Calling ALE_main() to remap initial conditions (initialize_MOM)")
-      call ALE_main( G, CS%h, CS%u, CS%v, CS%tv, CS%tracer_Reg, CS%ALE_CSp ) ! Or init_CS%tracer_Reg ??? -AJA
-    endif
-    call ALE_updateVerticalGridType( CS%ALE_CSp, G%GV )
+    call callTree_waypoint("Calling adjustGridForIntegrity() to remap initial conditions (initialize_MOM)")
+    call adjustGridForIntegrity(CS%ALE_CSp, G, CS%h )
+    call callTree_waypoint("Calling ALE_main() to remap initial conditions (initialize_MOM)")
+    call ALE_main( G, CS%h, CS%u, CS%v, CS%tv, CS%tracer_Reg, CS%ALE_CSp ) ! Or init_CS%tracer_Reg ??? -AJA
     if (CS%debug) then
-      call uchksum(CS%u,"Post initialize_ALE u", G, haloshift=1)
-      call vchksum(CS%v,"Post initialize_ALE v", G, haloshift=1)
-      call hchksum(CS%h*G%H_to_m, "Post initialize_ALE h", G, haloshift=1)
+      call uchksum(CS%u,"Post ALE adjust init cond u", G, haloshift=1)
+      call vchksum(CS%v,"Post ALE adjust init cond v", G, haloshift=1)
+      call hchksum(CS%h*G%H_to_m, "Post ALE adjust init cond h", G, haloshift=1)
     endif
   endif
+  if ( CS%use_ALE_algorithm ) call ALE_updateVerticalGridType( CS%ALE_CSp, G%GV )
 
   ! Initialize the diagnostics mask arrays.
   ! This step has to be done after call to MOM_initialize_state

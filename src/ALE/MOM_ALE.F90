@@ -92,6 +92,9 @@ type, public :: ALE_CS
   ! Work space for communicating between regridding and remapping
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NK_INTERFACE_) :: dzRegrid
 
+  !> Indicates whether to regrid/remap after initializing the state.
+  logical :: remap_after_initialization
+
   logical :: show_call_tree ! For debugging
 
 end type
@@ -117,6 +120,7 @@ public ALE_writeCoordinateFile
 public ALE_updateVerticalGridType
 public ALE_initThicknessToCoord
 public check_remapping_grid
+public remap_init_conds
 
 ! -----------------------------------------------------------------------------
 ! The following are private constants
@@ -212,6 +216,12 @@ subroutine initialize_ALE( param_file, G, CS )
                  trim(remappingSchemesDoc), default=remappingDefaultScheme)
   call initialize_remapping( G%ke, string, CS%remapCS )
   call remapDisableBoundaryExtrapolation( CS%remapCS )
+
+  call get_param(param_file, mod, "REMAP_AFTER_INITIALIZATION", CS%remap_after_initialization, &
+                 "If true, applies regridding and remapping immediately after\n"//&
+                 "initialization so that the state is ALE consistent. This is a\n"//&
+                 "legacy step and should not be needed if the initialization is\n"//&
+                 "consistent with the coordinate mode.", default=.true.)
 
   ! Keep a record of values for subsequent queries
   CS%nk = G%ke
@@ -921,6 +931,13 @@ function ALE_getCoordinateUnits( CS )
   ALE_getCoordinateUnits = getCoordinateUnits( CS%regridCS )
 
 end function ALE_getCoordinateUnits
+
+!> Returns true if initial conditions should be regridded and remapped
+logical function remap_init_conds( CS )
+  type(ALE_CS),            pointer :: CS
+  remap_init_conds = .false.
+  if (associated(CS)) remap_init_conds = CS%remap_after_initialization
+end function remap_init_conds
 
 !------------------------------------------------------------------------------
 ! Update the vertical grid type with ALE information
