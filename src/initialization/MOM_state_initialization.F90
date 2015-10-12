@@ -2085,9 +2085,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
          "Data has more levels than the model - this has not been coded yet!")
     ! Build the source grid and copy data onto model-shaped arrays with vanished layers
     allocate( tmp_mask_in(isd:ied,jsd:jed,nz) ) ; tmp_mask_in(is:ie,js:je,:) = 0.
-    allocate( h1(isd:ied,jsd:jed,nz) ) ; h1(:,:,:) = 0.
-    allocate( tmpT1dIn(isd:ied,jsd:jed,nz) ) ; tmpT1dIn(:,:,:) = 0.
-    allocate( tmpS1dIn(isd:ied,jsd:jed,nz) ) ; tmpS1dIn(:,:,:) = 0.
+    allocate( h1(isd:ied,jsd:jed,nz) ) ; h(is:ie,js:je,:) = 0.
+    allocate( tmpT1dIn(isd:ied,jsd:jed,nz) ) ; tmpT1dIn(is:ie,js:je,:) = 0.
+    allocate( tmpS1dIn(isd:ied,jsd:jed,nz) ) ; tmpS1dIn(is:ie,js:je,:) = 0.
     do j = js, je ; do i = is, ie
       if (G%mask2dT(i,j)>0.) then
         zTopOfCell = 0. ; zBottomOfCell = 0. ; nPoints = 0
@@ -2148,6 +2148,14 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
     if (remap_general) then
       call set_regrid_min_thickness( 0., regridCS )
       h(:,:,:) = h1(:,:,:) ; tv%T(:,:,:) = tmpT1dIn(:,:,:) ; tv%S(:,:,:) = tmpS1dIn(:,:,:)
+      do j = js, je ; do i = is, ie
+        if (G%mask2dT(i,j)==0.) then ! Ensure there are no nonsense values on land
+          h(i,j,:) = 0. ; tv%T(i,j,:) = 0. ; tv%S(i,j,:) = 0.
+        endif
+      enddo ; enddo
+      call pass_var(h, G%Domain)    ! Regridding might eventually use spatial information and
+      call pass_var(tv%T, G%Domain) ! thus needs to be up to date in the halo regions even though
+      call pass_var(tv%S, G%Domain) ! regrid_only() only updates h on the computational domain.
       call regrid_only( G, regridCS, remapCS, h, tv, .true. )
     endif
     call remap_scalar_h_to_h( remapCS, G, nz, h1, tmpT1dIn, h, tv%T, all_cells=remap_full_column )
