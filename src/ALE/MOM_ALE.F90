@@ -338,11 +338,13 @@ subroutine regrid_only( G, regridCS, remapCS, h, tv, debug )
   ! Override old grid with new one. The new grid 'h_new' is built in
   ! one of the 'build_...' routines above.
 !$OMP parallel do default(none) shared(isd,ied,jsd,jed,nk,h,CS)
-  do k = 1,G%ke
-    do j = G%jsd,G%jed ; do i = G%isd,G%ied
-      h(i,j,k) = h(i,j,k) + ( dzRegrid(i,j,k) - dzRegrid(i,j,k+1) )
-    enddo ; enddo
-  enddo
+  do j = G%jsc,G%jec ; do i = G%isc,G%iec
+    if (G%mask2dT(i,j)>0.) then
+      do k = 1,G%ke
+        h(i,j,k) = h(i,j,k) + ( dzRegrid(i,j,k) - dzRegrid(i,j,k+1) )
+      enddo
+    endif
+  enddo ; enddo
 !$OMP end parallel
 
   if (show_call_tree) call callTree_leave("regrid_only()")
