@@ -663,6 +663,7 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
   ! determine the cell average.
   ! ============================================================
   ! 1. Cell is vanished
+ !if ( abs(xR - xL) <= epsilon(xR)*max(abs(xR),abs(xL)) ) then
   if ( abs(xR - xL) == 0.0 ) then
 
     ! We check whether the source cell (i.e. the cell in which the
@@ -871,7 +872,11 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
 
     ! The cell average is the integrated value divided by the cell width
 #ifdef __USE_ROUNDOFF_SAFE_ADJUSTMENTS__
+if (hAct==0.) then
+    uAve = ppoly0_coefficients(jL,1)
+else
     uAve = q / hAct
+endif
 #else
     uAve = q / hC
 #endif
