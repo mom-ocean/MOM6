@@ -273,7 +273,7 @@ subroutine check_remapping_grid( G, h, dzInterface, msg )
 !$OMP                          private(totalHold,zOld,totalHnewF,zNewF,hNewF)
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
-      call check_grid_column( G%ke, G%bathyT(i,j), h(i,j,:), dzInterface(i,j,:), msg )
+      if (G%mask2dT(i,j)>0.) call check_grid_column( G%ke, G%bathyT(i,j), h(i,j,:), dzInterface(i,j,:), msg )
     enddo
   enddo
 
