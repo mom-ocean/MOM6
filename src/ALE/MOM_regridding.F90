@@ -790,7 +790,7 @@ subroutine adjust_interface_motion( nk, min_thickness, h_old, dz_int )
   enddo
   do k = nk,1,-1
     h_new = h_old(k) + ( dz_int(k) - dz_int(k+1) )
-    if (h_new<0.) dz_int(k) = ( dz_int(k+1) - h_old(k) ) ! Works if dz_int(k=1)==0
+    if (h_new<0.) dz_int(k) = ( dz_int(k+1) - h_old(k) ) + min_thickness ! Works if dz_int(k=1)==0
     h_new = h_old(k) + ( dz_int(k) - dz_int(k+1) )
     if (h_new<0.) dz_int(k) = ( 1. - eps ) * ( dz_int(k+1) - h_old(k) )
     h_new = h_old(k) + ( dz_int(k) - dz_int(k+1) )
