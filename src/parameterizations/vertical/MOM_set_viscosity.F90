@@ -433,7 +433,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
 ! Killworth and Edwards, 1999, as described in Stephens and Hallberg
 ! 2000 (unpublished and lost manuscript).
       if (use_BBL_EOS) then
-        Thtot = 0.0 ; Shtot = 0.0
+        Thtot = 0.0 ; Shtot = 0.0 ; oldfn = 0.0
         do k=nz,2,-1
           if (h_at_vel(i,k) <= 0.0) cycle
 
