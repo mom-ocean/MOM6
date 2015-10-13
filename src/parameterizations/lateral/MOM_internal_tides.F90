@@ -1887,7 +1887,7 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
   logical :: use_int_tides, use_temperature
   integer :: num_angle, num_freq, num_mode, m, fr, period_1
   real :: kappa_itides, kappa_h2_factor ! (BDM)
-  integer :: isd, ied, jsd, jed, a, fr, id_ang, i, j
+  integer :: isd, ied, jsd, jed, a, id_ang, i, j
   type(axesType) :: axes_ang 
   ! This include declares and sets the variable "version".
 #include "version_variable.h"
