@@ -436,13 +436,11 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
             ! Guess a vector shape to start with (excludes surface and bottom)
             e_guess(1:kc-1) = sin(z_int(2:kc)/htot(i,j)*Pi)
             e_guess(1:kc-1) = e_guess(1:kc-1)/sqrt(sum(e_guess(1:kc-1)**2))
-            !print *, "e_guess=", e_guess(1:kc-1)
-            !print *, "|e_guess|=", sqrt(sum(e_guess(1:kc-1)**2))
-            
+                        
             ! Perform inverse iteration with tri-diag solver
             do itt=1,max_itt
               call tridiag_solver(a_diag(1:kc-1),b_diag(1:kc-1),c_diag(1:kc-1), &
-                                  -lam_z(1:kc-1),e_guess(1:kc-1),"TDMA_T",e_itt)
+                                  -lam_z(1:kc-1),e_guess(1:kc-1),"TDMA_H",e_itt)
               e_guess(1:kc-1) = e_itt(1:kc-1)/sqrt(sum(e_itt(1:kc-1)**2))
             enddo ! itt-loop
             w_strct(2:kc) = e_guess(1:kc-1)
@@ -466,8 +464,8 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
             
             ! Calculate vertical structure function of u (i.e. dw/dz)
             do K=2,nzm-1
-              u_strct(K) = (w_strct(K-1) - w_strct(K)  )/dz(k-1) + &
-                           (w_strct(K)   - w_strct(K+1))/dz(k)
+              u_strct(K) = 0.5*((w_strct(K-1) - w_strct(K)  )/dz(k-1) + &
+                           (w_strct(K)   - w_strct(K+1))/dz(k))
             enddo
             u_strct(1)   = (w_strct(1)   -  w_strct(2) )/dz(1)
             u_strct(nzm)  = (w_strct(nzm-1)-  w_strct(nzm))/dz(nzm-1)
@@ -510,16 +508,35 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
             CS%N2(i,j,1:nzm)          = N2
             CS%num_intfaces(i,j)       = nzm
             !----for debugging; delete later----
+            !print *, "e_guess=", e_guess(1:kc-1)
+            !print *, "|e_guess|=", sqrt(sum(e_guess(1:kc-1)**2))
+            !print *, 'f0=', sqrt(f2)
+            !print *, 'freq=', freq
+            !print *, 'Kh=', sqrt(Kmag2)
             !print *, 'Wave_structure: z_int(ig,jg)=',   z_int(1:nzm)
             !print *, 'Wave_structure: N2(ig,jg)=',      N2(1:nzm)
-            !print *, 'Wave_structure: w_strct(ig,jg)=', w_strct(1:nzm)
-            print *, 'Wave_structure: a_diag(ig,jg)=',  a_diag(1:kc-1)
-            print *, 'Wave_structure: b_diag(ig,jg)=',  b_diag(1:kc-1)
-            print *, 'Wave_structure: c_diag(ig,jg)=',  c_diag(1:kc-1)
+            !print *, 'gprime=', gprime
+            !print *, '1/Hc=', 1/Hc
+            !print *, 'Wave_structure: a_diag(ig,jg)=',  a_diag(1:kc-1)
+            !print *, 'Wave_structure: b_diag(ig,jg)=',  b_diag(1:kc-1)
+            !print *, 'Wave_structure: c_diag(ig,jg)=',  c_diag(1:kc-1)
             !print *, 'Wave_structure: lam_z(ig,jg)=',   lam_z(1:kc-1)
+            print *, 'Wave_structure: w_strct(ig,jg)=', w_strct(1:nzm) !matches MATLAB!!
+            print *, 'En(i,j)=', En(i,j)
+            print *, 'Wave_structure: W_profile(ig,jg)=', W_profile(1:nzm)
+            print *,'int_dwdz2 =',int_dwdz2
+            print *,'int_w2 =',int_w2
+            print *,'int_N2w2 =',int_N2w2
+            print *,'KEterm=',KE_term
+            print *,'PEterm=',PE_term
+            print *, 'W0=',W0
             !open(unit=1,file='out_N2',form='formatted') ; write(1,*) N2 ; close(1)
             !open(unit=2,file='out_z',form='formatted') ;  write(2,*) z_int ; close(2)
             !-----------------------------------
+            
+            !----check energy calcs------------
+            ! depth integrate
+            
 
           endif  ! kc >= 2?
         endif ! drxh_sum >= 0?
@@ -576,33 +593,38 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
     ! Standard Thomas algoritim (4th variant)
     c_prime(:) = 0.0       ; y_prime(:) = 0.0
     c_prime(1) = c(1)/b(1) ; y_prime(1) = y(1)/b(1)
+    
     ! Forward sweep
     do k=2,nrow-1
       c_prime(k) = c(k)/(b(k)-a(k)*c_prime(k-1))
     enddo
+    print *, 'c_prime=', c_prime(1:nrow)
     do k=2,nrow
       y_prime(k) = (y(k)-a(k)*y_prime(k-1))/(b(k)-a(k)*c_prime(k-1))
     enddo
+    print *, 'y_prime=', y_prime(1:nrow)
     x(nrow) = y_prime(nrow)
+
     ! Backward sweep
-    do k=nrow-1,-1,1
+    do k=nrow-1,1,-1
       x(k) = y_prime(k)-c_prime(k)*x(k+1)
     enddo
+    print *, 'x=',x(1:nrow)
+    
     ! Check results
-    do j=1,nrow ; do i=1,nrow
-      if(i==j)then ;       A_check(i,j) = b(i)
-      elseif(i==j+1)then ; A_check(i,j) = a(i)
-      elseif(i==j-1)then ; A_check(i,j) = c(i)
-      endif
-    enddo ; enddo
-    print *, 'size of x is', shape(x)
-    print *, 'A(2,1),A(2,2),A(1,2)=', A_check(2,1), A_check(2,2), A_check(1,2) 
-    y_check = matmul(A_check,x)
-    if(all(y_check .ne. y))then
-      print *, "tridiag_solver: Uh oh, something's not right!"
-      print *, "y=", y
-      print *, "y_check=", y_check 
-      endif
+    !do j=1,nrow ; do i=1,nrow
+    !  if(i==j)then ;       A_check(i,j) = b(i)
+    !  elseif(i==j+1)then ; A_check(i,j) = a(i)
+    !  elseif(i==j-1)then ; A_check(i,j) = c(i)
+    !  endif
+    !enddo ; enddo
+    !print *, 'A(2,1),A(2,2),A(1,2)=', A_check(2,1), A_check(2,2), A_check(1,2)
+    !y_check = matmul(A_check,x)
+    !if(all(y_check .ne. y))then
+    !  print *, "tridiag_solver: Uh oh, something's not right!"
+    !  print *, "y=", y
+    !  print *, "y_check=", y_check 
+    !endif
   elseif (method == 'TDMA_H') then
     ! Thomas algoritim (4th variant) w/ Hallberg substitution.
     ! For a layered system where k is at interfaces, alpha{k+1/2} refers to
@@ -619,11 +641,13 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
     ! Alpha of the bottom-most layer is not necessarily zero. Therefore,
     ! back out the value from the provided b(nrow and h(nrow) values
     alpha(nrow)   = b(nrow)-h(nrow)-alpha(nrow-1)
+    !print *, 'alpha=', alpha(1:nrow)    
     ! Prime other variables
     beta       = 1/b(1)
     y_prime(:) = 0.0       ; q(:) = 0.0
     y_prime(1) = beta*y(1) ; q(1) = beta*alpha(1)
     Q_prime    = 1-q(1)
+        
     ! Forward sweep
     do k=2,nrow-1
       beta = 1/(h(k)+alpha(k-1)*Q_prime+alpha(k))
@@ -636,15 +660,43 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
     y_prime(nrow) = beta*(y(nrow)+alpha(nrow-1)*y_prime(nrow-1))
     x(nrow) = y_prime(nrow)
     ! Backward sweep
-    do k=nrow-1,-1,1
+    do k=nrow-1,1,-1
       x(k) = y_prime(k)+q(k)*x(k+1)
     enddo
+    !print *, 'yprime=',y_prime(1:nrow)
+    !print *, 'x=',x(1:nrow)
   endif
   
   deallocate(c_prime,y_prime,q,alpha,A_check,y_check)
 
 end subroutine tridiag_solver
 
+
+!subroutine jacobi_eig(A,N,NP,D,V,NROT)
+!  real, dimension(:,:), intent(in)  :: A
+!  real, intent(in)                  :: N, NP
+!  real, dimension(:), intent(out)   :: D
+!  real, dimension(:,:), intent(out) :: V
+!  real, intent(out)                 :: NROT  
+  
+!    This subroutine computes all eigen values and vectors of a real,
+! symmetric matrix.  
+!
+! Arguments: 
+!  (in)      A - a real, symmetric, square matrix
+!  (in)      N - size of A matrix (N x N)
+!  (in)      NP -
+!  (out)     D - one-dimensional array of eigen values (unsorted)
+!  (out)     V - matrix of same dimesions as A with eigen vectors as columns
+!  (out)     NROT - number of Jacobi rotations that were required
+!
+!  dimension A(NP,NP), D(NP), V(NP,NP) 
+!  integer, parameter :: NMAX = 100    ! 
+!  real, dimension(NMAX) :: B          !
+!  real, dimension(NMAX) :: Z          !
+!  integer :: ip, iq
+  
+  
 subroutine wave_structure_init(Time, G, param_file, diag, CS)
   type(time_type),             intent(in)    :: Time
   type(ocean_grid_type),       intent(in)    :: G
