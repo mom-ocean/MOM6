@@ -63,7 +63,7 @@ character(len=256), public :: remappingSchemesDoc = &
 character(len=3), public :: remappingDefaultScheme = "PLM" !< Default remapping method
 
 ! This CPP macro embeds some safety checks
-#define __DO_SAFETY_CHECKS__
+#undef __DO_SAFETY_CHECKS__
 
 ! This CPP macro turns on/off bounding of integrations limits so that they are
 ! always within the cell. Roundoff can lead to the non-dimensional bounds being

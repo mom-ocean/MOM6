@@ -152,7 +152,7 @@ real, parameter    :: NR_TOLERANCE = 1e-12
 real, parameter    :: NR_OFFSET = 1e-6
 
 ! This CPP macro embeds some safety checks
-#define __DO_SAFETY_CHECKS__
+#undef __DO_SAFETY_CHECKS__
 
 contains
 

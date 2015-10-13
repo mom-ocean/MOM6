@@ -26,7 +26,7 @@ public edge_values_explicit_h4
 public edge_values_implicit_h4
 public edge_values_implicit_h6
 
-#define __DO_SAFETY_CHECKS__
+#undef __DO_SAFETY_CHECKS__
 
 ! The following parameters are used to avoid singular matrices for boundary
 ! extrapolation. The are needed only in the case where thicknesses vanish
