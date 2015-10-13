@@ -198,7 +198,8 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, allowChange, permitDimi
   character(len=*),                       intent(in) :: mesg
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in) :: u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in) :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h, Temp, Salt
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h
+  real, pointer, dimension(:,:,:),        intent(in) :: Temp, Salt
   type(ocean_grid_type),                  intent(in) :: G
   logical, optional,                      intent(in) :: allowChange, permitDiminishing
 !   This subroutine monitors statistics for the model's state variables.
@@ -216,9 +217,12 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, allowChange, permitDimi
   type(stats) :: T, S, delT, delS
   type(stats), save :: oldT, oldS     ! NOTE: save data is not normally allowed but
   logical, save :: firstCall = .true. ! we use it for debugging purposes here on the
+  logical :: do_TS
   real, save :: oldVol                ! assumption we will not turn this on with threads
   character(len=80) :: lMsg
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  do_TS = associated(Temp) .and. associated(Salt)
 
   ! First collect local stats
   Area = 0. ; Vol = 0.
@@ -231,7 +235,7 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, allowChange, permitDimi
   do k = 1, nz ; do j = js, je ; do i = is, ie
     if (G%mask2dT(i,j)>0.) then
       dV = G%areaT(i,j)*h(i,j,k) ; Vol = Vol + dV
-      if (h(i,j,k)>0.) then
+      if (do_TS .and. h(i,j,k)>0.) then
         T%minimum = min( T%minimum, Temp(i,j,k) ) ; T%maximum = max( T%maximum, Temp(i,j,k) )
         T%average = T%average + dV*Temp(i,j,k)
         S%minimum = min( S%minimum, Salt(i,j,k) ) ; S%maximum = max( S%maximum, Salt(i,j,k) )
@@ -241,9 +245,11 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, allowChange, permitDimi
     endif
   enddo ; enddo ; enddo
   call sum_across_PEs( Area ) ; call sum_across_PEs( Vol )
-  call min_across_PEs( T%minimum ) ; call max_across_PEs( T%maximum ) ; call sum_across_PEs( T%average )
-  call min_across_PEs( S%minimum ) ; call max_across_PEs( S%maximum ) ; call sum_across_PEs( S%average )
-  T%average = T%average / Vol ; S%average = S%average / Vol
+  if (do_TS) then
+    call min_across_PEs( T%minimum ) ; call max_across_PEs( T%maximum ) ; call sum_across_PEs( T%average )
+    call min_across_PEs( S%minimum ) ; call max_across_PEs( S%maximum ) ; call sum_across_PEs( S%average )
+    T%average = T%average / Vol ; S%average = S%average / Vol
+  endif
   if (is_root_pe()) then
     if (.not.firstCall) then
       dV = Vol - oldVol
@@ -253,28 +259,32 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, allowChange, permitDimi
       delS%average = S%average - oldS%average
       write(lMsg(1:80),'(2(a,es12.4))') 'Mean thickness =',Vol/Area,' frac. delta=',dV/Vol
       call MOM_mesg(lMsg//trim(mesg))
-      write(lMsg(1:80),'(a,3es12.4)') 'Temp min/mean/max =',T%minimum,T%average,T%maximum
-      call MOM_mesg(lMsg//trim(mesg))
-      write(lMsg(1:80),'(a,3es12.4)') 'delT min/mean/max =',delT%minimum,delT%average,delT%maximum
-      call MOM_mesg(lMsg//trim(mesg))
-      write(lMsg(1:80),'(a,3es12.4)') 'Salt min/mean/max =',S%minimum,S%average,S%maximum
-      call MOM_mesg(lMsg//trim(mesg))
-      write(lMsg(1:80),'(a,3es12.4)') 'delS min/mean/max =',delS%minimum,delS%average,delS%maximum
-      call MOM_mesg(lMsg//trim(mesg))
+      if (do_TS) then
+        write(lMsg(1:80),'(a,3es12.4)') 'Temp min/mean/max =',T%minimum,T%average,T%maximum
+        call MOM_mesg(lMsg//trim(mesg))
+        write(lMsg(1:80),'(a,3es12.4)') 'delT min/mean/max =',delT%minimum,delT%average,delT%maximum
+        call MOM_mesg(lMsg//trim(mesg))
+        write(lMsg(1:80),'(a,3es12.4)') 'Salt min/mean/max =',S%minimum,S%average,S%maximum
+        call MOM_mesg(lMsg//trim(mesg))
+        write(lMsg(1:80),'(a,3es12.4)') 'delS min/mean/max =',delS%minimum,delS%average,delS%maximum
+        call MOM_mesg(lMsg//trim(mesg))
+      endif
     else
       write(lMsg(1:80),'(a,es12.4)') 'Mean thickness =',Vol/Area
       call MOM_mesg(lMsg//trim(mesg))
-      write(lMsg(1:80),'(a,3es12.4)') 'Temp min/mean/max =',T%minimum,T%average,T%maximum
-      call MOM_mesg(lMsg//trim(mesg))
-      write(lMsg(1:80),'(a,3es12.4)') 'Salt min/mean/max =',S%minimum,S%average,S%maximum
-      call MOM_mesg(lMsg//trim(mesg))
+      if (do_TS) then
+        write(lMsg(1:80),'(a,3es12.4)') 'Temp min/mean/max =',T%minimum,T%average,T%maximum
+        call MOM_mesg(lMsg//trim(mesg))
+        write(lMsg(1:80),'(a,3es12.4)') 'Salt min/mean/max =',S%minimum,S%average,S%maximum
+        call MOM_mesg(lMsg//trim(mesg))
+      endif
     endif
   endif
   firstCall = .false. ; oldVol = Vol
   oldT%minimum = T%minimum ; oldT%maximum = T%maximum ; oldT%average = T%average
   oldS%minimum = S%minimum ; oldS%maximum = S%maximum ; oldS%average = S%average
 
-  if (T%minimum<-5.0) then
+  if (do_TS .and. T%minimum<-5.0) then
     do j = js, je ; do i = is, ie
       if (minval(Temp(i,j,:)) == T%minimum) then
         write(0,'(a,2f12.5)') 'x,y=',G%geoLonT(i,j),G%geoLatT(i,j)
