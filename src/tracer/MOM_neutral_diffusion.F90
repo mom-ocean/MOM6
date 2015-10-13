@@ -44,7 +44,6 @@ end type neutral_diffusion_CS
 #include "version_variable.h"
 character(len=40)  :: mod = "MOM_neutral_diffusion" ! This module's name.
 
-logical, parameter :: debug_this_module = .false.
 
 contains
 
@@ -492,8 +491,6 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
     ! Potential density difference, rho(kr) - rho(kl)
     dRho = 0.5 * ( ( dRdTr(kr) + dRdTl(kl) ) * ( Tr(kr) - Tl(kl) ) &
                  + ( dRdSr(kr) + dRdSl(kl) ) * ( Sr(kr) - Sl(kl) ) )
-                                                     if (debug_this_module) write(0,*) k_surface,' ==== kl,kr,dRho=',kl,kr,dRho
-                                                     if (debug_this_module) write(0,*) '               klm1,krm1=',klm1,krm1
     ! Which column has the lighter surface for the current indexes, kr and kl
     if (.not. reached_bottom) then
       if (dRho < 0.) then
@@ -515,14 +512,12 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
 
     if (searching_left_column) then
       ! Interpolate for the neutral surface position within the left column, layer klm1
-                                                     if (debug_this_module) write(0,*) 'searching_left_column=',searching_left_column
       ! Potential density difference, rho(kl-1) - rho(kr) (should be negative)
       dRhoTop = 0.5 * ( ( dRdTl(klm1) + dRdTr(kr) ) * ( Tl(klm1) - Tr(kr) ) &
                      + ( dRdSl(klm1) + dRdSr(kr) ) * ( Sl(klm1) - Sr(kr) ) )
       ! Potential density difference, rho(kl) - rho(kr) (will be positive)
       dRhoBot = 0.5 * ( ( dRdTl(klm1+1) + dRdTr(kr) ) * ( Tl(klm1+1) - Tr(kr) ) &
                    + ( dRdSl(klm1+1) + dRdSr(kr) ) * ( Sl(klm1+1) - Sr(kr) ) )
-                                                     if (debug_this_module) write(0,*) '  dRhoTop=',dRhoTop,' dRhoBot=',dRhoBot
 
       ! Because we are looking left, the right surface, kr, is lighter than klm1+1 and should be denser than klm1
       ! unless we are still at the top of the left column (kl=1)
@@ -535,12 +530,10 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
         ! between right and left is zero.
         PoL(k_surface) = interpolate_for_nondim_position( dRhoTop, Pl(klm1), dRhoBot, Pl(klm1+1) )
       endif
-                                                     if (debug_this_module) write(0,*) ' *PoL(k)=',PoL(k_surface)
       if (PoL(k_surface)>=1. .and. klm1<nk) then ! >= is really ==, when PoL==1 we point to the bottom of the cell
         klm1 = klm1 + 1
         PoL(k_surface) = PoL(k_surface) - 1.
       endif
-                                                     if (debug_this_module) write(0,*) '  PoL(k)=',PoL(k_surface)
       if (real(klm1-lastK_left)+(PoL(k_surface)-lastP_left)<0.) then
         PoL(k_surface) = lastP_left
         klm1 = lastK_left
@@ -555,7 +548,6 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
       endif
       if (kr <= nk) then
         kr = kr + 1
-                                                     if (debug_this_module) write(0,*) '  updated: kr=',kr
       else
         reached_bottom = .true.
         searching_right_column = .true.
@@ -563,14 +555,12 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
       endif
     elseif (searching_right_column) then
       ! Interpolate for the neutral surface position within the right column, layer krm1
-                                                     if (debug_this_module) write(0,*) 'searching_right_column=',searching_right_column
       ! Potential density difference, rho(kr-1) - rho(kl) (should be negative)
       dRhoTop = 0.5 * ( ( dRdTr(krm1) + dRdTl(kl) ) * ( Tr(krm1) - Tl(kl) ) &
                      + ( dRdSr(krm1) + dRdSl(kl) ) * ( Sr(krm1) - Sl(kl) ) )
       ! Potential density difference, rho(kr) - rho(kl) (will be positive)
       dRhoBot = 0.5 * ( ( dRdTr(krm1+1) + dRdTl(kl) ) * ( Tr(krm1+1) - Tl(kl) ) &
                    + ( dRdSr(krm1+1) + dRdSl(kl) ) * ( Sr(krm1+1) - Sl(kl) ) )
-                                                     if (debug_this_module) write(0,*) '  dRhoTop=',dRhoTop,' dRhoBot=',dRhoBot
 
       ! Because we are looking right, the left surface, kl, is lighter than krm1+1 and should be denser than krm1
       ! unless we are still at the top of the right column (kr=1)
@@ -583,12 +573,10 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
         ! between right and left is zero.
         PoR(k_surface) = interpolate_for_nondim_position( dRhoTop, Pr(krm1), dRhoBot, Pr(krm1+1) )
       endif
-                                                     if (debug_this_module) write(0,*) ' *PoR(k)=',PoR(k_surface)
       if (PoR(k_surface)>=1. .and. krm1<nk) then ! >= is really ==, when PoR==1 we point to the bottom of the cell
         krm1 = krm1 + 1
         PoR(k_surface) = PoR(k_surface) - 1.
       endif
-                                                     if (debug_this_module) write(0,*) '  PoR(k)=',PoR(k_surface)
       if (real(krm1-lastK_right)+(PoR(k_surface)-lastP_right)<0.) then
         PoR(k_surface) = lastP_right
         krm1 = lastK_right
@@ -603,7 +591,6 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
       endif
       if (kl <= nk) then
         kl = kl + 1
-                                                     if (debug_this_module) write(0,*) '  updated: kl=',kl
       else
         reached_bottom = .true.
         searching_right_column = .false.
@@ -627,9 +614,7 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
       else
         hEff(k_surface-1) = 0.
       endif
-                                                     if (debug_this_module) write(0,*) '  hEff=',hEff(k_surface-1)
     endif
-    if (debug_this_module) write(0,*) '  result: ks=',k_surface,' kl=',KoL(k_surface),' kr=',KoR(k_surface)
 
   enddo neutral_surfaces
 
@@ -731,13 +716,9 @@ subroutine neutral_surface_flux(nk, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Fl
 
       klb = KoL(k_sublayer+1)
       T_left_bottom = ( 1. - PiL(k_sublayer+1) ) * Til(klb) + PiL(k_sublayer+1) * Til(klb+1)
-                                                     if (debug_this_module) write(0,'(i3,x,a,i3,4(x,a,f8.2))') &
-                                                     k_sublayer+1,'klb=',klb,'Til(klb)=',Til(klb),'Til(klb+1)=',Til(klb+1),'PiL(ks+1)=',PiL(k_sublayer+1),'T_left_bottom=',T_left_bottom
 
       klt = KoL(k_sublayer)
       T_left_top = ( 1. - PiL(k_sublayer) ) * Til(klt) + PiL(k_sublayer) * Til(klt+1)
-                                                     if (debug_this_module) write(0,'(i3,x,a,i3,4(x,a,f8.2))') &
-                                                     k_sublayer,'klt=',klt,'Til(klt)=',Til(klt),'Til(klt+1)=',Til(klt+1),'PiL(ks)=',PiL(k_sublayer),'T_left_top=',T_left_top
 
       !T_left_layer = Tl(klt)
       T_left_layer = ppm_ave(PiL(k_sublayer), PiL(k_sublayer+1) + real(klb-klt), &
@@ -745,13 +726,9 @@ subroutine neutral_surface_flux(nk, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Fl
 
       krb = KoR(k_sublayer+1)
       T_right_bottom = ( 1. - PiR(k_sublayer+1) ) * Tir(krb) + PiR(k_sublayer+1) * Tir(krb+1)
-                                                     if (debug_this_module) write(0,'(i3,x,a,i3,4(x,a,f8.2))') &
-                                                     k_sublayer+1,'krb=',krb,'Tir(krb)=',Tir(krb),'Tir(krb+1)=',Tir(krb+1),'PiR(ks+1)=',PiR(k_sublayer+1),'T_right_bottom=',T_right_bottom
 
       krt = KoR(k_sublayer)
       T_right_top = ( 1. - PiR(k_sublayer) ) * Tir(krt) + PiR(k_sublayer) * Tir(krt+1)
-                                                     if (debug_this_module) write(0,'(i3,x,a,i3,4(x,a,f8.2))') &
-                                                     k_sublayer,'krt=',krt,'Tir(krt)=',Tir(krt),'Tir(krt+1)=',Tir(krt+1),'PiR(ks)=',PiR(k_sublayer),'T_right_top=',T_right_top
 
       !T_right_layer = Tr(krt)
       T_right_layer = ppm_ave(PiR(k_sublayer), PiR(k_sublayer+1) + real(krb-krt), &
@@ -760,20 +737,15 @@ subroutine neutral_surface_flux(nk, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Fl
       dT_top = T_right_top - T_left_top
       dT_bottom = T_right_bottom - T_left_bottom
       dT_ave = 0.5 * ( dT_top + dT_bottom )
-                                                     if (debug_this_module) write(0,'(i3,3(x,a,f8.3))') k_sublayer,'dT_top=',dT_top,'dT_bottom=',dT_bottom,'dT_ave=',dT_ave
       dT_layer = T_right_layer - T_left_layer
-                                                     if (debug_this_module) write(0,'(i3,2(x,a,i3,x,a,f8.3),x,a,f8.3)') &
-                                                     k_sublayer,'klt=',klt,'Tl(klt=',Tl(klt),'krt=',krt,'Tr(krt=',Tr(krt),'dT_layer=',dT_layer
       if (dT_top * dT_bottom < 0. .or. dT_ave * dT_layer < 0. ) then
         dT_ave = 0.
       else
        !dT_ave = sign( min( abs(dT_top), abs(dT_bottom), abs(dT_ave) ) , dT_ave )
         dT_ave = sign( min( abs(dT_layer), abs(dT_ave) ) , dT_layer )
       endif
-                                                     if (debug_this_module) write(0,'(i3," dT_ave=",f8.3)') k_sublayer, dT_ave
       Flx(k_sublayer) = dT_ave * hEff(k_sublayer)
     endif
-                                                     if (debug_this_module) write(0,'(i3," Flx=",f8.3)') k_sublayer, Flx(k_sublayer)
   enddo
 
 end subroutine neutral_surface_flux
@@ -793,7 +765,6 @@ logical function neutralDiffusionUnitTests()
   integer :: k, verbosity
 
   verbosity = MOM_get_verbosity()
-  if (debug_this_module) verbosity=9
 
   neutralDiffusionUnitTests = .false. ! Normally return false
   write(*,'(a)') '===== MOM_neutral_diffusion: neutralDiffusionUnitTests =================='
@@ -1030,7 +1001,7 @@ logical function neutralDiffusionUnitTests()
 
     if (test_fv_diff .or. verbosity>5) then
       stdunit = 6
-      if (test_fv_diff.or.debug_this_module) stdunit = 0 ! In case of wrong results, write to error stream
+      if (test_fv_diff) stdunit = 0 ! In case of wrong results, write to error stream
       write(stdunit,'(a)') title
       if (test_fv_diff) then
         write(stdunit,'(2(x,a,f20.16),x,a)') 'pRet=',Pret,'pTrue=',Ptrue,'WRONG!'
@@ -1061,7 +1032,7 @@ logical function neutralDiffusionUnitTests()
 
     if (test_fvlsq_slope .or. verbosity>5) then
       stdunit = 6
-      if (test_fvlsq_slope.or.debug_this_module) stdunit = 0 ! In case of wrong results, write to error stream
+      if (test_fvlsq_slope) stdunit = 0 ! In case of wrong results, write to error stream
       write(stdunit,'(a)') title
       if (test_fvlsq_slope) then
         write(stdunit,'(2(x,a,f20.16),x,a)') 'pRet=',Pret,'pTrue=',Ptrue,'WRONG!'
@@ -1090,7 +1061,7 @@ logical function neutralDiffusionUnitTests()
 
     if (test_ifndp .or. verbosity>5) then
       stdunit = 6
-      if (test_ifndp.or.debug_this_module) stdunit = 0 ! In case of wrong results, write to error stream
+      if (test_ifndp) stdunit = 0 ! In case of wrong results, write to error stream
       write(stdunit,'(a)') title
       if (test_ifndp) then
         write(stdunit,'(4(x,a,f20.16),2(x,a,1pe22.15),x,a)') 'r1=',rhoNeg,'p1=',Pneg,'r2=',rhoPos,'p2=',Ppos,'pRet=',Pret,'pTrue=',Ptrue,'WRONG!'
@@ -1118,7 +1089,7 @@ logical function neutralDiffusionUnitTests()
 
     if (test_data1d .or. verbosity>5) then
       stdunit = 6
-      if (test_data1d.or.debug_this_module) stdunit = 0 ! In case of wrong results, write to error stream
+      if (test_data1d) stdunit = 0 ! In case of wrong results, write to error stream
       write(stdunit,'(a)') title
       do k = 1,nk
         if (Po(k) /= Ptrue(k)) then
@@ -1150,7 +1121,7 @@ logical function neutralDiffusionUnitTests()
 
     if (test_data1di .or. verbosity>5) then
       stdunit = 6
-      if (test_data1di.or.debug_this_module) stdunit = 0 ! In case of wrong results, write to error stream
+      if (test_data1di) stdunit = 0 ! In case of wrong results, write to error stream
       write(stdunit,'(a)') title
       do k = 1,nk
         if (Po(k) /= Ptrue(k)) then
@@ -1194,7 +1165,7 @@ logical function neutralDiffusionUnitTests()
 
     if (test_nsp .or. verbosity>5) then
       stdunit = 6
-      if (test_nsp.or.debug_this_module) stdunit = 0 ! In case of wrong results, write to error stream
+      if (test_nsp) stdunit = 0 ! In case of wrong results, write to error stream
       write(stdunit,'(a)') title
       do k = 1,2*nk+2
         this_row_failed = compare_nsp_row(KoL(k), KoR(k), pL(k), pR(k), KoL0(k), KoR0(k), pL0(k), pR0(k))
