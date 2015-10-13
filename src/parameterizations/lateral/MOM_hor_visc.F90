@@ -66,6 +66,10 @@ module MOM_hor_visc
 !*  These boundary conditions are largely dictated by the use of       *
 !*  a an Arakawa C-grid and by the varying layer thickness.            *
 !*                                                                     *
+!*                                                                     *
+!*                                                                     *
+!*                                                                     *
+!*                                                                     *
 !* Macros written all in capital letters are defined in MOM_memory.h.  *
 !*                                                                     *
 !*     A small fragment of the C-grid is shown below:                  *
@@ -263,7 +267,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
   real :: AhSm       ! Smagorinsky biharmonic viscosity (m4/s)
   real :: KhSm       ! Smagorinsky Laplacian viscosity  (m2/s)
   real :: Shear_mag  ! magnitude of the shear (1/s)
-  real :: huq, hvq   ! temporary variables in units of H (i.e. m2 or kg2 m-4).
+  real :: huq, hvq   ! temporary variables in units of H^2 (i.e. m2 or kg2 m-4).
+  real :: hu, hv     ! thicknesses at velocity points in units of H (i.e. m or kg m-2).
   real :: hq         ! harmonic mean of the harmonic means of the u- & v-
                      ! point thicknesses, in H; guarantees that hq/hu < 4.
   real :: h_neglect  ! thickness so small it can be lost in roundoff and so neglected (H)
@@ -474,6 +479,28 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
         visc_bound_rem = 1.0
       endif
 
+      if (CS%no_slip .and. (G%mask2dBu(I,J) < 0.5)) then
+        if ((G%mask2dCu(I,j) + G%mask2dCu(I,j+1)) + &
+            (G%mask2dCv(i,J) + G%mask2dCv(i+1,J)) > 0.0) then
+          ! This is a coastal vorticity point, so modify hq and hrat_min.
+
+          hu = 0.5 * (G%mask2dCu(I,j)   * (h(i,j,k) + h(i+1,j,k)) + &
+                      G%mask2dCu(I,j+1) * (h(i,j+1,k) + h(i+1,j+1,k)))
+          hv = 0.5 * (G%mask2dCv(i,J)   * (h(i,j,k) + h(i,j+1,k)) + &
+                      G%mask2dCv(i+1,J) * (h(i+1,j,k) + h(i+1,j+1,k)))
+          if ((G%mask2dCu(I,j) + G%mask2dCu(I,j+1)) * &
+              (G%mask2dCv(i,J) + G%mask2dCv(i+1,J)) == 0.0) then
+            ! Only one of hu and hv is nonzero, so just add them.
+            hq = hu + hv
+            hrat_min = 1.0
+          else
+            ! Both hu and hv are nonzero, so take the harmonic mean.
+            hq = 2.0 * (hu * hv) / ((hu + hv) + h_neglect)
+            hrat_min = min(1.0, min(hu, hv) / (hq + h_neglect) )
+          endif
+        endif
+      endif
+
       if (CS%Laplacian) then
         ! Determine the Laplacian viscosity at q points, using the
         ! largest value from several parameterizations.
@@ -541,7 +568,11 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
 
       endif  ! biharmonic
 
-      str_xy(I,J) = str_xy(I,J) * (hq * G%mask2dBu(I,J) * CS%reduction_xy(I,J))
+      if (CS%no_slip) then
+        str_xy(I,J) = str_xy(I,J) * (hq * CS%reduction_xy(I,J))
+      else
+        str_xy(I,J) = str_xy(I,J) * (hq * G%mask2dBu(I,J) * CS%reduction_xy(I,J))
+      endif
     enddo ; enddo
 
     do j=js,je ; do i=isq,ieq
