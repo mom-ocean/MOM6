@@ -2085,7 +2085,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
          "Data has more levels than the model - this has not been coded yet!")
     ! Build the source grid and copy data onto model-shaped arrays with vanished layers
     allocate( tmp_mask_in(isd:ied,jsd:jed,nz) ) ; tmp_mask_in(is:ie,js:je,:) = 0.
-    allocate( h1(isd:ied,jsd:jed,nz) ) ; h(is:ie,js:je,:) = 0.
+    allocate( h1(isd:ied,jsd:jed,nz) ) ; h1(is:ie,js:je,:) = 0.
     allocate( tmpT1dIn(isd:ied,jsd:jed,nz) ) ; tmpT1dIn(is:ie,js:je,:) = 0.
     allocate( tmpS1dIn(isd:ied,jsd:jed,nz) ) ; tmpS1dIn(is:ie,js:je,:) = 0.
     do j = js, je ; do i = is, ie
