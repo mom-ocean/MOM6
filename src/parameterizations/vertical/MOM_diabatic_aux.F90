@@ -701,6 +701,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, diagPtr
   real, dimension(SZI_(G))          :: rhoAtK, rho1, d1, pRef_N2 ! Used for N2
   real, dimension(SZI_(G), SZJ_(G)) :: MLD ! Diagnosed mixed layer depth
   real, dimension(SZI_(G), SZJ_(G)) :: subMLN2 ! Diagnosed stratification below ML
+  real, dimension(SZI_(G), SZJ_(G)) :: MLD2 ! Diagnosed MLD^2
   real, parameter                   :: dz_subML = 50. ! Depth below ML over which to diagnose stratification (m)
   integer :: i, j, is, ie, js, je, k, nz, id_N2, id_SQ
   real :: aFac, ddRho
@@ -759,7 +760,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, diagPtr
           MLD(i,j) = dK(i) * aFac + dKm1(i) * (1. - aFac)
         endif
       enddo ! i-loop
-
+      if (id_SQ > 0) MLD2(is:ie,j) = MLD(is:ie,j)**2
     enddo ! k-loop
     do i = is, ie
       if ((MLD(i,j)==0.) .and. (deltaRhoAtK(i)<densityDiff)) MLD(i,j) = dK(i) ! Assume mixing to the bottom
@@ -772,7 +773,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, diagPtr
 
   if (id_MLD > 0) call post_data(id_MLD, MLD, diagPtr)
   if (id_N2 > 0)  call post_data(id_N2, subMLN2 , diagPtr)
-  if (id_SQ > 0)  call post_data(id_SQ, (MLD*MLD), diagPtr)
+  if (id_SQ > 0)  call post_data(id_SQ, MLD2, diagPtr)
 
 end subroutine diagnoseMLDbyDensityDifference
 
