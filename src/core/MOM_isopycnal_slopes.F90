@@ -341,7 +341,7 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, halo_here)
   real :: c1(SZI_(G),SZK_(G))      ! tridiagonal solver.
   real :: kap_dt_x2                ! The product of 2*kappa*dt, converted to
                                    ! the same units as h, in m2 or kg2 m-4.
-  real :: h0                       ! A negligible thickness, in m or kg m-2, to
+  real :: h_neglect                ! A negligible thickness, in m or kg m-2, to
                                    ! allow for zero thicknesses.
   integer :: i, j, k, is, ie, js, je, nz, halo
 
@@ -351,7 +351,7 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, halo_here)
   nz = G%ke
 
   kap_dt_x2 = (2.0*kappa*dt)*G%m_to_H**2
-  h0 = 1.0e-16*sqrt(kappa*dt)*G%m_to_H
+  h_neglect = G%H_subroundoff
 
   if (kap_dt_x2 <= 0.0) then
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,T_f,T_in,S_f,S_in)
@@ -360,17 +360,17 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, halo_here)
     enddo ; enddo ; enddo
   else
 !$OMP parallel do default(none) private(ent,b1,d1,c1)   &
-!$OMP                            shared(is,ie,js,je,nz,kap_dt_x2,h,h0,T_f,S_f,T_in,S_in)
+!$OMP                            shared(is,ie,js,je,nz,kap_dt_x2,h,h_neglect,T_f,S_f,T_in,S_in)
     do j=js,je
       do i=is,ie
-        ent(i,2) = kap_dt_x2 / ((h(i,j,1)+h(i,j,2)) + h0)
+        ent(i,2) = kap_dt_x2 / ((h(i,j,1)+h(i,j,2)) + h_neglect)
         b1(i) = 1.0 / (h(i,j,1)+ent(i,2))
         d1(i) = b1(i) * h(i,j,1)
         T_f(i,j,1) = (b1(i)*h(i,j,1))*T_in(i,j,1)
         S_f(i,j,1) = (b1(i)*h(i,j,1))*S_in(i,j,1)
       enddo
       do k=2,nz-1 ; do i=is,ie
-        ent(i,K+1) = kap_dt_x2 / ((h(i,j,k)+h(i,j,k+1)) + h0)
+        ent(i,K+1) = kap_dt_x2 / ((h(i,j,k)+h(i,j,k+1)) + h_neglect)
         c1(i,k) = ent(i,K) * b1(i)
         b1(i) = 1.0 / ((h(i,j,k) + d1(i)*ent(i,K)) + ent(i,K+1))
         d1(i) = b1(i) * (h(i,j,k) + d1(i)*ent(i,K))
@@ -379,7 +379,7 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, halo_here)
       enddo ; enddo
       do i=is,ie
         c1(i,nz) = ent(i,nz) * b1(i)
-        b1(i) = 1.0 / (h(i,j,nz) + d1(i)*ent(i,nz))
+        b1(i) = 1.0 / (h(i,j,nz) + d1(i)*ent(i,nz) + h_neglect)
         T_f(i,j,nz) = b1(i) * (h(i,j,nz)*T_in(i,j,nz) + ent(i,nz)*T_f(i,j,nz-1))
         S_f(i,j,nz) = b1(i) * (h(i,j,nz)*S_in(i,j,nz) + ent(i,nz)*S_f(i,j,nz-1))
       enddo
