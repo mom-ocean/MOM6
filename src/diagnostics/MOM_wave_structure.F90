@@ -521,23 +521,20 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
             !print *, 'Wave_structure: b_diag(ig,jg)=',  b_diag(1:kc-1)
             !print *, 'Wave_structure: c_diag(ig,jg)=',  c_diag(1:kc-1)
             !print *, 'Wave_structure: lam_z(ig,jg)=',   lam_z(1:kc-1)
-            print *, 'Wave_structure: w_strct(ig,jg)=', w_strct(1:nzm) !matches MATLAB!!
-            print *, 'En(i,j)=', En(i,j)
-            print *, 'Wave_structure: W_profile(ig,jg)=', W_profile(1:nzm)
-            print *,'int_dwdz2 =',int_dwdz2
-            print *,'int_w2 =',int_w2
-            print *,'int_N2w2 =',int_N2w2
-            print *,'KEterm=',KE_term
-            print *,'PEterm=',PE_term
+            !print *, 'Wave_structure: w_strct(ig,jg)=', w_strct(1:nzm) !matches MATLAB!!
+            !print *, 'En(i,j)=', En(i,j)
+            !print *, 'Wave_structure: W_profile(ig,jg)=', W_profile(1:nzm)
+            !print *,'int_dwdz2 =',int_dwdz2
+            !print *,'int_w2 =',int_w2
+            !print *,'int_N2w2 =',int_N2w2
+            !print *,'KEterm=',KE_term
+            !print *,'PEterm=',PE_term
             print *, 'W0=',W0
+            print *,'Uavg_profile=',Uavg_profile
             !open(unit=1,file='out_N2',form='formatted') ; write(1,*) N2 ; close(1)
             !open(unit=2,file='out_z',form='formatted') ;  write(2,*) z_int ; close(2)
             !-----------------------------------
-            
-            !----check energy calcs------------
-            ! depth integrate
-            
-
+ 
           endif  ! kc >= 2?
         endif ! drxh_sum >= 0?
       else     ! if at test point - delete later
