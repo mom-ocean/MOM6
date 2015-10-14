@@ -108,7 +108,7 @@ use MOM_fixed_initialization, only : MOM_initialize_topography
 use MOM_fixed_initialization, only : MOM_initialize_rotation
 use user_initialization, only : user_initialize_topography
 use MOM_io, only : field_exists, file_exists, read_data, write_version_number
-use MOM_io, only : slasher, vardesc, fieldtype
+use MOM_io, only : slasher, vardesc, var_desc, fieldtype
 use MOM_io, only : create_file, write_field, close_file, SINGLE_FILE, MULTIPLE
 use MOM_restart, only : register_restart_field, query_initialized, save_restart
 use MOM_restart, only : restart_init, restore_state, MOM_restart_CS
@@ -1405,52 +1405,52 @@ subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
 
   ! Set up the restarts.
   call restart_init(G, param_file, CS%restart_CSp, "Shelf.res")
-  vd = vardesc("shelf_mass","Ice shelf mass",'h','1','s',"kg m-2")
+  vd = var_desc("shelf_mass","kg m-2","Ice shelf mass",z_grid='1')
   call register_restart_field(CS%mass_shelf, vd, .true., CS%restart_CSp)
-  vd = vardesc("shelf_area","Ice shelf area in cell",'h','1','s',"m2")
+  vd = var_desc("shelf_area","m2","Ice shelf area in cell",z_grid='1')
   call register_restart_field(CS%area_shelf_h, vd, .true., CS%restart_CSp)
 
   if (CS%shelf_mass_is_dynamic .and. .not.CS%override_shelf_movement) then
     ! additional restarts for ice shelf state
-    vd = vardesc("u_shelf","ice sheet/shelf velocity",'q','1','s',"m s-1")
+    vd = var_desc("u_shelf","m s-1","ice sheet/shelf velocity",'q',z_grid='1')
     call register_restart_field(CS%u_shelf, vd, .true., CS%restart_CSp)
-    vd = vardesc("v_shelf","ice sheet/shelf velocity",'q','1','s',"m s-1")
+    vd = var_desc("v_shelf","m s-1","ice sheet/shelf velocity",'q',z_grid='1')
     call register_restart_field(CS%v_shelf, vd, .true., CS%restart_CSp)
-    vd = vardesc("h_shelf","ice sheet/shelf thickness",'h','1','s',"m")
+    vd = var_desc("h_shelf","m","ice sheet/shelf thickness",z_grid='1')
     call register_restart_field(CS%h_shelf, vd, .true., CS%restart_CSp)
 
-    vd = vardesc("h_mask","ice sheet/shelf thickness mask",'h','1','s',"none")
+    vd = var_desc("h_mask","none","ice sheet/shelf thickness mask",z_grid='1')
     call register_restart_field(CS%hmask, vd, .true., CS%restart_CSp)
 
 !!! OVS vertically integrated stream/shelf temperature
-    vd = vardesc("t_shelf","ice sheet/shelf temperature",'h','1','s',"oC")
+    vd = var_desc("t_shelf","deg C","ice sheet/shelf temperature",z_grid='1')
     call register_restart_field(CS%t_shelf, vd, .true., CS%restart_CSp)
 
 
-  !  vd = vardesc("area_shelf_h","ice-covered area of a cell",'h','1','s',"m-2",'d')
+  !  vd = var_desc("area_shelf_h","m-2","ice-covered area of a cell",z_grid='1')
   !  call register_restart_field(CS%area_shelf_h, CS%area_shelf_h, vd, .true., CS%restart_CSp)
 
-    vd = vardesc("OD_av","avg ocean depth in a cell",'h','1','s',"m")
+    vd = var_desc("OD_av","m","avg ocean depth in a cell",z_grid='1')
     call register_restart_field(CS%OD_av, vd, .true., CS%restart_CSp)
 
-  !  vd = vardesc("OD_av_rt","avg ocean depth in a cell, intermed",'h','1','s',"m",'d')
+  !  vd = var_desc("OD_av_rt","m","avg ocean depth in a cell, intermed",z_grid='1')
   !  call register_restart_field(CS%OD_av_rt, CS%OD_av_rt, vd, .true., CS%restart_CSp)
 
-    vd = vardesc("float_frac","degree of grounding",'h','1','s',"m")
+    vd = var_desc("float_frac","m","degree of grounding",z_grid='1')
     call register_restart_field(CS%float_frac, vd, .true., CS%restart_CSp)
 
-  !  vd = vardesc("float_frac_rt","degree of grounding, intermed",'h','1','s',"m",'d')
+  !  vd = var_desc("float_frac_rt","m","degree of grounding, intermed",z_grid='1')
   !  call register_restart_field(CS%float_frac_rt, CS%float_frac_rt, vd, .true., CS%restart_CSp)
 
-    vd = vardesc("viscosity","glens law ice visc",'h','1','s',"m")
+    vd = var_desc("viscosity","m","glens law ice visc",z_grid='1')
     call register_restart_field(CS%ice_visc_bilinear, vd, .true., CS%restart_CSp)
-    vd = vardesc("tau_b_beta","coefficient of basal traction",'h','1','s',"m")
+    vd = var_desc("tau_b_beta","m","coefficient of basal traction",z_grid='1')
     call register_restart_field(CS%taub_beta_eff_bilinear, vd, .true., CS%restart_CSp)  
   endif
 
   if (.not. solo_mode) then
-   vd = vardesc("ustar_shelf","Friction velocity under ice shelves",'h','1','s',"m s-1")
-   call register_restart_field(fluxes%ustar_shelf, vd, .true., CS%restart_CSp)
+    vd = var_desc("ustar_shelf","m s-1","Friction velocity under ice shelves",z_grid='1')
+    call register_restart_field(fluxes%ustar_shelf, vd, .true., CS%restart_CSp)
   endif
  
   CS%restart_output_dir = dirs%restart_output_dir

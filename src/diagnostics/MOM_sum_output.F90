@@ -64,7 +64,7 @@ use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_interface_heights, only : find_eta
 use MOM_io, only : create_file, fieldtype, flush_file, open_file, reopen_file
-use MOM_io, only : file_exists, slasher, vardesc, write_field
+use MOM_io, only : file_exists, slasher, vardesc, var_desc, write_field
 use MOM_io, only : APPEND_FILE, ASCII_FILE, SINGLE_FILE, WRITEONLY_FILE
 use MOM_time_manager, only : time_type, get_time, get_date, set_time, operator(>), operator(-)
 use MOM_time_manager, only : get_calendar_type, NO_CALENDAR
@@ -408,24 +408,24 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
 
   num_nc_fields = 17
   if (.not.CS%use_temperature) num_nc_fields = 11
-  vars(1) = vardesc("Ntrunc","Number of Velocity Truncations",'1','1','s',"Nondim")
-  vars(2) = vardesc("En","Total Energy",'1','1','s',"Joules")
-  vars(3) = vardesc("APE","Total Interface APE",'1','i','s',"Joules")
-  vars(4) = vardesc("KE","Total Layer KE",'1','L','s',"Joules")
-  vars(5) = vardesc("H0","Zero APE Depth of Interface",'1','i','s',"meter")
-  vars(6) = vardesc("Mass_lay","Total Layer Mass",'1','L','s',"kg")
-  vars(7) = vardesc("Mass","Total Mass",'1','1','s',"kg")
-  vars(8) = vardesc("Mass_chg","Total Mass Change between Entries",'1','1','s',"kg")
-  vars(9) = vardesc("Mass_anom","Anomalous Total Mass Change",'1','1','s',"kg")
-  vars(10) = vardesc("max_CFL_trans","Maximum finite-volume CFL",'1','1','s',"Nondim")
-  vars(11) = vardesc("max_CFL_lin","Maximum finite-difference CFL",'1','1','s',"Nondim")
+  vars(1) = var_desc("Ntrunc","Nondim","Number of Velocity Truncations",'1','1')
+  vars(2) = var_desc("En","Joules","Total Energy",'1','1')
+  vars(3) = var_desc("APE","Joules","Total Interface APE",'1','i')
+  vars(4) = var_desc("KE","Joules","Total Layer KE",'1','L')
+  vars(5) = var_desc("H0","meter","Zero APE Depth of Interface",'1','i')
+  vars(6) = var_desc("Mass_lay","kg","Total Layer Mass",'1','L')
+  vars(7) = var_desc("Mass","kg","Total Mass",'1','1')
+  vars(8) = var_desc("Mass_chg","kg","Total Mass Change between Entries",'1','1')
+  vars(9) = var_desc("Mass_anom","kg","Anomalous Total Mass Change",'1','1')
+  vars(10) = var_desc("max_CFL_trans","Nondim","Maximum finite-volume CFL",'1','1')
+  vars(11) = var_desc("max_CFL_lin","Nondim","Maximum finite-difference CFL",'1','1')
   if (CS%use_temperature) then
-    vars(12) = vardesc("Salt","Total Salt",'1','1','s',"kg")
-    vars(13) = vardesc("Salt_chg","Total Salt Change between Entries",'1','1','s',"kg")
-    vars(14) = vardesc("Salt_anom","Anomalous Total Salt Change",'1','1','s',"kg")
-    vars(15) = vardesc("Heat","Total Heat",'1','1','s',"Joules")
-    vars(16) = vardesc("Heat_chg","Total Heat Change between Entries",'1','1','s',"Joules")
-    vars(17) = vardesc("Heat_anom","Anomalous Total Heat Change",'1','1','s',"Joules")
+    vars(12) = var_desc("Salt","kg","Total Salt",'1','1')
+    vars(13) = var_desc("Salt_chg","kg","Total Salt Change between Entries",'1','1')
+    vars(14) = var_desc("Salt_anom","kg","Anomalous Total Salt Change",'1','1')
+    vars(15) = var_desc("Heat","Joules","Total Heat",'1','1')
+    vars(16) = var_desc("Heat_chg","Joules","Total Heat Change between Entries",'1','1')
+    vars(17) = var_desc("Heat_anom","Joules","Anomalous Total Heat Change",'1','1')
   endif
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -515,8 +515,8 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
                                xgmax=Tr_max_x, ygmax=Tr_max_y, zgmax=Tr_max_z)
     if (nTr_stocks > 0) then
       do m=1,nTr_stocks
-        vars(num_nc_fields+m) = &
-          vardesc(Tr_names(m), Tr_names(m),'1','1','s',Tr_units(m))
+        vars(num_nc_fields+m) = var_desc(Tr_names(m), units=Tr_units(m), &
+                      longname=Tr_names(m), hor_grid='1', z_grid='1')
       enddo
       num_nc_fields = num_nc_fields + nTr_stocks
     endif

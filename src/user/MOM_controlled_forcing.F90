@@ -51,7 +51,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser, only : read_param, get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : vardesc
+use MOM_io, only : vardesc, var_desc
 use MOM_restart, only : register_restart_field, MOM_restart_CS
 use MOM_time_manager, only : time_type, operator(+), operator(/), operator(-)
 use MOM_time_manager, only : get_time, get_date, set_time, set_date
@@ -479,9 +479,9 @@ subroutine register_ctrl_forcing_restarts(G, param_file, CS, restart_CS)
   if (CS%do_integrated) then
     call safe_alloc_ptr(CS%heat_0,isd,ied,jsd,jed) ; CS%heat_0(:,:) = 0.0
     call safe_alloc_ptr(CS%precip_0,isd,ied,jsd,jed) ; CS%precip_0(:,:) = 0.0
-    vd = vardesc("Ctrl_heat","Control Integrative Heating",'h','1','s',"W m-2")
+    vd = var_desc("Ctrl_heat","W m-2","Control Integrative Heating",z_grid='1')
     call register_restart_field(CS%heat_0, vd, .false., restart_CS)
-    vd = vardesc("Ctrl_precip","Control Integrative Precipitation",'h','1','s',"kg m-2 s-1")
+    vd = var_desc("Ctrl_precip","kg m-2 s-1","Control Integrative Precipitation",z_grid='1')
     call register_restart_field(CS%precip_0, vd, .false., restart_CS)
   endif
 
@@ -490,20 +490,25 @@ subroutine register_ctrl_forcing_restarts(G, param_file, CS, restart_CS)
     period_str = trim('p ')//trim(adjustl(period_str))
     call safe_alloc_ptr(CS%heat_cyc,isd,ied,jsd,jed,CS%num_cycle) ; CS%heat_cyc(:,:,:) = 0.0
     call safe_alloc_ptr(CS%precip_cyc,isd,ied,jsd,jed,CS%num_cycle) ; CS%precip_cyc(:,:,:) = 0.0
-    vd = vardesc("Ctrl_heat_cycle","Cyclical Control Heating",'h','1', period_str, "W m-2")
+    vd = var_desc("Ctrl_heat_cycle", "W m-2","Cyclical Control Heating",&
+                  z_grid='1', t_grid=period_str)
     call register_restart_field(CS%heat_cyc, vd, .false., restart_CS)
-    vd = vardesc("Ctrl_precip_cycle","Cyclical Control Precipitation",'h','1', period_str,"kg m-2 s-1")
+    vd = var_desc("Ctrl_precip_cycle","kg m-2 s-1","Cyclical Control Precipitation", &
+                  z_grid='1', t_grid=period_str)
     call register_restart_field(CS%precip_cyc, vd, .false., restart_CS)
 
     call safe_alloc_ptr(CS%avg_time,CS%num_cycle) ; CS%avg_time(:) = 0.0
-    vd = vardesc("avg_time","Cyclical accumulated averaging time",'1','1',period_str,"sec")
+    vd = var_desc("avg_time","sec","Cyclical accumulated averaging time", &
+                  '1',z_grid='1',t_grid=period_str)
     call register_restart_field(CS%avg_time, vd, .false., restart_CS)
 
     call safe_alloc_ptr(CS%avg_SST_anom,isd,ied,jsd,jed,CS%num_cycle) ; CS%avg_SST_anom(:,:,:) = 0.0
     call safe_alloc_ptr(CS%avg_SSS_anom,isd,ied,jsd,jed,CS%num_cycle) ; CS%avg_SSS_anom(:,:,:) = 0.0
-    vd = vardesc("avg_SST_anom","Cyclical average SST Anomaly",'h','1',period_str,"deg C")
+    vd = var_desc("avg_SST_anom","deg C","Cyclical average SST Anomaly", &
+                  z_grid='1',t_grid=period_str)
     call register_restart_field(CS%avg_SST_anom, vd, .false., restart_CS)
-    vd = vardesc("avg_SSS_anom","Cyclical average SSS Anomaly",'h','1',period_str,"g kg-1")
+    vd = var_desc("avg_SSS_anom","g kg-1","Cyclical average SSS Anomaly", &
+                  z_grid='1',t_grid=period_str)
     call register_restart_field(CS%avg_SSS_anom, vd, .false., restart_CS)
   endif
 

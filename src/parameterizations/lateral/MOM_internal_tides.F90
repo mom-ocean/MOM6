@@ -50,7 +50,7 @@ use MOM_domains, only : group_pass_type, start_group_pass, complete_group_pass
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser, only : read_param, get_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : vardesc
+use MOM_io, only : vardesc, var_desc
 use MOM_restart, only : register_restart_field, MOM_restart_CS
 use MOM_time_manager, only : time_type, operator(+), operator(/), operator(-)
 use MOM_time_manager, only : get_time, get_date, set_time, set_date
@@ -954,7 +954,7 @@ subroutine register_int_tide_restarts(G, param_file, CS, restart_CS)
   enddo
 
 ! if (CS%do_integrated) then
-!   vd = vardesc("Ctrl_heat","Control Integrative Heating",'h','1','s',"W m-2")
+!   vd = var_desc("Ctrl_heat", "W m-2", "Control Integrative Heating", z_grid='1')
 !   call register_restart_field(CS%heat_0, vd, .false., restart_CS)
 ! endif
 

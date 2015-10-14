@@ -88,7 +88,7 @@ use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : MOM_set_verbosity
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
-use MOM_io, only : MOM_io_init, vardesc
+use MOM_io, only : MOM_io_init, vardesc, var_desc
 use MOM_restart, only : register_restart_field, query_initialized, save_restart
 use MOM_restart, only : restart_init, MOM_restart_CS
 use MOM_time_manager, only : time_type, set_time, time_type_to_real, operator(+)
@@ -1158,46 +1158,40 @@ subroutine register_restarts_dyn_legacy_split(G, param_file, CS, restart_CS, uh,
   thickness_units = get_thickness_units(G)
   flux_units = get_flux_units(G)
 
- ! if (G%Boussinesq) then
-    vd = vardesc("sfc","Free surface Height",'h','1','s',thickness_units)
- ! else
- !   vd(1) = vardesc("ocean_mass?","Ocean column mass",'h','1','s',"kg meter-2")
- ! endif
+  vd = var_desc("sfc",thickness_units,"Free surface Height",'h','1')
   call register_restart_field(CS%eta, vd, .false., restart_CS)
 
-  vd = vardesc("u2","Auxiliary Zonal velocity",'u','L','s',"meter second-1")
+  vd = var_desc("u2","meter second-1","Auxiliary Zonal velocity",'u','L')
   call register_restart_field(CS%u_av, vd, .false., restart_CS)
 
-  vd = vardesc("v2","Auxiliary Meridional velocity",'v','L','s',"meter second-1")
+  vd = var_desc("v2","meter second-1","Auxiliary Meridional velocity",'v','L')
   call register_restart_field(CS%v_av, vd, .false., restart_CS)
 
-  vd = vardesc("h2","Auxiliary Layer Thickness",'h','L','s',thickness_units)
+  vd = var_desc("h2",thickness_units,"Auxiliary Layer Thickness",'h','L')
   call register_restart_field(CS%h_av, vd, .false., restart_CS)
 
-  vd = vardesc("uh","Zonal thickness flux",'u','L','s',flux_units)
+  vd = var_desc("uh",flux_units,"Zonal thickness flux",'u','L')
   call register_restart_field(uh, vd, .false., restart_CS)
 
-  vd = vardesc("vh","Meridional thickness flux",'v','L','s',flux_units)
+  vd = var_desc("vh",flux_units,"Meridional thickness flux",'v','L')
   call register_restart_field(vh, vd, .false., restart_CS)
 
-  vd = vardesc("diffu","Zonal horizontal viscous acceleration",'u','L','s', &
-               "meter second-2")
+  vd = var_desc("diffu","meter second-2","Zonal horizontal viscous acceleration",'u','L')
   call register_restart_field(CS%diffu, vd, .false., restart_CS)
 
-  vd = vardesc("diffv","Meridional horizontal viscous acceleration",'v','L','s',&
-               "meter second-2")
+  vd = var_desc("diffv","meter second-2","Meridional horizontal viscous acceleration",'v','L')
   call register_restart_field(CS%diffv, vd, .false., restart_CS)
 
   call register_legacy_barotropic_restarts(G, param_file, &
            CS%barotropic_CSp, restart_CS)
 
   if (readjust_bt_trans) then
-    vd = vardesc("uhbt_in","Final instantaneous barotropic zonal thickness flux",&
-                 'u','1','s',flux_units)
+    vd = var_desc("uhbt_in",flux_units,"Final instantaneous barotropic zonal thickness flux",&
+                 'u','1')
     call register_restart_field(CS%uhbt_in, vd, .false., restart_CS)
 
-    vd = vardesc("vhbt_in","Final instantaneous barotropic meridional thickness flux",&
-                 'v','1','s',flux_units)
+    vd = var_desc("vhbt_in",flux_units,"Final instantaneous barotropic meridional thickness flux",&
+                 'v','1')
     call register_restart_field(CS%vhbt_in, vd, .false., restart_CS)
   endif
 

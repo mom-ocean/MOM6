@@ -94,7 +94,7 @@ use MOM_forcing_type,        only : extractFluxes1d, calculateBuoyancyFlux2d
 use MOM_forcing_type,        only : forcing_SinglePointPrint
 use MOM_geothermal,          only : geothermal, geothermal_init, geothermal_end, geothermal_CS
 use MOM_grid,                only : ocean_grid_type
-use MOM_io,                  only : vardesc
+use MOM_io,                  only : vardesc, var_desc
 use MOM_int_tide_input,      only : set_int_tide_input, int_tide_input_init
 use MOM_int_tide_input,      only : int_tide_input_end, int_tide_input_CS, int_tide_input_type
 use MOM_internal_tides,      only : propagate_int_tide, register_int_tide_restarts
@@ -1496,20 +1496,24 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
                  "surface density by the specified amount.", units='kg/m3', default=0.1)
 
   if (associated(diag_to_Z_CSp)) then
-    vd = vardesc("Kd","Diapycnal diffusivity at interfaces, interpolated to z",&
-                 'h','z','s',"meter2 second-1")
+    vd = var_desc("Kd", "meter2 second-1", &
+                  "Diapycnal diffusivity at interfaces, interpolated to z", z_grid='z')
     CS%id_Kd_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
-    vd = vardesc("Tflx_dia_dif","Diffusive diapycnal temperature flux across interfaces, interpolated to z",&
-                 'h','z','s',"degC meter second-1")
+    vd = var_desc("Tflx_dia_dif", "degC meter second-1", &
+                  "Diffusive diapycnal temperature flux across interfaces, interpolated to z", &
+                  z_grid='z')
     CS%id_Tdif_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
-    vd = vardesc("Tflx_dia_adv","Advective diapycnal temperature flux across interfaces, interpolated to z",&
-                 'h','z','s',"degC meter second-1")
+    vd = var_desc("Tflx_dia_adv", "degC meter second-1", &
+                  "Advective diapycnal temperature flux across interfaces, interpolated to z",&
+                  z_grid='z')
     CS%id_Tadv_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
-    vd = vardesc("Sflx_dia_dif","Diffusive diapycnal salinity flux across interfaces, interpolated to z",&
-                 'h','z','s',"PSU meter second-1")
+    vd = var_desc("Sflx_dia_dif", "PSU meter second-1", &
+                  "Diffusive diapycnal salinity flux across interfaces, interpolated to z",&
+                  z_grid='z')
     CS%id_Sdif_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
-    vd = vardesc("Sflx_dia_adv","Advective diapycnal salinity flux across interfaces, interpolated to z",&
-                 'h','z','s',"PSU meter second-1")
+    vd = var_desc("Sflx_dia_adv", "PSU meter second-1", &
+                  "Advective diapycnal salinity flux across interfaces, interpolated to z",&
+                  z_grid='z')
     CS%id_Sadv_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
   endif
 

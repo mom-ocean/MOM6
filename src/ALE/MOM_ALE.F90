@@ -20,7 +20,7 @@ use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
 use MOM_file_parser,   only : get_param, param_file_type, log_param
 use MOM_io,            only : file_exists, field_exists, MOM_read_data
-use MOM_io,            only : vardesc, fieldtype, SINGLE_FILE
+use MOM_io,            only : vardesc, var_desc, fieldtype, SINGLE_FILE
 use MOM_io,            only : create_file, write_field, close_file, slasher
 use MOM_EOS,           only : calculate_density
 use MOM_string_functions, only : uppercase, extractWord
@@ -1016,10 +1016,10 @@ subroutine ALE_writeCoordinateFile( CS, G, directory )
   dsi(2:G%ke) = 0.5*( ds(1:G%ke-1) + ds(2:G%ke) )
   dsi(G%ke+1) = 0.5*ds(G%ke)
 
-  vars(1) = vardesc('ds','Layer Coordinate Thickness','1','L','1', &
-                    getCoordinateUnits( CS%regridCS ) )
-  vars(2) = vardesc('ds_interface','Layer Center Coordinate Separation','1','i','1', &
-                    getCoordinateUnits( CS%regridCS ) )
+  vars(1) = var_desc('ds', getCoordinateUnits( CS%regridCS ), &
+                    'Layer Coordinate Thickness','1','L','1')
+  vars(2) = var_desc('ds_interface', getCoordinateUnits( CS%regridCS ), &
+                    'Layer Center Coordinate Separation','1','i','1')
 
   call create_file(unit, trim(filepath), vars, 2, G, fields, SINGLE_FILE)
   call write_field(unit, fields(1), ds)

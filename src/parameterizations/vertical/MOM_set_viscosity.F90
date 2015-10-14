@@ -60,7 +60,8 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_kappa_shear, only : kappa_shear_is_used
-use MOM_restart, only : register_restart_field, vardesc, MOM_restart_CS
+use MOM_io, only : vardesc, var_desc
+use MOM_restart, only : register_restart_field, MOM_restart_CS
 use MOM_variables, only : thermo_var_ptrs
 use MOM_variables, only : vertvisc_type, ocean_OBC_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs
@@ -1523,13 +1524,15 @@ subroutine set_visc_register_restarts(G, param_file, visc, restart_CS)
     allocate(visc%TKE_turb(isd:ied,jsd:jed,nz+1)) ; visc%TKE_turb(:,:,:) = 0.0
     allocate(visc%Kv_turb(isd:ied,jsd:jed,nz+1)) ; visc%Kv_turb(:,:,:) = 0.0
 
-    vd = vardesc("Kd_turb","Turbulent diffusivity at interfaces",'h','i','s',"m2 s-1")
+    vd = var_desc("Kd_turb","m2 s-1","Turbulent diffusivity at interfaces", &
+                  hor_grid='h', z_grid='i')
     call register_restart_field(visc%Kd_turb, vd, .false., restart_CS)
 
-    vd = vardesc("TKE_turb","Turbulent kinetic energy per unit mass at interfaces", &
-                 'h','i','s',"m2 s-2")
+    vd = var_desc("TKE_turb","m2 s-2","Turbulent kinetic energy per unit mass at interfaces", &
+                  hor_grid='h', z_grid='i')
     call register_restart_field(visc%TKE_turb, vd, .false., restart_CS)
-    vd = vardesc("Kv_turb","Turbulent viscosity at interfaces",'h','i','s',"m2 s-1")
+    vd = var_desc("Kv_turb","m2 s-1","Turbulent viscosity at interfaces", &
+                  hor_grid='h', z_grid='i')
     call register_restart_field(visc%Kv_turb, vd, .false., restart_CS)
   endif
 

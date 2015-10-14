@@ -157,7 +157,7 @@ contains
     real, dimension(:,:,:), pointer     :: tr_ptr
     real, dimension(G%isd:G%ied, G%jsd:G%jed,G%ke)         :: grid_tmask
     integer, dimension(G%isd:G%ied, G%jsd:G%jed)           :: grid_kmt
-    type(vardesc) :: var_desc
+    type(vardesc) :: vdesc
 
     register_MOM_generic_tracer = .false.
     if (associated(CS)) then
@@ -239,7 +239,7 @@ contains
        call g_tracer_get_values(g_tracer,g_tracer_name,'units',units )
 
        !nnz: Hard coded stuff. Need get/set routines
-       var_desc = var_desc(g_tracer_name, units, longname, &
+       vdesc = var_desc(g_tracer_name, units, longname, &
                            caller="MOM_generic_tracer")
        !!nnz: MOM field is 3D. Does this affect performance? Need it be override field?
        tr_ptr => tr_field(:,:,:,1)
@@ -248,7 +248,7 @@ contains
        ! 2008/12/08 jgj: change default to true, so all fields must be present in restart.
        ! 2010/02/04 jgj: if tracers_may_reinit is true, tracers may go through
        ! initialization code if not found in restart
-       call register_restart_field(tr_ptr, var_desc, .not.CS%tracers_may_reinit, restart_CS)
+       call register_restart_field(tr_ptr, vdesc, .not.CS%tracers_may_reinit, restart_CS)
 
        ! Register prognastic tracer for horizontal advection & diffusion.
        if(g_tracer_is_prog(g_tracer)) call register_tracer(tr_ptr, g_tracer_name, param_file, tr_Reg)
