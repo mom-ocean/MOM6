@@ -21,7 +21,7 @@ module MOM_internal_tides
 !
 !********+*********+*********+*********+*********+*********+*********+**
 !*                                                                     *
-!*  By Robert Hallberg, January 2013                                   *
+!*  By Robert Hallberg & Benjamin Mater, October 2015                  *
 !*                                                                     *
 !*    This program contains the subroutines that use the ray-tracing   *
 !*  equations to propagate the internal tide energy density.           *

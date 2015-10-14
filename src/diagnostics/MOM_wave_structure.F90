@@ -21,10 +21,12 @@ module MOM_wave_structure
 !
 !********+*********+*********+*********+*********+*********+*********+**
 !*                                                                     *
-!*  By Ben Mater, September, 2015                                      *
+!*  By Benjamin Mater, September, 2015                                      *
 !*                                                                     *
 !*    The subroutine in this module calculates the vertical structure  *
 !*    functions of the first baroclinic mode internal wave speed.      *
+!*    Calculation of interface values is the same as done in           *
+!*    MOM_wave_speed by Hallberg, 2008.                                *     
 !*                                                                     *
 !*  Macros written all in capital letters are defined in MOM_memory.h. *
 !*                                                                     *
@@ -266,11 +268,11 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
     ! to have page faults.
     do i=is,ie
       !----for debugging, remove later----
-      ig = G%isd_global + i - 1.0
-      jg = G%jsd_global + j - 1.0
-      if(ig .eq. CS%int_tide_source_x .and. jg .eq. CS%int_tide_source_y) then
-      print *, 'Wave_structure: at ig=', ig, ' and jg=', jg, '; running code'
-      print *, 'Wave_structure: cn=', cn(i,j)
+      !ig = G%isd_global + i - 1.0
+      !jg = G%jsd_global + j - 1.0
+      !if(ig .eq. CS%int_tide_source_x .and. jg .eq. CS%int_tide_source_y) then
+      !print *, 'Wave_structure: at ig=', ig, ' and jg=', jg, '; running code'
+      !print *, 'Wave_structure: cn=', cn(i,j)
       !-----------------------------------
       if (G%mask2dT(i,j) > 0.5) then
 
@@ -507,6 +509,7 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
             CS%z_depths(i,j,1:nzm)    = z_int
             CS%N2(i,j,1:nzm)          = N2
             CS%num_intfaces(i,j)       = nzm
+            
             !----for debugging; delete later----
             !print *, "e_guess=", e_guess(1:kc-1)
             !print *, "|e_guess|=", sqrt(sum(e_guess(1:kc-1)**2))
@@ -529,17 +532,17 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
             !print *,'int_N2w2 =',int_N2w2
             !print *,'KEterm=',KE_term
             !print *,'PEterm=',PE_term
-            print *, 'W0=',W0
-            print *,'Uavg_profile=',Uavg_profile
+            !print *, 'W0=',W0
+            !print *,'Uavg_profile=',Uavg_profile
             !open(unit=1,file='out_N2',form='formatted') ; write(1,*) N2 ; close(1)
             !open(unit=2,file='out_z',form='formatted') ;  write(2,*) z_int ; close(2)
             !-----------------------------------
  
           endif  ! kc >= 2?
         endif ! drxh_sum >= 0?
-      else     ! if at test point - delete later
-        return ! if at test point - delete later
-      endif    ! if at test point - delete later
+      !else     ! if at test point - delete later
+      !  return ! if at test point - delete later
+      !endif    ! if at test point - delete later
       endif ! mask2dT > 0.5?
     enddo ! i-loop
   enddo ! j-loop
@@ -565,7 +568,7 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
 !                [  alpha(k-1/2) + alpha(k+1/2) + h(k) ] * e(k)   +
 !                [ -alpha(k+1/2) ]                       * e(k+1) = y(k)
 !                where a(k)=[-alpha(k-1/2)], b(k)=[alpha(k-1/2)+alpha(k+1/2) + h(k)],
-!                and c(k)=[-alpha(k+1/2)].
+!                and c(k)=[-alpha(k+1/2)]. Only used with TDMA_H method.
 !  (in)      y - vector of known values on right hand side
 !  (out)     x - vector of unknown values to solve for
 
@@ -587,7 +590,8 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
   allocate(y_check(nrow))
   
   if (method == 'TDMA_T') then
-    ! Standard Thomas algoritim (4th variant)
+    ! Standard Thomas algoritim (4th variant). 
+    ! Note: Requires A to be non-singular for accuracy/stability 
     c_prime(:) = 0.0       ; y_prime(:) = 0.0
     c_prime(1) = c(1)/b(1) ; y_prime(1) = y(1)/b(1)
     
@@ -608,7 +612,7 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
     enddo
     print *, 'x=',x(1:nrow)
     
-    ! Check results
+    ! Check results - delete later
     !do j=1,nrow ; do i=1,nrow
     !  if(i==j)then ;       A_check(i,j) = b(i)
     !  elseif(i==j+1)then ; A_check(i,j) = a(i)
@@ -622,13 +626,16 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
     !  print *, "y=", y
     !  print *, "y_check=", y_check 
     !endif
+  
   elseif (method == 'TDMA_H') then
     ! Thomas algoritim (4th variant) w/ Hallberg substitution.
     ! For a layered system where k is at interfaces, alpha{k+1/2} refers to
     ! some property (e.g. inverse thickness for mode-structure problem) of the 
     ! layer below and alpha{k-1/2} refers to the layer above. 
     ! Here, alpha(k)=alpha{k+1/2} and alpha(k-1)=alpha{k-1/2}.
-    ! Formulation requires symmetry - check for it
+    ! Strictly speaking, this formulation requires A to be a non-singular,
+    ! symmetric, diagonally dominant matrix, with h>0. 
+    ! Need to add a check for these conditions.
     do k=1,nrow-1
       if (abs(a(k+1)-c(k)) > 1.e-10) then
         call MOM_error(WARNING, "tridiag_solver: matrix not symmetric; need symmetry when invoking TDMA_H")
@@ -638,7 +645,6 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
     ! Alpha of the bottom-most layer is not necessarily zero. Therefore,
     ! back out the value from the provided b(nrow and h(nrow) values
     alpha(nrow)   = b(nrow)-h(nrow)-alpha(nrow-1)
-    !print *, 'alpha=', alpha(1:nrow)    
     ! Prime other variables
     beta       = 1/b(1)
     y_prime(:) = 0.0       ; q(:) = 0.0
@@ -667,31 +673,6 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
   deallocate(c_prime,y_prime,q,alpha,A_check,y_check)
 
 end subroutine tridiag_solver
-
-
-!subroutine jacobi_eig(A,N,NP,D,V,NROT)
-!  real, dimension(:,:), intent(in)  :: A
-!  real, intent(in)                  :: N, NP
-!  real, dimension(:), intent(out)   :: D
-!  real, dimension(:,:), intent(out) :: V
-!  real, intent(out)                 :: NROT  
-  
-!    This subroutine computes all eigen values and vectors of a real,
-! symmetric matrix.  
-!
-! Arguments: 
-!  (in)      A - a real, symmetric, square matrix
-!  (in)      N - size of A matrix (N x N)
-!  (in)      NP -
-!  (out)     D - one-dimensional array of eigen values (unsorted)
-!  (out)     V - matrix of same dimesions as A with eigen vectors as columns
-!  (out)     NROT - number of Jacobi rotations that were required
-!
-!  dimension A(NP,NP), D(NP), V(NP,NP) 
-!  integer, parameter :: NMAX = 100    ! 
-!  real, dimension(NMAX) :: B          !
-!  real, dimension(NMAX) :: Z          !
-!  integer :: ip, iq
   
   
 subroutine wave_structure_init(Time, G, param_file, diag, CS)
@@ -735,8 +716,7 @@ subroutine wave_structure_init(Time, G, param_file, diag, CS)
   allocate(CS%Uavg_profile(isd:ied,jsd:jed,nz+1))
   allocate(CS%z_depths(isd:ied,jsd:jed,nz+1))
   allocate(CS%N2(isd:ied,jsd:jed,nz+1))
-  allocate(CS%num_intfaces(isd:ied,jsd:jed))
-   
+  allocate(CS%num_intfaces(isd:ied,jsd:jed))   
 
   ! Write all relevant parameters to the model log.
   call log_version(param_file, mod, version, "")

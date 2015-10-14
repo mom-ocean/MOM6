@@ -1481,19 +1481,23 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
     call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_TEST", CS%int_tide_source_test, &
                  "If true, apply an arbitrary generation site for internal tide testing", &
                  default=.false.)
-    call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_X", CS%int_tide_source_x, &
+    if(CS%int_tide_source_test)then
+      call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_X", CS%int_tide_source_x, &
                  "X Location of generation site for internal tide", default=1.)
-    call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_Y", CS%int_tide_source_y, &
+      call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_Y", CS%int_tide_source_y, &
                  "Y Location of generation site for internal tide", default=1.)
-    call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_TLEN_DAYS", CS%tlen_days, &
+      call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_TLEN_DAYS", CS%tlen_days, &
                  "Time interval from start of experiment for adding wave source", &
                  units="days", default=0)
-    CS%time_max_source = increment_time(Time,0,days=CS%tlen_days)
+      CS%time_max_source = increment_time(Time,0,days=CS%tlen_days)
+    endif
     ! GET UNIFORM MODE VELOCITY FOR TESTING (BDM)  
     call get_param(param_file, mod, "UNIFORM_CG", CS%uniform_cg, &
                  "If true, set cg = cg_test everywhere for test case", default=.false.)
-    call get_param(param_file, mod, "CG_TEST", CS%cg_test, &
-                 "Uniform group velocity of internal tide for test case", default=1.)    
+    if(CS%uniform_cg)then
+      call get_param(param_file, mod, "CG_TEST", CS%cg_test, &
+                 "Uniform group velocity of internal tide for test case", default=1.)
+    endif
   endif
   call get_param(param_file, mod, "MASSLESS_MATCH_TARGETS", &
                                 CS%massless_match_targets, &
