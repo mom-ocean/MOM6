@@ -57,7 +57,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc
+use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc, query_vardesc
 use MOM_restart, only : register_restart_field, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
 use MOM_time_manager, only : time_type, get_time
@@ -176,12 +176,11 @@ function USER_register_tracer_example(G, param_file, CS, diag, tr_Reg, &
   endif
 
   do m=1,NTR
-    CS%tr_desc(m) = var_desc("tr", "kg kg-1", "Tracer", caller=mod)
     if (m < 10) then ; write(name,'("tr",I1.1)') m
     else ; write(name,'("tr",I2.2)') m ; endif
     write(longname,'("Concentration of Tracer ",I2.2)') m
-    CS%tr_desc(m)%name = name
-    CS%tr_desc(m)%longname = longname
+    CS%tr_desc(m) = var_desc(name, units="kg kg-1", longname=longname, caller=mod)
+
     ! This is needed to force the compiler not to do a copy in the registration
     ! calls.  Curses on the designers and implementers of Fortran90.
     tr_ptr => CS%tr(:,:,:,m)
@@ -340,8 +339,8 @@ subroutine USER_initialize_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
 
   do m=1,NTR
     ! Register the tracer for the restart file.
-    name = CS%tr_desc(m)%name ; longname = CS%tr_desc(m)%longname
-    units = CS%tr_desc(m)%units
+    call query_vardesc(CS%tr_desc(m), name, units=units, longname=longname, &
+                       caller="USER_initialize_tracer")
     CS%id_tracer(m) = register_diag_field("ocean_model", trim(name), CS%diag%axesTL, &
         day, trim(longname) , trim(units))
     CS%id_tr_adx(m) = register_diag_field("ocean_model", trim(name)//"_adx", &
@@ -542,7 +541,8 @@ function USER_tracer_stock(h, stocks, G, CS, names, units, stock_index)
   endif ; endif
 
   do m=1,NTR
-    names(m) = CS%tr_desc(m)%name ; units(m) = trim(CS%tr_desc(m)%units)//" kg"
+    call query_vardesc(CS%tr_desc(m), name=names(m), units=units(m), caller="USER_tracer_stock")
+    units(m) = trim(units(m))//" kg"
     stocks(m) = 0.0
     do k=1,nz ; do j=js,je ; do i=is,ie
       stocks(m) = stocks(m) + CS%tr(i,j,k,m) * &
