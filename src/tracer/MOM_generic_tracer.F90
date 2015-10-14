@@ -58,7 +58,7 @@ module MOM_generic_tracer
   use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
   use MOM_forcing_type, only : forcing, optics_type
   use MOM_grid, only : ocean_grid_type
-  use MOM_io, only : file_exists, read_data, slasher, vardesc
+  use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc
   use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
   use MOM_sponge, only : set_up_sponge_field, sponge_CS
   use MOM_time_manager, only : time_type, get_time
@@ -239,7 +239,8 @@ contains
        call g_tracer_get_values(g_tracer,g_tracer_name,'units',units )
 
        !nnz: Hard coded stuff. Need get/set routines
-       var_desc = vardesc(g_tracer_name,longname,'h','L','s',units)
+       var_desc = var_desc(g_tracer_name, units, longname, &
+                           caller="MOM_generic_tracer")
        !!nnz: MOM field is 3D. Does this affect performance? Need it be override field?
        tr_ptr => tr_field(:,:,:,1)
        ! Register tracer for restart file.

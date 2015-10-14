@@ -57,7 +57,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : file_exists, read_data, slasher, vardesc
+use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc
 use MOM_restart, only : register_restart_field, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
 use MOM_time_manager, only : time_type, get_time
@@ -176,7 +176,7 @@ function USER_register_tracer_example(G, param_file, CS, diag, tr_Reg, &
   endif
 
   do m=1,NTR
-    CS%tr_desc(m) = vardesc("tr","Tracer",'h','L','s',"kg kg-1")
+    CS%tr_desc(m) = var_desc("tr", "kg kg-1", "Tracer", caller=mod)
     if (m < 10) then ; write(name,'("tr",I1.1)') m
     else ; write(name,'("tr",I2.2)') m ; endif
     write(longname,'("Concentration of Tracer ",I2.2)') m

@@ -17,7 +17,7 @@ use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type, isPointInCell
 use MOM_io, only : close_file, create_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE, MULTIPLE
-use MOM_io, only : slasher, vardesc, write_field
+use MOM_io, only : slasher, vardesc, write_field, var_desc
 use MOM_io, only : EAST_FACE, NORTH_FACE
 use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
 use MOM_string_functions, only : uppercase
@@ -1672,31 +1672,31 @@ subroutine write_ocean_geometry_file(G, param_file, directory)
 ! (5) a character indicating the time levels of the field, which may be
 !    's' (snap-shot), 'p' (periodic), or '1' (no time variation)
 ! (6) the variable's units
-  vars(1) = vardesc("geolatb","latitude at corner (Bu) points",'q','1','1',"degree")
-  vars(2) = vardesc("geolonb","longitude at corner (Bu) points",'q','1','1',"degree")
-  vars(3) = vardesc("geolat", "latitude at tracer (T) points", 'h','1','1',"degree")
-  vars(4) = vardesc("geolon","longitude at tracer (T) points",'h','1','1',"degree")
-  vars(5) = vardesc("D","Basin Depth",'h','1','1',"meter")
-  vars(6) = vardesc("f","Coriolis Parameter",'q','1','1',"second-1")
-  vars(7) = vardesc("dxCv","Zonal grid spacing at v points",'v','1','1',"m")
-  vars(8) = vardesc("dyCu","Meridional grid spacing at u points",'u','1','1',"m")
-  vars(9) = vardesc("dxCu","Zonal grid spacing at u points",'u','1','1',"m")
-  vars(10)= vardesc("dyCv","Meridional grid spacing at v points",'v','1','1',"m")
-  vars(11)= vardesc("dxT","Zonal grid spacing at h points",'h','1','1',"m")
-  vars(12)= vardesc("dyT","Meridional grid spacing at h points",'h','1','1',"m")
-  vars(13)= vardesc("dxBu","Zonal grid spacing at q points",'q','1','1',"m")
-  vars(14)= vardesc("dyBu","Meridional grid spacing at q points",'q','1','1',"m")
-  vars(15)= vardesc("Ah","Area of h cells",'h','1','1',"m2")
-  vars(16)= vardesc("Aq","Area of q cells",'q','1','1',"m2")
+  vars(1) = var_desc("geolatb","degree","latitude at corner (Bu) points",'q','1','1')
+  vars(2) = var_desc("geolonb","degree","longitude at corner (Bu) points",'q','1','1')
+  vars(3) = var_desc("geolat","degree", "latitude at tracer (T) points", 'h','1','1')
+  vars(4) = var_desc("geolon","degree","longitude at tracer (T) points",'h','1','1')
+  vars(5) = var_desc("D","meter","Basin Depth",'h','1','1')
+  vars(6) = var_desc("f","second-1","Coriolis Parameter",'q','1','1')
+  vars(7) = var_desc("dxCv","m","Zonal grid spacing at v points",'v','1','1')
+  vars(8) = var_desc("dyCu","m","Meridional grid spacing at u points",'u','1','1')
+  vars(9) = var_desc("dxCu","m","Zonal grid spacing at u points",'u','1','1')
+  vars(10)= var_desc("dyCv","m","Meridional grid spacing at v points",'v','1','1')
+  vars(11)= var_desc("dxT","m","Zonal grid spacing at h points",'h','1','1')
+  vars(12)= var_desc("dyT","m","Meridional grid spacing at h points",'h','1','1')
+  vars(13)= var_desc("dxBu","m","Zonal grid spacing at q points",'q','1','1')
+  vars(14)= var_desc("dyBu","m","Meridional grid spacing at q points",'q','1','1')
+  vars(15)= var_desc("Ah","m2","Area of h cells",'h','1','1')
+  vars(16)= var_desc("Aq","m2","Area of q cells",'q','1','1')
 
-  vars(17)= vardesc("dxCvo","Open zonal grid spacing at v points",'v','1','1',"m")
-  vars(18)= vardesc("dyCuo","Open meridional grid spacing at u points",'u','1','1',"m")
-  vars(19)= vardesc("wet", "land or ocean?", 'h','1','1',"none")
+  vars(17)= var_desc("dxCvo","m","Open zonal grid spacing at v points",'v','1','1')
+  vars(18)= var_desc("dyCuo","m","Open meridional grid spacing at u points",'u','1','1')
+  vars(19)= var_desc("wet", "none", "land or ocean?", 'h','1','1')
 
-  vars(20) = vardesc("Dblock_u","Blocked depth at u points",'u','1','1',"meter")
-  vars(21) = vardesc("Dopen_u","Open depth at u points",'u','1','1',"meter")
-  vars(22) = vardesc("Dblock_v","Blocked depth at v points",'v','1','1',"meter")
-  vars(23) = vardesc("Dopen_v","Open depth at v points",'v','1','1',"meter")
+  vars(20) = var_desc("Dblock_u","meter","Blocked depth at u points",'u','1','1')
+  vars(21) = var_desc("Dopen_u","meter","Open depth at u points",'u','1','1')
+  vars(22) = var_desc("Dblock_v","meter","Blocked depth at v points",'v','1','1')
+  vars(23) = var_desc("Dopen_v","meter","Open depth at v points",'v','1','1')
 
   nFlds_used = 19 ; if (G%bathymetry_at_vel) nFlds_used = 23
 
@@ -1787,8 +1787,8 @@ subroutine write_vertgrid_file(G, param_file, directory)
 
   filepath = trim(directory) // trim("Vertical_coordinate")
 
-  vars(1) = vardesc("R","Target Potential Density",'1','L','1',"kilogram meter-3")
-  vars(2) = vardesc("g","Reduced gravity",'1','L','1',"meter second-2")
+  vars(1) = var_desc("R","kilogram meter-3","Target Potential Density",'1','L','1')
+  vars(2) = var_desc("g","meter second-2","Reduced gravity",'1','L','1')
 
   call create_file(unit, trim(filepath), vars, 2, G, fields, SINGLE_FILE)
 

@@ -71,7 +71,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : file_exists, read_data, slasher, vardesc
+use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc
 use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
 use MOM_time_manager, only : time_type, get_time
@@ -250,8 +250,8 @@ function register_OCMIP2_CFC(G, param_file, CS, diag, tr_Reg, restart_CS)
   ! and precision in non-restart output files ('f' for 32-bit float or 'd' for
   ! 64-bit doubles). For most tracers, only the name, longname and units should
   ! be changed.  See MOM_variables for the full type description.
-  CS%CFC11_desc = vardesc("CFC11","CFC-11 Concentration",'h','L','s',"mol m-3")
-  CS%CFC12_desc = vardesc("CFC12","CFC-12 Concentration",'h','L','s',"mol m-3")
+  CS%CFC11_desc = var_desc("CFC11","mol m-3","CFC-11 Concentration", caller=mod)
+  CS%CFC12_desc = var_desc("CFC12","mol m-3","CFC-12 Concentration", caller=mod)
 
   allocate(CS%CFC11(isd:ied,jsd:jed,nz)) ; CS%CFC11(:,:,:) = 0.0
   allocate(CS%CFC12(isd:ied,jsd:jed,nz)) ; CS%CFC12(:,:,:) = 0.0

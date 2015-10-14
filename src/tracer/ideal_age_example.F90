@@ -61,7 +61,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : file_exists, read_data, slasher, vardesc
+use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc
 use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
 use MOM_time_manager, only : time_type, get_time
@@ -222,15 +222,15 @@ function register_ideal_age_tracer(G, param_file, CS, diag, tr_Reg, &
   CS%ntr = 0
   if (do_ideal_age) then
     CS%ntr = CS%ntr + 1 ; m = CS%ntr
-    CS%tr_desc(m) = vardesc("age","Ideal Age Tracer",'h','L','s',"years")
+    CS%tr_desc(m) = var_desc("age", "years", "Ideal Age Tracer", caller=mod)
     CS%tracer_ages(m) = .true. ; CS%sfc_growth_rate(m) = 0.0
     CS%IC_val(m) = 0.0 ; CS%young_val(m) = 0.0 ; CS%tracer_start_year(m) = 0.0
   endif
 
   if (do_vintage) then
     CS%ntr = CS%ntr + 1 ; m = CS%ntr
-    CS%tr_desc(m) = vardesc("vintage","Exponential Vintage Tracer",'h','L','s',&
-                            "years")
+    CS%tr_desc(m) = var_desc("vintage", "years", "Exponential Vintage Tracer", &
+                            caller=mod)
     CS%tracer_ages(m) = .false. ; CS%sfc_growth_rate(m) = 1.0/30.0
     CS%IC_val(m) = 0.0 ; CS%young_val(m) = 1e-20 ; CS%tracer_start_year(m) = 0.0
     call get_param(param_file, mod, "IDEAL_VINTAGE_START_YEAR", CS%tracer_start_year(m), &
@@ -240,8 +240,8 @@ function register_ideal_age_tracer(G, param_file, CS, diag, tr_Reg, &
 
   if (do_ideal_age_dated) then
     CS%ntr = CS%ntr + 1 ; m = CS%ntr
-    CS%tr_desc(m) = vardesc("age_dated","Ideal Age Tracer with a Start Date",&
-                            'h','L','s',"years")
+    CS%tr_desc(m) = var_desc("age_dated","years","Ideal Age Tracer with a Start Date",&
+                            caller=mod)
     CS%tracer_ages(m) = .true. ; CS%sfc_growth_rate(m) = 0.0
     CS%IC_val(m) = 0.0 ; CS%young_val(m) = 0.0 ; CS%tracer_start_year(m) = 0.0
     call get_param(param_file, mod, "IDEAL_AGE_DATED_START_YEAR", CS%tracer_start_year(m), &

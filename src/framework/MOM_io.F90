@@ -89,6 +89,7 @@ public :: open_namelist_file, check_nml_error, io_infra_init, io_infra_end
 public :: APPEND_FILE, ASCII_FILE, MULTIPLE, NETCDF_FILE, OVERWRITE_FILE
 public :: READONLY_FILE, SINGLE_FILE, WRITEONLY_FILE
 public :: CENTER, CORNER, NORTH_FACE, EAST_FACE
+public :: var_desc, modify_vardesc, query_vardesc
 
 type, public :: vardesc
   character(len=64)  :: name     ! The variable name in a NetCDF file.
@@ -566,7 +567,116 @@ function num_timelevels(filename, varname, min_dims) result(n_time)
 
 end function num_timelevels
 
+!> Returns a vardesc type whose elements have been filled in with the provided
+!! fields.  The argument name is required, while the others are optional and
+!! have default values that are empty strings or are appropriate for a 3-d
+!! tracer field at the tracer cell centers.
+function var_desc(name, units, longname, hor_grid, z_grid, t_grid, caller) result(vd)
+  character(len=*),           intent(in) :: name     !< Variable name.
+  character(len=*), optional, intent(in) :: units    !< Variable units.
+  character(len=*), optional, intent(in) :: longname !< Variable long name.
+  character(len=*), optional, intent(in) :: hor_grid !< Variable horizonal staggering.
+  character(len=*), optional, intent(in) :: z_grid   !< Variable vertical staggering.
+  character(len=*), optional, intent(in) :: t_grid   !< Variable name.
+  character(len=*), optional, intent(in) :: caller   !< Calling routine?
+  type(vardesc) :: vd       !< The vardesc type that is being created.
 
+  character(len=120) :: cllr
+  cllr = "var_desc"
+  if (present(caller)) cllr = trim(caller)
+  
+  call safe_string_copy(name, vd%name, "vd%name", cllr)
+
+  vd%longname = "" ; vd%units = ""
+  vd%hor_grid = 'h' ; vd%z_grid = 'L' ; vd%t_grid = 's'
+
+  call modify_vardesc(vd, units=units, longname=longname, hor_grid=hor_grid, &
+                      z_grid=z_grid, t_grid=t_grid, caller=cllr)
+
+end function var_desc
+
+!> Modifies the named elements of a vardesc type. All arguments except the
+!! vardesc type to be modified are optional.
+subroutine modify_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
+                          caller)
+  type(vardesc), intent(inout) :: vd     !< The vardesc type that is being modified.
+  character(len=*), optional, intent(in) :: name     !< Variable name.
+  character(len=*), optional, intent(in) :: units    !< Variable units.
+  character(len=*), optional, intent(in) :: longname !< Variable long name.
+  character(len=*), optional, intent(in) :: hor_grid !< Variable horizonal staggering.
+  character(len=*), optional, intent(in) :: z_grid   !< Variable vertical staggering.
+  character(len=*), optional, intent(in) :: t_grid   !< Variable name.
+  character(len=*), optional, intent(in) :: caller   !< Calling routine?
+    
+  character(len=120) :: cllr
+  cllr = "mod_vardesc"
+  if (present(caller)) cllr = trim(caller)
+
+  if (present(name)) call safe_string_copy(name, vd%name, "vd%name", cllr)
+
+  if (present(longname)) call safe_string_copy(longname, vd%longname, &
+                               "vd%longname of "//trim(vd%name), cllr)
+  if (present(units)) call safe_string_copy(units, vd%units, &
+                               "vd%units of "//trim(vd%name), cllr)
+  if (present(hor_grid)) call safe_string_copy(hor_grid, vd%hor_grid, &
+                               "vd%hor_grid of "//trim(vd%name), cllr)
+  if (present(z_grid)) call safe_string_copy(z_grid, vd%z_grid, &
+                               "vd%z_grid of "//trim(vd%name), cllr)
+  if (present(t_grid)) call safe_string_copy(t_grid, vd%t_grid, &
+                               "vd%t_grid of "//trim(vd%name), cllr)
+  
+end subroutine modify_vardesc
+
+subroutine query_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
+                         caller)
+  type(vardesc), intent(in) :: vd     !< The vardesc type that is being queried.
+  character(len=*), optional, intent(out) :: name     !< Variable name.
+  character(len=*), optional, intent(out) :: units    !< Variable units.
+  character(len=*), optional, intent(out) :: longname !< Variable long name.
+  character(len=*), optional, intent(out) :: hor_grid !< Variable horizonal staggering.
+  character(len=*), optional, intent(out) :: z_grid   !< Variable vertical staggering.
+  character(len=*), optional, intent(out) :: t_grid   !< Variable name.
+  character(len=*), optional, intent(in)  :: caller   !< Calling routine?
+  
+  
+  character(len=120) :: cllr
+  cllr = "mod_vardesc"
+  if (present(caller)) cllr = trim(caller)
+
+  if (present(name)) call safe_string_copy(vd%name, name, &
+                               "vd%name of "//trim(vd%name), cllr)
+  if (present(longname)) call safe_string_copy(vd%longname, longname, &
+                               "vd%longname of "//trim(vd%name), cllr)
+  if (present(units)) call safe_string_copy(vd%units, units, &
+                               "vd%units of "//trim(vd%name), cllr)
+  if (present(hor_grid)) call safe_string_copy(vd%hor_grid, hor_grid, &
+                               "vd%hor_grid of "//trim(vd%name), cllr)
+  if (present(z_grid)) call safe_string_copy(vd%z_grid, z_grid, &
+                               "vd%z_grid of "//trim(vd%name), cllr)
+  if (present(t_grid)) call safe_string_copy(vd%t_grid, t_grid, &
+                               "vd%t_grid of "//trim(vd%name), cllr)
+  
+end subroutine query_vardesc
+
+subroutine safe_string_copy(str1, str2, fieldnm, caller)
+  character(len=*),           intent(in) :: str1
+  character(len=*),           intent(out) :: str2
+  character(len=*), optional, intent(in) :: fieldnm, caller
+
+  if (len(trim(str1)) > len(str2)) then
+    if (present(fieldnm) .and. present(caller)) then
+      call MOM_error(FATAL, trim(caller)//" attempted to copy the overly long"//&
+        " string "//trim(str1)//" into "//trim(fieldnm))
+    else
+      call MOM_error(FATAL, "safe_string_copy: The string "//trim(str1)//&
+                     " is longer than its intended target.")
+    endif
+  endif
+  str2 = trim(str1)
+end subroutine safe_string_copy
+
+!> Returns a directory name that is terminated with a "/" or "./" if the
+!! argument is an empty string.
 function slasher(dir)
   character(len=*), intent(in) :: dir
   character(len=len(dir)) :: slasher
@@ -586,6 +696,7 @@ function slasher(dir)
   endif
 end function slasher
 
+!> Returns a name with "%#E" or "%E" replaced with the ensemble member number.
 function ensembler(name, ens_no_in) result(en_nm)
   character(len=*),  intent(in) :: name
   integer, optional, intent(in) :: ens_no_in
@@ -643,6 +754,7 @@ function ensembler(name, ens_no_in) result(en_nm)
 end function ensembler
 
 
+!> Returns true if the named file or its domain-decomposed variant exists.
 function MOM_file_exists(file_name, MOM_Domain)
   character(len=*),       intent(in) :: file_name
   type(MOM_domain_type),  intent(in) :: MOM_domain
