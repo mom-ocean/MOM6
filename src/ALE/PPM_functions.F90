@@ -16,6 +16,8 @@ implicit none ; private
 
 public PPM_reconstruction, PPM_boundary_extrapolation
 
+real, parameter :: h_neglect = 1.E-30
+
 contains
 
 !------------------------------------------------------------------------------
@@ -199,7 +201,7 @@ subroutine PPM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
   ! Compute the left edge slope in neighboring cell and express it in
   ! the global coordinate system
   b = ppoly_coefficients(i1,2)
-  u1_r = b *(h0/h1)     ! derivative evaluated at xi = 0.0, 
+  u1_r = b *((h0+h_neglect)/(h1+h_neglect))     ! derivative evaluated at xi = 0.0, 
                         ! expressed w.r.t. xi (local coord. system)
   
   ! Limit the right slope by the PLM limited slope
@@ -253,7 +255,7 @@ subroutine PPM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
   b = ppoly_coefficients(i0,2)
   c = ppoly_coefficients(i0,3)
   u1_l = (b + 2*c)                  ! derivative evaluated at xi = 1.0
-  u1_l = u1_l * (h1/h0)
+  u1_l = u1_l * ((h1+h_neglect)/(h0+h_neglect))
   
   ! Limit the left slope by the PLM limited slope
   slope = 2.0 * ( u1 - u0 )

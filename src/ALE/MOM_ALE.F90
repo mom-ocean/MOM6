@@ -15,6 +15,8 @@ module MOM_ALE
 !
 !==============================================================================
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
+use MOM_error_handler, only : callTree_showQuery
+use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
 use MOM_file_parser,   only : get_param, param_file_type, log_param
 use MOM_io,            only : file_exists, field_exists, MOM_read_data
@@ -30,13 +32,14 @@ use P1M_functions, only : P1M_interpolation, P1M_boundary_extrapolation
 use P3M_functions, only : P3M_interpolation, P3M_boundary_extrapolation
 use MOM_regridding, only : initialize_regridding, regridding_main , end_regridding
 use MOM_regridding, only : uniformResolution
-use MOM_regridding, only : check_grid_integrity, setCoordinateResolution
-use MOM_regridding, only : setcoordinateinterfaces
+use MOM_regridding, only : inflate_vanished_layers_old, setCoordinateResolution
+use MOM_regridding, only : set_target_densities_from_G, set_target_densities
 use MOM_regridding, only : regriddingCoordinateModeDoc, DEFAULT_COORDINATE_MODE
 use MOM_regridding, only : regriddingInterpSchemeDoc, regriddingDefaultInterpScheme
 use MOM_regridding, only : setRegriddingBoundaryExtrapolation
 use MOM_regridding, only : regriddingDefaultBoundaryExtrapolation
-use MOM_regridding, only : setRegriddingMinimumThickness, regriddingDefaultMinThickness
+use MOM_regridding, only : set_regrid_min_thickness, regriddingDefaultMinThickness
+use MOM_regridding, only : check_remapping_grid
 use MOM_regridding, only : regridding_CS
 use MOM_regridding, only : getCoordinateInterfaces, getCoordinateResolution
 use MOM_regridding, only : getCoordinateUnits, getCoordinateShortName
@@ -44,12 +47,12 @@ use MOM_regridding, only : getStaticThickness
 use MOM_remapping, only : initialize_remapping, remapping_core, end_remapping
 use MOM_remapping, only : remappingSchemesDoc, remappingDefaultScheme
 use MOM_remapping, only : remapDisableBoundaryExtrapolation, remapEnableBoundaryExtrapolation
-use MOM_remapping, only : remapping_CS
+use MOM_remapping, only : remapping_CS, dzFromH1H2
 use MOM_tracer_registry, only : tracer_registry_type
 use regrid_defs, only : PRESSURE_RECONSTRUCTION_PLM
 !use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts, only : coordinateUnits, coordinateMode
-use regrid_consts, only : REGRIDDING_ZSTAR
+use regrid_consts, only : REGRIDDING_ZSTAR, REGRIDDING_RHO, REGRIDDING_HYCOM1
 
 
 implicit none ; private
@@ -89,6 +92,11 @@ type, public :: ALE_CS
   ! Work space for communicating between regridding and remapping
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NK_INTERFACE_) :: dzRegrid
 
+  !> Indicates whether to regrid/remap after initializing the state.
+  logical :: remap_after_initialization
+
+  logical :: show_call_tree ! For debugging
+
 end type
 
 ! -----------------------------------------------------------------------------
@@ -97,6 +105,9 @@ end type
 public initialize_ALE
 public end_ALE
 public ALE_main 
+public regrid_only
+public regrid_remap_T_S
+public remap_scalar_h_to_h
 public pressure_gradient_plm
 public pressure_gradient_ppm
 public usePressureReconstruction
@@ -108,6 +119,8 @@ public ALE_getCoordinateUnits
 public ALE_writeCoordinateFile
 public ALE_updateVerticalGridType
 public ALE_initThicknessToCoord
+public check_remapping_grid
+public remap_init_conds
 
 ! -----------------------------------------------------------------------------
 ! The following are private constants
@@ -157,6 +170,9 @@ subroutine initialize_ALE( param_file, G, CS )
   endif
   allocate(CS)
 
+  CS%show_call_tree = callTree_showQuery()
+  if (CS%show_call_tree) call callTree_enter("initialize_ALE(), MOM_ALE.F90")
+
   ! Memory allocation for regridding
   call ALE_memory_allocation( G, CS )
 
@@ -201,9 +217,16 @@ subroutine initialize_ALE( param_file, G, CS )
   call initialize_remapping( G%ke, string, CS%remapCS )
   call remapDisableBoundaryExtrapolation( CS%remapCS )
 
+  call get_param(param_file, mod, "REMAP_AFTER_INITIALIZATION", CS%remap_after_initialization, &
+                 "If true, applies regridding and remapping immediately after\n"//&
+                 "initialization so that the state is ALE consistent. This is a\n"//&
+                 "legacy step and should not be needed if the initialization is\n"//&
+                 "consistent with the coordinate mode.", default=.true.)
+
   ! Keep a record of values for subsequent queries
   CS%nk = G%ke
 
+  if (CS%show_call_tree) call callTree_leave("initialize_ALE()")
 end subroutine initialize_ALE
 
 
@@ -223,7 +246,7 @@ subroutine adjustGridForIntegrity( CS, G, h )
   type(ocean_grid_type), intent(in)                      :: G
   real, dimension(NIMEM_,NJMEM_, NKMEM_),  intent(inout) :: h
 
-  call check_grid_integrity( CS%regridCS, G, h(:,:,:) )
+  call inflate_vanished_layers_old( CS%regridCS, G, h(:,:,:) )
 
 end subroutine adjustGridForIntegrity
 
@@ -247,7 +270,6 @@ subroutine end_ALE(CS)
 
 end subroutine end_ALE
 
-
 !> Takes care of (1) building a new grid and (2) remapping all variables between
 !! the old grid and the new grid. The creation of the new grid can be based
 !! on z coordinates, target interface densities, sigma coordinates or any
@@ -263,12 +285,20 @@ subroutine ALE_main( G, h, u, v, tv, Reg, CS )
   ! Local variables
   integer :: nk, i, j, k, isd, ied, jsd, jed
 
+  if (CS%show_call_tree) call callTree_enter("ALE_main(), MOM_ALE.F90")
+
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
   call regridding_main( CS%remapCS, CS%regridCS, G, h, tv, CS%dzRegrid )
 
+  call check_remapping_grid( G, h, CS%dzRegrid, 'in ALE_main()' )
+
+  if (CS%show_call_tree) call callTree_waypoint("new grid generated (ALE_main)")
+
   ! Remap all variables from old grid h onto new grid h_new
-  call remapping_main( CS%remapCS, G, h, -CS%dzRegrid, Reg, u, v )
+  call remapping_main( CS%remapCS, G, h, -CS%dzRegrid, Reg, u, v, CS%show_call_tree )
+
+  if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_main)")
 
   ! Override old grid with new one. The new grid 'h_new' is built in
   ! one of the 'build_...' routines above.
@@ -279,13 +309,101 @@ subroutine ALE_main( G, h, u, v, tv, Reg, CS )
       h(i,j,k) = h(i,j,k) + ( CS%dzRegrid(i,j,k) - CS%dzRegrid(i,j,k+1) )
     enddo ; enddo
   enddo
+!$OMP end parallel
 
+  if (CS%show_call_tree) call callTree_leave("ALE_main()")
 end subroutine ALE_main
+
+!> Generates new grid
+subroutine regrid_only( G, regridCS, remapCS, h, tv, debug )
+  type(ocean_grid_type),                   intent(in)    :: G !< Ocean grid informations
+  type(regridding_CS),                     intent(in)    :: regridCS !< Regridding parameters and options
+  type(remapping_CS),                      intent(in)    :: remapCS !< Remapping parameters and options
+  type(thermo_var_ptrs),                   intent(inout) :: tv !< Thermodynamical variable structure
+  real, dimension(NIMEM_,NJMEM_, NKMEM_),  intent(inout) :: h !< Current 3D grid obtained after the last time step (m or Pa)
+  logical,                       optional, intent(in)    :: debug !< If true, show the call tree
+  ! Local variables
+  integer :: nk, i, j, k, isd, ied, jsd, jed
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: dzRegrid ! The changein grid interface positions
+  logical :: show_call_tree
+
+  show_call_tree = .false.
+  if (present(debug)) show_call_tree = debug
+  if (show_call_tree) call callTree_enter("regrid_only(), MOM_ALE.F90")
+
+  ! Build new grid. The new grid is stored in h_new. The old grid is h.
+  ! Both are needed for the subsequent remapping of variables.
+  call regridding_main( remapCS, regridCS, G, h, tv, dzRegrid )
+
+  call check_remapping_grid( G, h, dzRegrid, 'in regrid_only()' )
+
+  ! Override old grid with new one. The new grid 'h_new' is built in
+  ! one of the 'build_...' routines above.
+!$OMP parallel do default(none) shared(isd,ied,jsd,jed,nk,h,CS)
+  do j = G%jsc,G%jec ; do i = G%isc,G%iec
+    if (G%mask2dT(i,j)>0.) then
+      do k = 1,G%ke
+        h(i,j,k) = h(i,j,k) + ( dzRegrid(i,j,k) - dzRegrid(i,j,k+1) )
+      enddo
+    endif
+  enddo ; enddo
+!$OMP end parallel
+
+  if (show_call_tree) call callTree_leave("regrid_only()")
+end subroutine regrid_only
+
+!> Generates new grid and remaps T and S.
+subroutine regrid_remap_T_S( G, regridCS, remapCS, h, tv, debug )
+  type(ocean_grid_type),                   intent(in)    :: G !< Ocean grid informations
+  type(regridding_CS),                     intent(in)    :: regridCS !< Regridding parameters and options
+  type(remapping_CS),                      intent(in)    :: remapCS !< Remapping parameters and options
+  real, dimension(NIMEM_,NJMEM_, NKMEM_),  intent(inout) :: h !< Current 3D grid obtained after the last time step (m or Pa)
+  type(thermo_var_ptrs),                   intent(inout) :: tv !< Thermodynamical variable structure
+  logical,                       optional, intent(in)    :: debug !< If true, show the call tree
+  ! Local variables
+  integer :: nk, i, j, k, isd, ied, jsd, jed
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: h_old ! The source grid
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: scalar ! The source data
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: dzRegrid ! The changein grid interface positions
+  logical :: show_call_tree
+
+  show_call_tree = .false.
+  if (present(debug)) show_call_tree = debug
+  if (show_call_tree) call callTree_enter("regrid_map_T_S(), MOM_ALE.F90")
+
+  ! Build new grid. The new grid is stored in h_new. The old grid is h.
+  ! Both are needed for the subsequent remapping of variables.
+  call regridding_main( remapCS, regridCS, G, h, tv, dzRegrid )
+
+  call check_remapping_grid( G, h, dzRegrid, 'in regrid_map_T_S()' )
+
+  ! Override old grid with new one. The new grid 'h_new' is built in
+  ! one of the 'build_...' routines above.
+  nk = G%ke; isd = G%isd; ied = G%ied; jsd = G%jsd; jed = G%jed
+!$OMP parallel do default(none) shared(isd,ied,jsd,jed,nk,h,CS)
+  do k = 1,nk
+    do j = jsd,jed ; do i = isd,ied
+      h_old(i,j,k) = h(i,j,k)
+      h(i,j,k) = h(i,j,k) + ( dzRegrid(i,j,k) - dzRegrid(i,j,k+1) )
+    enddo ; enddo
+  enddo
+!$OMP end parallel
+
+  if (show_call_tree) call callTree_waypoint("new grid generated (regrid_map_T_S)")
+
+  ! Remap T and S from old grid h_old onto new grid h
+  scalar(:,:,:) = tv%T(:,:,:)
+  call remap_scalar_h_to_h( remapCS, G, nk, h_old, scalar, h, tv%T )
+  scalar(:,:,:) = tv%S(:,:,:)
+  call remap_scalar_h_to_h( remapCS, G, nk, h_old, scalar, h, tv%S )
+
+  if (show_call_tree) call callTree_leave("regrid_map_T_S()")
+end subroutine regrid_remap_T_S
 
 !> This routine takes care of remapping all variable between the old and the
 !! new grids. When velocity components need to be remapped, thicknesses at
 !! velocity points are taken to be arithmetic averages of tracer thicknesses.
-subroutine remapping_main( CS, G, h, dxInterface, Reg, u, v )
+subroutine remapping_main( CS, G, h, dxInterface, Reg, u, v, debug )
   ! Arguments
   type(remapping_CS),                               intent(in)    :: CS !< Remapping control structure
   type(ocean_grid_type),                            intent(in)    :: G  !< Ocean grid structure
@@ -294,11 +412,17 @@ subroutine remapping_main( CS, G, h, dxInterface, Reg, u, v )
   type(tracer_registry_type),                       pointer       :: Reg !< Tracer registry structure
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), optional, intent(inout) :: u  !< Zonal velocity component (m/s)
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), optional, intent(inout) :: v  !< Meridional velocity component (m/s)
+  logical,                                optional, intent(in)    :: debug !< If true, show the call tree
   ! Local variables
   integer               :: i, j, k, m
   integer               :: nz, ntr
   real, dimension(G%ke+1) :: dx
   real, dimension(G%ke) :: h1, u_column
+  logical :: show_call_tree
+
+  show_call_tree = .false.
+  if (present(debug)) show_call_tree = debug
+  if (show_call_tree) call callTree_enter("remapping_main(), MOM_ALE.F90")
 
   nz = G%ke
   if (associated(Reg)) then
@@ -311,6 +435,7 @@ subroutine remapping_main( CS, G, h, dxInterface, Reg, u, v )
 !$OMP parallel default(none) shared(G,h,dxInterface,CS,nz,tv,u,v) &
 !$OMP                       private(h1,dx,u_column)
   if (ntr>0) then
+    if (show_call_tree) call callTree_waypoint("remapping tracers (remapping_main)")
 !$OMP do
     do j = G%jsc,G%jec
       do i = G%isc,G%iec
@@ -327,6 +452,8 @@ subroutine remapping_main( CS, G, h, dxInterface, Reg, u, v )
     enddo
   endif
 
+  if (show_call_tree) call callTree_waypoint("tracers remapped (remapping_main)")
+
   ! Remap u velocity component
   if ( present(u) ) then
 !$OMP do
@@ -342,6 +469,8 @@ subroutine remapping_main( CS, G, h, dxInterface, Reg, u, v )
       enddo
     enddo
   endif
+
+  if (show_call_tree) call callTree_waypoint("u remapped (remapping_main)")
 
   ! Remap v velocity component
   if ( present(v) ) then
@@ -360,7 +489,57 @@ subroutine remapping_main( CS, G, h, dxInterface, Reg, u, v )
   endif
 !$OMP end parallel
 
+  if (show_call_tree) call callTree_waypoint("u remapped (remapping_main)")
+  if (show_call_tree) call callTree_leave("remapping_main()")
+
 end subroutine remapping_main
+
+!> Remaps a single scalar between grids described by thicknesses h_src and h_dst.
+!! h_dst must be dimensioned as a model array with G%ke layers while h_src can
+!! have an arbitrary number of layers specified by nk_src.
+subroutine remap_scalar_h_to_h( CS, G, nk_src, h_src, s_src, h_dst, s_dst, all_cells )
+  type(remapping_CS),                      intent(in)    :: CS !< Remapping control structure
+  type(ocean_grid_type),                   intent(in)    :: G  !< Ocean grid structure
+  integer,                                 intent(in)    :: nk_src !< Number of levels on source grid
+  real, dimension(SZI_(G),SZJ_(G),nk_src), intent(in)    :: h_src !< Level thickness of source grid (m or Pa)
+  real, dimension(SZI_(G),SZJ_(G),nk_src), intent(in)    :: s_src !< Scalar on source grid
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),   intent(in)    :: h_dst !< Level thickness of destination grid (m or Pa)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),   intent(inout) :: s_dst !< Scalar on destination grid
+  logical, optional,                       intent(in)    :: all_cells !< If false, only reconstruct for
+                                                                      !! non-vanished cells. Use all vanished
+                                                                      !! layers otherwise (default).
+  ! Local variables
+  integer :: i, j, k, n_points
+  real :: dx(G%ke+1)
+  logical :: ignore_vanished_layers
+
+  ignore_vanished_layers = .false.
+  if (present(all_cells)) ignore_vanished_layers = .not. all_cells
+  n_points = nk_src
+
+!$OMP parallel default(none) shared(CS,G,h_src,s_src,h_dst,s_dst) &
+!$OMP                        private(dx)
+!$OMP do
+  do j = G%jsc,G%jec
+    do i = G%isc,G%iec
+      if (G%mask2dT(i,j)>0.) then
+        if (ignore_vanished_layers) then
+          n_points = 0
+          do k = 1, nk_src
+            if (h_src(i,j,k)>0.) n_points = n_points + 1
+          enddo
+          s_dst(i,j,:) = 0.
+        endif
+        call dzFromH1H2( n_points, h_src(i,j,1:n_points), G%ke, h_dst(i,j,:), dx )
+        call remapping_core(CS, n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), G%ke, dx, s_dst(i,j,:))
+      else
+        s_dst(i,j,:) = 0.
+      endif
+    enddo
+  enddo
+!$OMP end parallel
+
+end subroutine remap_scalar_h_to_h
 
 
 !------------------------------------------------------------------------------
@@ -593,6 +772,7 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
   integer :: ke
   logical :: tmpLogical
   real :: tmpReal
+  real :: rho_target(G%ke+1) ! Target density used in HYCOM1 mode
 
   ke = size(dz) ! Number of levels in resolution vector
 
@@ -622,8 +802,14 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
                  " UNIFORM     - uniformly distributed\n"//&
                  " FILE:string - read from a file. The string specifies\n"//&
                  "               the filename and variable name, separated\n"//&
-                 "               by a comma or space, e.g. FILE:lev.nc,Z",&
+                 "               by a comma or space, e.g. FILE:lev.nc,Z\n"//&
+                 " FNC1:string - FNC1:dz_min,H_total,power,precision",&
                  default='UNIFORM')
+!                " FNC1:string - FNC1:dz_min,H_total,power,precision\n"//&
+!                " HYBRID:strg  - read from a file. The string specifies\n"//&
+!                "               the filename and two variable names, separated\n"//&
+!                "               by a comma or space, for sigma-2 and dz. e.g.\n"//&
+!                "               HYBRID:vgrid.nc,sigma2,dz",&
   message = "The distribution of vertical resolution for the target\n"//&
             "grid used for Eulerian-like coordinates. For example,\n"//&
             "in z-coordinate mode, the parameter is a list of level\n"//&
@@ -654,7 +840,7 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
         if (.not. file_exists(fileName)) call MOM_error(FATAL,"ALE_initRegridding: "// &
           "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
 
-        varName = trim( extractWord(trim(string(6:80)), 2) )
+        varName = trim( extractWord(trim(string(6:)), 2) )
         if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,"ALE_initRegridding: "// &
           "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
         if (len_trim(varName)==0) then
@@ -668,12 +854,39 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
         call MOM_read_data(trim(fileName), trim(varName), dz)
         call log_param(param_file, mod, "!ALE_RESOLUTION", dz, &
                    trim(message), units=coordinateUnits(coordMode))
+      elseif (index(trim(string),'FNC1:')==1) then
+        call dz_function1( trim(string(6:)), dz )
+        call log_param(param_file, mod, "!ALE_RESOLUTION", dz, &
+                   trim(message), units=coordinateUnits(coordMode))
+      elseif (index(trim(string),'HYBRID:')==1) then
+        call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
+        inputdir = slasher(inputdir)
+
+        fileName = trim( extractWord(trim(string(8:)), 1) )
+        if (fileName(1:1)/='.' .and. filename(1:1)/='/') fileName = trim(inputdir) // trim( fileName )
+        if (.not. file_exists(fileName)) call MOM_error(FATAL,"ALE_initRegridding: HYCOM1 "// &
+          "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
+        varName = trim( extractWord(trim(string(8:)), 2) )
+        if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,"ALE_initRegridding: HYCOM1 "// &
+          "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
+        call MOM_read_data(trim(fileName), trim(varName), rho_target)
+        call set_target_densities( regridCS, rho_target )
+        varName = trim( extractWord(trim(string(8:)), 3) )
+        if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,"ALE_initRegridding: HYCOM1 "// &
+          "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
+        call MOM_read_data(trim(fileName), trim(varName), dz)
+        call log_param(param_file, mod, "!ALE_RESOLUTION", dz, &
+                   trim(message), units=coordinateUnits(coordMode))
+        call log_param(param_file, mod, "!TARGET_DENSITIES", rho_target, &
+                   'HYBRID target densities for itnerfaces', units=coordinateUnits(coordMode))
+
       else
         call MOM_error(FATAL,"ALE_initRegridding: "// &
           "Unrecognized coordinate configuraiton"//trim(string))
       endif
   end select
-  if (coordinateMode(coordMode) == REGRIDDING_ZSTAR) then
+  if (coordinateMode(coordMode) == REGRIDDING_ZSTAR .or. &
+      coordinateMode(coordMode) == REGRIDDING_HYCOM1) then
     ! Adjust target grid to be consistent with G%max_depth
     ! This is a work around to the from_Z initialization...  ???
     tmpReal = sum( dz(:) )
@@ -684,18 +897,18 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
         dz(ke) = dz(ke) + ( G%max_depth - tmpReal )
       else
         call MOM_error(FATAL,"ALE_initRegridding: "// &
-          "MAaIMUMX_DEPTH was too shallow to adjust bottom layer of DZ!"//trim(string))
+          "MAXIMUM_DEPTH was too shallow to adjust bottom layer of DZ!"//trim(string))
       endif
     endif
   endif
   call setCoordinateResolution( dz, regridCS )
-  call setCoordinateInterfaces( G, regridCS )
+  if (coordinateMode(coordMode) == REGRIDDING_RHO) call set_target_densities_from_G( G, regridCS )
 
   call get_param(param_file, mod, "MIN_THICKNESS", tmpReal, &
                  "When regridding, this is the minimum layer\n"//&
                  "thickness allowed.", units="m",&
                  default=regriddingDefaultMinThickness )
-  call setRegriddingMinimumThickness( tmpReal, regridCS )
+  call set_regrid_min_thickness( tmpReal, regridCS )
 
   call get_param(param_file, mod, "BOUNDARY_EXTRAPOLATION", tmpLogical, &
                  "When defined, a proper high-order reconstruction\n"//&
@@ -706,6 +919,32 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
   call setRegriddingBoundaryExtrapolation( tmpLogical, regridCS )
 
 end subroutine ALE_initRegridding
+
+!> Parses a string and generates a dz(:) profile
+subroutine dz_function1( string, dz )
+  character(len=*),   intent(in)    :: string !< String with list of parameters
+  real, dimension(:), intent(inout) :: dz !< Profile of nominal thicknesses
+  ! Local variables
+  integer :: nk, k
+  real :: dz_min, power, prec, H_total
+
+  nk = size(dz) ! Number of cells
+  prec = -1024.
+  read( string, *) dz_min, H_total, power, prec
+  if (prec == -1024.) call MOM_error(FATAL,"dz_function1: "// &
+          "Problem reading FNC1: string  ="//trim(string))
+  ! Create profile of ( dz - dz_min )
+  do k = 1, nk
+    dz(k) = (real(k-1)/real(nk-1))**power
+  enddo
+  dz(:) = ( H_total - real(nk) * dz_min ) * ( dz(:) / sum(dz) ) ! Rescale to so total is H_total
+  dz(:) = anint( dz(:) / prec ) * prec ! Rounds to precision prec
+  dz(:) = ( H_total - real(nk) * dz_min ) * ( dz(:) / sum(dz) ) ! Rescale to so total is H_total
+  dz(:) = anint( dz(:) / prec ) * prec ! Rounds to precision prec
+  dz(nk) = dz(nk) + ( H_total - sum( dz(:) + dz_min ) ) ! Adjust bottom most layer
+  dz(:) = anint( dz(:) / prec ) * prec ! Rounds to precision prec
+  dz(:) = dz(:) + dz_min ! Finally add in the constant dz_min
+end subroutine dz_function1
 
 !------------------------------------------------------------------------------
 ! Query the target coordinate interfaces positions
@@ -728,6 +967,13 @@ function ALE_getCoordinateUnits( CS )
   ALE_getCoordinateUnits = getCoordinateUnits( CS%regridCS )
 
 end function ALE_getCoordinateUnits
+
+!> Returns true if initial conditions should be regridded and remapped
+logical function remap_init_conds( CS )
+  type(ALE_CS),            pointer :: CS
+  remap_init_conds = .false.
+  if (associated(CS)) remap_init_conds = CS%remap_after_initialization
+end function remap_init_conds
 
 !------------------------------------------------------------------------------
 ! Update the vertical grid type with ALE information

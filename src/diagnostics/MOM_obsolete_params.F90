@@ -86,6 +86,9 @@ subroutine find_obsolete_params(param_file)
   call obsolete_int(param_file, "NYHALO")
   call obsolete_int(param_file, "ML_PRESORT_NZ_CONV_ADJ")
 
+  call obsolete_int(param_file, "NIPROC_IO", hint="Use IO_LAYOUT=#,# instead.")
+  call obsolete_int(param_file, "NJPROC_IO", hint="Use IO_LAYOUT=#,# instead.")
+
   call obsolete_real(param_file, "BT_COR_SLOW_RATE", 0.0)
   call obsolete_real(param_file, "BT_COR_FRAC", 1.0)
 

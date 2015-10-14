@@ -414,7 +414,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
   do j=js,je
     ! Copy the thicknesses and other fields to 2-d arrays.
     do k=1,nz ; do i=is,ie
-      h(i,k) = h_3d(i,j,k) ; u(i,k) = u_3d(i,j,k) ; v(i,k) = v_3d(i,j,k)
+      h(i,k) = h_3d(i,j,k) + h_neglect ; u(i,k) = u_3d(i,j,k) ; v(i,k) = v_3d(i,j,k)
       T(i,k) = tv%T(i,j,k) ; S(i,k) = tv%S(i,j,k)
       Kd(i,K) = 0.0
     enddo ; enddo

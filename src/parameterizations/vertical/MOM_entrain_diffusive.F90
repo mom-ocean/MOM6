@@ -194,6 +194,8 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
                   ! interface below layer kb, in m3 kg-1.
     dtKd_kb, &    ! The diapycnal diffusivity in layer kb times the time step,
                   ! in units of H2.
+    maxF_correct, & ! An amount by which to correct maxF due to excessive
+                  ! surface heat loss, in H.
     zeros, &      ! An array of all zeros. (Usually used with units of H.)
     max_eakb, &   ! The maximum value of eakb that might be realized, in H.
     min_eakb, &   ! The minimum value of eakb that might be realized, in H.
@@ -251,6 +253,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
                      ! interface below is taken into account, in H.
   real :: Idt        ! The inverse of the time step, in s-1.
 
+  logical :: do_any
   logical :: do_i(SZI_(G)), did_i(SZI_(G)), reiterate, correct_density
   integer :: it, i, j, k, is, ie, js, je, nz, K2, kmb
   integer :: kb(SZI_(G))  ! The value of kb in row j.
@@ -453,10 +456,20 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
     enddo ; enddo
     do i=is,ie
       maxF(i,nz) = 0.0
-      if (.not.CS%bulkmixedlayer) &
-        maxF(i,nz) = MIN(0.0, ds_dsp1(i,nz)*(maxF(i,nz-1) + htot(i)))
+      if (.not.CS%bulkmixedlayer) then
+        maxF_correct(i) = MAX(0.0, -(maxF(i,nz-1) + htot(i)))
+      endif
       htot(i) = h(i,j,nz) - Angstrom
     enddo
+    if (.not.CS%bulkmixedlayer) then
+      do_any = .false. ; do i=is,ie ; if (maxF_correct(i) > 0.0) do_any = .true. ; enddo
+      if (do_any) then
+        do k=nz-1,1,-1 ; do i=is,ie
+          maxF(i,k) = maxF(i,k) + maxF_correct(i)
+          maxF_correct(i) = maxF_correct(i) * dsp1_ds(i,k)
+        enddo ; enddo
+      endif
+    endif
     do k=nz-1,kb_min,-1 ; do i=is,ie ; if (do_i(i)) then
       if (k>=kb(i)) then
         maxF(i,k) = MIN(maxF(i,k),dsp1_ds(i,k+1)*maxF(i,k+1) + htot(i))
@@ -665,10 +678,10 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
     if (it == (CS%max_ent_it)) then
       !   Limit the flux so that the layer below is not depleted.
       ! This should only be applied to the last iteration.
-      do i=is1,ie1
-        if (F(i,nz-1) < 0.0) F(i,nz-1) = 0.0
+      do i=is1,ie1 ; if (do_i(i)) then
+        F(i,nz-1) = MAX(F(i,nz-1), MIN(minF(i,nz-1), 0.0))
         if (kb(i) >= nz-1) then ; ea_kbp1(i) = 0.0 ; endif
-      enddo
+      endif ; enddo
       do k=nz-2,kb_min_act,-1 ; do i=is1,ie1 ; if (do_i(i)) then
         if (k>kb(i)) then
           F(i,k) = MIN(MAX(minF(i,k),F(i,k)), (dsp1_ds(i,k+1)*F(i,k+1) + &

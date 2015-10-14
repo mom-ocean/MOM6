@@ -21,6 +21,8 @@ implicit none ; private
 public P3M_interpolation
 public P3M_boundary_extrapolation
 
+real, parameter :: h_neglect = 1.E-30
+
 contains
 
 !------------------------------------------------------------------------------
@@ -139,9 +141,9 @@ subroutine P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients )
     end if  
 
     ! Compute limited slope
-    sigma_l = 2.0 * ( u_c - u_l ) / h_c
-    sigma_c = 2.0 * ( u_r - u_l ) / ( h_l + 2.0*h_c + h_r )
-    sigma_r = 2.0 * ( u_r - u_c ) / h_c
+    sigma_l = 2.0 * ( u_c - u_l ) / ( h_c + h_neglect )
+    sigma_c = 2.0 * ( u_r - u_l ) / ( h_l + 2.0*h_c + h_r + h_neglect )
+    sigma_r = 2.0 * ( u_r - u_c ) / ( h_c + h_neglect )
 
     if ( (sigma_l * sigma_r) .GT. 0.0 ) then
       slope = sign( min(abs(sigma_l),abs(sigma_c),abs(sigma_r)), sigma_c )
@@ -247,7 +249,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coeffici
   u1_r = b / h1     ! derivative evaluated at xi = 0.0, expressed w.r.t. x
   
   ! Limit the right slope by the PLM limited slope
-  slope = 2.0 * ( u1 - u0 ) / h0
+  slope = 2.0 * ( u1 - u0 ) / ( h0 + h_neglect )
   if ( abs(u1_r) .GT. abs(slope) ) then
     u1_r = slope
   end if
@@ -260,7 +262,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coeffici
   ! edge value and slope by computing the parabola as determined by
   ! the right edge value and slope and the boundary cell average
   u0_l = 3.0 * u0 + 0.5 * h0*u1_r - 2.0 * u0_r
-  u1_l = ( - 6.0 * u0 - 2.0 * h0*u1_r + 6.0 * u0_r) / h0
+  u1_l = ( - 6.0 * u0 - 2.0 * h0*u1_r + 6.0 * u0_r) / ( h0 + h_neglect )
 
   ! Check whether the edge values are monotonic. For example, if the left edge
   ! value is larger than the right edge value while the slope is positive, the
@@ -304,10 +306,10 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coeffici
   b = ppoly_coefficients(i0,2)
   c = ppoly_coefficients(i0,3)
   d = ppoly_coefficients(i0,4)
-  u1_l = (b + 2*c + 3*d) / h0  ! derivative evaluated at xi = 1.0
+  u1_l = (b + 2*c + 3*d) / ( h0 + h_neglect ) ! derivative evaluated at xi = 1.0
   
   ! Limit the left slope by the PLM limited slope
-  slope = 2.0 * ( u1 - u0 ) / h1
+  slope = 2.0 * ( u1 - u0 ) / ( h1 + h_neglect )
   if ( abs(u1_l) .GT. abs(slope) ) then
     u1_l = slope
   end if
@@ -320,7 +322,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coeffici
   ! edge value and slope by computing the parabola as determined by
   ! the left edge value and slope and the boundary cell average
   u0_r = 3.0 * u1 - 0.5 * h1*u1_l - 2.0 * u0_l
-  u1_r = ( 6.0 * u1 - 2.0 * h1*u1_l - 6.0 * u0_l) / h1
+  u1_r = ( 6.0 * u1 - 2.0 * h1*u1_l - 6.0 * u0_l) / ( h1 + h_neglect )
 
   ! Check whether the edge values are monotonic. For example, if the right edge
   ! value is smaller than the left edge value while the slope is positive, the

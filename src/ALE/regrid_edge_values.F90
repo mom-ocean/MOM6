@@ -26,7 +26,7 @@ public edge_values_explicit_h4
 public edge_values_implicit_h4
 public edge_values_implicit_h6
 
-#define __DO_SAFETY_CHECKS__
+#undef __DO_SAFETY_CHECKS__
 
 ! The following parameters are used to avoid singular matrices for boundary
 ! extrapolation. The are needed only in the case where thicknesses vanish
@@ -103,9 +103,9 @@ subroutine bound_edge_values( N, h, u, edge_values )
     u0_l = edge_values(k,1)
     u0_r = edge_values(k,2)
 
-    sigma_l = 2.0 * ( u_c - u_l ) / h_c
-    sigma_c = 2.0 * ( u_r - u_l ) / ( h_l + 2.0*h_c + h_r )
-    sigma_r = 2.0 * ( u_r - u_c ) / h_c
+    sigma_l = 2.0 * ( u_c - u_l ) / ( h_c + 1.E-30 )
+    sigma_c = 2.0 * ( u_r - u_l ) / ( h_l + 2.0*h_c + h_r + 1.E-30 )
+    sigma_r = 2.0 * ( u_r - u_c ) / ( h_c + 1.E-30 )
     
     if ( (sigma_l * sigma_r) .GT. 0.0 ) then
       slope = sign( min(abs(sigma_l),abs(sigma_c),abs(sigma_r)), sigma_c )

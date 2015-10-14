@@ -1,19 +1,8 @@
+!> Generates vertical grids as part of the ALE algorithm
 module MOM_regridding
-!==============================================================================
-!
-! This file is part of MOM.
-!
-! Date of creation: 2008.06.09
-! L. White
-!
-! This module contains the main regridding routines. 
-!
-! Regridding must be understood as comprising two steps:
-! (1) Interpolation and creation of a new grid based on target interface 
-!     densities (or any other criterion).
-! (2) Remapping of quantities between old grid and new grid.
-!
-!==============================================================================
+
+! This file is part of MOM6. See LICENSE.md for the license.
+
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
 use MOM_EOS,           only : calculate_density
@@ -34,78 +23,87 @@ use MOM_remapping, only : remapping_CS
 use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
 use regrid_consts, only : REGRIDDING_RHO, REGRIDDING_SIGMA
-use regrid_consts, only : REGRIDDING_ARBITRARY
+use regrid_consts, only : REGRIDDING_ARBITRARY, REGRIDDING_HYCOM1
 
 implicit none ; private
 
 #include <MOM_memory.h>
 
-! -----------------------------------------------------------------------------
-! Private (module-wise) variables
-! -----------------------------------------------------------------------------
-
+!> Regridding control structure
 type, public :: regridding_CS
   private
                                                     
-  ! This array is set by function setCoordinateResolution
-  ! It contains the "resolution" or delta coordinate of the target
-  ! coorindate. It has the units of the target coordiante, e.g.
-  ! meters for z*, non-dimensional for sigma, etc.
+  !> This array is set by function setCoordinateResolution()
+  !! It contains the "resolution" or delta coordinate of the target
+  !! coorindate. It has the units of the target coordiante, e.g.
+  !! meters for z*, non-dimensional for sigma, etc.
   real, dimension(:), allocatable :: coordinateResolution
-  ! This array is set by function setcoordinateInterfaces
-  ! This array is nominal coordinate of interfaces and is the
-  ! running sum of coordinateResolution. i.e.
-  !  coordinateInterfaces(k) = coordinateResolution(k+1)-coordinateResolution(k)
-  ! It is only used in "rho" mode.
-  real, dimension(:), allocatable :: coordinateInterfaces
 
-  integer   :: nk ! Number of layers/levels
+  !> This array is set by function set_target_densities()
+  !! This array is the nominal coordinate of interfaces and is the
+  !! running sum of coordinateResolution. i.e.
+  !!  target_density(k+1) = coordinateResolution(k) + coordinateResolution(k)
+  !! It is only used in "rho" mode.
+  real, dimension(:), allocatable :: target_density
 
-  integer   :: degree_i=4 !Degree of interpolation polynomial
+  integer :: nk !< Number of layers/levels
 
-  ! Indicates which grid to use in the vertical (z*, sigma, target interface
-  ! densities)
-  integer   :: regridding_scheme
+  integer :: degree_i=4 !< Degree of interpolation polynomial
 
-  ! The following parameter is only relevant when used with the target
-  ! interface densities regridding scheme. It indicates which interpolation
-  ! to use to determine the grid.
-  integer   :: interpolation_scheme
+  !> Indicates which grid to use in the vertical (z*, sigma, target interface
+  !! densities)
+  integer :: regridding_scheme
+
+  !> The following parameter is only relevant when used with the target
+  !! interface densities regridding scheme. It indicates which interpolation
+  !! to use to determine the grid.
+  integer :: interpolation_scheme
 
   ! Indicate whether high-order boundary extrapolation should be used within
-  ! boundary cells
-  logical   :: boundary_extrapolation
+  !! boundary cells
+  logical :: boundary_extrapolation
 
-  ! Minimum thickness allowed when building the new grid through regridding
-  real      :: min_thickness
+  !> Minimum thickness allowed when building the new grid through regridding
+  real :: min_thickness
+
+  !> Reference pressure for potential density calculations (Pa)
+  real :: ref_pressure = 2.e7
 
 end type
 
-! -----------------------------------------------------------------------------
 ! The following routines are visible to the outside world
-! -----------------------------------------------------------------------------
 public initialize_regridding
 public end_regridding
 public regridding_main 
-public check_grid_integrity
+public inflate_vanished_layers_old
+public check_remapping_grid
+public check_grid_column
+public adjust_interface_motion
 public setRegriddingBoundaryExtrapolation
-public setRegriddingMinimumThickness
+public set_regrid_min_thickness
 public uniformResolution
 public setCoordinateResolution
-public setCoordinateInterfaces
+public set_target_densities_from_G
+public set_target_densities
 public getCoordinateResolution
 public getCoordinateInterfaces
 public getCoordinateUnits
 public getCoordinateShortName
 public getStaticThickness
-public buildGridZstarColumn
+public build_zstar_column
 
 public DEFAULT_COORDINATE_MODE
-character(len=158), parameter, public :: regriddingCoordinateModeDoc = &
+
+!> Documentation for coordinate options
+character(len=258), parameter, public :: regriddingCoordinateModeDoc = &
                  " LAYER - Isopycnal or stacked shallow water layers\n"//&
                  " Z*    - stetched geopotential z*\n"//&
                  " SIGMA - terrain following coordinates\n"//&
-                 " RHO   - continuous isopycnal\n"
+                 " RHO   - continuous isopycnal"
+!                " RHO   - continuous isopycnal\n"//&
+!                " HYCOM1 - HyCOM-like hybrid coordinate"
+
+! Documentation for regridding interpolation schemes
 character(len=338), parameter, public :: regriddingInterpSchemeDoc = &
                  " P1M_H2     (2nd-order accurate)\n"//&
                  " P1M_H4     (2nd-order accurate)\n"//&
@@ -121,65 +119,49 @@ character(len=6), parameter, public :: regriddingDefaultInterpScheme = "P1M_H2"
 logical, parameter, public :: regriddingDefaultBoundaryExtrapolation = .false.
 real, parameter, public :: regriddingDefaultMinThickness = 1.e-3
 
-! -----------------------------------------------------------------------------
 ! The following are private constants
-! -----------------------------------------------------------------------------
-! List of interpolation schemes
-integer, parameter :: INTERPOLATION_P1M_H2     = 0 ! O(h^2)
-integer, parameter :: INTERPOLATION_P1M_H4     = 1 ! O(h^2)
-integer, parameter :: INTERPOLATION_P1M_IH4    = 2 ! O(h^2)
-integer, parameter :: INTERPOLATION_PLM        = 3 ! O(h^2)
-integer, parameter :: INTERPOLATION_PPM_H4     = 4 ! O(h^3)
-integer, parameter :: INTERPOLATION_PPM_IH4    = 5 ! O(h^3)
-integer, parameter :: INTERPOLATION_P3M_IH4IH3 = 6 ! O(h^4)
-integer, parameter :: INTERPOLATION_P3M_IH6IH5 = 7 ! O(h^4)
-integer, parameter :: INTERPOLATION_PQM_IH4IH3 = 8 ! O(h^4)
-integer, parameter :: INTERPOLATION_PQM_IH6IH5 = 9 ! O(h^5)
 
-! List of interpolant degrees
+! List of interpolation schemes
+integer, parameter :: INTERPOLATION_P1M_H2     = 0 !< O(h^2)
+integer, parameter :: INTERPOLATION_P1M_H4     = 1 !< O(h^2)
+integer, parameter :: INTERPOLATION_P1M_IH4    = 2 !< O(h^2)
+integer, parameter :: INTERPOLATION_PLM        = 3 !< O(h^2)
+integer, parameter :: INTERPOLATION_PPM_H4     = 4 !< O(h^3)
+integer, parameter :: INTERPOLATION_PPM_IH4    = 5 !< O(h^3)
+integer, parameter :: INTERPOLATION_P3M_IH4IH3 = 6 !< O(h^4)
+integer, parameter :: INTERPOLATION_P3M_IH6IH5 = 7 !< O(h^4)
+integer, parameter :: INTERPOLATION_PQM_IH4IH3 = 8 !< O(h^4)
+integer, parameter :: INTERPOLATION_PQM_IH6IH5 = 9 !< O(h^5)
+
+!> List of interpolant degrees
 integer, parameter :: DEGREE_1 = 1, DEGREE_2 = 2, DEGREE_3 = 3, DEGREE_4 = 4
 
-! Maximum number of regridding iterations
+!> Maximum number of regridding iterations
 integer, parameter :: NB_REGRIDDING_ITERATIONS = 1
-! Deviation tolerance between succesive grids in regridding iterations
+!> Deviation tolerance between succesive grids in regridding iterations
 real, parameter    :: DEVIATION_TOLERANCE = 1e-10
-! Maximum number of Newton-Raphson iterations. Newton-Raphson iterations are
-! used to build the new grid by finding the coordinates associated with
-! target densities and interpolations of degree larger than 1.
+!> Maximum number of Newton-Raphson iterations. Newton-Raphson iterations are
+!! used to build the new grid by finding the coordinates associated with
+!! target densities and interpolations of degree larger than 1.
 integer, parameter :: NR_ITERATIONS = 8
-! Tolerance for Newton-Raphson iterations (stop when increment falls below this)
+!> Tolerance for Newton-Raphson iterations (stop when increment falls below this)
 real, parameter    :: NR_TOLERANCE = 1e-12
-! When the N-R algorithm produces an estimate that lies outside [0,1], the
-! estimate is set to be equal to the boundary location, 0 or 1, plus or minus
-! an offset, respectively, when the derivative is zero at the boundary.
+!> When the N-R algorithm produces an estimate that lies outside [0,1], the
+!! estimate is set to be equal to the boundary location, 0 or 1, plus or minus
+!! an offset, respectively, when the derivative is zero at the boundary.
 real, parameter    :: NR_OFFSET = 1e-6
 
 ! This CPP macro embeds some safety checks
 #undef __DO_SAFETY_CHECKS__
 
-! -----------------------------------------------------------------------------
-! This module contains the following routines
-! -----------------------------------------------------------------------------
 contains
 
-!------------------------------------------------------------------------------
-! Initialization of regridding options
-!------------------------------------------------------------------------------
+!> Initialization of regridding
 subroutine initialize_regridding( nk, coordMode, interpScheme, CS )
-!------------------------------------------------------------------------------
-! This routine is typically called (from initialize_MOM in file MOM.F90)
-! before the main time integration loop to initialize the regridding stuff.
-! We read the MOM_input file to register the values of different
-! regridding  parameters.
-!------------------------------------------------------------------------------
-  
-  ! Arguments
-  integer,               intent(in)    :: nk
-  character(len=*),      intent(in)    :: coordMode
-  character(len=*),      intent(in)    :: interpScheme
-  type(regridding_CS),   intent(inout) :: CS
-
-  ! Local variables
+  integer,               intent(in)    :: nk !< Number of levels
+  character(len=*),      intent(in)    :: coordMode !< Coordinate mode to use
+  character(len=*),      intent(in)    :: interpScheme !< Interpolation mode to use
+  type(regridding_CS),   intent(inout) :: CS !< Regridding control structure
 
   CS%nk = nk
 
@@ -210,17 +192,10 @@ end subroutine initialize_regridding
 
 
 
-!------------------------------------------------------------------------------
-! End of regridding (memory deallocation)
-!------------------------------------------------------------------------------
+!> Deallocation of regridding memory
 subroutine end_regridding(CS)
-!------------------------------------------------------------------------------
-! This routine is typically called (from MOM_end in file MOM.F90)
-! after the main time integration loop to deallocate the regridding stuff.
-!------------------------------------------------------------------------------
-  type(regridding_CS), intent(inout) :: CS
+  type(regridding_CS), intent(inout) :: CS !< Regridding control structure
   
-  ! Deallocate memory used for the regridding
   call regridding_memory_deallocation( CS )
 
 end subroutine end_regridding
@@ -249,7 +224,7 @@ subroutine regridding_main( remapCS, CS, G, h, tv, dzInterface )
   
   ! Arguments
   type(remapping_CS),                      intent(in)    :: remapCS ! Remapping parameters and options
-  type(regridding_CS),                     intent(in)    :: CS     ! Regridding parameters and options
+  type(regridding_CS),                     intent(in)    :: CS     !< Regridding control structure
   type(ocean_grid_type),                   intent(in)    :: G      ! Ocean grid informations
   real, dimension(NIMEM_,NJMEM_, NKMEM_),  intent(inout) :: h      ! Current 3D grid obtained after the last time step
   type(thermo_var_ptrs),                   intent(inout) :: tv     ! Thermodynamical variables (T, S, ...)  
@@ -262,7 +237,7 @@ subroutine regridding_main( remapCS, CS, G, h, tv, dzInterface )
   select case ( CS%regridding_scheme )
 
     case ( REGRIDDING_ZSTAR )
-      call buildGridZstar( CS, G, h, dzInterface )
+      call build_zstar_grid( CS, G, h, dzInterface )
 
     case ( REGRIDDING_SIGMA )
       call buildGridSigma( CS, G, h, dzInterface )
@@ -274,6 +249,9 @@ subroutine regridding_main( remapCS, CS, G, h, tv, dzInterface )
     case ( REGRIDDING_ARBITRARY )
       call build_grid_arbitrary( G, h, dzInterface, trickGnuCompiler, CS )
 
+    case ( REGRIDDING_HYCOM1 )
+      call build_grid_HyCOM1( G, h, tv, dzInterface, remapCS, CS )
+
     case default
       call MOM_error(FATAL,'MOM_regridding, regridding_main: '//&
                      'Unknown regridding scheme selected!')
@@ -281,98 +259,96 @@ subroutine regridding_main( remapCS, CS, G, h, tv, dzInterface )
   end select ! type of grid 
   
 #ifdef __DO_SAFETY_CHECKS__
-  call checkGridsMatch(G, h, dzInterface)
+  call check_remapping_grid(G, h, dzInterface,'in regridding_main')
 #endif
 
 end subroutine regridding_main
 
 
-!------------------------------------------------------------------------------
-! Check that the total thickness of two grids match
-!------------------------------------------------------------------------------
-subroutine checkGridsMatch( G, h, dzInterface )
-!------------------------------------------------------------------------------
-! This routine calculates the total thickness of 
-!------------------------------------------------------------------------------
-  
-  ! Arguments
-  type(ocean_grid_type),                        intent(in) :: G
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in) :: h
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(in) :: dzInterface
-  
+!> Check that the total thickness of two grids match
+subroutine check_remapping_grid( G, h, dzInterface, msg )
+  type(ocean_grid_type),                        intent(in) :: G !< Grid structure
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in) :: h !< Layer thicknesses (m)
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(in) :: dzInterface !< Change in interface positions (m)
+  character(len=*),                             intent(in) :: msg !< Message to append to errors
   ! Local variables
-  integer :: i, j, k
-  integer :: nz
-  real    :: totalHold, totalHnewF, eps, hNewF, zOld, zNewF
+  integer :: i, j
 
-  nz = G%ke
-  eps =1. ; eps = epsilon(eps)
 !$OMP parallel do default(none) shared(G,nz,h,dzInterface,eps) &
 !$OMP                          private(totalHold,zOld,totalHnewF,zNewF,hNewF)
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
-
-      ! Total thickness of grid h
-      totalHold = 0.
-      do k = 1,nz
-        totalHold = totalHold + h(i,j,k)
-      enddo
-
-      ! Integrate upwards for the interfaces consistent with the rest of MOM6
-      zOld = - G%bathyT(i,j)
-      totalHnewF = 0.
-      do k = nz,1,-1
-        zOld = zOld + h(i,j,k) ! Old interface position
-        zNewF = zOld + dzInterface(i,j,k) ! New interface position based on dzInterface
-       !hNewF = ( h(i,j,k) - dzInterface(i,j,k+1) ) + dzInterface(i,j,k)
-        hNewF = h(i,j,k) + ( dzInterface(i,j,k) - dzInterface(i,j,k+1) )
-        if (hNewF<0.) then
-          write(0,*) 'k,h,hnew=',k,h(i,j,k),hNewF
-          write(0,*) 'dzI(k+1),dzI(k)=',dzInterface(i,j,k+1),dzInterface(i,j,k)
-          call MOM_error( FATAL, 'MOM_regridding, checkGridsMatch: '//&
-            'Flux form led to negative layer thickness')
-        endif
-        totalHnewF = totalHnewF + hNewF
-
-      enddo
-
-      ! Conservation by implied hNewF
-      if (abs(totalHnewF-totalHold)>real(nz-1)*0.5*(totalHold+totalHnewF)*eps) then
-        write(0,*) 'i,j,nz=',i,j,nz
-        do k = 1,nz
-          write(0,*) 'k,h,hnew=',k,h(i,j,k),h(i,j,k)+(dzInterface(i,j,k)-dzInterface(i,j,k+1))
-        enddo
-        write(0,*) 'Hold,Hnew,Hnew-Hold=',totalHold,totalHnewF,totalHnewF-totalHold
-        write(0,*) 'eps,(n)/2*eps*H=',eps,real(nz-1)*0.5*(totalHold+totalHnewF)*eps
-        call MOM_error( FATAL, 'MOM_regridding, checkGridsMatch: '//&
-          'Flux form did NOT conserve total thickness to within roundoff')
-      endif
-
-      if (dzInterface(i,j,1) /= 0.) call MOM_error( FATAL, &
-          'MOM_regridding, checkGridsMatch: '//&
-          'Non-zero dzInterface at surface!')
-      if (dzInterface(i,j,nz+1) /= 0.) call MOM_error( FATAL, &
-          'MOM_regridding, checkGridsMatch: '//&
-          'Non-zero dzInterface at bottom!')
+      if (G%mask2dT(i,j)>0.) call check_grid_column( G%ke, G%bathyT(i,j), h(i,j,:), dzInterface(i,j,:), msg )
     enddo
   enddo
 
-end subroutine checkGridsMatch
+end subroutine check_remapping_grid
 
-!------------------------------------------------------------------------------
-! Build uniform z*-ccordinate grid with partial steps
-!------------------------------------------------------------------------------
-subroutine buildGridZstar( CS, G, h, dzInterface )
-!------------------------------------------------------------------------------
-! This routine builds a grid where the distribution of levels is based on a
-! z* coordinate system with partial steps (Adcroft and Campin, 2004).
-! The module parameter coordinateResolution(:) determines the nominal
-! resolution, dz*(:), in the absence of topography. z* is defined by
-!   z* = (z-eta)/(H+eta)*H  s.t. z*=0 when z=eta and z*=-H when z=-H .
-!------------------------------------------------------------------------------
+!> Check that the total thickness of new and old grids are consistent
+subroutine check_grid_column( nk, depth, h, dzInterface, msg )
+  integer,               intent(in) :: nk !< Number of cells
+  real,                  intent(in) :: depth !< Depth of bottom (m)
+  real, dimension(nk),   intent(in) :: h !< Cell thicknesses (m)
+  real, dimension(nk+1), intent(in) :: dzInterface !< Change in interface positions (m)
+  character(len=*),      intent(in) :: msg !< Message to append to errors
+  ! Local variables
+  integer :: k
+  real    :: eps, total_h_old, total_h_new, h_new, z_old, z_new
+
+  eps =1. ; eps = epsilon(eps)
+
+  ! Total thickness of grid h
+  total_h_old = 0.
+  do k = 1,nk
+    total_h_old = total_h_old + h(k)
+  enddo
+
+  ! Integrate upwards for the interfaces consistent with the rest of MOM6
+  z_old = - depth
+  if (depth == 0.) z_old = - total_h_old
+  total_h_new = 0.
+  do k = nk,1,-1
+    z_old = z_old + h(k) ! Old interface position above layer k
+    z_new = z_old + dzInterface(k) ! New interface position based on dzInterface
+    h_new = h(k) + ( dzInterface(k) - dzInterface(k+1) ) ! New thickness
+    if (h_new<0.) then
+      write(0,*) 'k,h,hnew=',k,h(k),h_new
+      write(0,*) 'dzI(k+1),dzI(k)=',dzInterface(k+1),dzInterface(k)
+      call MOM_error( FATAL, 'MOM_regridding, check_grid_column: '//&
+        'Negative layer thickness implied by re-gridding, '//trim(msg))
+    endif
+    total_h_new = total_h_new + h_new
+
+  enddo
+
+  ! Conservation by implied h_new
+  if (abs(total_h_new-total_h_old)>real(nk-1)*0.5*(total_h_old+total_h_new)*eps) then
+    write(0,*) 'nk=',nk
+    do k = 1,nk
+      write(0,*) 'k,h,hnew=',k,h(k),h(k)+(dzInterface(k)-dzInterface(k+1))
+    enddo
+    write(0,*) 'Hold,Hnew,Hnew-Hold=',total_h_old,total_h_new,total_h_new-total_h_old
+    write(0,*) 'eps,(n)/2*eps*H=',eps,real(nk-1)*0.5*(total_h_old+total_h_new)*eps
+    call MOM_error( FATAL, 'MOM_regridding, check_grid_column: '//&
+      'Re-gridding did NOT conserve total thickness to within roundoff '//trim(msg))
+  endif
+
+  ! Check that the top and bottom are intentionally moving
+  if (dzInterface(1) /= 0.) call MOM_error( FATAL, &
+    'MOM_regridding, check_grid_column: Non-zero dzInterface at surface! '//trim(msg))
+  if (dzInterface(nk+1) /= 0.) call MOM_error( FATAL, &
+    'MOM_regridding, check_grid_column: Non-zero dzInterface at bottom! '//trim(msg))
+
+end subroutine check_grid_column
+
+
+!> Builds a z*-ccordinate grid with partial steps (Adcroft and Campin, 2004).
+!! z* is defined as
+!!   z* = (z-eta)/(H+eta)*H  s.t. z*=0 when z=eta and z*=-H when z=-H .
+subroutine build_zstar_grid( CS, G, h, dzInterface )
   
   ! Arguments
-  type(regridding_CS),                           intent(in)    :: CS
+  type(regridding_CS),                           intent(in)    :: CS !< Regridding control structure
   type(ocean_grid_type),                         intent(in)    :: G
   real, dimension(NIMEM_,NJMEM_,NKMEM_),         intent(in)    :: h
   real, dimension(NIMEM_,NJMEM_, NK_INTERFACE_), intent(inout) :: dzInterface
@@ -380,15 +356,16 @@ subroutine buildGridZstar( CS, G, h, dzInterface )
   ! Local variables
   integer :: i, j, k
   integer :: nz
-  real    :: nominalDepth, totalThickness, eta, stretching, dh
+  real    :: nominalDepth, totalThickness, dh
   real, dimension(SZK_(G)+1) :: zOld, zNew
   real :: minThickness
 
   nz = G%ke
+  minThickness = CS%min_thickness
   
 !$OMP parallel do default(none) shared(G,dzInterface,CS,nz,h)                    &
 !$OMP                          private(nominalDepth,totalThickness,minThickness, &
-!$OMP                                  eta,stretching,zNew,dh,zOld)
+!$OMP                                  zNew,dh,zOld)
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
 
@@ -406,7 +383,7 @@ subroutine buildGridZstar( CS, G, h, dzInterface )
         totalThickness = totalThickness + h(i,j,k)
       end do
 
-      call buildGridZStarColumn(CS, nz, nominalDepth, totalThickness, zNew)
+      call build_zstar_column(CS, nz, nominalDepth, totalThickness, zNew)
 
       zOld(nz+1) = - nominalDepth
       do k = nz,1,-1
@@ -422,48 +399,47 @@ subroutine buildGridZstar( CS, G, h, dzInterface )
 
 #ifdef __DO_SAFETY_CHECKS__
       dh=max(nominalDepth,totalThickness)
-      if (abs(zNew(1)-zOld(1))>(nz-1)*0.5*epsilon(eta)*dh) then
+      if (abs(zNew(1)-zOld(1))>(nz-1)*0.5*epsilon(dh)*dh) then
         write(0,*) 'min_thickness=',minThickness
-        write(0,*) 'eta=',eta,'nominalDepth=',nominalDepth,'totalThickness=',totalThickness
-        write(0,*) 'dzInterface(1) = ',dzInterface(i,j,1),epsilon(eta),nz
+        write(0,*) 'nominalDepth=',nominalDepth,'totalThickness=',totalThickness
+        write(0,*) 'dzInterface(1) = ',dzInterface(i,j,1),epsilon(dh),nz
         do k=1,nz+1
           write(0,*) k,zOld(k),zNew(k)
         enddo
-        write(0,*) 'stretching=',stretching
         do k=1,nz
-          write(0,*) k,h(i,j,k),zNew(k)-zNew(k+1),stretching * CS%coordinateResolution(k),CS%coordinateResolution(k)
+          write(0,*) k,h(i,j,k),zNew(k)-zNew(k+1),CS%coordinateResolution(k)
         enddo
         call MOM_error( FATAL, &
-               'MOM_regridding, buildGridZstar: top surface has moved!!!' )
+               'MOM_regridding, build_zstar_grid(): top surface has moved!!!' )
       endif
 #endif
+
+      call adjust_interface_motion( nz, CS%min_thickness, h(i,j,:), dzInterface(i,j,:) )
 
     end do
   end do
 
-end subroutine buildGridZstar
+end subroutine build_zstar_grid
 
-subroutine buildGridZstarColumn( CS, nz, depth, totalThickness, zInterface)
-
-  ! Arguments
-  type(regridding_CS), intent(in)    :: CS
-  integer, intent(in) :: nz
-  real, intent(in) :: depth
-  real, intent(in) :: totalThickness
-  real, dimension(nz+1), intent(inout) :: zInterface
-
-  real :: eta, stretching, dh
-  real :: minThickness
+!> Builds a z* coordinate with a minimum thickness
+subroutine build_zstar_column( CS, nz, depth, total_thickness, zInterface)
+  type(regridding_CS),   intent(in)    :: CS !< Regridding control structure
+  integer,               intent(in)    :: nz !< Number of levels
+  real,                  intent(in)    :: depth !< Depth of ocean bottom (positive in m)
+  real,                  intent(in)    :: total_thickness !< Column thickness (positive in m)
+  real, dimension(nz+1), intent(inout) :: zInterface !< Absolute positions of interfaces
+  ! Local variables
+  real :: eta, stretching, dh, min_thickness
   integer :: k
 
-  minThickness = min( CS%min_thickness, totalThickness/float(nz) )
+  min_thickness = min( CS%min_thickness, total_thickness/float(nz) )
 
   ! Position of free-surface
-  eta = totalThickness - depth
+  eta = total_thickness - depth
 
   ! z* = (z-eta) / stretching   where stretching = (H+eta)/H
   ! z = eta + stretching * z*
-  stretching = totalThickness / depth
+  stretching = total_thickness / depth
 
   ! Integrate down from the top for a notional new grid, ignoring topography
   zInterface(1) = eta
@@ -472,16 +448,16 @@ subroutine buildGridZstarColumn( CS, nz, depth, totalThickness, zInterface)
     zInterface(k+1) = zInterface(k) - dh
   enddo
 
-  ! Integrating up from the bottom adjusting interface position to accomodate
+  ! Integrating up from the bottom adjusting interface position to accommodate
   ! inflating layers without disturbing the interface above
   zInterface(nz+1) = -depth
   do k = nz,1,-1
-    if ( zInterface(k) < (zInterface(k+1) + minThickness) ) then
-      zInterface(k) = zInterface(k+1) + minThickness
+    if ( zInterface(k) < (zInterface(k+1) + min_thickness) ) then
+      zInterface(k) = zInterface(k+1) + min_thickness
     endif
   enddo
 
-end subroutine buildGridZstarColumn
+end subroutine build_zstar_column
 
 
 !------------------------------------------------------------------------------
@@ -615,7 +591,7 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
                                     
   nz = G%ke
   threshold = CS%min_thickness
-  p_column(:) = 0.
+  p_column(:) = CS%ref_pressure
 
   ! Build grid based on target interface densities
   do i = G%isc-1,G%iec+1
@@ -693,10 +669,12 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
         end do
 
         ! One regridding iteration
-        call regridding_iteration( densities, CS%coordinateInterfaces, CS,&
+        call regridding_iteration( densities, CS%target_density, CS,&
                                    count_nonzero_layers, hTmp, xTmp, &
                                    ppoly_i_E, ppoly_i_S, ppoly_i_coefficients, &
                                    nz, h1, x1 )
+        call old_inflate_layers_1d( CS%min_thickness, nz, h1 )
+        x1(1) = 0.0 ; do k = 1,nz ; x1(k+1) = x1(k) + h1(k) ; end do
         
         ! Remap T and S from previous grid to new grid
         do k = 1,nz
@@ -790,6 +768,134 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
 
 end subroutine buildGridRho
 
+!> Builds a simple HyCOM-like grid with potential density interpolated from
+!! the column profile and a clipping of depth for each interface to a fixed
+!! z* or p* grid.
+!! \remark { Based on Bleck, 2002: An oceanice general circulation model framed in
+!! hybrid isopycnic-Cartesian coordinates, Ocean Modelling 37, 55-88.
+!! http://dx.doi.org/10.1016/S1463-5003(01)00012-9 }
+subroutine build_grid_HyCOM1( G, h, tv, dzInterface, remapCS, CS )
+  type(ocean_grid_type),                        intent(in)    :: G !< Grid structure
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: h !< Existing model thickness
+  type(thermo_var_ptrs),                        intent(in)    :: tv !< Thermodynamics structure
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: dzInterface !< Changes in interface position
+  type(remapping_CS),                           intent(in)    :: remapCS !< Remapping control structure
+  type(regridding_CS),                          intent(in)    :: CS !< Regridding control structure
+  ! Local variables
+  integer   :: i, j, k, nz
+  real, dimension(SZK_(G)) :: T_column, S_column, p_column, rho_column, h_column_new ! Layer quantities
+  real, dimension(SZK_(G)+1) :: z_column, z_column_new ! Interface positions in H units (m or Pa)
+  real, dimension(CS%nk,2) :: ppoly_i_E ! Edge value of polynomial
+  real, dimension(CS%nk,2) :: ppoly_i_S ! Edge slope of polynomial
+  real, dimension(CS%nk,CS%degree_i+1) :: ppoly_i_coefficients ! Coefficients of polynomial
+  real :: nominal_z ! Nominal depth of interface is using z* (m or Pa)
+  real :: stretching ! z* stretching, converts z* to z.
+  real :: hNew
+
+  nz = G%ke
+
+  ! Build grid based on target interface densities
+  do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
+    if (G%mask2dT(i,j)>0.) then
+
+      ! Copy T and S onto new variables so as to not alter the original values
+      ! of T and S (these are remapped at the end of the regridding iterations
+      ! once the final grid has been determined).
+      T_column(:) = tv%T(i,j,:)
+      S_column(:) = tv%S(i,j,:)
+      p_column(:) = CS%ref_pressure
+      z_column(1) = 0. ! Work downward rather than bottom up
+      do K = 1, nz
+        z_column(K+1) = z_column(K) + h(i,j,k) ! Work in units of h (m or Pa)
+      enddo
+
+      ! Work bottom recording potential density
+      call calculate_density(T_column, S_column, p_column, &
+                             rho_column, 1, nz, tv%eqn_of_state )
+      ! This ensures the potential density profile is monotonic
+      ! although not necessarily single valued.
+      do k = nz-1, 1, -1
+        rho_column(k) = min( rho_column(k), rho_column(k+1) )
+      enddo
+
+      ! Interpolates for the target interface position with the rho_column profile
+      call regridding_iteration( rho_column, CS%target_density, CS,    &
+                                 nz, h(i,j,:), z_column,                     &
+                                 ppoly_i_E, ppoly_i_S, ppoly_i_coefficients, &
+                                 nz, h_column_new, z_column_new)
+
+      ! Sweep down the interfaces and make sure that the interface is at least
+      ! as deep as a nominal target z* grid
+      nominal_z = 0.
+      stretching = z_column(nz+1) / G%bathyT(i,j) * G%m_to_H ! Stretches z* to z
+      do k = 2, nz+1
+        nominal_z = nominal_z + CS%coordinateResolution(k-1) * stretching
+        z_column_new(k) = max( z_column_new(k), nominal_z )
+        z_column_new(k) = min( z_column_new(k), z_column(nz+1) )
+      enddo
+
+      ! Finally calculate the change in position of the interface
+      do k = 1,nz+1
+        dzInterface(i,j,k) = z_column(k) - z_column_new(k)
+      enddo
+#ifdef __DO_SAFETY_CHECKS__
+     if (dzInterface(i,j,1) /= 0.) stop 'build_grid_HyCOM1: Surface moved?!'
+     if (dzInterface(i,j,nz+1) /= 0.) stop 'build_grid_HyCOM1: Bottom moved?!'
+#endif
+
+     ! This adjusts  things robust to round-off errors
+     call adjust_interface_motion( nz, CS%min_thickness, h(i,j,:), dzInterface(i,j,:) )
+
+    else ! on land
+      dzInterface(i,j,:) = 0.
+    endif ! mask2dT
+  enddo; enddo ! i,j
+
+end subroutine build_grid_HyCOM1
+
+!> Adjust dz_Interface to ensure non-negative future thicknesses
+subroutine adjust_interface_motion( nk, min_thickness, h_old, dz_int )
+  integer,               intent(in)    :: nk !< Number of layers
+  real,                  intent(in)    :: min_thickness !< Minium allowed thickness of h (H units)
+  real, dimension(nk),   intent(in)    :: h_old !< Minium allowed thickness of h (H units)
+  real, dimension(nk+1), intent(inout) :: dz_int !< Minium allowed thickness of h (H units)
+  ! Local variables
+  integer :: k
+  real :: h_new, eps, h_total, h_err
+
+  eps = 1. ; eps = epsilon(eps)
+
+  h_total = 0. ; h_err = 0.
+  do k = 1, nk
+    h_total = h_total + h_old(k)
+    h_err = h_err + max( h_old(k), abs(dz_int(k)), abs(dz_int(k+1)) )*eps
+    h_new = h_old(k) + ( dz_int(k) - dz_int(k+1) )
+    if (h_new < -h_err) then
+      write(0,*) 'h<0 at k=',k,'h_old=',h_old(k), &
+        'wup=',dz_int(k),'wdn=',dz_int(k+1),'dw_dz=',dz_int(k) - dz_int(k+1), &
+        'h_new=',h_new,'h_err=',h_err
+      call MOM_error( FATAL, 'MOM_regridding: adjust_interface_motion() - '//&
+                     'implied h<0 is larger than roundoff!')
+    endif
+  enddo
+  do k = nk,1,-1
+    h_new = h_old(k) + ( dz_int(k) - dz_int(k+1) )
+    if (h_new<0.) dz_int(k) = ( dz_int(k+1) - h_old(k) ) + min_thickness ! Works if dz_int(k=1)==0
+    h_new = h_old(k) + ( dz_int(k) - dz_int(k+1) )
+    if (h_new<0.) dz_int(k) = ( 1. - eps ) * ( dz_int(k+1) - h_old(k) )
+    h_new = h_old(k) + ( dz_int(k) - dz_int(k+1) )
+    if (h_new<0.) then
+      write(0,*) 'h<0 at k=',k,'h_old=',h_old(k), &
+        'wup=',dz_int(k),'wdn=',dz_int(k+1),'dw_dz=',dz_int(k) - dz_int(k+1), &
+        'h_new=',h_new
+      stop 'Still did not work!'
+      call MOM_error( FATAL, 'MOM_regridding: adjust_interface_motion() - '//&
+                     'Repeated adjustment for roundoff h<0 failed!')
+    endif
+  enddo
+  if (dz_int(1)/=0.) stop 'MOM_regridding: adjust_interface_motion() surface moved'
+
+end subroutine adjust_interface_motion
 
 !------------------------------------------------------------------------------
 ! Build arbitrary grid
@@ -893,35 +999,27 @@ stop 'OOOOOOPS' ! For some reason the gnu compiler will not let me delete this
 end subroutine build_grid_arbitrary
 
 
-!------------------------------------------------------------------------------
-! Regridding iterations
-!------------------------------------------------------------------------------
+!> Performs one single iteration of the regridding based on target interface
+!! densities. Given the set of target values and cell densities, this routine
+!! builds an interpolated profile and determines the location of the new
+!! grid. It may happen that, given a high-order interpolator, the number of
+!! available layers is insufficient (e.g., there are two available layers for
+!! a third-order PPM ih4 scheme). In these cases, we resort to the simplest 
+!! continuous linear scheme (P1M h2).
 subroutine regridding_iteration( densities, target_values, CS, &
                                  n0, h0, x0, ppoly0_E, ppoly0_S, ppoly0_coefficients, n1, h1, x1 )
-! ------------------------------------------------------------------------------
-! This routine performs one single iteration of the regridding based on target
-! interface densities. Given the set of target values and cell densities, this
-! routine builds an interpolated profile and determines the location of the new
-! grid. It may happen that, given a high-order interpolator, the number of
-! available layers is insufficient (e.g., there are two available layers for
-! a third-order PPM ih4 scheme). In these cases, we resort to the simplest 
-! continuous linear scheme (P1M h2).
-! ------------------------------------------------------------------------------
-  
-  ! Arguments
-  real, dimension(:),  intent(in)    :: densities ! Actual cell densities
-  real, dimension(:),  intent(in)    :: target_values ! Target interface densities
-  integer,             intent(in)    :: n0 ! Number of cells on source grid
-  real, dimension(:),  intent(in)    :: h0 ! cell widths on source grid
-  real, dimension(:),  intent(in)    :: x0 ! interface positions on source grid
-  real, dimension(:,:),intent(inout) :: ppoly0_E            !Edge value of polynomial
-  real, dimension(:,:),intent(inout) :: ppoly0_S            !Edge slope of polynomial
-  real, dimension(:,:),intent(inout) :: ppoly0_coefficients !Coefficients of polynomial 
-  integer,             intent(in)    :: n1 ! Number of cells on target grid
-  real, dimension(:),  intent(out)   :: h1 ! cell widths on target grid
-  real, dimension(:),  intent(out)   :: x1 ! interface positions on target grid
-  type(regridding_CS), intent(in)    :: CS   ! Parameters used for regridding
-
+  real, dimension(:),  intent(in)    :: densities !< Actual cell densities
+  real, dimension(:),  intent(in)    :: target_values !< Target interface densities
+  integer,             intent(in)    :: n0 !< Number of cells on source grid
+  real, dimension(:),  intent(in)    :: h0 !< cell widths on source grid
+  real, dimension(:),  intent(in)    :: x0 !< interface positions on source grid
+  real, dimension(:,:),intent(inout) :: ppoly0_E            !< Edge value of polynomial
+  real, dimension(:,:),intent(inout) :: ppoly0_S            !< Edge slope of polynomial
+  real, dimension(:,:),intent(inout) :: ppoly0_coefficients !< Coefficients of polynomial 
+  integer,             intent(in)    :: n1 !< Number of cells on target grid
+  real, dimension(:),  intent(out)   :: h1 !< cell widths on target grid
+  real, dimension(:),  intent(out)   :: x1 !< interface positions on target grid
+  type(regridding_CS), intent(in)    :: CS !< Parameters used for regridding
   ! Local variables
   integer :: degree, k
 
@@ -1062,7 +1160,7 @@ subroutine regridding_iteration( densities, target_values, CS, &
           call P1M_boundary_extrapolation( n0, h0, densities, ppoly0_E, ppoly0_coefficients )
         end if  
       end if
-    
+
     case ( INTERPOLATION_PQM_IH6IH5 )
       if ( n0 .ge. 6 ) then
         degree = DEGREE_4
@@ -1082,15 +1180,9 @@ subroutine regridding_iteration( densities, target_values, CS, &
       end if
     
   end select
-  
-  ! Based on global density profile, interpolate new grid and 
-  ! inflate vanished layers    
+
+  ! Based on global density profile, interpolate new grid
   call interpolate_grid( n0, h0, x0, ppoly0_E, ppoly0_coefficients, target_values, degree, n1, h1, x1 )
-  call inflate_vanished_layers( CS%min_thickness, n1, h1 )
-  x1(1) = 0.0
-  do k = 1,n1
-    x1(k+1) = x1(k) + h1(k)
-  end do
     
 end subroutine regridding_iteration
 
@@ -1307,7 +1399,7 @@ end function get_polynomial_coordinate
 !------------------------------------------------------------------------------
 ! Check grid integrity
 !------------------------------------------------------------------------------
-subroutine check_grid_integrity( CS, G, h )
+subroutine inflate_vanished_layers_old( CS, G, h )
 !------------------------------------------------------------------------------
 ! This routine is called when initializing the regridding options. The 
 ! objective is to make sure all layers are at least as thick as the minimum
@@ -1333,7 +1425,7 @@ subroutine check_grid_integrity( CS, G, h )
         hTmp(k) = h(i,j,k)
       end do
 
-      call inflate_vanished_layers( CS%min_thickness, G%ke, hTmp )
+      call old_inflate_layers_1d( CS%min_thickness, G%ke, hTmp )
 
       ! Save modified grid
       do k = 1,G%ke
@@ -1343,13 +1435,12 @@ subroutine check_grid_integrity( CS, G, h )
     end do
   end do
 
-end subroutine check_grid_integrity
-
+end subroutine inflate_vanished_layers_old
 
 !------------------------------------------------------------------------------
 ! Inflate vanished layers to finite (nonzero) width
 !------------------------------------------------------------------------------
-subroutine inflate_vanished_layers( minThickness, N, h )
+subroutine old_inflate_layers_1d( minThickness, N, h )
 
   ! Argument
   real,                intent(in) :: minThickness
@@ -1405,7 +1496,7 @@ subroutine inflate_vanished_layers( minThickness, N, h )
   
   h(k_found) = h(k_found) - correction
   
-end subroutine inflate_vanished_layers
+end subroutine old_inflate_layers_1d
 
 
 !------------------------------------------------------------------------------
@@ -1505,7 +1596,7 @@ function uniformResolution(nk,coordMode,maxDepth,rhoLight,rhoHeavy)
   scheme = coordinateMode(coordMode)
   select case ( scheme )
 
-    case ( REGRIDDING_ZSTAR )
+    case ( REGRIDDING_ZSTAR, REGRIDDING_HYCOM1 )
       uniformResolution(:) = maxDepth / real(nk)
 
     case ( REGRIDDING_RHO )  
@@ -1537,22 +1628,30 @@ subroutine setCoordinateResolution( dz, CS )
   
 end subroutine setCoordinateResolution
 
-!-----------------------------------------------------------------------------
-! Set the running sum of coordinateResolution
-!-----------------------------------------------------------------------------
-subroutine setCoordinateInterfaces( G, CS )
-  type(ocean_grid_type),  intent(in) :: G      ! Ocean grid informations
-  type(regridding_CS), intent(inout) :: CS
+!> Set target densities based on the old Rlay variable
+subroutine set_target_densities_from_G( G, CS )
+  type(ocean_grid_type),  intent(in)    :: G  !< Ocean grid structure
+  type(regridding_CS),    intent(inout) :: CS !< Regridding control structure
+  ! Local variables
   integer :: k, nz
 
   nz = CS%nk
-  CS%coordinateInterfaces(1)    = G%Rlay(1)+0.5*(G%Rlay(1)-G%Rlay(2))
-  CS%coordinateInterfaces(nz+1) = G%Rlay(nz)+0.5*(G%Rlay(nz)-G%Rlay(nz-1))
+  CS%target_density(1)    = G%Rlay(1)+0.5*(G%Rlay(1)-G%Rlay(2))
+  CS%target_density(nz+1) = G%Rlay(nz)+0.5*(G%Rlay(nz)-G%Rlay(nz-1))
   do k = 2,nz
-    CS%coordinateInterfaces(k) = CS%coordinateInterfaces(k-1) + CS%coordinateResolution(k)
+    CS%target_density(k) = CS%target_density(k-1) + CS%coordinateResolution(k)
   end do
 
-end subroutine setCoordinateInterfaces
+end subroutine set_target_densities_from_G
+
+!> Set target densities based on vector of interface values
+subroutine set_target_densities( CS, rho_int )
+  type(regridding_CS),      intent(inout) :: CS !< Regridding control structure
+  real, dimension(CS%nk+1), intent(in)    :: rho_int !< Interface densities
+
+  CS%target_density(:) = rho_int(:)
+
+end subroutine set_target_densities
 
 !------------------------------------------------------------------------------
 ! Query the fixed resolution data
@@ -1593,7 +1692,7 @@ function getCoordinateUnits( CS )
   character(len=20)               :: getCoordinateUnits
 
   select case ( CS%regridding_scheme )
-    case ( REGRIDDING_ZSTAR )
+    case ( REGRIDDING_ZSTAR, REGRIDDING_HYCOM1 )
       getCoordinateUnits = 'meter'
     case ( REGRIDDING_SIGMA )
       getCoordinateUnits = 'fraction'
@@ -1626,6 +1725,8 @@ function getCoordinateShortName( CS )
       getCoordinateShortName = 'rho'
     case ( REGRIDDING_ARBITRARY )
       getCoordinateShortName = 'coordinate'
+    case ( REGRIDDING_HYCOM1 )
+      getCoordinateShortName = 'z-rho'
     case default
       call MOM_error(FATAL,'MOM_regridding, getCoordinateShortName: '//&
                      'Unknown regridding scheme selected!')
@@ -1647,13 +1748,13 @@ end subroutine setRegriddingBoundaryExtrapolation
 !------------------------------------------------------------------------------
 ! Control the minimum thickness permitted in regridding
 !------------------------------------------------------------------------------
-subroutine setRegriddingMinimumThickness( minThickness, CS )
+subroutine set_regrid_min_thickness( minThickness, CS )
   real   ,             intent(in)    :: minThickness
   type(regridding_CS), intent(inout) :: CS
 
   CS%min_thickness = minThickness
   
-end subroutine setRegriddingMinimumThickness
+end subroutine set_regrid_min_thickness
 
 !------------------------------------------------------------------------------
 ! Return coordinate-derived thicknesses for fixed coordinate systems
@@ -1668,7 +1769,7 @@ function getStaticThickness( CS, SSH, depth )
   real :: z, dz
 
   select case ( CS%regridding_scheme )
-    case ( REGRIDDING_ZSTAR )
+    case ( REGRIDDING_ZSTAR, REGRIDDING_HYCOM1 )
       if (depth>0.) then
         z = ssh
         do k = 1, CS%nk
@@ -1713,7 +1814,7 @@ subroutine allocate_regridding( CS )
   ! Local variables
 
   ! Target values
-  allocate( CS%coordinateInterfaces(CS%nk+1) )
+  allocate( CS%target_density(CS%nk+1) )
 
   ! Target resolution (for fixed coordinates)
   allocate( CS%coordinateResolution(CS%nk) ); CS%coordinateResolution(:) = -1.E30
@@ -1721,20 +1822,37 @@ subroutine allocate_regridding( CS )
 end subroutine allocate_regridding
 
 
-!------------------------------------------------------------------------------
-! Deallocate memory for regridding
-!------------------------------------------------------------------------------
+!> Deallocate memory for regridding
 subroutine regridding_memory_deallocation( CS )
-!------------------------------------------------------------------------------
-! In this routine, we reclaim the memory that was allocated for the regridding. 
-!------------------------------------------------------------------------------
-  
-  type(regridding_CS), intent(inout) :: CS
+  type(regridding_CS), intent(inout) :: CS !< Regridding control structure
   
   ! Target values
-  deallocate( CS%coordinateInterfaces )
+  deallocate( CS%target_density )
   deallocate( CS%coordinateResolution )
 
 end subroutine regridding_memory_deallocation
+
+!> \namespace MOM_regridding
+!!
+!! A vertical grid is defined solely by the cell thicknesses, \f$h\f$.
+!! Most calculations in this module start with the coordinate at the bottom
+!! of the column set to -depth, and use a increasing value of coordinate with
+!! decreasing k. This is consistent with the rest of MOM6 that uses position,
+!!  f$z\f$ which is a negative quantity for most of the ocean.
+!!
+!! A change in grid is define through a change in position of the interfaces:
+!! \f[
+!! z^n_{k+1/2} = z^{n-1}_{k+1/2} + \Delta z_{k+1/2}
+!! \f]
+!! with the positive upward coordinate convention
+!! \f[
+!! z_{k-1/2} = z_{k+1/2} + h_k
+!! \f]
+!! so that
+!! \f[
+!! h^n_k = h^{n-1}_k + ( \Delta z_{k-1/2} - \Delta z_{k+1/2} )
+!! \f]
+!!
+!! Original date of creation: 2008.06.09 by L. White
 
 end module MOM_regridding

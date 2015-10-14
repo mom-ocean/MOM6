@@ -52,12 +52,12 @@ end type optics_type
 
 contains
 
-!> Apply shortwave heating below mixed layer. 
+!> Apply shortwave heating below surface boundary layer. 
 subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
                              adjustAbsorptionProfile, absorbAllSW, T, Pen_SW_bnd, &
                              eps, ksort, htot, Ttot, TKE, dSV_dT)
 
-! This subroutine applies shortwave heating below the mixed layer (when running
+! This subroutine applies shortwave heating below the boundary layer (when running
 ! with the bulk mixed layer from GOLD) or throughout the water column.  In
 ! addition, it causes all of the remaining SW radiation to be absorbed,
 ! provided that the total water column thickness is greater than
@@ -102,11 +102,12 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
 !                         shortwave that should be absorbed by each layer.
 !  (in)    absorbAllSW  = if true, any shortwave radiation that hits the
 !                         bottom is absorbed uniformly over the water column.
-!  (inout) T            = layer potential temperatures (deg C)
+!  (inout) T            = layer potential/conservative temperatures (deg C)
 !  (inout) Pen_SW_bnd   = penetrating shortwave heating in each band that
 !                         hits the bottom and will be redistributed through
-!                         the water column (units of K H), size nsw x NIMEM_.
-! These 4 optional arguments apply when the bulk mixed layer is used
+!                         the water column (units of K*H), size nsw x NIMEM_.
+
+! These optional arguments apply when the bulk mixed layer is used
 ! but are unnecessary with other schemes.
 !  (in,opt)    eps      = small thickness that must remain in each layer, and
 !                         which will not be subject to heating (units of H)
@@ -175,8 +176,8 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
   h_heat(:) = 0.0
   if (present(htot)) then ; do i=is,ie ; h_heat(i) = htot(i) ; enddo ; endif
 
-  ! Apply penetrating SW radiation to remaining parts of layers.  Excessively thin
-  ! layers are not heated.
+  ! Apply penetrating SW radiation to remaining parts of layers.  
+  ! Excessively thin layers are not heated to avoid runaway temps.
   do ks=1,nz ; do i=is,ie
     k = ks
     if (present(ksort)) then
@@ -193,6 +194,7 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
         opt_depth = h(i,k) * opacity_band(n,i,k)
         exp_OD = exp(-opt_depth)
         SW_trans = exp_OD
+
         ! Heating at a rate of less than 10-4 W m-2 = 10-3 K m / Century,
         ! and of the layer in question less than 1 K / Century, can be
         ! absorbed without further penetration.
@@ -217,7 +219,7 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
               ((opt_depth + opacity_band(n,i,k) * h_heat(i)) * &
                (1.0 - exp_OD))
           else
-            ! Use a Taylor's series expansion of the expression above for a
+            ! Use Taylor series expansion of the expression above for a
             ! more accurate form with very small layer optical depths.
             SWa = h(i,k) * (opt_depth * (1.0 - opt_depth)) / &
               ((h_heat(i) + h(i,k)) * (6.0 - 3.0*opt_depth))
@@ -235,13 +237,14 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
           coSWa_frac = 1.0
           T(i,k) = T(i,k) + Pen_SW_bnd(n,i) * (1.0 - SW_trans) / h(i,k)
         endif
+
         if (TKE_calc) then
           if (opt_depth > 1e-2) then
             TKE(i,k) = TKE(i,k) - coSWa_frac*Heat_bnd*dSV_dT(i,k)* &
                (0.5*h(i,k)*g_Hconv2) * &
                (opt_depth*(1.0+exp_OD) - 2.0*(1.0-exp_OD)) / (opt_depth*(1.0-exp_OD))
           else
-            ! Use a Taylor series-derived approximation to the above expression
+            ! Use Taylor series-derived approximation to the above expression
             ! that is well behaved and more accurate when opt_depth is small.
             TKE(i,k) = TKE(i,k) - coSWa_frac*Heat_bnd*dSV_dT(i,k)* &
                (0.5*h(i,k)*g_Hconv2) * &
@@ -318,8 +321,9 @@ end subroutine absorbRemainingSW
 
 subroutine sumSWoverBands(G, h, opacity_band, nsw, j, dt, &
                           H_limit_fluxes, absorbAllSW, iPen_SW_bnd, netPen)
-!   This subroutine calculates the total shortwave heat flux integrated over
-! bands as a function of depth.
+! This subroutine calculates the total shortwave heat flux integrated over
+! bands as a function of depth.  This routine is only called for computing
+! buoyancy fluxes for use in KPP. This routine does not update the state. 
   type(ocean_grid_type),                 intent(in)    :: G
   real, dimension(NIMEM_,NKMEM_),        intent(in)    :: h
   real, dimension(:,:,:),                intent(in)    :: opacity_band
@@ -333,30 +337,30 @@ subroutine sumSWoverBands(G, h, opacity_band, nsw, j, dt, &
 
 ! Arguments:
 !  (in)      G             = ocean grid structure
-!  (in)      h             = layer thickness (m or kg/m^2)
+!  (in)      h             = layer thickness (units of m or kg/m^2);
 !                            units of h are referred to as H below.
 !  (in)      opacity_band  = opacity in each band of penetrating shortwave
 !                            radiation, in m-1. The indicies are band, i, k.
-!  (in)      nsw           =  number of bands of penetrating shortwave radiation.
+!  (in)      nsw           = number of bands of penetrating shortwave radiation
 !  (in)      j             = j-index to work on
 !  (in)      dt            = time step (seconds)
 !  (inout)   Pen_SW_bnd    = penetrating shortwave heating in each band that
 !                            hits the bottom and will be redistributed through
-!                            the water column (K H units) size nsw x NIMEM_.
+!                            the water column (K H units); size nsw x NIMEM_.
 !  (out)     netPen        = attenuated flux at interfaces, summed over bands (K H units)
 
-  real :: h_heat(SZI_(G))     !  thickness of the water column that receives
-                              !  remaining shortwave radiation, in H.
+  real :: h_heat(SZI_(G))     ! thickness of the water column that receives
+                              ! remaining shortwave radiation, in H.
   real :: Pen_SW_rem(SZI_(G)) ! sum across all wavelength bands of the
                               ! penetrating shortwave heating that hits the bottom
                               ! and will be redistributed through the water column
                               ! (K H units)
 
   real, dimension(size(iPen_SW_bnd,1),size(iPen_SW_bnd,2)) :: Pen_SW_bnd
-  real :: SW_trans        ! fraction of shortwave radiation that is not
+  real :: SW_trans        ! fraction of shortwave radiation not
                           ! absorbed in a layer (nondimensional)
-  real :: unabsorbed      ! fraction of the shortwave radiation that
-                          ! is not absorbed because the layers are too thin.
+  real :: unabsorbed      ! fraction of the shortwave radiation 
+                          ! not absorbed because the layers are too thin.
   real :: Ih_limit        ! inverse of the total depth at which the
                           ! surface fluxes start to be limited (1/H units)
   real :: h_min_heat      ! minimum thickness layer that should get heated (H units)
@@ -375,8 +379,8 @@ subroutine sumSWoverBands(G, h, opacity_band, nsw, j, dt, &
   do i=is,ie ; h_heat(i) = 0.0 ; enddo
   netPen(:,1) = sum( pen_SW_bnd(:,:), dim=1 ) ! Surface interface
 
-  ! Apply penetrating SW radiation to remaining parts of layers.  Excessively thin
-  ! layers are not heated.
+  ! Apply penetrating SW radiation to remaining parts of layers.  
+  ! Excessively thin layers are not heated to avoid runaway temps.
   do k=1,nz
 
     do i=is,ie
@@ -388,6 +392,7 @@ subroutine sumSWoverBands(G, h, opacity_band, nsw, j, dt, &
           opt_depth = h(i,k)*G%H_to_m * opacity_band(n,i,k)
           exp_OD = exp(-opt_depth)
           SW_trans = exp_OD
+
           ! Heating at a rate of less than 10-4 W m-2 = 10-3 K m / Century,
           ! and of the layer in question less than 1 K / Century, can be
           ! absorbed without further penetration.
@@ -396,7 +401,7 @@ subroutine sumSWoverBands(G, h, opacity_band, nsw, j, dt, &
             SW_trans = 0.0
 
           Pen_SW_bnd(n,i) = Pen_SW_bnd(n,i) * SW_trans
-          netPen(i,k+1) = netPen(i,k+1) + Pen_SW_bnd(n,i)
+          netPen(i,k+1)   = netPen(i,k+1) + Pen_SW_bnd(n,i)
         endif ; enddo
       endif ! h(i,k) > 0.0
 

@@ -114,8 +114,14 @@ type, public :: diabatic_aux_CS ; private
 
   integer :: id_createdH = -1, id_brine_lay = -1
 
-! ! Optional diagnostic arrays
-  real, allocatable, dimension(:,:) :: createdH ! The amount of volume added in order to avoid grounding (m/s)
+  ! penetrative and non-penetrative shortwave heating diagnostic 
+  integer :: id_penSW_diag    = -1 
+  integer :: id_nonpenSW_diag = -1 
+
+  ! Optional diagnostic arrays
+  real, allocatable, dimension(:,:)   :: createdH      ! The amount of volume added in order to avoid grounding (m/s)
+  real, allocatable, dimension(:,:,:) :: penSW_diag    ! heating from convergence of penetrative SW (W/m2) 
+  real, allocatable, dimension(:,:)   :: nonpenSW_diag ! non-downwelling SW radiation (W/m2) at ocean surface 
 
 end type diabatic_aux_CS
 
@@ -695,6 +701,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, diagPtr
   real, dimension(SZI_(G))          :: rhoAtK, rho1, d1, pRef_N2 ! Used for N2
   real, dimension(SZI_(G), SZJ_(G)) :: MLD ! Diagnosed mixed layer depth
   real, dimension(SZI_(G), SZJ_(G)) :: subMLN2 ! Diagnosed stratification below ML
+  real, dimension(SZI_(G), SZJ_(G)) :: MLD2 ! Diagnosed MLD^2
   real, parameter                   :: dz_subML = 50. ! Depth below ML over which to diagnose stratification (m)
   integer :: i, j, is, ie, js, je, k, nz, id_N2, id_SQ
   real :: aFac, ddRho
@@ -753,7 +760,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, diagPtr
           MLD(i,j) = dK(i) * aFac + dKm1(i) * (1. - aFac)
         endif
       enddo ! i-loop
-
+      if (id_SQ > 0) MLD2(is:ie,j) = MLD(is:ie,j)**2
     enddo ! k-loop
     do i = is, ie
       if ((MLD(i,j)==0.) .and. (deltaRhoAtK(i)<densityDiff)) MLD(i,j) = dK(i) ! Assume mixing to the bottom
@@ -766,7 +773,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, diagPtr
 
   if (id_MLD > 0) call post_data(id_MLD, MLD, diagPtr)
   if (id_N2 > 0)  call post_data(id_N2, subMLN2 , diagPtr)
-  if (id_SQ > 0)  call post_data(id_SQ, (MLD*MLD), diagPtr)
+  if (id_SQ > 0)  call post_data(id_SQ, MLD2, diagPtr)
 
 end subroutine diagnoseMLDbyDensityDifference
 
@@ -783,7 +790,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
   logical, intent(in) :: aggregate_FW_forcing
   real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: cTKE, dSV_dT, dSV_dS
 
-!   Update the thickness, temperature, and salinity due to  thermodynamic
+! Update the thickness, temperature, and salinity due to thermodynamic
 ! boundary forcing (contained in fluxes type) applied to h, tv%T and tv%S,
 ! and calculate the TKE implications of this heating.
 !
@@ -793,7 +800,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
 ! A/ update mass, temp, and salinity due to all terms except
 !    netMassOut, fluxes%heat_content_evap < 0, and penetrative SW
 ! B/ update mass, temp, and salinity from netMassOut and fluxes%heat_content_evap
-! C/ update temp due to penetrative SW
+! C/ update temp due to penetrative SW radiation
 !
 ! Arguments:
 !  (in)      CS     = Control structure returned by a previous diabatic_driver_init call
@@ -822,19 +829,25 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
   real :: RivermixConst  ! A constant used in implementing river mixing, in Pa s.
 
   real, dimension(SZI_(G)) :: &
-    d_pres, &  ! The pressure change across a layer, in Pa.
-    p_lay, &   ! The average pressure in a layer, in Pa.
-    pres, &    ! The pressure at an interface, in Pa.
-    netMassInOut, netMassIn, netMassOut, &
-    netHeat, netSalt
-  real, dimension(SZI_(G), SZK_(G))              :: h2d, T2d
-  real, dimension(SZI_(G), SZK_(G))              :: pen_TKE_2d, dSV_dT_2d
-  real, dimension(max(optics%nbands,1),SZI_(G))  :: Pen_SW_bnd
-  real, dimension(max(optics%nbands,1),SZI_(G),SZK_(G)) :: opacityBand
-  real                                           :: hGrounding(maxGroundings)
+    d_pres,       &  ! pressure change across a layer (Pa)
+    p_lay,        &  ! average pressure in a layer (Pa)
+    pres,         &  ! pressure at an interface (Pa)
+    netMassInOut, &  ! surface water fluxes (H units) over time step
+    netMassIn,    &  ! mass entering ocean surface (H units) over a time step
+    netMassOut,   &  ! mass leaving ocean surface (H units) over a time step
+    netHeat,      &  ! heat (degC * H) via surface fluxes, excluding 
+                     ! Pen_SW_bnd and netMassOut
+    netSalt,      &  ! surface salt flux ( g(salt)/m2 for non-Bouss and ppt*H for Bouss )
+    nonpenSW         ! non-downwelling SW, which is absorbed at ocean surface 
 
-  real :: Temp_in, Salin_in
-  real :: I_G_Earth, g_Hconv2
+  real, dimension(SZI_(G), SZK_(G))                     :: h2d, T2d
+  real, dimension(SZI_(G), SZK_(G))                     :: pen_TKE_2d, dSV_dT_2d
+  real, dimension(max(optics%nbands,1),SZI_(G))         :: Pen_SW_bnd
+  real, dimension(max(optics%nbands,1),SZI_(G),SZK_(G)) :: opacityBand
+  real                                                  :: hGrounding(maxGroundings)
+
+  real    :: Temp_in, Salin_in
+  real    :: I_G_Earth, g_Hconv2
   logical :: calculate_energetics
 
   ! smg: obsolete logicals
@@ -940,11 +953,16 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
     ! netHeat      = heat (degC * H) via surface fluxes, excluding the part
     !                contained in Pen_SW_bnd; and excluding heat_content of netMassOut < 0.
     ! netSalt      = surface salt fluxes ( g(salt)/m2 for non-Bouss and ppt*H for Bouss )
-    ! Pen_SW_bnd   = components to penetrative shortwave radiation
+    ! Pen_SW_bnd   = components to penetrative shortwave radiation split according to bands.
+    !                This field provides that portion of SW from atmosphere that in fact  
+    !                enters to the ocean and participates in pentrative SW heating.
+    ! nonpenSW     = non-downwelling SW flux, which is absorbed in ocean surface 
+    !                (in tandem w/ LW,SENS,LAT); saved only for diagnostic purposes.  
+
     call extractFluxes1d(G, fluxes, optics, nsw, j, dt,                        &
                   H_limit_fluxes, use_riverHeatContent, useCalvingHeatContent, &
                   h2d, T2d, netMassInOut, netMassOut, netHeat, netSalt, &
-                  Pen_SW_bnd, tv, aggregate_FW_forcing)
+                  Pen_SW_bnd, tv, aggregate_FW_forcing, nonpenSW)
 
     ! ea is for passive tracers
     do i=is,ie
@@ -1140,8 +1158,17 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
 
     enddo ! i
 
-    ! step C/ in the application of fluxes
-    ! Heat by the divergence of penetrating SW (this uses the updated thicknesses)
+    ! Step C/ in the application of fluxes
+    ! Heat by the convergence of penetrating SW. 
+    ! SW penetrative heating uses the updated thickness from above. 
+    
+    ! save temperature before increment with SW heating 
+    if(CS%id_penSW_diag > 0) then 
+      do k=1,nz ; do i=is,ie
+        CS%penSW_diag(i,j,k) = T2d(i,k)
+      enddo ; enddo
+    endif 
+
     if (calculate_energetics) then
       call absorbRemainingSW(G, h2d, opacityBand, nsw, j, dt, H_limit_fluxes, &
                              .false., .true., T2d, Pen_SW_bnd, TKE=pen_TKE_2d, dSV_dT=dSV_dT_2d)
@@ -1154,15 +1181,34 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
                              .false., .true., T2d, Pen_SW_bnd)
     endif
 
-    ! Copy slice back into model state
+
+    ! Step D/ copy updated thickness and temperature  
+    ! 2d slice now back into model state.
     do k=1,nz ; do i=is,ie
       h(i,j,k)    = h2d(i,k)
       tv%T(i,j,k) = T2d(i,k)
     enddo ; enddo
 
+    ! diagnose heating (W/m2) applied to a grid cell from SW penetration 
+    if(CS%id_penSW_diag > 0) then 
+      do k=1,nz ; do i=is,ie
+        CS%penSW_diag(i,j,k) = (T2d(i,k)-CS%penSW_diag(i,j,k))*h(i,j,k) * Idt * tv%C_p * G%H_to_kg_m2
+      enddo ; enddo
+    endif 
+
+    ! fill CS%nonpenSW_diag
+    if(CS%id_nonpenSW_diag > 0) then 
+      do i=is,ie
+        CS%nonpenSW_diag(i,j) = nonpenSW(i)
+      enddo
+    endif 
+
   enddo ! j-loop finish
 
-  if (CS%id_createdH > 0) call post_data(CS%id_createdH, CS%createdH, CS%diag)
+  ! post the diagnostics 
+  if (CS%id_createdH      > 0) call post_data(CS%id_createdH     , CS%createdH     , CS%diag)
+  if (CS%id_penSW_diag    > 0) call post_data(CS%id_penSW_diag   , CS%penSW_diag   , CS%diag)
+  if (CS%id_nonpenSW_diag > 0) call post_data(CS%id_nonpenSW_diag, CS%nonpenSW_diag, CS%diag)
 
   if (numberOfGroundings>0) then
     do i = 1, min(numberOfGroundings, maxGroundings)
@@ -1252,17 +1298,40 @@ subroutine diabatic_aux_init(Time, G, param_file, diag, CS, use_ePBL)
       "meter second-1")
   if (CS%id_createdH>0) allocate(CS%createdH(isd:ied,jsd:jed))
 
+  ! diagnostic for heating of a grid cell from convergence of SW heat into the cell.   
+  CS%id_penSW_diag = register_diag_field('ocean_model', 'rsdo',      &
+        diag%axesTL, Time, 'Downwelling Shortwave Flux in Sea Water',&
+        'Watt meter-2', standard_name='downwelling_shortwave_flux_in_sea_water')
+  if (CS%id_penSW_diag>0) then 
+     allocate(CS%penSW_diag(isd:ied,jsd:jed,nz))
+     CS%penSW_diag(:,:,:) = 0.0
+  endif 
+
+  ! diagnostic for non-downwelling SW radiation (i.e., SW absorbed at ocean surface)
+  CS%id_nonpenSW_diag = register_diag_field('ocean_model', 'nonpenSW',                       &
+        diag%axesT1, Time,                                                                   &
+        'Non-downwelling SW radiation (i.e., SW absorbed in ocean surface with LW,SENS,LAT)',&
+        'Watt meter-2', standard_name='nondownwelling_shortwave_flux_in_sea_water')
+  if (CS%id_nonpenSW_diag > 0) then 
+     allocate(CS%nonpenSW_diag(isd:ied,jsd:jed))
+     CS%nonpenSW_diag(:,:) = 0.0
+  endif 
+
   id_clock_uv_at_h = cpu_clock_id('(Ocean find_uv_at_h)', grain=CLOCK_ROUTINE)
-  id_clock_frazil = cpu_clock_id('(Ocean frazil)', grain=CLOCK_ROUTINE)
+  id_clock_frazil  = cpu_clock_id('(Ocean frazil)', grain=CLOCK_ROUTINE)
 
 end subroutine diabatic_aux_init
+
 
 subroutine diabatic_aux_end(CS)
   type(diabatic_aux_CS), pointer :: CS
 
   if (.not.associated(CS)) return
 
-  if (CS%id_createdH>0) deallocate(CS%createdH)
+  if (CS%id_createdH     >0) deallocate(CS%createdH)
+  if (CS%id_penSW_diag   >0) deallocate(CS%penSW_diag)
+  if (CS%id_nonpenSW_diag>0) deallocate(CS%nonpenSW_diag)
+
   if (associated(CS)) deallocate(CS)
 
 end subroutine diabatic_aux_end

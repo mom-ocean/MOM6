@@ -98,11 +98,11 @@ type, public :: ocean_grid_type
     areaCv       ! The areas of the v-grid cells in m2.
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
-    mask2dBu, &  ! 0 for boundary points and 1 for ocean points on the q grid.  Nondim.
-    geoLatBu, &  ! The geographic latitude at q points in degrees of latitude or m.
-    geoLonBu, &  ! The geographic longitude at q points in degrees of longitude or m.
-    dxBu, IdxBu, & ! dxBu is delta x at q points, in m, and IdxBu is 1/dxBu in m-1.
-    dyBu, IdyBu, & ! dyBu is delta y at q points, in m, and IdyBu is 1/dyBu in m-1.
+    mask2dBu, &  ! 0 for boundary points and 1 for ocean points on the u grid.  Nondim.
+    geoLatBu, &  ! The geographic latitude at u points in degrees of latitude or m.
+    geoLonBu, &  ! The geographic longitude at u points in degrees of longitude or m.
+    dxBu, IdxBu, & ! dxBu is delta x at u points, in m, and IdxBu is 1/dxBu in m-1.
+    dyBu, IdyBu, & ! dyBu is delta y at u points, in m, and IdyBu is 1/dyBu in m-1.
     areaBu, &    ! areaBu is the area of a q-cell, in m2
     IareaBu      ! IareaBu = 1/areaBu in m-2.
 
@@ -120,11 +120,11 @@ type, public :: ocean_grid_type
 
   ! These parameters are run-time parameters that are used during some
   ! initialization routines (but not all)
-  real :: south_lat,   &! The latitude (or y-coordinate) of the first v-line
-          west_lon,    &! The longitude (or x-coordinate) of the first u-line
-          len_lat = 0.,&! The latitudinal (or y-coord) extent of physical domain
-          len_lon = 0.,&! The longitudinal (or x-coord) extent of physical domain
-          Rad_Earth = 6.378e6 ! The radius of the planet in meters.
+  real :: south_lat     ! The latitude (or y-coordinate) of the first v-line
+  real :: west_lon      ! The longitude (or x-coordinate) of the first u-line
+  real :: len_lat = 0.  ! The latitudinal (or y-coord) extent of physical domain
+  real :: len_lon = 0.  ! The longitudinal (or x-coord) extent of physical domain
+  real :: Rad_Earth = 6.378e6 ! The radius of the planet in meters.
   real :: max_depth     ! The maximum depth of the ocean in meters.
   character(len=40) :: axis_units = ' '! Units for the horizontal coordinates.
 
@@ -422,25 +422,25 @@ logical function isPointInCell(G, i, j, x, y)
   real :: xNE, xNW, xSE, xSW, yNE, yNW, ySE, ySW
   real :: p0, p1, p2, p3, l0, l1, l2, l3
   isPointInCell = .false.
-  xNE = G%geoLonBu(i  ,j  ); yNE = G%geoLatBu(i  ,j  )
-  xNW = G%geoLonBu(i-1,j  ); yNW = G%geoLatBu(i-1,j  )
-  xSE = G%geoLonBu(i  ,j-1); ySE = G%geoLatBu(i  ,j-1)
-  xSW = G%geoLonBu(i-1,j-1); ySW = G%geoLatBu(i-1,j-1)
+  xNE = G%geoLonBu(i  ,j  ) ; yNE = G%geoLatBu(i  ,j  )
+  xNW = G%geoLonBu(i-1,j  ) ; yNW = G%geoLatBu(i-1,j  )
+  xSE = G%geoLonBu(i  ,j-1) ; ySE = G%geoLatBu(i  ,j-1)
+  xSW = G%geoLonBu(i-1,j-1) ; ySW = G%geoLatBu(i-1,j-1)
   if (x<min(xNE,xNW,xSE,xSW) .or. x>max(xNE,xNW,xSE,xSW) .or. &
       y<min(yNE,yNW,ySE,ySW) .or. y>max(yNE,yNW,ySE,ySW) ) then
     return ! Avoid the more complicated calculation
   endif
-  l0=(x-xSW)*(ySE-ySW)-(y-ySW)*(xSE-xSW)
-  l1=(x-xSE)*(yNE-ySE)-(y-ySE)*(xNE-xSE)
-  l2=(x-xNE)*(yNW-yNE)-(y-yNE)*(xNW-xNE)
-  l3=(x-xNW)*(ySW-yNW)-(y-yNW)*(xSW-xNW)
+  l0 = (x-xSW)*(ySE-ySW) - (y-ySW)*(xSE-xSW)
+  l1 = (x-xSE)*(yNE-ySE) - (y-ySE)*(xNE-xSE)
+  l2 = (x-xNE)*(yNW-yNE) - (y-yNE)*(xNW-xNE)
+  l3 = (x-xNW)*(ySW-yNW) - (y-yNW)*(xSW-xNW)
 
-  p0=sign(1., l0); if (l0.eq.0.) p0=0.
-  p1=sign(1., l1); if (l1.eq.0.) p1=0.
-  p2=sign(1., l2); if (l2.eq.0.) p2=0.
-  p3=sign(1., l3); if (l3.eq.0.) p3=0.
+  p0 = sign(1., l0) ; if (l0 == 0.) p0=0.
+  p1 = sign(1., l1) ; if (l1 == 0.) p1=0.
+  p2 = sign(1., l2) ; if (l2 == 0.) p2=0.
+  p3 = sign(1., l3) ; if (l3 == 0.) p3=0.
 
-  if ( (abs(p0)+abs(p2))+(abs(p1)+abs(p3)) .eq. abs((p0+p2)+(p1+p3)) ) then
+  if ( (abs(p0)+abs(p2)) + (abs(p1)+abs(p3)) == abs((p0+p2) + (p1+p3)) ) then
     isPointInCell=.true.
   endif
 end function isPointInCell
@@ -452,6 +452,7 @@ subroutine set_first_direction(G, y_first)
   G%first_direction = y_first
 end subroutine set_first_direction
 
+!> Returns the model's thickness units, usually m or kg/m^2.
 function get_thickness_units(G)
   character(len=48)                 :: get_thickness_units
   type(ocean_grid_type), intent(in) :: G
@@ -469,6 +470,7 @@ function get_thickness_units(G)
   endif
 end function get_thickness_units
 
+!> Returns the model's thickness flux units, usually m^3/s or kg/s.
 function get_flux_units(G)
   character(len=48)                 :: get_flux_units
   type(ocean_grid_type), intent(in) :: G
@@ -486,7 +488,8 @@ function get_flux_units(G)
   endif
 end function get_flux_units
 
-function get_tr_flux_units(G, tr_units, tr_vol_conc_units,tr_mass_conc_units)
+!> Returns the model's tracer flux units.
+function get_tr_flux_units(G, tr_units, tr_vol_conc_units, tr_mass_conc_units)
   character(len=48)                      :: get_tr_flux_units
   type(ocean_grid_type),      intent(in) :: G
   character(len=*), optional, intent(in) :: tr_units

@@ -782,14 +782,20 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       h(i,j,1) = h(i,j,1) + (eb(i,j,1) - ea(i,j,2))
       hold(i,j,nz) = h(i,j,nz)
       h(i,j,nz) = h(i,j,nz) + (ea(i,j,nz) - eb(i,j,nz-1))
-      if (h(i,j,1) <= 0.0) h(i,j,1) = G%Angstrom
-      if (h(i,j,nz) <= 0.0) h(i,j,nz) = G%Angstrom
+      if (h(i,j,1) <= 0.0) then
+        h(i,j,1) = G%Angstrom
+      endif
+      if (h(i,j,nz) <= 0.0) then
+        h(i,j,nz) = G%Angstrom
+      endif
     enddo
     do k=2,nz-1 ; do i=is,ie
       hold(i,j,k) = h(i,j,k)
       h(i,j,k) = h(i,j,k) + ((ea(i,j,k) - eb(i,j,k-1)) + &
                     (eb(i,j,k) - ea(i,j,k+1)))
-      if (h(i,j,k) <= 0.0) h(i,j,k) = G%Angstrom
+      if (h(i,j,k) <= 0.0) then
+        h(i,j,k) = G%Angstrom
+      endif
     enddo ; enddo
   enddo
   if (CS%debug) then
@@ -798,7 +804,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call MOM_thermovar_chksum("after negative check ", tv, G)
   endif
   if (showCallTree) call callTree_waypoint("done with h=ea-eb (diabatic)")
-  if (CS%debugConservation) call MOM_state_stats('h=ea-eb', u, v, hold, tv%T, tv%S, G)
+  if (CS%debugConservation) call MOM_state_stats('h=ea-eb', u, v, h, tv%T, tv%S, G)
 
   ! Here, T and S are updated according to ea and eb.
   ! If using the bulk mixed layer, T and S are also updated
@@ -882,8 +888,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
         call triDiagTS(G, is, ie, js, je, hold, ea, eb, tv%T, tv%S)
       endif ! massless_match_targets
       call cpu_clock_end(id_clock_tridiag)
-      if (CS%debugConservation) call MOM_state_stats('BML tridiag', u, v, h, tv%T, tv%S, G)
     endif ! end of ASSOCIATED(T)
+    if (CS%debugConservation) call MOM_state_stats('BML tridiag', u, v, h, tv%T, tv%S, G)
 
     if ((CS%ML_mix_first > 0.0) .or. CS%use_geothermal) then
       ! The mixed layer code has already been called, but there is some needed
@@ -946,8 +952,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       call triDiagTS(G, is, ie, js, je, hold, ea, eb, tv%T, tv%S)
       call cpu_clock_end(id_clock_tridiag)
       if (showCallTree) call callTree_waypoint("done with triDiagTS (diabatic)")
-      if (CS%debugConservation) call MOM_state_stats('triDiagTS', u, v, h, tv%T, tv%S, G)
     endif
+    if (CS%debugConservation) call MOM_state_stats('triDiagTS', u, v, h, tv%T, tv%S, G)
 
   endif                                          ! end BULKMIXEDLAYER
   if (CS%debug) then

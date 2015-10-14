@@ -66,6 +66,7 @@ module MOM_generic_tracer
   use MOM_tracer_registry, only : add_tracer_diagnostics, add_tracer_OBC_values
   use MOM_tracer_registry, only : tracer_vertdiff
   use MOM_tracer_Z_init, only : tracer_Z_init
+  use MOM_tracer_initialization_from_Z, only : MOM_initialize_tracer_from_Z
   use MOM_variables, only : surface, ocean_OBC_type, thermo_var_ptrs
 
 
@@ -279,12 +280,13 @@ contains
   !  <TEMPLATE>
   !   call initialize_MOM_generic_tracer(restart, day, G, h, OBC, CS, sponge_CSp, diag_to_Z_CSp)
  ! </SUBROUTINE>
-  subroutine initialize_MOM_generic_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
+  subroutine initialize_MOM_generic_tracer(restart, day, G, h, param_file, OBC, CS, sponge_CSp, &
        diag_to_Z_CSp)
     logical,                               intent(in) :: restart
     type(time_type), target,               intent(in) :: day
-    type(ocean_grid_type),                 intent(in) :: G
+    type(ocean_grid_type),                 intent(inout) :: G
     real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
+    type(param_file_type),                 intent(in) :: param_file
     type(ocean_OBC_type),                  pointer    :: OBC
     type(MOM_generic_tracer_CS),           pointer    :: CS
     type(sponge_CS),                       pointer    :: sponge_CSp
@@ -330,7 +332,7 @@ contains
     g_tracer=>CS%g_tracer_list
 
     do
-      if(INDEX(CS%IC_file, '_NULL_')) then
+      if(INDEX(CS%IC_file, '_NULL_') .ne. 0) then
          call MOM_error(WARNING,"The name of the IC_file "//trim(CS%IC_file)//&
                               " indicates no MOM initialization was asked for the generic tracers."//&
                               "Bypassing the MOM initialization of ALL generic tracers!")
@@ -343,6 +345,20 @@ contains
       if (.not.restart .or. (CS%tracers_may_reinit .and. &
           .not.query_initialized(tr_ptr, g_tracer_name, CS%restart_CSp))) then
 
+       if(g_tracer%requires_src_info ) then 
+         call MOM_error(NOTE,"initialize_MOM_generic_tracer: "//&
+                             "initializing generic tracer "//trim(g_tracer_name)//&
+                             " using MOM_initialize_tracer_from_Z ")
+
+         call MOM_initialize_tracer_from_Z(h, tr_ptr, G, param_file,                       &
+                                src_file = g_tracer%src_file,                              &
+                                src_var_nam = g_tracer%src_var_name,                       &
+                                src_var_unit_conversion = g_tracer%src_var_unit_conversion,&
+                                src_var_record = g_tracer%src_var_record,                  &
+                                src_var_gridspec = g_tracer%src_var_gridspec               )
+
+       else !Do it old way if the tracer is not registered to start from a specific source file.  
+            !This path should be deprecated if all generic tracers are required to start from specified sources.
         if (len_trim(CS%IC_file) > 0) then
         !  Read the tracer concentrations from a netcdf file.
           if (.not.file_exists(CS%IC_file)) call MOM_error(FATAL, &
@@ -370,6 +386,7 @@ contains
                   "check Generic Tracer IC filename "//trim(CS%IC_file)//".")
         endif
 
+       endif
       endif
 
       !traverse the linked list till hit NULL
