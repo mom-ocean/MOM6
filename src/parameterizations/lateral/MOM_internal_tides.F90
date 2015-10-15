@@ -96,6 +96,7 @@ type, public :: int_tide_CS ; private
   real, allocatable, dimension(:,:) :: refl_angle
                         ! local coastline/ridge/shelf angles read from file (BDM)
                         ! (could be in G control structure)
+  real :: nullangle = -999.9 ! placeholder value in cell with no reflection
   real, allocatable, dimension(:,:) :: refl_pref
                         ! partial reflection coeff for each ``coast cell" (BDM)
                         ! (could be in G control structure)
@@ -115,7 +116,7 @@ type, public :: int_tide_CS ; private
   real :: q_itides      ! fraction of local dissipation (nondimensional) (BDM)
   real :: En_sum        ! global sum of energy for use in debugging (BDM)    
   type(time_type),pointer    :: Time
-                        ! The current model time (BDM) 
+                        ! The current model time (BDM)
   character(len=200) :: inputdir
                         ! directory to look for coastline angle file (BDM)
   real :: decay_rate    ! A constant rate at which internal tide energy is
@@ -134,17 +135,25 @@ type, public :: int_tide_CS ; private
                         ! (i,j,angle); temporary for restart (BDM)
   real, allocatable, dimension(:) :: &
     frequency           ! The frequency of each band.
+  
+  real    :: int_tide_source_x ! delete later
+                             ! X Location of generation site 
+                             ! for internal tide for testing (BDM)
+  real    :: int_tide_source_y ! delete later 
+                             ! Y Location of generation site 
+                             ! for internal tide for testing (BDM)
 
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                         ! timing of diagnostic output.
   type(wave_structure_CS),  pointer :: wave_structure_CSp => NULL()
   integer :: id_tot_En = -1, id_itide_drag = -1
-  integer :: id_refl_pref = -1, id_refl_ang = -1, id_land_mask = -1 !(BDM)
-  integer :: id_dx_Cv = -1, id_dy_Cu = -1                           !(BDM)
-  integer :: id_TKE_itidal_input = -1                               !(BDM)
+  integer :: id_refl_pref = -1, id_refl_ang = -1, id_land_mask = -1
+  integer :: id_dx_Cv = -1, id_dy_Cu = -1
+  integer :: id_TKE_itidal_input = -1
   integer, allocatable, dimension(:,:) :: id_En_mode, id_En_ang_mode
-  integer, allocatable, dimension(:,:) :: id_TKE_loss_mode          !(BDM)
-  integer, allocatable, dimension(:,:) :: id_TKE_loss_ang_mode      !(BDM)
+  integer, allocatable, dimension(:,:) :: id_TKE_loss_mode
+  integer, allocatable, dimension(:,:) :: id_TKE_loss_ang_mode
+  integer, allocatable, dimension(:,:) :: id_Ub_mode
   
 end type int_tide_CS
 
@@ -224,7 +233,7 @@ subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, 
       f2 = 0.25*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
                  (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
       if (CS%frequency(fr)**2 > f2) &
-        CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) + & 
+        CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) + &
                             dt*frac_per_sector**(1-CS%q_itides)*TKE_itidal_input(i,j)
     enddo ; enddo ; enddo ; enddo
   else
@@ -307,28 +316,56 @@ subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, 
   
   ! Extract the energy for mixing due to scattering (BDM).
   if (CS%apply_wave_drag) then
-    ! CALCULATE MODAL STRUCTURE
-    do m=1,CS%NMode ; do fr=1,CS%Nfreq    
-      call wave_structure(h, tv, G, c1(:,:,m), CS%frequency(fr), &
+    ! Calculate modal structure
+    do m=1,CS%NMode ; do fr=1,CS%Nfreq
+      call wave_structure(h, tv, G, c1(:,:,m), m, CS%frequency(fr), &
                           CS%wave_structure_CSp, tot_En_mode(:,:,fr,m), full_halos=.true.)
-      ! pick out near-bottom baroclinic velocity values
+      ! Pick out near-bottom baroclinic velocity values
       do j=jsd,jed ; do i=isd,ied
-        nzm = CS%wave_structure_CSp%num_intfaces(i,j)
-        Ub(i,j,fr,m) = CS%wave_structure_CSp%Uavg_profile(i,j,nzm)
-        !if(Ub(i,j,fr,m)>0.0)then
-        !  print *, "nzm=", nzm
-        !  print *, "Ub=", Ub(i,j,fr,m)
-        !endif
-      enddo ; enddo 
+        !id_g = G%isd_global + i - 1.0
+        !jd_g = G%jsd_global + j - 1.0
+        !if(id_g .eq. CS%int_tide_source_x .and. jd_g .eq. CS%int_tide_source_y) then  ! delete later
+          nzm = CS%wave_structure_CSp%num_intfaces(i,j)
+          !print *, 'id_g=', id_g, 'jd_g=', jd_g
+          !print *, 'nzm=', nzm
+          !print *, 'Uavg=', CS%wave_structure_CSp%Uavg_profile(i,j,nzm)
+          Ub(i,j,fr,m) = CS%wave_structure_CSp%Uavg_profile(i,j,nzm)
+        !endif ! for debug - delete later
+      enddo ; enddo
+    enddo ; enddo
+    
+    ! Check for NANs - for debugging, delete later
+    do m=1,CS%NMode ; do fr=1,CS%Nfreq
+      do j=js,je ; do i=is,ie
+        id_g = G%isd_global + i - 1.0
+        jd_g = G%jsd_global + j - 1.0
+        if(isnan(sum(CS%En(i,j,:,fr,m))))then
+          print *, 'Prior to loss: En is NAN at ig=', id_g, ', jg=', jd_g
+        endif
+      enddo ; enddo
     enddo ; enddo
 
+    ! Calculate loss rate and apply loss over the time step
     call itidal_lowmode_loss(G, CS, Nb, Ub, CS%En, CS%TKE_itidal_loss_fixed, &
-                             CS%TKE_itidal_loss, dt)
+                             CS%TKE_itidal_loss, dt, full_halos=.false.)
+    
+    ! Check for NANs - for debugging, delete later                         
+    do m=1,CS%NMode ; do fr=1,CS%Nfreq
+      do j=js,je ; do i=is,ie
+        id_g = G%isd_global + i - 1.0
+        jd_g = G%jsd_global + j - 1.0
+        if(isnan(sum(CS%En(i,j,:,fr,m))))then
+          print *, 'After loss: En is NAN at ig=', id_g, ', jg=', jd_g
+          stop
+        endif
+      enddo ; enddo
+    enddo ; enddo
+    
   endif
   
   ! Check for energy conservation on computational domain (BDM)
   do m=1,CS%NMode ; do fr=1,CS%Nfreq
-    print *, 'sum_En: mode(',m,'), freq(',fr,'):'
+    !print *, 'sum_En: mode(',m,'), freq(',fr,'):'
     call sum_En(G,CS,CS%En(:,:,:,fr,m),'prop_int_tide')
   enddo ; enddo
 
@@ -370,6 +407,11 @@ subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, 
     ! Output 3-D (i,j,a) energy loss for each freq and mode
     do m=1,CS%NMode ; do fr=1,CS%Nfreq ; if (CS%id_TKE_loss_ang_mode(fr,m) > 0) then
       call post_data(CS%id_TKE_loss_ang_mode(fr,m), CS%TKE_itidal_loss(:,:,:,fr,m) , CS%diag)
+    endif ; enddo ; enddo
+    
+    ! Output 2-D period-averaged horizontal near-bottom mode velocity for each freq and mode
+    do m=1,CS%NMode ; do fr=1,CS%Nfreq ; if (CS%id_Ub_mode(fr,m) > 0) then
+      call post_data(CS%id_Ub_mode(fr,m), Ub(:,:,fr,m), CS%diag)
     endif ; enddo ; enddo
     
   endif
@@ -415,7 +457,7 @@ subroutine sum_En(G, CS, En, label)
  
 end subroutine sum_En
 
-subroutine itidal_lowmode_loss(G, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, dt)
+subroutine itidal_lowmode_loss(G, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, dt, full_halos)
   type(ocean_grid_type),  intent(in)    :: G
   type(int_tide_CS), pointer            :: CS
   real, dimension(G%isd:G%ied,G%jsd:G%jed), intent(in) :: Nb
@@ -424,6 +466,7 @@ subroutine itidal_lowmode_loss(G, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, dt)
   real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%NAngle,CS%nFreq,CS%nMode), intent(inout) :: En
   real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%NAngle,CS%nFreq,CS%nMode), intent(out)   :: TKE_loss
   real, intent(in) :: dt
+  logical,optional, intent(in)  :: full_halos
      
   ! This subroutine calculates the energy lost from the propagating internal tide due to
   ! scattering over small-scale roughness along the lines of Jayne & St. Laurent (2001).
@@ -434,37 +477,52 @@ subroutine itidal_lowmode_loss(G, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, dt)
   !  (inout)   En - energy density of the internal waves, in J m-2.
   !  (in)      TKE_loss_fixed - fixed part of energy loss, in kg m-2 (rho*kappa*h^2)
   !  (out)     TKE_loss - energy loss rate, in W m-2 (rho*kappa*h^2*N^2*U^2)
-  !  (in)      dt - time increment, in s 
+  !  (in)      dt - time increment, in s
+  !  (in,opt)  full_halos - If true, do the calculation over the entire
+  !                         computational domain. 
     
-  integer :: j,i,m,fr,a
-  real    :: En_tot        ! energy for a given mode, frequency, and point summed over angles
-  real    :: TKE_loss_tot  ! dissipation for a given mode, frequency, and point summed over angles
-  real    :: TKE_sum_check ! temporary for check summing
-  real, dimension(CS%NAngle) :: frac_per_sector ! fraction of energy in each wedge
+  integer :: j,i,m,fr,a, is, ie, js, je
+  real    :: En_tot          ! energy for a given mode, frequency, and point summed over angles
+  real    :: TKE_loss_tot    ! dissipation for a given mode, frequency, and point summed over angles
+  real    :: TKE_sum_check   ! temporary for check summing
+  real    :: frac_per_sector ! fraction of energy in each wedge
   
-  do j=G%jsd,G%jed ; do i=G%isd,G%ied ; do m=1,CS%nMode ; do fr=1,CS%nFreq
-    En_tot = sum(En(i,j,:,fr,m))
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  
+  if (present(full_halos)) then ; if (full_halos) then
+    is = G%isd ; ie = G%ied ; js = G%jsd ; je = G%jed
+  endif ; endif
+  
+  do j=js,je ; do i=is,ie ; do m=1,CS%nMode ; do fr=1,CS%nFreq
+    En_tot = 0.0
     do a=1,CS%nAngle
-      frac_per_sector(a) = En(i,j,a,fr,m)/En_tot
+      if(En(i,j,a,fr,m)<0.0)then
+        call MOM_error(WARNING, "int_tides: En<0 prior to dissipation; setting to 0", .true.)
+        En(i,j,a,fr,m) = 0.0
+      endif
+      En_tot = En_tot + En(i,j,a,fr,m)
     enddo
-    ! using a placeholder here for Ub; delete later ----------------
-    !Ub(:,:,:,:) = 0.0
-    !if (En_tot > 0.0) then
-    !  Ub(i,j,fr,m) = 0.001*sqrt(En_tot)
-    !endif !---------------------------------------------------------
-    ! Calculate TKE loss rate; units of [W m-2] here.
-    TKE_loss_tot = TKE_loss_fixed(i,j) * Nb(i,j) * Ub(i,j,fr,m)**2
-    TKE_sum_check = 0.0
-    do a=1,CS%nAngle
-      TKE_loss(i,j,a,fr,m) = frac_per_sector(a)*TKE_loss_tot
+    if (En_tot > 0.0) then
+      ! Calculate TKE loss rate; units of [W m-2] here.
+      TKE_loss_tot = TKE_loss_fixed(i,j) * Nb(i,j) * Ub(i,j,fr,m)**2
       ! Update energy remaining (this is an explicit calc for now)
-      En(i,j,a,fr,m) = En(i,j,a,fr,m) - TKE_loss(i,j,a,fr,m)*dt
-      TKE_sum_check = TKE_sum_check + TKE_loss(i,j,a,fr,m)
-    enddo
-    if (abs(TKE_sum_check - TKE_loss_tot) > 1e-30) then
-      call MOM_error(WARNING, "itidal_lowmode_loss: TKE_loss .ne. total", .true.)
+      do a=1,CS%nAngle
+        frac_per_sector = En(i,j,a,fr,m)/En_tot
+        TKE_loss(i,j,a,fr,m) = frac_per_sector*TKE_loss_tot
+        if(TKE_loss(i,j,a,fr,m)*dt <= En(i,j,a,fr,m))then
+          En(i,j,a,fr,m) = En(i,j,a,fr,m) - TKE_loss(i,j,a,fr,m)*dt
+        else
+          call MOM_error(WARNING, "itidal_lowmode_loss: energy loss greater than avalable, "// &
+                            " setting En to zero.")
+          En(i,j,a,fr,m) = 0.0
+        endif
+      enddo
+    else
+      TKE_loss(i,j,:,fr,m) = 0.0
+      En(i,j,:,fr,m) = En(i,j,:,fr,m) - TKE_loss(i,j,:,fr,m)*dt
     endif
   enddo ; enddo ; enddo ; enddo
+
 end subroutine itidal_lowmode_loss
 
 
@@ -1396,7 +1454,7 @@ subroutine reflect(En, NAngle, CS, G, LB)
       id_g = isd_g + i - 1
       ! redistribute energy in angular space if ray will hit boundary 
       ! i.e., if energy is in a reflecting cell
-      if (.not. isnan(angle_c(i,j))) then
+      if (angle_c(i,j) .ne. CS%nullangle) then
         do a=1,NAngle
           if (En(i,j,a) > 0.0) then
             ! if ray is incident, keep specified boundary angle
@@ -2069,9 +2127,13 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
                fail_if_missing=.false.)
   filename = trim(CS%inputdir) // trim(refl_angle_file)
   call log_param(param_file, mod, "INPUTDIR/REFL_ANGLE_FILE", filename)
-  allocate(CS%refl_angle(isd:ied,jsd:jed)) ; CS%refl_angle(:,:) = 0.0
+  allocate(CS%refl_angle(isd:ied,jsd:jed)) ; CS%refl_angle(:,:) = CS%nullangle
   call read_data(filename, 'refl_angle', CS%refl_angle, &
                  domain=G%domain%mpp_domain, timelevel=1)
+  ! replace NANs with null value
+  do j=G%jsc,G%jec ; do i=G%isc,G%iec
+    if(isnan(CS%refl_angle(i,j))) CS%refl_angle(i,j) = CS%nullangle
+  enddo ; enddo
   call pass_var(CS%refl_angle,G%domain)
   
   ! Read in prescribed partial reflection coefficients from file (BDM)
@@ -2091,7 +2153,7 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
   do j=jsd,jed
     do i=isd,ied
       ! flag cells with partial reflection
-      if (.not. isnan(CS%refl_angle(i,j)) .and. &
+      if (CS%refl_angle(i,j) .ne. CS%nullangle .and. &
         CS%refl_pref(i,j) < 1.0 .and. CS%refl_pref(i,j) > 0.0) then
         CS%refl_pref_logical(i,j) = .true.
       endif
@@ -2177,6 +2239,7 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
   allocate(CS%id_En_ang_mode(CS%nFreq,CS%nMode)) ; CS%id_En_ang_mode(:,:) = -1
   allocate(CS%id_TKE_loss_mode(CS%nFreq,CS%nMode)) ; CS%id_TKE_loss_mode(:,:) = -1
   allocate(CS%id_TKE_loss_ang_mode(CS%nFreq,CS%nMode)) ; CS%id_TKE_loss_ang_mode(:,:) = -1
+  allocate(CS%id_Ub_mode(CS%nFreq,CS%nMode)) ; CS%id_Ub_mode(:,:) = -1
 
   allocate(angles(CS%NAngle)) ; angles(:) = 0.0
   Angle_size = (8.0*atan(1.0)) / (real(num_angle))
@@ -2215,8 +2278,21 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
                  axes_ang, Time, var_descript, 'W m-2 band-1')
     call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
     
+    ! Register 2-D period-averaged near-bottom horizonal velocity for each freq and mode
+    write(var_name, '("Itide_Ub_freq",i1,"_mode",i1)') fr, m
+    write(var_descript, '("Near-bottom horizonal velocity for frequency ",i1," mode ",i1)') fr, m
+    CS%id_Ub_mode(fr,m) = register_diag_field('ocean_model', var_name, &
+                 diag%axesT1, Time, var_descript, 'm s-1')
+    call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
+    
     ! Initialize wave_structure (not sure if this should be here - BDM)
     call wave_structure_init(Time, G, param_file, diag, CS%wave_structure_CSp)
+    
+    ! For debugging - delete later
+    call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_X", CS%int_tide_source_x, &
+                 "X Location of generation site for internal tide", default=1.)
+    call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_Y", CS%int_tide_source_y, &
+                 "Y Location of generation site for internal tide", default=1.)
     
   enddo ; enddo
   
@@ -2232,6 +2308,7 @@ subroutine internal_tides_end(CS)
     if (associated(CS%En)) deallocate(CS%En)
     if (allocated(CS%frequency)) deallocate(CS%frequency)
     if (allocated(CS%id_En_mode)) deallocate(CS%id_En_mode)
+    if (allocated(CS%id_Ub_mode)) deallocate(CS%id_Ub_mode)
     deallocate(CS)
   endif
   CS => NULL()  

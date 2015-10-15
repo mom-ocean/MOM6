@@ -21,7 +21,7 @@ module MOM_wave_structure
 !
 !********+*********+*********+*********+*********+*********+*********+**
 !*                                                                     *
-!*  By Benjamin Mater, September, 2015                                      *
+!*  By Benjamin Mater, September, 2015                                 *
 !*                                                                     *
 !*    The subroutine in this module calculates the vertical structure  *
 !*    functions of the first baroclinic mode internal wave speed.      *
@@ -87,11 +87,12 @@ end type wave_structure_CS
 
 contains
 
-subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
+subroutine wave_structure(h, tv, G, cn, ModeNum, freq, CS, En, full_halos)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),    intent(in)  :: h
   type(thermo_var_ptrs),                    intent(in)  :: tv
   type(ocean_grid_type),                    intent(in)  :: G
   real, dimension(NIMEM_,NJMEM_),           intent(in)  :: cn
+  integer,                                  intent(in)  :: ModeNum
   real,                                     intent(in)  :: freq
   type(wave_structure_CS),                  pointer     :: CS
   real, dimension(NIMEM_,NJMEM_), optional, intent(in)  :: En
@@ -102,6 +103,7 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
 !  (in)      tv - A structure containing the thermobaric variables.
 !  (in)      G - The ocean's grid structure.
 !  (in)      cn - The (non-rotational) mode internal gravity wave speed, in m s-1.
+!  (in)      ModeNum - mode number
 !  (in)      freq - intrinsic wave frequency, in s-1
 !  (in)      CS - The control structure returned by a previous call to
 !                 wave_structure_init.
@@ -143,10 +145,12 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
                   ! the thickness of the layer below (Igl) or above (Igu) it,
                   ! in units of s2 m-2.
   real, dimension(SZK_(G),SZI_(G)) :: &
-    Hf, Tf, Sf, Rf, htot
+    Hf, Tf, Sf, Rf
   real, dimension(SZK_(G)) :: &
     Hc, Tc, Sc, Rc, &
     det, ddet
+  real, dimension(SZI_(G),SZJ_(G)) :: &
+    htot
   real :: lam
   real :: min_h_frac
   real :: H_to_pres
@@ -187,7 +191,7 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
   real, dimension(SZK_(G)-1) :: e_itt   ! improved guess at eigen vector (from TDMA)
   real    :: Pi
   integer :: kc
-  integer :: i, j, k, k2, itt, is, ie, js, je, nz, nzm, row, ig, jg
+  integer :: i, j, k, k2, itt, is, ie, js, je, nz, nzm, row, ig, jg, ig_stop, jg_stop
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   I_a_int = 1/a_int
@@ -196,6 +200,7 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
     if (.not. associated(CS)) call MOM_error(FATAL, "MOM_wave_structure: "// &
            "Module must be initialized before it is used.")
   !endif
+  
   if (present(full_halos)) then ; if (full_halos) then
     is = G%isd ; ie = G%ied ; js = G%jsd ; je = G%jed
   endif ; endif
@@ -266,13 +271,11 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
 
     ! From this point, we can work on individual columns without causing memory
     ! to have page faults.
-    do i=is,ie
+    do i=is,ie ; if(cn(i,j)>0.0)then
       !----for debugging, remove later----
-      !ig = G%isd_global + i - 1.0
-      !jg = G%jsd_global + j - 1.0
+      ig = G%isd_global + i - 1.0
+      jg = G%jsd_global + j - 1.0
       !if(ig .eq. CS%int_tide_source_x .and. jg .eq. CS%int_tide_source_y) then
-      !print *, 'Wave_structure: at ig=', ig, ' and jg=', jg, '; running code'
-      !print *, 'Wave_structure: cn=', cn(i,j)
       !-----------------------------------
       if (G%mask2dT(i,j) > 0.5) then
 
@@ -384,7 +387,9 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
           !           kc+1 = nzm = number of interfaces, 
           !           kc-1 = number of interior interfaces (excluding surface and bottom)
           ! Also, note that "K" refers to an interface, while "k" refers to the layer below.
-          if (kc >= 2) then
+          ! Need at least 3 layers (2 internal interfaces) to generate a matrix, also
+          ! need number of layers to be greater than the mode number 
+          if (kc >= 5 .and. kc >= ModeNum + 1) then
             ! Set depth at surface
             z_int(1) = 0.0
             ! Calculate Igu, Igl, depth, and N2 at each interior interface 
@@ -400,10 +405,10 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
             z_int(kc+1) = z_int(kc)+Hc(kc)
             ! check that thicknesses sum to total depth
             if (abs(z_int(kc+1)-htot(i,j)) > 1.e-10) then
+              call MOM_error(WARNING, "wave_structure: mismatch in total depths")
               print *, "kc=", kc
               print *, "z_int(kc+1)=", z_int(kc+1)
-              print *, "htot(i,j)=", htot(i,j)
-              call MOM_error(WARNING, "wave_structure: mismatch in total depths")
+              print *, "htot(i,j)=", htot(i,j)              
             endif
 
             ! Populate interior rows of tridiagonal matrix; must multiply through by
@@ -448,9 +453,16 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
             w_strct(2:kc) = e_guess(1:kc-1)
             w_strct(1)    = 0.0 ! rigid lid at surface
             w_strct(kc+1) = 0.0 ! zero-flux at bottom
-            do K=1,kc+1
-              if(isnan(w_strct(K)))then ; print *, "Wave_structure: w_strct(K) is NAN" ; endif
-            enddo
+            
+            ! Check to see if solver worked
+            ig_stop = 0 ; jg_stop = 0
+            if(isnan(sum(w_strct(1:kc+1))))then
+              print *, "Wave_structure: w_strct has a NAN at ig=", ig, ", jg=", jg
+              if(i<G%isc .or. i>G%iec .or. j<G%jsc .or. j>G%jec)then
+                print *, "This is occuring at a halo point."
+              endif
+              ig_stop = ig ; jg_stop = jg
+            endif
             
             ! Normalize vertical structure function of w such that
             ! \int(w_strct)^2dz = a_int (a_int could be any value, e.g., 0.5)
@@ -473,8 +485,9 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
             u_strct(nzm)  = (w_strct(nzm-1)-  w_strct(nzm))/dz(nzm-1)
             
             ! Calculate wavenumber magnitude
-            f2 = 0.25*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
-                (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
+            f2 = G%CoriolisBu(I,J)**2
+            !f2 = 0.25*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
+            !    (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
             Kmag2 = (freq**2 - f2) / (cn(i,j)**2 + cg_subRO**2)
             
             ! Calculate terms in vertically integrated energy equation
@@ -492,7 +505,13 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
             PE_term = 0.25*G%Rho0*( int_N2w2/freq**2 )
             
             ! Back-calculate amplitude from energy equation
-            W0 = sqrt( En(i,j)/(KE_term + PE_term) )
+            if(En(i,j)>=0.0)then
+              W0 = sqrt( En(i,j)/(KE_term + PE_term) )
+            else
+              call MOM_error(WARNING, "wave_structure: En < 0.0; setting to W0 to 0.0")
+              print *, "En(i,j)=", En(i,j), " at ig=", ig, ", jg=", jg
+              W0 = 0.0
+            endif
             
             ! Calculate actual vertical velocity profile and derivative
             W_profile    = W0*w_strct
@@ -508,43 +527,66 @@ subroutine wave_structure(h, tv, G, cn, freq, CS, En, full_halos)
             CS%Uavg_profile(i,j,1:nzm)= Uavg_profile
             CS%z_depths(i,j,1:nzm)    = z_int
             CS%N2(i,j,1:nzm)          = N2
-            CS%num_intfaces(i,j)       = nzm
+            CS%num_intfaces(i,j)      = nzm
             
             !----for debugging; delete later----
-            !print *, "e_guess=", e_guess(1:kc-1)
-            !print *, "|e_guess|=", sqrt(sum(e_guess(1:kc-1)**2))
-            !print *, 'f0=', sqrt(f2)
-            !print *, 'freq=', freq
-            !print *, 'Kh=', sqrt(Kmag2)
-            !print *, 'Wave_structure: z_int(ig,jg)=',   z_int(1:nzm)
-            !print *, 'Wave_structure: N2(ig,jg)=',      N2(1:nzm)
-            !print *, 'gprime=', gprime
-            !print *, '1/Hc=', 1/Hc
-            !print *, 'Wave_structure: a_diag(ig,jg)=',  a_diag(1:kc-1)
-            !print *, 'Wave_structure: b_diag(ig,jg)=',  b_diag(1:kc-1)
-            !print *, 'Wave_structure: c_diag(ig,jg)=',  c_diag(1:kc-1)
-            !print *, 'Wave_structure: lam_z(ig,jg)=',   lam_z(1:kc-1)
-            !print *, 'Wave_structure: w_strct(ig,jg)=', w_strct(1:nzm) !matches MATLAB!!
-            !print *, 'En(i,j)=', En(i,j)
-            !print *, 'Wave_structure: W_profile(ig,jg)=', W_profile(1:nzm)
-            !print *,'int_dwdz2 =',int_dwdz2
-            !print *,'int_w2 =',int_w2
-            !print *,'int_N2w2 =',int_N2w2
-            !print *,'KEterm=',KE_term
-            !print *,'PEterm=',PE_term
-            !print *, 'W0=',W0
-            !print *,'Uavg_profile=',Uavg_profile
-            !open(unit=1,file='out_N2',form='formatted') ; write(1,*) N2 ; close(1)
-            !open(unit=2,file='out_z',form='formatted') ;  write(2,*) z_int ; close(2)
+            !if(ig .eq. ig_stop .and. jg .eq. jg_stop) then
+              !print *, 'cn(ig,jg)=', cn(i,j)
+              !print *, "e_guess=", e_guess(1:kc-1)
+              !print *, "|e_guess|=", sqrt(sum(e_guess(1:kc-1)**2))
+              !print *, 'f0=', sqrt(f2)
+              !print *, 'freq=', freq
+              !print *, 'Kh=', sqrt(Kmag2)
+              !print *, 'Wave_structure: z_int(ig,jg)=',   z_int(1:nzm)
+              !print *, 'Wave_structure: N2(ig,jg)=',      N2(1:nzm)
+              !print *, 'gprime=', gprime(1:nzm)
+              !print *, '1/Hc=', 1/Hc
+              !print *, 'Wave_structure: a_diag(ig,jg)=',  a_diag(1:kc-1)
+              !print *, 'Wave_structure: b_diag(ig,jg)=',  b_diag(1:kc-1)
+              !print *, 'Wave_structure: c_diag(ig,jg)=',  c_diag(1:kc-1)
+              !print *, 'Wave_structure: lam_z(ig,jg)=',   lam_z(1:kc-1)
+              !print *, 'Wave_structure: w_strct(ig,jg)=', w_strct(1:nzm)
+              !print *, 'En(i,j)=', En(i,j)
+              !print *, 'Wave_structure: W_profile(ig,jg)=', W_profile(1:nzm)
+              !print *,'int_dwdz2 =',int_dwdz2
+              !print *,'int_w2 =',int_w2
+              !print *,'int_N2w2 =',int_N2w2
+              !print *,'KEterm=',KE_term
+              !print *,'PEterm=',PE_term
+              !print *, 'W0=',W0
+              !print *,'Uavg_profile=',Uavg_profile(1:nzm)
+              !open(unit=1,file='out_N2',form='formatted') ; write(1,*) N2 ; close(1)
+              !open(unit=2,file='out_z',form='formatted') ;  write(2,*) z_int ; close(2)
+            !endif
             !-----------------------------------
  
-          endif  ! kc >= 2?
+          else
+            ! If not enough layers, default to zero
+            nzm = kc+1
+            CS%w_strct(i,j,1:nzm)     = 0.0
+            CS%u_strct(i,j,1:nzm)     = 0.0
+            CS%W_profile(i,j,1:nzm)   = 0.0
+            CS%Uavg_profile(i,j,1:nzm)= 0.0
+            CS%z_depths(i,j,1:nzm)    = 0.0 ! could use actual values
+            CS%N2(i,j,1:nzm)          = 0.0 ! could use with actual values
+            CS%num_intfaces(i,j)       = nzm
+          endif  ! kc >= 3 and kc > ModeNum + 1?
         endif ! drxh_sum >= 0?
       !else     ! if at test point - delete later
       !  return ! if at test point - delete later
       !endif    ! if at test point - delete later
       endif ! mask2dT > 0.5?
-    enddo ! i-loop
+    else
+      ! if cn=0.0, default to zero
+      nzm                       = nz+1! could use actual values
+      CS%w_strct(i,j,1:nzm)     = 0.0
+      CS%u_strct(i,j,1:nzm)     = 0.0
+      CS%W_profile(i,j,1:nzm)   = 0.0
+      CS%Uavg_profile(i,j,1:nzm)= 0.0
+      CS%z_depths(i,j,1:nzm)    = 0.0 ! could use actual values
+      CS%N2(i,j,1:nzm)          = 0.0 ! could use with actual values
+      CS%num_intfaces(i,j)       = nzm
+    endif ; enddo ! if cn>0.0? ; i-loop
   enddo ! j-loop
   
 end subroutine wave_structure
@@ -599,18 +641,18 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
     do k=2,nrow-1
       c_prime(k) = c(k)/(b(k)-a(k)*c_prime(k-1))
     enddo
-    print *, 'c_prime=', c_prime(1:nrow)
+    !print *, 'c_prime=', c_prime(1:nrow)
     do k=2,nrow
       y_prime(k) = (y(k)-a(k)*y_prime(k-1))/(b(k)-a(k)*c_prime(k-1))
     enddo
-    print *, 'y_prime=', y_prime(1:nrow)
+    !print *, 'y_prime=', y_prime(1:nrow)
     x(nrow) = y_prime(nrow)
 
     ! Backward sweep
     do k=nrow-1,1,-1
       x(k) = y_prime(k)-c_prime(k)*x(k+1)
     enddo
-    print *, 'x=',x(1:nrow)
+    !print *, 'x=',x(1:nrow)
     
     ! Check results - delete later
     !do j=1,nrow ; do i=1,nrow
@@ -659,7 +701,12 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
       y_prime(k) = beta*(y(k)+alpha(k-1)*y_prime(k-1))
       Q_prime = beta*(h(k)+alpha(k-1)*Q_prime)
     enddo
-    beta = 1/(h(nrow)+alpha(nrow-1)*Q_prime+alpha(nrow))
+    if((h(nrow)+alpha(nrow-1)*Q_prime+alpha(nrow)) == 0.0)then
+      call MOM_error(WARNING, "Tridiag_solver: this system is not stable; overriding beta(nrow).")
+      beta = 1/(1e-15) ! place holder for unstable systems - delete later
+    else
+      beta = 1/(h(nrow)+alpha(nrow-1)*Q_prime+alpha(nrow))
+    endif    
     y_prime(nrow) = beta*(y(nrow)+alpha(nrow-1)*y_prime(nrow-1))
     x(nrow) = y_prime(nrow)
     ! Backward sweep
@@ -716,7 +763,7 @@ subroutine wave_structure_init(Time, G, param_file, diag, CS)
   allocate(CS%Uavg_profile(isd:ied,jsd:jed,nz+1))
   allocate(CS%z_depths(isd:ied,jsd:jed,nz+1))
   allocate(CS%N2(isd:ied,jsd:jed,nz+1))
-  allocate(CS%num_intfaces(isd:ied,jsd:jed))   
+  allocate(CS%num_intfaces(isd:ied,jsd:jed))
 
   ! Write all relevant parameters to the model log.
   call log_version(param_file, mod, version, "")
