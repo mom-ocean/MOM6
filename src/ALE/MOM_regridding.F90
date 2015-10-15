@@ -274,8 +274,7 @@ subroutine check_remapping_grid( G, h, dzInterface, msg )
   ! Local variables
   integer :: i, j
 
-!$OMP parallel do default(none) shared(G,nz,h,dzInterface,eps) &
-!$OMP                          private(totalHold,zOld,totalHnewF,zNewF,hNewF)
+!$OMP parallel do default(none) shared(G,h,dzInterface,msg)
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
       if (G%mask2dT(i,j)>0.) call check_grid_column( G%ke, G%bathyT(i,j), h(i,j,:), dzInterface(i,j,:), msg )

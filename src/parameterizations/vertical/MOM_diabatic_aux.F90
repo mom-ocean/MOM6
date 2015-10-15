@@ -900,7 +900,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,h,tv,nsw,G,optics,fluxes,dt,       &
 !$OMP                                  H_limit_fluxes,use_riverHeatContent,              &
 !$OMP                                  useCalvingHeatContent,ea,IforcingDepthScale,      &
-!$OMP                                  numberOfGroundings,iGround,jGround,               &
+!$OMP                                  numberOfGroundings,iGround,jGround,nonPenSW,      &
 !$OMP                                  hGrounding,CS,Idt,aggregate_FW_forcing,           &
 !$OMP                                  calculate_energetics,dSV_dT,dSV_dS,cTKE,g_Hconv2) &
 !$OMP                          private(opacityBand,h2d,T2d,netMassInOut,netMassOut,      &

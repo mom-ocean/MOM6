@@ -313,6 +313,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
 !$OMP                          private(dtKd,dtKd_int,do_i,Ent_bl,dtKd_kb,h_bl,     &
 !$OMP                                  I2p2dsp1_ds,grats,htot,max_eakb,I_dSkbp1,   &
 !$OMP                                  zeros,maxF_kb,maxF,ea_kbp1,eakb,Sref,       &
+!$OMP                                  maxF_correct,do_any,                        &
 !$OMP                                  err_min_eakb0,err_max_eakb0,eakb_maxF,      &
 !$OMP                                  min_eakb,err_eakb0,F,minF,hm,fk,F_kb_maxent,&
 !$OMP                                  F_kb,is1,ie1,kb_min_act,dFdfm_kb,b1,dFdfm,  &
