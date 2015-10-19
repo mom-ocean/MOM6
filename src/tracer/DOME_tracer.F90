@@ -191,13 +191,13 @@ function register_DOME_tracer(G, param_file, CS, diag, tr_Reg, &
     ! Register the tracer for the restart file.
     call register_restart_field(tr_ptr, CS%tr_desc(m),.true.,restart_CS)
     ! Register the tracer for horizontal advection & diffusion.
-    call register_tracer(tr_ptr, CS%tr_desc(m)%name, param_file, tr_Reg)
+    call register_tracer(tr_ptr, name, param_file, tr_Reg)
 
     !   Set coupled_tracers to be true (hard-coded above) to provide the surface
     ! values to the coupler (if any).  This is meta-code and its arguments will
     ! currently (deliberately) give fatal errors if it is used.
     if (CS%coupled_tracers) &
-      CS%ind_tr(m) = aof_set_coupler_flux(trim(CS%tr_desc(m)%name)//'_flux', &
+      CS%ind_tr(m) = aof_set_coupler_flux(trim(name)//'_flux', &
           flux_type=' ', implementation=' ', caller="register_DOME_tracer")
   enddo
 
@@ -267,7 +267,8 @@ subroutine initialize_DOME_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
         call MOM_error(FATAL, "DOME_initialize_tracer: Unable to open "// &
                         CS%tracer_IC_file)
       do m=1,NTR
-        call read_data(CS%tracer_IC_file, trim(CS%tr_desc(m)%name), &
+        call query_vardesc(CS%tr_desc(m), name, caller="initialize_DOME_tracer")
+        call read_data(CS%tracer_IC_file, trim(name), &
                        CS%tr(:,:,:,m), domain=G%Domain%mpp_domain)
       enddo
     else
@@ -348,22 +349,24 @@ subroutine initialize_DOME_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
   endif
 
   if (associated(OBC)) then
+    call query_vardesc(CS%tr_desc(1), name, caller="initialize_DOME_tracer")
     if (OBC%apply_OBC_v) then
       allocate(OBC_tr1_v(G%isd:G%ied,G%jsd:G%jed,nz))
       do k=1,nz ; do j=G%jsd,G%jed ; do i=G%isd,G%ied
         if (k < nz/2) then ; OBC_tr1_v(i,j,k) = 0.0
         else ; OBC_tr1_v(i,j,k) = 1.0 ; endif
       enddo ; enddo ; enddo
-      call add_tracer_OBC_values(trim(CS%tr_desc(1)%name), CS%tr_Reg, &
+      call add_tracer_OBC_values(trim(name), CS%tr_Reg, &
                                  0.0, OBC_in_v=OBC_tr1_v)
     else
       ! This is not expected in the DOME example.
-      call add_tracer_OBC_values(trim(CS%tr_desc(1)%name), CS%tr_Reg, 0.0)
+      call add_tracer_OBC_values(trim(name), CS%tr_Reg, 0.0)
     endif
     ! All tracers but the first have 0 concentration in their inflows. As this
     ! is the default value, the following calls are unnecessary.
     do m=2,NTR
-      call add_tracer_OBC_values(trim(CS%tr_desc(m)%name), CS%tr_Reg, 0.0)
+      call query_vardesc(CS%tr_desc(m), name, caller="initialize_DOME_tracer")
+      call add_tracer_OBC_values(trim(name), CS%tr_Reg, 0.0)
     enddo
   endif
 

@@ -1140,7 +1140,7 @@ subroutine MOM_diag_to_Z_end(CS)
 
 end subroutine MOM_diag_to_Z_end
 
-function ocean_register_diag_with_z (tr_ptr, vardesc_tr, G, Time, CS)
+function ocean_register_diag_with_z(tr_ptr, vardesc_tr, G, Time, CS)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), target, intent(in) :: tr_ptr
   type(vardesc),                                 intent(in) :: vardesc_tr
   type(ocean_grid_type),                         intent(in) :: G
@@ -1157,6 +1157,7 @@ function ocean_register_diag_with_z (tr_ptr, vardesc_tr, G, Time, CS)
 !  (in)      CS         - control struct returned by a previous call to diagnostics_init
 
   type(vardesc) :: vardesc_z
+  character(len=64) :: var_name         ! A variable's name.
   integer :: isd, ied, jsd, jed, nk, m, id_test
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nk = G%ke
   if (.not.associated(CS)) call MOM_error(FATAL, &
@@ -1193,8 +1194,9 @@ function ocean_register_diag_with_z (tr_ptr, vardesc_tr, G, Time, CS)
   else
 ! There is no depth-space target file but warn if a diag_table entry is
 ! present.
+    call query_vardesc(vardesc_z, name=var_name, caller="ocean_register_diag_with_z")
     if (CS%id_tr(m)>0) call MOM_error(WARNING, &
-        "ocean_register_diag_with_z: "//trim(vardesc_z%name)// &
+        "ocean_register_diag_with_z: "//trim(var_name)// &
         " cannot be output without an appropriate depth-space target file.")
   endif
 
@@ -1213,8 +1215,8 @@ function register_Z_diag(var_desc, CS, day, missing)
   character(len=8) :: hor_grid, z_grid  ! Variable grid info.
   type(axesType) :: axes
 
-  call query_vardesc(var_desc, units=units, longname=longname, hor_grid=hor_grid, &
-                     z_grid=z_grid, caller="register_Zint_diag")
+  call query_vardesc(var_desc, name=var_name, units=units, longname=longname, &
+                     hor_grid=hor_grid, z_grid=z_grid, caller="register_Zint_diag")
 
   ! Use the hor_grid and z_grid components of vardesc to determine the 
   ! desired axes to register the diagnostic field for.
@@ -1265,8 +1267,8 @@ function register_Zint_diag(var_desc, CS, day)
   character(len=8) :: hor_grid          ! Variable grid info.
   type(axesType) :: axes
 
-  call query_vardesc(var_desc, units=units, longname=longname, hor_grid=hor_grid, &
-                     caller="register_Zint_diag")
+  call query_vardesc(var_desc, name=var_name, units=units, longname=longname, &
+                     hor_grid=hor_grid, caller="register_Zint_diag")
 
   if (CS%nk_zspace < 0) then
     register_Zint_diag = -1 ; return
