@@ -91,6 +91,7 @@ use MOM_lateral_mixing_coeffs, only : calc_resoln_function, VarMix_CS
 use MOM_MEKE,                  only : MEKE_init, MEKE_alloc_register_restart, step_forward_MEKE, MEKE_CS
 use MOM_MEKE_types,            only : MEKE_type
 use MOM_mixed_layer_restrat,   only : mixedlayer_restrat, mixedlayer_restrat_init, mixedlayer_restrat_CS
+use MOM_neutral_diffusion,     only : neutral_diffusion_CS, neutral_diffusion_diag_init
 use MOM_obsolete_diagnostics,  only : register_obsolete_diagnostics
 use MOM_open_boundary,         only : Radiation_Open_Bdry_Conds, open_boundary_init
 use MOM_PressureForce,         only : PressureForce, PressureForce_init, PressureForce_CS
@@ -307,6 +308,7 @@ type, public :: MOM_control_struct
   type(tracer_registry_type),    pointer :: tracer_Reg             => NULL()
   type(tracer_advect_CS),        pointer :: tracer_adv_CSp         => NULL()
   type(tracer_hor_diff_CS),      pointer :: tracer_diff_CSp        => NULL()
+  type(neutral_diffusion_CS),    pointer :: neutral_diffusion_CSp  => NULL()
   type(tracer_flow_control_CS),  pointer :: tracer_flow_CSp        => NULL()
   type(diagnostics_CS),          pointer :: diagnostics_CSp        => NULL()
   type(diag_to_Z_CS),            pointer :: diag_to_Z_CSp          => NULL()
@@ -1788,7 +1790,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   endif
 
   call tracer_advect_init(Time, G, param_file, diag, CS%tracer_adv_CSp)
-  call tracer_hor_diff_init(Time, G, param_file, diag, CS%tracer_diff_CSp)
+  call tracer_hor_diff_init(Time, G, param_file, diag, CS%tracer_diff_CSp, CS%neutral_diffusion_CSp)
 
   call register_diags(Time, G, CS, CS%ADp)
 
@@ -1828,6 +1830,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call cpu_clock_end(id_clock_pass_init)
 
   call register_obsolete_diagnostics(param_file, CS%diag)
+  call neutral_diffusion_diag_init(Time, G, diag, CS%tv%C_p, CS%tracer_Reg, CS%neutral_diffusion_CSp)
 
   call write_static_fields(G, CS%diag)
   call callTree_waypoint("static fields written (initialize_MOM)")
