@@ -489,7 +489,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     call create_group_pass(CS%pass_T_S_h, h, G%Domain)
   endif
 
-  if (CS%adiabatic .AND. CS%use_temperature) then
+  if ((CS%adiabatic .OR. CS%diabatic_first) .AND. CS%use_temperature) then
     call create_group_pass(CS%pass_T_S, CS%tv%T, G%Domain)
     call create_group_pass(CS%pass_T_S, CS%tv%S, G%Domain)
   endif
@@ -591,6 +591,14 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       ! This is here so that CS%visc is updated before diabatic() when 
       ! DIABATIC_FIRST=True. Otherwise diabatic() is called after the dynamics
       ! and set_viscous_BBL is called as a part of the dynamic stepping.
+
+      if (CS%debug) then
+        call uchksum(u,"Pre set_viscous_BBL u", G, haloshift=1)
+        call vchksum(v,"Pre set_viscous_BBL v", G, haloshift=1)
+        call hchksum(h*G%H_to_m,"Pre set_viscous_BBL h", G, haloshift=1)
+        if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Pre set_viscous_BBL T", G, haloshift=1)
+        if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Pre set_viscous_BBL S", G, haloshift=1)
+      endif
 
       !call cpu_clock_begin(id_clock_vertvisc)
       call set_viscous_BBL(u, v, h, CS%tv, CS%visc, G, CS%set_visc_CSp)
@@ -1013,7 +1021,14 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
         if (showCallTree) call callTree_waypoint("finished adiabatic (step_MOM)")
 
-      endif ; endif ! close of "if (.not.CS%diabatic_first) then ; if (.not.CS%adiabatic)" 
+      endif ; else  !  "else branch for if (.not.CS%diabatic_first) then"
+        ! Tracers have been advected and diffused, and need halo updates.
+        if (CS%use_temperature) then
+          call cpu_clock_begin(id_clock_pass)
+          call do_group_pass(CS%pass_T_S, G%Domain)
+          call cpu_clock_end(id_clock_pass)
+        endif
+      endif ! close of "if (.not.CS%diabatic_first) then ; if (.not.CS%adiabatic)" 
 
       call cpu_clock_end(id_clock_thermo)
 
