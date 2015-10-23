@@ -54,7 +54,7 @@ use MOM_error_handler,       only : callTree_enter, callTree_leave, callTree_way
 use MOM_file_parser,         only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type,        only : forcing, optics_type
 use MOM_grid,                only : ocean_grid_type
-use MOM_internal_tides,      only : int_tide_CS, sum_itidal_lowmode_loss !BDM
+use MOM_internal_tides,      only : int_tide_CS, get_itidal_loss !BDM
 use MOM_intrinsic_functions, only : invcosh
 use MOM_io,                  only : slasher, vardesc
 use MOM_kappa_shear,         only : calculate_kappa_shear, kappa_shear_init, Kappa_shear_CS
@@ -1897,6 +1897,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
   real :: Izeta_lee     ! inverse of TKE decay scale for lee waves (1/meter)
   real :: z0_psl        ! temporary variable with units of meter
   real :: TKE_lowmode_tot ! TKE from all low modes (W/m2) (BDM)
+  
 
   logical :: use_Polzin, use_Simmons
   integer :: i, k, is, ie, nz
@@ -2038,10 +2039,10 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
       TKE_Niku_bot(i) = (I_rho0 * CS%Mu_itides * CS%Gamma_lee) * CS%TKE_Niku(i,j)
     endif
     ! Dissipation of propagating internal tide (baroclinic low modes; rays) (BDM)
-    TKE_lowmode_tot = 0.0
+    TKE_lowmode_tot    = 0.0
     TKE_lowmode_bot(i) = 0.0
     if (CS%Lowmode_itidal_dissipation) then
-      call sum_itidal_lowmode_loss(i,j,CS%int_tide_CSp,G,TKE_lowmode_tot)
+      call get_itidal_loss(i,j,G,CS%int_tide_CSp,"WaveDrag",TKE_lowmode_tot)
       TKE_lowmode_bot(i) = (I_rho0 * CS%Mu_itides * CS%Gamma_itides) * TKE_lowmode_tot
     endif
     ! Vertical energy flux at bottom
