@@ -35,6 +35,7 @@ use MOM_checksums, only : hchksum
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
+use MOM_io, only : vardesc, query_vardesc
 
 implicit none ; private
 
@@ -46,8 +47,8 @@ public tracer_vertdiff, tracer_registry_end
 
 type, public :: tracer_type
   real, dimension(:,:,:), pointer :: t => NULL()
-                     ! The array containing the tracer concentration.
-  real :: OBC_inflow_conc = 0.0  ! A tracer concentration for generic inflows.
+                     !< The array containing the tracer concentration.
+  real :: OBC_inflow_conc = 0.0  !< A tracer concentration for generic inflows.
   real, dimension(:,:,:), pointer :: OBC_in_u => NULL(), OBC_in_v => NULL()
              ! These arrays contain structured values for flow into the domain
              ! that are specified in open boundary conditions through u- and
@@ -62,7 +63,8 @@ type, public :: tracer_type
   real, dimension(:,:), pointer :: df2d_x => NULL(), df2d_y => NULL()
              ! The arrays in which vertically summed x- & y- diffusive fluxes
              ! are stored in units of CONC m3 s-1..
-  character(len=32) :: name  ! A tracer name for error messages.
+  character(len=32) :: name !< A tracer name for error messages.
+  type(vardesc), pointer :: vd => NULL()  !< A structure with metadata describing this tracer.
 end type tracer_type
 
 type, public :: tracer_registry_type
@@ -74,13 +76,14 @@ end type tracer_registry_type
 
 contains
 
-subroutine register_tracer(tr1, name, param_file, Reg, ad_x, ad_y, &
+subroutine register_tracer(tr1, tr_desc, param_file, Reg, tr_desc_ptr, ad_x, ad_y, &
                            df_x, df_y, OBC_inflow, OBC_in_u, OBC_in_v, &
                            ad_2d_x, ad_2d_y, df_2d_x, df_2d_y)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), target :: tr1
-  character(len=*), intent(in)               :: name
+  type(vardesc), intent(in)                  :: tr_desc
   type(param_file_type), intent(in)          :: param_file
   type(tracer_registry_type), pointer        :: Reg
+  type(vardesc), target, optional            :: tr_desc_ptr
   real, pointer, dimension(:,:,:), optional  :: ad_x, ad_y, df_x, df_y
   real, intent(in), optional                 :: OBC_inflow
   real, pointer, dimension(:,:,:), optional  :: OBC_in_u, OBC_in_v
@@ -89,10 +92,16 @@ subroutine register_tracer(tr1, name, param_file, Reg, ad_x, ad_y, &
 ! diffused.
 
 ! Arguments: tr1 - The pointer to the tracer, in arbitrary concentration units (CONC).
-!  (in)      name - The name to be used in messages about the tracer.
+!  (in)      tr_desc - A structure with metadata about the tracer, including its name.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in/out)  Reg - A pointer to the tracer registry.
+!  (in)      tr_desc_ptr - A target that can be used to set a pointer to the
+!                   stored value of tr%tr_desc.  This target must be an
+!                   enduring part of the control structure, because the tracer
+!                   registry will use this memory, but it also means that any
+!                   updates to this structure in the calling module will be
+!                   available subsequently to the tracer registry.
 !  (in)      ad_x - An array in which zonal advective fluxes are stored in
 !                   units of CONC m3 s-1.
 !  (in)      ad_y - An array in which meridional advective fluxes are stored
@@ -131,7 +140,13 @@ subroutine register_tracer(tr1, name, param_file, Reg, ad_x, ad_y, &
   Reg%ntr = Reg%ntr + 1
   ntr = Reg%ntr
 
-  Reg%Tr(ntr)%name = trim(name)
+  if (present(tr_desc_ptr)) then
+    Reg%Tr(ntr)%vd => tr_desc_ptr
+  else
+    allocate(Reg%Tr(ntr)%vd) ; Reg%Tr(ntr)%vd = tr_desc
+  endif
+
+  call query_vardesc(Reg%Tr(ntr)%vd, name=Reg%Tr(ntr)%name)
   Reg%Tr(ntr)%t => tr1
 
   if (present(ad_x)) then ; if (associated(ad_x)) Reg%Tr(ntr)%ad_x => ad_x ; endif

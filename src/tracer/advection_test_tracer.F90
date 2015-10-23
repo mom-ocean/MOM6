@@ -209,7 +209,8 @@ function register_advection_test_tracer(G, param_file, CS, diag, tr_Reg, &
     ! Register the tracer for the restart file.
     call register_restart_field(tr_ptr, CS%tr_desc(m), .true., restart_CS)
     ! Register the tracer for horizontal advection & diffusion.
-    call register_tracer(tr_ptr, name, param_file, tr_Reg)
+    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, tr_Reg, &
+                         tr_desc_ptr=CS%tr_desc(m))
 
     !   Set coupled_tracers to be true (hard-coded above) to provide the surface
     ! values to the coupler (if any).  This is meta-code and its arguments will

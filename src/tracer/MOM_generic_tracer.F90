@@ -240,7 +240,7 @@ contains
 
        !nnz: Hard coded stuff. Need get/set routines
        vdesc = var_desc(g_tracer_name, units, longname, &
-                           caller="MOM_generic_tracer")
+                        caller="MOM_generic_tracer")
        !!nnz: MOM field is 3D. Does this affect performance? Need it be override field?
        tr_ptr => tr_field(:,:,:,1)
        ! Register tracer for restart file.
@@ -250,8 +250,12 @@ contains
        ! initialization code if not found in restart
        call register_restart_field(tr_ptr, vdesc, .not.CS%tracers_may_reinit, restart_CS)
 
-       ! Register prognastic tracer for horizontal advection & diffusion.
-       if(g_tracer_is_prog(g_tracer)) call register_tracer(tr_ptr, g_tracer_name, param_file, tr_Reg)
+       ! Register prognastic tracer for horizontal advection & diffusion. Note
+       ! that because the generic tracer code uses only a temporary copy of
+       ! the vardesc type, a pointer to this type can not be set as a target
+       ! for register_tracer to use.
+       if (g_tracer_is_prog(g_tracer)) &
+         call register_tracer(tr_ptr, vdesc, param_file, tr_Reg)
 
        !traverse the linked list till hit NULL
        call g_tracer_get_next(g_tracer, g_tracer_next)

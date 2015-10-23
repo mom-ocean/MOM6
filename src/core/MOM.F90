@@ -220,6 +220,10 @@ type, public :: MOM_control_struct
     p_surf_begin => NULL(), & !< surface pressure (Pa) at start of step_MOM_dyn_...
     p_surf_end   => NULL()    !< surface pressure (Pa) at end   of step_MOM_dyn_... 
 
+  type(vardesc) :: &
+    vd_T, &   !< A vardesc array describing the potential temperature tracer.
+    vd_S      !< A vardesc array describing the salinity tracer.
+
   real, pointer, dimension(:,:,:) :: &  !< arrays with advective/diffusive tracer fluxes
     T_adx => NULL(), T_ady => NULL(), T_diffx => NULL(), T_diffy => NULL(), &
     S_adx => NULL(), S_ady => NULL(), S_diffx => NULL(), S_diffy => NULL()
@@ -1582,8 +1586,10 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     ALLOC_(CS%T(isd:ied,jsd:jed,nz))   ; CS%T(:,:,:) = 0.0
     ALLOC_(CS%S(isd:ied,jsd:jed,nz))   ; CS%S(:,:,:) = 0.0
     CS%tv%T => CS%T ; CS%tv%S => CS%S
-    call register_tracer(CS%tv%T, "T", param_file, CS%tracer_Reg)
-    call register_tracer(CS%tv%S, "S", param_file, CS%tracer_Reg)
+    CS%vd_T = var_desc("T", "degC", "Potential Temperature") 
+    CS%vd_S = var_desc("S", "PPT", "Salinity") 
+    call register_tracer(CS%tv%T, CS%vd_T, param_file, CS%tracer_Reg, CS%vd_T)
+    call register_tracer(CS%tv%S, CS%vd_S, param_file, CS%tracer_Reg, CS%vd_S)
   endif
   if (CS%use_frazil) then
     allocate(CS%tv%frazil(isd:ied,jsd:jed)) ; CS%tv%frazil(:,:) = 0.0

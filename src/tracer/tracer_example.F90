@@ -185,9 +185,10 @@ function USER_register_tracer_example(G, param_file, CS, diag, tr_Reg, &
     ! calls.  Curses on the designers and implementers of Fortran90.
     tr_ptr => CS%tr(:,:,:,m)
     ! Register the tracer for the restart file.
-    call register_restart_field(tr_ptr, CS%tr_desc(m),.true.,restart_CS)
+    call register_restart_field(tr_ptr, CS%tr_desc(m), .true., restart_CS)
     ! Register the tracer for horizontal advection & diffusion.
-    call register_tracer(tr_ptr, name, param_file, tr_Reg)
+    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, tr_Reg, &
+                         tr_desc_ptr=CS%tr_desc(m))
 
     !   Set coupled_tracers to be true (hard-coded above) to provide the surface
     ! values to the coupler (if any).  This is meta-code and its arguments will
