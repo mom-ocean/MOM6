@@ -756,8 +756,13 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
 
             ! As a starting guess, take the minimum of a false position estimate
             ! and a Newton's method estimate starting from Kddt_h = 0.0.
-            Kddt_h_guess = tot_TKE * min( Kddt_h_max / (PE_chg_g0 - MKE_src), &
-                                1.0 / (dPEc_dKd_Kd0 - dMKE_max * MKE2_Hharm) )
+            Kddt_h_guess = tot_TKE * Kddt_h_max / max( PE_chg_g0 - MKE_src, &
+                               Kddt_h_max * (dPEc_dKd_Kd0 - dMKE_max * MKE2_Hharm) )
+            ! The above expression is mathematically the same as the following
+            ! except it is not susceptible to division by zero when
+            !   dPEc_dKd_Kd0 = dMKE_max = 0 .
+            !  Kddt_h_guess = tot_TKE * min( Kddt_h_max / (PE_chg_g0 - MKE_src), &
+            !                      1.0 / (dPEc_dKd_Kd0 - dMKE_max * MKE2_Hharm) )
             if (debug) then
               TKE_left_itt(:) = 0.0 ; dPEa_dKd_itt(:) = 0.0 ; PE_chg_itt(:) = 0.0
               MKE_src_itt(:) = 0.0 ; Kddt_h_itt(:) = 0.0
