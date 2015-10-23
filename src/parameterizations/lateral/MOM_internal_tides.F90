@@ -111,13 +111,16 @@ type, public :: int_tide_CS ; private
                         ! energy lost due to misc background processes [W m-2] (BDM)
   real, allocatable, dimension(:,:,:,:,:) :: TKE_quad_loss
                         ! energy lost due to quadratic bottom drag [W m-2] (BDM)
+  real, allocatable, dimension(:,:,:,:,:) :: TKE_Froude_loss
+                        ! energy lost due to wave breaking [W m-2] (BDM)
   real, allocatable, dimension(:,:) :: TKE_itidal_loss_fixed
                         ! fixed part of the energy lost due to small-scale drag
                         ! [kg m-2] here; will be multiplied by N and En to get 
                         ! into [W m-2] (BDM)
   real, allocatable, dimension(:,:,:,:,:) :: TKE_itidal_loss
                         ! energy lost due to small-scale wave drag [W m-2] (BDM)
-  real, allocatable, dimension(:,:) :: tot_leak_loss, tot_quad_loss, tot_itidal_loss
+  real, allocatable, dimension(:,:) :: tot_leak_loss, tot_quad_loss, &
+                                       tot_itidal_loss, tot_Froude_loss
                         ! energy loss rates summed over angle, freq, and mode (BDM)
   real :: q_itides      ! fraction of local dissipation (nondimensional) (BDM)
   real :: En_sum        ! global sum of energy for use in debugging (BDM)    
@@ -135,6 +138,8 @@ type, public :: int_tide_CS ; private
   logical :: apply_wave_drag 
                         ! If true, apply scattering due to small-scale 
                         ! roughness as a sink.
+  logical :: apply_Froude_drag 
+                        ! If true, apply wave breaking as a sink.
   real, dimension(:,:,:,:,:), pointer :: &
     En                  ! The internal wave energy density as a function of
                         ! (i,j,angle,frequency,mode)
@@ -164,7 +169,8 @@ type, public :: int_tide_CS ; private
   integer :: id_tot_En = -1, &
              id_tot_leak_loss = -1, &
              id_tot_quad_loss = -1, &
-             id_tot_itidal_loss = -1
+             id_tot_itidal_loss = -1, &
+             id_tot_Froude_loss = -1
   ! Diag handles considering: all modes & freqs; summed over angles
   integer, allocatable, dimension(:,:) :: &
              id_En_mode, &
@@ -216,9 +222,10 @@ subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, 
     flux_heat_y, &
     flux_prec_y
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    tot_En, tot_leak_loss, tot_quad_loss, tot_itidal_loss, &
+    tot_En, tot_leak_loss, tot_quad_loss, tot_itidal_loss, tot_Froude_loss, &
     drag_scale, Ub_mode_1, TKE_loss_mode_1
-  real :: frac_per_sector, f2, I_rho0, I_D_here
+  real :: frac_per_sector, f2, I_rho0, I_D_here, freq2, Ifreq
+  real :: speed, Umax, loss_rate
   
   integer :: a, m, fr, i, j, is, ie, js, je, isd, ied, jsd, jed, nAngle, nzm
   integer :: isd_g, jsd_g         ! start indices on data domain but referenced 
@@ -348,13 +355,20 @@ subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, 
     enddo ; enddo ; enddo ; enddo ; enddo
   endif  
   
-  ! Extract the energy for mixing due to scattering
-  if (CS%apply_wave_drag) then
+  ! Extract the energy for mixing due to scattering (wave-drag)
+  ! still need to allow a portion of the extracted energy to go to higher modes.
+  ! First, finde velocity profiles
+  if (CS%apply_wave_drag .or. CS%apply_Froude_drag) then
     ! Calculate modal structure
     do m=1,CS%NMode ; do fr=1,CS%Nfreq
       call wave_structure(h, tv, G, c1(:,:,m), m, CS%frequency(fr), &
                           CS%wave_structure_CSp, tot_En_mode(:,:,fr,m), full_halos=.true.)
-      ! Pick out near-bottom baroclinic velocity values
+    enddo ; enddo
+  endif
+  ! Next, find near-bottom velocity and apply loss
+  if (CS%apply_wave_drag) then
+    ! Pick out near-bottom baroclinic velocity values
+    do m=1,CS%NMode ; do fr=1,CS%Nfreq
       do j=jsd,jed ; do i=isd,ied
         !id_g = G%isd_global + i - 1.0
         !jd_g = G%jsd_global + j - 1.0
@@ -393,6 +407,34 @@ subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, 
     enddo ; enddo    
   endif
   
+  ! Extract the energy for mixing due to wave breaking
+  ! --need to add Fr-based breaking scheme here--
+  if (CS%apply_Froude_drag) then
+    ! Pick out maximum baroclinic velocity values; calculate Fr=max(u)/cg
+    do m=1,CS%NMode ; do fr=1,CS%Nfreq
+      freq2 = CS%frequency(fr)**2
+      Ifreq = 1/CS%frequency(fr)
+      do j=jsd,jed ; do i=isd,ied
+        ! Calculate horizontal group velocity magnitudes
+        f2 = 0.25*(G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J)**2 + &
+                 G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J-1)**2 )
+        speed = c1(i,j,m) * sqrt(max(freq2 - f2, 0.0)) * Ifreq
+        ! Calculate decay rate (s-1); this is an aribitrary place holder for now
+        I_D_here = 1.0 / max(G%bathyT(i,j), 1.0)
+        loss_rate = 0.001*sqrt(max(0.0,tot_En(i,j) * I_rho0 * I_D_here)) * I_D_here
+        nzm = CS%wave_structure_CSp%num_intfaces(i,j)
+        Umax = maxval(CS%wave_structure_CSp%Uavg_profile(i,j,1:nzm))
+        ! Dissipate energy if Fr>1; done here with an arbitrary time scale
+        if (Umax > speed) then
+          ! Calculate loss rate and apply loss over the time step ; apply the same drag timescale
+          ! to each En component (technically not correct; fix later)
+          CS%TKE_Froude_loss(i,j,a,fr,m)  = CS%En(i,j,a,fr,m) * loss_rate ! loss rate
+          CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) / (1.0 + dt * loss_rate)   ! implicit update
+        endif
+      enddo ; enddo
+    enddo ; enddo
+  endif
+  
   ! Check for energy conservation on computational domain (BDM)
   do m=1,CS%NMode ; do fr=1,CS%Nfreq
     !print *, 'sum_En: mode(',m,'), freq(',fr,'):'
@@ -429,14 +471,17 @@ subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, 
     tot_leak_loss(:,:)   = 0.0
     tot_quad_loss(:,:)   = 0.0
     tot_itidal_loss(:,:) = 0.0
+    tot_Froude_loss(:,:) = 0.0
     do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle ; do j=js,je ; do i=is,ie
       tot_leak_loss(i,j)   = tot_leak_loss(i,j)   + CS%TKE_leak_loss(i,j,a,fr,m)
       tot_quad_loss(i,j)   = tot_quad_loss(i,j)   + CS%TKE_quad_loss(i,j,a,fr,m)
       tot_itidal_loss(i,j) = tot_itidal_loss(i,j) + CS%TKE_itidal_loss(i,j,a,fr,m)
+      tot_Froude_loss(i,j) = tot_Froude_loss(i,j) + CS%TKE_Froude_loss(i,j,a,fr,m)
     enddo ; enddo ; enddo ; enddo ; enddo
     CS%tot_leak_loss   = tot_leak_loss
     CS%tot_quad_loss   = tot_quad_loss
     CS%tot_itidal_loss = tot_itidal_loss
+    CS%tot_Froude_loss = tot_Froude_loss
     if (CS%id_tot_leak_loss > 0) then
       call post_data(CS%id_tot_leak_loss, tot_leak_loss, CS%diag)
     endif    
@@ -445,6 +490,9 @@ subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, 
     endif
     if (CS%id_tot_itidal_loss > 0) then
       call post_data(CS%id_tot_itidal_loss, tot_itidal_loss, CS%diag)
+    endif
+    if (CS%id_tot_Froude_loss > 0) then
+      call post_data(CS%id_tot_Froude_loss, tot_Froude_loss, CS%diag)
     endif
     
     ! Output 2-D energy loss (summed over angles) for each freq and mode
@@ -605,6 +653,7 @@ subroutine get_itidal_loss(i,j,G,CS,mechanism,TKE_loss_sum)
   if(mechanism == 'LeakDrag') TKE_loss_sum = CS%tot_leak_loss(i,j)
   if(mechanism == 'QuadDrag') TKE_loss_sum = CS%tot_quad_loss(i,j)
   if(mechanism == 'WaveDrag') TKE_loss_sum = CS%tot_itidal_loss(i,j)
+  if(mechanism == 'Froude')   TKE_loss_sum = CS%tot_Froude_loss(i,j)
   
 end subroutine get_itidal_loss
 
@@ -2142,6 +2191,9 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
   call get_param(param_file, mod, "INTERNAL_TIDE_WAVE_DRAG", CS%apply_wave_drag, &
                  "If true, apply scattering due to small-scale roughness as a sink.", &
                  default=.false.)
+  call get_param(param_file, mod, "INTERNAL_TIDE_FROUDE_DRAG", CS%apply_Froude_drag, &
+                 "If true, apply wave breaking as a sink.", &
+                 default=.false.)
   call get_param(param_file, mod, "CDRAG", CS%cdrag, &
                  "CDRAG is the drag coefficient relating the magnitude of \n"//&
                  "the velocity field to the bottom stress.", units="nondim", &
@@ -2169,9 +2221,12 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
   CS%TKE_quad_loss(:,:,:,:,:) = 0.0
   allocate(CS%TKE_itidal_loss(isd:ied,jsd:jed,num_angle,num_freq,num_mode))
   CS%TKE_itidal_loss(:,:,:,:,:) = 0.0
+  allocate(CS%TKE_Froude_loss(isd:ied,jsd:jed,num_angle,num_freq,num_mode))
+  CS%TKE_Froude_loss(:,:,:,:,:) = 0.0
   allocate(CS%tot_leak_loss(isd:ied,jsd:jed))   ; CS%tot_leak_loss(:,:)   = 0.0
   allocate(CS%tot_quad_loss(isd:ied,jsd:jed) )  ; CS%tot_quad_loss(:,:)   = 0.0
   allocate(CS%tot_itidal_loss(isd:ied,jsd:jed)) ; CS%tot_itidal_loss(:,:) = 0.0
+  allocate(CS%tot_Froude_loss(isd:ied,jsd:jed)) ; CS%tot_Froude_loss(:,:) = 0.0
   
   call get_param(param_file, mod, "KAPPA_ITIDES", kappa_itides, &
                "A topographic wavenumber used with INT_TIDE_DISSIPATION. \n"//&
@@ -2347,7 +2402,9 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
                  Time, 'Internal tide energy loss to bottom drag', 'W m-2') ! (BDM)
     CS%id_tot_itidal_loss = register_diag_field('ocean_model', 'ITide_tot_itidal_loss', diag%axesT1, &
                  Time, 'Internal tide energy loss to wave drag', 'W m-2') ! (BDM)
-                 
+    CS%id_tot_Froude_loss = register_diag_field('ocean_model', 'ITide_tot_Froude_loss', diag%axesT1, &
+                 Time, 'Internal tide energy loss to wave breaking', 'W m-2') ! (BDM)
+                                  
     ! Register 2-D energy loss (summed over angles) for each freq and mode
     write(var_name, '("Itide_TKE_loss_freq",i1,"_mode",i1)') fr, m
     write(var_descript, '("Internal tide energy loss from frequency ",i1," mode ",i1)') fr, m
