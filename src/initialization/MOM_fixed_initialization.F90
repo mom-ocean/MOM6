@@ -770,6 +770,13 @@ subroutine initialize_topography_from_file(D, G, param_file)
   if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
        " initialize_topography_from_file: Unable to open "//trim(filename))
 
+  D(:,:) = -9.E30 ! Initializing to a very large negative depth (tall mountains)
+                  ! everywhere before reading from a file should do nothing.
+                  ! However, in the instance of masked-out PEs, halo regions
+                  ! are not updated when a processor does not exist. We need to
+                  ! ensure the depth in masked-out PEs appears to be that of land
+                  ! so this line does that in the halo regions. For non-masked PEs
+                  ! the halo region is filled properly with a later pass_var().
   call read_data(filename,trim(topo_varname),D,domain=G%Domain%mpp_domain)
 
   call apply_topography_edits_from_file(D, G, param_file)
