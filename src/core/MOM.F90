@@ -1586,8 +1586,16 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     ALLOC_(CS%T(isd:ied,jsd:jed,nz))   ; CS%T(:,:,:) = 0.0
     ALLOC_(CS%S(isd:ied,jsd:jed,nz))   ; CS%S(:,:,:) = 0.0
     CS%tv%T => CS%T ; CS%tv%S => CS%S
-    CS%vd_T = var_desc("T", "degC", "Potential Temperature") 
-    CS%vd_S = var_desc("S", "PPT", "Salinity") 
+    CS%vd_T = var_desc(name="T",units="degC",longname="Potential Temperature", &
+                       cmor_field_name="thetao",cmor_units="C",                &
+                       cmor_standard_name="sea_water_potential_temperature",   &
+                       cmor_long_name="Sea Water Potential Temperature",       &
+                       conversion=CS%tv%C_p) 
+    CS%vd_S = var_desc(name="S",units="PPT",longname="Salinity",&
+                       cmor_field_name="so",cmor_units="ppt",   &
+                       cmor_standard_name="sea_water_salinity", &
+                       cmor_long_name="Sea Water Salinity",     &
+                       conversion=0.001)
     call register_tracer(CS%tv%T, CS%vd_T, param_file, CS%tracer_Reg, CS%vd_T)
     call register_tracer(CS%tv%S, CS%vd_S, param_file, CS%tracer_Reg, CS%vd_S)
   endif
