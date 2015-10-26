@@ -106,7 +106,7 @@ use MOM_tracer_hor_diff,       only : tracer_hordiff, tracer_hor_diff_init
 use MOM_tracer_hor_diff,       only : tracer_hor_diff_end, tracer_hor_diff_CS
 use MOM_tracer_registry,       only : register_tracer, tracer_registry_init
 use MOM_tracer_registry,       only : add_tracer_diagnostics, tracer_registry_type
-use MOM_tracer_registry,       only : tracer_registry_end
+use MOM_tracer_registry,       only : lock_tracer_registry, tracer_registry_end
 use MOM_tracer_flow_control,   only : call_tracer_register, tracer_flow_control_CS
 use MOM_tracer_flow_control,   only : tracer_flow_control_init, call_tracer_surface_state
 use MOM_vert_friction,         only : vertvisc, vertvisc_remnant
@@ -1813,6 +1813,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call tracer_advect_init(Time, G, param_file, diag, CS%tracer_adv_CSp)
   call tracer_hor_diff_init(Time, G, param_file, diag, CS%tracer_diff_CSp, CS%neutral_diffusion_CSp)
 
+  call lock_tracer_registry(CS%tracer_Reg, diag, Time, G)
   call register_diags(Time, G, CS, CS%ADp)
 
   if (CS%use_temperature) then

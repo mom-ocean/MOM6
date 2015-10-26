@@ -36,6 +36,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : vardesc, query_vardesc
+use MOM_time_manager, only : time_type
 
 implicit none ; private
 
@@ -43,7 +44,7 @@ implicit none ; private
 
 public register_tracer, tracer_registry_init, MOM_tracer_chksum
 public add_tracer_diagnostics, add_tracer_OBC_values
-public tracer_vertdiff, tracer_registry_end
+public lock_tracer_registry, tracer_vertdiff, tracer_registry_end
 
 type, public :: tracer_type
   real, dimension(:,:,:), pointer :: t => NULL()
@@ -68,10 +69,13 @@ type, public :: tracer_type
 end type tracer_type
 
 type, public :: tracer_registry_type
-  integer :: ntr = 0        ! The number of registered tracers.
-  type(tracer_type) :: Tr(MAX_FIELDS_)  ! The array of registered tracers.
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+  integer :: ntr = 0          !< The number of registered tracers.
+  type(tracer_type) :: Tr(MAX_FIELDS_)  !< The array of registered tracers.
+  type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
+                              !! timing of diagnostic output.
+  logical :: locked = .false. !< New tracers may only be registered if the
+                              !! registry is locked, so that diagnostics can
+                              !! be properly set up for all registered tracers.
 end type tracer_registry_type
 
 contains
@@ -147,6 +151,11 @@ subroutine register_tracer(tr1, tr_desc, param_file, Reg, tr_desc_ptr, ad_x, ad_
   endif
 
   call query_vardesc(Reg%Tr(ntr)%vd, name=Reg%Tr(ntr)%name)
+
+  if (Reg%locked) call MOM_error(FATAL, &
+      "MOM register_tracer was called for variable "//trim(Reg%Tr(ntr)%name)//&
+      " with a locked tracer registry.")
+
   Reg%Tr(ntr)%t => tr1
 
   if (present(ad_x)) then ; if (associated(ad_x)) Reg%Tr(ntr)%ad_x => ad_x ; endif
@@ -164,6 +173,25 @@ subroutine register_tracer(tr1, tr_desc, param_file, Reg, tr_desc_ptr, ad_x, ad_
   if (present(df_2d_y)) then ; if (associated(df_2d_y)) Reg%Tr(ntr)%df2d_y => df_2d_y ; endif
 
 end subroutine register_tracer
+
+!> This subroutine locks the tracer registry to prevent the addition of more
+!! tracers and adds any commonly generated diagnostics.
+subroutine lock_tracer_registry(Reg, diag, Time, G)
+  type(tracer_registry_type), pointer    :: Reg
+  type(diag_ctrl),    target, intent(in) :: diag
+  type(time_type), target,    intent(in) :: Time
+  type(ocean_grid_type),      intent(in) :: G
+! Arguments: Reg - A pointer to the tracer registry.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
+!  (in)      Time - Time of the start of the run segment.
+!  (in)      G - The ocean's grid structure.
+
+  if (.not. associated(Reg)) call MOM_error(WARNING, &
+    "lock_tracer_registry called with an unassocaited registry.")
+
+  Reg%locked = .True.
+
+end subroutine lock_tracer_registry
 
 subroutine add_tracer_OBC_values(name, Reg, OBC_inflow, OBC_in_u, OBC_in_v)
   character(len=*), intent(in)               :: name
