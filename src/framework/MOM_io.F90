@@ -54,8 +54,6 @@ type, public :: vardesc
   character(len=8)   :: t_grid             !< Time description: s, p, or 1
   character(len=64)  :: cmor_field_name    !< CMOR name 
   character(len=64)  :: cmor_units         !< CMOR physical dimensions of the variable
-  character(len=240) :: cmor_standard_name !< CMOR standard name 
-  character(len=240) :: cmor_long_name     !< CMOR long name 
   real               :: conversion         !< for unit conversions, such as needed to 
                                            !! convert from intensive to extensive
 end type vardesc
@@ -512,8 +510,7 @@ end function num_timelevels
 !! have default values that are empty strings or are appropriate for a 3-d
 !! tracer field at the tracer cell centers.
 function var_desc(name, units, longname, hor_grid, z_grid, t_grid, &
-                  cmor_field_name, cmor_units, cmor_standard_name, &
-                  cmor_long_name, conversion, caller) result(vd)
+                  cmor_field_name, cmor_units, conversion, caller) result(vd)
   character(len=*),           intent(in) :: name               !< variable name
   character(len=*), optional, intent(in) :: units              !< variable units
   character(len=*), optional, intent(in) :: longname           !< variable long name
@@ -522,8 +519,6 @@ function var_desc(name, units, longname, hor_grid, z_grid, t_grid, &
   character(len=*), optional, intent(in) :: t_grid             !< time description: s, p, or 1
   character(len=*), optional, intent(in) :: cmor_field_name    !< CMOR name 
   character(len=*), optional, intent(in) :: cmor_units         !< CMOR physical dimensions of variable
-  character(len=*), optional, intent(in) :: cmor_standard_name !< CMOR standard name 
-  character(len=*), optional, intent(in) :: cmor_long_name     !< CMOR long name 
   real            , optional, intent(in) :: conversion         !< for unit conversions, such as needed to 
                                                                !! convert from intensive to extensive
   character(len=*), optional, intent(in) :: caller             !< calling routine?
@@ -538,18 +533,14 @@ function var_desc(name, units, longname, hor_grid, z_grid, t_grid, &
   vd%longname = "" ; vd%units = ""
   vd%hor_grid = 'h' ; vd%z_grid = 'L' ; vd%t_grid = 's'
 
-  vd%cmor_field_name    =  "" 
-  vd%cmor_units         =  "" 
-  vd%cmor_standard_name =  "" 
-  vd%cmor_long_name     =  "" 
-  vd%conversion         =  1.0
+  vd%cmor_field_name  =  "" 
+  vd%cmor_units       =  "" 
+  vd%conversion       =  1.0
 
   call modify_vardesc(vd, units=units, longname=longname, hor_grid=hor_grid, &
                       z_grid=z_grid, t_grid=t_grid,                          &
                       cmor_field_name=cmor_field_name,cmor_units=cmor_units, &
-                      cmor_standard_name=cmor_standard_name,                 &
-                      cmor_long_name=cmor_long_name,conversion=conversion,   &
-                      caller=cllr)
+                      conversion=conversion, caller=cllr)
 
 end function var_desc
 
@@ -557,8 +548,7 @@ end function var_desc
 !> This routine modifies the named elements of a vardesc type. 
 !! All arguments are optional, except the vardesc type to be modified.
 subroutine modify_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid,&
-                  cmor_field_name, cmor_units, cmor_standard_name,            &
-                  cmor_long_name, conversion, caller)
+                  cmor_field_name, cmor_units, conversion, caller)
   type(vardesc),              intent(inout) :: vd                 !< vardesc type that is modified
   character(len=*), optional, intent(in)    :: name               !< name of variable 
   character(len=*), optional, intent(in)    :: units              !< units of variable 
@@ -568,8 +558,6 @@ subroutine modify_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid,&
   character(len=*), optional, intent(in)    :: t_grid             !< time description: s, p, or 1 
   character(len=*), optional, intent(in)    :: cmor_field_name    !< CMOR name 
   character(len=*), optional, intent(in)    :: cmor_units         !< CMOR physical dimensions of variable
-  character(len=*), optional, intent(in)    :: cmor_standard_name !< CMOR standard name 
-  character(len=*), optional, intent(in)    :: cmor_long_name     !< CMOR long name 
   real            , optional, intent(in)    :: conversion         !< for unit conversions, such as needed to 
                                                                   !! convert from intensive to extensive
   character(len=*), optional, intent(in)    :: caller             !< calling routine?
@@ -595,18 +583,13 @@ subroutine modify_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid,&
                                    "vd%cmor_field_name of "//trim(vd%name), cllr)
   if (present(cmor_units))          call safe_string_copy(cmor_units, vd%cmor_units,               &
                                    "vd%cmor_units of "//trim(vd%name), cllr)
-  if (present(cmor_standard_name)) call safe_string_copy(cmor_standard_name, vd%cmor_standard_name,&
-                                   "vd%cmor_standard_name of "//trim(vd%name), cllr)
-  if (present(cmor_long_name))     call safe_string_copy(cmor_long_name, vd%cmor_long_name,        &
-                                   "vd%cmor_long_name of "//trim(vd%name), cllr)
   
 end subroutine modify_vardesc
 
 
 !> This routine queries vardesc
 subroutine query_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
-                  cmor_field_name, cmor_units, cmor_standard_name,            &
-                  cmor_long_name, conversion, caller)
+                         cmor_field_name, cmor_units, conversion, caller)
   type(vardesc),              intent(in)  :: vd                 !< vardesc type that is queried
   character(len=*), optional, intent(out) :: name               !< name of variable
   character(len=*), optional, intent(out) :: units              !< units of variable
@@ -616,8 +599,6 @@ subroutine query_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
   character(len=*), optional, intent(out) :: t_grid             !< time description: s, p, or 1
   character(len=*), optional, intent(out) :: cmor_field_name    !< CMOR name 
   character(len=*), optional, intent(out) :: cmor_units         !< CMOR physical dimensions of variable
-  character(len=*), optional, intent(out) :: cmor_standard_name !< CMOR standard name 
-  character(len=*), optional, intent(out) :: cmor_long_name     !< CMOR long name 
   real            , optional, intent(out) :: conversion         !< for unit conversions, such as needed to 
                                                                 !! convert from intensive to extensive
   character(len=*), optional, intent(in)  :: caller             !< calling routine?
@@ -644,11 +625,6 @@ subroutine query_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
                                    "vd%cmor_field_name of "//trim(vd%name), cllr)
   if (present(cmor_units))          call safe_string_copy(vd%cmor_units, cmor_units,                &
                                    "vd%cmor_units of "//trim(vd%name), cllr)
-  if (present(cmor_standard_name)) call safe_string_copy(vd%cmor_standard_name, cmor_standard_name, &
-                                   "vd%cmor_standard_name of "//trim(vd%name), cllr)
-  if (present(cmor_long_name))     call safe_string_copy(vd%cmor_long_name, cmor_long_name,         &
-                                   "vd%cmor_long_name of "//trim(vd%name), cllr)
-
   
 end subroutine query_vardesc
 
