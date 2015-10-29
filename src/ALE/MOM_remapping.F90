@@ -694,11 +694,21 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
         case ( INTEGRATION_PCM )
           uAve = ppoly0_coefficients(jL,1)
         case ( INTEGRATION_PLM )
-          uAve = evaluation_polynomial( ppoly0_coefficients(jL,:), 2, xi0 )
+          !uAve = evaluation_polynomial( ppoly0_coefficients(jL,:), 2, xi0 )
+          uAve = ppoly0_coefficients(jL,1)          &
+               + ppoly0_coefficients(jL,2) * xi0
         case ( INTEGRATION_PPM )
-          uAve = evaluation_polynomial( ppoly0_coefficients(jL,:), 3, xi0 )
+          !uAve = evaluation_polynomial( ppoly0_coefficients(jL,:), 3, xi0 )
+          uAve = (ppoly0_coefficients(jL,1)         &
+                + ppoly0_coefficients(jL,2) * xi0)  &
+               + ppoly0_coefficients(jL,3) * xi0**2
         case ( INTEGRATION_PQM )
-          uAve = evaluation_polynomial( ppoly0_coefficients(jL,:), 5, xi0 )
+          !uAve = evaluation_polynomial( ppoly0_coefficients(jL,:), 5, xi0 )
+          uAve = (((ppoly0_coefficients(jL,1)          &
+               + ppoly0_coefficients(jL,2) * xi0)    &
+               + ppoly0_coefficients(jL,3) * xi0**2) &
+               + ppoly0_coefficients(jL,4) * xi0**3) &
+               + ppoly0_coefficients(jL,5) * xi0**4
         case default
           call MOM_error( FATAL,'The selected integration method is invalid' )
       end select
@@ -764,12 +774,22 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
         case ( INTEGRATION_PLM )
           q = h0(jL) * &
               integration_polynomial( xi0, xi1, ppoly0_coefficients(jL,:), 1 )
+              !(ppoly0_coefficients(jL,1)*(xi1-xi0)/real(1)           &
+              !+ppoly0_coefficients(jL,2)*(xi1**2-xi0**2)/real(2) )
         case ( INTEGRATION_PPM )
           q = h0(jL) * &
               integration_polynomial( xi0, xi1, ppoly0_coefficients(jL,:), 2 )
+              !(  ppoly0_coefficients(jL,2)*(xi1**2-xi0**2)/real(2)  &
+              ! +(ppoly0_coefficients(jL,1)*(xi1**1-xi0**1)/real(1)  &
+              !  +ppoly0_coefficients(jL,3)*(xi1**3-xi0**3)/real(3)) )
         case ( INTEGRATION_PQM )
           q = h0(jL) * &
               integration_polynomial( xi0, xi1, ppoly0_coefficients(jL,:), 4 )
+              !((((ppoly0_coefficients(jL,1)*(xi1-xi0)/real(1)           &
+              !+ppoly0_coefficients(jL,2)*(xi1**2-xi0**2)/real(2)) &
+              !+ppoly0_coefficients(jL,3)*(xi1**3-xi0**3)/real(3)) &
+              !+ppoly0_coefficients(jL,4)*(xi1**4-xi0**4)/real(4)) &
+              !+ppoly0_coefficients(jL,5)*(xi1**5-xi0**5)/real(5) )
         case default
           call MOM_error( FATAL,'The selected integration method is invalid' )
       end select
