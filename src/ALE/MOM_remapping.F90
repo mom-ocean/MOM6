@@ -443,18 +443,22 @@ subroutine remapByProjection( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, h1,
   ! Local variables
   integer       :: iTarget
   real          :: xL, xR       ! coordinates of target cell edges
+  integer       :: jStart ! Used by integrateReconOnInterval()
+  real          :: xStart ! Used by integrateReconOnInterval()
 
   ! Loop on cells in target grid (grid1). For each target cell, we need to find
   ! in which source cells the target cell edges lie. The associated indexes are
   ! noted j0 and j1.
   xR = 0. ! Left boundary is at x=0
+  jStart = 1
+  xStart = 0.
   do iTarget = 1,n1
     ! Determine the coordinates of the target cell edges
     xL = xR
     xR = xL + h1(iTarget)
 
     call integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, method, &
-                                   xL, xR, h1(iTarget), u1(iTarget) )
+                                   xL, xR, h1(iTarget), u1(iTarget), jStart, xStart )
 
   end do ! end iTarget loop on target grid cells
 
@@ -487,6 +491,8 @@ subroutine remapByDeltaZ( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, dx1, me
   real    :: xOld, hOld, uOld
   real    :: xNew, hNew, h_err
   real    :: uhNew, hFlux, uAve, fluxL, fluxR
+  integer :: jStart ! Used by integrateReconOnInterval()
+  real    :: xStart ! Used by integrateReconOnInterval()
 #ifdef __DO_SAFETY_CHECKS__
   integer :: k
   real    :: h0Total, h_err2
@@ -505,6 +511,8 @@ subroutine remapByDeltaZ( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, dx1, me
   ! in the interior of the source domain.
   fluxR = 0.
   h_err = 0. ! For measuring round-off error
+  jStart = 1
+  xStart = 0.
   do iTarget = 0,n1
     fluxL = fluxR ! This does nothing for iTarget=0
 
@@ -545,7 +553,7 @@ subroutine remapByDeltaZ( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, dx1, me
     ! hFlux is the positive width of the remapped volume
     hFlux = abs(dx1(iTarget+1))
     call integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, method, &
-                                   xL, xR, hFlux, uAve )
+                                   xL, xR, hFlux, uAve, jStart, xStart )
     ! uAve is the average value of u, independent of sign of dx1
     fluxR = dx1(iTarget+1)*uAve ! Includes sign of dx1
 
@@ -582,7 +590,7 @@ end subroutine remapByDeltaZ
 
 !> Integrate the reconstructed column profile over a single cell
 subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, method, &
-                                     xL, xR, hC, uAve )
+                                     xL, xR, hC, uAve, jStart, xStart )
   integer, intent(in)  :: n0       !< Number of cells in source grid
   real,    intent(in)  :: h0(:)    !< Source grid sizes (size n0)
   real,    intent(in)  :: u0(:)    !< Source cell averages
@@ -592,6 +600,10 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
   real,    intent(in)  :: xL, xR   !< Left/right edges of target cell
   real,    intent(in)  :: hC       !< Cell width hC = xR - xL
   real,    intent(out) :: uAve     !< Average value on target cell
+  integer, intent(inout) :: jStart !< The index of the cell to start searching from
+                                   !< On exit, contains index of last cell used
+  real,    intent(inout) :: xStart !< The left edge position of cell jStart
+                                   !< On first entry should be 0.
   ! Local variables
   integer :: j, k
   integer :: jL, jR       ! indexes of source cells containing target
@@ -631,8 +643,8 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
 
   ! Find the left most cell in source grid spanned by the target cell
   jL = -1
-  x0jLr = 0.
-  do j = 1,n0
+  x0jLr = xStart
+  do j = jStart, n0
     x0jLl = x0jLr
     x0jLr = x0jLl + h0(j)
     ! Left edge is found in cell j
@@ -641,6 +653,8 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
       exit ! once target grid cell is found, exit loop
     endif
   enddo
+  jStart = jL
+  xStart = x0jLl
 
 ! ! HACK to handle round-off problems. Need only at  j=n0.
 ! ! This moves the effective cell boundary outwards a smidgen.
