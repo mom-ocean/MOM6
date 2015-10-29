@@ -7,7 +7,7 @@ module MOM_remapping
 
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_string_functions, only : uppercase
-use polynomial_functions, only : evaluation_polynomial, integration_polynomial
+!use polynomial_functions, only : evaluation_polynomial, integration_polynomial
 use regrid_edge_values, only : edge_values_explicit_h4, edge_values_implicit_h4
 use regrid_edge_values, only : edge_values_implicit_h4, edge_values_implicit_h6
 use regrid_edge_slopes, only : edge_slopes_implicit_h3, edge_slopes_implicit_h5
@@ -638,6 +638,8 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
 !         'The target cell ends beyond the right edge of the source grid')
 #endif
 
+  n1=1;n2=2;n3=3;n4=4;n5=5
+
   q = -1.E30
   x0jLl = -1.E30
   x0jRl = -1.E30
@@ -769,7 +771,6 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
       ! Depending on which polynomial is used, integrate quantity
       ! between xi0 and xi1. Integration is carried out in normalized
       ! coordinates, hence: \int_xL^xR p(x) dx = h \int_xi0^xi1 p(xi) dxi
-      n1=1;n2=2;n3=3;n4=4;n5=5
       select case ( method )
         case ( INTEGRATION_PCM )
           q = ppoly0_coefficients(jL,1) * ( xR - xL )
@@ -834,13 +835,23 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
           q = q + ppoly0_coefficients(jL,1) * ( x0jLr - xL )
         case ( INTEGRATION_PLM )
           q = q + h0(jL) * &
-              integration_polynomial( xi0, xi1, ppoly0_coefficients(jL,:), 1 )
+              !integration_polynomial( xi0, xi1, ppoly0_coefficients(jL,:), 1 )
+              (ppoly0_coefficients(jL,1)*(xi1-xi0)/real(n1)     &
+              +ppoly0_coefficients(jL,2)*(xi1**n2-xi0**n2)/real(n2) )
         case ( INTEGRATION_PPM )
           q = q + h0(jL) * &
-              integration_polynomial( xi0, xi1, ppoly0_coefficients(jL,:), 2 )
+              !integration_polynomial( xi0, xi1, ppoly0_coefficients(jL,:), 2 )
+              ((ppoly0_coefficients(jL,1)*(xi1-xi0)/real(n1)    &
+               +ppoly0_coefficients(jL,2)*(xi1**n2-xi0**n2)/real(n2))   &
+              +ppoly0_coefficients(jL,3)*(xi1**n3-xi0**n3)/real(n3)) 
         case ( INTEGRATION_PQM )
           q = q + h0(jL) * &
-              integration_polynomial( xi0, xi1, ppoly0_coefficients(jL,:), 4 )
+              !integration_polynomial( xi0, xi1, ppoly0_coefficients(jL,:), 4 )
+              ((((ppoly0_coefficients(jL,1)*(xi1-xi0)/real(n1)  &
+                 +ppoly0_coefficients(jL,2)*(xi1**n2-xi0**n2)/real(n2)) &
+                +ppoly0_coefficients(jL,3)*(xi1**n3-xi0**n3)/real(n3))  &
+               +ppoly0_coefficients(jL,4)*(xi1**n4-xi0**n4)/real(n4))   &
+              +ppoly0_coefficients(jL,5)*(xi1**n5-xi0**n5)/real(n5) )
         case default
           call MOM_error( FATAL, 'The selected integration method is invalid' )
       end select
@@ -883,13 +894,23 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
           q = q + ppoly0_coefficients(jR,1) * ( xR - x0jRl )
         case ( INTEGRATION_PLM )
           q = q + h0(jR) * &
-              integration_polynomial( xi0, xi1, ppoly0_coefficients(jR,:), 1 )
+              !integration_polynomial( xi0, xi1, ppoly0_coefficients(jR,:), 1 )
+              (ppoly0_coefficients(jR,1)*(xi1-xi0)/real(n1)     &
+              +ppoly0_coefficients(jR,2)*(xi1**n2-xi0**n2)/real(n2) )
         case ( INTEGRATION_PPM )
           q = q + h0(jR) * &
-              integration_polynomial( xi0, xi1, ppoly0_coefficients(jR,:), 2 )
+              !integration_polynomial( xi0, xi1, ppoly0_coefficients(jR,:), 2 )
+              ((ppoly0_coefficients(jR,1)*(xi1-xi0)/real(n1)    &
+               +ppoly0_coefficients(jR,2)*(xi1**n2-xi0**n2)/real(n2))   &
+              +ppoly0_coefficients(jR,3)*(xi1**n3-xi0**n3)/real(n3)) 
         case ( INTEGRATION_PQM )
           q = q + h0(jR) * &
-              integration_polynomial( xi0, xi1, ppoly0_coefficients(jR,:), 4 )
+              !integration_polynomial( xi0, xi1, ppoly0_coefficients(jR,:), 4 )
+              ((((ppoly0_coefficients(jR,1)*(xi1-xi0)/real(n1)  &
+                 +ppoly0_coefficients(jR,2)*(xi1**n2-xi0**n2)/real(n2)) &
+                +ppoly0_coefficients(jR,3)*(xi1**n3-xi0**n3)/real(n3))  &
+               +ppoly0_coefficients(jR,4)*(xi1**n4-xi0**n4)/real(n4))   &
+              +ppoly0_coefficients(jR,5)*(xi1**n5-xi0**n5)/real(n5) )
         case default
           call MOM_error( FATAL,'The selected integration method is invalid' )
       end select
