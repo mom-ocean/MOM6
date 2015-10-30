@@ -710,8 +710,9 @@ logical function mixedlayer_restrat_init(Time, G, param_file, diag, CS)
   call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "MIXEDLAYER_RESTRAT", mixedlayer_restrat_init, &
              "If true, a density-gradient dependent re-stratifying \n"//&
-             "flow is imposed in the mixed layer. \n"//&
-             "This is only used if BULKMIXEDLAYER is true.", default=.false.)
+             "flow is imposed in the mixed layer. Can be used in ALE mode\n"//&
+             "without restriction but in layer mode can only be used if\n"//&
+             "BULKMIXEDLAYER is true.", default=.false.)
   if (.not. mixedlayer_restrat_init) return
 
   call get_param(param_file, mod, "FOX_KEMPER_ML_RESTRAT_COEF", CS%ml_restrat_coef, &
