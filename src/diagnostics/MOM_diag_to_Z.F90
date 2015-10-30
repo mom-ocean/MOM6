@@ -48,7 +48,7 @@ use MOM_diag_mediator, only : post_data, post_data_1d_k, register_diag_field, sa
 use MOM_diag_mediator, only : diag_ctrl, time_type, diag_axis_init
 use MOM_diag_mediator, only : axesType, defineAxes
 use MOM_diag_mediator, only : ocean_register_diag
-use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
+use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
 use MOM_io,            only : slasher, vardesc, query_vardesc, modify_vardesc
@@ -135,17 +135,9 @@ function global_z_mean(var,G,CS,tracer)
   localVar = var
 
   do k=1, nz ; do j=js,je ; do i=is, ie
-    ! This block below determines the partial cell weights.  It could be moved outside
-    ! of the loop for efficiency
-    if (G%bathyT(i,j) >= CS%Z_int(k+1)) then
-      depth_weight(i,j,k) = 1.
-    else 
-    if ( (G%bathyT(i,j) > CS%Z_int(k)) .and. (G%bathyT(i,j) < CS%Z_int(k+1))) then
-      depth_weight(i,j,k) = (G%bathyT(i,j) - CS%Z_int(k)) / (CS%Z_int(k+1) - CS%Z_int(k))
-    else
-      depth_weight(i,j,k) = 0.
-    endif
-   
+    ! Weight factor for partial bottom cells
+    depth_weight(i,j,k) = min( max( (-1.*G%bathyT(i,j)), CS%Z_int(k+1) ) - CS%Z_int(k), 0.)
+
     ! Flag the point as invalid if it contains missing data, or is below the bathymetry
     if (var(i,j,k) == CS%missing_tr(tracer)) valid_point(i,j,k) = 0.
     if (depth_weight(i,j,k) == 0.) valid_point(i,j,k) = 0.
@@ -208,7 +200,7 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
 
   real :: slope ! normalized slope of a variable within the cell
 
-  real :: layer_ave(35)
+  real :: layer_ave(CS%nk_zspace)
 
   logical :: linear_velocity_profiles = .true.
 
@@ -926,7 +918,7 @@ subroutine register_Z_tracer_low(tr_ptr, name, long_name, units, standard_name, 
     CS%id_tr(m) = register_diag_field('ocean_model_z', name, CS%axesTz, Time,           &
                                       long_name, units, missing_value=CS%missing_tr(m), &
                                       standard_name=standard_name)
-    CS%id_tr_xyave(m) = register_diag_field('ocean_model_xyave_z', name, CS%axesZ, Time,           &
+    CS%id_tr_xyave(m) = register_diag_field('ocean_model_z', name//'_xyave', CS%axesZ, Time,           &
                                       long_name, units, missing_value=CS%missing_tr(m), &
                                       standard_name=standard_name)
   else
