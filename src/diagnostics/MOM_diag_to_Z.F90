@@ -137,9 +137,9 @@ function global_z_mean(var,G,CS,tracer)
   do k=1, nz ; do j=js,je ; do i=is, ie
     ! This block below determines the partial cell weights.  It could be moved outside
     ! of the loop for efficiency
-    !if (G%bathyT(i,j) >= CS%Z_int(k+1)) then
-    !  depth_weight(i,j,k) = 1.
-    !else 
+    if (G%bathyT(i,j) >= CS%Z_int(k+1)) then
+      depth_weight(i,j,k) = 1.
+    else 
     if ( (G%bathyT(i,j) > CS%Z_int(k)) .and. (G%bathyT(i,j) < CS%Z_int(k+1))) then
       depth_weight(i,j,k) = (G%bathyT(i,j) - CS%Z_int(k)) / (CS%Z_int(k+1) - CS%Z_int(k))
     else
