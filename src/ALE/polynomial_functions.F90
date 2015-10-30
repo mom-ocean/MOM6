@@ -75,7 +75,27 @@ real function integration_polynomial( xi0, xi1, C, n )
   do k = 1,(n+1) 
     integral = integral + C(k) * (xi1**k - xi0**k) / real(k)
   end do
-
+!
+!One non-answer-changing way of unrolling the above is:
+!  k=1
+!  integral = integral + C(k) * (xi1**k - xi0**k) / real(k)
+!  if (n>=1) then
+!    k=2
+!    integral = integral + C(k) * (xi1**k - xi0**k) / real(k)
+!  endif
+!  if (n>=2) then
+!    k=3
+!    integral = integral + C(k) * (xi1**k - xi0**k) / real(k)
+!  endif
+!  if (n>=3) then
+!    k=4
+!    integral = integral + C(k) * (xi1**k - xi0**k) / real(k)
+!  endif
+!  if (n>=4) then
+!    k=5
+!    integral = integral + C(k) * (xi1**k - xi0**k) / real(k)
+!  endif
+!
   integration_polynomial = integral
   
 end function integration_polynomial
