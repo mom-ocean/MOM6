@@ -723,8 +723,8 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
 
     ! Find the right most cell in source grid spanned by the target cell
     jR = -1
-    x0jRr = 0.
-    do j = 1,n0
+    x0jRr = xStart
+    do j = jStart,n0
       x0jRl = x0jRr
       x0jRr = x0jRl + h0(j)
       ! Right edge is found in cell j
