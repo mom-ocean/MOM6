@@ -43,15 +43,18 @@ module MOM_diag_to_Z
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
+use MOM_coms,          only : reproducing_sum
+use MOM_diag_mediator, only : post_data, post_data_1d_k, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl, time_type, diag_axis_init
 use MOM_diag_mediator, only : axesType, defineAxes
 use MOM_diag_mediator, only : ocean_register_diag
-use MOM_error_handler, only : MOM_error, FATAL, WARNING
+use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
 use MOM_io,            only : slasher, vardesc, query_vardesc, modify_vardesc
-use MOM_variables,     only : p3d
+use MOM_spatial_means, only : global_layer_mean
+use MOM_variables,     only : p3d, p2d
+
 
 use netcdf
 
@@ -93,6 +96,7 @@ type, public :: diag_to_Z_CS ; private
   integer :: id_uh_Z = -1
   integer :: id_vh_Z = -1
   integer :: id_tr(MAX_FIELDS_) = -1
+  integer :: id_tr_xyave(MAX_FIELDS_) = -1
   integer :: num_tr_used = 0
   integer :: nk_zspace = -1
 
@@ -100,6 +104,7 @@ type, public :: diag_to_Z_CS ; private
 
   type(axesType) :: axesBz,  axesTz,  axesCuz,  axesCvz
   type(axesType) :: axesBzi, axesTzi, axesCuzi, axesCvzi
+  type(axesType) :: axesZ
   integer, dimension(1) :: axesz_out
 
   type(diag_ctrl), pointer :: diag ! structure to regulate diagnostic output timing
@@ -110,6 +115,56 @@ integer, parameter :: NO_ZSPACE = -1
 
 contains
 
+function global_z_mean(var,G,CS,tracer)
+  type(ocean_grid_type),                           intent(in)  :: G
+  type(diag_to_Z_CS),                              intent(in)  :: CS
+  real, dimension(SZI_(G), SZJ_(G), CS%nk_zspace), intent(in)  :: var
+  real, dimension(SZI_(G), SZJ_(G), CS%nk_zspace)  :: tmpForSumming, weight
+  real, dimension(SZI_(G), SZJ_(G), CS%nk_zspace)  :: localVar, valid_point, depth_weight
+  real, dimension(CS%nk_zspace)                    :: global_z_mean, scalarij, weightij
+  real, dimension(CS%nk_zspace)                    :: global_temp_scalar, global_weight_scalar
+  integer :: i, j, k, is, ie, js, je, nz, tracer
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; 
+  nz = CS%nk_zspace
+
+  ! Initialize local arrays
+  valid_point = 1. ; depth_weight = 0.
+  tmpForSumming(:,:,:) = 0. ; weight(:,:,:) = 0.
+
+  ! Local array copy of tracer field pointer
+  localVar = var
+
+  do k=1, nz ; do j=js,je ; do i=is, ie
+    ! This block below determines the partial cell weights.  It could be moved outside
+    ! of the loop for efficiency
+    !if (G%bathyT(i,j) >= CS%Z_int(k+1)) then
+    !  depth_weight(i,j,k) = 1.
+    !else 
+    if ( (G%bathyT(i,j) > CS%Z_int(k)) .and. (G%bathyT(i,j) < CS%Z_int(k+1))) then
+      depth_weight(i,j,k) = (G%bathyT(i,j) - CS%Z_int(k)) / (CS%Z_int(k+1) - CS%Z_int(k))
+    else
+      depth_weight(i,j,k) = 0.
+    endif
+   
+    ! Flag the point as invalid if it contains missing data, or is below the bathymetry
+    if (var(i,j,k) == CS%missing_tr(tracer)) valid_point(i,j,k) = 0.
+    if (depth_weight(i,j,k) == 0.) valid_point(i,j,k) = 0.
+
+    ! If the point is flagged, set the variable itsef to zero to avoid NaNs
+    if (valid_point(i,j,k) == 0.) localVar(i,j,k) = 0.
+ 
+    weight(i,j,k)  =  depth_weight(i,j,k) * ( (valid_point(i,j,k) * (G%areaT(i,j) * G%mask2dT(i,j))) )
+    tmpForSumming(i,j,k) =  localVar(i,j,k) * weight(i,j,k)
+  enddo ; enddo ; enddo
+
+  global_temp_scalar   = reproducing_sum(tmpForSumming,sums=scalarij)
+  global_weight_scalar = reproducing_sum(weight,sums=weightij)
+
+  do k=1, nz
+    global_z_mean(k) = scalarij(k) / weightij(k)
+  enddo
+
+end function global_z_mean
 
 subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u
@@ -152,6 +207,8 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
                                        ! within the cell, in tracer units
 
   real :: slope ! normalized slope of a variable within the cell
+
+  real :: layer_ave(35)
 
   logical :: linear_velocity_profiles = .true.
 
@@ -397,6 +454,10 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
     
     do m=1,CS%num_tr_used
       if (CS%id_tr(m) > 0) call post_data(CS%id_tr(m), CS%tr_z(m)%p, CS%diag)
+      if (CS%id_tr_xyave(m) > 0) then
+        layer_ave = global_z_mean(CS%tr_z(m)%p,G,CS,m)
+        call post_data_1d_k(CS%id_tr_xyave(m), layer_ave, CS%diag)
+      endif
     enddo
   endif
 
@@ -865,6 +926,9 @@ subroutine register_Z_tracer_low(tr_ptr, name, long_name, units, standard_name, 
     CS%id_tr(m) = register_diag_field('ocean_model_z', name, CS%axesTz, Time,           &
                                       long_name, units, missing_value=CS%missing_tr(m), &
                                       standard_name=standard_name)
+    CS%id_tr_xyave(m) = register_diag_field('ocean_model_xyave_z', name, CS%axesZ, Time,           &
+                                      long_name, units, missing_value=CS%missing_tr(m), &
+                                      standard_name=standard_name)
   else
     id_test = register_diag_field('ocean_model_z', name, CS%diag%axesT1, Time,      &
                                   long_name, units, missing_value=CS%missing_tr(m), &
@@ -875,6 +939,7 @@ subroutine register_Z_tracer_low(tr_ptr, name, long_name, units, standard_name, 
   endif
 
   if (CS%id_tr(m) <= 0) then ; CS%id_tr(m) = -1 ; return ; endif
+  if (CS%id_tr_xyave(m) <= 0) then ; CS%id_tr_xyave(m) = -1 ; return ; endif
 
   CS%num_tr_used = m  
   call safe_alloc_ptr(CS%tr_z(m)%p,isd,ied,jsd,jed,CS%nk_zspace)
@@ -952,6 +1017,7 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
     call defineAxes(diag, (/ diag%axesT1%handles(1),  diag%axesT1%handles(2),  zint_axis /), CS%axesTzi)
     call defineAxes(diag, (/ diag%axesCu1%handles(1), diag%axesCu1%handles(2), zint_axis /), CS%axesCuzi)
     call defineAxes(diag, (/ diag%axesCv1%handles(1), diag%axesCv1%handles(2), zint_axis /), CS%axesCvzi)
+    call defineAxes(diag, (/ z_axis /),    CS%axesZ)
 
     CS%id_u_z = register_diag_field('ocean_model_z', 'u', CS%axesCuz, Time,    &
         'Zonal Velocity in Depth Space', 'meter second-1',                     &
