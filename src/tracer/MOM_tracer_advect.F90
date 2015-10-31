@@ -1,152 +1,92 @@
+!>  This program contains the subroutines that advect tracers
+!!  along coordinate surfaces. 
 module MOM_tracer_advect
-!***********************************************************************
-!*                   GNU General Public License                        *
-!* This file is a part of MOM.                                         *
-!*                                                                     *
-!* MOM is free software; you can redistribute it and/or modify it and  *
-!* are expected to follow the terms of the GNU General Public License  *
-!* as published by the Free Software Foundation; either version 2 of   *
-!* the License, or (at your option) any later version.                 *
-!*                                                                     *
-!* MOM is distributed in the hope that it will be useful, but WITHOUT  *
-!* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY  *
-!* or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public    *
-!* License for more details.                                           *
-!*                                                                     *
-!* For the full text of the GNU General Public License,                *
-!* write to: Free Software Foundation, Inc.,                           *
-!*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
-!* or see:   http://www.gnu.org/licenses/gpl.html                      *
-!***********************************************************************
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, October 1996 - June 2002                       *
-!*                                                                     *
-!*    This program contains the subroutines that advect tracers        *
-!*  horizontally (i.e. along layers).                                  *
-!*                                                                     *
-!*    advect_tracer advects tracer concentrations using a combination  *
-!*  of the modified flux advection scheme from Easter (Mon. Wea. Rev., *
-!*  1993) with tracer distributions given by the monotonic modified    *
-!*  van Leer scheme proposed by Lin et al. (Mon. Wea. Rev., 1994).     *
-!*  This scheme conserves the total amount of tracer while avoiding    *
-!*  spurious maxima and minima of the tracer concentration.  If a      *
-!*  higher order accuracy scheme is needed, I would suggest the mono-  *
-!*  tonic piecewise parabolic method, as described in Carpenter et al. *
-!*  (MWR, 1990).  advect_tracer has 4 arguments, described below. This *
-!*  subroutine determines the volume of a layer in a grid cell at the  *
-!*  previous instance when the tracer concentration was changed, so    *
-!*  it is essential that the volume fluxes should be correct.  It is   *
-!*  also important that the tracer advection occurs before each        *
-!*  calculation of the diabatic forcing.                               *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v, vh                                    *
-!*    j    x ^ x ^ x   At >:  u, uh                                    *
-!*    j    > o > o >   At o:  tr, h                                    *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
+! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
-use MOM_cpu_clock, only : CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
-use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
-use MOM_domains, only : sum_across_PEs, max_across_PEs
-use MOM_domains, only : create_group_pass, do_group_pass, group_pass_type
-use MOM_checksums, only : hchksum
-use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
-use MOM_file_parser, only : get_param, log_version, param_file_type
-use MOM_grid, only : ocean_grid_type
+use MOM_cpu_clock,       only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
+use MOM_cpu_clock,       only : CLOCK_MODULE, CLOCK_ROUTINE
+use MOM_diag_mediator,   only : post_data, query_averaging_enabled, diag_ctrl
+use MOM_diag_mediator,   only : register_diag_field, safe_alloc_ptr, time_type
+use MOM_domains,         only : sum_across_PEs, max_across_PEs
+use MOM_domains,         only : create_group_pass, do_group_pass, group_pass_type
+use MOM_checksums,       only : hchksum
+use MOM_error_handler,   only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
+use MOM_file_parser,     only : get_param, log_version, param_file_type
+use MOM_grid,            only : ocean_grid_type
 use MOM_tracer_registry, only : tracer_registry_type, tracer_type, MOM_tracer_chksum
-use MOM_variables, only : ocean_OBC_type, OBC_FLATHER_E
-use MOM_variables, only : OBC_FLATHER_W, OBC_FLATHER_N, OBC_FLATHER_S
+use MOM_variables,       only : ocean_OBC_type, OBC_FLATHER_E
+use MOM_variables,       only : OBC_FLATHER_W, OBC_FLATHER_N, OBC_FLATHER_S
 
 implicit none ; private
 
 #include <MOM_memory.h>
 
-public advect_tracer, tracer_advect_init, tracer_advect_end
+public advect_tracer
+public tracer_advect_init
+public tracer_advect_end
 
+!> Control structure for this module  
 type, public :: tracer_advect_CS ; private
-  real    :: dt             ! The baroclinic dynamics time step, in s.
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                            ! timing of diagnostic output.
-  logical :: debug          ! If true, write verbose checksums for debugging purposes.
-  logical :: usePPM         ! If true, use PPM instead of PLM
+  real    :: dt                    !< The baroclinic dynamics time step, in s.
+  type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
+                                   !< timing of diagnostic output.
+  logical :: debug                 !< If true, write verbose checksums for debugging purposes.
+  logical :: usePPM                !< If true, use PPM instead of PLM
   type(group_pass_type) :: pass_uhr_vhr_t_hprev ! For group pass
 end type tracer_advect_CS
 
-integer :: id_clock_advect, id_clock_pass, id_clock_sync
+integer :: id_clock_advect
+integer :: id_clock_pass
+integer :: id_clock_sync
 
 contains
 
+!> This routine time steps the tracer concentration using a 
+!! monotonic, conservative, weakly diffusive scheme.
 subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS, Reg)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h_end
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: uhtr
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: vhtr
-  type(ocean_OBC_type),                   pointer       :: OBC
-  real,                                   intent(in)    :: dt
-  type(ocean_grid_type),                  intent(inout) :: G
-  type(tracer_advect_CS),                 pointer       :: CS
-  type(tracer_registry_type),             pointer       :: Reg
-!    This subroutine time steps the tracer concentration.
-!  A monotonic, conservative, weakly diffusive scheme is used.
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h_end !< layer thickness after advection (m or kg m-2)
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: uhtr  !< accumulated volume/mass flux through zonal face (m3 or kg)
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: vhtr  !< accumulated volume/mass flux through merid face (m3 or kg) 
+  type(ocean_OBC_type),                   pointer       :: OBC   !< specifies whether, where, and what OBCs are used
+  real,                                   intent(in)    :: dt    !< time increment (seconds)
+  type(ocean_grid_type),                  intent(inout) :: G     !< ocean grid structure 
+  type(tracer_advect_CS),                 pointer       :: CS    !< control structure for module 
+  type(tracer_registry_type),             pointer       :: Reg   !< pointer to tracer registry 
 
-! Arguments: h_end - Layer thickness after advection, in m or kg m-2.
-!  (in)      uhtr - Accumulated volume or mass fluxes through zonal faces,
-!                   in m3 or kg.
-!  (in)      vhtr - Accumulated volume or mass fluxes through meridional faces,
-!                   in m3 or kg.
-!  (in)      OBC - This open boundary condition type specifies whether, where,
-!                  and what open boundary conditions are used.
-!  (in)      dt - Time increment in s.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 tracer_advect_init.
-!  (in)      Reg - A pointer to the tracer registry.
 
-  type(tracer_type) :: Tr(MAX_FIELDS_) ! The array of registered tracers.
+  type(tracer_type) :: Tr(MAX_FIELDS_) ! The array of registered tracers
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
-    hprev           ! The cell volume at the end of the previous tracer
-                    ! change, in m3.
+    hprev           ! cell volume at the end of previous tracer change (m3)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: &
-    uhr             ! The remaining zonal thickness flux, in m3.
+    uhr             ! The remaining zonal thickness flux (m3)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: &
-    vhr             ! The remaining meridional thickness fluxes, in m3.
+    vhr             ! The remaining meridional thickness fluxes (m3)
   real :: uh_neglect(SZIB_(G),SZJ_(G)) ! uh_neglect and vh_neglect are the
   real :: vh_neglect(SZI_(G),SZJB_(G)) ! magnitude of remaining transports that
-                                ! can be simply discarded, in m3 or kg.
+                                       ! can be simply discarded (m3 or kg).
 
-  real :: landvolfill         ! An arbitrary? nonzero cell volume, m3.
-  real :: Idt                 ! 1/dt in s-1.
+  real :: landvolfill                   ! An arbitrary? nonzero cell volume, m3.
+  real :: Idt                           ! 1/dt in s-1.
   logical :: domore_u(SZJ_(G),SZK_(G))  ! domore__ indicate whether there is more
   logical :: domore_v(SZJB_(G),SZK_(G)) ! advection to be done in the corresponding
-                                ! row or column.
+                                        ! row or column.
   logical :: x_first            ! If true, advect in the x-direction first.
-  integer :: max_iter           ! The maximum number of iterations in
-                                ! each layer.
+  integer :: max_iter           ! maximum number of iterations in each layer
   integer :: domore_k(SZK_(G))
-  integer :: stensil            ! The stensil of the advection scheme.
-  integer :: nsten_halo         ! The number of stensils that fit in the halos.
+  integer :: stencil            ! stencil of the advection scheme
+  integer :: nsten_halo         ! number of stencils that fit in the halos
   integer :: i, j, k, m, is, ie, js, je, isd, ied, jsd, jed, nz, itt, ntr, do_any
   integer :: isv, iev, jsv, jev ! The valid range of the indices.
   integer :: IsdB, IedB, JsdB, JedB
 
   domore_u(:,:) = .false.
   domore_v(:,:) = .false.
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   landvolfill = 1.0e-20         ! This is arbitrary, but must be positive.
-  stensil = 2                   ! The scheme's stensil; 2 for PLM.
+  stencil = 2                   ! The scheme's stencil; 2 for PLM.
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_tracer_advect: "// &
        "tracer_advect_init must be called before advect_tracer.")
@@ -207,7 +147,9 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS, Reg)
   do J=jsd,jed-1 ; do i=isd,ied
     vh_neglect(i,J) = G%H_subroundoff*MIN(G%areaT(i,j),G%areaT(i,j+1))
   enddo ; enddo
+
 !$OMP do
+  ! initialize diagnostic fluxes and tendencies 
   do m=1,ntr
     if (associated(Tr(m)%ad_x)) then
       do k=1,nz ; do j=jsd,jed ; do i=isd,ied
@@ -217,6 +159,11 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS, Reg)
     if (associated(Tr(m)%ad_y)) then
       do k=1,nz ; do J=jsd,jed ; do i=isd,ied
         Tr(m)%ad_y(i,J,k) = 0.0
+      enddo ; enddo ; enddo
+    endif
+    if (associated(Tr(m)%advection_xy)) then
+      do k=1,nz ; do j=jsd,jed ; do i=isd,ied
+        Tr(m)%advection_xy(i,j,k) = 0.0
       enddo ; enddo ; enddo
     endif
     if (associated(Tr(m)%ad2d_x)) then
@@ -232,27 +179,27 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS, Reg)
 
   do itt=1,max_iter
 
-    if (isv > is-stensil) then
+    if (isv > is-stencil) then
       call cpu_clock_begin(id_clock_pass)
       call do_group_pass(CS%pass_uhr_vhr_t_hprev, G%Domain)
       call cpu_clock_end(id_clock_pass)
 
-      nsten_halo = min(is-isd,ied-ie,js-jsd,jed-je)/stensil
-      isv = is-nsten_halo*stensil ; jsv = js-nsten_halo*stensil
-      iev = ie+nsten_halo*stensil ; jev = je+nsten_halo*stensil
+      nsten_halo = min(is-isd,ied-ie,js-jsd,jed-je)/stencil
+      isv = is-nsten_halo*stencil ; jsv = js-nsten_halo*stencil
+      iev = ie+nsten_halo*stencil ; jev = je+nsten_halo*stencil
       ! Reevaluate domore_u & domore_v unless the valid range is the same size as
       ! before.  Also, do this if there is Strang splitting.
       if ((nsten_halo > 1) .or. (itt==1)) then
-!$OMP parallel do default(none) shared(nz,domore_k,jsv,jev,domore_u,isv,iev,stensil, &
+!$OMP parallel do default(none) shared(nz,domore_k,jsv,jev,domore_u,isv,iev,stencil, &
 !$OMP                                  uhr,domore_v,vhr)
         do k=1,nz ; if (domore_k(k) > 0) then
           do j=jsv,jev ; if (.not.domore_u(j,k)) then
-            do i=isv+stensil-1,iev-stensil; if (uhr(I,j,k) /= 0.0) then
+            do i=isv+stencil-1,iev-stencil; if (uhr(I,j,k) /= 0.0) then
               domore_u(j,k) = .true. ; exit
             endif ; enddo ! i-loop
           endif ; enddo
-          do J=jsv+stensil-1,jev-stensil ; if (.not.domore_v(J,k)) then
-            do i=isv+stensil,iev-stensil; if (vhr(i,J,k) /= 0.0) then
+          do J=jsv+stencil-1,jev-stencil ; if (.not.domore_v(J,k)) then
+            do i=isv+stencil,iev-stencil; if (vhr(i,J,k) /= 0.0) then
               domore_v(J,k) = .true. ; exit
             endif ; enddo ! i-loop
           endif ; enddo
@@ -261,51 +208,57 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS, Reg)
           ! whether any work is needed on a layer on this processor.
           domore_k(k) = 0
           do j=jsv,jev ; if (domore_u(j,k)) domore_k(k) = 1 ; enddo
-          do J=jsv+stensil-1,jev-stensil ; if (domore_v(J,k)) domore_k(k) = 1 ; enddo
+          do J=jsv+stencil-1,jev-stencil ; if (domore_v(J,k)) domore_k(k) = 1 ; enddo
 
         endif ; enddo ! k-loop    
       endif
     endif
     
     ! Set the range of valid points after this iteration.
-    isv = isv + stensil ; iev = iev - stensil
-    jsv = jsv + stensil ; jev = jev - stensil
+    isv = isv + stencil ; iev = iev - stencil
+    jsv = jsv + stencil ; jev = jev - stencil
 
 !$OMP parallel do default(none) shared(nz,domore_k,x_first,Tr,hprev,uhr,uh_neglect,  &
-!$OMP                                  OBC,domore_u,ntr,Idt,isv,iev,jsv,jev,stensil, &
+!$OMP                                  OBC,domore_u,ntr,Idt,isv,iev,jsv,jev,stencil, &
 !$OMP                                  G,CS,vhr,vh_neglect,domore_v)
+
+    !  To ensure positive definiteness of the thickness at each iteration, the
+    !  mass fluxes out of each layer are checked each step, and limited to keep  
+    !  the thicknesses positive.  This means that several iterations may be required
+    !  for all the transport to happen.  The sum over domore_k keeps the processors
+    !  synchronized.  This may not be very efficient, but it should be reliable.
     do k=1,nz ; if (domore_k(k) > 0) then
-!    To ensure positive definiteness of the thickness at each iteration, the
-!  mass fluxes out of each layer are checked each step, and limited to keep
-!  the thicknesses positive.  This means that several iteration may be required
-!  for all the transport to happen.  The sum over domore_k keeps the processors
-!  synchronized.  This may not be very efficient, but it should be reliable.
 
       if (x_first) then
-  !    First, advect zonally.
-        call advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
-                      isv, iev, jsv-stensil, jev+stensil, k, G, CS%usePPM)
 
-  !    Next, advect meridionally.
+        ! First, advect zonally.
+        call advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
+                      isv, iev, jsv-stencil, jev+stencil, k, G, CS%usePPM)
+
+        !  Next, advect meridionally.
         call advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
                       isv, iev, jsv, jev, k, G, CS%usePPM)
 
         domore_k(k) = 0
-        do j=jsv-stensil,jev+stensil ; if (domore_u(j,k)) domore_k(k) = 1 ; enddo
+        do j=jsv-stencil,jev+stencil ; if (domore_u(j,k)) domore_k(k) = 1 ; enddo
         do J=jsv-1,jev ; if (domore_v(J,k)) domore_k(k) = 1 ; enddo
-      else
-  !    First, advect meridionally.
-        call advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
-                      isv-stensil, iev+stensil, jsv, jev, k, G, CS%usePPM)
 
-  !    Next, advect zonally.
+      else
+
+        ! First, advect meridionally.
+        call advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
+                      isv-stencil, iev+stencil, jsv, jev, k, G, CS%usePPM)
+
+        ! Next, advect zonally.
         call advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
                       isv, iev, jsv, jev, k, G, CS%usePPM)
 
         domore_k(k) = 0
         do j=jsv,jev ; if (domore_u(j,k)) domore_k(k) = 1 ; enddo
         do J=jsv-1,jev ; if (domore_v(J,k)) domore_k(k) = 1 ; enddo
+
       endif
+
 
     endif ; enddo ! End of k-loop
 
@@ -313,7 +266,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS, Reg)
     if (itt >= max_iter) exit
 
     ! Exit if there are no layers that need more iterations.
-    if (isv > is-stensil) then
+    if (isv > is-stencil) then
       do_any = 0
       call cpu_clock_begin(id_clock_sync)
       call sum_across_PEs(domore_k(:), nz)
@@ -328,32 +281,34 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS, Reg)
 
 end subroutine advect_tracer
 
+
+!> This subroutine does 1-d flux-form advection in the zonal direction using
+!! a monotonic piecewise linear scheme.
 subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
                     is, ie, js, je, k, G, usePPM)
   type(tracer_type), dimension(ntr),      intent(inout) :: Tr
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: hprev
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uhr
-  real, dimension(NIMEMB_,NJMEM_),        intent(inout) :: uh_neglect
+   real, dimension(NIMEMB_,NJMEM_),        intent(inout) :: uh_neglect
   type(ocean_OBC_type),                   pointer       :: OBC
   logical, dimension(NJMEM_,NKMEM_),      intent(inout) :: domore_u
   real,                                   intent(in)    :: Idt
   integer,                                intent(in)    :: ntr, is, ie, js, je,k
   type(ocean_grid_type),                  intent(inout) :: G
   logical,                                intent(in)    :: usePPM
-  !   This subroutine does 1-d flux-form advection in the zonal direction using
-  ! a monotonic piecewise linear scheme.
+
   real, dimension(SZIB_(G),ntr) :: &
-    slope_x, &      ! The concentration slope per grid point in units of
-                    ! concentration (nondim.).
-    flux_x          ! The tracer flux across a boundary in m3*conc or kg*conc.
-  real :: maxslope            ! The maximum concentration slope per grid point
-                              ! consistent with monotonicity, in conc. (nondim.).
-  real :: hup, hlos           ! hup is the upwind volume, hlos is the
-                              ! part of that volume that might be lost
-                              ! due to advection out the other side of
-                              ! the grid box, both in m3 or kg.
-  real :: uhh(SZIB_(G))       ! The zonal flux that occurs during the
-                              ! current iteration, in m3 or kg.
+    slope_x, &          ! The concentration slope per grid point in units of
+                        ! concentration (nondim.).
+    flux_x              ! The tracer flux across a boundary in m3*conc or kg*conc.
+  real :: maxslope      ! The maximum concentration slope per grid point
+                        ! consistent with monotonicity, in conc. (nondim.).
+  real :: hup, hlos     ! hup is the upwind volume, hlos is the
+                        ! part of that volume that might be lost
+                        ! due to advection out the other side of
+                        ! the grid box, both in m3 or kg.
+  real :: uhh(SZIB_(G)) ! The zonal flux that occurs during the
+                        ! current iteration, in m3 or kg.
   real, dimension(SZIB_(G)) :: &
     hlst, Ihnew, &      ! Work variables with units of m3 or kg and m-3 or kg-1.
     CFL                 ! A nondimensional work variable.
@@ -378,8 +333,8 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
   do j=js,je ; if (domore_u(j,k)) then
     domore_u(j,k) = .false.
 
-!   Calculate the i-direction profiles (slopes) of each tracer that
-! is being advected.
+    ! Calculate the i-direction profiles (slopes) of each tracer that
+    ! is being advected.
     if (usePLMslope) then
       do m=1,ntr ; do i=is-1,ie+1
        !if (ABS(Tr(m)%t(i+1,j,k)-Tr(m)%t(i,j,k)) < &
@@ -404,10 +359,10 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
         enddo ; enddo
     endif ! usePLMslope
 
-!   Calculate the i-direction fluxes of each tracer, using as much
-! the minimum of the remaining mass flux (uhr) and the half the mass
-! in the cell plus whatever part of its half of the mass flux that
-! the flux through the other side does not require.
+    ! Calculate the i-direction fluxes of each tracer, using as much
+    ! the minimum of the remaining mass flux (uhr) and the half the mass  
+    ! in the cell plus whatever part of its half of the mass flux that
+    ! the flux through the other side does not require.
     do I=is-1,ie
       if (uhr(I,j,k) == 0.0) then
         uhh(I) = 0.0
@@ -535,8 +490,8 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
       endif ; enddo ; enddo ; endif
     endif ; endif
 
-!   Calculate new tracer concentration in each cell after accounting
-! for the i-direction fluxes.
+    ! Calculate new tracer concentration in each cell after accounting
+    ! for the i-direction fluxes.
     do I=is-1,ie
       uhr(I,j,k) = uhr(I,j,k) - uhh(I)
       if (abs(uhr(I,j,k)) < uh_neglect(I,j)) uhr(I,j,k) = 0.0
@@ -555,23 +510,40 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
         do_i(i) = .false.
       endif
     enddo
+
+    ! update tracer concentration from i-flux and save some diagnostics   
     do m=1,ntr
+
+      ! update tracer
       do i=is,ie ; if ((do_i(i)) .and. (Ihnew(i) > 0.0)) then
         Tr(m)%t(i,j,k) = (Tr(m)%t(i,j,k) * hlst(i) - &
                           (flux_x(I,m) - flux_x(I-1,m))) * Ihnew(i)
       endif ; enddo
+
+      ! diagnostics 
       if (associated(Tr(m)%ad_x)) then ; do i=is,ie ; if (do_i(i)) then
         Tr(m)%ad_x(I,j,k) = Tr(m)%ad_x(I,j,k) + flux_x(I,m)*Idt
       endif ; enddo ; endif
       if (associated(Tr(m)%ad2d_x)) then ; do i=is,ie ; if (do_i(i)) then
         Tr(m)%ad2d_x(I,j) = Tr(m)%ad2d_x(I,j) + flux_x(I,m)*Idt
       endif ; enddo ; endif
+
+      ! diagnose convergence of flux_x (do not use the Ihnew(i) part of the logic).
+      ! division by areaT to get into W/m2 for heat and kg/(s*m2) for salt.
+      if (associated(Tr(m)%advection_xy)) then 
+        do i=is,ie ; if (do_i(i)) then
+          Tr(m)%advection_xy(i,j,k) = Tr(m)%advection_xy(i,j,k) - (flux_x(I,m) - flux_x(I-1,m)) * Idt * G%IareaT(i,j)
+        endif ; enddo
+      endif 
+
     enddo
 
   endif ; enddo ! End of j-loop.
 
 end subroutine advect_x
 
+!> This subroutine does 1-d flux-form advection using a monotonic piecewise
+!! linear scheme.
 subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
                     is, ie, js, je, k, G, usePPM)
   type(tracer_type), dimension(ntr),      intent(inout) :: Tr
@@ -584,20 +556,19 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   integer,                                intent(in)    :: ntr, is, ie, js, je,k
   type(ocean_grid_type),                  intent(inout) :: G
   logical,                                intent(in)    :: usePPM
-  !   This subroutine does 1-d flux-form advection using a monotonic piecewise
-  ! linear scheme.
+
   real, dimension(SZI_(G),ntr,SZJB_(G)) :: &
-    slope_y, &      ! The concentration slope per grid point in units of
-                    ! concentration (nondim.).
-    flux_y          ! The tracer flux across a boundary in m3 * conc or kg*conc.
-  real :: maxslope            ! The maximum concentration slope per grid point
-                              ! consistent with monotonicity, in conc. (nondim.).
+    slope_y, &                  ! The concentration slope per grid point in units of
+                                ! concentration (nondim.).
+    flux_y                      ! The tracer flux across a boundary in m3 * conc or kg*conc.
+  real :: maxslope              ! The maximum concentration slope per grid point
+                                ! consistent with monotonicity, in conc. (nondim.).
   real :: vhh(SZI_(G),SZJB_(G)) ! The meridional flux that occurs during the
-                              ! current iteration, in m3 or kg.
-  real :: hup, hlos           ! hup is the upwind volume, hlos is the
-                              ! part of that volume that might be lost
-                              ! due to advection out the other side of
-                              ! the grid box, both in m3 or kg.
+                                ! current iteration, in m3 or kg.
+  real :: hup, hlos             ! hup is the upwind volume, hlos is the
+                                ! part of that volume that might be lost
+                                ! due to advection out the other side of
+                                ! the grid box, both in m3 or kg.
   real, dimension(SZIB_(G)) :: &
     hlst, Ihnew, &      ! Work variables with units of m3 or kg and m-3 or kg-1.
     CFL                 ! A nondimensional work variable.
@@ -621,8 +592,8 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   do_j_tr(js-1) = domore_v(js-1,k) ; do_j_tr(je+1) = domore_v(je,k)
   do j=js,je ; do_j_tr(j) = (domore_v(J-1,k) .or. domore_v(J,k)) ; enddo
 
-!   Calculate the j-direction profiles (slopes) of each tracer that
-! is being advected.
+  !   Calculate the j-direction profiles (slopes) of each tracer that
+  ! is being advected.
   if (usePLMslope) then
     do j=js-1,je+1 ; if (do_j_tr(j)) then ; do m=1,ntr ; do i=is,ie
       !if (ABS(Tr(m)%t(i,j+1,k)-Tr(m)%t(i,j,k)) < &
@@ -647,10 +618,10 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
     enddo ; enddo ; endif ; enddo ! End of i-, m-, & j- loops.
   endif ! usePLMslope
 
-!   Calculate the j-direction fluxes of each tracer, using as much
-! the minimum of the remaining mass flux (vhr) and the half the mass
-! in the cell plus whatever part of its half of the mass flux that
-! the flux through the other side does not require.
+  ! Calculate the j-direction fluxes of each tracer, using as much
+  ! the minimum of the remaining mass flux (vhr) and the half the mass
+  ! in the cell plus whatever part of its half of the mass flux that
+  ! the flux through the other side does not require.
   do J=js-1,je ; if (domore_v(J,k)) then
     domore_v(J,k) = .false.
     do i=is,ie
@@ -787,8 +758,8 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
     if (abs(vhr(i,J,k)) < vh_neglect(i,J)) vhr(i,J,k) = 0.0
   enddo ; enddo
 
-!   Calculate new tracer concentration in each cell after accounting
-! for the j-direction fluxes.
+  ! Calculate new tracer concentration in each cell after accounting
+  ! for the j-direction fluxes.
   do j=js,je ; if (do_j_tr(j)) then
     do i=is,ie
       if ((vhh(i,J) /= 0.0) .or. (vhh(i,J-1) /= 0.0)) then
@@ -802,35 +773,47 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
         else ;  Ihnew(i) = 1.0 / hprev(i,j,k) ; endif
       else ; do_i(i) = .false. ; endif
     enddo
+
+    ! update tracer and save some diagnostics 
     do m=1,ntr
       do i=is,ie ; if (do_i(i)) then
         Tr(m)%t(i,j,k) = (Tr(m)%t(i,j,k) * hlst(i) - &
                           (flux_y(i,m,J) - flux_y(i,m,J-1))) * Ihnew(i)
       endif ; enddo
+
+      ! diagnostics 
       if (associated(Tr(m)%ad_y)) then ; do i=is,ie ; if (do_i(i)) then
         Tr(m)%ad_y(i,J,k) = Tr(m)%ad_y(i,J,k) + flux_y(i,m,J)*Idt
       endif ; enddo ; endif
       if (associated(Tr(m)%ad2d_y)) then ; do i=is,ie ; if (do_i(i)) then
         Tr(m)%ad2d_y(i,J) = Tr(m)%ad2d_y(i,J) + flux_y(i,m,J)*Idt
       endif ; enddo ; endif
+
+      ! diagnose convergence of flux_y and add to convergence of flux_x.  
+      ! division by areaT to get into W/m2 for heat and kg/(s*m2) for salt.
+      if (associated(Tr(m)%advection_xy)) then 
+        do i=is,ie ; if (do_i(i)) then
+          Tr(m)%advection_xy(i,j,k) = Tr(m)%advection_xy(i,j,k) - (flux_y(i,m,J) - flux_y(i,m,J-1))* Idt * G%IareaT(i,j)
+        endif ; enddo
+      endif 
+
+
     enddo
   endif ; enddo ! End of j-loop.
 
+
 end subroutine advect_y
 
+!> Initialize lateral tracer advection module 
 subroutine tracer_advect_init(Time, G, param_file, diag, CS)
-  type(time_type), target, intent(in)    :: Time
-  type(ocean_grid_type),   intent(in)    :: G
-  type(param_file_type),   intent(in)    :: param_file
-  type(diag_ctrl), target, intent(inout) :: diag
-  type(tracer_advect_CS),  pointer       :: CS
-! Arguments: Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in/out)  CS - A pointer to the control structure for this module
+  type(time_type), target, intent(in)    :: Time        !< current model time
+  type(ocean_grid_type),   intent(in)    :: G           !< ocean grid structure 
+  type(param_file_type),   intent(in)    :: param_file  !< open file to parse for model parameters
+  type(diag_ctrl), target, intent(inout) :: diag        !< regulates diagnostic output
+  type(tracer_advect_CS),  pointer       :: CS          !< module control structure 
+
   integer, save :: init_calls = 0
+
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_tracer_advect" ! This module's name.
@@ -870,11 +853,67 @@ subroutine tracer_advect_init(Time, G, param_file, diag, CS)
 
 end subroutine tracer_advect_init
 
+!> Close the tracer advection module 
 subroutine tracer_advect_end(CS)
   type(tracer_advect_CS), pointer :: CS
 
   if (associated(CS)) deallocate(CS)
 
 end subroutine tracer_advect_end
+
+
+!> \namespace mom_tracer_advect 
+!!                                                                     
+!!    This program contains the subroutines that advect tracers        
+!!  horizontally (i.e. along layers).                                  
+!!                                                                     
+!! \section section_mom_advect_intro
+!!
+!!  * advect_tracer advects tracer concentrations using a combination  
+!!  of the modified flux advection scheme from Easter (Mon. Wea. Rev., 
+!!  1993) with tracer distributions given by the monotonic modified    
+!!  van Leer scheme proposed by Lin et al. (Mon. Wea. Rev., 1994).     
+!!  This scheme conserves the total amount of tracer while avoiding    
+!!  spurious maxima and minima of the tracer concentration.  If a      
+!!  higher order accuracy scheme is needed, suggest monotonic 
+!!  piecewise parabolic method, as described in Carpenter et al. 
+!!  (MWR, 1990).  
+!! 
+!!  * advect_tracer has 4 arguments, described below. This 
+!!  subroutine determines the volume of a layer in a grid cell at the  
+!!  previous instance when the tracer concentration was changed, so    
+!!  it is essential that the volume fluxes should be correct.  It is   
+!!  also important that the tracer advection occurs before each        
+!!  calculation of the diabatic forcing.                               
+!!                                                                     
+!!  \section section_gridlayout MOM grid layout
+!! 
+!!  A small fragment of the grid is shown below:                    
+!!
+!! \verbatim
+!!    j+1  x ^ x ^ x   
+!!
+!!    j+1  > o > o >  
+!!
+!!    j    x ^ x ^ x  
+!!
+!!    j    > o > o >  
+!!
+!!    j-1  x ^ x ^ x
+!!
+!!        i-1  i  i+1
+!!
+!!           i  i+1                                                    
+!!
+!! \endverbatim
+!!
+!!  Fields at each point
+!!  * x =  q, CoriolisBu
+!!  * ^ =  v, PFv, CAv, vh, diffv, tauy, vbt, vhtr
+!!  * > =  u, PFu, CAu, uh, diffu, taux, ubt, uhtr
+!!  * o =  h, bathyT, eta, T, S, tr
+!!
+!!  The boundaries always run through q grid points (x).               
+!!                                                                     
 
 end module MOM_tracer_advect
