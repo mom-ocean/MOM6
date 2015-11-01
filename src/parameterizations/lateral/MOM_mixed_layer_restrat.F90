@@ -1,126 +1,73 @@
+!> This module implements a parameterization of unresolved viscous 
+!!  mixed layer restratification of the mixed layer as described in 
+!!  Fox-Kemper, Ferrari and Hallberg (JPO, 2008), and  
+!!  whose impacts are described in Fox-Kemper et al. 
+!!  (Ocean Modelling).
+
 module MOM_mixed_layer_restrat
-!***********************************************************************
-!*                   GNU General Public License                        *
-!* This file is a part of MOM.                                         *
-!*                                                                     *
-!* MOM is free software; you can redistribute it and/or modify it and  *
-!* are expected to follow the terms of the GNU General Public License  *
-!* as published by the Free Software Foundation; either version 2 of   *
-!* the License, or (at your option) any later version.                 *
-!*                                                                     *
-!* MOM is distributed in the hope that it will be useful, but WITHOUT  *
-!* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY  *
-!* or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public    *
-!* License for more details.                                           *
-!*                                                                     *
-!* For the full text of the GNU General Public License,                *
-!* write to: Free Software Foundation, Inc.,                           *
-!*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
-!* or see:   http://www.gnu.org/licenses/gpl.html                      *
-!***********************************************************************
-!
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, June 2002, 2006                                *
-!*                                                                     *
-!*    The subroutine in this file implements a parameterization of     *
-!*  unresolved viscous mixed layer restratification of the mixed layer *
-!*  as described in Fox-Kemper, Ferrari and Hallberg (JPO, 2008), and  *
-!*  whose impacts are described in Fox-Kemper et al. (Ocean Modelling, *
-!*  2011).  This is derived in part from the older parameterizaton     *
-!*  that is described in Hallberg (Aha Hulikoa, 2003), which this new  *
-!*  parameterization surpasses, which in turn is based on the          *
-!*  subinertial mixed layer theory of Young (JPO, 1994).  There is no  *
-!*  net horizontal volume transport due to this parameterization, and  *
-!*  no direct effect below the mixed layer.                            *
-!*                                                                     *
-!*    This parameterization, developed in detail by Fox-Kemper, et al.,*
-!*  sets the restratification  timescale to agree with his high-       *
-!*  resolution studies of mixed layer restratification.  The run-time  *
-!*  parameter FOX_KEMPER_ML_RESTRAT_COEF is a nondimensional number    *
-!*  of order a few tens, proportional to the ratio of the deformation  *
-!*  radius or the gridscale (whichever is smaller to the dominant      *
-!*  horizontal lengthscale of the submesoscale mixed layer             *
-!*  instabilities.                                                     *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v, vh, vav                               *
-!*    j    x ^ x ^ x   At >:  u, uh, uav                               *
-!*    j    > o > o >   At o:  h                                        *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
+
+! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_diag_mediator, only : diag_update_target_grids
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
-use MOM_file_parser, only : get_param, log_version, param_file_type
-use MOM_forcing_type, only : forcing
-use MOM_grid, only : ocean_grid_type
-use MOM_variables, only : thermo_var_ptrs
-use MOM_EOS, only : calculate_density
+use MOM_file_parser,   only : get_param, log_version, param_file_type
+use MOM_forcing_type,  only : forcing
+use MOM_grid,          only : ocean_grid_type
+use MOM_variables,     only : thermo_var_ptrs
+use MOM_EOS,           only : calculate_density
 
 implicit none ; private
 
 #include <MOM_memory.h>
 
-public mixedlayer_restrat, mixedlayer_restrat_init
+public mixedlayer_restrat
+public mixedlayer_restrat_init
 
+!> Control structure for module 
 type, public :: mixedlayer_restrat_CS ; private
-  real    :: ml_restrat_coef !   A nondimensional factor by which the 
-                             ! instability is enhanced over what would be
-                             ! predicted based on the resolved  gradients.  This
-                             ! increases with grid spacing^2, up to something
-                             ! of order 500.
-  real    :: MLE_density_diff ! Density difference used in detecting mixed-layer
-                             ! depth (kg/m3)
-  real    :: MLE_tail_dh     ! Fraction by which to extend the mixed-layer restratification
-                             ! depth used for a smoother stream function at the base of
-                             ! the mixed-layer.
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
-  integer :: id_urestrat_time , id_vrestrat_time 
-  integer :: id_uhml = -1, id_vhml = -1
-  integer :: id_MLD = -1, id_Rml = -1
-  integer :: id_uDml = -1, id_vDml = -1
-  integer :: id_uml = -1, id_vml = -1
+  real    :: ml_restrat_coef       !<  A nondimensional factor by which the 
+                                   !! instability is enhanced over what would be
+                                   !! predicted based on the resolved  gradients.  This
+                                   !! increases with grid spacing^2, up to something
+                                   !! of order 500.
+  real    :: MLE_density_diff      !< Density difference used in detecting mixed-layer
+                                   !! depth (kg/m3)
+  real    :: MLE_tail_dh           !< Fraction by which to extend the mixed-layer restratification
+                                   !! depth used for a smoother stream function at the base of
+                                   !! the mixed-layer.
+  type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
+                                   !! timing of diagnostic output.
+
+  integer :: id_urestrat_time
+  integer :: id_vrestrat_time 
+  integer :: id_uhml = -1
+  integer :: id_vhml = -1
+  integer :: id_MLD  = -1
+  integer :: id_Rml  = -1
+  integer :: id_uDml = -1
+  integer :: id_vDml = -1
+  integer :: id_uml  = -1
+  integer :: id_vml  = -1
+
 end type mixedlayer_restrat_CS
 
 contains
 
+!>  This subroutine does interface depth diffusion.  The fluxes are
+!!  limited to give positive definiteness, and the diffusivities are
+!!  limited to guarantee stability.
 subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uhtr
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vhtr
-  type(thermo_var_ptrs),                  intent(in)    :: tv
-  type(forcing),                          intent(in)    :: fluxes
-  real,                                   intent(in)    :: dt
-  type(ocean_grid_type),                  intent(in)    :: G
-  type(mixedlayer_restrat_CS),            pointer       :: CS
-!    This subroutine does interface depth diffusion.  The fluxes are
-!  limited to give positive definiteness, and the diffusivities are
-!  limited to guarantee stability.
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h       !< layer thickness (H units = m or kg/m2)
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uhtr    !< accumulated zonal mass flux (m3 or kg)   
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vhtr    !< accumulated merid mass flux (m3 or kg)   
+  type(thermo_var_ptrs),                  intent(in)    :: tv      !< thermodynamic variables structure 
+  type(forcing),                          intent(in)    :: fluxes  !< pointers to forcing fields
+  real,                                   intent(in)    :: dt      !< time increment (sec)
+  type(ocean_grid_type),                  intent(in)    :: G       !< ocean grid structure 
+  type(mixedlayer_restrat_CS),            pointer       :: CS      !< module control structure 
 
-! Arguments: h - Layer thickness, in m or kg m-2.  (Intent in/out.)
-!                The units of h are referred to as H below.
-!  (in/out)  uhtr - Accumulated zonal mass fluxes in m3 or kg.
-!  (in/out)  vhtr - Accumulated meridional mass fluxes in m3 or kg.
-!  (in)      tv - A structure containing the thermobaric variables.
-!  (in)      fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields have NULL ptrs.
-!  (in)      dt - Time increment in s.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 mixedlayer_restrat_init.
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "Module must be initialized before it is used.")
@@ -133,66 +80,51 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
 
 end subroutine mixedlayer_restrat
 
+
+!> This subroutine does interface depth diffusion.  The fluxes are
+!! limited to give positive definiteness, and the diffusivities are
+!! limited to guarantee stability.
 subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uhtr
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vhtr
-  type(thermo_var_ptrs),                  intent(in)    :: tv
-  type(forcing),                          intent(in)    :: fluxes
-  real,                                   intent(in)    :: dt
-  type(ocean_grid_type),                  intent(in)    :: G
-  type(mixedlayer_restrat_CS),            pointer       :: CS
-!    This subroutine does interface depth diffusion.  The fluxes are
-!  limited to give positive definiteness, and the diffusivities are
-!  limited to guarantee stability.
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h       !< layer thickness (H units = m or kg/m2)
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uhtr    !< accumulated zonal mass flux (m3 or kg)   
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vhtr    !< accumulated merid mass flux (m3 or kg)   
+  type(thermo_var_ptrs),                  intent(in)    :: tv      !< thermodynamic variables structure 
+  type(forcing),                          intent(in)    :: fluxes  !< pointers to forcing fields
+  real,                                   intent(in)    :: dt      !< time increment (sec)
+  type(ocean_grid_type),                  intent(in)    :: G       !< ocean grid structure  
+  type(mixedlayer_restrat_CS),            pointer       :: CS      !< module control structure 
 
-! Arguments: h - Layer thickness, in m or kg m-2.  (Intent in/out.)
-!                The units of h are referred to as H below.
-!  (in/out)  uhtr - Accumulated zonal mass fluxes in m3 or kg.
-!  (in/out)  vhtr - Accumulated meridional mass fluxes in m3 or kg.
-!  (in)      tv - A structure containing the thermobaric variables.
-!  (in)      fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields have NULL ptrs.
-!  (in)      dt - Time increment in s.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 mixedlayer_restrat_init.
 
-  real :: uhml(SZIB_(G),SZJ_(G),SZK_(G)) ! The zonal and meridional mixed layer
-  real :: vhml(SZI_(G),SZJB_(G),SZK_(G)) ! fluxes, in m3 s-1 or kg s-1.
+  real :: uhml(SZIB_(G),SZJ_(G),SZK_(G)) ! zonal mixed layer transport (m3/s or kg/s)
+  real :: vhml(SZI_(G),SZJB_(G),SZK_(G)) ! merid mixed layer transport (m3/s or kg/s)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
-    h_avail       ! The volume available for diffusion out of each face of each
-                  ! sublayer of the mixed layer, divided by dt, in units
-                  ! of H m2 s-1 (i.e., m3 s-1 or kg s-1).
+    h_avail               ! The volume available for diffusion out of each face of each
+                          ! sublayer of the mixed layer, divided by dt, in units
+                          ! of H * m2 s-1 (i.e., m3 s-1 or kg s-1).
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    MLD,  &       ! The diagnosed MLD
-    htot, &       ! The sum of the thicknesses of layers in the mixed layer, H.
-    Rml_av        ! g_Rho0 times the average mixed layer density, in m s-2.
-  real :: g_Rho0  ! G_Earth/Rho0 in m4 s-2 kg-1.
-  real :: Rho0(SZI_(G)) ! Potential density relative to the surface, in kg m-3.
-  real :: p0(SZI_(G))   ! A pressure of 0, in Pa.
+    MLD,  &               ! diagnosed MLD
+    htot, &               ! The sum of the thicknesses of layers in the mixed layer (H units)
+    Rml_av                ! g_Rho0 times the average mixed layer density (m s-2)
+  real :: g_Rho0          ! G_Earth/Rho0 (m4 s-2 kg-1) 
+  real :: Rho0(SZI_(G))   ! Potential density relative to the surface (kg m-3)
+  real :: p0(SZI_(G))     ! A pressure of 0 (Pa)
 
-  real :: h_vel         ! htot interpolated onto velocity points, in m (not H).
-  real :: absf          ! The absolute value of f, interpolated to velocity
-                        ! points, in s-1.
-  real :: u_star        ! The surface friction velocity, interpolated to velocity
-                        ! points, in m s-1.
-  real :: mom_mixrate   ! The rate at which momentum is homogenized within the
-                        ! mixed layer in s-1.
-  real :: timescale     ! The mixing growth timescale in s.
-  real :: h_neglect     ! A thickness that is so small it is usually lost
-                        ! in roundoff and can be neglected, in H.
-  real :: dz_neglect    ! A thickness in m that is so small it is usually lost
-                        ! in roundoff and can be neglected, in m.
-  real :: I4dt          ! 1 / 4 dt
-  real :: Ihtot         ! The total mixed layer thickness,
-  real :: a(SZK_(G))    ! A nondimensional value relating the overall flux
-                        ! magnitudes (uDml & vDml) to the realized flux in a
-                        ! layer.  The vertical sum of a() through the pieces of
-                        ! the mixed layer must be 0.
+  real :: h_vel           ! htot interpolated onto velocity points in metre (not H).
+  real :: absf            ! absolute value of f, interpolated to velocity points (s-1)
+  real :: u_star          ! surface friction velocity, interpolated to velocity points (m s-1)
+  real :: mom_mixrate     ! rate at which momentum is homogenized within mixed layer (s-1)
+  real :: timescale       ! mixing growth timescale (sec)
+  real :: h_neglect       ! tiny thickness usually lost in roundoff so can be neglected (H units)
+  real :: dz_neglect      ! A tiny thickness (in m) that is usually lost in roundoff so can be neglected
+  real :: I4dt            ! 1/(4 dt) (sec-1)
+  real :: Ihtot           ! total mixed layer thickness
+  real :: a(SZK_(G))      ! A nondimensional value relating the overall flux
+                          ! magnitudes (uDml & vDml) to the realized flux in a
+                          ! layer.  The vertical sum of a() through the pieces of
+                          ! the mixed layer must be 0.
   real :: uDml(SZIB_(G))  ! The zonal and meridional volume fluxes in the upper
   real :: vDml(SZI_(G))   ! half of the mixed layer in H m2 s-1 (m3 s-1 or kg s-1).
-  real :: utimescale_diag(SZIB_(G),SZJ_(G)) ! The restratification timescales
+  real :: utimescale_diag(SZIB_(G),SZJ_(G)) ! restratification timescales
   real :: vtimescale_diag(SZI_(G),SZJB_(G)) ! in the zonal and meridional
                                             ! directions, in s, stored in 2-D
                                             ! arrays for diagnostic purposes.
@@ -204,8 +136,9 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
   real :: hAtVel, zIHaboveVel, zIHbelowVel
 
   real :: PSI, PSI1, z ! For statement function
+
   ! Stream function as a function of non-dimensional position within mixed-layer (F77 statement function)
- !PSI(z) = max(0., (1. - (2.*z+1.)**2 ) )
+  !PSI(z) = max(0., (1. - (2.*z+1.)**2 ) )
   PSI1(z) = max(0., (1. - (2.*z+1.)**2 ) * (1. + (5./21.)*(2.*z+1.)**2) )
   real :: BOTTOP, XP, PSIC, DD
   BOTTOP(z) = 0.5*(1.-SIGN(1.,z+0.5)) ! =0 for z>-0.5, =1 for z<-0.5
@@ -214,7 +147,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
   PSIC(z) = max( PSI1(z), DD(z)*BOTTOP(z) )
   PSI(z) = PSIC(z)
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   if (.not.associated(tv%eqn_of_state)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
@@ -319,7 +252,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
         IhTot = 2.0 / ((htot(i,j) + htot(i+1,j)) + h_neglect)
         zIHbelowVel = 0.0
         ! a(k) relates the sublayer transport to uDml with a linear profile.
-        ! The sum of a through the mixed layers must be 0.
+        ! The sum of a(k) through the mixed layers must be 0.
         do k=1,nz
           hAtVel = 0.5*(h(i,j,k) + h(i+1,j,k))
           zIHaboveVel = zIHbelowVel                    ! z/H for upper interface
@@ -366,8 +299,8 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
     else
       IhTot = 2.0 / ((htot(i,j) + htot(i,j+1)) + h_neglect)
       zIHbelowVel = 0.0
-      ! a relates the sublayer transport to uDml with a linear profile.
-      ! The sum of a through the mixed layers must be 0.
+      ! a(k) relates the sublayer transport to uDml with a linear profile.
+      ! The sum of a(k) through the mixed layers must be 0.
       do k=1,nz
         hAtVel = 0.5*(h(i,j,k) + h(i,j+1,k))
         zIHaboveVel = zIHbelowVel                    ! z/H for upper interface
@@ -400,16 +333,17 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
   ! This needs to happen after the H update and before the next post_data.
   call diag_update_target_grids(CS%diag)
 
-! Offer fields for averaging.
+  ! Offer diagnostic fields for averaging.
   if (query_averaging_enabled(CS%diag)) then
     if (CS%id_urestrat_time > 0) call post_data(CS%id_urestrat_time, utimescale_diag, CS%diag)
     if (CS%id_vrestrat_time > 0) call post_data(CS%id_vrestrat_time, vtimescale_diag, CS%diag)
-    if (CS%id_uhml > 0) call post_data(CS%id_uhml, uhml, CS%diag)
-    if (CS%id_vhml > 0) call post_data(CS%id_vhml, vhml, CS%diag)
-    if (CS%id_MLD > 0) call post_data(CS%id_MLD, MLD, CS%diag)
-    if (CS%id_Rml > 0) call post_data(CS%id_Rml, Rml_av, CS%diag)
-    if (CS%id_uDml > 0) call post_data(CS%id_uDml, uDml_diag, CS%diag)
-    if (CS%id_vDml > 0) call post_data(CS%id_vDml, vDml_diag, CS%diag)
+    if (CS%id_uhml          > 0) call post_data(CS%id_uhml, uhml, CS%diag)
+    if (CS%id_vhml          > 0) call post_data(CS%id_vhml, vhml, CS%diag)
+    if (CS%id_MLD           > 0) call post_data(CS%id_MLD, MLD, CS%diag)
+    if (CS%id_Rml           > 0) call post_data(CS%id_Rml, Rml_av, CS%diag)
+    if (CS%id_uDml          > 0) call post_data(CS%id_uDml, uDml_diag, CS%diag)
+    if (CS%id_vDml          > 0) call post_data(CS%id_vDml, vDml_diag, CS%diag)
+
     if (CS%id_uml > 0) then
       do J=js,je ; do i=is,ie
         h_vel = 0.5*((htot(i,j) + htot(i+1,j)) + h_neglect)
@@ -428,86 +362,70 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
 
 end subroutine mixedlayer_restrat_general
 
+
+!> This subroutine does interface depth diffusion.  The fluxes are
+!! limited to give positive definiteness, and the diffusivities are
+!! limited to guarantee stability.
 subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uhtr
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vhtr
-  type(thermo_var_ptrs),                  intent(in)    :: tv
-  type(forcing),                          intent(in)    :: fluxes
-  real,                                   intent(in)    :: dt
-  type(ocean_grid_type),                  intent(in)    :: G
-  type(mixedlayer_restrat_CS),            pointer       :: CS
-!    This subroutine does interface depth diffusion.  The fluxes are
-!  limited to give positive definiteness, and the diffusivities are
-!  limited to guarantee stability.
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h       !< layer thickness (H units = m or kg/m2)
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uhtr    !< accumulated zonal mass flux (m3 or kg)   
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vhtr    !< accumulated merid mass flux (m3 or kg)   
+  type(thermo_var_ptrs),                  intent(in)    :: tv      !< thermodynamic variables structure 
+  type(forcing),                          intent(in)    :: fluxes  !< pointers to forcing fields
+  real,                                   intent(in)    :: dt      !< time increment (sec)
+  type(ocean_grid_type),                  intent(in)    :: G       !< ocean grid structure  
+  type(mixedlayer_restrat_CS),            pointer       :: CS      !< module control structure 
 
-! Arguments: h - Layer thickness, in m or kg m-2.  (Intent in/out.)
-!                The units of h are referred to as H below.
-!  (in/out)  uhtr - Accumulated zonal mass fluxes in m3 or kg.
-!  (in/out)  vhtr - Accumulated meridional mass fluxes in m3 or kg.
-!  (in)      tv - A structure containing the thermobaric variables.
-!  (in)      fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields have NULL ptrs.
-!  (in)      dt - Time increment in s.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 mixedlayer_restrat_init.
-
-  real :: uhml(SZIB_(G),SZJ_(G),SZK_(G)) ! The zonal and meridional mixed layer
-  real :: vhml(SZI_(G),SZJB_(G),SZK_(G)) ! fluxes, in m3 s-1 or kg s-1.
+  real :: uhml(SZIB_(G),SZJ_(G),SZK_(G)) ! zonal mixed layer transport (m3/s or kg/s) 
+  real :: vhml(SZI_(G),SZJB_(G),SZK_(G)) ! merid mixed layer transport (m3/s or kg/s)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
-    h_avail       ! The volume available for diffusion out of each face of each
-                  ! sublayer of the mixed layer, divided by dt, in units
-                  ! of H m2 s-1 (i.e., m3 s-1 or kg s-1).
+    h_avail               ! The volume available for diffusion out of each face of each
+                          ! sublayer of the mixed layer, divided by dt, in units
+                          ! of H m2 s-1 (i.e., m3 s-1 or kg s-1).
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    htot, &       ! The sum of the thicknesses of layers in the mixed layer, H.
-    Rml_av        ! g_Rho0 times the average mixed layer density, in m s-2.
-  real :: g_Rho0  ! G_Earth/Rho0 in m4 s-2 kg-1.
-  real :: Rho0(SZI_(G)) ! Potential density relative to the surface, in kg m-3.
-  real :: p0(SZI_(G))   ! A pressure of 0, in Pa.
+    htot, &               ! The sum of the thicknesses of layers in the mixed layer (H units)
+    Rml_av                ! g_Rho0 times the average mixed layer density (m s-2)
+  real :: g_Rho0          ! G_Earth/Rho0 (m4 s-2 kg-1)
+  real :: Rho0(SZI_(G))   ! Potential density relative to the surface (kg m-3)
+  real :: p0(SZI_(G))     ! A pressure of 0 (Pa)
 
-  real :: h_vel         ! htot interpolated onto velocity points, in m (not H).
-  real :: absf          ! The absolute value of f, interpolated to velocity
-                        ! points, in s-1.
-  real :: u_star        ! The surface friction velocity, interpolated to velocity
-                        ! points, in m s-1.
-  real :: mom_mixrate   ! The rate at which momentum is homogenized within the
-                        ! mixed layer in s-1.
-  real :: timescale     ! The mixing growth timescale in s.
-  real :: h_neglect     ! A thickness that is so small it is usually lost
-                        ! in roundoff and can be neglected, in H.
-  real :: dz_neglect    ! A thickness in m that is so small it is usually lost
-                        ! in roundoff and can be neglected, in m.
-  real :: I4dt          ! 1 / 4 dt
-  real :: I2htot        ! Twice the total mixed layer thickness,
-  real :: z_topx2       ! depth of the top of a layer, and
-  real :: hx2           ! layer thickness, all at velocity points and in H.
-  real :: a(SZK_(G))    ! A nondimensional value relating the overall flux
-                        ! magnitudes (uDml & vDml) to the realized flux in a
-                        ! layer.  The vertical sum of a() through the pieces of
-                        ! the mixed layer must be 0.
+  real :: h_vel           ! htot interpolated onto velocity points (meter; not H)
+  real :: absf            ! absolute value of f, interpolated to velocity points (s-1)
+  real :: u_star          ! surface friction velocity, interpolated to velocity points (m s-1)
+  real :: mom_mixrate     ! rate at which momentum is homogenized within mixed layer (s-1)
+  real :: timescale       ! mixing growth timescale (sec)
+  real :: h_neglect       ! tiny thickness usually lost in roundoff and can be neglected (H units)
+  real :: dz_neglect      ! tiny thickness (in m) that usually lost in roundoff and can be neglected (meter)
+  real :: I4dt            ! 1/(4 dt)
+  real :: I2htot          ! Twice the total mixed layer thickness at velocity points (H units)
+  real :: z_topx2         ! depth of the top of a layer at velocity points (H units)
+  real :: hx2             ! layer thickness at velocity points (H units)
+  real :: a(SZK_(G))      ! A nondimensional value relating the overall flux
+                          ! magnitudes (uDml & vDml) to the realized flux in a
+                          ! layer.  The vertical sum of a() through the pieces of
+                          ! the mixed layer must be 0.
   real :: uDml(SZIB_(G))  ! The zonal and meridional volume fluxes in the upper
   real :: vDml(SZI_(G))   ! half of the mixed layer in H m2 s-1 (m3 s-1 or kg s-1).
   real :: utimescale_diag(SZIB_(G),SZJ_(G)) ! The restratification timescales
   real :: vtimescale_diag(SZI_(G),SZJB_(G)) ! in the zonal and meridional
-                                            ! directions, in s, stored in 2-D
+                                            ! directions (sec), stored in 2-D
                                             ! arrays for diagnostic purposes.
   real :: uDml_diag(SZIB_(G),SZJ_(G)), vDml_diag(SZI_(G),SZJB_(G))
-  logical :: use_EOS    ! If true, density is calculated from T & S using an
-                        ! equation of state.
+  logical :: use_EOS    ! If true, density is calculated from T & S using an equation of state.
+
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "Module must be initialized before it is used.")
   if ((G%nkml<2) .or. (CS%ml_restrat_coef<=0.0)) return
 
-  uDml(:) = 0.0 ; vDml(:) = 0.0
-  I4dt = 0.25 / dt
-  g_Rho0 = G%g_Earth/G%Rho0
-  use_EOS = associated(tv%eqn_of_state)
-  h_neglect = G%H_subroundoff
+  uDml(:)    = 0.0 ; vDml(:) = 0.0
+  I4dt       = 0.25 / dt
+  g_Rho0     = G%g_Earth/G%Rho0
+  use_EOS    = associated(tv%eqn_of_state)
+  h_neglect  = G%H_subroundoff
   dz_neglect = G%H_subroundoff*G%H_to_m
 
   if (.not.use_EOS) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
@@ -576,7 +494,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
         I2htot = 1.0 / (htot(i,j) + htot(i+1,j) + h_neglect)
         z_topx2 = 0.0
         ! a(k) relates the sublayer transport to uDml with a linear profile.
-        ! The sum of a through the mixed layers must be 0.
+        ! The sum of a(k) through the mixed layers must be 0.
         do k=1,G%nkml
           hx2 = (h(i,j,k) + h(i+1,j,k) + h_neglect)
           a(k) = (hx2 * I2htot) * (2.0 - 4.0*(z_topx2+0.5*hx2)*I2htot)
@@ -622,8 +540,8 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
     else
       I2htot = 1.0 / (htot(i,j) + htot(i,j+1) + h_neglect)
       z_topx2 = 0.0
-      ! a relates the sublayer transport to uDml with a linear profile.
-      ! The sum of a through the mixed layers must be 0.
+      ! a(k) relates the sublayer transport to uDml with a linear profile.
+      ! The sum of a(k) through the mixed layers must be 0.
       do k=1,G%nkml
         hx2 = (h(i,j,k) + h(i,j+1,k) + h_neglect)
         a(k) = (hx2 * I2htot) * (2.0 - 4.0*(z_topx2+0.5*hx2)*I2htot)
@@ -654,9 +572,9 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
   ! for vertical remapping may need to be regenerated.
   call diag_update_target_grids(CS%diag)
 
-! Offer fields for averaging.
+  ! Offer diagnostic fields for averaging.
   if (query_averaging_enabled(CS%diag) .and. &
-      ((CS%id_urestrat_time > 0)  .or. (CS%id_vrestrat_time > 0))) then
+    ((CS%id_urestrat_time > 0)  .or. (CS%id_vrestrat_time > 0))) then
     call post_data(CS%id_urestrat_time, utimescale_diag, CS%diag)
     call post_data(CS%id_vrestrat_time, vtimescale_diag, CS%diag)
   endif
@@ -666,10 +584,10 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
       do j=js,je ; do I=Isq,Ieq ; uhml(I,j,k) = 0.0 ; enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie ; vhml(i,J,k) = 0.0 ; enddo ; enddo
     enddo
-    if (CS%id_uhml > 0) call post_data(CS%id_uhml, uhml, CS%diag)
-    if (CS%id_vhml > 0) call post_data(CS%id_vhml, vhml, CS%diag)
-    if (CS%id_MLD > 0) call post_data(CS%id_MLD, htot, CS%diag)
-    if (CS%id_Rml > 0) call post_data(CS%id_Rml, Rml_av, CS%diag)
+    if (CS%id_uhml > 0) call post_data(CS%id_uhml, uhml,      CS%diag)
+    if (CS%id_vhml > 0) call post_data(CS%id_vhml, vhml,      CS%diag)
+    if (CS%id_MLD  > 0) call post_data(CS%id_MLD,  htot,      CS%diag)
+    if (CS%id_Rml  > 0) call post_data(CS%id_Rml,  Rml_av,    CS%diag)
     if (CS%id_uDml > 0) call post_data(CS%id_uDml, uDml_diag, CS%diag)
     if (CS%id_vDml > 0) call post_data(CS%id_vDml, vDml_diag, CS%diag)
   endif
@@ -677,19 +595,14 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
 end subroutine mixedlayer_restrat_BML
 
 
+!> Initialize the mixedlayer restratification module 
 logical function mixedlayer_restrat_init(Time, G, param_file, diag, CS)
-  type(time_type),             intent(in)    :: Time
-  type(ocean_grid_type),       intent(in)    :: G
-  type(param_file_type),       intent(in)    :: param_file
-  type(diag_ctrl), target,     intent(inout) :: diag
-  type(mixedlayer_restrat_CS), pointer       :: CS
-! Arguments: Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                  for this module
+  type(time_type),             intent(in)    :: Time         !< current model time 
+  type(ocean_grid_type),       intent(in)    :: G            !< ocean grid structure   
+  type(param_file_type),       intent(in)    :: param_file   !< parameter file to parse
+  type(diag_ctrl), target,     intent(inout) :: diag         !< regulate diagnostics 
+  type(mixedlayer_restrat_CS), pointer       :: CS           !< module control structure 
+
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_mixed_layer_restrat"  ! This module's name.
@@ -738,6 +651,7 @@ logical function mixedlayer_restrat_init(Time, G, param_file, diag, CS)
     CS%MLE_density_diff = -9.e9
     CS%MLE_tail_dh = -9.e9
   endif
+
   CS%id_uhml = register_diag_field('ocean_model', 'uhml', diag%axesCuL, Time, &
       'Zonal Thickness Flux to Restratify Mixed Layer', flux_units)
   CS%id_vhml = register_diag_field('ocean_model', 'vhml', diag%axesCvL, Time, &
@@ -760,5 +674,60 @@ logical function mixedlayer_restrat_init(Time, G, param_file, diag, CS)
       'Surface meridional velocity component of mixed layer restratification', 'm/s')
 
 end function mixedlayer_restrat_init
+
+
+!> \namespace mom_mixed_layer_restrat
+!!                                                                     
+!!    The subroutine in this file implements a parameterization of     
+!!  unresolved viscous mixed layer restratification of the mixed layer 
+!!  as described in Fox-Kemper, Ferrari and Hallberg (JPO, 2008), and  
+!!  whose impacts are described in Fox-Kemper et al. (Ocean Modelling, 
+!!  2011).  This is derived in part from the older parameterizaton     
+!!  that is described in Hallberg (Aha Hulikoa, 2003), which this new  
+!!  parameterization surpasses, which in turn is based on the          
+!!  subinertial mixed layer theory of Young (JPO, 1994).  There is no  
+!!  net horizontal volume transport due to this parameterization, and  
+!!  no direct effect below the mixed layer.                            
+!!                                                                     
+!!  This parameterization sets the restratification timescale to agree 
+!!  high-resolution studies of mixed layer restratification.  The run-time  
+!!  parameter FOX_KEMPER_ML_RESTRAT_COEF is a nondimensional number    
+!!  of order a few tens, proportional to the ratio of the deformation  
+!!  radius or the gridscale (whichever is smaller to the dominant      
+!!  horizontal lengthscale of the submesoscale mixed layer             
+!!  instabilities.                                                     
+!!                                                                     
+!!  Macros written all in capital letters are defined in MOM_memory.h. 
+!!                                                                     
+!!  \section section_gridlayout MOM grid layout
+!! 
+!!  A small fragment of the grid is shown below:                    
+!!
+!! \verbatim
+!!    j+1  x ^ x ^ x   
+!!
+!!    j+1  > o > o >  
+!!
+!!    j    x ^ x ^ x  
+!!
+!!    j    > o > o >  
+!!
+!!    j-1  x ^ x ^ x
+!!
+!!        i-1  i  i+1
+!!
+!!           i  i+1                                                    
+!!
+!! \endverbatim
+!!
+!!  Fields at each point
+!!  * x =  q, CoriolisBu
+!!  * ^ =  v, PFv, CAv, vh, diffv, tauy, vbt, vhtr
+!!  * > =  u, PFu, CAu, uh, diffu, taux, ubt, uhtr
+!!  * o =  h, bathyT, eta, T, S, tr
+!!
+!!  The boundaries always run through q grid points (x).               
+!!                                                                     
+
 
 end module MOM_mixed_layer_restrat
