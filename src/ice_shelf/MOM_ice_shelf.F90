@@ -133,14 +133,14 @@ implicit none ; private
 #include <MOM_memory.h>
 #ifdef SYMMETRIC_LAND_ICE
 #  define GRID_SYM_ .true.
-#  define NIMEMB_SYM_ NIMEMB_SYM_
-#  define NJMEMB_SYM_ NJMEMB_SYM_
+#  define NILIMB_SYM_ NIMEMB_SYM_
+#  define NJLIMB_SYM_ NJMEMB_SYM_
 #  define ISUMSTART_INT_ CS%grid%iscB+1
 #  define JSUMSTART_INT_ CS%grid%jscB+1 
 #else
 #  define GRID_SYM_ .false.
-#  define NIMEMB_SYM_ NIMEMB_
-#  define NJMEMB_SYM_ NJMEMB_
+#  define NILIMB_SYM_ NIMEMB_
+#  define NJLIMB_SYM_ NJMEMB_
 #  define ISUMSTART_INT_ CS%grid%iscB
 #  define JSUMSTART_INT_ CS%grid%jscB
 #endif
@@ -2040,7 +2040,7 @@ end subroutine ice_shelf_advect
 
 subroutine ice_shelf_solve_outer (CS, u, v, FE, iters, time)
   type(ice_shelf_CS),                     pointer       :: CS
-  real, dimension(NIMEMB_SYM_,NJMEMB_SYM_), intent(inout) :: u, v
+  real, dimension(NILIMB_SYM_,NJLIMB_SYM_), intent(inout) :: u, v
   integer,                                intent(in)    :: FE
   integer,                                intent(out)   :: iters
   type(time_type),                        intent(in)    :: time
@@ -2398,8 +2398,8 @@ end subroutine ice_shelf_solve_outer
 
 subroutine ice_shelf_solve_inner (CS, u, v, taudx, taudy, H_node, float_cond, FE, conv_flag, iters, time, Phi, Phisub)
   type(ice_shelf_CS),         pointer    :: CS
-  real, dimension(NIMEMB_SYM_,NJMEMB_SYM_), intent(inout)  :: u, v
-  real, dimension(NIMEMB_SYM_,NJMEMB_SYM_), intent(in)     :: taudx, taudy, H_node
+  real, dimension(NILIMB_SYM_,NJLIMB_SYM_), intent(inout)  :: u, v
+  real, dimension(NILIMB_SYM_,NJLIMB_SYM_), intent(in)     :: taudx, taudy, H_node
   real, dimension(:,:),intent(in)                        :: float_cond
   integer, intent(in)          :: FE
   integer, intent(out)         :: conv_flag, iters
@@ -3532,7 +3532,7 @@ end subroutine calve_to_mask
 subroutine calc_shelf_driving_stress (CS, TAUD_X, TAUD_Y, OD, FE)
   type(ice_shelf_CS),         pointer   :: CS
   real, dimension(:,:), intent(in)    :: OD
-  real, dimension(NIMEMB_SYM_,NJMEMB_SYM_), intent(inout)    :: TAUD_X, TAUD_Y
+  real, dimension(NILIMB_SYM_,NJLIMB_SYM_), intent(inout)    :: TAUD_X, TAUD_Y
   integer, intent(in)            :: FE
 
 ! driving stress!
@@ -4003,11 +4003,11 @@ end subroutine CG_action_triangular
 subroutine CG_action_bilinear (uret, vret, u, v, Phi, Phisub, umask, vmask, hmask, H_node, &
                 nu, float_cond, D, beta, dxdyh, is, ie, js, je, dens_ratio)
 
-real, dimension (NIMEMB_SYM_,NJMEMB_SYM_), intent (inout)  :: uret, vret
+real, dimension (NILIMB_SYM_,NJLIMB_SYM_), intent (inout)  :: uret, vret
 real, dimension (:,:,:,:), pointer :: Phi 
 real, dimension (:,:,:,:,:,:),pointer :: Phisub
-real, dimension (NIMEMB_SYM_,NJMEMB_SYM_), intent (in)     :: u, v
-real, dimension (NIMEMB_SYM_,NJMEMB_SYM_), intent (in)     :: umask, vmask, H_node
+real, dimension (NILIMB_SYM_,NJLIMB_SYM_), intent (in)     :: u, v
+real, dimension (NILIMB_SYM_,NJLIMB_SYM_), intent (in)     :: umask, vmask, H_node
 real, dimension (:,:), intent (in)     :: hmask, nu, float_cond, D, beta, dxdyh
 real, intent(in)                       :: dens_ratio
 integer, intent(in)               :: is, ie, js, je
@@ -4404,11 +4404,11 @@ end subroutine matrix_diagonal_triangle
 subroutine matrix_diagonal_bilinear(CS, float_cond, H_node, dens_ratio, Phisub, u_diagonal, v_diagonal)
 
   type(ice_shelf_CS),    pointer       :: CS
-  real, dimension (NIMEMB_SYM_,NJMEMB_SYM_), intent(in) :: H_node
+  real, dimension (NILIMB_SYM_,NJLIMB_SYM_), intent(in) :: H_node
   real                                :: dens_ratio
   real, dimension (:,:), intent(in) :: float_cond
   real, dimension (:,:,:,:,:,:),pointer :: Phisub
-  real, dimension (NIMEMB_SYM_,NJMEMB_SYM_), intent(inout) :: u_diagonal, v_diagonal
+  real, dimension (NILIMB_SYM_,NJLIMB_SYM_), intent(inout) :: u_diagonal, v_diagonal
    
 
 ! returns the diagonal entries of the matrix for a Jacobi preconditioning
@@ -4763,10 +4763,10 @@ subroutine apply_boundary_values_bilinear (CS, time, Phisub, H_node, float_cond,
   type(time_type),       intent(in)    :: Time
   real, dimension (:,:,:,:,:,:),pointer:: Phisub
   type(ice_shelf_CS),    pointer       :: CS
-  real, dimension (NIMEMB_SYM_,NJMEMB_SYM_), intent (in)     :: H_node
+  real, dimension (NILIMB_SYM_,NJLIMB_SYM_), intent (in)     :: H_node
   real, dimension (:,:), intent (in)   :: float_cond
   real                                 :: dens_ratio
-  real, dimension (NIMEMB_SYM_,NJMEMB_SYM_), intent(inout) :: u_boundary_contr, v_boundary_contr
+  real, dimension (NILIMB_SYM_,NJLIMB_SYM_), intent(inout) :: u_boundary_contr, v_boundary_contr
 
 ! this will be a per-setup function. the boundary values of thickness and velocity
 ! (and possibly other variables) will be updated in this function
@@ -5023,7 +5023,7 @@ end subroutine calc_shelf_visc_triangular
 
 subroutine calc_shelf_visc_bilinear (CS, u, v)
   type(ice_shelf_CS),         pointer   :: CS
-  real, dimension(NIMEMB_SYM_,NJMEMB_SYM_), intent(inout)    :: u, v
+  real, dimension(NILIMB_SYM_,NJLIMB_SYM_), intent(inout)    :: u, v
 
 ! update DEPTH_INTEGRATED viscosity, based on horizontal strain rates - this is for triangle FEM solve so there is 
 ! an "upper" and "lower" triangular viscosity
@@ -5471,7 +5471,7 @@ end subroutine update_velocity_masks
 subroutine interpolate_H_to_B (CS, h_shelf, hmask, H_node)
   type(ice_shelf_CS), pointer                            :: CS
   real, dimension (:,:), intent(in)                      :: h_shelf, hmask
-  real, dimension (NIMEMB_SYM_,NJMEMB_SYM_), intent(inout) :: H_node
+  real, dimension (NILIMB_SYM_,NJLIMB_SYM_), intent(inout) :: H_node
 
   type(ocean_grid_type), pointer :: G
   integer                        :: i, j, isc, iec, jsc, jec, num_h, k, l
