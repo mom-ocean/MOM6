@@ -12,7 +12,7 @@ use MOM_domains,       only : group_pass_type
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, MOM_mesg
 use MOM_file_parser, only : read_param, get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : vardesc
+use MOM_io, only : vardesc, var_desc
 use MOM_restart, only : MOM_restart_CS, register_restart_field, query_initialized
 use MOM_variables, only : vertvisc_type
 use MOM_MEKE_types, only : MEKE_type
@@ -1048,7 +1048,8 @@ subroutine MEKE_alloc_register_restart(G, param_file, MEKE, restart_CS)
   call MOM_mesg("MEKE_alloc_register_restart: allocating and registering", 5)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   allocate(MEKE%MEKE(isd:ied,jsd:jed)) ; MEKE%MEKE(:,:) = 0.0
-  vd = vardesc("MEKE","Mesoscale Eddy Kinetic Energy",'h','1','s',"m2 s-2")
+  vd = var_desc("MEKE", "m2 s-2", hor_grid='h', z_grid='1', &
+           longname="Mesoscale Eddy Kinetic Energy")
   call register_restart_field(MEKE%MEKE, vd, .false., restart_CS)
   if (MEKE_GMcoeff>=0.) then
     allocate(MEKE%GM_src(isd:ied,jsd:jed)) ; MEKE%GM_src(:,:) = 0.0
@@ -1058,13 +1059,15 @@ subroutine MEKE_alloc_register_restart(G, param_file, MEKE, restart_CS)
   endif
   if (MEKE_KhCoeff>=0.) then
     allocate(MEKE%Kh(isd:ied,jsd:jed)) ; MEKE%Kh(:,:) = 0.0
-    vd = vardesc("MEKE_Kh","Lateral diffusivity from Mesoscale Eddy Kinetic Energy",'h','1','s',"m2 s-1")
+    vd = var_desc("MEKE_Kh", "m2 s-1",hor_grid='h',z_grid='1', &
+             longname="Lateral diffusivity from Mesoscale Eddy Kinetic Energy")
     call register_restart_field(MEKE%Kh, vd, .false., restart_CS)
   endif
   allocate(MEKE%Rd_dx_h(isd:ied,jsd:jed)) ; MEKE%Rd_dx_h(:,:) = 0.0
   if (MEKE_viscCoeff/=0.) then
     allocate(MEKE%Ku(isd:ied,jsd:jed)) ; MEKE%Ku(:,:) = 0.0
-    vd = vardesc("MEKE_Ah","Lateral viscosity from Mesoscale Eddy Kinetic Energy",'h','1','s',"m2 s-1")
+    vd = var_desc("MEKE_Ah", "m2 s-1", hor_grid='h', z_grid='1', &
+             longname="Lateral viscosity from Mesoscale Eddy Kinetic Energy")
     call register_restart_field(MEKE%Ku, vd, .false., restart_CS)
   endif
 

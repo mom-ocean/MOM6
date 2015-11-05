@@ -60,7 +60,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : file_exists, read_data, slasher, vardesc
+use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc, query_vardesc
 use MOM_restart, only : register_restart_field, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
 use MOM_time_manager, only : time_type, get_time
@@ -198,25 +198,25 @@ function register_advection_test_tracer(G, param_file, CS, diag, tr_Reg, &
   endif
 
   do m=1,NTR
-    CS%tr_desc(m) = vardesc("tr","Tracer",'h','L','s',"kg kg-1")
     if (m < 10) then ; write(name,'("tr",I1.1)') m
     else ; write(name,'("tr",I2.2)') m ; endif
     write(longname,'("Concentration of Tracer ",I2.2)') m
-    CS%tr_desc(m)%name = name
-    CS%tr_desc(m)%longname = longname
+    CS%tr_desc(m) = var_desc(name, units="kg kg-1", longname=longname, caller=mod)
+
     ! This is needed to force the compiler not to do a copy in the registration
     ! calls.  Curses on the designers and implementers of Fortran90.
     tr_ptr => CS%tr(:,:,:,m)
     ! Register the tracer for the restart file.
     call register_restart_field(tr_ptr, CS%tr_desc(m), .true., restart_CS)
     ! Register the tracer for horizontal advection & diffusion.
-    call register_tracer(tr_ptr, CS%tr_desc(m)%name, param_file, tr_Reg)
+    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, tr_Reg, &
+                         tr_desc_ptr=CS%tr_desc(m))
 
     !   Set coupled_tracers to be true (hard-coded above) to provide the surface
     ! values to the coupler (if any).  This is meta-code and its arguments will
     ! currently (deliberately) give fatal errors if it is used.
     if (CS%coupled_tracers) &
-      CS%ind_tr(m) = aof_set_coupler_flux(trim(CS%tr_desc(m)%name)//'_flux', &
+      CS%ind_tr(m) = aof_set_coupler_flux(trim(name)//'_flux', &
           flux_type=' ', implementation=' ', caller="register_advection_test_tracer")
   enddo
 
@@ -321,8 +321,8 @@ subroutine initialize_advection_test_tracer(restart, day, G, h, OBC, CS, sponge_
 
   do m=1,NTR
     ! Register the tracer for the restart file.
-    name = CS%tr_desc(m)%name ; longname = CS%tr_desc(m)%longname
-    units = CS%tr_desc(m)%units
+    call query_vardesc(CS%tr_desc(m), name, units=units, longname=longname, &
+                       caller="initialize_advection_test_tracer")
     CS%id_tracer(m) = register_diag_field("ocean_model", trim(name), CS%diag%axesTL, &
         day, trim(longname) , trim(units))
     CS%id_tr_adx(m) = register_diag_field("ocean_model", trim(name)//"_adx", &

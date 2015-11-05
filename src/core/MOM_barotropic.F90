@@ -103,7 +103,7 @@ use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : vardesc
+use MOM_io, only : vardesc, var_desc
 use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
 use MOM_tidal_forcing, only : tidal_forcing_sensitivity, tidal_forcing_CS
 use MOM_time_manager, only : time_type, set_time, operator(+), operator(-)
@@ -4296,30 +4296,36 @@ subroutine register_barotropic_restarts(G, param_file, CS, restart_CS)
   ALLOC_(CS%uhbt_IC(IsdB:IedB,jsd:jed))    ; CS%uhbt_IC(:,:) = 0.0
   ALLOC_(CS%vhbt_IC(isd:ied,JsdB:JedB))    ; CS%vhbt_IC(:,:) = 0.0
 
-  vd(2) = vardesc("ubtav","Time mean barotropic zonal velocity",'u','1','s', &
-          "meter second-1")
-  vd(3) = vardesc("vbtav","Time mean barotropic meridional velocity",'v','1','s', &
-          "meter second-1")
+  vd(2) = var_desc("ubtav","meter second-1","Time mean barotropic zonal velocity", &
+                hor_grid='u', z_grid='1')
+  vd(3) = var_desc("vbtav","meter second-1","Time mean barotropic meridional velocity",&
+                hor_grid='v', z_grid='1')
   call register_restart_field(CS%ubtav, vd(2), .false., restart_CS)
   call register_restart_field(CS%vbtav, vd(3), .false., restart_CS)
 
-  vd(2) = vardesc("ubt_IC","Next initial condition for the barotropic zonal velocity", &
-          'u','1','s', "meter second-1")
-  vd(3) = vardesc("vbt_IC","Next initial condition for the barotropic meridional velocity",&
-                  'v','1','s', "meter second-1")
+  vd(2) = var_desc("ubt_IC", "meter second-1", &
+              longname="Next initial condition for the barotropic zonal velocity", &
+              hor_grid='u', z_grid='1')
+  vd(3) = var_desc("vbt_IC", "meter second-1", &
+              longname="Next initial condition for the barotropic meridional velocity",&
+              hor_grid='v', z_grid='1')
   call register_restart_field(CS%ubt_IC, vd(2), .false., restart_CS)
   call register_restart_field(CS%vbt_IC, vd(3), .false., restart_CS)
 
   if (G%Boussinesq) then
-    vd(2) = vardesc("uhbt_IC","Next initial condition for the barotropic zonal transport", &
-            'u','1','s', "meter3 second-1")
-    vd(3) = vardesc("vhbt_IC","Next initial condition for the barotropic meridional transport",&
-                    'v','1','s', "meter3 second-1")
+   vd(2) = var_desc("uhbt_IC", "meter3 second-1", &
+                longname="Next initial condition for the barotropic zonal transport", &
+                hor_grid='u', z_grid='1')
+    vd(3) = var_desc("vhbt_IC", "meter3 second-1", &
+                longname="Next initial condition for the barotropic meridional transport",&
+                hor_grid='v', z_grid='1')
   else
-    vd(2) = vardesc("uhbt_IC","Next initial condition for the barotropic zonal transport", &
-            'u','1','s', "kg second-1")
-    vd(3) = vardesc("vhbt_IC","Next initial condition for the barotropic meridional transport",&
-                    'v','1','s', "kg second-1")
+    vd(2) = var_desc("uhbt_IC", "kg second-1", &
+                longname="Next initial condition for the barotropic zonal transport", &
+                hor_grid='u', z_grid='1')
+    vd(3) = var_desc("vhbt_IC", "kg second-1", &
+                longname="Next initial condition for the barotropic meridional transport",&
+                hor_grid='v', z_grid='1')
   endif
   call register_restart_field(CS%uhbt_IC, vd(2), .false., restart_CS)
   call register_restart_field(CS%vhbt_IC, vd(3), .false., restart_CS)

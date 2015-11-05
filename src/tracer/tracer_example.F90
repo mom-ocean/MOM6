@@ -57,7 +57,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : file_exists, read_data, slasher, vardesc
+use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc, query_vardesc
 use MOM_restart, only : register_restart_field, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
 use MOM_time_manager, only : time_type, get_time
@@ -176,25 +176,25 @@ function USER_register_tracer_example(G, param_file, CS, diag, tr_Reg, &
   endif
 
   do m=1,NTR
-    CS%tr_desc(m) = vardesc("tr","Tracer",'h','L','s',"kg kg-1")
     if (m < 10) then ; write(name,'("tr",I1.1)') m
     else ; write(name,'("tr",I2.2)') m ; endif
     write(longname,'("Concentration of Tracer ",I2.2)') m
-    CS%tr_desc(m)%name = name
-    CS%tr_desc(m)%longname = longname
+    CS%tr_desc(m) = var_desc(name, units="kg kg-1", longname=longname, caller=mod)
+
     ! This is needed to force the compiler not to do a copy in the registration
     ! calls.  Curses on the designers and implementers of Fortran90.
     tr_ptr => CS%tr(:,:,:,m)
     ! Register the tracer for the restart file.
-    call register_restart_field(tr_ptr, CS%tr_desc(m),.true.,restart_CS)
+    call register_restart_field(tr_ptr, CS%tr_desc(m), .true., restart_CS)
     ! Register the tracer for horizontal advection & diffusion.
-    call register_tracer(tr_ptr, CS%tr_desc(m)%name, param_file, tr_Reg)
+    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, tr_Reg, &
+                         tr_desc_ptr=CS%tr_desc(m))
 
     !   Set coupled_tracers to be true (hard-coded above) to provide the surface
     ! values to the coupler (if any).  This is meta-code and its arguments will
     ! currently (deliberately) give fatal errors if it is used.
     if (CS%coupled_tracers) &
-      CS%ind_tr(m) = aof_set_coupler_flux(trim(CS%tr_desc(m)%name)//'_flux', &
+      CS%ind_tr(m) = aof_set_coupler_flux(trim(name)//'_flux', &
           flux_type=' ', implementation=' ', caller="USER_register_tracer_example")
   enddo
 
@@ -234,7 +234,7 @@ subroutine USER_initialize_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
     OBC_tr1_v => NULL()    ! specify the values of tracer 1 that should come
                            ! in through u- and v- points through the open
                            ! boundary conditions, in the same units as tr.
-  character(len=16) :: name     ! A variable's name in a NetCDF file.
+  character(len=32) :: name     ! A variable's name in a NetCDF file.
   character(len=72) :: longname ! The long name of that variable.
   character(len=48) :: units    ! The dimensions of the variable.
   character(len=48) :: flux_units ! The units for tracer fluxes, usually
@@ -261,7 +261,8 @@ subroutine USER_initialize_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
         call MOM_error(FATAL, "USER_initialize_tracer: Unable to open "// &
                         CS%tracer_IC_file)
       do m=1,NTR
-        call read_data(CS%tracer_IC_file, trim(CS%tr_desc(m)%name), &
+        call query_vardesc(CS%tr_desc(m), name, caller="USER_initialize_tracer")
+        call read_data(CS%tracer_IC_file, trim(name), &
                        CS%tr(:,:,:,m), domain=G%Domain%mpp_domain)
       enddo
     else
@@ -315,22 +316,24 @@ subroutine USER_initialize_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
   endif
 
   if (associated(OBC)) then
+    call query_vardesc(CS%tr_desc(1), name, caller="USER_initialize_tracer")
     if (OBC%apply_OBC_v) then
       allocate(OBC_tr1_v(G%isd:G%ied,G%jsd:G%jed,nz))
       do k=1,nz ; do j=G%jsd,G%jed ; do i=G%isd,G%ied
         if (k < nz/2) then ; OBC_tr1_v(i,j,k) = 0.0
         else ; OBC_tr1_v(i,j,k) = 1.0 ; endif
       enddo ; enddo ; enddo
-      call add_tracer_OBC_values(trim(CS%tr_desc(1)%name), CS%tr_Reg, &
+      call add_tracer_OBC_values(trim(name), CS%tr_Reg, &
                                  0.0, OBC_in_v=OBC_tr1_v)
     else
       ! This is not expected in the DOME example.
-      call add_tracer_OBC_values(trim(CS%tr_desc(1)%name), CS%tr_Reg, 0.0)
+      call add_tracer_OBC_values(trim(name), CS%tr_Reg, 0.0)
     endif
     ! All tracers but the first have 0 concentration in their inflows. As this
     ! is the default value, the following calls are unnecessary.
     do m=2,lntr
-      call add_tracer_OBC_values(trim(CS%tr_desc(m)%name), CS%tr_Reg, 0.0)
+      call query_vardesc(CS%tr_desc(m), name, caller="USER_initialize_tracer")
+      call add_tracer_OBC_values(trim(name), CS%tr_Reg, 0.0)
     enddo
   endif
 
@@ -340,8 +343,8 @@ subroutine USER_initialize_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
 
   do m=1,NTR
     ! Register the tracer for the restart file.
-    name = CS%tr_desc(m)%name ; longname = CS%tr_desc(m)%longname
-    units = CS%tr_desc(m)%units
+    call query_vardesc(CS%tr_desc(m), name, units=units, longname=longname, &
+                       caller="USER_initialize_tracer")
     CS%id_tracer(m) = register_diag_field("ocean_model", trim(name), CS%diag%axesTL, &
         day, trim(longname) , trim(units))
     CS%id_tr_adx(m) = register_diag_field("ocean_model", trim(name)//"_adx", &
@@ -542,7 +545,8 @@ function USER_tracer_stock(h, stocks, G, CS, names, units, stock_index)
   endif ; endif
 
   do m=1,NTR
-    names(m) = CS%tr_desc(m)%name ; units(m) = trim(CS%tr_desc(m)%units)//" kg"
+    call query_vardesc(CS%tr_desc(m), name=names(m), units=units(m), caller="USER_tracer_stock")
+    units(m) = trim(units(m))//" kg"
     stocks(m) = 0.0
     do k=1,nz ; do j=js,je ; do i=is,ie
       stocks(m) = stocks(m) + CS%tr(i,j,k,m) * &

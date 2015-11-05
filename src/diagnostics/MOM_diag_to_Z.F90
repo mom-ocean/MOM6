@@ -50,7 +50,7 @@ use MOM_diag_mediator, only : ocean_register_diag
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
-use MOM_io,            only : slasher, vardesc
+use MOM_io,            only : slasher, vardesc, query_vardesc, modify_vardesc
 use MOM_variables,     only : p3d
 
 use netcdf
@@ -1140,7 +1140,7 @@ subroutine MOM_diag_to_Z_end(CS)
 
 end subroutine MOM_diag_to_Z_end
 
-function ocean_register_diag_with_z (tr_ptr, vardesc_tr, G, Time, CS)
+function ocean_register_diag_with_z(tr_ptr, vardesc_tr, G, Time, CS)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), target, intent(in) :: tr_ptr
   type(vardesc),                                 intent(in) :: vardesc_tr
   type(ocean_grid_type),                         intent(in) :: G
@@ -1157,6 +1157,7 @@ function ocean_register_diag_with_z (tr_ptr, vardesc_tr, G, Time, CS)
 !  (in)      CS         - control struct returned by a previous call to diagnostics_init
 
   type(vardesc) :: vardesc_z
+  character(len=64) :: var_name         ! A variable's name.
   integer :: isd, ied, jsd, jed, nk, m, id_test
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nk = G%ke
   if (.not.associated(CS)) call MOM_error(FATAL, &
@@ -1174,8 +1175,7 @@ function ocean_register_diag_with_z (tr_ptr, vardesc_tr, G, Time, CS)
   ! copy layer tracer variable descriptor to a z-tracer descriptor;
   ! change the name and layer information.
   vardesc_z = vardesc_tr
-  vardesc_z%name = trim(vardesc_tr%name)
-  vardesc_z%z_grid = "z"
+  call modify_vardesc(vardesc_z, z_grid="z", caller="ocean_register_diag_with_z")
   m = CS%num_tr_used + 1
   CS%missing_tr(m) = CS%missing_value ! This could be changed later, if desired.
   CS%id_tr(m) =  register_Z_diag(vardesc_z, CS, Time, CS%missing_tr(m))
@@ -1194,8 +1194,9 @@ function ocean_register_diag_with_z (tr_ptr, vardesc_tr, G, Time, CS)
   else
 ! There is no depth-space target file but warn if a diag_table entry is
 ! present.
+    call query_vardesc(vardesc_z, name=var_name, caller="ocean_register_diag_with_z")
     if (CS%id_tr(m)>0) call MOM_error(WARNING, &
-        "ocean_register_diag_with_z: "//trim(vardesc_z%name)// &
+        "ocean_register_diag_with_z: "//trim(var_name)// &
         " cannot be output without an appropriate depth-space target file.")
   endif
 
@@ -1208,14 +1209,21 @@ function register_Z_diag(var_desc, CS, day, missing)
   type(time_type),     intent(in) :: day
   real,                intent(in) :: missing
 
+  character(len=64) :: var_name         ! A variable's name.
+  character(len=48) :: units            ! A variable's units.
+  character(len=240) :: longname        ! A variable's longname.
+  character(len=8) :: hor_grid, z_grid  ! Variable grid info.
   type(axesType) :: axes
+
+  call query_vardesc(var_desc, name=var_name, units=units, longname=longname, &
+                     hor_grid=hor_grid, z_grid=z_grid, caller="register_Zint_diag")
 
   ! Use the hor_grid and z_grid components of vardesc to determine the 
   ! desired axes to register the diagnostic field for.
-  select case (var_desc%z_grid)
+  select case (z_grid)
 
     case ("z")
-      select case (var_desc%hor_grid)
+      select case (hor_grid)
         case ("q")
           axes = CS%axesBz
         case ("h")
@@ -1234,16 +1242,16 @@ function register_Z_diag(var_desc, CS, day, missing)
           axes = CS%axesCvz
         case default
           call MOM_error(FATAL,&
-            "register_Z_diag: unknown hor_grid component "//trim(var_desc%hor_grid))
+            "register_Z_diag: unknown hor_grid component "//trim(hor_grid))
       end select
 
     case default
         call MOM_error(FATAL,&
-          "register_Z_diag: unknown z_grid component "//trim(var_desc%z_grid))
+          "register_Z_diag: unknown z_grid component "//trim(z_grid))
   end select
 
-  register_Z_diag = register_diag_field("ocean_model_z", trim(var_desc%name), axes, &
-        day, trim(var_desc%longname), trim(var_desc%units), missing_value=missing)
+  register_Z_diag = register_diag_field("ocean_model_z", trim(var_name), axes, &
+        day, trim(longname), trim(units), missing_value=missing)
 
 end function register_Z_diag
 
@@ -1253,7 +1261,14 @@ function register_Zint_diag(var_desc, CS, day)
   type(diag_to_Z_CS),  pointer    :: CS
   type(time_type),     intent(in) :: day
 
+  character(len=64) :: var_name         ! A variable's name.
+  character(len=48) :: units            ! A variable's units.
+  character(len=240) :: longname        ! A variable's longname.
+  character(len=8) :: hor_grid          ! Variable grid info.
   type(axesType) :: axes
+
+  call query_vardesc(var_desc, name=var_name, units=units, longname=longname, &
+                     hor_grid=hor_grid, caller="register_Zint_diag")
 
   if (CS%nk_zspace < 0) then
     register_Zint_diag = -1 ; return
@@ -1261,7 +1276,7 @@ function register_Zint_diag(var_desc, CS, day)
 
   ! Use the hor_grid and z_grid components of vardesc to determine the 
   ! desired axes to register the diagnostic field for.
-  select case (var_desc%hor_grid)
+  select case (hor_grid)
     case ("h")
       axes = CS%axesTzi
     case ("q")
@@ -1272,12 +1287,11 @@ function register_Zint_diag(var_desc, CS, day)
       axes = CS%axesCvzi
     case default
       call MOM_error(FATAL,&
-        "register_Z_diag: unknown hor_grid component "//trim(var_desc%hor_grid))
+        "register_Z_diag: unknown hor_grid component "//trim(hor_grid))
   end select
 
-  register_Zint_diag = register_diag_field("ocean_model_z", trim(var_desc%name),&
-        axes, day, trim(var_desc%longname), trim(var_desc%units),               &
-        missing_value=CS%missing_value)
+  register_Zint_diag = register_diag_field("ocean_model_z", trim(var_name),&
+        axes, day, trim(longname), trim(units), missing_value=CS%missing_value)
 
 end function register_Zint_diag
 

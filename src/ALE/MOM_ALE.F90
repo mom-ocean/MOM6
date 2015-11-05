@@ -20,7 +20,7 @@ use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
 use MOM_file_parser,   only : get_param, param_file_type, log_param
 use MOM_io,            only : file_exists, field_exists, MOM_read_data
-use MOM_io,            only : vardesc, fieldtype, SINGLE_FILE
+use MOM_io,            only : vardesc, var_desc, fieldtype, SINGLE_FILE
 use MOM_io,            only : create_file, write_field, close_file, slasher
 use MOM_EOS,           only : calculate_density
 use MOM_string_functions, only : uppercase, extractWord
@@ -309,7 +309,6 @@ subroutine ALE_main( G, h, u, v, tv, Reg, CS )
       h(i,j,k) = h(i,j,k) + ( CS%dzRegrid(i,j,k) - CS%dzRegrid(i,j,k+1) )
     enddo ; enddo
   enddo
-!$OMP end parallel
 
   if (CS%show_call_tree) call callTree_leave("ALE_main()")
 end subroutine ALE_main
@@ -323,7 +322,7 @@ subroutine regrid_only( G, regridCS, remapCS, h, tv, debug )
   real, dimension(NIMEM_,NJMEM_, NKMEM_),  intent(inout) :: h !< Current 3D grid obtained after the last time step (m or Pa)
   logical,                       optional, intent(in)    :: debug !< If true, show the call tree
   ! Local variables
-  integer :: nk, i, j, k, isd, ied, jsd, jed
+  integer :: nk, i, j, k
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: dzRegrid ! The changein grid interface positions
   logical :: show_call_tree
 
@@ -339,7 +338,7 @@ subroutine regrid_only( G, regridCS, remapCS, h, tv, debug )
 
   ! Override old grid with new one. The new grid 'h_new' is built in
   ! one of the 'build_...' routines above.
-!$OMP parallel do default(none) shared(isd,ied,jsd,jed,nk,h,CS)
+!$OMP parallel do default(none) shared(G,h,dzRegrid)
   do j = G%jsc,G%jec ; do i = G%isc,G%iec
     if (G%mask2dT(i,j)>0.) then
       do k = 1,G%ke
@@ -347,7 +346,6 @@ subroutine regrid_only( G, regridCS, remapCS, h, tv, debug )
       enddo
     endif
   enddo ; enddo
-!$OMP end parallel
 
   if (show_call_tree) call callTree_leave("regrid_only()")
 end subroutine regrid_only
@@ -380,14 +378,13 @@ subroutine regrid_remap_T_S( G, regridCS, remapCS, h, tv, debug )
   ! Override old grid with new one. The new grid 'h_new' is built in
   ! one of the 'build_...' routines above.
   nk = G%ke; isd = G%isd; ied = G%ied; jsd = G%jsd; jed = G%jed
-!$OMP parallel do default(none) shared(isd,ied,jsd,jed,nk,h,CS)
+!$OMP parallel do default(none) shared(isd,ied,jsd,jed,nk,h,h_old,dzRegrid)
   do k = 1,nk
     do j = jsd,jed ; do i = isd,ied
       h_old(i,j,k) = h(i,j,k)
       h(i,j,k) = h(i,j,k) + ( dzRegrid(i,j,k) - dzRegrid(i,j,k+1) )
     enddo ; enddo
   enddo
-!$OMP end parallel
 
   if (show_call_tree) call callTree_waypoint("new grid generated (regrid_map_T_S)")
 
@@ -432,7 +429,7 @@ subroutine remapping_main( CS, G, h, dxInterface, Reg, u, v, debug )
   endif
 
   ! Remap tracer
-!$OMP parallel default(none) shared(G,h,dxInterface,CS,nz,tv,u,v) &
+!$OMP parallel default(none) shared(G,h,dxInterface,CS,nz,Reg,u,v,ntr,show_call_tree) &
 !$OMP                       private(h1,dx,u_column)
   if (ntr>0) then
     if (show_call_tree) call callTree_waypoint("remapping tracers (remapping_main)")
@@ -517,8 +514,9 @@ subroutine remap_scalar_h_to_h( CS, G, nk_src, h_src, s_src, h_dst, s_dst, all_c
   if (present(all_cells)) ignore_vanished_layers = .not. all_cells
   n_points = nk_src
 
-!$OMP parallel default(none) shared(CS,G,h_src,s_src,h_dst,s_dst) &
-!$OMP                        private(dx)
+!$OMP parallel default(none) shared(CS,G,h_src,s_src,h_dst,s_dst &
+!$OMP                               ignore_vanished_layers, nk_src ) &
+!$OMP                        private(d,n_pointx)
 !$OMP do
   do j = G%jsc,G%jec
     do i = G%isc,G%iec
@@ -1016,10 +1014,10 @@ subroutine ALE_writeCoordinateFile( CS, G, directory )
   dsi(2:G%ke) = 0.5*( ds(1:G%ke-1) + ds(2:G%ke) )
   dsi(G%ke+1) = 0.5*ds(G%ke)
 
-  vars(1) = vardesc('ds','Layer Coordinate Thickness','1','L','1', &
-                    getCoordinateUnits( CS%regridCS ) )
-  vars(2) = vardesc('ds_interface','Layer Center Coordinate Separation','1','i','1', &
-                    getCoordinateUnits( CS%regridCS ) )
+  vars(1) = var_desc('ds', getCoordinateUnits( CS%regridCS ), &
+                    'Layer Coordinate Thickness','1','L','1')
+  vars(2) = var_desc('ds_interface', getCoordinateUnits( CS%regridCS ), &
+                    'Layer Center Coordinate Separation','1','i','1')
 
   call create_file(unit, trim(filepath), vars, 2, G, fields, SINGLE_FILE)
   call write_field(unit, fields(1), ds)

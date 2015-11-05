@@ -3,15 +3,18 @@ module MOM_neutral_diffusion
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
-use MOM_cpu_clock, only : CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_diag_mediator, only : diag_ctrl, time_type
-use MOM_EOS, only : EOS_type, calculate_compress, calculate_density_derivs
-use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
-use MOM_error_handler, only : MOM_get_verbosity
-use MOM_file_parser, only : get_param, log_version, param_file_type
-use MOM_file_parser, only : openParameterBlock, closeParameterBlock
-use MOM_grid, only : ocean_grid_type
+use MOM_cpu_clock,      only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
+use MOM_cpu_clock,      only : CLOCK_MODULE, CLOCK_ROUTINE
+use MOM_diag_mediator,  only : diag_ctrl, time_type
+use MOM_diag_mediator,  only : post_data, register_diag_field
+use MOM_EOS,            only : EOS_type, calculate_compress, calculate_density_derivs
+use MOM_error_handler,  only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
+use MOM_error_handler,  only : MOM_get_verbosity
+use MOM_file_parser,    only : get_param, log_version, param_file_type
+use MOM_file_parser,    only : openParameterBlock, closeParameterBlock
+use MOM_grid,           only : ocean_grid_type
+use MOM_tracer_registry,only : tracer_registry_type
+
 
 implicit none ; private
 
@@ -19,6 +22,7 @@ implicit none ; private
 
 public neutral_diffusion
 public neutral_diffusion_init
+public neutral_diffusion_diag_init
 public neutral_diffusion_end
 public neutral_diffusion_calc_coeffs
 public neutralDiffusionUnitTests
@@ -27,33 +31,42 @@ type, public :: neutral_diffusion_CS ; private
   integer :: nkp1   ! Number of interfaces for a column = nk + 1
   integer :: nkp1X2 ! Number of intersecting interfaces between columns = 2 * nkp1
 
-  real,    allocatable, dimension(:,:,:) :: uPoL ! Non-dimensional position with left layer uKoL-1, u-point
-  real,    allocatable, dimension(:,:,:) :: uPoR ! Non-dimensional position with right layer uKoR-1, u-point
-  integer, allocatable, dimension(:,:,:) :: uKoL ! Index of left interface corresponding to neutral surface, u-point
-  integer, allocatable, dimension(:,:,:) :: uKoR ! Index of right interface corresponding to neutral surface, u-point
+  real,    allocatable, dimension(:,:,:) :: uPoL  ! Non-dimensional position with left layer uKoL-1, u-point
+  real,    allocatable, dimension(:,:,:) :: uPoR  ! Non-dimensional position with right layer uKoR-1, u-point
+  integer, allocatable, dimension(:,:,:) :: uKoL  ! Index of left interface corresponding to neutral surface, u-point
+  integer, allocatable, dimension(:,:,:) :: uKoR  ! Index of right interface corresponding to neutral surface, u-point
   real,    allocatable, dimension(:,:,:) :: uHeff ! Effective thickness at u-point (H units)
-  real,    allocatable, dimension(:,:,:) :: vPoL ! Non-dimensional position with left layer uKoL-1, v-point
-  real,    allocatable, dimension(:,:,:) :: vPoR ! Non-dimensional position with right layer uKoR-1, v-point
-  integer, allocatable, dimension(:,:,:) :: vKoL ! Index of left interface corresponding to neutral surface, v-point
-  integer, allocatable, dimension(:,:,:) :: vKoR ! Index of right interface corresponding to neutral surface, v-point
+  real,    allocatable, dimension(:,:,:) :: vPoL  ! Non-dimensional position with left layer uKoL-1, v-point
+  real,    allocatable, dimension(:,:,:) :: vPoR  ! Non-dimensional position with right layer uKoR-1, v-point
+  integer, allocatable, dimension(:,:,:) :: vKoL  ! Index of left interface corresponding to neutral surface, v-point
+  integer, allocatable, dimension(:,:,:) :: vKoR  ! Index of right interface corresponding to neutral surface, v-point
   real,    allocatable, dimension(:,:,:) :: vHeff ! Effective thickness at v-point (H units)
+
+  type(diag_ctrl), pointer :: diag ! structure to regulate output 
+  integer, allocatable, dimension(:) :: id_neutral_diff_tracer_conc_tend      ! tracer concentration tendency 
+  integer, allocatable, dimension(:) :: id_neutral_diff_tracer_cont_tend      ! tracer content tendency
+  integer, allocatable, dimension(:) :: id_neutral_diff_tracer_cont_tend_intz ! k-summed tracer content tendency
+
+  real    :: C_p ! heat capacity of seawater (J kg-1 K-1)  
 
 end type neutral_diffusion_CS
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-character(len=40)  :: mod = "MOM_neutral_diffusion" ! This module's name.
+character(len=40)  :: mod = "MOM_neutral_diffusion" ! module name
 
+logical, parameter :: debug_this_module = .false.
 
 contains
 
-!> Read parameters and allocates control structure for neutral_diffusion module.
+!> Read parameters and allocate control structure for neutral_diffusion module.
 logical function neutral_diffusion_init(Time, G, param_file, diag, CS)
   type(time_type), target,    intent(in)    :: Time       !< Time structure
   type(ocean_grid_type),      intent(in)    :: G          !< Grid structure
   type(diag_ctrl), target,    intent(inout) :: diag       !< Diagnostics control structure
   type(param_file_type),      intent(in)    :: param_file !< Parameter file structure
   type(neutral_diffusion_CS), pointer       :: CS         !< Neutral diffusion control structure
+
   ! Local variables
   character(len=256) :: mesg    ! Message for error messages.
 
@@ -68,8 +81,14 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, CS)
   call get_param(param_file, mod, "USE_NEUTRAL_DIFFUSION", neutral_diffusion_init, &
                  "If true, enables the neutral diffusion module.", &
                  default=.false.)
-  if (.not.neutral_diffusion_init) return
+
+  if (.not.neutral_diffusion_init) then 
+    return
+  endif 
+
   allocate(CS)
+  CS%diag => diag
+
 
   ! Read all relevant parameters and write them to the model log.
 ! call openParameterBlock(param_file,'NEUTRAL_DIFF')
@@ -91,15 +110,118 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, CS)
   allocate(CS%vKoR(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%vKoR(G%isc:G%iec,G%jsc-1:G%jec,:) = 0
   allocate(CS%vHeff(G%isd:G%ied,G%jsd:G%jed,2*G%ke+1)); CS%vHeff(G%isc:G%iec,G%jsc-1:G%jec,:) = 0
 
+
 end function neutral_diffusion_init
 
-!> Calculates remapping factors for u/v columns used to map adjoining columns to
+
+!> Diagnostic handles for neutral diffusion tendencies.
+subroutine neutral_diffusion_diag_init(Time, G, diag, C_p, Reg, CS)
+  type(time_type),target,     intent(in)  :: Time   !< Time structure
+  type(ocean_grid_type),      intent(in)  :: G      !< Grid structure
+  type(diag_ctrl),            intent(in)  :: diag   !< Diagnostics control structure
+  type(tracer_registry_type), intent(in)  :: Reg    !< Tracer structure 
+  real,                       intent(in)  :: C_p    !< Seawater heat capacity  
+  type(neutral_diffusion_CS), pointer     :: CS     !< Neutral diffusion control structure
+
+  ! local 
+  integer :: n,ntr 
+
+  if(.not. associated(CS)) return 
+
+  ntr          = Reg%ntr
+  CS%C_p       = C_p
+
+  allocate(CS%id_neutral_diff_tracer_conc_tend(ntr)) 
+  allocate(CS%id_neutral_diff_tracer_cont_tend(ntr)) 
+  allocate(CS%id_neutral_diff_tracer_cont_tend_intz(ntr)) 
+  CS%id_neutral_diff_tracer_conc_tend(:)      = -1
+  CS%id_neutral_diff_tracer_cont_tend(:)      = -1
+  CS%id_neutral_diff_tracer_cont_tend_intz(:) = -1
+
+
+  do n=1,ntr
+
+    if(trim(Reg%Tr(n)%name) == 'T') then 
+
+      CS%id_neutral_diff_tracer_conc_tend(n) = register_diag_field('ocean_model',  &
+      'ndiff_tracer_conc_tendency_'//trim(Reg%Tr(n)%name), diag%axesTL, Time,      &
+      'Neutral diffusion tracer concentration tendency for '//trim(Reg%Tr(n)%name),&
+       'Degree C per second')
+
+      CS%id_neutral_diff_tracer_cont_tend(n) = register_diag_field('ocean_model',                                      &
+      'ndiff_tracer_cont_tendency_'//trim(Reg%Tr(n)%name), diag%axesTL, Time,                                          &
+      'Neutral diffusion tracer content tendency for '//trim(Reg%Tr(n)%name),                                          &
+      'Watts/m2',cmor_field_name='opottemppmdiff', cmor_units='W m-2',                                                 &
+      cmor_standard_name=                                                                                              &
+      'tendency_of_sea_water_potential_temperature_expressed_as_heat_content_due_to_parameterized_mesocale_diffusion', &
+      cmor_long_name =                                                                                                 &
+      'Tendency of sea water potential temperature expressed as heat content due to parameterized mesocale diffusion') 
+  
+      CS%id_neutral_diff_tracer_cont_tend_intz(n) = register_diag_field('ocean_model',                                                 &
+      'ndiff_tracer_cont_tendency_intz_'//trim(Reg%Tr(n)%name), diag%axesT1, Time,                                                     &
+      'Depth integrated neutral diffusion tracer content tendency for '//trim(Reg%Tr(n)%name),                                         &
+      'Watts/m2',cmor_field_name='opottemppmdiff_intz', cmor_units='W m-2',                                                            &
+      cmor_standard_name=                                                                                                              &
+      'tendency_of_sea_water_potential_temperature_expressed_as_heat_content_due_to_parameterized_mesocale_diffusion_depth_integrated',&
+      cmor_long_name =                                                                                                                 &
+      'Tendency of sea water potential temperature expressed as heat content due to parameterized mesocale diffusion depth integrated') 
+  
+    elseif(trim(Reg%Tr(n)%name) == 'S') then 
+
+      CS%id_neutral_diff_tracer_conc_tend(n) = register_diag_field('ocean_model',  &
+      'ndiff_tracer_conc_tendency_'//trim(Reg%Tr(n)%name), diag%axesTL, Time,      &
+      'Neutral diffusion tracer concentration tendency for '//trim(Reg%Tr(n)%name),&
+       'tracer concentration units per second')
+
+      CS%id_neutral_diff_tracer_cont_tend(n) = register_diag_field('ocean_model',                         &
+      'ndiff_tracer_cont_tendency_'//trim(Reg%Tr(n)%name), diag%axesTL, Time,                             &
+      'Neutral diffusion tracer content tendency for '//trim(Reg%Tr(n)%name),                             &
+      'kg m-2 s-1',cmor_field_name='osaltpmdiff', cmor_units='kg m-2 s-1',                                &
+      cmor_standard_name=                                                                                 &
+      'tendency_of_sea_water_salinity_expressed_as_salt_content_due_to_parameterized_mesocale_diffusion', &
+      cmor_long_name =                                                                                    &
+      'Tendency of sea water salinity expressed as salt content due to parameterized mesocale diffusion') 
+
+      CS%id_neutral_diff_tracer_cont_tend_intz(n) = register_diag_field('ocean_model',                                    &
+      'ndiff_tracer_cont_tendency_intz_'//trim(Reg%Tr(n)%name), diag%axesT1, Time,                                        &
+      'Depth integrated neutral diffusion tracer content tendency for '//trim(Reg%Tr(n)%name),                            &
+      'kg m-2 s-1',cmor_field_name='osaltpmdiff_intz', cmor_units='kg m-2 s-1',                                           &
+      cmor_standard_name=                                                                                                 &
+      'tendency_of_sea_water_salinity_expressed_as_salt_content_due_to_parameterized_mesocale_diffusion_depth_integrated',&
+      cmor_long_name =                                                                                                    &
+      'Tendency of sea water salinity expressed as salt content due to parameterized mesocale diffusion depth integrated') 
+
+    else 
+
+      CS%id_neutral_diff_tracer_conc_tend(n) = register_diag_field('ocean_model',  &
+      'ndiff_tracer_conc_tendency_'//trim(Reg%Tr(n)%name), diag%axesTL, Time,      &
+      'Neutral diffusion tracer concentration tendency for '//trim(Reg%Tr(n)%name),&
+       'tracer concentration * m-2 s-1')
+
+      CS%id_neutral_diff_tracer_cont_tend(n) = register_diag_field('ocean_model',&
+      'ndiff_tracer_cont_tendency_'//trim(Reg%Tr(n)%name), diag%axesTL, Time, &
+      'Neutral diffusion tracer content tendency for '//trim(Reg%Tr(n)%name),    &
+      'tracer content * m-2 s-1')
+
+      CS%id_neutral_diff_tracer_cont_tend_intz(n) = register_diag_field('ocean_model',        &
+      'ndiff_tracer_cont_tendency_intz_'//trim(Reg%Tr(n)%name), diag%axesTL, Time,            &
+      'Depth integrated neutral diffusion tracer content tendency for '//trim(Reg%Tr(n)%name),&
+      'tracer content * m-2 s-1')
+
+    endif 
+
+  enddo 
+
+end subroutine neutral_diffusion_diag_init
+
+
+!> Calculate remapping factors for u/v columns used to map adjoining columns to
 !! a shared coordinate space.
 subroutine neutral_diffusion_calc_coeffs(G, h, T, S, EOS, CS)
-  type(ocean_grid_type),                 intent(in) :: G !< Ocean grid structure
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h !< Layer thickness (H units)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: T !< Potential temperature (degC)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: S !< Salinity (ppt)
+  type(ocean_grid_type),                 intent(in) :: G   !< Ocean grid structure
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h   !< Layer thickness (H units)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: T   !< Potential temperature (degC)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: S   !< Salinity (ppt)
   type(EOS_type),                        pointer    :: EOS !< Equation of state structure
   type(neutral_diffusion_CS),            pointer    :: CS  !< Neutral diffusion control structure
 
@@ -152,24 +274,43 @@ subroutine neutral_diffusion_calc_coeffs(G, h, T, S, EOS, CS)
 
 end subroutine neutral_diffusion_calc_coeffs
 
-!> Updates a tracer due to the effect of along neutral surface diffusion
-subroutine neutral_diffusion(G, h, Coef_x, Coef_y, Tracer, CS)
+!> Update tracer concentration due to neutral diffusion; layer thickness unchanged by this update. 
+subroutine neutral_diffusion(G, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
   type(ocean_grid_type),                  intent(in)    :: G      !< Ocean grid structure
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h      !< Layer thickness (H units)
   real, dimension(NIMEMB_,NJMEM_),        intent(in)    :: Coef_x !< dt * Kh * dy / dx at u-points (m^2)
   real, dimension(NIMEM_,NJMEMB_),        intent(in)    :: Coef_y !< dt * Kh * dx / dy at u-points (m^2)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: Tracer !< Tracer concentration
+  integer,                                intent(in)    :: m      !< Tracer number 
+  real,                                   intent(in)    :: dt     !< Tracer time step 
+  character(len=32),                      intent(in)    :: name   !< Tracer name 
   type(neutral_diffusion_CS),             pointer       :: CS     !< Neutral diffusion control structure
 
   ! Local variables
-  real, dimension(SZIB_(G),SZJ_(G),2*G%ke+1) :: uFlx ! Zonal flux of tracer (conc Pa)
-  real, dimension(SZI_(G),SZJB_(G),2*G%ke+1) :: vFlx ! Meridional flux of tracer (conc Pa)
-  real, dimension(G%ke) :: dTracer ! Change in tracer
+  real, dimension(SZIB_(G),SZJ_(G),2*G%ke+1) :: uFlx          ! Zonal flux of tracer      (concentration * H)
+  real, dimension(SZI_(G),SZJB_(G),2*G%ke+1) :: vFlx          ! Meridional flux of tracer (concentration * H)
+  real, dimension(SZI_(G),SZJ_(G),G%ke)      :: tendency      ! tendency array for diagn
+  real, dimension(SZI_(G),SZJ_(G))           :: tendency_intz ! depth integrated content tendency for diagn 
+  real, dimension(G%ke)                      :: dTracer       ! Change in tracer concentration 
   integer :: i, j, k, ks, nk
-  real :: Ihdxdy
+  real :: Ihdxdy, ppt2mks, Idt, convert
 
   nk = G%ke
 
+  if(CS%id_neutral_diff_tracer_conc_tend(m)      > 0  .or.  &
+     CS%id_neutral_diff_tracer_cont_tend(m)      > 0  .or.  &
+     CS%id_neutral_diff_tracer_cont_tend_intz(m) > 0 ) then 
+    ppt2mks            = 0.001
+    Idt                = 1.0/dt
+    tendency(:,:,:)    = 0.0
+    tendency_intz(:,:) = 0.0
+    convert            = 1.0 
+    if(trim(name) == 'T') convert = CS%C_p  * G%H_to_kg_m2
+    if(trim(name) == 'S') convert = ppt2mks * G%H_to_kg_m2
+  endif 
+
+
+  ! x-flux 
   do j = G%jsc,G%jec ; do I = G%isc-1,G%iec
     if (G%mask2dCu(I,j)>0.) then
       call neutral_surface_flux(nk, h(i,j,:), h(i+1,j,:), &
@@ -182,6 +323,7 @@ subroutine neutral_diffusion(G, h, Coef_x, Coef_y, Tracer, CS)
     endif
   enddo ; enddo
 
+  ! y-flux 
   do J = G%jsc-1,G%jec ; do i = G%isc,G%iec
     if (G%mask2dCv(i,J)>0.) then
       call neutral_surface_flux(nk, h(i,j,:), h(i,j+1,:), &
@@ -194,8 +336,10 @@ subroutine neutral_diffusion(G, h, Coef_x, Coef_y, Tracer, CS)
     endif
   enddo ; enddo
 
+  ! Update the tracer concentration from convergence of neutral diffusive flux components  
   do j = G%jsc,G%jec ; do i = G%isc,G%iec
     if (G%mask2dT(i,j)>0.) then
+
       dTracer(:) = 0.
       do ks = 1,2*nk+1 ;
         k = CS%uKoL(I,j,ks)
@@ -210,18 +354,54 @@ subroutine neutral_diffusion(G, h, Coef_x, Coef_y, Tracer, CS)
       do k = 1, G%ke
         Tracer(i,j,k) = Tracer(i,j,k) + dTracer(k) * ( G%IareaT(i,j) / ( h(i,j,k) + G%H_subroundoff ) )
       enddo
+
+      if(CS%id_neutral_diff_tracer_conc_tend(m)      > 0  .or.  &
+         CS%id_neutral_diff_tracer_cont_tend(m)      > 0  .or.  &
+         CS%id_neutral_diff_tracer_cont_tend_intz(m) > 0 ) then 
+        do k = 1, G%ke
+          tendency(i,j,k) = dTracer(k) * G%IareaT(i,j) * Idt
+        enddo
+      endif 
+
     endif
   enddo ; enddo
+
+
+  ! post tendency of tracer content 
+  if(CS%id_neutral_diff_tracer_cont_tend(m) > 0) then 
+    call post_data(CS%id_neutral_diff_tracer_cont_tend(m), tendency(:,:,:)*convert, CS%diag)
+  endif 
+
+  ! post depth summed tendency for tracer content 
+  if(CS%id_neutral_diff_tracer_cont_tend_intz(m) > 0) then 
+    do j = G%jsc,G%jec ; do i = G%isc,G%iec
+      do k = 1, G%ke
+        tendency_intz(i,j) = tendency_intz(i,j) + tendency(i,j,k)  
+      enddo
+    enddo ; enddo
+    call post_data(CS%id_neutral_diff_tracer_cont_tend_intz(m), tendency_intz(:,:)*convert, CS%diag)
+  endif 
+
+  ! post tendency of tracer concentration; this step must be  
+  ! done after posting tracer content tendency, since we alter 
+  ! the tendency array.
+  if(CS%id_neutral_diff_tracer_conc_tend(m) > 0) then 
+    do k = 1, G%ke ; do j = G%jsc,G%jec ; do i = G%isc,G%iec
+      tendency(i,j,k) =  tendency(i,j,k)/( h(i,j,k) + G%H_subroundoff )
+    enddo ; enddo ; enddo
+    call post_data(CS%id_neutral_diff_tracer_conc_tend(m), tendency, CS%diag)
+  endif 
+  
 
 end subroutine neutral_diffusion
 
 
 !> Returns interface scalar, Si, for a column of layer values, S.
 subroutine interface_scalar(nk, h, S, Si, i_method)
-  integer,               intent(in)    :: nk !< Number of levels
-  real, dimension(nk),   intent(in)    :: h  !< Layer thickness (H units)
-  real, dimension(nk),   intent(in)    :: S  !< Layer scalar (conc, e.g. ppt)
-  real, dimension(nk+1), intent(inout) :: Si !< Interface scalar (conc, e.g. ppt)
+  integer,               intent(in)    :: nk       !< Number of levels
+  real, dimension(nk),   intent(in)    :: h        !< Layer thickness (H units)
+  real, dimension(nk),   intent(in)    :: S        !< Layer scalar (conc, e.g. ppt)
+  real, dimension(nk+1), intent(inout) :: Si       !< Interface scalar (conc, e.g. ppt)
   integer,               intent(in)    :: i_method !< =1 use average of PLM edges
                                                    !! =2 use continuous PPM edge interpolation
   ! Local variables
@@ -411,6 +591,7 @@ real function fv_diff(hkm1, hk, hkp1, Skm1, Sk, Skp1)
             (   ( 2. * hkm1 + hk ) * hp * ( Skp1 - Sk ) &
               + ( 2. * hkp1 + hk ) * hm * ( Sk - Skm1 ) )
 end function fv_diff
+
 
 !> Returns the cell-centered second-order weighted least squares slope
 !! using three consecutive cell widths and average values. Slope is returned
@@ -642,6 +823,7 @@ function absolute_positions(n,Pint,Karr,NParr)
   real,    intent(in) :: Pint(n+1)    !< Position of interface (Pa)
   integer, intent(in) :: Karr(2*n+2)  !< Indexes of interfaces about positions
   real,    intent(in) :: NParr(2*n+2) !< Non-dimensional positions within layers Karr(:)
+
   real,  dimension(2*n+2) :: absolute_positions ! Absolute positions (Pa)
 
   ! Local variables
@@ -752,15 +934,15 @@ end subroutine neutral_surface_flux
 
 !> Returns true if unit tests of neutral_diffusion functions fail. Otherwise returns false.
 logical function neutralDiffusionUnitTests()
-  integer, parameter :: nk = 4
-  real, dimension(nk+1)   :: TiL, TiR1, TiR2, TiR4, Tio ! Test interface temperatures
-  real, dimension(nk)   :: TL ! Test layer temperatures
-  real, dimension(nk+1)   :: SiL ! Test interface salinities
-  real, dimension(nk+1)   :: PiL, PiR4 ! Test interface positions
-  real, dimension(2*nk+2) :: PiLRo, PiRLo ! Test positions
-  integer, dimension(2*nk+2) :: KoL, KoR ! Test indexes
-  real, dimension(2*nk+1) :: hEff ! Test positions
-  real, dimension(2*nk+1) :: Flx ! Test flux
+  integer, parameter         :: nk = 4
+  real, dimension(nk+1)      :: TiL, TiR1, TiR2, TiR4, Tio ! Test interface temperatures
+  real, dimension(nk)        :: TL           ! Test layer temperatures
+  real, dimension(nk+1)      :: SiL          ! Test interface salinities
+  real, dimension(nk+1)      :: PiL, PiR4    ! Test interface positions
+  real, dimension(2*nk+2)    :: PiLRo, PiRLo ! Test positions
+  integer, dimension(2*nk+2) :: KoL, KoR     ! Test indexes
+  real, dimension(2*nk+1)    :: hEff         ! Test positions
+  real, dimension(2*nk+1)    :: Flx          ! Test flux
 
   integer :: k, verbosity
 
@@ -1046,11 +1228,11 @@ logical function neutralDiffusionUnitTests()
   !> Returns true if a test of interpolate_for_nondim_position() fails, and conditionally writes results to stream
   logical function test_ifndp(rhoNeg, Pneg, rhoPos, Ppos, Ptrue, title)
     real,             intent(in) :: rhoNeg !< Lighter density (kg/m3)
-    real,             intent(in) :: Pneg   !< Interface position of lighter density (pa)
+    real,             intent(in) :: Pneg   !< Interface position of lighter density (Pa)
     real,             intent(in) :: rhoPos !< Heavier density (kg/m3)
-    real,             intent(in) :: Ppos   !< Interface position of heavier density (pa)
+    real,             intent(in) :: Ppos   !< Interface position of heavier density (Pa)
     real,             intent(in) :: Ptrue  !< True answer (Pa)
-    character(len=*), intent(in) :: title !< Title for messages
+    character(len=*), intent(in) :: title  !< Title for messages
 
     ! Local variables
     integer :: stdunit
@@ -1074,8 +1256,8 @@ logical function neutralDiffusionUnitTests()
 
   !> Returns true if comparison of Po and Ptrue fails, and conditionally writes results to stream
   logical function test_data1d(nk, Po, Ptrue, title)
-    integer,             intent(in) :: nk !< Number of layers
-    real, dimension(nk), intent(in) :: Po !< Calculated answer
+    integer,             intent(in) :: nk    !< Number of layers
+    real, dimension(nk), intent(in) :: Po    !< Calculated answer
     real, dimension(nk), intent(in) :: Ptrue !< True answer
     character(len=*),    intent(in) :: title !< Title for messages
 
@@ -1106,8 +1288,8 @@ logical function neutralDiffusionUnitTests()
 
   !> Returns true if comparison of Po and Ptrue fails, and conditionally writes results to stream
   logical function test_data1di(nk, Po, Ptrue, title)
-    integer,                intent(in) :: nk !< Number of layers
-    integer, dimension(nk), intent(in) :: Po !< Calculated answer
+    integer,                intent(in) :: nk    !< Number of layers
+    integer, dimension(nk), intent(in) :: Po    !< Calculated answer
     integer, dimension(nk), intent(in) :: Ptrue !< True answer
     character(len=*),       intent(in) :: title !< Title for messages
 
@@ -1138,7 +1320,7 @@ logical function neutralDiffusionUnitTests()
 
   !> Returns true if output of find_neutral_surface_positions() does not match correct values, and conditionally writes results to stream
   logical function test_nsp(nk, KoL, KoR, pL, pR, hEff, KoL0, KoR0, pL0, pR0, hEff0, title)
-    integer,                intent(in) :: nk !< Number of layers
+    integer,                    intent(in) :: nk    !< Number of layers
     integer, dimension(2*nk+2), intent(in) :: KoL   !< Index of first left interface above neutral surface
     integer, dimension(2*nk+2), intent(in) :: KoR   !< Index of first right interface above neutral surface
     real, dimension(2*nk+2),    intent(in) :: pL    !< Fractional position of neutral surface within layer KoL of left column
@@ -1149,7 +1331,7 @@ logical function neutralDiffusionUnitTests()
     real, dimension(2*nk+2),    intent(in) :: pL0   !< Correct value for pL
     real, dimension(2*nk+2),    intent(in) :: pR0   !< Correct value for pR
     real, dimension(2*nk+1),    intent(in) :: hEff0 !< Correct value for hEff
-    character(len=*),       intent(in) :: title !< Title for messages
+    character(len=*),           intent(in) :: title !< Title for messages
 
     ! Local variables
     integer :: k, stdunit
@@ -1207,6 +1389,8 @@ logical function neutralDiffusionUnitTests()
   end function compare_nsp_row
 
 end function neutralDiffusionUnitTests
+
+
 
 !> Deallocates neutral_diffusion control structure
 subroutine neutral_diffusion_end(CS)

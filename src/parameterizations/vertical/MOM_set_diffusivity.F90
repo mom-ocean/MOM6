@@ -56,7 +56,7 @@ use MOM_forcing_type,        only : forcing, optics_type
 use MOM_grid,                only : ocean_grid_type
 use MOM_internal_tides,      only : int_tide_CS, get_itidal_loss !BDM
 use MOM_intrinsic_functions, only : invcosh
-use MOM_io,                  only : slasher, vardesc
+use MOM_io,                  only : slasher, vardesc, var_desc
 use MOM_kappa_shear,         only : calculate_kappa_shear, kappa_shear_init, Kappa_shear_CS
 use MOM_string_functions,    only : uppercase
 use MOM_thickness_diffuse,   only : vert_fill_TS
@@ -3016,15 +3016,15 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp, in
          'User-specified Extra Diffusivity', 'meter2 sec-1')
 
   if (associated(diag_to_Z_CSp)) then
-    vd = vardesc("N2","Buoyancy frequency, interpolated to z",&
-                 'h','z','s',"second-2")
+    vd = var_desc("N2", "second-2",&
+                  "Buoyancy frequency, interpolated to z", z_grid='z')
     CS%id_N2_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
-    vd = vardesc("Kd_itides","Internal Tide Driven Diffusivity, interpolated to z",&
-                 'h','z','s',"meter2 second-1")
+    vd = var_desc("Kd_itides","meter2 second-1", &
+                  "Internal Tide Driven Diffusivity, interpolated to z", z_grid='z')
     CS%id_Kd_itidal_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
     if (CS%Lee_wave_dissipation) then
-       vd = vardesc("Kd_Nikurashin","Lee Wave Driven Diffusivity, interpolated to z",&
-                 'h','z','s',"meter2 second-1")
+       vd = var_desc("Kd_Nikurashin", "meter2 second-1", &
+                     "Lee Wave Driven Diffusivity, interpolated to z", z_grid='z')
        CS%id_Kd_Niku_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
     endif
     if (CS%Lowmode_itidal_dissipation) then
@@ -3060,13 +3060,16 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp, in
          'Double-diffusive diffusivity for salinity', 'meter2 sec-1')
 
     if (associated(diag_to_Z_CSp)) then
-      vd = vardesc("KT_extra","Double-Diffusive Temperature Diffusivity, interpolated to z",&
-           'h','z','s',"meter2 second-1")
+      vd = var_desc("KT_extra", "meter2 second-1", &
+                    "Double-Diffusive Temperature Diffusivity, interpolated to z", &
+                    z_grid='z')
       CS%id_KT_extra_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
-      vd = vardesc("KS_extra","Double-Diffusive Salinity Diffusivity, interpolated to z",&
-           'h','z','s',"meter2 second-1")
+      vd = var_desc("KS_extra", "meter2 second-1", &
+                    "Double-Diffusive Salinity Diffusivity, interpolated to z",&
+                    z_grid='z')
       CS%id_KS_extra_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
-      vd = vardesc("Kd_BBL","Bottom Boundary Layer Diffusivity", 'h','z','s',"meter2 second-1")
+      vd = var_desc("Kd_BBL", "meter2 second-1", &
+                    "Bottom Boundary Layer Diffusivity", z_grid='z')
       CS%id_Kd_BBL_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
     endif
   endif

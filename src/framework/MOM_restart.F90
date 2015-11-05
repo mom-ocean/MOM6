@@ -66,8 +66,9 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_string_functions, only : lowercase
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : create_file, fieldtype, file_exists, open_file, close_file
-use MOM_io, only : read_field, write_field, vardesc, read_data
+use MOM_io, only : read_field, write_field, read_data
 use MOM_io, only : get_file_info, get_file_atts, get_file_fields, get_file_times
+use MOM_io, only : vardesc, query_vardesc, modify_vardesc
 use MOM_io, only : MULTIPLE, NETCDF_FILE, READONLY_FILE, SINGLE_FILE
 use MOM_io, only : CENTER, CORNER, NORTH_FACE, EAST_FACE
 use MOM_time_manager, only : time_type, get_time, get_date, set_date, set_time
@@ -107,7 +108,7 @@ type field_restart
                                 ! from the restart file.
   logical :: initialized        ! .true. if this field has been read
                                 ! from the restart file.
-  character(len=32) :: var_name ! A name by which a varible may be queried.
+  character(len=32) :: var_name ! A name by which a variable may be queried.
 end type field_restart
 
 type, public :: MOM_restart_CS ; private
@@ -176,7 +177,9 @@ subroutine register_restart_field_ptr3d(f_ptr, var_desc, mandatory, CS)
   CS%restart_field(CS%novars)%vars = var_desc
   CS%restart_field(CS%novars)%mand_var = mandatory
   CS%restart_field(CS%novars)%initialized = .false.
-  CS%restart_field(CS%novars)%var_name = trim(CS%restart_field(CS%novars)%vars%name)
+  call query_vardesc(CS%restart_field(CS%novars)%vars, &
+                     name=CS%restart_field(CS%novars)%var_name, &
+                     caller="register_restart_field_ptr3d")
 
   CS%var_ptr3d(CS%novars)%p => f_ptr
   CS%var_ptr4d(CS%novars)%p => NULL()
@@ -212,7 +215,9 @@ subroutine register_restart_field_ptr4d(f_ptr, var_desc, mandatory, CS)
   CS%restart_field(CS%novars)%vars = var_desc
   CS%restart_field(CS%novars)%mand_var = mandatory
   CS%restart_field(CS%novars)%initialized = .false.
-  CS%restart_field(CS%novars)%var_name = trim(CS%restart_field(CS%novars)%vars%name)
+  call query_vardesc(CS%restart_field(CS%novars)%vars, &
+                     name=CS%restart_field(CS%novars)%var_name, &
+                     caller="register_restart_field_ptr4d")
 
   CS%var_ptr4d(CS%novars)%p => f_ptr
   CS%var_ptr3d(CS%novars)%p => NULL()
@@ -248,7 +253,9 @@ subroutine register_restart_field_ptr2d(f_ptr, var_desc, mandatory, CS)
   CS%restart_field(CS%novars)%vars = var_desc
   CS%restart_field(CS%novars)%mand_var = mandatory
   CS%restart_field(CS%novars)%initialized = .false.
-  CS%restart_field(CS%novars)%var_name = trim(CS%restart_field(CS%novars)%vars%name)
+  call query_vardesc(CS%restart_field(CS%novars)%vars, &
+                     name=CS%restart_field(CS%novars)%var_name, &
+                     caller="register_restart_field_ptr2d")
 
   CS%var_ptr2d(CS%novars)%p => f_ptr
   CS%var_ptr4d(CS%novars)%p => NULL()
@@ -284,7 +291,9 @@ subroutine register_restart_field_ptr1d(f_ptr, var_desc, mandatory, CS)
   CS%restart_field(CS%novars)%vars = var_desc
   CS%restart_field(CS%novars)%mand_var = mandatory
   CS%restart_field(CS%novars)%initialized = .false.
-  CS%restart_field(CS%novars)%var_name = trim(CS%restart_field(CS%novars)%vars%name)
+  call query_vardesc(CS%restart_field(CS%novars)%vars, &
+                     name=CS%restart_field(CS%novars)%var_name, &
+                     caller="register_restart_field_ptr1d")
 
   CS%var_ptr1d(CS%novars)%p => f_ptr
   CS%var_ptr4d(CS%novars)%p => NULL()
@@ -320,7 +329,9 @@ subroutine register_restart_field_ptr0d(f_ptr, var_desc, mandatory, CS)
   CS%restart_field(CS%novars)%vars = var_desc
   CS%restart_field(CS%novars)%mand_var = mandatory
   CS%restart_field(CS%novars)%initialized = .false.
-  CS%restart_field(CS%novars)%var_name = trim(CS%restart_field(CS%novars)%vars%name)
+  call query_vardesc(CS%restart_field(CS%novars)%vars, &
+                     name=CS%restart_field(CS%novars)%var_name, &
+                     caller="register_restart_field_ptr0d")
 
   CS%var_ptr0d(CS%novars)%p => f_ptr
   CS%var_ptr4d(CS%novars)%p => NULL()
@@ -730,7 +741,9 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename)
   integer :: unit                       ! The mpp unit of the open file.
   integer :: m, nz, num_files, var_periods
   integer :: seconds, days, year, month, hour, minute
-  character(len=8) :: t_grid, t_grid_read
+  character(len=8) :: hor_grid, z_grid, t_grid ! Variable grid info.
+  character(len=8) :: t_grid_read
+  character(len=64) :: var_name         ! A variable's name.
   real :: restart_time
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
@@ -774,16 +787,18 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename)
     size_in_file = 8*(2*G%Domain%niglobal+2*G%Domain%njglobal+2*nz+1000)
 
     do m=start_var,CS%novars
-      if (CS%restart_field(m)%vars%hor_grid == '1') then
+      call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
+                         z_grid=z_grid, t_grid=t_grid, caller="save_restart")
+      if (hor_grid == '1') then
         var_sz = 8
       else
         var_sz = 8*(G%Domain%niglobal+1)*(G%Domain%njglobal+1)
       endif
-      select case (CS%restart_field(m)%vars%z_grid)
+      select case (z_grid)
         case ('L') ; var_sz = var_sz * nz
         case ('i') ; var_sz = var_sz * (nz+1)
       end select
-      t_grid = adjustl(CS%restart_field(m)%vars%t_grid)
+      t_grid = adjustl(t_grid)
       if (t_grid(1:1) == 'p') then
         if (len_trim(t_grid(2:8)) > 0) then
           var_periods = -1
@@ -814,8 +829,10 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename)
     do m=start_var,next_var-1
       vars(m-start_var+1) = CS%restart_field(m)%vars
     enddo
-    t_grid = adjustl(CS%restart_field(m)%vars%t_grid)
-    if (t_grid(1:1) /= 'p') vars(1)%t_grid = 's'
+    call query_vardesc(vars(1), t_grid=t_grid, caller="save_restart")
+    t_grid = adjustl(t_grid)
+    if (t_grid(1:1) /= 'p') &
+      call modify_vardesc(vars(1), t_grid='s', caller="save_restart")
 
     if (CS%parallel_restartfiles) then
       call create_file(unit, trim(restartpath), vars, (next_var-start_var), &
@@ -891,6 +908,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   integer :: ndim, nvar, natt, ntime, pos
   integer :: unit(CS%max_fields) ! The mpp unit of all open files.
   logical :: unit_is_global(CS%max_fields) ! True if the file is global.
+  character(len=8)   :: hor_grid ! Variable grid info.
   character(len=200) :: unit_path(CS%max_fields) ! The file names.
   logical :: fexists
   real, allocatable :: time_vals(:)
@@ -1046,7 +1064,9 @@ subroutine restore_state(filename, directory, day, G, CS)
 
     do m=1,CS%novars
       if (CS%restart_field(m)%initialized) cycle
-      select case (CS%restart_field(m)%vars%hor_grid)
+      call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
+                         caller="restore_state")
+      select case (hor_grid)
         case ('q') ; pos = CORNER
         case ('h') ; pos = CENTER
         case ('u') ; pos = EAST_FACE
@@ -1186,7 +1206,7 @@ subroutine restore_state(filename, directory, day, G, CS)
       CS%restart = .false.
       if (CS%restart_field(m)%mand_var) then
         call MOM_error(FATAL,"MOM_restart: Unable to find mandatory variable " &
-                       //trim(CS%restart_field(m)%vars%name)//" in restart files.")
+                       //trim(CS%restart_field(m)%var_name)//" in restart files.")
       endif
     endif
   enddo

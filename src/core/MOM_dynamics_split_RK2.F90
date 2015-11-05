@@ -1,249 +1,189 @@
+!> Time step the adiabatic dynamic core of MOM using RK2 method.  
 module MOM_dynamics_split_RK2
 
-!***********************************************************************
-!*                   GNU General Public License                        *
-!* This file is a part of MOM.                                         *
-!*                                                                     *
-!* MOM is free software; you can redistribute it and/or modify it and  *
-!* are expected to follow the terms of the GNU General Public License  *
-!* as published by the Free Software Foundation; either version 2 of   *
-!* the License, or (at your option) any later version.                 *
-!*                                                                     *
-!* MOM is distributed in the hope that it will be useful, but WITHOUT  *
-!* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY  *
-!* or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public    *
-!* License for more details.                                           *
-!*                                                                     *
-!* For the full text of the GNU General Public License,                *
-!* write to: Free Software Foundation, Inc.,                           *
-!*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
-!* or see:   http://www.gnu.org/licenses/gpl.html                      *
-!***********************************************************************
+! This file is part of MOM6. See LICENSE.md for the license.
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg and Alistair Adcroft, 1996-2012                 *
-!*                                                                     *
-!*    This file contains code that does the time-stepping of the       *
-!*  adiabatic dynamic core, in this case with mode-splitting between   *
-!*  the baroclinic and barotropic modes and a pseudo-second order      *
-!*  Runge-Kutta time stepping scheme for the baroclinic momentum       *
-!*  equation and a forward-backward coupling between the baroclinic    *
-!*  momentum and continuity equations.  This split time-stepping       *
-!*  scheme is described in detail in Hallberg (JCP, 1997), with the    *
-!*  primary issues related to exact tracer conservation and how to     *
-!*  ensure consistency between the barotropic and layered estimates    *
-!*  of the free surface height described carefully in Hallberg and     *
-!*  Adcroft (Ocean Modelling, 2009).  This was the time stepping code  *
-!*  that is used for most GOLD applications, including GFDL's ESM2G    *
-!*  Earth system model, and all of the examples provided with the      *
-!*  MOM code (although several of these solutions are routinely        *
-!*  verified by comparison with the slower unsplit schemes).           *
-!*                                                                     *
-!*    The subroutine step_MOM_dyn_split_RK2 actually does the time     *
-!*  stepping, while register_restarts_dyn_split_RK2 sets the fields    *
-!*  that are found in a full restart file with this scheme, and        *
-!*  initialize_dyn_split_RK2 initializes the cpu clocks that are       *                                      *
-!*  used in this module.  For largely historical reasons, this module  *
-!*  does not have its own control structure, but shares the same       *
-!*  control structure with MOM.F90 and the other MOM_dynamics_...      *
-!*  modules.                                                           *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, CoriolisBu                            *
-!*    j+1  > o > o >   At ^:  v, PFv, CAv, vh, diffv, tauy, vbt, vhtr  *
-!*    j    x ^ x ^ x   At >:  u, PFu, CAu, uh, diffu, taux, ubt, uhtr  *
-!*    j    > o > o >   At o:  h, bathyT, eta, T, S, tr                 *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1                                                  *
-!*           i  i+1                                                    *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
-
-
-use MOM_variables, only : vertvisc_type, ocean_OBC_type, thermo_var_ptrs
-use MOM_variables, only : BT_cont_type, alloc_bt_cont_type, dealloc_bt_cont_type
-use MOM_variables, only : accel_diag_ptrs, ocean_internal_state, cont_diag_ptrs
+use MOM_variables,    only : vertvisc_type, ocean_OBC_type, thermo_var_ptrs
+use MOM_variables,    only : BT_cont_type, alloc_bt_cont_type, dealloc_bt_cont_type
+use MOM_variables,    only : accel_diag_ptrs, ocean_internal_state, cont_diag_ptrs
 use MOM_forcing_type, only : forcing
 
 use MOM_checksum_packages, only : MOM_thermo_chksum, MOM_state_chksum, MOM_accel_chksum
-use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
-use MOM_cpu_clock, only : CLOCK_COMPONENT, CLOCK_SUBCOMPONENT
-use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_diag_mediator, only : diag_mediator_init, enable_averaging
-use MOM_diag_mediator, only : disable_averaging, post_data, safe_alloc_ptr
-use MOM_diag_mediator, only : register_diag_field, register_static_field
-use MOM_diag_mediator, only : set_diag_mediator_grid, diag_ctrl, diag_update_target_grids
-use MOM_domains, only : MOM_domains_init
-use MOM_domains, only : To_South, To_West, To_All, CGRID_NE, SCALAR_PAIR
-use MOM_domains, only : create_group_pass, do_group_pass, group_pass_type
-use MOM_domains, only : start_group_pass, complete_group_pass
-use MOM_checksums, only : MOM_checksums_init, hchksum, uchksum, vchksum
-use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
-use MOM_error_handler, only : MOM_set_verbosity, callTree_showQuery
-use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
-use MOM_file_parser, only : get_param, log_version, param_file_type
-use MOM_get_input, only : directories
-use MOM_io, only : MOM_io_init, vardesc
-use MOM_restart, only : register_restart_field, query_initialized, save_restart
-use MOM_restart, only : restart_init, MOM_restart_CS
-use MOM_time_manager, only : time_type, set_time, time_type_to_real, operator(+)
-use MOM_time_manager, only : operator(-), operator(>), operator(*), operator(/)
+use MOM_cpu_clock,         only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
+use MOM_cpu_clock,         only : CLOCK_COMPONENT, CLOCK_SUBCOMPONENT
+use MOM_cpu_clock,         only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
+use MOM_diag_mediator,     only : diag_mediator_init, enable_averaging
+use MOM_diag_mediator,     only : disable_averaging, post_data, safe_alloc_ptr
+use MOM_diag_mediator,     only : register_diag_field, register_static_field
+use MOM_diag_mediator,     only : set_diag_mediator_grid, diag_ctrl, diag_update_target_grids
+use MOM_domains,           only : MOM_domains_init
+use MOM_domains,           only : To_South, To_West, To_All, CGRID_NE, SCALAR_PAIR
+use MOM_domains,           only : create_group_pass, do_group_pass, group_pass_type
+use MOM_domains,           only : start_group_pass, complete_group_pass
+use MOM_checksums,         only : MOM_checksums_init, hchksum, uchksum, vchksum
+use MOM_error_handler,     only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
+use MOM_error_handler,     only : MOM_set_verbosity, callTree_showQuery
+use MOM_error_handler,     only : callTree_enter, callTree_leave, callTree_waypoint
+use MOM_file_parser,       only : get_param, log_version, param_file_type
+use MOM_get_input,         only : directories
+use MOM_io,                only : MOM_io_init, vardesc, var_desc
+use MOM_restart,           only : register_restart_field, query_initialized, save_restart
+use MOM_restart,           only : restart_init, MOM_restart_CS
+use MOM_time_manager,      only : time_type, set_time, time_type_to_real, operator(+)
+use MOM_time_manager,      only : operator(-), operator(>), operator(*), operator(/)
 
-use MOM_ALE, only : ALE_CS
-use MOM_barotropic, only : barotropic_init, btstep, btcalc, bt_mass_source
-use MOM_barotropic, only : register_barotropic_restarts, set_dtbt, barotropic_CS
-use MOM_continuity, only : continuity, continuity_init, continuity_CS
-use MOM_CoriolisAdv, only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
-use MOM_diabatic_driver, only : diabatic, diabatic_driver_init, diabatic_CS
-use MOM_error_checking, only : check_redundant
-use MOM_grid, only : MOM_grid_init, ocean_grid_type, get_thickness_units
-use MOM_grid, only : get_flux_units, get_tr_flux_units
-use MOM_hor_visc, only : horizontal_viscosity, hor_visc_init, hor_visc_CS
-use MOM_interface_heights, only : find_eta
+use MOM_ALE,                   only : ALE_CS
+use MOM_barotropic,            only : barotropic_init, btstep, btcalc, bt_mass_source
+use MOM_barotropic,            only : register_barotropic_restarts, set_dtbt, barotropic_CS
+use MOM_continuity,            only : continuity, continuity_init, continuity_CS
+use MOM_CoriolisAdv,           only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
+use MOM_diabatic_driver,       only : diabatic, diabatic_driver_init, diabatic_CS
+use MOM_error_checking,        only : check_redundant
+use MOM_grid,                  only : MOM_grid_init, ocean_grid_type, get_thickness_units
+use MOM_grid,                  only : get_flux_units, get_tr_flux_units
+use MOM_hor_visc,              only : horizontal_viscosity, hor_visc_init, hor_visc_CS
+use MOM_interface_heights,     only : find_eta
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
-use MOM_MEKE_types, only : MEKE_type
-use MOM_open_boundary, only : Radiation_Open_Bdry_Conds, open_boundary_init
-use MOM_open_boundary, only : open_boundary_CS
-use MOM_PressureForce, only : PressureForce, PressureForce_init, PressureForce_CS
-use MOM_tidal_forcing, only : tidal_forcing_init, tidal_forcing_CS
-use MOM_vert_friction, only : vertvisc, vertvisc_coef, vertvisc_remnant
-use MOM_vert_friction, only : vertvisc_limit_vel, vertvisc_init, vertvisc_CS
-use MOM_vert_friction, only : updateCFLtruncationValue
-use MOM_set_visc, only : set_viscous_BBL, set_viscous_ML, set_visc_CS
+use MOM_MEKE_types,            only : MEKE_type
+use MOM_open_boundary,         only : Radiation_Open_Bdry_Conds, open_boundary_init
+use MOM_open_boundary,         only : open_boundary_CS
+use MOM_PressureForce,         only : PressureForce, PressureForce_init, PressureForce_CS
+use MOM_tidal_forcing,         only : tidal_forcing_init, tidal_forcing_CS
+use MOM_vert_friction,         only : vertvisc, vertvisc_coef, vertvisc_remnant
+use MOM_vert_friction,         only : vertvisc_limit_vel, vertvisc_init, vertvisc_CS
+use MOM_vert_friction,         only : updateCFLtruncationValue
+use MOM_set_visc,              only : set_viscous_BBL, set_viscous_ML, set_visc_CS
 
 implicit none ; private
 
 #include <MOM_memory.h>
 
+!> Module control structure 
 type, public :: MOM_dyn_split_RK2_CS ; private
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
-    CAu, &    ! CAu = f*v - u.grad(u) in m s-2.
-    PFu, &    ! PFu = -dM/dx, in m s-2.
-    diffu, &  ! Zonal acceleration due to convergence of the along-isopycnal
-              ! stress tensor, in m s-2.
-    visc_rem_u, & ! Both the fraction of the zonal momentum originally in a
-              ! layer that remains after a time-step of viscosity, and the
-              ! fraction of a time-step's worth of a barotropic acceleration
-              ! that a layer experiences after viscosity is applied.
-              ! Nondimensional between 0 (at the bottom) and 1 (far above).
-    u_accel_bt ! The layers' zonal accelerations due to the difference between
-              ! the barotropic accelerations and the baroclinic accelerations
-              ! that were fed into the barotopic calculation, in m s-2.
+    CAu, &        !< CAu = f*v - u.grad(u) in m s-2.
+    PFu, &        !< PFu = -dM/dx, in m s-2.
+    diffu, &      !< Zonal acceleration due to convergence of the along-isopycnal
+                  !! stress tensor, in m s-2.
+    visc_rem_u, & !< Both the fraction of the zonal momentum originally in a
+                  !! layer that remains after a time-step of viscosity, and the
+                  !! fraction of a time-step's worth of a barotropic acceleration
+                  !! that a layer experiences after viscosity is applied.
+                  !! Nondimensional between 0 (at the bottom) and 1 (far above).
+    u_accel_bt    !< The layers' zonal accelerations due to the difference between
+                  !! the barotropic accelerations and the baroclinic accelerations
+                  !! that were fed into the barotopic calculation, in m s-2.
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
-    CAv, &    ! CAv = -f*u - u.grad(v) in m s-2.
-    PFv, &    ! PFv = -dM/dy, in m s-2.
-    diffv, &  ! Meridional acceleration due to convergence of the
-              ! along-isopycnal stress tensor, in m s-2.
-    visc_rem_v, & ! Both the fraction of the meridional momentum originally in
-              ! a layer that remains after a time-step of viscosity, and the
-              ! fraction of a time-step's worth of a barotropic acceleration
-              ! that a layer experiences after viscosity is applied.
-              ! Nondimensional between 0 (at the bottom) and 1 (far above).
-    v_accel_bt ! The layers' meridional accelerations due to the difference between
-              ! the barotropic accelerations and the baroclinic accelerations
-              ! that were fed into the barotopic calculation, in m s-2.
+    CAv, &        !< CAv = -f*u - u.grad(v) in m s-2.
+    PFv, &        !< PFv = -dM/dy, in m s-2.
+    diffv, &      !< Meridional acceleration due to convergence of the
+                  !! along-isopycnal stress tensor, in m s-2.
+    visc_rem_v, & !< Both the fraction of the meridional momentum originally in
+                  !! a layer that remains after a time-step of viscosity, and the
+                  !! fraction of a time-step's worth of a barotropic acceleration
+                  !! that a layer experiences after viscosity is applied.
+                  !! Nondimensional between 0 (at the bottom) and 1 (far above).
+    v_accel_bt    !< The layers' meridional accelerations due to the difference between
+                  !! the barotropic accelerations and the baroclinic accelerations
+                  !! that were fed into the barotopic calculation, in m s-2.
 
-! The following variables are only used with the split time stepping scheme.
-  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    eta       ! Instantaneous free surface height, in m.
-  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: u_av
-  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: v_av
-    ! u_av and v_av are the layer velocities with the vertical mean replaced by
-    ! the time-mean barotropic velocity over a baroclinic timestep, in m s-1.
-  real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_)  :: h_av
-    ! The arithmetic mean of two successive layer thicknesses, in m or kg m-2.
-  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    eta_PF    ! The instantaneous SSH used in calculating PFu and PFv, in m.
-  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: uhbt
-  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: vhbt
-    ! uhbt and vhbt are the average volume or mass fluxes determined by the
-    ! barotropic solver in m3 s-1 or kg s-1.  uhbt and vhbt should (roughly?) 
-    ! equal the verticals sum of uh and vh, respectively.
-  real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_) :: pbce
-      ! pbce times eta gives the baroclinic pressure anomaly in each layer due
-      ! to free surface height anomalies.  pbce has units of m2 H-1 s-2.
+  ! The following variables are only used with the split time stepping scheme.
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_)             :: eta     !< Instantaneous free surface height, in m.
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: u_av    !< layer x-velocity with vertical mean replaced by
+                                                                   !! time-mean barotropic velocity over a baroclinic timestep (m s-1)
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: v_av    !< layer y-velocity with vertical mean replaced by
+                                                                   !! time-mean barotropic velocity over a baroclinic timestep (m s-1)
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_)      :: h_av    !< arithmetic mean of two successive layer thicknesses (m or kg m-2)
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_)             :: eta_PF  !< instantaneous SSH used in calculating PFu and PFv (meter)
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_)        :: uhbt    !< average x-volume or mass flux determined by barotropic solver 
+                                                                   !! (m3 s-1 or kg s-1). uhbt should (roughly?) equal to vertical sum of uh.
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_)        :: vhbt    !< average y-volume or mass flux determined by barotropic solver 
+                                                                   !! (m3 s-1 or kg s-1). uhbt should (roughly?) equal to vertical sum of uh.
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_)      :: pbce    !<  pbce times eta gives the baroclinic pressure anomaly in each layer due
+                                                                   !! to free surface height anomalies.  pbce has units of m2 H-1 s-2.
 
-  real, pointer, dimension(:,:) :: taux_bot => NULL(), tauy_bot => NULL()
-    ! The frictional bottom stresses from the ocean to the seafloor, in Pa.
-  type(BT_cont_type), pointer :: BT_cont => NULL()
-                              ! A structure with elements that describe the
-                              ! effective summed open face areas as a function
-                              ! of barotropic flow.
+  real, pointer, dimension(:,:) :: taux_bot => NULL()  !<  frictional x-bottom stress from the ocean to the seafloor (Pa)
+  real, pointer, dimension(:,:) :: tauy_bot => NULL()  !<  frictional y-bottom stress from the ocean to the seafloor (Pa)
+  type(BT_cont_type), pointer   :: BT_cont  => NULL()  !<  A structure with elements that describe the
+                                                       !! effective summed open face areas as a function
+                                                       !! of barotropic flow.
 
   ! This is to allow the previous, velocity-based coupling with between the
   ! baroclinic and barotropic modes.
-  logical :: BT_use_layer_fluxes ! If true, use the summed layered fluxes plus
-                               ! an adjustment due to a changed barotropic
-                               ! velocity in the barotropic continuity equation.
-  logical :: split_bottom_stress  ! If true, provide the bottom stress
-                               ! calculated by the vertical viscosity to the
-                               ! barotropic solver.
-  logical :: calc_dtbt         ! If true, calculate the barotropic time-step
-                               ! dynamically.
+  logical :: BT_use_layer_fluxes  !< If true, use the summed layered fluxes plus
+                                  !! an adjustment due to a changed barotropic
+                                  !! velocity in the barotropic continuity equation.
+  logical :: split_bottom_stress  !< If true, provide the bottom stress
+                                  !! calculated by the vertical viscosity to the
+                                  !! barotropic solver.
+  logical :: calc_dtbt            !< If true, calculate the barotropic time-step
+                                  !! dynamically.
 
-  real    :: be              ! A nondimensional number from 0.5 to 1 that controls
-                             ! the backward weighting of the time stepping scheme.
-  real    :: begw            ! A nondimensional number from 0 to 1 that controls
-                             ! the extent to which the treatment of gravity waves
-                             ! is forward-backward (0) or simulated backward
-                             ! Euler (1).  0 is almost always used.
-  logical :: debug           ! If true, write verbose checksums for debugging purposes.
+  real    :: be      !< A nondimensional number from 0.5 to 1 that controls
+                     !! the backward weighting of the time stepping scheme.
+  real    :: begw    !< A nondimensional number from 0 to 1 that controls
+                     !! the extent to which the treatment of gravity waves
+                     !! is forward-backward (0) or simulated backward
+                     !! Euler (1).  0 is almost always used.
+  logical :: debug   !< If true, write verbose checksums for debugging purposes.
 
   logical :: module_is_initialized = .false.
 
-  integer :: id_uh  = -1, id_vh  = -1
-  integer :: id_umo = -1, id_vmo = -1
-  integer :: id_PFu = -1, id_PFv = -1, id_CAu = -1, id_CAv = -1
+  integer :: id_uh     = -1, id_vh     = -1
+  integer :: id_umo    = -1, id_vmo    = -1
+  integer :: id_umo_2d = -1, id_vmo_2d = -1
+  integer :: id_PFu    = -1, id_PFv    = -1
+  integer :: id_CAu    = -1, id_CAv    = -1
 
-! Split scheme only.
-  integer :: id_uav = -1, id_vav = -1
+  ! Split scheme only.
+  integer :: id_uav        = -1, id_vav        = -1
   integer :: id_u_BT_accel = -1, id_v_BT_accel = -1
 
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                                   ! timing of diagnostic output.
-  type(accel_diag_ptrs), pointer :: ADp ! A structure pointing to the various
-                                   ! accelerations in the momentum equations,
-                                   ! which can later be used to calculate
-                                   ! derived diagnostics like energy budgets.
-  type(cont_diag_ptrs), pointer :: CDp ! A structure with pointers to various
-                                   ! terms in the continuity equations,
-                                   ! which can later be used to calculate
-                                   ! derived diagnostics like energy budgets.
-! The remainder of the structure is pointers to child subroutines' control strings.
-  type(hor_visc_CS), pointer :: hor_visc_CSp => NULL()
-  type(continuity_CS), pointer :: continuity_CSp => NULL()
-  type(CoriolisAdv_CS), pointer :: CoriolisAdv_CSp => NULL()
-  type(PressureForce_CS), pointer :: PressureForce_CSp => NULL()
-  type(barotropic_CS), pointer :: barotropic_CSp => NULL()
-  type(vertvisc_CS), pointer :: vertvisc_CSp => NULL()
-  type(set_visc_CS), pointer :: set_visc_CSp => NULL()
-  type(open_boundary_CS), pointer :: open_boundary_CSp => NULL()
-  type(ocean_OBC_type), pointer :: OBC => NULL() ! A pointer to an open boundary
-     ! condition type that specifies whether, where, and  what open boundary
-     ! conditions are used.  If no open BCs are used, this pointer stays
-     ! nullified.  Flather OBCs use open boundary_CS as well.
-  type(tidal_forcing_CS), pointer :: tides_CSp => NULL()
+  type(diag_ctrl), pointer       :: diag !< A structure that is used to regulate the
+                                         !! timing of diagnostic output.
+  type(accel_diag_ptrs), pointer :: ADp  !< A structure pointing to the various
+                                         !! accelerations in the momentum equations,
+                                         !! which can later be used to calculate
+                                         !! derived diagnostics like energy budgets.
+  type(cont_diag_ptrs), pointer  :: CDp  !< A structure with pointers to various
+                                         !! terms in the continuity equations,
+                                         !! which can later be used to calculate
+                                         !! derived diagnostics like energy budgets.
 
-! This is a copy of the pointer in the top-level control structure.
+  ! Remainder of the structure points to child subroutines' control strings.
+  type(hor_visc_CS),      pointer :: hor_visc_CSp      => NULL()
+  type(continuity_CS),    pointer :: continuity_CSp    => NULL()
+  type(CoriolisAdv_CS),   pointer :: CoriolisAdv_CSp   => NULL()
+  type(PressureForce_CS), pointer :: PressureForce_CSp => NULL()
+  type(barotropic_CS),    pointer :: barotropic_CSp    => NULL()
+  type(vertvisc_CS),      pointer :: vertvisc_CSp      => NULL()
+  type(set_visc_CS),      pointer :: set_visc_CSp      => NULL()
+  type(open_boundary_CS), pointer :: open_boundary_CSp => NULL()
+  type(tidal_forcing_CS), pointer :: tides_CSp         => NULL()
+
+  type(ocean_OBC_type),   pointer :: OBC => NULL() !< A pointer to an open boundary
+     !! condition type that specifies whether, where, and  what open boundary
+     !! conditions are used.  If no open BCs are used, this pointer stays
+     !! nullified.  Flather OBCs use open boundary_CS as well.
+
+  ! This is a copy of the pointer in the top-level control structure.
   type(ALE_CS), pointer :: ALE_CSp => NULL()
 
-  !---For group halo pass
+  ! for group halo pass
   type(group_pass_type) :: pass_kv_bbl_thick
   type(group_pass_type) :: pass_Ray_uv, pass_eta_PF_eta
   type(group_pass_type) :: pass_visc_rem, pass_uvp
   type(group_pass_type) :: pass_hp_uv, pass_eta_PF
   type(group_pass_type) :: pass_huv, pass_uv
   type(group_pass_type) :: pass_h, pass_av_uvh
+
 end type MOM_dyn_split_RK2_CS
 
-public step_MOM_dyn_split_RK2, register_restarts_dyn_split_RK2
-public initialize_dyn_split_RK2, end_dyn_split_RK2
+
+public step_MOM_dyn_split_RK2
+public register_restarts_dyn_split_RK2
+public initialize_dyn_split_RK2
+public end_dyn_split_RK2
 
 integer :: id_clock_Cor, id_clock_pres, id_clock_vertvisc
 integer :: id_clock_horvisc, id_clock_mom_update
@@ -253,90 +193,59 @@ integer :: id_clock_pass, id_clock_pass_init
 
 contains
 
-! =============================================================================
-
+!> RK2 splitting for time stepping MOM adiabatic dynamics 
 subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
                  Time_local, dt, fluxes, p_surf_begin, p_surf_end, &
                  dt_since_flux, dt_therm, uh, vh, uhtr, vhtr, eta_av, &
                  G, CS, calc_dtbt, VarMix, MEKE)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), target, intent(inout) :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), target, intent(inout) :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h
-  type(thermo_var_ptrs),                  intent(in)    :: tv
-  type(vertvisc_type),                    intent(inout) :: visc
-  type(time_type),                        intent(in)    :: Time_local
-  real,                                   intent(in)    :: dt
-  type(forcing),                          intent(in)    :: fluxes
-  real, dimension(:,:),                   pointer       :: p_surf_begin, p_surf_end
-  real,                                   intent(in)    :: dt_since_flux, dt_therm
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), target, intent(inout) :: uh
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), target, intent(inout) :: vh
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uhtr
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vhtr
-  real, dimension(NIMEM_,NJMEM_),         intent(out)   :: eta_av
-  type(ocean_grid_type),                  intent(inout) :: G
-  type(MOM_dyn_split_RK2_CS),             pointer       :: CS
-  logical,                                intent(in)    :: calc_dtbt
-  type(VarMix_CS),                        pointer       :: VarMix
-  type(MEKE_type),                        pointer       :: MEKE
-! Arguments: u - The zonal velocity, in m s-1.
-!  (inout)   v - The meridional velocity, in m s-1.
-!  (inout)   h - The layer thicknesses, in m or kg m-2, depending on
-!                whether the Boussinesq approximation is made.
-!  (in)      tv - a structure pointing to various thermodynamic variables.
-!  (inout)   visc - A structure containing vertical viscosities, bottom drag
-!                   viscosities, and related fields.
-!  (in)      Time_local - The model time at the end of the time step.
-!  (in)      dt - The time step in s.
-!  (in)      fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields have NULL ptrs.
-!  (in)      p_surf_begin - A pointer (perhaps NULL) to the surface pressure
-!                     at the beginning of this dynamic step, in Pa.
-!  (in)      p_surf_end - A pointer (perhaps NULL) to the surface pressure
-!                     at the end of this dynamic step, in Pa.
-!  (in)      dt_since_flux - The elapsed time since fluxes were applied, in s.
-!  (in)      dt_therm - The thermodynamic time step, in s.
-!  (inout)   uh - The zonal volume or mass transport, in m3 s-1 or kg s-1.
-!  (inout)   vh - The meridional volume or mass transport, in m3 s-1 or kg s-1.
-!  (inout)   uhtr - The accumulated zonal volume or mass transport since the last
-!                   tracer advection, in m3 or kg.
-!  (inout)   vhtr - The accumulated meridional volume or mass transport since the last
-!                   tracer advection, in m3 or kg.
-!  (out)     eta_av - The free surface height or column mass time-averaged
-!                     over a time step, in m or kg m-2.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure set up by initialize_dyn_split_RK2.
-!  (in)      calc_dtbt - If true, recalculate the barotropic time step.
-!  (in)      VarMix - A pointer to a structure with fields that specify the
-!                     spatially variable viscosities.
-!  (inout)   MEKE - A pointer to a structure containing fields related to
-!                   the Mesoscale Eddy Kinetic Energy.
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), target, intent(inout) :: u     !< zonal velocity (m/s) 
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), target, intent(inout) :: v     !< merid velocity (m/s)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h             !< layer thickness (m or kg/m2)   
+  type(thermo_var_ptrs),                  intent(in)    :: tv            !< thermodynamic type 
+  type(vertvisc_type),                    intent(inout) :: visc          !< vertical visc, bottom drag, and related
+  type(time_type),                        intent(in)    :: Time_local    !< model time at end of time step  
+  real,                                   intent(in)    :: dt            !< time step (sec)
+  type(forcing),                          intent(in)    :: fluxes        !< forcing fields 
+  real, dimension(:,:),                   pointer       :: p_surf_begin  !< surf pressure at start of this dynamic time step (Pa)
+  real, dimension(:,:),                   pointer       :: p_surf_end    !< surf pressure at end   of this dynamic time step (Pa)
+  real,                                   intent(in)    :: dt_since_flux !< elapesed time since fluxes were applied (sec)
+  real,                                   intent(in)    :: dt_therm      !< thermodynamic time step (sec)
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), target, intent(inout) :: uh    !< zonal volume/mass transport (m3/s or kg/s)
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), target, intent(inout) :: vh    !< merid volume/mass transport (m3/s or kg/s)
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uhtr          !< accumulatated zonal volume/mass transport since last tracer advection (m3 or kg)  
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vhtr          !< accumulatated merid volume/mass transport since last tracer advection (m3 or kg)  
+  real, dimension(NIMEM_,NJMEM_),         intent(out)   :: eta_av        !< free surface height or column mass time averaged over time step (m or kg/m2)
+  type(ocean_grid_type),                  intent(inout) :: G             !< ocean grid structure 
+  type(MOM_dyn_split_RK2_CS),             pointer       :: CS            !< module control structure 
+  logical,                                intent(in)    :: calc_dtbt     !< if true, recalculate barotropic time step 
+  type(VarMix_CS),                        pointer       :: VarMix        !< specify the spatially varying viscosities 
+  type(MEKE_type),                        pointer       :: MEKE          !< related to mesoscale eddy kinetic energy param 
 
-  real :: dt_pred   ! The time step for the predictor part of the baroclinic
-                    ! time stepping.
+  real :: dt_pred   ! The time step for the predictor part of the baroclinic time stepping.
 
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: &
-    up   ! Predicted zonal velocitiy in m s-1.
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: &
-    vp   ! Predicted meridional velocitiy in m s-1.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G))  :: &
-    hp   ! Predicted thickness in m or kg m-2 (H).
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: up   ! Predicted zonal velocitiy in m s-1.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vp   ! Predicted meridional velocitiy in m s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G))  :: hp   ! Predicted thickness in m or kg m-2 (H).
 
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: u_bc_accel
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: v_bc_accel
     ! u_bc_accel and v_bc_accel are the summed baroclinic accelerations of each
     ! layer calculated by the non-barotropic part of the model, both in m s-2.
+
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target :: uh_in
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target :: vh_in
     ! uh_in and vh_in are the zonal or meridional mass transports that would be
     ! obtained using the initial velocities, both in m3 s-1 or kg s-1.
+
   real, dimension(SZIB_(G),SZJ_(G)) :: uhbt_out
   real, dimension(SZI_(G),SZJB_(G)) :: vhbt_out
     ! uhbt_out and vhbt_out are the vertically summed transports from the
     ! barotropic solver based on its final velocities, both in m3 s-1 or kg s-1.
+
   real, dimension(SZI_(G),SZJ_(G)) :: eta_pred
     ! eta_pred is the predictor value of the free surface height or column mass,
     ! in m or kg m-2.
+
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target :: u_adj
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target :: v_adj
     ! u_adj and v_adj are the zonal or meridional velocities after u and v
@@ -354,6 +263,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     p_surf => NULL(), eta_PF_start => NULL(), &
     taux_bot => NULL(), tauy_bot => NULL(), &
     eta => NULL()
+
   real, pointer, dimension(:,:,:) :: &
     uh_ptr => NULL(), u_ptr => NULL(),  vh_ptr => NULL(), v_ptr => NULL(), &
     u_init => NULL(), v_init => NULL(), & ! Pointers to u and v or u_adj and v_adj.
@@ -367,10 +277,14 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
                               ! relative weightings of the layers in calculating
                               ! the barotropic accelerations.
   !---For group halo pass
-  logical                     :: do_pass_Ray_uv, do_pass_kv_bbl_thick
+  logical :: do_pass_Ray_uv, do_pass_kv_bbl_thick
   logical :: showCallTree
+
+  ! for diagnostics 
+  real, dimension(SZI_(G),SZJ_(G)) :: work2d
+
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   u_av => CS%u_av ; v_av => CS%v_av ; h_av => CS%h_av ; eta => CS%eta
   Idt = 1.0 / dt
@@ -703,8 +617,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   endif
   call cpu_clock_end(id_clock_pass)
 
-! uh = u_av * h
-! hp = h + dt * div . uh
+  ! uh = u_av * h
+  ! hp = h + dt * div . uh
   call cpu_clock_begin(id_clock_continuity)
   call continuity(up, vp, h, hp, uh, vh, dt, G, CS%continuity_CSp, &
                   CS%uhbt, CS%vhbt, CS%OBC, CS%visc_rem_u, CS%visc_rem_v, &
@@ -724,19 +638,19 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
              v_old_rad_OBC, hp, h_old_rad_OBC, G, CS%open_boundary_CSp)
   endif
 
-! h_av = (h + hp)/2
+  ! h_av = (h + hp)/2
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,h_av,h,hp)
   do k=1,nz ; do j=js-2,je+2 ; do i=is-2,ie+2
     h_av(i,j,k) = 0.5*(h(i,j,k) + hp(i,j,k))
   enddo ; enddo ; enddo
 
-! The correction phase of the time step starts here.
+  ! The correction phase of the time step starts here.
   call enable_averaging(dt, Time_local, CS%diag)
 
-!   Calculate a revised estimate of the free-surface height correction to be
-! used in the next call to btstep.  This call is at this point so that
-! hp can be changed if CS%begw /= 0.
-! eta_cor = ...                 (hidden inside CS%barotropic_CSp)
+  ! Calculate a revised estimate of the free-surface height correction to be
+  ! used in the next call to btstep.  This call is at this point so that
+  ! hp can be changed if CS%begw /= 0.
+  ! eta_cor = ...                 (hidden inside CS%barotropic_CSp)
   call cpu_clock_begin(id_clock_btcalc)
   call bt_mass_source(hp, eta_pred, fluxes, .false., dt_therm, &
                       dt_since_flux+dt, G, CS%barotropic_CSp)
@@ -751,8 +665,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
       hp(i,j,k) = (1.0-CS%begw)*h(i,j,k) + CS%begw*hp(i,j,k)
     enddo ; enddo ; enddo
 
-! PFu = d/dx M(hp,T,S)
-! pbce = dM/deta
+    ! PFu = d/dx M(hp,T,S)
+    ! pbce = dM/deta
     call cpu_clock_begin(id_clock_pres)
     call PressureForce(hp, tv, CS%PFu, CS%PFv, G, &
                        CS%PressureForce_CSp, CS%ALE_CSp, &
@@ -825,8 +739,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     call check_redundant("corr pre-btstep u_bc_accel ", u_bc_accel, v_bc_accel, G)
   endif
 
-! u_accel_bt = layer accelerations due to barotropic solver
-! pbce = dM/deta
+  ! u_accel_bt = layer accelerations due to barotropic solver
+  ! pbce = dM/deta
   call cpu_clock_begin(id_clock_btstep)
   if (CS%BT_use_layer_fluxes) then
     uh_ptr => uh ; vh_ptr => vh ; u_ptr => u_av ; v_ptr => v_av
@@ -850,7 +764,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     call check_redundant("u_accel_bt ", CS%u_accel_bt, CS%v_accel_bt, G)
   endif
 
-! u = u + dt*( u_bc_accel + u_accel_bt )
+  ! u = u + dt*( u_bc_accel + u_accel_bt )
   call cpu_clock_begin(id_clock_mom_update)
 !$OMP parallel do default(none) shared(is,ie,js,je,Isq,Ieq,Jsq,Jeq,nz,u,G,u_init, &
 !$OMP                                  CS,dt,u_bc_accel,v,v_init,v_bc_accel)
@@ -877,8 +791,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
              CS%diffu, CS%diffv, G, CS%pbce, CS%u_accel_bt, CS%v_accel_bt)
   endif
 
-! u <- u + dt d/dz visc d/dz u
-! u_av <- u_av + dt d/dz visc d/dz u_av
+  ! u <- u + dt d/dz visc d/dz u 
+  ! u_av <- u_av + dt d/dz visc d/dz u_av
   call cpu_clock_begin(id_clock_vertvisc)
   call vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS%vertvisc_CSp)
   call vertvisc(u, v, h, fluxes, visc, dt, CS%OBC, CS%ADp, CS%CDp, G, &
@@ -907,8 +821,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   endif
   call cpu_clock_end(id_clock_pass)
 
-! uh = u_av * h
-! h = h + dt * div . uh
+  ! uh = u_av * h
+  ! h  = h + dt * div . uh
   ! u_av and v_av adjusted so their mass transports match uhbt and vhbt.
   call cpu_clock_begin(id_clock_continuity)
   call continuity(u, v, h, h, uh, vh, dt, G, &
@@ -957,25 +871,47 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     enddo ; enddo 
   enddo
 
-!   The time-averaged free surface height has already been set by the last
-!  call to btstep.
+  !   The time-averaged free surface height has already been set by the last
+  !  call to btstep.
 
-!  Here various terms used in to update the momentum equations are
-!  offered for time averaging.
+  !  Here various terms used in to update the momentum equations are
+  !  offered for time averaging.
   if (CS%id_PFu > 0) call post_data(CS%id_PFu, CS%PFu, CS%diag)
   if (CS%id_PFv > 0) call post_data(CS%id_PFv, CS%PFv, CS%diag)
   if (CS%id_CAu > 0) call post_data(CS%id_CAu, CS%CAu, CS%diag)
   if (CS%id_CAv > 0) call post_data(CS%id_CAv, CS%CAv, CS%diag)
 
-!   Here the thickness fluxes are offered for time averaging.
-  if (CS%id_uh  > 0) call post_data(CS%id_uh , uh, CS%diag)
-  if (CS%id_vh  > 0) call post_data(CS%id_vh , vh,   CS%diag)
-  if (CS%id_umo > 0) call post_data(CS%id_umo, uh*G%H_to_kg_m2, CS%diag)
-  if (CS%id_vmo > 0) call post_data(CS%id_vmo, vh*G%H_to_kg_m2, CS%diag)
-  if (CS%id_uav > 0) call post_data(CS%id_uav, u_av, CS%diag)
-  if (CS%id_vav > 0) call post_data(CS%id_vav, v_av, CS%diag)
+  ! Here the thickness fluxes are offered for time averaging.
+  if (CS%id_uh         > 0) call post_data(CS%id_uh , uh,                   CS%diag)
+  if (CS%id_vh         > 0) call post_data(CS%id_vh , vh,                   CS%diag)
+  if (CS%id_uav        > 0) call post_data(CS%id_uav, u_av,                 CS%diag)
+  if (CS%id_vav        > 0) call post_data(CS%id_vav, v_av,                 CS%diag)
   if (CS%id_u_BT_accel > 0) call post_data(CS%id_u_BT_accel, CS%u_accel_bt, CS%diag)
   if (CS%id_v_BT_accel > 0) call post_data(CS%id_v_BT_accel, CS%v_accel_bt, CS%diag)
+  if (CS%id_umo        > 0) call post_data(CS%id_umo, uh*G%H_to_kg_m2,      CS%diag)
+  if (CS%id_vmo        > 0) call post_data(CS%id_vmo, vh*G%H_to_kg_m2,      CS%diag)
+
+  ! depth summed zonal mass transport 
+  if (CS%id_umo_2d > 0) then 
+    do j=js,je ; do i=is,ie
+      work2d(i,j) = 0.0
+      do k=1,nz 
+        work2d(i,j) = work2d(i,j) + uh(i,j,k)*G%H_to_kg_m2
+      enddo 
+    enddo ; enddo 
+    call post_data(CS%id_umo_2d, work2d, CS%diag)
+  endif 
+  ! depth summed merid mass transport 
+  if (CS%id_vmo_2d > 0) then 
+    do j=js,je ; do i=is,ie
+      work2d(i,j) = 0.0
+      do k=1,nz 
+        work2d(i,j) = work2d(i,j) + vh(i,j,k)*G%H_to_kg_m2
+      enddo 
+    enddo ; enddo 
+    call post_data(CS%id_vmo_2d, work2d, CS%diag)
+  endif 
+
   if (CS%debug) then
     call MOM_state_chksum("Corrector ", u, v, h, uh, vh, G)
     call uchksum(u_av,"Corrector avg u",G,haloshift=1)
@@ -983,39 +919,31 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     call hchksum(G%H_to_kg_m2*h_av,"Corrector avg h",G,haloshift=1)
  !  call MOM_state_chksum("Corrector avg ", u_av, v_av, h_av, uh, vh, G)
   endif
+
   if (showCallTree) call callTree_leave("step_MOM_dyn_split_RK2()")
 
 end subroutine step_MOM_dyn_split_RK2
 
-! =============================================================================
-
+!> This subroutine sets up any auxiliary restart variables that are specific
+!! to the unsplit time stepping scheme.  All variables registered here should
+!! have the ability to be recreated if they are not present in a restart file.
 subroutine register_restarts_dyn_split_RK2(G, param_file, CS, restart_CS, uh, vh)
-  type(ocean_grid_type),         intent(in)    :: G
-  type(param_file_type),         intent(in)    :: param_file
-  type(MOM_dyn_split_RK2_CS),    pointer       :: CS
-  type(MOM_restart_CS),          pointer       :: restart_CS
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), target, intent(inout) :: uh
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), target, intent(inout) :: vh
-!   This subroutine sets up any auxiliary restart variables that are specific
-! to the unsplit time stepping scheme.  All variables registered here should
-! have the ability to be recreated if they are not present in a restart file.
+  type(ocean_grid_type),         intent(in)    :: G                    !< ocean grid structure 
+  type(param_file_type),         intent(in)    :: param_file           !< parameter file 
+  type(MOM_dyn_split_RK2_CS),    pointer       :: CS                   !< module control structure 
+  type(MOM_restart_CS),          pointer       :: restart_CS           !< restart control structure 
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), target, intent(inout) :: uh  !< zonal volume/mass transport (m3/s or kg/s)  
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), target, intent(inout) :: vh  !< merid volume/mass transport (m3/s or kg/s)  
 
-! Arguments: G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (inout)   CS - The control structure set up by initialize_dyn_split_RK2.
-!  (in)      restart_CS - A pointer to the restart control structure.
-!  (inout)   uh - The zonal volume or mass transport, in m3 s-1 or kg s-1.
-!  (inout)   vh - The meridional volume or mass transport, in m3 s-1 or kg s-1.
-
-  type(vardesc) :: vd
+  type(vardesc)      :: vd
   character(len=40)  :: mod = "MOM_dynamics_split_RK2" ! This module's name.
-  character(len=48) :: thickness_units, flux_units
+  character(len=48)  :: thickness_units, flux_units
+
   integer :: isd, ied, jsd, jed, nz, IsdB, IedB, JsdB, JedB
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
+  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nz = G%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-! This is where a control structure that is specific to this module would be allocated.
+  ! This is where a control structure specific to this module would be allocated.
   if (associated(CS)) then
     call MOM_error(WARNING, "register_restarts_dyn_split_RK2 called with an associated "// &
                              "control structure.")
@@ -1025,12 +953,12 @@ subroutine register_restarts_dyn_split_RK2(G, param_file, CS, restart_CS, uh, vh
 
   ALLOC_(CS%diffu(IsdB:IedB,jsd:jed,nz)) ; CS%diffu(:,:,:) = 0.0
   ALLOC_(CS%diffv(isd:ied,JsdB:JedB,nz)) ; CS%diffv(:,:,:) = 0.0
-  ALLOC_(CS%CAu(IsdB:IedB,jsd:jed,nz)) ; CS%CAu(:,:,:) = 0.0
-  ALLOC_(CS%CAv(isd:ied,JsdB:JedB,nz)) ; CS%CAv(:,:,:) = 0.0
-  ALLOC_(CS%PFu(IsdB:IedB,jsd:jed,nz)) ; CS%PFu(:,:,:) = 0.0
-  ALLOC_(CS%PFv(isd:ied,JsdB:JedB,nz)) ; CS%PFv(:,:,:) = 0.0
+  ALLOC_(CS%CAu(IsdB:IedB,jsd:jed,nz))   ; CS%CAu(:,:,:)   = 0.0
+  ALLOC_(CS%CAv(isd:ied,JsdB:JedB,nz))   ; CS%CAv(:,:,:)   = 0.0
+  ALLOC_(CS%PFu(IsdB:IedB,jsd:jed,nz))   ; CS%PFu(:,:,:)   = 0.0
+  ALLOC_(CS%PFv(isd:ied,JsdB:JedB,nz))   ; CS%PFv(:,:,:)   = 0.0
 
-  ALLOC_(CS%eta(isd:ied,jsd:jed))       ; CS%eta(:,:) = 0.0
+  ALLOC_(CS%eta(isd:ied,jsd:jed))       ; CS%eta(:,:)    = 0.0
   ALLOC_(CS%u_av(IsdB:IedB,jsd:jed,nz)) ; CS%u_av(:,:,:) = 0.0
   ALLOC_(CS%v_av(isd:ied,JsdB:JedB,nz)) ; CS%v_av(:,:,:) = 0.0
   ALLOC_(CS%h_av(isd:ied,jsd:jed,nz))   ; CS%h_av(:,:,:) = G%Angstrom
@@ -1038,34 +966,28 @@ subroutine register_restarts_dyn_split_RK2(G, param_file, CS, restart_CS, uh, vh
   thickness_units = get_thickness_units(G)
   flux_units = get_flux_units(G)
 
- ! if (G%Boussinesq) then
-    vd = vardesc("sfc","Free surface Height",'h','1','s',thickness_units)
- ! else
- !   vd(1) = vardesc("ocean_mass?","Ocean column mass",'h','1','s',"kg meter-2")
- ! endif
+  vd = var_desc("sfc",thickness_units,"Free surface Height",'h','1')
   call register_restart_field(CS%eta, vd, .false., restart_CS)
 
-  vd = vardesc("u2","Auxiliary Zonal velocity",'u','L','s',"meter second-1")
+  vd = var_desc("u2","meter second-1","Auxiliary Zonal velocity",'u','L')
   call register_restart_field(CS%u_av, vd, .false., restart_CS)
 
-  vd = vardesc("v2","Auxiliary Meridional velocity",'v','L','s',"meter second-1")
+  vd = var_desc("v2","meter second-1","Auxiliary Meridional velocity",'v','L')
   call register_restart_field(CS%v_av, vd, .false., restart_CS)
 
-  vd = vardesc("h2","Auxiliary Layer Thickness",'h','L','s',thickness_units)
+  vd = var_desc("h2",thickness_units,"Auxiliary Layer Thickness",'h','L')
   call register_restart_field(CS%h_av, vd, .false., restart_CS)
 
-  vd = vardesc("uh","Zonal thickness flux",'u','L','s',flux_units)
+  vd = var_desc("uh",flux_units,"Zonal thickness flux",'u','L')
   call register_restart_field(uh, vd, .false., restart_CS)
 
-  vd = vardesc("vh","Meridional thickness flux",'v','L','s',flux_units)
+  vd = var_desc("vh",flux_units,"Meridional thickness flux",'v','L')
   call register_restart_field(vh, vd, .false., restart_CS)
 
-  vd = vardesc("diffu","Zonal horizontal viscous acceleration",'u','L','s', &
-               "meter second-2")
+  vd = var_desc("diffu","meter second-2","Zonal horizontal viscous acceleration",'u','L')
   call register_restart_field(CS%diffu, vd, .false., restart_CS)
 
-  vd = vardesc("diffv","Meridional horizontal viscous acceleration",'v','L','s',&
-               "meter second-2")
+  vd = var_desc("diffv","meter second-2","Meridional horizontal viscous acceleration",'v','L')
   call register_restart_field(CS%diffv, vd, .false., restart_CS)
 
   call register_barotropic_restarts(G, param_file, CS%barotropic_CSp, &
@@ -1073,82 +995,47 @@ subroutine register_restarts_dyn_split_RK2(G, param_file, CS, restart_CS, uh, vh
 
 end subroutine register_restarts_dyn_split_RK2
 
+!> This subroutine initializes all of the variables that are used by this
+!! dynamic core, including diagnostics and the cpu clocks.
 subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, param_file, &
                       diag, CS, restart_CS, dt, Accel_diag, Cont_diag, MIS, &
                       VarMix, MEKE, OBC, ALE_CSp, setVisc_CSp, visc, dirs, ntrunc)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_) , intent(inout) :: h
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), target, intent(inout) :: uh
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), target, intent(inout) :: vh
-  real, dimension(NIMEM_,NJMEM_),         intent(inout) :: eta
-  type(time_type),                target, intent(in)    :: Time
-  type(ocean_grid_type),                  intent(inout) :: G
-  type(param_file_type),                  intent(in)    :: param_file
-  type(diag_ctrl),                target, intent(inout) :: diag
-  type(MOM_dyn_split_RK2_CS),             pointer       :: CS
-  type(MOM_restart_CS),                   pointer       :: restart_CS
-  real,                                   intent(in)    :: dt
-  type(accel_diag_ptrs),          target, intent(inout) :: Accel_diag
-  type(cont_diag_ptrs),           target, intent(inout) :: Cont_diag
-  type(ocean_internal_state),             intent(inout) :: MIS
-  type(VarMix_CS),                        pointer       :: VarMix
-  type(MEKE_type),                        pointer       :: MEKE
-  type(ocean_OBC_type),                   pointer       :: OBC
-  type(ALE_CS),                           pointer       :: ALE_CSp
-  type(set_visc_CS),                      pointer       :: setVisc_CSp
-  type(vertvisc_type),                    intent(inout) :: visc
-  type(directories),                      intent(in)    :: dirs
-  integer, target,                        intent(inout) :: ntrunc
-! Arguments: u - The zonal velocity, in m s-1.
-!  (inout)   v - The meridional velocity, in m s-1.
-!  (inout)   h - The layer thicknesses, in m or kg m-2, depending on whether
-!                the Boussinesq approximation is made.
-!  (inout)   uh - The zonal volume or mass transport, in m3 s-1 or kg s-1.
-!  (inout)   vh - The meridional volume or mass transport, in m3 s-1 or kg s-1.
-!  (out)     eta - The free surface height or column mass, in m or kg m-2.
-!  (in)      Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (inout)   CS - The control structure set up by initialize_dyn_split_RK2.
-!  (in)      restart_CS - A pointer to the restart control structure.
-!  (inout)   Accel_diag - A set of pointers to the various accelerations in
-!                  the momentum equations, which can be used for later derived
-!                  diagnostics, like energy budgets.
-!  (inout)   Cont_diag - A structure with pointers to various terms in the
-!                   continuity equations.
-!  (inout)   MIS - The "MOM6 Internal State" structure, used to pass around
-!                  pointers to various arrays for diagnostic purposes.
-!  (in)      VarMix - A pointer to a structure with fields that specify the
-!                     spatially variable viscosities.
-!  (inout)   MEKE - A pointer to a structure containing fields related to
-!                   the Mesoscale Eddy Kinetic Energy.
-!  (in)      OBC - If open boundary conditions are used, this points to the
-!                  ocean_OBC_type that was set up in MOM_initialization.
-!  (in)      ALE_CS - This points to the ALE control structure.
-!  (in)      setVisc_CSp - This points to the set_visc control structure.
-!  (inout)   visc - A structure containing vertical viscosities, bottom drag
-!                   viscosities, and related fields.
-!  (in)      dirs - A structure containing several relevant directory paths.
-!  (in)      ntrunc - A target for the variable that records the number of times
-!                     the velocity is truncated (this should be 0).
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: u            !< zonal velocity (m/s)
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: v            !< merid velocity (m/s)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_) , intent(inout) :: h            !< layer thickness (m or kg/m2)  
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), target, intent(inout) :: uh   !< zonal volume/mass transport (m3 s-1 or kg s-1)
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), target, intent(inout) :: vh   !< merid volume/mass transport (m3 s-1 or kg s-1)
+  real, dimension(NIMEM_,NJMEM_),         intent(inout) :: eta          !< free surface height or column mass (m or kg m-2)      
+  type(time_type),                target, intent(in)    :: Time         !< current model time 
+  type(ocean_grid_type),                  intent(inout) :: G            !< ocean grid structure 
+  type(param_file_type),                  intent(in)    :: param_file   !< parameter file for parsing 
+  type(diag_ctrl),                target, intent(inout) :: diag         !< to control diagnostics 
+  type(MOM_dyn_split_RK2_CS),             pointer       :: CS           !< module control structure 
+  type(MOM_restart_CS),                   pointer       :: restart_CS   !< restart control structure 
+  real,                                   intent(in)    :: dt           !< time step (sec)
+  type(accel_diag_ptrs),          target, intent(inout) :: Accel_diag   !< points to momentum equation terms for budget analysis 
+  type(cont_diag_ptrs),           target, intent(inout) :: Cont_diag    !< points to terms in continuity equation  
+  type(ocean_internal_state),             intent(inout) :: MIS          !< "MOM6 internal state" used to pass diagnostic pointers 
+  type(VarMix_CS),                        pointer       :: VarMix       !< points to spatially variable viscosities 
+  type(MEKE_type),                        pointer       :: MEKE         !< points to mesoscale eddy kinetic energy fields 
+  type(ocean_OBC_type),                   pointer       :: OBC          !< points to OBC related fields 
+  type(ALE_CS),                           pointer       :: ALE_CSp      !< points to ALE control structure 
+  type(set_visc_CS),                      pointer       :: setVisc_CSp  !< points to the set_visc control structure. 
+  type(vertvisc_type),                    intent(inout) :: visc         !< vertical viscosities, bottom drag, and related 
+  type(directories),                      intent(in)    :: dirs         !< contains directory paths
+  integer, target,                        intent(inout) :: ntrunc       !< A target for the variable that records the number of times
+                                                                        !! the velocity is truncated (this should be 0).
 
-  !   This subroutine initializes all of the variables that are used by this
-  ! dynamic core, including diagnostics and the cpu clocks.
-
-  !   This subroutine initializes any variables that are specific to this time
-  ! stepping scheme, including the cpu clocks.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_tmp
-  character(len=40)  :: mod = "MOM_dynamics_split_RK2" ! This module's name.
+  character(len=40) :: mod = "MOM_dynamics_split_RK2" ! This module's name.
   character(len=48) :: thickness_units, flux_units
   type(group_pass_type) :: pass_h_tmp, pass_av_h_uvh
   logical :: use_tides, debug_truncations
+
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+  is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = G%ke
+  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
@@ -1196,27 +1083,37 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, param_file, &
   allocate(CS%taux_bot(IsdB:IedB,jsd:jed)) ; CS%taux_bot(:,:) = 0.0
   allocate(CS%tauy_bot(isd:ied,JsdB:JedB)) ; CS%tauy_bot(:,:) = 0.0
 
-  ALLOC_(CS%uhbt(IsdB:IedB,jsd:jed))   ; CS%uhbt(:,:) = 0.0
-  ALLOC_(CS%vhbt(isd:ied,JsdB:JedB))   ; CS%vhbt(:,:) = 0.0
+  ALLOC_(CS%uhbt(IsdB:IedB,jsd:jed))          ; CS%uhbt(:,:)         = 0.0
+  ALLOC_(CS%vhbt(isd:ied,JsdB:JedB))          ; CS%vhbt(:,:)         = 0.0
   ALLOC_(CS%visc_rem_u(IsdB:IedB,jsd:jed,nz)) ; CS%visc_rem_u(:,:,:) = 0.0
   ALLOC_(CS%visc_rem_v(isd:ied,JsdB:JedB,nz)) ; CS%visc_rem_v(:,:,:) = 0.0
-  ALLOC_(CS%eta_PF(isd:ied,jsd:jed))   ; CS%eta_PF(:,:) = 0.0
-  ALLOC_(CS%pbce(isd:ied,jsd:jed,nz))  ; CS%pbce(:,:,:) = 0.0
+  ALLOC_(CS%eta_PF(isd:ied,jsd:jed))          ; CS%eta_PF(:,:)       = 0.0
+  ALLOC_(CS%pbce(isd:ied,jsd:jed,nz))         ; CS%pbce(:,:,:)       = 0.0
 
   ALLOC_(CS%u_accel_bt(IsdB:IedB,jsd:jed,nz)) ; CS%u_accel_bt(:,:,:) = 0.0
   ALLOC_(CS%v_accel_bt(isd:ied,JsdB:JedB,nz)) ; CS%v_accel_bt(:,:,:) = 0.0
 
-  MIS%diffu => CS%diffu ; MIS%diffv => CS%diffv
-  MIS%PFu => CS%PFu ; MIS%PFv => CS%PFv
-  MIS%CAu => CS%CAu ; MIS%CAv => CS%CAv
-  MIS%pbce => CS%pbce
-  MIS%u_accel_bt => CS%u_accel_bt ; MIS%v_accel_bt => CS%v_accel_bt
-  MIS%u_av => CS%u_av ; MIS%v_av => CS%v_av
+  MIS%diffu      => CS%diffu 
+  MIS%diffv      => CS%diffv
+  MIS%PFu        => CS%PFu 
+  MIS%PFv        => CS%PFv
+  MIS%CAu        => CS%CAu
+  MIS%CAv        => CS%CAv
+  MIS%pbce       => CS%pbce
+  MIS%u_accel_bt => CS%u_accel_bt 
+  MIS%v_accel_bt => CS%v_accel_bt
+  MIS%u_av       => CS%u_av 
+  MIS%v_av       => CS%v_av
 
-  CS%ADp => Accel_diag ; CS%CDp => Cont_diag
-  Accel_diag%diffu => CS%diffu ; Accel_diag%diffv => CS%diffv
-  Accel_diag%PFu => CS%PFu ; Accel_diag%PFv => CS%PFv
-  Accel_diag%CAu => CS%CAu ; Accel_diag%CAv => CS%CAv
+  CS%ADp           => Accel_diag 
+  CS%CDp           => Cont_diag
+  Accel_diag%diffu => CS%diffu 
+  Accel_diag%diffv => CS%diffv
+  Accel_diag%PFu   => CS%PFu 
+  Accel_diag%PFv   => CS%PFv
+  Accel_diag%CAu   => CS%CAu 
+  Accel_diag%CAv   => CS%CAv
+
 !  Accel_diag%pbce => CS%pbce
 !  Accel_diag%u_accel_bt => CS%u_accel_bt ; Accel_diag%v_accel_bt => CS%v_accel_bt
 !  Accel_diag%u_av => CS%u_av ; Accel_diag%v_av => CS%v_av
@@ -1270,7 +1167,8 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, param_file, &
     CS%u_av(:,:,:) = u(:,:,:)
     CS%v_av(:,:,:) = v(:,:,:)
   endif
-! This call is just here to initialize uh and vh.
+
+  ! This call is just here to initialize uh and vh.
   if (.not. query_initialized(uh,"uh",restart_CS) .or. &
       .not. query_initialized(vh,"vh",restart_CS)) then
     h_tmp(:,:,:) = h(:,:,:)
@@ -1303,6 +1201,15 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, param_file, &
   CS%id_vmo = register_diag_field('ocean_model', 'vmo',                            &
       diag%axesCvL, Time,'Meridional Mass Transport (including SGS param)', 'kg/s',&
       cmor_standard_name='ocean_mass_y_transport', cmor_long_name='Ocean Mass Y Transport')
+  CS%id_umo_2d = register_diag_field('ocean_model', 'umo_2d',                              &
+      diag%axesCu1, Time,'Zonal Mass Transport (including SGS param) Vertical Sum', 'kg/s',&
+      cmor_standard_name='ocean_mass_x_transport_vertical_sum',                            &
+      cmor_long_name='Ocean Mass X Transport Vertical Sum')
+  CS%id_vmo_2d = register_diag_field('ocean_model', 'vmo_2d',                                   &
+      diag%axesCv1, Time,'Meridional Mass Transport (including SGS param) Vertical Sum', 'kg/s',&
+      cmor_standard_name='ocean_mass_y_transport_vertical_sum',                                 &
+      cmor_long_name='Ocean Mass Y Transport Vertical Sum')
+
   CS%id_CAu = register_diag_field('ocean_model', 'CAu', diag%axesCuL, Time, &
       'Zonal Coriolis and Advective Acceleration', 'meter second-2')
   CS%id_CAv = register_diag_field('ocean_model', 'CAv', diag%axesCvL, Time, &
@@ -1322,24 +1229,24 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, param_file, &
   CS%id_v_BT_accel = register_diag_field('ocean_model', 'v_BT_accel', diag%axesCvL, Time, &
     'Barotropic Anomaly Meridional Acceleration', 'meter second-1')
 
-  id_clock_Cor = cpu_clock_id('(Ocean Coriolis & mom advection)', grain=CLOCK_MODULE)
-  id_clock_continuity = cpu_clock_id('(Ocean continuity equation)', grain=CLOCK_MODULE)
-  id_clock_pres = cpu_clock_id('(Ocean pressure force)', grain=CLOCK_MODULE)
-  id_clock_vertvisc = cpu_clock_id('(Ocean vertical viscosity)', grain=CLOCK_MODULE)
-  id_clock_horvisc = cpu_clock_id('(Ocean horizontal viscosity)', grain=CLOCK_MODULE)
-  id_clock_mom_update = cpu_clock_id('(Ocean momentum increments)', grain=CLOCK_MODULE)
-  id_clock_pass = cpu_clock_id('(Ocean message passing)', grain=CLOCK_MODULE)
-  id_clock_pass_init = cpu_clock_id('(Ocean init message passing)', grain=CLOCK_ROUTINE)
-  id_clock_btcalc = cpu_clock_id('(Ocean barotropic mode calc)', grain=CLOCK_MODULE)
-  id_clock_btstep = cpu_clock_id('(Ocean barotropic mode stepping)', grain=CLOCK_MODULE)
-  id_clock_btforce = cpu_clock_id('(Ocean barotropic forcing calc)', grain=CLOCK_MODULE)
-
+  id_clock_Cor        = cpu_clock_id('(Ocean Coriolis & mom advection)', grain=CLOCK_MODULE)
+  id_clock_continuity = cpu_clock_id('(Ocean continuity equation)',      grain=CLOCK_MODULE)
+  id_clock_pres       = cpu_clock_id('(Ocean pressure force)',           grain=CLOCK_MODULE)
+  id_clock_vertvisc   = cpu_clock_id('(Ocean vertical viscosity)',       grain=CLOCK_MODULE)
+  id_clock_horvisc    = cpu_clock_id('(Ocean horizontal viscosity)',     grain=CLOCK_MODULE)
+  id_clock_mom_update = cpu_clock_id('(Ocean momentum increments)',      grain=CLOCK_MODULE)
+  id_clock_pass       = cpu_clock_id('(Ocean message passing)',          grain=CLOCK_MODULE)
+  id_clock_pass_init  = cpu_clock_id('(Ocean init message passing)',     grain=CLOCK_ROUTINE)
+  id_clock_btcalc     = cpu_clock_id('(Ocean barotropic mode calc)',     grain=CLOCK_MODULE)
+  id_clock_btstep     = cpu_clock_id('(Ocean barotropic mode stepping)', grain=CLOCK_MODULE)
+  id_clock_btforce    = cpu_clock_id('(Ocean barotropic forcing calc)',  grain=CLOCK_MODULE)
 
 end subroutine initialize_dyn_split_RK2
 
+
+!> Close the dyn_split_RK2 module 
 subroutine end_dyn_split_RK2(CS)
-  type(MOM_dyn_split_RK2_CS), pointer :: CS
-!  (inout)   CS - The control structure set up by initialize_dyn_split_RK2.
+  type(MOM_dyn_split_RK2_CS), pointer :: CS  !< module control structure 
 
   DEALLOC_(CS%diffu) ; DEALLOC_(CS%diffv)
   DEALLOC_(CS%CAu)   ; DEALLOC_(CS%CAv)
@@ -1358,5 +1265,64 @@ subroutine end_dyn_split_RK2(CS)
 
   deallocate(CS)
 end subroutine end_dyn_split_RK2
+
+
+!> \namespace mom_dynamics_split_rk2 
+!!
+!!  This file time steps the adiabatic dynamic core by splitting 
+!!  between baroclinic and barotropic modes. It uses a pseudo-second order      
+!!  Runge-Kutta time stepping scheme for the baroclinic momentum       
+!!  equation and a forward-backward coupling between the baroclinic    
+!!  momentum and continuity equations.  This split time-stepping       
+!!  scheme is described in detail in Hallberg (JCP, 1997). Additional
+!!  issues related to exact tracer conservation and how to     
+!!  ensure consistency between the barotropic and layered estimates    
+!!  of the free surface height are described in Hallberg and     
+!!  Adcroft (Ocean Modelling, 2009).  This was the time stepping code  
+!!  that is used for most GOLD applications, including GFDL's ESM2G    
+!!  Earth system model, and all of the examples provided with the      
+!!  MOM code (although several of these solutions are routinely        
+!!  verified by comparison with the slower unsplit schemes).           
+!!                                                                     
+!!  The subroutine step_MOM_dyn_split_RK2 actually does the time     
+!!  stepping, while register_restarts_dyn_split_RK2 sets the fields    
+!!  that are found in a full restart file with this scheme, and        
+!!  initialize_dyn_split_RK2 initializes the cpu clocks that are                                             
+!!  used in this module.  For largely historical reasons, this module  
+!!  does not have its own control structure, but shares the same       
+!!  control structure with MOM.F90 and the other MOM_dynamics_...      
+!!  modules.                                                           
+!!                                                                     
+!!  Macros written all in capital letters are defined in MOM_memory.h. 
+!!
+!!  \section section_gridlayout MOM grid layout
+!! 
+!!  A small fragment of the grid is shown below:                    
+!!
+!! \verbatim
+!!    j+1  x ^ x ^ x   
+!!
+!!    j+1  > o > o >  
+!!
+!!    j    x ^ x ^ x  
+!!
+!!    j    > o > o >  
+!!
+!!    j-1  x ^ x ^ x
+!!
+!!        i-1  i  i+1
+!!
+!!           i  i+1                                                    
+!!
+!! \endverbatim
+!!
+!!  Fields at each point
+!!  * x =  q, CoriolisBu
+!!  * ^ =  v, PFv, CAv, vh, diffv, tauy, vbt, vhtr
+!!  * > =  u, PFu, CAu, uh, diffu, taux, ubt, uhtr
+!!  * o =  h, bathyT, eta, T, S, tr
+!!
+!!  The boundaries always run through q grid points (x).               
+
 
 end module MOM_dynamics_split_RK2

@@ -58,7 +58,7 @@ module MOM_generic_tracer
   use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
   use MOM_forcing_type, only : forcing, optics_type
   use MOM_grid, only : ocean_grid_type
-  use MOM_io, only : file_exists, read_data, slasher, vardesc
+  use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc
   use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
   use MOM_sponge, only : set_up_sponge_field, sponge_CS
   use MOM_time_manager, only : time_type, get_time
@@ -157,7 +157,7 @@ contains
     real, dimension(:,:,:), pointer     :: tr_ptr
     real, dimension(G%isd:G%ied, G%jsd:G%jed,G%ke)         :: grid_tmask
     integer, dimension(G%isd:G%ied, G%jsd:G%jed)           :: grid_kmt
-    type(vardesc) :: var_desc
+    type(vardesc) :: vdesc
 
     register_MOM_generic_tracer = .false.
     if (associated(CS)) then
@@ -239,7 +239,8 @@ contains
        call g_tracer_get_values(g_tracer,g_tracer_name,'units',units )
 
        !nnz: Hard coded stuff. Need get/set routines
-       var_desc = vardesc(g_tracer_name,longname,'h','L','s',units)
+       vdesc = var_desc(g_tracer_name, units, longname, &
+                        caller="MOM_generic_tracer")
        !!nnz: MOM field is 3D. Does this affect performance? Need it be override field?
        tr_ptr => tr_field(:,:,:,1)
        ! Register tracer for restart file.
@@ -247,10 +248,14 @@ contains
        ! 2008/12/08 jgj: change default to true, so all fields must be present in restart.
        ! 2010/02/04 jgj: if tracers_may_reinit is true, tracers may go through
        ! initialization code if not found in restart
-       call register_restart_field(tr_ptr, var_desc, .not.CS%tracers_may_reinit, restart_CS)
+       call register_restart_field(tr_ptr, vdesc, .not.CS%tracers_may_reinit, restart_CS)
 
-       ! Register prognastic tracer for horizontal advection & diffusion.
-       if(g_tracer_is_prog(g_tracer)) call register_tracer(tr_ptr, g_tracer_name, param_file, tr_Reg)
+       ! Register prognastic tracer for horizontal advection & diffusion. Note
+       ! that because the generic tracer code uses only a temporary copy of
+       ! the vardesc type, a pointer to this type can not be set as a target
+       ! for register_tracer to use.
+       if (g_tracer_is_prog(g_tracer)) &
+         call register_tracer(tr_ptr, vdesc, param_file, tr_Reg)
 
        !traverse the linked list till hit NULL
        call g_tracer_get_next(g_tracer, g_tracer_next)

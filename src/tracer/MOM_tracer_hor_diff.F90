@@ -1,71 +1,29 @@
+!> Main routine for lateral (along surface or neutral) diffusion of tracers
 module MOM_tracer_hor_diff
-!***********************************************************************
-!*                   GNU General Public License                        *
-!* This file is a part of MOM.                                         *
-!*                                                                     *
-!* MOM is free software; you can redistribute it and/or modify it and  *
-!* are expected to follow the terms of the GNU General Public License  *
-!* as published by the Free Software Foundation; either version 2 of   *
-!* the License, or (at your option) any later version.                 *
-!*                                                                     *
-!* MOM is distributed in the hope that it will be useful, but WITHOUT  *
-!* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY  *
-!* or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public    *
-!* License for more details.                                           *
-!*                                                                     *
-!* For the full text of the GNU General Public License,                *
-!* write to: Free Software Foundation, Inc.,                           *
-!*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
-!* or see:   http://www.gnu.org/licenses/gpl.html                      *
-!***********************************************************************
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, October 1996 - June 2002                       *
-!*                                                                     *
-!*    This program contains the subroutines that handle horizontal     *
-!*  diffusion (i.e., isoneutral or along layer) of tracers.            *
-!*                                                                     *
-!*    Each of the tracers are subject to Fickian along-coordinate      *
-!*  diffusion if Khtr is defined and positive.  The tracer diffusion   *
-!*  can use a suitable number of iterations to guarantee stability     *
-!*  with an arbitrarily large time step.                               *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v, vh                                    *
-!*    j    x ^ x ^ x   At >:  u, uh                                    *
-!*    j    > o > o >   At o:  tr, h                                    *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
+! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
-use MOM_cpu_clock, only : CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_diag_mediator, only : post_data, diag_ctrl
-use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
-use MOM_domains, only : sum_across_PEs, max_across_PEs
-use MOM_domains, only : create_group_pass, do_group_pass, group_pass_type
-use MOM_checksums, only : hchksum
-use MOM_EOS, only : calculate_density
-use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
-use MOM_error_handler, only : MOM_set_verbosity, callTree_showQuery
-use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
-use MOM_file_parser, only : get_param, log_version, param_file_type
-use MOM_grid, only : ocean_grid_type
+use MOM_cpu_clock,             only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
+use MOM_cpu_clock,             only : CLOCK_MODULE, CLOCK_ROUTINE
+use MOM_diag_mediator,         only : post_data, diag_ctrl
+use MOM_diag_mediator,         only : register_diag_field, safe_alloc_ptr, time_type
+use MOM_domains,               only : sum_across_PEs, max_across_PEs
+use MOM_domains,               only : create_group_pass, do_group_pass, group_pass_type
+use MOM_checksums,             only : hchksum
+use MOM_EOS,                   only : calculate_density
+use MOM_error_handler,         only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
+use MOM_error_handler,         only : MOM_set_verbosity, callTree_showQuery
+use MOM_error_handler,         only : callTree_enter, callTree_leave, callTree_waypoint
+use MOM_file_parser,           only : get_param, log_version, param_file_type
+use MOM_grid,                  only : ocean_grid_type
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
-use MOM_MEKE_types, only : MEKE_type
-use MOM_neutral_diffusion, only : neutral_diffusion_init, neutral_diffusion_end
-use MOM_neutral_diffusion, only : neutral_diffusion_CS
-use MOM_neutral_diffusion, only : neutral_diffusion_calc_coeffs, neutral_diffusion
-use MOM_tracer_registry, only : tracer_registry_type, tracer_type, MOM_tracer_chksum
-use MOM_variables, only : ocean_OBC_type, thermo_var_ptrs, OBC_FLATHER_E
-use MOM_variables, only : OBC_FLATHER_W, OBC_FLATHER_N, OBC_FLATHER_S
+use MOM_MEKE_types,            only : MEKE_type
+use MOM_neutral_diffusion,     only : neutral_diffusion_init, neutral_diffusion_end
+use MOM_neutral_diffusion,     only : neutral_diffusion_CS
+use MOM_neutral_diffusion,     only : neutral_diffusion_calc_coeffs, neutral_diffusion
+use MOM_tracer_registry,       only : tracer_registry_type, tracer_type, MOM_tracer_chksum
+use MOM_variables,             only : ocean_OBC_type, thermo_var_ptrs, OBC_FLATHER_E
+use MOM_variables,             only : OBC_FLATHER_W, OBC_FLATHER_N, OBC_FLATHER_S
 
 implicit none ; private
 
@@ -80,25 +38,24 @@ type, public :: tracer_hor_diff_CS ; private
   real    :: KhTr_min       ! Minimum along-isopycnal tracer diffusivity in m2/s.
   real    :: KhTr_max       ! Maximum along-isopycnal tracer diffusivity in m2/s.
   real    :: KhTr_passivity_coeff ! Passivity coefficient that scales Rd/dx (default = 0)
-                            ! where passivity is the ratio between along-isopycnal
-                            ! tracer mixing and thickness mixing
+                                  ! where passivity is the ratio between along-isopycnal
+                                  ! tracer mixing and thickness mixing
   real    :: KhTr_passivity_min   ! Passivity minimum (default = 1/2)
   real    :: ML_KhTR_scale  ! With Diffuse_ML_interior, the ratio of the truly
                             ! horizontal diffusivity in the mixed layer to the
                             ! epipycnal diffusivity.  Nondim.
   logical :: Diffuse_ML_interior  ! If true, diffuse along isopycnals between
-                            ! the mixed layer and the interior.
+                                  ! the mixed layer and the interior.
   logical :: check_diffusive_CFL  ! If true, automatically iterate the diffusion
-                            ! to ensure that the diffusive equivalent of the CFL
-                            ! limit is not violated.
+                                  ! to ensure that the diffusive equivalent of the CFL
+                                  ! limit is not violated.
   logical :: use_neutral_diffusion ! If true, use the neutral_diffusion module from within
-                            ! tracer_hor_diff.
+                                   ! tracer_hor_diff.
 
   type(neutral_diffusion_CS), pointer :: neutral_diffusion_CSp => NULL() ! Control structure for neutral diffusion.
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                            ! timing of diagnostic output.
-  logical :: debug          ! If true, write verbose checksums for debugging purposes.
-  logical :: show_call_tree ! Display the call tree while running. Set by VERBOSITY level.
+  type(diag_ctrl), pointer :: diag ! structure to regulate timing of diagnostic output.
+  logical :: debug                 ! If true, write verbose checksums for debugging purposes.
+  logical :: show_call_tree        ! Display the call tree while running. Set by VERBOSITY level.
   logical :: first_call = .true.
   integer :: id_KhTr_u = -1, id_KhTr_v = -1
 
@@ -117,35 +74,24 @@ integer :: id_clock_diffuse, id_clock_epimix, id_clock_pass, id_clock_sync
 
 contains
 
+!> Compute along-coordinate diffusion of all tracers 
+!! using the diffusivity in CS%KhTr.  Multiple iterations are
+!! used (if necessary) so that there is no limit on the acceptable
+!! time increment.
 subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
-  real,                                  intent(in)    :: dt
-  type(MEKE_type),                       pointer       :: MEKE
-  type(VarMix_CS),                       pointer       :: VarMix
-  type(ocean_grid_type),                 intent(inout) :: G
-  type(tracer_hor_diff_CS),              pointer       :: CS
-  type(tracer_registry_type),            intent(inout) :: Reg
-  type(thermo_var_ptrs),                 intent(in)    :: tv
-
-!   This subroutine does along-coordinate diffusion of all tracers,
-! using the diffusivity in CS%KhTr.  Multiple iterations are
-! used (if necessary) so that there is no limit on the acceptable
-! time increment.
-
-! Arguments: h - Layer thickness, in m or kg m-2.
-!  (in)      dt - Time increment in s.
-!  (in/out)  Tr - An array of all of the registered tracers.
-!  (in)      VarMix - A structure with information about horizontal diffusivities.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 tracer_hor_diff_init.
-!  (in)      Reg - A pointer to the tracer registry.
-!  (in,opt)  tv - A structure containing pointers to any available
-!                 thermodynamic fields, including potential temperature and
-!                 salinity or mixed layer density. Absent fields have NULL ptrs,
-!                 and these may (probably will) point to some of the same arrays
-!                 as Tr does.  tv is required for epipycnal mixing between the
-!                 mixed layer and the interior.
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h       !< Layer thickness (m or kg m-2)
+  real,                                  intent(in)    :: dt      !< time step (seconds)
+  type(MEKE_type),                       pointer       :: MEKE    !< MEKE type 
+  type(VarMix_CS),                       pointer       :: VarMix  !< Variable mixing type 
+  type(ocean_grid_type),                 intent(inout) :: G       !< Grid type 
+  type(tracer_hor_diff_CS),              pointer       :: CS      !< module control structure 
+  type(tracer_registry_type),            intent(inout) :: Reg     !< registered tracers 
+  type(thermo_var_ptrs),                 intent(in)    :: tv      !< A structure containing pointers to any available   
+                                                                  !! thermodynamic fields, including potential temp and
+                                                                  !! salinity or mixed layer density. Absent fields have 
+                                                                  !! NULL ptrs, and these may (probably will) point to 
+                                                                  !! some of the same arrays as Tr does.  tv is required
+                                                                  !! for epipycnal mixing between mixed layer and the interior.
   real, dimension(SZI_(G),SZJ_(G)) :: &
     Ihdxdy, &     ! The inverse of the volume or mass of fluid in a layer in a
                   ! grid cell, in m-3 or kg-1.
@@ -370,7 +316,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
         call cpu_clock_end(id_clock_pass)
       endif
       do m=1,ntr ! For each tracer
-        call neutral_diffusion(G, h, Coef_x, Coef_y, Reg%Tr(m)%t, CS%neutral_diffusion_CSp)
+        call neutral_diffusion(G, h, Coef_x, Coef_y, Reg%Tr(m)%t, m, dt, Reg%Tr(m)%name, CS%neutral_diffusion_CSp)
       enddo ! m
     enddo ! itt
   else
@@ -471,38 +417,24 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
 
 end subroutine tracer_hordiff
 
+!> This subroutine does epipycnal diffusion of all tracers between the mixed
+!! and buffer layers and the interior, using the diffusivity in CS%KhTr.
+!! Multiple iterations are used (if necessary) so that there is no limit on the
+!! acceptable time increment.
 subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
                                     CS, tv, num_itts)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
-  real,                                  intent(in)    :: dt
-  type(tracer_type),                     intent(inout) :: Tr(:)
-  integer,                               intent(in)    :: ntr
-  real, dimension(NIMEMB_,NJMEM_),       intent(in)    :: khdt_epi_x
-  real, dimension(NIMEM_,NJMEMB_),       intent(in)    :: khdt_epi_y
-  type(ocean_grid_type),                 intent(inout) :: G
-  type(tracer_hor_diff_CS),              intent(inout) :: CS
-  type(thermo_var_ptrs),                 intent(in)    :: tv
-  integer,                               intent(in)    :: num_itts
-!   This subroutine does epipycnal diffusion of all tracers between the mixed
-! and buffer layers and the interior, using the diffusivity in CS%KhTr.
-! Multiple iterations are used (if necessary) so that there is no limit on the
-! acceptable time increment.
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h          !< layer thickness (m or kg m-2)
+  real,                                  intent(in)    :: dt         !< time step 
+  type(tracer_type),                     intent(inout) :: Tr(:)      !< tracer array 
+  integer,                               intent(in)    :: ntr        !< number of tracers 
+  real, dimension(NIMEMB_,NJMEM_),       intent(in)    :: khdt_epi_x !< needs a comment
+  real, dimension(NIMEM_,NJMEMB_),       intent(in)    :: khdt_epi_y !< needs a comment 
+  type(ocean_grid_type),                 intent(inout) :: G          !< ocean grid structure 
+  type(tracer_hor_diff_CS),              intent(inout) :: CS         !< module control structure 
+  type(thermo_var_ptrs),                 intent(in)    :: tv         !< thermodynamic structure 
+  integer,                               intent(in)    :: num_itts   !< number of iterations (usually=1)
 
-! Arguments: h - Layer thickness, in m or kg m-2.
-!  (in)      dt - Time increment in s.
-!  (in/out)  Tr - An array of all of the registered tracers.
-!  (in)      ntr - The number of tracers to work on.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 tracer_hor_diff_init.
-!  (in/out?) tv - A structure containing pointers to any available
-!                 thermodynamic fields, including potential temperature and
-!                 salinity or mixed layer density. Absent fields have NULL ptrs,
-!                 and these may (probably will) point to some of the same arrays
-!                 as Tr does.  tv is required for epipycnal mixing between the
-!                 mixed layer and the interior.
-!  (in)      num_itts - The number of iterations to use, usually 1.
-  
+ 
   real, dimension(SZI_(G), SZJ_(G)) :: &
     Rml_max  ! The maximum coordinate density within the mixed layer, in kg m-3.
   real, dimension(SZI_(G), SZJ_(G), max(1,G%nk_rho_varies)) :: &
@@ -1331,18 +1263,16 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
 
 end subroutine tracer_epipycnal_ML_diff
 
-subroutine tracer_hor_diff_init(Time, G, param_file, diag, CS)
-  type(time_type), target,  intent(in)    :: Time
-  type(ocean_grid_type),    intent(in)    :: G
-  type(diag_ctrl), target,  intent(inout) :: diag
-  type(param_file_type),    intent(in)    :: param_file
-  type(tracer_hor_diff_CS), pointer       :: CS
-! Arguments: Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in/out)  CS - A pointer to the control structure for this module
+
+!> Initialize lateral tracer diffusion module 
+subroutine tracer_hor_diff_init(Time, G, param_file, diag, CS, CSnd)
+  type(time_type), target,    intent(in)    :: Time       !< current model time 
+  type(ocean_grid_type),      intent(in)    :: G          !< ocean grid structure 
+  type(diag_ctrl), target,    intent(inout) :: diag       !< diagnostic control 
+  type(param_file_type),      intent(in)    :: param_file !< parameter file 
+  type(tracer_hor_diff_CS),   pointer       :: CS         !< horz diffusion control structure 
+  type(neutral_diffusion_CS), pointer       :: CSnd       !< pointer to neutral diffusion CS 
+
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_tracer_hor_diff" ! This module's name.
@@ -1404,6 +1334,7 @@ subroutine tracer_hor_diff_init(Time, G, param_file, diag, CS)
   endif
 
   CS%use_neutral_diffusion = neutral_diffusion_init(Time, G, param_file, diag, CS%neutral_diffusion_CSp)
+  CSnd => CS%neutral_diffusion_CSp 
   if (CS%use_neutral_diffusion .and. CS%Diffuse_ML_interior) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
        "USE_NEUTRAL_DIFFUSION and DIFFUSE_ML_TO_INTERIOR are mutually exclusive!")
 
@@ -1430,5 +1361,49 @@ subroutine tracer_hor_diff_end(CS)
   if (associated(CS)) deallocate(CS)
 
 end subroutine tracer_hor_diff_end
+
+
+!> \namespace mom_tracer_hor_diff
+!!
+!! \section section_intro Introduction to the module 
+!!
+!!                                                                     
+!!    This module contains the subroutines that handle horizontal     
+!!  diffusion (i.e., isoneutral or along layer) of tracers.            
+!!                                                                     
+!!    Each of the tracers are subject to Fickian along-coordinate      
+!!  diffusion if Khtr is defined and positive.  The tracer diffusion   
+!!  can use a suitable number of iterations to guarantee stability     
+!!  with an arbitrarily large time step.                               
+!!
+!!  \section section_gridlayout MOM grid layout
+!! 
+!!  A small fragment of the grid is shown below:                    
+!!
+!! \verbatim
+!!    j+1  x ^ x ^ x   
+!!
+!!    j+1  > o > o >  
+!!
+!!    j    x ^ x ^ x  
+!!
+!!    j    > o > o >  
+!!
+!!    j-1  x ^ x ^ x
+!!
+!!        i-1  i  i+1
+!!
+!!           i  i+1                                                    
+!!
+!! \endverbatim
+!!
+!!  Fields at each point
+!!  * x =  q, CoriolisBu
+!!  * ^ =  v, PFv, CAv, vh, diffv, tauy, vbt, vhtr
+!!  * > =  u, PFu, CAu, uh, diffu, taux, ubt, uhtr
+!!  * o =  h, bathyT, eta, T, S, tr
+!!
+!!  The boundaries always run through q grid points (x).               
+!!                                                                     
 
 end module MOM_tracer_hor_diff

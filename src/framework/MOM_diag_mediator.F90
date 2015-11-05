@@ -32,7 +32,7 @@ use MOM_error_handler,    only : MOM_error, FATAL, is_root_pe
 use MOM_file_parser,      only : get_param, log_param, log_version, param_file_type
 use MOM_grid,             only : ocean_grid_type
 use MOM_io,               only : file_exists, field_exists, field_size
-use MOM_io,               only : slasher, vardesc, mom_read_data
+use MOM_io,               only : slasher, vardesc, query_vardesc, mom_read_data
 use MOM_string_functions, only : extractWord
 use MOM_safe_alloc,       only : safe_alloc_ptr, safe_alloc_alloc
 use MOM_string_functions, only : lowercase
@@ -1273,6 +1273,7 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
 
 end function register_scalar_field
 
+!> Registers a static diagnostic, returning an integer handle
 function register_static_field(module_name, field_name, axes, &
      long_name, units, missing_value, range, mask_variant, standard_name, &
      do_not_log, interp_method, tile_count, &
@@ -1378,21 +1379,31 @@ subroutine describe_option(opt_name, value)
   write(doc_unit, '(a)') trim(mesg)
 end subroutine describe_option
 
+!> Registers a diagnostic using the information encapsulated in the vardesc
+!! type argument and returns an integer handle to this diagostic.  That
+!! integer handle is negative if the diagnostic is unused.
 function ocean_register_diag(var_desc, G, diag_cs, day)
-  integer :: ocean_register_diag
-  type(vardesc),         intent(in) :: var_desc
-  type(ocean_grid_type), intent(in) :: G
-  type(diag_ctrl),  intent(in) :: diag_cs
-  type(time_type),       intent(in) :: day
+  integer :: ocean_register_diag  !< An integer handle to this diagnostic.
+  type(vardesc),         intent(in) :: var_desc !< The vardesc type describing the diagnostic
+  type(ocean_grid_type), intent(in) :: G        !< The ocean's grid type
+  type(diag_ctrl),       intent(in) :: diag_cs  !< The diagnotic control structure
+  type(time_type),       intent(in) :: day      !< The current model time
 
+  character(len=64) :: var_name         ! A variable's name.
+  character(len=48) :: units            ! A variable's units.
+  character(len=240) :: longname        ! A variable's longname.
+  character(len=8) :: hor_grid, z_grid  ! Variable grid info.
   type(axesType) :: axes
+
+  call query_vardesc(var_desc, units=units, longname=longname, hor_grid=hor_grid, &
+                     z_grid=z_grid, caller="ocean_register_diag")
 
   ! Use the hor_grid and z_grid components of vardesc to determine the 
   ! desired axes to register the diagnostic field for.
-  select case (var_desc%z_grid)
+  select case (z_grid)
 
     case ("L")
-      select case (var_desc%hor_grid)
+      select case (hor_grid)
         case ("q")
           axes = diag_cs%axesBL
         case ("h")
@@ -1413,11 +1424,11 @@ function ocean_register_diag(var_desc, G, diag_cs, day)
           axes = diag_cs%axeszL
         case default
           call MOM_error(FATAL, "ocean_register_diag: " // &
-              "unknown hor_grid component "//trim(var_desc%hor_grid))
+              "unknown hor_grid component "//trim(hor_grid))
       end select
 
     case ("i")
-      select case (var_desc%hor_grid)
+      select case (hor_grid)
         case ("q")
           axes = diag_cs%axesBi
         case ("h")
@@ -1438,11 +1449,11 @@ function ocean_register_diag(var_desc, G, diag_cs, day)
           axes = diag_cs%axeszi
         case default
           call MOM_error(FATAL, "ocean_register_diag: " // &
-            "unknown hor_grid component "//trim(var_desc%hor_grid))
+            "unknown hor_grid component "//trim(hor_grid))
       end select
 
     case ("1")
-      select case (var_desc%hor_grid)
+      select case (hor_grid)
         case ("q")
           axes = diag_cs%axesB1
         case ("h")
@@ -1461,17 +1472,16 @@ function ocean_register_diag(var_desc, G, diag_cs, day)
           axes = diag_cs%axesCv1
         case default
           call MOM_error(FATAL, "ocean_register_diag: " // &
-            "unknown hor_grid component "//trim(var_desc%hor_grid))
+            "unknown hor_grid component "//trim(hor_grid))
       end select
 
     case default
       call MOM_error(FATAL,&
-        "ocean_register_diag: unknown z_grid component "//trim(var_desc%z_grid))
+        "ocean_register_diag: unknown z_grid component "//trim(z_grid))
   end select
 
-  ocean_register_diag = register_diag_field("ocean_model", trim(var_desc%name), &
-          axes, day, trim(var_desc%longname), trim(var_desc%units),     &
-          missing_value = -1.0e+34)
+  ocean_register_diag = register_diag_field("ocean_model", trim(var_name), &
+          axes, day, trim(longname), trim(units),  missing_value = -1.0e+34)
 
 end function ocean_register_diag
 

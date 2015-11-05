@@ -274,8 +274,7 @@ subroutine check_remapping_grid( G, h, dzInterface, msg )
   ! Local variables
   integer :: i, j
 
-!$OMP parallel do default(none) shared(G,nz,h,dzInterface,eps) &
-!$OMP                          private(totalHold,zOld,totalHnewF,zNewF,hNewF)
+!$OMP parallel do default(none) shared(G,h,dzInterface,msg)
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
       if (G%mask2dT(i,j)>0.) call check_grid_column( G%ke, G%bathyT(i,j), h(i,j,:), dzInterface(i,j,:), msg )
@@ -880,9 +879,9 @@ subroutine adjust_interface_motion( nk, min_thickness, h_old, dz_int )
   enddo
   do k = nk,1,-1
     h_new = h_old(k) + ( dz_int(k) - dz_int(k+1) )
-    if (h_new<0.) dz_int(k) = ( dz_int(k+1) - h_old(k) ) + min_thickness ! Works if dz_int(k=1)==0
+    if (h_new<min_thickness) dz_int(k) = ( dz_int(k+1) - h_old(k) ) + min_thickness ! Implies next h_new = min_thickness
     h_new = h_old(k) + ( dz_int(k) - dz_int(k+1) )
-    if (h_new<0.) dz_int(k) = ( 1. - eps ) * ( dz_int(k+1) - h_old(k) )
+    if (h_new<0.) dz_int(k) = ( 1. - eps ) * ( dz_int(k+1) - h_old(k) ) ! Backup in case min_thickness==0
     h_new = h_old(k) + ( dz_int(k) - dz_int(k+1) )
     if (h_new<0.) then
       write(0,*) 'h<0 at k=',k,'h_old=',h_old(k), &

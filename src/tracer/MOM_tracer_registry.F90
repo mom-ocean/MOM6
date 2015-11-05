@@ -1,121 +1,108 @@
+!> This module contains the tracer_registry_type and the subroutines
+!! that handle registration of tracers and related subroutines. 
+!! The primary subroutine, register_tracer, is called to indicate the
+!! tracers advected and diffused. 
 module MOM_tracer_registry
-!***********************************************************************
-!*                   GNU General Public License                        *
-!* This file is a part of MOM.                                         *
-!*                                                                     *
-!* MOM is free software; you can redistribute it and/or modify it and  *
-!* are expected to follow the terms of the GNU General Public License  *
-!* as published by the Free Software Foundation; either version 2 of   *
-!* the License, or (at your option) any later version.                 *
-!*                                                                     *
-!* MOM is distributed in the hope that it will be useful, but WITHOUT  *
-!* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY  *
-!* or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public    *
-!* License for more details.                                           *
-!*                                                                     *
-!* For the full text of the GNU General Public License,                *
-!* write to: Free Software Foundation, Inc.,                           *
-!*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
-!* or see:   http://www.gnu.org/licenses/gpl.html                      *
-!***********************************************************************
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!* By Robert Hallberg, May 2013                                        *
-!*                                                                     *
-!*   This module contains the tracer_registry_type and the subroutines *
-!* that handle the registration of tracers and related subroutines.    *
-!* The primary subroutine, register_tracer, is called to indicate the  *
-!* tracers that will be advected and diffused.                         *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
+! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_diag_mediator, only : diag_ctrl
-use MOM_checksums, only : hchksum
+use MOM_checksums,     only : hchksum
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
-use MOM_file_parser, only : get_param, log_version, param_file_type
-use MOM_grid, only : ocean_grid_type
+use MOM_file_parser,   only : get_param, log_version, param_file_type
+use MOM_grid,          only : ocean_grid_type
+use MOM_io,            only : vardesc, query_vardesc
+use MOM_time_manager,  only : time_type
 
 implicit none ; private
 
 #include <MOM_memory.h>
 
-public register_tracer, tracer_registry_init, MOM_tracer_chksum
-public add_tracer_diagnostics, add_tracer_OBC_values
-public tracer_vertdiff, tracer_registry_end
+public register_tracer
+public tracer_registry_init
+public MOM_tracer_chksum
+public add_tracer_diagnostics
+public add_tracer_OBC_values
+public lock_tracer_registry
+public tracer_vertdiff
+public tracer_registry_end
 
+!> The tracer type 
 type, public :: tracer_type
-  real, dimension(:,:,:), pointer :: t => NULL()
-                     ! The array containing the tracer concentration.
-  real :: OBC_inflow_conc = 0.0  ! A tracer concentration for generic inflows.
-  real, dimension(:,:,:), pointer :: OBC_in_u => NULL(), OBC_in_v => NULL()
-             ! These arrays contain structured values for flow into the domain
-             ! that are specified in open boundary conditions through u- and
-             ! v- faces of the tracer cell.
-  real, dimension(:,:,:), pointer :: ad_x => NULL(), ad_y => NULL()
-             ! The arrays in which x- & y- advective fluxes are stored.
-  real, dimension(:,:,:), pointer :: df_x => NULL(), df_y => NULL()
-             ! The arrays in which x- & y- diffusive fluxes are stored.
-  real, dimension(:,:), pointer :: ad2d_x => NULL(), ad2d_y => NULL()
-             ! The arrays in which vertically summed x- & y- advective fluxes
-             ! are stored in units of CONC m3 s-1..
-  real, dimension(:,:), pointer :: df2d_x => NULL(), df2d_y => NULL()
-             ! The arrays in which vertically summed x- & y- diffusive fluxes
-             ! are stored in units of CONC m3 s-1..
-  character(len=32) :: name  ! A tracer name for error messages.
+
+  real, dimension(:,:,:), pointer :: t              => NULL() !< tracer concentration array 
+  real                            :: OBC_inflow_conc=  0.0    !< tracer concentration for generic inflows
+  real, dimension(:,:,:), pointer :: OBC_in_u       => NULL() !< structured values for flow into the domain
+                                                              !! specified in OBCs through u-face of cell 
+  real, dimension(:,:,:), pointer :: OBC_in_v       => NULL() !< structured values for flow into the domain
+                                                              !! specified in OBCs through v-face of cell 
+
+  real, dimension(:,:,:), pointer :: ad_x           => NULL() !< diagnostic array for x-advective tracer flux
+  real, dimension(:,:,:), pointer :: ad_y           => NULL() !< diagnostic array for y-advective tracer flux
+  real, dimension(:,:),   pointer :: ad2d_x         => NULL() !< diagnostic vertical sum x-advective tracer flux 
+                                                              !! in units of (conc * m3/s or conc * kg/s)
+  real, dimension(:,:),   pointer :: ad2d_y         => NULL() !< diagnostic vertical sum y-advective tracer flux 
+                                                              !! in units of (conc * m3/s or conc * kg/s)
+
+  real, dimension(:,:,:), pointer :: df_x           => NULL() !< diagnostic array for x-diffusive tracer flux
+  real, dimension(:,:,:), pointer :: df_y           => NULL() !< diagnostic array for y-diffusive tracer flux
+  real, dimension(:,:),   pointer :: df2d_x         => NULL() !< diagnostic vertical sum x-diffusive flux
+                                                              !! in units of (conc * m3/s or conc * kg/s)
+  real, dimension(:,:),   pointer :: df2d_y         => NULL() !< diagnostic vertical sum y-diffusive flux
+                                                              !! in units of (conc * m3/s or conc * kg/s)
+
+  real, dimension(:,:,:), pointer :: advection_xy   => NULL() !< convergence of lateral advective tracer fluxes  
+
+  character(len=32)               :: name                     !< tracer name used for error messages
+  type(vardesc), pointer          :: vd             => NULL() !< metadata describing the tracer
+
 end type tracer_type
 
+!> Type to carry basic tracer information 
 type, public :: tracer_registry_type
-  integer :: ntr = 0        ! The number of registered tracers.
-  type(tracer_type) :: Tr(MAX_FIELDS_)  ! The array of registered tracers.
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+  integer                  :: ntr = 0           !< number of registered tracers
+  type(tracer_type)        :: Tr(MAX_FIELDS_)   !< array of registered tracers
+  type(diag_ctrl), pointer :: diag              !< structure to regulate timing of diagnostics
+  logical                  :: locked = .false.  !< New tracers may be registered if locked=.false. 
+                                                !! When locked=.true.,no more tracers can be registered,
+                                                !! at which point common diagnostics can be set up 
+                                                !! for the registered tracers.
 end type tracer_registry_type
 
 contains
 
-subroutine register_tracer(tr1, name, param_file, Reg, ad_x, ad_y, &
-                           df_x, df_y, OBC_inflow, OBC_in_u, OBC_in_v, &
-                           ad_2d_x, ad_2d_y, df_2d_x, df_2d_y)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), target :: tr1
-  character(len=*), intent(in)               :: name
-  type(param_file_type), intent(in)          :: param_file
-  type(tracer_registry_type), pointer        :: Reg
-  real, pointer, dimension(:,:,:), optional  :: ad_x, ad_y, df_x, df_y
-  real, intent(in), optional                 :: OBC_inflow
-  real, pointer, dimension(:,:,:), optional  :: OBC_in_u, OBC_in_v
-  real, dimension(:,:),   pointer, optional  :: ad_2d_x, ad_2d_y, df_2d_x, df_2d_y
-! This subroutine registers a tracer to be advected and horizontally
-! diffused.
+!> This subroutine registers a tracer to be advected and laterally diffused.
+subroutine register_tracer(tr1, tr_desc, param_file, Reg, tr_desc_ptr, ad_x, ad_y,&
+                           df_x, df_y, OBC_inflow, OBC_in_u, OBC_in_v,            &
+                           ad_2d_x, ad_2d_y, df_2d_x, df_2d_y, advection_xy)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), target :: tr1          !< pointer to the tracer (concentration units)
+  type(vardesc),         intent(in)             :: tr_desc      !< metadata about the tracer
+  type(param_file_type), intent(in)             :: param_file   !< file to parse for  model parameter values
+  type(tracer_registry_type), pointer           :: Reg          !< pointer to the tracer registry
+  type(vardesc), target, optional               :: tr_desc_ptr  !< A target that can be used to set a pointer to the
+                                                                !! stored value of tr%tr_desc.  This target must be an
+                                                                !! enduring part of the control structure, because the tracer
+                                                                !! registry will use this memory, but it also means that any
+                                                                !! updates to this structure in the calling module will be
+                                                                !! available subsequently to the tracer registry.
+  real, pointer, dimension(:,:,:), optional     :: ad_x         !< diagnostic x-advective flux (CONC m3/s or CONC*kg/s)
+  real, pointer, dimension(:,:,:), optional     :: ad_y         !< diagnostic y-advective flux (CONC m3/s or CONC*kg/s)
+  real, pointer, dimension(:,:,:), optional     :: df_x         !< diagnostic x-diffusive flux (CONC m3/s or CONC*kg/s)
+  real, pointer, dimension(:,:,:), optional     :: df_y         !< diagnostic y-diffusive flux (CONC m3/s or CONC*kg/s)
 
-! Arguments: tr1 - The pointer to the tracer, in arbitrary concentration units (CONC).
-!  (in)      name - The name to be used in messages about the tracer.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in/out)  Reg - A pointer to the tracer registry.
-!  (in)      ad_x - An array in which zonal advective fluxes are stored in
-!                   units of CONC m3 s-1.
-!  (in)      ad_y - An array in which meridional advective fluxes are stored
-!                   in units of CONC m3 s-1.
-!  (in)      df_x - An array in which zonal diffusive fluxes are stored in
-!                   units of CONC m3 s-1.
-!  (in)      df_y - An array in which meridional diffusive fluxes are stored
-!                   in units of CONC m3 s-1.
-!  (in)      OBC_inflow - The value of the tracer for all inflows via the open
-!                         boundary conditions for which OBC_in_u or OBC_in_v are
-!                         not specified, in the same units as tr (CONC).
-!  (in)      OBC_in_u - The value of the tracer at inflows through u-faces of
-!                       tracer cells, in the same units as tr (CONC).
-!  (in)      OBC_in_v - The value of the tracer at inflows through v-faces of
-!                       tracer cells, in the same units as tr (CONC).
-!  (in,opt)  ad_2d_x - An array in which the vertically summed zonal advective
-!                   fluxes are stored in units of CONC m3 s-1.
-!  (in,opt)  ad_2d_y - An array in which the vertically summed meridional advective
-!                   fluxes are stored in units of CONC m3 s-1.
-!  (in,opt)  df_2d_x - An array in which the vertically summed zonal diffusive
-!                   fluxes are stored in units of CONC m3 s-1.
-!  (in,opt)  df_2d_y - An array in which the vertically summed meridional diffusive
-!                   fluxes are stored in units of CONC m3 s-1.
+  real, intent(in),                optional     :: OBC_inflow   !< the tracer for all inflows via OBC for which OBC_in_u 
+                                                                !! or OBC_in_v are not specified (units of tracer CONC)
+  real, pointer, dimension(:,:,:), optional     :: OBC_in_u     !< tracer at inflows through u-faces of
+                                                                !! tracer cells (units of tracer CONC) 
+  real, pointer, dimension(:,:,:), optional     :: OBC_in_v     !< tracer at inflows through v-faces of
+                                                                !! tracer cells (units of tracer CONC)
+   
+  real, dimension(:,:),   pointer, optional     :: ad_2d_x      !< vert sum of diagnostic x-advect flux (CONC m3/s or CONC*kg/s) 
+  real, dimension(:,:),   pointer, optional     :: ad_2d_y      !< vert sum of diagnostic y-advect flux (CONC m3/s or CONC*kg/s)
+  real, dimension(:,:),   pointer, optional     :: df_2d_x      !< vert sum of diagnostic x-diffuse flux (CONC m3/s or CONC*kg/s)  
+  real, dimension(:,:),   pointer, optional     :: df_2d_y      !< vert sum of diagnostic y-diffuse flux (CONC m3/s or CONC*kg/s) 
+
+  real, pointer, dimension(:,:,:), optional     :: advection_xy !< convergence of lateral advective tracer fluxes  
 
   integer :: ntr
   type(tracer_type) :: temp
@@ -129,9 +116,20 @@ subroutine register_tracer(tr1, name, param_file, Reg, ad_x, ad_y, &
     call MOM_error(FATAL,"MOM register_tracer: "//mesg)
   endif
   Reg%ntr = Reg%ntr + 1
-  ntr = Reg%ntr
+  ntr     = Reg%ntr
 
-  Reg%Tr(ntr)%name = trim(name)
+  if (present(tr_desc_ptr)) then
+    Reg%Tr(ntr)%vd => tr_desc_ptr
+  else
+    allocate(Reg%Tr(ntr)%vd) ; Reg%Tr(ntr)%vd = tr_desc
+  endif
+
+  call query_vardesc(Reg%Tr(ntr)%vd, name=Reg%Tr(ntr)%name)
+
+  if (Reg%locked) call MOM_error(FATAL, &
+      "MOM register_tracer was called for variable "//trim(Reg%Tr(ntr)%name)//&
+      " with a locked tracer registry.")
+
   Reg%Tr(ntr)%t => tr1
 
   if (present(ad_x)) then ; if (associated(ad_x)) Reg%Tr(ntr)%ad_x => ad_x ; endif
@@ -146,26 +144,41 @@ subroutine register_tracer(tr1, name, param_file, Reg, ad_x, ad_y, &
   if (present(ad_2d_x)) then ; if (associated(ad_2d_x)) Reg%Tr(ntr)%ad2d_x => ad_2d_x ; endif
   if (present(ad_2d_y)) then ; if (associated(ad_2d_y)) Reg%Tr(ntr)%ad2d_y => ad_2d_y ; endif
   if (present(df_2d_x)) then ; if (associated(df_2d_x)) Reg%Tr(ntr)%df2d_x => df_2d_x ; endif
-  if (present(df_2d_y)) then ; if (associated(df_2d_y)) Reg%Tr(ntr)%df2d_y => df_2d_y ; endif
+
+  if (present(advection_xy)) then ; if (associated(advection_xy)) Reg%Tr(ntr)%advection_xy => advection_xy ; endif
 
 end subroutine register_tracer
 
-subroutine add_tracer_OBC_values(name, Reg, OBC_inflow, OBC_in_u, OBC_in_v)
-  character(len=*), intent(in)               :: name
-  type(tracer_registry_type), pointer        :: Reg
-  real, intent(in), optional                 :: OBC_inflow
-  real, pointer, dimension(:,:,:), optional  :: OBC_in_u, OBC_in_v
-! This subroutine adds open boundary condition concentrations for a tracer that
-! has previously been registered by a call to register_tracer.
 
-! Arguments: name - The name of the tracer for which the diagnostic pointers.
-!  (in/out)  Reg - A pointer to the tracer registry.
-!  (in)      OBC_inflow - The value of the tracer for all inflows via the open
-!                         boundary conditions for which OBC_in_u or OBC_in_v are
-!                         not specified, in the same units as tr (CONC).
-!  (in)      OBC_in_u - The value of the tracer at inflows through u-faces of
-!                       tracer cells, in the same units as tr (CONC).
-!  (in)      OBC_in_v - The value of the tracer at inflows through v-faces of
+!> This subroutine locks the tracer registry to prevent the addition of more
+!! tracers.  After locked=.true., can then register common diagnostics.
+subroutine lock_tracer_registry(Reg, diag, Time, G)
+  type(tracer_registry_type), pointer    :: Reg    !< pointer to the tracer registry
+  type(diag_ctrl), target,    intent(in) :: diag   !< regulates diagnostic output
+  type(time_type), target,    intent(in) :: Time   !< time of the start of the run segment
+  type(ocean_grid_type),      intent(in) :: G      !< ocean grid type 
+
+  if (.not. associated(Reg)) call MOM_error(WARNING, &
+    "lock_tracer_registry called with an unassocaited registry.")
+
+  Reg%locked = .True.
+
+end subroutine lock_tracer_registry
+
+
+!> This subroutine adds open boundary condition concentrations for a tracer that
+!! has previously been registered by a call to register_tracer.
+subroutine add_tracer_OBC_values(name, Reg, OBC_inflow, OBC_in_u, OBC_in_v)
+  character(len=*), intent(in)               :: name        !< tracer name for which the diagnostic points 
+  type(tracer_registry_type), pointer        :: Reg         !< pointer to the tracer registry
+  real, intent(in), optional                 :: OBC_inflow  !< tracer value for all inflows via the OBC
+                                                            !! for which OBC_in_u or OBC_in_v are
+                                                            !! not specified (same units as tracer CONC) 
+  real, pointer, dimension(:,:,:), optional  :: OBC_in_u    !< tracer at inflows through u-face of tracer cells
+                                                            !! (same units as tracer CONC)
+  real, pointer, dimension(:,:,:), optional  :: OBC_in_v    !< tracer at inflows through v-face of tracer cells
+                                                            !! (same units as tracer CONC)
+
   integer :: m
 
   if (.not. associated(Reg)) call MOM_error(FATAL, "add_tracer_OBC_values :"// &
@@ -186,33 +199,25 @@ subroutine add_tracer_OBC_values(name, Reg, OBC_inflow, OBC_in_u, OBC_in_v)
 
 end subroutine add_tracer_OBC_values
 
-subroutine add_tracer_diagnostics(name, Reg, ad_x, ad_y, df_x, df_y, &
-                                  ad_2d_x, ad_2d_y, df_2d_x, df_2d_y)
-  character(len=*), intent(in)              :: name
-  type(tracer_registry_type), pointer       :: Reg
-  real, dimension(:,:,:), pointer, optional :: ad_x, ad_y, df_x, df_y
-  real, dimension(:,:),   pointer, optional :: ad_2d_x, ad_2d_y, df_2d_x, df_2d_y
-! This subroutine adds diagnostic arrays for a tracer that has previously been
-! registered by a call to register_tracer.
 
-! Arguments: name - The name of the tracer for which the diagnostic pointers.
-!  (in/out)  Reg - A pointer to the tracer registry.
-!  (in,opt)  ad_x - An array in which zonal advective fluxes are stored in
-!                   units of CONC m3 s-1.
-!  (in,opt)  ad_y - An array in which meridional advective fluxes are stored
-!                   in units of CONC m3 s-1.
-!  (in,opt)  df_x - An array in which zonal diffusive fluxes are stored in
-!                   units of CONC m3 s-1.
-!  (in,opt)  df_y - An array in which meridional diffusive fluxes are stored
-!                   in units of CONC m3 s-1.
-!  (in,opt)  ad_2d_x - An array in which the vertically summed zonal advective
-!                   fluxes are stored in units of CONC m3 s-1.
-!  (in,opt)  ad_2d_y - An array in which the vertically summed meridional advective
-!                   fluxes are stored in units of CONC m3 s-1.
-!  (in,opt)  df_2d_x - An array in which the vertically summed zonal diffusive
-!                   fluxes are stored in units of CONC m3 s-1.
-!  (in,opt)  df_2d_y - An array in which the vertically summed meridional diffusive
-!                   fluxes are stored in units of CONC m3 s-1.
+!> This subroutine adds diagnostic arrays for a tracer that has 
+!! previously been registered by a call to register_tracer.
+subroutine add_tracer_diagnostics(name, Reg, ad_x, ad_y, df_x, df_y, &
+                                  ad_2d_x, ad_2d_y, df_2d_x, df_2d_y,&
+                                  advection_xy)
+  character(len=*), intent(in)              :: name         !< name of the tracer for which the diagnostic points
+  type(tracer_registry_type), pointer       :: Reg          !< pointer to the tracer registry
+  real, dimension(:,:,:), pointer, optional :: ad_x         !< diagnostic x-advective flux (CONC m3/s or CONC*kg/s) 
+  real, dimension(:,:,:), pointer, optional :: ad_y         !< diagnostic y-advective flux (CONC m3/s or CONC*kg/s)
+  real, dimension(:,:,:), pointer, optional :: df_x         !< diagnostic x-diffusive flux (CONC m3/s or CONC*kg/s)
+  real, dimension(:,:,:), pointer, optional :: df_y         !< diagnostic y-diffusive flux (CONC m3/s or CONC*kg/s)
+  real, dimension(:,:),   pointer, optional :: ad_2d_x      !< vert sum of diagnostic x-advect flux (CONC m3/s or CONC*kg/s) 
+  real, dimension(:,:),   pointer, optional :: ad_2d_y      !< vert sum of diagnostic y-advect flux (CONC m3/s or CONC*kg/s)
+  real, dimension(:,:),   pointer, optional :: df_2d_x      !< vert sum of diagnostic x-diffuse flux (CONC m3/s or CONC*kg/s)
+  real, dimension(:,:),   pointer, optional :: df_2d_y      !< vert sum of diagnostic y-diffuse flux (CONC m3/s or CONC*kg/s) 
+
+  real, dimension(:,:,:), pointer, optional :: advection_xy !< convergence of lateral advective tracer fluxes  
+
   integer :: m
 
   if (.not. associated(Reg)) call MOM_error(FATAL, "add_tracer_diagnostics: "// &
@@ -225,46 +230,41 @@ subroutine add_tracer_diagnostics(name, Reg, ad_x, ad_y, df_x, df_y, &
     if (present(ad_y)) then ; if (associated(ad_y)) Reg%Tr(m)%ad_y => ad_y ; endif
     if (present(df_x)) then ; if (associated(df_x)) Reg%Tr(m)%df_x => df_x ; endif
     if (present(df_y)) then ; if (associated(df_y)) Reg%Tr(m)%df_y => df_y ; endif
+
     if (present(ad_2d_x)) then ; if (associated(ad_2d_x)) Reg%Tr(m)%ad2d_x => ad_2d_x ; endif
     if (present(ad_2d_y)) then ; if (associated(ad_2d_y)) Reg%Tr(m)%ad2d_y => ad_2d_y ; endif
     if (present(df_2d_x)) then ; if (associated(df_2d_x)) Reg%Tr(m)%df2d_x => df_2d_x ; endif
     if (present(df_2d_y)) then ; if (associated(df_2d_y)) Reg%Tr(m)%df2d_y => df_2d_y ; endif
+
+    if (present(advection_xy)) then ; if (associated(advection_xy)) Reg%Tr(m)%advection_xy => advection_xy ; endif
+
   else
+
     call MOM_error(FATAL, "MOM_tracer: register_tracer must be called for "//&
              trim(name)//" before add_tracer_diagnostics is called for it.")
   endif
 
 end subroutine add_tracer_diagnostics
 
+
+!> This subroutine solves a tridiagonal equation for the final tracer
+!! concentrations after the dual-entrainments, and possibly sinking or surface
+!! and bottom sources, are applied.  The sinking is implemented with an
+!! fully implicit upwind advection scheme.
 subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, &
                            sfc_flux, btm_flux, btm_reservoir, sink_rate)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h_old, ea, eb
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: tr
-  real,                                  intent(in)    :: dt
-  type(ocean_grid_type),                 intent(in)    :: G
-  real, dimension(NIMEM_,NJMEM_), optional, intent(in) :: sfc_flux
-  real, dimension(NIMEM_,NJMEM_), optional, intent(in) :: btm_flux
-  real, dimension(NIMEM_,NJMEM_), optional, intent(inout) :: btm_reservoir
-  real,                           optional, intent(in) :: sink_rate
-! Arguments: h_old -  Layer thickness before entrainment, in m or kg m-2.
-!  (in)      ea - The amount of fluid entrained from the layer above, in the
-!                 same units as h_old, i.e. m or kg m-2.
-!  (in)      eb - The amount of fluid entrained from the layer below, in the
-!                 same units as h_old, i.e. m or kg m-2
-!  (inout)   tr - The tracer concentration, in concentration units (CU).
-!  (in)      dt - The amount of time covered by this call, in s.
-!  (in)      G - The ocean's grid structure.
-!  (in,opt)  sfc_flux - The surface flux of the tracer, in CU kg m-2 s-1.
-!  (in,opt)  btm_flux - The (negative upward) bottom flux of the tracer,
-!                       in units of CU kg m-2 s-1.
-!  (inout,opt) btm_reservoir - The amount of tracer in a bottom reservoir, in
-!                              units of CU kg m-2. (was CU m)
-!  (in,opt)  sink_rate - The rate at which the tracer sinks, in m s-1.
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),   intent(in)    :: h_old          !< layer thickness before entrainment (m or kg m-2)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),   intent(in)    :: ea             !< amount of fluid entrained from the layer above (units of h_old)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),   intent(in)    :: eb             !< amount of fluid entrained from the layer below (units of h_old)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),   intent(inout) :: tr             !< tracer concentration (in concentration units CU)
+  real,                                    intent(in)    :: dt             !< amount of time covered by this call (seconds)
+  type(ocean_grid_type),                   intent(in)    :: G              !< ocean grid structure 
+  real, dimension(NIMEM_,NJMEM_), optional,intent(in)    :: sfc_flux       !< surface flux of the tracer (in CU * kg m-2 s-1)
+  real, dimension(NIMEM_,NJMEM_), optional,intent(in)    :: btm_flux       !< The (negative upward) bottom flux of the tracer,
+                                                                           !! in units of (CU * kg m-2 s-1)
+  real, dimension(NIMEM_,NJMEM_), optional,intent(inout) :: btm_reservoir  !< amount of tracer in a bottom reservoir (units of CU kg m-2; formerly CU m)
+  real,                           optional,intent(in)    :: sink_rate      !< rate at which the tracer sinks, in m s-1
 
-!   This subroutine solves a tridiagonal equation for the final tracer
-! concentrations after the dual-entrainments, and possibly sinking or surface
-! and bottom sources, are applied.  The sinking is implemented with an
-! fully implicit upwind advection scheme.
  
   real :: sink_dist ! The distance the tracer sinks in a time step, in m or kg m-2.
   real, dimension(SZI_(G),SZJ_(G)) :: &
@@ -287,6 +287,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, &
                     ! ensure positive definiteness, in m or kg m-2.
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected, in m.
+
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
@@ -417,33 +418,31 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, &
 
 end subroutine tracer_vertdiff
 
+
+!> This subroutine writes out chksums for thermodynamic state variables.
 subroutine MOM_tracer_chksum(mesg, Tr, ntr, G)
-  character(len=*),         intent(in) :: mesg
-  type(tracer_type),        intent(in) :: Tr(:)
-  integer,                  intent(in) :: ntr
-  type(ocean_grid_type),    intent(in) :: G
-!   This subroutine writes out chksums for the model's thermodynamic state
-! variables.
-! Arguments: mesg - A message that appears on the chksum lines.
-!  (in)      Tr - An array of all of the registered tracers.
-!  (in)      ntr - The number of registered tracers.
-!  (in)      G - The ocean's grid structure.
+  character(len=*),         intent(in) :: mesg   !< message that appears on the chksum lines
+  type(tracer_type),        intent(in) :: Tr(:)  !< array of all of registered tracers
+  integer,                  intent(in) :: ntr    !< number of registered tracers
+  type(ocean_grid_type),    intent(in) :: G      !< ocean grid structure 
+
   integer :: is, ie, js, je, nz, m
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   do m=1,ntr
     call hchksum(Tr(m)%t, mesg//trim(Tr(m)%name), G)
   enddo
+
 end subroutine MOM_tracer_chksum
 
+
+!> This routine include declares and sets the variable "version".
 subroutine tracer_registry_init(param_file, Reg)
-  type(param_file_type),      intent(in) :: param_file
-  type(tracer_registry_type), pointer    :: Reg
-! Arguments: param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in/out)  Reg - A pointer that is set to point to the tracer registry.
+  type(param_file_type),      intent(in) :: param_file !< open file to parse for model parameters
+  type(tracer_registry_type), pointer    :: Reg        !< pointer to tracer registry 
+
   integer, save :: init_calls = 0
-! This include declares and sets the variable "version".
+
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_tracer_registry" ! This module's name.
   character(len=256) :: mesg    ! Message for error messages.
@@ -463,6 +462,8 @@ subroutine tracer_registry_init(param_file, Reg)
 
 end subroutine tracer_registry_init
 
+
+!> This routine closes the tracer registry module. 
 subroutine tracer_registry_end(Reg)
   type(tracer_registry_type), pointer :: Reg
   if (associated(Reg)) deallocate(Reg)

@@ -61,7 +61,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : file_exists, read_data, slasher, vardesc
+use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc, query_vardesc
 use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
 use MOM_time_manager, only : time_type, get_time
@@ -164,6 +164,7 @@ function register_oil_tracer(G, param_file, CS, diag, tr_Reg, &
 #include "version_variable.h"
   character(len=40)  :: mod = "oil_tracer" ! This module's name.
   character(len=200) :: inputdir ! The directory where the input files are.
+  character(len=48)  :: var_name ! The variable's name.
   character(len=3)   :: name_tag ! String for creating identifying oils
   real, pointer :: tr_ptr(:,:,:) => NULL()
   logical :: register_oil_tracer
@@ -234,7 +235,7 @@ function register_oil_tracer(G, param_file, CS, diag, tr_Reg, &
     if (CS%oil_source_k(m)/=0) then
       write(name_tag(1:3),'("_",I2.2)') m
       CS%ntr = CS%ntr + 1
-      CS%tr_desc(m) = vardesc("oil"//trim(name_tag),"Oil Tracer",'h','L','s',"kg/m3")
+      CS%tr_desc(m) = var_desc("oil"//trim(name_tag), "kg/m3", "Oil Tracer", caller=mod)
       CS%IC_val(m) = 0.0
       if (CS%oil_decay_days(m)>0.) then
         CS%oil_decay_rate(m)=1./(86400.0*CS%oil_decay_days(m))
@@ -251,17 +252,19 @@ function register_oil_tracer(G, param_file, CS, diag, tr_Reg, &
     ! This is needed to force the compiler not to do a copy in the registration
     ! calls.  Curses on the designers and implementers of Fortran90.
     tr_ptr => CS%tr(:,:,:,m)
+    call query_vardesc(CS%tr_desc(m), name=var_name, caller="register_oil_tracer")
     ! Register the tracer for the restart file.
     call register_restart_field(tr_ptr, CS%tr_desc(m), &
-                                .not.CS%oil_may_reinit,restart_CS)
+                                .not.CS%oil_may_reinit, restart_CS)
     ! Register the tracer for horizontal advection & diffusion.
-    call register_tracer(tr_ptr, CS%tr_desc(m)%name, param_file, tr_Reg)
+    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, tr_Reg, &
+                         tr_desc_ptr=CS%tr_desc(m))
 
     !   Set coupled_tracers to be true (hard-coded above) to provide the surface
     ! values to the coupler (if any).  This is meta-code and its arguments will
     ! currently (deliberately) give fatal errors if it is used.
     if (CS%coupled_tracers) &
-      CS%ind_tr(m) = aof_set_coupler_flux(trim(CS%tr_desc(m)%name)//'_flux', &
+      CS%ind_tr(m) = aof_set_coupler_flux(trim(var_name)//'_flux', &
           flux_type=' ', implementation=' ', caller="register_oil_tracer")
   enddo
 
@@ -328,8 +331,9 @@ subroutine initialize_oil_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
   CS%Time => day
 
   do m=1,CS%ntr
+    call query_vardesc(CS%tr_desc(m), name=name, caller="initialize_oil_tracer")
     if ((.not.restart) .or. (CS%oil_may_reinit .and. .not. &
-        query_initialized(CS%tr(:,:,:,m), CS%tr_desc(m)%name, CS%restart_CSp))) then
+        query_initialized(CS%tr(:,:,:,m), name, CS%restart_CSp))) then
 
       if (len_trim(CS%IC_file) > 0) then
   !  Read the tracer concentrations from a netcdf file.
@@ -338,17 +342,17 @@ subroutine initialize_oil_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
                                  "Unable to open "//CS%IC_file)
 
         if (CS%Z_IC_file) then
-          OK = tracer_Z_init(CS%tr(:,:,:,m), h, CS%IC_file, CS%tr_desc(m)%name,&
+          OK = tracer_Z_init(CS%tr(:,:,:,m), h, CS%IC_file, name, &
                              G, -1e34, 0.0) ! CS%land_val(m))
           if (.not.OK) then
             OK = tracer_Z_init(CS%tr(:,:,:,m), h, CS%IC_file, &
-                     trim(CS%tr_desc(m)%name), G, -1e34, 0.0) ! CS%land_val(m))
+                     trim(name), G, -1e34, 0.0) ! CS%land_val(m))
             if (.not.OK) call MOM_error(FATAL,"initialize_oil_tracer: "//&
-                    "Unable to read "//trim(CS%tr_desc(m)%name)//" from "//&
+                    "Unable to read "//trim(name)//" from "//&
                     trim(CS%IC_file)//".")
           endif
         else
-          call read_data(CS%IC_file, trim(CS%tr_desc(m)%name), CS%tr(:,:,:,m), &
+          call read_data(CS%IC_file, trim(name), CS%tr(:,:,:,m), &
                          domain=G%Domain%mpp_domain)
         endif
       else
@@ -378,8 +382,8 @@ subroutine initialize_oil_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
 
   do m=1,CS%ntr
     ! Register the tracer for the restart file.
-    name = CS%tr_desc(m)%name ; longname = CS%tr_desc(m)%longname
-    units = CS%tr_desc(m)%units
+    call query_vardesc(CS%tr_desc(m), name, units=units, longname=longname, &
+                       caller="initialize_oil_tracer")
     CS%id_tracer(m) = register_diag_field("ocean_model", trim(name), CS%diag%axesTL, &
         day, trim(longname) , trim(units))
     CS%id_tr_adx(m) = register_diag_field("ocean_model", trim(name)//"_adx", &
@@ -572,7 +576,8 @@ function oil_stock(h, stocks, G, CS, names, units, stock_index)
   endif ; endif
 
   do m=1,CS%ntr
-    names(m) = CS%tr_desc(m)%name ; units(m) = trim(CS%tr_desc(m)%units)//" kg"
+    call query_vardesc(CS%tr_desc(m), name=names(m), units=units(m), caller="oil_stock")
+    units(m) = trim(units(m))//" kg"
     stocks(m) = 0.0
     do k=1,nz ; do j=js,je ; do i=is,ie
       stocks(m) = stocks(m) + CS%tr(i,j,k,m) * &

@@ -71,7 +71,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : file_exists, read_data, slasher, vardesc
+use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc, query_vardesc
 use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
 use MOM_time_manager, only : time_type, get_time
@@ -135,6 +135,7 @@ type, public :: OCMIP2_CFC_CS ; private
   logical :: tracers_may_reinit  ! If true, tracers may go through the
                            ! initialization code if they are not found in the
                            ! restart files.
+  character(len=16) :: CFC11_name, CFC12_name ! Variable names.
 
   integer :: ind_cfc_11_flux  ! Indices returned by aof_set_coupler_flux that
   integer :: ind_cfc_12_flux  ! are used to pack and unpack surface boundary
@@ -244,14 +245,10 @@ function register_OCMIP2_CFC(G, param_file, CS, diag, tr_Reg, restart_CS)
                  "restart files of a restarted run.", default=.false.)
 
   !   The following vardesc types contain a package of metadata about each tracer,
-  ! including, in order, the following elements: name; longname; horizontal
-  ! staggering ('h') for collocation with thickness points ; vertical staggering
-  ! ('L') for a layer variable ; temporal staggering ('s' for snapshot) ; units ;
-  ! and precision in non-restart output files ('f' for 32-bit float or 'd' for
-  ! 64-bit doubles). For most tracers, only the name, longname and units should
-  ! be changed.  See MOM_variables for the full type description.
-  CS%CFC11_desc = vardesc("CFC11","CFC-11 Concentration",'h','L','s',"mol m-3")
-  CS%CFC12_desc = vardesc("CFC12","CFC-12 Concentration",'h','L','s',"mol m-3")
+  ! including, the name; units; longname; and grid information.
+  CS%CFC11_name = "CFC11" ; CS%CFC12_name = "CFC12"
+  CS%CFC11_desc = var_desc(CS%CFC11_name,"mol m-3","CFC-11 Concentration", caller=mod)
+  CS%CFC12_desc = var_desc(CS%CFC12_name,"mol m-3","CFC-12 Concentration", caller=mod)
 
   allocate(CS%CFC11(isd:ied,jsd:jed,nz)) ; CS%CFC11(:,:,:) = 0.0
   allocate(CS%CFC12(isd:ied,jsd:jed,nz)) ; CS%CFC12(:,:,:) = 0.0
@@ -267,12 +264,14 @@ function register_OCMIP2_CFC(G, param_file, CS, diag, tr_Reg, restart_CS)
   call register_restart_field(tr_ptr, CS%CFC11_desc, &
                               .not.CS%tracers_may_reinit, restart_CS)
   ! Register CFC11 for horizontal advection & diffusion.
-  call register_tracer(tr_ptr, CS%CFC11_desc%name, param_file, tr_Reg)
+  call register_tracer(tr_ptr, CS%CFC11_desc, param_file, tr_Reg, &
+                       tr_desc_ptr=CS%CFC11_desc)
   ! Do the same for CFC12
   tr_ptr => CS%CFC12
   call register_restart_field(tr_ptr, CS%CFC12_desc, &
                               .not.CS%tracers_may_reinit, restart_CS)
-  call register_tracer(tr_ptr, CS%CFC12_desc%name, param_file, tr_Reg)
+  call register_tracer(tr_ptr, CS%CFC12_desc, param_file, tr_Reg, &
+                       tr_desc_ptr=CS%CFC12_desc)
 
   ! Set and read the various empirical coefficients.
 
@@ -409,15 +408,14 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, h, OBC, CS, sponge_CSp, &
   CS%Time => day
 
   if (.not.restart .or. (CS%tracers_may_reinit .and. &
-      .not.query_initialized(CS%CFC11, CS%CFC11_desc%name, CS%restart_CSp))) &
-    call init_tracer_CFC(h, CS%CFC11, CS%CFC11_desc, CS%CFC11_land_val, &
+      .not.query_initialized(CS%CFC11, CS%CFC11_name, CS%restart_CSp))) &
+    call init_tracer_CFC(h, CS%CFC11, CS%CFC11_name, CS%CFC11_land_val, &
                          CS%CFC11_IC_val, G, CS)
 
   if (.not.restart .or. (CS%tracers_may_reinit .and. &
-      .not.query_initialized(CS%CFC12, CS%CFC12_desc%name, CS%restart_CSp))) &
-    call init_tracer_CFC(h, CS%CFC12, CS%CFC12_desc, CS%CFC12_land_val, &
+      .not.query_initialized(CS%CFC12, CS%CFC12_name, CS%restart_CSp))) &
+    call init_tracer_CFC(h, CS%CFC12, CS%CFC12_name, CS%CFC12_land_val, &
                          CS%CFC12_IC_val, G, CS)
-
 
   if (associated(OBC)) then
   ! By default, all tracers have 0 concentration in their inflows. This may
@@ -426,21 +424,7 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, h, OBC, CS, sponge_CSp, &
   !  call add_tracer_OBC_values(trim(CS%CFC12_desc%name), CS%tr_Reg, 0.0)
   endif
 
-  ! Register CFC11 for potential diagnostic output.
-  name = CS%CFC11_desc%name ; longname = CS%CFC11_desc%longname
-  units = CS%CFC11_desc%units
-  CS%id_CFC11 = register_diag_field("ocean_model", trim(name), CS%diag%axesTL, &
-      day, trim(longname) , trim(units))
-  call register_Z_tracer(CS%CFC11, trim(name), longname, units, &
-                         day, G, diag_to_Z_CSp)
-  ! Register CFC12 for potential diagnostic output.
-  name = CS%CFC12_desc%name ; longname = CS%CFC12_desc%longname
-  units = CS%CFC12_desc%units
-  CS%id_CFC12 = register_diag_field("ocean_model", trim(name), CS%diag%axesTL, &
-      day, trim(longname) , trim(units))
-  call register_Z_tracer(CS%CFC12, trim(name), longname, units, &
-                         day, G, diag_to_Z_CSp)
- 
+
   ! This needs to be changed if the units of tracer are changed above.
   if (G%Boussinesq) then ; flux_units = "mol s-1"
   else ; flux_units = "mol m-3 kg s-1" ; endif
@@ -449,11 +433,21 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, h, OBC, CS, sponge_CSp, &
     ! Register the tracer advective and diffusive fluxes for potential
     ! diagnostic output.
     if (m==1) then
-      name = CS%CFC11_desc%name ; longname = CS%CFC11_desc%longname
-      units = CS%CFC11_desc%units
+      ! Register CFC11 for potential diagnostic output.
+      call query_vardesc(CS%CFC11_desc, name, units=units, longname=longname, &
+                         caller="initialize_OCMIP2_CFC")
+      CS%id_CFC11 = register_diag_field("ocean_model", trim(name), CS%diag%axesTL, &
+          day, trim(longname) , trim(units))
+      call register_Z_tracer(CS%CFC11, trim(name), longname, units, &
+                             day, G, diag_to_Z_CSp)
     elseif (m==2) then
-      name = CS%CFC12_desc%name ; longname = CS%CFC12_desc%longname
-      units = CS%CFC12_desc%units
+      ! Register CFC12 for potential diagnostic output.
+      call query_vardesc(CS%CFC12_desc, name, units=units, longname=longname, &
+                         caller="initialize_OCMIP2_CFC")
+      CS%id_CFC12 = register_diag_field("ocean_model", trim(name), CS%diag%axesTL, &
+          day, trim(longname) , trim(units))
+      call register_Z_tracer(CS%CFC12, trim(name), longname, units, &
+                             day, G, diag_to_Z_CSp)
     else
       call MOM_error(FATAL,"initialize_OCMIP2_CFC is only set up to work"//&
                            "with NTR <= 2.")
@@ -485,10 +479,10 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, h, OBC, CS, sponge_CSp, &
 
 end subroutine initialize_OCMIP2_CFC
   
-subroutine init_tracer_CFC(h, tr, tr_desc, land_val, IC_val, G, CS)
+subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, CS)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)  :: h
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(out) :: tr
-  type(vardesc),                         intent(in)  :: tr_desc
+  character(len=*),                      intent(in)  :: name
   real,                                  intent(in)  :: land_val, IC_val
   type(ocean_grid_type),                 intent(in) :: G
   type(OCMIP2_CFC_CS),                   pointer    :: CS
@@ -504,15 +498,15 @@ subroutine init_tracer_CFC(h, tr, tr_desc, land_val, IC_val, G, CS)
     if (.not.file_exists(CS%IC_file, G%Domain)) &
       call MOM_error(FATAL, "initialize_OCMIP2_CFC: Unable to open "//CS%IC_file)
     if (CS%Z_IC_file) then
-      OK = tracer_Z_init(tr, h, CS%IC_file, tr_desc%name, G)
+      OK = tracer_Z_init(tr, h, CS%IC_file, name, G)
       if (.not.OK) then
-        OK = tracer_Z_init(tr, h, CS%IC_file, trim(tr_desc%name), G)
+        OK = tracer_Z_init(tr, h, CS%IC_file, trim(name), G)
         if (.not.OK) call MOM_error(FATAL,"initialize_OCMIP2_CFC: "//&
-                "Unable to read "//trim(tr_desc%name)//" from "//&
+                "Unable to read "//trim(name)//" from "//&
                 trim(CS%IC_file)//".")
       endif
     else
-      call read_data(CS%IC_file, trim(tr_desc%name), tr, domain=G%Domain%mpp_domain)
+      call read_data(CS%IC_file, trim(name), tr, domain=G%Domain%mpp_domain)
     endif
   else
     do k=1,nz ; do j=js,je ; do i=is,ie
@@ -650,8 +644,9 @@ function OCMIP2_CFC_stock(h, stocks, G, CS, names, units, stock_index)
     return
   endif ; endif
 
-  names(1) = CS%CFC11_desc%name ; units(1) = trim(CS%CFC11_desc%units)//" kg"
-  names(2) = CS%CFC12_desc%name ; units(2) = trim(CS%CFC12_desc%units)//" kg"
+  call query_vardesc(CS%CFC11_desc, name=names(1), units=units(1), caller="OCMIP2_CFC_stock")
+  call query_vardesc(CS%CFC12_desc, name=names(2), units=units(2), caller="OCMIP2_CFC_stock")
+  units(1) = trim(units(1))//" kg" ; units(2) = trim(units(2))//" kg"
 
   stocks(1) = 0.0 ; stocks(2) = 0.0
   do k=1,nz ; do j=js,je ; do i=is,ie

@@ -45,21 +45,22 @@ module MOM_internal_tides
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_axis_init
 use MOM_diag_mediator, only : register_diag_field, diag_ctrl, safe_alloc_ptr
 use MOM_diag_mediator, only : axesType, defineAxes
-use MOM_domains, only : AGRID, To_South, To_West, To_All
-use MOM_domains, only : create_group_pass, do_group_pass, pass_var
-use MOM_domains, only : group_pass_type, start_group_pass, complete_group_pass
+use MOM_domains, only       : AGRID, To_South, To_West, To_All
+use MOM_domains, only       : create_group_pass, do_group_pass, pass_var
+use MOM_domains, only       : group_pass_type, start_group_pass, complete_group_pass
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
-use MOM_file_parser, only : read_param, get_param, log_param, log_version, param_file_type
-use MOM_grid, only : ocean_grid_type
-use MOM_io, only : slasher, vardesc
-use MOM_restart, only : register_restart_field, MOM_restart_CS, restart_init, save_restart
-use MOM_spatial_means, only : global_area_mean ! BDM
-use MOM_time_manager, only   : time_type, operator(+), operator(/), operator(-)
-use MOM_time_manager, only   : get_time, get_date, set_time, set_date 
-use MOM_time_manager, only   : time_type_to_real
-use MOM_variables, only      : surface, thermo_var_ptrs
-use fms_mod, only            : read_data
-use MOM_wave_structure, only : wave_structure_init, wave_structure, wave_structure_CS
+use MOM_file_parser, only   : read_param, get_param, log_param, log_version, param_file_type
+use MOM_grid, only          : ocean_grid_type
+use MOM_io, only            : slasher, vardesc
+use MOM_restart, only       : register_restart_field, MOM_restart_CS, restart_init, save_restart
+use MOM_spatial_means, only : global_area_mean
+use MOM_time_manager, only  : time_type, operator(+), operator(/), operator(-)
+use MOM_time_manager, only  : get_time, get_date, set_time, set_date 
+use MOM_time_manager, only  : time_type_to_real
+use MOM_variables, only     : surface, thermo_var_ptrs
+use fms_mod, only           : read_data
+use MOM_wave_structure, only: wave_structure_init, wave_structure, wave_structure_CS
+
 !   Forcing is a structure containing pointers to the forcing fields
 ! which may be used to drive MOM.  All fluxes are positive downward.
 !   Surface is a structure containing pointers to various fields that
@@ -2032,7 +2033,7 @@ subroutine register_int_tide_restarts(G, param_file, CS, restart_CS)
     print *,'register_int_tide_restarts: done!'
   endif
   !-----------------------------------------------------------------------
-  
+
 end subroutine register_int_tide_restarts
 
 
