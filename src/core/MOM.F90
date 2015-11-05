@@ -58,7 +58,7 @@ use MOM_time_manager,         only : operator(-), operator(>), operator(*), oper
 ! MOM core modules
 use MOM_ALE,                   only : initialize_ALE, end_ALE, ALE_main, ALE_CS, adjustGridForIntegrity
 use MOM_ALE,                   only : ALE_getCoordinate, ALE_getCoordinateUnits, ALE_writeCoordinateFile
-use MOM_ALE,                   only : ALE_updateVerticalGridType, remap_init_conds
+use MOM_ALE,                   only : ALE_updateVerticalGridType, remap_init_conds, register_diags_ALE
 use MOM_continuity,            only : continuity, continuity_init, continuity_CS
 use MOM_CoriolisAdv,           only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
 use MOM_diabatic_driver,       only : diabatic, diabatic_driver_init, diabatic_CS
@@ -444,9 +444,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   logical :: do_pass_kd_kv_turb ! This is used for a group halo pass.
 
   G => CS%G
-  is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je  = G%jec ; nz = G%ke
-  Isq  = G%IscB ; Ieq  = G%IecB ; Jsq  = G%JscB ; Jeq = G%JecB
-  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed = G%jed
+  is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = G%ke
+  Isq  = G%IscB ; Ieq  = G%IecB ; Jsq  = G%JscB ; Jeq  = G%JecB
+  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   u => CS%u ; v => CS%v ; h => CS%h
 
@@ -680,7 +680,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
             call check_redundant("Pre-ALE 1 ", u, v, G)
           endif
           call cpu_clock_begin(id_clock_ALE)
-          call ALE_main(G, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp)
+          call ALE_main(G, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, dtdia)
           call cpu_clock_end(id_clock_ALE)
           if (CS%debug) then
             call MOM_state_chksum("Post-ALE 1 ", u, v, h, CS%uh, CS%vh, G)
@@ -989,7 +989,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
             call check_redundant("Pre-ALE ", u, v, G)
           endif
           call cpu_clock_begin(id_clock_ALE)
-          call ALE_main(G, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp)
+          call ALE_main(G, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%dt_trans)
           call cpu_clock_end(id_clock_ALE)
           if (CS%debug) then
             call MOM_state_chksum("Post-ALE ", u, v, h, CS%uh, CS%vh, G)
@@ -1384,9 +1384,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   call MOM_io_init(param_file)
   call MOM_grid_init(G, param_file)
-  is   = G%isc   ; ie  = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = G%ke
-  isd  = G%isd   ; ied = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+  is   = G%isc   ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = G%ke
+  isd  = G%isd   ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
+  IsdB = G%IsdB  ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   call diag_mediator_init(G, param_file, diag)
 
@@ -1840,8 +1840,15 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call tracer_hor_diff_init(Time, G, param_file, diag, CS%tracer_diff_CSp, CS%neutral_diffusion_CSp)
 
   call lock_tracer_registry(CS%tracer_Reg, diag, Time, G)
+  call callTree_waypoint("tracer registry now locked (initialize_MOM)")
+
+  ! now register some diagnostics since tracer registry is locked 
   call register_diags(Time, G, CS, CS%ADp)
   call register_diags_TS_tendency(Time, G, CS) 
+  if (CS%use_ALE_algorithm) then 
+    call register_diags_ALE(Time, G, diag, CS%tracer_Reg, CS%ALE_CSp)
+  endif 
+
 
   ! If need a diagnostic field, then would have been allocated in register_diags.
   if (CS%use_temperature) then
@@ -1944,6 +1951,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   call callTree_leave("initialize_MOM()")
   call cpu_clock_end(id_clock_init)
+
 
 end subroutine initialize_MOM
 
