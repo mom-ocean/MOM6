@@ -21,7 +21,7 @@ module MOM_wave_structure
 !
 !********+*********+*********+*********+*********+*********+*********+**
 !*                                                                     *
-!*  By Benjamin Mater, September, 2015                                 *
+!*  By Benjamin Mater & Robert Hallberg, 2015                          *
 !*                                                                     *
 !*    The subroutine in this module calculates the vertical structure  *
 !*    functions of the first baroclinic mode internal wave speed.      *

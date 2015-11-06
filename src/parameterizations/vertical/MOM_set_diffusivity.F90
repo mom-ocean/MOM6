@@ -54,7 +54,7 @@ use MOM_error_handler,       only : callTree_enter, callTree_leave, callTree_way
 use MOM_file_parser,         only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type,        only : forcing, optics_type
 use MOM_grid,                only : ocean_grid_type
-use MOM_internal_tides,      only : int_tide_CS, get_itidal_loss !BDM
+use MOM_internal_tides,      only : int_tide_CS, get_itidal_loss
 use MOM_intrinsic_functions, only : invcosh
 use MOM_io,                  only : slasher, vardesc, var_desc
 use MOM_kappa_shear,         only : calculate_kappa_shear, kappa_shear_init, Kappa_shear_CS
@@ -275,7 +275,7 @@ type, public :: set_diffusivity_CS ; private
   type(user_change_diff_CS), pointer :: user_change_diff_CSp => NULL()
   type(diag_to_Z_CS),        pointer :: diag_to_Z_CSp        => NULL()
   type(Kappa_shear_CS),      pointer :: kappaShear_CSp       => NULL()
-  type(int_tide_CS),         pointer :: int_tide_CSp         => NULL() !BDM
+  type(int_tide_CS),         pointer :: int_tide_CSp         => NULL()
 
   integer :: id_TKE_itidal  = -1
   integer :: id_TKE_leewave = -1
@@ -284,22 +284,22 @@ type, public :: set_diffusivity_CS ; private
 
   integer :: id_Kd_itidal      = -1
   integer :: id_Kd_Niku        = -1
-  integer :: id_Kd_lowmode     = -1 !BDM
+  integer :: id_Kd_lowmode     = -1
   integer :: id_Kd_user        = -1
   integer :: id_Kd_layer       = -1
   integer :: id_Kd_BBL         = -1
   integer :: id_Kd_BBL_z       = -1
   integer :: id_Kd_itidal_z    = -1
   integer :: id_Kd_Niku_z      = -1
-  integer :: id_Kd_lowmode_z   = -1 !BDM
+  integer :: id_Kd_lowmode_z   = -1
   integer :: id_Kd_user_z      = -1
   integer :: id_Kd_Work        = -1
   integer :: id_Kd_Itidal_Work = -1
   integer :: id_Kd_Niku_Work   = -1
-  integer :: id_Kd_Lowmode_Work= -1 !BDM
+  integer :: id_Kd_Lowmode_Work= -1
 
   integer :: id_Fl_itidal                 = -1
-  integer :: id_Fl_lowmode                = -1 !BDM
+  integer :: id_Fl_lowmode                = -1
   integer :: id_Polzin_decay_scale        = -1
   integer :: id_Polzin_decay_scale_scaled = -1
 
@@ -478,13 +478,13 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
   endif
   if ((CS%id_Kd_lowmode > 0) .or. (CS%id_Kd_lowmode_z > 0) .or. &
       (CS%id_Kd_lowmode_work > 0)) then
-    allocate(dd%Kd_lowmode(isd:ied,jsd:jed,nz+1)) ; dd%Kd_lowmode(:,:,:) = 0.0 !BDM
+    allocate(dd%Kd_lowmode(isd:ied,jsd:jed,nz+1)) ; dd%Kd_lowmode(:,:,:) = 0.0
   endif
   if ( (CS%id_Fl_itidal > 0) ) then
     allocate(dd%Fl_itidal(isd:ied,jsd:jed,nz+1)) ; dd%Fl_itidal(:,:,:) = 0.0
   endif
   if ( (CS%id_Fl_lowmode > 0) ) then
-    allocate(dd%Fl_lowmode(isd:ied,jsd:jed,nz+1)) ; dd%Fl_lowmode(:,:,:) = 0.0 !BDM
+    allocate(dd%Fl_lowmode(isd:ied,jsd:jed,nz+1)) ; dd%Fl_lowmode(:,:,:) = 0.0
   endif
   if ( (CS%id_Polzin_decay_scale > 0) ) then
     allocate(dd%Polzin_decay_scale(isd:ied,jsd:jed))
@@ -519,7 +519,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
   endif
   if (CS%id_Kd_Lowmode_Work > 0) then
     allocate(dd%Kd_Lowmode_Work(isd:ied,jsd:jed,nz))
-    dd%Kd_Lowmode_Work(:,:,:) = 0.0 !BDM
+    dd%Kd_Lowmode_Work(:,:,:) = 0.0
   endif
   if (CS%id_TKE_itidal > 0) then
     allocate(dd%TKE_Itidal_used(isd:ied,jsd:jed)) ; dd%TKE_Itidal_used(:,:) = 0.
@@ -837,14 +837,14 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
     if (CS%id_Fl_itidal > 0) call post_data(CS%id_Fl_itidal, dd%Fl_itidal, CS%diag)
     if (CS%id_Kd_itidal > 0) call post_data(CS%id_Kd_itidal, dd%Kd_itidal, CS%diag)
     if (CS%id_Kd_Niku   > 0) call post_data(CS%id_Kd_Niku,   dd%Kd_Niku,   CS%diag)
-    if (CS%id_Kd_lowmode> 0) call post_data(CS%id_Kd_lowmode, dd%Kd_lowmode, CS%diag) !BDM
+    if (CS%id_Kd_lowmode> 0) call post_data(CS%id_Kd_lowmode, dd%Kd_lowmode, CS%diag)
     if (CS%id_Kd_user   > 0) call post_data(CS%id_Kd_user,   dd%Kd_user,   CS%diag)
     if (CS%id_Kd_Work   > 0) call post_data(CS%id_Kd_Work,   dd%Kd_Work,   CS%diag)
     if (CS%id_Kd_Itidal_Work > 0) &
       call post_data(CS%id_Kd_Itidal_Work, dd%Kd_Itidal_Work, CS%diag)
     if (CS%id_Kd_Niku_Work > 0) call post_data(CS%id_Kd_Niku_Work, dd%Kd_Niku_Work, CS%diag)
     if (CS%id_Kd_Lowmode_Work > 0) &
-      call post_data(CS%id_Kd_Lowmode_Work, dd%Kd_Lowmode_Work, CS%diag) !BDM
+      call post_data(CS%id_Kd_Lowmode_Work, dd%Kd_Lowmode_Work, CS%diag)
     if (CS%id_maxTKE > 0) call post_data(CS%id_maxTKE, dd%maxTKE, CS%diag)
     if (CS%id_TKE_to_Kd > 0) call post_data(CS%id_TKE_to_Kd, dd%TKE_to_Kd, CS%diag)
 
@@ -865,7 +865,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
       z_ptrs(num_z_diags)%p => dd%Kd_Niku
     endif
     
-    if (CS%id_Kd_lowmode_z > 0) then !BDM
+    if (CS%id_Kd_lowmode_z > 0) then
       num_z_diags        = num_z_diags + 1
       z_ids(num_z_diags) = CS%id_Kd_lowmode_z
       z_ptrs(num_z_diags)%p => dd%Kd_lowmode
@@ -912,9 +912,9 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
 
   if (associated(dd%N2_3d)) deallocate(dd%N2_3d)
   if (associated(dd%Kd_itidal)) deallocate(dd%Kd_itidal)
-  if (associated(dd%Kd_lowmode)) deallocate(dd%Kd_lowmode) !BDM
+  if (associated(dd%Kd_lowmode)) deallocate(dd%Kd_lowmode)
   if (associated(dd%Fl_itidal)) deallocate(dd%Fl_itidal)
-  if (associated(dd%Fl_lowmode)) deallocate(dd%Fl_lowmode) !BDM
+  if (associated(dd%Fl_lowmode)) deallocate(dd%Fl_lowmode)
   if (associated(dd%Polzin_decay_scale)) deallocate(dd%Polzin_decay_scale)
   if (associated(dd%Polzin_decay_scale_scaled)) deallocate(dd%Polzin_decay_scale_scaled)
   if (associated(dd%N2_bot)) deallocate(dd%N2_bot)
@@ -923,7 +923,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
   if (associated(dd%Kd_Niku)) deallocate(dd%Kd_Niku)
   if (associated(dd%Kd_Niku_work)) deallocate(dd%Kd_Niku_work)
   if (associated(dd%Kd_Itidal_Work))  deallocate(dd%Kd_Itidal_Work)
-  if (associated(dd%Kd_Lowmode_Work)) deallocate(dd%Kd_Lowmode_Work) !BDM
+  if (associated(dd%Kd_Lowmode_Work)) deallocate(dd%Kd_Lowmode_Work)
   if (associated(dd%TKE_itidal_used)) deallocate(dd%TKE_itidal_used)
   if (associated(dd%maxTKE)) deallocate(dd%maxTKE)
   if (associated(dd%TKE_to_Kd)) deallocate(dd%TKE_to_Kd)
@@ -1901,7 +1901,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
 
   logical :: use_Polzin, use_Simmons
   integer :: i, k, is, ie, nz
-  integer :: a, fr, m !BDM
+  integer :: a, fr, m
   is = G%isc ; ie = G%iec ; nz = G%ke
 
   if (.not.(CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation)) return
@@ -1915,10 +1915,10 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
 
   use_Polzin = ((CS%Int_tide_dissipation .and. (CS%int_tide_profile == POLZIN_09)) .or. &
                 (CS%lee_wave_dissipation .and. (CS%lee_wave_profile == POLZIN_09)) .or. &
-                (CS%Lowmode_itidal_dissipation .and. (CS%int_tide_profile == POLZIN_09))) !BDM
+                (CS%Lowmode_itidal_dissipation .and. (CS%int_tide_profile == POLZIN_09)))
   use_Simmons = ((CS%Int_tide_dissipation .and. (CS%int_tide_profile == STLAURENT_02)) .or. &
                  (CS%lee_wave_dissipation .and. (CS%lee_wave_profile == STLAURENT_02)) .or. &
-                 (CS%Lowmode_itidal_dissipation .and. (CS%int_tide_profile == STLAURENT_02))) !BDM
+                 (CS%Lowmode_itidal_dissipation .and. (CS%int_tide_profile == STLAURENT_02)))
 
 ! Simmons
   if ( use_Simmons ) then
@@ -1938,7 +1938,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
           Inv_int_lee(i) = 1.0 / (1.0 - exp(-Izeta_lee*htot(i)))
         endif
       endif
-      if ( CS%Lowmode_itidal_dissipation) then !BDM
+      if ( CS%Lowmode_itidal_dissipation) then
         if (Izeta*htot(i) > 1.0e-14) then ! L'Hospital's version of Adcroft's reciprocal rule.
           Inv_int_low(i) = 1.0 / (1.0 - exp(-Izeta*htot(i)))
         endif
@@ -2048,7 +2048,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
     ! Vertical energy flux at bottom
     TKE_itidal_rem(i)  = Inv_int(i)     * TKE_itidal_bot(i)
     TKE_Niku_rem(i)    = Inv_int_lee(i) * TKE_Niku_bot(i)
-    TKE_lowmode_rem(i) = Inv_int_low(i) * TKE_lowmode_bot(i) !BDM
+    TKE_lowmode_rem(i) = Inv_int_low(i) * TKE_lowmode_bot(i)
 
     if (associated(dd%Fl_itidal)) dd%Fl_itidal(i,j,nz) = TKE_itidal_rem(i) !why is this here? BDM
   enddo
@@ -2063,29 +2063,29 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
       ! Fraction of bottom flux predicted to reach top of this layer
       TKE_frac_top(i)         = Inv_int(i)     * exp(-Izeta * z_from_bot(i))
       TKE_frac_top_lee(i)     = Inv_int_lee(i) * exp(-Izeta_lee * z_from_bot(i))
-      TKE_frac_top_lowmode(i) = Inv_int_low(i) * exp(-Izeta * z_from_bot(i)) !BDM
+      TKE_frac_top_lowmode(i) = Inv_int_low(i) * exp(-Izeta * z_from_bot(i))
 
       ! Actual influx at bottom of layer minus predicted outflux at top of layer to give 
       ! predicted power expended
       TKE_itide_lay   = TKE_itidal_rem(i)  - TKE_itidal_bot(i) * TKE_frac_top(i)
       TKE_Niku_lay    = TKE_Niku_rem(i)    - TKE_Niku_bot(i)   * TKE_frac_top_lee(i)
-      TKE_lowmode_lay = TKE_lowmode_rem(i) - TKE_lowmode_bot(i)* TKE_frac_top_lowmode(i) !BDM
+      TKE_lowmode_lay = TKE_lowmode_rem(i) - TKE_lowmode_bot(i)* TKE_frac_top_lowmode(i)
 
       ! Actual power expended may be less than predicted if stratification is weak; adjust
-      if (TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay > max_TKE(i,k)) then !BDM
-         frac_used = max_TKE(i,k) / (TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay) !BDM
+      if (TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay > max_TKE(i,k)) then
+         frac_used = max_TKE(i,k) / (TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay)
          TKE_itide_lay   = frac_used * TKE_itide_lay
          TKE_Niku_lay    = frac_used * TKE_Niku_lay
-         TKE_lowmode_lay = frac_used * TKE_lowmode_lay !BDM
+         TKE_lowmode_lay = frac_used * TKE_lowmode_lay
       endif
 
       ! Calculate vertical flux available to bottom of layer above
       TKE_itidal_rem(i)  = TKE_itidal_rem(i)  - TKE_itide_lay
       TKE_Niku_rem(i)    = TKE_Niku_rem(i)    - TKE_Niku_lay
-      TKE_lowmode_rem(i) = TKE_lowmode_rem(i) - TKE_lowmode_lay !BDM
+      TKE_lowmode_rem(i) = TKE_lowmode_rem(i) - TKE_lowmode_lay
       
       ! Convert power to diffusivity
-      Kd_add  = TKE_to_Kd(i,k) * (TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay) !BDM
+      Kd_add  = TKE_to_Kd(i,k) * (TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay)
 
       if (CS%Kd_max >= 0.0) Kd_add = min(Kd_add, CS%Kd_max)
       Kd(i,j,k) = Kd(i,j,k) + Kd_add
@@ -2120,7 +2120,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
       if (associated(dd%Kd_Niku_work)) &
         dd%Kd_Niku_work(i,j,k) = G%Rho0 * TKE_Niku_lay
         
-      if (associated(dd%Kd_lowmode)) then !-------------BDM---------------
+      if (associated(dd%Kd_lowmode)) then
         ! If at layers, dd%Kd_lowmode is just TKE_to_Kd(i,k) * TKE_lowmode_lay
         ! The following sets the interface diagnostics.
         Kd_add = TKE_to_Kd(i,k) * TKE_lowmode_lay
@@ -2150,29 +2150,29 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
       z0_psl = z0_polzin_scaled(i)*CS%Decay_scale_factor_lee
       TKE_frac_top_lee(i) = (Inv_int_lee(i) * z0_psl) / (z0_psl + z_from_bot_WKB(i))
       TKE_frac_top_lowmode(i) = ( Inv_int_low(i) * z0_polzin_scaled(i) ) / &
-                            ( z0_polzin_scaled(i) + z_from_bot_WKB(i) ) !BDM
+                            ( z0_polzin_scaled(i) + z_from_bot_WKB(i) )
 
       ! Actual influx at bottom of layer minus predicted outflux at top of layer to give 
       ! predicted power expended
       TKE_itide_lay   = TKE_itidal_rem(i)  - TKE_itidal_bot(i) *TKE_frac_top(i)
       TKE_Niku_lay    = TKE_Niku_rem(i)    - TKE_Niku_bot(i)   * TKE_frac_top_lee(i)
-      TKE_lowmode_lay = TKE_lowmode_rem(i) - TKE_lowmode_bot(i)*TKE_frac_top_lowmode(i) !BDM
+      TKE_lowmode_lay = TKE_lowmode_rem(i) - TKE_lowmode_bot(i)*TKE_frac_top_lowmode(i)
       
       ! Actual power expended may be less than predicted if stratification is weak; adjust
       if (TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay > max_TKE(i,k)) then
-        frac_used = max_TKE(i,k) / (TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay) !BDM
+        frac_used = max_TKE(i,k) / (TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay)
         TKE_itide_lay   = frac_used * TKE_itide_lay
         TKE_Niku_lay    = frac_used * TKE_Niku_lay
-        TKE_lowmode_lay = frac_used * TKE_lowmode_lay !BDM
+        TKE_lowmode_lay = frac_used * TKE_lowmode_lay
       endif
 
       ! Calculate vertical flux available to bottom of layer above
       TKE_itidal_rem(i)  = TKE_itidal_rem(i)  - TKE_itide_lay
       TKE_Niku_rem(i)    = TKE_Niku_rem(i)    - TKE_Niku_lay
-      TKE_lowmode_rem(i) = TKE_lowmode_rem(i) - TKE_lowmode_lay !BDM
+      TKE_lowmode_rem(i) = TKE_lowmode_rem(i) - TKE_lowmode_lay
       
       ! Convert power to diffusivity
-      Kd_add  = TKE_to_Kd(i,k) * (TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay) !BDM
+      Kd_add  = TKE_to_Kd(i,k) * (TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay)
 
       if (CS%Kd_max >= 0.0) Kd_add = min(Kd_add, CS%Kd_max)
       Kd(i,j,k) = Kd(i,j,k) + Kd_add
@@ -2206,7 +2206,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
    !  if (associated(dd%Kd_Niku)) dd%Kd_Niku(i,j,K) = TKE_to_Kd(i,k) * TKE_Niku_lay
       if (associated(dd%Kd_Niku_work)) dd%Kd_Niku_work(i,j,k) = G%Rho0 * TKE_Niku_lay
       
-      if (associated(dd%Kd_lowmode)) then !-------------BDM---------------
+      if (associated(dd%Kd_lowmode)) then
         ! If at layers, dd%Kd_lowmode is just TKE_to_Kd(i,k) * TKE_lowmode_lay
         ! The following sets the interface diagnostics.
         Kd_add = TKE_to_Kd(i,k) * TKE_lowmode_lay
@@ -2465,7 +2465,7 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp, in
   type(diag_ctrl), target,  intent(inout) :: diag
   type(set_diffusivity_CS), pointer       :: CS
   type(diag_to_Z_CS),       pointer       :: diag_to_Z_CSp
-  type(int_tide_CS),        pointer       :: int_tide_CSp !BDM
+  type(int_tide_CS),        pointer       :: int_tide_CSp
 
 ! Arguments:
 !  (in)      Time          - current model time
@@ -2497,7 +2497,7 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp, in
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
   CS%diag => diag
-  if (associated(int_tide_CSp))  CS%int_tide_CSp  => int_tide_CSp !BDM
+  if (associated(int_tide_CSp))  CS%int_tide_CSp  => int_tide_CSp
   if (associated(diag_to_Z_CSp)) CS%diag_to_Z_CSp => diag_to_Z_CSp
 
   ! These default values always need to be set.
@@ -2782,7 +2782,7 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp, in
                  "have been remotely generated; as with itidal drag on the \n"//&
                  "barotropic tide, use an internal tidal dissipation scheme to \n"//&
                  "drive diapycnal mixing, along the lines of St. Laurent \n"//&
-                 "et al. (2002) and Simmons et al. (2004).", default=.false.) !BDM
+                 "et al. (2002) and Simmons et al. (2004).", default=.false.)
 
   if ((CS%Int_tide_dissipation .and. (CS%int_tide_profile == POLZIN_09)) .or. &
       (CS%lee_wave_dissipation .and. (CS%lee_wave_profile == POLZIN_09))) then
