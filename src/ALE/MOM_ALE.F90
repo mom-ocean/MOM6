@@ -18,7 +18,7 @@ use MOM_io,               only : file_exists, field_exists, MOM_read_data
 use MOM_io,               only : vardesc, var_desc, fieldtype, SINGLE_FILE
 use MOM_io,               only : create_file, write_field, close_file, slasher
 use MOM_regridding,       only : initialize_regridding, regridding_main , end_regridding
-use MOM_regridding,       only : uniformResolution
+use MOM_regridding,       only : uniformResolution, set_old_grid_weight
 use MOM_regridding,       only : inflate_vanished_layers_old, setCoordinateResolution
 use MOM_regridding,       only : set_target_densities_from_G, set_target_densities
 use MOM_regridding,       only : regriddingCoordinateModeDoc, DEFAULT_COORDINATE_MODE
@@ -72,13 +72,15 @@ type, public :: ALE_CS
                                                  !! for FV pressure gradient calculation.
                                                  !! By default, it is =1 (PLM)
 
+  real :: regrid_time_scale !< The time-scale used in blending between the current (old) grid
+                            !! and the target (new) grid. (s)
+
   type(regridding_CS) :: regridCS !< Regridding parameters and work arrays
   type(remapping_CS)  :: remapCS  !< Remapping parameters and work arrays
 
   integer :: nk              !< Used only for queries, not directly by this module
   integer :: degree_linear=1 !< Degree of linear piecewise polynomial
   integer :: degree_parab=2  !< Degree of parabolic piecewise polynomial
-
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NK_INTERFACE_) :: dzRegrid  !< Work space for communicating
                                                                        !! between regridding and remapping
@@ -114,6 +116,7 @@ public ALE_getCoordinateUnits
 public ALE_writeCoordinateFile
 public ALE_updateVerticalGridType
 public ALE_initThicknessToCoord
+public ALE_update_regrid_weights
 public check_remapping_grid
 public remap_init_conds
 public register_diags_ALE 
@@ -138,9 +141,9 @@ contains
 !! We read the MOM_input file to register the values of different
 !! regridding/remapping parameters.
 subroutine initialize_ALE( param_file, G, CS)
-  type(param_file_type),   intent(in) :: param_file !< parameter file 
-  type(ocean_grid_type),   intent(in) :: G          !< ocean grid structure 
-  type(ALE_CS), pointer               :: CS         !< module control structure 
+  type(param_file_type),   intent(in) :: param_file !< Parameter file
+  type(ocean_grid_type),   intent(in) :: G          !< Ocean grid structure
+  type(ALE_CS),            pointer    :: CS         !< Module control structure
 
   ! Local variables
   real, dimension(:), allocatable :: dz
@@ -206,6 +209,13 @@ subroutine initialize_ALE( param_file, G, CS)
                  "initialization so that the state is ALE consistent. This is a\n"//&
                  "legacy step and should not be needed if the initialization is\n"//&
                  "consistent with the coordinate mode.", default=.true.)
+
+  call get_param(param_file, mod, "REGRID_TIME_SCALE", CS%regrid_time_scale, &
+                 "The time-scale used in blending between the current (old) grid\n"//&
+                 "and the target (new) grid. A short time-scale favors the target\n"//&
+                 "grid (0. or anything less than DT_THERM) has no memory of the old\n"//&
+                 "grid. A very long time-scale makes the model more Lagrangian.", &
+                 units="s", default=0.)
 
   ! Keep a record of values for subsequent queries
   CS%nk = G%ke
@@ -333,13 +343,17 @@ subroutine ALE_main( G, h, u, v, tv, Reg, CS, dt)
   real, dimension(NIMEM_,NJMEMB_, NKMEM_), intent(inout) :: v   !< Meridional velocity field (m/s)
   type(thermo_var_ptrs),                   intent(inout) :: tv  !< Thermodynamic variable structure
   type(tracer_registry_type),              pointer       :: Reg !< Tracer registry structure
-  type(ALE_CS),                            intent(inout) :: CS  !< Regridding parameters and options
-  real, optional,                          intent(in)    :: dt  !< time step needed for tendency diagnostics  
+  type(ALE_CS),                            pointer       :: CS  !< Regridding parameters and options
+  real,                          optional, intent(in)    :: dt  !< Time step between calls to ALE_main()
 
   ! Local variables
   integer :: nk, i, j, k, isd, ied, jsd, jed
 
   if (CS%show_call_tree) call callTree_enter("ALE_main(), MOM_ALE.F90")
+
+  if (present(dt)) then
+    call ALE_update_regrid_weights( dt, CS )
+  endif
 
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
@@ -1086,6 +1100,23 @@ logical function remap_init_conds( CS )
   if (associated(CS)) remap_init_conds = CS%remap_after_initialization
 end function remap_init_conds
 
+!> Updates the weights for time filtering the new grid generated in regridding
+subroutine ALE_update_regrid_weights( dt, CS )
+  real,         intent(in) :: dt !< Time-step used between ALE calls
+  type(ALE_CS), pointer    :: CS !< ALE control structure
+  ! Local variables
+  real :: w
+
+  if (associated(CS)) then
+    if (CS%regrid_time_scale <= dt) then
+      w = 0.
+    else
+      w = ( CS%regrid_time_scale - dt ) / CS%regrid_time_scale
+    endif
+    call set_old_grid_weight( w, CS%regridCS )
+  endif
+
+end subroutine ALE_update_regrid_weights
 
 !> Update the vertical grid type with ALE information.
 ! This subroutine sets information in the verticalGrid_type to be
