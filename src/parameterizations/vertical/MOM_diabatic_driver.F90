@@ -37,7 +37,7 @@ use MOM_grid,                only : ocean_grid_type
 use MOM_io,                  only : vardesc, var_desc
 use MOM_int_tide_input,      only : set_int_tide_input, int_tide_input_init
 use MOM_int_tide_input,      only : int_tide_input_end, int_tide_input_CS, int_tide_input_type
-use MOM_internal_tides,      only : propagate_int_tide, register_int_tide_restarts
+use MOM_internal_tides,      only : propagate_int_tide
 use MOM_internal_tides,      only : internal_tides_init, internal_tides_end, int_tide_CS
 use MOM_kappa_shear,         only : kappa_shear_is_used
 use MOM_KPP,                 only : KPP_CS, KPP_init, KPP_calculate, KPP_end
@@ -1418,7 +1418,7 @@ end subroutine adiabatic_driver_init
 subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
                                 ADp, CDp, CS, tracer_flow_CSp, sponge_CSp, diag_to_Z_CSp)
   type(time_type),         intent(in)    :: Time             !< model time 
-  type(ocean_grid_type),   intent(in)    :: G                !< model grid structure 
+  type(ocean_grid_type),   intent(inout) :: G                !< model grid structure 
   type(param_file_type),   intent(in)    :: param_file       !< file to parse for parameter values 
   logical,                 intent(in)    :: useALEalgorithm  !< logical for whether to use ALE remapping
   type(diag_ctrl), target, intent(inout) :: diag             !< structure to regulate diagnostic output
@@ -1634,18 +1634,16 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   if (CS%id_dvdt_dia > 0) call safe_alloc_ptr(ADp%dv_dt_dia,isd,ied,JsdB,JedB,nz)
   if (CS%id_wd > 0)       call safe_alloc_ptr(CDp%diapyc_vel,isd,ied,jsd,jed,nz+1)
 
-  call set_diffusivity_init(Time, G, param_file, diag, CS%set_diff_CSp, diag_to_Z_CSp, CS%int_tide_CSp)
+  !call set_diffusivity_init(Time, G, param_file, diag, CS%set_diff_CSp, diag_to_Z_CSp, CS%int_tide_CSp)
   CS%id_Kd_interface = register_diag_field('ocean_model', 'Kd_interface', diag%axesTi, Time, &
       'Total diapycnal diffusivity at interfaces', 'meter2 second-1')
   CS%id_Kd_ePBL = register_diag_field('ocean_model', 'Kd_ePBL', diag%axesTi, Time, &
       'ePBL diapycnal diffusivity at interfaces', 'meter2 second-1')
-
   CS%id_Kd_heat = register_diag_field('ocean_model', 'Kd_heat', diag%axesTi, Time, &
       'Total diapycnal diffusivity for heat at interfaces', 'meter2 second-1',     &
        cmor_field_name='difvho', cmor_units='m2 s-1',                              &
        cmor_standard_name='ocean_vertical_heat_diffusivity',                       &
        cmor_long_name='Net diapycnal diffusivity for ocean heat')
-
   CS%id_Kd_salt = register_diag_field('ocean_model', 'Kd_salt', diag%axesTi, Time, &
       'Total diapycnal diffusivity for salt at interfaces', 'meter2 second-1',     &
        cmor_field_name='difvso', cmor_units='m2 s-1',                              &
@@ -1758,6 +1756,9 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
                              CS%int_tide_input)
     call internal_tides_init(Time, G, param_file, diag, CS%int_tide_CSp)
   endif
+  
+  ! initialize module for setting diffusivities
+  call set_diffusivity_init(Time, G, param_file, diag, CS%set_diff_CSp, diag_to_Z_CSp, CS%int_tide_CSp)
 
 
   ! set up the clocks for this module 

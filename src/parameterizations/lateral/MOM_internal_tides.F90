@@ -72,7 +72,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public propagate_int_tide, register_int_tide_restarts
+public propagate_int_tide !, register_int_tide_restarts
 public internal_tides_init, internal_tides_end
 public get_itidal_loss
 
@@ -1980,62 +1980,60 @@ subroutine PPM_limit_pos(h_in, h_L, h_R, h_min, iis, iie, jis, jie)
   enddo ; enddo
 end subroutine PPM_limit_pos
 
+! subroutine register_int_tide_restarts(G, param_file, CS, restart_CS)
+!   type(ocean_grid_type), intent(inout) :: G
+!   type(param_file_type), intent(in) :: param_file
+!   type(int_tide_CS),     pointer :: CS
+!   type(MOM_restart_CS),  pointer :: restart_CS
+  
+!   ! This subroutine is not currently in use!!
+  
+!   ! Arguments: G - The ocean's grid structure.
+!   !  (in)      param_file - A structure indicating the open file to parse for
+!   !                         model parameter values.
+!   !  (in/out)  CS - A pointer that is set to point to the control structure
+!   !                 for this module.
+!   !  (in)      restart_CS - A pointer to the restart control structure.
+!   ! This subroutine is used to allocate and register any fields in this module
+!   ! that should be written to or read from the restart file.
+!   logical :: use_int_tides
+!   type(vardesc) :: vd
+!   integer :: num_freq, num_angle , num_mode, period_1
+!   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, a
+!   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+!   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-subroutine register_int_tide_restarts(G, param_file, CS, restart_CS)
-  type(ocean_grid_type), intent(inout) :: G
-  type(param_file_type), intent(in) :: param_file
-  type(int_tide_CS),     pointer :: CS
-  type(MOM_restart_CS),  pointer :: restart_CS
-  
-  ! This subroutine is not currently in use!!
-  
-  ! Arguments: G - The ocean's grid structure.
-  !  (in)      param_file - A structure indicating the open file to parse for
-  !                         model parameter values.
-  !  (in/out)  CS - A pointer that is set to point to the control structure
-  !                 for this module.
-  !  (in)      restart_CS - A pointer to the restart control structure.
-  ! This subroutine is used to allocate and register any fields in this module
-  ! that should be written to or read from the restart file.
-  logical :: use_int_tides
-  type(vardesc) :: vd
-  integer :: num_freq, num_angle , num_mode, period_1
-  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, a
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+!   if (associated(CS)) then
+!     call MOM_error(WARNING, "register_int_tide_restarts called "//&
+!                              "with an associated control structure.")
+!     return
+!   endif
 
-  if (associated(CS)) then
-    call MOM_error(WARNING, "register_int_tide_restarts called "//&
-                             "with an associated control structure.")
-    return
-  endif
+!   use_int_tides = .false.
+!   call read_param(param_file, "INTERNAL_TIDES", use_int_tides)
+!   if (.not.use_int_tides) return
+  
+!   allocate(CS)
+  
+!   num_angle = 24
+!   call read_param(param_file, "INTERNAL_TIDE_ANGLES", num_angle)
+!   allocate(CS%En_restart(isd:ied, jsd:jed, num_angle))
+!   CS%En_restart(:,:,:) = 0.0
+  
+!   vd = vardesc("En_restart", &
+!     "The internal wave energy density as a function of (i,j,angle,frequency,mode)", &
+!     'h','1','1',"J m-2")
+!   call register_restart_field(CS%En_restart, vd, .false., restart_CS)  
+  
+!   !--------------------check----------------------------------------------
+!   if (is_root_pe()) then
+!     print *,'register_int_tide_restarts: CS and CS%En_restart allocated!'
+!     print *,'register_int_tide_restarts: CS%En_restart registered!'
+!     print *,'register_int_tide_restarts: done!'
+!   endif
+!   !-----------------------------------------------------------------------
 
-  use_int_tides = .false.
-  call read_param(param_file, "INTERNAL_TIDES", use_int_tides)
-  if (.not.use_int_tides) return
-  
-  allocate(CS)
-  
-  num_angle = 24
-  call read_param(param_file, "INTERNAL_TIDE_ANGLES", num_angle)
-  allocate(CS%En_restart(isd:ied, jsd:jed, num_angle))
-  CS%En_restart(:,:,:) = 0.0
-  
-  vd = vardesc("En_restart", &
-    "The internal wave energy density as a function of (i,j,angle,frequency,mode)", &
-    'h','1','1',"J m-2")
-  call register_restart_field(CS%En_restart, vd, .false., restart_CS)  
-  
-  !--------------------check----------------------------------------------
-  if (is_root_pe()) then
-    print *,'register_int_tide_restarts: CS and CS%En_restart allocated!'
-    print *,'register_int_tide_restarts: CS%En_restart registered!'
-    print *,'register_int_tide_restarts: done!'
-  endif
-  !-----------------------------------------------------------------------
-
-end subroutine register_int_tide_restarts
-
+! end subroutine register_int_tide_restarts
 
 subroutine internal_tides_init(Time, G, param_file, diag, CS)
   !type(time_type),           intent(in) :: Time

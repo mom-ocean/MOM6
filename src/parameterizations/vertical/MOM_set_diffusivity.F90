@@ -3028,9 +3028,9 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp, in
        CS%id_Kd_Niku_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
     endif
     if (CS%Lowmode_itidal_dissipation) then
-      vd = vardesc("Kd_lowmodes", & 
+      vd = var_desc("Kd_lowmode","meter2 second-1", & 
                 "Internal Tide Driven Diffusivity (from low modes), interpolated to z",&
-                'h','z','s',"meter2 second-1")
+                z_grid='z')
       CS%id_Kd_lowmode_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
     endif    
     if (CS%user_change_diff) &

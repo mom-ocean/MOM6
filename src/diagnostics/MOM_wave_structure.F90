@@ -501,24 +501,27 @@ subroutine wave_structure(h, tv, G, cn, ModeNum, freq, CS, En, full_halos)
               int_N2w2  = int_N2w2  + 0.5*(w_strct2(K)*N2(K)+w_strct2(K+1)*N2(K+1))*dz(k)
             enddo
             
-            KE_term = 0.25*G%Rho0*( (1+f2/freq**2)/Kmag2*int_dwdz2 + int_w2 )
-            PE_term = 0.25*G%Rho0*( int_N2w2/freq**2 )
-            
             ! Back-calculate amplitude from energy equation
-            if(En(i,j)>=0.0)then
-              W0 = sqrt( En(i,j)/(KE_term + PE_term) )
+            if (Kmag2 > 0.0) then
+              KE_term = 0.25*G%Rho0*( (1+f2/freq**2)/Kmag2*int_dwdz2 + int_w2 )
+              PE_term = 0.25*G%Rho0*( int_N2w2/freq**2 )            
+              if (En(i,j) >= 0.0) then
+                W0 = sqrt( En(i,j)/(KE_term + PE_term) )
+              else
+                call MOM_error(WARNING, "wave_structure: En < 0.0; setting to W0 to 0.0")
+                print *, "En(i,j)=", En(i,j), " at ig=", ig, ", jg=", jg
+                W0 = 0.0
+              endif
+              ! Calculate actual vertical velocity profile and derivative
+              W_profile    = W0*w_strct
+              dWdz_profile = W0*u_strct
+              ! Calculate average magnitude of actual horizontal velocity over a period
+              Uavg_profile = abs(dWdz_profile) * sqrt((1+f2/freq**2)/(2.0*Kmag2))
             else
-              call MOM_error(WARNING, "wave_structure: En < 0.0; setting to W0 to 0.0")
-              print *, "En(i,j)=", En(i,j), " at ig=", ig, ", jg=", jg
-              W0 = 0.0
+              W_profile    = 0.0
+              dWdz_profile = 0.0
+              Uavg_profile = 0.0
             endif
-            
-            ! Calculate actual vertical velocity profile and derivative
-            W_profile    = W0*w_strct
-            dWdz_profile = W0*u_strct
-            
-            ! Calculate average magnitude of actual horizontal velocity over a period
-            Uavg_profile = abs(dWdz_profile) * sqrt((1+f2/freq**2)/(2.0*Kmag2))
              
             ! Store values in control structure
             CS%w_strct(i,j,1:nzm)     = w_strct
