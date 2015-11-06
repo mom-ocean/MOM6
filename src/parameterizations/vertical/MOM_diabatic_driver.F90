@@ -14,7 +14,7 @@ use MOM_diabatic_aux,        only : make_frazil, adjust_salt, insert_brine, diff
 use MOM_diabatic_aux,        only : find_uv_at_h, diagnoseMLDbyDensityDifference, applyBoundaryFluxesInOut
 use MOM_diag_mediator,       only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator,       only : diag_ctrl, time_type, diag_update_target_grids
-use MOM_diag_mediator,       only : diag_ctrl, query_averaging_enabled !BDM: see src/framework/MOM_diag_mediator.F90
+use MOM_diag_mediator,       only : diag_ctrl, query_averaging_enabled
 use MOM_diag_to_Z,           only : diag_to_Z_CS, register_Zint_diag, calc_Zint_diags
 use MOM_diffConvection,      only : diffConvection_CS, diffConvection_init
 use MOM_diffConvection,      only : diffConvection_calculate, diffConvection_end
@@ -48,13 +48,12 @@ use MOM_set_diffusivity,     only : set_diffusivity_init, set_diffusivity_end
 use MOM_set_diffusivity,     only : set_diffusivity_CS
 use MOM_shortwave_abs,       only : absorbRemainingSW, optics_type
 use MOM_sponge,              only : apply_sponge, sponge_CS
-use MOM_thickness_diffuse,   only : vert_fill_TS ! BDM
-use MOM_time_manager,        only : operator(<=), time_type !BDM: see src/framework/MOM_time_manager.F90
+use MOM_time_manager,        only : operator(<=), time_type ! for testing itides (BDM)
 use MOM_tracer_flow_control, only : call_tracer_column_fns, tracer_flow_control_CS
 use MOM_variables,           only : thermo_var_ptrs, vertvisc_type, accel_diag_ptrs
 use MOM_variables,           only : cont_diag_ptrs, MOM_thermovar_chksum, p3d
 use MOM_regularize_layers,   only : regularize_layers, regularize_layers_init, regularize_layers_CS
-use time_manager_mod,        only : increment_time !BDM: see shared/time_manager/time_manager.F90
+use time_manager_mod,        only : increment_time ! for testing itides (BDM)
 use MOM_wave_speed,          only : wave_speed
 
 implicit none ; private
@@ -87,11 +86,11 @@ type, public :: diabatic_CS ; private
   real    :: int_tide_source_y       !< Y Location of generation site 
                                      !! for internal tide for testing (BDM)
   integer :: tlen_days               !< Time interval from start for adding wave source
-                                     !! for testing (BDM)
+                                     !! for testing internal tides (BDM)
   logical :: uniform_cg	             !< If true, set cg = cg_test everywhere 
-                                     !! for test case (BDM)
+                                     !! for testing internal tides (BDM)
   real    :: cg_test                 !< Uniform group velocity of internal tide 
-                                     !! for test case (BDM)
+                                     !! for testing internal tides (BDM)
   type(time_type) :: time_max_source !< For use in testing internal tides (BDM)
   type(time_type) :: time_end        !< For use in testing internal tides (BDM)
   logical :: useALEalgorithm         !< If true, use the ALE algorithm rather than layered
@@ -226,7 +225,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: temp_diag     ! diagnostic array for temp
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: saln_diag     ! diagnostic array for salinity
   real, dimension(SZI_(G),SZJ_(G))      :: tendency_intz ! depth integrated content tendency for diagn 
-  real, dimension(SZI_(G),SZJ_(G))      :: TKE_itidal_input_test ! override of itide energy input (BDM)
+  real, dimension(SZI_(G),SZJ_(G))      :: TKE_itidal_input_test 
+                                                         ! override of energy input for testing (BDM)
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target :: &
              ! These are targets so that the space can be shared with eaml & ebml.
@@ -293,13 +293,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   logical :: showCallTree ! If true, show the call tree
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
   
-  integer :: ig, jg      ! (BDM)
-  logical :: avg_enabled ! (BDM)
-  !real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: T_f, S_f      
-  !                       ! The temperature and salinity in C and PSU with the values in
-  !                       ! the massless layers filled vertically by diffusion. (BDM)
-  !real, dimension(SZI_(G),SZJ_(G)) :: N2_bot        
-  !                       ! The bottom squared buoyancy frequency, in s-2. (BDM)
+  integer :: ig, jg      ! global indices for testing testing itide point source (BDM)
+  logical :: avg_enabled ! for testing internal tides (BDM)
 
   is   = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
   Isq  = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -448,8 +443,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 
   if (CS%use_int_tides) then
     !   This block provides an interface for the unresolved low-mode internal
-    ! tide module. It will eventually be used to provide an energy input to
-    ! set_diffusivity.
+    ! tide module (BDM).
     
     ! PROVIDE ENERGY DISTRIBUTION (calculate time-varying energy source)
     call set_int_tide_input(u, v, h, tv, fluxes, CS%int_tide_input, dt, G, &
@@ -457,31 +451,32 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     ! CALCULATE MODAL VELOCITY
     cg1(:,:) = 0.0
     if (CS%uniform_cg) then
-       ! SET TO CONSTANT VALUE TO TEST PROPAGATE CODE (BDM)
+       ! SET TO CONSTANT VALUE TO TEST PROPAGATE CODE
        cg1(:,:) = CS%cg_test
     else
-       ! CALCULATE cg1 OR OVERRIDE WITH HARD-CODED DISTRIBUTION (BDM)
+       ! CALCULATE cg1 OR OVERRIDE WITH HARD-CODED DISTRIBUTION
        call wave_speed(h, tv, G, cg1, full_halos=.true.)
+       ! uncomment below for hard-coded cg1 that changes linearly with latitude
        !do j=G%jsd,G%jed        
        !  cg1(:,j) = ((7.-1.)/14000000.)*G%geoLatBu(:,j) + (1.-((7.-1.)/14000000.)*-7000000.)
        !enddo
     endif
 
     if (CS%int_tide_source_test) then
-      ! BUILD 2D ARRAY WITH POINT SOURCE FOR TESTING (BDM)
+      ! BUILD 2D ARRAY WITH POINT SOURCE FOR TESTING
       TKE_itidal_input_test(:,:) = 0.0
       avg_enabled = query_averaging_enabled(CS%diag,time_end=CS%time_end)
       if (CS%time_end <= CS%time_max_source) then
         do j=G%jsc,G%jec; do i=G%isc,G%iec
          ig = G%isd_global + i - 1.0
          jg = G%jsd_global + j - 1.0
-         !INPUT ARBITRARY ENERGY POINT SOURCE (BDM)
+         !INPUT ARBITRARY ENERGY POINT SOURCE
          if (ig .eq. CS%int_tide_source_x .and. jg .eq. CS%int_tide_source_y) then
              TKE_itidal_input_test(i,j) = 1.0
         endif
         enddo; enddo
       endif
-      ! CALL ROUTINE USING PRESCRIBED KE FOR TESTING (BDM)
+      ! CALL ROUTINE USING PRESCRIBED KE FOR TESTING
       call propagate_int_tide(h, tv, cg1, TKE_itidal_input_test, &
                             CS%int_tide_input%tideamp, CS%int_tide_input%Nb, dt, G, CS%int_tide_CSp)
     else    
@@ -1328,7 +1323,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   if (CS%id_Tadv > 0) call post_data(CS%id_Tadv, Tadv_flx, CS%diag)
   if (CS%id_Sdif > 0) call post_data(CS%id_Sdif, Sdif_flx, CS%diag)
   if (CS%id_Sadv > 0) call post_data(CS%id_Sadv, Sadv_flx, CS%diag)
-  if (CS%id_cg1  > 0) call post_data(CS%id_cg1,  cg1,      CS%diag) !(BDM)
+  if (CS%id_cg1  > 0) call post_data(CS%id_cg1,  cg1,      CS%diag)
   
   num_z_diags = 0
   if (CS%id_Kd_z > 0) then
@@ -1574,7 +1569,7 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   CS%id_wd = register_diag_field('ocean_model','wd',diag%axesTi,Time, &
       'Diapycnal Velocity', 'meter second-1')
   CS%id_cg1 = register_diag_field('ocean_model','cn1', diag%axesT1, &
-                 Time, 'First baroclinic mode (eigen) speed', 'm s-1') ! (BDM)
+                 Time, 'First baroclinic mode (eigen) speed', 'm s-1')
 
   CS%id_Tdif = register_diag_field('ocean_model',"Tflx_dia_diff",diag%axesTi, &
       Time, "Diffusive diapycnal temperature flux across interfaces", &
@@ -1828,15 +1823,6 @@ subroutine diabatic_driver_end(CS)
   if (CS%use_energetic_PBL) &
     call energetic_PBL_end(CS%energetic_PBL_CSp)
     
-  !if (CS%use_int_tides) &
-  !  call internal_tides_end(CS%int_tide_CSp) !BDM  
-  !  
-  !!--------------------check----------------------------------------------
-  !if (is_root_pe()) then
-  !  print *,'diabatic_driver_end: internal_tides_end called!' !BDM
-  !endif
-  !!-----------------------------------------------------------------------
-
   if (associated(CS%optics)) then
     call opacity_end(CS%opacity_CSp, CS%optics)
     deallocate(CS%optics)
