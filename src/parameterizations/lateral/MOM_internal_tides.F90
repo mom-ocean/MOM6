@@ -391,7 +391,7 @@ subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, 
       do j=js,je ; do i=is,ie
         id_g = G%isd_global + i - 1.0
         jd_g = G%jsd_global + j - 1.0
-        if(isnan(sum(CS%En(i,j,:,fr,m))))then
+        if(test_isnan(sum(CS%En(i,j,:,fr,m))))then
           print *, 'Prior to loss: En is NAN at ig=', id_g, ', jg=', jd_g
         endif
       enddo ; enddo
@@ -399,12 +399,12 @@ subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, 
     ! Calculate loss rate and apply loss over the time step
     call itidal_lowmode_loss(G, CS, Nb, Ub, CS%En, CS%TKE_itidal_loss_fixed, &
                              CS%TKE_itidal_loss, dt, full_halos=.false.)    
-    ! Check for NANs - for debugging, delete later                         
+    ! Check for NANs - for debugging, delete later
     do m=1,CS%NMode ; do fr=1,CS%Nfreq
       do j=js,je ; do i=is,ie
         id_g = G%isd_global + i - 1.0
         jd_g = G%jsd_global + j - 1.0
-        if(isnan(sum(CS%En(i,j,:,fr,m))))then
+        if(test_isnan(sum(CS%En(i,j,:,fr,m))))then
           print *, 'After loss: En is NAN at ig=', id_g, ', jg=', jd_g
           stop
         endif
@@ -2289,7 +2289,7 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
                  domain=G%domain%mpp_domain, timelevel=1)
   ! replace NANs with null value
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    if(isnan(CS%refl_angle(i,j))) CS%refl_angle(i,j) = CS%nullangle
+    if(test_isnan(CS%refl_angle(i,j))) CS%refl_angle(i,j) = CS%nullangle
   enddo ; enddo
   call pass_var(CS%refl_angle,G%domain)
   
@@ -2493,6 +2493,12 @@ subroutine internal_tides_end(CS)
   endif
   CS => NULL()  
 end subroutine internal_tides_end
+
+logical function test_isnan(var)
+  real, intent(in) :: var  
+  test_isnan = .false.
+  if(var /= var) test_isnan = .true.
+end function test_isnan
 
 
 end module MOM_internal_tides
