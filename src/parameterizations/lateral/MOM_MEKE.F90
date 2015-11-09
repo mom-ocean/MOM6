@@ -423,7 +423,6 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS, hu, hv)
             MEKE_uflux(I,j) = MEKE_uflux(I,j) + baroHu(I,j)*MEKE%MEKE(i+1,j)*advFac
           endif
         enddo ; enddo
-      endif
 !$OMP do
         do J=js-1,je ; do i=is,ie
           if (baroHv(i,J)>0.) then
@@ -432,6 +431,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS, hu, hv)
             MEKE_vflux(i,J) = MEKE_vflux(i,J) + baroHv(i,J)*MEKE%MEKE(i,j+1)*advFac
           endif
         enddo ; enddo
+      endif
 !$OMP do
       do j=js,je ; do i=is,ie
         MEKE%MEKE(i,j) = MEKE%MEKE(i,j) + (sdt*(G%IareaT(i,j)*I_mass(i,j))) * &
