@@ -1769,7 +1769,7 @@ subroutine set_old_grid_weight( old_grid_weight, CS )
 
   if (old_grid_weight<0. .or. old_grid_weight>1.) call MOM_error(FATAL,'MOM_regridding, '//&
                      'set_old_grid_weight: Weight is out side the range 0..1!')
-! CS%old_grid_weight = old_grid_weight
+  CS%old_grid_weight = old_grid_weight
 
 end subroutine set_old_grid_weight
 
