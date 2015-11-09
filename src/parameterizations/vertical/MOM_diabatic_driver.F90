@@ -14,6 +14,7 @@ use MOM_diabatic_aux,        only : make_frazil, adjust_salt, insert_brine, diff
 use MOM_diabatic_aux,        only : find_uv_at_h, diagnoseMLDbyDensityDifference, applyBoundaryFluxesInOut
 use MOM_diag_mediator,       only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator,       only : diag_ctrl, time_type, diag_update_target_grids
+use MOM_diag_mediator,       only : diag_ctrl, query_averaging_enabled
 use MOM_diag_to_Z,           only : diag_to_Z_CS, register_Zint_diag, calc_Zint_diags
 use MOM_diffConvection,      only : diffConvection_CS, diffConvection_init
 use MOM_diffConvection,      only : diffConvection_calculate, diffConvection_end
@@ -25,7 +26,7 @@ use MOM_entrain_diffusive,   only : entrainment_diffusive, entrain_diffusive_ini
 use MOM_entrain_diffusive,   only : entrain_diffusive_end, entrain_diffusive_CS
 use MOM_EOS,                 only : calculate_density, calculate_2_densities, calculate_TFreeze
 use MOM_EOS,                 only : calculate_specific_vol_derivs
-use MOM_error_handler,       only : MOM_error, FATAL, WARNING, callTree_showQuery
+use MOM_error_handler,       only : MOM_error, FATAL, WARNING, callTree_showQuery, is_root_pe
 use MOM_error_handler,       only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,         only : get_param, log_version, param_file_type
 use MOM_forcing_type,        only : forcing, MOM_forcing_chksum
@@ -36,7 +37,7 @@ use MOM_grid,                only : ocean_grid_type
 use MOM_io,                  only : vardesc, var_desc
 use MOM_int_tide_input,      only : set_int_tide_input, int_tide_input_init
 use MOM_int_tide_input,      only : int_tide_input_end, int_tide_input_CS, int_tide_input_type
-use MOM_internal_tides,      only : propagate_int_tide, register_int_tide_restarts
+use MOM_internal_tides,      only : propagate_int_tide
 use MOM_internal_tides,      only : internal_tides_init, internal_tides_end, int_tide_CS
 use MOM_kappa_shear,         only : kappa_shear_is_used
 use MOM_KPP,                 only : KPP_CS, KPP_init, KPP_calculate, KPP_end
@@ -47,10 +48,12 @@ use MOM_set_diffusivity,     only : set_diffusivity_init, set_diffusivity_end
 use MOM_set_diffusivity,     only : set_diffusivity_CS
 use MOM_shortwave_abs,       only : absorbRemainingSW, optics_type
 use MOM_sponge,              only : apply_sponge, sponge_CS
+use MOM_time_manager,        only : operator(<=), time_type ! for testing itides (BDM)
 use MOM_tracer_flow_control, only : call_tracer_column_fns, tracer_flow_control_CS
 use MOM_variables,           only : thermo_var_ptrs, vertvisc_type, accel_diag_ptrs
 use MOM_variables,           only : cont_diag_ptrs, MOM_thermovar_chksum, p3d
 use MOM_regularize_layers,   only : regularize_layers, regularize_layers_init, regularize_layers_CS
+use time_manager_mod,        only : increment_time ! for testing itides (BDM)
 use MOM_wave_speed,          only : wave_speed
 
 implicit none ; private
@@ -76,6 +79,20 @@ type, public :: diabatic_CS ; private
   logical :: use_geothermal          !< If true, apply geothermal heating.
   logical :: use_int_tides           !< If true, use the code that advances a separate set
                                      !! of equations for the internal tide energy density.
+  logical :: int_tide_source_test    !< If true, apply an arbitrary generation site 
+                                     !! for internal tide testing (BDM) 
+  real    :: int_tide_source_x       !< X Location of generation site 
+                                     !! for internal tide for testing (BDM)
+  real    :: int_tide_source_y       !< Y Location of generation site 
+                                     !! for internal tide for testing (BDM)
+  integer :: tlen_days               !< Time interval from start for adding wave source
+                                     !! for testing internal tides (BDM)
+  logical :: uniform_cg	             !< If true, set cg = cg_test everywhere 
+                                     !! for testing internal tides (BDM)
+  real    :: cg_test                 !< Uniform group velocity of internal tide 
+                                     !! for testing internal tides (BDM)
+  type(time_type) :: time_max_source !< For use in testing internal tides (BDM)
+  type(time_type) :: time_end        !< For use in testing internal tides (BDM)
   logical :: useALEalgorithm         !< If true, use the ALE algorithm rather than layered
                                      !! isopycnal/stacked shallow water mode. This logical
                                      !! passed by argument to diabatic_driver_init.
@@ -114,11 +131,12 @@ type, public :: diabatic_CS ; private
   real :: MLDdensityDifference       !< Density difference used to determine MLD_user
   integer :: nsw                     !< SW_NBANDS
 
-  integer :: id_dudt_dia = -1, id_dvdt_dia  = -1, id_wd           = -1
-  integer :: id_ea       = -1, id_eb        = -1, id_Kd_z         = -1
-  integer :: id_Kd_heat  = -1, id_Kd_salt   = -1, id_Kd_interface = -1, id_Kd_ePBL  = -1
-  integer :: id_Tdif_z   = -1, id_Tadv_z    = -1, id_Sdif_z       = -1, id_Sadv_z   = -1
-  integer :: id_Tdif     = -1, id_Tadv      = -1, id_Sdif         = -1, id_Sadv     = -1
+  integer :: id_cg1      = -1  !(BDM)
+  integer :: id_dudt_dia = -1, id_dvdt_dia = -1, id_wd           = -1
+  integer :: id_ea       = -1, id_eb       = -1, id_Kd_z         = -1
+  integer :: id_Kd_heat  = -1, id_Kd_salt  = -1, id_Kd_interface = -1, id_Kd_ePBL  = -1
+  integer :: id_Tdif_z   = -1, id_Tadv_z   = -1, id_Sdif_z       = -1, id_Sadv_z   = -1
+  integer :: id_Tdif     = -1, id_Tadv     = -1, id_Sdif         = -1, id_Sadv     = -1
   integer :: id_subMLN2  = -1, id_brine_lay = -1
   integer :: id_MLD_003  = -1, id_MLD_0125  = -1, id_MLD_user     = -1, id_mlotstsq = -1
 
@@ -207,6 +225,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: temp_diag     ! diagnostic array for temp
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: saln_diag     ! diagnostic array for salinity
   real, dimension(SZI_(G),SZJ_(G))      :: tendency_intz ! depth integrated content tendency for diagn 
+  real, dimension(SZI_(G),SZJ_(G))      :: TKE_itidal_input_test 
+                                                         ! override of energy input for testing (BDM)
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target :: &
              ! These are targets so that the space can be shared with eaml & ebml.
@@ -272,6 +292,9 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   integer :: z_ids(7)     ! id numbers of diagnostics to be interpolated to depth
   logical :: showCallTree ! If true, show the call tree
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
+  
+  integer :: ig, jg      ! global indices for testing testing itide point source (BDM)
+  logical :: avg_enabled ! for testing internal tides (BDM)
 
   is   = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
   Isq  = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -420,14 +443,47 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 
   if (CS%use_int_tides) then
     !   This block provides an interface for the unresolved low-mode internal
-    ! tide module. It will eventually be used to provide an energy input to
-    ! set_diffusivity.
+    ! tide module (BDM).
+    
+    ! PROVIDE ENERGY DISTRIBUTION (calculate time-varying energy source)
     call set_int_tide_input(u, v, h, tv, fluxes, CS%int_tide_input, dt, G, &
                             CS%int_tide_input_CSp)
+    ! CALCULATE MODAL VELOCITY
     cg1(:,:) = 0.0
-    call wave_speed(h, tv, G, cg1, full_halos=.true.)
-    call propagate_int_tide(cg1, CS%int_tide_input%TKE_itidal_input, &
-                            CS%int_tide_input%tideamp, dt, G, CS%int_tide_CSp)
+    if (CS%uniform_cg) then
+       ! SET TO CONSTANT VALUE TO TEST PROPAGATE CODE
+       cg1(:,:) = CS%cg_test
+    else
+       ! CALCULATE cg1 OR OVERRIDE WITH HARD-CODED DISTRIBUTION
+       call wave_speed(h, tv, G, cg1, full_halos=.true.)
+       ! uncomment below for hard-coded cg1 that changes linearly with latitude
+       !do j=G%jsd,G%jed        
+       !  cg1(:,j) = ((7.-1.)/14000000.)*G%geoLatBu(:,j) + (1.-((7.-1.)/14000000.)*-7000000.)
+       !enddo
+    endif
+
+    if (CS%int_tide_source_test) then
+      ! BUILD 2D ARRAY WITH POINT SOURCE FOR TESTING
+      TKE_itidal_input_test(:,:) = 0.0
+      avg_enabled = query_averaging_enabled(CS%diag,time_end=CS%time_end)
+      if (CS%time_end <= CS%time_max_source) then
+        do j=G%jsc,G%jec; do i=G%isc,G%iec
+         ig = G%isd_global + i - 1.0
+         jg = G%jsd_global + j - 1.0
+         !INPUT ARBITRARY ENERGY POINT SOURCE
+         if (ig .eq. CS%int_tide_source_x .and. jg .eq. CS%int_tide_source_y) then
+             TKE_itidal_input_test(i,j) = 1.0
+        endif
+        enddo; enddo
+      endif
+      ! CALL ROUTINE USING PRESCRIBED KE FOR TESTING
+      call propagate_int_tide(h, tv, cg1, TKE_itidal_input_test, &
+                            CS%int_tide_input%tideamp, CS%int_tide_input%Nb, dt, G, CS%int_tide_CSp)
+    else    
+      ! CALL ROUTINE USING CALCULATED KE INPUT
+      call propagate_int_tide(h, tv, cg1, CS%int_tide_input%TKE_itidal_input, &
+                              CS%int_tide_input%tideamp, CS%int_tide_input%Nb, dt, G, CS%int_tide_CSp)    
+    endif
     if (showCallTree) call callTree_waypoint("done with propagate_int_tide (diabatic)")
   endif
 
@@ -1267,7 +1323,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   if (CS%id_Tadv > 0) call post_data(CS%id_Tadv, Tadv_flx, CS%diag)
   if (CS%id_Sdif > 0) call post_data(CS%id_Sdif, Sdif_flx, CS%diag)
   if (CS%id_Sadv > 0) call post_data(CS%id_Sadv, Sadv_flx, CS%diag)
-
+  if (CS%id_cg1  > 0) call post_data(CS%id_cg1,  cg1,      CS%diag)
+  
   num_z_diags = 0
   if (CS%id_Kd_z > 0) then
     num_z_diags = num_z_diags + 1
@@ -1356,7 +1413,7 @@ end subroutine adiabatic_driver_init
 subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
                                 ADp, CDp, CS, tracer_flow_CSp, sponge_CSp, diag_to_Z_CSp)
   type(time_type),         intent(in)    :: Time             !< model time 
-  type(ocean_grid_type),   intent(in)    :: G                !< model grid structure 
+  type(ocean_grid_type),   intent(inout) :: G                !< model grid structure 
   type(param_file_type),   intent(in)    :: param_file       !< file to parse for parameter values 
   logical,                 intent(in)    :: useALEalgorithm  !< logical for whether to use ALE remapping
   type(diag_ctrl), target, intent(inout) :: diag             !< structure to regulate diagnostic output
@@ -1386,7 +1443,7 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
     return
   else
     allocate(CS)
-   endif
+  endif
 
   CS%diag => diag
   if (associated(tracer_flow_CSp)) CS%tracer_flow_CSp => tracer_flow_CSp
@@ -1434,6 +1491,29 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   call get_param(param_file, mod, "INTERNAL_TIDES", CS%use_int_tides, &
                  "If true, use the code that advances a separate set of \n"//&
                  "equations for the internal tide energy density.", default=.false.)
+  if (CS%use_int_tides) then
+    ! GET LOCATION AND DURATION OF ENERGY POINT SOURCE FOR TESTING (BDM)
+    call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_TEST", CS%int_tide_source_test, &
+                 "If true, apply an arbitrary generation site for internal tide testing", &
+                 default=.false.)
+    if(CS%int_tide_source_test)then
+      call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_X", CS%int_tide_source_x, &
+                 "X Location of generation site for internal tide", default=1.)
+      call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_Y", CS%int_tide_source_y, &
+                 "Y Location of generation site for internal tide", default=1.)
+      call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_TLEN_DAYS", CS%tlen_days, &
+                 "Time interval from start of experiment for adding wave source", &
+                 units="days", default=0)
+      CS%time_max_source = increment_time(Time,0,days=CS%tlen_days)
+    endif
+    ! GET UNIFORM MODE VELOCITY FOR TESTING (BDM)  
+    call get_param(param_file, mod, "UNIFORM_CG", CS%uniform_cg, &
+                 "If true, set cg = cg_test everywhere for test case", default=.false.)
+    if(CS%uniform_cg)then
+      call get_param(param_file, mod, "CG_TEST", CS%cg_test, &
+                 "Uniform group velocity of internal tide for test case", default=1.)
+    endif
+  endif
   call get_param(param_file, mod, "MASSLESS_MATCH_TARGETS", &
                                 CS%massless_match_targets, &
                  "If true, the temperature and salinity of massless layers \n"//&
@@ -1488,6 +1568,8 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
       'Meridional Acceleration from Diapycnal Mixing', 'meter second-2')
   CS%id_wd = register_diag_field('ocean_model','wd',diag%axesTi,Time, &
       'Diapycnal Velocity', 'meter second-1')
+  CS%id_cg1 = register_diag_field('ocean_model','cn1', diag%axesT1, &
+                 Time, 'First baroclinic mode (eigen) speed', 'm s-1')
 
   CS%id_Tdif = register_diag_field('ocean_model',"Tflx_dia_diff",diag%axesTi, &
       Time, "Diffusive diapycnal temperature flux across interfaces", &
@@ -1547,19 +1629,16 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   if (CS%id_dvdt_dia > 0) call safe_alloc_ptr(ADp%dv_dt_dia,isd,ied,JsdB,JedB,nz)
   if (CS%id_wd > 0)       call safe_alloc_ptr(CDp%diapyc_vel,isd,ied,jsd,jed,nz+1)
 
-
-  call set_diffusivity_init(Time, G, param_file, diag, CS%set_diff_CSp, diag_to_Z_CSp)
+  !call set_diffusivity_init(Time, G, param_file, diag, CS%set_diff_CSp, diag_to_Z_CSp, CS%int_tide_CSp)
   CS%id_Kd_interface = register_diag_field('ocean_model', 'Kd_interface', diag%axesTi, Time, &
       'Total diapycnal diffusivity at interfaces', 'meter2 second-1')
   CS%id_Kd_ePBL = register_diag_field('ocean_model', 'Kd_ePBL', diag%axesTi, Time, &
       'ePBL diapycnal diffusivity at interfaces', 'meter2 second-1')
-
   CS%id_Kd_heat = register_diag_field('ocean_model', 'Kd_heat', diag%axesTi, Time, &
       'Total diapycnal diffusivity for heat at interfaces', 'meter2 second-1',     &
        cmor_field_name='difvho', cmor_units='m2 s-1',                              &
        cmor_standard_name='ocean_vertical_heat_diffusivity',                       &
        cmor_long_name='Net diapycnal diffusivity for ocean heat')
-
   CS%id_Kd_salt = register_diag_field('ocean_model', 'Kd_salt', diag%axesTi, Time, &
       'Total diapycnal diffusivity for salt at interfaces', 'meter2 second-1',     &
        cmor_field_name='difvso', cmor_units='m2 s-1',                              &
@@ -1672,6 +1751,9 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
                              CS%int_tide_input)
     call internal_tides_init(Time, G, param_file, diag, CS%int_tide_CSp)
   endif
+  
+  ! initialize module for setting diffusivities
+  call set_diffusivity_init(Time, G, param_file, diag, CS%set_diff_CSp, diag_to_Z_CSp, CS%int_tide_CSp)
 
 
   ! set up the clocks for this module 
@@ -1740,7 +1822,7 @@ subroutine diabatic_driver_end(CS)
   if (CS%useConvection) call diffConvection_end(CS%Conv_CSp)
   if (CS%use_energetic_PBL) &
     call energetic_PBL_end(CS%energetic_PBL_CSp)
-
+    
   if (associated(CS%optics)) then
     call opacity_end(CS%opacity_CSp, CS%optics)
     deallocate(CS%optics)

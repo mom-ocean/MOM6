@@ -374,7 +374,7 @@ subroutine wave_speed(h, tv, G, cg1, CS, full_halos)
         else
           cg1(i,j) = 0.0
         endif
-       
+
       endif ! cg1 /= 0.0
     else
       cg1(i,j) = 0.0 ! This is a land point.
