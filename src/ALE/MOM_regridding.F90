@@ -72,6 +72,10 @@ type, public :: regridding_CS
   !> Weight given to old coordinate when blending between new and old grids (nondim)
   real :: old_grid_weight = 0.
 
+  !> Fraction (between 0 and 1) of compressibility to add to potential density
+  !! profiles when interpolating for target grid positions. (nondim)
+  real :: compressibility_fraction = 0.
+
 end type
 
 ! The following routines are visible to the outside world
@@ -160,11 +164,13 @@ real, parameter    :: NR_OFFSET = 1e-6
 contains
 
 !> Initialization of regridding
-subroutine initialize_regridding( nk, coordMode, interpScheme, CS )
+subroutine initialize_regridding( nk, coordMode, interpScheme, CS, compressibility_fraction )
   integer,               intent(in)    :: nk !< Number of levels
   character(len=*),      intent(in)    :: coordMode !< Coordinate mode to use
   character(len=*),      intent(in)    :: interpScheme !< Interpolation mode to use
   type(regridding_CS),   intent(inout) :: CS !< Regridding control structure
+  real,        optional, intent(in)    :: compressibility_fraction !< Fraction of compressibility
+                                          !! to add to potential density profiles (nondim)
 
   CS%nk = nk
 
@@ -189,11 +195,11 @@ subroutine initialize_regridding( nk, coordMode, interpScheme, CS )
 
   CS%min_thickness = regriddingDefaultMinThickness
 
+  if (present(compressibility_fraction)) CS%compressibility_fraction = compressibility_fraction
+
   call allocate_regridding( CS )
   
 end subroutine initialize_regridding
-
-
 
 !> Deallocation of regridding memory
 subroutine end_regridding(CS)
@@ -202,7 +208,6 @@ subroutine end_regridding(CS)
   call regridding_memory_deallocation( CS )
 
 end subroutine end_regridding
-
 
 !------------------------------------------------------------------------------
 ! Dispatching regridding routine: regridding & remapping
@@ -808,10 +813,11 @@ subroutine build_grid_HyCOM1( G, h, tv, dzInterface, remapCS, CS )
       ! once the final grid has been determined).
       T_column(:) = tv%T(i,j,:)
       S_column(:) = tv%S(i,j,:)
-      p_column(:) = CS%ref_pressure
       z_column(1) = 0. ! Work downward rather than bottom up
       do K = 1, nz
         z_column(K+1) = z_column(K) + h(i,j,k) ! Work in units of h (m or Pa)
+        p_column(k) = CS%ref_pressure + CS%compressibility_fraction * &
+             ( 0.5 * ( z_column(K) + z_column(K+1) ) * G%H_to_Pa - CS%ref_pressure )
       enddo
 
       ! Work bottom recording potential density

@@ -892,7 +892,7 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
   character(len=320) :: message ! Temporary strings
   integer :: ke
   logical :: tmpLogical
-  real :: tmpReal
+  real :: tmpReal, compress_fraction
   real :: rho_target(G%ke+1) ! Target density used in HYCOM1 mode
 
   ke = size(dz) ! Number of levels in resolution vector
@@ -914,7 +914,14 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
                  "used. It can be one of the following schemes:\n"//&
                  trim(regriddingInterpSchemeDoc),&
                  default=regriddingDefaultInterpScheme)
-  call initialize_regridding( G%ke, coordMode, interpScheme, regridCS )
+
+  call get_param(param_file, mod, "REGRID_COMPRESSIBILITY_FRACTION", compress_fraction, &
+                 "When interpolating potential density profiles we can add\n"//&
+                 "some artificial compressibility solely to make homogenous\n"//&
+                 "regions appear stratified.", default=0.)
+
+  call initialize_regridding( G%ke, coordMode, interpScheme, regridCS, &
+                              compressibility_fraction=compress_fraction )
 
   call get_param(param_file, mod, "ALE_COORDINATE_CONFIG", string, &
                  "Determines how to specify the coordinate\n"//&
