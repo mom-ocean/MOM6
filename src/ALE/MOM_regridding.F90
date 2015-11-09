@@ -103,9 +103,8 @@ character(len=258), parameter, public :: regriddingCoordinateModeDoc = &
                  " LAYER - Isopycnal or stacked shallow water layers\n"//&
                  " Z*    - stetched geopotential z*\n"//&
                  " SIGMA - terrain following coordinates\n"//&
-                 " RHO   - continuous isopycnal"
-!                " RHO   - continuous isopycnal\n"//&
-!                " HYCOM1 - HyCOM-like hybrid coordinate"
+                 " RHO   - continuous isopycnal\n"//&
+                 " HYCOM1 - HyCOM-like hybrid coordinate"
 
 ! Documentation for regridding interpolation schemes
 character(len=338), parameter, public :: regriddingInterpSchemeDoc = &
