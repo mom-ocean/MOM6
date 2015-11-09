@@ -504,7 +504,7 @@ subroutine wave_structure(h, tv, G, cn, ModeNum, freq, CS, En, full_halos)
             ! Back-calculate amplitude from energy equation
             if (Kmag2 > 0.0) then
               KE_term = 0.25*G%Rho0*( (1+f2/freq**2)/Kmag2*int_dwdz2 + int_w2 )
-              PE_term = 0.25*G%Rho0*( int_N2w2/freq**2 )            
+              PE_term = 0.25*G%Rho0*( int_N2w2/freq**2 )
               if (En(i,j) >= 0.0) then
                 W0 = sqrt( En(i,j)/(KE_term + PE_term) )
               else

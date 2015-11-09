@@ -226,7 +226,10 @@ subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, 
     tot_En, tot_leak_loss, tot_quad_loss, tot_itidal_loss, tot_Froude_loss, &
     drag_scale, Ub_mode_1, TKE_loss_mode_1
   real :: frac_per_sector, f2, I_rho0, I_D_here, freq2, Ifreq
-  real :: speed, Umax, loss_rate
+  real :: speed, Umax, loss_rate, Fr2_max
+  real :: En_new, En_check                           ! for debugging
+  real :: En_initial, Delta_E_check                  ! for debugging
+  real :: TKE_Froude_loss_check, TKE_Froude_loss_tot ! for debugging
   
   integer :: a, m, fr, i, j, is, ie, js, je, isd, ied, jsd, jed, nAngle, nzm
   integer :: isd_g, jsd_g         ! start indices on data domain but referenced 
@@ -320,7 +323,8 @@ subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, 
   enddo ; enddo
 
   if (CS%apply_background_drag .or. CS%apply_bottom_drag &
-      .or. CS%apply_wave_drag .or. (CS%id_tot_En > 0)) then
+      .or. CS%apply_wave_drag .or. CS%apply_Froude_drag &
+      .or. (CS%id_tot_En > 0)) then
     tot_En(:,:) = 0.0
     tot_En_mode(:,:,:,:) = 0.0
     do m=1,CS%NMode ; do fr=1,CS%Nfreq
@@ -358,7 +362,7 @@ subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, 
   
   ! Extract the energy for mixing due to scattering (wave-drag)
   ! still need to allow a portion of the extracted energy to go to higher modes.
-  ! First, finde velocity profiles
+  ! First, find velocity profiles
   if (CS%apply_wave_drag .or. CS%apply_Froude_drag) then
     ! Calculate modal structure
     do m=1,CS%NMode ; do fr=1,CS%Nfreq
@@ -416,21 +420,45 @@ subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, 
       freq2 = CS%frequency(fr)**2
       Ifreq = 1/CS%frequency(fr)
       do j=jsd,jed ; do i=isd,ied
+        id_g = G%isd_global + i - 1.0 ! for debugging
+        jd_g = G%jsd_global + j - 1.0 ! for debugging
         ! Calculate horizontal group velocity magnitudes
         f2 = 0.25*(G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J)**2 + &
                  G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J-1)**2 )
         speed = c1(i,j,m) * sqrt(max(freq2 - f2, 0.0)) * Ifreq
-        ! Calculate decay rate (s-1); this is an aribitrary place holder for now
-        I_D_here = 1.0 / max(G%bathyT(i,j), 1.0)
-        loss_rate = 0.001*sqrt(max(0.0,tot_En(i,j) * I_rho0 * I_D_here)) * I_D_here
         nzm = CS%wave_structure_CSp%num_intfaces(i,j)
         Umax = maxval(CS%wave_structure_CSp%Uavg_profile(i,j,1:nzm))
+        Fr2_max = (Umax/speed)**2
         ! Dissipate energy if Fr>1; done here with an arbitrary time scale
-        if (Umax > speed) then
-          ! Calculate loss rate and apply loss over the time step ; apply the same drag timescale
-          ! to each En component (technically not correct; fix later)
-          CS%TKE_Froude_loss(i,j,a,fr,m)  = CS%En(i,j,a,fr,m) * loss_rate ! loss rate
-          CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) / (1.0 + dt * loss_rate)   ! implicit update
+        if (Fr2_max > 1.0) then
+          !print *, "Applying Fr-dissipation at ig= ", id_g, ", jg= ", jd_g ! for debugging
+          En_initial = sum(CS%En(i,j,:,fr,m))                              ! for debugging          
+          ! Calculate effective decay rate (s-1) if breaking occurs over a time step
+          loss_rate = (1/Fr2_max - 1.0)/dt
+          do a=1,CS%nAngle
+            ! Determine effective dissipation rate (Wm-2)
+            CS%TKE_Froude_loss(i,j,a,fr,m) = CS%En(i,j,a,fr,m) * abs(loss_rate)
+            ! Update energy
+            En_new = CS%En(i,j,a,fr,m)/Fr2_max ! for debugging
+            En_check = CS%En(i,j,a,fr,m) - CS%TKE_Froude_loss(i,j,a,fr,m)*dt ! for debugging
+            ! Re-scale (reduce) energy due to breaking
+            CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m)/Fr2_max
+            ! Check (for debugging only)
+            if (abs(En_new - En_check) > 1e-10) then
+              call MOM_error(WARNING, "MOM_internal_tides: something's wrong with Fr-breaking.")
+              print *, "En_new=", En_new
+              print *, "En_check=", En_check
+            endif
+          enddo
+          ! Check (for debugging)
+          Delta_E_check = En_initial - sum(CS%En(i,j,:,fr,m))
+          TKE_Froude_loss_check = abs(Delta_E_check)/dt
+          TKE_Froude_loss_tot = sum(CS%TKE_Froude_loss(i,j,:,fr,m))
+          if (abs(TKE_Froude_loss_check - TKE_Froude_loss_tot) > 1e-10) then
+            call MOM_error(WARNING, "MOM_internal_tides: something's wrong with Fr energy update.")
+            print *, "TKE_Froude_loss_check=", TKE_Froude_loss_check
+            print *, "TKE_Froude_loss_tot=", TKE_Froude_loss_tot
+          endif
         endif
       enddo ; enddo
     enddo ; enddo
