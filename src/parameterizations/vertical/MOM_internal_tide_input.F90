@@ -71,7 +71,7 @@ type, public :: int_tide_input_CS ; private
                         ! available to mix above the BBL
 
   real, allocatable, dimension(:,:) :: &
-    TKE_itidal_coef     ! The time-invariant field that entes the TKE_itidal
+    TKE_itidal_coef     ! The time-invariant field that enters the TKE_itidal
                         ! input calculation, in J m-2.
 
   integer :: id_TKE_itidal = -1, id_Nb = -1, id_N2_bot = -1
@@ -384,7 +384,7 @@ subroutine int_tide_input_init(Time, G, param_file, diag, CS, itide)
     ! Restrict rms topo to 10 percent of column depth.
     itide%h2(i,j) = min(0.01*G%bathyT(i,j)**2, itide%h2(i,j))
 
-    ! Compute the fixed part of internal tidal forcing; units are [kg s-2] here.
+    ! Compute the fixed part of internal tidal forcing; units are [J m-2] here.
     CS%TKE_itidal_coef(i,j) = 0.5*kappa_h2_factor*G%Rho0*&
          kappa_itides * itide%h2(i,j) * itide%tideamp(i,j)**2
   enddo; enddo
