@@ -44,6 +44,7 @@ module MOM_wave_structure
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
+use MOM_checksums, only     : isnan => is_NaN
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_EOS,           only : calculate_density_derivs
@@ -422,10 +423,10 @@ subroutine wave_structure(h, tv, G, cn, ModeNum, freq, CS, En, full_halos)
               a_diag(row) = gprime(K)*(-Igu(K))
               b_diag(row) = gprime(K)*(Igu(K)+Igl(K)) - lam_z(row)
               c_diag(row) = gprime(K)*(-Igl(K))
-              if(test_isnan(lam_z(row)))then  ; print *, "lam_z(row) is NAN" ; endif
-              if(test_isnan(a_diag(row)))then ; print *, "Wave_structure: a(k) is NAN" ; endif
-              if(test_isnan(b_diag(row)))then ; print *, "Wave_structure: b(k) is NAN" ; endif
-              if(test_isnan(c_diag(row)))then ; print *, "Wave_structure: c(k) is NAN" ; endif
+              if(isnan(lam_z(row)))then  ; print *, "lam_z(row) is NAN" ; endif
+              if(isnan(a_diag(row)))then ; print *, "Wave_structure: a(k) is NAN" ; endif
+              if(isnan(b_diag(row)))then ; print *, "Wave_structure: b(k) is NAN" ; endif
+              if(isnan(c_diag(row)))then ; print *, "Wave_structure: c(k) is NAN" ; endif
             enddo
             ! Populate top row of tridiagonal matrix
             K=2 ; row = K-1
@@ -456,7 +457,7 @@ subroutine wave_structure(h, tv, G, cn, ModeNum, freq, CS, En, full_halos)
             
             ! Check to see if solver worked
             ig_stop = 0 ; jg_stop = 0
-            if(test_isnan(sum(w_strct(1:kc+1))))then
+            if(isnan(sum(w_strct(1:kc+1))))then
               print *, "Wave_structure: w_strct has a NAN at ig=", ig, ", jg=", jg
               if(i<G%isc .or. i>G%iec .or. j<G%jsc .or. j>G%jec)then
                 print *, "This is occuring at a halo point."
@@ -699,7 +700,7 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
     ! Forward sweep
     do k=2,nrow-1
       beta = 1/(h(k)+alpha(k-1)*Q_prime+alpha(k))
-      if(test_isnan(beta))then ; print *, "Tridiag_solver: beta is NAN" ; endif
+      if(isnan(beta))then ; print *, "Tridiag_solver: beta is NAN" ; endif
       q(k) = beta*alpha(k)
       y_prime(k) = beta*(y(k)+alpha(k-1)*y_prime(k-1))
       Q_prime = beta*(h(k)+alpha(k-1)*Q_prime)
@@ -772,12 +773,6 @@ subroutine wave_structure_init(Time, G, param_file, diag, CS)
   call log_version(param_file, mod, version, "")
 
 end subroutine wave_structure_init
-
-logical function test_isnan(var)
-  real, intent(in) :: var  
-  test_isnan = .false.
-  if(var /= var) test_isnan = .true.
-end function test_isnan
 
 
 end module MOM_wave_structure

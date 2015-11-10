@@ -42,6 +42,7 @@ module MOM_internal_tides
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
+use MOM_checksums, only     : isnan => is_NaN
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_axis_init
 use MOM_diag_mediator, only : register_diag_field, diag_ctrl, safe_alloc_ptr
 use MOM_diag_mediator, only : axesType, defineAxes
@@ -391,7 +392,7 @@ subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, 
       do j=js,je ; do i=is,ie
         id_g = G%isd_global + i - 1.0
         jd_g = G%jsd_global + j - 1.0
-        if(test_isnan(sum(CS%En(i,j,:,fr,m))))then
+        if(isnan(sum(CS%En(i,j,:,fr,m))))then
           print *, 'Prior to loss: En is NAN at ig=', id_g, ', jg=', jd_g
         endif
       enddo ; enddo
@@ -404,7 +405,7 @@ subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, 
       do j=js,je ; do i=is,ie
         id_g = G%isd_global + i - 1.0
         jd_g = G%jsd_global + j - 1.0
-        if(test_isnan(sum(CS%En(i,j,:,fr,m))))then
+        if(isnan(sum(CS%En(i,j,:,fr,m))))then
           print *, 'After loss: En is NAN at ig=', id_g, ', jg=', jd_g
           stop
         endif
@@ -2289,7 +2290,7 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
                  domain=G%domain%mpp_domain, timelevel=1)
   ! replace NANs with null value
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    if(test_isnan(CS%refl_angle(i,j))) CS%refl_angle(i,j) = CS%nullangle
+    if(isnan(CS%refl_angle(i,j))) CS%refl_angle(i,j) = CS%nullangle
   enddo ; enddo
   call pass_var(CS%refl_angle,G%domain)
   
@@ -2493,12 +2494,6 @@ subroutine internal_tides_end(CS)
   endif
   CS => NULL()  
 end subroutine internal_tides_end
-
-logical function test_isnan(var)
-  real, intent(in) :: var  
-  test_isnan = .false.
-  if(var /= var) test_isnan = .true.
-end function test_isnan
 
 
 end module MOM_internal_tides
