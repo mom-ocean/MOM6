@@ -226,12 +226,12 @@ subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, 
   real, dimension(SZI_(G),SZJ_(G)) :: &
     tot_En, tot_leak_loss, tot_quad_loss, tot_itidal_loss, tot_Froude_loss, &
     drag_scale, Ub_mode_1, TKE_loss_mode_1
-  real :: frac_per_sector, f2, I_rho0, I_D_here, freq2, Ifreq
-  real :: speed, Umax, loss_rate, Fr2_max
+  real :: frac_per_sector, f2, I_rho0, I_D_here, freq, Kmag2
+  real :: c_phase, Umax, loss_rate, Fr2_max
+  real, parameter :: cn_subRO = 1e-100               ! to prevent division by zero
   real :: En_new, En_check                           ! for debugging
   real :: En_initial, Delta_E_check                  ! for debugging
   real :: TKE_Froude_loss_check, TKE_Froude_loss_tot ! for debugging
-  
   integer :: a, m, fr, i, j, is, ie, js, je, isd, ied, jsd, jed, nAngle, nzm
   integer :: isd_g, jsd_g         ! start indices on data domain but referenced 
                                   ! to global indexing (for debuggin)
@@ -418,18 +418,18 @@ subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, 
   if (CS%apply_Froude_drag) then
     ! Pick out maximum baroclinic velocity values; calculate Fr=max(u)/cg
     do m=1,CS%NMode ; do fr=1,CS%Nfreq
-      freq2 = CS%frequency(fr)**2
-      Ifreq = 1/CS%frequency(fr)
+      freq = CS%frequency(fr)**2
       do j=jsd,jed ; do i=isd,ied
         id_g = G%isd_global + i - 1.0 ! for debugging
         jd_g = G%jsd_global + j - 1.0 ! for debugging
-        ! Calculate horizontal group velocity magnitudes
+        ! Calculate horizontal phase velocity magnitudes
         f2 = 0.25*(G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J)**2 + &
                  G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J-1)**2 )
-        speed = c1(i,j,m) * sqrt(max(freq2 - f2, 0.0)) * Ifreq
+        Kmag2 = (freq**2 - f2) / (c1(i,j,m)**2 + cn_subRO**2)
+        c_phase = freq/sqrt(Kmag2)
         nzm = CS%wave_structure_CSp%num_intfaces(i,j)
         Umax = maxval(CS%wave_structure_CSp%Uavg_profile(i,j,1:nzm))
-        Fr2_max = (Umax/speed)**2
+        Fr2_max = (Umax/c_phase)**2
         ! Dissipate energy if Fr>1; done here with an arbitrary time scale
         if (Fr2_max > 1.0) then
           !print *, "Applying Fr-dissipation at ig= ", id_g, ", jg= ", jd_g ! for debugging
