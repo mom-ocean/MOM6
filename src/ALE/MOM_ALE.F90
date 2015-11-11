@@ -88,6 +88,7 @@ type, public :: ALE_CS
   logical :: remap_after_initialization !<   Indicates whether to regrid/remap after initializing the state.
 
   logical :: show_call_tree !< For debugging
+  real    :: C_p            !< seawater heat capacity (J/(kg deg C))
 
   ! for diagnostics 
   type(diag_ctrl), pointer           :: diag                          !< structure to regulate output
@@ -225,10 +226,11 @@ end subroutine initialize_ALE
 
 
 !> Initialize diagnostics for the ALE module. 
-subroutine register_diags_ALE(Time, G, diag, Reg, CS)
+subroutine register_diags_ALE(Time, G, diag, C_p, Reg, CS)
   type(time_type),target,     intent(in)  :: Time  !< Time structure
   type(ocean_grid_type),      intent(in)  :: G     !< Grid structure
   type(diag_ctrl), target,    intent(in)  :: diag  !< Diagnostics control structure
+  real,                       intent(in)  :: C_p   !< seawater heat capacity (J/(kg deg C))
   type(tracer_registry_type), pointer     :: Reg   !< Tracer registry
   type(ALE_CS), pointer                   :: CS    !< Module control structure 
 
@@ -242,6 +244,8 @@ subroutine register_diags_ALE(Time, G, diag, Reg, CS)
   nsize = max(1,ntr)
 
   CS%diag => diag
+  CS%C_p  = C_p
+
   allocate(CS%id_tracer_remap_tendency(nsize))
   allocate(CS%id_Htracer_remap_tendency(nsize))
   allocate(CS%id_Htracer_remap_tendency_2d(nsize))
@@ -497,14 +501,15 @@ subroutine remapping_main(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u, v, de
   real, dimension(SZI_(G), SZJ_(G), SZK_(G))  :: work_conc 
   real, dimension(SZI_(G), SZJ_(G), SZK_(G))  :: work_cont
   real, dimension(SZI_(G), SZJ_(G))           :: work_2d 
-  real                                        :: Idt, h2  
+  real                                        :: Idt, h2, ppt2mks   
   logical                                     :: show_call_tree
 
   show_call_tree = .false.
   if (present(debug)) show_call_tree = debug
   if (show_call_tree) call callTree_enter("remapping_main(), MOM_ALE.F90")
 
-  nz = G%ke
+  nz      = G%ke
+  ppt2mks = 0.001 
 
   if (associated(Reg)) then
     ntr = Reg%ntr
@@ -544,8 +549,8 @@ subroutine remapping_main(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u, v, de
               if(CS_ALE%do_tendency_diag(m)) then 
                 do k=1,G%ke
                   h2               = h1(k) - (dx(k)-dx(k+1))
-                  work_conc(i,j,k) = (u_column(k)    - Reg%Tr(m)%t(i,j,k)      )*Idt 
-                  work_cont(i,j,k) = (u_column(k)*h2 - Reg%Tr(m)%t(i,j,k)*h1(k))*Idt 
+                  work_conc(i,j,k) = (u_column(k)    - Reg%Tr(m)%t(i,j,k)      ) * Idt 
+                  work_cont(i,j,k) = (u_column(k)*h2 - Reg%Tr(m)%t(i,j,k)*h1(k)) * Idt * G%H_to_kg_m2 
                 enddo 
               endif 
             endif 
@@ -570,6 +575,27 @@ subroutine remapping_main(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u, v, de
           if(CS_ALE%id_tracer_remap_tendency(m) > 0) then 
             call post_data(CS_ALE%id_tracer_remap_tendency(m), work_conc, CS_ALE%diag)
           endif 
+
+          if (CS_ALE%id_Htracer_remap_tendency(m) > 0 .or. CS_ALE%id_Htracer_remap_tendency_2d(m) > 0) then 
+            if(trim(Reg%Tr(m)%name) == 'T') then 
+              do k=1,G%ke
+                do j = G%jsc,G%jec
+                  do i = G%isc,G%iec
+                    work_cont(i,j,k) = work_cont(i,j,k) * CS_ALE%C_p
+                  enddo
+                enddo
+              enddo
+            elseif(trim(Reg%Tr(m)%name) == 'S') then 
+              do k=1,G%ke
+                do j = G%jsc,G%jec
+                  do i = G%isc,G%iec
+                    work_cont(i,j,k) = work_cont(i,j,k) * ppt2mks 
+                  enddo
+                enddo
+              enddo
+            endif 
+          endif 
+
           if (CS_ALE%id_Htracer_remap_tendency(m) > 0) then 
             call post_data(CS_ALE%id_Htracer_remap_tendency(m), work_cont, CS_ALE%diag)
           endif 
@@ -1126,8 +1152,8 @@ subroutine ALE_update_regrid_weights( dt, CS )
 end subroutine ALE_update_regrid_weights
 
 !> Update the vertical grid type with ALE information.
-! This subroutine sets information in the verticalGrid_type to be
-! consistent with the use of ALE mode.
+!! This subroutine sets information in the verticalGrid_type to be
+!! consistent with the use of ALE mode.
 subroutine ALE_updateVerticalGridType( CS, GV )
   type(ALE_CS),            pointer :: CS  ! module control structure 
   type(verticalGrid_type), pointer :: GV  ! vertical grid information 

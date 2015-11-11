@@ -1846,7 +1846,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call register_diags(Time, G, CS, CS%ADp)
   call register_diags_TS_tendency(Time, G, CS) 
   if (CS%use_ALE_algorithm) then 
-    call register_diags_ALE(Time, G, diag, CS%tracer_Reg, CS%ALE_CSp)
+    call register_diags_ALE(Time, G, diag, CS%tv%C_p, CS%tracer_Reg, CS%ALE_CSp)
   endif 
 
 
