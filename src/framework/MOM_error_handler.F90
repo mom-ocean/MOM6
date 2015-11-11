@@ -37,7 +37,7 @@ integer :: verbosity = 6
 ! the parser has been initialized
 !   Also note that this is a module variable rather than contained in
 ! a type passed by argument (preferred for most data) for convenience
-! and to reduce obfiscation of code
+! and to reduce obfuscation of code
 
 ! The level of calling within the call tree
 integer :: callTreeIndentLevel = 0

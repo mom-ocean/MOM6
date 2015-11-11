@@ -26,7 +26,7 @@ use MOM_entrain_diffusive,   only : entrainment_diffusive, entrain_diffusive_ini
 use MOM_entrain_diffusive,   only : entrain_diffusive_end, entrain_diffusive_CS
 use MOM_EOS,                 only : calculate_density, calculate_2_densities, calculate_TFreeze
 use MOM_EOS,                 only : calculate_specific_vol_derivs
-use MOM_error_handler,       only : MOM_error, FATAL, WARNING, callTree_showQuery, is_root_pe
+use MOM_error_handler,       only : MOM_error, FATAL, WARNING, callTree_showQuery
 use MOM_error_handler,       only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,         only : get_param, log_version, param_file_type
 use MOM_forcing_type,        only : forcing, MOM_forcing_chksum

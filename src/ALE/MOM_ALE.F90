@@ -1,107 +1,105 @@
+!> This module contains the main regridding routines. 
+!! Regridding comprises two steps:
+!! (1) Interpolation and creation of a new grid based on target interface 
+!!     densities (or any other criterion).
+!! (2) Remapping of quantities between old grid and new grid.
+!! Original module written by Laurent White, 2008.06.09
 module MOM_ALE
-!==============================================================================
-!
-! This file is part of MOM.
-!
-! Date of creation: 2008.06.09
-! L. White
-!
-! This module contains the main regridding routines. 
-!
-! Regridding must be understood as comprising two steps:
-! (1) Interpolation and creation of a new grid based on target interface 
-!     densities (or any other criterion).
-! (2) Remapping of quantities between old grid and new grid.
-!
-!==============================================================================
-use MOM_error_handler, only : MOM_error, FATAL, WARNING
-use MOM_error_handler, only : callTree_showQuery
-use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
-use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
-use MOM_file_parser,   only : get_param, param_file_type, log_param
-use MOM_io,            only : file_exists, field_exists, MOM_read_data
-use MOM_io,            only : vardesc, var_desc, fieldtype, SINGLE_FILE
-use MOM_io,            only : create_file, write_field, close_file, slasher
-use MOM_EOS,           only : calculate_density
+
+! This file is part of MOM6. See LICENSE.md for the license.
+
+use MOM_diag_mediator,    only : register_diag_field, post_data, diag_ctrl, time_type
+use MOM_EOS,              only : calculate_density
+use MOM_error_handler,    only : MOM_error, FATAL, WARNING
+use MOM_error_handler,    only : callTree_showQuery
+use MOM_error_handler,    only : callTree_enter, callTree_leave, callTree_waypoint
+use MOM_file_parser,      only : get_param, param_file_type, log_param
+use MOM_io,               only : file_exists, field_exists, MOM_read_data
+use MOM_io,               only : vardesc, var_desc, fieldtype, SINGLE_FILE
+use MOM_io,               only : create_file, write_field, close_file, slasher
+use MOM_regridding,       only : initialize_regridding, regridding_main , end_regridding
+use MOM_regridding,       only : uniformResolution, set_old_grid_weight
+use MOM_regridding,       only : inflate_vanished_layers_old, setCoordinateResolution
+use MOM_regridding,       only : set_target_densities_from_G, set_target_densities
+use MOM_regridding,       only : regriddingCoordinateModeDoc, DEFAULT_COORDINATE_MODE
+use MOM_regridding,       only : regriddingInterpSchemeDoc, regriddingDefaultInterpScheme
+use MOM_regridding,       only : setRegriddingBoundaryExtrapolation
+use MOM_regridding,       only : regriddingDefaultBoundaryExtrapolation
+use MOM_regridding,       only : set_regrid_min_thickness, regriddingDefaultMinThickness
+use MOM_regridding,       only : check_remapping_grid
+use MOM_regridding,       only : regridding_CS
+use MOM_regridding,       only : getCoordinateInterfaces, getCoordinateResolution
+use MOM_regridding,       only : getCoordinateUnits, getCoordinateShortName
+use MOM_regridding,       only : getStaticThickness
+use MOM_remapping,        only : initialize_remapping, remapping_core, end_remapping
+use MOM_remapping,        only : remappingSchemesDoc, remappingDefaultScheme
+use MOM_remapping,        only : remapDisableBoundaryExtrapolation, remapEnableBoundaryExtrapolation
+use MOM_remapping,        only : remapping_CS, dzFromH1H2
 use MOM_string_functions, only : uppercase, extractWord
-use MOM_verticalGrid,  only : verticalGrid_type
-use regrid_edge_values, only : edge_values_implicit_h4
-use PLM_functions, only : PLM_reconstruction, PLM_boundary_extrapolation
-use PPM_functions, only : PPM_reconstruction, PPM_boundary_extrapolation
-use P1M_functions, only : P1M_interpolation, P1M_boundary_extrapolation
-use P3M_functions, only : P3M_interpolation, P3M_boundary_extrapolation
-use MOM_regridding, only : initialize_regridding, regridding_main , end_regridding
-use MOM_regridding, only : uniformResolution
-use MOM_regridding, only : inflate_vanished_layers_old, setCoordinateResolution
-use MOM_regridding, only : set_target_densities_from_G, set_target_densities
-use MOM_regridding, only : regriddingCoordinateModeDoc, DEFAULT_COORDINATE_MODE
-use MOM_regridding, only : regriddingInterpSchemeDoc, regriddingDefaultInterpScheme
-use MOM_regridding, only : setRegriddingBoundaryExtrapolation
-use MOM_regridding, only : regriddingDefaultBoundaryExtrapolation
-use MOM_regridding, only : set_regrid_min_thickness, regriddingDefaultMinThickness
-use MOM_regridding, only : check_remapping_grid
-use MOM_regridding, only : regridding_CS
-use MOM_regridding, only : getCoordinateInterfaces, getCoordinateResolution
-use MOM_regridding, only : getCoordinateUnits, getCoordinateShortName
-use MOM_regridding, only : getStaticThickness
-use MOM_remapping, only : initialize_remapping, remapping_core, end_remapping
-use MOM_remapping, only : remappingSchemesDoc, remappingDefaultScheme
-use MOM_remapping, only : remapDisableBoundaryExtrapolation, remapEnableBoundaryExtrapolation
-use MOM_remapping, only : remapping_CS, dzFromH1H2
-use MOM_tracer_registry, only : tracer_registry_type
-use regrid_defs, only : PRESSURE_RECONSTRUCTION_PLM
-!use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
-use regrid_consts, only : coordinateUnits, coordinateMode
-use regrid_consts, only : REGRIDDING_ZSTAR, REGRIDDING_RHO, REGRIDDING_HYCOM1
+use MOM_tracer_registry,  only : tracer_registry_type
+use MOM_variables,        only : ocean_grid_type, thermo_var_ptrs
+use MOM_verticalGrid,     only : verticalGrid_type
+
+use regrid_defs,          only : PRESSURE_RECONSTRUCTION_PLM
+!use regrid_consts,       only : coordinateMode, DEFAULT_COORDINATE_MODE
+use regrid_consts,        only : coordinateUnits, coordinateMode
+use regrid_consts,        only : REGRIDDING_ZSTAR, REGRIDDING_RHO, REGRIDDING_HYCOM1
+use regrid_edge_values,   only : edge_values_implicit_h4
+use PLM_functions,        only : PLM_reconstruction, PLM_boundary_extrapolation
+use PPM_functions,        only : PPM_reconstruction, PPM_boundary_extrapolation
+use P1M_functions,        only : P1M_interpolation,  P1M_boundary_extrapolation
+use P3M_functions,        only : P3M_interpolation,  P3M_boundary_extrapolation
 
 
 implicit none ; private
-
 #include <MOM_memory.h>
 
-! -----------------------------------------------------------------------------
-! Private (module-wise) variables
-! -----------------------------------------------------------------------------
 
+!> ALE control structure 
 type, public :: ALE_CS
   private
 
-  ! Indicate whether high-order boundary extrapolation should be used within
-  ! boundary cells
-  logical :: boundary_extrapolation_for_pressure
+  logical :: boundary_extrapolation_for_pressure !<  Indicate whether high-order boundary 
+                                                 !!  extrapolation should be used within boundary cells
 
-  ! Indicates whether integrals for FV pressure gradient calculation will
-  ! use reconstruction of T/S.
-  ! By default, it is true if regridding has been initialized, otherwise false.
-  logical :: reconstructForPressure = .false.
+  logical :: reconstructForPressure = .false.    !< Indicates whether integrals for FV 
+                                                 !! pressure gradient calculation will
+                                                 !! use reconstruction of T/S.
+                                                 !! By default, it is true if regridding 
+                                                 !! has been initialized, otherwise false.
 
-  ! The form of the reconstruction of T/S for FV pressure gradient calculation.
-  ! By default, it is =1 (PLM)
-  integer :: pressureReconstructionScheme
+  integer :: pressureReconstructionScheme        !<  Form of the reconstruction of T/S 
+                                                 !! for FV pressure gradient calculation.
+                                                 !! By default, it is =1 (PLM)
 
-  type(regridding_CS) :: regridCS ! Regridding parameters and work arrays
-  type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
+  real :: regrid_time_scale !< The time-scale used in blending between the current (old) grid
+                            !! and the target (new) grid. (s)
 
-  ! Used only for queries, not directly by this module
-  integer :: nk
+  type(regridding_CS) :: regridCS !< Regridding parameters and work arrays
+  type(remapping_CS)  :: remapCS  !< Remapping parameters and work arrays
 
-  integer :: degree_linear=1  ! Degree of linear piecewise polynomial
-  integer :: degree_parab=2   ! Degree of parabolic piecewise polynomial
+  integer :: nk              !< Used only for queries, not directly by this module
+  integer :: degree_linear=1 !< Degree of linear piecewise polynomial
+  integer :: degree_parab=2  !< Degree of parabolic piecewise polynomial
 
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NK_INTERFACE_) :: dzRegrid  !< Work space for communicating
+                                                                       !! between regridding and remapping
 
-  ! Work space for communicating between regridding and remapping
-  real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NK_INTERFACE_) :: dzRegrid
+  logical :: remap_after_initialization !<   Indicates whether to regrid/remap after initializing the state.
 
-  !> Indicates whether to regrid/remap after initializing the state.
-  logical :: remap_after_initialization
+  logical :: show_call_tree !< For debugging
+  real    :: C_p            !< seawater heat capacity (J/(kg deg C))
 
-  logical :: show_call_tree ! For debugging
+  ! for diagnostics 
+  type(diag_ctrl), pointer           :: diag                          !< structure to regulate output
+  integer, dimension(:), allocatable :: id_tracer_remap_tendency      !< diagnostic id 
+  integer, dimension(:), allocatable :: id_Htracer_remap_tendency     !< diagnostic id 
+  integer, dimension(:), allocatable :: id_Htracer_remap_tendency_2d  !< diagnostic id 
+  logical, dimension(:), allocatable :: do_tendency_diag              !< flag for doing diagnostics 
 
 end type
 
-! -----------------------------------------------------------------------------
-! The following routines are visible to the outside world
-! -----------------------------------------------------------------------------
+
 public initialize_ALE
 public end_ALE
 public ALE_main 
@@ -119,12 +117,11 @@ public ALE_getCoordinateUnits
 public ALE_writeCoordinateFile
 public ALE_updateVerticalGridType
 public ALE_initThicknessToCoord
+public ALE_update_regrid_weights
 public check_remapping_grid
 public remap_init_conds
+public register_diags_ALE 
 
-! -----------------------------------------------------------------------------
-! The following are private constants
-! -----------------------------------------------------------------------------
 ! List of interpolation schemes
 integer, parameter :: INTERPOLATION_P1M_H2     = 0 ! O(h^2)
 integer, parameter :: INTERPOLATION_P1M_H4     = 1 ! O(h^2)
@@ -137,31 +134,22 @@ integer, parameter :: INTERPOLATION_P3M_IH6IH5 = 7 ! O(h^4)
 integer, parameter :: INTERPOLATION_PQM_IH4IH3 = 8 ! O(h^4)
 integer, parameter :: INTERPOLATION_PQM_IH6IH5 = 9 ! O(h^5)
 
-! -----------------------------------------------------------------------------
-! This module contains the following routines
-! -----------------------------------------------------------------------------
 contains
 
-!------------------------------------------------------------------------------
-! Initialization of regridding
-!------------------------------------------------------------------------------
-subroutine initialize_ALE( param_file, G, CS )
-!------------------------------------------------------------------------------
-! This routine is typically called (from initialize_MOM in file MOM.F90)
-! before the main time integration loop to initialize the regridding stuff.
-! We read the MOM_input file to register the values of different
-! regridding/remapping parameters.
-!------------------------------------------------------------------------------
-  
-  ! Arguments
-  type(param_file_type), intent(in)                      :: param_file
-  type(ocean_grid_type), intent(in)                      :: G
-  type(ALE_CS), pointer                                  :: CS
+
+!> This routine is typically called (from initialize_MOM in file MOM.F90)
+!! before the main time integration loop to initialize the regridding stuff.
+!! We read the MOM_input file to register the values of different
+!! regridding/remapping parameters.
+subroutine initialize_ALE( param_file, G, CS)
+  type(param_file_type),   intent(in) :: param_file !< Parameter file
+  type(ocean_grid_type),   intent(in) :: G          !< Ocean grid structure
+  type(ALE_CS),            pointer    :: CS         !< Module control structure
 
   ! Local variables
   real, dimension(:), allocatable :: dz
-  character(len=40)  :: mod = "MOM_ALE" ! This module's name.
-  character(len=80) :: string ! Temporary strings
+  character(len=40)               :: mod = "MOM_ALE" ! This module's name.
+  character(len=80)               :: string ! Temporary strings
 
   if (associated(CS)) then
     call MOM_error(WARNING, "initialize_ALE called with an associated "// &
@@ -223,6 +211,13 @@ subroutine initialize_ALE( param_file, G, CS )
                  "legacy step and should not be needed if the initialization is\n"//&
                  "consistent with the coordinate mode.", default=.true.)
 
+  call get_param(param_file, mod, "REGRID_TIME_SCALE", CS%regrid_time_scale, &
+                 "The time-scale used in blending between the current (old) grid\n"//&
+                 "and the target (new) grid. A short time-scale favors the target\n"//&
+                 "grid (0. or anything less than DT_THERM) has no memory of the old\n"//&
+                 "grid. A very long time-scale makes the model more Lagrangian.", &
+                 units="s", default=0.)
+
   ! Keep a record of values for subsequent queries
   CS%nk = G%ke
 
@@ -230,36 +225,107 @@ subroutine initialize_ALE( param_file, G, CS )
 end subroutine initialize_ALE
 
 
-!------------------------------------------------------------------------------
-! Crudely adjust (initial) grid for integrity
-!------------------------------------------------------------------------------
+!> Initialize diagnostics for the ALE module. 
+subroutine register_diags_ALE(Time, G, diag, C_p, Reg, CS)
+  type(time_type),target,     intent(in)  :: Time  !< Time structure
+  type(ocean_grid_type),      intent(in)  :: G     !< Grid structure
+  type(diag_ctrl), target,    intent(in)  :: diag  !< Diagnostics control structure
+  real,                       intent(in)  :: C_p   !< seawater heat capacity (J/(kg deg C))
+  type(tracer_registry_type), pointer     :: Reg   !< Tracer registry
+  type(ALE_CS), pointer                   :: CS    !< Module control structure 
+
+  integer :: m, ntr, nsize 
+
+  if (associated(Reg)) then
+    ntr = Reg%ntr
+  else
+    ntr = 0
+  endif
+  nsize = max(1,ntr)
+
+  CS%diag => diag
+  CS%C_p  = C_p
+
+  allocate(CS%id_tracer_remap_tendency(nsize))
+  allocate(CS%id_Htracer_remap_tendency(nsize))
+  allocate(CS%id_Htracer_remap_tendency_2d(nsize))
+  allocate(CS%do_tendency_diag(nsize)) 
+  CS%do_tendency_diag(:)             = .false.
+  CS%id_tracer_remap_tendency(:)     = -1
+  CS%id_Htracer_remap_tendency(:)    = -1
+  CS%id_Htracer_remap_tendency_2d(:) = -1
+
+  if(ntr > 0) then 
+
+    do m=1,ntr
+      if(trim(Reg%Tr(m)%name) == 'T') then 
+
+        CS%id_tracer_remap_tendency(m) = register_diag_field('ocean_model',                &
+        trim(Reg%Tr(m)%name)//'_tendency_vert_remap', diag%axesTL, Time,                   &
+        'Tendency from vertical remapping for tracer concentration '//trim(Reg%Tr(m)%name),&
+        'degC/s')
+
+        CS%id_Htracer_remap_tendency(m) = register_diag_field('ocean_model',&
+        trim(Reg%Tr(m)%name)//'h_tendency_vert_remap', diag%axesTL, Time,   &
+        'Tendency from vertical remapping for heat',                        &
+         'W/m2')
+
+        CS%id_Htracer_remap_tendency_2d(m) = register_diag_field('ocean_model',&
+        trim(Reg%Tr(m)%name)//'h_tendency_vert_remap_2d', diag%axesT1, Time,   &
+        'Vertical sum of tendency from vertical remapping for heat',           &
+         'W/m2')
+
+      else 
+
+        CS%id_tracer_remap_tendency(m) = register_diag_field('ocean_model',                &
+        trim(Reg%Tr(m)%name)//'_tendency_vert_remap', diag%axesTL, Time,                   & 
+        'Tendency from vertical remapping for tracer concentration '//trim(Reg%Tr(m)%name),&
+        'tracer conc / sec')
+
+        CS%id_Htracer_remap_tendency(m) = register_diag_field('ocean_model',         &
+        trim(Reg%Tr(m)%name)//'h_tendency_vert_remap', diag%axesTL, Time,            &
+        'Tendency from vertical remapping for tracer content '//trim(Reg%Tr(m)%name),&
+        'kg m-2 s-1')
+
+        CS%id_Htracer_remap_tendency_2d(m) = register_diag_field('ocean_model',                      &
+        trim(Reg%Tr(m)%name)//'h_tendency_vert_remap_2d', diag%axesT1, Time,                         &
+        'Vertical sum of tendency from vertical remapping for tracer content '//trim(Reg%Tr(m)%name),&
+        'kg m-2 s-1')
+
+      endif 
+
+      if(CS%id_tracer_remap_tendency(m)     > 0) CS%do_tendency_diag(m) = .true.
+      if(CS%id_Htracer_remap_tendency(m)    > 0) CS%do_tendency_diag(m) = .true.
+      if(CS%id_Htracer_remap_tendency_2d(m) > 0) CS%do_tendency_diag(m) = .true.
+
+    enddo   ! m loop over tracers 
+
+  endif ! ntr > 0  
+
+
+end subroutine register_diags_ALE
+
+
+!> Crudely adjust (initial) grid for integrity.
+!! This routine is typically called (from initialize_MOM in file MOM.F90)
+!! before the main time integration loop to initialize the regridding stuff.
+!! We read the MOM_input file to register the values of different
+!! regridding/remapping parameters.
 subroutine adjustGridForIntegrity( CS, G, h )
-!------------------------------------------------------------------------------
-! This routine is typically called (from initialize_MOM in file MOM.F90)
-! before the main time integration loop to initialize the regridding stuff.
-! We read the MOM_input file to register the values of different
-! regridding/remapping parameters.
-!------------------------------------------------------------------------------
-  
-  ! Arguments
-  type(ALE_CS), pointer                                  :: CS
-  type(ocean_grid_type), intent(in)                      :: G
-  real, dimension(NIMEM_,NJMEM_, NKMEM_),  intent(inout) :: h
+  type(ALE_CS), pointer                                 :: CS
+  type(ocean_grid_type), intent(in)                     :: G
+  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout) :: h
 
   call inflate_vanished_layers_old( CS%regridCS, G, h(:,:,:) )
 
 end subroutine adjustGridForIntegrity
 
 
-!------------------------------------------------------------------------------
-! End of regridding (memory deallocation)
-!------------------------------------------------------------------------------
+!> End of regridding (memory deallocation).
+!! This routine is typically called (from MOM_end in file MOM.F90)
+!! after the main time integration loop to deallocate the regridding stuff.
 subroutine end_ALE(CS)
-!------------------------------------------------------------------------------
-! This routine is typically called (from MOM_end in file MOM.F90)
-! after the main time integration loop to deallocate the regridding stuff.
-!------------------------------------------------------------------------------
-  type(ALE_CS), pointer :: CS
+  type(ALE_CS), pointer :: CS  !< module control structure 
   
   ! Deallocate memory used for the regridding
   call end_remapping( CS%remapCS )
@@ -274,18 +340,24 @@ end subroutine end_ALE
 !! the old grid and the new grid. The creation of the new grid can be based
 !! on z coordinates, target interface densities, sigma coordinates or any
 !! arbitrary coordinate system.
-subroutine ALE_main( G, h, u, v, tv, Reg, CS )
-  type(ocean_grid_type),                   intent(in)    :: G !< Ocean grid informations
-  real, dimension(NIMEM_,NJMEM_, NKMEM_),  intent(inout) :: h !< Current 3D grid obtained after the last time step (m or Pa)
-  real, dimension(NIMEMB_,NJMEM_, NKMEM_), intent(inout) :: u !< Zonal velocity field (m/s)
-  real, dimension(NIMEM_,NJMEMB_, NKMEM_), intent(inout) :: v !< Meridional velocity field (m/s)
-  type(thermo_var_ptrs),                   intent(inout) :: tv !< Thermodynamical variable structure
+subroutine ALE_main( G, h, u, v, tv, Reg, CS, dt)
+  type(ocean_grid_type),                   intent(in)    :: G   !< Ocean grid informations
+  real, dimension(NIMEM_,NJMEM_, NKMEM_),  intent(inout) :: h   !< Current 3D grid obtained after last time step (m or Pa)
+  real, dimension(NIMEMB_,NJMEM_, NKMEM_), intent(inout) :: u   !< Zonal velocity field (m/s)
+  real, dimension(NIMEM_,NJMEMB_, NKMEM_), intent(inout) :: v   !< Meridional velocity field (m/s)
+  type(thermo_var_ptrs),                   intent(inout) :: tv  !< Thermodynamic variable structure
   type(tracer_registry_type),              pointer       :: Reg !< Tracer registry structure
-  type(ALE_CS),                            intent(inout) :: CS !< Regridding parameters and options
+  type(ALE_CS),                            pointer       :: CS  !< Regridding parameters and options
+  real,                          optional, intent(in)    :: dt  !< Time step between calls to ALE_main()
+
   ! Local variables
   integer :: nk, i, j, k, isd, ied, jsd, jed
 
   if (CS%show_call_tree) call callTree_enter("ALE_main(), MOM_ALE.F90")
+
+  if (present(dt)) then
+    call ALE_update_regrid_weights( dt, CS )
+  endif
 
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
@@ -296,7 +368,7 @@ subroutine ALE_main( G, h, u, v, tv, Reg, CS )
   if (CS%show_call_tree) call callTree_waypoint("new grid generated (ALE_main)")
 
   ! Remap all variables from old grid h onto new grid h_new
-  call remapping_main( CS%remapCS, G, h, -CS%dzRegrid, Reg, u, v, CS%show_call_tree )
+  call remapping_main( CS%remapCS, CS, G, h, -CS%dzRegrid, Reg, u, v, CS%show_call_tree, dt)
 
   if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_main)")
 
@@ -307,20 +379,22 @@ subroutine ALE_main( G, h, u, v, tv, Reg, CS )
   do k = 1,nk
     do j = jsd,jed ; do i = isd,ied
       h(i,j,k) = h(i,j,k) + ( CS%dzRegrid(i,j,k) - CS%dzRegrid(i,j,k+1) )
-    enddo ; enddo
+     enddo ; enddo
   enddo
 
   if (CS%show_call_tree) call callTree_leave("ALE_main()")
 end subroutine ALE_main
 
+
 !> Generates new grid
 subroutine regrid_only( G, regridCS, remapCS, h, tv, debug )
-  type(ocean_grid_type),                   intent(in)    :: G !< Ocean grid informations
+  type(ocean_grid_type),                   intent(in)    :: G        !< Ocean grid structure 
   type(regridding_CS),                     intent(in)    :: regridCS !< Regridding parameters and options
-  type(remapping_CS),                      intent(in)    :: remapCS !< Remapping parameters and options
-  type(thermo_var_ptrs),                   intent(inout) :: tv !< Thermodynamical variable structure
-  real, dimension(NIMEM_,NJMEM_, NKMEM_),  intent(inout) :: h !< Current 3D grid obtained after the last time step (m or Pa)
-  logical,                       optional, intent(in)    :: debug !< If true, show the call tree
+  type(remapping_CS),                      intent(in)    :: remapCS  !< Remapping parameters and options
+  type(thermo_var_ptrs),                   intent(inout) :: tv       !< Thermodynamical variable structure
+  real, dimension(NIMEM_,NJMEM_, NKMEM_),  intent(inout) :: h        !< Current 3D grid obtained after the last time step (m or Pa)
+  logical,                       optional, intent(in)    :: debug    !< If true, show the call tree
+
   ! Local variables
   integer :: nk, i, j, k
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: dzRegrid ! The changein grid interface positions
@@ -350,19 +424,21 @@ subroutine regrid_only( G, regridCS, remapCS, h, tv, debug )
   if (show_call_tree) call callTree_leave("regrid_only()")
 end subroutine regrid_only
 
-!> Generates new grid and remaps T and S.
+
+!> Generates new grid and remaps T and S
 subroutine regrid_remap_T_S( G, regridCS, remapCS, h, tv, debug )
-  type(ocean_grid_type),                   intent(in)    :: G !< Ocean grid informations
+  type(ocean_grid_type),                   intent(in)    :: G        !< Ocean grid informations
   type(regridding_CS),                     intent(in)    :: regridCS !< Regridding parameters and options
-  type(remapping_CS),                      intent(in)    :: remapCS !< Remapping parameters and options
-  real, dimension(NIMEM_,NJMEM_, NKMEM_),  intent(inout) :: h !< Current 3D grid obtained after the last time step (m or Pa)
-  type(thermo_var_ptrs),                   intent(inout) :: tv !< Thermodynamical variable structure
-  logical,                       optional, intent(in)    :: debug !< If true, show the call tree
+  type(remapping_CS),                      intent(in)    :: remapCS  !< Remapping parameters and options
+  real, dimension(NIMEM_,NJMEM_, NKMEM_),  intent(inout) :: h        !< Current 3D grid obtained after the last time step (m or Pa)
+  type(thermo_var_ptrs),                   intent(inout) :: tv       !< Thermodynamical variable structure
+  logical,                       optional, intent(in)    :: debug    !< If true, show the call tree
+
   ! Local variables
   integer :: nk, i, j, k, isd, ied, jsd, jed
-  real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: h_old ! The source grid
-  real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: scalar ! The source data
-  real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: dzRegrid ! The changein grid interface positions
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G))   :: h_old    ! source grid
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G))   :: scalar   ! source data
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: dzRegrid ! change in grid interface positions
   logical :: show_call_tree
 
   show_call_tree = .false.
@@ -391,63 +467,156 @@ subroutine regrid_remap_T_S( G, regridCS, remapCS, h, tv, debug )
   ! Remap T and S from old grid h_old onto new grid h
   scalar(:,:,:) = tv%T(:,:,:)
   call remap_scalar_h_to_h( remapCS, G, nk, h_old, scalar, h, tv%T )
+
   scalar(:,:,:) = tv%S(:,:,:)
   call remap_scalar_h_to_h( remapCS, G, nk, h_old, scalar, h, tv%S )
 
   if (show_call_tree) call callTree_leave("regrid_map_T_S()")
 end subroutine regrid_remap_T_S
 
+
 !> This routine takes care of remapping all variable between the old and the
 !! new grids. When velocity components need to be remapped, thicknesses at
 !! velocity points are taken to be arithmetic averages of tracer thicknesses.
-subroutine remapping_main( CS, G, h, dxInterface, Reg, u, v, debug )
-  ! Arguments
-  type(remapping_CS),                               intent(in)    :: CS !< Remapping control structure
-  type(ocean_grid_type),                            intent(in)    :: G  !< Ocean grid structure
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),            intent(in)    :: h  !< Level thickness (m or Pa)
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_),     intent(in)    :: dxInterface !< Change in interface position (Hm or Pa)
-  type(tracer_registry_type),                       pointer       :: Reg !< Tracer registry structure
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), optional, intent(inout) :: u  !< Zonal velocity component (m/s)
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), optional, intent(inout) :: v  !< Meridional velocity component (m/s)
-  logical,                                optional, intent(in)    :: debug !< If true, show the call tree
+!! This routine is called during initialization of the model at time=0, to 
+!! remap initiali conditions to the model grid.  It is also called during a
+!! time step to update the state.  
+subroutine remapping_main(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u, v, debug, dt)
+  type(remapping_CS),                               intent(in)    :: CS_remapping  !< Remapping control structure
+  type(ALE_CS),                                     intent(in)    :: CS_ALE        !< ALE control structure 
+  type(ocean_grid_type),                            intent(in)    :: G             !< Ocean grid structure
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),            intent(in)    :: h             !< Level thickness (m or Pa)
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_),     intent(in)    :: dxInterface   !< Change in interface position (Hm or Pa)
+  type(tracer_registry_type),                       pointer       :: Reg           !< Tracer registry structure
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), optional, intent(inout) :: u             !< Zonal velocity component (m/s)
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), optional, intent(inout) :: v             !< Meridional velocity component (m/s)
+  logical,                                optional, intent(in)    :: debug         !< If true, show the call tree
+  real,                                   optional, intent(in)    :: dt            !< time step for diagnostics 
+
   ! Local variables
-  integer               :: i, j, k, m
-  integer               :: nz, ntr
-  real, dimension(G%ke+1) :: dx
-  real, dimension(G%ke) :: h1, u_column
-  logical :: show_call_tree
+  integer                                     :: i, j, k, m
+  integer                                     :: nz, ntr
+  real, dimension(G%ke+1)                     :: dx
+  real, dimension(G%ke)                       :: h1, u_column
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G))  :: work_conc 
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G))  :: work_cont
+  real, dimension(SZI_(G), SZJ_(G))           :: work_2d 
+  real                                        :: Idt, h2, ppt2mks   
+  logical                                     :: show_call_tree
 
   show_call_tree = .false.
   if (present(debug)) show_call_tree = debug
   if (show_call_tree) call callTree_enter("remapping_main(), MOM_ALE.F90")
 
-  nz = G%ke
+  nz      = G%ke
+  ppt2mks = 0.001 
+
   if (associated(Reg)) then
     ntr = Reg%ntr
   else
     ntr = 0
   endif
 
+  if(present(dt)) then   
+    work_conc(:,:,:) = 0.0
+    work_cont(:,:,:) = 0.0
+    work_2d(:,:)     = 0.0 
+    Idt              = 1.0/dt 
+  endif 
+
   ! Remap tracer
-!$OMP parallel default(none) shared(G,h,dxInterface,CS,nz,Reg,u,v,ntr,show_call_tree) &
+!$OMP parallel default(none) shared(G,h,dxInterface,CS_remapping,nz,Reg,u,v,ntr,show_call_tree) &
 !$OMP                       private(h1,dx,u_column)
   if (ntr>0) then
     if (show_call_tree) call callTree_waypoint("remapping tracers (remapping_main)")
 !$OMP do
-    do j = G%jsc,G%jec
-      do i = G%isc,G%iec
-        if (G%mask2dT(i,j)>0.) then
-          ! Build the start and final grids
-          h1(:) = h(i,j,:)
-          dx(:) = dxInterface(i,j,:)
-          do m=1,ntr ! For each tracer ! NOTE THAT THIS LOOP SHOULD BE OUTSIDE -AJA
-            call remapping_core(CS, nz, h1, Reg%Tr(m)%t(i,j,:), nz, dx, u_column)
+    do m=1,ntr ! For each tracer 
+
+      do j = G%jsc,G%jec
+        do i = G%isc,G%iec
+
+          if (G%mask2dT(i,j)>0.) then
+
+            ! Build the start and final grids
+            h1(:) = h(i,j,:)
+            dx(:) = dxInterface(i,j,:)
+            call remapping_core(CS_remapping, nz, h1, Reg%Tr(m)%t(i,j,:), nz, dx, u_column)
+
+            ! Intermediate steps for tendency of tracer concentration and tracer content.
+            ! Note: do not merge the two if-tests, since do_tendency_diag(:) is not 
+            ! allocated during the time=0 initialization call to this routine. 
+            if(present(dt)) then 
+              if(CS_ALE%do_tendency_diag(m)) then 
+                do k=1,G%ke
+                  h2               = h1(k) - (dx(k)-dx(k+1))
+                  work_conc(i,j,k) = (u_column(k)    - Reg%Tr(m)%t(i,j,k)      ) * Idt 
+                  work_cont(i,j,k) = (u_column(k)*h2 - Reg%Tr(m)%t(i,j,k)*h1(k)) * Idt * G%H_to_kg_m2 
+                enddo 
+              endif 
+            endif 
+
+            ! update tracer concentration 
             Reg%Tr(m)%t(i,j,:) = u_column(:)
-          enddo
-        endif
-      enddo
-    enddo
-  endif
+
+          endif
+
+        enddo ! i
+      enddo ! j
+
+
+      ! tendency diagnostics.
+      ! Note: do not merge the two if-tests if(present(dt)) and 
+      ! if(CS_ALE%do_tendency_diag(m)).  The reason is that 
+      ! do_tendency_diag(:) is not allocated when this routine is called
+      ! during initialization (time=0). So need to keep the if-tests split.  
+      if(present(dt)) then 
+        if(CS_ALE%do_tendency_diag(m)) then 
+
+          if(CS_ALE%id_tracer_remap_tendency(m) > 0) then 
+            call post_data(CS_ALE%id_tracer_remap_tendency(m), work_conc, CS_ALE%diag)
+          endif 
+
+          if (CS_ALE%id_Htracer_remap_tendency(m) > 0 .or. CS_ALE%id_Htracer_remap_tendency_2d(m) > 0) then 
+            if(trim(Reg%Tr(m)%name) == 'T') then 
+              do k=1,G%ke
+                do j = G%jsc,G%jec
+                  do i = G%isc,G%iec
+                    work_cont(i,j,k) = work_cont(i,j,k) * CS_ALE%C_p
+                  enddo
+                enddo
+              enddo
+            elseif(trim(Reg%Tr(m)%name) == 'S') then 
+              do k=1,G%ke
+                do j = G%jsc,G%jec
+                  do i = G%isc,G%iec
+                    work_cont(i,j,k) = work_cont(i,j,k) * ppt2mks 
+                  enddo
+                enddo
+              enddo
+            endif 
+          endif 
+
+          if (CS_ALE%id_Htracer_remap_tendency(m) > 0) then 
+            call post_data(CS_ALE%id_Htracer_remap_tendency(m), work_cont, CS_ALE%diag)
+          endif 
+          if (CS_ALE%id_Htracer_remap_tendency_2d(m) > 0) then 
+            do j = G%jsc,G%jec
+              do i = G%isc,G%iec
+                work_2d(i,j) = 0.0
+                do k = 1,G%ke
+                  work_2d(i,j) = work_2d(i,j) + work_cont(i,j,k)
+                enddo 
+              enddo 
+            enddo 
+            call post_data(CS_ALE%id_Htracer_remap_tendency_2d(m), work_2d, CS_ALE%diag)
+          endif
+
+        endif 
+      endif 
+
+    enddo ! m=1,ntr
+
+  endif   ! endif for ntr > 0
 
   if (show_call_tree) call callTree_waypoint("tracers remapped (remapping_main)")
 
@@ -460,7 +629,7 @@ subroutine remapping_main( CS, G, h, dxInterface, Reg, u, v, debug )
           ! Build the start and final grids
           h1(:) = 0.5 * ( h(i,j,:) + h(i+1,j,:) )
           dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i+1,j,:) )
-          call remapping_core(CS, nz, h1, u(i,j,:), nz, dx, u_column)
+          call remapping_core(CS_remapping, nz, h1, u(i,j,:), nz, dx, u_column)
           u(i,j,:) = u_column(:)
         endif
       enddo
@@ -478,7 +647,7 @@ subroutine remapping_main( CS, G, h, dxInterface, Reg, u, v, debug )
           ! Build the start and final grids
           h1(:) = 0.5 * ( h(i,j,:) + h(i,j+1,:) )
           dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i,j+1,:) )
-          call remapping_core(CS, nz, h1, v(i,j,:), nz, dx, u_column)
+          call remapping_core(CS_remapping, nz, h1, v(i,j,:), nz, dx, u_column)
           v(i,j,:) = u_column(:)
         endif
       enddo
@@ -491,17 +660,18 @@ subroutine remapping_main( CS, G, h, dxInterface, Reg, u, v, debug )
 
 end subroutine remapping_main
 
+
 !> Remaps a single scalar between grids described by thicknesses h_src and h_dst.
 !! h_dst must be dimensioned as a model array with G%ke layers while h_src can
 !! have an arbitrary number of layers specified by nk_src.
-subroutine remap_scalar_h_to_h( CS, G, nk_src, h_src, s_src, h_dst, s_dst, all_cells )
-  type(remapping_CS),                      intent(in)    :: CS !< Remapping control structure
-  type(ocean_grid_type),                   intent(in)    :: G  !< Ocean grid structure
-  integer,                                 intent(in)    :: nk_src !< Number of levels on source grid
-  real, dimension(SZI_(G),SZJ_(G),nk_src), intent(in)    :: h_src !< Level thickness of source grid (m or Pa)
-  real, dimension(SZI_(G),SZJ_(G),nk_src), intent(in)    :: s_src !< Scalar on source grid
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),   intent(in)    :: h_dst !< Level thickness of destination grid (m or Pa)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),   intent(inout) :: s_dst !< Scalar on destination grid
+subroutine remap_scalar_h_to_h(CS, G, nk_src, h_src, s_src, h_dst, s_dst, all_cells )
+  type(remapping_CS),                      intent(in)    :: CS        !< Remapping control structure
+  type(ocean_grid_type),                   intent(in)    :: G         !< Ocean grid structure
+  integer,                                 intent(in)    :: nk_src    !< Number of levels on source grid
+  real, dimension(SZI_(G),SZJ_(G),nk_src), intent(in)    :: h_src     !< Level thickness of source grid (m or Pa)
+  real, dimension(SZI_(G),SZJ_(G),nk_src), intent(in)    :: s_src     !< Scalar on source grid
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),   intent(in)    :: h_dst     !< Level thickness of destination grid (m or Pa)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),   intent(inout) :: s_dst     !< Scalar on destination grid
   logical, optional,                       intent(in)    :: all_cells !< If false, only reconstruct for
                                                                       !! non-vanished cells. Use all vanished
                                                                       !! layers otherwise (default).
@@ -540,37 +710,27 @@ subroutine remap_scalar_h_to_h( CS, G, nk_src, h_src, s_src, h_dst, s_dst, all_c
 end subroutine remap_scalar_h_to_h
 
 
-!------------------------------------------------------------------------------
-! Use plm reconstruction for pressure gradient (determine edge values)
-!------------------------------------------------------------------------------
+!> Use plm reconstruction for pressure gradient (determine edge values)
+!! By using a PLM (limited piecewise linear method) reconstruction, this 
+!! routine determines the edge values for the salinity and temperature 
+!! within each layer. These edge values are returned and are used to compute 
+!! the pressure gradient (by computing the densities).
 subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, tv, h )
-!------------------------------------------------------------------------------
-! By using a PLM (limited piecewise linear method) reconstruction, this 
-! routine determines the edge values for the salinity and temperature 
-! within each layer. These edge values are returned and are used to compute 
-! the pressure gradient (by computing the densities).
-!------------------------------------------------------------------------------
-
-  ! Arguments
-  type(ALE_CS), intent(inout) :: CS ! Regridding parameters and options
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: &
-  S_t, S_b  ! Salinity at the top and bottom edges of each layer
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: &
-  T_t, T_b  ! Temperature at the top and bottom edges of each layer
-  type(ocean_grid_type), intent(in)                 :: G
-  type(thermo_var_ptrs), intent(in)                 :: tv
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: &
-  h         ! Three-dimensional ocean grid
+  type(ALE_CS), intent(inout)                          :: CS   !< module control structure 
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: S_t  !< Salinity at the top edge of each layer
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: S_b  !< Salinity at the bottom edge of each layer
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: T_t  !< Temperature at the top edge of each layer
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: T_b  !< Temperature at the bottom edge of each layer
+  type(ocean_grid_type), intent(in)                    :: G    !< ocean grid structure 
+  type(thermo_var_ptrs), intent(in)                    :: tv   !< thermodynamics structure 
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h    !< layer thickness 
 
   ! Local variables
   integer :: i, j, k
   real    :: hTmp(G%ke)
   real    :: tmp(G%ke)
-  real, dimension(CS%nk,2) :: &
-      ppoly_linear_E            !Edge value of polynomial
-  real, dimension(CS%nk,CS%degree_linear+1) :: &
-      ppoly_linear_coefficients !Coefficients of polynomial
-
+  real, dimension(CS%nk,2)                  :: ppoly_linear_E            !Edge value of polynomial
+  real, dimension(CS%nk,CS%degree_linear+1) :: ppoly_linear_coefficients !Coefficients of polynomial
 
   ! NOTE: the variables 'CS%grid_generic' and 'CS%ppoly_linear' are declared at
   ! the module level. Memory is allocated once at the beginning of the run
@@ -615,27 +775,20 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, tv, h )
 end subroutine pressure_gradient_plm
 
 
-!------------------------------------------------------------------------------
-! Use ppm reconstruction for pressure gradient (determine edge values)
-!------------------------------------------------------------------------------
+!> Use ppm reconstruction for pressure gradient (determine edge values)
+!> By using a PPM (limited piecewise linear method) reconstruction, this 
+!> routine determines the edge values for the salinity and temperature 
+!> within each layer. These edge values are returned and are used to compute 
+!> the pressure gradient (by computing the densities).
 subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, tv, h )
-!------------------------------------------------------------------------------
-! By using a PPM (limited piecewise linear method) reconstruction, this 
-! routine determines the edge values for the salinity and temperature 
-! within each layer. These edge values are returned and are used to compute 
-! the pressure gradient (by computing the densities).
-!------------------------------------------------------------------------------
-
-  ! Arguments
-  type(ALE_CS), intent(inout) :: CS
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: &
-  S_t, S_b  ! Salinity at the top and bottom edges of each layer
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: &
-  T_t, T_b  ! Temperature at the top and bottom edges of each layer
-  type(ocean_grid_type), intent(in)                 :: G
-  type(thermo_var_ptrs), intent(in)                 :: tv
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: &
-  h         ! Three-dimensional ocean grid
+  type(ALE_CS), intent(inout)                          :: CS   !< module control structure 
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: S_t  !< Salinity at top edge of each layer
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: S_b  !< Salinity at bottom edge of each layer
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: T_t  !< Temperature at the top edge of each layer
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: T_b  !< Temperature at the bottom edge of each layer
+  type(ocean_grid_type), intent(in)                    :: G    !< ocean grid structure 
+  type(thermo_var_ptrs), intent(in)                    :: tv   !< ocean thermodynamics structure 
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h    !< layer thickness 
 
   ! Local variables
   integer :: i, j, k
@@ -694,26 +847,18 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, tv, h )
 end subroutine pressure_gradient_ppm
 
 
-!------------------------------------------------------------------------------
-! Allocate memory for regridding
-!------------------------------------------------------------------------------
+!> Allocate memory for regridding.
+!! In this routine, we allocate the memory needed to carry out regridding
+!! steps in the course of the simulation. 
+!! For example, to compute implicit edge-value estimates, a tridiagonal system
+!! must be solved. We allocate the needed memory at the beginning of the
+!! simulation because the number of layers never changes.
 subroutine ALE_memory_allocation( G, CS )
-!------------------------------------------------------------------------------
-! In this routine, we allocate the memory needed to carry out regridding
-! steps in the course of the simulation. 
-
-! For example, to compute implicit edge-value estimates, a tridiagonal system
-! must be solved. We allocate the needed memory at the beginning of the
-! simulation because the number of layers never changes.
-!------------------------------------------------------------------------------
-
-  ! Arguments
-  type(ocean_grid_type), intent(in)   :: G
-  type(ALE_CS), intent(inout) :: CS
+  type(ocean_grid_type), intent(in) :: G   !< ocean grid structure 
+  type(ALE_CS), intent(inout)       :: CS  !< module control structure 
 
   ! Local variables
-  integer   :: nz
-  
+  integer :: nz
   nz = G%ke
 
   ! Work space
@@ -722,54 +867,58 @@ subroutine ALE_memory_allocation( G, CS )
 end subroutine ALE_memory_allocation
 
 
-!------------------------------------------------------------------------------
-! Deallocate memory for regridding
-!------------------------------------------------------------------------------
+!> Deallocate memory for regridding.
+!! In this routine, we reclaim the memory that was allocated for the regridding. 
 subroutine ALE_memory_deallocation( CS )
-!------------------------------------------------------------------------------
-! In this routine, we reclaim the memory that was allocated for the regridding. 
-!------------------------------------------------------------------------------
-  
-  type(ALE_CS), intent(inout) :: CS
+  type(ALE_CS), intent(inout) :: CS  !< module control structure 
   
   ! Work space
   DEALLOC_(CS%dzRegrid)
 
 end subroutine ALE_memory_deallocation
 
+!> pressure reconstruction logical 
 logical function usePressureReconstruction(CS)
-  type(ALE_CS), pointer :: CS
+  type(ALE_CS), pointer :: CS  !< control structure 
+
   if (associated(CS)) then
     usePressureReconstruction=CS%reconstructForPressure
   else
     usePressureReconstruction=.false.
   endif
+
 end function usePressureReconstruction
 
+
+!> pressure reconstruction integer 
 integer function pressureReconstructionScheme(CS)
-  type(ALE_CS), pointer :: CS
+  type(ALE_CS), pointer :: CS !< control structure 
+
   if (associated(CS)) then
     pressureReconstructionScheme=CS%pressureReconstructionScheme
   else
     pressureReconstructionScheme=-1
   endif
+
 end function pressureReconstructionScheme
 
+
+!> Initialize regridding module 
 subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
-  ! Arguments
-  type(ocean_grid_type), intent(in)  :: G
-  type(param_file_type), intent(in)  :: param_file
-  character(len=*),      intent(in)  :: mod ! Name of calling module
-  type(regridding_CS),   intent(out) :: regridCS ! Regridding parameters and work arrays
-  real, dimension(:),    intent(out) :: dz ! Resolution (thickness) in units of coordinate
+  type(ocean_grid_type), intent(in)  :: G            !< ocean grid structure 
+  type(param_file_type), intent(in)  :: param_file   !< parameter file 
+  character(len=*),      intent(in)  :: mod          !< Name of calling module
+  type(regridding_CS),   intent(out) :: regridCS     !< Regridding parameters and work arrays
+  real, dimension(:),    intent(out) :: dz           !< Resolution (thickness) in units of coordinate
+
   ! Local variables
-  character(len=80) :: string, varName ! Temporary strings
-  character(len=40) :: coordMode, interpScheme, coordUnits ! Temporary strings
+  character(len=80)  :: string, varName ! Temporary strings
+  character(len=40)  :: coordMode, interpScheme, coordUnits ! Temporary strings
   character(len=200) :: inputdir, fileName
   character(len=320) :: message ! Temporary strings
   integer :: ke
   logical :: tmpLogical
-  real :: tmpReal
+  real :: tmpReal, compress_fraction
   real :: rho_target(G%ke+1) ! Target density used in HYCOM1 mode
 
   ke = size(dz) ! Number of levels in resolution vector
@@ -791,7 +940,14 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
                  "used. It can be one of the following schemes:\n"//&
                  trim(regriddingInterpSchemeDoc),&
                  default=regriddingDefaultInterpScheme)
-  call initialize_regridding( G%ke, coordMode, interpScheme, regridCS )
+
+  call get_param(param_file, mod, "REGRID_COMPRESSIBILITY_FRACTION", compress_fraction, &
+                 "When interpolating potential density profiles we can add\n"//&
+                 "some artificial compressibility solely to make homogenous\n"//&
+                 "regions appear stratified.", default=0.)
+
+  call initialize_regridding( G%ke, coordMode, interpScheme, regridCS, &
+                              compressibility_fraction=compress_fraction )
 
   call get_param(param_file, mod, "ALE_COORDINATE_CONFIG", string, &
                  "Determines how to specify the coordinate\n"//&
@@ -918,13 +1074,15 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
 
 end subroutine ALE_initRegridding
 
+
 !> Parses a string and generates a dz(:) profile
 subroutine dz_function1( string, dz )
   character(len=*),   intent(in)    :: string !< String with list of parameters
-  real, dimension(:), intent(inout) :: dz !< Profile of nominal thicknesses
+  real, dimension(:), intent(inout) :: dz     !< Profile of nominal thicknesses
+
   ! Local variables
   integer :: nk, k
-  real :: dz_min, power, prec, H_total
+  real    :: dz_min, power, prec, H_total
 
   nk = size(dz) ! Number of cells
   prec = -1024.
@@ -942,45 +1100,64 @@ subroutine dz_function1( string, dz )
   dz(nk) = dz(nk) + ( H_total - sum( dz(:) + dz_min ) ) ! Adjust bottom most layer
   dz(:) = anint( dz(:) / prec ) * prec ! Rounds to precision prec
   dz(:) = dz(:) + dz_min ! Finally add in the constant dz_min
+
 end subroutine dz_function1
 
-!------------------------------------------------------------------------------
-! Query the target coordinate interfaces positions
-!------------------------------------------------------------------------------
-function ALE_getCoordinate( CS )
-  type(ALE_CS), pointer    :: CS
-  real, dimension(CS%nk+1) :: ALE_getCoordinate
 
+!> Query the target coordinate interfaces positions
+function ALE_getCoordinate( CS )
+  type(ALE_CS), pointer    :: CS                  !< module control structure 
+
+  real, dimension(CS%nk+1) :: ALE_getCoordinate  
   ALE_getCoordinate(:) = getCoordinateInterfaces( CS%regridCS )
 
 end function ALE_getCoordinate
 
-!------------------------------------------------------------------------------
-! Query the target coordinate units
-!------------------------------------------------------------------------------
+
+!> Query the target coordinate units
 function ALE_getCoordinateUnits( CS )
-  type(ALE_CS), pointer    :: CS
-  character(len=20)               :: ALE_getCoordinateUnits
+  type(ALE_CS), pointer :: CS   !< module control structure 
+ 
+  character(len=20)     :: ALE_getCoordinateUnits
 
   ALE_getCoordinateUnits = getCoordinateUnits( CS%regridCS )
 
 end function ALE_getCoordinateUnits
 
+
 !> Returns true if initial conditions should be regridded and remapped
 logical function remap_init_conds( CS )
-  type(ALE_CS),            pointer :: CS
+  type(ALE_CS), pointer :: CS   !< module control structure 
+
   remap_init_conds = .false.
   if (associated(CS)) remap_init_conds = CS%remap_after_initialization
 end function remap_init_conds
 
-!------------------------------------------------------------------------------
-! Update the vertical grid type with ALE information
-!------------------------------------------------------------------------------
+!> Updates the weights for time filtering the new grid generated in regridding
+subroutine ALE_update_regrid_weights( dt, CS )
+  real,         intent(in) :: dt !< Time-step used between ALE calls
+  type(ALE_CS), pointer    :: CS !< ALE control structure
+  ! Local variables
+  real :: w
+
+  if (associated(CS)) then
+    if (CS%regrid_time_scale <= dt) then
+      w = 0.
+    else
+      w = ( CS%regrid_time_scale - dt ) / CS%regrid_time_scale
+    endif
+    call set_old_grid_weight( w, CS%regridCS )
+  endif
+
+end subroutine ALE_update_regrid_weights
+
+!> Update the vertical grid type with ALE information.
+!! This subroutine sets information in the verticalGrid_type to be
+!! consistent with the use of ALE mode.
 subroutine ALE_updateVerticalGridType( CS, GV )
-  type(ALE_CS),            pointer :: CS
-  type(verticalGrid_type), pointer :: GV
-!   This subroutine sets information in the verticalGrid_type to be
-! consistent with the sue of ALE mode
+  type(ALE_CS),            pointer :: CS  ! module control structure 
+  type(verticalGrid_type), pointer :: GV  ! vertical grid information 
+
   integer :: nk
 
   nk = GV%ke
@@ -993,24 +1170,24 @@ subroutine ALE_updateVerticalGridType( CS, GV )
 
 end subroutine ALE_updateVerticalGridType
 
-!------------------------------------------------------------------------------
-! Write the vertical coordinate information into a file
-!------------------------------------------------------------------------------
-subroutine ALE_writeCoordinateFile( CS, G, directory )
-  type(ALE_CS),          pointer       :: CS
-  type(ocean_grid_type), intent(inout) :: G
-  character(len=*),      intent(in)    :: directory
-!   This subroutine writes out a file containing any available data related
-! to the vertical grid used by the MOM ocean model when in ALE mode.
-  character(len=120) :: filepath
-  type(vardesc) :: vars(2)
-  type(fieldtype) :: fields(2)
-  integer :: unit
-  real :: ds(G%ke), dsi(G%ke+1)
 
-  filepath = trim(directory) // trim("Vertical_coordinate")
-  ds(:) = getCoordinateResolution( CS%regridCS )
-  dsi(1) = 0.5*ds(1)
+!> Write the vertical coordinate information into a file.
+!! This subroutine writes out a file containing any available data related
+!! to the vertical grid used by the MOM ocean model when in ALE mode.
+subroutine ALE_writeCoordinateFile( CS, G, directory )
+  type(ALE_CS),          pointer       :: CS         !< module control structure 
+  type(ocean_grid_type), intent(inout) :: G          !< model grid structure 
+  character(len=*),      intent(in)    :: directory  !< directory for writing grid info 
+
+  character(len=120) :: filepath
+  type(vardesc)      :: vars(2)
+  type(fieldtype)    :: fields(2)
+  integer            :: unit
+  real               :: ds(G%ke), dsi(G%ke+1)
+
+  filepath    = trim(directory) // trim("Vertical_coordinate")
+  ds(:)       = getCoordinateResolution( CS%regridCS )
+  dsi(1)      = 0.5*ds(1)
   dsi(2:G%ke) = 0.5*( ds(1:G%ke-1) + ds(2:G%ke) )
   dsi(G%ke+1) = 0.5*ds(G%ke)
 
@@ -1026,14 +1203,13 @@ subroutine ALE_writeCoordinateFile( CS, G, directory )
 
 end subroutine ALE_writeCoordinateFile
 
-!------------------------------------------------------------------------------
-! Set h to coordinate values for fixed coordinate systems
-!------------------------------------------------------------------------------
+
+!> Set h to coordinate values for fixed coordinate systems
 subroutine ALE_initThicknessToCoord( CS, G, h )
-  ! Arguments
-  type(ALE_CS), intent(inout) :: CS ! Regridding parameters and options
-  type(ocean_grid_type), intent(in)                  :: G
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(out) :: h ! Three-dimensional ocean grid
+  type(ALE_CS), intent(inout)                        :: CS  !< module control structure 
+  type(ocean_grid_type), intent(in)                  :: G   !< module grid structure 
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(out) :: h   !< layer thickness 
+
   ! Local variables
   integer :: i, j, k
 

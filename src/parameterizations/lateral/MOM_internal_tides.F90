@@ -42,7 +42,7 @@ module MOM_internal_tides
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_checksums, only     : isnan => is_NaN
+use MOM_checksums,     only : isnan => is_NaN
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_axis_init
 use MOM_diag_mediator, only : register_diag_field, diag_ctrl, safe_alloc_ptr
 use MOM_diag_mediator, only : axesType, defineAxes

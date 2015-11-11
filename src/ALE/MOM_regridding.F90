@@ -69,6 +69,13 @@ type, public :: regridding_CS
   !> Reference pressure for potential density calculations (Pa)
   real :: ref_pressure = 2.e7
 
+  !> Weight given to old coordinate when blending between new and old grids (nondim)
+  real :: old_grid_weight = 0.
+
+  !> Fraction (between 0 and 1) of compressibility to add to potential density
+  !! profiles when interpolating for target grid positions. (nondim)
+  real :: compressibility_fraction = 0.
+
 end type
 
 ! The following routines are visible to the outside world
@@ -81,6 +88,7 @@ public check_grid_column
 public adjust_interface_motion
 public setRegriddingBoundaryExtrapolation
 public set_regrid_min_thickness
+public set_old_grid_weight
 public uniformResolution
 public setCoordinateResolution
 public set_target_densities_from_G
@@ -99,9 +107,8 @@ character(len=258), parameter, public :: regriddingCoordinateModeDoc = &
                  " LAYER - Isopycnal or stacked shallow water layers\n"//&
                  " Z*    - stetched geopotential z*\n"//&
                  " SIGMA - terrain following coordinates\n"//&
-                 " RHO   - continuous isopycnal"
-!                " RHO   - continuous isopycnal\n"//&
-!                " HYCOM1 - HyCOM-like hybrid coordinate"
+                 " RHO   - continuous isopycnal\n"//&
+                 " HYCOM1 - HyCOM-like hybrid coordinate"
 
 ! Documentation for regridding interpolation schemes
 character(len=338), parameter, public :: regriddingInterpSchemeDoc = &
@@ -157,11 +164,13 @@ real, parameter    :: NR_OFFSET = 1e-6
 contains
 
 !> Initialization of regridding
-subroutine initialize_regridding( nk, coordMode, interpScheme, CS )
+subroutine initialize_regridding( nk, coordMode, interpScheme, CS, compressibility_fraction )
   integer,               intent(in)    :: nk !< Number of levels
   character(len=*),      intent(in)    :: coordMode !< Coordinate mode to use
   character(len=*),      intent(in)    :: interpScheme !< Interpolation mode to use
   type(regridding_CS),   intent(inout) :: CS !< Regridding control structure
+  real,        optional, intent(in)    :: compressibility_fraction !< Fraction of compressibility
+                                          !! to add to potential density profiles (nondim)
 
   CS%nk = nk
 
@@ -186,11 +195,11 @@ subroutine initialize_regridding( nk, coordMode, interpScheme, CS )
 
   CS%min_thickness = regriddingDefaultMinThickness
 
+  if (present(compressibility_fraction)) CS%compressibility_fraction = compressibility_fraction
+
   call allocate_regridding( CS )
   
 end subroutine initialize_regridding
-
-
 
 !> Deallocation of regridding memory
 subroutine end_regridding(CS)
@@ -199,7 +208,6 @@ subroutine end_regridding(CS)
   call regridding_memory_deallocation( CS )
 
 end subroutine end_regridding
-
 
 !------------------------------------------------------------------------------
 ! Dispatching regridding routine: regridding & remapping
@@ -357,10 +365,11 @@ subroutine build_zstar_grid( CS, G, h, dzInterface )
   integer :: nz
   real    :: nominalDepth, totalThickness, dh
   real, dimension(SZK_(G)+1) :: zOld, zNew
-  real :: minThickness
+  real :: minThickness, new_grid_weight
 
   nz = G%ke
   minThickness = CS%min_thickness
+  new_grid_weight = 1.0 - CS%old_grid_weight
   
 !$OMP parallel do default(none) shared(G,dzInterface,CS,nz,h)                    &
 !$OMP                          private(nominalDepth,totalThickness,minThickness, &
@@ -392,7 +401,7 @@ subroutine build_zstar_grid( CS, G, h, dzInterface )
       ! Define regridding in terms of a movement of interfaces
       dzInterface(i,j,1) = 0.
       do k = 2,nz
-        dzInterface(i,j,k) = zNew(k) - zOld(k)
+        dzInterface(i,j,k) = new_grid_weight * ( zNew(k) - zOld(k) )
       enddo
       dzInterface(i,j,nz+1) = 0.
 
@@ -479,10 +488,11 @@ subroutine buildGridSigma( CS, G, h, dzInterface )
   ! Local variables
   integer :: i, j, k
   integer :: nz
-  real    :: nominalDepth, totalThickness, dh
+  real    :: nominalDepth, totalThickness, dh, new_grid_weight
   real, dimension(SZK_(G)+1) :: zOld, zNew
 
   nz = G%ke
+  new_grid_weight = 1.0 - CS%old_grid_weight
   
   do i = G%isc-1,G%iec+1
     do j = G%jsc-1,G%jec+1
@@ -510,7 +520,7 @@ subroutine buildGridSigma( CS, G, h, dzInterface )
       ! Define regridding in terms of a movement of interfaces
       dzInterface(i,j,1) = 0.
       do k = 2,nz
-        dzInterface(i,j,k) = zNew(k) - zOld(k)
+        dzInterface(i,j,k) = new_grid_weight * ( zNew(k) - zOld(k) )
       enddo
       dzInterface(i,j,nz+1) = 0.
 
@@ -789,9 +799,10 @@ subroutine build_grid_HyCOM1( G, h, tv, dzInterface, remapCS, CS )
   real, dimension(CS%nk,CS%degree_i+1) :: ppoly_i_coefficients ! Coefficients of polynomial
   real :: nominal_z ! Nominal depth of interface is using z* (m or Pa)
   real :: stretching ! z* stretching, converts z* to z.
-  real :: hNew
+  real :: hNew, new_grid_weight
 
   nz = G%ke
+  new_grid_weight = 1.0 - CS%old_grid_weight
 
   ! Build grid based on target interface densities
   do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
@@ -802,10 +813,11 @@ subroutine build_grid_HyCOM1( G, h, tv, dzInterface, remapCS, CS )
       ! once the final grid has been determined).
       T_column(:) = tv%T(i,j,:)
       S_column(:) = tv%S(i,j,:)
-      p_column(:) = CS%ref_pressure
       z_column(1) = 0. ! Work downward rather than bottom up
       do K = 1, nz
         z_column(K+1) = z_column(K) + h(i,j,k) ! Work in units of h (m or Pa)
+        p_column(k) = CS%ref_pressure + CS%compressibility_fraction * &
+             ( 0.5 * ( z_column(K) + z_column(K+1) ) * G%H_to_Pa - CS%ref_pressure )
       enddo
 
       ! Work bottom recording potential density
@@ -835,7 +847,7 @@ subroutine build_grid_HyCOM1( G, h, tv, dzInterface, remapCS, CS )
 
       ! Finally calculate the change in position of the interface
       do k = 1,nz+1
-        dzInterface(i,j,k) = z_column(k) - z_column_new(k)
+        dzInterface(i,j,k) =  new_grid_weight * ( z_column(k) - z_column_new(k) )
       enddo
 #ifdef __DO_SAFETY_CHECKS__
      if (dzInterface(i,j,1) /= 0.) stop 'build_grid_HyCOM1: Surface moved?!'
@@ -1754,6 +1766,17 @@ subroutine set_regrid_min_thickness( minThickness, CS )
   CS%min_thickness = minThickness
   
 end subroutine set_regrid_min_thickness
+
+!> Set the weight given to the old coordinate when blending between new and old grids
+subroutine set_old_grid_weight( old_grid_weight, CS )
+  real   ,             intent(in)    :: old_grid_weight !< Weight, 0..1 (nondim)
+  type(regridding_CS), intent(inout) :: CS              !< Regridding control structure
+
+  if (old_grid_weight<0. .or. old_grid_weight>1.) call MOM_error(FATAL,'MOM_regridding, '//&
+                     'set_old_grid_weight: Weight is out side the range 0..1!')
+  CS%old_grid_weight = old_grid_weight
+
+end subroutine set_old_grid_weight
 
 !------------------------------------------------------------------------------
 ! Return coordinate-derived thicknesses for fixed coordinate systems
