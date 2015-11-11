@@ -109,6 +109,8 @@ type, public :: int_tide_CS ; private
                         ! identifies reflection cells where double reflection 
                         ! is possible (i.e. ridge cells)
                         ! (could be in G control structure)
+  real, allocatable, dimension(:,:,:,:) :: cp
+                        ! horizontal phase speed [m s-1]
   real, allocatable, dimension(:,:,:,:,:) :: TKE_leak_loss
                         ! energy lost due to misc background processes [W m-2]
   real, allocatable, dimension(:,:,:,:,:) :: TKE_quad_loss
@@ -184,7 +186,8 @@ type, public :: int_tide_CS ; private
              id_TKE_loss_ang_mode
   ! Diag handles considering: only first mode and frequency
   integer :: id_Ub_mode_1 = -1, &
-             id_TKE_loss_mode_1 = -1
+             id_TKE_loss_mode_1 = -1, &
+             id_cp_mode_1 = -1
   
 end type int_tide_CS
 
@@ -225,8 +228,8 @@ subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, 
     flux_prec_y
   real, dimension(SZI_(G),SZJ_(G)) :: &
     tot_En, tot_leak_loss, tot_quad_loss, tot_itidal_loss, tot_Froude_loss, &
-    drag_scale, Ub_mode_1, TKE_loss_mode_1
-  real :: frac_per_sector, f2, I_rho0, I_D_here, freq, Kmag2
+    drag_scale, Ub_mode_1, TKE_loss_mode_1, cp_mode_1
+  real :: frac_per_sector, f2, I_rho0, I_D_here, freq2, Kmag2
   real :: c_phase, Umax, loss_rate, Fr2_max
   real, parameter :: cn_subRO = 1e-100               ! to prevent division by zero
   real :: En_new, En_check                           ! for debugging
@@ -418,49 +421,55 @@ subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, 
   if (CS%apply_Froude_drag) then
     ! Pick out maximum baroclinic velocity values; calculate Fr=max(u)/cg
     do m=1,CS%NMode ; do fr=1,CS%Nfreq
-      freq = CS%frequency(fr)**2
+      freq2 = CS%frequency(fr)**2
       do j=jsd,jed ; do i=isd,ied
         id_g = G%isd_global + i - 1.0 ! for debugging
         jd_g = G%jsd_global + j - 1.0 ! for debugging
         ! Calculate horizontal phase velocity magnitudes
         f2 = 0.25*(G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J)**2 + &
                  G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J-1)**2 )
-        Kmag2 = (freq**2 - f2) / (c1(i,j,m)**2 + cn_subRO**2)
-        c_phase = freq/sqrt(Kmag2)
-        nzm = CS%wave_structure_CSp%num_intfaces(i,j)
-        Umax = maxval(CS%wave_structure_CSp%Uavg_profile(i,j,1:nzm))
-        Fr2_max = (Umax/c_phase)**2
-        ! Dissipate energy if Fr>1; done here with an arbitrary time scale
-        if (Fr2_max > 1.0) then
-          !print *, "Applying Fr-dissipation at ig= ", id_g, ", jg= ", jd_g ! for debugging
-          En_initial = sum(CS%En(i,j,:,fr,m))                              ! for debugging          
-          ! Calculate effective decay rate (s-1) if breaking occurs over a time step
-          loss_rate = (1/Fr2_max - 1.0)/dt
-          do a=1,CS%nAngle
-            ! Determine effective dissipation rate (Wm-2)
-            CS%TKE_Froude_loss(i,j,a,fr,m) = CS%En(i,j,a,fr,m) * abs(loss_rate)
-            ! Update energy
-            En_new = CS%En(i,j,a,fr,m)/Fr2_max ! for debugging
-            En_check = CS%En(i,j,a,fr,m) - CS%TKE_Froude_loss(i,j,a,fr,m)*dt ! for debugging
-            ! Re-scale (reduce) energy due to breaking
-            CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m)/Fr2_max
-            ! Check (for debugging only)
-            if (abs(En_new - En_check) > 1e-10) then
-              call MOM_error(WARNING, "MOM_internal_tides: something's wrong with Fr-breaking.")
-              print *, "En_new=", En_new
-              print *, "En_check=", En_check
-            endif
-          enddo
-          ! Check (for debugging)
-          Delta_E_check = En_initial - sum(CS%En(i,j,:,fr,m))
-          TKE_Froude_loss_check = abs(Delta_E_check)/dt
-          TKE_Froude_loss_tot = sum(CS%TKE_Froude_loss(i,j,:,fr,m))
-          if (abs(TKE_Froude_loss_check - TKE_Froude_loss_tot) > 1e-10) then
-            call MOM_error(WARNING, "MOM_internal_tides: something's wrong with Fr energy update.")
-            print *, "TKE_Froude_loss_check=", TKE_Froude_loss_check
-            print *, "TKE_Froude_loss_tot=", TKE_Froude_loss_tot
-          endif
-        endif
+        Kmag2 = (freq2 - f2) / (c1(i,j,m)**2 + cn_subRO**2)
+        c_phase = 0.0
+        if (Kmag2 > 0.0) then
+          c_phase = sqrt(freq2/Kmag2)
+          nzm = CS%wave_structure_CSp%num_intfaces(i,j)
+          Umax = maxval(CS%wave_structure_CSp%Uavg_profile(i,j,1:nzm))
+          Fr2_max = (Umax/c_phase)**2
+          !print *, "Umag=",Umax
+          !print *, "Phase speed=",c_phase
+          ! Dissipate energy if Fr>1; done here with an arbitrary time scale
+          if (Fr2_max > 1.0) then
+            !print *, "Applying Fr-dissipation at ig= ", id_g, ", jg= ", jd_g ! for debugging
+            En_initial = sum(CS%En(i,j,:,fr,m))                              ! for debugging          
+            ! Calculate effective decay rate (s-1) if breaking occurs over a time step
+            loss_rate = (1/Fr2_max - 1.0)/dt
+            do a=1,CS%nAngle
+              ! Determine effective dissipation rate (Wm-2)
+              CS%TKE_Froude_loss(i,j,a,fr,m) = CS%En(i,j,a,fr,m) * abs(loss_rate)
+              ! Update energy
+              En_new = CS%En(i,j,a,fr,m)/Fr2_max ! for debugging
+              En_check = CS%En(i,j,a,fr,m) - CS%TKE_Froude_loss(i,j,a,fr,m)*dt ! for debugging
+              ! Re-scale (reduce) energy due to breaking
+              CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m)/Fr2_max
+              ! Check (for debugging only)
+             if (abs(En_new - En_check) > 1e-10) then
+               call MOM_error(WARNING, "MOM_internal_tides: something's wrong with Fr-breaking.")
+               print *, "En_new=", En_new
+               print *, "En_check=", En_check
+              endif
+            enddo
+            ! Check (for debugging)
+            Delta_E_check = En_initial - sum(CS%En(i,j,:,fr,m))
+            TKE_Froude_loss_check = abs(Delta_E_check)/dt
+            TKE_Froude_loss_tot = sum(CS%TKE_Froude_loss(i,j,:,fr,m))
+            if (abs(TKE_Froude_loss_check - TKE_Froude_loss_tot) > 1e-10) then
+              call MOM_error(WARNING, "MOM_internal_tides: something's wrong with Fr energy update.")
+              print *, "TKE_Froude_loss_check=", TKE_Froude_loss_check
+              print *, "TKE_Froude_loss_tot=", TKE_Froude_loss_tot
+            endif 
+          endif ! Fr2>1
+        endif ! Kmag2>0
+        CS%cp(i,j,fr,m) = c_phase
       enddo ; enddo
     enddo ; enddo
   endif
@@ -554,6 +563,10 @@ subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, 
     ! Output 2-D period-averaged horizontal near-bottom mode velocity for 1st mode and frequency only
     Ub_mode_1 = Ub(:,:,1,1)
     if (CS%id_Ub_mode_1 > 0) call post_data(CS%id_Ub_mode_1, Ub_mode_1, CS%diag)
+    
+    ! Output 2-D horizontal phase velocity for 1st mode and frequency only
+    cp_mode_1 = CS%cp(:,:,1,1)
+    if (CS%id_cp_mode_1 > 0) call post_data(CS%id_cp_mode_1, cp_mode_1, CS%diag)
     
   endif
      
@@ -2131,7 +2144,11 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
   
   ! Allocate energy density array
   allocate(CS%En(isd:ied, jsd:jed, num_angle, num_freq, num_mode))
-  CS%En(:,:,:,:,:) = 0.0    
+  CS%En(:,:,:,:,:) = 0.0
+  
+  ! Allocate phase speed array
+  allocate(CS%cp(isd:ied, jsd:jed, num_freq, num_mode))
+  CS%cp(:,:,:,:) = 0.0 
 
   ! Allocate and populate frequency array (each a multiple of first for now)
   allocate(CS%frequency(num_freq))
@@ -2465,6 +2482,10 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
     ! Register 2-D period-averaged near-bottom horizonal velocity for 1st mode and frequency only
     CS%id_Ub_mode_1 = register_diag_field('ocean_model', 'ITide_Ub_mode_1', diag%axesT1, &
                  Time, "Near-bottom horizonal velocity for 1st mode and frequency", 'm s-1')
+    
+    ! Register 2-D horizonal phase velocity for 1st mode and frequency only
+    CS%id_cp_mode_1 = register_diag_field('ocean_model', 'ITide_cp_mode_1', diag%axesT1, &
+                 Time, "Horizonal phase velocity for 1st mode and frequency", 'm s-1')
     
     ! Initialize wave_structure (not sure if this should be here - BDM)
     call wave_structure_init(Time, G, param_file, diag, CS%wave_structure_CSp)
