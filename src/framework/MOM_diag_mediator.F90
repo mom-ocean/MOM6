@@ -279,7 +279,8 @@ subroutine set_axes_info(G, param_file, diag_cs, set_vertical)
          "Found '"//trim(string)//"'")
     else
       if (string(6:6)=='.' .or. string(6:6)=='/') then
-        filename = trim(inputdir) // trim(extractWord(trim(string(1:200)), 1))
+        inputdir = "."
+        filename = trim(extractWord(trim(string(6:200)), 1))
       else
         call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
         inputdir = slasher(inputdir)
