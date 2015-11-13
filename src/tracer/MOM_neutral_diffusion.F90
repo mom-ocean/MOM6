@@ -43,9 +43,9 @@ type, public :: neutral_diffusion_CS ; private
   real,    allocatable, dimension(:,:,:) :: vHeff ! Effective thickness at v-point (H units)
 
   type(diag_ctrl), pointer :: diag ! structure to regulate output 
-  integer, allocatable, dimension(:) :: id_neutral_diff_tracer_conc_tend      ! tracer concentration tendency 
-  integer, allocatable, dimension(:) :: id_neutral_diff_tracer_cont_tend      ! tracer content tendency
-  integer, allocatable, dimension(:) :: id_neutral_diff_tracer_cont_tend_intz ! k-summed tracer content tendency
+  integer, allocatable, dimension(:) :: id_neutral_diff_tracer_conc_tend    ! tracer concentration tendency 
+  integer, allocatable, dimension(:) :: id_neutral_diff_tracer_cont_tend    ! tracer content tendency
+  integer, allocatable, dimension(:) :: id_neutral_diff_tracer_cont_tend_2d ! k-summed tracer content tendency
 
   real    :: C_p ! heat capacity of seawater (J kg-1 K-1)  
 
@@ -133,10 +133,10 @@ subroutine neutral_diffusion_diag_init(Time, G, diag, C_p, Reg, CS)
 
   allocate(CS%id_neutral_diff_tracer_conc_tend(ntr)) 
   allocate(CS%id_neutral_diff_tracer_cont_tend(ntr)) 
-  allocate(CS%id_neutral_diff_tracer_cont_tend_intz(ntr)) 
-  CS%id_neutral_diff_tracer_conc_tend(:)      = -1
-  CS%id_neutral_diff_tracer_cont_tend(:)      = -1
-  CS%id_neutral_diff_tracer_cont_tend_intz(:) = -1
+  allocate(CS%id_neutral_diff_tracer_cont_tend_2d(ntr)) 
+  CS%id_neutral_diff_tracer_conc_tend(:)    = -1
+  CS%id_neutral_diff_tracer_cont_tend(:)    = -1
+  CS%id_neutral_diff_tracer_cont_tend_2d(:) = -1
 
 
   do n=1,ntr
@@ -157,10 +157,10 @@ subroutine neutral_diffusion_diag_init(Time, G, diag, C_p, Reg, CS)
       cmor_long_name =                                                                                                 &
       'Tendency of sea water potential temperature expressed as heat content due to parameterized mesocale diffusion') 
   
-      CS%id_neutral_diff_tracer_cont_tend_intz(n) = register_diag_field('ocean_model',                                                 &
-      'ndiff_tracer_cont_tendency_intz_'//trim(Reg%Tr(n)%name), diag%axesT1, Time,                                                     &
+      CS%id_neutral_diff_tracer_cont_tend_2d(n) = register_diag_field('ocean_model',                                                   &
+      'ndiff_tracer_cont_tendency_2d_'//trim(Reg%Tr(n)%name), diag%axesT1, Time,                                                       &
       'Depth integrated neutral diffusion tracer content tendency for '//trim(Reg%Tr(n)%name),                                         &
-      'Watts/m2',cmor_field_name='opottemppmdiff_intz', cmor_units='W m-2',                                                            &
+      'Watts/m2',cmor_field_name='opottemppmdiff_2d', cmor_units='W m-2',                                                              &
       cmor_standard_name=                                                                                                              &
       'tendency_of_sea_water_potential_temperature_expressed_as_heat_content_due_to_parameterized_mesocale_diffusion_depth_integrated',&
       cmor_long_name =                                                                                                                 &
@@ -182,10 +182,10 @@ subroutine neutral_diffusion_diag_init(Time, G, diag, C_p, Reg, CS)
       cmor_long_name =                                                                                    &
       'Tendency of sea water salinity expressed as salt content due to parameterized mesocale diffusion') 
 
-      CS%id_neutral_diff_tracer_cont_tend_intz(n) = register_diag_field('ocean_model',                                    &
-      'ndiff_tracer_cont_tendency_intz_'//trim(Reg%Tr(n)%name), diag%axesT1, Time,                                        &
+      CS%id_neutral_diff_tracer_cont_tend_2d(n) = register_diag_field('ocean_model',                                      &
+      'ndiff_tracer_cont_tendency_2d_'//trim(Reg%Tr(n)%name), diag%axesT1, Time,                                          &
       'Depth integrated neutral diffusion tracer content tendency for '//trim(Reg%Tr(n)%name),                            &
-      'kg m-2 s-1',cmor_field_name='osaltpmdiff_intz', cmor_units='kg m-2 s-1',                                           &
+      'kg m-2 s-1',cmor_field_name='osaltpmdiff_2d', cmor_units='kg m-2 s-1',                                             &
       cmor_standard_name=                                                                                                 &
       'tendency_of_sea_water_salinity_expressed_as_salt_content_due_to_parameterized_mesocale_diffusion_depth_integrated',&
       cmor_long_name =                                                                                                    &
@@ -203,8 +203,8 @@ subroutine neutral_diffusion_diag_init(Time, G, diag, C_p, Reg, CS)
       'Neutral diffusion tracer content tendency for '//trim(Reg%Tr(n)%name),    &
       'tracer content * m-2 s-1')
 
-      CS%id_neutral_diff_tracer_cont_tend_intz(n) = register_diag_field('ocean_model',        &
-      'ndiff_tracer_cont_tendency_intz_'//trim(Reg%Tr(n)%name), diag%axesTL, Time,            &
+      CS%id_neutral_diff_tracer_cont_tend_2d(n) = register_diag_field('ocean_model',          &
+      'ndiff_tracer_cont_tendency_2d_'//trim(Reg%Tr(n)%name), diag%axesTL, Time,              &
       'Depth integrated neutral diffusion tracer content tendency for '//trim(Reg%Tr(n)%name),&
       'tracer content * m-2 s-1')
 
@@ -287,24 +287,24 @@ subroutine neutral_diffusion(G, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
   type(neutral_diffusion_CS),             pointer       :: CS     !< Neutral diffusion control structure
 
   ! Local variables
-  real, dimension(SZIB_(G),SZJ_(G),2*G%ke+1) :: uFlx          ! Zonal flux of tracer      (concentration * H)
-  real, dimension(SZI_(G),SZJB_(G),2*G%ke+1) :: vFlx          ! Meridional flux of tracer (concentration * H)
-  real, dimension(SZI_(G),SZJ_(G),G%ke)      :: tendency      ! tendency array for diagn
-  real, dimension(SZI_(G),SZJ_(G))           :: tendency_intz ! depth integrated content tendency for diagn 
-  real, dimension(G%ke)                      :: dTracer       ! Change in tracer concentration 
+  real, dimension(SZIB_(G),SZJ_(G),2*G%ke+1) :: uFlx        ! Zonal flux of tracer      (concentration * H)
+  real, dimension(SZI_(G),SZJB_(G),2*G%ke+1) :: vFlx        ! Meridional flux of tracer (concentration * H)
+  real, dimension(SZI_(G),SZJ_(G),G%ke)      :: tendency    ! tendency array for diagn
+  real, dimension(SZI_(G),SZJ_(G))           :: tendency_2d ! depth integrated content tendency for diagn 
+  real, dimension(G%ke)                      :: dTracer     ! Change in tracer concentration 
   integer :: i, j, k, ks, nk
   real :: Ihdxdy, ppt2mks, Idt, convert
 
   nk = G%ke
 
-  if(CS%id_neutral_diff_tracer_conc_tend(m)      > 0  .or.  &
-     CS%id_neutral_diff_tracer_cont_tend(m)      > 0  .or.  &
-     CS%id_neutral_diff_tracer_cont_tend_intz(m) > 0 ) then 
-    ppt2mks            = 0.001
-    Idt                = 1.0/dt
-    tendency(:,:,:)    = 0.0
-    tendency_intz(:,:) = 0.0
-    convert            = 1.0 
+  if(CS%id_neutral_diff_tracer_conc_tend(m)    > 0  .or.  &
+     CS%id_neutral_diff_tracer_cont_tend(m)    > 0  .or.  &
+     CS%id_neutral_diff_tracer_cont_tend_2d(m) > 0 ) then 
+    ppt2mks          = 0.001
+    Idt              = 1.0/dt
+    tendency(:,:,:)  = 0.0
+    tendency_2d(:,:) = 0.0
+    convert          = 1.0 
     if(trim(name) == 'T') convert = CS%C_p  * G%H_to_kg_m2
     if(trim(name) == 'S') convert = ppt2mks * G%H_to_kg_m2
   endif 
@@ -355,9 +355,9 @@ subroutine neutral_diffusion(G, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
         Tracer(i,j,k) = Tracer(i,j,k) + dTracer(k) * ( G%IareaT(i,j) / ( h(i,j,k) + G%H_subroundoff ) )
       enddo
 
-      if(CS%id_neutral_diff_tracer_conc_tend(m)      > 0  .or.  &
-         CS%id_neutral_diff_tracer_cont_tend(m)      > 0  .or.  &
-         CS%id_neutral_diff_tracer_cont_tend_intz(m) > 0 ) then 
+      if(CS%id_neutral_diff_tracer_conc_tend(m)    > 0  .or.  &
+         CS%id_neutral_diff_tracer_cont_tend(m)    > 0  .or.  &
+         CS%id_neutral_diff_tracer_cont_tend_2d(m) > 0 ) then 
         do k = 1, G%ke
           tendency(i,j,k) = dTracer(k) * G%IareaT(i,j) * Idt
         enddo
@@ -373,13 +373,13 @@ subroutine neutral_diffusion(G, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
   endif 
 
   ! post depth summed tendency for tracer content 
-  if(CS%id_neutral_diff_tracer_cont_tend_intz(m) > 0) then 
+  if(CS%id_neutral_diff_tracer_cont_tend_2d(m) > 0) then 
     do j = G%jsc,G%jec ; do i = G%isc,G%iec
       do k = 1, G%ke
-        tendency_intz(i,j) = tendency_intz(i,j) + tendency(i,j,k)  
+        tendency_2d(i,j) = tendency_2d(i,j) + tendency(i,j,k)  
       enddo
     enddo ; enddo
-    call post_data(CS%id_neutral_diff_tracer_cont_tend_intz(m), tendency_intz(:,:)*convert, CS%diag)
+    call post_data(CS%id_neutral_diff_tracer_cont_tend_2d(m), tendency_2d(:,:)*convert, CS%diag)
   endif 
 
   ! post tendency of tracer concentration; this step must be  

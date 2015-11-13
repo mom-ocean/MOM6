@@ -2217,7 +2217,7 @@ subroutine register_diags_TS_tendency(Time, G, CS)
       cmor_long_name ="Tendency of Sea Water Potential Temperature Expressed as Heat Content")
   CS%id_Th_tendency_2d = register_diag_field('ocean_model', 'Th_tendency_2d', diag%axesT1, Time,              &
       'Vertical sum of net time tendency for heat', 'W/m2',                                                   &
-      cmor_field_name="opottemptend_intz", cmor_units="W m-2",                                                &
+      cmor_field_name="opottemptend_2d", cmor_units="W m-2",                                                   &
       cmor_standard_name="tendency_of_sea_water_potential_temperature_expressed_as_heat_content_vertical_sum",&
       cmor_long_name ="Tendency of Sea Water Potential Temperature Expressed as Heat Content Vertical Sum")
   if (CS%id_T_tendency > 0) then 
@@ -2256,7 +2256,7 @@ subroutine register_diags_TS_tendency(Time, G, CS)
       cmor_long_name ="Tendency of Sea Water Salinity Expressed as Salt Content")
   CS%id_Sh_tendency_2d = register_diag_field('ocean_model', 'Sh_tendency_2d', diag%axesT1, Time, &
       'Vertical sum of net time tendency for salt', 'kg/(m2 * s)',                               &
-      cmor_field_name="osalttend_intz", cmor_units="kg m-2 s-1",                                 &
+      cmor_field_name="osalttend_2d", cmor_units="kg m-2 s-1",                                   &
       cmor_standard_name="tendency_of_sea_water_salinity_expressed_as_salt_content_vertical_sum",&
       cmor_long_name ="Tendency of Sea Water Salinity Expressed as Salt Content Vertical Sum")
   if (CS%id_S_tendency > 0) then 
@@ -3176,5 +3176,53 @@ end subroutine MOM_end
 !!
 !!  The boundaries always run through q grid points (x).               
 !!                                                                     
+!!  \section section_heat_budget Diagnosing MOM heat budget 
+!! 
+!!  Here are some example heat budgets for the ALE version of MOM6.
+!!
+!!  \subsection subsection_2d_heat_budget Depth integrated heat budget 
+!!
+!!  Depth integrated heat budget diagnostic for MOM.  
+!!
+!! * OPOTTEMPTEND_2d = T_ADVECTION_XY_2d + OPOTTEMPPMDIFF_2d + HFDS + HFGEOU  
+!!
+!! * T_ADVECTION_XY_2d = horizontal advection 
+!! * OPOTTEMPPMDIFF_2d = neutral diffusion 
+!! * HFDS              = net surface boundary heat flux
+!! * HFGEOU            = geothermal heat flux 
+!!
+!! * HFDS = net surface boundary heat flux entering the ocean
+!!        = hfrainds + hfevapds + hfrunoffds + hfsnthermds + hfsifrazil  
+!!         +hfibthermds + hfsolidrunoffds + rlntds + hfls + hfss + rsntds + rsdo
+!!         (needs to be verified...)
+!!
+!!  \subsection subsection_3d_heat_budget Depth integrated heat budget 
+!!
+!!  Here is an example 3d heat budget diagnostic for MOM.  
+!!
+!! * OPOTTEMPTEND = T_ADVECTION_XY + TH_TENDENCY_VERT_REMAP + OPOTTEMPDIFF + OPOTTEMPPMDIFF
+!!                + BOUNDARY_FORCING_HEAT_TENDENCY + FRAZIL_HEAT_TENDENCY
+!!
+!! * OPOTTEMPTEND                   = net tendency of heat as diagnosed in MOM.F90
+!! * T_ADVECTION_XY                 = heating of a cell from lateral advection 
+!! * TH_TENDENCY_VERT_REMAP         = heating of a cell from vertical remapping
+!! * OPOTTEMPDIFF                   = heating of a cell from diabatic diffusion  
+!! * OPOTTEMPPMDIFF                 = heating of a cell from neutral diffusion 
+!! * BOUNDARY_FORCING_HEAT_TENDENCY = heating of cell from boundary fluxes
+!! * FRAZIL_HEAT_TENDENCY           = heating of cell from frazil 
+!!
+!! * TH_TENDENCY_VERT_REMAP has zero vertical sum, as it merely redistributes heat in vertical.
+!!
+!! * OPOTTEMPDIFF has zero vertical sum, as it merely redistributes heat in the vertical. 
+!!
+!! * BOUNDARY_FORCING_HEAT_TENDENCY generally has 3d structure, with k > 1 contributions from 
+!!   penetrative shortwave, and from other fluxes for the case when layers are tiny, in which 
+!!   case MOM6 partitions tendencies into k < 1 layers.   
+!!
+!! * FRAZIL_HEAT_TENDENCY generally has 3d structure, since MOM6 frazil calculation checks the 
+!!   full ocean column. 
+!!
+!! * FRAZIL_HEAT_TENDENCY[k=@sum] = HFSIFRAZIL = column integrated frazil heating.
+!!
 
 end module MOM
