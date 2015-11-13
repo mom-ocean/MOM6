@@ -383,6 +383,7 @@ subroutine wave_structure(h, tv, G, cn, ModeNum, freq, CS, En, full_halos)
             enddo
           endif  ! use_EOS?
           
+          !-----------------NOW FIND WAVE STRUCTURE-------------------------------------
           ! Construct and solve tridiagonal system for the interior interfaces
           ! Note that kc   = number of layers, 
           !           kc+1 = nzm = number of interfaces, 

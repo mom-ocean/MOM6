@@ -198,18 +198,19 @@ end type loop_bounds_type
 contains
 
 
-subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, G, CS)
+subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G, CS)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)  :: h
   type(thermo_var_ptrs),                 intent(in)  :: tv
-  real, dimension(NIMEM_,NJMEM_), intent(in) :: cg1, TKE_itidal_input
+  real, dimension(NIMEM_,NJMEM_), intent(in) :: TKE_itidal_input
   real, dimension(NIMEM_,NJMEM_), intent(in) :: vel_btTide, Nb
   real,                  intent(in)          :: dt
   type(ocean_grid_type), intent(inout)       :: G
   type(int_tide_CS), pointer                 :: CS
+  real, dimension(SZI_(G),SZJ_(G),CS%nMode)  :: cn
   ! This subroutine calls any of the other subroutines in this file
   ! that are needed to specify the current surface forcing fields.
   !
-  ! Arguments: cg1 - The first mode internal gravity wave speed, in m s-1.
+  ! Arguments: cn - internal gravity wave speeds of modes, in m s-1.
   !  (in)      TKE_itidal_input - The energy input to the internal waves, in W m-2.
   !  (in)      vel_btTide - Barotropic velocity read from file, in m s-1
   !  (in)      Nb - Near-bottom buoyancy frequency, in s-1
@@ -219,8 +220,6 @@ subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, 
   !                 call to int_tide_init.
   real, dimension(SZI_(G),SZJ_(G),2) :: &
     test
-  real, dimension(SZI_(G),SZJ_(G),CS%nMode) :: &
-    c1
   real, dimension(SZI_(G),SZJ_(G),CS%nFreq,CS%nMode) :: &
     tot_En_mode, Ub
   real, dimension(SZI_(G),SZJB_(G)) :: &
@@ -251,9 +250,9 @@ subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, 
 
   ! Set the wave speeds for the modes, using that cg(n) ~ cg(1)/n.  This is
   ! wrong, of course, but it works reasonably in some cases.
-  do m=1,CS%nMode ; do j=jsd,jed ; do i=isd,ied
-    c1(i,j,m) = cg1(i,j) / real(m)
-  enddo ; enddo ; enddo
+  !do m=1,CS%nMode ; do j=jsd,jed ; do i=isd,ied
+  !  cn(i,j,m) = cg1(i,j) / real(m)
+  !enddo ; enddo ; enddo
 
   ! Add the forcing.
   if (CS%energized_angle <= 0) then
@@ -290,7 +289,7 @@ subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, 
   
   ! Apply half the refraction.
   do m=1,CS%nMode ; do fr=1,CS%nFreq
-    call refract(CS%En(:,:,:,fr,m), c1(:,:,m), CS%frequency(fr), 0.5*dt, G, CS%nAngle, CS%use_PPMang)
+    call refract(CS%En(:,:,:,fr,m), cn(:,:,m), CS%frequency(fr), 0.5*dt, G, CS%nAngle, CS%use_PPMang)
   enddo ; enddo
   call do_group_pass(pass_En, G%domain)
 
@@ -301,7 +300,7 @@ subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, 
   
   ! Propagate the waves.
   do m=1,CS%NMode ; do fr=1,CS%Nfreq
-    call propagate(CS%En(:,:,:,fr,m), c1(:,:,m), CS%frequency(fr), dt, G, CS, CS%NAngle)
+    call propagate(CS%En(:,:,:,fr,m), cn(:,:,m), CS%frequency(fr), dt, G, CS, CS%NAngle)
   enddo ; enddo
   
   ! Test if energy has passed coast for debugging only; delete later
@@ -323,7 +322,7 @@ subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, 
 
   ! Apply the other half of the refraction.
   do m=1,CS%NMode ; do fr=1,CS%Nfreq
-    call refract(CS%En(:,:,:,fr,m), c1(:,:,m), CS%frequency(fr), 0.5*dt, G, CS%NAngle, CS%use_PPMang)
+    call refract(CS%En(:,:,:,fr,m), cn(:,:,m), CS%frequency(fr), 0.5*dt, G, CS%NAngle, CS%use_PPMang)
   enddo ; enddo
 
   if (CS%apply_background_drag .or. CS%apply_bottom_drag &
@@ -370,7 +369,7 @@ subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, 
   if (CS%apply_wave_drag .or. CS%apply_Froude_drag) then
     ! Calculate modal structure
     do m=1,CS%NMode ; do fr=1,CS%Nfreq
-      call wave_structure(h, tv, G, c1(:,:,m), m, CS%frequency(fr), &
+      call wave_structure(h, tv, G, cn(:,:,m), m, CS%frequency(fr), &
                           CS%wave_structure_CSp, tot_En_mode(:,:,fr,m), full_halos=.true.)
     enddo ; enddo
   endif
@@ -428,7 +427,7 @@ subroutine propagate_int_tide(h, tv, cg1, TKE_itidal_input, vel_btTide, Nb, dt, 
         ! Calculate horizontal phase velocity magnitudes
         f2 = 0.25*(G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J)**2 + &
                  G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J-1)**2 )
-        Kmag2 = (freq2 - f2) / (c1(i,j,m)**2 + cn_subRO**2)
+        Kmag2 = (freq2 - f2) / (cn(i,j,m)**2 + cn_subRO**2)
         c_phase = 0.0
         if (Kmag2 > 0.0) then
           c_phase = sqrt(freq2/Kmag2)
@@ -2196,7 +2195,7 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
   if (CS%NAngle /= num_angle) call MOM_error(FATAL, "Internal_tides_init: "//&
       "Inconsistent number of angles.")
   if (CS%NMode /= num_mode) call MOM_error(FATAL, "Internal_tides_init: "//&
-      "Inconsistent number of angles.")
+      "Inconsistent number of modes.")
   if (4*(num_angle/4) /= num_angle) call MOM_error(FATAL, &
     "Internal_tides_init: INTERNAL_TIDE_ANGLES must be a multiple of 4.")
 
@@ -2391,6 +2390,12 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
   !call read_data(filename, 'dx_Cv', G%dx_Cv, &
   !               domain=G%domain%mpp_domain, timelevel=1)  
   !call pass_var(G%dx_Cv,G%domain)
+
+  ! For debugging - delete later
+  call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_X", CS%int_tide_source_x, &
+                "X Location of generation site for internal tide", default=1.)
+  call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_Y", CS%int_tide_source_y, &
+                "Y Location of generation site for internal tide", default=1.)  
   
   ! Register maps of reflection parameters
   CS%id_refl_ang = register_diag_field('ocean_model', 'refl_angle', diag%axesT1, &
@@ -2414,6 +2419,24 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
   CS%id_TKE_itidal_input = register_diag_field('ocean_model', 'TKE_itidal_input', diag%axesT1, &
                  Time, 'Conversion from barotropic to baroclinic tide, \n'//&
                  'a fraction of which goes into rays', 'W m-2')
+  ! Register 2-D energy losses (summed over angles, freq, modes)
+  CS%id_tot_leak_loss = register_diag_field('ocean_model', 'ITide_tot_leak_loss', diag%axesT1, &
+                Time, 'Internal tide energy loss to background drag', 'W m-2')
+  CS%id_tot_quad_loss = register_diag_field('ocean_model', 'ITide_tot_quad_loss', diag%axesT1, &
+                Time, 'Internal tide energy loss to bottom drag', 'W m-2')
+  CS%id_tot_itidal_loss = register_diag_field('ocean_model', 'ITide_tot_itidal_loss', diag%axesT1, &
+                Time, 'Internal tide energy loss to wave drag', 'W m-2')
+  CS%id_tot_Froude_loss = register_diag_field('ocean_model', 'ITide_tot_Froude_loss', diag%axesT1, &
+                Time, 'Internal tide energy loss to wave breaking', 'W m-2')
+  ! Register 2-D energy loss for 1st mode and frequency only
+  CS%id_TKE_loss_mode_1 = register_diag_field('ocean_model', 'ITide_TKE_loss_mode_1', diag%axesT1, &
+                Time, "Internal tide energy loss for 1st mode and frequency", 'W m-2')
+  ! Register 2-D period-averaged near-bottom horizonal velocity for 1st mode and frequency only
+  CS%id_Ub_mode_1 = register_diag_field('ocean_model', 'ITide_Ub_mode_1', diag%axesT1, &
+                Time, "Near-bottom horizonal velocity for 1st mode and frequency", 'm s-1')
+  ! Register 2-D horizonal phase velocity for 1st mode and frequency only
+  CS%id_cp_mode_1 = register_diag_field('ocean_model', 'ITide_cp_mode_1', diag%axesT1, &
+                Time, "Horizonal phase velocity for 1st mode and frequency", 'm s-1')
 
   allocate(CS%id_En_mode(CS%nFreq,CS%nMode)) ; CS%id_En_mode(:,:) = -1
   allocate(CS%id_En_ang_mode(CS%nFreq,CS%nMode)) ; CS%id_En_ang_mode(:,:) = -1
@@ -2444,26 +2467,12 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
                  axes_ang, Time, var_descript, 'J m-2 band-1')
     call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
     
-    ! Register 2-D energy losses (summed over angles, freq, modes)
-    CS%id_tot_leak_loss = register_diag_field('ocean_model', 'ITide_tot_leak_loss', diag%axesT1, &
-                 Time, 'Internal tide energy loss to background drag', 'W m-2')
-    CS%id_tot_quad_loss = register_diag_field('ocean_model', 'ITide_tot_quad_loss', diag%axesT1, &
-                 Time, 'Internal tide energy loss to bottom drag', 'W m-2')
-    CS%id_tot_itidal_loss = register_diag_field('ocean_model', 'ITide_tot_itidal_loss', diag%axesT1, &
-                 Time, 'Internal tide energy loss to wave drag', 'W m-2')
-    CS%id_tot_Froude_loss = register_diag_field('ocean_model', 'ITide_tot_Froude_loss', diag%axesT1, &
-                 Time, 'Internal tide energy loss to wave breaking', 'W m-2')
-                                  
     ! Register 2-D energy loss (summed over angles) for each freq and mode
     write(var_name, '("Itide_TKE_loss_freq",i1,"_mode",i1)') fr, m
     write(var_descript, '("Internal tide energy loss from frequency ",i1," mode ",i1)') fr, m
     CS%id_TKE_loss_mode(fr,m) = register_diag_field('ocean_model', var_name, &
                  diag%axesT1, Time, var_descript, 'W m-2')
     call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
-    
-    ! Register 2-D energy loss for 1st mode and frequency only
-    CS%id_TKE_loss_mode_1 = register_diag_field('ocean_model', 'ITide_TKE_loss_mode_1', diag%axesT1, &
-                 Time, "Internal tide energy loss for 1st mode and frequency", 'W m-2')
     
     ! Register 3-D (i,j,a) energy loss for each freq and mode
     write(var_name, '("Itide_TKE_loss_ang_freq",i1,"_mode",i1)') fr, m
@@ -2478,25 +2487,11 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
     CS%id_Ub_mode(fr,m) = register_diag_field('ocean_model', var_name, &
                  diag%axesT1, Time, var_descript, 'm s-1')
     call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
-    
-    ! Register 2-D period-averaged near-bottom horizonal velocity for 1st mode and frequency only
-    CS%id_Ub_mode_1 = register_diag_field('ocean_model', 'ITide_Ub_mode_1', diag%axesT1, &
-                 Time, "Near-bottom horizonal velocity for 1st mode and frequency", 'm s-1')
-    
-    ! Register 2-D horizonal phase velocity for 1st mode and frequency only
-    CS%id_cp_mode_1 = register_diag_field('ocean_model', 'ITide_cp_mode_1', diag%axesT1, &
-                 Time, "Horizonal phase velocity for 1st mode and frequency", 'm s-1')
-    
-    ! Initialize wave_structure (not sure if this should be here - BDM)
-    call wave_structure_init(Time, G, param_file, diag, CS%wave_structure_CSp)
-    
-    ! For debugging - delete later
-    call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_X", CS%int_tide_source_x, &
-                 "X Location of generation site for internal tide", default=1.)
-    call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_Y", CS%int_tide_source_y, &
-                 "Y Location of generation site for internal tide", default=1.)
-    
+   
   enddo ; enddo
+
+  ! Initialize wave_structure (not sure if this should be here - BDM)
+  call wave_structure_init(Time, G, param_file, diag, CS%wave_structure_CSp)
   
 end subroutine internal_tides_init
 
