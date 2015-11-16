@@ -128,7 +128,7 @@ subroutine wave_speed(h, tv, G, nmodes, cn, CS, full_halos)
     Hf, Tf, Sf, Rf
   real, dimension(SZK_(G)) :: &
     Hc, Tc, Sc, Rc
-  real, parameter :: c1_thresh = 1.0 
+  real, parameter :: c1_thresh = 0.01 
                           ! if c1 is below this value, don't bother calculating
                           ! cn values for higher modes
   real :: det, ddet       ! determinant & its derivative of eigen system
@@ -162,10 +162,12 @@ subroutine wave_speed(h, tv, G, nmodes, cn, CS, full_halos)
   integer, parameter :: max_itt = 10
   logical :: use_EOS    ! If true, density is calculated from T & S using an
                         ! equation of state.
+  real, dimension(SZK_(G)+1) :: z_int, N2
   integer :: nsub       ! number of subintervals used for root finding
   integer, parameter :: sub_it_max = 4
                         ! maximum number of times to subdivide interval 
                         ! for root finding (# intervals = 2**sub_it_max)
+  logical :: sub_rootfound ! if true, subdivision has located root
   integer :: kc, nrows
   integer :: sub, sub_it
   integer :: i, j, k, k2, itt, is, ie, js, je, nz, row, iint, m, ig, jg
@@ -362,13 +364,29 @@ subroutine wave_speed(h, tv, G, nmodes, cn, CS, full_halos)
           !   Sum the contributions from all of the interfaces to give an over-estimate
           ! of the first-mode wave speed.
           if (kc >= 2) then
+            ! Set depth at surface
+            z_int(1) = 0.0
+            ! initialize speed2_tot
             speed2_tot = 0.0
-            !   Calculate Igu, Igl at each interior interface 
-            ! [excludes surface (K=1) and bottom (K=kc+1)]
+            ! Calculate Igu, Igl, depth, and N2 at each interior interface 
+            ! [excludes surface (K=1) and bottom (K=kc+1)] 
             do K=2,kc
               Igl(K) = 1.0/(gprime(K)*Hc(k)) ; Igu(K) = 1.0/(gprime(K)*Hc(k-1))
+              z_int(K) = z_int(K-1) + Hc(k-1)
+              N2(K) = gprime(K)/(0.5*(Hc(k)+Hc(k-1)))              
               speed2_tot = speed2_tot + gprime(K)*(Hc(k-1)+Hc(k))
             enddo
+            ! Set stratification for surface and bottom (setting equal to nearest interface for now)
+            N2(1) = N2(2) ; N2(kc+1) = N2(kc) 
+            ! Calcualte depth at bottom
+            z_int(kc+1) = z_int(kc)+Hc(kc)
+            ! check that thicknesses sum to total depth
+            if (abs(z_int(kc+1)-htot(i)) > 1.e-10) then
+              call MOM_error(WARNING, "wave_structure: mismatch in total depths")
+              print *, "kc=", kc
+              print *, "z_int(kc+1)=", z_int(kc+1)
+              print *, "htot(i)=", htot(i)              
+            endif
 
             ! Define the diagonals of the tridiagonal matrix
             ! First, populate interior rows
@@ -417,8 +435,24 @@ subroutine wave_speed(h, tv, G, nmodes, cn, CS, full_halos)
               endif
             enddo
             
+            ! print resutls (for debugging only)
+            !if(ig .eq. 144 .and. jg .eq. 5) then
+            !  if(nmodes>1)then
+            !    print *,  "Results after finding first mode:"
+            !    print *, "first guess at lam_1=", 1./speed2_tot
+            !    print *, "final guess at lam_1=", lam_1
+            !    print *, "det value after iterations, det=", det
+            !    print *, "ddet value after iterations, det=", ddet
+            !    print *, "final guess at c1=", cn(i,j,1)
+            !    !print *, "a_diag=",a_diag(1:nrows)
+            !    !print *, "b_diag=",b_diag(1:nrows)
+            !    !print *, "c_diag=",c_diag(1:nrows)
+            !    !stop
+            !  endif
+            !endif
+            
             ! Find other eigen values if c1 is of significant magnitude, > cn_thresh
-            if (nmodes>1 .and. cn(i,j,1)>c1_thresh) then
+            if (nmodes>1 .and. kc>=nmodes+1 .and. cn(i,j,1)>c1_thresh) then
               ! Set the the range to look for the other desired eigen values
               ! set min value just greater than the 1st root (found above)
               lamMin = lam_1*(1.0 + tol2)
@@ -430,24 +464,29 @@ subroutine wave_speed(h, tv, G, nmodes, cn, CS, full_halos)
               ! set number of intervals within search range
               numint = nint((lamMax - lamMin)/lamInc)
               
+              if(ig .eq. 144 .and. jg .eq. 5) then
+                print *, 'Looking for other eigenvalues at', ig, jg
+                print *, 'Wave_speed: lamMin=',         lamMin
+                print *, 'Wave_speed: cnMax=',          1/sqrt(lamMin)
+                print *, 'Wave_speed: lamMax=',         lamMax
+                print *, 'Wave_speed: cnMin=',          1/sqrt(lamMax)
+                print *, 'Wave_speed: lamInc=',         lamInc
+              endif              
+              
               !   Find intervals containing zero-crossings (roots) of the determinant
               ! that are beyond the first root
               nrootsfound = 0    ! number of extra roots found (not including 1st root)
               ! find det_l of first interval (det at left endpoint)
               call tridiag_det(a_diag(1:nrows),b_diag(1:nrows),c_diag(1:nrows), &
                                nrows,lamMin,det_l,ddet_l)
-              if(ig .eq. 145 .and. jg .eq. 135) then
-                print *, "@ x=lam_1=",lam_1
-                print *, "det_l=",det_l
-                print *, "ddet_l=",ddet_l
-              endif
-              ! move interval window looking for zero-crossings
+              ! move interval window looking for zero-crossings************************
               do iint=1,numint
                 xr = lamMin + lamInc * iint
                 xl = xr - lamInc
                 call tridiag_det(a_diag(1:nrows),b_diag(1:nrows),c_diag(1:nrows), &
                                  nrows,xr,det_r,ddet_r)
-                if(ig .eq. 145 .and. jg .eq. 135) then
+                if(ig .eq. 144 .and. jg .eq. 5) then
+                  print *, "Move interval"
                   print *, "iint=",iint
                   print *, "@ xr=",xr
                   print *, "det_r=",det_r
@@ -458,6 +497,10 @@ subroutine wave_speed(h, tv, G, nmodes, cn, CS, full_halos)
                     nrootsfound = nrootsfound + 1
                     xbl(nrootsfound) = xl
                     xbr(nrootsfound) = xr
+                    if(ig .eq. 144 .and. jg .eq. 5) then
+                      print *, "Root located without subdivision!"
+                      print *, "between xbl=",xl,"and xbr=",xr
+                    endif
                   else
                     !   function changes sign but has a local max/min in interval,
                     ! try subdividing interval as many times as necessary (or sub_it_max).
@@ -467,7 +510,9 @@ subroutine wave_speed(h, tv, G, nmodes, cn, CS, full_halos)
                     !            " reduce increment in lam.")
                     ig_need_sub = G%isd_global + i - 1.0
                     jg_need_sub = G%jsd_global + j - 1.0
-                    print *, "subdividing interval at ig=",ig_need_sub,"jg=",jg_need_sub
+                    ! begin subdivision loop -------------------------------------------
+                    !print *, "subdividing interval at ig=",ig_need_sub,"jg=",jg_need_sub
+                    sub_rootfound = .false. ! initialize
                     do sub_it=1,sub_it_max
                       nsub = 2**sub_it ! number of subintervals; nsub=2,4,8,...
                       ! loop over each subinterval:
@@ -477,24 +522,40 @@ subroutine wave_speed(h, tv, G, nmodes, cn, CS, full_halos)
                                  nrows,xl_sub,det_sub,ddet_sub)
                         if (det_sub*det_r < 0.0) then  ! if function changes sign
                           if (det_sub*ddet_sub < 0.0) then ! if function at left is headed to zero
+                            sub_rootfound = .true.
                             nrootsfound = nrootsfound + 1
                             xbl(nrootsfound) = xl_sub
                             xbr(nrootsfound) = xr
-                            !if(ig .eq. 145 .and. jg .eq. 135) then
-                            !  print *, "exiting after",sub_it,"subdivisions"
-                            !endif
-                            exit ; exit ! exit sub and sub_it loops
+                            if(ig .eq. 144 .and. jg .eq. 5) then
+                              print *, "Root located after subdiving",sub_it," times!"
+                              print *, "between xbl=",xl_sub,"and xbr=",xr
+                            endif
+                            exit ! exit sub loop
                           endif ! headed toward zero
                         endif ! sign change
                       enddo ! sub-loop
+                      if (sub_rootfound) exit ! root has been found, exit sub_it loop
                       !   function changes sign but has a local max/min in on of the 
                       ! sub intervals, try subdividing again unless sub_it_max has been reached.
                       if (sub_it == sub_it_max) then
                         call MOM_error(WARNING, "wave_speed: root not found "// &
                                        " after sub_it_max subdivisions of original"// &
                                        " interval.")
+                        if(ig .eq. 144 .and. jg .eq. 5) then
+                          !print *, "xbl=",xbl
+                          !print *, "xbr=",xbr
+                          !print *, "Wave_speed: kc=",kc
+                          !print *, 'Wave_speed: z_int(ig,jg)=',   z_int(1:kc+1)
+                          !print *, 'Wave_speed: N2(ig,jg)=',      N2(1:kc+1)
+                          !print *, 'Wave_speed: gprime=',         gprime(1:kc+1)
+                          !print *, 'Wave_speed: htot=',           htot(i)
+                          !print *, 'Wave_speed: cn1=',            cn(i,j,1)
+                          !print *, 'Wave_speed: numint=',         numint
+                          !print *, 'Wave_speed: nrootsfound=',    nrootsfound
+                          stop
+                        endif 
                       endif ! sub_it == sub_it_max
-                    enddo ! sub_it-loop
+                    enddo ! sub_it-loop-------------------------------------------------
                   endif ! det_l*ddet_l < 0.0
                 endif ! det_l*det_r < 0.0
                 ! exit iint-loop if all desired roots have been found
@@ -504,7 +565,7 @@ subroutine wave_speed(h, tv, G, nmodes, cn, CS, full_halos)
                 elseif (iint == numint) then
                   ! oops, lamMax not large enough - need to add code to increase (BDM)
                   !call MOM_error(WARNING, "wave_speed: not all modes found "// &
-                  !                       " within search range: increase numint.")
+                  !                       " within search range: increase numint.")                  
                 else
                   ! else shift interval and keep looking until nmodes or numint is reached
                   det_l = det_r
@@ -530,8 +591,8 @@ subroutine wave_speed(h, tv, G, nmodes, cn, CS, full_halos)
                 enddo ! itt-loop
               enddo ! n-loop
             else
-              cn(i,j,1:nmodes) = 0.0 ! else to small to worry about
-            endif ! if nmodes>1 .and. c1>c1_thresh
+              cn(i,j,2:nmodes) = 0.0 ! else to small to worry about
+            endif ! if nmodes>1 .and. kc>nmodes .and. c1>c1_thresh
           else
             cn(i,j,:) = 0.0
           endif ! if more than 2 layers 
@@ -542,20 +603,20 @@ subroutine wave_speed(h, tv, G, nmodes, cn, CS, full_halos)
       ! ----- Spot check - comment out later (BDM) ----------
       !ig = G%isd_global + i - 1.0
       !jg = G%jsd_global + j - 1.0 
-      if(ig .eq. 145 .and. jg .eq. 135) then
-        print *, "nmodes=",nmodes
-        print *, "lam_1=",lam_1
-        print *, "lamMin=",lamMin
-        print *, "lamMax=",lamMax
-        print *, "lamInc=",lamInc
+      if(ig .eq. 144 .and. jg .eq. 5) then
+      !  print *, "nmodes=",nmodes
+      !  print *, "lam_1=",lam_1
+      !  print *, "lamMin=",lamMin
+      !  print *, "lamMax=",lamMax
+      !  print *, "lamInc=",lamInc
         print *, "nrootsfound=",nrootsfound
         do m=1,nmodes
           print *, "c",m,"= ", cn(i,j,m)
           print *, "xbl",m,"= ", xbl(m)
           print *, "xbr",m,"= ", xbr(m)
         enddo
+      endif
       !-------------------------------------------------------
-      endif      
     enddo ! i-loop
   enddo ! j-loop
 
