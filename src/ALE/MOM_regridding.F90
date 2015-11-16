@@ -353,6 +353,26 @@ subroutine check_grid_column( nk, depth, h, dzInterface, msg )
 
 end subroutine check_grid_column
 
+!> Returns the change in interface position motion after filtering
+!! and assuming the top and bottom interfaces do not move.
+subroutine filtered_grid_motion( CS, nk, z_old, z_new, dz_g )
+  type(regridding_CS),                           intent(in)    :: CS !< Regridding control structure
+  integer,               intent(in)    :: nk !< Number of cells
+  real, dimension(nk+1), intent(in)    :: z_old !< Old grid position (m)
+  real, dimension(nk+1), intent(in)    :: z_new !< New grid position (m)
+  real, dimension(nk+1), intent(inout) :: dz_g !< Change in interface positions (m)
+  ! Local variables
+  real :: new_grid_weight
+  integer :: k
+
+  new_grid_weight = 1.0 - CS%old_grid_weight
+  dz_g(1) = 0.
+  do k = 2,nk
+    dz_g(k) = new_grid_weight * ( z_new(k) - z_old(k) )
+  enddo
+  dz_g(nk+1) = 0.
+
+end subroutine filtered_grid_motion
 
 !> Builds a z*-ccordinate grid with partial steps (Adcroft and Campin, 2004).
 !! z* is defined as
@@ -370,11 +390,10 @@ subroutine build_zstar_grid( CS, G, h, dzInterface )
   integer :: nz
   real    :: nominalDepth, totalThickness, dh
   real, dimension(SZK_(G)+1) :: zOld, zNew
-  real :: minThickness, new_grid_weight
+  real :: minThickness
 
   nz = G%ke
   minThickness = CS%min_thickness
-  new_grid_weight = 1.0 - CS%old_grid_weight
   
 !$OMP parallel do default(none) shared(G,dzInterface,CS,nz,h)                    &
 !$OMP                          private(nominalDepth,totalThickness,minThickness, &
@@ -403,12 +422,8 @@ subroutine build_zstar_grid( CS, G, h, dzInterface )
         zOld(k) = zOld(k+1) + h(i,j,k)
       enddo
 
-      ! Define regridding in terms of a movement of interfaces
-      dzInterface(i,j,1) = 0.
-      do k = 2,nz
-        dzInterface(i,j,k) = new_grid_weight * ( zNew(k) - zOld(k) )
-      enddo
-      dzInterface(i,j,nz+1) = 0.
+      ! Calculate the final change in grid position after blending new and old grids
+      call filtered_grid_motion( CS, nz, zOld, zNew, dzInterface(i,j,:) )
 
 #ifdef __DO_SAFETY_CHECKS__
       dh=max(nominalDepth,totalThickness)
@@ -493,11 +508,10 @@ subroutine buildGridSigma( CS, G, h, dzInterface )
   ! Local variables
   integer :: i, j, k
   integer :: nz
-  real    :: nominalDepth, totalThickness, dh, new_grid_weight
+  real    :: nominalDepth, totalThickness, dh
   real, dimension(SZK_(G)+1) :: zOld, zNew
 
   nz = G%ke
-  new_grid_weight = 1.0 - CS%old_grid_weight
   
   do i = G%isc-1,G%iec+1
     do j = G%jsc-1,G%jec+1
@@ -522,12 +536,8 @@ subroutine buildGridSigma( CS, G, h, dzInterface )
         zOld(k) = zOld(k+1) + h(i,j,k)
       enddo
 
-      ! Define regridding in terms of a movement of interfaces
-      dzInterface(i,j,1) = 0.
-      do k = 2,nz
-        dzInterface(i,j,k) = new_grid_weight * ( zNew(k) - zOld(k) )
-      enddo
-      dzInterface(i,j,nz+1) = 0.
+      ! Calculate the final change in grid position after blending new and old grids
+      call filtered_grid_motion( CS, nz, zOld, zNew, dzInterface(i,j,:) )
 
 #ifdef __DO_SAFETY_CHECKS__
       dh=max(nominalDepth,totalThickness)
@@ -742,11 +752,10 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
         zOld(k) = zOld(k+1) + h(i,j,k)
       enddo
 
-      ! Define regridding in terms of a movement of interfaces
-      dzInterface(i,j,1) = 0.
-      do k = 2,nz
-        dzInterface(i,j,k) = zNew(k) - zOld(k)
+      ! Calculate the final change in grid position after blending new and old grids
+      call filtered_grid_motion( CS, nz, zOld, zNew, dzInterface(i,j,:) )
 #ifdef __DO_SAFETY_CHECKS__
+      do k = 2,nz
         if (zNew(k) > zOld(1)) then
           write(0,*) 'zOld=',zOld
           write(0,*) 'zNew=',zNew
@@ -759,9 +768,8 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
           call MOM_error( FATAL, 'MOM_regridding, buildGridRho: '//&
                'interior interfaces cross!' )
         endif
-#endif
       enddo
-      dzInterface(i,j,nz+1) = 0.
+#endif
 
 #ifdef __DO_SAFETY_CHECKS__
       dh=max(nominalDepth,totalThickness)
@@ -808,11 +816,10 @@ subroutine build_grid_HyCOM1( G, h, tv, dzInterface, remapCS, CS )
   real, dimension(CS%nk,CS%degree_i+1) :: ppoly_i_coefficients ! Coefficients of polynomial
   real :: nominal_z ! Nominal depth of interface is using z* (m or Pa)
   real :: stretching ! z* stretching, converts z* to z.
-  real :: hNew, new_grid_weight
+  real :: hNew
   integer :: ppoly_degree
 
   nz = G%ke
-  new_grid_weight = 1.0 - CS%old_grid_weight
 
   ! Build grid based on target interface densities
   do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
@@ -856,14 +863,8 @@ subroutine build_grid_HyCOM1( G, h, tv, dzInterface, remapCS, CS )
         z_column_new(k) = min( z_column_new(k), z_column(nz+1) )
       enddo
 
-      ! Finally calculate the change in position of the interface
-      do k = 1,nz+1
-        dzInterface(i,j,k) =  new_grid_weight * ( z_column(k) - z_column_new(k) )
-      enddo
-#ifdef __DO_SAFETY_CHECKS__
-     if (dzInterface(i,j,1) /= 0.) stop 'build_grid_HyCOM1: Surface moved?!'
-     if (dzInterface(i,j,nz+1) /= 0.) stop 'build_grid_HyCOM1: Bottom moved?!'
-#endif
+      ! Calculate the final change in grid position after blending new and old grids
+      call filtered_grid_motion( CS, nz, z_column_new, z_column, dzInterface(i,j,:) )
 
      ! This adjusts  things robust to round-off errors
      call adjust_interface_motion( nz, CS%min_thickness, h(i,j,:), dzInterface(i,j,:) )
@@ -900,11 +901,10 @@ subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
   real, dimension(CS%nk,CS%degree_i+1) :: ppoly_i_coefficients ! Coefficients of polynomial
   real :: nominal_z ! Nominal depth of interface is using z* (m or Pa)
   real :: stretching ! z* stretching, converts z* to z.
-  real :: hNew, new_grid_weight
+  real :: hNew
   integer :: ppoly_degree
 
   nz = G%ke
-  new_grid_weight = 1.0 - CS%old_grid_weight
 
   call MOM_error(FATAL, "build_grid_SLight is not completed yet.")
 
@@ -953,10 +953,8 @@ subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
         z_column_new(k) = min( z_column_new(k), z_column(nz+1) )
       enddo
 
-      ! Finally calculate the change in position of the interface
-      do k = 1,nz+1
-        dzInterface(i,j,k) =  new_grid_weight * ( z_column(k) - z_column_new(k) )
-      enddo
+      ! Calculate the final change in grid position after blending new and old grids
+      call filtered_grid_motion( CS, nz, z_column_new, z_column, dzInterface(i,j,:) )
 #ifdef __DO_SAFETY_CHECKS__
       if (dzInterface(i,j,1) /= 0.) stop 'build_grid_SLight: Surface moved?!'
       if (dzInterface(i,j,nz+1) /= 0.) stop 'build_grid_SLight: Bottom moved?!'
