@@ -23,7 +23,8 @@ use MOM_remapping, only : remapping_CS
 use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
 use regrid_consts, only : REGRIDDING_RHO, REGRIDDING_SIGMA
-use regrid_consts, only : REGRIDDING_ARBITRARY, REGRIDDING_HYCOM1
+use regrid_consts, only : REGRIDDING_ARBITRARY
+use regrid_consts, only : REGRIDDING_HYCOM1, REGRIDDING_SLIGHT
 
 implicit none ; private
 
@@ -103,12 +104,13 @@ public build_zstar_column
 public DEFAULT_COORDINATE_MODE
 
 !> Documentation for coordinate options
-character(len=258), parameter, public :: regriddingCoordinateModeDoc = &
+character(len=320), parameter, public :: regriddingCoordinateModeDoc = &
                  " LAYER - Isopycnal or stacked shallow water layers\n"//&
                  " Z*    - stetched geopotential z*\n"//&
                  " SIGMA - terrain following coordinates\n"//&
                  " RHO   - continuous isopycnal\n"//&
-                 " HYCOM1 - HyCOM-like hybrid coordinate"
+                 " HYCOM1 - HyCOM-like hybrid coordinate\n"//&
+                 " SLIGHT - stretched coordinates above continuous isopycnal"
 
 ! Documentation for regridding interpolation schemes
 character(len=338), parameter, public :: regriddingInterpSchemeDoc = &
@@ -259,6 +261,9 @@ subroutine regridding_main( remapCS, CS, G, h, tv, dzInterface )
 
     case ( REGRIDDING_HYCOM1 )
       call build_grid_HyCOM1( G, h, tv, dzInterface, remapCS, CS )
+
+    case ( REGRIDDING_SLIGHT )
+      call build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
 
     case default
       call MOM_error(FATAL,'MOM_regridding, regridding_main: '//&
@@ -440,7 +445,7 @@ subroutine build_zstar_column( CS, nz, depth, total_thickness, zInterface)
   real :: eta, stretching, dh, min_thickness
   integer :: k
 
-  min_thickness = min( CS%min_thickness, total_thickness/float(nz) )
+  min_thickness = min( CS%min_thickness, total_thickness/real(nz) )
 
   ! Position of free-surface
   eta = total_thickness - depth
@@ -591,6 +596,7 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
   real, dimension(CS%nk,2) :: ppoly_i_E            !Edge value of polynomial
   real, dimension(CS%nk,2) :: ppoly_i_S            !Edge slope of polynomial
   real, dimension(CS%nk,CS%degree_i+1) :: ppoly_i_coefficients !Coefficients of polynomial
+  integer   :: ppoly_degree         ! The actual degree of the polynomials.
   real, dimension(SZK_(G)) :: p_column, densities, T_column, S_column, Tmp_column
   integer, dimension(SZK_(G)) :: mapping
   real    :: nominalDepth, totalThickness, dh
@@ -622,19 +628,19 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
       ! Start iterations to build grid
       m = 1
       deviation = 1e10
-      do while ( ( m .le. NB_REGRIDDING_ITERATIONS ) .and. &
-                 ( deviation .gt. DEVIATION_TOLERANCE ) )
+      do while ( ( m <= NB_REGRIDDING_ITERATIONS ) .and. &
+                 ( deviation > DEVIATION_TOLERANCE ) )
 
         ! Count number of nonzero layers within current water column
         count_nonzero_layers = 0
         do k = 1,nz
-          if ( h0(k) .gt. threshold ) then
+          if ( h0(k) > threshold ) then
             count_nonzero_layers = count_nonzero_layers + 1
           end if
         end do
 
         ! If there is at most one nonzero layer, stop here (no regridding)
-        if ( count_nonzero_layers .le. 1 ) then 
+        if ( count_nonzero_layers <= 1 ) then 
           h1(1:nz) = h0(1:nz)
           exit  ! stop iterations here
         end if
@@ -643,7 +649,7 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
         map_index = 1
         correction = 0.0
         do k = 1,nz
-          if ( h0(k) .gt. threshold ) then
+          if ( h0(k) > threshold ) then
             mapping(map_index) = k
             hTmp(map_index) = h0(k)
             map_index = map_index + 1
@@ -655,7 +661,7 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
         max_thickness = hTmp(1)
         k_found = 1
         do k = 1,count_nonzero_layers
-          if ( hTmp(k) .gt. max_thickness ) then
+          if ( hTmp(k) > max_thickness ) then
             max_thickness = hTmp(k)
             k_found = k
           end if  
@@ -678,10 +684,12 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
         end do
 
         ! One regridding iteration
-        call regridding_iteration( densities, CS%target_density, CS,&
-                                   count_nonzero_layers, hTmp, xTmp, &
-                                   ppoly_i_E, ppoly_i_S, ppoly_i_coefficients, &
-                                   nz, h1, x1 )
+        call regridding_set_polys(densities, CS, count_nonzero_layers, hTmp, xTmp, &
+                                  ppoly_i_E, ppoly_i_S, ppoly_i_coefficients, ppoly_degree)
+        ! Based on global density profile, interpolate to generate a new grid
+        call interpolate_grid(count_nonzero_layers, hTmp, xTmp, ppoly_i_E, ppoly_i_coefficients, &
+                              CS%target_density, ppoly_degree, nz, h1, x1 )
+                                   
         call old_inflate_layers_1d( CS%min_thickness, nz, h1 )
         x1(1) = 0.0 ; do k = 1,nz ; x1(k+1) = x1(k) + h1(k) ; end do
         
@@ -777,9 +785,10 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
 
 end subroutine buildGridRho
 
-!> Builds a simple HyCOM-like grid with potential density interpolated from
-!! the column profile and a clipping of depth for each interface to a fixed
-!! z* or p* grid.
+!> Builds a simple HyCOM-like grid with the deepest location of potential
+!! density interpolated from the column profile and a clipping of depth for
+!! each interface to a fixed z* or p* grid.  This should probably be (optionally?)
+!! changed to find the nearest location of the target density.
 !! \remark { Based on Bleck, 2002: An oceanice general circulation model framed in
 !! hybrid isopycnic-Cartesian coordinates, Ocean Modelling 37, 55-88.
 !! http://dx.doi.org/10.1016/S1463-5003(01)00012-9 }
@@ -800,6 +809,7 @@ subroutine build_grid_HyCOM1( G, h, tv, dzInterface, remapCS, CS )
   real :: nominal_z ! Nominal depth of interface is using z* (m or Pa)
   real :: stretching ! z* stretching, converts z* to z.
   real :: hNew, new_grid_weight
+  integer :: ppoly_degree
 
   nz = G%ke
   new_grid_weight = 1.0 - CS%old_grid_weight
@@ -830,10 +840,11 @@ subroutine build_grid_HyCOM1( G, h, tv, dzInterface, remapCS, CS )
       enddo
 
       ! Interpolates for the target interface position with the rho_column profile
-      call regridding_iteration( rho_column, CS%target_density, CS,    &
-                                 nz, h(i,j,:), z_column,                     &
-                                 ppoly_i_E, ppoly_i_S, ppoly_i_coefficients, &
-                                 nz, h_column_new, z_column_new)
+      call regridding_set_polys(rho_column, CS, nz, h(i,j,:), z_column, &
+                                ppoly_i_E, ppoly_i_S, ppoly_i_coefficients, ppoly_degree)
+      ! Based on global density profile, interpolate to generate a new grid
+      call interpolate_grid(nz, h(i,j,:), z_column, ppoly_i_E, ppoly_i_coefficients, &
+                            CS%target_density, ppoly_degree, nz, h_column_new, z_column_new)
 
       ! Sweep down the interfaces and make sure that the interface is at least
       ! as deep as a nominal target z* grid
@@ -863,6 +874,103 @@ subroutine build_grid_HyCOM1( G, h, tv, dzInterface, remapCS, CS )
   enddo; enddo ! i,j
 
 end subroutine build_grid_HyCOM1
+
+!> Builds a grid that tracks density interfaces for water that is denser than
+!! the surface density plus an increment of some number of layers, and uses all
+!! lighter layers uniformly above this location.  Note that this amounts to
+!! interpolating to find the depth of an arbitrary (non-integer) interface index
+!! which should make the results vary smoothly in space to the extent that the
+!! surface density and interior stratification vary smoothly in space.  Over
+!! shallow topography, this will tend to give a uniform sigma-like coordinate.
+!! For sufficiently shallow water, a minimum grid spacing is used to avoid
+!! certain instabilities.
+subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
+  type(ocean_grid_type),                        intent(in)    :: G !< Grid structure
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: h !< Existing model thickness
+  type(thermo_var_ptrs),                        intent(in)    :: tv !< Thermodynamics structure
+  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: dzInterface !< Changes in interface position
+  type(remapping_CS),                           intent(in)    :: remapCS !< Remapping control structure
+  type(regridding_CS),                          intent(in)    :: CS !< Regridding control structure
+  ! Local variables
+  integer   :: i, j, k, nz
+  real, dimension(SZK_(G)) :: T_column, S_column, p_column, rho_column, h_column_new ! Layer quantities
+  real, dimension(SZK_(G)+1) :: z_column, z_column_new ! Interface positions in H units (m or Pa)
+  real, dimension(CS%nk,2) :: ppoly_i_E ! Edge value of polynomial
+  real, dimension(CS%nk,2) :: ppoly_i_S ! Edge slope of polynomial
+  real, dimension(CS%nk,CS%degree_i+1) :: ppoly_i_coefficients ! Coefficients of polynomial
+  real :: nominal_z ! Nominal depth of interface is using z* (m or Pa)
+  real :: stretching ! z* stretching, converts z* to z.
+  real :: hNew, new_grid_weight
+  integer :: ppoly_degree
+
+  nz = G%ke
+  new_grid_weight = 1.0 - CS%old_grid_weight
+
+  call MOM_error(FATAL, "build_grid_SLight is not completed yet.")
+
+  ! Build grid based on target interface densities
+  do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
+    if (G%mask2dT(i,j)>0.) then
+
+      ! Copy T and S onto new variables so as to not alter the original values
+      ! of T and S (these are remapped at the end of the regridding iterations
+      ! once the final grid has been determined).
+      T_column(:) = tv%T(i,j,:)
+      S_column(:) = tv%S(i,j,:)
+      z_column(1) = 0. ! Work downward rather than bottom up
+      do K = 1, nz
+        z_column(K+1) = z_column(K) + h(i,j,k) ! Work in units of h (m or Pa)
+        p_column(k) = CS%ref_pressure + CS%compressibility_fraction * &
+             ( 0.5 * ( z_column(K) + z_column(K+1) ) * G%H_to_Pa - CS%ref_pressure )
+      enddo
+
+      ! Work bottom recording potential density
+      call calculate_density(T_column, S_column, p_column, &
+                             rho_column, 1, nz, tv%eqn_of_state )
+
+      ! Interpolates for the target interface position with the rho_column profile
+      call regridding_set_polys(rho_column, CS, nz, h(i,j,:), z_column, &
+                                ppoly_i_E, ppoly_i_S, ppoly_i_coefficients, ppoly_degree)
+
+      !### Replace interpolate_grid with a better density-based grid generator.
+
+      ! Based on the global density profile, interpolate to generate a new grid
+      call interpolate_grid(nz, h(i,j,:), z_column, ppoly_i_E, ppoly_i_coefficients, &
+                            CS%target_density, ppoly_degree, nz, h_column_new, z_column_new)
+
+      ! Determine which interfaces are in the s-space region and the depth extent
+      ! of this region.
+
+      
+      ! ### This code may become unnecessary...
+      ! Sweep down the interfaces and make sure that the interface is at least
+      ! as deep as a nominal target z* grid
+      nominal_z = 0.
+      stretching = z_column(nz+1) / G%bathyT(i,j) * G%m_to_H ! Stretches z* to z
+      do k = 2, nz+1
+        nominal_z = nominal_z + CS%coordinateResolution(k-1) * stretching
+        z_column_new(k) = max( z_column_new(k), nominal_z )
+        z_column_new(k) = min( z_column_new(k), z_column(nz+1) )
+      enddo
+
+      ! Finally calculate the change in position of the interface
+      do k = 1,nz+1
+        dzInterface(i,j,k) =  new_grid_weight * ( z_column(k) - z_column_new(k) )
+      enddo
+#ifdef __DO_SAFETY_CHECKS__
+      if (dzInterface(i,j,1) /= 0.) stop 'build_grid_SLight: Surface moved?!'
+      if (dzInterface(i,j,nz+1) /= 0.) stop 'build_grid_SLight: Bottom moved?!'
+#endif
+
+      ! This adjusts things robust to round-off errors
+      call adjust_interface_motion( nz, CS%min_thickness, h(i,j,:), dzInterface(i,j,:) )
+
+    else ! on land
+      dzInterface(i,j,:) = 0.
+    endif ! mask2dT
+  enddo; enddo ! i,j
+
+end subroutine build_grid_SLight
 
 !> Adjust dz_Interface to ensure non-negative future thicknesses
 subroutine adjust_interface_motion( nk, min_thickness, h_old, dz_int )
@@ -970,9 +1078,9 @@ subroutine build_grid_arbitrary( G, h, dzInterface, h_new, CS )
     
         x = - ( z_inter(k) - eta ) / max_depth
       
-        if ( x .le. x1 ) then
+        if ( x <= x1 ) then
           t = y1*x/x1
-        else if ( (x .gt. x1 ) .and. ( x .lt. x2 )) then
+        else if ( (x > x1 ) .and. ( x < x2 )) then
           t = y1 + (y2-y1) * (x-x1) / (x2-x1)
         else  
           t = y2 + (1.0-y2) * (x-x2) / (1.0-x2)
@@ -987,7 +1095,7 @@ subroutine build_grid_arbitrary( G, h, dzInterface, h_new, CS )
 
       ! Modify interface heights to avoid layers of zero thicknesses
       do k = nz,1,-1
-        if ( z_inter(k) .LT. (z_inter(k+1) + min_thickness) ) then
+        if ( z_inter(k) < (z_inter(k+1) + min_thickness) ) then
           z_inter(k) = z_inter(k+1) + min_thickness
         end if
       end do
@@ -1010,36 +1118,31 @@ stop 'OOOOOOPS' ! For some reason the gnu compiler will not let me delete this
 end subroutine build_grid_arbitrary
 
 
-!> Performs one single iteration of the regridding based on target interface
-!! densities. Given the set of target values and cell densities, this routine
-!! builds an interpolated profile and determines the location of the new
-!! grid. It may happen that, given a high-order interpolator, the number of
+!> Given the set of target values and cell densities, this routine
+!! builds an interpolated profile for the densities within each grid cell.
+!! It may happen that, given a high-order interpolator, the number of
 !! available layers is insufficient (e.g., there are two available layers for
 !! a third-order PPM ih4 scheme). In these cases, we resort to the simplest 
 !! continuous linear scheme (P1M h2).
-subroutine regridding_iteration( densities, target_values, CS, &
-                                 n0, h0, x0, ppoly0_E, ppoly0_S, ppoly0_coefficients, n1, h1, x1 )
+subroutine regridding_set_polys( densities, CS, n0, h0, x0, ppoly0_E, ppoly0_S, &
+                                 ppoly0_coefficients, degree)
+
   real, dimension(:),  intent(in)    :: densities !< Actual cell densities
-  real, dimension(:),  intent(in)    :: target_values !< Target interface densities
   integer,             intent(in)    :: n0 !< Number of cells on source grid
   real, dimension(:),  intent(in)    :: h0 !< cell widths on source grid
   real, dimension(:),  intent(in)    :: x0 !< interface positions on source grid
   real, dimension(:,:),intent(inout) :: ppoly0_E            !< Edge value of polynomial
   real, dimension(:,:),intent(inout) :: ppoly0_S            !< Edge slope of polynomial
   real, dimension(:,:),intent(inout) :: ppoly0_coefficients !< Coefficients of polynomial 
-  integer,             intent(in)    :: n1 !< Number of cells on target grid
-  real, dimension(:),  intent(out)   :: h1 !< cell widths on target grid
-  real, dimension(:),  intent(out)   :: x1 !< interface positions on target grid
+  integer,             intent(inout) :: degree  !< The degree of the polynomials
   type(regridding_CS), intent(in)    :: CS !< Parameters used for regridding
-  ! Local variables
-  integer :: degree, k
 
   ! Reset piecewise polynomials
-  ppoly0_E = 0.0
-  ppoly0_S = 0.0
-  ppoly0_coefficients = 0.0
+  ppoly0_E(:,:) = 0.0
+  ppoly0_S(:,:) = 0.0
+  ppoly0_coefficients(:,:) = 0.0
   
-  ! 1. Compute the interpolated profile of the density field and build grid
+  ! Compute the interpolated profile of the density field and build grid
   select case ( CS%interpolation_scheme )
   
     case ( INTERPOLATION_P1M_H2 )
@@ -1052,7 +1155,7 @@ subroutine regridding_iteration( densities, target_values, CS, &
     
     case ( INTERPOLATION_P1M_H4 )
       degree = DEGREE_1
-      if ( n0 .ge. 4 ) then
+      if ( n0 >= 4 ) then
         call edge_values_explicit_h4( n0, h0, densities, ppoly0_E )
       else
         call edge_values_explicit_h2( n0, h0, densities, ppoly0_E )
@@ -1064,7 +1167,7 @@ subroutine regridding_iteration( densities, target_values, CS, &
     
     case ( INTERPOLATION_P1M_IH4 )
       degree = DEGREE_1
-      if ( n0 .ge. 4 ) then
+      if ( n0 >= 4 ) then
         call edge_values_implicit_h4( n0, h0, densities, ppoly0_E )
       else
         call edge_values_explicit_h2( n0, h0, densities, ppoly0_E )
@@ -1082,7 +1185,7 @@ subroutine regridding_iteration( densities, target_values, CS, &
       end if    
     
     case ( INTERPOLATION_PPM_H4 )
-      if ( n0 .ge. 4 ) then
+      if ( n0 >= 4 ) then
         degree = DEGREE_2
         call edge_values_explicit_h4( n0, h0, densities, ppoly0_E )
         call PPM_reconstruction( n0, h0, densities, ppoly0_E, ppoly0_coefficients )
@@ -1100,7 +1203,7 @@ subroutine regridding_iteration( densities, target_values, CS, &
     
     case ( INTERPOLATION_PPM_IH4 )
 
-      if ( n0 .ge. 4 ) then
+      if ( n0 >= 4 ) then
         degree = DEGREE_2
         call edge_values_implicit_h4( n0, h0, densities, ppoly0_E )
         call PPM_reconstruction( n0, h0, densities, ppoly0_E, ppoly0_coefficients )
@@ -1118,7 +1221,7 @@ subroutine regridding_iteration( densities, target_values, CS, &
     
     case ( INTERPOLATION_P3M_IH4IH3 )
       
-      if ( n0 .ge. 4 ) then
+      if ( n0 >= 4 ) then
         degree = DEGREE_3
         call edge_values_implicit_h4( n0, h0, densities, ppoly0_E )
         call edge_slopes_implicit_h3( n0, h0, densities, ppoly0_S )
@@ -1136,7 +1239,7 @@ subroutine regridding_iteration( densities, target_values, CS, &
       end if
       
     case ( INTERPOLATION_P3M_IH6IH5 )
-      if ( n0 .ge. 6 ) then
+      if ( n0 >= 6 ) then
         degree = DEGREE_3
         call edge_values_implicit_h6( n0, h0, densities, ppoly0_E )
         call edge_slopes_implicit_h5( n0, h0, densities, ppoly0_S )
@@ -1155,7 +1258,7 @@ subroutine regridding_iteration( densities, target_values, CS, &
     
     case ( INTERPOLATION_PQM_IH4IH3 )
     
-      if ( n0 .ge. 4 ) then
+      if ( n0 >= 4 ) then
         degree = DEGREE_4
         call edge_values_implicit_h4( n0, h0, densities, ppoly0_E )
         call edge_slopes_implicit_h3( n0, h0, densities, ppoly0_S )
@@ -1173,7 +1276,7 @@ subroutine regridding_iteration( densities, target_values, CS, &
       end if
 
     case ( INTERPOLATION_PQM_IH6IH5 )
-      if ( n0 .ge. 6 ) then
+      if ( n0 >= 6 ) then
         degree = DEGREE_4
         call edge_values_implicit_h6( n0, h0, densities, ppoly0_E )
         call edge_slopes_implicit_h5( n0, h0, densities, ppoly0_S )
@@ -1191,11 +1294,8 @@ subroutine regridding_iteration( densities, target_values, CS, &
       end if
     
   end select
-
-  ! Based on global density profile, interpolate new grid
-  call interpolate_grid( n0, h0, x0, ppoly0_E, ppoly0_coefficients, target_values, degree, n1, h1, x1 )
     
-end subroutine regridding_iteration
+end subroutine regridding_set_polys
 
 
 !------------------------------------------------------------------------------
@@ -1232,7 +1332,7 @@ subroutine interpolate_grid( n0, h0, x0, ppoly0_E, ppoly0_coefficients, target_v
   ! Find coordinates for interior target values
   do k = 2,n1
     t = target_values(k)
-    x1(k) = get_polynomial_coordinate ( n0, h0, ppoly0_E, ppoly0_coefficients, t, degree )
+    x1(k) = get_polynomial_coordinate ( n0, h0, x0, ppoly0_E, ppoly0_coefficients, t, degree )
     h1(k-1) = x1(k) - x1(k-1)
   end do
   h1(n1) = x1(n1+1) - x1(n1)
@@ -1243,7 +1343,8 @@ end subroutine interpolate_grid
 !------------------------------------------------------------------------------
 ! Given target value, find corresponding coordinate for given polynomial
 !------------------------------------------------------------------------------
-real function get_polynomial_coordinate ( N, h, ppoly_E, ppoly_coefficients, target_value, degree )
+function get_polynomial_coordinate ( N, h, x_g, ppoly_E, ppoly_coefficients, &
+                                     target_value, degree ) result ( x_tgt )
 ! ------------------------------------------------------------------------------
 ! Here, 'ppoly' is assumed to be a piecewise discontinuous polynomial of degree
 ! 'degree' throughout the domain defined by 'grid'. A target value is given 
@@ -1251,7 +1352,7 @@ real function get_polynomial_coordinate ( N, h, ppoly_E, ppoly_coefficients, tar
 ! new grid. 
 !
 ! If the target value is out of range, the grid coordinate is simply set to
-! be equal to one of the boundary coordinates, which defines vanished layers
+! be equal to one of the boundary coordinates, which results in vanished layers
 ! near the boundaries.
 !
 ! IT IS ASSUMED THAT THE PIECEWISE POLYNOMIAL IS MONOTONICALLY INCREASING.
@@ -1262,18 +1363,20 @@ real function get_polynomial_coordinate ( N, h, ppoly_E, ppoly_coefficients, tar
 ! ------------------------------------------------------------------------------
 
   ! Arguments
-  integer,        intent(in)  :: N
-  real,           intent(in)  :: h(:) ! size n
-  real,           intent(in)  :: ppoly_E(:,:)            !Edge value of polynomial
-  real,           intent(in)  :: ppoly_coefficients(:,:) !Coefficients of polynomial
-  real,           intent(in)  :: target_value
-  integer,        intent(in)  :: degree
+  integer,              intent(in) :: N     ! The number of grid cells
+  real, dimension(:),   intent(in) :: h     ! Grid cell thicknesses    (size N)
+  real, dimension(:),   intent(in) :: x_g   ! Grid interface locations (size N+1)
+  real, dimension(:,:), intent(in) :: ppoly_E  !Edge value of polynomial
+  real, dimension(:,:), intent(in) :: ppoly_coefficients !Coefficients of polynomial
+  real,                 intent(in) :: target_value
+  integer,              intent(in) :: degree ! The degree of the polynomials
+
+  real :: x_tgt      !< The position of x_g at which target_value is found.
 
   ! Local variables
   integer            :: i, k            ! loop indices
   integer            :: k_found         ! index of target cell
   integer            :: iter
-  real               :: x_l, x_r        ! end coordinates of target cell
   real               :: xi0             ! normalized target coordinate
   real, dimension(5) :: a               ! polynomial coefficients
   real               :: numerator
@@ -1282,41 +1385,36 @@ real function get_polynomial_coordinate ( N, h, ppoly_E, ppoly_coefficients, tar
   real               :: x               ! global target coordinate
   real               :: eps                 ! offset used to get away from
                                         ! boundaries
-  real               :: g               ! gradient during N-R iterations
+  real               :: grad            ! gradient during N-R iterations
 
   eps = NR_OFFSET
   
   k_found = -1
-  x_l = -1.E30
 
   ! If the target value is outside the range of all values, we
   ! force the target coordinate to be equal to the lowest or
   ! largest value, depending on which bound is overtaken
-  if ( target_value .LE. ppoly_E(1,1) ) then
-    x = 0. ! Left boundary is at x=0
-    get_polynomial_coordinate = x
+  if ( target_value <= ppoly_E(1,1) ) then
+    x_tgt = x_g(1)
     return  ! return because there is no need to look further
   end if
   
   ! Since discontinuous edge values are allowed, we check whether the target
   ! value lies between two discontinuous edge values at interior interfaces
-    x = 0. ! Left boundary is at x=0
   do k = 2,N
-    x = x + h(k-1) ! Position of interface k
-    if ( ( target_value .GE. ppoly_E(k-1,2) ) .AND. &
-       ( target_value .LE. ppoly_E(k,1) ) ) then
-       get_polynomial_coordinate = x
-       return   ! return because there is no need to look further
-       exit
+    if ( ( target_value >= ppoly_E(k-1,2) ) .AND. &
+      ( target_value <= ppoly_E(k,1) ) ) then
+      x_tgt = x_g(k)
+      return   ! return because there is no need to look further
+      exit
     end if   
   end do
 
   ! If the target value is outside the range of all values, we
   ! force the target coordinate to be equal to the lowest or
   ! largest value, depending on which bound is overtaken
-  x = x + h(N) ! Position of right boundary
-  if ( target_value .GE. ppoly_E(N,2) ) then
-    get_polynomial_coordinate = x
+  if ( target_value >= ppoly_E(N,2) ) then
+    x_tgt = x_g(N+1)
     return  ! return because there is no need to look further
   end if
   
@@ -1325,14 +1423,11 @@ real function get_polynomial_coordinate ( N, h, ppoly_E, ppoly_coefficients, tar
   ! there is a unique solution. We loop on all cells and find which one
   ! contains the target value. The variable k_found holds the index value
   ! of the cell where the taregt value lies.
-  x_r = 0. ! Left boundary is at x=0
   do k = 1,N
-    x_l = x_r
-    x_r = x_l + h(k)
-    if ( ( target_value .GT. ppoly_E(k,1) ) .AND. &
-       ( target_value .LT. ppoly_E(k,2) ) ) then
-       k_found = k
-       exit
+    if ( ( target_value > ppoly_E(k,1) ) .AND. &
+         ( target_value < ppoly_E(k,2) ) ) then
+      k_found = k
+      exit
     end if   
   end do
 
@@ -1341,7 +1436,7 @@ real function get_polynomial_coordinate ( N, h, ppoly_E, ppoly_coefficients, tar
   ! despite the fact that the target value lies between the extremes. It
   ! means there is a major problem with the interpolant. This needs to be
   ! reported.
-  if ( k_found .EQ. -1 ) then
+  if ( k_found == -1 ) then
       write(*,*) target_value, ppoly_E(1,1), ppoly_E(N,2)
       write(*,*) 'Could not find target coordinate in ' //&
                  '"get_polynomial_coordinate". This is caused by an '//&
@@ -1364,8 +1459,8 @@ real function get_polynomial_coordinate ( N, h, ppoly_E, ppoly_coefficients, tar
 
   ! Newton-Raphson iterations
   do 
-    if ( ( iter .GT. NR_ITERATIONS ) .OR. &
-         ( abs(delta) .LT. NR_TOLERANCE ) ) then
+    if ( ( iter > NR_ITERATIONS ) .OR. &
+         ( abs(delta) < NR_TOLERANCE ) ) then
       exit    
     end if
     
@@ -1384,25 +1479,23 @@ real function get_polynomial_coordinate ( N, h, ppoly_E, ppoly_coefficients, tar
     ! bound with a small offset towards the interior when the gradient of
     ! the function at the boundary is zero (in which case, the Newton-Raphson
     ! algorithm does not converge).
-    if ( xi0 .LT. 0.0 ) then
+    if ( xi0 < 0.0 ) then
       xi0 = 0.0
-      g = a(2)
-      if ( g .EQ. 0.0 ) xi0 = xi0 + eps
+      grad = a(2)
+      if ( grad == 0.0 ) xi0 = xi0 + eps
     end if
     
-    if ( xi0 .GT. 1.0 ) then
+    if ( xi0 > 1.0 ) then
       xi0 = 1.0
-      g = a(2) + 2*a(3) + 3*a(4) + 4*a(5)
-      if ( g .EQ. 0.0 ) xi0 = xi0 - eps
+      grad = a(2) + 2*a(3) + 3*a(4) + 4*a(5)
+      if ( grad == 0.0 ) xi0 = xi0 - eps
     end if
 
     iter = iter + 1
 
   end do ! end Newton-Raphson iterations
 
-  x = x_l + xi0 * h(k_found)
-    
-  get_polynomial_coordinate = x
+  x_tgt = x_g(k_found) + xi0 * h(k_found)
 
 end function get_polynomial_coordinate
 
@@ -1469,16 +1562,16 @@ subroutine old_inflate_layers_1d( minThickness, N, h )
   ! Count number of nonzero layers
   count_nonzero_layers = 0
   do k = 1,N
-    if ( h(k) .GT. minThickness ) then
+    if ( h(k) > minThickness ) then
       count_nonzero_layers = count_nonzero_layers + 1
     end if
   end do
 
   ! If all layer thicknesses are greater than the threshold, exit routine
-  if ( count_nonzero_layers .eq. N ) return
+  if ( count_nonzero_layers == N ) return
 
   ! If all thicknesses are zero, inflate them all and exit
-  if ( count_nonzero_layers .eq. 0 ) then  
+  if ( count_nonzero_layers == 0 ) then  
     do k = 1,N
       h(k) = minThickness
     end do
@@ -1488,7 +1581,7 @@ subroutine old_inflate_layers_1d( minThickness, N, h )
   ! Inflate zero layers
   correction = 0.0
   do k = 1,N
-    if ( h(k) .le. minThickness ) then
+    if ( h(k) <= minThickness ) then
       delta = minThickness - h(k)
       correction = correction + delta
       h(k) = h(k) + delta
@@ -1499,7 +1592,7 @@ subroutine old_inflate_layers_1d( minThickness, N, h )
   maxThickness = h(1)
   k_found = 1
   do k = 1,N
-    if ( h(k) .gt. maxThickness ) then
+    if ( h(k) > maxThickness ) then
       maxThickness = h(k)
       k_found = k
     end if  
@@ -1560,7 +1653,7 @@ subroutine convective_adjustment(G, h, tv)
           ! If the density of the current cell is larger than the density
           ! below it, we swap the cells and recalculate the densitiies
           ! within the swapped cells    
-          if ( r0 .gt. r1 ) then
+          if ( r0 > r1 ) then
             tv%T(i,j,k)   = T1
             tv%T(i,j,k+1) = T0
             tv%S(i,j,k)   = S1
@@ -1607,7 +1700,7 @@ function uniformResolution(nk,coordMode,maxDepth,rhoLight,rhoHeavy)
   scheme = coordinateMode(coordMode)
   select case ( scheme )
 
-    case ( REGRIDDING_ZSTAR, REGRIDDING_HYCOM1 )
+    case ( REGRIDDING_ZSTAR, REGRIDDING_HYCOM1, REGRIDDING_SLIGHT )
       uniformResolution(:) = maxDepth / real(nk)
 
     case ( REGRIDDING_RHO )  
@@ -1703,7 +1796,7 @@ function getCoordinateUnits( CS )
   character(len=20)               :: getCoordinateUnits
 
   select case ( CS%regridding_scheme )
-    case ( REGRIDDING_ZSTAR, REGRIDDING_HYCOM1 )
+    case ( REGRIDDING_ZSTAR, REGRIDDING_HYCOM1, REGRIDDING_SLIGHT )
       getCoordinateUnits = 'meter'
     case ( REGRIDDING_SIGMA )
       getCoordinateUnits = 'fraction'
@@ -1729,7 +1822,7 @@ function getCoordinateShortName( CS )
     case ( REGRIDDING_ZSTAR )
       !getCoordinateShortName = 'z*'
       ! The following line is a temporary work around...  :(  -AJA
-      getCoordinateShortName = 'pseaduo-depth, -z*'
+      getCoordinateShortName = 'pseudo-depth, -z*'
     case ( REGRIDDING_SIGMA )
       getCoordinateShortName = 'sigma'
     case ( REGRIDDING_RHO )  
@@ -1738,6 +1831,8 @@ function getCoordinateShortName( CS )
       getCoordinateShortName = 'coordinate'
     case ( REGRIDDING_HYCOM1 )
       getCoordinateShortName = 'z-rho'
+    case ( REGRIDDING_SLIGHT )
+      getCoordinateShortName = 's-rho'
     case default
       call MOM_error(FATAL,'MOM_regridding, getCoordinateShortName: '//&
                      'Unknown regridding scheme selected!')
@@ -1791,7 +1886,7 @@ function getStaticThickness( CS, SSH, depth )
   real :: z, dz
 
   select case ( CS%regridding_scheme )
-    case ( REGRIDDING_ZSTAR, REGRIDDING_HYCOM1 )
+    case ( REGRIDDING_ZSTAR, REGRIDDING_HYCOM1, REGRIDDING_SLIGHT )
       if (depth>0.) then
         z = ssh
         do k = 1, CS%nk
