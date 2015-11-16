@@ -26,9 +26,11 @@ subroutine PLM_reconstruction( N, h, u, ppoly_E, ppoly_coefficients )
 !------------------------------------------------------------------------------
 ! Reconstruction by linear polynomials within each cell.
 !
-! grid:  one-dimensional grid (properly initialized)
-! ppoly: piecewise linear polynomial to be reconstructed (properly initialized)
-! u:     cell averages
+! N:     number of cells in grid
+! h:     thicknesses of grid cells
+! u:     cell averages to use in constructing piecewise polynomials
+! ppoly_E : edge values of piecewise polynomials
+! ppoly_coefficients : coefficients of piecewise polynomials
 !
 ! It is assumed that the size of the array 'u' is equal to the number of cells
 ! defining 'grid' and 'ppoly'. No consistency check is performed here.
@@ -155,7 +157,6 @@ subroutine PLM_reconstruction( N, h, u, ppoly_E, ppoly_coefficients )
     
   end do ! end loop on interior cells
 
-  
 end subroutine PLM_reconstruction
 
 
@@ -170,9 +171,11 @@ subroutine PLM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
 ! 
 ! This extrapolation is EXACT when the underlying profile is linear.
 !
-! grid:  one-dimensional grid (properly initialized)
-! ppoly: piecewise linear polynomial to be reconstructed (properly initialized)
-! u:     cell averages
+! N:     number of cells in grid
+! h:     thicknesses of grid cells
+! u:     cell averages to use in constructing piecewise polynomials
+! ppoly_E : edge values of piecewise polynomials
+! ppoly_coefficients : coefficients of piecewise polynomials
 !
 ! It is assumed that the size of the array 'u' is equal to the number of cells
 ! defining 'grid' and 'ppoly'. No consistency check is performed here.

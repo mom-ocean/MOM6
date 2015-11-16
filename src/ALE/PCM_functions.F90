@@ -26,10 +26,11 @@ subroutine PCM_reconstruction( N, u, ppoly_E, ppoly_coefficients )
 ! do but this routine is provided to ensure a homogeneous interface
 ! throughout the regridding toolbox.
 !
-! grid:  one-dimensional grid (properly initialized)
-! ppoly: piecewise constant polynomial to be reconstructed (properly
-!        initialized)
-! u:     cell averages
+! N:     number of cells in grid
+! h:     thicknesses of grid cells
+! u:     cell averages to use in constructing piecewise polynomials
+! ppoly_E : edge values of piecewise polynomials
+! ppoly_coefficients : coefficients of piecewise polynomials
 !
 ! It is assumed that the dimension of 'u' is equal to the number of cells
 ! defining 'grid' and 'ppoly'. No consistency check is performed.

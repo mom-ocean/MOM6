@@ -23,15 +23,17 @@ contains
 !------------------------------------------------------------------------------
 ! PPM_reconstruction
 ! -----------------------------------------------------------------------------
-subroutine PPM_reconstruction( N, h, u, ppoly_E, ppoly_coefficients )
+subroutine PPM_reconstruction( N, h, u, ppoly_E, ppoly_coefficients)
 !------------------------------------------------------------------------------
 ! Reconstruction by quadratic polynomials within each cell.
 !
 ! The edge values MUST have been estimated prior to calling this routine
 !
-! grid:  one-dimensional grid (see grid.F90)
-! ppoly: piecewise quadratic polynomial to be reconstructed (see ppoly.F90)
-! u:     cell averages
+! N:     number of cells in grid
+! h:     thicknesses of grid cells
+! u:     cell averages to use in constructing piecewise polynomials
+! ppoly_E : edge values of piecewise polynomials
+! ppoly_coefficients : coefficients of piecewise polynomials
 !
 ! It is assumed that the dimension of 'u' is equal to the number of cells
 ! defining 'grid' and 'ppoly'. No consistency check is performed.
@@ -79,9 +81,10 @@ subroutine PPM_limiter_standard( N, h, u, ppoly_E )
 !------------------------------------------------------------------------------
 ! Standard PPM limiter (Colella & Woodward, JCP 1984).
 !
-! grid:  one-dimensional grid (see grid.F90)
-! ppoly: piecewise quadratic polynomial to be reconstructed (see ppoly.F90)
-! u:     cell averages
+! N:     number of cells in grid
+! h:     thicknesses of grid cells
+! u:     cell averages to use in constructing piecewise polynomials
+! ppoly_E : edge values of piecewise polynomials
 !
 ! It is assumed that the dimension of 'u' is equal to the number of cells
 ! defining 'grid' and 'ppoly'. No consistency check is performed.
@@ -150,7 +153,7 @@ end subroutine PPM_limiter_standard
 !------------------------------------------------------------------------------
 ! ppm boundary extrapolation
 ! -----------------------------------------------------------------------------
-subroutine PPM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
+subroutine PPM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients)
 !------------------------------------------------------------------------------
 ! Reconstruction by parabolas within boundary cells.
 !
@@ -165,9 +168,11 @@ subroutine PPM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
 ! PPM limiter is used to modify one of the edge values in order to yield
 ! a monotonic parabola.
 !
-! grid:  one-dimensional grid (properly initialized)
-! ppoly: piecewise linear polynomial to be reconstructed (properly initialized)
-! u:     cell averages
+! N:     number of cells in grid
+! h:     thicknesses of grid cells
+! u:     cell averages to use in constructing piecewise polynomials
+! ppoly_E : edge values of piecewise polynomials
+! ppoly_coefficients : coefficients of piecewise polynomials
 !
 ! It is assumed that the size of the array 'u' is equal to the number of cells
 ! defining 'grid' and 'ppoly'. No consistency check is performed here.
@@ -179,7 +184,7 @@ subroutine PPM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
   real, dimension(:),   intent(in)    :: u ! cell averages (size N)
   real, dimension(:,:), intent(inout) :: ppoly_E
   real, dimension(:,:), intent(inout) :: ppoly_coefficients
-  
+
   ! Local variables
   integer       :: i0, i1
   real          :: u0, u1

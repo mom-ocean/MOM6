@@ -62,7 +62,6 @@ subroutine P1M_interpolation( N, h, u, ppoly_E, ppoly_coefficients )
   real, dimension(:,:), intent(inout) :: ppoly_E
   real, dimension(:,:), intent(inout) :: ppoly_coefficients
 
-
   ! Local variables
   integer   :: k            ! loop index
   real      :: u0_l, u0_r   ! edge values (left and right)
@@ -97,9 +96,11 @@ subroutine P1M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
 ! The left and right edge values in the left and right boundary cells,
 ! respectively, are estimated using a linear extrapolation within the cells.
 !
-! grid:  one-dimensional grid (properly initialized)
-! ppoly: piecewise linear polynomial to be reconstructed (properly initialized)
-! u:     cell averages
+! N:     number of cells in grid
+! h:     thicknesses of grid cells
+! u:     cell averages to use in constructing piecewise polynomials
+! ppoly_E : edge values of piecewise polynomials
+! ppoly_coefficients : coefficients of piecewise polynomials
 !
 ! It is assumed that the size of the array 'u' is equal to the number of cells
 ! defining 'grid' and 'ppoly'. No consistency check is performed here.
