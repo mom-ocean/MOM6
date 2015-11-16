@@ -43,7 +43,8 @@ use MOM_verticalGrid,     only : verticalGrid_type
 use regrid_defs,          only : PRESSURE_RECONSTRUCTION_PLM
 !use regrid_consts,       only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts,        only : coordinateUnits, coordinateMode
-use regrid_consts,        only : REGRIDDING_ZSTAR, REGRIDDING_RHO, REGRIDDING_HYCOM1
+use regrid_consts,        only : REGRIDDING_ZSTAR, REGRIDDING_RHO
+use regrid_consts,        only : REGRIDDING_HYCOM1, REGRIDDING_SLIGHT
 use regrid_edge_values,   only : edge_values_implicit_h4
 use PLM_functions,        only : PLM_reconstruction, PLM_boundary_extrapolation
 use PPM_functions,        only : PPM_reconstruction, PPM_boundary_extrapolation
@@ -919,7 +920,7 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
   integer :: ke
   logical :: tmpLogical
   real :: tmpReal, compress_fraction
-  real :: rho_target(G%ke+1) ! Target density used in HYCOM1 mode
+  real :: rho_target(G%ke+1) ! Target density used in HYBRID mode
 
   ke = size(dz) ! Number of levels in resolution vector
 
@@ -1018,15 +1019,15 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
 
         fileName = trim( extractWord(trim(string(8:)), 1) )
         if (fileName(1:1)/='.' .and. filename(1:1)/='/') fileName = trim(inputdir) // trim( fileName )
-        if (.not. file_exists(fileName)) call MOM_error(FATAL,"ALE_initRegridding: HYCOM1 "// &
+        if (.not. file_exists(fileName)) call MOM_error(FATAL,"ALE_initRegridding: HYBRID "// &
           "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
         varName = trim( extractWord(trim(string(8:)), 2) )
-        if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,"ALE_initRegridding: HYCOM1 "// &
+        if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,"ALE_initRegridding: HYBRID "// &
           "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
         call MOM_read_data(trim(fileName), trim(varName), rho_target)
         call set_target_densities( regridCS, rho_target )
         varName = trim( extractWord(trim(string(8:)), 3) )
-        if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,"ALE_initRegridding: HYCOM1 "// &
+        if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,"ALE_initRegridding: HYBRID "// &
           "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
         call MOM_read_data(trim(fileName), trim(varName), dz)
         call log_param(param_file, mod, "!ALE_RESOLUTION", dz, &
@@ -1040,7 +1041,8 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
       endif
   end select
   if (coordinateMode(coordMode) == REGRIDDING_ZSTAR .or. &
-      coordinateMode(coordMode) == REGRIDDING_HYCOM1) then
+      coordinateMode(coordMode) == REGRIDDING_HYCOM1 .or. &
+      coordinateMode(coordMode) == REGRIDDING_SLIGHT) then
     ! Adjust target grid to be consistent with G%max_depth
     ! This is a work around to the from_Z initialization...  ???
     tmpReal = sum( dz(:) )
