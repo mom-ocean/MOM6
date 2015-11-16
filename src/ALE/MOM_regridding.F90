@@ -71,7 +71,16 @@ type, public :: regridding_CS
   real :: ref_pressure = 2.e7
 
   !> Weight given to old coordinate when blending between new and old grids (nondim)
+  !! Used only below depth_of_time_filter_shallow, with a cubic variation
+  !! from zero to full effect between depth_of_time_filter_shallow and
+  !! depth_of_time_filter_deep.
   real :: old_grid_weight = 0.
+
+  !> Depth above which no time-filtering of grid is applied (H units)
+  real :: depth_of_time_filter_shallow = 0.
+
+  !> Depth below which time-filtering of grid is applied at full effect (H units)
+  real :: depth_of_time_filter_deep = 0.
 
   !> Fraction (between 0 and 1) of compressibility to add to potential density
   !! profiles when interpolating for target grid positions. (nondim)
@@ -90,6 +99,7 @@ public adjust_interface_motion
 public setRegriddingBoundaryExtrapolation
 public set_regrid_min_thickness
 public set_old_grid_weight
+public set_filter_depths
 public uniformResolution
 public setCoordinateResolution
 public set_target_densities_from_G
@@ -362,12 +372,27 @@ subroutine filtered_grid_motion( CS, nk, z_old, z_new, dz_g )
   real, dimension(nk+1), intent(in)    :: z_new !< New grid position (m)
   real, dimension(nk+1), intent(inout) :: dz_g !< Change in interface positions (m)
   ! Local variables
-  real :: new_grid_weight
+  real :: new_grid_weight, z_pot, ws, recip_dz
   integer :: k
 
-  new_grid_weight = 1.0 - CS%old_grid_weight
+  recip_dz = CS%depth_of_time_filter_deep - CS%depth_of_time_filter_shallow
+  if (recip_dz>0.) then
+    recip_dz = 1./recip_dz
+  else
+    recip_dz = 0.
+  endif
+
   dz_g(1) = 0.
   do k = 2,nk
+    ! z_pot is where the new grid would be if full filtering were in effect
+    z_pot = z_new(k) + CS%old_grid_weight * ( z_old(k) - z_new(k) )
+    ! Calculate old grid weights based on average between old and z_pot
+    z_pot = 0.5 * ( z_old(k) + z_pot )
+    ! ws=1 at d>=deep, ws=0 at d<=shallow
+    ws = 1. - ( CS%depth_of_time_filter_deep -abs(z_pot) ) * recip_dz
+    ws = max(1., min(0., ws) )
+    ! Now blend grids and calculate grid motion
+    new_grid_weight = 1.0 - CS%old_grid_weight * ws
     dz_g(k) = new_grid_weight * ( z_new(k) - z_old(k) )
   enddo
   dz_g(nk+1) = 0.
@@ -1862,7 +1887,7 @@ end subroutine set_regrid_min_thickness
 
 !> Set the weight given to the old coordinate when blending between new and old grids
 subroutine set_old_grid_weight( old_grid_weight, CS )
-  real   ,             intent(in)    :: old_grid_weight !< Weight, 0..1 (nondim)
+  real,                intent(in)    :: old_grid_weight !< Weight, 0..1 (nondim)
   type(regridding_CS), intent(inout) :: CS              !< Regridding control structure
 
   if (old_grid_weight<0. .or. old_grid_weight>1.) call MOM_error(FATAL,'MOM_regridding, '//&
@@ -1870,6 +1895,19 @@ subroutine set_old_grid_weight( old_grid_weight, CS )
   CS%old_grid_weight = old_grid_weight
 
 end subroutine set_old_grid_weight
+
+!> Set depths over which to scale and apply "old_grid_weight"
+subroutine set_filter_depths( depth_of_time_filter_shallow, depth_of_time_filter_deep, CS )
+  real,                intent(in)    :: depth_of_time_filter_shallow !< Depth to start cubic (H units)
+  real,                intent(in)    :: depth_of_time_filter_deep !< Depth to end cubic (H units)
+  type(regridding_CS), intent(inout) :: CS !< Regridding control structure
+
+  if (depth_of_time_filter_deep>depth_of_time_filter_shallow) call MOM_error(FATAL,'MOM_regridding, '//&
+                     'set_filter_depths: depth_of_time_filter_deep>depth_of_time_filter_shallow!')
+  CS%depth_of_time_filter_deep = depth_of_time_filter_deep
+  CS%depth_of_time_filter_shallow = depth_of_time_filter_shallow
+
+end subroutine set_filter_depths
 
 !------------------------------------------------------------------------------
 ! Return coordinate-derived thicknesses for fixed coordinate systems
