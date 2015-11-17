@@ -459,9 +459,9 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
        do m=1,CS%nMode ; cn(:,:,m) = CS%cg_test ; enddo
     else
        ! CALCULATE cn OR OVERRIDE WITH HARD-CODED DISTRIBUTION
-       print *, "ddriver call wave_speed with CS%nMode=", CS%nMode ! delete later - BDM
+       !print *, "ddriver call wave_speed with CS%nMode=", CS%nMode ! delete later - BDM
        call wave_speed(h, tv, G, CS%nMode, cn, full_halos=.true.)
-       print *, "ddriver wave_speed called" ; stop
+       !print *, "ddriver wave_speed called" ; stop ! delete later - BDM
        ! uncomment below for hard-coded cn that changes linearly with latitude
        !do j=G%jsd,G%jed        
        !  cn(:,j,:) = ((7.-1.)/14000000.)*G%geoLatBu(:,j) + (1.-((7.-1.)/14000000.)*-7000000.)
@@ -1590,7 +1590,7 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   do m=1,CS%nMode
     write(var_name, '("cn_mode",i1)') m
     write(var_descript, '("Baroclinic (eigen) speed of mode ",i1)') m
-    CS%id_cn = register_diag_field('ocean_model',var_name, diag%axesT1, &
+    CS%id_cn(m) = register_diag_field('ocean_model',var_name, diag%axesT1, &
                  Time, var_descript, 'm s-1')
     call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
   enddo
