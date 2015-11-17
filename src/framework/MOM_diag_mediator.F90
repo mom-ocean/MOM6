@@ -1364,6 +1364,17 @@ function register_static_field(module_name, field_name, axes, &
     endif
   endif
 
+  ! Document diagnostics in list of available diagnostics
+  if (is_root_pe() .and. doc_unit > 0) then
+    call log_available_diag(associated(diag), module_name, field_name, &
+                            long_name, units, standard_name)
+    if (present(cmor_field_name)) then
+      call log_available_diag(associated(cmor_diag), module_name, cmor_field_name, &
+                              posted_cmor_long_name, posted_cmor_units, &
+                              posted_cmor_standard_name)
+    endif
+  endif
+
   register_static_field = primary_id
 
 end function register_static_field

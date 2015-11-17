@@ -2435,35 +2435,35 @@ subroutine write_static_fields(G, diag)
 
   id = register_static_field('ocean_model', 'geolat', diag%axesT1, &
         'Latitude of tracer (T) points', 'degrees_N')
-  if (id > 0) call post_data(id, G%geoLatT, diag, .true.)
+  if (id > 0) call post_data(id, G%geoLatT, diag, .true., mask=G%mask2dT)
 
   id = register_static_field('ocean_model', 'geolon', diag%axesT1, &
         'Longitude of tracer (T) points', 'degrees_E')
-  if (id > 0) call post_data(id, G%geoLonT, diag, .true.)
+  if (id > 0) call post_data(id, G%geoLonT, diag, .true., mask=G%mask2dT)
 
   id = register_static_field('ocean_model', 'geolat_c', diag%axesB1, &
         'Latitude of corner (Bu) points', 'degrees_N')
-  if (id > 0) call post_data(id, G%geoLatBu, diag, .true.)
+  if (id > 0) call post_data(id, G%geoLatBu, diag, .true., mask=G%mask2dBu)
 
   id = register_static_field('ocean_model', 'geolon_c', diag%axesB1, &
         'Longitude of corner (Bu) points', 'degrees_E')
-  if (id > 0) call post_data(id, G%geoLonBu, diag, .true.)
+  if (id > 0) call post_data(id, G%geoLonBu, diag, .true., mask=G%mask2dBu)
 
   id = register_static_field('ocean_model', 'geolat_v', diag%axesCv1, &
         'Latitude of meridional velocity (Cv) points', 'degrees_N')
-  if (id > 0) call post_data(id, G%geoLatCv, diag, .true.)
+  if (id > 0) call post_data(id, G%geoLatCv, diag, .true., mask=G%mask2dCv)
 
   id = register_static_field('ocean_model', 'geolon_v', diag%axesCv1, &
         'Longitude of meridional velocity (Cv) points', 'degrees_E')
-  if (id > 0) call post_data(id, G%geoLonCv, diag, .true.)
+  if (id > 0) call post_data(id, G%geoLonCv, diag, .true., mask=G%mask2dCv)
 
   id = register_static_field('ocean_model', 'geolat_u', diag%axesCu1, &
         'Latitude of zonal velocity (Cu) points', 'degrees_N')
-  if (id > 0) call post_data(id, G%geoLatCu, diag, .true.)
+  if (id > 0) call post_data(id, G%geoLatCu, diag, .true., mask=G%mask2dCu)
 
   id = register_static_field('ocean_model', 'geolon_u', diag%axesCu1, &
         'Longitude of zonal velocity (Cu) points', 'degrees_E')
-  if (id > 0) call post_data(id, G%geoLonCu, diag, .true.)
+  if (id > 0) call post_data(id, G%geoLonCu, diag, .true., mask=G%mask2dCu)
 
   id = register_static_field('ocean_model', 'area_t', diag%axesT1,   &
         'Surface area of tracer (T) cells', 'm2',                    &
@@ -2487,19 +2487,44 @@ subroutine write_static_fields(G, diag)
 
   id = register_static_field('ocean_model', 'wet_c', diag%axesB1, &
         '0 if land, 1 if ocean at corner (Bu) points', 'none')
-  if (id > 0) call post_data(id, G%mask2dBu, diag, .true.)
+  if (id > 0) call post_data(id, G%mask2dBu, diag, .true., mask=G%mask2dBu)
 
   id = register_static_field('ocean_model', 'wet_u', diag%axesCu1, &
         '0 if land, 1 if ocean at zonal velocity (Cu) points', 'none')
-  if (id > 0) call post_data(id, G%mask2dCu, diag, .true.)
+  if (id > 0) call post_data(id, G%mask2dCu, diag, .true., mask=G%mask2dCu)
 
   id = register_static_field('ocean_model', 'wet_v', diag%axesCv1, &
         '0 if land, 1 if ocean at meridional velocity (Cv) points', 'none')
-  if (id > 0) call post_data(id, G%mask2dCv, diag, .true.)
+  if (id > 0) call post_data(id, G%mask2dCv, diag, .true., mask=G%mask2dCv)
 
   id = register_static_field('ocean_model', 'Coriolis', diag%axesB1, &
         'Coriolis parameter at corner (Bu) points', 's-1')
-  if (id > 0) call post_data(id, G%CoriolisBu, diag, .true.)
+  if (id > 0) call post_data(id, G%CoriolisBu, diag, .true., mask=G%mask2dBu)
+
+  id = register_static_field('ocean_model', 'dxt', diag%axesT1, &
+        'Delta(x) at thickness/tracer points (meter)', 'm')
+  if (id > 0) call post_data(id, G%dxt, diag, .true., mask=G%mask2dT)
+
+  id = register_static_field('ocean_model', 'dyt', diag%axesT1, &
+        'Delta(y) at thickness/tracer points (meter)', 'm')
+  if (id > 0) call post_data(id, G%dyt, diag, .true., mask=G%mask2dT)
+
+  id = register_static_field('ocean_model', 'dxCu', diag%axesCu1, &
+        'Delta(x) at u points (meter)', 'm')
+  if (id > 0) call post_data(id, G%dxCu, diag, .true., mask=G%mask2dCu)
+
+  id = register_static_field('ocean_model', 'dyCu', diag%axesCu1, &
+        'Delta(y) at u points (meter)', 'm')
+  if (id > 0) call post_data(id, G%dyCu, diag, .true., mask=G%mask2dCu)
+
+  id = register_static_field('ocean_model', 'dxCv', diag%axesCv1, &
+        'Delta(x) at v points (meter)', 'm')
+  if (id > 0) call post_data(id, G%dxCv, diag, .true., mask=G%mask2dCv)
+
+  id = register_static_field('ocean_model', 'dyCv', diag%axesCv1, &
+        'Delta(y) at v points (meter)', 'm')
+  if (id > 0) call post_data(id, G%dyCv, diag, .true., mask=G%mask2dCv)
+
 
 end subroutine write_static_fields
 
@@ -3194,7 +3219,12 @@ end subroutine MOM_end
 !! * HFDS = net surface boundary heat flux entering the ocean
 !!        = hfrainds + hfevapds + hfrunoffds + hfsnthermds + hfsifrazil  
 !!         +hfibthermds + hfsolidrunoffds + rlntds + hfls + hfss + rsntds + rsdo
-!!         (needs to be verified...)
+!!         (This identity needs to be verified.)
+!!
+!! * More heat flux cross-checks 
+!!   * hfds     = net_heat_coupler + hfsifrazil + heat_pme
+!!   * heat_pme = heat_content_surfwater = heat_content_massin + heat_content_massout
+!!
 !!
 !!  \subsection subsection_3d_heat_budget Depth integrated heat budget 
 !!
