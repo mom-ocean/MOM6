@@ -54,7 +54,7 @@ use MOM_error_handler,       only : callTree_enter, callTree_leave, callTree_way
 use MOM_file_parser,         only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type,        only : forcing, optics_type
 use MOM_grid,                only : ocean_grid_type
-use MOM_internal_tides,      only : int_tide_CS, get_itidal_loss
+use MOM_internal_tides,      only : int_tide_CS, get_lowmode_loss
 use MOM_intrinsic_functions, only : invcosh
 use MOM_io,                  only : slasher, vardesc, var_desc
 use MOM_kappa_shear,         only : calculate_kappa_shear, kappa_shear_init, Kappa_shear_CS
@@ -2042,8 +2042,9 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
     TKE_lowmode_tot    = 0.0
     TKE_lowmode_bot(i) = 0.0
     if (CS%Lowmode_itidal_dissipation) then
-      call get_itidal_loss(i,j,G,CS%int_tide_CSp,"WaveDrag",TKE_lowmode_tot)
-      TKE_lowmode_bot(i) = (I_rho0 * CS%Mu_itides * CS%Gamma_itides) * TKE_lowmode_tot
+      ! get loss rate due to wave drag on low modes (already multiplied by q)
+      call get_lowmode_loss(i,j,G,CS%int_tide_CSp,"WaveDrag",TKE_lowmode_tot)
+      TKE_lowmode_bot(i) = CS%Mu_itides * I_rho0 * TKE_lowmode_tot
     endif
     ! Vertical energy flux at bottom
     TKE_itidal_rem(i)  = Inv_int(i)     * TKE_itidal_bot(i)

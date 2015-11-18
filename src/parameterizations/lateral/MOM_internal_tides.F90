@@ -75,7 +75,7 @@ implicit none ; private
 
 public propagate_int_tide !, register_int_tide_restarts
 public internal_tides_init, internal_tides_end
-public get_itidal_loss
+public get_lowmode_loss
 
 type, public :: int_tide_CS ; private
   logical :: do_int_tides    ! If true, use the internal tide code.
@@ -802,7 +802,7 @@ subroutine itidal_lowmode_loss(G, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, dt, 
 end subroutine itidal_lowmode_loss
 
 
-subroutine get_itidal_loss(i,j,G,CS,mechanism,TKE_loss_sum)
+subroutine get_lowmode_loss(i,j,G,CS,mechanism,TKE_loss_sum)
   integer, intent(in)                :: i,j
   type(ocean_grid_type),  intent(in) :: G
   type(int_tide_CS), pointer         :: CS
@@ -816,11 +816,11 @@ subroutine get_itidal_loss(i,j,G,CS,mechanism,TKE_loss_sum)
   !  (out)      TKE_loss_sum - total energy loss rate due to specified mechanism, in W m-2.  
   
   if(mechanism == 'LeakDrag') TKE_loss_sum = CS%tot_leak_loss(i,j)
-  if(mechanism == 'QuadDrag') TKE_loss_sum = CS%tot_quad_loss(i,j)
-  if(mechanism == 'WaveDrag') TKE_loss_sum = CS%tot_itidal_loss(i,j)
+  if(mechanism == 'QuadDrag') TKE_loss_sum = CS%tot_quad_loss(i,j)   ! 
+  if(mechanism == 'WaveDrag') TKE_loss_sum = CS%tot_itidal_loss(i,j) ! currently used for mixing
   if(mechanism == 'Froude')   TKE_loss_sum = CS%tot_Froude_loss(i,j)
   
-end subroutine get_itidal_loss
+end subroutine get_lowmode_loss
 
 
 subroutine refract(En, cg, freq, dt, G, NAngle, use_PPMang)
