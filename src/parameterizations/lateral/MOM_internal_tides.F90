@@ -253,7 +253,20 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
   !do m=1,CS%nMode ; do j=jsd,jed ; do i=isd,ied
   !  cn(i,j,m) = cg1(i,j) / real(m)
   !enddo ; enddo ; enddo
-
+  
+  ! Check for En<0 - for debugging, delete later&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+  do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
+    do j=js,je ; do i=is,ie
+      id_g = G%isd_global + i - 1.0
+      jd_g = G%jsd_global + j - 1.0
+      if(CS%En(i,j,a,fr,m)<0.0)then
+        print *, 'Prior to forcing: En<0.0 at ig=', id_g, ', jg=', jd_g
+        !stop
+      endif
+    enddo ; enddo
+  enddo ; enddo ; enddo
+  !&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+  
   ! Add the forcing.
   if (CS%energized_angle <= 0) then
     frac_per_sector = 1.0 / real(CS%nAngle * CS%nMode * CS%nFreq)
@@ -261,7 +274,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
       f2 = 0.25*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
                  (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
       if (CS%frequency(fr)**2 > f2) &
-        CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) + & 
+        CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) + &
                             dt*frac_per_sector*(1-CS%q_itides)*TKE_itidal_input(i,j)
     enddo ; enddo ; enddo ; enddo ; enddo
   elseif (CS%energized_angle <= CS%nAngle) then
@@ -278,7 +291,20 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
     call MOM_error(WARNING, "Internal tide energy is being put into a angular "//&
                             "band that does not exist.")
   endif
-
+  
+  ! Check for En<0 - for debugging, delete later&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+  do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
+    do j=js,je ; do i=is,ie
+      id_g = G%isd_global + i - 1.0
+      jd_g = G%jsd_global + j - 1.0
+      if(CS%En(i,j,a,fr,m)<0.0)then
+        print *, 'After forcing: En<0.0 at ig=', id_g, ', jg=', jd_g
+        !stop
+      endif
+    enddo ; enddo
+  enddo ; enddo ; enddo
+  !&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+  
   ! Pass a test vector to check for grid rotation in the halo updates.
   do j=jsd,jed ; do i=isd,ied ; test(i,j,1) = 1.0 ; test(i,j,2) = 0.0 ; enddo ; enddo
   do m=1,CS%nMode ; do fr=1,CS%nFreq
@@ -291,6 +317,22 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
   do m=1,CS%nMode ; do fr=1,CS%nFreq
     call refract(CS%En(:,:,:,fr,m), cn(:,:,m), CS%frequency(fr), 0.5*dt, G, CS%nAngle, CS%use_PPMang)
   enddo ; enddo
+  
+  ! Check for En<0 - for debugging, delete later&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+  do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
+    do j=js,je ; do i=is,ie
+      id_g = G%isd_global + i - 1.0
+      jd_g = G%jsd_global + j - 1.0
+      if(CS%En(i,j,a,fr,m)<0.0)then
+        print *, 'After first refraction: En<0.0 at ig=', id_g, ', jg=', jd_g
+        print *, 'En=',CS%En(i,j,a,fr,m)
+        print *, 'Setting En to zero'; CS%En(i,j,a,fr,m) = 0.0
+        !stop
+      endif
+    enddo ; enddo
+  enddo ; enddo ; enddo
+  !&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+  
   call do_group_pass(pass_En, G%domain)
 
   call complete_group_pass(pass_test, G%domain)
@@ -302,6 +344,21 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
   do m=1,CS%NMode ; do fr=1,CS%Nfreq
     call propagate(CS%En(:,:,:,fr,m), cn(:,:,m), CS%frequency(fr), dt, G, CS, CS%NAngle)
   enddo ; enddo
+  
+  ! Check for En<0 - for debugging, delete later&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+  do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
+    do j=js,je ; do i=is,ie
+      id_g = G%isd_global + i - 1.0
+      jd_g = G%jsd_global + j - 1.0
+      if(CS%En(i,j,a,fr,m)<0.0)then
+        print *, 'After propagation: En<0.0 at ig=', id_g, ', jg=', jd_g 
+        print *, 'En=',CS%En(i,j,a,fr,m)
+        print *, 'Setting En to zero'; CS%En(i,j,a,fr,m) = 0.0
+        !stop
+      endif
+    enddo ; enddo
+  enddo ; enddo ; enddo
+  !&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
   
   ! Test if energy has passed coast for debugging only; delete later
   !do j=js,je
@@ -324,6 +381,19 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
   do m=1,CS%NMode ; do fr=1,CS%Nfreq
     call refract(CS%En(:,:,:,fr,m), cn(:,:,m), CS%frequency(fr), 0.5*dt, G, CS%NAngle, CS%use_PPMang)
   enddo ; enddo
+  
+  ! Check for En<0 - for debugging, delete later&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+  do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
+    do j=js,je ; do i=is,ie
+      id_g = G%isd_global + i - 1.0
+      jd_g = G%jsd_global + j - 1.0
+      if(CS%En(i,j,a,fr,m)<0.0)then
+        print *, 'After second refraction: En<0.0 at ig=', id_g, ', jg=', jd_g
+        !stop
+      endif
+    enddo ; enddo
+  enddo ; enddo ; enddo
+  !&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
 
   if (CS%apply_background_drag .or. CS%apply_bottom_drag &
       .or. CS%apply_wave_drag .or. CS%apply_Froude_drag &
@@ -347,6 +417,19 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
     CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) / (1.0 + dt *CS%decay_rate) ! implicit update
     enddo ; enddo ; enddo ; enddo ; enddo
   endif
+  
+  ! Check for En<0 - for debugging, delete later&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+  do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
+    do j=js,je ; do i=is,ie
+      id_g = G%isd_global + i - 1.0
+      jd_g = G%jsd_global + j - 1.0
+      if(CS%En(i,j,a,fr,m)<0.0)then
+        print *, 'After leak loss: En<0.0 at ig=', id_g, ', jg=', jd_g
+        !stop
+      endif
+    enddo ; enddo
+  enddo ; enddo ; enddo
+  !&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
 
   ! Extract the energy for mixing due to bottom drag
   if (CS%apply_bottom_drag) then
@@ -361,7 +444,20 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
       CS%TKE_quad_loss(i,j,a,fr,m)  = CS%En(i,j,a,fr,m) * drag_scale(i,j) ! loss rate
       CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) / (1.0 + dt *drag_scale(i,j)) ! implicit update
     enddo ; enddo ; enddo ; enddo ; enddo
-  endif  
+  endif
+  
+  ! Check for En<0 - for debugging, delete later&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+  do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
+    do j=js,je ; do i=is,ie
+      id_g = G%isd_global + i - 1.0
+      jd_g = G%jsd_global + j - 1.0
+      if(CS%En(i,j,a,fr,m)<0.0)then
+        print *, 'After bottom loss: En<0.0 at ig=', id_g, ', jg=', jd_g
+        !stop
+      endif
+    enddo ; enddo
+  enddo ; enddo ; enddo
+  !&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
   
   ! Extract the energy for mixing due to scattering (wave-drag)
   ! still need to allow a portion of the extracted energy to go to higher modes.
@@ -389,31 +485,24 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
         !endif ! for debug - delete later
       enddo ; enddo
     enddo ; enddo    
-    ! Check for NANs - for debugging, delete later
-    do m=1,CS%NMode ; do fr=1,CS%Nfreq
-      do j=js,je ; do i=is,ie
-        id_g = G%isd_global + i - 1.0
-        jd_g = G%jsd_global + j - 1.0
-        if(isnan(sum(CS%En(i,j,:,fr,m))))then
-          print *, 'Prior to loss: En is NAN at ig=', id_g, ', jg=', jd_g
-        endif
-      enddo ; enddo
-    enddo ; enddo
+
     ! Calculate loss rate and apply loss over the time step
     call itidal_lowmode_loss(G, CS, Nb, Ub, CS%En, CS%TKE_itidal_loss_fixed, &
-                             CS%TKE_itidal_loss, dt, full_halos=.false.)    
-    ! Check for NANs - for debugging, delete later
-    do m=1,CS%NMode ; do fr=1,CS%Nfreq
-      do j=js,je ; do i=is,ie
-        id_g = G%isd_global + i - 1.0
-        jd_g = G%jsd_global + j - 1.0
-        if(isnan(sum(CS%En(i,j,:,fr,m))))then
-          print *, 'After loss: En is NAN at ig=', id_g, ', jg=', jd_g
-          stop
-        endif
-      enddo ; enddo
-    enddo ; enddo    
+                             CS%TKE_itidal_loss, dt, full_halos=.false.)
   endif
+  
+  ! Check for En<0 - for debugging, delete later&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+  do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
+    do j=js,je ; do i=is,ie
+      id_g = G%isd_global + i - 1.0
+      jd_g = G%jsd_global + j - 1.0
+      if(CS%En(i,j,a,fr,m)<0.0)then
+        print *, 'After wave drag loss: En<0.0 at ig=', id_g, ', jg=', jd_g
+        !stop
+      endif
+    enddo ; enddo
+  enddo ; enddo ; enddo
+  !&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
   
   ! Extract the energy for mixing due to wave breaking
   ! --need to add Fr-based breaking scheme here--
@@ -472,6 +561,19 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
       enddo ; enddo
     enddo ; enddo
   endif
+  
+  ! Check for En<0 - for debugging, delete later&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+  do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
+    do j=js,je ; do i=is,ie
+      id_g = G%isd_global + i - 1.0
+      jd_g = G%jsd_global + j - 1.0
+      if(CS%En(i,j,a,fr,m)<0.0)then
+        print *, 'After Froude loss: En<0.0 at ig=', id_g, ', jg=', jd_g
+        !stop
+      endif
+    enddo ; enddo
+  enddo ; enddo ; enddo
+  !&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
   
   ! Check for energy conservation on computational domain
   do m=1,CS%NMode ; do fr=1,CS%Nfreq
@@ -629,7 +731,7 @@ subroutine itidal_lowmode_loss(G, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, dt, 
   !  (in)      Ub - rms (over one period) near-bottom horizontal mode velocity , in m s-1.
   !  (inout)   En - energy density of the internal waves, in J m-2.
   !  (in)      TKE_loss_fixed - fixed part of energy loss, in kg m-2 (rho*kappa*h^2)
-  !  (out)     TKE_loss - energy loss rate, in W m-2 (rho*kappa*h^2*N^2*U^2)
+  !  (out)     TKE_loss - energy loss rate, in W m-2 (q*rho*kappa*h^2*N*U^2)
   !  (in)      dt - time increment, in s
   !  (in,opt)  full_halos - If true, do the calculation over the entire
   !                         computational domain. 
@@ -639,41 +741,62 @@ subroutine itidal_lowmode_loss(G, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, dt, 
   real    :: TKE_loss_tot    ! dissipation for a given mode, frequency, and point summed over angles
   real    :: TKE_sum_check   ! temporary for check summing
   real    :: frac_per_sector ! fraction of energy in each wedge
+  real    :: q_itides        ! fraction of energy actually lost to mixing (remainder, 1-q, is 
+                             ! assumed to stay in propagating mode for now - BDM)
+  real    :: loss_rate       ! approximate loss rate for implicit calc, s-1
+  real, parameter :: En_negl = 1e-30 ! negilibly small number to prevent division by zero
   
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  
+  q_itides = CS%q_itides
   
   if (present(full_halos)) then ; if (full_halos) then
     is = G%isd ; ie = G%ied ; js = G%jsd ; je = G%jed
   endif ; endif
   
   do j=js,je ; do i=is,ie ; do m=1,CS%nMode ; do fr=1,CS%nFreq
+    
+    ! Sum energy across angles
     En_tot = 0.0
     do a=1,CS%nAngle
-      if(En(i,j,a,fr,m)<0.0)then
-        call MOM_error(WARNING, "int_tides: En<0 prior to dissipation; setting to 0", .true.)
-        En(i,j,a,fr,m) = 0.0
-      endif
       En_tot = En_tot + En(i,j,a,fr,m)
     enddo
+    
+    ! Calculate TKE loss rate; units of [W m-2] here.
+    TKE_loss_tot = q_itides * TKE_loss_fixed(i,j) * Nb(i,j) * Ub(i,j,fr,m)**2
+    
+    ! Update energy remaining (this is a pseudo implicit calc)
+    ! (E(t+1)-E(t))/dt = -TKE_loss(E(t+1)/E(t)), which goes to zero as E(t+1) goes to zero
     if (En_tot > 0.0) then
-      ! Calculate TKE loss rate; units of [W m-2] here.
-      TKE_loss_tot = TKE_loss_fixed(i,j) * Nb(i,j) * Ub(i,j,fr,m)**2
-      ! Update energy remaining (this is an explicit calc for now)
       do a=1,CS%nAngle
         frac_per_sector = En(i,j,a,fr,m)/En_tot
-        TKE_loss(i,j,a,fr,m) = frac_per_sector*TKE_loss_tot
-        if(TKE_loss(i,j,a,fr,m)*dt <= En(i,j,a,fr,m))then
-          En(i,j,a,fr,m) = En(i,j,a,fr,m) - TKE_loss(i,j,a,fr,m)*dt
-        else
-          call MOM_error(WARNING, "itidal_lowmode_loss: energy loss greater than avalable, "// &
-                            " setting En to zero.")
-          En(i,j,a,fr,m) = 0.0
-        endif
+        TKE_loss(i,j,a,fr,m) = frac_per_sector*TKE_loss_tot           ! Wm-2
+        loss_rate = TKE_loss(i,j,a,fr,m) / (En(i,j,a,fr,m) + En_negl) ! s-1
+        En(i,j,a,fr,m) = En(i,j,a,fr,m) / (1.0 + dt*loss_rate)
       enddo
     else
+      ! no loss if no energy
       TKE_loss(i,j,:,fr,m) = 0.0
-      En(i,j,:,fr,m) = En(i,j,:,fr,m) - TKE_loss(i,j,:,fr,m)*dt
-    endif
+    endif 
+      
+    ! Update energy remaining (this is the old explicit calc)
+    !if (En_tot > 0.0) then
+    !  do a=1,CS%nAngle
+    !    frac_per_sector = En(i,j,a,fr,m)/En_tot
+    !    TKE_loss(i,j,a,fr,m) = frac_per_sector*TKE_loss_tot
+    !    if(TKE_loss(i,j,a,fr,m)*dt <= En(i,j,a,fr,m))then
+    !      En(i,j,a,fr,m) = En(i,j,a,fr,m) - TKE_loss(i,j,a,fr,m)*dt
+    !    else
+    !      call MOM_error(WARNING, "itidal_lowmode_loss: energy loss greater than avalable, "// &
+    !                        " setting En to zero.")
+    !      En(i,j,a,fr,m) = 0.0
+    !    endif
+    !  enddo
+    !else
+    !  ! no loss if no energy
+    !  TKE_loss(i,j,:,fr,m) = 0.0
+    !endif
+
   enddo ; enddo ; enddo ; enddo
 
 end subroutine itidal_lowmode_loss
@@ -826,6 +949,9 @@ subroutine refract(En, cg, freq, dt, G, NAngle, use_PPMang)
       
   ! Update and copy back to En.
     do a=1,na ; do i=is,ie
+      !if(En2d(i,a)+(Flux_E(i,A-1)-Flux_E(i,A)) < 0.0)then ! for debugging
+      !  print *,"refract: OutFlux>Available" ; !stop
+      !endif
       En(i,j,a) = En2d(i,a) + (Flux_E(i,A-1) - Flux_E(i,A))
     enddo ; enddo
   enddo ! j-loop
@@ -1348,7 +1474,7 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, Nangle, CS, LB)
       enddo
       call zonal_flux_En(cg_p, En(:,j,a), EnL(:,j), EnR(:,j), flux1, &
                          dt, G, j, ish, ieh, CS%vol_CFL)
-      do I=ish-1,ieh ; flux_x(I,j) = flux1(I); enddo      
+      do I=ish-1,ieh ; flux_x(I,j) = flux1(I); enddo
     enddo
   
     do j=jsh,jeh ; do i=ish,ieh
@@ -1373,6 +1499,11 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, Nangle, CS, LB)
  
   ! Update reflected energy (Jm-2)
   do j=jsh,jeh ; do i=ish,ieh
+    !do a=1,CS%nAngle
+    !  if((En(i,j,a) + G%IareaT(i,j)*(Fdt_m(i,j,a) + Fdt_p(i,j,a))) < 0.0)then ! for debugging
+    !    print *,"propagate_x: OutFlux>Available" ; !stop
+    !  endif
+    !enddo
     En(i,j,:) = En(i,j,:) + G%IareaT(i,j)*(Fdt_m(i,j,:) + Fdt_p(i,j,:))
   enddo ; enddo
   
@@ -1431,7 +1562,15 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, Nangle, CS, LB)
     do j=jsh,jeh ; do i=ish,ieh
       Fdt_m(i,j,a) = dt*flux_y(i,J-1) ! south face influx (J)
       Fdt_p(i,j,a) = -dt*flux_y(i,J)  ! north face influx (J)
-    enddo ; enddo   
+      !if((En(i,j,a) + G%IareaT(i,j)*(Fdt_m(i,j,a) + Fdt_p(i,j,a))) < 0.0)then ! for debugging
+      !  print *,"propagate_y: OutFlux>Available prior to reflection" ; !stop
+      !  print *,"flux_y_south=",flux_y(i,J-1)
+      !  print *,"flux_y_north=",flux_y(i,J)
+      !  print *,"En=",En(i,j,a)
+      !  print *,"cn_south=", speed_y(i,J-1) * (Cgy_av(a))
+      !  print *,"cn_north=", speed_y(i,J) * (Cgy_av(a))
+      !endif
+    enddo ; enddo
     
     ! test with old (take out later)
     !do j=jsh,jeh ; do i=ish,ieh
@@ -1450,6 +1589,11 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, Nangle, CS, LB)
   
   ! Update reflected energy (Jm-2)
   do j=jsh,jeh ; do i=ish,ieh
+    !do a=1,CS%nAngle
+    !  if((En(i,j,a) + G%IareaT(i,j)*(Fdt_m(i,j,a) + Fdt_p(i,j,a))) < 0.0)then ! for debugging
+    !    print *,"propagate_y: OutFlux>Available" ; !stop
+    !  endif
+    !enddo
     En(i,j,:) = En(i,j,:) + G%IareaT(i,j)*(Fdt_m(i,j,:) + Fdt_p(i,j,:))
   enddo ; enddo
 
