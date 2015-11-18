@@ -815,10 +815,10 @@ subroutine get_lowmode_loss(i,j,G,CS,mechanism,TKE_loss_sum)
   ! Arguments:
   !  (out)      TKE_loss_sum - total energy loss rate due to specified mechanism, in W m-2.  
   
-  if(mechanism == 'LeakDrag') TKE_loss_sum = CS%tot_leak_loss(i,j)
-  if(mechanism == 'QuadDrag') TKE_loss_sum = CS%tot_quad_loss(i,j)   ! 
+  if(mechanism == 'LeakDrag') TKE_loss_sum = CS%tot_leak_loss(i,j)   ! not used for mixing yet
+  if(mechanism == 'QuadDrag') TKE_loss_sum = CS%tot_quad_loss(i,j)   ! not used for mixing yet
   if(mechanism == 'WaveDrag') TKE_loss_sum = CS%tot_itidal_loss(i,j) ! currently used for mixing
-  if(mechanism == 'Froude')   TKE_loss_sum = CS%tot_Froude_loss(i,j)
+  if(mechanism == 'Froude')   TKE_loss_sum = CS%tot_Froude_loss(i,j) ! not used for mixing yet
   
 end subroutine get_lowmode_loss
 
