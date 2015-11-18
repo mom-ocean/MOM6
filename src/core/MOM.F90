@@ -238,6 +238,9 @@ type, public :: MOM_control_struct
     T_prev         => NULL(), S_prev         => NULL(),  &  
     Th_prev        => NULL(), Sh_prev        => NULL()
 
+  real, pointer, dimension(:,:,:) :: & !< diagnostic arrays for variance decay through ALE
+    T_squared => NULL(), S_squared => NULL()
+
   logical :: tendency_diagnostics = .false.    
   
   ! diagnostic ids 
@@ -300,7 +303,11 @@ type, public :: MOM_control_struct
   integer :: id_S_tendency        = -1 
   integer :: id_Sh_tendency       = -1 
   integer :: id_Sh_tendency_2d    = -1 
-  
+
+  ! variance decay for temp and heat
+  integer :: id_T_vardec = -1
+  integer :: id_S_vardec = -1
+
   ! diagnostic for fields prior to applying diapycnal physics 
   integer :: id_u_predia = -1
   integer :: id_v_predia = -1
@@ -673,6 +680,13 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         if ( CS%use_ALE_algorithm ) then 
 !         call pass_vector(u, v, G%Domain)
           call do_group_pass(CS%pass_T_S_h, G%Domain)
+
+          ! update squared quantities
+          if (associated(CS%S_squared)) &
+            CS%S_squared(:,:,:) = CS%tv%S(:,:,:) ** 2
+          if (associated(CS%T_squared)) &
+            CS%T_squared(:,:,:) = CS%tv%T(:,:,:) ** 2
+
           if (CS%debug) then
             call MOM_state_chksum("Pre-ALE 1 ", u, v, h, CS%uh, CS%vh, G)
             call hchksum(CS%tv%T,"Pre-ALE 1 T", G, haloshift=1)
@@ -694,9 +708,12 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         call do_group_pass(CS%pass_uv_T_S_h, G%Domain)
         call cpu_clock_end(id_clock_pass)
 
+
         ! Whenever thickness changes let the diag manager know, target grids
         ! for vertical remapping may need to be regenerated.
         call diag_update_target_grids(CS%diag)
+
+        call post_diags_TS_vardec(G, CS, dtdia)
 
         if (CS%debug) then
           call uchksum(u,"Post-dia first u", G, haloshift=2)
@@ -982,6 +999,13 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         if ( CS%use_ALE_algorithm ) then 
 !         call pass_vector(u, v, G%Domain)
           call do_group_pass(CS%pass_T_S_h, G%Domain)
+
+          ! update squared quantities
+          if (associated(CS%S_squared)) &
+            CS%S_squared(:,:,:) = CS%tv%S(:,:,:) ** 2
+          if (associated(CS%T_squared)) &
+            CS%T_squared(:,:,:) = CS%tv%T(:,:,:) ** 2
+
           if (CS%debug) then
             call MOM_state_chksum("Pre-ALE ", u, v, h, CS%uh, CS%vh, G)
             call hchksum(CS%tv%T,"Pre-ALE T", G, haloshift=1)
@@ -1007,6 +1031,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         ! for vertical remapping may need to be regenerated. This needs to
         ! happen after the H update and before the next post_data.
         call diag_update_target_grids(CS%diag)
+
+        call post_diags_TS_vardec(G, CS, CS%dt_trans)
 
         if (CS%debug) then
           call uchksum(u,"Post-diabatic u", G, haloshift=2)
@@ -1839,6 +1865,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call tracer_advect_init(Time, G, param_file, diag, CS%tracer_adv_CSp)
   call tracer_hor_diff_init(Time, G, param_file, diag, CS%tracer_diff_CSp, CS%neutral_diffusion_CSp)
 
+  if (CS%use_ALE_algorithm) &
+    call register_diags_TS_vardec(Time, G, param_file, CS)
+
   call lock_tracer_registry(CS%tracer_Reg, diag, Time, G)
   call callTree_waypoint("tracer registry now locked (initialize_MOM)")
 
@@ -2277,6 +2306,43 @@ subroutine register_diags_TS_tendency(Time, G, CS)
 end subroutine register_diags_TS_tendency
 
 
+!> Initialize diagnostics for the variance decay of temp/salt
+!! across regridding/remapping
+subroutine register_diags_TS_vardec(Time, G, param_file, CS)
+  type(time_type), intent(in) :: Time             !< current model time
+  type(ocean_grid_type), intent(in) :: G          !< ocean grid structure
+  type(param_file_type), intent(in) :: param_file !< parameter file
+  type(MOM_control_struct), pointer :: CS   !< control structure for MOM
+
+  integer :: isd, ied, jsd, jed, nz
+  type(vardesc) :: vd_tmp
+  type(diag_ctrl), pointer :: diag
+
+  diag => CS%diag
+  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nz = G%ke
+
+  ! variancy decay through ALE operation
+  CS%id_T_vardec = register_diag_field('ocean_model', 'T_vardec', diag%axesTL, Time, &
+      'ALE variance decay for temperature', 'degC2 s-1')
+  if (CS%id_T_vardec > 0) then
+    call safe_alloc_ptr(CS%T_squared,isd,ied,jsd,jed,nz)
+    CS%T_squared(:,:,:) = 0.
+
+    vd_tmp = var_desc(name="T2", units="degC2", longname="Squared Potential Temperature")
+    call register_tracer(CS%T_squared, vd_tmp, param_file, CS%tracer_reg)
+  endif
+
+  CS%id_S_vardec = register_diag_field('ocean_model', 'S_vardec', diag%axesTL, Time, &
+      'ALE variance decay for salinity', 'PPT2 s-1')
+  if (CS%id_S_vardec > 0) then
+    call safe_alloc_ptr(CS%S_squared,isd,ied,jsd,jed,nz)
+    CS%S_squared(:,:,:) = 0.
+
+    vd_tmp = var_desc(name="S2", units="PPT2", longname="Squared Salinity")
+    call register_tracer(CS%S_squared, vd_tmp, param_file, CS%tracer_reg)
+  endif
+
+end subroutine register_diags_TS_vardec
 
 !> This subroutine sets up clock IDs for timing various subroutines.
 subroutine MOM_timing_init(CS)
@@ -2417,6 +2483,28 @@ subroutine post_diags_TS_tendency(G, CS, dt)
 
 
 end subroutine post_diags_TS_tendency
+
+!> Calculate and post variance decay diagnostics for temp/salt
+subroutine post_diags_TS_vardec(G, CS, dt)
+  type(ocean_grid_type), intent(in) :: G        !< ocean grid structure
+  type(MOM_control_struct), intent(inout) :: CS !< control structure
+  real, intent(in) :: dt                        !< total time step
+
+  real :: work(SZI_(G),SZJ_(G),SZK_(G))
+  real :: Idt
+
+  Idt = 1.0 / dt
+
+  if (CS%id_T_vardec > 0) then
+    work(:,:,:) = (CS%T_squared(:,:,:) - CS%tv%T(:,:,:) ** 2) * Idt
+    call post_data(CS%id_T_vardec, work, CS%diag)
+  endif
+
+  if (CS%id_S_vardec > 0) then
+    work(:,:,:) = (CS%S_squared(:,:,:) - CS%tv%S(:,:,:) ** 2) * Idt
+    call post_data(CS%id_S_vardec, work, CS%diag)
+  endif
+end subroutine post_diags_TS_vardec
 
 
 !> Offers the static fields in the ocean grid type
