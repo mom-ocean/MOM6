@@ -3217,14 +3217,14 @@ end subroutine MOM_end
 !! * HFGEOU            = geothermal heat flux 
 !!
 !! * HFDS = net surface boundary heat flux entering the ocean
-!!        = hfrainds + hfevapds + hfrunoffds + hfsnthermds + hfsifrazil  
-!!         +hfibthermds + hfsolidrunoffds + rlntds + hfls + hfss + rsntds + rsdo
-!!         (This identity needs to be verified.)
+!!        = rsntds + rlntds + hfls + hfss + heat_pme + hfsifrazil 
 !!
 !! * More heat flux cross-checks 
 !!   * hfds     = net_heat_coupler + hfsifrazil + heat_pme
-!!   * heat_pme = heat_content_surfwater = heat_content_massin + heat_content_massout
-!!
+!!   * heat_pme = heat_content_surfwater 
+!!              = heat_content_massin + heat_content_massout
+!!              = heat_content_fprec + heat_content_cond + heat_content_vprec
+!!               + hfrunoffds + hfevapds + hfrainds 
 !!
 !!  \subsection subsection_3d_heat_budget Depth integrated heat budget 
 !!
