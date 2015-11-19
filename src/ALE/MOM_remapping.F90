@@ -692,20 +692,20 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
 
       select case ( method )
         case ( INTEGRATION_PCM )
-          uAve = ppoly0_coefficients(jL,1)
+          uAve =         ppoly0_coefficients(jL,1)
         case ( INTEGRATION_PLM )
-          uAve = ppoly0_coefficients(jL,1)          &
-               + ppoly0_coefficients(jL,2) * xi0
+          uAve =         ppoly0_coefficients(jL,1)   &
+               + xi0 *   ppoly0_coefficients(jL,2)
         case ( INTEGRATION_PPM )
-          uAve = (ppoly0_coefficients(jL,1)         &
-                + ppoly0_coefficients(jL,2) * xi0)  &
-               + ppoly0_coefficients(jL,3) * xi0*xi0
+          uAve =         ppoly0_coefficients(jL,1)   &
+               + xi0 * ( ppoly0_coefficients(jL,2)   &
+               + xi0 *   ppoly0_coefficients(jL,3) )
         case ( INTEGRATION_PQM )
-          uAve = (((ppoly0_coefficients(jL,1)          &
-               + ppoly0_coefficients(jL,2) * xi0)    &
-               + ppoly0_coefficients(jL,3) * xi0*xi0) &
-               + ppoly0_coefficients(jL,4) * xi0*xi0*xi0) &
-               + ppoly0_coefficients(jL,5) * xi0*xi0*xi0*xi0
+          uAve =         ppoly0_coefficients(jL,1)   &
+               + xi0 * ( ppoly0_coefficients(jL,2)   &
+               + xi0 * ( ppoly0_coefficients(jL,3)   &
+               + xi0 * ( ppoly0_coefficients(jL,4)   &
+               + xi0 *   ppoly0_coefficients(jL,5) ) ) )
         case default
           call MOM_error( FATAL,'The selected integration method is invalid' )
       end select
