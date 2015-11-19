@@ -7,7 +7,6 @@ module MOM_remapping
 
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_string_functions, only : uppercase
-!use polynomial_functions, only : evaluation_polynomial, integration_polynomial
 use regrid_edge_values, only : edge_values_explicit_h4, edge_values_implicit_h4
 use regrid_edge_values, only : edge_values_implicit_h4, edge_values_implicit_h6
 use regrid_edge_slopes, only : edge_slopes_implicit_h3, edge_slopes_implicit_h5
@@ -695,16 +694,13 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
         case ( INTEGRATION_PCM )
           uAve = ppoly0_coefficients(jL,1)
         case ( INTEGRATION_PLM )
-          !uAve = evaluation_polynomial( ppoly0_coefficients(jL,:), 2, xi0 )
           uAve = ppoly0_coefficients(jL,1)          &
                + ppoly0_coefficients(jL,2) * xi0
         case ( INTEGRATION_PPM )
-          !uAve = evaluation_polynomial( ppoly0_coefficients(jL,:), 3, xi0 )
           uAve = (ppoly0_coefficients(jL,1)         &
                 + ppoly0_coefficients(jL,2) * xi0)  &
                + ppoly0_coefficients(jL,3) * xi0*xi0
         case ( INTEGRATION_PQM )
-          !uAve = evaluation_polynomial( ppoly0_coefficients(jL,:), 5, xi0 )
           uAve = (((ppoly0_coefficients(jL,1)          &
                + ppoly0_coefficients(jL,2) * xi0)    &
                + ppoly0_coefficients(jL,3) * xi0*xi0) &
@@ -774,18 +770,15 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
           q = ppoly0_coefficients(jL,1) * ( xR - xL )
         case ( INTEGRATION_PLM )
           q = h0(jL) * &
-              !integration_polynomial( xi0, xi1, ppoly0_coefficients(jL,:), 1 )
               (ppoly0_coefficients(jL,1)*(xi1-xi0)     &
               +ppoly0_coefficients(jL,2)*(xi1*xi1-xi0*xi0)/2.0 )
         case ( INTEGRATION_PPM )
           q = h0(jL) * &
-              !integration_polynomial( xi0, xi1, ppoly0_coefficients(jL,:), 2 )
               ((ppoly0_coefficients(jL,1)*(xi1-xi0)    &
                +ppoly0_coefficients(jL,2)*(xi1*xi1-xi0*xi0)/2.0)   &
               +ppoly0_coefficients(jL,3)*(xi1*xi1*xi1-xi0*xi0*xi0)/3.0) 
         case ( INTEGRATION_PQM )
           q = h0(jL) * &
-              !integration_polynomial( xi0, xi1, ppoly0_coefficients(jL,:), 4 )
               ((((ppoly0_coefficients(jL,1)*(xi1-xi0)  &
                  +ppoly0_coefficients(jL,2)*(xi1*xi1-xi0*xi0)/2.0) &
                 +ppoly0_coefficients(jL,3)*(xi1*xi1*xi1-xi0*xi0*xi0)/3.0)  &
@@ -833,18 +826,15 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
           q = q + ppoly0_coefficients(jL,1) * ( x0jLr - xL )
         case ( INTEGRATION_PLM )
           q = q + h0(jL) * &
-              !integration_polynomial( xi0, xi1, ppoly0_coefficients(jL,:), 1 )
               (ppoly0_coefficients(jL,1)*(xi1-xi0)     &
               +ppoly0_coefficients(jL,2)*(xi1*xi1-xi0*xi0)/2.0 )
         case ( INTEGRATION_PPM )
           q = q + h0(jL) * &
-              !integration_polynomial( xi0, xi1, ppoly0_coefficients(jL,:), 2 )
               ((ppoly0_coefficients(jL,1)*(xi1-xi0)    &
                +ppoly0_coefficients(jL,2)*(xi1*xi1-xi0*xi0)/2.0)   &
               +ppoly0_coefficients(jL,3)*(xi1*xi1*xi1-xi0*xi0*xi0)/3.0) 
         case ( INTEGRATION_PQM )
           q = q + h0(jL) * &
-              !integration_polynomial( xi0, xi1, ppoly0_coefficients(jL,:), 4 )
               ((((ppoly0_coefficients(jL,1)*(xi1-xi0)  &
                  +ppoly0_coefficients(jL,2)*(xi1*xi1-xi0*xi0)/2.0) &
                 +ppoly0_coefficients(jL,3)*(xi1*xi1*xi1-xi0*xi0*xi0)/3.0)  &
@@ -892,18 +882,15 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
           q = q + ppoly0_coefficients(jR,1) * ( xR - x0jRl )
         case ( INTEGRATION_PLM )
           q = q + h0(jR) * &
-              !integration_polynomial( xi0, xi1, ppoly0_coefficients(jR,:), 1 )
               (ppoly0_coefficients(jR,1)*(xi1-xi0)     &
               +ppoly0_coefficients(jR,2)*(xi1*xi1-xi0*xi0)/2.0 )
         case ( INTEGRATION_PPM )
           q = q + h0(jR) * &
-              !integration_polynomial( xi0, xi1, ppoly0_coefficients(jR,:), 2 )
               ((ppoly0_coefficients(jR,1)*(xi1-xi0)    &
                +ppoly0_coefficients(jR,2)*(xi1*xi1-xi0*xi0)/2.0)   &
               +ppoly0_coefficients(jR,3)*(xi1*xi1*xi1-xi0*xi0*xi0)/3.0) 
         case ( INTEGRATION_PQM )
           q = q + h0(jR) * &
-              !integration_polynomial( xi0, xi1, ppoly0_coefficients(jR,:), 4 )
               ((((ppoly0_coefficients(jR,1)*(xi1-xi0)  &
                  +ppoly0_coefficients(jR,2)*(xi1*xi1-xi0*xi0)/2.0) &
                 +ppoly0_coefficients(jR,3)*(xi1*xi1*xi1-xi0*xi0*xi0)/3.0)  &
