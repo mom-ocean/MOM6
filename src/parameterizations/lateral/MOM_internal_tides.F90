@@ -207,10 +207,14 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
   type(ocean_grid_type), intent(inout)       :: G
   type(int_tide_CS), pointer                 :: CS
   real, dimension(SZI_(G),SZJ_(G),CS%nMode)  :: cn
-  ! This subroutine calls any of the other subroutines in this file
-  ! that are needed to specify the current surface forcing fields.
+  
+  ! This subroutine calls other subroutines in this file that are needed to
+  ! refract, propagate, and dissipate energy density of the internal tide.
   !
-  ! Arguments: cn - internal gravity wave speeds of modes, in m s-1.
+  ! Arguments:
+  !  (in)      h -  Layer thickness, in m or kg m-2  (needed for wave structure).
+  !  (in)      tv - Pointer to thermodynamic variables (needed for wave structure).
+  !  (in)      cn - Internal gravity wave speeds of modes, in m s-1.
   !  (in)      TKE_itidal_input - The energy input to the internal waves, in W m-2.
   !  (in)      vel_btTide - Barotropic velocity read from file, in m s-1
   !  (in)      Nb - Near-bottom buoyancy frequency, in s-1
@@ -248,26 +252,14 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
   
   isd_g = G%isd_global ; jsd_g = G%jsd_global ! for debugging
 
-  ! Set the wave speeds for the modes, using that cg(n) ~ cg(1)/n.  This is
-  ! wrong, of course, but it works reasonably in some cases.
+  ! Set the wave speeds for the modes, using cg(n) ~ cg(1)/n.**********************  
+  ! This is wrong, of course, but it works reasonably in some cases. 
+  ! Uncomment if wave_speed is not used to calculate the true values (BDM).
   !do m=1,CS%nMode ; do j=jsd,jed ; do i=isd,ied
-  !  cn(i,j,m) = cg1(i,j) / real(m)
+  !  cn(i,j,m) = cn(i,j,1) / real(m)
   !enddo ; enddo ; enddo
   
-  ! Check for En<0 - for debugging, delete later&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
-  do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
-    do j=js,je ; do i=is,ie
-      id_g = G%isd_global + i - 1.0
-      jd_g = G%jsd_global + j - 1.0
-      if(CS%En(i,j,a,fr,m)<0.0)then
-        print *, 'Prior to forcing: En<0.0 at ig=', id_g, ', jg=', jd_g
-        !stop
-      endif
-    enddo ; enddo
-  enddo ; enddo ; enddo
-  !&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
-  
-  ! Add the forcing.
+  ! Add the forcing.***************************************************************
   if (CS%energized_angle <= 0) then
     frac_per_sector = 1.0 / real(CS%nAngle * CS%nMode * CS%nFreq)
     do m=1,CS%nMode ; do fr=1,CS%nFreq ; do a=1,CS%nAngle ; do j=js,je ; do i=is,ie
@@ -292,19 +284,6 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
                             "band that does not exist.")
   endif
   
-  ! Check for En<0 - for debugging, delete later&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
-  do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
-    do j=js,je ; do i=is,ie
-      id_g = G%isd_global + i - 1.0
-      jd_g = G%jsd_global + j - 1.0
-      if(CS%En(i,j,a,fr,m)<0.0)then
-        print *, 'After forcing: En<0.0 at ig=', id_g, ', jg=', jd_g
-        !stop
-      endif
-    enddo ; enddo
-  enddo ; enddo ; enddo
-  !&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
-  
   ! Pass a test vector to check for grid rotation in the halo updates.
   do j=jsd,jed ; do i=isd,ied ; test(i,j,1) = 1.0 ; test(i,j,2) = 0.0 ; enddo ; enddo
   do m=1,CS%nMode ; do fr=1,CS%nFreq
@@ -313,12 +292,12 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
   call create_group_pass(pass_test, test(:,:,1), test(:,:,2), G%domain, stagger=AGRID)
   call start_group_pass(pass_test, G%domain)
   
-  ! Apply half the refraction.
+  ! Apply half the refraction.*****************************************************
   do m=1,CS%nMode ; do fr=1,CS%nFreq
     call refract(CS%En(:,:,:,fr,m), cn(:,:,m), CS%frequency(fr), 0.5*dt, G, CS%nAngle, CS%use_PPMang)
   enddo ; enddo
   
-  ! Check for En<0 - for debugging, delete later&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+  ! Check for En<0 - for debugging, delete later
   do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
     do j=js,je ; do i=is,ie
       id_g = G%isd_global + i - 1.0
@@ -330,8 +309,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
         !stop
       endif
     enddo ; enddo
-  enddo ; enddo ; enddo
-  !&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+  enddo ; enddo ; enddo  
   
   call do_group_pass(pass_En, G%domain)
 
@@ -340,12 +318,12 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
   ! Rotate points in the halos as necessary.
   call correct_halo_rotation(CS%En, test, G, CS%nAngle)
   
-  ! Propagate the waves.
+  ! Propagate the waves.***********************************************************
   do m=1,CS%NMode ; do fr=1,CS%Nfreq
     call propagate(CS%En(:,:,:,fr,m), cn(:,:,m), CS%frequency(fr), dt, G, CS, CS%NAngle)
   enddo ; enddo
   
-  ! Check for En<0 - for debugging, delete later&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+  ! Check for En<0 - for debugging, delete later
   do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
     do j=js,je ; do i=is,ie
       id_g = G%isd_global + i - 1.0
@@ -358,7 +336,6 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
       endif
     enddo ; enddo
   enddo ; enddo ; enddo
-  !&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
   
   ! Test if energy has passed coast for debugging only; delete later
   !do j=js,je
@@ -377,12 +354,12 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
  !   enddo
  ! enddo
 
-  ! Apply the other half of the refraction.
+  ! Apply the other half of the refraction.****************************************
   do m=1,CS%NMode ; do fr=1,CS%Nfreq
     call refract(CS%En(:,:,:,fr,m), cn(:,:,m), CS%frequency(fr), 0.5*dt, G, CS%NAngle, CS%use_PPMang)
   enddo ; enddo
   
-  ! Check for En<0 - for debugging, delete later&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+  ! Check for En<0 - for debugging, delete later
   do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
     do j=js,je ; do i=is,ie
       id_g = G%isd_global + i - 1.0
@@ -393,8 +370,8 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
       endif
     enddo ; enddo
   enddo ; enddo ; enddo
-  !&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
 
+  ! Apply various dissipation mechanisms.******************************************
   if (CS%apply_background_drag .or. CS%apply_bottom_drag &
       .or. CS%apply_wave_drag .or. CS%apply_Froude_drag &
       .or. (CS%id_tot_En > 0)) then
@@ -408,7 +385,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
     enddo ; enddo
   endif
 
-  ! Extract the energy for mixing due to misc. processes (background leakage)
+  ! Extract the energy for mixing due to misc. processes (background leakage)------
   if (CS%apply_background_drag) then
     do m=1,CS%nMode ; do fr=1,CS%nFreq ; do a=1,CS%nAngle ; do j=jsd,jed ; do i=isd,ied
     ! Calculate loss rate and apply loss over the time step ; apply the same drag timescale
@@ -416,9 +393,8 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
     CS%TKE_leak_loss(i,j,a,fr,m)  = CS%En(i,j,a,fr,m) * CS%decay_rate ! loss rate [Wm-2]
     CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) / (1.0 + dt *CS%decay_rate) ! implicit update
     enddo ; enddo ; enddo ; enddo ; enddo
-  endif
-  
-  ! Check for En<0 - for debugging, delete later&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+  endif  
+  ! Check for En<0 - for debugging, delete later
   do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
     do j=js,je ; do i=is,ie
       id_g = G%isd_global + i - 1.0
@@ -429,9 +405,8 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
       endif
     enddo ; enddo
   enddo ; enddo ; enddo
-  !&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
 
-  ! Extract the energy for mixing due to bottom drag
+  ! Extract the energy for mixing due to bottom drag-------------------------------
   if (CS%apply_bottom_drag) then
     do j=jsd,jed ; do i=isd,ied
       I_D_here = 1.0 / max(G%bathyT(i,j), 1.0)
@@ -444,9 +419,8 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
       CS%TKE_quad_loss(i,j,a,fr,m)  = CS%En(i,j,a,fr,m) * drag_scale(i,j) ! loss rate
       CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) / (1.0 + dt *drag_scale(i,j)) ! implicit update
     enddo ; enddo ; enddo ; enddo ; enddo
-  endif
-  
-  ! Check for En<0 - for debugging, delete later&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+  endif  
+  ! Check for En<0 - for debugging, delete later
   do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
     do j=js,je ; do i=is,ie
       id_g = G%isd_global + i - 1.0
@@ -457,9 +431,8 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
       endif
     enddo ; enddo
   enddo ; enddo ; enddo
-  !&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
   
-  ! Extract the energy for mixing due to scattering (wave-drag)
+  ! Extract the energy for mixing due to scattering (wave-drag)--------------------
   ! still need to allow a portion of the extracted energy to go to higher modes.
   ! First, find velocity profiles
   if (CS%apply_wave_drag .or. CS%apply_Froude_drag) then
@@ -489,9 +462,8 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
     ! Calculate loss rate and apply loss over the time step
     call itidal_lowmode_loss(G, CS, Nb, Ub, CS%En, CS%TKE_itidal_loss_fixed, &
                              CS%TKE_itidal_loss, dt, full_halos=.false.)
-  endif
-  
-  ! Check for En<0 - for debugging, delete later&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+  endif  
+  ! Check for En<0 - for debugging, delete later
   do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
     do j=js,je ; do i=is,ie
       id_g = G%isd_global + i - 1.0
@@ -502,10 +474,8 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
       endif
     enddo ; enddo
   enddo ; enddo ; enddo
-  !&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
-  
-  ! Extract the energy for mixing due to wave breaking
-  ! --need to add Fr-based breaking scheme here--
+    
+  ! Extract the energy for mixing due to wave breaking-----------------------------
   if (CS%apply_Froude_drag) then
     ! Pick out maximum baroclinic velocity values; calculate Fr=max(u)/cg
     do m=1,CS%NMode ; do fr=1,CS%Nfreq
@@ -560,9 +530,8 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
         CS%cp(i,j,fr,m) = c_phase
       enddo ; enddo
     enddo ; enddo
-  endif
-  
-  ! Check for En<0 - for debugging, delete later&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+  endif  
+  ! Check for En<0 - for debugging, delete later
   do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
     do j=js,je ; do i=is,ie
       id_g = G%isd_global + i - 1.0
@@ -572,15 +541,15 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
         !stop
       endif
     enddo ; enddo
-  enddo ; enddo ; enddo
-  !&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+  enddo ; enddo ; enddo  
   
-  ! Check for energy conservation on computational domain
+  ! Check for energy conservation on computational domain.*************************
   do m=1,CS%NMode ; do fr=1,CS%Nfreq
     !print *, 'sum_En: mode(',m,'), freq(',fr,'):'
     call sum_En(G,CS,CS%En(:,:,:,fr,m),'prop_int_tide')
   enddo ; enddo
   
+  ! Output diagnostics.************************************************************
   if (query_averaging_enabled(CS%diag)) then
     ! Output two-dimensional diagnostistics
     if (CS%id_tot_En > 0)     call post_data(CS%id_tot_En, tot_En, CS%diag)
@@ -823,18 +792,24 @@ subroutine get_lowmode_loss(i,j,G,CS,mechanism,TKE_loss_sum)
 end subroutine get_lowmode_loss
 
 
-subroutine refract(En, cg, freq, dt, G, NAngle, use_PPMang)
+subroutine refract(En, cn, freq, dt, G, NAngle, use_PPMang)
   type(ocean_grid_type),  intent(in)    :: G
   integer,                intent(in)    :: NAngle
   real, dimension(G%isd:G%ied,G%jsd:G%jed,NAngle), intent(inout) :: En
-  real, dimension(G%isd:G%ied,G%jsd:G%jed),        intent(in)    :: cg
+  real, dimension(G%isd:G%ied,G%jsd:G%jed),        intent(in)    :: cn
   real,                   intent(in)    :: freq
   real,                   intent(in)    :: dt
   logical,  	            intent(in)    :: use_PPMang
   !  This subroutine does refraction on the internal waves at a single frequency.
 
-  ! Arguments: En - the internal gravity wave energy density as a function of space
-  !                 and angular resolution, in J m-2 radian-1.
+  ! Arguments: 
+  ! (inout) En - the internal gravity wave energy density as a function of space
+  !              and angular resolution, in J m-2 radian-1.
+  ! (in)    cn - baroclinic mode speed, in m s-1
+  ! (in)    freq - wave frequency, in s-1
+  ! (in)    dt - time step, in s
+  ! (in)    use_PPMang - if true, use PPM for advection rather than upwind
+   
   integer, parameter :: stensil = 2
   real, dimension(SZI_(G),1-stensil:NAngle+stensil) :: &
     En2d
@@ -850,11 +825,11 @@ subroutine refract(En, cg, freq, dt, G, NAngle, use_PPMang)
   real :: favg            ! The average Coriolis parameter at a point, in s-1.
   real :: df2_dy, df2_dx  ! The x- and y- gradients of the squared Coriolis parameter, in s-2 m-1.
   real :: df_dy, df_dx    ! The x- and y- gradients of the Coriolis parameter, in s-1 m-1.
-  real :: dlnCg_dx        ! The x-gradient of the wave speed divided by itself in m-1.
-  real :: dlnCg_dy        ! The y-gradient of the wave speed divided by itself in m-1.
+  real :: dlnCn_dx        ! The x-gradient of the wave speed divided by itself in m-1.
+  real :: dlnCn_dy        ! The y-gradient of the wave speed divided by itself in m-1.
   real :: Angle_size, dt_Angle_size, angle
   real :: Ifreq, Kmag2, I_Kmag
-  real, parameter :: cg_subRO = 1e-100
+  real, parameter :: cn_subRO = 1e-100
   integer :: is, ie, js, je, asd, aed, na
   integer :: i, j, a
 
@@ -871,7 +846,7 @@ subroutine refract(En, cg, freq, dt, G, NAngle, use_PPMang)
     cos_angle(A) = cos(angle) ; sin_angle(A) = sin(angle)
   enddo
 
-  !### There should also be refraction due to cg.grad(grid_orientation).
+  !### There should also be refraction due to cn.grad(grid_orientation).
   CFL_ang(:,:,:) = 0.0;
   do j=js,je
   ! Copy En into angle space with halos.
@@ -895,25 +870,25 @@ subroutine refract(En, cg, freq, dt, G, NAngle, use_PPMang)
       df_dx = 0.5*((G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)) - &
                     (G%CoriolisBu(I-1,J) + G%CoriolisBu(I-1,J-1))) * &
                G%IdxT(i,j)
-      dlnCg_dx = 0.5*( G%IdxCu(I,j) * (cg(i+1,j) - cg(i,j)) / &
-                       (0.5*(cg(i+1,j) + cg(i,j)) + cg_subRO) + &
-                       G%IdxCu(I-1,j) * (cg(i,j) - cg(i-1,j)) / &
-                       (0.5*(cg(i,j) + cg(i-1,j)) + cg_subRO) )
+      dlnCn_dx = 0.5*( G%IdxCu(I,j) * (cn(i+1,j) - cn(i,j)) / &
+                       (0.5*(cn(i+1,j) + cn(i,j)) + cn_subRO) + &
+                       G%IdxCu(I-1,j) * (cn(i,j) - cn(i-1,j)) / &
+                       (0.5*(cn(i,j) + cn(i-1,j)) + cn_subRO) )
       df2_dy = 0.5*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J)**2) - &
                     (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J-1)**2)) * &
                G%IdyT(i,j)
       df_dy = 0.5*((G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) - &
                     (G%CoriolisBu(I,J-1) + G%CoriolisBu(I-1,J-1))) * &
                G%IdyT(i,j)
-      dlnCg_dy = 0.5*( G%IdyCv(i,J) * (cg(i,j+1) - cg(i,j)) / &
-                       (0.5*(cg(i,j+1) + cg(i,j)) + cg_subRO) + &
-                       G%IdyCv(i,J-1) * (cg(i,j) - cg(i,j-1)) / &
-                       (0.5*(cg(i,j) + cg(i,j-1)) + cg_subRO) )
-      Kmag2 = (freq**2 - f2) / (cg(i,j)**2 + cg_subRO**2)
+      dlnCn_dy = 0.5*( G%IdyCv(i,J) * (cn(i,j+1) - cn(i,j)) / &
+                       (0.5*(cn(i,j+1) + cn(i,j)) + cn_subRO) + &
+                       G%IdyCv(i,J-1) * (cn(i,j) - cn(i,j-1)) / &
+                       (0.5*(cn(i,j) + cn(i,j-1)) + cn_subRO) )
+      Kmag2 = (freq**2 - f2) / (cn(i,j)**2 + cn_subRO**2)
       if (Kmag2 > 0.0) then
         I_Kmag = 1.0 / sqrt(Kmag2)
-        Dk_Dt_Kmag(i) = -Ifreq * (favg*df_dx + (freq**2 - f2) * dlnCg_dx) * I_Kmag
-        Dl_Dt_Kmag(i) = -Ifreq * (favg*df_dy + (freq**2 - f2) * dlnCg_dy) * I_Kmag
+        Dk_Dt_Kmag(i) = -Ifreq * (favg*df_dx + (freq**2 - f2) * dlnCn_dx) * I_Kmag
+        Dl_Dt_Kmag(i) = -Ifreq * (favg*df_dy + (freq**2 - f2) * dlnCn_dy) * I_Kmag
       else
         Dk_Dt_Kmag(i) = 0.0
         Dl_Dt_Kmag(i) = 0.0
@@ -1037,18 +1012,23 @@ subroutine PPM_angular_advect(En2d, CFL_ang, Flux_En, NAngle, dt, halo_ang)
 end subroutine PPM_angular_advect
 
 
-subroutine propagate(En, cg, freq, dt, G, CS, NAngle)
+subroutine propagate(En, cn, freq, dt, G, CS, NAngle)
   type(ocean_grid_type),  intent(inout) :: G
   integer,                intent(in)    :: NAngle
   real, dimension(G%isd:G%ied,G%jsd:G%jed,NAngle), intent(inout) :: En
-  real, dimension(G%isd:G%ied,G%jsd:G%jed),        intent(in)    :: cg
+  real, dimension(G%isd:G%ied,G%jsd:G%jed),        intent(in)    :: cn
   real,                   intent(in)    :: freq
   real,                   intent(in)    :: dt
   type(int_tide_CS),      pointer       :: CS
   !  This subroutine does refraction on the internal waves at a single frequency.
 
-  ! Arguments: En - the internal gravity wave energy density as a function of space
-  !                 and angular resolution, in J m-2 radian-1.
+  ! Arguments: 
+  ! (inout) En - the internal gravity wave energy density as a function of space
+  !              and angular resolution, in J m-2 radian-1.
+  ! (in)    cn - baroclinic mode speed, in m s-1
+  ! (in)    freq - wave frequency, in s-1
+  ! (in)    dt - time step, in s
+
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB) :: &
     speed  ! The magnitude of the group velocity at the q points for corner adv, in m s-1.
   integer, parameter :: stensil = 2
@@ -1063,7 +1043,7 @@ subroutine propagate(En, cg, freq, dt, G, CS, NAngle)
   real :: f2   ! The squared Coriolis parameter, in s-2.
   real :: Angle_size, I_Angle_size, angle
   real :: Ifreq, freq2
-  real, parameter :: cg_subRO = 1e-100
+  real, parameter :: cn_subRO = 1e-100
   type(loop_bounds_type) :: LB
   integer :: is, ie, js, je, asd, aed, na
   integer :: ish, ieh, jsh, jeh
@@ -1097,7 +1077,7 @@ subroutine propagate(En, cg, freq, dt, G, CS, NAngle)
     speed(:,:) = 0;
     do J=jsh-1,jeh ; do I=ish-1,ieh
       f2 = G%CoriolisBu(I,J)**2
-      speed(I,J) = 0.25*(cg(i,j) + cg(i+1,j) + cg(i+1,j+1) + cg(i,j+1)) * &
+      speed(I,J) = 0.25*(cn(i,j) + cn(i+1,j) + cn(i+1,j+1) + cn(i,j+1)) * &
                      sqrt(max(freq2 - f2, 0.0)) * Ifreq
     enddo ; enddo  
     do a=1,na
@@ -1127,12 +1107,12 @@ subroutine propagate(En, cg, freq, dt, G, CS, NAngle)
 
     do j=jsh,jeh ; do I=ish-1,ieh
       f2 = 0.5*(G%CoriolisBu(I,J)**2 + G%CoriolisBu(I,J-1)**2)
-      speed_x(I,j) = 0.5*(cg(i,j) + cg(i+1,j)) * G%mask2dCu(I,j) * &
+      speed_x(I,j) = 0.5*(cn(i,j) + cn(i+1,j)) * G%mask2dCu(I,j) * &
                      sqrt(max(freq2 - f2, 0.0)) * Ifreq
     enddo ; enddo
     do J=jsh-1,jeh ; do i=ish,ieh
       f2 = 0.5*(G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J)**2)
-      speed_y(i,J) = 0.5*(cg(i,j) + cg(i,j+1)) * G%mask2dCv(i,J) * &
+      speed_y(i,J) = 0.5*(cn(i,j) + cn(i,j+1)) * G%mask2dCv(i,J) * &
                      sqrt(max(freq2 - f2, 0.0)) * Ifreq
     enddo ; enddo
     
@@ -1698,7 +1678,7 @@ subroutine reflect(En, NAngle, CS, G, LB)
 
   !  This subroutine does reflection of the internal waves at a single frequency.
   
-  real, dimension(G%isd:G%ied,G%jsd:G%jed) :: angle_c  
+  real, dimension(G%isd:G%ied,G%jsd:G%jed) :: angle_c
                                            ! angle of boudary wrt equator
   real, dimension(G%isd:G%ied,G%jsd:G%jed) :: part_refl  
                                            ! fraction of wave energy reflected
@@ -1732,7 +1712,7 @@ subroutine reflect(En, NAngle, CS, G, LB)
   Angle_size = TwoPi / (real(NAngle))
   
   do a=1,NAngle
-    ! These are the angles at the cell centers  
+    ! These are the angles at the cell centers
     ! (should do this elsewhere since doesn't change with time)
     angle_i(a) = Angle_size * real(a - 1) ! for a=1 aligned with x-axis
   enddo
@@ -2291,7 +2271,7 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
   
   ! Allocate phase speed array
   allocate(CS%cp(isd:ied, jsd:jed, num_freq, num_mode))
-  CS%cp(:,:,:,:) = 0.0 
+  CS%cp(:,:,:,:) = 0.0
 
   ! Allocate and populate frequency array (each a multiple of first for now)
   allocate(CS%frequency(num_freq))
