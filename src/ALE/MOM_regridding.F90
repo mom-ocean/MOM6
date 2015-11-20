@@ -70,6 +70,19 @@ type, public :: regridding_CS
   !> Reference pressure for potential density calculations (Pa)
   real :: ref_pressure = 2.e7
 
+  ! The following 4 parameters were introduced for use with the SLight coordinate:
+  !> Depth over which to average to determine the mixed layer potential density (m)
+  real :: Rho_ML_avg_depth = 1.0
+  
+  !> Number of layers to offset the mixed layer density to find resolved stratification (nondim)
+  real :: nlay_ml_offset = 2.0
+
+  !> The number of fixed-thickess layers at the top of the model
+  integer :: nz_fixed_surface = 2
+  
+  !> The fixed resolution in the topmost SLight_nkml_min layers (m)
+  real :: dz_ml_min = 1.0
+
   !> Weight given to old coordinate when blending between new and old grids (nondim)
   !! Used only below depth_of_time_filter_shallow, with a cubic variation
   !! from zero to full effect between depth_of_time_filter_shallow and
@@ -89,26 +102,17 @@ type, public :: regridding_CS
 end type
 
 ! The following routines are visible to the outside world
-public initialize_regridding
-public end_regridding
-public regridding_main 
+public initialize_regridding, end_regridding, regridding_main 
 public inflate_vanished_layers_old
-public check_remapping_grid
-public check_grid_column
+public check_remapping_grid, check_grid_column
 public adjust_interface_motion
 public setRegriddingBoundaryExtrapolation
-public set_regrid_min_thickness
-public set_old_grid_weight
-public set_filter_depths
-public uniformResolution
-public setCoordinateResolution
-public set_target_densities_from_G
-public set_target_densities
-public getCoordinateResolution
-public getCoordinateInterfaces
-public getCoordinateUnits
-public getCoordinateShortName
-public getStaticThickness
+public set_regrid_min_thickness, set_regrid_params
+public set_old_grid_weight, set_filter_depths
+public uniformResolution, setCoordinateResolution
+public set_target_densities_from_G, set_target_densities
+public getCoordinateResolution, getCoordinateInterfaces
+public getCoordinateUnits, getCoordinateShortName, getStaticThickness
 public build_zstar_column
 
 public DEFAULT_COORDINATE_MODE
@@ -719,8 +723,8 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
         end do
 
         ! One regridding iteration
-        call regridding_set_polys(densities, CS, count_nonzero_layers, hTmp, xTmp, &
-                                  ppoly_i_E, ppoly_i_S, ppoly_i_coefficients, ppoly_degree)
+        call regridding_set_ppolys(densities, CS, count_nonzero_layers, hTmp, &
+                                   ppoly_i_E, ppoly_i_S, ppoly_i_coefficients, ppoly_degree)
         ! Based on global density profile, interpolate to generate a new grid
         call interpolate_grid(count_nonzero_layers, hTmp, xTmp, ppoly_i_E, ppoly_i_coefficients, &
                               CS%target_density, ppoly_degree, nz, h1, x1 )
@@ -872,8 +876,8 @@ subroutine build_grid_HyCOM1( G, h, tv, dzInterface, remapCS, CS )
       enddo
 
       ! Interpolates for the target interface position with the rho_column profile
-      call regridding_set_polys(rho_column, CS, nz, h(i,j,:), z_column, &
-                                ppoly_i_E, ppoly_i_S, ppoly_i_coefficients, ppoly_degree)
+      call regridding_set_ppolys(rho_column, CS, nz, h(i,j,:), ppoly_i_E, ppoly_i_S, &
+                                 ppoly_i_coefficients, ppoly_degree)
       ! Based on global density profile, interpolate to generate a new grid
       call interpolate_grid(nz, h(i,j,:), z_column, ppoly_i_E, ppoly_i_coefficients, &
                             CS%target_density, ppoly_degree, nz, h_column_new, z_column_new)
@@ -918,20 +922,22 @@ subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
   type(remapping_CS),                           intent(in)    :: remapCS !< Remapping control structure
   type(regridding_CS),                          intent(in)    :: CS !< Regridding control structure
   ! Local variables
-  integer   :: i, j, k, nz
-  real, dimension(SZK_(G)) :: T_column, S_column, p_column, rho_column, h_column_new ! Layer quantities
-  real, dimension(SZK_(G)+1) :: z_column, z_column_new ! Interface positions in H units (m or Pa)
-  real, dimension(CS%nk,2) :: ppoly_i_E ! Edge value of polynomial
-  real, dimension(CS%nk,2) :: ppoly_i_S ! Edge slope of polynomial
-  real, dimension(CS%nk,CS%degree_i+1) :: ppoly_i_coefficients ! Coefficients of polynomial
+  real, dimension(SZK_(G)) :: T_col, S_col, p_col, rho_col ! Layer quantities
+  real, dimension(SZK_(G)) :: h_col     ! Layer quantities on the original grid.
+  real, dimension(SZK_(G)+1) :: z_col, z_col_new ! Interface positions in H units (m or Pa)
+  logical, dimension(SZK_(G)+1) :: reliable  ! If true, this interface is in a reliable position.
+
   real :: nominal_z ! Nominal depth of interface is using z* (m or Pa)
   real :: stretching ! z* stretching, converts z* to z.
   real :: hNew
-  integer :: ppoly_degree
+  integer :: i, j, k, nz
+  real :: dz_ur
+  real :: wgt, cowgt
+  real :: z_wt, rho_ml_av, rho_x_z, H_ml_av
+  real :: k_interior, z_interior, z_ml_fix, dz_dk
+  integer :: k1, kur1, kur2, k2, nkml
 
   nz = G%ke
-
-  call MOM_error(FATAL, "build_grid_SLight is not completed yet.")
 
   ! Build grid based on target interface densities
   do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
@@ -940,46 +946,120 @@ subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
       ! Copy T and S onto new variables so as to not alter the original values
       ! of T and S (these are remapped at the end of the regridding iterations
       ! once the final grid has been determined).
-      T_column(:) = tv%T(i,j,:)
-      S_column(:) = tv%S(i,j,:)
-      z_column(1) = 0. ! Work downward rather than bottom up
-      do K = 1, nz
-        z_column(K+1) = z_column(K) + h(i,j,k) ! Work in units of h (m or Pa)
-        p_column(k) = CS%ref_pressure + CS%compressibility_fraction * &
-             ( 0.5 * ( z_column(K) + z_column(K+1) ) * G%H_to_Pa - CS%ref_pressure )
+
+      do k=1,nz
+        T_col(k) = tv%T(i,j,k) ; S_col(k) = tv%S(i,j,k)
+        h_col(k) = h(i,j,k)
+      enddo
+
+      z_col(1) = 0. ! Work downward rather than bottom up
+      do K=1,nz
+        z_col(K+1) = z_col(K) + h_col(k) ! Work in units of h (m or Pa)
+        p_col(k) = CS%ref_pressure + CS%compressibility_fraction * &
+             ( 0.5 * ( z_col(K) + z_col(K+1) ) * G%H_to_Pa - CS%ref_pressure )
       enddo
 
       ! Work bottom recording potential density
-      call calculate_density(T_column, S_column, p_column, &
-                             rho_column, 1, nz, tv%eqn_of_state )
+      call calculate_density(T_col, S_col, p_col, &
+                             rho_col, 1, nz, tv%eqn_of_state )
 
-      ! Interpolates for the target interface position with the rho_column profile
-      call regridding_set_polys(rho_column, CS, nz, h(i,j,:), z_column, &
-                                ppoly_i_E, ppoly_i_S, ppoly_i_coefficients, ppoly_degree)
+      call rho_interfaces_col(rho_col, h_col, z_col, CS%target_density, nz, &
+                              z_col_new, CS, reliable, debug=.true.)
 
-      !### Replace interpolate_grid with a better density-based grid generator.
+      ! Fix up the unreliable regions.
+      k1 = 2 ! reliable(1) and reliable(nz+1) must always be true.
+      do
+        ! Search for the uppermost unreliable interface postion.
+        kur1 = nz+2
+        do K=k1,nz ; if (.not.reliable(K)) then
+          kur1 = K ; exit
+        endif ; enddo
+        if (kur1 > nz) exit ! Everything is now reliable.
 
-      ! Based on the global density profile, interpolate to generate a new grid
-      call interpolate_grid(nz, h(i,j,:), z_column, ppoly_i_E, ppoly_i_coefficients, &
-                            CS%target_density, ppoly_degree, nz, h_column_new, z_column_new)
+        kur2 = kur1-1 ! For error checking.
+        do K=kur1+1,nz+1 ; if (reliable(K)) then
+          kur2 = K-1 ; k1 = K ; exit
+        endif ; enddo
+        if (kur2 < kur1) call MOM_error(FATAL, "Bad unreliable range.")
+        
+        dz_ur = z_col_new(kur2+1) - z_col_new(kur1-1)
+!        drho = CS%target_density(kur2+1) - CS%target_density(kur1-1)
+        ! Perhaps reset the wgt and cowgt depending on how bad the old interface
+        ! locations were.
+        wgt = 1.0 ; cowgt = 0.0 ! = 1.0-wgt
+        do K=kur1,kur2
+          z_col_new(K) = cowgt*z_col_new(K) + &
+                wgt * (z_col_new(kur1-1) + dz_ur*(K - (kur1-1)) / ((kur2 - kur1) + 2))
+        enddo
+      enddo
 
       ! Determine which interfaces are in the s-space region and the depth extent
       ! of this region.
+      z_wt = 0.0 ; rho_x_z = 0.0
+      H_ml_av = G%m_to_H*CS%Rho_ml_avg_depth
+      do k=1,nz
+        if (z_wt + h_col(k) >= H_ml_av) then
+          rho_x_z = rho_x_z + rho_col(k) * (H_ml_av - z_wt)
+          z_wt = H_ml_av
+          exit
+        else
+          rho_x_z =  rho_x_z + rho_col(k) * h_col(k)
+          z_wt = z_wt + h_col(k)
+        endif
+      enddo
+      if (z_wt > 0.0) rho_ml_av = rho_x_z / z_wt
 
+      nkml = CS%nz_fixed_surface
+      ! Find the interface that matches rho_ml_av.
+      if (rho_ml_av <= CS%target_density(nkml)) then
+        k_interior = CS%nlay_ml_offset + real(nkml)
+      elseif (rho_ml_av > CS%target_density(nz+1)) then
+        k_interior = real(nz+1)
+      else ; do K=nkml,nz
+        if ((rho_ml_av >= CS%target_density(K)) .and. &
+            (rho_ml_av <  CS%target_density(K+1))) then
+          k_interior = (CS%nlay_ml_offset + K) + &
+                  (rho_ml_av - CS%target_density(K)) / &
+                  (CS%target_density(K+1) - CS%target_density(K))
+          exit
+        endif
+      enddo ; endif
+      if (k_interior > real(nz+1)) k_interior = real(nz+1) 
       
+      k2 = int(ceiling(k_interior))
+      z_interior = (k2-k_interior)*z_col_new(k2-1) + (1.0+(k_interior-k2))*z_col_new(k2)
+      
+      z_col_new(1) = 0.0
+      do K=2,nkml+1
+        z_col_new(K) = min((K-1)*CS%dz_ml_min, z_col_new(nz+1))
+      enddo
+      z_ml_fix = z_col_new(nkml+1)
+      if (z_interior > z_ml_fix) then
+        dz_dk = (z_interior - z_ml_fix) / (k_interior - (nkml+1))
+        do K=nkml+2,int(floor(k_interior))
+          z_col_new(K) = z_ml_fix + dz_dk * (K - (nkml+1))
+        enddo
+      else ! The fixed-thickness z-region penetrates into the interior.
+        do K=nkml+2,nz
+          if (z_col_new(K) <= z_col_new(CS%nz_fixed_surface+1)) then
+            z_col_new(K) = z_col_new(CS%nz_fixed_surface+1)
+          else ; exit ; endif
+        enddo
+      endif
+
       ! ### This code may become unnecessary...
       ! Sweep down the interfaces and make sure that the interface is at least
       ! as deep as a nominal target z* grid
-      nominal_z = 0.
-      stretching = z_column(nz+1) / G%bathyT(i,j) * G%m_to_H ! Stretches z* to z
-      do k = 2, nz+1
-        nominal_z = nominal_z + CS%coordinateResolution(k-1) * stretching
-        z_column_new(k) = max( z_column_new(k), nominal_z )
-        z_column_new(k) = min( z_column_new(k), z_column(nz+1) )
-      enddo
+!     nominal_z = 0.
+!     stretching = z_col(nz+1) / G%bathyT(i,j) * G%m_to_H ! Stretches z* to z
+!     do k = 2, nz+1
+!       nominal_z = nominal_z + CS%coordinateResolution(k-1) * stretching
+!       z_col_new(k) = max( z_col_new(k), nominal_z )
+!       z_col_new(k) = min( z_col_new(k), z_col(nz+1) )
+!     enddo
 
       ! Calculate the final change in grid position after blending new and old grids
-      call filtered_grid_motion( CS, nz, z_column_new, z_column, dzInterface(i,j,:) )
+      call filtered_grid_motion( CS, nz, z_col_new, z_col, dzInterface(i,j,:) )
 #ifdef __DO_SAFETY_CHECKS__
       if (dzInterface(i,j,1) /= 0.) stop 'build_grid_SLight: Surface moved?!'
       if (dzInterface(i,j,nz+1) /= 0.) stop 'build_grid_SLight: Bottom moved?!'
@@ -994,6 +1074,250 @@ subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
   enddo; enddo ! i,j
 
 end subroutine build_grid_SLight
+
+!> Finds the new interface locations in a column of water that match the
+!! prescribed target densities.
+subroutine rho_interfaces_col(rho_col, h_col, z_col, rho_tgt, nz, z_col_new, &
+                              CS, reliable, debug)
+  integer,               intent(in)    :: nz      !< Number of layers
+  real, dimension(nz),   intent(in)    :: rho_col !< Initial layer reference densities.
+  real, dimension(nz),   intent(in)    :: h_col   !< Initial layer thicknesses.
+  real, dimension(nz+1), intent(in)    :: z_col   !< Initial interface heights.
+  real, dimension(nz+1), intent(in)    :: rho_tgt !< Interface target densities.
+  real, dimension(nz+1), intent(inout) :: z_col_new !< New interface heights.
+  type(regridding_CS),   intent(in)    :: CS      !< Regridding control structure
+  logical, dimension(nz+1), intent(inout) :: reliable !< If true, the interface positions
+                                                  !! are well defined from a stable region.
+  logical, optional,     intent(in) :: debug      !< If present and true, do debugging checks.
+
+  real, dimension(nz+1) :: ru_max_int ! The maximum and minimum densities in
+  real, dimension(nz+1) :: ru_min_int ! an unstable region around an interface.
+  real, dimension(nz)   :: ru_max_lay ! The maximum and minimum densities in
+  real, dimension(nz)   :: ru_min_lay ! an unstable region containing a layer.
+  real, dimension(nz,2) :: ppoly_i_E ! Edge value of polynomial
+  real, dimension(nz,2) :: ppoly_i_S ! Edge slope of polynomial
+  real, dimension(nz,CS%degree_i+1) :: ppoly_i_coefficients ! Coefficients of polynomial
+  logical, dimension(nz)   :: unstable_lay ! If true, this layer is in an unstable region.
+  logical, dimension(nz+1) :: unstable_int ! If true, this interface is in an unstable region.
+  real :: rt  ! The current target density, in kg m-3.
+  real :: zf  ! The fractional z-position within a layer of the target density.
+  real :: rfn
+  real :: a(5) ! Coefficients of a local polynomial minus the target density.
+  real :: zf1, zf2, rfn1, rfn2
+  real :: drfn_dzf, sgn, delta_zf, zf_prev
+  real :: tol
+  logical :: k_found ! If true, the position has been found.
+  integer :: k_layer ! The index of the stable layer containing an interface.
+  integer :: ppoly_degree
+  integer :: k, k1, k1_min, itt, max_itt, m
+
+  real :: z_sgn  ! 1 or -1, depending on whether z increases with increasing K.
+  logical :: debugging
+  
+  debugging = .false. ; if (present(debug)) debugging = debug
+  max_itt = NR_ITERATIONS
+  tol = NR_TOLERANCE
+
+  z_sgn = 1.0 ; if ( z_col(1) > z_col(nz+1) ) z_sgn = -1.0
+  if (debugging) then
+    do K=1,nz
+      if (abs((z_col(K+1) - z_col(K)) - z_sgn*h_col(k)) > &
+          1.0e-14*(abs(z_col(K+1)) + abs(z_col(K)) + abs(h_col(k))) ) &
+        call MOM_error(FATAL, "rho_interfaces_col: Inconsistent z_col and h_col")
+    enddo
+  endif
+
+  if ( z_col(1) == z_col(nz+1) ) then
+    ! This is a massless column!
+    do K=1,nz+1 ; z_col_new(K) = z_col(1) ; reliable(K) = .true. ; enddo
+    return
+  endif
+
+  ! This sets up the piecewise polynomials based on the rho_col profile.
+  call regridding_set_ppolys(rho_col, CS, nz, h_col, ppoly_i_E, ppoly_i_S, &
+                             ppoly_i_coefficients, ppoly_degree)
+
+  ! Determine the density ranges of unstably stratified segments.
+  ! Interfaces that start out in an unstably stratified segment can
+  ! only escape if they are outside of the bounds of that segment, and no
+  ! interfaces are ever mapped into an unstable segment.
+  unstable_int(1) = .false.
+  ru_max_int(1) = ppoly_i_E(1,1)
+
+  unstable_lay(1) = (ppoly_i_E(1,1) > ppoly_i_E(1,2))
+  ru_max_lay(1) = max(ppoly_i_E(1,1), ppoly_i_E(1,2))
+
+  do K=2,nz
+    unstable_int(K) = (ppoly_i_E(k-1,2) > ppoly_i_E(k,1))
+    ru_max_int(K) = max(ppoly_i_E(k-1,2), ppoly_i_E(k,1))
+    ru_min_int(K) = min(ppoly_i_E(k-1,2), ppoly_i_E(k,1))
+    if (unstable_int(K) .and. unstable_lay(k-1)) &
+      ru_max_int(K) = max(ru_max_lay(k-1), ru_max_int(K))
+
+    unstable_lay(k) = (ppoly_i_E(k,1) > ppoly_i_E(k,2))
+    ru_max_lay(k) = max(ppoly_i_E(k,1), ppoly_i_E(k,2))
+    ru_min_lay(k) = min(ppoly_i_E(k,1), ppoly_i_E(k,2))
+    if (unstable_lay(k) .and. unstable_int(K)) &
+      ru_max_lay(k) = max(ru_max_int(K), ru_max_lay(k))
+  enddo
+  unstable_int(nz+1) = .false.      
+  ru_min_int(nz+1) = ppoly_i_E(nz,2)
+
+  do K=nz,1,-1
+    if (unstable_lay(k) .and. unstable_int(K+1)) &
+      ru_min_lay(k) = min(ru_min_int(K+1), ru_min_lay(k))
+
+    if (unstable_int(K) .and. unstable_lay(k)) &
+      ru_min_int(K) = min(ru_min_lay(k), ru_min_int(K))
+  enddo
+
+  z_col_new(1) = z_col(1) ; reliable(1) = .true.
+  k1_min = 1
+  do K=2,nz ! Find the locations of the various target densities for the interfaces.
+    rt = rho_tgt(K)
+    k_layer = -1               
+    k_found = .false.
+
+    ! Many light layers are found at the top, so start there.
+    if (rt <= ppoly_i_E(k1_min,1)) then
+      z_col_new(K) = z_col(k1_min)
+      k_found = .true.
+      ! Do not change k1_min for the next layer.
+    elseif (k1_min == nz+1) then
+      z_col_new(K) = z_col(nz+1)
+    else
+      ! Start with the previous location and search outward.
+      if (unstable_int(K) .and. (rt >= ru_min_int(K)) .and. (rt <= ru_max_int(K))) then
+        ! This interface started in an unstable region and should not move due to remapping.
+        z_col_new(K) = z_col(K) ; reliable(K) = .false.
+        k1_min = K ; k_found = .true.
+      elseif ((rt >= ppoly_i_E(k-1,2)) .and. (rt <= ppoly_i_E(k,1))) then
+        ! This interface is already in the right place and does not move.
+        z_col_new(K) = z_col(K) ; reliable(K) = .true.
+        k1_min = K ; k_found = .true.
+      elseif (rt < ppoly_i_E(k-1,2)) then   ! Search upward
+        do k1=K-1,k1_min,-1
+          ! Check whether rt is in layer k.
+          if ((rt < ppoly_i_E(k1,2)) .and. (rt > ppoly_i_E(k1,1))) then
+            ! rt is in layer k.
+            k_layer = k1                
+            k1_min = k1 ; k_found = .true. ; exit
+          elseif (unstable_lay(k1) .and. (rt >= ru_min_lay(k1)) .and. (rt <= ru_max_lay(K1))) then
+            ! rt would be found at unstable layer that it can not penetrate.
+            !   It is possible that this can never happen?
+            z_col_new(K) = z_col(K1+1) ; reliable(K) = .false.
+            k1_min = k1 ; k_found = .true. ; exit
+          endif
+          ! Check whether rt is at interface K.
+          if (k1 > 1) then ; if ((rt <= ppoly_i_E(k1,1)) .and. (rt >= ppoly_i_E(k1-1,2))) then
+            ! rt is at interface K1
+            z_col_new(K) = z_col(K1) ; reliable(K) = .true.
+            k1_min = k1 ; k_found = .true. ; exit
+          elseif (unstable_int(K1) .and. (rt >= ru_min_int(k1)) .and. (rt <= ru_max_int(K1))) then
+            ! rt would be found at an unstable interface that it can not pass.
+            !   It is possible that this can never happen?
+            z_col_new(K) = z_col(K1) ; reliable(K) = .false.
+            k1_min = k1 ; k_found = .true. ; exit
+          endif ; endif
+        enddo
+
+        if (.not.k_found) then
+          ! This should not happen unless k1_min = 1.
+          if (k1_min < 2) then
+            z_col_new(K) = z_col(k1_min)
+          else
+            z_col_new(K) = z_col(k1_min)
+          endif
+        endif
+
+      else  ! Search downward
+        do k1=K,nz
+          if ((rt < ppoly_i_E(k1,2)) .and. (rt > ppoly_i_E(k1,1))) then
+            ! rt is in layer k.
+            k_layer = k1                
+            k1_min = k1 ; k_found = .true. ; exit
+          elseif (unstable_lay(k1) .and. (rt >= ru_min_lay(k1)) .and. (rt <= ru_max_lay(K1))) then
+            ! rt would be found at unstable layer that it can not penetrate.
+            !   It is possible that this can never happen?
+            z_col_new(K) = z_col(K1)
+            reliable(K) = .false.
+            k1_min = k1 ; k_found = .true. ; exit
+          endif
+          if (k1 < nz) then ; if ((rt <= ppoly_i_E(k1+1,1)) .and. (rt >= ppoly_i_E(k1,2))) then
+            ! rt is at interface K1+1
+
+            z_col_new(K) = z_col(K1+1) ; reliable(K) = .true.
+            k1_min = k1+1 ; k_found = .true. ; exit
+          elseif (unstable_int(K1+1) .and. (rt >= ru_min_int(k1+1)) .and. (rt <= ru_max_int(K1+1))) then
+            ! rt would be found at an unstable interface that it can not pass.
+            !   It is possible that this can never happen?
+            z_col_new(K) = z_col(K1+1)
+            reliable(K) = .false.
+            k1_min = k1+1 ; k_found = .true. ; exit
+          endif ; endif
+        enddo
+        if (.not.k_found) then
+          z_col_new(K) = z_col(nz+1)
+          if (rt >= ppoly_i_E(nz,2)) then
+            reliable(K) = .true.
+          else
+            reliable(K) = .false.
+          endif
+        endif
+      endif
+
+      if (k_layer > 0) then  ! The new location is inside of layer k_layer.
+        ! Note that this is coded assuming that this layer is stably stratified.
+        if (.not.(ppoly_i_E(k1,2) > ppoly_i_E(k1,1))) call MOM_error(FATAL, &
+          "build_grid_SLight: Erroneously searching for an interface in an unstratified layer.") !### COMMENT OUT LATER?
+
+        ! Use the false position method to find the location (degree <= 1) or the first guess.
+        zf = (rt - ppoly_i_E(k1,1)) / (ppoly_i_E(k1,2) - ppoly_i_E(k1,1))
+
+        if (ppoly_degree > 1) then ! Iterate to find the solution.
+          a(:) = 0.0 ; a(1) = ppoly_i_coefficients(k_layer,1) - rt
+          do m=2,ppoly_degree+1 ; a(m) = ppoly_i_coefficients(k_layer,m) ; enddo
+          ! Bracket the root.
+          zf1 = 0.0 ; rfn1 = a(1)
+          zf2 = 1.0 ; rfn2 =  a(1) + (a(2) + (a(3) + (a(4) + a(5))))
+          if (rfn1 * rfn2 > 0.0) call MOM_error(FATAL, "build_grid_SLight: Bad bracketing.") !### COMMENT OUT LATER?
+
+          do itt=1,max_itt
+            rfn = a(1) + zf*(a(2) + zf*(a(3) + zf*(a(4) + zf*a(5))))
+            ! Reset one of the ends of the bracket.
+            if (rfn * rfn1 > 0.0) then
+              zf1 = zf ; rfn1 = rfn
+            else
+              zf2 = zf ; rfn2 = rfn
+            endif
+            if (rfn1 == rfn2) exit
+
+            drfn_dzf = (a(2) + zf*(2.0*a(3) + zf*(3.0*a(4) + zf*4.0*a(5))))
+            sgn = 1.0 ; if (drfn_dzf < 0.0) sgn = -1.0
+
+            if ((sgn*(zf - rfn) >= zf1 * abs(drfn_dzf)) .and. &
+                (sgn*(zf - rfn) <= zf2 * abs(drfn_dzf))) then
+              delta_zf = -rfn / drfn_dzf
+              zf = zf + delta_zf
+            else ! Newton's method goes out of bounds, so use a false position method estimate
+              zf_prev = zf
+              zf = ( rfn2 * zf1 - rfn1 * zf2 ) / (rfn2 - rfn1)
+              delta_zf = zf - zf_prev
+            endif
+
+            if (abs(delta_zf) < tol) exit
+          enddo
+        endif
+        z_col_new(K) = z_col(k_layer) + zf * z_sgn * h_col(k_layer)
+        reliable(K) = .true.
+      endif
+
+    endif
+
+  enddo
+  z_col_new(nz+1) = z_col(nz+1) ; reliable(nz+1) = .true.
+
+end subroutine rho_interfaces_col
 
 !> Adjust dz_Interface to ensure non-negative future thicknesses
 subroutine adjust_interface_motion( nk, min_thickness, h_old, dz_int )
@@ -1147,13 +1471,12 @@ end subroutine build_grid_arbitrary
 !! available layers is insufficient (e.g., there are two available layers for
 !! a third-order PPM ih4 scheme). In these cases, we resort to the simplest 
 !! continuous linear scheme (P1M h2).
-subroutine regridding_set_polys( densities, CS, n0, h0, x0, ppoly0_E, ppoly0_S, &
-                                 ppoly0_coefficients, degree)
+subroutine regridding_set_ppolys( densities, CS, n0, h0, ppoly0_E, ppoly0_S, &
+                                  ppoly0_coefficients, degree)
 
   real, dimension(:),  intent(in)    :: densities !< Actual cell densities
   integer,             intent(in)    :: n0 !< Number of cells on source grid
   real, dimension(:),  intent(in)    :: h0 !< cell widths on source grid
-  real, dimension(:),  intent(in)    :: x0 !< interface positions on source grid
   real, dimension(:,:),intent(inout) :: ppoly0_E            !< Edge value of polynomial
   real, dimension(:,:),intent(inout) :: ppoly0_S            !< Edge slope of polynomial
   real, dimension(:,:),intent(inout) :: ppoly0_coefficients !< Coefficients of polynomial 
@@ -1318,7 +1641,7 @@ subroutine regridding_set_polys( densities, CS, n0, h0, x0, ppoly0_E, ppoly0_S, 
     
   end select
     
-end subroutine regridding_set_polys
+end subroutine regridding_set_ppolys
 
 
 !------------------------------------------------------------------------------
@@ -1652,54 +1975,43 @@ subroutine convective_adjustment(G, h, tv)
   p_column(:) = 0.
   
   ! Loop on columns 
-  do j = G%jsc-1,G%jec+1
-    do i = G%isc-1,G%iec+1
+  do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
         
-      ! Compute densities within current water column
-      call calculate_density( tv%T(i,j,:), tv%S(i,j,:), p_column, &
-                              densities, 1, G%ke, tv%eqn_of_state )
-     
-      ! Repeat restratification until complete  
-      do
+    ! Compute densities within current water column
+    call calculate_density( tv%T(i,j,:), tv%S(i,j,:), p_column, &
+                            densities, 1, G%ke, tv%eqn_of_state )
 
-        stratified = .true.
-        do k = 1,G%ke-1
-          ! Gather information of current and next cells
-          T0 = tv%T(i,j,k)
-          T1 = tv%T(i,j,k+1)
-          S0 = tv%S(i,j,k)
-          S1 = tv%S(i,j,k+1)
-          r0 = densities(k)
-          r1 = densities(k+1)
-          h0 = h(i,j,k)
-          h1 = h(i,j,k+1)
-          ! If the density of the current cell is larger than the density
-          ! below it, we swap the cells and recalculate the densitiies
-          ! within the swapped cells    
-          if ( r0 > r1 ) then
-            tv%T(i,j,k)   = T1
-            tv%T(i,j,k+1) = T0
-            tv%S(i,j,k)   = S1
-            tv%S(i,j,k+1) = S0
-            h(i,j,k)      = h1
-            h(i,j,k+1)    = h0
-            ! Recompute densities at levels k and k+1
-            call calculate_density( tv%T(i,j,k), tv%S(i,j,k), &
-                                     p_column(k), &
-                                     densities(k), tv%eqn_of_state )
-            call calculate_density( tv%T(i,j,k+1), tv%S(i,j,k+1), &
-                                     p_column(k+1), &
-                                     densities(k+1), tv%eqn_of_state )
-            stratified = .false.
-          end if
-        end do  ! k 
-    
-        if ( stratified ) exit        
+    ! Repeat restratification until complete  
+    do
+      stratified = .true.
+      do k = 1,G%ke-1
+        ! Gather information of current and next cells
+        T0 = tv%T(i,j,k)  ; T1 = tv%T(i,j,k+1)
+        S0 = tv%S(i,j,k)  ; S1 = tv%S(i,j,k+1)
+        r0 = densities(k) ; r1 = densities(k+1)
+        h0 = h(i,j,k) ; h1 = h(i,j,k+1)
+        ! If the density of the current cell is larger than the density
+        ! below it, we swap the cells and recalculate the densitiies
+        ! within the swapped cells    
+        if ( r0 > r1 ) then
+          tv%T(i,j,k)   = T1 ; tv%T(i,j,k+1) = T0
+          tv%S(i,j,k)   = S1 ; tv%S(i,j,k+1) = S0
+          h(i,j,k)      = h1 ; h(i,j,k+1)    = h0
+          ! Recompute densities at levels k and k+1
+          call calculate_density( tv%T(i,j,k), tv%S(i,j,k), &
+                                   p_column(k), &
+                                   densities(k), tv%eqn_of_state )
+          call calculate_density( tv%T(i,j,k+1), tv%S(i,j,k+1), &
+                                   p_column(k+1), &
+                                   densities(k+1), tv%eqn_of_state )
+          stratified = .false.
+        end if
+      enddo  ! k 
 
-      end do    
+      if ( stratified ) exit        
+    enddo    
 
-    end do  ! i
-  end do  ! j   
+  enddo ; enddo  ! i & j   
 
 end subroutine convective_adjustment
 
@@ -1862,6 +2174,35 @@ function getCoordinateShortName( CS )
   end select ! type of grid 
 
 end function getCoordinateShortName
+
+!> This subroutine can be used to set many of the parameters for MOM_regridding.
+subroutine set_regrid_params( CS, Boundary_Extrap, min_thickness, old_grid_weight, &
+             compress_fraction, dz_min_surface, nz_fixed_surface, Rho_ML_avg_depth, &
+             nlay_ML_to_interior )
+  type(regridding_CS), intent(inout) :: CS
+  logical, optional, intent(in) :: Boundary_Extrap
+  real,    optional, intent(in) :: min_thickness
+  real,    optional, intent(in) :: old_grid_weight
+  real,    optional, intent(in) :: compress_fraction
+  real,    optional, intent(in) :: dz_min_surface
+  integer, optional, intent(in) :: nz_fixed_surface
+  real,    optional, intent(in) :: Rho_ml_avg_depth
+  real,    optional, intent(in) :: nlay_ML_to_interior
+
+  if (present(Boundary_Extrap)) CS%boundary_extrapolation = Boundary_Extrap
+  if (present(min_thickness)) CS%min_thickness = min_Thickness
+  if (present(old_grid_weight)) then
+    if (old_grid_weight<0. .or. old_grid_weight>1.) &
+      call MOM_error(FATAL,'MOM_regridding, set_old_grid_weight: Weight is out side the range 0..1!')
+    CS%old_grid_weight = old_grid_weight
+  endif
+  if (present(compress_fraction)) CS%compressibility_fraction = compress_fraction
+  if (present(dz_min_surface)) CS%dz_ml_min = dz_min_surface
+  if (present(nz_fixed_surface)) CS%nz_fixed_surface = nz_fixed_surface
+  if (present(Rho_ML_avg_depth)) CS%Rho_ML_avg_depth = Rho_ML_avg_depth
+  if (present(nlay_ML_to_interior)) CS%nlay_ML_offset = nlay_ML_to_interior
+
+end subroutine set_regrid_params
 
 !------------------------------------------------------------------------------
 ! Control the extrapolation of boundary data

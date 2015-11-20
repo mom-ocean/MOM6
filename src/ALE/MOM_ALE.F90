@@ -17,7 +17,7 @@ use MOM_file_parser,      only : get_param, param_file_type, log_param
 use MOM_io,               only : file_exists, field_exists, MOM_read_data
 use MOM_io,               only : vardesc, var_desc, fieldtype, SINGLE_FILE
 use MOM_io,               only : create_file, write_field, close_file, slasher
-use MOM_regridding,       only : initialize_regridding, regridding_main , end_regridding
+use MOM_regridding,       only : initialize_regridding, regridding_main, end_regridding
 use MOM_regridding,       only : uniformResolution, set_old_grid_weight
 use MOM_regridding,       only : inflate_vanished_layers_old, setCoordinateResolution
 use MOM_regridding,       only : set_target_densities_from_G, set_target_densities
@@ -27,13 +27,14 @@ use MOM_regridding,       only : setRegriddingBoundaryExtrapolation
 use MOM_regridding,       only : regriddingDefaultBoundaryExtrapolation
 use MOM_regridding,       only : set_regrid_min_thickness, regriddingDefaultMinThickness
 use MOM_regridding,       only : check_remapping_grid
-use MOM_regridding,       only : regridding_CS
+use MOM_regridding,       only : regridding_CS, set_regrid_params
 use MOM_regridding,       only : getCoordinateInterfaces, getCoordinateResolution
 use MOM_regridding,       only : getCoordinateUnits, getCoordinateShortName
 use MOM_regridding,       only : getStaticThickness
 use MOM_remapping,        only : initialize_remapping, remapping_core, end_remapping
 use MOM_remapping,        only : remappingSchemesDoc, remappingDefaultScheme
-use MOM_remapping,        only : remapDisableBoundaryExtrapolation, remapEnableBoundaryExtrapolation
+use MOM_remapping,        only : remapDisableBoundaryExtrapolation
+use MOM_remapping,        only : remapEnableBoundaryExtrapolation
 use MOM_remapping,        only : remapping_CS, dzFromH1H2
 use MOM_string_functions, only : uppercase, extractWord
 use MOM_tracer_registry,  only : tracer_registry_type
@@ -920,6 +921,8 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
   integer :: ke
   logical :: tmpLogical
   real :: tmpReal, compress_fraction
+  real :: dz_min, Rho_avg_depth, nlay_sfc_int
+  integer :: nz_fixed_sfc
   real :: rho_target(G%ke+1) ! Target density used in HYBRID mode
 
   ke = size(dz) ! Number of levels in resolution vector
@@ -1064,7 +1067,7 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
                  "When regridding, this is the minimum layer\n"//&
                  "thickness allowed.", units="m",&
                  default=regriddingDefaultMinThickness )
-  call set_regrid_min_thickness( tmpReal, regridCS )
+!  call set_regrid_min_thickness( tmpReal, regridCS )
 
   call get_param(param_file, mod, "BOUNDARY_EXTRAPOLATION", tmpLogical, &
                  "When defined, a proper high-order reconstruction\n"//&
@@ -1072,7 +1075,31 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
                  "than PCM. E.g., if PPM is used for remapping, a\n"//&
                  "PPM reconstruction will also be used within\n"//&
                  "boundary cells.", default=regriddingDefaultBoundaryExtrapolation)
-  call setRegriddingBoundaryExtrapolation( tmpLogical, regridCS )
+!  call setRegriddingBoundaryExtrapolation( tmpLogical, regridCS )
+
+  call set_regrid_params( regridCS, min_thickness=tmpReal, Boundary_Extrap=tmpLogical )
+
+  if (coordinateMode(coordMode) == REGRIDDING_SLIGHT) then
+    ! Set SLight-specific regridding parameters.
+    call get_param(param_file, mod, "SLIGHT_DZ_SURFACE", dz_min, &
+                 "The nominal thickness of fixed thickness near-surface\n"//&
+                 "layers with the SLight coordinate.", units="m", default=1.0)
+    call get_param(param_file, mod, "SLIGHT_NZ_SURFACE_FIXED", nz_fixed_sfc, &
+                 "The number of fixed-depth surface layers with the SLight\n"//&
+                 "coordinate.", units="nondimensional", default=2)
+    call get_param(param_file, mod, "SLIGHT_SURFACE_AVG_DEPTH", Rho_avg_depth, &
+                 "The thickness of the surface region over which to average\n"//&
+                 "when calculating the density to use to define the interior\n"//&
+                 "with the SLight coordinate.", units="m", default=1.0)
+    call get_param(param_file, mod, "SLIGHT_NLAY_TO_INTERIOR", nlay_sfc_int, &
+                 "The number of layers to offset the surface density when\n"//&
+                 "defining where the interior ocean starts with SLight.", &
+                 units="nondimensional", default=2.0)
+                 
+    call set_regrid_params( regridCS, dz_min_surface=dz_min, &
+                nz_fixed_surface=nz_fixed_sfc, Rho_ML_avg_depth=Rho_avg_depth, &
+                nlay_ML_to_interior=nlay_sfc_int)
+  endif
 
 end subroutine ALE_initRegridding
 
