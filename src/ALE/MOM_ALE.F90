@@ -1020,6 +1020,7 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
         call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
         inputdir = slasher(inputdir)
 
+        ! The following assumes the FILE: syntax of above but without "FILE:" in the string
         fileName = trim( extractWord(trim(string(8:)), 1) )
         if (fileName(1:1)/='.' .and. filename(1:1)/='/') fileName = trim(inputdir) // trim( fileName )
         if (.not. file_exists(fileName)) call MOM_error(FATAL,"ALE_initRegridding: HYBRID "// &
@@ -1030,9 +1031,13 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
         call MOM_read_data(trim(fileName), trim(varName), rho_target)
         call set_target_densities( regridCS, rho_target )
         varName = trim( extractWord(trim(string(8:)), 3) )
-        if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,"ALE_initRegridding: HYBRID "// &
-          "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
-        call MOM_read_data(trim(fileName), trim(varName), dz)
+        if (varName(1:5) == 'FNC1:') then ! Use FNC1 to calculate dz
+          call dz_function1( trim(string((index(trim(string),'FNC1:')+5):)), dz )
+        else ! Read dz from file
+          if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,"ALE_initRegridding: HYBRID "// &
+            "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
+          call MOM_read_data(trim(fileName), trim(varName), dz)
+        endif
         call log_param(param_file, mod, "!ALE_RESOLUTION", dz, &
                    trim(message), units=coordinateUnits(coordMode))
         call log_param(param_file, mod, "!TARGET_DENSITIES", rho_target, &
