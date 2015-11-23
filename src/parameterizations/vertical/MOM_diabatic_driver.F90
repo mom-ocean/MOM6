@@ -634,16 +634,29 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 
   endif ! endif for KPP
 
+  ! Differential diffusion done here. 
+  ! Changes: tv%T, tv%S
   ! If using matching within the KPP scheme, then this step needs to provide
   ! a diffusivity and happen before KPP.  But generally in MOM, we do not match
   ! KPP boundary layer to interior, so this diffusivity can be computed when convenient.
   if (associated(visc%Kd_extra_T) .and. associated(visc%Kd_extra_S) .and. associated(tv%T)) then
     call cpu_clock_begin(id_clock_differential_diff)
-    ! Changes: tv%T, tv%S
+
     call differential_diffuse_T_S(h, tv, visc, dt, G)
     call cpu_clock_end(id_clock_differential_diff)
     if (showCallTree) call callTree_waypoint("done with differential_diffuse_T_S (diabatic)")
     if (CS%debugConservation) call MOM_state_stats('differential_diffuse_T_S', u, v, h, tv%T, tv%S, G)
+
+    ! increment heat and salt diffusivity.
+    ! CS%useKPP==.true. already has extra_T and extra_S included 
+    if(.not. CS%useKPP) then 
+      do K=2,nz ; do j=js,je ; do i=is,ie
+        Kd_heat(i,j,K) = Kd_heat(i,j,K) + visc%Kd_extra_T(i,j,K) 
+        Kd_salt(i,j,K) = Kd_salt(i,j,K) + visc%Kd_extra_S(i,j,K) 
+      enddo ; enddo ; enddo 
+    endif 
+
+
   endif
 
 
@@ -725,14 +738,18 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 
       ! Augment the diffusivities due to those diagnosed in energetic_PBL.
       do K=2,nz ; do j=js,je ; do i=is,ie
+
         Ent_int = Kd_ePBL(i,j,K) * (G%m_to_H**2 * dt) / &
                   (0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect)
         eb(i,j,k-1) = eb(i,j,k-1) + Ent_int
         ea(i,j,k) = ea(i,j,k) + Ent_int
         visc%Kv_turb(i,j,K) = visc%Kv_turb(i,j,K) + Kd_ePBL(i,j,K)
-        Kd_int(i,j,K)  = Kd_int(i,j,K)  + Kd_ePBL(i,j,K)
-        Kd_heat(i,j,K) = Kd_heat(i,j,K) + Kd_ePBL(i,j,K)
-        Kd_salt(i,j,K) = Kd_salt(i,j,K) + Kd_ePBL(i,j,K)
+        Kd_int(i,j,K)  = Kd_int(i,j,K) + Kd_ePBL(i,j,K)
+
+        ! for diagnostics 
+        Kd_heat(i,j,K) = Kd_heat(i,j,K) + Kd_int(i,j,K) 
+        Kd_salt(i,j,K) = Kd_salt(i,j,K) + Kd_int(i,j,K) 
+
       enddo ; enddo ; enddo
 
       if (CS%debug) then
@@ -1312,16 +1329,16 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 
 
   ! Diagnose the diapycnal diffusivities and other related quantities.
-  if (CS%id_Kd_interface > 0) call post_data(CS%id_Kd_interface, Kd_int, CS%diag)
-  if (CS%id_Kd_heat > 0)      call post_data(CS%id_Kd_heat,     Kd_heat, CS%diag)
-  if (CS%id_Kd_salt > 0)      call post_data(CS%id_Kd_salt,     Kd_salt, CS%diag)
-  if (CS%id_Kd_ePBL > 0)      call post_data(CS%id_Kd_ePBL,     Kd_ePBL, CS%diag)
+  if (CS%id_Kd_interface > 0) call post_data(CS%id_Kd_interface, Kd_int,  CS%diag)
+  if (CS%id_Kd_heat      > 0) call post_data(CS%id_Kd_heat,      Kd_heat, CS%diag)
+  if (CS%id_Kd_salt      > 0) call post_data(CS%id_Kd_salt,      Kd_salt, CS%diag)
+  if (CS%id_Kd_ePBL      > 0) call post_data(CS%id_Kd_ePBL,      Kd_ePBL, CS%diag)
 
-  if (CS%id_ea > 0)       call post_data(CS%id_ea, ea, CS%diag)
-  if (CS%id_eb > 0)       call post_data(CS%id_eb, eb, CS%diag)
-  if (CS%id_dudt_dia > 0) call post_data(CS%id_dudt_dia, ADp%du_dt_dia, CS%diag)
-  if (CS%id_dvdt_dia > 0) call post_data(CS%id_dvdt_dia, ADp%dv_dt_dia, CS%diag)
-  if (CS%id_wd > 0)       call post_data(CS%id_wd, CDp%diapyc_vel, CS%diag)
+  if (CS%id_ea       > 0) call post_data(CS%id_ea,       ea,             CS%diag)
+  if (CS%id_eb       > 0) call post_data(CS%id_eb,       eb,             CS%diag)
+  if (CS%id_dudt_dia > 0) call post_data(CS%id_dudt_dia, ADp%du_dt_dia,  CS%diag)
+  if (CS%id_dvdt_dia > 0) call post_data(CS%id_dvdt_dia, ADp%dv_dt_dia,  CS%diag)
+  if (CS%id_wd       > 0) call post_data(CS%id_wd,       CDp%diapyc_vel, CS%diag)
 
   if (CS%id_MLD_003 > 0 .or. CS%id_subMLN2 > 0 .or. CS%id_mlotstsq > 0) then
     call diagnoseMLDbyDensityDifference(CS%id_MLD_003, h, tv, 0.03, G, CS%diag, &
