@@ -457,7 +457,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
           Ub(i,j,fr,m) = CS%wave_structure_CSp%Uavg_profile(i,j,nzm)
         !endif ! for debug - delete later
       enddo ; enddo
-    enddo ; enddo    
+    enddo ; enddo
 
     ! Calculate loss rate and apply loss over the time step
     call itidal_lowmode_loss(G, CS, Nb, Ub, CS%En, CS%TKE_itidal_loss_fixed, &
@@ -530,7 +530,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
         CS%cp(i,j,fr,m) = c_phase
       enddo ; enddo
     enddo ; enddo
-  endif  
+  endif
   ! Check for En<0 - for debugging, delete later
   do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
     do j=js,je ; do i=is,ie
