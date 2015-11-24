@@ -57,7 +57,9 @@ type, public :: tracer_hor_diff_CS ; private
   logical :: debug                 ! If true, write verbose checksums for debugging purposes.
   logical :: show_call_tree        ! Display the call tree while running. Set by VERBOSITY level.
   logical :: first_call = .true.
-  integer :: id_KhTr_u = -1, id_KhTr_v = -1
+  integer :: id_KhTr_u = -1
+  integer :: id_KhTr_v = -1
+  integer :: id_KhTr_h = -1
 
   type(group_pass_type) :: pass_t !For group halo pass, used in both 
                                   !tracer_hordiff and tracer_epipycnal_ML_diff
@@ -75,9 +77,9 @@ integer :: id_clock_diffuse, id_clock_epimix, id_clock_pass, id_clock_sync
 contains
 
 !> Compute along-coordinate diffusion of all tracers 
-!! using the diffusivity in CS%KhTr.  Multiple iterations are
-!! used (if necessary) so that there is no limit on the acceptable
-!! time increment.
+!! using the diffusivity in CS%KhTr, or using space-dependent diffusivity.  
+!! Multiple iterations are used (if necessary) so that there is no limit 
+!! on the acceptable time increment.
 subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h       !< Layer thickness (m or kg m-2)
   real,                                  intent(in)    :: dt      !< time step (seconds)
@@ -124,6 +126,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
   real :: Kh_loc     ! The local value of Kh, in m2 s-1.
   real :: Res_Fn     ! The local value of the resolution function, nondim.
   real :: Rd_dx      ! The local value of deformation radius over grid-spacing, nondim.
+  real :: normalize  ! normalization used for diagnostic Kh_h; diffusivity averaged to h-points. 
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
@@ -292,6 +295,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
   enddo
 
   if (CS%use_neutral_diffusion) then
+
     if (CS%show_call_tree) call callTree_waypoint("Calling neutral diffusion coeffs (tracer_hordiff)")
     call cpu_clock_begin(id_clock_pass)
     call do_group_pass(CS%pass_t, G%Domain)
@@ -299,6 +303,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
     ! We are assuming that neutral surfaces do not evolve (much) as a result of multiple
     ! lateral diffusion iterations. Otherwise the call to neutral_diffusion_calc_coeffs()
     ! would be inside the itt-loop. -AJA
+
     call neutral_diffusion_calc_coeffs(G, h, tv%T, tv%S, tv%eqn_of_state, CS%neutral_diffusion_CSp)
     do J=js-1,je ; do i=is,ie
       Coef_y(i,J) = I_numitts * khdt_y(i,J)
@@ -315,11 +320,13 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
         call do_group_pass(CS%pass_t, G%Domain)
         call cpu_clock_end(id_clock_pass)
       endif
-      do m=1,ntr ! For each tracer
+      do m=1,ntr ! for each tracer
         call neutral_diffusion(G, h, Coef_x, Coef_y, Reg%Tr(m)%t, m, dt, Reg%Tr(m)%name, CS%neutral_diffusion_CSp)
       enddo ! m
     enddo ! itt
-  else
+
+  else    ! following if not using neutral diffusion, but instead along-surface diffusion 
+
     if (CS%show_call_tree) call callTree_waypoint("Calculating horizontal diffusion (tracer_hordiff)")
     do itt=1,num_itts
       call cpu_clock_begin(id_clock_pass)
@@ -386,8 +393,10 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
       enddo ! End of k loop.
 
     enddo ! End of "while" loop.
-  endif
+
+  endif   ! endif for CS%use_neutral_diffusion 
   call cpu_clock_end(id_clock_diffuse)
+
 
   if (CS%Diffuse_ML_interior) then
     if (CS%show_call_tree) call callTree_waypoint("Calling epipycnal_ML_diff (tracer_hordiff)")
@@ -400,18 +409,34 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
 
   if (CS%debug) call MOM_tracer_chksum("After tracer diffusion ", Reg%Tr, ntr, G)
 
+  ! post diagnostics for 2d tracer diffusivity 
   if (CS%id_KhTr_u > 0) then
     do j=js,je ; do I=is-1,ie
       Kh_u(I,j) = G%mask2dCu(I,j)*Kh_u(I,j)
     enddo ; enddo
-    call post_data(CS%id_KhTr_u, Kh_u, CS%diag)
+    call post_data(CS%id_KhTr_u, Kh_u, CS%diag, mask=G%mask2dCu)
   endif
   if (CS%id_KhTr_v > 0) then
     do J=js-1,je ; do i=is,ie
       Kh_v(i,J) = G%mask2dCv(i,J)*Kh_v(i,J)
     enddo ; enddo
-    call post_data(CS%id_KhTr_v, Kh_v, CS%diag)
+    call post_data(CS%id_KhTr_v, Kh_v, CS%diag, mask=G%mask2dCv)
   endif
+  if (CS%id_KhTr_h > 0) then
+    Kh_h(:,:) = 0.0
+    do j=js,je ; do I=is-1,ie
+      Kh_u(I,j) = G%mask2dCu(I,j)*Kh_u(I,j)
+    enddo ; enddo
+    do J=js-1,je ; do i=is,ie
+      Kh_v(i,J) = G%mask2dCv(i,J)*Kh_v(i,J)
+    enddo ; enddo
+    do j=js,je ; do i=is,ie
+      normalize = 1.0/(G%mask2dCu(i-1,j)+G%mask2dCu(i,j)+G%mask2dCv(i,j-1)+G%mask2dCv(i,j)+G%H_subroundoff)
+      Kh_h(i,j) = normalize*G%mask2dT(i,j)*(Kh_u(i-1,j)+Kh_u(i,j)+Kh_v(i,j-1)+Kh_v(i,j))
+    enddo ; enddo
+    call post_data(CS%id_KhTr_h, Kh_h, CS%diag, mask=G%mask2dT)
+  endif 
+
 
   if (CS%show_call_tree) call callTree_leave("tracer_hordiff()")
 
@@ -1340,17 +1365,24 @@ subroutine tracer_hor_diff_init(Time, G, param_file, diag, CS, CSnd)
 
   call get_param(param_file, mod, "DEBUG", CS%debug, default=.false.)
 
-  id_clock_diffuse = cpu_clock_id('(Ocean diffuse tracer)', grain=CLOCK_MODULE)
-  id_clock_epimix = cpu_clock_id('(Ocean epipycnal diffuse tracer)', grain=CLOCK_MODULE)
-  id_clock_pass = cpu_clock_id('(Ocean tracer halo updates)', grain=CLOCK_ROUTINE)
-  id_clock_sync = cpu_clock_id('(Ocean tracer global synch)', grain=CLOCK_ROUTINE)
+  id_clock_diffuse = cpu_clock_id('(Ocean diffuse tracer)',          grain=CLOCK_MODULE)
+  id_clock_epimix  = cpu_clock_id('(Ocean epipycnal diffuse tracer)',grain=CLOCK_MODULE)
+  id_clock_pass    = cpu_clock_id('(Ocean tracer halo updates)',     grain=CLOCK_ROUTINE)
+  id_clock_sync    = cpu_clock_id('(Ocean tracer global synch)',     grain=CLOCK_ROUTINE)
 
-  CS%id_KhTr_u = -1 ; CS%id_KhTr_v = -1
+  CS%id_KhTr_u = -1 
+  CS%id_KhTr_v = -1 
+  CS%id_KhTr_h = -1
 
   CS%id_KhTr_u = register_diag_field('ocean_model', 'KHTR_u', diag%axesCu1, Time, &
      'Epipycnal tracer diffusivity at zonal faces of tracer cell', 'meter2 second-1')
   CS%id_KhTr_v = register_diag_field('ocean_model', 'KHTR_v', diag%axesCv1, Time, &
      'Epipycnal tracer diffusivity at meridional faces of tracer cell', 'meter2 second-1')
+  CS%id_KhTr_h = register_diag_field('ocean_model', 'KHTR_h', diag%axesT1, Time,&
+     'Epipycnal tracer diffusivity at tracer cell center', 'meter2 second-1',   &
+     cmor_field_name='diftrelo', cmor_units='m2 sec-1',                         &
+     cmor_standard_name= 'ocean_tracer_epineutral_laplacian_diffusivity',       &
+     cmor_long_name = 'Ocean Tracer Epineutral Laplacian Diffusivity') 
 
 end subroutine tracer_hor_diff_init
 
@@ -1367,8 +1399,7 @@ end subroutine tracer_hor_diff_end
 !!
 !! \section section_intro Introduction to the module 
 !!
-!!                                                                     
-!!    This module contains the subroutines that handle horizontal     
+!!    This module contains subroutines that handle horizontal     
 !!  diffusion (i.e., isoneutral or along layer) of tracers.            
 !!                                                                     
 !!    Each of the tracers are subject to Fickian along-coordinate      
