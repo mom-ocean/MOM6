@@ -1336,7 +1336,7 @@ subroutine adjust_interface_motion( nk, min_thickness, h_old, dz_int )
     h_total = h_total + h_old(k)
     h_err = h_err + max( h_old(k), abs(dz_int(k)), abs(dz_int(k+1)) )*eps
     h_new = h_old(k) + ( dz_int(k) - dz_int(k+1) )
-    if (h_new < -h_err) then
+    if (h_new < -3.*h_err) then
       write(0,*) 'h<0 at k=',k,'h_old=',h_old(k), &
         'wup=',dz_int(k),'wdn=',dz_int(k+1),'dw_dz=',dz_int(k) - dz_int(k+1), &
         'h_new=',h_new,'h_err=',h_err
