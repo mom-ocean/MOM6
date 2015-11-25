@@ -319,18 +319,15 @@ subroutine reopen_file(unit, filename, vars, novars, G, fields, threading, timeu
   if (.not.exists) then
     call create_file(unit, filename, vars, novars, G, fields, threading, timeunit)
   else
-    if ((thread == SINGLE_FILE) .or. .not.G%Domain%use_io_layout) then
-      call open_file(unit, filename, MPP_APPEND, MPP_NETCDF, threading=thread)
-    else
-      call open_file(unit, filename, MPP_APPEND, MPP_NETCDF, domain=G%Domain%mpp_domain)
-    endif
+    !Open file to check the content
+    call open_file(unit, trim(filename), action=MPP_RDONLY, form=MPP_NETCDF, fileset=SINGLE_FILE)
     if (unit < 0) return
 
     call mpp_get_info(unit, ndim, nvar, natt, ntime)
 
     if (nvar /= novars) then
       write (mesg,*) "Reopening file ",trim(filename)," with ",novars,&
-                     " variables instead of ",nvar,"."
+                     " variables instead of ",nvar,unit, ndim, nvar, natt, ntime,"."
       call MOM_error(FATAL,"MOM_io: "//mesg)
     endif
 
@@ -344,6 +341,14 @@ subroutine reopen_file(unit, filename, vars, novars, G, fields, threading, timeu
 !      !    filename,vars%name,name);
 !      !call MOM_error(NOTE,"MOM_io: "//mesg)
 !    enddo
+    !
+    !Open file for appending
+    !
+    if ((thread == SINGLE_FILE) .or. .not.G%Domain%use_io_layout) then
+      call open_file(unit, filename, MPP_APPEND, MPP_NETCDF, threading=thread)
+    else
+      call open_file(unit, filename, MPP_APPEND, MPP_NETCDF, domain=G%Domain%mpp_domain)
+    endif
   endif
 
 end subroutine reopen_file
