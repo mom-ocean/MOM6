@@ -1019,7 +1019,8 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
 
     CS%id_v_z = register_diag_field('ocean_model_z', 'v', CS%axesCvz, Time,    &
         'Meridional Velocity in Depth Space', 'meter second-1',                &
-        missing_value=CS%missing_vel)
+        missing_value=CS%missing_vel, cmor_field_name='vo', cmor_units='m s-1',&
+        cmor_standard_name='sea_water_y_velocity', cmor_long_name='Sea Water Y Velocity')
     if (CS%id_v_z>0) call safe_alloc_ptr(CS%v_z,isd,ied,JsdB,JedB,CS%nk_zspace)
 
     CS%id_uh_z = register_diag_field('ocean_model_z', 'uh', CS%axesCuz, Time,    &
@@ -1037,13 +1038,13 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
     ! Check whether diag-table is requesting any z-space files; issue a warning if it is.
 
     id_test = register_diag_field('ocean_model_z', 'u', diag%axesCu1, Time, &
-        'Zonal Velocity in Depth Space', 'meter second-1')
+        'Zonal Velocity in Depth Space', 'meter second-1', cmor_field_name='uo')
     if (id_test>0) call MOM_error(WARNING, &
         "MOM_diag_to_Z_init: u cannot be output without "//&
         "an appropriate depth-space target file.")
 
     id_test = register_diag_field('ocean_model_z', 'v', diag%axesCv1, Time, &
-        'Meridional Velocity in Depth Space', 'meter second-1')
+        'Meridional Velocity in Depth Space', 'meter second-1', cmor_field_name='vo')
     if (id_test>0) call MOM_error(WARNING,                 &
         "MOM_diag_to_Z_init: v cannot be output without "//&
         "an appropriate depth-space target file.")
