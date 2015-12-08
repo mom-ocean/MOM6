@@ -26,7 +26,7 @@ use MOM_regridding,       only : regriddingInterpSchemeDoc, regriddingDefaultInt
 use MOM_regridding,       only : setRegriddingBoundaryExtrapolation
 use MOM_regridding,       only : regriddingDefaultBoundaryExtrapolation
 use MOM_regridding,       only : set_regrid_min_thickness, regriddingDefaultMinThickness
-use MOM_regridding,       only : check_remapping_grid
+use MOM_regridding,       only : check_remapping_grid, set_regrid_max_depths
 use MOM_regridding,       only : regridding_CS, set_regrid_params
 use MOM_regridding,       only : getCoordinateInterfaces, getCoordinateResolution
 use MOM_regridding,       only : getCoordinateUnits, getCoordinateShortName
@@ -918,12 +918,15 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
   character(len=40)  :: coordMode, interpScheme, coordUnits ! Temporary strings
   character(len=200) :: inputdir, fileName
   character(len=320) :: message ! Temporary strings
-  integer :: ke
-  logical :: tmpLogical
+  integer :: K, ke
+  logical :: tmpLogical, fix_haloclines, set_max, do_sum
+  real :: filt_len, strat_tol, index_scale
   real :: tmpReal, compress_fraction
-  real :: dz_min, Rho_avg_depth, nlay_sfc_int
+  real :: dz_fixed_sfc, Rho_avg_depth, nlay_sfc_int
   integer :: nz_fixed_sfc
   real :: rho_target(G%ke+1) ! Target density used in HYBRID mode
+  real, dimension(size(dz))   :: dz_max ! Thicknesses used to find maximum grid spacing, in m.
+  real, dimension(size(dz)+1) :: z_max  ! Maximum tinterface depths, in m.
 
   ke = size(dz) ! Number of levels in resolution vector
 
@@ -1086,7 +1089,7 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
 
   if (coordinateMode(coordMode) == REGRIDDING_SLIGHT) then
     ! Set SLight-specific regridding parameters.
-    call get_param(param_file, mod, "SLIGHT_DZ_SURFACE", dz_min, &
+    call get_param(param_file, mod, "SLIGHT_DZ_SURFACE", dz_fixed_sfc, &
                  "The nominal thickness of fixed thickness near-surface\n"//&
                  "layers with the SLight coordinate.", units="m", default=1.0)
     call get_param(param_file, mod, "SLIGHT_NZ_SURFACE_FIXED", nz_fixed_sfc, &
@@ -1100,11 +1103,99 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
                  "The number of layers to offset the surface density when\n"//&
                  "defining where the interior ocean starts with SLight.", &
                  units="nondimensional", default=2.0)
+    call get_param(param_file, mod, "SLIGHT_FIX_HALOCLINES", fix_haloclines, &
+                 "If true, identify regions above the reference pressure\n"//&
+                 "where the reference pressure systematically underestimates\n"//&
+                 "the stratification and use this in the definition of the\n"//&
+                 "interior with the SLight coordinate.", default=.false.)
                  
-    call set_regrid_params( regridCS, dz_min_surface=dz_min, &
+    call set_regrid_params( regridCS, dz_min_surface=dz_fixed_sfc, &
                 nz_fixed_surface=nz_fixed_sfc, Rho_ML_avg_depth=Rho_avg_depth, &
-                nlay_ML_to_interior=nlay_sfc_int)
+                nlay_ML_to_interior=nlay_sfc_int, fix_haloclines=fix_haloclines)
+    if (fix_haloclines) then
+      ! Set additional parameters related to SLIGHT_FIX_HALOCLINES.
+      call get_param(param_file, mod, "HALOCLINE_FILTER_LENGTH", filt_len, &
+                 "A length scale over which to smooth the temperature and\n"//&
+                 "salinity before identifying erroneously unstable haloclines.", &
+                 units="m", default=2.0)
+      call get_param(param_file, mod, "HALOCLINE_STRAT_TOL", strat_tol, &
+                 "A tolerance for the ratio of the stratification of the\n"//&
+                 "apparent coordinate stratification to the actual value\n"//&
+                 "that is used to identify erroneously unstable haloclines.\n"//&
+                 "This ratio is 1 when they are equal, and sensible values \n"//&
+                 "are between 0 and 0.5.", units="nondimensional", default=0.2)
+      call set_regrid_params(regridCS, halocline_filt_len=filt_len, &
+                             halocline_strat_tol=strat_tol)
+    endif
+
   endif
+
+  call get_param(param_file, mod, "MAXIMUM_INT_DEPTH_CONFIG", string, &
+                 "Determines how to specify the maximum interface depths.\n"//&
+                 "Valid options are:\n"//&
+                 " NONE        - there are no maximum interface depths\n"//&
+                 " PARAM       - use the vector-parameter MAXIMUM_INTERFACE_DEPTHS\n"//&
+                 " FILE:string - read from a file. The string specifies\n"//&
+                 "               the filename and variable name, separated\n"//&
+                 "               by a comma or space, e.g. FILE:lev.nc,Z\n"//&
+                 " FNC1:string - FNC1:dz_min,H_total,power,precision",&
+                 default='NONE')
+  message = "The list of maximum depths for each interfaces."
+  if ( trim(string) == "NONE") then
+    ! Do nothing.
+  elseif ( trim(string) ==  "PARAM") then
+      call get_param(param_file, mod, "MAXIMUM_INTERFACE_DEPTHS", z_max, &
+                   trim(message), units="m", fail_if_missing=.true.)
+      call set_regrid_max_depths( regridCS, z_max, G%m_to_H )
+  elseif (index(trim(string),'FILE:')==1) then
+    call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
+    inputdir = slasher(inputdir)
+
+    if (string(6:6)=='.' .or. string(6:6)=='/') then
+      ! If we specified "FILE:./xyz" or "FILE:/xyz" then we have a relative or absolute path
+      fileName = trim( extractWord(trim(string(6:80)), 1) )
+    else
+      ! Otherwise assume we should look for the file in INPUTDIR
+      fileName = trim(inputdir) // trim( extractWord(trim(string(6:80)), 1) )
+    endif
+    if (.not. file_exists(fileName)) call MOM_error(FATAL,"ALE_initRegridding: "// &
+      "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
+
+    do_sum = .false.
+    varName = trim( extractWord(trim(string(6:)), 2) )
+    if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,"ALE_initRegridding: "// &
+      "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
+    if (len_trim(varName)==0) then
+      if (field_exists(fileName,'z_max')) then; varName = 'z_max'
+      elseif (field_exists(fileName,'dz')) then; varName = 'dz' ; do_sum = .true.
+      elseif (field_exists(fileName,'dz_max')) then; varName = 'dz_max' ; do_sum = .true.
+      endif
+    endif
+    if (len_trim(varName)==0) call MOM_error(FATAL,"ALE_initRegridding: "// &
+      "MAXIMUM_INT_DEPTHS variable not specified and none could be guessed.")
+    if (do_sum) then
+      call MOM_read_data(trim(fileName), trim(varName), dz_max)
+      z_max(1) = 0.0 ; do K=1,ke ; z_max(K+1) = z_max(K) + dz_max(k) ; enddo
+    else
+      call MOM_read_data(trim(fileName), trim(varName), z_max)
+    endif
+    call log_param(param_file, mod, "!MAXIMUM_INT_DEPTHS", z_max, &
+               trim(message), units=coordinateUnits(coordMode))
+  elseif (index(trim(string),'FNC1:')==1) then
+    call dz_function1( trim(string(6:)), dz_max )
+    if ((coordinateMode(coordMode) == REGRIDDING_SLIGHT) .and. &
+        (dz_fixed_sfc > 0.0)) then
+      do k=1,nz_fixed_sfc ; dz_max(k) = dz_fixed_sfc ; enddo
+    endif
+    z_max(1) = 0.0 ; do K=1,ke ; z_max(K+1) = z_max(K) + dz_max(K) ; enddo
+    call log_param(param_file, mod, "!MAXIMUM_INT_DEPTHS", z_max, &
+               trim(message), units=coordinateUnits(coordMode))
+    call set_regrid_max_depths( regridCS, z_max, G%m_to_H )
+  else
+    call MOM_error(FATAL,"ALE_initRegridding: "// &
+      "Unrecognized MAXIMUM_INT_DEPTH_CONFIG "//trim(string))
+  endif
+
 
 end subroutine ALE_initRegridding
 
@@ -1131,7 +1222,7 @@ subroutine dz_function1( string, dz )
   dz(:) = anint( dz(:) / prec ) * prec ! Rounds to precision prec
   dz(:) = ( H_total - real(nk) * dz_min ) * ( dz(:) / sum(dz) ) ! Rescale to so total is H_total
   dz(:) = anint( dz(:) / prec ) * prec ! Rounds to precision prec
-  dz(nk) = dz(nk) + ( H_total - sum( dz(:) + dz_min ) ) ! Adjust bottom most layer
+  dz(nk) = dz(nk) + ( H_total - sum( dz(:) + dz_min ) ) ! Adjust bottommost layer
   dz(:) = anint( dz(:) / prec ) * prec ! Rounds to precision prec
   dz(:) = dz(:) + dz_min ! Finally add in the constant dz_min
 

@@ -5,7 +5,8 @@ module MOM_regridding
 
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
-use MOM_EOS,           only : calculate_density
+use MOM_EOS,           only : calculate_density, calculate_density_derivs
+use MOM_EOS,           only : calculate_compress
 use MOM_string_functions,only : uppercase
 
 use regrid_edge_values, only : edge_values_explicit_h2, edge_values_explicit_h4
@@ -46,6 +47,10 @@ type, public :: regridding_CS
   !!  target_density(k+1) = coordinateResolution(k) + coordinateResolution(k)
   !! It is only used in "rho" mode.
   real, dimension(:), allocatable :: target_density
+
+  !> This array is set by function set_regrid_max_depths()
+  !! It specifies the maximum depth that every interface is allowed to take, in .
+  real, dimension(:), allocatable :: max_interface_depths
 
   integer :: nk !< Number of layers/levels
 
@@ -98,6 +103,25 @@ type, public :: regridding_CS
   !> Fraction (between 0 and 1) of compressibility to add to potential density
   !! profiles when interpolating for target grid positions. (nondim)
   real :: compressibility_fraction = 0.
+  
+  !> If true, detect regions with much weaker stratification in the coordinate
+  !! than based on in-situ density, and use a stretched coordinate there.
+  logical :: fix_haloclines = .false.
+
+  !> A length scale over which to filter T & S when looking for spuriously
+  !! unstable water mass profiles, in m.
+  real :: halocline_filter_length = 2.0
+
+  !> A value of the stratification ratio that defines a problematic halocline region.
+  real :: halocline_strat_tol = 0.25
+
+  !> If true, each interface is given a maximum depth based on a rescaling of
+  !! the indexing of coordinateResolution.
+  logical :: set_maximum_depths = .false.
+  
+  !> A scaling factor (> 1) of the rate at which the coordinateResolution list
+  !! is traversed to set the minimum depth of interfaces.
+  real :: max_depth_index_scale = 2.0
 
 end type
 
@@ -105,12 +129,11 @@ end type
 public initialize_regridding, end_regridding, regridding_main
 public inflate_vanished_layers_old
 public check_remapping_grid, check_grid_column
-public adjust_interface_motion
-public setRegriddingBoundaryExtrapolation
+public setRegriddingBoundaryExtrapolation, adjust_interface_motion
 public set_regrid_min_thickness, set_regrid_params
 public set_old_grid_weight, set_filter_depths
 public uniformResolution, setCoordinateResolution
-public set_target_densities_from_G, set_target_densities
+public set_target_densities_from_G, set_target_densities, set_regrid_max_depths
 public getCoordinateResolution, getCoordinateInterfaces
 public getCoordinateUnits, getCoordinateShortName, getStaticThickness
 public build_zstar_column
@@ -831,7 +854,7 @@ end subroutine buildGridRho
 !! http://dx.doi.org/10.1016/S1463-5003(01)00012-9 }
 subroutine build_grid_HyCOM1( G, h, tv, dzInterface, remapCS, CS )
   type(ocean_grid_type),                        intent(in)    :: G !< Grid structure
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: h !< Existing model thickness
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: h !< Existing model thickness, in H units
   type(thermo_var_ptrs),                        intent(in)    :: tv !< Thermodynamics structure
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: dzInterface !< Changes in interface position
   type(remapping_CS),                           intent(in)    :: remapCS !< Remapping control structure
@@ -846,9 +869,11 @@ subroutine build_grid_HyCOM1( G, h, tv, dzInterface, remapCS, CS )
   real :: nominal_z ! Nominal depth of interface is using z* (m or Pa)
   real :: stretching ! z* stretching, converts z* to z.
   real :: hNew
+  logical :: maximum_depths_set ! If true, the maximum depths of interface have been set.
   integer :: ppoly_degree
 
   nz = G%ke
+  maximum_depths_set = allocated(CS%max_interface_depths)
 
   ! Build grid based on target interface densities
   do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
@@ -892,6 +917,11 @@ subroutine build_grid_HyCOM1( G, h, tv, dzInterface, remapCS, CS )
         z_column_new(k) = min( z_column_new(k), z_column(nz+1) )
       enddo
 
+      if (maximum_depths_set) then ; do K=2,nz
+        ! The loop bounds are 2 & nz so the top and bottom interfaces do not move.
+        z_column_new(K) = min(z_column_new(K), CS%max_interface_depths(K))
+      enddo ; endif
+
       ! Calculate the final change in grid position after blending new and old grids
       call filtered_grid_motion( CS, nz, z_column_new, z_column, dzInterface(i,j,:) )
 
@@ -924,8 +954,17 @@ subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
   ! Local variables
   real, dimension(SZK_(G)) :: T_col, S_col, p_col, rho_col ! Layer quantities
   real, dimension(SZK_(G)) :: h_col     ! A column of layer thicknesses on the original grid in H units.
+  real, dimension(SZK_(G)) :: T_f, S_f  ! Filtered ayer quantities
   real, dimension(SZK_(G)+1) :: z_col, z_col_new ! Interface positions relative to the surface in H units (m or kg m-2)
   logical, dimension(SZK_(G)+1) :: reliable  ! If true, this interface is in a reliable position.
+  real, dimension(SZK_(G)+1) :: T_int, S_int ! Temperature and salinity interpolated to interfaces.
+  real, dimension(SZK_(G)+1) :: rho_tmp, drho_dp, p_IS, p_R
+  real, dimension(SZK_(G)+1) :: drhoIS_dT, drhoIS_dS
+  real, dimension(SZK_(G)+1) :: drhoR_dT, drhoR_dS
+  real, dimension(SZK_(G)+1) :: strat_rat
+  real :: H_to_cPa
+  real :: drIS, drR, Fn_now, I_HStol, Fn_zero_val
+  real :: z_int_unst
   real :: dz      ! A uniform layer thickness in very shallow water, in H.
   real :: dz_ur   ! The total thickness of an unstable region, in H.
   real :: wgt, cowgt  ! A weight and its complement, nondim.
@@ -934,15 +973,23 @@ subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
   real :: rho_x_z ! A cumulative integral of a density, in kg m-3 H.
   real :: z_wt    ! The thickness actually used in taking the near-surface average, in H.
   real :: k_interior  ! The (real) value of k where the interior grid starts.
+  real :: k_int2      ! The (real) value of k where the interior grid starts.
   real :: z_interior  ! The depth where the interior grid starts, in H.
   real :: z_ml_fix    ! The depth at which the fixed-thickness near-surface layers end, in H.
   real :: dz_dk       ! The thickness of layers between the fixed-thickness
                       ! near-surface layars and the interior, in H.
+  real :: Lfilt       ! A filtering lengthscale, in H.
+  logical :: maximum_depths_set ! If true, the maximum depths of interface have been set.
+  real :: k2_used, k2here, dz_sum, z_max
+  integer :: k2
+  real :: h_tr, b_denom_1, b1, d1 ! Temporary variables used by the tridiagonal solver.
+  real, dimension(SZK_(G)) :: c1  ! Temporary variables used by the tridiagonal solver.
   integer :: kur1, kur2  ! The indicies at the top and bottom of an unreliable region.
   integer :: kur_ss      ! The index to start with in the search for the next unstable region.
   integer :: i, j, k, nz, nkml
 
   nz = G%ke
+  maximum_depths_set = allocated(CS%max_interface_depths)
 
   ! Build grid based on target interface densities
   do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
@@ -1056,6 +1103,119 @@ subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
         K = int(ceiling(k_interior))
         z_interior = (K-k_interior)*z_col_new(K-1) + (1.0+(k_interior-K))*z_col_new(K)
 
+        if (CS%fix_haloclines) then
+!       ! Identify regions above the reference pressure where the chosen
+!       ! potential density significantly underestimates the actual
+!       ! stratification, and use these to find a second estimate of
+!       ! z_int_unst and k_interior.
+
+          if (CS%halocline_filter_length > 0.0) then
+            Lfilt = CS%halocline_filter_length*G%m_to_H
+
+            ! Filter the temperature and salnity with a fixed lengthscale.
+            h_tr = h_col(1) + G%H_subroundoff
+            b1 = 1.0 / (h_tr + Lfilt) ; d1 = h_tr * b1
+            T_f(1) = (b1*h_tr)*T_col(1) ;  S_f(1) = (b1*h_tr)*S_col(1)
+            do k=2,nz
+              c1(k) = Lfilt * b1
+              h_tr = h_col(k) + G%H_subroundoff ; b_denom_1 = h_tr + d1*Lfilt
+              b1 = 1.0 / (b_denom_1 + Lfilt) ; d1 = b_denom_1 * b1
+              T_f(k) = b1 * (h_tr*T_col(k) + Lfilt*T_f(k-1))
+              S_f(k) = b1 * (h_tr*S_col(k) + Lfilt*S_f(k-1))
+            enddo
+            do k=nz-1,1,-1
+              T_f(k) = T_f(k) + c1(k+1)*T_f(k+1) ; S_f(k) = S_f(k) + c1(k+1)*S_f(k+1)
+            enddo
+          else
+            do k=1,nz ; T_f(k) = T_col(k) ; S_f(k) = S_col(k) ; enddo
+          endif
+
+          T_int(1) = T_f(1) ; S_int(1) = S_f(1)
+          do K=2,nz 
+            T_int(K) = 0.5*(T_f(k-1) + T_f(k)) ; S_int(K) = 0.5*(S_f(k-1) + S_f(k))
+            p_IS(K) = z_col(K) * G%H_to_Pa
+            p_R(K) = CS%ref_pressure + CS%compressibility_fraction * ( p_IS(K) - CS%ref_pressure )
+          enddo
+          T_int(nz+1) = T_f(nz) ; S_int(nz+1) = S_f(nz)
+          p_IS(nz+1) = z_col(nz+1) * G%H_to_Pa
+          call calculate_density_derivs(T_int, S_int, p_IS, drhoIS_dT, drhoIS_dS, 2, nz-1, &
+                                        tv%eqn_of_state)
+          call calculate_density_derivs(T_int, S_int, p_R, drhoR_dT, drhoR_dS, 2, nz-1, &
+                                        tv%eqn_of_state)
+          if (CS%compressibility_fraction > 0.0) then
+            call calculate_compress(T_int, S_int, p_R, rho_tmp, drho_dp, 2, nz-1, &
+                                          tv%eqn_of_state)
+          else
+            do K=2,nz ; drho_dp(K) = 0.0 ; enddo
+          endif
+          
+          H_to_cPa = CS%compressibility_fraction*G%H_to_Pa
+          strat_rat(1) = 1.0
+          do K=2,nz
+            drIS = drhoIS_dT(K) * (T_f(k) - T_f(k-1)) + &
+                   drhoIS_dS(K) * (S_f(k) - S_f(k-1))
+            drR = (drhoR_dT(K) * (T_f(k) - T_f(k-1)) + &
+                   drhoR_dS(K) * (S_f(k) - S_f(k-1))) + &
+                  drho_dp(K) * (H_to_cPa*0.5*(h_col(k) + h_col(k-1)))
+
+            if (drIS <= 0.0) then
+              strat_rat(K) = 2.0 ! Maybe do this? => ; if (drR < 0.0) strat_rat(K) = -2.0
+            else
+              strat_rat(K) = 2.0*max(drR,0.0) / (drIS + abs(drR))
+            endif
+          enddo
+          strat_rat(nz+1) = 1.0
+
+          z_int_unst = 0.0 ; Fn_now = 0.0
+!          Fn_zero_val = 2.0*CS%halocline_strat_tol
+          Fn_zero_val = 0.5*(1.0 + CS%halocline_strat_tol)
+          if (CS%halocline_strat_tol > 0.0) then
+            ! Use Adcroft's reciprocal rule.
+            I_HStol = 0.0 ; if (Fn_zero_val - CS%halocline_strat_tol > 0.0) &
+              I_HStol = 1.0 / (Fn_zero_val - CS%halocline_strat_tol)
+            do k=nz,1,-1 ; if (CS%ref_pressure > p_IS(k+1)) then
+              z_int_unst = z_int_unst + Fn_now * h_col(k)
+              if (strat_rat(K) <= Fn_zero_val) then
+                if (strat_rat(K) <= CS%halocline_strat_tol) then ; Fn_now = 1.0
+                else
+                  Fn_now = max(Fn_now, (Fn_zero_val - strat_rat(K)) * I_HStol)
+                endif
+              endif
+            endif ; enddo
+          else
+            do k=nz,1,-1 ; if (CS%ref_pressure > p_IS(k+1)) then
+              z_int_unst = z_int_unst + Fn_now * h_col(k)
+              if (strat_rat(K) <= CS%halocline_strat_tol) Fn_now = 1.0
+            endif ; enddo
+          endif
+
+          if (z_interior < z_int_unst) then
+            ! Find a second estimate of the extent of the s-coordinate region.
+            kur1 = max(int(ceiling(k_interior)),2)
+            if (z_col_new(kur1-1) < z_interior) then
+              k_int2 = kur1
+              do K = kur1,nz+1 ; if (z_col_new(K) >= z_int_unst) then
+                ! This is linear interpolation again.
+                if (z_col_new(K-1) >= z_int_unst) &
+                  call MOM_error(FATAL,"build_grid_SLight, bad halocline structure.")
+                k_int2 = real(K-1) + (z_int_unst - z_col_new(K-1)) / &
+                                         (z_col_new(K) - z_col_new(K-1))
+                exit
+              endif ; enddo
+              if (z_col_new(nz+1) < z_int_unst) then
+                ! This should be unnecessary.
+                z_int_unst = z_col_new(nz+1) ; k_int2 = real(nz+1)
+              endif
+              
+              ! Now take the larger values.
+              if (k_int2 > k_interior) then
+                k_interior = k_int2 ; z_interior = z_int_unst
+              endif
+            endif
+          endif
+
+        endif  ! fix_haloclines
+
         z_col_new(1) = 0.0
         do K=2,nkml+1
           z_col_new(K) = min((K-1)*CS%dz_ml_min, &
@@ -1074,7 +1234,14 @@ subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
             else ; exit ; endif
           enddo
         endif
+
+        if (maximum_depths_set) then ; do K=2,nz
+          ! The loop bounds are 2 & nz so the top and bottom interfaces do not move.
+          z_col_new(K) = min(z_col_new(K), CS%max_interface_depths(K))
+        enddo ; endif
+
       endif ! Total thickness exceeds nz*CS%min_thickness.
+
 
       ! Calculate the final change in grid position after blending new and old grids
       call filtered_grid_motion( CS, nz, z_col_new, z_col, dzInterface(i,j,:) )
@@ -2110,6 +2277,37 @@ subroutine set_target_densities( CS, rho_int )
 
 end subroutine set_target_densities
 
+!> Set target densities based on vector of interface values
+subroutine set_regrid_max_depths( CS, max_depths, units_to_H )
+  type(regridding_CS),      intent(inout) :: CS !< Regridding control structure
+  real, dimension(CS%nk+1), intent(in)    :: max_depths !< Maximum interface depths, in arbitrary units
+  real, optional,           intent(in)    :: units_to_H !< A conversion factor for max_epths into H units
+
+  real :: val_to_H
+  integer :: K
+
+  if (.not.allocated(CS%max_interface_depths)) allocate(CS%max_interface_depths(1:CS%nk+1))
+
+  val_to_H = 1.0 ; if (present( units_to_H)) val_to_H = units_to_H
+  if (max_depths(CS%nk+1) < max_depths(1)) val_to_H = -1.0*val_to_H
+
+  ! Check for sign reversals in the depths.
+  if (max_depths(CS%nk+1) < max_depths(1)) then
+    do K=1,CS%nk ; if (max_depths(K+1) > max_depths(K)) &
+      call MOM_error(FATAL, "Unordered list of maximum depths sent to set_regrid_max_depths!")
+    enddo
+  else
+    do K=1,CS%nk ; if (max_depths(K+1) < max_depths(K)) &
+      call MOM_error(FATAL, "Unordered list of maximum depths sent to set_regrid_max_depths.")
+    enddo
+  endif
+
+  do K=1,CS%nk+1
+    CS%max_interface_depths(K) = val_to_H * max_depths(K)
+  enddo
+
+end subroutine set_regrid_max_depths
+
 !------------------------------------------------------------------------------
 ! Query the fixed resolution data
 !------------------------------------------------------------------------------
@@ -2196,7 +2394,8 @@ end function getCoordinateShortName
 !> This subroutine can be used to set many of the parameters for MOM_regridding.
 subroutine set_regrid_params( CS, Boundary_Extrap, min_thickness, old_grid_weight, &
              compress_fraction, dz_min_surface, nz_fixed_surface, Rho_ML_avg_depth, &
-             nlay_ML_to_interior )
+             nlay_ML_to_interior, fix_haloclines, halocline_filt_len, &
+             halocline_strat_tol)
   type(regridding_CS), intent(inout) :: CS
   logical, optional, intent(in) :: Boundary_Extrap
   real,    optional, intent(in) :: min_thickness
@@ -2206,6 +2405,9 @@ subroutine set_regrid_params( CS, Boundary_Extrap, min_thickness, old_grid_weigh
   integer, optional, intent(in) :: nz_fixed_surface
   real,    optional, intent(in) :: Rho_ml_avg_depth
   real,    optional, intent(in) :: nlay_ML_to_interior
+  logical, optional, intent(in) :: fix_haloclines
+  real,    optional, intent(in) :: halocline_filt_len
+  real,    optional, intent(in) :: halocline_strat_tol
 
   if (present(Boundary_Extrap)) CS%boundary_extrapolation = Boundary_Extrap
   if (present(min_thickness)) CS%min_thickness = min_Thickness
@@ -2219,6 +2421,15 @@ subroutine set_regrid_params( CS, Boundary_Extrap, min_thickness, old_grid_weigh
   if (present(nz_fixed_surface)) CS%nz_fixed_surface = nz_fixed_surface
   if (present(Rho_ML_avg_depth)) CS%Rho_ML_avg_depth = Rho_ML_avg_depth
   if (present(nlay_ML_to_interior)) CS%nlay_ML_offset = nlay_ML_to_interior
+  if (present(fix_haloclines)) CS%fix_haloclines = fix_haloclines
+  if (present(halocline_filt_len)) CS%halocline_filter_length = halocline_filt_len
+  if (present(halocline_strat_tol)) then
+!    if (halocline_strat_tol > 0.5) call MOM_error(FATAL, "set_regrid_params: "//&
+!        "HALOCLINE_STRAT_TOL must not exceed 0.5.")
+    if (halocline_strat_tol > 1.0) call MOM_error(FATAL, "set_regrid_params: "//&
+        "HALOCLINE_STRAT_TOL must not exceed 1.0.")
+    CS%halocline_strat_tol = halocline_strat_tol
+  endif
 
 end subroutine set_regrid_params
 
@@ -2341,6 +2552,7 @@ subroutine regridding_memory_deallocation( CS )
   ! Target values
   deallocate( CS%target_density )
   deallocate( CS%coordinateResolution )
+  if (allocated(CS%max_interface_depths) ) deallocate( CS%max_interface_depths )
 
 end subroutine regridding_memory_deallocation
 
