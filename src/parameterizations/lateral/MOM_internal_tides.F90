@@ -628,7 +628,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
     
     ! Output 2-D energy loss (summed over angles) for each freq and mode
     do m=1,CS%NMode ; do fr=1,CS%Nfreq
-    if (CS%id_itidal_loss_mode(fr,m) > 0 .or. CS%id_allprocesses_loss_mode(fr,m)) then
+    if (CS%id_itidal_loss_mode(fr,m) > 0 .or. CS%id_allprocesses_loss_mode(fr,m) > 0) then
       itidal_loss_mode(:,:)       = 0.0 ! wave-drag processes (could do others as well)
       allprocesses_loss_mode(:,:) = 0.0 ! all processes summed together
       do a=1,CS%nAngle ; do j=js,je ; do i=is,ie
