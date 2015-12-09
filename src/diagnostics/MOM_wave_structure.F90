@@ -99,7 +99,7 @@ subroutine wave_structure(h, tv, G, cn, ModeNum, freq, CS, En, full_halos)
   real, dimension(NIMEM_,NJMEM_), optional, intent(in)  :: En
   logical,optional,                         intent(in)  :: full_halos
   
-!    This subroutine determines the first mode internal wave velocity structure.
+!    This subroutine determines the internal wave velocity structure for any mode.
 ! Arguments: h - Layer thickness, in m or kg m-2.
 !  (in)      tv - A structure containing the thermobaric variables.
 !  (in)      G - The ocean's grid structure.
@@ -391,7 +391,7 @@ subroutine wave_structure(h, tv, G, cn, ModeNum, freq, CS, En, full_halos)
           ! Also, note that "K" refers to an interface, while "k" refers to the layer below.
           ! Need at least 3 layers (2 internal interfaces) to generate a matrix, also
           ! need number of layers to be greater than the mode number 
-          if (kc >= 5 .and. kc >= ModeNum + 1) then
+          if (kc >= ModeNum + 1) then
             ! Set depth at surface
             z_int(1) = 0.0
             ! Calculate Igu, Igl, depth, and N2 at each interior interface 
@@ -424,7 +424,7 @@ subroutine wave_structure(h, tv, G, cn, ModeNum, freq, CS, En, full_halos)
               a_diag(row) = gprime(K)*(-Igu(K))
               b_diag(row) = gprime(K)*(Igu(K)+Igl(K)) - lam_z(row)
               c_diag(row) = gprime(K)*(-Igl(K))
-              if(isnan(lam_z(row)))then  ; print *, "lam_z(row) is NAN" ; endif
+              if(isnan(lam_z(row)))then  ; print *, "Wave_structure: lam_z(row) is NAN" ; endif
               if(isnan(a_diag(row)))then ; print *, "Wave_structure: a(k) is NAN" ; endif
               if(isnan(b_diag(row)))then ; print *, "Wave_structure: b(k) is NAN" ; endif
               if(isnan(c_diag(row)))then ; print *, "Wave_structure: c(k) is NAN" ; endif

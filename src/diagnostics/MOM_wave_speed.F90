@@ -177,8 +177,6 @@ subroutine wave_speed(h, tv, G, nmodes, cn, CS, full_halos)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  !print *, "wave_speed nmodes=", nmodes
-
   if (present(CS)) then
     if (.not. associated(CS)) call MOM_error(FATAL, "MOM_wave_speed: "// &
            "Module must be initialized before it is used.")
@@ -538,7 +536,7 @@ subroutine wave_speed(h, tv, G, nmodes, cn, CS, full_halos)
                         endif ! sign change
                       enddo ! sub-loop
                       if (sub_rootfound) exit ! root has been found, exit sub_it loop
-                      !   Otherwise, function changes sign but has a local max/min in on of the 
+                      !   Otherwise, function changes sign but has a local max/min in one of the 
                       ! sub intervals, try subdividing again unless sub_it_max has been reached.
                       if (sub_it == sub_it_max) then
                         call MOM_error(WARNING, "wave_speed: root not found "// &

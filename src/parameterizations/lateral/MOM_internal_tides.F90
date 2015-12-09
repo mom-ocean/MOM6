@@ -124,7 +124,7 @@ type, public :: int_tide_CS ; private
   real, allocatable, dimension(:,:,:,:,:) :: TKE_itidal_loss
                         ! energy lost due to small-scale wave drag [W m-2]
   real, allocatable, dimension(:,:) :: tot_leak_loss, tot_quad_loss, &
-                                       tot_itidal_loss, tot_Froude_loss
+                                       tot_itidal_loss, tot_Froude_loss, tot_allprocesses_loss
                         ! energy loss rates summed over angle, freq, and mode
   real :: q_itides      ! fraction of local dissipation (nondimensional)
   real :: En_sum        ! global sum of energy for use in debugging
@@ -174,20 +174,19 @@ type, public :: int_tide_CS ; private
              id_tot_leak_loss = -1, &
              id_tot_quad_loss = -1, &
              id_tot_itidal_loss = -1, &
-             id_tot_Froude_loss = -1
+             id_tot_Froude_loss = -1, &
+             id_tot_allprocesses_loss = -1
   ! Diag handles considering: all modes & freqs; summed over angles
   integer, allocatable, dimension(:,:) :: &
              id_En_mode, &
-             id_TKE_loss_mode, &
-             id_Ub_mode
+             id_itidal_loss_mode, &
+             id_allprocesses_loss_mode, &
+             id_Ub_mode, &
+             id_cp_mode
   ! Diag handles considering: all modes, freqs, and angles
   integer, allocatable, dimension(:,:) :: &
              id_En_ang_mode, &
-             id_TKE_loss_ang_mode
-  ! Diag handles considering: only first mode and frequency
-  integer :: id_Ub_mode_1 = -1, &
-             id_TKE_loss_mode_1 = -1, &
-             id_cp_mode_1 = -1
+             id_itidal_loss_ang_mode
   
 end type int_tide_CS
 
@@ -225,15 +224,20 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
   real, dimension(SZI_(G),SZJ_(G),2) :: &
     test
   real, dimension(SZI_(G),SZJ_(G),CS%nFreq,CS%nMode) :: &
-    tot_En_mode, Ub
+    tot_En_mode, & ! energy summed over angles only
+    Ub, Umax       ! near-bottom & max horizontal velocity of wave (modal)
   real, dimension(SZI_(G),SZJB_(G)) :: &
     flux_heat_y, &
     flux_prec_y
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    tot_En, tot_leak_loss, tot_quad_loss, tot_itidal_loss, tot_Froude_loss, &
-    drag_scale, Ub_mode_1, TKE_loss_mode_1, cp_mode_1
+    tot_En, &      ! energy summed over angles, modes, frequencies
+    tot_leak_loss, tot_quad_loss, tot_itidal_loss, tot_Froude_loss, tot_allprocesses_loss, &
+                   ! energy loss rates summed over angle, freq, and mode
+    drag_scale, &  ! bottom drag scale, s-1    
+    itidal_loss_mode, allprocesses_loss_mode
+                   ! energy loss rates for a given mode and frequency (summed over angles)
   real :: frac_per_sector, f2, I_rho0, I_D_here, freq2, Kmag2
-  real :: c_phase, Umax, loss_rate, Fr2_max
+  real :: c_phase, loss_rate, Fr2_max
   real, parameter :: cn_subRO = 1e-100               ! to prevent division by zero
   real :: En_new, En_check                           ! for debugging
   real :: En_initial, Delta_E_check                  ! for debugging
@@ -329,15 +333,18 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
       id_g = G%isd_global + i - 1.0
       jd_g = G%jsd_global + j - 1.0
       if(CS%En(i,j,a,fr,m)<0.0)then
-        print *, 'After propagation: En<0.0 at ig=', id_g, ', jg=', jd_g 
-        print *, 'En=',CS%En(i,j,a,fr,m)
-        print *, 'Setting En to zero'; CS%En(i,j,a,fr,m) = 0.0
-        !stop
+        CS%En(i,j,a,fr,m) = 0.0
+        if(abs(CS%En(i,j,a,fr,m))>1.0)then! only print if large
+          print *, 'After propagation: En<0.0 at ig=', id_g, ', jg=', jd_g 
+          print *, 'En=',CS%En(i,j,a,fr,m)
+          print *, 'Setting En to zero'        
+          !stop
+        endif
       endif
     enddo ; enddo
   enddo ; enddo ; enddo
   
-  ! Test if energy has passed coast for debugging only; delete later
+  !! Test if energy has passed coast for debugging only; delete later
   !do j=js,je
   !  jd_g = jsd_g + j - 1
   !  do i=is,ie 
@@ -363,7 +370,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
   do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
     do j=js,je ; do i=is,ie
       id_g = G%isd_global + i - 1.0
-      jd_g = G%jsd_global + j - 1.0
+     jd_g = G%jsd_global + j - 1.0
       if(CS%En(i,j,a,fr,m)<0.0)then
         print *, 'After second refraction: En<0.0 at ig=', id_g, ', jg=', jd_g
         !stop
@@ -436,33 +443,43 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
   ! still need to allow a portion of the extracted energy to go to higher modes.
   ! First, find velocity profiles
   if (CS%apply_wave_drag .or. CS%apply_Froude_drag) then
-    ! Calculate modal structure
     do m=1,CS%NMode ; do fr=1,CS%Nfreq
+      ! Calculate modal structure for given mode and frequency
       call wave_structure(h, tv, G, cn(:,:,m), m, CS%frequency(fr), &
                           CS%wave_structure_CSp, tot_En_mode(:,:,fr,m), full_halos=.true.)
-    enddo ; enddo
-  endif
-  ! Next, find near-bottom velocity and apply loss
-  if (CS%apply_wave_drag) then
-    ! Pick out near-bottom baroclinic velocity values
-    do m=1,CS%NMode ; do fr=1,CS%Nfreq
+      ! Pick out near-bottom and max horizontal baroclinic velocity values at each point      
       do j=jsd,jed ; do i=isd,ied
-        !id_g = G%isd_global + i - 1.0
-        !jd_g = G%jsd_global + j - 1.0
-        !if(id_g .eq. CS%int_tide_source_x .and. jd_g .eq. CS%int_tide_source_y) then  ! delete later
-          nzm = CS%wave_structure_CSp%num_intfaces(i,j)
-          !print *, 'id_g=', id_g, 'jd_g=', jd_g
-          !print *, 'nzm=', nzm
-          !print *, 'Uavg=', CS%wave_structure_CSp%Uavg_profile(i,j,nzm)
-          Ub(i,j,fr,m) = CS%wave_structure_CSp%Uavg_profile(i,j,nzm)
+        id_g = G%isd_global + i - 1.0
+        jd_g = G%jsd_global + j - 1.0
+        nzm = CS%wave_structure_CSp%num_intfaces(i,j)
+        Ub(i,j,fr,m) = CS%wave_structure_CSp%Uavg_profile(i,j,nzm)
+        Umax(i,j,fr,m) = maxval(CS%wave_structure_CSp%Uavg_profile(i,j,1:nzm))
+        !! for debugging print profile, etc. Delete later        
+        !if(id_g .eq. 260 .and. &
+        !   jd_g .eq. 50 .and. &
+        !   tot_En_mode(i,j,1,1)>500.0) then
+        !  print *, 'Profiles for mode ',m,' and frequency ',fr
+        !  print *, 'id_g=', id_g, 'jd_g=', jd_g
+        !  print *, 'c',m,'=',   cn(i,j,m)          
+        !  print *, 'nzm=',  nzm
+        !  print *, 'z=',    CS%wave_structure_CSp%z_depths(i,j,1:nzm)
+        !  print *, 'N2=',   CS%wave_structure_CSp%N2(i,j,1:nzm)
+        !  print *, 'Ub=',   Ub(i,j,fr,m)
+        !  print *, 'Umax=', Umax(i,j,fr,m)
+        !  print *, 'Upro=', CS%wave_structure_CSp%Uavg_profile(i,j,1:nzm)
+        !  print *, 'Wpro=', CS%wave_structure_CSp%W_profile(i,j,1:nzm)
+        !  print *, 'En',m,'=',   tot_En_mode(i,j,fr,m)
+        !  if (m==3) stop
         !endif ! for debug - delete later
-      enddo ; enddo
-    enddo ; enddo
-
+      enddo ; enddo ! i-loop, j-loop
+    enddo ; enddo ! fr-loop, m-loop  
+  endif ! apply_wave or _Froude_drag (Ub or Umax needed)
+  ! Finally, apply loss
+  if (CS%apply_wave_drag) then
     ! Calculate loss rate and apply loss over the time step
     call itidal_lowmode_loss(G, CS, Nb, Ub, CS%En, CS%TKE_itidal_loss_fixed, &
                              CS%TKE_itidal_loss, dt, full_halos=.false.)
-  endif  
+  endif
   ! Check for En<0 - for debugging, delete later
   do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
     do j=js,je ; do i=is,ie
@@ -491,14 +508,10 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
         if (Kmag2 > 0.0) then
           c_phase = sqrt(freq2/Kmag2)
           nzm = CS%wave_structure_CSp%num_intfaces(i,j)
-          Umax = maxval(CS%wave_structure_CSp%Uavg_profile(i,j,1:nzm))
-          Fr2_max = (Umax/c_phase)**2
-          !print *, "Umag=",Umax
-          !print *, "Phase speed=",c_phase
+          Fr2_max = (Umax(i,j,fr,m)/c_phase)**2
           ! Dissipate energy if Fr>1; done here with an arbitrary time scale
           if (Fr2_max > 1.0) then
-            !print *, "Applying Fr-dissipation at ig= ", id_g, ", jg= ", jd_g ! for debugging
-            En_initial = sum(CS%En(i,j,:,fr,m))                              ! for debugging          
+            En_initial = sum(CS%En(i,j,:,fr,m)) ! for debugging          
             ! Calculate effective decay rate (s-1) if breaking occurs over a time step
             loss_rate = (1/Fr2_max - 1.0)/dt
             do a=1,CS%nAngle
@@ -581,16 +594,22 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
     tot_quad_loss(:,:)   = 0.0
     tot_itidal_loss(:,:) = 0.0
     tot_Froude_loss(:,:) = 0.0
+    tot_allprocesses_loss(:,:) = 0.0
     do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle ; do j=js,je ; do i=is,ie
       tot_leak_loss(i,j)   = tot_leak_loss(i,j)   + CS%TKE_leak_loss(i,j,a,fr,m)
       tot_quad_loss(i,j)   = tot_quad_loss(i,j)   + CS%TKE_quad_loss(i,j,a,fr,m)
       tot_itidal_loss(i,j) = tot_itidal_loss(i,j) + CS%TKE_itidal_loss(i,j,a,fr,m)
       tot_Froude_loss(i,j) = tot_Froude_loss(i,j) + CS%TKE_Froude_loss(i,j,a,fr,m)
     enddo ; enddo ; enddo ; enddo ; enddo
-    CS%tot_leak_loss   = tot_leak_loss
-    CS%tot_quad_loss   = tot_quad_loss
-    CS%tot_itidal_loss = tot_itidal_loss
-    CS%tot_Froude_loss = tot_Froude_loss
+    do j=js,je ; do i=is,ie
+      tot_allprocesses_loss(i,j) = tot_leak_loss(i,j) + tot_quad_loss(i,j) + &
+                          tot_itidal_loss(i,j) + tot_Froude_loss(i,j)
+    enddo ; enddo
+    CS%tot_leak_loss         = tot_leak_loss
+    CS%tot_quad_loss         = tot_quad_loss
+    CS%tot_itidal_loss       = tot_itidal_loss
+    CS%tot_Froude_loss       = tot_Froude_loss
+    CS%tot_allprocesses_loss = tot_allprocesses_loss
     if (CS%id_tot_leak_loss > 0) then
       call post_data(CS%id_tot_leak_loss, tot_leak_loss, CS%diag)
     endif    
@@ -603,40 +622,39 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
     if (CS%id_tot_Froude_loss > 0) then
       call post_data(CS%id_tot_Froude_loss, tot_Froude_loss, CS%diag)
     endif
+    if (CS%id_tot_allprocesses_loss > 0) then
+      call post_data(CS%id_tot_allprocesses_loss, tot_allprocesses_loss, CS%diag)
+    endif
     
     ! Output 2-D energy loss (summed over angles) for each freq and mode
-    do m=1,CS%NMode ; do fr=1,CS%Nfreq ; if (CS%id_TKE_loss_mode(fr,m) > 0) then
-      tot_itidal_loss(:,:) = 0.0
+    do m=1,CS%NMode ; do fr=1,CS%Nfreq
+    if (CS%id_itidal_loss_mode(fr,m) > 0 .or. CS%id_allprocesses_loss_mode(fr,m)) then
+      itidal_loss_mode(:,:)       = 0.0 ! wave-drag processes (could do others as well)
+      allprocesses_loss_mode(:,:) = 0.0 ! all processes summed together
       do a=1,CS%nAngle ; do j=js,je ; do i=is,ie
-        tot_itidal_loss(i,j) = tot_itidal_loss(i,j) + CS%TKE_itidal_loss(i,j,a,fr,m)
+        itidal_loss_mode(i,j)       = itidal_loss_mode(i,j) + CS%TKE_itidal_loss(i,j,a,fr,m)
+        allprocesses_loss_mode(i,j) = allprocesses_loss_mode(i,j) + &
+                                 CS%TKE_leak_loss(i,j,a,fr,m) + CS%TKE_quad_loss(i,j,a,fr,m) + &
+                                 CS%TKE_itidal_loss(i,j,a,fr,m) + CS%TKE_Froude_loss(i,j,a,fr,m)                                      
       enddo ; enddo ; enddo
-      call post_data(CS%id_TKE_loss_mode(fr,m), tot_itidal_loss, CS%diag)
+      call post_data(CS%id_itidal_loss_mode(fr,m), itidal_loss_mode, CS%diag)
+      call post_data(CS%id_allprocesses_loss_mode(fr,m), allprocesses_loss_mode, CS%diag)
     endif ; enddo ; enddo
         
     ! Output 3-D (i,j,a) energy loss for each freq and mode
-    do m=1,CS%NMode ; do fr=1,CS%Nfreq ; if (CS%id_TKE_loss_ang_mode(fr,m) > 0) then
-      call post_data(CS%id_TKE_loss_ang_mode(fr,m), CS%TKE_itidal_loss(:,:,:,fr,m) , CS%diag)
+    do m=1,CS%NMode ; do fr=1,CS%Nfreq ; if (CS%id_itidal_loss_ang_mode(fr,m) > 0) then
+      call post_data(CS%id_itidal_loss_ang_mode(fr,m), CS%TKE_itidal_loss(:,:,:,fr,m) , CS%diag)
     endif ; enddo ; enddo    
         
-    ! Output 2-D energy loss for 1st mode and frequency only (summed over angles)
-    TKE_loss_mode_1(:,:) = 0.0
-    do a=1,CS%nAngle ; do j=js,je ; do i=is,ie
-      TKE_loss_mode_1(i,j) = TKE_loss_mode_1(i,j) + CS%TKE_itidal_loss(i,j,a,1,1)
-    enddo ; enddo ; enddo
-    if (CS%id_TKE_loss_mode_1 > 0) call post_data(CS%id_TKE_loss_mode_1, TKE_loss_mode_1, CS%diag)
-    
     ! Output 2-D period-averaged horizontal near-bottom mode velocity for each freq and mode
     do m=1,CS%NMode ; do fr=1,CS%Nfreq ; if (CS%id_Ub_mode(fr,m) > 0) then
       call post_data(CS%id_Ub_mode(fr,m), Ub(:,:,fr,m), CS%diag)
     endif ; enddo ; enddo
     
-    ! Output 2-D period-averaged horizontal near-bottom mode velocity for 1st mode and frequency only
-    Ub_mode_1 = Ub(:,:,1,1)
-    if (CS%id_Ub_mode_1 > 0) call post_data(CS%id_Ub_mode_1, Ub_mode_1, CS%diag)
-    
-    ! Output 2-D horizontal phase velocity for 1st mode and frequency only
-    cp_mode_1 = CS%cp(:,:,1,1)
-    if (CS%id_cp_mode_1 > 0) call post_data(CS%id_cp_mode_1, cp_mode_1, CS%diag)
+    ! Output 2-D horizontal phase velocity for each freq and mode
+    do m=1,CS%NMode ; do fr=1,CS%Nfreq ; if (CS%id_cp_mode(fr,m) > 0) then
+      call post_data(CS%id_cp_mode(fr,m), CS%cp(:,:,fr,m), CS%diag)
+    endif ; enddo ; enddo
     
   endif
      
@@ -671,13 +689,14 @@ subroutine sum_En(G, CS, En, label)
     En_sum_pdiff= 0.0;
   endif
   CS%En_sum = En_sum
-  if (is_root_pe()) then
-    print *, label,':','days =', days
-    print *, 'En_sum=', En_sum
-    print *, 'En_sum_diff=',    En_sum_diff
-    print *, 'Percent change=', En_sum_pdiff, '%'
-    !if (abs(En_sum_pdiff) > 1.0) then ; stop ; endif
-  endif
+  !! Print to screen
+  !if (is_root_pe()) then
+  !  print *, label,':','days =', days
+  !  print *, 'En_sum=', En_sum
+  !  print *, 'En_sum_diff=',    En_sum_diff
+  !  print *, 'Percent change=', En_sum_pdiff, '%'
+  !  !if (abs(En_sum_pdiff) > 1.0) then ; stop ; endif
+  !endif
  
 end subroutine sum_En
 
@@ -2552,21 +2571,16 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
                 Time, 'Internal tide energy loss to wave drag', 'W m-2')
   CS%id_tot_Froude_loss = register_diag_field('ocean_model', 'ITide_tot_Froude_loss', diag%axesT1, &
                 Time, 'Internal tide energy loss to wave breaking', 'W m-2')
-  ! Register 2-D energy loss for 1st mode and frequency only
-  CS%id_TKE_loss_mode_1 = register_diag_field('ocean_model', 'ITide_TKE_loss_mode_1', diag%axesT1, &
-                Time, "Internal tide energy loss for 1st mode and frequency", 'W m-2')
-  ! Register 2-D period-averaged near-bottom horizonal velocity for 1st mode and frequency only
-  CS%id_Ub_mode_1 = register_diag_field('ocean_model', 'ITide_Ub_mode_1', diag%axesT1, &
-                Time, "Near-bottom horizonal velocity for 1st mode and frequency", 'm s-1')
-  ! Register 2-D horizonal phase velocity for 1st mode and frequency only
-  CS%id_cp_mode_1 = register_diag_field('ocean_model', 'ITide_cp_mode_1', diag%axesT1, &
-                Time, "Horizonal phase velocity for 1st mode and frequency", 'm s-1')
-
+  CS%id_tot_allprocesses_loss = register_diag_field('ocean_model', 'ITide_tot_allprocesses_loss', diag%axesT1, &
+                Time, 'Internal tide energy loss summed over all processes', 'W m-2')
+                
   allocate(CS%id_En_mode(CS%nFreq,CS%nMode)) ; CS%id_En_mode(:,:) = -1
   allocate(CS%id_En_ang_mode(CS%nFreq,CS%nMode)) ; CS%id_En_ang_mode(:,:) = -1
-  allocate(CS%id_TKE_loss_mode(CS%nFreq,CS%nMode)) ; CS%id_TKE_loss_mode(:,:) = -1
-  allocate(CS%id_TKE_loss_ang_mode(CS%nFreq,CS%nMode)) ; CS%id_TKE_loss_ang_mode(:,:) = -1
+  allocate(CS%id_itidal_loss_mode(CS%nFreq,CS%nMode)) ; CS%id_itidal_loss_mode(:,:) = -1
+  allocate(CS%id_allprocesses_loss_mode(CS%nFreq,CS%nMode)) ; CS%id_allprocesses_loss_mode(:,:) = -1
+  allocate(CS%id_itidal_loss_ang_mode(CS%nFreq,CS%nMode)) ; CS%id_itidal_loss_ang_mode(:,:) = -1
   allocate(CS%id_Ub_mode(CS%nFreq,CS%nMode)) ; CS%id_Ub_mode(:,:) = -1
+  allocate(CS%id_cp_mode(CS%nFreq,CS%nMode)) ; CS%id_cp_mode(:,:) = -1
 
   allocate(angles(CS%NAngle)) ; angles(:) = 0.0
   Angle_size = (8.0*atan(1.0)) / (real(num_angle))
@@ -2592,16 +2606,24 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
     call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
     
     ! Register 2-D energy loss (summed over angles) for each freq and mode
-    write(var_name, '("Itide_TKE_loss_freq",i1,"_mode",i1)') fr, m
-    write(var_descript, '("Internal tide energy loss from frequency ",i1," mode ",i1)') fr, m
-    CS%id_TKE_loss_mode(fr,m) = register_diag_field('ocean_model', var_name, &
+    ! wave-drag only
+    write(var_name, '("Itide_wavedrag_loss_freq",i1,"_mode",i1)') fr, m
+    write(var_descript, '("Internal tide energy loss due to wave-drag from frequency ",i1," mode ",i1)') fr, m
+    CS%id_itidal_loss_mode(fr,m) = register_diag_field('ocean_model', var_name, &
+                 diag%axesT1, Time, var_descript, 'W m-2')
+    call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
+    ! all loss processes
+    write(var_name, '("Itide_allprocesses_loss_freq",i1,"_mode",i1)') fr, m
+    write(var_descript, '("Internal tide energy loss due to all processes from frequency ",i1," mode ",i1)') fr, m
+    CS%id_allprocesses_loss_mode(fr,m) = register_diag_field('ocean_model', var_name, &
                  diag%axesT1, Time, var_descript, 'W m-2')
     call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
     
     ! Register 3-D (i,j,a) energy loss for each freq and mode
-    write(var_name, '("Itide_TKE_loss_ang_freq",i1,"_mode",i1)') fr, m
-    write(var_descript, '("Internal tide energy loss from frequency ",i1," mode ",i1)') fr, m
-    CS%id_TKE_loss_ang_mode(fr,m) = register_diag_field('ocean_model', var_name, &
+    ! wave-drag only
+    write(var_name, '("Itide_wavedrag_loss_ang_freq",i1,"_mode",i1)') fr, m
+    write(var_descript, '("Internal tide energy loss due to wave-drag from frequency ",i1," mode ",i1)') fr, m
+    CS%id_itidal_loss_ang_mode(fr,m) = register_diag_field('ocean_model', var_name, &
                  axes_ang, Time, var_descript, 'W m-2 band-1')
     call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
     
@@ -2609,6 +2631,13 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
     write(var_name, '("Itide_Ub_freq",i1,"_mode",i1)') fr, m
     write(var_descript, '("Near-bottom horizonal velocity for frequency ",i1," mode ",i1)') fr, m
     CS%id_Ub_mode(fr,m) = register_diag_field('ocean_model', var_name, &
+                 diag%axesT1, Time, var_descript, 'm s-1')
+    call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
+    
+    ! Register 2-D horizonal phase velocity for each freq and mode
+    write(var_name, '("Itide_cp_freq",i1,"_mode",i1)') fr, m
+    write(var_descript, '("Horizonal phase velocity for frequency ",i1," mode ",i1)') fr, m
+    CS%id_cp_mode(fr,m) = register_diag_field('ocean_model', var_name, &
                  diag%axesT1, Time, var_descript, 'm s-1')
     call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
    
@@ -2630,6 +2659,7 @@ subroutine internal_tides_end(CS)
     if (allocated(CS%frequency)) deallocate(CS%frequency)
     if (allocated(CS%id_En_mode)) deallocate(CS%id_En_mode)
     if (allocated(CS%id_Ub_mode)) deallocate(CS%id_Ub_mode)
+    if (allocated(CS%id_cp_mode)) deallocate(CS%id_cp_mode)
     deallocate(CS)
   endif
   CS => NULL()  
