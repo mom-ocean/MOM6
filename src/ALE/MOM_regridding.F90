@@ -1167,8 +1167,8 @@ subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
           strat_rat(nz+1) = 1.0
 
           z_int_unst = 0.0 ; Fn_now = 0.0
-!          Fn_zero_val = 2.0*CS%halocline_strat_tol
-          Fn_zero_val = 0.5*(1.0 + CS%halocline_strat_tol)
+          Fn_zero_val = min(2.0*CS%halocline_strat_tol, &
+                            0.5*(1.0 + CS%halocline_strat_tol))
           if (CS%halocline_strat_tol > 0.0) then
             ! Use Adcroft's reciprocal rule.
             I_HStol = 0.0 ; if (Fn_zero_val - CS%halocline_strat_tol > 0.0) &
