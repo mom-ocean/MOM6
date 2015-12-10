@@ -567,11 +567,6 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
     ! Output two-dimensional diagnostistics
     if (CS%id_tot_En > 0)     call post_data(CS%id_tot_En, tot_En, CS%diag)
     if (CS%id_itide_drag > 0) call post_data(CS%id_itide_drag, drag_scale, CS%diag)
-    if (CS%id_refl_ang > 0)   call post_data(CS%id_refl_ang, CS%refl_angle, CS%diag)
-    if (CS%id_refl_pref > 0)  call post_data(CS%id_refl_pref, CS%refl_pref, CS%diag)
-    if (CS%id_dx_Cv > 0)      call post_data(CS%id_dx_Cv, G%dx_Cv, CS%diag)
-    if (CS%id_dy_Cu > 0)      call post_data(CS%id_dy_Cu, G%dy_Cu, CS%diag)
-    if (CS%id_land_mask > 0)  call post_data(CS%id_land_mask, G%mask2dT, CS%diag)
     if (CS%id_TKE_itidal_input > 0) call post_data(CS%id_TKE_itidal_input, &
                                                    TKE_itidal_input, CS%diag)
         
@@ -2551,6 +2546,12 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
                  Time, 'East face unblocked width', 'm')  ! used if overriding (BDM)
   CS%id_land_mask = register_diag_field('ocean_model', 'land_mask', diag%axesT1, &
                  Time, 'Land mask', 'logical')            ! used if overriding (BDM)
+  ! Output reflection parameters as diags here (not needed every timestep)
+  if (CS%id_refl_ang > 0)   call post_data(CS%id_refl_ang, CS%refl_angle, CS%diag)
+  if (CS%id_refl_pref > 0)  call post_data(CS%id_refl_pref, CS%refl_pref, CS%diag)
+  if (CS%id_dx_Cv > 0)      call post_data(CS%id_dx_Cv, G%dx_Cv, CS%diag)
+  if (CS%id_dy_Cu > 0)      call post_data(CS%id_dy_Cu, G%dy_Cu, CS%diag)
+  if (CS%id_land_mask > 0)  call post_data(CS%id_land_mask, G%mask2dT, CS%diag)
   
   ! Register 2-D energy density (summed over angles, freq, modes)
   CS%id_tot_En = register_diag_field('ocean_model', 'ITide_tot_En', diag%axesT1, &
