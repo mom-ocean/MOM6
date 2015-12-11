@@ -1029,8 +1029,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
           ! In the case with (-1)*netMassOut*fractionOfForcing greater than cfl*h, we
           ! limit the forcing applied to this cell, leaving the remaining forcing to
           ! be distributed downwards.
-         !TODO: if (-fractionOfForcing*netMassOut(i) > CS%evap_CFL_limit*h2d(i,k)) then
-          if (-netMassOut(i) > CS%evap_CFL_limit*h2d(i,k)) then
+          if (-fractionOfForcing*netMassOut(i) > CS%evap_CFL_limit*h2d(i,k)) then
             fractionOfForcing = -CS%evap_CFL_limit*h2d(i,k)/netMassOut(i)
           endif
 
