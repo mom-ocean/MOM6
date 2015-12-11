@@ -94,37 +94,37 @@ public diabatic_aux_init, diabatic_aux_end
 public make_frazil, adjust_salt, insert_brine, differential_diffuse_T_S, triDiagTS
 public find_uv_at_h, diagnoseMLDbyDensityDifference, applyBoundaryFluxesInOut
 
+!> Control structure for diabatic_aux
 type, public :: diabatic_aux_CS ; private
-  logical :: do_rivermix = .false. ! Provide additional TKE to mix river runoff
-                                   ! at the river mouths to "rivermix_depth" meters
-  real    :: rivermix_depth = 0.0  ! The depth to which rivers are mixed if
-                                   ! do_rivermix = T, in m.
-  real    :: minimum_forcing_depth = 0.001 ! The smallest depth over which forcing is
-                                   ! applied, in m.
-  real    :: evap_CFL_limit = 0.8  ! The largest fraction of a layer that can be
-                                   ! evaporated in one time-step (non-dim).
+  logical :: do_rivermix = .false. !< Provide additional TKE to mix river runoff
+                                   !! at the river mouths to "rivermix_depth" meters
+  real    :: rivermix_depth = 0.0  !< The depth to which rivers are mixed if
+                                   !! do_rivermix = T, in m.
+  real    :: minimum_forcing_depth = 0.001 !< The smallest depth over which forcing is
+                                   !! applied, in m.
+  real    :: evap_CFL_limit = 0.8  !< The largest fraction of a layer that can be
+                                   !! evaporated in one time-step (non-dim).
 
-  logical :: reclaim_frazil  !   If true, try to use any frazil heat deficit to
-                             ! to cool the topmost layer down to the freezing
-                             ! point.  The default is false.
-  logical :: pressure_dependent_frazil  ! If true, use a pressure dependent
-                             ! freezing temperature when making frazil.  The
-                             ! default is false, which will be faster but is
-                             ! inappropriate with ice-shelf cavities.
+  logical :: reclaim_frazil  !<   If true, try to use any frazil heat deficit to
+                             !! to cool the topmost layer down to the freezing
+                             !! point.  The default is false.
+  logical :: pressure_dependent_frazil  !< If true, use a pressure dependent
+                             !! freezing temperature when making frazil.  The
+                             !! default is false, which will be faster but is
+                             !! inappropriate with ice-shelf cavities.
 
-! logical :: debug                 ! If true, write verbose checksums for debugging purposes.
-  type(diag_ctrl), pointer :: diag ! structure used to regulate timing of diagnostic output
+  type(diag_ctrl), pointer :: diag !< Structure used to regulate timing of diagnostic output
 
-  integer :: id_createdH = -1, id_brine_lay = -1
-
-  ! penetrative and non-penetrative shortwave heating diagnostic 
-  integer :: id_penSW_diag    = -1 
-  integer :: id_nonpenSW_diag = -1 
+  ! Diagnostic handles
+  integer :: id_createdH = -1
+  integer :: id_brine_lay = -1
+  integer :: id_penSW_diag    = -1 !< Penetrative shortwave heating diagnostic 
+  integer :: id_nonpenSW_diag = -1 !< Non-penetrative shortwave heating diagnostic 
 
   ! Optional diagnostic arrays
-  real, allocatable, dimension(:,:)   :: createdH      ! The amount of volume added in order to avoid grounding (m/s)
-  real, allocatable, dimension(:,:,:) :: penSW_diag    ! heating from convergence of penetrative SW (W/m2) 
-  real, allocatable, dimension(:,:)   :: nonpenSW_diag ! non-downwelling SW radiation (W/m2) at ocean surface 
+  real, allocatable, dimension(:,:)   :: createdH      !< The amount of volume added in order to avoid grounding (m/s)
+  real, allocatable, dimension(:,:,:) :: penSW_diag    !< Heating from convergence of penetrative SW (W/m2) 
+  real, allocatable, dimension(:,:)   :: nonpenSW_diag !< Non-downwelling SW radiation (W/m2) at ocean surface 
 
 end type diabatic_aux_CS
 
@@ -780,57 +780,35 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, diagPtr
 
 end subroutine diagnoseMLDbyDensityDifference
 
+!> Update the thickness, temperature, and salinity due to thermodynamic
+!! boundary forcing (contained in fluxes type) applied to h, tv%T and tv%S,
+!! and calculate the TKE implications of this heating.
 subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
                                     aggregate_FW_forcing, cTKE, dSV_dT, dSV_dS)
-  type(diabatic_aux_CS),                 pointer       :: CS
-  type(ocean_grid_type),                 intent(in)    :: G
-  real,                                  intent(in)    :: dt
-  type(forcing),                         intent(inout) :: fluxes
-  type(optics_type),                     pointer       :: optics
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: ea
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: h
-  type(thermo_var_ptrs),                 intent(inout) :: tv
-  logical, intent(in) :: aggregate_FW_forcing
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: cTKE, dSV_dT, dSV_dS
+  type(diabatic_aux_CS),                 pointer       :: CS !< Control structure for diabatic_aux 
+  type(ocean_grid_type),                 intent(in)    :: G  !< Grid structure
+  real,                                  intent(in)    :: dt !< Time-step over which forcing is applied (s)
+  type(forcing),                         intent(inout) :: fluxes !< Surface fluxes container
+  type(optics_type),                     pointer       :: optics !< Optical properties container
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: ea !< The entrainment distance at interfaces (H units)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: h  !< Layer thickness in H units
+  type(thermo_var_ptrs),                 intent(inout) :: tv !< Thermodynamics container
+  !> If False, treat in/out fluxes separately.
+  logical,                               intent(in)    :: aggregate_FW_forcing
+  !> Turbulent kinetic energy requirement to mix forcing through each layer, in W m-2
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: cTKE
+  !> Partial derivative of specific volume with potential temperature, in m3 kg-1 K-1.
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: dSV_dT
+  !> Partial derivative of specific a volume with potential salinity, in m3 kg-1 / (g kg-1).
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: dSV_dS
 
-! Update the thickness, temperature, and salinity due to thermodynamic
-! boundary forcing (contained in fluxes type) applied to h, tv%T and tv%S,
-! and calculate the TKE implications of this heating.
-!
-! This routine is only used if CS%useALEalgorithm == .true.
-!
-! Apply the surface boundary fluxes in three steps:
-! A/ update mass, temp, and salinity due to all terms except
-!    netMassOut, fluxes%heat_content_evap < 0, and penetrative SW
-! B/ update mass, temp, and salinity from netMassOut and fluxes%heat_content_evap
-! C/ update temp due to penetrative SW radiation
-!
-! Arguments:
-!  (in)      CS     = Control structure returned by a previous diabatic_driver_init call
-!  (in)      G      = The ocean grid structure
-!  (in)      dt     = Time increment (seconds)
-!  (in)      fluxes = Structure containing pointers to forcing fields; NULL ptrs for unused fields
-!  (in)      optics = A pointer to the optics structure
-!  (inout)   ea     = The amount of fluid entrained from the layer above within
-!                     one time step  (m for Bouss, kg/m^2 for non-Bouss)
-!  (inout)   h      = Layer thickness (m for Bouss and kg/m^2 for non-Bouss)
-!  (inout)   tv     = A structure containing pointers to any available
-!                     thermodynamic fields; unused fields have NULL ptrs.
-!  (out,opt) cTKE   = The turbulent kinetic energy requirement to mix forcing
-!                     through each layer, in W m-2
-!  (out,opt) dSV_dT = The partial derivative of specific volume with potential
-!                     temperature, in m3 kg-1 K-1.
-!  (out,opt) dSV_dS = The partial derivative of specific volume with potential
-!                     salinity, in m3 kg-1 / (g kg-1).
-
+  ! Local variables
   integer, parameter :: maxGroundings = 5
   integer :: numberOfGroundings, iGround(maxGroundings), jGround(maxGroundings)
-
   real :: H_limit_fluxes, IforcingDepthScale, Idt
   real :: dThickness, dTemp, dSalt
   real :: fractionOfForcing, hOld, Ithickness
   real :: RivermixConst  ! A constant used in implementing river mixing, in Pa s.
-
   real, dimension(SZI_(G)) :: &
     d_pres,       &  ! pressure change across a layer (Pa)
     p_lay,        &  ! average pressure in a layer (Pa)
@@ -842,26 +820,21 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
                      ! Pen_SW_bnd and netMassOut
     netSalt,      &  ! surface salt flux ( g(salt)/m2 for non-Bouss and ppt*H for Bouss )
     nonpenSW         ! non-downwelling SW, which is absorbed at ocean surface 
-
   real, dimension(SZI_(G), SZK_(G))                     :: h2d, T2d
   real, dimension(SZI_(G), SZK_(G))                     :: pen_TKE_2d, dSV_dT_2d
   real, dimension(max(optics%nbands,1),SZI_(G))         :: Pen_SW_bnd
   real, dimension(max(optics%nbands,1),SZI_(G),SZK_(G)) :: opacityBand
   real                                                  :: hGrounding(maxGroundings)
-
   real    :: Temp_in, Salin_in
   real    :: I_G_Earth, g_Hconv2
   logical :: calculate_energetics
-
-  ! smg: obsolete logicals
-  logical :: use_riverHeatContent, useCalvingHeatContent
-
+  logical :: use_riverHeatContent, useCalvingHeatContent ! smg: obsolete logicals
   integer :: i, j, is, ie, js, je, k, nz, n, nsw
   character(len=45) :: mesg
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  ! only apply forcing if fluxes%sw is associated.
+  ! Only apply forcing if fluxes%sw is associated.
   if (.not.ASSOCIATED(fluxes%sw)) return
 
 #define _OLD_ALG_
@@ -905,7 +878,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
 !$OMP                                  netMassIn,pres,d_pres,p_lay,dSV_dT_2d,            &
 !$OMP                                  pen_TKE_2d,Temp_in,Salin_in,RivermixConst)
 
-  ! work in vertical slices for efficiency
+  ! Work in vertical slices for efficiency
   do j=js,je
 
     ! Copy state into 2D-slice arrays
@@ -954,7 +927,6 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
     !                enters to the ocean and participates in pentrative SW heating.
     ! nonpenSW     = non-downwelling SW flux, which is absorbed in ocean surface 
     !                (in tandem w/ LW,SENS,LAT); saved only for diagnostic purposes.  
-
     call extractFluxes1d(G, fluxes, optics, nsw, j, dt,                        &
                   H_limit_fluxes, use_riverHeatContent, useCalvingHeatContent, &
                   h2d, T2d, netMassInOut, netMassOut, netHeat, netSalt, &
@@ -976,48 +948,36 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
     !    ocean (and corresponding outward heat content), and ignoring penetrative SW.
     ! B/ update mass, salt, temp from mass leaving ocean.
     ! C/ update temp due to penetrative SW
-
     do i=is,ie
       if (G%mask2dT(i,j)>0.) then
 
         ! A/ Update mass, temp, and salinity due to incoming mass flux.
         do k=1,1
 
-          ! Place forcing into top layer if this layer has nontrivial thickness.
-          ! If layer is thin relative to 1/IforcingDepthScale, then distribute
-          ! forcing into deeper layers.
-          ! fractionOfForcing=1.0 unless h2d is less than IforcingDepthScale.
-         !fractionOfForcing = min(1.0, h2d(i,k)*IforcingDepthScale)
-
           ! Change in state due to forcing
           dThickness = netMassIn(i) ! Since we are adding mass, we can use all of it
-         !dTemp      = fractionOfForcing*netHeat(i)
           dTemp = 0.
-          ! The following max avoids taking out more salt than is in the layer.
-         !dSalt = max( fractionOfForcing*netSalt(i), -0.9999*h2d(i,k)*tv%S(i,j,k))
           dSalt = 0.
 
           ! Update the forcing by the part to be consumed within the present k-layer.
           ! If fractionOfForcing = 1, then updated netMassIn, netHeat, and netSalt vanish.
           netMassIn(i) = netMassIn(i) - dThickness
-         !netHeat(i) = netHeat(i)   - dTemp
-         !netSalt(i) = netSalt(i)   - dSalt
 
           ! This line accounts for the temperature of the mass exchange
           Temp_in = T2d(i,k)
           Salin_in = 0.0
-          dTemp = dTemp + dThickness*T2d(i,k)
+          dTemp = dTemp + dThickness*Temp_in
 
           ! Diagnostics of heat content associated with mass fluxes
           if (ASSOCIATED(fluxes%heat_content_massin))                             &
             fluxes%heat_content_massin(i,j) = fluxes%heat_content_massin(i,j) +   &
-                         tv%T(i,j,k) * max(0.,dThickness) * G%H_to_kg_m2 * fluxes%C_p * Idt
+                         T2d(i,k) * max(0.,dThickness) * G%H_to_kg_m2 * fluxes%C_p * Idt
           if (ASSOCIATED(fluxes%heat_content_massout))                            &
             fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) + &
-                         tv%T(i,j,k) * min(0.,dThickness) * G%H_to_kg_m2 * fluxes%C_p * Idt
+                         T2d(i,k) * min(0.,dThickness) * G%H_to_kg_m2 * fluxes%C_p * Idt
           if (ASSOCIATED(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
-                         tv%T(i,j,k) * dThickness * G%H_to_kg_m2
-!NOTE tv%T should be T2d
+                         T2d(i,k) * dThickness * G%H_to_kg_m2
+
           ! Determine the energetics of river mixing before updating the state.
           if (calculate_energetics .and. associated(fluxes%lrunoff) .and. CS%do_rivermix) then
             ! Here we add an additional source of TKE to the mixed layer where river
@@ -1062,12 +1022,13 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
           ! For layers thin relative to 1/IforcingDepthScale, then distribute
           ! forcing into deeper layers.
           ! fractionOfForcing = 1.0, unless h2d is less than IforcingDepthScale.
+         !IforcingDepthScale = 1. / ( CS%minimum_forcing_depth*G%m_to_H - netMassOut(i) )
           IforcingDepthScale = 1. / ( CS%minimum_forcing_depth*G%m_to_H )
           fractionOfForcing = min(1.0, h2d(i,k)*IforcingDepthScale)
 
           ! In the case with (-1)*netMassOut*fractionOfForcing greater than cfl*h, we
           ! limit the forcing applied to this cell, leaving the remaining forcing to
-          ! be distribute downwards.
+          ! be distributed downwards.
          !TODO: if (-fractionOfForcing*netMassOut(i) > CS%evap_CFL_limit*h2d(i,k)) then
           if (-netMassOut(i) > CS%evap_CFL_limit*h2d(i,k)) then
             fractionOfForcing = -CS%evap_CFL_limit*h2d(i,k)/netMassOut(i)
@@ -1126,9 +1087,6 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
                            "Complete mass loss in column!")
           endif
 
-          ! For efficiency?
-!         if (abs(netMassOut(i))+abs(netHeat(i))+abs(netSalt(i)) == 0.0) exit
-
         enddo ! k
 
       ! Check if trying to apply fluxes over land points
@@ -1160,7 +1118,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
     ! Heat by the convergence of penetrating SW. 
     ! SW penetrative heating uses the updated thickness from above. 
     
-    ! save temperature before increment with SW heating 
+    ! Save temperature before increment with SW heating 
     if(CS%id_penSW_diag > 0) then 
       do k=1,nz ; do i=is,ie
         CS%penSW_diag(i,j,k) = T2d(i,k)
@@ -1187,14 +1145,14 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
       tv%T(i,j,k) = T2d(i,k)
     enddo ; enddo
 
-    ! diagnose heating (W/m2) applied to a grid cell from SW penetration 
+    ! Diagnose heating (W/m2) applied to a grid cell from SW penetration 
     if(CS%id_penSW_diag > 0) then 
       do k=1,nz ; do i=is,ie
         CS%penSW_diag(i,j,k) = (T2d(i,k)-CS%penSW_diag(i,j,k))*h(i,j,k) * Idt * tv%C_p * G%H_to_kg_m2
       enddo ; enddo
     endif 
 
-    ! fill CS%nonpenSW_diag
+    ! Fill CS%nonpenSW_diag
     if(CS%id_nonpenSW_diag > 0) then 
       do i=is,ie
         CS%nonpenSW_diag(i,j) = nonpenSW(i)
@@ -1203,7 +1161,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
 
   enddo ! j-loop finish
 
-  ! post the diagnostics 
+  ! Post the diagnostics 
   if (CS%id_createdH      > 0) call post_data(CS%id_createdH     , CS%createdH     , CS%diag)
   if (CS%id_penSW_diag    > 0) call post_data(CS%id_penSW_diag   , CS%penSW_diag   , CS%diag)
   if (CS%id_nonpenSW_diag > 0) call post_data(CS%id_nonpenSW_diag, CS%nonpenSW_diag, CS%diag)
