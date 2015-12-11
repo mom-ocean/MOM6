@@ -99,7 +99,10 @@ type, public :: diabatic_aux_CS ; private
                                    ! at the river mouths to "rivermix_depth" meters
   real    :: rivermix_depth = 0.0  ! The depth to which rivers are mixed if
                                    ! do_rivermix = T, in m.
-
+  real    :: minimum_forcing_depth = 0.001 ! The smallest depth over which forcing is
+                                   ! applied, in m.
+  real    :: evap_CFL_limit = 0.8  ! The largest fraction of a layer that can be
+                                   ! evaporated in one time-step (non-dim).
 
   logical :: reclaim_frazil  !   If true, try to use any frazil heat deficit to
                              ! to cool the topmost layer down to the freezing
@@ -886,13 +889,6 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
   ! code handles this issue properly.
   H_limit_fluxes = max(G%Angstrom, 1.E-30*G%m_to_H)
 
-  ! The inverse scale, IforcingDepthScale, is a hack which
-  ! should not be tickled in Eulerian mode. It stops all of the forcing from
-  ! being deposited into a vanish(ed/ing) layer. We presently use here
-  ! 1/10^-3 = 1000 to correspond to a 1mm thick layer over which to distribute
-  ! the surface fluxes uniformly.
-  IforcingDepthScale = 1000.
-
   ! diagnostic to see if need to create mass to avoid grounding
   if (CS%id_createdH>0) CS%createdH(:,:) = 0.
   numberOfGroundings = 0
@@ -1062,17 +1058,19 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
         ! B/ Update mass, salt, temp from mass leaving ocean and other fluxes of heat and salt.
         do k=1,nz
 
-          ! Place forcing into top layer if this layer has nontrivial thickness.
+          ! Place forcing into this layer if this layer has nontrivial thickness.
           ! For layers thin relative to 1/IforcingDepthScale, then distribute
           ! forcing into deeper layers.
           ! fractionOfForcing = 1.0, unless h2d is less than IforcingDepthScale.
-          fractionOfForcing = min(1.0, h2d(i,k)*G%H_to_m*IforcingDepthScale)
+          IforcingDepthScale = 1. / ( CS%minimum_forcing_depth*G%m_to_H )
+          fractionOfForcing = min(1.0, h2d(i,k)*IforcingDepthScale)
 
-          ! In the case with (-1)*netMassOut greater than 0.8*h, then we limit
-          ! applied to the top cell, and distribute the fluxes downwards.
-          !   ### The 0.8 here should become a run-time parameter?
-          if (-netMassOut(i) > 0.8*h2d(i,k)) then
-            fractionOfForcing = -0.8*h2d(i,k)/netMassOut(i)
+          ! In the case with (-1)*netMassOut*fractionOfForcing greater than cfl*h, we
+          ! limit the forcing applied to this cell, leaving the remaining forcing to
+          ! be distribute downwards.
+         !TODO: if (-fractionOfForcing*netMassOut(i) > CS%evap_CFL_limit*h2d(i,k)) then
+          if (-netMassOut(i) > CS%evap_CFL_limit*h2d(i,k)) then
+            fractionOfForcing = -CS%evap_CFL_limit*h2d(i,k)/netMassOut(i)
           endif
 
           ! Change in state due to forcing
@@ -1281,6 +1279,17 @@ subroutine diabatic_aux_init(Time, G, param_file, diag, CS, use_ePBL)
                  "when making frazil. The default is false, which will be \n"//&
                  "faster but is inappropriate with ice-shelf cavities.", &
                  default=.false.)
+  call get_param(param_file, mod, "MINIMUM_FORCING_DEPTH", CS%minimum_forcing_depth, &
+                 "The smallest depth over which forcing can be applied. This\n"//&
+                 "only takes effect when near-surface layers become thin\n"//&
+                 "relative to this scale, in which case the forcing tendencies\n"//&
+                 "scaled down by distributing the forcing over this depth scale.", &
+                 units="m", default=0.001)
+  call get_param(param_file, mod, "EVAP_CFL_LIMIT", CS%evap_CFL_limit, &
+                 "The largest fraction of a layer than can be lost to forcing\n"//&
+                 "(e.g. evaporation, sea-ice formation) in one time-step. The unused\n"//&
+                 "mass loss is passed down through the column.", &
+                 units="nondim", default=0.8)
 
   if (use_ePBL) then
     call get_param(param_file, mod, "DO_RIVERMIX", CS%do_rivermix, &
