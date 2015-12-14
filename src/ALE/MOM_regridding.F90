@@ -49,8 +49,12 @@ type, public :: regridding_CS
   real, dimension(:), allocatable :: target_density
 
   !> This array is set by function set_regrid_max_depths()
-  !! It specifies the maximum depth that every interface is allowed to take, in .
+  !! It specifies the maximum depth that every interface is allowed to take, in H.
   real, dimension(:), allocatable :: max_interface_depths
+
+  !> This array is set by function set_regrid_max_thickness()
+  !! It specifies the maximum depth that every interface is allowed to take, in H.
+  real, dimension(:), allocatable :: max_layer_thickness
 
   integer :: nk !< Number of layers/levels
 
@@ -127,17 +131,15 @@ end type
 
 ! The following routines are visible to the outside world
 public initialize_regridding, end_regridding, regridding_main
-public inflate_vanished_layers_old
-public check_remapping_grid, check_grid_column
+public inflate_vanished_layers_old, check_remapping_grid, check_grid_column
 public setRegriddingBoundaryExtrapolation, adjust_interface_motion
 public set_regrid_min_thickness, set_regrid_params
 public set_old_grid_weight, set_filter_depths
-public uniformResolution, setCoordinateResolution
-public set_target_densities_from_G, set_target_densities, set_regrid_max_depths
+public uniformResolution, setCoordinateResolution, build_zstar_column
+public set_target_densities_from_G, set_target_densities
+public set_regrid_max_depths, set_regrid_max_thickness
 public getCoordinateResolution, getCoordinateInterfaces
 public getCoordinateUnits, getCoordinateShortName, getStaticThickness
-public build_zstar_column
-
 public DEFAULT_COORDINATE_MODE
 
 !> Documentation for coordinate options
@@ -659,7 +661,7 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
   real, dimension(CS%nk,2) :: ppoly_i_S            !Edge slope of polynomial
   real, dimension(CS%nk,CS%degree_i+1) :: ppoly_i_coefficients !Coefficients of polynomial
   integer   :: ppoly_degree         ! The actual degree of the polynomials.
-  real, dimension(SZK_(G)) :: p_column, densities, T_column, S_column, Tmp_column
+  real, dimension(SZK_(G)) :: p_col, densities, T_col, S_col, Tmp_col
   integer, dimension(SZK_(G)) :: mapping
   real    :: nominalDepth, totalThickness, dh
   real, dimension(SZK_(G)+1) :: zOld, zNew
@@ -668,7 +670,7 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
 
   nz = G%ke
   threshold = CS%min_thickness
-  p_column(:) = CS%ref_pressure
+  p_col(:) = CS%ref_pressure
 
   ! Build grid based on target interface densities
   do i = G%isc-1,G%iec+1
@@ -677,8 +679,8 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
       ! Copy T and S onto new variables so as to not alter the original values
       ! of T and S (these are remapped at the end of the regridding iterations
       ! once the final grid has been determined).
-      T_column = tv%T(i,j,:)
-      S_column = tv%S(i,j,:)
+      T_col = tv%T(i,j,:)
+      S_col = tv%S(i,j,:)
 
       ! Copy original grid
       h0(1:nz) = h(i,j,1:nz)
@@ -738,7 +740,7 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
 
 
         ! Compute densities within current water column
-        call calculate_density( T_column, S_column, p_column, densities,&
+        call calculate_density( T_col, S_col, p_col, densities,&
                                  1, nz, tv%eqn_of_state )
 
         do k = 1,count_nonzero_layers
@@ -764,11 +766,11 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
         dx(1) = 0.
         dx(nz+1) = 0.
 
-        call remapping_core(remapCS, nz, h0, S_column, nz, dx, Tmp_column)
-        S_column(:) = Tmp_column(:)
+        call remapping_core(remapCS, nz, h0, S_col, nz, dx, Tmp_col)
+        S_col(:) = Tmp_col(:)
 
-        call remapping_core(remapCS, nz, h0, T_column, nz, dx, Tmp_column)
-        T_column(:) = Tmp_column(:)
+        call remapping_core(remapCS, nz, h0, T_col, nz, dx, Tmp_col)
+        T_col(:) = Tmp_col(:)
 
         ! Compute the deviation between two successive grids
         deviation = 0.0
@@ -861,8 +863,8 @@ subroutine build_grid_HyCOM1( G, h, tv, dzInterface, remapCS, CS )
   type(regridding_CS),                          intent(in)    :: CS !< Regridding control structure
   ! Local variables
   integer   :: i, j, k, nz
-  real, dimension(SZK_(G)) :: T_column, S_column, p_column, rho_column, h_column_new ! Layer quantities
-  real, dimension(SZK_(G)+1) :: z_column, z_column_new ! Interface positions in H units (m or Pa)
+  real, dimension(SZK_(G)) :: T_col, S_col, p_col, rho_col, h_col_new ! Layer quantities
+  real, dimension(SZK_(G)+1) :: z_col, z_col_new ! Interface positions in H units (m or Pa)
   real, dimension(CS%nk,2) :: ppoly_i_E ! Edge value of polynomial
   real, dimension(CS%nk,2) :: ppoly_i_S ! Edge slope of polynomial
   real, dimension(CS%nk,CS%degree_i+1) :: ppoly_i_coefficients ! Coefficients of polynomial
@@ -870,10 +872,12 @@ subroutine build_grid_HyCOM1( G, h, tv, dzInterface, remapCS, CS )
   real :: stretching ! z* stretching, converts z* to z.
   real :: hNew
   logical :: maximum_depths_set ! If true, the maximum depths of interface have been set.
+  logical :: maximum_h_set      ! If true, the maximum layer thicknesses have been set.
   integer :: ppoly_degree
 
   nz = G%ke
   maximum_depths_set = allocated(CS%max_interface_depths)
+  maximum_h_set = allocated(CS%max_layer_thickness)
 
   ! Build grid based on target interface densities
   do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
@@ -882,48 +886,54 @@ subroutine build_grid_HyCOM1( G, h, tv, dzInterface, remapCS, CS )
       ! Copy T and S onto new variables so as to not alter the original values
       ! of T and S (these are remapped at the end of the regridding iterations
       ! once the final grid has been determined).
-      T_column(:) = tv%T(i,j,:)
-      S_column(:) = tv%S(i,j,:)
-      z_column(1) = 0. ! Work downward rather than bottom up
+      T_col(:) = tv%T(i,j,:)
+      S_col(:) = tv%S(i,j,:)
+      z_col(1) = 0. ! Work downward rather than bottom up
       do K = 1, nz
-        z_column(K+1) = z_column(K) + h(i,j,k) ! Work in units of h (m or Pa)
-        p_column(k) = CS%ref_pressure + CS%compressibility_fraction * &
-             ( 0.5 * ( z_column(K) + z_column(K+1) ) * G%H_to_Pa - CS%ref_pressure )
+        z_col(K+1) = z_col(K) + h(i,j,k) ! Work in units of h (m or Pa)
+        p_col(k) = CS%ref_pressure + CS%compressibility_fraction * &
+             ( 0.5 * ( z_col(K) + z_col(K+1) ) * G%H_to_Pa - CS%ref_pressure )
       enddo
 
       ! Work bottom recording potential density
-      call calculate_density(T_column, S_column, p_column, &
-                             rho_column, 1, nz, tv%eqn_of_state )
+      call calculate_density(T_col, S_col, p_col, &
+                             rho_col, 1, nz, tv%eqn_of_state )
       ! This ensures the potential density profile is monotonic
       ! although not necessarily single valued.
       do k = nz-1, 1, -1
-        rho_column(k) = min( rho_column(k), rho_column(k+1) )
+        rho_col(k) = min( rho_col(k), rho_col(k+1) )
       enddo
 
-      ! Interpolates for the target interface position with the rho_column profile
-      call regridding_set_ppolys(rho_column, CS, nz, h(i,j,:), ppoly_i_E, ppoly_i_S, &
+      ! Interpolates for the target interface position with the rho_col profile
+      call regridding_set_ppolys(rho_col, CS, nz, h(i,j,:), ppoly_i_E, ppoly_i_S, &
                                  ppoly_i_coefficients, ppoly_degree)
       ! Based on global density profile, interpolate to generate a new grid
-      call interpolate_grid(nz, h(i,j,:), z_column, ppoly_i_E, ppoly_i_coefficients, &
-                            CS%target_density, ppoly_degree, nz, h_column_new, z_column_new)
+      call interpolate_grid(nz, h(i,j,:), z_col, ppoly_i_E, ppoly_i_coefficients, &
+                            CS%target_density, ppoly_degree, nz, h_col_new, z_col_new)
 
       ! Sweep down the interfaces and make sure that the interface is at least
       ! as deep as a nominal target z* grid
       nominal_z = 0.
-      stretching = z_column(nz+1) / G%bathyT(i,j) * G%m_to_H ! Stretches z* to z
+      stretching = z_col(nz+1) / G%bathyT(i,j) * G%m_to_H ! Stretches z* to z
       do k = 2, nz+1
         nominal_z = nominal_z + CS%coordinateResolution(k-1) * stretching
-        z_column_new(k) = max( z_column_new(k), nominal_z )
-        z_column_new(k) = min( z_column_new(k), z_column(nz+1) )
+        z_col_new(k) = max( z_col_new(k), nominal_z )
+        z_col_new(k) = min( z_col_new(k), z_col(nz+1) )
       enddo
 
-      if (maximum_depths_set) then ; do K=2,nz
+      if (maximum_depths_set .and. maximum_h_set) then ; do k=2,nz
         ! The loop bounds are 2 & nz so the top and bottom interfaces do not move.
-        z_column_new(K) = min(z_column_new(K), CS%max_interface_depths(K))
+        ! Recall that z_col_new is positive downward.
+        z_col_new(K) = min(z_col_new(K), CS%max_interface_depths(K), &
+                           z_col_new(K-1) + CS%max_layer_thickness(k-1))
+      enddo ; elseif (maximum_depths_set) then ; do K=2,nz
+        z_col_new(K) = min(z_col_new(K), CS%max_interface_depths(K))
+      enddo ; elseif (maximum_h_set) then ; do k=2,nz
+        z_col_new(K) = min(z_col_new(K), z_col_new(K-1) + CS%max_layer_thickness(k-1))
       enddo ; endif
 
       ! Calculate the final change in grid position after blending new and old grids
-      call filtered_grid_motion( CS, nz, z_column_new, z_column, dzInterface(i,j,:) )
+      call filtered_grid_motion( CS, nz, z_col_new, z_col, dzInterface(i,j,:) )
 
      ! This adjusts  things robust to round-off errors
      call adjust_interface_motion( nz, CS%min_thickness, h(i,j,:), dzInterface(i,j,:) )
@@ -980,6 +990,7 @@ subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
                       ! near-surface layars and the interior, in H.
   real :: Lfilt       ! A filtering lengthscale, in H.
   logical :: maximum_depths_set ! If true, the maximum depths of interface have been set.
+  logical :: maximum_h_set      ! If true, the maximum layer thicknesses have been set.
   real :: k2_used, k2here, dz_sum, z_max
   integer :: k2
   real :: h_tr, b_denom_1, b1, d1 ! Temporary variables used by the tridiagonal solver.
@@ -990,6 +1001,7 @@ subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
 
   nz = G%ke
   maximum_depths_set = allocated(CS%max_interface_depths)
+  maximum_h_set = allocated(CS%max_layer_thickness)
 
   ! Build grid based on target interface densities
   do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
@@ -1235,9 +1247,15 @@ subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
           enddo
         endif
 
-        if (maximum_depths_set) then ; do K=2,nz
+        if (maximum_depths_set .and. maximum_h_set) then ; do k=2,nz
           ! The loop bounds are 2 & nz so the top and bottom interfaces do not move.
+          ! Recall that z_col_new is positive downward.
+          z_col_new(K) = min(z_col_new(K), CS%max_interface_depths(K), &
+                                z_col_new(K-1) + CS%max_layer_thickness(k-1))
+        enddo ; elseif (maximum_depths_set) then ; do K=2,nz
           z_col_new(K) = min(z_col_new(K), CS%max_interface_depths(K))
+        enddo ; elseif (maximum_h_set) then ; do k=2,nz
+          z_col_new(K) = min(z_col_new(K), z_col_new(K-1) + CS%max_layer_thickness(k-1))
         enddo ; endif
 
       endif ! Total thickness exceeds nz*CS%min_thickness.
@@ -2155,15 +2173,15 @@ subroutine convective_adjustment(G, h, tv)
   real      :: r0, r1       ! densities
   real      :: h0, h1
   logical   :: stratified
-  real, dimension(G%kE) :: p_column, densities
+  real, dimension(G%kE) :: p_col, densities
 
-  p_column(:) = 0.
+  p_col(:) = 0.
 
   ! Loop on columns
   do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
 
     ! Compute densities within current water column
-    call calculate_density( tv%T(i,j,:), tv%S(i,j,:), p_column, &
+    call calculate_density( tv%T(i,j,:), tv%S(i,j,:), p_col, &
                             densities, 1, G%ke, tv%eqn_of_state )
 
     ! Repeat restratification until complete
@@ -2179,16 +2197,14 @@ subroutine convective_adjustment(G, h, tv)
         ! below it, we swap the cells and recalculate the densitiies
         ! within the swapped cells
         if ( r0 > r1 ) then
-          tv%T(i,j,k)   = T1 ; tv%T(i,j,k+1) = T0
-          tv%S(i,j,k)   = S1 ; tv%S(i,j,k+1) = S0
-          h(i,j,k)      = h1 ; h(i,j,k+1)    = h0
+          tv%T(i,j,k) = T1 ; tv%T(i,j,k+1) = T0
+          tv%S(i,j,k) = S1 ; tv%S(i,j,k+1) = S0
+          h(i,j,k)    = h1 ; h(i,j,k+1)    = h0
           ! Recompute densities at levels k and k+1
-          call calculate_density( tv%T(i,j,k), tv%S(i,j,k), &
-                                   p_column(k), &
-                                   densities(k), tv%eqn_of_state )
-          call calculate_density( tv%T(i,j,k+1), tv%S(i,j,k+1), &
-                                   p_column(k+1), &
-                                   densities(k+1), tv%eqn_of_state )
+          call calculate_density( tv%T(i,j,k), tv%S(i,j,k), p_col(k), &
+                                  densities(k), tv%eqn_of_state )
+          call calculate_density( tv%T(i,j,k+1), tv%S(i,j,k+1), p_col(k+1), &
+                                  densities(k+1), tv%eqn_of_state )
           stratified = .false.
         end if
       enddo  ! k
@@ -2277,11 +2293,11 @@ subroutine set_target_densities( CS, rho_int )
 
 end subroutine set_target_densities
 
-!> Set target densities based on vector of interface values
+!> Set maximum interface depths based on a vector of input values.
 subroutine set_regrid_max_depths( CS, max_depths, units_to_H )
   type(regridding_CS),      intent(inout) :: CS !< Regridding control structure
   real, dimension(CS%nk+1), intent(in)    :: max_depths !< Maximum interface depths, in arbitrary units
-  real, optional,           intent(in)    :: units_to_H !< A conversion factor for max_epths into H units
+  real, optional,           intent(in)    :: units_to_H !< A conversion factor for max_depths into H units
 
   real :: val_to_H
   integer :: K
@@ -2307,6 +2323,26 @@ subroutine set_regrid_max_depths( CS, max_depths, units_to_H )
   enddo
 
 end subroutine set_regrid_max_depths
+
+!> Set maximum layer thicknesses based on a vector of input values.
+subroutine set_regrid_max_thickness( CS, max_h, units_to_H )
+  type(regridding_CS),      intent(inout) :: CS !< Regridding control structure
+  real, dimension(CS%nk+1), intent(in)    :: max_h !< Maximum interface depths, in arbitrary units
+  real, optional,           intent(in)    :: units_to_H !< A conversion factor for max_h into H units
+
+  real :: val_to_H
+  integer :: K
+
+  if (.not.allocated(CS%max_layer_thickness)) allocate(CS%max_layer_thickness(1:CS%nk))
+
+  val_to_H = 1.0 ; if (present( units_to_H)) val_to_H = units_to_H
+
+  do k=1,CS%nk
+    CS%max_layer_thickness(k) = val_to_H * max_h(k)
+  enddo
+
+end subroutine set_regrid_max_thickness
+
 
 !------------------------------------------------------------------------------
 ! Query the fixed resolution data
@@ -2553,6 +2589,7 @@ subroutine regridding_memory_deallocation( CS )
   deallocate( CS%target_density )
   deallocate( CS%coordinateResolution )
   if (allocated(CS%max_interface_depths) ) deallocate( CS%max_interface_depths )
+  if (allocated(CS%max_layer_thickness) ) deallocate( CS%max_layer_thickness )
 
 end subroutine regridding_memory_deallocation
 

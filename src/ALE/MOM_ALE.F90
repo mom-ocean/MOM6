@@ -27,6 +27,7 @@ use MOM_regridding,       only : setRegriddingBoundaryExtrapolation
 use MOM_regridding,       only : regriddingDefaultBoundaryExtrapolation
 use MOM_regridding,       only : set_regrid_min_thickness, regriddingDefaultMinThickness
 use MOM_regridding,       only : check_remapping_grid, set_regrid_max_depths
+use MOM_regridding,       only : set_regrid_max_thickness
 use MOM_regridding,       only : regridding_CS, set_regrid_params
 use MOM_regridding,       only : getCoordinateInterfaces, getCoordinateResolution
 use MOM_regridding,       only : getCoordinateUnits, getCoordinateShortName
@@ -925,7 +926,8 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
   real :: dz_fixed_sfc, Rho_avg_depth, nlay_sfc_int
   integer :: nz_fixed_sfc
   real :: rho_target(G%ke+1) ! Target density used in HYBRID mode
-  real, dimension(size(dz))   :: dz_max ! Thicknesses used to find maximum grid spacing, in m.
+  real, dimension(size(dz))   :: h_max  ! Maximum layer thicknesses, in m.
+  real, dimension(size(dz))   :: dz_max ! Thicknesses used to find maximum interface depths, in m.
   real, dimension(size(dz)+1) :: z_max  ! Maximum tinterface depths, in m.
 
   ke = size(dz) ! Number of levels in resolution vector
@@ -1008,10 +1010,10 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
           if (field_exists(fileName,'dz')) then; varName = 'dz'
           elseif (field_exists(fileName,'dsigma')) then; varName = 'dsigma'
           elseif (field_exists(fileName,'ztest')) then; varName = 'ztest'
+          else ;  call MOM_error(FATAL,"ALE_initRegridding: "// &
+            "Coordinate variable not specified and none could be guessed.")
           endif
         endif
-        if (len_trim(varName)==0) call MOM_error(FATAL,"ALE_initRegridding: "// &
-          "Coordinate variable not specified and none could be guessed.")
         call MOM_read_data(trim(fileName), trim(varName), dz)
         call log_param(param_file, mod, "!ALE_RESOLUTION", dz, &
                    trim(message), units=coordinateUnits(coordMode))
@@ -1075,7 +1077,6 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
                  "When regridding, this is the minimum layer\n"//&
                  "thickness allowed.", units="m",&
                  default=regriddingDefaultMinThickness )
-!  call set_regrid_min_thickness( tmpReal, regridCS )
 
   call get_param(param_file, mod, "BOUNDARY_EXTRAPOLATION", tmpLogical, &
                  "When defined, a proper high-order reconstruction\n"//&
@@ -1083,8 +1084,6 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
                  "than PCM. E.g., if PPM is used for remapping, a\n"//&
                  "PPM reconstruction will also be used within\n"//&
                  "boundary cells.", default=regriddingDefaultBoundaryExtrapolation)
-!  call setRegriddingBoundaryExtrapolation( tmpLogical, regridCS )
-
   call set_regrid_params( regridCS, min_thickness=tmpReal, Boundary_Extrap=tmpLogical )
 
   if (coordinateMode(coordMode) == REGRIDDING_SLIGHT) then
@@ -1140,13 +1139,13 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
                  "               by a comma or space, e.g. FILE:lev.nc,Z\n"//&
                  " FNC1:string - FNC1:dz_min,H_total,power,precision",&
                  default='NONE')
-  message = "The list of maximum depths for each interfaces."
+  message = "The list of maximum depths for each interface."
   if ( trim(string) == "NONE") then
     ! Do nothing.
   elseif ( trim(string) ==  "PARAM") then
-      call get_param(param_file, mod, "MAXIMUM_INTERFACE_DEPTHS", z_max, &
-                   trim(message), units="m", fail_if_missing=.true.)
-      call set_regrid_max_depths( regridCS, z_max, G%m_to_H )
+    call get_param(param_file, mod, "MAXIMUM_INTERFACE_DEPTHS", z_max, &
+                 trim(message), units="m", fail_if_missing=.true.)
+    call set_regrid_max_depths( regridCS, z_max, G%m_to_H )
   elseif (index(trim(string),'FILE:')==1) then
     call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
     inputdir = slasher(inputdir)
@@ -1169,10 +1168,10 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
       if (field_exists(fileName,'z_max')) then; varName = 'z_max'
       elseif (field_exists(fileName,'dz')) then; varName = 'dz' ; do_sum = .true.
       elseif (field_exists(fileName,'dz_max')) then; varName = 'dz_max' ; do_sum = .true.
+      else ; call MOM_error(FATAL,"ALE_initRegridding: "// &
+        "MAXIMUM_INT_DEPTHS variable not specified and none could be guessed.")
       endif
     endif
-    if (len_trim(varName)==0) call MOM_error(FATAL,"ALE_initRegridding: "// &
-      "MAXIMUM_INT_DEPTHS variable not specified and none could be guessed.")
     if (do_sum) then
       call MOM_read_data(trim(fileName), trim(varName), dz_max)
       z_max(1) = 0.0 ; do K=1,ke ; z_max(K+1) = z_max(K) + dz_max(k) ; enddo
@@ -1181,6 +1180,7 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
     endif
     call log_param(param_file, mod, "!MAXIMUM_INT_DEPTHS", z_max, &
                trim(message), units=coordinateUnits(coordMode))
+    call set_regrid_max_depths( regridCS, z_max, G%m_to_H )
   elseif (index(trim(string),'FNC1:')==1) then
     call dz_function1( trim(string(6:)), dz_max )
     if ((coordinateMode(coordMode) == REGRIDDING_SLIGHT) .and. &
@@ -1196,6 +1196,62 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
       "Unrecognized MAXIMUM_INT_DEPTH_CONFIG "//trim(string))
   endif
 
+  ! Optionally specify maximum thicknesses for each layer, enforced by moving
+  ! the interface below a layer downward.
+  call get_param(param_file, mod, "MAX_LAYER_THICKNESS_CONFIG", string, &
+                 "Determines how to specify the maximum layer thicknesses.\n"//&
+                 "Valid options are:\n"//&
+                 " NONE        - there are no maximum layer thicknesses\n"//&
+                 " PARAM       - use the vector-parameter MAX_LAYER_THICKNESS\n"//&
+                 " FILE:string - read from a file. The string specifies\n"//&
+                 "               the filename and variable name, separated\n"//&
+                 "               by a comma or space, e.g. FILE:lev.nc,Z\n"//&
+                 " FNC1:string - FNC1:dz_min,H_total,power,precision",&
+                 default='NONE')
+  message = "The list of maximum thickness for each layer."
+  if ( trim(string) == "NONE") then
+    ! Do nothing.
+  elseif ( trim(string) ==  "PARAM") then
+    call get_param(param_file, mod, "MAX_LAYER_THICKNESS", h_max, &
+                 trim(message), units="m", fail_if_missing=.true.)
+    call set_regrid_max_thickness( regridCS, h_max, G%m_to_H )
+  elseif (index(trim(string),'FILE:')==1) then
+    call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
+    inputdir = slasher(inputdir)
+
+    if (string(6:6)=='.' .or. string(6:6)=='/') then
+      ! If we specified "FILE:./xyz" or "FILE:/xyz" then we have a relative or absolute path
+      fileName = trim( extractWord(trim(string(6:80)), 1) )
+    else
+      ! Otherwise assume we should look for the file in INPUTDIR
+      fileName = trim(inputdir) // trim( extractWord(trim(string(6:80)), 1) )
+    endif
+    if (.not. file_exists(fileName)) call MOM_error(FATAL,"ALE_initRegridding: "// &
+      "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
+
+    varName = trim( extractWord(trim(string(6:)), 2) )
+    if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,"ALE_initRegridding: "// &
+      "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
+    if (len_trim(varName)==0) then
+      if (field_exists(fileName,'h_max')) then; varName = 'h_max'
+      elseif (field_exists(fileName,'dz_max')) then; varName = 'dz_max'
+      else ; call MOM_error(FATAL,"ALE_initRegridding: "// &
+        "MAXIMUM_INT_DEPTHS variable not specified and none could be guessed.")
+      endif
+    endif
+    call MOM_read_data(trim(fileName), trim(varName), h_max)
+    call log_param(param_file, mod, "!MAX_LAYER_THICKNESS", h_max, &
+               trim(message), units=coordinateUnits(coordMode))
+    call set_regrid_max_thickness( regridCS, h_max, G%m_to_H )
+  elseif (index(trim(string),'FNC1:')==1) then
+    call dz_function1( trim(string(6:)), h_max )
+    call log_param(param_file, mod, "!MAX_LAYER_THICKNESS", h_max, &
+               trim(message), units=coordinateUnits(coordMode))
+    call set_regrid_max_thickness( regridCS, h_max, G%m_to_H )
+  else
+    call MOM_error(FATAL,"ALE_initRegridding: "// &
+      "Unrecognized MAX_LAYER_THICKNESS_CONFIG "//trim(string))
+  endif
 
 end subroutine ALE_initRegridding
 
