@@ -1021,9 +1021,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
           ! Place forcing into this layer if this layer has nontrivial thickness.
           ! For layers thin relative to 1/IforcingDepthScale, then distribute
           ! forcing into deeper layers.
+          IforcingDepthScale = 1. / max(G%H_subroundoff, CS%minimum_forcing_depth*G%m_to_H - netMassOut(i) )
           ! fractionOfForcing = 1.0, unless h2d is less than IforcingDepthScale.
-         !IforcingDepthScale = 1. / ( CS%minimum_forcing_depth*G%m_to_H - netMassOut(i) )
-          IforcingDepthScale = 1. / ( CS%minimum_forcing_depth*G%m_to_H )
           fractionOfForcing = min(1.0, h2d(i,k)*IforcingDepthScale)
 
           ! In the case with (-1)*netMassOut*fractionOfForcing greater than cfl*h, we
