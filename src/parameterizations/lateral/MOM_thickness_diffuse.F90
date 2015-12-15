@@ -68,8 +68,9 @@ public vert_fill_TS
 type, public :: thickness_diffuse_CS ; private
   real    :: Khth                ! background interface depth diffusivity (m2 s-1)
   real    :: Khth_Slope_Cff      ! slope dependence coefficient of Khth (m2 s-1)
-  real    :: Khth_Min            ! minimum Khth (m2 s-1)
-  real    :: Khth_Max            ! maximum Khth (m2 s-1), or 0 for no max
+  real    :: max_Khth_CFL        ! Maximum value of the diffusive CFL for thickness diffusion
+  real    :: Khth_Min            ! Minimum value of Khth (m2 s-1)
+  real    :: Khth_Max            ! Maximum value of Khth (m2 s-1), or 0 for no max
   real    :: slope_max           ! slopes steeper than slope_max are limited in some way.
   real    :: kappa_smooth        ! diffusivity used to interpolate more
                                  ! sensible values of T & S into thin layers.
@@ -185,13 +186,15 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
     allocate(KH_u_CFL(SZIB_(G), SZJ_(G)) )
     allocate(KH_v_CFL(SZI_(G), SZJB_(G)) )
 !$OMP parallel do default(none) shared(is,ie,js,je,KH_u_CFL,dt,G)
-    do j = js,je; do I=is-1,ie
-      KH_u_CFL(I,j) = 0.2/(dt*(G%IdxCu(I,j)*G%IdxCu(I,j) + G%IdyCu(I,j)*G%IdyCu(I,j)))
-    enddo; enddo
+    do j=js,je ; do I=is-1,ie
+      KH_u_CFL(I,j) = (0.25*CS%max_Khth_CFL) /  &
+        (dt*(G%IdxCu(I,j)*G%IdxCu(I,j) + G%IdyCu(I,j)*G%IdyCu(I,j)))
+    enddo ; enddo
 !$OMP parallel do default(none) shared(is,ie,js,je,KH_v_CFL,dt,G)
-    do j = js-1,je; do I=is,ie
-      KH_v_CFL(i,J) = 0.2/(dt*(G%IdxCv(i,J)*G%IdxCv(i,J) + G%IdyCv(i,J)*G%IdyCv(i,J)))
-    enddo; enddo
+    do j=js-1,je ; do I=is,ie
+      KH_v_CFL(i,J) = (0.25*CS%max_Khth_CFL) / &
+        (dt*(G%IdxCv(i,J)*G%IdxCv(i,J) + G%IdyCv(i,J)*G%IdyCv(i,J)))
+    enddo ; enddo
     first_call = .false.
   endif
 
@@ -203,46 +206,44 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
 !$OMP                               KH_u_CFL,nz,Khth_Loc,KH_v,KH_v_CFL,int_slope_u, &
 !$OMP                               int_slope_v )
 !$OMP do
-   do j = js,je; do I=is-1,ie
-      Khth_Loc_u(i,j) = CS%Khth
-   enddo; enddo
+  do j=js,je; do I=is-1,ie
+    Khth_Loc_u(i,j) = CS%Khth
+  enddo ; enddo
 
-   if(use_VarMix) then
+  if (use_VarMix) then
 !$OMP do 
-     do j = js,je; do I=is-1,ie
-       Khth_Loc_u(i,j) = Khth_Loc_u(i,j) + CS%KHTH_Slope_Cff*VarMix%L2u(I,j)*VarMix%SN_u(I,j)
-     enddo; enddo
-   endif
+    do j=js,je ; do I=is-1,ie
+      Khth_Loc_u(i,j) = Khth_Loc_u(i,j) + CS%KHTH_Slope_Cff*VarMix%L2u(I,j)*VarMix%SN_u(I,j)
+    enddo ; enddo
+  endif
 
-   if(MEKE_not_null) then; 
-     if (associated(MEKE%Kh)) then
+  if (MEKE_not_null) then ; if (associated(MEKE%Kh)) then
 !$OMP do
-       do j = js,je; do I=is-1,ie
-         Khth_Loc_u(i,j) = Khth_Loc_u(i,j) + MEKE%KhTh_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i+1,j))
-       enddo; enddo
-     endif
-   endif
+    do j=js,je ; do I=is-1,ie
+      Khth_Loc_u(i,j) = Khth_Loc_u(i,j) + MEKE%KhTh_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i+1,j))
+    enddo ; enddo
+  endif ; endif
 
-   if (Resoln_scaled) then
+  if (Resoln_scaled) then
 !$OMP do
-     do j = js,je; do I=is-1,ie
-       Khth_Loc_u(i,j) = Khth_Loc_u(i,j) * VarMix%Res_fn_u(i,j)
-     enddo; enddo
-   endif
+    do j=js,je; do I=is-1,ie
+      Khth_Loc_u(i,j) = Khth_Loc_u(i,j) * VarMix%Res_fn_u(i,j)
+    enddo ; enddo
+  endif
 
-   if (CS%Khth_Max > 0) then
+  if (CS%Khth_Max > 0) then
 !$OMP do
-     do j = js,je; do I=is-1,ie
-       Khth_Loc_u(i,j) = max(CS%Khth_min, min(Khth_Loc_u(i,j),CS%Khth_Max))
-     enddo; enddo
-   else
+    do j=js,je; do I=is-1,ie
+      Khth_Loc_u(i,j) = max(CS%Khth_min, min(Khth_Loc_u(i,j),CS%Khth_Max))
+    enddo ; enddo
+  else
 !$OMP do
-     do j = js,je; do I=is-1,ie
-       Khth_Loc_u(i,j) = max(CS%Khth_min, Khth_Loc_u(i,j))
-     enddo; enddo
-   endif
+    do j=js,je; do I=is-1,ie
+      Khth_Loc_u(i,j) = max(CS%Khth_min, Khth_Loc_u(i,j))
+    enddo ; enddo
+  endif
 !$OMP do
-  do j = js,je; do I=is-1,ie
+  do j=js,je; do I=is-1,ie
     KH_u(I,j,1) = min(KH_u_CFL(I,j), Khth_Loc_u(i,j))
   enddo ; enddo
 
@@ -254,46 +255,46 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
 !$OMP do
   do J=js-1,je ; do i=is,ie
     Khth_Loc(i,j) = CS%Khth
-  enddo; enddo
+  enddo ; enddo
 
   if (use_VarMix) then
 !$OMP do
-   do J=js-1,je ; do i=is,ie
+    do J=js-1,je ; do i=is,ie
       Khth_Loc(i,j) = Khth_Loc(i,j) + CS%KHTH_Slope_Cff*VarMix%L2v(i,J)*VarMix%SN_v(i,J)
-   enddo; enddo
+    enddo ; enddo
   endif
-  if (MEKE_not_null) then
-    if (associated(MEKE%Kh)) then
+  if (MEKE_not_null) then ; if (associated(MEKE%Kh)) then
 !$OMP do
-      do J=js-1,je ; do i=is,ie
-        Khth_Loc(i,j) = Khth_Loc(i,j) + MEKE%KhTh_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i,j+1))
-      enddo; enddo
-    endif
-  endif
+    do J=js-1,je ; do i=is,ie
+      Khth_Loc(i,j) = Khth_Loc(i,j) + MEKE%KhTh_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i,j+1))
+    enddo ; enddo
+  endif ; endif
 
   if (Resoln_scaled) then
 !$OMP do
     do J=js-1,je ; do i=is,ie
       Khth_Loc(i,j) = Khth_Loc(i,j) * VarMix%Res_fn_v(i,J)
-    enddo; enddo
+    enddo ; enddo
   endif
 
   if (CS%Khth_Max > 0) then
 !$OMP do
     do J=js-1,je ; do i=is,ie
       Khth_Loc(i,j) = max(CS%Khth_min, min(Khth_Loc(i,j),CS%Khth_Max))
-    enddo; enddo
+    enddo ; enddo
   else
 !$OMP do
     do J=js-1,je ; do i=is,ie
       Khth_Loc(i,j) = max(CS%Khth_min, Khth_Loc(i,j))
-    enddo; enddo
+    enddo ; enddo
   endif
 
+  if (CS%max_Khth_CFL > 0.0) then
 !$OMP do
-  do J=js-1,je ; do i=is,ie
-    KH_v(i,J,1) = min(KH_v_CFL(i,J), Khth_Loc(i,j))
-  enddo ; enddo
+    do J=js-1,je ; do i=is,ie
+      KH_v(i,J,1) = min(KH_v_CFL(i,J), Khth_Loc(i,j))
+    enddo ; enddo
+  endif
 !$OMP do
   do K=2,nz+1 ; do J=js-1,je ; do i=is,ie
     KH_v(i,J,K) = KH_v(i,J,1)
@@ -598,7 +599,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
 !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
 !$OMP                                  drdx,mag_grad2,Slope,slope2_Ratio,Sfn_unlim, &
 !$OMP                                  Sfn_safe,Sfn_est,Sfn,calc_derivatives)
-  do j = js,je ; do K=nz,2,-1
+  do j=js,je ; do K=nz,2,-1
     if (find_work .and. .not.(use_EOS)) then
       drdiA = 0.0 ; drdiB = 0.0
 !       drdkL = G%g_prime(k) ; drdkR = G%g_prime(k)
@@ -793,7 +794,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
 !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
 !$OMP                                  drdy,mag_grad2,Slope,slope2_Ratio,Sfn_unlim, &
 !$OMP                                  Sfn_safe,Sfn_est,Sfn,calc_derivatives)
-  do j = js-1,je ; do K=nz,2,-1
+  do J=js-1,je ; do K=nz,2,-1
     if (find_work .and. .not.(use_EOS)) then
       drdjA = 0.0 ; drdjB = 0.0
 !       drdkL = G%g_prime(k) ; drdkR = G%g_prime(k)
@@ -1606,6 +1607,13 @@ subroutine thickness_diffuse_init(Time, G, param_file, diag, CDp, CS)
   call get_param(param_file, mod, "KHTH_MAX", CS%KHTH_Max, &
                  "The maximum horizontal thickness diffusivity.", &
                  units = "m2 s-1", default=0.0)
+  call get_param(param_file, mod, "KHTH_MAX_CFL", CS%max_Khth_CFL, &
+                 "The maximum value of the local diffusive CFL ratio that \n"//&
+                 "is permitted for the thickness diffusivity. 1.0 is the \n"//&
+                 "marginally unstable value in a pure layered model, but \n"//&
+                 "much smaller numbers (e.g. 0.1) seem to work better for \n"//&
+                 "ALE-based models.", units = "nondimensional", default=0.8)
+  if (CS%max_Khth_CFL < 0.0) CS%max_Khth_CFL = 0.0
   call get_param(param_file, mod, "DETANGLE_INTERFACES", CS%detangle_interfaces, &
                  "If defined add 3-d structured enhanced interface height \n"//&
                  "diffusivities to horizonally smooth jagged layers.", &
