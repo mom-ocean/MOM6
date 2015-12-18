@@ -229,7 +229,7 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
                  
   call get_param(param_file, mod, "ENERGYFILE", energyfile, &
                  "The file to use to write the energies and globally \n"//&
-                 "summed diagnostics.", default="timestats") ! , default="ocean.stats")
+                 "summed diagnostics.", default="ocean.stats")
 
   CS%energyfile = trim(slasher(directory))//trim(energyfile)
   call log_param(param_file, mod, "output_path/ENERGYFILE", CS%energyfile)
