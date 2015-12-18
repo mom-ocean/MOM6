@@ -115,6 +115,9 @@ subroutine MOM_write_cputime_init(param_file, directory, Input_start_time, CS)
                  "The file into which CPU time is written.",default="CPU_stats")
   CS%CPUfile = trim(directory)//trim(CS%CPUfile)
   call log_param(param_file, mod, "directory/CPU_TIME_FILE", CS%CPUfile)
+#ifdef STATSLABEL
+  CS%CPUfile = trim(CS%CPUfile)//"."//trim(adjustl(STATSLABEL))
+#endif
 
   CS%Start_time = Input_start_time
 

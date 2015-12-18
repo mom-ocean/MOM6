@@ -58,7 +58,7 @@ module MOM_sum_output
 use MOM_coms, only : sum_across_PEs, PE_here, root_PE, num_PEs, max_across_PEs
 use MOM_coms, only : reproducing_sum
 use MOM_coms, only : EFP_type, operator(+), operator(-), assignment(=), EFP_to_real, real_to_EFP
-use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
+use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe, MOM_mesg
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
@@ -229,10 +229,13 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
                  
   call get_param(param_file, mod, "ENERGYFILE", energyfile, &
                  "The file to use to write the energies and globally \n"//&
-                 "summed diagnostics.", default="timestats")
+                 "summed diagnostics.", default="timestats") ! , default="ocean.stats")
 
   CS%energyfile = trim(slasher(directory))//trim(energyfile)
   call log_param(param_file, mod, "output_path/ENERGYFILE", CS%energyfile)
+#ifdef STATSLABEL
+  CS%energyfile = trim(CS%energyfile)//"."//trim(adjustl(STATSLABEL))
+#endif
 
   call get_param(param_file, mod, "DATE_STAMPED_STDOUT", CS%date_stamped_output, &
                  "If true, use dates (not times) in messages to stdout", &
