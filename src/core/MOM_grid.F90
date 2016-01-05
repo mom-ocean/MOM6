@@ -20,6 +20,7 @@ module MOM_grid
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
 !***********************************************************************
 
+use MOM_hor_index, only : hor_index_type, hor_index_init
 use MOM_domains, only : MOM_domain_type, get_domain_extent, compute_block_extent
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
@@ -48,15 +49,16 @@ type, public :: ocean_grid_type
   type(MOM_domain_type), pointer :: Domain => NULL()
   type(MOM_domain_type), pointer :: Domain_aux => NULL()
   type(verticalGrid_type), pointer :: GV => NULL()
-  integer :: isc, iec, jsc, jec ! The range of the computational domain indicies
-  integer :: isd, ied, jsd, jed ! and data domain indicies at tracer cell centers.
-  integer :: isg, ieg, jsg, jeg ! The range of the global domain tracer cell indicies.
-  integer :: IscB, IecB, JscB, JecB ! The range of the computational domain indicies
-  integer :: IsdB, IedB, JsdB, JedB ! and data domain indicies at tracer cell vertices.
-  integer :: IsgB, IegB, JsgB, JegB ! The range of the global domain vertex indicies.
+  type(hor_index_type) :: HI
+  integer :: isc, iec, jsc, jec ! The range of the computational domain indices
+  integer :: isd, ied, jsd, jed ! and data domain indices at tracer cell centers.
+  integer :: isg, ieg, jsg, jeg ! The range of the global domain tracer cell indices.
+  integer :: IscB, IecB, JscB, JecB ! The range of the computational domain indices
+  integer :: IsdB, IedB, JsdB, JedB ! and data domain indices at tracer cell vertices.
+  integer :: IsgB, IegB, JsgB, JegB ! The range of the global domain vertex indices.
   integer :: isd_global         ! The values of isd and jsd in the global
   integer :: jsd_global         ! (decomposition invariant) index space.
-  integer :: ks, ke             ! The range of layer's vertical indicies.
+  integer :: ks, ke             ! The range of layer's vertical indices.
   logical :: symmetric          ! True if symmetric memory is used.
   logical :: nonblocking_updates  ! If true, non-blocking halo updates are
                                   ! allowed.  The default is .false. (for now).
@@ -184,7 +186,7 @@ type, public :: ocean_grid_type
                         ! in m2
   ! These variables are for block strucutre.
   integer                   :: nblocks
-  type(ocean_block_type), pointer :: Block(:) => NULL() ! store indices for each block
+  type(hor_index_type), pointer :: Block(:) => NULL() ! store indices for each block
   integer :: isd_bk, ied_bk, jsd_bk, jed_bk     ! block data domain indices at 
                                                 ! tracer cell centers.
   integer :: isdB_bk, iedB_bk, jsdB_bk, jedB_bk ! block data domain indices at 
@@ -213,6 +215,8 @@ subroutine MOM_grid_init(G, param_file)
                          G%isg, G%ieg, G%jsg, G%jeg, &
                          idg_off, jdg_off, G%symmetric)
   G%isd_global = G%isd+idg_off ; G%jsd_global = G%jsd+jdg_off
+
+  call hor_index_init(G%Domain, G%HI, param_file)
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, "MOM_grid", version, &
@@ -339,12 +343,15 @@ subroutine MOM_grid_init(G, param_file)
        "nblocks(=NI_BLOCK*NJ_BLOCK) must be no less than 1")
 
   allocate(ibegin(niblock), iend(niblock), jbegin(njblock), jend(njblock))
-  call compute_block_extent(G%isc,G%iec,niblock,ibegin,iend)
-  call compute_block_extent(G%jsc,G%jec,njblock,jbegin,jend)
+  call compute_block_extent(G%HI%isc,G%HI%iec,niblock,ibegin,iend)
+  call compute_block_extent(G%HI%jsc,G%HI%jec,njblock,jbegin,jend)
 
   G%nblocks = nblocks
   allocate(G%Block(nblocks))
   do n = 1,nblocks
+    ! Copy all information from the array index type describing the local grid.
+    G%Block(n) = G%HI
+
     i = mod((n-1), niblock) + 1
     j = (n-1)/niblock + 1
     !--- isd and jsd are always 1 for each block
@@ -369,8 +376,10 @@ subroutine MOM_grid_init(G, param_file)
       G%Block(n)%IsdB = G%Block(n)%IsdB-1
       G%Block(n)%JsdB = G%Block(n)%JsdB-1
     endif
-    G%Block(n)%ioff = ibegin(i) - G%Block(n)%isc
-    G%Block(n)%joff = jbegin(j) - G%Block(n)%jsc
+!    G%Block(n)%ioff = ibegin(i) - G%Block(n)%isc
+!    G%Block(n)%joff = jbegin(j) - G%Block(n)%jsc
+    G%Block(n)%idg_offset = (ibegin(i) - G%Block(n)%isc) + G%HI%idg_offset
+    G%Block(n)%jdg_offset = (jbegin(j) - G%Block(n)%jsc) + G%HI%jdg_offset
   enddo
 
   !-- make sure the last block is the largest.
@@ -383,7 +392,7 @@ subroutine MOM_grid_init(G, param_file)
        "MOM_grid_init: the last block size in y-direction is not the largest")
   enddo
 
-  !-- make sure
+  ! Consider removing the isd_bk and similar variables.
 
   !--- define the block memory domain ( maximum data domain size of all blocks )
   G%isd_bk  = G%block(nblocks)%isd  ; G%ied_bk  = G%block(nblocks)%ied
@@ -391,11 +400,11 @@ subroutine MOM_grid_init(G, param_file)
   G%isdB_bk = G%block(nblocks)%isdB ; G%iedB_bk = G%block(nblocks)%iedB
   G%jsdB_bk = G%block(nblocks)%jsdB ; G%jedB_bk = G%block(nblocks)%jedB
 
-  !-- do some bound check
-  if ( G%ied_bk+G%block(nblocks)%ioff > G%ied ) call MOM_error(FATAL, &
-       "MOM_grid_init: G%ied_bk+G%block(nblocks)%ioff > G%ied")
-  if ( G%jed_bk+G%block(nblocks)%joff > G%jed ) call MOM_error(FATAL, &
-       "MOM_grid_init: G%jed_bk+G%block(nblocks)%joff > G%jed")
+  !-- do some bounds checking
+  if ( G%ied_bk+G%block(nblocks)%idg_offset > G%HI%ied + G%HI%idg_offset ) &
+        call MOM_error(FATAL, "MOM_grid_init: G%ied_bk > G%ied")
+  if ( G%jed_bk+G%block(nblocks)%jdg_offset > G%HI%jed + G%HI%jdg_offset ) &
+        call MOM_error(FATAL, "MOM_grid_init: G%jed_bk > G%jed")
 
   !--- For static memory, make sure G%iem_bk - G%ism_bk + 1 = NI_MEM_BK_
   !---                         and  G%jem_bk - G%jsm_bk + 1 = NJ_MEM_BK_

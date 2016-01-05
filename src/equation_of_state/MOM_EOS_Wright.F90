@@ -25,7 +25,8 @@ module MOM_EOS_Wright
 !*  Ocean. Tech., 14, 735-740.  Coded by R. Hallberg, 7/00.            *
 !***********************************************************************
 
-use MOM_grid, only : ocean_grid_type, ocean_block_type
+use MOM_grid, only : ocean_grid_type
+use MOM_hor_index, only : hor_index_type
 
 implicit none ; private
 
@@ -257,11 +258,11 @@ subroutine calculate_2_densities_wright( T, S, pressure1, pressure2, rho1, rho2,
   enddo
 end subroutine calculate_2_densities_wright
 
-subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, B, dpa, intz_dpa,   &
+subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, dpa, intz_dpa,   &
                                  intx_dpa, inty_dpa)
   real, dimension(NIMEM_BK_,NJMEM_BK_),  intent(in)  :: T, S, z_t, z_b
   real,                                  intent(in)  :: rho_ref, rho_0, G_e
-  type(ocean_block_type),                intent(in)  :: B 
+  type(hor_index_type),                  intent(in)  :: HI 
   real, dimension(NIMEM_BK_,NJMEM_BK_),  intent(out) :: dpa
   real, dimension(NIMEM_BK_,NJMEM_BK_),  optional, intent(out) :: intz_dpa
   real, dimension(NIMEMB_BK_,NJMEM_BK_), optional, intent(out) :: intx_dpa
@@ -293,7 +294,7 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, B, dpa, in
 !                       pressure anomaly at the top and bottom of the layer
 !                       divided by the y grid spacing, in Pa.
 
-  real, dimension(SZI_(B),SZJ_(B)) :: al0_2d, p0_2d, lambda_2d
+  real, dimension(SZI_(HI),SZJ_(HI)) :: al0_2d, p0_2d, lambda_2d
   real :: al0, p0, lambda
   real :: eps, eps2, rho_anom, rem
   real :: w_left, w_right, intz(5)
@@ -303,7 +304,7 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, B, dpa, in
   real :: dz, p_ave, I_al0, I_Lzz
   integer :: Isq, Ieq, Jsq, Jeq, i, j, m
 
-  Isq = B%IscB ; Ieq = B%IecB ; Jsq = B%JscB ; Jeq = B%JecB
+  Isq = HI%IscB ; Ieq = HI%IecB ; Jsq = HI%JscB ; Jeq = HI%JecB
 
   GxRho = G_e * rho_0
   I_Rho = 1.0 / rho_0
@@ -332,7 +333,7 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, B, dpa, in
       intz_dpa(i,j) = 0.5*G_e*rho_anom*dz**2 - dz*(1.0+eps)*rem
   enddo ; enddo
 
-  if (present(intx_dpa)) then ; do j=B%jsc,B%jec ; do I=Isq,Ieq
+  if (present(intx_dpa)) then ; do j=HI%jsc,HI%jec ; do I=Isq,Ieq
     intz(1) = dpa(i,j) ; intz(5) = dpa(i+1,j)
     do m=2,4
       w_left = 0.25*real(m-1) ; w_right = 1.0-w_left
@@ -357,7 +358,7 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, B, dpa, in
                            12.0*intz(3))
   enddo ; enddo ; endif
 
-  if (present(inty_dpa)) then ; do J=Jsq,Jeq ; do i=B%isc,B%iec
+  if (present(inty_dpa)) then ; do J=Jsq,Jeq ; do i=HI%isc,HI%iec
     intz(1) = dpa(i,j) ; intz(5) = dpa(i,j+1)
     do m=2,4
       w_left = 0.25*real(m-1) ; w_right = 1.0-w_left

@@ -10,7 +10,8 @@ use MOM_TFreeze, only : calculate_TFreeze_linear, calculate_TFreeze_Millero
 use MOM_error_handler, only : MOM_error, FATAL, MOM_mesg
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_string_functions, only : uppercase
-use MOM_grid, only : ocean_grid_type, ocean_block_type
+use MOM_grid, only : ocean_grid_type
+use MOM_hor_index, only : hor_index_type
 
 implicit none ; private
 
@@ -366,7 +367,7 @@ end subroutine int_specific_vol_dp
 !! potentially dodgy assumtion here is that rho_0 is used both in the denominator
 !! of the accelerations, and in the pressure used to calculated density (the latter
 !! being -z*rho_0*G_e).  These two uses could be separated if need be.
-subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, B, EOS, &
+subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS, &
                                 dpa, intz_dpa, intx_dpa, inty_dpa)
   !> Potential temperature referenced to the surface (degC)
     real, dimension(NIMEM_,NJMEM_),  intent(in)  :: T
@@ -385,7 +386,7 @@ subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, B, EOS, &
   !> The Earth's gravitational acceleration, in m s-2.
     real,                            intent(in)  :: G_e
   !> Ocean block structure.
-    type(ocean_block_type),          intent(in)  :: B
+    type(hor_index_type),            intent(in)  :: HI
   !> Equation of state structure
     type(EOS_type),                  pointer     :: EOS
   !> The change in the pressure anomaly across the layer, in Pa.
@@ -404,18 +405,18 @@ subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, B, EOS, &
     "int_density_dz called with an unassociated EOS_type EOS.")
 
   if (EOS%EOS_quadrature) then
-    call int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, B, &
+    call int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
                                 EOS, dpa, intz_dpa, intx_dpa, inty_dpa)
   else ; select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
-      call int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0, G_e, B, &
+      call int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
                                  EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS, &
                                  dpa, intz_dpa, intx_dpa, inty_dpa)
     case (EOS_WRIGHT)
-      call int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, B, &
+      call int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
                                        dpa, intz_dpa, intx_dpa, inty_dpa)
     case default
-      call int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, B, &
+      call int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
                                   EOS, dpa, intz_dpa, intx_dpa, inty_dpa)
   end select ; endif
 
@@ -556,11 +557,11 @@ subroutine EOS_use_linear(Rho_T0_S0, dRho_dT, dRho_dS, EOS, use_quadrature)
 
 end subroutine EOS_use_linear
 
-subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, B, &
+subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
                                   EOS, dpa, intz_dpa, intx_dpa, inty_dpa)
   real, dimension(NIMEM_BK_,NJMEM_BK_),  intent(in)  :: T, S, z_t, z_b
   real,                                  intent(in)  :: rho_ref, rho_0, G_e
-  type(ocean_block_type),                intent(in)  :: B
+  type(hor_index_type),                  intent(in)  :: HI
   type(EOS_type),                        pointer     :: EOS !< Equation of state structure
   real, dimension(NIMEM_BK_,NJMEM_BK_),  intent(out) :: dpa
   real, dimension(NIMEM_BK_,NJMEM_BK_),  optional, intent(out) :: intz_dpa
@@ -605,7 +606,7 @@ subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, B, &
   real :: dz
   integer :: Isq, Ieq, Jsq, Jeq, i, j, m, n
 
-  Isq = B%IscB ; Ieq = B%IecB ; Jsq = B%JscB ; Jeq = B%JecB
+  Isq = HI%IscB ; Ieq = HI%IecB ; Jsq = HI%JscB ; Jeq = HI%JecB
 
   GxRho = G_e * rho_0
   I_Rho = 1.0 / rho_0
@@ -628,7 +629,7 @@ subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, B, &
           (rho_anom - C1_90*(16.0*(r5(4)-r5(2)) + 7.0*(r5(5)-r5(1))) )
   enddo ; enddo
 
-  if (present(intx_dpa)) then ; do j=B%jsc,B%jec ; do I=Isq,Ieq
+  if (present(intx_dpa)) then ; do j=HI%jsc,HI%jec ; do I=Isq,Ieq
     intz(1) = dpa(i,j) ; intz(5) = dpa(i+1,j)
     do m=2,4
       w_left = 0.25*real(5-m) ; w_right = 1.0-w_left
@@ -651,7 +652,7 @@ subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, B, &
                            12.0*intz(3))
   enddo ; enddo ; endif
 
-  if (present(inty_dpa)) then ; do J=Jsq,Jeq ; do i=B%isc,B%iec
+  if (present(inty_dpa)) then ; do J=Jsq,Jeq ; do i=HI%isc,HI%iec
     intz(1) = dpa(i,j) ; intz(5) = dpa(i,j+1)
     do m=2,4
       w_left = 0.25*real(5-m) ; w_right = 1.0-w_left
@@ -884,13 +885,13 @@ end subroutine int_density_dz_generic_cell
 ! are linear profiles.
 ! ==========================================================================
 subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
-                                       rho_0, G_e, H_subroundoff, bathyT, B, EOS, dpa, &
+                                       rho_0, G_e, H_subroundoff, bathyT, HI, EOS, dpa, &
                                        intz_dpa, intx_dpa, inty_dpa, &
                                        useMassWghtInterp)
   real, dimension(NIMEM_BK_,NJMEM_BK_),  intent(in)  :: T_t, T_b, S_t, S_b, z_t, z_b
   real,                                  intent(in)  :: rho_ref, rho_0, G_e, H_subroundoff
   real, dimension(NIMEM_BK_,NJMEM_BK_),  intent(in)  :: bathyT
-  type(ocean_block_type),                intent(in)  :: B
+  type(hor_index_type),                  intent(in)  :: HI
   type(EOS_type), pointer                            :: EOS !< Equation of state structure
   real, dimension(NIMEM_BK_,NJMEM_BK_),  intent(out) :: dpa
   real, dimension(NIMEM_BK_,NJMEM_BK_),  optional, intent(out) :: intz_dpa
@@ -938,27 +939,27 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
 !  (in,opt) useMassWghtInterp - If true, uses mass weighting to interpolate
 !                       T/S for top and bottom integrals.
 
-  real :: T5((5*B%iscB+1):(5*(B%iecB+2)))
-  real :: S5((5*B%iscB+1):(5*(B%iecB+2)))
-  real :: p5((5*B%iscB+1):(5*(B%iecB+2)))
-  real :: r5((5*B%iscB+1):(5*(B%iecB+2)))
-  real :: u5((5*B%iscB+1):(5*(B%iecB+2)))
-  real :: T15((15*B%iscB+1):(15*(B%iecB+1)))
-  real :: S15((15*B%iscB+1):(15*(B%iecB+1)))
-  real :: p15((15*B%iscB+1):(15*(B%iecB+1)))
-  real :: r15((15*B%iscB+1):(15*(B%iecB+1)))
+  real :: T5((5*HI%iscB+1):(5*(HI%iecB+2)))
+  real :: S5((5*HI%iscB+1):(5*(HI%iecB+2)))
+  real :: p5((5*HI%iscB+1):(5*(HI%iecB+2)))
+  real :: r5((5*HI%iscB+1):(5*(HI%iecB+2)))
+  real :: u5((5*HI%iscB+1):(5*(HI%iecB+2)))
+  real :: T15((15*HI%iscB+1):(15*(HI%iecB+1)))
+  real :: S15((15*HI%iscB+1):(15*(HI%iecB+1)))
+  real :: p15((15*HI%iscB+1):(15*(HI%iecB+1)))
+  real :: r15((15*HI%iscB+1):(15*(HI%iecB+1)))
   real :: wt_t(5), wt_b(5)
   real :: rho_anom
   real :: w_left, w_right, intz(5)
   real, parameter :: C1_90 = 1.0/90.0  ! Rational constants.
   real :: GxRho, I_Rho
-  real :: dz(B%iscB:B%iecB+1), dz_x(5,B%iscB:B%iecB), dz_y(5,B%isc:B%iec)
+  real :: dz(HI%iscB:HI%iecB+1), dz_x(5,HI%iscB:HI%iecB), dz_y(5,HI%isc:HI%iec)
   real :: weight_t, weight_b, hWght, massWeightingToggle
   real :: Ttl, Tbl, Ttr, Tbr, Stl, Sbl, Str, Sbr, hL, hR, iDenom
   integer :: Isq, Ieq, Jsq, Jeq, i, j, m, n
   integer :: pos
 
-  Isq = B%IscB ; Ieq = B%IecB ; Jsq = B%JscB ; Jeq = B%JecB
+  Isq = HI%IscB ; Ieq = HI%IecB ; Jsq = HI%JscB ; Jeq = HI%JecB
 
   GxRho = G_e * rho_0
   I_Rho = 1.0 / rho_0
@@ -1006,7 +1007,7 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
   ! ==================================================
   ! 2. Compute horizontal integrals in the x direction
   ! ==================================================
-  if (present(intx_dpa)) then ; do j=B%jsc,B%jec
+  if (present(intx_dpa)) then ; do j=HI%jsc,HI%jec
      do I=Isq,Ieq
 
     ! Corner values of T and S
@@ -1089,7 +1090,7 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
   ! 3. Compute horizontal integrals in the y direction
   ! ==================================================
   if (present(inty_dpa)) then ; do J=Jsq,Jeq
-    do i=B%isc,B%iec
+    do i=HI%isc,HI%iec
     ! Corner values of T and S
     ! hWght is the distance measure by which the cell is violation of
     ! hydrostatic consistency. For large hWght we bias the interpolation
@@ -1147,9 +1148,9 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
       enddo
     enddo
 
-    call calculate_density_array(T15(15*B%isc+1:), S15(15*B%isc+1:), p15(15*B%isc+1:), &
-                                 r15(15*B%isc+1:), 1, 15*(B%iec-B%isc+1), EOS)
-    do i=B%isc,B%iec
+    call calculate_density_array(T15(15*HI%isc+1:), S15(15*HI%isc+1:), p15(15*HI%isc+1:), &
+                                 r15(15*HI%isc+1:), 1, 15*(HI%iec-HI%isc+1), EOS)
+    do i=HI%isc,HI%iec
       intz(1) = dpa(i,j) ; intz(5) = dpa(i,j+1)
 
       ! Use Bode's rule to estimate the pressure anomaly change.
@@ -1176,13 +1177,13 @@ end subroutine int_density_dz_generic_plm
 ! are parabolic profiles
 ! ==========================================================================
 subroutine int_density_dz_generic_ppm (T, T_t, T_b, S, S_t, S_b, &
-                                       z_t, z_b, rho_ref, rho_0, G_e, B, &
+                                       z_t, z_b, rho_ref, rho_0, G_e, HI, &
                                        EOS, dpa, intz_dpa, intx_dpa, inty_dpa)
   
   real, dimension(NIMEM_BK_,NJMEM_BK_),  intent(in)  :: T, T_t, T_b, S, S_t, S_b, &
                                                         z_t, z_b
   real,                                  intent(in)  :: rho_ref, rho_0, G_e
-  type(ocean_block_type),                intent(in)  :: B
+  type(hor_index_type),                  intent(in)  :: HI
   type(EOS_type), pointer                            :: EOS !< Equation of state structure
   real, dimension(NIMEM_BK_,NJMEM_BK_),  intent(out) :: dpa
   real, dimension(NIMEM_BK_,NJMEM_BK_),  optional, intent(out) :: intz_dpa
@@ -1247,7 +1248,7 @@ subroutine int_density_dz_generic_ppm (T, T_t, T_b, S, S_t, S_b, &
   call MOM_error(FATAL, &
     "int_density_dz_generic_ppm: the implementation is not done yet, contact developer")
 
-  Isq = B%IscB ; Ieq = B%IecB ; Jsq = B%JscB ; Jeq = B%JecB
+  Isq = HI%IscB ; Ieq = HI%IecB ; Jsq = HI%JscB ; Jeq = HI%JecB
 
   GxRho = G_e * rho_0
   I_Rho = 1.0 / rho_0
@@ -1299,7 +1300,7 @@ subroutine int_density_dz_generic_ppm (T, T_t, T_b, S, S_t, S_b, &
   ! ==================================================
   ! 2. Compute horizontal integrals in the x direction
   ! ==================================================
-  if (present(intx_dpa)) then ; do j=B%jsc,B%jec ; do I=Isq,Ieq
+  if (present(intx_dpa)) then ; do j=HI%jsc,HI%jec ; do I=Isq,Ieq
     intz(1) = dpa(i,j) ; intz(5) = dpa(i+1,j)
     do m=2,4
       w_left = 0.25*real(5-m) ; w_right = 1.0-w_left
@@ -1400,7 +1401,7 @@ subroutine int_density_dz_generic_ppm (T, T_t, T_b, S, S_t, S_b, &
   ! ==================================================
   ! 3. Compute horizontal integrals in the y direction
   ! ==================================================
-  if (present(inty_dpa)) then ; do J=Jsq,Jeq ; do i=B%isc,B%iec
+  if (present(inty_dpa)) then ; do J=Jsq,Jeq ; do i=HI%isc,HI%iec
 
     inty_dpa(i,j) = 0.0
 

@@ -693,7 +693,8 @@ subroutine calculate_vertical_integrals(h, tv, fluxes, G, CS)
         do n = 1, G%nblocks
           is_bk=G%Block(n)%isc    ; ie_bk=G%Block(n)%iec
           js_bk=G%Block(n)%jsc    ; je_bk=G%Block(n)%jec
-          ioff_bk=G%Block(n)%ioff ; joff_bk=G%Block(n)%joff
+          ioff_bk = G%Block(n)%idg_offset - G%HI%idg_offset
+          joff_bk = G%Block(n)%jdg_offset - G%HI%jdg_offset
           isd=G%isd_bk+ioff_bk    ; ied=G%ied_bk+ioff_bk
           jsd=G%jsd_bk+joff_bk    ; jed=G%jed_bk+joff_bk
           do jb=js_bk,je_bk ; do ib=is_bk,ie_bk ; z_bot_bk(ib,jb) = 0.0 ; enddo ; enddo

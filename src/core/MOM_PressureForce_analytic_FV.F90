@@ -379,7 +379,8 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
     js_bk=G%block(n)%jsc      ; je_bk=G%block(n)%jec
     Isq_bk=G%block(n)%IscB    ; Ieq_bk=G%block(n)%IecB
     Jsq_bk=G%block(n)%JscB    ; Jeq_bk=G%block(n)%JecB
-    ioff_bk = G%Block(n)%ioff ; joff_bk = G%Block(n)%joff
+    ioff_bk = G%Block(n)%idg_offset - G%HI%idg_offset
+    joff_bk = G%Block(n)%jdg_offset - G%HI%jdg_offset
     do jb=Jsq_bk,Jeq_bk+1 ; do ib=Isq_bk,Ieq_bk+1
       i = ib+ioff_bk ; j = jb+joff_bk
       za_bk(ib,jb) = za(i,j)
@@ -695,7 +696,8 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
     js_bk=G%Block(n)%jsc      ; je_bk=G%Block(n)%jec
     Isq_bk=G%Block(n)%IscB    ; Ieq_bk=G%Block(n)%IecB
     Jsq_bk=G%Block(n)%JscB    ; Jeq_bk=G%Block(n)%JecB
-    ioff_bk = G%Block(n)%ioff ; joff_bk = G%Block(n)%joff
+    ioff_bk = G%Block(n)%idg_offset - G%HI%idg_offset
+    joff_bk = G%Block(n)%jdg_offset - G%HI%jdg_offset
     isd=G%isd_bk+ioff_bk      ; ied=G%ied_bk+ioff_bk
     jsd=G%jsd_bk+joff_bk      ; jed=G%jed_bk+joff_bk
 
