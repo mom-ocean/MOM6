@@ -25,7 +25,6 @@ module MOM_EOS_linear
 !*  state for sea water with constant coefficients set as parameters.  *
 !***********************************************************************
 
-use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
 
 implicit none ; private
@@ -291,16 +290,16 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, 
   enddo ; enddo ; endif
 end subroutine int_density_dz_linear
 
-subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, G, Rho_T0_S0, &
+subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
                dRho_dT, dRho_dS, dza, intp_dza, intx_dza, inty_dza, halo_size)
-  real, dimension(NIMEM_,NJMEM_),  intent(in)  :: T, S, p_t, p_b
-  real,                            intent(in)  :: alpha_ref
-  type(ocean_grid_type),           intent(in)  :: G
-  real,    intent(in)  :: Rho_T0_S0, dRho_dT, dRho_dS
-  real, dimension(NIMEM_,NJMEM_),  intent(out) :: dza
-  real, dimension(NIMEM_,NJMEM_),  optional, intent(out) :: intp_dza
-  real, dimension(NIMEMB_,NJMEM_), optional, intent(out) :: intx_dza
-  real, dimension(NIMEM_,NJMEMB_), optional, intent(out) :: inty_dza
+  type(hor_index_type),                  intent(in)  :: HI
+  real, dimension(SZDI_(HI),SZDJ_(HI)),  intent(in)  :: T, S, p_t, p_b
+  real,             intent(in)  :: alpha_ref
+  real,             intent(in)  :: Rho_T0_S0, dRho_dT, dRho_dS
+  real, dimension(SZDI_(HI),SZDJ_(HI)),  intent(out) :: dza
+  real, dimension(SZDI_(HI),SZDJ_(HI)),  optional, intent(out) :: intp_dza
+  real, dimension(SZDIB_(HI),SZDJ_(HI)), optional, intent(out) :: intx_dza
+  real, dimension(SZDI_(HI),SZDJB_(HI)), optional, intent(out) :: inty_dza
   integer,                         optional, intent(in)  :: halo_size
 !   This subroutine calculates analytical and nearly-analytical integrals in
 ! pressure across layers of geopotential anomalies, which are required for
@@ -316,7 +315,7 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, G, Rho_T0_S0, &
 !                        The calculation is mathematically identical with
 !                        different values of alpha_ref, but this reduces the
 !                        effects of roundoff.       
-!  (in)      G - The ocean's grid structure.
+!  (in)      HI - The ocean's horizontal index type.
 !  (in)      Rho_T0_S0 - The density at T=0, S=0, in kg m-3.
 !  (in)      dRho_dT - The derivative of density with temperature in kg m-3 C-1.
 !  (in)      dRho_dS - The derivative of density with salinity, in kg m-3 psu-1.
@@ -338,9 +337,9 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, G, Rho_T0_S0, &
   real :: C1_6
   integer :: Isq, Ieq, Jsq, Jeq, ish, ieh, jsh, jeh, i, j, halo
 
-  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
+  Isq = HI%IscB ; Ieq = HI%IecB ; Jsq = HI%JscB ; Jeq = HI%JecB
   halo = 0 ; if (present(halo_size)) halo = MAX(halo_size,0)
-  ish = G%isc-halo ; ieh = G%iec+halo ; jsh = G%jsc-halo ; jeh = G%jec+halo
+  ish = HI%isc-halo ; ieh = HI%iec+halo ; jsh = HI%jsc-halo ; jeh = HI%jec+halo
   if (present(intx_dza)) then ; ish = MIN(Isq,ish) ; ieh = MAX(Ieq+1,ieh); endif
   if (present(inty_dza)) then ; jsh = MIN(Jsq,jsh) ; jeh = MAX(Jeq+1,jeh); endif
   C1_6 = 1.0 / 6.0
@@ -354,7 +353,7 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, G, Rho_T0_S0, &
     if (present(intp_dza)) intp_dza(i,j) = 0.5*alpha_anom*dp**2
   enddo ; enddo
 
-  if (present(intx_dza)) then ; do j=G%jsc,G%jec ; do I=Isq,Ieq
+  if (present(intx_dza)) then ; do j=HI%jsc,HI%jec ; do I=Isq,Ieq
     dpL = p_b(i,j) - p_t(i,j) ; dpR = p_b(i+1,j) - p_t(i+1,j)
     dRho_TS = dRho_dT*T(i,j) + dRho_dS*S(i,j)
     aaL = ((1.0 - Rho_T0_S0*alpha_ref) - dRho_TS*alpha_ref) / (Rho_T0_S0 + dRho_TS)
@@ -364,7 +363,7 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, G, Rho_T0_S0, &
     intx_dza(i,j) = C1_6 * (2.0*(dpL*aaL + dpR*aaR) + (dpL*aaR + dpR*aaL))
   enddo ; enddo ; endif
 
-  if (present(inty_dza)) then ; do J=Jsq,Jeq ; do i=G%isc,G%iec
+  if (present(inty_dza)) then ; do J=Jsq,Jeq ; do i=HI%isc,HI%iec
     dpL = p_b(i,j) - p_t(i,j) ; dpR = p_b(i,j+1) - p_t(i,j+1)
     dRho_TS = dRho_dT*T(i,j) + dRho_dS*S(i,j)
     aaL = ((1.0 - Rho_T0_S0*alpha_ref) - dRho_TS*alpha_ref) / (Rho_T0_S0 + dRho_TS)

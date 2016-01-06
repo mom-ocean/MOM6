@@ -25,7 +25,6 @@ module MOM_EOS_Wright
 !*  Ocean. Tech., 14, 735-740.  Coded by R. Hallberg, 7/00.            *
 !***********************************************************************
 
-use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
 
 implicit none ; private
@@ -294,7 +293,7 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, 
 !                       pressure anomaly at the top and bottom of the layer
 !                       divided by the y grid spacing, in Pa.
 
-  real, dimension(SZI_(HII),SZJ_(HII)) :: al0_2d, p0_2d, lambda_2d
+  real, dimension(SZDI_(HII),SZDJ_(HII)) :: al0_2d, p0_2d, lambda_2d
   real :: al0, p0, lambda
   real :: eps, eps2, rho_anom, rem
   real :: w_left, w_right, intz(5)
@@ -392,16 +391,16 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, 
   enddo ; enddo ; endif
 end subroutine int_density_dz_wright
 
-subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, alpha_ref, G, dza, &
+subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, alpha_ref, HI, dza, &
                                   intp_dza, intx_dza, inty_dza, halo_size)
-  real, dimension(NIMEM_,NJMEM_),  intent(in)  :: T, S, p_t, p_b
-  real,                            intent(in)  :: alpha_ref
-  type(ocean_grid_type),           intent(in)  :: G
-  real, dimension(NIMEM_,NJMEM_),  intent(out) :: dza
-  real, dimension(NIMEM_,NJMEM_),  optional, intent(out) :: intp_dza
-  real, dimension(NIMEMB_,NJMEM_), optional, intent(out) :: intx_dza
-  real, dimension(NIMEM_,NJMEMB_), optional, intent(out) :: inty_dza
-  integer,                         optional, intent(in)  :: halo_size
+  type(hor_index_type),                  intent(in)  :: HI
+  real, dimension(SZDI_(HI),SZDJ_(HI)),  intent(in)  :: T, S, p_t, p_b
+  real,                                  intent(in)  :: alpha_ref
+  real, dimension(SZDI_(HI),SZDJ_(HI)),  intent(out) :: dza
+  real, dimension(SZDI_(HI),SZDJ_(HI)),  optional, intent(out) :: intp_dza
+  real, dimension(SZDIB_(HI),SZDJ_(HI)), optional, intent(out) :: intx_dza
+  real, dimension(SZDI_(HI),SZDJB_(HI)), optional, intent(out) :: inty_dza
+  integer,                               optional, intent(in)  :: halo_size
 !   This subroutine calculates analytical and nearly-analytical integrals in
 ! pressure across layers of geopotential anomalies, which are required for
 ! calculating the finite-volume form pressure accelerations in a non-Boussinesq
@@ -418,7 +417,7 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, alpha_ref, G, dza, &
 !                        The calculation is mathematically identical with
 !                        different values of alpha_ref, but this reduces the
 !                        effects of roundoff.       
-!  (in)      G - The ocean's grid structure.
+!  (in)      HI - The ocean's horizontal index structure.
 !  (out)     dza - The change in the geopotential anomaly across the layer, 
 !                  in m2 s-2.                                  
 !  (out,opt) intp_dza - The integral in pressure through the layer of the 
@@ -432,7 +431,7 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, alpha_ref, G, dza, &
 !                       divided by the y grid spacing, in m2 s-2.
 !  (in,opt)  halo_size - The width of halo points on which to calculate dza.
 
-  real, dimension(SZI_(G),SZJ_(G)) :: al0_2d, p0_2d, lambda_2d
+  real, dimension(SZDI_(HI),SZDJ_(HI)) :: al0_2d, p0_2d, lambda_2d
   real :: al0, p0, lambda
   real :: alpha_anom, dp, p_ave
   real :: rem, eps, eps2
@@ -441,9 +440,9 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, alpha_ref, G, dza, &
   real, parameter :: C1_9 = 1.0/9.0, C1_90 = 1.0/90.0  ! Rational constants.
   integer :: Isq, Ieq, Jsq, Jeq, ish, ieh, jsh, jeh, i, j, m, halo
 
-  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
+  Isq = HI%IscB ; Ieq = HI%IecB ; Jsq = HI%JscB ; Jeq = HI%JecB
   halo = 0 ; if (present(halo_size)) halo = MAX(halo_size,0)
-  ish = G%isc-halo ; ieh = G%iec+halo ; jsh = G%jsc-halo ; jeh = G%jec+halo
+  ish = HI%isc-halo ; ieh = HI%iec+halo ; jsh = HI%jsc-halo ; jeh = HI%jec+halo
   if (present(intx_dza)) then ; ish = MIN(Isq,ish) ; ieh = MAX(Ieq+1,ieh); endif
   if (present(inty_dza)) then ; jsh = MIN(Jsq,jsh) ; jeh = MAX(Jeq+1,jeh); endif
 
@@ -480,7 +479,7 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, alpha_ref, G, dza, &
     enddo ; enddo
   endif
 
-  if (present(intx_dza)) then ; do j=G%jsc,G%jec ; do I=Isq,Ieq
+  if (present(intx_dza)) then ; do j=HI%jsc,HI%jec ; do I=Isq,Ieq
     intp(1) = dza(i,j) ; intp(5) = dza(i+1,j)
     do m=2,4
       w_left = 0.25*real(5-m) ; w_right = 1.0-w_left
@@ -500,7 +499,7 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, alpha_ref, G, dza, &
                            12.0*intp(3))
   enddo ; enddo ; endif
 
-  if (present(inty_dza)) then ; do J=Jsq,Jeq ; do i=G%isc,G%iec
+  if (present(inty_dza)) then ; do J=Jsq,Jeq ; do i=HI%isc,HI%iec
     intp(1) = dza(i,j) ; intp(5) = dza(i,j+1)
     do m=2,4
       w_left = 0.25*real(5-m) ; w_right = 1.0-w_left

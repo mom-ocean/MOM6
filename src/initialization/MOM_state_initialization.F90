@@ -691,7 +691,7 @@ subroutine convert_thickness(h, G, param_file, tv)
 
         do itt=1,max_itt
           call int_specific_vol_dp(tv%T(:,:,k), tv%S(:,:,k), p_top, p_bot, &
-                                   0.0, G, tv%eqn_of_state, dz_geo)
+                                   0.0, G%HI, tv%eqn_of_state, dz_geo)
           if (itt < max_itt) then ; do j=js,je
             call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_bot(:,j), rho, &
                                    is, ie-is+1, tv%eqn_of_state)

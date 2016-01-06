@@ -10,7 +10,6 @@ use MOM_TFreeze, only : calculate_TFreeze_linear, calculate_TFreeze_Millero
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_string_functions, only : uppercase
-use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
 
 implicit none ; private
@@ -308,35 +307,35 @@ end subroutine calculate_2_densities
 !! non-Boussinesq model.  There are essentially no free assumptions, apart from the
 !! use of Bode's rule to do the horizontal integrals, and from a truncation in the
 !! series for log(1-eps/1+eps) that assumes that |eps| <  .
-subroutine int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, G, EOS, &
+subroutine int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
                                dza, intp_dza, intx_dza, inty_dza, halo_size)
+  !> The horizontal index structure
+    type(hor_index_type),                  intent(in)  :: HI
   !> Potential temperature referenced to the surface (degC)
-    real, dimension(NIMEM_,NJMEM_),  intent(in)  :: T
+    real, dimension(SZDI_(HI),SZDJ_(HI)),  intent(in)  :: T
   !> Salinity (PSU)
-    real, dimension(NIMEM_,NJMEM_),  intent(in)  :: S
+    real, dimension(SZDI_(HI),SZDJ_(HI)),  intent(in)  :: S
   !> Pressure at the top of the layer in Pa.
-    real, dimension(NIMEM_,NJMEM_),  intent(in)  :: p_t
+    real, dimension(SZDI_(HI),SZDJ_(HI)),  intent(in)  :: p_t
   !> Pressure at the bottom of the layer in Pa.
-    real, dimension(NIMEM_,NJMEM_),  intent(in)  :: p_b
+    real, dimension(SZDI_(HI),SZDJ_(HI)),  intent(in)  :: p_b
   !> A mean specific volume that is subtracted out to reduce the magnitude of
   !! each of the integrals, m3 kg-1. The calculation is mathematically identical
   !! with different values of alpha_ref, but this reduces the effects of roundoff.
     real,                            intent(in)  :: alpha_ref
-  !> Grid structure
-    type(ocean_grid_type),           intent(in)  :: G
   !> Equation of state structure
     type(EOS_type),                  pointer     :: EOS
   !> The change in the geopotential anomaly across the layer, in m2 s-2.
-    real, dimension(NIMEM_,NJMEM_),  intent(out) :: dza
+    real, dimension(SZDI_(HI),SZDJ_(HI)),  intent(out) :: dza
   !> The integral in pressure through the layer of the geopotential anomaly
   !! relative to the anomaly at the bottom of the layer, in Pa m2 s-2.
-    real, dimension(NIMEM_,NJMEM_),  optional, intent(out) :: intp_dza
+    real, dimension(SZDI_(HI),SZDJ_(HI)),  optional, intent(out) :: intp_dza
   !> The integral in x of the difference between the geopotential anomaly at the
   !! top and bottom of the layer divided by the x grid spacing, in m2 s-2.
-    real, dimension(NIMEMB_,NJMEM_), optional, intent(out) :: intx_dza
+    real, dimension(SZDIB_(HI),SZDJ_(HI)), optional, intent(out) :: intx_dza
   !> The integral in y of the difference between the geopotential anomaly at the
   !! top and bottom of the layer divided by the y grid spacing, in m2 s-2.
-    real, dimension(NIMEM_,NJMEMB_), optional, intent(out) :: inty_dza
+    real, dimension(SZDI_(HI),SZDJB_(HI)), optional, intent(out) :: inty_dza
   !> The width of halo points on which to calculate dza.
     integer,                         optional, intent(in)  :: halo_size
 
@@ -344,18 +343,18 @@ subroutine int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, G, EOS, &
     "int_specific_vol_dp called with an unassociated EOS_type EOS.")
 
   if (EOS%EOS_quadrature) then
-    call int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, G, EOS, &
+    call int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, &
                                  dza, intp_dza, intx_dza, inty_dza, halo_size)
   else ; select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
-      call int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, G, EOS%Rho_T0_S0, &
+      call int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, EOS%Rho_T0_S0, &
                                   EOS%dRho_dT, EOS%dRho_dS, dza, intp_dza, &
                                   intx_dza, inty_dza, halo_size)
     case (EOS_WRIGHT)
-      call int_spec_vol_dp_wright(T, S, p_t, p_b, alpha_ref, G, dza, &
+      call int_spec_vol_dp_wright(T, S, p_t, p_b, alpha_ref, HI, dza, &
                                   intp_dza, intx_dza, inty_dza, halo_size)
     case default
-      call int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, G, EOS, &
+      call int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, &
                                    dza, intp_dza, intx_dza, inty_dza, halo_size)
   end select ; endif
 
@@ -690,7 +689,7 @@ end subroutine int_density_dz_generic
 ! ==============================================================================
 subroutine int_density_dz_generic_cell (T_t_arg, T_b_arg, S_t_arg, S_b_arg, &
                                         z_t_arg, z_b_arg, depth, rho_ref, &
-                                        rho_0, G_e, G, EOS, dpa, &
+                                        rho_0, G_e, EOS, dpa, &
                                         intz_dpa, intx_dpa, inty_dpa)
 
   ! Arguments
@@ -698,7 +697,6 @@ subroutine int_density_dz_generic_cell (T_t_arg, T_b_arg, S_t_arg, S_b_arg, &
   real, dimension(2), intent(inout)  :: z_t_arg, z_b_arg
   real, dimension(2), intent(in)     :: depth
   real, intent(in)                   :: rho_ref, rho_0, G_e
-  type(ocean_grid_type), intent(in)  :: G
   type(EOS_type), pointer            :: EOS !< Equation of state structure
   real, dimension(2), intent(out)    :: dpa
   real, dimension(2), intent(out)    :: intz_dpa
@@ -1442,16 +1440,16 @@ end subroutine int_density_dz_generic_ppm
 ! are linear profiles (analytical !!)
 ! ==========================================================================
 subroutine int_density_dz_generic_plm_analytic (T_t, T_b, S_t, S_b, z_t, &
-            z_b, rho_ref, rho_0, G_e, G, EOS, dpa, intz_dpa, intx_dpa, inty_dpa)
+            z_b, rho_ref, rho_0, G_e, HI, EOS, dpa, intz_dpa, intx_dpa, inty_dpa)
   
-  real, dimension(NIMEM_,NJMEM_),  intent(in)  :: T_t, T_b, S_t, S_b, z_t, z_b
+  type(hor_index_type),                  intent(in)  :: HI
+  real, dimension(SZDI_(HI),SZDJ_(HI)),  intent(in)  :: T_t, T_b, S_t, S_b, z_t, z_b
   real,                            intent(in)  :: rho_ref, rho_0, G_e
-  type(ocean_grid_type),           intent(in)  :: G
   type(EOS_type), pointer                      :: EOS !< Equation of state structure
-  real, dimension(NIMEM_,NJMEM_),  intent(out) :: dpa
-  real, dimension(NIMEM_,NJMEM_),  optional, intent(out) :: intz_dpa
-  real, dimension(NIMEMB_,NJMEM_), optional, intent(out) :: intx_dpa
-  real, dimension(NIMEM_,NJMEMB_), optional, intent(out) :: inty_dpa
+  real, dimension(SZDI_(HI),SZDJ_(HI)),  intent(out) :: dpa
+  real, dimension(SZDI_(HI),SZDJ_(HI)),  optional, intent(out) :: intz_dpa
+  real, dimension(SZDIB_(HI),SZDJ_(HI)), optional, intent(out) :: intx_dpa
+  real, dimension(SZDI_(HI),SZDJB_(HI)), optional, intent(out) :: inty_dpa
 ! This subroutine calculates (by numerical quadrature) integrals of
 ! pressure anomalies across layers, which are required for calculating the
 ! finite-volume form pressure accelerations in a Boussinesq model.  The one
@@ -1477,7 +1475,7 @@ subroutine int_density_dz_generic_plm_analytic (T_t, T_b, S_t, S_b, z_t, &
 !  (in)      rho_0 - A density, in kg m-3, that is used to calculate the pressure
 !                    (as p~=-z*rho_0*G_e) used in the equation of state.
 !  (in)      G_e - The Earth's gravitational acceleration, in m s-2.
-!  (in)      G - The ocean's grid structure.
+!  (in)      HI - The ocean's horizontal index structure.
 !  (in)      form_of_eos - integer that selects the eqn of state.
 !  (out)     dpa - The change in the pressure anomaly across the layer,
 !                  in Pa.  
@@ -1502,7 +1500,7 @@ subroutine int_density_dz_generic_plm_analytic (T_t, T_b, S_t, S_b, z_t, &
 
   real, dimension(4) :: x, y, f
 
-  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
+  Isq = HI%IscB ; Ieq = HI%IecB ; Jsq = HI%JscB ; Jeq = HI%JecB
 
   GxRho = G_e * rho_0
   I_Rho = 1.0 / rho_0
@@ -1549,7 +1547,7 @@ subroutine int_density_dz_generic_plm_analytic (T_t, T_b, S_t, S_b, z_t, &
   ! ==================================================
   ! 2. Compute horizontal integrals in the x direction
   ! ==================================================
-  if (present(intx_dpa)) then ; do j=G%jsc,G%jec ; do I=Isq,Ieq
+  if (present(intx_dpa)) then ; do j=HI%jsc,HI%jec ; do I=Isq,Ieq
 
     ! Use Gauss quadrature rule to compute integral
     x(1) = 1.0
@@ -1574,7 +1572,7 @@ subroutine int_density_dz_generic_plm_analytic (T_t, T_b, S_t, S_b, z_t, &
   ! ==================================================
   ! 3. Compute horizontal integrals in the y direction
   ! ==================================================
-  if (present(inty_dpa)) then ; do J=Jsq,Jeq ; do i=G%isc,G%iec
+  if (present(inty_dpa)) then ; do J=Jsq,Jeq ; do i=HI%isc,HI%iec
 
     ! Use Gauss quadrature rule to compute integral
     x(1) = 1.0
@@ -1848,17 +1846,17 @@ subroutine evaluate_shape_quadratic ( xi, eta, phi, dphidxi, dphideta )
 end subroutine evaluate_shape_quadratic
 ! ==============================================================================
 
-subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, G, EOS, &
+subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, &
                                    dza, intp_dza, intx_dza, inty_dza, halo_size)
-  real, dimension(NIMEM_,NJMEM_),  intent(in)  :: T, S, p_t, p_b
-  real,                            intent(in)  :: alpha_ref
-  type(ocean_grid_type),           intent(in)  :: G
-  type(EOS_type),                  pointer     :: EOS !< Equation of state structure
-  real, dimension(NIMEM_,NJMEM_),  intent(out) :: dza
-  real, dimension(NIMEM_,NJMEM_),  optional, intent(out) :: intp_dza
-  real, dimension(NIMEMB_,NJMEM_), optional, intent(out) :: intx_dza
-  real, dimension(NIMEM_,NJMEMB_), optional, intent(out) :: inty_dza
-  integer,                         optional, intent(in)  :: halo_size
+  type(hor_index_type),                  intent(in)  :: HI
+  real, dimension(SZDI_(HI),SZDJ_(HI)),  intent(in)  :: T, S, p_t, p_b
+  real,                                  intent(in)  :: alpha_ref
+  type(EOS_type),                        pointer     :: EOS !< Equation of state structure
+  real, dimension(SZDI_(HI),SZDJ_(HI)),  intent(out) :: dza
+  real, dimension(SZDI_(HI),SZDJ_(HI)),  optional, intent(out) :: intp_dza
+  real, dimension(SZDIB_(HI),SZDJ_(HI)), optional, intent(out) :: intx_dza
+  real, dimension(SZDI_(HI),SZDJB_(HI)), optional, intent(out) :: inty_dza
+  integer,                               optional, intent(in)  :: halo_size
 !   This subroutine calculates analytical and nearly-analytical integrals in
 ! pressure across layers of geopotential anomalies, which are required for
 ! calculating the finite-volume form pressure accelerations in a non-Boussinesq
@@ -1875,7 +1873,7 @@ subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, G, EOS, &
 !                        The calculation is mathematically identical with
 !                        different values of alpha_ref, but this reduces the
 !                        effects of roundoff.
-!  (in)      G - The ocean's grid structure.
+!  (in)      HI - The ocean's horizontal index structure.
 !  (in)      EOS - type that selects the eqn of state.
 !  (out)     dza - The change in the geopotential anomaly across the layer,
 !                  in m2 s-2.  
@@ -1896,9 +1894,9 @@ subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, G, EOS, &
   real :: dp         ! The pressure change through each layer, in Pa.
   integer :: Isq, Ieq, Jsq, Jeq, ish, ieh, jsh, jeh, i, j, m, n, halo
 
-  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
+  Isq = HI%IscB ; Ieq = HI%IecB ; Jsq = HI%JscB ; Jeq = HI%JecB
   halo = 0 ; if (present(halo_size)) halo = MAX(halo_size,0)
-  ish = G%isc-halo ; ieh = G%iec+halo ; jsh = G%jsc-halo ; jeh = G%jec+halo
+  ish = HI%isc-halo ; ieh = HI%iec+halo ; jsh = HI%jsc-halo ; jeh = HI%jec+halo
   if (present(intx_dza)) then ; ish = MIN(Isq,ish) ; ieh = MAX(Ieq+1,ieh); endif
   if (present(inty_dza)) then ; jsh = MIN(Jsq,jsh) ; jeh = MAX(Jeq+1,jeh); endif
 
@@ -1921,7 +1919,7 @@ subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, G, EOS, &
           (alpha_anom - C1_90*(16.0*(a5(4)-a5(2)) + 7.0*(a5(5)-a5(1))) )
   enddo ; enddo
 
-  if (present(intx_dza)) then ; do j=G%jsc,G%jec ; do I=Isq,Ieq
+  if (present(intx_dza)) then ; do j=HI%jsc,HI%jec ; do I=Isq,Ieq
     intp(1) = dza(i,j) ; intp(5) = dza(i+1,j)
     do m=2,4
       w_left = 0.25*real(5-m) ; w_right = 1.0-w_left
@@ -1944,7 +1942,7 @@ subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, G, EOS, &
                            12.0*intp(3))
   enddo ; enddo ; endif
 
-  if (present(inty_dza)) then ; do J=Jsq,Jeq ; do i=G%isc,G%iec
+  if (present(inty_dza)) then ; do J=Jsq,Jeq ; do i=HI%isc,HI%iec
     intp(1) = dza(i,j) ; intp(5) = dza(i,j+1)
     do m=2,4
       w_left = 0.25*real(5-m) ; w_right = 1.0-w_left

@@ -243,7 +243,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
 !$OMP do
       do k=1,nz
         call int_specific_vol_dp(tv%T(:,:,k), tv%S(:,:,k), p(:,:,k), p(:,:,k+1), &
-                                 0.0, G, tv%eqn_of_state, dz_geo(:,:,k), halo_size=1)
+                                 0.0, G%HI, tv%eqn_of_state, dz_geo(:,:,k), halo_size=1)
       enddo
 !$OMP do
       do j=Jsq,Jeq+1 ; do k=1,nz; do i=Isq,Ieq+1

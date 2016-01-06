@@ -289,7 +289,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
     ! subsequent calculation.
     if (use_EOS) then
       call int_specific_vol_dp(tv_tmp%T(:,:,k), tv_tmp%S(:,:,k), p(:,:,K), &
-                               p(:,:,K+1), alpha_ref, G, tv%eqn_of_state, &
+                               p(:,:,K+1), alpha_ref, G%HI, tv%eqn_of_state, &
                                dza(:,:,k), intp_dza(:,:,k), intx_dza(:,:,k), &
                                inty_dza(:,:,k))
     else
