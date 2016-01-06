@@ -212,16 +212,16 @@ subroutine calculate_2_densities_linear(T, S, pressure1, pressure2, rho1, rho2,&
   enddo
 end subroutine calculate_2_densities_linear
 
-subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
+subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, HIO, &
                  Rho_T0_S0, dRho_dT, dRho_dS, dpa, intz_dpa, intx_dpa, inty_dpa)
-  real, dimension(NIMEM_BK_,NJMEM_BK_),  intent(in)  :: T, S, z_t, z_b
-  real,                                  intent(in)  :: rho_ref, rho_0_pres, G_e
-  type(hor_index_type),                  intent(in)  :: HI
-  real,                                  intent(in)  :: Rho_T0_S0, dRho_dT, dRho_dS
-  real, dimension(NIMEM_BK_,NJMEM_BK_),  intent(out) :: dpa
-  real, dimension(NIMEM_BK_,NJMEM_BK_),  optional, intent(out) :: intz_dpa
-  real, dimension(NIMEMB_BK_,NJMEM_BK_), optional, intent(out) :: intx_dpa
-  real, dimension(NIMEM_BK_,NJMEMB_BK_), optional, intent(out) :: inty_dpa
+  type(hor_index_type),                    intent(in)  :: HII, HIO
+  real, dimension(SZDI_(HII),SZDJ_(HII)),  intent(in)  :: T, S, z_t, z_b
+  real,                                    intent(in)  :: rho_ref, rho_0_pres, G_e
+  real,                                    intent(in)  :: Rho_T0_S0, dRho_dT, dRho_dS
+  real, dimension(SZDI_(HIO),SZDJ_(HIO)),  intent(out) :: dpa
+  real, dimension(SZDI_(HIO),SZDJ_(HIO)),  optional, intent(out) :: intz_dpa
+  real, dimension(SZDIB_(HIO),SZDJ_(HIO)), optional, intent(out) :: intx_dpa
+  real, dimension(SZDI_(HIO),SZDJB_(HIO)), optional, intent(out) :: inty_dpa
 !   This subroutine calculates analytical and nearly-analytical integrals of
 ! pressure anomalies across layers, which are required for calculating the
 ! finite-volume form pressure accelerations in a Boussinesq model.
@@ -254,32 +254,40 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
   real :: raL, raR      ! rho_anom to the left and right, in kg m-3.
   real :: dz, dzL, dzR  ! Layer thicknesses in m.
   real :: C1_6
-  integer :: Isq, Ieq, Jsq, Jeq, i, j
+  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, i, j, ioff, joff
 
-  Isq = HI%IscB ; Ieq = HI%IecB ; Jsq = HI%JscB ; Jeq = HI%JecB
+  ioff = HIO%idg_offset - HII%idg_offset
+  joff = HIO%jdg_offset - HII%jdg_offset
+
+  ! These array bounds work for the indexing convention of the input arrays, but
+  ! on the computational domain defined for the output arrays.
+  Isq = HIO%IscB + ioff ; Ieq = HIO%IecB + ioff
+  Jsq = HIO%JscB + joff ; Jeq = HIO%JecB + joff
+  is = HIO%isc + ioff ; ie = HIO%iec + ioff
+  js = HIO%jsc + joff ; je = HIO%jec + joff
   C1_6 = 1.0 / 6.0
 
   do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
     dz = z_t(i,j) - z_b(i,j)
     rho_anom = (Rho_T0_S0 - rho_ref) + dRho_dT*T(i,j) + dRho_dS*S(i,j)
-    dpa(i,j) = G_e*rho_anom*dz
-    if (present(intz_dpa)) intz_dpa(i,j) = 0.5*G_e*rho_anom*dz**2
+    dpa(i-ioff,j-joff) = G_e*rho_anom*dz
+    if (present(intz_dpa)) intz_dpa(i-ioff,j-joff) = 0.5*G_e*rho_anom*dz**2
   enddo ; enddo
 
-  if (present(intx_dpa)) then ; do j=HI%jsc,HI%jec ; do I=Isq,Ieq
+  if (present(intx_dpa)) then ; do j=js,je ; do I=Isq,Ieq
     dzL = z_t(i,j) - z_b(i,j) ; dzR = z_t(i+1,j) - z_b(i+1,j)
     raL = (Rho_T0_S0 - rho_ref) + (dRho_dT*T(i,j) + dRho_dS*S(i,j))
     raR = (Rho_T0_S0 - rho_ref) + (dRho_dT*T(i+1,j) + dRho_dS*S(i+1,j))
 
-    intx_dpa(i,j) = G_e*C1_6 * (dzL*(2.0*raL + raR) + dzR*(2.0*raR + raL))
+    intx_dpa(i-ioff,j-joff) = G_e*C1_6 * (dzL*(2.0*raL + raR) + dzR*(2.0*raR + raL))
   enddo ; enddo ; endif
 
-  if (present(inty_dpa)) then ; do J=Jsq,Jeq ; do i=HI%isc,HI%iec
+  if (present(inty_dpa)) then ; do J=Jsq,Jeq ; do i=is,ie
     dzL = z_t(i,j) - z_b(i,j) ; dzR = z_t(i,j+1) - z_b(i,j+1)
     raL = (Rho_T0_S0 - rho_ref) + (dRho_dT*T(i,j) + dRho_dS*S(i,j))
     raR = (Rho_T0_S0 - rho_ref) + (dRho_dT*T(i,j+1) + dRho_dS*S(i,j+1))
 
-    inty_dpa(i,j) = G_e*C1_6 * (dzL*(2.0*raL + raR) + dzR*(2.0*raR + raL))
+    inty_dpa(i-ioff,j-joff) = G_e*C1_6 * (dzL*(2.0*raL + raR) + dzR*(2.0*raR + raL))
   enddo ; enddo ; endif
 end subroutine int_density_dz_linear
 

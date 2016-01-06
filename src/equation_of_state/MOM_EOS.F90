@@ -7,7 +7,7 @@ use MOM_EOS_linear
 use MOM_EOS_Wright
 use MOM_EOS_UNESCO
 use MOM_TFreeze, only : calculate_TFreeze_linear, calculate_TFreeze_Millero
-use MOM_error_handler, only : MOM_error, FATAL, MOM_mesg
+use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_string_functions, only : uppercase
 use MOM_grid, only : ocean_grid_type
@@ -367,16 +367,20 @@ end subroutine int_specific_vol_dp
 !! potentially dodgy assumtion here is that rho_0 is used both in the denominator
 !! of the accelerations, and in the pressure used to calculated density (the latter
 !! being -z*rho_0*G_e).  These two uses could be separated if need be.
-subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS, &
+subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, EOS, &
                                 dpa, intz_dpa, intx_dpa, inty_dpa)
+  !> Ocean horizontal index structures for the input arrays
+    type(hor_index_type),            intent(in)  :: HII
+  !> Ocean horizontal index structures for the output arrays
+    type(hor_index_type),            intent(in)  :: HIO
   !> Potential temperature referenced to the surface (degC)
-    real, dimension(NIMEM_,NJMEM_),  intent(in)  :: T
+    real, dimension(SZDI_(HII),SZDJ_(HII)),  intent(in)  :: T
   !> Salinity (PSU)
-    real, dimension(NIMEM_,NJMEM_),  intent(in)  :: S
+    real, dimension(SZDI_(HII),SZDJ_(HII)),  intent(in)  :: S
   !> Height at the top of the layer in m.
-    real, dimension(NIMEM_,NJMEM_),  intent(in)  :: z_t
+    real, dimension(SZDI_(HII),SZDJ_(HII)),  intent(in)  :: z_t
   !> Height at the bottom of the layer in m.
-    real, dimension(NIMEM_,NJMEM_),  intent(in)  :: z_b
+    real, dimension(SZDI_(HII),SZDJ_(HII)),  intent(in)  :: z_b
   !> A mean density, in kg m-3, that is subtracted out to reduce the magnitude
   !! of each of the integrals. (The pressure is calculated as p~=-z*rho_0*G_e.)
     real,                            intent(in)  :: rho_ref
@@ -385,38 +389,36 @@ subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS, &
     real,                            intent(in)  :: rho_0
   !> The Earth's gravitational acceleration, in m s-2.
     real,                            intent(in)  :: G_e
-  !> Ocean block structure.
-    type(hor_index_type),            intent(in)  :: HI
   !> Equation of state structure
     type(EOS_type),                  pointer     :: EOS
   !> The change in the pressure anomaly across the layer, in Pa.
-    real, dimension(NIMEM_BK_,NJMEM_BK_),            intent(out) :: dpa
+    real, dimension(SZDI_(HIO),SZDJ_(HIO)),            intent(out) :: dpa
   !> The integral through the thickness of the layer of the pressure anomaly
   !! relative to the anomaly at the top of the layer, in Pa m.
-    real, dimension(NIMEM_BK_,NJMEM_BK_),  optional, intent(out) :: intz_dpa
+    real, dimension(SZDI_(HIO),SZDJ_(HIO)),  optional, intent(out) :: intz_dpa
   !> The integral in x of the difference between the pressure anomaly at the
   !! top and bottom of the layer divided by the x grid spacing, in Pa.
-    real, dimension(NIMEMB_BK_,NJMEM_BK_), optional, intent(out) :: intx_dpa
+    real, dimension(SZDIB_(HIO),SZDJ_(HIO)), optional, intent(out) :: intx_dpa
   !> The integral in y of the difference between the pressure anomaly at the
   !! top and bottom of the layer divided by the y grid spacing, in Pa.
-    real, dimension(NIMEM_BK_,NJMEMB_BK_), optional, intent(out) :: inty_dpa
+    real, dimension(SZDI_(HIO),SZDJB_(HIO)), optional, intent(out) :: inty_dpa
 
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "int_density_dz called with an unassociated EOS_type EOS.")
 
   if (EOS%EOS_quadrature) then
-    call int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
+    call int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, &
                                 EOS, dpa, intz_dpa, intx_dpa, inty_dpa)
   else ; select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
-      call int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
+      call int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO,  &
                                  EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS, &
                                  dpa, intz_dpa, intx_dpa, inty_dpa)
     case (EOS_WRIGHT)
-      call int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
+      call int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO,  &
                                        dpa, intz_dpa, intx_dpa, inty_dpa)
     case default
-      call int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
+      call int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO,  &
                                   EOS, dpa, intz_dpa, intx_dpa, inty_dpa)
   end select ; endif
 
@@ -557,16 +559,16 @@ subroutine EOS_use_linear(Rho_T0_S0, dRho_dT, dRho_dS, EOS, use_quadrature)
 
 end subroutine EOS_use_linear
 
-subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
+subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, &
                                   EOS, dpa, intz_dpa, intx_dpa, inty_dpa)
-  real, dimension(NIMEM_BK_,NJMEM_BK_),  intent(in)  :: T, S, z_t, z_b
-  real,                                  intent(in)  :: rho_ref, rho_0, G_e
-  type(hor_index_type),                  intent(in)  :: HI
-  type(EOS_type),                        pointer     :: EOS !< Equation of state structure
-  real, dimension(NIMEM_BK_,NJMEM_BK_),  intent(out) :: dpa
-  real, dimension(NIMEM_BK_,NJMEM_BK_),  optional, intent(out) :: intz_dpa
-  real, dimension(NIMEMB_BK_,NJMEM_BK_), optional, intent(out) :: intx_dpa
-  real, dimension(NIMEM_BK_,NJMEMB_BK_), optional, intent(out) :: inty_dpa
+  type(hor_index_type),                    intent(in)  :: HII, HIO
+  real, dimension(SZDI_(HII),SZDJ_(HII)),  intent(in)  :: T, S, z_t, z_b
+  real,                                    intent(in)  :: rho_ref, rho_0, G_e
+  type(EOS_type),                          pointer     :: EOS !< Equation of state structure
+  real, dimension(SZDI_(HIO),SZDJ_(HIO)),  intent(out) :: dpa
+  real, dimension(SZDI_(HIO),SZDJ_(HIO)),  optional, intent(out) :: intz_dpa
+  real, dimension(SZDIB_(HIO),SZDJ_(HIO)), optional, intent(out) :: intx_dpa
+  real, dimension(SZDI_(HIO),SZDJB_(HIO)), optional, intent(out) :: inty_dpa
 !   This subroutine calculates (by numerical quadrature) integrals of
 ! pressure anomalies across layers, which are required for calculating the
 ! finite-volume form pressure accelerations in a Boussinesq model.  The one
@@ -604,9 +606,17 @@ subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
   real, parameter :: C1_90 = 1.0/90.0  ! Rational constants.
   real :: GxRho, I_Rho
   real :: dz
-  integer :: Isq, Ieq, Jsq, Jeq, i, j, m, n
+  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, i, j, m, n, ioff, joff
 
-  Isq = HI%IscB ; Ieq = HI%IecB ; Jsq = HI%JscB ; Jeq = HI%JecB
+  ioff = HIO%idg_offset - HII%idg_offset
+  joff = HIO%jdg_offset - HII%jdg_offset
+
+  ! These array bounds work for the indexing convention of the input arrays, but
+  ! on the computational domain defined for the output arrays.
+  Isq = HIO%IscB + ioff ; Ieq = HIO%IecB + ioff
+  Jsq = HIO%JscB + joff ; Jeq = HIO%JecB + joff
+  is = HIO%isc + ioff ; ie = HIO%iec + ioff
+  js = HIO%jsc + joff ; je = HIO%jec + joff
 
   GxRho = G_e * rho_0
   I_Rho = 1.0 / rho_0
@@ -622,15 +632,15 @@ subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
     ! Use Bode's rule to estimate the pressure anomaly change.
     rho_anom = C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + 12.0*r5(3)) - &
                rho_ref
-    dpa(i,j) = G_e*dz*rho_anom
+    dpa(i-ioff,j-joff) = G_e*dz*rho_anom
     ! Use a Bode's-rule-like fifth-order accurate estimate of the double integral of
     ! the pressure anomaly.
-    if (present(intz_dpa)) intz_dpa(i,j) = 0.5*G_e*dz**2 * &
+    if (present(intz_dpa)) intz_dpa(i-ioff,j-joff) = 0.5*G_e*dz**2 * &
           (rho_anom - C1_90*(16.0*(r5(4)-r5(2)) + 7.0*(r5(5)-r5(1))) )
   enddo ; enddo
 
-  if (present(intx_dpa)) then ; do j=HI%jsc,HI%jec ; do I=Isq,Ieq
-    intz(1) = dpa(i,j) ; intz(5) = dpa(i+1,j)
+  if (present(intx_dpa)) then ; do j=js,je ; do I=Isq,Ieq
+    intz(1) = dpa(i-ioff,j-joff) ; intz(5) = dpa(i+1-ioff,j-joff)
     do m=2,4
       w_left = 0.25*real(5-m) ; w_right = 1.0-w_left
       dz = w_left*(z_t(i,j) - z_b(i,j)) + w_right*(z_t(i+1,j) - z_b(i+1,j))
@@ -648,12 +658,12 @@ subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
                                 12.0*r5(3)) - rho_ref)
     enddo
     ! Use Bode's rule to integrate the bottom pressure anomaly values in x.
-    intx_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
+    intx_dpa(i-ioff,j-joff) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
                            12.0*intz(3))
   enddo ; enddo ; endif
 
-  if (present(inty_dpa)) then ; do J=Jsq,Jeq ; do i=HI%isc,HI%iec
-    intz(1) = dpa(i,j) ; intz(5) = dpa(i,j+1)
+  if (present(inty_dpa)) then ; do J=Jsq,Jeq ; do i=is,ie
+    intz(1) = dpa(i-ioff,j-joff) ; intz(5) = dpa(i-ioff,j-joff+1)
     do m=2,4
       w_left = 0.25*real(5-m) ; w_right = 1.0-w_left
       dz = w_left*(z_t(i,j) - z_b(i,j)) + w_right*(z_t(i,j+1) - z_b(i,j+1))
@@ -671,7 +681,7 @@ subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
                                 12.0*r5(3)) - rho_ref)
     enddo
     ! Use Bode's rule to integrate the values.
-    inty_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
+    inty_dpa(i-ioff,j-joff) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
                            12.0*intz(3))
   enddo ; enddo ; endif
 end subroutine int_density_dz_generic
@@ -885,19 +895,19 @@ end subroutine int_density_dz_generic_cell
 ! are linear profiles.
 ! ==========================================================================
 subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
-                                       rho_0, G_e, H_subroundoff, bathyT, HI, EOS, dpa, &
+                                       rho_0, G_e, H_subroundoff, bathyT, HII, HIO, EOS, dpa, &
                                        intz_dpa, intx_dpa, inty_dpa, &
                                        useMassWghtInterp)
-  real, dimension(NIMEM_BK_,NJMEM_BK_),  intent(in)  :: T_t, T_b, S_t, S_b, z_t, z_b
-  real,                                  intent(in)  :: rho_ref, rho_0, G_e, H_subroundoff
-  real, dimension(NIMEM_BK_,NJMEM_BK_),  intent(in)  :: bathyT
-  type(hor_index_type),                  intent(in)  :: HI
-  type(EOS_type), pointer                            :: EOS !< Equation of state structure
-  real, dimension(NIMEM_BK_,NJMEM_BK_),  intent(out) :: dpa
-  real, dimension(NIMEM_BK_,NJMEM_BK_),  optional, intent(out) :: intz_dpa
-  real, dimension(NIMEMB_BK_,NJMEM_BK_), optional, intent(out) :: intx_dpa
-  real, dimension(NIMEM_BK_,NJMEMB_BK_), optional, intent(out) :: inty_dpa
-  logical,                               optional, intent(in)  :: useMassWghtInterp
+  type(hor_index_type),                    intent(in)  :: HII, HIO
+  real, dimension(SZDI_(HII),SZDJ_(HII)),  intent(in)  :: T_t, T_b, S_t, S_b, z_t, z_b
+  real,                                    intent(in)  :: rho_ref, rho_0, G_e, H_subroundoff
+  real, dimension(SZDI_(HII),SZDJ_(HII)),  intent(in)  :: bathyT
+  type(EOS_type), pointer                              :: EOS !< Equation of state structure
+  real, dimension(SZDI_(HIO),SZDJ_(HIO)),  intent(out) :: dpa
+  real, dimension(SZDI_(HIO),SZDJ_(HIO)),  optional, intent(out) :: intz_dpa
+  real, dimension(SZDIB_(HIO),SZDJ_(HIO)), optional, intent(out) :: intx_dpa
+  real, dimension(SZDI_(HIO),SZDJB_(HIO)), optional, intent(out) :: inty_dpa
+  logical,                                 optional, intent(in)  :: useMassWghtInterp
 ! This subroutine calculates (by numerical quadrature) integrals of
 ! pressure anomalies across layers, which are required for calculating the
 ! finite-volume form pressure accelerations in a Boussinesq model.  The one
@@ -939,27 +949,31 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
 !  (in,opt) useMassWghtInterp - If true, uses mass weighting to interpolate
 !                       T/S for top and bottom integrals.
 
-  real :: T5((5*HI%iscB+1):(5*(HI%iecB+2)))
-  real :: S5((5*HI%iscB+1):(5*(HI%iecB+2)))
-  real :: p5((5*HI%iscB+1):(5*(HI%iecB+2)))
-  real :: r5((5*HI%iscB+1):(5*(HI%iecB+2)))
-  real :: u5((5*HI%iscB+1):(5*(HI%iecB+2)))
-  real :: T15((15*HI%iscB+1):(15*(HI%iecB+1)))
-  real :: S15((15*HI%iscB+1):(15*(HI%iecB+1)))
-  real :: p15((15*HI%iscB+1):(15*(HI%iecB+1)))
-  real :: r15((15*HI%iscB+1):(15*(HI%iecB+1)))
+  real :: T5((5*HIO%iscB+1):(5*(HIO%iecB+2)))
+  real :: S5((5*HIO%iscB+1):(5*(HIO%iecB+2)))
+  real :: p5((5*HIO%iscB+1):(5*(HIO%iecB+2)))
+  real :: r5((5*HIO%iscB+1):(5*(HIO%iecB+2)))
+  real :: u5((5*HIO%iscB+1):(5*(HIO%iecB+2)))
+  real :: T15((15*HIO%iscB+1):(15*(HIO%iecB+1)))
+  real :: S15((15*HIO%iscB+1):(15*(HIO%iecB+1)))
+  real :: p15((15*HIO%iscB+1):(15*(HIO%iecB+1)))
+  real :: r15((15*HIO%iscB+1):(15*(HIO%iecB+1)))
   real :: wt_t(5), wt_b(5)
   real :: rho_anom
   real :: w_left, w_right, intz(5)
   real, parameter :: C1_90 = 1.0/90.0  ! Rational constants.
   real :: GxRho, I_Rho
-  real :: dz(HI%iscB:HI%iecB+1), dz_x(5,HI%iscB:HI%iecB), dz_y(5,HI%isc:HI%iec)
+  real :: dz(HIO%iscB:HIO%iecB+1), dz_x(5,HIO%iscB:HIO%iecB), dz_y(5,HIO%isc:HIO%iec)
   real :: weight_t, weight_b, hWght, massWeightingToggle
   real :: Ttl, Tbl, Ttr, Tbr, Stl, Sbl, Str, Sbr, hL, hR, iDenom
   integer :: Isq, Ieq, Jsq, Jeq, i, j, m, n
+  integer :: iin, jin, ioff, joff
   integer :: pos
 
-  Isq = HI%IscB ; Ieq = HI%IecB ; Jsq = HI%JscB ; Jeq = HI%JecB
+  ioff = HIO%idg_offset - HII%idg_offset
+  joff = HIO%jdg_offset - HII%jdg_offset
+
+  Isq = HIO%IscB ; Ieq = HIO%IecB ; Jsq = HIO%JscB ; Jeq = HIO%JecB
 
   GxRho = G_e * rho_0
   I_Rho = 1.0 / rho_0
@@ -969,27 +983,28 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
   endif
 
   do n = 1, 5
-     wt_t(n) = 0.25 * real(5-n)
-     wt_b(n) = 1.0 - wt_t(n)
+    wt_t(n) = 0.25 * real(5-n)
+    wt_b(n) = 1.0 - wt_t(n)
   enddo
 
   ! =============================
   ! 1. Compute vertical integrals
   ! =============================
   do j=Jsq,Jeq+1
-    do i = Isq,Ieq+1
-      dz(i) = z_t(i,j) - z_b(i,j)
+    jin = j+joff
+    do i = Isq,Ieq+1 ; iin = i+ioff
+      dz(i) = z_t(iin,jin) - z_b(iin,jin)
       do n=1,5
-        p5(i*5+n) = -GxRho*(z_t(i,j) - 0.25*real(n-1)*dz(i))
+        p5(i*5+n) = -GxRho*(z_t(iin,jin) - 0.25*real(n-1)*dz(i))
         ! Salinity and temperature points are linearly interpolated
-        S5(i*5+n) = wt_t(n) * S_t(i,j) + wt_b(n) * S_b(i,j)
-        T5(i*5+n) = wt_t(n) * T_t(i,j) + wt_b(n) * T_b(i,j)
+        S5(i*5+n) = wt_t(n) * S_t(iin,jin) + wt_b(n) * S_b(iin,jin)
+        T5(i*5+n) = wt_t(n) * T_t(iin,jin) + wt_b(n) * T_b(iin,jin)
       enddo
     enddo
     call calculate_density_array(T5, S5, p5, r5, 1, (ieq-isq+2)*5, EOS )
     u5 = r5 - rho_ref
 
-    do i = isq, ieq+1
+    do i=isq,ieq+1 ; iin = i+ioff
     ! Use Bode's rule to estimate the pressure anomaly change.
       rho_anom = C1_90*(7.0*(r5(i*5+1)+r5(i*5+5)) + 32.0*(r5(i*5+2)+r5(i*5+4)) + 12.0*r5(i*5+3)) - &
            rho_ref
@@ -1007,8 +1022,8 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
   ! ==================================================
   ! 2. Compute horizontal integrals in the x direction
   ! ==================================================
-  if (present(intx_dpa)) then ; do j=HI%jsc,HI%jec
-     do I=Isq,Ieq
+  if (present(intx_dpa)) then ; do j=HIO%jsc,HIO%jec ; jin = j+joff
+     do I=Isq,Ieq ; iin = i+ioff
 
     ! Corner values of T and S
     ! hWght is the distance measure by which the cell is violation of
@@ -1018,28 +1033,28 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
     ! Note: To work in terrain following coordinates we could offset
     ! this distance by the layer thickness to replicate other models.
     hWght = massWeightingToggle * &
-            max(0., -bathyT(i,j)-z_t(i+1,j), -bathyT(i+1,j)-z_t(i,j))
+            max(0., -bathyT(iin,jin)-z_t(iin+1,jin), -bathyT(iin+1,jin)-z_t(iin,jin))
     if (hWght > 0.) then
-      hL = (z_t(i,j) - z_b(i,j)) + H_subroundoff
-      hR = (z_t(i+1,j) - z_b(i+1,j)) + H_subroundoff
+      hL = (z_t(iin,jin) - z_b(iin,jin)) + H_subroundoff
+      hR = (z_t(iin+1,jin) - z_b(iin+1,jin)) + H_subroundoff
       hWght = hWght * ( (hL-hR)/(hL+hR) )**2
       iDenom = 1./( hWght*(hR + hL) + hL*hR )
-      Ttl = ( (hWght*hR)*T_t(i+1,j) + (hWght*hL + hR*hL)*T_t(i,j) ) * iDenom
-      Ttr = ( (hWght*hL)*T_t(i,j) + (hWght*hR + hR*hL)*T_t(i+1,j) ) * iDenom
-      Tbl = ( (hWght*hR)*T_b(i+1,j) + (hWght*hL + hR*hL)*T_b(i,j) ) * iDenom
-      Tbr = ( (hWght*hL)*T_b(i,j) + (hWght*hR + hR*hL)*T_b(i+1,j) ) * iDenom
-      Stl = ( (hWght*hR)*S_t(i+1,j) + (hWght*hL + hR*hL)*S_t(i,j) ) * iDenom
-      Str = ( (hWght*hL)*S_t(i,j) + (hWght*hR + hR*hL)*S_t(i+1,j) ) * iDenom
-      Sbl = ( (hWght*hR)*S_b(i+1,j) + (hWght*hL + hR*hL)*S_b(i,j) ) * iDenom
-      Sbr = ( (hWght*hL)*S_b(i,j) + (hWght*hR + hR*hL)*S_b(i+1,j) ) * iDenom
+      Ttl = ( (hWght*hR)*T_t(iin+1,jin) + (hWght*hL + hR*hL)*T_t(iin,jin) ) * iDenom
+      Ttr = ( (hWght*hL)*T_t(iin,jin) + (hWght*hR + hR*hL)*T_t(iin+1,jin) ) * iDenom
+      Tbl = ( (hWght*hR)*T_b(iin+1,jin) + (hWght*hL + hR*hL)*T_b(iin,jin) ) * iDenom
+      Tbr = ( (hWght*hL)*T_b(iin,jin) + (hWght*hR + hR*hL)*T_b(iin+1,jin) ) * iDenom
+      Stl = ( (hWght*hR)*S_t(iin+1,jin) + (hWght*hL + hR*hL)*S_t(iin,jin) ) * iDenom
+      Str = ( (hWght*hL)*S_t(iin,jin) + (hWght*hR + hR*hL)*S_t(iin+1,jin) ) * iDenom
+      Sbl = ( (hWght*hR)*S_b(iin+1,jin) + (hWght*hL + hR*hL)*S_b(iin,jin) ) * iDenom
+      Sbr = ( (hWght*hL)*S_b(iin,jin) + (hWght*hR + hR*hL)*S_b(iin+1,jin) ) * iDenom
     else
-      Ttl = T_t(i,j); Tbl = T_b(i,j); Ttr = T_t(i+1,j); Tbr = T_b(i+1,j)
-      Stl = S_t(i,j); Sbl = S_b(i,j); Str = S_t(i+1,j); Sbr = S_b(i+1,j)
+      Ttl = T_t(iin,jin); Tbl = T_b(iin,jin); Ttr = T_t(iin+1,jin); Tbr = T_b(iin+1,jin)
+      Stl = S_t(iin,jin); Sbl = S_b(iin,jin); Str = S_t(iin+1,jin); Sbr = S_b(iin+1,jin)
     endif
 
     do m=2,4
            w_left = 0.25*real(5-m) ; w_right = 1.0-w_left
-           dz_x(m,i) = w_left*(z_t(i,j) - z_b(i,j)) + w_right*(z_t(i+1,j) - z_b(i+1,j))
+           dz_x(m,i) = w_left*(z_t(iin,jin) - z_b(iin,jin)) + w_right*(z_t(iin+1,jin) - z_b(iin+1,jin))
 
       ! Salinity and temperature points are linearly interpolated in
       ! the horizontal. The subscript (1) refers to the top value in
@@ -1052,7 +1067,7 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
       S15(pos+1) = w_left*Stl + w_right*Str
       S15(pos+5) = w_left*Sbl + w_right*Sbr
 
-      p15(pos+1) = -GxRho*(w_left*z_t(i,j) + w_right*z_t(i+1,j))
+      p15(pos+1) = -GxRho*(w_left*z_t(iin,jin) + w_right*z_t(iin+1,jin))
 
       ! Pressure
       do n=2,5
@@ -1071,26 +1086,26 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
 
     call calculate_density(T15, S15, p15, r15, 1, 15*(ieq-isq+1), EOS)
 
-    do I=Isq,Ieq
+    do I=Isq,Ieq ; iin = i+ioff
        intz(1) = dpa(i,j) ; intz(5) = dpa(i+1,j)
 
-    ! Use Bode's rule to estimate the pressure anomaly change.
-    do m = 2,4
+      ! Use Bode's rule to estimate the pressure anomaly change.
+      do m = 2,4
           pos = i*15+(m-2)*5
           intz(m) = G_e*dz_x(m,i)*( C1_90*(7.0*(r15(pos+1)+r15(pos+5)) + 32.0*(r15(pos+2)+r15(pos+4)) + &
                             12.0*r15(pos+3)) - rho_ref)
-    enddo
-    ! Use Bode's rule to integrate the bottom pressure anomaly values in x.
-    intx_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
-                           12.0*intz(3))
+      enddo
+      ! Use Bode's rule to integrate the bottom pressure anomaly values in x.
+      intx_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
+                             12.0*intz(3))
     enddo
   enddo ; endif
 
   ! ==================================================
   ! 3. Compute horizontal integrals in the y direction
   ! ==================================================
-  if (present(inty_dpa)) then ; do J=Jsq,Jeq
-    do i=HI%isc,HI%iec
+  if (present(inty_dpa)) then ; do J=Jsq,Jeq ; jin = j+joff
+    do i=HIO%isc,HIO%iec ; iin = i+ioff
     ! Corner values of T and S
     ! hWght is the distance measure by which the cell is violation of
     ! hydrostatic consistency. For large hWght we bias the interpolation
@@ -1099,28 +1114,28 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
     ! Note: To work in terrain following coordinates we could offset
     ! this distance by the layer thickness to replicate other models.
       hWght = massWeightingToggle * &
-              max(0., -bathyT(i,j)-z_t(i,j+1), -bathyT(i,j+1)-z_t(i,j))
+              max(0., -bathyT(i,j)-z_t(iin,jin+1), -bathyT(i,j+1)-z_t(iin,jin))
       if (hWght > 0.) then
-        hL = (z_t(i,j) - z_b(i,j)) + H_subroundoff
-        hR = (z_t(i,j+1) - z_b(i,j+1)) + H_subroundoff
+        hL = (z_t(iin,jin) - z_b(iin,jin)) + H_subroundoff
+        hR = (z_t(iin,jin+1) - z_b(iin,jin+1)) + H_subroundoff
         hWght = hWght * ( (hL-hR)/(hL+hR) )**2
         iDenom = 1./( hWght*(hR + hL) + hL*hR )
-        Ttl = ( (hWght*hR)*T_t(i,j+1) + (hWght*hL + hR*hL)*T_t(i,j) ) * iDenom
-        Ttr = ( (hWght*hL)*T_t(i,j) + (hWght*hR + hR*hL)*T_t(i,j+1) ) * iDenom
-        Tbl = ( (hWght*hR)*T_b(i,j+1) + (hWght*hL + hR*hL)*T_b(i,j) ) * iDenom
-        Tbr = ( (hWght*hL)*T_b(i,j) + (hWght*hR + hR*hL)*T_b(i,j+1) ) * iDenom
-        Stl = ( (hWght*hR)*S_t(i,j+1) + (hWght*hL + hR*hL)*S_t(i,j) ) * iDenom
-        Str = ( (hWght*hL)*S_t(i,j) + (hWght*hR + hR*hL)*S_t(i,j+1) ) * iDenom
-        Sbl = ( (hWght*hR)*S_b(i,j+1) + (hWght*hL + hR*hL)*S_b(i,j) ) * iDenom
-        Sbr = ( (hWght*hL)*S_b(i,j) + (hWght*hR + hR*hL)*S_b(i,j+1) ) * iDenom
+        Ttl = ( (hWght*hR)*T_t(iin,jin+1) + (hWght*hL + hR*hL)*T_t(iin,jin) ) * iDenom
+        Ttr = ( (hWght*hL)*T_t(iin,jin) + (hWght*hR + hR*hL)*T_t(iin,jin+1) ) * iDenom
+        Tbl = ( (hWght*hR)*T_b(iin,jin+1) + (hWght*hL + hR*hL)*T_b(iin,jin) ) * iDenom
+        Tbr = ( (hWght*hL)*T_b(iin,jin) + (hWght*hR + hR*hL)*T_b(iin,jin+1) ) * iDenom
+        Stl = ( (hWght*hR)*S_t(iin,jin+1) + (hWght*hL + hR*hL)*S_t(iin,jin) ) * iDenom
+        Str = ( (hWght*hL)*S_t(iin,jin) + (hWght*hR + hR*hL)*S_t(iin,jin+1) ) * iDenom
+        Sbl = ( (hWght*hR)*S_b(iin,jin+1) + (hWght*hL + hR*hL)*S_b(iin,jin) ) * iDenom
+        Sbr = ( (hWght*hL)*S_b(iin,jin) + (hWght*hR + hR*hL)*S_b(iin,jin+1) ) * iDenom
       else
-        Ttl = T_t(i,j); Tbl = T_b(i,j); Ttr = T_t(i,j+1); Tbr = T_b(i,j+1)
-        Stl = S_t(i,j); Sbl = S_b(i,j); Str = S_t(i,j+1); Sbr = S_b(i,j+1)
+        Ttl = T_t(iin,jin); Tbl = T_b(iin,jin); Ttr = T_t(iin,jin+1); Tbr = T_b(iin,jin+1)
+        Stl = S_t(iin,jin); Sbl = S_b(iin,jin); Str = S_t(iin,jin+1); Sbr = S_b(iin,jin+1)
       endif
 
       do m=2,4
         w_left = 0.25*real(5-m) ; w_right = 1.0-w_left
-        dz_y(m,i) = w_left*(z_t(i,j) - z_b(i,j)) + w_right*(z_t(i,j+1) - z_b(i,j+1))
+        dz_y(m,i) = w_left*(z_t(iin,jin) - z_b(iin,jin)) + w_right*(z_t(iin,jin+1) - z_b(iin,jin+1))
 
         ! Salinity and temperature points are linearly interpolated in
         ! the horizontal. The subscript (1) refers to the top value in
@@ -1133,7 +1148,7 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
         S15(pos+1) = w_left*Stl + w_right*Str
         S15(pos+5) = w_left*Sbl + w_right*Sbr
 
-        p15(pos+1) = -GxRho*(w_left*z_t(i,j) + w_right*z_t(i,j+1))
+        p15(pos+1) = -GxRho*(w_left*z_t(iin,jin) + w_right*z_t(iin,jin+1))
 
         ! Pressure
         do n=2,5 ; p15(pos+n) = p15(pos+n-1) + GxRho*0.25*dz_y(m,i) ; enddo
@@ -1148,9 +1163,9 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
       enddo
     enddo
 
-    call calculate_density_array(T15(15*HI%isc+1:), S15(15*HI%isc+1:), p15(15*HI%isc+1:), &
-                                 r15(15*HI%isc+1:), 1, 15*(HI%iec-HI%isc+1), EOS)
-    do i=HI%isc,HI%iec
+    call calculate_density_array(T15(15*HIO%isc+1:), S15(15*HIO%isc+1:), p15(15*HIO%isc+1:), &
+                                 r15(15*HIO%isc+1:), 1, 15*(HIO%iec-HIO%isc+1), EOS)
+    do i=HIO%isc,HIO%iec ; iin = i+ioff
       intz(1) = dpa(i,j) ; intz(5) = dpa(i,j+1)
 
       ! Use Bode's rule to estimate the pressure anomaly change.
@@ -1177,18 +1192,19 @@ end subroutine int_density_dz_generic_plm
 ! are parabolic profiles
 ! ==========================================================================
 subroutine int_density_dz_generic_ppm (T, T_t, T_b, S, S_t, S_b, &
-                                       z_t, z_b, rho_ref, rho_0, G_e, HI, &
+                                       z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, &
                                        EOS, dpa, intz_dpa, intx_dpa, inty_dpa)
   
-  real, dimension(NIMEM_BK_,NJMEM_BK_),  intent(in)  :: T, T_t, T_b, S, S_t, S_b, &
+  type(hor_index_type),                    intent(in)  :: HII, HIO
+  real, dimension(SZDI_(HII),SZDJ_(HII)),  intent(in)  :: T, T_t, T_b, S, S_t, S_b, &
                                                         z_t, z_b
-  real,                                  intent(in)  :: rho_ref, rho_0, G_e
-  type(hor_index_type),                  intent(in)  :: HI
+  real,                                    intent(in)  :: rho_ref, rho_0, G_e
   type(EOS_type), pointer                            :: EOS !< Equation of state structure
-  real, dimension(NIMEM_BK_,NJMEM_BK_),  intent(out) :: dpa
-  real, dimension(NIMEM_BK_,NJMEM_BK_),  optional, intent(out) :: intz_dpa
-  real, dimension(NIMEMB_BK_,NJMEM_BK_), optional, intent(out) :: intx_dpa
-  real, dimension(NIMEM_BK_,NJMEMB_BK_), optional, intent(out) :: inty_dpa
+  real, dimension(SZDI_(HIO),SZDJ_(HIO)),  intent(out) :: dpa
+  real, dimension(SZDI_(HIO),SZDJ_(HIO)),  optional, intent(out) :: intz_dpa
+
+  real, dimension(SZDIB_(HIO),SZDJB_(HIO)), optional, intent(out) :: intx_dpa
+  real, dimension(SZDI_(HIO),SZDJB_(HIO)), optional, intent(out) :: inty_dpa
 ! This subroutine calculates (by numerical quadrature) integrals of
 ! pressure anomalies across layers, which are required for calculating the
 ! finite-volume form pressure accelerations in a Boussinesq model.  The one
@@ -1240,7 +1256,7 @@ subroutine int_density_dz_generic_ppm (T, T_t, T_b, S, S_t, S_b, &
   real :: xi                           ! normalized coordinate
   real :: T_top, T_mid, T_bot
   real :: S_top, S_mid, S_bot
-  integer :: Isq, Ieq, Jsq, Jeq, i, j, m, n
+  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, i, j, m, n, ioff, joff
   real, dimension(4) :: x, y
   real, dimension(9) :: S_node, T_node, p_node, r_node
 
@@ -1248,7 +1264,15 @@ subroutine int_density_dz_generic_ppm (T, T_t, T_b, S, S_t, S_b, &
   call MOM_error(FATAL, &
     "int_density_dz_generic_ppm: the implementation is not done yet, contact developer")
 
-  Isq = HI%IscB ; Ieq = HI%IecB ; Jsq = HI%JscB ; Jeq = HI%JecB
+  ioff = HIO%idg_offset - HII%idg_offset
+  joff = HIO%jdg_offset - HII%jdg_offset
+
+  ! These array bounds work for the indexing convention of the input arrays, but
+  ! on the computational domain defined for the output arrays.
+  Isq = HIO%IscB + ioff ; Ieq = HIO%IecB + ioff
+  Jsq = HIO%JscB + joff ; Jeq = HIO%JecB + joff
+  is = HIO%isc + ioff ; ie = HIO%iec + ioff
+  js = HIO%jsc + joff ; je = HIO%jec + joff
 
   GxRho = G_e * rho_0
   I_Rho = 1.0 / rho_0
@@ -1285,7 +1309,7 @@ subroutine int_density_dz_generic_ppm (T, T_t, T_b, S, S_t, S_b, &
     !       rho_ref
 
     rho_anom = 1000.0 + S(i,j) - rho_ref;
-    dpa(i,j) = G_e*dz*rho_anom
+    dpa(i-ioff,j-joff) = G_e*dz*rho_anom
 
     ! Use a Bode's-rule-like fifth-order accurate estimate of
     ! the double integral of the pressure anomaly.
@@ -1293,15 +1317,15 @@ subroutine int_density_dz_generic_ppm (T, T_t, T_b, S, S_t, S_b, &
     !if (present(intz_dpa)) intz_dpa(i,j) = 0.5*G_e*dz**2 * &
     !      (rho_anom - C1_90*(16.0*(r5(4)-r5(2)) + 7.0*(r5(5)-r5(1))) )
 
-    intz_dpa(i,j) = 0.5 * G_e * dz**2 * ( 1000.0 - rho_ref + s0 + s1/3.0 + &
+    intz_dpa(i-ioff,j-joff) = 0.5 * G_e * dz**2 * ( 1000.0 - rho_ref + s0 + s1/3.0 + &
                                     s2/6.0 )
   enddo ; enddo ! end loops on j and i
 
   ! ==================================================
   ! 2. Compute horizontal integrals in the x direction
   ! ==================================================
-  if (present(intx_dpa)) then ; do j=HI%jsc,HI%jec ; do I=Isq,Ieq
-    intz(1) = dpa(i,j) ; intz(5) = dpa(i+1,j)
+  if (present(intx_dpa)) then ; do j=js,je ; do I=Isq,Ieq
+    intz(1) = dpa(i-ioff,j-joff) ; intz(5) = dpa(i+1-ioff,j-joff)
     do m=2,4
       w_left = 0.25*real(5-m) ; w_right = 1.0-w_left
       dz = w_left*(z_t(i,j) - z_b(i,j)) + w_right*(z_t(i+1,j) - z_b(i+1,j))
@@ -1348,7 +1372,7 @@ subroutine int_density_dz_generic_ppm (T, T_t, T_b, S, S_t, S_b, &
       intz(m) = G_e*dz*( C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + &
                             12.0*r5(3)) - rho_ref)
     enddo
-    intx_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
+    intx_dpa(i-ioff,j-joff) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
                            12.0*intz(3))
 
     ! Use Gauss quadrature rule to compute integral
@@ -1392,20 +1416,23 @@ subroutine int_density_dz_generic_ppm (T, T_t, T_b, S, S_t, S_b, &
     call calculate_density ( T_node, S_node, p_node, r_node, 1, 9, EOS )
     r_node = r_node - rho_ref
 
-    call compute_integral_quadratic ( x, y, r_node, intx_dpa(i,j) )
+    call compute_integral_quadratic ( x, y, r_node, intx_dpa(i-ioff,j-joff) )
 
-    intx_dpa(i,j) = intx_dpa(i,j) * G_e
+    intx_dpa(i-ioff,j-joff) = intx_dpa(i-ioff,j-joff) * G_e
 
   enddo ; enddo ; endif
 
   ! ==================================================
   ! 3. Compute horizontal integrals in the y direction
   ! ==================================================
-  if (present(inty_dpa)) then ; do J=Jsq,Jeq ; do i=HI%isc,HI%iec
+  if (present(inty_dpa)) then
+    call MOM_error(WARNING, "int_density_dz_generic_ppm still needs to be written for inty_dpa!")
+    do J=Jsq,Jeq ; do i=is,ie
 
-    inty_dpa(i,j) = 0.0
+      inty_dpa(i-ioff,j-joff) = 0.0
 
-  enddo ; enddo ; endif
+    enddo ; enddo
+  endif
 
 end subroutine int_density_dz_generic_ppm
 

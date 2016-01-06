@@ -632,21 +632,12 @@ subroutine calculate_vertical_integrals(h, tv, fluxes, G, CS)
     btm_pres,&! The pressure at the ocean bottom, or CMIP variable 'pbo'.
               ! This is the column mass multiplied by gravity plus the pressure
               ! at the ocean surface.
+    dpress, &    ! Change in hydrostatic pressure across a layer, in Pa.
     tr_int    ! vertical integral of a tracer times density,
               ! (Rho_0 in a Boussinesq model) in TR kg m-2.
-
-  ! These variables are on block indices
-  real, dimension(SZI_BK_(G),SZJ_BK_(G)) :: & 
-    z_top_bk, &  ! Height of the top of a layer or the ocean, in m.
-    z_bot_bk, &  ! Height of the bottom of a layer (for id_mass) or the
-                 ! (positive) depth of the ocean (for id_col_ht), in m.
-    dpress_bk    ! Change in hydrostatic pressure across a layer, in Pa.
-
   real    :: IG_Earth  ! Inverse of gravitational acceleration, in s2 m-1.
 
   integer :: i, j, k, is, ie, js, je, nz
-  integer :: is_bk, ie_bk, js_bk, je_bk, ib, jb, isd, ied, jsd, jed, n
-  integer :: ioff_bk, joff_bk
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   
   if (CS%id_mass_wt > 0) then
@@ -687,31 +678,18 @@ subroutine calculate_vertical_integrals(h, tv, fluxes, G, CS)
       if (associated(tv%eqn_of_state)) then
         IG_Earth = 1.0 / G%g_Earth
 !       do j=js,je ; do i=is,ie ; z_bot(i,j) = -P_SURF(i,j)/G%H_to_Pa ; enddo ; enddo
-!$OMP parallel do default(none) shared(G,nz,h,tv,mass,IG_Earth) &
-!$OMP                          private(is_bk,ie_bk,js_bk,je_bk,isd,ied,jsd,jed,ioff_bk, &
-!$OMP                                  joff_bk,z_top_bk,z_bot_bk,dpress_bk,i,j)
-        do n = 1, G%nblocks
-          is_bk=G%Block(n)%isc    ; ie_bk=G%Block(n)%iec
-          js_bk=G%Block(n)%jsc    ; je_bk=G%Block(n)%jec
-          ioff_bk = G%Block(n)%idg_offset - G%HI%idg_offset
-          joff_bk = G%Block(n)%jdg_offset - G%HI%jdg_offset
-          isd=G%isd_bk+ioff_bk    ; ied=G%ied_bk+ioff_bk
-          jsd=G%jsd_bk+joff_bk    ; jed=G%jed_bk+joff_bk
-          do jb=js_bk,je_bk ; do ib=is_bk,ie_bk ; z_bot_bk(ib,jb) = 0.0 ; enddo ; enddo
-          do k=1,nz
-            do jb=js_bk,je_bk ; do ib=is_bk,ie_bk
-              i = ib+ioff_bk ; j = jb+joff_bk
-              z_top_bk(ib,jb) = z_bot_bk(ib,jb)
-              z_bot_bk(ib,jb) = z_top_bk(ib,jb) - G%H_to_m*h(i,j,k)
-            enddo ; enddo
-            call int_density_dz(tv%T(isd:ied,jsd:jed,k), tv%S(isd:ied,jsd:jed,k), &
-                                z_top_bk, z_bot_bk, 0.0, G%H_to_kg_m2, G%g_Earth, &
-                                G%Block(n), tv%eqn_of_state, dpress_bk)
-            do jb=js_bk,je_bk ; do ib=is_bk,ie_bk
-              i = ib+ioff_bk ; j = jb+joff_bk
-              mass(i,j) = mass(i,j) + dpress_bk(ib,jb) * IG_Earth
-            enddo ; enddo
-          enddo
+        do j=js,je ; do i=is,ie ; z_bot(i,j) = 0.0 ; enddo ; enddo
+        do k=1,nz
+          do j=js,je ; do i=is,ie
+            z_top(i,j) = z_bot(i,j)
+            z_bot(i,j) = z_top(i,j) - G%H_to_m*h(i,j,k)
+          enddo ; enddo
+          call int_density_dz(tv%T(:,:,k), tv%S(:,:,k), &
+                              z_top, z_bot, 0.0, G%H_to_kg_m2, G%g_Earth, &
+                              G%HI, G%HI, tv%eqn_of_state, dpress)
+          do j=js,je ; do i=is,ie
+            mass(i,j) = mass(i,j) + dpress(i,j) * IG_Earth
+          enddo ; enddo
         enddo
       else
         do k=1,nz ; do j=js,je ; do i=is,ie

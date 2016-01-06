@@ -258,15 +258,15 @@ subroutine calculate_2_densities_wright( T, S, pressure1, pressure2, rho1, rho2,
   enddo
 end subroutine calculate_2_densities_wright
 
-subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, dpa, intz_dpa,   &
-                                 intx_dpa, inty_dpa)
-  real, dimension(NIMEM_BK_,NJMEM_BK_),  intent(in)  :: T, S, z_t, z_b
-  real,                                  intent(in)  :: rho_ref, rho_0, G_e
-  type(hor_index_type),                  intent(in)  :: HI 
-  real, dimension(NIMEM_BK_,NJMEM_BK_),  intent(out) :: dpa
-  real, dimension(NIMEM_BK_,NJMEM_BK_),  optional, intent(out) :: intz_dpa
-  real, dimension(NIMEMB_BK_,NJMEM_BK_), optional, intent(out) :: intx_dpa
-  real, dimension(NIMEM_BK_,NJMEMB_BK_), optional, intent(out) :: inty_dpa
+subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, &
+                                 dpa, intz_dpa, intx_dpa, inty_dpa)
+  type(hor_index_type),                    intent(in)  :: HII, HIO
+  real, dimension(SZDI_(HII),SZDJ_(HII)),  intent(in)  :: T, S, z_t, z_b
+  real,                                    intent(in)  :: rho_ref, rho_0, G_e
+  real, dimension(SZDI_(HIO),SZDJ_(HIO)),  intent(out) :: dpa
+  real, dimension(SZDI_(HIO),SZDJ_(HIO)),  optional, intent(out) :: intz_dpa
+  real, dimension(SZDIB_(HIO),SZDJ_(HIO)), optional, intent(out) :: intx_dpa
+  real, dimension(SZDI_(HIO),SZDJB_(HIO)), optional, intent(out) :: inty_dpa
 !   This subroutine calculates analytical and nearly-analytical integrals of
 ! pressure anomalies across layers, which are required for calculating the
 ! finite-volume form pressure accelerations in a Boussinesq model.
@@ -294,7 +294,7 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, dpa, i
 !                       pressure anomaly at the top and bottom of the layer
 !                       divided by the y grid spacing, in Pa.
 
-  real, dimension(SZI_(HI),SZJ_(HI)) :: al0_2d, p0_2d, lambda_2d
+  real, dimension(SZI_(HII),SZJ_(HII)) :: al0_2d, p0_2d, lambda_2d
   real :: al0, p0, lambda
   real :: eps, eps2, rho_anom, rem
   real :: w_left, w_right, intz(5)
@@ -302,9 +302,17 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, dpa, i
   real, parameter :: C1_9 = 1.0/9.0, C1_90 = 1.0/90.0  ! Rational constants.
   real :: GxRho, I_Rho
   real :: dz, p_ave, I_al0, I_Lzz
-  integer :: Isq, Ieq, Jsq, Jeq, i, j, m
+  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, i, j, ioff, joff, m
 
-  Isq = HI%IscB ; Ieq = HI%IecB ; Jsq = HI%JscB ; Jeq = HI%JecB
+  ioff = HIO%idg_offset - HII%idg_offset
+  joff = HIO%jdg_offset - HII%jdg_offset
+
+  ! These array bounds work for the indexing convention of the input arrays, but
+  ! on the computational domain defined for the output arrays.
+  Isq = HIO%IscB + ioff ; Ieq = HIO%IecB + ioff
+  Jsq = HIO%JscB + joff ; Jeq = HIO%JecB + joff
+  is = HIO%isc + ioff ; ie = HIO%iec + ioff
+  js = HIO%jsc + joff ; je = HIO%jec + joff
 
   GxRho = G_e * rho_0
   I_Rho = 1.0 / rho_0
@@ -328,13 +336,13 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, dpa, i
     rho_anom = (p0 + p_ave)*(I_Lzz*I_al0) - rho_ref
     rem = I_Rho * (lambda * I_al0**2) * eps2 * &
           (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))
-    dpa(i,j) = G_e*rho_anom*dz - 2.0*eps*rem
+    dpa(i-ioff,j-joff) = G_e*rho_anom*dz - 2.0*eps*rem
     if (present(intz_dpa)) &
-      intz_dpa(i,j) = 0.5*G_e*rho_anom*dz**2 - dz*(1.0+eps)*rem
+      intz_dpa(i-ioff,j-joff) = 0.5*G_e*rho_anom*dz**2 - dz*(1.0+eps)*rem
   enddo ; enddo
 
-  if (present(intx_dpa)) then ; do j=HI%jsc,HI%jec ; do I=Isq,Ieq
-    intz(1) = dpa(i,j) ; intz(5) = dpa(i+1,j)
+  if (present(intx_dpa)) then ; do j=js,je ; do I=Isq,Ieq
+    intz(1) = dpa(i-ioff,j-joff) ; intz(5) = dpa(i+1-ioff,j-joff)
     do m=2,4
       w_left = 0.25*real(m-1) ; w_right = 1.0-w_left
       al0 = w_left*al0_2d(i,j) + w_right*al0_2d(i+1,j)
@@ -354,12 +362,12 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, dpa, i
                (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))
     enddo
     ! Use Bode's rule to integrate the values.
-    intx_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
+    intx_dpa(i-ioff,j-joff) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
                            12.0*intz(3))
   enddo ; enddo ; endif
 
-  if (present(inty_dpa)) then ; do J=Jsq,Jeq ; do i=HI%isc,HI%iec
-    intz(1) = dpa(i,j) ; intz(5) = dpa(i,j+1)
+  if (present(inty_dpa)) then ; do J=Jsq,Jeq ; do i=is,ie
+    intz(1) = dpa(i-ioff,j-joff) ; intz(5) = dpa(i-ioff,j+1-joff)
     do m=2,4
       w_left = 0.25*real(m-1) ; w_right = 1.0-w_left
       al0 = w_left*al0_2d(i,j) + w_right*al0_2d(i,j+1)
@@ -379,7 +387,7 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, dpa, i
                (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))
     enddo
     ! Use Bode's rule to integrate the values.
-    inty_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
+    inty_dpa(i-ioff,j-joff) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
                            12.0*intz(3))
   enddo ; enddo ; endif
 end subroutine int_density_dz_wright

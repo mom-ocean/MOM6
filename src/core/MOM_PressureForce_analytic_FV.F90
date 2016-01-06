@@ -176,19 +176,19 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
                 ! account for a reduced gravity model, in m2 s-2.
     za          ! The geopotential anomaly (i.e. g*e + alpha_0*pressure) at the
                 ! interface atop a layer, in m2 s-2.
-  real, dimension(SZI_BK_(G),SZJ_BK_(G)) :: & ! on block indices
+  real, dimension(SZDI_(G%Block(1)),SZDJ_(G%Block(1))) :: & ! on block indices
     dp_bk, &    ! The (positive) change in pressure across a layer, in Pa.
     za_bk       ! The geopotential anomaly (i.e. g*e + alpha_0*pressure) at the
                 ! interface atop a layer, in m2 s-2.
     
   real, dimension(SZI_(G)) :: Rho_cv_BL !  The coordinate potential density in the deepest variable
                 ! density near-surface layer, in kg m-3.
-  real, dimension(SZIB_BK_(G),SZJ_BK_(G)) :: & ! on block indices
+  real, dimension(SZDIB_(G%Block(1)),SZDJ_(G%Block(1))) :: & ! on block indices
     intx_za_bk ! The zonal integral of the geopotential anomaly along the
                ! interface below a layer, divided by the grid spacing, m2 s-2.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: &
     intx_dza    ! The change in intx_za through a layer, in m2 s-2.
-  real, dimension(SZI_BK_(G),SZJB_BK_(G)) :: & ! on block indices
+  real, dimension(SZDI_(G%Block(1)),SZDJB_(G%Block(1))) :: & ! on block indices
     inty_za_bk ! The meridional integral of the geopotential anomaly along the
                ! interface below a layer, divided by the grid spacing, m2 s-2.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: &
@@ -504,7 +504,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
   real, dimension(SZI_(G)) :: &
     Rho_cv_BL   !   The coordinate potential density in the deepest variable
                 ! density near-surface layer, in kg m-3.
-  real, dimension(SZI_BK_(G),SZJ_BK_(G)) :: &  ! on block indices
+  real, dimension(SZDI_(G%Block(1)),SZDJ_(G%Block(1))) :: &  ! on block indices
     dz_bk, &     ! The change in geopotential thickness through a layer, m2 s-2.
     pa_bk, &     ! The pressure anomaly (i.e. pressure + g*RHO_0*e) at the
                  ! the interface atop a layer, in Pa.
@@ -512,11 +512,11 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
                  ! of a layer, in Pa.
     intz_dpa_bk  ! The vertical integral in depth of the pressure anomaly less
                  ! the pressure anomaly at the top of the layer, in H Pa (m Pa).
-  real, dimension(SZIB_BK_(G),SZJ_BK_(G)) :: & ! on block indices
+  real, dimension(SZDIB_(G%Block(1)),SZDJ_(G%Block(1))) :: & ! on block indices
     intx_pa_bk, & ! The zonal integral of the pressure anomaly along the interface
                   ! atop a layer, divided by the grid spacing, in Pa.
     intx_dpa_bk   ! The change in intx_pa through a layer, in Pa.
-  real, dimension(SZI_BK_(G),SZJB_BK_(G)) :: & ! on block indices
+  real, dimension(SZDI_(G%Block(1)),SZDJB_(G%Block(1))) :: & ! on block indices
     inty_pa_bk, & ! The meridional integral of the pressure anomaly along the
                   ! interface atop a layer, divided by the grid spacing, in Pa.
     inty_dpa_bk   ! The change in inty_pa through a layer, in Pa.
@@ -734,26 +734,23 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
         ! where the layers are located.
         if ( use_ALE ) then
           if ( PRScheme == PRESSURE_RECONSTRUCTION_PLM ) then
-            call int_density_dz_generic_plm ( T_t(isd:ied,jsd:jed,k),         &
-                      T_b(isd:ied,jsd:jed,k), S_t(isd:ied,jsd:jed,k),         &
-                      S_b(isd:ied,jsd:jed,k), e(isd:ied,jsd:jed,K),           &
-                      e(isd:ied,jsd:jed,K+1), rho_ref, CS%Rho0, G%g_Earth,    &
-                      G%H_subroundoff, G%bathyT(isd:ied,jsd:jed), G%Block(n), &
+            call int_density_dz_generic_plm ( T_t(:,:,k), T_b(:,:,k), &
+                      S_t(:,:,k), S_b(:,:,k), e(:,:,K), e(:,:,K+1), &
+                      rho_ref, CS%Rho0, G%g_Earth,    &
+                      G%H_subroundoff, G%bathyT, G%HI, G%Block(n), &
                       tv%eqn_of_state, dpa_bk, intz_dpa_bk, intx_dpa_bk, inty_dpa_bk, &
                       useMassWghtInterp = CS%useMassWghtInterp)
           elseif ( PRScheme == PRESSURE_RECONSTRUCTION_PPM ) then
-            call int_density_dz_generic_ppm ( tv%T(isd:ied,jsd:jed,k),     &
-                      T_t(isd:ied,jsd:jed,k), T_b(isd:ied,jsd:jed,k),      &
-                      tv%S(isd:ied,jsd:jed,k), S_t(isd:ied,jsd:jed,k),     &
-                      S_b(isd:ied,jsd:jed,k), e(isd:ied,jsd:jed,K),        &
-                      e(isd:ied,jsd:jed,K+1), rho_ref, CS%Rho0, G%G_Earth, &
-                      G%Block(n), tv%eqn_of_state, dpa_bk, intz_dpa_bk,    &
+            call int_density_dz_generic_ppm ( tv%T(:,:,k), T_t(:,:,k), T_b(:,:,k), &
+                      tv%S(:,:,k), S_t(:,:,k), S_b(:,:,k), e(:,:,K), e(:,:,K+1), &
+                      rho_ref, CS%Rho0, G%G_Earth, &
+                      G%HI, G%Block(n), tv%eqn_of_state, dpa_bk, intz_dpa_bk,    &
                       intx_dpa_bk, inty_dpa_bk)
           endif
         else
-          call int_density_dz(tv_tmp%T(isd:ied,jsd:jed,k), tv_tmp%S(isd:ied,jsd:jed,k), &
-                    e(isd:ied,jsd:jed,K), e(isd:ied,jsd:jed,K+1),             &
-                    rho_ref, CS%Rho0, G%g_Earth, G%Block(n), tv%eqn_of_state, &
+          call int_density_dz(tv_tmp%T(:,:,k), tv_tmp%S(:,:,k), &
+                    e(:,:,K), e(:,:,K+1),             &
+                    rho_ref, CS%Rho0, G%g_Earth, G%HI, G%Block(n), tv%eqn_of_state, &
                     dpa_bk, intz_dpa_bk, intx_dpa_bk, inty_dpa_bk )
         endif
         intz_dpa_bk(:,:) = intz_dpa_bk(:,:)*G%m_to_H

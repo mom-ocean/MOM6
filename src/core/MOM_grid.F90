@@ -205,6 +205,7 @@ subroutine MOM_grid_init(G, param_file)
 #include "version_variable.h"
   integer :: isd, ied, jsd, jed, nk, idg_off, jdg_off
   integer :: IsdB, IedB, JsdB, JedB
+  integer :: ied_max, jed_max
   integer :: niblock, njblock, nihalo, njhalo, nblocks, n, i, j
   integer, allocatable, dimension(:) :: ibegin, iend, jbegin, jend
 
@@ -262,24 +263,17 @@ subroutine MOM_grid_init(G, param_file)
                  static_value=NK_)
   if (nk /= NK_) call MOM_error(FATAL, "MOM_grid_init: " // &
        "Mismatched number of layers NK_ between MOM_memory.h and param_file")
-  niblock = NIBLOCK_
-  njblock = NJBLOCK_
-  call log_param(param_file, "MOM_grid", "NIBLOCK", niblock, "The number of blocks "// &
-                 "in the x-direction on each processor (for openmp).", default=1, &
-                 layoutParam=.true.)
-  call log_param(param_file, "MOM_grid", "NJBLOCK", njblock, "The number of blocks "// &
-                 "in the y-direction on each processor (for openmp).", default=1, &
-                 layoutParam=.true.)
 #else
   call get_param(param_file, "MOM_grid", "NK", nk, &
                  "The number of model layers.", units="nondim", fail_if_missing=.true.)
+#endif
+
   call get_param(param_file, "MOM_grid", "NIBLOCK", niblock, "The number of blocks "// &
                  "in the x-direction on each processor (for openmp).", default=1, &
                  layoutParam=.true.)
   call get_param(param_file, "MOM_grid", "NJBLOCK", njblock, "The number of blocks "// &
                  "in the y-direction on each processor (for openmp).", default=1, &
                  layoutParam=.true.)
-#endif
 
   G%ks = 1 ; G%ke = nk
 
@@ -345,9 +339,19 @@ subroutine MOM_grid_init(G, param_file)
   allocate(ibegin(niblock), iend(niblock), jbegin(njblock), jend(njblock))
   call compute_block_extent(G%HI%isc,G%HI%iec,niblock,ibegin,iend)
   call compute_block_extent(G%HI%jsc,G%HI%jec,njblock,jbegin,jend)
+  !-- make sure the last block is the largest.
+  do i = 1, niblock-1
+    if (iend(i)-ibegin(i) > iend(niblock)-ibegin(niblock) ) call MOM_error(FATAL, &
+       "MOM_grid_init: the last block size in x-direction is not the largest")
+  enddo
+  do j = 1, njblock-1
+    if (jend(j)-jbegin(j) > jend(njblock)-jbegin(njblock) ) call MOM_error(FATAL, &
+       "MOM_grid_init: the last block size in y-direction is not the largest")
+  enddo
 
   G%nblocks = nblocks
   allocate(G%Block(nblocks))
+  ied_max = 1 ; jed_max = 1
   do n = 1,nblocks
     ! Copy all information from the array index type describing the local grid.
     G%Block(n) = G%HI
@@ -380,20 +384,20 @@ subroutine MOM_grid_init(G, param_file)
 !    G%Block(n)%joff = jbegin(j) - G%Block(n)%jsc
     G%Block(n)%idg_offset = (ibegin(i) - G%Block(n)%isc) + G%HI%idg_offset
     G%Block(n)%jdg_offset = (jbegin(j) - G%Block(n)%jsc) + G%HI%jdg_offset
+    ! Find the largest values of ied and jed so that all blocks will have the
+    ! same size in memory.
+    ied_max = max(ied_max, G%Block(n)%ied)
+    jed_max = max(jed_max, G%Block(n)%jed)
   enddo
 
-  !-- make sure the last block is the largest.
-  do i = 1, niblock-1
-    if (iend(i)-ibegin(i) > iend(niblock)-ibegin(niblock) ) call MOM_error(FATAL, &
-       "MOM_grid_init: the last block size in x-direction is not the largest")
+  ! Reset all of the data domain sizes to match the largest for array reuse.
+  do n = 1,nblocks
+    G%Block(n)%ied = ied_max ; G%Block(n)%IedB = ied_max
+    G%Block(n)%jed = jed_max ; G%Block(n)%JedB = jed_max
   enddo
-  do j = 1, njblock-1
-    if (jend(j)-jbegin(j) > jend(njblock)-jbegin(njblock) ) call MOM_error(FATAL, &
-       "MOM_grid_init: the last block size in y-direction is not the largest")
-  enddo
+
 
   ! Consider removing the isd_bk and similar variables.
-
   !--- define the block memory domain ( maximum data domain size of all blocks )
   G%isd_bk  = G%block(nblocks)%isd  ; G%ied_bk  = G%block(nblocks)%ied
   G%jsd_bk  = G%block(nblocks)%jsd  ; G%jed_bk  = G%block(nblocks)%jed
@@ -405,15 +409,6 @@ subroutine MOM_grid_init(G, param_file)
         call MOM_error(FATAL, "MOM_grid_init: G%ied_bk > G%ied")
   if ( G%jed_bk+G%block(nblocks)%jdg_offset > G%HI%jed + G%HI%jdg_offset ) &
         call MOM_error(FATAL, "MOM_grid_init: G%jed_bk > G%jed")
-
-  !--- For static memory, make sure G%iem_bk - G%ism_bk + 1 = NI_MEM_BK_
-  !---                         and  G%jem_bk - G%jsm_bk + 1 = NJ_MEM_BK_
-#ifdef STATIC_MEMORY_
-  if ( (G%ied_bk-G%isd_bk+1) .NE. NIMEM_BK_ ) call MOM_error(FATAL, &
-       "MOM_grid_init:  (G%ied_bk-G%isd_bk+1) .NE. NIMEM_BK_ for static memory ")
-  if ( (G%jed_bk-G%jsd_bk+1) .NE. NJMEM_BK_ ) call MOM_error(FATAL, &
-       "MOM_grid_init:  (G%jed_bk-G%jsd_bk+1) .NE. NJMEM_BK_ for static memory ")
-#endif
 
 ! Log derivative values.
   call log_param(param_file, "MOM_grid", "M to THICKNESS", G%m_to_H)
