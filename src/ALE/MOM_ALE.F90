@@ -31,7 +31,7 @@ use MOM_regridding,       only : set_regrid_max_thickness
 use MOM_regridding,       only : regridding_CS, set_regrid_params
 use MOM_regridding,       only : getCoordinateInterfaces, getCoordinateResolution
 use MOM_regridding,       only : getCoordinateUnits, getCoordinateShortName
-use MOM_regridding,       only : getStaticThickness
+use MOM_regridding,       only : getStaticThickness, set_filter_depths
 use MOM_remapping,        only : initialize_remapping, remapping_core, end_remapping
 use MOM_remapping,        only : remappingSchemesDoc, remappingDefaultScheme
 use MOM_remapping,        only : remapDisableBoundaryExtrapolation
@@ -153,6 +153,7 @@ subroutine initialize_ALE( param_file, G, CS)
   real, dimension(:), allocatable :: dz
   character(len=40)               :: mod = "MOM_ALE" ! This module's name.
   character(len=80)               :: string ! Temporary strings
+  real                            :: filter_shallow_depth, filter_deep_depth
 
   if (associated(CS)) then
     call MOM_error(WARNING, "initialize_ALE called with an associated "// &
@@ -220,6 +221,15 @@ subroutine initialize_ALE( param_file, G, CS)
                  "grid (0. or anything less than DT_THERM) has no memory of the old\n"//&
                  "grid. A very long time-scale makes the model more Lagrangian.", &
                  units="s", default=0.)
+  call get_param(param_file, mod, "REGRID_FILTER_SHALLOW_DEPTH", filter_shallow_depth, &
+                 "The depth above which no time-filtering is applied. Above this depth\n"//&
+                 "final grid exactly matches the target (new) grid.", units="m", default=0.)
+  call get_param(param_file, mod, "REGRID_FILTER_DEEP_DEPTH", filter_deep_depth, &
+                 "The depth below which full time-filtering is applied with time-scale\n"//&
+                 "REGRID_TIME_SCALE. Between depths REGRID_FILTER_SHALLOW_DEPTH and\n"//&
+                 "REGRID_FILTER_SHALLOW_DEPTH the filter wieghts adopt a cubic profile.", &
+                 units="m", default=0.)
+  call set_filter_depths(filter_shallow_depth*G%m_to_H, filter_deep_depth*G%m_to_H, CS%regridCS)
 
   ! Keep a record of values for subsequent queries
   CS%nk = G%ke

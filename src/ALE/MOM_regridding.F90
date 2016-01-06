@@ -418,8 +418,9 @@ subroutine filtered_grid_motion( CS, nk, z_old, z_new, dz_g )
     ! Calculate old grid weights based on average between old and z_pot
     z_pot = 0.5 * ( z_old(k) + z_pot )
     ! ws=1 at d>=deep, ws=0 at d<=shallow
-    ws = 1. - ( CS%depth_of_time_filter_deep -abs(z_pot) ) * recip_dz
-    ws = max(1., min(0., ws) )
+    ws = 1. + ( abs(z_pot) - CS%depth_of_time_filter_deep ) * recip_dz
+    ws = max(0., min(1., ws) )
+    ws = (ws*ws) * (3. - 2.*ws) ! This turns the linear profile into a cubic profile (0..1)
     ! Now blend grids and calculate grid motion
     new_grid_weight = 1.0 - CS%old_grid_weight * ws
     dz_g(k) = new_grid_weight * ( z_new(k) - z_old(k) )
@@ -2508,8 +2509,8 @@ subroutine set_filter_depths( depth_of_time_filter_shallow, depth_of_time_filter
   real,                intent(in)    :: depth_of_time_filter_deep !< Depth to end cubic (H units)
   type(regridding_CS), intent(inout) :: CS !< Regridding control structure
 
-  if (depth_of_time_filter_deep>depth_of_time_filter_shallow) call MOM_error(FATAL,'MOM_regridding, '//&
-                     'set_filter_depths: depth_of_time_filter_deep>depth_of_time_filter_shallow!')
+  if (depth_of_time_filter_deep<depth_of_time_filter_shallow) call MOM_error(FATAL,'MOM_regridding, '//&
+                     'set_filter_depths: depth_of_time_filter_deep<depth_of_time_filter_shallow!')
   CS%depth_of_time_filter_deep = depth_of_time_filter_deep
   CS%depth_of_time_filter_shallow = depth_of_time_filter_shallow
 
