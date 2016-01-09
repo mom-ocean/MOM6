@@ -930,12 +930,13 @@ subroutine register_Z_tracer_low(tr_ptr, name, long_name, units, standard_name, 
         " cannot be output without an appropriate depth-space target file.")
   endif
 
-  if (CS%id_tr(m) <= 0) then ; CS%id_tr(m) = -1 ; return ; endif
-  if (CS%id_tr_xyave(m) <= 0) then ; CS%id_tr_xyave(m) = -1 ; return ; endif
-
-  CS%num_tr_used = m  
-  call safe_alloc_ptr(CS%tr_z(m)%p,isd,ied,jsd,jed,CS%nk_zspace)
-  CS%tr_model(m)%p => tr_ptr
+  if (CS%id_tr(m) <= 0) CS%id_tr(m) = -1
+  if (CS%id_tr_xyave(m) <= 0) CS%id_tr_xyave(m) = -1
+  if (CS%id_tr(m) > 0 .or. CS%id_tr_xyave(m) > 0) then
+    CS%num_tr_used = m
+    call safe_alloc_ptr(CS%tr_z(m)%p,isd,ied,jsd,jed,CS%nk_zspace)
+    CS%tr_model(m)%p => tr_ptr
+  endif
 
 end subroutine register_Z_tracer_low
 
