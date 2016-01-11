@@ -3,7 +3,7 @@ module MOM_regridding
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_error_handler, only : MOM_error, FATAL
+use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
 use MOM_EOS,           only : calculate_density, calculate_density_derivs
 use MOM_EOS,           only : calculate_compress
@@ -392,8 +392,11 @@ subroutine check_grid_column( nk, depth, h, dzInterface, msg )
 
 end subroutine check_grid_column
 
-!> Returns the change in interface position motion after filtering
-!! and assuming the top and bottom interfaces do not move.
+!> Returns the change in interface position motion after filtering and
+!! assuming the top and bottom interfaces do not move.  The filtering is
+!! a function of depth, and is applied as the integrated average filtering
+!! over the trajectory of the interface.  By design, this code can not give
+!! tangled interfaces provided that z_old and z_new are not already tangled.
 subroutine filtered_grid_motion( CS, nk, z_old, z_new, dz_g )
   type(regridding_CS),                           intent(in)    :: CS !< Regridding control structure
   integer,               intent(in)    :: nk !< Number of cells
@@ -401,31 +404,123 @@ subroutine filtered_grid_motion( CS, nk, z_old, z_new, dz_g )
   real, dimension(nk+1), intent(in)    :: z_new !< New grid position (m)
   real, dimension(nk+1), intent(inout) :: dz_g !< Change in interface positions (m)
   ! Local variables
-  real :: new_grid_weight, z_pot, ws, recip_dz
+  real :: sgn  ! The sign convention for downward.
+  real :: dz_tgt, zr1
+  real :: Aq, Bq, dz0, z0, F0
+  real :: zs, zd, dzwt, Idzwt
+  real :: wtd, Iwtd
+  real :: Int_zs, Int_zd, dInt_zs_zd
+! For debugging:
+  real, dimension(nk+1) :: z_act
+!  real, dimension(nk+1) :: ddz_g_s, ddz_g_d
+  logical :: debug = .false.
   integer :: k
 
-  recip_dz = CS%depth_of_time_filter_deep - CS%depth_of_time_filter_shallow
-  if (recip_dz>0.) then
-    recip_dz = 1./recip_dz
+  if ((z_old(nk+1) - z_old(1)) * (z_new(nk+1) - z_new(1)) < 0.0) then
+    call MOM_error(FATAL, "filtered_grid_motion: z_old and z_new use different sign conventions.")
+  elseif ((z_old(nk+1) - z_old(1)) * (z_new(nk+1) - z_new(1)) == 0.0) then
+    ! This is a massless column, so do nothing and return.
+    do k=1,nk+1 ; dz_g(k) = 0.0 ; enddo ; return
+  elseif ((z_old(nk+1) - z_old(1)) + (z_new(nk+1) - z_new(1)) > 0.0) then
+    sgn = 1.0
   else
-    recip_dz = 0.
+    sgn = -1.0
   endif
 
-  dz_g(1) = 0.
+  if (debug) then
+    do k=2,nk+1
+      if (sgn*(z_new(k)-z_new(k-1)) < -5e-16*(abs(z_new(k))+abs(z_new(k-1))) ) &
+        call MOM_error(FATAL, "filtered_grid_motion: z_new is tangled.")
+      if (sgn*(z_old(k)-z_old(k-1)) < -5e-16*(abs(z_old(k))+abs(z_old(k-1))) ) &
+        call MOM_error(FATAL, "filtered_grid_motion: z_old is tangled.")
+    enddo
+    ! ddz_g_s(:) = 0.0 ; ddz_g_d(:) = 0.0
+  endif
+  
+  zs = CS%depth_of_time_filter_shallow
+  zd = CS%depth_of_time_filter_deep
+  wtd = 1.0 - CS%old_grid_weight
+  Iwtd = 1.0 / wtd
+
+  dzwt = (zd - zs)
+  Idzwt = 0.0 ; if (abs(zd - zs) > 0.0) Idzwt = 1.0 / (zd - zs)
+  dInt_zs_zd = 0.5*(1.0 + Iwtd) * (zd - zs)
+  Aq = 0.5*(Iwtd - 1.0)
+
+  dz_g(1) = 0.0
   do k = 2,nk
-    ! z_pot is where the new grid would be if full filtering were in effect
-    z_pot = z_new(k) + CS%old_grid_weight * ( z_old(k) - z_new(k) )
-    ! Calculate old grid weights based on average between old and z_pot
-    z_pot = 0.5 * ( z_old(k) + z_pot )
-    ! ws=1 at d>=deep, ws=0 at d<=shallow
-    ws = 1. + ( abs(z_pot) - CS%depth_of_time_filter_deep ) * recip_dz
-    ws = max(0., min(1., ws) )
-    ws = (ws*ws) * (3. - 2.*ws) ! This turns the linear profile into a cubic profile (0..1)
-    ! Now blend grids and calculate grid motion
-    new_grid_weight = 1.0 - CS%old_grid_weight * ws
-    dz_g(k) = new_grid_weight * ( z_new(k) - z_old(k) )
+    ! zr1 is positive and increases with depth, and dz_tgt is positive downward.
+    dz_tgt = sgn*(z_new(k) - z_old(k))
+    zr1 = sgn*(z_old(k) - z_old(1))
+    
+    !   First, handle the two simple and common cases that do not pass through
+    ! the adjustment rate transition zone.
+    if ((zr1 > zd) .and. (zr1 + wtd * dz_tgt > zd)) then
+      dz_g(k) = sgn * wtd * dz_tgt
+    elseif ((zr1 < zs) .and. (zr1 + dz_tgt < zs)) then
+      dz_g(k) = sgn * dz_tgt
+    else
+      ! Find the new value by inverting the equation
+      !   integral(0 to dz_new) Iwt(z) dz = dz_tgt
+      ! This is trivial where Iwt is a constant, and agrees with the two limits above.
+      
+      ! Take test values at the transition points to figure out which segment
+      ! the new value will be found in.
+      if (zr1 >= zd) then
+        Int_zd = Iwtd*(zd - zr1)
+        Int_zs = Int_zd - dInt_zs_zd
+      elseif (zr1 <= zs) then
+        Int_zs = (zs - zr1)
+        Int_zd = dInt_zs_zd + (zs - zr1)
+      else
+!        Int_zd = (zd - zr1) * (Iwtd + 0.5*(1.0 - Iwtd) * (zd - zr1) / (zd - zs))
+        Int_zd = (zd - zr1) * (Iwtd*(0.5*(zd+zr1) - zs) + 0.5*(zd - zr1)) * Idzwt
+        Int_zs = (zs - zr1) * (0.5*Iwtd * ((zr1 - zs)) + (zd - 0.5*(zr1+zs))) * Idzwt
+        ! It has been verified that  Int_zs = Int_zd - dInt_zs_zd to within roundoff.
+      endif
+      
+      if (dz_tgt >= Int_zd) then ! The new location is in the deep, slow region.
+        dz_g(k) = sgn * ((zd-zr1) + wtd*(dz_tgt - Int_zd))
+      elseif (dz_tgt <= Int_zs) then ! The new location is in the shallow region.
+        dz_g(k) = sgn * ((zs-zr1) + (dz_tgt - Int_zs))
+      else  ! We need to solve a quadratic equation for z_new.
+        ! For accuracy, do the integral from the starting depth or the nearest
+        ! edge of the transition region.  The results with each choice are
+        ! mathematically equivalent, but differ in roundoff, and this choice
+        ! should minimize the likelihood of inadvertently overlapping interfaces.
+        if (zr1 <= zs) then ; dz0 = zs-zr1 ; z0 = zs ; F0 = dz_tgt - Int_zs
+        elseif (zr1 >= zd) then ; dz0 = zd-zr1 ; z0 = zd ; F0 = dz_tgt - Int_zd
+        else ; dz0 = 0.0 ; z0 = zr1 ; F0 = dz_tgt ; endif
+
+        Bq = (dzwt + 2.0*Aq*(z0-zs))
+        ! Solve the quadratic: Aq*(zn-z0)**2 + Bq*(zn-z0) - F0*dzwt = 0
+        ! Note that b>=0, and the two terms in the standard form cancel for the right root.
+        dz_g(k) = sgn * (dz0 + 2.0*F0*dzwt / (Bq + sqrt(Bq**2 + 4.0*Aq*F0*dzwt) ))
+
+!       if (debug) then
+!         dz0 = zs-zr1 ; z0 = zs ; F0 = dz_tgt - Int_zs ; Bq = (dzwt + 2.0*Aq*(z0-zs))
+!         ddz_g_s(k) = sgn * (dz0 + 2.0*F0*dzwt / (Bq + sqrt(Bq**2 + 4.0*Aq*F0*dzwt) )) - dz_g(k)
+!         dz0 = zd-zr1 ; z0 = zd ; F0 = dz_tgt - Int_zd ; Bq = (dzwt + 2.0*Aq*(z0-zs))
+!         ddz_g_d(k) = sgn * (dz0 + 2.0*F0*dzwt / (Bq + sqrt(Bq**2 + 4.0*Aq*F0*dzwt) )) - dz_g(k)
+!         
+!         if (abs(ddz_g_s(k)) > 1e-12*(abs(dz_g(k)) + abs(dz_g(k)+ddz_g_s(k)))) &
+!           call MOM_error(WARNING, "filtered_grid_motion: Expect z_output to be tangled (sc).")
+!         if (abs(ddz_g_d(k) - ddz_g_s(k)) > 1e-12*(abs(dz_g(k)+ddz_g_d(k)) + abs(dz_g(k)+ddz_g_s(k)))) &
+!           call MOM_error(WARNING, "filtered_grid_motion: Expect z_output to be tangled.")
+!       endif
+      endif
+
+    endif
   enddo
-  dz_g(nk+1) = 0.
+  dz_g(nk+1) = 0.0
+
+  if (debug) then
+    do k=1,nk+1 ; z_act(k) = z_old(k) + dz_g(k) ; enddo
+    do k=2,nk+1
+      if (sgn*((z_act(k))-z_act(k-1)) < -1e-15*(abs(z_act(k))+abs(z_act(k-1))) ) &
+        call MOM_error(FATAL, "filtered_grid_motion: z_output is tangled.")
+    enddo
+  endif
 
 end subroutine filtered_grid_motion
 
@@ -865,7 +960,8 @@ subroutine build_grid_HyCOM1( G, h, tv, dzInterface, remapCS, CS )
   ! Local variables
   integer   :: i, j, k, nz
   real, dimension(SZK_(G)) :: T_col, S_col, p_col, rho_col, h_col_new ! Layer quantities
-  real, dimension(SZK_(G)+1) :: z_col, z_col_new ! Interface positions in H units (m or Pa)
+  real, dimension(SZK_(G)+1) :: z_col, z_col_new ! Interface positions relative to the surface in H units (m or kg m-2)
+  real, dimension(SZK_(G)+1) :: dz_col  ! The realized change in z_col in H units (m or kg m-2)
   real, dimension(CS%nk,2) :: ppoly_i_E ! Edge value of polynomial
   real, dimension(CS%nk,2) :: ppoly_i_S ! Edge slope of polynomial
   real, dimension(CS%nk,CS%degree_i+1) :: ppoly_i_coefficients ! Coefficients of polynomial
@@ -934,10 +1030,11 @@ subroutine build_grid_HyCOM1( G, h, tv, dzInterface, remapCS, CS )
       enddo ; endif
 
       ! Calculate the final change in grid position after blending new and old grids
-      call filtered_grid_motion( CS, nz, z_col_new, z_col, dzInterface(i,j,:) )
+      call filtered_grid_motion( CS, nz, z_col, z_col_new, dz_col )
+      do K=1,nz+1 ; dzInterface(i,j,K) = -dz_col(K) ; enddo
 
-     ! This adjusts  things robust to round-off errors
-     call adjust_interface_motion( nz, CS%min_thickness, h(i,j,:), dzInterface(i,j,:) )
+      ! This adjusts things robust to round-off errors
+      call adjust_interface_motion( nz, CS%min_thickness, h(i,j,:), dzInterface(i,j,:) )
 
     else ! on land
       dzInterface(i,j,:) = 0.
@@ -967,6 +1064,7 @@ subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
   real, dimension(SZK_(G)) :: h_col     ! A column of layer thicknesses on the original grid in H units.
   real, dimension(SZK_(G)) :: T_f, S_f  ! Filtered ayer quantities
   real, dimension(SZK_(G)+1) :: z_col, z_col_new ! Interface positions relative to the surface in H units (m or kg m-2)
+  real, dimension(SZK_(G)+1) :: dz_col  ! The realized change in z_col in H units (m or kg m-2)
   logical, dimension(SZK_(G)+1) :: reliable  ! If true, this interface is in a reliable position.
   real, dimension(SZK_(G)+1) :: T_int, S_int ! Temperature and salinity interpolated to interfaces.
   real, dimension(SZK_(G)+1) :: rho_tmp, drho_dp, p_IS, p_R
@@ -1263,7 +1361,8 @@ subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
 
 
       ! Calculate the final change in grid position after blending new and old grids
-      call filtered_grid_motion( CS, nz, z_col_new, z_col, dzInterface(i,j,:) )
+      call filtered_grid_motion( CS, nz, z_col, z_col_new, dz_col )
+      do K=1,nz+1 ; dzInterface(i,j,K) = -dz_col(K) ; enddo
 #ifdef __DO_SAFETY_CHECKS__
       if (dzInterface(i,j,1) /= 0.) stop 'build_grid_SLight: Surface moved?!'
       if (dzInterface(i,j,nz+1) /= 0.) stop 'build_grid_SLight: Bottom moved?!'
