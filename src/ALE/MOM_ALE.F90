@@ -1329,13 +1329,12 @@ subroutine ALE_update_regrid_weights( dt, CS )
   real,         intent(in) :: dt !< Time-step used between ALE calls
   type(ALE_CS), pointer    :: CS !< ALE control structure
   ! Local variables
-  real :: w
+  real :: w  ! An implicit weighting estimate.
 
   if (associated(CS)) then
-    if (CS%regrid_time_scale <= dt) then
-      w = 0.
-    else
-      w = ( CS%regrid_time_scale - dt ) / CS%regrid_time_scale
+    w = 0.0
+    if (CS%regrid_time_scale > 0.0) then
+      w = CS%regrid_time_scale / (CS%regrid_time_scale + dt)
     endif
     call set_old_grid_weight( w, CS%regridCS )
   endif
