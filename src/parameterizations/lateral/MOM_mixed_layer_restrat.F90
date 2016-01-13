@@ -27,18 +27,20 @@ public mixedlayer_restrat_init
 
 !> Control structure for module 
 type, public :: mixedlayer_restrat_CS ; private
-  real    :: ml_restrat_coef       !<  A nondimensional factor by which the 
+  real    :: ml_restrat_coef       !<  A non-dimensional factor by which the
                                    !! instability is enhanced over what would be
                                    !! predicted based on the resolved  gradients.  This
                                    !! increases with grid spacing^2, up to something
                                    !! of order 500.
   real    :: MLE_density_diff      !< Density difference used in detecting mixed-layer
                                    !! depth (kg/m3)
-  real    :: MLE_tail_dh           !< Fraction by which to extend the mixed-layer restratification
+  real    :: MLE_tail_dh           !< Fraction by which to extend the mixed-layer re-stratification
                                    !! depth used for a smoother stream function at the base of
                                    !! the mixed-layer.
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                                    !! timing of diagnostic output.
+
+  real, dimension(:,:), pointer :: MLD => NULL() !< Mixed layer depth used in the MLE re-stratification parameterization
 
   integer :: id_urestrat_time
   integer :: id_vrestrat_time 
@@ -68,7 +70,6 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
   type(ocean_grid_type),                  intent(in)    :: G       !< ocean grid structure 
   type(mixedlayer_restrat_CS),            pointer       :: CS      !< module control structure 
 
-
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "Module must be initialized before it is used.")
 
@@ -94,7 +95,6 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
   type(ocean_grid_type),                  intent(in)    :: G       !< ocean grid structure  
   type(mixedlayer_restrat_CS),            pointer       :: CS      !< module control structure 
 
-
   real :: uhml(SZIB_(G),SZJ_(G),SZK_(G)) ! zonal mixed layer transport (m3/s or kg/s)
   real :: vhml(SZI_(G),SZJB_(G),SZK_(G)) ! merid mixed layer transport (m3/s or kg/s)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
@@ -102,7 +102,6 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
                           ! sublayer of the mixed layer, divided by dt, in units
                           ! of H * m2 s-1 (i.e., m3 s-1 or kg s-1).
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    MLD,  &               ! diagnosed MLD
     htot, &               ! The sum of the thicknesses of layers in the mixed layer (H units)
     Rml_av                ! g_Rho0 times the average mixed layer density (m s-2)
   real :: g_Rho0          ! G_Earth/Rho0 (m4 s-2 kg-1) 
@@ -153,35 +152,39 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
   if (.not.associated(tv%eqn_of_state)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "An equation of state must be used with this module.")
 
-  !! TODO: use derivatives and mid-MLD pressure. Currently this is sigma-0. -AJA
-  pRef_MLD(:) = 0.
-  do j = js-1, je+1
-    dK(:) = 0.5 * h(:,j,1) * G%H_to_m ! Depth of center of surface layer
-    call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef_MLD, rhoSurf, is-1, ie-is+3, tv%eqn_of_state)
-    deltaRhoAtK(:) = 0.
-    MLD(:,j) = 0.
-    do k = 2, nz
-      dKm1(:) = dK(:) ! Depth of center of layer K-1
-      dK(:) = dK(:) + 0.5 * ( h(:,j,k) + h(:,j,k-1) ) * G%H_to_m ! Depth of center of layer K
-
-      ! Mixed-layer depth, using sigma-0 (surface reference pressure)
-      deltaRhoAtKm1(:) = deltaRhoAtK(:) ! Store value from previous iteration of K
-      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_MLD, deltaRhoAtK, is-1, ie-is+3, tv%eqn_of_state)
-      deltaRhoAtK(:) = deltaRhoAtK(:) - rhoSurf(:) ! Density difference between layer K and surface
+  if (CS%MLE_density_diff > 0.) then ! We need to calculate a mixed layer depth, MLD.
+    !! TODO: use derivatives and mid-MLD pressure. Currently this is sigma-0. -AJA
+    pRef_MLD(:) = 0.
+    do j = js-1, je+1
+      dK(:) = 0.5 * h(:,j,1) * G%H_to_m ! Depth of center of surface layer
+      call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef_MLD, rhoSurf, is-1, ie-is+3, tv%eqn_of_state)
+      deltaRhoAtK(:) = 0.
+      CS%MLD(:,j) = 0.
+      do k = 2, nz
+        dKm1(:) = dK(:) ! Depth of center of layer K-1
+        dK(:) = dK(:) + 0.5 * ( h(:,j,k) + h(:,j,k-1) ) * G%H_to_m ! Depth of center of layer K
+        ! Mixed-layer depth, using sigma-0 (surface reference pressure)
+        deltaRhoAtKm1(:) = deltaRhoAtK(:) ! Store value from previous iteration of K
+        call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_MLD, deltaRhoAtK, is-1, ie-is+3, tv%eqn_of_state)
+        deltaRhoAtK(:) = deltaRhoAtK(:) - rhoSurf(:) ! Density difference between layer K and surface
+        do i = is-1, ie+1
+          ddRho = deltaRhoAtK(i) - deltaRhoAtKm1(i)
+          if ((CS%MLD(i,j)==0.) .and. (ddRho>0.) .and. &
+              (deltaRhoAtKm1(i)<CS%MLE_density_diff) .and. (deltaRhoAtK(i)>=CS%MLE_density_diff)) then
+            aFac = ( CS%MLE_density_diff - deltaRhoAtKm1(i) ) / ddRho
+            CS%MLD(i,j) = dK(i) * aFac + dKm1(i) * (1. - aFac)
+          endif
+        enddo ! i-loop
+      enddo ! k-loop
       do i = is-1, ie+1
-        ddRho = deltaRhoAtK(i) - deltaRhoAtKm1(i)
-        if ((MLD(i,j)==0.) .and. (ddRho>0.) .and. &
-            (deltaRhoAtKm1(i)<CS%MLE_density_diff) .and. (deltaRhoAtK(i)>=CS%MLE_density_diff)) then
-          aFac = ( CS%MLE_density_diff - deltaRhoAtKm1(i) ) / ddRho
-          MLD(i,j) = dK(i) * aFac + dKm1(i) * (1. - aFac)
-        endif
-      enddo ! i-loop
-
-    enddo ! k-loop
-    do i = is-1, ie+1
-      if ((MLD(i,j)==0.) .and. (deltaRhoAtK(i)<CS%MLE_density_diff)) MLD(i,j) = dK(i) ! Assume mixing to the bottom
-    enddo
-  enddo ! j-loop
+        if ((CS%MLD(i,j)==0.) .and. (deltaRhoAtK(i)<CS%MLE_density_diff)) CS%MLD(i,j) = dK(i) ! Assume mixing to the bottom
+      enddo
+    enddo ! j-loop
+  else
+    do j = js-1, je+1 ; do i = is-1, ie+1
+      CS%MLD(i,j) = 0.
+    enddo ; enddo
+  endif
 
   uDml(:) = 0.0 ; vDml(:) = 0.0
   I4dt = 0.25 / dt
@@ -204,7 +207,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
     do k=1,nz
       call calculate_density(tv%T(:,j,k),tv%S(:,j,k),p0,Rho0(:),is-1,ie-is+3,tv%eqn_of_state)
       do i=is-1,ie+1
-        if (htot(i,j) < MLD(i,j)) then
+        if (htot(i,j) < CS%MLD(i,j)) then
           Rml_av(i,j) = Rml_av(i,j) + h(i,j,k)*Rho0(i)
           htot(i,j) = htot(i,j) + h(i,j,k)
         endif
@@ -339,7 +342,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
     if (CS%id_vrestrat_time > 0) call post_data(CS%id_vrestrat_time, vtimescale_diag, CS%diag)
     if (CS%id_uhml          > 0) call post_data(CS%id_uhml, uhml, CS%diag)
     if (CS%id_vhml          > 0) call post_data(CS%id_vhml, vhml, CS%diag)
-    if (CS%id_MLD           > 0) call post_data(CS%id_MLD, MLD, CS%diag)
+    if (CS%id_MLD           > 0) call post_data(CS%id_MLD, CS%MLD, CS%diag)
     if (CS%id_Rml           > 0) call post_data(CS%id_Rml, Rml_av, CS%diag)
     if (CS%id_uDml          > 0) call post_data(CS%id_uDml, uDml_diag, CS%diag)
     if (CS%id_vDml          > 0) call post_data(CS%id_vDml, vDml_diag, CS%diag)
@@ -672,6 +675,8 @@ logical function mixedlayer_restrat_init(Time, G, param_file, diag, CS)
       'Surface zonal velocity component of mixed layer restratification', 'm/s')
   CS%id_vml = register_diag_field('ocean_model', 'vml_restrat', diag%axesCv1, Time, &
       'Surface meridional velocity component of mixed layer restratification', 'm/s')
+
+  allocate(CS%MLD(G%isd:G%ied,G%jsd:G%jed)) ; CS%MLD(:,:) = 0.
 
 end function mixedlayer_restrat_init
 
