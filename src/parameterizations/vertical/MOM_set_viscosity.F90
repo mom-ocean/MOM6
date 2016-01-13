@@ -1499,7 +1499,7 @@ subroutine set_visc_register_restarts(G, param_file, visc, restart_CS)
 !                   fields.  Allocated here.
 !  (in)      restart_CS - A pointer to the restart control structure.
   type(vardesc) :: vd
-  logical :: use_kappa_shear, adiabatic, useKPP, useEPBL
+  logical :: use_kappa_shear, adiabatic, useKPP, useEPBL, MLE_use_PBL_MLD
   integer :: isd, ied, jsd, jed, nz
   character(len=40)  :: mod = "MOM_set_visc"  ! This module's name.
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
@@ -1534,6 +1534,16 @@ subroutine set_visc_register_restarts(G, param_file, visc, restart_CS)
     vd = var_desc("Kv_turb","m2 s-1","Turbulent viscosity at interfaces", &
                   hor_grid='h', z_grid='i')
     call register_restart_field(visc%Kv_turb, vd, .false., restart_CS)
+  endif
+
+  ! visc%MLD is used to communicate the state of the (e)PBL to the rest of the model
+  call get_param(param_file, mod, "MLE_USE_PBL_MLD", MLE_use_PBL_MLD, &
+                 default=.false., do_not_log=.true.)
+  if (MLE_use_PBL_MLD) then
+    allocate(visc%MLD(isd:ied,jsd:jed)) ; visc%MLD(:,:) = 0.0
+    vd = var_desc("MLD","m","Instantaneous active mixing layer depth", &
+                  hor_grid='h', z_grid='1')
+    call register_restart_field(visc%MLD, vd, .false., restart_CS)
   endif
 
 end subroutine set_visc_register_restarts

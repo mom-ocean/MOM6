@@ -211,11 +211,12 @@ type, public :: vertvisc_type
     kv_tbl_shelf_u => NULL(), &  ! Viscosity in the viscous top boundary
     kv_tbl_shelf_v => NULL(), &  ! layer under ice shelves, in m2 s-1.
     nkml_visc_u => NULL(), & ! The number of layers in the viscous surface
-    nkml_visc_v => NULL()    ! mixed layer.  These are not integers because
+    nkml_visc_v => NULL(), & ! mixed layer.  These are not integers because
                              ! there may be fractional layers.  This is done
                              ! in terms of layers, not depth, to facilitate
                              ! the movement of the viscous boundary layer with
                              ! the flow.
+    MLD => NULL()            !< Instantaneous active mixing layer depth (H units).
   real, pointer, dimension(:,:,:) :: &
     Ray_u => NULL(), &  ! The Rayleigh drag velocity to be applied to each layer
     Ray_v => NULL(), &  ! at u- and v-points, in m s-1.
