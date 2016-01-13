@@ -47,6 +47,7 @@ type, public :: regridding_CS
   !!  target_density(k+1) = coordinateResolution(k) + coordinateResolution(k)
   !! It is only used in "rho" mode.
   real, dimension(:), allocatable :: target_density
+  logical :: target_density_set = .false.
 
   !> This array is set by function set_regrid_max_depths()
   !! It specifies the maximum depth that every interface is allowed to take, in H.
@@ -767,6 +768,8 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
   nz = G%ke
   threshold = CS%min_thickness
   p_col(:) = CS%ref_pressure
+  if (.not.CS%target_density_set) call MOM_error(FATAL, "buildGridRho : "//&
+        "Target densities must be set before buildGridRho is called.")
 
   ! Build grid based on target interface densities
   do i = G%isc-1,G%iec+1
@@ -976,6 +979,9 @@ subroutine build_grid_HyCOM1( G, h, tv, dzInterface, remapCS, CS )
   maximum_depths_set = allocated(CS%max_interface_depths)
   maximum_h_set = allocated(CS%max_layer_thickness)
 
+  if (.not.CS%target_density_set) call MOM_error(FATAL, "build_grid_HyCOM1 : "//&
+        "Target densities must be set before build_grid_HyCOM1 is called.")
+
   ! Build grid based on target interface densities
   do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
     if (G%mask2dT(i,j)>0.) then
@@ -1101,6 +1107,9 @@ subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
   nz = G%ke
   maximum_depths_set = allocated(CS%max_interface_depths)
   maximum_h_set = allocated(CS%max_layer_thickness)
+
+  if (.not.CS%target_density_set) call MOM_error(FATAL, "build_grid_SLight : "//&
+        "Target densities must be set before build_grid_SLight is called.")
 
   ! Build grid based on target interface densities
   do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
@@ -2381,6 +2390,7 @@ subroutine set_target_densities_from_G( G, CS )
   do k = 2,nz
     CS%target_density(k) = CS%target_density(k-1) + CS%coordinateResolution(k)
   end do
+  CS%target_density_set = .true.
 
 end subroutine set_target_densities_from_G
 
@@ -2390,6 +2400,7 @@ subroutine set_target_densities( CS, rho_int )
   real, dimension(CS%nk+1), intent(in)    :: rho_int !< Interface densities
 
   CS%target_density(:) = rho_int(:)
+  CS%target_density_set = .true.
 
 end subroutine set_target_densities
 

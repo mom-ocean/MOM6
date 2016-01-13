@@ -976,13 +976,12 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
                  " FILE:string - read from a file. The string specifies\n"//&
                  "               the filename and variable name, separated\n"//&
                  "               by a comma or space, e.g. FILE:lev.nc,Z\n"//&
-                 " FNC1:string - FNC1:dz_min,H_total,power,precision",&
+                 " FNC1:string - FNC1:dz_min,H_total,power,precision\n"//&
+                 " HYBRID:string - read from a file. The string specifies\n"//&
+                 "               the filename and two variable names, separated\n"//&
+                 "               by a comma or space, for sigma-2 and dz. e.g.\n"//&
+                 "               HYBRID:vgrid.nc,sigma2,dz",&
                  default='UNIFORM')
-!                " FNC1:string - FNC1:dz_min,H_total,power,precision\n"//&
-!                " HYBRID:strg  - read from a file. The string specifies\n"//&
-!                "               the filename and two variable names, separated\n"//&
-!                "               by a comma or space, for sigma-2 and dz. e.g.\n"//&
-!                "               HYBRID:vgrid.nc,sigma2,dz",&
   message = "The distribution of vertical resolution for the target\n"//&
             "grid used for Eulerian-like coordinates. For example,\n"//&
             "in z-coordinate mode, the parameter is a list of level\n"//&
