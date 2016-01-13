@@ -198,7 +198,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, CS)
     if (.not. associated(MLD)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "Argument MLD was not associated!")
     aFac = CS%MLE_MLD_decay_time / ( dt + CS%MLE_MLD_decay_time )
-    bFac = 1. - aFac
+    bFac = dt / ( dt + CS%MLE_MLD_decay_time )
     do j = js, je ; do i = is, ie
       CS%MLD_filtered(i,j) = bFac*MLD(i,j) + aFac*CS%MLD_filtered(i,j)
       CS%MLD(i,j) = CS%MLD_filtered(i,j)
