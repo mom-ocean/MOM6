@@ -200,7 +200,10 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, CS)
     aFac = CS%MLE_MLD_decay_time / ( dt + CS%MLE_MLD_decay_time )
     bFac = dt / ( dt + CS%MLE_MLD_decay_time )
     do j = js, je ; do i = is, ie
-      CS%MLD_filtered(i,j) = bFac*MLD(i,j) + aFac*CS%MLD_filtered(i,j)
+      ! Expression bFac*MLD(i,j) + aFac*CS%MLD_filtered(i,j) is the time-filtered
+      ! (running mean) of MLD. The max() allows the "running mean" to be reset
+      ! instantly to a deeper MLD.
+      CS%MLD_filtered(i,j) = max( MLD(i,j), bFac*MLD(i,j) + aFac*CS%MLD_filtered(i,j) )
       CS%MLD(i,j) = CS%MLD_filtered(i,j)
     enddo ; enddo
     call pass_var(MLD, G%domain)
