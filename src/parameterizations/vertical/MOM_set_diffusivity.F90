@@ -920,6 +920,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
   if (associated(dd%N2_bot)) deallocate(dd%N2_bot)
   if (associated(dd%N2_meanz)) deallocate(dd%N2_meanz)
   if (associated(dd%Kd_work)) deallocate(dd%Kd_work)
+  if (associated(dd%Kd_user)) deallocate(dd%Kd_user)
   if (associated(dd%Kd_Niku)) deallocate(dd%Kd_Niku)
   if (associated(dd%Kd_Niku_work)) deallocate(dd%Kd_Niku_work)
   if (associated(dd%Kd_Itidal_Work))  deallocate(dd%Kd_Itidal_Work)
