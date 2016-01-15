@@ -22,6 +22,7 @@ use MOM_domains,             only : pass_var, To_West, To_South
 use MOM_domains,             only : create_group_pass, do_group_pass, group_pass_type
 use MOM_energetic_PBL,       only : energetic_PBL, energetic_PBL_init
 use MOM_energetic_PBL,       only : energetic_PBL_end, energetic_PBL_CS
+use MOM_energetic_PBL,       only : energetic_PBL_get_MLD
 use MOM_entrain_diffusive,   only : entrainment_diffusive, entrain_diffusive_init
 use MOM_entrain_diffusive,   only : entrain_diffusive_end, entrain_diffusive_CS
 use MOM_EOS,                 only : calculate_density, calculate_2_densities, calculate_TFreeze
@@ -735,6 +736,9 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       call find_uv_at_h(u, v, h, u_h, v_h, G)
       call energetic_PBL(h, u_h, v_h, tv, fluxes, dt, Kd_ePBL, G, &
                          CS%energetic_PBL_CSp, dSV_dT, dSV_dS, cTKE)
+
+      ! If visc%MLD exists, copy the ePBL's MLD into it
+      if (associated(visc%MLD)) call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, visc%MLD, G)
 
       ! Augment the diffusivities due to those diagnosed in energetic_PBL.
       do K=2,nz ; do j=js,je ; do i=is,ie
