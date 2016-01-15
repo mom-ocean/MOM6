@@ -81,6 +81,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public energetic_PBL, energetic_PBL_init, energetic_PBL_end
+public energetic_PBL_get_MLD
 
 type, public :: energetic_PBL_CS ; private
   real    :: mstar           ! The ratio of the friction velocity cubed to the
@@ -1077,6 +1078,18 @@ subroutine find_PE_chg(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
   endif
 
 end subroutine find_PE_chg
+
+!> Copies the ePBL active mixed layer depth into MLD
+subroutine energetic_PBL_get_MLD(CS, MLD, G)
+  type(energetic_PBL_CS),         pointer     :: CS  !< Control structure for ePBL
+  real, dimension(NIMEM_,NJMEM_), intent(out) :: MLD !< Depth of ePBL active mixing layer
+  type(ocean_grid_type),          intent(in)  :: G   !< Grid structure
+  ! Local variables
+  integer :: i,j
+  do j = G%jsc, G%jec ; do i = G%isc, G%iec
+    MLD(i,j) = CS%ML_depth(i,j)
+  enddo ; enddo
+end subroutine energetic_PBL_get_MLD
 
 subroutine energetic_PBL_init(Time, G, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time

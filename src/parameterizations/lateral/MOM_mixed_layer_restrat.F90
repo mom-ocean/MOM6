@@ -11,10 +11,13 @@ module MOM_mixed_layer_restrat
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_diag_mediator, only : diag_update_target_grids
+use MOM_domains,       only : pass_var
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_forcing_type,  only : forcing
 use MOM_grid,          only : ocean_grid_type
+use MOM_io,            only : vardesc, var_desc
+use MOM_restart,       only : register_restart_field, MOM_restart_CS
 use MOM_variables,     only : thermo_var_ptrs
 use MOM_EOS,           only : calculate_density
 
@@ -24,21 +27,30 @@ implicit none ; private
 
 public mixedlayer_restrat
 public mixedlayer_restrat_init
+public mixedlayer_restrat_register_restarts
 
 !> Control structure for module 
 type, public :: mixedlayer_restrat_CS ; private
-  real    :: ml_restrat_coef       !<  A nondimensional factor by which the 
+  real    :: ml_restrat_coef       !<  A non-dimensional factor by which the
                                    !! instability is enhanced over what would be
                                    !! predicted based on the resolved  gradients.  This
                                    !! increases with grid spacing^2, up to something
                                    !! of order 500.
+  logical :: MLE_use_PBL_MLD       !< If true, use the MLD provided by the PBL parameterization.
+                                   !! if false, MLE will calculate a MLD based on a density difference
+                                   !! based on the parameter MLE_DENSITY_DIFF.
+  real    :: MLE_MLD_decay_time    !< Time-scale to use un running-mean when MLD is retreating (s).
   real    :: MLE_density_diff      !< Density difference used in detecting mixed-layer
-                                   !! depth (kg/m3)
-  real    :: MLE_tail_dh           !< Fraction by which to extend the mixed-layer restratification
+                                   !! depth (kg/m3).
+  real    :: MLE_tail_dh           !< Fraction by which to extend the mixed-layer re-stratification
                                    !! depth used for a smoother stream function at the base of
                                    !! the mixed-layer.
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                                    !! timing of diagnostic output.
+
+  real, dimension(:,:), pointer :: &
+         MLD          => NULL(), & !< Mixed layer depth used in the MLE re-stratification parameterization (H units)
+         MLD_filtered => NULL()    !< Time-filtered MLD (H units)
 
   integer :: id_urestrat_time
   integer :: id_vrestrat_time 
@@ -53,21 +65,23 @@ type, public :: mixedlayer_restrat_CS ; private
 
 end type mixedlayer_restrat_CS
 
+character(len=40)  :: mod = "MOM_mixed_layer_restrat"  ! This module's name.
+
 contains
 
 !>  This subroutine does interface depth diffusion.  The fluxes are
 !!  limited to give positive definiteness, and the diffusivities are
 !!  limited to guarantee stability.
-subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
+subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, CS)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h       !< layer thickness (H units = m or kg/m2)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uhtr    !< accumulated zonal mass flux (m3 or kg)   
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vhtr    !< accumulated merid mass flux (m3 or kg)   
   type(thermo_var_ptrs),                  intent(in)    :: tv      !< thermodynamic variables structure 
   type(forcing),                          intent(in)    :: fluxes  !< pointers to forcing fields
   real,                                   intent(in)    :: dt      !< time increment (sec)
+  real, dimension(:,:),                   pointer       :: MLD     !< Mixed layer depth provided by PBL (H units)
   type(ocean_grid_type),                  intent(in)    :: G       !< ocean grid structure 
   type(mixedlayer_restrat_CS),            pointer       :: CS      !< module control structure 
-
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "Module must be initialized before it is used.")
@@ -75,7 +89,7 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
   if (G%nkml>0) then
     call mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
   else
-    call mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
+    call mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, CS)
   endif
 
 end subroutine mixedlayer_restrat
@@ -84,16 +98,16 @@ end subroutine mixedlayer_restrat
 !> This subroutine does interface depth diffusion.  The fluxes are
 !! limited to give positive definiteness, and the diffusivities are
 !! limited to guarantee stability.
-subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
+subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, CS)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h       !< layer thickness (H units = m or kg/m2)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uhtr    !< accumulated zonal mass flux (m3 or kg)   
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vhtr    !< accumulated merid mass flux (m3 or kg)   
   type(thermo_var_ptrs),                  intent(in)    :: tv      !< thermodynamic variables structure 
   type(forcing),                          intent(in)    :: fluxes  !< pointers to forcing fields
   real,                                   intent(in)    :: dt      !< time increment (sec)
+  real, dimension(:,:),                   pointer       :: MLD     !< Mixed layer depth provided by PBL (H units)
   type(ocean_grid_type),                  intent(in)    :: G       !< ocean grid structure  
   type(mixedlayer_restrat_CS),            pointer       :: CS      !< module control structure 
-
 
   real :: uhml(SZIB_(G),SZJ_(G),SZK_(G)) ! zonal mixed layer transport (m3/s or kg/s)
   real :: vhml(SZI_(G),SZJB_(G),SZK_(G)) ! merid mixed layer transport (m3/s or kg/s)
@@ -102,7 +116,6 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
                           ! sublayer of the mixed layer, divided by dt, in units
                           ! of H * m2 s-1 (i.e., m3 s-1 or kg s-1).
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    MLD,  &               ! diagnosed MLD
     htot, &               ! The sum of the thicknesses of layers in the mixed layer (H units)
     Rml_av                ! g_Rho0 times the average mixed layer density (m s-2)
   real :: g_Rho0          ! G_Earth/Rho0 (m4 s-2 kg-1) 
@@ -132,7 +145,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   real, dimension(SZI_(G)) :: rhoSurf, deltaRhoAtKm1, deltaRhoAtK, dK, dKm1, pRef_MLD ! Used for MLD
   real, dimension(SZI_(G)) :: rhoAtK, rho1, d1, pRef_N2 ! Used for N2
-  real :: aFac, ddRho
+  real :: aFac, bFac, ddRho
   real :: hAtVel, zIHaboveVel, zIHbelowVel
 
   real :: PSI, PSI1, z ! For statement function
@@ -153,35 +166,51 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
   if (.not.associated(tv%eqn_of_state)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "An equation of state must be used with this module.")
 
-  !! TODO: use derivatives and mid-MLD pressure. Currently this is sigma-0. -AJA
-  pRef_MLD(:) = 0.
-  do j = js-1, je+1
-    dK(:) = 0.5 * h(:,j,1) * G%H_to_m ! Depth of center of surface layer
-    call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef_MLD, rhoSurf, is-1, ie-is+3, tv%eqn_of_state)
-    deltaRhoAtK(:) = 0.
-    MLD(:,j) = 0.
-    do k = 2, nz
-      dKm1(:) = dK(:) ! Depth of center of layer K-1
-      dK(:) = dK(:) + 0.5 * ( h(:,j,k) + h(:,j,k-1) ) * G%H_to_m ! Depth of center of layer K
-
-      ! Mixed-layer depth, using sigma-0 (surface reference pressure)
-      deltaRhoAtKm1(:) = deltaRhoAtK(:) ! Store value from previous iteration of K
-      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_MLD, deltaRhoAtK, is-1, ie-is+3, tv%eqn_of_state)
-      deltaRhoAtK(:) = deltaRhoAtK(:) - rhoSurf(:) ! Density difference between layer K and surface
+  if (CS%MLE_density_diff > 0.) then ! We need to calculate a mixed layer depth, MLD.
+    !! TODO: use derivatives and mid-MLD pressure. Currently this is sigma-0. -AJA
+    pRef_MLD(:) = 0.
+    do j = js-1, je+1
+      dK(:) = 0.5 * h(:,j,1) * G%H_to_m ! Depth of center of surface layer
+      call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef_MLD, rhoSurf, is-1, ie-is+3, tv%eqn_of_state)
+      deltaRhoAtK(:) = 0.
+      CS%MLD(:,j) = 0.
+      do k = 2, nz
+        dKm1(:) = dK(:) ! Depth of center of layer K-1
+        dK(:) = dK(:) + 0.5 * ( h(:,j,k) + h(:,j,k-1) ) * G%H_to_m ! Depth of center of layer K
+        ! Mixed-layer depth, using sigma-0 (surface reference pressure)
+        deltaRhoAtKm1(:) = deltaRhoAtK(:) ! Store value from previous iteration of K
+        call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_MLD, deltaRhoAtK, is-1, ie-is+3, tv%eqn_of_state)
+        deltaRhoAtK(:) = deltaRhoAtK(:) - rhoSurf(:) ! Density difference between layer K and surface
+        do i = is-1, ie+1
+          ddRho = deltaRhoAtK(i) - deltaRhoAtKm1(i)
+          if ((CS%MLD(i,j)==0.) .and. (ddRho>0.) .and. &
+              (deltaRhoAtKm1(i)<CS%MLE_density_diff) .and. (deltaRhoAtK(i)>=CS%MLE_density_diff)) then
+            aFac = ( CS%MLE_density_diff - deltaRhoAtKm1(i) ) / ddRho
+            CS%MLD(i,j) = dK(i) * aFac + dKm1(i) * (1. - aFac)
+          endif
+        enddo ! i-loop
+      enddo ! k-loop
       do i = is-1, ie+1
-        ddRho = deltaRhoAtK(i) - deltaRhoAtKm1(i)
-        if ((MLD(i,j)==0.) .and. (ddRho>0.) .and. &
-            (deltaRhoAtKm1(i)<CS%MLE_density_diff) .and. (deltaRhoAtK(i)>=CS%MLE_density_diff)) then
-          aFac = ( CS%MLE_density_diff - deltaRhoAtKm1(i) ) / ddRho
-          MLD(i,j) = dK(i) * aFac + dKm1(i) * (1. - aFac)
-        endif
-      enddo ! i-loop
-
-    enddo ! k-loop
-    do i = is-1, ie+1
-      if ((MLD(i,j)==0.) .and. (deltaRhoAtK(i)<CS%MLE_density_diff)) MLD(i,j) = dK(i) ! Assume mixing to the bottom
-    enddo
-  enddo ! j-loop
+        if ((CS%MLD(i,j)==0.) .and. (deltaRhoAtK(i)<CS%MLE_density_diff)) CS%MLD(i,j) = dK(i) ! Assume mixing to the bottom
+      enddo
+    enddo ! j-loop
+  elseif (CS%MLE_use_PBL_MLD .and. CS%MLE_MLD_decay_time>=0.) then
+    if (.not. associated(MLD)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
+         "Argument MLD was not associated!")
+    aFac = CS%MLE_MLD_decay_time / ( dt + CS%MLE_MLD_decay_time )
+    bFac = dt / ( dt + CS%MLE_MLD_decay_time )
+    do j = js, je ; do i = is, ie
+      ! Expression bFac*MLD(i,j) + aFac*CS%MLD_filtered(i,j) is the time-filtered
+      ! (running mean) of MLD. The max() allows the "running mean" to be reset
+      ! instantly to a deeper MLD.
+      CS%MLD_filtered(i,j) = max( MLD(i,j), bFac*MLD(i,j) + aFac*CS%MLD_filtered(i,j) )
+      CS%MLD(i,j) = CS%MLD_filtered(i,j)
+    enddo ; enddo
+    call pass_var(MLD, G%domain)
+  else
+    call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
+         "No MLD to use for MLE parameterization.")
+  endif
 
   uDml(:) = 0.0 ; vDml(:) = 0.0
   I4dt = 0.25 / dt
@@ -204,7 +233,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
     do k=1,nz
       call calculate_density(tv%T(:,j,k),tv%S(:,j,k),p0,Rho0(:),is-1,ie-is+3,tv%eqn_of_state)
       do i=is-1,ie+1
-        if (htot(i,j) < MLD(i,j)) then
+        if (htot(i,j) < CS%MLD(i,j)) then
           Rml_av(i,j) = Rml_av(i,j) + h(i,j,k)*Rho0(i)
           htot(i,j) = htot(i,j) + h(i,j,k)
         endif
@@ -339,7 +368,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
     if (CS%id_vrestrat_time > 0) call post_data(CS%id_vrestrat_time, vtimescale_diag, CS%diag)
     if (CS%id_uhml          > 0) call post_data(CS%id_uhml, uhml, CS%diag)
     if (CS%id_vhml          > 0) call post_data(CS%id_vhml, vhml, CS%diag)
-    if (CS%id_MLD           > 0) call post_data(CS%id_MLD, MLD, CS%diag)
+    if (CS%id_MLD           > 0) call post_data(CS%id_MLD, CS%MLD, CS%diag)
     if (CS%id_Rml           > 0) call post_data(CS%id_Rml, Rml_av, CS%diag)
     if (CS%id_uDml          > 0) call post_data(CS%id_uDml, uDml_diag, CS%diag)
     if (CS%id_vDml          > 0) call post_data(CS%id_vDml, vDml_diag, CS%diag)
@@ -605,19 +634,7 @@ logical function mixedlayer_restrat_init(Time, G, param_file, diag, CS)
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_mixed_layer_restrat"  ! This module's name.
   character(len=48)  :: flux_units
-
-  if (associated(CS)) then
-    call MOM_error(WARNING, "mixedlayer_restrat_init called with an "// &
-                            "associated control structure.")
-    return
-  else ; allocate(CS) ; endif
-
-  if (G%Boussinesq) then ; flux_units = "meter3 second-1"
-  else ; flux_units = "kilogram second-1" ; endif
-
-  CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mod, version, "")
@@ -628,6 +645,17 @@ logical function mixedlayer_restrat_init(Time, G, param_file, diag, CS)
              "BULKMIXEDLAYER is true.", default=.false.)
   if (.not. mixedlayer_restrat_init) return
 
+  if (.not.associated(CS)) then
+    call MOM_error(FATAL, "mixedlayer_restrat_init called without an "// &
+                            "associated control structure.")
+  endif
+
+  ! Nonsense values to cause problems when these parameters are not used
+  CS%MLE_MLD_decay_time = -9.e9
+  CS%MLE_density_diff = -9.e9
+  CS%MLE_tail_dh = -9.e9
+  CS%MLE_use_PBL_MLD = .false.
+
   call get_param(param_file, mod, "FOX_KEMPER_ML_RESTRAT_COEF", CS%ml_restrat_coef, &
              "A nondimensional coefficient that is proportional to \n"//&
              "the ratio of the deformation radius to the dominant \n"//&
@@ -637,20 +665,36 @@ logical function mixedlayer_restrat_init(Time, G, param_file, diag, CS)
              "geostrophic kinetic energy or 1 plus the square of the \n"//&
              "grid spacing over the deformation radius, as detailed \n"//&
              "by Fox-Kemper et al. (2010)", units="nondim", default=0.0)
+  ! We use G%nkml to distinguish between the old and new implementation of MLE.
+  ! The old implementation only works for the layer model with nkml>0.
   if (G%nkml==0) then
-    call get_param(param_file, mod, "MLE_DENSITY_DIFF", CS%MLE_density_diff, &
+    call get_param(param_file, mod, "MLE_USE_PBL_MLD", CS%MLE_use_PBL_MLD, &
+             "If true, the MLE parameterization will use the mixed-layer\n"//&
+             "depth provided by the active PBL parameterization. If false,\n"//&
+             "MLE will estimate a MLD based on a density difference with the\n"//&
+             "surface using the parameter MLE_DENSITY_DIFF.", default=.false.)
+    if (CS%MLE_use_PBL_MLD) then
+      call get_param(param_file, mod, "MLE_MLD_DECAY_TIME", CS%MLE_MLD_decay_time, &
+             "When MLE_USE_PBL_MLD is true, the PBL provided active miing layer\n"//&
+             "depth is running mean average with this time-scale when the MLD\n"//&
+             "is retreating. When the MLD deepens below the current running-mean\n"//&
+             "the runn-mean is instantaneously set to the current MLD.", units="s", default=0.)
+    else
+      call get_param(param_file, mod, "MLE_DENSITY_DIFF", CS%MLE_density_diff, &
              "Density difference used to detect the mixed-layer\n"//&
              "depth used for the mixed-layer eddy parameterization\n"//&
              "by Fox-Kemper et al. (2010)", units="kg/m3", default=0.03)
+    endif
     call get_param(param_file, mod, "MLE_TAIL_DH", CS%MLE_tail_dh, &
              "Fraction by which to extend the mixed-layer restratification\n"//&
              "depth used for a smoother stream function at the base of\n"//&
              "the mixed-layer.", units="nondim", default=0.0)
-  else
-    ! Nonsense values to cause problems when these parameters are not used
-    CS%MLE_density_diff = -9.e9
-    CS%MLE_tail_dh = -9.e9
   endif
+
+  CS%diag => diag
+
+  if (G%Boussinesq) then ; flux_units = "meter3 second-1"
+  else ; flux_units = "kilogram second-1" ; endif
 
   CS%id_uhml = register_diag_field('ocean_model', 'uhml', diag%axesCuL, Time, &
       'Zonal Thickness Flux to Restratify Mixed Layer', flux_units)
@@ -675,6 +719,41 @@ logical function mixedlayer_restrat_init(Time, G, param_file, diag, CS)
 
 end function mixedlayer_restrat_init
 
+!> Allocate and regsiter fields in the mixedlayer restratification structure for restarts 
+subroutine mixedlayer_restrat_register_restarts(G, param_file, CS, restart_CS)
+  type(ocean_grid_type),       intent(in)    :: G          !< Ocean grid structure   
+  type(param_file_type),       intent(in)    :: param_file !< Parameter file to parse
+  type(mixedlayer_restrat_CS), pointer       :: CS         !< Module control structure 
+  type(MOM_restart_CS),        pointer       :: restart_CS !< Restart structure
+  ! Local variables
+  type(vardesc) :: vd
+  logical :: mixedlayer_restrat_init
+
+  ! Check to see if this module will be used
+  call get_param(param_file, mod, "MIXEDLAYER_RESTRAT", mixedlayer_restrat_init, &
+             default=.false., do_not_log=.true.)
+  if (.not. mixedlayer_restrat_init) return
+
+  ! Allocate the control structure. CS will be later populated by mixedlayer_restrat_init()
+  if (associated(CS)) call MOM_error(FATAL, &
+       "mixedlayer_restrat_register_restarts called with an associated control structure.")
+  allocate(CS)
+
+  ! CS%MLD is used either for the internally diagnosed MLD or
+  ! for keep a running mean of the PBL's actively mixed MLD.
+  allocate(CS%MLD(G%isd:G%ied,G%jsd:G%jed)) ; CS%MLD(:,:) = 0.
+
+  call get_param(param_file, mod, "MLE_USE_PBL_MLD", CS%MLE_use_PBL_MLD, &
+             default=.false., do_not_log=.true.)
+  if (CS%MLE_use_PBL_MLD) then
+    allocate(CS%MLD_filtered(G%isd:G%ied,G%jsd:G%jed)) ; CS%MLD_filtered(:,:) = 0.
+    vd = var_desc("MLD_MLE_filtered","m","Time-filtered MLD for use in MLE", &
+                  hor_grid='h', z_grid='1')
+    call register_restart_field(CS%MLD_filtered, vd, .false., restart_CS)
+
+  endif
+
+end subroutine mixedlayer_restrat_register_restarts
 
 !> \namespace mom_mixed_layer_restrat
 !!                                                                     
