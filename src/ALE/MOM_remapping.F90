@@ -426,6 +426,228 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
 
 end subroutine remapping_core
 
+!> Remaps column of n0 values u0 on grid h0 to grid h1 with n1 cells by calculating
+!! the n0+n1+1 sub-integrals of the intersection of h0 and h1, and the summing the
+!! appropriate integrals into the h1*u1 values.
+subroutine remap_by_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, h1, method, u1 )
+  integer,       intent(in)    :: n0     !< Number of cells in source grid
+  real,          intent(in)    :: h0(:)  !< Source grid widths (size n0)
+  real,          intent(in)    :: u0(:)  !< Source cell averages (size n0)
+  real,          intent(in)    :: ppoly0_E(:,:)            !< Edge value of polynomial
+  real,          intent(in)    :: ppoly0_coefficients(:,:) !< Coefficients of polynomial
+  integer,       intent(in)    :: n1     !< Number of cells in target grid
+  real,          intent(in)    :: h1(:)  !< Target grid widths (size n1)
+  integer,       intent(in)    :: method !< Remapping scheme to use
+  real,          intent(out)   :: u1(:)  !< Target cell averages (size n1)
+  ! Local variables
+  integer :: i_sub ! Index of sub-cell
+  integer :: i0 ! Index into h0(1:n0), source column
+  integer :: i1 ! Index into h1(1:n1), target column
+  integer :: i_start0 ! Used to record which sub-cells map to source cells
+  integer :: i_start1 ! Used to record which sub-cells map to target cells
+  integer :: i_max ! Used to record which sub-cell is the largest contribution of a source cell
+  real :: dh_max ! Used to record which sub-cell is the largest contribution of a source cell
+  real, dimension(n0+n1+1) :: h_sub ! Width of each each sub-cell
+  real, dimension(n0+n1+1) :: uh_sub ! Integral of u*h over each sub-cell
+  real, dimension(n0+n1+1) :: u_sub ! Average of u over each sub-cell
+  integer, dimension(n0) :: isrc_start ! Index of first sub-cell within each source cell
+  integer, dimension(n0) :: isrc_end ! Index of last sub-cell within each source cell
+  integer, dimension(n0) :: isrc_max ! Index of thickest sub-cell within each source cell
+  integer, dimension(n1) :: itgt_start ! Index of first sub-cell within each target cell
+  integer, dimension(n1) :: itgt_end ! Index of last sub-cell within each target cell
+  real :: xa, xb ! Non-dimensional position within a source cell (0..1)
+  real :: h0_supply, h1_supply ! The amount of width available for constructing sub-cells
+  real :: dh ! The width of the sub-cell
+  real :: duh ! The total amount of accumulated stuff (u*h)
+
+  ! Initialize algorithm
+  h0_supply = h0(1)
+  h1_supply = h1(1)
+  i0 = 1 ; i1 = 1
+  xa = 0.
+
+  ! First sub-cell is always vanished
+  h_sub(1) = 0.
+  isrc_start(1) = 1
+  isrc_end(1) = 1
+  isrc_max(1) = 1
+  uh_sub(1) = 0.
+  u_sub(1) = u0(1)
+
+  i_start0 = 1
+  i_start1 = 1
+  i_max = 1
+  dh_max = 0.
+
+  ! Loop over each sub-cell
+  do i_sub = 2, n0+n1+1
+
+    ! This is the width of the sub-cell, determined by which ever column has the least
+    ! supply available to consume.
+    dh = min(h0_supply, h1_supply)
+
+    ! Record the source index (i0) that this sub-cell integral belongs to. This
+    ! is needed to index the reconstruction coefficients for the source cell
+    ! used in the integrals of the sub-cell width.
+    h_sub(i_sub) = dh
+
+    ! For recording the largest sub-cell within a source cell.
+    if (dh >= dh_max) then
+      i_max = i_sub
+      dh_max = dh
+    endif
+
+    ! Evaluate average and integral for sub-cell i_sub.
+    ! Integral is over distance dh but expressed in terms of non-dimensional
+    ! positions with source cell from xa to xb  (0 <= xa <= xb <= 1).
+    xb = xa + dh / h0(i0) ! This expression should ideally yield xa <= xb <= 1.0
+   !xb = min(xb, 1.0)     ! BUT the last inequality could be violated due to roundoff - AJA
+    u_sub(i_sub) = average_value_ppoly( n0, ppoly0_E, ppoly0_coefficients, method, i0, xa, xb, dh)
+    uh_sub(i_sub) = dh * u_sub(i_sub)
+    xa = xb ! Next integral will start at end of last
+
+    ! Which ever column (source or target) has the least width left to consume determined
+    ! the width, dh, of sub-cell i_sub in the expression for dh above.
+    if (h0_supply <= h1_supply) then
+      ! h0_supply is smaller than h1_supply) so we consume h0_supply and increment the
+      ! source cell index.
+      h1_supply = h1_supply - dh ! Although this is a difference the result will
+                                 ! be non-negative because of the conditional.
+      ! Record the sub-cell start/end index that span the source cell i0.
+      isrc_start(i0) = i_start0
+      isrc_end(i0) = i_sub
+      i_start0 = i_sub + 1
+      ! Record the sub-cell that is the largest fraction of the source cell.
+      isrc_max(i0) = i_max
+      i_max = i_sub + 1
+      dh_max = 0.
+      ! Move the source index.
+      if (i0 < n0) then
+        i0 = i0 + 1
+        h0_supply = h0(i0)
+        xa = 0. ! Next integral will start at top of the next source cell.
+      else
+        h0_supply = 0.
+      endif
+    else
+      ! h1_supply is smaller than h0_supply) so we consume h1_supply and increment the
+      ! target cell index.
+      h0_supply = h0_supply - dh ! Although this is a difference the result will
+                                 ! be non-negative because of the conditional.
+      ! Record the sub-cell start/end index that span the target cell i1.
+      itgt_start(i1) = i_start1
+      itgt_end(i1) = i_sub
+      i_start1 = i_sub + 1
+      ! Move the target index.
+      if (i1 < n1) then
+        i1 = i1 + 1
+        h1_supply = h1(i1)
+      else
+        h1_supply = 0.
+      endif
+    endif
+
+  enddo
+
+  ! Loop over each source cell substituting the integral/average for the thickest sub-cell (within
+  ! the source cell) with the residual of the source cell integral minus the other sub-cell integrals
+  ! aka a genius algorithm for accurate conservation when remapping from Robert Hallberg (@Hallberg-NOAA).
+  do i0 = 1, n0
+    i_max = isrc_max(i0)
+    dh_max = h_sub(i_max)
+    if (dh_max > 0.) then
+      ! duh will be the sum of sub-cell integrals within the source cell except for the thickest sub-cell.
+      duh = 0.
+      do i_sub = isrc_start(i0), isrc_end(i0)
+        if (i_sub /= i_max) duh = duh + uh_sub(i_sub)
+      enddo
+      uh_sub(i_max) = u0(i0)*h0(i0) - duh
+      u_sub(i_max) = uh_sub(i_max) / dh_max
+    endif
+  enddo
+
+  ! Loop over each target cell summing the integrals from sub-cells within the target cell.
+  do i1 = 1, n1
+    if (h1(i1) > 0.) then
+      duh = 0.
+      do i_sub = itgt_start(i1), itgt_end(i1)
+        duh = duh + uh_sub(i_sub)
+      enddo
+      u1(i1) = duh / h1(i1)
+    else
+      u1(i1) = u_sub(itgt_start(i1))
+    endif
+  enddo
+
+end subroutine remap_by_via_sub_cells
+
+!> Returns the average value of a reconstruction within a single source cell, i0,
+!! between the non-dimensional positions xa and xb (xa<=xb) with dimensional
+!! separation dh.
+real function average_value_ppoly( n0, ppoly0_E, ppoly0_coefficients, method, i0, xa, xb, dh)
+  integer,       intent(in)    :: n0     !< Number of cells in source grid
+  real,          intent(in)    :: ppoly0_E(:,:)            !< Edge value of polynomial
+  real,          intent(in)    :: ppoly0_coefficients(:,:) !< Coefficients of polynomial
+  integer,       intent(in)    :: method !< Remapping scheme to use
+  integer,       intent(in)    :: i0     !< Source cell index
+  real,          intent(in)    :: xa     !< Non-dimensional start position within source cell
+  real,          intent(in)    :: xb     !< Non-dimensional end position within source cell
+  real,          intent(in)    :: dh     !< Width of interval corresponding to xa..xb
+  ! Local variables
+  real :: u_ave, xa_2, xb_2, xa2pxb2, xapxb
+  real, parameter :: r_3 = 1.0/3.0 ! Used in evaluation of integrated polynomials
+
+  if (dh > 0.) then
+    select case ( method )
+      case ( INTEGRATION_PCM )
+        u_ave = ppoly0_coefficients(i0,1)
+      case ( INTEGRATION_PLM )
+        u_ave = (                                           &
+            ppoly0_coefficients(i0,1)                       &
+          + ppoly0_coefficients(i0,2) * 0.5 * ( xb + xa ) )
+      case ( INTEGRATION_PPM )
+        u_ave = (                                           &
+              ppoly0_coefficients(i0,1)                     &
+          + ( ppoly0_coefficients(i0,2) * 0.5 * ( xb + xa ) &
+          +   ppoly0_coefficients(i0,3) * r_3 * ( ( xb*xb + xa*xa ) + xa*xb ) ) )
+      case ( INTEGRATION_PQM )
+        xa_2 = xa*xa
+        xb_2 = xb*xb
+        xa2pxb2 = xa_2 + xb_2
+        xapxb = xa + xb
+        u_ave = (                                                                               &
+              ppoly0_coefficients(i0,1)                                                         &
+          + ( ppoly0_coefficients(i0,2) * 0.5 * ( xapxb )                                       &
+          + ( ppoly0_coefficients(i0,3) * r_3 * ( xa2pxb2 + xa*xb )                             &
+          + ( ppoly0_coefficients(i0,4) * 0.25* ( xa2pxb2 * xapxb )                             &
+          +   ppoly0_coefficients(i0,5) * 0.2 * ( ( xb*xb_2 + xa*xa_2 ) * xapxb + xa_2*xb_2 ) ) ) ) )
+      case default
+        call MOM_error( FATAL,'The selected integration method is invalid' )
+    end select
+  else ! dh == 0.
+    select case ( method )
+      case ( INTEGRATION_PCM )
+        u_ave =        ppoly0_coefficients(i0,1)
+      case ( INTEGRATION_PLM )
+        u_ave =        ppoly0_coefficients(i0,1)   &
+              + xa *   ppoly0_coefficients(i0,2)
+      case ( INTEGRATION_PPM )
+        u_ave =        ppoly0_coefficients(i0,1)   &
+              + xa * ( ppoly0_coefficients(i0,2)   &
+              + xa *   ppoly0_coefficients(i0,3) )
+      case ( INTEGRATION_PQM )
+        u_ave =        ppoly0_coefficients(i0,1)   &
+              + xa * ( ppoly0_coefficients(i0,2)   &
+              + xa * ( ppoly0_coefficients(i0,3)   &
+              + xa * ( ppoly0_coefficients(i0,4)   &
+              + xa *   ppoly0_coefficients(i0,5) ) ) )
+      case default
+        call MOM_error( FATAL,'The selected integration method is invalid' )
+    end select
+  endif
+  average_value_ppoly = u_ave
+
+end function average_value_ppoly
 
 !> Remaps column of values u0 on grid h0 to grid h1 by integrating
 !! over the projection of each h1 cell onto the h0 grid.
