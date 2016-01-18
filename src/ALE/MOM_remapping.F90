@@ -429,7 +429,7 @@ end subroutine remapping_core
 !> Remaps column of n0 values u0 on grid h0 to grid h1 with n1 cells by calculating
 !! the n0+n1+1 sub-integrals of the intersection of h0 and h1, and the summing the
 !! appropriate integrals into the h1*u1 values.
-subroutine remap_by_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, h1, method, u1 )
+subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, h1, method, u1 )
   integer,       intent(in)    :: n0     !< Number of cells in source grid
   real,          intent(in)    :: h0(:)  !< Source grid widths (size n0)
   real,          intent(in)    :: u0(:)  !< Source cell averages (size n0)
@@ -579,7 +579,7 @@ subroutine remap_by_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1
     endif
   enddo
 
-end subroutine remap_by_via_sub_cells
+end subroutine remap_via_sub_cells
 
 !> Returns the average value of a reconstruction within a single source cell, i0,
 !! between the non-dimensional positions xa and xb (xa<=xb) with dimensional
