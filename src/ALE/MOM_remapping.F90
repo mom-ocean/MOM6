@@ -450,45 +450,52 @@ subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, h
   real, dimension(n0+n1+1) :: h_sub ! Width of each each sub-cell
   real, dimension(n0+n1+1) :: uh_sub ! Integral of u*h over each sub-cell
   real, dimension(n0+n1+1) :: u_sub ! Average of u over each sub-cell
+  integer, dimension(n0+n1+1) :: isub_src ! Index of source cell for each sub-cell
   integer, dimension(n0) :: isrc_start ! Index of first sub-cell within each source cell
   integer, dimension(n0) :: isrc_end ! Index of last sub-cell within each source cell
   integer, dimension(n0) :: isrc_max ! Index of thickest sub-cell within each source cell
+  real, dimension(n0) :: h0_eff ! Effective thickness of source cells
   integer, dimension(n1) :: itgt_start ! Index of first sub-cell within each target cell
   integer, dimension(n1) :: itgt_end ! Index of last sub-cell within each target cell
   real :: xa, xb ! Non-dimensional position within a source cell (0..1)
   real :: h0_supply, h1_supply ! The amount of width available for constructing sub-cells
   real :: dh ! The width of the sub-cell
   real :: duh ! The total amount of accumulated stuff (u*h)
+  real :: dh0_eff ! Running sum of source cell thickness
+  real, parameter :: h_very_large = 1.E30 ! A large thickness, larger than will ever be encountered
 
   ! Initialize algorithm
   h0_supply = h0(1)
   h1_supply = h1(1)
   i0 = 1 ; i1 = 1
-  xa = 0.
+  i_start0 = 1 ; i_start1 = 1
+  i_max = 1
+  dh_max = 0.
+  dh0_eff = 0.
 
   ! First sub-cell is always vanished
   h_sub(1) = 0.
   isrc_start(1) = 1
   isrc_end(1) = 1
   isrc_max(1) = 1
-  uh_sub(1) = 0.
-  u_sub(1) = u0(1)
+  isub_src(1) = 1
 
-  i_start0 = 1
-  i_start1 = 1
-  i_max = 1
-  dh_max = 0.
-
-  ! Loop over each sub-cell
+  ! Loop over each sub-cell to calculate intersections with source and target grids
   do i_sub = 2, n0+n1+1
 
     ! This is the width of the sub-cell, determined by which ever column has the least
     ! supply available to consume.
     dh = min(h0_supply, h1_supply)
 
+    ! This is the running sum of the source cell thickness. After summing over each
+    ! sub-cell, the sum of sub-cell thickness might differ from the original source
+    ! cell thickness due to round off.
+    dh0_eff = dh0_eff + min(dh, h0_supply)
+
     ! Record the source index (i0) that this sub-cell integral belongs to. This
     ! is needed to index the reconstruction coefficients for the source cell
     ! used in the integrals of the sub-cell width.
+    isub_src(i_sub) = i0
     h_sub(i_sub) = dh
 
     ! For recording the largest sub-cell within a source cell.
@@ -496,15 +503,6 @@ subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, h
       i_max = i_sub
       dh_max = dh
     endif
-
-    ! Evaluate average and integral for sub-cell i_sub.
-    ! Integral is over distance dh but expressed in terms of non-dimensional
-    ! positions with source cell from xa to xb  (0 <= xa <= xb <= 1).
-    xb = xa + dh / h0(i0) ! This expression should ideally yield xa <= xb <= 1.0
-   !xb = min(xb, 1.0)     ! BUT the last inequality could be violated due to roundoff - AJA
-    u_sub(i_sub) = average_value_ppoly( n0, ppoly0_E, ppoly0_coefficients, method, i0, xa, xb, dh)
-    uh_sub(i_sub) = dh * u_sub(i_sub)
-    xa = xb ! Next integral will start at end of last
 
     ! Which ever column (source or target) has the least width left to consume determined
     ! the width, dh, of sub-cell i_sub in the expression for dh above.
@@ -521,13 +519,15 @@ subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, h
       isrc_max(i0) = i_max
       i_max = i_sub + 1
       dh_max = 0.
+      ! Record the source cell thickness found by summing the sub-cell thicknesses.
+      h0_eff(i0) = dh0_eff
       ! Move the source index.
       if (i0 < n0) then
         i0 = i0 + 1
         h0_supply = h0(i0)
-        xa = 0. ! Next integral will start at top of the next source cell.
+        dh0_eff = 0.
       else
-        h0_supply = 0.
+        h0_supply = h_very_large
       endif
     else
       ! h1_supply is smaller than h0_supply) so we consume h1_supply and increment the
@@ -543,15 +543,45 @@ subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, h
         i1 = i1 + 1
         h1_supply = h1(i1)
       else
-        h1_supply = 0.
+        h1_supply = h_very_large
       endif
     endif
 
   enddo
 
-  ! Last sub-cell needs to be associated with a target
-  itgt_start(n1) = i_start1
-  itgt_end(n1) = n0+n1+1
+  ! Loop over each sub-cell to calculate average/integral values within each sub-cell.
+  xa = 0.
+  dh0_eff = 0.
+  uh_sub(1) = 0.
+  u_sub(1) = ppoly0_E(1,1)
+  do i_sub = 2, n0+n1
+
+    ! Sub-cell thickness from loop above
+    dh = h_sub(i_sub)
+
+    ! Source cell
+    i0 = isub_src(i_sub)
+
+    ! Evaluate average and integral for sub-cell i_sub.
+    ! Integral is over distance dh but expressed in terms of non-dimensional
+    ! positions with source cell from xa to xb  (0 <= xa <= xb <= 1).
+    dh0_eff = dh0_eff + dh ! Cumulative thickness within the source cell
+    xb = dh0_eff / h0_eff(i0) ! This expression yields xa <= xb <= 1.0
+    xb = min(1., xb) ! This is only needed when the total target column is wider than the source column
+    u_sub(i_sub) = average_value_ppoly( n0, ppoly0_E, ppoly0_coefficients, method, i0, xa, xb)
+    uh_sub(i_sub) = dh * u_sub(i_sub)
+
+    if (isub_src(i_sub+1) /= i0) then
+      ! If the next sub-cell is in a different source cell, reset the position counters
+      dh0_eff = 0.
+      xa = 0.
+    else
+      xa = xb ! Next integral will start at end of last
+    endif
+
+  enddo
+  u_sub(n0+n1+1) = ppoly0_E(n0,2)                   ! This value is only needed when total target column
+  uh_sub(n0+n1+1) = ppoly0_E(n0,2) * h_sub(n0+n1+1) ! is wider than the source column
 
   ! Loop over each source cell substituting the integral/average for the thickest sub-cell (within
   ! the source cell) with the residual of the source cell integral minus the other sub-cell integrals
@@ -588,7 +618,7 @@ end subroutine remap_via_sub_cells
 !> Returns the average value of a reconstruction within a single source cell, i0,
 !! between the non-dimensional positions xa and xb (xa<=xb) with dimensional
 !! separation dh.
-real function average_value_ppoly( n0, ppoly0_E, ppoly0_coefficients, method, i0, xa, xb, dh)
+real function average_value_ppoly( n0, ppoly0_E, ppoly0_coefficients, method, i0, xa, xb)
   integer,       intent(in)    :: n0     !< Number of cells in source grid
   real,          intent(in)    :: ppoly0_E(:,:)            !< Edge value of polynomial
   real,          intent(in)    :: ppoly0_coefficients(:,:) !< Coefficients of polynomial
@@ -596,12 +626,11 @@ real function average_value_ppoly( n0, ppoly0_E, ppoly0_coefficients, method, i0
   integer,       intent(in)    :: i0     !< Source cell index
   real,          intent(in)    :: xa     !< Non-dimensional start position within source cell
   real,          intent(in)    :: xb     !< Non-dimensional end position within source cell
-  real,          intent(in)    :: dh     !< Width of interval corresponding to xa..xb
   ! Local variables
   real :: u_ave, xa_2, xb_2, xa2pxb2, xapxb
   real, parameter :: r_3 = 1.0/3.0 ! Used in evaluation of integrated polynomials
 
-  if (dh > 0.) then
+  if (xb > xa) then
     select case ( method )
       case ( INTEGRATION_PCM )
         u_ave = ppoly0_coefficients(i0,1)
