@@ -549,6 +549,10 @@ subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, h
 
   enddo
 
+  ! Last sub-cell needs to be associated with a target
+  itgt_start(n1) = i_start1
+  itgt_end(n1) = n0+n1+1
+
   ! Loop over each source cell substituting the integral/average for the thickest sub-cell (within
   ! the source cell) with the residual of the source cell integral minus the other sub-cell integrals
   ! aka a genius algorithm for accurate conservation when remapping from Robert Hallberg (@Hallberg-NOAA).
