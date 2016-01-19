@@ -235,18 +235,18 @@ end function isSignedSumErrSignificant
 !> Remaps column of values u0 on grid h0 to implied grid h1
 !! where the interfaces of h1 differ from those of h0 by dx.
 subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
-  type(remapping_CS), intent(in)    :: CS !< Remapping control structure
-  integer,            intent(in)    :: n0 !< Number of cells on source grid
-  real, dimension(:), intent(in)    :: h0 !< Cell widths on source grid
-  real, dimension(:), intent(in)    :: u0 !< Cell averages on source grid
-  integer,            intent(in)    :: n1 !< Number of cells on target grid
-  real, dimension(:), intent(in)    :: dx !< Change in interface positions
-  real, dimension(:), intent(out)   :: u1 !< Cell averages on target grid
+  type(remapping_CS),  intent(in)  :: CS !< Remapping control structure
+  integer,             intent(in)  :: n0 !< Number of cells on source grid
+  real, dimension(n0), intent(in)  :: h0 !< Cell widths on source grid
+  real, dimension(n0), intent(in)  :: u0 !< Cell averages on source grid
+  integer,             intent(in)  :: n1 !< Number of cells on target grid
+  real, dimension(n1+1), intent(in)  :: dx !< Cell widths on target grid
+  real, dimension(n1), intent(out) :: u1 !< Cell averages on target grid
   ! Local variables
   integer :: iMethod
-  real, dimension(CS%nk,2)           :: ppoly_r_E            !Edge value of polynomial
-  real, dimension(CS%nk,2)           :: ppoly_r_S            !Edge slope of polynomial
-  real, dimension(CS%nk,CS%degree+1) :: ppoly_r_coefficients !Coefficients of polynomial
+  real, dimension(n0,2)           :: ppoly_r_E            !Edge value of polynomial
+  real, dimension(n0,2)           :: ppoly_r_S            !Edge slope of polynomial
+  real, dimension(n0,CS%degree+1) :: ppoly_r_coefficients !Coefficients of polynomial
   integer :: remapping_scheme
 
   iMethod = -999
