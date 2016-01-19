@@ -61,9 +61,6 @@ character(len=256), public :: remappingSchemesDoc = &
                  "PQM_IH6IH5  (5th-order accurate)\n"
 character(len=3), public :: remappingDefaultScheme = "PLM" !< Default remapping method
 
-! This CPP macro embeds some safety checks
-#undef __DO_SAFETY_CHECKS__
-
 ! This CPP macro turns on/off bounding of integrations limits so that they are
 ! always within the cell. Roundoff can lead to the non-dimensional bounds being
 ! outside of the range 0 to 1.
@@ -252,47 +249,6 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
   real, dimension(CS%nk,CS%degree+1) :: ppoly_r_coefficients !Coefficients of polynomial
   integer :: remapping_scheme
 
-#ifdef __DO_SAFETY_CHECKS__
-  integer :: k
-  real :: hTmp, totalH0, totalHf, eps, h_err
-  real :: err0, totalHU0, err2, totalHU2
-  real :: z0, z1
-
-  if (dx(1) /= 0.) call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
-             'Non-zero surface flux!' ) ! This is technically allowed but is avoided in practice
-  totalH0 = 0.
-  do k=1, n0
-    totalH0 = totalH0 + h0(k)
-  enddo
-  totalHf = 0. ; h_err = 0.
-  do k=1, n1
-    if (k <= n0) then
-      hTmp = h0(k) + ( dx(k+1) - dx(k) )
-      h_err = h_err + epsilon(totalH0) * max( abs(h0(k)), abs(dx(k+1)), abs(dx(k)) )
-      if (hTmp < -h_err) then
-        write(0,*) 'k,h0(k),hTmp,dx(k+1),dx(k),h_err=',k,h0(k),hTmp,dx(k+1),dx(k),h_err
-        call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
-             'negative h implied by fluxes' )
-      endif
-    else
-      hTmp = ( dx(k+1) - dx(k) )
-      h_err = h_err + epsilon(totalH0) * max( abs(dx(k+1)), abs(dx(k)) )
-      if (hTmp < -h_err) then
-        write(0,*) 'k,hNew,dx(+1),dx(0),herr=',k,hTmp,dx(k+1),dx(k),h_err
-        call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
-             'negative h implied by fluxes' )
-      endif
-    endif
-    totalHf = totalHf + hTmp
-  end do
-  eps = epsilon(hTmp)*totalH0
-  if (abs(totalHf-totalH0) > 0.5*real(n0+n1-1)*eps) then
-    write(0,*) 'H0,Hf=',totalH0,totalHf,totalHf-totalH0,eps
-    call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
-         'Total thicknesses of h0 and h2 differ by more than roundoff' )
-  endif
-#endif
-
   iMethod = -999
 
   ! Reset polynomial
@@ -352,77 +308,9 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
       call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
            'The selected remapping method is invalid' )
   end select
-#ifdef __DO_SAFETY_CHECKS__
-  do k = 1, n0
-    if (ppoly_r_coefficients(k,2) /= ppoly_r_coefficients(k,2)) then
-      write(0,*) 'NaN in PPOLY at k=',k,' extrap=',CS%boundary_extrapolation
-      write(0,*) 'h0=',h0(k),' u0(k)',u0(k)
-      write(0,*) 'ppoly_r_E=',ppoly_r_E(k,:)
-      write(0,*) 'ppoly_r_coefficients(k)=',ppoly_r_coefficients(k,:)
-    endif
-  enddo
-#endif
 
   call remapByDeltaZ( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients, n1, dx, iMethod, u1 )
 ! call remapByProjection( n0, h0, u0, CS%ppoly_r, n1, h1, iMethod, u1 )
-
-#ifdef __DO_SAFETY_CHECKS__
-  totalHU0 = 0.
-  err0 = 0.
-  do k = 1, n0
-    hTmp = h0(k) * u0(k)
-    totalHU0 = totalHU0 + hTmp
-    err0 = err0 + epsilon(err0)*max(err0,abs(hTmp))
-  enddo
-  totalHU2 = 0. ; err2 = 0. ; z0 =0. ; z1 = 0.
-  do k = 1, n1
-    if (k <= n0) then
-      hTmp = h0(k) + ( dx(k+1) - dx(k) )
-    else
-      hTmp = ( dx(k+1) - dx(k) )
-    endif
-    hTmp = hTmp * u1(k)
-    totalHU2 = totalHU2 + hTmp
-    err2 = err2 + epsilon(err2)*max(err2,abs(hTmp))
-    if (u1(k) /= u1(k)) then
-      write(0,*) 'NaN detected at k=',k
-      write(0,*) 'h0(k)=',h0(k),' u0(k)=',u0(k)
-      write(0,*) 'z0(k)=',z0,' z0(k+1)=',z0+h0(k)
-      write(0,*) 'w(k)=',dx(k),' w(k+1)=',dx(k+1)
-      write(0,*) 'z1(k)=',z1,' z1(k+1)=',z1+(h0(k)+(dx(k+1)-dx(k)))
-      write(0,*) 'z0(k)+w(k)=',z0-dx(k),' z1(k+1)+w(k+1)=',(z0+h0(k))-dx(k+1)
-      write(0,*) 'h1(k)=',h0(k) + ( dx(k+1) - dx(k) )
-      hTmp = 0.;err0 = 0.
-      do iMethod = 1, n1
-        hTmp = hTmp + h0(iMethod)
-        err0 = err0 + (h0(iMethod)+(dx(iMethod+1)-dx(iMethod)))
-        write(0,*) iMethod,hTmp,h0(iMethod),u0(iMethod),err0,h0(iMethod)+(dx(iMethod+1)-dx(iMethod)),u1(iMethod),dx(iMethod)
-      enddo
-      write(0,*) dx(n1+1)
-      call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
-         'NaN detected!' )
-    endif
-    if (k<=n0) then; hTmp = h0(k); else; hTmp = 0.; endif
-    z0 = z0 + hTmp ; z1 = z1 + ( hTmp + ( dx(k+1) - dx(k) ) )
-  enddo
-  ! Maximum error based on guess at maximum roundoff
-  if (abs(totalHU2-totalHU0) > (err0+err2)*max(real(n0), real(n1)) .and. (err0+err2)/=0.) then
-    ! Maximum relative error
-    if (abs(totalHU2-totalHU0) / totalHU2 > 1e-09) then
-      ! Maximum absolute error
-      if (abs(totalHU2-totalHU0) > 1e-18) then
-        write(0,*) 'h0=',h0
-        write(0,*) 'hf=',h0(1:n1)+dx(2:n1+1)-dx(1:n1)
-        write(0,*) 'u0=',u0
-        write(0,*) 'u1=',u1
-        write(0,*) 'total HU0,HUf,f-0=',totalHU0,totalHU2,totalHU2-totalHU0
-        write(0,*) 'err0,errF=',err0,err2
-        call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
-             'Total stuff on h0 and hF differ by more than maximum errors' )
-      endif
-    endif
-  endif
-#endif
 
 end subroutine remapping_core
 
@@ -747,16 +635,6 @@ subroutine remapByDeltaZ( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, dx1, me
   real    :: uhNew, hFlux, uAve, fluxL, fluxR
   integer :: jStart ! Used by integrateReconOnInterval()
   real    :: xStart ! Used by integrateReconOnInterval()
-#ifdef __DO_SAFETY_CHECKS__
-  integer :: k
-  real    :: h0Total, h_err2
-
-  h0Total = 0. ; h_err2 = 0.
-  do iTarget = 1, n0
-    h0Total = h0Total + h0(iTarget)
-    h_err2 = h_err2 + epsilon(h0Total)*max( h0Total, h0(iTarget) )
-  enddo
-#endif
 
   ! Loop on cells in target grid. For each cell, iTarget, the left flux is
   ! the right flux of the cell to the left, iTarget-1.
@@ -787,43 +665,12 @@ subroutine remapByDeltaZ( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, dx1, me
     xL = min( xOld, xNew )
     xR = max( xOld, xNew )
 
-#ifdef __DO_SAFETY_CHECKS__
-    if (xL < 0.) then
-      write(0,*) 'h0=',h0
-      write(0,*) 'dx1=',dx1
-      write(0,*) 'xOld,xNew,xL,xR,i=',xOld,xNew,xL,xR,iTarget
-      call MOM_error(FATAL,'MOM_remapping, remapByDeltaZ: xL too negative')
-    endif
-    if (xR - h0Total > max(h_err, h_err2)) then
-      write(0,*) 'h0=',h0
-      write(0,*) 'h0Total=',h0Total,'xR-h0Tot=',xR - h0Total,real(iTarget)*epsilon(h0Total)*h0Total, &
-                 'h_err = ',h_err,h_err2
-      write(0,*) 'dx1=',dx1
-      write(0,*) 'xOld,xNew,xL,xR,i=',xOld,xNew,xL,xR,iTarget
-      call MOM_error(FATAL,'MOM_remapping, remapByDeltaZ: xR too positive')
-    endif
-#endif
-
     ! hFlux is the positive width of the remapped volume
     hFlux = abs(dx1(iTarget+1))
     call integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, method, &
                                    xL, xR, hFlux, uAve, jStart, xStart )
     ! uAve is the average value of u, independent of sign of dx1
     fluxR = dx1(iTarget+1)*uAve ! Includes sign of dx1
-
-#ifdef XXX__DO_SAFETY_CHECKS__
-    ! Valid for CFL<1
-    if (dx1(iTarget+1)<h0(iTarget+1) .and. dx1(iTarget+1)>-hOld) then
-      if (uAve<min(u0(iTarget),u0(iTarget+1))) then
-        write(0,*) 'u,u(k),u(k+1)=',uAve,u0(iTarget),u0(iTarget+1)
-        call MOM_error(FATAL,'MOM_remapping, remapByDeltaZ: undershoot in U')
-      endif
-      if (uAve>max(u0(iTarget),u0(iTarget+1))) then
-        write(0,*) 'u,u(k),u(k+1)=',uAve,u0(iTarget),u0(iTarget+1)
-        call MOM_error(FATAL,'MOM_remapping, remapByDeltaZ: overshoot in U')
-      endif
-    endif
-#endif
 
     if (iTarget>0) then
       hNew = hOld + ( dx1(iTarget+1) - dx1(iTarget) )
@@ -871,28 +718,6 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
                           ! (notionally xR - xL) which differs due to roundoff.
   real    :: x0_2, x1_2, x02px12, x0px1 ! Used in evaluation of integrated polynomials
   real, parameter :: r_3 = 1.0/3.0 ! Used in evaluation of integrated polynomials
-
-#ifdef __DO_SAFETY_CHECKS__
-  real    :: h0Total
-
-  h0Total = 0.
-  do k = 1, n0
-    h0Total = h0Total + h0(k)
-  enddo
-! if (xL < 0.) call MOM_error(FATAL, &
-!         'MOM_remapping, integrateReconOnInterval: '//&
-!         'The target cell starts beyond the left edge of the source grid')
-! if (xR < 0.) call MOM_error(FATAL, &
-!         'MOM_remapping, integrateReconOnInterval: '//&
-!         'The target cell ends beyond the left edge of the source grid')
-! if (xL > h0Total) call MOM_error(FATAL, &
-!         'MOM_remapping, integrateReconOnInterval: '//&
-!         'The target cell starts beyond the right edge of the source grid')
-! if (xR > h0Total) call MOM_error(FATAL, &
-!         'MOM_remapping, integrateReconOnInterval: '//&
-!         'The target cell ends beyond the right edge of the source grid')
-#endif
-
 
   q = -1.E30
   x0jLl = -1.E30
@@ -990,12 +815,6 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
     ! This can happen due to roundoff, in which case we set jR=n0.
     if (xR>x0jRr) jR = n0
 
-#ifdef __DO_SAFETY_CHECKS__
-    if ( jR == -1 ) call MOM_error(FATAL, &
-          'MOM_remapping, integrateReconOnInterval: '//&
-          'The location of the right-most cell could not be found')
-#endif
-
     ! To integrate, two cases must be considered: (1) the target cell is
     ! entirely contained within a cell of the source grid and (2) the target
     ! cell spans at least two cells of the source grid.
@@ -1048,14 +867,6 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
         case default
           call MOM_error( FATAL,'The selected integration method is invalid' )
       end select
-#ifdef __DO_SAFETY_CHECKS__
-      if (q /= q) then
-        write(0,*) 'Nan at jL==jR: jL=',jL,' jR=',jR
-        write(0,*) 'xL=',XL,' xR=',xR
-        write(0,*) 'xi0=',xi0,' xi1=',xi1
-        stop 'Nan during __DO_SAFETY_CHECKS__'
-      endif
-#endif
 
     else
     ! The target cell spans at least two cells of the source grid.
@@ -1108,14 +919,6 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
         case default
           call MOM_error( FATAL, 'The selected integration method is invalid' )
       end select
-#ifdef __DO_SAFETY_CHECKS__
-      if (q /= q) then
-        write(0,*) 'Nan on left segment: jL=',jL,' jR=',jR
-        write(0,*) 'xL=',XL,' xR=',xR
-        write(0,*) 'xi0=',xi0,' xi1=',xi1
-        stop 'Nan during __DO_SAFETY_CHECKS__'
-      endif
-#endif
 
       ! Integrate contents within cells strictly comprised between jL and jR
       if ( jR > (jL+1) ) then
@@ -1124,13 +927,6 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
           hAct = hAct + h0(k)
         end do
       end if
-#ifdef __DO_SAFETY_CHECKS__
-      if (q /= q) then
-        write(0,*) 'Nan on middle segment: jL=',jL,' jR=',jR
-        write(0,*) 'xL=',XL,' xR=',xR
-        stop 'Nan during __DO_SAFETY_CHECKS__'
-      endif
-#endif
 
       ! Integrate from left boundary of cell jR up to xR
       xi0 = 0.0
@@ -1168,16 +964,6 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefficients, 
         case default
           call MOM_error( FATAL,'The selected integration method is invalid' )
       end select
-#ifdef __DO_SAFETY_CHECKS__
-      if (q /= q) then
-        write(0,*) 'Nan on right segment: jL=',jL,' jR=',jR
-        write(0,*) 'h0(jR)=',h0(jR)
-        write(0,*) 'xL=',xL,' xR=',xR
-        write(0,*) 'xi0=',xi0,' xi1=',xi1
-        write(0,*) 'ppoly0_coeff(jR)=',ppoly0_coefficients(jR,:)
-        stop 'Nan during __DO_SAFETY_CHECKS__'
-      endif
-#endif
 
     end if ! end integration for non-vanished cells
 
@@ -1217,23 +1003,6 @@ subroutine dzFromH1H2( n1, h1, n2, h2, dx )
       dx(K+1) = x2 - x1 ! Change of interface k+1, target - source
     endif
   enddo
-#ifdef __DO_SAFETY_CHECKS__
-  if (abs(x2-x1) > 0.5*(real(n1-1)*x1+real(n2-1)*x2)*epsilon(x1)) then
-    write(0,'(a4,3a12)') 'k','h1','h2','dh'
-    do k = 1,max(n1,n2)
-      if (k<=min(n1,n2)) then
-        write(0,'(i4,3es12.3)') k,h1(k),h2(k),dx(k)
-      elseif (k>n1) then
-        write(0,'(i4,12x,2es12.3)') k,h2(k),dx(k)
-      else
-        write(0,'(i4,es12.3)') k,h1(k)
-      endif
-    enddo
-    write(0,'(i4,24x,es12.3)') n2+1,dx(n2+1)
-    write(0,*) 'x1,x2,x2-x1',x1,x2,x2-x1
-    call MOM_error(FATAL,'MOM_remapping, dzFromH1H2: Bottom has moved!')
-  endif
-#endif
 
 end subroutine dzFromH1H2
 
