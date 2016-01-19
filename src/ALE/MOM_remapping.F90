@@ -1311,7 +1311,7 @@ subroutine end_remapping(CS)
 
 end subroutine end_remapping
 
-!> Runs unit tests on remapping functions. 
+!> Runs unit tests on remapping functions.
 !! Should only be called from a single/root thread
 !! Returns True if a test fails, otherwise False
 logical function remappingUnitTests()
@@ -1319,7 +1319,7 @@ logical function remappingUnitTests()
   real :: h0(n0), x0(n0+1), u0(n0)
   real :: h1(n1), x1(n1+1), u1(n1), hn1(n1), dx1(n1+1)
   real :: h2(n2), x2(n2+1), u2(n2), hn2(n2), dx2(n2+1)
-  data u0 /3., 1., -1., -3./   ! Linear profile, 4 at surface to -4 at bottom
+  data u0 /9., 3., -3., -9./   ! Linear profile, 4 at surface to -4 at bottom
   data h0 /4*0.75/ ! 4 uniform layers with total depth of 3
   data h1 /3*1./   ! 3 uniform layers with total depth of 3
   data h2 /6*0.5/  ! 6 uniform layers with total depth of 3
@@ -1356,7 +1356,7 @@ logical function remappingUnitTests()
   call dzFromH1H2( n0, h0, n1, h1, dx1 )
   call remapping_core( CS, n0, h0, u0, n1, dx1, u1 )
   do i=1,n1
-    err=u1(i)-(8./3.)*(0.5*real(1+n1)-real(i))
+    err=u1(i)-8.*(0.5*real(1+n1)-real(i))
     if (abs(err)>real(n1-1)*epsilon(err)) thisTest = .true.
   enddo
   write(*,*) 'h1 (by projection)'
@@ -1380,7 +1380,7 @@ logical function remappingUnitTests()
   call remapByProjection( n0, h0, u0, ppoly0_E, ppoly0_coefficients, &
                           n1, h1, INTEGRATION_PPM, u1 )
   do i=1,n1
-    err=u1(i)-8./3.*(0.5*real(1+n1)-real(i))
+    err=u1(i)-8.*(0.5*real(1+n1)-real(i))
     if (abs(err)>2.*epsilon(err)) thisTest = .true.
   enddo
   if (thisTest) write(*,*) 'remappingUnitTests: Failed remapByProjection()'
@@ -1395,7 +1395,7 @@ logical function remappingUnitTests()
   call dumpGrid(n1,h1,x1,u1)
   hn1=hn1-h1
   do i=1,n1
-    err=u1(i)-8./3.*(0.5*real(1+n1)-real(i))
+    err=u1(i)-8.*(0.5*real(1+n1)-real(i))
     if (abs(err)>2.*epsilon(err)) thisTest = .true.
   enddo
   if (thisTest) write(*,*) 'remappingUnitTests: Failed remapByDeltaZ() 1'
@@ -1414,11 +1414,32 @@ logical function remappingUnitTests()
   call dumpGrid(n2,hn2,x2,u2)
 
   do i=1,n2
-    err=u2(i)-8./6.*(0.5*real(1+n2)-real(i))
+    err=u2(i)-8./2.*(0.5*real(1+n2)-real(i))
     if (abs(err)>2.*epsilon(err)) thisTest = .true.
   enddo
   if (thisTest) write(*,*) 'remappingUnitTests: Failed remapByDeltaZ() 2'
   remappingUnitTests = remappingUnitTests .or. thisTest
+
+  write(*,*) 'Via sub-cells'
+  thisTest = .false.
+  call remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, &
+                            n2, h2, INTEGRATION_PPM, u2 )
+  call dumpGrid(n2,h2,x2,u2)
+
+  do i=1,n2
+    err=u2(i)-8./2.*(0.5*real(1+n2)-real(i))
+    if (abs(err)>2.*epsilon(err)) thisTest = .true.
+  enddo
+  if (thisTest) write(*,*) 'remappingUnitTests: Failed remap_via_sub_cells() 2'
+  remappingUnitTests = remappingUnitTests .or. thisTest
+
+  call remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, &
+                            6, (/.125,.125,.125,.125,.125,.125/), INTEGRATION_PPM, u2 )
+  call dumpGrid(6,h2,x2,u2)
+
+  call remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, &
+                            3, (/2.25,1.5,1./), INTEGRATION_PPM, u2 )
+  call dumpGrid(3,h2,x2,u2)
 
   deallocate(ppoly0_E, ppoly0_S, ppoly0_coefficients)
 
