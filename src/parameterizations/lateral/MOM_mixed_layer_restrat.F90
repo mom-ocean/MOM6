@@ -80,7 +80,7 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, CS)
   type(forcing),                          intent(in)    :: fluxes  !< pointers to forcing fields
   real,                                   intent(in)    :: dt      !< time increment (sec)
   real, dimension(:,:),                   pointer       :: MLD     !< Mixed layer depth provided by PBL (H units)
-  type(ocean_grid_type),                  intent(in)    :: G       !< ocean grid structure 
+  type(ocean_grid_type),                  intent(inout) :: G       !< ocean grid structure 
   type(mixedlayer_restrat_CS),            pointer       :: CS      !< module control structure 
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
@@ -106,7 +106,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, CS)
   type(forcing),                          intent(in)    :: fluxes  !< pointers to forcing fields
   real,                                   intent(in)    :: dt      !< time increment (sec)
   real, dimension(:,:),                   pointer       :: MLD     !< Mixed layer depth provided by PBL (H units)
-  type(ocean_grid_type),                  intent(in)    :: G       !< ocean grid structure  
+  type(ocean_grid_type),                  intent(inout) :: G       !< ocean grid structure  
   type(mixedlayer_restrat_CS),            pointer       :: CS      !< module control structure 
 
   real :: uhml(SZIB_(G),SZJ_(G),SZK_(G)) ! zonal mixed layer transport (m3/s or kg/s)
