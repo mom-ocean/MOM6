@@ -103,12 +103,12 @@ type, public :: ALE_CS
 
 end type
 
-
-public initialize_ALE
-public end_ALE
+! Publicly available functions
+public ALE_init
+public ALE_end
 public ALE_main 
-public regrid_only
-public remap_scalar_h_to_h
+public ALE_build_grid
+public ALE_remap_scalar
 public pressure_gradient_plm
 public pressure_gradient_ppm
 public usePressureReconstruction
@@ -122,17 +122,16 @@ public ALE_updateVerticalGridType
 public ALE_initThicknessToCoord
 public ALE_update_regrid_weights
 public check_remapping_grid
-public remap_init_conds
-public register_diags_ALE 
+public ALE_remap_init_conds
+public ALE_register_diags
 
 contains
-
 
 !> This routine is typically called (from initialize_MOM in file MOM.F90)
 !! before the main time integration loop to initialize the regridding stuff.
 !! We read the MOM_input file to register the values of different
 !! regridding/remapping parameters.
-subroutine initialize_ALE( param_file, G, CS)
+subroutine ALE_init( param_file, G, CS)
   type(param_file_type),   intent(in) :: param_file !< Parameter file
   type(ocean_grid_type),   intent(in) :: G          !< Ocean grid structure
   type(ALE_CS),            pointer    :: CS         !< Module control structure
@@ -144,14 +143,14 @@ subroutine initialize_ALE( param_file, G, CS)
   real                            :: filter_shallow_depth, filter_deep_depth
 
   if (associated(CS)) then
-    call MOM_error(WARNING, "initialize_ALE called with an associated "// &
+    call MOM_error(WARNING, "ALE_init called with an associated "// &
                             "control structure.")
     return
   endif
   allocate(CS)
 
   CS%show_call_tree = callTree_showQuery()
-  if (CS%show_call_tree) call callTree_enter("initialize_ALE(), MOM_ALE.F90")
+  if (CS%show_call_tree) call callTree_enter("ALE_init(), MOM_ALE.F90")
 
   ! Memory allocation for regridding
   call ALE_memory_allocation( G, CS )
@@ -222,12 +221,11 @@ subroutine initialize_ALE( param_file, G, CS)
   ! Keep a record of values for subsequent queries
   CS%nk = G%ke
 
-  if (CS%show_call_tree) call callTree_leave("initialize_ALE()")
-end subroutine initialize_ALE
-
+  if (CS%show_call_tree) call callTree_leave("ALE_init()")
+end subroutine ALE_init
 
 !> Initialize diagnostics for the ALE module. 
-subroutine register_diags_ALE(Time, G, diag, C_p, Reg, CS)
+subroutine ALE_register_diags(Time, G, diag, C_p, Reg, CS)
   type(time_type),target,     intent(in)  :: Time  !< Time structure
   type(ocean_grid_type),      intent(in)  :: G     !< Grid structure
   type(diag_ctrl), target,    intent(in)  :: diag  !< Diagnostics control structure
@@ -303,9 +301,7 @@ subroutine register_diags_ALE(Time, G, diag, C_p, Reg, CS)
 
   endif ! ntr > 0  
 
-
-end subroutine register_diags_ALE
-
+end subroutine ALE_register_diags
 
 !> Crudely adjust (initial) grid for integrity.
 !! This routine is typically called (from initialize_MOM in file MOM.F90)
@@ -325,7 +321,7 @@ end subroutine adjustGridForIntegrity
 !> End of regridding (memory deallocation).
 !! This routine is typically called (from MOM_end in file MOM.F90)
 !! after the main time integration loop to deallocate the regridding stuff.
-subroutine end_ALE(CS)
+subroutine ALE_end(CS)
   type(ALE_CS), pointer :: CS  !< module control structure 
   
   ! Deallocate memory used for the regridding
@@ -335,7 +331,7 @@ subroutine end_ALE(CS)
 
   deallocate(CS)
 
-end subroutine end_ALE
+end subroutine ALE_end
 
 !> Takes care of (1) building a new grid and (2) remapping all variables between
 !! the old grid and the new grid. The creation of the new grid can be based
@@ -388,7 +384,7 @@ end subroutine ALE_main
 
 
 !> Generates new grid
-subroutine regrid_only( G, regridCS, remapCS, h, tv, debug )
+subroutine ALE_build_grid( G, regridCS, remapCS, h, tv, debug )
   type(ocean_grid_type),                   intent(in)    :: G        !< Ocean grid structure 
   type(regridding_CS),                     intent(in)    :: regridCS !< Regridding parameters and options
   type(remapping_CS),                      intent(in)    :: remapCS  !< Remapping parameters and options
@@ -403,13 +399,13 @@ subroutine regrid_only( G, regridCS, remapCS, h, tv, debug )
 
   show_call_tree = .false.
   if (present(debug)) show_call_tree = debug
-  if (show_call_tree) call callTree_enter("regrid_only(), MOM_ALE.F90")
+  if (show_call_tree) call callTree_enter("ALE_build_grid(), MOM_ALE.F90")
 
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
   call regridding_main( remapCS, regridCS, G, h, tv, dzRegrid )
 
-  call check_remapping_grid( G, h, dzRegrid, 'in regrid_only()' )
+  call check_remapping_grid( G, h, dzRegrid, 'in ALE_build_grid()' )
 
   ! Override old grid with new one. The new grid 'h_new' is built in
   ! one of the 'build_...' routines above.
@@ -422,8 +418,8 @@ subroutine regrid_only( G, regridCS, remapCS, h, tv, debug )
     endif
   enddo ; enddo
 
-  if (show_call_tree) call callTree_leave("regrid_only()")
-end subroutine regrid_only
+  if (show_call_tree) call callTree_leave("ALE_build_grid()")
+end subroutine ALE_build_grid
 
 !> This routine takes care of remapping all variable between the old and the
 !! new grids. When velocity components need to be remapped, thicknesses at
@@ -614,7 +610,7 @@ end subroutine remap_all_state_vars
 !> Remaps a single scalar between grids described by thicknesses h_src and h_dst.
 !! h_dst must be dimensioned as a model array with G%ke layers while h_src can
 !! have an arbitrary number of layers specified by nk_src.
-subroutine remap_scalar_h_to_h(CS, G, nk_src, h_src, s_src, h_dst, s_dst, all_cells )
+subroutine ALE_remap_scalar(CS, G, nk_src, h_src, s_src, h_dst, s_dst, all_cells )
   type(remapping_CS),                      intent(in)    :: CS        !< Remapping control structure
   type(ocean_grid_type),                   intent(in)    :: G         !< Ocean grid structure
   integer,                                 intent(in)    :: nk_src    !< Number of levels on source grid
@@ -657,7 +653,7 @@ subroutine remap_scalar_h_to_h(CS, G, nk_src, h_src, s_src, h_dst, s_dst, all_ce
   enddo
 !$OMP end parallel
 
-end subroutine remap_scalar_h_to_h
+end subroutine ALE_remap_scalar
 
 
 !> Use plm reconstruction for pressure gradient (determine edge values)
@@ -1253,12 +1249,12 @@ end function ALE_getCoordinateUnits
 
 
 !> Returns true if initial conditions should be regridded and remapped
-logical function remap_init_conds( CS )
+logical function ALE_remap_init_conds( CS )
   type(ALE_CS), pointer :: CS   !< module control structure 
 
-  remap_init_conds = .false.
-  if (associated(CS)) remap_init_conds = CS%remap_after_initialization
-end function remap_init_conds
+  ALE_remap_init_conds = .false.
+  if (associated(CS)) ALE_remap_init_conds = CS%remap_after_initialization
+end function ALE_remap_init_conds
 
 !> Updates the weights for time filtering the new grid generated in regridding
 subroutine ALE_update_regrid_weights( dt, CS )

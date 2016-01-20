@@ -56,9 +56,9 @@ use MOM_time_manager,         only : time_type, set_time, time_type_to_real, ope
 use MOM_time_manager,         only : operator(-), operator(>), operator(*), operator(/)
 
 ! MOM core modules
-use MOM_ALE,                   only : initialize_ALE, end_ALE, ALE_main, ALE_CS, adjustGridForIntegrity
+use MOM_ALE,                   only : ALE_init, ALE_end, ALE_main, ALE_CS, adjustGridForIntegrity
 use MOM_ALE,                   only : ALE_getCoordinate, ALE_getCoordinateUnits, ALE_writeCoordinateFile
-use MOM_ALE,                   only : ALE_updateVerticalGridType, remap_init_conds, register_diags_ALE
+use MOM_ALE,                   only : ALE_updateVerticalGridType, ALE_remap_init_conds, ALE_register_diags
 use MOM_continuity,            only : continuity, continuity_init, continuity_CS
 use MOM_CoriolisAdv,           only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
 use MOM_diabatic_driver,       only : diabatic, diabatic_driver_init, diabatic_CS
@@ -1744,8 +1744,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call callTree_waypoint("returned from MOM_initialize_fixed() (initialize_MOM)")
 
   if (CS%use_ALE_algorithm) then
-    call initialize_ALE(param_file, G, CS%ALE_CSp)
-    call callTree_waypoint("returned from initialize_ALE() (initialize_MOM)")
+    call ALE_init(param_file, G, CS%ALE_CSp)
+    call callTree_waypoint("returned from ALE_init() (initialize_MOM)")
   endif
 
   call MOM_initialize_state(CS%u, CS%v, CS%h, CS%tv, Time, G, param_file, dirs, &
@@ -1753,7 +1753,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call cpu_clock_end(id_clock_MOM_init)
   call callTree_waypoint("returned from MOM_initialize_state() (initialize_MOM)")
 
-  if (remap_init_conds(CS%ALE_CSp) .and. .not. query_initialized(CS%h,"h",CS%restart_CSp)) then
+  if (ALE_remap_init_conds(CS%ALE_CSp) .and. .not. query_initialized(CS%h,"h",CS%restart_CSp)) then
     ! This block is controlled by the ALE parameter REMAP_AFTER_INITIALIZATION.
     ! \todo This block exists for legacy reasons and we should phase it out of
     ! all examples.
@@ -1878,7 +1878,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call register_diags(Time, G, CS, CS%ADp)
   call register_diags_TS_tendency(Time, G, CS) 
   if (CS%use_ALE_algorithm) then 
-    call register_diags_ALE(Time, G, diag, CS%tv%C_p, CS%tracer_Reg, CS%ALE_CSp)
+    call ALE_register_diags(Time, G, diag, CS%tv%C_p, CS%tracer_Reg, CS%ALE_CSp)
   endif 
 
 
@@ -2923,7 +2923,7 @@ subroutine MOM_end(CS)
   type(MOM_control_struct), pointer :: CS   !< MOM control structure 
 
   if (CS%use_ALE_algorithm) then
-    call end_ALE(CS%ALE_CSp)
+    call ALE_end(CS%ALE_CSp)
   endif
 
   DEALLOC_(CS%u) ; DEALLOC_(CS%v) ; DEALLOC_(CS%h)

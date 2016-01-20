@@ -65,7 +65,7 @@ use midas_vertmap, only : find_interfaces, tracer_Z_init
 use midas_vertmap, only : determine_temperature
 
 use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord
-use MOM_ALE, only : remap_scalar_h_to_h, regrid_only
+use MOM_ALE, only : ALE_remap_scalar, ALE_build_grid
 use MOM_regridding, only : regridding_CS, set_regrid_min_thickness
 use MOM_remapping, only : remapping_CS, initialize_remapping
 use MOM_remapping, only : remapDisableBoundaryExtrapolation
@@ -2155,11 +2155,11 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
       enddo ; enddo
       call pass_var(h, G%Domain)    ! Regridding might eventually use spatial information and
       call pass_var(tv%T, G%Domain) ! thus needs to be up to date in the halo regions even though
-      call pass_var(tv%S, G%Domain) ! regrid_only() only updates h on the computational domain.
-      call regrid_only( G, regridCS, remapCS, h, tv, .true. )
+      call pass_var(tv%S, G%Domain) ! ALE_build_grid() only updates h on the computational domain.
+      call ALE_build_grid( G, regridCS, remapCS, h, tv, .true. )
     endif
-    call remap_scalar_h_to_h( remapCS, G, nz, h1, tmpT1dIn, h, tv%T, all_cells=remap_full_column )
-    call remap_scalar_h_to_h( remapCS, G, nz, h1, tmpS1dIn, h, tv%S, all_cells=remap_full_column )
+    call ALE_remap_scalar( remapCS, G, nz, h1, tmpT1dIn, h, tv%T, all_cells=remap_full_column )
+    call ALE_remap_scalar( remapCS, G, nz, h1, tmpS1dIn, h, tv%S, all_cells=remap_full_column )
     deallocate( h1 )
     deallocate( tmpT1dIn )
     deallocate( tmpS1dIn )
