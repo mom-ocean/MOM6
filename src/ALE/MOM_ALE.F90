@@ -125,18 +125,6 @@ public check_remapping_grid
 public remap_init_conds
 public register_diags_ALE 
 
-! List of interpolation schemes
-integer, parameter :: INTERPOLATION_P1M_H2     = 0 ! O(h^2)
-integer, parameter :: INTERPOLATION_P1M_H4     = 1 ! O(h^2)
-integer, parameter :: INTERPOLATION_P1M_IH4    = 2 ! O(h^2)
-integer, parameter :: INTERPOLATION_PLM        = 3 ! O(h^2)
-integer, parameter :: INTERPOLATION_PPM_H4     = 4 ! O(h^3)
-integer, parameter :: INTERPOLATION_PPM_IH4    = 5 ! O(h^3)
-integer, parameter :: INTERPOLATION_P3M_IH4IH3 = 6 ! O(h^4)
-integer, parameter :: INTERPOLATION_P3M_IH6IH5 = 7 ! O(h^4)
-integer, parameter :: INTERPOLATION_PQM_IH4IH3 = 8 ! O(h^4)
-integer, parameter :: INTERPOLATION_PQM_IH6IH5 = 9 ! O(h^5)
-
 contains
 
 
