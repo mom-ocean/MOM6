@@ -382,7 +382,7 @@ subroutine ALE_main( G, h, u, v, tv, Reg, CS, dt)
   if (CS%show_call_tree) call callTree_waypoint("new grid generated (ALE_main)")
 
   ! Remap all variables from old grid h onto new grid h_new
-  call remapping_main( CS%remapCS, CS, G, h, -CS%dzRegrid, Reg, u, v, CS%show_call_tree, dt)
+  call remap_all_state_vars( CS%remapCS, CS, G, h, -CS%dzRegrid, Reg, u, v, CS%show_call_tree, dt)
 
   if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_main)")
 
@@ -495,7 +495,7 @@ end subroutine regrid_remap_T_S
 !! This routine is called during initialization of the model at time=0, to 
 !! remap initiali conditions to the model grid.  It is also called during a
 !! time step to update the state.  
-subroutine remapping_main(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u, v, debug, dt)
+subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u, v, debug, dt)
   type(remapping_CS),                               intent(in)    :: CS_remapping  !< Remapping control structure
   type(ALE_CS),                                     intent(in)    :: CS_ALE        !< ALE control structure 
   type(ocean_grid_type),                            intent(in)    :: G             !< Ocean grid structure
@@ -520,7 +520,7 @@ subroutine remapping_main(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u, v, de
 
   show_call_tree = .false.
   if (present(debug)) show_call_tree = debug
-  if (show_call_tree) call callTree_enter("remapping_main(), MOM_ALE.F90")
+  if (show_call_tree) call callTree_enter("remap_all_state_vars(), MOM_ALE.F90")
 
   nz      = G%ke
   ppt2mks = 0.001 
@@ -542,7 +542,7 @@ subroutine remapping_main(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u, v, de
 !$OMP parallel default(none) shared(G,h,dxInterface,CS_remapping,nz,Reg,u,v,ntr,show_call_tree) &
 !$OMP                       private(h1,dx,u_column)
   if (ntr>0) then
-    if (show_call_tree) call callTree_waypoint("remapping tracers (remapping_main)")
+    if (show_call_tree) call callTree_waypoint("remapping tracers (remap_all_state_vars)")
 !$OMP do
     do m=1,ntr ! For each tracer 
 
@@ -632,7 +632,7 @@ subroutine remapping_main(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u, v, de
 
   endif   ! endif for ntr > 0
 
-  if (show_call_tree) call callTree_waypoint("tracers remapped (remapping_main)")
+  if (show_call_tree) call callTree_waypoint("tracers remapped (remap_all_state_vars)")
 
   ! Remap u velocity component
   if ( present(u) ) then
@@ -650,7 +650,7 @@ subroutine remapping_main(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u, v, de
     enddo
   endif
 
-  if (show_call_tree) call callTree_waypoint("u remapped (remapping_main)")
+  if (show_call_tree) call callTree_waypoint("u remapped (remap_all_state_vars)")
 
   ! Remap v velocity component
   if ( present(v) ) then
@@ -669,10 +669,10 @@ subroutine remapping_main(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u, v, de
   endif
 !$OMP end parallel
 
-  if (show_call_tree) call callTree_waypoint("u remapped (remapping_main)")
-  if (show_call_tree) call callTree_leave("remapping_main()")
+  if (show_call_tree) call callTree_waypoint("u remapped (remap_all_state_vars)")
+  if (show_call_tree) call callTree_leave("remap_all_state_vars()")
 
-end subroutine remapping_main
+end subroutine remap_all_state_vars
 
 
 !> Remaps a single scalar between grids described by thicknesses h_src and h_dst.
