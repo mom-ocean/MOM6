@@ -332,7 +332,7 @@ do j=1,ny
 ! For the piecewise parabolic form add the following...
 !     + C1_3*cur_tr*(z2(kz)**2 + z2(kz)*z1(kz) + z1(kz)**2))
 !        if (debug_) then
-! 	   print *,'k,k_top,k_bot= ',k,k_top,k_bot
+!      print *,'k,k_top,k_bot= ',k,k_top,k_bot
 !        endif
         if (debug_) then
            if (PRESENT(i_debug)) then
@@ -360,7 +360,7 @@ do j=1,ny
           sl_tr = 0.0 ! ; cur_tr = 0.0
           if ((kz < nlevs_data(i,j)) .and. (kz > 1)) then
             sl_tr = find_limited_slope(tr_1d, z_edges, kz)
-!	    if (debug_) then
+!      if (debug_) then
 !              print *,'002 sl_tr,k,kz,nlevs= ',sl_tr,k,kz,nlevs_data(i,j),nlevs(i,j)
 !            endif
           endif

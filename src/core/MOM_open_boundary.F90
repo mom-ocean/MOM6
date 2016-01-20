@@ -118,8 +118,8 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
     !   rx_new = 0.0
     !   if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max)
     !   rx_avg = (1.0-gamma_h)*OBC%rx_old_h(I,j,k) + gamma_h*rx_new  
-    !   OBC%rx_old_h(I,j,k) = rx_avg	  
-    !	  h_new(I+1,j,k) = (h_old(I+1,j,k) + rx_avg*h_new(I,j,k)) / (1.0+rx_avg) !original	  
+    !   OBC%rx_old_h(I,j,k) = rx_avg    
+    !    h_new(I+1,j,k) = (h_old(I+1,j,k) + rx_avg*h_new(I,j,k)) / (1.0+rx_avg) !original    
       endif     
       if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W) then
         dhdt = u_old(I+1,j,k)-u_new(I+1,j,k) !old-new
@@ -156,9 +156,9 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
     !   dhdx = h_new(i,J,k)-h_new(i,J-1,k) !in new time
     !   rx_new = 0.0
     !   if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max)
-    !   rx_avg = (1.0-gamma_h)*OBC%ry_old_h(i,J,k) + gamma_h*rx_new 	  
-    !   OBC%ry_old_h(i,J,k) = rx_avg	  
-    !	  h_new(i,J+1,k) = (h_old(i,J+1,k) + rx_avg*h_new(i,J,k)) / (1.0+rx_avg) !original	  
+    !   rx_avg = (1.0-gamma_h)*OBC%ry_old_h(i,J,k) + gamma_h*rx_new     
+    !   OBC%ry_old_h(i,J,k) = rx_avg    
+    !   h_new(i,J+1,k) = (h_old(i,J+1,k) + rx_avg*h_new(i,J,k)) / (1.0+rx_avg) !original    
       endif
 
       if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S) then
@@ -174,9 +174,9 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
     !   dhdx = h_new(i,J+1,k)-h_new(i,J+2,k) !in new time
     !   rx_new = 0.0
     !   if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max)
-    !   rx_avg = (1.0-gamma_h)*OBC%ry_old_h(i,J,k) + gamma_h*rx_new 	  
-    !   OBC%ry_old_h(i,J,k) = rx_avg	  
-    !	  h_new(i,J,k) = (h_old(i,J,k) + rx_avg*h_new(i,J+1,k)) / (1.0+rx_avg) !original	  
+    !   rx_avg = (1.0-gamma_h)*OBC%ry_old_h(i,J,k) + gamma_h*rx_new     
+    !   OBC%ry_old_h(i,J,k) = rx_avg    
+    !   h_new(i,J,k) = (h_old(i,J,k) + rx_avg*h_new(i,J+1,k)) / (1.0+rx_avg) !original    
       endif
 
     endif ; enddo ; enddo ; enddo      
