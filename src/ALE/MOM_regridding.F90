@@ -19,7 +19,7 @@ use PQM_functions, only : PQM_reconstruction, PQM_boundary_extrapolation_v1
 
 use P1M_functions, only : P1M_interpolation, P1M_boundary_extrapolation
 use P3M_functions, only : P3M_interpolation, P3M_boundary_extrapolation
-use MOM_remapping, only : remapping_core
+use MOM_remapping, only : remapping_core_w, remapping_core_h
 use MOM_remapping, only : remapping_CS
 use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
@@ -865,10 +865,10 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
         dx(1) = 0.
         dx(nz+1) = 0.
 
-        call remapping_core(remapCS, nz, h0, S_col, nz, dx, Tmp_col)
+        call remapping_core_w(remapCS, nz, h0, S_col, nz, dx, Tmp_col)
         S_col(:) = Tmp_col(:)
 
-        call remapping_core(remapCS, nz, h0, T_col, nz, dx, Tmp_col)
+        call remapping_core_w(remapCS, nz, h0, T_col, nz, dx, Tmp_col)
         T_col(:) = Tmp_col(:)
 
         ! Compute the deviation between two successive grids

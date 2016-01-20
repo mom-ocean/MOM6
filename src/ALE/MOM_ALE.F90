@@ -32,7 +32,8 @@ use MOM_regridding,       only : regridding_CS, set_regrid_params
 use MOM_regridding,       only : getCoordinateInterfaces, getCoordinateResolution
 use MOM_regridding,       only : getCoordinateUnits, getCoordinateShortName
 use MOM_regridding,       only : getStaticThickness, set_filter_depths
-use MOM_remapping,        only : initialize_remapping, remapping_core, end_remapping
+use MOM_remapping,        only : initialize_remapping, end_remapping
+use MOM_remapping,        only : remapping_core_h, remapping_core_w
 use MOM_remapping,        only : remappingSchemesDoc, remappingDefaultScheme
 use MOM_remapping,        only : remapDisableBoundaryExtrapolation
 use MOM_remapping,        only : remapEnableBoundaryExtrapolation
@@ -553,7 +554,7 @@ subroutine remapping_main(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u, v, de
             ! Build the start and final grids
             h1(:) = h(i,j,:)
             dx(:) = dxInterface(i,j,:)
-            call remapping_core(CS_remapping, nz, h1, Reg%Tr(m)%t(i,j,:), nz, dx, u_column)
+            call remapping_core_w(CS_remapping, nz, h1, Reg%Tr(m)%t(i,j,:), nz, dx, u_column)
 
             ! Intermediate steps for tendency of tracer concentration and tracer content.
             ! Note: do not merge the two if-tests, since do_tendency_diag(:) is not 
@@ -642,7 +643,7 @@ subroutine remapping_main(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u, v, de
           ! Build the start and final grids
           h1(:) = 0.5 * ( h(i,j,:) + h(i+1,j,:) )
           dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i+1,j,:) )
-          call remapping_core(CS_remapping, nz, h1, u(i,j,:), nz, dx, u_column)
+          call remapping_core_w(CS_remapping, nz, h1, u(i,j,:), nz, dx, u_column)
           u(i,j,:) = u_column(:)
         endif
       enddo
@@ -660,7 +661,7 @@ subroutine remapping_main(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u, v, de
           ! Build the start and final grids
           h1(:) = 0.5 * ( h(i,j,:) + h(i,j+1,:) )
           dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i,j+1,:) )
-          call remapping_core(CS_remapping, nz, h1, v(i,j,:), nz, dx, u_column)
+          call remapping_core_w(CS_remapping, nz, h1, v(i,j,:), nz, dx, u_column)
           v(i,j,:) = u_column(:)
         endif
       enddo
@@ -712,7 +713,7 @@ subroutine remap_scalar_h_to_h(CS, G, nk_src, h_src, s_src, h_dst, s_dst, all_ce
           s_dst(i,j,:) = 0.
         endif
         call dzFromH1H2( n_points, h_src(i,j,1:n_points), G%ke, h_dst(i,j,:), dx )
-        call remapping_core(CS, n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), G%ke, dx, s_dst(i,j,:))
+        call remapping_core_w(CS, n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), G%ke, dx, s_dst(i,j,:))
       else
         s_dst(i,j,:) = 0.
       endif

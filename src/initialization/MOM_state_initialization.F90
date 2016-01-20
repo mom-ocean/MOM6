@@ -67,8 +67,8 @@ use midas_vertmap, only : determine_temperature
 use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord
 use MOM_ALE, only : remap_scalar_h_to_h, regrid_only
 use MOM_regridding, only : regridding_CS, set_regrid_min_thickness
-use MOM_remapping, only : remapping_CS, remapping_core, initialize_remapping
-use MOM_remapping, only : dzFromH1H2, remapDisableBoundaryExtrapolation
+use MOM_remapping, only : remapping_CS, initialize_remapping
+use MOM_remapping, only : remapDisableBoundaryExtrapolation
 use MOM_tracer_initialization_from_Z, only : horiz_interp_and_extrap_tracer
 
 implicit none ; private

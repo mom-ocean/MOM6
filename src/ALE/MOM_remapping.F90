@@ -2,8 +2,7 @@
 module MOM_remapping
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-! Original module written by Laurent hite, 2008.06.09
+! Original module written by Laurent White, 2008.06.09
 
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_string_functions, only : uppercase
@@ -29,7 +28,7 @@ type, public :: remapping_CS
 end type
 
 ! The following routines are visible to the outside world
-public remapping_core
+public remapping_core_h, remapping_core_w
 public initialize_remapping, end_remapping
 public remapEnableBoundaryExtrapolation, remapDisableBoundaryExtrapolation
 public setReconstructionType
@@ -231,10 +230,33 @@ function isSignedSumErrSignificant(n1, maxTerm1, sum1, n2, maxTerm2, sum2)
   endif
 end function isSignedSumErrSignificant
 
+!> Remaps column of values u0 on grid h0 to grid h1
+!! assuming the top edge is aligned.
+subroutine remapping_core_h( n0, h0, u0, n1, h1, u1, CS )
+  integer,             intent(in)  :: n0 !< Number of cells on source grid
+  real, dimension(n0), intent(in)  :: h0 !< Cell widths on source grid
+  real, dimension(n0), intent(in)  :: u0 !< Cell averages on source grid
+  integer,             intent(in)  :: n1 !< Number of cells on target grid
+  real, dimension(n1), intent(in)  :: h1 !< Cell widths on target grid
+  real, dimension(n1), intent(out) :: u1 !< Cell averages on target grid
+  type(remapping_CS),  intent(in)  :: CS !< Remapping control structure
+  ! Local variables
+  integer :: iMethod
+  real, dimension(n0,2)           :: ppoly_r_E            !Edge value of polynomial
+  real, dimension(n0,2)           :: ppoly_r_S            !Edge slope of polynomial
+  real, dimension(n0,CS%degree+1) :: ppoly_r_coefficients !Coefficients of polynomial
+  integer :: remapping_scheme
+
+  call build_reconstructions_1d( n0, h0, u0, CS%remapping_scheme, CS%degree, CS%boundary_extrapolation, &
+                                   ppoly_r_coefficients, ppoly_r_E, ppoly_r_S, iMethod )
+
+  call remap_via_sub_cells( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients, n1, h1, iMethod, u1 )
+
+end subroutine remapping_core_h
 
 !> Remaps column of values u0 on grid h0 to implied grid h1
 !! where the interfaces of h1 differ from those of h0 by dx.
-subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
+subroutine remapping_core_w( CS, n0, h0, u0, n1, dx, u1 )
   type(remapping_CS),  intent(in)  :: CS !< Remapping control structure
   integer,             intent(in)  :: n0 !< Number of cells on source grid
   real, dimension(n0), intent(in)  :: h0 !< Cell widths on source grid
@@ -249,42 +271,65 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
   real, dimension(n0,CS%degree+1) :: ppoly_r_coefficients !Coefficients of polynomial
   integer :: remapping_scheme
 
-  iMethod = -999
+  call build_reconstructions_1d( n0, h0, u0, CS%remapping_scheme, CS%degree, CS%boundary_extrapolation, &
+                                   ppoly_r_coefficients, ppoly_r_E, ppoly_r_S, iMethod )
+
+  call remapByDeltaZ( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients, n1, dx, iMethod, u1 )
+! call remapByProjection( n0, h0, u0, CS%ppoly_r, n1, h1, iMethod, u1 )
+
+end subroutine remapping_core_w
+
+!> Creates polynomial reconstructions of u0 on the source grid h0.
+subroutine build_reconstructions_1d( n0, h0, u0, remapping_scheme, deg, boundary_extrapolation, &
+                                     ppoly_r_coefficients, ppoly_r_E, ppoly_r_S, iMethod )
+  integer,                  intent(in)  :: n0 !< Number of cells on source grid
+  real, dimension(n0),      intent(in)  :: h0 !< Cell widths on source grid
+  real, dimension(n0),      intent(in)  :: u0 !< Cell averages on source grid
+  integer,                  intent(in)  :: remapping_scheme !< Remapping scheme
+  integer,                  intent(in)  :: deg !< Degree of polynomial reconstruction
+  logical,                  intent(in)  :: boundary_extrapolation !< Extrapolate at boundaries if true
+  real, dimension(n0,deg+1),intent(out) :: ppoly_r_coefficients !< Coefficients of polynomial
+  real, dimension(n0,2),    intent(out) :: ppoly_r_E !< Edge value of polynomial
+  real, dimension(n0,2),    intent(out) :: ppoly_r_S !< Edge slope of polynomial
+  integer,                  intent(out) :: iMethod !< Integration method
+  ! Local variables
+  integer :: local_remapping_scheme
 
   ! Reset polynomial
   ppoly_r_E(:,:) = 0.0
   ppoly_r_S(:,:) = 0.0
   ppoly_r_coefficients(:,:) = 0.0
+  iMethod = -999
 
-  remapping_scheme = CS%remapping_scheme
+  local_remapping_scheme = remapping_scheme
   if (n0<=1) then
-    remapping_scheme = REMAPPING_PCM
+    local_remapping_scheme = REMAPPING_PCM
   elseif (n0<=3) then
-    remapping_scheme = min( remapping_scheme, REMAPPING_PLM )
+    local_remapping_scheme = min( local_remapping_scheme, REMAPPING_PLM )
   elseif (n0<=4) then
-    remapping_scheme = min( remapping_scheme, REMAPPING_PPM_H4 )
+    local_remapping_scheme = min( local_remapping_scheme, REMAPPING_PPM_H4 )
   endif
-  select case ( remapping_scheme )
+  select case ( local_remapping_scheme )
     case ( REMAPPING_PCM )
       call PCM_reconstruction( n0, u0, ppoly_r_E, ppoly_r_coefficients)
       iMethod = INTEGRATION_PCM
     case ( REMAPPING_PLM )
       call PLM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients )
-      if ( CS%boundary_extrapolation) then
+      if ( boundary_extrapolation) then
         call PLM_boundary_extrapolation( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients)
       end if
       iMethod = INTEGRATION_PLM
     case ( REMAPPING_PPM_H4 )
       call edge_values_explicit_h4( n0, h0, u0, ppoly_r_E )
       call PPM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients )
-      if ( CS%boundary_extrapolation) then
+      if ( boundary_extrapolation) then
         call PPM_boundary_extrapolation( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients )
       end if
       iMethod = INTEGRATION_PPM
     case ( REMAPPING_PPM_IH4 )
       call edge_values_implicit_h4( n0, h0, u0, ppoly_r_E )
       call PPM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients )
-      if ( CS%boundary_extrapolation) then
+      if ( boundary_extrapolation) then
         call PPM_boundary_extrapolation( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients )
       end if
       iMethod = INTEGRATION_PPM
@@ -292,7 +337,7 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
       call edge_values_implicit_h4( n0, h0, u0, ppoly_r_E )
       call edge_slopes_implicit_h3( n0, h0, u0, ppoly_r_S )
       call PQM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_S, ppoly_r_coefficients )
-      if ( CS%boundary_extrapolation) then
+      if ( boundary_extrapolation) then
         call PQM_boundary_extrapolation_v1( n0, h0, u0, ppoly_r_E, ppoly_r_S, ppoly_r_coefficients )
       end if
       iMethod = INTEGRATION_PQM
@@ -300,19 +345,16 @@ subroutine remapping_core( CS, n0, h0, u0, n1, dx, u1 )
       call edge_values_implicit_h6( n0, h0, u0, ppoly_r_E )
       call edge_slopes_implicit_h5( n0, h0, u0, ppoly_r_S )
       call PQM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_S, ppoly_r_coefficients )
-      if ( CS%boundary_extrapolation) then
+      if ( boundary_extrapolation) then
         call PQM_boundary_extrapolation_v1( n0, h0, u0, ppoly_r_E, ppoly_r_S, ppoly_r_coefficients )
       end if
       iMethod = INTEGRATION_PQM
     case default
-      call MOM_error( FATAL, 'MOM_remapping, remapping_core: '//&
+      call MOM_error( FATAL, 'MOM_remapping, build_reconstructions_1d: '//&
            'The selected remapping method is invalid' )
   end select
 
-  call remapByDeltaZ( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients, n1, dx, iMethod, u1 )
-! call remapByProjection( n0, h0, u0, CS%ppoly_r, n1, h1, iMethod, u1 )
-
-end subroutine remapping_core
+end subroutine build_reconstructions_1d
 
 !> Remaps column of n0 values u0 on grid h0 to grid h1 with n1 cells by calculating
 !! the n0+n1+1 sub-integrals of the intersection of h0 and h1, and the summing the
@@ -1123,14 +1165,14 @@ logical function remappingUnitTests()
   call dumpGrid(n0,h0,x0,u0)
 
   call dzFromH1H2( n0, h0, n1, h1, dx1 )
-  call remapping_core( CS, n0, h0, u0, n1, dx1, u1 )
+  call remapping_core_w( CS, n0, h0, u0, n1, dx1, u1 )
   do i=1,n1
     err=u1(i)-8.*(0.5*real(1+n1)-real(i))
     if (abs(err)>real(n1-1)*epsilon(err)) thisTest = .true.
   enddo
   write(*,*) 'h1 (by projection)'
   call dumpGrid(n1,h1,x1,u1)
-  if (thisTest) write(*,*) 'remappingUnitTests: Failed remapping_core()'
+  if (thisTest) write(*,*) 'remappingUnitTests: Failed remapping_core_w()'
   remappingUnitTests = remappingUnitTests .or. thisTest
 
   thisTest = .false.

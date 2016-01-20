@@ -37,7 +37,8 @@ use MOM_string_functions, only : extractWord
 use MOM_safe_alloc,       only : safe_alloc_ptr, safe_alloc_alloc
 use MOM_string_functions, only : lowercase
 use MOM_time_manager,     only : time_type
-use MOM_remapping,        only : remapping_CS, remapping_core, initialize_remapping, dzFromH1H2
+use MOM_remapping,        only : remapping_CS, initialize_remapping, dzFromH1H2
+use MOM_remapping,        only : remapping_core_w
 use MOM_regridding,       only : regridding_CS, initialize_regridding, setCoordinateResolution
 use MOM_regridding,       only : build_zstar_column, set_regrid_min_thickness
 
@@ -710,7 +711,7 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
         h_dest(:) = diag_cs%zi_u(i, j, 2:) - diag_cs%zi_u(i, j, :size(diag_cs%zi_u, 3)-1)
         h_src(:) = 0.5 * (diag_cs%h(i,j,:) + diag_cs%h(i+1,j,:))
         call dzFromH1H2(nz_src, h_src(:), nz_dest, h_dest(:), dz)
-        call remapping_core(diag_cs%remap_cs, nz_src, h_src(:), &
+        call remapping_core_w(diag_cs%remap_cs, nz_src, h_src(:), &
                       field(i, j, :), nz_dest, dz, remapped_field(i, j, :))
 
         ! Lower levels of the remapped data get squashed to follow bathymetry.
@@ -734,7 +735,7 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
         h_dest(:) = diag_cs%zi_v(i, j, 2:) - diag_cs%zi_v(i, j, :size(diag_cs%zi_v, 3)-1)
         h_src(:) = 0.5 * (diag_cs%h(i,j,:) + diag_cs%h(i,j+1,:))
         call dzFromH1H2(nz_src, h_src(:), nz_dest, h_dest(:), dz)
-        call remapping_core(diag_cs%remap_cs, nz_src, h_src(:), &
+        call remapping_core_w(diag_cs%remap_cs, nz_src, h_src(:), &
                       field(i, j, :), nz_dest, dz, remapped_field(i, j, :))
         do k=1, nz_dest
           if (diag_cs%zi_remap(k) >= diag_cs%G%bathyT(i, j)) then
@@ -752,7 +753,7 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
         endif
         h_dest(:) = diag_cs%zi_T(i, j, 2:) - diag_cs%zi_T(i, j, :size(diag_cs%zi_T, 3)-1)
         call dzFromH1H2(nz_src, diag_cs%h(i, j, :), nz_dest, h_dest(:), dz)
-        call remapping_core(diag_cs%remap_cs, nz_src, diag_cs%h(i, j, :), &
+        call remapping_core_w(diag_cs%remap_cs, nz_src, diag_cs%h(i, j, :), &
                       field(i, j, :), nz_dest, dz, remapped_field(i, j, :))
         do k=1, nz_dest
           if (diag_cs%zi_remap(k) >= diag_cs%G%bathyT(i, j)) then
