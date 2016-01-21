@@ -348,7 +348,9 @@ subroutine ALE_main( G, h, u, v, tv, Reg, CS, dt)
   real,                          optional, intent(in)    :: dt  !< Time step between calls to ALE_main()
 
   ! Local variables
-  integer :: nk, i, j, k, isd, ied, jsd, jed
+  integer :: nk, i, j, k, isc, iec, jsc, jec
+
+  nk = G%ke; isc = G%isc; iec = G%iec; jsc = G%jsc; jec = G%jec
 
   if (CS%show_call_tree) call callTree_enter("ALE_main(), MOM_ALE.F90")
 
@@ -371,12 +373,11 @@ subroutine ALE_main( G, h, u, v, tv, Reg, CS, dt)
 
   ! Override old grid with new one. The new grid 'h_new' is built in
   ! one of the 'build_...' routines above.
-  nk = G%ke; isd = G%isd; ied = G%ied; jsd = G%jsd; jed = G%jed
 !$OMP parallel do default(none) shared(isd,ied,jsd,jed,nk,h,CS)
   do k = 1,nk
-    do j = jsd,jed ; do i = isd,ied
+    do j = jsc-1,jec+1 ; do i = isc-1,iec+1
       h(i,j,k) = h(i,j,k) + ( CS%dzRegrid(i,j,k) - CS%dzRegrid(i,j,k+1) )
-     enddo ; enddo
+    enddo ; enddo
   enddo
 
   if (CS%show_call_tree) call callTree_leave("ALE_main()")
@@ -570,13 +571,13 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u,
   if ( present(u) ) then
 !$OMP do
     do j = G%jsc,G%jec
-      do i = G%iscB,G%iecB
+      do I = G%iscB,G%iecB
         if (G%mask2dCu(i,j)>0.) then
           ! Build the start and final grids
           h1(:) = 0.5 * ( h(i,j,:) + h(i+1,j,:) )
           dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i+1,j,:) )
-          call remapping_core_w(CS_remapping, nz, h1, u(i,j,:), nz, dx, u_column)
-          u(i,j,:) = u_column(:)
+          call remapping_core_w(CS_remapping, nz, h1, u(I,j,:), nz, dx, u_column)
+          u(I,j,:) = u_column(:)
         endif
       enddo
     enddo
@@ -587,21 +588,21 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u,
   ! Remap v velocity component
   if ( present(v) ) then
 !$OMP do
-    do j = G%jscB,G%jecB
+    do J = G%jscB,G%jecB
       do i = G%isc,G%iec
         if (G%mask2dCv(i,j)>0.) then
           ! Build the start and final grids
           h1(:) = 0.5 * ( h(i,j,:) + h(i,j+1,:) )
           dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i,j+1,:) )
-          call remapping_core_w(CS_remapping, nz, h1, v(i,j,:), nz, dx, u_column)
-          v(i,j,:) = u_column(:)
+          call remapping_core_w(CS_remapping, nz, h1, v(i,J,:), nz, dx, u_column)
+          v(i,J,:) = u_column(:)
         endif
       enddo
     enddo
   endif
 !$OMP end parallel
 
-  if (show_call_tree) call callTree_waypoint("u remapped (remap_all_state_vars)")
+  if (show_call_tree) call callTree_waypoint("v remapped (remap_all_state_vars)")
   if (show_call_tree) call callTree_leave("remap_all_state_vars()")
 
 end subroutine remap_all_state_vars
