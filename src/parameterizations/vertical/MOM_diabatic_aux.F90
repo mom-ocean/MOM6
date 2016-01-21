@@ -112,6 +112,12 @@ type, public :: diabatic_aux_CS ; private
                              !! freezing temperature when making frazil.  The
                              !! default is false, which will be faster but is
                              !! inappropriate with ice-shelf cavities.
+  logical :: use_river_heat_content !< If true, assumes that ice-ocean boundary
+                             !! has provided a river heat content. Otherwise, runoff
+                             !! is added with a temperature of the local SST.
+  logical :: use_calving_heat_content !< If true, assumes that ice-ocean boundary
+                             !! has provided a calving heat content. Otherwise, calving
+                             !! is added with a temperature of the local SST.
 
   type(diag_ctrl), pointer :: diag !< Structure used to regulate timing of diagnostic output
 
@@ -828,7 +834,6 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
   real    :: Temp_in, Salin_in
   real    :: I_G_Earth, g_Hconv2
   logical :: calculate_energetics
-  logical :: use_riverHeatContent, useCalvingHeatContent ! smg: obsolete logicals
   integer :: i, j, is, ie, js, je, k, nz, n, nsw
   character(len=45) :: mesg
 
@@ -840,14 +845,6 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
 #define _OLD_ALG_
   nsw = optics%nbands
   Idt = 1.0/dt
-
-!old alg:
-#ifdef _OLD_ALG_
-  use_riverHeatContent = .false.              ! ?????????????????
-  useCalvingHeatContent = .false.             ! ?????????????????
-#else
-!new alg needs settings???
-#endif
 
   calculate_energetics = (present(cTKE) .and. present(dSV_dT) .and. present(dSV_dS))
   I_G_Earth = 1.0 / G%G_earth
@@ -867,8 +864,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
   numberOfGroundings = 0
 
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,h,tv,nsw,G,optics,fluxes,dt,       &
-!$OMP                                  H_limit_fluxes,use_riverHeatContent,              &
-!$OMP                                  useCalvingHeatContent,ea,IforcingDepthScale,      &
+!$OMP                                  H_limit_fluxes,ea,IforcingDepthScale,             &
 !$OMP                                  numberOfGroundings,iGround,jGround,nonPenSW,      &
 !$OMP                                  hGrounding,CS,Idt,aggregate_FW_forcing,           &
 !$OMP                                  calculate_energetics,dSV_dT,dSV_dS,cTKE,g_Hconv2) &
@@ -927,9 +923,9 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
     !                enters to the ocean and participates in pentrative SW heating.
     ! nonpenSW     = non-downwelling SW flux, which is absorbed in ocean surface 
     !                (in tandem w/ LW,SENS,LAT); saved only for diagnostic purposes.  
-    call extractFluxes1d(G, fluxes, optics, nsw, j, dt,                        &
-                  H_limit_fluxes, use_riverHeatContent, useCalvingHeatContent, &
-                  h2d, T2d, netMassInOut, netMassOut, netHeat, netSalt, &
+    call extractFluxes1d(G, fluxes, optics, nsw, j, dt,                                   &
+                  H_limit_fluxes, CS%use_river_heat_content, CS%use_calving_heat_content, &
+                  h2d, T2d, netMassInOut, netMassOut, netHeat, netSalt,                   &
                   Pen_SW_bnd, tv, aggregate_FW_forcing, nonpenSW)
 
     ! ea is for passive tracers
@@ -1257,6 +1253,19 @@ subroutine diabatic_aux_init(Time, G, param_file, diag, CS, use_ePBL)
                  "The depth to which rivers are mixed if DO_RIVERMIX is \n"//&
                  "defined.", units="m", default=0.0)
   else ; CS%do_rivermix = .false. ; CS%rivermix_depth = 0.0 ; endif
+  if (G%nkml == 0) then
+    call get_param(param_file, mod, "USE_RIVER_HEAT_CONTENT", CS%use_river_heat_content, &
+                   "If true, use the fluxes%runoff_Hflx field to set the \n"//&
+                   "heat carried by runoff, instead of using SST*CP*liq_runoff.", &
+                   default=.false.)
+    call get_param(param_file, mod, "USE_CALVING_HEAT_CONTENT", CS%use_calving_heat_content, &
+                   "If true, use the fluxes%calving_Hflx field to set the \n"//&
+                   "heat carried by runoff, instead of using SST*CP*froz_runoff.", &
+                   default=.false.)
+  else
+    CS%use_river_heat_content = .false.
+    CS%use_calving_heat_content = .false.
+  endif
 
   CS%id_createdH = register_diag_field('ocean_model',"created_H",diag%axesT1, &
       Time, "The volume flux added to stop the ocean from drying out and becoming negative in depth", &

@@ -411,7 +411,8 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
        net_heat(i) = net_heat(i) + (scale * (dt * J_m2_to_H)) * fluxes%heat_restore(i,j)
     endif
 
-! smg: old code
+    ! Add explicit heat flux for runoff (which is part of the ice-ocean boundary
+    ! flux type). Runoff is otherwise added with a temperature of SST.
     if (useRiverHeatContent) then
       ! remove lrunoff*SST here, to counteract its addition elsewhere
       net_heat(i) = (net_heat(i) + (scale*(dt*J_m2_to_H)) * fluxes%heat_content_lrunoff(i,j)) - &
@@ -422,7 +423,8 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
       endif
     endif
 
-! smg: old code
+    ! Add explicit heat flux for calving (which is part of the ice-ocean boundary
+    ! flux type). Calving is otherwise added with a temperature of SST.
     if (useCalvingHeatContent) then
       ! remove frunoff*SST here, to counteract its addition elsewhere
       net_heat(i) = net_heat(i) + (scale*(dt*J_m2_to_H)) * fluxes%heat_content_frunoff(i,j) - &
