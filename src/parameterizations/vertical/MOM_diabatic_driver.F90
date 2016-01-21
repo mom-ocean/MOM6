@@ -92,7 +92,7 @@ type, public :: diabatic_CS ; private
                                      !! for internal tide for testing (BDM)
   integer :: tlen_days               !< Time interval from start for adding wave source
                                      !! for testing internal tides (BDM)
-  logical :: uniform_cg	             !< If true, set cg = cg_test everywhere 
+  logical :: uniform_cg              !< If true, set cg = cg_test everywhere 
                                      !! for testing internal tides (BDM)
   real    :: cg_test                 !< Uniform group velocity of internal tide 
                                      !! for testing internal tides (BDM)

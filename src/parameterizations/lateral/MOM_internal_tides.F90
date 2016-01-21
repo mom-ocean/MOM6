@@ -93,7 +93,7 @@ type, public :: int_tide_CS ; private
                              ! numbers.  Without aggress_adjust, the default is
                              ! false; it is always true with.
   logical :: use_PPMang      ! If true, use PPM for advection of energy in
-			                       ! angular space.
+                             ! angular space.
 
   real, allocatable, dimension(:,:) :: refl_angle
                         ! local coastline/ridge/shelf angles read from file
@@ -813,7 +813,7 @@ subroutine refract(En, cn, freq, dt, G, NAngle, use_PPMang)
   real, dimension(G%isd:G%ied,G%jsd:G%jed),        intent(in)    :: cn
   real,                   intent(in)    :: freq
   real,                   intent(in)    :: dt
-  logical,  	            intent(in)    :: use_PPMang
+  logical,                intent(in)    :: use_PPMang
   !  This subroutine does refraction on the internal waves at a single frequency.
 
   ! Arguments: 
