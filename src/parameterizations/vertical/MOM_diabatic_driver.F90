@@ -55,7 +55,7 @@ use MOM_variables,           only : thermo_var_ptrs, vertvisc_type, accel_diag_p
 use MOM_variables,           only : cont_diag_ptrs, MOM_thermovar_chksum, p3d
 use MOM_regularize_layers,   only : regularize_layers, regularize_layers_init, regularize_layers_CS
 use time_manager_mod,        only : increment_time ! for testing itides (BDM)
-use MOM_wave_speed,          only : wave_speed
+use MOM_wave_speed,          only : wave_speeds
 
 implicit none ; private
 
@@ -83,7 +83,7 @@ type, public :: diabatic_CS ; private
   logical :: use_geothermal          !< If true, apply geothermal heating.
   logical :: use_int_tides           !< If true, use the code that advances a separate set
                                      !! of equations for the internal tide energy density.
-  integer :: nMode                   !< Number of baroclinic modes to consider
+  integer :: nMode = 1               !< Number of baroclinic modes to consider
   logical :: int_tide_source_test    !< If true, apply an arbitrary generation site 
                                      !! for internal tide testing (BDM) 
   real    :: int_tide_source_x       !< X Location of generation site 
@@ -491,29 +491,27 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
        ! SET TO CONSTANT VALUE TO TEST PROPAGATE CODE
        do m=1,CS%nMode ; cn(:,:,m) = CS%cg_test ; enddo
     else
-       ! CALCULATE cn OR OVERRIDE WITH HARD-CODED DISTRIBUTION
-       !print *, "ddriver call wave_speed with CS%nMode=", CS%nMode ! delete later - BDM
-       call wave_speed(h, tv, G, CS%nMode, cn, full_halos=.true.)
-       !print *, "ddriver wave_speed called" ; stop ! delete later - BDM
-       ! uncomment below for hard-coded cn that changes linearly with latitude
-       !do j=G%jsd,G%jed        
-       !  cn(:,j,:) = ((7.-1.)/14000000.)*G%geoLatBu(:,j) + (1.-((7.-1.)/14000000.)*-7000000.)
-       !enddo
+       call wave_speeds(h, tv, G, CS%nMode, cn, full_halos=.true.)
+       ! uncomment the lines below for a hard-coded cn that changes linearly with latitude
+       !do j=G%jsd,G%jed ; do i=G%isd,G%ied      
+       !  cn(i,j,:) = ((7.-1.)/14000000.)*G%geoLatBu(i,j) + (1.-((7.-1.)/14000000.)*-7000000.)
+       !enddo ; enddo
     endif
 
     if (CS%int_tide_source_test) then
       ! BUILD 2D ARRAY WITH POINT SOURCE FOR TESTING
+      !  This block of code should be moved into set_int_tide_input. -RWH
       TKE_itidal_input_test(:,:) = 0.0
       avg_enabled = query_averaging_enabled(CS%diag,time_end=CS%time_end)
       if (CS%time_end <= CS%time_max_source) then
-        do j=G%jsc,G%jec; do i=G%isc,G%iec
+        do j=G%jsc,G%jec ; do i=G%isc,G%iec
          ig = G%isd_global + i - 1.0
          jg = G%jsd_global + j - 1.0
          !INPUT ARBITRARY ENERGY POINT SOURCE
          if (ig .eq. CS%int_tide_source_x .and. jg .eq. CS%int_tide_source_y) then
              TKE_itidal_input_test(i,j) = 1.0
         endif
-        enddo; enddo
+        enddo ; enddo
       endif
       ! CALL ROUTINE USING PRESCRIBED KE FOR TESTING
       call propagate_int_tide(h, tv, cn, TKE_itidal_input_test, &
@@ -1365,10 +1363,12 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   if (CS%id_Tadv > 0) call post_data(CS%id_Tadv, Tadv_flx, CS%diag)
   if (CS%id_Sdif > 0) call post_data(CS%id_Sdif, Sdif_flx, CS%diag)
   if (CS%id_Sadv > 0) call post_data(CS%id_Sadv, Sadv_flx, CS%diag)
-  if (CS%id_cg1  > 0) call post_data(CS%id_cg1,  cn(:,:,1),CS%diag)
-  do m=1,CS%nMode
-    if (CS%id_cn(m) > 0) call post_data(CS%id_cn(m),cn(:,:,m),CS%diag)
-  enddo
+  if (CS%use_int_tides) then
+    if (CS%id_cg1 > 0) call post_data(CS%id_cg1, cn(:,:,1),CS%diag)
+    do m=1,CS%nMode
+      if (CS%id_cn(m) > 0) call post_data(CS%id_cn(m),cn(:,:,m),CS%diag)
+    enddo
+  endif
   
   num_z_diags = 0
   if (CS%id_Kd_z > 0) then
@@ -1767,11 +1767,14 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   call get_param(param_file, mod, "INTERNAL_TIDES", CS%use_int_tides, &
                  "If true, use the code that advances a separate set of \n"//&
                  "equations for the internal tide energy density.", default=.false.)
+  CS%nMode = 1
   if (CS%use_int_tides) then
     ! SET NUMBER OF MODES TO CONSIDER
-    num_mode = 1
-    call read_param(param_file, "INTERNAL_TIDE_MODES", num_mode)
-    CS%nMode = num_mode
+    call get_param(param_file, mod, "INTERNAL_TIDE_MODES", CS%nMode, &
+                 "The number of distinct internal tide modes \n"//&
+                 "that will be calculated.", default=1, do_not_log=.true.)
+                 
+    ! The following parameters are used in testing the internal tide code.
     ! GET LOCATION AND DURATION OF ENERGY POINT SOURCE FOR TESTING (BDM)
     call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_TEST", CS%int_tide_source_test, &
                  "If true, apply an arbitrary generation site for internal tide testing", &
@@ -1794,6 +1797,7 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
                  "Uniform group velocity of internal tide for test case", default=1.)
     endif
   endif
+
   call get_param(param_file, mod, "MASSLESS_MATCH_TARGETS", &
                                 CS%massless_match_targets, &
                  "If true, the temperature and salinity of massless layers \n"//&
@@ -1832,9 +1836,7 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
                  "over the same distance.", units="m2 s-1", default=0.)
   endif
 
-
-  ! set up the diagnostics 
-
+  ! Register all available diagnostics for this module.
   if (G%Boussinesq) then ; thickness_units = "meter"
   else ; thickness_units = "kilogram meter-2" ; endif
 
@@ -1848,16 +1850,18 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
       'Meridional Acceleration from Diapycnal Mixing', 'meter second-2')
   CS%id_wd = register_diag_field('ocean_model','wd',diag%axesTi,Time, &
       'Diapycnal Velocity', 'meter second-1')
-  CS%id_cg1 = register_diag_field('ocean_model','cn1', diag%axesT1, &
+  if (CS%use_int_tides) then
+    CS%id_cg1 = register_diag_field('ocean_model','cn1', diag%axesT1, &
                  Time, 'First baroclinic mode (eigen) speed', 'm s-1')
-  allocate(CS%id_cn(CS%nMode)) ; CS%id_cn(:) = -1
-  do m=1,CS%nMode
-    write(var_name, '("cn_mode",i1)') m
-    write(var_descript, '("Baroclinic (eigen) speed of mode ",i1)') m
-    CS%id_cn(m) = register_diag_field('ocean_model',var_name, diag%axesT1, &
-                 Time, var_descript, 'm s-1')
-    call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
-  enddo
+    allocate(CS%id_cn(CS%nMode)) ; CS%id_cn(:) = -1
+    do m=1,CS%nMode
+      write(var_name, '("cn_mode",i1)') m
+      write(var_descript, '("Baroclinic (eigen) speed of mode ",i1)') m
+      CS%id_cn(m) = register_diag_field('ocean_model',var_name, diag%axesT1, &
+                   Time, var_descript, 'm s-1')
+      call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
+    enddo
+  endif
 
   CS%id_Tdif = register_diag_field('ocean_model',"Tflx_dia_diff",diag%axesTi, &
       Time, "Diffusive diapycnal temperature flux across interfaces", &
