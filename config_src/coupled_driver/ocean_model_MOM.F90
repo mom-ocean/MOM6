@@ -300,7 +300,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
 !  call convert_state_to_ocean_type(state, Ocean_sfc, OS%grid)
 
   call close_param_file(param_file)
-  call diag_mediator_close_registration()
+  call diag_mediator_close_registration(OS%MOM_CSp%diag)
  
   if (is_root_pe()) &
     write(*,'(/12x,a/)') '======== COMPLETED MOM INITIALIZATION ========'

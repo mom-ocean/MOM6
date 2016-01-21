@@ -104,6 +104,8 @@ end type diag_type
 ! The following data type a list of diagnostic fields an their variants,
 ! as well as variables that control the handling of model output.
 type, public :: diag_ctrl
+  integer :: doc_unit = -1 ! The unit number of a diagnostic documentation file.
+                           ! This file is open if doc_unit is > 0.
 
 ! The following fields are used for the output of the data.
   integer :: is, ie, js, je
@@ -174,8 +176,6 @@ type, public :: diag_ctrl
 #endif
 
 end type diag_ctrl
-
-integer :: doc_unit = -1
 
 contains
 
@@ -1152,18 +1152,18 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
   endif
 
   ! Document diagnostics in list of available diagnostics
-  if (is_root_pe() .and. doc_unit > 0) then
-    call log_available_diag(associated(diag), module_name, field_name, &
+  if (is_root_pe() .and. diag_CS%doc_unit > 0) then
+    call log_available_diag(associated(diag), module_name, field_name, diag_CS, &
                             long_name, units, standard_name)
     if (present(cmor_field_name)) then
       call log_available_diag(associated(cmor_diag), module_name, cmor_field_name, &
-                              posted_cmor_long_name, posted_cmor_units, &
+                              diag_CS, posted_cmor_long_name, posted_cmor_units, &
                               posted_cmor_standard_name)
     endif
     if (is_layer_axes(axes, diag_cs) .and. (.not. is_B_axes(axes, diag_cs)) &
         .and. axes%rank == 3) then
       call log_available_diag(associated(z_remap_diag), module_name//'_z_new', field_name, &
-                              long_name, units, standard_name)
+                              diag_CS, long_name, units, standard_name)
     endif
   endif
 
@@ -1261,12 +1261,12 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
   endif
 
   ! Document diagnostics in list of available diagnostics
-  if (is_root_pe() .and. doc_unit > 0) then
-    call log_available_diag(associated(diag), module_name, field_name, &
+  if (is_root_pe() .and. diag_CS%doc_unit > 0) then
+    call log_available_diag(associated(diag), module_name, field_name, diag_CS, &
                             long_name, units, standard_name)
     if (present(cmor_field_name)) then
       call log_available_diag(associated(cmor_diag), module_name, cmor_field_name, &
-                              posted_cmor_long_name, posted_cmor_units, &
+                              diag_CS, posted_cmor_long_name, posted_cmor_units, &
                               posted_cmor_standard_name)
     endif
   endif
@@ -1366,12 +1366,12 @@ function register_static_field(module_name, field_name, axes, &
   endif
 
   ! Document diagnostics in list of available diagnostics
-  if (is_root_pe() .and. doc_unit > 0) then
-    call log_available_diag(associated(diag), module_name, field_name, &
+  if (is_root_pe() .and. diag_CS%doc_unit > 0) then
+    call log_available_diag(associated(diag), module_name, field_name, diag_CS, &
                             long_name, units, standard_name)
     if (present(cmor_field_name)) then
       call log_available_diag(associated(cmor_diag), module_name, cmor_field_name, &
-                              posted_cmor_long_name, posted_cmor_units, &
+                              diag_CS, posted_cmor_long_name, posted_cmor_units, &
                               posted_cmor_standard_name)
     endif
   endif
@@ -1380,8 +1380,9 @@ function register_static_field(module_name, field_name, axes, &
 
 end function register_static_field
 
-subroutine describe_option(opt_name, value)
+subroutine describe_option(opt_name, value, diag_CS)
   character(len=*), intent(in) :: opt_name, value
+  type(diag_ctrl), intent(in) :: diag_CS
 
   character(len=240) :: mesg
   integer :: len_ind
@@ -1389,17 +1390,17 @@ subroutine describe_option(opt_name, value)
   len_ind = len_trim(value)  ! Add error handling for long values?
 
   mesg = "    ! "//trim(opt_name)//": "//trim(value)
-  write(doc_unit, '(a)') trim(mesg)
+  write(diag_CS%doc_unit, '(a)') trim(mesg)
 end subroutine describe_option
 
 !> Registers a diagnostic using the information encapsulated in the vardesc
 !! type argument and returns an integer handle to this diagostic.  That
 !! integer handle is negative if the diagnostic is unused.
-function ocean_register_diag(var_desc, G, diag_cs, day)
+function ocean_register_diag(var_desc, G, diag_CS, day)
   integer :: ocean_register_diag  !< An integer handle to this diagnostic.
   type(vardesc),         intent(in) :: var_desc !< The vardesc type describing the diagnostic
   type(ocean_grid_type), intent(in) :: G        !< The ocean's grid type
-  type(diag_ctrl),       intent(in) :: diag_cs  !< The diagnotic control structure
+  type(diag_ctrl),       intent(in) :: diag_CS  !< The diagnotic control structure
   type(time_type),       intent(in) :: day      !< The current model time
 
   character(len=64) :: var_name         ! A variable's name.
@@ -1498,19 +1499,20 @@ function ocean_register_diag(var_desc, G, diag_cs, day)
 
 end function ocean_register_diag
 
-subroutine diag_mediator_init(G, param_file, diag_cs, err_msg)
+subroutine diag_mediator_init(G, param_file, diag_cs, err_msg, doc_file_dir)
   type(ocean_grid_type), target, intent(inout) :: G
   type(param_file_type),      intent(in)    :: param_file
   type(diag_ctrl),            intent(inout) :: diag_cs
   character(len=*), optional, intent(out)   :: err_msg
+  character(len=*), optional, intent(in)    :: doc_file_dir
 
   ! This subroutine initializes the diag_mediator and the diag_manager.
   ! The grid type should have its dimensions set by this point, but it
   ! is not necessary that the metrics and axis labels be set up yet.
-  integer :: ios, i
+  integer :: ios, i, new_unit
   logical :: opened, new_file
   character(len=8)   :: this_pe
-  character(len=240) :: doc_file, doc_file_dflt
+  character(len=240) :: doc_file, doc_file_dflt, doc_path
   character(len=40)  :: mod  = "MOM_diag_mediator" ! This module's name.
 
   call diag_manager_init(err_msg=err_msg)
@@ -1544,34 +1546,40 @@ subroutine diag_mediator_init(G, param_file, diag_cs, err_msg)
   diag_cs%isd = G%isd ; diag_cs%ied = G%ied
   diag_cs%jsd = G%jsd ; diag_cs%jed = G%jed
 
-  if (is_root_pe()) then
+  if (is_root_pe() .and. (diag_CS%doc_unit < 0)) then
     write(this_pe,'(i6.6)') PE_here()
     doc_file_dflt = "available_diags."//this_pe
     call get_param(param_file, mod, "AVAILABLE_DIAGS_FILE", doc_file, &
                  "A file into which to write a list of all available \n"//&
                  "ocean diagnostics that can be included in a diag_table.", &
-                 default=doc_file_dflt)
+                 default=doc_file_dflt, do_not_log=(diag_CS%doc_unit/=-1))
     if (len_trim(doc_file) > 0) then
-      new_file = .true. ; if (doc_unit /= -1) new_file = .false.
+      new_file = .true. ; if (diag_CS%doc_unit /= -1) new_file = .false.
     ! Find an unused unit number.
-      do doc_unit=512,42,-1
-        inquire( doc_unit, opened=opened)
+      do new_unit=512,42,-1
+        inquire( new_unit, opened=opened)
         if (.not.opened) exit
       enddo
-
       if (opened) call MOM_error(FATAL, &
           "diag_mediator_init failed to find an unused unit number.")
 
+      doc_path = doc_file
+      if (present(doc_file_dir)) then ; if (len_trim(doc_file_dir) > 0) then
+        doc_path = trim(slasher(doc_file_dir))//trim(doc_file)
+      endif ; endif
+
+      diag_CS%doc_unit = new_unit
+
       if (new_file) then
-        open(doc_unit, file=trim(doc_file), access='SEQUENTIAL', form='FORMATTED', &
+        open(diag_CS%doc_unit, file=trim(doc_path), access='SEQUENTIAL', form='FORMATTED', &
              action='WRITE', status='REPLACE', iostat=ios)
       else ! This file is being reopened, and should be appended.
-        open(doc_unit, file=trim(doc_file), access='SEQUENTIAL', form='FORMATTED', &
+        open(diag_CS%doc_unit, file=trim(doc_path), access='SEQUENTIAL', form='FORMATTED', &
              action='WRITE', status='OLD', position='APPEND', iostat=ios)
       endif
-      inquire(doc_unit, opened=opened)
+      inquire(diag_CS%doc_unit, opened=opened)
       if ((.not.opened) .or. (ios /= 0)) then
-        call MOM_error(FATAL, "Failed to open available diags file "//trim(doc_file)//".")
+        call MOM_error(FATAL, "Failed to open available diags file "//trim(doc_path)//".")
       endif
     endif
   endif
@@ -1628,21 +1636,22 @@ subroutine diag_masks_set(G, missing_value, diag_cs)
 
 end subroutine diag_masks_set
 
-subroutine diag_mediator_close_registration()
+subroutine diag_mediator_close_registration(diag_CS)
+  type(diag_ctrl), intent(inout) :: diag_CS
 
-  if (doc_unit > -1) then
-    close(doc_unit) ; doc_unit = -2
+  if (diag_CS%doc_unit > -1) then
+    close(diag_CS%doc_unit) ; diag_CS%doc_unit = -2
   endif
 
 end subroutine diag_mediator_close_registration
 
-subroutine diag_mediator_end(time, diag_cs, end_diag_manager)
+subroutine diag_mediator_end(time, diag_CS, end_diag_manager)
   type(time_type),   intent(in)  :: time
   type(diag_ctrl), intent(inout) :: diag_cs
   logical, optional, intent(in)  :: end_diag_manager !< If true, call diag_manager_end()
 
-  if (doc_unit > -1) then
-    close(doc_unit) ; doc_unit = -3
+  if (diag_CS%doc_unit > -1) then
+    close(diag_CS%doc_unit) ; diag_CS%doc_unit = -3
   endif
 
   deallocate(diag_cs%diags)
@@ -1902,10 +1911,12 @@ subroutine alloc_diag_with_id(diag_id, diag_cs, diag)
 end subroutine alloc_diag_with_id
 
 ! Log a diagnostic to the available diagnostics file.
-subroutine log_available_diag(used, module_name, field_name, long_name, units, standard_name)
+subroutine log_available_diag(used, module_name, field_name, diag_CS, &
+                              long_name, units, standard_name)
 
   logical,          intent(in) :: used
   character(len=*), intent(in) :: module_name, field_name
+  type(diag_ctrl),  intent(in) :: diag_CS  ! < The diagnotic control structure
   character(len=*), optional, intent(in) :: long_name, units, standard_name
   character(len=240) :: mesg
 
@@ -1913,6 +1924,7 @@ subroutine log_available_diag(used, module_name, field_name, long_name, units, s
   !  (in)      used - whether or not this diagnostic is being used, i.e. appears in the diag_table
   !  (in)      module_name   - name of this module, usually "ocean_model" or "ice_shelf_model".
   !  (in)      field_name    - name of the diagnostic field
+  !  (in)      diag_CS       - the diagnostic control structure
   !  (in,opt)  long_name     - long name of a field
   !  (in,opt)  units         - units of a field
   !  (in,opt)  standard_name - standardized name associated with a field
@@ -1922,10 +1934,11 @@ subroutine log_available_diag(used, module_name, field_name, long_name, units, s
   else
     mesg = '"'//trim(module_name)//'", "'//trim(field_name)//'"  [Unused]'
   endif
-  write(doc_unit, '(a)') trim(mesg)
-  if (present(long_name)) call describe_option("long_name", long_name)
-  if (present(units)) call describe_option("units", units)
-  if (present(standard_name)) call describe_option("standard_name", standard_name)
+  write(diag_CS%doc_unit, '(a)') trim(mesg)
+  if (present(long_name)) call describe_option("long_name", long_name, diag_CS)
+  if (present(units)) call describe_option("units", units, diag_CS)
+  if (present(standard_name)) &
+    call describe_option("standard_name", standard_name, diag_CS)
 
 end subroutine log_available_diag
 

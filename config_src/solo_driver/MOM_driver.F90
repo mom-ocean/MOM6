@@ -351,7 +351,7 @@ program MOM_main
 
   ! Close the param_file.  No further parsing of input is possible after this.
   call close_param_file(param_file)
-  call diag_mediator_close_registration()
+  call diag_mediator_close_registration(MOM_CSp%diag)
 
   ! Write out a time stamp file.
   if (calendar_type /= NO_CALENDAR) then

@@ -1416,7 +1416,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   isd  = G%isd   ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
   IsdB = G%IsdB  ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  call diag_mediator_init(G, param_file, diag)
+  call diag_mediator_init(G, param_file, diag, doc_file_dir=dirs%output_directory)
 
   ! Read relevant parameters and write them to the model log.
   call log_version(param_file, "MOM", version, "")

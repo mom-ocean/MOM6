@@ -305,7 +305,7 @@ program SHELF_main
 
   ! Close the param_file.  No further parsing of input is possible after this.
   call close_param_file(param_file)
-  call diag_mediator_close_registration()
+  call diag_mediator_close_registration(MOM_CSp%diag)
 
   ! Write out a time stamp file.
   call open_file(unit, 'time_stamp.out', form=ASCII_FILE, action=APPEND_FILE, &
