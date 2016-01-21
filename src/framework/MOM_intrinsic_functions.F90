@@ -19,7 +19,7 @@ module MOM_intrinsic_functions
   function invcosh(x)
     real, intent(in) :: x
     real :: invcosh
-  
+
 #ifdef __INTEL_COMPILER
     invcosh=acosh(x)
 #else

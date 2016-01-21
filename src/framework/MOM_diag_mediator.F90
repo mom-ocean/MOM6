@@ -233,7 +233,7 @@ subroutine set_axes_info(G, param_file, diag_cs, set_vertical)
     Cartesian_grid = .false.
   endif
 
-  if(G%symmetric) then 
+  if(G%symmetric) then
     id_xq = diag_axis_init('xq', G%gridLonB(G%isgB:G%iegB), G%x_axis_units, 'x', &
               'q point nominal longitude', Domain2=G%Domain%mpp_domain)
     id_yq = diag_axis_init('yq', G%gridLatB(G%jsgB:G%jegB), G%y_axis_units, 'y', &
@@ -410,7 +410,7 @@ subroutine set_diag_mediator_grid(G, diag_cs)
   type(ocean_grid_type), intent(inout) :: G
   type(diag_ctrl),  intent(inout) :: diag_cs
 
-! Arguments: 
+! Arguments:
 !  (inout)    G   - ocean grid structure
 !  (inout)   diag - structure used to regulate diagnostic output
 
@@ -428,7 +428,7 @@ subroutine post_data_0d(diag_field_id, field, diag_cs, is_static, mask)
   logical, optional, intent(in) :: is_static
   real,    optional, intent(in) :: mask(:,:)
 
-! Arguments: 
+! Arguments:
 !  (in) diag_field_id  - the id for an output variable returned by a
 !                            previous call to register_diag_field.
 !  (in)      field     - 0-d array being offered for output or averaging.
@@ -475,7 +475,7 @@ subroutine post_data_1d_k(diag_field_id, field, diag_cs, is_static)
   integer :: isv, iev, jsv, jev
   type(diag_type), pointer :: diag => null()
 
-  is_stat = .false. ; if (present(is_static)) is_stat = is_static 
+  is_stat = .false. ; if (present(is_static)) is_stat = is_static
 
   ! Iterate over list of diag 'variants', e.g. CMOR aliases.
   call assert(diag_field_id < diag_cs%next_free_diag_id, &
@@ -537,7 +537,7 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
   logical :: used, is_stat
   integer :: isv, iev, jsv, jev
 
-  is_stat = .false. ; if (present(is_static)) is_stat = is_static 
+  is_stat = .false. ; if (present(is_static)) is_stat = is_static
 
   ! Determine the propery array indices, noting that because of the (:,:)
   ! declaration of field, symmetric arrays are using a SW-grid indexing,
@@ -953,7 +953,7 @@ subroutine enable_averaging(time_int_in, time_end_in, diag_cs)
 ! This subroutine enables the accumulation of time averages over the
 ! specified time interval.
 
-! Arguments: 
+! Arguments:
 !  (in)      time_int_in - time interval in s over which any
 !                          values that are offered are valid.
 !  (in)      time_end_in - end time in s of the valid interval
@@ -969,7 +969,7 @@ end subroutine enable_averaging
 subroutine disable_averaging(diag_cs)
   type(diag_ctrl), intent(inout) :: diag_cs
 
-! Argument: 
+! Argument:
 ! diag - structure used to regulate diagnostic output
 
   diag_cs%time_int = 0.0
@@ -985,7 +985,7 @@ function query_averaging_enabled(diag_cs, time_int, time_end)
   type(time_type), optional, intent(out) :: time_end
   logical :: query_averaging_enabled
 
-! Arguments: 
+! Arguments:
 !  (in)          diag - structure used to regulate diagnostic output
 !  (out,opt) time_int - current setting of diag%time_int, in s
 !  (out,opt) time_end - current setting of diag%time_end
@@ -999,7 +999,7 @@ function get_diag_time_end(diag_cs)
   type(diag_ctrl), intent(in)  :: diag_cs
   type(time_type) :: get_diag_time_end
 
-! Argument: 
+! Argument:
 ! (in) diag - structure used to regulate diagnostic output
 
 !   This function returns the valid end time for diagnostics that are handled
@@ -1039,9 +1039,9 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
   !  (in,opt)  cmor_field_name    - CMOR name of a field
   !  (in,opt)  cmor_long_name     - CMOR long name of a field
   !  (in,opt)  cmor_units         - CMOR units of a field
-  !  (in,opt)  cmor_standard_name - CMOR standardized name associated with a field 
+  !  (in,opt)  cmor_standard_name - CMOR standardized name associated with a field
 
-  ! Following params have yet to be used in MOM. 
+  ! Following params have yet to be used in MOM.
   !  (in,opt)  range         - valid range of a variable
   !  (in,opt)  mask_variant  - If true a logical mask must be provided with post_data calls
   !  (in,opt)  verbose       - If true, FMS is verbose
@@ -1189,7 +1189,7 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
   character(len=*), optional, intent(in) :: cmor_units, cmor_standard_name
 
   ! Output:    An integer handle for a diagnostic array.
-  ! Arguments: 
+  ! Arguments:
   !  (in)      module_name   - name of this module, usually "ocean_model" or "ice_shelf_model".
   !  (in)      field_name    - name of the diagnostic field.
   !  (in)      init_time     - time at which a field is first available?
@@ -1199,7 +1199,7 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
   !  (in,opt)  missing_value - indicates missing values
   !  (in,opt)  standard_name - standardized name associated with a field
 
-  ! Following params have yet to be used in MOM. 
+  ! Following params have yet to be used in MOM.
   !  (in,opt)  range         - valid range of a variable
   !  (in,opt)  mask_variant  - If true a logical mask must be provided with post_data calls
   !  (in,opt)  verbose       - If true, FMS is verbosed
@@ -1292,7 +1292,7 @@ function register_static_field(module_name, field_name, axes, &
   character(len=*), optional, intent(in) :: cmor_units, cmor_standard_name
 
   ! Output:    An integer handle for a diagnostic array.
-  ! Arguments: 
+  ! Arguments:
   !  (in)      module_name   - name of this module, usually "ocean_model" or "ice_shelf_model".
   !  (in)      field_name    - name of the diagnostic field
   !  (in)      axes          - container with up to 3 integer handles that indicates axes for this field
@@ -1301,7 +1301,7 @@ function register_static_field(module_name, field_name, axes, &
   !  (in,opt)  missing_value - A value that indicates missing values.
   !  (in,opt)  standard_name - standardized name associated with a field
 
-  ! Following params have yet to be used in MOM. 
+  ! Following params have yet to be used in MOM.
   !  (in,opt)  range          - valid range of a variable
   !  (in,opt)  mask_variant   - If true a logical mask must be provided with post_data calls
   !  (in,opt)  do_not_log     - If true, do not log something
@@ -1340,13 +1340,13 @@ function register_static_field(module_name, field_name, axes, &
     posted_cmor_standard_name = "not provided"
     posted_cmor_long_name = "not provided"
 
-    ! If attributes are present for MOM variable names, use them first for the register_static_field 
+    ! If attributes are present for MOM variable names, use them first for the register_static_field
     ! call for CMOR verison of the variable
     if (present(units)) posted_cmor_units = units
     if (present(standard_name)) posted_cmor_standard_name = standard_name
     if (present(long_name)) posted_cmor_long_name = long_name
 
-    ! If specified in the call to register_static_field, override attributes with the CMOR versions 
+    ! If specified in the call to register_static_field, override attributes with the CMOR versions
     if (present(cmor_units)) posted_cmor_units = cmor_units
     if (present(cmor_standard_name)) posted_cmor_standard_name = cmor_standard_name
     if (present(cmor_long_name)) posted_cmor_long_name = cmor_long_name
@@ -1411,7 +1411,7 @@ function ocean_register_diag(var_desc, G, diag_cs, day)
   call query_vardesc(var_desc, units=units, longname=longname, hor_grid=hor_grid, &
                      z_grid=z_grid, caller="ocean_register_diag")
 
-  ! Use the hor_grid and z_grid components of vardesc to determine the 
+  ! Use the hor_grid and z_grid components of vardesc to determine the
   ! desired axes to register the diagnostic field for.
   select case (z_grid)
 
@@ -1683,7 +1683,7 @@ function i2s(a,n_in)
 
     n=size(a)
     if(present(n_in)) n = n_in
- 
+
     i2s = ''
     do i=1,n
        write (i2s_temp, '(I4.4)') a(i)

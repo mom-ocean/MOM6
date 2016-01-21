@@ -92,7 +92,7 @@ subroutine doc_param_none(doc, varname, desc, units)
 
     if (mesgHasBeenDocumented(doc, varName, mesg)) return ! Avoid duplicates
     call writeMessageAndDesc(doc, mesg, desc)
-  endif 
+  endif
 end subroutine doc_param_none
 
 subroutine doc_param_logical(doc, varname, desc, units, val, default, layoutParam)
@@ -395,7 +395,7 @@ subroutine doc_param_time(doc, varname, desc, units, val, default)
 
     if (mesgHasBeenDocumented(doc, varName, mesg)) return ! Avoid duplicates
     call writeMessageAndDesc(doc, mesg, desc, equalsDefault)
-  endif 
+  endif
 
 end subroutine doc_param_time
 
@@ -591,7 +591,7 @@ function define_string(doc,varName,valString,units)
   define_string = trim(define_string)//repeat(" ",numSpaces)//"!"
   if (len_trim(units) > 0) define_string = trim(define_string)//"   ["//trim(units)//"]"
 end function define_string
-  
+
 function undef_string(doc,varName,units)
   type(doc_type),   pointer    :: doc
   character(len=*), intent(in) :: varName, units
@@ -609,7 +609,7 @@ function undef_string(doc,varName,units)
   undef_string = trim(undef_string)//repeat(" ",numSpaces)//"!"
   if (len_trim(units) > 0) undef_string = trim(undef_string)//"   ["//trim(units)//"]"
 end function undef_string
-  
+
 ! ----------------------------------------------------------------------
 
 subroutine doc_module(doc, modname, desc)
@@ -625,7 +625,7 @@ subroutine doc_module(doc, modname, desc)
     call writeMessageAndDesc(doc, '', '') ! Blank line for delineation
     mesg = "! === module "//trim(modname)//" ==="
     call writeMessageAndDesc(doc, mesg, desc, indent=0)
-  endif 
+  endif
 end subroutine doc_module
 
 subroutine doc_subroutine(doc, modname, subname, desc)
@@ -647,7 +647,7 @@ subroutine doc_function(doc, modname, fnname, desc)
 end subroutine doc_function
 
 ! ----------------------------------------------------------------------
-  
+
 subroutine doc_init(docFileBase, doc, minimal, complete)
   character(len=*),  intent(in)  :: docFileBase
   type(doc_type),    pointer     :: doc
@@ -668,7 +668,7 @@ subroutine open_doc_file(doc)
   type(doc_type), pointer    :: doc
 
   logical :: opened, new_file
-  integer :: ios 
+  integer :: ios
   character(len=240) :: fileName
 
   if (.not. (is_root_pe() .and. associated(doc))) return
