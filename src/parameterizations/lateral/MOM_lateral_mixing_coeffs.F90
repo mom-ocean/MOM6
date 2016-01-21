@@ -176,7 +176,7 @@ subroutine calc_resoln_function(h, tv, G, CS)
   if (.not. ASSOCIATED(CS%beta_dx2_v)) call MOM_error(FATAL, &
     "calc_resoln_function: %beta_dx2_v is not associated with Resoln_scaled_Kh.")
 
-  call wave_speed(h, tv, G, CS%cg1, CS%wave_speed_CSp)
+  call wave_speed(h, tv, G, 1, CS%cg1, CS%wave_speed_CSp) ! added nmodes=1 (BDM)
 
   call create_group_pass(CS%pass_cg1, CS%cg1, G%Domain)
   call do_group_pass(CS%pass_cg1, G%Domain)

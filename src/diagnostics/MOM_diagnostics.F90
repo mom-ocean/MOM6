@@ -490,7 +490,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
 
   if ((CS%id_cg1>0) .or. (CS%id_Rd1>0) .or. (CS%id_cfl_cg1>0) .or. &
       (CS%id_cfl_cg1_x>0) .or. (CS%id_cfl_cg1_y>0)) then
-    call wave_speed(h, tv, G, CS%cg1, CS%wave_speed_CSp)
+    call wave_speed(h, tv, G, 1, CS%cg1, CS%wave_speed_CSp) ! added nmodes=1 (BDM)
     if (CS%id_cg1>0) call post_data(CS%id_cg1, CS%cg1, CS%diag)
     if (CS%id_Rd1>0) then
 !$OMP parallel do default(none) shared(is,ie,js,je,G,CS) &

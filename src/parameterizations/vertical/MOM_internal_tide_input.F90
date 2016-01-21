@@ -98,7 +98,7 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, CS)
   type(int_tide_input_type),              intent(inout) :: itide
   real,                                   intent(in)    :: dt
   type(ocean_grid_type),                  intent(in)    :: G
-  type(int_tide_input_CS),           pointer       :: CS
+  type(int_tide_input_CS),                pointer       :: CS
 
 ! Arguments: u - Zonal velocity, in m s-1.
 !  (in)      v - Meridional velocity, in m s-1.
