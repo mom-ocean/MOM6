@@ -71,7 +71,7 @@ type, public :: verticalGrid_type
                         ! units of thickness.
   real :: H_to_m        ! A constant that translates distances in the units of
                         ! thickness to m.
-  real :: H_to_Pa       ! A constant that translates the units of thickness to 
+  real :: H_to_Pa       ! A constant that translates the units of thickness to
                         ! to pressure in Pa.
 end type verticalGrid_type
 

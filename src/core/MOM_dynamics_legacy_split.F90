@@ -163,7 +163,7 @@ type, public :: MOM_dyn_legacy_split_CS ; private
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: uhbt
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: vhbt
     ! uhbt and vhbt are the average volume or mass fluxes determined by the
-    ! barotropic solver in m3 s-1 or kg s-1.  uhbt and vhbt should (roughly?) 
+    ! barotropic solver in m3 s-1 or kg s-1.  uhbt and vhbt should (roughly?)
     ! equal the verticals sum of uh and vh, respectively.
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: uhbt_in
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: vhbt_in
@@ -197,7 +197,7 @@ type, public :: MOM_dyn_legacy_split_CS ; private
   logical :: readjust_velocity ! A flag that varies with time that determines
                                ! whether the velocities currently need to be
                                ! readjusted to agree with CS%uhbt_in and
-                               ! CS%vhbt_in.  This is only used if 
+                               ! CS%vhbt_in.  This is only used if
                                ! CS%readjust_BT_trans is true.
   logical :: calc_dtbt         ! If true, calculate the barotropic time-step
                                ! dynamically.
@@ -360,7 +360,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G))  :: h_old_rad_OBC
     ! u_old_rad_OBC and v_old_rad_OBC are the starting velocities, which are
     ! saved for use in the Flather open boundary condition code, both in m s-1.
-  
+
   real :: Pa_to_eta ! A factor that converts pressures to the units of eta.
   real, pointer, dimension(:,:) :: &
     p_surf => NULL(), eta_PF_start => NULL(), &
@@ -437,7 +437,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
     call cpu_clock_end(id_clock_vertvisc)
 
     call cpu_clock_begin(id_clock_pass)
-    if (G%nonblocking_updates) then   
+    if (G%nonblocking_updates) then
       if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) &
         pid_Ray = pass_vector_start(visc%Ray_u, visc%Ray_v, G%Domain, &
                        To_All+SCALAR_PAIR, CGRID_NE)
@@ -627,7 +627,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
                 taux_bot=taux_bot, tauy_bot=tauy_bot)
     call cpu_clock_end(id_clock_btstep)
   else
-    
+
     if (associated(CS%BT_cont) .or. CS%BT_use_layer_fluxes) then
       call cpu_clock_begin(id_clock_continuity)
       call continuity(u, v, h, hp, uh_in, vh_in, dt, G, &
@@ -643,7 +643,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
         call legacy_btcalc(h, G, CS%barotropic_CSp, CS%BT_cont%h_u, CS%BT_cont%h_v)
       endif
     endif
-    
+
     if (CS%BT_use_layer_fluxes) then
       uh_ptr => uh_in; vh_ptr => vh_in; u_ptr => u; v_ptr => v
     endif
@@ -1053,7 +1053,7 @@ subroutine adjustments_dyn_legacy_split(u, v, h, dt, G, CS)
   real,                                   intent(in)    :: dt
   type(ocean_grid_type),                  intent(inout) :: G
   type(MOM_dyn_legacy_split_CS),          pointer       :: CS
- 
+
 ! Arguments: u - The zonal velocity, in m s-1.
 !  (in)      v - The meridional velocity, in m s-1.
 !  (in)      h - The layer thicknesses, in m or kg m-2, depending on
@@ -1063,7 +1063,7 @@ subroutine adjustments_dyn_legacy_split(u, v, h, dt, G, CS)
 !  (in)      CS - The control structure set up by initialize_dyn_legacy_split.
 
   ! Temporary arrays to contain layer thickness fluxes in m3 s-1 or kg s-1.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: uh_temp 
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: uh_temp
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vh_temp
   ! A temporary array to contain layer projected thicknesses in m or kg m-2.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G))  :: h_temp
@@ -1077,18 +1077,18 @@ subroutine adjustments_dyn_legacy_split(u, v, h, dt, G, CS)
     call cpu_clock_end(id_clock_continuity)
 !$OMP parallel default(none) shared(is,ie,js,je,nz,CS,uh_temp,vh_temp)
 !$OMP do
-    do j=js,je 
+    do j=js,je
       do I=is-1,ie ; CS%uhbt_in(I,j) = uh_temp(I,j,1) ; enddo
       do k=2,nz ; do I=is-1,ie
         CS%uhbt_in(I,j) = CS%uhbt_in(I,j) + uh_temp(I,j,k)
-      enddo ; enddo 
+      enddo ; enddo
     enddo
 !$OMP do
-    do J=js-1,je 
+    do J=js-1,je
       do i=is,ie ; CS%vhbt_in(i,J) = vh_temp(i,J,1) ; enddo
       do k=2,nz ; do i=is,ie
         CS%vhbt_in(i,J) = CS%vhbt_in(i,J) + vh_temp(i,J,k)
-      enddo ; enddo 
+      enddo ; enddo
     enddo
 !$OMP end parallel
     CS%readjust_velocity = .true.
@@ -1379,7 +1379,7 @@ subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, param_file
     ! Estimate eta based on the layer thicknesses - h.  With the Boussinesq
     ! approximation, eta is the free surface height anomaly, while without it
     ! eta is the mass of ocean per unit area.  eta always has the same
-    ! dimensions as h, either m or kg m-3.  
+    ! dimensions as h, either m or kg m-3.
     !   CS%eta(:,:) = 0.0 already from initialization.
     if (G%Boussinesq) then
       do j=js,je ; do i=is,ie ; CS%eta(i,j) = -G%bathyT(i,j) ; enddo ; enddo
@@ -1498,7 +1498,7 @@ subroutine end_dyn_legacy_split(CS)
   DEALLOC_(CS%diffu) ; DEALLOC_(CS%diffv)
   DEALLOC_(CS%CAu)   ; DEALLOC_(CS%CAv)
   DEALLOC_(CS%PFu)   ; DEALLOC_(CS%PFv)
-  
+
   if (associated(CS%taux_bot)) deallocate(CS%taux_bot)
   if (associated(CS%tauy_bot)) deallocate(CS%tauy_bot)
   DEALLOC_(CS%uhbt) ; DEALLOC_(CS%vhbt)

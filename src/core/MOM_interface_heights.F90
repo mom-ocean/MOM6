@@ -1,4 +1,4 @@
-!> The module calculates interface heights, including free surface height.  
+!> The module calculates interface heights, including free surface height.
 module MOM_interface_heights
 
 !***********************************************************************
@@ -102,7 +102,7 @@ subroutine find_eta_3d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
   integer i, j, k, isv, iev, jsv, jev, nz, halo
 
   halo = 0 ; if (present(halo_size)) halo = max(0,halo_size)
-  
+
   isv = G%isc-halo ; iev = G%iec+halo ; jsv = G%jsc-halo ; jev = G%jec+halo
   nz = G%ke
 
@@ -140,11 +140,11 @@ subroutine find_eta_3d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
     if (associated(tv%eqn_of_state)) then
       ! ### THIS SHOULD BE P_SURF, IF AVAILABLE.
 !$OMP do
-      do j=jsv,jev 
+      do j=jsv,jev
         do i=isv,iev ; p(i,j,1) = 0.0 ; enddo
         do k=1,nz ; do i=isv,iev
           p(i,j,K+1) = p(i,j,K) + G_Earth*G%H_to_kg_m2*h(i,j,k)
-        enddo ; enddo 
+        enddo ; enddo
       enddo
 !$OMP do
       do k=1,nz
@@ -152,7 +152,7 @@ subroutine find_eta_3d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
                                  0.0, G%HI, tv%eqn_of_state, dz_geo(:,:,k), halo_size=halo)
       enddo
 !$OMP do
-      do j=jsv,jev 
+      do j=jsv,jev
         do k=nz,1,-1 ; do i=isv,iev
           eta(i,j,K) = eta(i,j,K+1) + I_gEarth * dz_geo(i,j,k)
         enddo ; enddo
@@ -196,7 +196,7 @@ subroutine find_eta_2d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
 ! Additionally, the sea surface height may be adjusted for consistency with the
 ! corresponding time-average quantity from the barotropic calculation.
 
-! Arguments: 
+! Arguments:
 !  (in)       h      - layer thickness (meter or kg/m2)
 !  (in)      tv      - structure pointing to various thermodynamic variables
 !  (in)      G_Earth - Earth gravitational acceleration (m/s2)
@@ -242,9 +242,9 @@ subroutine find_eta_2d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
   else
     if (associated(tv%eqn_of_state)) then
 !$OMP do
-      do j=js,je 
+      do j=js,je
         do i=is,ie ; p(i,j,1) = 0.0 ; enddo
-      
+
         do k=1,nz ; do i=is,ie
           p(i,j,k+1) = p(i,j,k) + G_Earth*G%H_to_kg_m2*h(i,j,k)
         enddo ; enddo
@@ -278,7 +278,7 @@ subroutine find_eta_2d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
       enddo
     endif
   endif
-!$OMP end parallel  
+!$OMP end parallel
 
 end subroutine find_eta_2d
 

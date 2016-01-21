@@ -104,7 +104,7 @@ type, public :: thermo_var_ptrs
                          ! When conservative temperature is used, this is
                          ! constant and exactly 3991.86795711963 J K kg-1.
   real, pointer, dimension(:,:) :: &
-    Hml => NULL(), &     !   The surface mixed layer depth in m.                        
+    Hml => NULL(), &     !   The surface mixed layer depth in m.
 
 !  These arrays are accumulated fluxes for communication with other components.
     frazil => NULL(), &  !   The energy needed to heat the ocean column to the
@@ -222,7 +222,7 @@ type, public :: vertvisc_type
     Ray_v => NULL(), &  ! at u- and v-points, in m s-1.
     Kd_extra_T => NULL(), & ! The extra diffusivities of temperature and
     Kd_extra_S => NULL(), & ! salinity due to double diffusion at the interfaces
-                        ! relative to the diffusivity of density, in m2 s-1.  
+                        ! relative to the diffusivity of density, in m2 s-1.
                         ! One of these is always 0.  Kd_extra_S is positive for
                         ! salt fingering; Kd_extra_T is positive for double
                         ! diffusive convection.  These are only allocated if

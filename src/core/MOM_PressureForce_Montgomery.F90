@@ -139,7 +139,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
     S_tmp       ! Temporary array of salinities where layers that are lighter
                 ! than the mixed layer have the mixed layer's properties, in psu.
 
-  real, dimension(SZI_(G)) :: Rho_cv_BL  ! The coordinate potential density in the 
+  real, dimension(SZI_(G)) :: Rho_cv_BL  ! The coordinate potential density in the
                   ! deepest variable density near-surface layer, in kg m-3.
 
   real, dimension(SZI_(G),SZJ_(G)) :: &
@@ -217,16 +217,16 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
 
   if (present(eta)) then
     Pa_to_H = 1.0 / G%H_to_Pa
-    if (use_p_atm) then 
+    if (use_p_atm) then
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,eta,p,p_atm,Pa_to_H)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         eta(i,j) = (p(i,j,nz+1) - p_atm(i,j))*Pa_to_H ! eta has the same units as h.
-      enddo ; enddo 
-    else 
+      enddo ; enddo
+    else
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,eta,p,Pa_to_H)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         eta(i,j) = p(i,j,nz+1)*Pa_to_H ! eta has the same units as h.
-      enddo ; enddo 
+      enddo ; enddo
     endif
   endif
 
@@ -294,7 +294,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
           else
             tv_tmp%T(i,j,k) = tv%T(i,j,k) ; tv_tmp%S(i,j,k) = tv%S(i,j,k)
           endif
-        enddo ; enddo 
+        enddo ; enddo
       enddo
     else
       tv_tmp%T => tv%T ; tv_tmp%S => tv%S
@@ -312,25 +312,25 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
 
   if (use_EOS) then
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,M,geopot_bot,p,alpha_star)
-    do j=Jsq,Jeq+1 
+    do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
         M(i,j,nz) = geopot_bot(i,j) + p(i,j,nz+1) * alpha_star(i,j,nz)
-      enddo 
+      enddo
       do k=nz-1,1,-1 ; do i=Isq,Ieq+1
         M(i,j,k) = M(i,j,k+1) + p(i,j,K+1) * (alpha_star(i,j,k) - alpha_star(i,j,k+1))
-      enddo ; enddo 
-    enddo   
+      enddo ; enddo
+    enddo
   else ! not use_EOS
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,M,geopot_bot,p,&
 !$OMP                                  alpha_Lay,dalpha_int)
-    do j=Jsq,Jeq+1 
+    do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
         M(i,j,nz) = geopot_bot(i,j) + p(i,j,nz+1) * alpha_Lay(nz)
-      enddo 
+      enddo
       do k=nz-1,1,-1 ; do i=Isq,Ieq+1
         M(i,j,k) = M(i,j,k+1) + p(i,j,K+1) * dalpha_int(K+1)
       enddo ; enddo
-    enddo   
+    enddo
   endif ! use_EOS
 
   if (CS%GFS_scale < 1.0) then
@@ -352,11 +352,11 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
 !   if (use_EOS) then
 !     do k=2,nz ; do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
 !       M(i,j,k) = M(i,j,k-1) - p(i,j,K) * (alpha_star(i,j,k-1) - alpha_star(i,j,k))
-!     enddo ; enddo ; enddo   
+!     enddo ; enddo ; enddo
 !   else ! not use_EOS
 !     do k=2,nz ; do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
 !        M(i,j,k) = M(i,j,k-1) - p(i,j,K) * dalpha_int(K)
-!     enddo ; enddo ; enddo   
+!     enddo ; enddo ; enddo
 !   endif ! use_EOS
 
   endif
@@ -407,7 +407,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
 
   if (CS%id_PFu_bc>0) call post_data(CS%id_PFu_bc, CS%PFu_bc, CS%diag)
   if (CS%id_PFv_bc>0) call post_data(CS%id_PFv_bc, CS%PFv_bc, CS%diag)
-  if (CS%id_e_tidal>0) call post_data(CS%id_e_tidal, e_tidal, CS%diag)   
+  if (CS%id_e_tidal>0) call post_data(CS%id_e_tidal, e_tidal, CS%diag)
 
 end subroutine PressureForce_Mont_nonBouss
 
@@ -513,11 +513,11 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
     ! but that is not yet implemented, and the current form is correct for
     ! barotropic tides.
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,e,h,G)
-    do j=Jsq,Jeq+1 
+    do j=Jsq,Jeq+1
       do i=Isq,Ieq+1 ; e(i,j,1) = -1.0*G%bathyT(i,j) ; enddo
       do k=1,nz ; do i=Isq,Ieq+1
         e(i,j,1) = e(i,j,1) + h(i,j,k)*G%H_to_m
-      enddo ; enddo 
+      enddo ; enddo
     enddo
     call calc_tidal_forcing(CS%Time, e(:,:,1), e_tidal, G, CS%tides_CSp)
   endif
@@ -552,24 +552,24 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
     if (nkmb>0) then
       tv_tmp%T => T_tmp ; tv_tmp%S => S_tmp
       tv_tmp%eqn_of_state => tv%eqn_of_state
-      
+
       do i=Isq,Ieq+1 ; p_ref(i) = tv%P_Ref ; enddo
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,nkmb,tv_tmp,tv,p_ref,G) &
 !$OMP                          private(Rho_cv_BL)
-      do j=Jsq,Jeq+1 
+      do j=Jsq,Jeq+1
         do k=1,nkmb ; do i=Isq,Ieq+1
           tv_tmp%T(i,j,k) = tv%T(i,j,k) ; tv_tmp%S(i,j,k) = tv%S(i,j,k)
-        enddo ; enddo 
+        enddo ; enddo
         call calculate_density(tv%T(:,j,nkmb), tv%S(:,j,nkmb), p_ref, &
                         Rho_cv_BL(:), Isq, Ieq-Isq+2, tv%eqn_of_state)
-      
+
         do k=nkmb+1,nz ; do i=Isq,Ieq+1
           if (G%Rlay(k) < Rho_cv_BL(i)) then
             tv_tmp%T(i,j,k) = tv%T(i,j,nkmb) ; tv_tmp%S(i,j,k) = tv%S(i,j,nkmb)
           else
             tv_tmp%T(i,j,k) = tv%T(i,j,k) ; tv_tmp%S(i,j,k) = tv%S(i,j,k)
           endif
-        enddo ; enddo 
+        enddo ; enddo
       enddo
     else
       tv_tmp%T => tv%T ; tv_tmp%S => tv%S
@@ -591,25 +591,25 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
   if (use_EOS) then
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,M,CS,rho_star,e,use_p_atm, &
 !$OMP                                  p_atm,I_Rho0)
-    do j=Jsq,Jeq+1 
+    do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
         M(i,j,1) = CS%GFS_scale * (rho_star(i,j,1) * e(i,j,1))
         if (use_p_atm) M(i,j,1) = M(i,j,1) + p_atm(i,j) * I_Rho0
-      enddo 
+      enddo
       do k=2,nz ; do i=Isq,Ieq+1
         M(i,j,k) = M(i,j,k-1) + (rho_star(i,j,k) - rho_star(i,j,k-1)) * e(i,j,K)
-      enddo ; enddo 
+      enddo ; enddo
     enddo
-  else ! not use_EOS 
+  else ! not use_EOS
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,M,G,e,use_p_atm,p_atm,I_Rho0)
-    do j=Jsq,Jeq+1 
+    do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
         M(i,j,1) = G%g_prime(1) * e(i,j,1)
         if (use_p_atm) M(i,j,1) = M(i,j,1) + p_atm(i,j) * I_Rho0
-      enddo 
+      enddo
       do k=2,nz ; do i=Isq,Ieq+1
         M(i,j,k) = M(i,j,k-1) + G%g_prime(K) * e(i,j,K)
-      enddo ; enddo 
+      enddo ; enddo
     enddo
   endif ! use_EOS
 
@@ -688,7 +688,7 @@ subroutine Set_pbce_Bouss(e, tv, G, g_Earth, Rho0, GFS_scale, pbce, rho_star)
 !  type(PressureForce_Mont_CS),          pointer     :: CS
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(out) :: pbce
   real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(in) :: rho_star
-!    This subroutine determines the partial derivative of the acceleration due 
+!    This subroutine determines the partial derivative of the acceleration due
 !  to pressure forces with the free surface height.
 ! Arguments: e - Interface height, in H (m).
 !  (in)      tv - A structure containing pointers to any available
@@ -707,7 +707,7 @@ subroutine Set_pbce_Bouss(e, tv, G, g_Earth, Rho0, GFS_scale, pbce, rho_star)
 !                   due to free surface height anomalies, in m2 H-1 s-2.
 !  (in,opt)  rho_star - The layer densities (maybe compressibility compensated),
 !                       times g/rho_0, in m s-2.
-   
+
   real :: Ihtot(SZI_(G))     ! The inverse of the sum of the layer
                              ! thicknesses, in m-1.
   real :: press(SZI_(G))     ! Interface pressure, in Pa.
@@ -723,9 +723,9 @@ subroutine Set_pbce_Bouss(e, tv, G, g_Earth, Rho0, GFS_scale, pbce, rho_star)
   real :: h_neglect          ! A thickness that is so small it is usually lost
                              ! in roundoff and can be neglected, in m.
   integer :: Isq, Ieq, Jsq, Jeq, nz, i, j, k
-    
+
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
- 
+
   Rho0xG = Rho0*g_Earth
   G_Rho0 = g_Earth/Rho0
   use_EOS = associated(tv%eqn_of_state)
@@ -765,7 +765,7 @@ subroutine Set_pbce_Bouss(e, tv, G, g_Earth, Rho0, GFS_scale, pbce, rho_star)
             press(i) = -Rho0xG*e(i,j,K)
             T_int(i) = 0.5*(tv%T(i,j,k-1)+tv%T(i,j,k))
             S_int(i) = 0.5*(tv%S(i,j,k-1)+tv%S(i,j,k))
-          enddo                        
+          enddo
           call calculate_density_derivs(T_int, S_int, press, dR_dT, dR_dS, &
                                         Isq, Ieq-Isq+2, tv%eqn_of_state)
           do i=Isq,Ieq+1
@@ -773,7 +773,7 @@ subroutine Set_pbce_Bouss(e, tv, G, g_Earth, Rho0, GFS_scale, pbce, rho_star)
                ((e(i,j,K) - e(i,j,nz+1)) * Ihtot(i)) * &
                (dR_dT(i)*(tv%T(i,j,k)-tv%T(i,j,k-1)) + &
                 dR_dS(i)*(tv%S(i,j,k)-tv%S(i,j,k-1)))
-          enddo                        
+          enddo
         enddo
       enddo ! end of j loop
     endif
@@ -790,7 +790,7 @@ subroutine Set_pbce_Bouss(e, tv, G, g_Earth, Rho0, GFS_scale, pbce, rho_star)
      enddo ; enddo
     enddo ! end of j loop
   endif ! use_EOS
-                      
+
 end subroutine Set_pbce_Bouss
 
 subroutine Set_pbce_nonBouss(p, tv, G, g_Earth, GFS_scale, pbce, alpha_star)
@@ -802,7 +802,7 @@ subroutine Set_pbce_nonBouss(p, tv, G, g_Earth, GFS_scale, pbce, alpha_star)
 !  type(PressureForce_Mont_CS),          pointer     :: CS
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(out) :: pbce
   real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(in) :: alpha_star
-!    This subroutine determines the partial derivative of the acceleration due 
+!    This subroutine determines the partial derivative of the acceleration due
 !  to pressure forces with the column mass.
 ! Arguments: p - Interface pressures, in Pa.
 !  (in)      tv - A structure containing pointers to any available
@@ -839,7 +839,7 @@ subroutine Set_pbce_nonBouss(p, tv, G, g_Earth, GFS_scale, pbce, alpha_star)
   logical :: use_EOS         ! If true, density is calculated from T & S using
                              ! an equation of state.
   integer :: Isq, Ieq, Jsq, Jeq, nz, i, j, k
-    
+
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
 
   use_EOS = associated(tv%eqn_of_state)
@@ -854,7 +854,7 @@ subroutine Set_pbce_nonBouss(p, tv, G, g_Earth, GFS_scale, pbce, alpha_star)
     if (present(alpha_star)) then
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,C_htot,dP_dH,p,dp_neglect, &
 !$OMP                                  pbce,alpha_star)
-      do j=Jsq,Jeq+1 
+      do j=Jsq,Jeq+1
         do i=Isq,Ieq+1
           C_htot(i,j) = dP_dH / ((p(i,j,nz+1)-p(i,j,1)) + dp_neglect)
           pbce(i,j,nz) = dP_dH * alpha_star(i,j,nz)
@@ -862,7 +862,7 @@ subroutine Set_pbce_nonBouss(p, tv, G, g_Earth, GFS_scale, pbce, alpha_star)
         do k=nz-1,1,-1 ; do i=Isq,Ieq+1
           pbce(i,j,k) = pbce(i,j,k+1) + ((p(i,j,K+1)-p(i,j,1)) * C_htot(i,j)) * &
               (alpha_star(i,j,k) - alpha_star(i,j,k+1))
-        enddo ; enddo 
+        enddo ; enddo
       enddo
     else
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,tv,p,C_htot, &
@@ -879,7 +879,7 @@ subroutine Set_pbce_nonBouss(p, tv, G, g_Earth, GFS_scale, pbce, alpha_star)
           do i=Isq,Ieq+1
             T_int(i) = 0.5*(tv%T(i,j,k)+tv%T(i,j,k+1))
             S_int(i) = 0.5*(tv%S(i,j,k)+tv%S(i,j,k+1))
-          enddo                        
+          enddo
           call calculate_density(T_int, S_int, p(:,j,k+1), rho_in_situ, &
                                       Isq, Ieq-Isq+2, tv%eqn_of_state)
           call calculate_density_derivs(T_int, S_int, p(:,j,k+1), dR_dT, dR_dS, &
@@ -889,13 +889,13 @@ subroutine Set_pbce_nonBouss(p, tv, G, g_Earth, GFS_scale, pbce, alpha_star)
                 ((dR_dT(i)*(tv%T(i,j,k+1)-tv%T(i,j,k)) + &
                   dR_dS(i)*(tv%S(i,j,k+1)-tv%S(i,j,k))) / rho_in_situ(i)**2)
           enddo
-        enddo 
+        enddo
       enddo
     endif
   else ! not use_EOS
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,C_htot,dP_dH,p,dp_neglect, &
 !$OMP                                  pbce,alpha_Lay,dalpha_int)
-    do j=Jsq,Jeq+1 
+    do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
         C_htot(i,j) = dP_dH / ((p(i,j,nz+1)-p(i,j,1)) + dp_neglect)
         pbce(i,j,nz) = dP_dH * alpha_Lay(nz)
@@ -903,7 +903,7 @@ subroutine Set_pbce_nonBouss(p, tv, G, g_Earth, GFS_scale, pbce, alpha_star)
       do k=nz-1,1,-1 ; do i=Isq,Ieq+1
         pbce(i,j,k) = pbce(i,j,k+1) + ((p(i,j,K+1)-p(i,j,1))*C_htot(i,j)) * &
             dalpha_int(K+1)
-      enddo ; enddo 
+      enddo ; enddo
     enddo
   endif ! use_EOS
 

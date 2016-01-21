@@ -122,7 +122,7 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
     pres(i,j,2) = pres(i,j,1) + G%H_to_Pa*h(i,j,1)
   enddo ; enddo
 !$OMP do
-  do j=js-1,je+1 
+  do j=js-1,je+1
     do k=2,nz ; do i=is-1,ie+1
       pres(i,j,K+1) = pres(i,j,K) + G%H_to_Pa*h(i,j,k)
     enddo ; enddo
@@ -216,7 +216,7 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
       else ! k <= nk_linear
         slope_x(I,j,k) = 0.
       endif
-      
+
     enddo ! i
   enddo ; enddo ! end of j-loop
 

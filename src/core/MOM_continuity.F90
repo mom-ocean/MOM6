@@ -63,7 +63,7 @@ type, public :: continuity_CS ; private
                                !  PPM - A directionally split peicewise
                                !        parabolic reconstruction solver.
                                ! The default, PPM, seems most appropriate for
-                               ! use with our current time-splitting strategies.       
+                               ! use with our current time-splitting strategies.
   type(continuity_PPM_CS), pointer :: PPM_CSp => NULL()
 end type continuity_CS
 
