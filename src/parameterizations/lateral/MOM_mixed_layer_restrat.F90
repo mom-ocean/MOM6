@@ -1,7 +1,7 @@
-!> This module implements a parameterization of unresolved viscous 
-!!  mixed layer restratification of the mixed layer as described in 
-!!  Fox-Kemper, Ferrari and Hallberg (JPO, 2008), and  
-!!  whose impacts are described in Fox-Kemper et al. 
+!> This module implements a parameterization of unresolved viscous
+!!  mixed layer restratification of the mixed layer as described in
+!!  Fox-Kemper, Ferrari and Hallberg (JPO, 2008), and
+!!  whose impacts are described in Fox-Kemper et al.
 !!  (Ocean Modelling).
 
 module MOM_mixed_layer_restrat
@@ -29,7 +29,7 @@ public mixedlayer_restrat
 public mixedlayer_restrat_init
 public mixedlayer_restrat_register_restarts
 
-!> Control structure for module 
+!> Control structure for module
 type, public :: mixedlayer_restrat_CS ; private
   real    :: ml_restrat_coef       !<  A non-dimensional factor by which the
                                    !! instability is enhanced over what would be
@@ -53,7 +53,7 @@ type, public :: mixedlayer_restrat_CS ; private
          MLD_filtered => NULL()    !< Time-filtered MLD (H units)
 
   integer :: id_urestrat_time
-  integer :: id_vrestrat_time 
+  integer :: id_vrestrat_time
   integer :: id_uhml = -1
   integer :: id_vhml = -1
   integer :: id_MLD  = -1
@@ -74,14 +74,14 @@ contains
 !!  limited to guarantee stability.
 subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, CS)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h       !< layer thickness (H units = m or kg/m2)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uhtr    !< accumulated zonal mass flux (m3 or kg)   
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vhtr    !< accumulated merid mass flux (m3 or kg)   
-  type(thermo_var_ptrs),                  intent(in)    :: tv      !< thermodynamic variables structure 
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uhtr    !< accumulated zonal mass flux (m3 or kg)
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vhtr    !< accumulated merid mass flux (m3 or kg)
+  type(thermo_var_ptrs),                  intent(in)    :: tv      !< thermodynamic variables structure
   type(forcing),                          intent(in)    :: fluxes  !< pointers to forcing fields
   real,                                   intent(in)    :: dt      !< time increment (sec)
   real, dimension(:,:),                   pointer       :: MLD     !< Mixed layer depth provided by PBL (H units)
-  type(ocean_grid_type),                  intent(inout) :: G       !< ocean grid structure 
-  type(mixedlayer_restrat_CS),            pointer       :: CS      !< module control structure 
+  type(ocean_grid_type),                  intent(inout) :: G       !< ocean grid structure
+  type(mixedlayer_restrat_CS),            pointer       :: CS      !< module control structure
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "Module must be initialized before it is used.")
@@ -100,14 +100,14 @@ end subroutine mixedlayer_restrat
 !! limited to guarantee stability.
 subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, CS)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h       !< layer thickness (H units = m or kg/m2)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uhtr    !< accumulated zonal mass flux (m3 or kg)   
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vhtr    !< accumulated merid mass flux (m3 or kg)   
-  type(thermo_var_ptrs),                  intent(in)    :: tv      !< thermodynamic variables structure 
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uhtr    !< accumulated zonal mass flux (m3 or kg)
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vhtr    !< accumulated merid mass flux (m3 or kg)
+  type(thermo_var_ptrs),                  intent(in)    :: tv      !< thermodynamic variables structure
   type(forcing),                          intent(in)    :: fluxes  !< pointers to forcing fields
   real,                                   intent(in)    :: dt      !< time increment (sec)
   real, dimension(:,:),                   pointer       :: MLD     !< Mixed layer depth provided by PBL (H units)
-  type(ocean_grid_type),                  intent(inout) :: G       !< ocean grid structure  
-  type(mixedlayer_restrat_CS),            pointer       :: CS      !< module control structure 
+  type(ocean_grid_type),                  intent(inout) :: G       !< ocean grid structure
+  type(mixedlayer_restrat_CS),            pointer       :: CS      !< module control structure
 
   real :: uhml(SZIB_(G),SZJ_(G),SZK_(G)) ! zonal mixed layer transport (m3/s or kg/s)
   real :: vhml(SZI_(G),SZJB_(G),SZK_(G)) ! merid mixed layer transport (m3/s or kg/s)
@@ -118,7 +118,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, CS)
   real, dimension(SZI_(G),SZJ_(G)) :: &
     htot, &               ! The sum of the thicknesses of layers in the mixed layer (H units)
     Rml_av                ! g_Rho0 times the average mixed layer density (m s-2)
-  real :: g_Rho0          ! G_Earth/Rho0 (m4 s-2 kg-1) 
+  real :: g_Rho0          ! G_Earth/Rho0 (m4 s-2 kg-1)
   real :: Rho0(SZI_(G))   ! Potential density relative to the surface (kg m-3)
   real :: p0(SZI_(G))     ! A pressure of 0 (Pa)
 
@@ -251,8 +251,8 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, CS)
 !   2. Add exponential tail to streamfunction?
 
 !   U - Component
-!$OMP do  
-  do j=js,je 
+!$OMP do
+  do j=js,je
     do i=is-1,ie ; utimescale_diag(i,j) = 0.0 ; enddo
     do i=is-1,ie ; vtimescale_diag(i,j) = 0.0 ; enddo
     do I=is-1,ie
@@ -261,7 +261,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, CS)
       u_star = 0.5*(fluxes%ustar(i,j) + fluxes%ustar(i+1,j))
       absf = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
       ! peak ML visc: u_star * 0.41 * (h_ml*u_star)/(absf*h_ml + 4.0*u_star)
-      ! momentum mixing rate: pi^2*visc/h_ml^2 
+      ! momentum mixing rate: pi^2*visc/h_ml^2
       ! 0.41 is the von Karmen constant, 9.8696 = pi^2.
       mom_mixrate = (0.41*9.8696)*u_star**2 / &
                     (absf*h_vel**2 + 4.0*(h_vel+dz_neglect)*u_star)
@@ -298,7 +298,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, CS)
           uhtr(I,j,k) = uhtr(I,j,k) + uhml(I,j,k)*dt
         enddo
       endif
-    enddo 
+    enddo
     uDml_diag(is:ie,j) = uDml(is:ie)
   enddo
 
@@ -310,7 +310,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, CS)
     u_star = 0.5*(fluxes%ustar(i,j) + fluxes%ustar(i,j+1))
     absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
     ! peak ML visc: u_star * 0.41 * (h_ml*u_star)/(absf*h_ml + 4.0*u_star)
-    ! momentum mixing rate: pi^2*visc/h_ml^2 
+    ! momentum mixing rate: pi^2*visc/h_ml^2
     ! 0.41 is the von Karmen constant, 9.8696 = pi^2.
     mom_mixrate = (0.41*9.8696)*u_star**2 / &
                   (absf*h_vel**2 + 4.0*(h_vel+dz_neglect)*u_star)
@@ -382,7 +382,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, CS)
     endif
     if (CS%id_vml > 0) then
       do J=js,je ; do i=is,ie
-        h_vel = 0.5*((htot(i,j) + htot(i,j+1)) + h_neglect) 
+        h_vel = 0.5*((htot(i,j) + htot(i,j+1)) + h_neglect)
         vDml_diag(i,J) = vDml_diag(i,J) / (0.01*h_vel) * G%IdxCv(i,J) * (PSI(0.)-PSI(-.01))
       enddo ; enddo
       call post_data(CS%id_vml, vDml_diag, CS%diag)
@@ -397,15 +397,15 @@ end subroutine mixedlayer_restrat_general
 !! limited to guarantee stability.
 subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h       !< layer thickness (H units = m or kg/m2)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uhtr    !< accumulated zonal mass flux (m3 or kg)   
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vhtr    !< accumulated merid mass flux (m3 or kg)   
-  type(thermo_var_ptrs),                  intent(in)    :: tv      !< thermodynamic variables structure 
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uhtr    !< accumulated zonal mass flux (m3 or kg)
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vhtr    !< accumulated merid mass flux (m3 or kg)
+  type(thermo_var_ptrs),                  intent(in)    :: tv      !< thermodynamic variables structure
   type(forcing),                          intent(in)    :: fluxes  !< pointers to forcing fields
   real,                                   intent(in)    :: dt      !< time increment (sec)
-  type(ocean_grid_type),                  intent(in)    :: G       !< ocean grid structure  
-  type(mixedlayer_restrat_CS),            pointer       :: CS      !< module control structure 
+  type(ocean_grid_type),                  intent(in)    :: G       !< ocean grid structure
+  type(mixedlayer_restrat_CS),            pointer       :: CS      !< module control structure
 
-  real :: uhml(SZIB_(G),SZJ_(G),SZK_(G)) ! zonal mixed layer transport (m3/s or kg/s) 
+  real :: uhml(SZIB_(G),SZJ_(G),SZK_(G)) ! zonal mixed layer transport (m3/s or kg/s)
   real :: vhml(SZI_(G),SZJB_(G),SZK_(G)) ! merid mixed layer transport (m3/s or kg/s)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     h_avail               ! The volume available for diffusion out of each face of each
@@ -493,8 +493,8 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
 !   2. Add exponential tail to streamfunction?
 
 !   U - Component
-!$OMP do  
-  do j=js,je 
+!$OMP do
+  do j=js,je
     do i=is,ie ; utimescale_diag(i,j) = 0.0 ; enddo
     do i=is,ie ; vtimescale_diag(i,j) = 0.0 ; enddo
     do I=is-1,ie
@@ -503,7 +503,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
       u_star = 0.5*(fluxes%ustar(i,j) + fluxes%ustar(i+1,j))
       absf = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
       ! peak ML visc: u_star * 0.41 * (h_ml*u_star)/(absf*h_ml + 4.0*u_star)
-      ! momentum mixing rate: pi^2*visc/h_ml^2 
+      ! momentum mixing rate: pi^2*visc/h_ml^2
       ! 0.41 is the von Karmen constant, 9.8696 = pi^2.
       mom_mixrate = (0.41*9.8696)*u_star**2 / &
                     (absf*h_vel**2 + 4.0*(h_vel+dz_neglect)*u_star)
@@ -539,7 +539,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
           uhtr(I,j,k) = uhtr(I,j,k) + uhml(I,j,k)*dt
         enddo
       endif
-    enddo 
+    enddo
     uDml_diag(is:ie,j) = uDml(is:ie)
   enddo
 
@@ -551,7 +551,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
     u_star = 0.5*(fluxes%ustar(i,j) + fluxes%ustar(i,j+1))
     absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
     ! peak ML visc: u_star * 0.41 * (h_ml*u_star)/(absf*h_ml + 4.0*u_star)
-    ! momentum mixing rate: pi^2*visc/h_ml^2 
+    ! momentum mixing rate: pi^2*visc/h_ml^2
     ! 0.41 is the von Karmen constant, 9.8696 = pi^2.
     mom_mixrate = (0.41*9.8696)*u_star**2 / &
                   (absf*h_vel**2 + 4.0*(h_vel+dz_neglect)*u_star)
@@ -624,13 +624,13 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
 end subroutine mixedlayer_restrat_BML
 
 
-!> Initialize the mixedlayer restratification module 
+!> Initialize the mixedlayer restratification module
 logical function mixedlayer_restrat_init(Time, G, param_file, diag, CS)
-  type(time_type),             intent(in)    :: Time         !< current model time 
-  type(ocean_grid_type),       intent(in)    :: G            !< ocean grid structure   
+  type(time_type),             intent(in)    :: Time         !< current model time
+  type(ocean_grid_type),       intent(in)    :: G            !< ocean grid structure
   type(param_file_type),       intent(in)    :: param_file   !< parameter file to parse
-  type(diag_ctrl), target,     intent(inout) :: diag         !< regulate diagnostics 
-  type(mixedlayer_restrat_CS), pointer       :: CS           !< module control structure 
+  type(diag_ctrl), target,     intent(inout) :: diag         !< regulate diagnostics
+  type(mixedlayer_restrat_CS), pointer       :: CS           !< module control structure
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -719,11 +719,11 @@ logical function mixedlayer_restrat_init(Time, G, param_file, diag, CS)
 
 end function mixedlayer_restrat_init
 
-!> Allocate and regsiter fields in the mixedlayer restratification structure for restarts 
+!> Allocate and regsiter fields in the mixedlayer restratification structure for restarts
 subroutine mixedlayer_restrat_register_restarts(G, param_file, CS, restart_CS)
-  type(ocean_grid_type),       intent(in)    :: G          !< Ocean grid structure   
+  type(ocean_grid_type),       intent(in)    :: G          !< Ocean grid structure
   type(param_file_type),       intent(in)    :: param_file !< Parameter file to parse
-  type(mixedlayer_restrat_CS), pointer       :: CS         !< Module control structure 
+  type(mixedlayer_restrat_CS), pointer       :: CS         !< Module control structure
   type(MOM_restart_CS),        pointer       :: restart_CS !< Restart structure
   ! Local variables
   type(vardesc) :: vd
@@ -756,46 +756,46 @@ subroutine mixedlayer_restrat_register_restarts(G, param_file, CS, restart_CS)
 end subroutine mixedlayer_restrat_register_restarts
 
 !> \namespace mom_mixed_layer_restrat
-!!                                                                     
-!!    The subroutine in this file implements a parameterization of     
-!!  unresolved viscous mixed layer restratification of the mixed layer 
-!!  as described in Fox-Kemper, Ferrari and Hallberg (JPO, 2008), and  
-!!  whose impacts are described in Fox-Kemper et al. (Ocean Modelling, 
-!!  2011).  This is derived in part from the older parameterizaton     
-!!  that is described in Hallberg (Aha Hulikoa, 2003), which this new  
-!!  parameterization surpasses, which in turn is based on the          
-!!  subinertial mixed layer theory of Young (JPO, 1994).  There is no  
-!!  net horizontal volume transport due to this parameterization, and  
-!!  no direct effect below the mixed layer.                            
-!!                                                                     
-!!  This parameterization sets the restratification timescale to agree 
-!!  high-resolution studies of mixed layer restratification.  The run-time  
-!!  parameter FOX_KEMPER_ML_RESTRAT_COEF is a nondimensional number    
-!!  of order a few tens, proportional to the ratio of the deformation  
-!!  radius or the gridscale (whichever is smaller to the dominant      
-!!  horizontal lengthscale of the submesoscale mixed layer             
-!!  instabilities.                                                     
-!!                                                                     
-!!  Macros written all in capital letters are defined in MOM_memory.h. 
-!!                                                                     
+!!
+!!    The subroutine in this file implements a parameterization of
+!!  unresolved viscous mixed layer restratification of the mixed layer
+!!  as described in Fox-Kemper, Ferrari and Hallberg (JPO, 2008), and
+!!  whose impacts are described in Fox-Kemper et al. (Ocean Modelling,
+!!  2011).  This is derived in part from the older parameterizaton
+!!  that is described in Hallberg (Aha Hulikoa, 2003), which this new
+!!  parameterization surpasses, which in turn is based on the
+!!  subinertial mixed layer theory of Young (JPO, 1994).  There is no
+!!  net horizontal volume transport due to this parameterization, and
+!!  no direct effect below the mixed layer.
+!!
+!!  This parameterization sets the restratification timescale to agree
+!!  high-resolution studies of mixed layer restratification.  The run-time
+!!  parameter FOX_KEMPER_ML_RESTRAT_COEF is a nondimensional number
+!!  of order a few tens, proportional to the ratio of the deformation
+!!  radius or the gridscale (whichever is smaller to the dominant
+!!  horizontal lengthscale of the submesoscale mixed layer
+!!  instabilities.
+!!
+!!  Macros written all in capital letters are defined in MOM_memory.h.
+!!
 !!  \section section_gridlayout MOM grid layout
-!! 
-!!  A small fragment of the grid is shown below:                    
+!!
+!!  A small fragment of the grid is shown below:
 !!
 !! \verbatim
-!!    j+1  x ^ x ^ x   
+!!    j+1  x ^ x ^ x
 !!
-!!    j+1  > o > o >  
+!!    j+1  > o > o >
 !!
-!!    j    x ^ x ^ x  
+!!    j    x ^ x ^ x
 !!
-!!    j    > o > o >  
+!!    j    > o > o >
 !!
 !!    j-1  x ^ x ^ x
 !!
 !!        i-1  i  i+1
 !!
-!!           i  i+1                                                    
+!!           i  i+1
 !!
 !! \endverbatim
 !!
@@ -805,8 +805,8 @@ end subroutine mixedlayer_restrat_register_restarts
 !!  * > =  u, PFu, CAu, uh, diffu, taux, ubt, uhtr
 !!  * o =  h, bathyT, eta, T, S, tr
 !!
-!!  The boundaries always run through q grid points (x).               
-!!                                                                     
+!!  The boundaries always run through q grid points (x).
+!!
 
 
 end module MOM_mixed_layer_restrat

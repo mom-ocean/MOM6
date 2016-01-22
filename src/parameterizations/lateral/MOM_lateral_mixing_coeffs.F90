@@ -56,7 +56,7 @@ type, public :: VarMix_CS ;
                                   ! to the velocity points from the thickness
                                   ! points; otherwise interpolate the wave
                                   ! speed and calculate the resolution function
-                                  ! independently at each point.   
+                                  ! independently at each point.
   logical :: use_stored_slopes    ! If true, stores isopycnal slopes in this structure.
   real, dimension(:,:), pointer :: &
     SN_u => NULL(), &   ! S*N at u-points (s^-1)
@@ -194,7 +194,7 @@ subroutine calc_resoln_function(h, tv, G, CS)
         CS%Res_fn_h(i,j) = 0.0
       else
         CS%Res_fn_h(i,j) = 1.0
-      endif 
+      endif
     enddo ; enddo
 !$OMP do
     do J=js-1,Jeq ; do I=is-1,Ieq
@@ -392,7 +392,7 @@ subroutine calc_slope_functions(h, tv, dt, G, CS)
 
 end subroutine calc_slope_functions
 
-!> Calculates diffusivity coefficients similar to Visbeck et al. 
+!> Calculates diffusivity coefficients similar to Visbeck et al.
 subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, CS)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),         intent(in)    :: h
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_),  intent(in)    :: e
@@ -486,7 +486,7 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, CS)
     do I=is-1,ie
       if (H_u(I)>0.) then
         CS%SN_u(I,j) = CS%SN_u(I,j) / H_u(I)
-        S2_u(I,j) = S2_u(I,j) / H_u(I) 
+        S2_u(I,j) = S2_u(I,j) / H_u(I)
       else
         CS%SN_u(I,j) = 0.
       endif
@@ -521,7 +521,7 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, CS)
     do i=is,ie
       if (H_v(i)>0.) then
         CS%SN_v(i,J) = CS%SN_v(i,J) / H_v(i)
-        S2_v(i,J) = S2_v(i,J) / H_v(i) 
+        S2_v(i,J) = S2_v(i,J) / H_v(i)
       else
         CS%SN_v(i,J) = 0.
       endif
@@ -659,7 +659,7 @@ subroutine calc_slope_functions_using_just_e(h, G, CS, e, calculate_slopes)
 
   enddo ! k
 !$OMP do
-  do j = js,je; 
+  do j = js,je;
     do k=nz,CS%VarMix_Ktop,-1 ; do I=is-1,ie
       CS%SN_u(I,j) = CS%SN_u(I,j) + SN_u_local(I,j,k)
     enddo ; enddo
@@ -672,10 +672,10 @@ subroutine calc_slope_functions_using_just_e(h, G, CS, e, calculate_slopes)
       else
         CS%SN_u(I,j) = 0.0
       endif
-    enddo 
+    enddo
   enddo
 !$OMP do
-  do J=js-1,je 
+  do J=js-1,je
     do k=nz,CS%VarMix_Ktop,-1 ; do I=is,ie
       CS%SN_v(i,J) = CS%SN_v(i,J) + SN_v_local(i,J,k)
     enddo ; enddo
@@ -687,7 +687,7 @@ subroutine calc_slope_functions_using_just_e(h, G, CS, e, calculate_slopes)
       else
         CS%SN_v(I,j) = 0.0
       endif
-    enddo 
+    enddo
   enddo
 !$OMP end parallel
 
