@@ -1,4 +1,4 @@
-!> This routine drives the diabatic/dianeutral physics for MOM  
+!> This routine drives the diabatic/dianeutral physics for MOM
 module MOM_diabatic_driver
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -67,7 +67,7 @@ public diabatic_driver_end
 public adiabatic
 public adiabatic_driver_init
 
-!> Control structure for this module 
+!> Control structure for this module
 type, public :: diabatic_CS ; private
   logical :: bulkmixedlayer          !< If true, a refined bulk mixed layer is used with
                                      !! nkml sublayers (and additional buffer layers).
@@ -84,17 +84,17 @@ type, public :: diabatic_CS ; private
   logical :: use_int_tides           !< If true, use the code that advances a separate set
                                      !! of equations for the internal tide energy density.
   integer :: nMode = 1               !< Number of baroclinic modes to consider
-  logical :: int_tide_source_test    !< If true, apply an arbitrary generation site 
-                                     !! for internal tide testing (BDM) 
-  real    :: int_tide_source_x       !< X Location of generation site 
+  logical :: int_tide_source_test    !< If true, apply an arbitrary generation site
+                                     !! for internal tide testing (BDM)
+  real    :: int_tide_source_x       !< X Location of generation site
                                      !! for internal tide for testing (BDM)
-  real    :: int_tide_source_y       !< Y Location of generation site 
+  real    :: int_tide_source_y       !< Y Location of generation site
                                      !! for internal tide for testing (BDM)
   integer :: tlen_days               !< Time interval from start for adding wave source
                                      !! for testing internal tides (BDM)
-  logical :: uniform_cg              !< If true, set cg = cg_test everywhere 
+  logical :: uniform_cg              !< If true, set cg = cg_test everywhere
                                      !! for testing internal tides (BDM)
-  real    :: cg_test                 !< Uniform group velocity of internal tide 
+  real    :: cg_test                 !< Uniform group velocity of internal tide
                                      !! for testing internal tides (BDM)
   type(time_type) :: time_max_source !< For use in testing internal tides (BDM)
   type(time_type) :: time_end        !< For use in testing internal tides (BDM)
@@ -149,17 +149,17 @@ type, public :: diabatic_CS ; private
   integer :: id_diabatic_diff_temp_tend     = -1
   integer :: id_diabatic_diff_saln_tend     = -1
   integer :: id_diabatic_diff_heat_tend     = -1
-  integer :: id_diabatic_diff_salt_tend     = -1 
+  integer :: id_diabatic_diff_salt_tend     = -1
   integer :: id_diabatic_diff_heat_tend_2d  = -1
-  integer :: id_diabatic_diff_salt_tend_2d  = -1 
+  integer :: id_diabatic_diff_salt_tend_2d  = -1
   logical :: diabatic_diff_tendency_diag    = .false.
 
   integer :: id_boundary_forcing_temp_tend    = -1
   integer :: id_boundary_forcing_saln_tend    = -1
   integer :: id_boundary_forcing_heat_tend    = -1
-  integer :: id_boundary_forcing_salt_tend    = -1 
+  integer :: id_boundary_forcing_salt_tend    = -1
   integer :: id_boundary_forcing_heat_tend_2d = -1
-  integer :: id_boundary_forcing_salt_tend_2d = -1 
+  integer :: id_boundary_forcing_salt_tend_2d = -1
   logical :: boundary_forcing_tendency_diag   = .false.
 
   integer :: id_frazil_temp_tend    = -1
@@ -169,7 +169,7 @@ type, public :: diabatic_CS ; private
   real, allocatable, dimension(:,:,:) :: frazil_heat_diag !< diagnose 3d heat tendency from frazil
   real, allocatable, dimension(:,:,:) :: frazil_temp_diag !< diagnose 3d temp tendency from frazil
 
-  real    :: ppt2mks = 0.001 
+  real    :: ppt2mks = 0.001
 
   type(diabatic_aux_CS),        pointer :: diabatic_aux_CSp      => NULL()
   type(entrain_diffusive_CS),   pointer :: entrain_diffusive_CSp => NULL()
@@ -200,7 +200,7 @@ type, public :: diabatic_CS ; private
 
 end type diabatic_CS
 
-! clock ids 
+! clock ids
 integer :: id_clock_entrain, id_clock_mixedlayer, id_clock_set_diffusivity
 integer :: id_clock_tracers, id_clock_tridiag, id_clock_pass, id_clock_sponge
 integer :: id_clock_geothermal, id_clock_differential_diff, id_clock_remap
@@ -213,15 +213,15 @@ contains
 subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: u       !< zonal velocity (m/s)
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: v       !< meridional velocity (m/s)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h       !< thickness (m for Bouss / kg/m2 for non-Bouss) 
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h       !< thickness (m for Bouss / kg/m2 for non-Bouss)
   type(thermo_var_ptrs),                  intent(inout) :: tv      !< points to thermodynamic fields; unused have NULL ptrs
   type(forcing),                          intent(inout) :: fluxes  !< points to forcing fields; unused fields have NULL ptrs
-  type(vertvisc_type),                    intent(inout) :: visc    !< vertical viscosities, BBL properies, and related 
-  type(accel_diag_ptrs),                  intent(inout) :: ADp     !< points to accelerations in momentum equations, 
+  type(vertvisc_type),                    intent(inout) :: visc    !< vertical viscosities, BBL properies, and related
+  type(accel_diag_ptrs),                  intent(inout) :: ADp     !< points to accelerations in momentum equations,
                                                                    !! to enable the later derived diagn, like energy budgets
   type(cont_diag_ptrs),                   intent(inout) :: CDp     !< points to terms in continuity equations
   real,                                   intent(in)    :: dt      !< time increment (seconds)
-  type(ocean_grid_type),                  intent(inout) :: G       !< ocean grid structure 
+  type(ocean_grid_type),                  intent(inout) :: G       !< ocean grid structure
   type(diabatic_CS),                      pointer       :: CS      !< module control structure
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
@@ -239,17 +239,17 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     cTKE,   &    ! convective TKE requirements for each layer in J/m^2.
     u_h,    &    ! zonal and meridional velocities at thickness points after
     v_h          ! entrainment (m/s)
-    
+
   real, dimension(SZI_(G),SZJ_(G),CS%nMode) :: &
     cn       ! baroclinic gravity wave speeds (formerly cg1 - BDM)
 
   real, dimension(SZI_(G),SZJ_(G)) :: &
     Rcv_ml   ! coordinate density of mixed layer, used for applying sponges
 
-  real, dimension(SZI_(G),SZJ_(G),G%ke) :: h_diag                ! diagnostic array for thickness 
+  real, dimension(SZI_(G),SZJ_(G),G%ke) :: h_diag                ! diagnostic array for thickness
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: temp_diag             ! diagnostic array for temp
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: saln_diag             ! diagnostic array for salinity
-  real, dimension(SZI_(G),SZJ_(G))      :: tendency_2d           ! depth integrated content tendency for diagn 
+  real, dimension(SZI_(G),SZJ_(G))      :: tendency_2d           ! depth integrated content tendency for diagn
   real, dimension(SZI_(G),SZJ_(G))      :: TKE_itidal_input_test ! override of energy input for testing (BDM)
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target :: &
@@ -316,7 +316,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   integer :: z_ids(7)     ! id numbers of diagnostics to be interpolated to depth
   logical :: showCallTree ! If true, show the call tree
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb, m
-  
+
   integer :: ig, jg      ! global indices for testing testing itide point source (BDM)
   logical :: avg_enabled ! for testing internal tides (BDM)
 
@@ -334,7 +334,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   ! set equivalence between the same bits of memory for these arrays
   eaml => eatr ; ebml => ebtr
 
-  ! inverse time step 
+  ! inverse time step
   Idt = 1.0 / dt
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_diabatic_driver: "// &
@@ -355,11 +355,11 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   ! the end of the diabatic processes.
   if (ASSOCIATED(tv%T) .AND. ASSOCIATED(tv%frazil)) then
 
-    if(CS%frazil_tendency_diag) then 
+    if(CS%frazil_tendency_diag) then
       do k=1,nz ; do j=js,je ; do i=is,ie
         temp_diag(i,j,k) = tv%T(i,j,k)
-      enddo ; enddo ; enddo 
-    endif 
+      enddo ; enddo ; enddo
+    endif
 
     if (ASSOCIATED(fluxes%p_surf_full)) then
         call make_frazil(h, tv, G, CS%diabatic_aux_CSp, fluxes%p_surf_full)
@@ -368,9 +368,9 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     endif
     if (showCallTree) call callTree_waypoint("done with 1st make_frazil (diabatic)")
 
-    if(CS%frazil_tendency_diag) then 
+    if(CS%frazil_tendency_diag) then
       call diagnose_frazil_tendency(tv, h, temp_diag, dt, G, CS, 1)
-    endif 
+    endif
 
   endif
 
@@ -407,7 +407,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     endif
 
     if (CS%ML_mix_first > 0.0) then
-!  This subroutine 
+!  This subroutine
 !    (1) Cools the mixed layer.
 !    (2) Performs convective adjustment by mixed layer entrainment.
 !    (3) Heats the mixed layer and causes it to detrain to
@@ -432,12 +432,12 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
                         CS%aggregate_FW_forcing, dt, last_call=.true.)
       endif
 
-      !  Keep salinity from falling below a small but positive threshold. 
-      !  This constraint is needed for SIS1 ice model, which can extract 
+      !  Keep salinity from falling below a small but positive threshold.
+      !  This constraint is needed for SIS1 ice model, which can extract
       !  more salt than is present in the ocean. SIS2 does not suffer
       !  from this limitation, in which case we can let salinity=0 and still
-      !  have salt conserved with SIS2 ice. So for SIS2, we can run with 
-      !  BOUND_SALINITY=False in MOM.F90.   
+      !  have salt conserved with SIS2 ice. So for SIS2, we can run with
+      !  BOUND_SALINITY=False in MOM.F90.
       if (ASSOCIATED(tv%S) .and. ASSOCIATED(tv%salt_deficit)) &
         call adjust_salt(h, tv, G, CS%diabatic_aux_CSp)
       call cpu_clock_end(id_clock_mixedlayer)
@@ -450,7 +450,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     endif
   endif
 
-!  smg: this comment is orphaned.  Should be removed?  
+!  smg: this comment is orphaned.  Should be removed?
 !  This subroutine applies diapycnal diffusion and the
 !  surface buoyancy forcing.  No layer is less than an Angstrom thick at
 !  the end, and total density (heat or salt) is conserved unless all
@@ -481,7 +481,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   if (CS%use_int_tides) then
     !   This block provides an interface for the unresolved low-mode internal
     ! tide module (BDM).
-    
+
     ! PROVIDE ENERGY DISTRIBUTION (calculate time-varying energy source)
     call set_int_tide_input(u, v, h, tv, fluxes, CS%int_tide_input, dt, G, &
                             CS%int_tide_input_CSp)
@@ -493,7 +493,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     else
        call wave_speeds(h, tv, G, CS%nMode, cn, full_halos=.true.)
        ! uncomment the lines below for a hard-coded cn that changes linearly with latitude
-       !do j=G%jsd,G%jed ; do i=G%isd,G%ied      
+       !do j=G%jsd,G%jed ; do i=G%isd,G%ied
        !  cn(i,j,:) = ((7.-1.)/14000000.)*G%geoLatBu(i,j) + (1.-((7.-1.)/14000000.)*-7000000.)
        !enddo ; enddo
     endif
@@ -516,10 +516,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       ! CALL ROUTINE USING PRESCRIBED KE FOR TESTING
       call propagate_int_tide(h, tv, cn, TKE_itidal_input_test, &
                             CS%int_tide_input%tideamp, CS%int_tide_input%Nb, dt, G, CS%int_tide_CSp)
-    else    
+    else
       ! CALL ROUTINE USING CALCULATED KE INPUT
       call propagate_int_tide(h, tv, cn, CS%int_tide_input%TKE_itidal_input, &
-                              CS%int_tide_input%tideamp, CS%int_tide_input%Nb, dt, G, CS%int_tide_CSp)    
+                              CS%int_tide_input%tideamp, CS%int_tide_input%Nb, dt, G, CS%int_tide_CSp)
     endif
     if (showCallTree) call callTree_waypoint("done with propagate_int_tide (diabatic)")
   endif
@@ -544,7 +544,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   if (CS%useKPP) then
     call cpu_clock_begin(id_clock_kpp)
     ! KPP needs the surface buoyancy flux but does not update state variables.
-    ! We could make this call higher up to avoid a repeat unpacking of the surface fluxes. 
+    ! We could make this call higher up to avoid a repeat unpacking of the surface fluxes.
     ! Sets: CS%KPP_buoy_flux, CS%KPP_temp_flux, CS%KPP_salt_flux
     ! NOTE: CS%KPP_buoy_flux, CS%KPP_temp_flux, CS%KPP_salt_flux are returned as rates (i.e. stuff per second)
     ! unlike other instances where the fluxes are integrated in time over a time-step.
@@ -639,7 +639,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 
   endif ! endif for KPP
 
-  ! Differential diffusion done here. 
+  ! Differential diffusion done here.
   ! Changes: tv%T, tv%S
   ! If using matching within the KPP scheme, then this step needs to provide
   ! a diffusivity and happen before KPP.  But generally in MOM, we do not match
@@ -653,13 +653,13 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     if (CS%debugConservation) call MOM_state_stats('differential_diffuse_T_S', u, v, h, tv%T, tv%S, G)
 
     ! increment heat and salt diffusivity.
-    ! CS%useKPP==.true. already has extra_T and extra_S included 
-    if(.not. CS%useKPP) then 
+    ! CS%useKPP==.true. already has extra_T and extra_S included
+    if(.not. CS%useKPP) then
       do K=2,nz ; do j=js,je ; do i=is,ie
-        Kd_heat(i,j,K) = Kd_heat(i,j,K) + visc%Kd_extra_T(i,j,K) 
-        Kd_salt(i,j,K) = Kd_salt(i,j,K) + visc%Kd_extra_S(i,j,K) 
-      enddo ; enddo ; enddo 
-    endif 
+        Kd_heat(i,j,K) = Kd_heat(i,j,K) + visc%Kd_extra_T(i,j,K)
+        Kd_salt(i,j,K) = Kd_salt(i,j,K) + visc%Kd_extra_S(i,j,K)
+      enddo ; enddo ; enddo
+    endif
 
 
   endif
@@ -715,14 +715,14 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 
     ! Changes made to following fields: ea(:,:,1), h, tv%T and tv%S.
 
-    ! save prior values for diagnostics 
-    if(CS%boundary_forcing_tendency_diag) then 
+    ! save prior values for diagnostics
+    if(CS%boundary_forcing_tendency_diag) then
       do k=1,nz ; do j=js,je ; do i=is,ie
         h_diag(i,j,k)    = h(i,j,k)
         temp_diag(i,j,k) = tv%T(i,j,k)
         saln_diag(i,j,k) = tv%S(i,j,k)
-      enddo ; enddo ; enddo 
-    endif 
+      enddo ; enddo ; enddo
+    endif
 
     if (CS%use_energetic_PBL) then
 
@@ -754,9 +754,9 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
         visc%Kv_turb(i,j,K) = visc%Kv_turb(i,j,K) + Kd_ePBL(i,j,K)
         Kd_int(i,j,K)  = Kd_int(i,j,K) + Kd_ePBL(i,j,K)
 
-        ! for diagnostics 
-        Kd_heat(i,j,K) = Kd_heat(i,j,K) + Kd_int(i,j,K) 
-        Kd_salt(i,j,K) = Kd_salt(i,j,K) + Kd_int(i,j,K) 
+        ! for diagnostics
+        Kd_heat(i,j,K) = Kd_heat(i,j,K) + Kd_int(i,j,K)
+        Kd_salt(i,j,K) = Kd_salt(i,j,K) + Kd_int(i,j,K)
 
       enddo ; enddo ; enddo
 
@@ -773,10 +773,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 
     endif   ! endif for CS%use_energetic_PBL
 
-    ! diagnose the tendencies due to boundary forcing 
-    if(CS%boundary_forcing_tendency_diag) then 
+    ! diagnose the tendencies due to boundary forcing
+    if(CS%boundary_forcing_tendency_diag) then
       call diagnose_boundary_forcing_tendency(tv, h, temp_diag, saln_diag, h_diag, dt, G, CS)
-    endif 
+    endif
 
     call cpu_clock_end(id_clock_remap)
     if (CS%debug) then
@@ -793,9 +793,9 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   ! Update h according to divergence of the difference between
   ! ea and eb. We keep a record of the original h in hold.
   ! In the following, the checks for negative values are to guard
-  ! against instances where entrainment drives a layer to 
+  ! against instances where entrainment drives a layer to
   ! negative thickness.  This situation will never happen if
-  ! enough iterations are permitted in Calculate_Entrainment. 
+  ! enough iterations are permitted in Calculate_Entrainment.
   ! Even if too few iterations are allowed, it is still guarded
   ! against.  In other words the checks are probably unnecessary.
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,hold,h,eb,ea,G)
@@ -832,8 +832,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 
   ! Here, T and S are updated according to ea and eb.
   ! If using the bulk mixed layer, T and S are also updated
-  ! by surface fluxes (in fluxes%*). 
-  ! This is a very long block.  
+  ! by surface fluxes (in fluxes%*).
+  ! This is a very long block.
   if (CS%bulkmixedlayer) then
 
     if (ASSOCIATED(tv%T)) then
@@ -956,12 +956,12 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
         call insert_brine(h, tv, G, fluxes, nkmb, CS%diabatic_aux_CSp, dt_mix, &
                           CS%id_brine_lay)
 
-      !  Keep salinity from falling below a small but positive threshold. 
-      !  This constraint is needed for SIS1 ice model, which can extract 
+      !  Keep salinity from falling below a small but positive threshold.
+      !  This constraint is needed for SIS1 ice model, which can extract
       !  more salt than is present in the ocean. SIS2 does not suffer
       !  from this limitation, in which case we can let salinity=0 and still
-      !  have salt conserved with SIS2 ice. So for SIS2, we can run with 
-      !  BOUND_SALINITY=False in MOM.F90.   
+      !  have salt conserved with SIS2 ice. So for SIS2, we can run with
+      !  BOUND_SALINITY=False in MOM.F90.
       if (ASSOCIATED(tv%S) .and. ASSOCIATED(tv%salt_deficit)) &
         call adjust_salt(h, tv, G, CS%diabatic_aux_CSp)
 
@@ -973,7 +973,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   else  ! following block for when NOT using BULKMIXEDLAYER
 
 
-    ! calculate change in temperature & salinity due to dia-coordinate surface diffusion 
+    ! calculate change in temperature & salinity due to dia-coordinate surface diffusion
     if (ASSOCIATED(tv%T)) then
 
       if (CS%debug) then
@@ -982,29 +982,29 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       endif
       call cpu_clock_begin(id_clock_tridiag)
 
-      if(CS%diabatic_diff_tendency_diag) then 
+      if(CS%diabatic_diff_tendency_diag) then
         do k=1,nz ; do j=js,je ; do i=is,ie
           temp_diag(i,j,k) = tv%T(i,j,k)
           saln_diag(i,j,k) = tv%S(i,j,k)
-        enddo ; enddo ; enddo 
-      endif 
+        enddo ; enddo ; enddo
+      endif
 
-      ! Changes T and S via the tridiagonal solver; no change to h 
+      ! Changes T and S via the tridiagonal solver; no change to h
       call triDiagTS(G, is, ie, js, je, hold, ea, eb, tv%T, tv%S)
 
-      ! diagnose temperature, salinity, heat, and salt tendencies 
-      if(CS%diabatic_diff_tendency_diag) then 
+      ! diagnose temperature, salinity, heat, and salt tendencies
+      if(CS%diabatic_diff_tendency_diag) then
          call diagnose_diabatic_diff_tendency(tv, hold, temp_diag, saln_diag, dt, G, CS)
-      endif  
+      endif
 
       call cpu_clock_end(id_clock_tridiag)
       if (showCallTree) call callTree_waypoint("done with triDiagTS (diabatic)")
 
-    endif  ! endif corresponding to if (ASSOCIATED(tv%T)) 
+    endif  ! endif corresponding to if (ASSOCIATED(tv%T))
     if (CS%debugConservation) call MOM_state_stats('triDiagTS', u, v, h, tv%T, tv%S, G)
 
 
-  endif  ! endif for the BULKMIXEDLAYER block 
+  endif  ! endif for the BULKMIXEDLAYER block
 
 
   if (CS%debug) then
@@ -1022,11 +1022,11 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     if (CS%debugConservation) call MOM_state_stats('regularize_layers', u, v, h, tv%T, tv%S, G)
   endif
 
-  ! Whenever thickness changes let the diag manager know, as the 
+  ! Whenever thickness changes let the diag manager know, as the
   ! target grids for vertical remapping may need to be regenerated.
   call diag_update_target_grids(CS%diag)
 
-  ! diagnostics 
+  ! diagnostics
   if ((CS%id_Tdif > 0) .or. (CS%id_Tdif_z > 0) .or. &
       (CS%id_Tadv > 0) .or. (CS%id_Tadv_z > 0)) then
     do j=js,je ; do i=is,ie
@@ -1057,7 +1057,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   endif
 
 
-  ! mixing of passive tracers from massless boundary layers to interior  
+  ! mixing of passive tracers from massless boundary layers to interior
   call cpu_clock_begin(id_clock_tracers)
   if (CS%mix_boundary_tracers) then
     Tr_ea_BBL = sqrt(dt*CS%Kd_BBL_tr)
@@ -1110,7 +1110,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, dt, G, tv, &
                                 CS%optics, CS%tracer_flow_CSp)
 
-  elseif (associated(visc%Kd_extra_S)) then  ! extra diffusivity for passive tracers 
+  elseif (associated(visc%Kd_extra_S)) then  ! extra diffusivity for passive tracers
 
     do j=js,je ; do i=is,ie
       ebtr(i,j,nz) = eb(i,j,nz) ; eatr(i,j,1) = ea(i,j,1)
@@ -1140,8 +1140,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 
   call cpu_clock_end(id_clock_tracers)
 
- 
-  ! sponges 
+
+  ! sponges
   if (CS%use_sponge) then
     call cpu_clock_begin(id_clock_sponge)
     if (CS%bulkmixedlayer .and. ASSOCIATED(tv%eqn_of_state)) then
@@ -1314,11 +1314,11 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   ! the end of the diabatic processes.
   if (ASSOCIATED(tv%T) .AND. ASSOCIATED(tv%frazil)) then
 
-    if(CS%frazil_tendency_diag) then 
+    if(CS%frazil_tendency_diag) then
       do k=1,nz ; do j=js,je ; do i=is,ie
         temp_diag(i,j,k) = tv%T(i,j,k)
-      enddo ; enddo ; enddo 
-    endif 
+      enddo ; enddo ; enddo
+    endif
 
     if (ASSOCIATED(fluxes%p_surf_full)) then
        call make_frazil(h, tv, G, CS%diabatic_aux_CSp, fluxes%p_surf_full)
@@ -1326,14 +1326,14 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
        call make_frazil(h, tv, G, CS%diabatic_aux_CSp)
     endif
 
-    if(CS%frazil_tendency_diag) then 
+    if(CS%frazil_tendency_diag) then
       call diagnose_frazil_tendency(tv, h, temp_diag, dt, G, CS, 2)
-    endif 
+    endif
 
     if (showCallTree) call callTree_waypoint("done with 2nd make_frazil (diabatic)")
     if (CS%debugConservation) call MOM_state_stats('2nd make_frazil', u, v, h, tv%T, tv%S, G)
 
-  endif  ! endif for frazil 
+  endif  ! endif for frazil
 
 
   ! Diagnose the diapycnal diffusivities and other related quantities.
@@ -1369,7 +1369,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       if (CS%id_cn(m) > 0) call post_data(CS%id_cn(m),cn(:,:,m),CS%diag)
     enddo
   endif
-  
+
   num_z_diags = 0
   if (CS%id_Kd_z > 0) then
     num_z_diags = num_z_diags + 1
@@ -1401,14 +1401,14 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 end subroutine diabatic
 
 
-!> Routine called for adiabatic physics 
+!> Routine called for adiabatic physics
 subroutine adiabatic(h, tv, fluxes, dt, G, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h      !< thickness (m for Bouss or kg/m2 for non-Bouss) 
-  type(thermo_var_ptrs),                  intent(inout) :: tv     !< points to thermodynamic fields 
-  type(forcing),                          intent(inout) :: fluxes !< boundary fluxes 
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h      !< thickness (m for Bouss or kg/m2 for non-Bouss)
+  type(thermo_var_ptrs),                  intent(inout) :: tv     !< points to thermodynamic fields
+  type(forcing),                          intent(inout) :: fluxes !< boundary fluxes
   real,                                   intent(in)    :: dt     !< time step (seconds)
-  type(ocean_grid_type),                  intent(inout) :: G      !< ocean grid structure 
-  type(diabatic_CS),                      pointer       :: CS     !< module control structure 
+  type(ocean_grid_type),                  intent(inout) :: G      !< ocean grid structure
+  type(diabatic_CS),                      pointer       :: CS     !< module control structure
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: zeros  ! An array of zeros.
 
@@ -1420,25 +1420,25 @@ subroutine adiabatic(h, tv, fluxes, dt, G, CS)
 end subroutine adiabatic
 
 
-!> This routine diagnoses tendencies from application of diabatic diffusion 
-!! using ALE algorithm. Note that layer thickness is not altered by 
+!> This routine diagnoses tendencies from application of diabatic diffusion
+!! using ALE algorithm. Note that layer thickness is not altered by
 !! diabatic diffusion.
 subroutine diagnose_diabatic_diff_tendency(tv, h, temp_old, saln_old, dt, G, CS)
   type(thermo_var_ptrs),                  intent(in) :: tv        !< points to updated thermodynamic fields
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h         !< thickness (m or kg/m2) 
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: temp_old  !< temperature prior to diabatic physics 
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: saln_old  !< salinity prior to diabatic physics (PPT) 
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h         !< thickness (m or kg/m2)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: temp_old  !< temperature prior to diabatic physics
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: saln_old  !< salinity prior to diabatic physics (PPT)
   real,                                   intent(in) :: dt        !< time step (sec)
-  type(ocean_grid_type),                  intent(in) :: G         !< ocean grid structure 
+  type(ocean_grid_type),                  intent(in) :: G         !< ocean grid structure
   type(diabatic_CS),                      pointer    :: CS        !< module control structure
 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: work_3d  
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: work_3d
   real, dimension(SZI_(G),SZJ_(G))         :: work_2d
-  real    :: Idt 
+  real    :: Idt
   integer :: i, j, k, is, ie, js, je, nz
 
   is  = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  Idt = 1/dt   
+  Idt = 1/dt
   work_3d(:,:,:) = 0.0
   work_2d(:,:)   = 0.0
 
@@ -1446,56 +1446,56 @@ subroutine diagnose_diabatic_diff_tendency(tv, h, temp_old, saln_old, dt, G, CS)
   ! temperature tendency
   do k=1,nz ; do j=js,je ; do i=is,ie
     work_3d(i,j,k) = (tv%T(i,j,k)-temp_old(i,j,k))*Idt
-  enddo ; enddo ; enddo 
+  enddo ; enddo ; enddo
   if(CS%id_diabatic_diff_temp_tend > 0) then
     call post_data(CS%id_diabatic_diff_temp_tend, work_3d, CS%diag)
-  endif  
+  endif
 
   ! heat tendency
-  if(CS%id_diabatic_diff_heat_tend > 0 .or. CS%id_diabatic_diff_heat_tend_2d > 0) then 
+  if(CS%id_diabatic_diff_heat_tend > 0 .or. CS%id_diabatic_diff_heat_tend_2d > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
       work_3d(i,j,k) = h(i,j,k) * G%H_to_kg_m2 * tv%C_p * work_3d(i,j,k)
-    enddo ; enddo ; enddo 
-    if(CS%id_diabatic_diff_heat_tend > 0) then 
+    enddo ; enddo ; enddo
+    if(CS%id_diabatic_diff_heat_tend > 0) then
       call post_data(CS%id_diabatic_diff_heat_tend, work_3d, CS%diag)
-    endif 
-    if(CS%id_diabatic_diff_heat_tend_2d > 0) then 
+    endif
+    if(CS%id_diabatic_diff_heat_tend_2d > 0) then
       do j=js,je ; do i=is,ie
         work_2d(i,j) = 0.0
-        do k=1,nz 
+        do k=1,nz
           work_2d(i,j) = work_2d(i,j) + work_3d(i,j,k)
         enddo
       enddo ; enddo
       call post_data(CS%id_diabatic_diff_heat_tend_2d, work_2d, CS%diag)
-    endif 
-  endif 
+    endif
+  endif
 
-  ! salinity tendency 
+  ! salinity tendency
   do k=1,nz ; do j=js,je ; do i=is,ie
     work_3d(i,j,k) = (tv%S(i,j,k)-saln_old(i,j,k))*Idt
-  enddo ; enddo ; enddo 
+  enddo ; enddo ; enddo
   if(CS%id_diabatic_diff_saln_tend > 0) then
     call post_data(CS%id_diabatic_diff_saln_tend, work_3d, CS%diag)
   endif
 
   ! salt tendency
-  if(CS%id_diabatic_diff_salt_tend > 0 .or. CS%id_diabatic_diff_salt_tend_2d > 0) then 
+  if(CS%id_diabatic_diff_salt_tend > 0 .or. CS%id_diabatic_diff_salt_tend_2d > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
       work_3d(i,j,k) = h(i,j,k) * G%H_to_kg_m2 * CS%ppt2mks * work_3d(i,j,k)
-    enddo ; enddo ; enddo 
-    if(CS%id_diabatic_diff_salt_tend > 0) then 
+    enddo ; enddo ; enddo
+    if(CS%id_diabatic_diff_salt_tend > 0) then
       call post_data(CS%id_diabatic_diff_salt_tend, work_3d, CS%diag)
-    endif 
-    if(CS%id_diabatic_diff_salt_tend_2d > 0) then 
+    endif
+    if(CS%id_diabatic_diff_salt_tend_2d > 0) then
       do j=js,je ; do i=is,ie
         work_2d(i,j) = 0.0
-        do k=1,nz 
+        do k=1,nz
           work_2d(i,j) = work_2d(i,j) + work_3d(i,j,k)
         enddo
       enddo ; enddo
       call post_data(CS%id_diabatic_diff_salt_tend_2d, work_2d, CS%diag)
-    endif 
-  endif 
+    endif
+  endif
 
 end subroutine diagnose_diabatic_diff_tendency
 
@@ -1503,144 +1503,144 @@ end subroutine diagnose_diabatic_diff_tendency
 !> This routine diagnoses tendencies from application of boundary fluxes.
 !! These impacts are generally 3d, in particular for penetrative shortwave.
 !! Other fluxes contribute 3d in cases when the layers vanish or are very thin,
-!! in which case we distribute the flux into k > 1 layers.  
+!! in which case we distribute the flux into k > 1 layers.
 subroutine diagnose_boundary_forcing_tendency(tv, h, temp_old, saln_old, h_old, dt, G, CS)
   type(thermo_var_ptrs),                  intent(in) :: tv        !< points to updated thermodynamic fields
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h         !< thickness after boundary flux application (m or kg/m2) 
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: temp_old  !< temperature prior to boundary flux application 
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: saln_old  !< salinity prior to boundary flux application (PPT) 
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h_old     !< thickness prior to boundary flux application (m or kg/m2) 
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h         !< thickness after boundary flux application (m or kg/m2)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: temp_old  !< temperature prior to boundary flux application
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: saln_old  !< salinity prior to boundary flux application (PPT)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h_old     !< thickness prior to boundary flux application (m or kg/m2)
   real,                                   intent(in) :: dt        !< time step (sec)
-  type(ocean_grid_type),                  intent(in) :: G         !< ocean grid structure 
+  type(ocean_grid_type),                  intent(in) :: G         !< ocean grid structure
   type(diabatic_CS),                      pointer    :: CS        !< module control structure
 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: work_3d  
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: work_3d
   real, dimension(SZI_(G),SZJ_(G))         :: work_2d
-  real    :: Idt 
+  real    :: Idt
   integer :: i, j, k, is, ie, js, je, nz
 
   is  = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  Idt = 1/dt   
+  Idt = 1/dt
   work_3d(:,:,:) = 0.0
   work_2d(:,:)   = 0.0
 
-  ! temperature tendency 
+  ! temperature tendency
   if(CS%id_boundary_forcing_temp_tend > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
       work_3d(i,j,k) = (tv%T(i,j,k)-temp_old(i,j,k))*Idt
-    enddo ; enddo ; enddo 
+    enddo ; enddo ; enddo
     call post_data(CS%id_boundary_forcing_temp_tend, work_3d, CS%diag)
-  endif  
+  endif
 
-  ! heat tendency 
-  if(CS%id_boundary_forcing_heat_tend > 0 .or. CS%id_boundary_forcing_heat_tend_2d > 0) then 
+  ! heat tendency
+  if(CS%id_boundary_forcing_heat_tend > 0 .or. CS%id_boundary_forcing_heat_tend_2d > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
       work_3d(i,j,k) = G%H_to_kg_m2 * tv%C_p * Idt * (h(i,j,k) * tv%T(i,j,k) - h_old(i,j,k) * temp_old(i,j,k))
-    enddo ; enddo ; enddo 
-    if(CS%id_boundary_forcing_heat_tend > 0) then 
+    enddo ; enddo ; enddo
+    if(CS%id_boundary_forcing_heat_tend > 0) then
       call post_data(CS%id_boundary_forcing_heat_tend, work_3d, CS%diag)
-    endif 
-    if(CS%id_boundary_forcing_heat_tend_2d > 0) then 
+    endif
+    if(CS%id_boundary_forcing_heat_tend_2d > 0) then
       do j=js,je ; do i=is,ie
         work_2d(i,j) = 0.0
-        do k=1,nz 
+        do k=1,nz
           work_2d(i,j) = work_2d(i,j) + work_3d(i,j,k)
         enddo
       enddo ; enddo
       call post_data(CS%id_boundary_forcing_heat_tend_2d, work_2d, CS%diag)
-    endif 
-  endif 
+    endif
+  endif
 
 
-  ! salinity tendency 
+  ! salinity tendency
   if(CS%id_boundary_forcing_saln_tend > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
       work_3d(i,j,k) = (tv%S(i,j,k)-saln_old(i,j,k))*Idt
-    enddo ; enddo ; enddo 
+    enddo ; enddo ; enddo
     call post_data(CS%id_boundary_forcing_saln_tend, work_3d, CS%diag)
   endif
 
-  ! salt tendency 
-  if(CS%id_boundary_forcing_salt_tend > 0 .or. CS%id_boundary_forcing_salt_tend_2d > 0) then 
+  ! salt tendency
+  if(CS%id_boundary_forcing_salt_tend > 0 .or. CS%id_boundary_forcing_salt_tend_2d > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
       work_3d(i,j,k) = G%H_to_kg_m2 * CS%ppt2mks * Idt * (h(i,j,k) * tv%S(i,j,k) - h_old(i,j,k) * saln_old(i,j,k))
-    enddo ; enddo ; enddo 
-    if(CS%id_boundary_forcing_salt_tend > 0) then 
+    enddo ; enddo ; enddo
+    if(CS%id_boundary_forcing_salt_tend > 0) then
       call post_data(CS%id_boundary_forcing_salt_tend, work_3d, CS%diag)
-    endif 
-    if(CS%id_boundary_forcing_salt_tend_2d > 0) then 
+    endif
+    if(CS%id_boundary_forcing_salt_tend_2d > 0) then
       do j=js,je ; do i=is,ie
         work_2d(i,j) = 0.0
-        do k=1,nz 
+        do k=1,nz
           work_2d(i,j) = work_2d(i,j) + work_3d(i,j,k)
         enddo
       enddo ; enddo
       call post_data(CS%id_boundary_forcing_salt_tend_2d, work_2d, CS%diag)
-    endif 
-  endif 
+    endif
+  endif
 
 end subroutine diagnose_boundary_forcing_tendency
 
 
-!> This routine diagnoses tendencies for temperature and heat from frazil formation. 
-!! This routine is called twice from within subroutine diabatic; at start and at 
-!! end of the diabatic processes. The impacts from frazil are generally a function 
+!> This routine diagnoses tendencies for temperature and heat from frazil formation.
+!! This routine is called twice from within subroutine diabatic; at start and at
+!! end of the diabatic processes. The impacts from frazil are generally a function
 !! of depth.  Hence, when checking heat budget, be sure to remove HFSIFRAZIL from HFDS in k=1.
 subroutine diagnose_frazil_tendency(tv, h, temp_old, dt, G, CS, ncall)
   type(thermo_var_ptrs),                  intent(in) :: tv        !< points to updated thermodynamic fields
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h         !< thickness (m or kg/m2) 
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: temp_old  !< temperature prior to frazil formation 
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h         !< thickness (m or kg/m2)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: temp_old  !< temperature prior to frazil formation
   real,                                   intent(in) :: dt        !< time step (sec)
-  integer,                                intent(in) :: ncall     !< the first or second call of this routine  
-  type(ocean_grid_type),                  intent(in) :: G         !< ocean grid structure 
+  integer,                                intent(in) :: ncall     !< the first or second call of this routine
+  type(ocean_grid_type),                  intent(in) :: G         !< ocean grid structure
   type(diabatic_CS),                      pointer    :: CS        !< module control structure
 
   real, dimension(SZI_(G),SZJ_(G))         :: work_2d
-  real    :: Idt 
+  real    :: Idt
   integer :: i, j, k, is, ie, js, je, nz
 
   is  = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  Idt = 1/dt   
+  Idt = 1/dt
   work_2d(:,:) = 0.0
 
-  ! zero the tendencies at start of first call 
-  if(ncall == 1) then 
-    CS%frazil_heat_diag(:,:,:) = 0.0 
-    CS%frazil_temp_diag(:,:,:) = 0.0 
-  endif 
+  ! zero the tendencies at start of first call
+  if(ncall == 1) then
+    CS%frazil_heat_diag(:,:,:) = 0.0
+    CS%frazil_temp_diag(:,:,:) = 0.0
+  endif
 
   ! temperature tendency
-  if(CS%id_frazil_temp_tend > 0) then 
+  if(CS%id_frazil_temp_tend > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
       CS%frazil_temp_diag(i,j,k) = CS%frazil_temp_diag(i,j,k) + Idt * (tv%T(i,j,k)-temp_old(i,j,k))
-    enddo ; enddo ; enddo 
+    enddo ; enddo ; enddo
     if(ncall == 2) then
       call post_data(CS%id_frazil_temp_tend, CS%frazil_temp_diag(:,:,:), CS%diag)
-    endif 
-  endif  
+    endif
+  endif
 
   ! heat tendency
-  if(CS%id_frazil_heat_tend > 0 .or. CS%id_frazil_heat_tend_2d > 0) then 
+  if(CS%id_frazil_heat_tend > 0 .or. CS%id_frazil_heat_tend_2d > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
       CS%frazil_heat_diag(i,j,k) = CS%frazil_heat_diag(i,j,k) + &
                                    G%H_to_kg_m2 * tv%C_p * h(i,j,k) * Idt * (tv%T(i,j,k)-temp_old(i,j,k))
-    enddo ; enddo ; enddo 
-    if(CS%id_frazil_heat_tend  > 0 .and. ncall == 2) then 
+    enddo ; enddo ; enddo
+    if(CS%id_frazil_heat_tend  > 0 .and. ncall == 2) then
       call post_data(CS%id_frazil_heat_tend, CS%frazil_heat_diag(:,:,:), CS%diag)
-    endif 
+    endif
 
-    ! As a consistency check, we must have 
-    ! FRAZIL_HEAT_TENDENCY_2d = HFSIFRAZIL 
-    if(CS%id_frazil_heat_tend_2d > 0 .and. ncall == 2) then 
+    ! As a consistency check, we must have
+    ! FRAZIL_HEAT_TENDENCY_2d = HFSIFRAZIL
+    if(CS%id_frazil_heat_tend_2d > 0 .and. ncall == 2) then
       do j=js,je ; do i=is,ie
         work_2d(i,j) = 0.0
-        do k=1,nz 
+        do k=1,nz
           work_2d(i,j) = work_2d(i,j) + CS%frazil_heat_diag(i,j,k)
         enddo
       enddo ; enddo
       call post_data(CS%id_frazil_heat_tend_2d, work_2d, CS%diag)
-    endif 
-  endif 
+    endif
+  endif
 
 
 end subroutine diagnose_frazil_tendency
@@ -1649,15 +1649,15 @@ end subroutine diagnose_frazil_tendency
 
 
 !> A simplified version of diabatic_driver_init that will allow
-!! tracer column functions to be called without allowing any 
+!! tracer column functions to be called without allowing any
 !! of the diabatic processes to be used.
 subroutine adiabatic_driver_init(Time, G, param_file, diag, CS, &
                                 tracer_flow_CSp, diag_to_Z_CSp)
-  type(time_type),         intent(in)    :: Time              !< current model time 
-  type(ocean_grid_type),   intent(in)    :: G                 !< model grid structure 
+  type(time_type),         intent(in)    :: Time              !< current model time
+  type(ocean_grid_type),   intent(in)    :: G                 !< model grid structure
   type(param_file_type),   intent(in)    :: param_file        !< the file to parse for parameter values
   type(diag_ctrl), target, intent(inout) :: diag              !< regulates diagnostic output
-  type(diabatic_CS),       pointer       :: CS                !< module control structure 
+  type(diabatic_CS),       pointer       :: CS                !< module control structure
   type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp   !< points to control structure of tracer flow control module
   type(diag_to_Z_CS),      pointer       :: diag_to_Z_CSp     !< pointer to Z-diagnostics control structure
 
@@ -1682,19 +1682,19 @@ subroutine adiabatic_driver_init(Time, G, param_file, diag, CS, &
 end subroutine adiabatic_driver_init
 
 
-!> This routine initializes the diabatic driver module. 
+!> This routine initializes the diabatic driver module.
 subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
                                 ADp, CDp, CS, tracer_flow_CSp, sponge_CSp, diag_to_Z_CSp)
-  type(time_type),         intent(in)    :: Time             !< model time 
-  type(ocean_grid_type),   intent(inout) :: G                !< model grid structure 
-  type(param_file_type),   intent(in)    :: param_file       !< file to parse for parameter values 
+  type(time_type),         intent(in)    :: Time             !< model time
+  type(ocean_grid_type),   intent(inout) :: G                !< model grid structure
+  type(param_file_type),   intent(in)    :: param_file       !< file to parse for parameter values
   logical,                 intent(in)    :: useALEalgorithm  !< logical for whether to use ALE remapping
   type(diag_ctrl), target, intent(inout) :: diag             !< structure to regulate diagnostic output
   type(accel_diag_ptrs),   intent(inout) :: ADp              !< pointers to accelerations in momentum equations,
                                                              !! to enable diagnostics, like energy budgets
-  type(cont_diag_ptrs),    intent(inout) :: CDp              !< pointers to terms in continuity equations 
-  type(diabatic_CS),       pointer       :: CS               !< module control structure 
-  type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp  !< pointer to control structure of tracer flow control module 
+  type(cont_diag_ptrs),    intent(inout) :: CDp              !< pointers to terms in continuity equations
+  type(diabatic_CS),       pointer       :: CS               !< module control structure
+  type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp  !< pointer to control structure of tracer flow control module
   type(sponge_CS),         pointer       :: sponge_CSp       !< pointer to the sponge module control structure
   type(diag_to_Z_CS),      pointer       :: diag_to_Z_CSp    !< pointer to the Z-diagnostics control structure
 
@@ -1773,7 +1773,7 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
     call get_param(param_file, mod, "INTERNAL_TIDE_MODES", CS%nMode, &
                  "The number of distinct internal tide modes \n"//&
                  "that will be calculated.", default=1, do_not_log=.true.)
-                 
+
     ! The following parameters are used in testing the internal tide code.
     ! GET LOCATION AND DURATION OF ENERGY POINT SOURCE FOR TESTING (BDM)
     call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_TEST", CS%int_tide_source_test, &
@@ -1789,7 +1789,7 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
                  units="days", default=0)
       CS%time_max_source = increment_time(Time,0,days=CS%tlen_days)
     endif
-    ! GET UNIFORM MODE VELOCITY FOR TESTING (BDM)  
+    ! GET UNIFORM MODE VELOCITY FOR TESTING (BDM)
     call get_param(param_file, mod, "UNIFORM_CG", CS%uniform_cg, &
                  "If true, set cg = cg_test everywhere for test case", default=.false.)
     if(CS%uniform_cg)then
@@ -1894,7 +1894,7 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
                  "The MLD is the depth at which the density is larger than the\n"//&
                  "surface density by the specified amount.", units='kg/m3', default=0.1)
 
-  ! diagnostics making use of the z-gridding code 
+  ! diagnostics making use of the z-gridding code
   if (associated(diag_to_Z_CSp)) then
     vd = var_desc("Kd", "meter2 second-1", &
                   "Diapycnal diffusivity at interfaces, interpolated to z", z_grid='z')
@@ -1959,22 +1959,22 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   endif
 
 
-  ! diagnostics for tendencies of temp and saln due to diabatic processes; 
-  ! available only for ALE algorithm.  
+  ! diagnostics for tendencies of temp and saln due to diabatic processes;
+  ! available only for ALE algorithm.
 
   CS%id_diabatic_diff_temp_tend = register_diag_field('ocean_model', &
       'diabatic_diff_temp_tendency', diag%axesTL, Time,              &
-      'Diabatic diffusion temperature tendency', 'Degree C per second')  
+      'Diabatic diffusion temperature tendency', 'Degree C per second')
   if(CS%id_diabatic_diff_temp_tend > 0) then
     CS%diabatic_diff_tendency_diag = .true.
-  endif   
+  endif
 
   CS%id_diabatic_diff_saln_tend = register_diag_field('ocean_model',&
       'diabatic_diff_saln_tendency', diag%axesTL, Time,             &
-      'Diabatic diffusion salinity tendency', 'PPT per second')  
+      'Diabatic diffusion salinity tendency', 'PPT per second')
   if(CS%id_diabatic_diff_saln_tend > 0) then
     CS%diabatic_diff_tendency_diag = .true.
-  endif   
+  endif
 
   CS%id_diabatic_diff_heat_tend = register_diag_field('ocean_model',                                                 &
       'diabatic_heat_tendency', diag%axesTL, Time,                                                                   &
@@ -1983,10 +1983,10 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
       cmor_standard_name=                                                                                            &
       'tendency_of_sea_water_potential_temperature_expressed_as_heat_content_due_to_parameterized_dianeutral_mixing',&
       cmor_long_name =                                                                                               &
-      'Tendency of sea water potential temperature expressed as heat content due to parameterized dianeutral mixing') 
+      'Tendency of sea water potential temperature expressed as heat content due to parameterized dianeutral mixing')
   if(CS%id_diabatic_diff_heat_tend > 0) then
     CS%diabatic_diff_tendency_diag = .true.
-  endif   
+  endif
 
   CS%id_diabatic_diff_salt_tend = register_diag_field('ocean_model',                                     &
       'diabatic_salt_tendency', diag%axesTL, Time,                                                       &
@@ -1995,10 +1995,10 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
       cmor_standard_name=                                                                                &
       'tendency_of_sea_water_salinity_expressed_as_salt_content_due_to_parameterized_dianeutral_mixing', &
       cmor_long_name =                                                                                   &
-      'Tendency of sea water salinity expressed as salt content due to parameterized dianeutral mixing') 
+      'Tendency of sea water salinity expressed as salt content due to parameterized dianeutral mixing')
   if(CS%id_diabatic_diff_salt_tend > 0) then
     CS%diabatic_diff_tendency_diag = .true.
-  endif   
+  endif
 
   ! This diagnostic should equal to roundoff if all is working well.
   CS%id_diabatic_diff_heat_tend_2d = register_diag_field('ocean_model',                                                               &
@@ -2008,10 +2008,10 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
       cmor_standard_name=                                                                                                             &
       'tendency_of_sea_water_potential_temperature_expressed_as_heat_content_due_to_parameterized_dianeutral_mixing_depth_integrated',&
       cmor_long_name =                                                                                                                &
-      'Tendency of sea water potential temperature expressed as heat content due to parameterized dianeutral mixing depth integrated') 
+      'Tendency of sea water potential temperature expressed as heat content due to parameterized dianeutral mixing depth integrated')
   if(CS%id_diabatic_diff_heat_tend_2d > 0) then
     CS%diabatic_diff_tendency_diag = .true.
-  endif   
+  endif
 
   ! This diagnostic should equal to roundoff if all is working well.
   CS%id_diabatic_diff_salt_tend_2d = register_diag_field('ocean_model',                                                  &
@@ -2021,58 +2021,58 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
       cmor_standard_name=                                                                                                &
       'tendency_of_sea_water_salinity_expressed_as_salt_content_due_to_parameterized_dianeutral_mixing_depth_integrated',&
       cmor_long_name =                                                                                                   &
-      'Tendency of sea water salinity expressed as salt content due to parameterized dianeutral mixing depth integrated') 
+      'Tendency of sea water salinity expressed as salt content due to parameterized dianeutral mixing depth integrated')
   if(CS%id_diabatic_diff_salt_tend_2d > 0) then
     CS%diabatic_diff_tendency_diag = .true.
-  endif   
- 
+  endif
+
 
   ! diagnostics for tendencies of temp and saln due to boundary forcing;
-  ! available only for ALE algorithm.  
+  ! available only for ALE algorithm.
 
   CS%id_boundary_forcing_temp_tend = register_diag_field('ocean_model',&
       'boundary_forcing_temp_tendency', diag%axesTL, Time,             &
-      'Boundary forcing temperature tendency', 'Degree C per second')  
+      'Boundary forcing temperature tendency', 'Degree C per second')
   if(CS%id_boundary_forcing_temp_tend > 0) then
     CS%boundary_forcing_tendency_diag = .true.
-  endif   
+  endif
 
   CS%id_boundary_forcing_saln_tend = register_diag_field('ocean_model',&
       'boundary_forcing_saln_tendency', diag%axesTL, Time,             &
-      'Boundary forcing saln tendency', 'PPT per second')  
+      'Boundary forcing saln tendency', 'PPT per second')
   if(CS%id_boundary_forcing_saln_tend > 0) then
     CS%boundary_forcing_tendency_diag = .true.
-  endif   
+  endif
 
   CS%id_boundary_forcing_heat_tend = register_diag_field('ocean_model',&
       'boundary_forcing_heat_tendency', diag%axesTL, Time,             &
       'Boundary forcing heat tendency','Watts/m2')
   if(CS%id_boundary_forcing_heat_tend > 0) then
     CS%boundary_forcing_tendency_diag = .true.
-  endif   
+  endif
 
   CS%id_boundary_forcing_salt_tend = register_diag_field('ocean_model',&
       'boundary_forcing_salt_tendency', diag%axesTL, Time,             &
       'Boundary forcing salt tendency','kg m-2 s-1')
   if(CS%id_boundary_forcing_salt_tend > 0) then
     CS%boundary_forcing_tendency_diag = .true.
-  endif   
+  endif
 
   ! This diagnostic should equal to surface heat flux if all is working well.
   CS%id_boundary_forcing_heat_tend_2d = register_diag_field('ocean_model',&
       'boundary_forcing_heat_tendency_2d', diag%axesT1, Time,             &
-      'Depth integrated boundary forcing of ocean heat','Watts/m2') 
+      'Depth integrated boundary forcing of ocean heat','Watts/m2')
   if(CS%id_boundary_forcing_heat_tend_2d > 0) then
     CS%boundary_forcing_tendency_diag = .true.
-  endif   
+  endif
 
   ! This diagnostic should equal to surface salt flux if all is working well.
   CS%id_boundary_forcing_salt_tend_2d = register_diag_field('ocean_model',&
       'boundary_forcing_salt_tendency_2d', diag%axesT1, Time,             &
-      'Depth integrated boundary forcing of ocean salt','kg m-2 s-1') 
+      'Depth integrated boundary forcing of ocean salt','kg m-2 s-1')
   if(CS%id_boundary_forcing_salt_tend_2d > 0) then
     CS%boundary_forcing_tendency_diag = .true.
-  endif   
+  endif
 
 
   ! diagnostics for tendencies of temp and heat due to frazil
@@ -2080,10 +2080,10 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   ! diagnostic for tendency of temp due to frazil
   CS%id_frazil_temp_tend = register_diag_field('ocean_model',&
       'frazil_temp_tendency', diag%axesTL, Time,             &
-      'Temperature tendency due to frazil formation', 'Degree C per second')  
+      'Temperature tendency due to frazil formation', 'Degree C per second')
   if(CS%id_frazil_temp_tend > 0) then
     CS%frazil_tendency_diag = .true.
-  endif   
+  endif
 
   ! diagnostic for tendency of heat due to frazil
   CS%id_frazil_heat_tend = register_diag_field('ocean_model',&
@@ -2091,20 +2091,20 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
       'Heat tendency due to frazil formation','Watts/m2')
   if(CS%id_frazil_heat_tend > 0) then
     CS%frazil_tendency_diag = .true.
-  endif   
+  endif
 
   ! if all is working propertly, this diagnostic should equal to hfsifrazil
   CS%id_frazil_heat_tend_2d = register_diag_field('ocean_model',&
       'frazil_heat_tendency_2d', diag%axesT1, Time,             &
-      'Depth integrated heat tendency due to frazil formation','Watts/m2') 
+      'Depth integrated heat tendency due to frazil formation','Watts/m2')
   if(CS%id_frazil_heat_tend_2d > 0) then
     CS%frazil_tendency_diag = .true.
-  endif   
+  endif
 
-  if(CS%frazil_tendency_diag) then 
+  if(CS%frazil_tendency_diag) then
     allocate(CS%frazil_temp_diag(isd:ied,jsd:jed,nz) ) ; CS%frazil_temp_diag(:,:,:) = 0.
     allocate(CS%frazil_heat_diag(isd:ied,jsd:jed,nz) ) ; CS%frazil_heat_diag(:,:,:) = 0.
-  endif 
+  endif
 
 
   ! CS%useConvection is set to True IF convection will be used, otherwise False.
@@ -2113,7 +2113,7 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
 
   call entrain_diffusive_init(Time, G, param_file, diag, CS%entrain_diffusive_CSp)
 
-  ! initialize the geothermal heating module 
+  ! initialize the geothermal heating module
   if (CS%use_geothermal) &
     call geothermal_init(Time, G, param_file, diag, CS%geothermal_CSp)
 
@@ -2123,12 +2123,12 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
                              CS%int_tide_input)
     call internal_tides_init(Time, G, param_file, diag, CS%int_tide_CSp)
   endif
-  
+
   ! initialize module for setting diffusivities
   call set_diffusivity_init(Time, G, param_file, diag, CS%set_diff_CSp, diag_to_Z_CSp, CS%int_tide_CSp)
 
 
-  ! set up the clocks for this module 
+  ! set up the clocks for this module
   id_clock_entrain = cpu_clock_id('(Ocean diabatic entrain)', grain=CLOCK_MODULE)
   if (CS%bulkmixedlayer) &
     id_clock_mixedlayer = cpu_clock_id('(Ocean mixed layer)', grain=CLOCK_MODULE)
@@ -2145,11 +2145,11 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   id_clock_differential_diff = -1 ; if (differentialDiffusion) &
     id_clock_differential_diff = cpu_clock_id('(Ocean differential diffusion)', grain=CLOCK_ROUTINE)
 
-  ! initialize the auxiliary diabatic driver module 
+  ! initialize the auxiliary diabatic driver module
   call diabatic_aux_init(Time, G, param_file, diag, CS%diabatic_aux_CSp, &
                          CS%use_energetic_PBL)
 
-  ! initialize the boundary layer modules 
+  ! initialize the boundary layer modules
   if (CS%bulkmixedlayer) &
     call bulkmixedlayer_init(Time, G, param_file, diag, CS%bulkmixedlayer_CSp)
   if (CS%use_energetic_PBL) &
@@ -2173,9 +2173,9 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
 end subroutine diabatic_driver_init
 
 
-!> Routine to close the diabatic driver module 
+!> Routine to close the diabatic driver module
 subroutine diabatic_driver_end(CS)
-  type(diabatic_CS), pointer :: CS    !< module control structure 
+  type(diabatic_CS), pointer :: CS    !< module control structure
 
   if (.not.associated(CS)) return
 
@@ -2194,7 +2194,7 @@ subroutine diabatic_driver_end(CS)
   if (CS%useConvection) call diffConvection_end(CS%Conv_CSp)
   if (CS%use_energetic_PBL) &
     call energetic_PBL_end(CS%energetic_PBL_CSp)
-    
+
   if (associated(CS%optics)) then
     call opacity_end(CS%opacity_CSp, CS%optics)
     deallocate(CS%optics)
@@ -2204,63 +2204,63 @@ subroutine diabatic_driver_end(CS)
 end subroutine diabatic_driver_end
 
 
-!> \namespace mom_diabatic_driver 
-!!                                                                     
-!!  By Robert Hallberg, Alistair Adcroft, and Stephen Griffies         
-!!                                                                     
-!!    This program contains the subroutine that, along with the        
-!!  subroutines that it calls, implements diapycnal mass and momentum  
-!!  fluxes and a bulk mixed layer.  The diapycnal diffusion can be     
-!!  used without the bulk mixed layer.         
+!> \namespace mom_diabatic_driver
 !!
-!!  \section section_diabatic Outline of MOM diabatic 
-!!                                                                     
-!!  * diabatic first determines the (diffusive) diapycnal mass fluxes  
-!!  based on the convergence of the buoyancy fluxes within each layer. 
+!!  By Robert Hallberg, Alistair Adcroft, and Stephen Griffies
 !!
-!!  * The dual-stream entrainment scheme of MacDougall and Dewar (JPO,   
-!!  1997) is used for combined diapycnal advection and diffusion,      
-!!  calculated implicitly and potentially with the Richardson number   
-!!  dependent mixing, as described by Hallberg (MWR, 2000). 
+!!    This program contains the subroutine that, along with the
+!!  subroutines that it calls, implements diapycnal mass and momentum
+!!  fluxes and a bulk mixed layer.  The diapycnal diffusion can be
+!!  used without the bulk mixed layer.
 !!
-!!  * Diapycnal advection is the residual of diapycnal diffusion,    
-!!  so the fully implicit upwind differencing scheme that is used is   
-!!  entirely appropriate.  
+!!  \section section_diabatic Outline of MOM diabatic
+!!
+!!  * diabatic first determines the (diffusive) diapycnal mass fluxes
+!!  based on the convergence of the buoyancy fluxes within each layer.
+!!
+!!  * The dual-stream entrainment scheme of MacDougall and Dewar (JPO,
+!!  1997) is used for combined diapycnal advection and diffusion,
+!!  calculated implicitly and potentially with the Richardson number
+!!  dependent mixing, as described by Hallberg (MWR, 2000).
+!!
+!!  * Diapycnal advection is the residual of diapycnal diffusion,
+!!  so the fully implicit upwind differencing scheme that is used is
+!!  entirely appropriate.
 !!
 !!  * The downward buoyancy flux in each layer is determined from
-!!  an implicit calculation based on the previously 
-!!  calculated flux of the layer above and an estimated flux in the    
-!!  layer below.  This flux is subject to the following conditions:    
-!!  (1) the flux in the top and bottom layers are set by the boundary  
+!!  an implicit calculation based on the previously
+!!  calculated flux of the layer above and an estimated flux in the
+!!  layer below.  This flux is subject to the following conditions:
+!!  (1) the flux in the top and bottom layers are set by the boundary
 !!  conditions, and (2) no layer may be driven below an Angstrom thick-
-!!  ness.  If there is a bulk mixed layer, the buffer layer is treated  
-!!  as a fixed density layer with vanishingly small diffusivity.    
-!!                                                                     
-!!    diabatic takes 5 arguments:  the two velocities (u and v), the   
-!!  thicknesses (h), a structure containing the forcing fields, and    
-!!  the length of time over which to act (dt).  The velocities and     
-!!  thickness are taken as inputs and modified within the subroutine.  
-!!  There is no limit on the time step.                                
-!!                                                                     
+!!  ness.  If there is a bulk mixed layer, the buffer layer is treated
+!!  as a fixed density layer with vanishingly small diffusivity.
+!!
+!!    diabatic takes 5 arguments:  the two velocities (u and v), the
+!!  thicknesses (h), a structure containing the forcing fields, and
+!!  the length of time over which to act (dt).  The velocities and
+!!  thickness are taken as inputs and modified within the subroutine.
+!!  There is no limit on the time step.
+!!
 !!
 !!  \section section_gridlayout MOM grid layout
-!! 
-!!  A small fragment of the grid is shown below:                    
+!!
+!!  A small fragment of the grid is shown below:
 !!
 !! \verbatim
-!!    j+1  x ^ x ^ x   
+!!    j+1  x ^ x ^ x
 !!
-!!    j+1  > o > o >  
+!!    j+1  > o > o >
 !!
-!!    j    x ^ x ^ x  
+!!    j    x ^ x ^ x
 !!
-!!    j    > o > o >  
+!!    j    > o > o >
 !!
 !!    j-1  x ^ x ^ x
 !!
 !!        i-1  i  i+1
 !!
-!!           i  i+1                                                    
+!!           i  i+1
 !!
 !! \endverbatim
 !!
@@ -2270,7 +2270,7 @@ end subroutine diabatic_driver_end
 !!  * > =  u, PFu, CAu, uh, diffu, taux, ubt, uhtr
 !!  * o =  h, bathyT, eta, T, S, tr
 !!
-!!  The boundaries always run through q grid points (x).               
-!!                                                                     
+!!  The boundaries always run through q grid points (x).
+!!
 
 end module MOM_diabatic_driver

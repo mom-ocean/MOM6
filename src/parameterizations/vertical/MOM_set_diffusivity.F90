@@ -134,7 +134,7 @@ type, public :: set_diffusivity_CS ; private
   real    :: BBL_effic       ! efficiency with which the energy extracted
                              ! by bottom drag drives BBL diffusion (nondim)
   real    :: cdrag           ! quadratic drag coefficient (nondim)
-  real    :: IMax_decay      ! inverse of a maximum decay scale for 
+  real    :: IMax_decay      ! inverse of a maximum decay scale for
                              ! bottom-drag driven turbulence, (1/m)
 
   real    :: Kd              ! interior diapycnal diffusivity (m2/s)
@@ -149,7 +149,7 @@ type, public :: set_diffusivity_CS ; private
   real    :: Hmix            ! mixed layer thickness (meter) when
                              ! bulkmixedlayer==.false.
 
-  logical :: Bryan_Lewis_diffusivity ! If true, background vertical diffusivity 
+  logical :: Bryan_Lewis_diffusivity ! If true, background vertical diffusivity
                                      ! uses Bryan-Lewis (1979) like tanh profile.
   real    :: Kd_Bryan_Lewis_deep     ! abyssal value of Bryan-Lewis profile (m2/s)
   real    :: Kd_Bryan_Lewis_surface  ! surface value of Bryan-Lewis profile (m2/s)
@@ -174,11 +174,11 @@ type, public :: set_diffusivity_CS ; private
   real :: Decay_scale_factor_lee ! Scaling factor for the decay scale of lee
                              ! wave energy dissipation (nondimensional)
   real :: min_zbot_itides    ! minimum depth for internal tide conversion (meter)
-  logical :: Int_tide_dissipation  ! Internal tide conversion (from barotropic) with 
+  logical :: Int_tide_dissipation  ! Internal tide conversion (from barotropic) with
                                    ! the schemes of St Laurent et al (2002)/
                                    ! Simmons et al (2004)
-  logical :: Lowmode_itidal_dissipation ! Internal tide conversion (from low modes) with 
-                                        ! the schemes of St Laurent et al (2002)/ 
+  logical :: Lowmode_itidal_dissipation ! Internal tide conversion (from low modes) with
+                                        ! the schemes of St Laurent et al (2002)/
                                         ! Simmons et al (2004) !BDM
   integer :: Int_tide_profile ! A coded integer indicating the vertical profile
                               ! for dissipation of the internal waves.  Schemes that
@@ -248,7 +248,7 @@ type, public :: set_diffusivity_CS ; private
                               ! problems (m/s).  If the value is small enough,
                               ! this parameter should not affect the solution.
   real    :: TKE_decay        ! ratio of natural Ekman depth to TKE decay scale (nondim)
-  real    :: mstar            ! ratio of friction velocity cubed to 
+  real    :: mstar            ! ratio of friction velocity cubed to
                               ! TKE input to the mixed layer (nondim)
   logical :: ML_use_omega     ! If true, use absolute rotation rate instead
                               ! of the vertical component of rotation when
@@ -321,9 +321,9 @@ type diffusivity_diags
     N2_3d          => NULL(),& ! squared buoyancy frequency at interfaces (1/s2)
     Kd_itidal      => NULL(),& ! internal tide diffusivity at interfaces (m2/s)
     Fl_itidal      => NULL(),& ! vertical flux of tidal turbulent dissipation (m3/s3)
-    Kd_lowmode     => NULL(),& ! internal tide diffusivity at interfaces 
+    Kd_lowmode     => NULL(),& ! internal tide diffusivity at interfaces
                                ! due to propagating low modes (m2/s) (BDM)
-    Fl_lowmode     => NULL(),& ! vertical flux of tidal turbulent dissipation 
+    Fl_lowmode     => NULL(),& ! vertical flux of tidal turbulent dissipation
                                ! due to propagating low modes (m3/s3) (BDM)
     Kd_Niku        => NULL(),& ! lee-wave diffusivity at interfaces (m2/s)
     Kd_user        => NULL(),& ! user-added diffusivity at interfaces (m2/s)
@@ -373,7 +373,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(out)   :: Kd
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), optional, intent(out) :: Kd_int
 
-! Arguments: 
+! Arguments:
 !  (in)      u      - zonal velocity (m/s)
 !  (in)      v      - meridional velocity (m/s)
 !  (in)      h      - Layer thickness (m or kg/m2)
@@ -394,10 +394,10 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
   real, dimension(SZI_(G), SZJ_(G)) :: &
     Kd_sfc        ! surface value of the diffusivity (m2/s)
 
-  type(diffusivity_diags) :: dd ! structure w/ arrays of pointers to avail diags 
+  type(diffusivity_diags) :: dd ! structure w/ arrays of pointers to avail diags
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
-    T_f, S_f      ! temperature and salinity (deg C and ppt); 
+    T_f, S_f      ! temperature and salinity (deg C and ppt);
                   ! massless layers filled vertically by diffusion.
 
   real, dimension(SZI_(G),SZK_(G)) :: &
@@ -409,7 +409,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
 
   real, dimension(SZI_(G),SZK_(G)+1) :: &
     N2_int,   &   ! squared buoyancy frequency associated at interfaces (1/s2)
-    dRho_int, &   ! locally ref potential density difference across interfaces (in s-2) smg: or kg/m3? 
+    dRho_int, &   ! locally ref potential density difference across interfaces (in s-2) smg: or kg/m3?
     KT_extra, &   ! double difusion diffusivity on temperature (m2/sec)
     KS_extra      ! double difusion diffusivity on salinity (m2/sec)
 
@@ -580,16 +580,16 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
 ! the appropriate place to add a depth-dependent parameterization or
 ! another explicit parameterization of Kd.
 
-  if (CS%Bryan_Lewis_diffusivity) then 
+  if (CS%Bryan_Lewis_diffusivity) then
 !$OMP parallel do default(none) shared(is,ie,js,je,CS,Kd_sfc)
     do j=js,je ; do i=is,ie
       Kd_sfc(i,j) = CS%Kd_Bryan_Lewis_surface
-    enddo ; enddo 
-  else 
+    enddo ; enddo
+  else
 !$OMP parallel do default(none) shared(is,ie,js,je,CS,Kd_sfc)
     do j=js,je ; do i=is,ie
       Kd_sfc(i,j) = CS%Kd
-    enddo ; enddo 
+    enddo ; enddo
   endif
   if (CS%Henyey_IGW_background) then
     I_x30 = 2.0 / invcosh(CS%N0_2Omega*2.0) ! This is evaluated at 30 deg.
@@ -601,7 +601,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
            ((abs_sin * invcosh(CS%N0_2Omega/max(epsilon,abs_sin))) * I_x30) )
     enddo ; enddo
   elseif (CS%Kd_tanh_lat_fn) then
-!$OMP parallel do default(none) shared(is,ie,js,je,Kd_sfc,CS,G) 
+!$OMP parallel do default(none) shared(is,ie,js,je,Kd_sfc,CS,G)
     do j=js,je ; do i=is,ie
       !   The transition latitude and latitude range are hard-scaled here, since
       ! this is not really intended for wide-spread use, but rather for
@@ -614,7 +614,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
   if (CS%debug) call hchksum(Kd_sfc,"Kd_sfc",G,haloshift=0)
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,G,CS,h,tv,T_f,S_f,fluxes,dd, &
 !$OMP                                  Kd,Kd_sfc,epsilon,deg_to_rad,I_2Omega,visc, &
-!$OMP                                  Kd_int,dt,u,v,Omega2)   & 
+!$OMP                                  Kd_int,dt,u,v,Omega2)   &
 !$OMP                          private(dRho_int,I_trans,atan_fn_sfc,I_atan_fn,atan_fn_lay, &
 !$OMP                                  I_Hmix,depth_c,depth,N2_lay, N2_int, N2_bot,        &
 !$OMP                                  I_x30,abs_sin,N_2Omega,N02_N2,KT_extra, KS_extra,   &
@@ -804,17 +804,17 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
   endif
 
   if (CS%Kd_add > 0.0) then
-    if (present(Kd_int)) then 
+    if (present(Kd_int)) then
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,Kd_int,CS,Kd)
       do k=1,nz ; do j=js,je ; do i=is,ie
         Kd_int(i,j,K) = Kd_int(i,j,K) + CS%Kd_add
         Kd(i,j,k) = Kd(i,j,k) + CS%Kd_add
-      enddo ; enddo ; enddo 
-    else 
+      enddo ; enddo ; enddo
+    else
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,CS,Kd)
       do k=1,nz ; do j=js,je ; do i=is,ie
         Kd(i,j,k) = Kd(i,j,k) + CS%Kd_add
-      enddo ; enddo ; enddo 
+      enddo ; enddo ; enddo
     endif
   endif
 
@@ -864,7 +864,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
       z_ids(num_z_diags) = CS%id_Kd_Niku_z
       z_ptrs(num_z_diags)%p => dd%Kd_Niku
     endif
-    
+
     if (CS%id_Kd_lowmode_z > 0) then
       num_z_diags        = num_z_diags + 1
       z_ids(num_z_diags) = CS%id_Kd_lowmode_z
@@ -1287,13 +1287,13 @@ subroutine double_diffusion(tv, h, T_f, S_f, j, G, CS, Kd_T_dd, Kd_S_dd)
   type(set_diffusivity_CS),              pointer     :: CS
   real, dimension(NIMEM_,NK_INTERFACE_), intent(out) :: Kd_T_dd, Kd_S_dd
 
-! Arguments: 
+! Arguments:
 !  (in)      tv      - structure containing pointers to any available
 !                      thermodynamic fields; absent fields have NULL ptrs
 !  (in)      h       - layer thickness (m or kg m-2)
-!  (in)      T_f     - layer temp in C with the values in massless layers 
+!  (in)      T_f     - layer temp in C with the values in massless layers
 !                      filled vertically by diffusion
-!  (in)      S_f     - layer salinities in PPT with values in massless layers 
+!  (in)      S_f     - layer salinities in PPT with values in massless layers
 !                      filled vertically by diffusion
 !  (in)      G       - ocean grid structure
 !  (in)      CS      - module control structure
@@ -1421,7 +1421,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, &
   is = G%isc ; ie = G%iec ; nz = G%ke
 
   do_diag_Kd_BBL = associated(Kd_BBL)
-  
+
   if (.not.(CS%bottomdraglaw .and. (CS%BBL_effic>0.0))) return
 
   cdrag_sqrt = sqrt(CS%cdrag)
@@ -1586,7 +1586,7 @@ end subroutine add_drag_diffusivity
 
 !> Calculates a BBL diffusivity use a Prandtl number 1 diffusivitiy with a law of the
 !! wall turbulent viscosity, up to a BBL height where the energy used for mixing has
-!! consumed the mechanical TKE input. 
+!! consumed the mechanical TKE input.
 subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, G, CS, Kd, Kd_int, Kd_BBL)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_),       intent(in)    :: u !< u component of flow (m s-1)
   real, dimension(NIMEM_,NJMEMB_,NKMEM_),       intent(in)    :: v !< v component of flow (m s-1)
@@ -1861,7 +1861,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
   type(diffusivity_diags),               intent(inout) :: dd
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: Kd
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), optional, intent(inout) :: Kd_int
-  
+
   ! This subroutine adds the effect of internal-tide-driven mixing to the layer diffusivities.
   ! The mechanisms considered are (1) local dissipation of internal waves generated by the
   ! barotropic flow ("itidal"), (2) local dissipation of internal waves generated by the propagating
@@ -1890,7 +1890,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
     TKE_lowmode_rem,  & ! remaining internal tide TKE (from propagating low mode source) (BDM)
     TKE_frac_top,     & ! fraction of bottom TKE that should appear at top of a layer (nondim)
     TKE_frac_top_lee, & ! fraction of bottom TKE that should appear at top of a layer (nondim)
-    TKE_frac_top_lowmode, & 
+    TKE_frac_top_lowmode, &
                         ! fraction of bottom TKE that should appear at top of a layer (nondim) (BDM)
     z_from_bot,       & ! distance from bottom (meter)
     z_from_bot_WKB      ! distance from bottom (meter), WKB scaled
@@ -1905,7 +1905,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
   real :: Izeta_lee     ! inverse of TKE decay scale for lee waves (1/meter)
   real :: z0_psl        ! temporary variable with units of meter
   real :: TKE_lowmode_tot ! TKE from all low modes (W/m2) (BDM)
-  
+
 
   logical :: use_Polzin, use_Simmons
   integer :: i, k, is, ie, nz
@@ -1927,9 +1927,9 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
   use_Simmons = ((CS%Int_tide_dissipation .and. (CS%int_tide_profile == STLAURENT_02)) .or. &
                  (CS%lee_wave_dissipation .and. (CS%lee_wave_profile == STLAURENT_02)) .or. &
                  (CS%Lowmode_itidal_dissipation .and. (CS%int_tide_profile == STLAURENT_02)))
-  
+
   ! Calculate parameters for vertical structure of dissipation
-  ! Simmons: 
+  ! Simmons:
   if ( use_Simmons ) then
     Izeta = 1.0 / max(CS%Int_tide_decay_scale, G%H_subroundoff*G%H_to_m)
     Izeta_lee = 1.0 / max(CS%Int_tide_decay_scale*CS%Decay_scale_factor_lee, &
@@ -2033,7 +2033,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
       else ; z_from_bot_WKB(i) = 0 ; endif
     enddo
   endif  ! Polzin
-  
+
   ! Calculate/get dissipation values at bottom
   ! Both Polzin and Simmons:
   do i=is,ie
@@ -2069,13 +2069,13 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
     do k=nz-1,2,-1 ; do i=is,ie
       if (max_TKE(i,k) <= 0.0) cycle
       z_from_bot(i) = z_from_bot(i) + G%H_to_m*h(i,j,k)
-      
+
       ! Fraction of bottom flux predicted to reach top of this layer
       TKE_frac_top(i)         = Inv_int(i)     * exp(-Izeta * z_from_bot(i))
       TKE_frac_top_lee(i)     = Inv_int_lee(i) * exp(-Izeta_lee * z_from_bot(i))
       TKE_frac_top_lowmode(i) = Inv_int_low(i) * exp(-Izeta * z_from_bot(i))
 
-      ! Actual influx at bottom of layer minus predicted outflux at top of layer to give 
+      ! Actual influx at bottom of layer minus predicted outflux at top of layer to give
       ! predicted power expended
       TKE_itide_lay   = TKE_itidal_rem(i)  - TKE_itidal_bot(i) * TKE_frac_top(i)
       TKE_Niku_lay    = TKE_Niku_rem(i)    - TKE_Niku_bot(i)   * TKE_frac_top_lee(i)
@@ -2093,7 +2093,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
       TKE_itidal_rem(i)  = TKE_itidal_rem(i)  - TKE_itide_lay
       TKE_Niku_rem(i)    = TKE_Niku_rem(i)    - TKE_Niku_lay
       TKE_lowmode_rem(i) = TKE_lowmode_rem(i) - TKE_lowmode_lay
-      
+
       ! Convert power to diffusivity
       Kd_add  = TKE_to_Kd(i,k) * (TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay)
 
@@ -2129,7 +2129,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
 !     if (associated(dd%Kd_Niku)) dd%Kd_Niku(i,j,K) = TKE_to_Kd(i,k) * TKE_Niku_lay
       if (associated(dd%Kd_Niku_work)) &
         dd%Kd_Niku_work(i,j,k) = G%Rho0 * TKE_Niku_lay
-        
+
       if (associated(dd%Kd_lowmode)) then
         ! If at layers, dd%Kd_lowmode is just TKE_to_Kd(i,k) * TKE_lowmode_lay
         ! The following sets the interface diagnostics.
@@ -2141,7 +2141,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
       if (associated(dd%Kd_lowmode_work)) &
         dd%Kd_lowmode_work(i,j,k) = G%Rho0 * TKE_lowmode_lay
       if (associated(dd%Fl_lowmode)) dd%Fl_lowmode(i,j,k) = TKE_lowmode_rem(i)
-      
+
     enddo ; enddo ;
   endif ! Simmons
 
@@ -2162,12 +2162,12 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
       TKE_frac_top_lowmode(i) = ( Inv_int_low(i) * z0_polzin_scaled(i) ) / &
                             ( z0_polzin_scaled(i) + z_from_bot_WKB(i) )
 
-      ! Actual influx at bottom of layer minus predicted outflux at top of layer to give 
+      ! Actual influx at bottom of layer minus predicted outflux at top of layer to give
       ! predicted power expended
       TKE_itide_lay   = TKE_itidal_rem(i)  - TKE_itidal_bot(i) *TKE_frac_top(i)
       TKE_Niku_lay    = TKE_Niku_rem(i)    - TKE_Niku_bot(i)   * TKE_frac_top_lee(i)
       TKE_lowmode_lay = TKE_lowmode_rem(i) - TKE_lowmode_bot(i)*TKE_frac_top_lowmode(i)
-      
+
       ! Actual power expended may be less than predicted if stratification is weak; adjust
       if (TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay > max_TKE(i,k)) then
         frac_used = max_TKE(i,k) / (TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay)
@@ -2180,7 +2180,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
       TKE_itidal_rem(i)  = TKE_itidal_rem(i)  - TKE_itide_lay
       TKE_Niku_rem(i)    = TKE_Niku_rem(i)    - TKE_Niku_lay
       TKE_lowmode_rem(i) = TKE_lowmode_rem(i) - TKE_lowmode_lay
-      
+
       ! Convert power to diffusivity
       Kd_add  = TKE_to_Kd(i,k) * (TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay)
 
@@ -2215,7 +2215,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
       endif
    !  if (associated(dd%Kd_Niku)) dd%Kd_Niku(i,j,K) = TKE_to_Kd(i,k) * TKE_Niku_lay
       if (associated(dd%Kd_Niku_work)) dd%Kd_Niku_work(i,j,k) = G%Rho0 * TKE_Niku_lay
-      
+
       if (associated(dd%Kd_lowmode)) then
         ! If at layers, dd%Kd_lowmode is just TKE_to_Kd(i,k) * TKE_lowmode_lay
         ! The following sets the interface diagnostics.
@@ -2227,7 +2227,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
       if (associated(dd%Kd_lowmode_work)) &
         dd%Kd_lowmode_work(i,j,k) = G%Rho0 * TKE_lowmode_lay
       if (associated(dd%Fl_lowmode)) dd%Fl_lowmode(i,j,k) = TKE_lowmode_rem(i)
-      
+
     enddo ; enddo;
   endif ! Polzin
 
@@ -2373,7 +2373,7 @@ subroutine set_density_ratios(h, tv, kb, G, CS, j, ds_dsp1, rho_0)
   real, dimension(NIMEM_,NKMEM_),        intent(out)   :: ds_dsp1
   real, dimension(NIMEM_,NKMEM_), optional, intent(in) :: rho_0
 
-! Arguments: 
+! Arguments:
 !  (in)      h       - layer thickness (meter)
 !  (in)      tv      - structure containing pointers to any available
 !                      thermodynamic fields; absent fields have NULL ptrs
@@ -2400,11 +2400,11 @@ subroutine set_density_ratios(h, tv, kb, G, CS, j, ds_dsp1, rho_0)
     if (G%g_prime(k+1)/=0.) then
       do i=is,ie
         ds_dsp1(i,k) = G%g_prime(k) / G%g_prime(k+1)
-      enddo 
+      enddo
     else
       do i=is,ie
         ds_dsp1(i,k) = 1.
-      enddo 
+      enddo
     endif
   enddo
 
@@ -2786,7 +2786,7 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp, in
             "#define LEE_WAVE_PROFILE "//trim(tmpstr)//" found in input file.")
     end select
   endif
-  
+
   call get_param(param_file, mod, "INT_TIDE_LOWMODE_DISSIPATION", CS%Lowmode_itidal_dissipation, &
                  "If true, consider mixing due to breaking low modes that \n"//&
                  "have been remotely generated; as with itidal drag on the \n"//&
@@ -2935,7 +2935,7 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp, in
       'Diapycnal diffusivity of layers (as set)', 'meter2 second-1')
 
   if (CS%Lee_wave_dissipation) then
- 
+
     call get_param(param_file, mod, "NIKURASHIN_TKE_INPUT_FILE",Niku_TKE_input_file, &
                  "The path to the file containing the TKE input from lee \n"//&
                  "wave driven mixing. Used with LEE_WAVE_DISSIPATION.", &
@@ -2982,13 +2982,13 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp, in
 
   CS%id_Kd_itidal = register_diag_field('ocean_model','Kd_itides',diag%axesTi,Time, &
        'Internal Tide Driven Diffusivity', 'meter2 sec-1')
-       
+
   CS%id_Kd_lowmode = register_diag_field('ocean_model','Kd_lowmode',diag%axesTi,Time, &
        'Internal Tide Driven Diffusivity (from propagating low modes)', 'meter2 sec-1')
 
   CS%id_Fl_itidal = register_diag_field('ocean_model','Fl_itides',diag%axesTi,Time, &
        'Vertical flux of tidal turbulent dissipation', 'meter3 sec-3')
-       
+
   CS%id_Fl_lowmode = register_diag_field('ocean_model','Fl_lowmode',diag%axesTi,Time, &
        'Vertical flux of tidal turbulent dissipation (from propagating low modes)', 'meter3 sec-3')
 
@@ -3012,7 +3012,7 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp, in
 
   CS%id_Kd_Niku_Work = register_diag_field('ocean_model','Kd_Nikurashin_Work',diag%axesTL,Time, &
        'Work done by Nikurashin Lee Wave Drag Scheme', 'Watts m-2')
-       
+
   CS%id_Kd_Lowmode_Work = register_diag_field('ocean_model','Kd_Lowmode_Work',diag%axesTL,Time, &
        'Work done by Internal Tide Diapycnal Mixing (low modes)', 'Watts m-2')
 
@@ -3038,11 +3038,11 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp, in
        CS%id_Kd_Niku_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
     endif
     if (CS%Lowmode_itidal_dissipation) then
-      vd = var_desc("Kd_lowmode","meter2 second-1", & 
+      vd = var_desc("Kd_lowmode","meter2 second-1", &
                 "Internal Tide Driven Diffusivity (from low modes), interpolated to z",&
                 z_grid='z')
       CS%id_Kd_lowmode_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
-    endif    
+    endif
     if (CS%user_change_diff) &
       CS%id_Kd_user_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
   endif
@@ -3097,9 +3097,9 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp, in
   CS%useKappaShear = kappa_shear_init(Time, G, param_file, CS%diag, CS%kappaShear_CSp)
   if (CS%useKappaShear) &
     id_clock_kappaShear = cpu_clock_id('(Ocean kappa_shear)', grain=CLOCK_MODULE)
-    
-  
-    
+
+
+
 end subroutine set_diffusivity_init
 
 subroutine set_diffusivity_end(CS)

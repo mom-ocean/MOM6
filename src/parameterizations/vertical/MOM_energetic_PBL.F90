@@ -190,12 +190,12 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 mixedlayer_init.
-!  (in)      dSV_dT - The partial derivative of in-situ specific volume with 
+!  (in)      dSV_dT - The partial derivative of in-situ specific volume with
 !                     potential temperature, in m3 kg-1 K-1.
-!  (in)      dSV_dS - The partial derivative of in-situ specific volume with 
+!  (in)      dSV_dS - The partial derivative of in-situ specific volume with
 !                     salinity, in m3 kg-1 ppt-1.
 !  (in)      TKE_forced - The forcing requirements to homogenize the forcing
-!                 that has been applied to each layer through each layer, in J m-2.         
+!                 that has been applied to each layer through each layer, in J m-2.
 !  (in,opt)  dt_diag - The diagnostic time step, which may be less than dt
 !                      if there are two callse to mixedlayer, in s.
 !  (in,opt)  last_call - if true, this is the last call to mixedlayer in the
@@ -216,7 +216,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
   real, dimension(SZI_(G)) :: &
     mech_TKE, &     !   The mechanically generated turbulent kinetic energy
                     ! available for mixing over a time step, in J m-2 = kg s-2.
-    conv_PErel, & ! The potential energy that has been convectively released 
+    conv_PErel, & ! The potential energy that has been convectively released
                     ! during this timestep, in J m-2 = kg s-2. A portion nstar_FC
                     ! of conv_PErel is available to drive mixing.
     htot, &         !   The total depth of the layers above an interface, in H.
@@ -295,7 +295,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
   real :: dSe_t2    ! A part of dSe_term, in ppt H.
   real :: dPE_conv  ! The convective change in column potential energy, in J m-2.
   real :: MKE_src   ! The mean kinetic energy source of TKE due to Kddt_h(K), in J m-2.
-  real :: dMKE_src_dK  ! The partial derivative of MKE_src with Kddt_h(K), in J m-2 H-1. 
+  real :: dMKE_src_dK  ! The partial derivative of MKE_src with Kddt_h(K), in J m-2 H-1.
   real :: Kd_guess0, PE_chg_g0, dPEa_dKd_g0, Kddt_h_g0
   real :: PE_chg_max   ! The maximum PE change for very large values of Kddt_h(K).
   real :: dPEc_dKd_Kd0 ! The partial derivative of PE change with Kddt_h(K)
@@ -372,14 +372,14 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
 
   if (reset_diags) then
 !$OMP parallel default(none) shared(is,ie,js,je,CS)
-    if (CS%TKE_diagnostics) then 
+    if (CS%TKE_diagnostics) then
 !$OMP do
       do j=js,je ; do i=is,ie
         CS%diag_TKE_wind(i,j) = 0.0 ; CS%diag_TKE_MKE(i,j) = 0.0
         CS%diag_TKE_conv(i,j) = 0.0 ; CS%diag_TKE_forcing(i,j) = 0.0
         CS%diag_TKE_mixing(i,j) = 0.0 ; CS%diag_TKE_mech_decay(i,j) = 0.0
         CS%diag_TKE_conv_decay(i,j) = 0.0
-      enddo ; enddo 
+      enddo ; enddo
     endif
 !$OMP end parallel
   endif
@@ -424,7 +424,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
     if (debug) then
       mech_TKE_k(:,:) = 0.0 ; conv_PErel_k(:,:) = 0.0
     endif
-     
+
     !   Determine the initial mech_TKE and conv_PErel, including the energy required
     ! to mix surface heating through the topmost cell, the energy released by mixing
     ! surface cooling & brine rejection down through the topmost cell, and
@@ -432,7 +432,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
     ! and ustar and wstar available to drive mixing at the first interior
     ! interface.
     do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
-      U_Star = fluxes%ustar(i,j) 
+      U_Star = fluxes%ustar(i,j)
       if (associated(fluxes%ustar_shelf) .and. associated(fluxes%frac_shelf_h)) then
         if (fluxes%frac_shelf_h(i,j) > 0.0) &
           U_Star = (1.0 - fluxes%frac_shelf_h(i,j)) * U_star + &
@@ -517,7 +517,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
       do K=2,nz
         ! Apply dissipation to the TKE, here applied as an exponential decay
         ! due to 3-d turbulent energy being lost to inefficient rotational modes.
-        
+
         !   There should be several different "flavors" of TKE that decay at
         ! different rates.  The following form is often used for mechanical
         ! stirring from the surface, perhaps due to breaking surface gravity
@@ -553,7 +553,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
                           sqrt(0.5 * dt * G%Rho0 * (absf(i)*(htot(i)*G%H_to_m))**3 * conv_PErel(i)))
         endif
         if (debug) nstar_k(K) = nstar_FC
-        
+
         tot_TKE = mech_TKE(i) + nstar_FC * conv_PErel(i)
 
         !   For each interior interface, first discard the TKE to account for
@@ -593,7 +593,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
 
         !   This tests whether the layers above and below this interface are in
         ! a convetively stable configuration, without considering any effects of
-        ! mixing at higher interfaces.  It is an approximation to the more 
+        ! mixing at higher interfaces.  It is an approximation to the more
         ! complete test dPEc_dKd_Kd0 >= 0.0, that would include the effects of
         ! mixing across interface K-1.  The dT_to_dColHt here are effectively
         ! mass-weigted estimates of dSV_dT.
@@ -807,7 +807,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
               if (use_Newt) then
                 Kddt_h_next = Kddt_h_guess + dKddt_h_Newt
                 dKddt_h = dKddt_h_Newt
-              else 
+              else
                 Kddt_h_next = (TKE_left_max * Kddt_h_min - Kddt_h_max * TKE_left_min) / &
                               (TKE_left_max - TKE_left_min)
                 dKddt_h = Kddt_h_next - Kddt_h_guess
@@ -979,7 +979,7 @@ subroutine find_PE_chg(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
 !                  in the salinities of all the layers above, in J m-2 ppt-1.
 !  (in)      pres - The hydrostatic interface pressure, which is used to relate
 !                  the changes in column thickness to the energy that is radiated
-!                  as gravity waves and unavailable to drive mixing, in Pa. 
+!                  as gravity waves and unavailable to drive mixing, in Pa.
 !  (in)      dT_to_dColHt_k - A factor (mass_lay*dSColHtc_vol/dT) relating
 !                  a layer's temperature change to the change in column
 !                  height, in m K-1.
@@ -1110,7 +1110,7 @@ subroutine energetic_PBL_init(Time, G, param_file, diag, CS)
   integer :: isd, ied, jsd, jed
   logical :: use_temperature
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
- 
+
   if (associated(CS)) then
     call MOM_error(WARNING, "mixedlayer_init called with an associated"// &
                             "associated control structure.")
@@ -1170,7 +1170,7 @@ subroutine energetic_PBL_init(Time, G, param_file, diag, CS)
   ! This gives a minimum decay scale that is typically much less than Angstrom.
   CS%ustar_min = 2e-4*CS%omega*(G%Angstrom_z + G%H_to_m*G%H_subroundoff)
   ! NOTE from AJA: The above parameter is not logged?
-   
+
   CS%id_ML_depth = register_diag_field('ocean_model', 'ePBL_h_ML', diag%axesT1, &
       Time, 'Surface mixed layer depth', 'meter')
   CS%id_TKE_wind = register_diag_field('ocean_model', 'ePBL_TKE_wind', diag%axesT1, &

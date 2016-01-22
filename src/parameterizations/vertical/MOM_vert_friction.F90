@@ -113,7 +113,7 @@ type, public :: vertvisc_CS ; private
                             ! absolute velocities.
   real    :: CFL_trunc      ! Velocity components will be truncated when they
                             ! are large enough that the corresponding CFL number
-                            ! exceeds this value, nondim. 
+                            ! exceeds this value, nondim.
   real    :: CFL_report     ! The value of the CFL number that will cause the
                             ! accelerations to be reported, nondim.  CFL_report
                             ! will often equal CFL_trunc.
@@ -191,7 +191,7 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, CS, &
   type(vertvisc_CS), pointer                            :: CS
   real, dimension(NIMEMB_,NJMEM_), optional, intent(out) :: taux_bot
   real, dimension(NIMEM_,NJMEMB_), optional, intent(out) :: tauy_bot
-  
+
 ! Arguments: u - Zonal velocity, in m s-1.  Intent in/out.
 !  (in/out)  v - Meridional velocity, in m s-1.
 !  (in)      h - Layer thickness, in m.
@@ -269,7 +269,7 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, CS, &
 !$OMP parallel do default(none) shared(G,Isq,Ieq,ADp,nz,u,CS,dt_Rho0,fluxes,h, &
 !$OMP                                  h_neglect,Hmix,I_Hmix,visc,dt_m_to_H,   &
 !$OMP                                  Idt,taux_bot)                           &
-!$OMP                     firstprivate(Ray)                                    & 
+!$OMP                     firstprivate(Ray)                                    &
 !$OMP                          private(do_i,surface_stress,zDS,stress,h_a,hfr, &
 !$OMP                                     b_denom_1,b1,d1,c1)
   do j=G%jsc,G%jec
@@ -327,7 +327,7 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, CS, &
     if (ASSOCIATED(visc%taux_shelf)) then ; do I=Isq,Ieq
       visc%taux_shelf(I,j) = -G%Rho0*CS%a1_shelf_u(I,j)*u(I,j,1) ! - u_shelf?
     enddo ; endif
-    
+
     if (PRESENT(taux_bot)) then
       do I=Isq,Ieq
         taux_bot(I,j) = G%Rho0 * (u(I,j,nz)*CS%a_u(I,j,nz+1))
@@ -434,9 +434,9 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, CS, &
   if (CS%id_dv_dt_visc > 0) &
     call post_data(CS%id_dv_dt_visc, ADp%dv_dt_visc, CS%diag)
   if (present(taux_bot) .and. (CS%id_taux_bot > 0)) &
-    call post_data(CS%id_taux_bot, taux_bot, CS%diag) 
+    call post_data(CS%id_taux_bot, taux_bot, CS%diag)
   if (present(tauy_bot) .and. (CS%id_tauy_bot > 0)) &
-    call post_data(CS%id_tauy_bot, tauy_bot, CS%diag) 
+    call post_data(CS%id_tauy_bot, tauy_bot, CS%diag)
 
 end subroutine vertvisc
 
@@ -514,7 +514,7 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, CS)
       visc_rem_u(I,j,k) = visc_rem_u(I,j,k) + c1(I,k+1)*visc_rem_u(I,j,k+1)
 
     endif ; enddo ; enddo ! i and k loops
-    
+
   enddo ! end u-component j loop
 
   ! Now find the meridional viscous using a modification.
@@ -604,7 +604,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
                   ! of H-1 (i.e., m-1 or m2 kg-1).
     zcol1, &      ! The height of the interfaces to the north and south of a
     zcol2, &      ! v-point, in m or kg m-2.
-    Ztop_min, &   ! The deeper of the two adjacent surface heights, in H. 
+    Ztop_min, &   ! The deeper of the two adjacent surface heights, in H.
     Dmin, &       ! The shallower of the two adjacent bottom depths converted to
                   ! thickness units, in m or kg m-2.
     zh, &         ! An estimate of the interface's distance from the bottom
@@ -651,7 +651,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
   endif
 
 !$OMP parallel do default(none) shared(G,CS,visc,Isq,ieq,nz,u,h,fluxes,hML_u,h_neglect,dt) &
-!$OMP                     firstprivate(i_hbbl)                                             & 
+!$OMP                     firstprivate(i_hbbl)                                             &
 !$OMP                          private(do_i,kv_bbl,bbl_thick,z_i,h_harm,h_arith,hvel,z2,   &
 !$OMP                                  botfn,zh,Dmin,zcol,a,do_any_shelf,do_i_shelf,       &
 !$OMP                                  a_shelf,Ztop_min,I_HTbl,hvel_shelf,topfn,h_ml)
@@ -773,7 +773,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
 
   ! Now work on v-points.
 !$OMP parallel do default(none) shared(G,CS,visc,is,ie,Jsq,Jeq,nz,v,h,fluxes,hML_v,h_neglect,dt) &
-!$OMP                     firstprivate(i_hbbl)                                                & 
+!$OMP                     firstprivate(i_hbbl)                                                &
 !$OMP                          private(do_i,kv_bbl,bbl_thick,z_i,h_harm,h_arith,hvel,z2,      &
 !$OMP                                  botfn,zh,Dmin,zcol1,zcol2,a,do_any_shelf,do_i_shelf,  &
 !$OMP                                  a_shelf,Ztop_min,I_HTbl,hvel_shelf,topfn,h_ml)
@@ -1036,7 +1036,7 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
         a(i,K) = a(i,K) + 2.0*(CS%Kvbbl-CS%Kv)*botfn
         h_shear = hvel(i,k) + hvel(i,k-1) + h_neglect
       endif
-      
+
       !   Up to this point a has units of m2 s-1, but now is converted to m s-1.
       !   The term including 1e-10 in the denominators is here to avoid
       ! truncation error problems in the tridiagonal solver. Effectively, this
@@ -1181,7 +1181,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
           dowrite(I,j) = .true. ; trunc_any = .true.
         endif ;enddo ; enddo
       endif
-      
+
       do I=Isq,Ieq ; if (dowrite(I,j)) then
          u_old(i,j,:) = u(i,j,:)
       endif; enddo
@@ -1514,7 +1514,7 @@ subroutine updateCFLtruncationValue(Time, CS, activate)
   ! beginning of the ramp-up period.
   if (present(activate)) then
     if (activate) then
-      CS%rampStartTime = Time ! Record the current time 
+      CS%rampStartTime = Time ! Record the current time
       CS%CFLrampingIsActivated = .true.
     endif
   endif

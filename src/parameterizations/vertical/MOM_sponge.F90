@@ -145,7 +145,7 @@ subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, &
   type(sponge_CS),                      pointer    :: CS
   real, dimension(NJMEM_),    optional, intent(in) :: Iresttime_i_mean
   real, dimension(NJMEM_,NK_INTERFACE_), optional, intent(in) :: int_height_i_mean
-  
+
 !   This subroutine determines the number of points which are within
 ! sponges in this computational domain.  Only points that have
 ! positive values of Iresttime and which mask2dT indicates are ocean
@@ -263,7 +263,7 @@ subroutine init_sponge_diags(Time, G, diag, CS)
   CS%diag => diag
   CS%id_w_sponge = register_diag_field('ocean_model', 'w_sponge', diag%axesTi, &
       Time, 'The diapycnal motion due to the sponges', 'meter second-1')
-  
+
 end subroutine init_sponge_diags
 
 subroutine set_up_sponge_field(sp_val, f_ptr, nlay, CS, sp_val_i_mean)
@@ -322,7 +322,7 @@ subroutine set_up_sponge_field(sp_val, f_ptr, nlay, CS, sp_val_i_mean)
   if (CS%do_i_mean_sponge) then
     if (.not.present(sp_val_i_mean)) call MOM_error(FATAL, &
       "set_up_sponge_field: sp_val_i_mean must be present with i-mean sponges.")
-      
+
     allocate(CS%Ref_val_im(CS%fldno)%p(CS%jsd:CS%jed,CS%nz))
     CS%Ref_val(CS%fldno)%p(:,:) = 0.0
     do k=1,CS%nz ; do j=CS%jsc,CS%jec
@@ -364,7 +364,7 @@ subroutine set_up_sponge_ML_density(sp_val, CS, sp_val_i_mean)
   if (CS%do_i_mean_sponge) then
     if (.not.present(sp_val_i_mean)) call MOM_error(FATAL, &
       "set_up_sponge_field: sp_val_i_mean must be present with i-mean sponges.")
-      
+
     allocate(CS%Rcv_ml_ref_im(CS%jsd:CS%jed)) ; CS%Rcv_ml_ref_im(:) = 0.0
     do j=CS%jsc,CS%jec
       CS%Rcv_ml_ref_im(j) = sp_val_i_mean(j)
@@ -454,7 +454,7 @@ subroutine apply_sponge(h, dt, G, ea, eb, CS, Rcv_ml)
     ! Apply forcing to restore the zonal-mean properties to prescribed values.
 
     if (CS%bulkmixedlayer) call MOM_error(FATAL, "apply_sponge is not yet set up to "//&
-                  "work properly with i-mean sponges and a bulk mixed layer.") 
+                  "work properly with i-mean sponges and a bulk mixed layer.")
 
     do j=js,je ; do i=is,ie ; e_D(i,j,nz+1) = -G%bathyT(i,j) ; enddo ; enddo
     do k=nz,1,-1 ; do j=js,je ; do i=is,ie
