@@ -185,12 +185,12 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
   if(first_call) then
     allocate(KH_u_CFL(SZIB_(G), SZJ_(G)) )
     allocate(KH_v_CFL(SZI_(G), SZJB_(G)) )
-!$OMP parallel do default(none) shared(is,ie,js,je,KH_u_CFL,dt,G)
+!$OMP parallel do default(none) shared(is,ie,js,je,KH_u_CFL,dt,G,CS)
     do j=js,je ; do I=is-1,ie
       KH_u_CFL(I,j) = (0.25*CS%max_Khth_CFL) /  &
         (dt*(G%IdxCu(I,j)*G%IdxCu(I,j) + G%IdyCu(I,j)*G%IdyCu(I,j)))
     enddo ; enddo
-!$OMP parallel do default(none) shared(is,ie,js,je,KH_v_CFL,dt,G)
+!$OMP parallel do default(none) shared(is,ie,js,je,KH_v_CFL,dt,G,CS)
     do j=js-1,je ; do I=is,ie
       KH_v_CFL(i,J) = (0.25*CS%max_Khth_CFL) / &
         (dt*(G%IdxCv(i,J)*G%IdxCv(i,J) + G%IdyCv(i,J)*G%IdyCv(i,J)))

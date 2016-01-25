@@ -538,7 +538,8 @@ subroutine remapping_main(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u, v, de
   endif 
 
   ! Remap tracer
-!$OMP parallel default(none) shared(G,h,dxInterface,CS_remapping,nz,Reg,u,v,ntr,show_call_tree) &
+!$OMP parallel default(none) shared(G,h,dxInterface,CS_remapping,nz,Reg,u,v,ntr,show_call_tree, &
+!$OMP                               dt,h2,CS_ALE,work_conc,work_cont,work_2d,Idt,ppt2mks) &
 !$OMP                       private(h1,dx,u_column)
   if (ntr>0) then
     if (show_call_tree) call callTree_waypoint("remapping tracers (remapping_main)")
@@ -698,8 +699,8 @@ subroutine remap_scalar_h_to_h(CS, G, nk_src, h_src, s_src, h_dst, s_dst, all_ce
   n_points = nk_src
 
 !$OMP parallel default(none) shared(CS,G,h_src,s_src,h_dst,s_dst &
-!$OMP                               ignore_vanished_layers, nk_src ) &
-!$OMP                        private(d,n_pointx)
+!$OMP                               ,ignore_vanished_layers, nk_src,dx ) &
+!$OMP                        private(n_points)
 !$OMP do
   do j = G%jsc,G%jec
     do i = G%isc,G%iec
