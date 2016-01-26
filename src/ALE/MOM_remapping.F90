@@ -1252,11 +1252,73 @@ logical function remappingUnitTests()
                             3, (/2.25,1.5,1./), INTEGRATION_PPM, u2 )
   call dumpGrid(3,h2,x2,u2)
 
+  deallocate(ppoly0_coefficients)
+
+  write(*,*) '===== MOM_remapping: new remappingUnitTests =================='
+
+  allocate(ppoly0_coefficients(n0,6))
+
+  call PCM_reconstruction(3, (/1.,2.,4./), ppoly0_E(1:3,:), ppoly0_coefficients(1:3,:) )
+  remappingUnitTests = remappingUnitTests .or. test_answer(3, ppoly0_E(:,1), (/1.,2.,4./), 'PCM: left edges')
+  remappingUnitTests = remappingUnitTests .or. test_answer(3, ppoly0_E(:,2), (/1.,2.,4./), 'PCM: right edges')
+  remappingUnitTests = remappingUnitTests .or. test_answer(3, ppoly0_coefficients(:,1), (/1.,2.,4./), 'PCM: P0')
+
+  call PLM_reconstruction(3, (/1.,1.,1./), (/1.,3.,5./), ppoly0_E(1:3,:), ppoly0_coefficients(1:3,:) )
+  remappingUnitTests = remappingUnitTests .or. test_answer(3, ppoly0_E(:,1), (/1.,2.,5./), 'Unlim PLM: left edges')
+  remappingUnitTests = remappingUnitTests .or. test_answer(3, ppoly0_E(:,2), (/1.,4.,5./), 'Unlim PLM: right edges')
+  remappingUnitTests = remappingUnitTests .or. test_answer(3, ppoly0_coefficients(:,1), (/1.,2.,5./), 'Unlim PLM: P0')
+  remappingUnitTests = remappingUnitTests .or. test_answer(3, ppoly0_coefficients(:,2), (/0.,2.,0./), 'Unlim PLM: P1')
+
+  call PLM_reconstruction(3, (/1.,1.,1./), (/1.,2.,7./), ppoly0_E(1:3,:), ppoly0_coefficients(1:3,:) )
+  remappingUnitTests = remappingUnitTests .or. test_answer(3, ppoly0_E(:,1), (/1.,1.,7./), 'Left lim PLM: left edges')
+  remappingUnitTests = remappingUnitTests .or. test_answer(3, ppoly0_E(:,2), (/1.,3.,7./), 'Left lim PLM: right edges')
+  remappingUnitTests = remappingUnitTests .or. test_answer(3, ppoly0_coefficients(:,1), (/1.,1.,7./), 'Left lim PLM: P0')
+  remappingUnitTests = remappingUnitTests .or. test_answer(3, ppoly0_coefficients(:,2), (/0.,2.,0./), 'Left lim PLM: P1')
+
+  call PLM_reconstruction(3, (/1.,1.,1./), (/1.,6.,7./), ppoly0_E(1:3,:), ppoly0_coefficients(1:3,:) )
+  remappingUnitTests = remappingUnitTests .or. test_answer(3, ppoly0_E(:,1), (/1.,5.,7./), 'Right lim PLM: left edges')
+  remappingUnitTests = remappingUnitTests .or. test_answer(3, ppoly0_E(:,2), (/1.,7.,7./), 'Right lim PLM: right edges')
+  remappingUnitTests = remappingUnitTests .or. test_answer(3, ppoly0_coefficients(:,1), (/1.,5.,7./), 'Right lim PLM: P0')
+  remappingUnitTests = remappingUnitTests .or. test_answer(3, ppoly0_coefficients(:,2), (/0.,2.,0./), 'Right lim PLM: P1')
+
+  call PLM_reconstruction(3, (/1.,2.,3./), (/1.,4.,9./), ppoly0_E(1:3,:), ppoly0_coefficients(1:3,:) )
+  remappingUnitTests = remappingUnitTests .or. test_answer(3, ppoly0_E(:,1), (/1.,2.,9./), 'Non-uniform line PLM: left edges')
+  remappingUnitTests = remappingUnitTests .or. test_answer(3, ppoly0_E(:,2), (/1.,6.,9./), 'Non-uniform line PLM: right edges')
+  remappingUnitTests = remappingUnitTests .or. test_answer(3, ppoly0_coefficients(:,1), (/1.,2.,9./), 'Non-uniform line PLM: P0')
+  remappingUnitTests = remappingUnitTests .or. test_answer(3, ppoly0_coefficients(:,2), (/0.,4.,0./), 'Non-uniform line PLM: P1')
+  remappingUnitTests = .false. ! TESTING
+
   deallocate(ppoly0_E, ppoly0_S, ppoly0_coefficients)
 
   write(*,*) '=========================================================='
 
   contains
+
+  !> Returns true if any cell of u and u_true are not identical. Returns false otherwise.
+  logical function test_answer(n, u, u_true, label)
+    integer,            intent(in) :: n !< Number of cells in u
+    real, dimension(n), intent(in) :: u !< Values to test
+    real, dimension(n), intent(in) :: u_true !< Values to test against (correct answer)
+    character(len=*),   intent(in) :: label !< Message
+    ! Local variables
+    integer :: k
+
+    test_answer = .false.
+    do k = 1, n
+      if (u(k) /= u_true(k)) test_answer = .true.
+    enddo
+    if (test_answer .or. .true.) then
+      write(*,'(a4,2a24,x,a)') 'k','Calculated value','Correct value',label
+      do k = 1, n
+        if (u(k) /= u_true(k)) then
+          write(*,'(i4,1p2e24.16,a,1pe24.16,a)') k,u(k),u_true(k),' err=',u(k)-u_true(k),' < wrong'
+        else
+          write(*,'(i4,1p2e24.16)') k,u(k),u_true(k)
+        endif
+      enddo
+    endif
+
+  end function test_answer
 
   !> Convenience function for printing grid to screen
   subroutine dumpGrid(n,h,x,u)
