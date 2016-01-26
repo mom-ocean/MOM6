@@ -21,10 +21,16 @@ implicit none ; private
 !> Container for remapping parameters
 type, public :: remapping_CS
   private
-  integer :: nk = 0                    !< Number of layers/levels in vertical
-  integer :: remapping_scheme = -911   !< Determines which reconstruction to use
-  integer :: degree=0                  !< Degree of polynomial reconstruction
-  logical :: boundary_extrapolation = .true. !< If true, extrapolate boundaries
+  !> Number of layers/levels in vertical
+  integer :: nk = 0
+  !> Determines which reconstruction to use
+  integer :: remapping_scheme = -911
+  !> Degree of polynomial reconstruction
+  integer :: degree=0
+  !> If true, extrapolate boundaries
+  logical :: boundary_extrapolation = .true.
+  !> If true, reconstructions are checked for consistency.
+  logical :: check_reconstruction = .false.
 end type
 
 ! The following routines are visible to the outside world
@@ -250,6 +256,9 @@ subroutine remapping_core_h( n0, h0, u0, n1, h1, u1, CS )
   call build_reconstructions_1d( n0, h0, u0, CS%remapping_scheme, CS%degree, CS%boundary_extrapolation, &
                                    ppoly_r_coefficients, ppoly_r_E, ppoly_r_S, iMethod )
 
+  if (CS%check_reconstruction) call check_reconstructions_1d(n0, h0, u0, CS%degree, &
+                                   CS%boundary_extrapolation, ppoly_r_coefficients, ppoly_r_E, ppoly_r_S)
+
   call remap_via_sub_cells( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients, n1, h1, iMethod, u1 )
 
 end subroutine remapping_core_h
@@ -273,6 +282,9 @@ subroutine remapping_core_w( CS, n0, h0, u0, n1, dx, u1 )
 
   call build_reconstructions_1d( n0, h0, u0, CS%remapping_scheme, CS%degree, CS%boundary_extrapolation, &
                                    ppoly_r_coefficients, ppoly_r_E, ppoly_r_S, iMethod )
+
+  if (CS%check_reconstruction) call check_reconstructions_1d(n0, h0, u0, CS%degree, &
+                                   CS%boundary_extrapolation, ppoly_r_coefficients, ppoly_r_E, ppoly_r_S)
 
   call remapByDeltaZ( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients, n1, dx, iMethod, u1 )
 ! call remapByProjection( n0, h0, u0, CS%ppoly_r, n1, h1, iMethod, u1 )
@@ -355,6 +367,104 @@ subroutine build_reconstructions_1d( n0, h0, u0, remapping_scheme, deg, boundary
   end select
 
 end subroutine build_reconstructions_1d
+
+!> Checks that edge values and reconstructions satisfy bounds
+subroutine check_reconstructions_1d(n0, h0, u0, deg, boundary_extrapolation, &
+                                    ppoly_r_coefficients, ppoly_r_E, ppoly_r_S)
+  integer,                  intent(in)  :: n0 !< Number of cells on source grid
+  real, dimension(n0),      intent(in)  :: h0 !< Cell widths on source grid
+  real, dimension(n0),      intent(in)  :: u0 !< Cell averages on source grid
+  integer,                  intent(in)  :: deg !< Degree of polynomial reconstruction
+  logical,                  intent(in)  :: boundary_extrapolation !< Extrapolate at boundaries if true
+  real, dimension(n0,deg+1),intent(out) :: ppoly_r_coefficients !< Coefficients of polynomial
+  real, dimension(n0,2),    intent(out) :: ppoly_r_E !< Edge value of polynomial
+  real, dimension(n0,2),    intent(out) :: ppoly_r_S !< Edge slope of polynomial
+  ! Local variables
+  integer :: i0, n
+  real :: u_l, u_c, u_r ! Cell averages
+  real :: u_min, u_max, u_x0, u_x1
+  logical :: problem_detected
+
+  problem_detected = .false.
+  if (deg>1) return ! Only apply tests to PCM and PLM (for now)
+  do i0 = 1, n0
+    u_l = u0(max(1,i0-1))
+    u_c = u0(i0)
+    u_r = u0(min(n0,i0+1))
+    u_x0 = ppoly_r_coefficients(i0,1) ! Polynomial evaluated at x=0
+    u_x1 = 0.
+    do n = deg+1, 1, -1
+      u_x1 = u_x1 + ppoly_r_coefficients(i0,n) ! Polynomial evaluated at x=1
+    enddo
+    if (i0 > 1 .or. .not. boundary_extrapolation) then
+      u_min = min(u_l, u_c)
+      u_max = max(u_l, u_c)
+      if (ppoly_r_E(i0,1) < u_min) then
+        write(0,'(a,i4,5(x,a,1pe24.16))') 'Left edge undershoot at',i0,'u(i0-1)=',u_l,'u(i0)=',u_c, &
+                                          'edge=',ppoly_r_E(i0,1),'err=',ppoly_r_E(i0,1)-u_min
+        problem_detected = .true.
+      endif
+      if (ppoly_r_E(i0,1) > u_max) then
+        write(0,'(a,i4,5(x,a,1pe24.16))') 'Left edge overshoot at',i0,'u(i0-1)=',u_l,'u(i0)=',u_c, &
+                                          'edge=',ppoly_r_E(i0,1),'err=',ppoly_r_E(i0,1)-u_max
+        problem_detected = .true.
+      endif
+      if (u_x0 < u_min) then
+        write(0,'(a,i4,5(x,a,1pe24.16))') 'Polynomial undershoot at',i0,'u(i0-1)=',u_l,'u(i0)=',u_c, &
+                                          'p(0)=',u_x0,'err=',u_x0-u_min
+        problem_detected = .true.
+      endif
+      if (u_x0 > u_max) then
+        write(0,'(a,i4,5(x,a,1pe24.16))') 'Polynomial overshoot at',i0,'u(i0-1)=',u_l,'u(i0)=',u_c, &
+                                          'p(0)=',u_x0,'err=',u_x0-u_max
+        problem_detected = .true.
+      endif
+    endif
+    if (i0 < n0 .or. .not. boundary_extrapolation) then
+      u_min = min(u_c, u_r)
+      u_max = max(u_c, u_r)
+      if (ppoly_r_E(i0,2) < u_min) then
+        write(0,'(a,i4,5(x,a,1pe24.16))') 'Right edge undershoot at',i0,'u(i0)=',u_c,'u(i0+1)=',u_r, &
+                                          'edge=',ppoly_r_E(i0,2),'err=',ppoly_r_E(i0,2)-u_min
+        problem_detected = .true.
+      endif
+      if (ppoly_r_E(i0,2) > u_max) then
+        write(0,'(a,i4,5(x,a,1pe24.16))') 'Right edge overshoot at',i0,'u(i0)=',u_c,'u(i0+1)=',u_r, &
+                                          'edge=',ppoly_r_E(i0,2),'err=',ppoly_r_E(i0,2)-u_max
+        problem_detected = .true.
+      endif
+      if (u_x1 < u_min) then
+        write(0,'(a,i4,5(x,a,1pe24.16))') 'Polynomial undershoot at',i0,'u(i0)=',u_c,'u(i0+1)=',u_r, &
+                                          'p(1)=',u_x1,'err=',u_x1-u_min
+        problem_detected = .true.
+      endif
+      if (u_x1 > u_max) then
+        write(0,'(a,i4,5(x,a,1pe24.16))') 'Polynomial overshoot at',i0,'u(i0)=',u_c,'u(i0+1)=',u_r, &
+                                          'p(1)=',u_x1,'err=',u_x1-u_max
+        problem_detected = .true.
+      endif
+    endif
+    if (i0 > 1) then
+      if ( (u_c-u_l)*(ppoly_r_E(i0,1)-ppoly_r_E(i0-1,2)) < 0.) then
+        write(0,'(a,i4,5(x,a,1pe24.16))') 'Non-monotonic edges at',i0,'u(i0-1)=',u_l,'u(i0)=',u_c, &
+                                          'right edge=',ppoly_r_E(i0-1,2),'left edge=',ppoly_r_E(i0,1)
+        write(0,'(5(a,1pe24.16,x))') 'u(i0)-u(i0-1)',u_c-u_l,'edge diff=',ppoly_r_E(i0,1)-ppoly_r_E(i0-1,2)
+        problem_detected = .true.
+      endif
+    endif
+    if (problem_detected) then
+      write(0,'(a,1p9e24.16)') 'Polynomial coeffs:',ppoly_r_coefficients(i0,:)
+      write(0,'(3(a,1pe24.16,x))') 'u_l=',u_l,'u_c=',u_c,'u_r=',u_r
+      write(0,'(a4,10a24)') 'i0','h0(i0)','u0(i0)','left edge','right edge','Polynomial coefficients'
+      do n = 1, n0
+        write(0,'(i4,1p10e24.16)') n,h0(n),u0(n),ppoly_r_E(n,1),ppoly_r_E(n,2),ppoly_r_coefficients(n,:)
+      enddo
+      call MOM_error(FATAL, 'MOM_remapping, check_reconstructions_1d: '// &
+                   'Edge values or polynomial coefficients were inconsistent!')
+    endif
+  enddo
+
+end subroutine check_reconstructions_1d
 
 !> Remaps column of n0 values u0 on grid h0 to grid h1 with n1 cells by calculating
 !! the n0+n1+1 sub-integrals of the intersection of h0 and h1, and the summing the
@@ -1050,16 +1160,20 @@ end subroutine dzFromH1H2
 
 
 !> Constructor for remapping control structure
-subroutine initialize_remapping( nk, remappingScheme, CS)
+subroutine initialize_remapping( nk, remappingScheme, CS, check_reconstruction)
   ! Arguments
   integer,            intent(in)    :: nk !< Number of cells to assume for
                                           !! polynomials storage
   character(len=*),   intent(in)    :: remappingScheme !< Remapping scheme to use
   type(remapping_CS), intent(inout) :: CS !< Remapping control structure
+  logical, optional,  intent(in)    :: check_reconstruction !< Indicate to check reconstructions
 
   CS%nk = nk
 
   call setReconstructionType( remappingScheme, CS )
+  if (present(check_reconstruction)) then
+    CS%check_reconstruction = check_reconstruction
+  endif
 
 end subroutine initialize_remapping
 

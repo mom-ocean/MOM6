@@ -141,6 +141,7 @@ subroutine ALE_init( param_file, G, CS)
   character(len=40)               :: mod = "MOM_ALE" ! This module's name.
   character(len=80)               :: string ! Temporary strings
   real                            :: filter_shallow_depth, filter_deep_depth
+  logical                         :: check_reconstruction
 
   if (associated(CS)) then
     call MOM_error(WARNING, "ALE_init called with an associated "// &
@@ -193,7 +194,11 @@ subroutine ALE_init( param_file, G, CS)
                  "for vertical remapping for all variables.\n"//&
                  "It can be one of the following schemes:\n"//&
                  trim(remappingSchemesDoc), default=remappingDefaultScheme)
-  call initialize_remapping( G%ke, string, CS%remapCS )
+  call get_param(param_file, mod, "FATAL_CHECK_RECONSTRUCTIONS", check_reconstruction, &
+                 "If true, cell-by-cell reconstructions are checked for\n"//&
+                 "consistency and if non-monotonicty or an inconsistency is\n"//&
+                 "detected then a FATAL error is issued.", default=.false.)
+  call initialize_remapping( G%ke, string, CS%remapCS, check_reconstruction=check_reconstruction )
   call remapDisableBoundaryExtrapolation( CS%remapCS )
 
   call get_param(param_file, mod, "REMAP_AFTER_INITIALIZATION", CS%remap_after_initialization, &
