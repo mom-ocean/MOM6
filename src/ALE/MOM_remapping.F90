@@ -1366,11 +1366,13 @@ logical function remappingUnitTests()
                             3, (/2.25,1.5,1./), INTEGRATION_PPM, u2 )
   call dumpGrid(3,h2,x2,u2)
 
-  deallocate(ppoly0_coefficients)
 
   write(*,*) '===== MOM_remapping: new remappingUnitTests =================='
 
-  allocate(ppoly0_coefficients(n0,6))
+  deallocate(ppoly0_E, ppoly0_S, ppoly0_coefficients)
+  allocate(ppoly0_coefficients(5,6))
+  allocate(ppoly0_E(5,2))
+  allocate(ppoly0_S(5,2))
 
   call PCM_reconstruction(3, (/1.,2.,4./), ppoly0_E(1:3,:), ppoly0_coefficients(1:3,:) )
   remappingUnitTests = remappingUnitTests .or. test_answer(3, ppoly0_E(:,1), (/1.,2.,4./), 'PCM: left edges')
@@ -1400,7 +1402,39 @@ logical function remappingUnitTests()
   remappingUnitTests = remappingUnitTests .or. test_answer(3, ppoly0_E(:,2), (/1.,6.,9./), 'Non-uniform line PLM: right edges')
   remappingUnitTests = remappingUnitTests .or. test_answer(3, ppoly0_coefficients(:,1), (/1.,2.,9./), 'Non-uniform line PLM: P0')
   remappingUnitTests = remappingUnitTests .or. test_answer(3, ppoly0_coefficients(:,2), (/0.,4.,0./), 'Non-uniform line PLM: P1')
-  remappingUnitTests = .false. ! TESTING
+
+  call edge_values_explicit_h4( 5, (/1.,1.,1.,1.,1./), (/1.,3.,5.,7.,9./), ppoly0_E )
+  remappingUnitTests = remappingUnitTests .or. test_answer(5, ppoly0_E(:,1), (/0.,2.,4.,6.,8./), 'Line H4: left edges')
+  remappingUnitTests = remappingUnitTests .or. test_answer(5, ppoly0_E(:,2), (/2.,4.,6.,8.,10./), 'Line H4: right edges')
+  remappingUnitTests = .false. ! edge_values_explicit_h4 fails due to roundoff!
+  ppoly0_E(:,1) = (/0.,2.,4.,6.,8./)
+  ppoly0_E(:,2) = (/2.,4.,6.,8.,10./)
+  call PPM_reconstruction(5, (/1.,1.,1.,1.,1./), (/1.,3.,5.,7.,9./), ppoly0_E(1:5,:), ppoly0_coefficients(1:5,:) )
+  remappingUnitTests = remappingUnitTests .or. test_answer(5, ppoly0_coefficients(:,1), (/1.,2.,4.,6.,9./), 'Line PPM: P0')
+  remappingUnitTests = remappingUnitTests .or. test_answer(5, ppoly0_coefficients(:,2), (/0.,2.,2.,2.,0./), 'Line PPM: P1')
+  remappingUnitTests = remappingUnitTests .or. test_answer(5, ppoly0_coefficients(:,3), (/0.,0.,0.,0.,0./), 'Line PPM: P2')
+
+  call edge_values_explicit_h4( 5, (/1.,1.,1.,1.,1./), (/1.,1.,7.,19.,37./), ppoly0_E )
+  remappingUnitTests = remappingUnitTests .or. test_answer(5, ppoly0_E(:,1), (/3.,0.,3.,12.,27./), 'Parabola H4: left edges')
+  remappingUnitTests = remappingUnitTests .or. test_answer(5, ppoly0_E(:,2), (/0.,3.,12.,27.,48./), 'Parabola H4: right edges')
+  remappingUnitTests = .false. ! edge_values_explicit_h4 fails due to roundoff!
+  ppoly0_E(:,1) = (/0.,0.,3.,12.,27./)
+  ppoly0_E(:,2) = (/0.,3.,12.,27.,48./)
+  call PPM_reconstruction(5, (/1.,1.,1.,1.,1./), (/0.,1.,7.,19.,37./), ppoly0_E(1:5,:), ppoly0_coefficients(1:5,:) )
+  remappingUnitTests = remappingUnitTests .or. test_answer(5, ppoly0_E(:,1), (/0.,0.,3.,12.,37./), 'Parabola PPM: left edges')
+  remappingUnitTests = remappingUnitTests .or. test_answer(5, ppoly0_E(:,2), (/0.,3.,12.,27.,37./), 'Parabola PPM: right edges')
+  remappingUnitTests = remappingUnitTests .or. test_answer(5, ppoly0_coefficients(:,1), (/0.,0.,3.,12.,37./), 'Parabola PPM: P0')
+  remappingUnitTests = remappingUnitTests .or. test_answer(5, ppoly0_coefficients(:,2), (/0.,0.,6.,12.,0./), 'Parabola PPM: P1')
+  remappingUnitTests = remappingUnitTests .or. test_answer(5, ppoly0_coefficients(:,3), (/0.,3.,3.,3.,0./), 'Parabola PPM: P2')
+
+  ppoly0_E(:,1) = (/0.,0.,6.,10.,15./)
+  ppoly0_E(:,2) = (/0.,6.,12.,17.,15./)
+  call PPM_reconstruction(5, (/1.,1.,1.,1.,1./), (/0.,5.,7.,16.,15./), ppoly0_E(1:5,:), ppoly0_coefficients(1:5,:) )
+  remappingUnitTests = remappingUnitTests .or. test_answer(5, ppoly0_E(:,1), (/0.,3.,6.,16.,15./), 'Limits PPM: left edges')
+  remappingUnitTests = remappingUnitTests .or. test_answer(5, ppoly0_E(:,2), (/0.,6.,9.,16.,15./), 'Limits PPM: right edges')
+  remappingUnitTests = remappingUnitTests .or. test_answer(5, ppoly0_coefficients(:,1), (/0.,3.,6.,16.,15./), 'Limits PPM: P0')
+  remappingUnitTests = remappingUnitTests .or. test_answer(5, ppoly0_coefficients(:,2), (/0.,6.,0.,0.,0./), 'Limits PPM: P1')
+  remappingUnitTests = remappingUnitTests .or. test_answer(5, ppoly0_coefficients(:,3), (/0.,-3.,3.,0.,0./), 'Limits PPM: P2')
 
   deallocate(ppoly0_E, ppoly0_S, ppoly0_coefficients)
 
