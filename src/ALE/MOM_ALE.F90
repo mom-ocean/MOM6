@@ -142,6 +142,7 @@ subroutine ALE_init( param_file, G, CS)
   character(len=80)               :: string ! Temporary strings
   real                            :: filter_shallow_depth, filter_deep_depth
   logical                         :: check_reconstruction
+  logical                         :: check_remapping
 
   if (associated(CS)) then
     call MOM_error(WARNING, "ALE_init called with an associated "// &
@@ -198,7 +199,13 @@ subroutine ALE_init( param_file, G, CS)
                  "If true, cell-by-cell reconstructions are checked for\n"//&
                  "consistency and if non-monotonicty or an inconsistency is\n"//&
                  "detected then a FATAL error is issued.", default=.false.)
-  call initialize_remapping( G%ke, string, CS%remapCS, check_reconstruction=check_reconstruction )
+  call get_param(param_file, mod, "FATAL_CHECK_REMAPPING", check_remapping, &
+                 "If true, the results of remapping are checked for\n"//&
+                 "conservation and new extrema and if an inconsistency is\n"//&
+                 "detected then a FATAL error is issued.", default=.false.)
+  call initialize_remapping( G%ke, string, CS%remapCS, &
+                             check_reconstruction=check_reconstruction, &
+                             check_remapping=check_remapping )
   call remapDisableBoundaryExtrapolation( CS%remapCS )
 
   call get_param(param_file, mod, "REMAP_AFTER_INITIALIZATION", CS%remap_after_initialization, &
