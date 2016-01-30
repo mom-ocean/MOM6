@@ -599,13 +599,17 @@ subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, h
   real :: dh0_eff ! Running sum of source cell thickness
   real, parameter :: h_very_large = 1.E30 ! A large thickness, larger than will ever be encountered
   ! For error checking/debugging
+  logical, parameter :: adjust_thickest_subcell = .true. ! To fix round-off conservation issues
   logical, parameter :: debug_bounds = .false. ! For debugging overshoots etc.
-  integer :: k
+  integer :: k, i0_last_thick_cell
   real :: h0tot, h0err, h1tot, h1err, h2tot, h2err, u02_err
   real :: u0tot, u0err, u0min, u0max, u1tot, u1err, u1min, u1max, u2tot, u2err, u2min, u2max, u_orig
+
+  i0_last_thick_cell = 0
   do i0 = 1, n0
     u0_min(i0) = min(ppoly0_E(i0,1), ppoly0_E(i0,2))
     u0_max(i0) = max(ppoly0_E(i0,1), ppoly0_E(i0,2))
+    if (h0(i0)>0.) i0_last_thick_cell = i0
   enddo
 
   ! Initialize algorithm
@@ -666,10 +670,15 @@ subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, h
       ! Record the source cell thickness found by summing the sub-cell thicknesses.
       h0_eff(i0) = dh0_eff
       ! Move the source index.
-      if (i0 < n0) then
+      if (i0 < i0_last_thick_cell) then
         i0 = i0 + 1
         h0_supply = h0(i0)
         dh0_eff = 0.
+        do while (h0_supply==0. .and. i0<i0_last_thick_cell)
+          ! This loop skips over vanished source cells
+          i0 = i0 + 1
+          h0_supply = h0(i0)
+        enddo
       else
         h0_supply = h_very_large
       endif
@@ -739,23 +748,24 @@ subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, h
   u_sub(n0+n1+1) = ppoly0_E(n0,2)                   ! This value is only needed when total target column
   uh_sub(n0+n1+1) = ppoly0_E(n0,2) * h_sub(n0+n1+1) ! is wider than the source column
 
-  ! Loop over each source cell substituting the integral/average for the thickest sub-cell (within
-  ! the source cell) with the residual of the source cell integral minus the other sub-cell integrals
-  ! aka a genius algorithm for accurate conservation when remapping from Robert Hallberg (@Hallberg-NOAA).
-  do i0 = 1, n0
-    i_max = isrc_max(i0)
-    dh_max = h_sub(i_max)
-    if (dh_max > 0.) then
-      ! duh will be the sum of sub-cell integrals within the source cell except for the thickest sub-cell.
-      duh = 0.
-      do i_sub = isrc_start(i0), isrc_end(i0)
-        if (i_sub /= i_max) duh = duh + uh_sub(i_sub)
-      enddo
-      uh_sub(i_max) = u0(i0)*h0(i0) - duh
-      u_sub(i_max) = uh_sub(i_max) / dh_max
-      u02_err = u02_err + max( abs(uh_sub(i_max)), abs(u0(i0)*h0(i0)), abs(duh) )
-    endif
-  enddo
+  if (adjust_thickest_subcell) then
+    ! Loop over each source cell substituting the integral/average for the thickest sub-cell (within
+    ! the source cell) with the residual of the source cell integral minus the other sub-cell integrals
+    ! aka a genius algorithm for accurate conservation when remapping from Robert Hallberg (@Hallberg-NOAA).
+    do i0 = 1, i0_last_thick_cell
+      i_max = isrc_max(i0)
+      dh_max = h_sub(i_max)
+      if (dh_max > 0.) then
+        ! duh will be the sum of sub-cell integrals within the source cell except for the thickest sub-cell.
+        duh = 0.
+        do i_sub = isrc_start(i0), isrc_end(i0)
+          if (i_sub /= i_max) duh = duh + uh_sub(i_sub)
+        enddo
+        uh_sub(i_max) = u0(i0)*h0(i0) - duh
+        u02_err = u02_err + max( abs(uh_sub(i_max)), abs(u0(i0)*h0(i0)), abs(duh) )
+      endif
+    enddo
+  endif
 
   ! Loop over each target cell summing the integrals from sub-cells within the target cell.
   uh_err = 0.
