@@ -600,6 +600,7 @@ subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, h
   real, parameter :: h_very_large = 1.E30 ! A large thickness, larger than will ever be encountered
   ! For error checking/debugging
   logical, parameter :: force_bounds_in_subcell = .false. ! To fix round-off issues
+  logical, parameter :: force_bounds_in_target = .true. ! To fix round-off issues
   logical, parameter :: adjust_thickest_subcell = .true. ! To fix round-off conservation issues
   logical, parameter :: debug_bounds = .false. ! For debugging overshoots etc.
   integer :: k, i0_last_thick_cell
@@ -781,17 +782,31 @@ subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, h
   uh_err = 0.
   do i1 = 1, n1
     if (h1(i1) > 0.) then
-      duh = 0.
+      duh = 0. ; dh = 0.
+      i_sub = itgt_start(i1)
+      if (force_bounds_in_target) then
+        u1min = u_sub(i_sub)
+        u1max = u_sub(i_sub)
+      endif
       do i_sub = itgt_start(i1), itgt_end(i1)
+        if (force_bounds_in_target) then
+          u1min = min(u1min, u_sub(i_sub))
+          u1max = max(u1max, u_sub(i_sub))
+        endif
+        dh = dh + h_sub(i_sub)
         duh = duh + uh_sub(i_sub)
         ! This accumulates the contribution to the error bound for the sum of u*h
         uh_err = uh_err + max(abs(duh),abs(uh_sub(i_sub)))*epsilon(duh)
       enddo
-      u1(i1) = duh / h1(i1)
-      ! This is the reciprocal contribution to the error bound for the sum of u*h
-      uh_err = uh_err + 2.*abs(duh)*epsilon(duh)
+      u1(i1) = duh / dh
       ! This is the contribution from the division to the error bound for the sum of u*h
       uh_err = uh_err + abs(duh)*epsilon(duh)
+      if (force_bounds_in_target) then
+        u_orig = u1(i1)
+        u1(i1) = max(u1min, min(u1max, u1(i1)))
+        ! Adjusting to be bounded contributes to the error for the sum of u*h
+        uh_err = uh_err + dh*abs( u1(i1)-u_orig )
+      endif
     else
       u1(i1) = u_sub(itgt_start(i1))
     endif
