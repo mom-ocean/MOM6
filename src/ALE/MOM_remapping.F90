@@ -722,7 +722,7 @@ subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, h
     dh0_eff = dh0_eff + dh ! Cumulative thickness within the source cell
     xb = dh0_eff / h0_eff(i0) ! This expression yields xa <= xb <= 1.0
     xb = min(1., xb) ! This is only needed when the total target column is wider than the source column
-    u_sub(i_sub) = average_value_ppoly( n0, ppoly0_E, ppoly0_coefficients, method, i0, xa, xb)
+    u_sub(i_sub) = average_value_ppoly( n0, u0, ppoly0_E, ppoly0_coefficients, method, i0, xa, xb)
     if (debug_bounds) then
       if (method<5 .and.(u_sub(i_sub)<u0_min(i0) .or. u_sub(i_sub)>u0_max(i0))) then
         write(0,*) 'Sub cell average is out of bounds',i_sub,'method=',method
@@ -864,8 +864,9 @@ end subroutine remap_via_sub_cells
 !> Returns the average value of a reconstruction within a single source cell, i0,
 !! between the non-dimensional positions xa and xb (xa<=xb) with dimensional
 !! separation dh.
-real function average_value_ppoly( n0, ppoly0_E, ppoly0_coefficients, method, i0, xa, xb)
+real function average_value_ppoly( n0, u0, ppoly0_E, ppoly0_coefficients, method, i0, xa, xb)
   integer,       intent(in)    :: n0     !< Number of cells in source grid
+  real,          intent(in)    :: u0(:)  !< Cell means
   real,          intent(in)    :: ppoly0_E(:,:)            !< Edge value of polynomial
   real,          intent(in)    :: ppoly0_coefficients(:,:) !< Coefficients of polynomial
   integer,       intent(in)    :: method !< Remapping scheme to use
@@ -879,7 +880,7 @@ real function average_value_ppoly( n0, ppoly0_E, ppoly0_coefficients, method, i0
   if (xb > xa) then
     select case ( method )
       case ( INTEGRATION_PCM )
-        u_ave = ppoly0_coefficients(i0,1)
+        u_ave = u0(i0)
       case ( INTEGRATION_PLM )
         u_ave = (                                           &
             ppoly0_coefficients(i0,1)                       &
