@@ -127,6 +127,10 @@ subroutine bound_edge_values( N, h, u, edge_values )
       u0_r = u_c + sign( min( abs(slope), abs(u0_r-u_c) ), slope )
     end if
 
+    ! Finally bound by neighboring cell means in case of round off
+    u0_l = max( min( u0_l, max(u_l, u_c) ), min(u_l, u_c) )
+    u0_r = max( min( u0_r, max(u_r, u_c) ), min(u_r, u_c) )
+
     ! Store edge values
     edge_values(k,1) = u0_l
     edge_values(k,2) = u0_r
