@@ -33,6 +33,8 @@ type, public :: remapping_CS
   logical :: check_reconstruction = .false.
   !> If true, the result of remapping are checked for conservation and bounds.
   logical :: check_remapping = .false.
+  !> If true, the intermediate values used in remapping are forced to be bounded.
+  logical :: force_bounds_in_subcell = .false.
 end type
 
 ! The following routines are visible to the outside world
@@ -264,7 +266,8 @@ subroutine remapping_core_h( n0, h0, u0, n1, h1, u1, CS )
 
   if (CS%check_remapping) call measure_input_bounds( n0, h0, u0, ppoly_r_E, h0tot, h0err, u0tot, u0err, u0min, u0max )
 
-  call remap_via_sub_cells( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients, n1, h1, iMethod, u1, uh_err )
+  call remap_via_sub_cells( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients, n1, h1, iMethod, &
+                            CS%force_bounds_in_subcell, u1, uh_err )
 
   if (CS%check_remapping) then
     ! Check errors and bounds
@@ -339,7 +342,8 @@ subroutine remapping_core_w( CS, n0, h0, u0, n1, dx, u1 )
       h1(k) = max( 0., dx(k+1) - dx(k) )
     endif
   enddo
-  call remap_via_sub_cells( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients, n1, h1, iMethod, u1, uh_err )
+  call remap_via_sub_cells( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients, n1, h1, iMethod, &
+                            CS%force_bounds_in_subcell,u1, uh_err )
 ! call remapByDeltaZ( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients, n1, dx, iMethod, u1 )
 ! call remapByProjection( n0, h0, u0, CS%ppoly_r, n1, h1, iMethod, u1 )
 
@@ -570,7 +574,8 @@ end subroutine check_reconstructions_1d
 !> Remaps column of n0 values u0 on grid h0 to grid h1 with n1 cells by calculating
 !! the n0+n1+1 sub-integrals of the intersection of h0 and h1, and the summing the
 !! appropriate integrals into the h1*u1 values.
-subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, h1, method, u1, uh_err )
+subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, h1, method, &
+                                force_bounds_in_subcell, u1, uh_err )
   integer,       intent(in)    :: n0     !< Number of cells in source grid
   real,          intent(in)    :: h0(:)  !< Source grid widths (size n0)
   real,          intent(in)    :: u0(:)  !< Source cell averages (size n0)
@@ -579,6 +584,7 @@ subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, h
   integer,       intent(in)    :: n1     !< Number of cells in target grid
   real,          intent(in)    :: h1(:)  !< Target grid widths (size n1)
   integer,       intent(in)    :: method !< Remapping scheme to use
+  logical,       intent(in)    :: force_bounds_in_subcell !< Force sub-cell values to be bounded
   real,          intent(out)   :: u1(:)  !< Target cell averages (size n1)
   real,          intent(out)   :: uh_err !< Estimate of bound on error in sum of u*h
   ! Local variables
@@ -608,7 +614,6 @@ subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, h
   real :: dh0_eff ! Running sum of source cell thickness
   real, parameter :: h_very_large = 1.E30 ! A large thickness, larger than will ever be encountered
   ! For error checking/debugging
-  logical, parameter :: force_bounds_in_subcell = .false. ! To fix round-off issues
   logical, parameter :: force_bounds_in_target = .true. ! To fix round-off issues
   logical, parameter :: adjust_thickest_subcell = .true. ! To fix round-off conservation issues
   logical, parameter :: debug_bounds = .false. ! For debugging overshoots etc.
@@ -1486,7 +1491,8 @@ subroutine dzFromH1H2( n1, h1, n2, h2, dx )
 end subroutine dzFromH1H2
 
 !> Constructor for remapping control structure
-subroutine initialize_remapping( nk, remappingScheme, CS, check_reconstruction, check_remapping)
+subroutine initialize_remapping( nk, remappingScheme, CS, &
+                check_reconstruction, check_remapping, force_bounds_in_subcell)
   ! Arguments
   integer,            intent(in)    :: nk !< Number of cells to assume for
                                           !! polynomials storage
@@ -1494,6 +1500,7 @@ subroutine initialize_remapping( nk, remappingScheme, CS, check_reconstruction, 
   type(remapping_CS), intent(inout) :: CS !< Remapping control structure
   logical, optional,  intent(in)    :: check_reconstruction !< Indicate to check reconstructions
   logical, optional,  intent(in)    :: check_remapping !< Indicate to check results of remapping
+  logical, optional,  intent(in)    :: force_bounds_in_subcell !< Force subcells values to be bounded
 
   CS%nk = nk
 
@@ -1503,6 +1510,9 @@ subroutine initialize_remapping( nk, remappingScheme, CS, check_reconstruction, 
   endif
   if (present(check_remapping)) then
     CS%check_remapping = check_remapping
+  endif
+  if (present(force_bounds_in_subcell)) then
+    CS%force_bounds_in_subcell = force_bounds_in_subcell
   endif
 
 end subroutine initialize_remapping
@@ -1677,7 +1687,7 @@ logical function remappingUnitTests()
   write(*,*) 'Via sub-cells'
   thisTest = .false.
   call remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, &
-                            n2, h2, INTEGRATION_PPM, u2, err )
+                            n2, h2, INTEGRATION_PPM, .false., u2, err )
   call dumpGrid(n2,h2,x2,u2)
 
   do i=1,n2
@@ -1688,11 +1698,11 @@ logical function remappingUnitTests()
   remappingUnitTests = remappingUnitTests .or. thisTest
 
   call remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, &
-                            6, (/.125,.125,.125,.125,.125,.125/), INTEGRATION_PPM, u2, err )
+                            6, (/.125,.125,.125,.125,.125,.125/), INTEGRATION_PPM, .false., u2, err )
   call dumpGrid(6,h2,x2,u2)
 
   call remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, &
-                            3, (/2.25,1.5,1./), INTEGRATION_PPM, u2, err )
+                            3, (/2.25,1.5,1./), INTEGRATION_PPM, .false., u2, err )
   call dumpGrid(3,h2,x2,u2)
 
 

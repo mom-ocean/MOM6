@@ -143,6 +143,7 @@ subroutine ALE_init( param_file, G, CS)
   real                            :: filter_shallow_depth, filter_deep_depth
   logical                         :: check_reconstruction
   logical                         :: check_remapping
+  logical                         :: force_bounds_in_subcell
 
   if (associated(CS)) then
     call MOM_error(WARNING, "ALE_init called with an associated "// &
@@ -203,9 +204,14 @@ subroutine ALE_init( param_file, G, CS)
                  "If true, the results of remapping are checked for\n"//&
                  "conservation and new extrema and if an inconsistency is\n"//&
                  "detected then a FATAL error is issued.", default=.false.)
+  call get_param(param_file, mod, "REMAP_BOUND_INTERMEDIATE_VALUES", force_bounds_in_subcell, &
+                 "If true, the values on the intermediate grid used for remapping\n"//&
+                 "are forced to be bounded, which might not be the case due to\n"//&
+                 "round off.", default=.false.)
   call initialize_remapping( G%ke, string, CS%remapCS, &
                              check_reconstruction=check_reconstruction, &
-                             check_remapping=check_remapping )
+                             check_remapping=check_remapping, &
+                             force_bounds_in_subcell=force_bounds_in_subcell)
   call remapDisableBoundaryExtrapolation( CS%remapCS )
 
   call get_param(param_file, mod, "REMAP_AFTER_INITIALIZATION", CS%remap_after_initialization, &
