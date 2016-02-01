@@ -90,7 +90,7 @@ subroutine PPM_limiter_standard( N, h, u, ppoly_E )
       edge_l = u_c
       edge_r = u_c
     else
-      expr1 = 6.0 * (edge_r - edge_l) * (u_c - 0.5*(edge_l+edge_r))
+      expr1 = 3.0 * (edge_r - edge_l) * ( (u_c - edge_l) + (u_c - edge_r))
       expr2 = (edge_r - edge_l) * (edge_r - edge_l)
       if ( expr1 > expr2 ) then
         ! Place extremum at right edge of cell by adjusting left edge value
@@ -99,6 +99,12 @@ subroutine PPM_limiter_standard( N, h, u, ppoly_E )
         ! Place extremum at left edge of cell by adjusting right edge value
         edge_r = u_c + 2.0 * ( u_c - edge_l )
       endif
+    endif
+    ! This checks that the difference in edge values is representable
+    ! and avoids overshoot problems due to round off.
+    if ( abs( edge_r - edge_l )<max(1.e-60,epsilon(u_c)*abs(u_c)) ) then
+      edge_l = u_c
+      edge_r = u_c
     endif
 
     ppoly_E(k,1) = edge_l
