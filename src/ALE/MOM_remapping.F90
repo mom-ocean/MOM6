@@ -331,7 +331,16 @@ subroutine remapping_core_w( CS, n0, h0, u0, n1, dx, u1 )
 
   if (CS%check_remapping) call measure_input_bounds( n0, h0, u0, ppoly_r_E, h0tot, h0err, u0tot, u0err, u0min, u0max )
 
-  call remapByDeltaZ( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients, n1, dx, iMethod, u1 )
+  ! This is a temporary step prior to switching to remapping_core_h()
+  do k = 1, n1
+    if (k<=n0) then
+      h1(k) = max( 0., h0(k) + ( dx(k+1) - dx(k) ) )
+    else
+      h1(k) = max( 0., dx(k+1) - dx(k) )
+    endif
+  enddo
+  call remap_via_sub_cells( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients, n1, h1, iMethod, u1, uh_err )
+! call remapByDeltaZ( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients, n1, dx, iMethod, u1 )
 ! call remapByProjection( n0, h0, u0, CS%ppoly_r, n1, h1, iMethod, u1 )
 
   if (CS%check_remapping) then
@@ -728,7 +737,9 @@ subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, h
     if (debug_bounds) then
       if (method<5 .and.(u_sub(i_sub)<u0_min(i0) .or. u_sub(i_sub)>u0_max(i0))) then
         write(0,*) 'Sub cell average is out of bounds',i_sub,'method=',method
+        write(0,*) 'xa,xb: ',xa,xb
         write(0,*) 'Edge values: ',ppoly0_E(i0,:),'mean',u0(i0)
+        write(0,*) 'a_c: ',(u0(i0)-ppoly0_E(i0,1))+(u0(i0)-ppoly0_E(i0,2))
         write(0,*) 'Polynomial coeffs: ',ppoly0_coefficients(i0,:)
         write(0,*) 'Bounds min=',u0_min(i0),'max=',u0_max(i0)
         write(0,*) 'Average: ',u_sub(i_sub),'rel to min=',u_sub(i_sub)-u0_min(i0),'rel to max=',u_sub(i_sub)-u0_max(i0)
@@ -902,6 +913,8 @@ real function average_value_ppoly( n0, u0, ppoly0_E, ppoly0_coefficients, method
   real :: u_ave, xa_2, xb_2, xa2pxb2, xapxb
   real, parameter :: r_3 = 1.0/3.0 ! Used in evaluation of integrated polynomials
 
+  real :: mx, a_L, a_R, u_c, Ya, Yb, my, xa2b2ab, Ya2b2ab, a_c
+
   if (xb > xa) then
     select case ( method )
       case ( INTEGRATION_PCM )
@@ -911,10 +924,25 @@ real function average_value_ppoly( n0, u0, ppoly0_E, ppoly0_coefficients, method
             ppoly0_coefficients(i0,1)                       &
           + ppoly0_coefficients(i0,2) * 0.5 * ( xb + xa ) )
       case ( INTEGRATION_PPM )
-        u_ave = (                                           &
-              ppoly0_coefficients(i0,1)                     &
-          + ( ppoly0_coefficients(i0,2) * 0.5 * ( xb + xa ) &
-          +   ppoly0_coefficients(i0,3) * r_3 * ( ( xb*xb + xa*xa ) + xa*xb ) ) )
+        mx = 0.5 * ( xa + xb )
+        a_L = ppoly0_E(i0, 1)
+        a_R = ppoly0_E(i0, 2)
+        u_c = u0(i0)
+        a_c = 0.5 * ( ( u_c - a_L ) + ( u_c - a_R ) ) ! a_6 / 6
+        if (mx<0.5) then
+          ! This integration of the PPM reconstruction is expressed in distances from the left edge
+          xa2b2ab = (xa*xa+xb*xb)+xa*xb
+          u_ave = a_L + ( ( a_R - a_L ) * mx &
+                          + a_c * ( 3. * ( xb + xa ) - 2.*xa2b2ab ) )
+        else
+          ! This integration of the PPM reconstruction is expressed in distances from the right edge
+          Ya = 1. - xa
+          Yb = 1. - xb
+          my = 0.5 * ( Ya + Yb )
+          Ya2b2ab = (Ya*Ya+Yb*Yb)+Ya*Yb
+          u_ave = a_R  + ( ( a_L - a_R ) * my &
+                           + a_c * ( 3. * ( Yb + Ya ) - 2.*Ya2b2ab ) )
+        endif
       case ( INTEGRATION_PQM )
         xa_2 = xa*xa
         xb_2 = xb*xb
