@@ -185,6 +185,7 @@ type, public :: forcing_diags
   integer :: id_heat_content_cond   = -1, id_heat_content_surfwater= -1
   integer :: id_heat_content_vprec  = -1, id_heat_content_massout  = -1
   integer :: id_heat_restore        = -1, id_heat_content_massin   = -1
+  integer :: id_hfrainds            = -1, id_hfrunoffds            = -1 
 
   ! global area integrated heat flux diagnostic handles
   integer :: id_total_net_heat_coupler    = -1, id_total_net_heat_surface      = -1
@@ -562,17 +563,17 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
       endif
     endif
 
-    ! Assume liquid runoff enters ocean at SST if land model does not provide runoff heat content.
+    ! Liquid runoff enters ocean at SST if land model does not provide runoff heat content.
     if (.not. useRiverHeatContent) then
       if (ASSOCIATED(fluxes%lrunoff) .and. ASSOCIATED(fluxes%heat_content_lrunoff)) then
         fluxes%heat_content_lrunoff(i,j) = fluxes%C_p*fluxes%lrunoff(i,j)*T(i,1)
       endif
     endif
 
-    ! Assume solid runoff enters ocean at 0degC if land model does not provide calving heat content.
+    ! Icebergs enter ocean at SST if land model does not provide calving heat content.
     if (.not. useCalvingHeatContent) then
-      if (ASSOCIATED(fluxes%heat_content_lrunoff)) then
-        fluxes%heat_content_frunoff(i,j) = 0.0
+      if (ASSOCIATED(fluxes%frunoff) .and. ASSOCIATED(fluxes%heat_content_frunoff)) then
+        fluxes%heat_content_frunoff(i,j) = fluxes%C_p*fluxes%frunoff(i,j)*T(i,1)
       endif
     endif
 
@@ -1112,30 +1113,25 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
   !===============================================================
   ! surface heat flux maps
 
-  handles%id_heat_content_frunoff = register_diag_field('ocean_model', 'heat_content_frunoff',          &
-        diag%axesT1, Time, 'Heat content (relative to 0C) of solid runoff into ocean', 'Watt meter-2',  &
-        standard_name='temperature_flux_due_to_solid_runoff_expressed_as_heat_flux_into_sea_water',     &
-        cmor_field_name='hfsolidrunoffds', cmor_units='W m-2',                                          &
-        cmor_standard_name='temperature_flux_due_to_solid_runoff_expressed_as_heat_flux_into_sea_water',&
-        cmor_long_name='Temperature Flux due to Solid Runoff Expressed as Heat Flux into Sea Water')
+  handles%id_heat_content_frunoff = register_diag_field('ocean_model', 'heat_content_frunoff',        &
+        diag%axesT1, Time, 'Heat content (relative to 0C) of solid runoff into ocean', 'Watt meter-2',&
+        standard_name='temperature_flux_due_to_solid_runoff_expressed_as_heat_flux_into_sea_water')
 
   handles%id_heat_content_lrunoff = register_diag_field('ocean_model', 'heat_content_lrunoff',         &
         diag%axesT1, Time, 'Heat content (relative to 0C) of liquid runoff into ocean', 'Watt meter-2',&
-        standard_name='temperature_flux_due_to_runoff_expressed_as_heat_flux_into_sea_water',          &
-        cmor_field_name='hfrunoffds', cmor_units='W m-2',                                              &
-        cmor_standard_name='temperature_flux_due_to_runoff_expressed_as_heat_flux_into_sea_water',     &
-        cmor_long_name='Temperature Flux due to Runoff Expressed as Heat Flux into Sea Water')
+        standard_name='temperature_flux_due_to_runoff_expressed_as_heat_flux_into_sea_water')
 
+  handles%id_hfrunoffds = register_diag_field('ocean_model', 'hfrunoffds',                            &
+        diag%axesT1, Time, 'Heat content (relative to 0C) of liquid+solid runoff into ocean', 'W m-2',&
+        standard_name='temperature_flux_due_to_runoff_expressed_as_heat_flux_into_sea_water')
+ 
   handles%id_heat_content_lprec = register_diag_field('ocean_model', 'heat_content_lprec',             &
         diag%axesT1,Time,'Heat content (relative to 0degC) of liquid precip entering ocean',           &
-        'W/m^2',standard_name='temperature_flux_due_to_rainfall_expressed_as_heat_flux_into_sea_water',&
-        cmor_field_name='hfrainds', cmor_units='W m-2',                                                &
-        cmor_standard_name='temperature_flux_due_to_rainfall_expressed_as_heat_flux_into_sea_water',   &
-        cmor_long_name='Heat Flux into Sea Water due to Liquid Precipitation')
+        'W/m^2')
 
   handles%id_heat_content_fprec = register_diag_field('ocean_model', 'heat_content_fprec',&
         diag%axesT1,Time,'Heat content (relative to 0degC) of frozen prec entering ocean',&
-        'Watt/m^2')
+        'W/m^2')
 
   handles%id_heat_content_vprec = register_diag_field('ocean_model', 'heat_content_vprec',   &
         diag%axesT1,Time,'Heat content (relative to 0degC) of virtual precip entering ocean',&
@@ -1145,20 +1141,25 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
         diag%axesT1,Time,'Heat content (relative to 0degC) of water condensing into ocean',&
         'Watt/m^2')
 
+  handles%id_hfrainds = register_diag_field('ocean_model', 'hfrainds',                                 &
+        diag%axesT1,Time,'Heat content (relative to 0degC) of liquid+frozen precip entering ocean',    &
+        'W/m^2',standard_name='temperature_flux_due_to_rainfall_expressed_as_heat_flux_into_sea_water',&
+        cmor_long_name='Heat Content (relative to 0degC) of Liquid + Frozen Precipitation')
+
   handles%id_heat_content_surfwater = register_diag_field('ocean_model', 'heat_content_surfwater',&
          diag%axesT1, Time,                                                                       &
         'Heat content (relative to 0degC) of net water crossing ocean surface (frozen+liquid)',   &
         'Watt/m^2')
 
-  handles%id_heat_content_massout = register_diag_field('ocean_model', 'heat_content_massout',           &
-         diag%axesT1, Time,'Heat content (relative to 0degC)of net mass leaving ocean ocean',            &
-        'Watt/m^2',                                                                                      &
-        cmor_field_name='hfevapds', cmor_units='W m-2',                                                  &
-        cmor_standard_name='temperature_flux_due_to_evaporation_expressed_as_heat_flux_out_of_sea_water',&
-        cmor_long_name='Heat Flux Out of Sea Water due to Evaporating Water')
+  handles%id_heat_content_massout = register_diag_field('ocean_model', 'heat_content_massout',                      &
+         diag%axesT1, Time,'Heat content (relative to 0degC) of net mass leaving ocean ocean via evap and ice form',&
+        'Watt/m^2',                                                                                                 &
+        cmor_field_name='hfevapds', cmor_units='W m-2',                                                             &
+        cmor_standard_name='temperature_flux_due_to_evaporation_expressed_as_heat_flux_out_of_sea_water',           &
+        cmor_long_name='Heat Content (relative to 0degC) of Water Leaving Ocean via Evaporation and Ice Formation')
 
-  handles%id_heat_content_massin = register_diag_field('ocean_model', 'heat_content_massin',&
-         diag%axesT1, Time,'Heat content (relative to 0degC)of net mass entering ocean ocean', &
+  handles%id_heat_content_massin = register_diag_field('ocean_model', 'heat_content_massin',   &
+         diag%axesT1, Time,'Heat content (relative to 0degC) of net mass entering ocean ocean',&
         'Watt/m^2')
 
   handles%id_net_heat_coupler = register_diag_field('ocean_model', 'net_heat_coupler',          &
@@ -1169,7 +1170,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
         Time,'Surface ocean heat flux from SW+LW+lat+sens+mass transfer+frazil+restore', 'Watt/m^2',&
         standard_name='surface_downward_heat_flux_in_sea_water', cmor_field_name='hfds',            &
         cmor_units='W m-2', cmor_standard_name='surface_downward_heat_flux_in_sea_water',           &
-        cmor_long_name='Surface ocean heat flux from SW+LW+latent+sensible+mass transfer+frazil')
+        cmor_long_name='Surface ocean heat flux from SW+LW+latent+sensible+masstransfer+frazil')
 
   handles%id_sw = register_diag_field('ocean_model', 'SW', diag%axesT1, Time,  &
         'Shortwave radiation flux into ocean', 'Watt meter-2',                 &
@@ -1188,11 +1189,11 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
         cmor_standard_name='surface_net_downward_longwave_flux',              &
         cmor_long_name='Surface Net Downward Longwave Radiation')
 
-  handles%id_lat = register_diag_field('ocean_model', 'latent', diag%axesT1, Time,                      &
-        'Latent heat flux into ocean due to fusion and evaporation (negative means ocean losses heat)', &
-        'Watt meter-2', cmor_field_name='hfls', cmor_units='W m-2',                                     &
-        cmor_standard_name='surface_downward_latent_heat_flux',                                         &
-        cmor_long_name='Surface Downward Latent Heat Flux')
+  handles%id_lat = register_diag_field('ocean_model', 'latent', diag%axesT1, Time,                    &
+        'Latent heat flux into ocean due to fusion and evaporation (negative means ocean heat loss)', &
+        'Watt meter-2', cmor_field_name='hfls', cmor_units='W m-2',                                   &
+        cmor_standard_name='surface_downward_latent_heat_flux',                                       &
+        cmor_long_name='Surface Downward Latent Heat Flux due to Evap + Melt Snow/Ice')
 
   handles%id_lat_evap = register_diag_field('ocean_model', 'latent_evap', diag%axesT1, Time, &
         'Latent heat flux into ocean due to evaporation/condensation', 'Watt/m^2')
@@ -1207,7 +1208,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
         'Latent heat flux into ocean due to melting of icebergs', 'Watt/m^2',                      &
         cmor_field_name='hfibthermds', cmor_units='W m-2',                                         &
         cmor_standard_name='heat_flux_into_sea_water_due_to_iceberg_thermodynamics',               &
-        cmor_long_name='Heat Flux into Sea Water due to Iceberg Thermodynamics')
+        cmor_long_name='Latent Heat to Melt Frozen Runoff/Iceberg')
 
   handles%id_sens = register_diag_field('ocean_model', 'sensible', diag%axesT1, Time,&
         'Sensible heat flux into ocean', 'Watt meter-2',                             &
@@ -1882,7 +1883,6 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
       call post_data(handles%id_total_heat_content_massin, total_transport, diag)
     endif
 
-
     if (handles%id_net_heat_coupler > 0 .or. handles%id_total_net_heat_coupler > 0 .or. handles%id_net_heat_coupler_ga > 0. ) then
       sum(:,:) = 0.0
       if (ASSOCIATED(fluxes%LW))         sum(:,:) = sum(:,:) + fluxes%LW(:,:)
@@ -1950,6 +1950,33 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
         call post_data(handles%id_total_heat_content_surfwater, total_transport, diag)
       endif
     endif
+
+    ! for OMIP, hfrunoffds = heat content of liquid plus frozen runoff
+    if (handles%id_hfrunoffds > 0) then 
+      sum(:,:) = 0.0       
+      if(ASSOCIATED(fluxes%heat_content_lrunoff)) then 
+        sum(:,:) = sum(:,:) + fluxes%heat_content_lrunoff(:,:)
+      endif 
+      if(ASSOCIATED(fluxes%heat_content_frunoff)) then 
+        sum(:,:) = sum(:,:) + fluxes%heat_content_frunoff(:,:)
+      endif 
+      call post_data(handles%id_hfrunoffds, sum, diag)
+    endif 
+
+    ! for OMIP, hfrainds = heat content of lprec + fprec + cond 
+    if (handles%id_hfrainds > 0) then 
+      sum(:,:) = 0.0       
+      if(ASSOCIATED(fluxes%heat_content_lprec)) then 
+        sum(:,:) = sum(:,:) + fluxes%heat_content_lprec(:,:)
+      endif 
+      if(ASSOCIATED(fluxes%heat_content_fprec)) then 
+        sum(:,:) = sum(:,:) + fluxes%heat_content_fprec(:,:)
+      endif 
+      if(ASSOCIATED(fluxes%heat_content_cond)) then 
+        sum(:,:) = sum(:,:) + fluxes%heat_content_cond(:,:)
+      endif 
+      call post_data(handles%id_hfrainds, sum, diag)
+    endif 
 
     if ((handles%id_LwLatSens > 0) .and. ASSOCIATED(fluxes%lw) .and. &
          ASSOCIATED(fluxes%latent) .and. ASSOCIATED(fluxes%sens)) then
