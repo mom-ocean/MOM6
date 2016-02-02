@@ -242,7 +242,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   call get_param(param_file, mod, "ENERGYSAVEDAYS",OS%energysavedays, &
                  "The interval in units of TIMEUNIT between saves of the \n"//&
                  "energies of the run and other globally summed diagnostics.", &
-                 default=set_time(0,1), timeunit=Time_unit)
+                 default=set_time(0,days=1), timeunit=Time_unit)
 
   call get_param(param_file, mod, "OCEAN_SURFACE_STAGGER", stagger, &
                  "A case-insensitive character string to indicate the \n"//&
