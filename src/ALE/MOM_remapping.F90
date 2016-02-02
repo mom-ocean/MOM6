@@ -475,7 +475,7 @@ subroutine check_reconstructions_1d(n0, h0, u0, deg, boundary_extrapolation, &
   ! Local variables
   integer :: i0, n
   real :: u_l, u_c, u_r ! Cell averages
-  real :: u_min, u_max, u_x0, u_x1, u_int
+  real :: u_min, u_max
   logical :: problem_detected
 
   problem_detected = .false.
@@ -484,13 +484,6 @@ subroutine check_reconstructions_1d(n0, h0, u0, deg, boundary_extrapolation, &
     u_l = u0(max(1,i0-1))
     u_c = u0(i0)
     u_r = u0(min(n0,i0+1))
-    u_x0 = ppoly_r_coefficients(i0,1) ! Polynomial evaluated at x=0
-    u_x1 = 0.
-    u_int = 0.
-    do n = deg+1, 1, -1
-      u_x1 = u_x1 + ppoly_r_coefficients(i0,n) ! Polynomial evaluated at x=1
-      u_int = u_int + ppoly_r_coefficients(i0,n)/real(n) ! Integral of polynomial over full cell
-    enddo
     if (i0 > 1 .or. .not. boundary_extrapolation) then
       u_min = min(u_l, u_c)
       u_max = max(u_l, u_c)
@@ -502,16 +495,6 @@ subroutine check_reconstructions_1d(n0, h0, u0, deg, boundary_extrapolation, &
       if (ppoly_r_E(i0,1) > u_max) then
         write(0,'(a,i4,5(x,a,1pe24.16))') 'Left edge overshoot at',i0,'u(i0-1)=',u_l,'u(i0)=',u_c, &
                                           'edge=',ppoly_r_E(i0,1),'err=',ppoly_r_E(i0,1)-u_max
-        problem_detected = .true.
-      endif
-      if (u_x0 < u_min) then
-        write(0,'(a,i4,5(x,a,1pe24.16))') 'Polynomial undershoot at',i0,'u(i0-1)=',u_l,'u(i0)=',u_c, &
-                                          'p(0)=',u_x0,'err=',u_x0-u_min
-        problem_detected = .true.
-      endif
-      if (u_x0 > u_max) then
-        write(0,'(a,i4,5(x,a,1pe24.16))') 'Polynomial overshoot at',i0,'u(i0-1)=',u_l,'u(i0)=',u_c, &
-                                          'p(0)=',u_x0,'err=',u_x0-u_max
         problem_detected = .true.
       endif
     endif
@@ -528,16 +511,6 @@ subroutine check_reconstructions_1d(n0, h0, u0, deg, boundary_extrapolation, &
                                           'edge=',ppoly_r_E(i0,2),'err=',ppoly_r_E(i0,2)-u_max
         problem_detected = .true.
       endif
-      if (u_x1 < u_min) then
-        write(0,'(a,i4,5(x,a,1pe24.16))') 'Polynomial undershoot at',i0,'u(i0)=',u_c,'u(i0+1)=',u_r, &
-                                          'p(1)=',u_x1,'err=',u_x1-u_min
-        problem_detected = .true.
-      endif
-      if (u_x1 > u_max) then
-        write(0,'(a,i4,5(x,a,1pe24.16))') 'Polynomial overshoot at',i0,'u(i0)=',u_c,'u(i0+1)=',u_r, &
-                                          'p(1)=',u_x1,'err=',u_x1-u_max
-        problem_detected = .true.
-      endif
     endif
     if (i0 > 1) then
       if ( (u_c-u_l)*(ppoly_r_E(i0,1)-ppoly_r_E(i0-1,2)) < 0.) then
@@ -546,16 +519,6 @@ subroutine check_reconstructions_1d(n0, h0, u0, deg, boundary_extrapolation, &
         write(0,'(5(a,1pe24.16,x))') 'u(i0)-u(i0-1)',u_c-u_l,'edge diff=',ppoly_r_E(i0,1)-ppoly_r_E(i0-1,2)
         problem_detected = .true.
       endif
-    endif
-    if (u_int < u_min) then
-      write(0,'(a,i4,5(x,a,1pe24.16))') 'Polynomial integral undershoot at',i0,'u(i0-1)=',u_l,'u(i0)=',u_c, &
-                                        'p(0)=',u_int,'err=',u_int-u_min
-      problem_detected = .true.
-    endif
-    if (u_int > u_max) then
-      write(0,'(a,i4,5(x,a,1pe24.16))') 'Polynomial integral overshoot at',i0,'u(i0-1)=',u_l,'u(i0)=',u_c, &
-                                        'p(0)=',u_int,'err=',u_int-u_max
-      problem_detected = .true.
     endif
     if (problem_detected) then
       write(0,'(a,1p9e24.16)') 'Polynomial coeffs:',ppoly_r_coefficients(i0,:)
