@@ -218,6 +218,7 @@ subroutine check_discontinuous_edge_values( N, u, edge_values )
 
     if ( (u0_plus - u0_minus)*(um_plus - um_minus) .LT. 0.0 ) then
       u0_avg = 0.5 * ( u0_minus + u0_plus )
+      u0_avg = max( min( u0_avg, max(um_minus, um_plus) ), min(um_minus, um_plus) )
       edge_values(k,2) = u0_avg
       edge_values(k+1,1) = u0_avg
     end if
