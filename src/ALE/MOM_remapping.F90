@@ -479,7 +479,6 @@ subroutine check_reconstructions_1d(n0, h0, u0, deg, boundary_extrapolation, &
   logical :: problem_detected
 
   problem_detected = .false.
-  if (deg>1) return ! Only apply tests to PCM and PLM (for now)
   do i0 = 1, n0
     u_l = u0(max(1,i0-1))
     u_c = u0(i0)
