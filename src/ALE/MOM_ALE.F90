@@ -466,7 +466,8 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u,
   real, dimension(SZI_(G), SZJ_(G), SZK_(G))  :: work_conc 
   real, dimension(SZI_(G), SZJ_(G), SZK_(G))  :: work_cont
   real, dimension(SZI_(G), SZJ_(G))           :: work_2d 
-  real                                        :: Idt, h2, ppt2mks   
+  real                                        :: Idt, ppt2mks
+  real, dimension(G%ke)                       :: h2
   logical                                     :: show_call_tree
 
   show_call_tree = .false.
@@ -506,7 +507,10 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u,
             ! Build the start and final grids
             h1(:) = h(i,j,:)
             dx(:) = dxInterface(i,j,:)
-            call remapping_core_w(CS_remapping, nz, h1, Reg%Tr(m)%t(i,j,:), nz, dx, u_column)
+            do k = 1, nz
+              h2(k) = max( 0., h1(k) + ( dx(k+1) - dx(k) ) )
+            enddo
+            call remapping_core_h( nz, h1, Reg%Tr(m)%t(i,j,:), nz, h2, u_column, CS_remapping )
 
             ! Intermediate steps for tendency of tracer concentration and tracer content.
             ! Note: do not merge the two if-tests, since do_tendency_diag(:) is not 
@@ -514,9 +518,8 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u,
             if(present(dt)) then 
               if(CS_ALE%do_tendency_diag(m)) then 
                 do k=1,G%ke
-                  h2               = h1(k) - (dx(k)-dx(k+1))
-                  work_conc(i,j,k) = (u_column(k)    - Reg%Tr(m)%t(i,j,k)      ) * Idt 
-                  work_cont(i,j,k) = (u_column(k)*h2 - Reg%Tr(m)%t(i,j,k)*h1(k)) * Idt * G%GV%H_to_kg_m2 
+                  work_conc(i,j,k) = (u_column(k)    - Reg%Tr(m)%t(i,j,k)      ) * Idt
+                  work_cont(i,j,k) = (u_column(k)*h2(k) - Reg%Tr(m)%t(i,j,k)*h1(k)) * Idt * G%GV%H_to_kg_m2
                 enddo 
               endif 
             endif 
@@ -595,7 +598,10 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u,
           ! Build the start and final grids
           h1(:) = 0.5 * ( h(i,j,:) + h(i+1,j,:) )
           dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i+1,j,:) )
-          call remapping_core_w(CS_remapping, nz, h1, u(I,j,:), nz, dx, u_column)
+          do k = 1, nz
+            h2(k) = max( 0., h1(k) + ( dx(k+1) - dx(k) ) )
+          enddo
+          call remapping_core_h( nz, h1, u(I,j,:), nz, h2, u_column, CS_remapping )
           u(I,j,:) = u_column(:)
         endif
       enddo
@@ -613,7 +619,10 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u,
           ! Build the start and final grids
           h1(:) = 0.5 * ( h(i,j,:) + h(i,j+1,:) )
           dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i,j+1,:) )
-          call remapping_core_w(CS_remapping, nz, h1, v(i,J,:), nz, dx, u_column)
+          do k = 1, nz
+            h2(k) = max( 0., h1(k) + ( dx(k+1) - dx(k) ) )
+          enddo
+          call remapping_core_h( nz, h1, v(i,J,:), nz, h2, u_column, CS_remapping )
           v(i,J,:) = u_column(:)
         endif
       enddo
@@ -664,6 +673,8 @@ subroutine ALE_remap_scalar(CS, G, nk_src, h_src, s_src, h_dst, s_dst, all_cells
           enddo
           s_dst(i,j,:) = 0.
         endif
+       ! Using remapping_core_h() is what we want to do but changes answers !!!
+       !call remapping_core_h(n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), G%ke, h_dst(i,j,:), s_dst(i,j,:), CS)
         call dzFromH1H2( n_points, h_src(i,j,1:n_points), G%ke, h_dst(i,j,:), dx )
         call remapping_core_w(CS, n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), G%ke, dx, s_dst(i,j,:))
       else
