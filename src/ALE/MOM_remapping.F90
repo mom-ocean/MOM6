@@ -264,13 +264,13 @@ subroutine remapping_core_h( n0, h0, u0, n1, h1, u1, CS )
   if (CS%check_reconstruction) call check_reconstructions_1d(n0, h0, u0, CS%degree, &
                                    CS%boundary_extrapolation, ppoly_r_coefficients, ppoly_r_E, ppoly_r_S)
 
-  if (CS%check_remapping) call measure_input_bounds( n0, h0, u0, ppoly_r_E, h0tot, h0err, u0tot, u0err, u0min, u0max )
 
   call remap_via_sub_cells( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients, n1, h1, iMethod, &
                             CS%force_bounds_in_subcell, u1, uh_err )
 
   if (CS%check_remapping) then
     ! Check errors and bounds
+    call measure_input_bounds( n0, h0, u0, ppoly_r_E, h0tot, h0err, u0tot, u0err, u0min, u0max )
     call measure_output_bounds( n1, h1, u1, h1tot, h1err, u1tot, u1err, u1min, u1max )
     if (iMethod<5) then ! We except PQM until we've debugged it
     if ( (abs(u1tot-u0tot)>(u0err+u1err)+uh_err .and. abs(h1tot-h0tot)<h0err+h1err) &
@@ -332,8 +332,6 @@ subroutine remapping_core_w( CS, n0, h0, u0, n1, dx, u1 )
   if (CS%check_reconstruction) call check_reconstructions_1d(n0, h0, u0, CS%degree, &
                                    CS%boundary_extrapolation, ppoly_r_coefficients, ppoly_r_E, ppoly_r_S)
 
-  if (CS%check_remapping) call measure_input_bounds( n0, h0, u0, ppoly_r_E, h0tot, h0err, u0tot, u0err, u0min, u0max )
-
   ! This is a temporary step prior to switching to remapping_core_h()
   do k = 1, n1
     if (k<=n0) then
@@ -349,6 +347,7 @@ subroutine remapping_core_w( CS, n0, h0, u0, n1, dx, u1 )
 
   if (CS%check_remapping) then
     ! Check errors and bounds
+    call measure_input_bounds( n0, h0, u0, ppoly_r_E, h0tot, h0err, u0tot, u0err, u0min, u0max )
     call measure_output_bounds( n1, h1, u1, h1tot, h1err, u1tot, u1err, u1min, u1max )
     if (iMethod<5) then ! We except PQM until we've debugged it
     if ( (abs(u1tot-u0tot)>(u0err+u1err)+uh_err .and. abs(h1tot-h0tot)<h0err+h1err) &
