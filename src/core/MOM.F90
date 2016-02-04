@@ -1,27 +1,27 @@
-!> This is the main routine for MOM  
+!> This is the main routine for MOM
 module MOM
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_variables, only : vertvisc_type, ocean_OBC_type
 
-! A Structure with pointers to forcing fields to drive MOM; 
+! A Structure with pointers to forcing fields to drive MOM;
 ! all fluxes are positive downward.
-use MOM_forcing_type, only : forcing 
+use MOM_forcing_type, only : forcing
 
 use MOM_variables, only: accel_diag_ptrs, cont_diag_ptrs, ocean_internal_state
 
-! A structure containing pointers to various fields 
-! to describe surface state, and will be returned 
+! A structure containing pointers to various fields
+! to describe surface state, and will be returned
 ! to the calling program.
-use MOM_variables, only : surface 
+use MOM_variables, only : surface
 
 ! A structure containing pointers to an assortment of
-! thermodynamic fields, including potential/Conservative 
+! thermodynamic fields, including potential/Conservative
 ! temperature, salinity and mixed layer density.
 use MOM_variables, only: thermo_var_ptrs
 
-! Infrastructure modules 
+! Infrastructure modules
 use MOM_checksums,            only : MOM_checksums_init, hchksum, uchksum, vchksum
 use MOM_checksum_packages,    only : MOM_thermo_chksum, MOM_state_chksum, MOM_accel_chksum
 use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
@@ -50,15 +50,15 @@ use MOM_io,                   only : MOM_io_init, vardesc, var_desc
 use MOM_obsolete_params,      only : find_obsolete_params
 use MOM_restart,              only : register_restart_field, query_initialized, save_restart
 use MOM_restart,              only : restart_init, MOM_restart_CS
-use MOM_spatial_means,        only : global_area_mean, global_area_integral 
+use MOM_spatial_means,        only : global_area_mean, global_area_integral
 use MOM_state_initialization, only : MOM_initialize_state, MOM_initialization_struct
 use MOM_time_manager,         only : time_type, set_time, time_type_to_real, operator(+)
 use MOM_time_manager,         only : operator(-), operator(>), operator(*), operator(/)
 
 ! MOM core modules
-use MOM_ALE,                   only : initialize_ALE, end_ALE, ALE_main, ALE_CS, adjustGridForIntegrity
+use MOM_ALE,                   only : ALE_init, ALE_end, ALE_main, ALE_CS, adjustGridForIntegrity
 use MOM_ALE,                   only : ALE_getCoordinate, ALE_getCoordinateUnits, ALE_writeCoordinateFile
-use MOM_ALE,                   only : ALE_updateVerticalGridType, remap_init_conds, register_diags_ALE
+use MOM_ALE,                   only : ALE_updateVerticalGridType, ALE_remap_init_conds, ALE_register_diags
 use MOM_continuity,            only : continuity, continuity_init, continuity_CS
 use MOM_CoriolisAdv,           only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
 use MOM_diabatic_driver,       only : diabatic, diabatic_driver_init, diabatic_CS
@@ -91,6 +91,7 @@ use MOM_lateral_mixing_coeffs, only : calc_resoln_function, VarMix_CS
 use MOM_MEKE,                  only : MEKE_init, MEKE_alloc_register_restart, step_forward_MEKE, MEKE_CS
 use MOM_MEKE_types,            only : MEKE_type
 use MOM_mixed_layer_restrat,   only : mixedlayer_restrat, mixedlayer_restrat_init, mixedlayer_restrat_CS
+use MOM_mixed_layer_restrat,   only : mixedlayer_restrat_register_restarts
 use MOM_neutral_diffusion,     only : neutral_diffusion_CS, neutral_diffusion_diag_init
 use MOM_obsolete_diagnostics,  only : register_obsolete_diagnostics
 use MOM_open_boundary,         only : Radiation_Open_Bdry_Conds, open_boundary_init
@@ -117,7 +118,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-!> Control structure for this module 
+!> Control structure for this module
 type, public :: MOM_control_struct
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_) :: &
     h, &      !< layer thickness (m or kg/m2 (H))
@@ -135,42 +136,42 @@ type, public :: MOM_control_struct
     ave_ssh   !< time-averaged (ave over baroclinic time steps) sea surface height (meter)
 
   real, pointer, dimension(:,:,:) :: &
-    u_prev => NULL(), &  !< previous value of u stored for diagnostics 
-    v_prev => NULL()     !< previous value of v stored for diagnostics 
+    u_prev => NULL(), &  !< previous value of u stored for diagnostics
+    v_prev => NULL()     !< previous value of v stored for diagnostics
 
   type(ocean_grid_type) :: G       !< structure containing metrics and grid info
-  type(thermo_var_ptrs) :: tv      !< structure containing pointers to available 
+  type(thermo_var_ptrs) :: tv      !< structure containing pointers to available
                                    !! thermodynamic fields
   type(diag_ctrl)       :: diag    !< structure to regulate diagnostic output timing
   type(vertvisc_type)   :: visc    !< structure containing vertical viscosities,
                                    !! bottom drag viscosities, and related fields
   type(MEKE_type), pointer :: MEKE => NULL()  !<  structure containing fields
                                    !! related to the Mesoscale Eddy Kinetic Energy
-  type(accel_diag_ptrs) :: ADp     !< structure containing pointers to accelerations, 
+  type(accel_diag_ptrs) :: ADp     !< structure containing pointers to accelerations,
                                    !! for derived diagnostics (e.g., energy budgets)
-  type(cont_diag_ptrs)  :: CDp     !< structure containing pointers continuity equation 
+  type(cont_diag_ptrs)  :: CDp     !< structure containing pointers continuity equation
                                    !! terms, for derived diagnostics (e.g., energy budgets)
 
   logical :: split                   !< If true, use the split time stepping scheme.
   logical :: legacy_split            !< If true, use the legacy split time stepping
                                      !! code with all the options that were available in
                                      !! the predecessor isopycnal model "GOLD".
-  logical :: use_RK2                 !< If true, use RK2 instead of RK3 in unsplit mode 
+  logical :: use_RK2                 !< If true, use RK2 instead of RK3 in unsplit mode
                                      !! (i.e., no split between barotropic and baroclinic).
-  logical :: adiabatic               !< If true, then no diapycnal mass fluxes, with no calls 
+  logical :: adiabatic               !< If true, then no diapycnal mass fluxes, with no calls
                                      !! to routines to calculate or apply diapycnal fluxes.
   logical :: use_temperature         !< If true, temp and saln used as state variables.
-  logical :: use_frazil              !< If true, liquid seawater freezes if temp below freezing, 
+  logical :: use_frazil              !< If true, liquid seawater freezes if temp below freezing,
                                      !! with accumulated heat deficit returned to surface ocean.
   logical :: bound_salinity          !< If true, salt is added to keep salinity above
                                      !! a minimum value, and the deficit is reported.
-  logical :: bulkmixedlayer          !< If true, a refined bulk mixed layer scheme is used 
+  logical :: bulkmixedlayer          !< If true, a refined bulk mixed layer scheme is used
                                      !! with nkml sublayers and nkbl buffer layer.
   logical :: diabatic_first          !< If true, apply diabatic and thermodynamic
                                      !! processes before time stepping the dynamics.
   logical :: thickness_diffuse       !< If true, diffuse interface height w/ a diffusivity KHTH.
   logical :: thickness_diffuse_first !< If true, diffuse thickness before dynamics.
-  logical :: mixedlayer_restrat      !< If true, use submesoscale mixed layer restratifying scheme. 
+  logical :: mixedlayer_restrat      !< If true, use submesoscale mixed layer restratifying scheme.
   logical :: useMEKE                 !< If true, call the MEKE parameterization.
   logical :: debug                   !< If true, write verbose checksums for debugging purposes.
   logical :: debug_truncations       !< If true, turn on diagnostics useful for debugging truncations.
@@ -186,7 +187,7 @@ type, public :: MOM_control_struct
   logical :: thermo_spans_coupling   !< If true, thermodynamic and tracer time
                                      !! steps can span multiple coupled time steps.
   real    :: dt_trans                !< The elapsed time since updating the tracers and
-                                     !! applying diabatic processes (sec); may 
+                                     !! applying diabatic processes (sec); may
                                      !! span multiple timesteps.
   type(time_type) :: Z_diag_interval !< amount of time between calculating Z-space diagnostics
   type(time_type) :: Z_diag_time     !< next time to compute Z-space diagnostics
@@ -197,7 +198,7 @@ type, public :: MOM_control_struct
                                      !! this is negative, it is never calculated, and
                                      !! if it is 0, it is calculated every step.
 
-  logical :: interp_p_surf           !< If true, linearly interpolate surface pressure 
+  logical :: interp_p_surf           !< If true, linearly interpolate surface pressure
                                      !! over the coupling time step, using specified value
                                      !! at the end of the coupling step. False by default.
   logical :: p_surf_prev_set         !< If true, p_surf_prev has been properly set from
@@ -218,7 +219,7 @@ type, public :: MOM_control_struct
   real, pointer, dimension(:,:) :: &
     p_surf_prev  => NULL(), & !< surface pressure (Pa) at end  previous call to step_MOM
     p_surf_begin => NULL(), & !< surface pressure (Pa) at start of step_MOM_dyn_...
-    p_surf_end   => NULL()    !< surface pressure (Pa) at end   of step_MOM_dyn_... 
+    p_surf_end   => NULL()    !< surface pressure (Pa) at end   of step_MOM_dyn_...
 
   type(vardesc) :: &
     vd_T, &   !< vardesc array describing potential temperature
@@ -233,32 +234,32 @@ type, public :: MOM_control_struct
     S_adx_2d => NULL(), S_ady_2d => NULL(), S_diffx_2d => NULL(), S_diffy_2d => NULL(), &
     SST_sq   => NULL()
 
-  real, pointer, dimension(:,:,:) :: &  !< diagnostic arrays for advection tendencies and total tendencies 
-    T_advection_xy => NULL(), S_advection_xy => NULL(),  &  
-    T_prev         => NULL(), S_prev         => NULL(),  &  
+  real, pointer, dimension(:,:,:) :: &  !< diagnostic arrays for advection tendencies and total tendencies
+    T_advection_xy => NULL(), S_advection_xy => NULL(),  &
+    T_prev         => NULL(), S_prev         => NULL(),  &
     Th_prev        => NULL(), Sh_prev        => NULL()
 
   real, pointer, dimension(:,:,:) :: & !< diagnostic arrays for variance decay through ALE
     T_squared => NULL(), S_squared => NULL()
 
-  logical :: tendency_diagnostics = .false.    
-  
-  ! diagnostic ids 
+  logical :: tendency_diagnostics = .false.
 
-  ! 3-d state fields 
+  ! diagnostic ids
+
+  ! 3-d state fields
   integer :: id_u  = -1
   integer :: id_v  = -1
   integer :: id_h  = -1
   integer :: id_T  = -1
   integer :: id_S  = -1
 
-  ! 2-d surface and bottom fields 
+  ! 2-d surface and bottom fields
   integer :: id_zos      = -1
   integer :: id_zossq    = -1
   integer :: id_volo     = -1
   integer :: id_ssh      = -1
   integer :: id_ssh_ga   = -1
-  integer :: id_sst      = -1 
+  integer :: id_sst      = -1
   integer :: id_sst_sq   = -1
   integer :: id_sss      = -1
   integer :: id_ssu      = -1
@@ -268,15 +269,15 @@ type, public :: MOM_control_struct
   integer :: id_tob      = -1
   integer :: id_sob      = -1
 
-  ! heat and salt flux fields 
+  ! heat and salt flux fields
   integer :: id_fraz         = -1
   integer :: id_salt_deficit = -1
   integer :: id_Heat_PmE     = -1
   integer :: id_intern_heat  = -1
 
-  ! transport of temperature and salinity 
+  ! transport of temperature and salinity
   integer :: id_Tadx      = -1
-  integer :: id_Tady      = -1 
+  integer :: id_Tady      = -1
   integer :: id_Tdiffx    = -1
   integer :: id_Tdiffy    = -1
   integer :: id_Sadx      = -1
@@ -293,22 +294,22 @@ type, public :: MOM_control_struct
   integer :: id_Sdiffy_2d = -1
 
   ! tendencies for temp/heat and saln/salt
-  integer :: id_T_advection_xy    = -1 
-  integer :: id_T_advection_xy_2d = -1 
-  integer :: id_T_tendency        = -1 
-  integer :: id_Th_tendency       = -1 
-  integer :: id_Th_tendency_2d    = -1 
-  integer :: id_S_advection_xy    = -1 
-  integer :: id_S_advection_xy_2d = -1 
-  integer :: id_S_tendency        = -1 
-  integer :: id_Sh_tendency       = -1 
-  integer :: id_Sh_tendency_2d    = -1 
+  integer :: id_T_advection_xy    = -1
+  integer :: id_T_advection_xy_2d = -1
+  integer :: id_T_tendency        = -1
+  integer :: id_Th_tendency       = -1
+  integer :: id_Th_tendency_2d    = -1
+  integer :: id_S_advection_xy    = -1
+  integer :: id_S_advection_xy_2d = -1
+  integer :: id_S_tendency        = -1
+  integer :: id_Sh_tendency       = -1
+  integer :: id_Sh_tendency_2d    = -1
 
   ! variance decay for temp and heat
   integer :: id_T_vardec = -1
   integer :: id_S_vardec = -1
 
-  ! diagnostic for fields prior to applying diapycnal physics 
+  ! diagnostic for fields prior to applying diapycnal physics
   integer :: id_u_predia = -1
   integer :: id_v_predia = -1
   integer :: id_h_predia = -1
@@ -393,7 +394,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   type(forcing),    intent(inout)    :: fluxes        !< pointers to forcing fields
   type(surface),    intent(inout)    :: state         !< surface ocean state
   type(time_type),  intent(in)       :: Time_start    !< starting time of a segment, as a time type
-  real,             intent(in)       :: time_interval !< time interval 
+  real,             intent(in)       :: time_interval !< time interval
   type(MOM_control_struct), pointer  :: CS            !< control structure from initialize_MOM
 
   ! local
@@ -417,7 +418,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   logical :: calc_dtbt                 ! Indicates whether the dynamically adjusted
                                        ! barotropic time step needs to be updated.
   logical :: do_advection              ! If true, it is time to advect tracers.
-  logical :: thermo_does_span_coupling ! If true, thermodynamic forcing spans 
+  logical :: thermo_does_span_coupling ! If true, thermodynamic forcing spans
                                        ! multiple dynamic timesteps.
 
   real, dimension(SZI_(CS%G),SZJ_(CS%G)) :: &
@@ -425,7 +426,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     ssh         ! sea surface height based on eta_av (meter or kg/m2)
 
   real, allocatable, dimension(:,:) :: &
-    tmp,              & ! temporary 2d field 
+    tmp,              & ! temporary 2d field
     zos,              & ! dynamic sea lev (zero area mean) from inverse-barometer adjusted ssh (meter)
     zossq,            & ! square of zos (m^2)
     sfc_speed,        & ! sea surface speed at h-points (m/s)
@@ -433,7 +434,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     salt_deficit_ave, & ! average salt flux required to keep salinity above 0.01ppt (gSalt m-2 s-1)
     Heat_PmE_ave,     & ! average effective heat flux into the ocean due to
                         ! the exchange of water with other components, times the
-                        ! heat capacity of water, in W m-2.   
+                        ! heat capacity of water, in W m-2.
     intern_heat_ave     ! avg heat flux into ocean from geothermal or
                         ! other internal heat sources (W/m2)
 
@@ -544,7 +545,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   call cpu_clock_end(id_clock_pass)
 
   if (ASSOCIATED(CS%tv%frazil))        CS%tv%frazil(:,:)        = 0.0
-  if (ASSOCIATED(CS%tv%salt_deficit))  CS%tv%salt_deficit(:,:)  = 0.0   
+  if (ASSOCIATED(CS%tv%salt_deficit))  CS%tv%salt_deficit(:,:)  = 0.0
   if (ASSOCIATED(CS%tv%TempxPmE))      CS%tv%TempxPmE(:,:)      = 0.0
   if (ASSOCIATED(CS%tv%internal_heat)) CS%tv%internal_heat(:,:) = 0.0
 
@@ -555,7 +556,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
   if (CS%interp_p_surf) then
     if (.not.ASSOCIATED(CS%p_surf_end))   allocate(CS%p_surf_end(isd:ied,jsd:jed))
-    if (.not.ASSOCIATED(CS%p_surf_begin)) allocate(CS%p_surf_begin(isd:ied,jsd:jed))    
+    if (.not.ASSOCIATED(CS%p_surf_begin)) allocate(CS%p_surf_begin(isd:ied,jsd:jed))
     if (.not.CS%p_surf_prev_set) then
       do j=jsd,jed ; do i=isd,ied
         CS%p_surf_prev(i,j) = fluxes%p_surf(i,j)
@@ -620,7 +621,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
                                    set_time(int(floor(dtdia-dt+0.5))), CS%diag)
 
       !   Calculate the BBL properties and store them inside visc (u,h).
-      ! This is here so that CS%visc is updated before diabatic() when 
+      ! This is here so that CS%visc is updated before diabatic() when
       ! DIABATIC_FIRST=True. Otherwise diabatic() is called after the dynamics
       ! and set_viscous_BBL is called as a part of the dynamic stepping.
 
@@ -677,7 +678,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         ! Regridding/remapping is done here, at end of thermodynamics time step
         ! (that may comprise several dynamical time steps)
         ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
-        if ( CS%use_ALE_algorithm ) then 
+        if ( CS%use_ALE_algorithm ) then
 !         call pass_vector(u, v, G%Domain)
           call do_group_pass(CS%pass_T_S_h, G%Domain)
 
@@ -848,13 +849,13 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       endif
       if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_split (step_MOM)")
 
-      
+
     elseif (CS%do_dynamics) then ! --------------------------------------------------- not SPLIT
       !   This section uses an unsplit stepping scheme for the dynamic
-      ! equations; basically the stacked shallow water equations with viscosity. 
+      ! equations; basically the stacked shallow water equations with viscosity.
       ! Because the time step is limited by CFL restrictions on the external
       ! gravity waves, the unsplit is usually much less efficient that the split
-      ! approaches. But because of its simplicity, the unsplit method is very 
+      ! approaches. But because of its simplicity, the unsplit method is very
       ! useful for debugging purposes.
 
       if (CS%use_RK2) then
@@ -882,7 +883,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       if (showCallTree) call callTree_waypoint("finished thickness_diffuse (step_MOM)")
     endif
 
-    ! apply the submesoscale mixed layer restratification parameterization 
+    ! apply the submesoscale mixed layer restratification parameterization
     if (CS%mixedlayer_restrat) then
       if (CS%debug) then
         call hchksum(h,"Pre-mixedlayer_restrat h", G, haloshift=1)
@@ -890,7 +891,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         call vchksum(CS%vhtr,"Pre-mixedlayer_restrat vhtr", G, haloshift=0)
       endif
       call cpu_clock_begin(id_clock_ml_restrat)
-      call mixedlayer_restrat(h, CS%uhtr ,CS%vhtr, CS%tv, fluxes, dt, G, CS%mixedlayer_restrat_CSp)
+      call mixedlayer_restrat(h, CS%uhtr ,CS%vhtr, CS%tv, fluxes, dt, CS%visc%MLD, &
+                              G, CS%mixedlayer_restrat_CSp)
       call cpu_clock_end(id_clock_ml_restrat)
       call cpu_clock_begin(id_clock_pass)
       call do_group_pass(CS%pass_h, G%Domain)
@@ -915,7 +917,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     endif
 
     ! do advection and (perhaps) thermodynamics
-    if (do_advection) then 
+    if (do_advection) then
 
       call cpu_clock_begin(id_clock_other)
 
@@ -996,7 +998,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         ! Regridding/remapping is done here, at the end of the thermodynamics time step
         ! (that may comprise several dynamical time steps)
         ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
-        if ( CS%use_ALE_algorithm ) then 
+        if ( CS%use_ALE_algorithm ) then
 !         call pass_vector(u, v, G%Domain)
           call do_group_pass(CS%pass_T_S_h, G%Domain)
 
@@ -1079,7 +1081,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
           call do_group_pass(CS%pass_T_S, G%Domain)
           call cpu_clock_end(id_clock_pass)
         endif
-      endif ! close of "if (.not.CS%diabatic_first) then ; if (.not.CS%adiabatic)" 
+      endif ! close of "if (.not.CS%diabatic_first) then ; if (.not.CS%adiabatic)"
 
       call cpu_clock_end(id_clock_thermo)
 
@@ -1093,7 +1095,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       call cpu_clock_end(id_clock_diagnostics)
 
 
-      ! post some diagnostics 
+      ! post some diagnostics
       if (CS%id_T > 0) call post_data(CS%id_T, CS%tv%T, CS%diag)
       if (CS%id_S > 0) call post_data(CS%id_S, CS%tv%S, CS%diag)
 
@@ -1120,7 +1122,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       if (CS%id_Sdiffx_2d > 0) call post_data(CS%id_Sdiffx_2d, CS%S_diffx_2d, CS%diag)
       if (CS%id_Sdiffy_2d > 0) call post_data(CS%id_Sdiffy_2d, CS%S_diffy_2d, CS%diag)
 
-      call post_diags_TS_tendency(G,CS,dtdia) 
+      call post_diags_TS_tendency(G,CS,dtdia)
 
       call disable_averaging(CS%diag)
 
@@ -1156,9 +1158,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     if (CS%id_v > 0) call post_data(CS%id_v, v, CS%diag)
     if (CS%id_h > 0) call post_data(CS%id_h, h, CS%diag)
 
-    ! compute ssh, which is either eta_av for Bouss, or 
-    ! diagnosed ssh for non-Bouss; call "find_eta" for this 
-    ! purpose.  
+    ! compute ssh, which is either eta_av for Bouss, or
+    ! diagnosed ssh for non-Bouss; call "find_eta" for this
+    ! purpose.
     tot_wt_ssh = tot_wt_ssh + dt
     call find_eta(h, CS%tv, G%g_Earth, G, ssh, eta_av)
     do j=js,je ; do i=is,ie
@@ -1192,8 +1194,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   if (CS%id_ssh > 0) &
     call post_data(CS%id_ssh, CS%ave_ssh, CS%diag, mask=G%mask2dT)
 
-  ! post the dynamic sea level, zos, and zossq.  
-  ! zos is ave_ssh with sea ice inverse barometer removed, 
+  ! post the dynamic sea level, zos, and zossq.
+  ! zos is ave_ssh with sea ice inverse barometer removed,
   ! and with zero global area mean.
   if(CS%id_zos > 0 .or. CS%id_zossq > 0) then
      allocate(zos(G%isd:G%ied,G%jsd:G%jed))
@@ -1201,18 +1203,18 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
      do j=js,je ; do i=is,ie
        zos(i,j) = CS%ave_ssh(i,j)
      enddo ; enddo
-     if (ASSOCIATED(fluxes%p_surf)) then 
+     if (ASSOCIATED(fluxes%p_surf)) then
        do j=js,je ; do i=is,ie
          zos(i,j) = zos(i,j)+G%mask2dT(i,j)*fluxes%p_surf(i,j)/(G%Rho0 * G%g_Earth)
        enddo ; enddo
-     endif 
+     endif
      zos_area_mean = global_area_mean(zos, G)
      do j=js,je ; do i=is,ie
        zos(i,j) = zos(i,j)-G%mask2dT(i,j)*zos_area_mean
      enddo ; enddo
-     if(CS%id_zos > 0) then 
+     if(CS%id_zos > 0) then
        call post_data(CS%id_zos, zos, CS%diag, mask=G%mask2dT)
-     endif 
+     endif
      if(CS%id_zossq > 0) then
        allocate(zossq(G%isd:G%ied,G%jsd:G%jed))
        zossq(:,:) = 0.0
@@ -1221,11 +1223,11 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
        enddo ; enddo
        call post_data(CS%id_zossq, zossq, CS%diag, mask=G%mask2dT)
        deallocate(zossq)
-     endif 
+     endif
      deallocate(zos)
-  endif 
+  endif
 
-  ! post total volume of the liquid ocean 
+  ! post total volume of the liquid ocean
   if(CS%id_volo > 0) then
     allocate(tmp(G%isd:G%ied,G%jsd:G%jed))
     do j=js,je ; do i=is,ie
@@ -1234,9 +1236,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     volo = global_area_integral(tmp, G)
     call post_data(CS%id_volo, volo, CS%diag)
     deallocate(tmp)
-  endif 
+  endif
 
-  ! post frazil 
+  ! post frazil
   if (ASSOCIATED(CS%tv%frazil) .and. (CS%id_fraz > 0)) then
     allocate(frazil_ave(G%isd:G%ied,G%jsd:G%jed))
     do j=js,je ; do i=is,ie
@@ -1246,7 +1248,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     deallocate(frazil_ave)
   endif
 
-  ! post the salt deficit 
+  ! post the salt deficit
   if (ASSOCIATED(CS%tv%salt_deficit) .and. (CS%id_salt_deficit > 0)) then
     allocate(salt_deficit_ave(G%isd:G%ied,G%jsd:G%jed))
     do j=js,je ; do i=is,ie
@@ -1262,11 +1264,11 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     do j=js,je ; do i=is,ie
       Heat_PmE_ave(i,j) = CS%tv%TempxPmE(i,j) * (CS%tv%C_p * I_time_int)
     enddo ; enddo
-    call post_data(CS%id_Heat_PmE, Heat_PmE_ave, CS%diag, mask=G%mask2dT)      
+    call post_data(CS%id_Heat_PmE, Heat_PmE_ave, CS%diag, mask=G%mask2dT)
     deallocate(Heat_PmE_ave)
   endif
 
-  ! post geothermal heating or internal heat source/sinks 
+  ! post geothermal heating or internal heat source/sinks
   if (ASSOCIATED(CS%tv%internal_heat) .and. (CS%id_intern_heat > 0)) then
     allocate(intern_heat_ave(G%isd:G%ied,G%jsd:G%jed))
     do j=js,je ; do i=is,ie
@@ -1324,7 +1326,7 @@ end subroutine step_MOM
 
 
 
-!> This subroutine initializes MOM. 
+!> This subroutine initializes MOM.
 subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   type(time_type), target,   intent(inout) :: Time        !< model time, set in this routine
   type(param_file_type),     intent(out)   :: param_file  !< structure indicating paramater file to parse
@@ -1333,7 +1335,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   type(time_type), optional, intent(in)    :: Time_in     !< time passed to MOM_initialize_state when
                                                           !! model is not being started from a restart file
 
-  ! local 
+  ! local
   type(ocean_grid_type), pointer :: G ! pointer to a structure with metrics and related
   type(diag_ctrl),       pointer :: diag
 
@@ -1346,7 +1348,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   integer :: IsdB, IedB, JsdB, JedB
   real    :: dtbt
   real    :: Z_diag_int  ! minimum interval between calc depth-space diagnostics (sec)
-  
+
   real, allocatable, dimension(:,:,:) :: e   ! interface heights (meter)
   real, allocatable, dimension(:,:)   :: eta ! free surface height (m) or bottom press (Pa)
   type(MOM_restart_CS),  pointer      :: restart_CSp_tmp => NULL()
@@ -1374,7 +1376,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     return
   endif
   allocate(CS)
-  G       => CS%G 
+  G       => CS%G
   CS%Time => Time
   diag    => CS%diag
 
@@ -1414,7 +1416,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   isd  = G%isd   ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
   IsdB = G%IsdB  ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  call diag_mediator_init(G, param_file, diag)
+  call diag_mediator_init(G, param_file, diag, doc_file_dir=dirs%output_directory)
 
   ! Read relevant parameters and write them to the model log.
   call log_version(param_file, "MOM", version, "")
@@ -1636,7 +1638,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     CS%tv%T => CS%T ; CS%tv%S => CS%S
     CS%vd_T = var_desc(name="T",units="degC",longname="Potential Temperature", &
                        cmor_field_name="thetao",cmor_units="C",                &
-                       conversion=CS%tv%C_p) 
+                       conversion=CS%tv%C_p)
     CS%vd_S = var_desc(name="S",units="PPT",longname="Salinity",&
                        cmor_field_name="so",cmor_units="ppt",   &
                        conversion=0.001)
@@ -1649,7 +1651,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   if (CS%bound_salinity) then
     allocate(CS%tv%salt_deficit(isd:ied,jsd:jed)) ; CS%tv%salt_deficit(:,:)=0.0
   endif
-  
+
   if (CS%bulkmixedlayer) then
     if (.not.use_EOS) call MOM_error(FATAL, &
       "initialize_MOM: A bulk mixed layer can only be used with T & S as "//&
@@ -1731,6 +1733,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   call MEKE_alloc_register_restart(G, param_file, CS%MEKE, CS%restart_CSp)
   call set_visc_register_restarts(G, param_file, CS%visc, CS%restart_CSp)
+  call mixedlayer_restrat_register_restarts(G, param_file, CS%mixedlayer_restrat_CSp, CS%restart_CSp)
 
   ! Initialize fields
   if (associated(CS%tracer_Reg)) init_CS%tracer_Reg => CS%tracer_Reg
@@ -1741,8 +1744,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call callTree_waypoint("returned from MOM_initialize_fixed() (initialize_MOM)")
 
   if (CS%use_ALE_algorithm) then
-    call initialize_ALE(param_file, G, CS%ALE_CSp)
-    call callTree_waypoint("returned from initialize_ALE() (initialize_MOM)")
+    call ALE_init(param_file, G, CS%ALE_CSp)
+    call callTree_waypoint("returned from ALE_init() (initialize_MOM)")
   endif
 
   call MOM_initialize_state(CS%u, CS%v, CS%h, CS%tv, Time, G, param_file, dirs, &
@@ -1750,7 +1753,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call cpu_clock_end(id_clock_MOM_init)
   call callTree_waypoint("returned from MOM_initialize_state() (initialize_MOM)")
 
-  if (remap_init_conds(CS%ALE_CSp) .and. .not. query_initialized(CS%h,"h",CS%restart_CSp)) then
+  if (ALE_remap_init_conds(CS%ALE_CSp) .and. .not. query_initialized(CS%h,"h",CS%restart_CSp)) then
     ! This block is controlled by the ALE parameter REMAP_AFTER_INITIALIZATION.
     ! \todo This block exists for legacy reasons and we should phase it out of
     ! all examples.
@@ -1871,12 +1874,12 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call lock_tracer_registry(CS%tracer_Reg, diag, Time, G)
   call callTree_waypoint("tracer registry now locked (initialize_MOM)")
 
-  ! now register some diagnostics since tracer registry is locked 
+  ! now register some diagnostics since tracer registry is locked
   call register_diags(Time, G, CS, CS%ADp)
-  call register_diags_TS_tendency(Time, G, CS) 
-  if (CS%use_ALE_algorithm) then 
-    call register_diags_ALE(Time, G, diag, CS%tv%C_p, CS%tracer_Reg, CS%ALE_CSp)
-  endif 
+  call register_diags_TS_tendency(Time, G, CS)
+  if (CS%use_ALE_algorithm) then
+    call ALE_register_diags(Time, G, diag, CS%tv%C_p, CS%tracer_Reg, CS%ALE_CSp)
+  endif
 
 
   ! If need a diagnostic field, then would have been allocated in register_diags.
@@ -1922,7 +1925,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call callTree_waypoint("static fields written (initialize_MOM)")
   call enable_averaging(0.0, Time, CS%diag)
 
-!  smg: can we remove this code? 
+!  smg: can we remove this code?
 !  call calculate_diagnostic_fields(CS%u, CS%v, CS%h, uh, vh, CS%tv, 0.0, G, CS%diagnostics_CSp)
 !  if (CS%id_u > 0) call post_data(CS%id_u, CS%u,    CS%diag)
 !  if (CS%id_v > 0) call post_data(CS%id_v, CS%v,    CS%diag)
@@ -1937,7 +1940,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
       CS%tv%frazil(:,:) = 0.0
   endif
 
-  if (CS%interp_p_surf) then 
+  if (CS%interp_p_surf) then
     CS%p_surf_prev_set = &
       query_initialized(CS%p_surf_prev,"p_surf_prev",CS%restart_CSp)
 
@@ -1946,7 +1949,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
       call do_group_pass(pass_p_surf_prev, G%domain)
     endif
   endif
-  
+
   if (.not.query_initialized(CS%ave_ssh,"ave_ssh",CS%restart_CSp)) then
     if (CS%split) then
       call find_eta(CS%h, CS%tv, G%g_Earth, G, CS%ave_ssh, eta)
@@ -1964,7 +1967,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     call find_eta(CS%h, CS%tv, G%g_Earth, G, e)
     vd = var_desc("eta","meter","Interface heights",z_grid='i')
     call register_restart_field(e, vd, .true., restart_CSp_tmp)
-    
+
     call save_restart(dirs%output_directory, Time, G, &
                       restart_CSp_tmp, filename=IC_file)
     deallocate(e)
@@ -2006,7 +2009,7 @@ subroutine unitTests
 end subroutine unitTests
 
 
-!> Register the diagnostics 
+!> Register the diagnostics
 subroutine register_diags(Time, G, CS, ADp)
   type(time_type),           intent(in)    :: Time  !< current model time
   type(ocean_grid_type),     intent(inout) :: G     !< ocean grid structure
@@ -2085,8 +2088,8 @@ subroutine register_diags(Time, G, CS, ADp)
     CS%id_sst_sq = register_diag_field('ocean_model', 'SST_sq', diag%axesT1, Time, &
         'Sea Surface Temperature Squared', 'Celsius**2', CS%missing, cmor_field_name='tossq', &
         cmor_long_name='Square of Sea Surface Temperature ', cmor_units='degC^2', &
-        cmor_standard_name='square_of_sea_surface_temperature')    
-    if (CS%id_sst_sq > 0) call safe_alloc_ptr(CS%SST_sq,isd,ied,jsd,jed)    
+        cmor_standard_name='square_of_sea_surface_temperature')
+    if (CS%id_sst_sq > 0) call safe_alloc_ptr(CS%SST_sq,isd,ied,jsd,jed)
     CS%id_sss = register_diag_field('ocean_model', 'SSS', diag%axesT1, Time, &
         'Sea Surface Salinity', 'PPT', CS%missing, cmor_field_name='sos', &
         cmor_long_name='Sea Surface Salinity', cmor_units='ppt',          &
@@ -2108,7 +2111,7 @@ subroutine register_diags(Time, G, CS, ADp)
          'Heat flux into ocean from geothermal or other internal sources', 'Watt meter-2')
 
 
-  ! lateral heat advective and diffusive fluxes 
+  ! lateral heat advective and diffusive fluxes
   CS%id_Tadx = register_diag_field('ocean_model', 'T_adx', diag%axesCuL, Time, &
       'Advective (by residual mean) Zonal Flux of Potential Temperature', T_flux_units)
   CS%id_Tady = register_diag_field('ocean_model', 'T_ady', diag%axesCvL, Time, &
@@ -2123,7 +2126,7 @@ subroutine register_diags(Time, G, CS, ADp)
   if (CS%id_Tdiffy > 0) call safe_alloc_ptr(CS%T_diffy,isd,ied,JsdB,JedB,nz)
 
 
-  ! lateral salt advective and diffusive fluxes 
+  ! lateral salt advective and diffusive fluxes
   CS%id_Sadx = register_diag_field('ocean_model', 'S_adx', diag%axesCuL, Time, &
       'Advective (by residual mean) Zonal Flux of Salinity', S_flux_units)
   CS%id_Sady = register_diag_field('ocean_model', 'S_ady', diag%axesCvL, Time, &
@@ -2138,7 +2141,7 @@ subroutine register_diags(Time, G, CS, ADp)
   if (CS%id_Sdiffy > 0) call safe_alloc_ptr(CS%S_diffy,isd,ied,JsdB,JedB,nz)
 
 
-  ! vertically integrated lateral heat advective and diffusive fluxes 
+  ! vertically integrated lateral heat advective and diffusive fluxes
   CS%id_Tadx_2d = register_diag_field('ocean_model', 'T_adx_2d', diag%axesCu1, Time, &
       'Vertically Integrated Advective Zonal Flux of Potential Temperature', T_flux_units)
   CS%id_Tady_2d = register_diag_field('ocean_model', 'T_ady_2d', diag%axesCv1, Time, &
@@ -2152,7 +2155,7 @@ subroutine register_diags(Time, G, CS, ADp)
   if (CS%id_Tdiffx_2d > 0) call safe_alloc_ptr(CS%T_diffx_2d,IsdB,IedB,jsd,jed)
   if (CS%id_Tdiffy_2d > 0) call safe_alloc_ptr(CS%T_diffy_2d,isd,ied,JsdB,JedB)
 
-  ! vertically integrated lateral salt advective and diffusive fluxes 
+  ! vertically integrated lateral salt advective and diffusive fluxes
   CS%id_Sadx_2d = register_diag_field('ocean_model', 'S_adx_2d', diag%axesCu1, Time, &
       'Vertically Integrated Advective Zonal Flux of Salinity', S_flux_units)
   CS%id_Sady_2d = register_diag_field('ocean_model', 'S_ady_2d', diag%axesCv1, Time, &
@@ -2176,7 +2179,7 @@ subroutine register_diags(Time, G, CS, ADp)
     endif
   endif
 
-  ! diagnostics for values prior to diabatic and prior to ALE 
+  ! diagnostics for values prior to diabatic and prior to ALE
   CS%id_u_predia = register_diag_field('ocean_model', 'u_predia', diag%axesCuL, Time, &
       'Zonal velocity before diabatic forcing', 'meter second-1')
   CS%id_v_predia = register_diag_field('ocean_model', 'v_predia', diag%axesCvL, Time, &
@@ -2226,17 +2229,17 @@ subroutine register_diags_TS_tendency(Time, G, CS)
   is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec
 
 
-  ! heat tendencies from lateral advection 
+  ! heat tendencies from lateral advection
   CS%id_T_advection_xy = register_diag_field('ocean_model', 'T_advection_xy', diag%axesTL, Time, &
       'Horizontal convergence of residual mean heat advective fluxes', 'W/m2')
   CS%id_T_advection_xy_2d = register_diag_field('ocean_model', 'T_advection_xy_2d', diag%axesT1, Time,&
       'Vertical sum of horizontal convergence of residual mean heat advective fluxes', 'W/m2')
-  if (CS%id_T_advection_xy > 0 .or. CS%id_T_advection_xy_2d > 0) then 
+  if (CS%id_T_advection_xy > 0 .or. CS%id_T_advection_xy_2d > 0) then
     call safe_alloc_ptr(CS%T_advection_xy,isd,ied,jsd,jed,nz)
-    CS%tendency_diagnostics = .true. 
-  endif 
+    CS%tendency_diagnostics = .true.
+  endif
 
-  ! net temperature and heat tendencies 
+  ! net temperature and heat tendencies
   CS%id_T_tendency = register_diag_field('ocean_model', 'T_tendency', diag%axesTL, Time, &
       'Net time tendency for temperature', 'degC/s')
   CS%id_Th_tendency = register_diag_field('ocean_model', 'Th_tendency', diag%axesTL, Time,        &
@@ -2249,33 +2252,33 @@ subroutine register_diags_TS_tendency(Time, G, CS)
       cmor_field_name="opottemptend_2d", cmor_units="W m-2",                                                   &
       cmor_standard_name="tendency_of_sea_water_potential_temperature_expressed_as_heat_content_vertical_sum",&
       cmor_long_name ="Tendency of Sea Water Potential Temperature Expressed as Heat Content Vertical Sum")
-  if (CS%id_T_tendency > 0) then 
-    CS%tendency_diagnostics = .true. 
+  if (CS%id_T_tendency > 0) then
+    CS%tendency_diagnostics = .true.
     call safe_alloc_ptr(CS%T_prev,isd,ied,jsd,jed,nz)
     do k=1,nz ; do j=js,je ; do i=is,ie
       CS%T_prev(i,j,k) = CS%tv%T(i,j,k)
-    enddo ; enddo ; enddo 
-  endif 
-  if (CS%id_Th_tendency > 0 .or. CS%id_Th_tendency_2d > 0) then 
-    CS%tendency_diagnostics = .true. 
+    enddo ; enddo ; enddo
+  endif
+  if (CS%id_Th_tendency > 0 .or. CS%id_Th_tendency_2d > 0) then
+    CS%tendency_diagnostics = .true.
     call safe_alloc_ptr(CS%Th_prev,isd,ied,jsd,jed,nz)
     do k=1,nz ; do j=js,je ; do i=is,ie
       CS%Th_prev(i,j,k) = CS%tv%T(i,j,k) * CS%h(i,j,k)
-    enddo ; enddo ; enddo 
-  endif 
+    enddo ; enddo ; enddo
+  endif
 
 
-  ! salt tendencies from lateral advection 
+  ! salt tendencies from lateral advection
   CS%id_S_advection_xy = register_diag_field('ocean_model', 'S_advection_xy', diag%axesTL, Time, &
       'Horizontal convergence of residual mean salt advective fluxes', 'kg/(m2 * s)')
   CS%id_S_advection_xy_2d = register_diag_field('ocean_model', 'S_advection_xy_2d', diag%axesT1, Time,&
       'Vertical sum of horizontal convergence of residual mean salt advective fluxes', 'kg/(m2 * s)')
-  if (CS%id_S_advection_xy > 0 .or. CS%id_S_advection_xy_2d > 0) then 
+  if (CS%id_S_advection_xy > 0 .or. CS%id_S_advection_xy_2d > 0) then
     call safe_alloc_ptr(CS%S_advection_xy,isd,ied,jsd,jed,nz)
-    CS%tendency_diagnostics = .true. 
-  endif 
+    CS%tendency_diagnostics = .true.
+  endif
 
-  ! net salinity and salt tendencies 
+  ! net salinity and salt tendencies
   CS%id_S_tendency = register_diag_field('ocean_model', 'S_tendency', diag%axesTL, Time, &
       'Net time tendency for salinity', 'PPT/s')
   CS%id_Sh_tendency = register_diag_field('ocean_model', 'Sh_tendency', diag%axesTL, Time,&
@@ -2288,20 +2291,20 @@ subroutine register_diags_TS_tendency(Time, G, CS)
       cmor_field_name="osalttend_2d", cmor_units="kg m-2 s-1",                                   &
       cmor_standard_name="tendency_of_sea_water_salinity_expressed_as_salt_content_vertical_sum",&
       cmor_long_name ="Tendency of Sea Water Salinity Expressed as Salt Content Vertical Sum")
-  if (CS%id_S_tendency > 0) then 
-    CS%tendency_diagnostics = .true. 
+  if (CS%id_S_tendency > 0) then
+    CS%tendency_diagnostics = .true.
     call safe_alloc_ptr(CS%S_prev,isd,ied,jsd,jed,nz)
     do k=1,nz ; do j=js,je ; do i=is,ie
       CS%S_prev(i,j,k) = CS%tv%S(i,j,k)
-    enddo ; enddo ; enddo 
-  endif 
-  if (CS%id_Sh_tendency > 0 .or. CS%id_Sh_tendency_2d > 0) then 
-    CS%tendency_diagnostics = .true. 
+    enddo ; enddo ; enddo
+  endif
+  if (CS%id_Sh_tendency > 0 .or. CS%id_Sh_tendency_2d > 0) then
+    CS%tendency_diagnostics = .true.
     call safe_alloc_ptr(CS%Sh_prev,isd,ied,jsd,jed,nz)
     do k=1,nz ; do j=js,je ; do i=is,ie
-      CS%Sh_prev(i,j,k) = CS%tv%S(i,j,k) * CS%h(i,j,k) 
-    enddo ; enddo ; enddo 
-  endif 
+      CS%Sh_prev(i,j,k) = CS%tv%S(i,j,k) * CS%h(i,j,k)
+    enddo ; enddo ; enddo
+  endif
 
 end subroutine register_diags_TS_tendency
 
@@ -2374,112 +2377,112 @@ end subroutine MOM_timing_init
 !> Post diagnostics for temp/heat and saln/salt tendencies.
 subroutine post_diags_TS_tendency(G, CS, dt)
   type(ocean_grid_type),    intent(in)    :: G   !< ocean grid structure
-  type(MOM_control_struct), intent(inout) :: CS  !< control structure 
-  real                    , intent(in)    :: dt  !< total time step for T,S update 
- 
+  type(MOM_control_struct), intent(inout) :: CS  !< control structure
+  real                    , intent(in)    :: dt  !< total time step for T,S update
+
   real    :: work3d(SZI_(G),SZJ_(G),SZK_(G))
   real    :: work2d(SZI_(G),SZJ_(G))
   real    :: Idt, ppt2mks
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  if(.not. CS%tendency_diagnostics) return 
+  if(.not. CS%tendency_diagnostics) return
 
   Idt           = 1.0/dt
-  ppt2mks       = 0.001 
+  ppt2mks       = 0.001
   work3d(:,:,:) = 0.0
   work2d(:,:)   = 0.0
- 
 
-  ! Diagnose tendency of heat from convergence of lateral advective, 
+
+  ! Diagnose tendency of heat from convergence of lateral advective,
   ! fluxes, where advective transport arises from residual mean velocity.
-  if (CS%id_T_advection_xy > 0 .or. CS%id_T_advection_xy_2d > 0) then 
+  if (CS%id_T_advection_xy > 0 .or. CS%id_T_advection_xy_2d > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
-      work3d(i,j,k) = CS%T_advection_xy(i,j,k) * G%H_to_kg_m2 * CS%tv%C_p 
-    enddo ; enddo ; enddo 
+      work3d(i,j,k) = CS%T_advection_xy(i,j,k) * G%H_to_kg_m2 * CS%tv%C_p
+    enddo ; enddo ; enddo
     if (CS%id_T_advection_xy    > 0) call post_data(CS%id_T_advection_xy, work3d, CS%diag)
-    if (CS%id_T_advection_xy_2d > 0) then 
+    if (CS%id_T_advection_xy_2d > 0) then
       do j=js,je ; do i=is,ie
         work2d(i,j) = 0.0
-        do k=1,nz 
+        do k=1,nz
           work2d(i,j) = work2d(i,j) + work3d(i,j,k)
-        enddo 
-      enddo ; enddo 
+        enddo
+      enddo ; enddo
       call post_data(CS%id_T_advection_xy_2d, work2d, CS%diag)
-    endif 
-  endif 
+    endif
+  endif
 
   ! Diagnose tendency of salt from convergence of lateral advective
   ! fluxes, where advective transport arises from residual mean velocity.
-  if (CS%id_S_advection_xy > 0 .or. CS%id_S_advection_xy_2d > 0) then 
+  if (CS%id_S_advection_xy > 0 .or. CS%id_S_advection_xy_2d > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
       work3d(i,j,k) = CS%S_advection_xy(i,j,k) * G%H_to_kg_m2 * ppt2mks
-    enddo ; enddo ; enddo 
+    enddo ; enddo ; enddo
     if (CS%id_S_advection_xy    > 0) call post_data(CS%id_S_advection_xy, work3d, CS%diag)
-    if (CS%id_S_advection_xy_2d > 0) then 
+    if (CS%id_S_advection_xy_2d > 0) then
       do j=js,je ; do i=is,ie
         work2d(i,j) = 0.0
-        do k=1,nz 
+        do k=1,nz
           work2d(i,j) = work2d(i,j) + work3d(i,j,k)
-        enddo 
-      enddo ; enddo 
+        enddo
+      enddo ; enddo
       call post_data(CS%id_S_advection_xy_2d, work2d, CS%diag)
-    endif 
-  endif 
+    endif
+  endif
 
   ! diagnose net tendency for temperature over a time step and update T_prev
-  if (CS%id_T_tendency > 0) then 
+  if (CS%id_T_tendency > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
-      work3d(i,j,k)    = (CS%tv%T(i,j,k) - CS%T_prev(i,j,k))*Idt 
+      work3d(i,j,k)    = (CS%tv%T(i,j,k) - CS%T_prev(i,j,k))*Idt
       CS%T_prev(i,j,k) =  CS%tv%T(i,j,k)
-    enddo ; enddo ; enddo 
+    enddo ; enddo ; enddo
     call post_data(CS%id_T_tendency, work3d, CS%diag)
-  endif 
+  endif
 
   ! diagnose net tendency for salinity over a time step and update S_prev
-  if (CS%id_S_tendency > 0) then 
+  if (CS%id_S_tendency > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
-      work3d(i,j,k)    = (CS%tv%S(i,j,k) - CS%S_prev(i,j,k))*Idt 
+      work3d(i,j,k)    = (CS%tv%S(i,j,k) - CS%S_prev(i,j,k))*Idt
       CS%S_prev(i,j,k) =  CS%tv%S(i,j,k)
-    enddo ; enddo ; enddo 
+    enddo ; enddo ; enddo
     call post_data(CS%id_S_tendency, work3d, CS%diag)
-  endif 
+  endif
 
   ! diagnose net tendency for heat content of a grid cell over a time step and update Th_prev
-  if (CS%id_Th_tendency > 0 .or. CS%id_Th_tendency_2d > 0) then 
+  if (CS%id_Th_tendency > 0 .or. CS%id_Th_tendency_2d > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
-      work3d(i,j,k)     = (CS%tv%T(i,j,k)*CS%h(i,j,k) - CS%Th_prev(i,j,k)) * Idt * G%H_to_kg_m2 * CS%tv%C_p 
-      CS%Th_prev(i,j,k) =  CS%tv%T(i,j,k)*CS%h(i,j,k) 
-    enddo ; enddo ; enddo 
+      work3d(i,j,k)     = (CS%tv%T(i,j,k)*CS%h(i,j,k) - CS%Th_prev(i,j,k)) * Idt * G%H_to_kg_m2 * CS%tv%C_p
+      CS%Th_prev(i,j,k) =  CS%tv%T(i,j,k)*CS%h(i,j,k)
+    enddo ; enddo ; enddo
     if (CS%id_Th_tendency    > 0) call post_data(CS%id_Th_tendency, work3d, CS%diag)
-    if (CS%id_Th_tendency_2d > 0) then 
+    if (CS%id_Th_tendency_2d > 0) then
       do j=js,je ; do i=is,ie
         work2d(i,j) = 0.0
-        do k=1,nz 
+        do k=1,nz
           work2d(i,j) = work2d(i,j) + work3d(i,j,k)
-        enddo 
-      enddo ; enddo 
+        enddo
+      enddo ; enddo
       call post_data(CS%id_Th_tendency_2d, work2d, CS%diag)
-    endif 
-  endif 
+    endif
+  endif
 
   ! diagnose net tendency for salt content of a grid cell over a time step and update Sh_prev
-  if (CS%id_Sh_tendency > 0 .or. CS%id_Sh_tendency_2d > 0) then 
+  if (CS%id_Sh_tendency > 0 .or. CS%id_Sh_tendency_2d > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
       work3d(i,j,k)     = (CS%tv%S(i,j,k)*CS%h(i,j,k) - CS%Sh_prev(i,j,k)) * Idt * G%H_to_kg_m2 * ppt2mks
-      CS%Sh_prev(i,j,k) =  CS%tv%S(i,j,k)*CS%h(i,j,k) 
-    enddo ; enddo ; enddo 
+      CS%Sh_prev(i,j,k) =  CS%tv%S(i,j,k)*CS%h(i,j,k)
+    enddo ; enddo ; enddo
     if (CS%id_Sh_tendency    > 0) call post_data(CS%id_Sh_tendency, work3d, CS%diag)
-    if (CS%id_Sh_tendency_2d > 0) then 
+    if (CS%id_Sh_tendency_2d > 0) then
       do j=js,je ; do i=is,ie
         work2d(i,j) = 0.0
-        do k=1,nz 
+        do k=1,nz
           work2d(i,j) = work2d(i,j) + work3d(i,j,k)
-        enddo 
-      enddo ; enddo 
+        enddo
+      enddo ; enddo
       call post_data(CS%id_Sh_tendency_2d, work2d, CS%diag)
-    endif 
-  endif 
+    endif
+  endif
 
 
 end subroutine post_diags_TS_tendency
@@ -2510,8 +2513,8 @@ end subroutine post_diags_TS_vardec
 !> Offers the static fields in the ocean grid type
 !! for output via the diag_manager.
 subroutine write_static_fields(G, diag)
-  type(ocean_grid_type),   intent(in) :: G      !< ocean grid structure 
-  type(diag_ctrl), target, intent(in) :: diag   !< regulates diagnostic output 
+  type(ocean_grid_type),   intent(in) :: G      !< ocean grid structure
+  type(diag_ctrl), target, intent(in) :: diag   !< regulates diagnostic output
 
   ! The out_X arrays are needed because some of the elements of the grid
   ! type may be reduced rank macros.
@@ -2626,9 +2629,9 @@ end subroutine write_static_fields
 !! This routine should be altered if there are any changes to the
 !! time stepping scheme.  The CHECK_RESTART facility may be used to
 !! confirm that all needed restart fields have been included.
-subroutine set_restart_fields(G, param_file, CS)      
-  type(ocean_grid_type),    intent(in) :: G             !< ocean grid structure  
-  type(param_file_type),    intent(in) :: param_file    !< opened file for parsing to get parameters 
+subroutine set_restart_fields(G, param_file, CS)
+  type(ocean_grid_type),    intent(in) :: G             !< ocean grid structure
+  type(param_file_type),    intent(in) :: param_file    !< opened file for parsing to get parameters
   type(MOM_control_struct), intent(in) :: CS            !< control structure set up by inialize_MOM
 
   type(vardesc) :: vd
@@ -2674,16 +2677,16 @@ end subroutine set_restart_fields
 !! model by setting the appropriate pointers in state.  Unused fields
 !! are set to NULL.
 subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
-  type(surface),                                  intent(inout) :: state  !< ocean surface state 
+  type(surface),                                  intent(inout) :: state  !< ocean surface state
   real, target, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u      !< zonal velocity (m/s)
   real, target, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v      !< meridional velocity (m/s)
   real, target, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h      !< layer thickness (m or kg/m2)
-  real, target, dimension(NIMEM_,NJMEM_),         intent(inout) :: ssh    !< time mean surface height (m)  
-  type(ocean_grid_type),                          intent(inout) :: G      !< ocean grid structure 
-  type(MOM_control_struct),                       intent(inout) :: CS     !< control structure 
+  real, target, dimension(NIMEM_,NJMEM_),         intent(inout) :: ssh    !< time mean surface height (m)
+  type(ocean_grid_type),                          intent(inout) :: G      !< ocean grid structure
+  type(MOM_control_struct),                       intent(inout) :: CS     !< control structure
   real, optional, pointer, dimension(:,:)                       :: p_atm  !< atmospheric pressure (Pascal)
 
-  ! local 
+  ! local
   real :: depth(SZI_(G))    ! distance from the surface (meter)
   real :: depth_ml          ! depth over which to average to
                             ! determine mixed layer properties (meter)
@@ -2917,20 +2920,20 @@ end subroutine calculate_surface_state
 
 !> End of model
 subroutine MOM_end(CS)
-  type(MOM_control_struct), pointer :: CS   !< MOM control structure 
+  type(MOM_control_struct), pointer :: CS   !< MOM control structure
 
   if (CS%use_ALE_algorithm) then
-    call end_ALE(CS%ALE_CSp)
+    call ALE_end(CS%ALE_CSp)
   endif
 
   DEALLOC_(CS%u) ; DEALLOC_(CS%v) ; DEALLOC_(CS%h)
   DEALLOC_(CS%uh) ; DEALLOC_(CS%vh)
-  
+
   if (CS%use_temperature) then
     DEALLOC_(CS%T) ; CS%tv%T => NULL() ; DEALLOC_(CS%S) ; CS%tv%S => NULL()
   endif
   if (associated(CS%tv%frazil)) deallocate(CS%tv%frazil)
-  if (associated(CS%tv%salt_deficit)) deallocate(CS%tv%salt_deficit)  
+  if (associated(CS%tv%salt_deficit)) deallocate(CS%tv%salt_deficit)
   if (associated(CS%tv%Hml)) deallocate(CS%tv%Hml)
 
   call tracer_advect_end(CS%tracer_adv_CSp)
@@ -2958,7 +2961,7 @@ end subroutine MOM_end
 !! Modular Ocean Model (MOM) Version 6.0 (MOM6)
 !!
 !! \authors Alistair Adcroft, Robert Hallberg, and Stephen Griffies
-!!                                                                     
+!!
 !!  Additional contributions from:
 !!    * Whit Anderson
 !!    * Brian Arbic
@@ -2967,153 +2970,153 @@ end subroutine MOM_end
 !!    * Matthew Harrison
 !!    * Mehmet Ilicak
 !!    * Laura Jackson
-!!    * Jasmine John    
+!!    * Jasmine John
 !!    * John Krasting
 !!    * Zhi Liang
 !!    * Bonnie Samuels
 !!    * Harper Simmons
-!!    * Laurent White     
-!!    * Niki Zadeh                                               
-!!                                                                     
+!!    * Laurent White
+!!    * Niki Zadeh
+!!
 !!  MOM ice-shelf code was developed by
 !!  * Daniel Goldberg
-!!  * Robert Hallberg             
+!!  * Robert Hallberg
 !!  * Chris Little
-!!  * Olga Sergienko                                 
-!!                                                                     
+!!  * Olga Sergienko
+!!
 !!  \section section_overview Overview of MOM
 !!
-!!  This program (MOM) simulates the ocean by numerically solving    
-!!  the hydrostatic primitive equations in generalized Lagrangian      
-!!  vertical coordinates, typically tracking stretched pressure (p*)   
-!!  surfaces or following isopycnals in the ocean's interior, and      
-!!  general orthogonal horizontal coordinates. Unlike earlier versions 
-!!  of MOM, in MOM6 these equations are horizontally discretized on an 
-!!  Arakawa C-grid.  (It remains to be seen whether a B-grid dynamic   
-!!  core will be revived in MOM6 at a later date; for now applications 
-!!  requiring a B-grid discretization should use MOM5.1.)  MOM6 offers 
-!!  a range of options for the physical parameterizations, from those  
-!!  most appropriate to highly idealized models for geophysical fluid  
-!!  dynamics studies to a rich suite of processes appropriate for      
-!!  realistic ocean simulations.  The thermodynamic options typically  
+!!  This program (MOM) simulates the ocean by numerically solving
+!!  the hydrostatic primitive equations in generalized Lagrangian
+!!  vertical coordinates, typically tracking stretched pressure (p*)
+!!  surfaces or following isopycnals in the ocean's interior, and
+!!  general orthogonal horizontal coordinates. Unlike earlier versions
+!!  of MOM, in MOM6 these equations are horizontally discretized on an
+!!  Arakawa C-grid.  (It remains to be seen whether a B-grid dynamic
+!!  core will be revived in MOM6 at a later date; for now applications
+!!  requiring a B-grid discretization should use MOM5.1.)  MOM6 offers
+!!  a range of options for the physical parameterizations, from those
+!!  most appropriate to highly idealized models for geophysical fluid
+!!  dynamics studies to a rich suite of processes appropriate for
+!!  realistic ocean simulations.  The thermodynamic options typically
 !!  use conservative temperature and preformed salinity as conservative
-!!  state variables and a full nonlinear equation of state, but there  
-!!  are also idealized adiabatic configurations of the model that use  
-!!  fixed density layers.  Version 6.0 of MOM continues in the long    
-!!  tradition of a commitment to climate-quality ocean simulations     
-!!  embodied in previous versions of MOM, even as it draws extensively 
-!!  on the lessons learned in the development of the Generalized Ocean 
-!!  Layered Dynamics (GOLD) ocean model, which was also primarily      
-!!  developed at NOAA/GFDL.  MOM has also benefited tremendously from  
-!!  the FMS infrastructure, which it utilizes and shares with other    
-!!  component models developed at NOAA/GFDL.                           
-!!                                                                     
-!!    When run is isopycnal-coordinate mode, the uppermost few layers  
-!!  are often used to describe a bulk mixed layer, including the       
-!!  effects of penetrating shortwave radiation.  Either a split-       
-!!  explicit time stepping scheme or a non-split scheme may be used    
-!!  for the dynamics, while the time stepping may be split (and use    
-!!  different numbers of steps to cover the same interval) for the     
-!!  forcing, the thermodynamics, and for the dynamics.  Most of the    
-!!  numerics are second order accurate in space.  MOM can run with an  
-!!  absurdly thin minimum layer thickness. A variety of non-isopycnal  
-!!  vertical coordinate options are under development, but all exploit 
-!!  the advantages of a Lagrangian vertical coordinate, as discussed   
-!!  in detail by Adcroft and Hallberg (Ocean Modelling, 2006).         
-!!                                                                     
-!!    Details of the numerics and physical parameterizations are       
-!!  provided in the appropriate source files.  All of the available    
-!!  options are selected at run-time by parsing the input files,       
-!!  usually MOM_input and MOM_override, and the options choices are    
-!!  then documented for each run in MOM_param_docs.                    
-!!                                                                     
-!!    MOM6 integrates the equations forward in time in three distinct  
-!!  phases.  In one phase, the dynamic equations for the velocities    
-!!  and layer thicknesses are advanced, capturing the propagation of   
-!!  external and internal inertia-gravity waves, Rossby waves, and     
-!!  other strictly adiabatic processes, including lateral stresses,    
-!!  vertical viscosity and momentum forcing, and interface height      
-!!  diffusion (commonly called Gent-McWilliams diffusion in depth-     
-!!  coordinate models).  In the second phase, all tracers are advected 
-!!  and diffused along the layers.  The third phase applies diabatic   
-!!  processes, vertical mixing of water properties, and perhaps        
-!!  vertical remapping to cause the layers to track the desired        
-!!  vertical coordinate.                                               
-!!                                                                     
-!!    The present file (MOM.F90) orchestrates the main time stepping   
-!!  loops. One time integration option for the dynamics uses a split   
-!!  explicit time stepping scheme to rapidly step the barotropic       
-!!  pressure and velocity fields. The barotropic velocities are        
-!!  averaged over the baroclinic time step before they are used to     
-!!  advect thickness and determine the baroclinic accelerations.  As   
-!!  described in Hallberg and Adcroft (2009), a barotropic correction  
-!!  is applied to the time-mean layer velocities to ensure that the    
-!!  sum of the layer transports agrees with the time-mean barotropic   
-!!  transport, thereby ensuring that the estimates of the free surface 
-!!  from the sum of the layer thicknesses agrees with the final free   
-!!  surface height as calculated by the barotropic solver.  The        
-!!  barotropic and baroclinic velocities are kept consistent by        
-!!  recalculating the barotropic velocities from the baroclinic        
-!!  transports each time step. This scheme is described in Hallberg,   
-!!  1997, J. Comp. Phys. 135, 54-65 and in Hallberg and Adcroft, 2009, 
-!!  Ocean Modelling, 29, 15-26.                                        
-!!                                                                     
-!!    The other time integration options use non-split time stepping   
-!!  schemes based on the 3-step third order Runge-Kutta scheme         
-!!  described in Matsuno, 1966, J. Met. Soc. Japan, 44, 85-88, or on   
-!!  a two-step quasi-2nd order Runge-Kutta scheme.  These are much     
-!!  slower than the split time-stepping scheme, but they are useful    
-!!  for providing a more robust solution for debugging cases where the 
-!!  more complicated split time-stepping scheme may be giving suspect  
-!!  solutions.                                                         
-!!                                                                     
-!!    There are a range of closure options available.  Horizontal      
-!!  velocities are subject to a combination of horizontal biharmonic   
-!!  and Laplacian friction (based on a stress tensor formalism) and a  
-!!  vertical Fickian viscosity (perhaps using the kinematic viscosity  
-!!  of water).  The horizontal viscosities may be constant, spatially  
-!!  varying or may be dynamically calculated using Smagorinsky's       
-!!  approach.  A diapycnal diffusion of density and thermodynamic      
-!!  quantities is also allowed, but not required, as is horizontal     
-!!  diffusion of interface heights (akin to the Gent-McWilliams        
-!!  closure of geopotential coordinate models).  The diapycnal mixing  
-!!  may use a fixed diffusivity or it may use the shear Richardson     
-!!  number dependent closure, like that described in Jackson et al.    
-!!  (JPO, 2008).  When there is diapycnal diffusion, it applies to     
+!!  state variables and a full nonlinear equation of state, but there
+!!  are also idealized adiabatic configurations of the model that use
+!!  fixed density layers.  Version 6.0 of MOM continues in the long
+!!  tradition of a commitment to climate-quality ocean simulations
+!!  embodied in previous versions of MOM, even as it draws extensively
+!!  on the lessons learned in the development of the Generalized Ocean
+!!  Layered Dynamics (GOLD) ocean model, which was also primarily
+!!  developed at NOAA/GFDL.  MOM has also benefited tremendously from
+!!  the FMS infrastructure, which it utilizes and shares with other
+!!  component models developed at NOAA/GFDL.
+!!
+!!    When run is isopycnal-coordinate mode, the uppermost few layers
+!!  are often used to describe a bulk mixed layer, including the
+!!  effects of penetrating shortwave radiation.  Either a split-
+!!  explicit time stepping scheme or a non-split scheme may be used
+!!  for the dynamics, while the time stepping may be split (and use
+!!  different numbers of steps to cover the same interval) for the
+!!  forcing, the thermodynamics, and for the dynamics.  Most of the
+!!  numerics are second order accurate in space.  MOM can run with an
+!!  absurdly thin minimum layer thickness. A variety of non-isopycnal
+!!  vertical coordinate options are under development, but all exploit
+!!  the advantages of a Lagrangian vertical coordinate, as discussed
+!!  in detail by Adcroft and Hallberg (Ocean Modelling, 2006).
+!!
+!!    Details of the numerics and physical parameterizations are
+!!  provided in the appropriate source files.  All of the available
+!!  options are selected at run-time by parsing the input files,
+!!  usually MOM_input and MOM_override, and the options choices are
+!!  then documented for each run in MOM_param_docs.
+!!
+!!    MOM6 integrates the equations forward in time in three distinct
+!!  phases.  In one phase, the dynamic equations for the velocities
+!!  and layer thicknesses are advanced, capturing the propagation of
+!!  external and internal inertia-gravity waves, Rossby waves, and
+!!  other strictly adiabatic processes, including lateral stresses,
+!!  vertical viscosity and momentum forcing, and interface height
+!!  diffusion (commonly called Gent-McWilliams diffusion in depth-
+!!  coordinate models).  In the second phase, all tracers are advected
+!!  and diffused along the layers.  The third phase applies diabatic
+!!  processes, vertical mixing of water properties, and perhaps
+!!  vertical remapping to cause the layers to track the desired
+!!  vertical coordinate.
+!!
+!!    The present file (MOM.F90) orchestrates the main time stepping
+!!  loops. One time integration option for the dynamics uses a split
+!!  explicit time stepping scheme to rapidly step the barotropic
+!!  pressure and velocity fields. The barotropic velocities are
+!!  averaged over the baroclinic time step before they are used to
+!!  advect thickness and determine the baroclinic accelerations.  As
+!!  described in Hallberg and Adcroft (2009), a barotropic correction
+!!  is applied to the time-mean layer velocities to ensure that the
+!!  sum of the layer transports agrees with the time-mean barotropic
+!!  transport, thereby ensuring that the estimates of the free surface
+!!  from the sum of the layer thicknesses agrees with the final free
+!!  surface height as calculated by the barotropic solver.  The
+!!  barotropic and baroclinic velocities are kept consistent by
+!!  recalculating the barotropic velocities from the baroclinic
+!!  transports each time step. This scheme is described in Hallberg,
+!!  1997, J. Comp. Phys. 135, 54-65 and in Hallberg and Adcroft, 2009,
+!!  Ocean Modelling, 29, 15-26.
+!!
+!!    The other time integration options use non-split time stepping
+!!  schemes based on the 3-step third order Runge-Kutta scheme
+!!  described in Matsuno, 1966, J. Met. Soc. Japan, 44, 85-88, or on
+!!  a two-step quasi-2nd order Runge-Kutta scheme.  These are much
+!!  slower than the split time-stepping scheme, but they are useful
+!!  for providing a more robust solution for debugging cases where the
+!!  more complicated split time-stepping scheme may be giving suspect
+!!  solutions.
+!!
+!!    There are a range of closure options available.  Horizontal
+!!  velocities are subject to a combination of horizontal biharmonic
+!!  and Laplacian friction (based on a stress tensor formalism) and a
+!!  vertical Fickian viscosity (perhaps using the kinematic viscosity
+!!  of water).  The horizontal viscosities may be constant, spatially
+!!  varying or may be dynamically calculated using Smagorinsky's
+!!  approach.  A diapycnal diffusion of density and thermodynamic
+!!  quantities is also allowed, but not required, as is horizontal
+!!  diffusion of interface heights (akin to the Gent-McWilliams
+!!  closure of geopotential coordinate models).  The diapycnal mixing
+!!  may use a fixed diffusivity or it may use the shear Richardson
+!!  number dependent closure, like that described in Jackson et al.
+!!  (JPO, 2008).  When there is diapycnal diffusion, it applies to
 !!  momentum as well. As this is in addition to the vertical viscosity,
-!!  the vertical Prandtl always exceeds 1.  A refined bulk-mixed layer 
+!!  the vertical Prandtl always exceeds 1.  A refined bulk-mixed layer
 !!  is often used to describe the planetary boundary layer in realistic
-!!  ocean simulations.                                                 
-!!                                                                     
-!!    MOM has a number of noteworthy debugging capabilities.           
-!!  Excessively large velocities are truncated and MOM will stop       
-!!  itself after a number of such instances to keep the model from     
-!!  crashing altogether.  This is useful in diagnosing failures,       
-!!  or (by accepting some truncations) it may be useful for getting    
-!!  the model past the adjustment from an ill-balanced initial         
-!!  condition.  In addition, all of the accelerations in the columns   
-!!  with excessively large velocities may be directed to a text file.  
-!!  Parallelization errors may be diagnosed using the DEBUG option,    
-!!  which causes extensive checksums to be written out along with      
-!!  comments indicating where in the algorithm the sums originate and  
-!!  what variable is being summed.  The point where these checksums    
-!!  differ between runs is usually a good indication of where in the   
-!!  code the problem lies.  All of the test cases provided with MOM    
-!!  are routinely tested to ensure that they give bitwise identical    
-!!  results regardless of the domain decomposition, or whether they    
-!!  use static or dynamic memory allocation.                           
+!!  ocean simulations.
+!!
+!!    MOM has a number of noteworthy debugging capabilities.
+!!  Excessively large velocities are truncated and MOM will stop
+!!  itself after a number of such instances to keep the model from
+!!  crashing altogether.  This is useful in diagnosing failures,
+!!  or (by accepting some truncations) it may be useful for getting
+!!  the model past the adjustment from an ill-balanced initial
+!!  condition.  In addition, all of the accelerations in the columns
+!!  with excessively large velocities may be directed to a text file.
+!!  Parallelization errors may be diagnosed using the DEBUG option,
+!!  which causes extensive checksums to be written out along with
+!!  comments indicating where in the algorithm the sums originate and
+!!  what variable is being summed.  The point where these checksums
+!!  differ between runs is usually a good indication of where in the
+!!  code the problem lies.  All of the test cases provided with MOM
+!!  are routinely tested to ensure that they give bitwise identical
+!!  results regardless of the domain decomposition, or whether they
+!!  use static or dynamic memory allocation.
 !!
 !!  \section section_structure Structure of MOM
-!! 
-!!  About 115 other files of source code and 4 header files comprise 
-!!  the MOM code, although there are several hundred more files that   
-!!  make up the FMS infrastructure upon which MOM is built.  Each of   
-!!  the MOM files contains comments documenting what it does, and      
-!!  most of the file names are fairly self-evident. In addition, all   
-!!  subroutines and data types are referenced via a module use, only   
+!!
+!!  About 115 other files of source code and 4 header files comprise
+!!  the MOM code, although there are several hundred more files that
+!!  make up the FMS infrastructure upon which MOM is built.  Each of
+!!  the MOM files contains comments documenting what it does, and
+!!  most of the file names are fairly self-evident. In addition, all
+!!  subroutines and data types are referenced via a module use, only
 !!  statement, and the module names are consistent with the file names,
-!!  so it is not too hard to find the source file for a subroutine.    
-!!                                                                     
+!!  so it is not too hard to find the source file for a subroutine.
+!!
 !!    The typical MOM directory tree is as follows:
 !!
 !! \verbatim
@@ -3140,144 +3143,144 @@ end subroutine MOM_end
 !!            `-- user
 !! \endverbatim
 !!
-!!  Rather than describing each file here, each directory contents   
-!!  will be described to give a broad overview of the MOM code         
-!!  structure.                                                         
-!!                                                                     
-!!    The directories under config_src contain files that are used for 
-!!  configuring the code, for instance for coupled or ocean-only runs. 
-!!  Only one or two of these directories are used in compiling any,    
-!!  particular run.                                                    
-!!                                                                     
-!!  * config_src/coupled_driver:                                         
-!!    The files here are used to couple MOM as a component in a larger 
-!!    run driven by the FMS coupler.  This includes code that converts 
+!!  Rather than describing each file here, each directory contents
+!!  will be described to give a broad overview of the MOM code
+!!  structure.
+!!
+!!    The directories under config_src contain files that are used for
+!!  configuring the code, for instance for coupled or ocean-only runs.
+!!  Only one or two of these directories are used in compiling any,
+!!  particular run.
+!!
+!!  * config_src/coupled_driver:
+!!    The files here are used to couple MOM as a component in a larger
+!!    run driven by the FMS coupler.  This includes code that converts
 !!    various forcing fields into the code structures and flux and unit
-!!    conventions used by MOM, and converts the MOM surface fields     
+!!    conventions used by MOM, and converts the MOM surface fields
 !!    back to the forms used by other FMS components.
 !!
-!!  * config_src/dynamic:                                                
-!!    The only file here is the version of MOM_memory.h that is used   
+!!  * config_src/dynamic:
+!!    The only file here is the version of MOM_memory.h that is used
 !!    for dynamic memory configurations of MOM.
 !!
-!!  * config_src/solo_driver:                                            
-!!    The files here are include the _main driver that is used when    
-!!    MOM is configured as an ocean-only model, as well as the files   
-!!    that specify the surface forcing in this configuration.          
-!!                                                                     
-!!    The directories under examples provide a large number of working 
-!!  configurations of MOM, along with reference solutions for several  
-!!  different compilers on GFDL's latest large computer.  The versions 
-!!  of MOM_memory.h in these directories need not be used if dynamic   
-!!  memory allocation is desired, and the answers should be unchanged. 
-!!                                                                     
-!!    The directories under src contain most of the MOM files.  These  
-!!  files are used in every configuration using MOM.                   
-!!                                                                     
-!!  * src/core:                                                          
-!!    The files here constitute the MOM dynamic core.  This directory  
-!!    also includes files with the types that describe the model's     
-!!    lateral grid and have defined types that are shared across       
-!!    various MOM modules to allow for more succinct and flexible      
-!!    subroutine argument lists.                                       
+!!  * config_src/solo_driver:
+!!    The files here are include the _main driver that is used when
+!!    MOM is configured as an ocean-only model, as well as the files
+!!    that specify the surface forcing in this configuration.
 !!
-!!  * src/diagnostics:                                                   
-!!    The files here calculate various diagnostics that are anciliary  
-!!    to the model itself.  While most of these diagnostics do not     
-!!    directly affect the model's solution, there are some, like the   
-!!    calculation of the deformation radius, that are used in some     
-!!    of the process parameterizations.                                
+!!    The directories under examples provide a large number of working
+!!  configurations of MOM, along with reference solutions for several
+!!  different compilers on GFDL's latest large computer.  The versions
+!!  of MOM_memory.h in these directories need not be used if dynamic
+!!  memory allocation is desired, and the answers should be unchanged.
 !!
-!!  * src/equation_of_state:                                             
-!!    These files describe the physical properties of sea-water,       
-!!    including both the equation of state and when it freezes.        
+!!    The directories under src contain most of the MOM files.  These
+!!  files are used in every configuration using MOM.
 !!
-!!  * src/framework:                                                     
-!!    These files provide infrastructure utilities for MOM.  Many are  
+!!  * src/core:
+!!    The files here constitute the MOM dynamic core.  This directory
+!!    also includes files with the types that describe the model's
+!!    lateral grid and have defined types that are shared across
+!!    various MOM modules to allow for more succinct and flexible
+!!    subroutine argument lists.
+!!
+!!  * src/diagnostics:
+!!    The files here calculate various diagnostics that are anciliary
+!!    to the model itself.  While most of these diagnostics do not
+!!    directly affect the model's solution, there are some, like the
+!!    calculation of the deformation radius, that are used in some
+!!    of the process parameterizations.
+!!
+!!  * src/equation_of_state:
+!!    These files describe the physical properties of sea-water,
+!!    including both the equation of state and when it freezes.
+!!
+!!  * src/framework:
+!!    These files provide infrastructure utilities for MOM.  Many are
 !!    simply wrappers for capabilities provided by FMS, although others
-!!    provide capabilities (like the file_parser) that are unique to   
-!!    MOM. When MOM is adapted to use a modeling infrastructure        
-!!    distinct from FMS, most of the required changes are in this      
-!!    directory.                                                       
+!!    provide capabilities (like the file_parser) that are unique to
+!!    MOM. When MOM is adapted to use a modeling infrastructure
+!!    distinct from FMS, most of the required changes are in this
+!!    directory.
 !!
-!!  * src/initialization:                                                
-!!    These are the files that are used to initialize the MOM grid     
-!!    or provide the initial physical state for MOM.  These files are  
-!!    not intended to be modified, but provide a means for calling     
-!!    user-specific initialization code like the examples in src/user. 
+!!  * src/initialization:
+!!    These are the files that are used to initialize the MOM grid
+!!    or provide the initial physical state for MOM.  These files are
+!!    not intended to be modified, but provide a means for calling
+!!    user-specific initialization code like the examples in src/user.
 !!
-!!  * src/parameterizations/lateral:                                     
-!!    These files implement a number of quasi-lateral (along-layer)    
-!!    process parameterizations, including lateral viscosities,        
-!!    parameterizations of eddy effects, and the calculation of tidal  
-!!    forcing.                                                         
+!!  * src/parameterizations/lateral:
+!!    These files implement a number of quasi-lateral (along-layer)
+!!    process parameterizations, including lateral viscosities,
+!!    parameterizations of eddy effects, and the calculation of tidal
+!!    forcing.
 !!
-!!  * src/parameterizations/vertical:                                    
-!!    These files implement a number of vertical mixing or diabatic    
-!!    processes, including the effects of vertical viscosity and       
-!!    code to parameterize the planetary boundary layer.  There is a   
-!!    separate driver that orchestrates this portion of the algorithm, 
-!!    and there is a diversity of parameterizations to be found here.  
+!!  * src/parameterizations/vertical:
+!!    These files implement a number of vertical mixing or diabatic
+!!    processes, including the effects of vertical viscosity and
+!!    code to parameterize the planetary boundary layer.  There is a
+!!    separate driver that orchestrates this portion of the algorithm,
+!!    and there is a diversity of parameterizations to be found here.
 !!
-!!  * src/tracer:                                                        
-!!    These files handle the lateral transport and diffusion of        
-!!    tracers, or are the code to implement various passive tracer     
-!!    packages.  Additional tracer packages are readily accomodated.   
+!!  * src/tracer:
+!!    These files handle the lateral transport and diffusion of
+!!    tracers, or are the code to implement various passive tracer
+!!    packages.  Additional tracer packages are readily accomodated.
 !!
-!!  * src/user:                                                          
-!!    These are either stub routines that a user could use to change   
-!!    the model's initial conditions or forcing, or are examples that  
-!!    implement specific test cases.  These files can easily  be hand  
-!!    edited to create new analytically specified configurations.      
-!!                                                                     
-!!                                                                     
-!!  Most simulations can be set up by modifying only the files       
-!!  MOM_input, and possibly one or two of the files in src/user.       
-!!  In addition, the diag_table (MOM_diag_table) will commonly be      
-!!  modified to tailor the output to the needs of the question at      
-!!  hand.  The FMS utility mkmf works with a file called path_names    
-!!  to build an appropriate makefile, and path_names should be edited  
-!!  to reflect the actual location of the desired source code.         
-!!                                                                     
-!!                                                                     
-!!  There are 3 publicly visible subroutines in this file (MOM.F90). 
-!!  * step_MOM steps MOM over a specified interval of time.              
-!!  * MOM_initialize calls initialize and does other initialization      
-!!    that does not warrant user modification.                         
-!!  * calculate_surface_state determines the surface (bulk mixed layer   
-!!    if traditional isoycnal vertical coordinate) properties of the     
-!!    current model state and packages pointers to these fields into an  
-!!    exported structure.                                                
-!!                                                                     
-!!    The remaining subroutines in this file (src/core/MOM.F90) are:   
-!!  * find_total_transport determines the barotropic mass transport.     
-!!  * register_diags registers many diagnostic fields for the dynamic    
-!!    solver, or of the main model variables.                          
-!!  * MOM_timing_init initializes various CPU time clocks.               
-!!  * write_static_fields writes out various time-invariant fields.      
-!!  * set_restart_fields is used to specify those fields that are        
-!!    written to and read from the restart file.                       
-!!                                                                     
-!!  Macros written all in capital letters are defined in MOM_memory.h. 
+!!  * src/user:
+!!    These are either stub routines that a user could use to change
+!!    the model's initial conditions or forcing, or are examples that
+!!    implement specific test cases.  These files can easily  be hand
+!!    edited to create new analytically specified configurations.
+!!
+!!
+!!  Most simulations can be set up by modifying only the files
+!!  MOM_input, and possibly one or two of the files in src/user.
+!!  In addition, the diag_table (MOM_diag_table) will commonly be
+!!  modified to tailor the output to the needs of the question at
+!!  hand.  The FMS utility mkmf works with a file called path_names
+!!  to build an appropriate makefile, and path_names should be edited
+!!  to reflect the actual location of the desired source code.
+!!
+!!
+!!  There are 3 publicly visible subroutines in this file (MOM.F90).
+!!  * step_MOM steps MOM over a specified interval of time.
+!!  * MOM_initialize calls initialize and does other initialization
+!!    that does not warrant user modification.
+!!  * calculate_surface_state determines the surface (bulk mixed layer
+!!    if traditional isoycnal vertical coordinate) properties of the
+!!    current model state and packages pointers to these fields into an
+!!    exported structure.
+!!
+!!    The remaining subroutines in this file (src/core/MOM.F90) are:
+!!  * find_total_transport determines the barotropic mass transport.
+!!  * register_diags registers many diagnostic fields for the dynamic
+!!    solver, or of the main model variables.
+!!  * MOM_timing_init initializes various CPU time clocks.
+!!  * write_static_fields writes out various time-invariant fields.
+!!  * set_restart_fields is used to specify those fields that are
+!!    written to and read from the restart file.
+!!
+!!  Macros written all in capital letters are defined in MOM_memory.h.
 !!
 !!  \section section_gridlayout MOM grid layout
-!! 
-!!  A small fragment of the grid is shown below:                    
+!!
+!!  A small fragment of the grid is shown below:
 !!
 !! \verbatim
-!!    j+1  x ^ x ^ x   
+!!    j+1  x ^ x ^ x
 !!
-!!    j+1  > o > o >  
+!!    j+1  > o > o >
 !!
-!!    j    x ^ x ^ x  
+!!    j    x ^ x ^ x
 !!
-!!    j    > o > o >  
+!!    j    > o > o >
 !!
 !!    j-1  x ^ x ^ x
 !!
 !!        i-1  i  i+1
 !!
-!!           i  i+1                                                    
+!!           i  i+1
 !!
 !! \endverbatim
 !!
@@ -3287,58 +3290,58 @@ end subroutine MOM_end
 !!  * > =  u, PFu, CAu, uh, diffu, taux, ubt, uhtr
 !!  * o =  h, bathyT, eta, T, S, tr
 !!
-!!  The boundaries always run through q grid points (x).               
-!!                                                                     
-!!  \section section_heat_budget Diagnosing MOM heat budget 
-!! 
+!!  The boundaries always run through q grid points (x).
+!!
+!!  \section section_heat_budget Diagnosing MOM heat budget
+!!
 !!  Here are some example heat budgets for the ALE version of MOM6.
 !!
-!!  \subsection subsection_2d_heat_budget Depth integrated heat budget 
+!!  \subsection subsection_2d_heat_budget Depth integrated heat budget
 !!
-!!  Depth integrated heat budget diagnostic for MOM.  
+!!  Depth integrated heat budget diagnostic for MOM.
 !!
-!! * OPOTTEMPTEND_2d = T_ADVECTION_XY_2d + OPOTTEMPPMDIFF_2d + HFDS + HFGEOU  
+!! * OPOTTEMPTEND_2d = T_ADVECTION_XY_2d + OPOTTEMPPMDIFF_2d + HFDS + HFGEOU
 !!
-!! * T_ADVECTION_XY_2d = horizontal advection 
-!! * OPOTTEMPPMDIFF_2d = neutral diffusion 
+!! * T_ADVECTION_XY_2d = horizontal advection
+!! * OPOTTEMPPMDIFF_2d = neutral diffusion
 !! * HFDS              = net surface boundary heat flux
-!! * HFGEOU            = geothermal heat flux 
+!! * HFGEOU            = geothermal heat flux
 !!
 !! * HFDS = net surface boundary heat flux entering the ocean
-!!        = rsntds + rlntds + hfls + hfss + heat_pme + hfsifrazil 
+!!        = rsntds + rlntds + hfls + hfss + heat_pme + hfsifrazil
 !!
-!! * More heat flux cross-checks 
+!! * More heat flux cross-checks
 !!   * hfds     = net_heat_coupler + hfsifrazil + heat_pme
-!!   * heat_pme = heat_content_surfwater 
+!!   * heat_pme = heat_content_surfwater
 !!              = heat_content_massin + heat_content_massout
 !!              = heat_content_fprec + heat_content_cond + heat_content_vprec
-!!               + hfrunoffds + hfevapds + hfrainds 
+!!               + hfrunoffds + hfevapds + hfrainds
 !!
-!!  \subsection subsection_3d_heat_budget Depth integrated heat budget 
+!!  \subsection subsection_3d_heat_budget Depth integrated heat budget
 !!
-!!  Here is an example 3d heat budget diagnostic for MOM.  
+!!  Here is an example 3d heat budget diagnostic for MOM.
 !!
 !! * OPOTTEMPTEND = T_ADVECTION_XY + TH_TENDENCY_VERT_REMAP + OPOTTEMPDIFF + OPOTTEMPPMDIFF
 !!                + BOUNDARY_FORCING_HEAT_TENDENCY + FRAZIL_HEAT_TENDENCY
 !!
 !! * OPOTTEMPTEND                   = net tendency of heat as diagnosed in MOM.F90
-!! * T_ADVECTION_XY                 = heating of a cell from lateral advection 
+!! * T_ADVECTION_XY                 = heating of a cell from lateral advection
 !! * TH_TENDENCY_VERT_REMAP         = heating of a cell from vertical remapping
-!! * OPOTTEMPDIFF                   = heating of a cell from diabatic diffusion  
-!! * OPOTTEMPPMDIFF                 = heating of a cell from neutral diffusion 
+!! * OPOTTEMPDIFF                   = heating of a cell from diabatic diffusion
+!! * OPOTTEMPPMDIFF                 = heating of a cell from neutral diffusion
 !! * BOUNDARY_FORCING_HEAT_TENDENCY = heating of cell from boundary fluxes
-!! * FRAZIL_HEAT_TENDENCY           = heating of cell from frazil 
+!! * FRAZIL_HEAT_TENDENCY           = heating of cell from frazil
 !!
 !! * TH_TENDENCY_VERT_REMAP has zero vertical sum, as it merely redistributes heat in vertical.
 !!
-!! * OPOTTEMPDIFF has zero vertical sum, as it merely redistributes heat in the vertical. 
+!! * OPOTTEMPDIFF has zero vertical sum, as it merely redistributes heat in the vertical.
 !!
-!! * BOUNDARY_FORCING_HEAT_TENDENCY generally has 3d structure, with k > 1 contributions from 
-!!   penetrative shortwave, and from other fluxes for the case when layers are tiny, in which 
-!!   case MOM6 partitions tendencies into k < 1 layers.   
+!! * BOUNDARY_FORCING_HEAT_TENDENCY generally has 3d structure, with k > 1 contributions from
+!!   penetrative shortwave, and from other fluxes for the case when layers are tiny, in which
+!!   case MOM6 partitions tendencies into k < 1 layers.
 !!
-!! * FRAZIL_HEAT_TENDENCY generally has 3d structure, since MOM6 frazil calculation checks the 
-!!   full ocean column. 
+!! * FRAZIL_HEAT_TENDENCY generally has 3d structure, since MOM6 frazil calculation checks the
+!!   full ocean column.
 !!
 !! * FRAZIL_HEAT_TENDENCY[k=@sum] = HFSIFRAZIL = column integrated frazil heating.
 !!

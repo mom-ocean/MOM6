@@ -71,7 +71,7 @@ type, public :: tidal_forcing_CS ; private
   logical :: use_sal_scalar ! If true, use the scalar approximation when
                       ! calculating self-attraction and loading.
   logical :: tidal_sal_from_file ! If true, Read the tidal self-attraction
-                      ! and loading from input files, specified 
+                      ! and loading from input files, specified
                       ! by TIDAL_INPUT_FILE.
   logical :: use_prev_tides ! If true, use the SAL from the previous
                       ! iteration of the tides to facilitate convergence.
@@ -90,7 +90,7 @@ type, public :: tidal_forcing_CS ; private
   real, pointer, dimension(:,:,:) :: &
     sin_struct => NULL(), &    ! The sine and cosine based structures that can
     cos_struct => NULL(), &    ! be associated with the astronomical forcing.
-    cosphasesal => NULL(), &   ! The cosine and sine of the phase of the 
+    cosphasesal => NULL(), &   ! The cosine and sine of the phase of the
     sinphasesal => NULL(), &   ! self-attraction and loading amphidromes.
     ampsal => NULL(), &        ! The amplitude of the SAL, in m.
     cosphase_prev => NULL(), & ! The cosine and sine of the phase of the
@@ -171,7 +171,7 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
     CS%sin_struct(i,j,3) = 0.0
     CS%cos_struct(i,j,3) = (0.5-1.5*sin(lat_rad(i,j))**2)
   enddo ; enddo
- 
+
   call get_param(param_file, mod, "TIDE_M2", use_M2, &
                  "If true, apply tidal momentum forcing at the M2 \n"//&
                  "frequency. This is only used if TIDES is true.", &

@@ -19,7 +19,7 @@ use PQM_functions, only : PQM_reconstruction, PQM_boundary_extrapolation_v1
 
 use P1M_functions, only : P1M_interpolation, P1M_boundary_extrapolation
 use P3M_functions, only : P3M_interpolation, P3M_boundary_extrapolation
-use MOM_remapping, only : remapping_core
+use MOM_remapping, only : remapping_core_w, remapping_core_h
 use MOM_remapping, only : remapping_CS
 use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
@@ -772,8 +772,8 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
         "Target densities must be set before buildGridRho is called.")
 
   ! Build grid based on target interface densities
-  do i = G%isc-1,G%iec+1
-    do j = G%jsc-1,G%jec+1
+  do j = G%jsc-1,G%jec+1
+    do i = G%isc-1,G%iec+1
 
       ! Copy T and S onto new variables so as to not alter the original values
       ! of T and S (these are remapped at the end of the regridding iterations
@@ -865,10 +865,10 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
         dx(1) = 0.
         dx(nz+1) = 0.
 
-        call remapping_core(remapCS, nz, h0, S_col, nz, dx, Tmp_col)
+        call remapping_core_w(remapCS, nz, h0, S_col, nz, dx, Tmp_col)
         S_col(:) = Tmp_col(:)
 
-        call remapping_core(remapCS, nz, h0, T_col, nz, dx, Tmp_col)
+        call remapping_core_w(remapCS, nz, h0, T_col, nz, dx, Tmp_col)
         T_col(:) = Tmp_col(:)
 
         ! Compute the deviation between two successive grids
@@ -941,8 +941,8 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
       endif
 #endif
 
-    end do  ! end loop on j
-  end do  ! end loop on i
+    end do  ! end loop on i
+  end do  ! end loop on j
 
 end subroutine buildGridRho
 

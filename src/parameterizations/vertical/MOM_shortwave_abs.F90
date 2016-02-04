@@ -30,7 +30,7 @@ implicit none ; private
 public absorbRemainingSW, sumSWoverBands
 
 type, public :: optics_type
-  ! ocean optical properties 
+  ! ocean optical properties
 
   integer :: nbands    ! number of penetrating bands of SW radiation
 
@@ -52,7 +52,7 @@ end type optics_type
 
 contains
 
-!> Apply shortwave heating below surface boundary layer. 
+!> Apply shortwave heating below surface boundary layer.
 subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
                              adjustAbsorptionProfile, absorbAllSW, T, Pen_SW_bnd, &
                              eps, ksort, htot, Ttot, TKE, dSV_dT)
@@ -85,7 +85,7 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
 
 ! Arguments:
 !  (in)    G            = the ocean grid structure.
-!  (in)    h            = the layer thicknesses, in m or kg m-2. 
+!  (in)    h            = the layer thicknesses, in m or kg m-2.
 !                         units of h are referred to as "H" below.
 !  (in)    opacity_band = opacity in each band of penetrating shortwave
 !                         radiation (1/H). The indicies are band, i, k.
@@ -176,7 +176,7 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
   h_heat(:) = 0.0
   if (present(htot)) then ; do i=is,ie ; h_heat(i) = htot(i) ; enddo ; endif
 
-  ! Apply penetrating SW radiation to remaining parts of layers.  
+  ! Apply penetrating SW radiation to remaining parts of layers.
   ! Excessively thin layers are not heated to avoid runaway temps.
   do ks=1,nz ; do i=is,ie
     k = ks
@@ -323,7 +323,7 @@ subroutine sumSWoverBands(G, h, opacity_band, nsw, j, dt, &
                           H_limit_fluxes, absorbAllSW, iPen_SW_bnd, netPen)
 ! This subroutine calculates the total shortwave heat flux integrated over
 ! bands as a function of depth.  This routine is only called for computing
-! buoyancy fluxes for use in KPP. This routine does not update the state. 
+! buoyancy fluxes for use in KPP. This routine does not update the state.
   type(ocean_grid_type),                 intent(in)    :: G
   real, dimension(NIMEM_,NKMEM_),        intent(in)    :: h
   real, dimension(:,:,:),                intent(in)    :: opacity_band
@@ -359,7 +359,7 @@ subroutine sumSWoverBands(G, h, opacity_band, nsw, j, dt, &
   real, dimension(size(iPen_SW_bnd,1),size(iPen_SW_bnd,2)) :: Pen_SW_bnd
   real :: SW_trans        ! fraction of shortwave radiation not
                           ! absorbed in a layer (nondimensional)
-  real :: unabsorbed      ! fraction of the shortwave radiation 
+  real :: unabsorbed      ! fraction of the shortwave radiation
                           ! not absorbed because the layers are too thin.
   real :: Ih_limit        ! inverse of the total depth at which the
                           ! surface fluxes start to be limited (1/H units)
@@ -379,7 +379,7 @@ subroutine sumSWoverBands(G, h, opacity_band, nsw, j, dt, &
   do i=is,ie ; h_heat(i) = 0.0 ; enddo
   netPen(:,1) = sum( pen_SW_bnd(:,:), dim=1 ) ! Surface interface
 
-  ! Apply penetrating SW radiation to remaining parts of layers.  
+  ! Apply penetrating SW radiation to remaining parts of layers.
   ! Excessively thin layers are not heated to avoid runaway temps.
   do k=1,nz
 

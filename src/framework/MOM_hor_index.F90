@@ -29,11 +29,11 @@ implicit none ; private
 public :: hor_index_init, assignment(=)
 
 type, public :: hor_index_type
-  integer :: isc, iec, jsc, jec     ! The range of the computational indices and 
+  integer :: isc, iec, jsc, jec     ! The range of the computational indices and
   integer :: isd, ied, jsd, jed     ! data indices at tracer cell centers.
   integer :: isg, ieg, jsg, jeg     ! The range of the global domain tracer cell indices.
-  integer :: IscB, IecB, JscB, JecB ! The range of the computational indices and 
-  integer :: IsdB, IedB, JsdB, JedB ! data indices at tracer cell vertices. 
+  integer :: IscB, IecB, JscB, JecB ! The range of the computational indices and
+  integer :: IsdB, IedB, JsdB, JedB ! data indices at tracer cell vertices.
   integer :: IsgB, IegB, JsgB, JegB ! The range of the global domain vertex indices.
   integer :: idg_offset             ! The offset between the corresponding global
   integer :: jdg_offset             ! and array indices.

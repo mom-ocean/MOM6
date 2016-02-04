@@ -1,4 +1,4 @@
-!> This module contains I/O framework code  
+!> This module contains I/O framework code
 module MOM_io
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -44,7 +44,7 @@ public :: READONLY_FILE, SINGLE_FILE, WRITEONLY_FILE
 public :: CENTER, CORNER, NORTH_FACE, EAST_FACE
 public :: var_desc, modify_vardesc, query_vardesc
 
-!> Type for describing a variable, typically a tracer 
+!> Type for describing a variable, typically a tracer
 type, public :: vardesc
   character(len=64)  :: name               !< Variable name in a NetCDF file
   character(len=48)  :: units              !< Physical dimensions of the variable
@@ -52,9 +52,9 @@ type, public :: vardesc
   character(len=8)   :: hor_grid           !< Horizontal grid:  u, v, h, q, Cu, Cv, T, Bu, or 1
   character(len=8)   :: z_grid             !< Vertical grid:  L, i, or 1
   character(len=8)   :: t_grid             !< Time description: s, p, or 1
-  character(len=64)  :: cmor_field_name    !< CMOR name 
+  character(len=64)  :: cmor_field_name    !< CMOR name
   character(len=64)  :: cmor_units         !< CMOR physical dimensions of the variable
-  real               :: conversion         !< for unit conversions, such as needed to 
+  real               :: conversion         !< for unit conversions, such as needed to
                                            !! convert from intensive to extensive
 end type vardesc
 
@@ -74,14 +74,14 @@ contains
 
 !> Routine creates a new NetCDF file.  It also sets up
 !! structures that describe this file and variables that will
-!! later be written to this file. Type for describing a variable, typically a tracer 
+!! later be written to this file. Type for describing a variable, typically a tracer
 subroutine create_file(unit, filename, vars, novars, G, fields, threading, timeunit)
   integer,               intent(out)   :: unit       !< unit id of an open file or -1 on a
                                                      !! nonwriting PE with single file output
   character(len=*),      intent(in)    :: filename   !< full path to the file to create
-  type(vardesc),         intent(in)    :: vars(:)    !< structures describing fields written to filename 
-  integer,               intent(in)    :: novars     !< number of fields written to filename  
-  type(ocean_grid_type), intent(in)    :: G          !< ocean grid structure 
+  type(vardesc),         intent(in)    :: vars(:)    !< structures describing fields written to filename
+  integer,               intent(in)    :: novars     !< number of fields written to filename
+  type(ocean_grid_type), intent(in)    :: G          !< ocean grid structure
   type(fieldtype),       intent(inout) :: fields(:)  !< array of fieldtypes for each variable
   integer, optional,     intent(in)    :: threading  !< SINGLE_FILE or MULTIPLE
   real, optional,        intent(in)    :: timeunit   !< length, in seconds, of the units for time. The
@@ -169,7 +169,7 @@ subroutine create_file(unit, filename, vars, novars, G, fields, threading, timeu
             "Only one value of the number of periods can be used in the "//&
             "create_file call for file "//trim(filename)//".  The second is "//&
             "variable "//trim(vars(k)%name)//" with t_grid "//vars(k)%t_grid )
-  
+
         num_periods = var_periods
       case ('1') ! Do nothing.
       case default
@@ -294,9 +294,9 @@ subroutine reopen_file(unit, filename, vars, novars, G, fields, threading, timeu
   integer,               intent(out)   :: unit       !< unit id of an open file or -1 on a
                                                      !! nonwriting PE with single file output
   character(len=*),      intent(in)    :: filename   !< full path to the file to create
-  type(vardesc),         intent(in)    :: vars(:)    !< structures describing fields written to filename 
-  integer,               intent(in)    :: novars     !< number of fields written to filename 
-  type(ocean_grid_type), intent(in)    :: G          !< ocean grid structure 
+  type(vardesc),         intent(in)    :: vars(:)    !< structures describing fields written to filename
+  integer,               intent(in)    :: novars     !< number of fields written to filename
+  type(ocean_grid_type), intent(in)    :: G          !< ocean grid structure
   type(fieldtype),       intent(inout) :: fields(:)  !< array of fieldtypes for each variable
   integer, optional,     intent(in)    :: threading  !< SINGLE_FILE or MULTIPLE
   real, optional,        intent(in)    :: timeunit   !< length, in seconds, of the units for time. The
@@ -439,7 +439,7 @@ function num_timelevels(filename, varname, min_dims) result(n_time)
         trim(filename)//" - "//trim(NF90_STRERROR(status)))
     deallocate(varids) ; return
   endif
-  
+
   do n = 1,nvars
     status = nf90_inquire_variable(ncid, varids(n), name=name)
     if (status /= NF90_NOERR) then
@@ -457,7 +457,7 @@ function num_timelevels(filename, varname, min_dims) result(n_time)
         varid = varids(n) ; found = .true.
       endif
     endif
-  enddo    
+  enddo
 
   deallocate(varids)
 
@@ -517,9 +517,9 @@ function var_desc(name, units, longname, hor_grid, z_grid, t_grid, &
   character(len=*), optional, intent(in) :: hor_grid           !< variable horizonal staggering
   character(len=*), optional, intent(in) :: z_grid             !< variable vertical staggering
   character(len=*), optional, intent(in) :: t_grid             !< time description: s, p, or 1
-  character(len=*), optional, intent(in) :: cmor_field_name    !< CMOR name 
+  character(len=*), optional, intent(in) :: cmor_field_name    !< CMOR name
   character(len=*), optional, intent(in) :: cmor_units         !< CMOR physical dimensions of variable
-  real            , optional, intent(in) :: conversion         !< for unit conversions, such as needed to 
+  real            , optional, intent(in) :: conversion         !< for unit conversions, such as needed to
                                                                !! convert from intensive to extensive
   character(len=*), optional, intent(in) :: caller             !< calling routine?
   type(vardesc)                          :: vd                 !< vardesc type that is created
@@ -527,14 +527,14 @@ function var_desc(name, units, longname, hor_grid, z_grid, t_grid, &
   character(len=120) :: cllr
   cllr = "var_desc"
   if (present(caller)) cllr = trim(caller)
-  
+
   call safe_string_copy(name, vd%name, "vd%name", cllr)
 
   vd%longname = "" ; vd%units = ""
   vd%hor_grid = 'h' ; vd%z_grid = 'L' ; vd%t_grid = 's'
 
-  vd%cmor_field_name  =  "" 
-  vd%cmor_units       =  "" 
+  vd%cmor_field_name  =  ""
+  vd%cmor_units       =  ""
   vd%conversion       =  1.0
 
   call modify_vardesc(vd, units=units, longname=longname, hor_grid=hor_grid, &
@@ -545,23 +545,23 @@ function var_desc(name, units, longname, hor_grid, z_grid, t_grid, &
 end function var_desc
 
 
-!> This routine modifies the named elements of a vardesc type. 
+!> This routine modifies the named elements of a vardesc type.
 !! All arguments are optional, except the vardesc type to be modified.
 subroutine modify_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid,&
                   cmor_field_name, cmor_units, conversion, caller)
   type(vardesc),              intent(inout) :: vd                 !< vardesc type that is modified
-  character(len=*), optional, intent(in)    :: name               !< name of variable 
-  character(len=*), optional, intent(in)    :: units              !< units of variable 
-  character(len=*), optional, intent(in)    :: longname           !< long name of variable 
-  character(len=*), optional, intent(in)    :: hor_grid           !< horizonal staggering of variable 
-  character(len=*), optional, intent(in)    :: z_grid             !< vertical staggering of variable 
-  character(len=*), optional, intent(in)    :: t_grid             !< time description: s, p, or 1 
-  character(len=*), optional, intent(in)    :: cmor_field_name    !< CMOR name 
+  character(len=*), optional, intent(in)    :: name               !< name of variable
+  character(len=*), optional, intent(in)    :: units              !< units of variable
+  character(len=*), optional, intent(in)    :: longname           !< long name of variable
+  character(len=*), optional, intent(in)    :: hor_grid           !< horizonal staggering of variable
+  character(len=*), optional, intent(in)    :: z_grid             !< vertical staggering of variable
+  character(len=*), optional, intent(in)    :: t_grid             !< time description: s, p, or 1
+  character(len=*), optional, intent(in)    :: cmor_field_name    !< CMOR name
   character(len=*), optional, intent(in)    :: cmor_units         !< CMOR physical dimensions of variable
-  real            , optional, intent(in)    :: conversion         !< for unit conversions, such as needed to 
+  real            , optional, intent(in)    :: conversion         !< for unit conversions, such as needed to
                                                                   !! convert from intensive to extensive
   character(len=*), optional, intent(in)    :: caller             !< calling routine?
-    
+
   character(len=120) :: cllr
   cllr = "mod_vardesc"
   if (present(caller)) cllr = trim(caller)
@@ -583,7 +583,7 @@ subroutine modify_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid,&
                                    "vd%cmor_field_name of "//trim(vd%name), cllr)
   if (present(cmor_units))          call safe_string_copy(cmor_units, vd%cmor_units,               &
                                    "vd%cmor_units of "//trim(vd%name), cllr)
-  
+
 end subroutine modify_vardesc
 
 
@@ -594,16 +594,16 @@ subroutine query_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
   character(len=*), optional, intent(out) :: name               !< name of variable
   character(len=*), optional, intent(out) :: units              !< units of variable
   character(len=*), optional, intent(out) :: longname           !< long name of variable
-  character(len=*), optional, intent(out) :: hor_grid           !< horiz staggering of variable 
-  character(len=*), optional, intent(out) :: z_grid             !< vert staggering of variable 
+  character(len=*), optional, intent(out) :: hor_grid           !< horiz staggering of variable
+  character(len=*), optional, intent(out) :: z_grid             !< vert staggering of variable
   character(len=*), optional, intent(out) :: t_grid             !< time description: s, p, or 1
-  character(len=*), optional, intent(out) :: cmor_field_name    !< CMOR name 
+  character(len=*), optional, intent(out) :: cmor_field_name    !< CMOR name
   character(len=*), optional, intent(out) :: cmor_units         !< CMOR physical dimensions of variable
-  real            , optional, intent(out) :: conversion         !< for unit conversions, such as needed to 
+  real            , optional, intent(out) :: conversion         !< for unit conversions, such as needed to
                                                                 !! convert from intensive to extensive
   character(len=*), optional, intent(in)  :: caller             !< calling routine?
-  
- 
+
+
   character(len=120) :: cllr
   cllr = "mod_vardesc"
   if (present(caller)) cllr = trim(caller)
@@ -625,11 +625,11 @@ subroutine query_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
                                    "vd%cmor_field_name of "//trim(vd%name), cllr)
   if (present(cmor_units))          call safe_string_copy(vd%cmor_units, cmor_units,                &
                                    "vd%cmor_units of "//trim(vd%name), cllr)
-  
+
 end subroutine query_vardesc
 
 
-!> Copies a string 
+!> Copies a string
 subroutine safe_string_copy(str1, str2, fieldnm, caller)
   character(len=*),           intent(in)  :: str1
   character(len=*),           intent(out) :: str2
@@ -705,7 +705,7 @@ function ensembler(name, ens_no_in) result(en_nm)
     tmp = en_nm(1:is-1)//trim(ens_num_char)//trim(en_nm(is+2:))
     en_nm = tmp
   enddo
-  
+
   if (index(name,"%") == 0) return
 
   write(ens_num_char, '(I10.10)') ens_no
@@ -776,7 +776,7 @@ end subroutine MOM_read_data_2d
 subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
                             timelevel, position)
   character(len=*),                 intent(in)    :: filename, fieldname
-  real, dimension(:,:,:),           intent(inout) :: data ! 2 dimensional data    
+  real, dimension(:,:,:),           intent(inout) :: data ! 2 dimensional data
   type(MOM_domain_type),            intent(in)    :: MOM_Domain
   integer,                optional, intent(in)    :: timelevel, position
 
@@ -786,9 +786,9 @@ subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
 end subroutine MOM_read_data_3d
 
 
-!> Initialize the MOM_io module 
+!> Initialize the MOM_io module
 subroutine MOM_io_init(param_file)
-  type(param_file_type), intent(in) :: param_file  !< structure indicating the open file to 
+  type(param_file_type), intent(in) :: param_file  !< structure indicating the open file to
                                                    !! parse for model parameter values.
 
 ! This include declares and sets the variable "version".
@@ -803,29 +803,29 @@ end subroutine MOM_io_init
 
 !> \namespace mom_io
 !!
-!!   This file contains a number of subroutines that manipulate        
-!!  NetCDF files and handle input and output of fields.  These         
-!!  subroutines, along with their purpose, are:                        
-!!                                                                     
-!!   * create_file: create a new file and set up structures that are     
-!!       needed for subsequent output and write out the coordinates.   
-!!   * reopen_file: reopen an existing file for writing and set up       
-!!       structures that are needed for subsequent output.             
-!!   * open_input_file: open the indicated file for reading only.        
-!!   * close_file: close an open file.                                   
-!!   * synch_file: flush the buffers, completing all pending output.     
-!!                                                                     
-!!   * write_field: write a field to an open file.                       
-!!   * write_time: write a value of the time axis to an open file.       
-!!   * read_field: read a field from an open file.                       
-!!   * read_time: read a time from an open file.                         
-!!                                                                     
-!!   * name_output_file: provide a name for an output file based on a    
-!!       name root and the time of the output.                         
-!!   * find_input_file: find a file that has been previously written by  
-!!       MOM and named by name_output_file and open it for reading.    
-!!                                                                     
-!!   * handle_error: write an error code and quit.                       
+!!   This file contains a number of subroutines that manipulate
+!!  NetCDF files and handle input and output of fields.  These
+!!  subroutines, along with their purpose, are:
+!!
+!!   * create_file: create a new file and set up structures that are
+!!       needed for subsequent output and write out the coordinates.
+!!   * reopen_file: reopen an existing file for writing and set up
+!!       structures that are needed for subsequent output.
+!!   * open_input_file: open the indicated file for reading only.
+!!   * close_file: close an open file.
+!!   * synch_file: flush the buffers, completing all pending output.
+!!
+!!   * write_field: write a field to an open file.
+!!   * write_time: write a value of the time axis to an open file.
+!!   * read_field: read a field from an open file.
+!!   * read_time: read a time from an open file.
+!!
+!!   * name_output_file: provide a name for an output file based on a
+!!       name root and the time of the output.
+!!   * find_input_file: find a file that has been previously written by
+!!       MOM and named by name_output_file and open it for reading.
+!!
+!!   * handle_error: write an error code and quit.
 
 
 

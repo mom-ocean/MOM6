@@ -63,7 +63,7 @@ type, public :: open_boundary_CS ; private
   real :: gamma_h  ! The relative weighting for the baroclinic radiation
                    ! velocities (or speed of characteristics) at the
                    ! new time level (1) or the running mean (0) for thicknesses.
-                   ! Valid values range from 0 to 1, with a default of 0.2. 
+                   ! Valid values range from 0 to 1, with a default of 0.2.
   real :: rx_max   ! The maximum magnitude of the baroclinic radiation
                    ! velocity (or speed of characteristics), in m s-1.  The
                    ! default value is 10 m s-1.
@@ -79,7 +79,7 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: u_new
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u_old
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: v_new
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v_old    
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v_old
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h_new
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h_old
   type(ocean_grid_type),                  intent(inout) :: G
@@ -102,63 +102,63 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
   gamma_u = CS%gamma_uv ; gamma_v = CS%gamma_uv ; gamma_h = CS%gamma_h
   rx_max = CS%rx_max ; ry_max = CS%rx_max
 
-  if (OBC%apply_OBC_u_flather_east .or. OBC%apply_OBC_u_flather_west) then   
+  if (OBC%apply_OBC_u_flather_east .or. OBC%apply_OBC_u_flather_west) then
     do k=1,nz ; do j=js,je ; do I=is-1,ie ; if (OBC%OBC_mask_u(I,j)) then
       if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) then
         dhdt = u_old(I-1,j,k)-u_new(I-1,j,k) !old-new
         dhdx = u_new(I-1,j,k)-u_new(I-2,j,k) !in new time backward sasha for I-1
         rx_new = 0.0
         if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max)
-        rx_avg = (1.0-gamma_u)*OBC%rx_old_u(I,j,k) + gamma_u*rx_new   
+        rx_avg = (1.0-gamma_u)*OBC%rx_old_u(I,j,k) + gamma_u*rx_new
         OBC%rx_old_u(I,j,k) = rx_avg
-        u_new(I,j,k) = (u_old(I,j,k) + rx_avg*u_new(I-1,j,k)) / (1.0+rx_avg) 
+        u_new(I,j,k) = (u_old(I,j,k) + rx_avg*u_new(I-1,j,k)) / (1.0+rx_avg)
 
     !   dhdt = h_old(I,j,k)-h_new(I,j,k) !old-new
     !   dhdx = h_new(I,j,k)-h_new(I-1,j,k) !in new time
     !   rx_new = 0.0
     !   if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max)
-    !   rx_avg = (1.0-gamma_h)*OBC%rx_old_h(I,j,k) + gamma_h*rx_new  
-    !   OBC%rx_old_h(I,j,k) = rx_avg	  
-    !	  h_new(I+1,j,k) = (h_old(I+1,j,k) + rx_avg*h_new(I,j,k)) / (1.0+rx_avg) !original	  
-      endif     
+    !   rx_avg = (1.0-gamma_h)*OBC%rx_old_h(I,j,k) + gamma_h*rx_new
+    !   OBC%rx_old_h(I,j,k) = rx_avg
+    !    h_new(I+1,j,k) = (h_old(I+1,j,k) + rx_avg*h_new(I,j,k)) / (1.0+rx_avg) !original
+      endif
       if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W) then
         dhdt = u_old(I+1,j,k)-u_new(I+1,j,k) !old-new
         dhdx = u_new(I+1,j,k)-u_new(I+2,j,k) !in new time backward sasha for I+1
         rx_new = 0.0
         if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max)
-        rx_avg = (1.0-gamma_u)*OBC%rx_old_u(I,j,k) + gamma_u*rx_new   
+        rx_avg = (1.0-gamma_u)*OBC%rx_old_u(I,j,k) + gamma_u*rx_new
         OBC%rx_old_u(I,j,k) = rx_avg
         u_new(I,j,k) = (u_old(I,j,k) + rx_avg*u_new(I+1,j,k)) / (1.0+rx_avg)
 
     !   dhdt = h_old(I+1,j,k)-h_new(I+1,j,k) !old-new
-    !   dhdx = h_new(I+1,j,k)-h_new(I+2,j,k) !in new time 
+    !   dhdx = h_new(I+1,j,k)-h_new(I+2,j,k) !in new time
     !   rx_new = 0.0
     !   if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max)
     !   rx_avg = (1.0-gamma_h)*OBC%rx_old_h(I,j,k) + gamma_h*rx_new
     !   OBC%rx_old_h(I,j,k) = rx_avg
-    !   h_new(I,j,k) = (h_old(I,j,k) + rx_avg*h_new(I+1,j,k)) / (1.0+rx_avg) !original      
-      endif     
-    endif ; enddo ; enddo ; enddo      
+    !   h_new(I,j,k) = (h_old(I,j,k) + rx_avg*h_new(I+1,j,k)) / (1.0+rx_avg) !original
+      endif
+    endif ; enddo ; enddo ; enddo
   endif
 
-  if (OBC%apply_OBC_v_flather_north .or. OBC%apply_OBC_v_flather_south) then   
+  if (OBC%apply_OBC_v_flather_north .or. OBC%apply_OBC_v_flather_south) then
     do k=1,nz ; do J=js-1,je ; do i=is,ie ; if (OBC%OBC_mask_v(i,J)) then
       if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) then
         dhdt = v_old(i,J-1,k)-v_new(i,J-1,k) !old-new
         dhdx = v_new(i,J-1,k)-v_new(i,J-2,k) !in new time backward sasha for J-1
         rx_new = 0.0
         if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max)
-        rx_avg = (1.0-gamma_v)*OBC%ry_old_v(i,J,k) + gamma_v*rx_new   
+        rx_avg = (1.0-gamma_v)*OBC%ry_old_v(i,J,k) + gamma_v*rx_new
         OBC%ry_old_v(i,J,k) = rx_avg
-        v_new(i,J,k) = (v_old(I,j,k) + rx_avg*v_new(i,J-1,k)) / (1.0+rx_avg) 
+        v_new(i,J,k) = (v_old(I,j,k) + rx_avg*v_new(i,J-1,k)) / (1.0+rx_avg)
 
     !   dhdt = h_old(i,J,k)-h_new(i,J,k) !old-new
     !   dhdx = h_new(i,J,k)-h_new(i,J-1,k) !in new time
     !   rx_new = 0.0
     !   if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max)
-    !   rx_avg = (1.0-gamma_h)*OBC%ry_old_h(i,J,k) + gamma_h*rx_new 	  
-    !   OBC%ry_old_h(i,J,k) = rx_avg	  
-    !	  h_new(i,J+1,k) = (h_old(i,J+1,k) + rx_avg*h_new(i,J,k)) / (1.0+rx_avg) !original	  
+    !   rx_avg = (1.0-gamma_h)*OBC%ry_old_h(i,J,k) + gamma_h*rx_new
+    !   OBC%ry_old_h(i,J,k) = rx_avg
+    !   h_new(i,J+1,k) = (h_old(i,J+1,k) + rx_avg*h_new(i,J,k)) / (1.0+rx_avg) !original
       endif
 
       if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S) then
@@ -166,20 +166,20 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
         dhdx = v_new(i,J+1,k)-v_new(i,J+2,k) !in new time backward sasha for J+1
         rx_new = 0.0
         if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max)
-        rx_avg = (1.0-gamma_v)*OBC%ry_old_v(i,J,k) + gamma_v*rx_new   
+        rx_avg = (1.0-gamma_v)*OBC%ry_old_v(i,J,k) + gamma_v*rx_new
         OBC%ry_old_v(i,J,k) = rx_avg
-        v_new(i,J,k) = (v_old(I,j,k) + rx_avg*v_new(i,J+1,k)) / (1.0+rx_avg) 
+        v_new(i,J,k) = (v_old(I,j,k) + rx_avg*v_new(i,J+1,k)) / (1.0+rx_avg)
 
     !   dhdt = h_old(i,J+1,k)-h_new(i,J+1,k) !old-new
     !   dhdx = h_new(i,J+1,k)-h_new(i,J+2,k) !in new time
     !   rx_new = 0.0
     !   if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max)
-    !   rx_avg = (1.0-gamma_h)*OBC%ry_old_h(i,J,k) + gamma_h*rx_new 	  
-    !   OBC%ry_old_h(i,J,k) = rx_avg	  
-    !	  h_new(i,J,k) = (h_old(i,J,k) + rx_avg*h_new(i,J+1,k)) / (1.0+rx_avg) !original	  
+    !   rx_avg = (1.0-gamma_h)*OBC%ry_old_h(i,J,k) + gamma_h*rx_new
+    !   OBC%ry_old_h(i,J,k) = rx_avg
+    !   h_new(i,J,k) = (h_old(i,J,k) + rx_avg*h_new(i,J+1,k)) / (1.0+rx_avg) !original
       endif
 
-    endif ; enddo ; enddo ; enddo      
+    endif ; enddo ; enddo ; enddo
   endif
 
   call cpu_clock_begin(id_clock_pass)

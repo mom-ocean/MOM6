@@ -112,7 +112,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
 !  limited to give positive definiteness, and the diffusivities are
 !  limited to guarantee stability.
 
-! Arguments: 
+! Arguments:
 !  (in/out)  h      - layer thickness (meter)
 !  (in/out)  uhtr   - accumulated zonal mass fluxes (m2 H)
 !  (in/out)  vhtr   - accumulated meridional mass fluxes (m2 H)
@@ -150,15 +150,15 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
   real, allocatable, save :: KH_u_CFL(:,:)   ! The maximum stable interface height
   real, allocatable, save :: KH_v_CFL(:,:)   ! diffusivity at u & v grid points (m2 s-1)
   logical, save :: first_call = .TRUE.
-  real :: Khth_Loc_u(SZIB_(G), SZJ_(G)) 
+  real :: Khth_Loc_u(SZIB_(G), SZJ_(G))
   real :: Khth_Loc(SZIB_(G), SZJB_(G))  ! locally calculated thickness diffusivity (m2/s)
   logical :: use_VarMix, Resoln_scaled, use_stored_slopes
   integer :: i, j, k, is, ie, js, je, nz
   logical :: MEKE_not_null
   real :: hu(SZI_(G), SZJ_(G))       ! u-thickness (H)
   real :: hv(SZI_(G), SZJ_(G))       ! v-thickness (H)
-  real :: KH_u_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities (m2/sec)     
-  real :: KH_v_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities (m2/sec)     
+  real :: KH_u_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities (m2/sec)
+  real :: KH_v_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities (m2/sec)
 
   if (.not. ASSOCIATED(CS)) call MOM_error(FATAL, "MOM_thickness_diffuse:"// &
          "Module must be initialized before it is used.")
@@ -185,12 +185,12 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
   if(first_call) then
     allocate(KH_u_CFL(SZIB_(G), SZJ_(G)) )
     allocate(KH_v_CFL(SZI_(G), SZJB_(G)) )
-!$OMP parallel do default(none) shared(is,ie,js,je,KH_u_CFL,dt,G)
+!$OMP parallel do default(none) shared(is,ie,js,je,KH_u_CFL,dt,G,CS)
     do j=js,je ; do I=is-1,ie
       KH_u_CFL(I,j) = (0.25*CS%max_Khth_CFL) /  &
         (dt*(G%IdxCu(I,j)*G%IdxCu(I,j) + G%IdyCu(I,j)*G%IdyCu(I,j)))
     enddo ; enddo
-!$OMP parallel do default(none) shared(is,ie,js,je,KH_v_CFL,dt,G)
+!$OMP parallel do default(none) shared(is,ie,js,je,KH_v_CFL,dt,G,CS)
     do j=js-1,je ; do I=is,ie
       KH_v_CFL(i,J) = (0.25*CS%max_Khth_CFL) / &
         (dt*(G%IdxCv(i,J)*G%IdxCv(i,J) + G%IdyCv(i,J)*G%IdyCv(i,J)))
@@ -211,7 +211,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
   enddo ; enddo
 
   if (use_VarMix) then
-!$OMP do 
+!$OMP do
     do j=js,je ; do I=is-1,ie
       Khth_Loc_u(i,j) = Khth_Loc_u(i,j) + CS%KHTH_Slope_Cff*VarMix%L2u(I,j)*VarMix%SN_u(I,j)
     enddo ; enddo
@@ -377,34 +377,34 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
     if (CS%id_KH_v1 > 0)  call post_data(CS%id_KH_v1, KH_v(:,:,1), CS%diag)
 
     ! Diagnose diffusivity at T-cell point.  Do simple average, rather than
-    ! thickness-weighted average, in order that KH_t is depth-independent 
+    ! thickness-weighted average, in order that KH_t is depth-independent
     ! in the case where KH_u and KH_v are depth independent.  Otherwise,
     ! if use thickess weighted average, the variations of thickness with
-    ! depth will place a spurious depth dependence to the diagnosed KH_t.  
-    if (CS%id_KH_t > 0 .or. CS%id_KH_t1 > 0) then    
-      do k=1,nz 
-        ! thicknesses across u and v faces, converted to 0/1 mask; 
-        ! layer average of the interface diffusivities KH_u and KH_v 
+    ! depth will place a spurious depth dependence to the diagnosed KH_t.
+    if (CS%id_KH_t > 0 .or. CS%id_KH_t1 > 0) then
+      do k=1,nz
+        ! thicknesses across u and v faces, converted to 0/1 mask;
+        ! layer average of the interface diffusivities KH_u and KH_v
         do j=js,je ; do I=is-1,ie
           hu(i,j)       = 2.0*h(i,j,k)*h(i+1,j,k)/(h(i,j,k)+h(i+1,j,k)+G%H_subroundoff)
           if(hu(i,j) /= 0.0) hu(i,j) = 1.0
-          KH_u_lay(i,j) = 0.5*(KH_u(i,j,k)+KH_u(i,j,k+1)) 
-        enddo ; enddo 
+          KH_u_lay(i,j) = 0.5*(KH_u(i,j,k)+KH_u(i,j,k+1))
+        enddo ; enddo
         do J=js-1,je ; do i=is,ie
           hv(i,j)       = 2.0*h(i,j,k)*h(i,j+1,k)/(h(i,j,k)+h(i,j+1,k)+G%H_subroundoff)
           if(hv(i,j) /= 0.0) hv(i,j) = 1.0
-          KH_v_lay(i,j) = 0.5*(KH_v(i,j,k)+KH_v(i,j,k+1)) 
-        enddo ; enddo 
-        ! diagnose diffusivity at T-point 
+          KH_v_lay(i,j) = 0.5*(KH_v(i,j,k)+KH_v(i,j,k+1))
+        enddo ; enddo
+        ! diagnose diffusivity at T-point
         do j=js,je ; do i=is,ie
           KH_t(i,j,k) = ((hu(i-1,j)*KH_u_lay(i-1,j)+hu(i,j)*KH_u_lay(i,j))  &
                         +(hv(i,j-1)*KH_v_lay(i,j-1)+hv(i,j)*KH_v_lay(i,j))) &
                        / (hu(i-1,j)+hu(i,j)+hv(i,j-1)+hv(i,j)+G%H_subroundoff)
-        enddo ; enddo 
+        enddo ; enddo
       enddo
       if(CS%id_KH_t  > 0) call post_data(CS%id_KH_t,  KH_t,        CS%diag)
       if(CS%id_KH_t1 > 0) call post_data(CS%id_KH_t1, KH_t(:,:,1), CS%diag)
-    endif 
+    endif
 
   endif
 
@@ -565,7 +565,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
     pres(i,j,2) = pres(i,j,1) + G%H_to_Pa*h(i,j,1)
   enddo ; enddo
 !$OMP do
-  do j=js-1,je+1 
+  do j=js-1,je+1
     do k=2,nz ; do i=is-1,ie+1
       h_avail(i,j,k) = max(I4dt*G%areaT(i,j)*(h(i,j,k)-G%Angstrom),0.0)
       h_avail_rsum(i,j,k+1) = h_avail_rsum(i,j,k) + h_avail(i,j,k)
@@ -778,7 +778,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
             (uhD(I,j,K) * drdiB) * 0.25 * &
             ((e(i,j,K) + e(i,j,K+1)) + (e(i+1,j,K) + e(i+1,j,K+1))) )
       endif
-      
+
     enddo
   enddo ; enddo ! end of j-loop
 
@@ -981,7 +981,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
 !$OMP                                  Work_u,G_scale,use_EOS,e)   &
 !$OMP                          private(pres_u,T_u,S_u,drho_dT_u,drho_dS_u,drdiB)
     do j=js,je
-      if (use_EOS) then 
+      if (use_EOS) then
         do I=is-1,ie
           pres_u(I) = 0.5*(pres(i,j,1) + pres(i+1,j,1))
           T_u(I) = 0.5*(T(i,j,1) + T(i+1,j,1))
@@ -1000,7 +1000,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
         Work_u(I,j) = Work_u(I,j) + G_scale * ( (uhD(I,j,1) * drdiB) * 0.25 * &
             ((e(i,j,1) + e(i,j,2)) + (e(i+1,j,1) + e(i+1,j,2))) )
 
-      enddo 
+      enddo
     enddo
 
     do J=js-1,je
@@ -1022,7 +1022,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
         endif
         Work_v(i,J) = Work_v(i,J) - G_scale * ( (vhD(i,J,1) * drdjB) * 0.25 * &
             ((e(i,j,1) + e(i,j,2)) + (e(i,j+1,1) + e(i,j+1,2))) )
-      enddo 
+      enddo
     enddo
   endif
 
@@ -1111,7 +1111,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, CS
                     ! and the ratio of the face length to the adjacent cell
                     ! areas for comparability with the diffusivities, in m2 s-1.
   real :: adH       ! The absolute value of dH, in m2 s-1.
-  real :: sign      ! 1 or -1, with the same sign as the layer thickness gradient. 
+  real :: sign      ! 1 or -1, with the same sign as the layer thickness gradient.
   real :: sl_K      ! The sign-corrected slope of the interface above, ND.
   real :: sl_Kp1    ! The sign-corrected slope of the interface below, ND.
   real :: I_sl_K    ! The (limited) inverse of sl_K, ND.
@@ -1211,13 +1211,13 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, CS
   enddo
 
   ! Limit the diffusivities
-  
+
   I_4t = Kh_scale / (4.0*dt)
 
   do n=1,2
     if (n==1) then ; jsh = js ; ish = is-1
     else ; jsh = js-1 ; ish = is ; endif
-  
+
     do j=jsh,je
 
       ! First, populate the diffusivities
@@ -1309,7 +1309,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, CS
             Kh_max_p(I,K) = 1.0 ; Kh0_max_p(I,K) = 0.0
           elseif (sl_K <= 0.0) then   ! Both slopes are opposite to dH
             I_sl = -1.0 / sl_Kp1
-            Rsl = -sl_K * I_sl                            ! 0 <= Rsl < 1 
+            Rsl = -sl_K * I_sl                            ! 0 <= Rsl < 1
             IRsl = 1e9 ; if (Rsl > 1e-9) IRsl = 1.0/Rsl   ! 1 < IRsl <= 1e9
 
             Fn_R = Rsl
@@ -1336,7 +1336,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, CS
             Kh_min_max_m(I,K+1) = max(Kh_min_max_m(I,K+1), Kh_max)
           else ! Both slopes are of the same sign as dH.
             I_sl = 1.0 / sl_K
-            Rsl = sl_Kp1 * I_sl                           ! 0 <= Rsl < 1 
+            Rsl = sl_Kp1 * I_sl                           ! 0 <= Rsl < 1
             IRsl = 1e9 ; if (Rsl > 1e-9) IRsl = 1.0/Rsl   ! 1 < IRsl <= 1e9
 
             ! Rsl <= Fn_R <= 1
@@ -1353,7 +1353,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, CS
       endif ; enddo ; enddo ! I-loop & k-loop
 
       do k=k_top,nz+1,nz+1-k_top ; do i=ish,ie ; if (do_i(i)) then
-        ! The diffusivities at k_top and nz+1 are both fixed. 
+        ! The diffusivities at k_top and nz+1 are both fixed.
         Kh_min_m(I,k) = 0.0 ; Kh0_min_m(I,k) = 0.0
         Kh_max_m(I,k) = 0.0 ; Kh0_max_m(I,k) = 0.0
         Kh_min_p(I,k) = 0.0 ; Kh0_min_p(I,k) = 0.0
@@ -1361,7 +1361,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, CS
         Kh_min_max_p(I,K) = Kh_bg(I,K)
         Kh_min_max_m(I,K) = Kh_bg(I,K)
       endif ; enddo ; enddo ! I-loop and k_top/nz+1 loop
- 
+
       ! Search for Kh that satisfy...
       !    Kh(I,K) >= Kh_min_m(I,K)*Kh(I,K-1) + Kh0_min_m(I,K)
       !    Kh(I,K) >= Kh_min_p(I,K)*Kh(I,K+1) + Kh0_min_p(I,K)
@@ -1623,7 +1623,7 @@ subroutine thickness_diffuse_init(Time, G, param_file, diag, CDp, CS)
     call get_param(param_file, mod, "DETANGLE_TIMESCALE", CS%detangle_time, &
                  "A timescale over which maximally jagged grid-scale \n"//&
                  "thickness variations are suppressed.  This must be \n"//&
-                 "longer than DT, or 0 to use DT.", units = "s", default=0.0) 
+                 "longer than DT, or 0 to use DT.", units = "s", default=0.0)
   call get_param(param_file, mod, "KHTH_SLOPE_MAX", CS%slope_max, &
                  "A slope beyond which the calculated isopycnal slope is \n"//&
                  "not reliable and is scaled away.", units="nondim", default=0.01)
@@ -1666,7 +1666,7 @@ subroutine thickness_diffuse_init(Time, G, param_file, diag, CDp, CS)
 
   CS%id_KH_u1 = register_diag_field('ocean_model', 'KHTH_u1', diag%axesCu1, Time,         &
            'Parameterized mesoscale eddy advection diffusivity at U-points (2-D)', 'meter second-2')
-  CS%id_KH_v1 = register_diag_field('ocean_model', 'KHTH_v1', diag%axesCv1, Time,         &  
+  CS%id_KH_v1 = register_diag_field('ocean_model', 'KHTH_v1', diag%axesCv1, Time,         &
            'Parameterized mesoscale eddy advection diffusivity at V-points (2-D)', 'meter second-2')
   CS%id_KH_t1 = register_diag_field('ocean_model', 'KHTH_t1', diag%axesT1, Time,&
            'Parameterized mesoscale eddy advection diffusivity at T-points (2-D)', 'meter second-2')

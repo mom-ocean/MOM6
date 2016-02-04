@@ -221,7 +221,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS, hu, hv)
                  (G%areaCv(i,J-1)*drag_vel_v(i,J-1) + &
                   G%areaCv(i,J)*drag_vel_v(i,J)) ) )
       enddo ; enddo
-    else 
+    else
 !$OMP do
       do j=js,je ; do i=is,ie
         drag_rate_visc(i,j) = 0.
@@ -646,7 +646,7 @@ subroutine MEKE_equilibrium(CS, MEKE, G, SN_u, SN_v, drag_rate_visc, I_mass)
         endif
         if (n2>200) stop 'Failing to converge?'
       enddo ! while(EKEmax-EKEmin>tolerance)
-      
+
     else
       EKE = 0.
     endif

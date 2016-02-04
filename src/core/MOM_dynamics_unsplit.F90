@@ -512,8 +512,8 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   endif
   do k=1,nz ; do j=js,je ; do i=is,ie
     eta_av(i,j) = eta_av(i,j) + h_av(i,j,k)
-  enddo ; enddo ; enddo 
-  
+  enddo ; enddo ; enddo
+
   if (dyn_p_surf) deallocate(p_surf)
 
 !   Here various terms used in to update the momentum equations are
@@ -704,7 +704,7 @@ end subroutine initialize_dyn_unsplit
 subroutine end_dyn_unsplit(CS)
   type(MOM_dyn_unsplit_CS), pointer :: CS
 !  (inout)    CS - The control structure set up by initialize_dyn_unsplit.
-  
+
   DEALLOC_(CS%diffu) ; DEALLOC_(CS%diffv)
   DEALLOC_(CS%CAu)   ; DEALLOC_(CS%CAv)
   DEALLOC_(CS%PFu)   ; DEALLOC_(CS%PFv)

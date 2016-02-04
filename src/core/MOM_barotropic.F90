@@ -285,7 +285,7 @@ type, public :: barotropic_CS ; private
                              ! truncated to maxvel, in m s-1.
   real    :: CFL_trunc       ! If clip_velocity is true, velocity components will
                              ! be truncated when they are large enough that the
-                             ! corresponding CFL number exceeds this value, nondim. 
+                             ! corresponding CFL number exceeds this value, nondim.
   real    :: maxCFL_BT_cont  ! The maximum permitted CFL number associated with the
                              ! barotropic accelerations from the summed velocities
                              ! times the time-derivatives of thicknesses.  The
@@ -334,7 +334,7 @@ type, public :: barotropic_CS ; private
   integer :: id_BTC_FA_v_NN = -1, id_BTC_FA_v_N0 = -1, id_BTC_FA_v_S0 = -1, id_BTC_FA_v_SS = -1
   integer :: id_BTC_vbt_NN = -1, id_BTC_vbt_SS = -1
   integer :: id_uhbt0 = -1, id_vhbt0 = -1
-  
+
 end type barotropic_CS
 
 type, private :: local_BT_cont_u_type
@@ -752,7 +752,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     trans_wt1 = (1.0 + be_proj); trans_wt2 = -be_proj
   else
     trans_wt1 = bebt ;           trans_wt2 = (1.0-bebt)
-  endif 
+  endif
 
   do_hifreq_output = .false.
   if ((CS%id_ubt_hifreq > 0) .or. (CS%id_vbt_hifreq > 0) .or. &
@@ -783,7 +783,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     call create_group_pass(CS%pass_eta_bt_rem, eta_PF_1, CS%BT_Domain)
     call create_group_pass(CS%pass_eta_bt_rem, d_eta_PF, CS%BT_Domain)
   else
-    !   eta_PF_in had correct values in its halos, so only update eta_PF with 
+    !   eta_PF_in had correct values in its halos, so only update eta_PF with
     ! extra-wide halo arrays.  This could have started almost immediately.
     if ((G%isd > CS%isdw) .or. (G%jsd > CS%jsdw)) &
       call create_group_pass(CS%pass_eta_bt_rem, eta_PF, CS%BT_Domain)
@@ -1677,9 +1677,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     if (apply_OBCs) then
       if (MOD(n+G%first_direction,2)==1) then
         ioff = 1; joff = 0
-      else        
+      else
         ioff = 0; joff = 1
-      endif 
+      endif
 
       if (apply_u_OBCs) then  ! save the old value of vbt and vhbt
 !$OMP parallel do default(none) shared(isv,iev,jsv,jev,ioff,joff,ubt_prev,ubt,uhbt_prev,  &
@@ -1946,7 +1946,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
             vbt_sum(i,J)=vbt_sum_prev(i,J); vhbt_sum(i,J)=vhbt_sum_prev(i,J) ; vbt_wtd(i,J)=vbt_wtd_prev(i,J)
           endif
         enddo ; enddo
-      endif    
+      endif
 
       call apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, &
            ubt_trans, vbt_trans, eta, ubt_old, vbt_old, BT_OBC, &
@@ -2160,7 +2160,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 
     if (CS%id_frhatu1 > 0) call post_data(CS%id_frhatu1, CS%frhatu1, CS%diag)
     if (CS%id_frhatv1 > 0) call post_data(CS%id_frhatv1, CS%frhatv1, CS%diag)
-    
+
     if (use_BT_cont) then
       if (CS%id_BTC_FA_u_EE > 0) call post_data(CS%id_BTC_FA_u_EE, BT_cont%FA_u_EE, CS%diag)
       if (CS%id_BTC_FA_u_E0 > 0) call post_data(CS%id_BTC_FA_u_E0, BT_cont%FA_u_E0, CS%diag)
@@ -4011,7 +4011,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
     CS%IdyCv(I,j) = G%IdyCv(I,j) ; CS%dx_Cv(i,J) = G%dx_Cv(i,J)
   enddo ; enddo
   call create_group_pass(pass_static_data, CS%IareaT, CS%BT_domain, To_All)
-  call create_group_pass(pass_static_data, CS%bathyT, CS%BT_domain, To_All) 
+  call create_group_pass(pass_static_data, CS%bathyT, CS%BT_domain, To_All)
   call create_group_pass(pass_static_data, CS%IdxCu, CS%IdyCv, CS%BT_domain, &
                          To_All+Scalar_Pair)
   call create_group_pass(pass_static_data, CS%dy_Cu, CS%dx_Cv, CS%BT_domain, &

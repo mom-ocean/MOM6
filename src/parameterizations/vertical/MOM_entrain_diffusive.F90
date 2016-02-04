@@ -359,7 +359,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
       ! interface and causes thin and relatively light interior layers to be
       ! entrained by the deepest buffer layer.  This also determines kb.
       call set_Ent_bl(h, dtKd_int, tv, kb, kmb, do_i, G, CS, j, Ent_bl, Sref, h_bl)
-      
+
       do i=is,ie
         dtKd_kb(i) = 0.0 ; if (kb(i) < nz) dtKd_kb(i) = dtKd(i,kb(i))
       enddo
@@ -635,12 +635,12 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
                              dFdfm_kb=dFdfm_kb)
         do i=is1,ie1
           if (do_i(i) .and. (kb(i) < nz)) F(i,kb(i)) = F_kb(i)
-        enddo                   
+        enddo
       endif
 
 ! Determine whether to do another iteration.
       if (it < CS%max_ent_it-1) then
-      
+
         reiterate = .false.
         if (CS%bulkmixedlayer) then ; do i=is1,ie1 ; if (do_i(i)) then
           eb_kmb(i) = max(2.0*Ent_bl(i,Kmb+1) - eakb(i), 0.0)
@@ -879,7 +879,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
         Kd_eff(i,j,nz) = G%H_to_m**2 * (dtKd(i,nz)*Idt)
       enddo
     endif
-    
+
     if (CS%id_diff_work > 0) then
       do i=is,ie ; diff_work(i,j,1) = 0.0 ; diff_work(i,j,nz+1) = 0.0 ; enddo
       if (associated(tv%eqn_of_state)) then
@@ -1129,7 +1129,7 @@ subroutine set_Ent_bl(h, dtKd_int, tv, kb, kmb, do_i, G, CS, j, Ent_bl, Sref, h_
   enddo ; enddo
 
   !   Determine the coordinate density of the bottommost buffer layer if there
-  ! is no entrainment from the layers below.  This is a partial solver, based 
+  ! is no entrainment from the layers below.  This is a partial solver, based
   ! on the first pass of a tridiagonal solver, as the values in the upper buffer
   ! layers are not needed.
 
@@ -1176,7 +1176,7 @@ subroutine set_Ent_bl(h, dtKd_int, tv, kb, kmb, do_i, G, CS, j, Ent_bl, Sref, h_
  !    This is where variables are be set up with a different vertical grid
  !  in which the (newly?) massless layers are taken out.
   do k=nz,kmb+1,-1 ; do i=is,ie
-    if (k >= kb(i)) h_interior(i) = h_interior(i) + (h(i,j,k)-G%Angstrom) 
+    if (k >= kb(i)) h_interior(i) = h_interior(i) + (h(i,j,k)-G%Angstrom)
     if (k==kb(i)) then
       h_bl(i,kmb+1) = h(i,j,k) ; Sref(i,kmb+1) = G%Rlay(k) - 1000.0
     elseif (k==kb(i)+1) then
@@ -1250,7 +1250,7 @@ subroutine determine_dSkb(h_bl, Sref, Ent_bl, E_kb, is, ie, kmb, G, limit, &
 !   The density difference across the first interior layer may also be returned.
 ! It could also be limited to avoid negative values or values that greatly
 ! exceed the density differences across an interface.
-!   Additionally, the partial derivatives of dSkb and dSlay with E_kb could 
+!   Additionally, the partial derivatives of dSkb and dSlay with E_kb could
 ! also be returned.
   real, dimension(SZI_(G),SZK_(G)) :: &
     b1, c1, &       ! b1 and c1 are variables used by the tridiagonal solver.
@@ -1365,7 +1365,7 @@ subroutine determine_dSkb(h_bl, Sref, Ent_bl, E_kb, is, ie, kmb, G, limit, &
     if (present(ddSkb_dE)) then ; do i=is,ie ; if (do_i(i)) then
       ddSkb_dE(i) = -1.0*dS_dE(i,kmb)
     endif ; enddo ; endif
-    
+
     if (present(dSlay)) then ; do i=is,ie ; if (do_i(i)) then
       dSlay(i) = 0.5 * (Sref(i,kmb+2) - S(i,kmb))
     endif ; enddo ; endif
@@ -1446,7 +1446,7 @@ subroutine F_kb_to_ea_kb(h_bl, Sref, Ent_bl, I_dSkbp1, F_kb, kmb, i, &
   type(entrain_diffusive_CS),  pointer       :: CS
   real, dimension(NIMEM_),     intent(inout) :: ea_kb
   real,                        intent(in), optional :: tol_in
-  
+
   !   Given an entrainment from below for layer kb, determine a consistent
   ! entrainment from above, such that dSkb * ea_kb = dSkbp1 * F_kb.  The input
   ! value of ea_kb is both the maximum value that can be obtained and the first
@@ -1468,7 +1468,7 @@ subroutine F_kb_to_ea_kb(h_bl, Sref, Ent_bl, I_dSkbp1, F_kb, kmb, i, &
   max_ea = ea_kb(i) ; min_ea = 0.0
   val = dS_kbp1 * F_kb(i)
   err_min = -val
-  
+
   tolerance = G%m_to_H * CS%Tolerance_Ent
   if (present(tol_in)) tolerance = tol_in
   bisect_next = .true.
@@ -1481,7 +1481,7 @@ subroutine F_kb_to_ea_kb(h_bl, Sref, Ent_bl, I_dSkbp1, F_kb, kmb, i, &
   ! Return if Newton's method on the first guess would give a tolerably small
   ! change in the value of ea_kb.
   if ((err <= 0.0) .and. (abs(err) <= tolerance*abs(derr_dea))) return
-  
+
   if (err == 0.0) then ; return ! The exact solution on the first guess...
   elseif (err > 0.0) then ! The root is properly bracketed.
     max_ea = ea_kb(i) ; err_max = err
@@ -1507,7 +1507,7 @@ subroutine F_kb_to_ea_kb(h_bl, Sref, Ent_bl, I_dSkbp1, F_kb, kmb, i, &
     else
       max_ea = ent_maxF(i)
       ea_kb(i) = 0.5*(max_ea+min_ea) ! Use bisection for the next guess.
-    endif 
+    endif
   endif
 
   ! Exit if the range between max_ea and min_ea already acceptable.
@@ -1519,7 +1519,7 @@ subroutine F_kb_to_ea_kb(h_bl, Sref, Ent_bl, I_dSkbp1, F_kb, kmb, i, &
 
     err = dS_kb(i) * ea_kb(i) - val
     derr_dea = dS_kb(i) + ddSkb_dE(i) * ea_kb(i)
-    
+
     ea_prev = ea_kb(i)
     ! Use Newton's method or the false position method to find the next value.
     Newton = .false.
@@ -1550,7 +1550,7 @@ subroutine F_kb_to_ea_kb(h_bl, Sref, Ent_bl, I_dSkbp1, F_kb, kmb, i, &
   enddo
 
 end subroutine F_kb_to_ea_kb
-  
+
 
 subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
                            min_eakb, max_eakb, kmb, is, ie, do_i, G, CS, Ent, &
@@ -1649,7 +1649,7 @@ subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
 
     if ((error_maxE(i) <= 0.0) .or. (error_minE(i) >= 0.0)) then
       ! The root is not bracketed and one of the limiting values should be used.
-      if (error_maxE(i) <= 0.0) then 
+      if (error_maxE(i) <= 0.0) then
         ! The errors decrease with E*ea_kbp1, so E_max is the best solution.
         Ent(i) = E_max(i) ; err(i) = error_maxE(i)
       else  ! error_minE >= 0 is equivalent to ea_kbp1 = 0.0.
@@ -1672,7 +1672,7 @@ subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
       fa = (1.0 + eL) + dS_kb(i)*I_dSkbp1(i)
       fk = dtKd_kb(i) * (dS_Lay(i)/dS_kb(i))
       fm = (ea_kbp1(i) - h_bl(i,kmb+1)) + eL*2.0*Ent_bl(i,Kmb+1)
-      if (fm > -G%Angstrom) fm = fm + G%Angstrom  ! This could be smooth if need be. 
+      if (fm > -G%Angstrom) fm = fm + G%Angstrom  ! This could be smooth if need be.
       err(i) = (fa * Ent(i)**2 - fm * Ent(i)) - fk
       derror_dE(i) = ((2.0*fa + (ddSkb_dE(i)*I_dSkbp1(i))*Ent(i))*Ent(i) - fm) - &
           dtKd_kb(i) * (ddSlay_dE(i)*dS_kb(i) - ddSkb_dE(i)*dS_Lay(i))/(dS_kb(i)**2)
@@ -1701,7 +1701,7 @@ subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
         if ((Ent(i) > E_max(i)) .or. (Ent(i) < E_min(i))) &
           Ent(i) = 0.5*(E_max(i) + E_min(i))
       elseif (((E_max(i)-Ent(i))*derror_dE(i) > -err(i)) .and. &
-              ((Ent(i)-E_min(i))*derror_dE(i) > err(i)) ) then 
+              ((Ent(i)-E_min(i))*derror_dE(i) > err(i)) ) then
         ! Use Newton's method for the next estimate, provided it will
         ! remain bracketed between Rmin and Rmax.
         Ent(i) = Ent(i) - err(i) / derror_dE(i)
@@ -1746,7 +1746,7 @@ subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
       dFdfm_kb(i) = 0.0
     endif
   endif ; enddo ; endif
-  
+
 end subroutine determine_Ea_kb
 
 subroutine find_maxF_kb(h_bl, Sref, Ent_bl, I_dSkbp1, min_ent_in, max_ent_in, &
@@ -1844,7 +1844,7 @@ subroutine find_maxF_kb(h_bl, Sref, Ent_bl, I_dSkbp1, min_ent_in, max_ent_in, &
       F_minent(i) = minent(i) * dS_kb(i) * I_dSkbp1(i)
       dF_dE_min(i) = (dS_kb(i) + minent(i)*ddSkb_dE(i)) * I_dSkbp1(i)
     endif ; enddo
-    
+
     ratio_select_end = 0.9
     do it=1,MAXIT
       ratio_select_end = 0.5*ratio_select_end
@@ -1917,7 +1917,7 @@ subroutine find_maxF_kb(h_bl, Sref, Ent_bl, I_dSkbp1, min_ent_in, max_ent_in, &
         ie1 = is-1 ; do i=is1,ie ; if (do_i(i)) ie1 = i ; enddo
         do i=ie1,is,-1 ; if (do_i(i)) is1 = i ; enddo
       endif
- 
+
       call determine_dSkb(h_bl, Sref, Ent_bl, ent, is1, ie1, kmb, G, .false., &
                           dS_kb, ddSkb_dE, do_i_in = do_i)
       do i=is1,ie1 ; if (do_i(i)) then
@@ -1930,7 +1930,7 @@ subroutine find_maxF_kb(h_bl, Sref, Ent_bl, I_dSkbp1, min_ent_in, max_ent_in, &
           F_best(i) = F(i) ; ent_best(i) = ent(i) ; do_i(i) = .false.
         endif
       endif ; enddo ; endif
-      
+
       doany = .false.
       do i=is1,ie1 ; if (do_i(i)) then
         if (.not.last_it(i)) doany = .true.
@@ -1959,7 +1959,7 @@ subroutine find_maxF_kb(h_bl, Sref, Ent_bl, I_dSkbp1, min_ent_in, max_ent_in, &
             new_min_bound = .false. ! We have a new maximum bound.
           else ! This case would bracket a minimum.  Wierd.
              ! Unless the derivative indicates that there is a maximum near the
-             ! lower bound, try keeping the end with the larger value of F; 
+             ! lower bound, try keeping the end with the larger value of F;
              ! in a tie keep the minimum as the answer here will be compared
              ! with the maximum input value later.
              new_min_bound = .true.

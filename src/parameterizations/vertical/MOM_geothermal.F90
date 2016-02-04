@@ -67,7 +67,7 @@ implicit none ; private
 public geothermal, geothermal_init, geothermal_end
 
 type, public :: geothermal_CS ; private
-  real    :: dRcv_dT_inplace !   The value of dRcv_dT above which (dRcv_dT is 
+  real    :: dRcv_dT_inplace !   The value of dRcv_dT above which (dRcv_dT is
                              ! negative) the water is heated in place instead
                              ! of moving upward between layers, in kg m-3 K-1.
   real, pointer :: geo_heat(:,:) => NULL()  ! The geothermal heat flux, in
@@ -99,7 +99,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
 ! the partial derivative of the coordinate density with temperature is positive
 ! or very small, the layers are simply heated in place.  Any heat that can not
 ! be applied to the ocean is returned (WHERE)?
- 
+
 ! Arguments: h - Layer thickness, in m or kg m-2. (Intent in/out)
 !                The units of h are referred to as H below.
 !  (in/out)  tv - A structure containing pointers to any available
@@ -149,7 +149,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
   logical :: do_i(SZI_(G))
   integer :: i, j, k, is, ie, js, je, nz, k2, i2
   integer :: isj, iej, num_start, num_left, nkmb, k_tgt
-  
+
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
@@ -183,17 +183,17 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
     ! 1. Only work on columns that are being heated.
     ! 2. Find the deepest layer with any mass.
     ! 3. Find the partial derivative of locally referenced potential density
-    !  and coordinate density with temperature, and the density of the layer 
+    !  and coordinate density with temperature, and the density of the layer
     !  and the layer above.
     ! 4. Heat a portion of the bottommost layer until it matches the target
     !    density of the layer above, and move it.
     ! 4a. In the case of variable density layers, heat but do not move.
     ! 5. If there is still heat left over, repeat for the next layer up.
     ! This subroutine updates thickness, T & S, and increments eb accordingly.
- 
+
     ! 6. If there is not enough mass in the ocean, pass some of the heat up
     !    from the ocean via the frazil field?
-    
+
     num_start = 0
     do i=is,ie
       heat_rem(i) = G%mask2dT(i,j) * (CS%geo_heat(i,j) * (dt*Irho_cp))
@@ -253,7 +253,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
             T2(2) = tv%T(i,j,k_tgt) ; S2(2) = tv%S(i,j,k_tgt)
             call calculate_density_derivs(T2(:), S2(:), p_Ref(:), &
                          dRcv_dT_, dRcv_dS_, 1, 2, tv%eqn_of_state)
-            dRcv_dT = 0.5*(dRcv_dT_(1) + dRcv_dT_(2)) 
+            dRcv_dT = 0.5*(dRcv_dT_(1) + dRcv_dT_(2))
           endif
 
           if ((dRcv_dT >= 0.0) .or. (k<=nkmb .or. nkmb<=0)) then
@@ -269,12 +269,12 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
             wt_in_place = (CS%dRcv_dT_inplace - dRcv_dT) / CS%dRcv_dT_inplace
             heat_in_place = max(wt_in_place*heat_avail, &
                                 h(i,j,k) * ((G%Rlay(k)-Rcv) / dRcv_dT) )
-            heat_trans = heat_avail - heat_in_place 
+            heat_trans = heat_avail - heat_in_place
           endif
 
           if (heat_in_place > 0.0) then
             ! This applies to variable density layers. In isopycnal coordinates
-            ! this only arises for relatively fresh water near the freezing 
+            ! this only arises for relatively fresh water near the freezing
             ! point, in which case heating in place will eventually cause things
             ! to sort themselves out, if only because the water will warm to
             ! the temperature of maximum density.
@@ -360,7 +360,7 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
   type(diag_ctrl), target, intent(inout) :: diag
   type(geothermal_CS),     pointer       :: CS
 
-! Arguments: 
+! Arguments:
 !  (in)      Time       - current model time
 !  (in)      G          - ocean grid structure
 !  (in)      param_file - structure indicating the open file to parse for
@@ -376,7 +376,7 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
   real :: scale
   integer :: i, j, isd, ied, jsd, jed, id
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
- 
+
   if (associated(CS)) then
     call MOM_error(WARNING, "geothermal_init called with an associated"// &
                             "associated control structure.")
@@ -431,7 +431,7 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
     enddo ; enddo
   endif
 
-  ! post the static geothermal heating field 
+  ! post the static geothermal heating field
   id = register_static_field('ocean_model', 'geo_heat', diag%axesT1,   &
         'Geothermal heat flux into ocean', 'W m-2',                    &
         cmor_field_name='hfgeou', cmor_units='W m-2',                  &
@@ -443,7 +443,7 @@ end subroutine geothermal_init
 
 subroutine geothermal_end(CS)
   type(geothermal_CS), pointer :: CS
-  
+
   if (associated(CS%geo_heat)) deallocate(CS%geo_heat)
   if (associated(CS)) deallocate(CS)
 end subroutine geothermal_end

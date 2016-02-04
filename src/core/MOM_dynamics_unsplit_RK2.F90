@@ -67,7 +67,7 @@ module MOM_dynamics_unsplit_RK2
 
 use MOM_variables, only : vertvisc_type, ocean_OBC_type, thermo_var_ptrs
 use MOM_variables, only : ocean_internal_state, accel_diag_ptrs, cont_diag_ptrs
-use MOM_forcing_type, only : forcing 
+use MOM_forcing_type, only : forcing
 use MOM_checksum_packages, only : MOM_thermo_chksum, MOM_state_chksum, MOM_accel_chksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_COMPONENT, CLOCK_SUBCOMPONENT
@@ -457,8 +457,8 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   endif
   do k=1,nz ; do j=js,je ; do i=is,ie
     eta_av(i,j) = eta_av(i,j) + h_av(i,j,k)
-  enddo ; enddo ; enddo 
-  
+  enddo ; enddo ; enddo
+
   if (dyn_p_surf) deallocate(p_surf)
 
 !   Here various terms used in to update the momentum equations are
@@ -667,7 +667,7 @@ end subroutine initialize_dyn_unsplit_RK2
 subroutine end_dyn_unsplit_RK2(CS)
   type(MOM_dyn_unsplit_RK2_CS), pointer :: CS
 !  (inout)   CS - The control structure set up by initialize_dyn_unsplit_RK2.
-  
+
   DEALLOC_(CS%diffu) ; DEALLOC_(CS%diffv)
   DEALLOC_(CS%CAu)   ; DEALLOC_(CS%CAv)
   DEALLOC_(CS%PFu)   ; DEALLOC_(CS%PFv)

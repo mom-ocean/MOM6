@@ -115,7 +115,7 @@ type, public :: hor_visc_CS ; private
   logical :: bound_Kh        ! If true, the Laplacian coefficient is locally
                              ! limited to guarantee stability.
   logical :: better_bound_Kh ! If true, use a more careful bounding of the
-                             ! Laplacian viscosity to guarantee stability.                           
+                             ! Laplacian viscosity to guarantee stability.
   logical :: bound_Ah        ! If true, the biharmonic coefficient is locally
                              ! limited to guarantee stability.
   logical :: better_bound_Ah ! If true, use a more careful bounding of the
@@ -123,7 +123,7 @@ type, public :: hor_visc_CS ; private
   real    :: bound_coef      ! The nondimensional coefficient of the ratio of
                              ! the viscosity bounds to the theoretical maximum
                              ! for stability without considering other terms.
-                             ! The default is 0.8.                         
+                             ! The default is 0.8.
   logical :: Smagorinsky_Kh  ! If true, use Smagorinsky nonlinear eddy
                              ! viscosity. KH is the background value.
   logical :: Smagorinsky_Ah  ! If true, use a biharmonic form of Smagorinsky
@@ -186,9 +186,9 @@ type, public :: hor_visc_CS ; private
     Laplac_Const_xy, & ! Laplacian  metric-dependent constants (nondim)
     Biharm_Const_xy    ! Biharmonic metric-dependent constants (nondim)
 
-  type(diag_ctrl), pointer :: diag ! structure to regulate diagnostic timing 
+  type(diag_ctrl), pointer :: diag ! structure to regulate diagnostic timing
 
-  ! diagnostic ids 
+  ! diagnostic ids
   integer :: id_diffu     = -1, id_diffv         = -1
   integer :: id_Ah_h      = -1, id_Ah_q          = -1
   integer :: id_Kh_h      = -1, id_Kh_q          = -1
@@ -210,11 +210,11 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
   type(hor_visc_CS),                      pointer     :: CS
   type(ocean_OBC_type),           pointer, optional   :: OBC
 
-! Arguments: 
+! Arguments:
 !  (in)      u      - zonal velocity (m/s)
 !  (in)      v      - meridional velocity (m/s)
 !  (in)      h      - layer thickness (m or kg m-2); h units are referred to as H.
-!  (out)     diffu  - zonal acceleration due to convergence of 
+!  (out)     diffu  - zonal acceleration due to convergence of
 !                     along-coordinate stress tensor (m/s2)
 !  (out)     diffv  - meridional acceleration due to convergence of
 !                     along-coordinate stress tensor (m/s2)
@@ -295,7 +295,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
 
   h_neglect  = G%H_subroundoff
   h_neglect3 = h_neglect**3
-  
+
   if (present(OBC)) then ; if (associated(OBC)) then
     apply_OBC = OBC%apply_OBC_u_flather_east .or. OBC%apply_OBC_u_flather_west .or. &
                 OBC%apply_OBC_v_flather_north .or. OBC%apply_OBC_v_flather_south
@@ -465,7 +465,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
         Shear_mag = sqrt(sh_xy(I,J)*sh_xy(I,J) + &
             0.25*((sh_xx(i,j)*sh_xx(i,j) + sh_xx(i+1,j+1)*sh_xx(i+1,j+1)) + &
                   (sh_xx(i,j+1)*sh_xx(i,j+1) + sh_xx(i+1,j)*sh_xx(i+1,j))))
- 
+
       huq = (h(i,j,k) + h(i+1,j,k)) * (h(i,j+1,k) + h(i+1,j+1,k))
       hvq = (h(i,j,k) + h(i,j+1,k)) * (h(i+1,j,k) + h(i+1,j+1,k))
       hq = 2.0 * huq * hvq / (h_neglect3 + (huq + hvq) * &
@@ -585,7 +585,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
 
       if (apply_OBC) then ; if (OBC%OBC_mask_u(I,j)) then
         if ((OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) .or. &
-            (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W)) diffu(I,j,k) = 0.0 
+            (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W)) diffu(I,j,k) = 0.0
       endif ; endif
     enddo ; enddo
 
@@ -598,7 +598,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
                      G%IareaCv(i,J)) / (0.5*(h(i,j+1,k) + h(i,j,k)) + h_neglect)
       if (apply_OBC) then ; if (OBC%OBC_mask_v(i,J)) then
         if ((OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) .or. &
-            (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S)) diffv(I,j,k) = 0.0 
+            (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S)) diffv(I,j,k) = 0.0
       endif ; endif
     enddo ; enddo
 
@@ -678,7 +678,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
   if (CS%id_Kh_h>0)      call post_data(CS%id_Kh_h, Kh_h, CS%diag)
   if (CS%id_Kh_q>0)      call post_data(CS%id_Kh_q, Kh_q, CS%diag)
 
-  if (CS%id_FrictWorkIntz > 0) then 
+  if (CS%id_FrictWorkIntz > 0) then
     do j=js,je
       do i=is,ie ; FrictWorkIntz(i,j) = FrictWork(i,j,1) ; enddo
       do k=2,nz ; do i=is,ie
@@ -702,10 +702,10 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
 ! This subroutine allocates space for and calculates static variables
 ! used by this module. The metrics may be 0, 1, or 2-D arrays,
 ! while fields like the background viscosities are 2-D arrays.
-! ALLOC is a macro defined in MOM_memory.h to either allocate 
+! ALLOC is a macro defined in MOM_memory.h to either allocate
 ! for dynamic memory, or do nothing when using static memory.
 !
-! Arguments: 
+! Arguments:
 !  (in)      Time       - current model time
 !  (in)      G          - ocean grid structure
 !  (in)      param_file - structure to parse for model parameter values
@@ -863,7 +863,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
       endif
     endif
   endif
-  
+
   if (CS%better_bound_Ah .or. CS%better_bound_Kh .or. get_all) &
     call get_param(param_file, mod, "HORVISC_BOUND_COEF", CS%bound_coef, &
                  "The nondimensional coefficient of the ratio of the \n"//&
@@ -1175,7 +1175,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
 
   CS%id_FrictWorkIntz = register_diag_field('ocean_model','FrictWorkIntz',diag%axesT1,Time,      &
       'Depth integrated work done by lateral friction', 'Watt meter-2',                          &
-      cmor_field_name='dispkexyfo', cmor_units='W m-2',                                          &  
+      cmor_field_name='dispkexyfo', cmor_units='W m-2',                                          &
       cmor_long_name='Depth integrated ocean kinetic energy dissipation due to lateral friction',&
       cmor_standard_name='ocean_kinetic_energy_dissipation_per_unit_area_due_to_xy_friction')
 

@@ -93,8 +93,8 @@ type, public :: regularize_layers_CS ; private
   type(group_pass_type) :: pass_h ! For group pass
 
   integer :: id_def_rat = -1
-  logical :: allow_clocks_in_omp_loops  ! If true, clocks can be called 
-                                        ! from inside loops that can be threaded. 
+  logical :: allow_clocks_in_omp_loops  ! If true, clocks can be called
+                                        ! from inside loops that can be threaded.
                                         ! To run with multiple threads, set to False.
 #ifdef DEBUG_CODE
   integer :: id_def_rat_2 = -1, id_def_rat_3 = -1
@@ -251,7 +251,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
   real :: h_predicted
   real :: h_prev
   real :: h_deficit
-  
+
   logical :: cols_left, ent_any, more_ent_i(SZI_(G)), ent_i(SZI_(G))
   logical :: det_any, det_i(SZI_(G))
   logical :: do_j(SZJ_(G)), do_i(SZI_(G)), find_i(SZI_(G))
@@ -313,16 +313,16 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
       ef(i,j,1) = 0.0
     enddo ; enddo
     do K=2,nz+1 ; do j=js,je ; do i=is,ie
-      if (G%mask2dCu(I,j) <= 0.0) then ; e_e = e(i,j,K) ; else 
+      if (G%mask2dCu(I,j) <= 0.0) then ; e_e = e(i,j,K) ; else
         e_e = max(e(i+1,j,K) + min(e(i,j,K) - e(i+1,j,nz+1), 0.0), e(i,j,nz+1))
       endif
-      if (G%mask2dCu(I-1,j) <= 0.0) then ; e_w = e(i,j,K) ; else 
+      if (G%mask2dCu(I-1,j) <= 0.0) then ; e_w = e(i,j,K) ; else
         e_w = max(e(i-1,j,K) + min(e(i,j,K) - e(i-1,j,nz+1), 0.0), e(i,j,nz+1))
       endif
-      if (G%mask2dCv(i,J) <= 0.0) then ; e_n = e(i,j,K) ; else 
+      if (G%mask2dCv(i,J) <= 0.0) then ; e_n = e(i,j,K) ; else
         e_n = max(e(i,j+1,K) + min(e(i,j,K) - e(i,j+1,nz+1), 0.0), e(i,j,nz+1))
       endif
-      if (G%mask2dCv(i,J-1) <= 0.0) then ; e_s = e(i,j,K) ; else 
+      if (G%mask2dCv(i,J-1) <= 0.0) then ; e_s = e(i,j,K) ; else
         e_s = max(e(i,j-1,K) + min(e(i,j,K) - e(i,j-1,nz+1), 0.0), e(i,j,nz+1))
       endif
 
@@ -337,7 +337,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
       def_rat_h3(i,j) = max(def_rat_u_3(I-1,j), def_rat_u_3(I,j), &
                             def_rat_v_3(i,J-1), def_rat_v_3(i,J))
     enddo ; enddo
-  
+
     if (CS%id_e3 > 0) call post_data(CS%id_e3, ef, CS%diag)
     if (CS%id_def_rat_3 > 0) call post_data(CS%id_def_rat_3, def_rat_h3, CS%diag)
     if (CS%id_def_rat_u_3 > 0) call post_data(CS%id_def_rat_u_3, def_rat_u_3, CS%diag)
@@ -383,20 +383,20 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
     ! deliberately omitted here.  This is slightly more complicated than a
     ! simple filter so that the effects of topography are eliminated.
     do K=1,nz_filt ; do i=is,ie ; if (do_i(i)) then
-      if (G%mask2dCu(I,j) <= 0.0) then ; e_e = e(i,j,K) ; else 
+      if (G%mask2dCu(I,j) <= 0.0) then ; e_e = e(i,j,K) ; else
         e_e = max(e(i+1,j,K) + min(e(i,j,K) - e(i+1,j,nz+1), 0.0), &
                   e(i,j,nz+1) + (nz+1-k)*G%Angstrom)
 
       endif
-      if (G%mask2dCu(I-1,j) <= 0.0) then ; e_w = e(i,j,K) ; else 
+      if (G%mask2dCu(I-1,j) <= 0.0) then ; e_w = e(i,j,K) ; else
         e_w = max(e(i-1,j,K) + min(e(i,j,K) - e(i-1,j,nz+1), 0.0), &
                   e(i,j,nz+1) + (nz+1-k)*G%Angstrom)
       endif
-      if (G%mask2dCv(i,J) <= 0.0) then ; e_n = e(i,j,K) ; else 
+      if (G%mask2dCv(i,J) <= 0.0) then ; e_n = e(i,j,K) ; else
         e_n = max(e(i,j+1,K) + min(e(i,j,K) - e(i,j+1,nz+1), 0.0), &
                   e(i,j,nz+1) + (nz+1-k)*G%Angstrom)
       endif
-      if (G%mask2dCv(i,J-1) <= 0.0) then ; e_s = e(i,j,K) ; else 
+      if (G%mask2dCv(i,J-1) <= 0.0) then ; e_s = e(i,j,K) ; else
         e_s = max(e(i,j-1,K) + min(e(i,j,K) - e(i,j-1,nz+1), 0.0), &
                   e(i,j,nz+1) + (nz+1-k)*G%Angstrom)
       endif
@@ -429,7 +429,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
         h_add_tgt(i) = e_2d(i,nkmb+1) - e_filt(i,nkmb+1)
       endif
     enddo
-    
+
     if (ent_any) then
       do k=nkmb+1,nz
         cols_left = .false.
@@ -440,7 +440,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
               h_2d(i,k) = G%Angstrom
             else
               h_add = e_2d(i,nkmb+1)-e_filt(i,nkmb+1)
-              h_2d(i,k) = h_2d(i,k) - h_add 
+              h_2d(i,k) = h_2d(i,k) - h_add
             endif
             d_eb(i,k-1) = d_eb(i,k-1) + h_add
             h_add_tot(i) = h_add_tot(i) + h_add
@@ -529,7 +529,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
                 T_2d(i,k2) = (h_prev*T_2d(i,k2) + h_add*T_2d(i,k1)) / h_2d(i,k2)
                 S_2d(i,k2) = (h_prev*S_2d(i,k2) + h_add*S_2d(i,k1)) / h_2d(i,k2)
                 h_det_tot = h_det_tot + h_add
-                
+
                 h_2d(i,k1) = h_2d(i,k1) - h_add
                 do k3=k1,nkmb ; e_2d(i,k3+1) = e_2d(i,k3) - h_2d(i,k3) ; enddo
                 do k3=k1+1,nkmb ; d_ea(i,k3) = d_ea(i,k3) + h_add ; enddo
@@ -551,7 +551,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
               T_2d(i,k2) = (h_prev*T_2d(i,k2) + h_add*T_2d(i,k1)) / h_2d(i,k2)
               S_2d(i,k2) = (h_prev*S_2d(i,k2) + h_add*S_2d(i,k1)) / h_2d(i,k2)
               h_det_tot = h_det_tot + h_add
-        
+
               h_2d(i,k1) = 0.0
               do k3=k1,nkmb ; e_2d(i,k3+1) = e_2d(i,k3) - h_2d(i,k3) ; enddo
               do k3=k1+1,nkmb ; d_ea(i,k3) = d_ea(i,k3) + h_add ; enddo
@@ -576,7 +576,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
     if (debug) then
       do i=is,ie ; h_tot3(i) = 0.0 ; Th_tot3(i) = 0.0 ; Sh_tot3(i) = 0.0 ; enddo
       do k=1,nz ; do i=is,ie ; if (do_i(i)) then
-        h_tot3(i) = h_tot3(i) + h_2d(i,k) 
+        h_tot3(i) = h_tot3(i) + h_2d(i,k)
         Th_tot3(i) = Th_tot3(i) + h_2d(i,k) * T_2d(i,k)
         Sh_tot3(i) = Sh_tot3(i) + h_2d(i,k) * S_2d(i,k)
       endif ; enddo ; enddo
@@ -609,7 +609,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
       do k=1,2*nkmb
         int_bot = max(e_2d(i,k1+1),e_filt(i,k2+1))
         h_add = int_top - int_bot
-        
+
         if (k2 > k1) then
           do k3=k1+1,k2
             d_ea(i,k3) = d_ea(i,k3) + h_add
@@ -636,7 +636,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
           call MOM_error(FATAL, &
             "Regularize_surface: Could not increment target or source.")
         endif
-        if ((k1 > nkmb) .or. (k2 > nkmb)) exit 
+        if ((k1 > nkmb) .or. (k2 > nkmb)) exit
         int_top = int_bot
       enddo
       if (k2 < nkmb) &
@@ -652,7 +652,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
       ! Note that movement of water across the base of the bottommost buffer
       ! layer has already been dealt with separately.
       h_2d(i,nkmb) = h_2d(i,nkmb) + int_flux(nkmb)
- 
+
       T_2d(i,1) = (T_2d(i,1)*h_prev_1d(1) - int_Tflux(2)) / h_2d(i,1)
       S_2d(i,1) = (S_2d(i,1)*h_prev_1d(1) - int_Sflux(2)) / h_2d(i,1)
       do k=2,nkmb-1
@@ -661,7 +661,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
       enddo
       T_2d(i,nkmb) = (T_2d(i,nkmb)*h_prev_1d(nkmb) + int_Tflux(nkmb) ) / h_2d(i,nkmb)
       S_2d(i,nkmb) = (S_2d(i,nkmb)*h_prev_1d(nkmb) + int_Sflux(nkmb) ) / h_2d(i,nkmb)
- 
+
     endif ; enddo ! i-loop
 
     ! Copy the interior thicknesses and other fields back to the 3-d arrays.
@@ -677,7 +677,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
       do i=is,ie ; h_tot2(i) = 0.0 ; Th_tot2(i) = 0.0 ; Sh_tot2(i) = 0.0 ; enddo
 
       do k=1,nz ; do i=is,ie ; if (do_i(i)) then
-        h_tot1(i) = h_tot1(i) + h_2d_init(i,k) 
+        h_tot1(i) = h_tot1(i) + h_2d_init(i,k)
         h_tot2(i) = h_tot2(i) + h(i,j,k)
 
         Th_tot1(i) = Th_tot1(i) + h_2d_init(i,k) * T_2d_init(i,k)
@@ -754,7 +754,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
       def_rat_h2(i,j) = max(def_rat_u_2(I-1,j), def_rat_u_2(I,j), &
                             def_rat_v_2(i,J-1), def_rat_v_2(i,J))
     enddo ; enddo
-  
+
     if (CS%id_def_rat_2 > 0) call post_data(CS%id_def_rat_2, def_rat_h2, CS%diag)
     if (CS%id_e2 > 0) call post_data(CS%id_e2, e, CS%diag)
     if (CS%id_def_rat_u_2 > 0) call post_data(CS%id_def_rat_u_2, def_rat_u_2, CS%diag)
@@ -935,7 +935,7 @@ subroutine regularize_layers_init(Time, G, param_file, diag, CS)
   logical :: use_temperature
   integer :: isd, ied, jsd, jed
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
- 
+
   if (associated(CS)) then
     call MOM_error(WARNING, "regularize_layers_init called with an associated"// &
                             "associated control structure.")
@@ -975,7 +975,7 @@ subroutine regularize_layers_init(Time, G, param_file, diag, CS)
 !  if (.not. CS%debug) &
 !    call get_param(param_file, mod, "DEBUG_CONSERVATION", CS%debug, &
 !                 "If true, monitor conservation and extrema.", default=.false.)
-   
+
   call get_param(param_file, mod, "ALLOW_CLOCKS_IN_OMP_LOOPS", &
                  CS%allow_clocks_in_omp_loops, &
                  "If true, clocks can be called from inside loops that can \n"//&
@@ -1024,7 +1024,7 @@ subroutine regularize_layers_init(Time, G, param_file, diag, CS)
       Time, 'V-point filtered 2-layer thickness deficit ratio', 'Nondim')
 #endif
 
-  if(CS%allow_clocks_in_omp_loops) then 
+  if(CS%allow_clocks_in_omp_loops) then
     id_clock_EOS = cpu_clock_id('(Ocean regularize_layers EOS)', grain=CLOCK_ROUTINE)
   endif
   id_clock_pass = cpu_clock_id('(Ocean regularize_layers halo updates)', grain=CLOCK_ROUTINE)

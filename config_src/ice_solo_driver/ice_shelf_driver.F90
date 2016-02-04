@@ -73,7 +73,7 @@ program SHELF_main
 
 
 !  type(forcing)         :: fluxes ! A structure that will be uninitialized till i figure out 
-				  ! whether i can make the argument optional
+          ! whether i can make the argument optional
                                   
 !   type(ocean_grid_type), pointer :: grid ! A pointer to a structure containing
                                   ! metrics and related information.
@@ -226,7 +226,7 @@ program SHELF_main
                  "some of the domain.", default=.false.)
 
   if (.not.use_ice_shelf) call MOM_error(FATAL, &
-	      "shelf_driver: ICE_SHELF must be defined.")
+        "shelf_driver: ICE_SHELF must be defined.")
 
   call get_param(param_file, mod, "ICE_VELOCITY_TIMESTEP", time_step, &
                  "The time step for changing forcing, coupling with other \n"//&
@@ -305,7 +305,7 @@ program SHELF_main
 
   ! Close the param_file.  No further parsing of input is possible after this.
   call close_param_file(param_file)
-  call diag_mediator_close_registration()
+  call diag_mediator_close_registration(MOM_CSp%diag)
 
   ! Write out a time stamp file.
   call open_file(unit, 'time_stamp.out', form=ASCII_FILE, action=APPEND_FILE, &
@@ -373,7 +373,7 @@ program SHELF_main
           call ice_shelf_save_restart(ice_shelf_CSp, Time, dirs%restart_output_dir, .true.)
         endif
         if (BTEST(Restart_control,0)) then
-	        call ice_shelf_save_restart(ice_shelf_CSp, Time, dirs%restart_output_dir)
+          call ice_shelf_save_restart(ice_shelf_CSp, Time, dirs%restart_output_dir)
         endif
         restart_time = restart_time + restint
       endif

@@ -1301,7 +1301,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
       dK(1) = 0.0 ! kappa takes boundary values of 0.
       cK(2) = 0.0 ; cKcomp = 1.0
       if (itt == 1) then ; dO K=2,nz
-        I_Ld2(K) = (N2(K)*Ilambda2 + f2) / tke(K) + I_L2_bdry(K)  
+        I_Ld2(K) = (N2(K)*Ilambda2 + f2) / tke(K) + I_L2_bdry(K)
       enddo ; endif
       do K=2,nz
         dK(K) = -kappa(K)

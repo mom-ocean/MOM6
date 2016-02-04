@@ -97,7 +97,7 @@ type, public :: opacity_CS ; private
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
-  type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp => NULL() 
+  type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp => NULL()
                     ! A pointer to the control structure of the tracer modules.
 
   integer :: id_sw_pen = -1, id_sw_vis_pen = -1, id_chl = -1
@@ -113,7 +113,7 @@ contains
 
 subroutine set_opacity(optics, fluxes, G, CS)
   type(optics_type),                   intent(inout) :: optics
-  type(forcing),                       intent(in)    :: fluxes  
+  type(forcing),                       intent(in)    :: fluxes
   type(ocean_grid_type),               intent(in)    :: G
   type(opacity_CS),                    pointer       :: CS
 ! Arguments: (inout) opacity - The inverse of the vertical absorption decay
@@ -121,9 +121,9 @@ subroutine set_opacity(optics, fluxes, G, CS)
 !            (inout) fluxes - A structure containing pointers to any possible
 !                     forcing fields.  Unused fields have NULL ptrs.
 !            (in)    G - The ocean's grid structure.
-!            (in)    CS - The control structure earlier set up by opacity_init.    
+!            (in)    CS - The control structure earlier set up by opacity_init.
 
-! local variables 
+! local variables
   integer :: i, j, k, n, is, ie, js, je, nz
   real :: inv_sw_pen_scale  ! The inverse of the e-folding scale, in m-1.
   real :: Inv_nbands        ! The inverse of the number of bands of penetrating
@@ -140,9 +140,9 @@ subroutine set_opacity(optics, fluxes, G, CS)
          "Module must be initialized via opacity_init before it is used.")
 
   if (CS%var_pen_sw) then
-    if (CS%chl_from_file) then 
+    if (CS%chl_from_file) then
       call opacity_from_chl(optics, fluxes, G, CS)
-    else 
+    else
       call get_chl_from_model(chl, G, CS%tracer_flow_CSp)
       call opacity_from_chl(optics, fluxes, G, CS, chl)
     endif
@@ -170,7 +170,7 @@ subroutine set_opacity(optics, fluxes, G, CS)
     endif
 !$OMP end parallel
   endif
-  
+
   if (query_averaging_enabled(CS%diag)) then
     if (CS%id_sw_pen > 0) then
 !$OMP parallel do default(none) shared(is,ie,js,je,Pen_SW_tot,optics)
@@ -216,7 +216,7 @@ end subroutine set_opacity
 
 subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
   type(optics_type),              intent(inout)  :: optics
-  type(forcing),                  intent(in)     :: fluxes  
+  type(forcing),                  intent(in)     :: fluxes
   type(ocean_grid_type),          intent(in)     :: G
   type(opacity_CS),               pointer        :: CS
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in), optional :: chl_in
@@ -244,7 +244,7 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
   integer :: days, seconds
   integer :: i, j, k, n, is, ie, js, je, nz, nbands
   logical :: multiband_vis_input, multiband_nir_input
-  
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
 !   In this model, the Morel (modified) and Manizza (modified) schemes
@@ -264,7 +264,7 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
 
   if (nbands <= 1) then ; Inv_nbands = 1.0
   else ; Inv_nbands = 1.0 / real(nbands) ; endif
-  
+
   if (nbands <= 2) then ; Inv_nbands_nir = 0.0
   else ; Inv_nbands_nir = 1.0 / real(nbands - 2.0) ; endif
 
@@ -336,7 +336,7 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
         do n=3,nbands
           optics%sw_pen_band(n,i,j) = Inv_nbands_nir * SW_nir_tot
         enddo
-      enddo ; enddo 
+      enddo ; enddo
     case (MOREL_88)
 !$OMP parallel do default(none) shared(is,ie,js,je,G,multiband_vis_input,chl_data, &
 !$OMP                                  fluxes,nbands,optics,Inv_nbands) &
@@ -417,7 +417,7 @@ function opacity_morel(chl_data)
   Chl = log10(min(max(chl_data,0.02),60.0)) ; Chl2 = Chl*Chl
   opacity_morel = 1.0 / ( (Z2_coef(1) + Z2_coef(2)*Chl) + Chl2 * &
       ((Z2_coef(3) + Chl*Z2_coef(4)) + Chl2*(Z2_coef(5) + Chl*Z2_coef(6))) )
-end function                       
+end function
 
 function SW_pen_frac_morel(chl_data)
   real, intent(in)  :: chl_data
@@ -429,7 +429,7 @@ function SW_pen_frac_morel(chl_data)
 ! appropriate when using an interactive ecosystem model that predicts
 ! three-dimensional chl-a values.
   real :: Chl, Chl2         ! The log10 of chl_data in mg m-3, and Chl^2.
-  real, dimension(6), parameter :: & 
+  real, dimension(6), parameter :: &
        V1_coef=(/0.321,  0.008, 0.132,  0.038, -0.017, -0.007/)
 
   Chl = log10(min(max(chl_data,0.02),60.0)) ; Chl2 = Chl*Chl
@@ -443,24 +443,24 @@ function opacity_manizza(chl_data)
 ! Argument : chl_data - The chlorophyll-A concentration in mg m-3.
 !   This sets the blue-wavelength opacity according to the scheme proposed by
 ! Manizza, M. et al, 2005.
-  
+
   opacity_manizza = 0.0232 + 0.074*chl_data**0.674
-end function  
-   
+end function
+
 subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
   type(time_type), target, intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
   type(param_file_type),   intent(in)    :: param_file
   type(diag_ctrl), target, intent(inout) :: diag
-  type(tracer_flow_control_CS), target, intent(in) :: tracer_flow 
-  type(opacity_CS),        pointer       :: CS  
+  type(tracer_flow_control_CS), target, intent(in) :: tracer_flow
+  type(opacity_CS),        pointer       :: CS
   type(optics_type),       pointer       :: optics
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in)      diag - A structure that is used to regulate diagnostic output.
-!  
+!
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                  for this module
 ! This include declares and sets the variable "version".
@@ -525,7 +525,7 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
 
     call get_param(param_file, mod, "CHL_FROM_FILE", CS%chl_from_file, &
                  "If true, chl_a is read from a file.", default=.true.)
-    if (CS%chl_from_file) then 
+    if (CS%chl_from_file) then
       call time_interp_external_init()
 
       call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
@@ -567,13 +567,13 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
       optics%max_wavelength_band(2)=700
     endif
     if (optics%nbands > 2) then
-      do n=3,optics%nbands 
+      do n=3,optics%nbands
         optics%min_wavelength_band(n) =700
         optics%max_wavelength_band(n) =2800
-      enddo 
+      enddo
     endif
-  endif       
- 
+  endif
+
   call get_param(param_file, mod, "OPACITY_LAND_VALUE", CS%opacity_land_value, &
                  "The value to use for opacity over land. The default is \n"//&
                  "10 m-1 - a value for muddy water.", units="m-1", default=10.0)
@@ -604,7 +604,7 @@ end subroutine opacity_init
 
 
 subroutine opacity_end(CS, optics)
-  type(opacity_CS),  pointer           :: CS  
+  type(opacity_CS),  pointer           :: CS
   type(optics_type), pointer, optional :: optics
 
   if (associated(CS%id_opacity)) deallocate(CS%id_opacity)
