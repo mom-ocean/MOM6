@@ -34,7 +34,7 @@ implicit none ; private
 
 public :: global_i_mean, global_j_mean
 public :: global_area_mean, global_layer_mean
-public :: global_area_integral 
+public :: global_area_integral
 public :: global_volume_mean
 public :: adjust_area_mean_to_zero
 
@@ -147,11 +147,11 @@ subroutine global_i_mean(array, i_mean, G, mask)
   allocate(sum(G%jsg:G%jeg))
   if (present(mask)) then
     allocate(mask_sum(G%jsg:G%jeg))
-  
+
     do j=G%jsg,G%jeg
       sum(j) = real_to_EFP(0.0) ; mask_sum(j) = real_to_EFP(0.0)
     enddo
-  
+
     do i=is,ie ; do j=js,je
       sum(j+jdg_off) = sum(j+jdg_off) + real_to_EFP(array(i,j)*mask(i,j))
       mask_sum(j+jdg_off) = mask_sum(j+jdg_off) + real_to_EFP(mask(i,j))
@@ -165,18 +165,18 @@ subroutine global_i_mean(array, i_mean, G, mask)
 
     if (query_EFP_overflow_error()) call MOM_error(FATAL, &
       "global_i_mean overflow error occurred during sums across PEs.")
-    
+
     do j=js,je
       mask_sum_r = EFP_to_real(mask_sum(j+jdg_off))
       if (mask_sum_r == 0.0 ) then ; i_mean(j) = 0.0 ; else
         i_mean(j) = EFP_to_real(sum(j+jdg_off)) / mask_sum_r
       endif
     enddo
-    
+
     deallocate(mask_sum)
   else
     do j=G%jsg,G%jeg ; sum(j) = real_to_EFP(0.0) ; enddo
-  
+
     do i=is,ie ; do j=js,je
       sum(j+jdg_off) = sum(j+jdg_off) + real_to_EFP(array(i,j))
     enddo ; enddo
@@ -225,11 +225,11 @@ subroutine global_j_mean(array, j_mean, G, mask)
   allocate(sum(G%isg:G%ieg))
   if (present(mask)) then
     allocate (mask_sum(G%isg:G%ieg))
-  
+
     do i=G%isg,G%ieg
       sum(i) = real_to_EFP(0.0) ; mask_sum(i) = real_to_EFP(0.0)
     enddo
-  
+
     do i=is,ie ; do j=js,je
       sum(i+idg_off) = sum(i+idg_off) + real_to_EFP(array(i,j)*mask(i,j))
       mask_sum(i+idg_off) = mask_sum(i+idg_off) + real_to_EFP(mask(i,j))
@@ -240,21 +240,21 @@ subroutine global_j_mean(array, j_mean, G, mask)
 
     call EFP_list_sum_across_PEs(sum(G%isg:G%ieg), G%ieg-G%isg+1)
     call EFP_list_sum_across_PEs(mask_sum(G%isg:G%ieg), G%ieg-G%isg+1)
-    
+
     if (query_EFP_overflow_error()) call MOM_error(FATAL, &
       "global_j_mean overflow error occurred during sums across PEs.")
-    
+
     do i=is,ie
       mask_sum_r = EFP_to_real(mask_sum(i+idg_off))
       if (mask_sum_r == 0.0 ) then ; j_mean(i) = 0.0 ; else
         j_mean(i) = EFP_to_real(sum(i+idg_off)) / mask_sum_r
       endif
     enddo
-    
+
     deallocate(mask_sum)
   else
     do i=G%isg,G%ieg ; sum(i) = real_to_EFP(0.0) ; enddo
-  
+
     do i=is,ie ; do j=js,je
       sum(i+idg_off) = sum(i+idg_off) + real_to_EFP(array(i,j))
     enddo ; enddo
@@ -288,7 +288,7 @@ subroutine adjust_area_mean_to_zero(array, G, scaling)
 
   areaXposVals(:,:) = 0.
   areaXnegVals(:,:) = 0.
-  
+
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     posVals(i,j) = max(0., array(i,j))
     areaXposVals(i,j) = G%areaT(i,j) * posVals(i,j)

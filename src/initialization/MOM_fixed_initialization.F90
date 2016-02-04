@@ -31,11 +31,6 @@ use sloshing_initialization, only : sloshing_initialize_topography
 use seamount_initialization, only : seamount_initialize_topography
 use Phillips_initialization, only : Phillips_initialize_topography
 
-use MOM_ALE, only : ALE_initRegridding
-use MOM_regridding, only : regridding_CS
-use MOM_remapping, only : remapping_CS, remapping_core, initialize_remapping
-use MOM_remapping, only : dzFromH1H2, remapDisableBoundaryExtrapolation
-
 use mpp_domains_mod, only  : mpp_global_field, mpp_get_compute_domain
 use mpp_mod, only          : mpp_broadcast,mpp_root_pe,mpp_sync,mpp_sync_self
 

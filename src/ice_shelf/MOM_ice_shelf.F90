@@ -32,25 +32,25 @@ module MOM_ice_shelf
 
 !   The ice-sheet dynamics subroutines do the following:
 !  initialize_shelf_mass - Initializes the ice shelf mass distribution.
-!			 - Initializes h_shelf, h_mask, area_shelf_h
-!			 - CURRENTLY: initializes mass_shelf as well, but this is unnecessary, as mass_shelf is initialized based on
-!				      h_shelf and density_ice immediately afterwards. Possibly subroutine should be renamed
+!      - Initializes h_shelf, h_mask, area_shelf_h
+!      - CURRENTLY: initializes mass_shelf as well, but this is unnecessary, as mass_shelf is initialized based on
+!             h_shelf and density_ice immediately afterwards. Possibly subroutine should be renamed
 !  update_shelf_mass - Does nothing for now, but in some versions calls 
 !                      USER_update_shelf_mass.
 !  ice_shelf_solve_outer - Orchestrates the calls to calculate the shelf
-!			 - outer loop calls ice_shelf_solve_inner 
+!      - outer loop calls ice_shelf_solve_inner 
 !                          stresses and checks for error tolerances. 
-!			   Max iteration count for outer loop currently fixed at 100 iteration
-!			 - tolerance (and error evaluation) can be set through input file
-! 			 - updates u_shelf, v_shelf, ice_visc_bilinear, taub_beta_eff_bilinear
+!         Max iteration count for outer loop currently fixed at 100 iteration
+!      - tolerance (and error evaluation) can be set through input file
+!      - updates u_shelf, v_shelf, ice_visc_bilinear, taub_beta_eff_bilinear
 !  ice_shelf_solve_inner - Conjugate Gradient solve of matrix solve for ice_shelf_solve_outer
-!  			 - Jacobi Preconditioner - basically diagonal of matrix (not sure if it is effective at all)
-!			 - modifies u_shelf and v_shelf only
-!			 - max iteration count can be set through input file
-!			 - tolerance (and error evaluation) can be set through input file
+!      - Jacobi Preconditioner - basically diagonal of matrix (not sure if it is effective at all)
+!      - modifies u_shelf and v_shelf only
+!      - max iteration count can be set through input file
+!      - tolerance (and error evaluation) can be set through input file
 !                  (ISSUE:  Too many mpp_sum calls?)
 !    calc_shelf_driving_stress - Determine the driving stresses using h_shelf, (water) column thickness, bathymetry
-!			       - does not modify any permanent arrays
+!            - does not modify any permanent arrays
 !    init_boundary_values - 
 !    bilinear_shape_functions - shape function for FEM solve using (convex) quadrilateral elements and bilinear nodal basis
 !    calc_shelf_visc_bilinear - Glen's law viscosity and nonlinear sliding law (called by ice_shelf_solve_outer)
@@ -58,31 +58,31 @@ module MOM_ice_shelf
 !    apply_boundary_values_bilinear - same as CG_action_bilinear, but input is zero except for dirichlet bdry conds
 !    apply_boundary_values_triangle - LET'S TAKE THIS OUT
 !    CG_action_bilinear - Effect of matrix (that is never explicitly constructed) 
-!			   on vector space of Degrees of Freedom (DoFs) in velocity solve 
+!        on vector space of Degrees of Freedom (DoFs) in velocity solve 
 !    CG_action_triangular -LET'S TAKE THIS OUT
 !      matrix_diagonal_bilinear - Returns the diagonal entries of a matrix for preconditioning.
 !                  (ISSUE:  No need to use control structure - add arguments.
 !      matrix_diagonal_triangle - LET'S TAKE THIS OUT
 !  ice_shelf_advect - Given the melt rate and velocities, it advects the ice shelf THICKNESS
-!		    - modified h_shelf, area_shelf_h, hmask
-!		    (maybe should updater mass_shelf as well ???)
+!        - modified h_shelf, area_shelf_h, hmask
+!        (maybe should updater mass_shelf as well ???)
 !    ice_shelf_advect_thickness_x, ice_shelf_advect_thickness_y - These
-!         subroutines determine the mass fluxes through the faces.
+!        subroutines determine the mass fluxes through the faces.
 !                  (ISSUE: duplicative flux calls for shared faces?)
 !    ice_shelf_advance_front - Iteratively determine the ice-shelf front location.
-!			     - IF ice_shelf_advect_thickness_x,y are modified to avoid
-!				dupe face processing, THIS NEEDS TO BE MODIFIED TOO 
-!				as it depends on arrays modified in those functions
-!				(if in doubt consult DNG)
+!           - IF ice_shelf_advect_thickness_x,y are modified to avoid
+!       dupe face processing, THIS NEEDS TO BE MODIFIED TOO 
+!       as it depends on arrays modified in those functions
+!       (if in doubt consult DNG)
 !    update_velocity_masks - Controls which elements of u_shelf and v_shelf are considered DoFs in linear solve
 !    solo_time_step - called only in ice-only mode.
 !    shelf_calc_flux - after melt rate & fluxes are calculated, ice dynamics are done. currently mass_shelf is 
-!	updated immediately after ice_shelf_advect.
+! updated immediately after ice_shelf_advect.
 !
 !
 !   NOTES: be aware that hmask(:,:) has a number of functions; it is used for front advancement, 
-!	for subroutines in the velocity solve, and for thickness boundary conditions (this last one may be removed).
-!	in other words, interfering with its updates will have implications you might not expect.
+! for subroutines in the velocity solve, and for thickness boundary conditions (this last one may be removed).
+! in other words, interfering with its updates will have implications you might not expect.
 !  
 !  Overall issues: Many variables need better documentation and units and the
 !                  subgrid on which they are discretized.
@@ -523,7 +523,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
                                                     CS%utide(i,j))
           ustar_h = MAX(CS%ustar_bg, fluxes%ustar_shelf(i,j))
 
-	  fluxes%ustar_shelf(i,j) = ustar_h
+          fluxes%ustar_shelf(i,j) = ustar_h
 
           if (associated(state%taux_shelf) .and. associated(state%tauy_shelf)) then
             state%taux_shelf(i,j) = ustar_h*ustar_h*G%Rho0*Isqrt2

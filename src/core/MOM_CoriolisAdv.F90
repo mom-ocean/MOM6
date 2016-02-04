@@ -107,7 +107,7 @@ type, public :: CoriolisAdv_CS ; private
                              ! greater than 2.0, and is 4.0 by default.
   real    :: wt_lin_blend    ! A weighting value beyond which the blending between
                              ! Sadourny and Arakawa & Hsu goes linearly to 0.
-                             ! This must be between 1 and 1e-15, often 1/8. 
+                             ! This must be between 1 and 1e-15, often 1/8.
   logical :: no_slip         ! If true, no slip boundary conditions are used.
                              ! Otherwise free slip boundary conditions are assumed.
                              ! The implementation of the free slip boundary
@@ -280,7 +280,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, AD, G, CS)
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "MOM_CoriolisAdv: Module must be initialized before it is used.")
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke   
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
   h_neglect = G%H_subroundoff
 
 !$OMP parallel default(none) shared(u,v,h,uh,vh,CAu,CAv,G,CS,AD,Area_h,Area_q,nz,RV,PV, &
@@ -379,7 +379,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, AD, G, CS)
     elseif (CS%Coriolis_Scheme == AL_BLEND) then
       Fe_m2 = CS%F_eff_max_blend - 2.0
       rat_lin = 1.5 * Fe_m2 / max(CS%wt_lin_blend, 1.0e-16)
-      
+
       ! This allows the code to always give Sadourny Energy
       if (CS%F_eff_max_blend <= 2.0) then ; Fe_m2 = -1. ; rat_lin = -1.0 ; endif
 
@@ -405,7 +405,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, AD, G, CS)
         elseif (rat_m1 < 2.0*rat_lin) then
           Sad_wt = 1.0 - (CS%wt_lin_blend / rat_lin) * (rat_m1 - 2.0*rat_lin)
         else ; Sad_wt = 1.0 ; endif
-          
+
         a(I-1,j) = Sad_wt * 0.25 * q(I-1,J) + (1.0 - Sad_wt) * &
                    ( ((2.0-AL_wt)* q(I-1,J) + AL_wt*q(I,J-1)) + &
                       2.0 * (q(I,J) + q(I-1,J-1)) ) * C1_24

@@ -187,7 +187,7 @@ type, public :: legacy_barotropic_CS ; private
     bathyT          !   A copy of bathyT (ocean bottom depth) with wide halos.
   real ALLOCABLE_, dimension(NIMEMW_,NJMEMW_) :: &
     IareaT          !   This is a copy of G%IareaT with wide halos, but will
-                    ! still utilize the macro IareaT when referenced, m-2.              
+                    ! still utilize the macro IareaT when referenced, m-2.
   real ALLOCABLE_, dimension(NIMEMBW_,NJMEMW_) :: &
     Datu_res, &     ! A nondimensional factor by which the zonal face areas
                     ! are to be rescaled to account for the effective face
@@ -253,9 +253,9 @@ type, public :: legacy_barotropic_CS ; private
                              ! between updates to the face area, or 0 only to
                              ! update at the start of a call to btstep.  The
                              ! default is 1.
-  logical :: BT_project_velocity ! If true, step the barotropic velocity first 
+  logical :: BT_project_velocity ! If true, step the barotropic velocity first
                              ! and project out the velocity tendancy by 1+BEBT
-                             ! when calculating the transport.  The default 
+                             ! when calculating the transport.  The default
                              ! (false) is to use a predictor continuity step to
                              ! find the pressure field, and then do a corrector
                              ! continuity step using a weighted average of the
@@ -358,13 +358,13 @@ type, private :: BT_OBC_type
     H_u => NULL(), &      ! The total thickness at the u-points, in m or kg m-2.
     H_v => NULL(), &      ! The total thickness at the v-points, in m or kg m-2.
     uhbt => NULL(), &     ! The zonal and meridional barotropic thickness fluxes
-    vhbt => NULL(), &     ! specified for open boundary conditions (if any), 
+    vhbt => NULL(), &     ! specified for open boundary conditions (if any),
                           ! in units of m3 s-1.
     ubt_outer => NULL(), & ! The zonal and meridional velocities just outside
     vbt_outer => NULL(), & ! the domain, as set by the open boundary conditions,
                            ! in units of m s-1.
     eta_outer_u => NULL(), & ! The surface height outside of the domain at a
-    eta_outer_v => NULL()    ! u- or v- point with an open boundary condition, 
+    eta_outer_v => NULL()    ! u- or v- point with an open boundary condition,
                              ! in units of m or kg m-2.
   integer :: is_u_obc, ie_u_obc, js_u_obc, je_u_obc
   integer :: is_v_obc, ie_v_obc, js_v_obc, je_v_obc
@@ -563,9 +563,9 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
     vbt_trans, &  ! The latest value of vbt used for a transport, in m s-1.
     Cor_ref_v, &  ! The meridional barotropic Coriolis acceleration due
                   ! to the reference velocities, in m s-2.
-    PFv_bt_sum, & ! The summed meridional barotropic pressure gradient force, 
+    PFv_bt_sum, & ! The summed meridional barotropic pressure gradient force,
                   ! in m s-2.
-    Corv_bt_sum, & ! The summed meridional barotropic Coriolis acceleration, 
+    Corv_bt_sum, & ! The summed meridional barotropic Coriolis acceleration,
                   ! in m s-2.
     DCor_v, &     ! A simply averaged depth at v points, in m.
     Datv          ! Basin depth at v-velocity grid points times the x-grid
@@ -594,7 +594,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
                   ! E, or W) from the thickness point. gtot_X has units of m2 H-1 s-2.
                   ! (See Hallberg, J Comp Phys 1997 for a discussion.)
     eta_src, &    ! The source of eta per barotropic timestep, in m or kg m-2.
-    dyn_coef_eta, & ! The coefficient relating the changes in eta to the 
+    dyn_coef_eta, & ! The coefficient relating the changes in eta to the
                   ! dynamic surface pressure under rigid ice, in m2 s-2 H-1.
     p_surf_dyn    ! A dynamic surface pressure under rigid ice, in m2 s-2.
   type(local_BT_cont_u_type), dimension(SZIBW_(CS),SZJW_(CS)) :: &
@@ -783,7 +783,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
     q(:,:) = 0.0 ; DCor_u(:,:) = 0.0 ; DCor_v(:,:) = 0.0
     !  This option has not yet been written properly.
     !  D here should be replaced with D+eta(Bous) or eta(non-Bous).
-!$OMP parallel do default(none) shared(js,je,is,ie,DCor_u,G) 
+!$OMP parallel do default(none) shared(js,je,is,ie,DCor_u,G)
     do j=js,je ; do I=is-1,ie
       DCor_u(I,j) = 0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j))
     enddo ; enddo
@@ -901,7 +901,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
   ! The gtot arrays are the effective layer-weighted reduced gravities for
   ! accelerations across the various faces, with names for the relative
   ! locations of the faces to the pressure point.  They will have their halos
-  ! updated later on. 
+  ! updated later on.
   do k=1,nz
     do j=js,je ; do I=is-1,ie
       gtot_E(i,j)   = gtot_E(i,j)   + pbce(i,j,k)   * wt_u(I,j,k)
@@ -912,7 +912,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
       gtot_S(i,j+1) = gtot_S(i,j+1) + pbce(i,j+1,k) * wt_v(i,J,k)
     enddo ; enddo
   enddo
-  
+
   if (CS%tides) then
     call tidal_forcing_sensitivity(G, CS%tides_CSp, det_de)
     dgeo_de = 1.0 + det_de + CS%G_extra
@@ -1004,7 +1004,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
     BT_force_v(i,J) = BT_force_v(i,J) + wt_v(i,J,k) * bc_accel_v(i,J,k)
   enddo ; enddo ; enddo
 
-  ! Determine the difference between the sum of the layer fluxes and the 
+  ! Determine the difference between the sum of the layer fluxes and the
   ! barotropic fluxes found from the same input velocities.
   if (add_uh0) then
     do j=js,je ; do I=is-1,ie ; uhbt(I,j) = 0.0 ; ubt(I,j) = 0.0 ; enddo ; enddo
@@ -1249,10 +1249,10 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
     if (CS%ua_polarity(i,j) < 0.0) call swap(gtot_E(i,j), gtot_W(i,j))
     if (CS%va_polarity(i,j) < 0.0) call swap(gtot_N(i,j), gtot_S(i,j))
   enddo ; enddo
-  
+
   ! Now start new halo updates.
   if (nonblock_setup) then
-    if (.not.use_BT_cont) & 
+    if (.not.use_BT_cont) &
       pid_Datu = pass_vector_start(Datu, Datv, CS%BT_Domain, To_All+Scalar_Pair)
     ! The following halo update is not needed without wide halos.  RWH
     if (((G%isd > CS%isdw) .or. (G%jsd > CS%jsdw)) .or. (Isq <= is-1) .or. (Jsq <= js-1)) &
@@ -1384,7 +1384,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
       call pass_var(eta_PF_1, CS%BT_Domain, complete=.false.)
       call pass_var(d_eta_PF, CS%BT_Domain, complete=.false.)
     else
-      !   eta_PF_in had correct values in its halos, so only update eta_PF with 
+      !   eta_PF_in had correct values in its halos, so only update eta_PF with
       ! extra-wide halo arrays.  This could have started almost immediately.
       if ((G%isd > CS%isdw) .or. (G%jsd > CS%jsdw)) &
         call pass_var(eta_PF, CS%BT_Domain, complete=.false.)
@@ -1433,7 +1433,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
         call pass_var_complete(pid_eta_PF, eta_PF, CS%BT_Domain)
     endif
     call pass_var_complete(pid_eta_src, eta_src, CS%BT_Domain)
- 
+
     if (ievf > ie) &
       call pass_vector_complete(pid_bt_rem_u, bt_rem_u, bt_rem_v, CS%BT_Domain,&
       To_All+Scalar_Pair)
@@ -1507,7 +1507,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
     if ( (n==nstep) .or. (dt_filt - abs(n-nstep)*dtbt >= 0.0)) then
       wt_vel(n) = 1.0  ; wt_eta(n) = 1.0
     elseif (dtbt + dt_filt - abs(n-nstep)*dtbt > 0.0) then
-      wt_vel(n) = 1.0 + (dt_filt / dtbt) - abs(n-nstep) ; wt_eta(n) = wt_vel(n) 
+      wt_vel(n) = 1.0 + (dt_filt / dtbt) - abs(n-nstep) ; wt_eta(n) = wt_vel(n)
     else
       wt_vel(n) = 0.0  ; wt_eta(n) = 0.0
     endif
@@ -1760,7 +1760,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
         ubt_wtd(I,j) = ubt_wtd(I,j) + wt_vel(n) * ubt(I,j)
       enddo ; enddo
 
-!$OMP do 
+!$OMP do
       do J=jsv-1,jev ; do i=isv,iev
         Cor = -1.0*((amer(I-1,j) * ubt(I-1,j) + bmer(I,j) * ubt(I,j)) + &
                 (cmer(I,j+1) * ubt(I,j+1) + dmer(I-1,j+1) * ubt(I-1,j+1))) - Cor_ref_v(i,J)
@@ -1903,7 +1903,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
  !###   v_accel_bt(i,J) = v_accel_bt(i,J)  * I_sum_wt_accel
     vbt_wtd(i,J) = vbt_wtd(i,J) * I_sum_wt_vel
   enddo ; enddo
- 
+
   if (present(uhbt_out)) then
     uhbt_out(:,:) = 0.0
     if (use_BT_cont) then ; do j=js,je ; do I=is-1,ie
@@ -1924,7 +1924,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
   if (id_clock_pass_post > 0) call cpu_clock_begin(id_clock_pass_post)
   if (G%nonblocking_updates) then
     call pass_var_complete(pid_e_anom, e_anom, G%Domain)
-  
+
     if (find_etaav) pid_etaav = pass_var_start(etaav, G%Domain)
     pid_uhbtav = pass_vector_start(uhbtav, vhbtav, G%Domain, complete=.false.)
     pid_ubtav = pass_vector_start(CS%ubtav, CS%vbtav, G%Domain)
@@ -2024,14 +2024,14 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
       if (CS%id_visc_rem_u > 0) call post_data(CS%id_visc_rem_u, visc_rem_u, CS%diag)
       if (CS%id_visc_rem_v > 0) call post_data(CS%id_visc_rem_v, visc_rem_v, CS%diag)
     endif
-    
-    if (CS%id_frhatu > 0) call post_data(CS%id_frhatu, CS%frhatu, CS%diag) 
-    if (CS%id_uhbt > 0) call post_data(CS%id_uhbt, uhbtav, CS%diag) 
-    if (CS%id_frhatv > 0) call post_data(CS%id_frhatv, CS%frhatv, CS%diag) 
-    if (CS%id_vhbt > 0) call post_data(CS%id_vhbt, vhbtav, CS%diag) 
 
-    if (CS%id_frhatu1 > 0) call post_data(CS%id_frhatu1, CS%frhatu1, CS%diag) 
-    if (CS%id_frhatv1 > 0) call post_data(CS%id_frhatv1, CS%frhatv1, CS%diag) 
+    if (CS%id_frhatu > 0) call post_data(CS%id_frhatu, CS%frhatu, CS%diag)
+    if (CS%id_uhbt > 0) call post_data(CS%id_uhbt, uhbtav, CS%diag)
+    if (CS%id_frhatv > 0) call post_data(CS%id_frhatv, CS%frhatv, CS%diag)
+    if (CS%id_vhbt > 0) call post_data(CS%id_vhbt, vhbtav, CS%diag)
+
+    if (CS%id_frhatu1 > 0) call post_data(CS%id_frhatu1, CS%frhatu1, CS%diag)
+    if (CS%id_frhatv1 > 0) call post_data(CS%id_frhatv1, CS%frhatv1, CS%diag)
   else
     if (CS%id_frhatu1 > 0) CS%frhatu1(:,:,:) = CS%frhatu(:,:,:)
     if (CS%id_frhatv1 > 0) CS%frhatv1(:,:,:) = CS%frhatv(:,:,:)
@@ -2107,7 +2107,7 @@ subroutine legacy_set_dtbt(G, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
 
   if (.not.(present(pbce) .or. present(gtot_est))) call MOM_error(FATAL, &
       "legacy_set_dtbt: Either pbce or gtot_est must be present.")
-  
+
   add_SSH = 0.0 ; if (present(SSH_add)) add_SSH = SSH_add
 
   use_BT_cont = .false.
@@ -3085,7 +3085,7 @@ subroutine set_local_BT_cont_types(BT_cont, BTCL_u, BTCL_v, G, MS, BT_Domain, ha
   type(ocean_grid_type),                                 intent(inout) :: G
   type(MOM_domain_type),                                intent(inout) :: BT_Domain
   integer,                                     optional, intent(in)    :: halo
-!   This subroutine sets up reordered versions of the BT_cont type in the 
+!   This subroutine sets up reordered versions of the BT_cont type in the
 ! local_BT_cont types, which have wide halos properly filled in.
 ! Arguments: BT_cont - The BT_cont_type input to the barotropic solver.
 !  (out)     BTCL_u - A structure with the u information from BT_cont.
@@ -3106,7 +3106,7 @@ subroutine set_local_BT_cont_types(BT_cont, BTCL_u, BTCL_v, G, MS, BT_Domain, ha
 
   ! Copy the BT_cont arrays into symmetric, potentially wide haloed arrays.
   u_polarity(:,:) = 1.0
-  uBT_EE(:,:) = 0.0 ; uBT_WW(:,:) = 0.0 
+  uBT_EE(:,:) = 0.0 ; uBT_WW(:,:) = 0.0
   FA_u_EE(:,:) = 0.0 ; FA_u_E0(:,:) = 0.0 ; FA_u_W0(:,:) = 0.0 ; FA_u_WW(:,:) = 0.0
   do I=is-1,ie ; do j=js,je
     uBT_EE(I,j) = BT_cont%uBT_EE(I,j) ; uBT_WW(I,j) = BT_cont%uBT_WW(I,j)
@@ -3115,7 +3115,7 @@ subroutine set_local_BT_cont_types(BT_cont, BTCL_u, BTCL_v, G, MS, BT_Domain, ha
   enddo ; enddo
 
   v_polarity(:,:) = 1.0
-  vBT_NN(:,:) = 0.0 ; vBT_SS(:,:) = 0.0 
+  vBT_NN(:,:) = 0.0 ; vBT_SS(:,:) = 0.0
   FA_v_NN(:,:) = 0.0 ; FA_v_N0(:,:) = 0.0 ; FA_v_S0(:,:) = 0.0 ; FA_v_SS(:,:) = 0.0
   do i=is,ie ; do J=js-1,je
     vBT_NN(i,J) = BT_cont%vBT_NN(i,J) ; vBT_SS(i,J) = BT_cont%vBT_SS(i,J)
@@ -3264,7 +3264,7 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, rescale_faces, eta, halo, add_
   if (present(eta)) then
     ! The use of harmonic mean thicknesses ensure positive definiteness.
     if (G%Boussinesq) then
-!$OMP do 
+!$OMP do
       do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
         H1 = CS%bathyT(i,j) + eta(i,j) ; H2 = CS%bathyT(i+1,j) + eta(i+1,j)
         Datu(I,j) = 0.0 ; if ((H1 > 0.0) .and. (H2 > 0.0)) &
@@ -3379,7 +3379,7 @@ subroutine legacy_bt_mass_source(h, eta, fluxes, set_cor, dt_therm, &
 
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,G,h,set_cor,CS,dt_therm, &
 !$OMP                                  fluxes,eta,dt_since_therm)              &
-!$OMP                          private(eta_h,h_tot,limit_dt,d_eta) 
+!$OMP                          private(eta_h,h_tot,limit_dt,d_eta)
   do j=js,je
     do i=is,ie ; h_tot(i) = h(i,j,1) ; enddo
     if (G%Boussinesq) then
@@ -3511,7 +3511,7 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
   call get_param(param_file, mod, "SPLIT", CS%split, &
                  "Use the split time stepping if true.", default=.true.)
   if (.not.CS%split) return
-  
+
   ! ### USE SOMETHING OTHER THAN MAXVEL FOR THIS...
   call get_param(param_file, mod, "BOUND_BT_CORRECTION", CS%bound_BT_corr, &
                  "If true, the corrective pseudo mass-fluxes into the \n"//&
@@ -3745,7 +3745,7 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
   CS%eta_source(:,:) = 0.0 ; CS%eta_cor(:,:) = 0.0
   CS%IDatu(:,:) = 0.0 ; CS%IDatv(:,:) = 0.0
   CS%Datu_res(:,:) = 1.0 ; CS%Datv_res(:,:) = 1.0
-  
+
   CS%ua_polarity(:,:) = 1.0 ; CS%va_polarity(:,:) = 1.0
   call pass_vector(CS%ua_polarity, CS%va_polarity, CS%BT_domain, To_All, AGRID)
 
@@ -3818,7 +3818,7 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
     call pass_var(CS%q_D, CS%BT_Domain, To_All, position=CORNER)
     call pass_vector(CS%D_u_Cor, CS%D_v_Cor, CS%BT_Domain, To_All+Scalar_Pair)
   endif
- 
+
   ! Estimate the maximum stable barotropic time step.
   dtbt_input = CS%dtbt
   CS%dtbt_fraction = 0.98 ; if (CS%dtbt < 0.0) CS%dtbt_fraction = -CS%dtbt

@@ -93,7 +93,7 @@ type, public :: param_file_type ; private
   character(len=FILENAME_LENGTH) :: filename(MAX_PARAM_FILES) ! The names of the open files.
   logical  :: NetCDF_file(MAX_PARAM_FILES)! If true, the input file is in NetCDF.
                                     ! This is not yet implemented.
-  type(file_data_type) :: param_data(MAX_PARAM_FILES) ! Structures that contain 
+  type(file_data_type) :: param_data(MAX_PARAM_FILES) ! Structures that contain
                                     ! the valid data lines from the parameter
                                     ! files, enabling all subsequent reads of
                                     ! parameter data to occur internally.
@@ -145,7 +145,7 @@ subroutine open_param_file(filename, CS, checkable, component, doc_file_dir)
   logical,          optional, intent(in) :: checkable
   character(len=*), optional, intent(in) :: component
   character(len=*), optional, intent(in) :: doc_file_dir
-  
+
   logical :: file_exists, unit_in_use, Netcdf_file, may_check
   integer :: ios, iounit, strlen, i
   character(len=240) :: doc_path
@@ -281,7 +281,7 @@ subroutine close_param_file(CS, quiet_close, component)
     call doc_end(CS%doc)
     return
   endif ; endif
-  
+
   ! Log the parameters for the parser.
   mod = "MOM_file_parser"
   call log_version(CS, mod, version)
@@ -322,7 +322,7 @@ subroutine close_param_file(CS, quiet_close, component)
     if (all_PEs_read .or. is_root_pe()) close(CS%iounit(i))
     call MOM_mesg("close_param_file: "// trim(CS%filename(i))// &
                  " has been closed successfully.", 5)
-    
+
     ! Check for unused lines.
     if (is_root_pe() .and. (CS%report_unused .or. &
                             CS%unused_params_fatal)) then
@@ -383,7 +383,7 @@ subroutine populate_param_data(iounit, filename, param_data)
         if (openMultiLineComment(line)) inMultiLineComment=.true.
       endif
     enddo ! while (.true.)
- 8  continue ! get here when read() reaches EOF 
+ 8  continue ! get here when read() reaches EOF
 
     if (inMultiLineComment .and. is_root_pe()) &
       call MOM_error(FATAL, 'MOM_file_parser : A C-style multi-line comment '// &
@@ -421,7 +421,7 @@ subroutine populate_param_data(iounit, filename, param_data)
         if (lastNonCommentNonBlank(line)>0) then
           line = removeComments(line)
           line = simplifyWhiteSpace(line(:len_trim(line)))
-          num_lines = num_lines + 1 
+          num_lines = num_lines + 1
           param_data%line(num_lines) = line
         endif
         if (openMultiLineComment(line)) inMultiLineComment=.true.
@@ -927,7 +927,7 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
         endif
       endif
 
-      ! Newer form of parameter block, block%, %block or block%param or 
+      ! Newer form of parameter block, block%, %block or block%param or
       iso=index(line(:last),'%')
       fullPathParameter = .false.
       if (iso==1) then ! % is first character means this is a close

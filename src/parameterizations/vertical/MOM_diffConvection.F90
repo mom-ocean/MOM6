@@ -96,7 +96,7 @@ end function diffConvection_init
 
 
 subroutine diffConvection_calculate(CS, G, h, Temp, Salt, EOS, Kd_int)
-! Calculates diffusivity and non-local transport for KPP parameterization 
+! Calculates diffusivity and non-local transport for KPP parameterization
 
 ! Arguments
   type(diffConvection_CS),                pointer       :: CS    ! Control structure

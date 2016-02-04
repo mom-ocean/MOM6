@@ -72,7 +72,7 @@ subroutine write_cputime_start_clock(CS)
 !                 for this module
   integer :: new_cputime   ! The CPU time returned by SYSTEM_CLOCK
   if (.not.associated(CS)) allocate(CS)
-  
+
   call SYSTEM_CLOCK(new_cputime, CLOCKS_PER_SEC, MAX_TICKS)
   CS%prev_cputime = new_cputime
 end subroutine write_cputime_start_clock

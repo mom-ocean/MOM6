@@ -299,8 +299,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
 
   if ((G%nkml>0) .and. .not.use_BBL_EOS) then
     do i=G%IscB,G%IecB+1 ; p_ref(i) = tv%P_ref ; enddo
-!$OMP parallel do default(none) shared(Jsq,Jeq,Isq,Ieq,nkmb,tv,p_ref,Rml)    
-    do j=Jsq,Jeq+1 ; do k=1,nkmb 
+!$OMP parallel do default(none) shared(Jsq,Jeq,Isq,Ieq,nkmb,tv,p_ref,Rml)
+    do j=Jsq,Jeq+1 ; do k=1,nkmb
       call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_ref, &
                       Rml(:,j,k), Isq, Ieq-Isq+2, tv%eqn_of_state)
     enddo ; enddo
@@ -383,7 +383,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
             hutot = hutot + hweight * sqrt(v(i,j,k)*v(i,j,k) + &
                                            u_at_v*u_at_v + U_bg_sq)
           endif ; endif
-          
+
           if (use_BBL_EOS .and. (hweight >= 0.0)) then ; if (m==1) then
             Thtot = Thtot + hweight * 0.5 * (tv%T(i,j,k) + tv%T(i+1,j,k))
             Shtot = Shtot + hweight * 0.5 * (tv%S(i,j,k) + tv%S(i+1,j,k))
@@ -398,7 +398,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
         else
           ustar(i) = cdrag_sqrt*CS%drag_bg_vel
         endif
-        
+
         if (use_BBL_EOS) then ; if (hwtot > 0.0) then
           T_EOS(i) = Thtot/hwtot ; S_EOS(i) = Shtot/hwtot
         else
@@ -420,7 +420,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
         press(i) = press(i) + G%H_to_Pa * 0.5 * (h(i,j,k) + h(i,j+1,k))
       enddo ; enddo ; endif
       call calculate_density_derivs(T_EOS, S_EOS, press, dR_dT, dR_dS, &
-                                    is-G%IsdB+1, ie-is+1, tv%eqn_of_state)      
+                                    is-G%IsdB+1, ie-is+1, tv%eqn_of_state)
     endif
 
     do i=is,ie ; if (do_i(i)) then
@@ -536,7 +536,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
       else ; C2f = (G%CoriolisBu(i-1,j)+G%CoriolisBu(i,j)) ; endif
 
       if (CS%cdrag * U_bg_sq <= 0.0) then
-        ! This avoids NaNs and overflows, and could be used in all cases, 
+        ! This avoids NaNs and overflows, and could be used in all cases,
         ! but is not bitwise identical to the current code.
         ustH = ustar(i)*G%m_to_H ; root = sqrt(0.25*ustH**2 + (htot*C2f)**2)
         if (htot*ustH <= (CS%BBL_thick_min+h_neglect) * (0.5*ustH + root)) then
@@ -575,7 +575,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
           Dm = 2.0 * D_vel * tmp / (D_vel + tmp)
         endif
         if (Dm > Dp) then ; tmp = Dp ; Dp = Dm ; Dm = tmp ; endif
-        
+
         ! Convert the D's to the units of thickness.
         Dp = G%m_to_H*Dp ; Dm = G%m_to_H*Dm ; D_vel = G%m_to_H*D_vel
 
@@ -798,7 +798,7 @@ function set_v_at_u(v, h, G, i, j, k)
   ! This subroutine finds a thickness-weighted value of v at the u-points.
   real :: hwt(4)           ! Masked weights used to average v onto u, in H.
   real :: hwt_tot          ! The sum of the masked thicknesses, in H.
-  
+
   hwt(1) = (h(i,j-1,k) + h(i,j,k)) * G%mask2dCv(i,j-1)
   hwt(2) = (h(i+1,j-1,k) + h(i+1,j,k)) * G%mask2dCv(i+1,j-1)
   hwt(3) = (h(i,j,k) + h(i,j+1,k)) * G%mask2dCv(i,j)
@@ -819,7 +819,7 @@ function set_u_at_v(u, h, G, i, j, k)
   ! This subroutine finds a thickness-weighted value of u at the v-points.
   real :: hwt(4)           ! Masked weights used to average u onto v, in H.
   real :: hwt_tot          ! The sum of the masked thicknesses, in H.
-  
+
   hwt(1) = (h(i-1,j,k) + h(i,j,k)) * G%mask2dCu(i-1,j)
   hwt(2) = (h(i,j,k) + h(i+1,j,k)) * G%mask2dCu(i,j)
   hwt(3) = (h(i-1,j+1,k) + h(i,j+1,k)) * G%mask2dCu(i-1,j+1)
@@ -1118,7 +1118,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
         endif
       enddo
     endif
-      
+
     if (do_any_shelf) then
       do k=1,nz ; do I=Isq,Ieq ; if (do_i(I)) then
         if (u(i,j,k) *(h(i+1,j,k) - h(i,j,k)) >= 0) then
@@ -1163,7 +1163,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
           T_EOS(I) = Thtot(I)/hwtot ; S_EOS(I) = Shtot(I)/hwtot
         else
           T_EOS(I) = 0.0 ; S_EOS(I) = 0.0
-        endif ; endif     
+        endif ; endif
       endif ; enddo ! I-loop
 
       if (use_EOS) then
@@ -1209,7 +1209,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
           do k=1,nz-1
             Rlay = G%Rlay(k) ; Rlb = G%Rlay(k+1)
 
-            oldfn = Rlay*htot(i) - Rhtot(i) 
+            oldfn = Rlay*htot(i) - Rhtot(i)
             if (oldfn >= ustarsq) exit
 
             Dfn = (Rlb - Rlay)*(h_at_vel(i,k)+htot(i))
@@ -1353,7 +1353,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
         endif
       enddo
     endif
-      
+
     if (do_any_shelf) then
       do k=1,nz ; do i=is,ie ; if (do_i(i)) then
         if (v(i,j,k) * (h(i,j+1,k) - h(i,j,k)) >= 0) then
@@ -1398,12 +1398,12 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
           T_EOS(i) = Thtot(i)/hwtot ; S_EOS(i) = Shtot(i)/hwtot
         else
           T_EOS(i) = 0.0 ; S_EOS(i) = 0.0
-        endif ; endif     
+        endif ; endif
       endif ; enddo ! I-loop
 
       if (use_EOS) then
         call calculate_density_derivs(T_EOS, S_EOS, fluxes%p_surf(:,j), &
-                     dR_dT, dR_dS, is-G%IsdB+1, ie-is+1, tv%eqn_of_state)      
+                     dR_dT, dR_dS, is-G%IsdB+1, ie-is+1, tv%eqn_of_state)
       endif
 
       do i=is,ie ; if (do_i(i)) then
@@ -1444,7 +1444,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
           do k=1,nz-1
             Rlay = G%Rlay(k) ; Rlb = G%Rlay(k+1)
 
-            oldfn = Rlay*htot(i) - Rhtot(i) 
+            oldfn = Rlay*htot(i) - Rhtot(i)
             if (oldfn >= ustarsq) exit
 
             Dfn = (Rlb - Rlay)*(h_at_vel(i,k)+htot(i))
@@ -1499,7 +1499,7 @@ subroutine set_visc_register_restarts(G, param_file, visc, restart_CS)
 !                   fields.  Allocated here.
 !  (in)      restart_CS - A pointer to the restart control structure.
   type(vardesc) :: vd
-  logical :: use_kappa_shear, adiabatic, useKPP, useEPBL
+  logical :: use_kappa_shear, adiabatic, useKPP, useEPBL, MLE_use_PBL_MLD
   integer :: isd, ied, jsd, jed, nz
   character(len=40)  :: mod = "MOM_set_visc"  ! This module's name.
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
@@ -1534,6 +1534,16 @@ subroutine set_visc_register_restarts(G, param_file, visc, restart_CS)
     vd = var_desc("Kv_turb","m2 s-1","Turbulent viscosity at interfaces", &
                   hor_grid='h', z_grid='i')
     call register_restart_field(visc%Kv_turb, vd, .false., restart_CS)
+  endif
+
+  ! visc%MLD is used to communicate the state of the (e)PBL to the rest of the model
+  call get_param(param_file, mod, "MLE_USE_PBL_MLD", MLE_use_PBL_MLD, &
+                 default=.false., do_not_log=.true.)
+  if (MLE_use_PBL_MLD) then
+    allocate(visc%MLD(isd:ied,jsd:jed)) ; visc%MLD(:,:) = 0.0
+    vd = var_desc("MLD","m","Instantaneous active mixing layer depth", &
+                  hor_grid='h', z_grid='1')
+    call register_restart_field(visc%MLD, vd, .false., restart_CS)
   endif
 
 end subroutine set_visc_register_restarts

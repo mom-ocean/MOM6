@@ -26,7 +26,8 @@ use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use MOM_EOS, only : int_specific_vol_dp
 use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord
 use MOM_regridding, only : regridding_CS
-use MOM_remapping, only : remapping_CS, remapping_core, initialize_remapping
+use MOM_remapping, only : remapping_CS, initialize_remapping
+use MOM_remapping, only : remapping_core_w
 use MOM_remapping, only : dzFromH1H2, remapDisableBoundaryExtrapolation
 use mpp_domains_mod, only  : mpp_global_field, mpp_get_compute_domain
 use mpp_mod, only          : mpp_broadcast,mpp_root_pe,mpp_sync,mpp_sync_self
@@ -212,7 +213,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, PF, src_file, src_var_nam, &
         ! Calcaulate an effectiveadisplacement, deltaE
         call dzFromH1H2( nPoints, h1, nz, h2, deltaE ) ! sets deltaE
         ! Now remap from h1 to h2=h1+div.deltaE
-        call remapping_core( remapCS, nPoints, h1, tmpT1dIn, nz, deltaE, tmpT1d ) ! sets tmpT1d
+        call remapping_core_w( remapCS, nPoints, h1, tmpT1dIn, nz, deltaE, tmpT1d ) ! sets tmpT1d
 !!!MJH        h(i,j,:) = h2(:)
         tr(i,j,:) = tmpT1d(:)
       else
@@ -887,7 +888,7 @@ do j=1,ny
 ! For the piecewise parabolic form add the following...
 !     + C1_3*cur_tr*(z2(kz)**2 + z2(kz)*z1(kz) + z1(kz)**2))
 !        if (debug_) then
-! 	   print *,'k,k_top,k_bot= ',k,k_top,k_bot
+!          print *,'k,k_top,k_bot= ',k,k_top,k_bot
 !        endif
         if (debug_) then
            if (PRESENT(i_debug)) then
@@ -915,7 +916,7 @@ do j=1,ny
           sl_tr = 0.0 ! ; cur_tr = 0.0
           if ((kz < nlevs_data(i,j)) .and. (kz > 1)) then
             sl_tr = find_limited_slope(tr_1d, z_edges, kz)
-!	    if (debug_) then
+!            if (debug_) then
 !              print *,'002 sl_tr,k,kz,nlevs= ',sl_tr,k,kz,nlevs_data(i,j),nlevs(i,j)
 !            endif
           endif

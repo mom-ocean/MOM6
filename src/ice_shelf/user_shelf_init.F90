@@ -117,7 +117,7 @@ subroutine USER_initialize_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, 
   type(ocean_grid_type),          intent(in)  :: G
   type(user_ice_shelf_CS),        pointer     :: CS
   type(param_file_type),          intent(in)  :: param_file
-  logical				      :: new_sim
+  logical                                     :: new_sim
 
 ! Arguments: mass_shelf - The mass per unit area averaged over the full ocean
 !                         cell, in kg m-2. (Intent out)
@@ -188,7 +188,7 @@ subroutine USER_update_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, C
   type(ocean_grid_type),          intent(in)    :: G
   type(user_ice_shelf_CS),        pointer       :: CS
   type(time_type),                intent(in)    :: Time
-  logical,	                      intent(in)    :: new_sim
+  logical,                        intent(in)    :: new_sim
 
 ! Arguments: mass_shelf - The mass per unit area averaged over the full ocean
 !                         cell, in kg m-2. (Intent out)

@@ -36,12 +36,12 @@ public get_flux_units, get_thickness_units, get_tr_flux_units
 public isPointInCell
 
 type, public :: ocean_block_type
-  integer :: isc, iec, jsc, jec     ! The range of the computational indices and 
+  integer :: isc, iec, jsc, jec     ! The range of the computational indices and
   integer :: isd, ied, jsd, jed     ! data indices at tracer cell enters for each block.
-  integer :: IscB, IecB, JscB, JecB ! The range of the computational indices and 
-  integer :: IsdB, IedB, JsdB, JedB ! data indices at tracer cell vertices 
+  integer :: IscB, IecB, JscB, JecB ! The range of the computational indices and
+  integer :: IsdB, IedB, JsdB, JedB ! data indices at tracer cell vertices
                                     ! for each block.
-  integer :: ioff, joff             ! index offset of block indices relative to 
+  integer :: ioff, joff             ! index offset of block indices relative to
                                     ! domain indices
 end type ocean_block_type
 
@@ -177,7 +177,7 @@ type, public :: ocean_grid_type
                         ! units of thickness.
   real :: H_to_m        ! A constant that translates distances in the units of
                         ! thickness to m.
-  real :: H_to_Pa       ! A constant that translates the units of thickness to 
+  real :: H_to_Pa       ! A constant that translates the units of thickness to
                         ! to pressure in Pa.
 
   ! These variables are global sums that are useful for 1-d diagnostics
@@ -187,9 +187,9 @@ type, public :: ocean_grid_type
   ! These variables are for block strucutre.
   integer                   :: nblocks
   type(hor_index_type), pointer :: Block(:) => NULL() ! store indices for each block
-  integer :: isd_bk, ied_bk, jsd_bk, jed_bk     ! block data domain indices at 
+  integer :: isd_bk, ied_bk, jsd_bk, jed_bk     ! block data domain indices at
                                                 ! tracer cell centers.
-  integer :: isdB_bk, iedB_bk, jsdB_bk, jedB_bk ! block data domain indices at 
+  integer :: isdB_bk, iedB_bk, jsdB_bk, jedB_bk ! block data domain indices at
                                                 ! tracer cell vertices.
 end type ocean_grid_type
 
@@ -292,7 +292,7 @@ subroutine MOM_grid_init(G, param_file)
   G%IegB = G%ieg ; G%JegB = G%jeg
 
   call MOM_mesg("  MOM_grid.F90, MOM_grid_init: allocating metrics", 5)
- 
+
   call allocate_metrics(G)
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -360,7 +360,7 @@ subroutine MOM_grid_init(G, param_file)
     j = (n-1)/niblock + 1
     !--- isd and jsd are always 1 for each block
     G%Block(n)%isd = 1 ; G%Block(n)%jsd = 1
-    G%Block(n)%isc = G%Block(n)%isd+nihalo 
+    G%Block(n)%isc = G%Block(n)%isd+nihalo
     G%Block(n)%jsc = G%Block(n)%jsd+njhalo
     G%Block(n)%iec = G%Block(n)%isc + iend(i) - ibegin(i)
     G%Block(n)%jec = G%Block(n)%jsc + jend(j) - jbegin(j)
@@ -599,7 +599,7 @@ subroutine allocate_metrics(G)
   ALLOC_(G%dx_Cv(isd:ied,JsdB:JedB))     ; G%dx_Cv(:,:) = 0.0
   ALLOC_(G%dy_Cu(IsdB:IedB,jsd:jed))     ; G%dy_Cu(:,:) = 0.0
   ALLOC_(G%dx_Cv_obc(isd:ied,JsdB:JedB)) ; G%dx_Cv_obc(:,:) = 0.0
-  ALLOC_(G%dy_Cu_obc(IsdB:IedB,jsd:jed)) ; G%dy_Cu_obc(:,:) = 0.0  
+  ALLOC_(G%dy_Cu_obc(IsdB:IedB,jsd:jed)) ; G%dy_Cu_obc(:,:) = 0.0
 
   ALLOC_(G%areaCu(IsdB:IedB,jsd:jed))  ; G%areaCu(:,:) = 0.0
   ALLOC_(G%areaCv(isd:ied,JsdB:JedB))  ; G%areaCv(:,:) = 0.0

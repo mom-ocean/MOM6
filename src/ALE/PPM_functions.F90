@@ -1,147 +1,118 @@
+!> Provides functions used with the Piecewise-Parabolic-Method in the vertical ALE algorithm.
 module PPM_functions
-!==============================================================================
-!
-! This file is part of MOM.
-!
-! Date of creation: 2008.06.06
-! L. White
-!
-! This module contains routines that handle one-dimensionnal finite volume
-! reconstruction using the piecewise parabolic method (PPM).
-!
-!==============================================================================
+
+! This file is part of MOM6. See LICENSE.md for the license.
+
+! First version was created by Laurent White, June 2008.
+! Substantially re-factored January 2016.
+
+!! @todo Re-factor PPM_boundary_extrapolation to give round-off safe and
+!!       optimization independent results.
+
 use regrid_edge_values, only : bound_edge_values, check_discontinuous_edge_values
 
 implicit none ; private
 
 public PPM_reconstruction, PPM_boundary_extrapolation
 
+!> A tiny width that is so small that adding it to cell widths does not
+!! change the value due to a computational representation. It is used
+!! to avoid division by zero.
+!! @note This is a dimensional parameter and should really include a unit
+!!       conversion.
 real, parameter :: h_neglect = 1.E-30
 
 contains
 
-!------------------------------------------------------------------------------
-! PPM_reconstruction
-! -----------------------------------------------------------------------------
+!> Builds quadratic polynomials coefficients from cell mean and edge values.
 subroutine PPM_reconstruction( N, h, u, ppoly_E, ppoly_coefficients)
-!------------------------------------------------------------------------------
-! Reconstruction by quadratic polynomials within each cell.
-!
-! The edge values MUST have been estimated prior to calling this routine
-!
-! N:     number of cells in grid
-! h:     thicknesses of grid cells
-! u:     cell averages to use in constructing piecewise polynomials
-! ppoly_E : edge values of piecewise polynomials
-! ppoly_coefficients : coefficients of piecewise polynomials
-!
-! It is assumed that the dimension of 'u' is equal to the number of cells
-! defining 'grid' and 'ppoly'. No consistency check is performed.
-!------------------------------------------------------------------------------
-
-  ! Arguments
-  integer,              intent(in)    :: N ! Number of cells
-  real, dimension(:),   intent(in)    :: h ! cell widths (size N)
-  real, dimension(:),   intent(in)    :: u ! cell averages (size N)
-  real, dimension(:,:), intent(inout) :: ppoly_E
-  real, dimension(:,:), intent(inout) :: ppoly_coefficients
-
+  integer,              intent(in)    :: N !< Number of cells
+  real, dimension(N),   intent(in)    :: h !< Cell widths
+  real, dimension(N),   intent(in)    :: u !< Cell averages
+  real, dimension(N,2), intent(inout) :: ppoly_E !< Edge values
+  real, dimension(N,3), intent(inout) :: ppoly_coefficients !< Polynomial coefficients
   ! Local variables
-  integer   :: k            ! loop index
-  real      :: u0_l, u0_r   ! edge values (left and right)
-  real      :: a, b, c      ! parabola coefficients
+  integer   :: k              ! Loop index
+  real      :: edge_l, edge_r ! Edge values (left and right)
   
   ! PPM limiter
   call PPM_limiter_standard( N, h, u, ppoly_E )
 
-  ! Loop on cells to construct the parabola within each cell
+  ! Loop over all cells
   do k = 1,N
   
-    u0_l = ppoly_E(k,1)
-    u0_r = ppoly_E(k,2)
+    edge_l = ppoly_E(k,1)
+    edge_r = ppoly_E(k,2)
 
-    a = u0_l
-    b = 6.0 * u(k) - 4.0 * u0_l - 2.0 * u0_r
-    c = 3.0 * ( u0_r + u0_l - 2.0 * u(k) )
-    
-    ! Store coefficients
-    ppoly_coefficients(k,1) = a
-    ppoly_coefficients(k,2) = b
-    ppoly_coefficients(k,3) = c
+    ! Store polynomial coefficients
+    ppoly_coefficients(k,1) = edge_l
+    ppoly_coefficients(k,2) = 4.0 * ( u(k) - edge_l ) + 2.0 * ( u(k) - edge_r )
+    ppoly_coefficients(k,3) = 3.0 * ( ( edge_r - u(k) ) + ( edge_l - u(k) ) )
   
-  end do ! end loop on interior cells
+  enddo
 
 end subroutine PPM_reconstruction
 
-
-!------------------------------------------------------------------------------
-! Limit ppm
-! -----------------------------------------------------------------------------
+!> Adjusts edge values using the standard PPM limiter (Colella & Woodward, JCP 1984)
+!! after first checking that the edge values are bounded by neighbors cell averages
+!! and that the edge values are monotonic between cell averages.
 subroutine PPM_limiter_standard( N, h, u, ppoly_E )
-!------------------------------------------------------------------------------
-! Standard PPM limiter (Colella & Woodward, JCP 1984).
-!
-! N:     number of cells in grid
-! h:     thicknesses of grid cells
-! u:     cell averages to use in constructing piecewise polynomials
-! ppoly_E : edge values of piecewise polynomials
-!
-! It is assumed that the dimension of 'u' is equal to the number of cells
-! defining 'grid' and 'ppoly'. No consistency check is performed.
-!------------------------------------------------------------------------------
-
-  ! Arguments
   integer,              intent(in)    :: N ! Number of cells
-  real, dimension(:),   intent(in)    :: h ! cell widths (size N)
-  real, dimension(:),   intent(in)    :: u ! cell averages (size N)
-  real, dimension(:,:), intent(inout) :: ppoly_E
-
+  real, dimension(N),   intent(in)    :: h ! Cell widths
+  real, dimension(N),   intent(in)    :: u ! Cell averages
+  real, dimension(N,2), intent(inout) :: ppoly_E !< Edge values
   ! Local variables
-  integer   :: k                ! loop index
-  real      :: u_l, u_c, u_r    ! cell averages (left, center and right)
-  real      :: u0_l, u0_r       ! edge values (left and right)
+  integer   :: k              ! Loop index
+  real      :: u_l, u_c, u_r  ! Cell averages (left, center and right)
+  real      :: edge_l, edge_r ! Edge values (left and right)
   real      :: expr1, expr2
-  
+
   ! Bound edge values
   call bound_edge_values( N, h, u, ppoly_E )
 
   ! Make discontinuous edge values monotonic
   call check_discontinuous_edge_values( N, u, ppoly_E )
 
-  ! Loop on interior cells to apply the standard 
+  ! Loop on interior cells to apply the standard
   ! PPM limiter (Colella & Woodward, JCP 84)
   do k = 2,N-1
-    
+
     ! Get cell averages
     u_l = u(k-1)
     u_c = u(k)
     u_r = u(k+1)
-  
-    u0_l = ppoly_E(k,1)
-    u0_r = ppoly_E(k,2)
-    
-    ! Auxiliary variables
-    expr1 = (u0_r - u0_l) * (u_c - 0.5*(u0_l+u0_r))
-    expr2 = (u0_r - u0_l) * (u0_r - u0_l) / 6.0
-    
-    ! Flatten extremum
-    if ( (u_r - u_c)*(u_c - u_l) .LE. 0.0) then
-      u0_l = u_c
-      u0_r = u_c
-    end if
 
-    if ( expr1 .GT. expr2 ) then  
-      u0_l = 3.0 * u_c - 2.0 * u0_r
-    end if  
-    
-    if ( expr1 .LT. -expr2 ) then  
-      u0_r = 3.0 * u_c - 2.0 * u0_l
-    end if  
-    
-    ppoly_E(k,1) = u0_l
-    ppoly_E(k,2) = u0_r
-  
-  end do ! end loop on interior cells
+    edge_l = ppoly_E(k,1)
+    edge_r = ppoly_E(k,2)
+
+    if ( (u_r - u_c)*(u_c - u_l) <= 0.0) then
+      ! Flatten extremum
+      edge_l = u_c
+      edge_r = u_c
+    else
+      expr1 = 3.0 * (edge_r - edge_l) * ( (u_c - edge_l) + (u_c - edge_r))
+      expr2 = (edge_r - edge_l) * (edge_r - edge_l)
+      if ( expr1 > expr2 ) then
+        ! Place extremum at right edge of cell by adjusting left edge value
+        edge_l = u_c + 2.0 * ( u_c - edge_r )
+        edge_l = max( min( edge_l, max(u_l, u_c) ), min(u_l, u_c) ) ! In case of round off
+      elseif ( expr1 < -expr2 ) then
+        ! Place extremum at left edge of cell by adjusting right edge value
+        edge_r = u_c + 2.0 * ( u_c - edge_l )
+        edge_r = max( min( edge_r, max(u_r, u_c) ), min(u_r, u_c) ) ! In case of round off
+      endif
+    endif
+    ! This checks that the difference in edge values is representable
+    ! and avoids overshoot problems due to round off.
+    if ( abs( edge_r - edge_l )<max(1.e-60,epsilon(u_c)*abs(u_c)) ) then
+      edge_l = u_c
+      edge_r = u_c
+    endif
+
+    ppoly_E(k,1) = edge_l
+    ppoly_E(k,2) = edge_r
+
+  enddo ! end loop on interior cells
 
   ! PCM within boundary cells
   ppoly_E(1,:) = u(1)

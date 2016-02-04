@@ -155,7 +155,7 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
   if (.not.associated(CS)) return
   if ((CS%num_cycle <= 0) .and. (.not.CS%do_integrated)) return
 
-  day_end = day_start + set_time(0, floor(dt+0.5))
+  day_end = day_start + set_time(floor(dt+0.5))
 
   do j=js,je ; do i=is,ie
     virt_heat(i,j) = 0.0 ; virt_precip(i,j) = 0.0   

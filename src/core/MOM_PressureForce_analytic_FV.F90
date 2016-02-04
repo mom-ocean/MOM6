@@ -180,7 +180,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
     dp_bk, &    ! The (positive) change in pressure across a layer, in Pa.
     za_bk       ! The geopotential anomaly (i.e. g*e + alpha_0*pressure) at the
                 ! interface atop a layer, in m2 s-2.
-    
+
   real, dimension(SZI_(G)) :: Rho_cv_BL !  The coordinate potential density in the deepest variable
                 ! density near-surface layer, in kg m-3.
   real, dimension(SZDIB_(G%Block(1)),SZDJ_(G%Block(1))) :: & ! on block indices
@@ -317,13 +317,13 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
 
   ! Sum vertically to determine the surface geopotential anomaly.
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,za,alpha_ref,p,G,dza)
-  do j=Jsq,Jeq+1 
+  do j=Jsq,Jeq+1
     do i=Isq,Ieq+1
       za(i,j) = alpha_ref*p(i,j,nz+1) - G%g_Earth*G%bathyT(i,j)
     enddo
     do k=nz,1,-1 ; do i=Isq,Ieq+1
     za(i,j) = za(i,j) + dza(i,j,k)
-    enddo ; enddo 
+    enddo ; enddo
   enddo
 
   if (CS%tides) then
@@ -375,7 +375,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
 !$OMP                                  Jeq_bk,ioff_bk,joff_bk,i,j,za_bk,intx_za_bk,  &
 !$OMP                                  inty_za_bk,dp_bk)
   do n = 1, G%nblocks
-    is_bk=G%block(n)%isc      ; ie_bk=G%block(n)%iec 
+    is_bk=G%block(n)%isc      ; ie_bk=G%block(n)%iec
     js_bk=G%block(n)%jsc      ; je_bk=G%block(n)%jec
     Isq_bk=G%block(n)%IscB    ; Ieq_bk=G%block(n)%IecB
     Jsq_bk=G%block(n)%JscB    ; Jeq_bk=G%block(n)%JecB
@@ -440,16 +440,16 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
 
   if (present(eta)) then
     Pa_to_H = 1.0 / G%H_to_Pa
-    if (use_p_atm) then 
+    if (use_p_atm) then
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,eta,p,p_atm,Pa_to_H)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         eta(i,j) = (p(i,j,nz+1) - p_atm(i,j))*Pa_to_H ! eta has the same units as h.
-      enddo ; enddo 
-    else  
+      enddo ; enddo
+    else
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,eta,p,Pa_to_H)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         eta(i,j) = p(i,j,nz+1)*Pa_to_H ! eta has the same units as h.
-      enddo ; enddo 
+      enddo ; enddo
     endif
   endif
 
@@ -547,7 +547,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
   real, parameter :: C1_6 = 1.0/6.0
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
   integer :: is_bk, ie_bk, js_bk, je_bk, Isq_bk, Ieq_bk, Jsq_bk, Jeq_bk
-  integer :: ioff_bk, joff_bk 
+  integer :: ioff_bk, joff_bk
   integer :: i, j, k, n, isd, ied, jsd, jed, ib, jb
   integer :: PRScheme
 
@@ -601,7 +601,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
       e(i,j,nz+1) = -1.0*G%bathyT(i,j)
     enddo ; enddo
   endif
-!$OMP do 
+!$OMP do
   do j=Jsq,Jeq+1; do k=nz,1,-1 ; do i=Isq,Ieq+1
     e(i,j,K) = e(i,j,K+1) + h(i,j,k)*G%H_to_m
   enddo ; enddo ; enddo
@@ -617,7 +617,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
     if (nkmb>0) then
       tv_tmp%T => T_tmp ; tv_tmp%S => S_tmp
       tv_tmp%eqn_of_state => tv%eqn_of_state
- 
+
       do i=Isq,Ieq+1 ; p_ref(i) = tv%P_Ref ; enddo
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nkmb,nz,G,tv_tmp,tv,p_ref) &
 !$OMP                          private(Rho_cv_BL)
@@ -627,14 +627,14 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
         enddo ; enddo
         call calculate_density(tv%T(:,j,nkmb), tv%S(:,j,nkmb), p_ref, &
                         Rho_cv_BL(:), Isq, Ieq-Isq+2, tv%eqn_of_state)
-     
+
         do k=nkmb+1,nz ; do i=Isq,Ieq+1
           if (G%Rlay(k) < Rho_cv_BL(i)) then
             tv_tmp%T(i,j,k) = tv%T(i,j,nkmb) ; tv_tmp%S(i,j,k) = tv%S(i,j,nkmb)
           else
             tv_tmp%T(i,j,k) = tv%T(i,j,k) ; tv_tmp%S(i,j,k) = tv%S(i,j,k)
           endif
-        enddo ; enddo 
+        enddo ; enddo
       enddo
     else
       tv_tmp%T => tv%T ; tv_tmp%S => tv%S
@@ -692,7 +692,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
 !$OMP                                  intx_pa_bk,inty_pa_bk,dpa_bk,intz_dpa_bk,      &
 !$OMP                                  intx_dpa_bk,inty_dpa_bk,dz_bk,i,j)
   do n = 1, G%nblocks
-    is_bk=G%Block(n)%isc      ; ie_bk=G%Block(n)%iec 
+    is_bk=G%Block(n)%isc      ; ie_bk=G%Block(n)%iec
     js_bk=G%Block(n)%jsc      ; je_bk=G%Block(n)%jec
     Isq_bk=G%Block(n)%IscB    ; Ieq_bk=G%Block(n)%IecB
     Jsq_bk=G%Block(n)%JscB    ; Jeq_bk=G%Block(n)%JecB

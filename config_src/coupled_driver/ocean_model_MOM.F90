@@ -177,7 +177,7 @@ end type ocean_state_type
 
 contains
 
-!#######################################################################
+!=======================================================================
 ! <SUBROUTINE NAME="ocean_model_init">
 !
 ! <DESCRIPTION>
@@ -242,13 +242,13 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   call get_param(param_file, mod, "ENERGYSAVEDAYS",OS%energysavedays, &
                  "The interval in units of TIMEUNIT between saves of the \n"//&
                  "energies of the run and other globally summed diagnostics.", &
-                 default=set_time(0,1), timeunit=Time_unit)
+                 default=set_time(0,days=1), timeunit=Time_unit)
 
   call get_param(param_file, mod, "OCEAN_SURFACE_STAGGER", stagger, &
                  "A case-insensitive character string to indicate the \n"//&
                  "staggering of the surface velocity field that is \n"//&
                  "returned to the coupler.  Valid values include \n"//&
-                 "'A', 'B', or 'C'.", default="B") !### CHANGE THE DEFAULT.
+                 "'A', 'B', or 'C'.", default="C")
   if (uppercase(stagger(1:1)) == 'A') then ; Ocean_sfc%stagger = AGRID
   elseif (uppercase(stagger(1:1)) == 'B') then ; Ocean_sfc%stagger = BGRID_NE
   elseif (uppercase(stagger(1:1)) == 'C') then ; Ocean_sfc%stagger = CGRID_NE
@@ -300,7 +300,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
 !  call convert_state_to_ocean_type(state, Ocean_sfc, OS%grid)
 
   call close_param_file(param_file)
-  call diag_mediator_close_registration()
+  call diag_mediator_close_registration(OS%MOM_CSp%diag)
  
   if (is_root_pe()) &
     write(*,'(/12x,a/)') '======== COMPLETED MOM INITIALIZATION ========'
@@ -310,7 +310,7 @@ end subroutine ocean_model_init
 ! </SUBROUTINE> NAME="ocean_model_init"
 
 
-!#######################################################################
+!=======================================================================
 ! <SUBROUTINE NAME="update_ocean_model">
 !
 ! <DESCRIPTION>
@@ -448,7 +448,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 end subroutine update_ocean_model
 ! </SUBROUTINE> NAME="update_ocean_model"
 
-!#######################################################################
+!=======================================================================
 ! <SUBROUTINE NAME="ocean_model_restart">
 !
 ! <DESCRIPTION>
@@ -491,7 +491,7 @@ subroutine ocean_model_restart(OS, timestamp)
 end subroutine ocean_model_restart
 ! </SUBROUTINE> NAME="ocean_model_restart"
 
-!#######################################################################
+!=======================================================================
 ! <SUBROUTINE NAME="ocean_model_end">
 !
 ! <DESCRIPTION>
@@ -555,7 +555,7 @@ subroutine ocean_model_save_restart(OS, Time, directory, filename_suffix)
 
 end subroutine ocean_model_save_restart
 
-!#######################################################################
+!=======================================================================
 
 subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, maskmap)
   type(domain2D), intent(in)             :: input_domain
@@ -659,7 +659,7 @@ subroutine convert_state_to_ocean_type(state, Ocean_sfc, G, patm, press_to_z)
 end subroutine convert_state_to_ocean_type
 
 
-!#######################################################################
+!=======================================================================
 ! <SUBROUTINE NAME="ocean_model_init_sfc">
 !
 ! <DESCRIPTION>

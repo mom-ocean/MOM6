@@ -59,7 +59,7 @@ subroutine MOM_mesg(message, verb, all_print)
   ! This provides a convenient interface for writing an informative comment.
   integer :: verb_msg
   logical :: write_msg
-  
+
   write_msg = is_root_pe()
   if (present(all_print)) write_msg = write_msg .or. all_print
 
@@ -75,10 +75,10 @@ subroutine MOM_error(level, message, all_print)
   ! This provides a convenient interface for writing an mpp_error message
   ! with run-time filter based on a verbosity.
   logical :: write_msg
-  
+
   write_msg = is_root_pe()
   if (present(all_print)) write_msg = write_msg .or. all_print
-  
+
   select case (level)
     case (NOTE)
       if (write_msg.and.verbosity>=2) call mpp_error(NOTE, message)
@@ -105,7 +105,7 @@ end subroutine MOM_set_verbosity
 function MOM_get_verbosity()
   integer :: MOM_get_verbosity
   MOM_get_verbosity = verbosity
-end function MOM_get_verbosity  
+end function MOM_get_verbosity
 
 function MOM_verbose_enough(verb)
   integer, intent(in) :: verb
