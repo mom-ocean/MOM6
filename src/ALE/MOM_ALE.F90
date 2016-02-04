@@ -391,7 +391,7 @@ subroutine ALE_main( G, h, u, v, tv, Reg, CS, dt)
 
   ! Override old grid with new one. The new grid 'h_new' is built in
   ! one of the 'build_...' routines above.
-!$OMP parallel do default(none) shared(isd,ied,jsd,jed,nk,h,CS)
+!$OMP parallel do default(none) shared(isc,iec,jsc,jec,nk,h,CS)
   do k = 1,nk
     do j = jsc-1,jec+1 ; do i = isc-1,iec+1
       h(i,j,k) = h(i,j,k) + ( CS%dzRegrid(i,j,k) - CS%dzRegrid(i,j,k+1) )
