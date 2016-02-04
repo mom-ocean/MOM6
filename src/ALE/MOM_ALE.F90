@@ -143,6 +143,7 @@ subroutine ALE_init( param_file, G, CS)
   real                            :: filter_shallow_depth, filter_deep_depth
   logical                         :: check_reconstruction
   logical                         :: check_remapping
+  logical                         :: force_bounds_in_subcell
 
   if (associated(CS)) then
     call MOM_error(WARNING, "ALE_init called with an associated "// &
@@ -203,9 +204,14 @@ subroutine ALE_init( param_file, G, CS)
                  "If true, the results of remapping are checked for\n"//&
                  "conservation and new extrema and if an inconsistency is\n"//&
                  "detected then a FATAL error is issued.", default=.false.)
+  call get_param(param_file, mod, "REMAP_BOUND_INTERMEDIATE_VALUES", force_bounds_in_subcell, &
+                 "If true, the values on the intermediate grid used for remapping\n"//&
+                 "are forced to be bounded, which might not be the case due to\n"//&
+                 "round off.", default=.false.)
   call initialize_remapping( G%ke, string, CS%remapCS, &
                              check_reconstruction=check_reconstruction, &
-                             check_remapping=check_remapping )
+                             check_remapping=check_remapping, &
+                             force_bounds_in_subcell=force_bounds_in_subcell)
   call remapDisableBoundaryExtrapolation( CS%remapCS )
 
   call get_param(param_file, mod, "REMAP_AFTER_INITIALIZATION", CS%remap_after_initialization, &
@@ -385,7 +391,7 @@ subroutine ALE_main( G, h, u, v, tv, Reg, CS, dt)
 
   ! Override old grid with new one. The new grid 'h_new' is built in
   ! one of the 'build_...' routines above.
-!$OMP parallel do default(none) shared(isd,ied,jsd,jed,nk,h,CS)
+!$OMP parallel do default(none) shared(isc,iec,jsc,jec,nk,h,CS)
   do k = 1,nk
     do j = jsc-1,jec+1 ; do i = isc-1,iec+1
       h(i,j,k) = h(i,j,k) + ( CS%dzRegrid(i,j,k) - CS%dzRegrid(i,j,k+1) )
@@ -484,7 +490,8 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u,
   endif 
 
   ! Remap tracer
-!$OMP parallel default(none) shared(G,h,dxInterface,CS_remapping,nz,Reg,u,v,ntr,show_call_tree) &
+!$OMP parallel default(none) shared(G,h,dxInterface,CS_remapping,nz,Reg,u,v,ntr,show_call_tree, &
+!$OMP                               dt,h2,CS_ALE,work_conc,work_cont,work_2d,Idt,ppt2mks) &
 !$OMP                       private(h1,dx,u_column)
   if (ntr>0) then
     if (show_call_tree) call callTree_waypoint("remapping tracers (remap_all_state_vars)")
@@ -644,8 +651,8 @@ subroutine ALE_remap_scalar(CS, G, nk_src, h_src, s_src, h_dst, s_dst, all_cells
   n_points = nk_src
 
 !$OMP parallel default(none) shared(CS,G,h_src,s_src,h_dst,s_dst &
-!$OMP                               ignore_vanished_layers, nk_src ) &
-!$OMP                        private(d,n_pointx)
+!$OMP                               ,ignore_vanished_layers, nk_src,dx ) &
+!$OMP                        private(n_points)
 !$OMP do
   do j = G%jsc,G%jec
     do i = G%isc,G%iec

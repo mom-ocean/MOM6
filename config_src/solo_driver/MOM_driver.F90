@@ -246,7 +246,7 @@ program MOM_main
     Start_time = set_date(date_init(1),date_init(2), date_init(3), &
          date_init(4),date_init(5),date_init(6))
   else
-    Start_time = set_time(0,0)
+    Start_time = set_time(0,days=0)
   endif
 
   if (sum(date) >= 0) then
@@ -343,7 +343,7 @@ program MOM_main
   call get_param(param_file, mod, "ENERGYSAVEDAYS", energysavedays, &
                  "The interval in units of TIMEUNIT between saves of the \n"//&
                  "energies of the run and other globally summed diagnostics.", &
-                 default=set_time(0,int(time_step+0.5)), timeunit=Time_unit)
+                 default=set_time(int(time_step+0.5)), timeunit=Time_unit)
   call log_param(param_file, mod, "ICE_SHELF", use_ice_shelf, &
                  "If true, call the code to apply an ice shelf model over \n"//&
                  "some of the domain.", default=.false.)

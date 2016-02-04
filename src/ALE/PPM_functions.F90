@@ -95,9 +95,11 @@ subroutine PPM_limiter_standard( N, h, u, ppoly_E )
       if ( expr1 > expr2 ) then
         ! Place extremum at right edge of cell by adjusting left edge value
         edge_l = u_c + 2.0 * ( u_c - edge_r )
+        edge_l = max( min( edge_l, max(u_l, u_c) ), min(u_l, u_c) ) ! In case of round off
       elseif ( expr1 < -expr2 ) then
         ! Place extremum at left edge of cell by adjusting right edge value
         edge_r = u_c + 2.0 * ( u_c - edge_l )
+        edge_r = max( min( edge_r, max(u_r, u_c) ), min(u_r, u_c) ) ! In case of round off
       endif
     endif
     ! This checks that the difference in edge values is representable
