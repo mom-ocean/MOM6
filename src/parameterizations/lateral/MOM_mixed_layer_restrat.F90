@@ -199,7 +199,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, CS)
          "Argument MLD was not associated!")
     aFac = CS%MLE_MLD_decay_time / ( dt + CS%MLE_MLD_decay_time )
     bFac = dt / ( dt + CS%MLE_MLD_decay_time )
-    do j = js, je ; do i = is, ie
+    do j = js-1, je+1 ; do i = is-1, ie+1
       ! Expression bFac*MLD(i,j) + aFac*CS%MLD_filtered(i,j) is the time-filtered
       ! (running mean) of MLD. The max() allows the "running mean" to be reset
       ! instantly to a deeper MLD.

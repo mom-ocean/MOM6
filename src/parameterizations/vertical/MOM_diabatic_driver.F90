@@ -742,7 +742,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
                          CS%energetic_PBL_CSp, dSV_dT, dSV_dS, cTKE)
 
       ! If visc%MLD exists, copy the ePBL's MLD into it
-      if (associated(visc%MLD)) call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, visc%MLD, G)
+      if (associated(visc%MLD)) then
+        call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, visc%MLD, G)
+        call pass_var(visc%MLD, G%domain)
+      endif
 
       ! Augment the diffusivities due to those diagnosed in energetic_PBL.
       do K=2,nz ; do j=js,je ; do i=is,ie
