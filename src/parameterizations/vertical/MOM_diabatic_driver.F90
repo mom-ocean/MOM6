@@ -252,6 +252,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   real, dimension(SZI_(G),SZJ_(G))      :: tendency_2d           ! depth integrated content tendency for diagn
   real, dimension(SZI_(G),SZJ_(G))      :: TKE_itidal_input_test ! override of energy input for testing (BDM)
 
+  real :: net_ent  ! The net of ea-eb at an interface.
+
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target :: &
              ! These are targets so that the space can be shared with eaml & ebml.
     eatr, &  ! The equivalent of ea and eb for tracers, which differ from ea and
@@ -1171,7 +1173,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   if (ASSOCIATED(CDp%diapyc_vel)) then
 !$OMP do
     do j=js,je
-      do K=2,nz ;  do i=is,ie
+      do K=2,nz ; do i=is,ie
         CDp%diapyc_vel(i,j,K) = Idt * (G%H_to_m * (ea(i,j,k) - eb(i,j,k-1)))
       enddo ; enddo
       do i=is,ie
@@ -1190,15 +1192,13 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       call hchksum(eb, "before net flux rearrangement eb",G)
     endif
 !$OMP do
-    do k=2,G%nkml ; do j=js,je ; do i=is,ie
-      if (ea(i,j,k) >= eb(i,j,k-1)) then
-        ea(i,j,k) = ea(i,j,k) - eb(i,j,k-1)
-        eb(i,j,k-1) = 0.0
-      else
-        eb(i,j,k-1) = eb(i,j,k-1) - ea(i,j,k)
-        ea(i,j,k) = 0.0
-      endif
-    enddo ; enddo ; enddo
+    do j=js,je
+      do K=2,G%nkml ; do i=is,ie
+        net_ent = ea(i,j,k) - eb(i,j,k-1)
+        ea(i,j,k) = max(net_ent, 0.0)
+        eb(i,j,k-1) = max(-net_ent, 0.0)
+      enddo ; enddo
+    enddo
     if (CS%debug) then
       call hchksum(ea, "after net flux rearrangement ea",G)
       call hchksum(eb, "after net flux rearrangement eb",G)
