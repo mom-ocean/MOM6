@@ -363,14 +363,16 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       enddo ; enddo ; enddo
     endif
 
-    if (ASSOCIATED(fluxes%p_surf_full)) then
-        call make_frazil(h, tv, G, CS%diabatic_aux_CSp, fluxes%p_surf_full)
+!    if (ASSOCIATED(fluxes%p_surf_full)) then
+!      call make_frazil(h, tv, G, CS%diabatic_aux_CSp, fluxes%p_surf_full)
+    if (ASSOCIATED(fluxes%p_surf_SSH)) then
+      call make_frazil(h, tv, G, CS%diabatic_aux_CSp, fluxes%p_surf_SSH)
     else
-        call make_frazil(h, tv, G, CS%diabatic_aux_CSp)
+      call make_frazil(h, tv, G, CS%diabatic_aux_CSp)
     endif
     if (showCallTree) call callTree_waypoint("done with 1st make_frazil (diabatic)")
 
-    if(CS%frazil_tendency_diag) then
+    if (CS%frazil_tendency_diag) then
       call diagnose_frazil_tendency(tv, h, temp_diag, dt, G, CS, 1)
     endif
 
@@ -1323,13 +1325,15 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       enddo ; enddo ; enddo
     endif
 
-    if (ASSOCIATED(fluxes%p_surf_full)) then
-       call make_frazil(h, tv, G, CS%diabatic_aux_CSp, fluxes%p_surf_full)
+!    if (ASSOCIATED(fluxes%p_surf_full)) then
+!      call make_frazil(h, tv, G, CS%diabatic_aux_CSp, fluxes%p_surf_full)
+    if (ASSOCIATED(fluxes%p_surf_SSH)) then
+      call make_frazil(h, tv, G, CS%diabatic_aux_CSp, fluxes%p_surf_SSH)
     else
-       call make_frazil(h, tv, G, CS%diabatic_aux_CSp)
+      call make_frazil(h, tv, G, CS%diabatic_aux_CSp)
     endif
 
-    if(CS%frazil_tendency_diag) then
+    if (CS%frazil_tendency_diag) then
       call diagnose_frazil_tendency(tv, h, temp_diag, dt, G, CS, 2)
     endif
 

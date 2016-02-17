@@ -108,7 +108,7 @@ type, public :: surface_forcing_CS ; private
                                 ! structure does not limit the water that can be
                                 ! frozen out of the ocean and the ice-ocean heat
                                 ! fluxes are treated explicitly.
-  logical :: use_limited_P_SSH  ! If true, return the the sea surface height with
+  logical :: use_limited_P_SSH  ! If true, return the sea surface height with
                                 ! the correction for the atmospheric (and sea-ice)
                                 ! pressure limited by max_p_surf instead of the
                                 ! full atmospheric pressure.  The default is true.
@@ -535,25 +535,24 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   endif
 
   ! applied surface pressure from atmosphere and cryosphere
-  if (ASSOCIATED(IOB%p) .and. (CS%max_p_surf >= 0.0)) then
-    if (CS%use_limited_P_SSH) then
-      do j=js,je ; do i=is,ie
-        fluxes%p_surf(i,j) = G%mask2dT(i,j) * MIN(IOB%p(i-i0,j-j0),CS%max_p_surf)
-        fluxes%p_surf_full(i,j) = fluxes%p_surf(i,j)
-      enddo ; enddo
-    else
+  if (ASSOCIATED(IOB%p)) then
+    if (CS%max_p_surf >= 0.0) then
       do j=js,je ; do i=is,ie
         fluxes%p_surf_full(i,j) = G%mask2dT(i,j) * IOB%p(i-i0,j-j0)
         fluxes%p_surf(i,j) = MIN(fluxes%p_surf_full(i,j),CS%max_p_surf)
       enddo ; enddo
+    else
+      do j=js,je ; do i=is,ie
+        fluxes%p_surf_full(i,j) = G%mask2dT(i,j) * IOB%p(i-i0,j-j0)
+        fluxes%p_surf(i,j) = fluxes%p_surf_full(i,j)
+      enddo ; enddo
     endif
-  elseif (ASSOCIATED(IOB%p)) then
-    do j=js,je ; do i=is,ie
-      fluxes%p_surf_full(i,j) = G%mask2dT(i,j) * IOB%p(i-i0,j-j0)
-      fluxes%p_surf(i,j) = fluxes%p_surf_full(i,j)
-    enddo ; enddo
+    if (CS%use_limited_P_SSH) then
+      fluxes%p_surf_SSH => fluxes%p_surf
+    else
+      fluxes%p_surf_SSH => fluxes%p_surf_full
+    endif
   endif
-
 
   ! surface momentum stress related fields as function of staggering
   if (wind_stagger == BGRID_NE) then
@@ -645,11 +644,16 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
 
   ! sea ice related fields
   if (CS%rigid_sea_ice) then
-    call pass_var(fluxes%p_surf_full, G%Domain)
+    ! The commented out code here and in the following lines is the correct
+    ! version, but the incorrect version is being retained temporarily to avoid
+    ! changing answers.
+!    call pass_var(fluxes%p_surf_full, G%Domain)
+    call pass_var(fluxes%p_surf_SSH, G%Domain)
     I_GEarth = 1.0 / G%G_Earth
     Kv_rho_ice = (CS%kv_sea_ice / CS%density_sea_ice)
     do I=isd,ied-1 ; do j=jsd,jed
-      mass_ice = min(fluxes%p_surf_full(i,j), fluxes%p_surf_full(i+1,j)) * I_GEarth
+!      mass_ice = min(fluxes%p_surf_full(i,j), fluxes%p_surf_full(i+1,j)) * I_GEarth
+      mass_ice = min(fluxes%p_surf_SSH(i,j), fluxes%p_surf_SSH(i+1,j)) * I_GEarth
       mass_eff = 0.0
       if (mass_ice > CS%rigid_sea_ice_mass) then
         mass_eff = (mass_ice - CS%rigid_sea_ice_mass) **2 / &
@@ -660,7 +664,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
       fluxes%rigidity_ice_u(I,j) = Kv_rho_ice * mass_eff
     enddo ; enddo
     do i=isd,ied ; do J=jsd,jed-1
-      mass_ice = min(fluxes%p_surf_full(i,j), fluxes%p_surf_full(i,j+1)) * I_GEarth
+!      mass_ice = min(fluxes%p_surf_full(i,j), fluxes%p_surf_full(i,j+1)) * I_GEarth
+      mass_ice = min(fluxes%p_surf_SSH(i,j), fluxes%p_surf_SSH(i,j+1)) * I_GEarth
       mass_eff = 0.0
       if (mass_ice > CS%rigid_sea_ice_mass) then
         mass_eff = (mass_ice - CS%rigid_sea_ice_mass) **2 / &
@@ -867,7 +872,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
                  "melt flux (or ice-ocean fresh-water flux).", &
                  units="kg/kg", default=0.005)
   call get_param(param_file, mod, "USE_LIMITED_PATM_SSH", CS%use_limited_P_SSH, &
-                 "If true, return the the sea surface height with the \n"//&
+                 "If true, return the sea surface height with the \n"//&
                  "correction for the atmospheric (and sea-ice) pressure \n"//&
                  "limited by max_p_surf instead of the full atmospheric \n"//&
                  "pressure.", default=.true.)

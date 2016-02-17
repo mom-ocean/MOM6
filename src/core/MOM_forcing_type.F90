@@ -102,11 +102,16 @@ type, public :: forcing
 
   ! applied surface pressure from other component models (e.g., atmos, sea ice, land ice)
   real, pointer, dimension(:,:) :: &
-  p_surf_full   => NULL(), & !< pressure at the top ocean interface (Pa).
+  p_surf_full   => NULL(), & !< Pressure at the top ocean interface (Pa).
                              !! if there is sea-ice, then p_surf_flux is at ice-ocean interface
-  p_surf        => NULL()    !< pressure at top ocean interface (Pa) as used to drive the ocean model.
-                             !! if p_surf is limited, then p_surf may be smaller than p_surf_full,
+  p_surf        => NULL(), & !< Pressure at the top ocean interface (Pa) as used
+                             !! to drive the ocean model. If p_surf is limited, 
+                             !! p_surf may be smaller than p_surf_full,
                              !! otherwise they are the same.
+  p_surf_SSH    => NULL()    !< Pressure at the top ocean interface that is used
+                             !! in corrections to the sea surface height field
+                             !! that is passed back to the calling routines.
+                             !! This may point to p_surf or to p_surf_full.
 
   ! tide related inputs
   real, pointer, dimension(:,:) :: &
@@ -121,8 +126,8 @@ type, public :: forcing
   frac_shelf_u  => NULL(), & !< cells, nondimensional from 0 to 1. These are only
   frac_shelf_v  => NULL(), & !< associated if ice shelves are enabled, and are
                              !! exactly 0 away from shelves or on land.
-  rigidity_ice_u => NULL(),& !< Depth-integrated lateral viscosity of
-  rigidity_ice_v => NULL()   !< ice shelves at u- or v-points (m3/s)
+  rigidity_ice_u => NULL(),& !< Depth-integrated lateral viscosity of ice
+  rigidity_ice_v => NULL()   !< shelves or sea ice at u- or v-points (m3/s)
 
   ! Scalars set by surface forcing modules
   real :: vPrecGlobalAdj     !< adjustment to restoring vprec to zero out global net ( kg/(m^2 s) )

@@ -1281,7 +1281,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   call disable_averaging(CS%diag)
   if (showCallTree) call callTree_waypoint("calling calculate_surface_state (step_MOM)")
   call calculate_surface_state(state, u, v, h, CS%ave_ssh, G, CS, &
-                               fluxes%p_surf_full)
+                               fluxes%p_surf_SSH)
 
   call enable_averaging(dt*n_max,Time_local, CS%diag)
 
