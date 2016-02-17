@@ -647,13 +647,11 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
     ! The commented out code here and in the following lines is the correct
     ! version, but the incorrect version is being retained temporarily to avoid
     ! changing answers.
-!    call pass_var(fluxes%p_surf_full, G%Domain)
-    call pass_var(fluxes%p_surf_SSH, G%Domain)
+    call pass_var(fluxes%p_surf_full, G%Domain)
     I_GEarth = 1.0 / G%G_Earth
     Kv_rho_ice = (CS%kv_sea_ice / CS%density_sea_ice)
     do I=isd,ied-1 ; do j=jsd,jed
-!      mass_ice = min(fluxes%p_surf_full(i,j), fluxes%p_surf_full(i+1,j)) * I_GEarth
-      mass_ice = min(fluxes%p_surf_SSH(i,j), fluxes%p_surf_SSH(i+1,j)) * I_GEarth
+      mass_ice = min(fluxes%p_surf_full(i,j), fluxes%p_surf_full(i+1,j)) * I_GEarth
       mass_eff = 0.0
       if (mass_ice > CS%rigid_sea_ice_mass) then
         mass_eff = (mass_ice - CS%rigid_sea_ice_mass) **2 / &
@@ -664,8 +662,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
       fluxes%rigidity_ice_u(I,j) = Kv_rho_ice * mass_eff
     enddo ; enddo
     do i=isd,ied ; do J=jsd,jed-1
-!      mass_ice = min(fluxes%p_surf_full(i,j), fluxes%p_surf_full(i,j+1)) * I_GEarth
-      mass_ice = min(fluxes%p_surf_SSH(i,j), fluxes%p_surf_SSH(i,j+1)) * I_GEarth
+      mass_ice = min(fluxes%p_surf_full(i,j), fluxes%p_surf_full(i,j+1)) * I_GEarth
       mass_eff = 0.0
       if (mass_ice > CS%rigid_sea_ice_mass) then
         mass_eff = (mass_ice - CS%rigid_sea_ice_mass) **2 / &

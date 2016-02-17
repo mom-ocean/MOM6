@@ -363,10 +363,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       enddo ; enddo ; enddo
     endif
 
-!    if (ASSOCIATED(fluxes%p_surf_full)) then
-!      call make_frazil(h, tv, G, CS%diabatic_aux_CSp, fluxes%p_surf_full)
-    if (ASSOCIATED(fluxes%p_surf_SSH)) then
-      call make_frazil(h, tv, G, CS%diabatic_aux_CSp, fluxes%p_surf_SSH)
+    if (ASSOCIATED(fluxes%p_surf_full)) then
+      call make_frazil(h, tv, G, CS%diabatic_aux_CSp, fluxes%p_surf_full)
     else
       call make_frazil(h, tv, G, CS%diabatic_aux_CSp)
     endif
@@ -1325,10 +1323,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       enddo ; enddo ; enddo
     endif
 
-!    if (ASSOCIATED(fluxes%p_surf_full)) then
-!      call make_frazil(h, tv, G, CS%diabatic_aux_CSp, fluxes%p_surf_full)
-    if (ASSOCIATED(fluxes%p_surf_SSH)) then
-      call make_frazil(h, tv, G, CS%diabatic_aux_CSp, fluxes%p_surf_SSH)
+    if (ASSOCIATED(fluxes%p_surf_full)) then
+      call make_frazil(h, tv, G, CS%diabatic_aux_CSp, fluxes%p_surf_full)
     else
       call make_frazil(h, tv, G, CS%diabatic_aux_CSp)
     endif
