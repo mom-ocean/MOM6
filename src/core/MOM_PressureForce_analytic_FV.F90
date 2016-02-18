@@ -548,7 +548,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
   integer :: is_bk, ie_bk, js_bk, je_bk, Isq_bk, Ieq_bk, Jsq_bk, Jeq_bk
   integer :: ioff_bk, joff_bk
-  integer :: i, j, k, n, isd, ied, jsd, jed, ib, jb
+  integer :: i, j, k, n, ib, jb
   integer :: PRScheme
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -688,7 +688,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
 !$OMP                                  p_atm,nz,use_EOS,use_ALE,PRScheme,T_t,T_b,S_t, &
 !$OMP                                  S_b,CS,tv,tv_tmp,h,PFu,I_Rho0,h_neglect,PFv,dM)&
 !$OMP                          private(is_bk,ie_bk,js_bk,je_bk,Isq_bk,Ieq_bk,Jsq_bk,  &
-!$OMP                                  Jeq_bk,ioff_bk,joff_bk,isd,ied,jsd,jed,pa_bk,  &
+!$OMP                                  Jeq_bk,ioff_bk,joff_bk,pa_bk,  &
 !$OMP                                  intx_pa_bk,inty_pa_bk,dpa_bk,intz_dpa_bk,      &
 !$OMP                                  intx_dpa_bk,inty_dpa_bk,dz_bk,i,j)
   do n = 1, G%nblocks
@@ -698,8 +698,6 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
     Jsq_bk=G%Block(n)%JscB    ; Jeq_bk=G%Block(n)%JecB
     ioff_bk = G%Block(n)%idg_offset - G%HI%idg_offset
     joff_bk = G%Block(n)%jdg_offset - G%HI%jdg_offset
-    isd=G%isd_bk+ioff_bk      ; ied=G%ied_bk+ioff_bk
-    jsd=G%jsd_bk+joff_bk      ; jed=G%jed_bk+joff_bk
 
     ! Set the surface boundary conditions on pressure anomaly and its horizontal
     ! integrals, assuming that the surface pressure anomaly varies linearly

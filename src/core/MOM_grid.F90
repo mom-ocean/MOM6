@@ -184,13 +184,9 @@ type, public :: ocean_grid_type
   real :: areaT_global  ! Global sum of h-cell area in m2
   real :: IareaT_global ! Global sum of inverse h-cell area (1/areaT_global)
                         ! in m2
-  ! These variables are for block strucutre.
+  ! These variables are for block structures.
   integer                   :: nblocks
   type(hor_index_type), pointer :: Block(:) => NULL() ! store indices for each block
-  integer :: isd_bk, ied_bk, jsd_bk, jed_bk     ! block data domain indices at
-                                                ! tracer cell centers.
-  integer :: isdB_bk, iedB_bk, jsdB_bk, jedB_bk ! block data domain indices at
-                                                ! tracer cell vertices.
 end type ocean_grid_type
 
 contains
@@ -358,7 +354,7 @@ subroutine MOM_grid_init(G, param_file)
 
     i = mod((n-1), niblock) + 1
     j = (n-1)/niblock + 1
-    !--- isd and jsd are always 1 for each block
+    !--- isd and jsd are always 1 for each block to permit array reuse.
     G%Block(n)%isd = 1 ; G%Block(n)%jsd = 1
     G%Block(n)%isc = G%Block(n)%isd+nihalo
     G%Block(n)%jsc = G%Block(n)%jsd+njhalo
@@ -380,8 +376,6 @@ subroutine MOM_grid_init(G, param_file)
       G%Block(n)%IsdB = G%Block(n)%IsdB-1
       G%Block(n)%JsdB = G%Block(n)%JsdB-1
     endif
-!    G%Block(n)%ioff = ibegin(i) - G%Block(n)%isc
-!    G%Block(n)%joff = jbegin(j) - G%Block(n)%jsc
     G%Block(n)%idg_offset = (ibegin(i) - G%Block(n)%isc) + G%HI%idg_offset
     G%Block(n)%jdg_offset = (jbegin(j) - G%Block(n)%jsc) + G%HI%jdg_offset
     ! Find the largest values of ied and jed so that all blocks will have the
@@ -390,24 +384,17 @@ subroutine MOM_grid_init(G, param_file)
     jed_max = max(jed_max, G%Block(n)%jed)
   enddo
 
-  ! Reset all of the data domain sizes to match the largest for array reuse.
+  ! Reset all of the data domain sizes to match the largest for array reuse,
+  ! recalling that all block have isd=jed=1 for array reuse.
   do n = 1,nblocks
     G%Block(n)%ied = ied_max ; G%Block(n)%IedB = ied_max
     G%Block(n)%jed = jed_max ; G%Block(n)%JedB = jed_max
   enddo
 
-
-  ! Consider removing the isd_bk and similar variables.
-  !--- define the block memory domain ( maximum data domain size of all blocks )
-  G%isd_bk  = G%block(nblocks)%isd  ; G%ied_bk  = G%block(nblocks)%ied
-  G%jsd_bk  = G%block(nblocks)%jsd  ; G%jed_bk  = G%block(nblocks)%jed
-  G%isdB_bk = G%block(nblocks)%isdB ; G%iedB_bk = G%block(nblocks)%iedB
-  G%jsdB_bk = G%block(nblocks)%jsdB ; G%jedB_bk = G%block(nblocks)%jedB
-
   !-- do some bounds checking
-  if ( G%ied_bk+G%block(nblocks)%idg_offset > G%HI%ied + G%HI%idg_offset ) &
+  if ( G%block(nblocks)%ied+G%block(nblocks)%idg_offset > G%HI%ied + G%HI%idg_offset ) &
         call MOM_error(FATAL, "MOM_grid_init: G%ied_bk > G%ied")
-  if ( G%jed_bk+G%block(nblocks)%jdg_offset > G%HI%jed + G%HI%jdg_offset ) &
+  if ( G%block(nblocks)%jed+G%block(nblocks)%jdg_offset > G%HI%jed + G%HI%jdg_offset ) &
         call MOM_error(FATAL, "MOM_grid_init: G%jed_bk > G%jed")
 
 ! Log derivative values.
