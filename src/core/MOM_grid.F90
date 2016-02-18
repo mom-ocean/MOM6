@@ -34,16 +34,7 @@ implicit none ; private
 public MOM_grid_init, MOM_grid_end, set_first_direction
 public get_flux_units, get_thickness_units, get_tr_flux_units
 public isPointInCell
-
-type, public :: ocean_block_type
-  integer :: isc, iec, jsc, jec     ! The range of the computational indices and
-  integer :: isd, ied, jsd, jed     ! data indices at tracer cell enters for each block.
-  integer :: IscB, IecB, JscB, JecB ! The range of the computational indices and
-  integer :: IsdB, IedB, JsdB, JedB ! data indices at tracer cell vertices
-                                    ! for each block.
-  integer :: ioff, joff             ! index offset of block indices relative to
-                                    ! domain indices
-end type ocean_block_type
+public hor_index_type, verticalGrid_type
 
 type, public :: ocean_grid_type
   type(MOM_domain_type), pointer :: Domain => NULL()

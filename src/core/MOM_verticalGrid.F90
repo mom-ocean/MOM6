@@ -147,6 +147,9 @@ subroutine verticalGridInit( param_file, GV )
 
   ALLOC_( GV%sInterface(nk+1) )
   ALLOC_( GV%sLayer(nk) )
+  ALLOC_( GV%g_prime(nk+1) ) ; GV%g_prime(:) = 0.0
+  ! The extent of Rlay should be changed to nk?
+  ALLOC_( GV%Rlay(nk+1) )    ; GV%Rlay(:) = 0.0
 
 end subroutine verticalGridInit
 

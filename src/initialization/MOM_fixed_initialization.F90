@@ -14,7 +14,7 @@ use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
 use MOM_file_parser, only : log_version
 use MOM_get_input, only : directories
-use MOM_grid, only : ocean_grid_type, isPointInCell
+use MOM_grid, only : ocean_grid_type, verticalGrid_type, isPointInCell
 use MOM_io, only : close_file, create_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE, MULTIPLE
 use MOM_io, only : slasher, vardesc, write_field, var_desc
@@ -68,8 +68,10 @@ subroutine MOM_initialize_fixed(G, PF, dirs, tv)
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   type(EOS_type), pointer :: eos => NULL() ! TO BE DELETED -aja
+  type(verticalGrid_type), pointer :: GV => NULL()
 
   if (associated(tv%eqn_of_state)) eos => tv%eqn_of_state ! TO BE DELETED -aja
+  GV => G%GV
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -114,28 +116,31 @@ subroutine MOM_initialize_fixed(G, PF, dirs, tv)
                  fail_if_missing=.true.)
   select case ( trim(config) )
     case ("gprime")
-      call set_coord_from_gprime(G%Rlay, G%g_prime, G, PF)
+      call set_coord_from_gprime(GV%Rlay, GV%g_prime, G, PF)
     case ("layer_ref")
-      call set_coord_from_layer_density(G%Rlay, G%g_prime, G, PF)
+      call set_coord_from_layer_density(GV%Rlay, GV%g_prime, G, PF)
     case ("linear")
-      call set_coord_linear(G%Rlay, G%g_prime, G, PF)
+      call set_coord_linear(GV%Rlay, GV%g_prime, G, PF)
     case ("ts_ref")
-      call set_coord_from_ts_ref(G%Rlay, G%g_prime, G, PF, eos, tv%P_Ref)
+      call set_coord_from_ts_ref(GV%Rlay, GV%g_prime, G, PF, eos, tv%P_Ref)
     case ("ts_profile")
-      call set_coord_from_TS_profile(G%Rlay, G%g_prime, G, PF, eos, tv%P_Ref)
+      call set_coord_from_TS_profile(GV%Rlay, GV%g_prime, G, PF, eos, tv%P_Ref)
     case ("ts_range")
-      call set_coord_from_TS_range(G%Rlay, G%g_prime, G, PF, eos, tv%P_Ref)
+      call set_coord_from_TS_range(GV%Rlay, GV%g_prime, G, PF, eos, tv%P_Ref)
     case ("file")
-      call set_coord_from_file(G%Rlay, G%g_prime, G, PF)
+      call set_coord_from_file(GV%Rlay, GV%g_prime, G, PF)
     case ("USER")
-      call user_set_coord(G%Rlay, G%g_prime, G, PF, eos)
+      call user_set_coord(GV%Rlay, GV%g_prime, G, PF, eos)
     case ("none")
     case default ; call MOM_error(FATAL,"MOM_initialize_fixed: "// &
       "Unrecognized coordinate setup"//trim(config))
   end select
-  if (debug) call chksum(G%Rlay, "MOM_initialize_fixed: Rlay ", 1, nz)
-  if (debug) call chksum(G%g_prime, "MOM_initialize_fixed: g_prime ", 1, nz)
-  call setVerticalGridAxes( G%Rlay, G%GV )
+  if (debug) call chksum(GV%Rlay, "MOM_initialize_fixed: Rlay ", 1, nz)
+  if (debug) call chksum(GV%g_prime, "MOM_initialize_fixed: g_prime ", 1, nz)
+  call setVerticalGridAxes( GV%Rlay, GV )
+
+  ! This should become unnecessary later.
+  G%Rlay(:) = GV%Rlay(:) ; G%g_prime(:) = GV%g_prime(:)
 
 !    This call sets seamasks that prohibit flow over any point with  !
 !  a bottom that is shallower than min_depth from PF.                !
@@ -210,7 +215,7 @@ subroutine MOM_initialize_fixed(G, PF, dirs, tv)
   if ((dirs%input_filename(1:1)=='n') .and. (LEN_TRIM(dirs%input_filename)==1)) new_sim = .true.
   if ((write_geom==1 .and. new_sim) .or. write_geom==2) then
     call write_ocean_geometry_file(G, PF, dirs%output_directory)
-    call write_vertgrid_file(G, PF, dirs%output_directory)
+    call write_vertgrid_file(G%GV, G, PF, dirs%output_directory)
   endif
 
   call callTree_leave('MOM_initialize_fixed()')
@@ -1772,13 +1777,15 @@ end subroutine write_ocean_geometry_file
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine write_vertgrid_file(G, param_file, directory)
+subroutine write_vertgrid_file(GV, G, param_file, directory)
+  type(verticalGrid_type), intent(in)  :: GV
   type(ocean_grid_type), intent(inout) :: G
   type(param_file_type), intent(in)    :: param_file
   character(len=*),      intent(in)    :: directory
 !   This subroutine writes out a file containing any available data related
 ! to the vertical grid used by the MOM ocean model.
-! Arguments: G - The ocean's grid structure.  Effectively intent in.
+! Arguments: Gv - The container for the vertical grid data.
+!  (in)      G - The ocean's grid structure.  Effectively intent in.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in)      directory - The directory into which to place the file.
@@ -1794,8 +1801,8 @@ subroutine write_vertgrid_file(G, param_file, directory)
 
   call create_file(unit, trim(filepath), vars, 2, G, fields, SINGLE_FILE)
 
-  call write_field(unit, fields(1), G%Rlay)
-  call write_field(unit, fields(2), G%g_prime)
+  call write_field(unit, fields(1), GV%Rlay)
+  call write_field(unit, fields(2), GV%g_prime)
 
   call close_file(unit)
 
