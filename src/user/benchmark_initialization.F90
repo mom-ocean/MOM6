@@ -135,7 +135,7 @@ subroutine benchmark_initialize_thickness(h, G, param_file, eqn_of_state, P_ref)
 
   call MOM_mesg("  benchmark_initialization.F90, benchmark_initialize_thickness: setting thickness", 5)
 
-  k1 = G%nk_rho_varies + 1
+  k1 = G%GV%nk_rho_varies + 1
 
   ML_depth = 50.0
   thermocline_scale = 500.0
@@ -244,7 +244,7 @@ subroutine benchmark_init_temperature_salinity(T, S, G, param_file, &
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  k1 = G%nk_rho_varies + 1
+  k1 = G%GV%nk_rho_varies + 1
 
   do k=1,nz
     pres(k) = P_Ref ; S0(k) = 35.0

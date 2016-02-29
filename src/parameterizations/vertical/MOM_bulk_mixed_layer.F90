@@ -3364,7 +3364,7 @@ subroutine bulkmixedlayer_init(Time, G, param_file, diag, CS)
   call log_param(param_file, mod, "NKML", CS%nkml, &
                  "The number of sublayers within the mixed layer if \n"//&
                  "BULKMIXEDLAYER is true.", units="nondim", default=2)
-  CS%nkbl = G%nk_rho_varies - G%nkml
+  CS%nkbl = G%GV%nk_rho_varies - G%nkml
   call log_param(param_file, mod, "NKBL", CS%nkbl, &
                  "The number of variable density buffer layers if \n"//&
                  "BULKMIXEDLAYER is true.", units="nondim", default=2)

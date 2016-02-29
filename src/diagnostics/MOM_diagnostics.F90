@@ -225,7 +225,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
 
   is  = G%isc  ; ie   = G%iec  ; js  = G%jsc  ; je  = G%jec
   Isq = G%IscB ; Ieq  = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-  nz  = G%ke   ; nkmb = G%nk_rho_varies
+  nz  = G%ke   ; nkmb = G%GV%nk_rho_varies
 
   ! smg: is the following robust to ALE? It seems a bit opaque.   
   ! If the model is NOT in isopycnal mode then nkmb=0. But we need all the
@@ -1118,7 +1118,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, param_file, diag, CS, &
   endif
 
   ! layer thickness variables 
-  !if (G%nk_rho_varies > 0) then
+  !if (G%GV%nk_rho_varies > 0) then
     CS%id_h_Rlay = register_diag_field('ocean_model', 'h_rho', diag%axesTL, Time, &
         'Layer thicknesses in pure potential density coordinates', thickness_units)
     if (CS%id_h_Rlay>0) call safe_alloc_ptr(CS%h_Rlay,isd,ied,jsd,jed,nz)

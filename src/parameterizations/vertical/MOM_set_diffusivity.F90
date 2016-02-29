@@ -79,7 +79,7 @@ type, public :: set_diffusivity_CS ; private
   logical :: debug           ! If true, write verbose checksums for debugging.
 
   logical :: bulkmixedlayer  ! If true, a refined bulk mixed layer is used with
-                             ! G%nk_rho_varies variable density mixed & buffer
+                             ! G%GV%nk_rho_varies variable density mixed & buffer
                              ! layers.
   real    :: FluxRi_max      ! The flux Richardson number where the stratification is
                              ! large enough that N2 > omega2.  The full expression for
@@ -1007,7 +1007,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, CS, TKE_to_Kd, maxT
 
   ! Determine kb - the index of the shallowest active interior layer.
   if (CS%bulkmixedlayer) then
-    kmb = G%nk_rho_varies
+    kmb = G%GV%nk_rho_varies
     do i=is,ie ; p_0(i) = 0.0 ; p_ref(i) = tv%P_Ref ; enddo
     do k=1,nz
       call calculate_density(tv%T(:,j,k),tv%S(:,j,k),p_0,rho_0(:,k),&
@@ -1046,7 +1046,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, CS, TKE_to_Kd, maxT
   do i=is,ie ; dsp1_ds(i,nz) = 0.0 ; enddo
 
   if (CS%bulkmixedlayer) then
-    kmb = G%nk_rho_varies
+    kmb = G%GV%nk_rho_varies
     do i=is,ie
       htot(i) = G%H_to_m*h(i,j,kmb)
       mFkb(i) = 0.0
@@ -1433,7 +1433,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, &
 
   do K=2,nz ; Rint(K) = 0.5*(G%GV%Rlay(k-1)+G%GV%Rlay(k)) ; enddo
 
-  kb_min = max(G%nk_rho_varies+1,2)
+  kb_min = max(G%GV%nk_rho_varies+1,2)
 
   ! The turbulence decay scale is 0.5*ustar/f from K&E & MOM_vertvisc.F90
   ! Any turbulence that makes it into the mixed layers is assumed
@@ -2410,7 +2410,7 @@ subroutine set_density_ratios(h, tv, kb, G, CS, j, ds_dsp1, rho_0)
 
   if (CS%bulkmixedlayer) then
     g_R0 = G%g_Earth/G%Rho0
-    kmb = G%nk_rho_varies
+    kmb = G%GV%nk_rho_varies
     eps = 0.1
     do i=is,ie ; p_ref(i) = tv%P_Ref ; enddo
     do k=1,kmb

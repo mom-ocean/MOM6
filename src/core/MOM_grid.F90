@@ -158,8 +158,8 @@ type, public :: ocean_grid_type
 !                        ! in each layer in kg m-3.
   integer :: nkml = 0   ! The number of layers at the top that should be treated
                         ! as parts of a homogenous region.
-  integer :: nk_rho_varies = 0 ! The number of layers at the top where the
-                        ! density does not track any target density.
+!  integer :: nk_rho_varies = 0 ! The number of layers at the top where the
+!                        ! density does not track any target density.
   real :: H_to_kg_m2    ! A constant that translates thicknesses from the units
                         ! of thickness to kg m-2.
   real :: kg_m2_to_H    ! A constant that translates thicknesses from kg m-2 to

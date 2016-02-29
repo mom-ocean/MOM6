@@ -215,7 +215,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
   real :: v_at_u, u_at_v   ! v at a u point or vice versa, m s-1.
   real :: Rho0x400_G       ! 400*Rho0/G_Earth, in kg s2 m-4.  The 400 is a
                            ! constant proposed by Killworth and Edwards, 1999.
-  real, dimension(SZI_(G),SZJ_(G),max(G%nk_rho_varies,1)) :: &
+  real, dimension(SZI_(G),SZJ_(G),max(G%GV%nk_rho_varies,1)) :: &
     Rml                    ! The mixed layer coordinate density, in kg m-3.
   real :: p_ref(SZI_(G))   !   The pressure used to calculate the coordinate
                            ! density, in Pa (usually set to 2e7 Pa = 2000 dbar).
@@ -278,7 +278,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
   integer :: itt, maxitt=20
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-  nkmb = G%nk_rho_varies
+  nkmb = G%GV%nk_rho_varies
   h_neglect = G%H_subroundoff
   Rho0x400_G = 400.0*(G%Rho0/G%g_Earth)*G%m_to_H
   Vol_quit = 0.9*G%Angstrom + h_neglect
@@ -949,7 +949,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-  nkmb = G%nk_rho_varies
+  nkmb = G%GV%nk_rho_varies
 
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(visc_ML): "//&
          "Module must be initialized before it is used.")

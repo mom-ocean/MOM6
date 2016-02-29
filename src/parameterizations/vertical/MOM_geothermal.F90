@@ -157,7 +157,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
          "Module must be initialized before it is used.")
   if (.not.CS%apply_geothermal) return
 
-  nkmb      = G%nk_rho_varies
+  nkmb      = G%GV%nk_rho_varies
   Irho_cp   = 1.0 / (G%H_to_kg_m2 * tv%C_p)
   Angstrom  = G%Angstrom
   H_neglect = G%H_subroundoff

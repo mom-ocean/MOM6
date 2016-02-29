@@ -439,7 +439,7 @@ subroutine apply_sponge(h, dt, G, ea, eb, CS, Rcv_ml)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   if (.not.associated(CS)) return
-  if (CS%bulkmixedlayer) nkmb = G%nk_rho_varies
+  if (CS%bulkmixedlayer) nkmb = G%GV%nk_rho_varies
   if (CS%bulkmixedlayer .and. (.not.present(Rcv_ml))) &
     call MOM_error(FATAL, "Rml must be provided to apply_sponge when using "//&
                            "a bulk mixed layer.")

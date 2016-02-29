@@ -479,7 +479,7 @@ subroutine set_coord_from_TS_range(Rlay, g_prime, G, param_file, &
                  "The reduced gravity at the free surface.", units="m s-2", &
                  default=G%g_Earth)
 
-  k_light = G%nk_rho_varies + 1
+  k_light = G%GV%nk_rho_varies + 1
 
   ! Set T0(k) to range from T_LIGHT to T_DENSE, and simliarly for S0(k).
   T0(k_light) = T_light ; S0(k_light) = S_light

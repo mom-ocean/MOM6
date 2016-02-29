@@ -184,7 +184,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, CS, &
         yr, yearday, (REAL(sec)/3600.0), pe_here(), I, j, &
         G%geoLonCu(I,j), G%geoLatCu(I,j), ks, ke, dt
 
-    if (ks <= G%nk_rho_varies) ks = 1
+    if (ks <= G%GV%nk_rho_varies) ks = 1
     do k=ks,ke
       if ((hin(i,j,k) + hin(i+1,j,k)) > 3.0*G%Angstrom) do_k(k) = .true.
     enddo
@@ -517,7 +517,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, CS, &
         yr, yearday, (REAL(sec)/3600.0), pe_here(), i, J, &
         G%geoLonCv(i,J), G%geoLatCv(i,J), ks, ke, dt
 
-    if (ks <= G%nk_rho_varies) ks = 1
+    if (ks <= G%GV%nk_rho_varies) ks = 1
     do k=ks,ke
       if ((hin(i,j,k) + hin(i,j+1,k)) > 3.0*G%Angstrom) do_k(k) = .true.
     enddo

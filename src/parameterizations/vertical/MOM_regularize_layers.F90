@@ -266,7 +266,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
          "Module must be initialized before it is used.")
 
   if (G%nkml<1) return
-  nkmb = G%nk_rho_varies
+  nkmb = G%GV%nk_rho_varies
   if (.not.ASSOCIATED(tv%eqn_of_state)) call MOM_error(FATAL, &
     "MOM_regularize_layers: This module now requires the use of temperature and "//&
     "an equation of state.")
@@ -813,7 +813,7 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, CS, &
   if (present(halo)) then
     is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
   endif
-  nkmb = G%nk_rho_varies
+  nkmb = G%GV%nk_rho_varies
   h_neglect = G%H_subroundoff
 
   ! Determine which zonal faces are problematic.

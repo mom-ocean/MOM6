@@ -1657,13 +1657,13 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
       "initialize_MOM: A bulk mixed layer can only be used with T & S as "//&
       "state variables. Add #define USE_EOS.")
     G%nkml = nkml
-    G%nk_rho_varies = nkml + nkbl
+    G%GV%nk_rho_varies = nkml + nkbl
     allocate(CS%tv%Hml(isd:ied,jsd:jed)) ; CS%tv%Hml(:,:) = 0.0
   else
-    G%nkml = 0 ; G%nk_rho_varies = 0
+    G%nkml = 0 ; G%GV%nk_rho_varies = 0
   endif
   if (CS%use_ALE_algorithm) then
-    call get_param(param_file, "MOM", "NK_RHO_VARIES", G%nk_rho_varies, default=0) ! Will default to nz later... -AJA
+    call get_param(param_file, "MOM", "NK_RHO_VARIES", G%GV%nk_rho_varies, default=0) ! Will default to nz later... -AJA
   endif
 
   ALLOC_(CS%uhtr(IsdB:IedB,jsd:jed,nz)) ; CS%uhtr(:,:,:) = 0.0

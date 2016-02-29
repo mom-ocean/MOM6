@@ -1157,7 +1157,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, CS
   integer :: i, j, k, n, ish, jsh, is, ie, js, je, nz, k_top
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  k_top = G%nk_rho_varies + 1
+  k_top = G%GV%nk_rho_varies + 1
   h_neglect = G%H_subroundoff
   !   The 0.5 is because we are not using uniform weightings, but are
   ! distributing the diffusivities more effectively (with wt1 & wt2), but this

@@ -84,7 +84,7 @@ public entrainment_diffusive, entrain_diffusive_init, entrain_diffusive_end
 
 type, public :: entrain_diffusive_CS ; private
   logical :: bulkmixedlayer  ! If true, a refined bulk mixed layer is used with
-                             ! G%nk_rho_varies variable density mixed & buffer
+                             ! G%GV%nk_rho_varies variable density mixed & buffer
                              ! layers.
   logical :: correct_density ! If true, the layer densities are restored toward
                              ! their target variables by the diapycnal mixing.
@@ -283,7 +283,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
 
   tolerance = G%m_to_H * CS%Tolerance_Ent
   g_2dt = 0.5 * G%g_Earth / dt
-  kmb = G%nk_rho_varies
+  kmb = G%GV%nk_rho_varies
   K2 = max(kmb+1,2) ; kb_min = K2
   if (.not. CS%bulkmixedlayer) then
     kb(:) = 1

@@ -342,7 +342,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
             if (CS%ML_KhTr_scale <= 0.0) cycle
             scale = I_numitts * CS%ML_KhTr_scale
           endif
-          if ((k>G%nkml) .and. (k<=G%nk_rho_varies)) cycle
+          if ((k>G%nkml) .and. (k<=G%GV%nk_rho_varies)) cycle
         endif
 
         do J=js-1,je ; do i=is,ie
@@ -462,7 +462,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
  
   real, dimension(SZI_(G), SZJ_(G)) :: &
     Rml_max  ! The maximum coordinate density within the mixed layer, in kg m-3.
-  real, dimension(SZI_(G), SZJ_(G), max(1,G%nk_rho_varies)) :: &
+  real, dimension(SZI_(G), SZJ_(G), max(1,G%GV%nk_rho_varies)) :: &
     rho_coord ! The coordinate density that is used to mix along, in kg m-3.
 
   ! The naming mnemnonic is a=above,b=below,L=Left,R=Right,u=u-point,v=v-point.
@@ -550,7 +550,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB
   Idt = 1.0/dt
-  nkmb = G%nk_rho_varies
+  nkmb = G%GV%nk_rho_varies
 
   if (num_itts <= 1) then
     max_itt = 1 ; I_maxitt = 1.0
