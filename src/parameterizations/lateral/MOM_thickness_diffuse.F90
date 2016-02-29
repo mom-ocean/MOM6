@@ -603,7 +603,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
     if (find_work .and. .not.(use_EOS)) then
       drdiA = 0.0 ; drdiB = 0.0
 !       drdkL = G%GV%g_prime(k) ; drdkR = G%GV%g_prime(k)
-      drdkL = G%Rlay(k)-G%Rlay(k-1) ; drdkR = G%Rlay(k)-G%Rlay(k-1)
+      drdkL = G%GV%Rlay(k)-G%GV%Rlay(k-1) ; drdkR = G%GV%Rlay(k)-G%GV%Rlay(k-1)
     endif
 
     calc_derivatives = use_EOS .and. (k >= nk_linear) .and. &
@@ -798,7 +798,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
     if (find_work .and. .not.(use_EOS)) then
       drdjA = 0.0 ; drdjB = 0.0
 !       drdkL = G%GV%g_prime(k) ; drdkR = G%GV%g_prime(k)
-      drdkL = G%Rlay(k)-G%Rlay(k-1) ; drdkR = G%Rlay(k)-G%Rlay(k-1)
+      drdkL = G%GV%Rlay(k)-G%GV%Rlay(k-1) ; drdkR = G%GV%Rlay(k)-G%GV%Rlay(k-1)
     endif
 
     calc_derivatives = use_EOS .and. (k >= nk_linear) .and. &

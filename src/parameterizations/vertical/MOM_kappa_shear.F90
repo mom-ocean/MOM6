@@ -350,7 +350,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
     if (use_temperature) then ; do k=1,nz ; do i=is,ie
       T_2d(i,k) = tv%T(i,j,k) ; S_2d(i,k) = tv%S(i,j,k)
     enddo ; enddo ; else ; do k=1,nz ; do i=is,ie
-      rho_2d(i,k) = G%Rlay(k) ! Could be tv%Rho(i,j,k) ?
+      rho_2d(i,k) = G%GV%Rlay(k) ! Could be tv%Rho(i,j,k) ?
     enddo ; enddo ; endif
     if (.not.new_kappa) then ; do K=1,nz+1 ; do i=is,ie
       kappa_2d(i,K) = kappa_io(i,j,K)

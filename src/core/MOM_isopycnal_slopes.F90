@@ -139,7 +139,7 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
   do j = js,je ; do K=nz,2,-1
     if (.not.(use_EOS)) then
       drdiA = 0.0 ; drdiB = 0.0
-      drdkL = G%Rlay(k)-G%Rlay(k-1) ; drdkR = G%Rlay(k)-G%Rlay(k-1)
+      drdkL = G%GV%Rlay(k)-G%GV%Rlay(k-1) ; drdkR = G%GV%Rlay(k)-G%GV%Rlay(k-1)
     endif
 
     ! Calculate the zonal isopycnal slope.
@@ -231,7 +231,7 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
   do j = js-1,je ; do K=nz,2,-1
     if (.not.(use_EOS)) then
       drdjA = 0.0 ; drdjB = 0.0
-      drdkL = G%Rlay(k)-G%Rlay(k-1) ; drdkR = G%Rlay(k)-G%Rlay(k-1)
+      drdkL = G%GV%Rlay(k)-G%GV%Rlay(k-1) ; drdkR = G%GV%Rlay(k)-G%GV%Rlay(k-1)
     endif
 
     if (use_EOS .and. (k > nk_linear)) then

@@ -140,7 +140,7 @@ subroutine MOM_initialize_fixed(G, PF, dirs, tv)
   call setVerticalGridAxes( GV%Rlay, GV )
 
   ! This should become unnecessary later.
-  G%Rlay(:) = GV%Rlay(:) ! ; G%g_prime(:) = GV%g_prime(:)
+  ! G%Rlay(:) = GV%Rlay(:) ! ; G%g_prime(:) = GV%g_prime(:)
 
 !    This call sets seamasks that prohibit flow over any point with  !
 !  a bottom that is shallower than min_depth from PF.                !

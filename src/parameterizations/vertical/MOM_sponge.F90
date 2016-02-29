@@ -555,7 +555,7 @@ subroutine apply_sponge(h, dt, G, ea, eb, CS, Rcv_ml)
 
       wpb = 0.0; wb = 0.0
       do k=nz,nkmb+1,-1
-        if (G%Rlay(k) > Rcv_ml(i,j)) then
+        if (G%GV%Rlay(k) > Rcv_ml(i,j)) then
           w = MIN((((e(K)-e0) - e_str*CS%Ref_eta(K,c)) * damp), &
                     ((wb + h(i,j,k)) - G%Angstrom))
           wm = 0.5*(w-ABS(w))

@@ -943,8 +943,8 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
   select case ( trim(string) )
     case ("UNIFORM")
       dz(:) = uniformResolution(G%ke, coordMode, G%max_depth, &
-                 G%Rlay(1)+0.5*(G%Rlay(1)-G%Rlay(2)), &
-                 G%Rlay(G%ke)+0.5*(G%Rlay(G%ke)-G%Rlay(G%ke-1)) )
+                 G%GV%Rlay(1)+0.5*(G%GV%Rlay(1)-G%GV%Rlay(2)), &
+                 G%GV%Rlay(G%ke)+0.5*(G%GV%Rlay(G%ke)-G%GV%Rlay(G%ke-1)) )
       call log_param(param_file, mod, "!ALE_RESOLUTION", dz, &
                    trim(message), units=trim(coordUnits))
     case ("PARAM")

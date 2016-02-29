@@ -2759,7 +2759,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
           state%SST(i,j) = state%SST(i,j) + dh * CS%tv%T(i,j,k)
           state%SSS(i,j) = state%SSS(i,j) + dh * CS%tv%S(i,j,k)
         else
-          state%sfc_density(i,j) = state%sfc_density(i,j) + dh * G%Rlay(k)
+          state%sfc_density(i,j) = state%sfc_density(i,j) + dh * G%GV%Rlay(k)
         endif
         depth(i) = depth(i) + dh
       enddo ; enddo

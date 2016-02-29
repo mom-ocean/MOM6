@@ -504,11 +504,11 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
           if (k1 <= 1) exit
           if (k2 <= nkmb) exit
           ! ### The 0.6 here should be adjustable?  It gives 20% overlap for now.
-          Rcv_min_det = G%Rlay(k2) + 0.6*Rcv_tol(i)*(G%Rlay(k2-1)-G%Rlay(k2))
+          Rcv_min_det = G%GV%Rlay(k2) + 0.6*Rcv_tol(i)*(G%GV%Rlay(k2-1)-G%GV%Rlay(k2))
           if (k2 < nz) then
-            Rcv_max_det = G%Rlay(k2) + 0.6*Rcv_tol(i)*(G%Rlay(k2+1)-G%Rlay(k2))
+            Rcv_max_det = G%GV%Rlay(k2) + 0.6*Rcv_tol(i)*(G%GV%Rlay(k2+1)-G%GV%Rlay(k2))
           else
-            Rcv_max_det = G%Rlay(nz) + 0.6*Rcv_tol(i)*(G%Rlay(nz)-G%Rlay(nz-1))
+            Rcv_max_det = G%GV%Rlay(nz) + 0.6*Rcv_tol(i)*(G%GV%Rlay(nz)-G%GV%Rlay(nz-1))
           endif
           if (Rcv(i,k1) > Rcv_max_det) &
             exit ! All shallower interior layers are too light for detrainment.

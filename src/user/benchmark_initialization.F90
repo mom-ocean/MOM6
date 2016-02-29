@@ -152,7 +152,7 @@ subroutine benchmark_initialize_thickness(h, G, param_file, eqn_of_state, P_ref)
 
 ! A first guess of the layers' temperatures.
   do k=1,nz
-    T0(k) = T0(k1) + (G%Rlay(k) - rho_guess(k1)) / drho_dT(k1)
+    T0(k) = T0(k1) + (G%GV%Rlay(k) - rho_guess(k1)) / drho_dT(k1)
   enddo
 
 ! Refine the guesses for each layer.
@@ -160,7 +160,7 @@ subroutine benchmark_initialize_thickness(h, G, param_file, eqn_of_state, P_ref)
     call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
     call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
     do k=1,nz
-      T0(k) = T0(k) + (G%Rlay(k) - rho_guess(k)) / drho_dT(k)
+      T0(k) = T0(k) + (G%GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
     enddo
   enddo
 
@@ -256,7 +256,7 @@ subroutine benchmark_init_temperature_salinity(T, S, G, param_file, &
 
 ! A first guess of the layers' temperatures.                         !
   do k=1,nz
-    T0(k) = T0(k1) + (G%Rlay(k) - rho_guess(k1)) / drho_dT(k1)
+    T0(k) = T0(k1) + (G%GV%Rlay(k) - rho_guess(k1)) / drho_dT(k1)
   enddo
 
 ! Refine the guesses for each layer.                                 !
@@ -264,7 +264,7 @@ subroutine benchmark_init_temperature_salinity(T, S, G, param_file, &
     call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
     call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
     do k=1,nz
-      T0(k) = T0(k) + (G%Rlay(k) - rho_guess(k)) / drho_dT(k)
+      T0(k) = T0(k) + (G%GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
     enddo
   enddo
 

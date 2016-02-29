@@ -764,7 +764,7 @@ contains
     !Don't know how to get the depth corresponding to k
     !Fake it for now.
     allocate(geo_z(nk))
-    do k=1,nk ;  geo_z(k) = G%Rlay(k) ; enddo
+    do k=1,nk ;  geo_z(k) = G%GV%Rlay(k) ; enddo
 
 
     m=ind_start ; g_tracer=>CS%g_tracer_list

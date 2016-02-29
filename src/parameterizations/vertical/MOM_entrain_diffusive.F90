@@ -760,7 +760,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
               !    the layers tracked the target density better, mostly due to
               !    the factor of 2 error.
               F_cor = h(i,j,k) * MIN(1.0 , MAX(-ds_dsp1(i,k), &
-                          (G%Rlay(k) - Rcv(i)) / (G%Rlay(k+1)-G%Rlay(k))) )
+                          (G%GV%Rlay(k) - Rcv(i)) / (G%GV%Rlay(k+1)-G%GV%Rlay(k))) )
 
               ! Ensure that (1) Entrainments are positive, (2) Corrections in
               ! a layer cannot deplete the layer itself (very generously), and
@@ -781,7 +781,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
               ! taking into account that the true potential density of the
               ! deepest buffer layer is not exactly what is returned as dS_kb.
               dS_kb_eff = 2.0*dS_kb(i) - dS_anom_lim(i) ! Could be negative!!!
-              Rho_cor = h(i,j,k) * (G%Rlay(k)-Rcv(i)) + eakb(i)*dS_anom_lim(i)
+              Rho_cor = h(i,j,k) * (G%GV%Rlay(k)-Rcv(i)) + eakb(i)*dS_anom_lim(i)
 
               ! Ensure that  -.9*eakb < ea_cor < .9*eakb
               if (abs(Rho_cor) < abs(0.9*eakb(i)*dS_kb_eff)) then
@@ -842,7 +842,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
             ! apply extremely rarely, but precludes undesirable
             ! behavior.
             F_cor = h(i,j,k) * MIN(dsp1_ds(i,k) , MAX(-1.0, &
-                       (G%Rlay(k) - Rcv(i)) / (G%Rlay(k+1)-G%Rlay(k))) )
+                       (G%GV%Rlay(k) - Rcv(i)) / (G%GV%Rlay(k+1)-G%GV%Rlay(k))) )
 
             ! Ensure that (1) Entrainments are positive, (2) Corrections in
             ! a layer cannot deplete the layer itself (very generously), and
@@ -919,7 +919,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
         enddo
       else
         do K=2,nz ; do i=is,ie
-          diff_work(i,j,K) = g_2dt * (G%Rlay(k)-G%Rlay(k-1)) * &
+          diff_work(i,j,K) = g_2dt * (G%GV%Rlay(k)-G%GV%Rlay(k-1)) * &
                (ea(i,j,k) * (h(i,j,k) + ea(i,j,k)) + &
                 eb(i,j,k-1)*(h(i,j,k-1) + eb(i,j,k-1)))
         enddo ; enddo
@@ -1154,7 +1154,7 @@ subroutine set_Ent_bl(h, dtKd_int, tv, kb, kmb, do_i, G, CS, j, Ent_bl, Sref, h_
   do i=is,ie ; kb(i) = nz+1 ; if (do_i(i)) kb(i) = kmb+1 ; enddo
 
   do k=kmb+1,nz ; do i=is,ie ; if (do_i(i)) then
-    if ((k == kb(i)) .and. (S_est(i,kmb) > (G%Rlay(k) - 1000.0))) then
+    if ((k == kb(i)) .and. (S_est(i,kmb) > (G%GV%Rlay(k) - 1000.0))) then
       if (4.0*dtKd_int(i,Kmb+1)*frac_rem(i) > &
           (h_bl(i,kmb) + h(i,j,k)) * (h(i,j,k) - G%Angstrom)) then
         ! Entrain this layer into the buffer layer and move kb down.
@@ -1162,7 +1162,7 @@ subroutine set_Ent_bl(h, dtKd_int, tv, kb, kmb, do_i, G, CS, j, Ent_bl, Sref, h_
         if (dh > 0.0) then
           frac_rem(i) = frac_rem(i) - ((h_bl(i,kmb) + h(i,j,k)) * dh) / &
                                        (4.0*dtKd_int(i,Kmb+1))
-          Sref(i,kmb) = (h_bl(i,kmb)*Sref(i,kmb) + dh*(G%Rlay(k)-1000.0)) / &
+          Sref(i,kmb) = (h_bl(i,kmb)*Sref(i,kmb) + dh*(G%GV%Rlay(k)-1000.0)) / &
                         (h_bl(i,kmb) + dh)
           h_bl(i,kmb) = h_bl(i,kmb) + dh
           S_est(i,kmb) = (h_bl(i,kmb)*Sref(i,kmb) + Ent_bl(i,Kmb)*S_est(i,kmb-1)) / &
@@ -1178,16 +1178,16 @@ subroutine set_Ent_bl(h, dtKd_int, tv, kb, kmb, do_i, G, CS, j, Ent_bl, Sref, h_
   do k=nz,kmb+1,-1 ; do i=is,ie
     if (k >= kb(i)) h_interior(i) = h_interior(i) + (h(i,j,k)-G%Angstrom)
     if (k==kb(i)) then
-      h_bl(i,kmb+1) = h(i,j,k) ; Sref(i,kmb+1) = G%Rlay(k) - 1000.0
+      h_bl(i,kmb+1) = h(i,j,k) ; Sref(i,kmb+1) = G%GV%Rlay(k) - 1000.0
     elseif (k==kb(i)+1) then
-      h_bl(i,kmb+2) = h(i,j,k) ; Sref(i,kmb+2) = G%Rlay(k) - 1000.0
+      h_bl(i,kmb+2) = h(i,j,k) ; Sref(i,kmb+2) = G%GV%Rlay(k) - 1000.0
     endif
   enddo ; enddo
   do i=is,ie ; if (kb(i) >= nz) then
     h_bl(i,kmb+1) = h(i,j,nz)
-    Sref(i,kmb+1) = G%Rlay(nz) - 1000.0
+    Sref(i,kmb+1) = G%GV%Rlay(nz) - 1000.0
     h_bl(i,kmb+2) = G%Angstrom
-    Sref(i,kmb+2) = Sref(i,kmb+1) + (G%Rlay(nz) - G%Rlay(nz-1))
+    Sref(i,kmb+2) = Sref(i,kmb+1) + (G%GV%Rlay(nz) - G%GV%Rlay(nz-1))
   endif ; enddo
 
   !   Perhaps we should revisit the way that the average entrainment between the

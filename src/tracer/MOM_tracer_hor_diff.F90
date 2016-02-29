@@ -581,18 +581,18 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   enddo ; enddo ; enddo
   !   Use bracketing and bisection to find the k-level that the densest of the
   ! mixed and buffer layer corresponds to, such that:
-  !     G%Rlay(max_kRho-1) < Rml_max <= G%Rlay(max_kRho)
+  !     G%GV%Rlay(max_kRho-1) < Rml_max <= G%GV%Rlay(max_kRho)
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,nkmb,G,Rml_max,max_kRho) &
 !$OMP                          private(k_min,k_max,k_test)
   do j=js-2,je+2 ; do i=is-2,ie+2 ; if (G%mask2dT(i,j) > 0.5) then
-    if (Rml_max(i,j) > G%Rlay(nz)) then ; max_kRho(i,j) = nz+1
-    elseif (Rml_max(i,j) <= G%Rlay(nkmb+1)) then ; max_kRho(i,j) = nkmb+1
+    if (Rml_max(i,j) > G%GV%Rlay(nz)) then ; max_kRho(i,j) = nz+1
+    elseif (Rml_max(i,j) <= G%GV%Rlay(nkmb+1)) then ; max_kRho(i,j) = nkmb+1
     else
       k_min = nkmb+2 ; k_max = nz
       do
         k_test = (k_min + k_max) / 2
-        if (Rml_max(i,j) <= G%Rlay(k_test-1)) then ; k_max = k_test-1
-        elseif (G%Rlay(k_test) < Rml_max(i,j)) then ; k_min = k_test+1
+        if (Rml_max(i,j) <= G%GV%Rlay(k_test-1)) then ; k_max = k_test-1
+        elseif (G%GV%Rlay(k_test) < Rml_max(i,j)) then ; k_min = k_test+1
         else ; max_kRho(i,j) = k_test ; exit ; endif
 
         if (k_min == k_max) then ; max_kRho(i,j) = k_max ; exit ; endif
@@ -626,7 +626,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
       if ((k<=k_end_srt(i,j)) .and. (h(i,j,k) > h_exclude)) then
         num_srt(i,j) = num_srt(i,j) + 1 ; ns = num_srt(i,j)
         k0_srt(i,ns,j) = k
-        rho_srt(i,ns,j) = G%Rlay(k)
+        rho_srt(i,ns,j) = G%GV%Rlay(k)
         h_srt(i,ns,j) = h(i,j,k)
       endif
     endif ; enddo ; enddo

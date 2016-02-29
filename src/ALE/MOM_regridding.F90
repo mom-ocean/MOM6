@@ -2385,8 +2385,8 @@ subroutine set_target_densities_from_G( G, CS )
   integer :: k, nz
 
   nz = CS%nk
-  CS%target_density(1)    = G%Rlay(1)+0.5*(G%Rlay(1)-G%Rlay(2))
-  CS%target_density(nz+1) = G%Rlay(nz)+0.5*(G%Rlay(nz)-G%Rlay(nz-1))
+  CS%target_density(1)    = G%GV%Rlay(1)+0.5*(G%GV%Rlay(1)-G%GV%Rlay(2))
+  CS%target_density(nz+1) = G%GV%Rlay(nz)+0.5*(G%GV%Rlay(nz)-G%GV%Rlay(nz-1))
   do k = 2,nz
     CS%target_density(k) = CS%target_density(k-1) + CS%coordinateResolution(k)
   end do

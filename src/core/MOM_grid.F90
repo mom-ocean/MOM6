@@ -152,10 +152,10 @@ type, public :: ocean_grid_type
                         ! at the bit level, in thickness units.  If Angstrom is
                         ! 0 or exceedingly small, this is negligible compared to
                         ! a thickness of 1e-17 m.
-  real ALLOCABLE_, dimension(NK_INTERFACE_) :: &
+!  real ALLOCABLE_, dimension(NK_INTERFACE_) :: &
 !    g_prime, &          ! The reduced gravity at each interface, in m s-2.
-    Rlay                ! The target coordinate value (potential density) in
-                        ! in each layer in kg m-3.
+!    Rlay                ! The target coordinate value (potential density) in
+!                        ! in each layer in kg m-3.
   integer :: nkml = 0   ! The number of layers at the top that should be treated
                         ! as parts of a homogenous region.
   integer :: nk_rho_varies = 0 ! The number of layers at the top where the
@@ -286,7 +286,7 @@ subroutine MOM_grid_init(G, param_file)
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   ALLOC_(G%bathyT(isd:ied, jsd:jed)) ; G%bathyT(:,:) = G%Angstrom_z
 !  ALLOC_(G%g_prime(nk+1)) ; G%g_prime(:) = 0.0
-  ALLOC_(G%Rlay(nk+1))    ; G%Rlay(:) = 0.0
+!  ALLOC_(G%Rlay(nk+1))    ; G%Rlay(:) = 0.0
 
   if (G%bathymetry_at_vel) then
     ALLOC_(G%Dblock_u(IsdB:IedB, jsd:jed)) ; G%Dblock_u(:,:) = 0.0
@@ -618,7 +618,7 @@ subroutine MOM_grid_end(G)
 
   DEALLOC_(G%bathyT)  ; DEALLOC_(G%CoriolisBu)
   DEALLOC_(G%dF_dx)  ; DEALLOC_(G%dF_dy)
-  DEALLOC_(G%Rlay) ! ; DEALLOC_(G%g_prime)
+  ! DEALLOC_(G%Rlay) ; DEALLOC_(G%g_prime)
   deallocate(G%gridLonT) ; deallocate(G%gridLatT)
   deallocate(G%gridLonB) ; deallocate(G%gridLatB)
 

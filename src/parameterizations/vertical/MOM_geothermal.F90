@@ -234,14 +234,14 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
             ! Simply heat the layer; convective adjustment occurs later
             ! if necessary.
             k_tgt = k
-          elseif ((k==nkmb+1) .or. (G%Rlay(k-1) < Rcv_BL(i))) then
+          elseif ((k==nkmb+1) .or. (G%GV%Rlay(k-1) < Rcv_BL(i))) then
             ! Add enough heat to match the lowest buffer layer density.
             k_tgt = nkmb
             Rcv_tgt = Rcv_BL(i)
           else
             ! Add enough heat to match the target density of layer k-1.
             k_tgt = k-1
-            Rcv_tgt = G%Rlay(k-1)
+            Rcv_tgt = G%GV%Rlay(k-1)
           endif
 
           if (k<=nkmb .or. nkmb<=0) then
@@ -262,13 +262,14 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
             heat_trans = 0.0
           elseif (dRcv_dT <= CS%dRcv_dT_inplace) then
             ! This is the option that usually applies in isopycnal coordinates.
-            heat_in_place = min(heat_avail, max(0.0, h(i,j,k) * ((G%Rlay(k)-Rcv) / dRcv_dT)))
+            heat_in_place = min(heat_avail, max(0.0, h(i,j,k) * &
+                                            ((G%GV%Rlay(k)-Rcv) / dRcv_dT)))
             heat_trans = heat_avail - heat_in_place
           else
             ! wt_in_place should go from 0 to 1.
             wt_in_place = (CS%dRcv_dT_inplace - dRcv_dT) / CS%dRcv_dT_inplace
             heat_in_place = max(wt_in_place*heat_avail, &
-                                h(i,j,k) * ((G%Rlay(k)-Rcv) / dRcv_dT) )
+                                h(i,j,k) * ((G%GV%Rlay(k)-Rcv) / dRcv_dT) )
             heat_trans = heat_avail - heat_in_place
           endif
 

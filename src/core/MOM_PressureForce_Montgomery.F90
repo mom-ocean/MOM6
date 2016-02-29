@@ -196,7 +196,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
   dp_neglect = G%H_to_Pa * G%H_subroundoff
 !$OMP parallel default(none) shared(nz,alpha_Lay,G,dalpha_int)
 !$OMP do
-  do k=1,nz ; alpha_Lay(k) = 1.0 / G%Rlay(k) ; enddo
+  do k=1,nz ; alpha_Lay(k) = 1.0 / G%GV%Rlay(k) ; enddo
 !$OMP do
   do k=2,nz ; dalpha_int(K) = alpha_Lay(k-1) - alpha_Lay(k) ; enddo
 !$OMP end parallel
@@ -289,7 +289,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
         call calculate_density(tv%T(:,j,nkmb), tv%S(:,j,nkmb), p_ref, &
                         Rho_cv_BL(:), Isq, Ieq-Isq+2, tv%eqn_of_state)
         do k=nkmb+1,nz ; do i=Isq,Ieq+1
-          if (G%Rlay(k) < Rho_cv_BL(i)) then
+          if (G%GV%Rlay(k) < Rho_cv_BL(i)) then
             tv_tmp%T(i,j,k) = tv%T(i,j,nkmb) ; tv_tmp%S(i,j,k) = tv%S(i,j,nkmb)
           else
             tv_tmp%T(i,j,k) = tv%T(i,j,k) ; tv_tmp%S(i,j,k) = tv%S(i,j,k)
@@ -564,7 +564,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
                         Rho_cv_BL(:), Isq, Ieq-Isq+2, tv%eqn_of_state)
 
         do k=nkmb+1,nz ; do i=Isq,Ieq+1
-          if (G%Rlay(k) < Rho_cv_BL(i)) then
+          if (G%GV%Rlay(k) < Rho_cv_BL(i)) then
             tv_tmp%T(i,j,k) = tv%T(i,j,nkmb) ; tv_tmp%S(i,j,k) = tv%S(i,j,nkmb)
           else
             tv_tmp%T(i,j,k) = tv%T(i,j,k) ; tv_tmp%S(i,j,k) = tv%S(i,j,k)
@@ -847,7 +847,7 @@ subroutine Set_pbce_nonBouss(p, tv, G, g_Earth, GFS_scale, pbce, alpha_star)
   dP_dH = g_Earth * G%H_to_kg_m2
   dp_neglect = dP_dH * G%H_subroundoff
 
-  do k=1,nz ; alpha_Lay(k) = 1.0 / G%Rlay(k) ; enddo
+  do k=1,nz ; alpha_Lay(k) = 1.0 / G%GV%Rlay(k) ; enddo
   do k=2,nz ; dalpha_int(K) = alpha_Lay(k-1) - alpha_Lay(k) ; enddo
 
   if (use_EOS) then

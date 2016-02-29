@@ -137,10 +137,10 @@ subroutine adjustment_initialize_thickness ( h, G, param_file )
           e0(k) = -(G%max_depth) * (real(k-1) / real(nz))
         enddo
       endif
-      target_values(1)    = G%Rlay(1)+0.5*(G%Rlay(1)-G%Rlay(2))
-      target_values(nz+1) = G%Rlay(nz)+0.5*(G%Rlay(nz)-G%Rlay(nz-1))
+      target_values(1)    = G%GV%Rlay(1)+0.5*(G%GV%Rlay(1)-G%GV%Rlay(2))
+      target_values(nz+1) = G%GV%Rlay(nz)+0.5*(G%GV%Rlay(nz)-G%GV%Rlay(nz-1))
       do k = 2,nz
-        target_values(k) = target_values(k-1) + ( G%Rlay(nz) - G%Rlay(1) ) / (nz-1)
+        target_values(k) = target_values(k-1) + ( G%GV%Rlay(nz) - G%GV%Rlay(1) ) / (nz-1)
       end do
       target_values = target_values - 1000.
       do j=js,je ; do i=is,ie

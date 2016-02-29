@@ -268,7 +268,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
         call calculate_density(tv%T(:,j,nkmb), tv%S(:,j,nkmb), p_ref, &
                         Rho_cv_BL(:), Isq, Ieq-Isq+2, tv%eqn_of_state)
         do k=nkmb+1,nz ; do i=Isq,Ieq+1
-          if (G%Rlay(k) < Rho_cv_BL(i)) then
+          if (G%GV%Rlay(k) < Rho_cv_BL(i)) then
             tv_tmp%T(i,j,k) = tv%T(i,j,nkmb) ; tv_tmp%S(i,j,k) = tv%S(i,j,nkmb)
           else
             tv_tmp%T(i,j,k) = tv%T(i,j,k) ; tv_tmp%S(i,j,k) = tv%S(i,j,k)
@@ -293,7 +293,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
                                dza(:,:,k), intp_dza(:,:,k), intx_dza(:,:,k), &
                                inty_dza(:,:,k))
     else
-      alpha_anom = 1.0/G%Rlay(k) - alpha_ref
+      alpha_anom = 1.0/G%GV%Rlay(k) - alpha_ref
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         dp(i,j) = G%H_to_Pa * h(i,j,k)
         dza(i,j,k) = alpha_anom * dp(i,j)
@@ -357,7 +357,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,dM,CS,p,G,alpha_ref,za)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         dM(i,j) = (CS%GFS_scale - 1.0) * &
-          (p(i,j,1)*(1.0/G%Rlay(1) - alpha_ref) + za(i,j))
+          (p(i,j,1)*(1.0/G%GV%Rlay(1) - alpha_ref) + za(i,j))
       enddo ; enddo
     endif
 !  else
@@ -629,7 +629,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
                         Rho_cv_BL(:), Isq, Ieq-Isq+2, tv%eqn_of_state)
 
         do k=nkmb+1,nz ; do i=Isq,Ieq+1
-          if (G%Rlay(k) < Rho_cv_BL(i)) then
+          if (G%GV%Rlay(k) < Rho_cv_BL(i)) then
             tv_tmp%T(i,j,k) = tv%T(i,j,nkmb) ; tv_tmp%S(i,j,k) = tv%S(i,j,nkmb)
           else
             tv_tmp%T(i,j,k) = tv%T(i,j,k) ; tv_tmp%S(i,j,k) = tv%S(i,j,k)
@@ -664,7 +664,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
     else
 !$OMP do
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        dM(i,j) = (CS%GFS_scale - 1.0) * (G_Rho0 * G%Rlay(1)) * e(i,j,1)
+        dM(i,j) = (CS%GFS_scale - 1.0) * (G_Rho0 * G%GV%Rlay(1)) * e(i,j,1)
       enddo ; enddo
     endif
   endif
@@ -756,14 +756,14 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
         do jb=Jsq_bk,Jeq_bk+1 ; do ib=Isq_bk,Ieq_bk+1
           i = ib+ioff_bk ; j = jb+joff_bk
           dz_bk(ib,jb) = G%g_Earth*G%H_to_m*h(i,j,k)
-          dpa_bk(ib,jb) = (G%Rlay(k) - rho_ref)*dz_bk(ib,jb)
-          intz_dpa_bk(ib,jb) = 0.5*(G%Rlay(k) - rho_ref)*dz_bk(ib,jb)*h(i,j,k)
+          dpa_bk(ib,jb) = (G%GV%Rlay(k) - rho_ref)*dz_bk(ib,jb)
+          intz_dpa_bk(ib,jb) = 0.5*(G%GV%Rlay(k) - rho_ref)*dz_bk(ib,jb)*h(i,j,k)
         enddo ; enddo
         do jb=js_bk,je_bk ; do Ib=Isq_bk,Ieq_bk
-          intx_dpa_bk(Ib,jb) = 0.5*(G%Rlay(k) - rho_ref) * (dz_bk(ib,jb)+dz_bk(ib+1,jb))
+          intx_dpa_bk(Ib,jb) = 0.5*(G%GV%Rlay(k) - rho_ref) * (dz_bk(ib,jb)+dz_bk(ib+1,jb))
         enddo ; enddo
         do Jb=Jsq_bk,Jeq_bk ; do ib=is_bk,ie_bk
-          inty_dpa_bk(ib,Jb) = 0.5*(G%Rlay(k) - rho_ref) * (dz_bk(ib,jb)+dz_bk(ib,jb+1))
+          inty_dpa_bk(ib,Jb) = 0.5*(G%GV%Rlay(k) - rho_ref) * (dz_bk(ib,jb)+dz_bk(ib,jb+1))
         enddo ; enddo
       endif
 

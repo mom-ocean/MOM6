@@ -710,7 +710,7 @@ subroutine convert_thickness(h, G, param_file, tv)
       enddo
     else
       do k=1,nz ; do j=js,je ; do i=is,ie
-        h(i,j,k) = h(i,j,k) * G%Rlay(k) * G%kg_m2_to_H
+        h(i,j,k) = h(i,j,k) * G%GV%Rlay(k) * G%kg_m2_to_H
       enddo ; enddo ; enddo
     endif
   endif
@@ -1096,7 +1096,7 @@ subroutine initialize_temp_salt_fit(T, S, G, param_file, eqn_of_state, P_Ref)
 
 ! A first guess of the layers' temperatures.                         !
   do k=nz,1,-1
-    T0(k) = T0(1) + (G%Rlay(k) - rho_guess(1)) / drho_dT(1)
+    T0(k) = T0(1) + (G%GV%Rlay(k) - rho_guess(1)) / drho_dT(1)
   enddo
 
 ! Refine the guesses for each layer.                                 !
@@ -1104,7 +1104,7 @@ subroutine initialize_temp_salt_fit(T, S, G, param_file, eqn_of_state, P_Ref)
     call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
     call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
     do k=1,nz
-      T0(k) = T0(k) + (G%Rlay(k) - rho_guess(k)) / drho_dT(k)
+      T0(k) = T0(k) + (G%GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
     enddo
   enddo
 
@@ -1449,11 +1449,11 @@ subroutine set_Open_Bdry_Conds(OBC, tv, G, param_file, tracer_Reg)
       call calculate_density(T0(1),S0(1),pres(1),rho_guess(1),tv%eqn_of_state)
       call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,1,tv%eqn_of_state)
 
-      do k=1,nz ; T0(k) = T0(1) + (G%Rlay(k)-rho_guess(1)) / drho_dT(1) ; enddo
+      do k=1,nz ; T0(k) = T0(1) + (G%GV%Rlay(k)-rho_guess(1)) / drho_dT(1) ; enddo
       do itt=1,6
         call calculate_density(T0,S0,pres,rho_guess,1,nz,tv%eqn_of_state)
         call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,tv%eqn_of_state)
-        do k=1,nz ; T0(k) = T0(k) + (G%Rlay(k)-rho_guess(k)) / drho_dT(k) ; enddo
+        do k=1,nz ; T0(k) = T0(k) + (G%GV%Rlay(k)-rho_guess(k)) / drho_dT(k) ; enddo
       enddo
 
       if (apply_OBC_u) then
@@ -2175,10 +2175,10 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 ! Rb contains the layer interface densities
     allocate(Rb(nz+1))
     do k=2,nz
-       Rb(k)=0.5*(G%Rlay(k-1)+G%Rlay(k))
+       Rb(k)=0.5*(G%GV%Rlay(k-1)+G%GV%Rlay(k))
     enddo
     Rb(1)=0.0
-    Rb(nz+1)=2.0*G%Rlay(nz) - G%Rlay(nz-1)
+    Rb(nz+1)=2.0*G%GV%Rlay(nz) - G%GV%Rlay(nz-1)
 
     zi(is:ie,js:je,:) = find_interfaces(rho_z(is:ie,js:je,:), z_in, Rb, G%bathyT(is:ie,js:je), &
                          nlevs(is:ie,js:je), nkml, nkbl, min_depth)
@@ -2221,8 +2221,12 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
 
 
-    tv%T(is:ie,js:je,:) = tracer_z_init(temp_z(is:ie,js:je,:),-1.0*z_edges_in,zi(is:ie,js:je,:),nkml,nkbl,missing_value,G%mask2dT(is:ie,js:je),nz,nlevs(is:ie,js:je),dbg,idbg,jdbg)
-    tv%S(is:ie,js:je,:) = tracer_z_init(salt_z(is:ie,js:je,:),-1.0*z_edges_in,zi(is:ie,js:je,:),nkml,nkbl,missing_value,G%mask2dT(is:ie,js:je),nz,nlevs(is:ie,js:je))
+    tv%T(is:ie,js:je,:) = tracer_z_init(temp_z(is:ie,js:je,:),-1.0*z_edges_in,zi(is:ie,js:je,:), &
+                                        nkml,nkbl,missing_value,G%mask2dT(is:ie,js:je),nz, &
+                                        nlevs(is:ie,js:je),dbg,idbg,jdbg)
+    tv%S(is:ie,js:je,:) = tracer_z_init(salt_z(is:ie,js:je,:),-1.0*z_edges_in,zi(is:ie,js:je,:), &
+                                        nkml,nkbl,missing_value,G%mask2dT(is:ie,js:je),nz, &
+                                        nlevs(is:ie,js:je))
 
     do k=1,nz
 
@@ -2268,7 +2272,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
   if (adjust_temperature .and. .not. useALEremapping) then
     call determine_temperature(tv%T(is:ie,js:je,:), tv%S(is:ie,js:je,:), &
-            G%Rlay(1:nz), tv%p_ref, niter, missing_value, h(is:ie,js:je,:), ks, eos)
+            G%GV%Rlay(1:nz), tv%p_ref, niter, missing_value, h(is:ie,js:je,:), ks, eos)
 
   endif
 

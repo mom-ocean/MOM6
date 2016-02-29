@@ -1020,7 +1020,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, CS, TKE_to_Kd, maxT
     do i=is,ie
       !   Determine the next denser layer than the buffer layer in the
       ! coordinate density (sigma-2).
-      do k=kmb+1,nz-1 ; if (Rcv_kmb(i) <= G%Rlay(k)) exit ; enddo
+      do k=kmb+1,nz-1 ; if (Rcv_kmb(i) <= G%GV%Rlay(k)) exit ; enddo
       kb(i) = k
 
     !   Backtrack, in case there are massive layers above that are stable
@@ -1191,7 +1191,7 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, CS, dRho_int, N2_lay, N2_int, 
     enddo
   else
     do K=2,nz ; do i=is,ie
-      dRho_int(i,K) = G%Rlay(k) - G%Rlay(k-1)
+      dRho_int(i,K) = G%GV%Rlay(k) - G%GV%Rlay(k-1)
     enddo ; enddo
   endif
 
@@ -1431,7 +1431,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, &
   I_Rho0 = 1.0/G%Rho0
   R0_g = G%Rho0/G%g_Earth
 
-  do K=2,nz ; Rint(K) = 0.5*(G%Rlay(k-1)+G%Rlay(k)) ; enddo
+  do K=2,nz ; Rint(K) = 0.5*(G%GV%Rlay(k-1)+G%GV%Rlay(k)) ; enddo
 
   kb_min = max(G%nk_rho_varies+1,2)
 
@@ -1468,16 +1468,16 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, &
 
     do_i(i) = (G%mask2dT(i,j) > 0.5)
     htot(i) = G%H_to_m*h(i,j,nz)
-    rho_htot(i) = G%Rlay(nz)*(G%H_to_m*h(i,j,nz))
-    Rho_top(i) = G%Rlay(1)
-    if (CS%bulkmixedlayer .and. do_i(i)) Rho_top(i) = G%Rlay(kb(i)-1)
+    rho_htot(i) = G%GV%Rlay(nz)*(G%H_to_m*h(i,j,nz))
+    Rho_top(i) = G%GV%Rlay(1)
+    if (CS%bulkmixedlayer .and. do_i(i)) Rho_top(i) = G%GV%Rlay(kb(i)-1)
   enddo
 
   do k=nz-1,2,-1 ; domore = .false.
     do i=is,ie ; if (do_i(i)) then
       htot(i) = htot(i) + G%H_to_m*h(i,j,k)
-      rho_htot(i) = rho_htot(i) + G%Rlay(k)*(G%H_to_m*h(i,j,k))
-      if (htot(i)*G%Rlay(k-1) <= (rho_htot(i) - gh_sum_top(i))) then
+      rho_htot(i) = rho_htot(i) + G%GV%Rlay(k)*(G%H_to_m*h(i,j,k))
+      if (htot(i)*G%GV%Rlay(k-1) <= (rho_htot(i) - gh_sum_top(i))) then
         ! The top of the mixing is in the interface atop the current layer.
         Rho_top(i) = (rho_htot(i) - gh_sum_top(i)) / htot(i)
         do_i(i) = .false.
@@ -2426,7 +2426,7 @@ subroutine set_density_ratios(h, tv, kb, G, CS, j, ds_dsp1, rho_0)
         I_Drho = g_R0 / G%GV%g_prime(k+1)
         ! The indexing convention for a is appropriate for the interfaces.
         do k3=1,kmb
-          a(k3+1) = (G%Rlay(k) - Rcv(i,k3)) * I_Drho
+          a(k3+1) = (G%GV%Rlay(k) - Rcv(i,k3)) * I_Drho
         enddo
         if ((present(rho_0)) .and. (a(kmb+1) < 2.0*eps*ds_dsp1(i,k))) then
 !   If the buffer layer nearly matches the density of the layer below in the

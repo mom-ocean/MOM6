@@ -224,7 +224,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, N2_bot)
       enddo
     else
       do K=2,nz ; do i=is,ie
-        dRho_int(i,K) = G%Rlay(k) - G%Rlay(k-1)
+        dRho_int(i,K) = G%GV%Rlay(k) - G%GV%Rlay(k-1)
       enddo ; enddo
     endif
 
