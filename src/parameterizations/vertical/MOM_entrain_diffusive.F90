@@ -2063,7 +2063,7 @@ subroutine entrain_diffusive_init(Time, G, param_file, diag, CS)
 
   CS%diag => diag
 
-  CS%bulkmixedlayer = (G%nkml > 0)
+  CS%bulkmixedlayer = (G%GV%nkml > 0)
 
 ! Set default, read and log parameters
   call log_version(param_file, mod, version, "")

@@ -209,7 +209,7 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
 
   is   = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nk = G%ke
   Isq  = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-  nkml = max(G%nkml, 1)
+  nkml = max(G%GV%nkml, 1)
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "diagnostic_fields_zstar: Module must be initialized before it is used.")

@@ -92,7 +92,7 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
 
   use_EOS = associated(tv%eqn_of_state)
 
-  nk_linear = 1 ! Was max(G%nkml, 1) -AJA ???? ##############
+  nk_linear = 1 ! Was max(G%GVnkml, 1) -AJA ???? ##############
 
   present_N2_u = PRESENT(N2_u)
   present_N2_v = PRESENT(N2_v)

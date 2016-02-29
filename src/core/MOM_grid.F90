@@ -152,14 +152,6 @@ type, public :: ocean_grid_type
                         ! at the bit level, in thickness units.  If Angstrom is
                         ! 0 or exceedingly small, this is negligible compared to
                         ! a thickness of 1e-17 m.
-!  real ALLOCABLE_, dimension(NK_INTERFACE_) :: &
-!    g_prime, &          ! The reduced gravity at each interface, in m s-2.
-!    Rlay                ! The target coordinate value (potential density) in
-!                        ! in each layer in kg m-3.
-  integer :: nkml = 0   ! The number of layers at the top that should be treated
-                        ! as parts of a homogenous region.
-!  integer :: nk_rho_varies = 0 ! The number of layers at the top where the
-!                        ! density does not track any target density.
   real :: H_to_kg_m2    ! A constant that translates thicknesses from the units
                         ! of thickness to kg m-2.
   real :: kg_m2_to_H    ! A constant that translates thicknesses from kg m-2 to

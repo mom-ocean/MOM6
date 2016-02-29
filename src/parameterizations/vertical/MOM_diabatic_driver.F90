@@ -1193,7 +1193,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     endif
 !$OMP do
     do j=js,je
-      do K=2,G%nkml ; do i=is,ie
+      do K=2,G%GV%nkml ; do i=is,ie
         net_ent = ea(i,j,k) - eb(i,j,k-1)
         ea(i,j,k) = max(net_ent, 0.0)
         eb(i,j,k-1) = max(-net_ent, 0.0)
@@ -1730,7 +1730,7 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   if (associated(diag_to_Z_CSp))   CS%diag_to_Z_CSp   => diag_to_Z_CSp
 
   CS%useALEalgorithm = useALEalgorithm
-  CS%bulkmixedlayer = (G%nkml > 0)
+  CS%bulkmixedlayer = (G%GV%nkml > 0)
 
   ! Set default, read and log parameters
   call log_version(param_file, mod, version, &

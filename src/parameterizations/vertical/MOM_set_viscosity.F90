@@ -274,11 +274,11 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
   real :: C2pi_3           ! An irrational constant, 2/3 pi.
   real :: tmp              ! A temporary variable.
   logical :: use_BBL_EOS, do_i(SZIB_(G))
-  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, m, K2, nkmb
+  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, m, K2, nkmb, nkml
   integer :: itt, maxitt=20
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-  nkmb = G%GV%nk_rho_varies
+  nkmb = G%GV%nk_rho_varies ; nkml = G%GV%nkml
   h_neglect = G%H_subroundoff
   Rho0x400_G = 400.0*(G%Rho0/G%g_Earth)*G%m_to_H
   Vol_quit = 0.9*G%Angstrom + h_neglect
@@ -297,7 +297,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
 !  With a linear drag law, the friction velocity is already known.
 !  if (CS%linear_drag) ustar(:) = cdrag_sqrt*CS%drag_bg_vel
 
-  if ((G%nkml>0) .and. .not.use_BBL_EOS) then
+  if ((nkml>0) .and. .not.use_BBL_EOS) then
     do i=G%IscB,G%IecB+1 ; p_ref(i) = tv%P_ref ; enddo
 !$OMP parallel do default(none) shared(Jsq,Jeq,Isq,Ieq,nkmb,tv,p_ref,Rml)
     do j=Jsq,Jeq+1 ; do k=1,nkmb
@@ -494,7 +494,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
           htot = htot + Dh
           Rhtot = Rhtot + G%GV%Rlay(k)*Dh
         enddo
-        if (G%nkml>0) then
+        if (nkml>0) then
           if (m==1) then
             Rla = 0.5*(Rml(i,j,nkmb) + Rml(i+1,j,nkmb))
           else
@@ -945,11 +945,11 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
   real :: Rho0x400_G  ! 400*Rho0/G_Earth, in kg s2 m-4.  The 400 is a
                       ! constant proposed by Killworth and Edwards, 1999.
   logical :: use_EOS, do_any, do_any_shelf, do_i(SZIB_(G))
-  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, K2, nkmb
+  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, K2, nkmb, nkml
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-  nkmb = G%GV%nk_rho_varies
+  nkmb = G%GV%nk_rho_varies ; nkml = G%GV%nkml
 
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(visc_ML): "//&
          "Module must be initialized before it is used.")
@@ -1018,10 +1018,10 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
       do I=Isq,Ieq
         htot(I) = 0.0
         if (G%mask2dCu(I,j) < 0.5) then
-          do_i(I) = .false. ; visc%nkml_visc_u(I,j) = G%nkml
+          do_i(I) = .false. ; visc%nkml_visc_u(I,j) = nkml
         else
           do_i(I) = .true. ; do_any = .true.
-          k_massive(I) = G%nkml
+          k_massive(I) = nkml
           Thtot(I) = 0.0 ; Shtot(I) = 0.0 ; Rhtot(i) = 0.0
           uhtot(I) = dt_Rho0 * fluxes%taux(I,j)
           vhtot(I) = 0.25 * dt_Rho0 * ((fluxes%tauy(i,J) + fluxes%tauy(i+1,J-1)) + &
@@ -1035,13 +1035,13 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
       enddo
 
       if (do_any) then ; do k=1,nz
-        if (k > G%nkml) then
+        if (k > nkml) then
           do_any = .false.
-          if (use_EOS .and. (k==G%nkml+1)) then
+          if (use_EOS .and. (k==nkml+1)) then
             ! Find dRho/dT and dRho_dS.
             do I=Isq,Ieq
               press(I) = G%H_to_Pa * htot(I)
-              k2 = max(1,G%nkml)
+              k2 = max(1,nkml)
               I_2hlay = 1.0 / (h(i,j,k2) + h(i+1,j,k2) + h_neglect)
               T_EOS(I) = (h(i,j,k2)*tv%T(i,j,k2) + h(i+1,j,k2)*tv%T(i+1,j,k2)) * I_2hlay
               S_EOS(I) = (h(i,j,k2)*tv%S(i,j,k2) + h(i+1,j,k2)*tv%S(i+1,j,k2)) * I_2hlay
@@ -1252,10 +1252,10 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
       do i=is,ie
         htot(i) = 0.0
         if (G%mask2dCv(i,J) < 0.5) then
-          do_i(i) = .false. ; visc%nkml_visc_v(i,J) = G%nkml
+          do_i(i) = .false. ; visc%nkml_visc_v(i,J) = nkml
         else
           do_i(i) = .true. ; do_any = .true.
-          k_massive(i) = G%nkml
+          k_massive(i) = nkml
           Thtot(i) = 0.0 ; Shtot(i) = 0.0 ; Rhtot(i) = 0.0
           vhtot(i) = dt_Rho0 * fluxes%tauy(i,J)
           uhtot(i) = 0.25 * dt_Rho0 * ((fluxes%taux(I,j) + fluxes%tauy(I-1,j+1)) + &
@@ -1270,13 +1270,13 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
       enddo
 
       if (do_any) then ; do k=1,nz
-        if (k > G%nkml) then
+        if (k > nkml) then
           do_any = .false.
-          if (use_EOS .and. (k==G%nkml+1)) then
+          if (use_EOS .and. (k==nkml+1)) then
             ! Find dRho/dT and dRho_dS.
             do i=is,ie
               press(i) = G%H_to_Pa * htot(i)
-              k2 = max(1,G%nkml)
+              k2 = max(1,nkml)
               I_2hlay = 1.0 / (h(i,j,k2) + h(i,j+1,k2) + h_neglect)
               T_EOS(i) = (h(i,j,k2)*tv%T(i,j,k2) + h(i,j+1,k2)*tv%T(i,j+1,k2)) * I_2hlay
               S_EOS(i) = (h(i,j,k2)*tv%S(i,j,k2) + h(i,j+1,k2)*tv%S(i,j+1,k2)) * I_2hlay

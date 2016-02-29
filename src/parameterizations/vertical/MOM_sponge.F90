@@ -588,11 +588,11 @@ subroutine apply_sponge(h, dt, G, ea, eb, CS, Rcv_ml)
         enddo
       else
         w = wb
-        do k=G%nkml,nkmb
+        do k=G%GV%nkml,nkmb
           eb(i,j,k) = eb(i,j,k) + w
         enddo
 
-        k = G%nkml
+        k = G%GV%nkml
         h(i,j,k) = h(i,j,k) + w
         do m=1,CS%fldno
           CS%var(m)%p(i,j,k) = (CS%var(m)%p(i,j,k)*h(i,j,k) + &
@@ -603,7 +603,7 @@ subroutine apply_sponge(h, dt, G, ea, eb, CS, Rcv_ml)
       do k=1,nkmb
         do m=1,CS%fldno
           CS%var(m)%p(i,j,k) = I1pdamp * &
-              (CS%var(m)%p(i,j,k) + CS%Ref_val(m)%p(G%nkml,c)*damp)
+              (CS%var(m)%p(i,j,k) + CS%Ref_val(m)%p(G%GV%nkml,c)*damp)
         enddo
       enddo
 

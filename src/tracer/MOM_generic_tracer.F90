@@ -585,7 +585,7 @@ contains
     do j=jsc,jec ; do i=isc,iec ;
        hblt_depth(i,j) = G%H_to_m * h_old(i,j,1)
     enddo; enddo
-    do k=2,G%nkml ; do j=jsc,jec ; do i=isc,iec
+    do k=2,G%GV%nkml ; do j=jsc,jec ; do i=isc,iec
        hblt_depth(i,j) = hblt_depth(i,j) + G%H_to_m * h_old(i,j,k)
     enddo; enddo ; enddo
 

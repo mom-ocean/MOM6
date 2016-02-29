@@ -338,11 +338,11 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
       do k=1,nz
         scale = I_numitts
         if (CS%Diffuse_ML_interior) then
-          if (k<=G%nkml) then
+          if (k<=G%GV%nkml) then
             if (CS%ML_KhTr_scale <= 0.0) cycle
             scale = I_numitts * CS%ML_KhTr_scale
           endif
-          if ((k>G%nkml) .and. (k<=G%GV%nk_rho_varies)) cycle
+          if ((k>G%GV%nkml) .and. (k<=G%GV%nk_rho_varies)) cycle
         endif
 
         do J=js-1,je ; do i=is,ie

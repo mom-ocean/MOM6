@@ -1767,7 +1767,7 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, CS, Kd, TKE_to_Kd, Kd_int)
 
   Omega2    = CS%Omega**2
   C1_6      = 1.0 / 6.0
-  kml       = G%nkml
+  kml       = G%GV%nkml
   h_neglect = G%H_subroundoff*G%H_to_m
 
   if (.not.CS%ML_radiation) return
@@ -2513,7 +2513,7 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp, in
   ! These default values always need to be set.
   CS%BBL_mixing_as_max = .true.
   CS%Kdml = 0.0 ; CS%cdrag = 0.003 ; CS%BBL_effic = 0.0 ;
-  CS%bulkmixedlayer = (G%nkml > 0)
+  CS%bulkmixedlayer = (G%GV%nkml > 0)
 
 
   ! Read all relevant parameters and write them to the model log.

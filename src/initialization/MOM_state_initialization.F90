@@ -1275,7 +1275,7 @@ subroutine initialize_sponges_file(G, use_temperature, tv, param_file, CSp)
 ! sponge. By default, momentum is advected vertically within the     !
 ! sponge, but momentum is typically not damped within the sponge.    !
 
-  if ( G%nkml>0 ) then
+  if ( G%GV%nkml>0 ) then
 !   This call to set_up_sponge_ML_density registers the target values of the
 ! mixed layer density, which is used in determining which layers can be
 ! inflated without causing static instabilities.

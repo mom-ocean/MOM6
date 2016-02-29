@@ -1756,11 +1756,11 @@ logical function kappa_shear_init(Time, G, param_file, diag, CS)
 !    id_clock_setup = cpu_clock_id('Ocean KS setup',grain=CLOCK_ROUTINE)
 
   CS%nkml = 1
-  if (G%nkml>0) then
+  if (G%GV%nkml>0) then
     call get_param(param_file, mod, "KAPPA_SHEAR_MERGE_ML",merge_mixedlayer, &
                  "If true, combine the mixed layers together before \n"//&
                  "solving the kappa-shear equations.", default=.true.)
-    if (merge_mixedlayer) CS%nkml = G%nkml
+    if (merge_mixedlayer) CS%nkml = G%GV%nkml
   endif
 
 ! Forego remainder of initialization if not using this scheme

@@ -218,7 +218,7 @@ function register_ideal_age_tracer(G, param_file, CS, diag, tr_Reg, &
                  "it is a fatal error if the tracers are not found in the \n"//&
                  "restart files of a restarted run.", default=.false.)
 
-  CS%nkml = max(G%nkml,1)
+  CS%nkml = max(G%GV%nkml,1)
 
   CS%ntr = 0
   if (do_ideal_age) then

@@ -581,7 +581,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
 !
 ! Field from fluxes used in this subroutine:
 !   ustar: the friction velocity in m s-1, used here as the mixing
-!     velocity in the mixed layer if G%nkml > 1 in a bulk mixed layer.
+!     velocity in the mixed layer if G%GV%nkml > 1 in a bulk mixed layer.
 !
   real, dimension(SZIB_(G),SZK_(G)) :: &
     h_harm, &   ! Harmonic mean of the thicknesses around a velocity grid point,
@@ -981,7 +981,7 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
 !    The following loop calculates the vertical average velocity and
 !  surface mixed layer contributions to the vertical viscosity.
     do i=is,ie ; a(i,1) = 0.0 ; enddo
-    if ((G%nkml>0) .or. do_shelf) then ; do k=2,nz ; do i=is,ie
+    if ((G%GV%nkml>0) .or. do_shelf) then ; do k=2,nz ; do i=is,ie
       if (do_i(i)) a(i,K) = 2.0*CS%Kv
     enddo ; enddo ; else
       I_Hmix = 1.0 / (CS%Hmix * G%m_to_H + h_neglect)
@@ -1080,10 +1080,10 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
         a_top = 2.0 * topfn * kv_tbl(i)
         a(i,K) = a(i,K) + a_top / (h_shear*G%H_to_m + 1.0e-10*dt*a_top)
       endif ; enddo ; enddo
-    elseif (CS%dynamic_viscous_ML .or. (G%nkml>0)) then
+    elseif (CS%dynamic_viscous_ML .or. (G%GV%nkml>0)) then
       max_nk = 0
       do i=is,ie ; if (do_i(i)) then
-        if (G%nkml>0) nk_visc(i) = real(G%nkml+1)
+        if (G%GV%nkml>0) nk_visc(i) = real(G%GV%nkml+1)
         if (work_on_u) then
           u_star(I) = 0.5*(fluxes%ustar(i,j) + fluxes%ustar(i+1,j))
           absf(I) = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
@@ -1397,13 +1397,13 @@ subroutine vertvisc_init(MIS, Time, G, param_file, diag, ADp, dirs, ntrunc, CS)
                  "calculating the vertical viscosity.", default=.false.)
   call get_param(param_file, mod, "DEBUG", CS%debug, default=.false.)
 
-  if (G%nkml < 1) &
+  if (G%GV%nkml < 1) &
     call get_param(param_file, mod, "HMIX_FIXED", CS%Hmix, &
                  "The prescribed depth over which the near-surface \n"//&
                  "viscosity and diffusivity are elevated when the bulk \n"//&
                  "mixed layer is not used.", units="m", fail_if_missing=.true.)
   if (CS%direct_stress) then
-    if (G%nkml < 1) then
+    if (G%GV%nkml < 1) then
       call get_param(param_file, mod, "HMIX_STRESS", CS%Hmix_stress, &
                  "The depth over which the wind stress is applied if \n"//&
                  "DIRECT_STRESS is true.", units="m", default=CS%Hmix)
@@ -1421,7 +1421,7 @@ subroutine vertvisc_init(MIS, Time, G, param_file, diag, ADp, dirs, ntrunc, CS)
                  units="m2 s-1", fail_if_missing=.true.)
 
 ! CS%Kvml = CS%Kv ; CS%Kvbbl = CS%Kv ! Needed? -AJA
-  if (G%nkml < 1) call get_param(param_file, mod, "KVML", CS%Kvml, &
+  if (G%GV%nkml < 1) call get_param(param_file, mod, "KVML", CS%Kvml, &
                  "The kinematic viscosity in the mixed layer.  A typical \n"//&
                  "value is ~1e-2 m2 s-1. KVML is not used if \n"//&
                  "BULKMIXEDLAYER is true.  The default is set by KV.", &

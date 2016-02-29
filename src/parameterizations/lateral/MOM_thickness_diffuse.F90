@@ -541,7 +541,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
   present_slope_x = PRESENT(slope_x)
   present_slope_y = PRESENT(slope_y)
 
-  nk_linear = max(G%nkml, 1)
+  nk_linear = max(G%GV%nkml, 1)
 
   find_work = .false.
   if (MEKE_not_null) find_work = ASSOCIATED(MEKE%GM_src)

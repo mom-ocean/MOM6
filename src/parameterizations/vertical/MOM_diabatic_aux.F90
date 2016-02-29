@@ -510,7 +510,7 @@ subroutine insert_brine(h, tv, G, fluxes, nkmb, CS, dt, id_brine_lay)
     enddo ; enddo
 
     ! Then try to insert into buffer layers if they exist
-    do k=nkmb,G%nkml+1,-1 ; do i=is,ie
+    do k=nkmb,G%GV%nkml+1,-1 ; do i=is,ie
       if ((G%mask2dT(i,j) > 0.0) .and. dzbr(i) < brine_dz .and. salt(i) > 0.) then
         mc = G%H_to_kg_m2 * h_2d(i,k)
         dzbr(i)=dzbr(i)+h_2d(i,k)
@@ -520,7 +520,7 @@ subroutine insert_brine(h, tv, G, fluxes, nkmb, CS, dt, id_brine_lay)
 
     ! finally if unable to find a layer to insert, then place in mixed layer
 
-    do k=1,G%nkml ; do i=is,ie
+    do k=1,G%GV%nkml ; do i=is,ie
       if ((G%mask2dT(i,j) > 0.0) .and. dzbr(i) < brine_dz .and. salt(i) > 0.) then
         mc = G%H_to_kg_m2 * h_2d(i,k)
         dzbr(i)=dzbr(i)+h_2d(i,k)
@@ -1253,7 +1253,7 @@ subroutine diabatic_aux_init(Time, G, param_file, diag, CS, use_ePBL)
                  "The depth to which rivers are mixed if DO_RIVERMIX is \n"//&
                  "defined.", units="m", default=0.0)
   else ; CS%do_rivermix = .false. ; CS%rivermix_depth = 0.0 ; endif
-  if (G%nkml == 0) then
+  if (G%GV%nkml == 0) then
     call get_param(param_file, mod, "USE_RIVER_HEAT_CONTENT", CS%use_river_heat_content, &
                    "If true, use the fluxes%runoff_Hflx field to set the \n"//&
                    "heat carried by runoff, instead of using SST*CP*liq_runoff.", &

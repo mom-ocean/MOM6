@@ -258,15 +258,15 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
   logical :: debug = .false.
   logical :: fatal_error
   character(len=256) :: mesg    ! Message for error messages.
-  integer :: i, j, k, is, ie, js, je, nz, nkmb, k1, k2, k3, ks, nz_filt
+  integer :: i, j, k, is, ie, js, je, nz, nkmb, nkml, k1, k2, k3, ks, nz_filt
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_regularize_layers: "//&
          "Module must be initialized before it is used.")
 
-  if (G%nkml<1) return
-  nkmb = G%GV%nk_rho_varies
+  if (G%GV%nkml<1) return
+  nkmb = G%GV%nk_rho_varies ; nkml = G%GV%nkml
   if (.not.ASSOCIATED(tv%eqn_of_state)) call MOM_error(FATAL, &
     "MOM_regularize_layers: This module now requires the use of temperature and "//&
     "an equation of state.")
@@ -590,13 +590,13 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
 
       ! Ensure that layer 1 only has water from layers 1 to nkml and rescale
       ! the remaining layer thicknesses if necessary.
-      if (e_filt(i,2) < e_2d(i,G%nkml)) then
-        scale = (e_2d(i,G%nkml) - e_filt(i,nkmb+1)) / &
+      if (e_filt(i,2) < e_2d(i,nkml)) then
+        scale = (e_2d(i,nkml) - e_filt(i,nkmb+1)) / &
                 ((e_filt(i,2) - e_filt(i,nkmb+1)) + h_neglect)
         do k=3,nkmb
           e_filt(i,k) = e_filt(i,nkmb+1) + scale * (e_filt(i,k) - e_filt(i,nkmb+1))
         enddo
-        e_filt(i,2) = e_2d(i,G%nkml)
+        e_filt(i,2) = e_2d(i,nkml)
       endif
 
       ! Map the water back into the layers.

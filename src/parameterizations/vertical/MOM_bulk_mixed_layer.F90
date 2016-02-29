@@ -392,7 +392,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_mixed_layer: "//&
          "Module must be initialized before it is used.")
-  if (G%nkml < 1) return
+  if (G%GV%nkml < 1) return
 
   if (.not. ASSOCIATED(tv%eqn_of_state)) call MOM_error(FATAL, &
       "MOM_mixed_layer: Temperature, salinity and an equation of state "//&
@@ -3355,16 +3355,16 @@ subroutine bulkmixedlayer_init(Time, G, param_file, diag, CS)
   CS%diag => diag
   CS%Time => Time
 
-  if (G%nkml < 1) return
+  if (G%GV%nkml < 1) return
 
 ! Set default, read and log parameters
   call log_version(param_file, mod, version, "")
 
-  CS%nkml = G%nkml
+  CS%nkml = G%GV%nkml
   call log_param(param_file, mod, "NKML", CS%nkml, &
                  "The number of sublayers within the mixed layer if \n"//&
                  "BULKMIXEDLAYER is true.", units="nondim", default=2)
-  CS%nkbl = G%GV%nk_rho_varies - G%nkml
+  CS%nkbl = G%GV%nk_rho_varies - G%GV%nkml
   call log_param(param_file, mod, "NKBL", CS%nkbl, &
                  "The number of variable density buffer layers if \n"//&
                  "BULKMIXEDLAYER is true.", units="nondim", default=2)

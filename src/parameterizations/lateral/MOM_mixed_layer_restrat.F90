@@ -86,7 +86,7 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, CS)
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "Module must be initialized before it is used.")
 
-  if (G%nkml>0) then
+  if (G%GV%nkml>0) then
     call mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
   else
     call mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, CS)
@@ -442,13 +442,13 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
   real :: uDml_diag(SZIB_(G),SZJ_(G)), vDml_diag(SZI_(G),SZJB_(G))
   logical :: use_EOS    ! If true, density is calculated from T & S using an equation of state.
 
-  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
+  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkml
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
-  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nkml = G%GV%nkml
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "Module must be initialized before it is used.")
-  if ((G%nkml<2) .or. (CS%ml_restrat_coef<=0.0)) return
+  if ((nkml<2) .or. (CS%ml_restrat_coef<=0.0)) return
 
   uDml(:)    = 0.0 ; vDml(:) = 0.0
   I4dt       = 0.25 / dt
@@ -460,7 +460,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
   if (.not.use_EOS) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "An equation of state must be used with this module.")
 
-  ! Fix this later for G%nkml >= 3.
+  ! Fix this later for nkml >= 3.
 
   p0(:) = 0.0
 !$OMP parallel default(none) shared(is,ie,js,je,G,htot,Rml_av,tv,p0,h,h_avail,         &
@@ -474,7 +474,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
     do i=is-1,ie+1
       htot(i,j) = 0.0 ; Rml_av(i,j) = 0.0
     enddo
-    do k=1,G%nkml
+    do k=1,nkml
       call calculate_density(tv%T(:,j,k),tv%S(:,j,k),p0,Rho0(:),is-1,ie-is+3,tv%eqn_of_state)
       do i=is-1,ie+1
         Rml_av(i,j) = Rml_av(i,j) + h(i,j,k)*Rho0(i)
@@ -518,13 +518,13 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
           G%IdxCu(I,j)*(Rml_av(i+1,j)-Rml_av(i,j)) * (h_vel**2 * G%m_to_H)
 
       if (uDml(i) == 0) then
-        do k=1,G%nkml ; uhml(I,j,k) = 0.0 ; enddo
+        do k=1,nkml ; uhml(I,j,k) = 0.0 ; enddo
       else
         I2htot = 1.0 / (htot(i,j) + htot(i+1,j) + h_neglect)
         z_topx2 = 0.0
         ! a(k) relates the sublayer transport to uDml with a linear profile.
         ! The sum of a(k) through the mixed layers must be 0.
-        do k=1,G%nkml
+        do k=1,nkml
           hx2 = (h(i,j,k) + h(i+1,j,k) + h_neglect)
           a(k) = (hx2 * I2htot) * (2.0 - 4.0*(z_topx2+0.5*hx2)*I2htot)
           z_topx2 = z_topx2 + hx2
@@ -534,7 +534,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
             if (-a(k)*uDml(I) > h_avail(i+1,j,k)) uDml(I) = -h_avail(i+1,j,k)/a(k)
           endif
         enddo
-        do k=1,G%nkml
+        do k=1,nkml
           uhml(I,j,k) = a(k)*uDml(I)
           uhtr(I,j,k) = uhtr(I,j,k) + uhml(I,j,k)*dt
         enddo
@@ -565,13 +565,13 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
     vDml(i) = timescale * G%mask2dCv(i,J)*G%dxCv(i,J)* &
         G%IdyCv(i,J)*(Rml_av(i,j+1)-Rml_av(i,j)) * (h_vel**2 * G%m_to_H)
     if (vDml(i) == 0) then
-      do k=1,G%nkml ; vhml(i,J,k) = 0.0 ; enddo
+      do k=1,nkml ; vhml(i,J,k) = 0.0 ; enddo
     else
       I2htot = 1.0 / (htot(i,j) + htot(i,j+1) + h_neglect)
       z_topx2 = 0.0
       ! a(k) relates the sublayer transport to uDml with a linear profile.
       ! The sum of a(k) through the mixed layers must be 0.
-      do k=1,G%nkml
+      do k=1,nkml
         hx2 = (h(i,j,k) + h(i,j+1,k) + h_neglect)
         a(k) = (hx2 * I2htot) * (2.0 - 4.0*(z_topx2+0.5*hx2)*I2htot)
         z_topx2 = z_topx2 + hx2
@@ -581,7 +581,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
           if (-a(k)*vDml(i) > h_avail(i,j+1,k)) vDml(i) = -h_avail(i,j+1,k)/a(k)
         endif
       enddo
-      do k=1,G%nkml
+      do k=1,nkml
         vhml(i,J,k) = a(k)*vDml(i)
         vhtr(i,J,k) = vhtr(i,J,k) + vhml(i,J,k)*dt
       enddo
@@ -591,7 +591,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
   enddo
 
 !$OMP do
-  do j=js,je ; do k=1,G%nkml ; do i=is,ie
+  do j=js,je ; do k=1,nkml ; do i=is,ie
     h(i,j,k) = h(i,j,k) - dt*G%IareaT(i,j) * &
         ((uhml(I,j,k) - uhml(I-1,j,k)) + (vhml(i,J,k) - vhml(i,J-1,k)))
   enddo ; enddo ; enddo
@@ -609,7 +609,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
   endif
   if (query_averaging_enabled(CS%diag) .and. &
       ((CS%id_uhml>0) .or. (CS%id_vhml>0))) then
-    do k=G%nkml+1,nz
+    do k=nkml+1,nz
       do j=js,je ; do I=Isq,Ieq ; uhml(I,j,k) = 0.0 ; enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie ; vhml(i,J,k) = 0.0 ; enddo ; enddo
     enddo
@@ -665,9 +665,9 @@ logical function mixedlayer_restrat_init(Time, G, param_file, diag, CS)
              "geostrophic kinetic energy or 1 plus the square of the \n"//&
              "grid spacing over the deformation radius, as detailed \n"//&
              "by Fox-Kemper et al. (2010)", units="nondim", default=0.0)
-  ! We use G%nkml to distinguish between the old and new implementation of MLE.
+  ! We use G%GV%nkml to distinguish between the old and new implementation of MLE.
   ! The old implementation only works for the layer model with nkml>0.
-  if (G%nkml==0) then
+  if (G%GV%nkml==0) then
     call get_param(param_file, mod, "MLE_USE_PBL_MLD", CS%MLE_use_PBL_MLD, &
              "If true, the MLE parameterization will use the mixed-layer\n"//&
              "depth provided by the active PBL parameterization. If false,\n"//&
