@@ -32,8 +32,8 @@ module user_initialization
 !*    h - Layer thickness in m.  (Must be positive.)                   *
 !*    G%bathyT - Basin depth in m.  (Must be positive.)                *
 !*    G%CoriolisBu - The Coriolis parameter, in s-1.                   *
-!*    G%g_prime - The reduced gravity at each interface, in m s-2.     *
-!*    G%Rlay - Layer potential density (coordinate variable) in kg m-3.*
+!*    GV%g_prime - The reduced gravity at each interface, in m s-2.    *
+!*    GV%Rlay - Layer potential density (coordinate variable), kg m-3. *
 !*  If ENABLE_THERMODYNAMICS is defined:                               *
 !*    T - Temperature in C.                                            *
 !*    S - Salinity in psu.                                             *

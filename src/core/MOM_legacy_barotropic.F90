@@ -2512,7 +2512,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, MS, halo, use_BT_cont, Datu, Datv,
           if (Datu(I,j) > 0.0) BT_OBC%ubt_outer(I,j) = BT_OBC%uhbt(I,j) / Datu(I,j)
         endif
       else
-        BT_OBC%Cg_u(I,j) = SQRT(G%g_prime(1)*(0.5* &
+        BT_OBC%Cg_u(I,j) = SQRT(G%GV%g_prime(1)*(0.5* &
                                 (G%bathyT(i,j) + G%bathyT(i+1,j))))
         if (G%Boussinesq) then
           BT_OBC%H_u(I,j) = 0.5*((G%bathyT(i,j) + eta(i,j)) + &
@@ -2548,7 +2548,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, MS, halo, use_BT_cont, Datu, Datv,
           if (Datv(i,J) > 0.0) BT_OBC%vbt_outer(i,J) = BT_OBC%vhbt(i,J) / Datv(i,J)
         endif
       else
-        BT_OBC%Cg_v(i,J) = SQRT(G%g_prime(1)*(0.5* &
+        BT_OBC%Cg_v(i,J) = SQRT(G%GV%g_prime(1)*(0.5* &
                                 (G%bathyT(i,j) + G%bathyT(i,j+1))))
         if (G%Boussinesq) then
           BT_OBC%H_v(i,J) = 0.5*((G%bathyT(i,j) + eta(i,j)) + &
@@ -3475,7 +3475,7 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_barotropic"  ! This module's name.
   real :: Datu(SZIBS_(G),SZJ_(G)), Datv(SZI_(G),SZJBS_(G))
-  real :: gtot_estimate ! Summing G%g_prime gives an upper-bound estimate for pbce.
+  real :: gtot_estimate ! Summing GV%g_prime gives an upper-bound estimate for pbce.
   real :: SSH_extra     ! An estimate of how much higher SSH might get, for use
                         ! in calculating the safe external wave speed.
   real :: dtbt_input
@@ -3823,7 +3823,7 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
   dtbt_input = CS%dtbt
   CS%dtbt_fraction = 0.98 ; if (CS%dtbt < 0.0) CS%dtbt_fraction = -CS%dtbt
   gtot_estimate = 0.0
-  do k=1,G%ke ; gtot_estimate = gtot_estimate + G%g_prime(K) ; enddo
+  do k=1,G%ke ; gtot_estimate = gtot_estimate + G%GV%g_prime(K) ; enddo
   call legacy_set_dtbt(G, CS, gtot_est = gtot_estimate, SSH_add = SSH_extra)
   if (dtbt_input > 0.0) CS%dtbt = dtbt_input
 

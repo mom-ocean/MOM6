@@ -2397,9 +2397,9 @@ subroutine set_density_ratios(h, tv, kb, G, CS, j, ds_dsp1, rho_0)
   is = G%isc ; ie = G%iec ; nz = G%ke
 
   do k=2,nz-1
-    if (G%g_prime(k+1)/=0.) then
+    if (G%GV%g_prime(k+1)/=0.) then
       do i=is,ie
-        ds_dsp1(i,k) = G%g_prime(k) / G%g_prime(k+1)
+        ds_dsp1(i,k) = G%GV%g_prime(k) / G%GV%g_prime(k+1)
       enddo
     else
       do i=is,ie
@@ -2423,7 +2423,7 @@ subroutine set_density_ratios(h, tv, kb, G, CS, j, ds_dsp1, rho_0)
 ! interfaces above and below the buffer layer and the next denser layer.
         k = kb(i)
 
-        I_Drho = g_R0 / G%g_prime(k+1)
+        I_Drho = g_R0 / G%GV%g_prime(k+1)
         ! The indexing convention for a is appropriate for the interfaces.
         do k3=1,kmb
           a(k3+1) = (G%Rlay(k) - Rcv(i,k3)) * I_Drho

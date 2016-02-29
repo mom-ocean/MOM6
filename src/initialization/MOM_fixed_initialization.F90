@@ -97,7 +97,7 @@ subroutine MOM_initialize_fixed(G, PF, dirs, tv)
 !  masks, vertical coordinate, Coriolis parameter.
 ! ====================================================================
 
-! Set-up the layer densities, G%Rlay, and reduced gravities, G%g_prime.
+! Set-up the layer densities, GV%Rlay, and reduced gravities, GV%g_prime.
   call get_param(PF, mod, "COORD_CONFIG", config, &
                  "This specifies how layers are to be defined: \n"//&
                  " \t file - read coordinate information from the file \n"//&
@@ -140,7 +140,7 @@ subroutine MOM_initialize_fixed(G, PF, dirs, tv)
   call setVerticalGridAxes( GV%Rlay, GV )
 
   ! This should become unnecessary later.
-  G%Rlay(:) = GV%Rlay(:) ; G%g_prime(:) = GV%g_prime(:)
+  G%Rlay(:) = GV%Rlay(:) ! ; G%g_prime(:) = GV%g_prime(:)
 
 !    This call sets seamasks that prohibit flow over any point with  !
 !  a bottom that is shallower than min_depth from PF.                !

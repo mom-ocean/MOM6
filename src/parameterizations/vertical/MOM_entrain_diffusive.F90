@@ -351,7 +351,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
     do i=is,ie ; dsp1_ds(i,nz) = 0.0 ; enddo
 
     do k=2,nz-1 ; do i=is,ie
-      ds_dsp1(i,k) = G%g_prime(k) / G%g_prime(k+1)
+      ds_dsp1(i,k) = G%GV%g_prime(k) / G%GV%g_prime(k+1)
     enddo ; enddo
 
     if (CS%bulkmixedlayer) then
@@ -440,7 +440,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
         htot(i) = h(i,j,1) - Angstrom
       enddo
       if (ASSOCIATED(fluxes%buoy)) then ; do i=is,ie
-        maxF(i,1) = (dt*fluxes%buoy(i,j)) / G%g_prime(2)
+        maxF(i,1) = (dt*fluxes%buoy(i,j)) / G%GV%g_prime(2)
       enddo ; endif
     endif
 
