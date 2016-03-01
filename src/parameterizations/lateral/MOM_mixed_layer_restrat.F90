@@ -208,7 +208,6 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, CS)
       CS%MLD_filtered(i,j) = max( MLD(i,j), bFac*MLD(i,j) + aFac*CS%MLD_filtered(i,j) )
       CS%MLD(i,j) = CS%MLD_filtered(i,j)
     enddo ; enddo
-    call pass_var(MLD, G%domain)
   else
     call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "No MLD to use for MLE parameterization.")
@@ -635,7 +634,7 @@ end subroutine mixedlayer_restrat_BML
 !> Initialize the mixedlayer restratification module
 logical function mixedlayer_restrat_init(Time, G, param_file, diag, CS)
   type(time_type),             intent(in)    :: Time         !< current model time
-  type(ocean_grid_type),       intent(in)    :: G            !< ocean grid structure
+  type(ocean_grid_type),       intent(inout) :: G            !< ocean grid structure
   type(param_file_type),       intent(in)    :: param_file   !< parameter file to parse
   type(diag_ctrl), target,     intent(inout) :: diag         !< regulate diagnostics
   type(mixedlayer_restrat_CS), pointer       :: CS           !< module control structure
@@ -725,6 +724,9 @@ logical function mixedlayer_restrat_init(Time, G, param_file, diag, CS)
       'Surface zonal velocity component of mixed layer restratification', 'm/s')
   CS%id_vml = register_diag_field('ocean_model', 'vml_restrat', diag%axesCv1, Time, &
       'Surface meridional velocity component of mixed layer restratification', 'm/s')
+
+  ! If MLD_filtered is being used, we need to update halo regions after a restart
+  if (associated(CS%MLD_filtered)) call pass_var(CS%MLD_filtered, G%domain)
 
 end function mixedlayer_restrat_init
 
