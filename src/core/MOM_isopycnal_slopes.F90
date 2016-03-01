@@ -72,8 +72,6 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
                         ! in roundoff and can be neglected, in m.
   logical :: use_EOS    ! If true, density is calculated from T & S using an
                         ! equation of state.
-  integer :: nk_linear  ! The number of layers over which the streamfunction
-                        ! goes to 0.
   real :: G_Rho0, N2, dzN2,  H_x(SZIB_(G)), H_y(SZI_(G))
 
   logical :: present_N2_u, present_N2_v
@@ -91,8 +89,6 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
   dz_neglect = G%H_subroundoff*G%H_to_m
 
   use_EOS = associated(tv%eqn_of_state)
-
-  nk_linear = 1 ! Was max(G%GVnkml, 1) -AJA ???? ##############
 
   present_N2_u = PRESENT(N2_u)
   present_N2_v = PRESENT(N2_v)
@@ -130,20 +126,20 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
 !$OMP end parallel
 
 !$OMP parallel do default(none) shared(nz,is,ie,js,je,use_EOS,G,pres,T,S, &
-!$OMP                                  nk_linear,IsdB,tv,h,h_neglect,e,dz_neglect,  &
+!$OMP                                  IsdB,tv,h,h_neglect,e,dz_neglect,  &
 !$OMP                                  h_neglect2,present_N2_u,G_Rho0,N2_u) &
 !$OMP                          private(drdiA,drdiB,drdkL,drdkR,pres_u,T_u,S_u,      &
 !$OMP                                  drho_dT_u,drho_dS_u,hg2A,hg2B,hg2L,hg2R,haA, &
 !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
 !$OMP                                  drdx,mag_grad2,Slope,slope2_Ratio,slope_x)
-  do j = js,je ; do K=nz,2,-1
+  do j=js,je ; do K=nz,2,-1
     if (.not.(use_EOS)) then
       drdiA = 0.0 ; drdiB = 0.0
       drdkL = G%GV%Rlay(k)-G%GV%Rlay(k-1) ; drdkR = G%GV%Rlay(k)-G%GV%Rlay(k-1)
     endif
 
     ! Calculate the zonal isopycnal slope.
-    if (use_EOS .and. (k > nk_linear)) then
+    if (use_EOS) then
       do I=is-1,ie
         pres_u(I) = 0.5*(pres(i,j,K) + pres(i+1,j,K))
         T_u(I) = 0.25*((T(i,j,k) + T(i+1,j,k)) + (T(i,j,k-1) + T(i+1,j,k-1)))
@@ -154,7 +150,7 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
     endif
 
     do I=is-1,ie
-      if (use_EOS .and. (k > nk_linear)) then
+      if (use_EOS) then
         ! Estimate the horizontal density gradients along layers.
         drdiA = drho_dT_u(I) * (T(i+1,j,k-1)-T(i,j,k-1)) + &
                 drho_dS_u(I) * (S(i+1,j,k-1)-S(i,j,k-1))
@@ -169,72 +165,67 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
       endif
 
 
-      if (k > nk_linear) then
-        if (use_EOS) then
-          hg2A = h(i,j,k-1)*h(i+1,j,k-1) + h_neglect2
-          hg2B = h(i,j,k)*h(i+1,j,k) + h_neglect2
-          hg2L = h(i,j,k-1)*h(i,j,k) + h_neglect2
-          hg2R = h(i+1,j,k-1)*h(i+1,j,k) + h_neglect2
-          haA = 0.5*(h(i,j,k-1) + h(i+1,j,k-1))
-          haB = 0.5*(h(i,j,k) + h(i+1,j,k)) + h_neglect
-          haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
-          haR = 0.5*(h(i+1,j,k-1) + h(i+1,j,k)) + h_neglect
-          if (G%Boussinesq) then
-            dzaL = haL * G%H_to_m ; dzaR = haR * G%H_to_m
-          else
-            dzaL = 0.5*(e(i,j,K-1) - e(i,j,K+1)) + dz_neglect
-            dzaR = 0.5*(e(i+1,j,K-1) - e(i+1,j,K+1)) + dz_neglect
-          endif
-          ! Use the harmonic mean thicknesses to weight the horizontal gradients.
-          ! These unnormalized weights have been rearranged to minimize divisions.
-          wtA = hg2A*haB ; wtB = hg2B*haA
-          wtL = hg2L*(haR*dzaR) ; wtR = hg2R*(haL*dzaL)
+      if (use_EOS) then
+        hg2A = h(i,j,k-1)*h(i+1,j,k-1) + h_neglect2
+        hg2B = h(i,j,k)*h(i+1,j,k) + h_neglect2
+        hg2L = h(i,j,k-1)*h(i,j,k) + h_neglect2
+        hg2R = h(i+1,j,k-1)*h(i+1,j,k) + h_neglect2
+        haA = 0.5*(h(i,j,k-1) + h(i+1,j,k-1))
+        haB = 0.5*(h(i,j,k) + h(i+1,j,k)) + h_neglect
+        haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
+        haR = 0.5*(h(i+1,j,k-1) + h(i+1,j,k)) + h_neglect
+        if (G%Boussinesq) then
+          dzaL = haL * G%H_to_m ; dzaR = haR * G%H_to_m
+        else
+          dzaL = 0.5*(e(i,j,K-1) - e(i,j,K+1)) + dz_neglect
+          dzaR = 0.5*(e(i+1,j,K-1) - e(i+1,j,K+1)) + dz_neglect
+        endif
+        ! Use the harmonic mean thicknesses to weight the horizontal gradients.
+        ! These unnormalized weights have been rearranged to minimize divisions.
+        wtA = hg2A*haB ; wtB = hg2B*haA
+        wtL = hg2L*(haR*dzaR) ; wtR = hg2R*(haL*dzaL)
 
-          drdz = (wtL * drdkL + wtR * drdkR) / (dzaL*wtL + dzaR*wtR)
-          ! The expression for drdz above is mathematically equivalent to:
-          !   drdz = ((hg2L/haL) * drdkL/dzaL + (hg2R/haR) * drdkR/dzaR) / &
-          !          ((hg2L/haL) + (hg2R/haR))
-          ! This is the gradient of density along geopotentials.
-          drdx = ((wtA * drdiA + wtB * drdiB) / (wtA + wtB) - &
-                  drdz * (e(i,j,K)-e(i+1,j,K))) * G%IdxCu(I,j)
+        drdz = (wtL * drdkL + wtR * drdkR) / (dzaL*wtL + dzaR*wtR)
+        ! The expression for drdz above is mathematically equivalent to:
+        !   drdz = ((hg2L/haL) * drdkL/dzaL + (hg2R/haR) * drdkR/dzaR) / &
+        !          ((hg2L/haL) + (hg2R/haR))
+        ! This is the gradient of density along geopotentials.
+        drdx = ((wtA * drdiA + wtB * drdiB) / (wtA + wtB) - &
+                drdz * (e(i,j,K)-e(i+1,j,K))) * G%IdxCu(I,j)
 
-          ! This estimate of slope is accurate for small slopes, but bounded
-          ! to be between -1 and 1.
-          mag_grad2 = drdx**2 + drdz**2
-          if (mag_grad2 > 0.0) then
-            slope_x(I,j,k) = drdx / sqrt(mag_grad2)
-          else ! Just in case mag_grad2 = 0 ever.
-            slope_x(I,j,k) = 0.0
-          endif
-
-          if (present_N2_u) N2_u(I,j,k) = G_Rho0 * drdz ! Square of Brunt-Vaisala frequency (s-2)
-
-        else ! With .not.use_EOS, the layers are constant density.
-          slope_x(I,j,k) = ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) * G%m_to_H
+        ! This estimate of slope is accurate for small slopes, but bounded
+        ! to be between -1 and 1.
+        mag_grad2 = drdx**2 + drdz**2
+        if (mag_grad2 > 0.0) then
+          slope_x(I,j,K) = drdx / sqrt(mag_grad2)
+        else ! Just in case mag_grad2 = 0 ever.
+          slope_x(I,j,K) = 0.0
         endif
 
-      else ! k <= nk_linear
-        slope_x(I,j,k) = 0.
+        if (present_N2_u) N2_u(I,j,k) = G_Rho0 * drdz ! Square of Brunt-Vaisala frequency (s-2)
+
+      else ! With .not.use_EOS, the layers are constant density.
+        slope_x(I,j,K) = ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) * G%m_to_H
       endif
 
-    enddo ! i
+    enddo ! I
   enddo ; enddo ! end of j-loop
 
     ! Calculate the meridional isopycnal slope.
 !$OMP parallel do default(none) shared(nz,is,ie,js,je,use_EOS,G,pres,T,S, &
-!$OMP                                  nk_linear,IsdB,tv,h,h_neglect,e,dz_neglect,  &
+!$OMP                                  IsdB,tv,h,h_neglect,e,dz_neglect,  &
 !$OMP                                  h_neglect2,present_N2_v,G_Rho0,N2_v)         &
 !$OMP                          private(drdjA,drdjB,drdkL,drdkR,pres_v,T_v,S_v,      &
 !$OMP                                  drho_dT_v,drho_dS_v,hg2A,hg2B,hg2L,hg2R,haA, &
 !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
 !$OMP                                  drdy,mag_grad2,Slope,slope2_Ratio,slope_y)
-  do j = js-1,je ; do K=nz,2,-1
+  do j=js-1,je ; do K=nz,2,-1
     if (.not.(use_EOS)) then
       drdjA = 0.0 ; drdjB = 0.0
       drdkL = G%GV%Rlay(k)-G%GV%Rlay(k-1) ; drdkR = G%GV%Rlay(k)-G%GV%Rlay(k-1)
     endif
 
-    if (use_EOS .and. (k > nk_linear)) then
+    if (use_EOS) then
       do i=is,ie
         pres_v(i) = 0.5*(pres(i,j,K) + pres(i,j+1,K))
         T_v(i) = 0.25*((T(i,j,k) + T(i,j+1,k)) + (T(i,j,k-1) + T(i,j+1,k-1)))
@@ -244,7 +235,7 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
                    drho_dS_v, is, ie-is+1, tv%eqn_of_state)
     endif
     do i=is,ie
-      if (use_EOS .and. (k > nk_linear)) then
+      if (use_EOS) then
         ! Estimate the horizontal density gradients along layers.
         drdjA = drho_dT_v(i) * (T(i,j+1,k-1)-T(i,j,k-1)) + &
                 drho_dS_v(i) * (S(i,j+1,k-1)-S(i,j,k-1))
@@ -258,52 +249,47 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
                  drho_dS_v(i) * (S(i,j+1,k)-S(i,j+1,k-1)))
       endif
 
-      if (k > nk_linear) then
-        if (use_EOS) then
-          hg2A = h(i,j,k-1)*h(i,j+1,k-1) + h_neglect2
-          hg2B = h(i,j,k)*h(i,j+1,k) + h_neglect2
-          hg2L = h(i,j,k-1)*h(i,j,k) + h_neglect2
-          hg2R = h(i,j+1,k-1)*h(i,j+1,k) + h_neglect2
-          haA = 0.5*(h(i,j,k-1) + h(i,j+1,k-1)) + h_neglect
-          haB = 0.5*(h(i,j,k) + h(i,j+1,k)) + h_neglect
-          haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
-          haR = 0.5*(h(i,j+1,k-1) + h(i,j+1,k)) + h_neglect
-          if (G%Boussinesq) then
-            dzaL = haL * G%H_to_m ; dzaR = haR * G%H_to_m
-          else
-            dzaL = 0.5*(e(i,j,K-1) - e(i,j,K+1)) + dz_neglect
-            dzaR = 0.5*(e(i,j+1,K-1) - e(i,j+1,K+1)) + dz_neglect
-          endif
-          ! Use the harmonic mean thicknesses to weight the horizontal gradients.
-          ! These unnormalized weights have been rearranged to minimize divisions.
-          wtA = hg2A*haB ; wtB = hg2B*haA
-          wtL = hg2L*(haR*dzaR) ; wtR = hg2R*(haL*dzaL)
+      if (use_EOS) then
+        hg2A = h(i,j,k-1)*h(i,j+1,k-1) + h_neglect2
+        hg2B = h(i,j,k)*h(i,j+1,k) + h_neglect2
+        hg2L = h(i,j,k-1)*h(i,j,k) + h_neglect2
+        hg2R = h(i,j+1,k-1)*h(i,j+1,k) + h_neglect2
+        haA = 0.5*(h(i,j,k-1) + h(i,j+1,k-1)) + h_neglect
+        haB = 0.5*(h(i,j,k) + h(i,j+1,k)) + h_neglect
+        haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
+        haR = 0.5*(h(i,j+1,k-1) + h(i,j+1,k)) + h_neglect
+        if (G%Boussinesq) then
+          dzaL = haL * G%H_to_m ; dzaR = haR * G%H_to_m
+        else
+          dzaL = 0.5*(e(i,j,K-1) - e(i,j,K+1)) + dz_neglect
+          dzaR = 0.5*(e(i,j+1,K-1) - e(i,j+1,K+1)) + dz_neglect
+        endif
+        ! Use the harmonic mean thicknesses to weight the horizontal gradients.
+        ! These unnormalized weights have been rearranged to minimize divisions.
+        wtA = hg2A*haB ; wtB = hg2B*haA
+        wtL = hg2L*(haR*dzaR) ; wtR = hg2R*(haL*dzaL)
 
-          drdz = (wtL * drdkL + wtR * drdkR) / (dzaL*wtL + dzaR*wtR)
-          ! The expression for drdz above is mathematically equivalent to:
-          !   drdz = ((hg2L/haL) * drdkL/dzaL + (hg2R/haR) * drdkR/dzaR) / &
-          !          ((hg2L/haL) + (hg2R/haR))
-          ! This is the gradient of density along geopotentials.
-          drdy = ((wtA * drdjA + wtB * drdjB) / (wtA + wtB) - &
-                  drdz * (e(i,j,K)-e(i,j+1,K))) * G%IdyCv(i,J)
+        drdz = (wtL * drdkL + wtR * drdkR) / (dzaL*wtL + dzaR*wtR)
+        ! The expression for drdz above is mathematically equivalent to:
+        !   drdz = ((hg2L/haL) * drdkL/dzaL + (hg2R/haR) * drdkR/dzaR) / &
+        !          ((hg2L/haL) + (hg2R/haR))
+        ! This is the gradient of density along geopotentials.
+        drdy = ((wtA * drdjA + wtB * drdjB) / (wtA + wtB) - &
+                drdz * (e(i,j,K)-e(i,j+1,K))) * G%IdyCv(i,J)
 
-          ! This estimate of slope is accurate for small slopes, but bounded
-          ! to be between -1 and 1.
-          mag_grad2 = drdy**2 + drdz**2
-          if (mag_grad2 > 0.0) then
-            slope_y(i,J,k) = drdy / sqrt(mag_grad2)
-          else ! Just in case mag_grad2 = 0 ever.
-            slope_y(i,J,k) = 0.0
-          endif
-
-          if (present_N2_v) N2_v(i,J,k) = G_Rho0 * drdz ! Square of Brunt-Vaisala frequency (s-2)
-
-        else ! With .not.use_EOS, the layers are constant density.
-          slope_y(i,J,k) = ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * G%m_to_H
+        ! This estimate of slope is accurate for small slopes, but bounded
+        ! to be between -1 and 1.
+        mag_grad2 = drdy**2 + drdz**2
+        if (mag_grad2 > 0.0) then
+          slope_y(i,J,K) = drdy / sqrt(mag_grad2)
+        else ! Just in case mag_grad2 = 0 ever.
+          slope_y(i,J,K) = 0.0
         endif
 
-      else ! k <= nk_linear
-        slope_y(i,J,k) = 0.
+        if (present_N2_v) N2_v(i,J,k) = G_Rho0 * drdz ! Square of Brunt-Vaisala frequency (s-2)
+
+      else ! With .not.use_EOS, the layers are constant density.
+        slope_y(i,J,K) = ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * G%m_to_H
       endif
 
     enddo ! i
