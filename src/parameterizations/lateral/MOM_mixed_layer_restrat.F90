@@ -8,6 +8,7 @@ module MOM_mixed_layer_restrat
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_checksums,     only : hchksum
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_diag_mediator, only : diag_update_target_grids
@@ -45,6 +46,7 @@ type, public :: mixedlayer_restrat_CS ; private
   real    :: MLE_tail_dh           !< Fraction by which to extend the mixed-layer re-stratification
                                    !! depth used for a smoother stream function at the base of
                                    !! the mixed-layer.
+  logical :: debug = .false.       !< If true, calculate checksums of fields for debugging.
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                                    !! timing of diagnostic output.
 
@@ -245,6 +247,12 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, CS)
       Rml_av(i,j) = -(g_Rho0*Rml_av(i,j)) / (htot(i,j) + h_neglect)
     enddo
   enddo
+
+  if (CS%debug) then
+    call hchksum(fluxes%ustar,'mixed_layer_restrat: u*',G,haloshift=1)
+    call hchksum(CS%MLD,'mixed_layer_restrat: MLD',G,haloshift=1)
+    call hchksum(Rml_av,'mixed_layer_restrat: rml',G,haloshift=1)
+  endif
 
 ! TO DO:
 !   1. Mixing extends below the mixing layer to the mixed layer.  Find it!
@@ -656,6 +664,7 @@ logical function mixedlayer_restrat_init(Time, G, param_file, diag, CS)
   CS%MLE_tail_dh = -9.e9
   CS%MLE_use_PBL_MLD = .false.
 
+  call get_param(param_file, mod, "DEBUG", CS%debug, default=.false., do_not_log=.true.)
   call get_param(param_file, mod, "FOX_KEMPER_ML_RESTRAT_COEF", CS%ml_restrat_coef, &
              "A nondimensional coefficient that is proportional to \n"//&
              "the ratio of the deformation radius to the dominant \n"//&
