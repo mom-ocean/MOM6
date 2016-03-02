@@ -97,52 +97,6 @@ subroutine buildGridFromH(nz, h, x)
 
 end subroutine buildGridFromH
 
-
-!> Check that two grids, xs and xf, are consistent to within roundoff.
-!! If strict=False, the end points of xs and xf are allowed to differ by
-!! numerical roundoff due to the nature of summation to obtain xs, xf.
-!! If strict=True, the end points must be identical.
-subroutine checkConsistantCoords(ns, xs, nf, xf, strict, msg)
-  integer,          intent(in) :: ns !< Number of cells in grid xs
-  integer,          intent(in) :: nf !< Number of cells in grid xf
-  real,             intent(in) :: xs(ns+1) !< Edge coordinates
-  real,             intent(in) :: xf(nf+1) !< Edge coordinates
-  logical,          intent(in) :: strict !< If False, allows total grid size
-                                         !! to differ by round-off
-  character(len=*), intent(in) :: msg !< Message to issue if test fails
-  ! Local variables
-  integer :: k
-  real    :: sumHs, sumHf
-
-  sumHs = xs(ns+1)-xs(1)
-  sumHf = xf(nf+1)-xf(1)
-
-  if (strict) then
-    if (sumHf /= sumHs) call &
-        MOM_error(FATAL,'MOM_remapping, checkConsistantCoords: '//&
-                        'Total thickness of two grids are not exactly equal.'//&
-                        ' Called from '//trim(msg) )
-  else ! not strict
-    if (isPosSumErrSignificant(ns, sumHs, nf, sumhf)) then
-      write(0,*) 'Start/final/start-final grid'
-      do k = 1,max(ns,nf)+1
-        if (k<=min(ns+1,nf+1)) then
-          write(0,'(i4,3es12.3)') k,xs(k),xf(k),xs(k)-xf(k)
-        elseif (k>ns+1) then
-          write(0,'(i4,12x,1es12.3)') k,xf(k)
-        else
-          write(0,'(i4,1es12.3)') k,xs(k)
-        endif
-      enddo
-      call MOM_error(FATAL,'MOM_remapping, checkConsistantCoords: '//&
-              'Total thickness of two grids do not match to within round-off.'//&
-              ' Called from '//trim(msg) )
-    endif
-  endif
-
-end subroutine checkConsistantCoords
-
-
 !> Compare two summation estimates of positive data and judge if due to more
 !! than round-off.
 !! When two sums are calculated from different vectors that should add up to
@@ -175,70 +129,6 @@ function isPosSumErrSignificant(n1, sum1, n2, sum2)
     isPosSumErrSignificant = .false.
   endif
 end function isPosSumErrSignificant
-
-!> Calculates the sum of h(:)*q(:), and optionally returns a bound on the
-!! roundoff error in the sum.
-subroutine sumHtimesQ(nz, h, q, sumHQ, sumErr)
-  integer,             intent(in)  :: nz !< Number of cells
-  real, dimension(nz), intent(in)  :: h  !< Cell width
-  real, dimension(nz), intent(in)  :: q  !< Scalar value in cell
-  real,                intent(out) :: sumHQ !< Sum of h*q
-  real, optional,      intent(out) :: sumErr !< Estimate of round-off error
-  ! Local variables
-  integer :: k
-  real :: hq, eps
-
-  if (present(sumErr)) then ! Calculate the sum and estimate errors
-    eps = epsilon(q(1))
-    sumErr=0.
-    sumHQ = 0.
-    do k = 1,nz
-      hq = h(k)*q(k)
-      sumHQ = sumHQ + hq
-      if (k>1) sumErr = sumErr + eps*max(abs(sumHQ),abs(hq))
-    end do
-  else ! Calculate the sum
-    sumHQ = 0.
-    do k = 1,nz
-      sumHQ = sumHQ + h(k)*q(k)
-    end do
-  endif
-
-end subroutine sumHtimesQ
-
-
-!> Compare two summation estimates of signed data and judge if due to more
-!! than round-off.
-!! When two sums are calculated from different vectors that should add up to
-!! the same value, the results can differ by round off. The round off error
-!! can be bounded to be proportional to the number of operations.
-!! This function returns true if the difference between sum1 and sum2 is
-!! larger than than the estimated round off bound.
-function isSignedSumErrSignificant(n1, maxTerm1, sum1, n2, maxTerm2, sum2)
-  integer, intent(in) :: n1 !< Number of terms in sum1
-  integer, intent(in) :: n2 !< Number of terms in sum2
-  real,    intent(in) :: maxTerm1 !< Largest term in sum1
-  real,    intent(in) :: sum1 !< Sum of n1 terms
-  real,    intent(in) :: maxTerm2 !< Largest term in sum2
-  real,    intent(in) :: sum2 !< Sum of n2 terms
-  logical             :: isSignedSumErrSignificant !< True is difference in sums is large
-  ! Local variables
-  real :: sumErr, allowedErr, eps
-
-  sumErr = abs(sum1-sum2)
-  eps = epsilon(sumErr)
-  allowedErr = eps*0.5*( real(n1-1)*max(abs(maxTerm1),abs(sum1)) &
-                       + real(n2-1)*max(abs(maxTerm2),abs(sum2)) )
-  if (sumErr>allowedErr) then
-    write(0,*) 'isSignedSumErrSignificant: maxTerm1,maxTerm2=',maxTerm1,maxTerm2
-    write(0,*) 'isSignedSumErrSignificant: sum1,sum2=',sum1,sum2
-    write(0,*) 'isSignedSumErrSignificant: eps=',eps
-    write(0,*) 'isSignedSumErrSignificant: err,n*eps*maxTerm=',sumErr,allowedErr
-    isSignedSumErrSignificant = .true.
-  else
-    isSignedSumErrSignificant = .false.
-  endif
-end function isSignedSumErrSignificant
 
 !> Remaps column of values u0 on grid h0 to grid h1
 !! assuming the top edge is aligned.
