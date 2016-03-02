@@ -802,7 +802,7 @@ subroutine diag_update_target_grids(diag_cs)
 
     ! Initialise remapping system, on the first call
     call initialize_regridding(nz_dest, 'Z*', 'PPM_IH4', diag_cs%regrid_cs)
-    call initialize_remapping(nz_src, 'PPM_IH4', diag_cs%remap_cs)
+    call initialize_remapping(diag_cs%remap_cs, 'PPM_IH4')
     call set_regrid_min_thickness(G%GV%Angstrom, diag_cs%regrid_cs)
     call setCoordinateResolution(diag_cs%zi_remap(2:) - &
                                  diag_cs%zi_remap(:nz_dest), diag_cs%regrid_cs)

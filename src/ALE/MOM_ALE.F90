@@ -35,8 +35,6 @@ use MOM_regridding,       only : getStaticThickness, set_filter_depths
 use MOM_remapping,        only : initialize_remapping, end_remapping
 use MOM_remapping,        only : remapping_core_h, remapping_core_w
 use MOM_remapping,        only : remappingSchemesDoc, remappingDefaultScheme
-use MOM_remapping,        only : remapDisableBoundaryExtrapolation
-use MOM_remapping,        only : remapEnableBoundaryExtrapolation
 use MOM_remapping,        only : remapping_CS, dzFromH1H2
 use MOM_string_functions, only : uppercase, extractWord
 use MOM_tracer_registry,  only : tracer_registry_type
@@ -208,11 +206,11 @@ subroutine ALE_init( param_file, G, CS)
                  "If true, the values on the intermediate grid used for remapping\n"//&
                  "are forced to be bounded, which might not be the case due to\n"//&
                  "round off.", default=.false.)
-  call initialize_remapping( G%ke, string, CS%remapCS, &
+  call initialize_remapping( CS%remapCS, string, &
+                             boundary_extrapolation=.false., &
                              check_reconstruction=check_reconstruction, &
                              check_remapping=check_remapping, &
                              force_bounds_in_subcell=force_bounds_in_subcell)
-  call remapDisableBoundaryExtrapolation( CS%remapCS )
 
   call get_param(param_file, mod, "REMAP_AFTER_INITIALIZATION", CS%remap_after_initialization, &
                  "If true, applies regridding and remapping immediately after\n"//&

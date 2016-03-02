@@ -28,7 +28,7 @@ use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord
 use MOM_regridding, only : regridding_CS
 use MOM_remapping, only : remapping_CS, initialize_remapping
 use MOM_remapping, only : remapping_core_w
-use MOM_remapping, only : dzFromH1H2, remapDisableBoundaryExtrapolation
+use MOM_remapping, only : dzFromH1H2
 use mpp_domains_mod, only  : mpp_global_field, mpp_get_compute_domain
 use mpp_mod, only          : mpp_broadcast,mpp_root_pe,mpp_sync,mpp_sync_self
 use horiz_interp_mod, only : horiz_interp_new, horiz_interp,horiz_interp_type
@@ -174,8 +174,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, PF, src_file, src_var_nam, &
     ! First we reserve a work space for reconstructions of the source data
     allocate( h1(kd) )
     allocate( tmpT1dIn(kd) )
-    call initialize_remapping( kd, remapScheme, remapCS ) ! Data for reconstructions
-    call remapDisableBoundaryExtrapolation( remapCS )
+    call initialize_remapping( remapCS, remapScheme, boundary_extrapolation=.false. ) ! Data for reconstructions
     ! Next we initialize the regridding package so that it knows about the target grid
     allocate( hTarget(nz) )
     allocate( h2(nz) )

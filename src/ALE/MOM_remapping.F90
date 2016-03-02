@@ -21,12 +21,10 @@ implicit none ; private
 !> Container for remapping parameters
 type, public :: remapping_CS
   private
-  !> Number of layers/levels in vertical
-  integer :: nk = 0
   !> Determines which reconstruction to use
   integer :: remapping_scheme = -911
   !> Degree of polynomial reconstruction
-  integer :: degree=0
+  integer :: degree = 0
   !> If true, extrapolate boundaries
   logical :: boundary_extrapolation = .true.
   !> If true, reconstructions are checked for consistency.
@@ -39,9 +37,7 @@ end type
 
 ! The following routines are visible to the outside world
 public remapping_core_h, remapping_core_w
-public initialize_remapping, end_remapping
-public remapEnableBoundaryExtrapolation, remapDisableBoundaryExtrapolation
-public setReconstructionType
+public initialize_remapping, end_remapping, remapping_set_param
 public remappingUnitTests
 public dzFromH1H2
 
@@ -81,6 +77,33 @@ real, parameter :: h_neglect = 1.E-30 !< A dimensional (H units) number that can
                                       !! a division by zero would otherwise occur.
 
 contains
+
+!> Set parameters within remapping object
+subroutine remapping_set_param(CS, remapping_scheme, boundary_extrapolation,  &
+               check_reconstruction, check_remapping, force_bounds_in_subcell)
+  type(remapping_CS),         intent(inout) :: CS !< Remapping control structure
+  character(len=*), optional, intent(in)    :: remapping_scheme !< Remapping scheme to use
+  logical, optional,          intent(in)    :: boundary_extrapolation !< Indicate to extrapolate in boundary cells
+  logical, optional,          intent(in)    :: check_reconstruction !< Indicate to check reconstructions
+  logical, optional,          intent(in)    :: check_remapping !< Indicate to check results of remapping
+  logical, optional,          intent(in)    :: force_bounds_in_subcell !< Force subcells values to be bounded
+
+  if (present(remapping_scheme)) then
+    call setReconstructionType( remapping_scheme, CS )
+  endif
+  if (present(boundary_extrapolation)) then
+    CS%boundary_extrapolation = boundary_extrapolation
+  endif
+  if (present(check_reconstruction)) then
+    CS%check_reconstruction = check_reconstruction
+  endif
+  if (present(check_remapping)) then
+    CS%check_remapping = check_remapping
+  endif
+  if (present(force_bounds_in_subcell)) then
+    CS%force_bounds_in_subcell = force_bounds_in_subcell
+  endif
+end subroutine remapping_set_param
 
 !> Calculate edge coordinate x from cell width h
 subroutine buildGridFromH(nz, h, x)
@@ -1342,29 +1365,20 @@ subroutine dzFromH1H2( n1, h1, n2, h2, dx )
 end subroutine dzFromH1H2
 
 !> Constructor for remapping control structure
-subroutine initialize_remapping( nk, remappingScheme, CS, &
+subroutine initialize_remapping( CS, remapping_scheme, boundary_extrapolation, &
                 check_reconstruction, check_remapping, force_bounds_in_subcell)
   ! Arguments
-  integer,            intent(in)    :: nk !< Number of cells to assume for
-                                          !! polynomials storage
-  character(len=*),   intent(in)    :: remappingScheme !< Remapping scheme to use
   type(remapping_CS), intent(inout) :: CS !< Remapping control structure
+  character(len=*),   intent(in)    :: remapping_scheme !< Remapping scheme to use
+  logical, optional,  intent(in)    :: boundary_extrapolation !< Indicate to extrapolate in boundary cells
   logical, optional,  intent(in)    :: check_reconstruction !< Indicate to check reconstructions
   logical, optional,  intent(in)    :: check_remapping !< Indicate to check results of remapping
   logical, optional,  intent(in)    :: force_bounds_in_subcell !< Force subcells values to be bounded
 
-  CS%nk = nk
-
-  call setReconstructionType( remappingScheme, CS )
-  if (present(check_reconstruction)) then
-    CS%check_reconstruction = check_reconstruction
-  endif
-  if (present(check_remapping)) then
-    CS%check_remapping = check_remapping
-  endif
-  if (present(force_bounds_in_subcell)) then
-    CS%force_bounds_in_subcell = force_bounds_in_subcell
-  endif
+  ! Note that remapping_scheme is mandatory fir initialize_remapping()
+  call remapping_set_param(CS, remapping_scheme=remapping_scheme, boundary_extrapolation=boundary_extrapolation,  &
+               check_reconstruction=check_reconstruction, check_remapping=check_remapping, &
+               force_bounds_in_subcell=force_bounds_in_subcell)
 
 end subroutine initialize_remapping
 
@@ -1405,18 +1419,6 @@ subroutine setReconstructionType(string,CS)
   CS%degree = degree
 
 end subroutine setReconstructionType
-
-!> Enables extrapolation in boundary cells
-subroutine remapEnableBoundaryExtrapolation(CS)
-  type(remapping_CS), intent(inout) :: CS !< Remapping control structure
-  CS%boundary_extrapolation = .true.
-end subroutine remapEnableBoundaryExtrapolation
-
-!> Disables extrapolation in boundary cells
-subroutine remapDisableBoundaryExtrapolation(CS)
-  type(remapping_CS), intent(inout) :: CS !< Remapping control structure
-  CS%boundary_extrapolation = .false.
-end subroutine remapDisableBoundaryExtrapolation
 
 !> Destrcutor for remapping control structure
 subroutine end_remapping(CS)
@@ -1464,7 +1466,7 @@ logical function remappingUnitTests()
   remappingUnitTests = remappingUnitTests .or. thisTest
 
   thisTest = .false.
-  call initialize_remapping(n0, 'PPM_H4', CS)
+  call initialize_remapping(CS, 'PPM_H4')
   write(*,*) 'h0 (test data)'
   call dumpGrid(n0,h0,x0,u0)
 

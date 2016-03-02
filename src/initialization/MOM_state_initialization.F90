@@ -68,7 +68,6 @@ use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord
 use MOM_ALE, only : ALE_remap_scalar, ALE_build_grid
 use MOM_regridding, only : regridding_CS, set_regrid_min_thickness
 use MOM_remapping, only : remapping_CS, initialize_remapping
-use MOM_remapping, only : remapDisableBoundaryExtrapolation
 use MOM_tracer_initialization_from_Z, only : horiz_interp_and_extrap_tracer
 
 implicit none ; private
@@ -2143,8 +2142,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
     endif
 
     ! Now remap from source grid to target grid
-    call initialize_remapping( nz, remappingScheme, remapCS ) ! Reconstruction parameters
-    call remapDisableBoundaryExtrapolation( remapCS )
+    call initialize_remapping( remapCS, remappingScheme, boundary_extrapolation=.false. ) ! Reconstruction parameters
     if (remap_general) then
       call set_regrid_min_thickness( 0., regridCS )
       h(:,:,:) = h1(:,:,:) ; tv%T(:,:,:) = tmpT1dIn(:,:,:) ; tv%S(:,:,:) = tmpS1dIn(:,:,:)
