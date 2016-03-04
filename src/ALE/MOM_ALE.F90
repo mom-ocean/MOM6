@@ -365,6 +365,7 @@ subroutine ALE_main( G, h, u, v, tv, Reg, CS, dt)
 
   ! Local variables
   integer :: nk, i, j, k, isc, iec, jsc, jec
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_new ! New 3D grid obtained after last time step (m or Pa)
 
   nk = G%ke; isc = G%isc; iec = G%iec; jsc = G%jsc; jec = G%jec
 
@@ -380,19 +381,28 @@ subroutine ALE_main( G, h, u, v, tv, Reg, CS, dt)
 
   call check_remapping_grid( G, h, CS%dzRegrid, 'in ALE_main()' )
 
+  ! Override old grid with new one. The new grid 'h_new' is built in
+  ! one of the 'build_...' routines above.
+!$OMP parallel do default(none) shared(isd,ied,jsd,jed,nk,h,h_new,CS)
+  do k = 1,nk
+    do j = jsc-1,jec+1 ; do i = isc-1,iec+1
+      h_new(i,j,k) = max( 0., h(i,j,k) + ( CS%dzRegrid(i,j,k) - CS%dzRegrid(i,j,k+1) ) )
+    enddo ; enddo
+  enddo
+
   if (CS%show_call_tree) call callTree_waypoint("new grid generated (ALE_main)")
 
   ! Remap all variables from old grid h onto new grid h_new
-  call remap_all_state_vars( CS%remapCS, CS, G, h, -CS%dzRegrid, Reg, u, v, CS%show_call_tree, dt)
+  call remap_all_state_vars( CS%remapCS, CS, G, h, h_new, -CS%dzRegrid, Reg, u, v, CS%show_call_tree, dt)
 
   if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_main)")
 
   ! Override old grid with new one. The new grid 'h_new' is built in
   ! one of the 'build_...' routines above.
-!$OMP parallel do default(none) shared(isc,iec,jsc,jec,nk,h,CS)
+!$OMP parallel do default(none) shared(isc,iec,jsc,jec,nk,h,h_new,CS)
   do k = 1,nk
     do j = jsc-1,jec+1 ; do i = isc-1,iec+1
-      h(i,j,k) = h(i,j,k) + ( CS%dzRegrid(i,j,k) - CS%dzRegrid(i,j,k+1) )
+      h(i,j,k) = h_new(i,j,k)
     enddo ; enddo
   enddo
 
@@ -444,11 +454,12 @@ end subroutine ALE_build_grid
 !! This routine is called during initialization of the model at time=0, to 
 !! remap initiali conditions to the model grid.  It is also called during a
 !! time step to update the state.  
-subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u, v, debug, dt)
+subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, h_old, h_new, dxInterface, Reg, u, v, debug, dt)
   type(remapping_CS),                               intent(in)    :: CS_remapping  !< Remapping control structure
   type(ALE_CS),                                     intent(in)    :: CS_ALE        !< ALE control structure 
   type(ocean_grid_type),                            intent(in)    :: G             !< Ocean grid structure
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),            intent(in)    :: h             !< Level thickness (m or Pa)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),            intent(in)    :: h_old         !< Thickness of source grid (m or Pa)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),            intent(in)    :: h_new         !< Thickness of destination grid (m or Pa)
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_),     intent(in)    :: dxInterface   !< Change in interface position (Hm or Pa)
   type(tracer_registry_type),                       pointer       :: Reg           !< Tracer registry structure
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), optional, intent(inout) :: u             !< Zonal velocity component (m/s)
@@ -503,11 +514,8 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u,
           if (G%mask2dT(i,j)>0.) then
 
             ! Build the start and final grids
-            h1(:) = h(i,j,:)
-            dx(:) = dxInterface(i,j,:)
-            do k = 1, nz
-              h2(k) = max( 0., h1(k) + ( dx(k+1) - dx(k) ) )
-            enddo
+            h1(:) = h_old(i,j,:)
+            h2(:) = h_new(i,j,:)
             call remapping_core_h( nz, h1, Reg%Tr(m)%t(i,j,:), nz, h2, u_column, CS_remapping )
 
             ! Intermediate steps for tendency of tracer concentration and tracer content.
@@ -594,11 +602,13 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u,
       do I = G%iscB,G%iecB
         if (G%mask2dCu(i,j)>0.) then
           ! Build the start and final grids
-          h1(:) = 0.5 * ( h(i,j,:) + h(i+1,j,:) )
+          h1(:) = 0.5 * ( h_old(i,j,:) + h_old(i+1,j,:) )
           dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i+1,j,:) )
           do k = 1, nz
             h2(k) = max( 0., h1(k) + ( dx(k+1) - dx(k) ) )
           enddo
+         !Todo: Using h_new directly changes answers!!! - AJA
+         !h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i+1,j,:) )
           call remapping_core_h( nz, h1, u(I,j,:), nz, h2, u_column, CS_remapping )
           u(I,j,:) = u_column(:)
         endif
@@ -615,11 +625,13 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u,
       do i = G%isc,G%iec
         if (G%mask2dCv(i,j)>0.) then
           ! Build the start and final grids
-          h1(:) = 0.5 * ( h(i,j,:) + h(i,j+1,:) )
+          h1(:) = 0.5 * ( h_old(i,j,:) + h_old(i,j+1,:) )
           dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i,j+1,:) )
           do k = 1, nz
             h2(k) = max( 0., h1(k) + ( dx(k+1) - dx(k) ) )
           enddo
+         !Todo: Using h_new directly changes answers!!! - AJA
+         !h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i,j+1,:) )
           call remapping_core_h( nz, h1, v(i,J,:), nz, h2, u_column, CS_remapping )
           v(i,J,:) = u_column(:)
         endif
@@ -671,7 +683,7 @@ subroutine ALE_remap_scalar(CS, G, nk_src, h_src, s_src, h_dst, s_dst, all_cells
           enddo
           s_dst(i,j,:) = 0.
         endif
-       ! Using remapping_core_h() is what we want to do but changes answers !!!
+       !Todo: Using remapping_core_h() is what we want to do but changes answers !!! -AJA
        !call remapping_core_h(n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), G%ke, h_dst(i,j,:), s_dst(i,j,:), CS)
         call dzFromH1H2( n_points, h_src(i,j,1:n_points), G%ke, h_dst(i,j,:), dx )
         call remapping_core_w(CS, n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), G%ke, dx, s_dst(i,j,:))
