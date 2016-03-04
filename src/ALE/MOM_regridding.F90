@@ -133,9 +133,8 @@ end type
 ! The following routines are visible to the outside world
 public initialize_regridding, end_regridding, regridding_main
 public inflate_vanished_layers_old, check_remapping_grid, check_grid_column
-public setRegriddingBoundaryExtrapolation, adjust_interface_motion
-public set_regrid_min_thickness, set_regrid_params
-public set_old_grid_weight, set_filter_depths
+public adjust_interface_motion
+public set_regrid_params
 public uniformResolution, setCoordinateResolution, build_zstar_column
 public set_target_densities_from_G, set_target_densities
 public set_regrid_max_depths, set_regrid_max_thickness
@@ -2409,7 +2408,7 @@ subroutine set_regrid_max_depths( CS, max_depths, units_to_H )
   type(regridding_CS),      intent(inout) :: CS !< Regridding control structure
   real, dimension(CS%nk+1), intent(in)    :: max_depths !< Maximum interface depths, in arbitrary units
   real, optional,           intent(in)    :: units_to_H !< A conversion factor for max_depths into H units
-
+  ! Local variables
   real :: val_to_H
   integer :: K
 
@@ -2440,7 +2439,7 @@ subroutine set_regrid_max_thickness( CS, max_h, units_to_H )
   type(regridding_CS),      intent(inout) :: CS !< Regridding control structure
   real, dimension(CS%nk+1), intent(in)    :: max_h !< Maximum interface depths, in arbitrary units
   real, optional,           intent(in)    :: units_to_H !< A conversion factor for max_h into H units
-
+  ! Local variables
   real :: val_to_H
   integer :: K
 
@@ -2539,29 +2538,38 @@ function getCoordinateShortName( CS )
 end function getCoordinateShortName
 
 !> This subroutine can be used to set many of the parameters for MOM_regridding.
-subroutine set_regrid_params( CS, Boundary_Extrap, min_thickness, old_grid_weight, &
+subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_grid_weight, &
+             depth_of_time_filter_shallow, depth_of_time_filter_deep, &
              compress_fraction, dz_min_surface, nz_fixed_surface, Rho_ML_avg_depth, &
              nlay_ML_to_interior, fix_haloclines, halocline_filt_len, &
              halocline_strat_tol)
-  type(regridding_CS), intent(inout) :: CS
-  logical, optional, intent(in) :: Boundary_Extrap
-  real,    optional, intent(in) :: min_thickness
-  real,    optional, intent(in) :: old_grid_weight
-  real,    optional, intent(in) :: compress_fraction
-  real,    optional, intent(in) :: dz_min_surface
-  integer, optional, intent(in) :: nz_fixed_surface
-  real,    optional, intent(in) :: Rho_ml_avg_depth
-  real,    optional, intent(in) :: nlay_ML_to_interior
-  logical, optional, intent(in) :: fix_haloclines
-  real,    optional, intent(in) :: halocline_filt_len
-  real,    optional, intent(in) :: halocline_strat_tol
+  type(regridding_CS), intent(inout) :: CS !< Regridding control structure
+  logical, optional, intent(in) :: boundary_extrapolation !< Extrapolate in boundary cells
+  real,    optional, intent(in) :: min_thickness !< Minimum thickness allowed when building the new grid (m)
+  real,    optional, intent(in) :: old_grid_weight !< Weight given to old coordinate when time-filtering grid
+  real,    optional, intent(in) :: depth_of_time_filter_shallow !< Depth to start cubic (H units)
+  real,    optional, intent(in) :: depth_of_time_filter_deep !< Depth to end cubic (H units)
+  real,    optional, intent(in) :: compress_fraction !< Fraction of compressibility to add to potential density
+  real,    optional, intent(in) :: dz_min_surface !< The fixed resolution in the topmost SLight_nkml_min layers (m)
+  integer, optional, intent(in) :: nz_fixed_surface !< The number of fixed-thickess layers at the top of the model
+  real,    optional, intent(in) :: Rho_ml_avg_depth !< Averaging depth over which to determine mixed layer potential density (m)
+  real,    optional, intent(in) :: nlay_ML_to_interior !< Number of layers to offset the mixed layer density to find resolved stratification (nondim)
+  logical, optional, intent(in) :: fix_haloclines !< Detect regions with much weaker stratification in the coordinate
+  real,    optional, intent(in) :: halocline_filt_len !< Length scale over which to filter T & S when looking for spuriously unstable water mass profiles (m)
+  real,    optional, intent(in) :: halocline_strat_tol !< Value of the stratification ratio that defines a problematic halocline region.
 
-  if (present(Boundary_Extrap)) CS%boundary_extrapolation = Boundary_Extrap
+  if (present(boundary_extrapolation)) CS%boundary_extrapolation = boundary_extrapolation
   if (present(min_thickness)) CS%min_thickness = min_Thickness
   if (present(old_grid_weight)) then
     if (old_grid_weight<0. .or. old_grid_weight>1.) &
-      call MOM_error(FATAL,'MOM_regridding, set_old_grid_weight: Weight is out side the range 0..1!')
+      call MOM_error(FATAL,'MOM_regridding, set_regrid_params: Weight is out side the range 0..1!')
     CS%old_grid_weight = old_grid_weight
+  endif
+  if (present(depth_of_time_filter_shallow)) CS%depth_of_time_filter_shallow = depth_of_time_filter_shallow
+  if (present(depth_of_time_filter_deep)) CS%depth_of_time_filter_deep = depth_of_time_filter_deep
+  if (present(depth_of_time_filter_shallow) .or. present(depth_of_time_filter_deep)) then
+    if (CS%depth_of_time_filter_deep<CS%depth_of_time_filter_shallow) call MOM_error(FATAL,'MOM_regridding, '//&
+                     'set_regrid_params: depth_of_time_filter_deep<depth_of_time_filter_shallow!')
   endif
   if (present(compress_fraction)) CS%compressibility_fraction = compress_fraction
   if (present(dz_min_surface)) CS%dz_ml_min = dz_min_surface
@@ -2571,60 +2579,12 @@ subroutine set_regrid_params( CS, Boundary_Extrap, min_thickness, old_grid_weigh
   if (present(fix_haloclines)) CS%fix_haloclines = fix_haloclines
   if (present(halocline_filt_len)) CS%halocline_filter_length = halocline_filt_len
   if (present(halocline_strat_tol)) then
-!    if (halocline_strat_tol > 0.5) call MOM_error(FATAL, "set_regrid_params: "//&
-!        "HALOCLINE_STRAT_TOL must not exceed 0.5.")
     if (halocline_strat_tol > 1.0) call MOM_error(FATAL, "set_regrid_params: "//&
         "HALOCLINE_STRAT_TOL must not exceed 1.0.")
     CS%halocline_strat_tol = halocline_strat_tol
   endif
 
 end subroutine set_regrid_params
-
-!------------------------------------------------------------------------------
-! Control the extrapolation of boundary data
-!------------------------------------------------------------------------------
-subroutine setRegriddingBoundaryExtrapolation( onOff, CS )
-  logical,             intent(in)    :: onOff
-  type(regridding_CS), intent(inout) :: CS
-
-  CS%boundary_extrapolation = onOff
-
-end subroutine setRegriddingBoundaryExtrapolation
-
-!------------------------------------------------------------------------------
-! Control the minimum thickness permitted in regridding
-!------------------------------------------------------------------------------
-subroutine set_regrid_min_thickness( minThickness, CS )
-  real   ,             intent(in)    :: minThickness
-  type(regridding_CS), intent(inout) :: CS
-
-  CS%min_thickness = minThickness
-
-end subroutine set_regrid_min_thickness
-
-!> Set the weight given to the old coordinate when blending between new and old grids
-subroutine set_old_grid_weight( old_grid_weight, CS )
-  real,                intent(in)    :: old_grid_weight !< Weight, 0..1 (nondim)
-  type(regridding_CS), intent(inout) :: CS              !< Regridding control structure
-
-  if (old_grid_weight<0. .or. old_grid_weight>1.) call MOM_error(FATAL,'MOM_regridding, '//&
-                     'set_old_grid_weight: Weight is out side the range 0..1!')
-  CS%old_grid_weight = old_grid_weight
-
-end subroutine set_old_grid_weight
-
-!> Set depths over which to scale and apply "old_grid_weight"
-subroutine set_filter_depths( depth_of_time_filter_shallow, depth_of_time_filter_deep, CS )
-  real,                intent(in)    :: depth_of_time_filter_shallow !< Depth to start cubic (H units)
-  real,                intent(in)    :: depth_of_time_filter_deep !< Depth to end cubic (H units)
-  type(regridding_CS), intent(inout) :: CS !< Regridding control structure
-
-  if (depth_of_time_filter_deep<depth_of_time_filter_shallow) call MOM_error(FATAL,'MOM_regridding, '//&
-                     'set_filter_depths: depth_of_time_filter_deep<depth_of_time_filter_shallow!')
-  CS%depth_of_time_filter_deep = depth_of_time_filter_deep
-  CS%depth_of_time_filter_shallow = depth_of_time_filter_shallow
-
-end subroutine set_filter_depths
 
 !------------------------------------------------------------------------------
 ! Return coordinate-derived thicknesses for fixed coordinate systems

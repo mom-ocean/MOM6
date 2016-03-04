@@ -40,7 +40,7 @@ use MOM_time_manager,     only : time_type
 use MOM_remapping,        only : remapping_CS, initialize_remapping, dzFromH1H2
 use MOM_remapping,        only : remapping_core_w
 use MOM_regridding,       only : regridding_CS, initialize_regridding, setCoordinateResolution
-use MOM_regridding,       only : build_zstar_column, set_regrid_min_thickness
+use MOM_regridding,       only : build_zstar_column, set_regrid_params
 
 use diag_manager_mod, only : diag_manager_init, diag_manager_end
 use diag_manager_mod, only : send_data, diag_axis_init
@@ -803,7 +803,7 @@ subroutine diag_update_target_grids(diag_cs)
     ! Initialise remapping system, on the first call
     call initialize_regridding(nz_dest, 'Z*', 'PPM_IH4', diag_cs%regrid_cs)
     call initialize_remapping(diag_cs%remap_cs, 'PPM_IH4')
-    call set_regrid_min_thickness(G%GV%Angstrom, diag_cs%regrid_cs)
+    call set_regrid_params(diag_cs%regrid_cs, min_thickness=G%GV%Angstrom)
     call setCoordinateResolution(diag_cs%zi_remap(2:) - &
                                  diag_cs%zi_remap(:nz_dest), diag_cs%regrid_cs)
 

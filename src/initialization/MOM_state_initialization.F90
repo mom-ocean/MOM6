@@ -66,7 +66,7 @@ use midas_vertmap, only : determine_temperature
 
 use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord
 use MOM_ALE, only : ALE_remap_scalar, ALE_build_grid
-use MOM_regridding, only : regridding_CS, set_regrid_min_thickness
+use MOM_regridding, only : regridding_CS, set_regrid_params
 use MOM_remapping, only : remapping_CS, initialize_remapping
 use MOM_tracer_initialization_from_Z, only : horiz_interp_and_extrap_tracer
 
@@ -2144,7 +2144,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
     ! Now remap from source grid to target grid
     call initialize_remapping( remapCS, remappingScheme, boundary_extrapolation=.false. ) ! Reconstruction parameters
     if (remap_general) then
-      call set_regrid_min_thickness( 0., regridCS )
+      call set_regrid_params( regridCS, min_thickness=0. )
       h(:,:,:) = h1(:,:,:) ; tv%T(:,:,:) = tmpT1dIn(:,:,:) ; tv%S(:,:,:) = tmpS1dIn(:,:,:)
       do j = js, je ; do i = is, ie
         if (G%mask2dT(i,j)==0.) then ! Ensure there are no nonsense values on land

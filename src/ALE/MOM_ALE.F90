@@ -18,20 +18,19 @@ use MOM_io,               only : file_exists, field_exists, MOM_read_data
 use MOM_io,               only : vardesc, var_desc, fieldtype, SINGLE_FILE
 use MOM_io,               only : create_file, write_field, close_file, slasher
 use MOM_regridding,       only : initialize_regridding, regridding_main, end_regridding
-use MOM_regridding,       only : uniformResolution, set_old_grid_weight
+use MOM_regridding,       only : uniformResolution
 use MOM_regridding,       only : inflate_vanished_layers_old, setCoordinateResolution
 use MOM_regridding,       only : set_target_densities_from_G, set_target_densities
 use MOM_regridding,       only : regriddingCoordinateModeDoc, DEFAULT_COORDINATE_MODE
 use MOM_regridding,       only : regriddingInterpSchemeDoc, regriddingDefaultInterpScheme
-use MOM_regridding,       only : setRegriddingBoundaryExtrapolation
 use MOM_regridding,       only : regriddingDefaultBoundaryExtrapolation
-use MOM_regridding,       only : set_regrid_min_thickness, regriddingDefaultMinThickness
+use MOM_regridding,       only : regriddingDefaultMinThickness
 use MOM_regridding,       only : check_remapping_grid, set_regrid_max_depths
 use MOM_regridding,       only : set_regrid_max_thickness
 use MOM_regridding,       only : regridding_CS, set_regrid_params
 use MOM_regridding,       only : getCoordinateInterfaces, getCoordinateResolution
 use MOM_regridding,       only : getCoordinateUnits, getCoordinateShortName
-use MOM_regridding,       only : getStaticThickness, set_filter_depths
+use MOM_regridding,       only : getStaticThickness
 use MOM_remapping,        only : initialize_remapping, end_remapping
 use MOM_remapping,        only : remapping_core_h, remapping_core_w
 use MOM_remapping,        only : remappingSchemesDoc, remappingDefaultScheme
@@ -232,7 +231,8 @@ subroutine ALE_init( param_file, G, CS)
                  "REGRID_TIME_SCALE. Between depths REGRID_FILTER_SHALLOW_DEPTH and\n"//&
                  "REGRID_FILTER_SHALLOW_DEPTH the filter wieghts adopt a cubic profile.", &
                  units="m", default=0.)
-  call set_filter_depths(filter_shallow_depth*G%GV%m_to_H, filter_deep_depth*G%GV%m_to_H, CS%regridCS)
+  call set_regrid_params(CS%regridCS, depth_of_time_filter_shallow=filter_shallow_depth*G%GV%m_to_H, &
+                                      depth_of_time_filter_deep=filter_deep_depth*G%GV%m_to_H)
 
   ! Keep a record of values for subsequent queries
   CS%nk = G%ke
@@ -1055,7 +1055,7 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
                  "than PCM. E.g., if PPM is used for remapping, a\n"//&
                  "PPM reconstruction will also be used within\n"//&
                  "boundary cells.", default=regriddingDefaultBoundaryExtrapolation)
-  call set_regrid_params( regridCS, min_thickness=tmpReal, Boundary_Extrap=tmpLogical )
+  call set_regrid_params( regridCS, min_thickness=tmpReal, boundary_extrapolation=tmpLogical )
 
   if (coordinateMode(coordMode) == REGRIDDING_SLIGHT) then
     ! Set SLight-specific regridding parameters.
@@ -1297,7 +1297,7 @@ subroutine ALE_update_regrid_weights( dt, CS )
     if (CS%regrid_time_scale > 0.0) then
       w = CS%regrid_time_scale / (CS%regrid_time_scale + dt)
     endif
-    call set_old_grid_weight( w, CS%regridCS )
+    call set_regrid_params( CS%regridCS, old_grid_weight=w )
   endif
 
 end subroutine ALE_update_regrid_weights
