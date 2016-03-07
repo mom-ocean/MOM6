@@ -963,8 +963,8 @@ subroutine register_restarts_dyn_split_RK2(G, param_file, CS, restart_CS, uh, vh
   ALLOC_(CS%v_av(isd:ied,JsdB:JedB,nz)) ; CS%v_av(:,:,:) = 0.0
   ALLOC_(CS%h_av(isd:ied,jsd:jed,nz))   ; CS%h_av(:,:,:) = G%Angstrom
 
-  thickness_units = get_thickness_units(G)
-  flux_units = get_flux_units(G)
+  thickness_units = get_thickness_units(G%GV)
+  flux_units = get_flux_units(G%GV)
 
   vd = var_desc("sfc",thickness_units,"Free surface Height",'h','1')
   call register_restart_field(CS%eta, vd, .false., restart_CS)
@@ -1190,7 +1190,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, param_file, &
   call do_group_pass(pass_av_h_uvh, G%Domain)
   call cpu_clock_end(id_clock_pass_init)
 
-  flux_units = get_flux_units(G)
+  flux_units = get_flux_units(G%GV)
   CS%id_uh = register_diag_field('ocean_model', 'uh', diag%axesCuL, Time, &
       'Zonal Thickness Flux', flux_units)
   CS%id_vh = register_diag_field('ocean_model', 'vh', diag%axesCvL, Time, &

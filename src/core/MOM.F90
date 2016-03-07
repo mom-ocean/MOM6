@@ -2024,10 +2024,10 @@ subroutine register_diags(Time, G, CS, ADp)
 
   diag => CS%diag
 
-  thickness_units = get_thickness_units(G)
-  flux_units      = get_flux_units(G)
-  T_flux_units    = get_tr_flux_units(G, "Celsius")
-  S_flux_units    = get_tr_flux_units(G, "PPT")
+  thickness_units = get_thickness_units(G%GV)
+  flux_units      = get_flux_units(G%GV)
+  T_flux_units    = get_tr_flux_units(G%GV, "Celsius")
+  S_flux_units    = get_tr_flux_units(G%GV, "PPT")
 
   !Initialize the diagnostics mask arrays.
   !This has to be done after MOM_initialize_state call.
@@ -2637,8 +2637,8 @@ subroutine set_restart_fields(G, param_file, CS)
   type(vardesc) :: vd
   character(len=48) :: thickness_units, flux_units
 
-  thickness_units = get_thickness_units(G)
-  flux_units = get_flux_units(G)
+  thickness_units = get_thickness_units(G%GV)
+  flux_units = get_flux_units(G%GV)
 
   if (CS%use_temperature) then
     vd = var_desc("Temp","degC","Potential Temperature")

@@ -512,8 +512,8 @@ subroutine register_restarts_dyn_unsplit_RK2(G, param_file, CS, restart_CS)
   ALLOC_(CS%PFu(IsdB:IedB,jsd:jed,nz)) ; CS%PFu(:,:,:) = 0.0
   ALLOC_(CS%PFv(isd:ied,JsdB:JedB,nz)) ; CS%PFv(:,:,:) = 0.0
 
-  thickness_units = get_thickness_units(G)
-  flux_units = get_flux_units(G)
+  thickness_units = get_thickness_units(G%GV)
+  flux_units = get_flux_units(G%GV)
 
 !  No extra restart fields are needed with this time stepping scheme.
 
@@ -639,7 +639,7 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, param_file, diag, CS, &
     call open_boundary_init(Time, G, param_file, diag, CS%open_boundary_CSp)
   endif
 
-  flux_units = get_flux_units(G)
+  flux_units = get_flux_units(G%GV)
   CS%id_uh = register_diag_field('ocean_model', 'uh', diag%axesCuL, Time, &
       'Zonal Thickness Flux', flux_units)
   CS%id_vh = register_diag_field('ocean_model', 'vh', diag%axesCvL, Time, &
