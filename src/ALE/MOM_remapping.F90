@@ -841,12 +841,30 @@ real function average_value_ppoly( n0, u0, ppoly0_E, ppoly0_coefficients, method
       case ( INTEGRATION_PCM )
         u_ave =        ppoly0_coefficients(i0,1)
       case ( INTEGRATION_PLM )
-        u_ave =        ppoly0_coefficients(i0,1)   &
-              + xa *   ppoly0_coefficients(i0,2)
+       !u_ave =        ppoly0_coefficients(i0,1)   &
+       !      + xa *   ppoly0_coefficients(i0,2)
+        a_L = ppoly0_E(i0, 1)
+        a_R = ppoly0_E(i0, 2)
+        Ya = 1. - xa
+        if (xa < 0.5) then
+          u_ave = a_L + xa * ( a_R - a_L )
+        else
+          u_ave = a_R + Ya * ( a_L - a_R )
+        endif
       case ( INTEGRATION_PPM )
-        u_ave =        ppoly0_coefficients(i0,1)   &
-              + xa * ( ppoly0_coefficients(i0,2)   &
-              + xa *   ppoly0_coefficients(i0,3) )
+       !u_ave =        ppoly0_coefficients(i0,1)   &
+       !      + xa * ( ppoly0_coefficients(i0,2)   &
+       !      + xa *   ppoly0_coefficients(i0,3) )
+        a_L = ppoly0_E(i0, 1)
+        a_R = ppoly0_E(i0, 2)
+        u_c = u0(i0)
+        a_c = 3. * ( ( u_c - a_L ) + ( u_c - a_R ) ) ! a_6
+        Ya = 1. - xa
+        if (xa < 0.5) then
+          u_ave = a_L + xa * ( ( a_R - a_L ) + a_c * Ya )
+        else
+          u_ave = a_R + Ya * ( ( a_L - a_R ) + a_c * xa )
+        endif
       case ( INTEGRATION_PQM )
         u_ave =        ppoly0_coefficients(i0,1)   &
               + xa * ( ppoly0_coefficients(i0,2)   &
