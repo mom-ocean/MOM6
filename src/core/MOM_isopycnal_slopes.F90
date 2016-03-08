@@ -92,7 +92,7 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
 
   present_N2_u = PRESENT(N2_u)
   present_N2_v = PRESENT(N2_v)
-  G_Rho0 = G%g_Earth / G%Rho0
+  G_Rho0 = G%g_Earth / G%GV%Rho0
   if (present_N2_u) then
     do j=js,je ; do I=is-1,ie
       N2_u(I,j,1) = 0.
@@ -174,7 +174,7 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
         haB = 0.5*(h(i,j,k) + h(i+1,j,k)) + h_neglect
         haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
         haR = 0.5*(h(i+1,j,k-1) + h(i+1,j,k)) + h_neglect
-        if (G%Boussinesq) then
+        if (G%GV%Boussinesq) then
           dzaL = haL * G%H_to_m ; dzaR = haR * G%H_to_m
         else
           dzaL = 0.5*(e(i,j,K-1) - e(i,j,K+1)) + dz_neglect
@@ -258,7 +258,7 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
         haB = 0.5*(h(i,j,k) + h(i,j+1,k)) + h_neglect
         haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
         haR = 0.5*(h(i,j+1,k-1) + h(i,j+1,k)) + h_neglect
-        if (G%Boussinesq) then
+        if (G%GV%Boussinesq) then
           dzaL = haL * G%H_to_m ; dzaR = haR * G%H_to_m
         else
           dzaL = 0.5*(e(i,j,K-1) - e(i,j,K+1)) + dz_neglect

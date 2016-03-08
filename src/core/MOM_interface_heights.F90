@@ -117,7 +117,7 @@ subroutine find_eta_3d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
 !$OMP do
   do j=jsv,jev ; do i=isv,iev ; eta(i,j,nz+1) = -G%bathyT(i,j) ; enddo ; enddo
 
-  if (G%Boussinesq) then
+  if (G%GV%Boussinesq) then
 !$OMP do
     do j=jsv,jev ; do k=nz,1,-1; do i=isv,iev
       eta(i,j,K) = eta(i,j,K+1) + h(i,j,k)*G%H_to_m
@@ -227,7 +227,7 @@ subroutine find_eta_2d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
 !$OMP do
   do j=js,je ; do i=is,ie ; eta(i,j) = -G%bathyT(i,j) ; enddo ; enddo
 
-  if (G%Boussinesq) then
+  if (G%GV%Boussinesq) then
     if (present(eta_bt)) then
 !$OMP do
       do j=js,je ; do i=is,ie

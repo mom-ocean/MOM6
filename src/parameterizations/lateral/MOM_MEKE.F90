@@ -569,7 +569,7 @@ subroutine MEKE_equilibrium(CS, MEKE, G, SN_u, SN_v, drag_rate_visc, I_mass)
     ! This avoids extremes values in equilibrium solution due to bad values in SN_u, SN_v
     SN = min( min(SN_u(I,j) , SN_u(I-1,j)) , min(SN_v(i,J), SN_v(i,J-1)) )
     beta = sqrt( G%dF_dx(i,j)**2 + G%dF_dy(i,j)**2 )
-    I_H = G%Rho0 * I_mass(i,j)
+    I_H = G%GV%Rho0 * I_mass(i,j)
 
     if (KhCoeff*SN*I_H>0.) then
       ! Solve resid(E) = 0, where resid = Kh(E) * (SN)^2 - damp_rate(E) E

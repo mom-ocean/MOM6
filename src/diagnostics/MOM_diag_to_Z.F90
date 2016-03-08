@@ -972,7 +972,7 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
   endif
   allocate(CS)
 
-  if (G%Boussinesq) then ; flux_units = "meter3 second-1"
+  if (G%GV%Boussinesq) then ; flux_units = "meter3 second-1"
   else ; flux_units = "kilogram second-1" ; endif
 
   CS%diag => diag

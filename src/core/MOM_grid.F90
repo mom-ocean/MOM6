@@ -138,13 +138,13 @@ type, public :: ocean_grid_type
     CoriolisBu    ! The Coriolis parameter at corner points, in s-1.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
     dF_dx, dF_dy  ! Derivatives of f (Coriolis parameter) at h-points, in s-1 m-1.
+  real :: g_Earth !   The gravitational acceleration in m s-2.
 
   ! The following variables give information about the vertical grid.
-  real :: g_Earth !   The gravitational acceleration in m s-2.
-  real :: Rho0    !   The density used in the Boussinesq approximation or
-                  ! nominal density used to convert depths into mass
-                  ! units, in kg m-3.
-  logical :: Boussinesq     ! If true, make the Boussinesq approximation.
+!  real :: Rho0    !   The density used in the Boussinesq approximation or
+!                  ! nominal density used to convert depths into mass
+!                  ! units, in kg m-3.
+!  logical :: Boussinesq     ! If true, make the Boussinesq approximation.
   real :: Angstrom      !   A one-Angstrom thickness in the model's thickness
                         ! units.  (This replaces the old macro EPSILON.)
   real :: Angstrom_z    !   A one-Angstrom thickness in m.
@@ -329,7 +329,7 @@ subroutine MOM_grid_init(G, param_file)
   ! Copy over several common variables from the vertical grid.
   ! Consider removing these later.
   G%ks = 1 ; G%ke = G%GV%ke
-  G%Rho0 = G%GV%Rho0 ; G%Boussinesq = G%GV%Boussinesq
+  ! G%Rho0 = G%GV%Rho0 ; G%Boussinesq = G%GV%Boussinesq
   G%Angstrom = G%GV%Angstrom ; G%Angstrom_z = G%GV%Angstrom_z
   G%H_subroundoff = G%GV%H_subroundoff
   G%H_to_kg_m2 = G%GV%H_to_kg_m2 ; G%kg_m2_to_H = G%GV%kg_m2_to_H

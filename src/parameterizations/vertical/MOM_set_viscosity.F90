@@ -280,7 +280,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nkmb = G%GV%nk_rho_varies ; nkml = G%GV%nkml
   h_neglect = G%H_subroundoff
-  Rho0x400_G = 400.0*(G%Rho0/G%g_Earth)*G%m_to_H
+  Rho0x400_G = 400.0*(G%GV%Rho0/G%g_Earth)*G%m_to_H
   Vol_quit = 0.9*G%Angstrom + h_neglect
   C2pi_3 = 8.0*atan(1.0)/3.0
 
@@ -955,7 +955,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
          "Module must be initialized before it is used.")
   if (.not.(CS%dynamic_viscous_ML .or. associated(fluxes%frac_shelf_h))) return
 
-  Rho0x400_G = 400.0*(G%Rho0/G%g_Earth)*G%m_to_H
+  Rho0x400_G = 400.0*(G%GV%Rho0/G%g_Earth)*G%m_to_H
   U_bg_sq = CS%drag_bg_vel * CS%drag_bg_vel
   cdrag_sqrt=sqrt(CS%cdrag)
 
@@ -963,7 +963,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
   dt_Rho0 = dt/G%H_to_kg_m2
   h_neglect = G%H_subroundoff
   h_tiny = 2.0*G%Angstrom + h_neglect
-  g_H_Rho0 = (G%g_Earth * G%H_to_m) / G%Rho0
+  g_H_Rho0 = (G%g_Earth * G%H_to_m) / G%GV%Rho0
 
   if (associated(fluxes%frac_shelf_h)) then
     ! This configuration has ice shelves, and the appropriate variables need to

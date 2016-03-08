@@ -649,7 +649,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
             haB = 0.5*(h(i,j,k) + h(i+1,j,k)) + h_neglect
             haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
             haR = 0.5*(h(i+1,j,k-1) + h(i+1,j,k)) + h_neglect
-            if (G%Boussinesq) then
+            if (G%GV%Boussinesq) then
               dzaL = haL * G%H_to_m ; dzaR = haR * G%H_to_m
             else
               dzaL = 0.5*(e(i,j,K-1) - e(i,j,K+1)) + dz_neglect
@@ -842,7 +842,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
             haB = 0.5*(h(i,j,k) + h(i,j+1,k)) + h_neglect
             haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
             haR = 0.5*(h(i,j+1,k-1) + h(i,j+1,k)) + h_neglect
-            if (G%Boussinesq) then
+            if (G%GV%Boussinesq) then
               dzaL = haL * G%H_to_m ; dzaR = haR * G%H_to_m
             else
               dzaL = 0.5*(e(i,j,K-1) - e(i,j,K+1)) + dz_neglect
@@ -1635,7 +1635,7 @@ subroutine thickness_diffuse_init(Time, G, param_file, diag, CDp, CS)
                  "If true, write out verbose debugging data.", default=.false.)
 
 
-  if (G%Boussinesq) then ; flux_units = "meter3 second-1"
+  if (G%GV%Boussinesq) then ; flux_units = "meter3 second-1"
   else ; flux_units = "kilogram second-1" ; endif
 
   CS%id_uhGM = register_diag_field('ocean_model', 'uhGM', diag%axesCuL, Time, &

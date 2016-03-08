@@ -778,7 +778,7 @@ subroutine Ocean_stock_pe(OS, index, value, time_index)
     case (ISTOCK_WATER)
       ! Return the mass of fresh water in the ocean on this PE in kg.
       to_mass = OS%grid%H_to_kg_m2
-      if (OS%grid%Boussinesq) then
+      if (OS%grid%GV%Boussinesq) then
         do k=1,nz ; do j=js,je ; do i=is,ie ; if (OS%grid%mask2dT(i,j) > 0.5) then
           value = value + to_mass*(OS%MOM_CSp%h(i,j,k) * OS%grid%areaT(i,j))
         endif ; enddo ; enddo ; enddo

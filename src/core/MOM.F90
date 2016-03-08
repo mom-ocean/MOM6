@@ -1205,7 +1205,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
      enddo ; enddo
      if (ASSOCIATED(fluxes%p_surf)) then
        do j=js,je ; do i=is,ie
-         zos(i,j) = zos(i,j)+G%mask2dT(i,j)*fluxes%p_surf(i,j)/(G%Rho0 * G%g_Earth)
+         zos(i,j) = zos(i,j)+G%mask2dT(i,j)*fluxes%p_surf(i,j)/(G%GV%Rho0 * G%g_Earth)
        enddo ; enddo
      endif
      zos_area_mean = global_area_mean(zos, G)
@@ -2706,7 +2706,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
   state%sea_lev => ssh
 
   if (present(p_atm)) then ; if (ASSOCIATED(p_atm)) then
-    IgR0 = 1.0 / (G%Rho0 * G%g_Earth)
+    IgR0 = 1.0 / (G%GV%Rho0 * G%g_Earth)
     do j=js,je ; do i=is,ie
       ssh(i,j) = ssh(i,j) + p_atm(i,j) * IgR0
     enddo ; enddo

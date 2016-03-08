@@ -441,7 +441,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
     areaTm(i,j) = G%mask2dT(i,j)*G%areaT(i,j)
   enddo ; enddo
 
-  if (G%Boussinesq) then
+  if (G%GV%Boussinesq) then
     if (CS%use_repro_sum) then
       tmp1(:,:,:) = 0.0
       do k=1,nz ; do j=js,je ; do i=is,ie
@@ -479,7 +479,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
           tmp1(i,j,k) = G%H_to_kg_m2 * h(i,j,k) * areaTm(i,j)
         enddo ; enddo ; enddo
         mass_tot = reproducing_sum(tmp1, sums=mass_lay, EFP_sum=mass_EFP)
-        do k=1,nz ; vol_lay(k) = mass_lay(k) / G%Rho0 ; enddo
+        do k=1,nz ; vol_lay(k) = mass_lay(k) / G%GV%Rho0 ; enddo
       endif
     else ! not use_repro_sum
       do k=1,nz
@@ -501,7 +501,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
         call sum_across_PEs(mass_lay,nz)
       else
         call sum_across_PEs(mass_lay,nz)
-        do k=1,nz ; vol_lay(k) = mass_lay(k) / G%Rho0 ; enddo
+        do k=1,nz ; vol_lay(k) = mass_lay(k) / G%GV%Rho0 ; enddo
       endif
     endif ! use_repro_sum
   endif ! Boussinesq
@@ -642,7 +642,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
   do k=1,nz+1 ; PE(K) = 0.0 ; enddo
   if (CS%do_APE_calc) then
     PE_pt(:,:,:) = 0.0
-    if (G%Boussinesq) then
+    if (G%GV%Boussinesq) then
       do j=js,je ; do i=is,ie
         hbelow = 0.0
         do k=nz,1,-1
@@ -650,7 +650,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
           hint = (H_0APE(K) + hbelow - G%bathyT(i,j))
           hbot = H_0APE(K) - G%bathyT(i,j)
           hbot = (hbot + ABS(hbot)) * 0.5
-          PE_pt(i,j,K) = 0.5 * areaTm(i,j) * (G%Rho0*G%GV%g_prime(K)) * &
+          PE_pt(i,j,K) = 0.5 * areaTm(i,j) * (G%GV%Rho0*G%GV%g_prime(K)) * &
                   (hint * hint - hbot * hbot)
         enddo
       enddo ; enddo
@@ -660,7 +660,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
         do k=nz,1,-1
           hint = H_0APE(K) + eta(i,j,K)  ! eta and H_0 have opposite signs.
           hbot = max(H_0APE(K) - G%bathyT(i,j), 0.0)
-          PE_pt(i,j,K) = 0.5 * (areaTm(i,j) * (G%Rho0*G%GV%g_prime(K))) * &
+          PE_pt(i,j,K) = 0.5 * (areaTm(i,j) * (G%GV%Rho0*G%GV%g_prime(K))) * &
                   (hint * hint - hbot * hbot)
         enddo
       enddo ; enddo
@@ -755,7 +755,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
       CS%heat_prev_EFP = heat_EFP ; CS%net_heat_in_EFP = real_to_EFP(0.0)
     endif
   endif
-  Irho0 = 1.0/G%Rho0
+  Irho0 = 1.0/G%GV%Rho0
 
   if (CS%use_repro_sum) then
     if (CS%use_temperature) then
@@ -769,7 +769,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
 
     mass_chg_EFP = mass_EFP - CS%mass_prev_EFP
     salin_mass_in = 0.0
-    if (G%Boussinesq) then
+    if (G%GV%Boussinesq) then
       mass_anom_EFP = mass_chg_EFP - CS%fresh_water_in_EFP
     else
       ! net_salt_input needs to be converted from psu m s-1 to kg m-2 s-1.
@@ -783,7 +783,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
     Salt_chg = Salt - CS%salt_prev  ; Salt_anom = Salt_chg - CS%net_salt_input
     Heat_chg = Heat - CS%heat_prev  ; Heat_anom = Heat_chg - CS%net_heat_input
     mass_chg = mass_tot - CS%mass_prev
-    if (G%Boussinesq) then
+    if (G%GV%Boussinesq) then
       mass_anom = mass_chg - CS%fresh_water_input
     else
       ! net_salt_input needs to be converted from psu m s-1 to kg m-2 s-1.

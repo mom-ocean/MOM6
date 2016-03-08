@@ -94,7 +94,7 @@ subroutine PressureForce(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce, eta)
 ! following conditional block.
 
   if (CS%Analytic_FV_PGF) then
-    if (G%Boussinesq) then
+    if (G%GV%Boussinesq) then
       call PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS%PressureForce_AFV_CSp, &
                                    ALE_CSp, p_atm, pbce, eta)
     else
@@ -102,7 +102,7 @@ subroutine PressureForce(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce, eta)
                                       p_atm, pbce, eta)
     endif
   else
-    if (G%Boussinesq) then
+    if (G%GV%Boussinesq) then
       call PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, CS%PressureForce_Mont_CSp, &
                                     p_atm, pbce, eta)
     else

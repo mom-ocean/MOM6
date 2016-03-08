@@ -209,10 +209,10 @@ subroutine wave_structure(h, tv, G, cn, ModeNum, freq, CS, En, full_halos)
   Pi = (4.0*atan(1.0))
   
   S => tv%S ; T => tv%T
-  g_Rho0 = G%g_Earth/G%Rho0
+  g_Rho0 = G%g_Earth/G%GV%Rho0
   use_EOS = associated(tv%eqn_of_state)
 
-  H_to_pres = G%g_Earth * G%Rho0
+  H_to_pres = G%g_Earth * G%GV%Rho0
   rescale = 1024.0**4 ; I_rescale = 1.0/rescale
 
   min_h_frac = tol1 / real(nz)
@@ -505,8 +505,8 @@ subroutine wave_structure(h, tv, G, cn, ModeNum, freq, CS, En, full_halos)
             
             ! Back-calculate amplitude from energy equation
             if (Kmag2 > 0.0) then
-              KE_term = 0.25*G%Rho0*( (1+f2/freq**2)/Kmag2*int_dwdz2 + int_w2 )
-              PE_term = 0.25*G%Rho0*( int_N2w2/freq**2 )
+              KE_term = 0.25*G%GV%Rho0*( (1+f2/freq**2)/Kmag2*int_dwdz2 + int_w2 )
+              PE_term = 0.25*G%GV%Rho0*( int_N2w2/freq**2 )
               if (En(i,j) >= 0.0) then
                 W0 = sqrt( En(i,j)/(KE_term + PE_term) )
               else

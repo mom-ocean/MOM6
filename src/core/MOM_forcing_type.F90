@@ -305,7 +305,7 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
   character(len=200) :: mesg
   integer            :: is, ie, nz, i, k, n
   Ih_limit  = 1.0 / DepthBeforeScalingFluxes
-  Irho0     = 1.0 / G%Rho0
+  Irho0     = 1.0 / G%GV%Rho0
   I_Cp      = 1.0 / fluxes%C_p
   J_m2_to_H = 1.0 / (G%H_to_kg_m2 * fluxes%C_p)
 
@@ -373,7 +373,7 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
     ! for non-Bouss, we add/remove salt mass to total ocean mass. to conserve
     ! total salt mass ocean+ice, the sea ice model must lose mass when
     ! salt mass is added to the ocean, which may still need to be coded.
-    if (.not.G%Boussinesq .and. ASSOCIATED(fluxes%salt_flux)) then
+    if (.not.G%GV%Boussinesq .and. ASSOCIATED(fluxes%salt_flux)) then
       netMassInOut(i) = netMassInOut(i) + (dt * G%kg_m2_to_H) * (scale * fluxes%salt_flux(i,j))
     endif
 
@@ -691,7 +691,7 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, &
 
   depthBeforeScalingFluxes = max( G%Angstrom, 1.e-30*G%m_to_H )
   pressure(:) = 0. ! Ignore atmospheric pressure
-  GoRho       = G%g_Earth / G%Rho0
+  GoRho       = G%g_Earth / G%GV%Rho0
   start       = 1 + G%isc - G%isd
   npts        = 1 + G%iec - G%isc
 

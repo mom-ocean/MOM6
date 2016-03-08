@@ -505,7 +505,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
 
   h_neglect = G%H_subroundoff * G%H_to_m
   I_Rho0 = 1.0/CS%Rho0
-  G_Rho0 = G%g_Earth/G%Rho0
+  G_Rho0 = G%g_Earth/G%GV%Rho0
 
   if (CS%tides) then
     !   Determine the surface height anomaly for calculating self attraction

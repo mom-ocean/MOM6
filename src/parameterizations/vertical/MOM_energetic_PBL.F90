@@ -357,13 +357,13 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
 
   C1_3 = 1.0 / 3.0
   dt__diag = dt ; if (present(dt_diag)) dt__diag = dt_diag
-  IdtdR0 = 1.0 / (dt__diag * G%Rho0)
+  IdtdR0 = 1.0 / (dt__diag * G%GV%Rho0)
   write_diags = .true. ; if (present(last_call)) write_diags = last_call
   max_itt = 20
 
   h_tt_min = 0.0
   vonKar = 0.41
-  I_dtmrho = 0.0 ; if (dt*CS%mstar*G%Rho0 > 0.0) I_dtmrho = 1.0 / (dt*CS%mstar*G%Rho0)
+  I_dtmrho = 0.0 ; if (dt*CS%mstar*G%GV%Rho0 > 0.0) I_dtmrho = 1.0 / (dt*CS%mstar*G%GV%Rho0)
 
   ! Determine whether to zero out diagnostics before accumulation.
   reset_diags = .true.
@@ -446,7 +446,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
                      (abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I-1,J))))
       endif
 
-      mech_TKE(i) = (dt*CS%mstar*G%Rho0)*((U_Star**3))
+      mech_TKE(i) = (dt*CS%mstar*G%GV%Rho0)*((U_Star**3))
       conv_PErel(i) = 0.0
 
       if (CS%TKE_diagnostics) then
@@ -550,7 +550,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
           ! on a curve fit from the data of Wang (GRL, 2003).
           ! Note:         Ro = 1.0 / sqrt(0.5 * dt * Rho0 * (absf*htot(i))**3 / conv_PErel(i))
           nstar_FC = CS%nstar * conv_PErel(i) / (conv_PErel(i) + 0.2 * &
-                          sqrt(0.5 * dt * G%Rho0 * (absf(i)*(htot(i)*G%H_to_m))**3 * conv_PErel(i)))
+                          sqrt(0.5 * dt * G%GV%Rho0 * (absf(i)*(htot(i)*G%H_to_m))**3 * conv_PErel(i)))
         endif
         if (debug) nstar_k(K) = nstar_FC
 

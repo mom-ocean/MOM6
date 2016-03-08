@@ -281,7 +281,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
   if (CS%id_thkcello > 0) then
 
     ! thkcello = h for Boussinesq 
-    if (G%Boussinesq) then 
+    if (G%GV%Boussinesq) then 
       call post_data(CS%id_thkcello, G%H_to_m*h, CS%diag)
 
     ! thkcello = dp/(rho*g) for non-Boussinesq
@@ -674,7 +674,7 @@ subroutine calculate_vertical_integrals(h, tv, fluxes, G, CS)
 
   if (CS%id_col_mass > 0 .or. CS%id_pbo > 0) then
     do j=js,je ; do i=is,ie ; mass(i,j) = 0.0 ; enddo ; enddo
-    if (G%Boussinesq) then
+    if (G%GV%Boussinesq) then
       if (associated(tv%eqn_of_state)) then
         IG_Earth = 1.0 / G%g_Earth
 !       do j=js,je ; do i=is,ie ; z_bot(i,j) = -P_SURF(i,j)/G%H_to_Pa ; enddo ; enddo
@@ -1035,7 +1035,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, param_file, diag, CS, &
   call get_param(param_file, mod, "SPLIT", CS%split, &
                  "Use the split time stepping if true.", default=.true.)
 
-  if (G%Boussinesq) then
+  if (G%GV%Boussinesq) then
     thickness_units = "meter" ; flux_units = "meter3 second-1"
   else
     thickness_units = "kilogram meter-2" ; flux_units = "kilogram second-1"
@@ -1057,7 +1057,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, param_file, diag, CS, &
   CS%id_thkcello = register_diag_field('ocean_model', 'thkcello', diag%axesTL, Time, &
       long_name = 'Cell Thickness', standard_name='cell_thickness', units='m')
 
-  if (((CS%id_masscello>0) .or. (CS%id_masso>0) .or. (CS%id_thkcello>0.and..not.G%Boussinesq)) &
+  if (((CS%id_masscello>0) .or. (CS%id_masso>0) .or. (CS%id_thkcello>0.and..not.G%GV%Boussinesq)) &
       .and. .not.ASSOCIATED(CS%diag_tmp3d)) then
     call safe_alloc_ptr(CS%diag_tmp3d,isd,ied,jsd,jed,nz)
   endif

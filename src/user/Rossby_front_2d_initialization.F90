@@ -64,7 +64,7 @@ subroutine Rossby_front_initialize_thickness(h, G, param_file )
     case (REGRIDDING_LAYER, REGRIDDING_RHO)
       do j = G%jsc,G%jec ; do i = G%isc,G%iec
         Dml = Hml( G, G%geoLatT(i,j) )
-        eta = -( -dRho_DT / G%Rho0 ) * Tz * 0.5 * ( Dml * Dml )
+        eta = -( -dRho_DT / G%GV%Rho0 ) * Tz * 0.5 * ( Dml * Dml )
         stretch = ( ( G%max_depth + eta ) / G%max_depth )
         h0 = ( G%max_depth / real(nz) ) * stretch
         do k = 1, nz
@@ -75,7 +75,7 @@ subroutine Rossby_front_initialize_thickness(h, G, param_file )
     case (REGRIDDING_ZSTAR, REGRIDDING_SIGMA)
       do j = G%jsc,G%jec ; do i = G%isc,G%iec
         Dml = Hml( G, G%geoLatT(i,j) )
-        eta = -( -dRho_DT / G%Rho0 ) * Tz * 0.5 * ( Dml * Dml )
+        eta = -( -dRho_DT / G%GV%Rho0 ) * Tz * 0.5 * ( Dml * Dml )
         stretch = ( ( G%max_depth + eta ) / G%max_depth )
         h0 = ( G%max_depth / real(nz) ) * stretch
         do k = 1, nz
@@ -160,7 +160,7 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, param_file)
   
   do j = G%jsc,G%jec ; do I = G%isc-1,G%iec+1
     f = 0.5*( G%CoriolisBu(I,j) + G%CoriolisBu(I,j-1) )
-    dUdT = ( G%g_Earth * dRho_dT ) / ( f * G%Rho0 )
+    dUdT = ( G%g_Earth * dRho_dT ) / ( f * G%GV%Rho0 )
     Dml = Hml( G, G%geoLatT(i,j) )
     Ty = dTdy( G, T_range, G%geoLatT(i,j) )
     zi = 0.

@@ -266,7 +266,7 @@ contains
 
     !   Rho_0 is a property of MOM and not a property of any tracer. Copy it
     ! from the ocean grid type.
-    CS%Rho_0 = G%Rho0
+    CS%Rho_0 = G%GV%Rho0
 
     register_MOM_generic_tracer = .true.
   end function register_MOM_generic_tracer

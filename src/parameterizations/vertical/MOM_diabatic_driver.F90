@@ -1840,7 +1840,7 @@ subroutine diabatic_driver_init(Time, G, param_file, useALEalgorithm, diag, &
   endif
 
   ! Register all available diagnostics for this module.
-  if (G%Boussinesq) then ; thickness_units = "meter"
+  if (G%GV%Boussinesq) then ; thickness_units = "meter"
   else ; thickness_units = "kilogram meter-2" ; endif
 
   CS%id_ea = register_diag_field('ocean_model','ea',diag%axesTL,Time, &

@@ -325,10 +325,10 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
                  "units of m to kg m-2 or vice versa, depending on whether \n"//&
                  "BOUSSINESQ is defined. This does not apply if a restart \n"//&
                  "file is read.", default=.false.)
-    if (convert .and. .not. G%Boussinesq) then
+    if (convert .and. .not. G%GV%Boussinesq) then
       ! Convert h from m to kg m-2 then to thickness units (H)
       call convert_thickness(h, G, PF, tv)
-    elseif (G%Boussinesq) then
+    elseif (G%GV%Boussinesq) then
       ! Convert h from m to thickness units (H)
       h(:,:,:) = h(:,:,:)*G%m_to_H
     else
@@ -669,7 +669,7 @@ subroutine convert_thickness(h, G, param_file, tv)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   max_itt = 10
-  Boussinesq = G%Boussinesq
+  Boussinesq = G%GV%Boussinesq
   I_gEarth = 1.0 / G%g_Earth
 
   if (Boussinesq) then

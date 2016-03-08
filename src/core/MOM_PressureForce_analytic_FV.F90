@@ -110,7 +110,7 @@ subroutine PressureForce_AFV(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce, eta)
 ! Descriptions of the variables are in each of the routines called in the
 ! following conditional block.
 
-  if (G%Boussinesq) then
+  if (G%GV%Boussinesq) then
     call PressureForce_AFV_bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce, eta)
   else
     call PressureForce_AFV_nonbouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
@@ -567,8 +567,8 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
 
   PRScheme = pressureReconstructionScheme(ALE_CSp)
   h_neglect = G%H_subroundoff
-  I_Rho0 = 1.0/G%Rho0
-  G_Rho0 = G%g_Earth/G%Rho0
+  I_Rho0 = 1.0/G%GV%Rho0
+  G_Rho0 = G%g_Earth/G%GV%Rho0
   rho_ref = CS%Rho0
 
   if (CS%tides) then

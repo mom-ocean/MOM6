@@ -325,15 +325,15 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, CS, &
     enddo ; enddo ; endif
 
     if (ASSOCIATED(visc%taux_shelf)) then ; do I=Isq,Ieq
-      visc%taux_shelf(I,j) = -G%Rho0*CS%a1_shelf_u(I,j)*u(I,j,1) ! - u_shelf?
+      visc%taux_shelf(I,j) = -G%GV%Rho0*CS%a1_shelf_u(I,j)*u(I,j,1) ! - u_shelf?
     enddo ; endif
 
     if (PRESENT(taux_bot)) then
       do I=Isq,Ieq
-        taux_bot(I,j) = G%Rho0 * (u(I,j,nz)*CS%a_u(I,j,nz+1))
+        taux_bot(I,j) = G%GV%Rho0 * (u(I,j,nz)*CS%a_u(I,j,nz+1))
       enddo
       if (CS%Channel_drag) then ; do k=1,nz ; do I=Isq,Ieq
-        taux_bot(I,j) = taux_bot(I,j) + G%Rho0 * (Ray(I,k)*u(I,j,k))
+        taux_bot(I,j) = taux_bot(I,j) + G%GV%Rho0 * (Ray(I,k)*u(I,j,k))
       enddo ; enddo ; endif
     endif
   enddo ! end u-component j loop
@@ -398,15 +398,15 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, CS, &
     enddo ; enddo ; endif
 
     if (ASSOCIATED(visc%tauy_shelf)) then ; do i=is,ie
-      visc%tauy_shelf(i,J) = -G%Rho0*CS%a1_shelf_v(i,J)*v(i,J,1) ! - v_shelf?
+      visc%tauy_shelf(i,J) = -G%GV%Rho0*CS%a1_shelf_v(i,J)*v(i,J,1) ! - v_shelf?
     enddo ; endif
 
     if (present(tauy_bot)) then
       do i=is,ie
-        tauy_bot(i,J) = G%Rho0 * (v(i,J,nz)*CS%a_v(i,J,nz+1))
+        tauy_bot(i,J) = G%GV%Rho0 * (v(i,J,nz)*CS%a_v(i,J,nz+1))
       enddo
       if (CS%Channel_drag) then ; do k=1,nz ; do i=is,ie
-        tauy_bot(i,J) = tauy_bot(i,J) + G%Rho0 * (Ray(i,k)*v(i,J,k))
+        tauy_bot(i,J) = tauy_bot(i,J) + G%GV%Rho0 * (Ray(i,k)*v(i,J,k))
       enddo ; enddo ; endif
     endif
   enddo ! end of v-component J loop
@@ -1229,7 +1229,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
 !   Here the diagnostic reporting subroutines are called if
 ! unphysically large values were found.
         call write_u_accel(I, j, u_old, h, ADp, CDp, dt, G, CS%PointAccel_CSp, &
-               vel_report(I,j), -vel_report(I,j), (dt*fluxes%taux(I,j)/G%Rho0), &
+               vel_report(I,j), -vel_report(I,j), (dt*fluxes%taux(I,j)/G%GV%Rho0), &
                a=CS%a_u(:,j,:), hv=CS%h_u(:,j,:))
     endif ; enddo; enddo
   endif
@@ -1310,7 +1310,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
 !   Here the diagnostic reporting subroutines are called if
 ! unphysically large values were found.
         call write_v_accel(i, J, v_old, h, ADp, CDp, dt, G, CS%PointAccel_CSp, &
-               vel_report(i,J), -vel_report(i,J), (dt*fluxes%tauy(i,J)/G%Rho0), &
+               vel_report(i,J), -vel_report(i,J), (dt*fluxes%tauy(i,J)/G%GV%Rho0), &
                a=CS%a_v(:,J,:),hv=CS%h_v(:,J,:))
     endif ; enddo; enddo
   endif

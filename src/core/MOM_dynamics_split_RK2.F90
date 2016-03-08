@@ -1145,7 +1145,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, param_file, &
     ! eta is the mass of ocean per unit area.  eta always has the same
     ! dimensions as h, either m or kg m-3.
     !   CS%eta(:,:) = 0.0 already from initialization.
-    if (G%Boussinesq) then
+    if (G%GV%Boussinesq) then
       do j=js,je ; do i=is,ie ; CS%eta(i,j) = -G%bathyT(i,j) * G%m_to_H ; enddo ; enddo
     endif
     do k=1,nz ; do j=js,je ; do i=is,ie

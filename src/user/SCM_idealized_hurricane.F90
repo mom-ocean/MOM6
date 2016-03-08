@@ -298,9 +298,9 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
   ! Set the surface friction velocity, in units of m s-1. ustar is always positive.
   do j=js,je ; do i=is,ie
     !  This expression can be changed if desired, but need not be.
-    fluxes%ustar(i,j) = G%mask2dT(i,j) * sqrt(CS%gust_const/G%Rho0 + &
+    fluxes%ustar(i,j) = G%mask2dT(i,j) * sqrt(CS%gust_const/G%GV%Rho0 + &
        sqrt(0.5*(fluxes%taux(I-1,j)**2 + fluxes%taux(I,j)**2) + &
-            0.5*(fluxes%tauy(i,J-1)**2 + fluxes%tauy(i,J)**2))/G%Rho0)
+            0.5*(fluxes%tauy(i,J-1)**2 + fluxes%tauy(i,J)**2))/G%GV%Rho0)
   enddo ; enddo
 
 end subroutine SCM_idealized_hurricane_wind_forcing

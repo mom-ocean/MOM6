@@ -470,8 +470,8 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
   call PressureForce(h, tv, CS%PFu, CS%PFv, G, CS%PressureForce_CSp, &
                      CS%ALE_CSp, p_surf, CS%pbce, CS%eta_PF)
   if (dyn_p_surf) then
-    if (G%Boussinesq) then
-      Pa_to_eta = 1.0 / (G%Rho0*G%g_Earth)
+    if (G%GV%Boussinesq) then
+      Pa_to_eta = 1.0 / (G%GV%Rho0*G%g_Earth)
     else
       Pa_to_eta = 1.0 / G%H_to_Pa
     endif
@@ -1381,7 +1381,7 @@ subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, param_file
     ! eta is the mass of ocean per unit area.  eta always has the same
     ! dimensions as h, either m or kg m-3.
     !   CS%eta(:,:) = 0.0 already from initialization.
-    if (G%Boussinesq) then
+    if (G%GV%Boussinesq) then
       do j=js,je ; do i=is,ie ; CS%eta(i,j) = -G%bathyT(i,j) ; enddo ; enddo
     endif
     do k=1,nz ; do j=js,je ; do i=is,ie

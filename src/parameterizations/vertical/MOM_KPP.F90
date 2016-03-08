@@ -446,7 +446,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, &
 #endif
 
   ! some constants
-  GoRho = G%g_Earth / G%Rho0
+  GoRho = G%g_Earth / G%GV%Rho0
   nonLocalTrans(:,:) = 0.0
 
   if (CS%id_Kd_in > 0) call post_data(CS%id_Kd_in, Kt, CS%diag)

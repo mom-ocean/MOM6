@@ -727,7 +727,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
         OBC%apply_OBC_v_flather_south
     apply_OBCs = OBC%apply_OBC_u .or. OBC%apply_OBC_v .or. apply_OBC_flather
 
-    if (apply_OBC_flather .and. .not.G%Boussinesq) call MOM_error(FATAL, &
+    if (apply_OBC_flather .and. .not.G%GV%Boussinesq) call MOM_error(FATAL, &
       "btstep: Flather open boundary conditions have not yet been "// &
       "implemented for a non-Boussinesq model.")
   endif ; endif
@@ -745,7 +745,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   dtbt = dt * Instep
   bebt = CS%bebt
   be_proj = CS%bebt
-  I_Rho0 = 1.0/G%Rho0
+  I_Rho0 = 1.0/G%GV%Rho0
 
   !--- setup the weight when computing vbt_trans and ubt_trans
   if (project_velocity) then
@@ -1375,7 +1375,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
         ! Limit the sink (inward) correction to the amount of mass that is already
         ! inside the cell, plus any mass added by eta_source.
         Htot = eta(i,j)
-        if (G%Boussinesq) Htot = CS%bathyT(i,j)*G%m_to_H + eta(i,j)
+        if (G%GV%Boussinesq) Htot = CS%bathyT(i,j)*G%m_to_H + eta(i,j)
 
         CS%eta_cor(i,j) = max(CS%eta_cor(i,j), -max(0.0,Htot + dt*CS%eta_source(i,j)))
       endif
@@ -2656,7 +2656,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, MS, halo, use_BT_cont, Datu, Datv,
       else
         BT_OBC%Cg_u(I,j) = SQRT(G%GV%g_prime(1)*(0.5* &
                                 (G%bathyT(i,j) + G%bathyT(i+1,j))))
-        if (G%Boussinesq) then
+        if (G%GV%Boussinesq) then
           BT_OBC%H_u(I,j) = 0.5*((G%bathyT(i,j)*G%m_to_H + eta(i,j)) + &
                                  (G%bathyT(i+1,j)*G%m_to_H + eta(i+1,j)))
         else
@@ -2692,7 +2692,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, MS, halo, use_BT_cont, Datu, Datv,
       else
         BT_OBC%Cg_v(i,J) = SQRT(G%GV%g_prime(1)*(0.5* &
                                 (G%bathyT(i,j) + G%bathyT(i,j+1))))
-        if (G%Boussinesq) then
+        if (G%GV%Boussinesq) then
           BT_OBC%H_v(i,J) = 0.5*((G%bathyT(i,j)*G%m_to_H + eta(i,j)) + &
                                  (G%bathyT(i,j+1)*G%m_to_H + eta(i,j+1)))
         else
@@ -3484,7 +3484,7 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, eta, halo, add_max)
 !$OMP                       private(H1,H2)
   if (present(eta)) then
     ! The use of harmonic mean thicknesses ensure positive definiteness.
-    if (G%Boussinesq) then
+    if (G%GV%Boussinesq) then
 !$OMP do
       do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
         H1 = CS%bathyT(i,j)*G%m_to_H + eta(i,j) ; H2 = CS%bathyT(i+1,j)*G%m_to_H + eta(i+1,j)
@@ -3596,7 +3596,7 @@ subroutine bt_mass_source(h, eta, fluxes, set_cor, dt_therm, dt_since_therm, &
 !$OMP                          private(eta_h,h_tot,limit_dt,d_eta)
   do j=js,je
     do i=is,ie ; h_tot(i) = h(i,j,1) ; enddo
-    if (G%Boussinesq) then
+    if (G%GV%Boussinesq) then
       do i=is,ie ; eta_h(i) = h(i,j,1) - G%bathyT(i,j)*G%m_to_H ; enddo
     else
       do i=is,ie ; eta_h(i) = h(i,j,1) ; enddo
@@ -4061,7 +4061,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
   ! ubtav, vbtav, ubt_IC, vbt_IC, uhbt_IC, and vhbt_IC are allocated and
   ! initialized in register_barotropic_restarts.
 
-  if (G%Boussinesq) then
+  if (G%GV%Boussinesq) then
     thickness_units = "meter" ; flux_units = "meter3 second-1"
   else
     thickness_units = "kilogram meter-2" ; flux_units = "kilogram second-1"
@@ -4194,7 +4194,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
 !   Calculate other constants which are used for btstep.
 
   ! The following is only valid with the Boussinesq approximation.
-! if (G%Boussinesq) then
+! if (G%GV%Boussinesq) then
     do j=js,je ; do I=is-1,ie
       if (G%mask2dCu(i,j)>0.) then
         CS%IDatu(I,j) = G%mask2dCu(I,j) * 2.0 / (G%bathyT(i+1,j) + G%bathyT(i,j))
@@ -4211,10 +4211,10 @@ subroutine barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
     enddo ; enddo
 ! else
 !   do j=js,je ; do I=is-1,ie
-!     CS%IDatu(I,j) = G%mask2dCu(i,j) * 2.0 / (G%Rho0*(G%bathyT(i+1,j) + G%bathyT(i,j)))
+!     CS%IDatu(I,j) = G%mask2dCu(i,j) * 2.0 / (G%GV%Rho0*(G%bathyT(i+1,j) + G%bathyT(i,j)))
 !   enddo ; enddo
 !   do J=js-1,je ; do i=is,ie
-!     CS%IDatv(i,J) = G%mask2dCv(i,j) * 2.0 / (G%Rho0*(G%bathyT(i,j+1) + G%bathyT(i,j)))
+!     CS%IDatv(i,J) = G%mask2dCv(i,j) * 2.0 / (G%GV%Rho0*(G%bathyT(i,j+1) + G%bathyT(i,j)))
 !   enddo ; enddo
 ! endif
 
@@ -4312,7 +4312,7 @@ subroutine register_barotropic_restarts(G, param_file, CS, restart_CS)
   call register_restart_field(CS%ubt_IC, vd(2), .false., restart_CS)
   call register_restart_field(CS%vbt_IC, vd(3), .false., restart_CS)
 
-  if (G%Boussinesq) then
+  if (G%GV%Boussinesq) then
    vd(2) = var_desc("uhbt_IC", "meter3 second-1", &
                 longname="Next initial condition for the barotropic zonal transport", &
                 hor_grid='u', z_grid='1')

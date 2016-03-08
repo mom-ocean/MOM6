@@ -426,7 +426,7 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, h, OBC, CS, sponge_CSp, &
 
 
   ! This needs to be changed if the units of tracer are changed above.
-  if (G%Boussinesq) then ; flux_units = "mol s-1"
+  if (G%GV%Boussinesq) then ; flux_units = "mol s-1"
   else ; flux_units = "mol m-3 kg s-1" ; endif
 
   do m=1,NTR
@@ -564,12 +564,12 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, CS)
   CFC11 => CS%CFC11 ; CFC12 => CS%CFC12
 
   ! These two calls unpack the fluxes from the input arrays.
-  !   The -G%Rho0 changes the sign convention of the flux and changes the units
+  !   The -G%GV%Rho0 changes the sign convention of the flux and changes the units
   ! of the flux from [Conc. m s-1] to [Conc. kg m-2 s-1].
   call extract_coupler_values(fluxes%tr_fluxes, CS%ind_cfc_11_flux, ind_flux, &
-                              CFC11_flux, is, ie, js, je, -G%Rho0)
+                              CFC11_flux, is, ie, js, je, -G%GV%Rho0)
   call extract_coupler_values(fluxes%tr_fluxes, CS%ind_cfc_12_flux, ind_flux, &
-                              CFC12_flux, is, ie, js, je, -G%Rho0)
+                              CFC12_flux, is, ie, js, je, -G%GV%Rho0)
 
   ! Use a tridiagonal solver to determine the concentrations after the
   ! surface source is applied and diapycnal advection and diffusion occurs.

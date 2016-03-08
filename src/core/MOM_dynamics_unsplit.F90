@@ -505,7 +505,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
                           CS%diffu, CS%diffv, G)
   endif
 
-  if (G%Boussinesq) then
+  if (G%GV%Boussinesq) then
     do j=js,je ; do i=is,ie ; eta_av(i,j) = -G%bathyT(i,j) ; enddo ; enddo
   else
     do j=js,je ; do i=is,ie ; eta_av(i,j) = 0.0 ; enddo ; enddo

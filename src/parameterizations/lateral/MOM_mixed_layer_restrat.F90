@@ -215,7 +215,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, CS)
 
   uDml(:) = 0.0 ; vDml(:) = 0.0
   I4dt = 0.25 / dt
-  g_Rho0 = G%g_Earth/G%Rho0
+  g_Rho0 = G%g_Earth/G%GV%Rho0
   h_neglect = G%H_subroundoff
   dz_neglect = G%H_subroundoff*G%H_to_m
 
@@ -459,7 +459,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
 
   uDml(:)    = 0.0 ; vDml(:) = 0.0
   I4dt       = 0.25 / dt
-  g_Rho0     = G%g_Earth/G%Rho0
+  g_Rho0     = G%g_Earth/G%GV%Rho0
   use_EOS    = associated(tv%eqn_of_state)
   h_neglect  = G%H_subroundoff
   dz_neglect = G%H_subroundoff*G%H_to_m
@@ -701,7 +701,7 @@ logical function mixedlayer_restrat_init(Time, G, param_file, diag, CS)
 
   CS%diag => diag
 
-  if (G%Boussinesq) then ; flux_units = "meter3 second-1"
+  if (G%GV%Boussinesq) then ; flux_units = "meter3 second-1"
   else ; flux_units = "kilogram second-1" ; endif
 
   CS%id_uhml = register_diag_field('ocean_model', 'uhml', diag%axesCuL, Time, &
