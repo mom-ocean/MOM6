@@ -620,8 +620,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 
     call cpu_clock_begin(id_clock_kpp)
     if (CS%debug) then
-      call hchksum(CS%KPP_temp_flux*G%H_to_m, "before KPP_applyNLT netHeat",G,haloshift=0)
-      call hchksum(CS%KPP_salt_flux*G%H_to_m, "before KPP_applyNLT netSalt",G,haloshift=0)
+      call hchksum(CS%KPP_temp_flux*G%GV%H_to_m, "before KPP_applyNLT netHeat",G,haloshift=0)
+      call hchksum(CS%KPP_salt_flux*G%GV%H_to_m, "before KPP_applyNLT netSalt",G,haloshift=0)
       call hchksum(CS%KPP_NLTheat, "before KPP_applyNLT NLTheat",G,haloshift=0)
       call hchksum(CS%KPP_NLTscalar, "before KPP_applyNLT NLTscalar",G,haloshift=0)
     endif
@@ -681,7 +681,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 !$OMP                          private(hval)
     do k=2,nz ; do j=js,je ; do i=is,ie
       hval=1.0/(h_neglect + 0.5*(h(i,j,k-1) + h(i,j,k)))
-      ea(i,j,k) = (G%m_to_H**2) * dt * hval * Kd_int(i,j,k)
+      ea(i,j,k) = (G%GV%m_to_H**2) * dt * hval * Kd_int(i,j,k)
       eb(i,j,k-1) = ea(i,j,k)
     enddo ; enddo ; enddo
     do j=js,je ; do i=is,ie
@@ -705,8 +705,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call MOM_forcing_chksum("after calc_entrain ", fluxes, G, haloshift=0)
     call MOM_thermovar_chksum("after calc_entrain ", tv, G)
     call MOM_state_chksum("after calc_entrain ", u(:,:,:), v(:,:,:), h(:,:,:), G)
-    call hchksum(G%H_to_m*ea, "after calc_entrain ea",G,haloshift=0)
-    call hchksum(G%H_to_m*eb, "after calc_entrain eb",G,haloshift=0)
+    call hchksum(G%GV%H_to_m*ea, "after calc_entrain ea",G,haloshift=0)
+    call hchksum(G%GV%H_to_m*eb, "after calc_entrain eb",G,haloshift=0)
   endif
 
   if (CS%id_Kd_ePBL > -1) Kd_ePBL(:,:,:) = 0.0
@@ -752,7 +752,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       ! Augment the diffusivities due to those diagnosed in energetic_PBL.
       do K=2,nz ; do j=js,je ; do i=is,ie
 
-        Ent_int = Kd_ePBL(i,j,K) * (G%m_to_H**2 * dt) / &
+        Ent_int = Kd_ePBL(i,j,K) * (G%GV%m_to_H**2 * dt) / &
                   (0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect)
         eb(i,j,k-1) = eb(i,j,k-1) + Ent_int
         ea(i,j,k) = ea(i,j,k) + Ent_int
@@ -933,8 +933,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
         eb(i,j,k) = eb(i,j,k) + ebml(i,j,k)
       enddo ; enddo ; enddo
       if (CS%debug) then
-        call hchksum(G%H_to_m*ea, "after ea = ea + eaml",G,haloshift=0)
-        call hchksum(G%H_to_m*eb, "after eb = eb + ebml",G,haloshift=0)
+        call hchksum(G%GV%H_to_m*ea, "after ea = ea + eaml",G,haloshift=0)
+        call hchksum(G%GV%H_to_m*eb, "after eb = eb + ebml",G,haloshift=0)
       endif
     endif
 
@@ -982,8 +982,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     if (ASSOCIATED(tv%T)) then
 
       if (CS%debug) then
-        call hchksum(G%H_to_m*ea, "before triDiagTS ea ",G,haloshift=0)
-        call hchksum(G%H_to_m*eb, "before triDiagTS eb ",G,haloshift=0)
+        call hchksum(G%GV%H_to_m*ea, "before triDiagTS ea ",G,haloshift=0)
+        call hchksum(G%GV%H_to_m*eb, "before triDiagTS eb ",G,haloshift=0)
       endif
       call cpu_clock_begin(id_clock_tridiag)
 
@@ -1086,7 +1086,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
           ! in the calculation of the fluxes in the first place.  Kd_min_tr
           ! should be much less than the values that have been set in Kd,
           ! perhaps a molecular diffusivity.
-          add_ent = ((dt * CS%Kd_min_tr) * G%m_to_H**2) * &
+          add_ent = ((dt * CS%Kd_min_tr) * G%GV%m_to_H**2) * &
                     ((h(i,j,k-1)+h(i,j,k)+h_neglect) / &
                      (h(i,j,k-1)*h(i,j,k)+h_neglect2)) - &
                     0.5*(ea(i,j,k) + eb(i,j,k-1))
@@ -1103,7 +1103,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
           ebtr(i,j,k-1) = eb(i,j,k-1) ; eatr(i,j,k) = ea(i,j,k)
         endif
         if (associated(visc%Kd_extra_S)) then ; if (visc%Kd_extra_S(i,j,k) > 0.0) then
-          add_ent = ((dt * visc%Kd_extra_S(i,j,k)) * G%m_to_H**2) / &
+          add_ent = ((dt * visc%Kd_extra_S(i,j,k)) * G%GV%m_to_H**2) / &
              (0.25 * ((h(i,j,k-1) + h(i,j,k)) + (hold(i,j,k-1) + hold(i,j,k))) + &
               h_neglect)
           ebtr(i,j,k-1) = ebtr(i,j,k-1) + add_ent
@@ -1125,7 +1125,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 !$OMP                          private(add_ent)
     do k=nz,2,-1 ; do j=js,je ; do i=is,ie
       if (visc%Kd_extra_S(i,j,k) > 0.0) then
-        add_ent = ((dt * visc%Kd_extra_S(i,j,k)) * G%m_to_H**2) / &
+        add_ent = ((dt * visc%Kd_extra_S(i,j,k)) * G%GV%m_to_H**2) / &
            (0.25 * ((h(i,j,k-1) + h(i,j,k)) + (hold(i,j,k-1) + hold(i,j,k))) + &
             h_neglect)
       else
@@ -1174,7 +1174,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 !$OMP do
     do j=js,je
       do K=2,nz ; do i=is,ie
-        CDp%diapyc_vel(i,j,K) = Idt * (G%H_to_m * (ea(i,j,k) - eb(i,j,k-1)))
+        CDp%diapyc_vel(i,j,K) = Idt * (G%GV%H_to_m * (ea(i,j,k) - eb(i,j,k-1)))
       enddo ; enddo
       do i=is,ie
         CDp%diapyc_vel(i,j,1) = 0.0
@@ -1457,7 +1457,7 @@ subroutine diagnose_diabatic_diff_tendency(tv, h, temp_old, saln_old, dt, G, CS)
   ! heat tendency
   if(CS%id_diabatic_diff_heat_tend > 0 .or. CS%id_diabatic_diff_heat_tend_2d > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
-      work_3d(i,j,k) = h(i,j,k) * G%H_to_kg_m2 * tv%C_p * work_3d(i,j,k)
+      work_3d(i,j,k) = h(i,j,k) * G%GV%H_to_kg_m2 * tv%C_p * work_3d(i,j,k)
     enddo ; enddo ; enddo
     if(CS%id_diabatic_diff_heat_tend > 0) then
       call post_data(CS%id_diabatic_diff_heat_tend, work_3d, CS%diag)
@@ -1484,7 +1484,7 @@ subroutine diagnose_diabatic_diff_tendency(tv, h, temp_old, saln_old, dt, G, CS)
   ! salt tendency
   if(CS%id_diabatic_diff_salt_tend > 0 .or. CS%id_diabatic_diff_salt_tend_2d > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
-      work_3d(i,j,k) = h(i,j,k) * G%H_to_kg_m2 * CS%ppt2mks * work_3d(i,j,k)
+      work_3d(i,j,k) = h(i,j,k) * G%GV%H_to_kg_m2 * CS%ppt2mks * work_3d(i,j,k)
     enddo ; enddo ; enddo
     if(CS%id_diabatic_diff_salt_tend > 0) then
       call post_data(CS%id_diabatic_diff_salt_tend, work_3d, CS%diag)
@@ -1538,7 +1538,7 @@ subroutine diagnose_boundary_forcing_tendency(tv, h, temp_old, saln_old, h_old, 
   ! heat tendency
   if(CS%id_boundary_forcing_heat_tend > 0 .or. CS%id_boundary_forcing_heat_tend_2d > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
-      work_3d(i,j,k) = G%H_to_kg_m2 * tv%C_p * Idt * (h(i,j,k) * tv%T(i,j,k) - h_old(i,j,k) * temp_old(i,j,k))
+      work_3d(i,j,k) = G%GV%H_to_kg_m2 * tv%C_p * Idt * (h(i,j,k) * tv%T(i,j,k) - h_old(i,j,k) * temp_old(i,j,k))
     enddo ; enddo ; enddo
     if(CS%id_boundary_forcing_heat_tend > 0) then
       call post_data(CS%id_boundary_forcing_heat_tend, work_3d, CS%diag)
@@ -1566,7 +1566,7 @@ subroutine diagnose_boundary_forcing_tendency(tv, h, temp_old, saln_old, h_old, 
   ! salt tendency
   if(CS%id_boundary_forcing_salt_tend > 0 .or. CS%id_boundary_forcing_salt_tend_2d > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
-      work_3d(i,j,k) = G%H_to_kg_m2 * CS%ppt2mks * Idt * (h(i,j,k) * tv%S(i,j,k) - h_old(i,j,k) * saln_old(i,j,k))
+      work_3d(i,j,k) = G%GV%H_to_kg_m2 * CS%ppt2mks * Idt * (h(i,j,k) * tv%S(i,j,k) - h_old(i,j,k) * saln_old(i,j,k))
     enddo ; enddo ; enddo
     if(CS%id_boundary_forcing_salt_tend > 0) then
       call post_data(CS%id_boundary_forcing_salt_tend, work_3d, CS%diag)
@@ -1626,7 +1626,7 @@ subroutine diagnose_frazil_tendency(tv, h, temp_old, dt, G, CS, ncall)
   if(CS%id_frazil_heat_tend > 0 .or. CS%id_frazil_heat_tend_2d > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
       CS%frazil_heat_diag(i,j,k) = CS%frazil_heat_diag(i,j,k) + &
-                                   G%H_to_kg_m2 * tv%C_p * h(i,j,k) * Idt * (tv%T(i,j,k)-temp_old(i,j,k))
+                                   G%GV%H_to_kg_m2 * tv%C_p * h(i,j,k) * Idt * (tv%T(i,j,k)-temp_old(i,j,k))
     enddo ; enddo ; enddo
     if(CS%id_frazil_heat_tend  > 0 .and. ncall == 2) then
       call post_data(CS%id_frazil_heat_tend, CS%frazil_heat_diag(:,:,:), CS%diag)

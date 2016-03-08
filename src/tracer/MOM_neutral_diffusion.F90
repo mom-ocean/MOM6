@@ -245,7 +245,7 @@ subroutine neutral_diffusion_calc_coeffs(G, h, T, S, EOS, CS)
     do k = 1, G%ke+1
       call calculate_density_derivs(Tint(:,j,k), Sint(:,j,k), Pint(:,j,k), &
                                     dRdT(:,j,k), dRdS(:,j,k), G%isc-1, G%iec-G%isc+3, EOS)
-      if (k<=G%ke) Pint(:,j,k+1) = Pint(:,j,k) + h(:,j,k) * G%H_to_Pa ! Pressure at next interface, k+1 (Pa)
+      if (k<=G%ke) Pint(:,j,k+1) = Pint(:,j,k) + h(:,j,k) * G%GV%H_to_Pa ! Pressure at next interface, k+1 (Pa)
     enddo
   enddo
 
@@ -269,8 +269,8 @@ subroutine neutral_diffusion_calc_coeffs(G, h, T, S, EOS, CS)
     enddo
   enddo
 
-  CS%uhEff(:,:,:) = CS%uhEff(:,:,:) / G%H_to_pa
-  CS%vhEff(:,:,:) = CS%vhEff(:,:,:) / G%H_to_pa
+  CS%uhEff(:,:,:) = CS%uhEff(:,:,:) / G%GV%H_to_pa
+  CS%vhEff(:,:,:) = CS%vhEff(:,:,:) / G%GV%H_to_pa
 
 end subroutine neutral_diffusion_calc_coeffs
 
@@ -305,8 +305,8 @@ subroutine neutral_diffusion(G, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
     tendency(:,:,:)  = 0.0
     tendency_2d(:,:) = 0.0
     convert          = 1.0 
-    if(trim(name) == 'T') convert = CS%C_p  * G%H_to_kg_m2
-    if(trim(name) == 'S') convert = ppt2mks * G%H_to_kg_m2
+    if(trim(name) == 'T') convert = CS%C_p  * G%GV%H_to_kg_m2
+    if(trim(name) == 'S') convert = ppt2mks * G%GV%H_to_kg_m2
   endif 
 
 

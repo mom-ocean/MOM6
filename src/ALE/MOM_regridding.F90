@@ -558,7 +558,7 @@ subroutine build_zstar_grid( CS, G, h, dzInterface )
       endif
 
       ! Local depth (G%bathyT is positive)
-      nominalDepth = G%bathyT(i,j)*G%m_to_H
+      nominalDepth = G%bathyT(i,j)*G%GV%m_to_H
 
       ! Determine water column thickness
       totalThickness = 0.0
@@ -674,7 +674,7 @@ subroutine buildGridSigma( CS, G, h, dzInterface )
       end do
 
       ! The rest of the model defines grids integrating up from the bottom
-      nominalDepth = G%bathyT(i,j)*G%m_to_H
+      nominalDepth = G%bathyT(i,j)*G%GV%m_to_H
       zOld(nz+1) = - nominalDepth
       zNew(nz+1) = - nominalDepth
       do k = nz,1,-1
@@ -888,7 +888,7 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
       end do ! end regridding iterations
 
       ! Local depth (G%bathyT is positive)
-      nominalDepth = G%bathyT(i,j)*G%m_to_H
+      nominalDepth = G%bathyT(i,j)*G%GV%m_to_H
 
       ! The rest of the model defines grids integrating up from the bottom
       totalThickness = 0.0
@@ -995,7 +995,7 @@ subroutine build_grid_HyCOM1( G, h, tv, dzInterface, remapCS, CS )
       do K = 1, nz
         z_col(K+1) = z_col(K) + h(i,j,k) ! Work in units of h (m or Pa)
         p_col(k) = CS%ref_pressure + CS%compressibility_fraction * &
-             ( 0.5 * ( z_col(K) + z_col(K+1) ) * G%H_to_Pa - CS%ref_pressure )
+             ( 0.5 * ( z_col(K) + z_col(K+1) ) * G%GV%H_to_Pa - CS%ref_pressure )
       enddo
 
       ! Work bottom recording potential density
@@ -1017,7 +1017,7 @@ subroutine build_grid_HyCOM1( G, h, tv, dzInterface, remapCS, CS )
       ! Sweep down the interfaces and make sure that the interface is at least
       ! as deep as a nominal target z* grid
       nominal_z = 0.
-      stretching = z_col(nz+1) / G%bathyT(i,j) * G%m_to_H ! Stretches z* to z
+      stretching = z_col(nz+1) / G%bathyT(i,j) * G%GV%m_to_H ! Stretches z* to z
       do k = 2, nz+1
         nominal_z = nominal_z + CS%coordinateResolution(k-1) * stretching
         z_col_new(k) = max( z_col_new(k), nominal_z )
@@ -1128,7 +1128,7 @@ subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
       do K=1,nz
         z_col(K+1) = z_col(K) + h_col(k) ! Work in units of h (m or Pa)
         p_col(k) = CS%ref_pressure + CS%compressibility_fraction * &
-             ( 0.5 * ( z_col(K) + z_col(K+1) ) * G%H_to_Pa - CS%ref_pressure )
+             ( 0.5 * ( z_col(K) + z_col(K+1) ) * G%GV%H_to_Pa - CS%ref_pressure )
       enddo
 
       if (z_col(nz+1) - z_col(1) < nz*CS%min_thickness) then
@@ -1189,7 +1189,7 @@ subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
         ! Determine which interfaces are in the s-space region and the depth extent
         ! of this region.
         z_wt = 0.0 ; rho_x_z = 0.0
-        H_ml_av = G%m_to_H*CS%Rho_ml_avg_depth
+        H_ml_av = G%GV%m_to_H*CS%Rho_ml_avg_depth
         do k=1,nz
           if (z_wt + h_col(k) >= H_ml_av) then
             rho_x_z = rho_x_z + rho_col(k) * (H_ml_av - z_wt)
@@ -1230,7 +1230,7 @@ subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
 !       ! z_int_unst and k_interior.
 
           if (CS%halocline_filter_length > 0.0) then
-            Lfilt = CS%halocline_filter_length*G%m_to_H
+            Lfilt = CS%halocline_filter_length*G%GV%m_to_H
 
             ! Filter the temperature and salnity with a fixed lengthscale.
             h_tr = h_col(1) + G%GV%H_subroundoff
@@ -1253,11 +1253,11 @@ subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
           T_int(1) = T_f(1) ; S_int(1) = S_f(1)
           do K=2,nz 
             T_int(K) = 0.5*(T_f(k-1) + T_f(k)) ; S_int(K) = 0.5*(S_f(k-1) + S_f(k))
-            p_IS(K) = z_col(K) * G%H_to_Pa
+            p_IS(K) = z_col(K) * G%GV%H_to_Pa
             p_R(K) = CS%ref_pressure + CS%compressibility_fraction * ( p_IS(K) - CS%ref_pressure )
           enddo
           T_int(nz+1) = T_f(nz) ; S_int(nz+1) = S_f(nz)
-          p_IS(nz+1) = z_col(nz+1) * G%H_to_Pa
+          p_IS(nz+1) = z_col(nz+1) * G%GV%H_to_Pa
           call calculate_density_derivs(T_int, S_int, p_IS, drhoIS_dT, drhoIS_dS, 2, nz-1, &
                                         tv%eqn_of_state)
           call calculate_density_derivs(T_int, S_int, p_R, drhoR_dT, drhoR_dS, 2, nz-1, &
@@ -1269,7 +1269,7 @@ subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
             do K=2,nz ; drho_dp(K) = 0.0 ; enddo
           endif
           
-          H_to_cPa = CS%compressibility_fraction*G%H_to_Pa
+          H_to_cPa = CS%compressibility_fraction*G%GV%H_to_Pa
           strat_rat(1) = 1.0
           do K=2,nz
             drIS = drhoIS_dT(K) * (T_f(k) - T_f(k-1)) + &
@@ -1712,7 +1712,7 @@ subroutine build_grid_arbitrary( G, h, dzInterface, h_new, CS )
     do i = G%isc-1,G%iec+1
 
       ! Local depth
-      local_depth = G%bathyT(i,j)*G%m_to_H
+      local_depth = G%bathyT(i,j)*G%GV%m_to_H
 
       ! Determine water column height
       total_height = 0.0

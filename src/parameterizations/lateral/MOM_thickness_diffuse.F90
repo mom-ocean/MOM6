@@ -315,7 +315,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
     call vchksum(Kh_v(:,:,:),"Kh_v",G,haloshift=0)
     call uchksum(int_slope_u(:,:,:),"int_slope_u",G,haloshift=0)
     call vchksum(int_slope_v(:,:,:),"int_slope_v",G,haloshift=0)
-    call hchksum(h(:,:,:)*G%H_to_m,"thickness_diffuse_1 h",G,haloshift=0)
+    call hchksum(h(:,:,:)*G%GV%H_to_m,"thickness_diffuse_1 h",G,haloshift=0)
     call hchksum(e(:,:,:),"thickness_diffuse_1 e",G,haloshift=0)
   endif
 
@@ -359,11 +359,11 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
   endif
 
   if (CS%debug) then
-    call uchksum(uhD(:,:,:)*G%H_to_m,"thickness_diffuse uhD",G,haloshift=0)
-    call vchksum(vhD(:,:,:)*G%H_to_m,"thickness_diffuse vhD",G,haloshift=0)
-    call uchksum(uhtr(:,:,:)*G%H_to_m,"thickness_diffuse uhtr",G,haloshift=0)
-    call vchksum(vhtr(:,:,:)*G%H_to_m,"thickness_diffuse vhtr",G,haloshift=0)
-    call hchksum(h(:,:,:)*G%H_to_m,"thickness_diffuse h",G,haloshift=0)
+    call uchksum(uhD(:,:,:)*G%GV%H_to_m,"thickness_diffuse uhD",G,haloshift=0)
+    call vchksum(vhD(:,:,:)*G%GV%H_to_m,"thickness_diffuse vhD",G,haloshift=0)
+    call uchksum(uhtr(:,:,:)*G%GV%H_to_m,"thickness_diffuse uhtr",G,haloshift=0)
+    call vchksum(vhtr(:,:,:)*G%GV%H_to_m,"thickness_diffuse vhtr",G,haloshift=0)
+    call hchksum(h(:,:,:)*G%GV%H_to_m,"thickness_diffuse h",G,haloshift=0)
   endif
 
   ! offer diagnostic fields for averaging
@@ -530,9 +530,9 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
 
   I4dt = 0.25 / dt
   I_slope_max2 = 1.0 / (CS%slope_max**2)
-  G_scale = G%g_Earth * G%H_to_m
+  G_scale = G%g_Earth * G%GV%H_to_m
   h_neglect = G%GV%H_subroundoff ; h_neglect2 = h_neglect**2
-  dz_neglect = G%GV%H_subroundoff*G%H_to_m
+  dz_neglect = G%GV%H_subroundoff*G%GV%H_to_m
 
   use_EOS = associated(tv%eqn_of_state)
   MEKE_not_null = (LOC(MEKE) .NE. 0)
@@ -562,7 +562,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
     h_avail(i,j,1) = max(I4dt*G%areaT(i,j)*(h(i,j,1)-G%GV%Angstrom),0.0)
     h_avail_rsum(i,j,2) = h_avail(i,j,1)
     h_frac(i,j,1) = 1.0
-    pres(i,j,2) = pres(i,j,1) + G%H_to_Pa*h(i,j,1)
+    pres(i,j,2) = pres(i,j,1) + G%GV%H_to_Pa*h(i,j,1)
   enddo ; enddo
 !$OMP do
   do j=js-1,je+1
@@ -571,7 +571,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
       h_avail_rsum(i,j,k+1) = h_avail_rsum(i,j,k) + h_avail(i,j,k)
       h_frac(i,j,k) = 0.0 ; if (h_avail(i,j,k) > 0.0) &
         h_frac(i,j,k) = h_avail(i,j,k) / h_avail_rsum(i,j,k+1)
-      pres(i,j,K+1) = pres(i,j,K) + G%H_to_Pa*h(i,j,k)
+      pres(i,j,K+1) = pres(i,j,K) + G%GV%H_to_Pa*h(i,j,k)
     enddo ; enddo
   enddo
 !$OMP do
@@ -650,7 +650,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
             haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
             haR = 0.5*(h(i+1,j,k-1) + h(i+1,j,k)) + h_neglect
             if (G%GV%Boussinesq) then
-              dzaL = haL * G%H_to_m ; dzaR = haR * G%H_to_m
+              dzaL = haL * G%GV%H_to_m ; dzaR = haR * G%GV%H_to_m
             else
               dzaL = 0.5*(e(i,j,K-1) - e(i,j,K+1)) + dz_neglect
               dzaR = 0.5*(e(i+1,j,K-1) - e(i+1,j,K+1)) + dz_neglect
@@ -690,7 +690,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
           if (CS%id_slope_x > 0) CS%diagSlopeX(I,j,k) = Slope
 
           ! Estimate the streamfunction at each interface.
-          Sfn_unlim = -((KH_u(I,j,K)*G%dy_Cu(I,j))*Slope) * G%m_to_H
+          Sfn_unlim = -((KH_u(I,j,K)*G%dy_Cu(I,j))*Slope) * G%GV%m_to_H
           if (uhtot(I,j) <= 0.0) then
             ! The transport that must balance the transport below is positive.
             Sfn_safe = uhtot(I,j) * (1.0 - h_frac(i,j,k))
@@ -723,10 +723,10 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
           if (present_slope_x) then
             Slope = slope_x(I,j,k)
           else
-            Slope = ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) * G%m_to_H
+            Slope = ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) * G%GV%m_to_H
           endif
           Sfn_est = (KH_u(I,j,K)*G%dy_Cu(I,j)) * Slope
-                  !  ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j))) * G%m_to_H
+                  !  ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j))) * G%GV%m_to_H
           if (CS%id_slope_x > 0) CS%diagSlopeX(I,j,k) = Slope
         endif
 
@@ -843,7 +843,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
             haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
             haR = 0.5*(h(i,j+1,k-1) + h(i,j+1,k)) + h_neglect
             if (G%GV%Boussinesq) then
-              dzaL = haL * G%H_to_m ; dzaR = haR * G%H_to_m
+              dzaL = haL * G%GV%H_to_m ; dzaR = haR * G%GV%H_to_m
             else
               dzaL = 0.5*(e(i,j,K-1) - e(i,j,K+1)) + dz_neglect
               dzaR = 0.5*(e(i,j+1,K-1) - e(i,j+1,K+1)) + dz_neglect
@@ -883,7 +883,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
           if (CS%id_slope_y > 0) CS%diagSlopeY(I,j,k) = Slope
 
           ! Estimate the streamfunction at each interface.
-          Sfn_unlim = -((KH_v(i,J,K)*G%dx_Cv(i,J))*Slope) * G%m_to_H
+          Sfn_unlim = -((KH_v(i,J,K)*G%dx_Cv(i,J))*Slope) * G%GV%m_to_H
           if (vhtot(i,J) <= 0.0) then
             Sfn_safe = vhtot(i,J) * (1.0 - h_frac(i,j,k))
           else !  (vhtot(I,j) > 0.0)
@@ -916,10 +916,10 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
           if (present_slope_y) then
             Slope = slope_y(i,J,k)
           else
-            Slope = ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * G%m_to_H
+            Slope = ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * G%GV%m_to_H
           endif
           Sfn_est = (KH_v(i,J,K)*G%dx_Cv(i,J)) * Slope
-                  !  ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J))) * G%m_to_H
+                  !  ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J))) * G%GV%m_to_H
           if (CS%id_slope_y > 0) CS%diagSlopeY(I,j,k) = Slope
         endif
 
@@ -1405,7 +1405,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, CS
 !               Sfn(K+1) = -Kh(i,K+1) * (e(i+1,j,K+1)-e(i,j,K+1)) * G%IdxCu(I,j)
 !               uh_here(k) = (Sfn(K) - Sfn(K+1))*G%dy_Cu(I,j)
 !               if (abs(uh_here(k))*min(G%IareaT(i,j), G%IareaT(i+1,j)) > &
-!                   (1e-10*G%m_to_H)) then
+!                   (1e-10*G%GV%m_to_H)) then
 !                 if (uh_here(k) * (h(i+1,j,k) - h(i,j,k)) > 0.0) then
 !                   call MOM_error(WARNING, &
 !                          "Corrective u-transport is up the thickness gradient.", .true.)
@@ -1425,7 +1425,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, CS
 !               Sfn(K+1) = -Kh(i,K+1) * (e(i,j+1,K+1)-e(i,j,K+1)) * G%IdyCv(i,J)
 !               uh_here(k) = (Sfn(K) - Sfn(K+1))*G%dx_Cv(i,J)
 !               if (abs(uh_here(K))*min(G%IareaT(i,j), G%IareaT(i,j+1)) > &
-!                   (1e-10*G%m_to_H)) then
+!                   (1e-10*G%GV%m_to_H)) then
 !                 if (uh_here(K) * (h(i,j+1,k) - h(i,j,k)) > 0.0) then
 !                   call MOM_error(WARNING, &
 !                          "Corrective v-transport is up the thickness gradient.", .true.)
@@ -1513,8 +1513,8 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, halo_here)
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
   nz = G%ke
   h_neglect = G%GV%H_subroundoff
-  kap_dt_x2 = (2.0*kappa*dt)*G%m_to_H**2
-  h0 = 1.0e-16*sqrt(kappa*dt)*G%m_to_H
+  kap_dt_x2 = (2.0*kappa*dt)*G%GV%m_to_H**2
+  h0 = 1.0e-16*sqrt(kappa*dt)*G%GV%m_to_H
 
   if (kap_dt_x2 <= 0.0) then
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,T_f,T_in,S_f,S_in)

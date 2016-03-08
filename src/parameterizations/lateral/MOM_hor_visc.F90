@@ -604,7 +604,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
 
     if (find_FrictWork) then ; do j=js,je ; do i=is,ie
     ! Diagnose   str_xx*d_x u - str_yy*d_y v + str_xy*(d_y u + d_x v)
-      FrictWork(i,j,k) = G%H_to_kg_m2 * ( &
+      FrictWork(i,j,k) = G%GV%H_to_kg_m2 * ( &
               (str_xx(i,j)*(u(i,j,k)-u(i-1,j,k))*G%IdxT(i,j)     &
               -str_xx(i,j)*(v(i,j,k)-v(i,j-1,k))*G%IdyT(i,j))    &
        +0.25*((str_xy(i,j)*(                                     &
@@ -644,7 +644,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
           ! RoScl = 1 - g(Ro)
           RoScl = Shear_mag / ( FatH + Shear_mag ) ! = 1 - f^n/(f^n+c*D^n)
           MEKE%mom_src(i,j) = MEKE%mom_src(i,j) +                                     &
-                           G%H_to_kg_m2 * (                                           &
+                           G%GV%H_to_kg_m2 * (                                           &
                 ((str_xx(i,j)-RoScl*bhstr_xx(i,j))*(u(i,j,k)-u(i-1,j,k))*G%IdxT(i,j)  &
                 -(str_xx(i,j)-RoScl*bhstr_xx(i,j))*(v(i,j,k)-v(i,j-1,k))*G%IdyT(i,j)) &
          +0.25*(((str_xy(i,j)-RoScl*bhstr_xy(i,j))*(                                  &

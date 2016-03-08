@@ -211,7 +211,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, N2_bot)
       endif
       do K=2,nz
         do i=is,ie
-          pres(i) = pres(i) + G%H_to_Pa*h(i,j,k-1)
+          pres(i) = pres(i) + G%GV%H_to_Pa*h(i,j,k-1)
           Temp_Int(i) = 0.5 * (T_f(i,j,k) + T_f(i,j,k-1))
           Salin_Int(i) = 0.5 * (S_f(i,j,k) + S_f(i,j,k-1))
         enddo
@@ -231,7 +231,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, N2_bot)
     ! Find the bottom boundary layer stratification.
     do i=is,ie
       hb(i) = 0.0 ; dRho_bot(i) = 0.0
-      z_from_bot(i) = 0.5*G%H_to_m*h(i,j,nz)
+      z_from_bot(i) = 0.5*G%GV%H_to_m*h(i,j,nz)
       do_i(i) = (G%mask2dT(i,j) > 0.5)
       h_amp(i) = sqrt(h2(i,j))
     enddo
@@ -239,7 +239,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, N2_bot)
     do k=nz,2,-1
       do_any = .false.
       do i=is,ie ; if (do_i(i)) then
-        dz_int = 0.5*G%H_to_m*(h(i,j,k) + h(i,j,k-1))
+        dz_int = 0.5*G%GV%H_to_m*(h(i,j,k) + h(i,j,k-1))
         z_from_bot(i) = z_from_bot(i) + dz_int ! middle of the layer above
 
         hb(i) = hb(i) + dz_int
@@ -248,7 +248,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, N2_bot)
         if (z_from_bot(i) > h_amp(i)) then
           if (k>2) then
             ! Always include at least one full layer.
-            hb(i) = hb(i) + 0.5*G%H_to_m*(h(i,j,k-1) + h(i,j,k-2))
+            hb(i) = hb(i) + 0.5*G%GV%H_to_m*(h(i,j,k-1) + h(i,j,k-2))
             dRho_bot(i) = dRho_bot(i) + dRho_int(i,K-1)
           endif
           do_i(i) = .false.

@@ -580,7 +580,7 @@ subroutine calc_slope_functions_using_just_e(h, G, CS, e, calculate_slopes)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  one_meter = 1.0 * G%m_to_H
+  one_meter = 1.0 * G%GV%m_to_H
   h_neglect = G%GV%H_subroundoff
   H_cutoff = real(2*nz) * (G%GV%Angstrom + h_neglect)
 
@@ -640,10 +640,10 @@ subroutine calc_slope_functions_using_just_e(h, G, CS, e, calculate_slopes)
       Hdn = 2.*h(i,j,k)*h(i,j,k-1) / (h(i,j,k) + h(i,j,k-1) + h_neglect)
       Hup = 2.*h(i+1,j,k)*h(i+1,j,k-1) / (h(i+1,j,k) + h(i+1,j,k-1) + h_neglect)
       H_geom = sqrt(Hdn*Hup)
-      N2 = G%GV%g_prime(k) / (G%H_to_m * max(Hdn,Hup,one_meter))
+      N2 = G%GV%g_prime(k) / (G%GV%H_to_m * max(Hdn,Hup,one_meter))
       if (min(h(i,j,k-1), h(i+1,j,k-1), h(i,j,k), h(i+1,j,k)) < H_cutoff) &
         S2 = 0.0
-      SN_u_local(I,j,k) = (H_geom * G%H_to_m) * S2 * N2
+      SN_u_local(I,j,k) = (H_geom * G%GV%H_to_m) * S2 * N2
     enddo ; enddo
     do J=js-1,je ; do i=is,ie
       S2 = ( E_y(i,J)**2  + 0.25*( &
@@ -651,10 +651,10 @@ subroutine calc_slope_functions_using_just_e(h, G, CS, e, calculate_slopes)
       Hdn = 2.*h(i,j,k)*h(i,j,k-1) / (h(i,j,k) + h(i,j,k-1) + h_neglect)
       Hup = 2.*h(i,j+1,k)*h(i,j+1,k-1) / (h(i,j+1,k) + h(i,j+1,k-1) + h_neglect)
       H_geom = sqrt(Hdn*Hup)
-      N2 = G%GV%g_prime(k) / (G%H_to_m * max(Hdn,Hup,one_meter))
+      N2 = G%GV%g_prime(k) / (G%GV%H_to_m * max(Hdn,Hup,one_meter))
       if (min(h(i,j,k-1), h(i,j+1,k-1), h(i,j,k), h(i,j+1,k)) < H_cutoff) &
         S2 = 0.0
-      SN_v_local(i,J,k) = (H_geom * G%H_to_m) * S2 * N2
+      SN_v_local(i,J,k) = (H_geom * G%GV%H_to_m) * S2 * N2
     enddo ; enddo
 
   enddo ! k

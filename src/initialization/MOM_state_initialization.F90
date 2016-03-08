@@ -330,13 +330,13 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
       call convert_thickness(h, G, PF, tv)
     elseif (G%GV%Boussinesq) then
       ! Convert h from m to thickness units (H)
-      h(:,:,:) = h(:,:,:)*G%m_to_H
+      h(:,:,:) = h(:,:,:)*G%GV%m_to_H
     else
-      h(:,:,:) = h(:,:,:)*G%kg_m2_to_H
+      h(:,:,:) = h(:,:,:)*G%GV%kg_m2_to_H
     endif
 
     if (debug) then
-      call hchksum(h*G%H_to_m, "MOM_initialize_state: h ", G, haloshift=1)
+      call hchksum(h*G%GV%H_to_m, "MOM_initialize_state: h ", G, haloshift=1)
       if ( use_temperature ) call hchksum(tv%T, "MOM_initialize_state: T ", G, haloshift=1)
       if ( use_temperature ) call hchksum(tv%S, "MOM_initialize_state: S ", G, haloshift=1)
     endif
@@ -705,12 +705,12 @@ subroutine convert_thickness(h, G, param_file, tv)
         enddo
 
         do j=js,je ; do i=is,ie
-          h(i,j,k) = (p_bot(i,j) - p_top(i,j)) * G%kg_m2_to_H * I_gEarth
+          h(i,j,k) = (p_bot(i,j) - p_top(i,j)) * G%GV%kg_m2_to_H * I_gEarth
         enddo ; enddo
       enddo
     else
       do k=1,nz ; do j=js,je ; do i=is,ie
-        h(i,j,k) = h(i,j,k) * G%GV%Rlay(k) * G%kg_m2_to_H
+        h(i,j,k) = h(i,j,k) * G%GV%Rlay(k) * G%GV%kg_m2_to_H
       enddo ; enddo ; enddo
     endif
   endif
@@ -1415,7 +1415,7 @@ subroutine set_Open_Bdry_Conds(OBC, tv, G, param_file, tracer_Reg)
       if (OBC_mask_v(i,J)) then
         ! An appropriate expression for the meridional inflow velocities and
         ! transports should go here.
-        OBC%vh(i,J,k) = 0.0 * G%m_to_H ; OBC%v(i,J,k) = 0.0
+        OBC%vh(i,J,k) = 0.0 * G%GV%m_to_H ; OBC%v(i,J,k) = 0.0
       else
         OBC%vh(i,J,k) = 0.0 ; OBC%v(i,J,k) = 0.0
       endif
@@ -1427,7 +1427,7 @@ subroutine set_Open_Bdry_Conds(OBC, tv, G, param_file, tracer_Reg)
       if (OBC_mask_u(I,j)) then
         ! An appropriate expression for the zonal inflow velocities and
         ! transports should go here.
-        OBC%uh(I,j,k) = 0.0 * G%m_to_H ; OBC%u(I,j,k) = 0.0
+        OBC%uh(I,j,k) = 0.0 * G%GV%m_to_H ; OBC%u(I,j,k) = 0.0
       else
         OBC%uh(I,j,k) = 0.0 ; OBC%u(I,j,k) = 0.0
       endif

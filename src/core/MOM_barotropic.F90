@@ -1375,7 +1375,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
         ! Limit the sink (inward) correction to the amount of mass that is already
         ! inside the cell, plus any mass added by eta_source.
         Htot = eta(i,j)
-        if (G%GV%Boussinesq) Htot = CS%bathyT(i,j)*G%m_to_H + eta(i,j)
+        if (G%GV%Boussinesq) Htot = CS%bathyT(i,j)*G%GV%m_to_H + eta(i,j)
 
         CS%eta_cor(i,j) = max(CS%eta_cor(i,j), -max(0.0,Htot + dt*CS%eta_source(i,j)))
       endif
@@ -1393,7 +1393,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   if (CS%dynamic_psurf) then
     ice_is_rigid = (associated(fluxes%rigidity_ice_u) .and. &
                     associated(fluxes%rigidity_ice_v))
-    H_min_dyn = G%m_to_H * CS%Dmin_dyn_psurf
+    H_min_dyn = G%GV%m_to_H * CS%Dmin_dyn_psurf
     if (ice_is_rigid .and. use_BT_cont) &
       call BT_cont_to_face_areas(BT_cont, Datu, Datv, G, MS, 0, .true.)
     if (ice_is_rigid) then
@@ -1427,7 +1427,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
                       (CS%ice_strength_length**2 * dtbt)
 
       ! Units of dyn_coef: m2 s-2 H-1
-      dyn_coef_eta(I,j) = min(dyn_coef_max, ice_strength * G%H_to_m)
+      dyn_coef_eta(I,j) = min(dyn_coef_max, ice_strength * G%GV%H_to_m)
     enddo ; enddo ; endif
   endif
 
@@ -1460,27 +1460,27 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   endif
 
   if (CS%debug) then
-    call uchksum(uhbt*G%H_to_m, "BT uhbt",CS%debug_BT_G,haloshift=0)
-    call vchksum(vhbt*G%H_to_m, "BT vhbt",CS%debug_BT_G,haloshift=0)
+    call uchksum(uhbt*G%GV%H_to_m, "BT uhbt",CS%debug_BT_G,haloshift=0)
+    call vchksum(vhbt*G%GV%H_to_m, "BT vhbt",CS%debug_BT_G,haloshift=0)
     call uchksum(ubt, "BT Initial ubt",CS%debug_BT_G,haloshift=0)
     call vchksum(vbt, "BT Initial vbt",CS%debug_BT_G,haloshift=0)
-    call hchksum(G%H_to_kg_m2*eta, "BT Initial eta",CS%debug_BT_G,haloshift=0)
+    call hchksum(G%GV%H_to_kg_m2*eta, "BT Initial eta",CS%debug_BT_G,haloshift=0)
     call uchksum(BT_force_u, "BT BT_force_u",CS%debug_BT_G,haloshift=0)
     call vchksum(BT_force_v, "BT BT_force_v",CS%debug_BT_G,haloshift=0)
     if (interp_eta_PF) then
-      call hchksum(G%H_to_kg_m2*eta_PF_1, "BT eta_PF_1",CS%debug_BT_G,haloshift=0)
-      call hchksum(G%H_to_kg_m2*d_eta_PF, "BT d_eta_PF",CS%debug_BT_G,haloshift=0)
+      call hchksum(G%GV%H_to_kg_m2*eta_PF_1, "BT eta_PF_1",CS%debug_BT_G,haloshift=0)
+      call hchksum(G%GV%H_to_kg_m2*d_eta_PF, "BT d_eta_PF",CS%debug_BT_G,haloshift=0)
     else
-      call hchksum(G%H_to_kg_m2*eta_PF, "BT eta_PF",CS%debug_BT_G,haloshift=0)
-      call hchksum(G%H_to_kg_m2*eta_PF_in, "BT eta_PF_in",G,haloshift=0)
+      call hchksum(G%GV%H_to_kg_m2*eta_PF, "BT eta_PF",CS%debug_BT_G,haloshift=0)
+      call hchksum(G%GV%H_to_kg_m2*eta_PF_in, "BT eta_PF_in",G,haloshift=0)
     endif
     call uchksum(Cor_ref_u, "BT Cor_ref_u",CS%debug_BT_G,haloshift=0)
     call vchksum(Cor_ref_v, "BT Cor_ref_v",CS%debug_BT_G,haloshift=0)
-    call uchksum(uhbt0*G%H_to_m, "BT uhbt0",CS%debug_BT_G,haloshift=0)
-    call vchksum(vhbt0*G%H_to_m, "BT vhbt0",CS%debug_BT_G,haloshift=0)
+    call uchksum(uhbt0*G%GV%H_to_m, "BT uhbt0",CS%debug_BT_G,haloshift=0)
+    call vchksum(vhbt0*G%GV%H_to_m, "BT vhbt0",CS%debug_BT_G,haloshift=0)
     if (.not. use_BT_cont) then
-      call uchksum(G%H_to_m*Datu, "BT Datu",CS%debug_BT_G,haloshift=1)
-      call vchksum(G%H_to_m*Datv, "BT Datv",CS%debug_BT_G,haloshift=1)
+      call uchksum(G%GV%H_to_m*Datu, "BT Datu",CS%debug_BT_G,haloshift=1)
+      call vchksum(G%GV%H_to_m*Datv, "BT Datv",CS%debug_BT_G,haloshift=1)
     endif
     call uchksum(wt_u, "BT wt_u",G,haloshift=1)
     call vchksum(wt_v, "BT wt_v",G,haloshift=1)
@@ -1969,8 +1969,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     endif
 
     if (CS%debug_bt) then
-      call uchksum(uhbt*G%H_to_m, "BT uhbt just after OBC",CS%debug_BT_G,haloshift=iev-ie)
-      call vchksum(vhbt*G%H_to_m, "BT vhbt just after OBC",CS%debug_BT_G,haloshift=iev-ie)
+      call uchksum(uhbt*G%GV%H_to_m, "BT uhbt just after OBC",CS%debug_BT_G,haloshift=iev-ie)
+      call vchksum(vhbt*G%GV%H_to_m, "BT vhbt just after OBC",CS%debug_BT_G,haloshift=iev-ie)
     endif
 
 !$OMP parallel do default(none) shared(isv,iev,jsv,jev,n,eta,eta_src,dtbt,CS,uhbt,vhbt,eta_wtd,wt_eta)
@@ -1998,7 +1998,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       write(mesg,'("BT step ",I4)') n
       call uchksum(ubt, trim(mesg)//" ubt",CS%debug_BT_G,haloshift=iev-ie)
       call vchksum(vbt, trim(mesg)//" vbt",CS%debug_BT_G,haloshift=iev-ie)
-      call hchksum(G%H_to_kg_m2*eta, trim(mesg)//" eta",CS%debug_BT_G,haloshift=iev-ie)
+      call hchksum(G%GV%H_to_kg_m2*eta, trim(mesg)//" eta",CS%debug_BT_G,haloshift=iev-ie)
     endif
 
   enddo ! end of do n=1,ntimestep
@@ -2279,8 +2279,8 @@ subroutine set_dtbt(G, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
     enddo ; enddo ; enddo
   else
     do j=js,je ; do i=is,ie
-      gtot_E(i,j) = gtot_est * G%H_to_m ; gtot_W(i,j) = gtot_est * G%H_to_m
-      gtot_N(i,j) = gtot_est * G%H_to_m ; gtot_S(i,j) = gtot_est * G%H_to_m
+      gtot_E(i,j) = gtot_est * G%GV%H_to_m ; gtot_W(i,j) = gtot_est * G%GV%H_to_m
+      gtot_N(i,j) = gtot_est * G%GV%H_to_m ; gtot_S(i,j) = gtot_est * G%GV%H_to_m
     enddo ; enddo
   endif
 
@@ -2657,8 +2657,8 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, MS, halo, use_BT_cont, Datu, Datv,
         BT_OBC%Cg_u(I,j) = SQRT(G%GV%g_prime(1)*(0.5* &
                                 (G%bathyT(i,j) + G%bathyT(i+1,j))))
         if (G%GV%Boussinesq) then
-          BT_OBC%H_u(I,j) = 0.5*((G%bathyT(i,j)*G%m_to_H + eta(i,j)) + &
-                                 (G%bathyT(i+1,j)*G%m_to_H + eta(i+1,j)))
+          BT_OBC%H_u(I,j) = 0.5*((G%bathyT(i,j)*G%GV%m_to_H + eta(i,j)) + &
+                                 (G%bathyT(i+1,j)*G%GV%m_to_H + eta(i+1,j)))
         else
           BT_OBC%H_u(I,j) = 0.5*(eta(i,j) + eta(i+1,j))
         endif
@@ -2693,8 +2693,8 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, MS, halo, use_BT_cont, Datu, Datv,
         BT_OBC%Cg_v(i,J) = SQRT(G%GV%g_prime(1)*(0.5* &
                                 (G%bathyT(i,j) + G%bathyT(i,j+1))))
         if (G%GV%Boussinesq) then
-          BT_OBC%H_v(i,J) = 0.5*((G%bathyT(i,j)*G%m_to_H + eta(i,j)) + &
-                                 (G%bathyT(i,j+1)*G%m_to_H + eta(i,j+1)))
+          BT_OBC%H_v(i,J) = 0.5*((G%bathyT(i,j)*G%GV%m_to_H + eta(i,j)) + &
+                                 (G%bathyT(i,j+1)*G%GV%m_to_H + eta(i,j+1)))
         else
           BT_OBC%H_v(i,J) = 0.5*(eta(i,j) + eta(i,j+1))
         endif
@@ -2832,8 +2832,8 @@ subroutine btcalc(h, G, CS, h_u, h_v, may_use_default)
         enddo ; enddo
       elseif (CS%hvel_scheme == HYBRID .or. use_default) then
         do I=is-2,ie+1
-          e_u(I,nz+1) = -0.5 * G%m_to_H * (G%bathyT(i+1,j) + G%bathyT(i,j))
-          D_shallow_u(I) = -G%m_to_H * min(G%bathyT(i+1,j), G%bathyT(i,j))
+          e_u(I,nz+1) = -0.5 * G%GV%m_to_H * (G%bathyT(i+1,j) + G%bathyT(i,j))
+          D_shallow_u(I) = -G%GV%m_to_H * min(G%bathyT(i+1,j), G%bathyT(i,j))
           hatutot(I) = 0.0
         enddo
         do k=nz,1,-1 ; do I=is-2,ie+1
@@ -2895,8 +2895,8 @@ subroutine btcalc(h, G, CS, h_u, h_v, may_use_default)
         enddo ; enddo
       elseif (CS%hvel_scheme == HYBRID .or. use_default) then
         do i=is-1,ie+1
-          e_v(i,nz+1) = -0.5 * G%m_to_H * (G%bathyT(i,j+1) + G%bathyT(i,j))
-          D_shallow_v(I) = -G%m_to_H * min(G%bathyT(i,j+1), G%bathyT(i,j))
+          e_v(i,nz+1) = -0.5 * G%GV%m_to_H * (G%bathyT(i,j+1) + G%bathyT(i,j))
+          D_shallow_v(I) = -G%GV%m_to_H * min(G%bathyT(i,j+1), G%bathyT(i,j))
           hatvtot(I) = 0.0
         enddo
         do k=nz,1,-1 ; do i=is-1,ie+1
@@ -2937,7 +2937,7 @@ subroutine btcalc(h, G, CS, h_u, h_v, may_use_default)
   if (CS%debug) then
     call uchksum(CS%frhatu, "btcalc frhatu",G,haloshift=1)
     call vchksum(CS%frhatv, "btcalc frhatv",G,haloshift=1)
-    call hchksum(G%H_to_m*h, "btcalc h",G,haloshift=1)
+    call hchksum(G%GV%H_to_m*h, "btcalc h",G,haloshift=1)
   endif
 
 end subroutine btcalc
@@ -3487,14 +3487,14 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, eta, halo, add_max)
     if (G%GV%Boussinesq) then
 !$OMP do
       do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
-        H1 = CS%bathyT(i,j)*G%m_to_H + eta(i,j) ; H2 = CS%bathyT(i+1,j)*G%m_to_H + eta(i+1,j)
+        H1 = CS%bathyT(i,j)*G%GV%m_to_H + eta(i,j) ; H2 = CS%bathyT(i+1,j)*G%GV%m_to_H + eta(i+1,j)
         Datu(I,j) = 0.0 ; if ((H1 > 0.0) .and. (H2 > 0.0)) &
         Datu(I,j) = CS%dy_Cu(I,j) * (2.0 * H1 * H2) / (H1 + H2)
 !       Datu(I,j) = CS%dy_Cu(I,j) * 0.5 * (H1 + H2)
       enddo ; enddo
 !$OMP do
       do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
-        H1 = CS%bathyT(i,j)*G%m_to_H + eta(i,j) ; H2 = CS%bathyT(i,j+1)*G%m_to_H + eta(i,j+1)
+        H1 = CS%bathyT(i,j)*G%GV%m_to_H + eta(i,j) ; H2 = CS%bathyT(i,j+1)*G%GV%m_to_H + eta(i,j+1)
         Datv(i,J) = 0.0 ; if ((H1 > 0.0) .and. (H2 > 0.0)) &
         Datv(i,J) = CS%dx_Cv(i,J) * (2.0 * H1 * H2) / (H1 + H2)
 !       Datv(i,J) = CS%dy_v(i,J) * 0.5 * (H1 + H2)
@@ -3518,12 +3518,12 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, eta, halo, add_max)
   elseif (present(add_max)) then
 !$OMP do
     do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
-      Datu(I,j) = CS%dy_Cu(I,j) * G%m_to_H * &
+      Datu(I,j) = CS%dy_Cu(I,j) * G%GV%m_to_H * &
                   (max(CS%bathyT(i+1,j), CS%bathyT(i,j)) + add_max)
     enddo ; enddo
 !$OMP do
     do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
-      Datv(i,J) = CS%dx_Cv(i,J) * G%m_to_H * &
+      Datv(i,J) = CS%dx_Cv(i,J) * G%GV%m_to_H * &
                   (max(CS%bathyT(i,j+1), CS%bathyT(i,j)) + add_max)
     enddo ; enddo
   else
@@ -3531,7 +3531,7 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, eta, halo, add_max)
     do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
       !Would be "if (G%mask2dCu(I,j)>0.) &" is G was valid on BT domain
       if (CS%bathyT(i+1,j)+CS%bathyT(i,j)>0.) &
-        Datu(I,j) = 2.0*CS%dy_Cu(I,j) * G%m_to_H * &
+        Datu(I,j) = 2.0*CS%dy_Cu(I,j) * G%GV%m_to_H * &
                   (CS%bathyT(i+1,j) * CS%bathyT(i,j)) / &
                   (CS%bathyT(i+1,j) + CS%bathyT(i,j))
     enddo ; enddo
@@ -3539,7 +3539,7 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, eta, halo, add_max)
     do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
       !Would be "if (G%mask2dCv(i,J)>0.) &" is G was valid on BT domain
       if (CS%bathyT(i,j+1)+CS%bathyT(i,j)>0.) &
-        Datv(i,J) = 2.0*CS%dx_Cv(i,J) * G%m_to_H * &
+        Datv(i,J) = 2.0*CS%dx_Cv(i,J) * G%GV%m_to_H * &
                   (CS%bathyT(i,j+1) * CS%bathyT(i,j)) / &
                   (CS%bathyT(i,j+1) + CS%bathyT(i,j))
     enddo ; enddo
@@ -3597,7 +3597,7 @@ subroutine bt_mass_source(h, eta, fluxes, set_cor, dt_therm, dt_since_therm, &
   do j=js,je
     do i=is,ie ; h_tot(i) = h(i,j,1) ; enddo
     if (G%GV%Boussinesq) then
-      do i=is,ie ; eta_h(i) = h(i,j,1) - G%bathyT(i,j)*G%m_to_H ; enddo
+      do i=is,ie ; eta_h(i) = h(i,j,1) - G%bathyT(i,j)*G%GV%m_to_H ; enddo
     else
       do i=is,ie ; eta_h(i) = h(i,j,1) ; enddo
     endif
@@ -3629,7 +3629,7 @@ subroutine bt_mass_source(h, eta, fluxes, set_cor, dt_therm, dt_since_therm, &
           CS%eta_source(i,j) = CS%eta_source(i,j) + fluxes%evap(i,j)
         enddo ; endif
         do i=is,ie
-          CS%eta_source(i,j) = CS%eta_source(i,j)*G%kg_m2_to_H
+          CS%eta_source(i,j) = CS%eta_source(i,j)*G%GV%kg_m2_to_H
           if (abs(CS%eta_source(i,j)) > limit_dt * h_tot(i)) then
             CS%eta_source(i,j) = SIGN(limit_dt * h_tot(i), CS%eta_source(i,j))
           endif
@@ -4223,7 +4223,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
     ! ### Consider replacing maxvel with G%dxT(i,j) * (CS%maxCFL_BT_cont*Idt)
     ! ### and G%dyT(i,j) * (CS%maxCFL_BT_cont*Idt)
     do j=js,je ; do i=is,ie
-      CS%eta_cor_bound(i,j) = G%m_to_H * G%IareaT(i,j) * 0.1 * CS%maxvel * &
+      CS%eta_cor_bound(i,j) = G%GV%m_to_H * G%IareaT(i,j) * 0.1 * CS%maxvel * &
          ((Datu(I-1,j) + Datu(I,j)) + (Datv(i,J) + Datv(i,J-1)))
     enddo ; enddo
   endif

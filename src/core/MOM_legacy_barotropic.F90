@@ -1328,7 +1328,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
   if (CS%dynamic_psurf) then
     ice_is_rigid = (associated(fluxes%rigidity_ice_u) .and. &
                     associated(fluxes%rigidity_ice_v))
-    H_min_dyn = G%m_to_H * CS%Dmin_dyn_psurf
+    H_min_dyn = G%GV%m_to_H * CS%Dmin_dyn_psurf
     if (ice_is_rigid .and. use_BT_cont) &
       call BT_cont_to_face_areas(BT_cont, Datu, Datv, G, MS, 0, .true.)
     if (ice_is_rigid) then ; do j=js,je ; do i=is,ie
@@ -1357,7 +1357,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
                       (CS%ice_strength_length**2 * dtbt)
 
       ! Units of dyn_coef: m2 s-2 H-1
-      dyn_coef_eta(I,j) = min(dyn_coef_max, ice_strength * G%H_to_m)
+      dyn_coef_eta(I,j) = min(dyn_coef_max, ice_strength * G%GV%H_to_m)
     enddo ; enddo ; endif
   endif
 
@@ -1447,23 +1447,23 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
     call vchksum(vhbt, "BT vhbt",CS%debug_BT_G,haloshift=0)
     call uchksum(ubt, "BT Initial ubt",CS%debug_BT_G,haloshift=0)
     call vchksum(vbt, "BT Initial vbt",CS%debug_BT_G,haloshift=0)
-    call hchksum(G%H_to_kg_m2*eta, "BT Initial eta",CS%debug_BT_G,haloshift=0)
+    call hchksum(G%GV%H_to_kg_m2*eta, "BT Initial eta",CS%debug_BT_G,haloshift=0)
     call uchksum(BT_force_u, "BT BT_force_u",CS%debug_BT_G,haloshift=0)
     call vchksum(BT_force_v, "BT BT_force_v",CS%debug_BT_G,haloshift=0)
     if (interp_eta_PF) then
-      call hchksum(G%H_to_kg_m2*eta_PF_1, "BT eta_PF_1",CS%debug_BT_G,haloshift=0)
-      call hchksum(G%H_to_kg_m2*d_eta_PF, "BT d_eta_PF",CS%debug_BT_G,haloshift=0)
+      call hchksum(G%GV%H_to_kg_m2*eta_PF_1, "BT eta_PF_1",CS%debug_BT_G,haloshift=0)
+      call hchksum(G%GV%H_to_kg_m2*d_eta_PF, "BT d_eta_PF",CS%debug_BT_G,haloshift=0)
     else
-      call hchksum(G%H_to_kg_m2*eta_PF, "BT eta_PF",CS%debug_BT_G,haloshift=0)
-      call hchksum(G%H_to_kg_m2*eta_PF_in, "BT eta_PF_in",G,haloshift=0)
+      call hchksum(G%GV%H_to_kg_m2*eta_PF, "BT eta_PF",CS%debug_BT_G,haloshift=0)
+      call hchksum(G%GV%H_to_kg_m2*eta_PF_in, "BT eta_PF_in",G,haloshift=0)
     endif
     call uchksum(Cor_ref_u, "BT Cor_ref_u",CS%debug_BT_G,haloshift=0)
     call vchksum(Cor_ref_v, "BT Cor_ref_v",CS%debug_BT_G,haloshift=0)
     call uchksum(uhbt0, "BT uhbt0",CS%debug_BT_G,haloshift=0)
     call vchksum(vhbt0, "BT vhbt0",CS%debug_BT_G,haloshift=0)
     if (.not. use_BT_cont) then
-      call uchksum(G%H_to_m*Datu, "BT Datu",CS%debug_BT_G,haloshift=1)
-      call vchksum(G%H_to_m*Datv, "BT Datv",CS%debug_BT_G,haloshift=1)
+      call uchksum(G%GV%H_to_m*Datu, "BT Datu",CS%debug_BT_G,haloshift=1)
+      call vchksum(G%GV%H_to_m*Datv, "BT Datv",CS%debug_BT_G,haloshift=1)
     endif
     call uchksum(wt_u, "BT wt_u",G,haloshift=1)
     call vchksum(wt_v, "BT wt_v",G,haloshift=1)
@@ -1846,7 +1846,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
       write(mesg,'("BT step ",I4)') n
       call uchksum(ubt, trim(mesg)//" ubt",CS%debug_BT_G,haloshift=iev-ie)
       call vchksum(vbt, trim(mesg)//" vbt",CS%debug_BT_G,haloshift=iev-ie)
-      call hchksum(G%H_to_kg_m2*eta, trim(mesg)//" eta",CS%debug_BT_G,haloshift=iev-ie)
+      call hchksum(G%GV%H_to_kg_m2*eta, trim(mesg)//" eta",CS%debug_BT_G,haloshift=iev-ie)
     endif
 
   enddo ! end of do n=1,ntimestep
@@ -2137,8 +2137,8 @@ subroutine legacy_set_dtbt(G, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
     enddo ; enddo ; enddo
   else
     do j=js,je ; do i=is,ie
-      gtot_E(i,j) = gtot_est * G%H_to_m ; gtot_W(i,j) = gtot_est * G%H_to_m
-      gtot_N(i,j) = gtot_est * G%H_to_m ; gtot_S(i,j) = gtot_est * G%H_to_m
+      gtot_E(i,j) = gtot_est * G%GV%H_to_m ; gtot_W(i,j) = gtot_est * G%GV%H_to_m
+      gtot_N(i,j) = gtot_est * G%GV%H_to_m ; gtot_S(i,j) = gtot_est * G%GV%H_to_m
     enddo ; enddo
   endif
 
@@ -2689,8 +2689,8 @@ subroutine legacy_btcalc(h, G, CS, h_u, h_v, may_use_default)
         enddo ; enddo
       elseif (CS%hvel_scheme == HYBRID .or. use_default) then
         do I=is-2,ie+1
-          e_u(I,nz+1) = -0.5 * G%m_to_H * (G%bathyT(i+1,j) + G%bathyT(i,j))
-          D_shallow_u(I) = -G%m_to_H * min(G%bathyT(i+1,j), G%bathyT(i,j))
+          e_u(I,nz+1) = -0.5 * G%GV%m_to_H * (G%bathyT(i+1,j) + G%bathyT(i,j))
+          D_shallow_u(I) = -G%GV%m_to_H * min(G%bathyT(i+1,j), G%bathyT(i,j))
           hatutot(I) = 0.0
         enddo
         do k=nz,1,-1 ; do I=is-2,ie+1
@@ -2752,8 +2752,8 @@ subroutine legacy_btcalc(h, G, CS, h_u, h_v, may_use_default)
         enddo ; enddo
       elseif (CS%hvel_scheme == HYBRID .or. use_default) then
         do i=is-1,ie+1
-          e_v(i,nz+1) = -0.5 * G%m_to_H * (G%bathyT(i,j+1) + G%bathyT(i,j))
-          D_shallow_v(I) = -G%m_to_H * min(G%bathyT(i,j+1), G%bathyT(i,j))
+          e_v(i,nz+1) = -0.5 * G%GV%m_to_H * (G%bathyT(i,j+1) + G%bathyT(i,j))
+          D_shallow_v(I) = -G%GV%m_to_H * min(G%bathyT(i,j+1), G%bathyT(i,j))
           hatvtot(I) = 0.0
         enddo
         do k=nz,1,-1 ; do i=is-1,ie+1
@@ -2837,7 +2837,7 @@ subroutine legacy_btcalc(h, G, CS, h_u, h_v, may_use_default)
   if (CS%debug) then
     call uchksum(CS%frhatu, "btcalc frhatu",G,haloshift=1)
     call vchksum(CS%frhatv, "btcalc frhatv",G,haloshift=1)
-    call hchksum(G%H_to_m*h, "btcalc h",G,haloshift=1)
+    call hchksum(G%GV%H_to_m*h, "btcalc h",G,haloshift=1)
   endif
 
 end subroutine legacy_btcalc
@@ -3297,24 +3297,24 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, rescale_faces, eta, halo, add_
   elseif (present(add_max)) then
 !$OMP do
     do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
-      Datu(I,j) = CS%dy_Cu(I,j) * G%m_to_H * &
+      Datu(I,j) = CS%dy_Cu(I,j) * G%GV%m_to_H * &
                   (max(CS%bathyT(i+1,j), CS%bathyT(i,j)) + add_max)
     enddo ; enddo
 !$OMP do
     do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
-      Datv(i,J) = CS%dx_Cv(i,J) * G%m_to_H * &
+      Datv(i,J) = CS%dx_Cv(i,J) * G%GV%m_to_H * &
                   (max(CS%bathyT(i,j+1), CS%bathyT(i,j)) + add_max)
     enddo ; enddo
   else
 !$OMP do
     do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
-      Datu(I,j) = 2.0*CS%dy_Cu(I,j) * G%m_to_H * &
+      Datu(I,j) = 2.0*CS%dy_Cu(I,j) * G%GV%m_to_H * &
                   (CS%bathyT(i+1,j) * CS%bathyT(i,j)) / &
                   (CS%bathyT(i+1,j) + CS%bathyT(i,j))
     enddo ; enddo
 !$OMP do
     do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
-      Datv(i,J) = 2.0*CS%dx_Cv(i,J) * G%m_to_H * &
+      Datv(i,J) = 2.0*CS%dx_Cv(i,J) * G%GV%m_to_H * &
                   (CS%bathyT(i,j+1) * CS%bathyT(i,j)) / &
                   (CS%bathyT(i,j+1) + CS%bathyT(i,j))
     enddo ; enddo
@@ -3415,7 +3415,7 @@ subroutine legacy_bt_mass_source(h, eta, fluxes, set_cor, dt_therm, &
           CS%eta_source(i,j) = CS%eta_source(i,j) + fluxes%evap(i,j)
         enddo ; endif
         do i=is,ie
-          CS%eta_source(i,j) = CS%eta_source(i,j)*G%kg_m2_to_H
+          CS%eta_source(i,j) = CS%eta_source(i,j)*G%GV%kg_m2_to_H
           if (abs(CS%eta_source(i,j)) > limit_dt * h_tot(i)) then
             CS%eta_source(i,j) = SIGN(limit_dt * h_tot(i), CS%eta_source(i,j))
           endif
@@ -3960,7 +3960,7 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
   call find_face_areas(Datu, Datv, G, CS, MS, halo=1)
   if (CS%bound_BT_corr) then
     do j=js,je ; do i=is,ie
-      CS%eta_cor_bound(i,j) = G%m_to_H * G%IareaT(i,j) * 0.1 * CS%maxvel * &
+      CS%eta_cor_bound(i,j) = G%GV%m_to_H * G%IareaT(i,j) * 0.1 * CS%maxvel * &
          ((Datu(I-1,j) + Datu(I,j)) + (Datv(i,J) + Datv(i,J-1)))
     enddo ; enddo
   endif

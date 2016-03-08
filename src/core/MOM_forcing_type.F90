@@ -307,7 +307,7 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
   Ih_limit  = 1.0 / DepthBeforeScalingFluxes
   Irho0     = 1.0 / G%GV%Rho0
   I_Cp      = 1.0 / fluxes%C_p
-  J_m2_to_H = 1.0 / (G%H_to_kg_m2 * fluxes%C_p)
+  J_m2_to_H = 1.0 / (G%GV%H_to_kg_m2 * fluxes%C_p)
 
   is = G%isc ; ie = G%iec ; nz = G%ke
 
@@ -374,7 +374,7 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
     ! total salt mass ocean+ice, the sea ice model must lose mass when
     ! salt mass is added to the ocean, which may still need to be coded.
     if (.not.G%GV%Boussinesq .and. ASSOCIATED(fluxes%salt_flux)) then
-      netMassInOut(i) = netMassInOut(i) + (dt * G%kg_m2_to_H) * (scale * fluxes%salt_flux(i,j))
+      netMassInOut(i) = netMassInOut(i) + (dt * G%GV%kg_m2_to_H) * (scale * fluxes%salt_flux(i,j))
     endif
 
     ! net volume/mass of water leaving the ocean.
@@ -403,8 +403,8 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
     netMassOut(i) = dt * scale * netMassOut(i)
 
     ! convert to H units (Bouss=meter or non-Bouss=kg/m^2)
-    netMassInOut(i) = G%kg_m2_to_H * netMassInOut(i)
-    netMassOut(i)   = G%kg_m2_to_H * netMassOut(i)
+    netMassInOut(i) = G%GV%kg_m2_to_H * netMassInOut(i)
+    netMassOut(i)   = G%GV%kg_m2_to_H * netMassOut(i)
 
 
     ! surface heat fluxes from radiation and turbulent fluxes (K * H)
@@ -422,7 +422,7 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
     if (useRiverHeatContent) then
       ! remove lrunoff*SST here, to counteract its addition elsewhere
       net_heat(i) = (net_heat(i) + (scale*(dt*J_m2_to_H)) * fluxes%heat_content_lrunoff(i,j)) - &
-                     (G%kg_m2_to_H * (scale * dt)) * fluxes%lrunoff(i,j) * T(i,1)
+                     (G%GV%kg_m2_to_H * (scale * dt)) * fluxes%lrunoff(i,j) * T(i,1)
       if (ASSOCIATED(tv%TempxPmE)) then
         tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + (scale * dt) * &
             (I_Cp*fluxes%heat_content_lrunoff(i,j) - fluxes%lrunoff(i,j)*T(i,1))
@@ -434,7 +434,7 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
     if (useCalvingHeatContent) then
       ! remove frunoff*SST here, to counteract its addition elsewhere
       net_heat(i) = net_heat(i) + (scale*(dt*J_m2_to_H)) * fluxes%heat_content_frunoff(i,j) - &
-                    (G%kg_m2_to_H * (scale * dt)) * fluxes%frunoff(i,j) * T(i,1)
+                    (G%GV%kg_m2_to_H * (scale * dt)) * fluxes%frunoff(i,j) * T(i,1)
       if (ASSOCIATED(tv%TempxPmE)) then
         tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + (scale * dt) * &
             (I_Cp*fluxes%heat_content_frunoff(i,j) - fluxes%frunoff(i,j)*T(i,1))
@@ -485,7 +485,7 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
     ! Boussinesq: (ppt * m)
     ! non-Bouss:  (g/m^2)
     if (ASSOCIATED(fluxes%salt_flux)) &
-      Net_salt(i) = (scale * dt * (1000.0 * fluxes%salt_flux(i,j))) * G%kg_m2_to_H
+      Net_salt(i) = (scale * dt * (1000.0 * fluxes%salt_flux(i,j))) * G%GV%kg_m2_to_H
 
     ! Diagnostics follow...
 
@@ -494,9 +494,9 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
     if(ASSOCIATED(fluxes%heat_content_massin))  then
       if (aggregate_FW_forcing) then
         if (netMassInOut(i) > 0.0) then ! net is "in"
-          fluxes%heat_content_massin(i,j) = -fluxes%C_p * netMassOut(i) * T(i,1) * G%H_to_kg_m2 / dt
+          fluxes%heat_content_massin(i,j) = -fluxes%C_p * netMassOut(i) * T(i,1) * G%GV%H_to_kg_m2 / dt
         else ! net is "out"
-          fluxes%heat_content_massin(i,j) = fluxes%C_p * ( netMassInout(i) - netMassOut(i) ) * T(i,1) * G%H_to_kg_m2 / dt
+          fluxes%heat_content_massin(i,j) = fluxes%C_p * ( netMassInout(i) - netMassOut(i) ) * T(i,1) * G%GV%H_to_kg_m2 / dt
         endif
       else
         fluxes%heat_content_massin(i,j) = 0.
@@ -508,9 +508,9 @@ subroutine extractFluxes1d(G, fluxes, optics, nsw, j, dt,                       
     if(ASSOCIATED(fluxes%heat_content_massout)) then
       if (aggregate_FW_forcing) then
         if (netMassInOut(i) > 0.0) then ! net is "in"
-          fluxes%heat_content_massout(i,j) = fluxes%C_p * netMassOut(i) * T(i,1) * G%H_to_kg_m2 / dt
+          fluxes%heat_content_massout(i,j) = fluxes%C_p * netMassOut(i) * T(i,1) * G%GV%H_to_kg_m2 / dt
         else ! net is "out"
-          fluxes%heat_content_massout(i,j) = -fluxes%C_p * ( netMassInout(i) - netMassOut(i) ) * T(i,1) * G%H_to_kg_m2 / dt
+          fluxes%heat_content_massout(i,j) = -fluxes%C_p * ( netMassInout(i) - netMassOut(i) ) * T(i,1) * G%GV%H_to_kg_m2 / dt
         endif
       else
         fluxes%heat_content_massout(i,j) = 0.0
@@ -689,7 +689,7 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, &
   useRiverHeatContent   = .False.
   useCalvingHeatContent = .False.
 
-  depthBeforeScalingFluxes = max( G%GV%Angstrom, 1.e-30*G%m_to_H )
+  depthBeforeScalingFluxes = max( G%GV%Angstrom, 1.e-30*G%GV%m_to_H )
   pressure(:) = 0. ! Ignore atmospheric pressure
   GoRho       = G%g_Earth / G%GV%Rho0
   start       = 1 + G%isc - G%isd
@@ -719,7 +719,7 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, &
                                 dRhodT, dRhodS, start, npts, tv%eqn_of_state)
 
   ! Adjust netSalt to reflect dilution effect of FW flux
-  netSalt(G%isc:G%iec) = netSalt(G%isc:G%iec) - Salt(G%isc:G%iec,j,1) * netH(G%isc:G%iec) * G%H_to_m ! ppt H/s
+  netSalt(G%isc:G%iec) = netSalt(G%isc:G%iec) - Salt(G%isc:G%iec,j,1) * netH(G%isc:G%iec) * G%GV%H_to_m ! ppt H/s
 
   ! Add in the SW heating for purposes of calculating the net
   ! surface buoyancy flux affecting the top layer.
@@ -728,10 +728,10 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, &
 
   ! Convert to a buoyancy flux, excluding penetrating SW heating
   buoyancyFlux(G%isc:G%iec,1) = - GoRho * ( dRhodS(G%isc:G%iec) * netSalt(G%isc:G%iec) + &
-                                             dRhodT(G%isc:G%iec) * netHeat(G%isc:G%iec) ) * G%H_to_m ! m^2/s^3
+                                             dRhodT(G%isc:G%iec) * netHeat(G%isc:G%iec) ) * G%GV%H_to_m ! m^2/s^3
   ! We also have a penetrative buoyancy flux associated with penetrative SW
   do k=2, G%ke+1
-    buoyancyFlux(G%isc:G%iec,k) = - GoRho * ( dRhodT(G%isc:G%iec) * netPen(G%isc:G%iec,k) ) * G%H_to_m ! m^2/s^3
+    buoyancyFlux(G%isc:G%iec,k) = - GoRho * ( dRhodT(G%isc:G%iec) * netPen(G%isc:G%iec,k) ) * G%GV%H_to_m ! m^2/s^3
   enddo
 
 end subroutine calculateBuoyancyFlux1d

@@ -294,19 +294,19 @@ subroutine initialize_DOME_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
         do j=js,je ; do i=is,ie
           e(nz+1) = -G%bathyT(i,j)
           do k=nz,1,-1
-            e(K) = e(K+1) + h(i,j,k)*G%H_to_m
+            e(K) = e(K+1) + h(i,j,k)*G%GV%H_to_m
             do m=7,NTR
               e_top = -600.0*real(m-1) + 3000.0
               e_bot = -600.0*real(m-1) + 2700.0
               if (e_top < e(K)) then
                 if (e_top < e(K+1)) then ; d_tr = 0.0
                 elseif (e_bot < e(K+1)) then
-                  d_tr = (e_top-e(K+1)) / ((h(i,j,k)+h_neglect)*G%H_to_m)
-                else ; d_tr = (e_top-e_bot) / ((h(i,j,k)+h_neglect)*G%H_to_m)
+                  d_tr = (e_top-e(K+1)) / ((h(i,j,k)+h_neglect)*G%GV%H_to_m)
+                else ; d_tr = (e_top-e_bot) / ((h(i,j,k)+h_neglect)*G%GV%H_to_m)
                 endif
               elseif (e_bot < e(K)) then
                 if (e_bot < e(K+1)) then ; d_tr = 1.0
-                else ; d_tr = (e(K)-e_bot) / ((h(i,j,k)+h_neglect)*G%H_to_m)
+                else ; d_tr = (e(K)-e_bot) / ((h(i,j,k)+h_neglect)*G%GV%H_to_m)
                 endif
               else
                 d_tr = 0.0

@@ -120,7 +120,7 @@ subroutine find_eta_3d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
   if (G%GV%Boussinesq) then
 !$OMP do
     do j=jsv,jev ; do k=nz,1,-1; do i=isv,iev
-      eta(i,j,K) = eta(i,j,K+1) + h(i,j,k)*G%H_to_m
+      eta(i,j,K) = eta(i,j,K+1) + h(i,j,k)*G%GV%H_to_m
     enddo ; enddo ; enddo
     if (present(eta_bt)) then
       ! Dilate the water column to agree with the free surface height
@@ -128,7 +128,7 @@ subroutine find_eta_3d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
 !$OMP do
       do j=jsv,jev
         do i=isv,iev
-          dilate(i) = (eta_bt(i,j)*G%H_to_m + G%bathyT(i,j)) / &
+          dilate(i) = (eta_bt(i,j)*G%GV%H_to_m + G%bathyT(i,j)) / &
                       (eta(i,j,1) + G%bathyT(i,j))
         enddo
         do k=1,nz ; do i=isv,iev
@@ -143,7 +143,7 @@ subroutine find_eta_3d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
       do j=jsv,jev
         do i=isv,iev ; p(i,j,1) = 0.0 ; enddo
         do k=1,nz ; do i=isv,iev
-          p(i,j,K+1) = p(i,j,K) + G_Earth*G%H_to_kg_m2*h(i,j,k)
+          p(i,j,K+1) = p(i,j,K) + G_Earth*G%GV%H_to_kg_m2*h(i,j,k)
         enddo ; enddo
       enddo
 !$OMP do
@@ -160,7 +160,7 @@ subroutine find_eta_3d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
     else
 !$OMP do
       do j=jsv,jev ;  do k=nz,1,-1; do i=isv,iev
-        eta(i,j,K) = eta(i,j,K+1) + G%H_to_kg_m2*h(i,j,k)/G%GV%Rlay(k)
+        eta(i,j,K) = eta(i,j,K+1) + G%GV%H_to_kg_m2*h(i,j,k)/G%GV%Rlay(k)
       enddo ; enddo ; enddo
     endif
     if (present(eta_bt)) then
@@ -236,7 +236,7 @@ subroutine find_eta_2d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
     else
 !$OMP do
       do j=js,je ; do k=1,nz ; do i=is,ie
-        eta(i,j) = eta(i,j) + h(i,j,k)*G%H_to_m
+        eta(i,j) = eta(i,j) + h(i,j,k)*G%GV%H_to_m
       enddo ; enddo ; enddo
     endif
   else
@@ -246,7 +246,7 @@ subroutine find_eta_2d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
         do i=is,ie ; p(i,j,1) = 0.0 ; enddo
 
         do k=1,nz ; do i=is,ie
-          p(i,j,k+1) = p(i,j,k) + G_Earth*G%H_to_kg_m2*h(i,j,k)
+          p(i,j,k+1) = p(i,j,k) + G_Earth*G%GV%H_to_kg_m2*h(i,j,k)
         enddo ; enddo
       enddo
 !$OMP do
@@ -261,7 +261,7 @@ subroutine find_eta_2d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
     else
 !$OMP do
       do j=js,je ; do k=1,nz ; do i=is,ie
-        eta(i,j) = eta(i,j) + G%H_to_kg_m2*h(i,j,k)/G%GV%Rlay(k)
+        eta(i,j) = eta(i,j) + G%GV%H_to_kg_m2*h(i,j,k)/G%GV%Rlay(k)
       enddo ; enddo ; enddo
     endif
     if (present(eta_bt)) then

@@ -559,7 +559,7 @@ function ideal_age_stock(h, stocks, G, CS, names, units, stock_index)
       stocks(m) = stocks(m) + CS%tr(i,j,k,m) * &
                              (G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k))
     enddo ; enddo ; enddo
-    stocks(m) = G%H_to_kg_m2 * stocks(m)
+    stocks(m) = G%GV%H_to_kg_m2 * stocks(m)
   enddo
   ideal_age_stock = CS%ntr
 

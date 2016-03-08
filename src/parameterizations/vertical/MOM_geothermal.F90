@@ -158,7 +158,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
   if (.not.CS%apply_geothermal) return
 
   nkmb      = G%GV%nk_rho_varies
-  Irho_cp   = 1.0 / (G%H_to_kg_m2 * tv%C_p)
+  Irho_cp   = 1.0 / (G%GV%H_to_kg_m2 * tv%C_p)
   Angstrom  = G%GV%Angstrom
   H_neglect = G%GV%H_subroundoff
   p_ref(:)  = tv%P_Ref
@@ -199,7 +199,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
       heat_rem(i) = G%mask2dT(i,j) * (CS%geo_heat(i,j) * (dt*Irho_cp))
       do_i(i) = .true. ; if (heat_rem(i) <= 0.0) do_i(i) = .false.
       if (do_i(i)) num_start = num_start + 1
-      h_geo_rem(i) = CS%Geothermal_thick * G%m_to_H
+      h_geo_rem(i) = CS%Geothermal_thick * G%GV%m_to_H
     enddo
     if (num_start == 0) cycle
     num_left = num_start
@@ -342,13 +342,13 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
     enddo ! k-loop
 
     if (associated(tv%internal_heat)) then ; do i=is,ie
-      tv%internal_heat(i,j) = tv%internal_heat(i,j) + G%H_to_kg_m2 * &
+      tv%internal_heat(i,j) = tv%internal_heat(i,j) + G%GV%H_to_kg_m2 * &
            (G%mask2dT(i,j) * (CS%geo_heat(i,j) * (dt*Irho_cp)) - heat_rem(i))
     enddo ; endif
   enddo ! j-loop
 
 !  do i=is,ie ; do j=js,je
-!    resid(i,j) = tv%internal_heat(i,j) - resid(i,j) - G%H_to_kg_m2 * &
+!    resid(i,j) = tv%internal_heat(i,j) - resid(i,j) - G%GV%H_to_kg_m2 * &
 !           (G%mask2dT(i,j) * (CS%geo_heat(i,j) * (dt*Irho_cp)))
 !  enddo ; enddo
 

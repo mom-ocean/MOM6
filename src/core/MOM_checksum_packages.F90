@@ -77,9 +77,9 @@ subroutine MOM_state_chksum_5arg(mesg, u, v, h, uh, vh, G, haloshift)
   hs=1; if (present(haloshift)) hs=haloshift
   call uchksum(u, mesg//" u",G,haloshift=hs)
   call vchksum(v, mesg//" v",G,haloshift=hs)
-  call hchksum(G%H_to_kg_m2*h, mesg//" h",G,haloshift=hs)
-  call uchksum(G%H_to_kg_m2*uh, mesg//" uh",G,haloshift=hs)
-  call vchksum(G%H_to_kg_m2*vh, mesg//" vh",G,haloshift=hs)
+  call hchksum(G%GV%H_to_kg_m2*h, mesg//" h",G,haloshift=hs)
+  call uchksum(G%GV%H_to_kg_m2*uh, mesg//" uh",G,haloshift=hs)
+  call vchksum(G%GV%H_to_kg_m2*vh, mesg//" vh",G,haloshift=hs)
 end subroutine MOM_state_chksum_5arg
 
 ! =============================================================================
@@ -108,7 +108,7 @@ subroutine MOM_state_chksum_3arg(mesg, u, v, h, G, haloshift)
   hs=1; if (present(haloshift)) hs=haloshift
   call uchksum(u, mesg//" u",G,haloshift=hs)
   call vchksum(v, mesg//" v",G,haloshift=hs)
-  call hchksum(G%H_to_kg_m2*h, mesg//" h",G,haloshift=hs)
+  call hchksum(G%GV%H_to_kg_m2*h, mesg//" h",G,haloshift=hs)
 end subroutine MOM_state_chksum_3arg
 
 ! =============================================================================
@@ -185,7 +185,7 @@ subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, pbce, &
   call uchksum(diffu, mesg//" diffu",G,haloshift=0)
   call vchksum(diffv, mesg//" diffv",G,haloshift=0)
   if (present(pbce)) &
-    call hchksum(G%kg_m2_to_H*pbce, mesg//" pbce",G,haloshift=0)
+    call hchksum(G%GV%kg_m2_to_H*pbce, mesg//" pbce",G,haloshift=0)
   if (present(u_accel_bt)) &
     call uchksum(u_accel_bt, mesg//" u_accel_bt",G,haloshift=0)
   if (present(v_accel_bt)) &

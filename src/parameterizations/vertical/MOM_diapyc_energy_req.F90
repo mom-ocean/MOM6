@@ -91,7 +91,7 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G)
                  (abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))))
     Kd(1) = 0.0 ; Kd(nz+1) = 0.0
     do K=2,nz
-      tmp1 = h_top(K) * h_bot(K) * G%H_to_m
+      tmp1 = h_top(K) * h_bot(K) * G%GV%H_to_m
       Kd(k) = ustar * 0.41 * (tmp1*ustar) / (absf*tmp1 + htot*ustar)
     enddo
     call diapyc_energy_req_calc(h_col, T0, S0, Kd, energy_Kd, dt, tv, G)
@@ -190,7 +190,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, G)
     T0(k) = T_in(k) ; S0(k) = S_in(k)
     h_tr(k) = h_in(k)
     htot = htot + h_tr(k)
-    pres(K+1) = pres(K) + G%g_Earth * G%H_to_kg_m2 * h_tr(k)
+    pres(K+1) = pres(K) + G%g_Earth * G%GV%H_to_kg_m2 * h_tr(k)
     p_lay(k) = 0.5*(pres(K) + pres(K+1))
   enddo
   do k=1,nz
@@ -201,7 +201,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, G)
 
   Kddt_h(1) = 0.0 ; Kddt_h(nz+1) = 0.0
   do K=2,nz
-    Kddt_h(K) = min((G%m_to_H**2*dt)*Kd(k) / (0.5*(h_tr(k-1) + h_tr(k))),1e3*htot)
+    Kddt_h(K) = min((G%GV%m_to_H**2*dt)*Kd(k) / (0.5*(h_tr(k-1) + h_tr(k))),1e3*htot)
   enddo
 
   ! Solve the tridiagonal equations for new temperatures.

@@ -433,7 +433,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, &
 
 #ifdef __DO_SAFETY_CHECKS__
   if (CS%debug) then
-    call hchksum(h*G%H_to_m, "KPP in: h",G,haloshift=0)
+    call hchksum(h*G%GV%H_to_m, "KPP in: h",G,haloshift=0)
     call hchksum(Temp, "KPP in: T",G,haloshift=0)
     call hchksum(Salt, "KPP in: S",G,haloshift=0)
     call hchksum(u, "KPP in: u",G,haloshift=0)
@@ -488,8 +488,8 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, &
       do k=1,G%ke
 
         ! cell center and cell bottom in meters (negative values in the ocean)
-        cellHeight(k)    = iFaceHeight(k) - 0.5 * h(i,j,k) * G%H_to_m
-        iFaceHeight(k+1) = iFaceHeight(k) - h(i,j,k) * G%H_to_m
+        cellHeight(k)    = iFaceHeight(k) - 0.5 * h(i,j,k) * G%GV%H_to_m
+        iFaceHeight(k+1) = iFaceHeight(k) - h(i,j,k) * G%GV%H_to_m
 
         ! find ksfc for cell where "surface layer" sits
         SLdepth_0d = CS%surf_layer_ext*max( max(-cellHeight(k),-iFaceHeight(2) ), CS%minOBLdepth )
@@ -511,7 +511,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, &
         do ktmp = 1,ksfc
 
           ! SLdepth_0d can be between cell interfaces
-          delH = min( max(0.0, SLdepth_0d - hTot), h(i,j,ktmp)*G%H_to_m )
+          delH = min( max(0.0, SLdepth_0d - hTot), h(i,j,ktmp)*G%GV%H_to_m )
 
           ! surface layer thickness
           hTot = hTot + delH
@@ -553,7 +553,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, &
 
         ! pRef is pressure at interface between k and km1.
         ! iterate pRef for next pass through k-loop.
-        pRef = pRef + G%H_to_Pa * h(i,j,k)
+        pRef = pRef + G%GV%H_to_Pa * h(i,j,k)
 
         ! this difference accounts for penetrating SW
         surfBuoyFlux2(k) = buoyFlux(i,j,1) - buoyFlux(i,j,k+1)
@@ -571,7 +571,7 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, &
         kk = 3*(k-1)
         deltaRho(k) = rho_1D(kk+2) - rho_1D(kk+1)
         N2_1d(k)    = (GoRho * (rho_1D(kk+2) - rho_1D(kk+3)) ) / &
-                      ((0.5*(h(i,j,km1) + h(i,j,k))+G%GV%H_subroundoff)*G%H_to_m)
+                      ((0.5*(h(i,j,km1) + h(i,j,k))+G%GV%H_subroundoff)*G%GV%H_to_m)
         N_1d(k)     = sqrt( max( N2_1d(k), 0.) )
       enddo
       N2_1d(G%ke+1 ) = 0.0
@@ -647,14 +647,14 @@ subroutine KPP_calculate(CS, G, h, Temp, Salt, u, v, EOS, uStar, &
           Uk = 0.5*(u(i,j,k)+u(i-1,j,k)) - surfU
           Vk = 0.5*(v(i,j,k)+v(i,j-1,k)) - surfV
           deltaU2(k) = Uk**2 + Vk**2
-          pRef = pRef + G%H_to_Pa * h(i,j,k)
+          pRef = pRef + G%GV%H_to_Pa * h(i,j,k)
           call calculate_density(surfTemp, surfSalt, pRef, rho1, EOS)
           call calculate_density(Temp(i,j,k), Salt(i,j,k), pRef, rhoK, EOS)
           deltaRho(k) = rhoK - rho1
 
           ! Surface layer averaging (needed for next k+1 iteration of this loop)
           if (hTot < SLdepth_0d) then
-            delH = min( max(0., SLdepth_0d - hTot), h(i,j,k)*G%H_to_m )
+            delH = min( max(0., SLdepth_0d - hTot), h(i,j,k)*G%GV%H_to_m )
             hTot = hTot + delH
             surfHtemp = surfHtemp + Temp(i,j,k) * delH ; surfTemp = surfHtemp / hTot
             surfHsalt = surfHsalt + Salt(i,j,k) * delH ; surfSalt = surfHsalt / hTot
@@ -924,7 +924,7 @@ subroutine KPP_NonLocalTransport_temp(CS, G, h, nonLocalTrans, surfFlux, dt, sca
     do k = 1, G%ke
       do j = G%jsc, G%jec
         do i = G%isc, G%iec
-          dtracer(i,j,k) = (nonLocalTrans(i,j,k) - nonLocalTrans(i,j,k+1)) * surfFlux(i,j) * C_p * G%H_to_kg_m2
+          dtracer(i,j,k) = (nonLocalTrans(i,j,k) - nonLocalTrans(i,j,k+1)) * surfFlux(i,j) * C_p * G%GV%H_to_kg_m2
         enddo
       enddo
     enddo
@@ -980,7 +980,7 @@ subroutine KPP_NonLocalTransport_saln(CS, G, h, nonLocalTrans, surfFlux, dt, sca
     do k = 1, G%ke
       do j = G%jsc, G%jec
         do i = G%isc, G%iec
-          dtracer(i,j,k) = (nonLocalTrans(i,j,k) - nonLocalTrans(i,j,k+1)) * surfFlux(i,j) * G%H_to_kg_m2
+          dtracer(i,j,k) = (nonLocalTrans(i,j,k) - nonLocalTrans(i,j,k+1)) * surfFlux(i,j) * G%GV%H_to_kg_m2
         enddo
       enddo
     enddo

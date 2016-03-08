@@ -375,7 +375,7 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, param_file, tr_Reg)
   if (apply_OBC_v) then
     g_prime_tot = (G%g_Earth/G%GV%Rho0)*2.0
     Def_Rad = sqrt(D_edge*g_prime_tot) / (1.0e-4*1000.0)
-    tr_0 = (-D_edge*sqrt(D_edge*g_prime_tot)*0.5e3*Def_Rad) * G%m_to_H
+    tr_0 = (-D_edge*sqrt(D_edge*g_prime_tot)*0.5e3*Def_Rad) * G%GV%m_to_H
 
     do k=1,nz
       rst = -1.0
@@ -414,7 +414,7 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, param_file, tr_Reg)
       if (OBC_mask_u(I,j)) then
         ! An appropriate expression for the zonal inflow velocities and
         ! transports should go here.
-        OBC%uh(I,j,k) = 0.0 * G%m_to_H ; OBC%u(I,j,k) = 0.0
+        OBC%uh(I,j,k) = 0.0 * G%GV%m_to_H ; OBC%u(I,j,k) = 0.0
       else
         OBC%uh(I,j,k) = 0.0 ; OBC%u(I,j,k) = 0.0
       endif

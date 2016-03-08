@@ -125,7 +125,7 @@ subroutine diffConvection_calculate(CS, G, h, Temp, Salt, EOS, Kd_int)
     pRef = 0. ! Ignore atmospheric pressure
     do K = 2, G%ke
       ! Pressure at interface K is incremented by mass of level above
-      pRef = pRef + G%g_Earth * G%GV%Rho0 * h(i,j,k-1) * G%H_to_m ! Boussinesq approximation!!!! ?????
+      pRef = pRef + G%g_Earth * G%GV%Rho0 * h(i,j,k-1) * G%GV%H_to_m ! Boussinesq approximation!!!! ?????
       ! Compute Brunt-Vaisala frequency (static stability) on interfaces
       call calculate_density(Temp(i,j,k),   Salt(i,j,k),   pRef, rhoK,   EOS)
       call calculate_density(Temp(i,j,k-1), Salt(i,j,k-1), pRef, rhoKm1, EOS)

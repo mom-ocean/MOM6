@@ -344,7 +344,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
 
   do j=js,je
     do k=1,nz ; do i=is,ie
-      h_2d(i,k) = h(i,j,k)*G%H_to_m
+      h_2d(i,k) = h(i,j,k)*G%GV%H_to_m
       u_2d(i,k) = u_in(i,j,k) ; v_2d(i,k) = v_in(i,j,k)
     enddo ; enddo
     if (use_temperature) then ; do k=1,nz ; do i=is,ie

@@ -193,7 +193,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
   endif
 
   I_gEarth = 1.0 / G%g_Earth
-  dp_neglect = G%H_to_Pa * G%GV%H_subroundoff
+  dp_neglect = G%GV%H_to_Pa * G%GV%H_subroundoff
 !$OMP parallel default(none) shared(nz,alpha_Lay,G,dalpha_int)
 !$OMP do
   do k=1,nz ; alpha_Lay(k) = 1.0 / G%GV%Rlay(k) ; enddo
@@ -211,12 +211,12 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
   endif
 !$OMP do
   do j=Jsq,Jeq+1 ; do k=1,nz ; do i=Isq,Ieq+1
-    p(i,j,K+1) = p(i,j,K) + G%H_to_Pa * h(i,j,k)
+    p(i,j,K+1) = p(i,j,K) + G%GV%H_to_Pa * h(i,j,k)
   enddo ; enddo ; enddo
 !$OMP end parallel
 
   if (present(eta)) then
-    Pa_to_H = 1.0 / G%H_to_Pa
+    Pa_to_H = 1.0 / G%GV%H_to_Pa
     if (use_p_atm) then
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,eta,p,p_atm,Pa_to_H)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -252,7 +252,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
     else
 !$OMP do
       do j=Jsq,Jeq+1 ; do k=1,nz ; do i=Isq,Ieq+1
-        SSH(i,j) = SSH(i,j) + G%H_to_kg_m2*h(i,j,k)*alpha_Lay(k)
+        SSH(i,j) = SSH(i,j) + G%GV%H_to_kg_m2*h(i,j,k)*alpha_Lay(k)
       enddo ; enddo ; enddo
     endif
 !$OMP end parallel
@@ -503,7 +503,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
       "can no longer be used with a compressible EOS. Use #define ANALYTIC_FV_PGF.")
   endif
 
-  h_neglect = G%GV%H_subroundoff * G%H_to_m
+  h_neglect = G%GV%H_subroundoff * G%GV%H_to_m
   I_Rho0 = 1.0/CS%Rho0
   G_Rho0 = G%g_Earth/G%GV%Rho0
 
@@ -516,7 +516,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
     do j=Jsq,Jeq+1
       do i=Isq,Ieq+1 ; e(i,j,1) = -1.0*G%bathyT(i,j) ; enddo
       do k=1,nz ; do i=Isq,Ieq+1
-        e(i,j,1) = e(i,j,1) + h(i,j,k)*G%H_to_m
+        e(i,j,1) = e(i,j,1) + h(i,j,k)*G%GV%H_to_m
       enddo ; enddo
     enddo
     call calc_tidal_forcing(CS%Time, e(:,:,1), e_tidal, G, CS%tides_CSp)
@@ -537,7 +537,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
   endif
 !$OMP do
   do j=Jsq,Jeq+1 ; do k=nz,1,-1 ; do i=Isq,Ieq+1
-    e(i,j,K) = e(i,j,K+1) + h(i,j,k)*G%H_to_m
+    e(i,j,K) = e(i,j,K+1) + h(i,j,k)*G%GV%H_to_m
   enddo ; enddo ; enddo
 !$OMP end parallel
   if (use_EOS) then
@@ -662,12 +662,12 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
     ! about 200 lines above.
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,eta,e,e_tidal,G)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        eta(i,j) = e(i,j,1)*G%m_to_H + e_tidal(i,j)*G%m_to_H
+        eta(i,j) = e(i,j,1)*G%GV%m_to_H + e_tidal(i,j)*G%GV%m_to_H
       enddo ; enddo
     else
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,eta,e,G)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        eta(i,j) = e(i,j,1)*G%m_to_H
+        eta(i,j) = e(i,j,1)*G%GV%m_to_H
       enddo ; enddo
     endif
   endif
@@ -729,7 +729,7 @@ subroutine Set_pbce_Bouss(e, tv, G, g_Earth, Rho0, GFS_scale, pbce, rho_star)
   Rho0xG = Rho0*g_Earth
   G_Rho0 = g_Earth/Rho0
   use_EOS = associated(tv%eqn_of_state)
-  h_neglect = G%GV%H_subroundoff*G%H_to_m
+  h_neglect = G%GV%H_subroundoff*G%GV%H_to_m
 
   if (use_EOS) then
     if (present(rho_star)) then
@@ -738,8 +738,8 @@ subroutine Set_pbce_Bouss(e, tv, G, g_Earth, Rho0, GFS_scale, pbce, rho_star)
 !$OMP                          private(Ihtot)
       do j=Jsq,Jeq+1
         do i=Isq,Ieq+1
-          Ihtot(i) = 1.0 / (((e(i,j,1)-e(i,j,nz+1)) + h_neglect) * G%m_to_H)
-          pbce(i,j,1) = GFS_scale * rho_star(i,j,1) * G%H_to_m
+          Ihtot(i) = 1.0 / (((e(i,j,1)-e(i,j,nz+1)) + h_neglect) * G%GV%m_to_H)
+          pbce(i,j,1) = GFS_scale * rho_star(i,j,1) * G%GV%H_to_m
         enddo
         do k=2,nz ; do i=Isq,Ieq+1
           pbce(i,j,k) = pbce(i,j,k-1) + (rho_star(i,j,k)-rho_star(i,j,k-1)) * &
@@ -752,13 +752,13 @@ subroutine Set_pbce_Bouss(e, tv, G, g_Earth, Rho0, GFS_scale, pbce, rho_star)
 !$OMP                          private(Ihtot,press,rho_in_situ,T_int,S_int,dR_dT,dR_dS)
       do j=Jsq,Jeq+1
         do i=Isq,Ieq+1
-          Ihtot(i) = 1.0 / (((e(i,j,1)-e(i,j,nz+1)) + h_neglect) * G%m_to_H)
+          Ihtot(i) = 1.0 / (((e(i,j,1)-e(i,j,nz+1)) + h_neglect) * G%GV%m_to_H)
           press(i) = -Rho0xG*e(i,j,1)
         enddo
         call calculate_density(tv%T(:,j,1), tv%S(:,j,1), press, rho_in_situ, &
                                Isq, Ieq-Isq+2, tv%eqn_of_state)
         do i=Isq,Ieq+1
-          pbce(i,j,1) = G_Rho0*(GFS_scale * rho_in_situ(i)) * G%H_to_m
+          pbce(i,j,1) = G_Rho0*(GFS_scale * rho_in_situ(i)) * G%GV%H_to_m
         enddo
         do k=2,nz
           do i=Isq,Ieq+1
@@ -781,8 +781,8 @@ subroutine Set_pbce_Bouss(e, tv, G, g_Earth, Rho0, GFS_scale, pbce, rho_star)
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,e,G,h_neglect,pbce) private(Ihtot)
     do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
-        Ihtot(i) = 1.0 / (((e(i,j,1)-e(i,j,nz+1)) + h_neglect) * G%m_to_H)
-        pbce(i,j,1) = G%GV%g_prime(1) * G%H_to_m
+        Ihtot(i) = 1.0 / (((e(i,j,1)-e(i,j,nz+1)) + h_neglect) * G%GV%m_to_H)
+        pbce(i,j,1) = G%GV%g_prime(1) * G%GV%H_to_m
       enddo
       do k=2,nz ; do i=Isq,Ieq+1
         pbce(i,j,k) = pbce(i,j,k-1) + &
@@ -844,7 +844,7 @@ subroutine Set_pbce_nonBouss(p, tv, G, g_Earth, GFS_scale, pbce, alpha_star)
 
   use_EOS = associated(tv%eqn_of_state)
 
-  dP_dH = g_Earth * G%H_to_kg_m2
+  dP_dH = g_Earth * G%GV%H_to_kg_m2
   dp_neglect = dP_dH * G%GV%H_subroundoff
 
   do k=1,nz ; alpha_Lay(k) = 1.0 / G%GV%Rlay(k) ; enddo

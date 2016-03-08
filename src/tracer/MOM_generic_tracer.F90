@@ -569,24 +569,24 @@ contains
     !Prepare input arrays for source update
     !
 
-    rho_dzt(:,:,:) = G%H_to_kg_m2 * G%GV%Angstrom
+    rho_dzt(:,:,:) = G%GV%H_to_kg_m2 * G%GV%Angstrom
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
-      rho_dzt(i,j,k) = G%H_to_kg_m2 * h_old(i,j,k)
+      rho_dzt(i,j,k) = G%GV%H_to_kg_m2 * h_old(i,j,k)
     enddo; enddo ; enddo !}
 
     dzt(:,:,:) = 1.0
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
-      dzt(i,j,k) = G%H_to_m * h_old(i,j,k)
+      dzt(i,j,k) = G%GV%H_to_m * h_old(i,j,k)
     enddo; enddo ; enddo !}
 
 
     ! Boussinesq model
-    hblt_depth(:,:) = G%H_to_m * G%GV%Angstrom
+    hblt_depth(:,:) = G%GV%H_to_m * G%GV%Angstrom
     do j=jsc,jec ; do i=isc,iec ;
-      hblt_depth(i,j) = G%H_to_m * h_old(i,j,1)
+      hblt_depth(i,j) = G%GV%H_to_m * h_old(i,j,1)
     enddo; enddo
     do k=2,G%GV%nkml ; do j=jsc,jec ; do i=isc,iec
-      hblt_depth(i,j) = hblt_depth(i,j) + G%H_to_m * h_old(i,j,k)
+      hblt_depth(i,j) = hblt_depth(i,j) + G%GV%H_to_m * h_old(i,j,k)
     enddo; enddo ; enddo
 
 
@@ -605,7 +605,7 @@ contains
     ! Use a tridiagonal solver to determine the concentrations after the
     ! surface source is applied and diapycnal advection and diffusion occurs.
 
-    call generic_tracer_vertdiff_G(h_old, ea, eb, dt, G%kg_m2_to_H, G%m_to_H, 1) !Last arg is tau which is always 1 for MOM
+    call generic_tracer_vertdiff_G(h_old, ea, eb, dt, G%GV%kg_m2_to_H, G%GV%m_to_H, 1) !Last arg is tau which is always 1 for MOM
 
     ! Update bottom fields after vertical processes
 
@@ -687,7 +687,7 @@ contains
         stocks(m) = stocks(m) + tr_ptr(i,j,k) * &
                                (G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k))
       enddo ; enddo ; enddo
-      stocks(m) = G%H_to_kg_m2 * stocks(m)
+      stocks(m) = G%GV%H_to_kg_m2 * stocks(m)
 
       !traverse the linked list till hit NULL
       call g_tracer_get_next(g_tracer, g_tracer_next)

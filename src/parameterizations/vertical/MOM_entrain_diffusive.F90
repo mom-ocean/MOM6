@@ -281,7 +281,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
          &and a linear equation of state to drive the model.")
   endif
 
-  tolerance = G%m_to_H * CS%Tolerance_Ent
+  tolerance = G%GV%m_to_H * CS%Tolerance_Ent
   g_2dt = 0.5 * G%g_Earth / dt
   kmb = G%GV%nk_rho_varies
   K2 = max(kmb+1,2) ; kb_min = K2
@@ -326,23 +326,23 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
 
     if (present(Kd_Lay)) then
       do k=1,nz ; do i=is,ie
-        dtKd(i,k) = G%m_to_H**2 * (dt*Kd_Lay(i,j,k))
+        dtKd(i,k) = G%GV%m_to_H**2 * (dt*Kd_Lay(i,j,k))
       enddo ; enddo
       if (present(Kd_int)) then
         do K=1,nz+1 ; do i=is,ie
-          dtKd_int(i,K) = G%m_to_H**2 * (dt*Kd_int(i,j,K))
+          dtKd_int(i,K) = G%GV%m_to_H**2 * (dt*Kd_int(i,j,K))
         enddo ; enddo
       else
         do K=2,nz ; do i=is,ie
-          dtKd_int(i,K) = G%m_to_H**2 * (0.5*dt*(Kd_Lay(i,j,k-1) + Kd_Lay(i,j,k)))
+          dtKd_int(i,K) = G%GV%m_to_H**2 * (0.5*dt*(Kd_Lay(i,j,k-1) + Kd_Lay(i,j,k)))
         enddo ; enddo
       endif
     else ! Kd_int must be present, or there already would have been an error.
       do k=1,nz ; do i=is,ie
-        dtKd(i,k) = G%m_to_H**2 * (0.5*dt*(Kd_int(i,j,K)+Kd_int(i,j,K+1)))
+        dtKd(i,k) = G%GV%m_to_H**2 * (0.5*dt*(Kd_int(i,j,K)+Kd_int(i,j,K+1)))
       enddo ; enddo
       dO K=1,nz+1 ; do i=is,ie
-        dtKd_int(i,K) = G%m_to_H**2 * (dt*Kd_int(i,j,K))
+        dtKd_int(i,K) = G%GV%m_to_H**2 * (dt*Kd_int(i,j,K))
       enddo ; enddo
     endif
 
@@ -872,11 +872,11 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
               (eb(i,j,k) - ea(i,j,k+1))) ) / (I2p2dsp1_ds(i,k) * grats(i,k))
         endif
 
-        Kd_eff(i,j,k) = G%H_to_m**2 * (MAX(dtKd(i,k),Kd_here)*Idt)
+        Kd_eff(i,j,k) = G%GV%H_to_m**2 * (MAX(dtKd(i,k),Kd_here)*Idt)
       enddo ; enddo
       do i=is,ie
-        Kd_eff(i,j,1) = G%H_to_m**2 * (dtKd(i,1)*Idt)
-        Kd_eff(i,j,nz) = G%H_to_m**2 * (dtKd(i,nz)*Idt)
+        Kd_eff(i,j,1) = G%GV%H_to_m**2 * (dtKd(i,1)*Idt)
+        Kd_eff(i,j,nz) = G%GV%H_to_m**2 * (dtKd(i,nz)*Idt)
       enddo
     endif
 
@@ -889,7 +889,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
           do i=is,ie ; pressure(i) = 0.0 ; enddo
         endif
         do K=2,nz
-          do i=is,ie ; pressure(i) = pressure(i) + G%H_to_Pa*h(i,j,k-1) ; enddo
+          do i=is,ie ; pressure(i) = pressure(i) + G%GV%H_to_Pa*h(i,j,k-1) ; enddo
           do i=is,ie
             if (k==kb(i)) then
               T_eos(i) = 0.5*(tv%T(i,j,kmb) + tv%T(i,j,k))
@@ -1103,7 +1103,7 @@ subroutine set_Ent_bl(h, dtKd_int, tv, kb, kmb, do_i, G, CS, j, Ent_bl, Sref, h_
   is = G%isc ; ie = G%iec ; nz = G%ke
 
 !  max_ent = 1.0e14*G%GV%Angstrom ! This is set to avoid roundoff problems.
-  max_ent = 1.0e4*G%m_to_H
+  max_ent = 1.0e4*G%GV%m_to_H
   h_neglect = G%GV%H_subroundoff
 
   do i=is,ie ; pres(i) = tv%P_Ref ; enddo
@@ -1469,7 +1469,7 @@ subroutine F_kb_to_ea_kb(h_bl, Sref, Ent_bl, I_dSkbp1, F_kb, kmb, i, &
   val = dS_kbp1 * F_kb(i)
   err_min = -val
 
-  tolerance = G%m_to_H * CS%Tolerance_Ent
+  tolerance = G%GV%m_to_H * CS%Tolerance_Ent
   if (present(tol_in)) tolerance = tol_in
   bisect_next = .true.
 
@@ -1631,7 +1631,7 @@ subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
     call MOM_error(FATAL, "determine_Ea_kb should not be called "//&
                            "unless BULKMIXEDLAYER is defined.")
   endif
-  tolerance = G%m_to_H * CS%Tolerance_Ent
+  tolerance = G%GV%m_to_H * CS%Tolerance_Ent
 
   do i=is,ie ; redo_i(i) = do_i(i) ; enddo
 
@@ -1807,7 +1807,7 @@ subroutine find_maxF_kb(h_bl, Sref, Ent_bl, I_dSkbp1, min_ent_in, max_ent_in, &
   integer :: i, it, is1, ie1
   integer, parameter :: MAXIT = 20
 
-  tolerance = G%m_to_H * CS%Tolerance_Ent
+  tolerance = G%GV%m_to_H * CS%Tolerance_Ent
 
   if (present(do_i_in)) then
     do i=is,ie ; do_i(i) = do_i_in(i) ; enddo

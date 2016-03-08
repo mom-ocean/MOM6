@@ -175,7 +175,7 @@ subroutine wave_speed(h, tv, G, cg1, CS, full_halos)
     ! at the top).  This also transposes the row order so that columns can
     ! be worked upon one at a time.
     do i=is,ie ; htot(i) = 0.0 ; enddo
-    do k=1,nz ; do i=is,ie ; htot(i) = htot(i) + h(i,j,k)*G%H_to_m ; enddo ; enddo
+    do k=1,nz ; do i=is,ie ; htot(i) = htot(i) + h(i,j,k)*G%GV%H_to_m ; enddo ; enddo
 
     do i=is,ie
       hmin(i) = htot(i)*min_h_frac ; kf(i) = 1 ; H_here(i) = 0.0
@@ -183,20 +183,20 @@ subroutine wave_speed(h, tv, G, cg1, CS, full_halos)
     enddo
     if (use_EOS) then
       do k=1,nz ; do i=is,ie
-        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*G%H_to_m > hmin(i))) then
+        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*G%GV%H_to_m > hmin(i))) then
           Hf(kf(i),i) = H_here(i)
           Tf(kf(i),i) = HxT_here(i) / H_here(i)
           Sf(kf(i),i) = HxS_here(i) / H_here(i)
           kf(i) = kf(i) + 1
 
           ! Start a new layer
-          H_here(i) = h(i,j,k)*G%H_to_m
-          HxT_here(i) = (h(i,j,k)*G%H_to_m)*T(i,j,k)
-          HxS_here(i) = (h(i,j,k)*G%H_to_m)*S(i,j,k)
+          H_here(i) = h(i,j,k)*G%GV%H_to_m
+          HxT_here(i) = (h(i,j,k)*G%GV%H_to_m)*T(i,j,k)
+          HxS_here(i) = (h(i,j,k)*G%GV%H_to_m)*S(i,j,k)
         else
-          H_here(i) = H_here(i) + h(i,j,k)*G%H_to_m
-          HxT_here(i) = HxT_here(i) + (h(i,j,k)*G%H_to_m)*T(i,j,k)
-          HxS_here(i) = HxS_here(i) + (h(i,j,k)*G%H_to_m)*S(i,j,k)
+          H_here(i) = H_here(i) + h(i,j,k)*G%GV%H_to_m
+          HxT_here(i) = HxT_here(i) + (h(i,j,k)*G%GV%H_to_m)*T(i,j,k)
+          HxS_here(i) = HxS_here(i) + (h(i,j,k)*G%GV%H_to_m)*S(i,j,k)
         endif
       enddo ; enddo
       do i=is,ie ; if (H_here(i) > 0.0) then
@@ -206,16 +206,16 @@ subroutine wave_speed(h, tv, G, cg1, CS, full_halos)
       endif ; enddo
     else
       do k=1,nz ; do i=is,ie
-        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*G%H_to_m > hmin(i))) then
+        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*G%GV%H_to_m > hmin(i))) then
           Hf(kf(i),i) = H_here(i) ; Rf(kf(i),i) = HxR_here(i) / H_here(i)
           kf(i) = kf(i) + 1
 
           ! Start a new layer
-          H_here(i) = h(i,j,k)*G%H_to_m
-          HxR_here(i) = (h(i,j,k)*G%H_to_m)*G%GV%Rlay(k)
+          H_here(i) = h(i,j,k)*G%GV%H_to_m
+          HxR_here(i) = (h(i,j,k)*G%GV%H_to_m)*G%GV%Rlay(k)
         else
-          H_here(i) = H_here(i) + h(i,j,k)*G%H_to_m
-          HxR_here(i) = HxR_here(i) + (h(i,j,k)*G%H_to_m)*G%GV%Rlay(k)
+          H_here(i) = H_here(i) + h(i,j,k)*G%GV%H_to_m
+          HxR_here(i) = HxR_here(i) + (h(i,j,k)*G%GV%H_to_m)*G%GV%Rlay(k)
         endif
       enddo ; enddo
       do i=is,ie ; if (H_here(i) > 0.0) then
@@ -530,7 +530,7 @@ subroutine wave_speeds(h, tv, G, nmodes, cn, CS, full_halos)
     ! at the top).  This also transposes the row order so that columns can
     ! be worked upon one at a time.
     do i=is,ie ; htot(i) = 0.0 ; enddo
-    do k=1,nz ; do i=is,ie ; htot(i) = htot(i) + h(i,j,k)*G%H_to_m ; enddo ; enddo
+    do k=1,nz ; do i=is,ie ; htot(i) = htot(i) + h(i,j,k)*G%GV%H_to_m ; enddo ; enddo
 
     do i=is,ie
       hmin(i) = htot(i)*min_h_frac ; kf(i) = 1 ; H_here(i) = 0.0
@@ -538,20 +538,20 @@ subroutine wave_speeds(h, tv, G, nmodes, cn, CS, full_halos)
     enddo
     if (use_EOS) then
       do k=1,nz ; do i=is,ie
-        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*G%H_to_m > hmin(i))) then
+        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*G%GV%H_to_m > hmin(i))) then
           Hf(kf(i),i) = H_here(i)
           Tf(kf(i),i) = HxT_here(i) / H_here(i)
           Sf(kf(i),i) = HxS_here(i) / H_here(i)
           kf(i) = kf(i) + 1
 
           ! Start a new layer
-          H_here(i) = h(i,j,k)*G%H_to_m
-          HxT_here(i) = (h(i,j,k)*G%H_to_m)*T(i,j,k)
-          HxS_here(i) = (h(i,j,k)*G%H_to_m)*S(i,j,k)
+          H_here(i) = h(i,j,k)*G%GV%H_to_m
+          HxT_here(i) = (h(i,j,k)*G%GV%H_to_m)*T(i,j,k)
+          HxS_here(i) = (h(i,j,k)*G%GV%H_to_m)*S(i,j,k)
         else
-          H_here(i) = H_here(i) + h(i,j,k)*G%H_to_m
-          HxT_here(i) = HxT_here(i) + (h(i,j,k)*G%H_to_m)*T(i,j,k)
-          HxS_here(i) = HxS_here(i) + (h(i,j,k)*G%H_to_m)*S(i,j,k)
+          H_here(i) = H_here(i) + h(i,j,k)*G%GV%H_to_m
+          HxT_here(i) = HxT_here(i) + (h(i,j,k)*G%GV%H_to_m)*T(i,j,k)
+          HxS_here(i) = HxS_here(i) + (h(i,j,k)*G%GV%H_to_m)*S(i,j,k)
         endif
       enddo ; enddo
       do i=is,ie ; if (H_here(i) > 0.0) then
@@ -561,16 +561,16 @@ subroutine wave_speeds(h, tv, G, nmodes, cn, CS, full_halos)
       endif ; enddo
     else
       do k=1,nz ; do i=is,ie
-        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*G%H_to_m > hmin(i))) then
+        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*G%GV%H_to_m > hmin(i))) then
           Hf(kf(i),i) = H_here(i) ; Rf(kf(i),i) = HxR_here(i) / H_here(i)
           kf(i) = kf(i) + 1
 
           ! Start a new layer
-          H_here(i) = h(i,j,k)*G%H_to_m
-          HxR_here(i) = (h(i,j,k)*G%H_to_m)*G%GV%Rlay(k)
+          H_here(i) = h(i,j,k)*G%GV%H_to_m
+          HxR_here(i) = (h(i,j,k)*G%GV%H_to_m)*G%GV%Rlay(k)
         else
-          H_here(i) = H_here(i) + h(i,j,k)*G%H_to_m
-          HxR_here(i) = HxR_here(i) + (h(i,j,k)*G%H_to_m)*G%GV%Rlay(k)
+          H_here(i) = H_here(i) + h(i,j,k)*G%GV%H_to_m
+          HxR_here(i) = HxR_here(i) + (h(i,j,k)*G%GV%H_to_m)*G%GV%Rlay(k)
         endif
       enddo ; enddo
       do i=is,ie ; if (H_here(i) > 0.0) then

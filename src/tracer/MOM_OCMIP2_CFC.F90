@@ -654,8 +654,8 @@ function OCMIP2_CFC_stock(h, stocks, G, CS, names, units, stock_index)
     stocks(1) = stocks(1) + CS%CFC11(i,j,k) * mass
     stocks(2) = stocks(2) + CS%CFC12(i,j,k) * mass
   enddo ; enddo ; enddo
-  stocks(1) = G%H_to_kg_m2 * stocks(1)
-  stocks(2) = G%H_to_kg_m2 * stocks(2)
+  stocks(1) = G%GV%H_to_kg_m2 * stocks(1)
+  stocks(2) = G%GV%H_to_kg_m2 * stocks(2)
 
   OCMIP2_CFC_stock = 2
 

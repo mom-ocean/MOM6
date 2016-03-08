@@ -417,7 +417,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   endif
 
   if (dyn_p_surf) then
-    Pa_to_eta = 1.0 / G%H_to_Pa
+    Pa_to_eta = 1.0 / G%GV%H_to_Pa
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,eta_PF_start,CS,Pa_to_eta,p_surf_begin,p_surf_end)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       eta_PF_start(i,j) = CS%eta_PF(i,j) - Pa_to_eta * &
@@ -578,9 +578,9 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   if (CS%debug) then
     call uchksum(up,"Predictor 1 u",G,haloshift=0)
     call vchksum(vp,"Predictor 1 v",G,haloshift=0)
-    call hchksum(G%H_to_kg_m2*h,"Predictor 1 h",G,haloshift=1)
-    call uchksum(G%H_to_kg_m2*uh,"Predictor 1 uh",G,haloshift=2)
-    call vchksum(G%H_to_kg_m2*vh,"Predictor 1 vh",G,haloshift=2)
+    call hchksum(G%GV%H_to_kg_m2*h,"Predictor 1 h",G,haloshift=1)
+    call uchksum(G%GV%H_to_kg_m2*uh,"Predictor 1 uh",G,haloshift=2)
+    call vchksum(G%GV%H_to_kg_m2*vh,"Predictor 1 vh",G,haloshift=2)
 !   call MOM_state_chksum("Predictor 1", up, vp, h, uh, vh, G, haloshift=1)
     call MOM_accel_chksum("Predictor accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
              CS%diffu, CS%diffv, G, CS%pbce, CS%u_accel_bt, CS%v_accel_bt)
@@ -696,7 +696,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     call MOM_state_chksum("Predictor ", up, vp, hp, uh, vh, G)
     call uchksum(u_av,"Predictor avg u",G,haloshift=1)
     call vchksum(v_av,"Predictor avg v",G,haloshift=1)
-    call hchksum(G%H_to_kg_m2*h_av,"Predictor avg h",G,haloshift=0)
+    call hchksum(G%GV%H_to_kg_m2*h_av,"Predictor avg h",G,haloshift=0)
   ! call MOM_state_chksum("Predictor avg ", u_av, v_av,  h_av,uh, vh, G)
     call check_redundant("Predictor up ", up, vp, G)
     call check_redundant("Predictor uh ", uh, vh, G)
@@ -783,9 +783,9 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   if (CS%debug) then
     call uchksum(u,"Corrector 1 u",G,haloshift=0)
     call vchksum(v,"Corrector 1 v",G,haloshift=0)
-    call hchksum(G%H_to_kg_m2*h,"Corrector 1 h",G,haloshift=2)
-    call uchksum(G%H_to_kg_m2*uh,"Corrector 1 uh",G,haloshift=2)
-    call vchksum(G%H_to_kg_m2*vh,"Corrector 1 vh",G,haloshift=2)
+    call hchksum(G%GV%H_to_kg_m2*h,"Corrector 1 h",G,haloshift=2)
+    call uchksum(G%GV%H_to_kg_m2*uh,"Corrector 1 uh",G,haloshift=2)
+    call vchksum(G%GV%H_to_kg_m2*vh,"Corrector 1 vh",G,haloshift=2)
   ! call MOM_state_chksum("Corrector 1", u, v, h, uh, vh, G, haloshift=1)
     call MOM_accel_chksum("Corrector accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
              CS%diffu, CS%diffv, G, CS%pbce, CS%u_accel_bt, CS%v_accel_bt)
@@ -888,15 +888,15 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   if (CS%id_vav        > 0) call post_data(CS%id_vav, v_av,                 CS%diag)
   if (CS%id_u_BT_accel > 0) call post_data(CS%id_u_BT_accel, CS%u_accel_bt, CS%diag)
   if (CS%id_v_BT_accel > 0) call post_data(CS%id_v_BT_accel, CS%v_accel_bt, CS%diag)
-  if (CS%id_umo        > 0) call post_data(CS%id_umo, uh*G%H_to_kg_m2,      CS%diag)
-  if (CS%id_vmo        > 0) call post_data(CS%id_vmo, vh*G%H_to_kg_m2,      CS%diag)
+  if (CS%id_umo        > 0) call post_data(CS%id_umo, uh*G%GV%H_to_kg_m2,      CS%diag)
+  if (CS%id_vmo        > 0) call post_data(CS%id_vmo, vh*G%GV%H_to_kg_m2,      CS%diag)
 
   ! depth summed zonal mass transport
   if (CS%id_umo_2d > 0) then
     do j=js,je ; do i=is,ie
       work2d(i,j) = 0.0
       do k=1,nz
-        work2d(i,j) = work2d(i,j) + uh(i,j,k)*G%H_to_kg_m2
+        work2d(i,j) = work2d(i,j) + uh(i,j,k)*G%GV%H_to_kg_m2
       enddo
     enddo ; enddo
     call post_data(CS%id_umo_2d, work2d, CS%diag)
@@ -906,7 +906,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     do j=js,je ; do i=is,ie
       work2d(i,j) = 0.0
       do k=1,nz
-        work2d(i,j) = work2d(i,j) + vh(i,j,k)*G%H_to_kg_m2
+        work2d(i,j) = work2d(i,j) + vh(i,j,k)*G%GV%H_to_kg_m2
       enddo
     enddo ; enddo
     call post_data(CS%id_vmo_2d, work2d, CS%diag)
@@ -916,7 +916,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     call MOM_state_chksum("Corrector ", u, v, h, uh, vh, G)
     call uchksum(u_av,"Corrector avg u",G,haloshift=1)
     call vchksum(v_av,"Corrector avg v",G,haloshift=1)
-    call hchksum(G%H_to_kg_m2*h_av,"Corrector avg h",G,haloshift=1)
+    call hchksum(G%GV%H_to_kg_m2*h_av,"Corrector avg h",G,haloshift=1)
  !  call MOM_state_chksum("Corrector avg ", u_av, v_av, h_av, uh, vh, G)
   endif
 
@@ -1146,7 +1146,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, param_file, &
     ! dimensions as h, either m or kg m-3.
     !   CS%eta(:,:) = 0.0 already from initialization.
     if (G%GV%Boussinesq) then
-      do j=js,je ; do i=is,ie ; CS%eta(i,j) = -G%bathyT(i,j) * G%m_to_H ; enddo ; enddo
+      do j=js,je ; do i=is,ie ; CS%eta(i,j) = -G%bathyT(i,j) * G%GV%m_to_H ; enddo ; enddo
     endif
     do k=1,nz ; do j=js,je ; do i=is,ie
        CS%eta(i,j) = CS%eta(i,j) + h(i,j,k)

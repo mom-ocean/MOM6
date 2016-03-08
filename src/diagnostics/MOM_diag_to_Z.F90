@@ -246,7 +246,7 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
       do I=Isq,Ieq ; if (nk_valid(I) > 0) then
       ! Calculate the z* interface heights for tracers.
         htot = 0.0 ; do k=1,nk_valid(i) ; htot = htot + h_f(k,i) ; enddo
-        dilate = 0.0 ; if (htot*G%H_to_m > 2.0*Angstrom) dilate = (D_pt(i) - 0.0) / htot
+        dilate = 0.0 ; if (htot*G%GV%H_to_m > 2.0*Angstrom) dilate = (D_pt(i) - 0.0) / htot
 
         e(nk_valid(i)+1) = -D_pt(i)
         do k=nk_valid(i),1,-1 ; e(K) = e(K+1) + h_f(k,i)*dilate ; enddo
@@ -602,14 +602,14 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, CS)
 
   if (CS%id_uh_Z > 0) then 
     do k=1,nk_z ; do j=js,je ; do I=Isq,Ieq
-      CS%uh_z(i,j,k) = CS%uh_z(i,j,k)*G%H_to_kg_m2 
+      CS%uh_z(i,j,k) = CS%uh_z(i,j,k)*G%GV%H_to_kg_m2 
     enddo ; enddo ; enddo
     call post_data(CS%id_uh_Z, CS%uh_z, CS%diag)
   endif 
 
   if (CS%id_vh_Z > 0) then
     do k=1,nk_z ; do j=Jsq,Jeq ; do I=is,ie
-      CS%vh_z(i,j,k) = CS%vh_z(i,j,k)*G%H_to_kg_m2 
+      CS%vh_z(i,j,k) = CS%vh_z(i,j,k)*G%GV%H_to_kg_m2 
     enddo ; enddo ; enddo
     call post_data(CS%id_vh_Z, CS%vh_z, CS%diag)
   endif 
@@ -752,7 +752,7 @@ subroutine calc_Zint_diags(h, in_ptrs, ids, num_diags, &
     do k=1,nk ; do i=is,ie ; htot(i) = htot(i) + h(i,j,k) ; enddo ; enddo
     do i=is,ie
       dilate(i) = 0.0
-      if (htot(i)*G%H_to_m > 0.5) dilate(i) = (G%bathyT(i,j) - 0.0) / htot(i)
+      if (htot(i)*G%GV%H_to_m > 0.5) dilate(i) = (G%bathyT(i,j) - 0.0) / htot(i)
       e(i,nk+1) = -G%bathyT(i,j)
     enddo
     do k=nk,1,-1 ; do i=is,ie

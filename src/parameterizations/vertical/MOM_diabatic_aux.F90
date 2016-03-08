@@ -188,11 +188,11 @@ subroutine make_frazil(h, tv, G, CS, p_surf)
 
     if (CS%pressure_dependent_frazil) then
       do i=is,ie
-        pressure(i,1) = ps(i) + (0.5*G%H_to_Pa)*h(i,j,1)
+        pressure(i,1) = ps(i) + (0.5*G%GV%H_to_Pa)*h(i,j,1)
       enddo
       do k=2,nz ; do i=is,ie
         pressure(i,k) = pressure(i,k-1) + &
-          (0.5*G%H_to_Pa) * (h(i,j,k) + h(i,j,k-1))
+          (0.5*G%GV%H_to_Pa) * (h(i,j,k) + h(i,j,k-1))
       enddo ; enddo
     endif
 
@@ -208,7 +208,7 @@ subroutine make_frazil(h, tv, G, CS, p_surf)
         if (tv%T(i,j,1) > T_freeze(i)) then
     ! If frazil had previously been formed, but the surface temperature is now
     ! above freezing, cool the surface layer with the frazil heat deficit.
-          hc = (tv%C_p*G%H_to_kg_m2) * h(i,j,1)
+          hc = (tv%C_p*G%GV%H_to_kg_m2) * h(i,j,1)
           if (tv%frazil(i,j) - hc * (tv%T(i,j,1) - T_freeze(i)) <= 0.0) then
             tv%T(i,j,1) = tv%T(i,j,1) - tv%frazil(i,j)/hc
             tv%frazil(i,j) = 0.0
@@ -231,7 +231,7 @@ subroutine make_frazil(h, tv, G, CS, p_surf)
             T_fr_set = .true.
           endif
 
-          hc = (tv%C_p*G%H_to_kg_m2) * h(i,j,k)
+          hc = (tv%C_p*G%GV%H_to_kg_m2) * h(i,j,k)
           if (h(i,j,k) <= 10.0*G%GV%Angstrom) then
             ! Very thin layers should not be cooled by the frazil flux.
             if (tv%T(i,j,k) < T_freeze(i)) then
@@ -315,8 +315,8 @@ subroutine differential_diffuse_T_S(h, tv, visc, dt, G)
   do j=js,je
     do i=is,ie
       I_h_int = 1.0 / (0.5 * (h(i,j,1) + h(i,j,2)) + h_neglect)
-      mix_T(i,2) = ((dt * Kd_T(i,j,2)) * G%m_to_H**2) * I_h_int
-      mix_S(i,2) = ((dt * Kd_S(i,j,2)) * G%m_to_H**2) * I_h_int
+      mix_T(i,2) = ((dt * Kd_T(i,j,2)) * G%GV%m_to_H**2) * I_h_int
+      mix_S(i,2) = ((dt * Kd_S(i,j,2)) * G%GV%m_to_H**2) * I_h_int
 
       h_tr = h(i,j,1) + h_neglect
       b1_T(i) = 1.0 / (h_tr + mix_T(i,2))
@@ -329,8 +329,8 @@ subroutine differential_diffuse_T_S(h, tv, visc, dt, G)
     do k=2,nz-1 ; do i=is,ie
       ! Calculate the mixing across the interface below this layer.
       I_h_int = 1.0 / (0.5 * (h(i,j,k) + h(i,j,k+1)) + h_neglect)
-      mix_T(i,K+1) = ((dt * Kd_T(i,j,K+1)) * G%m_to_H**2) * I_h_int
-      mix_S(i,K+1) = ((dt * Kd_S(i,j,K+1)) * G%m_to_H**2) * I_h_int
+      mix_T(i,K+1) = ((dt * Kd_T(i,j,K+1)) * G%GV%m_to_H**2) * I_h_int
+      mix_S(i,K+1) = ((dt * Kd_S(i,j,K+1)) * G%GV%m_to_H**2) * I_h_int
 
       c1_T(i,k) = mix_T(i,K) * b1_T(i)
       c1_S(i,k) = mix_S(i,K) * b1_S(i)
@@ -399,7 +399,7 @@ subroutine adjust_salt(h, tv, G, CS)
     do k=nz,1,-1 ; do i=is,ie
       if ((G%mask2dT(i,j) > 0.0) .and. &
            ((tv%S(i,j,k) < S_min) .or. (salt_add_col(i,j) > 0.0))) then
-        mc = G%H_to_kg_m2 * h(i,j,k)
+        mc = G%GV%H_to_kg_m2 * h(i,j,k)
         if (h(i,j,k) <= 10.0*G%GV%Angstrom) then
           ! Very thin layers should not be adjusted by the salt flux
           if (tv%S(i,j,k) < S_min) then
@@ -498,7 +498,7 @@ subroutine insert_brine(h, tv, G, fluxes, nkmb, CS, dt, id_brine_lay)
 
     do k=nkmb+1,nz-1 ; do i=is,ie
       if ((G%mask2dT(i,j) > 0.0) .and. dzbr(i) < brine_dz .and. salt(i) > 0.) then
-        mc = G%H_to_kg_m2 * h_2d(i,k)
+        mc = G%GV%H_to_kg_m2 * h_2d(i,k)
         s_new = S(i,k) + salt(i)/mc
         t0 = T(i,k)
         call calculate_density(t0,s_new,tv%P_Ref,R_new,tv%eqn_of_state)
@@ -512,7 +512,7 @@ subroutine insert_brine(h, tv, G, fluxes, nkmb, CS, dt, id_brine_lay)
     ! Then try to insert into buffer layers if they exist
     do k=nkmb,G%GV%nkml+1,-1 ; do i=is,ie
       if ((G%mask2dT(i,j) > 0.0) .and. dzbr(i) < brine_dz .and. salt(i) > 0.) then
-        mc = G%H_to_kg_m2 * h_2d(i,k)
+        mc = G%GV%H_to_kg_m2 * h_2d(i,k)
         dzbr(i)=dzbr(i)+h_2d(i,k)
         inject_layer(i,j) = min(inject_layer(i,j),real(k))
       endif
@@ -522,7 +522,7 @@ subroutine insert_brine(h, tv, G, fluxes, nkmb, CS, dt, id_brine_lay)
 
     do k=1,G%GV%nkml ; do i=is,ie
       if ((G%mask2dT(i,j) > 0.0) .and. dzbr(i) < brine_dz .and. salt(i) > 0.) then
-        mc = G%H_to_kg_m2 * h_2d(i,k)
+        mc = G%GV%H_to_kg_m2 * h_2d(i,k)
         dzbr(i)=dzbr(i)+h_2d(i,k)
         inject_layer(i,j) = min(inject_layer(i,j),real(k))
       endif
@@ -535,7 +535,7 @@ subroutine insert_brine(h, tv, G, fluxes, nkmb, CS, dt, id_brine_lay)
         ks=inject_layer(i,j)
         cdz=0.0
         do k=ks,nz
-          mc = G%H_to_kg_m2 * h_2d(i,k)
+          mc = G%GV%H_to_kg_m2 * h_2d(i,k)
           scale = h_2d(i,k)/dzbr(i)
           cdz=cdz+h_2d(i,k)
           if (cdz > 1.0) exit
@@ -724,7 +724,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, diagPtr
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   pRef_MLD(:) = 0. ; pRef_N2(:) = 0.
   do j = js, je
-    dK(:) = 0.5 * h(:,j,1) * G%H_to_m ! Depth of center of surface layer
+    dK(:) = 0.5 * h(:,j,1) * G%GV%H_to_m ! Depth of center of surface layer
     call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef_MLD, rhoSurf, is, ie-is+1, tv%eqn_of_state)
     deltaRhoAtK(:) = 0.
     MLD(:,j) = 0.
@@ -732,15 +732,15 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, diagPtr
       subMLN2(:,j) = 0.
       rho1(:) = 0.
       d1(:) = 0.
-      pRef_N2(:) = G%g_Earth * G%GV%Rho0 * h(:,j,1) * G%H_to_m ! Boussinesq approximation!!!! ?????
+      pRef_N2(:) = G%g_Earth * G%GV%Rho0 * h(:,j,1) * G%GV%H_to_m ! Boussinesq approximation!!!! ?????
     endif
     do k = 2, nz
       dKm1(:) = dK(:) ! Depth of center of layer K-1
-      dK(:) = dK(:) + 0.5 * ( h(:,j,k) + h(:,j,k-1) ) * G%H_to_m ! Depth of center of layer K
+      dK(:) = dK(:) + 0.5 * ( h(:,j,k) + h(:,j,k-1) ) * G%GV%H_to_m ! Depth of center of layer K
 
       ! Stratification, N2, immediately below the mixed layer, averaged over at least 50 m.
       if (id_N2>0) then
-        pRef_N2(:) = pRef_N2(:) + G%g_Earth * G%GV%Rho0 * h(:,j,k) * G%H_to_m ! Boussinesq approximation!!!! ?????
+        pRef_N2(:) = pRef_N2(:) + G%g_Earth * G%GV%Rho0 * h(:,j,k) * G%GV%H_to_m ! Boussinesq approximation!!!! ?????
         call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_N2, rhoAtK, is, ie-is+1, tv%eqn_of_state)
         do i = is, ie
           if (MLD(i,j)>0. .and. subMLN2(i,j)==0.) then ! This block is below the mixed layer
@@ -748,7 +748,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, diagPtr
               rho1(i) = rhoAtK(i)
               d1(i) = dK(i)
               ! Use pressure at the bottom of the upper layer used in calculating d/dz rho
-              pRef_N2(i) = pRef_N2(i) + G%g_Earth * G%GV%Rho0 * h(i,j,k) * G%H_to_m ! Boussinesq approximation!!!! ?????
+              pRef_N2(i) = pRef_N2(i) + G%g_Earth * G%GV%Rho0 * h(i,j,k) * G%GV%H_to_m ! Boussinesq approximation!!!! ?????
             endif
             if (d1(i)>0. .and. dK(i)-d1(i)>=dz_subML) then
               subMLN2(i,j) = G%g_Earth/ G%GV%Rho0 * (rho1(i)-rhoAtK(i)) / (d1(i) - dK(i))
@@ -848,7 +848,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
 
   calculate_energetics = (present(cTKE) .and. present(dSV_dT) .and. present(dSV_dS))
   I_G_Earth = 1.0 / G%G_earth
-  g_Hconv2 = G%G_earth * G%H_to_kg_m2**2
+  g_Hconv2 = G%G_earth * G%GV%H_to_kg_m2**2
 
   if (present(cTKE)) cTKE(:,:,:) = 0.0
 
@@ -857,7 +857,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
   ! To accommodate vanishing upper layers, we need to allow for an instantaneous
   ! distribution of forcing over some finite vertical extent. The bulk mixed layer
   ! code handles this issue properly.
-  H_limit_fluxes = max(G%GV%Angstrom, 1.E-30*G%m_to_H)
+  H_limit_fluxes = max(G%GV%Angstrom, 1.E-30*G%GV%m_to_H)
 
   ! diagnostic to see if need to create mass to avoid grounding
   if (CS%id_createdH>0) CS%createdH(:,:) = 0.
@@ -882,7 +882,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
       h2d(i,k) = h(i,j,k)
       T2d(i,k) = tv%T(i,j,k)
       do n=1,nsw
-        opacityBand(n,i,k) = (1.0 / G%m_to_H)*optics%opacity_band(n,i,j,k)
+        opacityBand(n,i,k) = (1.0 / G%GV%m_to_H)*optics%opacity_band(n,i,j,k)
       enddo
     enddo ; enddo
 
@@ -893,7 +893,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
       do i=is,ie ; pres(i) = 0.0 ; enddo ! Add surface pressure?
       do k=1,nz
         do i=is,ie
-          d_pres(i) = G%g_Earth * G%H_to_kg_m2 * h2d(i,k)
+          d_pres(i) = G%g_Earth * G%GV%H_to_kg_m2 * h2d(i,k)
           p_lay(i) = pres(i) + 0.5*d_pres(i)
           pres(i) = pres(i) + d_pres(i)
         enddo
@@ -967,12 +967,12 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
           ! Diagnostics of heat content associated with mass fluxes
           if (ASSOCIATED(fluxes%heat_content_massin))                             &
             fluxes%heat_content_massin(i,j) = fluxes%heat_content_massin(i,j) +   &
-                         T2d(i,k) * max(0.,dThickness) * G%H_to_kg_m2 * fluxes%C_p * Idt
+                         T2d(i,k) * max(0.,dThickness) * G%GV%H_to_kg_m2 * fluxes%C_p * Idt
           if (ASSOCIATED(fluxes%heat_content_massout))                            &
             fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) + &
-                         T2d(i,k) * min(0.,dThickness) * G%H_to_kg_m2 * fluxes%C_p * Idt
+                         T2d(i,k) * min(0.,dThickness) * G%GV%H_to_kg_m2 * fluxes%C_p * Idt
           if (ASSOCIATED(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
-                         T2d(i,k) * dThickness * G%H_to_kg_m2
+                         T2d(i,k) * dThickness * G%GV%H_to_kg_m2
 
           ! Determine the energetics of river mixing before updating the state.
           if (calculate_energetics .and. associated(fluxes%lrunoff) .and. CS%do_rivermix) then
@@ -986,7 +986,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
             ! rivermix_depth =  The prescribed depth over which to mix river inflow
             ! drho_ds = The gradient of density wrt salt at the ambient surface salinity.
             ! Sriver = 0 (i.e. rivers are assumed to be pure freshwater)
-            RivermixConst = -0.5*(CS%rivermix_depth*dt)*G%m_to_H*G%H_to_Pa
+            RivermixConst = -0.5*(CS%rivermix_depth*dt)*G%GV%m_to_H*G%GV%H_to_Pa
 
             cTKE(i,j,k) = cTKE(i,j,k) + max(0.0, RivermixConst*dSV_dS(i,j,1) * &
                   (fluxes%lrunoff(i,j) + fluxes%frunoff(i,j)) * tv%S(i,j,1))
@@ -1017,7 +1017,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
           ! Place forcing into this layer if this layer has nontrivial thickness.
           ! For layers thin relative to 1/IforcingDepthScale, then distribute
           ! forcing into deeper layers.
-          IforcingDepthScale = 1. / max(G%GV%H_subroundoff, CS%minimum_forcing_depth*G%m_to_H - netMassOut(i) )
+          IforcingDepthScale = 1. / max(G%GV%H_subroundoff, CS%minimum_forcing_depth*G%GV%m_to_H - netMassOut(i) )
           ! fractionOfForcing = 1.0, unless h2d is less than IforcingDepthScale.
           fractionOfForcing = min(1.0, h2d(i,k)*IforcingDepthScale)
 
@@ -1046,12 +1046,12 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
           ! Diagnostics of heat content associated with mass fluxes
           if (ASSOCIATED(fluxes%heat_content_massin))                             &
             fluxes%heat_content_massin(i,j) = fluxes%heat_content_massin(i,j) +   &
-                         tv%T(i,j,k) * max(0.,dThickness) * G%H_to_kg_m2 * fluxes%C_p * Idt
+                         tv%T(i,j,k) * max(0.,dThickness) * G%GV%H_to_kg_m2 * fluxes%C_p * Idt
           if (ASSOCIATED(fluxes%heat_content_massout))                            &
             fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) + &
-                         tv%T(i,j,k) * min(0.,dThickness) * G%H_to_kg_m2 * fluxes%C_p * Idt
+                         tv%T(i,j,k) * min(0.,dThickness) * G%GV%H_to_kg_m2 * fluxes%C_p * Idt
           if (ASSOCIATED(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
-                         tv%T(i,j,k) * dThickness * G%H_to_kg_m2
+                         tv%T(i,j,k) * dThickness * G%GV%H_to_kg_m2
 !NOTE tv%T should be T2d
 
           ! Update state by the appropriate increment.
@@ -1142,7 +1142,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
     ! Diagnose heating (W/m2) applied to a grid cell from SW penetration
     if(CS%id_penSW_diag > 0) then
       do k=1,nz ; do i=is,ie
-        CS%penSW_diag(i,j,k) = (T2d(i,k)-CS%penSW_diag(i,j,k))*h(i,j,k) * Idt * tv%C_p * G%H_to_kg_m2
+        CS%penSW_diag(i,j,k) = (T2d(i,k)-CS%penSW_diag(i,j,k))*h(i,j,k) * Idt * tv%C_p * G%GV%H_to_kg_m2
       enddo ; enddo
     endif
 

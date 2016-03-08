@@ -628,7 +628,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       if (CS%debug) then
         call uchksum(u,"Pre set_viscous_BBL u", G, haloshift=1)
         call vchksum(v,"Pre set_viscous_BBL v", G, haloshift=1)
-        call hchksum(h*G%H_to_m,"Pre set_viscous_BBL h", G, haloshift=1)
+        call hchksum(h*G%GV%H_to_m,"Pre set_viscous_BBL h", G, haloshift=1)
         if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Pre set_viscous_BBL T", G, haloshift=1)
         if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Pre set_viscous_BBL S", G, haloshift=1)
       endif
@@ -924,9 +924,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       if (CS%debug) then
         call uchksum(u,"Pre-advection u", G, haloshift=2)
         call vchksum(v,"Pre-advection v", G, haloshift=2)
-        call hchksum(h*G%H_to_m,"Pre-advection h", G, haloshift=1)
-        call uchksum(CS%uhtr*G%H_to_m,"Pre-advection uhtr", G, haloshift=0)
-        call vchksum(CS%vhtr*G%H_to_m,"Pre-advection vhtr", G, haloshift=0)
+        call hchksum(h*G%GV%H_to_m,"Pre-advection h", G, haloshift=1)
+        call uchksum(CS%uhtr*G%GV%H_to_m,"Pre-advection uhtr", G, haloshift=0)
+        call vchksum(CS%vhtr*G%GV%H_to_m,"Pre-advection vhtr", G, haloshift=0)
       ! call MOM_state_chksum("Pre-advection ", u, v, &
       !                       h, CS%uhtr, CS%vhtr, G, haloshift=1)
           if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Pre-advection T", G, haloshift=1)
@@ -977,9 +977,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         if (CS%debug) then
           call uchksum(u,"Pre-diabatic u", G, haloshift=2)
           call vchksum(v,"Pre-diabatic v", G, haloshift=2)
-          call hchksum(h*G%H_to_m,"Pre-diabatic h", G, haloshift=1)
-          call uchksum(CS%uhtr*G%H_to_m,"Pre-diabatic uh", G, haloshift=0)
-          call vchksum(CS%vhtr*G%H_to_m,"Pre-diabatic vh", G, haloshift=0)
+          call hchksum(h*G%GV%H_to_m,"Pre-diabatic h", G, haloshift=1)
+          call uchksum(CS%uhtr*G%GV%H_to_m,"Pre-diabatic uh", G, haloshift=0)
+          call vchksum(CS%vhtr*G%GV%H_to_m,"Pre-diabatic vh", G, haloshift=0)
         ! call MOM_state_chksum("Pre-diabatic ",u, v, h, CS%uhtr, CS%vhtr, G)
           call MOM_thermo_chksum("Pre-diabatic ", CS%tv, G,haloshift=0)
           call check_redundant("Pre-diabatic ", u, v, G)
@@ -1039,9 +1039,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         if (CS%debug) then
           call uchksum(u,"Post-diabatic u", G, haloshift=2)
           call vchksum(v,"Post-diabatic v", G, haloshift=2)
-          call hchksum(h*G%H_to_m,"Post-diabatic h", G, haloshift=1)
-          call uchksum(CS%uhtr*G%H_to_m,"Post-diabatic uh", G, haloshift=0)
-          call vchksum(CS%vhtr*G%H_to_m,"Post-diabatic vh", G, haloshift=0)
+          call hchksum(h*G%GV%H_to_m,"Post-diabatic h", G, haloshift=1)
+          call uchksum(CS%uhtr*G%GV%H_to_m,"Post-diabatic uh", G, haloshift=0)
+          call vchksum(CS%vhtr*G%GV%H_to_m,"Post-diabatic vh", G, haloshift=0)
         ! call MOM_state_chksum("Post-diabatic ", u, v, &
         !                       h, CS%uhtr, CS%vhtr, G, haloshift=1)
           if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Post-diabatic T", G, haloshift=1)
@@ -1760,7 +1760,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     if (CS%debug) then
       call uchksum(CS%u,"Pre ALE adjust init cond u", G, haloshift=1)
       call vchksum(CS%v,"Pre ALE adjust init cond v", G, haloshift=1)
-      call hchksum(CS%h*G%H_to_m,"Pre ALE adjust init cond h", G, haloshift=1)
+      call hchksum(CS%h*G%GV%H_to_m,"Pre ALE adjust init cond h", G, haloshift=1)
     endif
     call callTree_waypoint("Calling adjustGridForIntegrity() to remap initial conditions (initialize_MOM)")
     call adjustGridForIntegrity(CS%ALE_CSp, G, CS%h )
@@ -1769,7 +1769,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     if (CS%debug) then
       call uchksum(CS%u,"Post ALE adjust init cond u", G, haloshift=1)
       call vchksum(CS%v,"Post ALE adjust init cond v", G, haloshift=1)
-      call hchksum(CS%h*G%H_to_m, "Post ALE adjust init cond h", G, haloshift=1)
+      call hchksum(CS%h*G%GV%H_to_m, "Post ALE adjust init cond h", G, haloshift=1)
     endif
   endif
   if ( CS%use_ALE_algorithm ) call ALE_updateVerticalGridType( CS%ALE_CSp, G%GV )
@@ -2398,7 +2398,7 @@ subroutine post_diags_TS_tendency(G, CS, dt)
   ! fluxes, where advective transport arises from residual mean velocity.
   if (CS%id_T_advection_xy > 0 .or. CS%id_T_advection_xy_2d > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
-      work3d(i,j,k) = CS%T_advection_xy(i,j,k) * G%H_to_kg_m2 * CS%tv%C_p
+      work3d(i,j,k) = CS%T_advection_xy(i,j,k) * G%GV%H_to_kg_m2 * CS%tv%C_p
     enddo ; enddo ; enddo
     if (CS%id_T_advection_xy    > 0) call post_data(CS%id_T_advection_xy, work3d, CS%diag)
     if (CS%id_T_advection_xy_2d > 0) then
@@ -2416,7 +2416,7 @@ subroutine post_diags_TS_tendency(G, CS, dt)
   ! fluxes, where advective transport arises from residual mean velocity.
   if (CS%id_S_advection_xy > 0 .or. CS%id_S_advection_xy_2d > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
-      work3d(i,j,k) = CS%S_advection_xy(i,j,k) * G%H_to_kg_m2 * ppt2mks
+      work3d(i,j,k) = CS%S_advection_xy(i,j,k) * G%GV%H_to_kg_m2 * ppt2mks
     enddo ; enddo ; enddo
     if (CS%id_S_advection_xy    > 0) call post_data(CS%id_S_advection_xy, work3d, CS%diag)
     if (CS%id_S_advection_xy_2d > 0) then
@@ -2451,7 +2451,7 @@ subroutine post_diags_TS_tendency(G, CS, dt)
   ! diagnose net tendency for heat content of a grid cell over a time step and update Th_prev
   if (CS%id_Th_tendency > 0 .or. CS%id_Th_tendency_2d > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
-      work3d(i,j,k)     = (CS%tv%T(i,j,k)*CS%h(i,j,k) - CS%Th_prev(i,j,k)) * Idt * G%H_to_kg_m2 * CS%tv%C_p
+      work3d(i,j,k)     = (CS%tv%T(i,j,k)*CS%h(i,j,k) - CS%Th_prev(i,j,k)) * Idt * G%GV%H_to_kg_m2 * CS%tv%C_p
       CS%Th_prev(i,j,k) =  CS%tv%T(i,j,k)*CS%h(i,j,k)
     enddo ; enddo ; enddo
     if (CS%id_Th_tendency    > 0) call post_data(CS%id_Th_tendency, work3d, CS%diag)
@@ -2469,7 +2469,7 @@ subroutine post_diags_TS_tendency(G, CS, dt)
   ! diagnose net tendency for salt content of a grid cell over a time step and update Sh_prev
   if (CS%id_Sh_tendency > 0 .or. CS%id_Sh_tendency_2d > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
-      work3d(i,j,k)     = (CS%tv%S(i,j,k)*CS%h(i,j,k) - CS%Sh_prev(i,j,k)) * Idt * G%H_to_kg_m2 * ppt2mks
+      work3d(i,j,k)     = (CS%tv%S(i,j,k)*CS%h(i,j,k) - CS%Sh_prev(i,j,k)) * Idt * G%GV%H_to_kg_m2 * ppt2mks
       CS%Sh_prev(i,j,k) =  CS%tv%S(i,j,k)*CS%h(i,j,k)
     enddo ; enddo ; enddo
     if (CS%id_Sh_tendency    > 0) call post_data(CS%id_Sh_tendency, work3d, CS%diag)
@@ -2748,8 +2748,8 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
       enddo
 
       do k=1,nz ; do i=is,ie
-        if (depth(i) + h(i,j,k)*G%H_to_m < depth_ml) then
-          dh = h(i,j,k)*G%H_to_m
+        if (depth(i) + h(i,j,k)*G%GV%H_to_m < depth_ml) then
+          dh = h(i,j,k)*G%GV%H_to_m
         elseif (depth(i) < depth_ml) then
           dh = depth_ml - depth(i)
         else
@@ -2765,8 +2765,8 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
       enddo ; enddo
   ! Calculate the average properties of the mixed layer depth.
       do i=is,ie
-        if (depth(i) < G%GV%H_subroundoff*G%H_to_m) &
-            depth(i) = G%GV%H_subroundoff*G%H_to_m
+        if (depth(i) < G%GV%H_subroundoff*G%GV%H_to_m) &
+            depth(i) = G%GV%H_subroundoff*G%GV%H_to_m
         if (CS%use_temperature) then
           state%SST(i,j) = state%SST(i,j) / depth(i)
           state%SSS(i,j) = state%SSS(i,j) / depth(i)
@@ -2817,7 +2817,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
     enddo ; enddo
 !$OMP do
     do j=js,je ; do k=1,nz; do i=is,ie
-      mass = G%H_to_kg_m2*h(i,j,k)
+      mass = G%GV%H_to_kg_m2*h(i,j,k)
       state%ocean_mass(i,j) = state%ocean_mass(i,j) + mass
       state%ocean_heat(i,j) = state%ocean_heat(i,j) + mass*CS%tv%T(i,j,k)
       state%ocean_salt(i,j) = state%ocean_salt(i,j) + &
@@ -2829,7 +2829,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
       do j=js,je ; do i=is,ie ; state%ocean_mass(i,j) = 0.0 ; enddo ; enddo
 !$OMP do
       do j=js,je ; do k=1,nz ; do i=is,ie
-        state%ocean_mass(i,j) = state%ocean_mass(i,j) + G%H_to_kg_m2*h(i,j,k)
+        state%ocean_mass(i,j) = state%ocean_mass(i,j) + G%GV%H_to_kg_m2*h(i,j,k)
       enddo ; enddo ; enddo
     endif
     if (associated(state%ocean_heat)) then
@@ -2837,7 +2837,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
       do j=js,je ; do i=is,ie ; state%ocean_heat(i,j) = 0.0 ; enddo ; enddo
 !$OMP do
       do j=js,je ; do k=1,nz ; do i=is,ie
-        mass = G%H_to_kg_m2*h(i,j,k)
+        mass = G%GV%H_to_kg_m2*h(i,j,k)
         state%ocean_heat(i,j) = state%ocean_heat(i,j) + mass*CS%tv%T(i,j,k)
       enddo ; enddo ; enddo
     endif
@@ -2846,7 +2846,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
       do j=js,je ; do i=is,ie ; state%ocean_salt(i,j) = 0.0 ; enddo ; enddo
 !$OMP do
       do j=js,je ; do k=1,nz ; do i=is,ie
-        mass = G%H_to_kg_m2*h(i,j,k)
+        mass = G%GV%H_to_kg_m2*h(i,j,k)
         state%ocean_salt(i,j) = state%ocean_salt(i,j) + &
                                 mass * (1.0e-3*CS%tv%S(i,j,k))
       enddo ; enddo ; enddo

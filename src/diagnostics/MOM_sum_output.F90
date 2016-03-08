@@ -445,10 +445,10 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
     if (CS%use_repro_sum) then
       tmp1(:,:,:) = 0.0
       do k=1,nz ; do j=js,je ; do i=is,ie
-        tmp1(i,j,k) = h(i,j,k) * (G%H_to_kg_m2*areaTm(i,j))
+        tmp1(i,j,k) = h(i,j,k) * (G%GV%H_to_kg_m2*areaTm(i,j))
       enddo ; enddo ; enddo
       mass_tot = reproducing_sum(tmp1, sums=mass_lay, EFP_sum=mass_EFP)
-      do k=1,nz ; vol_lay(k) = (G%H_to_m/G%H_to_kg_m2)*mass_lay(k) ; enddo
+      do k=1,nz ; vol_lay(k) = (G%GV%H_to_m/G%GV%H_to_kg_m2)*mass_lay(k) ; enddo
     else
       do k=1,nz
         vol_lay(k) = 0.0
@@ -457,15 +457,15 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
         enddo ; enddo
       enddo
       call sum_across_PEs(vol_lay,nz)
-      do k=1,nz ; mass_lay(k) = G%H_to_kg_m2*vol_lay(k) ; enddo
-      do k=1,nz ; vol_lay(k) = G%H_to_m*vol_lay(k) ; enddo
+      do k=1,nz ; mass_lay(k) = G%GV%H_to_kg_m2*vol_lay(k) ; enddo
+      do k=1,nz ; vol_lay(k) = G%GV%H_to_m*vol_lay(k) ; enddo
     endif
   else
     if (CS%use_repro_sum) then
       tmp1(:,:,:) = 0.0
       if (CS%do_APE_calc) then
         do k=1,nz ; do j=js,je ; do i=is,ie
-          tmp1(i,j,k) = G%H_to_kg_m2 * h(i,j,k) * areaTm(i,j)
+          tmp1(i,j,k) = G%GV%H_to_kg_m2 * h(i,j,k) * areaTm(i,j)
         enddo ; enddo ; enddo
         mass_tot = reproducing_sum(tmp1, sums=mass_lay, EFP_sum=mass_EFP)
 
@@ -473,10 +473,10 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
         do k=1,nz ; do j=js,je ; do i=is,ie
           tmp1(i,j,k) = (eta(i,j,K)-eta(i,j,K+1)) * areaTm(i,j)
         enddo ; enddo ; enddo
-        vol_tot = G%H_to_m*reproducing_sum(tmp1, sums=vol_lay)
+        vol_tot = G%GV%H_to_m*reproducing_sum(tmp1, sums=vol_lay)
       else
         do k=1,nz ; do j=js,je ; do i=is,ie
-          tmp1(i,j,k) = G%H_to_kg_m2 * h(i,j,k) * areaTm(i,j)
+          tmp1(i,j,k) = G%GV%H_to_kg_m2 * h(i,j,k) * areaTm(i,j)
         enddo ; enddo ; enddo
         mass_tot = reproducing_sum(tmp1, sums=mass_lay, EFP_sum=mass_EFP)
         do k=1,nz ; vol_lay(k) = mass_lay(k) / G%GV%Rho0 ; enddo
@@ -485,7 +485,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
       do k=1,nz
         mass_lay(k) = 0.0
         do j=js,je ; do i=is,ie
-          mass_lay(k) = mass_lay(k) + G%H_to_kg_m2 * h(i,j,k) * areaTm(i,j)
+          mass_lay(k) = mass_lay(k) + G%GV%H_to_kg_m2 * h(i,j,k) * areaTm(i,j)
         enddo ; enddo
       enddo
       if (CS%do_APE_calc) then
@@ -622,7 +622,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
   if (CS%use_repro_sum) then
     tmp1(:,:,:) = 0.0
     do k=1,nz ; do j=js,je ; do i=is,ie
-      tmp1(i,j,k) = (0.25 * G%H_to_kg_m2 * (areaTm(i,j) * h(i,j,k))) * &
+      tmp1(i,j,k) = (0.25 * G%GV%H_to_kg_m2 * (areaTm(i,j) * h(i,j,k))) * &
               (u(I-1,j,k)**2 + u(I,j,k)**2 + v(i,J-1,k)**2 + v(i,J,k)**2)
     enddo ; enddo ; enddo
   else
@@ -632,7 +632,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
          KE(k) = KE(k) + 0.25 * (areaTm(i,j) * h(i,j,k)) * &
               (u(I-1,j,k)**2 + u(I,j,k)**2 + v(i,J-1,k)**2 + v(i,J,k)**2)
       enddo ; enddo
-      KE(k) = G%H_to_kg_m2 * KE(k)
+      KE(k) = G%GV%H_to_kg_m2 * KE(k)
     enddo
   endif
 
@@ -646,7 +646,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
       do j=js,je ; do i=is,ie
         hbelow = 0.0
         do k=nz,1,-1
-          hbelow = hbelow + h(i,j,k) * G%H_to_m
+          hbelow = hbelow + h(i,j,k) * G%GV%H_to_m
           hint = (H_0APE(K) + hbelow - G%bathyT(i,j))
           hbot = H_0APE(K) - G%bathyT(i,j)
           hbot = (hbot + ABS(hbot)) * 0.5
@@ -699,9 +699,9 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
       Temp_int(:,:) = 0.0 ; Salt_int(:,:) = 0.0
       do k=1,nz ; do j=js,je ; do i=is,ie
         Salt_int(i,j) = Salt_int(i,j) + tv%S(i,j,k) * &
-                        (h(i,j,k)*(G%H_to_kg_m2 * areaTm(i,j)))
+                        (h(i,j,k)*(G%GV%H_to_kg_m2 * areaTm(i,j)))
         Temp_int(i,j) = Temp_int(i,j) + (tv%C_p * tv%T(i,j,k)) * &
-                        (h(i,j,k)*(G%H_to_kg_m2 * areaTm(i,j)))
+                        (h(i,j,k)*(G%GV%H_to_kg_m2 * areaTm(i,j)))
       enddo ; enddo ; enddo
       Salt = reproducing_sum(Salt_int, EFP_sum=salt_EFP)
       Heat = reproducing_sum(Temp_int, EFP_sum=heat_EFP)
@@ -710,8 +710,8 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
         Salt = Salt + tv%S(i,j,k)*h(i,j,k)*areaTm(i,j)
         Heat = Heat + tv%T(i,j,k)*h(i,j,k)*areaTm(i,j)
       enddo ; enddo ; enddo
-      Salt = G%H_to_kg_m2 * Salt
-      Heat = (G%H_to_kg_m2) * (tv%C_p * Heat)
+      Salt = G%GV%H_to_kg_m2 * Salt
+      Heat = (G%GV%H_to_kg_m2) * (tv%C_p * Heat)
       call sum_across_PEs(Salt)
       call sum_across_PEs(Heat)
     endif

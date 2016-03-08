@@ -140,30 +140,6 @@ type, public :: ocean_grid_type
     dF_dx, dF_dy  ! Derivatives of f (Coriolis parameter) at h-points, in s-1 m-1.
   real :: g_Earth !   The gravitational acceleration in m s-2.
 
-  ! The following variables give information about the vertical grid.
-!  real :: Rho0    !   The density used in the Boussinesq approximation or
-!                  ! nominal density used to convert depths into mass
-!                  ! units, in kg m-3.
-!  logical :: Boussinesq     ! If true, make the Boussinesq approximation.
-!  real :: Angstrom      !   A one-Angstrom thickness in the model's thickness
-!                        ! units.  (This replaces the old macro EPSILON.)
-!  real :: Angstrom_z    !   A one-Angstrom thickness in m.
-!  real :: H_subroundoff !   A thickness that is so small that it can be added to
-                        ! a thickness of Angstrom or larger without changing it
-                        ! at the bit level, in thickness units.  If Angstrom is
-                        ! 0 or exceedingly small, this is negligible compared to
-                        ! a thickness of 1e-17 m.
-  real :: H_to_kg_m2    ! A constant that translates thicknesses from the units
-                        ! of thickness to kg m-2.
-  real :: kg_m2_to_H    ! A constant that translates thicknesses from kg m-2 to
-                        ! the units of thickness.
-  real :: m_to_H        ! A constant that translates distances in m to the
-                        ! units of thickness.
-  real :: H_to_m        ! A constant that translates distances in the units of
-                        ! thickness to m.
-  real :: H_to_Pa       ! A constant that translates the units of thickness to
-                        ! to pressure in Pa.
-
   ! These variables are global sums that are useful for 1-d diagnostics
   real :: areaT_global  ! Global sum of h-cell area in m2
   real :: IareaT_global ! Global sum of inverse h-cell area (1/areaT_global)
@@ -329,13 +305,6 @@ subroutine MOM_grid_init(G, param_file)
   ! Copy over several common variables from the vertical grid.
   ! Consider removing these later.
   G%ks = 1 ; G%ke = G%GV%ke
-  ! G%Rho0 = G%GV%Rho0 ; G%Boussinesq = G%GV%Boussinesq
-!  G%GV%Angstrom = G%GV%Angstrom ; G%GV%Angstrom_z = G%GV%Angstrom_z
-!  G%H_subroundoff = G%GV%H_subroundoff
-  G%H_to_kg_m2 = G%GV%H_to_kg_m2 ; G%kg_m2_to_H = G%GV%kg_m2_to_H
-  G%m_to_H = G%GV%m_to_H ; G%H_to_m = G%GV%H_to_m
-  G%H_to_Pa = G%GV%H_to_Pa
-
   G%bathyT(:,:) = G%GV%Angstrom_z !### Should this be 0 instead, in which case this line can go?
 
 end subroutine MOM_grid_init

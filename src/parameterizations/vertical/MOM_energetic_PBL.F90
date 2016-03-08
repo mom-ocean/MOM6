@@ -419,7 +419,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
       T(i,k) = tv%T(i,j,k) ; S(i,k) = tv%S(i,j,k)
       Kd(i,K) = 0.0
     enddo ; enddo
-    do i=is,ie ; CS%ML_depth(i,j) = h(i,1)*G%H_to_m ; sfc_connected(i) = .true. ; enddo
+    do i=is,ie ; CS%ML_depth(i,j) = h(i,1)*G%GV%H_to_m ; sfc_connected(i) = .true. ; enddo
 
     if (debug) then
       mech_TKE_k(:,:) = 0.0 ; conv_PErel_k(:,:) = 0.0
@@ -481,7 +481,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
       h_bot(i) = 0.0 ; hb_hs(i,nz+1) = 0.0
       do k=nz,1,-1
         h_bot(i) = h_bot(i) + h(i,k)
-        hb_hs(i,K) = G%H_to_m * (h_bot(i)*I_hs)
+        hb_hs(i,K) = G%GV%H_to_m * (h_bot(i)*I_hs)
       enddo
 !    endif ; enddo
 
@@ -493,7 +493,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
 
       pres(i,1) = 0.0
       do k=1,nz
-        dMass = G%H_to_kg_m2 * h(i,k)
+        dMass = G%GV%H_to_kg_m2 * h(i,k)
         dPres = G%G_Earth * dMass
         dT_to_dPE(i,k) = (dMass * (pres(i,K) + 0.5*dPres)) * dSV_dT(i,j,k)
         dS_to_dPE(i,k) = (dMass * (pres(i,K) + 0.5*dPres)) * dSV_dS(i,j,k)
@@ -522,7 +522,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
         ! different rates.  The following form is often used for mechanical
         ! stirring from the surface, perhaps due to breaking surface gravity
         ! waves and wind-driven turbulence.
-        Idecay_len_TKE(i) = (CS%TKE_decay * absf(i) / U_Star) * G%H_to_m
+        Idecay_len_TKE(i) = (CS%TKE_decay * absf(i) / U_Star) * G%GV%H_to_m
         exp_kh = 1.0
         if (Idecay_len_TKE(i) > 0.0) exp_kh = exp(-h(i,k-1)*Idecay_len_TKE(i))
         if (CS%TKE_diagnostics) CS%diag_TKE_mech_decay(i,j) = &
@@ -550,7 +550,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
           ! on a curve fit from the data of Wang (GRL, 2003).
           ! Note:         Ro = 1.0 / sqrt(0.5 * dt * Rho0 * (absf*htot(i))**3 / conv_PErel(i))
           nstar_FC = CS%nstar * conv_PErel(i) / (conv_PErel(i) + 0.2 * &
-                          sqrt(0.5 * dt * G%GV%Rho0 * (absf(i)*(htot(i)*G%H_to_m))**3 * conv_PErel(i)))
+                          sqrt(0.5 * dt * G%GV%Rho0 * (absf(i)*(htot(i)*G%GV%H_to_m))**3 * conv_PErel(i)))
         endif
         if (debug) nstar_k(K) = nstar_FC
 
@@ -589,7 +589,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
           dTe_t2 = Kddt_h(K-1) * ((T0(k-2) - T0(k-1)) + dTe(k-2))
           dSe_t2 = Kddt_h(K-1) * ((S0(k-2) - S0(k-1)) + dSe(k-2))
         endif
-        dt_h = (G%m_to_H**2*dt) / max(0.5*(h(i,k-1)+h(i,k)), 1e-15*h_sum(i))
+        dt_h = (G%GV%m_to_H**2*dt) / max(0.5*(h(i,k-1)+h(i,k)), 1e-15*h_sum(i))
 
         !   This tests whether the layers above and below this interface are in
         ! a convetively stable configuration, without considering any effects of
@@ -649,7 +649,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
           if ((CS%MKE_to_TKE_effic > 0.0) .and. (htot(i)*h(i,k) > 0.0)) then
             ! This is the energy that would be available from homogenizing the
             ! velocities between layer k and the layers above.
-            dMKE_max = (G%H_to_kg_m2 * CS%MKE_to_TKE_effic) * 0.5 * &
+            dMKE_max = (G%GV%H_to_kg_m2 * CS%MKE_to_TKE_effic) * 0.5 * &
                 (h(i,k) / ((htot(i) + h(i,k))*htot(i))) * &
                 ((uhtot(i)-u(i,k)*htot(i))**2 + (vhtot(i)-v(i,k)*htot(i))**2)
             ! A fraction (1-exp(Kddt_h*MKE2_Hharm)) of this energy would be
@@ -720,7 +720,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
               CS%diag_TKE_MKE(i,j) = CS%diag_TKE_MKE(i,j) + MKE_src * IdtdR0
             endif
             if (sfc_connected(i)) CS%ML_depth(i,J) = CS%ML_depth(i,J) + &
-                 G%H_to_m * h(i,k)
+                 G%GV%H_to_m * h(i,k)
 
             Kddt_h(K) = Kd(i,k)*dt_h
           elseif (tot_TKE + (MKE_src - PE_chg_g0) >= 0.0) then
@@ -743,7 +743,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
             mech_TKE(i) = TKE_reduc*(mech_TKE(i) + MKE_src)
             conv_PErel(i) = TKE_reduc*conv_PErel(i)
             if (sfc_connected(i)) CS%ML_depth(i,J) = CS%ML_depth(i,J) + &
-                 G%H_to_m * h(i,k)
+                 G%GV%H_to_m * h(i,k)
           elseif (tot_TKE == 0.0) then
             ! This can arise if nstar_FC = 0.
             Kd(i,k) = 0.0 ; Kddt_h(K) = 0.0
@@ -832,7 +832,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
             endif
 
             if (sfc_connected(i)) CS%ML_depth(i,J) = CS%ML_depth(i,J) + &
-                 (PE_chg / PE_chg_g0) * G%H_to_m * h(i,k)
+                 (PE_chg / PE_chg_g0) * G%GV%H_to_m * h(i,k)
             tot_TKE = 0.0 ; mech_TKE(i) = 0.0 ; conv_PErel(i) = 0.0
             sfc_disconnect = .true.
           endif
@@ -892,9 +892,9 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
     endif ; enddo ; ! Close of i-loop - Note unusual loop order!
 
     if (CS%id_Hsfc_used > 0) then
-      do i=is,ie ; Hsfc_used(i,j) = h(i,1)*G%H_to_m ; enddo
+      do i=is,ie ; Hsfc_used(i,j) = h(i,1)*G%GV%H_to_m ; enddo
       do k=2,nz ; do i=is,ie
-        if (Kd(i,K) > 0.0) Hsfc_used(i,j) = Hsfc_used(i,j) + h(i,k)*G%H_to_m
+        if (Kd(i,K) > 0.0) Hsfc_used(i,j) = Hsfc_used(i,j) + h(i,k)*G%GV%H_to_m
       enddo ; enddo
     endif
 
@@ -1168,7 +1168,7 @@ subroutine energetic_PBL_init(Time, G, param_file, diag, CS)
                  "units=nondim", default=1.0)
 
   ! This gives a minimum decay scale that is typically much less than Angstrom.
-  CS%ustar_min = 2e-4*CS%omega*(G%GV%Angstrom_z + G%H_to_m*G%GV%H_subroundoff)
+  CS%ustar_min = 2e-4*CS%omega*(G%GV%Angstrom_z + G%GV%H_to_m*G%GV%H_subroundoff)
   ! NOTE from AJA: The above parameter is not logged?
 
   CS%id_ML_depth = register_diag_field('ocean_model', 'ePBL_h_ML', diag%axesT1, &

@@ -70,7 +70,7 @@ subroutine SCM_idealized_hurricane_TS_init(T, S, h, G, param_file)
   do j=js,je ; do i=is,ie
     eta(1) = 0. ! Reference to surface
     do k=1,nz
-      eta(K+1) = eta(K) - h(i,j,k)*G%H_to_m ! Interface below layer (in m)
+      eta(K+1) = eta(K) - h(i,j,k)*G%GV%H_to_m ! Interface below layer (in m)
       zC = 0.5*( eta(K) + eta(K+1) )        ! Z of middle of layer (in m)
       T(i,j,k) = SST_ref + dTdz*min(0., zC+MLD)
       S(i,j,k) = S_ref

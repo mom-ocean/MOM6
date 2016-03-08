@@ -234,7 +234,7 @@ subroutine ALE_init( param_file, G, CS)
                  "REGRID_TIME_SCALE. Between depths REGRID_FILTER_SHALLOW_DEPTH and\n"//&
                  "REGRID_FILTER_SHALLOW_DEPTH the filter wieghts adopt a cubic profile.", &
                  units="m", default=0.)
-  call set_filter_depths(filter_shallow_depth*G%m_to_H, filter_deep_depth*G%m_to_H, CS%regridCS)
+  call set_filter_depths(filter_shallow_depth*G%GV%m_to_H, filter_deep_depth*G%GV%m_to_H, CS%regridCS)
 
   ! Keep a record of values for subsequent queries
   CS%nk = G%ke
@@ -516,7 +516,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u,
                 do k=1,G%ke
                   h2               = h1(k) - (dx(k)-dx(k+1))
                   work_conc(i,j,k) = (u_column(k)    - Reg%Tr(m)%t(i,j,k)      ) * Idt 
-                  work_cont(i,j,k) = (u_column(k)*h2 - Reg%Tr(m)%t(i,j,k)*h1(k)) * Idt * G%H_to_kg_m2 
+                  work_cont(i,j,k) = (u_column(k)*h2 - Reg%Tr(m)%t(i,j,k)*h1(k)) * Idt * G%GV%H_to_kg_m2 
                 enddo 
               endif 
             endif 
@@ -708,7 +708,7 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, tv, h )
   do j = G%jsc,G%jec+1
     do i = G%isc,G%iec+1
       ! Build current grid
-      hTmp(:) = h(i,j,:)*G%H_to_m
+      hTmp(:) = h(i,j,:)*G%GV%H_to_m
       tmp(:) = tv%S(i,j,:)
       ! Reconstruct salinity profile    
       ppoly_linear_E = 0.0
@@ -777,7 +777,7 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, tv, h )
     do i = G%isc,G%iec+1
      
       ! Build current grid
-      hTmp(:) = h(i,j,:) * G%H_to_m
+      hTmp(:) = h(i,j,:) * G%GV%H_to_m
       tmp(:) = tv%S(i,j,:)
       
       ! Reconstruct salinity profile    
@@ -1107,7 +1107,7 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
   elseif ( trim(string) ==  "PARAM") then
     call get_param(param_file, mod, "MAXIMUM_INTERFACE_DEPTHS", z_max, &
                  trim(message), units="m", fail_if_missing=.true.)
-    call set_regrid_max_depths( regridCS, z_max, G%m_to_H )
+    call set_regrid_max_depths( regridCS, z_max, G%GV%m_to_H )
   elseif (index(trim(string),'FILE:')==1) then
     call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
     inputdir = slasher(inputdir)
@@ -1142,7 +1142,7 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
     endif
     call log_param(param_file, mod, "!MAXIMUM_INT_DEPTHS", z_max, &
                trim(message), units=coordinateUnits(coordMode))
-    call set_regrid_max_depths( regridCS, z_max, G%m_to_H )
+    call set_regrid_max_depths( regridCS, z_max, G%GV%m_to_H )
   elseif (index(trim(string),'FNC1:')==1) then
     call dz_function1( trim(string(6:)), dz_max )
     if ((coordinateMode(coordMode) == REGRIDDING_SLIGHT) .and. &
@@ -1152,7 +1152,7 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
     z_max(1) = 0.0 ; do K=1,ke ; z_max(K+1) = z_max(K) + dz_max(K) ; enddo
     call log_param(param_file, mod, "!MAXIMUM_INT_DEPTHS", z_max, &
                trim(message), units=coordinateUnits(coordMode))
-    call set_regrid_max_depths( regridCS, z_max, G%m_to_H )
+    call set_regrid_max_depths( regridCS, z_max, G%GV%m_to_H )
   else
     call MOM_error(FATAL,"ALE_initRegridding: "// &
       "Unrecognized MAXIMUM_INT_DEPTH_CONFIG "//trim(string))
@@ -1176,7 +1176,7 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
   elseif ( trim(string) ==  "PARAM") then
     call get_param(param_file, mod, "MAX_LAYER_THICKNESS", h_max, &
                  trim(message), units="m", fail_if_missing=.true.)
-    call set_regrid_max_thickness( regridCS, h_max, G%m_to_H )
+    call set_regrid_max_thickness( regridCS, h_max, G%GV%m_to_H )
   elseif (index(trim(string),'FILE:')==1) then
     call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
     inputdir = slasher(inputdir)
@@ -1204,12 +1204,12 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
     call MOM_read_data(trim(fileName), trim(varName), h_max)
     call log_param(param_file, mod, "!MAX_LAYER_THICKNESS", h_max, &
                trim(message), units=coordinateUnits(coordMode))
-    call set_regrid_max_thickness( regridCS, h_max, G%m_to_H )
+    call set_regrid_max_thickness( regridCS, h_max, G%GV%m_to_H )
   elseif (index(trim(string),'FNC1:')==1) then
     call dz_function1( trim(string(6:)), h_max )
     call log_param(param_file, mod, "!MAX_LAYER_THICKNESS", h_max, &
                trim(message), units=coordinateUnits(coordMode))
-    call set_regrid_max_thickness( regridCS, h_max, G%m_to_H )
+    call set_regrid_max_thickness( regridCS, h_max, G%GV%m_to_H )
   else
     call MOM_error(FATAL,"ALE_initRegridding: "// &
       "Unrecognized MAX_LAYER_THICKNESS_CONFIG "//trim(string))
