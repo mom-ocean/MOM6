@@ -293,7 +293,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
-  h_neglect  = G%H_subroundoff
+  h_neglect  = G%GV%H_subroundoff
   h_neglect3 = h_neglect**3
 
   if (present(OBC)) then ; if (associated(OBC)) then

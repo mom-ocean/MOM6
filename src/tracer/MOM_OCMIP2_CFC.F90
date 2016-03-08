@@ -579,7 +579,7 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, CS)
   ! Write out any desired diagnostics.
   if (CS%mask_tracers) then
     do k=1,nz ; do j=js,je ; do i=is,ie
-      if (h_new(i,j,k) < 1.1*G%Angstrom) then
+      if (h_new(i,j,k) < 1.1*G%GV%Angstrom) then
         CS%CFC11_aux(i,j,k) = CS%CFC11_land_val
         CS%CFC12_aux(i,j,k) = CS%CFC12_land_val
       else

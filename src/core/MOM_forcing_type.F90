@@ -689,7 +689,7 @@ subroutine calculateBuoyancyFlux1d(G, fluxes, optics, h, Temp, Salt, tv, j, &
   useRiverHeatContent   = .False.
   useCalvingHeatContent = .False.
 
-  depthBeforeScalingFluxes = max( G%Angstrom, 1.e-30*G%m_to_H )
+  depthBeforeScalingFluxes = max( G%GV%Angstrom, 1.e-30*G%m_to_H )
   pressure(:) = 0. ! Ignore atmospheric pressure
   GoRho       = G%g_Earth / G%GV%Rho0
   start       = 1 + G%isc - G%isd

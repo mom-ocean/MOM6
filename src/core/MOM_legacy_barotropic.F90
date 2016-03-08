@@ -2661,7 +2661,7 @@ subroutine legacy_btcalc(h, G, CS, h_u, h_v, may_use_default)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-  h_neglect = G%H_subroundoff
+  h_neglect = G%GV%H_subroundoff
 
   !   This estimates the fractional thickness of each layer at the velocity
   ! points, using a harmonic mean estimate.
@@ -3774,7 +3774,7 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
 
   ! IareaT, IdxCu, and IdyCv need to be allocated with wide halos.
   ALLOC_(CS%IareaT(CS%isdw:CS%iedw,CS%jsdw:CS%jedw)) ; CS%IareaT(:,:) = 0.0
-  ALLOC_(CS%bathyT(CS%isdw:CS%iedw,CS%jsdw:CS%jedw)) ; CS%bathyT(:,:) = G%Angstrom_z
+  ALLOC_(CS%bathyT(CS%isdw:CS%iedw,CS%jsdw:CS%jedw)) ; CS%bathyT(:,:) = G%GV%Angstrom_z !### Should this be 0 instead?
   ALLOC_(CS%IdxCu(CS%isdw-1:CS%iedw,CS%jsdw:CS%jedw)) ; CS%IdxCu(:,:) = 0.0
   ALLOC_(CS%IdyCv(CS%isdw:CS%iedw,CS%jsdw-1:CS%jedw)) ; CS%IdyCv(:,:) = 0.0
   ALLOC_(CS%dy_Cu(CS%isdw-1:CS%iedw,CS%jsdw:CS%jedw)) ; CS%dy_Cu(:,:) = 0.0

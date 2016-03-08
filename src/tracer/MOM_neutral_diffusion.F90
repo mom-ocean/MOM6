@@ -352,7 +352,8 @@ subroutine neutral_diffusion(G, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
         dTracer(k) = dTracer(k) - Coef_y(i,J-1) * vFlx(i,J-1,ks)
       enddo
       do k = 1, G%ke
-        Tracer(i,j,k) = Tracer(i,j,k) + dTracer(k) * ( G%IareaT(i,j) / ( h(i,j,k) + G%H_subroundoff ) )
+        Tracer(i,j,k) = Tracer(i,j,k) + dTracer(k) * &
+                        ( G%IareaT(i,j) / ( h(i,j,k) + G%GV%H_subroundoff ) )
       enddo
 
       if(CS%id_neutral_diff_tracer_conc_tend(m)    > 0  .or.  &
@@ -387,7 +388,7 @@ subroutine neutral_diffusion(G, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
   ! the tendency array.
   if(CS%id_neutral_diff_tracer_conc_tend(m) > 0) then 
     do k = 1, G%ke ; do j = G%jsc,G%jec ; do i = G%isc,G%iec
-      tendency(i,j,k) =  tendency(i,j,k)/( h(i,j,k) + G%H_subroundoff )
+      tendency(i,j,k) =  tendency(i,j,k) / ( h(i,j,k) + G%GV%H_subroundoff )
     enddo ; enddo ; enddo
     call post_data(CS%id_neutral_diff_tracer_conc_tend(m), tendency, CS%diag)
   endif 

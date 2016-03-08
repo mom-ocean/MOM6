@@ -491,10 +491,10 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, CS, tv
       k=CS%oil_source_k(m)
       if (k>0) then
         k=min(k,k_max) ! Only insert k or first layer with interface 10 m above bottom
-        CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + CS%oil_source_rate*dt/((h_new(i,j,k)+G%h_subroundoff) &
-                                           * G%areaT(i,j) )
+        CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + CS%oil_source_rate*dt / &
+                ((h_new(i,j,k)+G%GV%H_subroundoff) * G%areaT(i,j) )
       elseif (k<0) then
-        h_total=G%h_subroundoff
+        h_total=G%GV%H_subroundoff
         do k=1, nz
           h_total = h_total + h_new(i,j,k)
         enddo
@@ -511,7 +511,7 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, CS, tv
     if (CS%id_tracer(m)>0) then
       if (CS%mask_tracers) then
         do k=1,nz ; do j=js,je ; do i=is,ie
-          if (h_new(i,j,k) < 1.1*G%Angstrom) then
+          if (h_new(i,j,k) < 1.1*G%GV%Angstrom) then
             local_tr(i,j,k) = CS%land_val(m)
           else
             local_tr(i,j,k) = CS%tr(i,j,k,m)

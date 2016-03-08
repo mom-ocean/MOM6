@@ -166,7 +166,7 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
 
   min_SW_heating = 2.5e-11
 
-  h_min_heat = 2.0*G%Angstrom + G%H_subroundoff
+  h_min_heat = 2.0*G%GV%Angstrom + G%GV%H_subroundoff
   is = G%isc ; ie = G%iec ; nz = G%ke
   C1_6 = 1.0 / 6.0 ; C1_60 = 1.0 / 60.0
 
@@ -372,7 +372,7 @@ subroutine sumSWoverBands(G, h, opacity_band, nsw, j, dt, &
   integer :: is, ie, nz, i, k, ks, n
   SW_Remains = .false.
 
-  h_min_heat = 2.0*G%Angstrom + G%H_subroundoff
+  h_min_heat = 2.0*G%GV%Angstrom + G%GV%H_subroundoff
   is = G%isc ; ie = G%iec ; nz = G%ke
 
   pen_SW_bnd(:,:) = iPen_SW_bnd(:,:)

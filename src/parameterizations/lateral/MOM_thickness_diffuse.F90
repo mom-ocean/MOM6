@@ -340,7 +340,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
     do j=js,je ; do i=is,ie
       h(i,j,k) = h(i,j,k) - dt * G%IareaT(i,j) * &
           ((uhD(I,j,k) - uhD(I-1,j,k)) + (vhD(i,J,k) - vhD(i,J-1,k)))
-      if (h(i,j,k) < G%Angstrom) h(i,j,k) = G%Angstrom
+      if (h(i,j,k) < G%GV%Angstrom) h(i,j,k) = G%GV%Angstrom
     enddo ; enddo
   enddo
 
@@ -386,12 +386,12 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
         ! thicknesses across u and v faces, converted to 0/1 mask;
         ! layer average of the interface diffusivities KH_u and KH_v
         do j=js,je ; do I=is-1,ie
-          hu(i,j)       = 2.0*h(i,j,k)*h(i+1,j,k)/(h(i,j,k)+h(i+1,j,k)+G%H_subroundoff)
+          hu(i,j)       = 2.0*h(i,j,k)*h(i+1,j,k)/(h(i,j,k)+h(i+1,j,k)+G%GV%H_subroundoff)
           if(hu(i,j) /= 0.0) hu(i,j) = 1.0
           KH_u_lay(i,j) = 0.5*(KH_u(i,j,k)+KH_u(i,j,k+1))
         enddo ; enddo
         do J=js-1,je ; do i=is,ie
-          hv(i,j)       = 2.0*h(i,j,k)*h(i,j+1,k)/(h(i,j,k)+h(i,j+1,k)+G%H_subroundoff)
+          hv(i,j)       = 2.0*h(i,j,k)*h(i,j+1,k)/(h(i,j,k)+h(i,j+1,k)+G%GV%H_subroundoff)
           if(hv(i,j) /= 0.0) hv(i,j) = 1.0
           KH_v_lay(i,j) = 0.5*(KH_v(i,j,k)+KH_v(i,j,k+1))
         enddo ; enddo
@@ -399,7 +399,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, MEKE, VarMix, CDp, CS)
         do j=js,je ; do i=is,ie
           KH_t(i,j,k) = ((hu(i-1,j)*KH_u_lay(i-1,j)+hu(i,j)*KH_u_lay(i,j))  &
                         +(hv(i,j-1)*KH_v_lay(i,j-1)+hv(i,j)*KH_v_lay(i,j))) &
-                       / (hu(i-1,j)+hu(i,j)+hv(i,j-1)+hv(i,j)+G%H_subroundoff)
+                       / (hu(i-1,j)+hu(i,j)+hv(i,j-1)+hv(i,j)+G%GV%H_subroundoff)
         enddo ; enddo
       enddo
       if(CS%id_KH_t  > 0) call post_data(CS%id_KH_t,  KH_t,        CS%diag)
@@ -531,8 +531,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
   I4dt = 0.25 / dt
   I_slope_max2 = 1.0 / (CS%slope_max**2)
   G_scale = G%g_Earth * G%H_to_m
-  h_neglect = G%H_subroundoff ; h_neglect2 = h_neglect**2
-  dz_neglect = G%H_subroundoff*G%H_to_m
+  h_neglect = G%GV%H_subroundoff ; h_neglect2 = h_neglect**2
+  dz_neglect = G%GV%H_subroundoff*G%H_to_m
 
   use_EOS = associated(tv%eqn_of_state)
   MEKE_not_null = (LOC(MEKE) .NE. 0)
@@ -559,7 +559,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
     h_avail_rsum(i,j,1) = 0.0
     pres(i,j,1) = 0.0  ! ### This should be atmospheric pressure.
 
-    h_avail(i,j,1) = max(I4dt*G%areaT(i,j)*(h(i,j,1)-G%Angstrom),0.0)
+    h_avail(i,j,1) = max(I4dt*G%areaT(i,j)*(h(i,j,1)-G%GV%Angstrom),0.0)
     h_avail_rsum(i,j,2) = h_avail(i,j,1)
     h_frac(i,j,1) = 1.0
     pres(i,j,2) = pres(i,j,1) + G%H_to_Pa*h(i,j,1)
@@ -567,7 +567,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, MEKE, &
 !$OMP do
   do j=js-1,je+1
     do k=2,nz ; do i=is-1,ie+1
-      h_avail(i,j,k) = max(I4dt*G%areaT(i,j)*(h(i,j,k)-G%Angstrom),0.0)
+      h_avail(i,j,k) = max(I4dt*G%areaT(i,j)*(h(i,j,k)-G%GV%Angstrom),0.0)
       h_avail_rsum(i,j,k+1) = h_avail_rsum(i,j,k) + h_avail(i,j,k)
       h_frac(i,j,k) = 0.0 ; if (h_avail(i,j,k) > 0.0) &
         h_frac(i,j,k) = h_avail(i,j,k) / h_avail_rsum(i,j,k+1)
@@ -1158,7 +1158,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, CS
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   k_top = G%GV%nk_rho_varies + 1
-  h_neglect = G%H_subroundoff
+  h_neglect = G%GV%H_subroundoff
   !   The 0.5 is because we are not using uniform weightings, but are
   ! distributing the diffusivities more effectively (with wt1 & wt2), but this
   ! means that the additions to a single interface can be up to twice as large.
@@ -1512,7 +1512,7 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, halo_here)
 
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
   nz = G%ke
-  h_neglect = G%H_subroundoff
+  h_neglect = G%GV%H_subroundoff
   kap_dt_x2 = (2.0*kappa*dt)*G%m_to_H**2
   h0 = 1.0e-16*sqrt(kappa*dt)*G%m_to_H
 

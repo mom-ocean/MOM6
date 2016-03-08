@@ -82,9 +82,9 @@ subroutine circle_obcs_initialize_thickness(h, G, param_file)
     eta1D(nz+1) = -1.0*G%bathyT(i,j)
     do k=nz,1,-1
       eta1D(K) = e0(K)
-      if (eta1D(K) < (eta1D(K+1) + G%Angstrom_z)) then
-        eta1D(K) = eta1D(K+1) + G%Angstrom_z
-        h(i,j,k) = G%Angstrom_z
+      if (eta1D(K) < (eta1D(K+1) + G%GV%Angstrom_z)) then
+        eta1D(K) = eta1D(K+1) + G%GV%Angstrom_z
+        h(i,j,k) = G%GV%Angstrom_z
       else
         h(i,j,k) = eta1D(K) - eta1D(K+1)
       endif

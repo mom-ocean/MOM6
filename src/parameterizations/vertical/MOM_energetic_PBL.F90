@@ -353,7 +353,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
   if (.NOT. ASSOCIATED(fluxes%ustar)) call MOM_error(FATAL, &
       "energetic_PBL: No surface TKE fluxes (ustar) defined in mixedlayer!")
 
-  h_neglect = G%H_subroundoff
+  h_neglect = G%GV%H_subroundoff
 
   C1_3 = 1.0 / 3.0
   dt__diag = dt ; if (present(dt_diag)) dt__diag = dt_diag
@@ -1168,7 +1168,7 @@ subroutine energetic_PBL_init(Time, G, param_file, diag, CS)
                  "units=nondim", default=1.0)
 
   ! This gives a minimum decay scale that is typically much less than Angstrom.
-  CS%ustar_min = 2e-4*CS%omega*(G%Angstrom_z + G%H_to_m*G%H_subroundoff)
+  CS%ustar_min = 2e-4*CS%omega*(G%GV%Angstrom_z + G%H_to_m*G%GV%H_subroundoff)
   ! NOTE from AJA: The above parameter is not logged?
 
   CS%id_ML_depth = register_diag_field('ocean_model', 'ePBL_h_ML', diag%axesT1, &

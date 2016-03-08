@@ -477,6 +477,7 @@ subroutine horiz_interp_and_extrap_tracer(filename, varnam,  conversion, recnum,
   real, dimension(:), allocatable  :: lon_in, lat_in
   real, dimension(:), allocatable  :: lat_inp, last_row
   real :: max_lat, min_lat, pole, max_depth, npole
+  real :: roundoff  ! The magnitude of roundoff, usually ~2e-16.
   logical :: add_np
   character(len=8)  :: laynum
   type(horiz_interp_type) :: Interp
@@ -633,6 +634,9 @@ subroutine horiz_interp_and_extrap_tracer(filename, varnam,  conversion, recnum,
 ! after interpolating, fill in points which will be needed
 ! to define the layers
 
+  roundoff = G%GV%Angstrom_Z ! ###This is dimensionally incorrect and should be
+                             ! changed to roundoff = 2.0*EPSILON(missing_value)
+
   do k=1,kd
     write(laynum,'(I8)') k ; laynum = adjustl(laynum)
 
@@ -646,7 +650,7 @@ subroutine horiz_interp_and_extrap_tracer(filename, varnam,  conversion, recnum,
       if (add_np) then
          last_row(:)=tr_in(:,jd); pole=0.0;npole=0.0
          do i=1,id
-            if (abs(tr_in(i,jd)-missing_value) .gt. abs(G%Angstrom_Z*missing_value)) then
+            if (abs(tr_in(i,jd)-missing_value) .gt. abs(roundoff*missing_value)) then
                pole = pole+last_row(i)
                npole = npole+1.0
             endif
@@ -672,10 +676,10 @@ subroutine horiz_interp_and_extrap_tracer(filename, varnam,  conversion, recnum,
 
     do j=1,jdp
       do i=1,id
-         if (abs(tr_inp(i,j)-missing_value) .gt. abs(G%Angstrom_Z*missing_value)) then
+         if (abs(tr_inp(i,j)-missing_value) .gt. abs(roundoff*missing_value)) then
            mask_in(i,j)=1.0
-           tr_inp(i,j) = tr_inp(i,j) * conversion
-        else
+            tr_inp(i,j) = tr_inp(i,j) * conversion
+         else
            tr_inp(i,j)=missing_value
          endif
       enddo 
@@ -701,7 +705,7 @@ subroutine horiz_interp_and_extrap_tracer(filename, varnam,  conversion, recnum,
     mask_out=1.0
     do j=js,je
       do i=is,ie
-        if (abs(tr_out(i,j)-missing_value) .lt. abs(G%Angstrom_Z*missing_value)) mask_out(i,j)=0.
+        if (abs(tr_out(i,j)-missing_value) .lt. abs(roundoff*missing_value)) mask_out(i,j)=0.
       enddo
     enddo
 

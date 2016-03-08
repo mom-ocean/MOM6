@@ -291,7 +291,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, &
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  h_neglect = G%H_subroundoff
+  h_neglect = G%GV%H_subroundoff
   sink_dist = 0.0
   if (present(sink_rate)) sink_dist = (dt*sink_rate) * G%m_to_H
 !$OMP parallel default(none) shared(is,ie,js,je,sfc_src,btm_src,sfc_flux,dt,G,btm_flux, &

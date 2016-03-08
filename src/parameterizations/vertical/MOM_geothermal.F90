@@ -159,8 +159,8 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
 
   nkmb      = G%GV%nk_rho_varies
   Irho_cp   = 1.0 / (G%H_to_kg_m2 * tv%C_p)
-  Angstrom  = G%Angstrom
-  H_neglect = G%H_subroundoff
+  Angstrom  = G%GV%Angstrom
+  H_neglect = G%GV%H_subroundoff
   p_ref(:)  = tv%P_Ref
 
   if (.not.ASSOCIATED(tv%T)) call MOM_error(FATAL, "MOM geothermal: "//&

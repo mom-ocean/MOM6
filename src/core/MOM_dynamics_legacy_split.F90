@@ -1151,7 +1151,7 @@ subroutine register_restarts_dyn_legacy_split(G, param_file, CS, restart_CS, uh,
   ALLOC_(CS%eta(isd:ied,jsd:jed))       ; CS%eta(:,:) = 0.0
   ALLOC_(CS%u_av(IsdB:IedB,jsd:jed,nz)) ; CS%u_av(:,:,:) = 0.0
   ALLOC_(CS%v_av(isd:ied,JsdB:JedB,nz)) ; CS%v_av(:,:,:) = 0.0
-  ALLOC_(CS%h_av(isd:ied,jsd:jed,nz))   ; CS%h_av(:,:,:) = G%Angstrom
+  ALLOC_(CS%h_av(isd:ied,jsd:jed,nz))   ; CS%h_av(:,:,:) = G%GV%Angstrom
   ALLOC_(CS%uhbt_in(IsdB:IedB,jsd:jed)) ; CS%uhbt_in(:,:) = 0.0
   ALLOC_(CS%vhbt_in(isd:ied,JsdB:JedB)) ; CS%vhbt_in(:,:) = 0.0
 

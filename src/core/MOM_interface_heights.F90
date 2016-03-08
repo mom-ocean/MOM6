@@ -168,7 +168,7 @@ subroutine find_eta_3d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
       ! from the time-averaged barotropic solution.
 !$OMP do
       do j=jsv,jev
-        do i=isv,iev ; htot(i) = G%H_subroundoff ; enddo
+        do i=isv,iev ; htot(i) = G%GV%H_subroundoff ; enddo
         do k=1,nz ; do i=isv,iev ; htot(i) = htot(i) + h(i,j,k) ; enddo ; enddo
         do i=isv,iev ; dilate(i) = eta_bt(i,j) / htot(i) ; enddo
         do k=1,nz ; do i=isv,iev
@@ -269,7 +269,7 @@ subroutine find_eta_2d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
       ! mass from the barotropic solution.
 !$OMP do
       do j=js,je
-        do i=is,ie ; htot(i) = G%H_subroundoff ; enddo
+        do i=is,ie ; htot(i) = G%GV%H_subroundoff ; enddo
         do k=1,nz ; do i=is,ie ; htot(i) = htot(i) + h(i,j,k) ; enddo ; enddo
         do i=is,ie
           eta(i,j) = (eta_bt(i,j) / htot(i)) * (eta(i,j) + G%bathyT(i,j)) - &

@@ -259,7 +259,7 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, CS, &
   endif
   dt_Rho0 = dt/G%H_to_kg_m2
   dt_m_to_H = dt*G%m_to_H
-  h_neglect = G%H_subroundoff
+  h_neglect = G%GV%H_subroundoff
   Idt = 1.0 / dt
 
   do k=1,nz ; do i=Isq,Ieq ; Ray(i,k) = 0.0 ; enddo ; enddo
@@ -631,7 +631,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(coef): "// &
          "Module must be initialized before it is used.")
 
-  h_neglect = G%H_subroundoff
+  h_neglect = G%GV%H_subroundoff
   I_Hbbl(:) = 1.0 / (CS%Hbbl * G%m_to_H + h_neglect)
 
   if (CS%debug .or. (CS%id_hML_u > 0)) then
@@ -972,8 +972,8 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
     if (work_on_u) then ; is = G%IscB ; ie = G%IecB
     else ; is = G%isc ; ie = G%iec ; endif
     nz = G%ke
-    h_neglect = G%H_subroundoff
-    dz_neglect = G%H_subroundoff*G%H_to_m
+    h_neglect = G%GV%H_subroundoff
+    dz_neglect = G%GV%H_subroundoff*G%H_to_m
 
     do_shelf = .false. ; if (present(shelf)) do_shelf = shelf
     h_ml(:) = 0.0
@@ -1190,16 +1190,16 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
         do k=1,nz ; do I=Isq,Ieq
           if ((u(I,j,k) * (dt * G%dy_Cu(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
             u(I,j,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i+1,j) / (dt * G%dy_Cu(I,j)))
-            if (h(i,j,k) + h(i+1,j,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
+            if (h(i,j,k) + h(i+1,j,k) > 6.0*G%GV%Angstrom) CS%ntrunc = CS%ntrunc + 1
           elseif ((u(I,j,k) * (dt * G%dy_Cu(I,j))) * G%IareaT(i,j) > CS%CFL_trunc) then
             u(I,j,k) = (0.9*CS%CFL_trunc) * (G%areaT(i,j) / (dt * G%dy_Cu(I,j)))
-            if (h(i,j,k) + h(i+1,j,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
+            if (h(i,j,k) + h(i+1,j,k) > 6.0*G%GV%Angstrom) CS%ntrunc = CS%ntrunc + 1
           endif
         enddo ; enddo
       else
         do k=1,nz ; do I=Isq,Ieq ; if (abs(u(I,j,k)) > maxvel) then
           u(I,j,k) = SIGN(truncvel,u(I,j,k))
-          if (h(i,j,k) + h(i+1,j,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
+          if (h(i,j,k) + h(i+1,j,k) > 6.0*G%GV%Angstrom) CS%ntrunc = CS%ntrunc + 1
         endif ; enddo ;  enddo
       endif ; endif
     enddo ! j-loop
@@ -1209,17 +1209,17 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
       do k=1,nz ; do j=js,je ; do I=Isq,Ieq
         if ((u(I,j,k) * (dt * G%dy_Cu(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
           u(I,j,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i+1,j) / (dt * G%dy_Cu(I,j)))
-          if (h(i,j,k) + h(i+1,j,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
+          if (h(i,j,k) + h(i+1,j,k) > 6.0*G%GV%Angstrom) CS%ntrunc = CS%ntrunc + 1
         elseif ((u(I,j,k) * (dt * G%dy_Cu(I,j))) * G%IareaT(i,j) > CS%CFL_trunc) then
           u(I,j,k) = (0.9*CS%CFL_trunc) * (G%areaT(i,j) / (dt * G%dy_Cu(I,j)))
-          if (h(i,j,k) + h(i+1,j,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
+          if (h(i,j,k) + h(i+1,j,k) > 6.0*G%GV%Angstrom) CS%ntrunc = CS%ntrunc + 1
         endif
       enddo ; enddo ; enddo
     else
 !$OMP parallel do default(none) shared(nz,js,je,Isq,Ieq,u,G,CS,truncvel,maxvel,h)
       do k=1,nz ; do j=js,je ; do I=Isq,Ieq ; if (abs(u(I,j,k)) > maxvel) then
         u(I,j,k) = SIGN(truncvel,u(I,j,k))
-        if (h(i,j,k) + h(i+1,j,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
+        if (h(i,j,k) + h(i+1,j,k) > 6.0*G%GV%Angstrom) CS%ntrunc = CS%ntrunc + 1
       endif ; enddo ; enddo ; enddo
     endif
   endif
@@ -1271,16 +1271,16 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
         do k=1,nz; do i=is,ie
           if ((v(i,J,k) * (dt * G%dx_Cv(i,J))) * G%IareaT(i,j+1) < -CS%CFL_trunc) then
             v(i,J,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i,j+1) / (dt * G%dx_Cv(i,J)))
-            if (h(i,j,k) + h(i,j+1,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
+            if (h(i,j,k) + h(i,j+1,k) > 6.0*G%GV%Angstrom) CS%ntrunc = CS%ntrunc + 1
           elseif ((v(i,J,k) * (dt * G%dx_Cv(i,J))) * G%IareaT(i,j) > CS%CFL_trunc) then
             v(i,J,k) = (0.9*CS%CFL_trunc) * (G%areaT(i,j) / (dt * G%dx_Cv(i,J)))
-            if (h(i,j,k) + h(i,j+1,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
+            if (h(i,j,k) + h(i,j+1,k) > 6.0*G%GV%Angstrom) CS%ntrunc = CS%ntrunc + 1
           endif
         enddo ; enddo
       else
         do k=1,nz ; do i=is,ie ; if (abs(v(i,J,k)) > maxvel) then
           v(i,J,k) = SIGN(truncvel,v(i,J,k))
-          if (h(i,j,k) + h(i,j+1,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
+          if (h(i,j,k) + h(i,j+1,k) > 6.0*G%GV%Angstrom) CS%ntrunc = CS%ntrunc + 1
         endif ; enddo ;  enddo
       endif ; endif
     enddo ! J-loop
@@ -1290,17 +1290,17 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
       do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
         if ((v(i,J,k) * (dt * G%dx_Cv(i,J))) * G%IareaT(i,j+1) < -CS%CFL_trunc) then
           v(i,J,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i,j+1) / (dt * G%dx_Cv(i,J)))
-          if (h(i,j,k) + h(i,j+1,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
+          if (h(i,j,k) + h(i,j+1,k) > 6.0*G%GV%Angstrom) CS%ntrunc = CS%ntrunc + 1
         elseif ((v(i,J,k) * (dt * G%dx_Cv(i,J))) * G%IareaT(i,j) > CS%CFL_trunc) then
           v(i,J,k) = (0.9*CS%CFL_trunc) * (G%areaT(i,j) / (dt * G%dx_Cv(i,J)))
-          if (h(i,j,k) + h(i,j+1,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
+          if (h(i,j,k) + h(i,j+1,k) > 6.0*G%GV%Angstrom) CS%ntrunc = CS%ntrunc + 1
         endif
       enddo ; enddo ; enddo
     else
 !$OMP parallel do default(none) shared(is,ie,Jsq,Jeq,nz,v,G,CS,h,truncvel,maxvel)
       do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie ; if (abs(v(i,J,k)) > maxvel) then
         v(i,J,k) = SIGN(truncvel,v(i,J,k))
-        if (h(i,j,k) + h(i,j+1,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
+        if (h(i,j,k) + h(i,j+1,k) > 6.0*G%GV%Angstrom) CS%ntrunc = CS%ntrunc + 1
       endif ; enddo ; enddo ; enddo
     endif
   endif

@@ -141,7 +141,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
 
   ntr = Reg%ntr
   Idt = 1.0/dt
-  h_neglect = G%H_subroundoff
+  h_neglect = G%GV%H_subroundoff
 
   if (CS%Diffuse_ML_interior .and. CS%first_call) then ; if (is_root_pe()) then
     do m=1,ntr ; if (associated(Reg%Tr(m)%df_x) .or. associated(Reg%Tr(m)%df_y)) &
@@ -431,8 +431,11 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
       Kh_v(i,J) = G%mask2dCv(i,J)*Kh_v(i,J)
     enddo ; enddo
     do j=js,je ; do i=is,ie
-      normalize = 1.0/(G%mask2dCu(i-1,j)+G%mask2dCu(i,j)+G%mask2dCv(i,j-1)+G%mask2dCv(i,j)+G%H_subroundoff)
-      Kh_h(i,j) = normalize*G%mask2dT(i,j)*(Kh_u(i-1,j)+Kh_u(i,j)+Kh_v(i,j-1)+Kh_v(i,j))
+      !### Add parentheses.
+      normalize = 1.0 / (G%mask2dCu(i-1,j)+G%mask2dCu(i,j) + &
+                  G%mask2dCv(i,j-1)+G%mask2dCv(i,j) + G%GV%H_subroundoff)
+      Kh_h(i,j) = normalize*G%mask2dT(i,j)*(Kh_u(i-1,j)+Kh_u(i,j) + &
+                                            Kh_v(i,j-1)+Kh_v(i,j))
     enddo ; enddo
     call post_data(CS%id_KhTr_h, Kh_h, CS%diag, mask=G%mask2dT)
   endif 
@@ -608,7 +611,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   enddo ; enddo
   if (PEmax_kRho > nz) PEmax_kRho = nz ! PEmax_kRho could have been nz+1.
 
-  h_exclude = 10.0*(G%Angstrom + G%H_subroundoff)
+  h_exclude = 10.0*(G%GV%Angstrom + G%GV%H_subroundoff)
 !$OMP parallel default(none) shared(is,ie,js,je,nkmb,G,h,h_exclude,num_srt,k0_srt, &
 !$OMP                               rho_srt,h_srt,PEmax_kRho,k_end_srt,rho_coord,max_srt) &
 !$OMP                       private(ns,tmp,itmp)

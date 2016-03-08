@@ -227,7 +227,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
   if (.not.associated(CS)) call MOM_error(FATAL, &
        "MOM_PressureForce: Module must be initialized before it is used.")
 
-  dp_neglect = G%H_to_Pa * G%H_subroundoff
+  dp_neglect = G%H_to_Pa * G%GV%H_subroundoff
   alpha_ref = 1.0/CS%Rho0
 
 !$OMP parallel default(none) shared(Isq,Ieq,Jsq,Jeq,nz,use_p_atm,p,p_atm,G,h)
@@ -566,7 +566,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
   if (associated(ALE_CSp)) use_ALE = usePressureReconstruction(ALE_CSp) .and. use_EOS
 
   PRScheme = pressureReconstructionScheme(ALE_CSp)
-  h_neglect = G%H_subroundoff
+  h_neglect = G%GV%H_subroundoff
   I_Rho0 = 1.0/G%GV%Rho0
   G_Rho0 = G%g_Earth/G%GV%Rho0
   rho_ref = CS%Rho0
@@ -735,7 +735,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
             call int_density_dz_generic_plm ( T_t(:,:,k), T_b(:,:,k), &
                       S_t(:,:,k), S_b(:,:,k), e(:,:,K), e(:,:,K+1), &
                       rho_ref, CS%Rho0, G%g_Earth,    &
-                      G%H_subroundoff, G%bathyT, G%HI, G%Block(n), &
+                      G%GV%H_subroundoff, G%bathyT, G%HI, G%Block(n), &
                       tv%eqn_of_state, dpa_bk, intz_dpa_bk, intx_dpa_bk, inty_dpa_bk, &
                       useMassWghtInterp = CS%useMassWghtInterp)
           elseif ( PRScheme == PRESSURE_RECONSTRUCTION_PPM ) then

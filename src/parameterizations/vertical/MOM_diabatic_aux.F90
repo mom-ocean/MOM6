@@ -232,7 +232,7 @@ subroutine make_frazil(h, tv, G, CS, p_surf)
           endif
 
           hc = (tv%C_p*G%H_to_kg_m2) * h(i,j,k)
-          if (h(i,j,k) <= 10.0*G%Angstrom) then
+          if (h(i,j,k) <= 10.0*G%GV%Angstrom) then
             ! Very thin layers should not be cooled by the frazil flux.
             if (tv%T(i,j,k) < T_freeze(i)) then
               fraz_col(i) = fraz_col(i) + hc * (T_freeze(i) - tv%T(i,j,k))
@@ -296,7 +296,7 @@ subroutine differential_diffuse_T_S(h, tv, visc, dt, G)
   integer :: i, j, k, is, ie, js, je, nz
   real, pointer :: T(:,:,:), S(:,:,:), Kd_T(:,:,:), Kd_S(:,:,:)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  h_neglect = G%H_subroundoff
+  h_neglect = G%GV%H_subroundoff
 
   if (.not.associated(tv%T)) call MOM_error(FATAL, &
       "differential_diffuse_T_S: Called with an unassociated tv%T")
@@ -400,7 +400,7 @@ subroutine adjust_salt(h, tv, G, CS)
       if ((G%mask2dT(i,j) > 0.0) .and. &
            ((tv%S(i,j,k) < S_min) .or. (salt_add_col(i,j) > 0.0))) then
         mc = G%H_to_kg_m2 * h(i,j,k)
-        if (h(i,j,k) <= 10.0*G%Angstrom) then
+        if (h(i,j,k) <= 10.0*G%GV%Angstrom) then
           ! Very thin layers should not be adjusted by the salt flux
           if (tv%S(i,j,k) < S_min) then
             salt_add_col(i,j) = salt_add_col(i,j) +  mc * (S_min - tv%S(i,j,k))
@@ -568,7 +568,7 @@ subroutine triDiagTS(G, is, ie, js, je, hold, ea, eb, T, S)
 !$OMP                          private(h_tr,b1,d1,c1,b_denom_1)
   do j=js,je
     do i=is,ie
-      h_tr = hold(i,j,1) + G%H_subroundoff
+      h_tr = hold(i,j,1) + G%GV%H_subroundoff
       b1(i) = 1.0 / (h_tr + eb(i,j,1))
       d1(i) = h_tr * b1(i)
       T(i,j,1) = (b1(i)*h_tr)*T(i,j,1)
@@ -576,7 +576,7 @@ subroutine triDiagTS(G, is, ie, js, je, hold, ea, eb, T, S)
     enddo
     do k=2,G%ke ; do i=is,ie
       c1(i,k) = eb(i,j,k-1) * b1(i)
-      h_tr = hold(i,j,k) + G%H_subroundoff
+      h_tr = hold(i,j,k) + G%GV%H_subroundoff
       b_denom_1 = h_tr + d1(i)*ea(i,j,k)
       b1(i) = 1.0 / (b_denom_1 + eb(i,j,k))
       d1(i) = b_denom_1 * b1(i)
@@ -629,7 +629,7 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, ea, eb)
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   call cpu_clock_begin(id_clock_uv_at_h)
-  h_neglect = G%H_subroundoff
+  h_neglect = G%GV%H_subroundoff
 
   mix_vertically = present(ea)
   if (present(ea) .neqv. present(eb)) call MOM_error(FATAL, &
@@ -857,7 +857,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
   ! To accommodate vanishing upper layers, we need to allow for an instantaneous
   ! distribution of forcing over some finite vertical extent. The bulk mixed layer
   ! code handles this issue properly.
-  H_limit_fluxes = max(G%Angstrom, 1.E-30*G%m_to_H)
+  H_limit_fluxes = max(G%GV%Angstrom, 1.E-30*G%m_to_H)
 
   ! diagnostic to see if need to create mass to avoid grounding
   if (CS%id_createdH>0) CS%createdH(:,:) = 0.
@@ -1017,7 +1017,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, dt, fluxes, optics, ea, h, tv, &
           ! Place forcing into this layer if this layer has nontrivial thickness.
           ! For layers thin relative to 1/IforcingDepthScale, then distribute
           ! forcing into deeper layers.
-          IforcingDepthScale = 1. / max(G%H_subroundoff, CS%minimum_forcing_depth*G%m_to_H - netMassOut(i) )
+          IforcingDepthScale = 1. / max(G%GV%H_subroundoff, CS%minimum_forcing_depth*G%m_to_H - netMassOut(i) )
           ! fractionOfForcing = 1.0, unless h2d is less than IforcingDepthScale.
           fractionOfForcing = min(1.0, h2d(i,k)*IforcingDepthScale)
 

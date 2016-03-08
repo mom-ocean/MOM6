@@ -497,7 +497,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
     do k=1,nz ; do i=is,ie
       h(i,k) = h_3d(i,j,k) ; u(i,k) = u_3d(i,j,k) ; v(i,k) = v_3d(i,j,k)
       h_orig(i,k) = h_3d(i,j,k)
-      eps(i,k) = 0.0 ; if (k > nkmb) eps(i,k) = G%Angstrom
+      eps(i,k) = 0.0 ; if (k > nkmb) eps(i,k) = G%GV%Angstrom
       T(i,k) = tv%T(i,j,k) ; S(i,k) = tv%S(i,j,k)
       do n=1,nsw
         opacity_band(n,i,k) = G%H_to_m*optics%opacity_band(n,i,j,k)
@@ -1061,7 +1061,7 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
     C2, &              ! Temporary variable with units of kg m-3 H-1.
     r_SW_top           ! Temporary variables with units of H kg m-3.
 
-  Angstrom = G%Angstrom
+  Angstrom = G%GV%Angstrom
   C1_3 = 1.0/3.0 ; C1_6 = 1.0/6.0
   g_H2_2Rho0 = (G%g_Earth * G%H_to_m**2) / (2.0 * G%GV%Rho0)
   Idt        = 1.0/dt
@@ -1573,7 +1573,7 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
   C1_3 = 1.0/3.0 ; C1_6 = 1.0/6.0 ; C1_24 = 1.0/24.0
   g_H_2Rho0 = (G%g_Earth * G%H_to_m) / (2.0 * G%GV%Rho0)
   Hmix_min = CS%Hmix_min * G%m_to_H
-  h_neglect = G%H_subroundoff
+  h_neglect = G%GV%H_subroundoff
   is = G%isc ; ie = G%iec ; nz = G%ke
 
   do ks=1,nz
@@ -1739,7 +1739,7 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
               endif
               h_ent = h_ent + dh_Newt
 
-              if (ABS(dh_Newt) < 0.2*G%Angstrom) exit
+              if (ABS(dh_Newt) < 0.2*G%GV%Angstrom) exit
             enddo
           endif
 
@@ -2309,7 +2309,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
   is = G%isc ; ie = G%iec ; nz = G%ke
   kb1 = CS%nkml+1; kb2 = CS%nkml+2
   nkmb = CS%nkml+CS%nkbl
-  h_neglect = G%H_subroundoff
+  h_neglect = G%GV%H_subroundoff
   G_2 = 0.5*G%g_Earth
   Rho0xG = G%GV%Rho0 * G%g_Earth
   Idt_H2 = G%H_to_m**2 / dt_diag
@@ -2393,7 +2393,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
       ! and the next denser interior layer, measured by R0.  This probably does
       ! not happen very often, so I am not too worried about the inefficiency of
       ! the following loop.
-      do k1=kb2+1,nz ; if (h(i,k1) > 2.0*G%Angstrom) exit ; enddo
+      do k1=kb2+1,nz ; if (h(i,k1) > 2.0*G%GV%Angstrom) exit ; enddo
 
       R0(i,kb2) = R0(i,kb1)
 
@@ -2466,12 +2466,12 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
                       dT_dS_gauge*dRcv_dT(i)*(S(i,kb2)-S(i,kb1))) * &
                       (h2 - h2_to_k1) / (h1 + h2)
         dSpice_lim = 0.0
-        if (h(i,k1) > 10.0*G%Angstrom) then
+        if (h(i,k1) > 10.0*G%GV%Angstrom) then
           dSpice_lim = dS_dT_gauge*dRcv_dS(i)*(T(i,k1)-T(i,kb2)) - &
                        dT_dS_gauge*dRcv_dT(i)*(S(i,k1)-S(i,kb2))
           if (dSpice_det*dSpice_lim <= 0.0) dSpice_lim = 0.0
         endif
-        if (k1<nz) then ; if (h(i,k1+1) > 10.0*G%Angstrom) then
+        if (k1<nz) then ; if (h(i,k1+1) > 10.0*G%GV%Angstrom) then
           dSpice_lim2 = dS_dT_gauge*dRcv_dS(i)*(T(i,k1+1)-T(i,kb2)) - &
                         dT_dS_gauge*dRcv_dT(i)*(S(i,k1+1)-S(i,kb2))
           if ((dSpice_det*dSpice_lim2 > 0.0) .and. &
@@ -2491,7 +2491,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
         if (CS%BL_extrap_lim >= 0.) then
           ! Only do this detrainment if the new layer's temperature and salinity
           ! are not too far outside of the range of previous values.
-          if (h(i,k1) > 10.0*G%Angstrom) then
+          if (h(i,k1) > 10.0*G%GV%Angstrom) then
             T_min = min(T(i,kb1), T(i,kb2), T(i,k1)) - CS%Allowed_T_chg
             T_max = max(T(i,kb1), T(i,kb2), T(i,k1)) + CS%Allowed_T_chg
             S_min = min(S(i,kb1), S(i,kb2), S(i,k1)) - CS%Allowed_S_chg
@@ -2590,12 +2590,12 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
                           dT_dS_gauge*dRcv_dT(i)*(S(i,kb2)-S(i,kb1))) * &
                           (h2 - h2_to_k1) / (h1 + h2)
             dSpice_lim = 0.0
-            if (h(i,k1) > 10.0*G%Angstrom) then
+            if (h(i,k1) > 10.0*G%GV%Angstrom) then
               dSpice_lim = dS_dT_gauge*dRcv_dS(i)*(T(i,k1)-T(i,kb2)) - &
                            dT_dS_gauge*dRcv_dT(i)*(S(i,k1)-S(i,kb2))
               if (dSpice_det*dSpice_lim <= 0.0) dSpice_lim = 0.0
             endif
-            if (k1<nz) then; if (h(i,k1+1) > 10.0*G%Angstrom) then
+            if (k1<nz) then; if (h(i,k1+1) > 10.0*G%GV%Angstrom) then
               dSpice_lim2 = dS_dT_gauge*dRcv_dS(i)*(T(i,k1+1)-T(i,kb2)) - &
                             dT_dS_gauge*dRcv_dT(i)*(S(i,k1+1)-S(i,kb2))
               if ((dSpice_det*dSpice_lim2 > 0.0) .and. &
@@ -3213,10 +3213,10 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_e
         ! temperature and salinity.  If none is available a pseudo-orthogonal
         ! extrapolation is used.  The 10.0 and 0.9 in the following are
         ! arbitrary but probably about right.
-        if ((h(i,k+1) < 10.0*G%Angstrom) .or. &
+        if ((h(i,k+1) < 10.0*G%GV%Angstrom) .or. &
             ((RcvTgt(k+1)-Rcv(i,nkmb)) >= 0.9*(Rcv(i,k1) - Rcv(i,0)))) then
           if (k>=nz-1) then ; orthogonal_extrap = .true.
-          elseif ((h(i,k+2) <= 10.0*G%Angstrom) .and. &
+          elseif ((h(i,k+2) <= 10.0*G%GV%Angstrom) .and. &
               ((RcvTgt(k+1)-Rcv(i,nkmb)) < 0.9*(Rcv(i,k+2)-Rcv(i,0)))) then
             k1 = k+2
           else ; orthogonal_extrap = .true. ; endif
@@ -3447,7 +3447,7 @@ subroutine bulkmixedlayer_init(Time, G, param_file, diag, CS)
                  "layers before sorting when ML_RESORT is true.", &
                  units="nondim", default=0, fail_if_missing=.true.) ! Fail added by AJA??
   ! This gives a minimum decay scale that is typically much less than Angstrom.
-  CS%ustar_min = 2e-4*CS%omega*(G%Angstrom_z + G%H_to_m*G%H_subroundoff)
+  CS%ustar_min = 2e-4*CS%omega*(G%GV%Angstrom_z + G%H_to_m*G%GV%H_subroundoff)
   ! NOTE from AJA: The above parameter is not logged?
   call get_param(param_file, mod, "RESOLVE_EKMAN", CS%Resolve_Ekman, &
                  "If true, the NKML>1 layers in the mixed layer are \n"//&

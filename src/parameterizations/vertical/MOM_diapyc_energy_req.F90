@@ -177,7 +177,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, G)
   integer :: k, nz, itt, max_itt
   logical :: surface_BL, bottom_BL, debug
   nz = G%ke
-  h_neglect = G%H_subroundoff
+  h_neglect = G%GV%H_subroundoff
 
   I_G_Earth = 1.0 / G%G_earth
   surface_BL = .true. ; bottom_BL = .true. ; debug = .true.

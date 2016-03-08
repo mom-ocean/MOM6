@@ -271,7 +271,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
     "MOM_regularize_layers: This module now requires the use of temperature and "//&
     "an equation of state.")
 
-  h_neglect = G%H_subroundoff
+  h_neglect = G%GV%H_subroundoff
   debug = (debug .or. CS%debug)
 #ifdef DEBUG_CODE
   debug = .true.
@@ -385,20 +385,20 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
     do K=1,nz_filt ; do i=is,ie ; if (do_i(i)) then
       if (G%mask2dCu(I,j) <= 0.0) then ; e_e = e(i,j,K) ; else
         e_e = max(e(i+1,j,K) + min(e(i,j,K) - e(i+1,j,nz+1), 0.0), &
-                  e(i,j,nz+1) + (nz+1-k)*G%Angstrom)
+                  e(i,j,nz+1) + (nz+1-k)*G%GV%Angstrom)
 
       endif
       if (G%mask2dCu(I-1,j) <= 0.0) then ; e_w = e(i,j,K) ; else
         e_w = max(e(i-1,j,K) + min(e(i,j,K) - e(i-1,j,nz+1), 0.0), &
-                  e(i,j,nz+1) + (nz+1-k)*G%Angstrom)
+                  e(i,j,nz+1) + (nz+1-k)*G%GV%Angstrom)
       endif
       if (G%mask2dCv(i,J) <= 0.0) then ; e_n = e(i,j,K) ; else
         e_n = max(e(i,j+1,K) + min(e(i,j,K) - e(i,j+1,nz+1), 0.0), &
-                  e(i,j,nz+1) + (nz+1-k)*G%Angstrom)
+                  e(i,j,nz+1) + (nz+1-k)*G%GV%Angstrom)
       endif
       if (G%mask2dCv(i,J-1) <= 0.0) then ; e_s = e(i,j,K) ; else
         e_s = max(e(i,j-1,K) + min(e(i,j,K) - e(i,j-1,nz+1), 0.0), &
-                  e(i,j,nz+1) + (nz+1-k)*G%Angstrom)
+                  e(i,j,nz+1) + (nz+1-k)*G%GV%Angstrom)
       endif
 
       wt = max(0.0, min(1.0, I_dtol*(def_rat_h(i,j)-CS%h_def_tol1)))
@@ -434,10 +434,10 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
       do k=nkmb+1,nz
         cols_left = .false.
         do i=is,ie ; if (more_ent_i(i)) then
-          if (h_2d(i,k) - G%Angstrom > h_neglect) then
-            if (e_2d(i,nkmb+1)-e_filt(i,nkmb+1) > h_2d(i,k) - G%Angstrom) then
-              h_add = h_2d(i,k) - G%Angstrom
-              h_2d(i,k) = G%Angstrom
+          if (h_2d(i,k) - G%GV%Angstrom > h_neglect) then
+            if (e_2d(i,nkmb+1)-e_filt(i,nkmb+1) > h_2d(i,k) - G%GV%Angstrom) then
+              h_add = h_2d(i,k) - G%GV%Angstrom
+              h_2d(i,k) = G%GV%Angstrom
             else
               h_add = e_2d(i,nkmb+1)-e_filt(i,nkmb+1)
               h_2d(i,k) = h_2d(i,k) - h_add
@@ -692,7 +692,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
           h_predicted = h_2d_init(i,k) + ((d_ea(i,k) - d_eb(i,k-1)) + &
                                           (d_eb(i,k) - d_ea(i,k+1)))
         endif
-        if (abs(h(i,j,k) - h_predicted) > MAX(1e-9*abs(h_predicted),G%Angstrom)) &
+        if (abs(h(i,j,k) - h_predicted) > MAX(1e-9*abs(h_predicted),G%GV%Angstrom)) &
           call MOM_error(FATAL, "regularize_surface: d_ea mismatch.")
       endif ; enddo ; enddo
       do i=is,ie ; if (do_i(i)) then
@@ -814,7 +814,7 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, CS, &
     is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
   endif
   nkmb = G%GV%nk_rho_varies
-  h_neglect = G%H_subroundoff
+  h_neglect = G%GV%H_subroundoff
 
   ! Determine which zonal faces are problematic.
   do j=js,je ; do I=is-1,ie

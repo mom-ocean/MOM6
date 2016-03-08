@@ -193,7 +193,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
   endif
 
   I_gEarth = 1.0 / G%g_Earth
-  dp_neglect = G%H_to_Pa * G%H_subroundoff
+  dp_neglect = G%H_to_Pa * G%GV%H_subroundoff
 !$OMP parallel default(none) shared(nz,alpha_Lay,G,dalpha_int)
 !$OMP do
   do k=1,nz ; alpha_Lay(k) = 1.0 / G%GV%Rlay(k) ; enddo
@@ -503,7 +503,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
       "can no longer be used with a compressible EOS. Use #define ANALYTIC_FV_PGF.")
   endif
 
-  h_neglect = G%H_subroundoff * G%H_to_m
+  h_neglect = G%GV%H_subroundoff * G%H_to_m
   I_Rho0 = 1.0/CS%Rho0
   G_Rho0 = G%g_Earth/G%GV%Rho0
 
@@ -729,7 +729,7 @@ subroutine Set_pbce_Bouss(e, tv, G, g_Earth, Rho0, GFS_scale, pbce, rho_star)
   Rho0xG = Rho0*g_Earth
   G_Rho0 = g_Earth/Rho0
   use_EOS = associated(tv%eqn_of_state)
-  h_neglect = G%H_subroundoff*G%H_to_m
+  h_neglect = G%GV%H_subroundoff*G%H_to_m
 
   if (use_EOS) then
     if (present(rho_star)) then
@@ -845,7 +845,7 @@ subroutine Set_pbce_nonBouss(p, tv, G, g_Earth, GFS_scale, pbce, alpha_star)
   use_EOS = associated(tv%eqn_of_state)
 
   dP_dH = g_Earth * G%H_to_kg_m2
-  dp_neglect = dP_dH * G%H_subroundoff
+  dp_neglect = dP_dH * G%GV%H_subroundoff
 
   do k=1,nz ; alpha_Lay(k) = 1.0 / G%GV%Rlay(k) ; enddo
   do k=2,nz ; dalpha_int(K) = alpha_Lay(k-1) - alpha_Lay(k) ; enddo

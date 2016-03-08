@@ -987,7 +987,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, CS, TKE_to_Kd, maxT
   I_dt      = 1.0/dt
   Omega2    = CS%Omega**2
   G_Rho0    = G%g_Earth / G%GV%Rho0
-  H_neglect = G%H_subroundoff
+  H_neglect = G%GV%H_subroundoff
   I_Rho0    = 1.0/G%GV%Rho0
 
   ! Simple but coordinate-independent estimate of Kd/TKE
@@ -1027,7 +1027,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, CS, TKE_to_Kd, maxT
     ! in sigma-0.
       do k=kb(i)-1,kmb+1,-1
         if (rho_0(i,kmb) > rho_0(i,k)) exit
-        if (h(i,j,k)>2.0*G%Angstrom) kb(i) = k
+        if (h(i,j,k)>2.0*G%GV%Angstrom) kb(i) = k
       enddo
     enddo
 
@@ -1051,15 +1051,15 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, CS, TKE_to_Kd, maxT
       htot(i) = G%H_to_m*h(i,j,kmb)
       mFkb(i) = 0.0
       if (kb(i) < nz) &
-        mFkb(i) = ds_dsp1(i,kb(i)) * (G%H_to_m*(h(i,j,kmb) - G%Angstrom))
+        mFkb(i) = ds_dsp1(i,kb(i)) * (G%H_to_m*(h(i,j,kmb) - G%GV%Angstrom))
     enddo
     do k=1,kmb-1 ; do i=is,ie
       htot(i) = htot(i) + G%H_to_m*h(i,j,k)
-      mFkb(i) = mFkb(i) + ds_dsp1(i,k+1)*(G%H_to_m*(h(i,j,k) - G%Angstrom))
+      mFkb(i) = mFkb(i) + ds_dsp1(i,k+1)*(G%H_to_m*(h(i,j,k) - G%GV%Angstrom))
     enddo ; enddo
   else
     do i=is,i
-      maxEnt(i,1) = 0.0 ; htot(i) = G%H_to_m*(h(i,j,1) - G%Angstrom)
+      maxEnt(i,1) = 0.0 ; htot(i) = G%H_to_m*(h(i,j,1) - G%GV%Angstrom)
     enddo
   endif
   do k=kb_min,nz-1 ; do i=is,ie
@@ -1068,12 +1068,12 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, CS, TKE_to_Kd, maxT
     elseif (k > kb(i)) then
       maxEnt(i,k) = (1.0/dsp1_ds(i,k))*(maxEnt(i,k-1) + htot(i))
 !        maxEnt(i,k) = ds_dsp1(i,k)*(maxEnt(i,k-1) + htot(i)) ! BITWISE CHG
-      htot(i) = htot(i) + G%H_to_m*(h(i,j,k) - G%Angstrom)
+      htot(i) = htot(i) + G%H_to_m*(h(i,j,k) - G%GV%Angstrom)
     endif
   enddo ; enddo
 
   do i=is,ie
-    htot(i) = G%H_to_m*(h(i,j,nz) - G%Angstrom) ; maxEnt(i,nz) = 0.0
+    htot(i) = G%H_to_m*(h(i,j,nz) - G%GV%Angstrom) ; maxEnt(i,nz) = 0.0
     do_i(i) = (G%mask2dT(i,j) > 0.5)
   enddo
   do k=nz-1,kb_min,-1
@@ -1082,7 +1082,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, CS, TKE_to_Kd, maxT
       if (k<kb(i)) then ; do_i(i) = .false. ; cycle ; endif
       i_rem = i_rem + 1  ! Count the i-rows that are still being worked on.
       maxEnt(i,k) = MIN(maxEnt(i,k),dsp1_ds(i,k+1)*maxEnt(i,k+1) + htot(i))
-      htot(i) = htot(i) + G%H_to_m*(h(i,j,k) - G%Angstrom)
+      htot(i) = htot(i) + G%H_to_m*(h(i,j,k) - G%GV%Angstrom)
     endif ; enddo
     if (i_rem == 0) exit
   enddo ! k-loop
@@ -1161,7 +1161,7 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, CS, dRho_int, N2_lay, N2_int, 
 
   is = G%isc ; ie = G%iec ; nz = G%ke
   G_Rho0    = G%g_Earth / G%GV%Rho0
-  H_neglect = G%H_subroundoff
+  H_neglect = G%GV%H_subroundoff
 
   ! Find the (limited) density jump across each interface.
   do i=is,ie
@@ -1670,7 +1670,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, G, CS,
     TKE_column = CS%BBL_effic * TKE_column ! Only use a fraction of the mechanical dissipation for mixing.
 
     TKE_remaining = TKE_column
-    total_thickness = ( sum(h(i,j,:)) + G%H_subroundoff )* G%H_to_m ! Total column thickness, in m.
+    total_thickness = ( sum(h(i,j,:)) + G%GV%H_subroundoff )* G%H_to_m ! Total column thickness, in m.
     ustar_D = ustar * total_thickness
     z = 0.
     Kd_lower = 0. ! Diffusivity on bottom boundary.
@@ -1768,7 +1768,7 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, CS, Kd, TKE_to_Kd, Kd_int)
   Omega2    = CS%Omega**2
   C1_6      = 1.0 / 6.0
   kml       = G%GV%nkml
-  h_neglect = G%H_subroundoff*G%H_to_m
+  h_neglect = G%GV%H_subroundoff*G%H_to_m
 
   if (.not.CS%ML_radiation) return
 
@@ -1931,9 +1931,9 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
   ! Calculate parameters for vertical structure of dissipation
   ! Simmons:
   if ( use_Simmons ) then
-    Izeta = 1.0 / max(CS%Int_tide_decay_scale, G%H_subroundoff*G%H_to_m)
+    Izeta = 1.0 / max(CS%Int_tide_decay_scale, G%GV%H_subroundoff*G%H_to_m)
     Izeta_lee = 1.0 / max(CS%Int_tide_decay_scale*CS%Decay_scale_factor_lee, &
-                          G%H_subroundoff*G%H_to_m)
+                          G%GV%H_subroundoff*G%H_to_m)
     do i=is,ie
       CS%Nb(i,j) = sqrt(N2_bot(i))
       if (associated(dd%N2_bot)) dd%N2_bot(i,j) = N2_bot(i)
@@ -1964,7 +1964,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
       N2_meanz(i) = N2_meanz(i) + N2_lay(i,k)*G%H_to_m*h(i,j,k)
     enddo ; enddo
     do i=is,ie
-      N2_meanz(i) = N2_meanz(i) / (htot(i) + G%H_subroundoff*G%H_to_m)
+      N2_meanz(i) = N2_meanz(i) / (htot(i) + G%GV%H_subroundoff*G%H_to_m)
       if (associated(dd%N2_meanz))  dd%N2_meanz(i,j) = N2_meanz(i)
     enddo
 
@@ -2538,7 +2538,7 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp, in
                  "length scale.", default=.false.)
   if (CS%ML_radiation) then
     ! This give a minimum decay scale that is typically much less than Angstrom.
-    CS%ustar_min = 2e-4*CS%omega*(G%Angstrom + G%H_subroundoff)
+    CS%ustar_min = 2e-4*CS%omega*(G%GV%Angstrom + G%GV%H_subroundoff)
 
     call get_param(param_file, mod, "ML_RAD_EFOLD_COEFF", CS%ML_rad_efold_coeff, &
                  "A coefficient that is used to scale the penetration \n"//&

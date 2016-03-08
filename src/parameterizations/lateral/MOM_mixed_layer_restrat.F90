@@ -216,8 +216,8 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, CS)
   uDml(:) = 0.0 ; vDml(:) = 0.0
   I4dt = 0.25 / dt
   g_Rho0 = G%g_Earth/G%GV%Rho0
-  h_neglect = G%H_subroundoff
-  dz_neglect = G%H_subroundoff*G%H_to_m
+  h_neglect = G%GV%H_subroundoff
+  dz_neglect = G%GV%H_subroundoff*G%H_to_m
 
   p0(:) = 0.0
 !$OMP parallel default(none) shared(is,ie,js,je,G,htot,Rml_av,tv,p0,h,h_avail,         &
@@ -238,7 +238,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, CS)
           Rml_av(i,j) = Rml_av(i,j) + h(i,j,k)*Rho0(i)
           htot(i,j) = htot(i,j) + h(i,j,k)
         endif
-        h_avail(i,j,k) = max(I4dt*G%areaT(i,j)*(h(i,j,k)-G%Angstrom),0.0)
+        h_avail(i,j,k) = max(I4dt*G%areaT(i,j)*(h(i,j,k)-G%GV%Angstrom),0.0)
       enddo
     enddo
 
@@ -461,8 +461,8 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
   I4dt       = 0.25 / dt
   g_Rho0     = G%g_Earth/G%GV%Rho0
   use_EOS    = associated(tv%eqn_of_state)
-  h_neglect  = G%H_subroundoff
-  dz_neglect = G%H_subroundoff*G%H_to_m
+  h_neglect  = G%GV%H_subroundoff
+  dz_neglect = G%GV%H_subroundoff*G%H_to_m
 
   if (.not.use_EOS) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "An equation of state must be used with this module.")
@@ -486,7 +486,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
       do i=is-1,ie+1
         Rml_av(i,j) = Rml_av(i,j) + h(i,j,k)*Rho0(i)
         htot(i,j) = htot(i,j) + h(i,j,k)
-        h_avail(i,j,k) = max(I4dt*G%areaT(i,j)*(h(i,j,k)-G%Angstrom),0.0)
+        h_avail(i,j,k) = max(I4dt*G%areaT(i,j)*(h(i,j,k)-G%GV%Angstrom),0.0)
       enddo
     enddo
 

@@ -1629,7 +1629,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   ! Allocate and initialize space for primary MOM variables.
   ALLOC_(CS%u(IsdB:IedB,jsd:jed,nz))   ; CS%u(:,:,:) = 0.0
   ALLOC_(CS%v(isd:ied,JsdB:JedB,nz))   ; CS%v(:,:,:) = 0.0
-  ALLOC_(CS%h(isd:ied,jsd:jed,nz))     ; CS%h(:,:,:) = G%Angstrom
+  ALLOC_(CS%h(isd:ied,jsd:jed,nz))     ; CS%h(:,:,:) = G%GV%Angstrom
   ALLOC_(CS%uh(IsdB:IedB,jsd:jed,nz))  ; CS%uh(:,:,:) = 0.0
   ALLOC_(CS%vh(isd:ied,JsdB:JedB,nz))  ; CS%vh(:,:,:) = 0.0
   if (CS%use_temperature) then
@@ -2765,7 +2765,8 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
       enddo ; enddo
   ! Calculate the average properties of the mixed layer depth.
       do i=is,ie
-        if (depth(i) < G%H_subroundoff*G%H_to_m) depth(i) = G%H_subroundoff*G%H_to_m
+        if (depth(i) < G%GV%H_subroundoff*G%H_to_m) &
+            depth(i) = G%GV%H_subroundoff*G%H_to_m
         if (CS%use_temperature) then
           state%SST(i,j) = state%SST(i,j) / depth(i)
           state%SSS(i,j) = state%SSS(i,j) / depth(i)

@@ -145,10 +145,10 @@ type, public :: ocean_grid_type
 !                  ! nominal density used to convert depths into mass
 !                  ! units, in kg m-3.
 !  logical :: Boussinesq     ! If true, make the Boussinesq approximation.
-  real :: Angstrom      !   A one-Angstrom thickness in the model's thickness
-                        ! units.  (This replaces the old macro EPSILON.)
-  real :: Angstrom_z    !   A one-Angstrom thickness in m.
-  real :: H_subroundoff !   A thickness that is so small that it can be added to
+!  real :: Angstrom      !   A one-Angstrom thickness in the model's thickness
+!                        ! units.  (This replaces the old macro EPSILON.)
+!  real :: Angstrom_z    !   A one-Angstrom thickness in m.
+!  real :: H_subroundoff !   A thickness that is so small that it can be added to
                         ! a thickness of Angstrom or larger without changing it
                         ! at the bit level, in thickness units.  If Angstrom is
                         ! 0 or exceedingly small, this is negligible compared to
@@ -330,11 +330,13 @@ subroutine MOM_grid_init(G, param_file)
   ! Consider removing these later.
   G%ks = 1 ; G%ke = G%GV%ke
   ! G%Rho0 = G%GV%Rho0 ; G%Boussinesq = G%GV%Boussinesq
-  G%Angstrom = G%GV%Angstrom ; G%Angstrom_z = G%GV%Angstrom_z
-  G%H_subroundoff = G%GV%H_subroundoff
+!  G%GV%Angstrom = G%GV%Angstrom ; G%GV%Angstrom_z = G%GV%Angstrom_z
+!  G%H_subroundoff = G%GV%H_subroundoff
   G%H_to_kg_m2 = G%GV%H_to_kg_m2 ; G%kg_m2_to_H = G%GV%kg_m2_to_H
   G%m_to_H = G%GV%m_to_H ; G%H_to_m = G%GV%H_to_m
   G%H_to_Pa = G%GV%H_to_Pa
+
+  G%bathyT(:,:) = G%GV%Angstrom_z !### Should this be 0 instead, in which case this line can go?
 
 end subroutine MOM_grid_init
 
@@ -434,7 +436,7 @@ subroutine allocate_metrics(G)
   ALLOC_(G%IareaCu(IsdB:IedB,jsd:jed)) ; G%IareaCu(:,:) = 0.0
   ALLOC_(G%IareaCv(isd:ied,JsdB:JedB)) ; G%IareaCv(:,:) = 0.0
 
-  ALLOC_(G%bathyT(isd:ied, jsd:jed)) ; G%bathyT(:,:) = G%Angstrom_z
+  ALLOC_(G%bathyT(isd:ied, jsd:jed)) ; G%bathyT(:,:) = 0.0  ! This was Angstrom_z.
   ALLOC_(G%CoriolisBu(IsdB:IedB, JsdB:JedB)) ; G%CoriolisBu(:,:) = 0.0
   ALLOC_(G%dF_dx(isd:ied, jsd:jed)) ; G%dF_dx(:,:) = 0.0
   ALLOC_(G%dF_dy(isd:ied, jsd:jed)) ; G%dF_dy(:,:) = 0.0

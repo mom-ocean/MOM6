@@ -1233,12 +1233,12 @@ subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
             Lfilt = CS%halocline_filter_length*G%m_to_H
 
             ! Filter the temperature and salnity with a fixed lengthscale.
-            h_tr = h_col(1) + G%H_subroundoff
+            h_tr = h_col(1) + G%GV%H_subroundoff
             b1 = 1.0 / (h_tr + Lfilt) ; d1 = h_tr * b1
             T_f(1) = (b1*h_tr)*T_col(1) ;  S_f(1) = (b1*h_tr)*S_col(1)
             do k=2,nz
               c1(k) = Lfilt * b1
-              h_tr = h_col(k) + G%H_subroundoff ; b_denom_1 = h_tr + d1*Lfilt
+              h_tr = h_col(k) + G%GV%H_subroundoff ; b_denom_1 = h_tr + d1*Lfilt
               b1 = 1.0 / (b_denom_1 + Lfilt) ; d1 = b_denom_1 * b1
               T_f(k) = b1 * (h_tr*T_col(k) + Lfilt*T_f(k-1))
               S_f(k) = b1 * (h_tr*S_col(k) + Lfilt*S_f(k-1))

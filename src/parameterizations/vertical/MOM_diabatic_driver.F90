@@ -325,7 +325,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
   is   = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
   Isq  = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nkmb = G%GV%nk_rho_varies
-  h_neglect = G%H_subroundoff ; h_neglect2 = h_neglect*h_neglect
+  h_neglect = G%GV%H_subroundoff ; h_neglect2 = h_neglect*h_neglect
   Kd_heat(:,:,:) = 0.0 ; Kd_salt(:,:,:) = 0.0
 
 
@@ -811,10 +811,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       hold(i,j,nz) = h(i,j,nz)
       h(i,j,nz) = h(i,j,nz) + (ea(i,j,nz) - eb(i,j,nz-1))
       if (h(i,j,1) <= 0.0) then
-        h(i,j,1) = G%Angstrom
+        h(i,j,1) = G%GV%Angstrom
       endif
       if (h(i,j,nz) <= 0.0) then
-        h(i,j,nz) = G%Angstrom
+        h(i,j,nz) = G%GV%Angstrom
       endif
     enddo
     do k=2,nz-1 ; do i=is,ie
@@ -822,7 +822,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
       h(i,j,k) = h(i,j,k) + ((ea(i,j,k) - eb(i,j,k-1)) + &
                     (eb(i,j,k) - ea(i,j,k+1)))
       if (h(i,j,k) <= 0.0) then
-        h(i,j,k) = G%Angstrom
+        h(i,j,k) = G%GV%Angstrom
       endif
     enddo ; enddo
   enddo
@@ -1210,12 +1210,12 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
 !$OMP do
   do k=1,nz
     do i=is-1,ie+1
-      hold(i,js-1,k) = G%Angstrom ; ea(i,js-1,k) = 0.0 ; eb(i,js-1,k) = 0.0
-      hold(i,je+1,k) = G%Angstrom ; ea(i,je+1,k) = 0.0 ; eb(i,je+1,k) = 0.0
+      hold(i,js-1,k) = G%GV%Angstrom ; ea(i,js-1,k) = 0.0 ; eb(i,js-1,k) = 0.0
+      hold(i,je+1,k) = G%GV%Angstrom ; ea(i,je+1,k) = 0.0 ; eb(i,je+1,k) = 0.0
     enddo
     do j=js,je
-      hold(is-1,j,k) = G%Angstrom ; ea(is-1,j,k) = 0.0 ; eb(is-1,j,k) = 0.0
-      hold(ie+1,j,k) = G%Angstrom ; ea(ie+1,j,k) = 0.0 ; eb(ie+1,j,k) = 0.0
+      hold(is-1,j,k) = G%GV%Angstrom ; ea(is-1,j,k) = 0.0 ; eb(is-1,j,k) = 0.0
+      hold(ie+1,j,k) = G%GV%Angstrom ; ea(ie+1,j,k) = 0.0 ; eb(ie+1,j,k) = 0.0
     enddo
   enddo
 !$OMP end parallel

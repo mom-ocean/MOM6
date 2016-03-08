@@ -254,7 +254,7 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
     call get_param(param_file, mod, "DEPTH_LIST_MIN_INC", CS%D_list_min_inc, &
                    "The minimum increment between the depths of the \n"//&
                    "entries in the depth-list file.", units="m", &
-                   default=G%Angstrom_Z)
+                   default=G%GV%Angstrom_Z)
     if (CS%read_depth_list) then
       call get_param(param_file, mod, "DEPTH_LIST_FILE", CS%depth_list_file, &
                    "The name of the depth list file.", default="Depth_list.nc")

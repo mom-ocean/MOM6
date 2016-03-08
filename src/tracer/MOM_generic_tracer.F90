@@ -569,24 +569,24 @@ contains
     !Prepare input arrays for source update
     !
 
-    rho_dzt(:,:,:) = G%H_to_kg_m2 * G%Angstrom
+    rho_dzt(:,:,:) = G%H_to_kg_m2 * G%GV%Angstrom
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
-       rho_dzt(i,j,k) = G%H_to_kg_m2 * h_old(i,j,k)
+      rho_dzt(i,j,k) = G%H_to_kg_m2 * h_old(i,j,k)
     enddo; enddo ; enddo !}
 
     dzt(:,:,:) = 1.0
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
-       dzt(i,j,k) = G%H_to_m * h_old(i,j,k)
+      dzt(i,j,k) = G%H_to_m * h_old(i,j,k)
     enddo; enddo ; enddo !}
 
 
     ! Boussinesq model
-    hblt_depth(:,:) = G%H_to_m * G%Angstrom
+    hblt_depth(:,:) = G%H_to_m * G%GV%Angstrom
     do j=jsc,jec ; do i=isc,iec ;
-       hblt_depth(i,j) = G%H_to_m * h_old(i,j,1)
+      hblt_depth(i,j) = G%H_to_m * h_old(i,j,1)
     enddo; enddo
     do k=2,G%GV%nkml ; do j=jsc,jec ; do i=isc,iec
-       hblt_depth(i,j) = hblt_depth(i,j) + G%H_to_m * h_old(i,j,k)
+      hblt_depth(i,j) = hblt_depth(i,j) + G%H_to_m * h_old(i,j,k)
     enddo; enddo ; enddo
 
 

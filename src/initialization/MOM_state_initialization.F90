@@ -183,7 +183,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
                "and salnities from a Z-space file on a latitude- \n"//&
                "longitude grid.", default=.false.)
     ! h will be converted from m to H below
-    h(:,:,:) = G%Angstrom_z
+    h(:,:,:) = G%GV%Angstrom_z
 
     if (from_Z_file) then
 !     Initialize thickness and T/S from z-coordinate data in a file.
@@ -488,9 +488,9 @@ subroutine initialize_thickness_from_file(h, G, param_file, file_has_thickness)
       call adjustEtaToFitBathymetry(G, eta, h)
     else
       do k=nz,1,-1 ; do j=js,je ; do i=is,ie
-        if (eta(i,j,K) < (eta(i,j,K+1) + G%Angstrom_z)) then
-          eta(i,j,K) = eta(i,j,K+1) + G%Angstrom_z
-          h(i,j,k) = G%Angstrom_z
+        if (eta(i,j,K) < (eta(i,j,K+1) + G%GV%Angstrom_z)) then
+          eta(i,j,K) = eta(i,j,K+1) + G%GV%Angstrom_z
+          h(i,j,k) = G%GV%Angstrom_z
         else
           h(i,j,k) = eta(i,j,K) - eta(i,j,K+1)
         endif
@@ -517,7 +517,7 @@ end subroutine initialize_thickness_from_file
 ! -----------------------------------------------------------------------------
 !> Adjust interface heights to fit the bathymetry and diagnose layer thickness.
 !! If the bottom most interface is below the topography then the bottom-most
-!! layers are contracted to G%Angstrom_z.
+!! layers are contracted to GV%Angstrom_z.
 !! If the bottom most interface is above the topography then the entire column
 !! is dilated (expanded) to fill the void.
 !!   @remark{There is a (hard-wired) "tolerance" parameter such that the
@@ -554,9 +554,9 @@ subroutine adjustEtaToFitBathymetry(G, eta, h)
   do k=nz,1,-1 ; do j=js,je ; do i=is,ie
     ! Collapse layers to thinnest possible if the thickness less than
     ! the thinnest possible (or negative).
-    if (eta(i,j,K) < (eta(i,j,K+1) + G%Angstrom_z)) then
-      eta(i,j,K) = eta(i,j,K+1) + G%Angstrom_z
-      h(i,j,k) = G%Angstrom_z
+    if (eta(i,j,K) < (eta(i,j,K+1) + G%GV%Angstrom_z)) then
+      eta(i,j,K) = eta(i,j,K+1) + G%GV%Angstrom_z
+      h(i,j,k) = G%GV%Angstrom_z
     else
       h(i,j,k) = eta(i,j,K) - eta(i,j,K+1)
     endif
@@ -627,9 +627,9 @@ subroutine initialize_thickness_uniform(h, G, param_file)
     eta1D(nz+1) = -1.0*G%bathyT(i,j)
     do k=nz,1,-1
       eta1D(K) = e0(K)
-      if (eta1D(K) < (eta1D(K+1) + G%Angstrom_z)) then
-        eta1D(K) = eta1D(K+1) + G%Angstrom_z
-        h(i,j,k) = G%Angstrom_z
+      if (eta1D(K) < (eta1D(K+1) + G%GV%Angstrom_z)) then
+        eta1D(K) = eta1D(K+1) + G%GV%Angstrom_z
+        h(i,j,k) = G%GV%Angstrom_z
       else
         h(i,j,k) = eta1D(K) - eta1D(K+1)
       endif
@@ -784,9 +784,9 @@ subroutine depress_surface(h, G, param_file, tv)
       do k=1,nz
         if (eta(i,j,K) <= eta_sfc(i,j)) exit
         if (eta(i,j,K+1) >= eta_sfc(i,j)) then
-          h(i,j,k) = G%Angstrom
+          h(i,j,k) = G%GV%Angstrom
         else
-          h(i,j,k) = max(G%Angstrom, h(i,j,k) * &
+          h(i,j,k) = max(G%GV%Angstrom, h(i,j,k) * &
               (eta_sfc(i,j) - eta(i,j,K+1)) / (eta(i,j,K) - eta(i,j,K+1)) )
         endif
       enddo
@@ -1264,8 +1264,8 @@ subroutine initialize_sponges_file(G, use_temperature, tv, param_file, CSp)
     eta(i,j,nz+1) = -G%bathyT(i,j)
   enddo ; enddo
   do k=nz,1,-1 ; do j=js,je ; do i=is,ie
-    if (eta(i,j,K) < (eta(i,j,K+1) + G%Angstrom_z)) &
-      eta(i,j,K) = eta(i,j,K+1) + G%Angstrom_z
+    if (eta(i,j,K) < (eta(i,j,K+1) + G%GV%Angstrom_z)) &
+      eta(i,j,K) = eta(i,j,K+1) + G%GV%Angstrom_z
   enddo ; enddo ; enddo
 ! Set the inverse damping rates so that the model will know where to !
 ! apply the sponges, along with the interface heights.               !
@@ -2198,9 +2198,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
       call adjustEtaToFitBathymetry(G, zi, h)
     else
       do k=nz,1,-1 ; do j=js,je ; do i=is,ie
-        if (zi(i,j,K) < (zi(i,j,K+1) + G%Angstrom_z)) then
-          zi(i,j,K) = zi(i,j,K+1) + G%Angstrom_z
-          h(i,j,k) = G%Angstrom_z
+        if (zi(i,j,K) < (zi(i,j,K+1) + G%GV%Angstrom_z)) then
+          zi(i,j,K) = zi(i,j,K+1) + G%GV%Angstrom_z
+          h(i,j,k) = G%GV%Angstrom_z
         else
           h(i,j,k) = zi(i,j,K) - zi(i,j,K+1)
         endif

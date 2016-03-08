@@ -85,8 +85,8 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
   endif
   nz = G%ke ; IsdB = G%IsdB
 
-  h_neglect = G%H_subroundoff ; h_neglect2 = h_neglect**2
-  dz_neglect = G%H_subroundoff*G%H_to_m
+  h_neglect = G%GV%H_subroundoff ; h_neglect2 = h_neglect**2
+  dz_neglect = G%GV%H_subroundoff*G%H_to_m
 
   use_EOS = associated(tv%eqn_of_state)
 
@@ -337,7 +337,7 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, halo_here)
   nz = G%ke
 
   kap_dt_x2 = (2.0*kappa*dt)*G%m_to_H**2
-  h_neglect = G%H_subroundoff
+  h_neglect = G%GV%H_subroundoff
 
   if (kap_dt_x2 <= 0.0) then
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,T_f,T_in,S_f,S_in)

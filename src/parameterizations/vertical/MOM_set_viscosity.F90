@@ -279,9 +279,9 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nkmb = G%GV%nk_rho_varies ; nkml = G%GV%nkml
-  h_neglect = G%H_subroundoff
+  h_neglect = G%GV%H_subroundoff
   Rho0x400_G = 400.0*(G%GV%Rho0/G%g_Earth)*G%m_to_H
-  Vol_quit = 0.9*G%Angstrom + h_neglect
+  Vol_quit = 0.9*G%GV%Angstrom + h_neglect
   C2pi_3 = 8.0*atan(1.0)/3.0
 
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(BBL): "//&
@@ -369,7 +369,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
           if (htot_vel>=CS%Hbbl) exit ! terminate the k loop
 
           hweight = MIN(CS%Hbbl - htot_vel, h_at_vel(i,k))
-          if (hweight < 1.5*G%Angstrom) cycle
+          if (hweight < 1.5*G%GV%Angstrom) cycle
 
           htot_vel  = htot_vel + h_at_vel(i,k)
           hwtot = hwtot + hweight
@@ -667,10 +667,10 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
               !   Try a relatively simple solution that usually works well
               ! for massless layers.
               dV_dL2 = 0.5*(slope+a) - a*L0 ; dVol = (vol-Vol_0)
-              if (a*a*dVol**3 < G%Angstrom*dV_dL2**2 * &
-                                (0.25*dV_dL2*G%Angstrom - a*L0*dVol)) then
+              if (a*a*dVol**3 < G%GV%Angstrom*dV_dL2**2 * &
+                                (0.25*dV_dL2*G%GV%Angstrom - a*L0*dVol)) then
                 ! One iteration of Newton's method should give an estimate
-                ! that is accurate to within 0.5*G%Angstrom
+                ! that is accurate to within 0.5*G%GV%Angstrom
                 L(K) = sqrt(L0*L0 + dVol / dV_dL2)
                 Vol_err = 0.5*(L(K)*L(K))*(slope + a_3*(3.0-4.0*L(K))) - vol
               else
@@ -961,8 +961,8 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
 
   use_EOS = associated(tv%eqn_of_state)
   dt_Rho0 = dt/G%H_to_kg_m2
-  h_neglect = G%H_subroundoff
-  h_tiny = 2.0*G%Angstrom + h_neglect
+  h_neglect = G%GV%H_subroundoff
+  h_tiny = 2.0*G%GV%Angstrom + h_neglect
   g_H_Rho0 = (G%g_Earth * G%H_to_m) / G%GV%Rho0
 
   if (associated(fluxes%frac_shelf_h)) then
@@ -1137,7 +1137,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
         if (use_EOS .or. .not.CS%linear_drag) then ; do k=1,nz
           if (htot_vel>=CS%Htbl_shelf) exit ! terminate the k loop
           hweight = MIN(CS%Htbl_shelf - htot_vel, h_at_vel(i,k))
-          if (hweight <= 1.5*G%Angstrom) cycle
+          if (hweight <= 1.5*G%GV%Angstrom) cycle
 
           htot_vel  = htot_vel + h_at_vel(i,k)
           hwtot = hwtot + hweight
@@ -1372,7 +1372,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
         if (use_EOS .or. .not.CS%linear_drag) then ; do k=1,nz
           if (htot_vel>=CS%Htbl_shelf) exit ! terminate the k loop
           hweight = MIN(CS%Htbl_shelf - htot_vel, h_at_vel(i,k))
-          if (hweight <= 1.5*G%Angstrom) cycle
+          if (hweight <= 1.5*G%GV%Angstrom) cycle
 
           htot_vel  = htot_vel + h_at_vel(i,k)
           hwtot = hwtot + hweight
@@ -1651,7 +1651,7 @@ subroutine set_visc_init(Time, G, param_file, diag, visc, CS)
                  "The rotation rate of the earth.", units="s-1", &
                  default=7.2921e-5)
     ! This give a minimum decay scale that is typically much less than Angstrom.
-    CS%ustar_min = 2e-4*CS%omega*(G%Angstrom_z + G%H_to_m*G%H_subroundoff)
+    CS%ustar_min = 2e-4*CS%omega*(G%GV%Angstrom_z + G%H_to_m*G%GV%H_subroundoff)
   endif
 
   call get_param(param_file, mod, "HBBL", CS%Hbbl, &

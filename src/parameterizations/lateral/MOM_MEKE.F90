@@ -138,7 +138,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS, hu, hv)
          "MOM_MEKE: MEKE must be initialized before it is used.")
 
   Rho0 = G%H_to_kg_m2 * G%m_to_H
-  mass_neglect = G%H_to_kg_m2 * G%H_subroundoff
+  mass_neglect = G%H_to_kg_m2 * G%GV%H_subroundoff
   sdt = dt*CS%MEKE_dtScale ! Scaled dt to use for time-stepping
   if (CS%MEKE_damping + CS%MEKE_Cd_scale > 0.0 .or. CS%MEKE_Cb>0. &
       .or. CS%visc_drag) then
@@ -156,9 +156,10 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS, hu, hv)
       if (associated(MEKE%MEKE)) call hchksum(MEKE%MEKE, 'MEKE MEKE',G)
     endif
 
+    ! Why are these 3 lines repeated from above?
     sdt = dt*CS%MEKE_dtScale ! Scaled dt to use for time-stepping
     Rho0 = G%H_to_kg_m2 * G%m_to_H
-    mass_neglect = G%H_to_kg_m2 * G%H_subroundoff
+    mass_neglect = G%H_to_kg_m2 * G%GV%H_subroundoff
     cdrag2 = CS%cdrag**2
 
     ! With a depth-dependent (and possibly strong) damping, it seems

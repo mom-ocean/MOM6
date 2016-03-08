@@ -119,30 +119,28 @@ subroutine diffConvection_calculate(CS, G, h, Temp, Salt, EOS, Kd_int)
   N2_1d( G%ke+1 ) = 0.
   Kd_1d( 1 ) = 0.
   Kd_1d( G%ke+1 ) = 0.
-  do j = G%jsc, G%jec
-    do i = G%isc, G%iec
+  do j=G%jsc,G%jec ; do i=G%isc,G%iec
+    ! This k-loop calculates external quantities independent of any iterations
+    ! Start at bottom of top level
+    pRef = 0. ! Ignore atmospheric pressure
+    do K = 2, G%ke
+      ! Pressure at interface K is incremented by mass of level above
+      pRef = pRef + G%g_Earth * G%GV%Rho0 * h(i,j,k-1) * G%H_to_m ! Boussinesq approximation!!!! ?????
+      ! Compute Brunt-Vaisala frequency (static stability) on interfaces
+      call calculate_density(Temp(i,j,k),   Salt(i,j,k),   pRef, rhoK,   EOS)
+      call calculate_density(Temp(i,j,k-1), Salt(i,j,k-1), pRef, rhoKm1, EOS)
+      N2_1d(K) = GoRho * (rhoK - rhoKm1) / &
+              (0.5*(h(i,j,k-1) + h(i,j,k)) + G%GV%H_subroundoff) ! Can be negative
+      Kd_1d(K) = 0.
+      if (N2_1d(K) < 0.) Kd_1d(K) = CS%Kd_convection
+    enddo ! k
 
-      ! This k-loop calculates external quantities independent of any iterations
-      ! Start at bottom of top level
-      pRef = 0. ! Ignore atmospheric pressure
-      do K = 2, G%ke
-        ! Pressure at interface K is incremented by mass of level above
-        pRef = pRef + G%g_Earth * G%GV%Rho0 * h(i,j,k-1) * G%H_to_m ! Boussinesq approximation!!!! ?????
-        ! Compute Brunt-Vaisala frequency (static stability) on interfaces
-        call calculate_density(Temp(i,j,k),   Salt(i,j,k),   pRef, rhoK,   EOS)
-        call calculate_density(Temp(i,j,k-1), Salt(i,j,k-1), pRef, rhoKm1, EOS)
-        N2_1d(K) = GoRho * (rhoK - rhoKm1) / (0.5*(h(i,j,k-1) + h(i,j,k))+G%H_subroundoff) ! Can be negative
-        Kd_1d(K) = 0.
-        if (N2_1d(K) < 0.) Kd_1d(K) = CS%Kd_convection
-      enddo ! k
+    if (.not. CS%passiveMode) Kd_int(i,j,:) = Kd_int(i,j,:) + Kd_1d(:)
 
-      if (.not. CS%passiveMode) Kd_int(i,j,:) = Kd_int(i,j,:) + Kd_1d(:)
+    if (CS%id_N2 > 0) CS%N2(i,j,:) = N2_1d(:)
+    if (CS%id_Kd_conv > 0) CS%Kd_conv(i,j,:) = Kd_1d(:)
 
-      if (CS%id_N2 > 0) CS%N2(i,j,:) = N2_1d(:)
-      if (CS%id_Kd_conv > 0) CS%Kd_conv(i,j,:) = Kd_1d(:)
-
-    enddo ! i
-  enddo ! j
+  enddo ; enddo ! j
 
   if (CS%id_N2 > 0) call post_data(CS%id_N2, CS%N2, CS%diag)
   if (CS%id_Kd_conv > 0) call post_data(CS%id_Kd_conv, CS%Kd_conv, CS%diag)
