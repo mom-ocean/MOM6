@@ -46,7 +46,7 @@ module MOM_diag_to_Z
 use MOM_coms,          only : reproducing_sum
 use MOM_diag_mediator, only : post_data, post_data_1d_k, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl, time_type, diag_axis_init
-use MOM_diag_mediator, only : axesType, defineAxes
+use MOM_diag_mediator, only : axes_grp, define_axes_group
 use MOM_diag_mediator, only : ocean_register_diag
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
@@ -102,9 +102,9 @@ type, public :: diag_to_Z_CS ; private
 
   real, pointer :: Z_int(:) => NULL()  ! interface depths of the z-space file (meter)
 
-  type(axesType) :: axesBz,  axesTz,  axesCuz,  axesCvz
-  type(axesType) :: axesBzi, axesTzi, axesCuzi, axesCvzi
-  type(axesType) :: axesZ
+  type(axes_grp) :: axesBz,  axesTz,  axesCuz,  axesCvz
+  type(axes_grp) :: axesBzi, axesTzi, axesCuzi, axesCvzi
+  type(axes_grp) :: axesZ
   integer, dimension(1) :: axesz_out
 
   type(diag_ctrl), pointer :: diag ! structure to regulate diagnostic output timing
@@ -1003,15 +1003,15 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
 
   if (CS%nk_zspace > 0) then
 
-    call defineAxes(diag, (/ diag%axesB1%handles(1),  diag%axesB1%handles(2),  z_axis /),    CS%axesBz)
-    call defineAxes(diag, (/ diag%axesT1%handles(1),  diag%axesT1%handles(2),  z_axis /),    CS%axesTz)
-    call defineAxes(diag, (/ diag%axesCu1%handles(1), diag%axesCu1%handles(2), z_axis /),    CS%axesCuz)
-    call defineAxes(diag, (/ diag%axesCv1%handles(1), diag%axesCv1%handles(2), z_axis /),    CS%axesCvz)
-    call defineAxes(diag, (/ diag%axesB1%handles(1),  diag%axesB1%handles(2),  zint_axis /), CS%axesBzi)
-    call defineAxes(diag, (/ diag%axesT1%handles(1),  diag%axesT1%handles(2),  zint_axis /), CS%axesTzi)
-    call defineAxes(diag, (/ diag%axesCu1%handles(1), diag%axesCu1%handles(2), zint_axis /), CS%axesCuzi)
-    call defineAxes(diag, (/ diag%axesCv1%handles(1), diag%axesCv1%handles(2), zint_axis /), CS%axesCvzi)
-    call defineAxes(diag, (/ z_axis /),    CS%axesZ)
+    call define_axes_group(diag, (/ diag%axesB1%handles(1),  diag%axesB1%handles(2),  z_axis /),    CS%axesBz)
+    call define_axes_group(diag, (/ diag%axesT1%handles(1),  diag%axesT1%handles(2),  z_axis /),    CS%axesTz)
+    call define_axes_group(diag, (/ diag%axesCu1%handles(1), diag%axesCu1%handles(2), z_axis /),    CS%axesCuz)
+    call define_axes_group(diag, (/ diag%axesCv1%handles(1), diag%axesCv1%handles(2), z_axis /),    CS%axesCvz)
+    call define_axes_group(diag, (/ diag%axesB1%handles(1),  diag%axesB1%handles(2),  zint_axis /), CS%axesBzi)
+    call define_axes_group(diag, (/ diag%axesT1%handles(1),  diag%axesT1%handles(2),  zint_axis /), CS%axesTzi)
+    call define_axes_group(diag, (/ diag%axesCu1%handles(1), diag%axesCu1%handles(2), zint_axis /), CS%axesCuzi)
+    call define_axes_group(diag, (/ diag%axesCv1%handles(1), diag%axesCv1%handles(2), zint_axis /), CS%axesCvzi)
+    call define_axes_group(diag, (/ z_axis /),    CS%axesZ)
 
     CS%id_u_z = register_diag_field('ocean_model_z', 'u', CS%axesCuz, Time,    &
         'Zonal Velocity in Depth Space', 'meter second-1',                     &
@@ -1274,7 +1274,7 @@ function register_Z_diag(var_desc, CS, day, missing)
   character(len=48) :: units            ! A variable's units.
   character(len=240) :: longname        ! A variable's longname.
   character(len=8) :: hor_grid, z_grid  ! Variable grid info.
-  type(axesType) :: axes
+  type(axes_grp) :: axes
 
   call query_vardesc(var_desc, name=var_name, units=units, longname=longname, &
                      hor_grid=hor_grid, z_grid=z_grid, caller="register_Zint_diag")
@@ -1326,7 +1326,7 @@ function register_Zint_diag(var_desc, CS, day)
   character(len=48) :: units            ! A variable's units.
   character(len=240) :: longname        ! A variable's longname.
   character(len=8) :: hor_grid          ! Variable grid info.
-  type(axesType) :: axes
+  type(axes_grp) :: axes
 
   call query_vardesc(var_desc, name=var_name, units=units, longname=longname, &
                      hor_grid=hor_grid, caller="register_Zint_diag")

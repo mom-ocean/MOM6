@@ -42,8 +42,9 @@ use MOM_remapping,        only : remapping_core_h
 use MOM_regridding,       only : regridding_CS, initialize_regridding, setCoordinateResolution
 use MOM_regridding,       only : build_zstar_column, set_regrid_params
 
+use diag_axis_mod, only : get_diag_axis_name
 use diag_manager_mod, only : diag_manager_init, diag_manager_end
-use diag_manager_mod, only : send_data, diag_axis_init
+use diag_manager_mod, only : send_data, diag_axis_init, diag_field_add_attribute
 use diag_manager_mod, only : register_diag_field_fms=>register_diag_field
 use diag_manager_mod, only : register_static_field_fms=>register_static_field
 use diag_manager_mod, only : get_diag_field_id_fms=>get_diag_field_id
@@ -70,7 +71,7 @@ public diag_mediator_init, diag_mediator_end, set_diag_mediator_grid
 public diag_mediator_close_registration, get_diag_time_end
 public diag_axis_init, ocean_register_diag, register_static_field
 public register_scalar_field
-public defineAxes, diag_masks_set
+public define_axes_group, diag_masks_set
 public diag_set_thickness_ptr
 public diag_update_target_grids
 
@@ -78,13 +79,17 @@ interface post_data
   module procedure post_data_3d, post_data_2d, post_data_0d
 end interface post_data
 
-! 2D/3D axes type to contain 1D axes handles and pointers to masks
-type, public :: axesType
-  character(len=15) :: id   ! the id string for this particular combination of handles
-  integer           :: rank ! number of dimensions in the list of axes
-  integer, dimension(:), allocatable :: handles ! Handles to 1D axes
-  type(diag_ctrl), pointer :: diag_cs => null()
-end type axesType
+!> A group of 1D axes that comprise a 1D/2D/3D mesh
+type, public :: axes_grp
+  character(len=15) :: id   !< The id string for this particular combination of handles
+  integer           :: rank !< Number of dimensions in the list of axes
+  integer, dimension(:), allocatable :: handles !< Handles to 1D axes
+  type(diag_ctrl), pointer :: diag_cs => null() !< Circular link back to the main diagnostics control structure
+                                                !! (Used to avoid passing said structure into every possible call)
+  character(len=9) :: x_cell_method = '' !< Default nature of data representation, if axes group includes x-direction
+  character(len=9) :: y_cell_method = '' !< Default nature of data representation, if axes group includes y-direction
+  character(len=9) :: v_cell_method = '' !< Default nature of data representation, if axes group includes vertical direction
+end type axes_grp
 
 ! This type is used to represent a diagnostic at the diag_mediator level.
 ! There can be both 'primary' and 'seconday' diagnostics. The primaries
@@ -95,7 +100,7 @@ end type axesType
 type, private :: diag_type
   logical :: in_use
   integer :: fms_diag_id         ! underlying FMS diag id
-  type(axesType), pointer :: remap_axes => null()
+  type(axes_grp), pointer :: remap_axes => null()
   real, pointer, dimension(:,:)   :: mask2d => null()
   real, pointer, dimension(:,:,:) :: mask3d => null()
   type(diag_type), pointer :: next => null()  ! pointer to the next diag
@@ -117,11 +122,11 @@ type, public :: diag_ctrl
   logical :: ave_enabled = .false. ! .true. if averaging is enabled.
 
   ! The following are axis types defined for output.
-  type(axesType) :: axesBL, axesTL, axesCuL, axesCvL
-  type(axesType) :: axesBi, axesTi, axesCui, axesCvi
-  type(axesType) :: axesB1, axesT1, axesCu1, axesCv1
-  type(axesType) :: axesZi, axesZL
-  type(axesType) :: axesTzi, axesTZL, axesBZL, axesCuZL, axesCvZL
+  type(axes_grp) :: axesBL, axesTL, axesCuL, axesCvL
+  type(axes_grp) :: axesBi, axesTi, axesCui, axesCvi
+  type(axes_grp) :: axesB1, axesT1, axesCu1, axesCv1
+  type(axes_grp) :: axesZi, axesZL
+  type(axes_grp) :: axesTzi, axesTZL, axesBZL, axesCuZL, axesCvZL
 
   ! Mask arrays for diagnostics
   real, dimension(:,:),   pointer :: mask2dT   => null()
@@ -327,32 +332,50 @@ subroutine set_axes_info(G, param_file, diag_cs, set_vertical)
   endif
 
   ! Axes for z remapping
-  call defineAxes(diag_cs, (/ id_xh, id_yh, id_zzl /), diag_cs%axesTZL)
-  call defineAxes(diag_cs, (/ id_xq, id_yq, id_zzL /), diag_cs%axesBZL)
-  call defineAxes(diag_cs, (/ id_xq, id_yh, id_zzL /), diag_cs%axesCuZL)
-  call defineAxes(diag_cs, (/ id_xh, id_yq, id_zzL /), diag_cs%axesCvZL)
+  call define_axes_group(diag_cs, (/ id_xh, id_yh, id_zzl /), diag_cs%axesTZL, &
+       x_cell_method='mean', y_cell_method='mean', v_cell_method='mean')
+  call define_axes_group(diag_cs, (/ id_xq, id_yq, id_zzL /), diag_cs%axesBZL, &
+       x_cell_method='point', y_cell_method='point', v_cell_method='mean')
+  call define_axes_group(diag_cs, (/ id_xq, id_yh, id_zzL /), diag_cs%axesCuZL, &
+       x_cell_method='point', y_cell_method='mean', v_cell_method='mean')
+  call define_axes_group(diag_cs, (/ id_xh, id_yq, id_zzL /), diag_cs%axesCvZL, &
+       x_cell_method='mean', y_cell_method='point', v_cell_method='mean')
 
   ! Vertical axes for the interfaces and layers
-  call defineAxes(diag_cs, (/ id_zi /), diag_cs%axesZi)
-  call defineAxes(diag_cs, (/ id_zL /), diag_cs%axesZL)
+  call define_axes_group(diag_cs, (/ id_zi /), diag_cs%axesZi, &
+       v_cell_method='point')
+  call define_axes_group(diag_cs, (/ id_zL /), diag_cs%axesZL, &
+       v_cell_method='mean')
 
   ! Axis groupings for the model layers
-  call defineAxes(diag_cs, (/ id_xh, id_yh, id_zL /), diag_cs%axesTL)
-  call defineAxes(diag_cs, (/ id_xq, id_yq, id_zL /), diag_cs%axesBL)
-  call defineAxes(diag_cs, (/ id_xq, id_yh, id_zL /), diag_cs%axesCuL)
-  call defineAxes(diag_cs, (/ id_xh, id_yq, id_zL /), diag_cs%axesCvL)
+  call define_axes_group(diag_cs, (/ id_xh, id_yh, id_zL /), diag_cs%axesTL, &
+       x_cell_method='mean', y_cell_method='mean', v_cell_method='mean')
+  call define_axes_group(diag_cs, (/ id_xq, id_yq, id_zL /), diag_cs%axesBL, &
+       x_cell_method='point', y_cell_method='point', v_cell_method='mean')
+  call define_axes_group(diag_cs, (/ id_xq, id_yh, id_zL /), diag_cs%axesCuL, &
+       x_cell_method='point', y_cell_method='mean', v_cell_method='mean')
+  call define_axes_group(diag_cs, (/ id_xh, id_yq, id_zL /), diag_cs%axesCvL, &
+       x_cell_method='mean', y_cell_method='point', v_cell_method='mean')
 
   ! Axis groupings for the model interfaces
-  call defineAxes(diag_cs, (/ id_xh, id_yh, id_zi /), diag_cs%axesTi)
-  call defineAxes(diag_cs, (/ id_xq, id_yh, id_zi /), diag_cs%axesCui)
-  call defineAxes(diag_cs, (/ id_xh, id_yq, id_zi /), diag_cs%axesCvi)
-  call defineAxes(diag_cs, (/ id_xq, id_yq, id_zi /), diag_cs%axesBi)
+  call define_axes_group(diag_cs, (/ id_xh, id_yh, id_zi /), diag_cs%axesTi, &
+       x_cell_method='mean', y_cell_method='mean', v_cell_method='point')
+  call define_axes_group(diag_cs, (/ id_xq, id_yh, id_zi /), diag_cs%axesCui, &
+       x_cell_method='point', y_cell_method='mean', v_cell_method='point')
+  call define_axes_group(diag_cs, (/ id_xh, id_yq, id_zi /), diag_cs%axesCvi, &
+       x_cell_method='mean', y_cell_method='point', v_cell_method='point')
+  call define_axes_group(diag_cs, (/ id_xq, id_yq, id_zi /), diag_cs%axesBi, &
+       x_cell_method='point', y_cell_method='point', v_cell_method='point')
 
   ! Axis groupings for 2-D arrays
-  call defineAxes(diag_cs, (/ id_xh, id_yh /), diag_cs%axesT1)
-  call defineAxes(diag_cs, (/ id_xq, id_yq /), diag_cs%axesB1)
-  call defineAxes(diag_cs, (/ id_xq, id_yh /), diag_cs%axesCu1)
-  call defineAxes(diag_cs, (/ id_xh, id_yq /), diag_cs%axesCv1)
+  call define_axes_group(diag_cs, (/ id_xh, id_yh /), diag_cs%axesT1, &
+       x_cell_method='mean', y_cell_method='mean')
+  call define_axes_group(diag_cs, (/ id_xq, id_yq /), diag_cs%axesB1, &
+       x_cell_method='point', y_cell_method='point')
+  call define_axes_group(diag_cs, (/ id_xq, id_yh /), diag_cs%axesCu1, &
+       x_cell_method='point', y_cell_method='mean')
+  call define_axes_group(diag_cs, (/ id_xh, id_yq /), diag_cs%axesCv1, &
+       x_cell_method='mean', y_cell_method='point')
 
 end subroutine set_axes_info
 
@@ -386,23 +409,46 @@ function check_grid_def(filename, varname)
 
 end function check_grid_def
 
-subroutine defineAxes(diag_cs, handles, axes)
-  ! Defines "axes" from list of handle and associates mask
-  type(diag_ctrl),    target, intent(in)  :: diag_cs
-  integer, dimension(:),   intent(in)  :: handles
-  type(axesType),          intent(out) :: axes
-
+!> Defines a group of "axes" from list of handles
+subroutine define_axes_group(diag_cs, handles, axes, &
+                             x_cell_method, y_cell_method, v_cell_method)
+  type(diag_ctrl), target,    intent(in)  :: diag_cs !< Diagnostics control structure
+  integer, dimension(:),      intent(in)  :: handles !< A list of 1D axis handles
+  type(axes_grp),             intent(out) :: axes    !< The group of 1D axes
+  character(len=*), optional, intent(in)  :: x_cell_method !< A x-direction cell method used to construct the "cell_methods" attribute in CF convention
+  character(len=*), optional, intent(in)  :: y_cell_method !< A y-direction cell method used to construct the "cell_methods" attribute in CF convention
+  character(len=*), optional, intent(in)  :: v_cell_method !< A vertical direction cell method used to construct the "cell_methods" attribute in CF convention
   ! Local variables
   integer :: n
   n = size(handles)
-  if (n<1 .or. n>3) call MOM_error(FATAL,"defineAxes: wrong size for list of handles!")
+  if (n<1 .or. n>3) call MOM_error(FATAL,"define_axes_group: wrong size for list of handles!")
   allocate( axes%handles(n) )
   axes%id = i2s(handles, n) ! Identifying string
   axes%rank = n
   axes%handles(:) = handles(:)
   axes%diag_cs => diag_cs ! A [circular] link back to the diag_cs structure
-
-end subroutine defineAxes
+  if (present(x_cell_method)) then
+    if (axes%rank<2) call MOM_error(FATAL, 'define_axes_group: ' // &
+                                           'Can not set x_cell_method for rank<2.')
+    axes%x_cell_method = trim(x_cell_method)
+  else
+    axes%x_cell_method = ''
+  endif
+  if (present(y_cell_method)) then
+    if (axes%rank<2) call MOM_error(FATAL, 'define_axes_group: ' // &
+                                           'Can not set y_cell_method for rank<2.')
+    axes%y_cell_method = trim(y_cell_method)
+  else
+    axes%y_cell_method = ''
+  endif
+  if (present(v_cell_method)) then
+    if (axes%rank/=1 .and. axes%rank/=3) call MOM_error(FATAL, 'define_axes_group: ' // &
+                                           'Can not set v_cell_method for rank<>1 or 3.')
+    axes%v_cell_method = trim(v_cell_method)
+  else
+    axes%v_cell_method = ''
+  endif
+end subroutine define_axes_group
 
 subroutine set_diag_mediator_grid(G, diag_cs)
   type(ocean_grid_type), intent(inout) :: G
@@ -971,45 +1017,35 @@ end function get_diag_time_end
 function register_diag_field(module_name, field_name, axes, init_time,         &
      long_name, units, missing_value, range, mask_variant, standard_name,      &
      verbose, do_not_log, err_msg, interp_method, tile_count, cmor_field_name, &
-     cmor_long_name, cmor_units, cmor_standard_name)
-  integer :: register_diag_field
-  character(len=*), intent(in) :: module_name, field_name
-  type(axesType), target, intent(in) :: axes
-  type(time_type),  intent(in) :: init_time
-  character(len=*), optional, intent(in) :: long_name, units, standard_name
-  real,             optional, intent(in) :: missing_value, range(2)
-  logical,          optional, intent(in) :: mask_variant, verbose, do_not_log
-  character(len=*), optional, intent(out):: err_msg
-  character(len=*), optional, intent(in) :: interp_method
-  integer,          optional, intent(in) :: tile_count
-  character(len=*), optional, intent(in) :: cmor_field_name, cmor_long_name
-  character(len=*), optional, intent(in) :: cmor_units, cmor_standard_name
-
-  ! Output:    An integer handle for a diagnostic array.
-  ! Arguments:
-  !  (in)      module_name   - name of this module, usually "ocean_model" or "ice_shelf_model"
-  !  (in)      field_name    - name of the diagnostic field
-  !  (in)      axes          - container w/ up to 3 integer handles that indicates axes for this field
-  !  (in)      init_time     - time at which a field is first available?
-  !  (in,opt)  long_name     - long name of a field.
-  !  (in,opt)  units         - units of a field.
-  !  (in,opt)  missing_value - A value that indicates missing values.
-  !  (in,opt)  standard_name - standardized name associated with a field
-
-  !  (in,opt)  cmor_field_name    - CMOR name of a field
-  !  (in,opt)  cmor_long_name     - CMOR long name of a field
-  !  (in,opt)  cmor_units         - CMOR units of a field
-  !  (in,opt)  cmor_standard_name - CMOR standardized name associated with a field
-
-  ! Following params have yet to be used in MOM.
-  !  (in,opt)  range         - valid range of a variable
-  !  (in,opt)  mask_variant  - If true a logical mask must be provided with post_data calls
-  !  (in,opt)  verbose       - If true, FMS is verbose
-  !  (in,opt)  do_not_log    - If true, do not log something
-  !  (out,opt) err_msg       - character string into which an error message might be placed
-  !  (in,opt)  interp_method - no clue
-  !  (in,opt)  tile_count    - no clue
-
+     cmor_long_name, cmor_units, cmor_standard_name, cell_methods, &
+     x_cell_method, y_cell_method, v_cell_method)
+  integer :: register_diag_field !< An integer handle for a diagnostic array.
+  character(len=*), intent(in) :: module_name !< Name of this module, usually "ocean_model" or "ice_shelf_model"
+  character(len=*), intent(in) :: field_name !< Name of the diagnostic field
+  type(axes_grp), target, intent(in) :: axes !< Container w/ up to 3 integer handles that indicates axes for this field
+  type(time_type),  intent(in) :: init_time !< Time at which a field is first available?
+  character(len=*), optional, intent(in) :: long_name !< Long name of a field.
+  character(len=*), optional, intent(in) :: units !< Units of a field.
+  character(len=*), optional, intent(in) :: standard_name !< Standardized name associated with a field
+  real,             optional, intent(in) :: missing_value !< A value that indicates missing values.
+  real,             optional, intent(in) :: range(2) !< Valid range of a variable (not used in MOM?)
+  logical,          optional, intent(in) :: mask_variant !< If true a logical mask must be provided with post_data calls (not used in MOM?)
+  logical,          optional, intent(in) :: verbose !< If true, FMS is verbose (not used in MOM?)
+  logical,          optional, intent(in) :: do_not_log !< If true, do not log something (not used in MOM?)
+  character(len=*), optional, intent(out):: err_msg !< String into which an error message might be placed (not used in MOM?)
+  character(len=*), optional, intent(in) :: interp_method !< no clue (not used in MOM?)
+  integer,          optional, intent(in) :: tile_count !< no clue (not used in MOM?)
+  character(len=*), optional, intent(in) :: cmor_field_name !< CMOR name of a field
+  character(len=*), optional, intent(in) :: cmor_long_name !< CMOR long name of a field
+  character(len=*), optional, intent(in) :: cmor_units !< CMOR units of a field
+  character(len=*), optional, intent(in) :: cmor_standard_name !< CMOR standardized name associated with a field
+  character(len=*), optional, intent(in) :: cell_methods !< String to append as cell_methods attribute. Use '' to have no attribute.
+                                                         !! If present, this overrides the default constructed from the default for
+                                                         !! each individual axis direction.
+  character(len=*), optional, intent(in) :: x_cell_method !< Specifies the cell method for the x-direction. Use '' have no method.
+  character(len=*), optional, intent(in) :: y_cell_method !< Specifies the cell method for the y-direction. Use '' have no method.
+  character(len=*), optional, intent(in) :: v_cell_method !< Specifies the cell method for the vertical direction. Use '' have no method.
+  ! Local variables
   real :: MOM_missing_value
   type(diag_ctrl), pointer :: diag_cs
   type(diag_type), pointer :: diag => null(), cmor_diag => null(), z_remap_diag => null()
@@ -1031,6 +1067,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
          range=range, mask_variant=mask_variant, standard_name=standard_name, &
          verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
          interp_method=interp_method, tile_count=tile_count)
+  call attach_cell_methods(fms_id, axes, cell_methods, x_cell_method, y_cell_method, v_cell_method)
   if (fms_id /= DIAG_FIELD_NOT_FOUND) then
     ! If the diagnostic is needed then allocate and id and space
     primary_id = get_new_diag_id(diag_cs)
@@ -1063,6 +1100,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
       missing_value=MOM_missing_value, range=range, mask_variant=mask_variant,                 &
       standard_name=trim(posted_cmor_standard_name), verbose=verbose, do_not_log=do_not_log,   &
       err_msg=err_msg, interp_method=interp_method, tile_count=tile_count)
+    call attach_cell_methods(fms_id, axes, cell_methods, x_cell_method, y_cell_method, v_cell_method)
 
     if (fms_id /= DIAG_FIELD_NOT_FOUND) then
       if (primary_id == -1) then
@@ -1099,6 +1137,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
          range=range, mask_variant=mask_variant, standard_name=standard_name, &
          verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
          interp_method=interp_method, tile_count=tile_count)
+    call attach_cell_methods(fms_id, z_remap_diag%remap_axes, cell_methods, x_cell_method, y_cell_method, v_cell_method)
     z_remap_diag%fms_diag_id = fms_id
 
     if (is_u_axes(axes, diag_cs)) then
@@ -1130,6 +1169,72 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
   register_diag_field = primary_id
 
 end function register_diag_field
+
+!> Attaches "cell_methods" attribute to a variable based on defaults for axes_grp or optional arguments.
+subroutine attach_cell_methods(id, axes, cell_methods, x_cell_method, y_cell_method, v_cell_method)
+  integer,                    intent(in) :: id !< Handle to diagnostic
+  type(axes_grp),             intent(in) :: axes !< Container w/ up to 3 integer handles that indicates axes for this field
+  character(len=*), optional, intent(in) :: cell_methods !< String to append as cell_methods attribute. Use '' to have no attribute.
+                                                         !! If present, this overrides the default constructed from the default for
+                                                         !! each individual axis direction.
+  character(len=*), optional, intent(in) :: x_cell_method !< Specifies the cell method for the x-direction. Use '' have no method.
+  character(len=*), optional, intent(in) :: y_cell_method !< Specifies the cell method for the y-direction. Use '' have no method.
+  character(len=*), optional, intent(in) :: v_cell_method !< Specifies the cell method for the vertical direction. Use '' have no method.
+  ! Local variables
+  character(len=9) :: axis_name
+
+  if (present(cell_methods)) then
+    if (present(x_cell_method) .or. present(y_cell_method) .or. present(v_cell_method)) then
+      call MOM_error(FATAL, "attach_cell_methods: " // &
+           'Individual direction cell method was specified along with a "cell_methods" string.')
+    endif
+    if (len(trim(cell_methods))>0) then
+      call diag_field_add_attribute(id, 'cell_methods', trim(cell_methods))
+    endif
+  else
+    if (present(x_cell_method)) then
+      if (len(trim(x_cell_method))>0) then
+        call get_diag_axis_name(axes%handles(1), axis_name)
+        call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//': '//trim(x_cell_method))
+      endif
+    else
+      if (len(trim(axes%x_cell_method))>0) then
+        call get_diag_axis_name(axes%handles(1), axis_name)
+        call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//': '//trim(axes%x_cell_method))
+      endif
+    endif
+    if (present(y_cell_method)) then
+      if (len(trim(y_cell_method))>0) then
+        call get_diag_axis_name(axes%handles(2), axis_name)
+        call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//': '//trim(y_cell_method))
+      endif
+    else
+      if (len(trim(axes%y_cell_method))>0) then
+        call get_diag_axis_name(axes%handles(2), axis_name)
+        call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//': '//trim(axes%y_cell_method))
+      endif
+    endif
+    if (present(v_cell_method)) then
+      if (len(trim(v_cell_method))>0) then
+        if (axes%rank==1) then
+          call get_diag_axis_name(axes%handles(1), axis_name)
+        elseif (axes%rank==3) then
+          call get_diag_axis_name(axes%handles(3), axis_name)
+        endif
+        call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//': '//trim(v_cell_method))
+      endif
+    else
+      if (len(trim(axes%v_cell_method))>0) then
+        if (axes%rank==1) then
+          call get_diag_axis_name(axes%handles(1), axis_name)
+        elseif (axes%rank==3) then
+          call get_diag_axis_name(axes%handles(3), axis_name)
+        endif
+        call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//': '//trim(axes%v_cell_method))
+      endif
+    endif
+  endif
+end subroutine attach_cell_methods
 
 function register_scalar_field(module_name, field_name, init_time, diag_cs, &
      long_name, units, missing_value, range, mask_variant, standard_name, &
@@ -1242,7 +1347,7 @@ function register_static_field(module_name, field_name, axes, &
      cmor_field_name, cmor_long_name, cmor_units, cmor_standard_name)
   integer :: register_static_field
   character(len=*), intent(in) :: module_name, field_name
-  type(axesType),   intent(in) :: axes
+  type(axes_grp),   intent(in) :: axes
   character(len=*), optional, intent(in) :: long_name, units, standard_name
   real,             optional, intent(in) :: missing_value, range(2)
   logical,          optional, intent(in) :: mask_variant, do_not_log
@@ -1367,7 +1472,7 @@ function ocean_register_diag(var_desc, G, diag_CS, day)
   character(len=48) :: units            ! A variable's units.
   character(len=240) :: longname        ! A variable's longname.
   character(len=8) :: hor_grid, z_grid  ! Variable grid info.
-  type(axesType) :: axes
+  type(axes_grp) :: axes
 
   call query_vardesc(var_desc, units=units, longname=longname, hor_grid=hor_grid, &
                      z_grid=z_grid, caller="ocean_register_diag")
@@ -1663,7 +1768,7 @@ subroutine set_diag_remap_axes(diag, diag_cs, axes)
   ! Associate a remapping axes with the a diagnostic based on the axes info.
   type(diag_ctrl), target, intent(inout) :: diag_cs
   type(diag_type), pointer, intent(out) :: diag
-  type(axesType),   intent(in) :: axes
+  type(axes_grp),   intent(in) :: axes
 
   diag%remap_axes => null()
   if (axes%rank .eq. 3) then
@@ -1685,7 +1790,7 @@ subroutine set_diag_mask(diag, diag_cs, axes)
 
   type(diag_ctrl), target, intent(inout) :: diag_cs
   type(diag_type), pointer, intent(out) :: diag
-  type(axesType),   intent(in) :: axes
+  type(axes_grp),   intent(in) :: axes
 
   diag%mask2d => null()
   diag%mask3d => null()
@@ -1728,7 +1833,7 @@ end subroutine set_diag_mask
 
 function is_layer_axes(axes, diag_cs)
 
-  type(axesType),  intent(in) :: axes
+  type(axes_grp),  intent(in) :: axes
   type(diag_ctrl), intent(in) :: diag_cs
 
   logical :: is_layer_axes
@@ -1751,7 +1856,7 @@ end function is_layer_axes
 
 function is_u_axes(axes, diag_cs)
 
-  type(axesType),  intent(in) :: axes
+  type(axes_grp),  intent(in) :: axes
   type(diag_ctrl), intent(in) :: diag_cs
 
   logical :: is_u_axes
@@ -1769,7 +1874,7 @@ end function is_u_axes
 
 function is_v_axes(axes, diag_cs)
 
-  type(axesType),  intent(in) :: axes
+  type(axes_grp),  intent(in) :: axes
   type(diag_ctrl), intent(in) :: diag_cs
 
   logical :: is_v_axes
@@ -1787,7 +1892,7 @@ end function is_v_axes
 
 function is_B_axes(axes, diag_cs)
 
-  type(axesType),  intent(in) :: axes
+  type(axes_grp),  intent(in) :: axes
   type(diag_ctrl), intent(in) :: diag_cs
 
   logical :: is_B_axes

@@ -45,7 +45,7 @@ module MOM_internal_tides
 use MOM_checksums,     only : isnan => is_NaN
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_axis_init
 use MOM_diag_mediator, only : register_diag_field, diag_ctrl, safe_alloc_ptr
-use MOM_diag_mediator, only : axesType, defineAxes
+use MOM_diag_mediator, only : axes_grp, define_axes_group
 use MOM_domains, only       : AGRID, To_South, To_West, To_All
 use MOM_domains, only       : create_group_pass, do_group_pass, pass_var
 use MOM_domains, only       : group_pass_type, start_group_pass, complete_group_pass
@@ -2237,7 +2237,7 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
   logical                           :: use_int_tides, use_temperature
   integer                           :: num_angle, num_freq, num_mode, m, fr, period_1
   integer :: isd, ied, jsd, jed, a, id_ang, i, j
-  type(axesType) :: axes_ang
+  type(axes_grp) :: axes_ang
   ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_internal_tides" ! This module's name.
@@ -2588,7 +2588,7 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
   do a=1,num_angle ; angles(a) = (real(a) - 1) * Angle_size ; enddo
 
   id_ang = diag_axis_init("angle", angles, "Radians", "N", "Angular Orienation of Fluxes")
-  call defineAxes(diag, (/ diag%axesT1%handles(1), diag%axesT1%handles(2), id_ang /), axes_ang)
+  call define_axes_group(diag, (/ diag%axesT1%handles(1), diag%axesT1%handles(2), id_ang /), axes_ang)
 
   do fr=1,CS%nFreq ; write(freq_name(fr), '("freq",i1)') fr ; enddo
   do m=1,CS%nMode ; do fr=1,CS%nFreq
