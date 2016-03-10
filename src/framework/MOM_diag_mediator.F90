@@ -1050,7 +1050,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
   type(diag_ctrl), pointer :: diag_cs
   type(diag_type), pointer :: diag => null(), cmor_diag => null(), z_remap_diag => null(), cmor_z_remap_diag => null()
   integer :: primary_id, fms_id, remap_id
-  character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name, cm_string
+  character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name, cm_string, msg
 
   MOM_missing_value = axes%diag_cs%missing_value
   if(present(missing_value)) MOM_missing_value = missing_value
@@ -1079,8 +1079,10 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
     call set_diag_mask(diag, diag_cs, axes)
   endif
   if (is_root_pe() .and. diag_CS%doc_unit > 0) then
+    msg = ''
+    if (present(cmor_field_name)) msg = 'CMOR equivalent is "'//trim(cmor_field_name)//'"'
     call log_available_diag(associated(diag), module_name, field_name, cm_string, &
-                            diag_CS, long_name, units, standard_name)
+                            msg, diag_CS, long_name, units, standard_name)
   endif
 
   ! For the CMOR variation of the both the native and _z diagnostics
@@ -1122,8 +1124,9 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
       call set_diag_mask(cmor_diag, diag_cs, axes)
     endif
     if (is_root_pe() .and. diag_CS%doc_unit > 0) then
+      msg = 'native name is "'//trim(field_name)//'"'
       call log_available_diag(associated(cmor_diag), module_name, cmor_field_name, cm_string, &
-                              diag_CS, posted_cmor_long_name, posted_cmor_units, &
+                              msg, diag_CS, posted_cmor_long_name, posted_cmor_units, &
                               posted_cmor_standard_name)
     endif
   endif
@@ -1162,8 +1165,10 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
       endif
     endif
     if (is_root_pe() .and. diag_CS%doc_unit > 0) then
+      msg = ''
+      if (present(cmor_field_name)) msg = 'CMOR equivalent is "'//trim(cmor_field_name)//'"'
       call log_available_diag(associated(z_remap_diag), module_name//'_z_new', field_name, &
-                              cm_string, diag_CS, long_name, units, standard_name)
+                              cm_string, msg, diag_CS, long_name, units, standard_name)
     endif
 
     ! Remap to z vertical coordinate with CMOR names and attributes
@@ -1199,8 +1204,10 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
         endif
       endif
       if (is_root_pe() .and. diag_CS%doc_unit > 0) then
+        msg = 'native name is "'//trim(field_name)//'"'
         call log_available_diag(associated(cmor_z_remap_diag), module_name//'_z_new', cmor_field_name, &
-                                cm_string, diag_CS, posted_cmor_long_name, posted_cmor_units, posted_cmor_standard_name)
+                                cm_string, msg, diag_CS, posted_cmor_long_name, posted_cmor_units, &
+                                posted_cmor_standard_name)
       endif
     endif
   endif
@@ -1376,11 +1383,11 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
 
   ! Document diagnostics in list of available diagnostics
   if (is_root_pe() .and. diag_CS%doc_unit > 0) then
-    call log_available_diag(associated(diag), module_name, field_name, '', diag_CS, &
+    call log_available_diag(associated(diag), module_name, field_name, '', '', diag_CS, &
                             long_name, units, standard_name)
     if (present(cmor_field_name)) then
       call log_available_diag(associated(cmor_diag), module_name, cmor_field_name, &
-                              '', diag_CS, posted_cmor_long_name, posted_cmor_units, &
+                              '', '', diag_CS, posted_cmor_long_name, posted_cmor_units, &
                               posted_cmor_standard_name)
     endif
   endif
@@ -1481,11 +1488,11 @@ function register_static_field(module_name, field_name, axes, &
 
   ! Document diagnostics in list of available diagnostics
   if (is_root_pe() .and. diag_CS%doc_unit > 0) then
-    call log_available_diag(associated(diag), module_name, field_name, '', diag_CS, &
+    call log_available_diag(associated(diag), module_name, field_name, '', '', diag_CS, &
                             long_name, units, standard_name)
     if (present(cmor_field_name)) then
       call log_available_diag(associated(cmor_diag), module_name, cmor_field_name, &
-                              '', diag_CS, posted_cmor_long_name, posted_cmor_units, &
+                              '', '', diag_CS, posted_cmor_long_name, posted_cmor_units, &
                               posted_cmor_standard_name)
     endif
   endif
@@ -2023,12 +2030,13 @@ subroutine alloc_diag_with_id(diag_id, diag_cs, diag)
 end subroutine alloc_diag_with_id
 
 !> Log a diagnostic to the available diagnostics file.
-subroutine log_available_diag(used, module_name, field_name, cell_methods_string, diag_CS, &
-                              long_name, units, standard_name)
+subroutine log_available_diag(used, module_name, field_name, cell_methods_string, comment, &
+                              diag_CS, long_name, units, standard_name)
   logical,          intent(in) :: used !< Whether this diagnostic was in the diag_table or not
   character(len=*), intent(in) :: module_name !< Name of the diagnostic module
   character(len=*), intent(in) :: field_name !< Name of this diagnostic field
   character(len=*), intent(in) :: cell_methods_string !< The spatial component of the CF cell_methods attribute
+  character(len=*), intent(in) :: comment !< A comment to append after [Used|Unused]
   type(diag_ctrl),  intent(in) :: diag_CS  !< The diagnotics control structure
   character(len=*), optional, intent(in) :: long_name !< CF long name of diagnostic
   character(len=*), optional, intent(in) :: units !< Units for diagnostic
@@ -2041,7 +2049,11 @@ subroutine log_available_diag(used, module_name, field_name, cell_methods_string
   else
     mesg = '"'//trim(module_name)//'", "'//trim(field_name)//'"  [Unused]'
   endif
-  write(diag_CS%doc_unit, '(a)') trim(mesg)
+  if (len(trim((comment)))>0) then
+    write(diag_CS%doc_unit, '(a,x,"(",a,")")') trim(mesg),trim(comment)
+  else
+    write(diag_CS%doc_unit, '(a)') trim(mesg)
+  endif
   if (present(long_name)) call describe_option("long_name", long_name, diag_CS)
   if (present(units)) call describe_option("units", units, diag_CS)
   if (present(standard_name)) &
