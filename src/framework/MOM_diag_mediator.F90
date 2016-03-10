@@ -1050,7 +1050,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
   type(diag_ctrl), pointer :: diag_cs
   type(diag_type), pointer :: diag => null(), cmor_diag => null(), z_remap_diag => null(), cmor_z_remap_diag => null()
   integer :: primary_id, fms_id, remap_id
-  character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name
+  character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name, cm_string
 
   MOM_missing_value = axes%diag_cs%missing_value
   if(present(missing_value)) MOM_missing_value = missing_value
@@ -1068,7 +1068,8 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
          range=range, mask_variant=mask_variant, standard_name=standard_name, &
          verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
          interp_method=interp_method, tile_count=tile_count)
-  call attach_cell_methods(fms_id, axes, cell_methods, x_cell_method, y_cell_method, v_cell_method)
+  call attach_cell_methods(fms_id, axes, cm_string, &
+                           cell_methods, x_cell_method, y_cell_method, v_cell_method)
   if (fms_id /= DIAG_FIELD_NOT_FOUND) then
     ! If the diagnostic is needed then allocate and id and space
     primary_id = get_new_diag_id(diag_cs)
@@ -1078,8 +1079,8 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
     call set_diag_mask(diag, diag_cs, axes)
   endif
   if (is_root_pe() .and. diag_CS%doc_unit > 0) then
-    call log_available_diag(associated(diag), module_name, field_name, diag_CS, &
-                            long_name, units, standard_name)
+    call log_available_diag(associated(diag), module_name, field_name, cm_string, &
+                            diag_CS, long_name, units, standard_name)
   endif
 
   ! For the CMOR variation of the both the native and _z diagnostics
@@ -1108,7 +1109,8 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
       missing_value=MOM_missing_value, range=range, mask_variant=mask_variant,                 &
       standard_name=trim(posted_cmor_standard_name), verbose=verbose, do_not_log=do_not_log,   &
       err_msg=err_msg, interp_method=interp_method, tile_count=tile_count)
-    call attach_cell_methods(fms_id, axes, cell_methods, x_cell_method, y_cell_method, v_cell_method)
+    call attach_cell_methods(fms_id, axes, cm_string, &
+                             cell_methods, x_cell_method, y_cell_method, v_cell_method)
     if (fms_id /= DIAG_FIELD_NOT_FOUND) then
       if (primary_id == -1) then
         primary_id = get_new_diag_id(diag_cs)
@@ -1120,7 +1122,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
       call set_diag_mask(cmor_diag, diag_cs, axes)
     endif
     if (is_root_pe() .and. diag_CS%doc_unit > 0) then
-      call log_available_diag(associated(cmor_diag), module_name, cmor_field_name, &
+      call log_available_diag(associated(cmor_diag), module_name, cmor_field_name, cm_string, &
                               diag_CS, posted_cmor_long_name, posted_cmor_units, &
                               posted_cmor_standard_name)
     endif
@@ -1147,7 +1149,8 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
            range=range, mask_variant=mask_variant, standard_name=standard_name, &
            verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
            interp_method=interp_method, tile_count=tile_count)
-      call attach_cell_methods(fms_id, z_remap_diag%remap_axes, cell_methods, x_cell_method, y_cell_method, v_cell_method)
+      call attach_cell_methods(fms_id, z_remap_diag%remap_axes, cm_string, &
+                               cell_methods, x_cell_method, y_cell_method, v_cell_method)
       z_remap_diag%fms_diag_id = fms_id
   
       if (is_u_axes(axes, diag_cs)) then
@@ -1160,7 +1163,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
     endif
     if (is_root_pe() .and. diag_CS%doc_unit > 0) then
       call log_available_diag(associated(z_remap_diag), module_name//'_z_new', field_name, &
-                              diag_CS, long_name, units, standard_name)
+                              cm_string, diag_CS, long_name, units, standard_name)
     endif
 
     ! Remap to z vertical coordinate with CMOR names and attributes
@@ -1183,7 +1186,8 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
              range=range, mask_variant=mask_variant, standard_name=trim(posted_cmor_standard_name), &
              verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
              interp_method=interp_method, tile_count=tile_count)
-        call attach_cell_methods(fms_id, cmor_z_remap_diag%remap_axes, cell_methods, x_cell_method, y_cell_method, v_cell_method)
+        call attach_cell_methods(fms_id, cmor_z_remap_diag%remap_axes, cm_string, &
+                                 cell_methods, x_cell_method, y_cell_method, v_cell_method)
         cmor_z_remap_diag%fms_diag_id = fms_id
     
         if (is_u_axes(axes, diag_cs)) then
@@ -1196,7 +1200,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
       endif
       if (is_root_pe() .and. diag_CS%doc_unit > 0) then
         call log_available_diag(associated(cmor_z_remap_diag), module_name//'_z_new', cmor_field_name, &
-                                diag_CS, posted_cmor_long_name, posted_cmor_units, posted_cmor_standard_name)
+                                cm_string, diag_CS, posted_cmor_long_name, posted_cmor_units, posted_cmor_standard_name)
       endif
     endif
   endif
@@ -1206,18 +1210,20 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
 end function register_diag_field
 
 !> Attaches "cell_methods" attribute to a variable based on defaults for axes_grp or optional arguments.
-subroutine attach_cell_methods(id, axes, cell_methods, x_cell_method, y_cell_method, v_cell_method)
-  integer,                    intent(in) :: id !< Handle to diagnostic
-  type(axes_grp),             intent(in) :: axes !< Container w/ up to 3 integer handles that indicates axes for this field
-  character(len=*), optional, intent(in) :: cell_methods !< String to append as cell_methods attribute. Use '' to have no attribute.
+subroutine attach_cell_methods(id, axes, ostring, cell_methods, x_cell_method, y_cell_method, v_cell_method)
+  integer,                    intent(in)  :: id !< Handle to diagnostic
+  type(axes_grp),             intent(in)  :: axes !< Container w/ up to 3 integer handles that indicates axes for this field
+  character(len=*),           intent(out) :: ostring !< The cell_methods strings that would appear in the file
+  character(len=*), optional, intent(in)  :: cell_methods !< String to append as cell_methods attribute. Use '' to have no attribute.
                                                          !! If present, this overrides the default constructed from the default for
                                                          !! each individual axis direction.
-  character(len=*), optional, intent(in) :: x_cell_method !< Specifies the cell method for the x-direction. Use '' have no method.
-  character(len=*), optional, intent(in) :: y_cell_method !< Specifies the cell method for the y-direction. Use '' have no method.
-  character(len=*), optional, intent(in) :: v_cell_method !< Specifies the cell method for the vertical direction. Use '' have no method.
+  character(len=*), optional, intent(in)  :: x_cell_method !< Specifies the cell method for the x-direction. Use '' have no method.
+  character(len=*), optional, intent(in)  :: y_cell_method !< Specifies the cell method for the y-direction. Use '' have no method.
+  character(len=*), optional, intent(in)  :: v_cell_method !< Specifies the cell method for the vertical direction. Use '' have no method.
   ! Local variables
   character(len=9) :: axis_name
 
+  ostring = ''
   if (present(cell_methods)) then
     if (present(x_cell_method) .or. present(y_cell_method) .or. present(v_cell_method)) then
       call MOM_error(FATAL, "attach_cell_methods: " // &
@@ -1225,28 +1231,33 @@ subroutine attach_cell_methods(id, axes, cell_methods, x_cell_method, y_cell_met
     endif
     if (len(trim(cell_methods))>0) then
       call diag_field_add_attribute(id, 'cell_methods', trim(cell_methods))
+      ostring = trim(cell_methods)
     endif
   else
     if (present(x_cell_method)) then
       if (len(trim(x_cell_method))>0) then
         call get_diag_axis_name(axes%handles(1), axis_name)
         call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//': '//trim(x_cell_method))
+        ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(x_cell_method)
       endif
     else
       if (len(trim(axes%x_cell_method))>0) then
         call get_diag_axis_name(axes%handles(1), axis_name)
         call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//': '//trim(axes%x_cell_method))
+        ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(axes%x_cell_method)
       endif
     endif
     if (present(y_cell_method)) then
       if (len(trim(y_cell_method))>0) then
         call get_diag_axis_name(axes%handles(2), axis_name)
         call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//': '//trim(y_cell_method))
+        ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(y_cell_method)
       endif
     else
       if (len(trim(axes%y_cell_method))>0) then
         call get_diag_axis_name(axes%handles(2), axis_name)
         call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//': '//trim(axes%y_cell_method))
+        ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(axes%y_cell_method)
       endif
     endif
     if (present(v_cell_method)) then
@@ -1257,6 +1268,7 @@ subroutine attach_cell_methods(id, axes, cell_methods, x_cell_method, y_cell_met
           call get_diag_axis_name(axes%handles(3), axis_name)
         endif
         call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//': '//trim(v_cell_method))
+        ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(v_cell_method)
       endif
     else
       if (len(trim(axes%v_cell_method))>0) then
@@ -1266,9 +1278,11 @@ subroutine attach_cell_methods(id, axes, cell_methods, x_cell_method, y_cell_met
           call get_diag_axis_name(axes%handles(3), axis_name)
         endif
         call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//': '//trim(axes%v_cell_method))
+        ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(axes%v_cell_method)
       endif
     endif
   endif
+  ostring = adjustl(ostring)
 end subroutine attach_cell_methods
 
 function register_scalar_field(module_name, field_name, init_time, diag_cs, &
@@ -1362,11 +1376,11 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
 
   ! Document diagnostics in list of available diagnostics
   if (is_root_pe() .and. diag_CS%doc_unit > 0) then
-    call log_available_diag(associated(diag), module_name, field_name, diag_CS, &
+    call log_available_diag(associated(diag), module_name, field_name, '', diag_CS, &
                             long_name, units, standard_name)
     if (present(cmor_field_name)) then
       call log_available_diag(associated(cmor_diag), module_name, cmor_field_name, &
-                              diag_CS, posted_cmor_long_name, posted_cmor_units, &
+                              '', diag_CS, posted_cmor_long_name, posted_cmor_units, &
                               posted_cmor_standard_name)
     endif
   endif
@@ -1467,11 +1481,11 @@ function register_static_field(module_name, field_name, axes, &
 
   ! Document diagnostics in list of available diagnostics
   if (is_root_pe() .and. diag_CS%doc_unit > 0) then
-    call log_available_diag(associated(diag), module_name, field_name, diag_CS, &
+    call log_available_diag(associated(diag), module_name, field_name, '', diag_CS, &
                             long_name, units, standard_name)
     if (present(cmor_field_name)) then
       call log_available_diag(associated(cmor_diag), module_name, cmor_field_name, &
-                              diag_CS, posted_cmor_long_name, posted_cmor_units, &
+                              '', diag_CS, posted_cmor_long_name, posted_cmor_units, &
                               posted_cmor_standard_name)
     endif
   endif
@@ -2008,24 +2022,19 @@ subroutine alloc_diag_with_id(diag_id, diag_cs, diag)
 
 end subroutine alloc_diag_with_id
 
-! Log a diagnostic to the available diagnostics file.
-subroutine log_available_diag(used, module_name, field_name, diag_CS, &
+!> Log a diagnostic to the available diagnostics file.
+subroutine log_available_diag(used, module_name, field_name, cell_methods_string, diag_CS, &
                               long_name, units, standard_name)
-
-  logical,          intent(in) :: used
-  character(len=*), intent(in) :: module_name, field_name
-  type(diag_ctrl),  intent(in) :: diag_CS  ! < The diagnotic control structure
-  character(len=*), optional, intent(in) :: long_name, units, standard_name
+  logical,          intent(in) :: used !< Whether this diagnostic was in the diag_table or not
+  character(len=*), intent(in) :: module_name !< Name of the diagnostic module
+  character(len=*), intent(in) :: field_name !< Name of this diagnostic field
+  character(len=*), intent(in) :: cell_methods_string !< The spatial component of the CF cell_methods attribute
+  type(diag_ctrl),  intent(in) :: diag_CS  !< The diagnotics control structure
+  character(len=*), optional, intent(in) :: long_name !< CF long name of diagnostic
+  character(len=*), optional, intent(in) :: units !< Units for diagnostic
+  character(len=*), optional, intent(in) :: standard_name !< CF standardized name of diagnostic
+  ! Local variables
   character(len=240) :: mesg
-
-  ! Arguments:
-  !  (in)      used - whether or not this diagnostic is being used, i.e. appears in the diag_table
-  !  (in)      module_name   - name of this module, usually "ocean_model" or "ice_shelf_model".
-  !  (in)      field_name    - name of the diagnostic field
-  !  (in)      diag_CS       - the diagnostic control structure
-  !  (in,opt)  long_name     - long name of a field
-  !  (in,opt)  units         - units of a field
-  !  (in,opt)  standard_name - standardized name associated with a field
 
   if (used) then
     mesg = '"'//trim(module_name)//'", "'//trim(field_name)//'"  [Used]'
@@ -2037,6 +2046,8 @@ subroutine log_available_diag(used, module_name, field_name, diag_CS, &
   if (present(units)) call describe_option("units", units, diag_CS)
   if (present(standard_name)) &
     call describe_option("standard_name", standard_name, diag_CS)
+  if (len(trim((cell_methods_string)))>0) &
+    call describe_option("cell_methods", trim(cell_methods_string), diag_CS)
 
 end subroutine log_available_diag
 
