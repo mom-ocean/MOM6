@@ -1048,7 +1048,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
   ! Local variables
   real :: MOM_missing_value
   type(diag_ctrl), pointer :: diag_cs
-  type(diag_type), pointer :: diag => null(), cmor_diag => null(), z_remap_diag => null()
+  type(diag_type), pointer :: diag => null(), cmor_diag => null(), z_remap_diag => null(), cmor_z_remap_diag => null()
   integer :: primary_id, fms_id, remap_id
   character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name
 
@@ -1060,6 +1060,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
   diag => null()
   cmor_diag => null()
   z_remap_diag => null()
+  cmor_z_remap_diag => null()
 
   ! Set up the 'primary' diagnostic, first get an underlying FMS id
   fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
@@ -1076,8 +1077,12 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
     diag%fms_diag_id = fms_id
     call set_diag_mask(diag, diag_cs, axes)
   endif
+  if (is_root_pe() .and. diag_CS%doc_unit > 0) then
+    call log_available_diag(associated(diag), module_name, field_name, diag_CS, &
+                            long_name, units, standard_name)
+  endif
 
-  ! Set up the CMOR variation of the diagnostic
+  ! For the CMOR variation of the both the native and _z diagnostics
   if (present(cmor_field_name)) then
     ! Fallback values for strings set to "NULL"
     posted_cmor_units = "not provided"           !
@@ -1094,14 +1099,16 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
     if (present(cmor_units)) posted_cmor_units = cmor_units
     if (present(cmor_standard_name)) posted_cmor_standard_name = cmor_standard_name
     if (present(cmor_long_name)) posted_cmor_long_name = cmor_long_name
+  endif
 
+  ! Set up the CMOR variation of the native diagnostic
+  if (present(cmor_field_name)) then
     fms_id = register_diag_field_fms(module_name, cmor_field_name, axes%handles, init_time,    &
       long_name=trim(posted_cmor_long_name), units=trim(posted_cmor_units),                    &
       missing_value=MOM_missing_value, range=range, mask_variant=mask_variant,                 &
       standard_name=trim(posted_cmor_standard_name), verbose=verbose, do_not_log=do_not_log,   &
       err_msg=err_msg, interp_method=interp_method, tile_count=tile_count)
     call attach_cell_methods(fms_id, axes, cell_methods, x_cell_method, y_cell_method, v_cell_method)
-
     if (fms_id /= DIAG_FIELD_NOT_FOUND) then
       if (primary_id == -1) then
         primary_id = get_new_diag_id(diag_cs)
@@ -1112,57 +1119,85 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
       cmor_diag%fms_diag_id = fms_id
       call set_diag_mask(cmor_diag, diag_cs, axes)
     endif
-  endif
-
-  ! Remap to z vertical coordinate, note that only diagnostics on layers
-  ! (not interfaces) are supported, also B axes are not supported yet
-  if (get_diag_field_id_fms(module_name//'_z_new', field_name) /= DIAG_FIELD_NOT_FOUND &
-      .and. is_layer_axes(axes, diag_cs) .and. (.not. is_B_axes(axes, diag_cs)) &
-      .and. axes%rank == 3) then
-    if (.not. allocated(diag_cs%zi_remap)) then
-      call MOM_error(FATAL, 'register_diag_field: Request to regrid but no '// &
-                     'destination grid spec provided, see param DIAG_REMAP_Z_GRID_DEF')
-    endif
-    if (primary_id == -1) then
-      primary_id = get_new_diag_id(diag_cs)
-    endif
-    call alloc_diag_with_id(primary_id, diag_cs, z_remap_diag)
-    call set_diag_mask(z_remap_diag, diag_cs, axes)
-    call set_diag_remap_axes(z_remap_diag, diag_cs, axes)
-    call assert(associated(z_remap_diag%remap_axes), &
-                'register_diag_field: remap axes not set')
-    fms_id = register_diag_field_fms(module_name//'_z_new', field_name, &
-         z_remap_diag%remap_axes%handles, &
-         init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
-         range=range, mask_variant=mask_variant, standard_name=standard_name, &
-         verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
-         interp_method=interp_method, tile_count=tile_count)
-    call attach_cell_methods(fms_id, z_remap_diag%remap_axes, cell_methods, x_cell_method, y_cell_method, v_cell_method)
-    z_remap_diag%fms_diag_id = fms_id
-
-    if (is_u_axes(axes, diag_cs)) then
-      diag_cs%do_z_remapping_on_u = .true.
-    elseif (is_v_axes(axes, diag_cs)) then
-      diag_cs%do_z_remapping_on_v = .true.
-    else
-      diag_cs%do_z_remapping_on_T = .true.
-    endif
-
-  endif
-
-  ! Document diagnostics in list of available diagnostics
-  if (is_root_pe() .and. diag_CS%doc_unit > 0) then
-    call log_available_diag(associated(diag), module_name, field_name, diag_CS, &
-                            long_name, units, standard_name)
-    if (present(cmor_field_name)) then
+    if (is_root_pe() .and. diag_CS%doc_unit > 0) then
       call log_available_diag(associated(cmor_diag), module_name, cmor_field_name, &
                               diag_CS, posted_cmor_long_name, posted_cmor_units, &
                               posted_cmor_standard_name)
     endif
-    if (is_layer_axes(axes, diag_cs) .and. (.not. is_B_axes(axes, diag_cs)) &
-        .and. axes%rank == 3) then
+  endif
+
+  ! Remap to z vertical coordinate, note that only diagnostics on layers
+  ! (not interfaces) are supported, also B axes are not supported yet
+  if (is_layer_axes(axes, diag_cs) .and. (.not. is_B_axes(axes, diag_cs)) .and. axes%rank == 3) then
+    if (get_diag_field_id_fms(module_name//'_z_new', field_name) /= DIAG_FIELD_NOT_FOUND) then
+      if (.not. allocated(diag_cs%zi_remap)) then
+        call MOM_error(FATAL, 'register_diag_field: Request to regrid but no '// &
+                       'destination grid spec provided, see param DIAG_REMAP_Z_GRID_DEF')
+      endif
+      if (primary_id == -1) then
+        primary_id = get_new_diag_id(diag_cs)
+      endif
+      call alloc_diag_with_id(primary_id, diag_cs, z_remap_diag)
+      call set_diag_mask(z_remap_diag, diag_cs, axes)
+      call set_diag_remap_axes(z_remap_diag, diag_cs, axes)
+      call assert(associated(z_remap_diag%remap_axes), 'register_diag_field: remap axes not set')
+      fms_id = register_diag_field_fms(module_name//'_z_new', field_name, &
+           z_remap_diag%remap_axes%handles, &
+           init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
+           range=range, mask_variant=mask_variant, standard_name=standard_name, &
+           verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
+           interp_method=interp_method, tile_count=tile_count)
+      call attach_cell_methods(fms_id, z_remap_diag%remap_axes, cell_methods, x_cell_method, y_cell_method, v_cell_method)
+      z_remap_diag%fms_diag_id = fms_id
+  
+      if (is_u_axes(axes, diag_cs)) then
+        diag_cs%do_z_remapping_on_u = .true.
+      elseif (is_v_axes(axes, diag_cs)) then
+        diag_cs%do_z_remapping_on_v = .true.
+      else
+        diag_cs%do_z_remapping_on_T = .true.
+      endif
+    endif
+    if (is_root_pe() .and. diag_CS%doc_unit > 0) then
       call log_available_diag(associated(z_remap_diag), module_name//'_z_new', field_name, &
                               diag_CS, long_name, units, standard_name)
+    endif
+
+    ! Remap to z vertical coordinate with CMOR names and attributes
+    if (present(cmor_field_name)) then
+      if (get_diag_field_id_fms(module_name//'_z_new', cmor_field_name) /= DIAG_FIELD_NOT_FOUND) then
+        if (.not. allocated(diag_cs%zi_remap)) then
+          call MOM_error(FATAL, 'register_diag_field: Request to regrid but no '// &
+                         'destination grid spec provided, see param DIAG_REMAP_Z_GRID_DEF')
+        endif
+        if (primary_id == -1) then
+          primary_id = get_new_diag_id(diag_cs)
+        endif
+        call alloc_diag_with_id(primary_id, diag_cs, cmor_z_remap_diag)
+        call set_diag_mask(cmor_z_remap_diag, diag_cs, axes)
+        call set_diag_remap_axes(cmor_z_remap_diag, diag_cs, axes)
+        call assert(associated(cmor_z_remap_diag%remap_axes), 'register_diag_field: remap axes not set')
+        fms_id = register_diag_field_fms(module_name//'_z_new', cmor_field_name, &
+             cmor_z_remap_diag%remap_axes%handles, &
+             init_time, long_name=trim(posted_cmor_long_name), units=trim(posted_cmor_units), missing_value=MOM_missing_value, &
+             range=range, mask_variant=mask_variant, standard_name=trim(posted_cmor_standard_name), &
+             verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
+             interp_method=interp_method, tile_count=tile_count)
+        call attach_cell_methods(fms_id, cmor_z_remap_diag%remap_axes, cell_methods, x_cell_method, y_cell_method, v_cell_method)
+        cmor_z_remap_diag%fms_diag_id = fms_id
+    
+        if (is_u_axes(axes, diag_cs)) then
+          diag_cs%do_z_remapping_on_u = .true.
+        elseif (is_v_axes(axes, diag_cs)) then
+          diag_cs%do_z_remapping_on_v = .true.
+        else
+          diag_cs%do_z_remapping_on_T = .true.
+        endif
+      endif
+      if (is_root_pe() .and. diag_CS%doc_unit > 0) then
+        call log_available_diag(associated(cmor_z_remap_diag), module_name//'_z_new', cmor_field_name, &
+                                diag_CS, posted_cmor_long_name, posted_cmor_units, posted_cmor_standard_name)
+      endif
     endif
   endif
 
