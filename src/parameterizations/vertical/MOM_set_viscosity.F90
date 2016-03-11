@@ -243,7 +243,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
                            ! is currently under consideration, in H.
   real :: Vol_err          ! The error in the volume with the latest estimate of
                            ! L, or the error for the interface below, in H.
-  real :: Vol_quit         ! The volume below which to quit, in H.
+  real :: Vol_quit         ! The volume error below which to quit iterating, in H.
+  real :: Vol_tol          ! A volume error tolerance, in H.
   real :: L(SZK_(G)+1)     ! The fraction of the full cell width that is open at
                            ! the depth of each interface, nondimensional.
   real :: L_direct         ! The value of L above volume Vol_direct, nondim.
@@ -310,7 +311,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
 
 !$OMP parallel do default(none) shared(u, v, h, tv, visc, G, CS, Rml, is, ie, js, je, nz,  &
 !$OMP                                     Isq, Ieq, Jsq, Jeq, nkmb, h_neglect, Rho0x400_G, &
-!$OMP                                     Vol_quit, C2pi_3, U_bg_sq, cdrag_sqrt,           &
+!$OMP                                     C2pi_3, U_bg_sq, cdrag_sqrt,                     &
 !$OMP                                     K2,use_BBL_EOS,maxitt)                           &
 !$OMP                          private(do_i,h_at_vel,htot_vel,hwtot,hutot,Thtot,Shtot,     &
 !$OMP                                  hweight,v_at_u,u_at_v,ustar,T_EOS,S_EOS,press,      &
@@ -321,7 +322,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
 !$OMP                                  L_direct,Ibma_2,L,vol,vol_below,Vol_err,            &
 !$OMP                                  BBL_visc_frac,h_vel,L0,Vol_0,dV_dL2,dVol,L_max,     &
 !$OMP                                  L_min,Vol_err_min,Vol_err_max,BBL_frac,Cell_width,  &
-!$OMP                                  gam,Rayleigh )
+!$OMP                                  gam,Rayleigh, Vol_tol, Vol_quit)
   do j=G%JscB,G%JecB ; do m=1,2
 
     if (m==1) then
@@ -371,7 +372,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
           if (htot_vel>=CS%Hbbl) exit ! terminate the k loop
 
           hweight = MIN(CS%Hbbl - htot_vel, h_at_vel(i,k))
-          if (hweight < 1.5*G%GV%Angstrom) cycle
+          if (hweight < 1.5*G%GV%Angstrom + h_neglect) cycle
 
           htot_vel  = htot_vel + h_at_vel(i,k)
           hwtot = hwtot + hweight
@@ -658,21 +659,38 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
               ! Both edges of the cell are bounded by walls.
               L(K) = (-0.25*C24_a*vol)**C1_3
             else
-              ! x_R is at 1/2 but x_L is in the interior  L is found by solving
+              ! x_R is at 1/2 but x_L is in the interior & L is found by solving
               !   vol = 0.5*L^2*(slope + a/3*(3-4L))
+
+              !  Vol_err = 0.5*(L(K+1)*L(K+1))*(slope + a_3*(3.0-4.0*L(K+1))) - vol_below
+              ! Change to ... 
+              !   if (min(Vol_below + Vol_err, vol) <= Vol_direct) then ?
               if (vol_below + Vol_err <= Vol_direct) then
                 L0 = L_direct ; Vol_0 = Vol_direct
               else
                 L0 = L(K+1) ; Vol_0 = Vol_below + Vol_err
+                ! Change to   Vol_0 = min(Vol_below + Vol_err, vol) ?
               endif
 
               !   Try a relatively simple solution that usually works well
               ! for massless layers.
               dV_dL2 = 0.5*(slope+a) - a*L0 ; dVol = (vol-Vol_0)
+           !  dV_dL2 = 0.5*(slope+a) - a*L0 ; dVol = max(vol-Vol_0, 0.0)
+
+           !### The following code is more robust when GV%Angstrom=0, but it
+           !### changes answers.
+           !   Vol_tol = max(0.5*GV%Angstrom + GV%H_subroundoff, 1e-14*vol)
+           !   Vol_quit = max(0.9*GV%Angstrom + GV%H_subroundoff, 1e-14*vol)
+
+           !   if (dVol <= 0.0) then
+           !     L(K) = L0
+           !     Vol_err = 0.5*(L(K)*L(K))*(slope + a_3*(3.0-4.0*L(K))) - vol
+           !   elseif (a*a*dVol**3 < Vol_tol*dV_dL2**2 * &
+           !                     (dV_dL2*Vol_tol - 2.0*a*L0*dVol)) then
               if (a*a*dVol**3 < G%GV%Angstrom*dV_dL2**2 * &
                                 (0.25*dV_dL2*G%GV%Angstrom - a*L0*dVol)) then
                 ! One iteration of Newton's method should give an estimate
-                ! that is accurate to within 0.5*G%GV%Angstrom
+                ! that is accurate to within Vol_tol.
                 L(K) = sqrt(L0*L0 + dVol / dV_dL2)
                 Vol_err = 0.5*(L(K)*L(K))*(slope + a_3*(3.0-4.0*L(K))) - vol
               else
@@ -685,10 +703,11 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
                 L_min = sqrt(L0*L0 + dVol / (0.5*(slope+a) - a*L_max))
 
                 Vol_err_min = 0.5*(L_min**2)*(slope + a_3*(3.0-4.0*L_min)) - vol
+                Vol_err_max = 0.5*(L_max**2)*(slope + a_3*(3.0-4.0*L_max)) - vol
+           !    if ((abs(Vol_err_min) <= Vol_quit) .or. (Vol_err_min >= Vol_err_max)) then
                 if (abs(Vol_err_min) <= Vol_quit) then
                   L(K) = L_min ; Vol_err = Vol_err_min
                 else
-                  Vol_err_max = 0.5*(L_max**2)*(slope + a_3*(3.0-4.0*L_max)) - vol
                   L(K) = sqrt((L_min**2*Vol_err_max - L_max**2*Vol_err_min) / &
                               (Vol_err_max - Vol_err_min))
                   do itt=1,maxitt
@@ -697,7 +716,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
                     ! Take a Newton's method iteration. This equation has proven
                     ! robust enough not to need bracketing.
                     L(K) = L(K) - Vol_err / (L(K)* (slope + a - 2.0*a*L(K)))
-!                   L(K) = sqrt(L(K)*L(K) - Vol_err / (0.5*(slope+a) - a*L(K)))
+                    ! This would be a Newton's method iteration for L^2:
+                    !   L(K) = sqrt(L(K)*L(K) - Vol_err / (0.5*(slope+a) - a*L(K)))
                   enddo
                 endif ! end of iterative solver
               endif ! end of 1-boundary alternatives.
@@ -1141,7 +1161,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
         if (use_EOS .or. .not.CS%linear_drag) then ; do k=1,nz
           if (htot_vel>=CS%Htbl_shelf) exit ! terminate the k loop
           hweight = MIN(CS%Htbl_shelf - htot_vel, h_at_vel(i,k))
-          if (hweight <= 1.5*G%GV%Angstrom) cycle
+          if (hweight <= 1.5*G%GV%Angstrom + h_neglect) cycle
 
           htot_vel  = htot_vel + h_at_vel(i,k)
           hwtot = hwtot + hweight
@@ -1376,7 +1396,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
         if (use_EOS .or. .not.CS%linear_drag) then ; do k=1,nz
           if (htot_vel>=CS%Htbl_shelf) exit ! terminate the k loop
           hweight = MIN(CS%Htbl_shelf - htot_vel, h_at_vel(i,k))
-          if (hweight <= 1.5*G%GV%Angstrom) cycle
+          if (hweight <= 1.5*G%GV%Angstrom + h_neglect) cycle
 
           htot_vel  = htot_vel + h_at_vel(i,k)
           hwtot = hwtot + hweight
