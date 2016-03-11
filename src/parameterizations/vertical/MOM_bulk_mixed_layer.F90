@@ -1566,12 +1566,14 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
   real :: E_HxHpE   ! Entrainment divided by the product of the new and old
                     ! thicknesses, in H-1.
   real :: Hmix_min  ! The minimum mixed layer depth in H.
+  real :: H_to_m    ! Local copies of unit conversion factors.
   real :: opacity
   real :: C1_3, C1_6, C1_24   !  1/3, 1/6, and 1/24.
   integer :: is, ie, nz, i, k, ks, itt, n
 
   C1_3 = 1.0/3.0 ; C1_6 = 1.0/6.0 ; C1_24 = 1.0/24.0
-  g_H_2Rho0 = (G%g_Earth * G%GV%H_to_m) / (2.0 * G%GV%Rho0)
+  H_to_m = G%GV%H_to_m
+  g_H_2Rho0 = (G%g_Earth * H_to_m) / (2.0 * G%GV%Rho0)
   Hmix_min = CS%Hmix_min * G%GV%m_to_H
   h_neglect = G%GV%H_subroundoff
   is = G%isc ; ie = G%iec ; nz = G%ke
@@ -1584,7 +1586,7 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
       h_avail = h(i,k) - eps(i,k)
       if ((h_avail > 0.) .and. ((TKE(i) > 0.) .or. (htot(i) < Hmix_min))) then
         dRL = g_H_2Rho0 * (R0(i,k)*htot(i) - R0_tot(i) )
-        dMKE = (G%GV%H_to_m * CS%bulk_Ri_ML) * 0.5 * &
+        dMKE = (H_to_m * CS%bulk_Ri_ML) * 0.5 * &
             ((uhtot(i)-u(i,k)*htot(i))**2 + (vhtot(i)-v(i,k)*htot(i))**2)
 
 ! Find the TKE that would remain if the entire layer were entrained.
@@ -1630,7 +1632,7 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
         HpE = htot(i)+h_avail
         MKE_rate = 1.0/(1.0 + (cMKE(1,i)*HpE + cMKE(2,i)*HpE**2))
         EF4_val = EF4(htot(i)+h_neglect,h_avail,Idecay_len_TKE(i))
-        TKE_full_ent = (exp_kh*TKE(i) - (h_avail*G%GV%H_to_m)*(dRL*f1_kh + Pen_En_Contrib)) + &
+        TKE_full_ent = (exp_kh*TKE(i) - (h_avail*H_to_m)*(dRL*f1_kh + Pen_En_Contrib)) + &
             MKE_rate*dMKE*EF4_val
         if ((TKE_full_ent >= 0.0) .or. (h_avail+htot(i) <= Hmix_min)) then
           ! The layer will be fully entrained.
@@ -1640,12 +1642,12 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
             E_HxHpE = h_ent / ((htot(i)+h_neglect)*(htot(i)+h_ent+h_neglect))
             CS%diag_TKE_mech_decay(i,j) = CS%diag_TKE_mech_decay(i,j) + &
                 Idt_diag * ((exp_kh-1.0)*TKE(i) + &
-                            (h_ent*G%GV%H_to_m)*dRL*(1.0-f1_kh) + &
+                            (h_ent*H_to_m)*dRL*(1.0-f1_kh) + &
                             MKE_rate*dMKE*(EF4_val-E_HxHpE))
             CS%diag_TKE_mixing(i,j) = CS%diag_TKE_mixing(i,j) - &
-                Idt_diag*(G%GV%H_to_m*h_ent)*dRL
+                Idt_diag*(H_to_m*h_ent)*dRL
             CS%diag_TKE_pen_SW(i,j) = CS%diag_TKE_pen_SW(i,j) - &
-                Idt_diag*(G%GV%H_to_m*h_ent)*Pen_En_Contrib
+                Idt_diag*(H_to_m*h_ent)*Pen_En_Contrib
             CS%diag_TKE_RiBulk(i,j) = CS%diag_TKE_RiBulk(i,j) + &
                 Idt_diag*MKE_rate*dMKE*E_HxHpE
           endif
@@ -1710,15 +1712,15 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
                            C1*((1.0-SW_trans) - opacity*(htot(i) + h_ent)*SW_trans)
               endif ; enddo ! (Pen_SW_bnd(n,i) > 0.0)
 
-              TKE_ent1 = exp_kh*TKE(i) - (h_ent*G%GV%H_to_m)*(dRL*f1_kh + Pen_En_Contrib)
+              TKE_ent1 = exp_kh*TKE(i) - (h_ent*H_to_m)*(dRL*f1_kh + Pen_En_Contrib)
               EF4_val = EF4(htot(i)+h_neglect,h_ent,Idecay_len_TKE(i),dEF4_dh)
               HpE = htot(i)+h_ent
               MKE_rate = 1.0/(1.0 + (cMKE(1,i)*HpE + cMKE(2,i)*HpE**2))
               TKE_ent = TKE_ent1 + dMKE*EF4_val*MKE_rate
               ! TKE_ent is the TKE that would remain if h_ent were entrained.
 
-              dTKE_dh = ((-Idecay_len_TKE(i)*TKE_ent1 - dRL*G%GV%H_to_m) + &
-                         Pen_dTKE_dh_Contrib*G%GV%H_to_m) + dMKE * MKE_rate* &
+              dTKE_dh = ((-Idecay_len_TKE(i)*TKE_ent1 - dRL*H_to_m) + &
+                         Pen_dTKE_dh_Contrib*H_to_m) + dMKE * MKE_rate* &
                        (dEF4_dh - EF4_val*MKE_rate*(cMKE(1,i)+2.0*cMKE(2,i)*HpE))
               !  dh_Newt = -TKE_ent / dTKE_dh
               ! Bisect if the Newton's method prediction is outside of the bounded range.
@@ -1753,12 +1755,12 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
             E_HxHpE = h_ent / ((htot(i)+h_neglect)*(HpE+h_neglect))
             CS%diag_TKE_mech_decay(i,j) = CS%diag_TKE_mech_decay(i,j) + &
                 Idt_diag * ((exp_kh-1.0)*TKE(i) + &
-                            (h_ent*G%GV%H_to_m)*dRL*(1.0-f1_kh) + &
+                            (h_ent*H_to_m)*dRL*(1.0-f1_kh) + &
                              dMKE*MKE_rate*(EF4_val-E_HxHpE))
             CS%diag_TKE_mixing(i,j) = CS%diag_TKE_mixing(i,j) - &
-                Idt_diag*(h_ent*G%GV%H_to_m)*dRL
+                Idt_diag*(h_ent*H_to_m)*dRL
             CS%diag_TKE_pen_SW(i,j) = CS%diag_TKE_pen_SW(i,j) - &
-                Idt_diag*(h_ent*G%GV%H_to_m)*Pen_En_Contrib
+                Idt_diag*(h_ent*H_to_m)*Pen_En_Contrib
             CS%diag_TKE_RiBulk(i,j) = CS%diag_TKE_RiBulk(i,j) + &
                 Idt_diag*dMKE*MKE_rate*E_HxHpE
           endif
@@ -2301,6 +2303,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
   real :: dR1, dR2, dR2b, dRk1    ! Assorted density difference work variables,
   real :: dR0, dR21, dRcv         ! all with units of kg m-3.
   real :: dRcv_stays, dRcv_det, dRcv_lim
+  real :: Angstrom                ! The minumum layer thickness, in H.
 
   real :: h2_to_k1_lim, T_new, S_new, T_max, T_min, S_max, S_min
   character(len=200) :: mesg
@@ -2314,6 +2317,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
   Rho0xG = G%GV%Rho0 * G%g_Earth
   Idt_H2 = G%GV%H_to_m**2 / dt_diag
   I2Rho0 = 0.5 / G%GV%Rho0
+  Angstrom = G%GV%Angstrom
 
   ! This is hard coding of arbitrary and dimensional numbers.
   h_min_bl_thick = 5.0 * G%GV%m_to_H
@@ -2393,7 +2397,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
       ! and the next denser interior layer, measured by R0.  This probably does
       ! not happen very often, so I am not too worried about the inefficiency of
       ! the following loop.
-      do k1=kb2+1,nz ; if (h(i,k1) > 2.0*G%GV%Angstrom) exit ; enddo
+      do k1=kb2+1,nz ; if (h(i,k1) > 2.0*Angstrom) exit ; enddo
 
       R0(i,kb2) = R0(i,kb1)
 
@@ -2466,12 +2470,12 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
                       dT_dS_gauge*dRcv_dT(i)*(S(i,kb2)-S(i,kb1))) * &
                       (h2 - h2_to_k1) / (h1 + h2)
         dSpice_lim = 0.0
-        if (h(i,k1) > 10.0*G%GV%Angstrom) then
+        if (h(i,k1) > 10.0*Angstrom) then
           dSpice_lim = dS_dT_gauge*dRcv_dS(i)*(T(i,k1)-T(i,kb2)) - &
                        dT_dS_gauge*dRcv_dT(i)*(S(i,k1)-S(i,kb2))
           if (dSpice_det*dSpice_lim <= 0.0) dSpice_lim = 0.0
         endif
-        if (k1<nz) then ; if (h(i,k1+1) > 10.0*G%GV%Angstrom) then
+        if (k1<nz) then ; if (h(i,k1+1) > 10.0*Angstrom) then
           dSpice_lim2 = dS_dT_gauge*dRcv_dS(i)*(T(i,k1+1)-T(i,kb2)) - &
                         dT_dS_gauge*dRcv_dT(i)*(S(i,k1+1)-S(i,kb2))
           if ((dSpice_det*dSpice_lim2 > 0.0) .and. &
@@ -2491,7 +2495,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
         if (CS%BL_extrap_lim >= 0.) then
           ! Only do this detrainment if the new layer's temperature and salinity
           ! are not too far outside of the range of previous values.
-          if (h(i,k1) > 10.0*G%GV%Angstrom) then
+          if (h(i,k1) > 10.0*Angstrom) then
             T_min = min(T(i,kb1), T(i,kb2), T(i,k1)) - CS%Allowed_T_chg
             T_max = max(T(i,kb1), T(i,kb2), T(i,k1)) + CS%Allowed_T_chg
             S_min = min(S(i,kb1), S(i,kb2), S(i,k1)) - CS%Allowed_S_chg
@@ -2590,12 +2594,12 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
                           dT_dS_gauge*dRcv_dT(i)*(S(i,kb2)-S(i,kb1))) * &
                           (h2 - h2_to_k1) / (h1 + h2)
             dSpice_lim = 0.0
-            if (h(i,k1) > 10.0*G%GV%Angstrom) then
+            if (h(i,k1) > 10.0*Angstrom) then
               dSpice_lim = dS_dT_gauge*dRcv_dS(i)*(T(i,k1)-T(i,kb2)) - &
                            dT_dS_gauge*dRcv_dT(i)*(S(i,k1)-S(i,kb2))
               if (dSpice_det*dSpice_lim <= 0.0) dSpice_lim = 0.0
             endif
-            if (k1<nz) then; if (h(i,k1+1) > 10.0*G%GV%Angstrom) then
+            if (k1<nz) then; if (h(i,k1+1) > 10.0*Angstrom) then
               dSpice_lim2 = dS_dT_gauge*dRcv_dS(i)*(T(i,k1+1)-T(i,kb2)) - &
                             dT_dS_gauge*dRcv_dT(i)*(S(i,k1+1)-S(i,kb2))
               if ((dSpice_det*dSpice_lim2 > 0.0) .and. &

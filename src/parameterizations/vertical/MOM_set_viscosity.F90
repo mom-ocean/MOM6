@@ -259,6 +259,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
                            ! in roundoff and can be neglected, in H.
   real :: ustH             ! ustar converted to units of H s-1.
   real :: root             ! A temporary variable with units of H s-1.
+  real :: H_to_m, m_to_H   ! Local copies of unit conversion factors.
 
   real :: Cell_width       ! The transverse width of the velocity cell, in m.
   real :: Rayleigh         ! A nondimensional value that is multiplied by the
@@ -282,6 +283,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
   h_neglect = G%GV%H_subroundoff
   Rho0x400_G = 400.0*(G%GV%Rho0/G%g_Earth)*G%GV%m_to_H
   Vol_quit = 0.9*G%GV%Angstrom + h_neglect
+  H_to_m = G%GV%H_to_m ; m_to_H = G%GV%m_to_H
   C2pi_3 = 8.0*atan(1.0)/3.0
 
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(BBL): "//&
@@ -538,7 +540,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
       if (CS%cdrag * U_bg_sq <= 0.0) then
         ! This avoids NaNs and overflows, and could be used in all cases,
         ! but is not bitwise identical to the current code.
-        ustH = ustar(i)*G%GV%m_to_H ; root = sqrt(0.25*ustH**2 + (htot*C2f)**2)
+        ustH = ustar(i)*m_to_H ; root = sqrt(0.25*ustH**2 + (htot*C2f)**2)
         if (htot*ustH <= (CS%BBL_thick_min+h_neglect) * (0.5*ustH + root)) then
           bbl_thick = CS%BBL_thick_min
         else
@@ -546,7 +548,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
         endif
       else
         bbl_thick = htot / (0.5 + sqrt(0.25 + htot*htot*C2f*C2f/ &
-          ((ustar(i)*ustar(i)) * (G%GV%m_to_H**2) )))
+          ((ustar(i)*ustar(i)) * (m_to_H**2) )))
 
         if (bbl_thick < CS%BBL_thick_min) bbl_thick = CS%BBL_thick_min
       endif
@@ -577,7 +579,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
         if (Dm > Dp) then ; tmp = Dp ; Dp = Dm ; Dm = tmp ; endif
 
         ! Convert the D's to the units of thickness.
-        Dp = G%GV%m_to_H*Dp ; Dm = G%GV%m_to_H*Dm ; D_vel = G%GV%m_to_H*D_vel
+        Dp = m_to_H*Dp ; Dm = m_to_H*Dm ; D_vel = m_to_H*D_vel
 
         a_3 = (Dp + Dm - 2.0*D_vel) ; a = 3.0*a_3 ; a_12 = 0.25*a_3
         slope = Dp - Dm
@@ -716,7 +718,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
             else ; Cell_width = G%dx_Cv(i,j) ; endif
             gam = 1.0 - L(K+1)/L(K)
             Rayleigh = CS%cdrag * (L(K)-L(K+1)) * (1.0-BBL_frac) * &
-                (12.0*CS%c_Smag*h_vel) /  (12.0*CS%c_Smag*h_vel + G%GV%m_to_H * &
+                (12.0*CS%c_Smag*h_vel) /  (12.0*CS%c_Smag*h_vel + m_to_H * &
                  CS%cdrag * gam*(1.0-gam)*(1.0-1.5*gam) * L(K)**2 * Cell_width)
           else ! This layer feels no drag.
             Rayleigh = 0.0
@@ -738,7 +740,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
 
         enddo ! k loop to determine L(K).
 
-        bbl_thick = bbl_thick * G%GV%H_to_m
+        bbl_thick = bbl_thick * H_to_m
         if (m==1) then
           visc%kv_bbl_u(i,j) = max(CS%KV_BBL_min, &
                                    cdrag_sqrt*ustar(i)*bbl_thick*BBL_visc_frac)
@@ -752,7 +754,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
       else ! Not Channel_drag.
 !   Here the near-bottom viscosity is set to a value which will give
 ! the correct stress when the shear occurs over bbl_thick.
-        bbl_thick = bbl_thick * G%GV%H_to_m
+        bbl_thick = bbl_thick * H_to_m
         if (m==1) then
           visc%kv_bbl_u(i,j) = max(CS%KV_BBL_min, cdrag_sqrt*ustar(i)*bbl_thick)
           visc%bbl_thick_u(i,j) = bbl_thick
@@ -944,6 +946,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
                     ! in roundoff and can be neglected, in H.
   real :: Rho0x400_G  ! 400*Rho0/G_Earth, in kg s2 m-4.  The 400 is a
                       ! constant proposed by Killworth and Edwards, 1999.
+  real :: H_to_m, m_to_H   ! Local copies of unit conversion factors.
   logical :: use_EOS, do_any, do_any_shelf, do_i(SZIB_(G))
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, K2, nkmb, nkml
 
@@ -964,6 +967,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
   h_neglect = G%GV%H_subroundoff
   h_tiny = 2.0*G%GV%Angstrom + h_neglect
   g_H_Rho0 = (G%g_Earth * G%GV%H_to_m) / G%GV%Rho0
+  H_to_m = G%GV%H_to_m ; m_to_H = G%GV%m_to_H
 
   if (associated(fluxes%frac_shelf_h)) then
     ! This configuration has ice shelves, and the appropriate variables need to
@@ -1030,7 +1034,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
           if (CS%use_omega) then ; absf = 2.0*CS%omega
           else ; absf = 0.5*(abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I,J-1))) ; endif
           U_Star = max(CS%ustar_min, 0.5 * (fluxes%ustar(i,j) + fluxes%ustar(i+1,j)))
-          Idecay_len_TKE(I) = ((absf / U_Star) * CS%TKE_decay) * G%GV%H_to_m
+          Idecay_len_TKE(I) = ((absf / U_Star) * CS%TKE_decay) * H_to_m
         endif
       enddo
 
@@ -1229,7 +1233,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
         visc%tbl_thick_shelf_u(I,j) = max(CS%Htbl_shelf_min, &
             htot(I) / (0.5 + sqrt(0.25 + &
                          (htot(i)*(G%CoriolisBu(I,J-1)+G%CoriolisBu(I,J)))**2 / &
-                         (ustar(i)*G%GV%m_to_H)**2 )) )
+                         (ustar(i)*m_to_H)**2 )) )
         visc%kv_tbl_shelf_u(I,j) = max(CS%KV_TBL_min, &
                        cdrag_sqrt*ustar(I)*visc%tbl_thick_shelf_u(I,j))
       endif ; enddo ! I-loop
@@ -1264,7 +1268,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
          if (CS%use_omega) then ; absf = 2.0*CS%omega
          else ; absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J))) ; endif
          U_Star = max(CS%ustar_min, 0.5 * (fluxes%ustar(i,j) + fluxes%ustar(i,j+1)))
-         Idecay_len_TKE(i) = ((absf / U_Star) * CS%TKE_decay) * G%GV%H_to_m
+         Idecay_len_TKE(i) = ((absf / U_Star) * CS%TKE_decay) * H_to_m
 
         endif
       enddo
@@ -1464,7 +1468,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
         visc%tbl_thick_shelf_v(i,J) = max(CS%Htbl_shelf_min, &
             htot(i) / (0.5 + sqrt(0.25 + &
                 (htot(i)*(G%CoriolisBu(I-1,J)+G%CoriolisBu(I,J)))**2 / &
-                (ustar(i)*G%GV%m_to_H)**2 )) )
+                (ustar(i)*m_to_H)**2 )) )
         visc%kv_tbl_shelf_v(i,J) = max(CS%KV_TBL_min, &
                        cdrag_sqrt*ustar(i)*visc%tbl_thick_shelf_v(i,J))
       endif ; enddo ! i-loop

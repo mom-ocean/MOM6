@@ -252,6 +252,7 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
   real :: h1         ! The layer thickness after entrainment through the
                      ! interface below is taken into account, in H.
   real :: Idt        ! The inverse of the time step, in s-1.
+  real :: H_to_m, m_to_H  ! Local copies of unit conversion factors.
 
   logical :: do_any
   logical :: do_i(SZI_(G)), did_i(SZI_(G)), reiterate, correct_density
@@ -281,7 +282,8 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
          &and a linear equation of state to drive the model.")
   endif
 
-  tolerance = G%GV%m_to_H * CS%Tolerance_Ent
+  H_to_m = G%GV%H_to_m ; m_to_H = G%GV%m_to_H
+  tolerance = m_to_H * CS%Tolerance_Ent
   g_2dt = 0.5 * G%g_Earth / dt
   kmb = G%GV%nk_rho_varies
   K2 = max(kmb+1,2) ; kb_min = K2
@@ -326,23 +328,23 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
 
     if (present(Kd_Lay)) then
       do k=1,nz ; do i=is,ie
-        dtKd(i,k) = G%GV%m_to_H**2 * (dt*Kd_Lay(i,j,k))
+        dtKd(i,k) = m_to_H**2 * (dt*Kd_Lay(i,j,k))
       enddo ; enddo
       if (present(Kd_int)) then
         do K=1,nz+1 ; do i=is,ie
-          dtKd_int(i,K) = G%GV%m_to_H**2 * (dt*Kd_int(i,j,K))
+          dtKd_int(i,K) = m_to_H**2 * (dt*Kd_int(i,j,K))
         enddo ; enddo
       else
         do K=2,nz ; do i=is,ie
-          dtKd_int(i,K) = G%GV%m_to_H**2 * (0.5*dt*(Kd_Lay(i,j,k-1) + Kd_Lay(i,j,k)))
+          dtKd_int(i,K) = m_to_H**2 * (0.5*dt*(Kd_Lay(i,j,k-1) + Kd_Lay(i,j,k)))
         enddo ; enddo
       endif
     else ! Kd_int must be present, or there already would have been an error.
       do k=1,nz ; do i=is,ie
-        dtKd(i,k) = G%GV%m_to_H**2 * (0.5*dt*(Kd_int(i,j,K)+Kd_int(i,j,K+1)))
+        dtKd(i,k) = m_to_H**2 * (0.5*dt*(Kd_int(i,j,K)+Kd_int(i,j,K+1)))
       enddo ; enddo
       dO K=1,nz+1 ; do i=is,ie
-        dtKd_int(i,K) = G%GV%m_to_H**2 * (dt*Kd_int(i,j,K))
+        dtKd_int(i,K) = m_to_H**2 * (dt*Kd_int(i,j,K))
       enddo ; enddo
     endif
 
@@ -872,11 +874,11 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, CS, ea, eb, &
               (eb(i,j,k) - ea(i,j,k+1))) ) / (I2p2dsp1_ds(i,k) * grats(i,k))
         endif
 
-        Kd_eff(i,j,k) = G%GV%H_to_m**2 * (MAX(dtKd(i,k),Kd_here)*Idt)
+        Kd_eff(i,j,k) = H_to_m**2 * (MAX(dtKd(i,k),Kd_here)*Idt)
       enddo ; enddo
       do i=is,ie
-        Kd_eff(i,j,1) = G%GV%H_to_m**2 * (dtKd(i,1)*Idt)
-        Kd_eff(i,j,nz) = G%GV%H_to_m**2 * (dtKd(i,nz)*Idt)
+        Kd_eff(i,j,1) = H_to_m**2 * (dtKd(i,1)*Idt)
+        Kd_eff(i,j,nz) = H_to_m**2 * (dtKd(i,nz)*Idt)
       enddo
     endif
 
