@@ -37,8 +37,13 @@ use user_initialization, only : user_initialize_thickness, user_initialize_veloc
 use user_initialization, only : user_init_temperature_salinity
 use user_initialization, only : user_set_Open_Bdry_Conds, user_initialize_sponges
 use DOME_initialization, only : DOME_initialize_thickness
+use ISOMIP_initialization, only : ISOMIP_initialize_thickness
+use TVWS_initialization, only : TVWS_initialize_thickness
 use DOME_initialization, only : DOME_set_Open_Bdry_Conds
+use TVWS_initialization, only : TVWS_set_Open_Bdry_Conds
 use DOME_initialization, only : DOME_initialize_sponges
+use ISOMIP_initialization, only : ISOMIP_initialize_sponges
+use ISOMIP_initialization, only : ISOMIP_initialize_temperature_salinity
 use baroclinic_zone_initialization, only : baroclinic_zone_init_temperature_salinity
 use benchmark_initialization, only : benchmark_initialize_thickness
 use benchmark_initialization, only : benchmark_init_temperature_salinity
@@ -206,6 +211,10 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
                " \t\t between the surface and MAXIMUM_DEPTH. \n"//&
                " \t DOME - use a slope and channel configuration for the \n"//&
                " \t\t DOME sill-overflow test case. \n"//&
+               " \t ISOMIP - use a slope and channel configuration for the \n"//&
+               " \t\t ISOMIP test case. \n"//&
+               " \t TVWS - use a slope and channel configuration for the \n"//&
+               " \t\t TVWS overflow test case. \n"//&
                " \t benchmark - use the benchmark test case thicknesses. \n"//&
                " \t search - search a density profile for the interface \n"//&
                " \t\t densities. This is not yet implemented. \n"//&
@@ -223,6 +232,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
          case ("coord"); call ALE_initThicknessToCoord( ALE_CSp, G, h )
          case ("uniform"); call initialize_thickness_uniform(h, G, PF)
          case ("DOME"); call DOME_initialize_thickness(h, G, PF)
+         case ("TVWS"); call TVWS_initialize_thickness(h, G, PF)
+         case ("ISOMIP"); call ISOMIP_initialize_thickness(h, G, PF)
          case ("benchmark"); call benchmark_initialize_thickness(h, G, PF, &
                                  tv%eqn_of_state, tv%P_Ref)
          case ("search"); call initialize_thickness_search
@@ -271,6 +282,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
           case ("TS_profile") ; call initialize_temp_salt_from_profile(tv%T, tv%S, G, PF)
           case ("linear"); call initialize_temp_salt_linear(tv%T, tv%S, G, PF)
           case ("DOME2D"); call DOME2d_initialize_temperature_salinity ( tv%T, &
+                                tv%S, h, G, PF, eos)
+          case ("ISOMIP"); call ISOMIP_initialize_temperature_salinity ( tv%T, &
                                 tv%S, h, G, PF, eos)
           case ("adjustment2d"); call adjustment_initialize_temperature_salinity ( tv%T, &
                                       tv%S, h, G, PF, eos)
@@ -375,6 +388,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
 
     select case (trim(config))
       case ("DOME"); call DOME_initialize_sponges(G, tv, PF, CS%sponge_CSp)
+      case ("ISOMIP"); call ISOMIP_initialize_sponges(G, tv, PF, CS%sponge_CSp)
       case ("USER"); call user_initialize_sponges(G, use_temperature, tv, &
                                                   PF, CS%sponge_CSp, h)
       case ("phillips"); call Phillips_initialize_sponges(G, use_temperature, tv, &
@@ -402,10 +416,14 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
                  " configured: \n"//&
                  " \t DOME - use a slope and channel configuration for the \n"//&
                  " \t\t DOME sill-overflow test case. \n"//&
+                 " \t TVWS - use a slope and channel configuration for the \n"//&
+                 " \t\t TVWS overflow test case. \n"//&
                  " \t USER - call a user modified routine.", default="file", &
                  fail_if_missing=.true.)
     if (trim(config) == "DOME") then
       call DOME_set_Open_Bdry_Conds(CS%OBC, tv, G, PF, CS%tracer_Reg)
+    elseif (trim(config) == "TVWS") then
+      call TVWS_set_Open_Bdry_Conds(CS%OBC, tv, G, PF, CS%tracer_Reg)
     elseif (trim(config) == "USER") then
       call user_set_Open_Bdry_Conds(CS%OBC, tv, G, PF, CS%tracer_Reg)
     else

@@ -264,7 +264,7 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, param_file, &
   select case ( coordinateMode(verticalCoordinate) )
 
     case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA )
-
+      write(*,*)'here1'
       do j=js,je ; do i=is,ie
         xi0 = 0.0;
         do k = 1,nz
@@ -275,7 +275,7 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, param_file, &
       enddo ; enddo
     
     case ( REGRIDDING_RHO )
-
+      write(*,*)'here2'
       do j=js,je ; do i=is,ie
         xi0 = 0.0;
         do k = 1,nz
@@ -290,7 +290,7 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, param_file, &
       enddo ; enddo
 
     case ( REGRIDDING_LAYER )
-
+      write(*,*)'here3'
       delta_S = S_range / ( G%ke - 1.0 );
       S(:,:,1) = S_ref;
       do k = 2,G%ke

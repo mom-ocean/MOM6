@@ -354,8 +354,9 @@ subroutine initialize_DOME_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
     if (OBC%apply_OBC_v) then
       allocate(OBC_tr1_v(G%isd:G%ied,G%jsd:G%jed,nz))
       do k=1,nz ; do j=G%jsd,G%jed ; do i=G%isd,G%ied
-        if (k < nz/2) then ; OBC_tr1_v(i,j,k) = 0.0
-        else ; OBC_tr1_v(i,j,k) = 1.0 ; endif
+        if (k < 2) then ; OBC_tr1_v(i,j,k) = 0.0
+        else ; OBC_tr1_v(i,j,k) = 1.0 ; 
+        endif
       enddo ; enddo ; enddo
       call add_tracer_OBC_values(trim(name), CS%tr_Reg, &
                                  0.0, OBC_in_v=OBC_tr1_v)
