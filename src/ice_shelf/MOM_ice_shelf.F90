@@ -475,12 +475,12 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
 
   I_ZETA_N = 1.0 / ZETA_N
   LF = CS%Lat_fusion
-  I_RhoLF = 1.0/(G%Rho0*LF)
+  I_RhoLF = 1.0/(G%GV%Rho0*LF)
   I_LF = 1.0 / LF
   SC = CS%kv_molec/CS%kd_molec_salt
   PR = CS%kv_molec/CS%kd_molec_temp
   I_VK = 1.0/VK
-  RhoCp = G%Rho0 * CS%Cp
+  RhoCp = G%GV%Rho0 * CS%Cp
   Isqrt2 = 1.0/sqrt(2.0)
 
 !first calculate molecular component  
@@ -526,7 +526,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
           fluxes%ustar_shelf(i,j) = ustar_h
 
           if (associated(state%taux_shelf) .and. associated(state%tauy_shelf)) then
-            state%taux_shelf(i,j) = ustar_h*ustar_h*G%Rho0*Isqrt2
+            state%taux_shelf(i,j) = ustar_h*ustar_h*G%GV%Rho0*Isqrt2
             state%tauy_shelf(i,j) = state%taux_shelf(i,j)
           endif
 
@@ -636,7 +636,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
   !            CS%tflux_shelf(i,j) = 0.0
   !            CS%lprec(i,j) = I_LF * (- CS%tflux_shelf(i,j) + CS%t_flux(i,j))
 
-            mass_exch = CS%exch_vel_s(i,j) * G%Rho0
+            mass_exch = CS%exch_vel_s(i,j) * G%GV%Rho0
             Sbdry_it = (state%sss(i,j) * mass_exch + CS%Salin_ice * CS%lprec(i,j)) / &
                        (mass_exch + CS%lprec(i,j))
             dS_it = Sbdry_it - Sbdry
@@ -783,7 +783,7 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
 
-  Irho0 = 1.0 / G%Rho0
+  Irho0 = 1.0 / G%GV%Rho0
   ! Determine ustar and the square magnitude of the velocity in the
   ! bottom boundary layer. Together these give the TKE source and
   ! vertical decay scale.
@@ -946,7 +946,7 @@ end subroutine add_shelf_flux
 !   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 !   isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
 
-!   Irho0 = 1.0 / G%Rho0
+!   Irho0 = 1.0 / G%GV%Rho0
 !   ! Determine ustar and the square magnitude of the velocity in the
 !   ! bottom boundary layer. Together these give the TKE source and
 !   ! vertical decay scale.

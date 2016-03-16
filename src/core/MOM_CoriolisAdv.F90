@@ -273,6 +273,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, AD, G, CS)
 
   real :: Heff1, Heff2  ! Temporary effective H at U or V points in m or kg m-2.
   real :: Heff3, Heff4  ! Temporary effective H at U or V points in m or kg m-2.
+  real :: h_tiny        ! A very small thickness, in m or kg m-2.
   real :: UHeff, VHeff  ! More temporary variables, in m3 s-1 or kg s-1.
   real :: QUHeff,QVHeff ! More temporary variables, in m3 s-2 or kg s-2.
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
@@ -281,7 +282,8 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, AD, G, CS)
          "MOM_CoriolisAdv: Module must be initialized before it is used.")
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
-  h_neglect = G%H_subroundoff
+  h_neglect = G%GV%H_subroundoff
+  h_tiny = G%GV%Angstrom  ! Perhaps this should be set to h_neglect instead.
 
 !$OMP parallel default(none) shared(u,v,h,uh,vh,CAu,CAv,G,CS,AD,Area_h,Area_q,nz,RV,PV, &
 !$OMP                               is,ie,js,je,Isq,Ieq,Jsq,Jeq,h_neglect)              &
@@ -543,14 +545,14 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, AD, G, CS)
           CAu(I,j,k) = 0.5*(abs_vort(I,J)+abs_vort(I,J-1)) * &
                        ((vh(i  ,J  ,k)+vh(i+1,J-1,k)) +      &
                         (vh(i  ,J-1,k)+vh(i+1,J  ,k)) ) /    &
-                       (G%Angstrom +((Heff1+Heff4) +(Heff2+Heff3)) ) * G%IdxCu(i,j)
+                       (h_tiny +((Heff1+Heff4) +(Heff2+Heff3)) ) * G%IdxCu(i,j)
         elseif (CS%PV_Adv_Scheme == PV_ADV_UPWIND1) then
           VHeff = ((vh(i  ,J  ,k)+vh(i+1,J-1,k)) +      &
                    (vh(i  ,J-1,k)+vh(i+1,J  ,k)) )
           QVHeff = 0.5*( (abs_vort(I,J)+abs_vort(I,J-1))*VHeff &
                         -(abs_vort(I,J)-abs_vort(I,J-1))*abs(VHeff) )
           CAu(I,j,k) = QVHeff / &
-                     (G%Angstrom +((Heff1+Heff4) +(Heff2+Heff3)) ) * G%IdxCu(i,j)
+                     (h_tiny +((Heff1+Heff4) +(Heff2+Heff3)) ) * G%IdxCu(i,j)
         endif
       enddo ; enddo
     endif
@@ -652,14 +654,14 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, AD, G, CS)
           CAv(i,J,k) = - 0.5*(abs_vort(I,J)+abs_vort(I-1,J)) * &
                          ((uh(I  ,j  ,k)+uh(I-1,j+1,k)) +      &
                           (uh(I-1,j  ,k)+uh(I  ,j+1,k)) ) /    &
-                      (G%Angstrom + ((Heff1+Heff4) +(Heff2+Heff3)) ) * G%IdyCv(i,J)
+                      (h_tiny + ((Heff1+Heff4) +(Heff2+Heff3)) ) * G%IdyCv(i,J)
         elseif (CS%PV_Adv_Scheme == PV_ADV_UPWIND1) then
           UHeff = ((uh(I  ,j  ,k)+uh(I-1,j+1,k)) +      &
                    (uh(I-1,j  ,k)+uh(I  ,j+1,k)) )
           QUHeff = 0.5*( (abs_vort(I,J)+abs_vort(I-1,J))*UHeff &
                         -(abs_vort(I,J)-abs_vort(I-1,J))*abs(UHeff) )
           CAv(i,J,k) = - QUHeff / &
-                       (G%Angstrom + ((Heff1+Heff4) +(Heff2+Heff3)) ) * G%IdyCv(i,J)
+                       (h_tiny + ((Heff1+Heff4) +(Heff2+Heff3)) ) * G%IdyCv(i,J)
         endif
       enddo ; enddo
     endif

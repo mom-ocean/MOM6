@@ -628,7 +628,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       if (CS%debug) then
         call uchksum(u,"Pre set_viscous_BBL u", G, haloshift=1)
         call vchksum(v,"Pre set_viscous_BBL v", G, haloshift=1)
-        call hchksum(h*G%H_to_m,"Pre set_viscous_BBL h", G, haloshift=1)
+        call hchksum(h*G%GV%H_to_m,"Pre set_viscous_BBL h", G, haloshift=1)
         if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Pre set_viscous_BBL T", G, haloshift=1)
         if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Pre set_viscous_BBL S", G, haloshift=1)
       endif
@@ -924,9 +924,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       if (CS%debug) then
         call uchksum(u,"Pre-advection u", G, haloshift=2)
         call vchksum(v,"Pre-advection v", G, haloshift=2)
-        call hchksum(h*G%H_to_m,"Pre-advection h", G, haloshift=1)
-        call uchksum(CS%uhtr*G%H_to_m,"Pre-advection uhtr", G, haloshift=0)
-        call vchksum(CS%vhtr*G%H_to_m,"Pre-advection vhtr", G, haloshift=0)
+        call hchksum(h*G%GV%H_to_m,"Pre-advection h", G, haloshift=1)
+        call uchksum(CS%uhtr*G%GV%H_to_m,"Pre-advection uhtr", G, haloshift=0)
+        call vchksum(CS%vhtr*G%GV%H_to_m,"Pre-advection vhtr", G, haloshift=0)
       ! call MOM_state_chksum("Pre-advection ", u, v, &
       !                       h, CS%uhtr, CS%vhtr, G, haloshift=1)
           if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Pre-advection T", G, haloshift=1)
@@ -977,9 +977,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         if (CS%debug) then
           call uchksum(u,"Pre-diabatic u", G, haloshift=2)
           call vchksum(v,"Pre-diabatic v", G, haloshift=2)
-          call hchksum(h*G%H_to_m,"Pre-diabatic h", G, haloshift=1)
-          call uchksum(CS%uhtr*G%H_to_m,"Pre-diabatic uh", G, haloshift=0)
-          call vchksum(CS%vhtr*G%H_to_m,"Pre-diabatic vh", G, haloshift=0)
+          call hchksum(h*G%GV%H_to_m,"Pre-diabatic h", G, haloshift=1)
+          call uchksum(CS%uhtr*G%GV%H_to_m,"Pre-diabatic uh", G, haloshift=0)
+          call vchksum(CS%vhtr*G%GV%H_to_m,"Pre-diabatic vh", G, haloshift=0)
         ! call MOM_state_chksum("Pre-diabatic ",u, v, h, CS%uhtr, CS%vhtr, G)
           call MOM_thermo_chksum("Pre-diabatic ", CS%tv, G,haloshift=0)
           call check_redundant("Pre-diabatic ", u, v, G)
@@ -1039,9 +1039,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         if (CS%debug) then
           call uchksum(u,"Post-diabatic u", G, haloshift=2)
           call vchksum(v,"Post-diabatic v", G, haloshift=2)
-          call hchksum(h*G%H_to_m,"Post-diabatic h", G, haloshift=1)
-          call uchksum(CS%uhtr*G%H_to_m,"Post-diabatic uh", G, haloshift=0)
-          call vchksum(CS%vhtr*G%H_to_m,"Post-diabatic vh", G, haloshift=0)
+          call hchksum(h*G%GV%H_to_m,"Post-diabatic h", G, haloshift=1)
+          call uchksum(CS%uhtr*G%GV%H_to_m,"Post-diabatic uh", G, haloshift=0)
+          call vchksum(CS%vhtr*G%GV%H_to_m,"Post-diabatic vh", G, haloshift=0)
         ! call MOM_state_chksum("Post-diabatic ", u, v, &
         !                       h, CS%uhtr, CS%vhtr, G, haloshift=1)
           if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Post-diabatic T", G, haloshift=1)
@@ -1205,7 +1205,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
      enddo ; enddo
      if (ASSOCIATED(fluxes%p_surf)) then
        do j=js,je ; do i=is,ie
-         zos(i,j) = zos(i,j)+G%mask2dT(i,j)*fluxes%p_surf(i,j)/(G%Rho0 * G%g_Earth)
+         zos(i,j) = zos(i,j)+G%mask2dT(i,j)*fluxes%p_surf(i,j)/(G%GV%Rho0 * G%g_Earth)
        enddo ; enddo
      endif
      zos_area_mean = global_area_mean(zos, G)
@@ -1629,7 +1629,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   ! Allocate and initialize space for primary MOM variables.
   ALLOC_(CS%u(IsdB:IedB,jsd:jed,nz))   ; CS%u(:,:,:) = 0.0
   ALLOC_(CS%v(isd:ied,JsdB:JedB,nz))   ; CS%v(:,:,:) = 0.0
-  ALLOC_(CS%h(isd:ied,jsd:jed,nz))     ; CS%h(:,:,:) = G%Angstrom
+  ALLOC_(CS%h(isd:ied,jsd:jed,nz))     ; CS%h(:,:,:) = G%GV%Angstrom
   ALLOC_(CS%uh(IsdB:IedB,jsd:jed,nz))  ; CS%uh(:,:,:) = 0.0
   ALLOC_(CS%vh(isd:ied,JsdB:JedB,nz))  ; CS%vh(:,:,:) = 0.0
   if (CS%use_temperature) then
@@ -1760,7 +1760,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     if (CS%debug) then
       call uchksum(CS%u,"Pre ALE adjust init cond u", G, haloshift=1)
       call vchksum(CS%v,"Pre ALE adjust init cond v", G, haloshift=1)
-      call hchksum(CS%h*G%H_to_m,"Pre ALE adjust init cond h", G, haloshift=1)
+      call hchksum(CS%h*G%GV%H_to_m,"Pre ALE adjust init cond h", G, haloshift=1)
     endif
     call callTree_waypoint("Calling adjustGridForIntegrity() to remap initial conditions (initialize_MOM)")
     call adjustGridForIntegrity(CS%ALE_CSp, G, CS%h )
@@ -1769,7 +1769,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     if (CS%debug) then
       call uchksum(CS%u,"Post ALE adjust init cond u", G, haloshift=1)
       call vchksum(CS%v,"Post ALE adjust init cond v", G, haloshift=1)
-      call hchksum(CS%h*G%H_to_m, "Post ALE adjust init cond h", G, haloshift=1)
+      call hchksum(CS%h*G%GV%H_to_m, "Post ALE adjust init cond h", G, haloshift=1)
     endif
   endif
   if ( CS%use_ALE_algorithm ) call ALE_updateVerticalGridType( CS%ALE_CSp, G%GV )
@@ -2024,10 +2024,10 @@ subroutine register_diags(Time, G, CS, ADp)
 
   diag => CS%diag
 
-  thickness_units = get_thickness_units(G)
-  flux_units      = get_flux_units(G)
-  T_flux_units    = get_tr_flux_units(G, "Celsius")
-  S_flux_units    = get_tr_flux_units(G, "PPT")
+  thickness_units = get_thickness_units(G%GV)
+  flux_units      = get_flux_units(G%GV)
+  T_flux_units    = get_tr_flux_units(G%GV, "Celsius")
+  S_flux_units    = get_tr_flux_units(G%GV, "PPT")
 
   !Initialize the diagnostics mask arrays.
   !This has to be done after MOM_initialize_state call.
@@ -2040,7 +2040,7 @@ subroutine register_diags(Time, G, CS, ADp)
       'Meridional velocity', 'meter second-1', cmor_field_name='vo', cmor_units='m s-1', &
       cmor_standard_name='sea_water_y_velocity', cmor_long_name='Sea Water Y Velocity')
   CS%id_h = register_diag_field('ocean_model', 'h', diag%axesTL, Time, &
-      'Layer Thickness', thickness_units)
+      'Layer Thickness', thickness_units, v_cell_method='sum')
 
   CS%id_volo = register_scalar_field('ocean_model', 'volo', Time, diag,&
       long_name='Total volume of liquid ocean', units='m3',            &
@@ -2185,7 +2185,7 @@ subroutine register_diags(Time, G, CS, ADp)
   CS%id_v_predia = register_diag_field('ocean_model', 'v_predia', diag%axesCvL, Time, &
       'Meridional velocity before diabatic forcing', 'meter second-1')
   CS%id_h_predia = register_diag_field('ocean_model', 'h_predia', diag%axesTL, Time, &
-      'Layer Thickness before diabatic forcing', thickness_units)
+      'Layer Thickness before diabatic forcing', thickness_units, v_cell_method='sum')
   CS%id_e_predia = register_diag_field('ocean_model', 'e_predia', diag%axesTi, Time, &
       'Interface Heights before diabatic forcing', 'meter')
   if (CS%diabatic_first .and. (.not. CS%adiabatic)) then
@@ -2194,7 +2194,7 @@ subroutine register_diags(Time, G, CS, ADp)
     CS%id_v_preale = register_diag_field('ocean_model', 'v_preale', diag%axesCvL, Time, &
         'Meridional velocity before remapping', 'meter second-1')
     CS%id_h_preale = register_diag_field('ocean_model', 'h_preale', diag%axesTL, Time, &
-        'Layer Thickness before remapping', thickness_units)
+        'Layer Thickness before remapping', thickness_units, v_cell_method='sum')
     CS%id_T_preale = register_diag_field('ocean_model', 'T_preale', diag%axesTL, Time, &
         'Temperature before remapping', 'degC')
     CS%id_S_preale = register_diag_field('ocean_model', 'S_preale', diag%axesTL, Time, &
@@ -2246,7 +2246,8 @@ subroutine register_diags_TS_tendency(Time, G, CS)
       'Net time tendency for heat', 'W/m2',                                                       &
       cmor_field_name="opottemptend", cmor_units="W m-2",                                         &
       cmor_standard_name="tendency_of_sea_water_potential_temperature_expressed_as_heat_content", &
-      cmor_long_name ="Tendency of Sea Water Potential Temperature Expressed as Heat Content")
+      cmor_long_name ="Tendency of Sea Water Potential Temperature Expressed as Heat Content",    &
+      v_cell_method='sum')
   CS%id_Th_tendency_2d = register_diag_field('ocean_model', 'Th_tendency_2d', diag%axesT1, Time,              &
       'Vertical sum of net time tendency for heat', 'W/m2',                                                   &
       cmor_field_name="opottemptend_2d", cmor_units="W m-2",                                                   &
@@ -2285,7 +2286,8 @@ subroutine register_diags_TS_tendency(Time, G, CS)
       'Net time tendency for salt', 'kg/(m2 * s)',                                        &
       cmor_field_name="osalttend", cmor_units="kg m-2 s-1",                               &
       cmor_standard_name="tendency_of_sea_water_salinity_expressed_as_salt_content",      &
-      cmor_long_name ="Tendency of Sea Water Salinity Expressed as Salt Content")
+      cmor_long_name ="Tendency of Sea Water Salinity Expressed as Salt Content",         &
+      v_cell_method='sum')
   CS%id_Sh_tendency_2d = register_diag_field('ocean_model', 'Sh_tendency_2d', diag%axesT1, Time, &
       'Vertical sum of net time tendency for salt', 'kg/(m2 * s)',                               &
       cmor_field_name="osalttend_2d", cmor_units="kg m-2 s-1",                                   &
@@ -2398,7 +2400,7 @@ subroutine post_diags_TS_tendency(G, CS, dt)
   ! fluxes, where advective transport arises from residual mean velocity.
   if (CS%id_T_advection_xy > 0 .or. CS%id_T_advection_xy_2d > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
-      work3d(i,j,k) = CS%T_advection_xy(i,j,k) * G%H_to_kg_m2 * CS%tv%C_p
+      work3d(i,j,k) = CS%T_advection_xy(i,j,k) * G%GV%H_to_kg_m2 * CS%tv%C_p
     enddo ; enddo ; enddo
     if (CS%id_T_advection_xy    > 0) call post_data(CS%id_T_advection_xy, work3d, CS%diag)
     if (CS%id_T_advection_xy_2d > 0) then
@@ -2416,7 +2418,7 @@ subroutine post_diags_TS_tendency(G, CS, dt)
   ! fluxes, where advective transport arises from residual mean velocity.
   if (CS%id_S_advection_xy > 0 .or. CS%id_S_advection_xy_2d > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
-      work3d(i,j,k) = CS%S_advection_xy(i,j,k) * G%H_to_kg_m2 * ppt2mks
+      work3d(i,j,k) = CS%S_advection_xy(i,j,k) * G%GV%H_to_kg_m2 * ppt2mks
     enddo ; enddo ; enddo
     if (CS%id_S_advection_xy    > 0) call post_data(CS%id_S_advection_xy, work3d, CS%diag)
     if (CS%id_S_advection_xy_2d > 0) then
@@ -2451,7 +2453,7 @@ subroutine post_diags_TS_tendency(G, CS, dt)
   ! diagnose net tendency for heat content of a grid cell over a time step and update Th_prev
   if (CS%id_Th_tendency > 0 .or. CS%id_Th_tendency_2d > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
-      work3d(i,j,k)     = (CS%tv%T(i,j,k)*CS%h(i,j,k) - CS%Th_prev(i,j,k)) * Idt * G%H_to_kg_m2 * CS%tv%C_p
+      work3d(i,j,k)     = (CS%tv%T(i,j,k)*CS%h(i,j,k) - CS%Th_prev(i,j,k)) * Idt * G%GV%H_to_kg_m2 * CS%tv%C_p
       CS%Th_prev(i,j,k) =  CS%tv%T(i,j,k)*CS%h(i,j,k)
     enddo ; enddo ; enddo
     if (CS%id_Th_tendency    > 0) call post_data(CS%id_Th_tendency, work3d, CS%diag)
@@ -2469,7 +2471,7 @@ subroutine post_diags_TS_tendency(G, CS, dt)
   ! diagnose net tendency for salt content of a grid cell over a time step and update Sh_prev
   if (CS%id_Sh_tendency > 0 .or. CS%id_Sh_tendency_2d > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
-      work3d(i,j,k)     = (CS%tv%S(i,j,k)*CS%h(i,j,k) - CS%Sh_prev(i,j,k)) * Idt * G%H_to_kg_m2 * ppt2mks
+      work3d(i,j,k)     = (CS%tv%S(i,j,k)*CS%h(i,j,k) - CS%Sh_prev(i,j,k)) * Idt * G%GV%H_to_kg_m2 * ppt2mks
       CS%Sh_prev(i,j,k) =  CS%tv%S(i,j,k)*CS%h(i,j,k)
     enddo ; enddo ; enddo
     if (CS%id_Sh_tendency    > 0) call post_data(CS%id_Sh_tendency, work3d, CS%diag)
@@ -2637,8 +2639,8 @@ subroutine set_restart_fields(G, param_file, CS)
   type(vardesc) :: vd
   character(len=48) :: thickness_units, flux_units
 
-  thickness_units = get_thickness_units(G)
-  flux_units = get_flux_units(G)
+  thickness_units = get_thickness_units(G%GV)
+  flux_units = get_flux_units(G%GV)
 
   if (CS%use_temperature) then
     vd = var_desc("Temp","degC","Potential Temperature")
@@ -2706,7 +2708,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
   state%sea_lev => ssh
 
   if (present(p_atm)) then ; if (ASSOCIATED(p_atm)) then
-    IgR0 = 1.0 / (G%Rho0 * G%g_Earth)
+    IgR0 = 1.0 / (G%GV%Rho0 * G%g_Earth)
     do j=js,je ; do i=is,ie
       ssh(i,j) = ssh(i,j) + p_atm(i,j) * IgR0
     enddo ; enddo
@@ -2748,8 +2750,8 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
       enddo
 
       do k=1,nz ; do i=is,ie
-        if (depth(i) + h(i,j,k)*G%H_to_m < depth_ml) then
-          dh = h(i,j,k)*G%H_to_m
+        if (depth(i) + h(i,j,k)*G%GV%H_to_m < depth_ml) then
+          dh = h(i,j,k)*G%GV%H_to_m
         elseif (depth(i) < depth_ml) then
           dh = depth_ml - depth(i)
         else
@@ -2765,7 +2767,8 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
       enddo ; enddo
   ! Calculate the average properties of the mixed layer depth.
       do i=is,ie
-        if (depth(i) < G%H_subroundoff*G%H_to_m) depth(i) = G%H_subroundoff*G%H_to_m
+        if (depth(i) < G%GV%H_subroundoff*G%GV%H_to_m) &
+            depth(i) = G%GV%H_subroundoff*G%GV%H_to_m
         if (CS%use_temperature) then
           state%SST(i,j) = state%SST(i,j) / depth(i)
           state%SSS(i,j) = state%SSS(i,j) / depth(i)
@@ -2816,7 +2819,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
     enddo ; enddo
 !$OMP do
     do j=js,je ; do k=1,nz; do i=is,ie
-      mass = G%H_to_kg_m2*h(i,j,k)
+      mass = G%GV%H_to_kg_m2*h(i,j,k)
       state%ocean_mass(i,j) = state%ocean_mass(i,j) + mass
       state%ocean_heat(i,j) = state%ocean_heat(i,j) + mass*CS%tv%T(i,j,k)
       state%ocean_salt(i,j) = state%ocean_salt(i,j) + &
@@ -2828,7 +2831,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
       do j=js,je ; do i=is,ie ; state%ocean_mass(i,j) = 0.0 ; enddo ; enddo
 !$OMP do
       do j=js,je ; do k=1,nz ; do i=is,ie
-        state%ocean_mass(i,j) = state%ocean_mass(i,j) + G%H_to_kg_m2*h(i,j,k)
+        state%ocean_mass(i,j) = state%ocean_mass(i,j) + G%GV%H_to_kg_m2*h(i,j,k)
       enddo ; enddo ; enddo
     endif
     if (associated(state%ocean_heat)) then
@@ -2836,7 +2839,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
       do j=js,je ; do i=is,ie ; state%ocean_heat(i,j) = 0.0 ; enddo ; enddo
 !$OMP do
       do j=js,je ; do k=1,nz ; do i=is,ie
-        mass = G%H_to_kg_m2*h(i,j,k)
+        mass = G%GV%H_to_kg_m2*h(i,j,k)
         state%ocean_heat(i,j) = state%ocean_heat(i,j) + mass*CS%tv%T(i,j,k)
       enddo ; enddo ; enddo
     endif
@@ -2845,7 +2848,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
       do j=js,je ; do i=is,ie ; state%ocean_salt(i,j) = 0.0 ; enddo ; enddo
 !$OMP do
       do j=js,je ; do k=1,nz ; do i=is,ie
-        mass = G%H_to_kg_m2*h(i,j,k)
+        mass = G%GV%H_to_kg_m2*h(i,j,k)
         state%ocean_salt(i,j) = state%ocean_salt(i,j) + &
                                 mass * (1.0e-3*CS%tv%S(i,j,k))
       enddo ; enddo ; enddo

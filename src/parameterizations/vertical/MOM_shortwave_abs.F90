@@ -166,12 +166,12 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
 
   min_SW_heating = 2.5e-11
 
-  h_min_heat = 2.0*G%Angstrom + G%H_subroundoff
+  h_min_heat = 2.0*G%GV%Angstrom + G%GV%H_subroundoff
   is = G%isc ; ie = G%iec ; nz = G%ke
   C1_6 = 1.0 / 6.0 ; C1_60 = 1.0 / 60.0
 
   TKE_calc = (present(TKE) .and. present(dSV_dT))
-  g_Hconv2 = G%G_earth * G%H_to_kg_m2**2
+  g_Hconv2 = G%G_earth * G%GV%H_to_kg_m2**2
 
   h_heat(:) = 0.0
   if (present(htot)) then ; do i=is,ie ; h_heat(i) = htot(i) ; enddo ; endif
@@ -200,7 +200,7 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
         ! absorbed without further penetration.
         ! ###Make these numbers into parameters!
         if (nsw*Pen_SW_bnd(n,i)*SW_trans < &
-            dt*min_SW_heating*min(G%m_to_H,1e3*h(i,k)) ) SW_trans = 0.0
+            dt*min_SW_heating*min(G%GV%m_to_H,1e3*h(i,k)) ) SW_trans = 0.0
 
         Heat_bnd = Pen_SW_bnd(n,i) * (1.0 - SW_trans)
         if (adjustAbsorptionProfile .and. (h_heat(i) > 0.0)) then
@@ -372,7 +372,7 @@ subroutine sumSWoverBands(G, h, opacity_band, nsw, j, dt, &
   integer :: is, ie, nz, i, k, ks, n
   SW_Remains = .false.
 
-  h_min_heat = 2.0*G%Angstrom + G%H_subroundoff
+  h_min_heat = 2.0*G%GV%Angstrom + G%GV%H_subroundoff
   is = G%isc ; ie = G%iec ; nz = G%ke
 
   pen_SW_bnd(:,:) = iPen_SW_bnd(:,:)
@@ -389,14 +389,14 @@ subroutine sumSWoverBands(G, h, opacity_band, nsw, j, dt, &
       if (h(i,k) > 0.0) then
         do n=1,nsw ; if (Pen_SW_bnd(n,i) > 0.0) then
           ! SW_trans is the SW that is transmitted THROUGH the layer
-          opt_depth = h(i,k)*G%H_to_m * opacity_band(n,i,k)
+          opt_depth = h(i,k)*G%GV%H_to_m * opacity_band(n,i,k)
           exp_OD = exp(-opt_depth)
           SW_trans = exp_OD
 
           ! Heating at a rate of less than 10-4 W m-2 = 10-3 K m / Century,
           ! and of the layer in question less than 1 K / Century, can be
           ! absorbed without further penetration.
-          if ((nsw*Pen_SW_bnd(n,i)*SW_trans < G%m_to_H*2.5e-11*dt) .and. &
+          if ((nsw*Pen_SW_bnd(n,i)*SW_trans < G%GV%m_to_H*2.5e-11*dt) .and. &
               (nsw*Pen_SW_bnd(n,i)*SW_trans < h(i,k)*dt*2.5e-8)) &
             SW_trans = 0.0
 

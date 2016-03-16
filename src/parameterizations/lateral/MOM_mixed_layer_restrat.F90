@@ -172,13 +172,13 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, CS)
     !! TODO: use derivatives and mid-MLD pressure. Currently this is sigma-0. -AJA
     pRef_MLD(:) = 0.
     do j = js-1, je+1
-      dK(:) = 0.5 * h(:,j,1) * G%H_to_m ! Depth of center of surface layer
+      dK(:) = 0.5 * h(:,j,1) * G%GV%H_to_m ! Depth of center of surface layer
       call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef_MLD, rhoSurf, is-1, ie-is+3, tv%eqn_of_state)
       deltaRhoAtK(:) = 0.
       CS%MLD(:,j) = 0.
       do k = 2, nz
         dKm1(:) = dK(:) ! Depth of center of layer K-1
-        dK(:) = dK(:) + 0.5 * ( h(:,j,k) + h(:,j,k-1) ) * G%H_to_m ! Depth of center of layer K
+        dK(:) = dK(:) + 0.5 * ( h(:,j,k) + h(:,j,k-1) ) * G%GV%H_to_m ! Depth of center of layer K
         ! Mixed-layer depth, using sigma-0 (surface reference pressure)
         deltaRhoAtKm1(:) = deltaRhoAtK(:) ! Store value from previous iteration of K
         call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_MLD, deltaRhoAtK, is-1, ie-is+3, tv%eqn_of_state)
@@ -215,9 +215,9 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, CS)
 
   uDml(:) = 0.0 ; vDml(:) = 0.0
   I4dt = 0.25 / dt
-  g_Rho0 = G%g_Earth/G%Rho0
-  h_neglect = G%H_subroundoff
-  dz_neglect = G%H_subroundoff*G%H_to_m
+  g_Rho0 = G%g_Earth/G%GV%Rho0
+  h_neglect = G%GV%H_subroundoff
+  dz_neglect = G%GV%H_subroundoff*G%GV%H_to_m
 
   p0(:) = 0.0
 !$OMP parallel default(none) shared(is,ie,js,je,G,htot,Rml_av,tv,p0,h,h_avail,         &
@@ -238,7 +238,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, CS)
           Rml_av(i,j) = Rml_av(i,j) + h(i,j,k)*Rho0(i)
           htot(i,j) = htot(i,j) + h(i,j,k)
         endif
-        h_avail(i,j,k) = max(I4dt*G%areaT(i,j)*(h(i,j,k)-G%Angstrom),0.0)
+        h_avail(i,j,k) = max(I4dt*G%areaT(i,j)*(h(i,j,k)-G%GV%Angstrom),0.0)
       enddo
     enddo
 
@@ -263,7 +263,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, CS)
     do i=is-1,ie ; utimescale_diag(i,j) = 0.0 ; enddo
     do i=is-1,ie ; vtimescale_diag(i,j) = 0.0 ; enddo
     do I=is-1,ie
-      h_vel = 0.5*((htot(i,j) + htot(i+1,j)) + h_neglect) * G%H_to_m
+      h_vel = 0.5*((htot(i,j) + htot(i+1,j)) + h_neglect) * G%GV%H_to_m
 
       u_star = 0.5*(fluxes%ustar(i,j) + fluxes%ustar(i+1,j))
       absf = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
@@ -280,7 +280,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, CS)
       utimescale_diag(I,j) = timescale
 
       uDml(I) = timescale * G%mask2dCu(I,j)*G%dyCu(I,j)* &
-          G%IdxCu(I,j)*(Rml_av(i+1,j)-Rml_av(i,j)) * (h_vel**2 * G%m_to_H)
+          G%IdxCu(I,j)*(Rml_av(i+1,j)-Rml_av(i,j)) * (h_vel**2 * G%GV%m_to_H)
 
       if (uDml(i) == 0) then
         do k=1,nz ; uhml(I,j,k) = 0.0 ; enddo
@@ -312,7 +312,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, CS)
 !  V- component
 !$OMP do
   do J=js-1,je ; do i=is,ie
-    h_vel = 0.5*((htot(i,j) + htot(i,j+1)) + h_neglect) * G%H_to_m
+    h_vel = 0.5*((htot(i,j) + htot(i,j+1)) + h_neglect) * G%GV%H_to_m
 
     u_star = 0.5*(fluxes%ustar(i,j) + fluxes%ustar(i,j+1))
     absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
@@ -329,7 +329,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, CS)
     vtimescale_diag(i,J) = timescale
 
     vDml(i) = timescale * G%mask2dCv(i,J)*G%dxCv(i,J)* &
-        G%IdyCv(i,J)*(Rml_av(i,j+1)-Rml_av(i,j)) * (h_vel**2 * G%m_to_H)
+        G%IdyCv(i,J)*(Rml_av(i,j+1)-Rml_av(i,j)) * (h_vel**2 * G%GV%m_to_H)
     if (vDml(i) == 0) then
       do k=1,nz ; vhml(i,J,k) = 0.0 ; enddo
     else
@@ -459,10 +459,10 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
 
   uDml(:)    = 0.0 ; vDml(:) = 0.0
   I4dt       = 0.25 / dt
-  g_Rho0     = G%g_Earth/G%Rho0
+  g_Rho0     = G%g_Earth/G%GV%Rho0
   use_EOS    = associated(tv%eqn_of_state)
-  h_neglect  = G%H_subroundoff
-  dz_neglect = G%H_subroundoff*G%H_to_m
+  h_neglect  = G%GV%H_subroundoff
+  dz_neglect = G%GV%H_subroundoff*G%GV%H_to_m
 
   if (.not.use_EOS) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "An equation of state must be used with this module.")
@@ -486,7 +486,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
       do i=is-1,ie+1
         Rml_av(i,j) = Rml_av(i,j) + h(i,j,k)*Rho0(i)
         htot(i,j) = htot(i,j) + h(i,j,k)
-        h_avail(i,j,k) = max(I4dt*G%areaT(i,j)*(h(i,j,k)-G%Angstrom),0.0)
+        h_avail(i,j,k) = max(I4dt*G%areaT(i,j)*(h(i,j,k)-G%GV%Angstrom),0.0)
       enddo
     enddo
 
@@ -505,7 +505,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
     do i=is,ie ; utimescale_diag(i,j) = 0.0 ; enddo
     do i=is,ie ; vtimescale_diag(i,j) = 0.0 ; enddo
     do I=is-1,ie
-      h_vel = 0.5*(htot(i,j) + htot(i+1,j)) * G%H_to_m
+      h_vel = 0.5*(htot(i,j) + htot(i+1,j)) * G%GV%H_to_m
 
       u_star = 0.5*(fluxes%ustar(i,j) + fluxes%ustar(i+1,j))
       absf = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
@@ -522,7 +522,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
       utimescale_diag(I,j) = timescale
 
       uDml(I) = timescale * G%mask2dCu(I,j)*G%dyCu(I,j)* &
-          G%IdxCu(I,j)*(Rml_av(i+1,j)-Rml_av(i,j)) * (h_vel**2 * G%m_to_H)
+          G%IdxCu(I,j)*(Rml_av(i+1,j)-Rml_av(i,j)) * (h_vel**2 * G%GV%m_to_H)
 
       if (uDml(i) == 0) then
         do k=1,nkml ; uhml(I,j,k) = 0.0 ; enddo
@@ -553,7 +553,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
 !  V- component
 !$OMP do
   do J=js-1,je ; do i=is,ie
-    h_vel = 0.5*(htot(i,j) + htot(i,j+1)) * G%H_to_m
+    h_vel = 0.5*(htot(i,j) + htot(i,j+1)) * G%GV%H_to_m
 
     u_star = 0.5*(fluxes%ustar(i,j) + fluxes%ustar(i,j+1))
     absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
@@ -570,7 +570,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
     vtimescale_diag(i,J) = timescale
 
     vDml(i) = timescale * G%mask2dCv(i,J)*G%dxCv(i,J)* &
-        G%IdyCv(i,J)*(Rml_av(i,j+1)-Rml_av(i,j)) * (h_vel**2 * G%m_to_H)
+        G%IdyCv(i,J)*(Rml_av(i,j+1)-Rml_av(i,j)) * (h_vel**2 * G%GV%m_to_H)
     if (vDml(i) == 0) then
       do k=1,nkml ; vhml(i,J,k) = 0.0 ; enddo
     else
@@ -701,7 +701,7 @@ logical function mixedlayer_restrat_init(Time, G, param_file, diag, CS)
 
   CS%diag => diag
 
-  if (G%Boussinesq) then ; flux_units = "meter3 second-1"
+  if (G%GV%Boussinesq) then ; flux_units = "meter3 second-1"
   else ; flux_units = "kilogram second-1" ; endif
 
   CS%id_uhml = register_diag_field('ocean_model', 'uhml', diag%axesCuL, Time, &

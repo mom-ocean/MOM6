@@ -85,14 +85,14 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
   endif
   nz = G%ke ; IsdB = G%IsdB
 
-  h_neglect = G%H_subroundoff ; h_neglect2 = h_neglect**2
-  dz_neglect = G%H_subroundoff*G%H_to_m
+  h_neglect = G%GV%H_subroundoff ; h_neglect2 = h_neglect**2
+  dz_neglect = G%GV%H_subroundoff*G%GV%H_to_m
 
   use_EOS = associated(tv%eqn_of_state)
 
   present_N2_u = PRESENT(N2_u)
   present_N2_v = PRESENT(N2_v)
-  G_Rho0 = G%g_Earth / G%Rho0
+  G_Rho0 = G%g_Earth / G%GV%Rho0
   if (present_N2_u) then
     do j=js,je ; do I=is-1,ie
       N2_u(I,j,1) = 0.
@@ -115,12 +115,12 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
 !$OMP do
   do j=js-1,je+1 ; do i=is-1,ie+1
     pres(i,j,1) = 0.0  ! ### This should be atmospheric pressure.
-    pres(i,j,2) = pres(i,j,1) + G%H_to_Pa*h(i,j,1)
+    pres(i,j,2) = pres(i,j,1) + G%GV%H_to_Pa*h(i,j,1)
   enddo ; enddo
 !$OMP do
   do j=js-1,je+1
     do k=2,nz ; do i=is-1,ie+1
-      pres(i,j,K+1) = pres(i,j,K) + G%H_to_Pa*h(i,j,k)
+      pres(i,j,K+1) = pres(i,j,K) + G%GV%H_to_Pa*h(i,j,k)
     enddo ; enddo
   enddo
 !$OMP end parallel
@@ -174,8 +174,8 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
         haB = 0.5*(h(i,j,k) + h(i+1,j,k)) + h_neglect
         haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
         haR = 0.5*(h(i+1,j,k-1) + h(i+1,j,k)) + h_neglect
-        if (G%Boussinesq) then
-          dzaL = haL * G%H_to_m ; dzaR = haR * G%H_to_m
+        if (G%GV%Boussinesq) then
+          dzaL = haL * G%GV%H_to_m ; dzaR = haR * G%GV%H_to_m
         else
           dzaL = 0.5*(e(i,j,K-1) - e(i,j,K+1)) + dz_neglect
           dzaR = 0.5*(e(i+1,j,K-1) - e(i+1,j,K+1)) + dz_neglect
@@ -205,7 +205,7 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
         if (present_N2_u) N2_u(I,j,k) = G_Rho0 * drdz ! Square of Brunt-Vaisala frequency (s-2)
 
       else ! With .not.use_EOS, the layers are constant density.
-        slope_x(I,j,K) = ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) * G%m_to_H
+        slope_x(I,j,K) = ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) * G%GV%m_to_H
       endif
 
     enddo ! I
@@ -258,8 +258,8 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
         haB = 0.5*(h(i,j,k) + h(i,j+1,k)) + h_neglect
         haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
         haR = 0.5*(h(i,j+1,k-1) + h(i,j+1,k)) + h_neglect
-        if (G%Boussinesq) then
-          dzaL = haL * G%H_to_m ; dzaR = haR * G%H_to_m
+        if (G%GV%Boussinesq) then
+          dzaL = haL * G%GV%H_to_m ; dzaR = haR * G%GV%H_to_m
         else
           dzaL = 0.5*(e(i,j,K-1) - e(i,j,K+1)) + dz_neglect
           dzaR = 0.5*(e(i,j+1,K-1) - e(i,j+1,K+1)) + dz_neglect
@@ -289,7 +289,7 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
         if (present_N2_v) N2_v(i,J,k) = G_Rho0 * drdz ! Square of Brunt-Vaisala frequency (s-2)
 
       else ! With .not.use_EOS, the layers are constant density.
-        slope_y(i,J,K) = ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * G%m_to_H
+        slope_y(i,J,K) = ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * G%GV%m_to_H
       endif
 
     enddo ! i
@@ -336,8 +336,8 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, halo_here)
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
   nz = G%ke
 
-  kap_dt_x2 = (2.0*kappa*dt)*G%m_to_H**2
-  h_neglect = G%H_subroundoff
+  kap_dt_x2 = (2.0*kappa*dt)*G%GV%m_to_H**2
+  h_neglect = G%GV%H_subroundoff
 
   if (kap_dt_x2 <= 0.0) then
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,T_f,T_in,S_f,S_in)

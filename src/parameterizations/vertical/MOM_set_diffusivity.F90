@@ -452,7 +452,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
   if (.not.associated(CS)) call MOM_error(FATAL,"set_diffusivity: "//&
          "Module must be initialized before it is used.")
 
-  I_Rho0     = 1.0/G%Rho0
+  I_Rho0     = 1.0/G%GV%Rho0
   kappa_fill = 1.e-3 ! m2 s-1
   dt_fill    = 7200.
   deg_to_rad = atan(1.0)/45.0 ! = PI/180
@@ -545,13 +545,13 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
     if (CS%debug) then
       call hchksum(tv%T, "before vert_fill_TS tv%T",G)
       call hchksum(tv%S, "before vert_fill_TS tv%S",G)
-      call hchksum(h*G%H_to_m, "before vert_fill_TS h",G)
+      call hchksum(h*G%GV%H_to_m, "before vert_fill_TS h",G)
     endif
     call vert_fill_TS(h, tv%T, tv%S, kappa_fill, dt_fill, T_f, S_f, G)
     if (CS%debug) then
       call hchksum(tv%T, "after vert_fill_TS tv%T",G)
       call hchksum(tv%S, "after vert_fill_TS tv%S",G)
-      call hchksum(h*G%H_to_m, "after vert_fill_TS h",G)
+      call hchksum(h*G%GV%H_to_m, "after vert_fill_TS h",G)
     endif
   endif
 
@@ -634,16 +634,16 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
       do i=is,ie ; depth(i) = 0.0 ; enddo
       do k=1,nz ; do i=is,ie
         atan_fn_lay = atan((CS%Bryan_Lewis_depth_cent - &
-                            (depth(i)+0.5*G%H_to_m*h(i,j,k)))*I_trans)
+                            (depth(i)+0.5*G%GV%H_to_m*h(i,j,k)))*I_trans)
         Kd(i,j,k) = Kd_sfc(i,j) + (CS%Kd_Bryan_Lewis_deep - Kd_sfc(i,j)) * &
                                   (atan_fn_sfc - atan_fn_lay) * I_atan_fn
-        depth(i) = depth(i) + G%H_to_m*h(i,j,k)
+        depth(i) = depth(i) + G%GV%H_to_m*h(i,j,k)
       enddo ; enddo
     elseif ((.not.CS%bulkmixedlayer) .and. (CS%Kd /= CS%Kdml)) then
       I_Hmix = 1.0 / CS%Hmix
       do i=is,ie ; depth(i) = 0.0 ; enddo
       do k=1,nz ; do i=is,ie
-        depth_c = depth(i) + 0.5*G%H_to_m*h(i,j,k)
+        depth_c = depth(i) + 0.5*G%GV%H_to_m*h(i,j,k)
 
         if (depth_c <= CS%Hmix) then ; Kd(i,j,k) = CS%Kdml
         elseif (depth_c >= 2.0*CS%Hmix) then ; Kd(i,j,k) = Kd_sfc(i,j)
@@ -652,7 +652,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
                       (2.0*CS%Kdml - Kd_sfc(i,j))
         endif
 
-        depth(i) = depth(i) + G%H_to_m*h(i,j,k)
+        depth(i) = depth(i) + G%GV%H_to_m*h(i,j,k)
       enddo ; enddo
     elseif (CS%Henyey_IGW_background_new) then
       I_x30 = 2.0 / invcosh(CS%N0_2Omega*2.0) ! This is evaluated at 30 deg.
@@ -761,7 +761,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
                       CS%dissip_N0 + CS%dissip_N1 * sqrt(N2_lay(i,k)), & ! Floor aka Gargett
                       CS%dissip_N2 * N2_lay(i,k) ) ! Floor of Kd_min*rho0/F_Ri
         Kd(i,j,k) = max( Kd(i,j,k) , &  ! Apply floor to Kd
-           dissip * (CS%FluxRi_max / (G%Rho0 * (N2_lay(i,k) + Omega2))) )
+           dissip * (CS%FluxRi_max / (G%GV%Rho0 * (N2_lay(i,k) + Omega2))) )
       enddo ; enddo
 
       if (present(Kd_int)) then ; do K=2,nz ; do i=is,ie
@@ -774,14 +774,14 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, G, C
                       CS%dissip_N0 + CS%dissip_N1 * sqrt(N2_int(i,K)), & ! Floor aka Gargett
                       CS%dissip_N2 * N2_int(i,K) ) ! Floor of Kd_min*rho0/F_Ri
         Kd_int(i,j,K) = max( Kd_int(i,j,K) , &  ! Apply floor to Kd
-           dissip * (CS%FluxRi_max / (G%Rho0 * (N2_int(i,K) + Omega2))) )
+           dissip * (CS%FluxRi_max / (G%GV%Rho0 * (N2_int(i,K) + Omega2))) )
       enddo ; enddo ; endif
     endif
 
     if (associated(dd%Kd_work)) then
       do k=1,nz ; do i=is,ie
-        dd%Kd_Work(i,j,k)  = G%Rho0 * Kd(i,j,k) * N2_lay(i,k) * &
-                             G%H_to_m*h(i,j,k)  ! Watt m-2 s or kg s-3
+        dd%Kd_Work(i,j,k)  = G%GV%Rho0 * Kd(i,j,k) * N2_lay(i,k) * &
+                             G%GV%H_to_m*h(i,j,k)  ! Watt m-2 s or kg s-3
       enddo ; enddo
     endif
   enddo ! j-loop
@@ -986,14 +986,14 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, CS, TKE_to_Kd, maxT
 
   I_dt      = 1.0/dt
   Omega2    = CS%Omega**2
-  G_Rho0    = G%g_Earth / G%Rho0
-  H_neglect = G%H_subroundoff
-  I_Rho0    = 1.0/G%Rho0
+  G_Rho0    = G%g_Earth / G%GV%Rho0
+  H_neglect = G%GV%H_subroundoff
+  I_Rho0    = 1.0/G%GV%Rho0
 
   ! Simple but coordinate-independent estimate of Kd/TKE
   if (CS%simple_TKE_to_Kd) then
     do k=1,nz ; do i=is,ie
-      hN2pO2 = ( G%H_to_m * h(i,j,k) ) * ( N2_lay(i,k) + Omega2 ) ! Units of m s-2.
+      hN2pO2 = ( G%GV%H_to_m * h(i,j,k) ) * ( N2_lay(i,k) + Omega2 ) ! Units of m s-2.
       if (hN2pO2>0.) then
         TKE_to_Kd(i,k) = 1./ hN2pO2 ! Units of s2 m-1.
       else; TKE_to_Kd(i,k) = 0.; endif
@@ -1027,7 +1027,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, CS, TKE_to_Kd, maxT
     ! in sigma-0.
       do k=kb(i)-1,kmb+1,-1
         if (rho_0(i,kmb) > rho_0(i,k)) exit
-        if (h(i,j,k)>2.0*G%Angstrom) kb(i) = k
+        if (h(i,j,k)>2.0*G%GV%Angstrom) kb(i) = k
       enddo
     enddo
 
@@ -1048,18 +1048,18 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, CS, TKE_to_Kd, maxT
   if (CS%bulkmixedlayer) then
     kmb = G%GV%nk_rho_varies
     do i=is,ie
-      htot(i) = G%H_to_m*h(i,j,kmb)
+      htot(i) = G%GV%H_to_m*h(i,j,kmb)
       mFkb(i) = 0.0
       if (kb(i) < nz) &
-        mFkb(i) = ds_dsp1(i,kb(i)) * (G%H_to_m*(h(i,j,kmb) - G%Angstrom))
+        mFkb(i) = ds_dsp1(i,kb(i)) * (G%GV%H_to_m*(h(i,j,kmb) - G%GV%Angstrom))
     enddo
     do k=1,kmb-1 ; do i=is,ie
-      htot(i) = htot(i) + G%H_to_m*h(i,j,k)
-      mFkb(i) = mFkb(i) + ds_dsp1(i,k+1)*(G%H_to_m*(h(i,j,k) - G%Angstrom))
+      htot(i) = htot(i) + G%GV%H_to_m*h(i,j,k)
+      mFkb(i) = mFkb(i) + ds_dsp1(i,k+1)*(G%GV%H_to_m*(h(i,j,k) - G%GV%Angstrom))
     enddo ; enddo
   else
     do i=is,i
-      maxEnt(i,1) = 0.0 ; htot(i) = G%H_to_m*(h(i,j,1) - G%Angstrom)
+      maxEnt(i,1) = 0.0 ; htot(i) = G%GV%H_to_m*(h(i,j,1) - G%GV%Angstrom)
     enddo
   endif
   do k=kb_min,nz-1 ; do i=is,ie
@@ -1068,12 +1068,12 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, CS, TKE_to_Kd, maxT
     elseif (k > kb(i)) then
       maxEnt(i,k) = (1.0/dsp1_ds(i,k))*(maxEnt(i,k-1) + htot(i))
 !        maxEnt(i,k) = ds_dsp1(i,k)*(maxEnt(i,k-1) + htot(i)) ! BITWISE CHG
-      htot(i) = htot(i) + G%H_to_m*(h(i,j,k) - G%Angstrom)
+      htot(i) = htot(i) + G%GV%H_to_m*(h(i,j,k) - G%GV%Angstrom)
     endif
   enddo ; enddo
 
   do i=is,ie
-    htot(i) = G%H_to_m*(h(i,j,nz) - G%Angstrom) ; maxEnt(i,nz) = 0.0
+    htot(i) = G%GV%H_to_m*(h(i,j,nz) - G%GV%Angstrom) ; maxEnt(i,nz) = 0.0
     do_i(i) = (G%mask2dT(i,j) > 0.5)
   enddo
   do k=nz-1,kb_min,-1
@@ -1082,7 +1082,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, CS, TKE_to_Kd, maxT
       if (k<kb(i)) then ; do_i(i) = .false. ; cycle ; endif
       i_rem = i_rem + 1  ! Count the i-rows that are still being worked on.
       maxEnt(i,k) = MIN(maxEnt(i,k),dsp1_ds(i,k+1)*maxEnt(i,k+1) + htot(i))
-      htot(i) = htot(i) + G%H_to_m*(h(i,j,k) - G%Angstrom)
+      htot(i) = htot(i) + G%GV%H_to_m*(h(i,j,k) - G%GV%Angstrom)
     endif ; enddo
     if (i_rem == 0) exit
   enddo ! k-loop
@@ -1095,7 +1095,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, CS, TKE_to_Kd, maxT
   do k=2,kmb ; do i=is,ie
     maxTKE(i,k) = 0.0
     TKE_to_Kd(i,k) = 1.0 / ((N2_lay(i,k) + Omega2) * &
-                            (G%H_to_m*(h(i,j,k) + H_neglect)))
+                            (G%GV%H_to_m*(h(i,j,k) + H_neglect)))
   enddo ; enddo
   do k=kmb+1,kb_min-1 ; do i=is,ie
     !   These are the properties in the deeper mixed and buffer layers, and
@@ -1110,16 +1110,16 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, CS, TKE_to_Kd, maxT
       ! maxTKE is found by determining the kappa that gives maxEnt.
       ! ### This should be 1 / G_Earth * (delta rho_InSitu)
       !  kappa_max = I_dt * dRho_int(i,K+1) * maxEnt(i,k) * &
-      !             (G%H_to_m*h(i,j,k) + dh_max) / dRho_lay
+      !             (G%GV%H_to_m*h(i,j,k) + dh_max) / dRho_lay
       !  maxTKE(i,k) = G%g_Earth * dRho_lay * kappa_max
       ! dRho_int should already be non-negative, so the max is redundant?
       dh_max = maxEnt(i,k) * (1.0 + dsp1_ds(i,k))
       dRho_lay = 0.5 * max(dRho_int(i,K) + dRho_int(i,K+1), 0.0)
       maxTKE(i,k) = I_dt * ((G%g_Earth * I_Rho0) * &
           (0.5*max(dRho_int(i,K+1) + dsp1_ds(i,k)*dRho_int(i,K),0.0))) * &
-                   ((G%H_to_m*h(i,j,k) + dh_max) * maxEnt(i,k))
+                   ((G%GV%H_to_m*h(i,j,k) + dh_max) * maxEnt(i,k))
       TKE_to_Kd(i,k) = 1.0 / (G_Rho0 * dRho_lay + &
-                              CS%Omega**2 * G%H_to_m*(h(i,j,k) + H_neglect))
+                              CS%Omega**2 * G%GV%H_to_m*(h(i,j,k) + H_neglect))
     endif
   enddo ; enddo
 
@@ -1160,8 +1160,8 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, CS, dRho_int, N2_lay, N2_int, 
   integer :: i, k, is, ie, nz
 
   is = G%isc ; ie = G%iec ; nz = G%ke
-  G_Rho0    = G%g_Earth / G%Rho0
-  H_neglect = G%H_subroundoff
+  G_Rho0    = G%g_Earth / G%GV%Rho0
+  H_neglect = G%GV%H_subroundoff
 
   ! Find the (limited) density jump across each interface.
   do i=is,ie
@@ -1176,7 +1176,7 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, CS, dRho_int, N2_lay, N2_int, 
     endif
     do K=2,nz
       do i=is,ie
-        pres(i) = pres(i) + G%H_to_Pa*h(i,j,k-1)
+        pres(i) = pres(i) + G%GV%H_to_Pa*h(i,j,k-1)
         Temp_Int(i) = 0.5 * (T_f(i,j,k) + T_f(i,j,k-1))
         Salin_Int(i) = 0.5 * (S_f(i,j,k) + S_f(i,j,k-1))
       enddo
@@ -1198,18 +1198,18 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, CS, dRho_int, N2_lay, N2_int, 
   ! Set the buoyancy frequencies.
   do k=1,nz ; do i=is,ie
     N2_lay(i,k) = G_Rho0 * 0.5*(dRho_int(i,K) + dRho_int(i,K+1)) / &
-                  (G%H_to_m*(h(i,j,k) + H_neglect))
+                  (G%GV%H_to_m*(h(i,j,k) + H_neglect))
   enddo ; enddo
   do i=is,ie ; N2_int(i,1) = 0.0 ; N2_int(i,nz+1) = 0.0 ; enddo
   do K=2,nz ; do i=is,ie
     N2_int(i,K) = G_Rho0 * dRho_int(i,K) / &
-                  (0.5*G%H_to_m*(h(i,j,k-1) + h(i,j,k) + H_neglect))
+                  (0.5*G%GV%H_to_m*(h(i,j,k-1) + h(i,j,k) + H_neglect))
   enddo ; enddo
 
   ! Find the bottom boundary layer stratification, and use this in the deepest layers.
   do i=is,ie
     hb(i) = 0.0 ; dRho_bot(i) = 0.0
-    z_from_bot(i) = 0.5*G%H_to_m*h(i,j,nz)
+    z_from_bot(i) = 0.5*G%GV%H_to_m*h(i,j,nz)
     do_i(i) = (G%mask2dT(i,j) > 0.5)
 
     if (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation) then
@@ -1222,7 +1222,7 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, CS, dRho_int, N2_lay, N2_int, 
   do k=nz,2,-1
     do_any = .false.
     do i=is,ie ; if (do_i(i)) then
-      dz_int = 0.5*G%H_to_m*(h(i,j,k) + h(i,j,k-1))
+      dz_int = 0.5*G%GV%H_to_m*(h(i,j,k) + h(i,j,k-1))
       z_from_bot(i) = z_from_bot(i) + dz_int ! middle of the layer above
 
       hb(i) = hb(i) + dz_int
@@ -1231,7 +1231,7 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, CS, dRho_int, N2_lay, N2_int, 
       if (z_from_bot(i) > h_amp(i)) then
         if (k>2) then
           ! Always include at least one full layer.
-          hb(i) = hb(i) + 0.5*G%H_to_m*(h(i,j,k-1) + h(i,j,k-2))
+          hb(i) = hb(i) + 0.5*G%GV%H_to_m*(h(i,j,k-1) + h(i,j,k-2))
           dRho_bot(i) = dRho_bot(i) + dRho_int(i,K-1)
         endif
         do_i(i) = .false.
@@ -1246,14 +1246,14 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, CS, dRho_int, N2_lay, N2_int, 
     if (hb(i) > 0.0) then
       N2_bot(i) = (G_Rho0 * dRho_bot(i)) / hb(i)
     else ;  N2_bot(i) = 0.0 ; endif
-    z_from_bot(i) = 0.5*G%H_to_m*h(i,j,nz)
+    z_from_bot(i) = 0.5*G%GV%H_to_m*h(i,j,nz)
     do_i(i) = (G%mask2dT(i,j) > 0.5)
   enddo
 
   do k=nz,2,-1
     do_any = .false.
     do i=is,ie ; if (do_i(i)) then
-      dz_int = 0.5*G%H_to_m*(h(i,j,k) + h(i,j,k-1))
+      dz_int = 0.5*G%GV%H_to_m*(h(i,j,k) + h(i,j,k-1))
       z_from_bot(i) = z_from_bot(i) + dz_int ! middle of the layer above
 
       N2_int(i,K) = N2_bot(i)
@@ -1335,7 +1335,7 @@ subroutine double_diffusion(tv, h, T_f, S_f, j, G, CS, Kd_T_dd, Kd_S_dd)
     enddo
     do K=2,nz
       do i=is,ie
-        pres(i) = pres(i) + G%H_to_Pa*h(i,j,k-1)
+        pres(i) = pres(i) + G%GV%H_to_Pa*h(i,j,k-1)
         Temp_Int(i) = 0.5 * (T_f(i,j,k-1) + T_f(i,j,k))
         Salin_Int(i) = 0.5 * (S_f(i,j,k-1) + S_f(i,j,k))
       enddo
@@ -1428,8 +1428,8 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, &
   TKE_Ray = 0.0 ; Rayleigh_drag = .false.
   if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) Rayleigh_drag = .true.
 
-  I_Rho0 = 1.0/G%Rho0
-  R0_g = G%Rho0/G%g_Earth
+  I_Rho0 = 1.0/G%GV%Rho0
+  R0_g = G%GV%Rho0/G%g_Earth
 
   do K=2,nz ; Rint(K) = 0.5*(G%GV%Rlay(k-1)+G%GV%Rlay(k)) ; enddo
 
@@ -1452,12 +1452,12 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, &
       I2decay(i) = 0.5*CS%IMax_decay
     endif
     TKE(i) = ((CS%BBL_effic * cdrag_sqrt) * &
-              exp(-I2decay(i)*(G%H_to_m*h(i,j,nz))) ) * &
+              exp(-I2decay(i)*(G%GV%H_to_m*h(i,j,nz))) ) * &
              visc%TKE_BBL(i,j)
 
     if (ASSOCIATED(fluxes%TKE_tidal)) &
       TKE(i) = TKE(i) + fluxes%TKE_tidal(i,j) * I_Rho0 * &
-           (CS%BBL_effic * exp(-I2decay(i)*(G%H_to_m*h(i,j,nz))))
+           (CS%BBL_effic * exp(-I2decay(i)*(G%GV%H_to_m*h(i,j,nz))))
 
     ! Distribute the work over a BBL of depth 20^2 ustar^2 / g' following
     ! Killworth & Edwards (1999) and Zilitikevich & Mironov (1996).
@@ -1467,16 +1467,16 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, &
     gh_sum_top(i) = R0_g * 400.0 * ustar_h**2
 
     do_i(i) = (G%mask2dT(i,j) > 0.5)
-    htot(i) = G%H_to_m*h(i,j,nz)
-    rho_htot(i) = G%GV%Rlay(nz)*(G%H_to_m*h(i,j,nz))
+    htot(i) = G%GV%H_to_m*h(i,j,nz)
+    rho_htot(i) = G%GV%Rlay(nz)*(G%GV%H_to_m*h(i,j,nz))
     Rho_top(i) = G%GV%Rlay(1)
     if (CS%bulkmixedlayer .and. do_i(i)) Rho_top(i) = G%GV%Rlay(kb(i)-1)
   enddo
 
   do k=nz-1,2,-1 ; domore = .false.
     do i=is,ie ; if (do_i(i)) then
-      htot(i) = htot(i) + G%H_to_m*h(i,j,k)
-      rho_htot(i) = rho_htot(i) + G%GV%Rlay(k)*(G%H_to_m*h(i,j,k))
+      htot(i) = htot(i) + G%GV%H_to_m*h(i,j,k)
+      rho_htot(i) = rho_htot(i) + G%GV%Rlay(k)*(G%GV%H_to_m*h(i,j,k))
       if (htot(i)*G%GV%Rlay(k-1) <= (rho_htot(i) - gh_sum_top(i))) then
         ! The top of the mixing is in the interface atop the current layer.
         Rho_top(i) = (rho_htot(i) - gh_sum_top(i)) / htot(i)
@@ -1495,7 +1495,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, &
       i_rem = i_rem + 1  ! Count the i-rows that are still being worked on.
       !   Apply vertical decay of the turbulent energy.  This energy is
       ! simply lost.
-      TKE(i) = TKE(i) * exp(-I2decay(i) * (G%H_to_m*(h(i,j,k) + h(i,j,k+1))))
+      TKE(i) = TKE(i) * exp(-I2decay(i) * (G%GV%H_to_m*(h(i,j,k) + h(i,j,k+1))))
 
 !      if (maxEnt(i,k) <= 0.0) cycle
       if (maxTKE(i,k) <= 0.0) cycle
@@ -1638,7 +1638,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, G, CS,
   ! Determine whether to add Rayleigh drag contribution to TKE
   Rayleigh_drag = .false.
   if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) Rayleigh_drag = .true.
-  I_Rho0 = 1.0/G%Rho0
+  I_Rho0 = 1.0/G%GV%Rho0
   cdrag_sqrt = sqrt(CS%cdrag)
 
   TKE_Ray = 0. ! In case Rayleigh_drag is not used.
@@ -1670,7 +1670,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, G, CS,
     TKE_column = CS%BBL_effic * TKE_column ! Only use a fraction of the mechanical dissipation for mixing.
 
     TKE_remaining = TKE_column
-    total_thickness = ( sum(h(i,j,:)) + G%H_subroundoff )* G%H_to_m ! Total column thickness, in m.
+    total_thickness = ( sum(h(i,j,:)) + G%GV%H_subroundoff )* G%GV%H_to_m ! Total column thickness, in m.
     ustar_D = ustar * total_thickness
     z = 0.
     Kd_lower = 0. ! Diffusivity on bottom boundary.
@@ -1678,9 +1678,9 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, G, CS,
     ! Work upwards from the bottom, accumulating work used until it exceeds the available TKE input
     ! at the bottom.
     do k=G%ke,2,-1
-      dh = G%H_to_m * h(i,j,k) ! Thickness of this level in m.
+      dh = G%GV%H_to_m * h(i,j,k) ! Thickness of this level in m.
       km1 = max(k-1, 1)
-      dhm1 = G%H_to_m * h(i,j,km1) ! Thickness of level above in m.
+      dhm1 = G%GV%H_to_m * h(i,j,km1) ! Thickness of level above in m.
 
       ! Add in additional energy input from bottom-drag against slopes (sides)
       if (Rayleigh_drag) TKE_remaining = TKE_remaining + 0.5*CS%BBL_effic * G%IareaT(i,j) * &
@@ -1693,7 +1693,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, G, CS,
       ! This is energy loss in addition to work done as mixing, apparently to Joule heating.
       TKE_remaining = exp(-Idecay*dh) * TKE_remaining
 
-      z = z + h(i,j,k)*G%H_to_m ! Distance between upper interface of layer and the bottom, in m.
+      z = z + h(i,j,k)*G%GV%H_to_m ! Distance between upper interface of layer and the bottom, in m.
       D_minus_z = max(total_thickness - z, 0.) ! Thickness above layer, m.
 
       ! Diffusivity using law of the wall, limited by rotation, at height z, in m2/s.
@@ -1768,12 +1768,12 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, CS, Kd, TKE_to_Kd, Kd_int)
   Omega2    = CS%Omega**2
   C1_6      = 1.0 / 6.0
   kml       = G%GV%nkml
-  h_neglect = G%H_subroundoff*G%H_to_m
+  h_neglect = G%GV%H_subroundoff*G%GV%H_to_m
 
   if (.not.CS%ML_radiation) return
 
   do i=is,ie ; h_ml(i) = 0.0 ; do_i(i) = (G%mask2dT(i,j) > 0.5) ; enddo
-  do k=1,kml ; do i=is,ie ; h_ml(i) = h_ml(i) + G%H_to_m*h(i,j,k) ; enddo ; enddo
+  do k=1,kml ; do i=is,ie ; h_ml(i) = h_ml(i) + G%GV%H_to_m*h(i,j,k) ; enddo ; enddo
 
   do i=is,ie ; if (do_i(i)) then
     if (CS%ML_use_omega) then
@@ -1797,7 +1797,7 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, CS, Kd, TKE_to_Kd, Kd_int)
 
     ! Average the dissipation layer kml+1, using
     ! a more accurate Taylor series approximations for very thin layers.
-    z1 = (G%H_to_m*h(i,j,kml+1)) * I_decay(i)
+    z1 = (G%GV%H_to_m*h(i,j,kml+1)) * I_decay(i)
     if (z1 > 1e-5) then
       Kd_mlr = (TKE_ml_flux(i) * TKE_to_Kd(i,kml+1)) * &
                (1.0 - exp(-z1))
@@ -1824,7 +1824,7 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, CS, Kd, TKE_to_Kd, Kd_int)
   do k=kml+2,nz-1
     do_any = .false.
     do i=is,ie ; if (do_i(i)) then
-      dzL = G%H_to_m*h(i,j,k) ;  z1 = dzL*I_decay(i)
+      dzL = G%GV%H_to_m*h(i,j,k) ;  z1 = dzL*I_decay(i)
       if (z1 > 1e-5) then
         Kd_mlr = (TKE_ml_flux(i) * TKE_to_Kd(i,k)) * &
                  ((1.0 - exp(-z1)) / dzL)
@@ -1916,10 +1916,10 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
 
   do i=is,ie ; htot(i) = 0.0 ; Inv_int(i) = 0.0 ; Inv_int_lee(i) = 0.0 ; Inv_int_low(i) = 0.0 ;enddo
   do k=1,nz ; do i=is,ie
-    htot(i) = htot(i) + G%H_to_m*h(i,j,k)
+    htot(i) = htot(i) + G%GV%H_to_m*h(i,j,k)
   enddo ; enddo
 
-  I_Rho0 = 1.0/G%Rho0
+  I_Rho0 = 1.0/G%GV%Rho0
 
   use_Polzin = ((CS%Int_tide_dissipation .and. (CS%int_tide_profile == POLZIN_09)) .or. &
                 (CS%lee_wave_dissipation .and. (CS%lee_wave_profile == POLZIN_09)) .or. &
@@ -1931,9 +1931,9 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
   ! Calculate parameters for vertical structure of dissipation
   ! Simmons:
   if ( use_Simmons ) then
-    Izeta = 1.0 / max(CS%Int_tide_decay_scale, G%H_subroundoff*G%H_to_m)
+    Izeta = 1.0 / max(CS%Int_tide_decay_scale, G%GV%H_subroundoff*G%GV%H_to_m)
     Izeta_lee = 1.0 / max(CS%Int_tide_decay_scale*CS%Decay_scale_factor_lee, &
-                          G%H_subroundoff*G%H_to_m)
+                          G%GV%H_subroundoff*G%GV%H_to_m)
     do i=is,ie
       CS%Nb(i,j) = sqrt(N2_bot(i))
       if (associated(dd%N2_bot)) dd%N2_bot(i,j) = N2_bot(i)
@@ -1952,7 +1952,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
           Inv_int_low(i) = 1.0 / (1.0 - exp(-Izeta*htot(i)))
         endif
       endif
-      z_from_bot(i) = G%H_to_m*h(i,j,nz)
+      z_from_bot(i) = G%GV%H_to_m*h(i,j,nz)
     enddo
   endif ! Simmons
 
@@ -1961,10 +1961,10 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
     ! WKB scaling of the vertical coordinate
     do i=is,ie ; N2_meanz(i)=0.0 ; enddo
     do k=1,nz ; do i=is,ie
-      N2_meanz(i) = N2_meanz(i) + N2_lay(i,k)*G%H_to_m*h(i,j,k)
+      N2_meanz(i) = N2_meanz(i) + N2_lay(i,k)*G%GV%H_to_m*h(i,j,k)
     enddo ; enddo
     do i=is,ie
-      N2_meanz(i) = N2_meanz(i) / (htot(i) + G%H_subroundoff*G%H_to_m)
+      N2_meanz(i) = N2_meanz(i) / (htot(i) + G%GV%H_subroundoff*G%GV%H_to_m)
       if (associated(dd%N2_meanz))  dd%N2_meanz(i,j) = N2_meanz(i)
     enddo
 
@@ -1972,7 +1972,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
     do i=is,ie ; htot_WKB(i) = htot(i) ; enddo
 !    do i=is,ie ; htot_WKB(i) = 0.0 ; enddo
 !    do k=1,nz ; do i=is,ie
-!      htot_WKB(i) = htot_WKB(i) + G%H_to_m*h(i,j,k)*N2_lay(i,k) / N2_meanz(i)
+!      htot_WKB(i) = htot_WKB(i) + G%GV%H_to_m*h(i,j,k)*N2_lay(i,k) / N2_meanz(i)
 !    enddo ; enddo
     ! htot_WKB(i) = htot(i) ! Nearly equivalent and simpler
 
@@ -2025,11 +2025,11 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
         endif
       endif
 
-      z_from_bot(i) = G%H_to_m*h(i,j,nz)
+      z_from_bot(i) = G%GV%H_to_m*h(i,j,nz)
       ! Use the new formulation for WKB scaling.  N2 is referenced to its
       ! vertical mean.
       if (N2_meanz(i) > 1.0e-14 ) then
-        z_from_bot_WKB(i) = G%H_to_m*h(i,j,nz)*N2_lay(i,nz) / N2_meanz(i)
+        z_from_bot_WKB(i) = G%GV%H_to_m*h(i,j,nz)*N2_lay(i,nz) / N2_meanz(i)
       else ; z_from_bot_WKB(i) = 0 ; endif
     enddo
   endif  ! Polzin
@@ -2068,7 +2068,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
   if ( use_Simmons ) then
     do k=nz-1,2,-1 ; do i=is,ie
       if (max_TKE(i,k) <= 0.0) cycle
-      z_from_bot(i) = z_from_bot(i) + G%H_to_m*h(i,j,k)
+      z_from_bot(i) = z_from_bot(i) + G%GV%H_to_m*h(i,j,k)
 
       ! Fraction of bottom flux predicted to reach top of this layer
       TKE_frac_top(i)         = Inv_int(i)     * exp(-Izeta * z_from_bot(i))
@@ -2115,7 +2115,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
         if (k<nz) dd%Kd_itidal(i,j,K+1) = dd%Kd_itidal(i,j,K+1) + 0.5*Kd_add
       endif
       if (associated(dd%Kd_Itidal_work)) &
-        dd%Kd_itidal_work(i,j,k) = G%Rho0 * TKE_itide_lay
+        dd%Kd_itidal_work(i,j,k) = G%GV%Rho0 * TKE_itide_lay
       if (associated(dd%Fl_itidal)) dd%Fl_itidal(i,j,k) = TKE_itidal_rem(i)
 
       if (associated(dd%Kd_Niku)) then
@@ -2128,7 +2128,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
       endif
 !     if (associated(dd%Kd_Niku)) dd%Kd_Niku(i,j,K) = TKE_to_Kd(i,k) * TKE_Niku_lay
       if (associated(dd%Kd_Niku_work)) &
-        dd%Kd_Niku_work(i,j,k) = G%Rho0 * TKE_Niku_lay
+        dd%Kd_Niku_work(i,j,k) = G%GV%Rho0 * TKE_Niku_lay
 
       if (associated(dd%Kd_lowmode)) then
         ! If at layers, dd%Kd_lowmode is just TKE_to_Kd(i,k) * TKE_lowmode_lay
@@ -2139,7 +2139,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
         if (k<nz) dd%Kd_lowmode(i,j,K+1) = dd%Kd_lowmode(i,j,K+1) + 0.5*Kd_add
       endif
       if (associated(dd%Kd_lowmode_work)) &
-        dd%Kd_lowmode_work(i,j,k) = G%Rho0 * TKE_lowmode_lay
+        dd%Kd_lowmode_work(i,j,k) = G%GV%Rho0 * TKE_lowmode_lay
       if (associated(dd%Fl_lowmode)) dd%Fl_lowmode(i,j,k) = TKE_lowmode_rem(i)
 
     enddo ; enddo ;
@@ -2149,9 +2149,9 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
   if ( use_Polzin ) then
     do k=nz-1,2,-1 ; do i=is,ie
       if (max_TKE(i,k) <= 0.0) cycle
-      z_from_bot(i) = z_from_bot(i) + G%H_to_m*h(i,j,k)
+      z_from_bot(i) = z_from_bot(i) + G%GV%H_to_m*h(i,j,k)
       if (N2_meanz(i) > 1.0e-14 ) then
-        z_from_bot_WKB(i) = z_from_bot_WKB(i) + G%H_to_m*h(i,j,k)*N2_lay(i,k)/N2_meanz(i)
+        z_from_bot_WKB(i) = z_from_bot_WKB(i) + G%GV%H_to_m*h(i,j,k)*N2_lay(i,k)/N2_meanz(i)
       else ; z_from_bot_WKB(i) = 0 ; endif
 
       ! Fraction of bottom flux predicted to reach top of this layer
@@ -2202,7 +2202,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
         if (k<nz) dd%Kd_itidal(i,j,K+1) = dd%Kd_itidal(i,j,K+1) + 0.5*Kd_add
       endif
       if (associated(dd%Kd_Itidal_work)) &
-        dd%Kd_itidal_work(i,j,k) = G%Rho0 * TKE_itide_lay
+        dd%Kd_itidal_work(i,j,k) = G%GV%Rho0 * TKE_itide_lay
       if (associated(dd%Fl_itidal)) dd%Fl_itidal(i,j,k) = TKE_itidal_rem(i)
 
       if (associated(dd%Kd_Niku)) then
@@ -2214,7 +2214,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
         if (k<nz) dd%Kd_Niku(i,j,K+1) = dd%Kd_Niku(i,j,K+1) + 0.5*Kd_add
       endif
    !  if (associated(dd%Kd_Niku)) dd%Kd_Niku(i,j,K) = TKE_to_Kd(i,k) * TKE_Niku_lay
-      if (associated(dd%Kd_Niku_work)) dd%Kd_Niku_work(i,j,k) = G%Rho0 * TKE_Niku_lay
+      if (associated(dd%Kd_Niku_work)) dd%Kd_Niku_work(i,j,k) = G%GV%Rho0 * TKE_Niku_lay
 
       if (associated(dd%Kd_lowmode)) then
         ! If at layers, dd%Kd_lowmode is just TKE_to_Kd(i,k) * TKE_lowmode_lay
@@ -2225,7 +2225,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, CS, &
         if (k<nz) dd%Kd_lowmode(i,j,K+1) = dd%Kd_lowmode(i,j,K+1) + 0.5*Kd_add
       endif
       if (associated(dd%Kd_lowmode_work)) &
-        dd%Kd_lowmode_work(i,j,k) = G%Rho0 * TKE_lowmode_lay
+        dd%Kd_lowmode_work(i,j,k) = G%GV%Rho0 * TKE_lowmode_lay
       if (associated(dd%Fl_lowmode)) dd%Fl_lowmode(i,j,k) = TKE_lowmode_rem(i)
 
     enddo ; enddo;
@@ -2299,7 +2299,7 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, CS)
     do k=nz,1,-1
       domore = .false.
       do i=is,ie ; if (do_i(i)) then
-        hvel = 0.5*G%H_to_m*(h(i,j,k) + h(i,j+1,k))
+        hvel = 0.5*G%GV%H_to_m*(h(i,j,k) + h(i,j+1,k))
         if ((htot(i) + hvel) >= visc%bbl_thick_v(i,J)) then
           vhtot(i) = vhtot(i) + (visc%bbl_thick_v(i,J) - htot(i))*v(i,J,k)
           htot(i) = visc%bbl_thick_v(i,J)
@@ -2328,7 +2328,7 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, CS)
     endif ; enddo
     do k=nz,1,-1 ; domore = .false.
       do I=is-1,ie ; if (do_i(I)) then
-        hvel = 0.5*G%H_to_m*(h(i,j,k) + h(i+1,j,k))
+        hvel = 0.5*G%GV%H_to_m*(h(i,j,k) + h(i+1,j,k))
         if ((htot(I) + hvel) >= visc%bbl_thick_u(I,j)) then
           uhtot(I) = uhtot(I) + (visc%bbl_thick_u(I,j) - htot(I))*u(I,j,k)
           htot(I) = visc%bbl_thick_u(I,j)
@@ -2409,7 +2409,7 @@ subroutine set_density_ratios(h, tv, kb, G, CS, j, ds_dsp1, rho_0)
   enddo
 
   if (CS%bulkmixedlayer) then
-    g_R0 = G%g_Earth/G%Rho0
+    g_R0 = G%g_Earth/G%GV%Rho0
     kmb = G%GV%nk_rho_varies
     eps = 0.1
     do i=is,ie ; p_ref(i) = tv%P_Ref ; enddo
@@ -2538,7 +2538,7 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp, in
                  "length scale.", default=.false.)
   if (CS%ML_radiation) then
     ! This give a minimum decay scale that is typically much less than Angstrom.
-    CS%ustar_min = 2e-4*CS%omega*(G%Angstrom + G%H_subroundoff)
+    CS%ustar_min = 2e-4*CS%omega*(G%GV%Angstrom + G%GV%H_subroundoff)
 
     call get_param(param_file, mod, "ML_RAD_EFOLD_COEFF", CS%ML_rad_efold_coeff, &
                  "A coefficient that is used to scale the penetration \n"//&
@@ -2849,7 +2849,7 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp, in
                          (CS%dissip_N0>0.) .or. (CS%dissip_Kd_min>0.)
   CS%dissip_N2 = 0.0
   if (CS%FluxRi_max > 0.0) &
-    CS%dissip_N2 = CS%dissip_Kd_min * G%rho0 / CS%FluxRi_max
+    CS%dissip_N2 = CS%dissip_Kd_min * G%GV%Rho0 / CS%FluxRi_max
 
   if (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation) then
     call get_param(param_file, mod, "INT_TIDE_DECAY_SCALE", CS%Int_tide_decay_scale, &
@@ -2925,7 +2925,7 @@ subroutine set_diffusivity_init(Time, G, param_file, diag, CS, diag_to_Z_CSp, in
 
       utide = CS%tideamp(i,j)
       ! Compute the fixed part of internal tidal forcing; units are [kg s-2] here.
-      CS%TKE_itidal(i,j) = 0.5*CS%kappa_h2_factor*G%Rho0*&
+      CS%TKE_itidal(i,j) = 0.5*CS%kappa_h2_factor*G%GV%Rho0*&
            CS%kappa_itides*CS%h2(i,j)*utide*utide
     enddo; enddo
 

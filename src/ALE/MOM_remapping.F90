@@ -21,12 +21,10 @@ implicit none ; private
 !> Container for remapping parameters
 type, public :: remapping_CS
   private
-  !> Number of layers/levels in vertical
-  integer :: nk = 0
   !> Determines which reconstruction to use
   integer :: remapping_scheme = -911
   !> Degree of polynomial reconstruction
-  integer :: degree=0
+  integer :: degree = 0
   !> If true, extrapolate boundaries
   logical :: boundary_extrapolation = .true.
   !> If true, reconstructions are checked for consistency.
@@ -39,9 +37,7 @@ end type
 
 ! The following routines are visible to the outside world
 public remapping_core_h, remapping_core_w
-public initialize_remapping, end_remapping
-public remapEnableBoundaryExtrapolation, remapDisableBoundaryExtrapolation
-public setReconstructionType
+public initialize_remapping, end_remapping, remapping_set_param
 public remappingUnitTests
 public dzFromH1H2
 
@@ -82,6 +78,33 @@ real, parameter :: h_neglect = 1.E-30 !< A dimensional (H units) number that can
 
 contains
 
+!> Set parameters within remapping object
+subroutine remapping_set_param(CS, remapping_scheme, boundary_extrapolation,  &
+               check_reconstruction, check_remapping, force_bounds_in_subcell)
+  type(remapping_CS),         intent(inout) :: CS !< Remapping control structure
+  character(len=*), optional, intent(in)    :: remapping_scheme !< Remapping scheme to use
+  logical, optional,          intent(in)    :: boundary_extrapolation !< Indicate to extrapolate in boundary cells
+  logical, optional,          intent(in)    :: check_reconstruction !< Indicate to check reconstructions
+  logical, optional,          intent(in)    :: check_remapping !< Indicate to check results of remapping
+  logical, optional,          intent(in)    :: force_bounds_in_subcell !< Force subcells values to be bounded
+
+  if (present(remapping_scheme)) then
+    call setReconstructionType( remapping_scheme, CS )
+  endif
+  if (present(boundary_extrapolation)) then
+    CS%boundary_extrapolation = boundary_extrapolation
+  endif
+  if (present(check_reconstruction)) then
+    CS%check_reconstruction = check_reconstruction
+  endif
+  if (present(check_remapping)) then
+    CS%check_remapping = check_remapping
+  endif
+  if (present(force_bounds_in_subcell)) then
+    CS%force_bounds_in_subcell = force_bounds_in_subcell
+  endif
+end subroutine remapping_set_param
+
 !> Calculate edge coordinate x from cell width h
 subroutine buildGridFromH(nz, h, x)
   integer,               intent(in)    :: nz !< Number of cells
@@ -96,52 +119,6 @@ subroutine buildGridFromH(nz, h, x)
   end do
 
 end subroutine buildGridFromH
-
-
-!> Check that two grids, xs and xf, are consistent to within roundoff.
-!! If strict=False, the end points of xs and xf are allowed to differ by
-!! numerical roundoff due to the nature of summation to obtain xs, xf.
-!! If strict=True, the end points must be identical.
-subroutine checkConsistantCoords(ns, xs, nf, xf, strict, msg)
-  integer,          intent(in) :: ns !< Number of cells in grid xs
-  integer,          intent(in) :: nf !< Number of cells in grid xf
-  real,             intent(in) :: xs(ns+1) !< Edge coordinates
-  real,             intent(in) :: xf(nf+1) !< Edge coordinates
-  logical,          intent(in) :: strict !< If False, allows total grid size
-                                         !! to differ by round-off
-  character(len=*), intent(in) :: msg !< Message to issue if test fails
-  ! Local variables
-  integer :: k
-  real    :: sumHs, sumHf
-
-  sumHs = xs(ns+1)-xs(1)
-  sumHf = xf(nf+1)-xf(1)
-
-  if (strict) then
-    if (sumHf /= sumHs) call &
-        MOM_error(FATAL,'MOM_remapping, checkConsistantCoords: '//&
-                        'Total thickness of two grids are not exactly equal.'//&
-                        ' Called from '//trim(msg) )
-  else ! not strict
-    if (isPosSumErrSignificant(ns, sumHs, nf, sumhf)) then
-      write(0,*) 'Start/final/start-final grid'
-      do k = 1,max(ns,nf)+1
-        if (k<=min(ns+1,nf+1)) then
-          write(0,'(i4,3es12.3)') k,xs(k),xf(k),xs(k)-xf(k)
-        elseif (k>ns+1) then
-          write(0,'(i4,12x,1es12.3)') k,xf(k)
-        else
-          write(0,'(i4,1es12.3)') k,xs(k)
-        endif
-      enddo
-      call MOM_error(FATAL,'MOM_remapping, checkConsistantCoords: '//&
-              'Total thickness of two grids do not match to within round-off.'//&
-              ' Called from '//trim(msg) )
-    endif
-  endif
-
-end subroutine checkConsistantCoords
-
 
 !> Compare two summation estimates of positive data and judge if due to more
 !! than round-off.
@@ -176,70 +153,6 @@ function isPosSumErrSignificant(n1, sum1, n2, sum2)
   endif
 end function isPosSumErrSignificant
 
-!> Calculates the sum of h(:)*q(:), and optionally returns a bound on the
-!! roundoff error in the sum.
-subroutine sumHtimesQ(nz, h, q, sumHQ, sumErr)
-  integer,             intent(in)  :: nz !< Number of cells
-  real, dimension(nz), intent(in)  :: h  !< Cell width
-  real, dimension(nz), intent(in)  :: q  !< Scalar value in cell
-  real,                intent(out) :: sumHQ !< Sum of h*q
-  real, optional,      intent(out) :: sumErr !< Estimate of round-off error
-  ! Local variables
-  integer :: k
-  real :: hq, eps
-
-  if (present(sumErr)) then ! Calculate the sum and estimate errors
-    eps = epsilon(q(1))
-    sumErr=0.
-    sumHQ = 0.
-    do k = 1,nz
-      hq = h(k)*q(k)
-      sumHQ = sumHQ + hq
-      if (k>1) sumErr = sumErr + eps*max(abs(sumHQ),abs(hq))
-    end do
-  else ! Calculate the sum
-    sumHQ = 0.
-    do k = 1,nz
-      sumHQ = sumHQ + h(k)*q(k)
-    end do
-  endif
-
-end subroutine sumHtimesQ
-
-
-!> Compare two summation estimates of signed data and judge if due to more
-!! than round-off.
-!! When two sums are calculated from different vectors that should add up to
-!! the same value, the results can differ by round off. The round off error
-!! can be bounded to be proportional to the number of operations.
-!! This function returns true if the difference between sum1 and sum2 is
-!! larger than than the estimated round off bound.
-function isSignedSumErrSignificant(n1, maxTerm1, sum1, n2, maxTerm2, sum2)
-  integer, intent(in) :: n1 !< Number of terms in sum1
-  integer, intent(in) :: n2 !< Number of terms in sum2
-  real,    intent(in) :: maxTerm1 !< Largest term in sum1
-  real,    intent(in) :: sum1 !< Sum of n1 terms
-  real,    intent(in) :: maxTerm2 !< Largest term in sum2
-  real,    intent(in) :: sum2 !< Sum of n2 terms
-  logical             :: isSignedSumErrSignificant !< True is difference in sums is large
-  ! Local variables
-  real :: sumErr, allowedErr, eps
-
-  sumErr = abs(sum1-sum2)
-  eps = epsilon(sumErr)
-  allowedErr = eps*0.5*( real(n1-1)*max(abs(maxTerm1),abs(sum1)) &
-                       + real(n2-1)*max(abs(maxTerm2),abs(sum2)) )
-  if (sumErr>allowedErr) then
-    write(0,*) 'isSignedSumErrSignificant: maxTerm1,maxTerm2=',maxTerm1,maxTerm2
-    write(0,*) 'isSignedSumErrSignificant: sum1,sum2=',sum1,sum2
-    write(0,*) 'isSignedSumErrSignificant: eps=',eps
-    write(0,*) 'isSignedSumErrSignificant: err,n*eps*maxTerm=',sumErr,allowedErr
-    isSignedSumErrSignificant = .true.
-  else
-    isSignedSumErrSignificant = .false.
-  endif
-end function isSignedSumErrSignificant
-
 !> Remaps column of values u0 on grid h0 to grid h1
 !! assuming the top edge is aligned.
 subroutine remapping_core_h( n0, h0, u0, n1, h1, u1, CS )
@@ -264,13 +177,13 @@ subroutine remapping_core_h( n0, h0, u0, n1, h1, u1, CS )
   if (CS%check_reconstruction) call check_reconstructions_1d(n0, h0, u0, CS%degree, &
                                    CS%boundary_extrapolation, ppoly_r_coefficients, ppoly_r_E, ppoly_r_S)
 
-  if (CS%check_remapping) call measure_input_bounds( n0, h0, u0, ppoly_r_E, h0tot, h0err, u0tot, u0err, u0min, u0max )
 
   call remap_via_sub_cells( n0, h0, u0, ppoly_r_E, ppoly_r_coefficients, n1, h1, iMethod, &
                             CS%force_bounds_in_subcell, u1, uh_err )
 
   if (CS%check_remapping) then
     ! Check errors and bounds
+    call measure_input_bounds( n0, h0, u0, ppoly_r_E, h0tot, h0err, u0tot, u0err, u0min, u0max )
     call measure_output_bounds( n1, h1, u1, h1tot, h1err, u1tot, u1err, u1min, u1max )
     if (iMethod<5) then ! We except PQM until we've debugged it
     if ( (abs(u1tot-u0tot)>(u0err+u1err)+uh_err .and. abs(h1tot-h0tot)<h0err+h1err) &
@@ -332,8 +245,6 @@ subroutine remapping_core_w( CS, n0, h0, u0, n1, dx, u1 )
   if (CS%check_reconstruction) call check_reconstructions_1d(n0, h0, u0, CS%degree, &
                                    CS%boundary_extrapolation, ppoly_r_coefficients, ppoly_r_E, ppoly_r_S)
 
-  if (CS%check_remapping) call measure_input_bounds( n0, h0, u0, ppoly_r_E, h0tot, h0err, u0tot, u0err, u0min, u0max )
-
   ! This is a temporary step prior to switching to remapping_core_h()
   do k = 1, n1
     if (k<=n0) then
@@ -349,6 +260,7 @@ subroutine remapping_core_w( CS, n0, h0, u0, n1, dx, u1 )
 
   if (CS%check_remapping) then
     ! Check errors and bounds
+    call measure_input_bounds( n0, h0, u0, ppoly_r_E, h0tot, h0err, u0tot, u0err, u0min, u0max )
     call measure_output_bounds( n1, h1, u1, h1tot, h1err, u1tot, u1err, u1min, u1max )
     if (iMethod<5) then ! We except PQM until we've debugged it
     if ( (abs(u1tot-u0tot)>(u0err+u1err)+uh_err .and. abs(h1tot-h0tot)<h0err+h1err) &
@@ -479,7 +391,6 @@ subroutine check_reconstructions_1d(n0, h0, u0, deg, boundary_extrapolation, &
   logical :: problem_detected
 
   problem_detected = .false.
-  if (deg>1) return ! Only apply tests to PCM and PLM (for now)
   do i0 = 1, n0
     u_l = u0(max(1,i0-1))
     u_c = u0(i0)
@@ -930,12 +841,30 @@ real function average_value_ppoly( n0, u0, ppoly0_E, ppoly0_coefficients, method
       case ( INTEGRATION_PCM )
         u_ave =        ppoly0_coefficients(i0,1)
       case ( INTEGRATION_PLM )
-        u_ave =        ppoly0_coefficients(i0,1)   &
-              + xa *   ppoly0_coefficients(i0,2)
+       !u_ave =        ppoly0_coefficients(i0,1)   &
+       !      + xa *   ppoly0_coefficients(i0,2)
+        a_L = ppoly0_E(i0, 1)
+        a_R = ppoly0_E(i0, 2)
+        Ya = 1. - xa
+        if (xa < 0.5) then
+          u_ave = a_L + xa * ( a_R - a_L )
+        else
+          u_ave = a_R + Ya * ( a_L - a_R )
+        endif
       case ( INTEGRATION_PPM )
-        u_ave =        ppoly0_coefficients(i0,1)   &
-              + xa * ( ppoly0_coefficients(i0,2)   &
-              + xa *   ppoly0_coefficients(i0,3) )
+       !u_ave =        ppoly0_coefficients(i0,1)   &
+       !      + xa * ( ppoly0_coefficients(i0,2)   &
+       !      + xa *   ppoly0_coefficients(i0,3) )
+        a_L = ppoly0_E(i0, 1)
+        a_R = ppoly0_E(i0, 2)
+        u_c = u0(i0)
+        a_c = 3. * ( ( u_c - a_L ) + ( u_c - a_R ) ) ! a_6
+        Ya = 1. - xa
+        if (xa < 0.5) then
+          u_ave = a_L + xa * ( ( a_R - a_L ) + a_c * Ya )
+        else
+          u_ave = a_R + Ya * ( ( a_L - a_R ) + a_c * xa )
+        endif
       case ( INTEGRATION_PQM )
         u_ave =        ppoly0_coefficients(i0,1)   &
               + xa * ( ppoly0_coefficients(i0,2)   &
@@ -1454,29 +1383,20 @@ subroutine dzFromH1H2( n1, h1, n2, h2, dx )
 end subroutine dzFromH1H2
 
 !> Constructor for remapping control structure
-subroutine initialize_remapping( nk, remappingScheme, CS, &
+subroutine initialize_remapping( CS, remapping_scheme, boundary_extrapolation, &
                 check_reconstruction, check_remapping, force_bounds_in_subcell)
   ! Arguments
-  integer,            intent(in)    :: nk !< Number of cells to assume for
-                                          !! polynomials storage
-  character(len=*),   intent(in)    :: remappingScheme !< Remapping scheme to use
   type(remapping_CS), intent(inout) :: CS !< Remapping control structure
+  character(len=*),   intent(in)    :: remapping_scheme !< Remapping scheme to use
+  logical, optional,  intent(in)    :: boundary_extrapolation !< Indicate to extrapolate in boundary cells
   logical, optional,  intent(in)    :: check_reconstruction !< Indicate to check reconstructions
   logical, optional,  intent(in)    :: check_remapping !< Indicate to check results of remapping
   logical, optional,  intent(in)    :: force_bounds_in_subcell !< Force subcells values to be bounded
 
-  CS%nk = nk
-
-  call setReconstructionType( remappingScheme, CS )
-  if (present(check_reconstruction)) then
-    CS%check_reconstruction = check_reconstruction
-  endif
-  if (present(check_remapping)) then
-    CS%check_remapping = check_remapping
-  endif
-  if (present(force_bounds_in_subcell)) then
-    CS%force_bounds_in_subcell = force_bounds_in_subcell
-  endif
+  ! Note that remapping_scheme is mandatory fir initialize_remapping()
+  call remapping_set_param(CS, remapping_scheme=remapping_scheme, boundary_extrapolation=boundary_extrapolation,  &
+               check_reconstruction=check_reconstruction, check_remapping=check_remapping, &
+               force_bounds_in_subcell=force_bounds_in_subcell)
 
 end subroutine initialize_remapping
 
@@ -1517,18 +1437,6 @@ subroutine setReconstructionType(string,CS)
   CS%degree = degree
 
 end subroutine setReconstructionType
-
-!> Enables extrapolation in boundary cells
-subroutine remapEnableBoundaryExtrapolation(CS)
-  type(remapping_CS), intent(inout) :: CS !< Remapping control structure
-  CS%boundary_extrapolation = .true.
-end subroutine remapEnableBoundaryExtrapolation
-
-!> Disables extrapolation in boundary cells
-subroutine remapDisableBoundaryExtrapolation(CS)
-  type(remapping_CS), intent(inout) :: CS !< Remapping control structure
-  CS%boundary_extrapolation = .false.
-end subroutine remapDisableBoundaryExtrapolation
 
 !> Destrcutor for remapping control structure
 subroutine end_remapping(CS)
@@ -1576,7 +1484,7 @@ logical function remappingUnitTests()
   remappingUnitTests = remappingUnitTests .or. thisTest
 
   thisTest = .false.
-  call initialize_remapping(n0, 'PPM_H4', CS)
+  call initialize_remapping(CS, 'PPM_H4')
   write(*,*) 'h0 (test data)'
   call dumpGrid(n0,h0,x0,u0)
 

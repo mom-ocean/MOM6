@@ -141,11 +141,11 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS, Reg)
 
 !$OMP do
   do j=jsd,jed ; do I=isd,ied-1
-    uh_neglect(I,j) = G%H_subroundoff*MIN(G%areaT(i,j),G%areaT(i+1,j))
+    uh_neglect(I,j) = G%GV%H_subroundoff*MIN(G%areaT(i,j),G%areaT(i+1,j))
   enddo ; enddo
 !$OMP do
   do J=jsd,jed-1 ; do i=isd,ied
-    vh_neglect(i,J) = G%H_subroundoff*MIN(G%areaT(i,j),G%areaT(i,j+1))
+    vh_neglect(i,J) = G%GV%H_subroundoff*MIN(G%areaT(i,j),G%areaT(i,j+1))
   enddo ; enddo
 
 !$OMP do
@@ -324,8 +324,8 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
 
   usePLMslope = .not. usePPM
 
-  min_h = 0.1*G%Angstrom
-  h_neglect = G%H_subroundoff
+  min_h = 0.1*G%GV%Angstrom
+  h_neglect = G%GV%H_subroundoff
 
 ! do I=is-1,ie ; ts2(I) = 0.0 ; enddo
   do I=is-1,ie ; CFL(I) = 0.0 ; enddo
@@ -368,10 +368,10 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
         uhh(I) = 0.0
         CFL(I) = 0.0
       elseif (uhr(I,j,k) < 0.0) then
-        hup = (hprev(i+1,j,k)-G%areaT(i+1,j)*G%Angstrom*0.1)
+        hup = (hprev(i+1,j,k)-G%areaT(i+1,j)*G%GV%Angstrom*0.1) !### Change to *min_h
         hlos = MAX(0.0,uhr(I+1,j,k))
         if (((hup + uhr(I,j,k) - hlos) < 0.0) .and. &
-            ((0.5*hup + uhr(I,j,k)) < 0.0)) then
+            ((0.5*hup + uhr(I,j,k)) < 0.0)) then !### Add parentheses.
           uhh(I) = MIN(-0.5*hup,-hup+hlos,0.0)
           domore_u(j,k) = .true.
         else
@@ -380,10 +380,10 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
        !ts2(I) = 0.5*(1.0 + uhh(I)/(hprev(i+1,j,k)+h_neglect))
         CFL(I) = - uhh(I)/(hprev(i+1,j,k)+h_neglect) ! CFL is positive
       else
-        hup = (hprev(i,j,k)-G%areaT(i,j)*G%Angstrom*0.1)
+        hup = (hprev(i,j,k)-G%areaT(i,j)*G%GV%Angstrom*0.1) !### Change to *min_h
         hlos = MAX(0.0,-uhr(I-1,j,k))
         if (((hup - uhr(I,j,k) - hlos) < 0.0) .and. &
-            ((0.5*hup - uhr(I,j,k)) < 0.0)) then
+            ((0.5*hup - uhr(I,j,k)) < 0.0)) then !### Add parentheses.
           uhh(I) = MAX(0.5*hup,hup-hlos,0.0)
           domore_u(j,k) = .true.
         else
@@ -585,8 +585,8 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
 
   usePLMslope = .not. usePPM
 
-  min_h = 0.1*G%Angstrom
-  h_neglect = G%H_subroundoff
+  min_h = 0.1*G%GV%Angstrom
+  h_neglect = G%GV%H_subroundoff
 
  !do i=is,ie ; ts2(i) = 0.0 ; enddo
   do_j_tr(js-1) = domore_v(js-1,k) ; do_j_tr(je+1) = domore_v(je,k)
@@ -629,7 +629,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
         vhh(i,J) = 0.0
         CFL(i) = 0.0
       elseif (vhr(i,J,k) < 0.0) then
-        hup = (hprev(i,j+1,k)-G%areaT(i,j+1)*G%Angstrom*0.1)
+        hup = (hprev(i,j+1,k)-G%areaT(i,j+1)*G%GV%Angstrom*0.1) !### Change to *min_h
         hlos = MAX(0.0,vhr(i,J+1,k))
         if ((((hup - hlos) + vhr(i,J,k)) < 0.0) .and. &
             ((0.5*hup + vhr(i,J,k)) < 0.0)) then
@@ -641,7 +641,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
        !ts2(i) = 0.5*(1.0 + vhh(i,J) / (hprev(i,j+1,k)+h_neglect))
         CFL(i) = - vhh(i,J) / (hprev(i,j+1,k)+h_neglect) ! CFL is positive
       else
-        hup = (hprev(i,j,k)-G%areaT(i,j)*G%Angstrom*0.1)
+        hup = (hprev(i,j,k)-G%areaT(i,j)*G%GV%Angstrom*0.1) !### Change to *min_h
         hlos = MAX(0.0,-vhr(i,J-1,k))
         if ((((hup - hlos) - vhr(i,J,k)) < 0.0) .and. &
             ((0.5*hup - vhr(i,J,k)) < 0.0)) then

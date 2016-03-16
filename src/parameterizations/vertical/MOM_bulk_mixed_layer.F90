@@ -404,7 +404,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
   Inkml = 1.0 / REAL(CS%nkml)
   if (CS%nkml > 1) Inkmlm1 = 1.0 / REAL(CS%nkml-1)
 
-  Irho0 = 1.0 / G%Rho0
+  Irho0 = 1.0 / G%GV%Rho0
   dt__diag = dt ; if (present(dt_diag)) dt__diag = dt_diag
   Idt = 1.0/dt
   Idt_diag = 1.0 / dt__diag
@@ -497,10 +497,10 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
     do k=1,nz ; do i=is,ie
       h(i,k) = h_3d(i,j,k) ; u(i,k) = u_3d(i,j,k) ; v(i,k) = v_3d(i,j,k)
       h_orig(i,k) = h_3d(i,j,k)
-      eps(i,k) = 0.0 ; if (k > nkmb) eps(i,k) = G%Angstrom
+      eps(i,k) = 0.0 ; if (k > nkmb) eps(i,k) = G%GV%Angstrom
       T(i,k) = tv%T(i,j,k) ; S(i,k) = tv%S(i,j,k)
       do n=1,nsw
-        opacity_band(n,i,k) = G%H_to_m*optics%opacity_band(n,i,j,k)
+        opacity_band(n,i,k) = G%GV%H_to_m*optics%opacity_band(n,i,j,k)
       enddo
     enddo ; enddo
 
@@ -512,7 +512,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
     ! Calculate an estimate of the mid-mixed layer pressure (in Pa)
     do i=is,ie ; p_ref(i) = 0.0 ; enddo
     do k=1,CS%nkml ; do i=is,ie
-      p_ref(i) = p_ref(i) + 0.5*G%H_to_Pa*h(i,k)
+      p_ref(i) = p_ref(i) + 0.5*G%GV%H_to_Pa*h(i,k)
     enddo ; enddo
     call calculate_density_derivs(T(:,1), S(:,1), p_ref, dR0_dT, dR0_dS, &
                                   is, ie-is+1, tv%eqn_of_state)
@@ -635,10 +635,10 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
       h(i,0) = htot(i)
     endif ; enddo
     if (write_diags .and. ALLOCATED(CS%ML_depth)) then ; do i=is,ie
-      CS%ML_depth(i,j) = h(i,0) * G%H_to_m
+      CS%ML_depth(i,j) = h(i,0) * G%GV%H_to_m
     enddo ; endif
     if (ASSOCIATED(tv%Hml)) then ; do i=is,ie
-      tv%Hml(i,j) = G%mask2dT(i,j) * (h(i,0) * G%H_to_m)
+      tv%Hml(i,j) = G%mask2dT(i,j) * (h(i,0) * G%GV%H_to_m)
     enddo ; endif
 
 ! At this point, return water to the original layers, but constrained to
@@ -672,14 +672,14 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
                           hmbl_prev(i,j-1) - dHD*min(h_sum(i,j),h_sum(i,j-1)), &
                           hmbl_prev(i,j+1) - dHD*min(h_sum(i,j),h_sum(i,j+1))) )
 
-          Hsfc_min(i,j) = G%H_to_m*max(h(i,0), min(Hsfc(i), H_nbr))
+          Hsfc_min(i,j) = G%GV%H_to_m*max(h(i,0), min(Hsfc(i), H_nbr))
 
           if (CS%limit_det) max_BL_det(i) = max(0.0, Hsfc(i)-H_nbr)
         enddo
       endif
 
       if (CS%id_Hsfc_max > 0) then ; do i=is,ie
-        Hsfc_max(i,j) = Hsfc(i)*G%H_to_m
+        Hsfc_max(i,j) = Hsfc(i)*G%GV%H_to_m
       enddo ; endif
     endif
 
@@ -703,9 +703,9 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
 
 
     if (CS%id_Hsfc_used > 0) then
-      do i=is,ie ; Hsfc_used(i,j) = h(i,0)*G%H_to_m ; enddo
+      do i=is,ie ; Hsfc_used(i,j) = h(i,0)*G%GV%H_to_m ; enddo
       do k=CS%nkml+1,nkmb ; do i=is,ie
-        Hsfc_used(i,j) = Hsfc_used(i,j) + h(i,k)*G%H_to_m
+        Hsfc_used(i,j) = Hsfc_used(i,j) + h(i,k)*G%GV%H_to_m
       enddo ; enddo
     endif
 
@@ -799,7 +799,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
       do i=is,ie
         h_miss(i,j) = h_miss(i,j) + abs(h_3d(i,j,nz) - (h_orig(i,nz) + &
           ((eaml(i,nz) - ebml(i,nz-1)) + ebml(i,nz))))
-        h_miss(i,j) = G%H_to_m * h_miss(i,j)
+        h_miss(i,j) = G%GV%H_to_m * h_miss(i,j)
       enddo
     endif
 
@@ -905,7 +905,7 @@ subroutine convective_adjustment(h, u, v, R0, Rcv, T, S, eps, d_eb, &
   integer :: is, ie, nz, i, k, k1, nzc, nkmb
 
   is = G%isc ; ie = G%iec ; nz = G%ke
-  g_H2_2Rho0 = (G%g_Earth * G%H_to_m**2) / (2.0 * G%Rho0)
+  g_H2_2Rho0 = (G%g_Earth * G%GV%H_to_m**2) / (2.0 * G%GV%Rho0)
   nzc = nz ; if (present(nz_conv)) nzc = nz_conv
   nkmb = CS%nkml+CS%nkbl
 
@@ -955,7 +955,7 @@ subroutine convective_adjustment(h, u, v, R0, Rcv, T, S, eps, d_eb, &
       Ih = 1.0 / h(i,k1)
       R0(i,k1) = R0_tot(i) * Ih
       u(i,k1) = uhtot(i) * Ih ; v(i,k1) = vhtot(i) * Ih
-      dKE_CA(i,k1) = dKE_CA(i,k1) + G%H_to_m * (CS%bulk_Ri_convective * &
+      dKE_CA(i,k1) = dKE_CA(i,k1) + G%GV%H_to_m * (CS%bulk_Ri_convective * &
            (KE_orig(i) - 0.5*h(i,k1)*(u(i,k1)**2 + v(i,k1)**2)))
       Rcv(i,k1) = Rcv_tot(i) * Ih
       T(i,k1) = Ttot(i) * Ih ; S(i,k1) = Stot(i) * Ih
@@ -1061,9 +1061,9 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
     C2, &              ! Temporary variable with units of kg m-3 H-1.
     r_SW_top           ! Temporary variables with units of H kg m-3.
 
-  Angstrom = G%Angstrom
+  Angstrom = G%GV%Angstrom
   C1_3 = 1.0/3.0 ; C1_6 = 1.0/6.0
-  g_H2_2Rho0 = (G%g_Earth * G%H_to_m**2) / (2.0 * G%Rho0)
+  g_H2_2Rho0 = (G%g_Earth * G%GV%H_to_m**2) / (2.0 * G%GV%Rho0)
   Idt        = 1.0/dt
   is = G%isc ; ie = G%iec ; nz = G%ke
 
@@ -1118,9 +1118,9 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
     Conv_En(i) = 0.0 ; dKE_FC(i) = 0.0
     if(ASSOCIATED(fluxes%heat_content_massin))                            &
            fluxes%heat_content_massin(i,j) = fluxes%heat_content_massin(i,j) &
-                       + T_precip * netMassIn(i) * G%H_to_kg_m2 * fluxes%C_p * Idt
+                       + T_precip * netMassIn(i) * G%GV%H_to_kg_m2 * fluxes%C_p * Idt
     if (ASSOCIATED(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
-                         T_precip * netMassIn(i) * G%H_to_kg_m2
+                         T_precip * netMassIn(i) * G%GV%H_to_kg_m2
   endif ; enddo
 
   ! Now do netMassOut case in this block.
@@ -1166,14 +1166,14 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
         d_eb(i,k) = d_eb(i,k) - h_evap
 
         ! smg: when resolve the A=B code, we will set
-        ! heat_content_massout = heat_content_massout - T(i,k)*h_evap*G%H_to_kg_m2*fluxes%C_p*Idt
+        ! heat_content_massout = heat_content_massout - T(i,k)*h_evap*G%GV%H_to_kg_m2*fluxes%C_p*Idt
         ! by uncommenting the lines here.
         ! we will also then completely remove TempXpme from the model.
         if(ASSOCIATED(fluxes%heat_content_massout))                            &
            fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) &
-                                    - T(i,k)*h_evap*G%H_to_kg_m2 * fluxes%C_p * Idt
+                                    - T(i,k)*h_evap*G%GV%H_to_kg_m2 * fluxes%C_p * Idt
         if (ASSOCIATED(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) - &
-                                      T(i,k)*h_evap*G%H_to_kg_m2
+                                      T(i,k)*h_evap*G%GV%H_to_kg_m2
 
       endif
 
@@ -1280,7 +1280,7 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
         if (h_ent > 0.0) then
           if (htot(i) > 0.0) &
             dKE_FC(i) = dKE_FC(i) + CS%bulk_Ri_convective * 0.5 * &
-              ((G%H_to_m*h_ent) / (htot(i)*(h_ent+htot(i)))) * &
+              ((G%GV%H_to_m*h_ent) / (htot(i)*(h_ent+htot(i)))) * &
               ((uhtot(i)-u(i,k)*htot(i))**2 + (vhtot(i)-v(i,k)*htot(i))**2)
 
           htot(i)  = htot(i)  + h_ent
@@ -1377,7 +1377,7 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
       absf = 0.25*((abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I-1,J-1))) + &
                    (abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I-1,J))))
     absf_Ustar = absf / U_Star
-    Idecay_len_TKE(i) = (absf_Ustar * CS%TKE_decay) * G%H_to_m
+    Idecay_len_TKE(i) = (absf_Ustar * CS%TKE_decay) * G%GV%H_to_m
 
 !    The first number in the denominator could be anywhere up to 16.  The
 !  value of 3 was chosen to minimize the time-step dependence of the amount
@@ -1389,8 +1389,8 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
 !  scales contribute to mixed layer deepening at similar rates, even though
 !  small scales are dissipated more rapidly (implying they are less efficient).
 !     Ih = 1.0/(16.0*0.41*U_star*dt)
-    Ih = G%H_to_m/(3.0*0.41*U_star*dt)
-    cMKE(1,i) = 4.0 * Ih ; cMKE(2,i) = (absf_Ustar*G%H_to_m) * Ih
+    Ih = G%GV%H_to_m/(3.0*0.41*U_star*dt)
+    cMKE(1,i) = 4.0 * Ih ; cMKE(2,i) = (absf_Ustar*G%GV%H_to_m) * Ih
 
     if (Idecay_len_TKE(i) > 0.0) then
       exp_kh = exp(-htot(i)*Idecay_len_TKE(i))
@@ -1408,7 +1408,7 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
 
       if (totEn > 0.0) then
         nstar_FC = CS%nstar * totEn / (totEn + 0.2 * &
-                        sqrt(0.5 * dt * (absf*(htot(i)*G%H_to_m))**3 * totEn))
+                        sqrt(0.5 * dt * (absf*(htot(i)*G%GV%H_to_m))**3 * totEn))
       else
         nstar_FC = CS%nstar
       endif
@@ -1418,7 +1418,7 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
       if (Conv_En(i) > 0.0) then
         totEn = Conv_En(i) + TKE_CA * (htot(i) / h_CA(i))
        nstar_FC = CS%nstar * totEn / (totEn + 0.2 * &
-                        sqrt(0.5 * dt * (absf*(htot(i)*G%H_to_m))**3 * totEn))
+                        sqrt(0.5 * dt * (absf*(htot(i)*G%GV%H_to_m))**3 * totEn))
       else
         nstar_FC = CS%nstar
       endif
@@ -1426,7 +1426,7 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
       totEn = Conv_En(i) + TKE_CA
       if (TKE_CA > 0.0) then
         nstar_CA = CS%nstar * totEn / (totEn + 0.2 * &
-                        sqrt(0.5 * dt * (absf*(h_CA(i)*G%H_to_m))**3 * totEn))
+                        sqrt(0.5 * dt * (absf*(h_CA(i)*G%GV%H_to_m))**3 * totEn))
       else
         nstar_CA = CS%nstar
       endif
@@ -1571,9 +1571,9 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
   integer :: is, ie, nz, i, k, ks, itt, n
 
   C1_3 = 1.0/3.0 ; C1_6 = 1.0/6.0 ; C1_24 = 1.0/24.0
-  g_H_2Rho0 = (G%g_Earth * G%H_to_m) / (2.0 * G%Rho0)
-  Hmix_min = CS%Hmix_min * G%m_to_H
-  h_neglect = G%H_subroundoff
+  g_H_2Rho0 = (G%g_Earth * G%GV%H_to_m) / (2.0 * G%GV%Rho0)
+  Hmix_min = CS%Hmix_min * G%GV%m_to_H
+  h_neglect = G%GV%H_subroundoff
   is = G%isc ; ie = G%iec ; nz = G%ke
 
   do ks=1,nz
@@ -1584,7 +1584,7 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
       h_avail = h(i,k) - eps(i,k)
       if ((h_avail > 0.) .and. ((TKE(i) > 0.) .or. (htot(i) < Hmix_min))) then
         dRL = g_H_2Rho0 * (R0(i,k)*htot(i) - R0_tot(i) )
-        dMKE = (G%H_to_m * CS%bulk_Ri_ML) * 0.5 * &
+        dMKE = (G%GV%H_to_m * CS%bulk_Ri_ML) * 0.5 * &
             ((uhtot(i)-u(i,k)*htot(i))**2 + (vhtot(i)-v(i,k)*htot(i))**2)
 
 ! Find the TKE that would remain if the entire layer were entrained.
@@ -1630,7 +1630,7 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
         HpE = htot(i)+h_avail
         MKE_rate = 1.0/(1.0 + (cMKE(1,i)*HpE + cMKE(2,i)*HpE**2))
         EF4_val = EF4(htot(i)+h_neglect,h_avail,Idecay_len_TKE(i))
-        TKE_full_ent = (exp_kh*TKE(i) - (h_avail*G%H_to_m)*(dRL*f1_kh + Pen_En_Contrib)) + &
+        TKE_full_ent = (exp_kh*TKE(i) - (h_avail*G%GV%H_to_m)*(dRL*f1_kh + Pen_En_Contrib)) + &
             MKE_rate*dMKE*EF4_val
         if ((TKE_full_ent >= 0.0) .or. (h_avail+htot(i) <= Hmix_min)) then
           ! The layer will be fully entrained.
@@ -1640,12 +1640,12 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
             E_HxHpE = h_ent / ((htot(i)+h_neglect)*(htot(i)+h_ent+h_neglect))
             CS%diag_TKE_mech_decay(i,j) = CS%diag_TKE_mech_decay(i,j) + &
                 Idt_diag * ((exp_kh-1.0)*TKE(i) + &
-                            (h_ent*G%H_to_m)*dRL*(1.0-f1_kh) + &
+                            (h_ent*G%GV%H_to_m)*dRL*(1.0-f1_kh) + &
                             MKE_rate*dMKE*(EF4_val-E_HxHpE))
             CS%diag_TKE_mixing(i,j) = CS%diag_TKE_mixing(i,j) - &
-                Idt_diag*(G%H_to_m*h_ent)*dRL
+                Idt_diag*(G%GV%H_to_m*h_ent)*dRL
             CS%diag_TKE_pen_SW(i,j) = CS%diag_TKE_pen_SW(i,j) - &
-                Idt_diag*(G%H_to_m*h_ent)*Pen_En_Contrib
+                Idt_diag*(G%GV%H_to_m*h_ent)*Pen_En_Contrib
             CS%diag_TKE_RiBulk(i,j) = CS%diag_TKE_RiBulk(i,j) + &
                 Idt_diag*MKE_rate*dMKE*E_HxHpE
           endif
@@ -1710,15 +1710,15 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
                            C1*((1.0-SW_trans) - opacity*(htot(i) + h_ent)*SW_trans)
               endif ; enddo ! (Pen_SW_bnd(n,i) > 0.0)
 
-              TKE_ent1 = exp_kh*TKE(i) - (h_ent*G%H_to_m)*(dRL*f1_kh + Pen_En_Contrib)
+              TKE_ent1 = exp_kh*TKE(i) - (h_ent*G%GV%H_to_m)*(dRL*f1_kh + Pen_En_Contrib)
               EF4_val = EF4(htot(i)+h_neglect,h_ent,Idecay_len_TKE(i),dEF4_dh)
               HpE = htot(i)+h_ent
               MKE_rate = 1.0/(1.0 + (cMKE(1,i)*HpE + cMKE(2,i)*HpE**2))
               TKE_ent = TKE_ent1 + dMKE*EF4_val*MKE_rate
               ! TKE_ent is the TKE that would remain if h_ent were entrained.
 
-              dTKE_dh = ((-Idecay_len_TKE(i)*TKE_ent1 - dRL*G%H_to_m) + &
-                         Pen_dTKE_dh_Contrib*G%H_to_m) + dMKE * MKE_rate* &
+              dTKE_dh = ((-Idecay_len_TKE(i)*TKE_ent1 - dRL*G%GV%H_to_m) + &
+                         Pen_dTKE_dh_Contrib*G%GV%H_to_m) + dMKE * MKE_rate* &
                        (dEF4_dh - EF4_val*MKE_rate*(cMKE(1,i)+2.0*cMKE(2,i)*HpE))
               !  dh_Newt = -TKE_ent / dTKE_dh
               ! Bisect if the Newton's method prediction is outside of the bounded range.
@@ -1739,7 +1739,7 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
               endif
               h_ent = h_ent + dh_Newt
 
-              if (ABS(dh_Newt) < 0.2*G%Angstrom) exit
+              if (ABS(dh_Newt) < 0.2*G%GV%Angstrom) exit
             enddo
           endif
 
@@ -1753,12 +1753,12 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
             E_HxHpE = h_ent / ((htot(i)+h_neglect)*(HpE+h_neglect))
             CS%diag_TKE_mech_decay(i,j) = CS%diag_TKE_mech_decay(i,j) + &
                 Idt_diag * ((exp_kh-1.0)*TKE(i) + &
-                            (h_ent*G%H_to_m)*dRL*(1.0-f1_kh) + &
+                            (h_ent*G%GV%H_to_m)*dRL*(1.0-f1_kh) + &
                              dMKE*MKE_rate*(EF4_val-E_HxHpE))
             CS%diag_TKE_mixing(i,j) = CS%diag_TKE_mixing(i,j) - &
-                Idt_diag*(h_ent*G%H_to_m)*dRL
+                Idt_diag*(h_ent*G%GV%H_to_m)*dRL
             CS%diag_TKE_pen_SW(i,j) = CS%diag_TKE_pen_SW(i,j) - &
-                Idt_diag*(h_ent*G%H_to_m)*Pen_En_Contrib
+                Idt_diag*(h_ent*G%GV%H_to_m)*Pen_En_Contrib
             CS%diag_TKE_RiBulk(i,j) = CS%diag_TKE_RiBulk(i,j) + &
                 Idt_diag*dMKE*MKE_rate*E_HxHpE
           endif
@@ -2309,14 +2309,14 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
   is = G%isc ; ie = G%iec ; nz = G%ke
   kb1 = CS%nkml+1; kb2 = CS%nkml+2
   nkmb = CS%nkml+CS%nkbl
-  h_neglect = G%H_subroundoff
+  h_neglect = G%GV%H_subroundoff
   G_2 = 0.5*G%g_Earth
-  Rho0xG = G%Rho0 * G%g_Earth
-  Idt_H2 = G%H_to_m**2 / dt_diag
-  I2Rho0 = 0.5 / G%Rho0
+  Rho0xG = G%GV%Rho0 * G%g_Earth
+  Idt_H2 = G%GV%H_to_m**2 / dt_diag
+  I2Rho0 = 0.5 / G%GV%Rho0
 
   ! This is hard coding of arbitrary and dimensional numbers.
-  h_min_bl_thick = 5.0 * G%m_to_H
+  h_min_bl_thick = 5.0 * G%GV%m_to_H
   dT_dS_gauge = CS%dT_dS_wt ; dS_dT_gauge = 1.0 /dT_dS_gauge
   num_events = 10.0
   detrainment_timescale = 4.0*3600.0
@@ -2393,7 +2393,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
       ! and the next denser interior layer, measured by R0.  This probably does
       ! not happen very often, so I am not too worried about the inefficiency of
       ! the following loop.
-      do k1=kb2+1,nz ; if (h(i,k1) > 2.0*G%Angstrom) exit ; enddo
+      do k1=kb2+1,nz ; if (h(i,k1) > 2.0*G%GV%Angstrom) exit ; enddo
 
       R0(i,kb2) = R0(i,kb1)
 
@@ -2466,12 +2466,12 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
                       dT_dS_gauge*dRcv_dT(i)*(S(i,kb2)-S(i,kb1))) * &
                       (h2 - h2_to_k1) / (h1 + h2)
         dSpice_lim = 0.0
-        if (h(i,k1) > 10.0*G%Angstrom) then
+        if (h(i,k1) > 10.0*G%GV%Angstrom) then
           dSpice_lim = dS_dT_gauge*dRcv_dS(i)*(T(i,k1)-T(i,kb2)) - &
                        dT_dS_gauge*dRcv_dT(i)*(S(i,k1)-S(i,kb2))
           if (dSpice_det*dSpice_lim <= 0.0) dSpice_lim = 0.0
         endif
-        if (k1<nz) then ; if (h(i,k1+1) > 10.0*G%Angstrom) then
+        if (k1<nz) then ; if (h(i,k1+1) > 10.0*G%GV%Angstrom) then
           dSpice_lim2 = dS_dT_gauge*dRcv_dS(i)*(T(i,k1+1)-T(i,kb2)) - &
                         dT_dS_gauge*dRcv_dT(i)*(S(i,k1+1)-S(i,kb2))
           if ((dSpice_det*dSpice_lim2 > 0.0) .and. &
@@ -2491,7 +2491,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
         if (CS%BL_extrap_lim >= 0.) then
           ! Only do this detrainment if the new layer's temperature and salinity
           ! are not too far outside of the range of previous values.
-          if (h(i,k1) > 10.0*G%Angstrom) then
+          if (h(i,k1) > 10.0*G%GV%Angstrom) then
             T_min = min(T(i,kb1), T(i,kb2), T(i,k1)) - CS%Allowed_T_chg
             T_max = max(T(i,kb1), T(i,kb2), T(i,k1)) + CS%Allowed_T_chg
             S_min = min(S(i,kb1), S(i,kb2), S(i,k1)) - CS%Allowed_S_chg
@@ -2590,12 +2590,12 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
                           dT_dS_gauge*dRcv_dT(i)*(S(i,kb2)-S(i,kb1))) * &
                           (h2 - h2_to_k1) / (h1 + h2)
             dSpice_lim = 0.0
-            if (h(i,k1) > 10.0*G%Angstrom) then
+            if (h(i,k1) > 10.0*G%GV%Angstrom) then
               dSpice_lim = dS_dT_gauge*dRcv_dS(i)*(T(i,k1)-T(i,kb2)) - &
                            dT_dS_gauge*dRcv_dT(i)*(S(i,k1)-S(i,kb2))
               if (dSpice_det*dSpice_lim <= 0.0) dSpice_lim = 0.0
             endif
-            if (k1<nz) then; if (h(i,k1+1) > 10.0*G%Angstrom) then
+            if (k1<nz) then; if (h(i,k1+1) > 10.0*G%GV%Angstrom) then
               dSpice_lim2 = dS_dT_gauge*dRcv_dS(i)*(T(i,k1+1)-T(i,kb2)) - &
                             dT_dS_gauge*dRcv_dT(i)*(S(i,k1+1)-S(i,kb2))
               if ((dSpice_det*dSpice_lim2 > 0.0) .and. &
@@ -2752,7 +2752,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
             h_det_to_h2*( (R0(i,kb1)-R0_det)*h1 + (R0(i,kb2)-R0_det)*h2 ) + &
             h_ml_to_h2*( (R0(i,kb2)-R0(i,0))*h2 + (R0(i,kb1)-R0(i,0))*h1 + &
                          (R0_det-R0(i,0))*h_det_to_h2 ) + &
-            h_det_to_h1*h_ml_to_h1*(R0_det-R0(i,0))) - 2.0*G%Rho0*dPE_extrap )
+            h_det_to_h1*h_ml_to_h1*(R0_det-R0(i,0))) - 2.0*G%GV%Rho0*dPE_extrap )
 
         if (ALLOCATED(CS%diag_PE_detrain)) &
           CS%diag_PE_detrain(i,j) = CS%diag_PE_detrain(i,j) + s1en
@@ -3107,8 +3107,8 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_e
                         "CS%nkbl must be 1 in mixedlayer_detrain_1.")
   Idt = 1.0/dt
   dt_Time = dt/Timescale
-  g_H2_2Rho0dt = (G%g_Earth * G%H_to_m**2) / (2.0 * G%Rho0 * dt_diag)
-  g_H2_2dt = (G%g_Earth * G%H_to_m**2) / (2.0 * dt_diag)
+  g_H2_2Rho0dt = (G%g_Earth * G%GV%H_to_m**2) / (2.0 * G%GV%Rho0 * dt_diag)
+  g_H2_2dt = (G%g_Earth * G%GV%H_to_m**2) / (2.0 * dt_diag)
 
   ! Move detrained water into the buffer layer.
   do k=1,CS%nkml
@@ -3213,10 +3213,10 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_e
         ! temperature and salinity.  If none is available a pseudo-orthogonal
         ! extrapolation is used.  The 10.0 and 0.9 in the following are
         ! arbitrary but probably about right.
-        if ((h(i,k+1) < 10.0*G%Angstrom) .or. &
+        if ((h(i,k+1) < 10.0*G%GV%Angstrom) .or. &
             ((RcvTgt(k+1)-Rcv(i,nkmb)) >= 0.9*(Rcv(i,k1) - Rcv(i,0)))) then
           if (k>=nz-1) then ; orthogonal_extrap = .true.
-          elseif ((h(i,k+2) <= 10.0*G%Angstrom) .and. &
+          elseif ((h(i,k+2) <= 10.0*G%GV%Angstrom) .and. &
               ((RcvTgt(k+1)-Rcv(i,nkmb)) < 0.9*(Rcv(i,k+2)-Rcv(i,0)))) then
             k1 = k+2
           else ; orthogonal_extrap = .true. ; endif
@@ -3447,7 +3447,7 @@ subroutine bulkmixedlayer_init(Time, G, param_file, diag, CS)
                  "layers before sorting when ML_RESORT is true.", &
                  units="nondim", default=0, fail_if_missing=.true.) ! Fail added by AJA??
   ! This gives a minimum decay scale that is typically much less than Angstrom.
-  CS%ustar_min = 2e-4*CS%omega*(G%Angstrom_z + G%H_to_m*G%H_subroundoff)
+  CS%ustar_min = 2e-4*CS%omega*(G%GV%Angstrom_z + G%GV%H_to_m*G%GV%H_subroundoff)
   ! NOTE from AJA: The above parameter is not logged?
   call get_param(param_file, mod, "RESOLVE_EKMAN", CS%Resolve_Ekman, &
                  "If true, the NKML>1 layers in the mixed layer are \n"//&

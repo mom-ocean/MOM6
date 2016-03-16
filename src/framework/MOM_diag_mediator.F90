@@ -38,12 +38,13 @@ use MOM_safe_alloc,       only : safe_alloc_ptr, safe_alloc_alloc
 use MOM_string_functions, only : lowercase
 use MOM_time_manager,     only : time_type
 use MOM_remapping,        only : remapping_CS, initialize_remapping, dzFromH1H2
-use MOM_remapping,        only : remapping_core_w
+use MOM_remapping,        only : remapping_core_h
 use MOM_regridding,       only : regridding_CS, initialize_regridding, setCoordinateResolution
-use MOM_regridding,       only : build_zstar_column, set_regrid_min_thickness
+use MOM_regridding,       only : build_zstar_column, set_regrid_params
 
+use diag_axis_mod, only : get_diag_axis_name
 use diag_manager_mod, only : diag_manager_init, diag_manager_end
-use diag_manager_mod, only : send_data, diag_axis_init
+use diag_manager_mod, only : send_data, diag_axis_init, diag_field_add_attribute
 use diag_manager_mod, only : register_diag_field_fms=>register_diag_field
 use diag_manager_mod, only : register_static_field_fms=>register_static_field
 use diag_manager_mod, only : get_diag_field_id_fms=>get_diag_field_id
@@ -70,7 +71,7 @@ public diag_mediator_init, diag_mediator_end, set_diag_mediator_grid
 public diag_mediator_close_registration, get_diag_time_end
 public diag_axis_init, ocean_register_diag, register_static_field
 public register_scalar_field
-public defineAxes, diag_masks_set
+public define_axes_group, diag_masks_set
 public diag_set_thickness_ptr
 public diag_update_target_grids
 
@@ -78,13 +79,17 @@ interface post_data
   module procedure post_data_3d, post_data_2d, post_data_0d
 end interface post_data
 
-! 2D/3D axes type to contain 1D axes handles and pointers to masks
-type, public :: axesType
-  character(len=15) :: id   ! the id string for this particular combination of handles
-  integer           :: rank ! number of dimensions in the list of axes
-  integer, dimension(:), allocatable :: handles ! Handles to 1D axes
-  type(diag_ctrl), pointer :: diag_cs => null()
-end type axesType
+!> A group of 1D axes that comprise a 1D/2D/3D mesh
+type, public :: axes_grp
+  character(len=15) :: id   !< The id string for this particular combination of handles
+  integer           :: rank !< Number of dimensions in the list of axes
+  integer, dimension(:), allocatable :: handles !< Handles to 1D axes
+  type(diag_ctrl), pointer :: diag_cs => null() !< Circular link back to the main diagnostics control structure
+                                                !! (Used to avoid passing said structure into every possible call)
+  character(len=9) :: x_cell_method = '' !< Default nature of data representation, if axes group includes x-direction
+  character(len=9) :: y_cell_method = '' !< Default nature of data representation, if axes group includes y-direction
+  character(len=9) :: v_cell_method = '' !< Default nature of data representation, if axes group includes vertical direction
+end type axes_grp
 
 ! This type is used to represent a diagnostic at the diag_mediator level.
 ! There can be both 'primary' and 'seconday' diagnostics. The primaries
@@ -95,7 +100,7 @@ end type axesType
 type, private :: diag_type
   logical :: in_use
   integer :: fms_diag_id         ! underlying FMS diag id
-  type(axesType), pointer :: remap_axes => null()
+  type(axes_grp), pointer :: remap_axes => null()
   real, pointer, dimension(:,:)   :: mask2d => null()
   real, pointer, dimension(:,:,:) :: mask3d => null()
   type(diag_type), pointer :: next => null()  ! pointer to the next diag
@@ -117,11 +122,11 @@ type, public :: diag_ctrl
   logical :: ave_enabled = .false. ! .true. if averaging is enabled.
 
   ! The following are axis types defined for output.
-  type(axesType) :: axesBL, axesTL, axesCuL, axesCvL
-  type(axesType) :: axesBi, axesTi, axesCui, axesCvi
-  type(axesType) :: axesB1, axesT1, axesCu1, axesCv1
-  type(axesType) :: axesZi, axesZL
-  type(axesType) :: axesTzi, axesTZL, axesBZL, axesCuZL, axesCvZL
+  type(axes_grp) :: axesBL, axesTL, axesCuL, axesCvL
+  type(axes_grp) :: axesBi, axesTi, axesCui, axesCvi
+  type(axes_grp) :: axesB1, axesT1, axesCu1, axesCv1
+  type(axes_grp) :: axesZi, axesZL
+  type(axes_grp) :: axesTzi, axesTZL, axesBZL, axesCuZL, axesCvZL
 
   ! Mask arrays for diagnostics
   real, dimension(:,:),   pointer :: mask2dT   => null()
@@ -157,9 +162,7 @@ type, public :: diag_ctrl
   integer :: nz_remap
 
   ! Define z star on u, v, T grids, these are the interface positions
-  real, dimension(:,:,:), allocatable :: zi_u
-  real, dimension(:,:,:), allocatable :: zi_v
-  real, dimension(:,:,:), allocatable :: zi_T
+  real, dimension(:,:,:), allocatable :: h_zoutput
 
   ! Keep track of which remapping is needed for diagnostic output
   logical :: do_z_remapping_on_u, do_z_remapping_on_v, do_z_remapping_on_T
@@ -329,32 +332,50 @@ subroutine set_axes_info(G, param_file, diag_cs, set_vertical)
   endif
 
   ! Axes for z remapping
-  call defineAxes(diag_cs, (/ id_xh, id_yh, id_zzl /), diag_cs%axesTZL)
-  call defineAxes(diag_cs, (/ id_xq, id_yq, id_zzL /), diag_cs%axesBZL)
-  call defineAxes(diag_cs, (/ id_xq, id_yh, id_zzL /), diag_cs%axesCuZL)
-  call defineAxes(diag_cs, (/ id_xh, id_yq, id_zzL /), diag_cs%axesCvZL)
+  call define_axes_group(diag_cs, (/ id_xh, id_yh, id_zzl /), diag_cs%axesTZL, &
+       x_cell_method='mean', y_cell_method='mean', v_cell_method='mean')
+  call define_axes_group(diag_cs, (/ id_xq, id_yq, id_zzL /), diag_cs%axesBZL, &
+       x_cell_method='point', y_cell_method='point', v_cell_method='mean')
+  call define_axes_group(diag_cs, (/ id_xq, id_yh, id_zzL /), diag_cs%axesCuZL, &
+       x_cell_method='point', y_cell_method='mean', v_cell_method='mean')
+  call define_axes_group(diag_cs, (/ id_xh, id_yq, id_zzL /), diag_cs%axesCvZL, &
+       x_cell_method='mean', y_cell_method='point', v_cell_method='mean')
 
   ! Vertical axes for the interfaces and layers
-  call defineAxes(diag_cs, (/ id_zi /), diag_cs%axesZi)
-  call defineAxes(diag_cs, (/ id_zL /), diag_cs%axesZL)
+  call define_axes_group(diag_cs, (/ id_zi /), diag_cs%axesZi, &
+       v_cell_method='point')
+  call define_axes_group(diag_cs, (/ id_zL /), diag_cs%axesZL, &
+       v_cell_method='mean')
 
   ! Axis groupings for the model layers
-  call defineAxes(diag_cs, (/ id_xh, id_yh, id_zL /), diag_cs%axesTL)
-  call defineAxes(diag_cs, (/ id_xq, id_yq, id_zL /), diag_cs%axesBL)
-  call defineAxes(diag_cs, (/ id_xq, id_yh, id_zL /), diag_cs%axesCuL)
-  call defineAxes(diag_cs, (/ id_xh, id_yq, id_zL /), diag_cs%axesCvL)
+  call define_axes_group(diag_cs, (/ id_xh, id_yh, id_zL /), diag_cs%axesTL, &
+       x_cell_method='mean', y_cell_method='mean', v_cell_method='mean')
+  call define_axes_group(diag_cs, (/ id_xq, id_yq, id_zL /), diag_cs%axesBL, &
+       x_cell_method='point', y_cell_method='point', v_cell_method='mean')
+  call define_axes_group(diag_cs, (/ id_xq, id_yh, id_zL /), diag_cs%axesCuL, &
+       x_cell_method='point', y_cell_method='mean', v_cell_method='mean')
+  call define_axes_group(diag_cs, (/ id_xh, id_yq, id_zL /), diag_cs%axesCvL, &
+       x_cell_method='mean', y_cell_method='point', v_cell_method='mean')
 
   ! Axis groupings for the model interfaces
-  call defineAxes(diag_cs, (/ id_xh, id_yh, id_zi /), diag_cs%axesTi)
-  call defineAxes(diag_cs, (/ id_xq, id_yh, id_zi /), diag_cs%axesCui)
-  call defineAxes(diag_cs, (/ id_xh, id_yq, id_zi /), diag_cs%axesCvi)
-  call defineAxes(diag_cs, (/ id_xq, id_yq, id_zi /), diag_cs%axesBi)
+  call define_axes_group(diag_cs, (/ id_xh, id_yh, id_zi /), diag_cs%axesTi, &
+       x_cell_method='mean', y_cell_method='mean', v_cell_method='point')
+  call define_axes_group(diag_cs, (/ id_xq, id_yh, id_zi /), diag_cs%axesCui, &
+       x_cell_method='point', y_cell_method='mean', v_cell_method='point')
+  call define_axes_group(diag_cs, (/ id_xh, id_yq, id_zi /), diag_cs%axesCvi, &
+       x_cell_method='mean', y_cell_method='point', v_cell_method='point')
+  call define_axes_group(diag_cs, (/ id_xq, id_yq, id_zi /), diag_cs%axesBi, &
+       x_cell_method='point', y_cell_method='point', v_cell_method='point')
 
   ! Axis groupings for 2-D arrays
-  call defineAxes(diag_cs, (/ id_xh, id_yh /), diag_cs%axesT1)
-  call defineAxes(diag_cs, (/ id_xq, id_yq /), diag_cs%axesB1)
-  call defineAxes(diag_cs, (/ id_xq, id_yh /), diag_cs%axesCu1)
-  call defineAxes(diag_cs, (/ id_xh, id_yq /), diag_cs%axesCv1)
+  call define_axes_group(diag_cs, (/ id_xh, id_yh /), diag_cs%axesT1, &
+       x_cell_method='mean', y_cell_method='mean')
+  call define_axes_group(diag_cs, (/ id_xq, id_yq /), diag_cs%axesB1, &
+       x_cell_method='point', y_cell_method='point')
+  call define_axes_group(diag_cs, (/ id_xq, id_yh /), diag_cs%axesCu1, &
+       x_cell_method='point', y_cell_method='mean')
+  call define_axes_group(diag_cs, (/ id_xh, id_yq /), diag_cs%axesCv1, &
+       x_cell_method='mean', y_cell_method='point')
 
 end subroutine set_axes_info
 
@@ -388,23 +409,46 @@ function check_grid_def(filename, varname)
 
 end function check_grid_def
 
-subroutine defineAxes(diag_cs, handles, axes)
-  ! Defines "axes" from list of handle and associates mask
-  type(diag_ctrl),    target, intent(in)  :: diag_cs
-  integer, dimension(:),   intent(in)  :: handles
-  type(axesType),          intent(out) :: axes
-
+!> Defines a group of "axes" from list of handles
+subroutine define_axes_group(diag_cs, handles, axes, &
+                             x_cell_method, y_cell_method, v_cell_method)
+  type(diag_ctrl), target,    intent(in)  :: diag_cs !< Diagnostics control structure
+  integer, dimension(:),      intent(in)  :: handles !< A list of 1D axis handles
+  type(axes_grp),             intent(out) :: axes    !< The group of 1D axes
+  character(len=*), optional, intent(in)  :: x_cell_method !< A x-direction cell method used to construct the "cell_methods" attribute in CF convention
+  character(len=*), optional, intent(in)  :: y_cell_method !< A y-direction cell method used to construct the "cell_methods" attribute in CF convention
+  character(len=*), optional, intent(in)  :: v_cell_method !< A vertical direction cell method used to construct the "cell_methods" attribute in CF convention
   ! Local variables
   integer :: n
   n = size(handles)
-  if (n<1 .or. n>3) call MOM_error(FATAL,"defineAxes: wrong size for list of handles!")
+  if (n<1 .or. n>3) call MOM_error(FATAL,"define_axes_group: wrong size for list of handles!")
   allocate( axes%handles(n) )
   axes%id = i2s(handles, n) ! Identifying string
   axes%rank = n
   axes%handles(:) = handles(:)
   axes%diag_cs => diag_cs ! A [circular] link back to the diag_cs structure
-
-end subroutine defineAxes
+  if (present(x_cell_method)) then
+    if (axes%rank<2) call MOM_error(FATAL, 'define_axes_group: ' // &
+                                           'Can not set x_cell_method for rank<2.')
+    axes%x_cell_method = trim(x_cell_method)
+  else
+    axes%x_cell_method = ''
+  endif
+  if (present(y_cell_method)) then
+    if (axes%rank<2) call MOM_error(FATAL, 'define_axes_group: ' // &
+                                           'Can not set y_cell_method for rank<2.')
+    axes%y_cell_method = trim(y_cell_method)
+  else
+    axes%y_cell_method = ''
+  endif
+  if (present(v_cell_method)) then
+    if (axes%rank/=1 .and. axes%rank/=3) call MOM_error(FATAL, 'define_axes_group: ' // &
+                                           'Can not set v_cell_method for rank<>1 or 3.')
+    axes%v_cell_method = trim(v_cell_method)
+  else
+    axes%v_cell_method = ''
+  endif
+end subroutine define_axes_group
 
 subroutine set_diag_mediator_grid(G, diag_cs)
   type(ocean_grid_type), intent(inout) :: G
@@ -658,20 +702,14 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask)
 
 end subroutine post_data_3d
 
+!> Remap diagnostic field to z-star vertical grid.
+!! \note This uses grids generated by diag_update_target_grids()
 subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
-! Remap diagnostic field to z-star vertical grid.
-! This uses grids generated by diag_update_target_grids()
-
-  real, dimension(:,:,:), intent(in) :: field
-  type(diag_type), intent(in) :: diag
-  type(diag_ctrl), intent(in) :: diag_cs
-  real, dimension(:,:,:), intent(inout) :: remapped_field
-
-! Arguments:
-!  (in) field  - The diagnostic field to be remapped
-!  (in) diag   - structure used to regulate diagnostic output
-!  (out) remapped_field - the field argument remapped to z star coordinate
-
+  real, dimension(:,:,:), intent(in) :: field !<  The diagnostic field to be remapped
+  type(diag_type), intent(in) :: diag !< Structure containing remapping/masking information
+  type(diag_ctrl), intent(in) :: diag_cs !< Diagnostics control structure
+  real, dimension(:,:,:), intent(inout) :: remapped_field !< Field argument remapped to z star coordinate
+  ! Local variables
   real, dimension(diag_cs%nz_remap+1) :: dz
   real, dimension(diag_cs%nz_remap) :: h_dest
   real, dimension(size(diag_cs%h, 3)) :: h_src
@@ -679,7 +717,7 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
   integer :: i, j, k
 
   call assert(diag_cs%remapping_initialized, &
-             'remap_diag_to_z: Remmaping not initialized.')
+              'remap_diag_to_z: Remmaping not initialized.')
   call assert(size(field, 3) == size(diag_cs%h, 3), &
               'remap_diag_to_z: Remap field and thickness z-axes do not match.')
 
@@ -687,59 +725,51 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
   nz_src = size(field, 3)
   nz_dest = diag_cs%nz_remap
 
-#if defined(DEBUG) || defined(__DO_SAFETY_CHECKS__)
-  ! Check that H is up-to-date.
-  do k=RANGE_K(diag_cs%h)
-    do j=RANGE_J(diag_cs%h)
-      do i=RANGE_I(diag_cs%h)
-        if (diag_cs%h_old(i, j, k) /= diag_cs%h(i, j, k)) then
-          call MOM_error(FATAL, "remap_diag_to_z: H has changed since "//&
-                                "remapping grids were updated")
-        endif
-      enddo
-    enddo
-  enddo
-#endif
-
   if (is_u_axes(diag%remap_axes, diag_cs)) then
     do j=diag_cs%G%jsc, diag_cs%G%jec
-      do i=diag_cs%G%iscB, diag_cs%G%iecB
+      do I=diag_cs%G%iscB, diag_cs%G%iecB
         if (associated(diag%mask3d)) then
-          if (diag%mask3d(i,j, 1) == 0.) cycle
+          if (diag%mask3d(i,j,1)+diag%mask3d(i+1,j,1) == 0.) cycle
         endif
-
-        h_dest(:) = diag_cs%zi_u(i, j, 2:) - diag_cs%zi_u(i, j, :size(diag_cs%zi_u, 3)-1)
+#if defined(DEBUG) || defined(__DO_SAFETY_CHECKS__)
+        ! Check that H is up-to-date.
+        do k=RANGE_K(diag_cs%h)
+          if (diag_cs%h_old(i,j,k) /= diag_cs%h(i,j,k)) call MOM_error(FATAL, &
+            "remap_diag_to_z: H has changed since remapping grids were updated")
+        enddo
+#endif
         h_src(:) = 0.5 * (diag_cs%h(i,j,:) + diag_cs%h(i+1,j,:))
-        call dzFromH1H2(nz_src, h_src(:), nz_dest, h_dest(:), dz)
-        call remapping_core_w(diag_cs%remap_cs, nz_src, h_src(:), &
-                      field(i, j, :), nz_dest, dz, remapped_field(i, j, :))
-
-        ! Lower levels of the remapped data get squashed to follow bathymetry.
-        ! If their nominal depth is below the bathymetry remove them.
+        h_dest(:) = 0.5 * ( diag_cs%h_zoutput(i,j,:) + diag_cs%h_zoutput(i+1,j,:) )
+        call remapping_core_h(nz_src, h_src(:), field(I,j,:), &
+                              nz_dest, h_dest(:), remapped_field(I,j,:), diag_cs%remap_cs)
         do k=1, nz_dest
-          if (diag_cs%zi_remap(k) >= diag_cs%G%bathyT(i, j)) then
+          if (h_dest(k) == 0.) then ! This only works for z-like output
             remapped_field(i, j, k:nz_dest) = diag_cs%missing_value
             exit
           endif
         enddo
       enddo
     enddo
-
   elseif (is_v_axes(diag%remap_axes, diag_cs)) then
-    do j=diag_cs%G%jscB, diag_cs%G%jecB
+    do J=diag_cs%G%jscB, diag_cs%G%jecB
       do i=diag_cs%G%isc, diag_cs%G%iec
         if (associated(diag%mask3d)) then
-          if (diag%mask3d(i,j, 1) == 0.) cycle
+          if (diag%mask3d(i,j,1)+diag%mask3d(i,j+1,1) == 0.) cycle
         endif
-
-        h_dest(:) = diag_cs%zi_v(i, j, 2:) - diag_cs%zi_v(i, j, :size(diag_cs%zi_v, 3)-1)
+#if defined(DEBUG) || defined(__DO_SAFETY_CHECKS__)
+        ! Check that H is up-to-date.
+        do k=RANGE_K(diag_cs%h)
+          if (diag_cs%h_old(i,j,k) /= diag_cs%h(i,j,k)) call MOM_error(FATAL, &
+            "remap_diag_to_z: H has changed since remapping grids were updated")
+        enddo
+#endif
         h_src(:) = 0.5 * (diag_cs%h(i,j,:) + diag_cs%h(i,j+1,:))
-        call dzFromH1H2(nz_src, h_src(:), nz_dest, h_dest(:), dz)
-        call remapping_core_w(diag_cs%remap_cs, nz_src, h_src(:), &
-                      field(i, j, :), nz_dest, dz, remapped_field(i, j, :))
+        h_dest(:) = 0.5 * ( diag_cs%h_zoutput(i,j,:) + diag_cs%h_zoutput(i,j+1,:) )
+        call remapping_core_h(nz_src, h_src(:), field(i,J,:), &
+                              nz_dest, h_dest(:), remapped_field(i,J,:), diag_cs%remap_cs)
         do k=1, nz_dest
-          if (diag_cs%zi_remap(k) >= diag_cs%G%bathyT(i, j)) then
-            remapped_field(i, j, k:nz_dest) = diag_cs%missing_value
+          if (h_dest(k) == 0.) then ! This only works for z-like output
+            remapped_field(i,J,k:nz_dest) = diag_cs%missing_value
             exit
           endif
         enddo
@@ -751,13 +781,19 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
         if (associated(diag%mask3d)) then
           if (diag%mask3d(i,j, 1) == 0.) cycle
         endif
-        h_dest(:) = diag_cs%zi_T(i, j, 2:) - diag_cs%zi_T(i, j, :size(diag_cs%zi_T, 3)-1)
-        call dzFromH1H2(nz_src, diag_cs%h(i, j, :), nz_dest, h_dest(:), dz)
-        call remapping_core_w(diag_cs%remap_cs, nz_src, diag_cs%h(i, j, :), &
-                      field(i, j, :), nz_dest, dz, remapped_field(i, j, :))
+#if defined(DEBUG) || defined(__DO_SAFETY_CHECKS__)
+        ! Check that H is up-to-date.
+        do k=RANGE_K(diag_cs%h)
+          if (diag_cs%h_old(i,j,k) /= diag_cs%h(i,j,k)) call MOM_error(FATAL, &
+            "remap_diag_to_z: H has changed since remapping grids were updated")
+        enddo
+#endif
+        h_dest(:) = diag_cs%h_zoutput(i,j,:)
+        call remapping_core_h(nz_src, diag_cs%h(i,j,:), field(i,j,:), &
+                              nz_dest, h_dest(:), remapped_field(i,j,:), diag_cs%remap_cs)
         do k=1, nz_dest
-          if (diag_cs%zi_remap(k) >= diag_cs%G%bathyT(i, j)) then
-            remapped_field(i, j, k:nz_dest) = diag_cs%missing_value
+          if (h_dest(k) == 0.) then ! This only works for z-like output
+            remapped_field(i,j,k:nz_dest) = diag_cs%missing_value
             exit
           endif
         enddo
@@ -767,23 +803,21 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
 
 end subroutine remap_diag_to_z
 
+!> Build/update target vertical grids for diagnostic remapping.
+!! \note The target grids need to be updated whenever sea surface
+!! height changes.
 subroutine diag_update_target_grids(diag_cs)
-! Build/update target vertical grids for diagnostic remapping.
-!
-! The target grids need to be updated whenever sea surface
-! height changes.
-
-  type(diag_ctrl),        intent(inout) :: diag_cs
-
-! Arguments:
-!  (inout)  diag_cs   - structure used to regulate diagnostic output.
-
+  type(diag_ctrl), intent(inout) :: diag_cs !< Diagnostics control structure
+  ! Local variables
   real, dimension(size(diag_cs%h, 3)) :: h_src
   type(ocean_grid_type), pointer :: G
   real :: depth
   integer :: nz_src, nz_dest
   integer :: i, j, k
   logical :: force, h_changed
+  real, dimension(diag_cs%G%ke) :: h_src_1d
+  real, dimension(diag_cs%nz_remap) :: h_zout_1d
+  real, dimension(diag_cs%nz_remap+1) :: z_out_1d
 
   nz_dest = diag_cs%nz_remap
   nz_src = size(diag_cs%h, 3)
@@ -800,54 +834,26 @@ subroutine diag_update_target_grids(diag_cs)
     call assert(allocated(diag_cs%zi_remap), &
                 'update_diag_target_grids: Remapping axis not initialized')
 
-    ! Initialise remapping system, on the first call
+    ! Initialize remapping system, on the first call
     call initialize_regridding(nz_dest, 'Z*', 'PPM_IH4', diag_cs%regrid_cs)
-    call initialize_remapping(nz_src, 'PPM_IH4', diag_cs%remap_cs)
-    call set_regrid_min_thickness(G%Angstrom, diag_cs%regrid_cs)
+    call initialize_remapping(diag_cs%remap_cs, 'PPM_IH4', boundary_extrapolation=.false.)
+    call set_regrid_params(diag_cs%regrid_cs, min_thickness=0.)
     call setCoordinateResolution(diag_cs%zi_remap(2:) - &
                                  diag_cs%zi_remap(:nz_dest), diag_cs%regrid_cs)
 
-    allocate(diag_cs%zi_u(G%iscB:G%iecB,G%jsc:G%jec,nz_dest+1))
-    allocate(diag_cs%zi_v(G%isc:G%iec,G%jscB:G%jecB,nz_dest+1))
-    allocate(diag_cs%zi_T(G%isc:G%iec,G%jsc:G%jec,nz_dest+1))
+    allocate(diag_cs%h_zoutput(G%isd:G%ied,G%jsd:G%jed,nz_dest))
   endif
 
-  ! Build z-star grid on u points
-  if (diag_cs%do_z_remapping_on_u .or. (.not. diag_cs%remapping_initialized)) then
-    do j=G%jsc, G%jec
-      do i=G%iscB, G%iecB
-        h_src(:) = 0.5 * (diag_cs%h(i,j,:) + diag_cs%h(i+1,j,:))
-        depth = 0.5 * (G%bathyT(i,j) + G%bathyT(i+1,j))
-        call build_zstar_column(diag_cs%regrid_cs, nz_dest, depth, &
-                                  sum(h_src(:)), diag_cs%zi_u(i, j, :))
-        diag_cs%zi_u(i, j, :) = -diag_cs%zi_u(i, j, :)
-      enddo
+  ! Store z-star thicknesses on h-points
+  do j=G%jsc, G%jec+1
+    do i=G%isc, G%iec+1
+      h_src_1d(:) = diag_cs%h(i,j,:)
+      call build_zstar_column(diag_cs%regrid_cs, nz_dest, G%bathyT(i,j), &
+                              sum(h_src_1d(:)), z_out_1d)
+      h_zout_1d(:) = z_out_1d(1:nz_dest) - z_out_1d(2:nz_dest+1)
+      diag_cs%h_zoutput(i,j,:) = h_zout_1d(:)
     enddo
-  endif
-
-  ! Build z-star grid on u points
-  if (diag_cs%do_z_remapping_on_v .or. (.not. diag_cs%remapping_initialized)) then
-    do j=G%jscB, G%jecB
-      do i=G%isc, G%iec
-        h_src(:) = 0.5 * (diag_cs%h(i,j,:) + diag_cs%h(i,j+1,:))
-        depth = 0.5 * (G%bathyT(i, j) + G%bathyT(i, j+1))
-        call build_zstar_column(diag_cs%regrid_cs, nz_dest, depth, &
-                                  sum(h_src(:)), diag_cs%zi_v(i, j, :))
-        diag_cs%zi_v(i, j, :) = -diag_cs%zi_v(i, j, :)
-      enddo
-    enddo
-  endif
-
-  ! Build z-star grid on T points
-  if (diag_cs%do_z_remapping_on_T .or. (.not. diag_cs%remapping_initialized)) then
-    do j=G%jsc, G%jec
-      do i=G%isc, G%iec
-        call build_zstar_column(diag_cs%regrid_cs, nz_dest, G%bathyT(i, j), &
-                                  sum(diag_cs%h(i, j, :)), diag_cs%zi_T(i, j, :))
-        diag_cs%zi_T(i, j, :) = -diag_cs%zi_T(i, j, :)
-      enddo
-    enddo
-  endif
+  enddo
 
   diag_cs%remapping_initialized = .true.
 #if defined(DEBUG) || defined(__DO_SAFETY_CHECKS__)
@@ -1011,50 +1017,40 @@ end function get_diag_time_end
 function register_diag_field(module_name, field_name, axes, init_time,         &
      long_name, units, missing_value, range, mask_variant, standard_name,      &
      verbose, do_not_log, err_msg, interp_method, tile_count, cmor_field_name, &
-     cmor_long_name, cmor_units, cmor_standard_name)
-  integer :: register_diag_field
-  character(len=*), intent(in) :: module_name, field_name
-  type(axesType), target, intent(in) :: axes
-  type(time_type),  intent(in) :: init_time
-  character(len=*), optional, intent(in) :: long_name, units, standard_name
-  real,             optional, intent(in) :: missing_value, range(2)
-  logical,          optional, intent(in) :: mask_variant, verbose, do_not_log
-  character(len=*), optional, intent(out):: err_msg
-  character(len=*), optional, intent(in) :: interp_method
-  integer,          optional, intent(in) :: tile_count
-  character(len=*), optional, intent(in) :: cmor_field_name, cmor_long_name
-  character(len=*), optional, intent(in) :: cmor_units, cmor_standard_name
-
-  ! Output:    An integer handle for a diagnostic array.
-  ! Arguments:
-  !  (in)      module_name   - name of this module, usually "ocean_model" or "ice_shelf_model"
-  !  (in)      field_name    - name of the diagnostic field
-  !  (in)      axes          - container w/ up to 3 integer handles that indicates axes for this field
-  !  (in)      init_time     - time at which a field is first available?
-  !  (in,opt)  long_name     - long name of a field.
-  !  (in,opt)  units         - units of a field.
-  !  (in,opt)  missing_value - A value that indicates missing values.
-  !  (in,opt)  standard_name - standardized name associated with a field
-
-  !  (in,opt)  cmor_field_name    - CMOR name of a field
-  !  (in,opt)  cmor_long_name     - CMOR long name of a field
-  !  (in,opt)  cmor_units         - CMOR units of a field
-  !  (in,opt)  cmor_standard_name - CMOR standardized name associated with a field
-
-  ! Following params have yet to be used in MOM.
-  !  (in,opt)  range         - valid range of a variable
-  !  (in,opt)  mask_variant  - If true a logical mask must be provided with post_data calls
-  !  (in,opt)  verbose       - If true, FMS is verbose
-  !  (in,opt)  do_not_log    - If true, do not log something
-  !  (out,opt) err_msg       - character string into which an error message might be placed
-  !  (in,opt)  interp_method - no clue
-  !  (in,opt)  tile_count    - no clue
-
+     cmor_long_name, cmor_units, cmor_standard_name, cell_methods, &
+     x_cell_method, y_cell_method, v_cell_method)
+  integer :: register_diag_field !< An integer handle for a diagnostic array.
+  character(len=*), intent(in) :: module_name !< Name of this module, usually "ocean_model" or "ice_shelf_model"
+  character(len=*), intent(in) :: field_name !< Name of the diagnostic field
+  type(axes_grp), target, intent(in) :: axes !< Container w/ up to 3 integer handles that indicates axes for this field
+  type(time_type),  intent(in) :: init_time !< Time at which a field is first available?
+  character(len=*), optional, intent(in) :: long_name !< Long name of a field.
+  character(len=*), optional, intent(in) :: units !< Units of a field.
+  character(len=*), optional, intent(in) :: standard_name !< Standardized name associated with a field
+  real,             optional, intent(in) :: missing_value !< A value that indicates missing values.
+  real,             optional, intent(in) :: range(2) !< Valid range of a variable (not used in MOM?)
+  logical,          optional, intent(in) :: mask_variant !< If true a logical mask must be provided with post_data calls (not used in MOM?)
+  logical,          optional, intent(in) :: verbose !< If true, FMS is verbose (not used in MOM?)
+  logical,          optional, intent(in) :: do_not_log !< If true, do not log something (not used in MOM?)
+  character(len=*), optional, intent(out):: err_msg !< String into which an error message might be placed (not used in MOM?)
+  character(len=*), optional, intent(in) :: interp_method !< no clue (not used in MOM?)
+  integer,          optional, intent(in) :: tile_count !< no clue (not used in MOM?)
+  character(len=*), optional, intent(in) :: cmor_field_name !< CMOR name of a field
+  character(len=*), optional, intent(in) :: cmor_long_name !< CMOR long name of a field
+  character(len=*), optional, intent(in) :: cmor_units !< CMOR units of a field
+  character(len=*), optional, intent(in) :: cmor_standard_name !< CMOR standardized name associated with a field
+  character(len=*), optional, intent(in) :: cell_methods !< String to append as cell_methods attribute. Use '' to have no attribute.
+                                                         !! If present, this overrides the default constructed from the default for
+                                                         !! each individual axis direction.
+  character(len=*), optional, intent(in) :: x_cell_method !< Specifies the cell method for the x-direction. Use '' have no method.
+  character(len=*), optional, intent(in) :: y_cell_method !< Specifies the cell method for the y-direction. Use '' have no method.
+  character(len=*), optional, intent(in) :: v_cell_method !< Specifies the cell method for the vertical direction. Use '' have no method.
+  ! Local variables
   real :: MOM_missing_value
   type(diag_ctrl), pointer :: diag_cs
-  type(diag_type), pointer :: diag => null(), cmor_diag => null(), z_remap_diag => null()
+  type(diag_type), pointer :: diag => null(), cmor_diag => null(), z_remap_diag => null(), cmor_z_remap_diag => null()
   integer :: primary_id, fms_id, remap_id
-  character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name
+  character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name, cm_string, msg
 
   MOM_missing_value = axes%diag_cs%missing_value
   if(present(missing_value)) MOM_missing_value = missing_value
@@ -1064,6 +1060,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
   diag => null()
   cmor_diag => null()
   z_remap_diag => null()
+  cmor_z_remap_diag => null()
 
   ! Set up the 'primary' diagnostic, first get an underlying FMS id
   fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
@@ -1071,6 +1068,8 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
          range=range, mask_variant=mask_variant, standard_name=standard_name, &
          verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
          interp_method=interp_method, tile_count=tile_count)
+  call attach_cell_methods(fms_id, axes, cm_string, &
+                           cell_methods, x_cell_method, y_cell_method, v_cell_method)
   if (fms_id /= DIAG_FIELD_NOT_FOUND) then
     ! If the diagnostic is needed then allocate and id and space
     primary_id = get_new_diag_id(diag_cs)
@@ -1079,8 +1078,14 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
     diag%fms_diag_id = fms_id
     call set_diag_mask(diag, diag_cs, axes)
   endif
+  if (is_root_pe() .and. diag_CS%doc_unit > 0) then
+    msg = ''
+    if (present(cmor_field_name)) msg = 'CMOR equivalent is "'//trim(cmor_field_name)//'"'
+    call log_available_diag(associated(diag), module_name, field_name, cm_string, &
+                            msg, diag_CS, long_name, units, standard_name)
+  endif
 
-  ! Set up the CMOR variation of the diagnostic
+  ! For the CMOR variation of the both the native and _z diagnostics
   if (present(cmor_field_name)) then
     ! Fallback values for strings set to "NULL"
     posted_cmor_units = "not provided"           !
@@ -1097,13 +1102,17 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
     if (present(cmor_units)) posted_cmor_units = cmor_units
     if (present(cmor_standard_name)) posted_cmor_standard_name = cmor_standard_name
     if (present(cmor_long_name)) posted_cmor_long_name = cmor_long_name
+  endif
 
+  ! Set up the CMOR variation of the native diagnostic
+  if (present(cmor_field_name)) then
     fms_id = register_diag_field_fms(module_name, cmor_field_name, axes%handles, init_time,    &
       long_name=trim(posted_cmor_long_name), units=trim(posted_cmor_units),                    &
       missing_value=MOM_missing_value, range=range, mask_variant=mask_variant,                 &
       standard_name=trim(posted_cmor_standard_name), verbose=verbose, do_not_log=do_not_log,   &
       err_msg=err_msg, interp_method=interp_method, tile_count=tile_count)
-
+    call attach_cell_methods(fms_id, axes, cm_string, &
+                             cell_methods, x_cell_method, y_cell_method, v_cell_method)
     if (fms_id /= DIAG_FIELD_NOT_FOUND) then
       if (primary_id == -1) then
         primary_id = get_new_diag_id(diag_cs)
@@ -1114,62 +1123,174 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
       cmor_diag%fms_diag_id = fms_id
       call set_diag_mask(cmor_diag, diag_cs, axes)
     endif
+    if (is_root_pe() .and. diag_CS%doc_unit > 0) then
+      msg = 'native name is "'//trim(field_name)//'"'
+      call log_available_diag(associated(cmor_diag), module_name, cmor_field_name, cm_string, &
+                              msg, diag_CS, posted_cmor_long_name, posted_cmor_units, &
+                              posted_cmor_standard_name)
+    endif
   endif
 
   ! Remap to z vertical coordinate, note that only diagnostics on layers
   ! (not interfaces) are supported, also B axes are not supported yet
-  if (get_diag_field_id_fms(module_name//'_z_new', field_name) /= DIAG_FIELD_NOT_FOUND &
-      .and. is_layer_axes(axes, diag_cs) .and. (.not. is_B_axes(axes, diag_cs)) &
-      .and. axes%rank == 3) then
-    if (.not. allocated(diag_cs%zi_remap)) then
-      call MOM_error(FATAL, 'register_diag_field: Request to regrid but no '// &
-                     'destination grid spec provided, see param DIAG_REMAP_Z_GRID_DEF')
+  if (is_layer_axes(axes, diag_cs) .and. (.not. is_B_axes(axes, diag_cs)) .and. axes%rank == 3) then
+    if (get_diag_field_id_fms(module_name//'_z_new', field_name) /= DIAG_FIELD_NOT_FOUND) then
+      if (.not. allocated(diag_cs%zi_remap)) then
+        call MOM_error(FATAL, 'register_diag_field: Request to regrid but no '// &
+                       'destination grid spec provided, see param DIAG_REMAP_Z_GRID_DEF')
+      endif
+      if (primary_id == -1) then
+        primary_id = get_new_diag_id(diag_cs)
+      endif
+      call alloc_diag_with_id(primary_id, diag_cs, z_remap_diag)
+      call set_diag_mask(z_remap_diag, diag_cs, axes)
+      call set_diag_remap_axes(z_remap_diag, diag_cs, axes)
+      call assert(associated(z_remap_diag%remap_axes), 'register_diag_field: remap axes not set')
+      fms_id = register_diag_field_fms(module_name//'_z_new', field_name, &
+           z_remap_diag%remap_axes%handles, &
+           init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
+           range=range, mask_variant=mask_variant, standard_name=standard_name, &
+           verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
+           interp_method=interp_method, tile_count=tile_count)
+      call attach_cell_methods(fms_id, z_remap_diag%remap_axes, cm_string, &
+                               cell_methods, x_cell_method, y_cell_method, v_cell_method)
+      z_remap_diag%fms_diag_id = fms_id
+  
+      if (is_u_axes(axes, diag_cs)) then
+        diag_cs%do_z_remapping_on_u = .true.
+      elseif (is_v_axes(axes, diag_cs)) then
+        diag_cs%do_z_remapping_on_v = .true.
+      else
+        diag_cs%do_z_remapping_on_T = .true.
+      endif
     endif
-    if (primary_id == -1) then
-      primary_id = get_new_diag_id(diag_cs)
-    endif
-    call alloc_diag_with_id(primary_id, diag_cs, z_remap_diag)
-    call set_diag_mask(z_remap_diag, diag_cs, axes)
-    call set_diag_remap_axes(z_remap_diag, diag_cs, axes)
-    call assert(associated(z_remap_diag%remap_axes), &
-                'register_diag_field: remap axes not set')
-    fms_id = register_diag_field_fms(module_name//'_z_new', field_name, &
-         z_remap_diag%remap_axes%handles, &
-         init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
-         range=range, mask_variant=mask_variant, standard_name=standard_name, &
-         verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
-         interp_method=interp_method, tile_count=tile_count)
-    z_remap_diag%fms_diag_id = fms_id
-
-    if (is_u_axes(axes, diag_cs)) then
-      diag_cs%do_z_remapping_on_u = .true.
-    elseif (is_v_axes(axes, diag_cs)) then
-      diag_cs%do_z_remapping_on_v = .true.
-    else
-      diag_cs%do_z_remapping_on_T = .true.
-    endif
-
-  endif
-
-  ! Document diagnostics in list of available diagnostics
-  if (is_root_pe() .and. diag_CS%doc_unit > 0) then
-    call log_available_diag(associated(diag), module_name, field_name, diag_CS, &
-                            long_name, units, standard_name)
-    if (present(cmor_field_name)) then
-      call log_available_diag(associated(cmor_diag), module_name, cmor_field_name, &
-                              diag_CS, posted_cmor_long_name, posted_cmor_units, &
-                              posted_cmor_standard_name)
-    endif
-    if (is_layer_axes(axes, diag_cs) .and. (.not. is_B_axes(axes, diag_cs)) &
-        .and. axes%rank == 3) then
+    if (is_root_pe() .and. diag_CS%doc_unit > 0) then
+      msg = ''
+      if (present(cmor_field_name)) msg = 'CMOR equivalent is "'//trim(cmor_field_name)//'"'
       call log_available_diag(associated(z_remap_diag), module_name//'_z_new', field_name, &
-                              diag_CS, long_name, units, standard_name)
+                              cm_string, msg, diag_CS, long_name, units, standard_name)
+    endif
+
+    ! Remap to z vertical coordinate with CMOR names and attributes
+    if (present(cmor_field_name)) then
+      if (get_diag_field_id_fms(module_name//'_z_new', cmor_field_name) /= DIAG_FIELD_NOT_FOUND) then
+        if (.not. allocated(diag_cs%zi_remap)) then
+          call MOM_error(FATAL, 'register_diag_field: Request to regrid but no '// &
+                         'destination grid spec provided, see param DIAG_REMAP_Z_GRID_DEF')
+        endif
+        if (primary_id == -1) then
+          primary_id = get_new_diag_id(diag_cs)
+        endif
+        call alloc_diag_with_id(primary_id, diag_cs, cmor_z_remap_diag)
+        call set_diag_mask(cmor_z_remap_diag, diag_cs, axes)
+        call set_diag_remap_axes(cmor_z_remap_diag, diag_cs, axes)
+        call assert(associated(cmor_z_remap_diag%remap_axes), 'register_diag_field: remap axes not set')
+        fms_id = register_diag_field_fms(module_name//'_z_new', cmor_field_name, &
+             cmor_z_remap_diag%remap_axes%handles, &
+             init_time, long_name=trim(posted_cmor_long_name), units=trim(posted_cmor_units), missing_value=MOM_missing_value, &
+             range=range, mask_variant=mask_variant, standard_name=trim(posted_cmor_standard_name), &
+             verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
+             interp_method=interp_method, tile_count=tile_count)
+        call attach_cell_methods(fms_id, cmor_z_remap_diag%remap_axes, cm_string, &
+                                 cell_methods, x_cell_method, y_cell_method, v_cell_method)
+        cmor_z_remap_diag%fms_diag_id = fms_id
+    
+        if (is_u_axes(axes, diag_cs)) then
+          diag_cs%do_z_remapping_on_u = .true.
+        elseif (is_v_axes(axes, diag_cs)) then
+          diag_cs%do_z_remapping_on_v = .true.
+        else
+          diag_cs%do_z_remapping_on_T = .true.
+        endif
+      endif
+      if (is_root_pe() .and. diag_CS%doc_unit > 0) then
+        msg = 'native name is "'//trim(field_name)//'"'
+        call log_available_diag(associated(cmor_z_remap_diag), module_name//'_z_new', cmor_field_name, &
+                                cm_string, msg, diag_CS, posted_cmor_long_name, posted_cmor_units, &
+                                posted_cmor_standard_name)
+      endif
     endif
   endif
 
   register_diag_field = primary_id
 
 end function register_diag_field
+
+!> Attaches "cell_methods" attribute to a variable based on defaults for axes_grp or optional arguments.
+subroutine attach_cell_methods(id, axes, ostring, cell_methods, x_cell_method, y_cell_method, v_cell_method)
+  integer,                    intent(in)  :: id !< Handle to diagnostic
+  type(axes_grp),             intent(in)  :: axes !< Container w/ up to 3 integer handles that indicates axes for this field
+  character(len=*),           intent(out) :: ostring !< The cell_methods strings that would appear in the file
+  character(len=*), optional, intent(in)  :: cell_methods !< String to append as cell_methods attribute. Use '' to have no attribute.
+                                                         !! If present, this overrides the default constructed from the default for
+                                                         !! each individual axis direction.
+  character(len=*), optional, intent(in)  :: x_cell_method !< Specifies the cell method for the x-direction. Use '' have no method.
+  character(len=*), optional, intent(in)  :: y_cell_method !< Specifies the cell method for the y-direction. Use '' have no method.
+  character(len=*), optional, intent(in)  :: v_cell_method !< Specifies the cell method for the vertical direction. Use '' have no method.
+  ! Local variables
+  character(len=9) :: axis_name
+
+  ostring = ''
+  if (present(cell_methods)) then
+    if (present(x_cell_method) .or. present(y_cell_method) .or. present(v_cell_method)) then
+      call MOM_error(FATAL, "attach_cell_methods: " // &
+           'Individual direction cell method was specified along with a "cell_methods" string.')
+    endif
+    if (len(trim(cell_methods))>0) then
+      call diag_field_add_attribute(id, 'cell_methods', trim(cell_methods))
+      ostring = trim(cell_methods)
+    endif
+  else
+    if (present(x_cell_method)) then
+      if (len(trim(x_cell_method))>0) then
+        call get_diag_axis_name(axes%handles(1), axis_name)
+        call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//': '//trim(x_cell_method))
+        ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(x_cell_method)
+      endif
+    else
+      if (len(trim(axes%x_cell_method))>0) then
+        call get_diag_axis_name(axes%handles(1), axis_name)
+        call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//': '//trim(axes%x_cell_method))
+        ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(axes%x_cell_method)
+      endif
+    endif
+    if (present(y_cell_method)) then
+      if (len(trim(y_cell_method))>0) then
+        call get_diag_axis_name(axes%handles(2), axis_name)
+        call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//': '//trim(y_cell_method))
+        ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(y_cell_method)
+      endif
+    else
+      if (len(trim(axes%y_cell_method))>0) then
+        call get_diag_axis_name(axes%handles(2), axis_name)
+        call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//': '//trim(axes%y_cell_method))
+        ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(axes%y_cell_method)
+      endif
+    endif
+    if (present(v_cell_method)) then
+      if (len(trim(v_cell_method))>0) then
+        if (axes%rank==1) then
+          call get_diag_axis_name(axes%handles(1), axis_name)
+        elseif (axes%rank==3) then
+          call get_diag_axis_name(axes%handles(3), axis_name)
+        endif
+        call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//': '//trim(v_cell_method))
+        ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(v_cell_method)
+      endif
+    else
+      if (len(trim(axes%v_cell_method))>0) then
+        if (axes%rank==1) then
+          call get_diag_axis_name(axes%handles(1), axis_name)
+        elseif (axes%rank==3) then
+          call get_diag_axis_name(axes%handles(3), axis_name)
+        endif
+        call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//': '//trim(axes%v_cell_method))
+        ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(axes%v_cell_method)
+      endif
+    endif
+  endif
+  ostring = adjustl(ostring)
+end subroutine attach_cell_methods
 
 function register_scalar_field(module_name, field_name, init_time, diag_cs, &
      long_name, units, missing_value, range, mask_variant, standard_name, &
@@ -1262,11 +1383,11 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
 
   ! Document diagnostics in list of available diagnostics
   if (is_root_pe() .and. diag_CS%doc_unit > 0) then
-    call log_available_diag(associated(diag), module_name, field_name, diag_CS, &
+    call log_available_diag(associated(diag), module_name, field_name, '', '', diag_CS, &
                             long_name, units, standard_name)
     if (present(cmor_field_name)) then
       call log_available_diag(associated(cmor_diag), module_name, cmor_field_name, &
-                              diag_CS, posted_cmor_long_name, posted_cmor_units, &
+                              '', '', diag_CS, posted_cmor_long_name, posted_cmor_units, &
                               posted_cmor_standard_name)
     endif
   endif
@@ -1282,7 +1403,7 @@ function register_static_field(module_name, field_name, axes, &
      cmor_field_name, cmor_long_name, cmor_units, cmor_standard_name)
   integer :: register_static_field
   character(len=*), intent(in) :: module_name, field_name
-  type(axesType),   intent(in) :: axes
+  type(axes_grp),   intent(in) :: axes
   character(len=*), optional, intent(in) :: long_name, units, standard_name
   real,             optional, intent(in) :: missing_value, range(2)
   logical,          optional, intent(in) :: mask_variant, do_not_log
@@ -1367,11 +1488,11 @@ function register_static_field(module_name, field_name, axes, &
 
   ! Document diagnostics in list of available diagnostics
   if (is_root_pe() .and. diag_CS%doc_unit > 0) then
-    call log_available_diag(associated(diag), module_name, field_name, diag_CS, &
+    call log_available_diag(associated(diag), module_name, field_name, '', '', diag_CS, &
                             long_name, units, standard_name)
     if (present(cmor_field_name)) then
       call log_available_diag(associated(cmor_diag), module_name, cmor_field_name, &
-                              diag_CS, posted_cmor_long_name, posted_cmor_units, &
+                              '', '', diag_CS, posted_cmor_long_name, posted_cmor_units, &
                               posted_cmor_standard_name)
     endif
   endif
@@ -1407,7 +1528,7 @@ function ocean_register_diag(var_desc, G, diag_CS, day)
   character(len=48) :: units            ! A variable's units.
   character(len=240) :: longname        ! A variable's longname.
   character(len=8) :: hor_grid, z_grid  ! Variable grid info.
-  type(axesType) :: axes
+  type(axes_grp) :: axes
 
   call query_vardesc(var_desc, units=units, longname=longname, hor_grid=hor_grid, &
                      z_grid=z_grid, caller="ocean_register_diag")
@@ -1659,9 +1780,7 @@ subroutine diag_mediator_end(time, diag_CS, end_diag_manager)
   if (allocated(diag_cs%zi_remap)) deallocate(diag_cs%zi_remap)
   if (allocated(diag_cs%zl_remap)) deallocate(diag_cs%zl_remap)
 
-  if (allocated(diag_cs%zi_u)) deallocate(diag_cs%zi_u)
-  if (allocated(diag_cs%zi_v)) deallocate(diag_cs%zi_v)
-  if (allocated(diag_cs%zi_T)) deallocate(diag_cs%zi_T)
+  if (allocated(diag_cs%h_zoutput)) deallocate(diag_cs%h_zoutput)
   deallocate(diag_cs%mask3dTL)
   deallocate(diag_cs%mask3dBuL)
   deallocate(diag_cs%mask3dCuL)
@@ -1705,7 +1824,7 @@ subroutine set_diag_remap_axes(diag, diag_cs, axes)
   ! Associate a remapping axes with the a diagnostic based on the axes info.
   type(diag_ctrl), target, intent(inout) :: diag_cs
   type(diag_type), pointer, intent(out) :: diag
-  type(axesType),   intent(in) :: axes
+  type(axes_grp),   intent(in) :: axes
 
   diag%remap_axes => null()
   if (axes%rank .eq. 3) then
@@ -1727,7 +1846,7 @@ subroutine set_diag_mask(diag, diag_cs, axes)
 
   type(diag_ctrl), target, intent(inout) :: diag_cs
   type(diag_type), pointer, intent(out) :: diag
-  type(axesType),   intent(in) :: axes
+  type(axes_grp),   intent(in) :: axes
 
   diag%mask2d => null()
   diag%mask3d => null()
@@ -1770,7 +1889,7 @@ end subroutine set_diag_mask
 
 function is_layer_axes(axes, diag_cs)
 
-  type(axesType),  intent(in) :: axes
+  type(axes_grp),  intent(in) :: axes
   type(diag_ctrl), intent(in) :: diag_cs
 
   logical :: is_layer_axes
@@ -1793,7 +1912,7 @@ end function is_layer_axes
 
 function is_u_axes(axes, diag_cs)
 
-  type(axesType),  intent(in) :: axes
+  type(axes_grp),  intent(in) :: axes
   type(diag_ctrl), intent(in) :: diag_cs
 
   logical :: is_u_axes
@@ -1811,7 +1930,7 @@ end function is_u_axes
 
 function is_v_axes(axes, diag_cs)
 
-  type(axesType),  intent(in) :: axes
+  type(axes_grp),  intent(in) :: axes
   type(diag_ctrl), intent(in) :: diag_cs
 
   logical :: is_v_axes
@@ -1829,7 +1948,7 @@ end function is_v_axes
 
 function is_B_axes(axes, diag_cs)
 
-  type(axesType),  intent(in) :: axes
+  type(axes_grp),  intent(in) :: axes
   type(diag_ctrl), intent(in) :: diag_cs
 
   logical :: is_B_axes
@@ -1910,35 +2029,37 @@ subroutine alloc_diag_with_id(diag_id, diag_cs, diag)
 
 end subroutine alloc_diag_with_id
 
-! Log a diagnostic to the available diagnostics file.
-subroutine log_available_diag(used, module_name, field_name, diag_CS, &
-                              long_name, units, standard_name)
-
-  logical,          intent(in) :: used
-  character(len=*), intent(in) :: module_name, field_name
-  type(diag_ctrl),  intent(in) :: diag_CS  ! < The diagnotic control structure
-  character(len=*), optional, intent(in) :: long_name, units, standard_name
+!> Log a diagnostic to the available diagnostics file.
+subroutine log_available_diag(used, module_name, field_name, cell_methods_string, comment, &
+                              diag_CS, long_name, units, standard_name)
+  logical,          intent(in) :: used !< Whether this diagnostic was in the diag_table or not
+  character(len=*), intent(in) :: module_name !< Name of the diagnostic module
+  character(len=*), intent(in) :: field_name !< Name of this diagnostic field
+  character(len=*), intent(in) :: cell_methods_string !< The spatial component of the CF cell_methods attribute
+  character(len=*), intent(in) :: comment !< A comment to append after [Used|Unused]
+  type(diag_ctrl),  intent(in) :: diag_CS  !< The diagnotics control structure
+  character(len=*), optional, intent(in) :: long_name !< CF long name of diagnostic
+  character(len=*), optional, intent(in) :: units !< Units for diagnostic
+  character(len=*), optional, intent(in) :: standard_name !< CF standardized name of diagnostic
+  ! Local variables
   character(len=240) :: mesg
-
-  ! Arguments:
-  !  (in)      used - whether or not this diagnostic is being used, i.e. appears in the diag_table
-  !  (in)      module_name   - name of this module, usually "ocean_model" or "ice_shelf_model".
-  !  (in)      field_name    - name of the diagnostic field
-  !  (in)      diag_CS       - the diagnostic control structure
-  !  (in,opt)  long_name     - long name of a field
-  !  (in,opt)  units         - units of a field
-  !  (in,opt)  standard_name - standardized name associated with a field
 
   if (used) then
     mesg = '"'//trim(module_name)//'", "'//trim(field_name)//'"  [Used]'
   else
     mesg = '"'//trim(module_name)//'", "'//trim(field_name)//'"  [Unused]'
   endif
-  write(diag_CS%doc_unit, '(a)') trim(mesg)
+  if (len(trim((comment)))>0) then
+    write(diag_CS%doc_unit, '(a,x,"(",a,")")') trim(mesg),trim(comment)
+  else
+    write(diag_CS%doc_unit, '(a)') trim(mesg)
+  endif
   if (present(long_name)) call describe_option("long_name", long_name, diag_CS)
   if (present(units)) call describe_option("units", units, diag_CS)
   if (present(standard_name)) &
     call describe_option("standard_name", standard_name, diag_CS)
+  if (len(trim((cell_methods_string)))>0) &
+    call describe_option("cell_methods", trim(cell_methods_string), diag_CS)
 
 end subroutine log_available_diag
 

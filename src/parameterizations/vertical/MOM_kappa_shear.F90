@@ -316,7 +316,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   new_kappa = .true. ; if (present(initialize_all)) new_kappa = initialize_all
 
   Ri_crit = CS%Rino_crit
-  gR0 = G%Rho0*G%g_Earth ; g_R0 = G%g_Earth/G%Rho0
+  gR0 = G%GV%Rho0*G%g_Earth ; g_R0 = G%g_Earth/G%GV%Rho0
 
   k0dt = dt*CS%kappa_0
   dz_massless = 0.1*sqrt(k0dt)
@@ -344,7 +344,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
 
   do j=js,je
     do k=1,nz ; do i=is,ie
-      h_2d(i,k) = h(i,j,k)*G%H_to_m
+      h_2d(i,k) = h(i,j,k)*G%GV%H_to_m
       u_2d(i,k) = u_in(i,j,k) ; v_2d(i,k) = v_in(i,j,k)
     enddo ; enddo
     if (use_temperature) then ; do k=1,nz ; do i=is,ie

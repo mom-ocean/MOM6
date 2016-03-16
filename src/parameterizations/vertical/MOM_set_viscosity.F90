@@ -279,9 +279,9 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nkmb = G%GV%nk_rho_varies ; nkml = G%GV%nkml
-  h_neglect = G%H_subroundoff
-  Rho0x400_G = 400.0*(G%Rho0/G%g_Earth)*G%m_to_H
-  Vol_quit = 0.9*G%Angstrom + h_neglect
+  h_neglect = G%GV%H_subroundoff
+  Rho0x400_G = 400.0*(G%GV%Rho0/G%g_Earth)*G%GV%m_to_H
+  Vol_quit = 0.9*G%GV%Angstrom + h_neglect
   C2pi_3 = 8.0*atan(1.0)/3.0
 
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(BBL): "//&
@@ -369,7 +369,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
           if (htot_vel>=CS%Hbbl) exit ! terminate the k loop
 
           hweight = MIN(CS%Hbbl - htot_vel, h_at_vel(i,k))
-          if (hweight < 1.5*G%Angstrom) cycle
+          if (hweight < 1.5*G%GV%Angstrom) cycle
 
           htot_vel  = htot_vel + h_at_vel(i,k)
           hwtot = hwtot + hweight
@@ -415,9 +415,9 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
         if (.not.do_i(i)) then ; T_EOS(i) = 0.0 ; S_EOS(i) = 0.0 ; endif
       enddo
       if (m==1) then ; do k=1,nz ; do i=is,ie
-        press(I) = press(I) + G%H_to_Pa * 0.5 * (h(i,j,k) + h(i+1,j,k))
+        press(I) = press(I) + G%GV%H_to_Pa * 0.5 * (h(i,j,k) + h(i+1,j,k))
       enddo ; enddo ; else ; do k=1,nz ; do i=is,ie
-        press(i) = press(i) + G%H_to_Pa * 0.5 * (h(i,j,k) + h(i,j+1,k))
+        press(i) = press(i) + G%GV%H_to_Pa * 0.5 * (h(i,j,k) + h(i,j+1,k))
       enddo ; enddo ; endif
       call calculate_density_derivs(T_EOS, S_EOS, press, dR_dT, dR_dS, &
                                     is-G%IsdB+1, ie-is+1, tv%eqn_of_state)
@@ -538,7 +538,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
       if (CS%cdrag * U_bg_sq <= 0.0) then
         ! This avoids NaNs and overflows, and could be used in all cases,
         ! but is not bitwise identical to the current code.
-        ustH = ustar(i)*G%m_to_H ; root = sqrt(0.25*ustH**2 + (htot*C2f)**2)
+        ustH = ustar(i)*G%GV%m_to_H ; root = sqrt(0.25*ustH**2 + (htot*C2f)**2)
         if (htot*ustH <= (CS%BBL_thick_min+h_neglect) * (0.5*ustH + root)) then
           bbl_thick = CS%BBL_thick_min
         else
@@ -546,7 +546,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
         endif
       else
         bbl_thick = htot / (0.5 + sqrt(0.25 + htot*htot*C2f*C2f/ &
-          ((ustar(i)*ustar(i)) * (G%m_to_H**2) )))
+          ((ustar(i)*ustar(i)) * (G%GV%m_to_H**2) )))
 
         if (bbl_thick < CS%BBL_thick_min) bbl_thick = CS%BBL_thick_min
       endif
@@ -577,7 +577,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
         if (Dm > Dp) then ; tmp = Dp ; Dp = Dm ; Dm = tmp ; endif
 
         ! Convert the D's to the units of thickness.
-        Dp = G%m_to_H*Dp ; Dm = G%m_to_H*Dm ; D_vel = G%m_to_H*D_vel
+        Dp = G%GV%m_to_H*Dp ; Dm = G%GV%m_to_H*Dm ; D_vel = G%GV%m_to_H*D_vel
 
         a_3 = (Dp + Dm - 2.0*D_vel) ; a = 3.0*a_3 ; a_12 = 0.25*a_3
         slope = Dp - Dm
@@ -667,10 +667,10 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
               !   Try a relatively simple solution that usually works well
               ! for massless layers.
               dV_dL2 = 0.5*(slope+a) - a*L0 ; dVol = (vol-Vol_0)
-              if (a*a*dVol**3 < G%Angstrom*dV_dL2**2 * &
-                                (0.25*dV_dL2*G%Angstrom - a*L0*dVol)) then
+              if (a*a*dVol**3 < G%GV%Angstrom*dV_dL2**2 * &
+                                (0.25*dV_dL2*G%GV%Angstrom - a*L0*dVol)) then
                 ! One iteration of Newton's method should give an estimate
-                ! that is accurate to within 0.5*G%Angstrom
+                ! that is accurate to within 0.5*G%GV%Angstrom
                 L(K) = sqrt(L0*L0 + dVol / dV_dL2)
                 Vol_err = 0.5*(L(K)*L(K))*(slope + a_3*(3.0-4.0*L(K))) - vol
               else
@@ -716,7 +716,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
             else ; Cell_width = G%dx_Cv(i,j) ; endif
             gam = 1.0 - L(K+1)/L(K)
             Rayleigh = CS%cdrag * (L(K)-L(K+1)) * (1.0-BBL_frac) * &
-                (12.0*CS%c_Smag*h_vel) /  (12.0*CS%c_Smag*h_vel + G%m_to_H * &
+                (12.0*CS%c_Smag*h_vel) /  (12.0*CS%c_Smag*h_vel + G%GV%m_to_H * &
                  CS%cdrag * gam*(1.0-gam)*(1.0-1.5*gam) * L(K)**2 * Cell_width)
           else ! This layer feels no drag.
             Rayleigh = 0.0
@@ -738,7 +738,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
 
         enddo ! k loop to determine L(K).
 
-        bbl_thick = bbl_thick * G%H_to_m
+        bbl_thick = bbl_thick * G%GV%H_to_m
         if (m==1) then
           visc%kv_bbl_u(i,j) = max(CS%KV_BBL_min, &
                                    cdrag_sqrt*ustar(i)*bbl_thick*BBL_visc_frac)
@@ -752,7 +752,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, CS)
       else ! Not Channel_drag.
 !   Here the near-bottom viscosity is set to a value which will give
 ! the correct stress when the shear occurs over bbl_thick.
-        bbl_thick = bbl_thick * G%H_to_m
+        bbl_thick = bbl_thick * G%GV%H_to_m
         if (m==1) then
           visc%kv_bbl_u(i,j) = max(CS%KV_BBL_min, cdrag_sqrt*ustar(i)*bbl_thick)
           visc%bbl_thick_u(i,j) = bbl_thick
@@ -955,15 +955,15 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
          "Module must be initialized before it is used.")
   if (.not.(CS%dynamic_viscous_ML .or. associated(fluxes%frac_shelf_h))) return
 
-  Rho0x400_G = 400.0*(G%Rho0/G%g_Earth)*G%m_to_H
+  Rho0x400_G = 400.0*(G%GV%Rho0/G%g_Earth)*G%GV%m_to_H
   U_bg_sq = CS%drag_bg_vel * CS%drag_bg_vel
   cdrag_sqrt=sqrt(CS%cdrag)
 
   use_EOS = associated(tv%eqn_of_state)
-  dt_Rho0 = dt/G%H_to_kg_m2
-  h_neglect = G%H_subroundoff
-  h_tiny = 2.0*G%Angstrom + h_neglect
-  g_H_Rho0 = (G%g_Earth * G%H_to_m) / G%Rho0
+  dt_Rho0 = dt/G%GV%H_to_kg_m2
+  h_neglect = G%GV%H_subroundoff
+  h_tiny = 2.0*G%GV%Angstrom + h_neglect
+  g_H_Rho0 = (G%g_Earth * G%GV%H_to_m) / G%GV%Rho0
 
   if (associated(fluxes%frac_shelf_h)) then
     ! This configuration has ice shelves, and the appropriate variables need to
@@ -1030,7 +1030,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
           if (CS%use_omega) then ; absf = 2.0*CS%omega
           else ; absf = 0.5*(abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I,J-1))) ; endif
           U_Star = max(CS%ustar_min, 0.5 * (fluxes%ustar(i,j) + fluxes%ustar(i+1,j)))
-          Idecay_len_TKE(I) = ((absf / U_Star) * CS%TKE_decay) * G%H_to_m
+          Idecay_len_TKE(I) = ((absf / U_Star) * CS%TKE_decay) * G%GV%H_to_m
         endif
       enddo
 
@@ -1040,7 +1040,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
           if (use_EOS .and. (k==nkml+1)) then
             ! Find dRho/dT and dRho_dS.
             do I=Isq,Ieq
-              press(I) = G%H_to_Pa * htot(I)
+              press(I) = G%GV%H_to_Pa * htot(I)
               k2 = max(1,nkml)
               I_2hlay = 1.0 / (h(i,j,k2) + h(i+1,j,k2) + h_neglect)
               T_EOS(I) = (h(i,j,k2)*tv%T(i,j,k2) + h(i+1,j,k2)*tv%T(i+1,j,k2)) * I_2hlay
@@ -1137,7 +1137,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
         if (use_EOS .or. .not.CS%linear_drag) then ; do k=1,nz
           if (htot_vel>=CS%Htbl_shelf) exit ! terminate the k loop
           hweight = MIN(CS%Htbl_shelf - htot_vel, h_at_vel(i,k))
-          if (hweight <= 1.5*G%Angstrom) cycle
+          if (hweight <= 1.5*G%GV%Angstrom) cycle
 
           htot_vel  = htot_vel + h_at_vel(i,k)
           hwtot = hwtot + hweight
@@ -1229,7 +1229,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
         visc%tbl_thick_shelf_u(I,j) = max(CS%Htbl_shelf_min, &
             htot(I) / (0.5 + sqrt(0.25 + &
                          (htot(i)*(G%CoriolisBu(I,J-1)+G%CoriolisBu(I,J)))**2 / &
-                         (ustar(i)*G%m_to_H)**2 )) )
+                         (ustar(i)*G%GV%m_to_H)**2 )) )
         visc%kv_tbl_shelf_u(I,j) = max(CS%KV_TBL_min, &
                        cdrag_sqrt*ustar(I)*visc%tbl_thick_shelf_u(I,j))
       endif ; enddo ! I-loop
@@ -1264,7 +1264,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
          if (CS%use_omega) then ; absf = 2.0*CS%omega
          else ; absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J))) ; endif
          U_Star = max(CS%ustar_min, 0.5 * (fluxes%ustar(i,j) + fluxes%ustar(i,j+1)))
-         Idecay_len_TKE(i) = ((absf / U_Star) * CS%TKE_decay) * G%H_to_m
+         Idecay_len_TKE(i) = ((absf / U_Star) * CS%TKE_decay) * G%GV%H_to_m
 
         endif
       enddo
@@ -1275,7 +1275,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
           if (use_EOS .and. (k==nkml+1)) then
             ! Find dRho/dT and dRho_dS.
             do i=is,ie
-              press(i) = G%H_to_Pa * htot(i)
+              press(i) = G%GV%H_to_Pa * htot(i)
               k2 = max(1,nkml)
               I_2hlay = 1.0 / (h(i,j,k2) + h(i,j+1,k2) + h_neglect)
               T_EOS(i) = (h(i,j,k2)*tv%T(i,j,k2) + h(i,j+1,k2)*tv%T(i,j+1,k2)) * I_2hlay
@@ -1372,7 +1372,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
         if (use_EOS .or. .not.CS%linear_drag) then ; do k=1,nz
           if (htot_vel>=CS%Htbl_shelf) exit ! terminate the k loop
           hweight = MIN(CS%Htbl_shelf - htot_vel, h_at_vel(i,k))
-          if (hweight <= 1.5*G%Angstrom) cycle
+          if (hweight <= 1.5*G%GV%Angstrom) cycle
 
           htot_vel  = htot_vel + h_at_vel(i,k)
           hwtot = hwtot + hweight
@@ -1464,7 +1464,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, CS)
         visc%tbl_thick_shelf_v(i,J) = max(CS%Htbl_shelf_min, &
             htot(i) / (0.5 + sqrt(0.25 + &
                 (htot(i)*(G%CoriolisBu(I-1,J)+G%CoriolisBu(I,J)))**2 / &
-                (ustar(i)*G%m_to_H)**2 )) )
+                (ustar(i)*G%GV%m_to_H)**2 )) )
         visc%kv_tbl_shelf_v(i,J) = max(CS%KV_TBL_min, &
                        cdrag_sqrt*ustar(i)*visc%tbl_thick_shelf_v(i,J))
       endif ; enddo ! i-loop
@@ -1651,7 +1651,7 @@ subroutine set_visc_init(Time, G, param_file, diag, visc, CS)
                  "The rotation rate of the earth.", units="s-1", &
                  default=7.2921e-5)
     ! This give a minimum decay scale that is typically much less than Angstrom.
-    CS%ustar_min = 2e-4*CS%omega*(G%Angstrom_z + G%H_to_m*G%H_subroundoff)
+    CS%ustar_min = 2e-4*CS%omega*(G%GV%Angstrom_z + G%GV%H_to_m*G%GV%H_subroundoff)
   endif
 
   call get_param(param_file, mod, "HBBL", CS%Hbbl, &
@@ -1755,8 +1755,8 @@ subroutine set_visc_init(Time, G, param_file, diag, visc, CS)
        diag%axesCv1, Time, 'Number of layers in viscous mixed layer at v points', 'meter')
   endif
 
-  CS%Hbbl = CS%Hbbl * G%m_to_H
-  CS%BBL_thick_min = CS%BBL_thick_min * G%m_to_H
+  CS%Hbbl = CS%Hbbl * G%GV%m_to_H
+  CS%BBL_thick_min = CS%BBL_thick_min * G%GV%m_to_H
 
 end subroutine set_visc_init
 

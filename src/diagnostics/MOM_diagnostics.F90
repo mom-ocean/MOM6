@@ -263,7 +263,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
   ! mass per area of grid cell (for Bouss, use Rho0)
   if (CS%id_masscello > 0) then
     do k=1,nz; do j=js,je ; do i=is,ie 
-       CS%diag_tmp3d(i,j,k) = G%H_to_kg_m2*h(i,j,k)
+       CS%diag_tmp3d(i,j,k) = G%GV%H_to_kg_m2*h(i,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_masscello, CS%diag_tmp3d, CS%diag)
   endif
@@ -271,7 +271,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
   ! mass of liquid ocean (for Bouss, use Rho0)
   if (CS%id_masso > 0) then
     do k=1,nz; do j=js,je ; do i=is,ie
-       CS%diag_tmp3d(i,j,k) = G%H_to_kg_m2*h(i,j,k)*G%areaT(i,j)
+       CS%diag_tmp3d(i,j,k) = G%GV%H_to_kg_m2*h(i,j,k)*G%areaT(i,j)
     enddo ; enddo ; enddo
     masso = (reproducing_sum(sum(CS%diag_tmp3d,3)))
     call post_data(CS%id_masso, masso, CS%diag)
@@ -281,8 +281,8 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
   if (CS%id_thkcello > 0) then
 
     ! thkcello = h for Boussinesq 
-    if (G%Boussinesq) then 
-      call post_data(CS%id_thkcello, G%H_to_m*h, CS%diag)
+    if (G%GV%Boussinesq) then 
+      call post_data(CS%id_thkcello, G%GV%H_to_m*h, CS%diag)
 
     ! thkcello = dp/(rho*g) for non-Boussinesq
     else 
@@ -302,18 +302,18 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
         do k=1,nz
           ! pressure for EOS at the layer center (Pa)
           do i=is,ie
-            pressure_1d(i) = pressure_1d(i) + 0.5*(G%G_Earth*G%H_to_kg_m2)*h(i,j,k)
+            pressure_1d(i) = pressure_1d(i) + 0.5*(G%G_Earth*G%GV%H_to_kg_m2)*h(i,j,k)
           enddo
           ! store in-situ density (kg/m3) in diag_tmp3d
           call calculate_density(tv%T(:,j,k),tv%S(:,j,k), pressure_1d, &
                                  CS%diag_tmp3d(:,j,k), is, ie-is+1, tv%eqn_of_state)
           ! cell thickness = dz = dp/(g*rho) (meter); store in diag_tmp3d
           do i=is,ie
-            CS%diag_tmp3d(i,j,k) = (G%H_to_kg_m2*h(i,j,k))/CS%diag_tmp3d(i,j,k)
+            CS%diag_tmp3d(i,j,k) = (G%GV%H_to_kg_m2*h(i,j,k))/CS%diag_tmp3d(i,j,k)
           enddo
           ! pressure for EOS at the bottom interface (Pa)
           do i=is,ie
-            pressure_1d(i) = pressure_1d(i) + 0.5*(G%G_Earth*G%H_to_kg_m2)*h(i,j,k)
+            pressure_1d(i) = pressure_1d(i) + 0.5*(G%G_Earth*G%GV%H_to_kg_m2)*h(i,j,k)
           enddo
         enddo ! k
 
@@ -643,7 +643,7 @@ subroutine calculate_vertical_integrals(h, tv, fluxes, G, CS)
   if (CS%id_mass_wt > 0) then
     do j=js,je ; do i=is,ie ; mass(i,j) = 0.0 ; enddo ; enddo
     do k=1,nz ; do j=js,je ; do i=is,ie
-      mass(i,j) = mass(i,j) + G%H_to_kg_m2*h(i,j,k)
+      mass(i,j) = mass(i,j) + G%GV%H_to_kg_m2*h(i,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_mass_wt, mass, CS%diag)
   endif
@@ -651,7 +651,7 @@ subroutine calculate_vertical_integrals(h, tv, fluxes, G, CS)
   if (CS%id_temp_int > 0) then
     do j=js,je ; do i=is,ie ; tr_int(i,j) = 0.0 ; enddo ; enddo
     do k=1,nz ; do j=js,je ; do i=is,ie
-      tr_int(i,j) = tr_int(i,j) + (G%H_to_kg_m2*h(i,j,k))*tv%T(i,j,k)
+      tr_int(i,j) = tr_int(i,j) + (G%GV%H_to_kg_m2*h(i,j,k))*tv%T(i,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_temp_int, tr_int, CS%diag)
   endif
@@ -659,7 +659,7 @@ subroutine calculate_vertical_integrals(h, tv, fluxes, G, CS)
   if (CS%id_salt_int > 0) then
     do j=js,je ; do i=is,ie ; tr_int(i,j) = 0.0 ; enddo ; enddo
     do k=1,nz ; do j=js,je ; do i=is,ie
-      tr_int(i,j) = tr_int(i,j) + (G%H_to_kg_m2*h(i,j,k))*tv%S(i,j,k)
+      tr_int(i,j) = tr_int(i,j) + (G%GV%H_to_kg_m2*h(i,j,k))*tv%S(i,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_salt_int, tr_int, CS%diag)
   endif
@@ -674,18 +674,18 @@ subroutine calculate_vertical_integrals(h, tv, fluxes, G, CS)
 
   if (CS%id_col_mass > 0 .or. CS%id_pbo > 0) then
     do j=js,je ; do i=is,ie ; mass(i,j) = 0.0 ; enddo ; enddo
-    if (G%Boussinesq) then
+    if (G%GV%Boussinesq) then
       if (associated(tv%eqn_of_state)) then
         IG_Earth = 1.0 / G%g_Earth
-!       do j=js,je ; do i=is,ie ; z_bot(i,j) = -P_SURF(i,j)/G%H_to_Pa ; enddo ; enddo
+!       do j=js,je ; do i=is,ie ; z_bot(i,j) = -P_SURF(i,j)/G%GV%H_to_Pa ; enddo ; enddo
         do j=js,je ; do i=is,ie ; z_bot(i,j) = 0.0 ; enddo ; enddo
         do k=1,nz
           do j=js,je ; do i=is,ie
             z_top(i,j) = z_bot(i,j)
-            z_bot(i,j) = z_top(i,j) - G%H_to_m*h(i,j,k)
+            z_bot(i,j) = z_top(i,j) - G%GV%H_to_m*h(i,j,k)
           enddo ; enddo
           call int_density_dz(tv%T(:,:,k), tv%S(:,:,k), &
-                              z_top, z_bot, 0.0, G%H_to_kg_m2, G%g_Earth, &
+                              z_top, z_bot, 0.0, G%GV%H_to_kg_m2, G%g_Earth, &
                               G%HI, G%HI, tv%eqn_of_state, dpress)
           do j=js,je ; do i=is,ie
             mass(i,j) = mass(i,j) + dpress(i,j) * IG_Earth
@@ -693,12 +693,12 @@ subroutine calculate_vertical_integrals(h, tv, fluxes, G, CS)
         enddo
       else
         do k=1,nz ; do j=js,je ; do i=is,ie
-          mass(i,j) = mass(i,j) + (G%H_to_m*G%GV%Rlay(k))*h(i,j,k)
+          mass(i,j) = mass(i,j) + (G%GV%H_to_m*G%GV%Rlay(k))*h(i,j,k)
         enddo ; enddo ; enddo
       endif
     else
       do k=1,nz ; do j=js,je ; do i=is,ie
-        mass(i,j) = mass(i,j) + G%H_to_kg_m2*h(i,j,k)
+        mass(i,j) = mass(i,j) + G%GV%H_to_kg_m2*h(i,j,k)
       enddo ; enddo ; enddo
     endif
     if (CS%id_col_mass > 0) then
@@ -1035,7 +1035,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, param_file, diag, CS, &
   call get_param(param_file, mod, "SPLIT", CS%split, &
                  "Use the split time stepping if true.", default=.true.)
 
-  if (G%Boussinesq) then
+  if (G%GV%Boussinesq) then
     thickness_units = "meter" ; flux_units = "meter3 second-1"
   else
     thickness_units = "kilogram meter-2" ; flux_units = "kilogram second-1"
@@ -1057,7 +1057,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, param_file, diag, CS, &
   CS%id_thkcello = register_diag_field('ocean_model', 'thkcello', diag%axesTL, Time, &
       long_name = 'Cell Thickness', standard_name='cell_thickness', units='m')
 
-  if (((CS%id_masscello>0) .or. (CS%id_masso>0) .or. (CS%id_thkcello>0.and..not.G%Boussinesq)) &
+  if (((CS%id_masscello>0) .or. (CS%id_masso>0) .or. (CS%id_thkcello>0.and..not.G%GV%Boussinesq)) &
       .and. .not.ASSOCIATED(CS%diag_tmp3d)) then
     call safe_alloc_ptr(CS%diag_tmp3d,isd,ied,jsd,jed,nz)
   endif

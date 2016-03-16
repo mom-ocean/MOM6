@@ -177,7 +177,7 @@ subroutine benchmark_initialize_thickness(h, G, param_file, eqn_of_state, P_ref)
 
 !    This sets the initial thickness (in m) of the layers.  The      !
 !  thicknesses are set to insure that: 1.  each layer is at least    !
-!  G%Angstrom_z thick, and 2.  the interfaces are where they should be    !
+!  Gv%Angstrom_z thick, and 2.  the interfaces are where they should be    !
 !  based on the resting depths and interface height perturbations,   !
 !  as long at this doesn't interfere with 1.                         !
     eta1D(nz+1) = -1.0*G%bathyT(i,j)
@@ -199,12 +199,12 @@ subroutine benchmark_initialize_thickness(h, G, param_file, eqn_of_state, P_ref)
 
       if (eta1D(K) > -ML_depth) eta1D(K) = -ML_depth
 
-      if (eta1D(K) < eta1D(K+1) + G%Angstrom_z) &
-        eta1D(K) = eta1D(K+1) + G%Angstrom_z
+      if (eta1D(K) < eta1D(K+1) + G%GV%Angstrom_z) &
+        eta1D(K) = eta1D(K+1) + G%GV%Angstrom_z
 
-      h(i,j,k) = max(eta1D(K) - eta1D(K+1), G%Angstrom_z)
+      h(i,j,k) = max(eta1D(K) - eta1D(K+1), G%GV%Angstrom_z)
     enddo
-    h(i,j,1) = max(0.0 - eta1D(2), G%Angstrom_z)
+    h(i,j,1) = max(0.0 - eta1D(2), G%GV%Angstrom_z)
 
   enddo ; enddo
 

@@ -167,6 +167,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     h_input      ! Left and right face thicknesses, in H.
+  real :: h_min
   type(loop_bounds_type) :: LB
   integer :: is, ie, js, je, nz, stensil
   integer :: i, j, k
@@ -175,6 +176,8 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
   logical :: apply_OBC_u_flather_east, apply_OBC_u_flather_west
   logical :: apply_OBC_v_flather_north, apply_OBC_v_flather_south
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  h_min = G%GV%Angstrom
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "MOM_continuity_PPM: Module must be initialized before it is used.")
@@ -215,7 +218,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
     do k=1,nz ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
       h(i,j,k) = hin(i,j,k) - dt* G%IareaT(i,j) * (uh(I,j,k) - uh(I-1,j,k))
   !   Uncomment this line to prevent underflow.
-  !   if (h(i,j,k) < G%Angstrom) h(i,j,k) = G%Angstrom
+  !   if (h(i,j,k) < h_min) h(i,j,k) = h_min
     enddo ; enddo ; enddo
     call cpu_clock_end(id_clock_update)
 
@@ -243,7 +246,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
     do k=1,nz ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
       h(i,j,k) = h(i,j,k) - dt*G%IareaT(i,j) * (vh(i,J,k) - vh(i,J-1,k))
   !   This line prevents underflow.
-      if (h(i,j,k) < G%Angstrom) h(i,j,k) = G%Angstrom
+      if (h(i,j,k) < h_min) h(i,j,k) = h_min
     enddo ; enddo ; enddo
     call cpu_clock_end(id_clock_update)
 
@@ -298,7 +301,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
     do k=1,nz ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
       h(i,j,k) = h(i,j,k) - dt* G%IareaT(i,j) * (uh(I,j,k) - uh(I-1,j,k))
   !   This line prevents underflow.
-      if (h(i,j,k) < G%Angstrom) h(i,j,k) = G%Angstrom
+      if (h(i,j,k) < h_min) h(i,j,k) = h_min
     enddo ; enddo ; enddo
     call cpu_clock_end(id_clock_update)
 
@@ -407,7 +410,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, CS, LB, uhbt, OBC, &
       enddo ; enddo
     else
       call PPM_reconstruction_x(h_in(:,:,k), hl(:,:,k), hr(:,:,k), G, LB, &
-                                2.0*G%Angstrom, CS%monotonic, simple_2nd=CS%simple_2nd)
+                                2.0*G%GV%Angstrom, CS%monotonic, simple_2nd=CS%simple_2nd)
     endif
     do I=ish-1,ieh ; visc_rem(I,k) = 1.0 ; enddo
   enddo
@@ -568,7 +571,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, CS, LB, uhbt, OBC, &
           do I=ish-1,ieh
             do_i(I) = (OBC%OBC_mask_u(I,j) .and. &
                        (OBC%OBC_kind_u(I,j) == OBC_SIMPLE))
-            if (do_i(I)) BT_cont%Fa_u_W0(I,j) = G%H_subroundoff*G%dy_Cu(I,j)
+            if (do_i(I)) BT_cont%Fa_u_W0(I,j) = G%GV%H_subroundoff*G%dy_Cu(I,j)
           enddo
           do k=1,nz ; do I=ish-1,ieh ; if (do_i(I)) then
             if (abs(OBC%u(I,j,k)) > 0.0) &
@@ -722,7 +725,7 @@ subroutine zonal_face_thickness(u, h, hL, hR, h_u, dt, G, LB, vol_CFL, &
       ! it should be noted that hl(i+1,j,k) and hr(i,j,k) are usually the same.
       h_marg = 0.5 * (hl(i+1,j,k) + hr(i,j,k))
  !    h_marg = (2.0 * hl(i+1,j,k) * hr(i,j,k)) / &
- !             (hl(i+1,j,k) + hr(i,j,k) + G%H_subroundoff)
+ !             (hl(i+1,j,k) + hr(i,j,k) + G%GV%H_subroundoff)
     endif
 
     if (marginal) then ; h_u(I,j,k) = h_marg
@@ -1160,7 +1163,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, CS, LB, vhbt, OBC, &
       enddo ; enddo
     else
       call PPM_reconstruction_y(h_in(:,:,k), hl(:,:,k), hr(:,:,k), G, LB, &
-                                2.0*G%Angstrom, CS%monotonic, simple_2nd=CS%simple_2nd)
+                                2.0*G%GV%Angstrom, CS%monotonic, simple_2nd=CS%simple_2nd)
     endif
     do i=ish,ieh ; visc_rem(i,k) = 1.0 ; enddo
   enddo
@@ -1318,7 +1321,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, CS, LB, vhbt, OBC, &
           do i=ish,ieh
             do_i(i) = (OBC%OBC_mask_v(i,J) .and. &
                        (OBC%OBC_kind_v(i,J) == OBC_SIMPLE))
-            if (do_i(i)) BT_cont%Fa_v_S0(i,J) = G%H_subroundoff*G%dx_Cv(I,j)
+            if (do_i(i)) BT_cont%Fa_v_S0(i,J) = G%GV%H_subroundoff*G%dx_Cv(I,j)
           enddo
           do k=1,nz ; do i=ish,ieh ; if (do_i(i)) then
             if (abs(OBC%v(i,J,k)) > 0.0) &
@@ -1474,7 +1477,7 @@ subroutine merid_face_thickness(v, h, hL, hR, h_v, dt, G, LB, vol_CFL, &
       ! it should be noted that hl(i+1,j,k) and hr(i,j,k) are usually the same.
       h_marg = 0.5 * (hl(i,j+1,k) + hr(i,j,k))
  !    h_marg = (2.0 * hl(i,j+1,k) * hr(i,j,k)) / &
- !             (hl(i,j+1,k) + hr(i,j,k) + G%H_subroundoff)
+ !             (hl(i,j+1,k) + hr(i,j,k) + G%GV%H_subroundoff)
     endif
 
     if (marginal) then ; h_v(i,J,k) = h_marg
@@ -2142,7 +2145,7 @@ subroutine continuity_PPM_init(Time, G, param_file, diag, CS)
                  "tolerance for SSH is 4 times this value.  The default \n"//&
                  "is 0.5*NK*ANGSTROM, and this should not be set less x\n"//&
                  "than about 10^-15*MAXIMUM_DEPTH.", units="m", &
-                 default=0.5*G%ke*G%Angstrom_z)
+                 default=0.5*G%ke*G%GV%Angstrom_z)
 
   call get_param(param_file, mod, "ETA_TOLERANCE_AUX", CS%tol_eta_aux, &
                  "The tolerance for free-surface height discrepancies \n"//&
@@ -2186,8 +2189,8 @@ subroutine continuity_PPM_init(Time, G, param_file, diag, CS)
   id_clock_update = cpu_clock_id('(Ocean continuity update)', grain=CLOCK_ROUTINE)
   id_clock_correct = cpu_clock_id('(Ocean continuity correction)', grain=CLOCK_ROUTINE)
 
-  CS%tol_eta = CS%tol_eta * G%m_to_H
-  CS%tol_eta_aux = CS%tol_eta_aux * G%m_to_H
+  CS%tol_eta = CS%tol_eta * G%GV%m_to_H
+  CS%tol_eta_aux = CS%tol_eta_aux * G%GV%m_to_H
 
 end subroutine continuity_PPM_init
 

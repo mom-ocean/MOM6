@@ -372,7 +372,7 @@ subroutine initialize_ideal_age_tracer(restart, day, G, h, OBC, CS, sponge_CSp, 
   endif
 
   ! This needs to be changed if the units of tracer are changed above.
-  if (G%Boussinesq) then ; flux_units = "years m3 s-1"
+  if (G%GV%Boussinesq) then ; flux_units = "years m3 s-1"
   else ; flux_units = "years kg s-1" ; endif
 
   do m=1,CS%ntr
@@ -484,7 +484,7 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
   if (CS%mask_tracers) then
     do m=1,CS%ntr ; if (CS%id_tracer(m) > 0) then
       do k=1,nz ; do j=js,je ; do i=is,ie
-        if (h_new(i,j,k) < 1.1*G%Angstrom) then
+        if (h_new(i,j,k) < 1.1*G%GV%Angstrom) then
           CS%tr_aux(i,j,k,m) = CS%land_val(m)
         else
           CS%tr_aux(i,j,k,m) = CS%tr(i,j,k,m)
@@ -559,7 +559,7 @@ function ideal_age_stock(h, stocks, G, CS, names, units, stock_index)
       stocks(m) = stocks(m) + CS%tr(i,j,k,m) * &
                              (G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k))
     enddo ; enddo ; enddo
-    stocks(m) = G%H_to_kg_m2 * stocks(m)
+    stocks(m) = G%GV%H_to_kg_m2 * stocks(m)
   enddo
   ideal_age_stock = CS%ntr
 

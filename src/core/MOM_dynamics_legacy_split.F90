@@ -470,10 +470,10 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
   call PressureForce(h, tv, CS%PFu, CS%PFv, G, CS%PressureForce_CSp, &
                      CS%ALE_CSp, p_surf, CS%pbce, CS%eta_PF)
   if (dyn_p_surf) then
-    if (G%Boussinesq) then
-      Pa_to_eta = 1.0 / (G%Rho0*G%g_Earth)
+    if (G%GV%Boussinesq) then
+      Pa_to_eta = 1.0 / (G%GV%Rho0*G%g_Earth)
     else
-      Pa_to_eta = 1.0 / G%H_to_Pa
+      Pa_to_eta = 1.0 / G%GV%H_to_Pa
     endif
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       eta_PF_start(i,j) = CS%eta_PF(i,j) - Pa_to_eta * &
@@ -678,9 +678,9 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
   if (CS%debug) then
     call uchksum(up,"Predictor 1 u",G,haloshift=0)
     call vchksum(vp,"Predictor 1 v",G,haloshift=0)
-    call hchksum(G%H_to_kg_m2*h,"Predictor 1 h",G,haloshift=1)
-    call uchksum(G%H_to_kg_m2*uh,"Predictor 1 uh",G,haloshift=2)
-    call vchksum(G%H_to_kg_m2*vh,"Predictor 1 vh",G,haloshift=2)
+    call hchksum(G%GV%H_to_kg_m2*h,"Predictor 1 h",G,haloshift=1)
+    call uchksum(G%GV%H_to_kg_m2*uh,"Predictor 1 uh",G,haloshift=2)
+    call vchksum(G%GV%H_to_kg_m2*vh,"Predictor 1 vh",G,haloshift=2)
 !   call MOM_state_chksum("Predictor 1", up, vp, h, uh, vh, G, haloshift=1)
     call MOM_accel_chksum("Predictor accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
              CS%diffu, CS%diffv, G, CS%pbce, CS%u_accel_bt, CS%v_accel_bt)
@@ -793,7 +793,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
     call MOM_state_chksum("Predictor ", up, vp, hp, uh, vh, G)
     call uchksum(u_av,"Predictor avg u",G,haloshift=1)
     call vchksum(v_av,"Predictor avg v",G,haloshift=1)
-    call hchksum(G%H_to_kg_m2*h_av,"Predictor avg h",G,haloshift=0)
+    call hchksum(G%GV%H_to_kg_m2*h_av,"Predictor avg h",G,haloshift=0)
   ! call MOM_state_chksum("Predictor avg ", u_av, v_av,  h_av,uh, vh, G)
     call check_redundant("Predictor up ", up, vp, G)
     call check_redundant("Predictor uh ", uh, vh, G)
@@ -877,9 +877,9 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
   if (CS%debug) then
     call uchksum(u,"Corrector 1 u",G,haloshift=0)
     call vchksum(v,"Corrector 1 v",G,haloshift=0)
-    call hchksum(G%H_to_kg_m2*h,"Corrector 1 h",G,haloshift=2)
-    call uchksum(G%H_to_kg_m2*uh,"Corrector 1 uh",G,haloshift=2)
-    call vchksum(G%H_to_kg_m2*vh,"Corrector 1 vh",G,haloshift=2)
+    call hchksum(G%GV%H_to_kg_m2*h,"Corrector 1 h",G,haloshift=2)
+    call uchksum(G%GV%H_to_kg_m2*uh,"Corrector 1 uh",G,haloshift=2)
+    call vchksum(G%GV%H_to_kg_m2*vh,"Corrector 1 vh",G,haloshift=2)
   ! call MOM_state_chksum("Corrector 1", u, v, h, uh, vh, G, haloshift=1)
     call MOM_accel_chksum("Corrector accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
              CS%diffu, CS%diffv, G, CS%pbce, CS%u_accel_bt, CS%v_accel_bt)
@@ -1038,7 +1038,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
     call MOM_state_chksum("Corrector ", u, v, h, uh, vh, G)
     call uchksum(u_av,"Corrector avg u",G,haloshift=1)
     call vchksum(v_av,"Corrector avg v",G,haloshift=1)
-    call hchksum(G%H_to_kg_m2*h_av,"Corrector avg h",G,haloshift=1)
+    call hchksum(G%GV%H_to_kg_m2*h_av,"Corrector avg h",G,haloshift=1)
  !  call MOM_state_chksum("Corrector avg ", u_av, v_av, h_av, uh, vh, G)
   endif
 
@@ -1151,12 +1151,12 @@ subroutine register_restarts_dyn_legacy_split(G, param_file, CS, restart_CS, uh,
   ALLOC_(CS%eta(isd:ied,jsd:jed))       ; CS%eta(:,:) = 0.0
   ALLOC_(CS%u_av(IsdB:IedB,jsd:jed,nz)) ; CS%u_av(:,:,:) = 0.0
   ALLOC_(CS%v_av(isd:ied,JsdB:JedB,nz)) ; CS%v_av(:,:,:) = 0.0
-  ALLOC_(CS%h_av(isd:ied,jsd:jed,nz))   ; CS%h_av(:,:,:) = G%Angstrom
+  ALLOC_(CS%h_av(isd:ied,jsd:jed,nz))   ; CS%h_av(:,:,:) = G%GV%Angstrom
   ALLOC_(CS%uhbt_in(IsdB:IedB,jsd:jed)) ; CS%uhbt_in(:,:) = 0.0
   ALLOC_(CS%vhbt_in(isd:ied,JsdB:JedB)) ; CS%vhbt_in(:,:) = 0.0
 
-  thickness_units = get_thickness_units(G)
-  flux_units = get_flux_units(G)
+  thickness_units = get_thickness_units(G%GV)
+  flux_units = get_flux_units(G%GV)
 
   vd = var_desc("sfc",thickness_units,"Free surface Height",'h','1')
   call register_restart_field(CS%eta, vd, .false., restart_CS)
@@ -1381,7 +1381,7 @@ subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, param_file
     ! eta is the mass of ocean per unit area.  eta always has the same
     ! dimensions as h, either m or kg m-3.
     !   CS%eta(:,:) = 0.0 already from initialization.
-    if (G%Boussinesq) then
+    if (G%GV%Boussinesq) then
       do j=js,je ; do i=is,ie ; CS%eta(i,j) = -G%bathyT(i,j) ; enddo ; enddo
     endif
     do k=1,nz ; do j=js,je ; do i=is,ie
@@ -1436,7 +1436,7 @@ subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, param_file
   call pass_vector(uh, vh, G%Domain)
   call cpu_clock_end(id_clock_pass_init)
 
-  flux_units = get_flux_units(G)
+  flux_units = get_flux_units(G%GV)
   CS%id_uh = register_diag_field('ocean_model', 'uh', diag%axesCuL, Time, &
       'Zonal Thickness Flux', flux_units)
   CS%id_vh = register_diag_field('ocean_model', 'vh', diag%axesCvL, Time, &

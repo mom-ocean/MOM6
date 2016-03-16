@@ -110,7 +110,7 @@ subroutine PressureForce_AFV(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce, eta)
 ! Descriptions of the variables are in each of the routines called in the
 ! following conditional block.
 
-  if (G%Boussinesq) then
+  if (G%GV%Boussinesq) then
     call PressureForce_AFV_bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce, eta)
   else
     call PressureForce_AFV_nonbouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
@@ -227,7 +227,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
   if (.not.associated(CS)) call MOM_error(FATAL, &
        "MOM_PressureForce: Module must be initialized before it is used.")
 
-  dp_neglect = G%H_to_Pa * G%H_subroundoff
+  dp_neglect = G%GV%H_to_Pa * G%GV%H_subroundoff
   alpha_ref = 1.0/CS%Rho0
 
 !$OMP parallel default(none) shared(Isq,Ieq,Jsq,Jeq,nz,use_p_atm,p,p_atm,G,h)
@@ -244,7 +244,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
   endif
 !$OMP do
   do j=Jsq,Jeq+1 ; do k=2,nz+1 ; do i=Isq,Ieq+1
-    p(i,j,K) = p(i,j,K-1) + G%H_to_Pa * h(i,j,k-1)
+    p(i,j,K) = p(i,j,K-1) + G%GV%H_to_Pa * h(i,j,k-1)
   enddo ; enddo ; enddo
 !$OMP end parallel
 
@@ -295,7 +295,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
     else
       alpha_anom = 1.0/G%GV%Rlay(k) - alpha_ref
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        dp(i,j) = G%H_to_Pa * h(i,j,k)
+        dp(i,j) = G%GV%H_to_Pa * h(i,j,k)
         dza(i,j,k) = alpha_anom * dp(i,j)
         intp_dza(i,j,k) = 0.5 * alpha_anom * dp(i,j)**2
       enddo ; enddo
@@ -398,7 +398,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
       ! a set of idealized cases, and should be bug-free.
       do jb=Jsq_bk,Jeq_bk+1 ; do ib=Isq_bk,Ieq_bk+1
         i = ib+ioff_bk ; j = jb+joff_bk
-        dp_bk(ib,jb) = G%H_to_Pa*h(i,j,k)
+        dp_bk(ib,jb) = G%GV%H_to_Pa*h(i,j,k)
         za_bk(ib,jb) = za_bk(ib,jb) - dza(i,j,k)
       enddo ; enddo
       do jb=js_bk,je_bk ; do Ib=Isq_bk,Ieq_bk
@@ -439,7 +439,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
   endif
 
   if (present(eta)) then
-    Pa_to_H = 1.0 / G%H_to_Pa
+    Pa_to_H = 1.0 / G%GV%H_to_Pa
     if (use_p_atm) then
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,eta,p,p_atm,Pa_to_H)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -566,9 +566,9 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
   if (associated(ALE_CSp)) use_ALE = usePressureReconstruction(ALE_CSp) .and. use_EOS
 
   PRScheme = pressureReconstructionScheme(ALE_CSp)
-  h_neglect = G%H_subroundoff
-  I_Rho0 = 1.0/G%Rho0
-  G_Rho0 = G%g_Earth/G%Rho0
+  h_neglect = G%GV%H_subroundoff
+  I_Rho0 = 1.0/G%GV%Rho0
+  G_Rho0 = G%g_Earth/G%GV%Rho0
   rho_ref = CS%Rho0
 
   if (CS%tides) then
@@ -582,7 +582,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
         e(i,j,1) = -1.0*G%bathyT(i,j)
       enddo
       do k=1,nz ; do i=Isq,Ieq+1
-        e(i,j,1) = e(i,j,1) + h(i,j,k)*G%H_to_m
+        e(i,j,1) = e(i,j,1) + h(i,j,k)*G%GV%H_to_m
       enddo ; enddo
     enddo
     call calc_tidal_forcing(CS%Time, e(:,:,1), e_tidal, G, CS%tides_CSp)
@@ -603,7 +603,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
   endif
 !$OMP do
   do j=Jsq,Jeq+1; do k=nz,1,-1 ; do i=Isq,Ieq+1
-    e(i,j,K) = e(i,j,K+1) + h(i,j,k)*G%H_to_m
+    e(i,j,K) = e(i,j,K+1) + h(i,j,k)*G%GV%H_to_m
   enddo ; enddo ; enddo
 !$OMP end parallel
 
@@ -735,7 +735,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
             call int_density_dz_generic_plm ( T_t(:,:,k), T_b(:,:,k), &
                       S_t(:,:,k), S_b(:,:,k), e(:,:,K), e(:,:,K+1), &
                       rho_ref, CS%Rho0, G%g_Earth,    &
-                      G%H_subroundoff, G%bathyT, G%HI, G%Block(n), &
+                      G%GV%H_subroundoff, G%bathyT, G%HI, G%Block(n), &
                       tv%eqn_of_state, dpa_bk, intz_dpa_bk, intx_dpa_bk, inty_dpa_bk, &
                       useMassWghtInterp = CS%useMassWghtInterp)
           elseif ( PRScheme == PRESSURE_RECONSTRUCTION_PPM ) then
@@ -751,11 +751,11 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
                     rho_ref, CS%Rho0, G%g_Earth, G%HI, G%Block(n), tv%eqn_of_state, &
                     dpa_bk, intz_dpa_bk, intx_dpa_bk, inty_dpa_bk )
         endif
-        intz_dpa_bk(:,:) = intz_dpa_bk(:,:)*G%m_to_H
+        intz_dpa_bk(:,:) = intz_dpa_bk(:,:)*G%GV%m_to_H
       else
         do jb=Jsq_bk,Jeq_bk+1 ; do ib=Isq_bk,Ieq_bk+1
           i = ib+ioff_bk ; j = jb+joff_bk
-          dz_bk(ib,jb) = G%g_Earth*G%H_to_m*h(i,j,k)
+          dz_bk(ib,jb) = G%g_Earth*G%GV%H_to_m*h(i,j,k)
           dpa_bk(ib,jb) = (G%GV%Rlay(k) - rho_ref)*dz_bk(ib,jb)
           intz_dpa_bk(ib,jb) = 0.5*(G%GV%Rlay(k) - rho_ref)*dz_bk(ib,jb)*h(i,j,k)
         enddo ; enddo
@@ -773,7 +773,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
         PFu(I,j,k) = (((pa_bk(ib,jb)*h(i,j,k) + intz_dpa_bk(ib,jb)) - &
                      (pa_bk(ib+1,jb)*h(i+1,j,k) + intz_dpa_bk(ib+1,jb))) + &
                      ((h(i+1,j,k) - h(i,j,k)) * intx_pa_bk(Ib,jb) - &
-                     (e(i+1,j,K+1) - e(i,j,K+1)) * intx_dpa_bk(Ib,jb) * G%m_to_H)) * &
+                     (e(i+1,j,K+1) - e(i,j,K+1)) * intx_dpa_bk(Ib,jb) * G%GV%m_to_H)) * &
                      ((2.0*I_Rho0*G%IdxCu(I,j)) / &
                      ((h(i,j,k) + h(i+1,j,k)) + h_neglect))
         intx_pa_bk(Ib,jb) = intx_pa_bk(Ib,jb) + intx_dpa_bk(Ib,jb)
@@ -784,7 +784,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
         PFv(i,J,k) = (((pa_bk(ib,jb)*h(i,j,k) + intz_dpa_bk(ib,jb)) - &
                      (pa_bk(ib,jb+1)*h(i,j+1,k) + intz_dpa_bk(ib,jb+1))) + &
                      ((h(i,j+1,k) - h(i,j,k)) * inty_pa_bk(ib,Jb) - &
-                     (e(i,j+1,K+1) - e(i,j,K+1)) * inty_dpa_bk(ib,Jb) * G%m_to_H)) * &
+                     (e(i,j+1,K+1) - e(i,j,K+1)) * inty_dpa_bk(ib,Jb) * G%GV%m_to_H)) * &
                      ((2.0*I_Rho0*G%IdyCv(i,J)) / &
                      ((h(i,j,k) + h(i,j+1,k)) + h_neglect))
         inty_pa_bk(ib,Jb) = inty_pa_bk(ib,Jb) + inty_dpa_bk(ib,Jb)
@@ -817,12 +817,12 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
     ! about 200 lines above.
 !$OM parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,eta,e,e_tidal)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        eta(i,j) = e(i,j,1)*G%m_to_H + e_tidal(i,j)*G%m_to_H
+        eta(i,j) = e(i,j,1)*G%GV%m_to_H + e_tidal(i,j)*G%GV%m_to_H
       enddo ; enddo
     else
 !$OM parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,eta,e)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        eta(i,j) = e(i,j,1)*G%m_to_H
+        eta(i,j) = e(i,j,1)*G%GV%m_to_H
       enddo ; enddo
     endif
   endif

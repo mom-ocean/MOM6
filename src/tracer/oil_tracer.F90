@@ -377,7 +377,7 @@ subroutine initialize_oil_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
   endif
 
   ! This needs to be changed if the units of tracer are changed above.
-  if (G%Boussinesq) then ; flux_units = "years m3 s-1"
+  if (G%GV%Boussinesq) then ; flux_units = "years m3 s-1"
   else ; flux_units = "years kg s-1" ; endif
 
   do m=1,CS%ntr
@@ -491,10 +491,10 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, CS, tv
       k=CS%oil_source_k(m)
       if (k>0) then
         k=min(k,k_max) ! Only insert k or first layer with interface 10 m above bottom
-        CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + CS%oil_source_rate*dt/((h_new(i,j,k)+G%h_subroundoff) &
-                                           * G%areaT(i,j) )
+        CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + CS%oil_source_rate*dt / &
+                ((h_new(i,j,k)+G%GV%H_subroundoff) * G%areaT(i,j) )
       elseif (k<0) then
-        h_total=G%h_subroundoff
+        h_total=G%GV%H_subroundoff
         do k=1, nz
           h_total = h_total + h_new(i,j,k)
         enddo
@@ -511,7 +511,7 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, CS, tv
     if (CS%id_tracer(m)>0) then
       if (CS%mask_tracers) then
         do k=1,nz ; do j=js,je ; do i=is,ie
-          if (h_new(i,j,k) < 1.1*G%Angstrom) then
+          if (h_new(i,j,k) < 1.1*G%GV%Angstrom) then
             local_tr(i,j,k) = CS%land_val(m)
           else
             local_tr(i,j,k) = CS%tr(i,j,k,m)
@@ -583,7 +583,7 @@ function oil_stock(h, stocks, G, CS, names, units, stock_index)
       stocks(m) = stocks(m) + CS%tr(i,j,k,m) * &
                              (G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k))
     enddo ; enddo ; enddo
-    stocks(m) = G%H_to_kg_m2 * stocks(m)
+    stocks(m) = G%GV%H_to_kg_m2 * stocks(m)
   enddo
   oil_stock = CS%ntr
 

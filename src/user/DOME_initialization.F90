@@ -129,9 +129,9 @@ subroutine DOME_initialize_thickness(h, G, param_file)
     eta1D(nz+1) = -1.0*G%bathyT(i,j)
     do k=nz,1,-1
       eta1D(K) = e0(K)
-      if (eta1D(K) < (eta1D(K+1) + G%Angstrom_z)) then
-        eta1D(K) = eta1D(K+1) + G%Angstrom_z
-        h(i,j,k) = G%Angstrom_z
+      if (eta1D(K) < (eta1D(K+1) + G%GV%Angstrom_z)) then
+        eta1D(K) = eta1D(K+1) + G%GV%Angstrom_z
+        h(i,j,k) = G%GV%Angstrom_z
       else
         h(i,j,k) = eta1D(K) - eta1D(K+1)
       endif
@@ -207,12 +207,12 @@ subroutine DOME_initialize_sponges(G, tv, PF, CSp)
     ! depth space for Boussinesq or non-Boussinesq models.
     eta(i,j,1) = 0.0
     do k=2,nz
-!     eta(i,j,K)=max(H0(k), -G%bathyT(i,j), G%Angstrom_z*(nz-k+1)-G%bathyT(i,j))
+!     eta(i,j,K)=max(H0(k), -G%bathyT(i,j), G%GV%Angstrom_z*(nz-k+1)-G%bathyT(i,j))
       e_dense = -G%bathyT(i,j)
       if (e_dense >= H0(k)) then ; eta(i,j,K) = e_dense
       else ; eta(i,j,K) = H0(k) ; endif
-      if (eta(i,j,K) < G%Angstrom_z*(nz-k+1)-G%bathyT(i,j)) &
-          eta(i,j,K) = G%Angstrom_z*(nz-k+1)-G%bathyT(i,j)
+      if (eta(i,j,K) < G%GV%Angstrom_z*(nz-k+1)-G%bathyT(i,j)) &
+          eta(i,j,K) = G%GV%Angstrom_z*(nz-k+1)-G%bathyT(i,j)
     enddo
     eta(i,j,nz+1) = -G%bathyT(i,j)
 
@@ -373,9 +373,9 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, param_file, tr_Reg)
   endif
 
   if (apply_OBC_v) then
-    g_prime_tot = (G%g_Earth/G%Rho0)*2.0
+    g_prime_tot = (G%g_Earth/G%GV%Rho0)*2.0
     Def_Rad = sqrt(D_edge*g_prime_tot) / (1.0e-4*1000.0)
-    tr_0 = (-D_edge*sqrt(D_edge*g_prime_tot)*0.5e3*Def_Rad) * G%m_to_H
+    tr_0 = (-D_edge*sqrt(D_edge*g_prime_tot)*0.5e3*Def_Rad) * G%GV%m_to_H
 
     do k=1,nz
       rst = -1.0
@@ -424,7 +424,7 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, param_file, tr_Reg)
       if (OBC_mask_u(I,j)) then
         ! An appropriate expression for the zonal inflow velocities and
         ! transports should go here.
-        OBC%uh(I,j,k) = 0.0 * G%m_to_H ; OBC%u(I,j,k) = 0.0
+        OBC%uh(I,j,k) = 0.0 * G%GV%m_to_H ; OBC%u(I,j,k) = 0.0
       else
         OBC%uh(I,j,k) = 0.0 ; OBC%u(I,j,k) = 0.0
       endif

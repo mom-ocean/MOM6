@@ -133,9 +133,8 @@ end type
 ! The following routines are visible to the outside world
 public initialize_regridding, end_regridding, regridding_main
 public inflate_vanished_layers_old, check_remapping_grid, check_grid_column
-public setRegriddingBoundaryExtrapolation, adjust_interface_motion
-public set_regrid_min_thickness, set_regrid_params
-public set_old_grid_weight, set_filter_depths
+public adjust_interface_motion
+public set_regrid_params
 public uniformResolution, setCoordinateResolution, build_zstar_column
 public set_target_densities_from_G, set_target_densities
 public set_regrid_max_depths, set_regrid_max_thickness
@@ -558,7 +557,7 @@ subroutine build_zstar_grid( CS, G, h, dzInterface )
       endif
 
       ! Local depth (G%bathyT is positive)
-      nominalDepth = G%bathyT(i,j)*G%m_to_H
+      nominalDepth = G%bathyT(i,j)*G%GV%m_to_H
 
       ! Determine water column thickness
       totalThickness = 0.0
@@ -674,7 +673,7 @@ subroutine buildGridSigma( CS, G, h, dzInterface )
       end do
 
       ! The rest of the model defines grids integrating up from the bottom
-      nominalDepth = G%bathyT(i,j)*G%m_to_H
+      nominalDepth = G%bathyT(i,j)*G%GV%m_to_H
       zOld(nz+1) = - nominalDepth
       zNew(nz+1) = - nominalDepth
       do k = nz,1,-1
@@ -888,7 +887,7 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
       end do ! end regridding iterations
 
       ! Local depth (G%bathyT is positive)
-      nominalDepth = G%bathyT(i,j)*G%m_to_H
+      nominalDepth = G%bathyT(i,j)*G%GV%m_to_H
 
       ! The rest of the model defines grids integrating up from the bottom
       totalThickness = 0.0
@@ -995,7 +994,7 @@ subroutine build_grid_HyCOM1( G, h, tv, dzInterface, remapCS, CS )
       do K = 1, nz
         z_col(K+1) = z_col(K) + h(i,j,k) ! Work in units of h (m or Pa)
         p_col(k) = CS%ref_pressure + CS%compressibility_fraction * &
-             ( 0.5 * ( z_col(K) + z_col(K+1) ) * G%H_to_Pa - CS%ref_pressure )
+             ( 0.5 * ( z_col(K) + z_col(K+1) ) * G%GV%H_to_Pa - CS%ref_pressure )
       enddo
 
       ! Work bottom recording potential density
@@ -1017,7 +1016,7 @@ subroutine build_grid_HyCOM1( G, h, tv, dzInterface, remapCS, CS )
       ! Sweep down the interfaces and make sure that the interface is at least
       ! as deep as a nominal target z* grid
       nominal_z = 0.
-      stretching = z_col(nz+1) / G%bathyT(i,j) * G%m_to_H ! Stretches z* to z
+      stretching = z_col(nz+1) / G%bathyT(i,j) * G%GV%m_to_H ! Stretches z* to z
       do k = 2, nz+1
         nominal_z = nominal_z + CS%coordinateResolution(k-1) * stretching
         z_col_new(k) = max( z_col_new(k), nominal_z )
@@ -1128,7 +1127,7 @@ subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
       do K=1,nz
         z_col(K+1) = z_col(K) + h_col(k) ! Work in units of h (m or Pa)
         p_col(k) = CS%ref_pressure + CS%compressibility_fraction * &
-             ( 0.5 * ( z_col(K) + z_col(K+1) ) * G%H_to_Pa - CS%ref_pressure )
+             ( 0.5 * ( z_col(K) + z_col(K+1) ) * G%GV%H_to_Pa - CS%ref_pressure )
       enddo
 
       if (z_col(nz+1) - z_col(1) < nz*CS%min_thickness) then
@@ -1189,7 +1188,7 @@ subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
         ! Determine which interfaces are in the s-space region and the depth extent
         ! of this region.
         z_wt = 0.0 ; rho_x_z = 0.0
-        H_ml_av = G%m_to_H*CS%Rho_ml_avg_depth
+        H_ml_av = G%GV%m_to_H*CS%Rho_ml_avg_depth
         do k=1,nz
           if (z_wt + h_col(k) >= H_ml_av) then
             rho_x_z = rho_x_z + rho_col(k) * (H_ml_av - z_wt)
@@ -1230,15 +1229,15 @@ subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
 !       ! z_int_unst and k_interior.
 
           if (CS%halocline_filter_length > 0.0) then
-            Lfilt = CS%halocline_filter_length*G%m_to_H
+            Lfilt = CS%halocline_filter_length*G%GV%m_to_H
 
             ! Filter the temperature and salnity with a fixed lengthscale.
-            h_tr = h_col(1) + G%H_subroundoff
+            h_tr = h_col(1) + G%GV%H_subroundoff
             b1 = 1.0 / (h_tr + Lfilt) ; d1 = h_tr * b1
             T_f(1) = (b1*h_tr)*T_col(1) ;  S_f(1) = (b1*h_tr)*S_col(1)
             do k=2,nz
               c1(k) = Lfilt * b1
-              h_tr = h_col(k) + G%H_subroundoff ; b_denom_1 = h_tr + d1*Lfilt
+              h_tr = h_col(k) + G%GV%H_subroundoff ; b_denom_1 = h_tr + d1*Lfilt
               b1 = 1.0 / (b_denom_1 + Lfilt) ; d1 = b_denom_1 * b1
               T_f(k) = b1 * (h_tr*T_col(k) + Lfilt*T_f(k-1))
               S_f(k) = b1 * (h_tr*S_col(k) + Lfilt*S_f(k-1))
@@ -1253,11 +1252,11 @@ subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
           T_int(1) = T_f(1) ; S_int(1) = S_f(1)
           do K=2,nz 
             T_int(K) = 0.5*(T_f(k-1) + T_f(k)) ; S_int(K) = 0.5*(S_f(k-1) + S_f(k))
-            p_IS(K) = z_col(K) * G%H_to_Pa
+            p_IS(K) = z_col(K) * G%GV%H_to_Pa
             p_R(K) = CS%ref_pressure + CS%compressibility_fraction * ( p_IS(K) - CS%ref_pressure )
           enddo
           T_int(nz+1) = T_f(nz) ; S_int(nz+1) = S_f(nz)
-          p_IS(nz+1) = z_col(nz+1) * G%H_to_Pa
+          p_IS(nz+1) = z_col(nz+1) * G%GV%H_to_Pa
           call calculate_density_derivs(T_int, S_int, p_IS, drhoIS_dT, drhoIS_dS, 2, nz-1, &
                                         tv%eqn_of_state)
           call calculate_density_derivs(T_int, S_int, p_R, drhoR_dT, drhoR_dS, 2, nz-1, &
@@ -1269,7 +1268,7 @@ subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
             do K=2,nz ; drho_dp(K) = 0.0 ; enddo
           endif
           
-          H_to_cPa = CS%compressibility_fraction*G%H_to_Pa
+          H_to_cPa = CS%compressibility_fraction*G%GV%H_to_Pa
           strat_rat(1) = 1.0
           do K=2,nz
             drIS = drhoIS_dT(K) * (T_f(k) - T_f(k-1)) + &
@@ -1712,7 +1711,7 @@ subroutine build_grid_arbitrary( G, h, dzInterface, h_new, CS )
     do i = G%isc-1,G%iec+1
 
       ! Local depth
-      local_depth = G%bathyT(i,j)*G%m_to_H
+      local_depth = G%bathyT(i,j)*G%GV%m_to_H
 
       ! Determine water column height
       total_height = 0.0
@@ -2409,7 +2408,7 @@ subroutine set_regrid_max_depths( CS, max_depths, units_to_H )
   type(regridding_CS),      intent(inout) :: CS !< Regridding control structure
   real, dimension(CS%nk+1), intent(in)    :: max_depths !< Maximum interface depths, in arbitrary units
   real, optional,           intent(in)    :: units_to_H !< A conversion factor for max_depths into H units
-
+  ! Local variables
   real :: val_to_H
   integer :: K
 
@@ -2440,7 +2439,7 @@ subroutine set_regrid_max_thickness( CS, max_h, units_to_H )
   type(regridding_CS),      intent(inout) :: CS !< Regridding control structure
   real, dimension(CS%nk+1), intent(in)    :: max_h !< Maximum interface depths, in arbitrary units
   real, optional,           intent(in)    :: units_to_H !< A conversion factor for max_h into H units
-
+  ! Local variables
   real :: val_to_H
   integer :: K
 
@@ -2539,29 +2538,38 @@ function getCoordinateShortName( CS )
 end function getCoordinateShortName
 
 !> This subroutine can be used to set many of the parameters for MOM_regridding.
-subroutine set_regrid_params( CS, Boundary_Extrap, min_thickness, old_grid_weight, &
+subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_grid_weight, &
+             depth_of_time_filter_shallow, depth_of_time_filter_deep, &
              compress_fraction, dz_min_surface, nz_fixed_surface, Rho_ML_avg_depth, &
              nlay_ML_to_interior, fix_haloclines, halocline_filt_len, &
              halocline_strat_tol)
-  type(regridding_CS), intent(inout) :: CS
-  logical, optional, intent(in) :: Boundary_Extrap
-  real,    optional, intent(in) :: min_thickness
-  real,    optional, intent(in) :: old_grid_weight
-  real,    optional, intent(in) :: compress_fraction
-  real,    optional, intent(in) :: dz_min_surface
-  integer, optional, intent(in) :: nz_fixed_surface
-  real,    optional, intent(in) :: Rho_ml_avg_depth
-  real,    optional, intent(in) :: nlay_ML_to_interior
-  logical, optional, intent(in) :: fix_haloclines
-  real,    optional, intent(in) :: halocline_filt_len
-  real,    optional, intent(in) :: halocline_strat_tol
+  type(regridding_CS), intent(inout) :: CS !< Regridding control structure
+  logical, optional, intent(in) :: boundary_extrapolation !< Extrapolate in boundary cells
+  real,    optional, intent(in) :: min_thickness !< Minimum thickness allowed when building the new grid (m)
+  real,    optional, intent(in) :: old_grid_weight !< Weight given to old coordinate when time-filtering grid
+  real,    optional, intent(in) :: depth_of_time_filter_shallow !< Depth to start cubic (H units)
+  real,    optional, intent(in) :: depth_of_time_filter_deep !< Depth to end cubic (H units)
+  real,    optional, intent(in) :: compress_fraction !< Fraction of compressibility to add to potential density
+  real,    optional, intent(in) :: dz_min_surface !< The fixed resolution in the topmost SLight_nkml_min layers (m)
+  integer, optional, intent(in) :: nz_fixed_surface !< The number of fixed-thickess layers at the top of the model
+  real,    optional, intent(in) :: Rho_ml_avg_depth !< Averaging depth over which to determine mixed layer potential density (m)
+  real,    optional, intent(in) :: nlay_ML_to_interior !< Number of layers to offset the mixed layer density to find resolved stratification (nondim)
+  logical, optional, intent(in) :: fix_haloclines !< Detect regions with much weaker stratification in the coordinate
+  real,    optional, intent(in) :: halocline_filt_len !< Length scale over which to filter T & S when looking for spuriously unstable water mass profiles (m)
+  real,    optional, intent(in) :: halocline_strat_tol !< Value of the stratification ratio that defines a problematic halocline region.
 
-  if (present(Boundary_Extrap)) CS%boundary_extrapolation = Boundary_Extrap
+  if (present(boundary_extrapolation)) CS%boundary_extrapolation = boundary_extrapolation
   if (present(min_thickness)) CS%min_thickness = min_Thickness
   if (present(old_grid_weight)) then
     if (old_grid_weight<0. .or. old_grid_weight>1.) &
-      call MOM_error(FATAL,'MOM_regridding, set_old_grid_weight: Weight is out side the range 0..1!')
+      call MOM_error(FATAL,'MOM_regridding, set_regrid_params: Weight is out side the range 0..1!')
     CS%old_grid_weight = old_grid_weight
+  endif
+  if (present(depth_of_time_filter_shallow)) CS%depth_of_time_filter_shallow = depth_of_time_filter_shallow
+  if (present(depth_of_time_filter_deep)) CS%depth_of_time_filter_deep = depth_of_time_filter_deep
+  if (present(depth_of_time_filter_shallow) .or. present(depth_of_time_filter_deep)) then
+    if (CS%depth_of_time_filter_deep<CS%depth_of_time_filter_shallow) call MOM_error(FATAL,'MOM_regridding, '//&
+                     'set_regrid_params: depth_of_time_filter_deep<depth_of_time_filter_shallow!')
   endif
   if (present(compress_fraction)) CS%compressibility_fraction = compress_fraction
   if (present(dz_min_surface)) CS%dz_ml_min = dz_min_surface
@@ -2571,60 +2579,12 @@ subroutine set_regrid_params( CS, Boundary_Extrap, min_thickness, old_grid_weigh
   if (present(fix_haloclines)) CS%fix_haloclines = fix_haloclines
   if (present(halocline_filt_len)) CS%halocline_filter_length = halocline_filt_len
   if (present(halocline_strat_tol)) then
-!    if (halocline_strat_tol > 0.5) call MOM_error(FATAL, "set_regrid_params: "//&
-!        "HALOCLINE_STRAT_TOL must not exceed 0.5.")
     if (halocline_strat_tol > 1.0) call MOM_error(FATAL, "set_regrid_params: "//&
         "HALOCLINE_STRAT_TOL must not exceed 1.0.")
     CS%halocline_strat_tol = halocline_strat_tol
   endif
 
 end subroutine set_regrid_params
-
-!------------------------------------------------------------------------------
-! Control the extrapolation of boundary data
-!------------------------------------------------------------------------------
-subroutine setRegriddingBoundaryExtrapolation( onOff, CS )
-  logical,             intent(in)    :: onOff
-  type(regridding_CS), intent(inout) :: CS
-
-  CS%boundary_extrapolation = onOff
-
-end subroutine setRegriddingBoundaryExtrapolation
-
-!------------------------------------------------------------------------------
-! Control the minimum thickness permitted in regridding
-!------------------------------------------------------------------------------
-subroutine set_regrid_min_thickness( minThickness, CS )
-  real   ,             intent(in)    :: minThickness
-  type(regridding_CS), intent(inout) :: CS
-
-  CS%min_thickness = minThickness
-
-end subroutine set_regrid_min_thickness
-
-!> Set the weight given to the old coordinate when blending between new and old grids
-subroutine set_old_grid_weight( old_grid_weight, CS )
-  real,                intent(in)    :: old_grid_weight !< Weight, 0..1 (nondim)
-  type(regridding_CS), intent(inout) :: CS              !< Regridding control structure
-
-  if (old_grid_weight<0. .or. old_grid_weight>1.) call MOM_error(FATAL,'MOM_regridding, '//&
-                     'set_old_grid_weight: Weight is out side the range 0..1!')
-  CS%old_grid_weight = old_grid_weight
-
-end subroutine set_old_grid_weight
-
-!> Set depths over which to scale and apply "old_grid_weight"
-subroutine set_filter_depths( depth_of_time_filter_shallow, depth_of_time_filter_deep, CS )
-  real,                intent(in)    :: depth_of_time_filter_shallow !< Depth to start cubic (H units)
-  real,                intent(in)    :: depth_of_time_filter_deep !< Depth to end cubic (H units)
-  type(regridding_CS), intent(inout) :: CS !< Regridding control structure
-
-  if (depth_of_time_filter_deep<depth_of_time_filter_shallow) call MOM_error(FATAL,'MOM_regridding, '//&
-                     'set_filter_depths: depth_of_time_filter_deep<depth_of_time_filter_shallow!')
-  CS%depth_of_time_filter_deep = depth_of_time_filter_deep
-  CS%depth_of_time_filter_shallow = depth_of_time_filter_shallow
-
-end subroutine set_filter_depths
 
 !------------------------------------------------------------------------------
 ! Return coordinate-derived thicknesses for fixed coordinate systems

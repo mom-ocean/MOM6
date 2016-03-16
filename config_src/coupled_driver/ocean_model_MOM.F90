@@ -777,8 +777,8 @@ subroutine Ocean_stock_pe(OS, index, value, time_index)
   select case (index)
     case (ISTOCK_WATER)
       ! Return the mass of fresh water in the ocean on this PE in kg.
-      to_mass = OS%grid%H_to_kg_m2
-      if (OS%grid%Boussinesq) then
+      to_mass = OS%grid%GV%H_to_kg_m2
+      if (OS%grid%GV%Boussinesq) then
         do k=1,nz ; do j=js,je ; do i=is,ie ; if (OS%grid%mask2dT(i,j) > 0.5) then
           value = value + to_mass*(OS%MOM_CSp%h(i,j,k) * OS%grid%areaT(i,j))
         endif ; enddo ; enddo ; enddo
@@ -792,7 +792,7 @@ subroutine Ocean_stock_pe(OS, index, value, time_index)
       endif
     case (ISTOCK_HEAT)
       ! Return the heat content of the ocean on this PE in J.
-      to_heat = OS%grid%H_to_kg_m2 * OS%C_p
+      to_heat = OS%grid%GV%H_to_kg_m2 * OS%C_p
       do k=1,nz ; do j=js,je ; do i=is,ie ; if (OS%grid%mask2dT(i,j) > 0.5) then
         value = value + (to_heat * OS%MOM_CSp%tv%T(i,j,k)) * &
                         (OS%MOM_CSp%h(i,j,k)*OS%grid%areaT(i,j))
@@ -800,7 +800,7 @@ subroutine Ocean_stock_pe(OS, index, value, time_index)
     case (ISTOCK_SALT)
       ! Return the mass of the salt in the ocean on this PE in kg.
       ! The 1000 converts salinity in PSU to salt in kg kg-1.
-      to_salt = OS%grid%H_to_kg_m2 / 1000.0
+      to_salt = OS%grid%GV%H_to_kg_m2 / 1000.0
       do k=1,nz ; do j=js,je ; do i=is,ie ; if (OS%grid%mask2dT(i,j) > 0.5) then
         value = value + (to_salt * OS%MOM_CSp%tv%S(i,j,k)) * &
                         (OS%MOM_CSp%h(i,j,k)*OS%grid%areaT(i,j))

@@ -291,9 +291,9 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, &
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  h_neglect = G%H_subroundoff
+  h_neglect = G%GV%H_subroundoff
   sink_dist = 0.0
-  if (present(sink_rate)) sink_dist = (dt*sink_rate) * G%m_to_H
+  if (present(sink_rate)) sink_dist = (dt*sink_rate) * G%GV%m_to_H
 !$OMP parallel default(none) shared(is,ie,js,je,sfc_src,btm_src,sfc_flux,dt,G,btm_flux, &
 !$OMP                               sink_rate,btm_reservoir,nz,sink_dist,h_old,ea,      &
 !$OMP                               h_neglect,eb,tr) & 
@@ -303,13 +303,13 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, &
   if (present(sfc_flux)) then
 !$OMP do 
      do j = js, je; do i = is,ie
-        sfc_src(i,j) = (sfc_flux(i,j)*dt) * G%kg_m2_to_H
+        sfc_src(i,j) = (sfc_flux(i,j)*dt) * G%GV%kg_m2_to_H
      enddo; enddo
   endif
   if (present(btm_flux)) then
 !$OMP do
      do j = js, je; do i = is,ie
-        btm_src(i,j) = (btm_flux(i,j)*dt) * G%kg_m2_to_H
+        btm_src(i,j) = (btm_flux(i,j)*dt) * G%GV%kg_m2_to_H
      enddo; enddo
   endif
 
@@ -375,7 +375,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, &
       endif ; enddo
       if (present(btm_reservoir)) then ; do i=is,ie ; if (G%mask2dT(i,j)>0.5) then
         btm_reservoir(i,j) = btm_reservoir(i,j) + &
-                             (sink(i,nz+1)*tr(i,j,nz)) * G%H_to_kg_m2
+                             (sink(i,nz+1)*tr(i,j,nz)) * G%GV%H_to_kg_m2
       endif ; enddo ; endif
 
       do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then

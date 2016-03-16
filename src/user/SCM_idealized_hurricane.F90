@@ -70,7 +70,7 @@ subroutine SCM_idealized_hurricane_TS_init(T, S, h, G, param_file)
   do j=js,je ; do i=is,ie
     eta(1) = 0. ! Reference to surface
     do k=1,nz
-      eta(K+1) = eta(K) - h(i,j,k)*G%H_to_m ! Interface below layer (in m)
+      eta(K+1) = eta(K) - h(i,j,k)*G%GV%H_to_m ! Interface below layer (in m)
       zC = 0.5*( eta(K) + eta(K+1) )        ! Z of middle of layer (in m)
       T(i,j,k) = SST_ref + dTdz*min(0., zC+MLD)
       S(i,j,k) = S_ref
@@ -298,9 +298,9 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
   ! Set the surface friction velocity, in units of m s-1. ustar is always positive.
   do j=js,je ; do i=is,ie
     !  This expression can be changed if desired, but need not be.
-    fluxes%ustar(i,j) = G%mask2dT(i,j) * sqrt(CS%gust_const/G%Rho0 + &
+    fluxes%ustar(i,j) = G%mask2dT(i,j) * sqrt(CS%gust_const/G%GV%Rho0 + &
        sqrt(0.5*(fluxes%taux(I-1,j)**2 + fluxes%taux(I,j)**2) + &
-            0.5*(fluxes%tauy(i,J-1)**2 + fluxes%tauy(i,J)**2))/G%Rho0)
+            0.5*(fluxes%tauy(i,J-1)**2 + fluxes%tauy(i,J)**2))/G%GV%Rho0)
   enddo ; enddo
 
 end subroutine SCM_idealized_hurricane_wind_forcing

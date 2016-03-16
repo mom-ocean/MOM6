@@ -257,7 +257,7 @@ subroutine initialize_DOME_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-  h_neglect = G%H_subroundoff
+  h_neglect = G%GV%H_subroundoff
 
   CS%Time => day
 
@@ -294,24 +294,24 @@ subroutine initialize_DOME_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
         do j=js,je ; do i=is,ie
           e(nz+1) = -G%bathyT(i,j)
           do k=nz,1,-1
-            e(K) = e(K+1) + h(i,j,k)*G%H_to_m
+            e(K) = e(K+1) + h(i,j,k)*G%GV%H_to_m
             do m=7,NTR
               e_top = -600.0*real(m-1) + 3000.0
               e_bot = -600.0*real(m-1) + 2700.0
               if (e_top < e(K)) then
                 if (e_top < e(K+1)) then ; d_tr = 0.0
                 elseif (e_bot < e(K+1)) then
-                  d_tr = (e_top-e(K+1)) / ((h(i,j,k)+h_neglect)*G%H_to_m)
-                else ; d_tr = (e_top-e_bot) / ((h(i,j,k)+h_neglect)*G%H_to_m)
+                  d_tr = (e_top-e(K+1)) / ((h(i,j,k)+h_neglect)*G%GV%H_to_m)
+                else ; d_tr = (e_top-e_bot) / ((h(i,j,k)+h_neglect)*G%GV%H_to_m)
                 endif
               elseif (e_bot < e(K)) then
                 if (e_bot < e(K+1)) then ; d_tr = 1.0
-                else ; d_tr = (e(K)-e_bot) / ((h(i,j,k)+h_neglect)*G%H_to_m)
+                else ; d_tr = (e(K)-e_bot) / ((h(i,j,k)+h_neglect)*G%GV%H_to_m)
                 endif
               else
                 d_tr = 0.0
               endif
-              if (h(i,j,k) < 2.0*G%Angstrom) d_tr=0.0
+              if (h(i,j,k) < 2.0*G%GV%Angstrom) d_tr=0.0
               CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + d_tr
             enddo
           enddo
@@ -373,7 +373,7 @@ subroutine initialize_DOME_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
   endif
 
   ! This needs to be changed if the units of tracer are changed above.
-  if (G%Boussinesq) then ; flux_units = "kg kg-1 m3 s-1"
+  if (G%GV%Boussinesq) then ; flux_units = "kg kg-1 m3 s-1"
   else ; flux_units = "kg s-1" ; endif
 
   do m=1,NTR
@@ -453,7 +453,7 @@ subroutine DOME_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, CS)
   if (CS%mask_tracers) then
     do m = 1,NTR ; if (CS%id_tracer(m) > 0) then
       do k=1,nz ; do j=js,je ; do i=is,ie
-        if (h_new(i,j,k) < 1.1*G%Angstrom) then
+        if (h_new(i,j,k) < 1.1*G%GV%Angstrom) then
           CS%tr_aux(i,j,k,m) = CS%land_val(m)
         else
           CS%tr_aux(i,j,k,m) = CS%tr(i,j,k,m)

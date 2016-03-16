@@ -18,25 +18,22 @@ use MOM_io,               only : file_exists, field_exists, MOM_read_data
 use MOM_io,               only : vardesc, var_desc, fieldtype, SINGLE_FILE
 use MOM_io,               only : create_file, write_field, close_file, slasher
 use MOM_regridding,       only : initialize_regridding, regridding_main, end_regridding
-use MOM_regridding,       only : uniformResolution, set_old_grid_weight
+use MOM_regridding,       only : uniformResolution
 use MOM_regridding,       only : inflate_vanished_layers_old, setCoordinateResolution
 use MOM_regridding,       only : set_target_densities_from_G, set_target_densities
 use MOM_regridding,       only : regriddingCoordinateModeDoc, DEFAULT_COORDINATE_MODE
 use MOM_regridding,       only : regriddingInterpSchemeDoc, regriddingDefaultInterpScheme
-use MOM_regridding,       only : setRegriddingBoundaryExtrapolation
 use MOM_regridding,       only : regriddingDefaultBoundaryExtrapolation
-use MOM_regridding,       only : set_regrid_min_thickness, regriddingDefaultMinThickness
+use MOM_regridding,       only : regriddingDefaultMinThickness
 use MOM_regridding,       only : check_remapping_grid, set_regrid_max_depths
 use MOM_regridding,       only : set_regrid_max_thickness
 use MOM_regridding,       only : regridding_CS, set_regrid_params
 use MOM_regridding,       only : getCoordinateInterfaces, getCoordinateResolution
 use MOM_regridding,       only : getCoordinateUnits, getCoordinateShortName
-use MOM_regridding,       only : getStaticThickness, set_filter_depths
+use MOM_regridding,       only : getStaticThickness
 use MOM_remapping,        only : initialize_remapping, end_remapping
 use MOM_remapping,        only : remapping_core_h, remapping_core_w
 use MOM_remapping,        only : remappingSchemesDoc, remappingDefaultScheme
-use MOM_remapping,        only : remapDisableBoundaryExtrapolation
-use MOM_remapping,        only : remapEnableBoundaryExtrapolation
 use MOM_remapping,        only : remapping_CS, dzFromH1H2
 use MOM_string_functions, only : uppercase, extractWord
 use MOM_tracer_registry,  only : tracer_registry_type
@@ -208,11 +205,11 @@ subroutine ALE_init( param_file, G, CS)
                  "If true, the values on the intermediate grid used for remapping\n"//&
                  "are forced to be bounded, which might not be the case due to\n"//&
                  "round off.", default=.false.)
-  call initialize_remapping( G%ke, string, CS%remapCS, &
+  call initialize_remapping( CS%remapCS, string, &
+                             boundary_extrapolation=.false., &
                              check_reconstruction=check_reconstruction, &
                              check_remapping=check_remapping, &
                              force_bounds_in_subcell=force_bounds_in_subcell)
-  call remapDisableBoundaryExtrapolation( CS%remapCS )
 
   call get_param(param_file, mod, "REMAP_AFTER_INITIALIZATION", CS%remap_after_initialization, &
                  "If true, applies regridding and remapping immediately after\n"//&
@@ -234,7 +231,8 @@ subroutine ALE_init( param_file, G, CS)
                  "REGRID_TIME_SCALE. Between depths REGRID_FILTER_SHALLOW_DEPTH and\n"//&
                  "REGRID_FILTER_SHALLOW_DEPTH the filter wieghts adopt a cubic profile.", &
                  units="m", default=0.)
-  call set_filter_depths(filter_shallow_depth*G%m_to_H, filter_deep_depth*G%m_to_H, CS%regridCS)
+  call set_regrid_params(CS%regridCS, depth_of_time_filter_shallow=filter_shallow_depth*G%GV%m_to_H, &
+                                      depth_of_time_filter_deep=filter_deep_depth*G%GV%m_to_H)
 
   ! Keep a record of values for subsequent queries
   CS%nk = G%ke
@@ -367,6 +365,7 @@ subroutine ALE_main( G, h, u, v, tv, Reg, CS, dt)
 
   ! Local variables
   integer :: nk, i, j, k, isc, iec, jsc, jec
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_new ! New 3D grid obtained after last time step (m or Pa)
 
   nk = G%ke; isc = G%isc; iec = G%iec; jsc = G%jsc; jec = G%jec
 
@@ -382,19 +381,28 @@ subroutine ALE_main( G, h, u, v, tv, Reg, CS, dt)
 
   call check_remapping_grid( G, h, CS%dzRegrid, 'in ALE_main()' )
 
+  ! Override old grid with new one. The new grid 'h_new' is built in
+  ! one of the 'build_...' routines above.
+!$OMP parallel do default(none) shared(isd,ied,jsd,jed,nk,h,h_new,CS)
+  do k = 1,nk
+    do j = jsc-1,jec+1 ; do i = isc-1,iec+1
+      h_new(i,j,k) = max( 0., h(i,j,k) + ( CS%dzRegrid(i,j,k) - CS%dzRegrid(i,j,k+1) ) )
+    enddo ; enddo
+  enddo
+
   if (CS%show_call_tree) call callTree_waypoint("new grid generated (ALE_main)")
 
   ! Remap all variables from old grid h onto new grid h_new
-  call remap_all_state_vars( CS%remapCS, CS, G, h, -CS%dzRegrid, Reg, u, v, CS%show_call_tree, dt)
+  call remap_all_state_vars( CS%remapCS, CS, G, h, h_new, -CS%dzRegrid, Reg, u, v, CS%show_call_tree, dt)
 
   if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_main)")
 
   ! Override old grid with new one. The new grid 'h_new' is built in
   ! one of the 'build_...' routines above.
-!$OMP parallel do default(none) shared(isc,iec,jsc,jec,nk,h,CS)
+!$OMP parallel do default(none) shared(isc,iec,jsc,jec,nk,h,h_new,CS)
   do k = 1,nk
     do j = jsc-1,jec+1 ; do i = isc-1,iec+1
-      h(i,j,k) = h(i,j,k) + ( CS%dzRegrid(i,j,k) - CS%dzRegrid(i,j,k+1) )
+      h(i,j,k) = h_new(i,j,k)
     enddo ; enddo
   enddo
 
@@ -446,11 +454,12 @@ end subroutine ALE_build_grid
 !! This routine is called during initialization of the model at time=0, to 
 !! remap initiali conditions to the model grid.  It is also called during a
 !! time step to update the state.  
-subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u, v, debug, dt)
+subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, h_old, h_new, dxInterface, Reg, u, v, debug, dt)
   type(remapping_CS),                               intent(in)    :: CS_remapping  !< Remapping control structure
   type(ALE_CS),                                     intent(in)    :: CS_ALE        !< ALE control structure 
   type(ocean_grid_type),                            intent(in)    :: G             !< Ocean grid structure
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),            intent(in)    :: h             !< Level thickness (m or Pa)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),            intent(in)    :: h_old         !< Thickness of source grid (m or Pa)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),            intent(in)    :: h_new         !< Thickness of destination grid (m or Pa)
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_),     intent(in)    :: dxInterface   !< Change in interface position (Hm or Pa)
   type(tracer_registry_type),                       pointer       :: Reg           !< Tracer registry structure
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), optional, intent(inout) :: u             !< Zonal velocity component (m/s)
@@ -466,7 +475,8 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u,
   real, dimension(SZI_(G), SZJ_(G), SZK_(G))  :: work_conc 
   real, dimension(SZI_(G), SZJ_(G), SZK_(G))  :: work_cont
   real, dimension(SZI_(G), SZJ_(G))           :: work_2d 
-  real                                        :: Idt, h2, ppt2mks   
+  real                                        :: Idt, ppt2mks
+  real, dimension(G%ke)                       :: h2
   logical                                     :: show_call_tree
 
   show_call_tree = .false.
@@ -504,9 +514,9 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u,
           if (G%mask2dT(i,j)>0.) then
 
             ! Build the start and final grids
-            h1(:) = h(i,j,:)
-            dx(:) = dxInterface(i,j,:)
-            call remapping_core_w(CS_remapping, nz, h1, Reg%Tr(m)%t(i,j,:), nz, dx, u_column)
+            h1(:) = h_old(i,j,:)
+            h2(:) = h_new(i,j,:)
+            call remapping_core_h( nz, h1, Reg%Tr(m)%t(i,j,:), nz, h2, u_column, CS_remapping )
 
             ! Intermediate steps for tendency of tracer concentration and tracer content.
             ! Note: do not merge the two if-tests, since do_tendency_diag(:) is not 
@@ -514,9 +524,8 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u,
             if(present(dt)) then 
               if(CS_ALE%do_tendency_diag(m)) then 
                 do k=1,G%ke
-                  h2               = h1(k) - (dx(k)-dx(k+1))
-                  work_conc(i,j,k) = (u_column(k)    - Reg%Tr(m)%t(i,j,k)      ) * Idt 
-                  work_cont(i,j,k) = (u_column(k)*h2 - Reg%Tr(m)%t(i,j,k)*h1(k)) * Idt * G%H_to_kg_m2 
+                  work_conc(i,j,k) = (u_column(k)    - Reg%Tr(m)%t(i,j,k)      ) * Idt
+                  work_cont(i,j,k) = (u_column(k)*h2(k) - Reg%Tr(m)%t(i,j,k)*h1(k)) * Idt * G%GV%H_to_kg_m2
                 enddo 
               endif 
             endif 
@@ -593,9 +602,14 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u,
       do I = G%iscB,G%iecB
         if (G%mask2dCu(i,j)>0.) then
           ! Build the start and final grids
-          h1(:) = 0.5 * ( h(i,j,:) + h(i+1,j,:) )
+          h1(:) = 0.5 * ( h_old(i,j,:) + h_old(i+1,j,:) )
           dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i+1,j,:) )
-          call remapping_core_w(CS_remapping, nz, h1, u(I,j,:), nz, dx, u_column)
+          do k = 1, nz
+            h2(k) = max( 0., h1(k) + ( dx(k+1) - dx(k) ) )
+          enddo
+         !Todo: Using h_new directly changes answers!!! - AJA
+         !h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i+1,j,:) )
+          call remapping_core_h( nz, h1, u(I,j,:), nz, h2, u_column, CS_remapping )
           u(I,j,:) = u_column(:)
         endif
       enddo
@@ -611,9 +625,14 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, h, dxInterface, Reg, u,
       do i = G%isc,G%iec
         if (G%mask2dCv(i,j)>0.) then
           ! Build the start and final grids
-          h1(:) = 0.5 * ( h(i,j,:) + h(i,j+1,:) )
+          h1(:) = 0.5 * ( h_old(i,j,:) + h_old(i,j+1,:) )
           dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i,j+1,:) )
-          call remapping_core_w(CS_remapping, nz, h1, v(i,J,:), nz, dx, u_column)
+          do k = 1, nz
+            h2(k) = max( 0., h1(k) + ( dx(k+1) - dx(k) ) )
+          enddo
+         !Todo: Using h_new directly changes answers!!! - AJA
+         !h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i,j+1,:) )
+          call remapping_core_h( nz, h1, v(i,J,:), nz, h2, u_column, CS_remapping )
           v(i,J,:) = u_column(:)
         endif
       enddo
@@ -664,6 +683,8 @@ subroutine ALE_remap_scalar(CS, G, nk_src, h_src, s_src, h_dst, s_dst, all_cells
           enddo
           s_dst(i,j,:) = 0.
         endif
+       !Todo: Using remapping_core_h() is what we want to do but changes answers !!! -AJA
+       !call remapping_core_h(n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), G%ke, h_dst(i,j,:), s_dst(i,j,:), CS)
         call dzFromH1H2( n_points, h_src(i,j,1:n_points), G%ke, h_dst(i,j,:), dx )
         call remapping_core_w(CS, n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), G%ke, dx, s_dst(i,j,:))
       else
@@ -708,7 +729,7 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, tv, h )
   do j = G%jsc,G%jec+1
     do i = G%isc,G%iec+1
       ! Build current grid
-      hTmp(:) = h(i,j,:)*G%H_to_m
+      hTmp(:) = h(i,j,:)*G%GV%H_to_m
       tmp(:) = tv%S(i,j,:)
       ! Reconstruct salinity profile    
       ppoly_linear_E = 0.0
@@ -777,7 +798,7 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, tv, h )
     do i = G%isc,G%iec+1
      
       ! Build current grid
-      hTmp(:) = h(i,j,:) * G%H_to_m
+      hTmp(:) = h(i,j,:) * G%GV%H_to_m
       tmp(:) = tv%S(i,j,:)
       
       ! Reconstruct salinity profile    
@@ -1046,7 +1067,7 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
                  "than PCM. E.g., if PPM is used for remapping, a\n"//&
                  "PPM reconstruction will also be used within\n"//&
                  "boundary cells.", default=regriddingDefaultBoundaryExtrapolation)
-  call set_regrid_params( regridCS, min_thickness=tmpReal, Boundary_Extrap=tmpLogical )
+  call set_regrid_params( regridCS, min_thickness=tmpReal, boundary_extrapolation=tmpLogical )
 
   if (coordinateMode(coordMode) == REGRIDDING_SLIGHT) then
     ! Set SLight-specific regridding parameters.
@@ -1107,7 +1128,7 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
   elseif ( trim(string) ==  "PARAM") then
     call get_param(param_file, mod, "MAXIMUM_INTERFACE_DEPTHS", z_max, &
                  trim(message), units="m", fail_if_missing=.true.)
-    call set_regrid_max_depths( regridCS, z_max, G%m_to_H )
+    call set_regrid_max_depths( regridCS, z_max, G%GV%m_to_H )
   elseif (index(trim(string),'FILE:')==1) then
     call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
     inputdir = slasher(inputdir)
@@ -1142,7 +1163,7 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
     endif
     call log_param(param_file, mod, "!MAXIMUM_INT_DEPTHS", z_max, &
                trim(message), units=coordinateUnits(coordMode))
-    call set_regrid_max_depths( regridCS, z_max, G%m_to_H )
+    call set_regrid_max_depths( regridCS, z_max, G%GV%m_to_H )
   elseif (index(trim(string),'FNC1:')==1) then
     call dz_function1( trim(string(6:)), dz_max )
     if ((coordinateMode(coordMode) == REGRIDDING_SLIGHT) .and. &
@@ -1152,7 +1173,7 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
     z_max(1) = 0.0 ; do K=1,ke ; z_max(K+1) = z_max(K) + dz_max(K) ; enddo
     call log_param(param_file, mod, "!MAXIMUM_INT_DEPTHS", z_max, &
                trim(message), units=coordinateUnits(coordMode))
-    call set_regrid_max_depths( regridCS, z_max, G%m_to_H )
+    call set_regrid_max_depths( regridCS, z_max, G%GV%m_to_H )
   else
     call MOM_error(FATAL,"ALE_initRegridding: "// &
       "Unrecognized MAXIMUM_INT_DEPTH_CONFIG "//trim(string))
@@ -1176,7 +1197,7 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
   elseif ( trim(string) ==  "PARAM") then
     call get_param(param_file, mod, "MAX_LAYER_THICKNESS", h_max, &
                  trim(message), units="m", fail_if_missing=.true.)
-    call set_regrid_max_thickness( regridCS, h_max, G%m_to_H )
+    call set_regrid_max_thickness( regridCS, h_max, G%GV%m_to_H )
   elseif (index(trim(string),'FILE:')==1) then
     call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
     inputdir = slasher(inputdir)
@@ -1204,12 +1225,12 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
     call MOM_read_data(trim(fileName), trim(varName), h_max)
     call log_param(param_file, mod, "!MAX_LAYER_THICKNESS", h_max, &
                trim(message), units=coordinateUnits(coordMode))
-    call set_regrid_max_thickness( regridCS, h_max, G%m_to_H )
+    call set_regrid_max_thickness( regridCS, h_max, G%GV%m_to_H )
   elseif (index(trim(string),'FNC1:')==1) then
     call dz_function1( trim(string(6:)), h_max )
     call log_param(param_file, mod, "!MAX_LAYER_THICKNESS", h_max, &
                trim(message), units=coordinateUnits(coordMode))
-    call set_regrid_max_thickness( regridCS, h_max, G%m_to_H )
+    call set_regrid_max_thickness( regridCS, h_max, G%GV%m_to_H )
   else
     call MOM_error(FATAL,"ALE_initRegridding: "// &
       "Unrecognized MAX_LAYER_THICKNESS_CONFIG "//trim(string))
@@ -1288,7 +1309,7 @@ subroutine ALE_update_regrid_weights( dt, CS )
     if (CS%regrid_time_scale > 0.0) then
       w = CS%regrid_time_scale / (CS%regrid_time_scale + dt)
     endif
-    call set_old_grid_weight( w, CS%regridCS )
+    call set_regrid_params( CS%regridCS, old_grid_weight=w )
   endif
 
 end subroutine ALE_update_regrid_weights

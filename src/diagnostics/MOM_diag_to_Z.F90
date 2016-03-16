@@ -46,7 +46,7 @@ module MOM_diag_to_Z
 use MOM_coms,          only : reproducing_sum
 use MOM_diag_mediator, only : post_data, post_data_1d_k, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl, time_type, diag_axis_init
-use MOM_diag_mediator, only : axesType, defineAxes
+use MOM_diag_mediator, only : axes_grp, define_axes_group
 use MOM_diag_mediator, only : ocean_register_diag
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
@@ -102,9 +102,9 @@ type, public :: diag_to_Z_CS ; private
 
   real, pointer :: Z_int(:) => NULL()  ! interface depths of the z-space file (meter)
 
-  type(axesType) :: axesBz,  axesTz,  axesCuz,  axesCvz
-  type(axesType) :: axesBzi, axesTzi, axesCuzi, axesCvzi
-  type(axesType) :: axesZ
+  type(axes_grp) :: axesBz,  axesTz,  axesCuz,  axesCvz
+  type(axes_grp) :: axesBzi, axesTzi, axesCuzi, axesCvzi
+  type(axes_grp) :: axesZ
   integer, dimension(1) :: axesz_out
 
   type(diag_ctrl), pointer :: diag ! structure to regulate diagnostic output timing
@@ -197,7 +197,7 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
                          ! Note that -1/2 <= z1 < z2 <= 1/2.
   real :: sl_tr(max(CS%num_tr_used,1)) ! normalized slope of the tracer
                                        ! within the cell, in tracer units
-
+  real :: Angstrom ! A minimal layer thickness, in H.
   real :: slope ! normalized slope of a variable within the cell
 
   real :: layer_ave(CS%nk_zspace)
@@ -210,6 +210,7 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
   is   = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nk = G%ke
   Isq  = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nkml = max(G%GV%nkml, 1)
+  Angstrom = G%GV%Angstrom
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "diagnostic_fields_zstar: Module must be initialized before it is used.")
@@ -230,7 +231,7 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
         nk_valid(I) = 0 ; D_pt(I) = 0.5*(G%bathyT(i+1,j)+G%bathyT(i,j))
       enddo
       do k=1,nk ; do I=Isq,Ieq
-        if ((G%mask2dCu(I,j) > 0.5) .and. (h(i,j,k)+h(i+1,j,k) > 4.0*G%Angstrom)) then
+        if ((G%mask2dCu(I,j) > 0.5) .and. (h(i,j,k)+h(i+1,j,k) > 4.0*Angstrom)) then
           nk_valid(I) = nk_valid(I) + 1 ; k2 = nk_valid(I)
           h_f(k2,I) = 0.5*(h(i,j,k)+h(i+1,j,k)) ; u_f(k2,I) = u(I,j,k)
         endif
@@ -239,13 +240,13 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
         ! Add an Angstrom thick layer at the bottom with 0 velocity to impose a
         ! no-slip BBC in the output, if anything but piecewise constant is used.
         nk_valid(I) = nk_valid(I) + 1 ; k2 = nk_valid(I)
-        h_f(k2,I) = G%Angstrom ; u_f(k2,I) = 0.0
+        h_f(k2,I) = Angstrom ; u_f(k2,I) = 0.0
       endif ; enddo
 
       do I=Isq,Ieq ; if (nk_valid(I) > 0) then
       ! Calculate the z* interface heights for tracers.
         htot = 0.0 ; do k=1,nk_valid(i) ; htot = htot + h_f(k,i) ; enddo
-        dilate = 0.0 ; if (htot*G%H_to_m > 2.0*G%Angstrom) dilate = (D_pt(i) - 0.0) / htot
+        dilate = 0.0 ; if (htot*G%GV%H_to_m > 2.0*Angstrom) dilate = (D_pt(i) - 0.0) / htot
 
         e(nk_valid(i)+1) = -D_pt(i)
         do k=nk_valid(i),1,-1 ; e(K) = e(K+1) + h_f(k,i)*dilate ; enddo
@@ -309,7 +310,7 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
         nk_valid(i) = 0 ; D_pt(i) = 0.5*(G%bathyT(i,j)+G%bathyT(i,j+1))
       enddo
       do k=1,nk ; do i=is,ie
-        if ((G%mask2dCv(i,j) > 0.5) .and. (h(i,j,k)+h(i,j+1,k) > 4.0*G%Angstrom)) then
+        if ((G%mask2dCv(i,j) > 0.5) .and. (h(i,j,k)+h(i,j+1,k) > 4.0*Angstrom)) then
           nk_valid(i) = nk_valid(i) + 1 ; k2 = nk_valid(i)
           h_f(k2,i) = 0.5*(h(i,j,k)+h(i,j+1,k)) ; v_f(k2,i) = v(i,j,k)
         endif
@@ -318,13 +319,13 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
         ! Add an Angstrom thick layer at the bottom with 0 velocity to impose a
         ! no-slip BBC in the output, if anything but piecewise constant is used.
         nk_valid(i) = nk_valid(i) + 1 ; k2 = nk_valid(i)
-        h_f(k2,i) = G%Angstrom ; v_f(k2,i) = 0.0
+        h_f(k2,i) = Angstrom ; v_f(k2,i) = 0.0
       endif ; enddo
 
       do i=is,ie ; if (nk_valid(i) > 0) then
       ! Calculate the z* interface heights for tracers.
         htot = 0.0 ; do k=1,nk_valid(i) ; htot = htot + h_f(k,i) ; enddo
-        dilate = 0.0 ; if (htot > 2.0*G%Angstrom) dilate = (D_pt(i) - 0.0) / htot
+        dilate = 0.0 ; if (htot > 2.0*Angstrom) dilate = (D_pt(i) - 0.0) / htot
 
         e(nk_valid(i)+1) = -D_pt(i)
         do k=nk_valid(i),1,-1 ; e(K) = e(K+1) + h_f(k,i)*dilate ; enddo
@@ -387,7 +388,7 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
       ! Remove all massless layers.
       do i=is,ie ; nk_valid(i) = 0 ; D_pt(i) = G%bathyT(i,j) ; enddo
       do k=1,nk ; do i=is,ie
-        if ((G%mask2dT(i,j) > 0.5) .and. (h(i,j,k) > 2.0*G%Angstrom)) then
+        if ((G%mask2dT(i,j) > 0.5) .and. (h(i,j,k) > 2.0*Angstrom)) then
           nk_valid(i) = nk_valid(i) + 1 ; k2 = nk_valid(i)
           h_f(k2,i) = h(i,j,k)
           do m=1,CS%num_tr_used ; tr_f(k2,m,i) = CS%tr_model(m)%p(i,j,k) ; enddo
@@ -397,7 +398,7 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
       do i=is,ie ; if (nk_valid(i) > 0) then
       ! Calculate the z* interface heights for tracers.
         htot = 0.0 ;  do k=1,nk_valid(i) ; htot = htot + h_f(k,i) ; enddo
-        dilate = 0.0 ; if (htot > 2.0*G%Angstrom) dilate = (D_pt(i) - 0.0) / htot
+        dilate = 0.0 ; if (htot > 2.0*Angstrom) dilate = (D_pt(i) - 0.0) / htot
 
         e(nk_valid(i)+1) = -D_pt(i)
         do k=nk_valid(i),1,-1 ; e(K) = e(K+1) + h_f(k,i)*dilate ; enddo
@@ -520,7 +521,7 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, CS)
   ! Determine how much the layers will be dilated in recasting them into z*
   ! coordiantes.  (-G%D < z* < 0).
   do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-    htot(i,j) = G%H_subroundoff
+    htot(i,j) = G%GV%H_subroundoff
   enddo ; enddo
   do k=1,nk ; do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
     htot(i,j) = htot(i,j) + h(i,j,k)
@@ -601,14 +602,14 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, CS)
 
   if (CS%id_uh_Z > 0) then 
     do k=1,nk_z ; do j=js,je ; do I=Isq,Ieq
-      CS%uh_z(i,j,k) = CS%uh_z(i,j,k)*G%H_to_kg_m2 
+      CS%uh_z(i,j,k) = CS%uh_z(i,j,k)*G%GV%H_to_kg_m2 
     enddo ; enddo ; enddo
     call post_data(CS%id_uh_Z, CS%uh_z, CS%diag)
   endif 
 
   if (CS%id_vh_Z > 0) then
     do k=1,nk_z ; do j=Jsq,Jeq ; do I=is,ie
-      CS%vh_z(i,j,k) = CS%vh_z(i,j,k)*G%H_to_kg_m2 
+      CS%vh_z(i,j,k) = CS%vh_z(i,j,k)*G%GV%H_to_kg_m2 
     enddo ; enddo ; enddo
     call post_data(CS%id_vh_Z, CS%vh_z, CS%diag)
   endif 
@@ -751,7 +752,7 @@ subroutine calc_Zint_diags(h, in_ptrs, ids, num_diags, &
     do k=1,nk ; do i=is,ie ; htot(i) = htot(i) + h(i,j,k) ; enddo ; enddo
     do i=is,ie
       dilate(i) = 0.0
-      if (htot(i)*G%H_to_m > 0.5) dilate(i) = (G%bathyT(i,j) - 0.0) / htot(i)
+      if (htot(i)*G%GV%H_to_m > 0.5) dilate(i) = (G%bathyT(i,j) - 0.0) / htot(i)
       e(i,nk+1) = -G%bathyT(i,j)
     enddo
     do k=nk,1,-1 ; do i=is,ie
@@ -972,7 +973,7 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
   endif
   allocate(CS)
 
-  if (G%Boussinesq) then ; flux_units = "meter3 second-1"
+  if (G%GV%Boussinesq) then ; flux_units = "meter3 second-1"
   else ; flux_units = "kilogram second-1" ; endif
 
   CS%diag => diag
@@ -1002,15 +1003,15 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
 
   if (CS%nk_zspace > 0) then
 
-    call defineAxes(diag, (/ diag%axesB1%handles(1),  diag%axesB1%handles(2),  z_axis /),    CS%axesBz)
-    call defineAxes(diag, (/ diag%axesT1%handles(1),  diag%axesT1%handles(2),  z_axis /),    CS%axesTz)
-    call defineAxes(diag, (/ diag%axesCu1%handles(1), diag%axesCu1%handles(2), z_axis /),    CS%axesCuz)
-    call defineAxes(diag, (/ diag%axesCv1%handles(1), diag%axesCv1%handles(2), z_axis /),    CS%axesCvz)
-    call defineAxes(diag, (/ diag%axesB1%handles(1),  diag%axesB1%handles(2),  zint_axis /), CS%axesBzi)
-    call defineAxes(diag, (/ diag%axesT1%handles(1),  diag%axesT1%handles(2),  zint_axis /), CS%axesTzi)
-    call defineAxes(diag, (/ diag%axesCu1%handles(1), diag%axesCu1%handles(2), zint_axis /), CS%axesCuzi)
-    call defineAxes(diag, (/ diag%axesCv1%handles(1), diag%axesCv1%handles(2), zint_axis /), CS%axesCvzi)
-    call defineAxes(diag, (/ z_axis /),    CS%axesZ)
+    call define_axes_group(diag, (/ diag%axesB1%handles(1),  diag%axesB1%handles(2),  z_axis /),    CS%axesBz)
+    call define_axes_group(diag, (/ diag%axesT1%handles(1),  diag%axesT1%handles(2),  z_axis /),    CS%axesTz)
+    call define_axes_group(diag, (/ diag%axesCu1%handles(1), diag%axesCu1%handles(2), z_axis /),    CS%axesCuz)
+    call define_axes_group(diag, (/ diag%axesCv1%handles(1), diag%axesCv1%handles(2), z_axis /),    CS%axesCvz)
+    call define_axes_group(diag, (/ diag%axesB1%handles(1),  diag%axesB1%handles(2),  zint_axis /), CS%axesBzi)
+    call define_axes_group(diag, (/ diag%axesT1%handles(1),  diag%axesT1%handles(2),  zint_axis /), CS%axesTzi)
+    call define_axes_group(diag, (/ diag%axesCu1%handles(1), diag%axesCu1%handles(2), zint_axis /), CS%axesCuzi)
+    call define_axes_group(diag, (/ diag%axesCv1%handles(1), diag%axesCv1%handles(2), zint_axis /), CS%axesCvzi)
+    call define_axes_group(diag, (/ z_axis /),    CS%axesZ)
 
     CS%id_u_z = register_diag_field('ocean_model_z', 'u', CS%axesCuz, Time,    &
         'Zonal Velocity in Depth Space', 'meter second-1',                     &
@@ -1273,7 +1274,7 @@ function register_Z_diag(var_desc, CS, day, missing)
   character(len=48) :: units            ! A variable's units.
   character(len=240) :: longname        ! A variable's longname.
   character(len=8) :: hor_grid, z_grid  ! Variable grid info.
-  type(axesType) :: axes
+  type(axes_grp) :: axes
 
   call query_vardesc(var_desc, name=var_name, units=units, longname=longname, &
                      hor_grid=hor_grid, z_grid=z_grid, caller="register_Zint_diag")
@@ -1325,7 +1326,7 @@ function register_Zint_diag(var_desc, CS, day)
   character(len=48) :: units            ! A variable's units.
   character(len=240) :: longname        ! A variable's longname.
   character(len=8) :: hor_grid          ! Variable grid info.
-  type(axesType) :: axes
+  type(axes_grp) :: axes
 
   call query_vardesc(var_desc, name=var_name, units=units, longname=longname, &
                      hor_grid=hor_grid, caller="register_Zint_diag")

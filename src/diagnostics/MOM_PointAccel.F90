@@ -127,6 +127,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, CS, &
 !                 vertvisc, in m.
 
   real    :: f_eff, CFL
+  real    :: Angstrom
   real    :: truncvel, du
   real    :: Inorm(SZK_(G))
   real    :: e(SZK_(G)+1)
@@ -136,6 +137,8 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, CS, &
   logical :: do_k(SZK_(G)+1)
   logical :: prev_avail
   integer :: file
+
+  Angstrom = G%GV%Angstrom + G%GV%H_subroundoff
 
 !  if (.not.associated(CS)) return
   nz = G%ke
@@ -163,13 +166,13 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, CS, &
     do k=1,nz
       if (((max(CS%u_av(I,j,k),um(I,j,k)) >= maxvel) .or. &
            (min(CS%u_av(I,j,k),um(I,j,k)) <= minvel)) .and. &
-          ((hin(i,j,k) + hin(i+1,j,k)) > 3.0*G%Angstrom)) exit
+          ((hin(i,j,k) + hin(i+1,j,k)) > 3.0*Angstrom)) exit
     enddo
     ks = k
     do k=nz,1,-1
       if (((max(CS%u_av(I,j,k), um(I,j,k)) >= maxvel) .or. &
            (min(CS%u_av(I,j,k), um(I,j,k)) <= minvel)) .and. &
-          ((hin(i,j,k) + hin(i+1,j,k)) > 3.0*G%Angstrom)) exit
+          ((hin(i,j,k) + hin(i+1,j,k)) > 3.0*Angstrom)) exit
     enddo
     ke = k
     if (ke < ks) then
@@ -186,7 +189,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, CS, &
 
     if (ks <= G%GV%nk_rho_varies) ks = 1
     do k=ks,ke
-      if ((hin(i,j,k) + hin(i+1,j,k)) > 3.0*G%Angstrom) do_k(k) = .true.
+      if ((hin(i,j,k) + hin(i+1,j,k)) > 3.0*Angstrom) do_k(k) = .true.
     enddo
 
     write(file,'(/,"Layers:",$)')
@@ -461,6 +464,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, CS, &
 !                 vertvisc, in m.
 
   real    :: f_eff, CFL
+  real    :: Angstrom
   real    :: truncvel, dv
   real    :: Inorm(SZK_(G))
   real    :: e(SZK_(G)+1)
@@ -470,6 +474,8 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, CS, &
   logical :: do_k(SZK_(G)+1)
   logical :: prev_avail
   integer :: file
+
+  Angstrom = G%GV%Angstrom + G%GV%H_subroundoff
 
 !  if (.not.associated(CS)) return
   nz = G%ke
@@ -496,13 +502,13 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, CS, &
     do k=1,nz
       if (((max(CS%v_av(i,J,k), vm(i,J,k)) >= maxvel) .or. &
            (min(CS%v_av(i,J,k), vm(i,J,k)) <= minvel)) .and. &
-          ((hin(i,j,k) + hin(i,j+1,k)) > 3.0*G%Angstrom)) exit
+          ((hin(i,j,k) + hin(i,j+1,k)) > 3.0*Angstrom)) exit
     enddo
     ks = k
     do k=nz,1,-1
       if (((max(CS%v_av(i,J,k), vm(i,J,k)) >= maxvel) .or. &
            (min(CS%v_av(i,J,k), vm(i,J,k)) <= minvel)) .and. &
-          ((hin(i,j,k) + hin(i,j+1,k)) > 3.0*G%Angstrom)) exit
+          ((hin(i,j,k) + hin(i,j+1,k)) > 3.0*Angstrom)) exit
     enddo
     ke = k
     if (ke < ks) then
@@ -519,7 +525,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, CS, &
 
     if (ks <= G%GV%nk_rho_varies) ks = 1
     do k=ks,ke
-      if ((hin(i,j,k) + hin(i,j+1,k)) > 3.0*G%Angstrom) do_k(k) = .true.
+      if ((hin(i,j,k) + hin(i,j+1,k)) > 3.0*Angstrom) do_k(k) = .true.
     enddo
 
     write(file,'(/,"Layers:",$)')

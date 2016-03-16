@@ -254,12 +254,12 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, CS, &
          "Module must be initialized before it is used.")
 
   if (CS%direct_stress) then
-    Hmix = CS%Hmix_stress*G%m_to_H
+    Hmix = CS%Hmix_stress*G%GV%m_to_H
     I_Hmix = 1.0 / Hmix
   endif
-  dt_Rho0 = dt/G%H_to_kg_m2
-  dt_m_to_H = dt*G%m_to_H
-  h_neglect = G%H_subroundoff
+  dt_Rho0 = dt/G%GV%H_to_kg_m2
+  dt_m_to_H = dt*G%GV%m_to_H
+  h_neglect = G%GV%H_subroundoff
   Idt = 1.0 / dt
 
   do k=1,nz ; do i=Isq,Ieq ; Ray(i,k) = 0.0 ; enddo ; enddo
@@ -325,15 +325,15 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, CS, &
     enddo ; enddo ; endif
 
     if (ASSOCIATED(visc%taux_shelf)) then ; do I=Isq,Ieq
-      visc%taux_shelf(I,j) = -G%Rho0*CS%a1_shelf_u(I,j)*u(I,j,1) ! - u_shelf?
+      visc%taux_shelf(I,j) = -G%GV%Rho0*CS%a1_shelf_u(I,j)*u(I,j,1) ! - u_shelf?
     enddo ; endif
 
     if (PRESENT(taux_bot)) then
       do I=Isq,Ieq
-        taux_bot(I,j) = G%Rho0 * (u(I,j,nz)*CS%a_u(I,j,nz+1))
+        taux_bot(I,j) = G%GV%Rho0 * (u(I,j,nz)*CS%a_u(I,j,nz+1))
       enddo
       if (CS%Channel_drag) then ; do k=1,nz ; do I=Isq,Ieq
-        taux_bot(I,j) = taux_bot(I,j) + G%Rho0 * (Ray(I,k)*u(I,j,k))
+        taux_bot(I,j) = taux_bot(I,j) + G%GV%Rho0 * (Ray(I,k)*u(I,j,k))
       enddo ; enddo ; endif
     endif
   enddo ! end u-component j loop
@@ -398,15 +398,15 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, CS, &
     enddo ; enddo ; endif
 
     if (ASSOCIATED(visc%tauy_shelf)) then ; do i=is,ie
-      visc%tauy_shelf(i,J) = -G%Rho0*CS%a1_shelf_v(i,J)*v(i,J,1) ! - v_shelf?
+      visc%tauy_shelf(i,J) = -G%GV%Rho0*CS%a1_shelf_v(i,J)*v(i,J,1) ! - v_shelf?
     enddo ; endif
 
     if (present(tauy_bot)) then
       do i=is,ie
-        tauy_bot(i,J) = G%Rho0 * (v(i,J,nz)*CS%a_v(i,J,nz+1))
+        tauy_bot(i,J) = G%GV%Rho0 * (v(i,J,nz)*CS%a_v(i,J,nz+1))
       enddo
       if (CS%Channel_drag) then ; do k=1,nz ; do i=is,ie
-        tauy_bot(i,J) = tauy_bot(i,J) + G%Rho0 * (Ray(i,k)*v(i,J,k))
+        tauy_bot(i,J) = tauy_bot(i,J) + G%GV%Rho0 * (Ray(i,k)*v(i,J,k))
       enddo ; enddo ; endif
     endif
   enddo ! end of v-component J loop
@@ -482,7 +482,7 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, CS)
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(visc): "// &
          "Module must be initialized before it is used.")
 
-  dt_m_to_H = dt*G%m_to_H
+  dt_m_to_H = dt*G%GV%m_to_H
 
   do k=1,nz ; do i=Isq,Ieq ; Ray(i,k) = 0.0 ; enddo ; enddo
 
@@ -631,8 +631,8 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(coef): "// &
          "Module must be initialized before it is used.")
 
-  h_neglect = G%H_subroundoff
-  I_Hbbl(:) = 1.0 / (CS%Hbbl * G%m_to_H + h_neglect)
+  h_neglect = G%GV%H_subroundoff
+  I_Hbbl(:) = 1.0 / (CS%Hbbl * G%GV%m_to_H + h_neglect)
 
   if (CS%debug .or. (CS%id_hML_u > 0)) then
     allocate(hML_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; hML_u(:,:) = 0.0
@@ -660,7 +660,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
 
     if (CS%bottomdraglaw) then ; do I=Isq,Ieq
       kv_bbl(I) = visc%kv_bbl_u(I,j)
-      bbl_thick(I) = visc%bbl_thick_u(I,j) * G%m_to_H
+      bbl_thick(I) = visc%bbl_thick_u(I,j) * G%GV%m_to_H
       if (do_i(I)) I_Hbbl(I) = 1.0 / (bbl_thick(I) + h_neglect)
     enddo ; endif
 
@@ -685,9 +685,9 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
     else ! Not harmonic_visc
       do I=Isq,Ieq
         zh(I) = 0.0 ; z_i(I,nz+1) = 0.0
-        Dmin(I) = min(G%bathyT(i,j), G%bathyT(i+1,j)) * G%m_to_H
+        Dmin(I) = min(G%bathyT(i,j), G%bathyT(i+1,j)) * G%GV%m_to_H
       enddo
-      do i=Isq,Ieq+1 ; zcol(i) = -G%bathyT(i,j) * G%m_to_H ; enddo
+      do i=Isq,Ieq+1 ; zcol(i) = -G%bathyT(i,j) * G%GV%m_to_H ; enddo
       do k=nz,1,-1
         do i=Isq,Ieq+1 ; zcol(i) = zcol(i) + h(i,j,k) ; enddo
         do I=Isq,Ieq ; if (do_i(I)) then
@@ -726,7 +726,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
           ! Perhaps this needs to be done more carefully, via find_eta.
           do I=Isq,Ieq ; if (do_i_shelf(I)) then
             zh(I) = 0.0 ; Ztop_min(I) = min(zcol(i), zcol(i+1))
-            I_HTbl(I) = 1.0 / (visc%tbl_thick_shelf_u(I,j)*G%m_to_H + h_neglect)
+            I_HTbl(I) = 1.0 / (visc%tbl_thick_shelf_u(I,j)*G%GV%m_to_H + h_neglect)
           endif ; enddo
           do k=1,nz
             do i=Isq,Ieq+1 ; zcol(i) = zcol(i) - h(i,j,k) ; enddo
@@ -782,7 +782,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
 
     if (CS%bottomdraglaw) then ; do i=is,ie
       kv_bbl(i) = visc%kv_bbl_v(i,J)
-      bbl_thick(i) = visc%bbl_thick_v(i,J) * G%m_to_H
+      bbl_thick(i) = visc%bbl_thick_v(i,J) * G%GV%m_to_H
       if (do_i(i)) I_Hbbl(i) = 1.0 / bbl_thick(i)
     enddo ; endif
 
@@ -808,9 +808,9 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
     else ! Not harmonic_visc
       do i=is,ie
         zh(i) = 0.0 ; z_i(i,nz+1) = 0.0
-        Dmin(i) = min(G%bathyT(i,j), G%bathyT(i,j+1)) * G%m_to_H
-        zcol1(i) = -G%bathyT(i,j) * G%m_to_H
-        zcol2(i) = -G%bathyT(i,j+1) * G%m_to_H
+        Dmin(i) = min(G%bathyT(i,j), G%bathyT(i,j+1)) * G%GV%m_to_H
+        zcol1(i) = -G%bathyT(i,j) * G%GV%m_to_H
+        zcol2(i) = -G%bathyT(i,j+1) * G%GV%m_to_H
       enddo
       do k=nz,1,-1 ; do i=is,ie ; if (do_i(i)) then
         h_harm(i,k) = 2.0*h(i,j,k)*h(i,j+1,k) / (h(i,j,k)+h(i,j+1,k)+h_neglect)
@@ -848,7 +848,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
           ! Perhaps this needs to be done more carefully, via find_eta.
           do i=is,ie ; if (do_i_shelf(i)) then
             zh(i) = 0.0 ; Ztop_min(I) = min(zcol1(i), zcol2(i))
-            I_HTbl(i) = 1.0 / (visc%tbl_thick_shelf_v(i,J)*G%m_to_H + h_neglect)
+            I_HTbl(i) = 1.0 / (visc%tbl_thick_shelf_v(i,J)*G%GV%m_to_H + h_neglect)
           endif ; enddo
           do k=1,nz
             do i=is,ie ; if (do_i_shelf(i)) then
@@ -893,12 +893,12 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
 
 
   if (CS%debug) then
-    call uchksum(CS%h_u*G%H_to_m,"vertvisc_coef h_u",G,haloshift=0)
-    call vchksum(CS%h_v*G%H_to_m,"vertvisc_coef h_v",G,haloshift=0)
+    call uchksum(CS%h_u*G%GV%H_to_m,"vertvisc_coef h_u",G,haloshift=0)
+    call vchksum(CS%h_v*G%GV%H_to_m,"vertvisc_coef h_v",G,haloshift=0)
     call uchksum(CS%a_u,"vertvisc_coef a_u",G,haloshift=0)
     call vchksum(CS%a_v,"vertvisc_coef a_v",G,haloshift=0)
-    if (allocated(hML_u)) call uchksum(hML_u*G%H_to_m,"vertvisc_coef hML_u",G,haloshift=0)
-    if (allocated(hML_v)) call vchksum(hML_v*G%H_to_m,"vertvisc_coef hML_v",G,haloshift=0)
+    if (allocated(hML_u)) call uchksum(hML_u*G%GV%H_to_m,"vertvisc_coef hML_u",G,haloshift=0)
+    if (allocated(hML_v)) call vchksum(hML_v*G%GV%H_to_m,"vertvisc_coef hML_v",G,haloshift=0)
   endif
 
 ! Offer diagnostic fields for averaging.
@@ -972,8 +972,8 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
     if (work_on_u) then ; is = G%IscB ; ie = G%IecB
     else ; is = G%isc ; ie = G%iec ; endif
     nz = G%ke
-    h_neglect = G%H_subroundoff
-    dz_neglect = G%H_subroundoff*G%H_to_m
+    h_neglect = G%GV%H_subroundoff
+    dz_neglect = G%GV%H_subroundoff*G%GV%H_to_m
 
     do_shelf = .false. ; if (present(shelf)) do_shelf = shelf
     h_ml(:) = 0.0
@@ -984,7 +984,7 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
     if ((G%GV%nkml>0) .or. do_shelf) then ; do k=2,nz ; do i=is,ie
       if (do_i(i)) a(i,K) = 2.0*CS%Kv
     enddo ; enddo ; else
-      I_Hmix = 1.0 / (CS%Hmix * G%m_to_H + h_neglect)
+      I_Hmix = 1.0 / (CS%Hmix * G%GV%m_to_H + h_neglect)
       do i=is,ie ; z_t(i) = h_neglect*I_Hmix ; enddo
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
         z_t(i) = z_t(i) + h_harm(i,k-1)*I_Hmix
@@ -997,12 +997,12 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
       if (CS%bottomdraglaw) then
         r = hvel(i,nz)*0.5
         if (r < bbl_thick(i)) then
-          a(i,nz+1) = 1.0*kv_bbl(i) / (1e-10*dt*kv_bbl(i) + r*G%H_to_m)
+          a(i,nz+1) = 1.0*kv_bbl(i) / (1e-10*dt*kv_bbl(i) + r*G%GV%H_to_m)
         else
-          a(i,nz+1) = 1.0*kv_bbl(i) / (1e-10*dt*kv_bbl(i) + bbl_thick(i)*G%H_to_m)
+          a(i,nz+1) = 1.0*kv_bbl(i) / (1e-10*dt*kv_bbl(i) + bbl_thick(i)*G%GV%H_to_m)
         endif
       else
-        a(i,nz+1) = 2.0*CS%Kvbbl / (hvel(i,nz)*G%H_to_m + 2.0e-10*dt*CS%Kvbbl)
+        a(i,nz+1) = 2.0*CS%Kvbbl / (hvel(i,nz)*G%GV%H_to_m + 2.0e-10*dt*CS%Kvbbl)
       endif
     endif ; enddo
 
@@ -1041,7 +1041,7 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
       !   The term including 1e-10 in the denominators is here to avoid
       ! truncation error problems in the tridiagonal solver. Effectively, this
       ! sets the maximum coupling coefficient at 1e10 m.
-      a(i,K) = a(i,K) / (h_shear*G%H_to_m + 1.0e-10*dt*a(i,K))
+      a(i,K) = a(i,K) / (h_shear*G%GV%H_to_m + 1.0e-10*dt*a(i,K))
     endif ; enddo ; enddo ! i & k loops
 
     if (do_shelf) then
@@ -1049,18 +1049,18 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
       do i=is,ie ; if (do_i(i)) then
         if (work_on_u) then
           kv_tbl(i) = visc%kv_tbl_shelf_u(I,j)
-          tbl_thick(i) = visc%tbl_thick_shelf_u(I,j) * G%m_to_H
+          tbl_thick(i) = visc%tbl_thick_shelf_u(I,j) * G%GV%m_to_H
         else
           kv_tbl(i) = visc%kv_tbl_shelf_v(i,J)
-          tbl_thick(i) = visc%tbl_thick_shelf_v(i,J) * G%m_to_H
+          tbl_thick(i) = visc%tbl_thick_shelf_v(i,J) * G%GV%m_to_H
         endif
         z_t(i) = 0.0
 
         ! If a(i,1) were not already 0, it would be added here.
         if (0.5*hvel(i,1) > tbl_thick(i)) then
-          a(i,1) = kv_tbl(i) / (tbl_thick(i) *G%H_to_m + (1.0e-10*dt)*kv_tbl(i))
+          a(i,1) = kv_tbl(i) / (tbl_thick(i) *G%GV%H_to_m + (1.0e-10*dt)*kv_tbl(i))
         else
-          a(i,1) = kv_tbl(i) / (0.5*hvel(i,1)*G%H_to_m + (1.0e-10*dt)*kv_tbl(i))
+          a(i,1) = kv_tbl(i) / (0.5*hvel(i,1)*G%GV%H_to_m + (1.0e-10*dt)*kv_tbl(i))
         endif
       endif ; enddo
 
@@ -1078,7 +1078,7 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
       ! truncation error problems in the tridiagonal solver. Effectively, this
       ! sets the maximum coupling coefficient increment to 1e10 m.
         a_top = 2.0 * topfn * kv_tbl(i)
-        a(i,K) = a(i,K) + a_top / (h_shear*G%H_to_m + 1.0e-10*dt*a_top)
+        a(i,K) = a(i,K) + a_top / (h_shear*G%GV%H_to_m + 1.0e-10*dt*a_top)
       endif ; enddo ; enddo
     elseif (CS%dynamic_viscous_ML .or. (G%GV%nkml>0)) then
       max_nk = 0
@@ -1108,13 +1108,13 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
       do K=2,max_nk ; do i=is,ie ; if (do_i(i)) then ; if (k < nk_visc(i)) then
         ! Set the viscosity at the interfaces.
         z_t(i) = z_t(i) + hvel(i,k-1)
-        temp1 = (z_t(i)*h_ml(i) - z_t(i)*z_t(i)) * G%H_to_m
+        temp1 = (z_t(i)*h_ml(i) - z_t(i)*z_t(i)) * G%GV%H_to_m
         !   This viscosity is set to go to 0 at the mixed layer top and bottom
         ! (in a log-layer) and be further limited by rotation to give the
         ! natural Ekman length.
         visc_ml = u_star(i) * 0.41 * (temp1*u_star(i)) / &
                        (absf(i)*temp1 + h_ml(i)*u_star(i))
-        a_ml = 4.0*visc_ml / ((hvel(i,k)+hvel(i,k-1) + h_neglect) * G%H_to_m + &
+        a_ml = 4.0*visc_ml / ((hvel(i,k)+hvel(i,k-1) + h_neglect) * G%GV%H_to_m + &
                               2.0e-10*dt*visc_ml)
         ! Choose the largest estimate of a.
         if (a_ml > a(i,K)) a(i,K) = a_ml
@@ -1190,16 +1190,16 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
         do k=1,nz ; do I=Isq,Ieq
           if ((u(I,j,k) * (dt * G%dy_Cu(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
             u(I,j,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i+1,j) / (dt * G%dy_Cu(I,j)))
-            if (h(i,j,k) + h(i+1,j,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
+            if (h(i,j,k) + h(i+1,j,k) > 6.0*G%GV%Angstrom) CS%ntrunc = CS%ntrunc + 1
           elseif ((u(I,j,k) * (dt * G%dy_Cu(I,j))) * G%IareaT(i,j) > CS%CFL_trunc) then
             u(I,j,k) = (0.9*CS%CFL_trunc) * (G%areaT(i,j) / (dt * G%dy_Cu(I,j)))
-            if (h(i,j,k) + h(i+1,j,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
+            if (h(i,j,k) + h(i+1,j,k) > 6.0*G%GV%Angstrom) CS%ntrunc = CS%ntrunc + 1
           endif
         enddo ; enddo
       else
         do k=1,nz ; do I=Isq,Ieq ; if (abs(u(I,j,k)) > maxvel) then
           u(I,j,k) = SIGN(truncvel,u(I,j,k))
-          if (h(i,j,k) + h(i+1,j,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
+          if (h(i,j,k) + h(i+1,j,k) > 6.0*G%GV%Angstrom) CS%ntrunc = CS%ntrunc + 1
         endif ; enddo ;  enddo
       endif ; endif
     enddo ! j-loop
@@ -1209,17 +1209,17 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
       do k=1,nz ; do j=js,je ; do I=Isq,Ieq
         if ((u(I,j,k) * (dt * G%dy_Cu(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
           u(I,j,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i+1,j) / (dt * G%dy_Cu(I,j)))
-          if (h(i,j,k) + h(i+1,j,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
+          if (h(i,j,k) + h(i+1,j,k) > 6.0*G%GV%Angstrom) CS%ntrunc = CS%ntrunc + 1
         elseif ((u(I,j,k) * (dt * G%dy_Cu(I,j))) * G%IareaT(i,j) > CS%CFL_trunc) then
           u(I,j,k) = (0.9*CS%CFL_trunc) * (G%areaT(i,j) / (dt * G%dy_Cu(I,j)))
-          if (h(i,j,k) + h(i+1,j,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
+          if (h(i,j,k) + h(i+1,j,k) > 6.0*G%GV%Angstrom) CS%ntrunc = CS%ntrunc + 1
         endif
       enddo ; enddo ; enddo
     else
 !$OMP parallel do default(none) shared(nz,js,je,Isq,Ieq,u,G,CS,truncvel,maxvel,h)
       do k=1,nz ; do j=js,je ; do I=Isq,Ieq ; if (abs(u(I,j,k)) > maxvel) then
         u(I,j,k) = SIGN(truncvel,u(I,j,k))
-        if (h(i,j,k) + h(i+1,j,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
+        if (h(i,j,k) + h(i+1,j,k) > 6.0*G%GV%Angstrom) CS%ntrunc = CS%ntrunc + 1
       endif ; enddo ; enddo ; enddo
     endif
   endif
@@ -1229,7 +1229,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
 !   Here the diagnostic reporting subroutines are called if
 ! unphysically large values were found.
         call write_u_accel(I, j, u_old, h, ADp, CDp, dt, G, CS%PointAccel_CSp, &
-               vel_report(I,j), -vel_report(I,j), (dt*fluxes%taux(I,j)/G%Rho0), &
+               vel_report(I,j), -vel_report(I,j), (dt*fluxes%taux(I,j)/G%GV%Rho0), &
                a=CS%a_u(:,j,:), hv=CS%h_u(:,j,:))
     endif ; enddo; enddo
   endif
@@ -1271,16 +1271,16 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
         do k=1,nz; do i=is,ie
           if ((v(i,J,k) * (dt * G%dx_Cv(i,J))) * G%IareaT(i,j+1) < -CS%CFL_trunc) then
             v(i,J,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i,j+1) / (dt * G%dx_Cv(i,J)))
-            if (h(i,j,k) + h(i,j+1,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
+            if (h(i,j,k) + h(i,j+1,k) > 6.0*G%GV%Angstrom) CS%ntrunc = CS%ntrunc + 1
           elseif ((v(i,J,k) * (dt * G%dx_Cv(i,J))) * G%IareaT(i,j) > CS%CFL_trunc) then
             v(i,J,k) = (0.9*CS%CFL_trunc) * (G%areaT(i,j) / (dt * G%dx_Cv(i,J)))
-            if (h(i,j,k) + h(i,j+1,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
+            if (h(i,j,k) + h(i,j+1,k) > 6.0*G%GV%Angstrom) CS%ntrunc = CS%ntrunc + 1
           endif
         enddo ; enddo
       else
         do k=1,nz ; do i=is,ie ; if (abs(v(i,J,k)) > maxvel) then
           v(i,J,k) = SIGN(truncvel,v(i,J,k))
-          if (h(i,j,k) + h(i,j+1,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
+          if (h(i,j,k) + h(i,j+1,k) > 6.0*G%GV%Angstrom) CS%ntrunc = CS%ntrunc + 1
         endif ; enddo ;  enddo
       endif ; endif
     enddo ! J-loop
@@ -1290,17 +1290,17 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
       do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
         if ((v(i,J,k) * (dt * G%dx_Cv(i,J))) * G%IareaT(i,j+1) < -CS%CFL_trunc) then
           v(i,J,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i,j+1) / (dt * G%dx_Cv(i,J)))
-          if (h(i,j,k) + h(i,j+1,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
+          if (h(i,j,k) + h(i,j+1,k) > 6.0*G%GV%Angstrom) CS%ntrunc = CS%ntrunc + 1
         elseif ((v(i,J,k) * (dt * G%dx_Cv(i,J))) * G%IareaT(i,j) > CS%CFL_trunc) then
           v(i,J,k) = (0.9*CS%CFL_trunc) * (G%areaT(i,j) / (dt * G%dx_Cv(i,J)))
-          if (h(i,j,k) + h(i,j+1,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
+          if (h(i,j,k) + h(i,j+1,k) > 6.0*G%GV%Angstrom) CS%ntrunc = CS%ntrunc + 1
         endif
       enddo ; enddo ; enddo
     else
 !$OMP parallel do default(none) shared(is,ie,Jsq,Jeq,nz,v,G,CS,h,truncvel,maxvel)
       do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie ; if (abs(v(i,J,k)) > maxvel) then
         v(i,J,k) = SIGN(truncvel,v(i,J,k))
-        if (h(i,j,k) + h(i,j+1,k) > 6.0*G%Angstrom) CS%ntrunc = CS%ntrunc + 1
+        if (h(i,j,k) + h(i,j+1,k) > 6.0*G%GV%Angstrom) CS%ntrunc = CS%ntrunc + 1
       endif ; enddo ; enddo ; enddo
     endif
   endif
@@ -1310,7 +1310,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
 !   Here the diagnostic reporting subroutines are called if
 ! unphysically large values were found.
         call write_v_accel(i, J, v_old, h, ADp, CDp, dt, G, CS%PointAccel_CSp, &
-               vel_report(i,J), -vel_report(i,J), (dt*fluxes%tauy(i,J)/G%Rho0), &
+               vel_report(i,J), -vel_report(i,J), (dt*fluxes%tauy(i,J)/G%GV%Rho0), &
                a=CS%a_v(:,J,:),hv=CS%h_v(:,J,:))
     endif ; enddo; enddo
   endif

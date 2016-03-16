@@ -71,9 +71,8 @@ use midas_vertmap, only : determine_temperature
 
 use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord
 use MOM_ALE, only : ALE_remap_scalar, ALE_build_grid
-use MOM_regridding, only : regridding_CS, set_regrid_min_thickness
+use MOM_regridding, only : regridding_CS, set_regrid_params
 use MOM_remapping, only : remapping_CS, initialize_remapping
-use MOM_remapping, only : remapDisableBoundaryExtrapolation
 use MOM_tracer_initialization_from_Z, only : horiz_interp_and_extrap_tracer
 
 implicit none ; private
@@ -188,7 +187,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
                "and salnities from a Z-space file on a latitude- \n"//&
                "longitude grid.", default=.false.)
     ! h will be converted from m to H below
-    h(:,:,:) = G%Angstrom_z
+    h(:,:,:) = G%GV%Angstrom_z
 
     if (from_Z_file) then
 !     Initialize thickness and T/S from z-coordinate data in a file.
@@ -338,18 +337,18 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
                  "units of m to kg m-2 or vice versa, depending on whether \n"//&
                  "BOUSSINESQ is defined. This does not apply if a restart \n"//&
                  "file is read.", default=.false.)
-    if (convert .and. .not. G%Boussinesq) then
+    if (convert .and. .not. G%GV%Boussinesq) then
       ! Convert h from m to kg m-2 then to thickness units (H)
       call convert_thickness(h, G, PF, tv)
-    elseif (G%Boussinesq) then
+    elseif (G%GV%Boussinesq) then
       ! Convert h from m to thickness units (H)
-      h(:,:,:) = h(:,:,:)*G%m_to_H
+      h(:,:,:) = h(:,:,:)*G%GV%m_to_H
     else
-      h(:,:,:) = h(:,:,:)*G%kg_m2_to_H
+      h(:,:,:) = h(:,:,:)*G%GV%kg_m2_to_H
     endif
 
     if (debug) then
-      call hchksum(h*G%H_to_m, "MOM_initialize_state: h ", G, haloshift=1)
+      call hchksum(h*G%GV%H_to_m, "MOM_initialize_state: h ", G, haloshift=1)
       if ( use_temperature ) call hchksum(tv%T, "MOM_initialize_state: T ", G, haloshift=1)
       if ( use_temperature ) call hchksum(tv%S, "MOM_initialize_state: S ", G, haloshift=1)
     endif
@@ -506,9 +505,9 @@ subroutine initialize_thickness_from_file(h, G, param_file, file_has_thickness)
       call adjustEtaToFitBathymetry(G, eta, h)
     else
       do k=nz,1,-1 ; do j=js,je ; do i=is,ie
-        if (eta(i,j,K) < (eta(i,j,K+1) + G%Angstrom_z)) then
-          eta(i,j,K) = eta(i,j,K+1) + G%Angstrom_z
-          h(i,j,k) = G%Angstrom_z
+        if (eta(i,j,K) < (eta(i,j,K+1) + G%GV%Angstrom_z)) then
+          eta(i,j,K) = eta(i,j,K+1) + G%GV%Angstrom_z
+          h(i,j,k) = G%GV%Angstrom_z
         else
           h(i,j,k) = eta(i,j,K) - eta(i,j,K+1)
         endif
@@ -535,7 +534,7 @@ end subroutine initialize_thickness_from_file
 ! -----------------------------------------------------------------------------
 !> Adjust interface heights to fit the bathymetry and diagnose layer thickness.
 !! If the bottom most interface is below the topography then the bottom-most
-!! layers are contracted to G%Angstrom_z.
+!! layers are contracted to GV%Angstrom_z.
 !! If the bottom most interface is above the topography then the entire column
 !! is dilated (expanded) to fill the void.
 !!   @remark{There is a (hard-wired) "tolerance" parameter such that the
@@ -572,9 +571,9 @@ subroutine adjustEtaToFitBathymetry(G, eta, h)
   do k=nz,1,-1 ; do j=js,je ; do i=is,ie
     ! Collapse layers to thinnest possible if the thickness less than
     ! the thinnest possible (or negative).
-    if (eta(i,j,K) < (eta(i,j,K+1) + G%Angstrom_z)) then
-      eta(i,j,K) = eta(i,j,K+1) + G%Angstrom_z
-      h(i,j,k) = G%Angstrom_z
+    if (eta(i,j,K) < (eta(i,j,K+1) + G%GV%Angstrom_z)) then
+      eta(i,j,K) = eta(i,j,K+1) + G%GV%Angstrom_z
+      h(i,j,k) = G%GV%Angstrom_z
     else
       h(i,j,k) = eta(i,j,K) - eta(i,j,K+1)
     endif
@@ -645,9 +644,9 @@ subroutine initialize_thickness_uniform(h, G, param_file)
     eta1D(nz+1) = -1.0*G%bathyT(i,j)
     do k=nz,1,-1
       eta1D(K) = e0(K)
-      if (eta1D(K) < (eta1D(K+1) + G%Angstrom_z)) then
-        eta1D(K) = eta1D(K+1) + G%Angstrom_z
-        h(i,j,k) = G%Angstrom_z
+      if (eta1D(K) < (eta1D(K+1) + G%GV%Angstrom_z)) then
+        eta1D(K) = eta1D(K+1) + G%GV%Angstrom_z
+        h(i,j,k) = G%GV%Angstrom_z
       else
         h(i,j,k) = eta1D(K) - eta1D(K+1)
       endif
@@ -687,7 +686,7 @@ subroutine convert_thickness(h, G, param_file, tv)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   max_itt = 10
-  Boussinesq = G%Boussinesq
+  Boussinesq = G%GV%Boussinesq
   I_gEarth = 1.0 / G%g_Earth
 
   if (Boussinesq) then
@@ -723,12 +722,12 @@ subroutine convert_thickness(h, G, param_file, tv)
         enddo
 
         do j=js,je ; do i=is,ie
-          h(i,j,k) = (p_bot(i,j) - p_top(i,j)) * G%kg_m2_to_H * I_gEarth
+          h(i,j,k) = (p_bot(i,j) - p_top(i,j)) * G%GV%kg_m2_to_H * I_gEarth
         enddo ; enddo
       enddo
     else
       do k=1,nz ; do j=js,je ; do i=is,ie
-        h(i,j,k) = h(i,j,k) * G%GV%Rlay(k) * G%kg_m2_to_H
+        h(i,j,k) = h(i,j,k) * G%GV%Rlay(k) * G%GV%kg_m2_to_H
       enddo ; enddo ; enddo
     endif
   endif
@@ -802,9 +801,9 @@ subroutine depress_surface(h, G, param_file, tv)
       do k=1,nz
         if (eta(i,j,K) <= eta_sfc(i,j)) exit
         if (eta(i,j,K+1) >= eta_sfc(i,j)) then
-          h(i,j,k) = G%Angstrom
+          h(i,j,k) = G%GV%Angstrom
         else
-          h(i,j,k) = max(G%Angstrom, h(i,j,k) * &
+          h(i,j,k) = max(G%GV%Angstrom, h(i,j,k) * &
               (eta_sfc(i,j) - eta(i,j,K+1)) / (eta(i,j,K) - eta(i,j,K+1)) )
         endif
       enddo
@@ -1282,8 +1281,8 @@ subroutine initialize_sponges_file(G, use_temperature, tv, param_file, CSp)
     eta(i,j,nz+1) = -G%bathyT(i,j)
   enddo ; enddo
   do k=nz,1,-1 ; do j=js,je ; do i=is,ie
-    if (eta(i,j,K) < (eta(i,j,K+1) + G%Angstrom_z)) &
-      eta(i,j,K) = eta(i,j,K+1) + G%Angstrom_z
+    if (eta(i,j,K) < (eta(i,j,K+1) + G%GV%Angstrom_z)) &
+      eta(i,j,K) = eta(i,j,K+1) + G%GV%Angstrom_z
   enddo ; enddo ; enddo
 ! Set the inverse damping rates so that the model will know where to !
 ! apply the sponges, along with the interface heights.               !
@@ -1433,7 +1432,7 @@ subroutine set_Open_Bdry_Conds(OBC, tv, G, param_file, tracer_Reg)
       if (OBC_mask_v(i,J)) then
         ! An appropriate expression for the meridional inflow velocities and
         ! transports should go here.
-        OBC%vh(i,J,k) = 0.0 * G%m_to_H ; OBC%v(i,J,k) = 0.0
+        OBC%vh(i,J,k) = 0.0 * G%GV%m_to_H ; OBC%v(i,J,k) = 0.0
       else
         OBC%vh(i,J,k) = 0.0 ; OBC%v(i,J,k) = 0.0
       endif
@@ -1445,7 +1444,7 @@ subroutine set_Open_Bdry_Conds(OBC, tv, G, param_file, tracer_Reg)
       if (OBC_mask_u(I,j)) then
         ! An appropriate expression for the zonal inflow velocities and
         ! transports should go here.
-        OBC%uh(I,j,k) = 0.0 * G%m_to_H ; OBC%u(I,j,k) = 0.0
+        OBC%uh(I,j,k) = 0.0 * G%GV%m_to_H ; OBC%u(I,j,k) = 0.0
       else
         OBC%uh(I,j,k) = 0.0 ; OBC%u(I,j,k) = 0.0
       endif
@@ -2161,10 +2160,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
     endif
 
     ! Now remap from source grid to target grid
-    call initialize_remapping( nz, remappingScheme, remapCS ) ! Reconstruction parameters
-    call remapDisableBoundaryExtrapolation( remapCS )
+    call initialize_remapping( remapCS, remappingScheme, boundary_extrapolation=.false. ) ! Reconstruction parameters
     if (remap_general) then
-      call set_regrid_min_thickness( 0., regridCS )
+      call set_regrid_params( regridCS, min_thickness=0. )
       h(:,:,:) = h1(:,:,:) ; tv%T(:,:,:) = tmpT1dIn(:,:,:) ; tv%S(:,:,:) = tmpS1dIn(:,:,:)
       do j = js, je ; do i = is, ie
         if (G%mask2dT(i,j)==0.) then ! Ensure there are no nonsense values on land
@@ -2216,9 +2214,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
       call adjustEtaToFitBathymetry(G, zi, h)
     else
       do k=nz,1,-1 ; do j=js,je ; do i=is,ie
-        if (zi(i,j,K) < (zi(i,j,K+1) + G%Angstrom_z)) then
-          zi(i,j,K) = zi(i,j,K+1) + G%Angstrom_z
-          h(i,j,k) = G%Angstrom_z
+        if (zi(i,j,K) < (zi(i,j,K+1) + G%GV%Angstrom_z)) then
+          zi(i,j,K) = zi(i,j,K+1) + G%GV%Angstrom_z
+          h(i,j,k) = G%GV%Angstrom_z
         else
           h(i,j,k) = zi(i,j,K) - zi(i,j,K+1)
         endif

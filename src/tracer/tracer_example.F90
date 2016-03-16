@@ -338,7 +338,7 @@ subroutine USER_initialize_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
   endif
 
   ! This needs to be changed if the units of tracer are changed above.
-  if (G%Boussinesq) then ; flux_units = "kg kg-1 m3 s-1"
+  if (G%GV%Boussinesq) then ; flux_units = "kg kg-1 m3 s-1"
   else ; flux_units = "kg s-1" ; endif
 
   do m=1,NTR
@@ -436,7 +436,7 @@ subroutine tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, CS)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   if (.not.associated(CS)) return
-  h_neglect = G%H_subroundoff
+  h_neglect = G%GV%H_subroundoff
 
   do j=js,je
     do i=is,ie
@@ -478,7 +478,7 @@ subroutine tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, CS)
   if (CS%mask_tracers) then
     do m = 1,NTR ; if (CS%id_tracer(m) > 0) then
       do k=1,nz ; do j=js,je ; do i=is,ie
-        if (h_new(i,j,k) < 1.1*G%Angstrom) then
+        if (h_new(i,j,k) < 1.1*G%GV%Angstrom) then
           CS%tr_aux(i,j,k,m) = CS%land_val(m)
         else
           CS%tr_aux(i,j,k,m) = CS%tr(i,j,k,m)
@@ -552,7 +552,7 @@ function USER_tracer_stock(h, stocks, G, CS, names, units, stock_index)
       stocks(m) = stocks(m) + CS%tr(i,j,k,m) * &
                              (G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k))
     enddo ; enddo ; enddo
-    stocks(m) = G%H_to_kg_m2 * stocks(m)
+    stocks(m) = G%GV%H_to_kg_m2 * stocks(m)
   enddo
   USER_tracer_stock = NTR
 
