@@ -709,8 +709,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, CS)
     call hchksum(G%GV%H_to_m*eb, "after calc_entrain eb",G,haloshift=0)
   endif
 
-  if (CS%id_Kd_ePBL > -1) Kd_ePBL(:,:,:) = 0.0
-
   ! Apply forcing when using the ALE algorithm
   if (CS%useALEalgorithm) then
     call cpu_clock_begin(id_clock_remap)
