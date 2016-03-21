@@ -35,7 +35,7 @@ use MOM_diag_mediator,        only : register_diag_field, register_static_field
 use MOM_diag_mediator,        only : register_scalar_field
 use MOM_diag_mediator,        only : set_axes_info, diag_ctrl, diag_masks_set
 use MOM_domains,              only : MOM_domains_init, clone_MOM_domain
-use MOM_domains,              only : sum_across_PEs
+use MOM_domains,              only : sum_across_PEs, pass_var
 use MOM_domains,              only : To_South, To_West, To_All, CGRID_NE, SCALAR_PAIR
 use MOM_domains,              only : create_group_pass, do_group_pass, group_pass_type
 use MOM_domains,              only : start_group_pass, complete_group_pass
@@ -1840,8 +1840,11 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call thickness_diffuse_init(Time, G, param_file, diag, CS%CDp, CS%thickness_diffuse_CSp)
   CS%mixedlayer_restrat = mixedlayer_restrat_init(Time, G, param_file, diag, &
                                                   CS%mixedlayer_restrat_CSp)
-  if (CS%mixedlayer_restrat .and. .not.(CS%bulkmixedlayer .or. CS%use_ALE_algorithm)) &
+  if (CS%mixedlayer_restrat) then
+    if (.not.(CS%bulkmixedlayer .or. CS%use_ALE_algorithm)) &
      call MOM_error(FATAL, "MOM: MIXEDLAYER_RESTRAT true requires a boundary layer scheme.")
+    if (.not. CS%diabatic_first) call pass_var(CS%visc%MLD, G%domain) ! Needed after a restart
+  endif
   if (associated(init_CS%OBC)) CS%OBC => init_CS%OBC
 
   call MOM_diagnostics_init(MOM_internal_state, CS%ADp, CS%CDp, Time, G, &
