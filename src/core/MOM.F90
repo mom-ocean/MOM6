@@ -1842,8 +1842,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                                                   CS%mixedlayer_restrat_CSp)
   if (CS%mixedlayer_restrat) then
     if (.not.(CS%bulkmixedlayer .or. CS%use_ALE_algorithm)) &
-     call MOM_error(FATAL, "MOM: MIXEDLAYER_RESTRAT true requires a boundary layer scheme.")
-    if (.not. CS%diabatic_first) call pass_var(CS%visc%MLD, G%domain) ! Needed after a restart
+      call MOM_error(FATAL, "MOM: MIXEDLAYER_RESTRAT true requires a boundary layer scheme.")
+    ! When DIABATIC_FIRST=False and using CS%visc%ML in mixedlayer_restrat we need to update after a restart
+    if (.not. CS%diabatic_first .and. associated(CS%visc%MLD)) call pass_var(CS%visc%MLD, G%domain)
   endif
   if (associated(init_CS%OBC)) CS%OBC => init_CS%OBC
 
