@@ -383,7 +383,7 @@ subroutine ALE_main( G, h, u, v, tv, Reg, CS, dt)
 
   ! Override old grid with new one. The new grid 'h_new' is built in
   ! one of the 'build_...' routines above.
-!$OMP parallel do default(none) shared(isd,ied,jsd,jed,nk,h,h_new,CS)
+!$OMP parallel do default(none) shared(isc,iec,jsc,jec,nk,h,h_new,CS)
   do k = 1,nk
     do j = jsc-1,jec+1 ; do i = isc-1,iec+1
       h_new(i,j,k) = max( 0., h(i,j,k) + ( CS%dzRegrid(i,j,k) - CS%dzRegrid(i,j,k+1) ) )
@@ -500,7 +500,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, h_old, h_new, dxInterfa
   endif 
 
   ! Remap tracer
-!$OMP parallel default(none) shared(G,h,dxInterface,CS_remapping,nz,Reg,u,v,ntr,show_call_tree, &
+!$OMP parallel default(none) shared(G,h_old,h_new,dxInterface,CS_remapping,nz,Reg,u,v,ntr,show_call_tree, &
 !$OMP                               dt,h2,CS_ALE,work_conc,work_cont,work_2d,Idt,ppt2mks) &
 !$OMP                       private(h1,dx,u_column)
   if (ntr>0) then

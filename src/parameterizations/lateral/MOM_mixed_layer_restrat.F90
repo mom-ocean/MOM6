@@ -199,6 +199,10 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, CS)
   elseif (CS%MLE_use_PBL_MLD .and. CS%MLE_MLD_decay_time>=0.) then
     if (.not. associated(MLD)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "Argument MLD was not associated!")
+    if (CS%debug) then
+      call hchksum(CS%MLD_filtered,'mixed_layer_restrat: MLD_filtered',G,haloshift=1)
+      call hchksum(MLD,'mixed_layer_restrat: MLD in',G,haloshift=1)
+    endif
     aFac = CS%MLE_MLD_decay_time / ( dt + CS%MLE_MLD_decay_time )
     bFac = dt / ( dt + CS%MLE_MLD_decay_time )
     do j = js-1, je+1 ; do i = is-1, ie+1
@@ -248,6 +252,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, CS)
   enddo
 
   if (CS%debug) then
+    call hchksum(h,'mixed_layer_restrat: h',G,haloshift=1)
     call hchksum(fluxes%ustar,'mixed_layer_restrat: u*',G,haloshift=1)
     call hchksum(CS%MLD,'mixed_layer_restrat: MLD',G,haloshift=1)
     call hchksum(Rml_av,'mixed_layer_restrat: rml',G,haloshift=1)
@@ -473,7 +478,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, CS)
 !$OMP parallel default(none) shared(is,ie,js,je,G,htot,Rml_av,tv,p0,h,h_avail,         &
 !$OMP                               h_neglect,g_Rho0,I4dt,CS,uhml,uhtr,dt,vhml,vhtr,   &
 !$OMP                               utimescale_diag,vtimescale_diag,fluxes,dz_neglect, &
-!$OMP                               uDml_diag,vDml_diag)                               &
+!$OMP                               uDml_diag,vDml_diag,nkml)                          &
 !$OMP                       private(Rho0,h_vel,u_star,absf,mom_mixrate,timescale,uDml, &
 !$OMP                               I2htot,z_topx2,hx2,a,vDml)
 !$OMP do

@@ -889,6 +889,11 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, CS, &
         enddo
       endif
       k = nz ! This is here to allow a breakpoint to be set.
+    else
+      ! For masked points, Kd_int must still be set (to 0) because it has intent(out).
+      do K=1,nz+1
+        Kd(i,K) = 0.
+      enddo
     endif ; enddo ; ! Close of i-loop - Note unusual loop order!
 
     if (CS%id_Hsfc_used > 0) then
