@@ -50,6 +50,7 @@ use MOM_error_handler, only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : thermo_var_ptrs
+use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs
 
 implicit none ; private
@@ -116,7 +117,7 @@ end type Kappa_shear_CS
 contains
 
 subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
-                                 kv_io, dt, G, CS, initialize_all)
+                                 kv_io, dt, G, GV, CS, initialize_all)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: u_in
   real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: v_in
   real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: h
@@ -127,6 +128,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: kv_io ! really intent(out)
   real,                                         intent(in)    :: dt
   type(ocean_grid_type),                        intent(in)    :: G
+  type(verticalGrid_type),               intent(in)    :: GV
   type(Kappa_shear_CS),                         pointer       :: CS
   logical,                            optional, intent(in)    :: initialize_all
 !
@@ -152,6 +154,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
 !                    i.e. intent(out) and simply sets Kv = Prandtl * Kd_turb
 !  (in)      dt - Time increment, in s.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 kappa_shear_init.
 !  (in,opt)  initialize_all - If present and false, the previous value of
@@ -316,7 +319,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   new_kappa = .true. ; if (present(initialize_all)) new_kappa = initialize_all
 
   Ri_crit = CS%Rino_crit
-  gR0 = G%GV%Rho0*G%g_Earth ; g_R0 = G%g_Earth/G%GV%Rho0
+  gR0 = GV%Rho0*G%g_Earth ; g_R0 = G%g_Earth/GV%Rho0
 
   k0dt = dt*CS%kappa_0
   dz_massless = 0.1*sqrt(k0dt)
@@ -344,13 +347,13 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
 
   do j=js,je
     do k=1,nz ; do i=is,ie
-      h_2d(i,k) = h(i,j,k)*G%GV%H_to_m
+      h_2d(i,k) = h(i,j,k)*GV%H_to_m
       u_2d(i,k) = u_in(i,j,k) ; v_2d(i,k) = v_in(i,j,k)
     enddo ; enddo
     if (use_temperature) then ; do k=1,nz ; do i=is,ie
       T_2d(i,k) = tv%T(i,j,k) ; S_2d(i,k) = tv%S(i,j,k)
     enddo ; enddo ; else ; do k=1,nz ; do i=is,ie
-      rho_2d(i,k) = G%GV%Rlay(k) ! Could be tv%Rho(i,j,k) ?
+      rho_2d(i,k) = GV%Rlay(k) ! Could be tv%Rho(i,j,k) ?
     enddo ; enddo ; endif
     if (.not.new_kappa) then ; do K=1,nz+1 ; do i=is,ie
       kappa_2d(i,K) = kappa_io(i,j,K)
@@ -1639,14 +1642,16 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
 end subroutine find_kappa_tke
 
 
-logical function kappa_shear_init(Time, G, param_file, diag, CS)
+logical function kappa_shear_init(Time, G, GV, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
+  type(verticalGrid_type), intent(in)    :: GV
   type(param_file_type),   intent(in)    :: param_file
   type(diag_ctrl), target, intent(inout) :: diag
   type(Kappa_shear_CS),    pointer       :: CS
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in)      diag - A structure that is used to regulate diagnostic output.
@@ -1756,11 +1761,11 @@ logical function kappa_shear_init(Time, G, param_file, diag, CS)
 !    id_clock_setup = cpu_clock_id('Ocean KS setup',grain=CLOCK_ROUTINE)
 
   CS%nkml = 1
-  if (G%GV%nkml>0) then
+  if (GV%nkml>0) then
     call get_param(param_file, mod, "KAPPA_SHEAR_MERGE_ML",merge_mixedlayer, &
                  "If true, combine the mixed layers together before \n"//&
                  "solving the kappa-shear equations.", default=.true.)
-    if (merge_mixedlayer) CS%nkml = G%GV%nkml
+    if (merge_mixedlayer) CS%nkml = GV%nkml
   endif
 
 ! Forego remainder of initialization if not using this scheme

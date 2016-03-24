@@ -63,6 +63,7 @@ use MOM_forcing_type,  only : extractFluxes1d, forcing
 use MOM_grid,          only : ocean_grid_type
 use MOM_shortwave_abs, only : absorbRemainingSW, optics_type
 use MOM_variables,     only : thermo_var_ptrs
+use MOM_verticalGrid,  only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs
 use MOM_EOS, only : calculate_2_densities
 
@@ -192,7 +193,7 @@ integer :: num_msg = 0, max_msg = 2
 
 contains
 
-subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
+subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
                           optics, aggregate_FW_forcing, dt_diag, last_call)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: h_3d
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: u_3d, v_3d
@@ -201,6 +202,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
   real,                                  intent(in)    :: dt
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: ea, eb
   type(ocean_grid_type),                 intent(inout) :: G
+  type(verticalGrid_type),               intent(in)    :: GV
   type(bulkmixedlayer_CS),               pointer       :: CS
   type(optics_type),                     pointer       :: optics
   logical,                               intent(in)    :: aggregate_FW_forcing
@@ -392,7 +394,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_mixed_layer: "//&
          "Module must be initialized before it is used.")
-  if (G%GV%nkml < 1) return
+  if (GV%nkml < 1) return
 
   if (.not. ASSOCIATED(tv%eqn_of_state)) call MOM_error(FATAL, &
       "MOM_mixed_layer: Temperature, salinity and an equation of state "//&
@@ -404,7 +406,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
   Inkml = 1.0 / REAL(CS%nkml)
   if (CS%nkml > 1) Inkmlm1 = 1.0 / REAL(CS%nkml-1)
 
-  Irho0 = 1.0 / G%GV%Rho0
+  Irho0 = 1.0 / GV%Rho0
   dt__diag = dt ; if (present(dt_diag)) dt__diag = dt_diag
   Idt = 1.0/dt
   Idt_diag = 1.0 / dt__diag
@@ -497,10 +499,10 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
     do k=1,nz ; do i=is,ie
       h(i,k) = h_3d(i,j,k) ; u(i,k) = u_3d(i,j,k) ; v(i,k) = v_3d(i,j,k)
       h_orig(i,k) = h_3d(i,j,k)
-      eps(i,k) = 0.0 ; if (k > nkmb) eps(i,k) = G%GV%Angstrom
+      eps(i,k) = 0.0 ; if (k > nkmb) eps(i,k) = GV%Angstrom
       T(i,k) = tv%T(i,j,k) ; S(i,k) = tv%S(i,j,k)
       do n=1,nsw
-        opacity_band(n,i,k) = G%GV%H_to_m*optics%opacity_band(n,i,j,k)
+        opacity_band(n,i,k) = GV%H_to_m*optics%opacity_band(n,i,j,k)
       enddo
     enddo ; enddo
 
@@ -512,7 +514,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
     ! Calculate an estimate of the mid-mixed layer pressure (in Pa)
     do i=is,ie ; p_ref(i) = 0.0 ; enddo
     do k=1,CS%nkml ; do i=is,ie
-      p_ref(i) = p_ref(i) + 0.5*G%GV%H_to_Pa*h(i,k)
+      p_ref(i) = p_ref(i) + 0.5*GV%H_to_Pa*h(i,k)
     enddo ; enddo
     call calculate_density_derivs(T(:,1), S(:,1), p_ref, dR0_dT, dR0_dS, &
                                   is, ie-is+1, tv%eqn_of_state)
@@ -530,7 +532,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
       if(id_clock_resort>0) call cpu_clock_begin(id_clock_resort)
       if (CS%ML_presort_nz_conv_adj > 0) &
         call convective_adjustment(h(:,1:), u, v, R0(:,1:), Rcv(:,1:), T(:,1:), &
-                                   S(:,1:), eps, d_eb, dKE_CA, cTKE, j, G, CS, &
+                                   S(:,1:), eps, d_eb, dKE_CA, cTKE, j, G, GV, CS, &
                                    CS%ML_presort_nz_conv_adj)
 
       call sort_ML(h(:,1:), R0(:,1:), eps, G, CS, ksort)
@@ -543,7 +545,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
       ! to remove hydrostatic instabilities.  Any water that is lighter than
       ! currently in the mixed or buffer layer is entrained.
       call convective_adjustment(h(:,1:), u, v, R0(:,1:), Rcv(:,1:), T(:,1:), &
-                                 S(:,1:), eps, d_eb, dKE_CA, cTKE, j, G, CS)
+                                 S(:,1:), eps, d_eb, dKE_CA, cTKE, j, G, GV, CS)
       do i=is,ie ; h_CA(i) = h(i,1) ; enddo
 
       if(id_clock_adjustment>0) call cpu_clock_end(id_clock_adjustment)
@@ -592,7 +594,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
                                dR0_dT, dRcv_dT, dR0_dS, dRcv_dS,              &
                                netMassInOut, netMassOut, Net_heat, Net_salt,  &
                                nsw, Pen_SW_bnd, opacity_band, Conv_en,        &
-                               dKE_FC, j, ksort, G, CS, tv, fluxes, dt,       &
+                               dKE_FC, j, ksort, G, GV, CS, tv, fluxes, dt,       &
                                aggregate_FW_forcing)
 
     if(id_clock_conv>0) call cpu_clock_end(id_clock_conv)
@@ -607,15 +609,15 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
 
     call find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, &
                            TKE, TKE_river, Idecay_len_TKE, cMKE, dt, Idt_diag, &
-                           j, ksort, G, CS)
+                           j, ksort, G, GV, CS)
 
     ! Here the mechanically driven entrainment occurs.
     call mechanical_entrainment(h(:,1:), d_eb, htot, Ttot, Stot, uhtot, vhtot, &
                                 R0_tot, Rcv_tot, u, v, T(:,1:), S(:,1:), R0(:,1:), Rcv(:,1:), eps, dR0_dT, dRcv_dT, &
                                 cMKE, Idt_diag, nsw, Pen_SW_bnd, opacity_band, TKE, &
-                                Idecay_len_TKE, j, ksort, G, CS)
+                                Idecay_len_TKE, j, ksort, G, GV, CS)
 
-    call absorbRemainingSW(G, h(:,1:), opacity_band, nsw, j, dt, CS%H_limit_fluxes, &
+    call absorbRemainingSW(G, GV, h(:,1:), opacity_band, nsw, j, dt, CS%H_limit_fluxes, &
                            CS%correct_absorption, CS%absorb_all_SW, &
                            T(:,1:), Pen_SW_bnd, eps, ksort, htot, Ttot)
 
@@ -635,10 +637,10 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
       h(i,0) = htot(i)
     endif ; enddo
     if (write_diags .and. ALLOCATED(CS%ML_depth)) then ; do i=is,ie
-      CS%ML_depth(i,j) = h(i,0) * G%GV%H_to_m
+      CS%ML_depth(i,j) = h(i,0) * GV%H_to_m
     enddo ; endif
     if (ASSOCIATED(tv%Hml)) then ; do i=is,ie
-      tv%Hml(i,j) = G%mask2dT(i,j) * (h(i,0) * G%GV%H_to_m)
+      tv%Hml(i,j) = G%mask2dT(i,j) * (h(i,0) * GV%H_to_m)
     enddo ; endif
 
 ! At this point, return water to the original layers, but constrained to
@@ -653,7 +655,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
 
     if (CS%ML_resort) then
       if(id_clock_resort>0) call cpu_clock_begin(id_clock_resort)
-      call resort_ML(h(:,0:), T(:,0:), S(:,0:), R0(:,0:), Rcv(:,0:), G%GV%Rlay, eps, &
+      call resort_ML(h(:,0:), T(:,0:), S(:,0:), R0(:,0:), Rcv(:,0:), GV%Rlay, eps, &
                      d_ea, d_eb, ksort, G, CS, dR0_dT, dR0_dS, dRcv_dT, dRcv_dS)
       if(id_clock_resort>0) call cpu_clock_end(id_clock_resort)
     endif
@@ -672,14 +674,14 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
                           hmbl_prev(i,j-1) - dHD*min(h_sum(i,j),h_sum(i,j-1)), &
                           hmbl_prev(i,j+1) - dHD*min(h_sum(i,j),h_sum(i,j+1))) )
 
-          Hsfc_min(i,j) = G%GV%H_to_m*max(h(i,0), min(Hsfc(i), H_nbr))
+          Hsfc_min(i,j) = GV%H_to_m*max(h(i,0), min(Hsfc(i), H_nbr))
 
           if (CS%limit_det) max_BL_det(i) = max(0.0, Hsfc(i)-H_nbr)
         enddo
       endif
 
       if (CS%id_Hsfc_max > 0) then ; do i=is,ie
-        Hsfc_max(i,j) = Hsfc(i)*G%GV%H_to_m
+        Hsfc_max(i,j) = Hsfc(i)*GV%H_to_m
       enddo ; endif
     endif
 
@@ -689,11 +691,11 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
     if(id_clock_detrain>0) call cpu_clock_begin(id_clock_detrain)
     if (CS%nkbl == 1) then
       call mixedlayer_detrain_1(h(:,0:), T(:,0:), S(:,0:), R0(:,0:), Rcv(:,0:), &
-                                G%GV%Rlay, dt, dt__diag, d_ea, d_eb, j, G, CS, &
+                                GV%Rlay, dt, dt__diag, d_ea, d_eb, j, G, GV, CS, &
                                 dRcv_dT, dRcv_dS, max_BL_det)
     elseif (CS%nkbl == 2) then
       call mixedlayer_detrain_2(h(:,0:), T(:,0:), S(:,0:), R0(:,0:), Rcv(:,0:), &
-                                G%GV%Rlay, dt, dt__diag, d_ea, j, G, CS, &
+                                GV%Rlay, dt, dt__diag, d_ea, j, G, GV, CS, &
                                 dR0_dT, dR0_dS, dRcv_dT, dRcv_dS, max_BL_det)
     else ! CS%nkbl not = 1 or 2
       ! This code only works with 1 or 2 buffer layers.
@@ -703,9 +705,9 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
 
 
     if (CS%id_Hsfc_used > 0) then
-      do i=is,ie ; Hsfc_used(i,j) = h(i,0)*G%GV%H_to_m ; enddo
+      do i=is,ie ; Hsfc_used(i,j) = h(i,0)*GV%H_to_m ; enddo
       do k=CS%nkml+1,nkmb ; do i=is,ie
-        Hsfc_used(i,j) = Hsfc_used(i,j) + h(i,k)*G%GV%H_to_m
+        Hsfc_used(i,j) = Hsfc_used(i,j) + h(i,k)*GV%H_to_m
       enddo ; enddo
     endif
 
@@ -799,7 +801,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
       do i=is,ie
         h_miss(i,j) = h_miss(i,j) + abs(h_3d(i,j,nz) - (h_orig(i,nz) + &
           ((eaml(i,nz) - ebml(i,nz-1)) + ebml(i,nz))))
-        h_miss(i,j) = G%GV%H_to_m * h_miss(i,j)
+        h_miss(i,j) = GV%H_to_m * h_miss(i,j)
       enddo
     endif
 
@@ -848,13 +850,14 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, CS, &
 end subroutine bulkmixedlayer
 
 subroutine convective_adjustment(h, u, v, R0, Rcv, T, S, eps, d_eb, &
-                                 dKE_CA, cTKE, j, G, CS, nz_conv)
+                                 dKE_CA, cTKE, j, G, GV, CS, nz_conv)
   real, dimension(NIMEM_,NKMEM_), intent(inout) :: h, u, v
   real, dimension(NIMEM_,NKMEM_), intent(inout) :: T, S, R0, Rcv, d_eb
   real, dimension(NIMEM_,NKMEM_), intent(in)    :: eps
   real, dimension(NIMEM_,NKMEM_), intent(out)   :: dKE_CA, cTKE
   integer,                        intent(in)    :: j
   type(ocean_grid_type),          intent(in)    :: G
+  type(verticalGrid_type),        intent(in)    :: GV
   type(bulkmixedlayer_CS),        pointer       :: CS
   integer,              optional, intent(in)    :: nz_conv
 !   This subroutine does instantaneous convective entrainment into the buffer
@@ -905,7 +908,7 @@ subroutine convective_adjustment(h, u, v, R0, Rcv, T, S, eps, d_eb, &
   integer :: is, ie, nz, i, k, k1, nzc, nkmb
 
   is = G%isc ; ie = G%iec ; nz = G%ke
-  g_H2_2Rho0 = (G%g_Earth * G%GV%H_to_m**2) / (2.0 * G%GV%Rho0)
+  g_H2_2Rho0 = (G%g_Earth * GV%H_to_m**2) / (2.0 * GV%Rho0)
   nzc = nz ; if (present(nz_conv)) nzc = nz_conv
   nkmb = CS%nkml+CS%nkbl
 
@@ -955,7 +958,7 @@ subroutine convective_adjustment(h, u, v, R0, Rcv, T, S, eps, d_eb, &
       Ih = 1.0 / h(i,k1)
       R0(i,k1) = R0_tot(i) * Ih
       u(i,k1) = uhtot(i) * Ih ; v(i,k1) = vhtot(i) * Ih
-      dKE_CA(i,k1) = dKE_CA(i,k1) + G%GV%H_to_m * (CS%bulk_Ri_convective * &
+      dKE_CA(i,k1) = dKE_CA(i,k1) + GV%H_to_m * (CS%bulk_Ri_convective * &
            (KE_orig(i) - 0.5*h(i,k1)*(u(i,k1)**2 + v(i,k1)**2)))
       Rcv(i,k1) = Rcv_tot(i) * Ih
       T(i,k1) = Ttot(i) * Ih ; S(i,k1) = Stot(i) * Ih
@@ -975,7 +978,7 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
                                  dR0_dT, dRcv_dT, dR0_dS, dRcv_dS,             &
                                  netMassInOut, netMassOut, Net_heat, Net_salt, &
                                  nsw, Pen_SW_bnd, opacity_band, Conv_en,       &
-                                 dKE_FC, j, ksort, G, CS, tv, fluxes, dt,      &
+                                 dKE_FC, j, ksort, G, GV, CS, tv, fluxes, dt,      &
                                  aggregate_FW_forcing)
   real, dimension(NIMEM_,NKMEM_), intent(inout) :: h, d_eb
   real, dimension(NIMEM_),        intent(out)   :: htot, Ttot, Stot
@@ -991,6 +994,7 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
   integer,                        intent(in)    :: j
   integer, dimension(NIMEM_,NKMEM_), intent(in) :: ksort
   type(ocean_grid_type),          intent(in)    :: G
+  type(verticalGrid_type),        intent(in)    :: GV
   type(bulkmixedlayer_CS),        pointer       :: CS
   type(thermo_var_ptrs),          intent(inout) :: tv
   type(forcing),                  intent(inout) :: fluxes
@@ -1061,9 +1065,9 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
     C2, &              ! Temporary variable with units of kg m-3 H-1.
     r_SW_top           ! Temporary variables with units of H kg m-3.
 
-  Angstrom = G%GV%Angstrom
+  Angstrom = GV%Angstrom
   C1_3 = 1.0/3.0 ; C1_6 = 1.0/6.0
-  g_H2_2Rho0 = (G%g_Earth * G%GV%H_to_m**2) / (2.0 * G%GV%Rho0)
+  g_H2_2Rho0 = (G%g_Earth * GV%H_to_m**2) / (2.0 * GV%Rho0)
   Idt        = 1.0/dt
   is = G%isc ; ie = G%iec ; nz = G%ke
 
@@ -1118,9 +1122,9 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
     Conv_En(i) = 0.0 ; dKE_FC(i) = 0.0
     if(ASSOCIATED(fluxes%heat_content_massin))                            &
            fluxes%heat_content_massin(i,j) = fluxes%heat_content_massin(i,j) &
-                       + T_precip * netMassIn(i) * G%GV%H_to_kg_m2 * fluxes%C_p * Idt
+                       + T_precip * netMassIn(i) * GV%H_to_kg_m2 * fluxes%C_p * Idt
     if (ASSOCIATED(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
-                         T_precip * netMassIn(i) * G%GV%H_to_kg_m2
+                         T_precip * netMassIn(i) * GV%H_to_kg_m2
   endif ; enddo
 
   ! Now do netMassOut case in this block.
@@ -1166,14 +1170,14 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
         d_eb(i,k) = d_eb(i,k) - h_evap
 
         ! smg: when resolve the A=B code, we will set
-        ! heat_content_massout = heat_content_massout - T(i,k)*h_evap*G%GV%H_to_kg_m2*fluxes%C_p*Idt
+        ! heat_content_massout = heat_content_massout - T(i,k)*h_evap*GV%H_to_kg_m2*fluxes%C_p*Idt
         ! by uncommenting the lines here.
         ! we will also then completely remove TempXpme from the model.
         if(ASSOCIATED(fluxes%heat_content_massout))                            &
            fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) &
-                                    - T(i,k)*h_evap*G%GV%H_to_kg_m2 * fluxes%C_p * Idt
+                                    - T(i,k)*h_evap*GV%H_to_kg_m2 * fluxes%C_p * Idt
         if (ASSOCIATED(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) - &
-                                      T(i,k)*h_evap*G%GV%H_to_kg_m2
+                                      T(i,k)*h_evap*GV%H_to_kg_m2
 
       endif
 
@@ -1280,7 +1284,7 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
         if (h_ent > 0.0) then
           if (htot(i) > 0.0) &
             dKE_FC(i) = dKE_FC(i) + CS%bulk_Ri_convective * 0.5 * &
-              ((G%GV%H_to_m*h_ent) / (htot(i)*(h_ent+htot(i)))) * &
+              ((GV%H_to_m*h_ent) / (htot(i)*(h_ent+htot(i)))) * &
               ((uhtot(i)-u(i,k)*htot(i))**2 + (vhtot(i)-v(i,k)*htot(i))**2)
 
           htot(i)  = htot(i)  + h_ent
@@ -1298,7 +1302,7 @@ end subroutine mixedlayer_convection
 
 subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, &
                              TKE, TKE_river, Idecay_len_TKE, cMKE, dt, Idt_diag, &
-                             j, ksort, G, CS)
+                             j, ksort, G, GV, CS)
   real, dimension(NIMEM_),        intent(in)    :: htot, h_CA
   type(forcing),                  intent(in)    :: fluxes
   real, dimension(NIMEM_),        intent(inout) :: Conv_En
@@ -1311,6 +1315,7 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
   integer,                        intent(in)    :: j
   integer, dimension(NIMEM_,NKMEM_), intent(in) :: ksort
   type(ocean_grid_type),          intent(in)    :: G
+  type(verticalGrid_type),         intent(in)    :: GV
   type(bulkmixedlayer_CS),        pointer       :: CS
 !   This subroutine determines the TKE available at the depth of free
 ! convection to drive mechanical entrainment.
@@ -1377,7 +1382,7 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
       absf = 0.25*((abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I-1,J-1))) + &
                    (abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I-1,J))))
     absf_Ustar = absf / U_Star
-    Idecay_len_TKE(i) = (absf_Ustar * CS%TKE_decay) * G%GV%H_to_m
+    Idecay_len_TKE(i) = (absf_Ustar * CS%TKE_decay) * GV%H_to_m
 
 !    The first number in the denominator could be anywhere up to 16.  The
 !  value of 3 was chosen to minimize the time-step dependence of the amount
@@ -1389,8 +1394,8 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
 !  scales contribute to mixed layer deepening at similar rates, even though
 !  small scales are dissipated more rapidly (implying they are less efficient).
 !     Ih = 1.0/(16.0*0.41*U_star*dt)
-    Ih = G%GV%H_to_m/(3.0*0.41*U_star*dt)
-    cMKE(1,i) = 4.0 * Ih ; cMKE(2,i) = (absf_Ustar*G%GV%H_to_m) * Ih
+    Ih = GV%H_to_m/(3.0*0.41*U_star*dt)
+    cMKE(1,i) = 4.0 * Ih ; cMKE(2,i) = (absf_Ustar*GV%H_to_m) * Ih
 
     if (Idecay_len_TKE(i) > 0.0) then
       exp_kh = exp(-htot(i)*Idecay_len_TKE(i))
@@ -1408,7 +1413,7 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
 
       if (totEn > 0.0) then
         nstar_FC = CS%nstar * totEn / (totEn + 0.2 * &
-                        sqrt(0.5 * dt * (absf*(htot(i)*G%GV%H_to_m))**3 * totEn))
+                        sqrt(0.5 * dt * (absf*(htot(i)*GV%H_to_m))**3 * totEn))
       else
         nstar_FC = CS%nstar
       endif
@@ -1418,7 +1423,7 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
       if (Conv_En(i) > 0.0) then
         totEn = Conv_En(i) + TKE_CA * (htot(i) / h_CA(i))
        nstar_FC = CS%nstar * totEn / (totEn + 0.2 * &
-                        sqrt(0.5 * dt * (absf*(htot(i)*G%GV%H_to_m))**3 * totEn))
+                        sqrt(0.5 * dt * (absf*(htot(i)*GV%H_to_m))**3 * totEn))
       else
         nstar_FC = CS%nstar
       endif
@@ -1426,7 +1431,7 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
       totEn = Conv_En(i) + TKE_CA
       if (TKE_CA > 0.0) then
         nstar_CA = CS%nstar * totEn / (totEn + 0.2 * &
-                        sqrt(0.5 * dt * (absf*(h_CA(i)*G%GV%H_to_m))**3 * totEn))
+                        sqrt(0.5 * dt * (absf*(h_CA(i)*GV%H_to_m))**3 * totEn))
       else
         nstar_CA = CS%nstar
       endif
@@ -1479,7 +1484,7 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
                                   R0_tot, Rcv_tot, u, v, T, S, R0, Rcv, eps, &
                                   dR0_dT, dRcv_dT, cMKE, Idt_diag, nsw, &
                                   Pen_SW_bnd, opacity_band, TKE, &
-                                  Idecay_len_TKE, j, ksort, G, CS)
+                                  Idecay_len_TKE, j, ksort, G, GV, CS)
   real, dimension(NIMEM_,NKMEM_), intent(inout) :: h, d_eb
   real, dimension(NIMEM_),        intent(inout) :: htot, Ttot, Stot
   real, dimension(NIMEM_),        intent(inout) :: uhtot, vhtot
@@ -1496,6 +1501,7 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
   integer,                        intent(in)    :: j
   integer, dimension(NIMEM_,NKMEM_), intent(in) :: ksort
   type(ocean_grid_type),          intent(in)    :: G
+  type(verticalGrid_type),         intent(in)    :: GV
   type(bulkmixedlayer_CS),        pointer       :: CS
 
 ! This subroutine calculates mechanically driven entrainment.
@@ -1572,10 +1578,10 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
   integer :: is, ie, nz, i, k, ks, itt, n
 
   C1_3 = 1.0/3.0 ; C1_6 = 1.0/6.0 ; C1_24 = 1.0/24.0
-  H_to_m = G%GV%H_to_m
-  g_H_2Rho0 = (G%g_Earth * H_to_m) / (2.0 * G%GV%Rho0)
-  Hmix_min = CS%Hmix_min * G%GV%m_to_H
-  h_neglect = G%GV%H_subroundoff
+  H_to_m = GV%H_to_m
+  g_H_2Rho0 = (G%g_Earth * H_to_m) / (2.0 * GV%Rho0)
+  Hmix_min = CS%Hmix_min * GV%m_to_H
+  h_neglect = GV%H_subroundoff
   is = G%isc ; ie = G%iec ; nz = G%ke
 
   do ks=1,nz
@@ -1741,7 +1747,7 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
               endif
               h_ent = h_ent + dh_Newt
 
-              if (ABS(dh_Newt) < 0.2*G%GV%Angstrom) exit
+              if (ABS(dh_Newt) < 0.2*GV%Angstrom) exit
             enddo
           endif
 
@@ -2159,7 +2165,7 @@ subroutine resort_ML(h, T, S, R0, Rcv, RcvTgt, eps, d_ea, d_eb, ksort, G, CS, &
 
 end subroutine resort_ML
 
-subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, G, CS, &
+subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, G, GV, CS, &
                                 dR0_dT, dR0_dS, dRcv_dT, dRcv_dS, max_BL_det)
   real, dimension(NIMEM_,NKMEM0_), intent(inout) :: h, T, S, R0, Rcv
   real, dimension(NKMEM_),           intent(in)    :: RcvTgt
@@ -2167,6 +2173,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
   real, dimension(NIMEM_,NKMEM_),  intent(inout) :: d_ea
   integer,                         intent(in)    :: j
   type(ocean_grid_type),           intent(in)    :: G
+  type(verticalGrid_type),         intent(in)    :: GV
   type(bulkmixedlayer_CS),         pointer       :: CS
   real, dimension(NIMEM_),         intent(in)    :: dR0_dT, dR0_dS, dRcv_dT, dRcv_dS
   real, dimension(NIMEM_),         intent(in)    :: max_BL_det
@@ -2312,15 +2319,15 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
   is = G%isc ; ie = G%iec ; nz = G%ke
   kb1 = CS%nkml+1; kb2 = CS%nkml+2
   nkmb = CS%nkml+CS%nkbl
-  h_neglect = G%GV%H_subroundoff
+  h_neglect = GV%H_subroundoff
   G_2 = 0.5*G%g_Earth
-  Rho0xG = G%GV%Rho0 * G%g_Earth
-  Idt_H2 = G%GV%H_to_m**2 / dt_diag
-  I2Rho0 = 0.5 / G%GV%Rho0
-  Angstrom = G%GV%Angstrom
+  Rho0xG = GV%Rho0 * G%g_Earth
+  Idt_H2 = GV%H_to_m**2 / dt_diag
+  I2Rho0 = 0.5 / GV%Rho0
+  Angstrom = GV%Angstrom
 
   ! This is hard coding of arbitrary and dimensional numbers.
-  h_min_bl_thick = 5.0 * G%GV%m_to_H
+  h_min_bl_thick = 5.0 * GV%m_to_H
   dT_dS_gauge = CS%dT_dS_wt ; dS_dT_gauge = 1.0 /dT_dS_gauge
   num_events = 10.0
   detrainment_timescale = 4.0*3600.0
@@ -2756,7 +2763,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
             h_det_to_h2*( (R0(i,kb1)-R0_det)*h1 + (R0(i,kb2)-R0_det)*h2 ) + &
             h_ml_to_h2*( (R0(i,kb2)-R0(i,0))*h2 + (R0(i,kb1)-R0(i,0))*h1 + &
                          (R0_det-R0(i,0))*h_det_to_h2 ) + &
-            h_det_to_h1*h_ml_to_h1*(R0_det-R0(i,0))) - 2.0*G%GV%Rho0*dPE_extrap )
+            h_det_to_h1*h_ml_to_h1*(R0_det-R0(i,0))) - 2.0*GV%Rho0*dPE_extrap )
 
         if (ALLOCATED(CS%diag_PE_detrain)) &
           CS%diag_PE_detrain(i,j) = CS%diag_PE_detrain(i,j) + s1en
@@ -3047,13 +3054,14 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
 end subroutine mixedlayer_detrain_2
 
 subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_eb, &
-                                j, G, CS, dRcv_dT, dRcv_dS, max_BL_det)
+                                j, G, GV, CS, dRcv_dT, dRcv_dS, max_BL_det)
   real, dimension(NIMEM_,NKMEM0_), intent(inout) :: h, T, S, R0, Rcv
   real, dimension(NKMEM_),         intent(in)    :: RcvTgt
   real,                            intent(in)    :: dt, dt_diag
   real, dimension(NIMEM_,NKMEM_),  intent(inout) :: d_ea, d_eb
   integer,                         intent(in)    :: j
   type(ocean_grid_type),           intent(in)    :: G
+  type(verticalGrid_type),         intent(in)    :: GV
   type(bulkmixedlayer_CS),         pointer       :: CS
   real, dimension(NIMEM_),         intent(in)    :: dRcv_dT, dRcv_dS, max_BL_det
 ! This subroutine moves any water left in the former mixed layers into the
@@ -3111,8 +3119,8 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_e
                         "CS%nkbl must be 1 in mixedlayer_detrain_1.")
   Idt = 1.0/dt
   dt_Time = dt/Timescale
-  g_H2_2Rho0dt = (G%g_Earth * G%GV%H_to_m**2) / (2.0 * G%GV%Rho0 * dt_diag)
-  g_H2_2dt = (G%g_Earth * G%GV%H_to_m**2) / (2.0 * dt_diag)
+  g_H2_2Rho0dt = (G%g_Earth * GV%H_to_m**2) / (2.0 * GV%Rho0 * dt_diag)
+  g_H2_2dt = (G%g_Earth * GV%H_to_m**2) / (2.0 * dt_diag)
 
   ! Move detrained water into the buffer layer.
   do k=1,CS%nkml
@@ -3217,10 +3225,10 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_e
         ! temperature and salinity.  If none is available a pseudo-orthogonal
         ! extrapolation is used.  The 10.0 and 0.9 in the following are
         ! arbitrary but probably about right.
-        if ((h(i,k+1) < 10.0*G%GV%Angstrom) .or. &
+        if ((h(i,k+1) < 10.0*GV%Angstrom) .or. &
             ((RcvTgt(k+1)-Rcv(i,nkmb)) >= 0.9*(Rcv(i,k1) - Rcv(i,0)))) then
           if (k>=nz-1) then ; orthogonal_extrap = .true.
-          elseif ((h(i,k+2) <= 10.0*G%GV%Angstrom) .and. &
+          elseif ((h(i,k+2) <= 10.0*GV%Angstrom) .and. &
               ((RcvTgt(k+1)-Rcv(i,nkmb)) < 0.9*(Rcv(i,k+2)-Rcv(i,0)))) then
             k1 = k+2
           else ; orthogonal_extrap = .true. ; endif
@@ -3330,9 +3338,10 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_e
 
 end subroutine mixedlayer_detrain_1
 
-subroutine bulkmixedlayer_init(Time, G, param_file, diag, CS)
+subroutine bulkmixedlayer_init(Time, G, GV, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
+  type(verticalGrid_type), intent(in)    :: GV
   type(param_file_type),   intent(in)    :: param_file
   type(diag_ctrl), target, intent(inout) :: diag
   type(bulkmixedlayer_CS), pointer       :: CS
@@ -3359,16 +3368,16 @@ subroutine bulkmixedlayer_init(Time, G, param_file, diag, CS)
   CS%diag => diag
   CS%Time => Time
 
-  if (G%GV%nkml < 1) return
+  if (GV%nkml < 1) return
 
 ! Set default, read and log parameters
   call log_version(param_file, mod, version, "")
 
-  CS%nkml = G%GV%nkml
+  CS%nkml = GV%nkml
   call log_param(param_file, mod, "NKML", CS%nkml, &
                  "The number of sublayers within the mixed layer if \n"//&
                  "BULKMIXEDLAYER is true.", units="nondim", default=2)
-  CS%nkbl = G%GV%nk_rho_varies - G%GV%nkml
+  CS%nkbl = GV%nk_rho_varies - GV%nkml
   call log_param(param_file, mod, "NKBL", CS%nkbl, &
                  "The number of variable density buffer layers if \n"//&
                  "BULKMIXEDLAYER is true.", units="nondim", default=2)
@@ -3451,7 +3460,7 @@ subroutine bulkmixedlayer_init(Time, G, param_file, diag, CS)
                  "layers before sorting when ML_RESORT is true.", &
                  units="nondim", default=0, fail_if_missing=.true.) ! Fail added by AJA??
   ! This gives a minimum decay scale that is typically much less than Angstrom.
-  CS%ustar_min = 2e-4*CS%omega*(G%GV%Angstrom_z + G%GV%H_to_m*G%GV%H_subroundoff)
+  CS%ustar_min = 2e-4*CS%omega*(GV%Angstrom_z + GV%H_to_m*GV%H_subroundoff)
   ! NOTE from AJA: The above parameter is not logged?
   call get_param(param_file, mod, "RESOLVE_EKMAN", CS%Resolve_Ekman, &
                  "If true, the NKML>1 layers in the mixed layer are \n"//&

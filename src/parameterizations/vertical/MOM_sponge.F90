@@ -79,6 +79,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_spatial_means, only : global_i_mean
 use MOM_time_manager, only : time_type
+use MOM_verticalGrid, only : verticalGrid_type
 
 ! Planned extension:  Support for time varying sponge targets.
 
@@ -373,10 +374,11 @@ subroutine set_up_sponge_ML_density(sp_val, CS, sp_val_i_mean)
 
 end subroutine set_up_sponge_ML_density
 
-subroutine apply_sponge(h, dt, G, ea, eb, CS, Rcv_ml)
+subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: h
   real,                                  intent(in)    :: dt
   type(ocean_grid_type),                 intent(inout) :: G
+  type(verticalGrid_type),               intent(in)    :: GV
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(out)   :: ea
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(out)   :: eb
   type(sponge_CS),                       pointer       :: CS
@@ -389,6 +391,7 @@ subroutine apply_sponge(h, dt, G, ea, eb, CS, Rcv_ml)
 ! Arguments: h -  Layer thickness, in m.
 !  (in)      dt - The amount of time covered by this call, in s.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (out)     ea - an array to which the amount of fluid entrained
 !                 from the layer above during this call will be
 !                 added, in m.
@@ -439,7 +442,7 @@ subroutine apply_sponge(h, dt, G, ea, eb, CS, Rcv_ml)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   if (.not.associated(CS)) return
-  if (CS%bulkmixedlayer) nkmb = G%GV%nk_rho_varies
+  if (CS%bulkmixedlayer) nkmb = GV%nk_rho_varies
   if (CS%bulkmixedlayer .and. (.not.present(Rcv_ml))) &
     call MOM_error(FATAL, "Rml must be provided to apply_sponge when using "//&
                            "a bulk mixed layer.")
@@ -492,10 +495,10 @@ subroutine apply_sponge(h, dt, G, ea, eb, CS, Rcv_ml)
         h_above(i,1) = 0.0 ; h_below(i,nz+1) = 0.0
       enddo
       do K=nz,1,-1 ; do i=is,ie
-        h_below(i,K) = h_below(i,K+1) + max(h(i,j,k)-G%GV%Angstrom, 0.0)
+        h_below(i,K) = h_below(i,K+1) + max(h(i,j,k)-GV%Angstrom, 0.0)
       enddo ; enddo
       do K=2,nz+1 ; do i=is,ie
-        h_above(i,K) = h_above(i,K-1) + max(h(i,j,k-1)-G%GV%Angstrom, 0.0)
+        h_above(i,K) = h_above(i,K-1) + max(h(i,j,k-1)-GV%Angstrom, 0.0)
       enddo ; enddo
       do K=2,nz
         ! w is positive for an upward (lightward) flux of mass, resulting
@@ -522,7 +525,7 @@ subroutine apply_sponge(h, dt, G, ea, eb, CS, Rcv_ml)
         enddo
 
         h(i,j,k) = max(h(i,j,k) + (w_int(i,j,K+1) - w_int(i,j,K)), &
-                       min(h(i,j,k), G%GV%Angstrom))
+                       min(h(i,j,k), GV%Angstrom))
       enddo ; enddo
     endif ; enddo
 
@@ -555,9 +558,9 @@ subroutine apply_sponge(h, dt, G, ea, eb, CS, Rcv_ml)
 
       wpb = 0.0; wb = 0.0
       do k=nz,nkmb+1,-1
-        if (G%GV%Rlay(k) > Rcv_ml(i,j)) then
+        if (GV%Rlay(k) > Rcv_ml(i,j)) then
           w = MIN((((e(K)-e0) - e_str*CS%Ref_eta(K,c)) * damp), &
-                    ((wb + h(i,j,k)) - G%GV%Angstrom))
+                    ((wb + h(i,j,k)) - GV%Angstrom))
           wm = 0.5*(w-ABS(w))
           do m=1,CS%fldno
             CS%var(m)%p(i,j,k) = (h(i,j,k)*CS%var(m)%p(i,j,k) + &
@@ -569,7 +572,7 @@ subroutine apply_sponge(h, dt, G, ea, eb, CS, Rcv_ml)
             CS%var(m)%p(i,j,k) = I1pdamp * &
               (CS%var(m)%p(i,j,k) + CS%Ref_val(m)%p(k,c)*damp)
           enddo
-          w = wb + (h(i,j,k) - G%GV%Angstrom)
+          w = wb + (h(i,j,k) - GV%Angstrom)
           wm = 0.5*(w-ABS(w))
         endif
         eb(i,j,k) = eb(i,j,k) + wpb
@@ -581,18 +584,18 @@ subroutine apply_sponge(h, dt, G, ea, eb, CS, Rcv_ml)
 
       if (wb < 0) then
         do k=nkmb,1,-1
-          w = MIN((wb + (h(i,j,k) - G%GV%Angstrom)),0.0)
+          w = MIN((wb + (h(i,j,k) - GV%Angstrom)),0.0)
           h(i,j,k)  = h(i,j,k)  + (wb - w)
           ea(i,j,k) = ea(i,j,k) - w
           wb = w
         enddo
       else
         w = wb
-        do k=G%GV%nkml,nkmb
+        do k=GV%nkml,nkmb
           eb(i,j,k) = eb(i,j,k) + w
         enddo
 
-        k = G%GV%nkml
+        k = GV%nkml
         h(i,j,k) = h(i,j,k) + w
         do m=1,CS%fldno
           CS%var(m)%p(i,j,k) = (CS%var(m)%p(i,j,k)*h(i,j,k) + &
@@ -603,7 +606,7 @@ subroutine apply_sponge(h, dt, G, ea, eb, CS, Rcv_ml)
       do k=1,nkmb
         do m=1,CS%fldno
           CS%var(m)%p(i,j,k) = I1pdamp * &
-              (CS%var(m)%p(i,j,k) + CS%Ref_val(m)%p(G%GV%nkml,c)*damp)
+              (CS%var(m)%p(i,j,k) + CS%Ref_val(m)%p(GV%nkml,c)*damp)
         enddo
       enddo
 
@@ -613,7 +616,7 @@ subroutine apply_sponge(h, dt, G, ea, eb, CS, Rcv_ml)
       wb = 0.0
       do k=nz,1,-1
         w = MIN((((e(K)-e0) - e_str*CS%Ref_eta(K,c)) * damp), &
-                  ((wb + h(i,j,k)) - G%GV%Angstrom))
+                  ((wb + h(i,j,k)) - GV%Angstrom))
         wm = 0.5*(w - ABS(w))
         do m=1,CS%fldno
           CS%var(m)%p(i,j,k) = (h(i,j,k)*CS%var(m)%p(i,j,k) + &

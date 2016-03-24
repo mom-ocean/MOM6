@@ -88,6 +88,7 @@ use MOM_time_manager, only : time_type, time_type_to_real, operator(-)
 use MOM_variables, only : thermo_var_ptrs, vertvisc_type
 use MOM_variables, only : cont_diag_ptrs, accel_diag_ptrs
 use MOM_variables, only : ocean_internal_state, ocean_OBC_type, OBC_SIMPLE
+use MOM_verticalGrid, only : verticalGrid_type
 
 implicit none ; private
 
@@ -174,7 +175,7 @@ end type vertvisc_CS
 
 contains
 
-subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, CS, &
+subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, GV, CS, &
                     taux_bot, tauy_bot)
 !    This subroutine does a fully implicit vertical diffusion
 !  of momentum.  Stress top and bottom b.c.s are used.
@@ -188,6 +189,7 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, CS, &
   type(accel_diag_ptrs), intent(inout)                  :: ADp
   type(cont_diag_ptrs),  intent(inout)                  :: CDp
   type(ocean_grid_type), intent(in)                     :: G
+  type(verticalGrid_type), intent(in)                   :: GV
   type(vertvisc_CS), pointer                            :: CS
   real, dimension(NIMEMB_,NJMEM_), optional, intent(out) :: taux_bot
   real, dimension(NIMEM_,NJMEMB_), optional, intent(out) :: tauy_bot
@@ -256,13 +258,13 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, CS, &
          "Module must be initialized before it is used.")
 
   if (CS%direct_stress) then
-    Hmix = CS%Hmix_stress*G%GV%m_to_H
+    Hmix = CS%Hmix_stress*GV%m_to_H
     I_Hmix = 1.0 / Hmix
   endif
-  dt_Rho0 = dt/G%GV%H_to_kg_m2
-  dt_m_to_H = dt*G%GV%m_to_H
-  Rho0 = G%GV%Rho0
-  h_neglect = G%GV%H_subroundoff
+  dt_Rho0 = dt/GV%H_to_kg_m2
+  dt_m_to_H = dt*GV%m_to_H
+  Rho0 = GV%Rho0
+  h_neglect = GV%H_subroundoff
   Idt = 1.0 / dt
 
   do k=1,nz ; do i=Isq,Ieq ; Ray(i,k) = 0.0 ; enddo ; enddo
@@ -414,7 +416,7 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, CS, &
     endif
   enddo ! end of v-component J loop
 
-  call vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
+  call vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, GV, CS)
 
   ! Here the velocities associated with open boundary conditions are applied.
   if (associated(OBC)) then
@@ -443,14 +445,15 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, CS, &
 
 end subroutine vertvisc
 
-subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, CS)
+subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, CS)
 !    This subroutine does a fully implicit vertical diffusion
 !  of momentum.  Stress top and bottom b.c.s are used.
   type(vertvisc_type), intent(in)                       :: visc
-  real, intent(inout), dimension(NIMEMB_,NJMEM_,NKMEM_) :: visc_rem_u
-  real, intent(inout), dimension(NIMEM_,NJMEMB_,NKMEM_) :: visc_rem_v
+  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: visc_rem_u
+  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: visc_rem_v
   real, intent(in)                                      :: dt
   type(ocean_grid_type), intent(in)                     :: G
+  type(verticalGrid_type), intent(in)                   :: GV
   type(vertvisc_CS), pointer                            :: CS
 ! Arguments: visc - The vertical viscosity type, containing information about
 !                   viscosities and bottom drag-related quantities, intent in.
@@ -463,6 +466,7 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, CS)
 !                         0 (at the bottom) and 1 (far above the bottom).
 !  (in)      dt - Time increment in s.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 vertvisc_init.
 !
@@ -485,7 +489,7 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, CS)
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(visc): "// &
          "Module must be initialized before it is used.")
 
-  dt_m_to_H = dt*G%GV%m_to_H
+  dt_m_to_H = dt*GV%m_to_H
 
   do k=1,nz ; do i=Isq,Ieq ; Ray(i,k) = 0.0 ; enddo ; enddo
 
@@ -557,7 +561,7 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, CS)
 end subroutine vertvisc_remnant
 
 
-subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
+subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS)
 !    This subroutine calculates the coupling coefficients (CS%a_u and CS%a_v)
 ! and effective layer thicknesses (CS%h_u and CS%h_v) for later use in the
 ! applying the implicit vertical viscosity via vertvisc.
@@ -568,6 +572,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
   type(vertvisc_type), intent(in)                       :: visc
   real, intent(in)                                      :: dt
   type(ocean_grid_type), intent(in)                     :: G
+  type(verticalGrid_type),                intent(in)    :: GV
   type(vertvisc_CS), pointer                            :: CS
 
 ! Arguments: u - Zonal velocity, in m s-1.  Intent in.
@@ -579,6 +584,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
 !                   viscosities and bottom drag-related quantities.
 !  (in)      dt - Time increment in s.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in/out)  CS - The control structure returned by a previous call to
 !                 vertvisc_init.
 !
@@ -635,9 +641,9 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(coef): "// &
          "Module must be initialized before it is used.")
 
-  h_neglect = G%GV%H_subroundoff
-  H_to_m = G%GV%H_to_m ; m_to_H = G%GV%m_to_H
-  I_Hbbl(:) = 1.0 / (CS%Hbbl * G%GV%m_to_H + h_neglect)
+  h_neglect = GV%H_subroundoff
+  H_to_m = GV%H_to_m ; m_to_H = GV%m_to_H
+  I_Hbbl(:) = 1.0 / (CS%Hbbl * GV%m_to_H + h_neglect)
 
   if (CS%debug .or. (CS%id_hML_u > 0)) then
     allocate(hML_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; hML_u(:,:) = 0.0
@@ -712,7 +718,8 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
       enddo ! k loop
     endif
 
-    call find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_ml, dt, j, G, CS, visc, fluxes, work_on_u=.true.)
+    call find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_ml, &
+                            dt, j, G, GV, CS, visc, fluxes, work_on_u=.true.)
     if (allocated(hML_u)) then
         do i=isq,ieq ; if (do_i(i)) then ; hML_u(I,j) = h_ml(I) ; endif ; enddo
     endif
@@ -725,8 +732,9 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
       enddo
       if (do_any_shelf) then
         if (CS%harmonic_visc) then
-          call find_coupling_coef(a_shelf, hvel, do_i_shelf, h_harm, bbl_thick, kv_bbl, z_i, h_ml, dt, j, &
-                                  G, CS, visc, fluxes, work_on_u=.true., shelf=.true.)
+          call find_coupling_coef(a_shelf, hvel, do_i_shelf, h_harm, bbl_thick, &
+                                  kv_bbl, z_i, h_ml, dt, j, G, GV, CS, &
+                                  visc, fluxes, work_on_u=.true., shelf=.true.)
         else  ! Find upwind-biased thickness near the surface.
           ! Perhaps this needs to be done more carefully, via find_eta.
           do I=Isq,Ieq ; if (do_i_shelf(I)) then
@@ -747,8 +755,9 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
               endif
             endif ; enddo
           enddo
-          call find_coupling_coef(a_shelf, hvel_shelf, do_i_shelf, h_harm, bbl_thick, kv_bbl, z_i, h_ml, dt, j, &
-                                  G, CS, visc, fluxes, work_on_u=.true., shelf=.true.)
+          call find_coupling_coef(a_shelf, hvel_shelf, do_i_shelf, h_harm, &
+                                  bbl_thick, kv_bbl, z_i, h_ml, dt, j, G, GV, CS, &
+                                  visc, fluxes, work_on_u=.true., shelf=.true.)
         endif
         do I=Isq,Ieq ; if (do_i_shelf(I)) CS%a1_shelf_u(I,j) = a_shelf(I,1) ; enddo
       endif
@@ -834,7 +843,8 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
       endif ; enddo ; enddo ! i & k loops
     endif
 
-    call find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_ml, dt, j, G, CS, visc, fluxes, work_on_u=.false.)
+    call find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_ml, &
+                            dt, j, G, GV, CS, visc, fluxes, work_on_u=.false.)
     if ( allocated(hML_v)) then
        do i=is,ie ; if (do_i(i)) then ; hML_v(i,J) = h_ml(i) ; endif ; enddo
     endif
@@ -847,8 +857,9 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
       enddo
       if (do_any_shelf) then
         if (CS%harmonic_visc) then
-          call find_coupling_coef(a_shelf, hvel, do_i_shelf, h_harm, bbl_thick, kv_bbl, z_i, h_ml, dt, j, &
-                                  G, CS, visc, fluxes, work_on_u=.false., shelf=.true.)
+          call find_coupling_coef(a_shelf, hvel, do_i_shelf, h_harm, bbl_thick, &
+                                  kv_bbl, z_i, h_ml, dt, j, G, GV, CS, visc, &
+                                  fluxes, work_on_u=.false., shelf=.true.)
         else  ! Find upwind-biased thickness near the surface.
           ! Perhaps this needs to be done more carefully, via find_eta.
           do i=is,ie ; if (do_i_shelf(i)) then
@@ -869,8 +880,9 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
               endif
             endif ; enddo
           enddo
-          call find_coupling_coef(a_shelf, hvel_shelf, do_i_shelf, h_harm, bbl_thick, kv_bbl, z_i, h_ml, dt, j, &
-                                  G, CS, visc, fluxes, work_on_u=.false., shelf=.true.)
+          call find_coupling_coef(a_shelf, hvel_shelf, do_i_shelf, h_harm, &
+                                  bbl_thick, kv_bbl, z_i, h_ml, dt, j, G, GV, CS, &
+                                  visc, fluxes, work_on_u=.false., shelf=.true.)
         endif
         do i=is,ie ; if (do_i_shelf(i)) CS%a1_shelf_v(i,J) = a_shelf(i,1) ; enddo
       endif
@@ -920,7 +932,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, CS)
 end subroutine vertvisc_coef
 
 subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_ml, &
-                              dt, j, G, CS, visc, fluxes, work_on_u, shelf)
+                              dt, j, G, GV, CS, visc, fluxes, work_on_u, shelf)
 !    This subroutine calculates the 'coupling coefficient' (a[k]) at the
 !  interfaces. If BOTTOMDRAGLAW is defined, the minimum of Hbbl and half the
 !  adjacent layer thicknesses are used to calculate a[k] near the bottom.
@@ -934,6 +946,7 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
   integer,                              intent(in)  :: j
   real,                                 intent(in)  :: dt
   type(ocean_grid_type), intent(in)                 :: G
+  type(verticalGrid_type),               intent(in) :: GV
   type(vertvisc_CS), pointer                        :: CS
   type(vertvisc_type), intent(in)                   :: visc
   type(forcing), intent(in)                         :: fluxes
@@ -942,6 +955,11 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
 ! Arguments: a - The coupling coefficent across interfaces, in m/s.  Intent out.
 !  (in)      hvel - The thickness at velocity points, in H.
 !  (in)      do_i - If true, determine the a for a column.
+!  ...
+!  (in)      dt - The amount of time covered by this call, in s.
+!  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
+!  ...
 !  (in)      work_on_u - If true, u-points are being worked on, otherwise this
 !                        call is for v-points.
 !  (in)      shelf - If present and true, use a surface boundary condition
@@ -978,9 +996,9 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
   if (work_on_u) then ; is = G%IscB ; ie = G%IecB
   else ; is = G%isc ; ie = G%iec ; endif
   nz = G%ke
-  h_neglect = G%GV%H_subroundoff
-  H_to_m = G%GV%H_to_m ; m_to_H = G%GV%m_to_H
-  dz_neglect = G%GV%H_subroundoff*G%GV%H_to_m
+  h_neglect = GV%H_subroundoff
+  H_to_m = GV%H_to_m ; m_to_H = GV%m_to_H
+  dz_neglect = GV%H_subroundoff*GV%H_to_m
 
   do_shelf = .false. ; if (present(shelf)) do_shelf = shelf
   h_ml(:) = 0.0
@@ -988,7 +1006,7 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
 !    The following loop calculates the vertical average velocity and
 !  surface mixed layer contributions to the vertical viscosity.
   do i=is,ie ; a(i,1) = 0.0 ; enddo
-  if ((G%GV%nkml>0) .or. do_shelf) then ; do k=2,nz ; do i=is,ie
+  if ((GV%nkml>0) .or. do_shelf) then ; do k=2,nz ; do i=is,ie
     if (do_i(i)) a(i,K) = 2.0*CS%Kv
   enddo ; enddo ; else
     I_Hmix = 1.0 / (CS%Hmix * m_to_H + h_neglect)
@@ -1087,10 +1105,10 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
       a_top = 2.0 * topfn * kv_tbl(i)
       a(i,K) = a(i,K) + a_top / (h_shear*H_to_m + 1.0e-10*dt*a_top)
     endif ; enddo ; enddo
-  elseif (CS%dynamic_viscous_ML .or. (G%GV%nkml>0)) then
+  elseif (CS%dynamic_viscous_ML .or. (GV%nkml>0)) then
     max_nk = 0
     do i=is,ie ; if (do_i(i)) then
-      if (G%GV%nkml>0) nk_visc(i) = real(G%GV%nkml+1)
+      if (GV%nkml>0) nk_visc(i) = real(GV%nkml+1)
       if (work_on_u) then
         u_star(I) = 0.5*(fluxes%ustar(i,j) + fluxes%ustar(i+1,j))
         absf(I) = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
@@ -1132,7 +1150,7 @@ end subroutine find_coupling_coef
 
 
 
-subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
+subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, GV, CS)
 !  Within this subroutine, velocity components which exceed a threshold for
 ! physically reasonable values are truncated. Optionally, any column with
 ! excessive velocities may be sent to a diagnostic reporting subroutine.
@@ -1145,6 +1163,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
   type(vertvisc_type),                    intent(in)    :: visc
   real,                                   intent(in)    :: dt
   type(ocean_grid_type),                  intent(in)    :: G
+  type(verticalGrid_type),                intent(in)    :: GV
   type(vertvisc_CS),                      pointer       :: CS
 
   real :: maxvel           ! Velocities components greater than maxvel
@@ -1162,8 +1181,8 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
 
   maxvel = CS%maxvel
   truncvel = 0.9*maxvel
-  H_report = 6.0 * G%GV%Angstrom
-  dt_Rho0 = dt / G%GV%Rho0
+  H_report = 6.0 * GV%Angstrom
+  dt_Rho0 = dt / GV%Rho0
 
   if (len_trim(CS%u_trunc_file) > 0) then
 !$OMP parallel do default(none) shared(js,je,Isq,Ieq,nz,CS,G,fluxes,u,h,dt,maxvel,ADp,CDp,truncvel, &
@@ -1328,11 +1347,12 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, CS)
 
 end subroutine vertvisc_limit_vel
 
-subroutine vertvisc_init(MIS, Time, G, param_file, diag, ADp, dirs, ntrunc, CS)
+subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
+                         ntrunc, CS)
   type(ocean_internal_state), target, intent(in) :: MIS
   type(time_type), target, intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
-!  type(verticalGrid_type), intent(in)    :: GV
+  type(verticalGrid_type), intent(in)    :: GV
   type(param_file_type),   intent(in)    :: param_file
   type(diag_ctrl), target, intent(inout) :: diag
   type(accel_diag_ptrs),   intent(inout) :: ADp
@@ -1343,6 +1363,7 @@ subroutine vertvisc_init(MIS, Time, G, param_file, diag, ADp, dirs, ntrunc, CS)
 !                  accelerations that make up the ocean's physical state.
 !  (in)      Time - The current model time.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in)      diag - A structure that is used to regulate diagnostic output.
@@ -1409,13 +1430,13 @@ subroutine vertvisc_init(MIS, Time, G, param_file, diag, ADp, dirs, ntrunc, CS)
                  "calculating the vertical viscosity.", default=.false.)
   call get_param(param_file, mod, "DEBUG", CS%debug, default=.false.)
 
-  if (G%GV%nkml < 1) &
+  if (GV%nkml < 1) &
     call get_param(param_file, mod, "HMIX_FIXED", CS%Hmix, &
                  "The prescribed depth over which the near-surface \n"//&
                  "viscosity and diffusivity are elevated when the bulk \n"//&
                  "mixed layer is not used.", units="m", fail_if_missing=.true.)
   if (CS%direct_stress) then
-    if (G%GV%nkml < 1) then
+    if (GV%nkml < 1) then
       call get_param(param_file, mod, "HMIX_STRESS", CS%Hmix_stress, &
                  "The depth over which the wind stress is applied if \n"//&
                  "DIRECT_STRESS is true.", units="m", default=CS%Hmix)
@@ -1433,7 +1454,7 @@ subroutine vertvisc_init(MIS, Time, G, param_file, diag, ADp, dirs, ntrunc, CS)
                  units="m2 s-1", fail_if_missing=.true.)
 
 ! CS%Kvml = CS%Kv ; CS%Kvbbl = CS%Kv ! Needed? -AJA
-  if (G%GV%nkml < 1) call get_param(param_file, mod, "KVML", CS%Kvml, &
+  if (GV%nkml < 1) call get_param(param_file, mod, "KVML", CS%Kvml, &
                  "The kinematic viscosity in the mixed layer.  A typical \n"//&
                  "value is ~1e-2 m2 s-1. KVML is not used if \n"//&
                  "BULKMIXEDLAYER is true.  The default is set by KV.", &

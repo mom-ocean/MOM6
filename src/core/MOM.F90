@@ -634,7 +634,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       endif
 
       !call cpu_clock_begin(id_clock_vertvisc)
-      call set_viscous_BBL(u, v, h, CS%tv, CS%visc, G, CS%set_visc_CSp)
+      call set_viscous_BBL(u, v, h, CS%tv, CS%visc, G, G%GV, CS%set_visc_CSp)
       !call cpu_clock_end(id_clock_vertvisc)
 
       call cpu_clock_begin(id_clock_pass)
@@ -661,7 +661,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
         call cpu_clock_begin(id_clock_diabatic)
         call diabatic(u, v, h, CS%tv, fluxes, CS%visc, CS%ADp, CS%CDp, &
-                      dtdia, G, CS%diabatic_CSp)
+                      dtdia, G, G%GV, CS%diabatic_CSp)
         fluxes%fluxes_used = .true.
         call cpu_clock_end(id_clock_diabatic)
 
@@ -991,7 +991,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         endif
         call cpu_clock_begin(id_clock_diabatic)
         call diabatic(u, v, h, CS%tv, fluxes, CS%visc, CS%ADp, CS%CDp, &
-                      CS%dt_trans, G, CS%diabatic_CSp)
+                      CS%dt_trans, G, G%GV, CS%diabatic_CSp)
         fluxes%fluxes_used = .true.
         call cpu_clock_end(id_clock_diabatic)
 
@@ -1802,7 +1802,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   call wave_speed_init(Time, G, param_file, diag, CS%wave_speed_CSp)
   call VarMix_init(Time, G, param_file, diag, CS%VarMix, CS%wave_speed_CSp)
-  call set_visc_init(Time, G, param_file, diag, CS%visc, CS%set_visc_CSp)
+  call set_visc_init(Time, G, G%GV, param_file, diag, CS%visc, CS%set_visc_CSp)
 
   if (associated(init_CS%tracer_Reg)) &
     CS%tracer_Reg => init_CS%tracer_Reg
@@ -1864,7 +1864,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     call adiabatic_driver_init(Time, G, param_file, diag, CS%diabatic_CSp, &
                                CS%tracer_flow_CSp, CS%diag_to_Z_CSp)
   else
-    call diabatic_driver_init(Time, G, param_file, CS%use_ALE_algorithm, diag,     &
+    call diabatic_driver_init(Time, G, G%GV, param_file, CS%use_ALE_algorithm, diag,     &
                               CS%ADp, CS%CDp, CS%diabatic_CSp, CS%tracer_flow_CSp, &
                               init_CS%sponge_CSp, CS%diag_to_Z_CSp)
   endif
