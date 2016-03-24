@@ -453,13 +453,13 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
 
   if (CS%id_Kd_in > 0) call post_data(CS%id_Kd_in, Kt, CS%diag)
 
-!$OMP parallel do default(none) shared(G,CS,EOS,uStar,Temp,Salt,u,v,h,GoRho,buoyFlux, &
-!$OMP                                  nonLocalTransHeat,                             &
+!$OMP parallel do default(none) shared(G,GV,CS,EOS,uStar,Temp,Salt,u,v,h,GoRho,       &
+!$OMP                                  buoyFlux, nonLocalTransHeat,                   &
 !$OMP                                  nonLocalTransScalar,Kt,Ks,Kv)                  &
 !$OMP                     firstprivate(nonLocalTrans)                                 &
 !$OMP                          private(Coriolis,surfFricVel,SLdepth_0d,hTot,surfTemp, &
-!$OMP                                  surfHtemp,surfSalt,surfHsalt,surfU,      &
-!$OMP                                  surfHu,surfV,surfHv,iFaceHeight,         &
+!$OMP                                  surfHtemp,surfSalt,surfHsalt,surfU,            &
+!$OMP                                  surfHu,surfV,surfHv,iFaceHeight,               &
 !$OMP                                  pRef,km1,cellHeight,Uk,Vk,deltaU2,             &
 !$OMP                                  rho1,rhoK,rhoKm1,deltaRho,N2_1d,N_1d,delH,     &
 !$OMP                                  surfBuoyFlux,Ws_1d,Vt2_1d,BulkRi_1d,           &
@@ -899,7 +899,7 @@ subroutine KPP_NonLocalTransport_temp(CS, G, GV, h, nonLocalTrans, surfFlux, &
 
 
   dtracer(:,:,:) = 0.0
-!$OMP parallel do default(none) shared(G,dtracer,nonLocalTrans,h,surfFlux,CS,scalar,dt)
+!$OMP parallel do default(none) shared(G,GV,dtracer,nonLocalTrans,h,surfFlux,CS,scalar,dt)
   do k = 1, G%ke
     do j = G%jsc, G%jec
       do i = G%isc, G%iec
@@ -957,7 +957,7 @@ subroutine KPP_NonLocalTransport_saln(CS, G, GV, h, nonLocalTrans, surfFlux, dt,
 
 
   dtracer(:,:,:) = 0.0
-!$OMP parallel do default(none) shared(G,dtracer,nonLocalTrans,h,surfFlux,CS,scalar,dt)
+!$OMP parallel do default(none) shared(G,GV,dtracer,nonLocalTrans,h,surfFlux,CS,scalar,dt)
   do k = 1, G%ke
     do j = G%jsc, G%jec
       do i = G%isc, G%iec

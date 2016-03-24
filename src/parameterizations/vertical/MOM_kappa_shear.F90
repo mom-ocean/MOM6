@@ -325,12 +325,12 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   dz_massless = 0.1*sqrt(k0dt)
 
 !$OMP parallel do default(none) shared(js,je,is,ie,nz,h,u_in,v_in,use_temperature,new_kappa, &
-!$OMP                                  tv,G,CS,kappa_io,dz_massless,k0dt,p_surf,gR0,g_R0,dt, &
-!$OMP                                  tol_dksrc,tol_dksrc_low,tol2,Ri_crit,dt_refinements,  &
+!$OMP                                  tv,G,GV,CS,kappa_io,dz_massless,k0dt,p_surf,gR0,g_R0, &
+!$OMP                                  dt,tol_dksrc,tol_dksrc_low,tol2,dt_refinements,       &
 #ifdef ADD_DIAGNOSTICS
 !$OMP                                  I_Ld2_3d,dz_Int_3d,                                   &
 #endif
-!$OMP                                  tke_io,kv_io)                                         &
+!$OMP                                  Ri_crit,tke_io,kv_io)                                 &
 !$OMP                          private(h_2d,u_2d,v_2d,T_2d,S_2d,rho_2d,kappa_2d,nzc,dz,      &
 !$OMP                                  u0xdz,v0xdz,T0xdz,S0xdz,kc,Idz,kf,I_dz_int,dz_in_lay, &
 !$OMP                                  dist_from_top,a1,b1,u,v,T,Sal,c1,d1,bd1,dz_Int,Norm,  &

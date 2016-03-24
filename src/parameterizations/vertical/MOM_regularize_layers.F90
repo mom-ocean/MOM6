@@ -354,8 +354,8 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
 
 
   ! Now restructure the layers.
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,do_j,def_rat_h,CS,nkmb,G,e, &
-!$OMP                                  I_dtol,h,tv,debug,h_neglect,p_ref_cv,ea,   &
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,do_j,def_rat_h,CS,nkmb,G,GV,&
+!$OMP                                  e,I_dtol,h,tv,debug,h_neglect,p_ref_cv,ea, &
 !$OMP                                  eb,id_clock_EOS,nkml)                      &
 !$OMP                          private(d_ea,d_eb,max_def_rat,do_i,nz_filt,e_e,e_w,&
 !$OMP                                  e_n,e_s,wt,e_filt,e_2d,h_2d,T_2d,S_2d,     &

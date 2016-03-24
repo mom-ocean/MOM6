@@ -312,10 +312,10 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
     enddo ; enddo
   endif
 
-!$OMP parallel do default(none) shared(u, v, h, tv, visc, G, CS, Rml, is, ie, js, je, nz,  &
-!$OMP                                     Isq, Ieq, Jsq, Jeq, nkmb, h_neglect, Rho0x400_G, &
-!$OMP                                     C2pi_3, U_bg_sq, cdrag_sqrt,                     &
-!$OMP                                     K2,use_BBL_EOS,maxitt,nkml)                      &
+!$OMP parallel do default(none) shared(u, v, h, tv, visc, G, GV, CS, Rml, is, ie, js, je,  &
+!$OMP                                  nz, Isq, Ieq, Jsq, Jeq, nkmb, h_neglect, Rho0x400_G,&
+!$OMP                                  C2pi_3, U_bg_sq, cdrag_sqrt,K2,use_BBL_EOS,         &
+!$OMP                                  maxitt,nkml,m_to_H,H_to_m)                          &
 !$OMP                          private(do_i,h_at_vel,htot_vel,hwtot,hutot,Thtot,Shtot,     &
 !$OMP                                  hweight,v_at_u,u_at_v,ustar,T_EOS,S_EOS,press,      &
 !$OMP                                  dR_dT, dR_dS,ustarsq,htot,TLay,SLay,Tabove,Sabove,  &
@@ -1032,9 +1032,10 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
 !    if (CS%linear_drag) ustar(:) = cdrag_sqrt*CS%drag_bg_vel
   endif
 
-!$OMP parallel do default(none) shared(u, v, h, tv, fluxes, visc, dt, G, CS, use_EOS, &
-!$OMP                                  dt_Rho0, h_neglect, h_tiny, g_H_Rho0,js,je,    &
-!$OMP                                  Isq,Ieq,nz,U_bg_sq,cdrag_sqrt,Rho0x400_G,nkml) &
+!$OMP parallel do default(none) shared(u, v, h, tv, fluxes, visc, dt, G, GV, CS, use_EOS, &
+!$OMP                                  dt_Rho0, h_neglect, h_tiny, g_H_Rho0,js,je,        &
+!$OMP                                  H_to_m, m_to_H, Isq, Ieq, nz, U_bg_sq,             &
+!$OMP                                  cdrag_sqrt,Rho0x400_G,nkml) &
 !$OMP                          private(do_any,htot,do_i,k_massive,Thtot,uhtot,vhtot,U_Star, &
 !$OMP                                  Idecay_len_TKE,press,k2,I_2hlay,T_EOS,S_EOS,dR_dT,   &
 !$OMP                                  dR_dS,hlay,v_at_u,Uh2,T_lay,S_lay,gHprime,           &
@@ -1266,9 +1267,10 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
 
   enddo ! j-loop at u-points
 
-!$OMP parallel do default(none) shared(u, v, h, tv, fluxes, visc, dt, G, CS, use_EOS,    &
-!$OMP                                     dt_Rho0, h_neglect, h_tiny, g_H_Rho0,is,ie,    &
-!$OMP                                     Jsq,Jeq,nz,U_bg_sq,cdrag_sqrt,Rho0x400_G,nkml) &
+!$OMP parallel do default(none) shared(u, v, h, tv, fluxes, visc, dt, G, GV, CS, use_EOS,&
+!$OMP                                  dt_Rho0, h_neglect, h_tiny, g_H_Rho0,is,ie,       &
+!$OMP                                  Jsq,Jeq,nz,U_bg_sq,cdrag_sqrt,Rho0x400_G,nkml,    &
+!$OMP                                  m_to_H,H_to_m) &
 !$OMP                          private(do_any,htot,do_i,k_massive,Thtot,vhtot,uhtot,absf,&
 !$OMP                                  U_Star,Idecay_len_TKE,press,k2,I_2hlay,T_EOS,     &
 !$OMP                                  S_EOS,dR_dT, dR_dS,hlay,u_at_v,Uh2,               &

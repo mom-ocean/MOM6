@@ -178,9 +178,9 @@ subroutine make_frazil(h, tv, G, GV, CS, p_surf)
   if (.not.CS%pressure_dependent_frazil) then
     do k=1,nz ; do i=is,ie ; pressure(i,k) = 0.0 ; enddo ; enddo
   endif
-!$OMP parallel do default(none) shared(is,ie,js,je,CS,G,h,nz,tv,p_surf) &
-!$OMP                          private(fraz_col,T_fr_set,T_freeze,hc,ps) &
-!$OMP                     firstprivate(pressure)
+!$OMP parallel do default(none) shared(is,ie,js,je,CS,G,GV,h,nz,tv,p_surf) &
+!$OMP                           private(fraz_col,T_fr_set,T_freeze,hc,ps)  &
+!$OMP                      firstprivate(pressure)
   do j=js,je
      ps(:) = 0.0
      if (PRESENT(p_surf)) then
@@ -314,7 +314,7 @@ subroutine differential_diffuse_T_S(h, tv, visc, dt, G, GV)
 
   T => tv%T ; S => tv%S
   Kd_T => visc%Kd_extra_T ; Kd_S => visc%Kd_extra_S
-!$OMP parallel do default(none) shared(is,ie,js,je,h,h_neglect,dt,Kd_T,Kd_S,G,T,S,nz) &
+!$OMP parallel do default(none) shared(is,ie,js,je,h,h_neglect,dt,Kd_T,Kd_S,G,GV,T,S,nz) &
 !$OMP                          private(I_h_int,mix_T,mix_S,h_tr,b1_T,b1_S, &
 !$OMP                                  d1_T,d1_S,c1_T,c1_S,b_denom_T,b_denom_S)
   do j=js,je
@@ -400,7 +400,7 @@ subroutine adjust_salt(h, tv, G, GV, CS)
 
   salt_add_col(:,:) = 0.0
 
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,G,tv,h,salt_add_col, S_min) &
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,G,GV,tv,h,salt_add_col, S_min) &
 !$OMP                          private(mc)
   do j=js,je
     do k=nz,1,-1 ; do i=is,ie
@@ -574,7 +574,7 @@ subroutine triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, T, S)
   real :: h_tr, b_denom_1
   integer :: i, j, k
 
-!$OMP parallel do default(none) shared(is,ie,js,je,G,hold,eb,T,S,ea) &
+!$OMP parallel do default(none) shared(is,ie,js,je,G,GV,hold,eb,T,S,ea) &
 !$OMP                          private(h_tr,b1,d1,c1,b_denom_1)
   do j=js,je
     do i=is,ie
@@ -647,7 +647,7 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, ea, eb)
   if (present(ea) .neqv. present(eb)) call MOM_error(FATAL, &
       "find_uv_at_h: Either both ea and eb or neither one must be present "// &
       "in call to find_uv_at_h.")
-!$OMP parallel do default(none) shared(is,ie,js,je,G,mix_vertically,h,h_neglect, &
+!$OMP parallel do default(none) shared(is,ie,js,je,G,GV,mix_vertically,h,h_neglect, &
 !$OMP                                  eb,u_h,u,v_h,v,nz,ea)                     &
 !$OMP                          private(s,Idenom,a_w,a_e,a_s,a_n,b_denom_1,b1,d1,c1)
   do j=js,je
@@ -877,7 +877,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
   if (CS%id_createdH>0) CS%createdH(:,:) = 0.
   numberOfGroundings = 0
 
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,h,tv,nsw,G,optics,fluxes,dt,       &
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,h,tv,nsw,G,GV,optics,fluxes,dt,    &
 !$OMP                                  H_limit_fluxes,ea,IforcingDepthScale,             &
 !$OMP                                  numberOfGroundings,iGround,jGround,nonPenSW,      &
 !$OMP                                  hGrounding,CS,Idt,aggregate_FW_forcing,           &

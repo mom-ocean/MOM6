@@ -273,7 +273,7 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, GV, CS, &
   ! tridagonal solver.
 !$OMP parallel do default(none) shared(G,Isq,Ieq,ADp,nz,u,CS,dt_Rho0,fluxes,h, &
 !$OMP                                  h_neglect,Hmix,I_Hmix,visc,dt_m_to_H,   &
-!$OMP                                  Idt,taux_bot)                           &
+!$OMP                                  Idt,taux_bot,Rho0)                      &
 !$OMP                     firstprivate(Ray)                                    &
 !$OMP                          private(do_i,surface_stress,zDS,stress,h_a,hfr, &
 !$OMP                                     b_denom_1,b1,d1,c1)
@@ -345,7 +345,7 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, GV, CS, &
 
   ! Now work on the meridional velocity component.
 !$OMP parallel do default(none) shared(G,Jsq,Jeq,ADp,nz,v,CS,dt_Rho0,fluxes,h, &
-!$OMP                                  Hmix,I_Hmix,visc,dt_m_to_H,Idt,         &
+!$OMP                                  Hmix,I_Hmix,visc,dt_m_to_H,Idt,Rho0,    &
 !$OMP                                  tauy_bot,is,ie)                         &
 !$OMP                     firstprivate(Ray)                                    &
 !$OMP                          private(do_i,surface_stress,zDS,stress,h_a,hfr, &
@@ -661,7 +661,8 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS)
     allocate(CS%a1_shelf_v(G%isd:G%ied,G%JsdB:G%JedB)) ; CS%a1_shelf_v(:,:)=0.0
   endif
 
-!$OMP parallel do default(none) shared(G,CS,visc,Isq,ieq,nz,u,h,fluxes,hML_u,h_neglect,dt) &
+!$OMP parallel do default(none) shared(G,GV,CS,visc,Isq,ieq,nz,u,h,fluxes,hML_u, &
+!$OMP                                  h_neglect,dt,m_to_H) &
 !$OMP                     firstprivate(i_hbbl)                                             &
 !$OMP                          private(do_i,kv_bbl,bbl_thick,z_i,h_harm,h_arith,hvel,z2,   &
 !$OMP                                  botfn,zh,Dmin,zcol,a,do_any_shelf,do_i_shelf,       &
@@ -786,7 +787,8 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS)
 
 
   ! Now work on v-points.
-!$OMP parallel do default(none) shared(G,CS,visc,is,ie,Jsq,Jeq,nz,v,h,fluxes,hML_v,h_neglect,dt) &
+!$OMP parallel do default(none) shared(G,GV,CS,visc,is,ie,Jsq,Jeq,nz,v,h,fluxes,hML_v, &
+!$OMP                                  h_neglect,dt,m_to_H) &
 !$OMP                     firstprivate(i_hbbl)                                                &
 !$OMP                          private(do_i,kv_bbl,bbl_thick,z_i,h_harm,h_arith,hvel,z2,      &
 !$OMP                                  botfn,zh,Dmin,zcol1,zcol2,a,do_any_shelf,do_i_shelf,  &
@@ -1186,7 +1188,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, GV, CS)
 
   if (len_trim(CS%u_trunc_file) > 0) then
 !$OMP parallel do default(none) shared(js,je,Isq,Ieq,nz,CS,G,fluxes,u,h,dt,maxvel,ADp,CDp,truncvel, &
-!$OMP                                  u_old,vel_report,dowrite) &
+!$OMP                                  u_old,vel_report,dowrite,H_report) &
 !$OMP                          private(trunc_any,CFL)
     do j=js,je
       trunc_any = .false.
@@ -1235,7 +1237,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, GV, CS)
     enddo ! j-loop
   else
     if (CS%CFL_based_trunc) then
-!$OMP parallel do default(none) shared(nz,js,je,Isq,Ieq,u,dt,G,CS,h)
+!$OMP parallel do default(none) shared(nz,js,je,Isq,Ieq,u,dt,G,CS,h,H_report)
       do k=1,nz ; do j=js,je ; do I=Isq,Ieq
         if ((u(I,j,k) * (dt * G%dy_Cu(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
           u(I,j,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i+1,j) / (dt * G%dy_Cu(I,j)))
@@ -1246,7 +1248,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, GV, CS)
         endif
       enddo ; enddo ; enddo
     else
-!$OMP parallel do default(none) shared(nz,js,je,Isq,Ieq,u,G,CS,truncvel,maxvel,h)
+!$OMP parallel do default(none) shared(nz,js,je,Isq,Ieq,u,G,CS,truncvel,maxvel,h,H_report)
       do k=1,nz ; do j=js,je ; do I=Isq,Ieq ; if (abs(u(I,j,k)) > maxvel) then
         u(I,j,k) = SIGN(truncvel,u(I,j,k))
         if (h(i,j,k) + h(i+1,j,k) > H_report) CS%ntrunc = CS%ntrunc + 1
@@ -1267,7 +1269,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, GV, CS)
 
   if (len_trim(CS%v_trunc_file) > 0) then
 !$OMP parallel do default(none) shared(Jsq,Jeq,is,ie,nz,CS,G,fluxes,v,h,dt,maxvel,ADp,CDp,truncvel, &
-!$OMP                                  v_old,vel_report,dowrite)                                    &
+!$OMP                                  v_old,vel_report,dowrite,H_report)                           &
 !$OMP                          private(trunc_any,CFL)
     do J=Jsq,Jeq
       trunc_any = .false.
@@ -1316,7 +1318,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, GV, CS)
     enddo ! J-loop
   else
     if (CS%CFL_based_trunc) then
-!$OMP parallel do default(none) shared(is,ie,Jsq,Jeq,nz,v,dt,G,CS,h)
+!$OMP parallel do default(none) shared(is,ie,Jsq,Jeq,nz,v,dt,G,CS,h,H_report)
       do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
         if ((v(i,J,k) * (dt * G%dx_Cv(i,J))) * G%IareaT(i,j+1) < -CS%CFL_trunc) then
           v(i,J,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i,j+1) / (dt * G%dx_Cv(i,J)))
@@ -1327,7 +1329,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, GV, CS)
         endif
       enddo ; enddo ; enddo
     else
-!$OMP parallel do default(none) shared(is,ie,Jsq,Jeq,nz,v,G,CS,h,truncvel,maxvel)
+!$OMP parallel do default(none) shared(is,ie,Jsq,Jeq,nz,v,G,CS,h,truncvel,maxvel,H_report)
       do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie ; if (abs(v(i,J,k)) > maxvel) then
         v(i,J,k) = SIGN(truncvel,v(i,J,k))
         if (h(i,j,k) + h(i,j+1,k) > H_report) CS%ntrunc = CS%ntrunc + 1

@@ -679,7 +679,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     do j=js,je ; do i=is,ie
       ea(i,j,1) = 0.
     enddo ; enddo
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,h_neglect,h,ea,G,dt,Kd_int,eb) &
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,h_neglect,h,ea,GV,dt,Kd_int,eb) &
 !$OMP                          private(hval)
     do k=2,nz ; do j=js,je ; do i=is,ie
       hval=1.0/(h_neglect + 0.5*(h(i,j,k-1) + h(i,j,k)))
@@ -803,7 +803,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   ! enough iterations are permitted in Calculate_Entrainment.
   ! Even if too few iterations are allowed, it is still guarded
   ! against.  In other words the checks are probably unnecessary.
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,hold,h,eb,ea,G)
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,hold,h,eb,ea,GV)
   do j=js,je
     do i=is,ie
       hold(i,j,1) = h(i,j,1)
@@ -1066,7 +1066,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   call cpu_clock_begin(id_clock_tracers)
   if (CS%mix_boundary_tracers) then
     Tr_ea_BBL = sqrt(dt*CS%Kd_BBL_tr)
-!$OMP parallel do default(none) shared(is,ie,js,je,ebtr,nz,G,h,dt,CS,h_neglect,     &
+!$OMP parallel do default(none) shared(is,ie,js,je,ebtr,nz,G,GV,h,dt,CS,h_neglect,  &
 !$OMP                                  ea,eb,Tr_ea_BBL,eatr,visc,hold,h_neglect2 )  &
 !$OMP                          private(htot,in_boundary,add_ent)
     do j=js,je
@@ -1120,7 +1120,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     do j=js,je ; do i=is,ie
       ebtr(i,j,nz) = eb(i,j,nz) ; eatr(i,j,1) = ea(i,j,1)
     enddo ; enddo
-!$OMP parallel do default(none) shared(nz,is,ie,js,je,visc,dt,G,h,hold,h_neglect, &
+!$OMP parallel do default(none) shared(nz,is,ie,js,je,visc,dt,GV,h,hold,h_neglect,&
 !$OMP                                  ebtr,eb,eatr,ea )                          &
 !$OMP                          private(add_ent)
     do k=nz,2,-1 ; do j=js,je ; do i=is,ie
@@ -1168,7 +1168,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   endif
 
 
-!$OMP parallel default(none) shared(is,ie,js,je,nz,CDp,Idt,G,ea,eb,CS,hold) private(net_ent)
+!$OMP parallel default(none) shared(is,ie,js,je,nz,CDp,Idt,G,GV,ea,eb,CS,hold) private(net_ent)
 !   Save the diapycnal mass fluxes as a diagnostic field.
   if (ASSOCIATED(CDp%diapyc_vel)) then
 !$OMP do

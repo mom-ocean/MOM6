@@ -173,8 +173,8 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS)
 !    resid(i,j) = tv%internal_heat(i,j)
 !  enddo ; enddo
 
-!$OMP parallel do default(none) shared(is,ie,js,je,G,CS,dt,Irho_cp,nkmb,tv,p_Ref, &
-!$OMP                                  h,Angstrom,nz,H_neglect,eb)                &
+!$OMP parallel do default(none) shared(is,ie,js,je,G,GV,CS,dt,Irho_cp,nkmb,tv,    &
+!$OMP                                  p_Ref,h,Angstrom,nz,H_neglect,eb)          &
 !$OMP                          private(num_start,heat_rem,do_i,h_geo_rem,num_left,&
 !$OMP                                  isj,iej,Rcv_BL,h_heated,heat_avail,k_tgt,  &
 !$OMP                                  Rcv_tgt,Rcv,dRcv_dT,T2,S2,dRcv_dT_,        &

@@ -310,10 +310,10 @@ subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, CS, ea, eb, &
     pres(:) = 0.0
   endif
 
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,Kd_Lay,G,dt,Kd_int,CS,h,tv,  &
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,Kd_Lay,G,GV,dt,Kd_int,CS,h,tv, &
 !$OMP                                  kmb,Angstrom,fluxes,K2,h_neglect,tolerance, &
 !$OMP                                  ea,eb,correct_density,Kd_eff,diff_work,     &
-!$OMP                                  g_2dt, kb_out)                              &
+!$OMP                                  g_2dt, kb_out, m_to_H, H_to_m)              &
 !$OMP                     firstprivate(kb,ds_dsp1,dsp1_ds,pres,kb_min)             &
 !$OMP                          private(dtKd,dtKd_int,do_i,Ent_bl,dtKd_kb,h_bl,     &
 !$OMP                                  I2p2dsp1_ds,grats,htot,max_eakb,I_dSkbp1,   &

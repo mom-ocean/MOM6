@@ -479,7 +479,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
   endif
   max_BL_det(:) = -1
 
-!$OMP parallel default(none) shared(is,ie,js,je,nz,h_3d,u_3d,v_3d,nkmb,G,nsw,optics,         &
+!$OMP parallel default(none) shared(is,ie,js,je,nz,h_3d,u_3d,v_3d,nkmb,G,GV,nsw,optics,      &
 !$OMP                               CS,tv,fluxes,Irho0,dt,Idt_diag,Ih,write_diags,           &
 !$OMP                               hmbl_prev,h_sum,Hsfc_min,Hsfc_max,dt__diag,              &
 !$OMP                               Hsfc_used,Inkmlm1,Inkml,ea,eb,h_miss,                    &

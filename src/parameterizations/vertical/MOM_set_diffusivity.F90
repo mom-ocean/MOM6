@@ -616,8 +616,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   endif
 
   if (CS%debug) call hchksum(Kd_sfc,"Kd_sfc",G,haloshift=0)
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,G,CS,h,tv,T_f,S_f,fluxes,dd, &
-!$OMP                                  Kd,Kd_sfc,epsilon,deg_to_rad,I_2Omega,visc, &
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,G,GV,CS,h,tv,T_f,S_f,fluxes,dd, &
+!$OMP                                  Kd,Kd_sfc,epsilon,deg_to_rad,I_2Omega,visc,    &
 !$OMP                                  Kd_int,dt,u,v,Omega2)   &
 !$OMP                          private(dRho_int,I_trans,atan_fn_sfc,I_atan_fn,atan_fn_lay, &
 !$OMP                                  I_Hmix,depth_c,depth,N2_lay, N2_int, N2_bot,        &
@@ -2299,7 +2299,7 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, CS)
 
   cdrag_sqrt = sqrt(CS%cdrag)
 
-!$OMP parallel default(none) shared(cdrag_sqrt,is,ie,js,je,nz,visc,CS,G,vstar,h,v, &
+!$OMP parallel default(none) shared(cdrag_sqrt,is,ie,js,je,nz,visc,CS,G,GV,vstar,h,v, &
 !$OMP                               v2_bbl,u) &
 !$OMP                       private(do_i,vhtot,htot,domore,hvel,uhtot,ustar,u2_bbl)
 !$OMP do
