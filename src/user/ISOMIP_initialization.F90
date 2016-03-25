@@ -187,7 +187,6 @@ subroutine ISOMIP_initialize_thickness ( h, G, param_file )
             h(i,j,k) = eta1D(k) - eta1D(k+1)
           endif
         enddo
-!        write(*,*)'G%bathyT(i,j)-sum(h(i,j,:))',G%bathyT(i,j)-sum(h(i,j,:))
       end do ; end do   
     
 
@@ -357,7 +356,6 @@ subroutine ISOMIP_initialize_sponges(G, tv, PF, CSp)
    enddo ; enddo
 
    if (associated(CSp)) then
-    write(*,*)'associated'
     call MOM_error(WARNING, "ISOMIP_initialize_sponges called with an associated "// &
                             "control structure.")
     return
@@ -379,9 +377,9 @@ subroutine ISOMIP_initialize_sponges(G, tv, PF, CSp)
           RHO(i,j,k) = rho_dummy
         enddo
       enddo ; enddo
-      write(*,*)'max(T)',maxval(T(10:20,10,:)),minval(T(10:20,10,:))
-      write(*,*)'max(S)',maxval(S(10:20,10,:)),minval(S(10:20,10,:))
-      write(*,*)'max(RHO)',maxval(RHO(10:20,10,:)),minval(RHO(10:20,10,:))
+!      write(*,*)'max(T)',maxval(T(10:20,10,:)),minval(T(10:20,10,:))
+!      write(*,*)'max(S)',maxval(S(10:20,10,:)),minval(S(10:20,10,:))
+!      write(*,*)'max(RHO)',maxval(RHO(10:20,10,:)),minval(RHO(10:20,10,:))
 
 !   Now register all of the fields which are damped in the sponge.   !
 ! By default, momentum is advected vertically within the sponge, but !
