@@ -580,18 +580,21 @@ subroutine read_param_int(CS, varname, value, fail_if_missing)
 
   call get_variable_line(CS, varname, found, defined, value_string)
   if (found .and. defined .and. (LEN_TRIM(value_string(1)) > 0)) then
-    read(value_string(1),*) value
+    read(value_string(1),*,err = 1001) value
   else
     if (present(fail_if_missing)) then ; if (fail_if_missing) then
       if (.not.found) then
-        call MOM_error(FATAL,'Unable to find variable '//trim(varname)// &
+        call MOM_error(FATAL,'read_param_int: Unable to find variable '//trim(varname)// &
                              ' in any input files.')
       else
-        call MOM_error(FATAL,'Variable '//trim(varname)// &
+        call MOM_error(FATAL,'read_param_int: Variable '//trim(varname)// &
                              ' found but not set in input files.')
       endif
     endif ; endif
   endif
+  return
+ 1001 call MOM_error(FATAL,'read_param_int: read error for integer variable '//trim(varname)// &
+                             ' parsing "'//trim(value_string(1))//'"')
 end subroutine read_param_int
 
 subroutine read_param_int_array(CS, varname, value, fail_if_missing)
@@ -609,19 +612,22 @@ subroutine read_param_int_array(CS, varname, value, fail_if_missing)
 
   call get_variable_line(CS, varname, found, defined, value_string)
   if (found .and. defined .and. (LEN_TRIM(value_string(1)) > 0)) then
-    read(value_string(1),*,end=991) value
+    read(value_string(1),*,end=991,err=1002) value
  991 return
   else
     if (present(fail_if_missing)) then ; if (fail_if_missing) then
       if (.not.found) then
-        call MOM_error(FATAL,'Unable to find variable '//trim(varname)// &
+        call MOM_error(FATAL,'read_param_int_array: Unable to find variable '//trim(varname)// &
                              ' in any input files.')
       else
-        call MOM_error(FATAL,'Variable '//trim(varname)// &
+        call MOM_error(FATAL,'read_param_int_array: Variable '//trim(varname)// &
                              ' found but not set in input files.')
       endif
     endif ; endif
   endif
+  return
+ 1002 call MOM_error(FATAL,'read_param_int_array: read error for integer array '//trim(varname)// &
+                             ' parsing "'//trim(value_string(1))//'"')
 end subroutine read_param_int_array
 
 subroutine read_param_real(CS, varname, value, fail_if_missing)
@@ -639,18 +645,21 @@ subroutine read_param_real(CS, varname, value, fail_if_missing)
 
   call get_variable_line(CS, varname, found, defined, value_string)
   if (found .and. defined .and. (LEN_TRIM(value_string(1)) > 0)) then
-    read(value_string(1),*) value
+    read(value_string(1),*,err=1003) value
   else
     if (present(fail_if_missing)) then ; if (fail_if_missing) then
       if (.not.found) then
-        call MOM_error(FATAL,'Unable to find variable '//trim(varname)// &
+        call MOM_error(FATAL,'read_param_real: Unable to find variable '//trim(varname)// &
                              ' in any input files.')
       else
-        call MOM_error(FATAL,'Variable '//trim(varname)// &
+        call MOM_error(FATAL,'read_param_real: Variable '//trim(varname)// &
                              ' found but not set in input files.')
       endif
     endif ; endif
   endif
+  return
+ 1003 call MOM_error(FATAL,'read_param_real: read error for real variable '//trim(varname)// &
+                             ' parsing "'//trim(value_string(1))//'"')
 end subroutine read_param_real
 
 subroutine read_param_real_array(CS, varname, value, fail_if_missing)
@@ -668,19 +677,22 @@ subroutine read_param_real_array(CS, varname, value, fail_if_missing)
 
   call get_variable_line(CS, varname, found, defined, value_string)
   if (found .and. defined .and. (LEN_TRIM(value_string(1)) > 0)) then
-    read(value_string(1),*,end=991) value
+    read(value_string(1),*,end=991,err=1004) value
  991 return
   else
     if (present(fail_if_missing)) then ; if (fail_if_missing) then
       if (.not.found) then
-        call MOM_error(FATAL,'Unable to find variable '//trim(varname)// &
+        call MOM_error(FATAL,'read_param_real_array: Unable to find variable '//trim(varname)// &
                              ' in any input files.')
       else
-        call MOM_error(FATAL,'Variable '//trim(varname)// &
+        call MOM_error(FATAL,'read_param_real_array: Variable '//trim(varname)// &
                              ' found but not set in input files.')
       endif
     endif ; endif
   endif
+  return
+ 1004 call MOM_error(FATAL,'read_param_real_array: read error for real array '//trim(varname)// &
+                             ' parsing "'//trim(value_string(1))//'"')
 end subroutine read_param_real_array
 
 subroutine read_param_char(CS, varname, value, fail_if_missing)
