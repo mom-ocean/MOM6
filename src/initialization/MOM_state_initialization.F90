@@ -166,6 +166,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
   inputdir = slasher(inputdir)
 
   use_temperature = ASSOCIATED(tv%T)
+  useALE = associated(ALE_CSp)
   use_EOS = associated(tv%eqn_of_state)
   if (use_EOS) eos => tv%eqn_of_state
 
