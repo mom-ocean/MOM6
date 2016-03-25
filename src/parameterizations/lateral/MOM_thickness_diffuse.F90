@@ -150,9 +150,10 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: &
     KH_t          ! diagnosed diffusivity at tracer points (m^2/s)
 
-  real, allocatable, save :: KH_u_CFL(:,:)   ! The maximum stable interface height
-  real, allocatable, save :: KH_v_CFL(:,:)   ! diffusivity at u & v grid points (m2 s-1)
-  logical, save :: first_call = .TRUE.
+  real, dimension(SZIB_(G), SZJ_(G)) :: &
+    KH_u_CFL      ! The maximum stable interface height diffusivity at u grid points (m2 s-1)
+  real, dimension(SZI_(G), SZJB_(G)) :: &
+    KH_v_CFL      ! The maximum stable interface height diffusivity at v grid points (m2 s-1)
   real :: Khth_Loc_u(SZIB_(G), SZJ_(G))
   real :: Khth_Loc(SZIB_(G), SZJB_(G))  ! locally calculated thickness diffusivity (m2/s)
   real :: H_to_m, m_to_H   ! Local copies of unit conversion factors.
@@ -190,21 +191,16 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
     use_stored_slopes = VarMix%use_stored_slopes
   endif
 
-  if(first_call) then
-    allocate(KH_u_CFL(SZIB_(G), SZJ_(G)) )
-    allocate(KH_v_CFL(SZI_(G), SZJB_(G)) )
 !$OMP parallel do default(none) shared(is,ie,js,je,KH_u_CFL,dt,G,CS)
-    do j=js,je ; do I=is-1,ie
-      KH_u_CFL(I,j) = (0.25*CS%max_Khth_CFL) /  &
-        (dt*(G%IdxCu(I,j)*G%IdxCu(I,j) + G%IdyCu(I,j)*G%IdyCu(I,j)))
-    enddo ; enddo
+  do j=js,je ; do I=is-1,ie
+    KH_u_CFL(I,j) = (0.25*CS%max_Khth_CFL) /  &
+      (dt*(G%IdxCu(I,j)*G%IdxCu(I,j) + G%IdyCu(I,j)*G%IdyCu(I,j)))
+  enddo ; enddo
 !$OMP parallel do default(none) shared(is,ie,js,je,KH_v_CFL,dt,G,CS)
-    do j=js-1,je ; do I=is,ie
-      KH_v_CFL(i,J) = (0.25*CS%max_Khth_CFL) / &
-        (dt*(G%IdxCv(i,J)*G%IdxCv(i,J) + G%IdyCv(i,J)*G%IdyCv(i,J)))
-    enddo ; enddo
-    first_call = .false.
-  endif
+  do j=js-1,je ; do I=is,ie
+    KH_v_CFL(i,J) = (0.25*CS%max_Khth_CFL) / &
+      (dt*(G%IdxCv(i,J)*G%IdxCv(i,J) + G%IdyCv(i,J)*G%IdyCv(i,J)))
+  enddo ; enddo
 
   call find_eta(h, tv, G%g_Earth, G, e, halo_size=1)
 
