@@ -690,8 +690,6 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
                  " \t benchmark - use the benchmark test case topography. \n"//&
                  " \t DOME - use a slope and channel configuration for the \n"//&
                  " \t\t DOME sill-overflow test case. \n"//&
-                 " \t TVWS - use a slope and channel configuration for the \n"//&
-                 " \t\t TVWS overflow test case. \n"//&
                  " \t ISOMIP - use a slope and channel configuration for the \n"//&
                  " \t\t ISOMIP test case. \n"//&
                  " \t DOME2D - use a shelf and slope configuration for the \n"//&
@@ -708,7 +706,6 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
     case ("bowl");      call initialize_topography_named(D, G, PF, config, max_depth)
     case ("halfpipe");  call initialize_topography_named(D, G, PF, config, max_depth)
     case ("DOME");      call DOME_initialize_topography(D, G, PF, max_depth)
-    case ("TVWS");      call TVWS_initialize_topography(D, G, PF, max_depth)
     case ("ISOMIP");      call ISOMIP_initialize_topography(D, G, PF, max_depth)
     case ("benchmark"); call benchmark_initialize_topography(D, G, PF, max_depth)
     case ("DOME2D");    call DOME2d_initialize_topography(D, G, PF, max_depth)
