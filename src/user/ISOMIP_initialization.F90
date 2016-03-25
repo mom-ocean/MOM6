@@ -244,10 +244,15 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, param_file, &
       do j=js,je ; do i=is,ie
         xi0 = 0.0;
         do k = 1,nz
+          xi1 = xi0 + h(i,j,k) / G%max_depth
 !          z = (G%bathyT(i,j)/(nz-1))* (k -1)
-          z = (G%max_depth/(nz-1))* (k -1)
-          S(i,j,k) = S_REF + (S_RANGE*z/Bmax)
-          T(i,j,k) = T_REF + (T_RANGE*z/Bmax)
+!          z = (G%max_depth/(nz-1))* (k -1)
+
+!          S(i,j,k) = S_REF + (S_RANGE*z/Bmax)
+          S(i,j,k) = S_REF + (S_RANGE*(xi0 + xi1))
+!          T(i,j,k) = T_REF + (T_RANGE*z/Bmax)
+          T(i,j,k) = T_REF + (T_RANGE*(xi0 + xi1))
+          xi0 = xi1;
         enddo
       enddo ; enddo
     
