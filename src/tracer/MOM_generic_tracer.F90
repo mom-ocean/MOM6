@@ -61,6 +61,7 @@ module MOM_generic_tracer
   use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc
   use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
   use MOM_sponge, only : set_up_sponge_field, sponge_CS
+  use MOM_ALE_sponge, only : set_up_ALE_sponge_field, ALE_sponge_CS
   use MOM_time_manager, only : time_type, get_time
   use MOM_tracer_registry, only : register_tracer, tracer_registry_type
   use MOM_tracer_registry, only : add_tracer_diagnostics, add_tracer_OBC_values
@@ -283,10 +284,10 @@ contains
   !       Z_diag_register them.
   !  </DESCRIPTION>
   !  <TEMPLATE>
-  !   call initialize_MOM_generic_tracer(restart, day, G, h, OBC, CS, sponge_CSp, diag_to_Z_CSp)
+  !   call initialize_MOM_generic_tracer(restart, day, G, h, OBC, CS, sponge_CSp,ALE_sponge_CSp, diag_to_Z_CSp)
  ! </SUBROUTINE>
-  subroutine initialize_MOM_generic_tracer(restart, day, G, h, param_file, OBC, CS, sponge_CSp, &
-       diag_to_Z_CSp)
+  subroutine initialize_MOM_generic_tracer(restart, day, G, h, param_file, OBC, CS, &
+                                          sponge_CSp, ALE_sponge_CSp,diag_to_Z_CSp)
     logical,                               intent(in) :: restart
     type(time_type), target,               intent(in) :: day
     type(ocean_grid_type),                 intent(inout) :: G
@@ -295,6 +296,7 @@ contains
     type(ocean_OBC_type),                  pointer    :: OBC
     type(MOM_generic_tracer_CS),           pointer    :: CS
     type(sponge_CS),                       pointer    :: sponge_CSp
+    type(ALE_sponge_CS),                   pointer    :: ALE_sponge_CSp
     type(diag_to_Z_CS),                    pointer    :: diag_to_Z_CSp
     !   This subroutine initializes the NTR tracer fields in tr(:,:,:,:)
     ! and it sets up the tracer output.
@@ -310,6 +312,8 @@ contains
     !                 register_MOM_generic_tracer.
     !  (in/out)  sponge_CSp - A pointer to the control structure for the sponges, if
     !                         they are in use.  Otherwise this may be unassociated.
+    !  (in/out)  ALE_sponge_CSp - A pointer to the control structure for the ALE 
+    !                 sponges, if they are in use.  Otherwise this may be unassociated
     !  (in/out)  diag_to_Z_Csp - A pointer to the control structure for diagnostics
     !                            in depth space.
 
