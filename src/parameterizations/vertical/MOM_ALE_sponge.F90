@@ -143,11 +143,9 @@ subroutine initialize_ALE_sponge(Iresttime, data_h, nz_data , G, param_file, CS)
   total_sponge_cols = CS%num_col
   call sum_across_PEs(total_sponge_cols)
 
-  write(*,*)'initialize_remapping before'
 ! Call the constructor for remapping control structure
   call initialize_remapping(CS%remap_cs, 'PPM_H4', boundary_extrapolation=.false.)
 
-  write(*,*)'initialize_remapping after'
   call log_param(param_file, mod, "!Total sponge columns", total_sponge_cols, &
                  "The total number of columns where sponges are applied.")
 
