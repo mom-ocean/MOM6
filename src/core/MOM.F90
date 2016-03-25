@@ -781,8 +781,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
         call enable_averaging(dtth,Time_local+set_time(int(floor(dtth-dt+0.5))), CS%diag)
         call cpu_clock_begin(id_clock_thick_diff)
-        if (associated(CS%VarMix)) call calc_slope_functions(h, CS%tv, dt, G, CS%VarMix)
-        call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dtth, G, &
+        if (associated(CS%VarMix)) &
+          call calc_slope_functions(h, CS%tv, dt, G, G%GV, CS%VarMix)
+        call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dtth, G, G%GV, &
                                CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
         call cpu_clock_end(id_clock_thick_diff)
         call cpu_clock_begin(id_clock_pass)
@@ -873,8 +874,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
     if (CS%thickness_diffuse .and. .not.CS%thickness_diffuse_first) then
       call cpu_clock_begin(id_clock_thick_diff)
-      if (associated(CS%VarMix)) call calc_slope_functions(h, CS%tv, dt, G, CS%VarMix)
-      call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dt, G, &
+      if (associated(CS%VarMix)) &
+        call calc_slope_functions(h, CS%tv, dt, G, G%GV, CS%VarMix)
+      call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dt, G, G%GV, &
                              CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
       call cpu_clock_end(id_clock_thick_diff)
       call cpu_clock_begin(id_clock_pass)
@@ -892,7 +894,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       endif
       call cpu_clock_begin(id_clock_ml_restrat)
       call mixedlayer_restrat(h, CS%uhtr ,CS%vhtr, CS%tv, fluxes, dt, CS%visc%MLD, &
-                              G, CS%mixedlayer_restrat_CSp)
+                              G, G%GV, CS%mixedlayer_restrat_CSp)
       call cpu_clock_end(id_clock_ml_restrat)
       call cpu_clock_begin(id_clock_pass)
       call do_group_pass(CS%pass_h, G%Domain)
@@ -905,7 +907,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     endif
 
     if (CS%useMEKE) call step_forward_MEKE(CS%MEKE, h, CS%VarMix%SN_u, CS%VarMix%SN_v, &
-                                           CS%visc, dt, G, CS%MEKE_CSp, CS%uhtr, CS%vhtr)
+                                           CS%visc, dt, G, G%GV, CS%MEKE_CSp, CS%uhtr, CS%vhtr)
     call disable_averaging(CS%diag)
     call cpu_clock_end(id_clock_dynamics)
 
@@ -1837,8 +1839,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   endif
   call callTree_waypoint("dynamics initialized (initialize_MOM)")
 
-  call thickness_diffuse_init(Time, G, param_file, diag, CS%CDp, CS%thickness_diffuse_CSp)
-  CS%mixedlayer_restrat = mixedlayer_restrat_init(Time, G, param_file, diag, &
+  call thickness_diffuse_init(Time, G, G%GV, param_file, diag, CS%CDp, CS%thickness_diffuse_CSp)
+  CS%mixedlayer_restrat = mixedlayer_restrat_init(Time, G, G%GV, param_file, diag, &
                                                   CS%mixedlayer_restrat_CSp)
   if (CS%mixedlayer_restrat) then
     if (.not.(CS%bulkmixedlayer .or. CS%use_ALE_algorithm)) &
