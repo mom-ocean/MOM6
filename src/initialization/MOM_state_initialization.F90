@@ -386,7 +386,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
 
     if (useALE) then
        select case (trim(config))
-!         case ("ISOMIP"); call ISOMIP_initialize_sponges(G, tv, PF, CS%ALE_sponge_CSp) 
+         case ("ISOMIP"); call ISOMIP_initialize_sponges(G, tv, PF, CS%ALE_sponge_CSp) 
          case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
              "Unrecognized ALE sponge configuration "//trim(config))
        end select

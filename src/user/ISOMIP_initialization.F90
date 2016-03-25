@@ -24,8 +24,8 @@ module ISOMIP_initialization
 !*  The module configures the ISOMIP test case                         *
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
-use MOM_sponge, only : sponge_CS, set_up_sponge_field, initialize_sponge
-use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
+use MOM_ALE_sponge, only : ALE_sponge_CS, set_up_ALE_sponge_field, initialize_ALE_sponge
+use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
@@ -37,7 +37,6 @@ use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
 use regrid_consts, only : REGRIDDING_RHO, REGRIDDING_SIGMA
-
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -45,11 +44,8 @@ implicit none ; private
 ! -----------------------------------------------------------------------------
 ! Private (module-wise) parameters
 ! -----------------------------------------------------------------------------
-real, parameter :: dome2d_width_bay = 0.1;      ! width of bay
-real, parameter :: dome2d_width_bottom = 0.3;   ! width of deepest part
-real, parameter :: dome2d_depth_bay = 0.2;      ! normalized bay depth
 
-character(len=40) :: mod = "DOEM2D_initialization" ! This module's name.
+character(len=40) :: mod = "ISOMIP_initialization" ! This module's name.
 
 ! -----------------------------------------------------------------------------
 ! The following routines are visible to the outside world
@@ -176,18 +172,17 @@ subroutine ISOMIP_initialize_thickness ( h, G, param_file )
   do k=1,nz
     e0(k) = -G%max_depth * real(k-1) / real(nz)
   enddo
-  
+
   select case ( coordinateMode(verticalCoordinate) )
 
-    case ( REGRIDDING_LAYER, REGRIDDING_RHO )
-
+    case ( REGRIDDING_RHO )
       do j=js,je ; do i=is,ie
         eta1D(nz+1) = -1.0*G%bathyT(i,j)
         do k=nz,1,-1
           eta1D(k) = e0(k)
-          if (eta1D(k) < (eta1D(k+1) + G%Angstrom_z)) then
-            eta1D(k) = eta1D(k+1) + G%Angstrom_z
-            h(i,j,k) = G%Angstrom_z
+          if (eta1D(k) < (eta1D(k+1) + G%GV%Angstrom_z)) then
+            eta1D(k) = eta1D(k+1) + G%GV%Angstrom_z
+            h(i,j,k) = G%GV%Angstrom_z
           else
             h(i,j,k) = eta1D(k) - eta1D(k+1)
           endif
@@ -195,48 +190,6 @@ subroutine ISOMIP_initialize_thickness ( h, G, param_file )
 !        write(*,*)'G%bathyT(i,j)-sum(h(i,j,:))',G%bathyT(i,j)-sum(h(i,j,:))
       end do ; end do   
     
- !  case ( IC_RHO_C )
- !  
- !    do j=js,je ; do i=is,ie
- !        eta1D(nz+1) = -1.0*G%bathyT(i,j)
- !        do k=nz,1,-1
- !          eta1D(k) = e0(k)
- !          if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
- !            eta1D(k) = eta1D(k+1) + min_thickness
- !            h(i,j,k) = min_thickness
- !          else
- !            h(i,j,k) = eta1D(k) - eta1D(k+1)
- !          endif
- !       enddo
- !   
- !       x = G%geoLonT(i,j) / G%len_lon;
- !       if ( x .le. dome2d_width_bay ) then
- !         h(i,j,1:nz-1) = min_thickness;
- !         h(i,j,nz) = dome2d_depth_bay * G%max_depth - (nz-1) * min_thickness;
- !       end if
- !   
- !    enddo ; enddo
-
-    case ( REGRIDDING_ZSTAR )
-    
-      do j=js,je ; do i=is,ie
-          eta1D(nz+1) = -1.0*G%bathyT(i,j)
-          do k=nz,1,-1
-            eta1D(k) = e0(k)
-            if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
-              eta1D(k) = eta1D(k+1) + min_thickness
-              h(i,j,k) = min_thickness
-            else
-              h(i,j,k) = eta1D(k) - eta1D(k+1)
-            endif
-         enddo
-      enddo ; enddo
-
-    case ( REGRIDDING_SIGMA )
-      do j=js,je ; do i=is,ie
-        delta_h = G%bathyT(i,j) / nz;
-        h(i,j,:) = delta_h;
-      end do ; end do   
 
     case default
       call MOM_error(FATAL,"isomip_initialize: "// &
@@ -259,11 +212,9 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, param_file, &
   type(EOS_type),                      pointer     :: eqn_of_state
 
   real :: pres(SZK_(G))      ! An array of the reference pressure in Pa.
-  real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 in kg m-3.
 
   integer   :: i, j, k, is, ie, js, je, nz
   real      :: x;
-  integer   :: index_bay_z;
   real      :: delta_S, delta_T;
   real :: bmax            ! max depth of bedrock topography
   real      :: S_ref, T_ref;        ! Reference salinity and temerature within
@@ -290,18 +241,7 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, param_file, &
 
   select case ( coordinateMode(verticalCoordinate) )
 
-    case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA )
-      do j=js,je ; do i=is,ie
-        xi0 = 0.0;
-        do k = 1,nz
-          xi1 = xi0 + h(i,j,k) / G%max_depth;
-          S(i,j,k) = 34.0 + 0.5 * S_range * (xi0 + xi1);
-          xi0 = xi1;
-        enddo
-      enddo ; enddo
-    
     case ( REGRIDDING_RHO )
-      write(*,*)'T_REF,T_RANGE',T_REF,T_RANGE
       do j=js,je ; do i=is,ie
         xi0 = 0.0;
         do k = 1,nz
@@ -309,61 +249,15 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, param_file, &
           z = (G%max_depth/(nz-1))* (k -1)
           S(i,j,k) = S_REF + (S_RANGE*z/Bmax)
           T(i,j,k) = T_REF + (T_RANGE*z/Bmax)
-!          T(i,j,k) = -1.9
         enddo
       enddo ; enddo
-      write(*,*)'max(T)',maxval(T(:,:,:)),minval(T)
-      call calculate_density(T(1,1,1),S(1,1,1),0.0,rho_guess(1),eqn_of_state)
-      write(*,*)'rho_guess(1)',rho_guess(1)
-      
-    case ( REGRIDDING_LAYER )
-      delta_S = S_range / ( G%ke - 1.0 );
-      S(:,:,1) = S_ref;
-      do k = 2,G%ke
-        S(:,:,k) = S(:,:,k-1) + delta_S;
-      end do 
     
-    case default
+   case default
       call MOM_error(FATAL,"isomip_initialize: "// &
       "Unrecognized i.c. setup - set REGRIDDING_COORDINATE_MODE")
 
   end select
 
-  ! Modify salinity and temperature when z coordinates are used  
-!  if ( coordinateMode(verticalCoordinate) .eq. REGRIDDING_ZSTAR ) then
-!    index_bay_z = Nint ( dome2d_depth_bay * G%ke );
-!    do j = G%jsc,G%jec ; do i = G%isc,G%iec 
-!      x = G%geoLonT(i,j) / G%len_lon;
-!      if ( x .le. dome2d_width_bay ) then
-!        S(i,j,1:index_bay_z) = S_ref + S_range; ! Use for z coordinates
-!        T(i,j,1:index_bay_z) = 1.0;             ! Use for z coordinates
-!      end if    
-!    end do ; end do ! i and j loops
-!  end if ! Z initial conditions
-
-  ! Modify salinity and temperature when sigma coordinates are used  
-!  if ( coordinateMode(verticalCoordinate) .eq. REGRIDDING_SIGMA ) then
-!    do i = G%isc,G%iec ; do j = G%jsc,G%jec
-!      x = G%geoLonT(i,j) / G%len_lon;
-!      if ( x .le. dome2d_width_bay ) then
-!        S(i,j,1:G%ke) = S_ref + S_range;    ! Use for sigma coordinates
-!        T(i,j,1:G%ke) = 1.0;                ! Use for sigma coordinates
-!      end if    
-!    end do ; end do
-!  end if
-  
-  ! Modify temperature when rho coordinates are used
-!  T(G%isc:G%iec,G%jsc:G%jec,1:G%ke) = 0.0;
-!  if (( coordinateMode(verticalCoordinate) .eq. REGRIDDING_RHO ) .or. ( coordinateMode(verticalCoordinate) .eq. REGRIDDING_LAYER )) then 
-!    do i = G%isc,G%iec ; do j = G%jsc,G%jec
-!      x = G%geoLonT(i,j) / G%len_lon;
-!      if ( x .le. dome2d_width_bay ) then
-!        T(i,j,G%ke) = 1.0;
-!      end if    
-!    end do ; end do
-!  end if
-  
-  
 end subroutine ISOMIP_initialize_temperature_salinity
 
 ! -----------------------------------------------------------------------------
@@ -371,7 +265,7 @@ subroutine ISOMIP_initialize_sponges(G, tv, PF, CSp)
   type(ocean_grid_type), intent(in) :: G
   type(thermo_var_ptrs), intent(in) :: tv
   type(param_file_type), intent(in) :: PF
-  type(sponge_CS),       pointer    :: CSp
+  type(ALE_sponge_CS),   pointer    :: CSp
 !   This subroutine sets the inverse restoration time (Idamp), and   !
 ! the values towards which the interface heights and an arbitrary    !
 ! number of tracers should be restored within each sponge. The       !
@@ -387,9 +281,11 @@ subroutine ISOMIP_initialize_sponges(G, tv, PF, CSp)
 !  (in/out)  CSp - A pointer that is set to point to the control structure
 !                  for this module
 
-  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta.
+!  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta.
   real :: T(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for temp 
   real :: S(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for salt
+  real :: RHO(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for RHO
+  real :: h(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for thickness
   real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate, in s-1.
   real      :: S_ref, T_ref;        ! Reference salinity and temerature within
                                     ! surface layer
@@ -397,78 +293,80 @@ subroutine ISOMIP_initialize_sponges(G, tv, PF, CSp)
                                     ! vertical
 
 
-  real :: H0(SZK_(G))
+  real :: e0(SZK_(G))               ! The resting interface heights, in m, usually !
+                                    ! negative because it is positive upward.      !
+  real :: eta1D(SZK_(G)+1)          ! Interface height relative to the sea surface !
+                                    ! positive upward, in m.
   real :: min_depth, dummy1, z, Bmax
-  real :: damp, e_dense, damp_new
+  real :: damp, rho_dummy
   character(len=40)  :: mod = "ISOMIP_initialize_sponges" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
-  eta(:,:,:) = 0.0 ; T(:,:,:) = 0.0 ; S(:,:,:) = 0.0 ; Idamp(:,:) = 0.0
+  T(:,:,:) = 0.0 ; S(:,:,:) = 0.0 ; Idamp(:,:) = 0.0; RHO(:,:,:) = 0.0
   S_ref = 33.8; S_range = 0.90
   T_ref = -1.9; T_range = 2.9
   Bmax = 720.0
-!  Here the inverse damping time, in s-1, is set. Set Idamp to 0     !
-!  wherever there is no sponge, and the subroutines that are called  !
-!  will automatically set up the sponges only where Idamp is positive!
-!  and mask2dT is 1.                                                   !
 
 !   Set up sponges for ISOMIP configuration
   call get_param(PF, mod, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0)
 
-  H0(1) = 0.0
-  do k=2,nz ; H0(k) = -(real(k-1)-0.5)*G%max_depth/real(nz-1) ; enddo
-  do i=is,ie; do j=js,je
-    if (G%geoLonT(i,j) >= 790.0 .AND. G%geoLonT(i,j) <= 800.0) then
+! GMM: set thickness, I am using same config. as the initial thickness for now
+   do k=1,nz
+    e0(k) = -G%max_depth * real(k-1) / real(nz)
+   enddo
 
-      dummy1=(G%geoLonT(i,j)-790.0)/(800.0-790.0)
-      damp = 10.0 * max(0.0,dummy1)
+   do j=js,je ; do i=is,ie
+     eta1D(nz+1) = -1.0*G%bathyT(i,j)
+        do k=nz,1,-1
+          eta1D(k) = e0(k)
+          if (eta1D(k) < (eta1D(k+1) + G%GV%Angstrom_z)) then
+            eta1D(k) = eta1D(k+1) + G%GV%Angstrom_z
+            h(i,j,k) = G%GV%Angstrom_z
+          else
+            h(i,j,k) = eta1D(k) - eta1D(k+1)
+          endif
+         enddo
+    enddo;  enddo
 
-    else ; damp=0.0
-    endif
+!  Here the inverse damping time, in s-1, is set. Set Idamp to 0     !
+!  wherever there is no sponge, and the subroutines that are called  !
+!  will automatically set up the sponges only where Idamp is positive!
+!  and mask2dT is 1.  
 
-    ! These will be streched inside of apply_sponge, so they can be in
-    ! depth space for Boussinesq or non-Boussinesq models.
+   do i=is,ie; do j=js,je
+      if (G%geoLonT(i,j) >= 790.0 .AND. G%geoLonT(i,j) <= 800.0) then
 
-!    do k=1,nz
-!      e0(k) = -G%max_depth * real(k-1) / real(nz)
-!    enddo
+! 1 / day
+        dummy1=(G%geoLonT(i,j)-790.0)/(800.0-790.0)
+!        damp = 1.0/10.0 * max(0.0,dummy1)
+        damp = 1.0/0.04166 * max(0.0,dummy1)  ! one hour
 
-!      do j=js,je ; do i=is,ie
-!        eta1D(nz+1) = -1.0*G%bathyT(i,j)
-!        do k=nz,1,-1
-!          eta1D(k) = e0(k)
-!          if (eta1D(k) < (eta1D(k+1) + G%Angstrom_z)) then
-!            eta1D(k) = eta1D(k+1) + G%Angstrom_z
-!            h(i,j,k) = G%Angstrom_z
-!          else
-!            h(i,j,k) = eta1D(k) - eta1D(k+1)
-!          endif
-!        enddo
-!      end do ; end do
+      else ; damp=0.0
+      endif
 
-    eta(i,j,1) = 0.0
-    do k=2,nz
-!     eta(i,j,K)=max(H0(k), -G%bathyT(i,j), G%Angstrom_z*(nz-k+1)-G%bathyT(i,j))
-      e_dense = -G%bathyT(i,j)
-      if (e_dense >= H0(k)) then ; eta(i,j,K) = e_dense
-      else ; eta(i,j,K) = H0(k) ; endif
-      if (eta(i,j,K) < G%Angstrom_z*(nz-k+1)-G%bathyT(i,j)) &
-          eta(i,j,K) = G%Angstrom_z*(nz-k+1)-G%bathyT(i,j)
-    enddo
-    eta(i,j,nz+1) = -G%bathyT(i,j)
+! convert to 1 / seconds
+      if (G%bathyT(i,j) > min_depth) then
+          Idamp(i,j) = damp/86400.0
+      else ; Idamp(i,j) = 0.0 ; endif
+   
 
-    if (G%bathyT(i,j) > min_depth) then
-      Idamp(i,j) = damp/86400.0
-    else ; Idamp(i,j) = 0.0 ; endif
-  enddo ; enddo
+   enddo ; enddo
+
+   if (associated(CSp)) then
+    write(*,*)'associated'
+    call MOM_error(WARNING, "ISOMIP_initialize_sponges called with an associated "// &
+                            "control structure.")
+    return
+  endif
 
 !  This call sets up the damping rates and interface heights.
 !  This sets the inverse damping timescale fields in the sponges.    !
-  call initialize_sponge(Idamp, eta, G, PF, CSp)
+
+  call initialize_ALE_sponge(Idamp,h, nz, G, PF, CSp)
 
 ! setup temp and salt at the sponge zone
       do j=js,je ; do i=is,ie
@@ -477,13 +375,13 @@ subroutine ISOMIP_initialize_sponges(G, tv, PF, CSp)
           z = (G%max_depth/(nz-1))* (k -1)
           S(i,j,k) = S_REF + (S_RANGE*z/Bmax)
           T(i,j,k) = T_REF + (T_RANGE*z/Bmax)
+          call calculate_density(T(i,j,k),S(i,j,k),0.0,rho_dummy,tv%eqn_of_state)
+          RHO(i,j,k) = rho_dummy
         enddo
       enddo ; enddo
-!      write(*,*)'max(T)',maxval(T(:,:,:)),minval(T)
-!      write(*,*)'test'
-!      call calculate_density(T(1,1,1),S(1,1,1),0.0,rho_guess(1),eqn_of_state)
-!      write(*,*)'rho_guess(1)',rho_guess(1)
-
+      write(*,*)'max(T)',maxval(T(10:20,10,:)),minval(T(10:20,10,:))
+      write(*,*)'max(S)',maxval(S(10:20,10,:)),minval(S(10:20,10,:))
+      write(*,*)'max(RHO)',maxval(RHO(10:20,10,:)),minval(RHO(10:20,10,:))
 
 !   Now register all of the fields which are damped in the sponge.   !
 ! By default, momentum is advected vertically within the sponge, but !
@@ -494,13 +392,13 @@ subroutine ISOMIP_initialize_sponges(G, tv, PF, CSp)
 
 !  The remaining calls to set_up_sponge_field can be in any order. !
   if ( associated(tv%T) ) then
-!    call MOM_error(FATAL,"ISOMIP_initialize_sponges is not set up for use with"//&
-!                         " a temperatures defined.")
-    ! This should use the target values of T in temp.
-!!    call set_up_sponge_field(T,tv%T,nz,CSp)
-    ! This should use the target values of S in salt.
-!!    call set_up_sponge_field(S,tv%S,nz,CSp)
+      call set_up_ALE_sponge_field(T,G,tv%T,CSp)
   endif
+
+  if ( associated(tv%S) ) then
+    call set_up_ALE_sponge_field(S,G,tv%S,CSp)
+  endif
+
 
 end subroutine ISOMIP_initialize_sponges
 ! -----------------------------------------------------------------------------
