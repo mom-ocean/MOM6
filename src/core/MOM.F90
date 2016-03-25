@@ -2394,7 +2394,7 @@ subroutine post_diags_TS_tendency(G, CS, dt)
 
   if(.not. CS%tendency_diagnostics) return
 
-  Idt           = 1.0/dt
+  Idt = 0.; if (dt/=0.) Idt = 1.0 / dt ! The "if" is in case the diagnostic is called for a zero length interval
   ppt2mks       = 0.001
   work3d(:,:,:) = 0.0
   work2d(:,:)   = 0.0
@@ -2502,7 +2502,7 @@ subroutine post_diags_TS_vardec(G, CS, dt)
   real :: work(SZI_(G),SZJ_(G),SZK_(G))
   real :: Idt
 
-  Idt = 1.0 / dt
+  Idt = 0.; if (dt/=0.) Idt = 1.0 / dt ! The "if" is in case the diagnostic is called for a zero length interval
 
   if (CS%id_T_vardec > 0) then
     work(:,:,:) = (CS%T_squared(:,:,:) - CS%tv%T(:,:,:) ** 2) * Idt
