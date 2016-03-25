@@ -25,7 +25,6 @@ use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : setVerticalGridAxes
 use user_initialization, only : user_set_coord, user_initialize_topography
 use DOME_initialization, only : DOME_initialize_topography
-use TVWS_initialization, only : TVWS_initialize_topography
 use ISOMIP_initialization, only : ISOMIP_initialize_topography
 use benchmark_initialization, only : benchmark_initialize_topography
 use DOME2d_initialization, only : DOME2d_initialize_topography
