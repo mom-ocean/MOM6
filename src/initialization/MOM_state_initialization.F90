@@ -2,7 +2,6 @@
 module MOM_state_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
 use MOM_checksums, only : hchksum, qchksum, uchksum, vchksum, chksum
 use MOM_coms, only : max_across_PEs, min_across_PEs
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
@@ -24,6 +23,8 @@ use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
 use MOM_restart, only : restore_state, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, set_up_sponge_ML_density
 use MOM_sponge, only : initialize_sponge, sponge_CS
+use MOM_ALE_sponge, only : set_up_ALE_sponge_field, initialize_ALE_sponge
+use MOM_ALE_sponge, only : ALE_sponge_CS
 use MOM_string_functions, only : uppercase
 use MOM_time_manager, only : time_type, set_time
 use MOM_tracer_registry, only : add_tracer_OBC_values, tracer_registry_type
@@ -37,13 +38,8 @@ use user_initialization, only : user_initialize_thickness, user_initialize_veloc
 use user_initialization, only : user_init_temperature_salinity
 use user_initialization, only : user_set_Open_Bdry_Conds, user_initialize_sponges
 use DOME_initialization, only : DOME_initialize_thickness
-use ISOMIP_initialization, only : ISOMIP_initialize_thickness
-use TVWS_initialization, only : TVWS_initialize_thickness
 use DOME_initialization, only : DOME_set_Open_Bdry_Conds
-use TVWS_initialization, only : TVWS_set_Open_Bdry_Conds
 use DOME_initialization, only : DOME_initialize_sponges
-use ISOMIP_initialization, only : ISOMIP_initialize_sponges
-use ISOMIP_initialization, only : ISOMIP_initialize_temperature_salinity
 use baroclinic_zone_initialization, only : baroclinic_zone_init_temperature_salinity
 use benchmark_initialization, only : benchmark_initialize_thickness
 use benchmark_initialization, only : benchmark_init_temperature_salinity
@@ -85,6 +81,7 @@ public MOM_initialize_state
 type, public :: MOM_initialization_struct
   type(tracer_registry_type), pointer :: tracer_Reg => NULL()
   type(sponge_CS), pointer :: sponge_CSp => NULL()
+  type(ALE_sponge_CS), pointer :: ALE_sponge_CSp => NULL()
   type(ocean_OBC_type), pointer :: OBC => NULL()
 end type MOM_initialization_struct
 
@@ -127,7 +124,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
   character(len=200) :: filename2  ! The name of an input files.
   character(len = 200) :: inputdir ! The directory where NetCDF input files are.
   character(len=200) :: config
-  logical :: from_Z_file
+  logical :: from_Z_file, useALE
   logical :: new_sim
   integer :: write_geom
   logical :: use_temperature, use_sponge
@@ -210,10 +207,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
                " \t\t between the surface and MAXIMUM_DEPTH. \n"//&
                " \t DOME - use a slope and channel configuration for the \n"//&
                " \t\t DOME sill-overflow test case. \n"//&
-               " \t ISOMIP - use a slope and channel configuration for the \n"//&
-               " \t\t ISOMIP test case. \n"//&
-               " \t TVWS - use a slope and channel configuration for the \n"//&
-               " \t\t TVWS overflow test case. \n"//&
                " \t benchmark - use the benchmark test case thicknesses. \n"//&
                " \t search - search a density profile for the interface \n"//&
                " \t\t densities. This is not yet implemented. \n"//&
@@ -231,8 +224,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
          case ("coord"); call ALE_initThicknessToCoord( ALE_CSp, G, h )
          case ("uniform"); call initialize_thickness_uniform(h, G, PF)
          case ("DOME"); call DOME_initialize_thickness(h, G, PF)
-         case ("TVWS"); call TVWS_initialize_thickness(h, G, PF)
-         case ("ISOMIP"); call ISOMIP_initialize_thickness(h, G, PF)
          case ("benchmark"); call benchmark_initialize_thickness(h, G, PF, &
                                  tv%eqn_of_state, tv%P_Ref)
          case ("search"); call initialize_thickness_search
@@ -281,8 +272,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
           case ("TS_profile") ; call initialize_temp_salt_from_profile(tv%T, tv%S, G, PF)
           case ("linear"); call initialize_temp_salt_linear(tv%T, tv%S, G, PF)
           case ("DOME2D"); call DOME2d_initialize_temperature_salinity ( tv%T, &
-                                tv%S, h, G, PF, eos)
-          case ("ISOMIP"); call ISOMIP_initialize_temperature_salinity ( tv%T, &
                                 tv%S, h, G, PF, eos)
           case ("adjustment2d"); call adjustment_initialize_temperature_salinity ( tv%T, &
                                       tv%S, h, G, PF, eos)
@@ -385,19 +374,26 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
                  " \t\t DOME sill-overflow test case. \n"//&
                  " \t USER - call a user modified routine.", default="file")
 
-    select case (trim(config))
-      case ("DOME"); call DOME_initialize_sponges(G, tv, PF, CS%sponge_CSp)
-      case ("ISOMIP"); call ISOMIP_initialize_sponges(G, tv, PF, CS%sponge_CSp)
-      case ("USER"); call user_initialize_sponges(G, use_temperature, tv, &
-                                                  PF, CS%sponge_CSp, h)
-      case ("phillips"); call Phillips_initialize_sponges(G, use_temperature, tv, &
-                                                  PF, CS%sponge_CSp, h)
-      case ("file"); call initialize_sponges_file(G, use_temperature, tv, &
-                                                  PF, CS%sponge_CSp)
-      case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
-             "Unrecognized sponge configuration "//trim(config))
-    end select
+    if (useALE) then
+       select case (trim(config))
+         case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
+             "Unrecognized ALE sponge configuration "//trim(config))
+       end select
 
+    else
+
+       select case (trim(config))
+         case ("DOME"); call DOME_initialize_sponges(G, tv, PF, CS%sponge_CSp)
+         case ("USER"); call user_initialize_sponges(G, use_temperature, tv, &
+                                                  PF, CS%sponge_CSp, h)
+         case ("phillips"); call Phillips_initialize_sponges(G, use_temperature, tv, &
+                                                  PF, CS%sponge_CSp, h)
+         case ("file"); call initialize_sponges_file(G, use_temperature, tv, &
+                                                  PF, CS%sponge_CSp)
+         case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
+             "Unrecognized sponge configuration "//trim(config))
+       end select
+   endif
   endif
 
 ! This subroutine call sets optional open boundary conditions.
@@ -415,14 +411,10 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
                  " configured: \n"//&
                  " \t DOME - use a slope and channel configuration for the \n"//&
                  " \t\t DOME sill-overflow test case. \n"//&
-                 " \t TVWS - use a slope and channel configuration for the \n"//&
-                 " \t\t TVWS overflow test case. \n"//&
                  " \t USER - call a user modified routine.", default="file", &
                  fail_if_missing=.true.)
     if (trim(config) == "DOME") then
       call DOME_set_Open_Bdry_Conds(CS%OBC, tv, G, PF, CS%tracer_Reg)
-    elseif (trim(config) == "TVWS") then
-      call TVWS_set_Open_Bdry_Conds(CS%OBC, tv, G, PF, CS%tracer_Reg)
     elseif (trim(config) == "USER") then
       call user_set_Open_Bdry_Conds(CS%OBC, tv, G, PF, CS%tracer_Reg)
     else
