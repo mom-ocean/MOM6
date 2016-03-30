@@ -5,6 +5,7 @@ module MOM_isopycnal_slopes
 
 use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : thermo_var_ptrs
+use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : int_specific_vol_dp, calculate_density_derivs
 
 implicit none ; private

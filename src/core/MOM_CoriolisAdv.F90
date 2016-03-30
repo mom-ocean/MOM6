@@ -65,10 +65,11 @@ module MOM_CoriolisAdv
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
-use MOM_file_parser, only : get_param, log_version, param_file_type
-use MOM_grid, only : ocean_grid_type
-use MOM_variables, only : accel_diag_ptrs
+use MOM_file_parser,   only : get_param, log_version, param_file_type
+use MOM_grid,          only : ocean_grid_type
 use MOM_string_functions, only : uppercase
+use MOM_variables,     only : accel_diag_ptrs
+use MOM_verticalGrid,  only : verticalGrid_type
 
 implicit none ; private
 

@@ -268,7 +268,7 @@ contains
 subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
                  Time_local, dt, fluxes, p_surf_begin, p_surf_end, &
                  dt_since_flux, dt_therm, uh, vh, uhtr, vhtr, eta_av, &
-                 G, CS, calc_dtbt, VarMix, MEKE)
+                 G, GV, CS, calc_dtbt, VarMix, MEKE)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), target, intent(inout) :: u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), target, intent(inout) :: v
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h
@@ -285,6 +285,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vhtr
   real, dimension(NIMEM_,NJMEM_),         intent(out)   :: eta_av
   type(ocean_grid_type),                  intent(inout) :: G
+  type(verticalGrid_type),                intent(in)    :: GV
   type(MOM_dyn_legacy_split_CS),          pointer       :: CS
   logical,                                intent(in)    :: calc_dtbt
   type(VarMix_CS),                        pointer       :: VarMix
@@ -315,6 +316,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
 !  (out)     eta_av - The free surface height or column mass time-averaged
 !                     over a time step, in m or kg m-2.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure set up by initialize_dyn_legacy_split.
 !  (in)      calc_dtbt - If true, recalculate the barotropic time step.
 !  (in)      VarMix - A pointer to a structure with fields that specify the
@@ -379,7 +381,6 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
   logical :: BT_cont_BT_thick ! If true, use the BT_cont_type to estimate the
                               ! relative weightings of the layers in calculating
                               ! the barotropic accelerations.
-  type(verticalGrid_type),  pointer :: GV => NULL()
   integer :: pid_Ray, pid_bbl_h, pid_kv_bbl, pid_eta_PF, pid_eta, pid_visc
   integer :: pid_h, pid_u, pid_u_av, pid_uh, pid_uhbt_in
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
@@ -389,12 +390,10 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
   eta => CS%eta ; uhbt_in => CS%uhbt_in ; vhbt_in => CS%vhbt_in
   Idt = 1.0 / dt
 
-  GV => G%GV
-
   up(:,:,:) = 0.0 ; vp(:,:,:) = 0.0 ; hp(:,:,:) = h(:,:,:)
 
   if (CS%debug) then
-    call MOM_state_chksum("Start predictor ", u, v, h, uh, vh, G)
+    call MOM_state_chksum("Start predictor ", u, v, h, uh, vh, G, GV)
     call check_redundant("Start predictor u ", u, v, G)
     call check_redundant("Start predictor uh ", uh, vh, G)
   endif
@@ -471,13 +470,13 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
 ! pbce = dM/deta
   if (CS%begw == 0.0) call enable_averaging(dt, Time_local, CS%diag)
   call cpu_clock_begin(id_clock_pres)
-  call PressureForce(h, tv, CS%PFu, CS%PFv, G, CS%PressureForce_CSp, &
+  call PressureForce(h, tv, CS%PFu, CS%PFv, G, GV, CS%PressureForce_CSp, &
                      CS%ALE_CSp, p_surf, CS%pbce, CS%eta_PF)
   if (dyn_p_surf) then
-    if (G%GV%Boussinesq) then
-      Pa_to_eta = 1.0 / (G%GV%Rho0*G%g_Earth)
+    if (GV%Boussinesq) then
+      Pa_to_eta = 1.0 / (GV%Rho0*G%g_Earth)
     else
-      Pa_to_eta = 1.0 / G%GV%H_to_Pa
+      Pa_to_eta = 1.0 / GV%H_to_Pa
     endif
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       eta_PF_start(i,j) = CS%eta_PF(i,j) - Pa_to_eta * &
@@ -574,9 +573,9 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
   call cpu_clock_begin(id_clock_btcalc)
   ! Calculate the relative layer weights for determining barotropic quantities.
   if (.not.BT_cont_BT_thick) &
-    call legacy_btcalc(h, G, CS%barotropic_CSp)
+    call legacy_btcalc(h, G, GV, CS%barotropic_CSp)
   call legacy_bt_mass_source(h, eta, fluxes, .true., dt_therm, dt_since_flux, &
-                      G, CS%barotropic_CSp)
+                      G, GV, CS%barotropic_CSp)
   call cpu_clock_end(id_clock_btcalc)
 
   if (G%nonblocking_updates) then
@@ -618,13 +617,13 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
       call pass_vector(CS%BT_cont%h_u, CS%BT_cont%h_v, G%Domain, &
                        To_All+SCALAR_PAIR, CGRID_NE)
       call cpu_clock_end(id_clock_pass)
-      call legacy_btcalc(h, G, CS%barotropic_CSp, CS%BT_cont%h_u, CS%BT_cont%h_v)
+      call legacy_btcalc(h, G, GV, CS%barotropic_CSp, CS%BT_cont%h_u, CS%BT_cont%h_v)
     endif
     call cpu_clock_begin(id_clock_btstep)
-    if (calc_dtbt) call legacy_set_dtbt(G, CS%barotropic_CSp, eta, CS%pbce, CS%BT_cont)
+    if (calc_dtbt) call legacy_set_dtbt(G, GV, CS%barotropic_CSp, eta, CS%pbce, CS%BT_cont)
     call legacy_btstep(.true., uh_in, vh_in, eta, dt, u_bc_accel, v_bc_accel, &
                 fluxes, CS%pbce, CS%eta_PF, uh, vh, CS%u_accel_bt, &
-                CS%v_accel_bt, eta_pred, CS%uhbt, CS%vhbt, G, &
+                CS%v_accel_bt, eta_pred, CS%uhbt, CS%vhbt, G, GV, &
                 CS%barotropic_CSp, CS%visc_rem_u, CS%visc_rem_v, &
                 uhbt_out = uhbt_out, vhbt_out = vhbt_out, OBC = CS%OBC, &
                 BT_cont = CS%BT_cont, eta_PF_start = eta_PF_start, &
@@ -644,7 +643,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
         call pass_vector(CS%BT_cont%h_u, CS%BT_cont%h_v, G%Domain, &
                          To_All+SCALAR_PAIR, CGRID_NE)
         call cpu_clock_end(id_clock_pass)
-        call legacy_btcalc(h, G, CS%barotropic_CSp, CS%BT_cont%h_u, CS%BT_cont%h_v)
+        call legacy_btcalc(h, G, GV, CS%barotropic_CSp, CS%BT_cont%h_u, CS%BT_cont%h_v)
       endif
     endif
 
@@ -654,10 +653,10 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
 
     u_init => u ; v_init => v
     call cpu_clock_begin(id_clock_btstep)
-    if (calc_dtbt) call legacy_set_dtbt(G, CS%barotropic_CSp, eta, CS%pbce)
+    if (calc_dtbt) call legacy_set_dtbt(G, GV, CS%barotropic_CSp, eta, CS%pbce)
     call legacy_btstep(.false., u, v, eta, dt, u_bc_accel, v_bc_accel, &
                 fluxes, CS%pbce, CS%eta_PF, u_av, v_av, CS%u_accel_bt, &
-                CS%v_accel_bt, eta_pred, CS%uhbt, CS%vhbt, G, CS%barotropic_CSp,&
+                CS%v_accel_bt, eta_pred, CS%uhbt, CS%vhbt, G, GV, CS%barotropic_CSp,&
                 CS%visc_rem_u, CS%visc_rem_v, OBC=CS%OBC, &
                 BT_cont = CS%BT_cont, eta_PF_start=eta_PF_start, &
                 taux_bot=taux_bot, tauy_bot=tauy_bot, &
@@ -682,13 +681,13 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
   if (CS%debug) then
     call uchksum(up,"Predictor 1 u",G,haloshift=0)
     call vchksum(vp,"Predictor 1 v",G,haloshift=0)
-    call hchksum(G%GV%H_to_kg_m2*h,"Predictor 1 h",G,haloshift=1)
-    call uchksum(G%GV%H_to_kg_m2*uh,"Predictor 1 uh",G,haloshift=2)
-    call vchksum(G%GV%H_to_kg_m2*vh,"Predictor 1 vh",G,haloshift=2)
-!   call MOM_state_chksum("Predictor 1", up, vp, h, uh, vh, G, haloshift=1)
+    call hchksum(GV%H_to_kg_m2*h,"Predictor 1 h",G,haloshift=1)
+    call uchksum(GV%H_to_kg_m2*uh,"Predictor 1 uh",G,haloshift=2)
+    call vchksum(GV%H_to_kg_m2*vh,"Predictor 1 vh",G,haloshift=2)
+!   call MOM_state_chksum("Predictor 1", up, vp, h, uh, vh, G, GV, haloshift=1)
     call MOM_accel_chksum("Predictor accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
-             CS%diffu, CS%diffv, G, CS%pbce, CS%u_accel_bt, CS%v_accel_bt)
-    call MOM_state_chksum("Predictor 1 init", u_init, v_init, h, uh, vh, G, haloshift=2)
+             CS%diffu, CS%diffv, G, GV, CS%pbce, CS%u_accel_bt, CS%v_accel_bt)
+    call MOM_state_chksum("Predictor 1 init", u_init, v_init, h, uh, vh, G, GV, haloshift=2)
     call check_redundant("Predictor 1 up", up, vp, G)
     call check_redundant("Predictor 1 uh", uh, vh, G)
   endif
@@ -755,7 +754,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
 ! eta_cor = ...                 (hidden inside CS%barotropic_CSp)
   call cpu_clock_begin(id_clock_btcalc)
   call legacy_bt_mass_source(hp, eta_pred, fluxes, .false., dt_therm, &
-                      dt_since_flux+dt, G, CS%barotropic_CSp)
+                      dt_since_flux+dt, G, GV, CS%barotropic_CSp)
   call cpu_clock_end(id_clock_btcalc)
 
   if (CS%begw /= 0.0) then
@@ -769,7 +768,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
 ! PFu = d/dx M(hp,T,S)
 ! pbce = dM/deta
     call cpu_clock_begin(id_clock_pres)
-    call PressureForce(hp, tv, CS%PFu, CS%PFv, G, &
+    call PressureForce(hp, tv, CS%PFu, CS%PFv, G, GV, &
                        CS%PressureForce_CSp, CS%ALE_CSp, &
                        p_surf, CS%pbce, CS%eta_PF)
     call cpu_clock_end(id_clock_pres)
@@ -790,15 +789,15 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
     call pass_vector(CS%BT_cont%h_u, CS%BT_cont%h_v, G%Domain, &
                      To_All+SCALAR_PAIR, CGRID_NE)
     call cpu_clock_end(id_clock_pass)
-    call legacy_btcalc(h, G, CS%barotropic_CSp, CS%BT_cont%h_u, CS%BT_cont%h_v)
+    call legacy_btcalc(h, G, GV, CS%barotropic_CSp, CS%BT_cont%h_u, CS%BT_cont%h_v)
   endif
 
   if (CS%debug) then
-    call MOM_state_chksum("Predictor ", up, vp, hp, uh, vh, G)
+    call MOM_state_chksum("Predictor ", up, vp, hp, uh, vh, G, GV)
     call uchksum(u_av,"Predictor avg u",G,haloshift=1)
     call vchksum(v_av,"Predictor avg v",G,haloshift=1)
-    call hchksum(G%GV%H_to_kg_m2*h_av,"Predictor avg h",G,haloshift=0)
-  ! call MOM_state_chksum("Predictor avg ", u_av, v_av,  h_av,uh, vh, G)
+    call hchksum(GV%H_to_kg_m2*h_av,"Predictor avg h",G,haloshift=0)
+  ! call MOM_state_chksum("Predictor avg ", u_av, v_av,  h_av,uh, vh, G, GV)
     call check_redundant("Predictor up ", up, vp, G)
     call check_redundant("Predictor uh ", uh, vh, G)
   endif
@@ -840,7 +839,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
   if (CS%flux_BT_coupling) then
     call legacy_btstep(.true., uh_in, vh_in, eta, dt, u_bc_accel, v_bc_accel, &
                 fluxes, CS%pbce, CS%eta_PF, uh, vh, CS%u_accel_bt, &
-                CS%v_accel_bt, eta, CS%uhbt, CS%vhbt, G, &
+                CS%v_accel_bt, eta, CS%uhbt, CS%vhbt, G, GV, &
                 CS%barotropic_CSp, CS%visc_rem_u, CS%visc_rem_v, etaav=eta_av, &
                 uhbt_out = uhbt_out, vhbt_out = vhbt_out, OBC=CS%OBC, &
                 BT_cont = CS%BT_cont, eta_PF_start = eta_PF_start, &
@@ -852,7 +851,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
 
     call legacy_btstep(.false., u, v, eta, dt, u_bc_accel, v_bc_accel, &
                 fluxes, CS%pbce, CS%eta_PF, u_av, v_av, CS%u_accel_bt, &
-                CS%v_accel_bt, eta, CS%uhbt, CS%vhbt, G, &
+                CS%v_accel_bt, eta, CS%uhbt, CS%vhbt, G, GV, &
                 CS%barotropic_CSp, CS%visc_rem_u, CS%visc_rem_v, &
                 etaav=eta_av, OBC=CS%OBC, &
                 BT_cont = CS%BT_cont, eta_PF_start=eta_PF_start, &
@@ -881,12 +880,12 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
   if (CS%debug) then
     call uchksum(u,"Corrector 1 u",G,haloshift=0)
     call vchksum(v,"Corrector 1 v",G,haloshift=0)
-    call hchksum(G%GV%H_to_kg_m2*h,"Corrector 1 h",G,haloshift=2)
-    call uchksum(G%GV%H_to_kg_m2*uh,"Corrector 1 uh",G,haloshift=2)
-    call vchksum(G%GV%H_to_kg_m2*vh,"Corrector 1 vh",G,haloshift=2)
-  ! call MOM_state_chksum("Corrector 1", u, v, h, uh, vh, G, haloshift=1)
+    call hchksum(GV%H_to_kg_m2*h,"Corrector 1 h",G,haloshift=2)
+    call uchksum(GV%H_to_kg_m2*uh,"Corrector 1 uh",G,haloshift=2)
+    call vchksum(GV%H_to_kg_m2*vh,"Corrector 1 vh",G,haloshift=2)
+  ! call MOM_state_chksum("Corrector 1", u, v, h, uh, vh, G, GV, haloshift=1)
     call MOM_accel_chksum("Corrector accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
-             CS%diffu, CS%diffv, G, CS%pbce, CS%u_accel_bt, CS%v_accel_bt)
+             CS%diffu, CS%diffv, G, GV, CS%pbce, CS%u_accel_bt, CS%v_accel_bt)
   endif
 
 ! u <- u + dt d/dz visc d/dz u
@@ -1039,11 +1038,11 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
   if (CS%id_du_adj > 0) call post_data(CS%id_du_adj, CS%ADp%du_other, CS%diag)
   if (CS%id_dv_adj > 0) call post_data(CS%id_dv_adj, CS%ADp%dv_other, CS%diag)
   if (CS%debug) then
-    call MOM_state_chksum("Corrector ", u, v, h, uh, vh, G)
+    call MOM_state_chksum("Corrector ", u, v, h, uh, vh, G, GV)
     call uchksum(u_av,"Corrector avg u",G,haloshift=1)
     call vchksum(v_av,"Corrector avg v",G,haloshift=1)
-    call hchksum(G%GV%H_to_kg_m2*h_av,"Corrector avg h",G,haloshift=1)
- !  call MOM_state_chksum("Corrector avg ", u_av, v_av, h_av, uh, vh, G)
+    call hchksum(GV%H_to_kg_m2*h_av,"Corrector avg h",G,haloshift=1)
+ !  call MOM_state_chksum("Corrector avg ", u_av, v_av, h_av, uh, vh, G, GV)
   endif
 
 end subroutine step_MOM_dyn_legacy_split
@@ -1102,8 +1101,9 @@ end subroutine adjustments_dyn_legacy_split
 
 ! =============================================================================
 
-subroutine register_restarts_dyn_legacy_split(G, param_file, CS, restart_CS, uh, vh)
+subroutine register_restarts_dyn_legacy_split(G, GV, param_file, CS, restart_CS, uh, vh)
   type(ocean_grid_type),         intent(in)    :: G
+  type(verticalGrid_type),       intent(in)    :: GV
   type(param_file_type),         intent(in)    :: param_file
   type(MOM_dyn_legacy_split_CS), pointer       :: CS
   type(MOM_restart_CS),          pointer       :: restart_CS
@@ -1114,6 +1114,7 @@ subroutine register_restarts_dyn_legacy_split(G, param_file, CS, restart_CS, uh,
 ! have the ability to be recreated if they are not present in a restart file.
 
 ! Arguments: G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (inout)   CS - The control structure set up by initialize_dyn_legacy_split.
@@ -1155,12 +1156,12 @@ subroutine register_restarts_dyn_legacy_split(G, param_file, CS, restart_CS, uh,
   ALLOC_(CS%eta(isd:ied,jsd:jed))       ; CS%eta(:,:) = 0.0
   ALLOC_(CS%u_av(IsdB:IedB,jsd:jed,nz)) ; CS%u_av(:,:,:) = 0.0
   ALLOC_(CS%v_av(isd:ied,JsdB:JedB,nz)) ; CS%v_av(:,:,:) = 0.0
-  ALLOC_(CS%h_av(isd:ied,jsd:jed,nz))   ; CS%h_av(:,:,:) = G%GV%Angstrom
+  ALLOC_(CS%h_av(isd:ied,jsd:jed,nz))   ; CS%h_av(:,:,:) = GV%Angstrom
   ALLOC_(CS%uhbt_in(IsdB:IedB,jsd:jed)) ; CS%uhbt_in(:,:) = 0.0
   ALLOC_(CS%vhbt_in(isd:ied,JsdB:JedB)) ; CS%vhbt_in(:,:) = 0.0
 
-  thickness_units = get_thickness_units(G%GV)
-  flux_units = get_flux_units(G%GV)
+  thickness_units = get_thickness_units(GV)
+  flux_units = get_flux_units(GV)
 
   vd = var_desc("sfc",thickness_units,"Free surface Height",'h','1')
   call register_restart_field(CS%eta, vd, .false., restart_CS)
@@ -1186,7 +1187,7 @@ subroutine register_restarts_dyn_legacy_split(G, param_file, CS, restart_CS, uh,
   vd = var_desc("diffv","meter second-2","Meridional horizontal viscous acceleration",'v','L')
   call register_restart_field(CS%diffv, vd, .false., restart_CS)
 
-  call register_legacy_barotropic_restarts(G, param_file, &
+  call register_legacy_barotropic_restarts(G, GV, param_file, &
            CS%barotropic_CSp, restart_CS)
 
   if (readjust_bt_trans) then
@@ -1201,7 +1202,7 @@ subroutine register_restarts_dyn_legacy_split(G, param_file, CS, restart_CS, uh,
 
 end subroutine register_restarts_dyn_legacy_split
 
-subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, param_file, &
+subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, GV, param_file, &
                       diag, CS, restart_CS, dt, Accel_diag, Cont_diag, MIS, &
                       VarMix, MEKE, OBC, ALE_CSp, setVisc_CSp, visc, dirs, ntrunc)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: u
@@ -1212,6 +1213,7 @@ subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, param_file
   real, dimension(NIMEM_,NJMEM_),         intent(inout) :: eta
   type(time_type),                target, intent(in)    :: Time
   type(ocean_grid_type),                  intent(inout) :: G
+  type(verticalGrid_type),                intent(in)    :: GV
   type(param_file_type),                  intent(in)    :: param_file
   type(diag_ctrl),                target, intent(inout) :: diag
   type(MOM_dyn_legacy_split_CS),          pointer       :: CS
@@ -1364,10 +1366,10 @@ subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, param_file
   call continuity_init(Time, G, param_file, diag, CS%continuity_CSp)
   call CoriolisAdv_init(Time, G, param_file, diag, CS%ADp, CS%CoriolisAdv_CSp)
   if (use_tides) call tidal_forcing_init(Time, G, param_file, CS%tides_CSp)
-  call PressureForce_init(Time, G, param_file, diag, CS%PressureForce_CSp, &
+  call PressureForce_init(Time, G, GV, param_file, diag, CS%PressureForce_CSp, &
                           CS%tides_CSp)
   call hor_visc_init(Time, G, param_file, diag, CS%hor_visc_CSp)
-  call vertvisc_init(MIS, Time, G, G%GV, param_file, diag, CS%ADp, dirs, &
+  call vertvisc_init(MIS, Time, G, GV, param_file, diag, CS%ADp, dirs, &
                      ntrunc, CS%vertvisc_CSp)
   if (.not.associated(setVisc_CSp)) call MOM_error(FATAL, &
     "initialize_dyn_legacy_split called with setVisc_CSp unassociated.")
@@ -1385,7 +1387,7 @@ subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, param_file
     ! eta is the mass of ocean per unit area.  eta always has the same
     ! dimensions as h, either m or kg m-3.
     !   CS%eta(:,:) = 0.0 already from initialization.
-    if (G%GV%Boussinesq) then
+    if (GV%Boussinesq) then
       do j=js,je ; do i=is,ie ; CS%eta(i,j) = -G%bathyT(i,j) ; enddo ; enddo
     endif
     do k=1,nz ; do j=js,je ; do i=is,ie
@@ -1395,13 +1397,13 @@ subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, param_file
   ! Copy eta into an output array.
   do j=js,je ; do i=is,ie ; eta(i,j) = CS%eta(i,j) ; enddo ; enddo
 
-  call legacy_barotropic_init(u, v, h, CS%eta, Time, G, param_file, diag, &
+  call legacy_barotropic_init(u, v, h, CS%eta, Time, G, GV, param_file, diag, &
                        CS%barotropic_CSp, restart_CS, CS%BT_cont, CS%tides_CSp)
 
   if (.not. query_initialized(CS%diffu,"diffu",restart_CS) .or. &
       .not. query_initialized(CS%diffv,"diffv",restart_CS)) &
     call horizontal_viscosity(u, v, h, CS%diffu, CS%diffv, MEKE, VarMix, &
-                              G, G%GV, CS%hor_visc_CSp)
+                              G, GV, CS%hor_visc_CSp)
   if (.not. query_initialized(CS%u_av,"u2", restart_CS) .or. &
       .not. query_initialized(CS%u_av,"v2", restart_CS)) then
     CS%u_av(:,:,:) = u(:,:,:)
@@ -1440,7 +1442,7 @@ subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, param_file
   call pass_vector(uh, vh, G%Domain)
   call cpu_clock_end(id_clock_pass_init)
 
-  flux_units = get_flux_units(G%GV)
+  flux_units = get_flux_units(GV)
   CS%id_uh = register_diag_field('ocean_model', 'uh', diag%axesCuL, Time, &
       'Zonal Thickness Flux', flux_units)
   CS%id_vh = register_diag_field('ocean_model', 'vh', diag%axesCvL, Time, &

@@ -51,6 +51,7 @@ use MOM_error_handler, only : MOM_error, FATAL
 use MOM_file_parser, only : log_version
 use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : thermo_var_ptrs
+use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : int_specific_vol_dp
 
 implicit none ; private

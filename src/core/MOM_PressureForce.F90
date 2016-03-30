@@ -60,6 +60,7 @@ use MOM_PressureForce_Mont, only : PressureForce_Mont_Bouss, PressureForce_Mont_
 use MOM_PressureForce_Mont, only : PressureForce_Mont_init, PressureForce_Mont_CS
 use MOM_tidal_forcing, only : calc_tidal_forcing, tidal_forcing_CS
 use MOM_variables, only : thermo_var_ptrs
+use MOM_verticalGrid, only : verticalGrid_type
 use MOM_ALE, only: ALE_CS
 implicit none ; private
 
@@ -76,12 +77,13 @@ end type PressureForce_CS
 
 contains
 
-subroutine PressureForce(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce, eta)
+subroutine PressureForce(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, pbce, eta)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)  :: h
   type(thermo_var_ptrs),                  intent(in)  :: tv
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(out) :: PFu
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out) :: PFv
   type(ocean_grid_type),                  intent(in)  :: G
+  type(verticalGrid_type),                intent(in)  :: GV
   type(PressureForce_CS),                 pointer     :: CS
   type(ALE_CS),                           pointer     :: ALE_CSp
   real, dimension(:,:),                  optional, pointer     :: p_atm
@@ -94,34 +96,36 @@ subroutine PressureForce(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce, eta)
 ! following conditional block.
 
   if (CS%Analytic_FV_PGF) then
-    if (G%GV%Boussinesq) then
-      call PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS%PressureForce_AFV_CSp, &
+    if (GV%Boussinesq) then
+      call PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS%PressureForce_AFV_CSp, &
                                    ALE_CSp, p_atm, pbce, eta)
     else
-      call PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS%PressureForce_AFV_CSp, &
+      call PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS%PressureForce_AFV_CSp, &
                                       p_atm, pbce, eta)
     endif
   else
-    if (G%GV%Boussinesq) then
-      call PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, CS%PressureForce_Mont_CSp, &
+    if (GV%Boussinesq) then
+      call PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS%PressureForce_Mont_CSp, &
                                     p_atm, pbce, eta)
     else
-      call PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, CS%PressureForce_Mont_CSp, &
+      call PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS%PressureForce_Mont_CSp, &
                                        p_atm, pbce, eta)
     endif
   endif
 
 end subroutine Pressureforce
 
-subroutine PressureForce_init(Time, G, param_file, diag, CS, tides_CSp)
+subroutine PressureForce_init(Time, G, GV, param_file, diag, CS, tides_CSp)
   type(time_type), target, intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
+  type(verticalGrid_type), intent(in)    :: GV
   type(param_file_type),   intent(in)    :: param_file
   type(diag_ctrl), target, intent(inout) :: diag
   type(PressureForce_CS),  pointer       :: CS
   type(tidal_forcing_CS), optional, pointer :: tides_CSp
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in)      diag - A structure that is used to regulate diagnostic output.
@@ -149,10 +153,10 @@ subroutine PressureForce_init(Time, G, param_file, diag, CS, tides_CSp)
                  "described in Adcroft et al., O. Mod. (2008).", default=.true.)
 
   if (CS%Analytic_FV_PGF) then
-    call PressureForce_AFV_init(Time, G, param_file, diag, &
+    call PressureForce_AFV_init(Time, G, GV, param_file, diag, &
              CS%PressureForce_AFV_CSp, tides_CSp)
   else
-    call PressureForce_Mont_init(Time, G, param_file, diag, &
+    call PressureForce_Mont_init(Time, G, GV, param_file, diag, &
              CS%PressureForce_Mont_CSp, tides_CSp)
   endif
 

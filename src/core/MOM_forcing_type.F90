@@ -14,6 +14,7 @@ use MOM_grid,          only : ocean_grid_type
 use MOM_shortwave_abs, only : sumSWoverBands, optics_type
 use MOM_spatial_means, only : global_area_integral, global_area_mean
 use MOM_variables,     only : surface, thermo_var_ptrs
+use MOM_verticalGrid,  only : verticalGrid_type
 
 use coupler_types_mod, only : coupler_2d_bc_type
 
