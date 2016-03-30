@@ -243,17 +243,21 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, param_file, &
     case ( REGRIDDING_RHO )
       do j=js,je ; do i=is,ie
         xi0 = 0.0;
+        xi1 = 0.0;
+!        write(*,*)'max/min h(i,j,k)', maxval(h(i,j,:)), minval(h(i,j,:))
         do k = 1,nz
-          xi1 = xi0 + h(i,j,k) / G%max_depth
+          xi1 = xi1 + (h(i,j,k) / G%max_depth)
+!          write(*,*)'xi1,xi0,G%max_depth',xi1,xi0,G%max_depth
 !          z = (G%bathyT(i,j)/(nz-1))* (k -1)
 !          z = (G%max_depth/(nz-1))* (k -1)
 
 !          S(i,j,k) = S_REF + (S_RANGE*z/Bmax)
-          S(i,j,k) = S_REF + (S_RANGE*(xi0 + xi1))
+          S(i,j,k) = S_REF + (S_RANGE*xi1)
 !          T(i,j,k) = T_REF + (T_RANGE*z/Bmax)
-          T(i,j,k) = T_REF + (T_RANGE*(xi0 + xi1))
-          xi0 = xi1;
+          T(i,j,k) = T_REF + (T_RANGE*xi1)
+!          xi0 = xi0 + h(i,j,k);
         enddo
+!       write(*,*)'max/min(S(i,j,:))',maxval(S(i,j,:)), minval(S(i,j,:))
       enddo ; enddo
     
    case default
