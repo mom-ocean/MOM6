@@ -24,6 +24,8 @@ use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
 use MOM_restart, only : restore_state, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, set_up_sponge_ML_density
 use MOM_sponge, only : initialize_sponge, sponge_CS
+use MOM_ALE_sponge, only : set_up_ALE_sponge_field, initialize_ALE_sponge
+use MOM_ALE_sponge, only : ALE_sponge_CS
 use MOM_string_functions, only : uppercase
 use MOM_time_manager, only : time_type, set_time
 use MOM_tracer_registry, only : add_tracer_OBC_values, tracer_registry_type
@@ -80,6 +82,7 @@ public MOM_initialize_state
 type, public :: MOM_initialization_struct
   type(tracer_registry_type), pointer :: tracer_Reg => NULL()
   type(sponge_CS), pointer :: sponge_CSp => NULL()
+  type(ALE_sponge_CS), pointer :: ALE_sponge_CSp => NULL()
   type(ocean_OBC_type), pointer :: OBC => NULL()
 end type MOM_initialization_struct
 
@@ -122,7 +125,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
   character(len=200) :: filename2  ! The name of an input files.
   character(len = 200) :: inputdir ! The directory where NetCDF input files are.
   character(len=200) :: config
-  logical :: from_Z_file
+  logical :: from_Z_file, useALE
   logical :: new_sim
   integer :: write_geom
   logical :: use_temperature, use_sponge
@@ -372,18 +375,26 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
                  " \t\t DOME sill-overflow test case. \n"//&
                  " \t USER - call a user modified routine.", default="file")
 
-    select case (trim(config))
-      case ("DOME"); call DOME_initialize_sponges(G, tv, PF, CS%sponge_CSp)
-      case ("USER"); call user_initialize_sponges(G, use_temperature, tv, &
-                                                  PF, CS%sponge_CSp, h)
-      case ("phillips"); call Phillips_initialize_sponges(G, use_temperature, tv, &
-                                                  PF, CS%sponge_CSp, h)
-      case ("file"); call initialize_sponges_file(G, use_temperature, tv, &
-                                                  PF, CS%sponge_CSp)
-      case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
-             "Unrecognized sponge configuration "//trim(config))
-    end select
+    if (useALE) then
+      select case (trim(config))
+        case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
+             "Unrecognized ALE sponge configuration "//trim(config))
+      end select
 
+    else
+
+      select case (trim(config))
+        case ("DOME"); call DOME_initialize_sponges(G, tv, PF, CS%sponge_CSp)
+        case ("USER"); call user_initialize_sponges(G, use_temperature, tv, &
+                                                 PF, CS%sponge_CSp, h)
+        case ("phillips"); call Phillips_initialize_sponges(G, use_temperature, tv, &
+                                                 PF, CS%sponge_CSp, h)
+        case ("file"); call initialize_sponges_file(G, use_temperature, tv, &
+                                                 PF, CS%sponge_CSp)
+        case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
+               "Unrecognized sponge configuration "//trim(config))
+      end select
+    endif
   endif
 
 ! This subroutine call sets optional open boundary conditions.

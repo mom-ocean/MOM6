@@ -50,6 +50,7 @@ use MOM_set_diffusivity,     only : set_diffusivity_init, set_diffusivity_end
 use MOM_set_diffusivity,     only : set_diffusivity_CS
 use MOM_shortwave_abs,       only : absorbRemainingSW, optics_type
 use MOM_sponge,              only : apply_sponge, sponge_CS
+use MOM_ALE_sponge,          only : apply_ALE_sponge, ALE_sponge_CS
 use MOM_time_manager,        only : operator(<=), time_type ! for testing itides (BDM)
 use MOM_tracer_flow_control, only : call_tracer_column_fns, tracer_flow_control_CS
 use MOM_variables,           only : thermo_var_ptrs, vertvisc_type, accel_diag_ptrs
@@ -184,6 +185,7 @@ type, public :: diabatic_CS ; private
   type(opacity_CS),             pointer :: opacity_CSp           => NULL()
   type(set_diffusivity_CS),     pointer :: set_diff_CSp          => NULL()
   type(sponge_CS),              pointer :: sponge_CSp            => NULL()
+  type(ALE_sponge_CS),          pointer :: ALE_sponge_CSp        => NULL()
   type(tracer_flow_control_CS), pointer :: tracer_flow_CSp       => NULL()
   type(optics_type),            pointer :: optics                => NULL()
   type(diag_to_Z_CS),           pointer :: diag_to_Z_CSp         => NULL()
@@ -1148,24 +1150,38 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
 
   ! sponges
   if (CS%use_sponge) then
-    call cpu_clock_begin(id_clock_sponge)
-    if (CS%bulkmixedlayer .and. ASSOCIATED(tv%eqn_of_state)) then
-      do i=is,ie ; p_ref_cv(i) = tv%P_Ref ; enddo
-!$OMP parallel do default(none) shared(js,je,p_ref_cv,Rcv_ml,is,ie,tv)
-      do j=js,je
-        call calculate_density(tv%T(:,j,1), tv%S(:,j,1), p_ref_cv, Rcv_ml(:,j), &
-                               is, ie-is+1, tv%eqn_of_state)
-      enddo
-      call apply_sponge(h, dt, G, GV, ea, eb, CS%sponge_CSp, Rcv_ml)
+
+    if (associated(CS%ALE_sponge_CSp)) then
+      ! ALE sponge
+      call cpu_clock_begin(id_clock_sponge)
+      call apply_ALE_sponge(h, dt, G, CS%ALE_sponge_CSp)
+      call cpu_clock_end(id_clock_sponge)
+      if (CS%debug) then
+          call MOM_state_chksum("apply_ALE_sponge ", u, v, h, G, GV)
+          call MOM_thermovar_chksum("apply_ALE_sponge ", tv, G)
+      endif
     else
-      call apply_sponge(h, dt, G, GV, ea, eb, CS%sponge_CSp)
+      ! Layer mode sponge
+      call cpu_clock_begin(id_clock_sponge)
+      if (CS%bulkmixedlayer .and. ASSOCIATED(tv%eqn_of_state)) then
+        do i=is,ie ; p_ref_cv(i) = tv%P_Ref ; enddo
+!$OMP parallel do default(none) shared(js,je,p_ref_cv,Rcv_ml,is,ie,tv)
+        do j=js,je
+           call calculate_density(tv%T(:,j,1), tv%S(:,j,1), p_ref_cv, Rcv_ml(:,j), &
+                               is, ie-is+1, tv%eqn_of_state)
+        enddo
+        call apply_sponge(h, dt, G, GV, ea, eb, CS%sponge_CSp, Rcv_ml)
+      else
+        call apply_sponge(h, dt, G, GV, ea, eb, CS%sponge_CSp)
+      endif
+      call cpu_clock_end(id_clock_sponge)
+      if (CS%debug) then
+        call MOM_state_chksum("apply_sponge ", u, v, h, G, GV)
+        call MOM_thermovar_chksum("apply_sponge ", tv, G)
+      endif
     endif
-    call cpu_clock_end(id_clock_sponge)
-    if (CS%debug) then
-      call MOM_state_chksum("apply_sponge ", u, v, h, G, GV)
-      call MOM_thermovar_chksum("apply_sponge ", tv, G)
-    endif
-  endif
+
+  endif ! CS%use_sponge
 
 
 !$OMP parallel default(none) shared(is,ie,js,je,nz,CDp,Idt,G,GV,ea,eb,CS,hold) private(net_ent)
@@ -1691,7 +1707,8 @@ end subroutine adiabatic_driver_init
 
 !> This routine initializes the diabatic driver module.
 subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, &
-                                ADp, CDp, CS, tracer_flow_CSp, sponge_CSp, diag_to_Z_CSp)
+                                ADp, CDp, CS, tracer_flow_CSp, sponge_CSp, &
+                                ALE_sponge_CSp, diag_to_Z_CSp)
   type(time_type),         intent(in)    :: Time             !< model time
   type(ocean_grid_type),   intent(inout) :: G                !< model grid structure
   type(verticalGrid_type), intent(in)    :: GV               !< model vertical grid structure
@@ -1704,6 +1721,7 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
   type(diabatic_CS),       pointer       :: CS               !< module control structure
   type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp  !< pointer to control structure of tracer flow control module
   type(sponge_CS),         pointer       :: sponge_CSp       !< pointer to the sponge module control structure
+  type(ALE_sponge_CS),     pointer       :: ALE_sponge_CSp   !< pointer to the ALE sponge module control structure
   type(diag_to_Z_CS),      pointer       :: diag_to_Z_CSp    !< pointer to the Z-diagnostics control structure
 
   real    :: Kd
@@ -1732,6 +1750,7 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
   CS%diag => diag
   if (associated(tracer_flow_CSp)) CS%tracer_flow_CSp => tracer_flow_CSp
   if (associated(sponge_CSp))      CS%sponge_CSp      => sponge_CSp
+  if (associated(ALE_sponge_CSp))  CS%ALE_sponge_CSp  => ALE_sponge_CSp
   if (associated(diag_to_Z_CSp))   CS%diag_to_Z_CSp   => diag_to_Z_CSp
 
   CS%useALEalgorithm = useALEalgorithm
