@@ -99,6 +99,7 @@ use MOM_PressureForce,         only : PressureForce, PressureForce_init, Pressur
 use MOM_set_visc,              only : set_viscous_BBL, set_viscous_ML, set_visc_init
 use MOM_set_visc,              only : set_visc_register_restarts, set_visc_CS
 use MOM_sponge,                only : init_sponge_diags, sponge_CS
+use MOM_ALE_sponge,            only : init_ALE_sponge_diags, ALE_sponge_CS
 use MOM_thickness_diffuse,     only : thickness_diffuse, thickness_diffuse_init, thickness_diffuse_CS
 use MOM_tidal_forcing,         only : tidal_forcing_init, tidal_forcing_CS
 use MOM_tracer_advect,         only : advect_tracer, tracer_advect_init
@@ -1866,13 +1867,17 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   if (associated(init_CS%sponge_CSp)) &
     call init_sponge_diags(Time, G, diag, init_CS%sponge_CSp)
+
+  if (associated(init_CS%ALE_sponge_CSp)) &
+    call init_ALE_sponge_diags(Time, G, diag, init_CS%ALE_sponge_CSp)
+
   if (CS%adiabatic) then
     call adiabatic_driver_init(Time, G, param_file, diag, CS%diabatic_CSp, &
                                CS%tracer_flow_CSp, CS%diag_to_Z_CSp)
   else
     call diabatic_driver_init(Time, G, GV, param_file, CS%use_ALE_algorithm, diag,     &
                               CS%ADp, CS%CDp, CS%diabatic_CSp, CS%tracer_flow_CSp, &
-                              init_CS%sponge_CSp, CS%diag_to_Z_CSp)
+                              init_CS%sponge_CSp, init_CS%ALE_sponge_CSp, CS%diag_to_Z_CSp)
   endif
 
   call tracer_advect_init(Time, G, param_file, diag, CS%tracer_adv_CSp)
@@ -1915,7 +1920,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   new_sim = ((dirs%input_filename(1:1) == 'n') .and. &
              (LEN_TRIM(dirs%input_filename) == 1))
   call tracer_flow_control_init(.not.new_sim, Time, G, CS%h, param_file, CS%OBC, &
-           CS%tracer_flow_CSp, init_CS%sponge_CSp, CS%diag_to_Z_CSp)
+           CS%tracer_flow_CSp, init_CS%sponge_CSp, init_CS%ALE_sponge_CSp, CS%diag_to_Z_CSp)
 
   call cpu_clock_begin(id_clock_pass_init)
   !--- set up group pass for u,v,T,S and h. pass_uv_T_S_h also is used in step_MOM

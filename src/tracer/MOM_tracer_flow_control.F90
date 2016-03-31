@@ -37,6 +37,7 @@ use MOM_forcing_type, only : forcing, optics_type
 use MOM_grid, only : ocean_grid_type
 use MOM_restart, only : MOM_restart_CS
 use MOM_sponge, only : sponge_CS
+use MOM_ALE_sponge, only : ALE_sponge_CS
 use MOM_tracer_registry, only : tracer_registry_type
 use MOM_variables, only : surface, ocean_OBC_type, thermo_var_ptrs
 
@@ -187,8 +188,8 @@ subroutine call_tracer_register(G, param_file, CS, diag, tr_Reg, restart_CS)
 
 end subroutine call_tracer_register
 
-subroutine tracer_flow_control_init(restart, day, G, h, param_file, OBC, CS, sponge_CSp, &
-                                    diag_to_Z_CSp)
+subroutine tracer_flow_control_init(restart, day, G, h, param_file, OBC, & 
+                                CS, sponge_CSp, ALE_sponge_CSp, diag_to_Z_CSp)
   logical,                               intent(in) :: restart
   type(time_type), target,               intent(in) :: day
   type(ocean_grid_type),                 intent(inout) :: G
@@ -197,6 +198,7 @@ subroutine tracer_flow_control_init(restart, day, G, h, param_file, OBC, CS, spo
   type(ocean_OBC_type),                  pointer    :: OBC
   type(tracer_flow_control_CS),          pointer    :: CS
   type(sponge_CS),                       pointer    :: sponge_CSp
+  type(ALE_sponge_CS),                   pointer    :: ALE_sponge_CSp
   type(diag_to_Z_CS),                    pointer    :: diag_to_Z_CSp
 !   This subroutine calls all registered tracer initialization
 ! subroutines.
@@ -212,6 +214,7 @@ subroutine tracer_flow_control_init(restart, day, G, h, param_file, OBC, CS, spo
 !                 call_tracer_register.
 !  (in/out)  sponge_CSp - A pointer to the control structure for the sponges, if
 !                         they are in use.  Otherwise this may be unassociated.
+!  (in/out)  ALE_sponge_CSp - A pointer to the control structure for the ALE sponges, if they are in use.  Otherwise this may be unassociated.
 !  (in/out)  diag_to_Z_Csp - A pointer to the control structure for diagnostics
 !                            in depth space.
   if (.not. associated(CS)) call MOM_error(FATAL, "tracer_flow_control_init: "// &
@@ -238,8 +241,8 @@ subroutine tracer_flow_control_init(restart, day, G, h, param_file, OBC, CS, spo
                                 sponge_CSp, diag_to_Z_CSp)
 #ifdef _USE_GENERIC_TRACER
   if (CS%use_MOM_generic_tracer) &
-    call initialize_MOM_generic_tracer(restart, day, G, h, param_file, OBC, CS%MOM_generic_tracer_CSp, &
-                                sponge_CSp, diag_to_Z_CSp)
+    call initialize_MOM_generic_tracer(restart, day, G, h, param_file, OBC, &
+        CS%MOM_generic_tracer_CSp, sponge_CSp, ALE_sponge_CSp, diag_to_Z_CSp)
 #endif
 
 end subroutine tracer_flow_control_init
