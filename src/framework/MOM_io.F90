@@ -328,13 +328,18 @@ subroutine reopen_file(unit, filename, vars, novars, G, fields, threading, timeu
 
     call mpp_get_info(unit, ndim, nvar, natt, ntime)
 
-    if (nvar /= novars) then
+    if (nvar == -1) then
+      write (mesg,*) "Reopening file ",trim(filename)," apparently had ",nvar,&
+                     " variables. Clobbering and creating file with ",novars," instead."
+      call MOM_error(WARNING,"MOM_io: "//mesg)
+      call create_file(unit, filename, vars, novars, G, fields, threading, timeunit)
+    elseif (nvar /= novars) then
       write (mesg,*) "Reopening file ",trim(filename)," with ",novars,&
                      " variables instead of ",nvar,"."
       call MOM_error(FATAL,"MOM_io: "//mesg)
     endif
 
-    call mpp_get_fields(unit,fields(1:nvar))
+    if (nvar>0) call mpp_get_fields(unit,fields(1:nvar))
 
     ! Check the field names...
 !    do i=1,nvar
