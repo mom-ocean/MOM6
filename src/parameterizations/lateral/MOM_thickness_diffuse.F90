@@ -175,7 +175,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
        .not.( CS%Khth > 0.0 .or. associated(VarMix) .or. MEKE_not_null ) ) return
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  h_neglect = h_neglect
+  h_neglect = GV%H_subroundoff
   H_to_m = GV%H_to_m ; m_to_H = GV%m_to_H
 
   if (MEKE_not_null) then
