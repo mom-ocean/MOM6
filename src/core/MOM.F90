@@ -950,9 +950,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       call enable_averaging(CS%dt_trans, Time_local, CS%diag)
 
       call cpu_clock_begin(id_clock_tracer)
-      call advect_tracer(h, CS%uhtr, CS%vhtr, CS%OBC, CS%dt_trans, G, &
+      call advect_tracer(h, CS%uhtr, CS%vhtr, CS%OBC, CS%dt_trans, G, GV, &
                          CS%tracer_adv_CSp, CS%tracer_Reg)
-      call tracer_hordiff(h, CS%dt_trans, CS%MEKE, CS%VarMix, G, &
+      call tracer_hordiff(h, CS%dt_trans, CS%MEKE, CS%VarMix, G, GV, &
                           CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
       call cpu_clock_end(id_clock_tracer)
       if (showCallTree) call callTree_waypoint("finished tracer advection/diffusion (step_MOM)")
