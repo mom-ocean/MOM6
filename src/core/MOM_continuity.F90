@@ -48,6 +48,7 @@ use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_string_functions, only : uppercase
 use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : ocean_OBC_type, BT_cont_type
+use MOM_verticalGrid, only : verticalGrid_type
 
 implicit none ; private
 
@@ -72,7 +73,7 @@ character(len=20), parameter :: PPM_STRING = "PPM"
 
 contains
 
-subroutine continuity(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
+subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, &
                       visc_rem_u, visc_rem_v, u_cor, v_cor, &
                       uhbt_aux, vhbt_aux, u_cor_aux, v_cor_aux, BT_cont)
   real, intent(in),  dimension(NIMEMB_,NJMEM_,NKMEM_) :: u
@@ -83,6 +84,7 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
   real, intent(out), dimension(NIMEM_,NJMEMB_,NKMEM_) :: vh
   real, intent(in)                                    :: dt
   type(ocean_grid_type), intent(inout)                :: G
+  type(verticalGrid_type), intent(in)                 :: GV
   type(continuity_CS), pointer                        :: CS
   real, intent(in), optional, dimension(NIMEMB_,NJMEM_) :: uhbt
   real, intent(in), optional, dimension(NIMEM_,NJMEMB_) :: vhbt
@@ -108,6 +110,7 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
 !                  in m3 s-1.
 !  (in)      dt - Time increment in s.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 continuity_init.
 !  (in, opt) uhbt - The summed volume flux through zonal faces, m3 s-1.
@@ -150,7 +153,7 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
       " or neither.")
 
   if (CS%continuity_scheme == PPM_SCHEME) then
-    call continuity_PPM(u, v, hin, h, uh, vh, dt, G, CS%PPM_CSp, uhbt, vhbt, OBC, &
+    call continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS%PPM_CSp, uhbt, vhbt, OBC, &
                         visc_rem_u, visc_rem_v, u_cor, v_cor, &
                         uhbt_aux, vhbt_aux, u_cor_aux, v_cor_aux, BT_cont)
   else
@@ -159,14 +162,16 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
 
 end subroutine continuity
 
-subroutine continuity_init(Time, G, param_file, diag, CS)
+subroutine continuity_init(Time, G, GV, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
+  type(verticalGrid_type), intent(in)    :: GV
   type(param_file_type),   intent(in)    :: param_file
   type(diag_ctrl), target, intent(inout) :: diag
   type(continuity_CS),     pointer       :: CS
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in)      diag - A structure that is used to regulate diagnostic output.
@@ -204,7 +209,7 @@ subroutine continuity_init(Time, G, param_file, diag, CS)
   end select
 
   if (CS%continuity_scheme == PPM_SCHEME) then
-    call continuity_PPM_init(Time, G, param_file, diag, CS%PPM_CSp)
+    call continuity_PPM_init(Time, G, GV, param_file, diag, CS%PPM_CSp)
   endif
 
 end subroutine continuity_init

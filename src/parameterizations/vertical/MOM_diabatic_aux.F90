@@ -78,8 +78,7 @@ use MOM_error_handler,     only : MOM_error, FATAL, WARNING, callTree_showQuery
 use MOM_error_handler,     only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,       only : get_param, log_version, param_file_type
 use MOM_forcing_type,      only : forcing, MOM_forcing_chksum
-use MOM_forcing_type,      only : extractFluxes1d, calculateBuoyancyFlux2d
-use MOM_forcing_type,      only : forcing_SinglePointPrint
+use MOM_forcing_type,      only : extractFluxes1d, forcing_SinglePointPrint
 use MOM_grid,              only : ocean_grid_type
 use MOM_io,                only : vardesc
 use MOM_shortwave_abs,     only : absorbRemainingSW, optics_type
@@ -937,7 +936,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
     !                enters to the ocean and participates in pentrative SW heating.
     ! nonpenSW     = non-downwelling SW flux, which is absorbed in ocean surface
     !                (in tandem w/ LW,SENS,LAT); saved only for diagnostic purposes.
-    call extractFluxes1d(G, fluxes, optics, nsw, j, dt,                                   &
+    call extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                               &
                   H_limit_fluxes, CS%use_river_heat_content, CS%use_calving_heat_content, &
                   h2d, T2d, netMassInOut, netMassOut, netHeat, netSalt,                   &
                   Pen_SW_bnd, tv, aggregate_FW_forcing, nonpenSW)

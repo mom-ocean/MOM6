@@ -32,7 +32,7 @@ use MOM_tracer_registry, only : add_tracer_OBC_values, tracer_registry_type
 use MOM_variables, only : thermo_var_ptrs, ocean_OBC_type
 use MOM_variables, only : OBC_NONE, OBC_SIMPLE, OBC_FLATHER_E, OBC_FLATHER_W
 use MOM_variables, only : OBC_FLATHER_N, OBC_FLATHER_S
-use MOM_verticalGrid, only : setVerticalGridAxes
+use MOM_verticalGrid, only : setVerticalGridAxes, verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use MOM_EOS, only : int_specific_vol_dp
 use user_initialization, only : user_initialize_thickness, user_initialize_velocity
@@ -140,6 +140,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
   logical :: apply_OBC_v_flather_north, apply_OBC_v_flather_south
   logical :: convert
   type(EOS_type), pointer :: eos => NULL()
+  type(verticalGrid_type), pointer :: GV => NULL()
   logical :: debug    ! indicates whether to write debugging output
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -150,6 +151,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+  GV => G%GV
 
   call callTree_enter("MOM_initialize_state(), MOM_state_initialization.F90")
   call log_version(PF, mod, version)
@@ -185,14 +187,14 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
                "and salnities from a Z-space file on a latitude- \n"//&
                "longitude grid.", default=.false.)
     ! h will be converted from m to H below
-    h(:,:,:) = G%GV%Angstrom_z
+    h(:,:,:) = GV%Angstrom_z
 
     if (from_Z_file) then
 !     Initialize thickness and T/S from z-coordinate data in a file.
       if (.NOT.use_temperature) call MOM_error(FATAL,"MOM_initialize_state : "//&
          "use_temperature must be true if INIT_LAYERS_FROM_Z_FILE is true")
 
-      call MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
+      call MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
       call pass_var(h, G%Domain)
 
     else
@@ -220,10 +222,10 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
                " \t USER - call a user modified routine.", &
                fail_if_missing=.true.)
       select case (trim(config))
-         case ("file"); call initialize_thickness_from_file(h, G, PF, .false.)
-         case ("thickness_file"); call initialize_thickness_from_file(h, G, PF, .true.)
+         case ("file"); call initialize_thickness_from_file(h, G, GV, PF, .false.)
+         case ("thickness_file"); call initialize_thickness_from_file(h, G, GV, PF, .true.)
          case ("coord"); call ALE_initThicknessToCoord( ALE_CSp, G, h )
-         case ("uniform"); call initialize_thickness_uniform(h, G, PF)
+         case ("uniform"); call initialize_thickness_uniform(h, G, GV, PF)
          case ("DOME"); call DOME_initialize_thickness(h, G, PF)
          case ("benchmark"); call benchmark_initialize_thickness(h, G, PF, &
                                  tv%eqn_of_state, tv%P_Ref)
@@ -266,7 +268,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
                fail_if_missing=.true.)
 !              " \t baroclinic_zone - an analytic baroclinic zone. \n"//&
         select case (trim(config))
-          case ("fit"); call initialize_temp_salt_fit(tv%T, tv%S, G, PF, eos, tv%P_Ref)
+          case ("fit"); call initialize_temp_salt_fit(tv%T, tv%S, G, GV, PF, eos, tv%P_Ref)
           case ("file"); call initialize_temp_salt_from_file(tv%T, tv%S, G, PF)
           case ("benchmark"); call benchmark_init_temperature_salinity(tv%T, tv%S, &
                                    G, PF, eos, tv%P_Ref)
@@ -327,18 +329,18 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
                  "units of m to kg m-2 or vice versa, depending on whether \n"//&
                  "BOUSSINESQ is defined. This does not apply if a restart \n"//&
                  "file is read.", default=.false.)
-    if (convert .and. .not. G%GV%Boussinesq) then
+    if (convert .and. .not. GV%Boussinesq) then
       ! Convert h from m to kg m-2 then to thickness units (H)
-      call convert_thickness(h, G, PF, tv)
-    elseif (G%GV%Boussinesq) then
+      call convert_thickness(h, G, GV, PF, tv)
+    elseif (GV%Boussinesq) then
       ! Convert h from m to thickness units (H)
-      h(:,:,:) = h(:,:,:)*G%GV%m_to_H
+      h(:,:,:) = h(:,:,:)*GV%m_to_H
     else
-      h(:,:,:) = h(:,:,:)*G%GV%kg_m2_to_H
+      h(:,:,:) = h(:,:,:)*GV%kg_m2_to_H
     endif
 
     if (debug) then
-      call hchksum(h*G%GV%H_to_m, "MOM_initialize_state: h ", G, haloshift=1)
+      call hchksum(h*GV%H_to_m, "MOM_initialize_state: h ", G, haloshift=1)
       if ( use_temperature ) call hchksum(tv%T, "MOM_initialize_state: T ", G, haloshift=1)
       if ( use_temperature ) call hchksum(tv%S, "MOM_initialize_state: S ", G, haloshift=1)
     endif
@@ -348,7 +350,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
                  "If true,  depress the initial surface to avoid huge \n"//&
                  "tsunamis when a large surface pressure is applied.", &
                  default=.false.)
-    if (depress_sfc) call depress_surface(h, G, PF, tv)
+    if (depress_sfc) call depress_surface(h, G, GV, PF, tv)
 
   else ! Previous block for new_sim=.T., this block restores state
 !    This line calls a subroutine that reads the initial conditions  !
@@ -389,7 +391,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
                                                  PF, CS%sponge_CSp, h)
         case ("phillips"); call Phillips_initialize_sponges(G, use_temperature, tv, &
                                                  PF, CS%sponge_CSp, h)
-        case ("file"); call initialize_sponges_file(G, use_temperature, tv, &
+        case ("file"); call initialize_sponges_file(G, GV, use_temperature, tv, &
                                                  PF, CS%sponge_CSp)
         case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
                "Unrecognized sponge configuration "//trim(config))
@@ -421,7 +423,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
     else
       call MOM_error(FATAL, "The open boundary conditions specified by "//&
               "OBC_CONFIG = "//trim(config)//" have not been fully implemented.")
-      call set_Open_Bdry_Conds(CS%OBC, tv, G, PF, CS%tracer_Reg)
+      call set_Open_Bdry_Conds(CS%OBC, tv, G, GV, PF, CS%tracer_Reg)
     endif
   endif
 
@@ -447,13 +449,15 @@ end subroutine MOM_initialize_state
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine initialize_thickness_from_file(h, G, param_file, file_has_thickness)
+subroutine initialize_thickness_from_file(h, G, GV, param_file, file_has_thickness)
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: h
   type(ocean_grid_type),                  intent(in)  :: G
+  type(verticalGrid_type),                intent(in)  :: GV
   type(param_file_type),                  intent(in)  :: param_file
   logical,                                intent(in)  :: file_has_thickness
 ! Arguments: h - The thickness that is being initialized.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in)      file_has_thickness - If true, this file contains thicknesses;
@@ -495,12 +499,12 @@ subroutine initialize_thickness_from_file(h, G, param_file, file_has_thickness)
     call read_data(filename,"eta",eta(:,:,:),domain=G%Domain%mpp_domain)
 
     if (correct_thickness) then 
-      call adjustEtaToFitBathymetry(G, eta, h)
+      call adjustEtaToFitBathymetry(G, GV, eta, h)
     else
       do k=nz,1,-1 ; do j=js,je ; do i=is,ie
-        if (eta(i,j,K) < (eta(i,j,K+1) + G%GV%Angstrom_z)) then
-          eta(i,j,K) = eta(i,j,K+1) + G%GV%Angstrom_z
-          h(i,j,k) = G%GV%Angstrom_z
+        if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_z)) then
+          eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_z
+          h(i,j,k) = GV%Angstrom_z
         else
           h(i,j,k) = eta(i,j,K) - eta(i,j,K+1)
         endif
@@ -535,8 +539,9 @@ end subroutine initialize_thickness_from_file
 !!   @param[in]     G   Grid type
 !!   @param[in,out] eta Interface heights
 !!   @param[out]    h   Layer thicknesses
-subroutine adjustEtaToFitBathymetry(G, eta, h)
+subroutine adjustEtaToFitBathymetry(G, GV, eta, h)
   type(ocean_grid_type),                          intent(in)    :: G
+  type(verticalGrid_type),                        intent(in)    :: GV
   real, dimension(NIMEM_,NJMEM_, NK_INTERFACE_ ), intent(inout) :: eta
   real, dimension(NIMEM_,NJMEM_, NKMEM_),         intent(inout) :: h
   ! Local variables
@@ -564,9 +569,9 @@ subroutine adjustEtaToFitBathymetry(G, eta, h)
   do k=nz,1,-1 ; do j=js,je ; do i=is,ie
     ! Collapse layers to thinnest possible if the thickness less than
     ! the thinnest possible (or negative).
-    if (eta(i,j,K) < (eta(i,j,K+1) + G%GV%Angstrom_z)) then
-      eta(i,j,K) = eta(i,j,K+1) + G%GV%Angstrom_z
-      h(i,j,k) = G%GV%Angstrom_z
+    if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_z)) then
+      eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_z
+      h(i,j,k) = GV%Angstrom_z
     else
       h(i,j,k) = eta(i,j,K) - eta(i,j,K+1)
     endif
@@ -599,13 +604,15 @@ end subroutine adjustEtaToFitBathymetry
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine initialize_thickness_uniform(h, G, param_file)
+subroutine initialize_thickness_uniform(h, G, GV, param_file)
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: h
   type(ocean_grid_type),                  intent(in)  :: G
+  type(verticalGrid_type),                intent(in)  :: GV
   type(param_file_type),                  intent(in)  :: param_file
 
 ! Arguments: h - The thickness that is being initialized.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 
@@ -637,9 +644,9 @@ subroutine initialize_thickness_uniform(h, G, param_file)
     eta1D(nz+1) = -1.0*G%bathyT(i,j)
     do k=nz,1,-1
       eta1D(K) = e0(K)
-      if (eta1D(K) < (eta1D(K+1) + G%GV%Angstrom_z)) then
-        eta1D(K) = eta1D(K+1) + G%GV%Angstrom_z
-        h(i,j,k) = G%GV%Angstrom_z
+      if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_z)) then
+        eta1D(K) = eta1D(K+1) + GV%Angstrom_z
+        h(i,j,k) = GV%Angstrom_z
       else
         h(i,j,k) = eta1D(K) - eta1D(K+1)
       endif
@@ -657,13 +664,15 @@ subroutine initialize_thickness_search
 end subroutine initialize_thickness_search
 ! -----------------------------------------------------------------------------
 
-subroutine convert_thickness(h, G, param_file, tv)
+subroutine convert_thickness(h, G, GV, param_file, tv)
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout) :: h
   type(ocean_grid_type),                  intent(in)    :: G
+  type(verticalGrid_type),                intent(in)    :: GV
   type(param_file_type),                  intent(in)    :: param_file
   type(thermo_var_ptrs),                  intent(in)    :: tv
 ! Arguments: h - The thickness that is being initialized.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
   real, dimension(SZI_(G),SZJ_(G)) :: &
@@ -679,7 +688,7 @@ subroutine convert_thickness(h, G, param_file, tv)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   max_itt = 10
-  Boussinesq = G%GV%Boussinesq
+  Boussinesq = GV%Boussinesq
   I_gEarth = 1.0 / G%g_Earth
 
   if (Boussinesq) then
@@ -715,25 +724,27 @@ subroutine convert_thickness(h, G, param_file, tv)
         enddo
 
         do j=js,je ; do i=is,ie
-          h(i,j,k) = (p_bot(i,j) - p_top(i,j)) * G%GV%kg_m2_to_H * I_gEarth
+          h(i,j,k) = (p_bot(i,j) - p_top(i,j)) * GV%kg_m2_to_H * I_gEarth
         enddo ; enddo
       enddo
     else
       do k=1,nz ; do j=js,je ; do i=is,ie
-        h(i,j,k) = h(i,j,k) * G%GV%Rlay(k) * G%GV%kg_m2_to_H
+        h(i,j,k) = h(i,j,k) * GV%Rlay(k) * GV%kg_m2_to_H
       enddo ; enddo ; enddo
     endif
   endif
 
 end subroutine convert_thickness
 
-subroutine depress_surface(h, G, param_file, tv)
+subroutine depress_surface(h, G, GV, param_file, tv)
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout) :: h
   type(ocean_grid_type),                  intent(in)    :: G
+  type(verticalGrid_type),                intent(in)    :: GV
   type(param_file_type),                  intent(in)    :: param_file
   type(thermo_var_ptrs),                  intent(in)    :: tv
 ! Arguments: h - The thickness that is being initialized.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 
@@ -773,7 +784,7 @@ subroutine depress_surface(h, G, param_file, tv)
   enddo ; enddo ; endif
 
   ! Convert thicknesses to interface heights.
-  call find_eta(h, tv, G%g_Earth, G, eta)
+  call find_eta(h, tv, G%g_Earth, G, GV, eta)
   
   do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
 !    if (eta_sfc(i,j) < eta(i,j,nz+1)) then
@@ -794,9 +805,9 @@ subroutine depress_surface(h, G, param_file, tv)
       do k=1,nz
         if (eta(i,j,K) <= eta_sfc(i,j)) exit
         if (eta(i,j,K+1) >= eta_sfc(i,j)) then
-          h(i,j,k) = G%GV%Angstrom
+          h(i,j,k) = GV%Angstrom
         else
-          h(i,j,k) = max(G%GV%Angstrom, h(i,j,k) * &
+          h(i,j,k) = max(GV%Angstrom, h(i,j,k) * &
               (eta_sfc(i,j) - eta(i,j,K+1)) / (eta(i,j,K) - eta(i,j,K+1)) )
         endif
       enddo
@@ -1061,9 +1072,10 @@ end subroutine initialize_temp_salt_from_profile
 
 
 ! -----------------------------------------------------------------------------
-subroutine initialize_temp_salt_fit(T, S, G, param_file, eqn_of_state, P_Ref)
+subroutine initialize_temp_salt_fit(T, S, G, GV, param_file, eqn_of_state, P_Ref)
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T, S
   type(ocean_grid_type),                  intent(in)  :: G
+  type(verticalGrid_type),                intent(in)  :: GV
   type(param_file_type),                  intent(in)  :: param_file
   type(EOS_type),                         pointer     :: eqn_of_state
   real,                                   intent(in)  :: P_Ref
@@ -1073,6 +1085,7 @@ subroutine initialize_temp_salt_fit(T, S, G, param_file, eqn_of_state, P_Ref)
 ! Arguments: T - The potential temperature that is being initialized.
 !  (out)     S - The salinity that is being initialized.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in)      eqn_of_state - integer that selects the equatio of state
@@ -1106,7 +1119,7 @@ subroutine initialize_temp_salt_fit(T, S, G, param_file, eqn_of_state, P_Ref)
 
 ! A first guess of the layers' temperatures.                         !
   do k=nz,1,-1
-    T0(k) = T0(1) + (G%GV%Rlay(k) - rho_guess(1)) / drho_dT(1)
+    T0(k) = T0(1) + (GV%Rlay(k) - rho_guess(1)) / drho_dT(1)
   enddo
 
 ! Refine the guesses for each layer.                                 !
@@ -1114,7 +1127,7 @@ subroutine initialize_temp_salt_fit(T, S, G, param_file, eqn_of_state, P_Ref)
     call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
     call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
     do k=1,nz
-      T0(k) = T0(k) + (G%GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
+      T0(k) = T0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
     enddo
   enddo
 
@@ -1181,8 +1194,9 @@ end subroutine initialize_temp_salt_linear
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine initialize_sponges_file(G, use_temperature, tv, param_file, CSp)
+subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp)
   type(ocean_grid_type), intent(in) :: G
+  type(verticalGrid_type), intent(in) :: GV
   logical,               intent(in) :: use_temperature
   type(thermo_var_ptrs), intent(in) :: tv
   type(param_file_type), intent(in) :: param_file
@@ -1200,6 +1214,7 @@ subroutine initialize_sponges_file(G, use_temperature, tv, param_file, CSp)
 !  (in)      damp_file - The name of the file from which to read the
 !                        inverse damping rate.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      use_temperature - If true, T & S are state variables.
 !  (in)      tv - A structure containing pointers to any available
 !                 thermodynamic fields, including potential temperature and
@@ -1274,8 +1289,8 @@ subroutine initialize_sponges_file(G, use_temperature, tv, param_file, CSp)
     eta(i,j,nz+1) = -G%bathyT(i,j)
   enddo ; enddo
   do k=nz,1,-1 ; do j=js,je ; do i=is,ie
-    if (eta(i,j,K) < (eta(i,j,K+1) + G%GV%Angstrom_z)) &
-      eta(i,j,K) = eta(i,j,K+1) + G%GV%Angstrom_z
+    if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_z)) &
+      eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_z
   enddo ; enddo ; enddo
 ! Set the inverse damping rates so that the model will know where to !
 ! apply the sponges, along with the interface heights.               !
@@ -1285,7 +1300,7 @@ subroutine initialize_sponges_file(G, use_temperature, tv, param_file, CSp)
 ! sponge. By default, momentum is advected vertically within the     !
 ! sponge, but momentum is typically not damped within the sponge.    !
 
-  if ( G%GV%nkml>0 ) then
+  if ( GV%nkml>0 ) then
 !   This call to set_up_sponge_ML_density registers the target values of the
 ! mixed layer density, which is used in determining which layers can be
 ! inflated without causing static instabilities.
@@ -1315,10 +1330,11 @@ end subroutine initialize_sponges_file
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine set_Open_Bdry_Conds(OBC, tv, G, param_file, tracer_Reg)
+subroutine set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tracer_Reg)
   type(ocean_OBC_type),       pointer    :: OBC
   type(thermo_var_ptrs),      intent(in) :: tv
   type(ocean_grid_type),      intent(in) :: G
+  type(verticalGrid_type),    intent(in) :: GV
   type(param_file_type),      intent(in) :: param_file
   type(tracer_registry_type), pointer    :: tracer_Reg
 !   This subroutine sets the properties of flow at open boundary conditions.
@@ -1330,6 +1346,7 @@ subroutine set_Open_Bdry_Conds(OBC, tv, G, param_file, tracer_Reg)
 !                 thermodynamic fields, including potential temperature and
 !                 salinity or mixed layer density. Absent fields have NULL ptrs.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 
@@ -1425,7 +1442,7 @@ subroutine set_Open_Bdry_Conds(OBC, tv, G, param_file, tracer_Reg)
       if (OBC_mask_v(i,J)) then
         ! An appropriate expression for the meridional inflow velocities and
         ! transports should go here.
-        OBC%vh(i,J,k) = 0.0 * G%GV%m_to_H ; OBC%v(i,J,k) = 0.0
+        OBC%vh(i,J,k) = 0.0 * GV%m_to_H ; OBC%v(i,J,k) = 0.0
       else
         OBC%vh(i,J,k) = 0.0 ; OBC%v(i,J,k) = 0.0
       endif
@@ -1437,7 +1454,7 @@ subroutine set_Open_Bdry_Conds(OBC, tv, G, param_file, tracer_Reg)
       if (OBC_mask_u(I,j)) then
         ! An appropriate expression for the zonal inflow velocities and
         ! transports should go here.
-        OBC%uh(I,j,k) = 0.0 * G%GV%m_to_H ; OBC%u(I,j,k) = 0.0
+        OBC%uh(I,j,k) = 0.0 * GV%m_to_H ; OBC%u(I,j,k) = 0.0
       else
         OBC%uh(I,j,k) = 0.0 ; OBC%u(I,j,k) = 0.0
       endif
@@ -1459,11 +1476,11 @@ subroutine set_Open_Bdry_Conds(OBC, tv, G, param_file, tracer_Reg)
       call calculate_density(T0(1),S0(1),pres(1),rho_guess(1),tv%eqn_of_state)
       call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,1,tv%eqn_of_state)
 
-      do k=1,nz ; T0(k) = T0(1) + (G%GV%Rlay(k)-rho_guess(1)) / drho_dT(1) ; enddo
+      do k=1,nz ; T0(k) = T0(1) + (GV%Rlay(k)-rho_guess(1)) / drho_dT(1) ; enddo
       do itt=1,6
         call calculate_density(T0,S0,pres,rho_guess,1,nz,tv%eqn_of_state)
         call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,tv%eqn_of_state)
-        do k=1,nz ; T0(k) = T0(k) + (G%GV%Rlay(k)-rho_guess(k)) / drho_dT(k) ; enddo
+        do k=1,nz ; T0(k) = T0(k) + (GV%Rlay(k)-rho_guess(k)) / drho_dT(k) ; enddo
       enddo
 
       if (apply_OBC_u) then
@@ -1888,7 +1905,7 @@ end subroutine set_velocity_depth_min
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
+subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
 
 ! Determines the isopycnal interfaces and layer potential
 ! temperatures and salinities directly from a z-space file on a latitude-
@@ -1903,6 +1920,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 !                 thermodynamic fields, including potential temperature and
 !                 salinity or mixed layer density. Absent fields have NULL ptrs.
 !  (inout)   G       - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      PF      - A structure indicating the open file to parse for
 !                      model parameter values.
 !  (in)      dirs    - A structure containing several relevant directory paths.
@@ -1910,7 +1928,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(out)   :: h    
   type(thermo_var_ptrs),                 intent(inout) :: tv
-  type(ocean_grid_type),                 intent(inout)    :: G
+  type(ocean_grid_type),                 intent(inout) :: G
+  type(verticalGrid_type),               intent(in)    :: GV
   type(param_file_type),                 intent(in)    :: PF
   type(directories),                     intent(in)    :: dirs
 
@@ -2184,10 +2203,10 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 ! Rb contains the layer interface densities
     allocate(Rb(nz+1))
     do k=2,nz
-       Rb(k)=0.5*(G%GV%Rlay(k-1)+G%GV%Rlay(k))
+       Rb(k)=0.5*(GV%Rlay(k-1)+GV%Rlay(k))
     enddo
     Rb(1)=0.0
-    Rb(nz+1)=2.0*G%GV%Rlay(nz) - G%GV%Rlay(nz-1)
+    Rb(nz+1)=2.0*GV%Rlay(nz) - GV%Rlay(nz-1)
 
     zi(is:ie,js:je,:) = find_interfaces(rho_z(is:ie,js:je,:), z_in, Rb, G%bathyT(is:ie,js:je), &
                          nlevs(is:ie,js:je), nkml, nkbl, min_depth)
@@ -2204,12 +2223,12 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
                  "high latitudes.", default=.true.)
 
     if (correct_thickness) then
-      call adjustEtaToFitBathymetry(G, zi, h)
+      call adjustEtaToFitBathymetry(G, GV, zi, h)
     else
       do k=nz,1,-1 ; do j=js,je ; do i=is,ie
-        if (zi(i,j,K) < (zi(i,j,K+1) + G%GV%Angstrom_z)) then
-          zi(i,j,K) = zi(i,j,K+1) + G%GV%Angstrom_z
-          h(i,j,k) = G%GV%Angstrom_z
+        if (zi(i,j,K) < (zi(i,j,K+1) + GV%Angstrom_z)) then
+          zi(i,j,K) = zi(i,j,K+1) + GV%Angstrom_z
+          h(i,j,k) = GV%Angstrom_z
         else
           h(i,j,k) = zi(i,j,K) - zi(i,j,K+1)
         endif
@@ -2281,7 +2300,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, PF, dirs)
 
   if (adjust_temperature .and. .not. useALEremapping) then
     call determine_temperature(tv%T(is:ie,js:je,:), tv%S(is:ie,js:je,:), &
-            G%GV%Rlay(1:nz), tv%p_ref, niter, missing_value, h(is:ie,js:je,:), ks, eos)
+            GV%Rlay(1:nz), tv%p_ref, niter, missing_value, h(is:ie,js:je,:), ks, eos)
 
   endif
 

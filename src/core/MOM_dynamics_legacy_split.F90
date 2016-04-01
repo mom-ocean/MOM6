@@ -497,7 +497,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
 
 ! CAu = -(f+zeta_av)/h_av vh + d/dx KE_av
   call cpu_clock_begin(id_clock_Cor)
-  call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%ADp, G, &
+  call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%ADp, G, GV, &
                  CS%CoriolisAdv_CSp)
   call cpu_clock_end(id_clock_Cor)
 
@@ -590,7 +590,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
     call cpu_clock_begin(id_clock_continuity)
     if (CS%readjust_velocity) then
       ! Adjust the input velocites so that their transports match uhbt_out & vhbt_out.
-      call continuity(u, v, h, hp, uh_in, vh_in, dt, G, &
+      call continuity(u, v, h, hp, uh_in, vh_in, dt, G, GV, &
                       CS%continuity_CSp, uhbt_in, vhbt_in, CS%OBC, &
                       CS%visc_rem_u, CS%visc_rem_v, u_adj, v_adj, &
                       BT_cont=CS%BT_cont)
@@ -603,9 +603,9 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
       enddo ; enddo ; enddo ; endif
       CS%readjust_velocity = .false.
     else
-      call continuity(u, v, h, hp, uh_in, vh_in, dt, G, &
+      call continuity(u, v, h, hp, uh_in, vh_in, dt, G, GV, &
                       CS%continuity_CSp, OBC=CS%OBC, BT_cont=CS%BT_cont)
-!###   call continuity(u, v, h, hp, uh_in, vh_in, dt, G, &
+!###   call continuity(u, v, h, hp, uh_in, vh_in, dt, G, GV, &
 !###                   CS%continuity_CSp, OBC=CS%OBC, visc_rem_u=CS%visc_rem_u, &
 !###                      visc_rem_v=CS%visc_rem_v, BT_cont=CS%BT_cont)
       u_init => u ; v_init => v
@@ -633,7 +633,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
 
     if (associated(CS%BT_cont) .or. CS%BT_use_layer_fluxes) then
       call cpu_clock_begin(id_clock_continuity)
-      call continuity(u, v, h, hp, uh_in, vh_in, dt, G, &
+      call continuity(u, v, h, hp, uh_in, vh_in, dt, G, GV, &
                       CS%continuity_CSp, OBC=CS%OBC, &
                       visc_rem_u=CS%visc_rem_u, visc_rem_v=CS%visc_rem_v, &
                       BT_cont=CS%BT_cont)
@@ -719,7 +719,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
 ! uh = u_av * h
 ! hp = h + dt * div . uh
   call cpu_clock_begin(id_clock_continuity)
-  call continuity(up, vp, h, hp, uh, vh, dt, G, CS%continuity_CSp, &
+  call continuity(up, vp, h, hp, uh, vh, dt, G, GV, CS%continuity_CSp, &
                   CS%uhbt, CS%vhbt, CS%OBC, CS%visc_rem_u, &
                   CS%visc_rem_v, u_av, v_av, BT_cont=CS%BT_cont)
   call cpu_clock_end(id_clock_continuity)
@@ -810,7 +810,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
 
 ! CAu = -(f+zeta_av)/h_av vh + d/dx KE_av
   call cpu_clock_begin(id_clock_Cor)
-  call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%ADp, G, &
+  call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%ADp, G, GV, &
                  CS%CoriolisAdv_CSp)
   call cpu_clock_end(id_clock_Cor)
 
@@ -930,7 +930,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
       v_tmp(i,J,k) = v(i,J,k)
     enddo ; enddo ; enddo ; endif
     call cpu_clock_begin(id_clock_continuity)
-    call continuity(u, v, h, h, uh, vh, dt, G, &
+    call continuity(u, v, h, h, uh, vh, dt, G, GV, &
                     CS%continuity_CSp, CS%uhbt, CS%vhbt, CS%OBC, &
                     CS%visc_rem_u, CS%visc_rem_v, u_av, v_av, &
                     uhbt_out, vhbt_out, u, v)
@@ -972,7 +972,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
   else
     ! u_av and v_av adjusted so their mass transports match uhbt and vhbt.
     call cpu_clock_begin(id_clock_continuity)
-    call continuity(u, v, h, h, uh, vh, dt, G, &
+    call continuity(u, v, h, h, uh, vh, dt, G, GV, &
                     CS%continuity_CSp, CS%uhbt, CS%vhbt, CS%OBC, &
                     CS%visc_rem_u, CS%visc_rem_v, u_av, v_av)
     call cpu_clock_end(id_clock_continuity)
@@ -1049,12 +1049,13 @@ end subroutine step_MOM_dyn_legacy_split
 
 ! =============================================================================
 
-subroutine adjustments_dyn_legacy_split(u, v, h, dt, G, CS)
+subroutine adjustments_dyn_legacy_split(u, v, h, dt, G, GV, CS)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
   real,                                   intent(in)    :: dt
   type(ocean_grid_type),                  intent(inout) :: G
+  type(verticalGrid_type), intent(in)    :: GV
   type(MOM_dyn_legacy_split_CS),          pointer       :: CS
 
 ! Arguments: u - The zonal velocity, in m s-1.
@@ -1063,6 +1064,7 @@ subroutine adjustments_dyn_legacy_split(u, v, h, dt, G, CS)
 !                whether the Boussinesq approximation is made.
 !  (in)      dt - The time step in s.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure set up by initialize_dyn_legacy_split.
 
   ! Temporary arrays to contain layer thickness fluxes in m3 s-1 or kg s-1.
@@ -1075,7 +1077,7 @@ subroutine adjustments_dyn_legacy_split(u, v, h, dt, G, CS)
 
   if (CS%readjust_BT_trans) then
     call cpu_clock_begin(id_clock_continuity)
-    call continuity(u, v, h, h_temp, uh_temp, vh_temp, dt, G, &
+    call continuity(u, v, h, h_temp, uh_temp, vh_temp, dt, G, GV, &
                     CS%continuity_CSp, OBC=CS%OBC)
     call cpu_clock_end(id_clock_continuity)
 !$OMP parallel default(none) shared(is,ie,js,je,nz,CS,uh_temp,vh_temp)
@@ -1363,8 +1365,8 @@ subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, GV, param_
 !  Accel_diag%u_accel_bt => CS%u_accel_bt ; Accel_diag%v_accel_bt => CS%v_accel_bt
 !  Accel_diag%u_av => CS%u_av ; Accel_diag%v_av => CS%v_av
 
-  call continuity_init(Time, G, param_file, diag, CS%continuity_CSp)
-  call CoriolisAdv_init(Time, G, param_file, diag, CS%ADp, CS%CoriolisAdv_CSp)
+  call continuity_init(Time, G, GV, param_file, diag, CS%continuity_CSp)
+  call CoriolisAdv_init(Time, G,  param_file, diag, CS%ADp, CS%CoriolisAdv_CSp)
   if (use_tides) call tidal_forcing_init(Time, G, param_file, CS%tides_CSp)
   call PressureForce_init(Time, G, GV, param_file, diag, CS%PressureForce_CSp, &
                           CS%tides_CSp)
@@ -1413,7 +1415,7 @@ subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, GV, param_
   if (.not. query_initialized(uh,"uh",restart_CS) .or. &
       .not. query_initialized(vh,"vh",restart_CS)) then
     h_tmp(:,:,:) = h(:,:,:)
-    call continuity(u, v, h, h_tmp, uh, vh, dt, G, CS%continuity_CSp, OBC=CS%OBC)
+    call continuity(u, v, h, h_tmp, uh, vh, dt, G, GV, CS%continuity_CSp, OBC=CS%OBC)
     call cpu_clock_begin(id_clock_pass_init)
     call pass_var(h_tmp, G%Domain)
     call cpu_clock_end(id_clock_pass_init)

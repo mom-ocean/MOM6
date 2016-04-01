@@ -285,7 +285,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   call cpu_clock_begin(id_clock_continuity)
   ! This is a duplicate caclulation of the last continuity from the previous step
   ! and could/should be optimized out. -AJA
-  call continuity(u_in, v_in, h_in, hp, uh, vh, dt_pred, G, CS%continuity_CSp, &
+  call continuity(u_in, v_in, h_in, hp, uh, vh, dt_pred, G, GV, CS%continuity_CSp, &
                   OBC=CS%OBC)
   call cpu_clock_end(id_clock_continuity)
   call cpu_clock_begin(id_clock_pass)
@@ -303,7 +303,8 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
 
 ! CAu = -(f+zeta)/h_av vh + d/dx KE  (function of u[n-1] and uh[n-1])
   call cpu_clock_begin(id_clock_Cor)
-  call CorAdCalc(u_in, v_in, h_av, uh, vh, CS%CAu, CS%CAv, CS%ADp, G, CS%CoriolisAdv_CSp)
+  call CorAdCalc(u_in, v_in, h_av, uh, vh, CS%CAu, CS%CAv, CS%ADp, &
+                 G, GV, CS%CoriolisAdv_CSp)
   call cpu_clock_end(id_clock_Cor)
 
 ! PFu = d/dx M(h_av,T,S)  (function of h[n-1/2])
@@ -373,7 +374,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
 ! h_av = h + dt div . uh
   call cpu_clock_begin(id_clock_continuity)
   call continuity(up, vp, h_in, hp, uh, vh, &
-                  dt, G, CS%continuity_CSp, OBC=CS%OBC)
+                  dt, G, GV, CS%continuity_CSp, OBC=CS%OBC)
   call cpu_clock_end(id_clock_continuity)
   call cpu_clock_begin(id_clock_pass)
   call pass_var(hp, G%Domain)
@@ -391,7 +392,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
 ! CAu = -(f+zeta(up))/h_av vh + d/dx KE(up)  (function of up[n-1/2], h[n-1/2])
   call cpu_clock_begin(id_clock_Cor)
   call CorAdCalc(up, vp, h_av, uh, vh, CS%CAu, CS%CAv, CS%ADp, &
-                 G, CS%CoriolisAdv_CSp)
+                 G, GV, CS%CoriolisAdv_CSp)
   call cpu_clock_end(id_clock_Cor)
 
 ! call enable_averaging(dt,Time_local, CS%diag)  ?????????????????????/
@@ -430,7 +431,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
 ! h[n+1] = h[n] + dt div . uh
   call cpu_clock_begin(id_clock_continuity)
   call continuity(up, vp, h_in, h_in, uh, vh, &
-                  dt, G, CS%continuity_CSp, OBC=CS%OBC)
+                  dt, G, GV, CS%continuity_CSp, OBC=CS%OBC)
   call cpu_clock_end(id_clock_continuity)
   call cpu_clock_begin(id_clock_pass)
   call pass_var(h_in, G%Domain)
@@ -628,7 +629,7 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, param_file, diag, CS
   Accel_diag%PFu => CS%PFu ; Accel_diag%PFv => CS%PFv
   Accel_diag%CAu => CS%CAu ; Accel_diag%CAv => CS%CAv
 
-  call continuity_init(Time, G, param_file, diag, CS%continuity_CSp)
+  call continuity_init(Time, G, GV, param_file, diag, CS%continuity_CSp)
   call CoriolisAdv_init(Time, G, param_file, diag, CS%ADp, CS%CoriolisAdv_CSp)
   if (use_tides) call tidal_forcing_init(Time, G, param_file, CS%tides_CSp)
   call PressureForce_init(Time, G, GV, param_file, diag, CS%PressureForce_CSp, &

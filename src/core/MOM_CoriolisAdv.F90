@@ -163,7 +163,7 @@ character*(20), parameter :: PV_ADV_UPWIND1_STRING = "PV_ADV_UPWIND1"
 
 contains
 
-subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, AD, G, CS)
+subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, AD, G, GV, CS)
   real, intent(in),  dimension(NIMEMB_,NJMEM_,NKMEM_) :: u
   real, intent(in),  dimension(NIMEM_,NJMEMB_,NKMEM_) :: v
   real, intent(in),  dimension(NIMEM_,NJMEM_,NKMEM_)  :: h
@@ -173,6 +173,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, AD, G, CS)
   real, intent(out), dimension(NIMEM_,NJMEMB_,NKMEM_) :: CAv
   type(accel_diag_ptrs), intent(inout)                :: AD
   type(ocean_grid_type), intent(in)                   :: G
+  type(verticalGrid_type), intent(in)                 :: GV
   type(CoriolisAdv_CS), pointer                       :: CS
 !    This subroutine calculates the Coriolis and momentum advection
 !  contributions to the acceleration.
@@ -190,6 +191,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, AD, G, CS)
 !  (in)      AD - A structure pointing to the various accelerations in
 !                 the momentum equations.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 CoriolisAdv_init.
 !
@@ -283,8 +285,8 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, AD, G, CS)
          "MOM_CoriolisAdv: Module must be initialized before it is used.")
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
-  h_neglect = G%GV%H_subroundoff
-  h_tiny = G%GV%Angstrom  ! Perhaps this should be set to h_neglect instead.
+  h_neglect = GV%H_subroundoff
+  h_tiny = GV%Angstrom  ! Perhaps this should be set to h_neglect instead.
 
 !$OMP parallel default(none) shared(u,v,h,uh,vh,CAu,CAv,G,CS,AD,Area_h,Area_q,nz,RV,PV, &
 !$OMP                               is,ie,js,je,Isq,Ieq,Jsq,Jeq,h_neglect,h_tiny)       &

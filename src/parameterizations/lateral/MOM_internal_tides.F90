@@ -59,6 +59,7 @@ use MOM_time_manager, only  : time_type, operator(+), operator(/), operator(-)
 use MOM_time_manager, only  : get_time, get_date, set_time, set_date
 use MOM_time_manager, only  : time_type_to_real
 use MOM_variables, only     : surface, thermo_var_ptrs
+use MOM_verticalGrid, only  : verticalGrid_type
 use fms_mod, only           : read_data
 use MOM_wave_structure, only: wave_structure_init, wave_structure, wave_structure_CS
 
@@ -197,13 +198,15 @@ end type loop_bounds_type
 contains
 
 
-subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G, CS)
+subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
+                              G, GV, CS)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)  :: h
   type(thermo_var_ptrs),                 intent(in)  :: tv
   real, dimension(NIMEM_,NJMEM_), intent(in) :: TKE_itidal_input
   real, dimension(NIMEM_,NJMEM_), intent(in) :: vel_btTide, Nb
-  real,                  intent(in)          :: dt
-  type(ocean_grid_type), intent(inout)       :: G
+  real,                        intent(in)    :: dt
+  type(ocean_grid_type),       intent(inout) :: G
+  type(verticalGrid_type),     intent(in)    :: GV
   type(int_tide_CS), pointer                 :: CS
   real, dimension(SZI_(G),SZJ_(G),CS%nMode)  :: cn
 
@@ -219,6 +222,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
   !  (in)      Nb - Near-bottom buoyancy frequency, in s-1
   !  (in)      dt - Length of time over which these fluxes will be applied, in s.
   !  (in)      G - The ocean's grid structure.
+  !  (in)      GV - The ocean's vertical grid structure.
   !  (in)      CS - A pointer to the control structure returned by a previous
   !                 call to int_tide_init.
   real, dimension(SZI_(G),SZJ_(G),2) :: &
@@ -252,7 +256,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
   if (.not.associated(CS)) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nAngle = CS%NAngle
-  I_rho0 = 1.0 / G%GV%Rho0
+  I_rho0 = 1.0 / GV%Rho0
 
   isd_g = G%isd_global ; jsd_g = G%jsd_global ! for debugging
 
@@ -445,7 +449,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
   if (CS%apply_wave_drag .or. CS%apply_Froude_drag) then
     do m=1,CS%NMode ; do fr=1,CS%Nfreq
       ! Calculate modal structure for given mode and frequency
-      call wave_structure(h, tv, G, cn(:,:,m), m, CS%frequency(fr), &
+      call wave_structure(h, tv, G, GV, cn(:,:,m), m, CS%frequency(fr), &
                           CS%wave_structure_CSp, tot_En_mode(:,:,fr,m), full_halos=.true.)
       ! Pick out near-bottom and max horizontal baroclinic velocity values at each point
       do j=jsd,jed ; do i=isd,ied
@@ -2212,14 +2216,16 @@ end subroutine PPM_limit_pos
 
 ! end subroutine register_int_tide_restarts
 
-subroutine internal_tides_init(Time, G, param_file, diag, CS)
+subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   type(time_type), target,   intent(in)    :: Time
   type(ocean_grid_type),     intent(inout) :: G
+  type(verticalGrid_type),   intent(in)    :: GV
   type(param_file_type),     intent(in)    :: param_file
   type(diag_ctrl), target,   intent(in)    :: diag
   type(int_tide_CS),pointer                :: CS
   ! Arguments: Time - The current model time.
   !  (in)      G - The ocean's grid structure.
+  !  (in)      GV - The ocean's vertical grid structure.
   !  (in)      param_file - A structure indicating the open file to parse for
   !                         model parameter values.
   !  (in)      diag - A structure that is used to regulate diagnostic output.
@@ -2428,7 +2434,7 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
     h2(i,j) = min(0.01*G%bathyT(i,j)**2, h2(i,j))
     ! Compute the fixed part; units are [kg m-2] here;
     ! will be multiplied by N and En to get into [W m-2]
-    CS%TKE_itidal_loss_fixed(i,j) = 0.5*kappa_h2_factor*G%GV%Rho0*&
+    CS%TKE_itidal_loss_fixed(i,j) = 0.5*kappa_h2_factor*GV%Rho0*&
          kappa_itides * h2(i,j)
   enddo; enddo
 

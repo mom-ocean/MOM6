@@ -582,7 +582,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
     ! net_heat     = heat (degC * H) via surface fluxes
     ! net_salt     = salt ( g(salt)/m2 for non-Bouss and ppt*m/s for Bouss ) via surface fluxes
     ! Pen_SW_bnd   = components to penetrative shortwave radiation
-    call extractFluxes1d(G, fluxes, optics, nsw, j, dt, &
+    call extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt, &
                   CS%H_limit_fluxes, CS%use_river_heat_content, CS%use_calving_heat_content, &
                   h(:,1:), T(:,1:), netMassInOut, netMassOut, Net_heat, Net_salt, Pen_SW_bnd,&
                   tv, aggregate_FW_forcing)
