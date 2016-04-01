@@ -690,7 +690,7 @@ subroutine horiz_interp_and_extrap_tracer(filename, varnam,  conversion, recnum,
 
     if (k == 1) then
       call horiz_interp_new(Interp,x_in,y_in,lon_out(is:ie,js:je),lat_out(is:ie,js:je), &
-               interp_method='bilinear',src_modulo=reentrant_x)
+               interp_method='bilinear',src_modulo=.true.)
     endif
 
     if (debug) then
