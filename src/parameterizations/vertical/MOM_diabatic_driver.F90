@@ -31,8 +31,7 @@ use MOM_error_handler,       only : MOM_error, FATAL, WARNING, callTree_showQuer
 use MOM_error_handler,       only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,         only : get_param, log_version, param_file_type, read_param
 use MOM_forcing_type,        only : forcing, MOM_forcing_chksum
-use MOM_forcing_type,        only : extractFluxes1d, calculateBuoyancyFlux2d
-use MOM_forcing_type,        only : forcing_SinglePointPrint
+use MOM_forcing_type,        only : calculateBuoyancyFlux2d, forcing_SinglePointPrint
 use MOM_geothermal,          only : geothermal, geothermal_init, geothermal_end, geothermal_CS
 use MOM_grid,                only : ocean_grid_type
 use MOM_io,                  only : vardesc, var_desc
@@ -497,7 +496,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
        ! SET TO CONSTANT VALUE TO TEST PROPAGATE CODE
        do m=1,CS%nMode ; cn(:,:,m) = CS%cg_test ; enddo
     else
-       call wave_speeds(h, tv, G, CS%nMode, cn, full_halos=.true.)
+       call wave_speeds(h, tv, G, GV, CS%nMode, cn, full_halos=.true.)
        ! uncomment the lines below for a hard-coded cn that changes linearly with latitude
        !do j=G%jsd,G%jed ; do i=G%isd,G%ied
        !  cn(i,j,:) = ((7.-1.)/14000000.)*G%geoLatBu(i,j) + (1.-((7.-1.)/14000000.)*-7000000.)
@@ -521,11 +520,11 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       endif
       ! CALL ROUTINE USING PRESCRIBED KE FOR TESTING
       call propagate_int_tide(h, tv, cn, TKE_itidal_input_test, &
-                            CS%int_tide_input%tideamp, CS%int_tide_input%Nb, dt, G, CS%int_tide_CSp)
+                            CS%int_tide_input%tideamp, CS%int_tide_input%Nb, dt, G, GV, CS%int_tide_CSp)
     else
       ! CALL ROUTINE USING CALCULATED KE INPUT
       call propagate_int_tide(h, tv, cn, CS%int_tide_input%TKE_itidal_input, &
-                              CS%int_tide_input%tideamp, CS%int_tide_input%Nb, dt, G, CS%int_tide_CSp)
+                              CS%int_tide_input%tideamp, CS%int_tide_input%Nb, dt, G, GV, CS%int_tide_CSp)
     endif
     if (showCallTree) call callTree_waypoint("done with propagate_int_tide (diabatic)")
   endif
@@ -554,7 +553,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     ! Sets: CS%KPP_buoy_flux, CS%KPP_temp_flux, CS%KPP_salt_flux
     ! NOTE: CS%KPP_buoy_flux, CS%KPP_temp_flux, CS%KPP_salt_flux are returned as rates (i.e. stuff per second)
     ! unlike other instances where the fluxes are integrated in time over a time-step.
-    call calculateBuoyancyFlux2d(G, fluxes, CS%optics, h, tv%T, tv%S, tv, &
+    call calculateBuoyancyFlux2d(G, GV, fluxes, CS%optics, h, tv%T, tv%S, tv, &
                                  CS%KPP_buoy_flux, CS%KPP_temp_flux, CS%KPP_salt_flux)
     ! The KPP scheme calculates boundary layer diffusivities and non-local transport.
     ! MOM6 implementation of KPP matches the boundary layer to zero interior diffusivity,
@@ -1150,19 +1149,12 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
 
   ! sponges
   if (CS%use_sponge) then
-
+    call cpu_clock_begin(id_clock_sponge)
     if (associated(CS%ALE_sponge_CSp)) then
       ! ALE sponge
-      call cpu_clock_begin(id_clock_sponge)
       call apply_ALE_sponge(h, dt, G, CS%ALE_sponge_CSp)
-      call cpu_clock_end(id_clock_sponge)
-      if (CS%debug) then
-          call MOM_state_chksum("apply_ALE_sponge ", u, v, h, G, GV)
-          call MOM_thermovar_chksum("apply_ALE_sponge ", tv, G)
-      endif
     else
       ! Layer mode sponge
-      call cpu_clock_begin(id_clock_sponge)
       if (CS%bulkmixedlayer .and. ASSOCIATED(tv%eqn_of_state)) then
         do i=is,ie ; p_ref_cv(i) = tv%P_Ref ; enddo
 !$OMP parallel do default(none) shared(js,je,p_ref_cv,Rcv_ml,is,ie,tv)
@@ -1174,13 +1166,12 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       else
         call apply_sponge(h, dt, G, GV, ea, eb, CS%sponge_CSp)
       endif
-      call cpu_clock_end(id_clock_sponge)
-      if (CS%debug) then
-        call MOM_state_chksum("apply_sponge ", u, v, h, G, GV)
-        call MOM_thermovar_chksum("apply_sponge ", tv, G)
-      endif
     endif
-
+    call cpu_clock_end(id_clock_sponge)
+    if (CS%debug) then
+      call MOM_state_chksum("apply_sponge ", u, v, h, G, GV)
+      call MOM_thermovar_chksum("apply_sponge ", tv, G)
+    endif
   endif ! CS%use_sponge
 
 
@@ -1412,7 +1403,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   endif
 
   if (num_z_diags > 0) &
-    call calc_Zint_diags(h, z_ptrs, z_ids, num_z_diags, G, CS%diag_to_Z_CSp)
+    call calc_Zint_diags(h, z_ptrs, z_ids, num_z_diags, G, GV, CS%diag_to_Z_CSp)
 
   if (CS%debugConservation) call MOM_state_stats('leaving diabatic', u, v, h, tv%T, tv%S, G)
   if (showCallTree) call callTree_leave("diabatic()")
@@ -2148,7 +2139,7 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
   if (CS%use_int_tides) then
     call int_tide_input_init(Time, G, GV, param_file, diag, CS%int_tide_input_CSp, &
                              CS%int_tide_input)
-    call internal_tides_init(Time, G, param_file, diag, CS%int_tide_CSp)
+    call internal_tides_init(Time, G, GV, param_file, diag, CS%int_tide_CSp)
   endif
 
   ! initialize module for setting diffusivities

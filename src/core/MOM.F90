@@ -579,7 +579,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   if (associated(CS%VarMix)) then
     call enable_averaging(time_interval, Time_start+set_time(int(time_interval)), &
                           CS%diag)
-    call calc_resoln_function(h, CS%tv, G, CS%VarMix)
+    call calc_resoln_function(h, CS%tv, G, GV, CS%VarMix)
     call disable_averaging(CS%diag)
   endif
 
@@ -659,7 +659,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         endif
 
         if (CS%split .and. CS%legacy_split) then
-          call adjustments_dyn_legacy_split(u, v, h, dt, G, CS%dyn_legacy_split_CSp)
+          call adjustments_dyn_legacy_split(u, v, h, dt, G, GV, CS%dyn_legacy_split_CSp)
         endif
 
         call cpu_clock_begin(id_clock_diabatic)
@@ -674,7 +674,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         if (CS%id_T_preale > 0) call post_data(CS%id_T_preale, CS%tv%T, CS%diag)
         if (CS%id_S_preale > 0) call post_data(CS%id_S_preale, CS%tv%S, CS%diag)
         if (CS%id_e_preale > 0) then
-            call find_eta(h, CS%tv, G%g_Earth, G, eta_preale)
+            call find_eta(h, CS%tv, G%g_Earth, G, GV, eta_preale)
             call post_data(CS%id_e_preale, eta_preale, CS%diag)
         endif
 
@@ -958,7 +958,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       if (showCallTree) call callTree_waypoint("finished tracer advection/diffusion (step_MOM)")
 
       call cpu_clock_begin(id_clock_Z_diag)
-      call calculate_Z_transport(CS%uhtr, CS%vhtr, h, CS%dt_trans, G, &
+      call calculate_Z_transport(CS%uhtr, CS%vhtr, h, CS%dt_trans, G, GV, &
                                  CS%diag_to_Z_CSp)
       call cpu_clock_end(id_clock_Z_diag)
 
@@ -968,7 +968,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       if (CS%id_T_predia > 0) call post_data(CS%id_T_predia, CS%tv%T, CS%diag)
       if (CS%id_S_predia > 0) call post_data(CS%id_S_predia, CS%tv%S, CS%diag)
       if (CS%id_e_predia > 0) then
-        call find_eta(h, CS%tv, G%g_Earth, G, eta_predia)
+        call find_eta(h, CS%tv, G%g_Earth, G, GV, eta_predia)
         call post_data(CS%id_e_predia, eta_predia, CS%diag)
       endif
 
@@ -992,7 +992,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         endif
 
         if (CS%split .and. CS%legacy_split) then  ! The dt here is correct. -RWH
-          call adjustments_dyn_legacy_split(u, v, h, dt, G, CS%dyn_legacy_split_CSp)
+          call adjustments_dyn_legacy_split(u, v, h, dt, G, GV, CS%dyn_legacy_split_CSp)
         endif
         call cpu_clock_begin(id_clock_diabatic)
         call diabatic(u, v, h, CS%tv, fluxes, CS%visc, CS%ADp, CS%CDp, &
@@ -1095,7 +1095,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
       call cpu_clock_begin(id_clock_diagnostics)
       call calculate_diagnostic_fields(u, v, h, CS%uh, CS%vh, CS%tv, &
-                          CS%ADp, CS%CDp, fluxes, CS%dt_trans, G, CS%diagnostics_CSp)
+                          CS%ADp, CS%CDp, fluxes, CS%dt_trans, G, GV, CS%diagnostics_CSp)
       if (showCallTree) call callTree_waypoint("finished calculate_diagnostic_fields (step_MOM)")
       call cpu_clock_end(id_clock_diagnostics)
 
@@ -1136,7 +1136,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         call enable_averaging(real(time_type_to_real(CS%Z_diag_interval)), &
                               CS%Z_diag_time, CS%diag)
         call calculate_Z_diag_fields(u, v, h, CS%dt_trans, &
-                                     G, CS%diag_to_Z_CSp)
+                                     G, GV, CS%diag_to_Z_CSp)
         CS%Z_diag_time = CS%Z_diag_time + CS%Z_diag_interval
         call disable_averaging(CS%diag)
         if (showCallTree) call callTree_waypoint("finished calculate_Z_diag_fields (step_MOM)")
@@ -1167,7 +1167,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     ! diagnosed ssh for non-Bouss; call "find_eta" for this
     ! purpose.
     tot_wt_ssh = tot_wt_ssh + dt
-    call find_eta(h, CS%tv, G%g_Earth, G, ssh, eta_av)
+    call find_eta(h, CS%tv, G%g_Earth, G, GV, ssh, eta_av)
     do j=js,je ; do i=is,ie
       CS%ave_ssh(i,j) = CS%ave_ssh(i,j) + dt*ssh(i,j)
     enddo ; enddo
@@ -1855,13 +1855,13 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   endif
   if (associated(init_CS%OBC)) CS%OBC => init_CS%OBC
 
-  call MOM_diagnostics_init(MOM_internal_state, CS%ADp, CS%CDp, Time, G, &
+  call MOM_diagnostics_init(MOM_internal_state, CS%ADp, CS%CDp, Time, G, GV, &
               param_file, diag, CS%diagnostics_CSp, CS%wave_speed_CSp)
 
 
   CS%Z_diag_interval = set_time(int((CS%dt_therm) * &
        max(1,floor(0.01 + Z_diag_int/(CS%dt_therm)))))
-  call MOM_diag_to_Z_init(Time, G, param_file, diag, CS%diag_to_Z_CSp)
+  call MOM_diag_to_Z_init(Time, G, GV, param_file, diag, CS%diag_to_Z_CSp)
   CS%Z_diag_time = Start_time + CS%Z_diag_interval * (1 + &
     ((Time + set_time(int(CS%dt_therm))) - Start_time) / CS%Z_diag_interval)
 
@@ -1967,9 +1967,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   if (.not.query_initialized(CS%ave_ssh,"ave_ssh",CS%restart_CSp)) then
     if (CS%split) then
-      call find_eta(CS%h, CS%tv, G%g_Earth, G, CS%ave_ssh, eta)
+      call find_eta(CS%h, CS%tv, G%g_Earth, G, GV, CS%ave_ssh, eta)
     else
-      call find_eta(CS%h, CS%tv, G%g_Earth, G, CS%ave_ssh)
+      call find_eta(CS%h, CS%tv, G%g_Earth, G, GV, CS%ave_ssh)
     endif
   endif
   if (CS%split) deallocate(eta)
@@ -1979,7 +1979,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     allocate(restart_CSp_tmp)
     restart_CSp_tmp = CS%restart_CSp
     allocate(e(SZI_(G),SZJ_(G),SZK_(G)+1))
-    call find_eta(CS%h, CS%tv, G%g_Earth, G, e)
+    call find_eta(CS%h, CS%tv, G%g_Earth, G, GV, e)
     vd = var_desc("eta","meter","Interface heights",z_grid='i')
     call register_restart_field(e, vd, .true., restart_CSp_tmp)
 
