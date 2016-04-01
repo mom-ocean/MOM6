@@ -368,7 +368,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
         uhh(I) = 0.0
         CFL(I) = 0.0
       elseif (uhr(I,j,k) < 0.0) then
-        hup = (hprev(i+1,j,k)-G%areaT(i+1,j)*G%GV%Angstrom*0.1) !### Change to *min_h
+        hup = hprev(i+1,j,k) - G%areaT(i+1,j)*min_h
         hlos = MAX(0.0,uhr(I+1,j,k))
         if (((hup + uhr(I,j,k) - hlos) < 0.0) .and. &
             ((0.5*hup + uhr(I,j,k)) < 0.0)) then !### Add parentheses.
@@ -380,7 +380,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
        !ts2(I) = 0.5*(1.0 + uhh(I)/(hprev(i+1,j,k)+h_neglect))
         CFL(I) = - uhh(I)/(hprev(i+1,j,k)+h_neglect) ! CFL is positive
       else
-        hup = (hprev(i,j,k)-G%areaT(i,j)*G%GV%Angstrom*0.1) !### Change to *min_h
+        hup = hprev(i,j,k) - G%areaT(i,j)*min_h
         hlos = MAX(0.0,-uhr(I-1,j,k))
         if (((hup - uhr(I,j,k) - hlos) < 0.0) .and. &
             ((0.5*hup - uhr(I,j,k)) < 0.0)) then !### Add parentheses.
@@ -629,7 +629,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
         vhh(i,J) = 0.0
         CFL(i) = 0.0
       elseif (vhr(i,J,k) < 0.0) then
-        hup = (hprev(i,j+1,k)-G%areaT(i,j+1)*G%GV%Angstrom*0.1) !### Change to *min_h
+        hup = hprev(i,j+1,k) - G%areaT(i,j+1)*min_h
         hlos = MAX(0.0,vhr(i,J+1,k))
         if ((((hup - hlos) + vhr(i,J,k)) < 0.0) .and. &
             ((0.5*hup + vhr(i,J,k)) < 0.0)) then
@@ -641,7 +641,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
        !ts2(i) = 0.5*(1.0 + vhh(i,J) / (hprev(i,j+1,k)+h_neglect))
         CFL(i) = - vhh(i,J) / (hprev(i,j+1,k)+h_neglect) ! CFL is positive
       else
-        hup = (hprev(i,j,k)-G%areaT(i,j)*G%GV%Angstrom*0.1) !### Change to *min_h
+        hup = hprev(i,j,k) - G%areaT(i,j)*min_h
         hlos = MAX(0.0,-vhr(i,J-1,k))
         if ((((hup - hlos) - vhr(i,J,k)) < 0.0) .and. &
             ((0.5*hup - vhr(i,J,k)) < 0.0)) then
