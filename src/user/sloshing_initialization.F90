@@ -38,6 +38,7 @@ use MOM_io, only : write_field, slasher
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
 use MOM_tracer_registry, only : tracer_registry_type, add_tracer_OBC_values
 use MOM_variables, only : thermo_var_ptrs, ocean_OBC_type
+use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 
 implicit none ; private
@@ -85,11 +86,12 @@ end subroutine sloshing_initialize_topography
 !------------------------------------------------------------------------------
 ! Initialization of thicknesses
 !------------------------------------------------------------------------------
-subroutine sloshing_initialize_thickness ( h, G, param_file )
+subroutine sloshing_initialize_thickness ( h, G, GV, param_file )
 
   real, intent(out), dimension(NIMEM_,NJMEM_, NKMEM_) :: h
-  type(ocean_grid_type), intent(in)                :: G
-  type(param_file_type), intent(in)                :: param_file
+  type(ocean_grid_type),   intent(in)                 :: G
+  type(verticalGrid_type), intent(in)                 :: GV
+  type(param_file_type),   intent(in)                 :: param_file
 
 ! This routine is called when THICKNESS_CONFIG is set to 'sloshing'
 !
@@ -178,8 +180,8 @@ subroutine sloshing_initialize_thickness ( h, G, param_file )
     ! are strictly positive
     do k = nz,1,-1
       
-      if ( z_inter(k) .LT. (z_inter(k+1) + G%GV%Angstrom) ) then
-        z_inter(k) = z_inter(k+1) + G%GV%Angstrom
+      if ( z_inter(k) .LT. (z_inter(k+1) + GV%Angstrom) ) then
+        z_inter(k) = z_inter(k+1) + GV%Angstrom
       end if
       
     end do

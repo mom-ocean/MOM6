@@ -226,19 +226,19 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
          case ("thickness_file"); call initialize_thickness_from_file(h, G, GV, PF, .true.)
          case ("coord"); call ALE_initThicknessToCoord( ALE_CSp, G, h )
          case ("uniform"); call initialize_thickness_uniform(h, G, GV, PF)
-         case ("DOME"); call DOME_initialize_thickness(h, G, PF)
-         case ("benchmark"); call benchmark_initialize_thickness(h, G, PF, &
+         case ("DOME"); call DOME_initialize_thickness(h, G, GV, PF)
+         case ("benchmark"); call benchmark_initialize_thickness(h, G, GV, PF, &
                                  tv%eqn_of_state, tv%P_Ref)
          case ("search"); call initialize_thickness_search
-         case ("circle_obcs"); call circle_obcs_initialize_thickness(h, G, PF)
-         case ("lock_exchange"); call lock_exchange_initialize_thickness(h, G, PF)
+         case ("circle_obcs"); call circle_obcs_initialize_thickness(h, G, GV, PF)
+         case ("lock_exchange"); call lock_exchange_initialize_thickness(h, G, GV, PF)
          case ("external_gwave"); call external_gwave_initialize_thickness(h, G, PF)
-         case ("DOME2D"); call DOME2d_initialize_thickness(h, G, PF)
-         case ("adjustment2d"); call adjustment_initialize_thickness(h, G, PF)
-         case ("sloshing"); call sloshing_initialize_thickness(h, G, PF)
-         case ("seamount"); call seamount_initialize_thickness(h, G, PF)
-         case ("phillips"); call Phillips_initialize_thickness(h, G, PF)
-         case ("rossby_front"); call Rossby_front_initialize_thickness(h, G, PF)
+         case ("DOME2D"); call DOME2d_initialize_thickness(h, G, GV, PF)
+         case ("adjustment2d"); call adjustment_initialize_thickness(h, G, GV, PF)
+         case ("sloshing"); call sloshing_initialize_thickness(h, G, GV, PF)
+         case ("seamount"); call seamount_initialize_thickness(h, G, GV, PF)
+         case ("phillips"); call Phillips_initialize_thickness(h, G, GV, PF)
+         case ("rossby_front"); call Rossby_front_initialize_thickness(h, G, GV, PF)
          case ("USER"); call user_initialize_thickness(h, G, PF, tv%T)
          case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
               "Unrecognized layer thickness configuration "//trim(config))
@@ -271,7 +271,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
           case ("fit"); call initialize_temp_salt_fit(tv%T, tv%S, G, GV, PF, eos, tv%P_Ref)
           case ("file"); call initialize_temp_salt_from_file(tv%T, tv%S, G, PF)
           case ("benchmark"); call benchmark_init_temperature_salinity(tv%T, tv%S, &
-                                   G, PF, eos, tv%P_Ref)
+                                   G, GV, PF, eos, tv%P_Ref)
           case ("TS_profile") ; call initialize_temp_salt_from_profile(tv%T, tv%S, G, PF)
           case ("linear"); call initialize_temp_salt_linear(tv%T, tv%S, G, PF)
           case ("DOME2D"); call DOME2d_initialize_temperature_salinity ( tv%T, &
@@ -287,7 +287,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
           case ("rossby_front"); call Rossby_front_initialize_temperature_salinity ( tv%T, &
                                 tv%S, h, G, PF, eos)
           case ("SCM_ideal_hurr"); call SCM_idealized_hurricane_TS_init ( tv%T, &
-                                tv%S, h, G, PF)
+                                tv%S, h, G, GV, PF)
           case ("USER"); call user_init_temperature_salinity(tv%T, tv%S, G, PF, eos)
           case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
                  "Unrecognized Temp & salt configuration "//trim(config))
@@ -311,8 +311,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
        case ("zero"); call initialize_velocity_zero(u, v, G, PF)
        case ("uniform"); call initialize_velocity_uniform(u, v, G, PF)
        case ("circular"); call initialize_velocity_circular(u, v, G, PF)
-       case ("phillips"); call Phillips_initialize_velocity(u, v, G, PF)
-       case ("rossby_front"); call Rossby_front_initialize_velocity(u, v, h, G, PF)
+       case ("phillips"); call Phillips_initialize_velocity(u, v, G, GV, PF)
+       case ("rossby_front"); call Rossby_front_initialize_velocity(u, v, h, G, GV, PF)
        case ("USER"); call user_initialize_velocity(u, v, G, PF)
        case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
             "Unrecognized velocity configuration "//trim(config))
@@ -386,7 +386,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
     else
 
       select case (trim(config))
-        case ("DOME"); call DOME_initialize_sponges(G, tv, PF, CS%sponge_CSp)
+        case ("DOME"); call DOME_initialize_sponges(G, GV, tv, PF, CS%sponge_CSp)
         case ("USER"); call user_initialize_sponges(G, use_temperature, tv, &
                                                  PF, CS%sponge_CSp, h)
         case ("phillips"); call Phillips_initialize_sponges(G, use_temperature, tv, &
@@ -417,7 +417,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
                  " \t USER - call a user modified routine.", default="file", &
                  fail_if_missing=.true.)
     if (trim(config) == "DOME") then
-      call DOME_set_Open_Bdry_Conds(CS%OBC, tv, G, PF, CS%tracer_Reg)
+      call DOME_set_Open_Bdry_Conds(CS%OBC, tv, G, GV, PF, CS%tracer_Reg)
     elseif (trim(config) == "USER") then
       call user_set_Open_Bdry_Conds(CS%OBC, tv, G, PF, CS%tracer_Reg)
     else
