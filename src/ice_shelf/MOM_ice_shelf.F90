@@ -867,6 +867,7 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
       fluxes%sw(i,j) = 0.0
       fluxes%lw(i,j) = 0.0
       fluxes%latent(i,j) = 0.0
+
       fluxes%evap(i,j) = 0.0
 
 
@@ -899,7 +900,6 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
 
     endif
   enddo ; enddo
-
   if (CS%debug) then
     call hchksum(fluxes%ustar_shelf, "ustar_shelf", G, haloshift=0)
   endif
