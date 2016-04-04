@@ -44,6 +44,7 @@ program MOM_main
   use MOM_cpu_clock,       only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
   use MOM_cpu_clock,       only : CLOCK_COMPONENT
   use MOM_diag_mediator,   only : enable_averaging, disable_averaging, diag_mediator_end
+  use MOM_diag_mediator,   only : safe_alloc_ptr
   use MOM_diag_mediator,   only : diag_mediator_close_registration, diag_mediator_end
   use MOM,                 only : initialize_MOM, step_MOM, MOM_control_struct
   use MOM,                 only : calculate_surface_state, MOM_end
@@ -274,6 +275,11 @@ program MOM_main
 
   use_ice_shelf=.false. ; call read_param(param_file,"ICE_SHELF",use_ice_shelf)
   if (use_ice_shelf) then
+    ! These arrays are not initialized in most solo cases, but are needed
+    ! when using an ice shelf 
+    call safe_alloc_ptr(fluxes%p_surf,grid%isd,grid%ied,grid%jsd,grid%jed)
+    call safe_alloc_ptr(fluxes%p_surf_full,grid%isd,grid%ied,grid%jsd,grid%jed)
+    call safe_alloc_ptr(fluxes%salt_flux,grid%isd,grid%ied,grid%jsd,grid%jed)
     call initialize_ice_shelf(Time, ice_shelf_CSp, MOM_CSp%diag, fluxes)
   endif
 
