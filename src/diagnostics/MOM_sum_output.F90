@@ -520,10 +520,11 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
 
   nTr_stocks = 0
   if (present(tracer_CSp)) then
-    call call_tracer_stocks(h, Tr_stocks, G, tracer_CSp, stock_names=Tr_names, stock_units=Tr_units, num_stocks=nTr_stocks,&
-                               got_min_max=Tr_minmax_got, global_min=Tr_min, global_max=Tr_max, &
-                               xgmin=Tr_min_x, ygmin=Tr_min_y, zgmin=Tr_min_z,&
-                               xgmax=Tr_max_x, ygmax=Tr_max_y, zgmax=Tr_max_z)
+    call call_tracer_stocks(h, Tr_stocks, G, GV, tracer_CSp, stock_names=Tr_names, &
+                            stock_units=Tr_units, num_stocks=nTr_stocks,&
+                            got_min_max=Tr_minmax_got, global_min=Tr_min, global_max=Tr_max, &
+                            xgmin=Tr_min_x, ygmin=Tr_min_y, zgmin=Tr_min_z,&
+                            xgmax=Tr_max_x, ygmax=Tr_max_y, zgmax=Tr_max_z)
     if (nTr_stocks > 0) then
       do m=1,nTr_stocks
         vars(num_nc_fields+m) = var_desc(Tr_names(m), units=Tr_units(m), &

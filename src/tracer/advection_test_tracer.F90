@@ -68,6 +68,7 @@ use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_registry, only : add_tracer_diagnostics, add_tracer_OBC_values
 use MOM_tracer_registry, only : tracer_vertdiff
 use MOM_variables, only : surface, ocean_OBC_type
+use MOM_verticalGrid, only : verticalGrid_type
 
 use coupler_util, only : set_coupler_values, ind_csurf
 use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
@@ -224,11 +225,12 @@ function register_advection_test_tracer(G, param_file, CS, diag, tr_Reg, &
   register_advection_test_tracer = .true.
 end function register_advection_test_tracer
 
-subroutine initialize_advection_test_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
+subroutine initialize_advection_test_tracer(restart, day, G, GV, h, OBC, CS, sponge_CSp, &
                                   diag_to_Z_CSp)
   logical,                            intent(in) :: restart
   type(time_type), target,            intent(in) :: day
   type(ocean_grid_type),              intent(in) :: G
+  type(verticalGrid_type),            intent(in) :: GV
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
   type(ocean_OBC_type),               pointer    :: OBC
   type(advection_test_tracer_CS),               pointer    :: CS
@@ -241,6 +243,7 @@ subroutine initialize_advection_test_tracer(restart, day, G, h, OBC, CS, sponge_
 !                     a restart file.
 !  (in)      day - Time of the start of the run.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      h - Layer thickness, in m or kg m-2.
 !  (in)      OBC - This open boundary condition type specifies whether, where,
 !                  and what open boundary conditions are used.
@@ -275,7 +278,7 @@ subroutine initialize_advection_test_tracer(restart, day, G, h, OBC, CS, sponge_
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-  h_neglect = G%GV%H_subroundoff
+  h_neglect = GV%H_subroundoff
 
   if (.not.restart) then
     do m=1,NTR
@@ -316,7 +319,7 @@ subroutine initialize_advection_test_tracer(restart, day, G, h, OBC, CS, sponge_
   endif ! restart
 
   ! This needs to be changed if the units of tracer are changed above.
-  if (G%GV%Boussinesq) then ; flux_units = "kg kg-1 m3 s-1"
+  if (GV%Boussinesq) then ; flux_units = "kg kg-1 m3 s-1"
   else ; flux_units = "kg s-1" ; endif
 
   do m=1,NTR
@@ -355,11 +358,12 @@ subroutine initialize_advection_test_tracer(restart, day, G, h, OBC, CS, sponge_
 end subroutine initialize_advection_test_tracer
 
 
-subroutine advection_test_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, CS)
+subroutine advection_test_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h_old, h_new, ea, eb
   type(forcing),                         intent(in) :: fluxes
   real,                                  intent(in) :: dt
   type(ocean_grid_type),                 intent(in) :: G
+  type(verticalGrid_type),               intent(in) :: GV
   type(advection_test_tracer_CS),        pointer    :: CS
 !   This subroutine applies diapycnal diffusion and any other column
 ! tracer physics or chemistry to the tracers from this file.
@@ -377,6 +381,7 @@ subroutine advection_test_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, 
 !                     forcing fields.  Unused fields have NULL ptrs.
 !  (in)      dt - The amount of time covered by this call, in s.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 register_advection_test_tracer.
 !
@@ -391,13 +396,13 @@ subroutine advection_test_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, 
   if (.not.associated(CS)) return
 
 ! do m=1,NTR
-!   call tracer_vertdiff(h_old, ea, eb, dt, CS%tr(:,:,:,m), G)
+!   call tracer_vertdiff(h_old, ea, eb, dt, CS%tr(:,:,:,m), G, GV)
 ! enddo
 
   if (CS%mask_tracers) then
     do m = 1,NTR ; if (CS%id_tracer(m) > 0) then
       do k=1,nz ; do j=js,je ; do i=is,ie
-        if (h_new(i,j,k) < 1.1*G%GV%Angstrom) then
+        if (h_new(i,j,k) < 1.1*GV%Angstrom) then
           CS%tr_aux(i,j,k,m) = CS%land_val(m)
         else
           CS%tr_aux(i,j,k,m) = CS%tr(i,j,k,m)

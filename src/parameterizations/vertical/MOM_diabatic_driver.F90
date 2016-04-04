@@ -1113,7 +1113,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       enddo ; enddo
       do i=is,ie ; eatr(i,j,1) = ea(i,j,1) ; enddo
     enddo
-    call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, dt, G, tv, &
+    call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
                                 CS%optics, CS%tracer_flow_CSp)
 
   elseif (associated(visc%Kd_extra_S)) then  ! extra diffusivity for passive tracers
@@ -1135,11 +1135,11 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       ebtr(i,j,k-1) = eb(i,j,k-1) + add_ent
       eatr(i,j,k) = ea(i,j,k) + add_ent
     enddo ; enddo ; enddo
-    call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, dt, G, tv, &
+    call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
                                 CS%optics, CS%tracer_flow_CSp)
 
   else
-    call call_tracer_column_fns(hold, h, ea, eb, fluxes, dt, G, tv, &
+    call call_tracer_column_fns(hold, h, ea, eb, fluxes, dt, G, GV, tv, &
                                 CS%optics, CS%tracer_flow_CSp)
 
   endif  ! (CS%mix_boundary_tracers)
@@ -1424,7 +1424,7 @@ subroutine adiabatic(h, tv, fluxes, dt, G, CS)
 
   zeros(:,:,:) = 0.0
 
-  call call_tracer_column_fns(h, h, zeros, zeros, fluxes, dt, G, tv, &
+  call call_tracer_column_fns(h, h, zeros, zeros, fluxes, dt, G, G%GV, tv, &
                               CS%optics, CS%tracer_flow_CSp)
 
 end subroutine adiabatic

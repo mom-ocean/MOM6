@@ -69,6 +69,7 @@ module MOM_generic_tracer
   use MOM_tracer_Z_init, only : tracer_Z_init
   use MOM_tracer_initialization_from_Z, only : MOM_initialize_tracer_from_Z
   use MOM_variables, only : surface, ocean_OBC_type, thermo_var_ptrs
+  use MOM_verticalGrid, only : verticalGrid_type
 
 
   implicit none ; private
@@ -96,7 +97,7 @@ module MOM_generic_tracer
                              ! timing of diagnostic output.
      type(MOM_restart_CS), pointer :: restart_CSp => NULL()
 
-     real    :: Rho_0
+!     real    :: Rho_0
      !   The following pointer will be directed to the first element of the
      ! linked list of generic tracers.
      type(g_tracer_type), pointer :: g_tracer_list => NULL()
@@ -266,8 +267,8 @@ contains
     enddo
 
     !   Rho_0 is a property of MOM and not a property of any tracer. Copy it
-    ! from the ocean grid type.
-    CS%Rho_0 = G%GV%Rho0
+    ! from the ocean grid type.  (I think this is now unneeded. -RWH)
+    !  CS%Rho_0 = G%GV%Rho0
 
     register_MOM_generic_tracer = .true.
   end function register_MOM_generic_tracer
@@ -286,11 +287,12 @@ contains
   !  <TEMPLATE>
   !   call initialize_MOM_generic_tracer(restart, day, G, h, OBC, CS, sponge_CSp,ALE_sponge_CSp, diag_to_Z_CSp)
  ! </SUBROUTINE>
-  subroutine initialize_MOM_generic_tracer(restart, day, G, h, param_file, OBC, CS, &
+  subroutine initialize_MOM_generic_tracer(restart, day, G, GV, h, param_file, OBC, CS, &
                                           sponge_CSp, ALE_sponge_CSp,diag_to_Z_CSp)
     logical,                               intent(in) :: restart
     type(time_type), target,               intent(in) :: day
     type(ocean_grid_type),                 intent(inout) :: G
+    type(verticalGrid_type),               intent(in) :: GV
     real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
     type(param_file_type),                 intent(in) :: param_file
     type(ocean_OBC_type),                  pointer    :: OBC
@@ -305,6 +307,7 @@ contains
     !                     a restart file.
     !  (in)      day - Time of the start of the run.
     !  (in)      G - The ocean's grid structure.
+    !  (in)      GV - The ocean's vertical grid structure.
     !  (in)      h - Layer thickness, in m or kg m-2.
     !  (in)      OBC - This open boundary condition type specifies whether, where,
     !                  and what open boundary conditions are used.
@@ -493,11 +496,12 @@ contains
   !  </TEMPLATE>
   ! </SUBROUTINE>
 
-  subroutine MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, CS, tv, optics)
+  subroutine MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS, tv, optics)
     real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h_old, h_new, ea, eb
     type(forcing),                         intent(in) :: fluxes
     real,                                  intent(in) :: dt
     type(ocean_grid_type),                 intent(in) :: G
+    type(verticalGrid_type),               intent(in) :: GV
     type(MOM_generic_tracer_CS),           pointer    :: CS
     type(thermo_var_ptrs),                 intent(in) :: tv
     type(optics_type),                     intent(in) :: optics
@@ -518,6 +522,7 @@ contains
     !                     forcing fields.  Unused fields have NULL ptrs.
     !  (in)      dt - The amount of time covered by this call, in s.
     !  (in)      G - The ocean's grid structure.
+    !  (in)      GV - The ocean's vertical grid structure.
     !  (in)      CS - The control structure returned by a previous call to
     !                 register_MOM_generic_tracer.
     !
@@ -573,24 +578,24 @@ contains
     !Prepare input arrays for source update
     !
 
-    rho_dzt(:,:,:) = G%GV%H_to_kg_m2 * G%GV%Angstrom
+    rho_dzt(:,:,:) = GV%H_to_kg_m2 * GV%Angstrom
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
-      rho_dzt(i,j,k) = G%GV%H_to_kg_m2 * h_old(i,j,k)
+      rho_dzt(i,j,k) = GV%H_to_kg_m2 * h_old(i,j,k)
     enddo; enddo ; enddo !}
 
     dzt(:,:,:) = 1.0
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
-      dzt(i,j,k) = G%GV%H_to_m * h_old(i,j,k)
+      dzt(i,j,k) = GV%H_to_m * h_old(i,j,k)
     enddo; enddo ; enddo !}
 
 
     ! Boussinesq model
-    hblt_depth(:,:) = G%GV%H_to_m * G%GV%Angstrom
+    hblt_depth(:,:) = GV%H_to_m * GV%Angstrom
     do j=jsc,jec ; do i=isc,iec ;
-      hblt_depth(i,j) = G%GV%H_to_m * h_old(i,j,1)
+      hblt_depth(i,j) = GV%H_to_m * h_old(i,j,1)
     enddo; enddo
-    do k=2,G%GV%nkml ; do j=jsc,jec ; do i=isc,iec
-      hblt_depth(i,j) = hblt_depth(i,j) + G%GV%H_to_m * h_old(i,j,k)
+    do k=2,GV%nkml ; do j=jsc,jec ; do i=isc,iec
+      hblt_depth(i,j) = hblt_depth(i,j) + GV%H_to_m * h_old(i,j,k)
     enddo; enddo ; enddo
 
 
@@ -609,7 +614,7 @@ contains
     ! Use a tridiagonal solver to determine the concentrations after the
     ! surface source is applied and diapycnal advection and diffusion occurs.
 
-    call generic_tracer_vertdiff_G(h_old, ea, eb, dt, G%GV%kg_m2_to_H, G%GV%m_to_H, 1) !Last arg is tau which is always 1 for MOM
+    call generic_tracer_vertdiff_G(h_old, ea, eb, dt, GV%kg_m2_to_H, GV%m_to_H, 1) !Last arg is tau which is always 1 for MOM
 
     ! Update bottom fields after vertical processes
 
@@ -635,10 +640,11 @@ contains
   !  </TEMPLATE>
   ! </SUBROUTINE>
 
-  function MOM_generic_tracer_stock(h, stocks, G, CS, names, units, stock_index)
+  function MOM_generic_tracer_stock(h, stocks, G, GV, CS, names, units, stock_index)
     real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
     real, dimension(:),                 intent(out)   :: stocks
     type(ocean_grid_type),              intent(in)    :: G
+    type(verticalGrid_type),            intent(in)    :: GV
     type(MOM_generic_tracer_CS),        pointer       :: CS
     character(len=*), dimension(:),     intent(out)   :: names
     character(len=*), dimension(:),     intent(out)   :: units
@@ -652,6 +658,7 @@ contains
   !  (out)     stocks - the mass-weighted integrated amount of each tracer,
   !                     in kg times concentration units.
   !  (in)      G - The ocean's grid structure.
+  !  (in)      GV - The ocean's vertical grid structure.
   !  (in)      CS - The control structure returned by a previous call to
   !                 register_MOM_generic_tracer.
   !  (out)     names - the names of the stocks calculated.
@@ -691,7 +698,7 @@ contains
         stocks(m) = stocks(m) + tr_ptr(i,j,k) * &
                                (G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k))
       enddo ; enddo ; enddo
-      stocks(m) = G%GV%H_to_kg_m2 * stocks(m)
+      stocks(m) = GV%H_to_kg_m2 * stocks(m)
 
       !traverse the linked list till hit NULL
       call g_tracer_get_next(g_tracer, g_tracer_next)
@@ -765,10 +772,10 @@ contains
 
     call g_tracer_get_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,grid_tmask=grid_tmask)
 
-    !Don't know how to get the depth corresponding to k
-    !Fake it for now.
+    !  Because the use of a simple z-coordinate can not be assumed, simply
+    ! use the layer index as the vertical label.
     allocate(geo_z(nk))
-    do k=1,nk ;  geo_z(k) = G%GV%Rlay(k) ; enddo
+    do k=1,nk ; geo_z(k) = real(k) ; enddo
 
 
     m=ind_start ; g_tracer=>CS%g_tracer_list
