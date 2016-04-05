@@ -684,9 +684,9 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
   ! of freedeom needed to know the linear profile).
   if ( use_ALE ) then
     if ( PRScheme == PRESSURE_RECONSTRUCTION_PLM ) then
-      call pressure_gradient_plm (ALE_CSp, S_t, S_b, T_t, T_b, G, tv, h);
+      call pressure_gradient_plm (ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h);
     elseif ( PRScheme == PRESSURE_RECONSTRUCTION_PPM ) then
-      call pressure_gradient_ppm (ALE_CSp, S_t, S_b, T_t, T_b, G, tv, h);
+      call pressure_gradient_ppm (ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h);
     endif
   endif
 

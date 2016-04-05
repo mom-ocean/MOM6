@@ -2023,7 +2023,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
 
 ! call mpp_get_compute_domain(G%domain%mpp_domain,isc,iec,jsc,jec)
 
-  reentrant_x = .false. ;  call get_param(PF, mod, "REENTRANT_X", reentrant_x,default=.true.)
+  reentrant_x = .false. ; call get_param(PF, mod, "REENTRANT_X", reentrant_x,default=.true.)
   tripolar_n = .false. ;  call get_param(PF, mod, "TRIPOLAR_N", tripolar_n, default=.false.)
   call get_param(PF, mod, "MINIMUM_DEPTH", min_depth, default=0.0)
 
@@ -2085,23 +2085,18 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
 
   allocate(rho_z(isd:ied,jsd:jed,kd))
 
-
   press(:)=tv%p_ref
 
-
   do k=1, kd
-
     do j=js,je
       call calculate_density(temp_z(:,j,k),salt_z(:,j,k), press, rho_z(:,j,k), is, ie, eos)
     enddo
-
   enddo ! kd
 
   call pass_var(temp_z,G%Domain)
   call pass_var(salt_z,G%Domain)
   call pass_var(mask_z,G%Domain)
   call pass_var(rho_z,G%Domain)
-
 
 ! Done with horizontal interpolation.    
 ! Now remap to model coordinates
@@ -2149,7 +2144,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
     ! Build the target grid (and set the model thickness to it)
     allocate( hTarget(nz) )
     ! This call can be more general but is hard-coded for z* coordinates...  ????
-    call ALE_initRegridding( G, PF, mod, regridCS, hTarget ) ! sets regridCS and hTarget(1:nz)
+    call ALE_initRegridding( G, GV, PF, mod, regridCS, hTarget ) ! sets regridCS and hTarget(1:nz)
 
     if (.not. remap_general) then
       ! This is the old way of initializing to z* coordinates only
@@ -2184,7 +2179,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
       call pass_var(h, G%Domain)    ! Regridding might eventually use spatial information and
       call pass_var(tv%T, G%Domain) ! thus needs to be up to date in the halo regions even though
       call pass_var(tv%S, G%Domain) ! ALE_build_grid() only updates h on the computational domain.
-      call ALE_build_grid( G, regridCS, remapCS, h, tv, .true. )
+      call ALE_build_grid( G, GV, regridCS, remapCS, h, tv, .true. )
     endif
     call ALE_remap_scalar( remapCS, G, nz, h1, tmpT1dIn, h, tv%T, all_cells=remap_full_column )
     call ALE_remap_scalar( remapCS, G, nz, h1, tmpS1dIn, h, tv%S, all_cells=remap_full_column )
@@ -2202,11 +2197,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
 
 ! Rb contains the layer interface densities
     allocate(Rb(nz+1))
-    do k=2,nz
-       Rb(k)=0.5*(GV%Rlay(k-1)+GV%Rlay(k))
-    enddo
-    Rb(1)=0.0
-    Rb(nz+1)=2.0*GV%Rlay(nz) - GV%Rlay(nz-1)
+    do k=2,nz ; Rb(k)=0.5*(GV%Rlay(k-1)+GV%Rlay(k)) ; enddo
+    Rb(1) = 0.0 ;  Rb(nz+1) = 2.0*GV%Rlay(nz) - GV%Rlay(nz-1)
 
     zi(is:ie,js:je,:) = find_interfaces(rho_z(is:ie,js:je,:), z_in, Rb, G%bathyT(is:ie,js:je), &
                          nlevs(is:ie,js:je), nkml, nkbl, min_depth)
@@ -2247,8 +2239,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
       endif
     endif
 
-
-
     tv%T(is:ie,js:je,:) = tracer_z_init(temp_z(is:ie,js:je,:),-1.0*z_edges_in,zi(is:ie,js:je,:), &
                                         nkml,nkbl,missing_value,G%mask2dT(is:ie,js:je),nz, &
                                         nlevs(is:ie,js:je),dbg,idbg,jdbg)
@@ -2284,7 +2274,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
 
     enddo
 
-
   endif ! useALEremapping
 
 ! Fill land values
@@ -2312,8 +2301,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
 
   call callTree_leave(trim(mod)//'()')
   call cpu_clock_end(id_clock_routine)
-
-
 
 end subroutine MOM_temp_salt_initialize_from_Z
 
