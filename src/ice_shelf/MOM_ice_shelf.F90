@@ -237,6 +237,7 @@ type, public :: ice_shelf_CS ; private
   real :: ustar_bg     ! A minimum value for ustar under ice shelves, in m s-1.
   real :: cdrag        ! drag coefficient under ice shelves , non-dimensional.
   real :: Cp           ! The heat capacity of sea water, in J kg-1 K-1.
+  real :: Rho0         ! A reference ocean density in kg/m3.
   real :: Cp_ice       ! The heat capacity of fresh ice, in J kg-1 K-1.
   real :: gamma_t      !   The (fixed) turbulent exchange velocity in the
                        ! 2-equation formulation, in m s-1.
@@ -475,12 +476,12 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
 
   I_ZETA_N = 1.0 / ZETA_N
   LF = CS%Lat_fusion
-  I_RhoLF = 1.0/(G%GV%Rho0*LF)
+  I_RhoLF = 1.0/(CS%Rho0*LF)
   I_LF = 1.0 / LF
   SC = CS%kv_molec/CS%kd_molec_salt
   PR = CS%kv_molec/CS%kd_molec_temp
   I_VK = 1.0/VK
-  RhoCp = G%GV%Rho0 * CS%Cp
+  RhoCp = CS%Rho0 * CS%Cp
   Isqrt2 = 1.0/sqrt(2.0)
 
 !first calculate molecular component  
@@ -526,7 +527,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
           fluxes%ustar_shelf(i,j) = ustar_h
 
           if (associated(state%taux_shelf) .and. associated(state%tauy_shelf)) then
-            state%taux_shelf(i,j) = ustar_h*ustar_h*G%GV%Rho0*Isqrt2
+            state%taux_shelf(i,j) = ustar_h*ustar_h*CS%Rho0*Isqrt2
             state%tauy_shelf(i,j) = state%taux_shelf(i,j)
           endif
 
@@ -636,7 +637,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
   !            CS%tflux_shelf(i,j) = 0.0
   !            CS%lprec(i,j) = I_LF * (- CS%tflux_shelf(i,j) + CS%t_flux(i,j))
 
-            mass_exch = CS%exch_vel_s(i,j) * G%GV%Rho0
+            mass_exch = CS%exch_vel_s(i,j) * CS%Rho0
             Sbdry_it = (state%sss(i,j) * mass_exch + CS%Salin_ice * CS%lprec(i,j)) / &
                        (mass_exch + CS%lprec(i,j))
             dS_it = Sbdry_it - Sbdry
@@ -783,7 +784,7 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
 
-  Irho0 = 1.0 / G%GV%Rho0
+  Irho0 = 1.0 / CS%Rho0
   ! Determine ustar and the square magnitude of the velocity in the
   ! bottom boundary layer. Together these give the TKE source and
   ! vertical decay scale.
@@ -946,7 +947,7 @@ end subroutine add_shelf_flux
 !   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 !   isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
 
-!   Irho0 = 1.0 / G%GV%Rho0
+!   Irho0 = 1.0 / CS%Rho0
 !   ! Determine ustar and the square magnitude of the velocity in the
 !   ! bottom boundary layer. Together these give the TKE source and
 !   ! vertical decay scale.
@@ -1166,6 +1167,12 @@ subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
   call get_param(param_file, mod, "C_P", CS%Cp, &
                  "The heat capacity of sea water.", units="J kg-1 K-1", &
                  fail_if_missing=.true.)
+  call get_param(param_file, mod, "RHO_0", CS%Rho0, &
+                 "The mean ocean density used with BOUSSINESQ true to \n"//&
+                 "calculate accelerations and the mass for conservation \n"//&
+                 "properties, or with BOUSSINSEQ false to convert some \n"//&
+                 "parameters from vertical units of m to kg m-2.", &
+                 units="kg m-3", default=1035.0) !### MAKE THIS A SEPARATE PARAMETER.
   call get_param(param_file, mod, "C_P_ICE", CS%Cp_ice, &
                  "The heat capacity of ice.", units="J kg-1 K-1", &
                  default=2.10e3)
