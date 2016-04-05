@@ -51,15 +51,6 @@ implicit none ; private
 character(len=40) :: mod = "seamount_initialization" ! This module's name.
 
 ! -----------------------------------------------------------------------------
-! Private (module-wise) parameters
-! -----------------------------------------------------------------------------
-integer, parameter :: RHO_LINEAR = 0;
-integer, parameter :: RHO_EXP = 1;
-integer, parameter :: RHO_PARABOLIC = 2;
-
-integer, parameter :: density_profile = RHO_LINEAR;
-
-! -----------------------------------------------------------------------------
 ! The following routines are visible to the outside world
 ! -----------------------------------------------------------------------------
 public seamount_initialize_topography
@@ -127,9 +118,9 @@ subroutine seamount_initialize_thickness ( h, G, GV, param_file )
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
                           ! positive upward, in m.                       !
   integer :: i, j, k, is, ie, js, je, nz
-  real    :: x;
-  real    :: delta_h;
-  real    :: min_thickness;
+  real    :: x
+  real    :: delta_h
+  real    :: min_thickness
   character(len=20) :: verticalCoordinate
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -185,63 +176,88 @@ subroutine seamount_initialize_thickness ( h, G, GV, param_file )
 
   case ( REGRIDDING_SIGMA )             ! Initial thicknesses for sigma coordinates
     do j=js,je ; do i=is,ie
-      delta_h = G%bathyT(i,j) / dfloat(nz);
-      h(i,j,:) = delta_h;
+      delta_h = G%bathyT(i,j) / dfloat(nz)
+      h(i,j,:) = delta_h
     end do ; end do 
 end select
     
 end subroutine seamount_initialize_thickness
 
-!------------------------------------------------------------------------------
-! Initialization of temperature and salinity
-!------------------------------------------------------------------------------
-subroutine seamount_initialize_temperature_salinity ( T, S, h, G, param_file, &
-                                                      eqn_of_state)
-                                                      
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T, S
-  real, intent(in), dimension(NIMEM_,NJMEM_, NKMEM_)  :: h
-  type(ocean_grid_type),               intent(in)  :: G
-  type(param_file_type),               intent(in)  :: param_file
-  type(EOS_type),                      pointer     :: eqn_of_state
-
-  integer :: i, j, k, is, ie, js, je, nz
-  real    :: xi0, xi1, dxi, r
-  character(len=20) :: verticalCoordinate
+!> Initial values for temperature and salinity
+subroutine seamount_initialize_temperature_salinity ( T, S, h, G, GV, param_file, eqn_of_state)
+  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T !< Potential temperature (degC)
+  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: S !< Salinity (ppt)
+  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)  :: h !< Layer thickness (m or Pa)
+  type(ocean_grid_type),                  intent(in)  :: G !< Ocean grid structure
+  type(verticalGrid_type),                intent(in) :: GV !< Vertical grid structure
+  type(param_file_type),                  intent(in)  :: param_file !< Parameter file structure
+  type(EOS_type),                         pointer     :: eqn_of_state !< Equation of state structure
+  ! Local variables
+  integer :: i, j, k, is, ie, js, je, nz, k_light
+  real    :: xi0, xi1, dxi, r, S_surf, T_surf, S_range, T_range
+  real    :: T_ref, T_Light, T_Dense, S_ref, S_Light, S_Dense, a1, frac_dense, k_frac, res_rat
+  character(len=20) :: verticalCoordinate, density_profile
   
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  call get_param(param_file,mod,"REGRIDDING_COORDINATE_MODE",verticalCoordinate, &
+  call get_param(param_file, mod, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE)
+  call get_param(param_file,mod,"INITIAL_DENSITY_PROFILE", density_profile, &
+                 'Initial profile shape. Valid values are "linear", "parabolic"\n'// &
+                 'and "exponential".', default='linear')
+  call get_param(param_file,mod,"INITIAL_SSS", S_surf, &
+                 'Initial surface salinity', units='1e-3', default=34.)
+  call get_param(param_file,mod,"INITIAL_SST", T_surf, &
+                 'Initial surface temperature', units='C', default=0.)
+  call get_param(param_file,mod,"INITIAL_S_RANGE", S_range, &
+                 'Initial salinity range (bottom - surface)', units='1e-3', default=2.)
+  call get_param(param_file,mod,"INITIAL_T_RANGE", T_range, &
+                 'Initial temperature range (bottom - surface)', units='C', default=0.)
   
   select case ( coordinateMode(verticalCoordinate) )
     case ( REGRIDDING_LAYER ) ! Initial thicknesses for layer isopycnal coordinates
-      do k=1,nz ; do j=js,je ; do i=is,ie
-        xi1 = dfloat(k)/dfloat(nz)
-        S(i,j,k) = 34.0 + (xi1);
-      enddo ; enddo ; enddo
+      ! These parameters are used in MOM_fixed_initialization.F90 when CONFIG_COORD="ts_range" 
+      call get_param(param_file, mod, "T_REF", T_ref, default=10.0, do_not_log=.true.)
+      call get_param(param_file, mod, "TS_RANGE_T_LIGHT", T_light, default=T_Ref, do_not_log=.true.)
+      call get_param(param_file, mod, "TS_RANGE_T_DENSE", T_dense, default=T_Ref, do_not_log=.true.)
+      call get_param(param_file, mod, "S_REF", S_ref, default=35.0, do_not_log=.true.)
+      call get_param(param_file, mod, "TS_RANGE_S_LIGHT", S_light, default = S_Ref, do_not_log=.true.)
+      call get_param(param_file, mod, "TS_RANGE_S_DENSE", S_dense, default = S_Ref, do_not_log=.true.)
+      call get_param(param_file, mod, "TS_RANGE_RESOLN_RATIO", res_rat, default=1.0, do_not_log=.true.)
+      ! Emulate the T,S used in the "ts_range" coordinate configuration code
+      k_light = GV%nk_rho_varies + 1
+      do j=js,je ; do i=is,ie
+        T(i,j,k_light) = T_light ; S(i,j,k_light) = S_light
+      enddo ; enddo
+      a1 = 2.0 * res_rat / (1.0 + res_rat)
+      do k=k_light+1,nz
+        k_frac = real(k-k_light)/real(nz-k_light)
+        frac_dense = a1 * k_frac + (1.0 - a1) * k_frac**2
+        do j=js,je ; do i=is,ie
+          T(i,j,k) = frac_dense * (T_Dense - T_Light) + T_Light
+          S(i,j,k) = frac_dense * (S_Dense - S_Light) + S_Light
+        enddo ; enddo
+      enddo
     case ( REGRIDDING_SIGMA, REGRIDDING_ZSTAR, REGRIDDING_RHO ) ! All other coordinate use FV initialization
       do j=js,je ; do i=is,ie
-        xi0 = 0.0;
+        xi0 = 0.0
         do k = 1,nz
-          xi1 = xi0 + h(i,j,k) / G%max_depth;
-          if ( density_profile .eq. RHO_LINEAR ) then 
-            ! ---------------------------
-            ! Linear density profile
-            ! ---------------------------
-            S(i,j,k) = 34.0 + (xi0 + xi1);
-          else if ( density_profile .eq. RHO_PARABOLIC ) then
-            ! ---------------------------
-            ! Parabolic density profile
-            ! ---------------------------
-            S(i,j,k) = 34.0 + (2.0 / 3.0) * (xi1**3 - xi0**3) / (xi1 - xi0);
-          else if ( density_profile .eq. RHO_EXP ) then
-            ! ---------------------------
-            ! Exponential density profile
-            ! ---------------------------
-            r = 0.8;    ! small values give sharp profiles
-            S(i,j,k) = 34.0 + r * (exp(xi1/r)-exp(xi0/r)) / (xi1 - xi0);
-          end if    
-          xi0 = xi1;
+          xi1 = xi0 + h(i,j,k) / G%max_depth
+          select case ( trim(density_profile) )
+            case ('linear')
+              S(i,j,k) = S_surf + S_range * 0.5 * (xi0 + xi1)
+              S(i,j,k) = S_surf + (xi0 + xi1)
+              T(i,j,k) = T_surf + T_range * 0.5 * (xi0 + xi1)
+            case ('parabolic')
+              S(i,j,k) = S_surf + S_range * (2.0 / 3.0) * (xi1**3 - xi0**3) / (xi1 - xi0)
+              T(i,j,k) = T_surf + T_range * (2.0 / 3.0) * (xi1**3 - xi0**3) / (xi1 - xi0)
+            case ('exponential')
+              S(i,j,k) = S_surf + S_range * (exp(xi1/r)-exp(xi0/r)) / (xi1 - xi0)
+              T(i,j,k) = T_surf + T_range * (exp(xi1/r)-exp(xi0/r)) / (xi1 - xi0)
+            case default
+              call MOM_error(FATAL, 'Unknown value for "INITIAL_DENSITY_PROFILE"')
+          end select
+          xi0 = xi1
         enddo
       enddo ; enddo
   end select
