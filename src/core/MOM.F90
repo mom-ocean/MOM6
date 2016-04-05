@@ -82,8 +82,7 @@ use MOM_dynamics_legacy_split, only : initialize_dyn_legacy_split, end_dyn_legac
 use MOM_dynamics_legacy_split, only : adjustments_dyn_legacy_split, MOM_dyn_legacy_split_CS
 use MOM_EOS,                   only : EOS_init
 use MOM_error_checking,        only : check_redundant
-use MOM_grid,                  only : MOM_grid_init, ocean_grid_type, get_thickness_units
-use MOM_grid,                  only : get_flux_units, get_tr_flux_units
+use MOM_grid,                  only : MOM_grid_init, ocean_grid_type, MOM_grid_end
 use MOM_hor_visc,              only : horizontal_viscosity, hor_visc_init
 use MOM_interface_heights,     only : find_eta
 use MOM_lateral_mixing_coeffs, only : calc_slope_functions, VarMix_init
@@ -113,7 +112,8 @@ use MOM_tracer_flow_control,   only : call_tracer_register, tracer_flow_control_
 use MOM_tracer_flow_control,   only : tracer_flow_control_init, call_tracer_surface_state
 use MOM_vert_friction,         only : vertvisc, vertvisc_remnant
 use MOM_vert_friction,         only : vertvisc_limit_vel, vertvisc_init
-use MOM_verticalGrid,          only : verticalGrid_type
+use MOM_verticalGrid,          only : verticalGrid_type, verticalGridInit, verticalGridEnd
+use MOM_verticalGrid,          only : get_thickness_units, get_flux_units, get_tr_flux_units
 use MOM_wave_speed,            only : wave_speed_init, wave_speed_CS
 
 implicit none ; private
@@ -1418,7 +1418,13 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   call MOM_io_init(param_file)
   call MOM_grid_init(G, param_file)
-  GV => CS%G%GV
+  call verticalGridInit( param_file, G%GV )
+  GV => G%GV
+  ! Copy several common variables from the vertical grid to the horizontal grid.
+  ! Consider removing these later?
+  G%ks = 1 ; G%ke = GV%ke
+  G%bathyT(:,:) = GV%Angstrom_z !### Should this be 0 instead, in which case this line can go?
+
   is   = G%isc   ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = G%ke
   isd  = G%isd   ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
   IsdB = G%IsdB  ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
@@ -2975,6 +2981,9 @@ subroutine MOM_end(CS)
       call end_dyn_unsplit(CS%dyn_unsplit_CSp)
   endif ; endif
   DEALLOC_(CS%ave_ssh)
+
+  call verticalGridEnd(CS%G%GV)
+  call MOM_grid_end(CS%G)
 
   deallocate(CS)
 

@@ -25,17 +25,14 @@ use MOM_domains, only : MOM_domain_type, get_domain_extent, compute_block_extent
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_verticalGrid, only : verticalGrid_type
-use MOM_verticalGrid, only : verticalGridInit, verticalGridEnd
-use MOM_verticalGrid, only : get_flux_units, get_thickness_units, get_tr_flux_units
 
 implicit none ; private
 
 #include <MOM_memory.h>
 
 public MOM_grid_init, MOM_grid_end, set_first_direction
-public get_flux_units, get_thickness_units, get_tr_flux_units
 public isPointInCell
-public hor_index_type, verticalGrid_type
+public hor_index_type
 
 type, public :: ocean_grid_type
   type(MOM_domain_type), pointer :: Domain => NULL()
@@ -300,13 +297,6 @@ subroutine MOM_grid_init(G, param_file)
   if ( G%block(nblocks)%jed+G%block(nblocks)%jdg_offset > G%HI%jed + G%HI%jdg_offset ) &
         call MOM_error(FATAL, "MOM_grid_init: G%jed_bk > G%jed")
 
-  call verticalGridInit( param_file, G%GV )
-
-  ! Copy over several common variables from the vertical grid.
-  ! Consider removing these later.
-  G%ks = 1 ; G%ke = G%GV%ke
-  G%bathyT(:,:) = G%GV%Angstrom_z !### Should this be 0 instead, in which case this line can go?
-
 end subroutine MOM_grid_init
 
 !> Returns true if the coordinates (x,y) are within the h-cell (i,j)
@@ -449,7 +439,6 @@ subroutine MOM_grid_end(G)
   deallocate(G%gridLonT) ; deallocate(G%gridLatT)
   deallocate(G%gridLonB) ; deallocate(G%gridLatB)
 
-  call verticalGridEnd( G%GV )
 end subroutine MOM_grid_end
 
 end module MOM_grid
