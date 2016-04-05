@@ -471,7 +471,7 @@ subroutine ocean_model_restart(OS, timestamp)
 
    if (BTEST(OS%Restart_control,1)) then
      call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
-                       OS%MOM_CSp%restart_CSp, .true.)
+                       OS%MOM_CSp%restart_CSp, .true., GV=OS%grid%GV)
      call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
                                OS%dirs%restart_output_dir, .true.)
      if (OS%use_ice_shelf) then
@@ -480,7 +480,7 @@ subroutine ocean_model_restart(OS, timestamp)
    endif
    if (BTEST(OS%Restart_control,0)) then
      call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
-                       OS%MOM_CSp%restart_CSp)
+                       OS%MOM_CSp%restart_CSp, GV=OS%grid%GV)
      call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
                                OS%dirs%restart_output_dir)
      if (OS%use_ice_shelf) then
@@ -545,7 +545,7 @@ subroutine ocean_model_save_restart(OS, Time, directory, filename_suffix)
   if (present(directory)) then ; restart_dir = directory
   else ; restart_dir = OS%dirs%restart_output_dir ; endif
 
-  call save_restart(restart_dir, Time, OS%grid, OS%MOM_CSp%restart_CSp)
+  call save_restart(restart_dir, Time, OS%grid, OS%MOM_CSp%restart_CSp, GV=OS%grid%GV)
 
   call forcing_save_restart(OS%forcing_CSp, OS%grid, Time, restart_dir)
 

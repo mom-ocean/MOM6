@@ -465,7 +465,7 @@ program MOM_main
         (Time + (Time_step_ocean/2) > restart_time)) then
       if (BTEST(Restart_control,1)) then
         call save_restart(dirs%restart_output_dir, Time, grid, &
-                          MOM_CSp%restart_CSp, .true.)
+                          MOM_CSp%restart_CSp, .true., GV=grid%GV)
         call forcing_save_restart(surface_forcing_CSp, grid, Time, &
                             dirs%restart_output_dir, .true.)
         if (use_ice_shelf) call ice_shelf_save_restart(ice_shelf_CSp, Time, &
@@ -473,7 +473,7 @@ program MOM_main
       endif
       if (BTEST(Restart_control,0)) then
         call save_restart(dirs%restart_output_dir, Time, grid, &
-                          MOM_CSp%restart_CSp)
+                          MOM_CSp%restart_CSp, GV=grid%GV)
         call forcing_save_restart(surface_forcing_CSp, grid, Time, &
                             dirs%restart_output_dir)
         if (use_ice_shelf) call ice_shelf_save_restart(ice_shelf_CSp, Time, &
@@ -495,7 +495,7 @@ program MOM_main
          "with unused buoyancy fluxes.  For conservation, the ocean restart "//&
          "files can only be created after the buoyancy forcing is applied.")
 
-    call save_restart(dirs%restart_output_dir, Time, grid, MOM_CSp%restart_CSp)
+    call save_restart(dirs%restart_output_dir, Time, grid, MOM_CSp%restart_CSp, GV=grid%GV)
     if (use_ice_shelf) call ice_shelf_save_restart(ice_shelf_CSp, Time, &
                                 dirs%restart_output_dir)
     ! Write ocean solo restart file.

@@ -1337,9 +1337,10 @@ end subroutine ALE_updateVerticalGridType
 !> Write the vertical coordinate information into a file.
 !! This subroutine writes out a file containing any available data related
 !! to the vertical grid used by the MOM ocean model when in ALE mode.
-subroutine ALE_writeCoordinateFile( CS, G, directory )
+subroutine ALE_writeCoordinateFile( CS, G, GV, directory )
   type(ALE_CS),          pointer       :: CS         !< module control structure 
   type(ocean_grid_type), intent(inout) :: G          !< model grid structure 
+  type(verticalGrid_type), intent(in)  :: GV         !< ocean vertical grid structure
   character(len=*),      intent(in)    :: directory  !< directory for writing grid info 
 
   character(len=120) :: filepath
@@ -1359,7 +1360,7 @@ subroutine ALE_writeCoordinateFile( CS, G, directory )
   vars(2) = var_desc('ds_interface', getCoordinateUnits( CS%regridCS ), &
                     'Layer Center Coordinate Separation','1','i','1')
 
-  call create_file(unit, trim(filepath), vars, 2, G, fields, SINGLE_FILE)
+  call create_file(unit, trim(filepath), vars, 2, G, fields, SINGLE_FILE, GV=GV)
   call write_field(unit, fields(1), ds)
   call write_field(unit, fields(2), dsi)
   call close_file(unit)

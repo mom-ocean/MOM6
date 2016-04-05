@@ -595,10 +595,10 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
     energypath_nc = trim(CS%energyfile) // ".nc"
     if (day > CS%Start_time) then
       call reopen_file(CS%fileenergy_nc, trim(energypath_nc), vars, &
-                       num_nc_fields, G, CS%fields, SINGLE_FILE, CS%timeunit)
+                       num_nc_fields, G, CS%fields, SINGLE_FILE, CS%timeunit, GV=GV)
     else
       call create_file(CS%fileenergy_nc, trim(energypath_nc), vars, &
-                       num_nc_fields, G, CS%fields, SINGLE_FILE, CS%timeunit)
+                       num_nc_fields, G, CS%fields, SINGLE_FILE, CS%timeunit, GV=GV)
     endif
   endif
 
