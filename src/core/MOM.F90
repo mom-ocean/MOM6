@@ -1747,7 +1747,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call callTree_waypoint("restart registration complete (initialize_MOM)")
 
   call cpu_clock_begin(id_clock_MOM_init)
-  call MOM_initialize_fixed(G, param_file, dirs, CS%tv)
+  call MOM_initialize_fixed(G, GV, param_file, dirs, CS%tv)
   call callTree_waypoint("returned from MOM_initialize_fixed() (initialize_MOM)")
 
   if (CS%use_ALE_algorithm) then
@@ -1755,8 +1755,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     call callTree_waypoint("returned from ALE_init() (initialize_MOM)")
   endif
 
-  call MOM_initialize_state(CS%u, CS%v, CS%h, CS%tv, Time, G, param_file, dirs, &
-                      CS%restart_CSp, CS%ALE_CSp, init_CS, Time_in)
+  call MOM_initialize_state(CS%u, CS%v, CS%h, CS%tv, Time, G, GV, param_file, &
+                            dirs, CS%restart_CSp, CS%ALE_CSp, init_CS, Time_in)
   call cpu_clock_end(id_clock_MOM_init)
   call callTree_waypoint("returned from MOM_initialize_state() (initialize_MOM)")
 

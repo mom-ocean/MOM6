@@ -50,12 +50,13 @@ character(len=40) :: mod = "MOM_fixed_initialization" ! This module's name.
 contains
 
 ! -----------------------------------------------------------------------------
-subroutine MOM_initialize_fixed(G, PF, dirs, tv)
-  type(ocean_grid_type),                  intent(inout) :: G    !< The ocean's grid structure.
-  type(param_file_type),                  intent(in)    :: PF   !< A structure indicating the open file
-                                                                !! to parse for model parameter values.
-  type(directories),                      intent(in)    :: dirs !< A structure containing relevant paths.
-  type(thermo_var_ptrs),                  intent(inout) :: tv   !< TO BE DELETED -aja
+subroutine MOM_initialize_fixed(G, GV, PF, dirs, tv)
+  type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(inout) :: GV   !< Ocean vertical grid structure
+  type(param_file_type),   intent(in)    :: PF   !< A structure indicating the open file
+                                                 !! to parse for model parameter values.
+  type(directories),       intent(in)    :: dirs !< A structure containing relevant paths.
+  type(thermo_var_ptrs),   intent(inout) :: tv   !< TO BE DELETED -aja
   ! Local
   character(len=200) :: filename   ! The name of an input file.
   character(len=200) :: filename2  ! The name of an input files.
@@ -68,10 +69,8 @@ subroutine MOM_initialize_fixed(G, PF, dirs, tv)
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   type(EOS_type), pointer :: eos => NULL() ! TO BE DELETED -aja
-  type(verticalGrid_type), pointer :: GV => NULL()
 
   if (associated(tv%eqn_of_state)) eos => tv%eqn_of_state ! TO BE DELETED -aja
-  GV => G%GV
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
