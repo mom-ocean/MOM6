@@ -14,7 +14,7 @@ use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
 use MOM_file_parser, only : log_version
 use MOM_get_input, only : directories
-use MOM_grid, only : ocean_grid_type, verticalGrid_type, isPointInCell
+use MOM_grid, only : ocean_grid_type, isPointInCell
 use MOM_io, only : close_file, create_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE, MULTIPLE
 use MOM_io, only : slasher, vardesc, write_field, var_desc
@@ -22,7 +22,7 @@ use MOM_io, only : EAST_FACE, NORTH_FACE
 use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
 use MOM_string_functions, only : uppercase
 use MOM_variables, only : thermo_var_ptrs
-use MOM_verticalGrid, only : setVerticalGridAxes
+use MOM_verticalGrid, only : verticalGrid_type, setVerticalGridAxes
 use user_initialization, only : user_set_coord, user_initialize_topography
 use DOME_initialization, only : DOME_initialize_topography
 use benchmark_initialization, only : benchmark_initialize_topography

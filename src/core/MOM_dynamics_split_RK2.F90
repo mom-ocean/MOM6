@@ -39,8 +39,7 @@ use MOM_continuity,            only : continuity, continuity_init, continuity_CS
 use MOM_CoriolisAdv,           only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
 use MOM_diabatic_driver,       only : diabatic, diabatic_driver_init, diabatic_CS
 use MOM_error_checking,        only : check_redundant
-use MOM_grid,                  only : MOM_grid_init, ocean_grid_type, get_thickness_units
-use MOM_grid,                  only : get_flux_units, get_tr_flux_units
+use MOM_grid,                  only : ocean_grid_type
 use MOM_hor_visc,              only : horizontal_viscosity, hor_visc_init, hor_visc_CS
 use MOM_interface_heights,     only : find_eta
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
@@ -53,7 +52,8 @@ use MOM_tidal_forcing,         only : tidal_forcing_init, tidal_forcing_CS
 use MOM_vert_friction,         only : vertvisc, vertvisc_coef, vertvisc_remnant
 use MOM_vert_friction,         only : vertvisc_limit_vel, vertvisc_init, vertvisc_CS
 use MOM_vert_friction,         only : updateCFLtruncationValue
-use MOM_verticalGrid,          only : verticalGrid_type
+use MOM_verticalGrid,          only : verticalGrid_type, get_thickness_units
+use MOM_verticalGrid,          only : get_flux_units, get_tr_flux_units
 
 implicit none ; private
 

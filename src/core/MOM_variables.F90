@@ -23,7 +23,7 @@ module MOM_variables
 use MOM_domains, only : MOM_domain_type, get_domain_extent, group_pass_type
 use MOM_checksums, only : hchksum, qchksum, uchksum, vchksum
 use MOM_error_handler, only : MOM_error, FATAL
-use MOM_grid, only : ocean_grid_type, MOM_variables_init => MOM_grid_init
+use MOM_grid, only : ocean_grid_type
 use MOM_io, only : vardesc
 use MOM_EOS, only : EOS_type
 
@@ -33,7 +33,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public MOM_variables_init, MOM_thermovar_chksum
+public MOM_thermovar_chksum
 public ocean_grid_type, vardesc, alloc_BT_cont_type, dealloc_BT_cont_type
 
 type, public :: p3d
