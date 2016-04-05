@@ -2383,7 +2383,7 @@ end subroutine deallocate_forcing_type
 !!   \f}
 !! The convergence of the penetrative shortwave flux is given by
 !! \f$ \mbox{pen_SW (enter k)}-\mbox{pen_SW (leave k)}\f$.  This term
-!! appears for all cells k=1,nz.  It is diagnosed as "rsdo" inside module
+!! appears for all cells k=1,nz.  It is diagnosed as "rsdoabsorb" inside module
 !! MOM6/src/parameterizations/vertical/MOM_diabatic_aux.F90
 !!
 

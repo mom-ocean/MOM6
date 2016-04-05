@@ -1287,10 +1287,10 @@ subroutine diabatic_aux_init(Time, G, GV, param_file, diag, CS, use_ePBL)
       "meter second-1")
   if (CS%id_createdH>0) allocate(CS%createdH(isd:ied,jsd:jed))
 
-  ! diagnostic for heating of a grid cell from convergence of SW heat into the cell.
-  CS%id_penSW_diag = register_diag_field('ocean_model', 'rsdo',      &
-        diag%axesTL, Time, 'Downwelling Shortwave Flux in Sea Water',&
-        'Watt meter-2', standard_name='downwelling_shortwave_flux_in_sea_water')
+ ! diagnostic for heating of a grid cell from convergence of SW heat into the cell.
+  CS%id_penSW_diag = register_diag_field('ocean_model', 'rsdoabsorb',&
+        diag%axesTL, Time, 'Convergence of Penetrative Shortwave Flux in Sea Water',&
+        'Watt meter-2', standard_name='net_rate_of_absorption_of_shortwave_energy_in_ocean_layer')
   if (CS%id_penSW_diag>0) then
      allocate(CS%penSW_diag(isd:ied,jsd:jed,nz))
      CS%penSW_diag(:,:,:) = 0.0
