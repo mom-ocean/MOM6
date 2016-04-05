@@ -1792,7 +1792,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   ! This call sets up the diagnostic axes. These are needed,
   ! e.g. to generate the target grids below.
-  call set_axes_info(G, param_file, diag)
+  call set_axes_info(G, GV, param_file, diag)
 
   ! Whenever thickness changes let the diag manager know, target grids
   ! for vertical remapping may need to be regenerated. This needs to
@@ -1800,7 +1800,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   call cpu_clock_begin(id_clock_MOM_init)
   if (CS%use_ALE_algorithm) then
-    call ALE_writeCoordinateFile( CS%ALE_CSp, G, dirs%output_directory )
+    call ALE_writeCoordinateFile( CS%ALE_CSp, G, GV, dirs%output_directory )
   endif
   call cpu_clock_end(id_clock_MOM_init)
   call callTree_waypoint("ALE initialized (initialize_MOM)")
@@ -1984,7 +1984,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     call register_restart_field(e, vd, .true., restart_CSp_tmp)
 
     call save_restart(dirs%output_directory, Time, G, &
-                      restart_CSp_tmp, filename=IC_file)
+                      restart_CSp_tmp, filename=IC_file, GV=GV)
     deallocate(e)
     deallocate(restart_CSp_tmp)
   endif

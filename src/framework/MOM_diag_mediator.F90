@@ -41,6 +41,7 @@ use MOM_remapping,        only : remapping_CS, initialize_remapping, dzFromH1H2
 use MOM_remapping,        only : remapping_core_h
 use MOM_regridding,       only : regridding_CS, initialize_regridding, setCoordinateResolution
 use MOM_regridding,       only : build_zstar_column, set_regrid_params
+use MOM_verticalGrid,     only : verticalGrid_type
 
 use diag_axis_mod, only : get_diag_axis_name
 use diag_manager_mod, only : diag_manager_init, diag_manager_end
@@ -183,8 +184,9 @@ end type diag_ctrl
 contains
 
 !> Sets up diagnostics axes
-subroutine set_axes_info(G, param_file, diag_cs, set_vertical)
+subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
   type(ocean_grid_type), intent(inout) :: G !< Ocean grid structure
+  type(verticalGrid_type), intent(in)  :: GV !< ocean vertical grid structure
   type(param_file_type), intent(in)    :: param_file !< Parameter file structure
   type(diag_ctrl),       intent(inout) :: diag_cs !< Diagnostics control structure
   logical, optional,     intent(in)    :: set_vertical !< If true or missing, set up
@@ -254,14 +256,14 @@ subroutine set_axes_info(G, param_file, diag_cs, set_vertical)
 
   if (set_vert) then
     nz = G%ke
-    zinter(1:nz+1) = G%GV%sInterface(1:nz+1)
-    zlev(1:nz) = G%GV%sLayer(1:nz)
-    id_zl = diag_axis_init('zl', zlev, trim(G%GV%zAxisUnits), 'z', &
-                           'Layer '//trim(G%GV%zAxisLongName),     &
-                           direction=G%GV%direction)
-    id_zi = diag_axis_init('zi', zinter, trim(G%GV%zAxisUnits), 'z', &
-                           'Interface '//trim(G%GV%zAxisLongName),   &
-                           direction=G%GV%direction)
+    zinter(1:nz+1) = GV%sInterface(1:nz+1)
+    zlev(1:nz) = GV%sLayer(1:nz)
+    id_zl = diag_axis_init('zl', zlev, trim(GV%zAxisUnits), 'z', &
+                           'Layer '//trim(GV%zAxisLongName),     &
+                           direction=GV%direction)
+    id_zi = diag_axis_init('zi', zinter, trim(GV%zAxisUnits), 'z', &
+                           'Interface '//trim(GV%zAxisLongName),   &
+                           direction=GV%direction)
   else
     id_zl = -1 ; id_zi = -1
   endif
