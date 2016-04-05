@@ -283,7 +283,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
           case ("sloshing"); call sloshing_initialize_temperature_salinity(tv%T, &
                                   tv%S, h, G, PF, eos)
           case ("seamount"); call seamount_initialize_temperature_salinity(tv%T, &
-                                  tv%S, h, G, PF, eos)
+                                  tv%S, h, G, GV, PF, eos)
           case ("rossby_front"); call Rossby_front_initialize_temperature_salinity ( tv%T, &
                                 tv%S, h, G, PF, eos)
           case ("SCM_ideal_hurr"); call SCM_idealized_hurricane_TS_init ( tv%T, &
