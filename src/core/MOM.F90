@@ -698,7 +698,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
             call check_redundant("Pre-ALE 1 ", u, v, G)
           endif
           call cpu_clock_begin(id_clock_ALE)
-          call ALE_main(G, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, dtdia)
+          call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, dtdia)
           call cpu_clock_end(id_clock_ALE)
           if (CS%debug) then
             call MOM_state_chksum("Post-ALE 1 ", u, v, h, CS%uh, CS%vh, G, GV)
@@ -1020,7 +1020,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
             call check_redundant("Pre-ALE ", u, v, G)
           endif
           call cpu_clock_begin(id_clock_ALE)
-          call ALE_main(G, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%dt_trans)
+          call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%dt_trans)
           call cpu_clock_end(id_clock_ALE)
           if (CS%debug) then
             call MOM_state_chksum("Post-ALE ", u, v, h, CS%uh, CS%vh, G, GV)
@@ -1751,7 +1751,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call callTree_waypoint("returned from MOM_initialize_fixed() (initialize_MOM)")
 
   if (CS%use_ALE_algorithm) then
-    call ALE_init(param_file, G, CS%ALE_CSp)
+    call ALE_init(param_file, G, GV, CS%ALE_CSp)
     call callTree_waypoint("returned from ALE_init() (initialize_MOM)")
   endif
 
@@ -1772,7 +1772,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     call callTree_waypoint("Calling adjustGridForIntegrity() to remap initial conditions (initialize_MOM)")
     call adjustGridForIntegrity(CS%ALE_CSp, G, CS%h )
     call callTree_waypoint("Calling ALE_main() to remap initial conditions (initialize_MOM)")
-    call ALE_main( G, CS%h, CS%u, CS%v, CS%tv, CS%tracer_Reg, CS%ALE_CSp ) ! Or init_CS%tracer_Reg ??? -AJA
+    call ALE_main( G, GV, CS%h, CS%u, CS%v, CS%tv, CS%tracer_Reg, CS%ALE_CSp ) ! Or init_CS%tracer_Reg ??? -AJA
     if (CS%debug) then
       call uchksum(CS%u,"Post ALE adjust init cond u", G, haloshift=1)
       call vchksum(CS%v,"Post ALE adjust init cond v", G, haloshift=1)
