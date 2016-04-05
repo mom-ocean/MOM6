@@ -97,7 +97,6 @@ module MOM_generic_tracer
                              ! timing of diagnostic output.
      type(MOM_restart_CS), pointer :: restart_CSp => NULL()
 
-!     real    :: Rho_0
      !   The following pointer will be directed to the first element of the
      ! linked list of generic tracers.
      type(g_tracer_type), pointer :: g_tracer_list => NULL()
@@ -265,10 +264,6 @@ contains
        g_tracer=>g_tracer_next
 
     enddo
-
-    !   Rho_0 is a property of MOM and not a property of any tracer. Copy it
-    ! from the ocean grid type.  (I think this is now unneeded. -RWH)
-    !  CS%Rho_0 = G%GV%Rho0
 
     register_MOM_generic_tracer = .true.
   end function register_MOM_generic_tracer
