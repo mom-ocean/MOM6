@@ -367,7 +367,7 @@ program MOM_main
   endif
 
   call write_energy(MOM_CSp%u, MOM_CSp%v, MOM_CSp%h, &
-                    MOM_CSp%tv, Time, 0, grid, sum_output_CSp, MOM_CSp%tracer_flow_CSp)
+                    MOM_CSp%tv, Time, 0, grid, grid%GV, sum_output_CSp, MOM_CSp%tracer_flow_CSp)
   call write_cputime(Time, 0, nmax, write_CPU_CSp)
 
   write_energy_time = Start_time + energysavedays * &
@@ -454,7 +454,7 @@ program MOM_main
     if ((Time + (Time_step_ocean/2) > write_energy_time) .and. &
         (MOM_CSp%dt_trans == 0.0)) then
       call write_energy(MOM_CSp%u, MOM_CSp%v, MOM_CSp%h, &
-                        MOM_CSp%tv, Time, n+ntstep-1, grid, sum_output_CSp, &
+                        MOM_CSp%tv, Time, n+ntstep-1, grid, grid%GV, sum_output_CSp, &
                         MOM_CSp%tracer_flow_CSp)
       call write_cputime(Time, n+ntstep-1, nmax, write_CPU_CSp)
       write_energy_time = write_energy_time + energysavedays

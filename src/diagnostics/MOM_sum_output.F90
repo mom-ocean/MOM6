@@ -291,7 +291,7 @@ subroutine MOM_sum_output_end(CS)
   endif
 end subroutine MOM_sum_output_end
 
-subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
+subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
@@ -299,7 +299,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
   type(time_type),                        intent(inout) :: day
   integer,                                intent(in)    :: n
   type(ocean_grid_type),                  intent(in)    :: G
-  ! type(verticalGrid_type),                intent(in)    :: GV
+  type(verticalGrid_type),                intent(in)    :: GV
   type(Sum_output_CS),                    pointer       :: CS
   type(tracer_flow_control_CS), optional, pointer       :: tracer_CSp
 
@@ -386,7 +386,6 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
   real, dimension(SZI_(G),SZJ_(G)) :: &
     Temp_int, Salt_int
   real :: H_to_m, H_to_kg_m2  ! Local copies of unit conversion factors.
-  type(verticalGrid_type),  pointer :: GV => NULL()
   integer :: num_nc_fields  ! The number of fields that will actually go into
                             ! the NetCDF file.
   integer :: i, j, k, is, ie, js, je, nz, m, Isq, Ieq, Jsq, Jeq
@@ -413,8 +412,6 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
 
  ! A description for output of each of the fields.
   type(vardesc) :: vars(NUM_FIELDS+MAX_FIELDS_)
-
-  GV => G%GV
 
   num_nc_fields = 17
   if (.not.CS%use_temperature) num_nc_fields = 11

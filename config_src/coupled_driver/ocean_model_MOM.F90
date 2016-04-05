@@ -285,7 +285,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
                             OS%MOM_CSp%ntrunc, Time_init, OS%sum_output_CSp)
 
   call write_energy(OS%MOM_CSp%u, OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%tv, &
-             OS%Time, 0, OS%grid, OS%sum_output_CSp, OS%MOM_CSp%tracer_flow_CSp)
+             OS%Time, 0, OS%grid, OS%grid%GV, OS%sum_output_CSp, OS%MOM_CSp%tracer_flow_CSp)
 
   ! write_energy_time is the next integral multiple of energysavedays.
   OS%write_energy_time = Time_init + OS%energysavedays * &
@@ -434,7 +434,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   if ((OS%Time + ((Ocean_coupling_time_step)/2) > OS%write_energy_time) .and. &
       (OS%MOM_CSp%dt_trans==0.0)) then
     call write_energy(OS%MOM_CSp%u, OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%tv, &
-                      OS%Time, OS%nstep, OS%grid, OS%sum_output_CSp, &
+                      OS%Time, OS%nstep, OS%grid, OS%grid%GV, OS%sum_output_CSp, &
                       OS%MOM_CSp%tracer_flow_CSp)
     OS%write_energy_time = OS%write_energy_time + OS%energysavedays
   endif

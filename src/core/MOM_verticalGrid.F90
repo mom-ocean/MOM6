@@ -259,8 +259,8 @@ end function get_tr_flux_units
 !> This sets the coordinate data for the "layer mode" of the isopycnal model.
 subroutine setVerticalGridAxes( Rlay, GV )
   ! Arguments
-  type(verticalGrid_type), pointer    :: GV   ! The container for vertical grid data
-  real, dimension(GV%ke),  intent(in) :: Rlay ! The layer target density
+  type(verticalGrid_type), intent(inout) :: GV   !< The container for vertical grid data
+  real, dimension(GV%ke),  intent(in)    :: Rlay !< The layer target density
   ! Local variables
   integer :: nk
 

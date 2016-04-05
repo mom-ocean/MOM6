@@ -91,14 +91,15 @@ character(len=40)  :: mod = "MOM_state_initialization" ! This module's name.
 contains
 
 ! -----------------------------------------------------------------------------
-subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
-                              restart_CS, ALE_CSp, CS, Time_in)
+subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
+                                restart_CS, ALE_CSp, CS, Time_in)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(out)   :: u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out)   :: v
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(out)   :: h
   type(thermo_var_ptrs),                  intent(inout) :: tv
   type(time_type),                        intent(inout) :: Time
   type(ocean_grid_type),                  intent(inout) :: G
+  type(verticalGrid_type),                intent(in)    :: GV
   type(param_file_type),                  intent(in)    :: PF
   type(directories),                      intent(in)    :: dirs
   type(MOM_restart_CS),                   pointer       :: restart_CS
@@ -113,6 +114,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
 !                 salinity or mixed layer density. Absent fields have NULL ptrs.
 !  (out)     Time    - Time at the start of the run segment.
 !  (inout)   G       - The ocean's grid structure.
+!  (in)      GV      - The ocean's vertical grid structure.
 !  (in)      PF      - A structure indicating the open file to parse for
 !                      model parameter values.
 !  (in)      dirs    - A structure containing several relevant directory paths.
@@ -140,7 +142,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
   logical :: apply_OBC_v_flather_north, apply_OBC_v_flather_south
   logical :: convert
   type(EOS_type), pointer :: eos => NULL()
-  type(verticalGrid_type), pointer :: GV => NULL()
   logical :: debug    ! indicates whether to write debugging output
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -151,7 +152,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, PF, dirs, &
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-  GV => G%GV
 
   call callTree_enter("MOM_initialize_state(), MOM_state_initialization.F90")
   call log_version(PF, mod, version)
