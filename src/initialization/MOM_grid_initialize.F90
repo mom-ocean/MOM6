@@ -1444,7 +1444,7 @@ subroutine initialize_masks(G, PF)
     call MOM_error(FATAL, "Symmetric memory must be used when "//&
       "APPLY_OBC_U_FLATHER_WEST or APPLY_OBC_V_FLATHER_SOUTH is true.")
 
-  Dmin = MAX(min_depth,2.0*G%GV%Angstrom_z)
+  Dmin = min_depth
   if (mask_depth>=0.) Dmin = mask_depth
 
   call pass_var(G%bathyT, G%Domain)
