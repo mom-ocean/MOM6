@@ -51,7 +51,6 @@ subroutine register_obsolete_diagnostics(param_file, diag)
   if (found_in_diagtable(diag, 'heat_rest', 'heat_restore'))                        foundEntry = .true.
   if (found_in_diagtable(diag, 'KPP_dTdt', 'KPP_NLT_dTdt'))                         foundEntry = .true.
   if (found_in_diagtable(diag, 'KPP_dSdt', 'KPP_NLT_dSdt'))                         foundEntry = .true.
-  if (found_in_diagtable(diag, 'rsdo', 'rsdoabsorb'))                               foundEntry = .true.
 
   if (causeFatal) then; errType = FATAL
   else ; errType = WARNING ; endif
