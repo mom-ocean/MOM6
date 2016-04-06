@@ -38,12 +38,12 @@ subroutine bcz_params(G, param_file, S_ref, dSdz, delta_S, dSdx, T_ref, dTdz, de
   call get_param(param_file,mod,"S_REF",S_ref,'Reference salinity',units='ppt',default=35.)
   call get_param(param_file,mod,"DSDZ",dSdz,'Salinity stratification',units='ppt/m',default=0.0)
   call get_param(param_file,mod,"DELTA_S",delta_S,'Salinity difference across baroclinic zone',units='ppt',default=0.0)
-  call get_param(param_file,mod,"DSDX",dSdx,'Meridional salinity difference',units='ppt'//G%axis_units,default=0.0)
+  call get_param(param_file,mod,"DSDX",dSdx,'Meridional salinity difference',units='ppt/'//trim(G%x_axis_units),default=0.0)
   call get_param(param_file,mod,"T_REF",T_ref,'Reference temperature',units='C',default=10.)
   call get_param(param_file,mod,"DTDZ",dTdz,'Temperature stratification',units='C/m',default=0.0)
   call get_param(param_file,mod,"DELTA_T",delta_T,'Temperature difference across baroclinic zone',units='C',default=0.0)
-  call get_param(param_file,mod,"DTDX",dTdx,'Meridional temperature difference',units='C'//G%axis_units,default=0.0)
-  call get_param(param_file,mod,"L_ZONE",L_zone,'Width of baroclinic zone',units=G%axis_units,default=0.5*G%len_lat)
+  call get_param(param_file,mod,"DTDX",dTdx,'Meridional temperature difference',units='C/'//trim(G%x_axis_units),default=0.0)
+  call get_param(param_file,mod,"L_ZONE",L_zone,'Width of baroclinic zone',units=G%x_axis_units,default=0.5*G%len_lat)
   call closeParameterBlock(param_file)
 
 end subroutine bcz_params

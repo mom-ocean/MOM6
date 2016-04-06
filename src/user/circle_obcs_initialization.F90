@@ -74,7 +74,7 @@ subroutine circle_obcs_initialize_thickness(h, G, GV, param_file)
   call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "DISK_RADIUS", diskrad, &
                  "The radius of the initially elevated disk in the \n"//&
-                 "circle_obcs test case.", units=G%axis_units, &
+                 "circle_obcs test case.", units=G%x_axis_units, &
                  fail_if_missing=.true.)
 
   do k=1,nz
