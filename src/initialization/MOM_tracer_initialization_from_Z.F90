@@ -631,8 +631,7 @@ subroutine horiz_interp_and_extrap_tracer(filename, varnam,  conversion, recnum,
 ! after interpolating, fill in points which will be needed
 ! to define the layers
 
-  roundoff = G%GV%Angstrom_Z ! ###This is dimensionally incorrect and should be
-                             ! changed to roundoff = 2.0*EPSILON(missing_value)
+  roundoff = 3.0*EPSILON(missing_value)
 
   do k=1,kd
     write(laynum,'(I8)') k ; laynum = adjustl(laynum)
