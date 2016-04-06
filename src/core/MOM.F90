@@ -142,6 +142,7 @@ type, public :: MOM_control_struct
     v_prev => NULL()     !< previous value of v stored for diagnostics
 
   type(ocean_grid_type) :: G       !< structure containing metrics and grid info
+  type(verticalGrid_type), pointer :: GV => NULL() !< structure containing vertical grid info
   type(thermo_var_ptrs) :: tv      !< structure containing pointers to available
                                    !! thermodynamic fields
   type(diag_ctrl)       :: diag    !< structure to regulate diagnostic output timing
@@ -454,7 +455,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   logical :: showCallTree
   logical :: do_pass_kd_kv_turb ! This is used for a group halo pass.
 
-  G => CS%G ; GV => CS%G%GV
+  G => CS%G ; GV => CS%GV
   is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = G%ke
   Isq  = G%IscB ; Ieq  = G%IecB ; Jsq  = G%JscB ; Jeq  = G%JecB
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
@@ -740,7 +741,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       else   ! else for block "if (.not.CS%adiabatic)"
 
         call cpu_clock_begin(id_clock_diabatic)
-        call adiabatic(h, CS%tv, fluxes, dtdia, G, CS%diabatic_CSp)
+        call adiabatic(h, CS%tv, fluxes, dtdia, G, GV, CS%diabatic_CSp)
         fluxes%fluxes_used = .true.
         call cpu_clock_end(id_clock_diabatic)
 
@@ -1063,7 +1064,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       else   ! complement of "if (.not.CS%adiabatic)"
 
         call cpu_clock_begin(id_clock_diabatic)
-        call adiabatic(h, CS%tv, fluxes, CS%dt_trans, G, CS%diabatic_CSp)
+        call adiabatic(h, CS%tv, fluxes, CS%dt_trans, G, GV, CS%diabatic_CSp)
         fluxes%fluxes_used = .true.
         call cpu_clock_end(id_clock_diabatic)
 
@@ -1285,7 +1286,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
   call disable_averaging(CS%diag)
   if (showCallTree) call callTree_waypoint("calling calculate_surface_state (step_MOM)")
-  call calculate_surface_state(state, u, v, h, CS%ave_ssh, G, CS, &
+  call calculate_surface_state(state, u, v, h, CS%ave_ssh, G, GV, CS, &
                                fluxes%p_surf_SSH)
 
   call enable_averaging(dt*n_max,Time_local, CS%diag)
@@ -1418,8 +1419,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   call MOM_io_init(param_file)
   call MOM_grid_init(G, param_file)
-  call verticalGridInit( param_file, G%GV )
-  GV => G%GV
+  call verticalGridInit( param_file, CS%GV )
+  GV => CS%GV
   ! Copy several common variables from the vertical grid to the horizontal grid.
   ! Consider removing these later?
   G%ks = 1 ; G%ke = GV%ke
@@ -1995,7 +1996,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     deallocate(restart_CSp_tmp)
   endif
 
-!  call calculate_surface_state(state, CS%u, CS%v, CS%h, CS%ave_ssh, G, CS)
+!  call calculate_surface_state(state, CS%u, CS%v, CS%h, CS%ave_ssh, G, GV, CS)
 
   ! Undocumented parameter: set DO_UNIT_TESTS=True to invoke unitTests s/r
   ! which calls unit tests provided by some modules.
@@ -2702,14 +2703,14 @@ end subroutine set_restart_fields
 !> This subroutine sets the surface (return) properties of the ocean
 !! model by setting the appropriate pointers in state.  Unused fields
 !! are set to NULL.
-subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
+subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
   type(surface),                                  intent(inout) :: state  !< ocean surface state
   real, target, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u      !< zonal velocity (m/s)
   real, target, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v      !< meridional velocity (m/s)
   real, target, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h      !< layer thickness (m or kg/m2)
   real, target, dimension(NIMEM_,NJMEM_),         intent(inout) :: ssh    !< time mean surface height (m)
   type(ocean_grid_type),                          intent(inout) :: G      !< ocean grid structure
-!   type(verticalGrid_type),                        intent(inout) :: GV     !< ocean vertical grid structure
+  type(verticalGrid_type),                        intent(inout) :: GV     !< ocean vertical grid structure
   type(MOM_control_struct),                       intent(inout) :: CS     !< control structure
   real, optional, pointer, dimension(:,:)                       :: p_atm  !< atmospheric pressure (Pascal)
 
@@ -2719,7 +2720,6 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
                             ! determine mixed layer properties (meter)
   real :: dh                ! thickness of a layer within mixed layer (meter)
   real :: mass              ! mass per unit area of a layer (kg/m2)
-  type(verticalGrid_type),  pointer :: GV => NULL()
 
   real :: IgR0
   integer :: i, j, k, is, ie, js, je, nz, numberOfErrors
@@ -2728,7 +2728,6 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, CS, p_atm)
   character(240) :: msg
 
   call callTree_enter("calculate_surface_state(), MOM.F90")
-  GV => CS%G%GV
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
@@ -2982,7 +2981,7 @@ subroutine MOM_end(CS)
   endif ; endif
   DEALLOC_(CS%ave_ssh)
 
-  call verticalGridEnd(CS%G%GV)
+  call verticalGridEnd(CS%GV)
   call MOM_grid_end(CS%G)
 
   deallocate(CS)

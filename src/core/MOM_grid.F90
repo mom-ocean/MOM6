@@ -24,20 +24,17 @@ use MOM_hor_index, only : hor_index_type, hor_index_init
 use MOM_domains, only : MOM_domain_type, get_domain_extent, compute_block_extent
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_verticalGrid, only : verticalGrid_type
 
 implicit none ; private
 
 #include <MOM_memory.h>
 
 public MOM_grid_init, MOM_grid_end, set_first_direction
-public isPointInCell
-public hor_index_type
+public isPointInCell, hor_index_type
 
 type, public :: ocean_grid_type
   type(MOM_domain_type), pointer :: Domain => NULL()
   type(MOM_domain_type), pointer :: Domain_aux => NULL()
-  type(verticalGrid_type), pointer :: GV => NULL()
   type(hor_index_type) :: HI
   integer :: isc, iec, jsc, jec ! The range of the computational domain indices
   integer :: isd, ied, jsd, jed ! and data domain indices at tracer cell centers.
