@@ -196,8 +196,7 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
   integer :: k, nz
   integer :: nzi(4)
   real :: zlev(G%ke), zinter(G%ke+1)
-  logical :: set_vert, Cartesian_grid
-  character(len=80) :: grid_config, units_temp
+  logical :: set_vert
   character(len=200) :: inputdir, string, filename, varname, dimname
 
 ! This include declares and sets the variable "version".
@@ -208,35 +207,6 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mod, version)
-  call get_param(param_file, mod, "GRID_CONFIG", grid_config, &
-                 "The method for defining the horizontal grid.  Valid \n"//&
-                 "entries include:\n"//&
-                 "\t file - read the grid from GRID_FILE \n"//&
-                 "\t mosaic - read the grid from a mosaic grid file \n"//&
-                 "\t cartesian - a Cartesian grid \n"//&
-                 "\t spherical - a spherical grid \n"//&
-                 "\t mercator  - a Mercator grid", fail_if_missing=.true.)
-
-  G%x_axis_units = "degrees_E"
-  G%y_axis_units = "degrees_N"
-  if (index(lowercase(trim(grid_config)),"cartesian") > 0) then
-    ! This is a cartesian grid, and may have different axis units.
-    Cartesian_grid = .true.
-    call get_param(param_file, mod, "AXIS_UNITS", units_temp, &
-                 "The units for the x- and y- axis labels.  AXIS_UNITS \n"//&
-                 "should be defined as 'k' for km, 'm' for m, or 'd' \n"//&
-                 "for degrees of latitude and longitude (the default). \n"//&
-                 "Except on a Cartesian grid, only degrees are currently \n"//&
-                 "implemented.", default='degrees')
-    if (units_temp(1:1) == 'k') then
-      G%x_axis_units = "kilometers" ; G%y_axis_units = "kilometers"
-    elseif (units_temp(1:1) == 'm') then
-      G%x_axis_units = "meters" ; G%y_axis_units = "meters"
-    endif
-    call log_param(param_file, mod, "explicit AXIS_UNITS", G%x_axis_units)
-  else
-    Cartesian_grid = .false.
-  endif
 
   if(G%symmetric) then
     id_xq = diag_axis_init('xq', G%gridLonB(G%isgB:G%iegB), G%x_axis_units, 'x', &

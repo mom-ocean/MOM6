@@ -61,7 +61,9 @@ type, public :: ocean_grid_type
     dxT, IdxT, & ! dxT is delta x at h points, in m, and IdxT is 1/dxT in m-1.
     dyT, IdyT, & ! dyT is delta y at h points, in m, and IdyT is 1/dyT in m-1.
     areaT, &     ! areaT is the area of an h-cell, in m2.
-    IareaT       ! IareaT = 1/areaT, in m-2.
+    IareaT, &    ! IareaT = 1/areaT, in m-2.
+    sin_rot, &   ! The sine and cosine of the angular rotation between the local
+    cos_rot      ! model grid's northward and the true northward directions.
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
     mask2dCu, &  ! 0 for boundary points and 1 for ocean points on the u grid.  Nondim.
@@ -104,17 +106,8 @@ type, public :: ocean_grid_type
                         ! On many grids these are the same as geoLonT & geoLonBu.
   character(len=40) :: &
     x_axis_units, &     !   The units that are used in labeling the coordinate
-    y_axis_units        ! axes.
-
-  ! These parameters are run-time parameters that are used during some
-  ! initialization routines (but not all)
-  real :: south_lat     ! The latitude (or y-coordinate) of the first v-line
-  real :: west_lon      ! The longitude (or x-coordinate) of the first u-line
-  real :: len_lat = 0.  ! The latitudinal (or y-coord) extent of physical domain
-  real :: len_lon = 0.  ! The longitudinal (or x-coord) extent of physical domain
-  real :: Rad_Earth = 6.378e6 ! The radius of the planet in meters.
-  real :: max_depth     ! The maximum depth of the ocean in meters.
-  character(len=40) :: axis_units = ' '! Units for the horizontal coordinates.
+    y_axis_units        ! axes.  Except on a Cartesian grid, these are usually
+                        ! some variant of "degrees".
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
     bathyT        ! Ocean bottom depth at tracer points, in m.
@@ -141,6 +134,15 @@ type, public :: ocean_grid_type
   ! These variables are for block structures.
   integer                   :: nblocks
   type(hor_index_type), pointer :: Block(:) => NULL() ! store indices for each block
+
+  ! These parameters are run-time parameters that are used during some
+  ! initialization routines (but not all)
+  real :: south_lat     ! The latitude (or y-coordinate) of the first v-line
+  real :: west_lon      ! The longitude (or x-coordinate) of the first u-line
+  real :: len_lat = 0.  ! The latitudinal (or y-coord) extent of physical domain
+  real :: len_lon = 0.  ! The longitudinal (or x-coord) extent of physical domain
+  real :: Rad_Earth = 6.378e6 ! The radius of the planet in meters.
+  real :: max_depth     ! The maximum depth of the ocean in meters.
 end type ocean_grid_type
 
 contains
@@ -397,6 +399,9 @@ subroutine allocate_metrics(G)
   ALLOC_(G%dF_dx(isd:ied, jsd:jed)) ; G%dF_dx(:,:) = 0.0
   ALLOC_(G%dF_dy(isd:ied, jsd:jed)) ; G%dF_dy(:,:) = 0.0
 
+  ALLOC_(G%sin_rot(isd:ied,jsd:jed)) ; G%sin_rot(:,:) = 0.0
+  ALLOC_(G%cos_rot(isd:ied,jsd:jed)) ; G%cos_rot(:,:) = 1.0
+
   allocate(G%gridLonT(isg:ieg))   ; G%gridLonT(:) = 0.0
   allocate(G%gridLonB(G%IsgB:G%IegB)) ; G%gridLonB(:) = 0.0
   allocate(G%gridLatT(jsg:jeg))   ; G%gridLatT(:) = 0.0
@@ -432,6 +437,7 @@ subroutine MOM_grid_end(G)
 
   DEALLOC_(G%bathyT)  ; DEALLOC_(G%CoriolisBu)
   DEALLOC_(G%dF_dx)  ; DEALLOC_(G%dF_dy)
+  DEALLOC_(G%sin_rot) ; DEALLOC_(G%cos_rot)
 
   deallocate(G%gridLonT) ; deallocate(G%gridLatT)
   deallocate(G%gridLonB) ; deallocate(G%gridLatB)
