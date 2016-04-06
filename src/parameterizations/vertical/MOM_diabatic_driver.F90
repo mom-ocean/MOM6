@@ -1412,19 +1412,20 @@ end subroutine diabatic
 
 
 !> Routine called for adiabatic physics
-subroutine adiabatic(h, tv, fluxes, dt, G, CS)
+subroutine adiabatic(h, tv, fluxes, dt, G, GV, CS)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h      !< thickness (m for Bouss or kg/m2 for non-Bouss)
   type(thermo_var_ptrs),                  intent(inout) :: tv     !< points to thermodynamic fields
   type(forcing),                          intent(inout) :: fluxes !< boundary fluxes
   real,                                   intent(in)    :: dt     !< time step (seconds)
   type(ocean_grid_type),                  intent(inout) :: G      !< ocean grid structure
+  type(verticalGrid_type),                intent(in)    :: GV     !< ocean vertical grid structure
   type(diabatic_CS),                      pointer       :: CS     !< module control structure
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: zeros  ! An array of zeros.
 
   zeros(:,:,:) = 0.0
 
-  call call_tracer_column_fns(h, h, zeros, zeros, fluxes, dt, G, G%GV, tv, &
+  call call_tracer_column_fns(h, h, zeros, zeros, fluxes, dt, G, GV, tv, &
                               CS%optics, CS%tracer_flow_CSp)
 
 end subroutine adiabatic
