@@ -623,7 +623,7 @@ contains
 
     call g_tracer_set_csdiag(CS%diag)
 
-    call disable_averaging(CS%diag)
+!!!    call disable_averaging(CS%diag) !Niki: This interrupts and STOPS the diagnostics output for all modules!!!
 
   end subroutine MOM_generic_tracer_column_physics
 
