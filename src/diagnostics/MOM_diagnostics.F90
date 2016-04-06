@@ -143,7 +143,8 @@ type, public :: diagnostics_CS ; private
   integer :: id_sosga          = -1, id_tosga          = -1
   integer :: id_temp_layer_ave = -1, id_salt_layer_ave = -1
   integer :: id_pbo            = -1
-  integer :: id_thkcello       = -1
+  integer :: id_thkcello       = -1, id_rhoinsitu      = -1
+  integer :: id_rhopot0        = -1, id_rhopot2        = -1
 
   type(wave_speed_CS), pointer :: wave_speed_CSp => NULL()  
 
@@ -488,6 +489,38 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
       enddo
 
       if (CS%id_vhGM_Rlay > 0) call post_data(CS%id_vhGM_Rlay, CS%vhGM_Rlay, CS%diag)
+    endif
+  endif
+
+  if (associated(tv%eqn_of_state)) then
+    if (CS%id_rhopot0 > 0) then
+      pres(:) = 0.
+!$OMP parallel do default(none) shared(tv,Rcv,is,ie,js,je,nz,pres)
+      do k=1,nz ; do j=js,je
+        call calculate_density(tv%T(:,j,k),tv%S(:,j,k),pres, &
+                               Rcv(:,j,k),is,ie-is+1, tv%eqn_of_state)
+      enddo ; enddo
+      if (CS%id_rhopot0 > 0) call post_data(CS%id_rhopot0, Rcv, CS%diag)
+    endif
+    if (CS%id_rhopot2 > 0) then
+      pres(:) = 2.E7 ! 2000 dbars
+!$OMP parallel do default(none) shared(tv,Rcv,is,ie,js,je,nz,pres)
+      do k=1,nz ; do j=js,je
+        call calculate_density(tv%T(:,j,k),tv%S(:,j,k),pres, &
+                               Rcv(:,j,k),is,ie-is+1, tv%eqn_of_state)
+      enddo ; enddo
+      if (CS%id_rhopot2 > 0) call post_data(CS%id_rhopot2, Rcv, CS%diag)
+    endif
+    if (CS%id_rhoinsitu > 0) then
+      pres(:) = 0.
+!$OMP parallel do default(none) shared(tv,Rcv,is,ie,js,je,nz,pres)
+      do k=1,nz ; do j=js,je
+        pres(:) =  pres(:) + 0.5 * h(:,j,k) * GV%H_to_Pa ! Pressure in middle of layer k
+        call calculate_density(tv%T(:,j,k),tv%S(:,j,k),pres, &
+                               Rcv(:,j,k),is,ie-is+1, tv%eqn_of_state)
+        pres(:) =  pres(:) + 0.5 * h(:,j,k) * GV%H_to_Pa ! Pressure at bottom of layer k
+      enddo ; enddo
+      if (CS%id_rhoinsitu > 0) call post_data(CS%id_rhoinsitu, Rcv, CS%diag)
     endif
   endif
 
@@ -1102,6 +1135,13 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
 
   CS%id_Rcv = register_diag_field('ocean_model', 'Rho_cv', diag%axesTL, Time, &
       'Coordinate Potential Density', 'kg meter-3')
+
+  CS%id_rhopot0 = register_diag_field('ocean_model', 'rhopot0', diag%axesTL, Time, &
+      'Potential density referenced to surface', 'kg meter-3')
+  CS%id_rhopot2 = register_diag_field('ocean_model', 'rhopot2', diag%axesTL, Time, &
+      'Potential density referenced to 2000 dbar', 'kg meter-3')
+  CS%id_rhoinsitu = register_diag_field('ocean_model', 'rhoinsitu', diag%axesTL, Time, &
+      'In situ density', 'kg meter-3')
 
   CS%id_du_dt = register_diag_field('ocean_model', 'dudt', diag%axesCuL, Time, &
       'Zonal Acceleration', 'meter second-2')
