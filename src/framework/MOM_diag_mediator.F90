@@ -195,7 +195,7 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
   integer :: id_xq, id_yq, id_zl, id_zi, id_xh, id_yh, id_zzl, id_zzi
   integer :: k, nz
   integer :: nzi(4)
-  real :: zlev(G%ks:G%ke), zinter(G%ks:G%ke+1)
+  real :: zlev(G%ke), zinter(G%ke+1)
   logical :: set_vert, Cartesian_grid
   character(len=80) :: grid_config, units_temp
   character(len=200) :: inputdir, string, filename, varname, dimname
@@ -1660,7 +1660,7 @@ subroutine diag_mediator_init(G, param_file, diag_cs, err_msg, doc_file_dir)
   diag_cs%do_z_remapping_on_T = .false.
   diag_cs%remapping_initialized = .false.
 #if defined(DEBUG) || defined(__DO_SAFETY_CHECKS__)
-  allocate(diag_cs%h_old(G%isd:G%ied,G%jsd:G%jed,G%ks:G%ke))
+  allocate(diag_cs%h_old(G%isd:G%ied,G%jsd:G%jed,G%ke))
   diag_cs%h_old(:,:,:) = 0.0
 #endif
 

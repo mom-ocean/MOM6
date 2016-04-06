@@ -1423,7 +1423,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   GV => CS%GV
   ! Copy several common variables from the vertical grid to the horizontal grid.
   ! Consider removing these later?
-  G%ks = 1 ; G%ke = GV%ke
+  G%ke = GV%ke
   G%bathyT(:,:) = GV%Angstrom_z !### Should this be 0 instead, in which case this line can go?
 
   is   = G%isc   ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = G%ke
