@@ -513,7 +513,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
     endif
     if (CS%id_rhoinsitu > 0) then
       pres(:) = 0.
-!$OMP parallel do default(none) shared(tv,Rcv,is,ie,js,je,nz,pres)
+!$OMP parallel do default(none) shared(tv,Rcv,is,ie,js,je,nz,pres,h,GV)
       do k=1,nz ; do j=js,je
         pres(:) =  pres(:) + 0.5 * h(:,j,k) * GV%H_to_Pa ! Pressure in middle of layer k
         call calculate_density(tv%T(:,j,k),tv%S(:,j,k),pres, &
