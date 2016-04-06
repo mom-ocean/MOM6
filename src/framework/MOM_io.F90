@@ -99,7 +99,7 @@ subroutine create_file(unit, filename, vars, novars, G, fields, threading, timeu
   type(domain1d) :: x_domain, y_domain
   integer        :: numaxes, pack, thread, k, nz
   integer        :: var_periods, num_periods=0
-  real           :: layer_val(G%ks:G%ke), interface_val(G%ks:G%ke+1)
+  real           :: layer_val(G%ke), interface_val(G%ke+1)
   real, dimension(:), allocatable :: period_val
   character(len=40) :: time_units
   character(len=8)  :: t_grid, t_grid_read

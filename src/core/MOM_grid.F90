@@ -44,7 +44,7 @@ type, public :: ocean_grid_type
   integer :: IsgB, IegB, JsgB, JegB ! The range of the global domain vertex indices.
   integer :: isd_global         ! The values of isd and jsd in the global
   integer :: jsd_global         ! (decomposition invariant) index space.
-  integer :: ks, ke             ! The range of layer's vertical indices.
+  integer :: ke                 ! The number of layers in the vertical.
   logical :: symmetric          ! True if symmetric memory is used.
   logical :: nonblocking_updates  ! If true, non-blocking halo updates are
                                   ! allowed.  The default is .false. (for now).
