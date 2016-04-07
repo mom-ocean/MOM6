@@ -208,8 +208,6 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
   ! tmp array for surface properties 
   real :: surface_field(SZI_(G),SZJ_(G)) 
   real :: pressure_1d(SZI_(G)) ! Temporary array for pressure when calling EOS
-                                   
-  real :: pres(SZI_(G))
   real :: wt, wt_p
 
   ! squared Coriolis parameter at to h-points (1/s2)
@@ -375,10 +373,10 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
       ASSOCIATED(CS%uhGM_Rlay) .or. ASSOCIATED(CS%vhGM_Rlay)) then
 
     if (associated(tv%eqn_of_state)) then
-      pres(:) = tv%P_Ref
+      pressure_1d(:) = tv%P_Ref
 !$OMP parallel do default(none) shared(tv,Rcv,is,ie,js,je,nz,pres)
       do k=1,nz ; do j=js,je+1
-        call calculate_density(tv%T(:,j,k),tv%S(:,j,k),pres, &
+        call calculate_density(tv%T(:,j,k),tv%S(:,j,k),pressure_1d, &
                                Rcv(:,j,k),is,ie-is+2, tv%eqn_of_state)
       enddo ; enddo
       if (CS%id_Rml > 0) call post_data(CS%id_Rml, Rcv, CS%diag)
@@ -494,32 +492,34 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
 
   if (associated(tv%eqn_of_state)) then
     if (CS%id_rhopot0 > 0) then
-      pres(:) = 0.
-!$OMP parallel do default(none) shared(tv,Rcv,is,ie,js,je,nz,pres)
+      pressure_1d(:) = 0.
+!$OMP parallel do default(none) shared(tv,Rcv,is,ie,js,je,nz,pressure_1d)
       do k=1,nz ; do j=js,je
-        call calculate_density(tv%T(:,j,k),tv%S(:,j,k),pres, &
+        call calculate_density(tv%T(:,j,k),tv%S(:,j,k),pressure_1d, &
                                Rcv(:,j,k),is,ie-is+1, tv%eqn_of_state)
       enddo ; enddo
       if (CS%id_rhopot0 > 0) call post_data(CS%id_rhopot0, Rcv, CS%diag)
     endif
     if (CS%id_rhopot2 > 0) then
-      pres(:) = 2.E7 ! 2000 dbars
-!$OMP parallel do default(none) shared(tv,Rcv,is,ie,js,je,nz,pres)
+      pressure_1d(:) = 2.E7 ! 2000 dbars
+!$OMP parallel do default(none) shared(tv,Rcv,is,ie,js,je,nz,pressure_1d)
       do k=1,nz ; do j=js,je
-        call calculate_density(tv%T(:,j,k),tv%S(:,j,k),pres, &
+        call calculate_density(tv%T(:,j,k),tv%S(:,j,k),pressure_1d, &
                                Rcv(:,j,k),is,ie-is+1, tv%eqn_of_state)
       enddo ; enddo
       if (CS%id_rhopot2 > 0) call post_data(CS%id_rhopot2, Rcv, CS%diag)
     endif
     if (CS%id_rhoinsitu > 0) then
-      pres(:) = 0.
-!$OMP parallel do default(none) shared(tv,Rcv,is,ie,js,je,nz,pres,h,GV)
-      do k=1,nz ; do j=js,je
-        pres(:) =  pres(:) + 0.5 * h(:,j,k) * GV%H_to_Pa ! Pressure in middle of layer k
-        call calculate_density(tv%T(:,j,k),tv%S(:,j,k),pres, &
-                               Rcv(:,j,k),is,ie-is+1, tv%eqn_of_state)
-        pres(:) =  pres(:) + 0.5 * h(:,j,k) * GV%H_to_Pa ! Pressure at bottom of layer k
-      enddo ; enddo
+!$OMP parallel do default(none) shared(tv,Rcv,is,ie,js,je,nz,pressure_1d,h,GV)
+      do j=js,je
+        pressure_1d(:) = 0. ! Start at p=0 Pa at surface
+        do k=1,nz
+          pressure_1d(:) =  pressure_1d(:) + 0.5 * h(:,j,k) * GV%H_to_Pa ! Pressure in middle of layer k
+          call calculate_density(tv%T(:,j,k),tv%S(:,j,k),pressure_1d, &
+                                 Rcv(:,j,k),is,ie-is+1, tv%eqn_of_state)
+          pressure_1d(:) =  pressure_1d(:) + 0.5 * h(:,j,k) * GV%H_to_Pa ! Pressure at bottom of layer k
+        enddo
+      enddo
       if (CS%id_rhoinsitu > 0) call post_data(CS%id_rhoinsitu, Rcv, CS%diag)
     endif
   endif
