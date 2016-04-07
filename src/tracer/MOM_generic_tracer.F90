@@ -539,7 +539,7 @@ contains
     if(.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL,&
          trim(sub_name)//": No tracer in the list.")
 
-    call enable_averaging(dt, get_diag_time_end(CS%diag), CS%diag) 
+    call enable_averaging(dt, get_diag_time_end(CS%diag), CS%diag) !Niki: This call is not needed since avaraging is already enabled. This is jjust to ensure it. 
     call g_tracer_set_csdiag(CS%diag)
   
     !
