@@ -347,7 +347,7 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, OBC, CS, sponge_CSp, &
       ! This is needed to force the compiler not to do a copy in the sponge
       ! calls.  Curses on the designers and implementers of Fortran90.
       tr_ptr => CS%tr(:,:,:,m)
-      call set_up_sponge_field(temp,tr_ptr,nz,sponge_CSp)
+      call set_up_sponge_field(temp, tr_ptr, G, nz, sponge_CSp)
     enddo
     deallocate(temp)
   endif
