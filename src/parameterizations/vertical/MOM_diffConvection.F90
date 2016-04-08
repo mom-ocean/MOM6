@@ -100,14 +100,14 @@ subroutine diffConvection_calculate(CS, G, GV, h, Temp, Salt, EOS, Kd_int)
 ! Calculates diffusivity and non-local transport for KPP parameterization
 
 ! Arguments
-  type(diffConvection_CS),                pointer       :: CS    ! Control structure
-  type(ocean_grid_type),                  intent(in)    :: G     ! Ocean grid
-  type(verticalGrid_type),                intent(in)    :: GV    ! Ocean vertical grid
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h     ! Layer/level thicknesses (units of H)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: Temp  ! Pot. temperature (degrees C)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: Salt  ! Salinity (ppt)
-  type(EOS_type),                         pointer       :: EOS   ! Equation of state
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: Kd_int ! (in) Vertical diffusivity on interfaces (m2/s)
+  type(diffConvection_CS),                   pointer       :: CS    ! Control structure
+  type(ocean_grid_type),                     intent(in)    :: G     ! Ocean grid
+  type(verticalGrid_type),                   intent(in)    :: GV    ! Ocean vertical grid
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h     ! Layer/level thicknesses (units of H)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: Temp  ! Pot. temperature (degrees C)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: Salt  ! Salinity (ppt)
+  type(EOS_type),                            pointer       :: EOS   ! Equation of state
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kd_int ! (in) Vertical diffusivity on interfaces (m2/s)
                                                                  ! (out) Modified vertical diffusivity (m2/s)
 ! Local variables
   integer :: i, j, k
