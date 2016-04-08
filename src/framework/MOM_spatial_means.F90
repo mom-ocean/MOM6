@@ -41,12 +41,12 @@ public :: adjust_area_mean_to_zero
 contains
 
 function global_area_mean(var,G)
-  type(ocean_grid_type),              intent(in)  :: G
-  real, dimension(SZI_(G), SZJ_(G)),  intent(in)  :: var
-  real, dimension(SZI_(G), SZJ_(G))               :: tmpForSumming
+  type(ocean_grid_type),             intent(in)  :: G
+  real, dimension(SZI_(G), SZJ_(G)), intent(in)  :: var
+  real, dimension(SZI_(G), SZJ_(G))              :: tmpForSumming
+  real :: global_area_mean
 
   integer :: i, j, is, ie, js, je
-  real :: global_area_mean
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
   tmpForSumming(:,:) = 0.
@@ -58,12 +58,12 @@ function global_area_mean(var,G)
 end function global_area_mean
 
 function global_area_integral(var,G)
-  type(ocean_grid_type),              intent(in)  :: G
-  real, dimension(SZI_(G), SZJ_(G)),  intent(in)  :: var
-  real, dimension(SZI_(G), SZJ_(G))               :: tmpForSumming
+  type(ocean_grid_type),             intent(in)  :: G
+  real, dimension(SZI_(G), SZJ_(G)), intent(in)  :: var
+  real, dimension(SZI_(G), SZJ_(G))              :: tmpForSumming
+  real :: global_area_integral
 
   integer :: i, j, is, ie, js, je
-  real :: global_area_integral
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
   tmpForSumming(:,:) = 0.
@@ -77,10 +77,12 @@ end function global_area_integral
 function global_layer_mean(var,h,G)
   type(ocean_grid_type),                       intent(in)  :: G
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)),  intent(in)  :: var
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),       intent(in)  :: h
-  real, dimension(SZI_(G), SZJ_(G), SZK_(G))               :: tmpForSumming, weight
-  real, dimension(SZK_(G))                                 :: global_layer_mean, scalarij, weightij
-  real, dimension(SZK_(G))  :: global_temp_scalar, global_weight_scalar
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)  :: h
+  real, dimension(SZK_(G))                   :: global_layer_mean
+
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: tmpForSumming, weight
+  real, dimension(SZK_(G)) :: scalarij, weightij
+  real, dimension(SZK_(G)) :: global_temp_scalar, global_weight_scalar
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
@@ -103,10 +105,11 @@ end function global_layer_mean
 function global_volume_mean(var,h,G)
   type(ocean_grid_type),                       intent(in)  :: G
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)),  intent(in)  :: var
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),       intent(in)  :: h
-  real, dimension(SZI_(G), SZJ_(G), SZK_(G))               :: tmpForSumming, weight
-  integer :: i, j, k, is, ie, js, je, nz
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)  :: h
   real :: global_volume_mean
+
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: tmpForSumming, weight
+  integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   tmpForSumming(:,:,:) = 0. ; weight(:,:,:) = 0.
@@ -121,10 +124,10 @@ end function global_volume_mean
 
 
 subroutine global_i_mean(array, i_mean, G, mask)
-  real, dimension(NIMEM_,NJMEM_), intent(in)    :: array
-  real, dimension(NJMEM_),        intent(out)   :: i_mean
-  type(ocean_grid_type),          intent(inout) :: G
-  real, dimension(NIMEM_,NJMEM_), optional, intent(in) :: mask
+  type(ocean_grid_type),            intent(inout) :: G
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: array
+  real, dimension(SZJ_(G)),         intent(out)   :: i_mean
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: mask
 
 !    This subroutine determines the global mean of a field along rows of
 !  constant i, returning it in a 1-d array using the local indexing.
@@ -199,10 +202,10 @@ subroutine global_i_mean(array, i_mean, G, mask)
 end subroutine global_i_mean
 
 subroutine global_j_mean(array, j_mean, G, mask)
-  real, dimension(NIMEM_,NJMEM_), intent(in)    :: array
-  real, dimension(NIMEM_),        intent(out)   :: j_mean
-  type(ocean_grid_type),          intent(inout) :: G
-  real, dimension(NIMEM_,NJMEM_), optional, intent(in) :: mask
+  type(ocean_grid_type),            intent(inout) :: G
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: array
+  real, dimension(SZI_(G)),         intent(out)   :: j_mean
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: mask
 
 !    This subroutine determines the global mean of a field along rows of
 !  constant j, returning it in a 1-d array using the local indexing.
@@ -278,9 +281,9 @@ end subroutine global_j_mean
 
 !> Adjust 2d array such that area mean is zero without moving the zero contour
 subroutine adjust_area_mean_to_zero(array, G, scaling)
-  real, dimension(NIMEM_,NJMEM_), intent(inout) :: array   !< 2D array to be adjusted
-  type(ocean_grid_type),          intent(inout) :: G       !< Grid structure
-  real, optional,                 intent(out)   :: scaling !< The scaling factor used
+  type(ocean_grid_type),            intent(inout) :: G       !< Grid structure
+  real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: array   !< 2D array to be adjusted
+  real, optional,                   intent(out)   :: scaling !< The scaling factor used
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G)) :: posVals, negVals, areaXposVals, areaXnegVals
   integer :: i,j
