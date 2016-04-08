@@ -219,9 +219,9 @@ end subroutine neutral_diffusion_diag_init
 subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, EOS, CS)
   type(ocean_grid_type),                 intent(in) :: G   !< Ocean grid structure
   type(verticalGrid_type),               intent(in) :: GV  !< ocean vertical grid structure
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h   !< Layer thickness (H units)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: T   !< Potential temperature (degC)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: S   !< Salinity (ppt)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h   !< Layer thickness (H units)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: T   !< Potential temperature (degC)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: S   !< Salinity (ppt)
   type(EOS_type),                        pointer    :: EOS !< Equation of state structure
   type(neutral_diffusion_CS),            pointer    :: CS  !< Neutral diffusion control structure
 
@@ -278,10 +278,10 @@ end subroutine neutral_diffusion_calc_coeffs
 subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
   type(ocean_grid_type),                  intent(in)    :: G      !< Ocean grid structure
   type(verticalGrid_type),                intent(in)    :: GV     !< ocean vertical grid structure
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h      !< Layer thickness (H units)
-  real, dimension(NIMEMB_,NJMEM_),        intent(in)    :: Coef_x !< dt * Kh * dy / dx at u-points (m^2)
-  real, dimension(NIMEM_,NJMEMB_),        intent(in)    :: Coef_y !< dt * Kh * dx / dy at u-points (m^2)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: Tracer !< Tracer concentration
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h      !< Layer thickness (H units)
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(in)    :: Coef_x !< dt * Kh * dy / dx at u-points (m^2)
+  real, dimension(SZI_(G),SZJB_(G)),         intent(in)    :: Coef_y !< dt * Kh * dx / dy at u-points (m^2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: Tracer !< Tracer concentration
   integer,                                intent(in)    :: m      !< Tracer number 
   real,                                   intent(in)    :: dt     !< Tracer time step 
   character(len=32),                      intent(in)    :: name   !< Tracer name 

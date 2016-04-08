@@ -46,15 +46,15 @@ contains
 !> This routine time steps the tracer concentration using a 
 !! monotonic, conservative, weakly diffusive scheme.
 subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h_end !< layer thickness after advection (m or kg m-2)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: uhtr  !< accumulated volume/mass flux through zonal face (m3 or kg)
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: vhtr  !< accumulated volume/mass flux through merid face (m3 or kg) 
-  type(ocean_OBC_type),                   pointer       :: OBC   !< specifies whether, where, and what OBCs are used
-  real,                                   intent(in)    :: dt    !< time increment (seconds)
-  type(ocean_grid_type),                  intent(inout) :: G     !< ocean grid structure 
-  type(verticalGrid_type),                intent(in)    :: GV    !< ocean vertical grid structure
-  type(tracer_advect_CS),                 pointer       :: CS    !< control structure for module 
-  type(tracer_registry_type),             pointer       :: Reg   !< pointer to tracer registry 
+  type(ocean_grid_type),                     intent(inout) :: G     !< ocean grid structure 
+  type(verticalGrid_type),                   intent(in)    :: GV    !< ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h_end !< layer thickness after advection (m or kg m-2)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uhtr  !< accumulated volume/mass flux through zonal face (m3 or kg)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vhtr  !< accumulated volume/mass flux through merid face (m3 or kg) 
+  type(ocean_OBC_type),                      pointer       :: OBC   !< specifies whether, where, and what OBCs are used
+  real,                                      intent(in)    :: dt    !< time increment (seconds)
+  type(tracer_advect_CS),                    pointer       :: CS    !< control structure for module 
+  type(tracer_registry_type),                pointer       :: Reg   !< pointer to tracer registry 
 
 
   type(tracer_type) :: Tr(MAX_FIELDS_) ! The array of registered tracers
@@ -288,17 +288,17 @@ end subroutine advect_tracer
 !! a monotonic piecewise linear scheme.
 subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
                     is, ie, js, je, k, G, GV, usePPM)
-  type(tracer_type), dimension(ntr),      intent(inout) :: Tr
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: hprev
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uhr
-   real, dimension(NIMEMB_,NJMEM_),        intent(inout) :: uh_neglect
-  type(ocean_OBC_type),                   pointer       :: OBC
-  logical, dimension(NJMEM_,NKMEM_),      intent(inout) :: domore_u
-  real,                                   intent(in)    :: Idt
-  integer,                                intent(in)    :: ntr, is, ie, js, je,k
-  type(ocean_grid_type),                  intent(inout) :: G
-  type(verticalGrid_type),                intent(in)    :: GV
-  logical,                                intent(in)    :: usePPM
+  type(ocean_grid_type),                     intent(inout) :: G
+  type(verticalGrid_type),                   intent(in)    :: GV
+  type(tracer_type), dimension(ntr),         intent(inout) :: Tr
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: hprev
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhr
+   real, dimension(SZIB_(G),SZJ_(G)),        intent(inout) :: uh_neglect
+  type(ocean_OBC_type),                      pointer       :: OBC
+  logical, dimension(SZJ_(G),SZK_(G)),       intent(inout) :: domore_u
+  real,                                      intent(in)    :: Idt
+  integer,                                   intent(in)    :: ntr, is, ie, js, je,k
+  logical,                                   intent(in)    :: usePPM
 
   real, dimension(SZIB_(G),ntr) :: &
     slope_x, &          ! The concentration slope per grid point in units of
@@ -549,17 +549,17 @@ end subroutine advect_x
 !! linear scheme.
 subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
                     is, ie, js, je, k, G, GV, usePPM)
-  type(tracer_type), dimension(ntr),      intent(inout) :: Tr
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: hprev
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vhr
-  real, dimension(NIMEM_,NJMEMB_),        intent(inout) :: vh_neglect
-  type(ocean_OBC_type),                   pointer       :: OBC
-  logical, dimension(NJMEMB_,NKMEM_),     intent(inout) :: domore_v
-  real,                                   intent(in)    :: Idt
-  integer,                                intent(in)    :: ntr, is, ie, js, je,k
-  type(ocean_grid_type),                  intent(inout) :: G
-  type(verticalGrid_type),                intent(in)    :: GV
-  logical,                                intent(in)    :: usePPM
+  type(ocean_grid_type),                     intent(inout) :: G
+  type(verticalGrid_type),                   intent(in)    :: GV
+  type(tracer_type), dimension(ntr),         intent(inout) :: Tr
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: hprev
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhr
+  real, dimension(SZI_(G),SZJB_(G)),         intent(inout) :: vh_neglect
+  type(ocean_OBC_type),                      pointer       :: OBC
+  logical, dimension(SZJB_(G),SZK_(G)),      intent(inout) :: domore_v
+  real,                                      intent(in)    :: Idt
+  integer,                                   intent(in)    :: ntr, is, ie, js, je,k
+  logical,                                   intent(in)    :: usePPM
 
   real, dimension(SZI_(G),ntr,SZJB_(G)) :: &
     slope_y, &                  ! The concentration slope per grid point in units of
