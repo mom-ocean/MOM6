@@ -83,9 +83,6 @@ type, public :: ALE_CS
   integer :: degree_linear=1 !< Degree of linear piecewise polynomial
   integer :: degree_parab=2  !< Degree of parabolic piecewise polynomial
 
-  real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NK_INTERFACE_) :: dzRegrid  !< Work space for communicating
-                                                                       !! between regridding and remapping
-
   logical :: remap_after_initialization !<   Indicates whether to regrid/remap after initializing the state.
 
   logical :: show_call_tree !< For debugging
@@ -152,9 +149,6 @@ subroutine ALE_init( param_file, G, GV, CS)
 
   CS%show_call_tree = callTree_showQuery()
   if (CS%show_call_tree) call callTree_enter("ALE_init(), MOM_ALE.F90")
-
-  ! Memory allocation for regridding
-  call ALE_memory_allocation( G, CS )
 
   ! --- BOUNDARY EXTRAPOLATION --
   ! This sets whether high-order (rather than PCM) reconstruction schemes
@@ -344,7 +338,6 @@ subroutine ALE_end(CS)
   ! Deallocate memory used for the regridding
   call end_remapping( CS%remapCS )
   call end_regridding( CS%regridCS )
-  call ALE_memory_deallocation( CS )
 
   deallocate(CS)
 
@@ -366,8 +359,9 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt)
   real,                          optional, intent(in)    :: dt  !< Time step between calls to ALE_main()
 
   ! Local variables
-  integer :: nk, i, j, k, isc, iec, jsc, jec
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: dzRegrid ! The change in grid interface positions
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_new ! New 3D grid obtained after last time step (m or Pa)
+  integer :: nk, i, j, k, isc, iec, jsc, jec
 
   nk = G%ke; isc = G%isc; iec = G%iec; jsc = G%jsc; jec = G%jec
 
@@ -376,26 +370,27 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt)
   if (present(dt)) then
     call ALE_update_regrid_weights( dt, CS )
   endif
+  dzRegrid(:,:,:) = 0.0
 
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
-  call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, CS%dzRegrid )
+  call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, dzRegrid )
 
-  call check_remapping_grid( G, h, CS%dzRegrid, 'in ALE_main()' )
+  call check_remapping_grid( G, h, dzRegrid, 'in ALE_main()' )
 
   ! Override old grid with new one. The new grid 'h_new' is built in
   ! one of the 'build_...' routines above.
-!$OMP parallel do default(none) shared(isc,iec,jsc,jec,nk,h,h_new,CS)
+!$OMP parallel do default(none) shared(isc,iec,jsc,jec,nk,h,h_new,dzRegrid,CS)
   do k = 1,nk
     do j = jsc-1,jec+1 ; do i = isc-1,iec+1
-      h_new(i,j,k) = max( 0., h(i,j,k) + ( CS%dzRegrid(i,j,k) - CS%dzRegrid(i,j,k+1) ) )
+      h_new(i,j,k) = max( 0., h(i,j,k) + ( dzRegrid(i,j,k) - dzRegrid(i,j,k+1) ) )
     enddo ; enddo
   enddo
 
   if (CS%show_call_tree) call callTree_waypoint("new grid generated (ALE_main)")
 
   ! Remap all variables from old grid h onto new grid h_new
-  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, -CS%dzRegrid, Reg, &
+  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, -dzRegrid, Reg, &
                              u, v, CS%show_call_tree, dt )
 
   if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_main)")
@@ -726,8 +721,7 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h )
   real, dimension(CS%nk,CS%degree_linear+1) :: ppoly_linear_coefficients !Coefficients of polynomial
 
   ! NOTE: the variables 'CS%grid_generic' and 'CS%ppoly_linear' are declared at
-  ! the module level. Memory is allocated once at the beginning of the run
-  ! in 'ALE_memory_allocation'.
+  ! the module level.
 
   ! Determine reconstruction within each column
 !$OMP parallel do default(none) shared(G,GV,h,tv,CS,S_t,S_b,T_t,T_b)                  &
@@ -795,8 +789,7 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h )
 
 
   ! NOTE: the variables 'CS%grid_generic' and 'CS%ppoly_parab' are declared at
-  ! the module level. Memory is allocated once at the beginning of the run
-  ! in 'ALE_memory_allocation'.
+  ! the module level.
 
   ! Determine reconstruction within each column
 !$OMP parallel do default(none) shared(G,GV,h,tv,CS,S_t,S_b,T_t,T_b) &
@@ -840,36 +833,6 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h )
 
 end subroutine pressure_gradient_ppm
 
-
-!> Allocate memory for regridding.
-!! In this routine, we allocate the memory needed to carry out regridding
-!! steps in the course of the simulation. 
-!! For example, to compute implicit edge-value estimates, a tridiagonal system
-!! must be solved. We allocate the needed memory at the beginning of the
-!! simulation because the number of layers never changes.
-subroutine ALE_memory_allocation( G, CS )
-  type(ocean_grid_type), intent(in) :: G   !< ocean grid structure 
-  type(ALE_CS), intent(inout)       :: CS  !< module control structure 
-
-  ! Local variables
-  integer :: nz
-  nz = G%ke
-
-  ! Work space
-  ALLOC_(CS%dzRegrid(G%isd:G%ied,G%jsd:G%jed,nz+1)); CS%dzRegrid(:,:,:) = 0.
-  
-end subroutine ALE_memory_allocation
-
-
-!> Deallocate memory for regridding.
-!! In this routine, we reclaim the memory that was allocated for the regridding. 
-subroutine ALE_memory_deallocation( CS )
-  type(ALE_CS), intent(inout) :: CS  !< module control structure 
-  
-  ! Work space
-  DEALLOC_(CS%dzRegrid)
-
-end subroutine ALE_memory_deallocation
 
 !> pressure reconstruction logical 
 logical function usePressureReconstruction(CS)
