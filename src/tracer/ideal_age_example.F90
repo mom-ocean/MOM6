@@ -264,7 +264,7 @@ function register_ideal_age_tracer(G, param_file, CS, diag, tr_Reg, &
     call register_restart_field(tr_ptr, CS%tr_desc(m), &
                                 .not.CS%tracers_may_reinit, restart_CS)
     ! Register the tracer for horizontal advection & diffusion.
-    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, tr_Reg, &
+    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, G, tr_Reg, &
                          tr_desc_ptr=CS%tr_desc(m))
 
     !   Set coupled_tracers to be true (hard-coded above) to provide the surface
@@ -286,7 +286,7 @@ subroutine initialize_ideal_age_tracer(restart, day, G, GV, h, OBC, CS, sponge_C
   type(time_type), target,            intent(in) :: day
   type(ocean_grid_type),              intent(in) :: G
   type(verticalGrid_type),            intent(in) :: GV
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
   type(ocean_OBC_type),               pointer    :: OBC
   type(ideal_age_tracer_CS),          pointer    :: CS
   type(sponge_CS),                    pointer    :: sponge_CSp
@@ -413,11 +413,11 @@ subroutine initialize_ideal_age_tracer(restart, day, G, GV, h, OBC, CS, sponge_C
 end subroutine initialize_ideal_age_tracer
 
 subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h_old, h_new, ea, eb
-  type(forcing),                      intent(in) :: fluxes
-  real,                               intent(in) :: dt
   type(ocean_grid_type),              intent(in) :: G
   type(verticalGrid_type),            intent(in) :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
+  type(forcing),                      intent(in) :: fluxes
+  real,                               intent(in) :: dt
   type(ideal_age_tracer_CS),          pointer    :: CS
 !   This subroutine applies diapycnal diffusion and any other column
 ! tracer physics or chemistry to the tracers from this file.
@@ -518,9 +518,9 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
 end subroutine ideal_age_tracer_column_physics
 
 function ideal_age_stock(h, stocks, G, GV, CS, names, units, stock_index)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
-  real, dimension(:),                 intent(out)   :: stocks
   type(ocean_grid_type),              intent(in)    :: G
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
+  real, dimension(:),                 intent(out)   :: stocks
   type(verticalGrid_type),            intent(in)    :: GV
   type(ideal_age_tracer_CS),          pointer       :: CS
   character(len=*), dimension(:),     intent(out)   :: names
@@ -572,10 +572,10 @@ function ideal_age_stock(h, stocks, G, GV, CS, names, units, stock_index)
 end function ideal_age_stock
 
 subroutine ideal_age_tracer_surface_state(state, h, G, CS)
-  type(surface),                         intent(inout) :: state
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
-  type(ocean_grid_type),                 intent(in)    :: G
-  type(ideal_age_tracer_CS),             pointer       :: CS
+  type(ocean_grid_type),                    intent(in)    :: G
+  type(surface),                            intent(inout) :: state
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
+  type(ideal_age_tracer_CS),                pointer       :: CS
 !   This particular tracer package does not report anything back to the coupler.
 ! The code that is here is just a rough guide for packages that would.
 ! Arguments: state - A structure containing fields that describe the

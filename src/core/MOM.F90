@@ -1656,8 +1656,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     CS%vd_S = var_desc(name="S",units="PPT",longname="Salinity",&
                        cmor_field_name="so",cmor_units="ppt",   &
                        conversion=0.001)
-    call register_tracer(CS%tv%T, CS%vd_T, param_file, CS%tracer_Reg, CS%vd_T)
-    call register_tracer(CS%tv%S, CS%vd_S, param_file, CS%tracer_Reg, CS%vd_S)
+    call register_tracer(CS%tv%T, CS%vd_T, param_file, G, CS%tracer_Reg, CS%vd_T)
+    call register_tracer(CS%tv%S, CS%vd_S, param_file, G, CS%tracer_Reg, CS%vd_S)
   endif
   if (CS%use_frazil) then
     allocate(CS%tv%frazil(isd:ied,jsd:jed)) ; CS%tv%frazil(:,:) = 0.0
@@ -2357,7 +2357,7 @@ subroutine register_diags_TS_vardec(Time, G, param_file, CS)
     CS%T_squared(:,:,:) = 0.
 
     vd_tmp = var_desc(name="T2", units="degC2", longname="Squared Potential Temperature")
-    call register_tracer(CS%T_squared, vd_tmp, param_file, CS%tracer_reg)
+    call register_tracer(CS%T_squared, vd_tmp, param_file, G, CS%tracer_reg)
   endif
 
   CS%id_S_vardec = register_diag_field('ocean_model', 'S_vardec', diag%axesTL, Time, &
@@ -2367,7 +2367,7 @@ subroutine register_diags_TS_vardec(Time, G, param_file, CS)
     CS%S_squared(:,:,:) = 0.
 
     vd_tmp = var_desc(name="S2", units="PPT2", longname="Squared Salinity")
-    call register_tracer(CS%S_squared, vd_tmp, param_file, CS%tracer_reg)
+    call register_tracer(CS%S_squared, vd_tmp, param_file, G, CS%tracer_reg)
   endif
 
 end subroutine register_diags_TS_vardec
