@@ -200,17 +200,17 @@ end type hor_visc_CS
 contains
 
 subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, OBC)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)  :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)  :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)  :: h
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(out) :: diffu
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out) :: diffv
-  type(MEKE_type),                        pointer     :: MEKE
-  type(VarMix_CS),                        pointer     :: VarMix
-  type(ocean_grid_type),                  intent(in)  :: G
-  type(verticalGrid_type),                intent(in)  :: GV
-  type(hor_visc_CS),                      pointer     :: CS
-  type(ocean_OBC_type),           pointer, optional   :: OBC
+  type(ocean_grid_type),                     intent(in)  :: G
+  type(verticalGrid_type),                   intent(in)  :: GV
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: diffu
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: diffv
+  type(MEKE_type),                           pointer     :: MEKE
+  type(VarMix_CS),                           pointer     :: VarMix
+  type(hor_visc_CS),                         pointer     :: CS
+  type(ocean_OBC_type),              pointer, optional   :: OBC
 
 ! Arguments:
 !  (in)      u      - zonal velocity (m/s)

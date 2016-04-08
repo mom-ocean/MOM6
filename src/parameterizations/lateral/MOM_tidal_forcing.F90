@@ -388,10 +388,10 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
 end subroutine tidal_forcing_init
 
 subroutine find_in_files(tidal_input_files,varname,array,G)
-  character(len=*),                intent(in)  :: tidal_input_files(:)
-  character(len=*),                intent(in)  :: varname
-  real, dimension(NIMEM_,NJMEM_),  intent(out) :: array
-  type(ocean_grid_type),           intent(in)  :: G
+  character(len=*),                 intent(in)  :: tidal_input_files(:)
+  character(len=*),                 intent(in)  :: varname
+  type(ocean_grid_type),            intent(in)  :: G
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: array
 
   integer :: nf
 
@@ -439,12 +439,12 @@ subroutine tidal_forcing_sensitivity(G, CS, deta_tidal_deta)
 end subroutine tidal_forcing_sensitivity
 
 subroutine calc_tidal_forcing(Time, eta, eta_tidal, G, CS, deta_tidal_deta)
-  type(time_type),       intent(in) :: Time
-  real, intent(in),  dimension(NIMEM_,NJMEM_) :: eta
-  real, intent(out), dimension(NIMEM_,NJMEM_) :: eta_tidal
-  type(ocean_grid_type), intent(in) :: G
-  type(tidal_forcing_CS), pointer   :: CS
-  real, optional,       intent(out) :: deta_tidal_deta
+  type(ocean_grid_type),            intent(in)  :: G
+  type(time_type),                  intent(in)  :: Time
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)  :: eta
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: eta_tidal
+  type(tidal_forcing_CS),           pointer     :: CS
+  real, optional,                   intent(out) :: deta_tidal_deta
 
 !   This subroutine calculates the geopotential anomalies that drive the tides,
 ! including self-attraction and loading.  Optionally, it also returns the
