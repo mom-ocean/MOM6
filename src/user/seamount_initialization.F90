@@ -245,8 +245,8 @@ subroutine seamount_initialize_temperature_salinity ( T, S, h, G, GV, param_file
           xi1 = xi0 + h(i,j,k) / G%max_depth
           select case ( trim(density_profile) )
             case ('linear')
-              S(i,j,k) = S_surf + S_range * 0.5 * (xi0 + xi1)
-              S(i,j,k) = S_surf + (xi0 + xi1)
+             !S(i,j,k) = S_surf + S_range * 0.5 * (xi0 + xi1)
+              S(i,j,k) = S_surf + ( 0.5 * S_range ) * (xi0 + xi1) ! Coded this way to reproduce old hard-coded answers
               T(i,j,k) = T_surf + T_range * 0.5 * (xi0 + xi1)
             case ('parabolic')
               S(i,j,k) = S_surf + S_range * (2.0 / 3.0) * (xi1**3 - xi0**3) / (xi1 - xi0)
