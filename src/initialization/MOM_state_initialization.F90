@@ -1314,15 +1314,15 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp)
                              is, ie-is+1, tv%eqn_of_state)
     enddo
 
-    call set_up_sponge_ML_density(tmp_2d, CSp)
+    call set_up_sponge_ML_density(tmp_2d, G, CSp)
   endif
 
 !  The remaining calls to set_up_sponge_field can be in any order.   !
   if ( use_temperature ) then
     call read_data(filename, potemp_var, tmp(:,:,:), domain=G%Domain%mpp_domain)
-    call set_up_sponge_field(tmp, tv%T, nz, CSp)
+    call set_up_sponge_field(tmp, tv%T, G, nz, CSp)
     call read_data(filename, salin_var, tmp(:,:,:), domain=G%Domain%mpp_domain)
-    call set_up_sponge_field(tmp, tv%S, nz, CSp)
+    call set_up_sponge_field(tmp, tv%S, G, nz, CSp)
   endif
 
 
