@@ -80,6 +80,7 @@ use MOM_tracer_registry, only : add_tracer_diagnostics, add_tracer_OBC_values
 use MOM_tracer_registry, only : tracer_vertdiff
 use MOM_tracer_Z_init, only : tracer_Z_init
 use MOM_variables, only : surface, ocean_OBC_type
+use MOM_verticalGrid, only : verticalGrid_type
 
 use coupler_util, only : extract_coupler_values, set_coupler_values
 use coupler_util, only : ind_flux, ind_alpha, ind_csurf
@@ -264,13 +265,13 @@ function register_OCMIP2_CFC(G, param_file, CS, diag, tr_Reg, restart_CS)
   call register_restart_field(tr_ptr, CS%CFC11_desc, &
                               .not.CS%tracers_may_reinit, restart_CS)
   ! Register CFC11 for horizontal advection & diffusion.
-  call register_tracer(tr_ptr, CS%CFC11_desc, param_file, tr_Reg, &
+  call register_tracer(tr_ptr, CS%CFC11_desc, param_file, G, tr_Reg, &
                        tr_desc_ptr=CS%CFC11_desc)
   ! Do the same for CFC12
   tr_ptr => CS%CFC12
   call register_restart_field(tr_ptr, CS%CFC12_desc, &
                               .not.CS%tracers_may_reinit, restart_CS)
-  call register_tracer(tr_ptr, CS%CFC12_desc, param_file, tr_Reg, &
+  call register_tracer(tr_ptr, CS%CFC12_desc, param_file, G, tr_Reg, &
                        tr_desc_ptr=CS%CFC12_desc)
 
   ! Set and read the various empirical coefficients.
@@ -366,12 +367,13 @@ function register_OCMIP2_CFC(G, param_file, CS, diag, tr_Reg, restart_CS)
   register_OCMIP2_CFC = .true.
 end function register_OCMIP2_CFC
 
-subroutine initialize_OCMIP2_CFC(restart, day, G, h, OBC, CS, sponge_CSp, &
+subroutine initialize_OCMIP2_CFC(restart, day, G, GV, h, OBC, CS, sponge_CSp, &
                                        diag_to_Z_CSp)
   logical,                               intent(in) :: restart
   type(time_type), target,               intent(in) :: day
   type(ocean_grid_type),                 intent(in) :: G
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
+  type(verticalGrid_type),               intent(in) :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
   type(ocean_OBC_type),                  pointer    :: OBC
   type(OCMIP2_CFC_CS),                   pointer    :: CS
   type(sponge_CS),                       pointer    :: sponge_CSp
@@ -383,6 +385,7 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, h, OBC, CS, sponge_CSp, &
 !                     a restart file.
 !  (in)      day - Time of the start of the run.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      h - Layer thickness, in m or kg m-2.
 !  (in)      OBC - This open boundary condition type specifies whether, where,
 !                  and what open boundary conditions are used.
@@ -426,7 +429,7 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, h, OBC, CS, sponge_CSp, &
 
 
   ! This needs to be changed if the units of tracer are changed above.
-  if (G%GV%Boussinesq) then ; flux_units = "mol s-1"
+  if (GV%Boussinesq) then ; flux_units = "mol s-1"
   else ; flux_units = "mol m-3 kg s-1" ; endif
 
   do m=1,NTR
@@ -480,12 +483,12 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, h, OBC, CS, sponge_CSp, &
 end subroutine initialize_OCMIP2_CFC
   
 subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)  :: h
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(out) :: tr
-  character(len=*),                      intent(in)  :: name
-  real,                                  intent(in)  :: land_val, IC_val
-  type(ocean_grid_type),                 intent(in) :: G
-  type(OCMIP2_CFC_CS),                   pointer    :: CS
+  type(ocean_grid_type),                    intent(in)  :: G
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: tr
+  character(len=*),                         intent(in)  :: name
+  real,                                     intent(in)  :: land_val, IC_val
+  type(OCMIP2_CFC_CS),                      pointer     :: CS
 
   ! This subroutine initializes a tracer array.
 
@@ -520,11 +523,12 @@ subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, CS)
 
 end subroutine init_tracer_CFC
 
-subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h_old, h_new, ea, eb
+subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS)
+  type(ocean_grid_type),              intent(in) :: G
+  type(verticalGrid_type),            intent(in) :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
   type(forcing),                      intent(in) :: fluxes
   real,                               intent(in) :: dt
-  type(ocean_grid_type),              intent(in) :: G
   type(OCMIP2_CFC_CS),                pointer    :: CS
 !   This subroutine applies diapycnal diffusion and any other column
 ! tracer physics or chemistry to the tracers from this file.
@@ -543,6 +547,7 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, CS)
 !                     forcing fields.  Unused fields have NULL ptrs.
 !  (in)      dt - The amount of time covered by this call, in s.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 register_OCMIP2_CFC.
 !
@@ -564,22 +569,22 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, CS)
   CFC11 => CS%CFC11 ; CFC12 => CS%CFC12
 
   ! These two calls unpack the fluxes from the input arrays.
-  !   The -G%GV%Rho0 changes the sign convention of the flux and changes the units
+  !   The -GV%Rho0 changes the sign convention of the flux and changes the units
   ! of the flux from [Conc. m s-1] to [Conc. kg m-2 s-1].
   call extract_coupler_values(fluxes%tr_fluxes, CS%ind_cfc_11_flux, ind_flux, &
-                              CFC11_flux, is, ie, js, je, -G%GV%Rho0)
+                              CFC11_flux, is, ie, js, je, -GV%Rho0)
   call extract_coupler_values(fluxes%tr_fluxes, CS%ind_cfc_12_flux, ind_flux, &
-                              CFC12_flux, is, ie, js, je, -G%GV%Rho0)
+                              CFC12_flux, is, ie, js, je, -GV%Rho0)
 
   ! Use a tridiagonal solver to determine the concentrations after the
   ! surface source is applied and diapycnal advection and diffusion occurs.
-  call tracer_vertdiff(h_old, ea, eb, dt, CFC11, G, sfc_flux=CFC11_flux)
-  call tracer_vertdiff(h_old, ea, eb, dt, CFC12, G, sfc_flux=CFC12_flux)
+  call tracer_vertdiff(h_old, ea, eb, dt, CFC11, G, GV, sfc_flux=CFC11_flux)
+  call tracer_vertdiff(h_old, ea, eb, dt, CFC12, G, GV, sfc_flux=CFC12_flux)
 
   ! Write out any desired diagnostics.
   if (CS%mask_tracers) then
     do k=1,nz ; do j=js,je ; do i=is,ie
-      if (h_new(i,j,k) < 1.1*G%GV%Angstrom) then
+      if (h_new(i,j,k) < 1.1*GV%Angstrom) then
         CS%CFC11_aux(i,j,k) = CS%CFC11_land_val
         CS%CFC12_aux(i,j,k) = CS%CFC12_land_val
       else
@@ -606,10 +611,11 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, CS)
 
 end subroutine OCMIP2_CFC_column_physics
 
-function OCMIP2_CFC_stock(h, stocks, G, CS, names, units, stock_index)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
-  real, dimension(:),                 intent(out)   :: stocks
+function OCMIP2_CFC_stock(h, stocks, G, GV, CS, names, units, stock_index)
   type(ocean_grid_type),              intent(in)    :: G
+  type(verticalGrid_type),            intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
+  real, dimension(:),                 intent(out)   :: stocks
   type(OCMIP2_CFC_CS),                pointer       :: CS
   character(len=*), dimension(:),     intent(out)   :: names
   character(len=*), dimension(:),     intent(out)   :: units
@@ -623,6 +629,7 @@ function OCMIP2_CFC_stock(h, stocks, G, CS, names, units, stock_index)
 !  (out)     stocks - the mass-weighted integrated amount of each tracer,
 !                     in kg times concentration units.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 register_OCMIP2_CFC.
 !  (out)     names - the names of the stocks calculated.
@@ -654,18 +661,18 @@ function OCMIP2_CFC_stock(h, stocks, G, CS, names, units, stock_index)
     stocks(1) = stocks(1) + CS%CFC11(i,j,k) * mass
     stocks(2) = stocks(2) + CS%CFC12(i,j,k) * mass
   enddo ; enddo ; enddo
-  stocks(1) = G%GV%H_to_kg_m2 * stocks(1)
-  stocks(2) = G%GV%H_to_kg_m2 * stocks(2)
+  stocks(1) = GV%H_to_kg_m2 * stocks(1)
+  stocks(2) = GV%H_to_kg_m2 * stocks(2)
 
   OCMIP2_CFC_stock = 2
 
 end function OCMIP2_CFC_stock
 
 subroutine OCMIP2_CFC_surface_state(state, h, G, CS)
-  type(surface),                         intent(inout) :: state
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
-  type(ocean_grid_type),                 intent(in) :: G
-  type(OCMIP2_CFC_CS),                   pointer    :: CS
+  type(ocean_grid_type),                    intent(in) :: G
+  type(surface),                            intent(inout) :: state
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  type(OCMIP2_CFC_CS),                      pointer    :: CS
 !   This subroutine sets up the fields that the coupler needs to calculate the
 ! CFC fluxes between the ocean and atmosphere.
 ! Arguments: state - A structure containing fields that describe the

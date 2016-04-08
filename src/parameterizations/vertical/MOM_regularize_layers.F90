@@ -114,13 +114,13 @@ integer :: id_clock_pass, id_clock_EOS
 contains
 
 subroutine regularize_layers(h, tv, dt, ea, eb, G, GV, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: h
-  type(thermo_var_ptrs),                 intent(inout) :: tv
-  real,                                  intent(in)    :: dt
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: ea, eb
-  type(ocean_grid_type),                 intent(inout) :: G
-  type(verticalGrid_type),               intent(in)    :: GV
-  type(regularize_layers_CS),            pointer       :: CS
+  type(ocean_grid_type),                    intent(inout) :: G
+  type(verticalGrid_type),                  intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h
+  type(thermo_var_ptrs),                    intent(inout) :: tv
+  real,                                     intent(in)    :: dt
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: ea, eb
+  type(regularize_layers_CS),               pointer       :: CS
 
 !    This subroutine partially steps the bulk mixed layer model.
 !  The following processes are executed, in the order listed.
@@ -162,13 +162,13 @@ subroutine regularize_layers(h, tv, dt, ea, eb, G, GV, CS)
 end subroutine regularize_layers
 
 subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: h
-  type(thermo_var_ptrs),                 intent(inout) :: tv
-  real,                                  intent(in)    :: dt
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: ea, eb
-  type(ocean_grid_type),                 intent(inout) :: G
-  type(verticalGrid_type),               intent(in)    :: GV
-  type(regularize_layers_CS),            pointer       :: CS
+  type(ocean_grid_type),                    intent(inout) :: G
+  type(verticalGrid_type),                  intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h
+  type(thermo_var_ptrs),                    intent(inout) :: tv
+  real,                                     intent(in)    :: dt
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: ea, eb
+  type(regularize_layers_CS),               pointer       :: CS
 
 !    This subroutine ensures that there is a degree of horizontal smoothness
 !  in the depths of the near-surface interfaces.
@@ -773,16 +773,16 @@ end subroutine regularize_surface
 
 subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, &
                                def_rat_u_2lay, def_rat_v_2lay, halo, h)
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(in) :: e
-  real, dimension(NIMEMB_,NJMEM_),           intent(out) :: def_rat_u
-  real, dimension(NIMEM_,NJMEMB_),           intent(out) :: def_rat_v
   type(ocean_grid_type),                     intent(in)  :: G
   type(verticalGrid_type),                   intent(in)  :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in) :: e
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(out) :: def_rat_u
+  real, dimension(SZI_(G),SZJB_(G)),         intent(out) :: def_rat_v
   type(regularize_layers_CS),                pointer     :: CS
-  real, dimension(NIMEMB_,NJMEM_), optional, intent(out) :: def_rat_u_2lay
-  real, dimension(NIMEM_,NJMEMB_), optional, intent(out) :: def_rat_v_2lay
+  real, dimension(SZIB_(G),SZJ_(G)), optional, intent(out) :: def_rat_u_2lay
+  real, dimension(SZI_(G),SZJB_(G)), optional, intent(out) :: def_rat_v_2lay
   integer,                         optional, intent(in)  :: halo
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(in)  :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(in)  :: h
 !    This subroutine determines the amount by which the harmonic mean
 !  thickness at velocity points differ from the arithmetic means, relative to
 !  the the arithmetic means, after eliminating thickness variations that are

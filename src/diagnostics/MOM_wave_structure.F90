@@ -52,6 +52,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : log_version, param_file_type, get_param
 use MOM_grid,          only : ocean_grid_type
 use MOM_variables,     only : thermo_var_ptrs
+use MOM_verticalGrid,  only : verticalGrid_type
 
 implicit none ; private
 
@@ -88,21 +89,23 @@ end type wave_structure_CS
 
 contains
 
-subroutine wave_structure(h, tv, G, cn, ModeNum, freq, CS, En, full_halos)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),    intent(in)  :: h
-  type(thermo_var_ptrs),                    intent(in)  :: tv
+subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
   type(ocean_grid_type),                    intent(in)  :: G
-  real, dimension(NIMEM_,NJMEM_),           intent(in)  :: cn
+  type(verticalGrid_type),                  intent(in)  :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h
+  type(thermo_var_ptrs),                    intent(in)  :: tv
+  real, dimension(SZI_(G),SZJ_(G)),         intent(in)  :: cn
   integer,                                  intent(in)  :: ModeNum
   real,                                     intent(in)  :: freq
   type(wave_structure_CS),                  pointer     :: CS
-  real, dimension(NIMEM_,NJMEM_), optional, intent(in)  :: En
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)  :: En
   logical,optional,                         intent(in)  :: full_halos
   
 !    This subroutine determines the internal wave velocity structure for any mode.
 ! Arguments: h - Layer thickness, in m or kg m-2.
 !  (in)      tv - A structure containing the thermobaric variables.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      cn - The (non-rotational) mode internal gravity wave speed, in m s-1.
 !  (in)      ModeNum - mode number
 !  (in)      freq - intrinsic wave frequency, in s-1
@@ -155,6 +158,7 @@ subroutine wave_structure(h, tv, G, cn, ModeNum, freq, CS, En, full_halos)
   real :: lam
   real :: min_h_frac
   real :: H_to_pres
+  real :: H_to_m     ! Local copy of a unit conversion factor.
   real, dimension(SZI_(G)) :: &
     hmin, &  ! Thicknesses in m.
     H_here, HxT_here, HxS_here, HxR_here
@@ -209,10 +213,11 @@ subroutine wave_structure(h, tv, G, cn, ModeNum, freq, CS, En, full_halos)
   Pi = (4.0*atan(1.0))
   
   S => tv%S ; T => tv%T
-  g_Rho0 = G%g_Earth/G%GV%Rho0
+  g_Rho0 = G%g_Earth/GV%Rho0
   use_EOS = associated(tv%eqn_of_state)
 
-  H_to_pres = G%g_Earth * G%GV%Rho0
+  H_to_pres = G%g_Earth * GV%Rho0
+  H_to_m = GV%H_to_m
   rescale = 1024.0**4 ; I_rescale = 1.0/rescale
 
   min_h_frac = tol1 / real(nz)
@@ -222,7 +227,7 @@ subroutine wave_structure(h, tv, G, cn, ModeNum, freq, CS, En, full_halos)
     ! at the top).  This also transposes the row order so that columns can
     ! be worked upon one at a time.
     do i=is,ie ; htot(i,j) = 0.0 ; enddo
-    do k=1,nz ; do i=is,ie ; htot(i,j) = htot(i,j) + h(i,j,k)*G%GV%H_to_m ; enddo ; enddo
+    do k=1,nz ; do i=is,ie ; htot(i,j) = htot(i,j) + h(i,j,k)*H_to_m ; enddo ; enddo
 
     do i=is,ie
       hmin(i) = htot(i,j)*min_h_frac ; kf(i) = 1 ; H_here(i) = 0.0
@@ -230,20 +235,20 @@ subroutine wave_structure(h, tv, G, cn, ModeNum, freq, CS, En, full_halos)
     enddo
     if (use_EOS) then
       do k=1,nz ; do i=is,ie
-        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*G%GV%H_to_m > hmin(i))) then
+        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*H_to_m > hmin(i))) then
           Hf(kf(i),i) = H_here(i)
           Tf(kf(i),i) = HxT_here(i) / H_here(i)
           Sf(kf(i),i) = HxS_here(i) / H_here(i)
           kf(i) = kf(i) + 1
 
           ! Start a new layer
-          H_here(i) = h(i,j,k)*G%GV%H_to_m
-          HxT_here(i) = (h(i,j,k)*G%GV%H_to_m)*T(i,j,k)
-          HxS_here(i) = (h(i,j,k)*G%GV%H_to_m)*S(i,j,k)
+          H_here(i) = h(i,j,k)*H_to_m
+          HxT_here(i) = (h(i,j,k)*H_to_m)*T(i,j,k)
+          HxS_here(i) = (h(i,j,k)*H_to_m)*S(i,j,k)
         else
-          H_here(i) = H_here(i) + h(i,j,k)*G%GV%H_to_m
-          HxT_here(i) = HxT_here(i) + (h(i,j,k)*G%GV%H_to_m)*T(i,j,k)
-          HxS_here(i) = HxS_here(i) + (h(i,j,k)*G%GV%H_to_m)*S(i,j,k)
+          H_here(i) = H_here(i) + h(i,j,k)*H_to_m
+          HxT_here(i) = HxT_here(i) + (h(i,j,k)*H_to_m)*T(i,j,k)
+          HxS_here(i) = HxS_here(i) + (h(i,j,k)*H_to_m)*S(i,j,k)
         endif
       enddo ; enddo
       do i=is,ie ; if (H_here(i) > 0.0) then
@@ -253,16 +258,16 @@ subroutine wave_structure(h, tv, G, cn, ModeNum, freq, CS, En, full_halos)
       endif ; enddo
     else
       do k=1,nz ; do i=is,ie
-        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*G%GV%H_to_m > hmin(i))) then
+        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*H_to_m > hmin(i))) then
           Hf(kf(i),i) = H_here(i) ; Rf(kf(i),i) = HxR_here(i) / H_here(i)
           kf(i) = kf(i) + 1
 
           ! Start a new layer
-          H_here(i) = h(i,j,k)*G%GV%H_to_m
-          HxR_here(i) = (h(i,j,k)*G%GV%H_to_m)*G%GV%Rlay(k)
+          H_here(i) = h(i,j,k)*H_to_m
+          HxR_here(i) = (h(i,j,k)*H_to_m)*GV%Rlay(k)
         else
-          H_here(i) = H_here(i) + h(i,j,k)*G%GV%H_to_m
-          HxR_here(i) = HxR_here(i) + (h(i,j,k)*G%GV%H_to_m)*G%GV%Rlay(k)
+          H_here(i) = H_here(i) + h(i,j,k)*H_to_m
+          HxR_here(i) = HxR_here(i) + (h(i,j,k)*H_to_m)*GV%Rlay(k)
         endif
       enddo ; enddo
       do i=is,ie ; if (H_here(i) > 0.0) then
@@ -505,8 +510,8 @@ subroutine wave_structure(h, tv, G, cn, ModeNum, freq, CS, En, full_halos)
             
             ! Back-calculate amplitude from energy equation
             if (Kmag2 > 0.0) then
-              KE_term = 0.25*G%GV%Rho0*( (1+f2/freq**2)/Kmag2*int_dwdz2 + int_w2 )
-              PE_term = 0.25*G%GV%Rho0*( int_N2w2/freq**2 )
+              KE_term = 0.25*GV%Rho0*( (1+f2/freq**2)/Kmag2*int_dwdz2 + int_w2 )
+              PE_term = 0.25*GV%Rho0*( int_N2w2/freq**2 )
               if (En(i,j) >= 0.0) then
                 W0 = sqrt( En(i,j)/(KE_term + PE_term) )
               else

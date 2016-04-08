@@ -16,6 +16,8 @@
 #  define NIMEM_ (((NIGLOBAL_-1)/NIPROC_)+1+2*NIHALO_)
 #  define NJMEM_ (((NJGLOBAL_-1)/NJPROC_)+1+2*NJHALO_)
 
+! These are the macors that should be used when setting up ALLOCABLE_ or
+! PTR_ (heap) variables.
 #  ifdef SYMMETRIC_MEMORY_
 #    define NIMEMB_   0:NIMEM_
 #    define NJMEMB_   0:NJMEM_
@@ -33,6 +35,8 @@
 #  define C1_         1
 #  define C2_         2
 #  define C3_         3
+! These are the macros that should be used for subroutine arguments
+! or for automatically allocated (stack) variables.
 #  define SZI_(G)     NIMEM_
 #  define SZJ_(G)     NJMEM_
 #  define SZK_(G)     NK_
@@ -50,6 +54,9 @@
 #  define ALLOCABLE_ ,allocatable
 #  define PTR_       ,pointer
 #  define TO_NULL_   =>NULL()
+
+! These are the macors that should be used when setting up ALLOCABLE_ or
+! PTR_ (heap) variables.
 #  define NIMEM_      :
 #  define NJMEM_      :
 #  define NIMEMB_PTR_ :
@@ -69,10 +76,12 @@
 #  define C1_         :
 #  define C2_         :
 #  define C3_         :
+! These are the macros that should be used for subroutine arguments
+! or for automatically allocated (stack) variables.
 #  define SZI_(G)     G%isd:G%ied
 #  define SZJ_(G)     G%jsd:G%jed
-#  define SZK_(G)     G%ks:G%ke
-#  define SZK0_(G)    G%ks-1:G%ke
+#  define SZK_(G)     G%ke
+#  define SZK0_(G)    0:G%ke
 #  define SZIB_(G)    G%IsdB:G%IedB
 #  define SZJB_(G)    G%JsdB:G%JedB
 #  define SZIBS_(G)   G%isd-1:G%ied

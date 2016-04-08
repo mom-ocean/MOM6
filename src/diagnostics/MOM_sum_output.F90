@@ -70,6 +70,7 @@ use MOM_time_manager, only : time_type, get_time, get_date, set_time, operator(>
 use MOM_time_manager, only : get_calendar_type, NO_CALENDAR
 use MOM_tracer_flow_control, only : tracer_flow_control_CS, call_tracer_stocks
 use MOM_variables, only : surface, thermo_var_ptrs
+use MOM_verticalGrid, only : verticalGrid_type
 
 use netcdf
 
@@ -254,7 +255,7 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
     call get_param(param_file, mod, "DEPTH_LIST_MIN_INC", CS%D_list_min_inc, &
                    "The minimum increment between the depths of the \n"//&
                    "entries in the depth-list file.", units="m", &
-                   default=G%GV%Angstrom_Z)
+                   default=1.0E-10)
     if (CS%read_depth_list) then
       call get_param(param_file, mod, "DEPTH_LIST_FILE", CS%depth_list_file, &
                    "The name of the depth list file.", default="Depth_list.nc")
@@ -290,16 +291,17 @@ subroutine MOM_sum_output_end(CS)
   endif
 end subroutine MOM_sum_output_end
 
-subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
-  type(thermo_var_ptrs),                  intent(in)    :: tv
-  type(time_type),                        intent(inout) :: day
-  integer,                                intent(in)    :: n
-  type(ocean_grid_type),                  intent(in)    :: G
-  type(Sum_output_CS),                    pointer       :: CS
-  type(tracer_flow_control_CS), optional, pointer       :: tracer_CSp
+subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
+  type(ocean_grid_type),                     intent(in)    :: G
+  type(verticalGrid_type),                   intent(in)    :: GV
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
+  type(thermo_var_ptrs),                     intent(in)    :: tv
+  type(time_type),                           intent(inout) :: day
+  integer,                                   intent(in)    :: n
+  type(Sum_output_CS),                       pointer       :: CS
+  type(tracer_flow_control_CS),    optional, pointer       :: tracer_CSp
 
 
 !  This subroutine calculates and writes the total model energy, the
@@ -315,6 +317,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
 !  (in/out)  day - The current model time.
 !  (in)      n - The time step number of the current execution.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 MOM_sum_output_init.
 
@@ -382,6 +385,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
     PE_pt
   real, dimension(SZI_(G),SZJ_(G)) :: &
     Temp_int, Salt_int
+  real :: H_to_m, H_to_kg_m2  ! Local copies of unit conversion factors.
   integer :: num_nc_fields  ! The number of fields that will actually go into
                             ! the NetCDF file.
   integer :: i, j, k, is, ie, js, je, nz, m, Isq, Ieq, Jsq, Jeq
@@ -433,6 +437,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
+  H_to_m = GV%H_to_m ; H_to_kg_m2 = GV%H_to_kg_m2
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "write_energy: Module must be initialized before it is used.")
@@ -441,14 +446,14 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
     areaTm(i,j) = G%mask2dT(i,j)*G%areaT(i,j)
   enddo ; enddo
 
-  if (G%GV%Boussinesq) then
+  if (GV%Boussinesq) then
     if (CS%use_repro_sum) then
       tmp1(:,:,:) = 0.0
       do k=1,nz ; do j=js,je ; do i=is,ie
-        tmp1(i,j,k) = h(i,j,k) * (G%GV%H_to_kg_m2*areaTm(i,j))
+        tmp1(i,j,k) = h(i,j,k) * (H_to_kg_m2*areaTm(i,j))
       enddo ; enddo ; enddo
       mass_tot = reproducing_sum(tmp1, sums=mass_lay, EFP_sum=mass_EFP)
-      do k=1,nz ; vol_lay(k) = (G%GV%H_to_m/G%GV%H_to_kg_m2)*mass_lay(k) ; enddo
+      do k=1,nz ; vol_lay(k) = (H_to_m/H_to_kg_m2)*mass_lay(k) ; enddo
     else
       do k=1,nz
         vol_lay(k) = 0.0
@@ -457,39 +462,39 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
         enddo ; enddo
       enddo
       call sum_across_PEs(vol_lay,nz)
-      do k=1,nz ; mass_lay(k) = G%GV%H_to_kg_m2*vol_lay(k) ; enddo
-      do k=1,nz ; vol_lay(k) = G%GV%H_to_m*vol_lay(k) ; enddo
+      do k=1,nz ; mass_lay(k) = H_to_kg_m2*vol_lay(k) ; enddo
+      do k=1,nz ; vol_lay(k) = H_to_m*vol_lay(k) ; enddo
     endif
   else
     if (CS%use_repro_sum) then
       tmp1(:,:,:) = 0.0
       if (CS%do_APE_calc) then
         do k=1,nz ; do j=js,je ; do i=is,ie
-          tmp1(i,j,k) = G%GV%H_to_kg_m2 * h(i,j,k) * areaTm(i,j)
+          tmp1(i,j,k) = H_to_kg_m2 * h(i,j,k) * areaTm(i,j)
         enddo ; enddo ; enddo
         mass_tot = reproducing_sum(tmp1, sums=mass_lay, EFP_sum=mass_EFP)
 
-        call find_eta(h, tv, G%g_Earth, G, eta)
+        call find_eta(h, tv, G%g_Earth, G, GV, eta)
         do k=1,nz ; do j=js,je ; do i=is,ie
           tmp1(i,j,k) = (eta(i,j,K)-eta(i,j,K+1)) * areaTm(i,j)
         enddo ; enddo ; enddo
-        vol_tot = G%GV%H_to_m*reproducing_sum(tmp1, sums=vol_lay)
+        vol_tot = H_to_m*reproducing_sum(tmp1, sums=vol_lay)
       else
         do k=1,nz ; do j=js,je ; do i=is,ie
-          tmp1(i,j,k) = G%GV%H_to_kg_m2 * h(i,j,k) * areaTm(i,j)
+          tmp1(i,j,k) = H_to_kg_m2 * h(i,j,k) * areaTm(i,j)
         enddo ; enddo ; enddo
         mass_tot = reproducing_sum(tmp1, sums=mass_lay, EFP_sum=mass_EFP)
-        do k=1,nz ; vol_lay(k) = mass_lay(k) / G%GV%Rho0 ; enddo
+        do k=1,nz ; vol_lay(k) = mass_lay(k) / GV%Rho0 ; enddo
       endif
     else ! not use_repro_sum
       do k=1,nz
         mass_lay(k) = 0.0
         do j=js,je ; do i=is,ie
-          mass_lay(k) = mass_lay(k) + G%GV%H_to_kg_m2 * h(i,j,k) * areaTm(i,j)
+          mass_lay(k) = mass_lay(k) + H_to_kg_m2 * h(i,j,k) * areaTm(i,j)
         enddo ; enddo
       enddo
       if (CS%do_APE_calc) then
-        call find_eta(h, tv, G%g_Earth, G, eta)
+        call find_eta(h, tv, G%g_Earth, G, GV, eta)
 
         do k=1,nz
           vol_lay(k) = 0.0
@@ -501,7 +506,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
         call sum_across_PEs(mass_lay,nz)
       else
         call sum_across_PEs(mass_lay,nz)
-        do k=1,nz ; vol_lay(k) = mass_lay(k) / G%GV%Rho0 ; enddo
+        do k=1,nz ; vol_lay(k) = mass_lay(k) / GV%Rho0 ; enddo
       endif
     endif ! use_repro_sum
   endif ! Boussinesq
@@ -512,10 +517,11 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
 
   nTr_stocks = 0
   if (present(tracer_CSp)) then
-    call call_tracer_stocks(h, Tr_stocks, G, tracer_CSp, stock_names=Tr_names, stock_units=Tr_units, num_stocks=nTr_stocks,&
-                               got_min_max=Tr_minmax_got, global_min=Tr_min, global_max=Tr_max, &
-                               xgmin=Tr_min_x, ygmin=Tr_min_y, zgmin=Tr_min_z,&
-                               xgmax=Tr_max_x, ygmax=Tr_max_y, zgmax=Tr_max_z)
+    call call_tracer_stocks(h, Tr_stocks, G, GV, tracer_CSp, stock_names=Tr_names, &
+                            stock_units=Tr_units, num_stocks=nTr_stocks,&
+                            got_min_max=Tr_minmax_got, global_min=Tr_min, global_max=Tr_max, &
+                            xgmin=Tr_min_x, ygmin=Tr_min_y, zgmin=Tr_min_z,&
+                            xgmax=Tr_max_x, ygmax=Tr_max_y, zgmax=Tr_max_z)
     if (nTr_stocks > 0) then
       do m=1,nTr_stocks
         vars(num_nc_fields+m) = var_desc(Tr_names(m), units=Tr_units(m), &
@@ -586,10 +592,10 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
     energypath_nc = trim(CS%energyfile) // ".nc"
     if (day > CS%Start_time) then
       call reopen_file(CS%fileenergy_nc, trim(energypath_nc), vars, &
-                       num_nc_fields, G, CS%fields, SINGLE_FILE, CS%timeunit)
+                       num_nc_fields, G, CS%fields, SINGLE_FILE, CS%timeunit, GV=GV)
     else
       call create_file(CS%fileenergy_nc, trim(energypath_nc), vars, &
-                       num_nc_fields, G, CS%fields, SINGLE_FILE, CS%timeunit)
+                       num_nc_fields, G, CS%fields, SINGLE_FILE, CS%timeunit, GV=GV)
     endif
   endif
 
@@ -622,7 +628,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
   if (CS%use_repro_sum) then
     tmp1(:,:,:) = 0.0
     do k=1,nz ; do j=js,je ; do i=is,ie
-      tmp1(i,j,k) = (0.25 * G%GV%H_to_kg_m2 * (areaTm(i,j) * h(i,j,k))) * &
+      tmp1(i,j,k) = (0.25 * H_to_kg_m2 * (areaTm(i,j) * h(i,j,k))) * &
               (u(I-1,j,k)**2 + u(I,j,k)**2 + v(i,J-1,k)**2 + v(i,J,k)**2)
     enddo ; enddo ; enddo
   else
@@ -632,7 +638,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
          KE(k) = KE(k) + 0.25 * (areaTm(i,j) * h(i,j,k)) * &
               (u(I-1,j,k)**2 + u(I,j,k)**2 + v(i,J-1,k)**2 + v(i,J,k)**2)
       enddo ; enddo
-      KE(k) = G%GV%H_to_kg_m2 * KE(k)
+      KE(k) = H_to_kg_m2 * KE(k)
     enddo
   endif
 
@@ -642,15 +648,15 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
   do k=1,nz+1 ; PE(K) = 0.0 ; enddo
   if (CS%do_APE_calc) then
     PE_pt(:,:,:) = 0.0
-    if (G%GV%Boussinesq) then
+    if (GV%Boussinesq) then
       do j=js,je ; do i=is,ie
         hbelow = 0.0
         do k=nz,1,-1
-          hbelow = hbelow + h(i,j,k) * G%GV%H_to_m
+          hbelow = hbelow + h(i,j,k) * H_to_m
           hint = (H_0APE(K) + hbelow - G%bathyT(i,j))
           hbot = H_0APE(K) - G%bathyT(i,j)
           hbot = (hbot + ABS(hbot)) * 0.5
-          PE_pt(i,j,K) = 0.5 * areaTm(i,j) * (G%GV%Rho0*G%GV%g_prime(K)) * &
+          PE_pt(i,j,K) = 0.5 * areaTm(i,j) * (GV%Rho0*GV%g_prime(K)) * &
                   (hint * hint - hbot * hbot)
         enddo
       enddo ; enddo
@@ -660,7 +666,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
         do k=nz,1,-1
           hint = H_0APE(K) + eta(i,j,K)  ! eta and H_0 have opposite signs.
           hbot = max(H_0APE(K) - G%bathyT(i,j), 0.0)
-          PE_pt(i,j,K) = 0.5 * (areaTm(i,j) * (G%GV%Rho0*G%GV%g_prime(K))) * &
+          PE_pt(i,j,K) = 0.5 * (areaTm(i,j) * (GV%Rho0*GV%g_prime(K))) * &
                   (hint * hint - hbot * hbot)
         enddo
       enddo ; enddo
@@ -699,9 +705,9 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
       Temp_int(:,:) = 0.0 ; Salt_int(:,:) = 0.0
       do k=1,nz ; do j=js,je ; do i=is,ie
         Salt_int(i,j) = Salt_int(i,j) + tv%S(i,j,k) * &
-                        (h(i,j,k)*(G%GV%H_to_kg_m2 * areaTm(i,j)))
+                        (h(i,j,k)*(H_to_kg_m2 * areaTm(i,j)))
         Temp_int(i,j) = Temp_int(i,j) + (tv%C_p * tv%T(i,j,k)) * &
-                        (h(i,j,k)*(G%GV%H_to_kg_m2 * areaTm(i,j)))
+                        (h(i,j,k)*(H_to_kg_m2 * areaTm(i,j)))
       enddo ; enddo ; enddo
       Salt = reproducing_sum(Salt_int, EFP_sum=salt_EFP)
       Heat = reproducing_sum(Temp_int, EFP_sum=heat_EFP)
@@ -710,8 +716,8 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
         Salt = Salt + tv%S(i,j,k)*h(i,j,k)*areaTm(i,j)
         Heat = Heat + tv%T(i,j,k)*h(i,j,k)*areaTm(i,j)
       enddo ; enddo ; enddo
-      Salt = G%GV%H_to_kg_m2 * Salt
-      Heat = (G%GV%H_to_kg_m2) * (tv%C_p * Heat)
+      Salt = H_to_kg_m2 * Salt
+      Heat = (H_to_kg_m2) * (tv%C_p * Heat)
       call sum_across_PEs(Salt)
       call sum_across_PEs(Heat)
     endif
@@ -755,7 +761,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
       CS%heat_prev_EFP = heat_EFP ; CS%net_heat_in_EFP = real_to_EFP(0.0)
     endif
   endif
-  Irho0 = 1.0/G%GV%Rho0
+  Irho0 = 1.0/GV%Rho0
 
   if (CS%use_repro_sum) then
     if (CS%use_temperature) then
@@ -769,7 +775,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
 
     mass_chg_EFP = mass_EFP - CS%mass_prev_EFP
     salin_mass_in = 0.0
-    if (G%GV%Boussinesq) then
+    if (GV%Boussinesq) then
       mass_anom_EFP = mass_chg_EFP - CS%fresh_water_in_EFP
     else
       ! net_salt_input needs to be converted from psu m s-1 to kg m-2 s-1.
@@ -783,7 +789,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, CS, tracer_CSp)
     Salt_chg = Salt - CS%salt_prev  ; Salt_anom = Salt_chg - CS%net_salt_input
     Heat_chg = Heat - CS%heat_prev  ; Heat_anom = Heat_chg - CS%net_heat_input
     mass_chg = mass_tot - CS%mass_prev
-    if (G%GV%Boussinesq) then
+    if (GV%Boussinesq) then
       mass_anom = mass_chg - CS%fresh_water_input
     else
       ! net_salt_input needs to be converted from psu m s-1 to kg m-2 s-1.

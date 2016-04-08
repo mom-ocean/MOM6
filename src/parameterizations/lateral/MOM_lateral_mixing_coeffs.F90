@@ -120,11 +120,12 @@ public VarMix_init, calc_slope_functions, calc_resoln_function
 
 contains
 
-subroutine calc_resoln_function(h, tv, G, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
-  type(thermo_var_ptrs),                 intent(in)    :: tv
-  type(ocean_grid_type),                 intent(inout) :: G
-  type(VarMix_CS),                       pointer       :: CS
+subroutine calc_resoln_function(h, tv, G, GV, CS)
+  type(ocean_grid_type),                    intent(inout) :: G
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
+  type(thermo_var_ptrs),                    intent(in)    :: tv
+  type(verticalGrid_type),                  intent(in)    :: GV
+  type(VarMix_CS),                          pointer       :: CS
 !    This subroutine determines a function of the ratio of the grid
 ! spacing to the deformation radius that is used to scale horizontal
 ! viscosities or diffusivities.
@@ -133,6 +134,7 @@ subroutine calc_resoln_function(h, tv, G, CS)
 ! Arguments: h - Layer thickness, in m or kg m-2.
 !  (in)      tv - A structure containing the thermodynamic variables.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 VarMix_init.
 
@@ -177,7 +179,7 @@ subroutine calc_resoln_function(h, tv, G, CS)
   if (.not. ASSOCIATED(CS%beta_dx2_v)) call MOM_error(FATAL, &
     "calc_resoln_function: %beta_dx2_v is not associated with Resoln_scaled_Kh.")
 
-  call wave_speed(h, tv, G, CS%cg1, CS%wave_speed_CSp)
+  call wave_speed(h, tv, G, GV, CS%cg1, CS%wave_speed_CSp)
 
   call create_group_pass(CS%pass_cg1, CS%cg1, G%Domain)
   call do_group_pass(CS%pass_cg1, G%Domain)
@@ -352,12 +354,12 @@ end subroutine calc_resoln_function
 
 !> Calculates functions of isopycnal slopes
 subroutine calc_slope_functions(h, tv, dt, G, GV, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: h
-  type(thermo_var_ptrs),                 intent(in)    :: tv
-  real,                                  intent(in)    :: dt
-  type(ocean_grid_type),                 intent(inout) :: G
-  type(verticalGrid_type),               intent(in)    :: GV
-  type(VarMix_CS),                       pointer       :: CS
+  type(ocean_grid_type),                    intent(inout) :: G
+  type(verticalGrid_type),                  intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h
+  type(thermo_var_ptrs),                    intent(in)    :: tv
+  real,                                     intent(in)    :: dt
+  type(VarMix_CS),                          pointer       :: CS
 !    This subroutine calls for the calculation of the interface heights, and
 !  then calls for the calculation of the slope function S*N for the Visbeck et
 !  al. style scaling for the various horizontal diffusivities.
@@ -369,14 +371,15 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, CS)
   if (.not. ASSOCIATED(CS)) call MOM_error(FATAL, "MOM_lateral_mixing_coeffs.F90, calc_slope_functions:"//&
          "Module must be initialized before it is used.")
 
-  call find_eta(h, tv, G%g_Earth, G, e, halo_size=2)
+  call find_eta(h, tv, G%g_Earth, G, GV, e, halo_size=2)
   if (CS%use_variable_mixing) then
     if (CS%use_stored_slopes) then
-      call calc_isoneutral_slopes(G, h, e, tv, dt*CS%kappa_smooth, CS%slope_x, CS%slope_y, N2_u, N2_v, 1)
+      call calc_isoneutral_slopes(G, GV, h, e, tv, dt*CS%kappa_smooth, &
+                                  CS%slope_x, CS%slope_y, N2_u, N2_v, 1)
       call calc_Visbeck_coeffs(h, e, CS%slope_x, CS%slope_y, N2_u, N2_v, G, GV, CS)
 !     call calc_slope_functions_using_just_e(h, G, CS, e, .false.)
     else
-      !call calc_isoneutral_slopes(G, h, e, tv, dt*CS%kappa_smooth, CS%slope_x, CS%slope_y)
+      !call calc_isoneutral_slopes(G, GV, h, e, tv, dt*CS%kappa_smooth, CS%slope_x, CS%slope_y)
       call calc_slope_functions_using_just_e(h, G, GV, CS, e, .true.)
     endif
   endif
@@ -396,15 +399,15 @@ end subroutine calc_slope_functions
 
 !> Calculates diffusivity coefficients similar to Visbeck et al.
 subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),         intent(in)    :: h
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_),  intent(in)    :: e
-  real, dimension(NIMEMB_,NJMEM_,NK_INTERFACE_), intent(in)    :: slope_x
-  real, dimension(NIMEMB_,NJMEM_,NK_INTERFACE_), intent(in)    :: N2_u
-  real, dimension(NIMEM_,NJMEMB_,NK_INTERFACE_), intent(in)    :: slope_y
-  real, dimension(NIMEM_,NJMEMB_,NK_INTERFACE_), intent(in)    :: N2_v
-  type(ocean_grid_type),                         intent(inout) :: G
-  type(verticalGrid_type),                       intent(in)    :: GV
-  type(VarMix_CS),                               intent(inout) :: CS
+  type(ocean_grid_type),                      intent(inout) :: G
+  type(verticalGrid_type),                    intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: e
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: slope_x
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: N2_u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(in)    :: slope_y
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(in)    :: N2_v
+  type(VarMix_CS),                            intent(inout) :: CS
   ! Local variables
   real :: E_x(SZIB_(G), SZJ_(G))  ! X-slope of interface at u points (for diagnostics)
   real :: E_y(SZI_(G), SZJB_(G))  ! Y-slope of interface at u points (for diagnostics)
@@ -544,12 +547,12 @@ end subroutine calc_Visbeck_coeffs
 !> The original calc_slope_function() that calculated slopes using
 !! interface positions only, not accounting for density variations.
 subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(inout) :: h
-  type(ocean_grid_type),                        intent(inout) :: G
-  type(verticalGrid_type),                      intent(in)    :: GV
-  type(VarMix_CS),                              pointer       :: CS
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(in)    :: e
-  logical,                                      intent(in)    :: calculate_slopes
+  type(ocean_grid_type),                      intent(inout) :: G
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: h
+  type(verticalGrid_type),                    intent(in)    :: GV
+  type(VarMix_CS),                            pointer       :: CS
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: e
+  logical,                                    intent(in)    :: calculate_slopes
 !    This subroutine calculates the slope function S*N for the Visbeck et
 !  al. style scaling for the various horizontal diffusivities.
 

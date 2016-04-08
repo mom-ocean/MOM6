@@ -54,7 +54,7 @@ use MOM_grid,          only : ocean_grid_type
 use MOM_io,            only : slasher, vardesc, query_vardesc, modify_vardesc
 use MOM_spatial_means, only : global_layer_mean
 use MOM_variables,     only : p3d, p2d
-
+use MOM_verticalGrid,  only : verticalGrid_type
 
 use netcdf
 
@@ -158,13 +158,14 @@ function global_z_mean(var,G,CS,tracer)
 
 end function global_z_mean
 
-subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
-  real,                                   intent(in)    :: dt
-  type(ocean_grid_type),                  intent(inout) :: G
-  type(diag_to_Z_CS),                     pointer       :: CS
+subroutine calculate_Z_diag_fields(u, v, h, dt, G, GV, CS)
+  type(ocean_grid_type),                     intent(inout) :: G
+  type(verticalGrid_type),                   intent(in)    :: GV
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
+  real,                                      intent(in)    :: dt
+  type(diag_to_Z_CS),                        pointer       :: CS
 
 ! This subroutine maps tracers and velocities into depth space for diagnostics. 
 
@@ -174,6 +175,7 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
 !  (in)  h  - layer thickness (meter or kg/m2)
 !  (in)  dt - time difference in sec since last call to this subroutine
 !  (in)  G  - ocean grid structure
+!  (in)  GV - The ocean's vertical grid structure.
 !  (in)  CS - control structure returned by previous call to diagnostics_init
 
   ! Note the deliberately reversed axes in h_f, u_f, v_f, and tr_f.
@@ -209,8 +211,8 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
 
   is   = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nk = G%ke
   Isq  = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-  nkml = max(G%GV%nkml, 1)
-  Angstrom = G%GV%Angstrom
+  nkml = max(GV%nkml, 1)
+  Angstrom = GV%Angstrom
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "diagnostic_fields_zstar: Module must be initialized before it is used.")
@@ -246,7 +248,7 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
       do I=Isq,Ieq ; if (nk_valid(I) > 0) then
       ! Calculate the z* interface heights for tracers.
         htot = 0.0 ; do k=1,nk_valid(i) ; htot = htot + h_f(k,i) ; enddo
-        dilate = 0.0 ; if (htot*G%GV%H_to_m > 2.0*Angstrom) dilate = (D_pt(i) - 0.0) / htot
+        dilate = 0.0 ; if (htot*GV%H_to_m > 2.0*Angstrom) dilate = (D_pt(i) - 0.0) / htot
 
         e(nk_valid(i)+1) = -D_pt(i)
         do k=nk_valid(i),1,-1 ; e(K) = e(K+1) + h_f(k,i)*dilate ; enddo
@@ -457,13 +459,14 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, CS)
 end subroutine calculate_Z_diag_fields
 
 
-subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, CS)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: uh_int
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: vh_int
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
-  real,                                   intent(in)    :: dt
-  type(ocean_grid_type),                  intent(inout) :: G
-  type(diag_to_Z_CS),                     pointer       :: CS
+subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, GV, CS)
+  type(ocean_grid_type),                     intent(inout) :: G
+  type(verticalGrid_type),                   intent(in)    :: GV
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uh_int
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vh_int
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
+  real,                                      intent(in)    :: dt
+  type(diag_to_Z_CS),                        pointer       :: CS
 
 !   This subroutine maps horizontal transport into depth space for diagnostic output.
 
@@ -473,6 +476,7 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, CS)
 !  (in)      h      - layer thickness (meter or kg/m2)
 !  (in)      dt     - time difference (sec) since last call to this routine
 !  (in)      G      - ocean grid structure
+!  (in)      GV     - The ocean's vertical grid structure
 !  (in)      CS     - control structure returned by previous call to diagnostics_init
 
   real, dimension(SZI_(G), SZJ_(G)) :: &
@@ -521,7 +525,7 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, CS)
   ! Determine how much the layers will be dilated in recasting them into z*
   ! coordiantes.  (-G%D < z* < 0).
   do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-    htot(i,j) = G%GV%H_subroundoff
+    htot(i,j) = GV%H_subroundoff
   enddo ; enddo
   do k=1,nk ; do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
     htot(i,j) = htot(i,j) + h(i,j,k)
@@ -602,14 +606,14 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, CS)
 
   if (CS%id_uh_Z > 0) then 
     do k=1,nk_z ; do j=js,je ; do I=Isq,Ieq
-      CS%uh_z(i,j,k) = CS%uh_z(i,j,k)*G%GV%H_to_kg_m2 
+      CS%uh_z(i,j,k) = CS%uh_z(i,j,k)*GV%H_to_kg_m2 
     enddo ; enddo ; enddo
     call post_data(CS%id_uh_Z, CS%uh_z, CS%diag)
   endif 
 
   if (CS%id_vh_Z > 0) then
     do k=1,nk_z ; do j=Jsq,Jeq ; do I=is,ie
-      CS%vh_z(i,j,k) = CS%vh_z(i,j,k)*G%GV%H_to_kg_m2 
+      CS%vh_z(i,j,k) = CS%vh_z(i,j,k)*GV%H_to_kg_m2 
     enddo ; enddo ; enddo
     call post_data(CS%id_vh_Z, CS%vh_z, CS%diag)
   endif 
@@ -717,14 +721,14 @@ subroutine find_limited_slope(val, e, slope, k)
 
 end subroutine find_limited_slope
 
-subroutine calc_Zint_diags(h, in_ptrs, ids, num_diags, &
-                                       G, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
-  type(p3d), dimension(:),               intent(in) :: in_ptrs
-  integer,   dimension(:),               intent(in) :: ids
-  integer,                               intent(in) :: num_diags
-  type(ocean_grid_type),                 intent(in) :: G
-  type(diag_to_Z_CS),                    pointer    :: CS
+subroutine calc_Zint_diags(h, in_ptrs, ids, num_diags, G, GV, CS)
+  type(ocean_grid_type),                    intent(in) :: G
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  type(p3d), dimension(:),                  intent(in) :: in_ptrs
+  integer,   dimension(:),                  intent(in) :: ids
+  integer,                                  intent(in) :: num_diags
+  type(verticalGrid_type),                  intent(in) :: GV
+  type(diag_to_Z_CS),                       pointer    :: CS
   
   real, dimension(SZI_(G),SZJ_(G),max(CS%nk_zspace+1,1),max(num_diags,1)) :: &
     diag_on_Z  ! diagnostics interpolated to depth space
@@ -752,7 +756,7 @@ subroutine calc_Zint_diags(h, in_ptrs, ids, num_diags, &
     do k=1,nk ; do i=is,ie ; htot(i) = htot(i) + h(i,j,k) ; enddo ; enddo
     do i=is,ie
       dilate(i) = 0.0
-      if (htot(i)*G%GV%H_to_m > 0.5) dilate(i) = (G%bathyT(i,j) - 0.0) / htot(i)
+      if (htot(i)*GV%H_to_m > 0.5) dilate(i) = (G%bathyT(i,j) - 0.0) / htot(i)
       e(i,nk+1) = -G%bathyT(i,j)
     enddo
     do k=nk,1,-1 ; do i=is,ie
@@ -814,13 +818,13 @@ end subroutine calc_Zint_diags
                           
 subroutine register_Z_tracer(tr_ptr, name, long_name, units, Time, G, CS, standard_name,   &
      cmor_field_name, cmor_long_name, cmor_units, cmor_standard_name)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), target, intent(in) :: tr_ptr
+  type(ocean_grid_type),                         intent(in) :: G
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target, intent(in) :: tr_ptr
   character(len=*),                              intent(in) :: name
   character(len=*),                              intent(in) :: long_name
   character(len=*),                              intent(in) :: units
   character(len=*), optional,                    intent(in) :: standard_name
   type(time_type),                               intent(in) :: Time
-  type(ocean_grid_type),                         intent(in) :: G
   type(diag_to_Z_CS),                            pointer    :: CS
   character(len=*), optional,                    intent(in) :: cmor_field_name
   character(len=*), optional,                    intent(in) :: cmor_long_name
@@ -879,13 +883,13 @@ subroutine register_Z_tracer(tr_ptr, name, long_name, units, Time, G, CS, standa
 end subroutine register_Z_tracer
 
 subroutine register_Z_tracer_low(tr_ptr, name, long_name, units, standard_name, Time, G, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), target, intent(in) :: tr_ptr
+  type(ocean_grid_type),                         intent(in) :: G
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target, intent(in) :: tr_ptr
   character(len=*),                              intent(in) :: name
   character(len=*),                              intent(in) :: long_name
   character(len=*),                              intent(in) :: units
   character(len=*),                              intent(in) :: standard_name
   type(time_type),                               intent(in) :: Time
-  type(ocean_grid_type),                         intent(in) :: G
   type(diag_to_Z_CS),                            pointer    :: CS
 
 !   This subroutine registers a tracer to be output in depth space.
@@ -941,9 +945,10 @@ subroutine register_Z_tracer_low(tr_ptr, name, long_name, units, standard_name, 
 
 end subroutine register_Z_tracer_low
 
-subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
+subroutine MOM_diag_to_Z_init(Time, G, GV, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
+  type(verticalGrid_type), intent(in)    :: GV
   type(param_file_type),   intent(in)    :: param_file
   type(diag_ctrl), target, intent(inout) :: diag
   type(diag_to_Z_CS),      pointer       :: CS
@@ -951,6 +956,7 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
 ! Arguments: 
 !  (in)      Time       - current model time
 !  (in)      G          - ocean grid structure
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - struct indicating open file to parse for model param values
 !  (in)      diag       - struct to regulate diagnostic output
 !  (in/out)  CS         - pointer to point to control structure for this module
@@ -973,7 +979,7 @@ subroutine MOM_diag_to_Z_init(Time, G, param_file, diag, CS)
   endif
   allocate(CS)
 
-  if (G%GV%Boussinesq) then ; flux_units = "meter3 second-1"
+  if (GV%Boussinesq) then ; flux_units = "meter3 second-1"
   else ; flux_units = "kilogram second-1" ; endif
 
   CS%diag => diag
@@ -1202,9 +1208,9 @@ subroutine MOM_diag_to_Z_end(CS)
 end subroutine MOM_diag_to_Z_end
 
 function ocean_register_diag_with_z(tr_ptr, vardesc_tr, G, Time, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), target, intent(in) :: tr_ptr
-  type(vardesc),                                 intent(in) :: vardesc_tr
   type(ocean_grid_type),                         intent(in) :: G
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target, intent(in) :: tr_ptr
+  type(vardesc),                                 intent(in) :: vardesc_tr
   type(time_type),                               intent(in) :: Time
   type(diag_to_Z_CS),                            pointer    :: CS
   integer                                                   :: ocean_register_diag_with_z
