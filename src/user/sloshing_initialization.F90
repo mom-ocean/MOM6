@@ -64,8 +64,8 @@ contains
 !------------------------------------------------------------------------------
 subroutine sloshing_initialize_topography ( D, G, param_file, max_depth )
   ! Arguments 
-  real, dimension(NIMEM_,NJMEM_), intent(out) :: D
   type(ocean_grid_type), intent(in) :: G
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: D
   type(param_file_type), intent(in) :: param_file
   real,                  intent(in) :: max_depth
   
@@ -87,11 +87,10 @@ end subroutine sloshing_initialize_topography
 ! Initialization of thicknesses
 !------------------------------------------------------------------------------
 subroutine sloshing_initialize_thickness ( h, G, GV, param_file )
-
-  real, intent(out), dimension(NIMEM_,NJMEM_, NKMEM_) :: h
-  type(ocean_grid_type),   intent(in)                 :: G
-  type(verticalGrid_type), intent(in)                 :: GV
-  type(param_file_type),   intent(in)                 :: param_file
+  type(ocean_grid_type),   intent(in)                    :: G
+  type(verticalGrid_type), intent(in)                    :: GV
+  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h
+  type(param_file_type),   intent(in)                    :: param_file
 
 ! This routine is called when THICKNESS_CONFIG is set to 'sloshing'
 !
@@ -204,11 +203,11 @@ end subroutine sloshing_initialize_thickness
 !------------------------------------------------------------------------------
 subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, param_file, &
                                                       eqn_of_state)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T, S
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)  :: h
-  type(ocean_grid_type),               intent(in)  :: G
-  type(param_file_type),               intent(in)  :: param_file
-  type(EOS_type),                      pointer     :: eqn_of_state
+  type(ocean_grid_type),                     intent(in)  :: G
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T, S
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h
+  type(param_file_type),                     intent(in)  :: param_file
+  type(EOS_type),                            pointer     :: eqn_of_state
                                                       
   ! This subroutine initializes linear profiles for T and S according to
   ! reference surface layer salinity and temperature and a specified range.

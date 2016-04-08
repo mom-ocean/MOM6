@@ -108,9 +108,9 @@ public Phillips_initialize_topography
 contains
 
 subroutine Phillips_initialize_thickness(h, G, GV, param_file)
-  real, intent(out), dimension(NIMEM_,NJMEM_, NKMEM_) :: h
   type(ocean_grid_type),   intent(in) :: G
   type(verticalGrid_type), intent(in) :: GV
+  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h
   type(param_file_type),   intent(in) :: param_file
 
   real :: eta0(SZK_(G)+1)   ! The 1-d nominal positions of the interfaces.
@@ -179,10 +179,10 @@ subroutine Phillips_initialize_thickness(h, G, GV, param_file)
 end subroutine Phillips_initialize_thickness
 
 subroutine Phillips_initialize_velocity(u, v, G, GV, param_file)
-  real, dimension(NIMEMB_,NJMEM_, NKMEM_), intent(out) :: u
-  real, dimension(NIMEM_,NJMEMB_, NKMEM_), intent(out) :: v
   type(ocean_grid_type),                intent(in)  :: G
   type(verticalGrid_type),              intent(in)  :: GV
+  real, dimension(SZIB_(G),SZJ_(G), SZK_(G)), intent(out) :: u
+  real, dimension(SZI_(G),SZJB_(G), SZK_(G)), intent(out) :: v
   type(param_file_type),                intent(in)  :: param_file
 
   real :: damp_rate, jet_width, jet_height, x_2, y_2
@@ -240,7 +240,7 @@ subroutine Phillips_initialize_sponges(G, use_temperature, tv, param_file, CSp, 
   type(thermo_var_ptrs), intent(in) :: tv
   type(param_file_type), intent(in) :: param_file
   type(sponge_CS),       pointer    :: CSp
-  real, intent(in), dimension(NIMEM_,NJMEM_, NKMEM_) :: h
+  real, intent(in), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h
 
   real :: eta0(SZK_(G)+1)   ! The 1-d nominal positions of the interfaces.
   real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta, m.
@@ -316,9 +316,10 @@ function sech(x)
 end function sech
 
 subroutine Phillips_initialize_topography(D, G, param_file)
-  real, dimension(NIMEM_,NJMEM_), intent(out) :: D
   type(ocean_grid_type), intent(in) :: G
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: D
   type(param_file_type), intent(in) :: param_file
+
   real :: PI, Htop, Wtop, Ltop, offset, dist, &
           x1, x2, x3, x4, y1, y2
   integer :: i,j,is,ie,js,je

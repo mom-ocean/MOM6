@@ -50,11 +50,11 @@ end subroutine bcz_params
 
 !> Initialization of temperature and salinity with the baroclinic zone initial conditions
 subroutine baroclinic_zone_init_temperature_salinity(T, S, h, G, param_file)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T            !< Potential temperature [deg C]
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: S            !< Salinity [ppt]
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)  :: h            !< Thickness
-  type(ocean_grid_type),               intent(in)     :: G            !< Grid structure
-  type(param_file_type),               intent(in)     :: param_file   !< Parameter file handle
+  type(ocean_grid_type),                     intent(in)  :: G  !< Grid structure
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T  !< Potential temperature [deg C]
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S  !< Salinity [ppt]
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< Thickness
+  type(param_file_type),                     intent(in)  :: param_file  !< Parameter file handle
 
   integer   :: i, j, k, is, ie, js, je, nz
   real      :: T_ref, dTdz, dTdx, delta_T ! Parameters describing temperature distribution

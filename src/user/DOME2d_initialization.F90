@@ -70,8 +70,8 @@ contains
 !------------------------------------------------------------------------------
 subroutine DOME2d_initialize_topography ( D, G, param_file, max_depth )
   ! Arguments 
-  real, dimension(NIMEM_,NJMEM_), intent(out) :: D
   type(ocean_grid_type), intent(in) :: G
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: D
   type(param_file_type), intent(in) :: param_file
   real,                  intent(in) :: max_depth
   
@@ -111,9 +111,9 @@ end subroutine DOME2d_initialize_topography
 !------------------------------------------------------------------------------
 subroutine DOME2d_initialize_thickness ( h, G, GV, param_file )
 
-  real, intent(out), dimension(NIMEM_,NJMEM_, NKMEM_) :: h
   type(ocean_grid_type),   intent(in) :: G
   type(verticalGrid_type), intent(in) :: GV
+  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h
   type(param_file_type),   intent(in) :: param_file
 
 ! Arguments: h - The thickness that is being initialized.
@@ -233,9 +233,9 @@ end subroutine DOME2d_initialize_thickness
 !------------------------------------------------------------------------------
 subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, param_file, &
                                                     eqn_of_state)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T, S
-  real, intent(in), dimension(NIMEM_,NJMEM_, NKMEM_)  :: h
   type(ocean_grid_type),               intent(in)  :: G
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T, S
+  real, intent(in), dimension(SZI_(G),SZJ_(G), SZK_(G))  :: h
   type(param_file_type),               intent(in)  :: param_file
   type(EOS_type),                      pointer     :: eqn_of_state
 

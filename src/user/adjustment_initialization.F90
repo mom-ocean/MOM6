@@ -62,9 +62,9 @@ contains
 !------------------------------------------------------------------------------
 subroutine adjustment_initialize_thickness ( h, G, GV, param_file )
 
-  real, intent(out), dimension(NIMEM_,NJMEM_, NKMEM_) :: h
   type(ocean_grid_type),   intent(in) :: G
   type(verticalGrid_type), intent(in) :: GV
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: h
   type(param_file_type),   intent(in) :: param_file
 
 ! Arguments: h - The thickness that is being initialized.
@@ -208,9 +208,9 @@ end subroutine adjustment_initialize_thickness
 !------------------------------------------------------------------------------
 subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, param_file, &
                                                     eqn_of_state)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T, S
-  real, intent(in), dimension(NIMEM_,NJMEM_, NKMEM_)  :: h
   type(ocean_grid_type),               intent(in)  :: G
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T, S
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h
   type(param_file_type),               intent(in)  :: param_file
   type(EOS_type),                      pointer     :: eqn_of_state
 
