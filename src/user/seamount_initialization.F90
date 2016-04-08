@@ -113,14 +113,14 @@ subroutine seamount_initialize_thickness ( h, G, GV, param_file )
 !                         model parameter values.
 
 !  This subroutine initializes the layer thicknesses to be uniform.
-  real :: e0(SZK_(G))     ! The resting interface heights, in m, usually !
+  real :: e0(SZK_(G)+1)   ! The resting interface heights, in m, usually !
                           ! negative because it is positive upward.      !
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
                           ! positive upward, in m.                       !
   integer :: i, j, k, is, ie, js, je, nz
   real    :: x
   real    :: delta_h
-  real    :: min_thickness
+  real    :: min_thickness, S_surf, S_range, S_ref, S_light, S_dense
   character(len=20) :: verticalCoordinate
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -139,14 +139,30 @@ subroutine seamount_initialize_thickness ( h, G, GV, param_file )
   !          To obtain a thickness distribution where the last layer is 
   !          vanished and the other thicknesses uniformly distributed, use:
   !          e0(k) = -G%max_depth * real(k-1) / real(nz-1)
-  do k=1,nz
-    e0(k) = -G%max_depth * real(k-1) / real(nz)
-  enddo
-
+  !do k=1,nz+1
+  !  e0(k) = -G%max_depth * real(k-1) / real(nz)
+  !enddo
     
   select case ( coordinateMode(verticalCoordinate) )
     
   case ( REGRIDDING_LAYER, REGRIDDING_RHO ) ! Initial thicknesses for isopycnal coordinates
+    call get_param(param_file,mod,"INITIAL_SSS", S_surf, default=34., do_not_log=.true.)
+    call get_param(param_file,mod,"INITIAL_S_RANGE", S_range, default=2., do_not_log=.true.)
+    call get_param(param_file, mod, "S_REF", S_ref, default=35.0, do_not_log=.true.)
+    call get_param(param_file, mod, "TS_RANGE_S_LIGHT", S_light, default = S_Ref, do_not_log=.true.)
+    call get_param(param_file, mod, "TS_RANGE_S_DENSE", S_dense, default = S_Ref, do_not_log=.true.)
+    do K=1,nz+1
+      ! Salinity of layer k is S_light + (k-1)/(nz-1) * (S_dense - S_light)
+      ! Salinity of interface K is S_light + (K-3/2)/(nz-1) * (S_dense - S_light)
+      ! Salinity at depth z should be S(z) = S_surf - S_range * z/max_depth
+      ! Equating: S_surf - S_range * z/max_depth = S_light + (K-3/2)/(nz-1) * (S_dense - S_light)
+      ! Equating: - S_range * z/max_depth = S_light - S_surf + (K-3/2)/(nz-1) * (S_dense - S_light)
+      ! Equating: z/max_depth = - ( S_light - S_surf + (K-3/2)/(nz-1) * (S_dense - S_light) ) / S_range
+      e0(K) = - G%max_depth * ( ( S_light  - S_surf ) + ( S_dense - S_light ) * ( (real(K)-1.5) / real(nz-1) ) ) / S_range
+      e0(K) = nint(2048.*e0(K))/2048. ! Force round numbers ... the above expression has irrational factors ...
+      e0(K) = min(real(1-K)*GV%Angstrom_z, e0(K)) ! Bound by surface
+      e0(K) = max(-G%max_depth, e0(K)) ! Bound by bottom
+    enddo
     do j=js,je ; do i=is,ie
       eta1D(nz+1) = -1.0*G%bathyT(i,j)
       do k=nz,1,-1
@@ -164,7 +180,7 @@ subroutine seamount_initialize_thickness ( h, G, GV, param_file )
     do j=js,je ; do i=is,ie
       eta1D(nz+1) = -1.0*G%bathyT(i,j)
       do k=nz,1,-1
-        eta1D(k) = e0(k)
+        eta1D(k) =  -G%max_depth * real(k-1) / real(nz)
         if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
           eta1D(k) = eta1D(k+1) + min_thickness
           h(i,j,k) = min_thickness
