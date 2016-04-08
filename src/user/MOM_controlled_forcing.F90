@@ -113,11 +113,11 @@ contains
 
 subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_precip, &
                               day_start, dt, G, CS)
-  real, dimension(NIMEM_,NJMEM_), intent(in)    :: SST_anom, SSS_anom, SSS_mean
-  real, dimension(NIMEM_,NJMEM_), intent(inout) :: virt_heat, virt_precip
+  type(ocean_grid_type), intent(inout) :: G
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: SST_anom, SSS_anom, SSS_mean
+  real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: virt_heat, virt_precip
   type(time_type),       intent(in)    :: day_start
   real,                  intent(in)    :: dt
-  type(ocean_grid_type), intent(inout) :: G
   type(ctrl_forcing_CS), pointer       :: CS
 ! This subroutine calls any of the other subroutines in this file
 ! that are needed to specify the current surface forcing fields.

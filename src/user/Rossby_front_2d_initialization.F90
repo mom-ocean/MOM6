@@ -37,9 +37,9 @@ contains
 
 !> Initialization of thicknesses in 2D Rossby front test
 subroutine Rossby_front_initialize_thickness(h, G, GV, param_file )
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: h !< Thickness
   type(ocean_grid_type),   intent(in) :: G                 !< Grid structure
   type(verticalGrid_type), intent(in) :: GV                !< Vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: h !< Thickness
   type(param_file_type),   intent(in) :: param_file        !< Parameter file handle
 
   integer :: i, j, k, is, ie, js, je, nz
@@ -96,12 +96,12 @@ end subroutine Rossby_front_initialize_thickness
 
 !> Initialization of temperature and salinity in the Rossby front test
 subroutine Rossby_front_initialize_temperature_salinity(T, S, h, G, param_file, eqn_of_state)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T            !< Potential temperature [deg C]
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: S            !< Salinity [ppt]
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)  :: h            !< Thickness
-  type(ocean_grid_type),               intent(in)     :: G            !< Grid structure
-  type(param_file_type),               intent(in)     :: param_file   !< Parameter file handle
-  type(EOS_type),                      pointer        :: eqn_of_state !< Equation of state structure
+  type(ocean_grid_type),                     intent(in)  :: G  !< Grid structure
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T  !< Potential temperature [deg C]
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S  !< Salinity [ppt]
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< Thickness
+  type(param_file_type),                     intent(in)  :: param_file   !< Parameter file handle
+  type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure
 
   integer   :: i, j, k, is, ie, js, je, nz
   real      :: T_ref, S_ref ! Reference salinity and temerature within surface layer
@@ -137,12 +137,12 @@ end subroutine Rossby_front_initialize_temperature_salinity
 
 !> Initialization of u and v in the Rossby front test
 subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, param_file)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: u            !< i-component of velocity [m/s]
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: v            !< j-component of velocity [m/s]
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)  :: h            !< Thickness
-  type(ocean_grid_type),               intent(in)     :: G            !< Grid structure
-  type(verticalGrid_type),             intent(in)     :: GV           !< Vertical grid structure
-  type(param_file_type),               intent(in)     :: param_file   !< Parameter file handle
+  type(ocean_grid_type),                  intent(in)     :: G  !< Grid structure
+  type(verticalGrid_type),                intent(in)     :: GV !< Vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: u  !< i-component of velocity [m/s]
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: v  !< j-component of velocity [m/s]
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< Thickness [H]
+  type(param_file_type),                  intent(in)     :: param_file !< Parameter file handle
 
   real    :: y              ! Non-dimensional coordinate across channel, 0..pi
   real    :: T_range        ! Range of salinities and temperatures over the vertical

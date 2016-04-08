@@ -67,8 +67,8 @@ contains
 !------------------------------------------------------------------------------
 subroutine seamount_initialize_topography ( D, G, param_file, max_depth )
   ! Arguments 
-  real, dimension(NIMEM_,NJMEM_), intent(out) :: D
   type(ocean_grid_type), intent(in) :: G
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: D
   type(param_file_type), intent(in) :: param_file
   real,                  intent(in) :: max_depth
   
@@ -101,9 +101,9 @@ end subroutine seamount_initialize_topography
 !------------------------------------------------------------------------------
 subroutine seamount_initialize_thickness ( h, G, GV, param_file )
 
-  real, intent(out), dimension(NIMEM_,NJMEM_, NKMEM_) :: h
   type(ocean_grid_type),   intent(in) :: G
   type(verticalGrid_type), intent(in) :: GV
+  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h
   type(param_file_type),   intent(in) :: param_file
 
 ! Arguments: h - The thickness that is being initialized.
@@ -201,13 +201,13 @@ end subroutine seamount_initialize_thickness
 
 !> Initial values for temperature and salinity
 subroutine seamount_initialize_temperature_salinity ( T, S, h, G, GV, param_file, eqn_of_state)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T !< Potential temperature (degC)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: S !< Salinity (ppt)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)  :: h !< Layer thickness (m or Pa)
-  type(ocean_grid_type),                  intent(in)  :: G !< Ocean grid structure
-  type(verticalGrid_type),                intent(in) :: GV !< Vertical grid structure
-  type(param_file_type),                  intent(in)  :: param_file !< Parameter file structure
-  type(EOS_type),                         pointer     :: eqn_of_state !< Equation of state structure
+  type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure
+  type(verticalGrid_type),                   intent(in) :: GV !< Vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< Potential temperature (degC)
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< Salinity (ppt)
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< Layer thickness (m or Pa)
+  type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
+  type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure
   ! Local variables
   integer :: i, j, k, is, ie, js, je, nz, k_light
   real    :: xi0, xi1, dxi, r, S_surf, T_surf, S_range, T_range
