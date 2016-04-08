@@ -118,19 +118,19 @@ contains
 
 subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
                                  kv_io, dt, G, GV, CS, initialize_all)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: u_in
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: v_in
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: h
-  type(thermo_var_ptrs),                        intent(in)    :: tv
-  real, dimension(:,:),                         pointer       :: p_surf
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: kappa_io
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: tke_io
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: kv_io ! really intent(out)
-  real,                                         intent(in)    :: dt
-  type(ocean_grid_type),                        intent(in)    :: G
-  type(verticalGrid_type),               intent(in)    :: GV
-  type(Kappa_shear_CS),                         pointer       :: CS
-  logical,                            optional, intent(in)    :: initialize_all
+  type(ocean_grid_type),                      intent(in)    :: G
+  type(verticalGrid_type),                    intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: u_in
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: v_in
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h
+  type(thermo_var_ptrs),                      intent(in)    :: tv
+  real, dimension(:,:),                       pointer       :: p_surf
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: kappa_io
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: tke_io
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: kv_io ! really intent(out)
+  real,                                       intent(in)    :: dt
+  type(Kappa_shear_CS),                       pointer       :: CS
+  logical,                          optional, intent(in)    :: initialize_all
 !
 ! ----------------------------------------------
 ! Subroutine for calculating diffusivity and TKE
@@ -909,14 +909,14 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
 !   This subroutine calculates the velocities, temperature and salinity that
 ! the water column will have after mixing for dt with diffusivities kappa.  It
 ! may also calculate the projected buoyancy frequency and shear.
-  real, dimension(NK_INTERFACE_), intent(in)  :: kappa
-  real, dimension(NKMEM_),        intent(in)  :: u0, v0, T0, S0, dz
-  real, dimension(NK_INTERFACE_), intent(in)  :: I_dz_int, dbuoy_dT, dbuoy_dS
-  real,                           intent(in)  :: dt
-  integer,                        intent(in)  :: nz
-  real, dimension(NKMEM_),        intent(inout) :: u, v, T, Sal
-  real, dimension(NK_INTERFACE_), optional, intent(inout) :: N2, S2
-  integer, optional,              intent(in)  :: ks_int, ke_int
+  integer,               intent(in)  :: nz
+  real, dimension(nz+1), intent(in)  :: kappa
+  real, dimension(nz),   intent(in)  :: u0, v0, T0, S0, dz
+  real, dimension(nz+1), intent(in)  :: I_dz_int, dbuoy_dT, dbuoy_dS
+  real,                  intent(in)  :: dt
+  real, dimension(nz),   intent(inout) :: u, v, T, Sal
+  real, dimension(nz+1), optional, intent(inout) :: N2, S2
+  integer, optional,     intent(in)  :: ks_int, ke_int
   ! Arguments: kappa - The diapycnal diffusivity at interfaces, in m2 s-1.
   !  (in)      Sh - The shear at interfaces, in s-1.
   !  (in)      u0 - The initial zonal velocity, in m s-1.
@@ -1033,15 +1033,15 @@ end subroutine calculate_projected_state
 
 subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
                           nz, CS, K_Q, tke, kappa, kappa_src, local_src)
-  real, dimension(NK_INTERFACE_), intent(in)  :: N2, S2, kappa_in, dz_Int, I_L2_bdry
-  real, dimension(NKMEM_),        intent(in)  :: Idz
-  real,                           intent(in)  :: f2
-  integer,                        intent(in)  :: nz
-  type(Kappa_shear_CS),           pointer    :: CS
-  real, dimension(NK_INTERFACE_), intent(inout) :: K_Q
-  real, dimension(NK_INTERFACE_), intent(out) :: tke, kappa
-  real, dimension(NK_INTERFACE_), optional, intent(out) :: kappa_src
-  real, dimension(NK_INTERFACE_), optional, intent(out) :: local_src
+  integer,               intent(in)  :: nz
+  real, dimension(nz+1), intent(in)  :: N2, S2, kappa_in, dz_Int, I_L2_bdry
+  real, dimension(nz),   intent(in)  :: Idz
+  real,                  intent(in)  :: f2
+  type(Kappa_shear_CS),  pointer     :: CS
+  real, dimension(nz+1), intent(inout) :: K_Q
+  real, dimension(nz+1), intent(out) :: tke, kappa
+  real, dimension(nz+1), optional, intent(out) :: kappa_src
+  real, dimension(nz+1), optional, intent(out) :: local_src
 !   This subroutine calculates new, consistent estimates of TKE and kappa.
 
 ! Arguments: N2 - The buoyancy frequency squared at interfaces, in s-2.

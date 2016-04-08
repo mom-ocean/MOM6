@@ -144,18 +144,18 @@ contains
 
 subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                          dSV_dT, dSV_dS, TKE_forced, dt_diag, last_call)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: h_3d
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: u_3d, v_3d, dSV_dT, dSV_dS
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: TKE_forced
-  type(thermo_var_ptrs),                 intent(inout) :: tv
-  type(forcing),                         intent(inout) :: fluxes
-  real,                                  intent(in)    :: dt
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(out)   :: Kd_int
-  type(ocean_grid_type),                 intent(inout) :: G
-  type(verticalGrid_type),               intent(in)    :: GV
-  type(energetic_PBL_CS),                pointer       :: CS
-  real,                        optional, intent(in)    :: dt_diag
-  logical,                     optional, intent(in)    :: last_call
+  type(ocean_grid_type),                    intent(inout) :: G
+  type(verticalGrid_type),                  intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h_3d
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: u_3d, v_3d, dSV_dT, dSV_dS
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: TKE_forced
+  type(thermo_var_ptrs),                    intent(inout) :: tv
+  type(forcing),                            intent(inout) :: fluxes
+  real,                                     intent(in)    :: dt
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: Kd_int
+  type(energetic_PBL_CS),                   pointer       :: CS
+  real,                           optional, intent(in)    :: dt_diag
+  logical,                        optional, intent(in)    :: last_call
 
 !    This subroutine determines the diffusivities from the integrated energetics
 !  mixed layer model.  It assumes that heating, cooling and freshwater fluxes
@@ -1089,9 +1089,9 @@ end subroutine find_PE_chg
 
 !> Copies the ePBL active mixed layer depth into MLD
 subroutine energetic_PBL_get_MLD(CS, MLD, G)
-  type(energetic_PBL_CS),         pointer     :: CS  !< Control structure for ePBL
-  real, dimension(NIMEM_,NJMEM_), intent(out) :: MLD !< Depth of ePBL active mixing layer
-  type(ocean_grid_type),          intent(in)  :: G   !< Grid structure
+  type(energetic_PBL_CS),           pointer     :: CS  !< Control structure for ePBL
+  type(ocean_grid_type),            intent(in)  :: G   !< Grid structure
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: MLD !< Depth of ePBL active mixing layer
   ! Local variables
   integer :: i,j
   do j = G%jsc, G%jec ; do i = G%isc, G%iec

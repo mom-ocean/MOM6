@@ -87,13 +87,13 @@ end type geothermal_CS
 contains
 
 subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: h
-  type(thermo_var_ptrs),                 intent(inout) :: tv
-  real,                                  intent(in)    :: dt
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: ea, eb
-  type(ocean_grid_type),                 intent(inout) :: G
-  type(verticalGrid_type),               intent(in)    :: GV
-  type(geothermal_CS),                   pointer       :: CS
+  type(ocean_grid_type),                    intent(inout) :: G
+  type(verticalGrid_type),                  intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h
+  type(thermo_var_ptrs),                    intent(inout) :: tv
+  real,                                     intent(in)    :: dt
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: ea, eb
+  type(geothermal_CS),                      pointer       :: CS
 
 !   This subroutine applies geothermal heating, including the movement of water
 ! between isopycnal layers to match the target densities.  The heating is
