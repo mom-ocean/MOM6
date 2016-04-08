@@ -34,6 +34,7 @@ use MOM_io, only : close_file, create_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
 use MOM_io, only : write_field, slasher, vardesc
 use MOM_variables, only : thermo_var_ptrs, ocean_OBC_type
+use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
@@ -69,8 +70,8 @@ contains
 !------------------------------------------------------------------------------
 subroutine DOME2d_initialize_topography ( D, G, param_file, max_depth )
   ! Arguments 
-  real, dimension(NIMEM_,NJMEM_), intent(out) :: D
   type(ocean_grid_type), intent(in) :: G
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: D
   type(param_file_type), intent(in) :: param_file
   real,                  intent(in) :: max_depth
   
@@ -108,14 +109,16 @@ end subroutine DOME2d_initialize_topography
 !------------------------------------------------------------------------------
 ! Initialization of thicknesses
 !------------------------------------------------------------------------------
-subroutine DOME2d_initialize_thickness ( h, G, param_file )
+subroutine DOME2d_initialize_thickness ( h, G, GV, param_file )
 
-  real, intent(out), dimension(NIMEM_,NJMEM_, NKMEM_) :: h
-  type(ocean_grid_type), intent(in) :: G
-  type(param_file_type), intent(in) :: param_file
+  type(ocean_grid_type),   intent(in) :: G
+  type(verticalGrid_type), intent(in) :: GV
+  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h
+  type(param_file_type),   intent(in) :: param_file
 
 ! Arguments: h - The thickness that is being initialized.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 
@@ -157,9 +160,9 @@ subroutine DOME2d_initialize_thickness ( h, G, param_file )
         eta1D(nz+1) = -1.0*G%bathyT(i,j)
         do k=nz,1,-1
           eta1D(k) = e0(k)
-          if (eta1D(k) < (eta1D(k+1) + G%GV%Angstrom_z)) then
-            eta1D(k) = eta1D(k+1) + G%GV%Angstrom_z
-            h(i,j,k) = G%GV%Angstrom_z
+          if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_z)) then
+            eta1D(k) = eta1D(k+1) + GV%Angstrom_z
+            h(i,j,k) = GV%Angstrom_z
           else
             h(i,j,k) = eta1D(k) - eta1D(k+1)
           endif
@@ -167,8 +170,8 @@ subroutine DOME2d_initialize_thickness ( h, G, param_file )
      
          x = G%geoLonT(i,j) / G%len_lon;
          if ( x .le. dome2d_width_bay ) then
-           h(i,j,1:nz-1) = G%GV%Angstrom;
-           h(i,j,nz) = dome2d_depth_bay * G%max_depth - (nz-1) * G%GV%Angstrom;
+           h(i,j,1:nz-1) = GV%Angstrom;
+           h(i,j,nz) = dome2d_depth_bay * G%max_depth - (nz-1) * GV%Angstrom;
          end if
       
       end do ; end do   
@@ -230,9 +233,9 @@ end subroutine DOME2d_initialize_thickness
 !------------------------------------------------------------------------------
 subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, param_file, &
                                                     eqn_of_state)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T, S
-  real, intent(in), dimension(NIMEM_,NJMEM_, NKMEM_)  :: h
   type(ocean_grid_type),               intent(in)  :: G
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T, S
+  real, intent(in), dimension(SZI_(G),SZJ_(G), SZK_(G))  :: h
   type(param_file_type),               intent(in)  :: param_file
   type(EOS_type),                      pointer     :: eqn_of_state
 

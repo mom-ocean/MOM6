@@ -21,12 +21,12 @@ program MOM_main
 
 !********+*********+*********+*********+*********+*********+*********+**
 !*                                                                     *
-!*                  The Modular Ocean Model                            *
-!*                               MOM                                   *
+!*                  The Modular Ocean Model, version 6                 *
+!*                               MOM6                                  *
 !*                                                                     *
 !*  By Alistair Adcroft, Stephen Griffies and Robert Hallberg          *
 !*                                                                     *
-!*    This file is the ocean-only driver for Verion 6 of the Modular   *
+!*    This file is the ocean-only driver for Version 6 of the Modular  *
 !*  Ocean Model (MOM).  A separate ocean interface for use with        *
 !*  coupled models is provided in ocean_model_MOM.F90.   These two     *
 !*  drivers are kept in separate directories for convenience of code   *
@@ -63,14 +63,15 @@ program MOM_main
   use MOM_sum_output,      only : MOM_sum_output_init, sum_output_CS
   use MOM_surface_forcing, only : set_forcing, forcing_save_restart
   use MOM_surface_forcing, only : surface_forcing_init, surface_forcing_CS
-  use MOM_time_manager,   only : time_type, set_date, set_time, get_date, time_type_to_real
-  use MOM_time_manager,   only : operator(+), operator(-), operator(*), operator(/)
-  use MOM_time_manager,   only : operator(>), operator(<), operator(>=)
-  use MOM_time_manager,   only : increment_date, set_calendar_type, month_name
-  use MOM_time_manager,   only : JULIAN, NOLEAP, THIRTY_DAY_MONTHS, NO_CALENDAR
-  use MOM_variables,      only : surface
-  use MOM_write_cputime,  only : write_cputime, MOM_write_cputime_init
-  use MOM_write_cputime,  only : write_cputime_start_clock, write_cputime_CS
+  use MOM_time_manager,    only : time_type, set_date, set_time, get_date, time_type_to_real
+  use MOM_time_manager,    only : operator(+), operator(-), operator(*), operator(/)
+  use MOM_time_manager,    only : operator(>), operator(<), operator(>=)
+  use MOM_time_manager,    only : increment_date, set_calendar_type, month_name
+  use MOM_time_manager,    only : JULIAN, NOLEAP, THIRTY_DAY_MONTHS, NO_CALENDAR
+  use MOM_variables,       only : surface
+  use MOM_verticalGrid,    only : verticalGrid_type
+  use MOM_write_cputime,   only : write_cputime, MOM_write_cputime_init
+  use MOM_write_cputime,   only : write_cputime_start_clock, write_cputime_CS
 
   use ensemble_manager_mod, only : ensemble_manager_init, get_ensemble_size
   use ensemble_manager_mod, only : ensemble_pelist_setup
@@ -91,7 +92,8 @@ program MOM_main
   type(surface) :: state  
   
   ! A pointer to a structure containing metrics and related information.
-  type(ocean_grid_type), pointer :: grid 
+  type(ocean_grid_type), pointer :: grid
+  type(verticalGrid_type), pointer :: GV
                                        
   ! If .true., use the ice shelf model for part of the domain.
   logical :: use_ice_shelf = .false. 
@@ -264,8 +266,9 @@ program MOM_main
 
   Master_Time = Time
   grid => MOM_CSp%G
+  GV   => MOM_CSp%GV
   call calculate_surface_state(state, MOM_CSp%u, MOM_CSp%v, MOM_CSp%h, &
-                               MOM_CSp%ave_ssh, grid, MOM_CSp)
+                               MOM_CSp%ave_ssh, grid, GV, MOM_CSp)
 
 
   call surface_forcing_init(Time, grid, param_file, MOM_CSp%diag, &
@@ -367,7 +370,7 @@ program MOM_main
   endif
 
   call write_energy(MOM_CSp%u, MOM_CSp%v, MOM_CSp%h, &
-                    MOM_CSp%tv, Time, 0, grid, sum_output_CSp, MOM_CSp%tracer_flow_CSp)
+                    MOM_CSp%tv, Time, 0, grid, GV, sum_output_CSp, MOM_CSp%tracer_flow_CSp)
   call write_cputime(Time, 0, nmax, write_CPU_CSp)
 
   write_energy_time = Start_time + energysavedays * &
@@ -454,7 +457,7 @@ program MOM_main
     if ((Time + (Time_step_ocean/2) > write_energy_time) .and. &
         (MOM_CSp%dt_trans == 0.0)) then
       call write_energy(MOM_CSp%u, MOM_CSp%v, MOM_CSp%h, &
-                        MOM_CSp%tv, Time, n+ntstep-1, grid, sum_output_CSp, &
+                        MOM_CSp%tv, Time, n+ntstep-1, grid, GV, sum_output_CSp, &
                         MOM_CSp%tracer_flow_CSp)
       call write_cputime(Time, n+ntstep-1, nmax, write_CPU_CSp)
       write_energy_time = write_energy_time + energysavedays
@@ -465,7 +468,7 @@ program MOM_main
         (Time + (Time_step_ocean/2) > restart_time)) then
       if (BTEST(Restart_control,1)) then
         call save_restart(dirs%restart_output_dir, Time, grid, &
-                          MOM_CSp%restart_CSp, .true.)
+                          MOM_CSp%restart_CSp, .true., GV=GV)
         call forcing_save_restart(surface_forcing_CSp, grid, Time, &
                             dirs%restart_output_dir, .true.)
         if (use_ice_shelf) call ice_shelf_save_restart(ice_shelf_CSp, Time, &
@@ -473,7 +476,7 @@ program MOM_main
       endif
       if (BTEST(Restart_control,0)) then
         call save_restart(dirs%restart_output_dir, Time, grid, &
-                          MOM_CSp%restart_CSp)
+                          MOM_CSp%restart_CSp, GV=GV)
         call forcing_save_restart(surface_forcing_CSp, grid, Time, &
                             dirs%restart_output_dir)
         if (use_ice_shelf) call ice_shelf_save_restart(ice_shelf_CSp, Time, &
@@ -495,7 +498,7 @@ program MOM_main
          "with unused buoyancy fluxes.  For conservation, the ocean restart "//&
          "files can only be created after the buoyancy forcing is applied.")
 
-    call save_restart(dirs%restart_output_dir, Time, grid, MOM_CSp%restart_CSp)
+    call save_restart(dirs%restart_output_dir, Time, grid, MOM_CSp%restart_CSp, GV=GV)
     if (use_ice_shelf) call ice_shelf_save_restart(ice_shelf_CSp, Time, &
                                 dirs%restart_output_dir)
     ! Write ocean solo restart file.

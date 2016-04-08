@@ -78,8 +78,7 @@ use MOM_error_handler,     only : MOM_error, FATAL, WARNING, callTree_showQuery
 use MOM_error_handler,     only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,       only : get_param, log_version, param_file_type
 use MOM_forcing_type,      only : forcing, MOM_forcing_chksum
-use MOM_forcing_type,      only : extractFluxes1d, calculateBuoyancyFlux2d
-use MOM_forcing_type,      only : forcing_SinglePointPrint
+use MOM_forcing_type,      only : extractFluxes1d, forcing_SinglePointPrint
 use MOM_grid,              only : ocean_grid_type
 use MOM_io,                only : vardesc
 use MOM_shortwave_abs,     only : absorbRemainingSW, optics_type
@@ -123,15 +122,17 @@ type, public :: diabatic_aux_CS ; private
   type(diag_ctrl), pointer :: diag !< Structure used to regulate timing of diagnostic output
 
   ! Diagnostic handles
-  integer :: id_createdH = -1
-  integer :: id_brine_lay = -1
-  integer :: id_penSW_diag    = -1 !< Penetrative shortwave heating diagnostic
-  integer :: id_nonpenSW_diag = -1 !< Non-penetrative shortwave heating diagnostic
+  integer :: id_createdH       = -1
+  integer :: id_brine_lay      = -1
+  integer :: id_penSW_diag     = -1 !< Penetrative shortwave heating (flux convergence) diagnostic
+  integer :: id_penSWflux_diag = -1 !< Penetrative shortwave flux diagnostic
+  integer :: id_nonpenSW_diag  = -1 !< Non-penetrative shortwave heating diagnostic
 
   ! Optional diagnostic arrays
-  real, allocatable, dimension(:,:)   :: createdH      !< The amount of volume added in order to avoid grounding (m/s)
-  real, allocatable, dimension(:,:,:) :: penSW_diag    !< Heating from convergence of penetrative SW (W/m2)
-  real, allocatable, dimension(:,:)   :: nonpenSW_diag !< Non-downwelling SW radiation (W/m2) at ocean surface
+  real, allocatable, dimension(:,:)   :: createdH       !< The amount of volume added in order to avoid grounding (m/s)
+  real, allocatable, dimension(:,:,:) :: penSW_diag     !< Heating in a layer from convergence of penetrative SW (W/m2)
+  real, allocatable, dimension(:,:,:) :: penSWflux_diag !< Penetrative SW flux at base of grid layer (W/m2)
+  real, allocatable, dimension(:,:)   :: nonpenSW_diag  !< Non-downwelling SW radiation (W/m2) at ocean surface
 
 end type diabatic_aux_CS
 
@@ -140,12 +141,12 @@ integer :: id_clock_uv_at_h, id_clock_frazil
 contains
 
 subroutine make_frazil(h, tv, G, GV, CS, p_surf)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
-  type(thermo_var_ptrs),                 intent(inout) :: tv
   type(ocean_grid_type),                 intent(in)    :: G
   type(verticalGrid_type),               intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  type(thermo_var_ptrs),                 intent(inout) :: tv
   type(diabatic_aux_CS),                 intent(in)    :: CS
-  real, dimension(NIMEM_,NJMEM_), intent(in), optional :: p_surf
+  real, dimension(SZI_(G),SZJ_(G)), intent(in), optional :: p_surf
 
 !   Frazil formation keeps the temperature above the freezing point.
 ! This subroutine warms any water that is colder than the (currently
@@ -262,12 +263,12 @@ subroutine make_frazil(h, tv, G, GV, CS, p_surf)
 end subroutine make_frazil
 
 subroutine differential_diffuse_T_S(h, tv, visc, dt, G, GV)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
+  type(ocean_grid_type),                 intent(in)    :: G
+  type(verticalGrid_type),               intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
   type(thermo_var_ptrs),                 intent(inout) :: tv
   type(vertvisc_type),                   intent(in)    :: visc
   real,                                  intent(in)    :: dt
-  type(ocean_grid_type),                 intent(in)    :: G
-  type(verticalGrid_type),               intent(in)    :: GV
 
 ! This subroutine applies double diffusion to T & S, assuming no diapycal mass
 ! fluxes, using a simple triadiagonal solver.
@@ -371,10 +372,10 @@ subroutine differential_diffuse_T_S(h, tv, visc, dt, G, GV)
 end subroutine differential_diffuse_T_S
 
 subroutine adjust_salt(h, tv, G, GV, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
-  type(thermo_var_ptrs),                 intent(inout) :: tv
   type(ocean_grid_type),                 intent(in)    :: G
   type(verticalGrid_type),               intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  type(thermo_var_ptrs),                 intent(inout) :: tv
   type(diabatic_aux_CS),                 intent(in)    :: CS
 
 !  Keep salinity from falling below a small but positive threshold
@@ -433,10 +434,10 @@ subroutine adjust_salt(h, tv, G, GV, CS)
 end subroutine adjust_salt
 
 subroutine insert_brine(h, tv, G, GV, fluxes, nkmb, CS, dt, id_brine_lay)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
-  type(thermo_var_ptrs),                 intent(inout) :: tv
   type(ocean_grid_type),                 intent(in)    :: G
   type(verticalGrid_type),               intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  type(thermo_var_ptrs),                 intent(inout) :: tv
   type(forcing),                         intent(in)    :: fluxes
   integer,                               intent(in)    :: nkmb
   type(diabatic_aux_CS),                 intent(in)    :: CS
@@ -563,11 +564,11 @@ subroutine triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, T, S)
 ! Simple tri-diagnonal solver for T and S
 ! "Simple" means it only uses arrays hold, ea and eb
   ! Arguments
-  type(ocean_grid_type),                 intent(in)    :: G
-  type(verticalGrid_type),               intent(in)    :: GV
-  integer,                               intent(in)    :: is, ie, js, je
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: hold, ea, eb
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: T, S
+  type(ocean_grid_type),                    intent(in)    :: G
+  type(verticalGrid_type),                  intent(in)    :: GV
+  integer,                                  intent(in)    :: is, ie, js, je
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: hold, ea, eb
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: T, S
   ! Local variables
   real :: b1(SZIB_(G)), d1(SZIB_(G)) ! b1, c1, and d1 are variables used by the
   real :: c1(SZIB_(G),SZK_(G))       ! tridiagonal solver.
@@ -602,13 +603,13 @@ end subroutine triDiagTS
 
 
 subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, ea, eb)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)  :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)  :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)  :: h
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(out) :: u_h, v_h
-  type(ocean_grid_type),                  intent(in)  :: G
-  type(verticalGrid_type),                intent(in)  :: GV
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in), optional  :: ea, eb
+  type(ocean_grid_type),                     intent(in)  :: G
+  type(verticalGrid_type),                   intent(in)  :: GV
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(out) :: u_h, v_h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in), optional  :: ea, eb
 !   This subroutine calculates u_h and v_h (velocities at thickness
 ! points), optionally using the entrainments (in m) passed in as arguments.
 
@@ -708,12 +709,12 @@ end subroutine find_uv_at_h
 !> Diagnose a mixed layer depth (MLD) determined by a given density difference with the surface.
 !> This routine is appropriate in MOM_diabatic_driver due to its position within the time stepping.
 subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, diagPtr, id_N2subML, id_MLDsq)
-  integer,                               intent(in) :: id_MLD      !< Handle (ID) of MLD diagnostic
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h           !< Layer thickness
-  type(thermo_var_ptrs),                 intent(in) :: tv          !< Thermodynamics type
-  real,                                  intent(in) :: densityDiff !< Density difference to determine MLD (kg/m3)
   type(ocean_grid_type),                 intent(in) :: G           !< Grid type
   type(verticalGrid_type),               intent(in) :: GV          !< ocean vertical grid structure
+  integer,                               intent(in) :: id_MLD      !< Handle (ID) of MLD diagnostic
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h        !< Layer thickness
+  type(thermo_var_ptrs),                 intent(in) :: tv          !< Thermodynamics type
+  real,                                  intent(in) :: densityDiff !< Density difference to determine MLD (kg/m3)
   type(diag_ctrl),                       pointer    :: diagPtr     !< Diagnostics structure
   integer,                     optional, intent(in) :: id_N2subML  !< Optional handle (ID) of subML stratification
   integer,                     optional, intent(in) :: id_MLDsq    !< Optional handle (ID) of squared MLD
@@ -810,17 +811,17 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
   real,                                  intent(in)    :: dt !< Time-step over which forcing is applied (s)
   type(forcing),                         intent(inout) :: fluxes !< Surface fluxes container
   type(optics_type),                     pointer       :: optics !< Optical properties container
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: ea !< The entrainment distance at interfaces (H units)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: h  !< Layer thickness in H units
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: ea !< The entrainment distance at interfaces (H units)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thickness in H units
   type(thermo_var_ptrs),                 intent(inout) :: tv !< Thermodynamics container
   !> If False, treat in/out fluxes separately.
   logical,                               intent(in)    :: aggregate_FW_forcing
   !> Turbulent kinetic energy requirement to mix forcing through each layer, in W m-2
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: cTKE
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(out) :: cTKE
   !> Partial derivative of specific volume with potential temperature, in m3 kg-1 K-1.
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: dSV_dT
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(out) :: dSV_dT
   !> Partial derivative of specific a volume with potential salinity, in m3 kg-1 / (g kg-1).
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: dSV_dS
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(out) :: dSV_dS
 
   ! Local variables
   integer, parameter :: maxGroundings = 5
@@ -937,7 +938,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
     !                enters to the ocean and participates in pentrative SW heating.
     ! nonpenSW     = non-downwelling SW flux, which is absorbed in ocean surface
     !                (in tandem w/ LW,SENS,LAT); saved only for diagnostic purposes.
-    call extractFluxes1d(G, fluxes, optics, nsw, j, dt,                                   &
+    call extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                               &
                   H_limit_fluxes, CS%use_river_heat_content, CS%use_calving_heat_content, &
                   h2d, T2d, netMassInOut, netMassOut, netHeat, netSalt,                   &
                   Pen_SW_bnd, tv, aggregate_FW_forcing, nonpenSW)
@@ -1127,10 +1128,15 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
     ! SW penetrative heating uses the updated thickness from above.
 
     ! Save temperature before increment with SW heating
-    if(CS%id_penSW_diag > 0) then
+    ! and initialize CS%penSWflux_diag to zero.  
+    if(CS%id_penSW_diag > 0 .or. CS%id_penSWflux_diag > 0) then
       do k=1,nz ; do i=is,ie
-        CS%penSW_diag(i,j,k) = T2d(i,k)
+        CS%penSW_diag(i,j,k)     = T2d(i,k)
+        CS%penSWflux_diag(i,j,k) = 0.0
       enddo ; enddo
+      k=nz+1 ; do i=is,ie
+         CS%penSWflux_diag(i,j,k) = 0.0
+      enddo
     endif
 
     if (calculate_energetics) then
@@ -1154,10 +1160,26 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
     enddo ; enddo
 
     ! Diagnose heating (W/m2) applied to a grid cell from SW penetration
-    if(CS%id_penSW_diag > 0) then
+    ! Also diagnose the penetrative SW heat flux at base of layer.  
+    if(CS%id_penSW_diag > 0 .or. CS%id_penSWflux_diag > 0) then
+
+      ! convergence of SW into a layer 
       do k=1,nz ; do i=is,ie
         CS%penSW_diag(i,j,k) = (T2d(i,k)-CS%penSW_diag(i,j,k))*h(i,j,k) * Idt * tv%C_p * GV%H_to_kg_m2
       enddo ; enddo
+
+      ! Perform a cumulative sum upwards from bottom to 
+      ! diagnose penetrative SW flux at base of tracer cell. 
+      ! CS%penSWflux_diag(i,j,k=1)    is penetrative shortwave at top of ocean.  
+      ! CS%penSWflux_diag(i,j,k=kbot+1) is zero, since assume no SW penetrates rock. 
+      ! CS%penSWflux_diag = rsdo  and CS%penSW_diag = rsdoabsorb
+      ! rsdoabsorb(k) = rsdo(k) - rsdo(k+1), so that rsdo(k) = rsdo(k+1) + rsdoabsorb(k)
+      if(CS%id_penSWflux_diag > 0) then
+        do k=nz,1,-1 ; do i=is,ie
+          CS%penSWflux_diag(i,j,k) = CS%penSW_diag(i,j,k) + CS%penSWflux_diag(i,j,k+1)
+        enddo ; enddo
+      endif 
+
     endif
 
     ! Fill CS%nonpenSW_diag
@@ -1170,9 +1192,10 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
   enddo ! j-loop finish
 
   ! Post the diagnostics
-  if (CS%id_createdH      > 0) call post_data(CS%id_createdH     , CS%createdH     , CS%diag)
-  if (CS%id_penSW_diag    > 0) call post_data(CS%id_penSW_diag   , CS%penSW_diag   , CS%diag)
-  if (CS%id_nonpenSW_diag > 0) call post_data(CS%id_nonpenSW_diag, CS%nonpenSW_diag, CS%diag)
+  if (CS%id_createdH       > 0) call post_data(CS%id_createdH      , CS%createdH      , CS%diag)
+  if (CS%id_penSW_diag     > 0) call post_data(CS%id_penSW_diag    , CS%penSW_diag    , CS%diag)
+  if (CS%id_penSWflux_diag > 0) call post_data(CS%id_penSWflux_diag, CS%penSWflux_diag, CS%diag)
+  if (CS%id_nonpenSW_diag  > 0) call post_data(CS%id_nonpenSW_diag , CS%nonpenSW_diag , CS%diag)
 
   if (numberOfGroundings>0) then
     do i = 1, min(numberOfGroundings, maxGroundings)
@@ -1288,14 +1311,26 @@ subroutine diabatic_aux_init(Time, G, GV, param_file, diag, CS, use_ePBL)
       "meter second-1")
   if (CS%id_createdH>0) allocate(CS%createdH(isd:ied,jsd:jed))
 
-  ! diagnostic for heating of a grid cell from convergence of SW heat into the cell.
-  CS%id_penSW_diag = register_diag_field('ocean_model', 'rsdo',      &
-        diag%axesTL, Time, 'Downwelling Shortwave Flux in Sea Water',&
+
+  ! diagnostic for heating of a grid cell from convergence of SW heat into the cell
+  CS%id_penSW_diag = register_diag_field('ocean_model', 'rsdoabsorb',                     &
+        diag%axesTL, Time, 'Convergence of Penetrative Shortwave Flux in Sea Water Layer',&
+        'Watt meter-2', standard_name='net_rate_of_absorption_of_shortwave_energy_in_ocean_layer')
+
+  ! diagnostic for penetrative SW heat flux at top interface of tracer cell (nz+1 interfaces)
+  ! k=1 gives penetrative SW at surface; SW(k=nz+1)=0 (no penetration through rock).
+  CS%id_penSWflux_diag = register_diag_field('ocean_model', 'rsdo',                               &
+        diag%axesTi, Time, 'Downwelling Shortwave Flux in Sea Water at Grid Cell Upper Interface',&
         'Watt meter-2', standard_name='downwelling_shortwave_flux_in_sea_water')
-  if (CS%id_penSW_diag>0) then
+
+  ! need both arrays for the SW diagnostics (one for flux, one for convergence)
+  if (CS%id_penSW_diag>0 .or. CS%id_penSWflux_diag>0) then
      allocate(CS%penSW_diag(isd:ied,jsd:jed,nz))
      CS%penSW_diag(:,:,:) = 0.0
+     allocate(CS%penSWflux_diag(isd:ied,jsd:jed,nz+1))
+     CS%penSWflux_diag(:,:,:) = 0.0
   endif
+
 
   ! diagnostic for non-downwelling SW radiation (i.e., SW absorbed at ocean surface)
   CS%id_nonpenSW_diag = register_diag_field('ocean_model', 'nonpenSW',                       &
@@ -1318,9 +1353,10 @@ subroutine diabatic_aux_end(CS)
 
   if (.not.associated(CS)) return
 
-  if (CS%id_createdH     >0) deallocate(CS%createdH)
-  if (CS%id_penSW_diag   >0) deallocate(CS%penSW_diag)
-  if (CS%id_nonpenSW_diag>0) deallocate(CS%nonpenSW_diag)
+  if (CS%id_createdH       >0) deallocate(CS%createdH)
+  if (CS%id_penSW_diag     >0) deallocate(CS%penSW_diag)
+  if (CS%id_penSWflux_diag >0) deallocate(CS%penSWflux_diag)
+  if (CS%id_nonpenSW_diag  >0) deallocate(CS%nonpenSW_diag)
 
   if (associated(CS)) deallocate(CS)
 

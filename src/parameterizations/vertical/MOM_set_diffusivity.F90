@@ -362,19 +362,19 @@ contains
 
 subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
                            G, GV, CS, Kd, Kd_int)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h, u_h, v_h
+  type(ocean_grid_type),                  intent(in)    :: G
+  type(verticalGrid_type),                intent(in)    :: GV
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h, u_h, v_h
   type(thermo_var_ptrs),                  intent(inout) :: tv  ! out is for tv%TempxPmE
   type(forcing),                          intent(in)    :: fluxes
   type(optics_type),                      pointer       :: optics
   type(vertvisc_type),                    intent(inout) :: visc
   real,                                   intent(in)    :: dt
-  type(ocean_grid_type),                  intent(in)    :: G
-  type(verticalGrid_type),                intent(in)    :: GV
   type(set_diffusivity_CS),               pointer       :: CS
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(out)   :: Kd
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), optional, intent(out) :: Kd_int
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: Kd
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), optional, intent(out) :: Kd_int
 
 ! Arguments:
 !  (in)      u      - zonal velocity (m/s)
@@ -913,7 +913,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   endif
 
   if (num_z_diags > 0) &
-    call calc_Zint_diags(h, z_ptrs, z_ids, num_z_diags, G, CS%diag_to_Z_CSp)
+    call calc_Zint_diags(h, z_ptrs, z_ids, num_z_diags, G, GV, CS%diag_to_Z_CSp)
 
   if (associated(dd%N2_3d)) deallocate(dd%N2_3d)
   if (associated(dd%Kd_itidal)) deallocate(dd%Kd_itidal)
@@ -943,17 +943,17 @@ end subroutine set_diffusivity
 
 subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, CS, &
                           TKE_to_Kd, maxTKE, kb)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)   :: h
-  type(thermo_var_ptrs),                 intent(in)   :: tv
-  real, dimension(NIMEM_,NK_INTERFACE_), intent(in)   :: dRho_int
-  real, dimension(NIMEM_,NKMEM_),       intent(in)    :: N2_lay
-  integer,                              intent(in)    :: j
-  real,                                 intent(in)    :: dt
-  type(ocean_grid_type),                intent(in)    :: G
-  type(verticalGrid_type),              intent(in)    :: GV
-  type(set_diffusivity_CS),             pointer       :: CS
-  real, dimension(NIMEM_,NKMEM_),       intent(out)   :: TKE_to_Kd, maxTKE
-  integer, dimension(NIMEM_),           intent(out)   :: kb
+  type(ocean_grid_type),                   intent(in)    :: G
+  type(verticalGrid_type),                 intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)   :: h
+  type(thermo_var_ptrs),                   intent(in)    :: tv
+  real, dimension(SZI_(G),SZK_(G)+1),      intent(in)    :: dRho_int
+  real, dimension(SZI_(G),SZK_(G)),        intent(in)    :: N2_lay
+  integer,                                 intent(in)    :: j
+  real,                                    intent(in)    :: dt
+  type(set_diffusivity_CS),                pointer       :: CS
+  real, dimension(SZI_(G),SZK_(G)),        intent(out)   :: TKE_to_Kd, maxTKE
+  integer, dimension(SZI_(G)),             intent(out)   :: kb
 
   real, dimension(SZI_(G),SZK_(G)) :: &
     ds_dsp1, &    ! coordinate variable (sigma-2) difference across an
@@ -1134,17 +1134,17 @@ end subroutine find_TKE_to_Kd
 
 subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, CS, dRho_int, &
                    N2_lay, N2_int, N2_bot)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)   :: h
-  type(thermo_var_ptrs),                 intent(in)   :: tv
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)   :: T_f, S_f
-  type(forcing),                         intent(in)   :: fluxes
-  integer,                               intent(in)   :: j
-  type(ocean_grid_type),                 intent(in)   :: G
-  type(verticalGrid_type),               intent(in)   :: GV
-  type(set_diffusivity_CS),              pointer      :: CS
-  real, dimension(NIMEM_,NK_INTERFACE_), intent(out)  :: dRho_int, N2_int
-  real, dimension(NIMEM_,NKMEM_),        intent(out)  :: N2_lay
-  real, dimension(NIMEM_),               intent(out)  :: N2_bot
+  type(ocean_grid_type),                    intent(in)   :: G
+  type(verticalGrid_type),                  intent(in)   :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)   :: h
+  type(thermo_var_ptrs),                    intent(in)   :: tv
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)   :: T_f, S_f
+  type(forcing),                            intent(in)   :: fluxes
+  integer,                                  intent(in)   :: j
+  type(set_diffusivity_CS),                 pointer      :: CS
+  real, dimension(SZI_(G),SZK_(G)+1),       intent(out)  :: dRho_int, N2_int
+  real, dimension(SZI_(G),SZK_(G)),         intent(out)  :: N2_lay
+  real, dimension(SZI_(G)),                 intent(out)  :: N2_bot
 
   real, dimension(SZI_(G),SZK_(G)+1) :: &
     dRho_int_unfilt, & ! unfiltered density differences across interfaces
@@ -1288,14 +1288,14 @@ end subroutine find_N2
 
 
 subroutine double_diffusion(tv, h, T_f, S_f, j, G, GV, CS, Kd_T_dd, Kd_S_dd)
-  type(thermo_var_ptrs),                 intent(in)  :: tv
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)  :: h
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)  :: T_f, S_f
-  integer,                               intent(in)  :: j
-  type(ocean_grid_type),                 intent(in)  :: G
-  type(verticalGrid_type),               intent(in)  :: GV
-  type(set_diffusivity_CS),              pointer     :: CS
-  real, dimension(NIMEM_,NK_INTERFACE_), intent(out) :: Kd_T_dd, Kd_S_dd
+  type(ocean_grid_type),                    intent(in)  :: G
+  type(verticalGrid_type),                  intent(in)  :: GV
+  type(thermo_var_ptrs),                    intent(in)  :: tv
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: T_f, S_f
+  integer,                                  intent(in)  :: j
+  type(set_diffusivity_CS),                 pointer     :: CS
+  real, dimension(SZI_(G),SZK_(G)+1),       intent(out) :: Kd_T_dd, Kd_S_dd
 
 ! Arguments:
 !  (in)      tv      - structure containing pointers to any available
@@ -1381,21 +1381,21 @@ end subroutine double_diffusion
 
 subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
                                 maxTKE, kb, G, GV, CS, Kd, Kd_int, Kd_BBL)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
-  type(thermo_var_ptrs),                  intent(in)    :: tv
-  type(forcing),                          intent(in)    :: fluxes
-  type(vertvisc_type),                    intent(in)    :: visc
-  integer,                                intent(in)    :: j
-  real, dimension(NIMEM_,NKMEM_),         intent(in)    :: TKE_to_Kd, maxTKE
-  integer, dimension(NIMEM_),             intent(in)    :: kb
-  type(ocean_grid_type),                  intent(in)    :: G
-  type(verticalGrid_type),                intent(in)    :: GV
-  type(set_diffusivity_CS),               pointer       :: CS
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: Kd
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: Kd_int
-  real, dimension(:,:,:),                 pointer       :: Kd_BBL
+  type(ocean_grid_type),                     intent(in)    :: G
+  type(verticalGrid_type),                   intent(in)    :: GV
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
+  type(thermo_var_ptrs),                     intent(in)    :: tv
+  type(forcing),                             intent(in)    :: fluxes
+  type(vertvisc_type),                       intent(in)    :: visc
+  integer,                                   intent(in)    :: j
+  real, dimension(SZI_(G),SZK_(G)),          intent(in)    :: TKE_to_Kd, maxTKE
+  integer, dimension(SZI_(G)),               intent(in)    :: kb
+  type(set_diffusivity_CS),                  pointer       :: CS
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: Kd
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kd_int
+  real, dimension(:,:,:),                    pointer       :: Kd_BBL
 
 ! This routine adds diffusion sustained by flow energy extracted by bottom drag.
 
@@ -1601,19 +1601,19 @@ end subroutine add_drag_diffusivity
 !! consumed the mechanical TKE input.
 subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
                                     G, GV, CS, Kd, Kd_int, Kd_BBL)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_),       intent(in)    :: u !< u component of flow (m s-1)
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_),       intent(in)    :: v !< v component of flow (m s-1)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: h !< Layer thickness (m or kg m-2)
+  type(ocean_grid_type),                        intent(in)    :: G !< Grid structure
+  type(verticalGrid_type),                      intent(in)    :: GV !< Vertical grid structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)),    intent(in)    :: u !< u component of flow (m s-1)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)),    intent(in)    :: v !< v component of flow (m s-1)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),     intent(in)    :: h !< Layer thickness (m or kg m-2)
   type(thermo_var_ptrs),                        intent(in)    :: tv !< Thermodynamic variables structure
   type(forcing),                                intent(in)    :: fluxes !< Surface fluxes structure
   type(vertvisc_type),                          intent(in)    :: visc !< Vertical viscosity structure
   integer,                                      intent(in)    :: j !< j-index of row to work on
-  real, dimension(NIMEM_,NK_INTERFACE_),        intent(in)    :: N2_int !< Square of Brunt-Vaisala at interfaces (s-2)
-  type(ocean_grid_type),                        intent(in)    :: G !< Grid structure
-  type(verticalGrid_type),                      intent(in)    :: GV !< Vertical grid structure
+  real, dimension(SZI_(G),SZK_(G)+1),           intent(in)    :: N2_int !< Square of Brunt-Vaisala at interfaces (s-2)
   type(set_diffusivity_CS),                     pointer       :: CS !< Diffusivity control structure
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(inout) :: Kd !< Layer net diffusivity (m2 s-1)
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: Kd_int !< Interface net diffusivity (m2 s-1)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),     intent(inout) :: Kd !< Layer net diffusivity (m2 s-1)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),   intent(inout) :: Kd_int !< Interface net diffusivity (m2 s-1)
   real, dimension(:,:,:),                       pointer       :: Kd_BBL !< Interface BBL diffusivity (m2 s-1)
 
   ! Local variables
@@ -1750,15 +1750,15 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
 end subroutine add_LOTW_BBL_diffusivity
 
 subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, CS, Kd, TKE_to_Kd, Kd_int)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
-  type(forcing),                         intent(in)    :: fluxes
-  integer,                               intent(in)    :: j
-  type(ocean_grid_type),                 intent(in)    :: G
-  type(verticalGrid_type),               intent(in)    :: GV
-  type(set_diffusivity_CS),              pointer       :: CS
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: Kd
-  real, dimension(NIMEM_,NKMEM_),        intent(in)    :: TKE_to_Kd
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), optional, intent(inout) :: Kd_int
+  type(ocean_grid_type),                    intent(in)    :: G
+  type(verticalGrid_type),                  intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
+  type(forcing),                            intent(in)    :: fluxes
+  integer,                                  intent(in)    :: j
+  type(set_diffusivity_CS),                 pointer       :: CS
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: Kd
+  real, dimension(SZI_(G),SZK_(G)),         intent(in)    :: TKE_to_Kd
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), optional, intent(inout) :: Kd_int
 
 ! This routine adds effects of mixed layer radiation to the layer diffusivities.
 
@@ -1866,17 +1866,17 @@ end subroutine add_MLrad_diffusivity
 
 subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS, &
                                     dd, N2_lay, Kd, Kd_int )
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
-  real, dimension(NIMEM_),               intent(in)    :: N2_bot
-  real, dimension(NIMEM_,NKMEM_),        intent(in)    :: N2_lay
-  integer,                               intent(in)    :: j
-  real, dimension(NIMEM_,NKMEM_),        intent(in)    :: TKE_to_Kd, max_TKE
-  type(ocean_grid_type),                 intent(in)    :: G
-  type(verticalGrid_type),               intent(in)    :: GV
-  type(set_diffusivity_CS),              pointer       :: CS
-  type(diffusivity_diags),               intent(inout) :: dd
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: Kd
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), optional, intent(inout) :: Kd_int
+  type(ocean_grid_type),                    intent(in)    :: G
+  type(verticalGrid_type),                  intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
+  real, dimension(SZI_(G)),                 intent(in)    :: N2_bot
+  real, dimension(SZI_(G),SZK_(G)),         intent(in)    :: N2_lay
+  integer,                                  intent(in)    :: j
+  real, dimension(SZI_(G),SZK_(G)),         intent(in)    :: TKE_to_Kd, max_TKE
+  type(set_diffusivity_CS),                 pointer       :: CS
+  type(diffusivity_diags),                  intent(inout) :: dd
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: Kd
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), optional, intent(inout) :: Kd_int
 
   ! This subroutine adds the effect of internal-tide-driven mixing to the layer diffusivities.
   ! The mechanisms considered are (1) local dissipation of internal waves generated by the
@@ -2250,14 +2250,14 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
 end subroutine add_int_tide_diffusivity
 
 subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, CS)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
-  type(forcing),                          intent(in)    :: fluxes
-  type(vertvisc_type),                    intent(inout) :: visc
-  type(ocean_grid_type),                  intent(in)    :: G
-  type(verticalGrid_type),                intent(in)    :: GV
-  type(set_diffusivity_CS),               pointer       :: CS
+  type(ocean_grid_type),                     intent(in)    :: G
+  type(verticalGrid_type),                   intent(in)    :: GV
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
+  type(forcing),                             intent(in)    :: fluxes
+  type(vertvisc_type),                       intent(inout) :: visc
+  type(set_diffusivity_CS),                  pointer       :: CS
 
   ! This subroutine calculates several properties related to bottom
   ! boundary layer turbulence.
@@ -2381,15 +2381,15 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, CS)
 end subroutine set_BBL_TKE
 
 subroutine set_density_ratios(h, tv, kb, G, GV, CS, j, ds_dsp1, rho_0)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
-  type(thermo_var_ptrs),                 intent(in)    :: tv
-  integer, dimension(NIMEM_),            intent(in)    :: kb
   type(ocean_grid_type),                 intent(in)    :: G
   type(verticalGrid_type),               intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  type(thermo_var_ptrs),                 intent(in)    :: tv
+  integer, dimension(SZI_(G)),            intent(in)   :: kb
   type(set_diffusivity_CS),              pointer       :: CS
   integer,                               intent(in)    :: j
-  real, dimension(NIMEM_,NKMEM_),        intent(out)   :: ds_dsp1
-  real, dimension(NIMEM_,NKMEM_), optional, intent(in) :: rho_0
+  real, dimension(SZI_(G),SZK_(G)),      intent(out)   :: ds_dsp1
+  real, dimension(SZI_(G),SZK_(G)), optional, intent(in) :: rho_0
 
 ! Arguments:
 !  (in)      h       - layer thickness (meter)

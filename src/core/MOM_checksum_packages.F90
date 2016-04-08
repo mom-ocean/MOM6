@@ -29,6 +29,7 @@ use MOM_domains, only : sum_across_PEs, min_across_PEs, max_across_PEs
 use MOM_error_handler, only : MOM_mesg, is_root_pe
 use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : thermo_var_ptrs
+use MOM_verticalGrid, only : verticalGrid_type
 
 implicit none ; private
 
@@ -51,7 +52,7 @@ contains
 
 ! =============================================================================
 
-subroutine MOM_state_chksum_5arg(mesg, u, v, h, uh, vh, G, haloshift)
+subroutine MOM_state_chksum_5arg(mesg, u, v, h, uh, vh, G, GV, haloshift)
   character(len=*),                       intent(in) :: mesg
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in) :: u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in) :: v
@@ -59,6 +60,7 @@ subroutine MOM_state_chksum_5arg(mesg, u, v, h, uh, vh, G, haloshift)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in) :: uh
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in) :: vh
   type(ocean_grid_type),                  intent(in) :: G
+  type(verticalGrid_type),                intent(in)    :: GV
   integer, optional,                      intent(in) :: haloshift
 !   This subroutine writes out chksums for the model's basic state variables.
 ! Arguments: mesg - A message that appears on the chksum lines.
@@ -68,6 +70,7 @@ subroutine MOM_state_chksum_5arg(mesg, u, v, h, uh, vh, G, haloshift)
 !  (in)      uh - Volume flux through zonal faces = u*h*dy, m3 s-1.
 !  (in)      vh - Volume flux through meridional faces = v*h*dx, in m3 s-1.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
   integer :: is, ie, js, je, nz, hs
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
@@ -77,19 +80,20 @@ subroutine MOM_state_chksum_5arg(mesg, u, v, h, uh, vh, G, haloshift)
   hs=1; if (present(haloshift)) hs=haloshift
   call uchksum(u, mesg//" u",G,haloshift=hs)
   call vchksum(v, mesg//" v",G,haloshift=hs)
-  call hchksum(G%GV%H_to_kg_m2*h, mesg//" h",G,haloshift=hs)
-  call uchksum(G%GV%H_to_kg_m2*uh, mesg//" uh",G,haloshift=hs)
-  call vchksum(G%GV%H_to_kg_m2*vh, mesg//" vh",G,haloshift=hs)
+  call hchksum(GV%H_to_kg_m2*h, mesg//" h",G,haloshift=hs)
+  call uchksum(GV%H_to_kg_m2*uh, mesg//" uh",G,haloshift=hs)
+  call vchksum(GV%H_to_kg_m2*vh, mesg//" vh",G,haloshift=hs)
 end subroutine MOM_state_chksum_5arg
 
 ! =============================================================================
 
-subroutine MOM_state_chksum_3arg(mesg, u, v, h, G, haloshift)
+subroutine MOM_state_chksum_3arg(mesg, u, v, h, G, GV, haloshift)
   character(len=*),                       intent(in) :: mesg
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in) :: u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in) :: v
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h
   type(ocean_grid_type),                  intent(in) :: G
+  type(verticalGrid_type),                intent(in)    :: GV
   integer, optional,                      intent(in) :: haloshift
 !   This subroutine writes out chksums for the model's basic state variables.
 ! Arguments: mesg - A message that appears on the chksum lines.
@@ -99,6 +103,7 @@ subroutine MOM_state_chksum_3arg(mesg, u, v, h, G, haloshift)
 !  (in)      uh - Volume flux through zonal faces = u*h*dy, m3 s-1.
 !  (in)      vh - Volume flux through meridional faces = v*h*dx, in m3 s-1.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
   integer :: is, ie, js, je, nz, hs
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
@@ -108,7 +113,7 @@ subroutine MOM_state_chksum_3arg(mesg, u, v, h, G, haloshift)
   hs=1; if (present(haloshift)) hs=haloshift
   call uchksum(u, mesg//" u",G,haloshift=hs)
   call vchksum(v, mesg//" v",G,haloshift=hs)
-  call hchksum(G%GV%H_to_kg_m2*h, mesg//" h",G,haloshift=hs)
+  call hchksum(GV%H_to_kg_m2*h, mesg//" h",G,haloshift=hs)
 end subroutine MOM_state_chksum_3arg
 
 ! =============================================================================
@@ -137,7 +142,7 @@ end subroutine MOM_thermo_chksum
 
 ! =============================================================================
 
-subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, pbce, &
+subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, GV, pbce, &
                             u_accel_bt, v_accel_bt)
   character(len=*),                       intent(in) :: mesg
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in) :: CAu
@@ -147,6 +152,7 @@ subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, pbce, &
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in) :: diffu
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in) :: diffv
   type(ocean_grid_type),                  intent(in) :: G
+  type(verticalGrid_type),                intent(in)    :: GV
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  optional, intent(in) :: pbce
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), optional, intent(in) :: u_accel_bt
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), optional, intent(in) :: v_accel_bt
@@ -165,6 +171,7 @@ subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, pbce, &
 !  (in)      diffv - Meridional acceleration due to convergence of
 !                    the along-isopycnal stress tensor, in m s-2.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      pbce - the baroclinic pressure anomaly in each layer
 !                   due to free surface height anomalies, in m s-2.
 !                   pbce points to a space with nz layers or NULL.
@@ -185,7 +192,7 @@ subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, pbce, &
   call uchksum(diffu, mesg//" diffu",G,haloshift=0)
   call vchksum(diffv, mesg//" diffv",G,haloshift=0)
   if (present(pbce)) &
-    call hchksum(G%GV%kg_m2_to_H*pbce, mesg//" pbce",G,haloshift=0)
+    call hchksum(GV%kg_m2_to_H*pbce, mesg//" pbce",G,haloshift=0)
   if (present(u_accel_bt)) &
     call uchksum(u_accel_bt, mesg//" u_accel_bt",G,haloshift=0)
   if (present(v_accel_bt)) &
