@@ -374,7 +374,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
 
     if (associated(tv%eqn_of_state)) then
       pressure_1d(:) = tv%P_Ref
-!$OMP parallel do default(none) shared(tv,Rcv,is,ie,js,je,nz,pres)
+!$OMP parallel do default(none) shared(tv,Rcv,is,ie,js,je,nz,pressure_1d)
       do k=1,nz ; do j=js,je+1
         call calculate_density(tv%T(:,j,k),tv%S(:,j,k),pressure_1d, &
                                Rcv(:,j,k),is,ie-is+2, tv%eqn_of_state)
