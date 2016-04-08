@@ -159,13 +159,13 @@ function global_z_mean(var,G,CS,tracer)
 end function global_z_mean
 
 subroutine calculate_Z_diag_fields(u, v, h, dt, G, GV, CS)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
-  real,                                   intent(in)    :: dt
-  type(ocean_grid_type),                  intent(inout) :: G
-  type(verticalGrid_type),                intent(in)    :: GV
-  type(diag_to_Z_CS),                     pointer       :: CS
+  type(ocean_grid_type),                     intent(inout) :: G
+  type(verticalGrid_type),                   intent(in)    :: GV
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
+  real,                                      intent(in)    :: dt
+  type(diag_to_Z_CS),                        pointer       :: CS
 
 ! This subroutine maps tracers and velocities into depth space for diagnostics. 
 
@@ -460,13 +460,13 @@ end subroutine calculate_Z_diag_fields
 
 
 subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, GV, CS)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: uh_int
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: vh_int
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
-  real,                                   intent(in)    :: dt
-  type(ocean_grid_type),                  intent(inout) :: G
-  type(verticalGrid_type),                intent(in)    :: GV
-  type(diag_to_Z_CS),                     pointer       :: CS
+  type(ocean_grid_type),                     intent(inout) :: G
+  type(verticalGrid_type),                   intent(in)    :: GV
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uh_int
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vh_int
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
+  real,                                      intent(in)    :: dt
+  type(diag_to_Z_CS),                        pointer       :: CS
 
 !   This subroutine maps horizontal transport into depth space for diagnostic output.
 
@@ -722,13 +722,13 @@ subroutine find_limited_slope(val, e, slope, k)
 end subroutine find_limited_slope
 
 subroutine calc_Zint_diags(h, in_ptrs, ids, num_diags, G, GV, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
-  type(p3d), dimension(:),               intent(in) :: in_ptrs
-  integer,   dimension(:),               intent(in) :: ids
-  integer,                               intent(in) :: num_diags
-  type(ocean_grid_type),                 intent(in) :: G
-  type(verticalGrid_type),               intent(in) :: GV
-  type(diag_to_Z_CS),                    pointer    :: CS
+  type(ocean_grid_type),                    intent(in) :: G
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  type(p3d), dimension(:),                  intent(in) :: in_ptrs
+  integer,   dimension(:),                  intent(in) :: ids
+  integer,                                  intent(in) :: num_diags
+  type(verticalGrid_type),                  intent(in) :: GV
+  type(diag_to_Z_CS),                       pointer    :: CS
   
   real, dimension(SZI_(G),SZJ_(G),max(CS%nk_zspace+1,1),max(num_diags,1)) :: &
     diag_on_Z  ! diagnostics interpolated to depth space
@@ -818,13 +818,13 @@ end subroutine calc_Zint_diags
                           
 subroutine register_Z_tracer(tr_ptr, name, long_name, units, Time, G, CS, standard_name,   &
      cmor_field_name, cmor_long_name, cmor_units, cmor_standard_name)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), target, intent(in) :: tr_ptr
+  type(ocean_grid_type),                         intent(in) :: G
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target, intent(in) :: tr_ptr
   character(len=*),                              intent(in) :: name
   character(len=*),                              intent(in) :: long_name
   character(len=*),                              intent(in) :: units
   character(len=*), optional,                    intent(in) :: standard_name
   type(time_type),                               intent(in) :: Time
-  type(ocean_grid_type),                         intent(in) :: G
   type(diag_to_Z_CS),                            pointer    :: CS
   character(len=*), optional,                    intent(in) :: cmor_field_name
   character(len=*), optional,                    intent(in) :: cmor_long_name
@@ -883,13 +883,13 @@ subroutine register_Z_tracer(tr_ptr, name, long_name, units, Time, G, CS, standa
 end subroutine register_Z_tracer
 
 subroutine register_Z_tracer_low(tr_ptr, name, long_name, units, standard_name, Time, G, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), target, intent(in) :: tr_ptr
+  type(ocean_grid_type),                         intent(in) :: G
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target, intent(in) :: tr_ptr
   character(len=*),                              intent(in) :: name
   character(len=*),                              intent(in) :: long_name
   character(len=*),                              intent(in) :: units
   character(len=*),                              intent(in) :: standard_name
   type(time_type),                               intent(in) :: Time
-  type(ocean_grid_type),                         intent(in) :: G
   type(diag_to_Z_CS),                            pointer    :: CS
 
 !   This subroutine registers a tracer to be output in depth space.
@@ -1208,9 +1208,9 @@ subroutine MOM_diag_to_Z_end(CS)
 end subroutine MOM_diag_to_Z_end
 
 function ocean_register_diag_with_z(tr_ptr, vardesc_tr, G, Time, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), target, intent(in) :: tr_ptr
-  type(vardesc),                                 intent(in) :: vardesc_tr
   type(ocean_grid_type),                         intent(in) :: G
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target, intent(in) :: tr_ptr
+  type(vardesc),                                 intent(in) :: vardesc_tr
   type(time_type),                               intent(in) :: Time
   type(diag_to_Z_CS),                            pointer    :: CS
   integer                                                   :: ocean_register_diag_with_z

@@ -90,15 +90,15 @@ end type wave_structure_CS
 contains
 
 subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),    intent(in)  :: h
-  type(thermo_var_ptrs),                    intent(in)  :: tv
   type(ocean_grid_type),                    intent(in)  :: G
-  type(verticalGrid_type),                  intent(in)    :: GV
-  real, dimension(NIMEM_,NJMEM_),           intent(in)  :: cn
+  type(verticalGrid_type),                  intent(in)  :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h
+  type(thermo_var_ptrs),                    intent(in)  :: tv
+  real, dimension(SZI_(G),SZJ_(G)),         intent(in)  :: cn
   integer,                                  intent(in)  :: ModeNum
   real,                                     intent(in)  :: freq
   type(wave_structure_CS),                  pointer     :: CS
-  real, dimension(NIMEM_,NJMEM_), optional, intent(in)  :: En
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)  :: En
   logical,optional,                         intent(in)  :: full_halos
   
 !    This subroutine determines the internal wave velocity structure for any mode.
