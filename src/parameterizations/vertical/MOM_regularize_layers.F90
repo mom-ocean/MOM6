@@ -57,6 +57,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : thermo_var_ptrs
+use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs
 use MOM_EOS, only : calculate_2_densities
 
@@ -112,13 +113,14 @@ integer :: id_clock_pass, id_clock_EOS
 
 contains
 
-subroutine regularize_layers(h, tv, dt, ea, eb, G, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: h
-  type(thermo_var_ptrs),                 intent(inout) :: tv
-  real,                                  intent(in)    :: dt
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: ea, eb
-  type(ocean_grid_type),                 intent(inout) :: G
-  type(regularize_layers_CS),            pointer       :: CS
+subroutine regularize_layers(h, tv, dt, ea, eb, G, GV, CS)
+  type(ocean_grid_type),                    intent(inout) :: G
+  type(verticalGrid_type),                  intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h
+  type(thermo_var_ptrs),                    intent(inout) :: tv
+  real,                                     intent(in)    :: dt
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: ea, eb
+  type(regularize_layers_CS),               pointer       :: CS
 
 !    This subroutine partially steps the bulk mixed layer model.
 !  The following processes are executed, in the order listed.
@@ -135,6 +137,7 @@ subroutine regularize_layers(h, tv, dt, ea, eb, G, CS)
 !                 be increased due to mixed layer entrainment, in the same units
 !                 as h - usually m or kg m-2 (i.e., H).
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 regularize_layers_init.
 
@@ -153,18 +156,19 @@ subroutine regularize_layers(h, tv, dt, ea, eb, G, CS)
   endif
 
   if (CS%regularize_surface_layers) then
-    call regularize_surface(h, tv, dt, ea, eb, G, CS)
+    call regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
   endif
 
 end subroutine regularize_layers
 
-subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: h
-  type(thermo_var_ptrs),                 intent(inout) :: tv
-  real,                                  intent(in)    :: dt
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: ea, eb
-  type(ocean_grid_type),                 intent(inout) :: G
-  type(regularize_layers_CS),            pointer       :: CS
+subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
+  type(ocean_grid_type),                    intent(inout) :: G
+  type(verticalGrid_type),                  intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h
+  type(thermo_var_ptrs),                    intent(inout) :: tv
+  real,                                     intent(in)    :: dt
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: ea, eb
+  type(regularize_layers_CS),               pointer       :: CS
 
 !    This subroutine ensures that there is a degree of horizontal smoothness
 !  in the depths of the near-surface interfaces.
@@ -181,6 +185,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
 !                 be increased due to mixed layer entrainment, in the same units
 !                 as h - usually m or kg m-2 (i.e., H).
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 regularize_layers_init.
 
@@ -265,13 +270,13 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_regularize_layers: "//&
          "Module must be initialized before it is used.")
 
-  if (G%GV%nkml<1) return
-  nkmb = G%GV%nk_rho_varies ; nkml = G%GV%nkml
+  if (GV%nkml<1) return
+  nkmb = GV%nk_rho_varies ; nkml = GV%nkml
   if (.not.ASSOCIATED(tv%eqn_of_state)) call MOM_error(FATAL, &
     "MOM_regularize_layers: This module now requires the use of temperature and "//&
     "an equation of state.")
 
-  h_neglect = G%GV%H_subroundoff
+  h_neglect = GV%H_subroundoff
   debug = (debug .or. CS%debug)
 #ifdef DEBUG_CODE
   debug = .true.
@@ -293,9 +298,9 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
   enddo ; enddo ; enddo
 
 #ifdef DEBUG_CODE
-  call find_deficit_ratios(e, def_rat_u, def_rat_v, G, CS, def_rat_u_1b, def_rat_v_1b, 1, h)
+  call find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, def_rat_u_1b, def_rat_v_1b, 1, h)
 #else
-  call find_deficit_ratios(e, def_rat_u, def_rat_v, G, CS, h=h)
+  call find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, h=h)
 #endif
   ! Determine which columns are problematic
   do j=js,je ; do_j(j) = .false. ; enddo
@@ -330,7 +335,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
       ef(i,j,k) = (1.0 - 0.5*wt) * e(i,j,K) + &
                   wt * 0.125 * ((e_e + e_w) + (e_n + e_s))
     enddo ; enddo ; enddo
-    call find_deficit_ratios(ef, def_rat_u_3, def_rat_v_3, G, CS, def_rat_u_3b, def_rat_v_3b)
+    call find_deficit_ratios(ef, def_rat_u_3, def_rat_v_3, G, GV, CS, def_rat_u_3b, def_rat_v_3b)
 
     ! Determine which columns are problematic
     do j=js,je ; do i=is,ie
@@ -349,9 +354,9 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
 
 
   ! Now restructure the layers.
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,do_j,def_rat_h,CS,nkmb,G,e, &
-!$OMP                                  I_dtol,h,tv,debug,h_neglect,p_ref_cv,ea,   &
-!$OMP                                  eb,id_clock_EOS)                           &
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,do_j,def_rat_h,CS,nkmb,G,GV,&
+!$OMP                                  e,I_dtol,h,tv,debug,h_neglect,p_ref_cv,ea, &
+!$OMP                                  eb,id_clock_EOS,nkml)                      &
 !$OMP                          private(d_ea,d_eb,max_def_rat,do_i,nz_filt,e_e,e_w,&
 !$OMP                                  e_n,e_s,wt,e_filt,e_2d,h_2d,T_2d,S_2d,     &
 !$OMP                                  h_2d_init,T_2d_init,S_2d_init,ent_any,     &
@@ -385,20 +390,20 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
     do K=1,nz_filt ; do i=is,ie ; if (do_i(i)) then
       if (G%mask2dCu(I,j) <= 0.0) then ; e_e = e(i,j,K) ; else
         e_e = max(e(i+1,j,K) + min(e(i,j,K) - e(i+1,j,nz+1), 0.0), &
-                  e(i,j,nz+1) + (nz+1-k)*G%GV%Angstrom)
+                  e(i,j,nz+1) + (nz+1-k)*GV%Angstrom)
 
       endif
       if (G%mask2dCu(I-1,j) <= 0.0) then ; e_w = e(i,j,K) ; else
         e_w = max(e(i-1,j,K) + min(e(i,j,K) - e(i-1,j,nz+1), 0.0), &
-                  e(i,j,nz+1) + (nz+1-k)*G%GV%Angstrom)
+                  e(i,j,nz+1) + (nz+1-k)*GV%Angstrom)
       endif
       if (G%mask2dCv(i,J) <= 0.0) then ; e_n = e(i,j,K) ; else
         e_n = max(e(i,j+1,K) + min(e(i,j,K) - e(i,j+1,nz+1), 0.0), &
-                  e(i,j,nz+1) + (nz+1-k)*G%GV%Angstrom)
+                  e(i,j,nz+1) + (nz+1-k)*GV%Angstrom)
       endif
       if (G%mask2dCv(i,J-1) <= 0.0) then ; e_s = e(i,j,K) ; else
         e_s = max(e(i,j-1,K) + min(e(i,j,K) - e(i,j-1,nz+1), 0.0), &
-                  e(i,j,nz+1) + (nz+1-k)*G%GV%Angstrom)
+                  e(i,j,nz+1) + (nz+1-k)*GV%Angstrom)
       endif
 
       wt = max(0.0, min(1.0, I_dtol*(def_rat_h(i,j)-CS%h_def_tol1)))
@@ -434,10 +439,10 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
       do k=nkmb+1,nz
         cols_left = .false.
         do i=is,ie ; if (more_ent_i(i)) then
-          if (h_2d(i,k) - G%GV%Angstrom > h_neglect) then
-            if (e_2d(i,nkmb+1)-e_filt(i,nkmb+1) > h_2d(i,k) - G%GV%Angstrom) then
-              h_add = h_2d(i,k) - G%GV%Angstrom
-              h_2d(i,k) = G%GV%Angstrom
+          if (h_2d(i,k) - GV%Angstrom > h_neglect) then
+            if (e_2d(i,nkmb+1)-e_filt(i,nkmb+1) > h_2d(i,k) - GV%Angstrom) then
+              h_add = h_2d(i,k) - GV%Angstrom
+              h_2d(i,k) = GV%Angstrom
             else
               h_add = e_2d(i,nkmb+1)-e_filt(i,nkmb+1)
               h_2d(i,k) = h_2d(i,k) - h_add
@@ -504,11 +509,11 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
           if (k1 <= 1) exit
           if (k2 <= nkmb) exit
           ! ### The 0.6 here should be adjustable?  It gives 20% overlap for now.
-          Rcv_min_det = G%GV%Rlay(k2) + 0.6*Rcv_tol(i)*(G%GV%Rlay(k2-1)-G%GV%Rlay(k2))
+          Rcv_min_det = GV%Rlay(k2) + 0.6*Rcv_tol(i)*(GV%Rlay(k2-1)-GV%Rlay(k2))
           if (k2 < nz) then
-            Rcv_max_det = G%GV%Rlay(k2) + 0.6*Rcv_tol(i)*(G%GV%Rlay(k2+1)-G%GV%Rlay(k2))
+            Rcv_max_det = GV%Rlay(k2) + 0.6*Rcv_tol(i)*(GV%Rlay(k2+1)-GV%Rlay(k2))
           else
-            Rcv_max_det = G%GV%Rlay(nz) + 0.6*Rcv_tol(i)*(G%GV%Rlay(nz)-G%GV%Rlay(nz-1))
+            Rcv_max_det = GV%Rlay(nz) + 0.6*Rcv_tol(i)*(GV%Rlay(nz)-GV%Rlay(nz-1))
           endif
           if (Rcv(i,k1) > Rcv_max_det) &
             exit ! All shallower interior layers are too light for detrainment.
@@ -692,7 +697,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
           h_predicted = h_2d_init(i,k) + ((d_ea(i,k) - d_eb(i,k-1)) + &
                                           (d_eb(i,k) - d_ea(i,k+1)))
         endif
-        if (abs(h(i,j,k) - h_predicted) > MAX(1e-9*abs(h_predicted),G%GV%Angstrom)) &
+        if (abs(h(i,j,k) - h_predicted) > MAX(1e-9*abs(h_predicted),GV%Angstrom)) &
           call MOM_error(FATAL, "regularize_surface: d_ea mismatch.")
       endif ; enddo ; enddo
       do i=is,ie ; if (do_i(i)) then
@@ -747,7 +752,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
       e(i,j,K+1) = e(i,j,K) - h(i,j,k)
     enddo ; enddo ; enddo
 
-    call find_deficit_ratios(e, def_rat_u_2, def_rat_v_2, G, CS, def_rat_u_2b, def_rat_v_2b, h=h)
+    call find_deficit_ratios(e, def_rat_u_2, def_rat_v_2, G, GV, CS, def_rat_u_2b, def_rat_v_2b, h=h)
 
     ! Determine which columns are problematic
     do j=js,je ; do i=is,ie
@@ -766,17 +771,18 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, CS)
 
 end subroutine regularize_surface
 
-subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, CS, &
+subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, &
                                def_rat_u_2lay, def_rat_v_2lay, halo, h)
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(in) :: e
-  real, dimension(NIMEMB_,NJMEM_),           intent(out) :: def_rat_u
-  real, dimension(NIMEM_,NJMEMB_),           intent(out) :: def_rat_v
   type(ocean_grid_type),                     intent(in)  :: G
+  type(verticalGrid_type),                   intent(in)  :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in) :: e
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(out) :: def_rat_u
+  real, dimension(SZI_(G),SZJB_(G)),         intent(out) :: def_rat_v
   type(regularize_layers_CS),                pointer     :: CS
-  real, dimension(NIMEMB_,NJMEM_), optional, intent(out) :: def_rat_u_2lay
-  real, dimension(NIMEM_,NJMEMB_), optional, intent(out) :: def_rat_v_2lay
+  real, dimension(SZIB_(G),SZJ_(G)), optional, intent(out) :: def_rat_u_2lay
+  real, dimension(SZI_(G),SZJB_(G)), optional, intent(out) :: def_rat_v_2lay
   integer,                         optional, intent(in)  :: halo
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(in)  :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(in)  :: h
 !    This subroutine determines the amount by which the harmonic mean
 !  thickness at velocity points differ from the arithmetic means, relative to
 !  the the arithmetic means, after eliminating thickness variations that are
@@ -786,6 +792,7 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, CS, &
 !  (out)     def_rat_u - The thickness deficit ratio at u points, nondim.
 !  (out)     def_rat_v - The thickness deficit ratio at v points, nondim.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 regularize_layers_init.
 !  (out,opt) def_rat_u_2lay - The thickness deficit ratio at u points when the
@@ -813,8 +820,8 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, CS, &
   if (present(halo)) then
     is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
   endif
-  nkmb = G%GV%nk_rho_varies
-  h_neglect = G%GV%H_subroundoff
+  nkmb = GV%nk_rho_varies
+  h_neglect = GV%H_subroundoff
 
   ! Determine which zonal faces are problematic.
   do j=js,je ; do I=is-1,ie

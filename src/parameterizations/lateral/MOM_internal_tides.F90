@@ -59,6 +59,7 @@ use MOM_time_manager, only  : time_type, operator(+), operator(/), operator(-)
 use MOM_time_manager, only  : get_time, get_date, set_time, set_date
 use MOM_time_manager, only  : time_type_to_real
 use MOM_variables, only     : surface, thermo_var_ptrs
+use MOM_verticalGrid, only  : verticalGrid_type
 use fms_mod, only           : read_data
 use MOM_wave_structure, only: wave_structure_init, wave_structure, wave_structure_CS
 
@@ -197,15 +198,17 @@ end type loop_bounds_type
 contains
 
 
-subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)  :: h
-  type(thermo_var_ptrs),                 intent(in)  :: tv
-  real, dimension(NIMEM_,NJMEM_), intent(in) :: TKE_itidal_input
-  real, dimension(NIMEM_,NJMEM_), intent(in) :: vel_btTide, Nb
-  real,                  intent(in)          :: dt
-  type(ocean_grid_type), intent(inout)       :: G
-  type(int_tide_CS), pointer                 :: CS
-  real, dimension(SZI_(G),SZJ_(G),CS%nMode)  :: cn
+subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
+                              G, GV, CS)
+  type(ocean_grid_type),            intent(inout) :: G
+  type(verticalGrid_type),          intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  type(thermo_var_ptrs),            intent(in)    :: tv
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: TKE_itidal_input
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: vel_btTide, Nb
+  real,                             intent(in)    :: dt
+  type(int_tide_CS),                pointer       :: CS
+  real, dimension(SZI_(G),SZJ_(G),CS%nMode), intent(in) :: cn
 
   ! This subroutine calls other subroutines in this file that are needed to
   ! refract, propagate, and dissipate energy density of the internal tide.
@@ -219,6 +222,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
   !  (in)      Nb - Near-bottom buoyancy frequency, in s-1
   !  (in)      dt - Length of time over which these fluxes will be applied, in s.
   !  (in)      G - The ocean's grid structure.
+  !  (in)      GV - The ocean's vertical grid structure.
   !  (in)      CS - A pointer to the control structure returned by a previous
   !                 call to int_tide_init.
   real, dimension(SZI_(G),SZJ_(G),2) :: &
@@ -252,7 +256,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
   if (.not.associated(CS)) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nAngle = CS%NAngle
-  I_rho0 = 1.0 / G%GV%Rho0
+  I_rho0 = 1.0 / GV%Rho0
 
   isd_g = G%isd_global ; jsd_g = G%jsd_global ! for debugging
 
@@ -445,7 +449,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, G
   if (CS%apply_wave_drag .or. CS%apply_Froude_drag) then
     do m=1,CS%NMode ; do fr=1,CS%Nfreq
       ! Calculate modal structure for given mode and frequency
-      call wave_structure(h, tv, G, cn(:,:,m), m, CS%frequency(fr), &
+      call wave_structure(h, tv, G, GV, cn(:,:,m), m, CS%frequency(fr), &
                           CS%wave_structure_CSp, tot_En_mode(:,:,fr,m), full_halos=.true.)
       ! Pick out near-bottom and max horizontal baroclinic velocity values at each point
       do j=jsd,jed ; do i=isd,ied
@@ -1595,13 +1599,13 @@ end subroutine propagate_y
 
 
 subroutine zonal_flux_En(u, h, hL, hR, uh, dt, G, j, ish, ieh, vol_CFL)
-  real, dimension(NIMEMB_),    intent(in)    :: u
-  real, dimension(NIMEM_),     intent(in)    :: h, hL, hR
-  real, dimension(NIMEMB_),    intent(inout) :: uh
-  real,                        intent(in)    :: dt
-  type(ocean_grid_type),       intent(in)    :: G
-  integer,                     intent(in)    :: j, ish, ieh
-  logical,                     intent(in)    :: vol_CFL
+  type(ocean_grid_type),     intent(in)    :: G
+  real, dimension(SZIB_(G)), intent(in)    :: u
+  real, dimension(SZI_(G)),  intent(in)    :: h, hL, hR
+  real, dimension(SZIB_(G)), intent(inout) :: uh
+  real,                      intent(in)    :: dt
+  integer,                   intent(in)    :: j, ish, ieh
+  logical,                   intent(in)    :: vol_CFL
   !   This subroutines evaluates the zonal mass or volume fluxes in a layer.
   !
   ! Arguments: u - Zonal velocity, in m s-1.
@@ -1640,13 +1644,13 @@ end subroutine zonal_flux_En
 
 
 subroutine merid_flux_En(v, h, hL, hR, vh, dt, G, J, ish, ieh, vol_CFL)
-  real, dimension(NIMEM_),        intent(in)    :: v
-  real, dimension(NIMEM_,NJMEM_), intent(in)    :: h, hL, hR
-  real, dimension(NIMEM_),        intent(inout) :: vh
-  real,                           intent(in)    :: dt
-  type(ocean_grid_type),          intent(in)    :: G
-  integer,                        intent(in)    :: J, ish, ieh
-  logical,                        intent(in)    :: vol_CFL
+  type(ocean_grid_type),            intent(in)    :: G
+  real, dimension(SZI_(G)),         intent(in)    :: v
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: h, hL, hR
+  real, dimension(SZI_(G)),         intent(inout) :: vh
+  real,                             intent(in)    :: dt
+  integer,                          intent(in)    :: J, ish, ieh
+  logical,                          intent(in)    :: vol_CFL
   !   This subroutines evaluates the meridional mass or volume fluxes in a layer.
   !
   ! Arguments: v - Meridional velocity, in m s-1.
@@ -1904,9 +1908,9 @@ subroutine teleport(En, NAngle, CS, G, LB)
 end subroutine teleport
 
 subroutine correct_halo_rotation(En, test, G, NAngle)
-  real, dimension(:,:,:,:,:),         intent(inout) :: En
-  real, dimension(NIMEM_,NJMEM_,C2_), intent(in)    :: test
   type(ocean_grid_type),              intent(in)    :: G
+  real, dimension(:,:,:,:,:),         intent(inout) :: En
+  real, dimension(SZI_(G),SZJ_(G),2), intent(in)    :: test
   integer,                            intent(in)    :: NAngle
   !   This subroutine rotates points in the halos where required to accomodate
   ! changes in grid orientation, such as at the tripolar fold.
@@ -1956,11 +1960,11 @@ subroutine correct_halo_rotation(En, test, G, NAngle)
 end subroutine correct_halo_rotation
 
 subroutine PPM_reconstruction_x(h_in, h_l, h_r, G, LB, simple_2nd)
-  real, dimension(NIMEM_,NJMEM_), intent(in)  :: h_in
-  real, dimension(NIMEM_,NJMEM_), intent(out) :: h_l, h_r
-  type(ocean_grid_type),          intent(in)  :: G
-  type(loop_bounds_type),         intent(in)  :: LB
-  logical, optional,              intent(in)  :: simple_2nd
+  type(ocean_grid_type),            intent(in)  :: G
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)  :: h_in
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: h_l, h_r
+  type(loop_bounds_type),           intent(in)  :: LB
+  logical, optional,                intent(in)  :: simple_2nd
   ! This subroutine calculates left/right edge values for PPM reconstruction.
   ! Arguments: h_in    - Energy density in a sector (2D)
   !  (out)     h_l,h_r - left/right edge value of reconstruction (2D)
@@ -2032,16 +2036,16 @@ subroutine PPM_reconstruction_x(h_in, h_l, h_r, G, LB, simple_2nd)
     enddo; enddo
   endif
 
-  call PPM_limit_pos(h_in, h_l, h_r, 0.0, isl, iel, jsl, jel)
+  call PPM_limit_pos(h_in, h_l, h_r, 0.0, G, isl, iel, jsl, jel)
 end subroutine PPM_reconstruction_x
 
 
 subroutine PPM_reconstruction_y(h_in, h_l, h_r, G, LB, simple_2nd)
-  real, dimension(NIMEM_,NJMEM_), intent(in)  :: h_in
-  real, dimension(NIMEM_,NJMEM_), intent(out) :: h_l, h_r
-  type(ocean_grid_type),          intent(in)  :: G
-  type(loop_bounds_type),         intent(in)  :: LB
-  logical, optional,              intent(in)  :: simple_2nd
+  type(ocean_grid_type),            intent(in)  :: G
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)  :: h_in
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: h_l, h_r
+  type(loop_bounds_type),           intent(in)  :: LB
+  logical, optional,                intent(in)  :: simple_2nd
   ! This subroutine calculates left/right edge valus for PPM reconstruction.
   ! Arguments: h_in    - Energy density in a sector (2D)
   !  (out)     h_l,h_r - left/right edge value of reconstruction (2D)
@@ -2111,15 +2115,16 @@ subroutine PPM_reconstruction_y(h_in, h_l, h_r, G, LB, simple_2nd)
     enddo ; enddo
   endif
 
-  call PPM_limit_pos(h_in, h_l, h_r, 0.0, isl, iel, jsl, jel)
+  call PPM_limit_pos(h_in, h_l, h_r, 0.0, G, isl, iel, jsl, jel)
 end subroutine PPM_reconstruction_y
 
 
-subroutine PPM_limit_pos(h_in, h_L, h_R, h_min, iis, iie, jis, jie)
-  real, dimension(NIMEM_,NJMEM_), intent(in)     :: h_in
-  real, dimension(NIMEM_,NJMEM_), intent(inout)  :: h_L, h_R
-  real,                           intent(in)     :: h_min
-  integer,                        intent(in)     :: iis, iie, jis, jie
+subroutine PPM_limit_pos(h_in, h_L, h_R, h_min, G, iis, iie, jis, jie)
+  type(ocean_grid_type),            intent(in)     :: G
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)     :: h_in
+  real, dimension(SZI_(G),SZJ_(G)), intent(inout)  :: h_L, h_R
+  real,                             intent(in)     :: h_min
+  integer,                          intent(in)     :: iis, iie, jis, jie
   ! This subroutine limits the left/right edge values of the PPM reconstruction
   ! to give a reconstruction that is positive-definite.  Here this is
   ! reinterpreted as giving a constant thickness if the mean thickness is less
@@ -2130,6 +2135,7 @@ subroutine PPM_limit_pos(h_in, h_L, h_R, h_min, iis, iie, jis, jie)
   !  (in)      h_min   - The minimum thickness that can be obtained by a
   !                      concave parabolic fit.
   !  (in)      iis, iie, jis, jie - Index range for computation.
+  !  (in)      G - The ocean's grid structure.
 
   ! Local variables
   real    :: curv, dh, scale
@@ -2212,14 +2218,16 @@ end subroutine PPM_limit_pos
 
 ! end subroutine register_int_tide_restarts
 
-subroutine internal_tides_init(Time, G, param_file, diag, CS)
+subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   type(time_type), target,   intent(in)    :: Time
   type(ocean_grid_type),     intent(inout) :: G
+  type(verticalGrid_type),   intent(in)    :: GV
   type(param_file_type),     intent(in)    :: param_file
   type(diag_ctrl), target,   intent(in)    :: diag
   type(int_tide_CS),pointer                :: CS
   ! Arguments: Time - The current model time.
   !  (in)      G - The ocean's grid structure.
+  !  (in)      GV - The ocean's vertical grid structure.
   !  (in)      param_file - A structure indicating the open file to parse for
   !                         model parameter values.
   !  (in)      diag - A structure that is used to regulate diagnostic output.
@@ -2428,7 +2436,7 @@ subroutine internal_tides_init(Time, G, param_file, diag, CS)
     h2(i,j) = min(0.01*G%bathyT(i,j)**2, h2(i,j))
     ! Compute the fixed part; units are [kg m-2] here;
     ! will be multiplied by N and En to get into [W m-2]
-    CS%TKE_itidal_loss_fixed(i,j) = 0.5*kappa_h2_factor*G%GV%Rho0*&
+    CS%TKE_itidal_loss_fixed(i,j) = 0.5*kappa_h2_factor*GV%Rho0*&
          kappa_itides * h2(i,j)
   enddo; enddo
 
