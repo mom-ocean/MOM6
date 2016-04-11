@@ -76,28 +76,28 @@ contains
 subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, &
                       visc_rem_u, visc_rem_v, u_cor, v_cor, &
                       uhbt_aux, vhbt_aux, u_cor_aux, v_cor_aux, BT_cont)
-  real, intent(in),  dimension(NIMEMB_,NJMEM_,NKMEM_) :: u
-  real, intent(in),  dimension(NIMEM_,NJMEMB_,NKMEM_) :: v
-  real, intent(in),  dimension(NIMEM_,NJMEM_,NKMEM_)  :: hin
-  real, intent(inout), dimension(NIMEM_,NJMEM_,NKMEM_)  :: h
-  real, intent(out), dimension(NIMEMB_,NJMEM_,NKMEM_) :: uh
-  real, intent(out), dimension(NIMEM_,NJMEMB_,NKMEM_) :: vh
-  real, intent(in)                                    :: dt
-  type(ocean_grid_type), intent(inout)                :: G
-  type(verticalGrid_type), intent(in)                 :: GV
-  type(continuity_CS), pointer                        :: CS
-  real, intent(in), optional, dimension(NIMEMB_,NJMEM_) :: uhbt
-  real, intent(in), optional, dimension(NIMEM_,NJMEMB_) :: vhbt
-  type(ocean_OBC_type), pointer, optional             :: OBC
-  real, intent(in), optional, dimension(NIMEMB_,NJMEM_,NKMEM_) :: visc_rem_u
-  real, intent(in), optional, dimension(NIMEM_,NJMEMB_,NKMEM_) :: visc_rem_v
-  real, intent(out), optional, dimension(NIMEMB_,NJMEM_,NKMEM_) :: u_cor
-  real, intent(out), optional, dimension(NIMEM_,NJMEMB_,NKMEM_) :: v_cor
-  real, intent(in), optional, dimension(NIMEMB_,NJMEM_) :: uhbt_aux
-  real, intent(in), optional, dimension(NIMEM_,NJMEMB_) :: vhbt_aux
-  real, intent(inout), optional, dimension(NIMEMB_,NJMEM_,NKMEM_) :: u_cor_aux
-  real, intent(inout), optional, dimension(NIMEM_,NJMEMB_,NKMEM_) :: v_cor_aux
-  type(BT_cont_type),                  pointer,     optional :: BT_cont
+  type(ocean_grid_type), intent(inout)                     :: G
+  type(verticalGrid_type), intent(in)                      :: GV
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: hin
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: uh
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: vh
+  real,                                      intent(in)    :: dt
+  type(continuity_CS),                       pointer       :: CS
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(in), optional :: uhbt
+  real, dimension(SZI_(G),SZJB_(G)),         intent(in), optional :: vhbt
+  type(ocean_OBC_type),                      pointer,    optional :: OBC
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in), optional :: visc_rem_u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in), optional :: visc_rem_v
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out), optional :: u_cor
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out), optional :: v_cor
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(in), optional :: uhbt_aux
+  real, dimension(SZI_(G),SZJB_(G)),         intent(in), optional :: vhbt_aux
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout), optional :: u_cor_aux
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout), optional :: v_cor_aux
+  type(BT_cont_type),                        pointer,      optional :: BT_cont
 !    This subroutine time steps the layer thicknesses, using a monotonically
 !  limit, directionally split PPM scheme, based on Lin (1994).
 
