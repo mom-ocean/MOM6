@@ -66,17 +66,17 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam,
 !  (in)      G  - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
 
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h    
-  real, dimension(:,:,:), pointer                   :: tr
   type(ocean_grid_type),                 intent(inout) :: G   !< Ocean grid structure 
   type(verticalGrid_type),               intent(in)    :: GV  !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    
+  real, dimension(:,:,:),                pointer       :: tr
   type(param_file_type),                 intent(in)    :: PF
-  character(len=*),                      intent(in) :: src_file, src_var_nam
-  real, optional,                        intent(in) :: src_var_unit_conversion
-  integer, optional,                     intent(in) :: src_var_record
-  logical, optional,                     intent(in) :: homogenize, useALEremapping
-  character(len=*),  optional,           intent(in) :: remappingScheme
-  character(len=*),  optional,           intent(in) :: src_var_gridspec ! Not implemented yet.
+  character(len=*),                      intent(in)    :: src_file, src_var_nam
+  real, optional,                        intent(in)    :: src_var_unit_conversion
+  integer, optional,                     intent(in)    :: src_var_record
+  logical, optional,                     intent(in)    :: homogenize, useALEremapping
+  character(len=*),  optional,           intent(in)    :: remappingScheme
+  character(len=*),  optional,           intent(in)    :: src_var_gridspec ! Not implemented yet.
 
   real :: land_fill = 0.0
   character(len=200) :: inputdir ! The directory where NetCDF input files are.
@@ -89,10 +89,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam,
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
 
-
   character(len=40)  :: mod = "MOM_initialize_tracers_from_Z" ! This module's name.
-
-
 
   integer :: is, ie, js, je, nz ! compute domain indices
   integer :: isc,iec,jsc,jec    ! global compute domain indices
@@ -294,13 +291,12 @@ subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug
   !  (in)     fill   : same shape array of points which need filling (1==please fill;0==leave it alone)   
   !  (in)     prev   : first guess where isolated holes exist,
   !
-
   use MOM_coms, only : sum_across_PEs
 
-  real, dimension(NIMEM_,NJMEM_), intent(inout) :: aout
-  real, dimension(NIMEM_,NJMEM_), intent(in) :: good,fill
-  real, dimension(NIMEM_,NJMEM_), optional, intent(in) :: prev
   type(ocean_grid_type), intent(inout)  :: G
+  real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: aout
+  real, dimension(SZI_(G),SZJ_(G)), intent(in) :: good, fill
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: prev
   logical, intent(in), optional :: smooth
   integer, intent(in), optional :: num_pass
   real, intent(in), optional    :: relc,crit
