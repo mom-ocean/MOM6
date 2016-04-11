@@ -269,27 +269,27 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
                  Time_local, dt, fluxes, p_surf_begin, p_surf_end, &
                  dt_since_flux, dt_therm, uh, vh, uhtr, vhtr, eta_av, &
                  G, GV, CS, calc_dtbt, VarMix, MEKE)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), target, intent(inout) :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), target, intent(inout) :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h
-  type(thermo_var_ptrs),                  intent(in)    :: tv
-  type(vertvisc_type),                    intent(inout) :: visc
-  type(time_type),                        intent(in)    :: Time_local
-  real,                                   intent(in)    :: dt
-  type(forcing),                          intent(in)    :: fluxes
-  real, dimension(:,:),                   pointer       :: p_surf_begin, p_surf_end
-  real,                                   intent(in)    :: dt_since_flux, dt_therm
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), target, intent(inout) :: uh
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), target, intent(inout) :: vh
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uhtr
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vhtr
-  real, dimension(NIMEM_,NJMEM_),         intent(out)   :: eta_av
-  type(ocean_grid_type),                  intent(inout) :: G
-  type(verticalGrid_type),                intent(in)    :: GV
-  type(MOM_dyn_legacy_split_CS),          pointer       :: CS
-  logical,                                intent(in)    :: calc_dtbt
-  type(VarMix_CS),                        pointer       :: VarMix
-  type(MEKE_type),                        pointer       :: MEKE
+  type(ocean_grid_type),                     intent(inout) :: G
+  type(verticalGrid_type),                   intent(in)    :: GV
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target, intent(inout) :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target, intent(inout) :: v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h
+  type(thermo_var_ptrs),                     intent(in)    :: tv
+  type(vertvisc_type),                       intent(inout) :: visc
+  type(time_type),                           intent(in)    :: Time_local
+  real,                                      intent(in)    :: dt
+  type(forcing),                             intent(in)    :: fluxes
+  real, dimension(:,:),                      pointer       :: p_surf_begin, p_surf_end
+  real,                                      intent(in)    :: dt_since_flux, dt_therm
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target, intent(inout) :: uh
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target, intent(inout) :: vh
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr
+  real, dimension(SZI_(G),SZJ_(G)),          intent(out)   :: eta_av
+  type(MOM_dyn_legacy_split_CS),             pointer       :: CS
+  logical,                                   intent(in)    :: calc_dtbt
+  type(VarMix_CS),                           pointer       :: VarMix
+  type(MEKE_type),                           pointer       :: MEKE
 ! Arguments: u - The zonal velocity, in m s-1.
 !  (inout)   v - The meridional velocity, in m s-1.
 !  (inout)   h - The layer thicknesses, in m or kg m-2, depending on
@@ -1050,13 +1050,13 @@ end subroutine step_MOM_dyn_legacy_split
 ! =============================================================================
 
 subroutine adjustments_dyn_legacy_split(u, v, h, dt, G, GV, CS)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
-  real,                                   intent(in)    :: dt
-  type(ocean_grid_type),                  intent(inout) :: G
-  type(verticalGrid_type), intent(in)    :: GV
-  type(MOM_dyn_legacy_split_CS),          pointer       :: CS
+  type(ocean_grid_type),                     intent(inout) :: G
+  type(verticalGrid_type),                   intent(in)    :: GV
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
+  real,                                      intent(in)    :: dt
+  type(MOM_dyn_legacy_split_CS),             pointer       :: CS
 
 ! Arguments: u - The zonal velocity, in m s-1.
 !  (in)      v - The meridional velocity, in m s-1.
@@ -1109,8 +1109,8 @@ subroutine register_restarts_dyn_legacy_split(G, GV, param_file, CS, restart_CS,
   type(param_file_type),         intent(in)    :: param_file
   type(MOM_dyn_legacy_split_CS), pointer       :: CS
   type(MOM_restart_CS),          pointer       :: restart_CS
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), target, intent(inout) :: uh
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), target, intent(inout) :: vh
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target, intent(inout) :: uh
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target, intent(inout) :: vh
 !   This subroutine sets up any auxiliary restart variables that are specific
 ! to the unsplit time stepping scheme.  All variables registered here should
 ! have the ability to be recreated if they are not present in a restart file.
@@ -1207,31 +1207,31 @@ end subroutine register_restarts_dyn_legacy_split
 subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, GV, param_file, &
                       diag, CS, restart_CS, dt, Accel_diag, Cont_diag, MIS, &
                       VarMix, MEKE, OBC, ALE_CSp, setVisc_CSp, visc, dirs, ntrunc)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_) , intent(inout) :: h
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), target, intent(inout) :: uh
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), target, intent(inout) :: vh
-  real, dimension(NIMEM_,NJMEM_),         intent(inout) :: eta
-  type(time_type),                target, intent(in)    :: Time
-  type(ocean_grid_type),                  intent(inout) :: G
-  type(verticalGrid_type),                intent(in)    :: GV
-  type(param_file_type),                  intent(in)    :: param_file
-  type(diag_ctrl),                target, intent(inout) :: diag
-  type(MOM_dyn_legacy_split_CS),          pointer       :: CS
-  type(MOM_restart_CS),                   pointer       :: restart_CS
-  real,                                   intent(in)    :: dt
-  type(accel_diag_ptrs),          target, intent(inout) :: Accel_diag
-  type(cont_diag_ptrs),           target, intent(inout) :: Cont_diag
-  type(ocean_internal_state),             intent(inout) :: MIS
-  type(VarMix_CS),                        pointer       :: VarMix
-  type(MEKE_type),                        pointer       :: MEKE
-  type(ocean_OBC_type),                   pointer       :: OBC
-  type(ALE_CS),                           pointer       :: ALE_CSp
-  type(set_visc_CS),                      pointer       :: setVisc_CSp
-  type(vertvisc_type),                    intent(inout) :: visc
-  type(directories),                      intent(in)    :: dirs
-  integer, target,                        intent(inout) :: ntrunc
+  type(ocean_grid_type),                     intent(inout) :: G
+  type(verticalGrid_type),                   intent(in)    :: GV
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout) :: h
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target, intent(inout) :: uh
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target, intent(inout) :: vh
+  real, dimension(SZI_(G),SZJ_(G)),          intent(inout) :: eta
+  type(time_type),                   target, intent(in)    :: Time
+  type(param_file_type),                     intent(in)    :: param_file
+  type(diag_ctrl),                   target, intent(inout) :: diag
+  type(MOM_dyn_legacy_split_CS),             pointer       :: CS
+  type(MOM_restart_CS),                      pointer       :: restart_CS
+  real,                                      intent(in)    :: dt
+  type(accel_diag_ptrs),             target, intent(inout) :: Accel_diag
+  type(cont_diag_ptrs),              target, intent(inout) :: Cont_diag
+  type(ocean_internal_state),                intent(inout) :: MIS
+  type(VarMix_CS),                           pointer       :: VarMix
+  type(MEKE_type),                           pointer       :: MEKE
+  type(ocean_OBC_type),                      pointer       :: OBC
+  type(ALE_CS),                              pointer       :: ALE_CSp
+  type(set_visc_CS),                         pointer       :: setVisc_CSp
+  type(vertvisc_type),                       intent(inout) :: visc
+  type(directories),                         intent(in)    :: dirs
+  integer, target,                           intent(inout) :: ntrunc
 ! Arguments: u - The zonal velocity, in m s-1.
 !  (inout)   v - The meridional velocity, in m s-1.
 !  (inout)   h - The layer thicknesses, in m or kg m-2, depending on whether
