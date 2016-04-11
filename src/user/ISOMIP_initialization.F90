@@ -33,6 +33,7 @@ use MOM_io, only : close_file, create_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
 use MOM_io, only : write_field, slasher, vardesc
 use MOM_variables, only : thermo_var_ptrs, ocean_OBC_type
+use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
@@ -131,10 +132,11 @@ end subroutine ISOMIP_initialize_topography
 !------------------------------------------------------------------------------
 ! Initialization of thicknesses
 !------------------------------------------------------------------------------
-subroutine ISOMIP_initialize_thickness ( h, G, param_file )
+subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file )
 
   real, intent(out), dimension(NIMEM_,NJMEM_, NKMEM_) :: h
   type(ocean_grid_type), intent(in) :: G
+  type(verticalGrid_type), intent(in) :: GV
   type(param_file_type), intent(in) :: param_file
 
 ! Arguments: h - The thickness that is being initialized.
@@ -180,9 +182,9 @@ subroutine ISOMIP_initialize_thickness ( h, G, param_file )
         eta1D(nz+1) = -1.0*G%bathyT(i,j)
         do k=nz,1,-1
           eta1D(k) = e0(k)
-          if (eta1D(k) < (eta1D(k+1) + G%GV%Angstrom_z)) then
-            eta1D(k) = eta1D(k+1) + G%GV%Angstrom_z
-            h(i,j,k) = G%GV%Angstrom_z
+          if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_z)) then
+            eta1D(k) = eta1D(k+1) + GV%Angstrom_z
+            h(i,j,k) = GV%Angstrom_z
           else
             h(i,j,k) = eta1D(k) - eta1D(k+1)
           endif
@@ -265,8 +267,9 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, param_file, &
 end subroutine ISOMIP_initialize_temperature_salinity
 
 ! -----------------------------------------------------------------------------
-subroutine ISOMIP_initialize_sponges(G, tv, PF, CSp)
+subroutine ISOMIP_initialize_sponges(G,GV, tv, PF, CSp)
   type(ocean_grid_type), intent(in) :: G
+  type(verticalGrid_type), intent(in) :: GV
   type(thermo_var_ptrs), intent(in) :: tv
   type(param_file_type), intent(in) :: PF
   type(ALE_sponge_CS),   pointer    :: CSp
@@ -327,9 +330,9 @@ subroutine ISOMIP_initialize_sponges(G, tv, PF, CSp)
      eta1D(nz+1) = -1.0*G%bathyT(i,j)
         do k=nz,1,-1
           eta1D(k) = e0(k)
-          if (eta1D(k) < (eta1D(k+1) + G%GV%Angstrom_z)) then
-            eta1D(k) = eta1D(k+1) + G%GV%Angstrom_z
-            h(i,j,k) = G%GV%Angstrom_z
+          if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_z)) then
+            eta1D(k) = eta1D(k+1) + GV%Angstrom_z
+            h(i,j,k) = GV%Angstrom_z
           else
             h(i,j,k) = eta1D(k) - eta1D(k+1)
           endif

@@ -5,6 +5,7 @@ module MOM_isopycnal_slopes
 
 use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : thermo_var_ptrs
+use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : int_specific_vol_dp, calculate_density_derivs
 
 implicit none ; private
@@ -15,9 +16,10 @@ public calc_isoneutral_slopes
 
 contains
 
-subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y, &
-                                  N2_u, N2_v, halo)
+subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
+                                  slope_x, slope_y, N2_u, N2_v, halo)
   type(ocean_grid_type),                         intent(in)    :: G
+  type(verticalGrid_type),                       intent(in)    :: GV
   real, dimension(NIMEM_,NJMEM_,NKMEM_),         intent(in)    :: h
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_),  intent(in)    :: e
   type(thermo_var_ptrs),                         intent(in)    :: tv
@@ -85,14 +87,14 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
   endif
   nz = G%ke ; IsdB = G%IsdB
 
-  h_neglect = G%GV%H_subroundoff ; h_neglect2 = h_neglect**2
-  dz_neglect = G%GV%H_subroundoff*G%GV%H_to_m
+  h_neglect = GV%H_subroundoff ; h_neglect2 = h_neglect**2
+  dz_neglect = GV%H_subroundoff*GV%H_to_m
 
   use_EOS = associated(tv%eqn_of_state)
 
   present_N2_u = PRESENT(N2_u)
   present_N2_v = PRESENT(N2_v)
-  G_Rho0 = G%g_Earth / G%GV%Rho0
+  G_Rho0 = G%g_Earth / GV%Rho0
   if (present_N2_u) then
     do j=js,je ; do I=is-1,ie
       N2_u(I,j,1) = 0.
@@ -107,25 +109,25 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
   endif
 
   if (use_EOS) then
-    call vert_fill_TS(h, tv%T, tv%S, dt_kappa_smooth, 1.0, T, S, G, 1)
+    call vert_fill_TS(h, tv%T, tv%S, dt_kappa_smooth, 1.0, T, S, G, GV, 1)
   endif
 
   ! Find the maximum and minimum permitted streamfunction.
-!$OMP parallel default(none) shared(is,ie,js,je,pres,G,h,nz)
+!$OMP parallel default(none) shared(is,ie,js,je,pres,GV,h,nz)
 !$OMP do
   do j=js-1,je+1 ; do i=is-1,ie+1
     pres(i,j,1) = 0.0  ! ### This should be atmospheric pressure.
-    pres(i,j,2) = pres(i,j,1) + G%GV%H_to_Pa*h(i,j,1)
+    pres(i,j,2) = pres(i,j,1) + GV%H_to_Pa*h(i,j,1)
   enddo ; enddo
 !$OMP do
   do j=js-1,je+1
     do k=2,nz ; do i=is-1,ie+1
-      pres(i,j,K+1) = pres(i,j,K) + G%GV%H_to_Pa*h(i,j,k)
+      pres(i,j,K+1) = pres(i,j,K) + GV%H_to_Pa*h(i,j,k)
     enddo ; enddo
   enddo
 !$OMP end parallel
 
-!$OMP parallel do default(none) shared(nz,is,ie,js,je,use_EOS,G,pres,T,S, &
+!$OMP parallel do default(none) shared(nz,is,ie,js,je,use_EOS,G,GV,pres,T,S, &
 !$OMP                                  IsdB,tv,h,h_neglect,e,dz_neglect,  &
 !$OMP                                  h_neglect2,present_N2_u,G_Rho0,N2_u) &
 !$OMP                          private(drdiA,drdiB,drdkL,drdkR,pres_u,T_u,S_u,      &
@@ -135,7 +137,7 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
   do j=js,je ; do K=nz,2,-1
     if (.not.(use_EOS)) then
       drdiA = 0.0 ; drdiB = 0.0
-      drdkL = G%GV%Rlay(k)-G%GV%Rlay(k-1) ; drdkR = G%GV%Rlay(k)-G%GV%Rlay(k-1)
+      drdkL = GV%Rlay(k)-GV%Rlay(k-1) ; drdkR = GV%Rlay(k)-GV%Rlay(k-1)
     endif
 
     ! Calculate the zonal isopycnal slope.
@@ -174,8 +176,8 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
         haB = 0.5*(h(i,j,k) + h(i+1,j,k)) + h_neglect
         haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
         haR = 0.5*(h(i+1,j,k-1) + h(i+1,j,k)) + h_neglect
-        if (G%GV%Boussinesq) then
-          dzaL = haL * G%GV%H_to_m ; dzaR = haR * G%GV%H_to_m
+        if (GV%Boussinesq) then
+          dzaL = haL * GV%H_to_m ; dzaR = haR * GV%H_to_m
         else
           dzaL = 0.5*(e(i,j,K-1) - e(i,j,K+1)) + dz_neglect
           dzaR = 0.5*(e(i+1,j,K-1) - e(i+1,j,K+1)) + dz_neglect
@@ -205,14 +207,14 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
         if (present_N2_u) N2_u(I,j,k) = G_Rho0 * drdz ! Square of Brunt-Vaisala frequency (s-2)
 
       else ! With .not.use_EOS, the layers are constant density.
-        slope_x(I,j,K) = ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) * G%GV%m_to_H
+        slope_x(I,j,K) = ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) * GV%m_to_H
       endif
 
     enddo ! I
   enddo ; enddo ! end of j-loop
 
     ! Calculate the meridional isopycnal slope.
-!$OMP parallel do default(none) shared(nz,is,ie,js,je,use_EOS,G,pres,T,S, &
+!$OMP parallel do default(none) shared(nz,is,ie,js,je,use_EOS,G,GV,pres,T,S, &
 !$OMP                                  IsdB,tv,h,h_neglect,e,dz_neglect,  &
 !$OMP                                  h_neglect2,present_N2_v,G_Rho0,N2_v)         &
 !$OMP                          private(drdjA,drdjB,drdkL,drdkR,pres_v,T_v,S_v,      &
@@ -222,7 +224,7 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
   do j=js-1,je ; do K=nz,2,-1
     if (.not.(use_EOS)) then
       drdjA = 0.0 ; drdjB = 0.0
-      drdkL = G%GV%Rlay(k)-G%GV%Rlay(k-1) ; drdkR = G%GV%Rlay(k)-G%GV%Rlay(k-1)
+      drdkL = GV%Rlay(k)-GV%Rlay(k-1) ; drdkR = GV%Rlay(k)-GV%Rlay(k-1)
     endif
 
     if (use_EOS) then
@@ -258,8 +260,8 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
         haB = 0.5*(h(i,j,k) + h(i,j+1,k)) + h_neglect
         haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
         haR = 0.5*(h(i,j+1,k-1) + h(i,j+1,k)) + h_neglect
-        if (G%GV%Boussinesq) then
-          dzaL = haL * G%GV%H_to_m ; dzaR = haR * G%GV%H_to_m
+        if (GV%Boussinesq) then
+          dzaL = haL * GV%H_to_m ; dzaR = haR * GV%H_to_m
         else
           dzaL = 0.5*(e(i,j,K-1) - e(i,j,K+1)) + dz_neglect
           dzaR = 0.5*(e(i,j+1,K-1) - e(i,j+1,K+1)) + dz_neglect
@@ -289,7 +291,7 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
         if (present_N2_v) N2_v(i,J,k) = G_Rho0 * drdz ! Square of Brunt-Vaisala frequency (s-2)
 
       else ! With .not.use_EOS, the layers are constant density.
-        slope_y(i,J,K) = ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * G%GV%m_to_H
+        slope_y(i,J,K) = ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * GV%m_to_H
       endif
 
     enddo ! i
@@ -297,7 +299,7 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
 
 end subroutine calc_isoneutral_slopes
 
-subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, halo_here)
+subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, GV, halo_here)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: T_in
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: S_in
@@ -306,6 +308,7 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, halo_here)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(out)   :: T_f
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(out)   :: S_f
   type(ocean_grid_type),                 intent(in)    :: G
+  type(verticalGrid_type),               intent(in)    :: GV
   integer,                     optional, intent(in)    :: halo_here
 !    This subroutine fills massless layers with sensible values of two
 !*  tracer arrays (nominally temperature and salinity) by diffusing
@@ -319,6 +322,7 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, halo_here)
 !  (out)     T_f - The filled temperature, in K.
 !  (out)     S_f - The filled salinity, in psu.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in,opt)  halo_here - the number of halo points to work on, 0 by default.
 
   real :: ent(SZI_(G),SZK_(G)+1)   ! The diffusive entrainment (kappa*dt)/dz
@@ -336,8 +340,8 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, halo_here)
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
   nz = G%ke
 
-  kap_dt_x2 = (2.0*kappa*dt)*G%GV%m_to_H**2
-  h_neglect = G%GV%H_subroundoff
+  kap_dt_x2 = (2.0*kappa*dt)*GV%m_to_H**2
+  h_neglect = GV%H_subroundoff
 
   if (kap_dt_x2 <= 0.0) then
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,T_f,T_in,S_f,S_in)

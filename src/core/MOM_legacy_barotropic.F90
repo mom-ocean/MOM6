@@ -113,6 +113,7 @@ use MOM_variables, only : BT_cont_type, alloc_bt_cont_type
 use MOM_variables, only : ocean_OBC_type, OBC_SIMPLE, OBC_NONE
 use MOM_variables, only : OBC_FLATHER_E, OBC_FLATHER_W
 use MOM_variables, only : OBC_FLATHER_N, OBC_FLATHER_S
+use MOM_verticalGrid, only : verticalGrid_type
 
 implicit none ; private
 
@@ -389,7 +390,7 @@ contains
 
 subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
                   fluxes, pbce, eta_PF_in, U_Cor, V_Cor, &
-                  accel_layer_u, accel_layer_v, eta_out, uhbtav, vhbtav, G, CS, &
+                  accel_layer_u, accel_layer_v, eta_out, uhbtav, vhbtav, G, GV, CS, &
                   visc_rem_u, visc_rem_v, etaav, uhbt_out, vhbt_out, OBC, &
                   BT_cont, eta_PF_start, &
                   taux_bot, tauy_bot, uh0, vh0, u_uh0, v_vh0)
@@ -411,6 +412,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
   real, dimension(NIMEMB_,NJMEM_),      intent(out)   :: uhbtav
   real, dimension(NIMEM_,NJMEMB_),      intent(out)   :: vhbtav
   type(ocean_grid_type),                intent(inout) :: G
+  type(verticalGrid_type),              intent(in)    :: GV
   type(legacy_barotropic_CS),           pointer       :: CS
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in), optional :: visc_rem_u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in), optional :: visc_rem_v
@@ -458,6 +460,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
 !  (out)     vhbtav - the barotropic meridional volume or mass fluxes averaged
 !                     through the barotropic steps, in m3 s-1 or kg s-1.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 barotropic_init.
 !  (in,opt)  visc_rem_u - Both the fraction of the momentum originally in a
@@ -733,7 +736,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
         OBC%apply_OBC_v_flather_south
     apply_OBCs = OBC%apply_OBC_u .or. OBC%apply_OBC_v .or. apply_OBC_flather
 
-    if (apply_OBC_flather .and. .not.G%GV%Boussinesq) call MOM_error(FATAL, &
+    if (apply_OBC_flather .and. .not.GV%Boussinesq) call MOM_error(FATAL, &
       "legacy_btstep: Flather open boundary conditions have not yet been "// &
       "implemented for a non-Boussinesq model.")
   endif ; endif
@@ -751,7 +754,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
   dtbt = dt * Instep
   bebt = CS%bebt
   be_proj = CS%bebt
-  I_Rho0 = 1.0/G%GV%Rho0
+  I_Rho0 = 1.0/GV%Rho0
   do_ave = query_averaging_enabled(CS%diag)
 
   do_hifreq_output = .false.
@@ -949,15 +952,15 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
       if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
     endif
     if (CS%Nonlinear_continuity) then
-      call find_face_areas(Datu, Datv, G, CS, MS, CS%rescale_D_bt, eta, 1)
+      call find_face_areas(Datu, Datv, G, GV, CS, MS, CS%rescale_D_bt, eta, 1)
     else
-      call find_face_areas(Datu, Datv, G, CS, MS, CS%rescale_D_bt, halo=1)
+      call find_face_areas(Datu, Datv, G, GV, CS, MS, CS%rescale_D_bt, halo=1)
     endif
   endif
 
   ! Set up fields related to the open boundary conditions.
   if (apply_OBCs) then
-    call set_up_BT_OBC(OBC, eta, BT_OBC, G, MS, ievf-ie, use_BT_cont, &
+    call set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, ievf-ie, use_BT_cont, &
                                      Datu, Datv, BTCL_u, BTCL_v)
     apply_u_OBCs = associated(BT_OBC%OBC_mask_u)
     apply_v_OBCs = associated(BT_OBC%OBC_mask_v)
@@ -1328,7 +1331,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
   if (CS%dynamic_psurf) then
     ice_is_rigid = (associated(fluxes%rigidity_ice_u) .and. &
                     associated(fluxes%rigidity_ice_v))
-    H_min_dyn = G%GV%m_to_H * CS%Dmin_dyn_psurf
+    H_min_dyn = GV%m_to_H * CS%Dmin_dyn_psurf
     if (ice_is_rigid .and. use_BT_cont) &
       call BT_cont_to_face_areas(BT_cont, Datu, Datv, G, MS, 0, .true.)
     if (ice_is_rigid) then ; do j=js,je ; do i=is,ie
@@ -1357,7 +1360,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
                       (CS%ice_strength_length**2 * dtbt)
 
       ! Units of dyn_coef: m2 s-2 H-1
-      dyn_coef_eta(I,j) = min(dyn_coef_max, ice_strength * G%GV%H_to_m)
+      dyn_coef_eta(I,j) = min(dyn_coef_max, ice_strength * GV%H_to_m)
     enddo ; enddo ; endif
   endif
 
@@ -1447,23 +1450,23 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
     call vchksum(vhbt, "BT vhbt",CS%debug_BT_G,haloshift=0)
     call uchksum(ubt, "BT Initial ubt",CS%debug_BT_G,haloshift=0)
     call vchksum(vbt, "BT Initial vbt",CS%debug_BT_G,haloshift=0)
-    call hchksum(G%GV%H_to_kg_m2*eta, "BT Initial eta",CS%debug_BT_G,haloshift=0)
+    call hchksum(GV%H_to_kg_m2*eta, "BT Initial eta",CS%debug_BT_G,haloshift=0)
     call uchksum(BT_force_u, "BT BT_force_u",CS%debug_BT_G,haloshift=0)
     call vchksum(BT_force_v, "BT BT_force_v",CS%debug_BT_G,haloshift=0)
     if (interp_eta_PF) then
-      call hchksum(G%GV%H_to_kg_m2*eta_PF_1, "BT eta_PF_1",CS%debug_BT_G,haloshift=0)
-      call hchksum(G%GV%H_to_kg_m2*d_eta_PF, "BT d_eta_PF",CS%debug_BT_G,haloshift=0)
+      call hchksum(GV%H_to_kg_m2*eta_PF_1, "BT eta_PF_1",CS%debug_BT_G,haloshift=0)
+      call hchksum(GV%H_to_kg_m2*d_eta_PF, "BT d_eta_PF",CS%debug_BT_G,haloshift=0)
     else
-      call hchksum(G%GV%H_to_kg_m2*eta_PF, "BT eta_PF",CS%debug_BT_G,haloshift=0)
-      call hchksum(G%GV%H_to_kg_m2*eta_PF_in, "BT eta_PF_in",G,haloshift=0)
+      call hchksum(GV%H_to_kg_m2*eta_PF, "BT eta_PF",CS%debug_BT_G,haloshift=0)
+      call hchksum(GV%H_to_kg_m2*eta_PF_in, "BT eta_PF_in",G,haloshift=0)
     endif
     call uchksum(Cor_ref_u, "BT Cor_ref_u",CS%debug_BT_G,haloshift=0)
     call vchksum(Cor_ref_v, "BT Cor_ref_v",CS%debug_BT_G,haloshift=0)
     call uchksum(uhbt0, "BT uhbt0",CS%debug_BT_G,haloshift=0)
     call vchksum(vhbt0, "BT vhbt0",CS%debug_BT_G,haloshift=0)
     if (.not. use_BT_cont) then
-      call uchksum(G%GV%H_to_m*Datu, "BT Datu",CS%debug_BT_G,haloshift=1)
-      call vchksum(G%GV%H_to_m*Datv, "BT Datv",CS%debug_BT_G,haloshift=1)
+      call uchksum(GV%H_to_m*Datu, "BT Datu",CS%debug_BT_G,haloshift=1)
+      call vchksum(GV%H_to_m*Datv, "BT Datv",CS%debug_BT_G,haloshift=1)
     endif
     call uchksum(wt_u, "BT wt_u",G,haloshift=1)
     call vchksum(wt_v, "BT wt_v",G,haloshift=1)
@@ -1584,7 +1587,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
     if ((.not.use_BT_cont) .and. CS%Nonlinear_continuity .and. &
         (CS%Nonlin_cont_update_period > 0)) then
       if ((n>1) .and. (mod(n-1,CS%Nonlin_cont_update_period) == 0)) &
-        call find_face_areas(Datu, Datv, G, CS, MS, CS%rescale_D_bt, eta, 1+iev-ie)
+        call find_face_areas(Datu, Datv, G, GV, CS, MS, CS%rescale_D_bt, eta, 1+iev-ie)
     endif
 
     if (CS%dynamic_psurf .or. .not.project_velocity) then
@@ -1846,7 +1849,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
       write(mesg,'("BT step ",I4)') n
       call uchksum(ubt, trim(mesg)//" ubt",CS%debug_BT_G,haloshift=iev-ie)
       call vchksum(vbt, trim(mesg)//" vbt",CS%debug_BT_G,haloshift=iev-ie)
-      call hchksum(G%GV%H_to_kg_m2*eta, trim(mesg)//" eta",CS%debug_BT_G,haloshift=iev-ie)
+      call hchksum(GV%H_to_kg_m2*eta, trim(mesg)//" eta",CS%debug_BT_G,haloshift=iev-ie)
     endif
 
   enddo ! end of do n=1,ntimestep
@@ -2047,8 +2050,9 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
 
 end subroutine legacy_btstep
 
-subroutine legacy_set_dtbt(G, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
+subroutine legacy_set_dtbt(G, GV, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
   type(ocean_grid_type),                 intent(inout) :: G
+  type(verticalGrid_type),             intent(in)    :: GV
   type(legacy_barotropic_CS),            pointer       :: CS
   real, dimension(NIMEM_,NJMEM_),        intent(in), optional :: eta
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in), optional :: pbce
@@ -2056,6 +2060,7 @@ subroutine legacy_set_dtbt(G, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
   real,                                  intent(in), optional :: gtot_est
   real,                                  intent(in), optional :: SSH_add
 ! Arguments: G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 barotropic_init.
 !  (in,opt)  eta - The barotropic free surface height anomaly or
@@ -2116,9 +2121,9 @@ subroutine legacy_set_dtbt(G, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
   if (use_BT_cont) then
     call BT_cont_to_face_areas(BT_cont, Datu, Datv, G, MS, 0, .true.)
   elseif (CS%Nonlinear_continuity .and. present(eta)) then
-    call find_face_areas(Datu, Datv, G, CS, MS, eta=eta, halo=0)
+    call find_face_areas(Datu, Datv, G, GV, CS, MS, eta=eta, halo=0)
   else
-    call find_face_areas(Datu, Datv, G, CS, MS, halo=0, add_max=add_SSH)
+    call find_face_areas(Datu, Datv, G, GV, CS, MS, halo=0, add_max=add_SSH)
   endif
 
   det_de = 0.0
@@ -2137,8 +2142,8 @@ subroutine legacy_set_dtbt(G, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
     enddo ; enddo ; enddo
   else
     do j=js,je ; do i=is,ie
-      gtot_E(i,j) = gtot_est * G%GV%H_to_m ; gtot_W(i,j) = gtot_est * G%GV%H_to_m
-      gtot_N(i,j) = gtot_est * G%GV%H_to_m ; gtot_S(i,j) = gtot_est * G%GV%H_to_m
+      gtot_E(i,j) = gtot_est * GV%H_to_m ; gtot_W(i,j) = gtot_est * GV%H_to_m
+      gtot_N(i,j) = gtot_est * GV%H_to_m ; gtot_S(i,j) = gtot_est * GV%H_to_m
     enddo ; enddo
   endif
 
@@ -2434,12 +2439,13 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
 
 end subroutine apply_eta_OBCs
 
-subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, MS, halo, use_BT_cont, Datu, Datv, BTCL_u, BTCL_v)
+subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, halo, use_BT_cont, Datu, Datv, BTCL_u, BTCL_v)
   type(ocean_OBC_type),                  pointer       :: OBC
   type(memory_size_type),                intent(in)    :: MS
   real, dimension(SZIW_(MS),SZJW_(MS)),  intent(in)    :: eta
   type(BT_OBC_type),                     intent(inout) :: BT_OBC
   type(ocean_grid_type),                 intent(inout) :: G
+  type(verticalGrid_type),               intent(in)    :: GV
   integer,                               intent(in)    :: halo
   logical,                               intent(in)    :: use_BT_cont
   real, dimension(SZIBW_(MS),SZJW_(MS)), intent(in)    :: Datu
@@ -2455,6 +2461,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, MS, halo, use_BT_cont, Datu, Datv,
 !  (in)      BT_OBC - A structure with the private barotropic arrays related
 !                     to the open boundary conditions, set by set_up_BT_OBC.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      MS - A type that describes the memory sizes of the argument arrays.
 !  (in)      halo - The extra halo size to use here.
 !  (in)      dtbt - The time step, in s.
@@ -2512,9 +2519,9 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, MS, halo, use_BT_cont, Datu, Datv,
           if (Datu(I,j) > 0.0) BT_OBC%ubt_outer(I,j) = BT_OBC%uhbt(I,j) / Datu(I,j)
         endif
       else
-        BT_OBC%Cg_u(I,j) = SQRT(G%GV%g_prime(1)*(0.5* &
+        BT_OBC%Cg_u(I,j) = SQRT(GV%g_prime(1)*(0.5* &
                                 (G%bathyT(i,j) + G%bathyT(i+1,j))))
-        if (G%GV%Boussinesq) then
+        if (GV%Boussinesq) then
           BT_OBC%H_u(I,j) = 0.5*((G%bathyT(i,j) + eta(i,j)) + &
                                  (G%bathyT(i+1,j) + eta(i+1,j)))
         else
@@ -2548,9 +2555,9 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, MS, halo, use_BT_cont, Datu, Datv,
           if (Datv(i,J) > 0.0) BT_OBC%vbt_outer(i,J) = BT_OBC%vhbt(i,J) / Datv(i,J)
         endif
       else
-        BT_OBC%Cg_v(i,J) = SQRT(G%GV%g_prime(1)*(0.5* &
+        BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1)*(0.5* &
                                 (G%bathyT(i,j) + G%bathyT(i,j+1))))
-        if (G%GV%Boussinesq) then
+        if (GV%Boussinesq) then
           BT_OBC%H_v(i,J) = 0.5*((G%bathyT(i,j) + eta(i,j)) + &
                                  (G%bathyT(i,j+1) + eta(i,j+1)))
         else
@@ -2598,9 +2605,10 @@ subroutine destroy_BT_OBC(BT_OBC)
 end subroutine destroy_BT_OBC
 
 
-subroutine legacy_btcalc(h, G, CS, h_u, h_v, may_use_default)
+subroutine legacy_btcalc(h, G, GV, CS, h_u, h_v, may_use_default)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)  :: h
   type(ocean_grid_type),               intent(inout) :: G
+  type(verticalGrid_type),             intent(in)    :: GV
   type(legacy_barotropic_CS),          pointer       :: CS
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in), optional :: h_u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in), optional :: h_v
@@ -2613,6 +2621,7 @@ subroutine legacy_btcalc(h, G, CS, h_u, h_v, may_use_default)
 
 ! Arguments: h - Layer thickness, in m or kg m-2 (H in later comments).
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 barotropic_init.
 !  (in,opt)  h_u, h_v - The specified thicknesses at u- and v- points, in m or kg m-2.
@@ -2661,11 +2670,11 @@ subroutine legacy_btcalc(h, G, CS, h_u, h_v, may_use_default)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-  h_neglect = G%GV%H_subroundoff
+  h_neglect = GV%H_subroundoff
 
   !   This estimates the fractional thickness of each layer at the velocity
   ! points, using a harmonic mean estimate.
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,h_u,CS,h_neglect,h,use_default,G) &
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,h_u,CS,h_neglect,h,use_default,G,GV) &
 !$OMP                          private(hatutot,Ihatutot,e_u,D_shallow_u,h_arith,h_harm,wt_arith)
   do j=js-1,je+1
     if (present(h_u)) then
@@ -2689,8 +2698,8 @@ subroutine legacy_btcalc(h, G, CS, h_u, h_v, may_use_default)
         enddo ; enddo
       elseif (CS%hvel_scheme == HYBRID .or. use_default) then
         do I=is-2,ie+1
-          e_u(I,nz+1) = -0.5 * G%GV%m_to_H * (G%bathyT(i+1,j) + G%bathyT(i,j))
-          D_shallow_u(I) = -G%GV%m_to_H * min(G%bathyT(i+1,j), G%bathyT(i,j))
+          e_u(I,nz+1) = -0.5 * GV%m_to_H * (G%bathyT(i+1,j) + G%bathyT(i,j))
+          D_shallow_u(I) = -GV%m_to_H * min(G%bathyT(i+1,j), G%bathyT(i,j))
           hatutot(I) = 0.0
         enddo
         do k=nz,1,-1 ; do I=is-2,ie+1
@@ -2728,7 +2737,7 @@ subroutine legacy_btcalc(h, G, CS, h_u, h_v, may_use_default)
     endif
   enddo
 
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,CS,G,h_v,h_neglect,h,use_default) &
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,CS,G,GV,h_v,h_neglect,h,use_default) &
 !$OMP                          private(hatvtot,Ihatvtot,e_v,D_shallow_v,h_arith,h_harm,wt_arith)
   do J=js-2,je+1
     if (present(h_v)) then
@@ -2752,8 +2761,8 @@ subroutine legacy_btcalc(h, G, CS, h_u, h_v, may_use_default)
         enddo ; enddo
       elseif (CS%hvel_scheme == HYBRID .or. use_default) then
         do i=is-1,ie+1
-          e_v(i,nz+1) = -0.5 * G%GV%m_to_H * (G%bathyT(i,j+1) + G%bathyT(i,j))
-          D_shallow_v(I) = -G%GV%m_to_H * min(G%bathyT(i,j+1), G%bathyT(i,j))
+          e_v(i,nz+1) = -0.5 * GV%m_to_H * (G%bathyT(i,j+1) + G%bathyT(i,j))
+          D_shallow_v(I) = -GV%m_to_H * min(G%bathyT(i,j+1), G%bathyT(i,j))
           hatvtot(I) = 0.0
         enddo
         do k=nz,1,-1 ; do i=is-1,ie+1
@@ -2837,7 +2846,7 @@ subroutine legacy_btcalc(h, G, CS, h_u, h_v, may_use_default)
   if (CS%debug) then
     call uchksum(CS%frhatu, "btcalc frhatu",G,haloshift=1)
     call vchksum(CS%frhatv, "btcalc frhatv",G,haloshift=1)
-    call hchksum(G%GV%H_to_m*h, "btcalc h",G,haloshift=1)
+    call hchksum(GV%H_to_m*h, "btcalc h",G,haloshift=1)
   endif
 
 end subroutine legacy_btcalc
@@ -3226,11 +3235,12 @@ subroutine swap(a,b)
   tmp = a ; a = b ; b = tmp
 end subroutine swap
 
-subroutine find_face_areas(Datu, Datv, G, CS, MS, rescale_faces, eta, halo, add_max)
+subroutine find_face_areas(Datu, Datv, G, GV, CS, MS, rescale_faces, eta, halo, add_max)
   type(memory_size_type),                   intent(in) :: MS
   real, dimension(MS%isdw-1:MS%iedw,MS%jsdw:MS%jedw), intent(out)   :: Datu
   real, dimension(MS%isdw:MS%iedw,MS%jsdw-1:MS%jedw), intent(out)   :: Datv
   type(ocean_grid_type),                    intent(in) :: G
+  type(verticalGrid_type),                  intent(in) :: GV
   type(legacy_barotropic_CS),               pointer    :: CS
   logical,                        optional, intent(in) :: rescale_faces
   real, dimension(MS%isdw:MS%iedw,MS%jsdw:MS%jedw), optional, intent(in) :: eta
@@ -3239,6 +3249,7 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, rescale_faces, eta, halo, add_
 ! Arguments: Datu - The open zonal face area, in H m (m2 or kg m-1).
 !  (out)     Datv - The open meridional face area, in H m (m2 or kg m-1).
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 barotropic_init.
 !  (in)      MS - A type that describes the memory sizes of the argument arrays.
@@ -3259,11 +3270,11 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, rescale_faces, eta, halo, add_
   hs = 1 ; if (present(halo)) hs = max(halo,0)
   rescale = .false. ; if (present(rescale_faces)) rescale = rescale_faces
 
-!$OMP parallel default(none) shared(is,ie,js,je,hs,eta,G,CS,Datu,Datv,add_max,rescale) &
+!$OMP parallel default(none) shared(is,ie,js,je,hs,eta,GV,CS,Datu,Datv,add_max,rescale) &
 !$OMP                       private(H1,H2)
   if (present(eta)) then
     ! The use of harmonic mean thicknesses ensure positive definiteness.
-    if (G%GV%Boussinesq) then
+    if (GV%Boussinesq) then
 !$OMP do
       do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
         H1 = CS%bathyT(i,j) + eta(i,j) ; H2 = CS%bathyT(i+1,j) + eta(i+1,j)
@@ -3297,24 +3308,24 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, rescale_faces, eta, halo, add_
   elseif (present(add_max)) then
 !$OMP do
     do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
-      Datu(I,j) = CS%dy_Cu(I,j) * G%GV%m_to_H * &
+      Datu(I,j) = CS%dy_Cu(I,j) * GV%m_to_H * &
                   (max(CS%bathyT(i+1,j), CS%bathyT(i,j)) + add_max)
     enddo ; enddo
 !$OMP do
     do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
-      Datv(i,J) = CS%dx_Cv(i,J) * G%GV%m_to_H * &
+      Datv(i,J) = CS%dx_Cv(i,J) * GV%m_to_H * &
                   (max(CS%bathyT(i,j+1), CS%bathyT(i,j)) + add_max)
     enddo ; enddo
   else
 !$OMP do
     do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
-      Datu(I,j) = 2.0*CS%dy_Cu(I,j) * G%GV%m_to_H * &
+      Datu(I,j) = 2.0*CS%dy_Cu(I,j) * GV%m_to_H * &
                   (CS%bathyT(i+1,j) * CS%bathyT(i,j)) / &
                   (CS%bathyT(i+1,j) + CS%bathyT(i,j))
     enddo ; enddo
 !$OMP do
     do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
-      Datv(i,J) = 2.0*CS%dx_Cv(i,J) * G%GV%m_to_H * &
+      Datv(i,J) = 2.0*CS%dx_Cv(i,J) * GV%m_to_H * &
                   (CS%bathyT(i,j+1) * CS%bathyT(i,j)) / &
                   (CS%bathyT(i,j+1) + CS%bathyT(i,j))
     enddo ; enddo
@@ -3335,13 +3346,14 @@ subroutine find_face_areas(Datu, Datv, G, CS, MS, rescale_faces, eta, halo, add_
 end subroutine find_face_areas
 
 subroutine legacy_bt_mass_source(h, eta, fluxes, set_cor, dt_therm, &
-                                 dt_since_therm, G, CS)
+                                 dt_since_therm, G, GV, CS)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
   real, dimension(NIMEM_,NJMEM_),     intent(in) :: eta
   type(forcing),                      intent(in) :: fluxes
   logical,                            intent(in) :: set_cor
   real,                               intent(in) :: dt_therm, dt_since_therm
   type(ocean_grid_type),              intent(in) :: G
+  type(verticalGrid_type),            intent(in) :: GV
   type(legacy_barotropic_CS),         pointer    :: CS
 !   bt_mass_source determines the appropriately limited mass source for
 ! the barotropic solver, along with a corrective fictitious mass source that
@@ -3358,6 +3370,7 @@ subroutine legacy_bt_mass_source(h, eta, fluxes, set_cor, dt_therm, &
 !  (in)      dt_therm - The thermodynamic time step, in s.
 !  (in)      dt_since_therm - The elapsed time since mass forcing was applied, s.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 barotropic_init.
   real :: h_tot(SZI_(G))      ! The sum of the layer thicknesses, in H.
@@ -3377,12 +3390,12 @@ subroutine legacy_bt_mass_source(h, eta, fluxes, set_cor, dt_therm, &
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,G,h,set_cor,CS,dt_therm, &
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,G,GV,h,set_cor,CS,dt_therm, &
 !$OMP                                  fluxes,eta,dt_since_therm)              &
 !$OMP                          private(eta_h,h_tot,limit_dt,d_eta)
   do j=js,je
     do i=is,ie ; h_tot(i) = h(i,j,1) ; enddo
-    if (G%GV%Boussinesq) then
+    if (GV%Boussinesq) then
       do i=is,ie ; eta_h(i) = h(i,j,1) - G%bathyT(i,j) ; enddo
     else
       do i=is,ie ; eta_h(i) = h(i,j,1) ; enddo
@@ -3415,7 +3428,7 @@ subroutine legacy_bt_mass_source(h, eta, fluxes, set_cor, dt_therm, &
           CS%eta_source(i,j) = CS%eta_source(i,j) + fluxes%evap(i,j)
         enddo ; endif
         do i=is,ie
-          CS%eta_source(i,j) = CS%eta_source(i,j)*G%GV%kg_m2_to_H
+          CS%eta_source(i,j) = CS%eta_source(i,j)*GV%kg_m2_to_H
           if (abs(CS%eta_source(i,j)) > limit_dt * h_tot(i)) then
             CS%eta_source(i,j) = SIGN(limit_dt * h_tot(i), CS%eta_source(i,j))
           endif
@@ -3438,7 +3451,7 @@ subroutine legacy_bt_mass_source(h, eta, fluxes, set_cor, dt_therm, &
 
 end subroutine legacy_bt_mass_source
 
-subroutine legacy_barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
+subroutine legacy_barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
                            restart_CS, BT_cont, tides_CSp)
   real, intent(in), dimension(NIMEMB_,NJMEM_,NKMEM_) :: u
   real, intent(in), dimension(NIMEM_,NJMEMB_,NKMEM_) :: v
@@ -3446,6 +3459,7 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
   real, intent(in), dimension(NIMEM_,NJMEM_)      :: eta
   type(time_type), target,          intent(in)    :: Time
   type(ocean_grid_type),            intent(inout) :: G
+  type(verticalGrid_type),          intent(in)    :: GV
   type(param_file_type),            intent(in)    :: param_file
   type(diag_ctrl), target,          intent(inout) :: diag
   type(legacy_barotropic_CS),       pointer       :: CS
@@ -3462,6 +3476,7 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
 !  (in)      eta - Free surface height or column mass anomaly, in m or kg m-2.
 !  (in)      Time - The current model time.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in)      diag - A structure that is used to regulate diagnostic output.
@@ -3774,7 +3789,7 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
 
   ! IareaT, IdxCu, and IdyCv need to be allocated with wide halos.
   ALLOC_(CS%IareaT(CS%isdw:CS%iedw,CS%jsdw:CS%jedw)) ; CS%IareaT(:,:) = 0.0
-  ALLOC_(CS%bathyT(CS%isdw:CS%iedw,CS%jsdw:CS%jedw)) ; CS%bathyT(:,:) = G%GV%Angstrom_z !### Should this be 0 instead?
+  ALLOC_(CS%bathyT(CS%isdw:CS%iedw,CS%jsdw:CS%jedw)) ; CS%bathyT(:,:) = GV%Angstrom_z !### Should this be 0 instead?
   ALLOC_(CS%IdxCu(CS%isdw-1:CS%iedw,CS%jsdw:CS%jedw)) ; CS%IdxCu(:,:) = 0.0
   ALLOC_(CS%IdyCv(CS%isdw:CS%iedw,CS%jsdw-1:CS%jedw)) ; CS%IdyCv(:,:) = 0.0
   ALLOC_(CS%dy_Cu(CS%isdw-1:CS%iedw,CS%jsdw:CS%jedw)) ; CS%dy_Cu(:,:) = 0.0
@@ -3823,8 +3838,8 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
   dtbt_input = CS%dtbt
   CS%dtbt_fraction = 0.98 ; if (CS%dtbt < 0.0) CS%dtbt_fraction = -CS%dtbt
   gtot_estimate = 0.0
-  do k=1,G%ke ; gtot_estimate = gtot_estimate + G%GV%g_prime(K) ; enddo
-  call legacy_set_dtbt(G, CS, gtot_est = gtot_estimate, SSH_add = SSH_extra)
+  do k=1,G%ke ; gtot_estimate = gtot_estimate + GV%g_prime(K) ; enddo
+  call legacy_set_dtbt(G, GV, CS, gtot_est = gtot_estimate, SSH_add = SSH_extra)
   if (dtbt_input > 0.0) CS%dtbt = dtbt_input
 
   call log_param(param_file, mod, "!DTBT as used", CS%dtbt)
@@ -3833,7 +3848,7 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
   ! ubtav, vbtav, ubt_IC, vbt_IC, uhbt_IC, and vhbt_IC are allocated and
   ! initialized in register_barotropic_restarts.
 
-  if (G%GV%Boussinesq) then
+  if (GV%Boussinesq) then
     thickness_units = "meter" ; flux_units = "meter3 second-1"
   else
     thickness_units = "kilogram meter-2" ; flux_units = "kilogram second-1"
@@ -3922,7 +3937,7 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
 
   if (.NOT.query_initialized(CS%ubtav,"ubtav",restart_CS) .or. &
       .NOT.query_initialized(CS%vbtav,"vbtav",restart_CS)) then
-    call legacy_btcalc(h, G, CS, may_use_default=.true.)
+    call legacy_btcalc(h, G, GV, CS, may_use_default=.true.)
     do j=js-1,je+1 ; do i=is-1,ie+1
       CS%ubtav(I,j) = 0.0 ; CS%vbtav(i,J) = 0.0
     enddo ; enddo
@@ -3941,7 +3956,7 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
 !   Calculate other constants which are used for btstep.
 
   ! The following is only valid with the Boussinesq approximation.
-! if (G%GV%Boussinesq) then
+! if (GV%Boussinesq) then
     do j=js,je ; do I=is-1,ie
       CS%IDatu(I,j) = G%mask2dCu(i,j) * 2.0 / (G%bathyT(i+1,j) + G%bathyT(i,j))
     enddo ; enddo
@@ -3950,17 +3965,17 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, param_file, diag, CS, &
     enddo ; enddo
 ! else
 !   do j=js,je ; do I=is-1,ie
-!     CS%IDatu(I,j) = G%mask2dCu(i,j) * 2.0 / (G%GV%Rho0*(G%bathyT(i+1,j) + G%bathyT(i,j)))
+!     CS%IDatu(I,j) = G%mask2dCu(i,j) * 2.0 / (GV%Rho0*(G%bathyT(i+1,j) + G%bathyT(i,j)))
 !   enddo ; enddo
 !   do J=js-1,je ; do i=is,ie
-!     CS%IDatv(i,J) = G%mask2dCv(i,j) * 2.0 / (G%GV%Rho0*(G%bathyT(i,j+1) + G%bathyT(i,j)))
+!     CS%IDatv(i,J) = G%mask2dCv(i,j) * 2.0 / (GV%Rho0*(G%bathyT(i,j+1) + G%bathyT(i,j)))
 !   enddo ; enddo
 ! endif
 
-  call find_face_areas(Datu, Datv, G, CS, MS, halo=1)
+  call find_face_areas(Datu, Datv, G, GV, CS, MS, halo=1)
   if (CS%bound_BT_corr) then
     do j=js,je ; do i=is,ie
-      CS%eta_cor_bound(i,j) = G%GV%m_to_H * G%IareaT(i,j) * 0.1 * CS%maxvel * &
+      CS%eta_cor_bound(i,j) = GV%m_to_H * G%IareaT(i,j) * 0.1 * CS%maxvel * &
          ((Datu(I-1,j) + Datu(I,j)) + (Datv(i,J) + Datv(i,J-1)))
     enddo ; enddo
   endif
@@ -4003,14 +4018,16 @@ subroutine legacy_barotropic_end(CS)
   deallocate(CS)
 end subroutine legacy_barotropic_end
 
-subroutine register_legacy_barotropic_restarts(G, param_file, CS, restart_CS)
+subroutine register_legacy_barotropic_restarts(G, GV, param_file, CS, restart_CS)
   type(ocean_grid_type), intent(in) :: G
+  type(verticalGrid_type), intent(in) :: GV
   type(param_file_type), intent(in) :: param_file
   type(legacy_barotropic_CS),   pointer    :: CS
   type(MOM_restart_CS),  pointer    :: restart_CS
 ! This subroutine is used to register any fields from MOM_barotropic.F90
 ! that should be written to or read from the restart file.
 ! Arguments: G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
 !  (in)      restart_CS - A pointer to the restart control structure.
@@ -4050,7 +4067,7 @@ subroutine register_legacy_barotropic_restarts(G, param_file, CS, restart_CS)
   call register_restart_field(CS%ubt_IC, vd(2), .false., restart_CS)
   call register_restart_field(CS%vbt_IC, vd(3), .false., restart_CS)
 
-  if (G%GV%Boussinesq) then
+  if (GV%Boussinesq) then
     vd(2) = var_desc("uhbt_IC", "meter3 second-1", &
                 longname="Next initial condition for the barotropic zonal transport", &
                 hor_grid='u', z_grid='1')

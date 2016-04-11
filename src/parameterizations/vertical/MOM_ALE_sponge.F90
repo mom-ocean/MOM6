@@ -1,11 +1,11 @@
 !> This module contains the routines used to apply sponge layers when using
-!! the ALE mode. 
+!! the ALE mode.
 !! Applying sponges requires the following:
 !! (1) initialize_ALE_sponge
 !! (2) set_up_ALE_sponge_field
 !! (3) apply_ALE_sponge
 !! (4) init_ALE_sponge_diags (not being used for now)
-!! (5) ALE_sponge_end (not being used for now) 
+!! (5) ALE_sponge_end (not being used for now)
 module MOM_ALE_sponge
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -70,14 +70,14 @@ contains
 ! points are included in the sponges.  It also stores the target interface
 ! heights.
 
-subroutine initialize_ALE_sponge(Iresttime, data_h, nz_data , G, param_file, CS)
+subroutine initialize_ALE_sponge(Iresttime, data_h, nz_data, G, param_file, CS)
 
-  integer,  intent(in)  :: nz_data !< The total number of arbritary layers (in).
-  real, dimension(NIMEM_,NJMEM_),       intent(in) :: Iresttime !< The inverse of the restoring time, in s-1 (in).
+  integer,                              intent(in) :: nz_data !< The total number of arbritary layers (in).
   type(ocean_grid_type),                intent(in) :: G !< The ocean's grid structure (in).
+  real, dimension(SZI_(G),SZJ_(G)),     intent(in) :: Iresttime !< The inverse of the restoring time, in s-1 (in).
   real, dimension(SZI_(G),SZJ_(G),nz_data), intent(in) :: data_h !< The thickness to be used in the sponge. It has arbritary layers (in).
   type(param_file_type),                intent(in) :: param_file !< A structure indicating the open file to parse for model parameter values (in). GM: I don't know what this does!
-  type(ALE_sponge_CS),                      pointer    :: CS !< A pointer that is set to point to the control structure for this module (in/out).
+  type(ALE_sponge_CS),                  pointer    :: CS !< A pointer that is set to point to the control structure for this module (in/out).
 
 
 ! This include declares and sets the variable "version".
@@ -100,7 +100,7 @@ subroutine initialize_ALE_sponge(Iresttime, data_h, nz_data , G, param_file, CS)
                  "specified from MOM_initialization.F90.", default=.false.)
 
   if (.not.use_sponge) return
- 
+
   allocate(CS)
 
   CS%nz = G%ke
@@ -157,7 +157,7 @@ subroutine init_ALE_sponge_diags(Time, G, diag, CS)
   type(time_type),       target, intent(in)    :: Time
   type(ocean_grid_type),         intent(in)    :: G
   type(diag_ctrl),       target, intent(inout) :: diag
-  type(ALE_sponge_CS),               pointer       :: CS
+  type(ALE_sponge_CS),           pointer       :: CS
 
   if (.not.associated(CS)) return
 
@@ -166,12 +166,12 @@ subroutine init_ALE_sponge_diags(Time, G, diag, CS)
 end subroutine init_ALE_sponge_diags
 
 !> This subroutine stores the reference profile for the variable
-! whose address is given by f_ptr. 
+! whose address is given by f_ptr.
 subroutine set_up_ALE_sponge_field(sp_val, G, f_ptr, CS)
-  type(ocean_grid_type),                intent(in) :: G !< Grid structure (in).
-  type(ALE_sponge_CS),                  pointer  :: CS !< Sponge structure (in/out).
+  type(ocean_grid_type),                   intent(in) :: G !< Grid structure (in).
+  type(ALE_sponge_CS),                     pointer  :: CS !< Sponge structure (in/out).
   real, dimension(SZI_(G),SZJ_(G),CS%nz_data), intent(in) :: sp_val !< Field to be used in the sponge, it has arbritary number of layers (in).
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), target, intent(in) :: f_ptr !< Pointer to the field to be damped (in).
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target, intent(in) :: f_ptr !< Pointer to the field to be damped (in).
 
   integer :: j, k, col
   character(len=256) :: mesg ! String for error messages
@@ -186,7 +186,7 @@ subroutine set_up_ALE_sponge_field(sp_val, G, f_ptr, CS)
            &initialize_sponge." )') CS%fldno
     call MOM_error(FATAL,"set_up_ALE_sponge_field: "//mesg)
   endif
-  
+
   ! stores the reference profile
   allocate(CS%Ref_val(CS%fldno)%p(CS%nz_data,CS%num_col))
   CS%Ref_val(CS%fldno)%p(:,:) = 0.0
@@ -202,10 +202,10 @@ end subroutine set_up_ALE_sponge_field
 
 !> This subroutine applies damping to the layers thicknesses, temp, salt and a variety of tracers for every column where there is damping.
 subroutine apply_ALE_sponge(h, dt, G, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: h !< Layer thickness, in m (in)
-  real,                                  intent(in)    :: dt !< The amount of time covered by this call, in s (in).
-  type(ocean_grid_type),                 intent(inout) :: G !< The ocean's grid structure (in).
-  type(ALE_sponge_CS),                       pointer       :: CS !<A pointer to the control structure for this module that is set by a previous call to initialize_sponge (in).
+  type(ocean_grid_type),                    intent(inout) :: G !< The ocean's grid structure (in).
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h !< Layer thickness, in m (in)
+  real,                                     intent(in)    :: dt !< The amount of time covered by this call, in s (in).
+  type(ALE_sponge_CS),                      pointer       :: CS !<A pointer to the control structure for this module that is set by a previous call to initialize_sponge (in).
 
   real :: damp                                               !< The timestep times the local damping  coefficient.  ND.
   real :: I1pdamp                                            !< I1pdamp is 1/(1 + damp).  Nondimensional.

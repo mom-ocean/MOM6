@@ -95,6 +95,7 @@ use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types,            only : MEKE_type
 use MOM_variables,             only : ocean_OBC_type, OBC_FLATHER_E, OBC_FLATHER_W
 use MOM_variables,             only : OBC_FLATHER_N, OBC_FLATHER_S
+use MOM_verticalGrid,          only : verticalGrid_type
 
 implicit none ; private
 
@@ -198,17 +199,18 @@ end type hor_visc_CS
 
 contains
 
-subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)  :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)  :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)  :: h
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(out) :: diffu
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out) :: diffv
-  type(MEKE_type),                        pointer     :: MEKE
-  type(VarMix_CS),                        pointer     :: VarMix
-  type(ocean_grid_type),                  intent(in)  :: G
-  type(hor_visc_CS),                      pointer     :: CS
-  type(ocean_OBC_type),           pointer, optional   :: OBC
+subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, OBC)
+  type(ocean_grid_type),                     intent(in)  :: G
+  type(verticalGrid_type),                   intent(in)  :: GV
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: diffu
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: diffv
+  type(MEKE_type),                           pointer     :: MEKE
+  type(VarMix_CS),                           pointer     :: VarMix
+  type(hor_visc_CS),                         pointer     :: CS
+  type(ocean_OBC_type),              pointer, optional   :: OBC
 
 ! Arguments:
 !  (in)      u      - zonal velocity (m/s)
@@ -223,6 +225,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
 !  (in)      VarMix - pointer to a structure with fields that specify the
 !                     spatially variable viscosities
 !  (in)      G      - ocean grid structure
+!  (in)      GV     - The ocean's vertical grid structure.
 !  (in)      CS     - control structure returned by a previous call to
 !                     hor_visc_init
 !  (in)      OBC    - pointer to an open boundary condition type
@@ -293,7 +296,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
-  h_neglect  = G%GV%H_subroundoff
+  h_neglect  = GV%H_subroundoff
   h_neglect3 = h_neglect**3
 
   if (present(OBC)) then ; if (associated(OBC)) then
@@ -322,9 +325,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
   ! Toggle whether to use a Laplacian viscosity derived from MEKE
   use_MEKE_Ku = associated(MEKE%Ku)
 
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,CS,G,u,v,is,js,h,h_neglect, &
-!$OMP                                  rescale_Kh,VarMix,Kh_h,Ah_h,h_neglect3,Kh_q,   &
-!$OMP                                  Ah_q,ie,je,diffu,apply_OBC,OBC,diffv,          &
+!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,CS,G,GV,u,v,is,js,ie,je,h,  &
+!$OMP                                  rescale_Kh,VarMix,h_neglect,h_neglect3,        &
+!$OMP                                  Kh_h,Ah_h,Kh_q,Ah_q,diffu,apply_OBC,OBC,diffv, &
 !$OMP                                  find_FrictWork,FrictWork,use_MEKE_Ku,MEKE)     &
 !$OMP                          private(u0, v0, sh_xx, str_xx, visc_bound_rem,         &
 !$OMP                                  sh_xy, str_xy, Ah, Kh, AhSm, KhSm,             &
@@ -604,7 +607,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
 
     if (find_FrictWork) then ; do j=js,je ; do i=is,ie
     ! Diagnose   str_xx*d_x u - str_yy*d_y v + str_xy*(d_y u + d_x v)
-      FrictWork(i,j,k) = G%GV%H_to_kg_m2 * ( &
+      FrictWork(i,j,k) = GV%H_to_kg_m2 * ( &
               (str_xx(i,j)*(u(i,j,k)-u(i-1,j,k))*G%IdxT(i,j)     &
               -str_xx(i,j)*(v(i,j,k)-v(i,j-1,k))*G%IdyT(i,j))    &
        +0.25*((str_xy(i,j)*(                                     &
@@ -643,8 +646,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, CS, OBC)
           ! The Rossby number function is g(Ro) = 1/(1+c.Ro^n)
           ! RoScl = 1 - g(Ro)
           RoScl = Shear_mag / ( FatH + Shear_mag ) ! = 1 - f^n/(f^n+c*D^n)
-          MEKE%mom_src(i,j) = MEKE%mom_src(i,j) +                                     &
-                           G%GV%H_to_kg_m2 * (                                           &
+          MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + GV%H_to_kg_m2 * (                   &
                 ((str_xx(i,j)-RoScl*bhstr_xx(i,j))*(u(i,j,k)-u(i-1,j,k))*G%IdxT(i,j)  &
                 -(str_xx(i,j)-RoScl*bhstr_xx(i,j))*(v(i,j,k)-v(i,j-1,k))*G%IdyT(i,j)) &
          +0.25*(((str_xy(i,j)-RoScl*bhstr_xy(i,j))*(                                  &

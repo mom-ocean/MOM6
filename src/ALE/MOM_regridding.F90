@@ -5,6 +5,7 @@ module MOM_regridding
 
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
+use MOM_verticalGrid,  only : verticalGrid_type
 use MOM_EOS,           only : calculate_density, calculate_density_derivs
 use MOM_EOS,           only : calculate_compress
 use MOM_string_functions,only : uppercase
@@ -136,7 +137,7 @@ public inflate_vanished_layers_old, check_remapping_grid, check_grid_column
 public adjust_interface_motion
 public set_regrid_params
 public uniformResolution, setCoordinateResolution, build_zstar_column
-public set_target_densities_from_G, set_target_densities
+public set_target_densities_from_GV, set_target_densities
 public set_regrid_max_depths, set_regrid_max_thickness
 public getCoordinateResolution, getCoordinateInterfaces
 public getCoordinateUnits, getCoordinateShortName, getStaticThickness
@@ -253,7 +254,7 @@ end subroutine end_regridding
 !------------------------------------------------------------------------------
 ! Dispatching regridding routine: regridding & remapping
 !------------------------------------------------------------------------------
-subroutine regridding_main( remapCS, CS, G, h, tv, dzInterface )
+subroutine regridding_main( remapCS, CS, G, GV, h, tv, dzInterface )
 !------------------------------------------------------------------------------
 ! This routine takes care of (1) building a new grid and (2) remapping between
 ! the old grid and the new grid. The creation of the new grid can be based
@@ -272,12 +273,13 @@ subroutine regridding_main( remapCS, CS, G, h, tv, dzInterface )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(remapping_CS),                      intent(in)    :: remapCS ! Remapping parameters and options
-  type(regridding_CS),                     intent(in)    :: CS     !< Regridding control structure
-  type(ocean_grid_type),                   intent(in)    :: G      ! Ocean grid informations
-  real, dimension(NIMEM_,NJMEM_, NKMEM_),  intent(inout) :: h      ! Current 3D grid obtained after the last time step
-  type(thermo_var_ptrs),                   intent(inout) :: tv     ! Thermodynamical variables (T, S, ...)
-  real, dimension(NIMEM_,NJMEM_, NK_INTERFACE_), intent(inout) :: dzInterface  ! The change in position of each interface
+  type(remapping_CS),                        intent(in)    :: remapCS !< Remapping parameters and options
+  type(regridding_CS),                       intent(in)    :: CS     !< Regridding control structure
+  type(ocean_grid_type),                     intent(in)    :: G      !< Ocean grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV     !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h      !< Current 3D grid obtained after the last time step
+  type(thermo_var_ptrs),                     intent(inout) :: tv     !< Thermodynamical variables (T, S, ...)
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)+1), intent(inout) :: dzInterface  ! The change in position of each interface
 
   real :: trickGnuCompiler
 
@@ -286,23 +288,23 @@ subroutine regridding_main( remapCS, CS, G, h, tv, dzInterface )
   select case ( CS%regridding_scheme )
 
     case ( REGRIDDING_ZSTAR )
-      call build_zstar_grid( CS, G, h, dzInterface )
+      call build_zstar_grid( CS, G, GV, h, dzInterface )
 
     case ( REGRIDDING_SIGMA )
-      call buildGridSigma( CS, G, h, dzInterface )
+      call buildGridSigma( CS, G, GV, h, dzInterface )
 
     case ( REGRIDDING_RHO )
       call convective_adjustment(G, h, tv)
-      call buildGridRho( G, h, tv, dzInterface, remapCS, CS )
+      call buildGridRho( G, GV, h, tv, dzInterface, remapCS, CS )
 
     case ( REGRIDDING_ARBITRARY )
-      call build_grid_arbitrary( G, h, dzInterface, trickGnuCompiler, CS )
+      call build_grid_arbitrary( G, GV, h, dzInterface, trickGnuCompiler, CS )
 
     case ( REGRIDDING_HYCOM1 )
-      call build_grid_HyCOM1( G, h, tv, dzInterface, remapCS, CS )
+      call build_grid_HyCOM1( G, GV, h, tv, dzInterface, remapCS, CS )
 
     case ( REGRIDDING_SLIGHT )
-      call build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
+      call build_grid_SLight( G, GV, h, tv, dzInterface, remapCS, CS )
 
     case default
       call MOM_error(FATAL,'MOM_regridding, regridding_main: '//&
@@ -319,10 +321,10 @@ end subroutine regridding_main
 
 !> Check that the total thickness of two grids match
 subroutine check_remapping_grid( G, h, dzInterface, msg )
-  type(ocean_grid_type),                        intent(in) :: G !< Grid structure
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in) :: h !< Layer thicknesses (m)
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(in) :: dzInterface !< Change in interface positions (m)
-  character(len=*),                             intent(in) :: msg !< Message to append to errors
+  type(ocean_grid_type),                      intent(in) :: G !< Grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in) :: h !< Layer thicknesses (m)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in) :: dzInterface !< Change in interface positions (m)
+  character(len=*),                           intent(in) :: msg !< Message to append to errors
   ! Local variables
   integer :: i, j
 
@@ -527,13 +529,14 @@ end subroutine filtered_grid_motion
 !> Builds a z*-ccordinate grid with partial steps (Adcroft and Campin, 2004).
 !! z* is defined as
 !!   z* = (z-eta)/(H+eta)*H  s.t. z*=0 when z=eta and z*=-H when z=-H .
-subroutine build_zstar_grid( CS, G, h, dzInterface )
+subroutine build_zstar_grid( CS, G, GV, h, dzInterface )
 
   ! Arguments
-  type(regridding_CS),                           intent(in)    :: CS !< Regridding control structure
-  type(ocean_grid_type),                         intent(in)    :: G
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),         intent(in)    :: h
-  real, dimension(NIMEM_,NJMEM_, NK_INTERFACE_), intent(inout) :: dzInterface
+  type(regridding_CS),                         intent(in)    :: CS !< Regridding control structure
+  type(ocean_grid_type),                       intent(in)    :: G  !< Ocean grid structure
+  type(verticalGrid_type),                     intent(in)    :: GV !< ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h  !< Layer thicknesses, in H
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)+1), intent(inout) :: dzInterface !< The change in interface depth in H.
 
   ! Local variables
   integer :: i, j, k
@@ -545,7 +548,7 @@ subroutine build_zstar_grid( CS, G, h, dzInterface )
   nz = G%ke
   minThickness = CS%min_thickness
 
-!$OMP parallel do default(none) shared(G,dzInterface,CS,nz,h)                    &
+!$OMP parallel do default(none) shared(G,GV,dzInterface,CS,nz,h)                 &
 !$OMP                          private(nominalDepth,totalThickness,minThickness, &
 !$OMP                                  zNew,dh,zOld)
   do j = G%jsc-1,G%jec+1
@@ -557,7 +560,7 @@ subroutine build_zstar_grid( CS, G, h, dzInterface )
       endif
 
       ! Local depth (G%bathyT is positive)
-      nominalDepth = G%bathyT(i,j)*G%GV%m_to_H
+      nominalDepth = G%bathyT(i,j)*GV%m_to_H
 
       ! Determine water column thickness
       totalThickness = 0.0
@@ -641,7 +644,7 @@ end subroutine build_zstar_column
 !------------------------------------------------------------------------------
 ! Build sigma grid
 !------------------------------------------------------------------------------
-subroutine buildGridSigma( CS, G, h, dzInterface )
+subroutine buildGridSigma( CS, G, GV, h, dzInterface )
 !------------------------------------------------------------------------------
 ! This routine builds a grid based on terrain-following coordinates.
 ! The module parameter coordinateResolution(:) determines the resolution in
@@ -650,10 +653,11 @@ subroutine buildGridSigma( CS, G, h, dzInterface )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(regridding_CS),                           intent(in)    :: CS
-  type(ocean_grid_type),                         intent(in)    :: G
-  real, dimension(NIMEM_,NJMEM_, NKMEM_),        intent(in)    :: h
-  real, dimension(NIMEM_,NJMEM_, NK_INTERFACE_), intent(inout) :: dzInterface
+  type(regridding_CS),                         intent(in)    :: CS !< Regridding control structure
+  type(ocean_grid_type),                       intent(in)    :: G  !< Ocean grid structure
+  type(verticalGrid_type),                     intent(in)    :: GV !< ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h  !< Layer thicknesses, in H
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)+1), intent(inout) :: dzInterface !< The change in interface depth in H.
 
   ! Local variables
   integer :: i, j, k
@@ -673,7 +677,7 @@ subroutine buildGridSigma( CS, G, h, dzInterface )
       end do
 
       ! The rest of the model defines grids integrating up from the bottom
-      nominalDepth = G%bathyT(i,j)*G%GV%m_to_H
+      nominalDepth = G%bathyT(i,j)*GV%m_to_H
       zOld(nz+1) = - nominalDepth
       zNew(nz+1) = - nominalDepth
       do k = nz,1,-1
@@ -717,7 +721,7 @@ end subroutine buildGridSigma
 !------------------------------------------------------------------------------
 ! Build grid based on target interface densities
 !------------------------------------------------------------------------------
-subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
+subroutine buildGridRho( G, GV, h, tv, dzInterface, remapCS, CS )
 !------------------------------------------------------------------------------
 ! This routine builds a new grid based on a given set of target interface
 ! densities (these target densities are computed by taking the mean value
@@ -734,12 +738,13 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(ocean_grid_type),                         intent(in)    :: G
-  real, dimension(NIMEM_,NJMEM_, NKMEM_),        intent(in)    :: h
-  type(thermo_var_ptrs),                         intent(in)    :: tv
-  real, dimension(NIMEM_,NJMEM_, NK_INTERFACE_), intent(inout) :: dzInterface
-  type(remapping_CS),                            intent(in)    :: remapCS
-  type(regridding_CS),                           intent(in)    :: CS
+  type(ocean_grid_type),                       intent(in)    :: G  !< Ocean grid structure
+  type(verticalGrid_type),                     intent(in)    :: GV !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h  !< Layer thicknesses, in H
+  type(thermo_var_ptrs),                       intent(in)    :: tv !< Thermodynamics structure 
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)+1), intent(inout) :: dzInterface !< The change in interface depth in H
+  type(remapping_CS),                          intent(in)    :: remapCS !< The remapping control structure
+  type(regridding_CS),                         intent(in)    :: CS !< Regridding control structure
 
   ! Local variables
   integer   :: i, j, k, m
@@ -887,7 +892,7 @@ subroutine buildGridRho( G, h, tv, dzInterface, remapCS, CS )
       end do ! end regridding iterations
 
       ! Local depth (G%bathyT is positive)
-      nominalDepth = G%bathyT(i,j)*G%GV%m_to_H
+      nominalDepth = G%bathyT(i,j)*GV%m_to_H
 
       ! The rest of the model defines grids integrating up from the bottom
       totalThickness = 0.0
@@ -952,13 +957,14 @@ end subroutine buildGridRho
 !! \remark { Based on Bleck, 2002: An oceanice general circulation model framed in
 !! hybrid isopycnic-Cartesian coordinates, Ocean Modelling 37, 55-88.
 !! http://dx.doi.org/10.1016/S1463-5003(01)00012-9 }
-subroutine build_grid_HyCOM1( G, h, tv, dzInterface, remapCS, CS )
-  type(ocean_grid_type),                        intent(in)    :: G !< Grid structure
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: h !< Existing model thickness, in H units
-  type(thermo_var_ptrs),                        intent(in)    :: tv !< Thermodynamics structure
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: dzInterface !< Changes in interface position
-  type(remapping_CS),                           intent(in)    :: remapCS !< Remapping control structure
-  type(regridding_CS),                          intent(in)    :: CS !< Regridding control structure
+subroutine build_grid_HyCOM1( G, GV, h, tv, dzInterface, remapCS, CS )
+  type(ocean_grid_type),                      intent(in)    :: G  !< Grid structure
+  type(verticalGrid_type),                    intent(in)    :: GV !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h  !< Existing model thickness, in H units
+  type(thermo_var_ptrs),                      intent(in)    :: tv !< Thermodynamics structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: dzInterface !< Changes in interface position
+  type(remapping_CS),                         intent(in)    :: remapCS !< Remapping control structure
+  type(regridding_CS),                        intent(in)    :: CS !< Regridding control structure
   ! Local variables
   integer   :: i, j, k, nz
   real, dimension(SZK_(G)) :: T_col, S_col, p_col, rho_col, h_col_new ! Layer quantities
@@ -994,7 +1000,7 @@ subroutine build_grid_HyCOM1( G, h, tv, dzInterface, remapCS, CS )
       do K = 1, nz
         z_col(K+1) = z_col(K) + h(i,j,k) ! Work in units of h (m or Pa)
         p_col(k) = CS%ref_pressure + CS%compressibility_fraction * &
-             ( 0.5 * ( z_col(K) + z_col(K+1) ) * G%GV%H_to_Pa - CS%ref_pressure )
+             ( 0.5 * ( z_col(K) + z_col(K+1) ) * GV%H_to_Pa - CS%ref_pressure )
       enddo
 
       ! Work bottom recording potential density
@@ -1016,7 +1022,7 @@ subroutine build_grid_HyCOM1( G, h, tv, dzInterface, remapCS, CS )
       ! Sweep down the interfaces and make sure that the interface is at least
       ! as deep as a nominal target z* grid
       nominal_z = 0.
-      stretching = z_col(nz+1) / G%bathyT(i,j) * G%GV%m_to_H ! Stretches z* to z
+      stretching = z_col(nz+1) / G%bathyT(i,j) * GV%m_to_H ! Stretches z* to z
       do k = 2, nz+1
         nominal_z = nominal_z + CS%coordinateResolution(k-1) * stretching
         z_col_new(k) = max( z_col_new(k), nominal_z )
@@ -1057,11 +1063,12 @@ end subroutine build_grid_HyCOM1
 !! shallow topography, this will tend to give a uniform sigma-like coordinate.
 !! For sufficiently shallow water, a minimum grid spacing is used to avoid
 !! certain instabilities.
-subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
-  type(ocean_grid_type),                        intent(in)    :: G !< Grid structure
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: h !< Existing model thickness, in H units
+subroutine build_grid_SLight( G, GV, h, tv, dzInterface, remapCS, CS )
+  type(ocean_grid_type),                        intent(in)    :: G  !< Grid structure
+  type(verticalGrid_type),                      intent(in)    :: GV !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),     intent(in)    :: h  !< Existing model thickness, in H units
   type(thermo_var_ptrs),                        intent(in)    :: tv !< Thermodynamics structure
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: dzInterface !< Changes in interface position
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),   intent(inout) :: dzInterface !< Changes in interface position
   type(remapping_CS),                           intent(in)    :: remapCS !< Remapping control structure
   type(regridding_CS),                          intent(in)    :: CS !< Regridding control structure
   ! Local variables
@@ -1127,7 +1134,7 @@ subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
       do K=1,nz
         z_col(K+1) = z_col(K) + h_col(k) ! Work in units of h (m or Pa)
         p_col(k) = CS%ref_pressure + CS%compressibility_fraction * &
-             ( 0.5 * ( z_col(K) + z_col(K+1) ) * G%GV%H_to_Pa - CS%ref_pressure )
+             ( 0.5 * ( z_col(K) + z_col(K+1) ) * GV%H_to_Pa - CS%ref_pressure )
       enddo
 
       if (z_col(nz+1) - z_col(1) < nz*CS%min_thickness) then
@@ -1188,7 +1195,7 @@ subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
         ! Determine which interfaces are in the s-space region and the depth extent
         ! of this region.
         z_wt = 0.0 ; rho_x_z = 0.0
-        H_ml_av = G%GV%m_to_H*CS%Rho_ml_avg_depth
+        H_ml_av = GV%m_to_H*CS%Rho_ml_avg_depth
         do k=1,nz
           if (z_wt + h_col(k) >= H_ml_av) then
             rho_x_z = rho_x_z + rho_col(k) * (H_ml_av - z_wt)
@@ -1229,15 +1236,15 @@ subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
 !       ! z_int_unst and k_interior.
 
           if (CS%halocline_filter_length > 0.0) then
-            Lfilt = CS%halocline_filter_length*G%GV%m_to_H
+            Lfilt = CS%halocline_filter_length*GV%m_to_H
 
             ! Filter the temperature and salnity with a fixed lengthscale.
-            h_tr = h_col(1) + G%GV%H_subroundoff
+            h_tr = h_col(1) + GV%H_subroundoff
             b1 = 1.0 / (h_tr + Lfilt) ; d1 = h_tr * b1
             T_f(1) = (b1*h_tr)*T_col(1) ;  S_f(1) = (b1*h_tr)*S_col(1)
             do k=2,nz
               c1(k) = Lfilt * b1
-              h_tr = h_col(k) + G%GV%H_subroundoff ; b_denom_1 = h_tr + d1*Lfilt
+              h_tr = h_col(k) + GV%H_subroundoff ; b_denom_1 = h_tr + d1*Lfilt
               b1 = 1.0 / (b_denom_1 + Lfilt) ; d1 = b_denom_1 * b1
               T_f(k) = b1 * (h_tr*T_col(k) + Lfilt*T_f(k-1))
               S_f(k) = b1 * (h_tr*S_col(k) + Lfilt*S_f(k-1))
@@ -1252,11 +1259,11 @@ subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
           T_int(1) = T_f(1) ; S_int(1) = S_f(1)
           do K=2,nz 
             T_int(K) = 0.5*(T_f(k-1) + T_f(k)) ; S_int(K) = 0.5*(S_f(k-1) + S_f(k))
-            p_IS(K) = z_col(K) * G%GV%H_to_Pa
+            p_IS(K) = z_col(K) * GV%H_to_Pa
             p_R(K) = CS%ref_pressure + CS%compressibility_fraction * ( p_IS(K) - CS%ref_pressure )
           enddo
           T_int(nz+1) = T_f(nz) ; S_int(nz+1) = S_f(nz)
-          p_IS(nz+1) = z_col(nz+1) * G%GV%H_to_Pa
+          p_IS(nz+1) = z_col(nz+1) * GV%H_to_Pa
           call calculate_density_derivs(T_int, S_int, p_IS, drhoIS_dT, drhoIS_dS, 2, nz-1, &
                                         tv%eqn_of_state)
           call calculate_density_derivs(T_int, S_int, p_R, drhoR_dT, drhoR_dS, 2, nz-1, &
@@ -1268,7 +1275,7 @@ subroutine build_grid_SLight( G, h, tv, dzInterface, remapCS, CS )
             do K=2,nz ; drho_dp(K) = 0.0 ; enddo
           endif
           
-          H_to_cPa = CS%compressibility_fraction*G%GV%H_to_Pa
+          H_to_cPa = CS%compressibility_fraction*GV%H_to_Pa
           strat_rat(1) = 1.0
           do K=2,nz
             drIS = drhoIS_dT(K) * (T_f(k) - T_f(k-1)) + &
@@ -1677,17 +1684,18 @@ end subroutine adjust_interface_motion
 !------------------------------------------------------------------------------
 ! Build arbitrary grid
 !------------------------------------------------------------------------------
-subroutine build_grid_arbitrary( G, h, dzInterface, h_new, CS )
+subroutine build_grid_arbitrary( G, GV, h, dzInterface, h_new, CS )
 !------------------------------------------------------------------------------
 ! This routine builds a grid based on arbitrary rules
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(ocean_grid_type),                         intent(in)    :: G
-  real, dimension(NIMEM_,NJMEM_, NKMEM_),        intent(in)    :: h
-  real, dimension(NIMEM_,NJMEM_, NK_INTERFACE_), intent(inout) :: dzInterface
-  real,                                          intent(inout) :: h_new
-  type(regridding_CS),                           intent(in)    :: CS
+  type(ocean_grid_type),                       intent(in)    :: G  !< Ocean grid structure
+  type(verticalGrid_type),                     intent(in)    :: GV !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)),   intent(in)    :: h  !< Original ayer thicknesses, in H
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)+1), intent(inout) :: dzInterface !< The change in interface depth in H
+  real,                                        intent(inout) :: h_new !< New layer thicknesses, in H
+  type(regridding_CS),                         intent(in)    :: CS !< Regridding control structure
 
   ! Local variables
   integer   :: i, j, k
@@ -1711,7 +1719,7 @@ subroutine build_grid_arbitrary( G, h, dzInterface, h_new, CS )
     do i = G%isc-1,G%iec+1
 
       ! Local depth
-      local_depth = G%bathyT(i,j)*G%GV%m_to_H
+      local_depth = G%bathyT(i,j)*GV%m_to_H
 
       ! Determine water column height
       total_height = 0.0
@@ -2172,7 +2180,7 @@ subroutine inflate_vanished_layers_old( CS, G, h )
   ! Arguments
   type(regridding_CS),                    intent(in)    :: CS
   type(ocean_grid_type),                  intent(in)    :: G
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout) :: h
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h
 
   ! Local variables
   integer :: i, j, k
@@ -2271,7 +2279,7 @@ subroutine convective_adjustment(G, h, tv)
 
   ! Arguments
   type(ocean_grid_type), intent(in)                  :: G
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout) :: h
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h
   type(thermo_var_ptrs), intent(inout)               :: tv
 
   ! Local variables
@@ -2377,21 +2385,21 @@ subroutine setCoordinateResolution( dz, CS )
 end subroutine setCoordinateResolution
 
 !> Set target densities based on the old Rlay variable
-subroutine set_target_densities_from_G( G, CS )
-  type(ocean_grid_type),  intent(in)    :: G  !< Ocean grid structure
-  type(regridding_CS),    intent(inout) :: CS !< Regridding control structure
+subroutine set_target_densities_from_GV( GV, CS )
+  type(verticalGrid_type), intent(in)    :: GV !< Ocean vertical grid structure
+  type(regridding_CS),     intent(inout) :: CS !< Regridding control structure
   ! Local variables
   integer :: k, nz
 
   nz = CS%nk
-  CS%target_density(1)    = G%GV%Rlay(1)+0.5*(G%GV%Rlay(1)-G%GV%Rlay(2))
-  CS%target_density(nz+1) = G%GV%Rlay(nz)+0.5*(G%GV%Rlay(nz)-G%GV%Rlay(nz-1))
+  CS%target_density(1)    = GV%Rlay(1)+0.5*(GV%Rlay(1)-GV%Rlay(2))
+  CS%target_density(nz+1) = GV%Rlay(nz)+0.5*(GV%Rlay(nz)-GV%Rlay(nz-1))
   do k = 2,nz
     CS%target_density(k) = CS%target_density(k-1) + CS%coordinateResolution(k)
   end do
   CS%target_density_set = .true.
 
-end subroutine set_target_densities_from_G
+end subroutine set_target_densities_from_GV
 
 !> Set target densities based on vector of interface values
 subroutine set_target_densities( CS, rho_int )

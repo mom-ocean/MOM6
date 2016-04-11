@@ -1,6 +1,5 @@
 module MOM_tracer_initialization_from_Z
 
-
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_checksums, only : hchksum, qchksum, uchksum, vchksum, chksum
@@ -29,6 +28,8 @@ use MOM_regridding, only : regridding_CS
 use MOM_remapping, only : remapping_CS, initialize_remapping
 use MOM_remapping, only : remapping_core_w
 use MOM_remapping, only : dzFromH1H2
+use MOM_verticalGrid,     only : verticalGrid_type
+
 use mpp_domains_mod, only  : mpp_global_field, mpp_get_compute_domain
 use mpp_mod, only          : mpp_broadcast,mpp_root_pe,mpp_sync,mpp_sync_self
 use horiz_interp_mod, only : horiz_interp_new, horiz_interp,horiz_interp_type
@@ -42,36 +43,33 @@ implicit none ; private
 
 public :: MOM_initialize_tracer_from_Z, horiz_interp_and_extrap_tracer
 
-
 character(len=40)  :: mod = "MOM_tracer_initialization_from_Z" ! This module's name.
 
-  interface fill_boundaries
-     module procedure fill_boundaries_real
-     module procedure fill_boundaries_int
-  end interface
+interface fill_boundaries
+  module procedure fill_boundaries_real
+  module procedure fill_boundaries_int
+end interface
 
-  real, parameter :: epsln=1.e-10
+real, parameter :: epsln=1.e-10
 
 contains
 
-
-
-subroutine MOM_initialize_tracer_from_Z(h, tr, G, PF, src_file, src_var_nam, &
+subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam, &
                                 src_var_unit_conversion, src_var_record, &
                                 homogenize, useALEremapping, remappingScheme, src_var_gridspec )
 
-
 ! Arguments: 
 !  (in)     h  - Layer thickness, in m.
-!  (inout)     tv - A structure containing pointers to any available
+!  (inout)  tv - A structure containing pointers to any available
 !                 thermodynamic fields, including potential temperature and
 !                 salinity or mixed layer density. Absent fields have NULL ptrs.
-!  (inout)   G       - The ocean's grid structure.
-
+!  (in)      G  - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h    
   real, dimension(:,:,:), pointer                   :: tr
-  type(ocean_grid_type),              intent(inout) :: G
+  type(ocean_grid_type),                 intent(inout) :: G   !< Ocean grid structure 
+  type(verticalGrid_type),               intent(in)    :: GV  !< Ocean vertical grid structure
   type(param_file_type),                 intent(in)    :: PF
   character(len=*),                      intent(in) :: src_file, src_var_nam
   real, optional,                        intent(in) :: src_var_unit_conversion
@@ -181,7 +179,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, PF, src_file, src_var_nam, &
     allocate( tmpT1d(nz) )
     allocate( deltaE(nz+1) )
     ! This call can be more general but is hard-coded for z* coordinates...  ????
-    call ALE_initRegridding( G, PF, mod, regridCS, hTarget ) ! sets regridCS and hTarget(1:nz)
+    call ALE_initRegridding( G, GV, PF, mod, regridCS, hTarget ) ! sets regridCS and hTarget(1:nz)
     ! For each column ...
     do j = js, je ; do i = is, ie
       if (G%mask2dT(i,j)>0.) then
@@ -633,8 +631,7 @@ subroutine horiz_interp_and_extrap_tracer(filename, varnam,  conversion, recnum,
 ! after interpolating, fill in points which will be needed
 ! to define the layers
 
-  roundoff = G%GV%Angstrom_Z ! ###This is dimensionally incorrect and should be
-                             ! changed to roundoff = 2.0*EPSILON(missing_value)
+  roundoff = 3.0*EPSILON(missing_value)
 
   do k=1,kd
     write(laynum,'(I8)') k ; laynum = adjustl(laynum)
