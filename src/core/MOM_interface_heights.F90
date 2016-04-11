@@ -67,14 +67,14 @@ end interface find_eta
 contains
 
 subroutine find_eta_3d(h, tv, G_Earth, G, GV, eta, eta_bt, halo_size)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),    intent(in)      :: h
-  type(thermo_var_ptrs),                    intent(in)      :: tv
-  real,                                     intent(in)      :: G_Earth
-  type(ocean_grid_type),                    intent(in)      :: G
-  type(verticalGrid_type),                  intent(in)      :: GV
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(out) :: eta
-  real, dimension(NIMEM_,NJMEM_), optional, intent(in)      :: eta_bt
-  integer,                        optional, intent(in)      :: halo_size
+  type(ocean_grid_type),                      intent(in)  :: G
+  type(verticalGrid_type),                    intent(in)  :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h
+  type(thermo_var_ptrs),                      intent(in)  :: tv
+  real,                                       intent(in)  :: G_Earth
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: eta
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)  :: eta_bt
+  integer,                          optional, intent(in)  :: halo_size
 
 !   This subroutine determines the heights of all interfaces between layers,
 ! using the appropriate form for consistency with the calculation of the
@@ -186,14 +186,14 @@ end subroutine find_eta_3d
 
 
 subroutine find_eta_2d(h, tv, G_Earth, G, GV, eta, eta_bt, halo_size)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),    intent(in)  :: h
-  type(thermo_var_ptrs),                    intent(in)  :: tv
-  real,                                     intent(in)  :: G_Earth
-  type(ocean_grid_type),                    intent(in)  :: G
-  type(verticalGrid_type),                  intent(in)    :: GV
-  real, dimension(NIMEM_,NJMEM_),           intent(out) :: eta
-  real, dimension(NIMEM_,NJMEM_), optional, intent(in)  :: eta_bt
-  integer,                        optional, intent(in)  :: halo_size
+  type(ocean_grid_type),                      intent(in)  :: G
+  type(verticalGrid_type),                    intent(in)  :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h
+  type(thermo_var_ptrs),                      intent(in)  :: tv
+  real,                                       intent(in)  :: G_Earth
+  real, dimension(SZI_(G),SZJ_(G)),           intent(out) :: eta
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)  :: eta_bt
+  integer,                          optional, intent(in)  :: halo_size
 
 !   This subroutine determines the free surface height, using the appropriate
 ! form for consistency with the calculation of the pressure gradient forces.
