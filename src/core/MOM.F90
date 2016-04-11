@@ -2704,13 +2704,13 @@ end subroutine set_restart_fields
 !! model by setting the appropriate pointers in state.  Unused fields
 !! are set to NULL.
 subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
-  type(surface),                                  intent(inout) :: state  !< ocean surface state
-  real, target, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u      !< zonal velocity (m/s)
-  real, target, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v      !< meridional velocity (m/s)
-  real, target, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h      !< layer thickness (m or kg/m2)
-  real, target, dimension(NIMEM_,NJMEM_),         intent(inout) :: ssh    !< time mean surface height (m)
   type(ocean_grid_type),                          intent(inout) :: G      !< ocean grid structure
   type(verticalGrid_type),                        intent(inout) :: GV     !< ocean vertical grid structure
+  type(surface),                                  intent(inout) :: state  !< ocean surface state
+  real, target, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u      !< zonal velocity (m/s)
+  real, target, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v      !< meridional velocity (m/s)
+  real, target, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h      !< layer thickness (m or kg/m2)
+  real, target, dimension(SZI_(G),SZJ_(G)),       intent(inout) :: ssh    !< time mean surface height (m)
   type(MOM_control_struct),                       intent(inout) :: CS     !< control structure
   real, optional, pointer, dimension(:,:)                       :: p_atm  !< atmospheric pressure (Pascal)
 
