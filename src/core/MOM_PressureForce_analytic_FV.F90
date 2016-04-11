@@ -61,6 +61,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_PressureForce_Mont, only : set_pbce_Bouss, set_pbce_nonBouss
 use MOM_tidal_forcing, only : calc_tidal_forcing, tidal_forcing_CS
 use MOM_variables, only : thermo_var_ptrs
+use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs
 use MOM_EOS, only : int_density_dz, int_specific_vol_dp
 use MOM_EOS, only : int_density_dz_generic_plm, int_density_dz_generic_ppm
@@ -93,12 +94,13 @@ end type PressureForce_AFV_CS
 
 contains
 
-subroutine PressureForce_AFV(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce, eta)
+subroutine PressureForce_AFV(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, pbce, eta)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)  :: h
   type(thermo_var_ptrs), intent(inout)                :: tv
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(out) :: PFu
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out) :: PFv
   type(ocean_grid_type),                  intent(in)  :: G
+  type(verticalGrid_type),                intent(in)  :: GV
   type(PressureForce_AFV_CS),             pointer     :: CS
   type(ALE_CS),                           pointer     :: ALE_CSp
   real, dimension(:,:),                  optional, pointer     :: p_atm
@@ -110,20 +112,21 @@ subroutine PressureForce_AFV(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce, eta)
 ! Descriptions of the variables are in each of the routines called in the
 ! following conditional block.
 
-  if (G%GV%Boussinesq) then
-    call PressureForce_AFV_bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce, eta)
+  if (GV%Boussinesq) then
+    call PressureForce_AFV_bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, pbce, eta)
   else
-    call PressureForce_AFV_nonbouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
+    call PressureForce_AFV_nonbouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta)
   endif
 
 end subroutine PressureForce_AFV
 
-subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
+subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)   :: h
   type(thermo_var_ptrs),                  intent(in)   :: tv
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(out)  :: PFu
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out)  :: PFv
   type(ocean_grid_type),                  intent(in)   :: G
+  type(verticalGrid_type),                intent(in)   :: GV
   type(PressureForce_AFV_CS),             pointer      :: CS
   real, dimension(:,:),                  optional, pointer     :: p_atm
   real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: pbce
@@ -146,6 +149,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
 !  (out)     PFv - Meridional acceleration due to pressure
 !                  gradients (equal to -dM/dy) in m s-2.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 PressureForce_init.
 !  (in)      p_atm - The pressure at the ice-ocean or atmosphere-ocean
@@ -217,7 +221,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
   integer :: i, j, k, n, ib, jb, ioff_bk, joff_bk
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  nkmb=G%GV%nk_rho_varies
+  nkmb=GV%nk_rho_varies
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   use_p_atm = .false.
@@ -227,10 +231,10 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
   if (.not.associated(CS)) call MOM_error(FATAL, &
        "MOM_PressureForce: Module must be initialized before it is used.")
 
-  dp_neglect = G%GV%H_to_Pa * G%GV%H_subroundoff
+  dp_neglect = GV%H_to_Pa * GV%H_subroundoff
   alpha_ref = 1.0/CS%Rho0
 
-!$OMP parallel default(none) shared(Isq,Ieq,Jsq,Jeq,nz,use_p_atm,p,p_atm,G,h)
+!$OMP parallel default(none) shared(Isq,Ieq,Jsq,Jeq,nz,use_p_atm,p,p_atm,GV,h)
   if (use_p_atm) then
 !$OMP do
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -244,7 +248,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
   endif
 !$OMP do
   do j=Jsq,Jeq+1 ; do k=2,nz+1 ; do i=Isq,Ieq+1
-    p(i,j,K) = p(i,j,K-1) + G%GV%H_to_Pa * h(i,j,k-1)
+    p(i,j,K) = p(i,j,K-1) + GV%H_to_Pa * h(i,j,k-1)
   enddo ; enddo ; enddo
 !$OMP end parallel
 
@@ -259,7 +263,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
       tv_tmp%T => T_tmp ; tv_tmp%S => S_tmp
       tv_tmp%eqn_of_state => tv%eqn_of_state
       do i=Isq,Ieq+1 ; p_ref(i) = tv%P_Ref ; enddo
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,nkmb,tv_tmp,tv,p_ref,G) &
+!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,nkmb,tv_tmp,tv,p_ref,GV) &
 !$OMP                          private(Rho_cv_BL)
       do j=Jsq,Jeq+1
         do k=1,nkmb ; do i=Isq,Ieq+1
@@ -268,7 +272,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
         call calculate_density(tv%T(:,j,nkmb), tv%S(:,j,nkmb), p_ref, &
                         Rho_cv_BL(:), Isq, Ieq-Isq+2, tv%eqn_of_state)
         do k=nkmb+1,nz ; do i=Isq,Ieq+1
-          if (G%GV%Rlay(k) < Rho_cv_BL(i)) then
+          if (GV%Rlay(k) < Rho_cv_BL(i)) then
             tv_tmp%T(i,j,k) = tv%T(i,j,nkmb) ; tv_tmp%S(i,j,k) = tv%S(i,j,nkmb)
           else
             tv_tmp%T(i,j,k) = tv%T(i,j,k) ; tv_tmp%S(i,j,k) = tv%S(i,j,k)
@@ -282,7 +286,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
   endif
 
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,is,ie,js,je,tv_tmp,alpha_ref, &
-!$OMP                                  p,h,G,tv,dza,intp_dza,intx_dza,inty_dza,use_EOS) &
+!$OMP                                  p,h,G,GV,tv,dza,intp_dza,intx_dza,inty_dza,use_EOS) &
 !$OMP                          private(alpha_anom,dp)
   do k=1,nz
     ! Calculate 4 integrals through the layer that are required in the
@@ -293,9 +297,9 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
                                dza(:,:,k), intp_dza(:,:,k), intx_dza(:,:,k), &
                                inty_dza(:,:,k))
     else
-      alpha_anom = 1.0/G%GV%Rlay(k) - alpha_ref
+      alpha_anom = 1.0/GV%Rlay(k) - alpha_ref
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        dp(i,j) = G%GV%H_to_Pa * h(i,j,k)
+        dp(i,j) = GV%H_to_Pa * h(i,j,k)
         dza(i,j,k) = alpha_anom * dp(i,j)
         intp_dza(i,j,k) = 0.5 * alpha_anom * dp(i,j)**2
       enddo ; enddo
@@ -354,10 +358,10 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
         enddo
       enddo
     else
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,dM,CS,p,G,alpha_ref,za)
+!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,dM,CS,p,GV,alpha_ref,za)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         dM(i,j) = (CS%GFS_scale - 1.0) * &
-          (p(i,j,1)*(1.0/G%GV%Rlay(1) - alpha_ref) + za(i,j))
+          (p(i,j,1)*(1.0/GV%Rlay(1) - alpha_ref) + za(i,j))
       enddo ; enddo
     endif
 !  else
@@ -369,7 +373,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
   ! linearly between the values at thickness points, but the bottom
   ! geopotentials will not now be linear at the sub-grid-scale.  Doing this
   ! ensures no motion with flat isopycnals, even with a nonlinear equation of state.
-!$OMP parallel do default(none) shared(nz,za,G,dza,intx_dza,h,PFu, &
+!$OMP parallel do default(none) shared(nz,za,G,GV,dza,intx_dza,h,PFu, &
 !$OMP                                  intp_dza,p,dp_neglect,inty_dza,PFv,CS,dM) &
 !$OMP                          private(is_bk,ie_bk,js_bk,je_bk,Isq_bk,Ieq_bk,Jsq_bk, &
 !$OMP                                  Jeq_bk,ioff_bk,joff_bk,i,j,za_bk,intx_za_bk,  &
@@ -398,7 +402,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
       ! a set of idealized cases, and should be bug-free.
       do jb=Jsq_bk,Jeq_bk+1 ; do ib=Isq_bk,Ieq_bk+1
         i = ib+ioff_bk ; j = jb+joff_bk
-        dp_bk(ib,jb) = G%GV%H_to_Pa*h(i,j,k)
+        dp_bk(ib,jb) = GV%H_to_Pa*h(i,j,k)
         za_bk(ib,jb) = za_bk(ib,jb) - dza(i,j,k)
       enddo ; enddo
       do jb=js_bk,je_bk ; do Ib=Isq_bk,Ieq_bk
@@ -435,11 +439,11 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
   enddo
 
   if (present(pbce)) then
-    call set_pbce_nonBouss(p, tv_tmp, G, G%g_Earth, CS%GFS_scale, pbce)
+    call set_pbce_nonBouss(p, tv_tmp, G, GV, G%g_Earth, CS%GFS_scale, pbce)
   endif
 
   if (present(eta)) then
-    Pa_to_H = 1.0 / G%GV%H_to_Pa
+    Pa_to_H = 1.0 / GV%H_to_Pa
     if (use_p_atm) then
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,eta,p,p_atm,Pa_to_H)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -457,13 +461,14 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, CS, p_atm, pbce, eta)
 
 end subroutine PressureForce_AFV_nonBouss
 
-subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce, eta)
+subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, pbce, eta)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
   type(thermo_var_ptrs),                  intent(in)    :: tv
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(out)   :: PFu
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out)   :: PFv
   type(ocean_grid_type),                  intent(in)    :: G
   type(PressureForce_AFV_CS),             pointer       :: CS
+  type(verticalGrid_type),                intent(in)    :: GV
   type(ALE_CS),                           pointer       :: ALE_CSp
   real, dimension(:,:),                  optional, pointer     :: p_atm
   real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: pbce
@@ -486,6 +491,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
 !  (out)     PFv - Meridional acceleration due to pressure
 !                  gradients (equal to -dM/dy) in m s-2.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 PressureForce_init.
 !  (in)      p_atm - the pressure at the ice-ocean or atmosphere-ocean
@@ -552,7 +558,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
   integer :: PRScheme
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  nkmb=G%GV%nk_rho_varies
+  nkmb=GV%nk_rho_varies
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
@@ -566,9 +572,9 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
   if (associated(ALE_CSp)) use_ALE = usePressureReconstruction(ALE_CSp) .and. use_EOS
 
   PRScheme = pressureReconstructionScheme(ALE_CSp)
-  h_neglect = G%GV%H_subroundoff
-  I_Rho0 = 1.0/G%GV%Rho0
-  G_Rho0 = G%g_Earth/G%GV%Rho0
+  h_neglect = GV%H_subroundoff
+  I_Rho0 = 1.0/GV%Rho0
+  G_Rho0 = G%g_Earth/GV%Rho0
   rho_ref = CS%Rho0
 
   if (CS%tides) then
@@ -576,20 +582,20 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
     ! and loading.  This should really be based on bottom pressure anomalies,
     ! but that is not yet implemented, and the current form is correct for
     ! barotropic tides.
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,e,G,h)
+!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,e,G,GV,h)
     do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
         e(i,j,1) = -1.0*G%bathyT(i,j)
       enddo
       do k=1,nz ; do i=Isq,Ieq+1
-        e(i,j,1) = e(i,j,1) + h(i,j,k)*G%GV%H_to_m
+        e(i,j,1) = e(i,j,1) + h(i,j,k)*GV%H_to_m
       enddo ; enddo
     enddo
     call calc_tidal_forcing(CS%Time, e(:,:,1), e_tidal, G, CS%tides_CSp)
   endif
 
 !    Here layer interface heights, e, are calculated.
-!$OMP parallel default(none) shared(Isq,Ieq,Jsq,Jeq,nz,e,G,h,CS,e_tidal)
+!$OMP parallel default(none) shared(Isq,Ieq,Jsq,Jeq,nz,e,G,GV,h,CS,e_tidal)
   if (CS%tides) then
 !$OMP do
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -603,7 +609,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
   endif
 !$OMP do
   do j=Jsq,Jeq+1; do k=nz,1,-1 ; do i=Isq,Ieq+1
-    e(i,j,K) = e(i,j,K+1) + h(i,j,k)*G%GV%H_to_m
+    e(i,j,K) = e(i,j,K+1) + h(i,j,k)*GV%H_to_m
   enddo ; enddo ; enddo
 !$OMP end parallel
 
@@ -619,7 +625,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
       tv_tmp%eqn_of_state => tv%eqn_of_state
 
       do i=Isq,Ieq+1 ; p_ref(i) = tv%P_Ref ; enddo
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nkmb,nz,G,tv_tmp,tv,p_ref) &
+!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nkmb,nz,GV,tv_tmp,tv,p_ref) &
 !$OMP                          private(Rho_cv_BL)
       do j=Jsq,Jeq+1
         do k=1,nkmb ; do i=Isq,Ieq+1
@@ -629,7 +635,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
                         Rho_cv_BL(:), Isq, Ieq-Isq+2, tv%eqn_of_state)
 
         do k=nkmb+1,nz ; do i=Isq,Ieq+1
-          if (G%GV%Rlay(k) < Rho_cv_BL(i)) then
+          if (GV%Rlay(k) < Rho_cv_BL(i)) then
             tv_tmp%T(i,j,k) = tv%T(i,j,nkmb) ; tv_tmp%S(i,j,k) = tv%S(i,j,nkmb)
           else
             tv_tmp%T(i,j,k) = tv%T(i,j,k) ; tv_tmp%S(i,j,k) = tv%S(i,j,k)
@@ -643,7 +649,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
   endif
 
 !$OMP parallel default(none) shared(Jsq,Jeq,Isq,Ieq,tv_tmp,p_atm,rho_in_situ,tv, &
-!$OMP                               p0,dM,CS,G_Rho0,e,use_p_atm,use_EOS,G,    &
+!$OMP                               p0,dM,CS,G_Rho0,e,use_p_atm,use_EOS,GV,    &
 !$OMP                               rho_ref,js,je,is,ie)
   if (CS%GFS_scale < 1.0) then
     ! Adjust the Montgomery potential to make this a reduced gravity model.
@@ -664,7 +670,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
     else
 !$OMP do
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        dM(i,j) = (CS%GFS_scale - 1.0) * (G_Rho0 * G%GV%Rlay(1)) * e(i,j,1)
+        dM(i,j) = (CS%GFS_scale - 1.0) * (G_Rho0 * GV%Rlay(1)) * e(i,j,1)
       enddo ; enddo
     endif
   endif
@@ -678,13 +684,13 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
   ! of freedeom needed to know the linear profile).
   if ( use_ALE ) then
     if ( PRScheme == PRESSURE_RECONSTRUCTION_PLM ) then
-      call pressure_gradient_plm (ALE_CSp, S_t, S_b, T_t, T_b, G, tv, h);
+      call pressure_gradient_plm (ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h);
     elseif ( PRScheme == PRESSURE_RECONSTRUCTION_PPM ) then
-      call pressure_gradient_ppm (ALE_CSp, S_t, S_b, T_t, T_b, G, tv, h);
+      call pressure_gradient_ppm (ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h);
     endif
   endif
 
-!$OMP parallel do default(none) shared(use_p_atm,rho_ref,G,e,     &
+!$OMP parallel do default(none) shared(use_p_atm,rho_ref,G,GV,e,     &
 !$OMP                                  p_atm,nz,use_EOS,use_ALE,PRScheme,T_t,T_b,S_t, &
 !$OMP                                  S_b,CS,tv,tv_tmp,h,PFu,I_Rho0,h_neglect,PFv,dM)&
 !$OMP                          private(is_bk,ie_bk,js_bk,je_bk,Isq_bk,Ieq_bk,Jsq_bk,  &
@@ -735,7 +741,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
             call int_density_dz_generic_plm ( T_t(:,:,k), T_b(:,:,k), &
                       S_t(:,:,k), S_b(:,:,k), e(:,:,K), e(:,:,K+1), &
                       rho_ref, CS%Rho0, G%g_Earth,    &
-                      G%GV%H_subroundoff, G%bathyT, G%HI, G%Block(n), &
+                      GV%H_subroundoff, G%bathyT, G%HI, G%Block(n), &
                       tv%eqn_of_state, dpa_bk, intz_dpa_bk, intx_dpa_bk, inty_dpa_bk, &
                       useMassWghtInterp = CS%useMassWghtInterp)
           elseif ( PRScheme == PRESSURE_RECONSTRUCTION_PPM ) then
@@ -751,19 +757,19 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
                     rho_ref, CS%Rho0, G%g_Earth, G%HI, G%Block(n), tv%eqn_of_state, &
                     dpa_bk, intz_dpa_bk, intx_dpa_bk, inty_dpa_bk )
         endif
-        intz_dpa_bk(:,:) = intz_dpa_bk(:,:)*G%GV%m_to_H
+        intz_dpa_bk(:,:) = intz_dpa_bk(:,:)*GV%m_to_H
       else
         do jb=Jsq_bk,Jeq_bk+1 ; do ib=Isq_bk,Ieq_bk+1
           i = ib+ioff_bk ; j = jb+joff_bk
-          dz_bk(ib,jb) = G%g_Earth*G%GV%H_to_m*h(i,j,k)
-          dpa_bk(ib,jb) = (G%GV%Rlay(k) - rho_ref)*dz_bk(ib,jb)
-          intz_dpa_bk(ib,jb) = 0.5*(G%GV%Rlay(k) - rho_ref)*dz_bk(ib,jb)*h(i,j,k)
+          dz_bk(ib,jb) = G%g_Earth*GV%H_to_m*h(i,j,k)
+          dpa_bk(ib,jb) = (GV%Rlay(k) - rho_ref)*dz_bk(ib,jb)
+          intz_dpa_bk(ib,jb) = 0.5*(GV%Rlay(k) - rho_ref)*dz_bk(ib,jb)*h(i,j,k)
         enddo ; enddo
         do jb=js_bk,je_bk ; do Ib=Isq_bk,Ieq_bk
-          intx_dpa_bk(Ib,jb) = 0.5*(G%GV%Rlay(k) - rho_ref) * (dz_bk(ib,jb)+dz_bk(ib+1,jb))
+          intx_dpa_bk(Ib,jb) = 0.5*(GV%Rlay(k) - rho_ref) * (dz_bk(ib,jb)+dz_bk(ib+1,jb))
         enddo ; enddo
         do Jb=Jsq_bk,Jeq_bk ; do ib=is_bk,ie_bk
-          inty_dpa_bk(ib,Jb) = 0.5*(G%GV%Rlay(k) - rho_ref) * (dz_bk(ib,jb)+dz_bk(ib,jb+1))
+          inty_dpa_bk(ib,Jb) = 0.5*(GV%Rlay(k) - rho_ref) * (dz_bk(ib,jb)+dz_bk(ib,jb+1))
         enddo ; enddo
       endif
 
@@ -773,7 +779,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
         PFu(I,j,k) = (((pa_bk(ib,jb)*h(i,j,k) + intz_dpa_bk(ib,jb)) - &
                      (pa_bk(ib+1,jb)*h(i+1,j,k) + intz_dpa_bk(ib+1,jb))) + &
                      ((h(i+1,j,k) - h(i,j,k)) * intx_pa_bk(Ib,jb) - &
-                     (e(i+1,j,K+1) - e(i,j,K+1)) * intx_dpa_bk(Ib,jb) * G%GV%m_to_H)) * &
+                     (e(i+1,j,K+1) - e(i,j,K+1)) * intx_dpa_bk(Ib,jb) * GV%m_to_H)) * &
                      ((2.0*I_Rho0*G%IdxCu(I,j)) / &
                      ((h(i,j,k) + h(i+1,j,k)) + h_neglect))
         intx_pa_bk(Ib,jb) = intx_pa_bk(Ib,jb) + intx_dpa_bk(Ib,jb)
@@ -784,7 +790,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
         PFv(i,J,k) = (((pa_bk(ib,jb)*h(i,j,k) + intz_dpa_bk(ib,jb)) - &
                      (pa_bk(ib,jb+1)*h(i,j+1,k) + intz_dpa_bk(ib,jb+1))) + &
                      ((h(i,j+1,k) - h(i,j,k)) * inty_pa_bk(ib,Jb) - &
-                     (e(i,j+1,K+1) - e(i,j,K+1)) * inty_dpa_bk(ib,Jb) * G%GV%m_to_H)) * &
+                     (e(i,j+1,K+1) - e(i,j,K+1)) * inty_dpa_bk(ib,Jb) * GV%m_to_H)) * &
                      ((2.0*I_Rho0*G%IdyCv(i,J)) / &
                      ((h(i,j,k) + h(i,j+1,k)) + h_neglect))
         inty_pa_bk(ib,Jb) = inty_pa_bk(ib,Jb) + inty_dpa_bk(ib,Jb)
@@ -807,7 +813,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
   enddo
 
   if (present(pbce)) then
-    call set_pbce_Bouss(e, tv_tmp, G, G%g_Earth, CS%Rho0, CS%GFS_scale, pbce)
+    call set_pbce_Bouss(e, tv_tmp, G, GV, G%g_Earth, CS%Rho0, CS%GFS_scale, pbce)
   endif
 
   if (present(eta)) then
@@ -817,12 +823,12 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
     ! about 200 lines above.
 !$OM parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,eta,e,e_tidal)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        eta(i,j) = e(i,j,1)*G%GV%m_to_H + e_tidal(i,j)*G%GV%m_to_H
+        eta(i,j) = e(i,j,1)*GV%m_to_H + e_tidal(i,j)*GV%m_to_H
       enddo ; enddo
     else
 !$OM parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,eta,e)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        eta(i,j) = e(i,j,1)*G%GV%m_to_H
+        eta(i,j) = e(i,j,1)*GV%m_to_H
       enddo ; enddo
     endif
   endif
@@ -832,15 +838,17 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, CS, ALE_CSp, p_atm, pbce,
 end subroutine PressureForce_AFV_Bouss
 
 
-subroutine PressureForce_AFV_init(Time, G, param_file, diag, CS, tides_CSp)
+subroutine PressureForce_AFV_init(Time, G, GV, param_file, diag, CS, tides_CSp)
   type(time_type), target,    intent(in)    :: Time
   type(ocean_grid_type),      intent(in)    :: G
+  type(verticalGrid_type),    intent(in)    :: GV
   type(param_file_type),      intent(in)    :: param_file
   type(diag_ctrl), target,    intent(inout) :: diag
   type(PressureForce_AFV_CS), pointer       :: CS
   type(tidal_forcing_CS), optional, pointer :: tides_CSp
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in)      diag - A structure that is used to regulate diagnostic output.
@@ -882,7 +890,7 @@ subroutine PressureForce_AFV_init(Time, G, param_file, diag, CS, tides_CSp)
   endif
 
   CS%GFS_scale = 1.0
-  if (G%GV%g_prime(1) /= G%g_Earth) CS%GFS_scale = G%GV%g_prime(1) / G%g_Earth
+  if (GV%g_prime(1) /= G%g_Earth) CS%GFS_scale = GV%g_prime(1) / G%g_Earth
 
   call log_param(param_file, mod, "GFS / G_EARTH", CS%GFS_scale)
 

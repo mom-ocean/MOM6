@@ -13,6 +13,7 @@ use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
 use MOM_io,            only : vardesc, query_vardesc
 use MOM_time_manager,  only : time_type
+use MOM_verticalGrid, only : verticalGrid_type
 
 implicit none ; private
 
@@ -72,10 +73,11 @@ end type tracer_registry_type
 contains
 
 !> This subroutine registers a tracer to be advected and laterally diffused.
-subroutine register_tracer(tr1, tr_desc, param_file, Reg, tr_desc_ptr, ad_x, ad_y,&
+subroutine register_tracer(tr1, tr_desc, param_file, G, Reg, tr_desc_ptr, ad_x, ad_y,&
                            df_x, df_y, OBC_inflow, OBC_in_u, OBC_in_v,            &
                            ad_2d_x, ad_2d_y, df_2d_x, df_2d_y, advection_xy)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), target :: tr1          !< pointer to the tracer (concentration units)
+  type(ocean_grid_type),  intent(in)            :: G            !< ocean grid type 
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target :: tr1       !< pointer to the tracer (concentration units)
   type(vardesc),         intent(in)             :: tr_desc      !< metadata about the tracer
   type(param_file_type), intent(in)             :: param_file   !< file to parse for  model parameter values
   type(tracer_registry_type), pointer           :: Reg          !< pointer to the tracer registry
@@ -251,19 +253,20 @@ end subroutine add_tracer_diagnostics
 !! concentrations after the dual-entrainments, and possibly sinking or surface
 !! and bottom sources, are applied.  The sinking is implemented with an
 !! fully implicit upwind advection scheme.
-subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, &
+subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
                            sfc_flux, btm_flux, btm_reservoir, sink_rate)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),   intent(in)    :: h_old          !< layer thickness before entrainment (m or kg m-2)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),   intent(in)    :: ea             !< amount of fluid entrained from the layer above (units of h_old)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),   intent(in)    :: eb             !< amount of fluid entrained from the layer below (units of h_old)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),   intent(inout) :: tr             !< tracer concentration (in concentration units CU)
-  real,                                    intent(in)    :: dt             !< amount of time covered by this call (seconds)
-  type(ocean_grid_type),                   intent(in)    :: G              !< ocean grid structure 
-  real, dimension(NIMEM_,NJMEM_), optional,intent(in)    :: sfc_flux       !< surface flux of the tracer (in CU * kg m-2 s-1)
-  real, dimension(NIMEM_,NJMEM_), optional,intent(in)    :: btm_flux       !< The (negative upward) bottom flux of the tracer,
-                                                                           !! in units of (CU * kg m-2 s-1)
-  real, dimension(NIMEM_,NJMEM_), optional,intent(inout) :: btm_reservoir  !< amount of tracer in a bottom reservoir (units of CU kg m-2; formerly CU m)
-  real,                           optional,intent(in)    :: sink_rate      !< rate at which the tracer sinks, in m s-1
+  type(ocean_grid_type),                     intent(in)    :: G             !< ocean grid structure 
+  type(verticalGrid_type),                   intent(in)    :: GV            !< ocean vertical grid structure 
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h_old         !< layer thickness before entrainment (m or kg m-2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: ea            !< amount of fluid entrained from the layer above (units of h_old)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: eb            !< amount of fluid entrained from the layer below (units of h_old)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: tr            !< tracer concentration (in concentration units CU)
+  real,                                      intent(in)    :: dt            !< amount of time covered by this call (seconds)
+  real, dimension(SZI_(G),SZJ_(G)), optional,intent(in)    :: sfc_flux      !< surface flux of the tracer (in CU * kg m-2 s-1)
+  real, dimension(SZI_(G),SZJ_(G)), optional,intent(in)    :: btm_flux      !< The (negative upward) bottom flux of the tracer,
+                                                                            !! in units of (CU * kg m-2 s-1)
+  real, dimension(SZI_(G),SZJ_(G)), optional,intent(inout) :: btm_reservoir !< amount of tracer in a bottom reservoir (units of CU kg m-2; formerly CU m)
+  real,                             optional,intent(in)    :: sink_rate     !< rate at which the tracer sinks, in m s-1
 
  
   real :: sink_dist ! The distance the tracer sinks in a time step, in m or kg m-2.
@@ -291,10 +294,10 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, &
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  h_neglect = G%GV%H_subroundoff
+  h_neglect = GV%H_subroundoff
   sink_dist = 0.0
-  if (present(sink_rate)) sink_dist = (dt*sink_rate) * G%GV%m_to_H
-!$OMP parallel default(none) shared(is,ie,js,je,sfc_src,btm_src,sfc_flux,dt,G,btm_flux, &
+  if (present(sink_rate)) sink_dist = (dt*sink_rate) * GV%m_to_H
+!$OMP parallel default(none) shared(is,ie,js,je,sfc_src,btm_src,sfc_flux,dt,G,GV,btm_flux, &
 !$OMP                               sink_rate,btm_reservoir,nz,sink_dist,h_old,ea,      &
 !$OMP                               h_neglect,eb,tr) & 
 !$OMP                       private(sink,h_minus_dsink,b_denom_1,b1,d1,h_tr,c1)
@@ -303,13 +306,13 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, &
   if (present(sfc_flux)) then
 !$OMP do 
      do j = js, je; do i = is,ie
-        sfc_src(i,j) = (sfc_flux(i,j)*dt) * G%GV%kg_m2_to_H
+        sfc_src(i,j) = (sfc_flux(i,j)*dt) * GV%kg_m2_to_H
      enddo; enddo
   endif
   if (present(btm_flux)) then
 !$OMP do
      do j = js, je; do i = is,ie
-        btm_src(i,j) = (btm_flux(i,j)*dt) * G%GV%kg_m2_to_H
+        btm_src(i,j) = (btm_flux(i,j)*dt) * GV%kg_m2_to_H
      enddo; enddo
   endif
 
@@ -375,7 +378,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, &
       endif ; enddo
       if (present(btm_reservoir)) then ; do i=is,ie ; if (G%mask2dT(i,j)>0.5) then
         btm_reservoir(i,j) = btm_reservoir(i,j) + &
-                             (sink(i,nz+1)*tr(i,j,nz)) * G%GV%H_to_kg_m2
+                             (sink(i,nz+1)*tr(i,j,nz)) * GV%H_to_kg_m2
       endif ; enddo ; endif
 
       do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then

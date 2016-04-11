@@ -79,6 +79,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_spatial_means, only : global_i_mean
 use MOM_time_manager, only : time_type
+use MOM_verticalGrid, only : verticalGrid_type
 
 ! Planned extension:  Support for time varying sponge targets.
 
@@ -138,13 +139,13 @@ contains
 
 subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, &
                              Iresttime_i_mean, int_height_i_mean)
-  real, dimension(NIMEM_,NJMEM_),       intent(in) :: Iresttime
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(in) :: int_height
-  type(ocean_grid_type),                intent(in) :: G
-  type(param_file_type),                intent(in) :: param_file
-  type(sponge_CS),                      pointer    :: CS
-  real, dimension(NJMEM_),    optional, intent(in) :: Iresttime_i_mean
-  real, dimension(NJMEM_,NK_INTERFACE_), optional, intent(in) :: int_height_i_mean
+  type(ocean_grid_type),                  intent(in) :: G
+  real, dimension(SZI_(G),SZJ_(G)),       intent(in) :: Iresttime
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in) :: int_height
+  type(param_file_type),                  intent(in) :: param_file
+  type(sponge_CS),                        pointer    :: CS
+  real, dimension(SZJ_(G)),     optional, intent(in) :: Iresttime_i_mean
+  real, dimension(SZJ_(G),SZK_(G)+1), optional, intent(in) :: int_height_i_mean
 
 !   This subroutine determines the number of points which are within
 ! sponges in this computational domain.  Only points that have
@@ -266,12 +267,13 @@ subroutine init_sponge_diags(Time, G, diag, CS)
 
 end subroutine init_sponge_diags
 
-subroutine set_up_sponge_field(sp_val, f_ptr, nlay, CS, sp_val_i_mean)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),         intent(in) :: sp_val
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), target, intent(in) :: f_ptr
-  integer,                                       intent(in) :: nlay
-  type(sponge_CS),                               pointer    :: CS
-  real, dimension(NJMEM_,NKMEM_),      optional, intent(in) :: sp_val_i_mean
+subroutine set_up_sponge_field(sp_val, f_ptr, G, nlay, CS, sp_val_i_mean)
+  type(ocean_grid_type),                            intent(in) :: G
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),         intent(in) :: sp_val
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target, intent(in) :: f_ptr
+  integer,                                          intent(in) :: nlay
+  type(sponge_CS),                                  pointer    :: CS
+  real, dimension(SZJ_(G),SZK_(G)),       optional, intent(in) :: sp_val_i_mean
 !   This subroutine stores the reference profile for the variable
 ! whose address is given by f_ptr. nlay is the number of layers in
 ! this variable.
@@ -333,10 +335,11 @@ subroutine set_up_sponge_field(sp_val, f_ptr, nlay, CS, sp_val_i_mean)
 end subroutine set_up_sponge_field
 
 
-subroutine set_up_sponge_ML_density(sp_val, CS, sp_val_i_mean)
-  real, dimension(NIMEM_,NJMEM_), intent(in) :: sp_val
-  type(sponge_CS),                pointer    :: CS
-  real, dimension(NJMEM_), optional, intent(in) :: sp_val_i_mean
+subroutine set_up_sponge_ML_density(sp_val, G, CS, sp_val_i_mean)
+  type(ocean_grid_type),              intent(in) :: G
+  real, dimension(SZI_(G),SZJ_(G)),   intent(in) :: sp_val
+  type(sponge_CS),                    pointer    :: CS
+  real, dimension(SZJ_(G)), optional, intent(in) :: sp_val_i_mean
 !   This subroutine stores the reference value for mixed layer density.  It is
 ! handled differently from other values because it is only used in determining
 ! which layers can be inflated.
@@ -373,14 +376,15 @@ subroutine set_up_sponge_ML_density(sp_val, CS, sp_val_i_mean)
 
 end subroutine set_up_sponge_ML_density
 
-subroutine apply_sponge(h, dt, G, ea, eb, CS, Rcv_ml)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: h
-  real,                                  intent(in)    :: dt
-  type(ocean_grid_type),                 intent(inout) :: G
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(out)   :: ea
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(out)   :: eb
-  type(sponge_CS),                       pointer       :: CS
-  real, dimension(NIMEM_,NJMEM_), optional, intent(inout) :: Rcv_ml
+subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
+  type(ocean_grid_type),                    intent(inout) :: G
+  type(verticalGrid_type),                  intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h
+  real,                                     intent(in)    :: dt
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)   :: ea
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)   :: eb
+  type(sponge_CS),                          pointer       :: CS
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(inout) :: Rcv_ml
 
 ! This subroutine applies damping to the layers thicknesses, mixed
 ! layer buoyancy, and a variety of tracers for every column where
@@ -389,6 +393,7 @@ subroutine apply_sponge(h, dt, G, ea, eb, CS, Rcv_ml)
 ! Arguments: h -  Layer thickness, in m.
 !  (in)      dt - The amount of time covered by this call, in s.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (out)     ea - an array to which the amount of fluid entrained
 !                 from the layer above during this call will be
 !                 added, in m.
@@ -439,7 +444,7 @@ subroutine apply_sponge(h, dt, G, ea, eb, CS, Rcv_ml)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   if (.not.associated(CS)) return
-  if (CS%bulkmixedlayer) nkmb = G%GV%nk_rho_varies
+  if (CS%bulkmixedlayer) nkmb = GV%nk_rho_varies
   if (CS%bulkmixedlayer .and. (.not.present(Rcv_ml))) &
     call MOM_error(FATAL, "Rml must be provided to apply_sponge when using "//&
                            "a bulk mixed layer.")
@@ -492,10 +497,10 @@ subroutine apply_sponge(h, dt, G, ea, eb, CS, Rcv_ml)
         h_above(i,1) = 0.0 ; h_below(i,nz+1) = 0.0
       enddo
       do K=nz,1,-1 ; do i=is,ie
-        h_below(i,K) = h_below(i,K+1) + max(h(i,j,k)-G%GV%Angstrom, 0.0)
+        h_below(i,K) = h_below(i,K+1) + max(h(i,j,k)-GV%Angstrom, 0.0)
       enddo ; enddo
       do K=2,nz+1 ; do i=is,ie
-        h_above(i,K) = h_above(i,K-1) + max(h(i,j,k-1)-G%GV%Angstrom, 0.0)
+        h_above(i,K) = h_above(i,K-1) + max(h(i,j,k-1)-GV%Angstrom, 0.0)
       enddo ; enddo
       do K=2,nz
         ! w is positive for an upward (lightward) flux of mass, resulting
@@ -522,7 +527,7 @@ subroutine apply_sponge(h, dt, G, ea, eb, CS, Rcv_ml)
         enddo
 
         h(i,j,k) = max(h(i,j,k) + (w_int(i,j,K+1) - w_int(i,j,K)), &
-                       min(h(i,j,k), G%GV%Angstrom))
+                       min(h(i,j,k), GV%Angstrom))
       enddo ; enddo
     endif ; enddo
 
@@ -555,9 +560,9 @@ subroutine apply_sponge(h, dt, G, ea, eb, CS, Rcv_ml)
 
       wpb = 0.0; wb = 0.0
       do k=nz,nkmb+1,-1
-        if (G%GV%Rlay(k) > Rcv_ml(i,j)) then
+        if (GV%Rlay(k) > Rcv_ml(i,j)) then
           w = MIN((((e(K)-e0) - e_str*CS%Ref_eta(K,c)) * damp), &
-                    ((wb + h(i,j,k)) - G%GV%Angstrom))
+                    ((wb + h(i,j,k)) - GV%Angstrom))
           wm = 0.5*(w-ABS(w))
           do m=1,CS%fldno
             CS%var(m)%p(i,j,k) = (h(i,j,k)*CS%var(m)%p(i,j,k) + &
@@ -569,7 +574,7 @@ subroutine apply_sponge(h, dt, G, ea, eb, CS, Rcv_ml)
             CS%var(m)%p(i,j,k) = I1pdamp * &
               (CS%var(m)%p(i,j,k) + CS%Ref_val(m)%p(k,c)*damp)
           enddo
-          w = wb + (h(i,j,k) - G%GV%Angstrom)
+          w = wb + (h(i,j,k) - GV%Angstrom)
           wm = 0.5*(w-ABS(w))
         endif
         eb(i,j,k) = eb(i,j,k) + wpb
@@ -581,18 +586,18 @@ subroutine apply_sponge(h, dt, G, ea, eb, CS, Rcv_ml)
 
       if (wb < 0) then
         do k=nkmb,1,-1
-          w = MIN((wb + (h(i,j,k) - G%GV%Angstrom)),0.0)
+          w = MIN((wb + (h(i,j,k) - GV%Angstrom)),0.0)
           h(i,j,k)  = h(i,j,k)  + (wb - w)
           ea(i,j,k) = ea(i,j,k) - w
           wb = w
         enddo
       else
         w = wb
-        do k=G%GV%nkml,nkmb
+        do k=GV%nkml,nkmb
           eb(i,j,k) = eb(i,j,k) + w
         enddo
 
-        k = G%GV%nkml
+        k = GV%nkml
         h(i,j,k) = h(i,j,k) + w
         do m=1,CS%fldno
           CS%var(m)%p(i,j,k) = (CS%var(m)%p(i,j,k)*h(i,j,k) + &
@@ -603,7 +608,7 @@ subroutine apply_sponge(h, dt, G, ea, eb, CS, Rcv_ml)
       do k=1,nkmb
         do m=1,CS%fldno
           CS%var(m)%p(i,j,k) = I1pdamp * &
-              (CS%var(m)%p(i,j,k) + CS%Ref_val(m)%p(G%GV%nkml,c)*damp)
+              (CS%var(m)%p(i,j,k) + CS%Ref_val(m)%p(GV%nkml,c)*damp)
         enddo
       enddo
 
@@ -613,7 +618,7 @@ subroutine apply_sponge(h, dt, G, ea, eb, CS, Rcv_ml)
       wb = 0.0
       do k=nz,1,-1
         w = MIN((((e(K)-e0) - e_str*CS%Ref_eta(K,c)) * damp), &
-                  ((wb + h(i,j,k)) - G%GV%Angstrom))
+                  ((wb + h(i,j,k)) - GV%Angstrom))
         wm = 0.5*(w - ABS(w))
         do m=1,CS%fldno
           CS%var(m)%p(i,j,k) = (h(i,j,k)*CS%var(m)%p(i,j,k) + &

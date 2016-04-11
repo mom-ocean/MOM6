@@ -129,7 +129,7 @@ subroutine verticalGridInit( param_file, GV )
   call get_param(param_file, mod, "NK", nk, &
                  "The number of model layers.", units="nondim", &
                  static_value=NK_)
-  if (nk /= NK_) call MOM_error(FATAL, "MOM_grid_init: " // &
+  if (nk /= NK_) call MOM_error(FATAL, "verticalGridInit: " // &
        "Mismatched number of layers NK_ between MOM_memory.h and param_file")
 
 #else
@@ -259,8 +259,8 @@ end function get_tr_flux_units
 !> This sets the coordinate data for the "layer mode" of the isopycnal model.
 subroutine setVerticalGridAxes( Rlay, GV )
   ! Arguments
-  type(verticalGrid_type), pointer    :: GV   ! The container for vertical grid data
-  real, dimension(GV%ke),  intent(in) :: Rlay ! The layer target density
+  type(verticalGrid_type), intent(inout) :: GV   !< The container for vertical grid data
+  real, dimension(GV%ke),  intent(in)    :: Rlay !< The layer target density
   ! Local variables
   integer :: nk
 

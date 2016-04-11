@@ -59,6 +59,7 @@ use MOM_interface_heights, only : find_eta
 use MOM_spatial_means,     only : global_area_mean, global_layer_mean, global_volume_mean
 use MOM_variables,         only : thermo_var_ptrs, ocean_internal_state, p3d
 use MOM_variables,         only : accel_diag_ptrs, cont_diag_ptrs
+use MOM_verticalGrid,      only : verticalGrid_type
 use MOM_wave_speed,        only : wave_speed, wave_speed_CS
 
 implicit none ; private
@@ -142,7 +143,8 @@ type, public :: diagnostics_CS ; private
   integer :: id_sosga          = -1, id_tosga          = -1
   integer :: id_temp_layer_ave = -1, id_salt_layer_ave = -1
   integer :: id_pbo            = -1
-  integer :: id_thkcello       = -1
+  integer :: id_thkcello       = -1, id_rhoinsitu      = -1
+  integer :: id_rhopot0        = -1, id_rhopot2        = -1
 
   type(wave_speed_CS), pointer :: wave_speed_CSp => NULL()  
 
@@ -161,20 +163,21 @@ end type diagnostics_CS
 contains
 
 subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
-                                       dt, G, CS, eta_bt)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_),   intent(in)    :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_),   intent(in)    :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),    intent(in)    :: h
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_),   intent(in)    :: uh
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_),   intent(in)    :: vh
-  type(thermo_var_ptrs),                    intent(in)    :: tv
-  type(accel_diag_ptrs),                    intent(in)    :: ADp
-  type(cont_diag_ptrs),                     intent(in)    :: CDp
-  type(forcing),                            intent(in)    :: fluxes
-  real,                                     intent(in)    :: dt
-  type(ocean_grid_type),                    intent(inout) :: G
-  type(diagnostics_CS),                     intent(inout) :: CS
-  real, dimension(NIMEM_,NJMEM_), optional, intent(in)    :: eta_bt
+                                       dt, G, GV, CS, eta_bt)
+  type(ocean_grid_type),                     intent(inout) :: G
+  type(verticalGrid_type),                   intent(in)    :: GV
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uh
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vh
+  type(thermo_var_ptrs),                     intent(in)    :: tv
+  type(accel_diag_ptrs),                     intent(in)    :: ADp
+  type(cont_diag_ptrs),                      intent(in)    :: CDp
+  type(forcing),                             intent(in)    :: fluxes
+  real,                                      intent(in)    :: dt
+  type(diagnostics_CS),                      intent(inout) :: CS
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)    :: eta_bt
 
 ! Diagnostics not more naturally calculated elsewhere are computed here. 
 
@@ -189,6 +192,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
 !  (in)      CDp - structure with pointers to terms in continuity equation
 !  (in)      dt  - time difference in s since the last call to this subroutine
 !  (in)      G   - ocean grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS  - control structure returned by a previous call to diagnostics_init
 !  (in,opt)  eta_bt - An optional barotropic variable that gives the "correct"
 !                     free surface height (Boussinesq) or total water column
@@ -204,8 +208,6 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
   ! tmp array for surface properties 
   real :: surface_field(SZI_(G),SZJ_(G)) 
   real :: pressure_1d(SZI_(G)) ! Temporary array for pressure when calling EOS
-                                   
-  real :: pres(SZI_(G))
   real :: wt, wt_p
 
   ! squared Coriolis parameter at to h-points (1/s2)
@@ -225,7 +227,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
 
   is  = G%isc  ; ie   = G%iec  ; js  = G%jsc  ; je  = G%jec
   Isq = G%IscB ; Ieq  = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-  nz  = G%ke   ; nkmb = G%GV%nk_rho_varies
+  nz  = G%ke   ; nkmb = GV%nk_rho_varies
 
   ! smg: is the following robust to ALE? It seems a bit opaque.   
   ! If the model is NOT in isopycnal mode then nkmb=0. But we need all the
@@ -241,7 +243,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
   call calculate_derivs(dt, G, CS)
 
   if (ASSOCIATED(CS%e)) then
-    call find_eta(h, tv, G%g_Earth, G, CS%e, eta_bt)
+    call find_eta(h, tv, G%g_Earth, G, GV, CS%e, eta_bt)
     if (CS%id_e > 0) call post_data(CS%id_e, CS%e, CS%diag)
   endif
 
@@ -251,7 +253,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
         CS%e_D(i,j,k) = CS%e(i,j,k) + G%bathyT(i,j)
       enddo ; enddo ; enddo
     else
-      call find_eta(h, tv, G%g_Earth, G, CS%e_D, eta_bt)
+      call find_eta(h, tv, G%g_Earth, G, GV, CS%e_D, eta_bt)
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
         CS%e_D(i,j,k) = CS%e_D(i,j,k) + G%bathyT(i,j)
       enddo ; enddo ; enddo
@@ -263,7 +265,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
   ! mass per area of grid cell (for Bouss, use Rho0)
   if (CS%id_masscello > 0) then
     do k=1,nz; do j=js,je ; do i=is,ie 
-       CS%diag_tmp3d(i,j,k) = G%GV%H_to_kg_m2*h(i,j,k)
+       CS%diag_tmp3d(i,j,k) = GV%H_to_kg_m2*h(i,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_masscello, CS%diag_tmp3d, CS%diag)
   endif
@@ -271,7 +273,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
   ! mass of liquid ocean (for Bouss, use Rho0)
   if (CS%id_masso > 0) then
     do k=1,nz; do j=js,je ; do i=is,ie
-       CS%diag_tmp3d(i,j,k) = G%GV%H_to_kg_m2*h(i,j,k)*G%areaT(i,j)
+       CS%diag_tmp3d(i,j,k) = GV%H_to_kg_m2*h(i,j,k)*G%areaT(i,j)
     enddo ; enddo ; enddo
     masso = (reproducing_sum(sum(CS%diag_tmp3d,3)))
     call post_data(CS%id_masso, masso, CS%diag)
@@ -281,8 +283,8 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
   if (CS%id_thkcello > 0) then
 
     ! thkcello = h for Boussinesq 
-    if (G%GV%Boussinesq) then 
-      call post_data(CS%id_thkcello, G%GV%H_to_m*h, CS%diag)
+    if (GV%Boussinesq) then 
+      call post_data(CS%id_thkcello, GV%H_to_m*h, CS%diag)
 
     ! thkcello = dp/(rho*g) for non-Boussinesq
     else 
@@ -302,18 +304,18 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
         do k=1,nz
           ! pressure for EOS at the layer center (Pa)
           do i=is,ie
-            pressure_1d(i) = pressure_1d(i) + 0.5*(G%G_Earth*G%GV%H_to_kg_m2)*h(i,j,k)
+            pressure_1d(i) = pressure_1d(i) + 0.5*(G%G_Earth*GV%H_to_kg_m2)*h(i,j,k)
           enddo
           ! store in-situ density (kg/m3) in diag_tmp3d
           call calculate_density(tv%T(:,j,k),tv%S(:,j,k), pressure_1d, &
                                  CS%diag_tmp3d(:,j,k), is, ie-is+1, tv%eqn_of_state)
           ! cell thickness = dz = dp/(g*rho) (meter); store in diag_tmp3d
           do i=is,ie
-            CS%diag_tmp3d(i,j,k) = (G%GV%H_to_kg_m2*h(i,j,k))/CS%diag_tmp3d(i,j,k)
+            CS%diag_tmp3d(i,j,k) = (GV%H_to_kg_m2*h(i,j,k))/CS%diag_tmp3d(i,j,k)
           enddo
           ! pressure for EOS at the bottom interface (Pa)
           do i=is,ie
-            pressure_1d(i) = pressure_1d(i) + 0.5*(G%G_Earth*G%GV%H_to_kg_m2)*h(i,j,k)
+            pressure_1d(i) = pressure_1d(i) + 0.5*(G%G_Earth*GV%H_to_kg_m2)*h(i,j,k)
           enddo
         enddo ! k
 
@@ -364,17 +366,17 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
     call post_data_1d_k(CS%id_salt_layer_ave, salt_layer_ave, CS%diag)
   endif
 
-  call calculate_vertical_integrals(h, tv, fluxes, G, CS)
+  call calculate_vertical_integrals(h, tv, fluxes, G, GV, CS)
 
   if ((CS%id_Rml > 0) .or. (CS%id_Rcv > 0) .or. ASSOCIATED(CS%h_Rlay) .or. &
       ASSOCIATED(CS%uh_Rlay) .or. ASSOCIATED(CS%vh_Rlay) .or. &
       ASSOCIATED(CS%uhGM_Rlay) .or. ASSOCIATED(CS%vhGM_Rlay)) then
 
     if (associated(tv%eqn_of_state)) then
-      pres(:) = tv%P_Ref
-!$OMP parallel do default(none) shared(tv,Rcv,is,ie,js,je,nz,pres)
+      pressure_1d(:) = tv%P_Ref
+!$OMP parallel do default(none) shared(tv,Rcv,is,ie,js,je,nz,pressure_1d)
       do k=1,nz ; do j=js,je+1
-        call calculate_density(tv%T(:,j,k),tv%S(:,j,k),pres, &
+        call calculate_density(tv%T(:,j,k),tv%S(:,j,k),pressure_1d, &
                                Rcv(:,j,k),is,ie-is+2, tv%eqn_of_state)
       enddo ; enddo
       if (CS%id_Rml > 0) call post_data(CS%id_Rml, Rcv, CS%diag)
@@ -383,17 +385,17 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
 
     if (ASSOCIATED(CS%h_Rlay)) then
       k_list = nz/2
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,nkmb,CS,Rcv,h,G) &
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,nkmb,CS,Rcv,h,GV) &
 !$OMP                          private(wt,wt_p) firstprivate(k_list)
       do j=js,je 
         do k=1,nkmb ; do i=is,ie
           CS%h_Rlay(i,j,k) = 0.0
         enddo ; enddo
         do k=nkmb+1,nz ; do i=is,ie
-        CS%h_Rlay(i,j,k) = h(i,j,k)
+          CS%h_Rlay(i,j,k) = h(i,j,k)
         enddo ; enddo 
         do k=1,nkmb ; do i=is,ie
-          call find_weights(G%GV%Rlay, Rcv(i,j,k), k_list, nz, wt, wt_p)
+          call find_weights(GV%Rlay, Rcv(i,j,k), k_list, nz, wt, wt_p)
           CS%h_Rlay(i,j,k_list)   = CS%h_Rlay(i,j,k_list)   + h(i,j,k)*wt
           CS%h_Rlay(i,j,k_list+1) = CS%h_Rlay(i,j,k_list+1) + h(i,j,k)*wt_p
         enddo ; enddo 
@@ -404,7 +406,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
 
     if (ASSOCIATED(CS%uh_Rlay)) then
       k_list = nz/2
-!$OMP parallel do default(none) shared(Isq,Ieq,js,je,nz,nkmb,Rcv,CS,G,uh) &
+!$OMP parallel do default(none) shared(Isq,Ieq,js,je,nz,nkmb,Rcv,CS,GV,uh) &
 !$OMP                          private(wt,wt_p) firstprivate(k_list)
       do j=js,je
         do k=1,nkmb ; do I=Isq,Ieq
@@ -415,7 +417,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
         enddo ; enddo 
         k_list = nz/2
         do k=1,nkmb ; do I=Isq,Ieq
-          call find_weights(G%GV%Rlay, 0.5*(Rcv(i,j,k)+Rcv(i+1,j,k)), k_list, nz, wt, wt_p)
+          call find_weights(GV%Rlay, 0.5*(Rcv(i,j,k)+Rcv(i+1,j,k)), k_list, nz, wt, wt_p)
           CS%uh_Rlay(I,j,k_list)   = CS%uh_Rlay(I,j,k_list)   + uh(I,j,k)*wt
           CS%uh_Rlay(I,j,k_list+1) = CS%uh_Rlay(I,j,k_list+1) + uh(I,j,k)*wt_p
         enddo ; enddo 
@@ -426,7 +428,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
 
     if (ASSOCIATED(CS%vh_Rlay)) then
       k_list = nz/2
-!$OMP parallel do default(none)  shared(Jsq,Jeq,is,ie,nz,nkmb,Rcv,CS,G,vh) &
+!$OMP parallel do default(none)  shared(Jsq,Jeq,is,ie,nz,nkmb,Rcv,CS,GV,vh) &
 !$OMP                          private(wt,wt_p) firstprivate(k_list)
       do J=Jsq,Jeq
         do k=1,nkmb ; do i=is,ie
@@ -436,7 +438,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
           CS%vh_Rlay(i,J,k) = vh(i,J,k)
         enddo ; enddo
         do k=1,nkmb ; do i=is,ie
-          call find_weights(G%GV%Rlay, 0.5*(Rcv(i,j,k)+Rcv(i,j+1,k)), k_list, nz, wt, wt_p)
+          call find_weights(GV%Rlay, 0.5*(Rcv(i,j,k)+Rcv(i,j+1,k)), k_list, nz, wt, wt_p)
           CS%vh_Rlay(i,J,k_list)   = CS%vh_Rlay(i,J,k_list)   + vh(i,J,k)*wt
           CS%vh_Rlay(i,J,k_list+1) = CS%vh_Rlay(i,J,k_list+1) + vh(i,J,k)*wt_p
         enddo ; enddo
@@ -447,7 +449,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
 
     if (ASSOCIATED(CS%uhGM_Rlay) .and. ASSOCIATED(CDp%uhGM)) then
       k_list = nz/2
-!$OMP parallel do default(none) shared(Isq,Ieq,js,je,nz,nkmb,Rcv,CDP,CS,G) &
+!$OMP parallel do default(none) shared(Isq,Ieq,js,je,nz,nkmb,Rcv,CDP,CS,GV) &
 !$OMP                          private(wt,wt_p) firstprivate(k_list)
       do j=js,je
         do k=1,nkmb ; do I=Isq,Ieq
@@ -457,7 +459,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
           CS%uhGM_Rlay(I,j,k) = CDp%uhGM(I,j,k)
         enddo ; enddo
         do k=1,nkmb ; do I=Isq,Ieq
-          call find_weights(G%GV%Rlay, 0.5*(Rcv(i,j,k)+Rcv(i+1,j,k)), k_list, nz, wt, wt_p)
+          call find_weights(GV%Rlay, 0.5*(Rcv(i,j,k)+Rcv(i+1,j,k)), k_list, nz, wt, wt_p)
           CS%uhGM_Rlay(I,j,k_list)   = CS%uhGM_Rlay(I,j,k_list)   + CDp%uhGM(I,j,k)*wt
           CS%uhGM_Rlay(I,j,k_list+1) = CS%uhGM_Rlay(I,j,k_list+1) + CDp%uhGM(I,j,k)*wt_p
         enddo ; enddo
@@ -468,7 +470,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
 
     if (ASSOCIATED(CS%vhGM_Rlay) .and. ASSOCIATED(CDp%vhGM)) then
       k_list = nz/2
-!$OMP parallel do default(none) shared(is,ie,Jsq,Jeq,nz,nkmb,CS,CDp,Rcv,G) &
+!$OMP parallel do default(none) shared(is,ie,Jsq,Jeq,nz,nkmb,CS,CDp,Rcv,GV) &
 !$OMP                          private(wt,wt_p) firstprivate(k_list)
       do J=Jsq,Jeq
         do k=1,nkmb ; do i=is,ie
@@ -478,7 +480,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
           CS%vhGM_Rlay(i,J,k) = CDp%vhGM(i,J,k)
         enddo ; enddo
         do k=1,nkmb ; do i=is,ie
-          call find_weights(G%GV%Rlay, 0.5*(Rcv(i,j,k)+Rcv(i,j+1,k)), k_list, nz, wt, wt_p)
+          call find_weights(GV%Rlay, 0.5*(Rcv(i,j,k)+Rcv(i,j+1,k)), k_list, nz, wt, wt_p)
           CS%vhGM_Rlay(i,J,k_list)   = CS%vhGM_Rlay(i,J,k_list)   + CDp%vhGM(i,J,k)*wt
           CS%vhGM_Rlay(i,J,k_list+1) = CS%vhGM_Rlay(i,J,k_list+1) + CDp%vhGM(i,J,k)*wt_p
         enddo ; enddo
@@ -488,9 +490,43 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
     endif
   endif
 
+  if (associated(tv%eqn_of_state)) then
+    if (CS%id_rhopot0 > 0) then
+      pressure_1d(:) = 0.
+!$OMP parallel do default(none) shared(tv,Rcv,is,ie,js,je,nz,pressure_1d)
+      do k=1,nz ; do j=js,je
+        call calculate_density(tv%T(:,j,k),tv%S(:,j,k),pressure_1d, &
+                               Rcv(:,j,k),is,ie-is+1, tv%eqn_of_state)
+      enddo ; enddo
+      if (CS%id_rhopot0 > 0) call post_data(CS%id_rhopot0, Rcv, CS%diag)
+    endif
+    if (CS%id_rhopot2 > 0) then
+      pressure_1d(:) = 2.E7 ! 2000 dbars
+!$OMP parallel do default(none) shared(tv,Rcv,is,ie,js,je,nz,pressure_1d)
+      do k=1,nz ; do j=js,je
+        call calculate_density(tv%T(:,j,k),tv%S(:,j,k),pressure_1d, &
+                               Rcv(:,j,k),is,ie-is+1, tv%eqn_of_state)
+      enddo ; enddo
+      if (CS%id_rhopot2 > 0) call post_data(CS%id_rhopot2, Rcv, CS%diag)
+    endif
+    if (CS%id_rhoinsitu > 0) then
+!$OMP parallel do default(none) shared(tv,Rcv,is,ie,js,je,nz,pressure_1d,h,GV)
+      do j=js,je
+        pressure_1d(:) = 0. ! Start at p=0 Pa at surface
+        do k=1,nz
+          pressure_1d(:) =  pressure_1d(:) + 0.5 * h(:,j,k) * GV%H_to_Pa ! Pressure in middle of layer k
+          call calculate_density(tv%T(:,j,k),tv%S(:,j,k),pressure_1d, &
+                                 Rcv(:,j,k),is,ie-is+1, tv%eqn_of_state)
+          pressure_1d(:) =  pressure_1d(:) + 0.5 * h(:,j,k) * GV%H_to_Pa ! Pressure at bottom of layer k
+        enddo
+      enddo
+      if (CS%id_rhoinsitu > 0) call post_data(CS%id_rhoinsitu, Rcv, CS%diag)
+    endif
+  endif
+
   if ((CS%id_cg1>0) .or. (CS%id_Rd1>0) .or. (CS%id_cfl_cg1>0) .or. &
       (CS%id_cfl_cg1_x>0) .or. (CS%id_cfl_cg1_y>0)) then
-    call wave_speed(h, tv, G, CS%cg1, CS%wave_speed_CSp)
+    call wave_speed(h, tv, G, GV, CS%cg1, CS%wave_speed_CSp)
     if (CS%id_cg1>0) call post_data(CS%id_cg1, CS%cg1, CS%diag)
     if (CS%id_Rd1>0) then
 !$OMP parallel do default(none) shared(is,ie,js,je,G,CS) &
@@ -603,11 +639,12 @@ subroutine find_weights(Rlist, R_in, k, nz, wt, wt_p)
 
 end subroutine find_weights
 
-subroutine calculate_vertical_integrals(h, tv, fluxes, G, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),    intent(in)    :: h
+subroutine calculate_vertical_integrals(h, tv, fluxes, G, GV, CS)
+  type(ocean_grid_type),                    intent(inout) :: G
+  type(verticalGrid_type),                  intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
   type(thermo_var_ptrs),                    intent(in)    :: tv
   type(forcing),                            intent(in)    :: fluxes
-  type(ocean_grid_type),                    intent(inout) :: G
   type(diagnostics_CS),                     intent(inout) :: CS
 
 ! Subroutine calculates vertical integrals of several tracers, along
@@ -619,6 +656,7 @@ subroutine calculate_vertical_integrals(h, tv, fluxes, G, CS)
 !  (in)      tv - structure pointing to thermodynamic variables
 !  (in)      fluxes - a structure containing the surface fluxes.
 !  (in)      G  - ocean grid structure
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - control structure returned by a previous call to diagnostics_init
 
   real, dimension(SZI_(G), SZJ_(G)) :: &
@@ -643,7 +681,7 @@ subroutine calculate_vertical_integrals(h, tv, fluxes, G, CS)
   if (CS%id_mass_wt > 0) then
     do j=js,je ; do i=is,ie ; mass(i,j) = 0.0 ; enddo ; enddo
     do k=1,nz ; do j=js,je ; do i=is,ie
-      mass(i,j) = mass(i,j) + G%GV%H_to_kg_m2*h(i,j,k)
+      mass(i,j) = mass(i,j) + GV%H_to_kg_m2*h(i,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_mass_wt, mass, CS%diag)
   endif
@@ -651,7 +689,7 @@ subroutine calculate_vertical_integrals(h, tv, fluxes, G, CS)
   if (CS%id_temp_int > 0) then
     do j=js,je ; do i=is,ie ; tr_int(i,j) = 0.0 ; enddo ; enddo
     do k=1,nz ; do j=js,je ; do i=is,ie
-      tr_int(i,j) = tr_int(i,j) + (G%GV%H_to_kg_m2*h(i,j,k))*tv%T(i,j,k)
+      tr_int(i,j) = tr_int(i,j) + (GV%H_to_kg_m2*h(i,j,k))*tv%T(i,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_temp_int, tr_int, CS%diag)
   endif
@@ -659,13 +697,13 @@ subroutine calculate_vertical_integrals(h, tv, fluxes, G, CS)
   if (CS%id_salt_int > 0) then
     do j=js,je ; do i=is,ie ; tr_int(i,j) = 0.0 ; enddo ; enddo
     do k=1,nz ; do j=js,je ; do i=is,ie
-      tr_int(i,j) = tr_int(i,j) + (G%GV%H_to_kg_m2*h(i,j,k))*tv%S(i,j,k)
+      tr_int(i,j) = tr_int(i,j) + (GV%H_to_kg_m2*h(i,j,k))*tv%S(i,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_salt_int, tr_int, CS%diag)
   endif
 
   if (CS%id_col_ht > 0) then
-    call find_eta(h, tv, G%g_Earth, G, z_top)
+    call find_eta(h, tv, G%g_Earth, G, GV, z_top)
     do j=js,je ; do i=is,ie
       z_bot(i,j) = z_top(i,j) + G%bathyT(i,j)
     enddo ; enddo
@@ -674,18 +712,18 @@ subroutine calculate_vertical_integrals(h, tv, fluxes, G, CS)
 
   if (CS%id_col_mass > 0 .or. CS%id_pbo > 0) then
     do j=js,je ; do i=is,ie ; mass(i,j) = 0.0 ; enddo ; enddo
-    if (G%GV%Boussinesq) then
+    if (GV%Boussinesq) then
       if (associated(tv%eqn_of_state)) then
         IG_Earth = 1.0 / G%g_Earth
-!       do j=js,je ; do i=is,ie ; z_bot(i,j) = -P_SURF(i,j)/G%GV%H_to_Pa ; enddo ; enddo
+!       do j=js,je ; do i=is,ie ; z_bot(i,j) = -P_SURF(i,j)/GV%H_to_Pa ; enddo ; enddo
         do j=js,je ; do i=is,ie ; z_bot(i,j) = 0.0 ; enddo ; enddo
         do k=1,nz
           do j=js,je ; do i=is,ie
             z_top(i,j) = z_bot(i,j)
-            z_bot(i,j) = z_top(i,j) - G%GV%H_to_m*h(i,j,k)
+            z_bot(i,j) = z_top(i,j) - GV%H_to_m*h(i,j,k)
           enddo ; enddo
           call int_density_dz(tv%T(:,:,k), tv%S(:,:,k), &
-                              z_top, z_bot, 0.0, G%GV%H_to_kg_m2, G%g_Earth, &
+                              z_top, z_bot, 0.0, GV%H_to_kg_m2, G%g_Earth, &
                               G%HI, G%HI, tv%eqn_of_state, dpress)
           do j=js,je ; do i=is,ie
             mass(i,j) = mass(i,j) + dpress(i,j) * IG_Earth
@@ -693,12 +731,12 @@ subroutine calculate_vertical_integrals(h, tv, fluxes, G, CS)
         enddo
       else
         do k=1,nz ; do j=js,je ; do i=is,ie
-          mass(i,j) = mass(i,j) + (G%GV%H_to_m*G%GV%Rlay(k))*h(i,j,k)
+          mass(i,j) = mass(i,j) + (GV%H_to_m*GV%Rlay(k))*h(i,j,k)
         enddo ; enddo ; enddo
       endif
     else
       do k=1,nz ; do j=js,je ; do i=is,ie
-        mass(i,j) = mass(i,j) + G%GV%H_to_kg_m2*h(i,j,k)
+        mass(i,j) = mass(i,j) + GV%H_to_kg_m2*h(i,j,k)
       enddo ; enddo ; enddo
     endif
     if (CS%id_col_mass > 0) then
@@ -724,15 +762,15 @@ end subroutine calculate_vertical_integrals
 
 
 subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, CS)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: uh
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: vh
-  type(accel_diag_ptrs),                  intent(in)    :: ADp
-  type(cont_diag_ptrs),                   intent(in)    :: CDp
-  type(ocean_grid_type),                  intent(inout) :: G
-  type(diagnostics_CS),                   intent(inout) :: CS
+  type(ocean_grid_type),                     intent(inout) :: G
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uh
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vh
+  type(accel_diag_ptrs),                     intent(in)    :: ADp
+  type(cont_diag_ptrs),                      intent(in)    :: CDp
+  type(diagnostics_CS),                      intent(inout) :: CS
 
 ! This subroutine calculates terms in the mechanical energy budget.
 
@@ -982,30 +1020,32 @@ subroutine calculate_derivs(dt, G, CS)
 
 end subroutine calculate_derivs
 
-subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, param_file, diag, CS, &
+subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS, &
                                 wave_speed_CSp)
   type(ocean_internal_state), intent(in)    :: MIS
   type(accel_diag_ptrs),      intent(inout) :: ADp
   type(cont_diag_ptrs),       intent(inout) :: CDp
   type(time_type),            intent(in)    :: Time
   type(ocean_grid_type),      intent(in)    :: G
+  type(verticalGrid_type),    intent(in)    :: GV
   type(param_file_type),      intent(in)    :: param_file
   type(diag_ctrl), target,    intent(inout) :: diag
   type(diagnostics_CS),       pointer       :: CS
   type(wave_speed_CS),        pointer       :: wave_speed_CSp
 
 ! Arguments
-!  (in)        MIS  - For "MOM Internal State" a set of pointers to the fields and
-!                     accelerations that make up the ocean's internal physical
-!                     state.
-!  (inout)     ADp  - structure with pointers to momentum equation terms 
-!  (inout)     CDp  - structure with pointers to continuity equation terms
-!  (in)        Time - current model time
-!  (in)        G    - ocean grid structure
-!  (in) param_file  - structure indicating the open file to parse for
+!  (in)     MIS    - For "MOM Internal State" a set of pointers to the fields and
+!                    accelerations that make up the ocean's internal physical
+!                    state.
+!  (inout)  ADp    - structure with pointers to momentum equation terms 
+!  (inout)  CDp    - structure with pointers to continuity equation terms
+!  (in)     Time   - current model time
+!  (in)     G      - ocean grid structure
+!  (in)     GV     - The ocean's vertical grid structure.
+!  (in) param_file - structure indicating the open file to parse for
 !                     model parameter values
-!  (in)      diag   - structure to regulate diagnostic output
-!  (in/out)  CS     - pointer set to point to control structure for this module
+!  (in)     diag   - structure to regulate diagnostic output
+!  (in/out) CS     - pointer set to point to control structure for this module
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -1035,7 +1075,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, param_file, diag, CS, &
   call get_param(param_file, mod, "SPLIT", CS%split, &
                  "Use the split time stepping if true.", default=.true.)
 
-  if (G%GV%Boussinesq) then
+  if (GV%Boussinesq) then
     thickness_units = "meter" ; flux_units = "meter3 second-1"
   else
     thickness_units = "kilogram meter-2" ; flux_units = "kilogram second-1"
@@ -1057,7 +1097,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, param_file, diag, CS, &
   CS%id_thkcello = register_diag_field('ocean_model', 'thkcello', diag%axesTL, Time, &
       long_name = 'Cell Thickness', standard_name='cell_thickness', units='m')
 
-  if (((CS%id_masscello>0) .or. (CS%id_masso>0) .or. (CS%id_thkcello>0.and..not.G%GV%Boussinesq)) &
+  if (((CS%id_masscello>0) .or. (CS%id_masso>0) .or. (CS%id_thkcello>0.and..not.GV%Boussinesq)) &
       .and. .not.ASSOCIATED(CS%diag_tmp3d)) then
     call safe_alloc_ptr(CS%diag_tmp3d,isd,ied,jsd,jed,nz)
   endif
@@ -1096,6 +1136,13 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, param_file, diag, CS, &
   CS%id_Rcv = register_diag_field('ocean_model', 'Rho_cv', diag%axesTL, Time, &
       'Coordinate Potential Density', 'kg meter-3')
 
+  CS%id_rhopot0 = register_diag_field('ocean_model', 'rhopot0', diag%axesTL, Time, &
+      'Potential density referenced to surface', 'kg meter-3')
+  CS%id_rhopot2 = register_diag_field('ocean_model', 'rhopot2', diag%axesTL, Time, &
+      'Potential density referenced to 2000 dbar', 'kg meter-3')
+  CS%id_rhoinsitu = register_diag_field('ocean_model', 'rhoinsitu', diag%axesTL, Time, &
+      'In situ density', 'kg meter-3')
+
   CS%id_du_dt = register_diag_field('ocean_model', 'dudt', diag%axesCuL, Time, &
       'Zonal Acceleration', 'meter second-2')
   if ((CS%id_du_dt>0) .and. .not.ASSOCIATED(CS%du_dt)) then
@@ -1118,7 +1165,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, param_file, diag, CS, &
   endif
 
   ! layer thickness variables 
-  !if (G%GV%nk_rho_varies > 0) then
+  !if (GV%nk_rho_varies > 0) then
     CS%id_h_Rlay = register_diag_field('ocean_model', 'h_rho', diag%axesTL, Time, &
         'Layer thicknesses in pure potential density coordinates', thickness_units)
     if (CS%id_h_Rlay>0) call safe_alloc_ptr(CS%h_Rlay,isd,ied,jsd,jed,nz)
