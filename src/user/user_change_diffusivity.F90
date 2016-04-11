@@ -71,15 +71,15 @@ end type user_change_diff_CS
 contains
 
 subroutine user_change_diff(h, tv, G, CS, Kd, Kd_int, T_f, S_f, Kd_int_add)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),   intent(in)    :: h
-  type(thermo_var_ptrs),                intent(in)    :: tv
-  type(ocean_grid_type),                intent(in)    :: G
-  type(user_change_diff_CS),            pointer       :: CS
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),   optional, intent(inout) :: Kd
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), optional, intent(inout) :: Kd_int
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),   optional, intent(in)    :: T_f
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),   optional, intent(in)    :: S_f
-  real, dimension(:,:,:),               optional, pointer       :: Kd_int_add
+  type(ocean_grid_type),                    intent(in)    :: G
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
+  type(thermo_var_ptrs),                    intent(in)    :: tv
+  type(user_change_diff_CS),                pointer       :: CS
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   optional, intent(inout) :: Kd
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), optional, intent(inout) :: Kd_int
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   optional, intent(in)    :: T_f
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   optional, intent(in)    :: S_f
+  real, dimension(:,:,:),                     optional, pointer       :: Kd_int_add
 !   This subroutine provides an interface for a user to use to modify the
 ! main code to alter the diffusivities as needed.  The specific example
 ! implemented here augments the diffusivity for a specified range of latitude

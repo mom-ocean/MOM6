@@ -14,7 +14,7 @@ use MOM_file_parser,    only : get_param, log_version, param_file_type
 use MOM_file_parser,    only : openParameterBlock, closeParameterBlock
 use MOM_grid,           only : ocean_grid_type
 use MOM_tracer_registry,only : tracer_registry_type
-
+use MOM_verticalGrid, only : verticalGrid_type
 
 implicit none ; private
 
@@ -109,7 +109,6 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, CS)
   allocate(CS%vKoL(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%vKoL(G%isc:G%iec,G%jsc-1:G%jec,:) = 0
   allocate(CS%vKoR(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%vKoR(G%isc:G%iec,G%jsc-1:G%jec,:) = 0
   allocate(CS%vHeff(G%isd:G%ied,G%jsd:G%jed,2*G%ke+1)); CS%vHeff(G%isc:G%iec,G%jsc-1:G%jec,:) = 0
-
 
 end function neutral_diffusion_init
 
@@ -217,11 +216,12 @@ end subroutine neutral_diffusion_diag_init
 
 !> Calculate remapping factors for u/v columns used to map adjoining columns to
 !! a shared coordinate space.
-subroutine neutral_diffusion_calc_coeffs(G, h, T, S, EOS, CS)
+subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, EOS, CS)
   type(ocean_grid_type),                 intent(in) :: G   !< Ocean grid structure
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h   !< Layer thickness (H units)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: T   !< Potential temperature (degC)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: S   !< Salinity (ppt)
+  type(verticalGrid_type),               intent(in) :: GV  !< ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h   !< Layer thickness (H units)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: T   !< Potential temperature (degC)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: S   !< Salinity (ppt)
   type(EOS_type),                        pointer    :: EOS !< Equation of state structure
   type(neutral_diffusion_CS),            pointer    :: CS  !< Neutral diffusion control structure
 
@@ -245,7 +245,7 @@ subroutine neutral_diffusion_calc_coeffs(G, h, T, S, EOS, CS)
     do k = 1, G%ke+1
       call calculate_density_derivs(Tint(:,j,k), Sint(:,j,k), Pint(:,j,k), &
                                     dRdT(:,j,k), dRdS(:,j,k), G%isc-1, G%iec-G%isc+3, EOS)
-      if (k<=G%ke) Pint(:,j,k+1) = Pint(:,j,k) + h(:,j,k) * G%GV%H_to_Pa ! Pressure at next interface, k+1 (Pa)
+      if (k<=G%ke) Pint(:,j,k+1) = Pint(:,j,k) + h(:,j,k) * GV%H_to_Pa ! Pressure at next interface, k+1 (Pa)
     enddo
   enddo
 
@@ -269,18 +269,19 @@ subroutine neutral_diffusion_calc_coeffs(G, h, T, S, EOS, CS)
     enddo
   enddo
 
-  CS%uhEff(:,:,:) = CS%uhEff(:,:,:) / G%GV%H_to_pa
-  CS%vhEff(:,:,:) = CS%vhEff(:,:,:) / G%GV%H_to_pa
+  CS%uhEff(:,:,:) = CS%uhEff(:,:,:) / GV%H_to_pa
+  CS%vhEff(:,:,:) = CS%vhEff(:,:,:) / GV%H_to_pa
 
 end subroutine neutral_diffusion_calc_coeffs
 
 !> Update tracer concentration due to neutral diffusion; layer thickness unchanged by this update. 
-subroutine neutral_diffusion(G, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
+subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
   type(ocean_grid_type),                  intent(in)    :: G      !< Ocean grid structure
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h      !< Layer thickness (H units)
-  real, dimension(NIMEMB_,NJMEM_),        intent(in)    :: Coef_x !< dt * Kh * dy / dx at u-points (m^2)
-  real, dimension(NIMEM_,NJMEMB_),        intent(in)    :: Coef_y !< dt * Kh * dx / dy at u-points (m^2)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: Tracer !< Tracer concentration
+  type(verticalGrid_type),                intent(in)    :: GV     !< ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h      !< Layer thickness (H units)
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(in)    :: Coef_x !< dt * Kh * dy / dx at u-points (m^2)
+  real, dimension(SZI_(G),SZJB_(G)),         intent(in)    :: Coef_y !< dt * Kh * dx / dy at u-points (m^2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: Tracer !< Tracer concentration
   integer,                                intent(in)    :: m      !< Tracer number 
   real,                                   intent(in)    :: dt     !< Tracer time step 
   character(len=32),                      intent(in)    :: name   !< Tracer name 
@@ -305,8 +306,8 @@ subroutine neutral_diffusion(G, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
     tendency(:,:,:)  = 0.0
     tendency_2d(:,:) = 0.0
     convert          = 1.0 
-    if(trim(name) == 'T') convert = CS%C_p  * G%GV%H_to_kg_m2
-    if(trim(name) == 'S') convert = ppt2mks * G%GV%H_to_kg_m2
+    if(trim(name) == 'T') convert = CS%C_p  * GV%H_to_kg_m2
+    if(trim(name) == 'S') convert = ppt2mks * GV%H_to_kg_m2
   endif 
 
 
@@ -353,7 +354,7 @@ subroutine neutral_diffusion(G, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
       enddo
       do k = 1, G%ke
         Tracer(i,j,k) = Tracer(i,j,k) + dTracer(k) * &
-                        ( G%IareaT(i,j) / ( h(i,j,k) + G%GV%H_subroundoff ) )
+                        ( G%IareaT(i,j) / ( h(i,j,k) + GV%H_subroundoff ) )
       enddo
 
       if(CS%id_neutral_diff_tracer_conc_tend(m)    > 0  .or.  &
@@ -388,7 +389,7 @@ subroutine neutral_diffusion(G, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
   ! the tendency array.
   if(CS%id_neutral_diff_tracer_conc_tend(m) > 0) then 
     do k = 1, G%ke ; do j = G%jsc,G%jec ; do i = G%isc,G%iec
-      tendency(i,j,k) =  tendency(i,j,k) / ( h(i,j,k) + G%GV%H_subroundoff )
+      tendency(i,j,k) =  tendency(i,j,k) / ( h(i,j,k) + GV%H_subroundoff )
     enddo ; enddo ; enddo
     call post_data(CS%id_neutral_diff_tracer_conc_tend(m), tendency, CS%diag)
   endif 

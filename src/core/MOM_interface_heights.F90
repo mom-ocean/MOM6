@@ -51,6 +51,7 @@ use MOM_error_handler, only : MOM_error, FATAL
 use MOM_file_parser, only : log_version
 use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : thermo_var_ptrs
+use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : int_specific_vol_dp
 
 implicit none ; private
@@ -65,11 +66,12 @@ end interface find_eta
 
 contains
 
-subroutine find_eta_3d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
+subroutine find_eta_3d(h, tv, G_Earth, G, GV, eta, eta_bt, halo_size)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),    intent(in)      :: h
   type(thermo_var_ptrs),                    intent(in)      :: tv
   real,                                     intent(in)      :: G_Earth
   type(ocean_grid_type),                    intent(in)      :: G
+  type(verticalGrid_type),                  intent(in)      :: GV
   real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(out) :: eta
   real, dimension(NIMEM_,NJMEM_), optional, intent(in)      :: eta_bt
   integer,                        optional, intent(in)      :: halo_size
@@ -85,6 +87,7 @@ subroutine find_eta_3d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
 !  (in)      tv      - structure pointing to thermodynamic variables
 !  (in)      G_Earth - Earth gravitational acceleration (m/s2)
 !  (in)      G       - ocean grid structure
+!  (in)      GV      - The ocean's vertical grid structure.
 !  (out)     eta     - layer interface heights (meter)
 !  (in,opt)  eta_bt  - optional barotropic variable that gives the "correct"
 !                      free surface height (Boussinesq) or total water column
@@ -111,16 +114,16 @@ subroutine find_eta_3d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
 
   I_gEarth = 1.0 / G_Earth
 
-!$OMP parallel default(none) shared(isv,iev,jsv,jev,nz,eta,G,h,eta_bt,tv,p, &
+!$OMP parallel default(none) shared(isv,iev,jsv,jev,nz,eta,G,GV,h,eta_bt,tv,p, &
 !$OMP                               G_Earth,dz_geo,halo,I_gEarth) &
 !$OMP                       private(dilate,htot)
 !$OMP do
   do j=jsv,jev ; do i=isv,iev ; eta(i,j,nz+1) = -G%bathyT(i,j) ; enddo ; enddo
 
-  if (G%GV%Boussinesq) then
+  if (GV%Boussinesq) then
 !$OMP do
     do j=jsv,jev ; do k=nz,1,-1; do i=isv,iev
-      eta(i,j,K) = eta(i,j,K+1) + h(i,j,k)*G%GV%H_to_m
+      eta(i,j,K) = eta(i,j,K+1) + h(i,j,k)*GV%H_to_m
     enddo ; enddo ; enddo
     if (present(eta_bt)) then
       ! Dilate the water column to agree with the free surface height
@@ -128,7 +131,7 @@ subroutine find_eta_3d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
 !$OMP do
       do j=jsv,jev
         do i=isv,iev
-          dilate(i) = (eta_bt(i,j)*G%GV%H_to_m + G%bathyT(i,j)) / &
+          dilate(i) = (eta_bt(i,j)*GV%H_to_m + G%bathyT(i,j)) / &
                       (eta(i,j,1) + G%bathyT(i,j))
         enddo
         do k=1,nz ; do i=isv,iev
@@ -143,7 +146,7 @@ subroutine find_eta_3d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
       do j=jsv,jev
         do i=isv,iev ; p(i,j,1) = 0.0 ; enddo
         do k=1,nz ; do i=isv,iev
-          p(i,j,K+1) = p(i,j,K) + G_Earth*G%GV%H_to_kg_m2*h(i,j,k)
+          p(i,j,K+1) = p(i,j,K) + G_Earth*GV%H_to_kg_m2*h(i,j,k)
         enddo ; enddo
       enddo
 !$OMP do
@@ -160,7 +163,7 @@ subroutine find_eta_3d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
     else
 !$OMP do
       do j=jsv,jev ;  do k=nz,1,-1; do i=isv,iev
-        eta(i,j,K) = eta(i,j,K+1) + G%GV%H_to_kg_m2*h(i,j,k)/G%GV%Rlay(k)
+        eta(i,j,K) = eta(i,j,K+1) + GV%H_to_kg_m2*h(i,j,k)/GV%Rlay(k)
       enddo ; enddo ; enddo
     endif
     if (present(eta_bt)) then
@@ -168,7 +171,7 @@ subroutine find_eta_3d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
       ! from the time-averaged barotropic solution.
 !$OMP do
       do j=jsv,jev
-        do i=isv,iev ; htot(i) = G%GV%H_subroundoff ; enddo
+        do i=isv,iev ; htot(i) = GV%H_subroundoff ; enddo
         do k=1,nz ; do i=isv,iev ; htot(i) = htot(i) + h(i,j,k) ; enddo ; enddo
         do i=isv,iev ; dilate(i) = eta_bt(i,j) / htot(i) ; enddo
         do k=1,nz ; do i=isv,iev
@@ -182,11 +185,12 @@ subroutine find_eta_3d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
 end subroutine find_eta_3d
 
 
-subroutine find_eta_2d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
+subroutine find_eta_2d(h, tv, G_Earth, G, GV, eta, eta_bt, halo_size)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),    intent(in)  :: h
   type(thermo_var_ptrs),                    intent(in)  :: tv
   real,                                     intent(in)  :: G_Earth
   type(ocean_grid_type),                    intent(in)  :: G
+  type(verticalGrid_type),                  intent(in)    :: GV
   real, dimension(NIMEM_,NJMEM_),           intent(out) :: eta
   real, dimension(NIMEM_,NJMEM_), optional, intent(in)  :: eta_bt
   integer,                        optional, intent(in)  :: halo_size
@@ -201,6 +205,7 @@ subroutine find_eta_2d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
 !  (in)      tv      - structure pointing to various thermodynamic variables
 !  (in)      G_Earth - Earth gravitational acceleration (m/s2)
 !  (in)      G       - ocean grid structure
+!  (in)      GV      - The ocean's vertical grid structure.
 !  (out)     eta     - free surface height relative to mean sea level (z=0) (m)
 !  (in,opt)  eta_bt  - optional barotropic variable that gives the "correct"
 !                      free surface height (Boussinesq) or total water column
@@ -221,13 +226,13 @@ subroutine find_eta_2d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
 
   I_gEarth = 1.0 / G_Earth
 
-!$OMP parallel default(none) shared(is,ie,js,je,nz,eta,G,eta_bt,h,tv,p, &
+!$OMP parallel default(none) shared(is,ie,js,je,nz,eta,G,GV,eta_bt,h,tv,p, &
 !$OMP                               G_Earth,dz_geo,halo,I_gEarth) &
 !$OMP                       private(htot)
 !$OMP do
   do j=js,je ; do i=is,ie ; eta(i,j) = -G%bathyT(i,j) ; enddo ; enddo
 
-  if (G%GV%Boussinesq) then
+  if (GV%Boussinesq) then
     if (present(eta_bt)) then
 !$OMP do
       do j=js,je ; do i=is,ie
@@ -236,7 +241,7 @@ subroutine find_eta_2d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
     else
 !$OMP do
       do j=js,je ; do k=1,nz ; do i=is,ie
-        eta(i,j) = eta(i,j) + h(i,j,k)*G%GV%H_to_m
+        eta(i,j) = eta(i,j) + h(i,j,k)*GV%H_to_m
       enddo ; enddo ; enddo
     endif
   else
@@ -246,7 +251,7 @@ subroutine find_eta_2d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
         do i=is,ie ; p(i,j,1) = 0.0 ; enddo
 
         do k=1,nz ; do i=is,ie
-          p(i,j,k+1) = p(i,j,k) + G_Earth*G%GV%H_to_kg_m2*h(i,j,k)
+          p(i,j,k+1) = p(i,j,k) + G_Earth*GV%H_to_kg_m2*h(i,j,k)
         enddo ; enddo
       enddo
 !$OMP do
@@ -261,7 +266,7 @@ subroutine find_eta_2d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
     else
 !$OMP do
       do j=js,je ; do k=1,nz ; do i=is,ie
-        eta(i,j) = eta(i,j) + G%GV%H_to_kg_m2*h(i,j,k)/G%GV%Rlay(k)
+        eta(i,j) = eta(i,j) + GV%H_to_kg_m2*h(i,j,k)/GV%Rlay(k)
       enddo ; enddo ; enddo
     endif
     if (present(eta_bt)) then
@@ -269,7 +274,7 @@ subroutine find_eta_2d(h, tv, G_Earth, G, eta, eta_bt, halo_size)
       ! mass from the barotropic solution.
 !$OMP do
       do j=js,je
-        do i=is,ie ; htot(i) = G%GV%H_subroundoff ; enddo
+        do i=is,ie ; htot(i) = GV%H_subroundoff ; enddo
         do k=1,nz ; do i=is,ie ; htot(i) = htot(i) + h(i,j,k) ; enddo ; enddo
         do i=is,ie
           eta(i,j) = (eta_bt(i,j) / htot(i)) * (eta(i,j) + G%bathyT(i,j)) - &

@@ -96,8 +96,7 @@ use MOM_ALE, only : ALE_CS
 use MOM_continuity, only : continuity, continuity_init, continuity_CS
 use MOM_CoriolisAdv, only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
 use MOM_error_checking, only : check_redundant
-use MOM_grid, only : MOM_grid_init, ocean_grid_type, get_thickness_units
-use MOM_grid, only : get_flux_units, get_tr_flux_units
+use MOM_grid, only : ocean_grid_type
 use MOM_hor_visc, only : horizontal_viscosity, hor_visc_init, hor_visc_CS
 use MOM_interface_heights, only : find_eta
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
@@ -105,10 +104,12 @@ use MOM_MEKE_types, only : MEKE_type
 use MOM_open_boundary, only : Radiation_Open_Bdry_Conds, open_boundary_init
 use MOM_open_boundary, only : open_boundary_CS
 use MOM_PressureForce, only : PressureForce, PressureForce_init, PressureForce_CS
+use MOM_set_visc, only : set_viscous_BBL, set_viscous_ML, set_visc_CS
 use MOM_tidal_forcing, only : tidal_forcing_init, tidal_forcing_CS
 use MOM_vert_friction, only : vertvisc, vertvisc_coef
 use MOM_vert_friction, only : vertvisc_limit_vel, vertvisc_init, vertvisc_CS
-use MOM_set_visc, only : set_viscous_BBL, set_viscous_ML, set_visc_CS
+use MOM_verticalGrid, only : verticalGrid_type, get_thickness_units
+use MOM_verticalGrid, only : get_flux_units, get_tr_flux_units
 
 implicit none ; private
 
@@ -177,7 +178,7 @@ contains
 ! =============================================================================
 
 subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
-                  p_surf_begin, p_surf_end, uh, vh, uhtr, vhtr, eta_av, G, CS, &
+                  p_surf_begin, p_surf_end, uh, vh, uhtr, vhtr, eta_av, G, GV, CS, &
                   VarMix, MEKE)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: u
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: v
@@ -194,6 +195,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vhtr
   real, dimension(NIMEM_,NJMEM_),         intent(out)   :: eta_av
   type(ocean_grid_type),                  intent(inout) :: G
+  type(verticalGrid_type),                intent(in)    :: GV
   type(MOM_dyn_unsplit_CS),               pointer       :: CS
   type(VarMix_CS),                        pointer       :: VarMix
   type(MEKE_type),                        pointer       :: MEKE
@@ -221,6 +223,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
 !  (out)     eta_av - The time-mean free surface height or column mass, in m or
 !                     kg m-2.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure set up by initialize_dyn_unsplit.
 !  (in)      VarMix - A pointer to a structure with fields that specify the
 !                     spatially variable viscosities.
@@ -254,21 +257,21 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
 ! all of the fields except h.  h is stepped separately.
 
   if (CS%debug) then
-    call MOM_state_chksum("Start First Predictor ", u, v, h, uh, vh, G)
+    call MOM_state_chksum("Start First Predictor ", u, v, h, uh, vh, G, GV)
   endif
 
 ! diffu = horizontal viscosity terms (u,h)
   call enable_averaging(dt,Time_local, CS%diag)
   call cpu_clock_begin(id_clock_horvisc)
   call horizontal_viscosity(u, v, h, CS%diffu, CS%diffv, MEKE, Varmix, &
-                            G, CS%hor_visc_CSp)
+                            G, GV, CS%hor_visc_CSp)
   call cpu_clock_end(id_clock_horvisc)
   call disable_averaging(CS%diag)
 
 ! uh = u*h
 ! hp = h + dt/2 div . uh
   call cpu_clock_begin(id_clock_continuity)
-  call continuity(u, v, h, hp, uh, vh, dt*0.5, G, CS%continuity_CSp, &
+  call continuity(u, v, h, hp, uh, vh, dt*0.5, G, GV, CS%continuity_CSp, &
                   OBC=CS%OBC)
   call cpu_clock_end(id_clock_continuity)
   call cpu_clock_begin(id_clock_pass)
@@ -309,7 +312,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
 
 ! CAu = -(f+zeta)/h_av vh + d/dx KE
   call cpu_clock_begin(id_clock_Cor)
-  call CorAdCalc(u, v, h_av, uh, vh, CS%CAu, CS%CAv, CS%ADp, G, &
+  call CorAdCalc(u, v, h_av, uh, vh, CS%CAu, CS%CAv, CS%ADp, G, GV, &
                  CS%CoriolisAdv_CSp)
   call cpu_clock_end(id_clock_Cor)
 
@@ -318,7 +321,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   if (dyn_p_surf) then ; do j=js-2,je+2 ; do i=is-2,ie+2
     p_surf(i,j) = 0.75*p_surf_begin(i,j) + 0.25*p_surf_end(i,j)
   enddo ; enddo ; endif
-  call PressureForce(h_av, tv, CS%PFu, CS%PFv, G, &
+  call PressureForce(h_av, tv, CS%PFu, CS%PFv, G, GV, &
                      CS%PressureForce_CSp, CS%ALE_CSp, p_surf)
   call cpu_clock_end(id_clock_pres)
 
@@ -335,16 +338,16 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   call cpu_clock_end(id_clock_mom_update)
 
   if (CS%debug) then
-    call MOM_state_chksum("Predictor 1", up, vp, h_av, uh, vh, G)
+    call MOM_state_chksum("Predictor 1", up, vp, h_av, uh, vh, G, GV)
     call MOM_accel_chksum("Predictor 1 accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv,&
-                          CS%diffu, CS%diffv, G)
+                          CS%diffu, CS%diffv, G, GV)
   endif
 
 ! visc contains viscosity and BBL thickness (u_in,h_in)
   if (visc%calc_bbl) then
     call enable_averaging(visc%bbl_calc_time_interval, &
               Time_local+set_time(int(visc%bbl_calc_time_interval-dt)), CS%diag)
-    call set_viscous_BBL(u, v, h_av, tv, visc, G, CS%set_visc_CSp)
+    call set_viscous_BBL(u, v, h_av, tv, visc, G, GV, CS%set_visc_CSp)
     call disable_averaging(CS%diag)
     call cpu_clock_begin(id_clock_pass)
     if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) &
@@ -363,12 +366,12 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
  ! up <- up + dt/2 d/dz visc d/dz up
   call cpu_clock_begin(id_clock_vertvisc)
   call enable_averaging(dt, Time_local, CS%diag)
-  call set_viscous_ML(u, v, h_av, tv, fluxes, visc, dt*0.5, G, &
+  call set_viscous_ML(u, v, h_av, tv, fluxes, visc, dt*0.5, G, GV, &
                       CS%set_visc_CSp)
   call disable_averaging(CS%diag)
-  call vertvisc_coef(up, vp, h_av, fluxes, visc, dt*0.5, G, CS%vertvisc_CSp)
-  call vertvisc(up, vp, h_av, fluxes, visc, dt*0.5, CS%OBC, CS%ADp, CS%CDp, G, &
-                CS%vertvisc_CSp)
+  call vertvisc_coef(up, vp, h_av, fluxes, visc, dt*0.5, G, GV, CS%vertvisc_CSp)
+  call vertvisc(up, vp, h_av, fluxes, visc, dt*0.5, CS%OBC, CS%ADp, CS%CDp, &
+                G, GV, CS%vertvisc_CSp)
   call cpu_clock_end(id_clock_vertvisc)
   call cpu_clock_begin(id_clock_pass)
   call pass_vector(up, vp, G%Domain)
@@ -378,7 +381,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
 ! h_av = hp + dt/2 div . uh
   call cpu_clock_begin(id_clock_continuity)
   call continuity(up, vp, hp, h_av, uh, vh, &
-                  (0.5*dt), G, CS%continuity_CSp, OBC=CS%OBC)
+                  (0.5*dt), G, GV, CS%continuity_CSp, OBC=CS%OBC)
   call cpu_clock_end(id_clock_continuity)
   call cpu_clock_begin(id_clock_pass)
   call pass_var(h_av, G%Domain)
@@ -393,7 +396,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
 ! CAu = -(f+zeta(up))/h_av vh + d/dx KE(up)
   call cpu_clock_begin(id_clock_Cor)
   call CorAdCalc(up, vp, h_av, uh, vh, CS%CAu, CS%CAv, CS%ADp, &
-                 G, CS%CoriolisAdv_CSp)
+                 G, GV, CS%CoriolisAdv_CSp)
   call cpu_clock_end(id_clock_Cor)
 
 ! PFu = d/dx M(h_av,T,S)
@@ -401,7 +404,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   if (dyn_p_surf) then ; do j=js-2,je+2 ; do i=is-2,ie+2
     p_surf(i,j) = 0.25*p_surf_begin(i,j) + 0.75*p_surf_end(i,j)
   enddo ; enddo ; endif
-  call PressureForce(h_av, tv, CS%PFu, CS%PFv, G, &
+  call PressureForce(h_av, tv, CS%PFu, CS%PFv, G, GV, &
                      CS%PressureForce_CSp, CS%ALE_CSp, p_surf)
   call cpu_clock_end(id_clock_pres)
 
@@ -418,16 +421,16 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   call cpu_clock_end(id_clock_mom_update)
 
   if (CS%debug) then
-    call MOM_state_chksum("Predictor 2", upp, vpp, h_av, uh, vh, G)
+    call MOM_state_chksum("Predictor 2", upp, vpp, h_av, uh, vh, G, GV)
     call MOM_accel_chksum("Predictor 2 accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv,&
-                          CS%diffu, CS%diffv, G)
+                          CS%diffu, CS%diffv, G, GV)
   endif
 
 ! upp <- upp + dt/2 d/dz visc d/dz upp
   call cpu_clock_begin(id_clock_vertvisc)
-  call vertvisc_coef(upp, vpp, hp, fluxes, visc, dt*0.5, G, CS%vertvisc_CSp)
-  call vertvisc(upp, vpp, hp, fluxes, visc, dt*0.5, CS%OBC, CS%ADp, CS%CDp, G, &
-                CS%vertvisc_CSp)
+  call vertvisc_coef(upp, vpp, hp, fluxes, visc, dt*0.5, G, GV, CS%vertvisc_CSp)
+  call vertvisc(upp, vpp, hp, fluxes, visc, dt*0.5, CS%OBC, CS%ADp, CS%CDp, &
+                G, GV, CS%vertvisc_CSp)
   call cpu_clock_end(id_clock_vertvisc)
   call cpu_clock_begin(id_clock_pass)
   call pass_vector(upp, vpp, G%Domain)
@@ -437,7 +440,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
 ! h = hp + dt/2 div . uh
   call cpu_clock_begin(id_clock_continuity)
   call continuity(upp, vpp, hp, h, uh, vh, &
-                  (dt*0.5), G, CS%continuity_CSp, OBC=CS%OBC)
+                  (dt*0.5), G, GV, CS%continuity_CSp, OBC=CS%OBC)
   call cpu_clock_end(id_clock_continuity)
   call cpu_clock_begin(id_clock_pass)
   call pass_var(h, G%Domain)
@@ -470,12 +473,12 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
 ! CAu = -(f+zeta(upp))/h_av vh + d/dx KE(upp)
   call cpu_clock_begin(id_clock_Cor)
   call CorAdCalc(upp, vpp, h_av, uh, vh, CS%CAu, CS%CAv, CS%ADp, &
-                 G, CS%CoriolisAdv_CSp)
+                 G, GV, CS%CoriolisAdv_CSp)
   call cpu_clock_end(id_clock_Cor)
 
 ! PFu = d/dx M(h_av,T,S)
   call cpu_clock_begin(id_clock_pres)
-  call PressureForce(h_av, tv, CS%PFu, CS%PFv, G, &
+  call PressureForce(h_av, tv, CS%PFu, CS%PFv, G, GV, &
                      CS%PressureForce_CSp, CS%ALE_CSp, p_surf)
   call cpu_clock_end(id_clock_pres)
 
@@ -491,21 +494,21 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
 
 ! u <- u + dt d/dz visc d/dz u
   call cpu_clock_begin(id_clock_vertvisc)
-  call vertvisc_coef(u, v, h_av, fluxes, visc, dt, G, CS%vertvisc_CSp)
-  call vertvisc(u, v, h_av, fluxes, visc, dt, CS%OBC, CS%ADp, CS%CDp, G, &
-                CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
+  call vertvisc_coef(u, v, h_av, fluxes, visc, dt, G, GV, CS%vertvisc_CSp)
+  call vertvisc(u, v, h_av, fluxes, visc, dt, CS%OBC, CS%ADp, CS%CDp, &
+                G, GV, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
   call cpu_clock_end(id_clock_vertvisc)
   call cpu_clock_begin(id_clock_pass)
   call pass_vector(u, v, G%Domain)
   call cpu_clock_end(id_clock_pass)
 
   if (CS%debug) then
-    call MOM_state_chksum("Corrector", u, v, h, uh, vh, G)
+    call MOM_state_chksum("Corrector", u, v, h, uh, vh, G, GV)
     call MOM_accel_chksum("Corrector accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
-                          CS%diffu, CS%diffv, G)
+                          CS%diffu, CS%diffv, G, GV)
   endif
 
-  if (G%GV%Boussinesq) then
+  if (GV%Boussinesq) then
     do j=js,je ; do i=is,ie ; eta_av(i,j) = -G%bathyT(i,j) ; enddo ; enddo
   else
     do j=js,je ; do i=is,ie ; eta_av(i,j) = 0.0 ; enddo ; enddo
@@ -527,8 +530,9 @@ end subroutine step_MOM_dyn_unsplit
 
 ! =============================================================================
 
-subroutine register_restarts_dyn_unsplit(G, param_file, CS, restart_CS)
+subroutine register_restarts_dyn_unsplit(G, GV, param_file, CS, restart_CS)
   type(ocean_grid_type),        intent(in)    :: G
+  type(verticalGrid_type),      intent(in)    :: GV
   type(param_file_type),        intent(in)    :: param_file
   type(MOM_dyn_unsplit_CS),     pointer       :: CS
   type(MOM_restart_CS),         pointer       :: restart_CS
@@ -537,6 +541,7 @@ subroutine register_restarts_dyn_unsplit(G, param_file, CS, restart_CS)
 ! have the ability to be recreated if they are not present in a restart file.
 
 ! Arguments: G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (inout)   CS - The control structure set up by initialize_dyn_unsplit.
@@ -564,14 +569,14 @@ subroutine register_restarts_dyn_unsplit(G, param_file, CS, restart_CS)
   ALLOC_(CS%PFu(IsdB:IedB,jsd:jed,nz)) ; CS%PFu(:,:,:) = 0.0
   ALLOC_(CS%PFv(isd:ied,JsdB:JedB,nz)) ; CS%PFv(:,:,:) = 0.0
 
-  thickness_units = get_thickness_units(G%GV)
-  flux_units = get_flux_units(G%GV)
+  thickness_units = get_thickness_units(GV)
+  flux_units = get_flux_units(GV)
 
 !  No extra restart fields are needed with this time stepping scheme.
 
 end subroutine register_restarts_dyn_unsplit
 
-subroutine initialize_dyn_unsplit(u, v, h, Time, G, param_file, diag, CS, &
+subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, param_file, diag, CS, &
                                   restart_CS, Accel_diag, Cont_diag, MIS, &
                                   OBC, ALE_CSp, setVisc_CSp, visc, dirs, ntrunc)
   real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: u
@@ -579,6 +584,7 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, param_file, diag, CS, &
   real, dimension(NIMEM_,NJMEM_,NKMEM_) , intent(inout) :: h
   type(time_type),                target, intent(in)    :: Time
   type(ocean_grid_type),                  intent(inout) :: G
+  type(verticalGrid_type),                intent(in)    :: GV
   type(param_file_type),                  intent(in)    :: param_file
   type(diag_ctrl),                target, intent(inout) :: diag
   type(MOM_dyn_unsplit_CS),               pointer       :: CS
@@ -599,6 +605,7 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, param_file, diag, CS, &
 !                the Boussinesq approximation is made.
 !  (in)      Time - The current model time.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in)      diag - A structure that is used to regulate diagnostic output.
@@ -658,13 +665,13 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, param_file, diag, CS, &
   Accel_diag%PFu => CS%PFu ; Accel_diag%PFv => CS%PFv
   Accel_diag%CAu => CS%CAu ; Accel_diag%CAv => CS%CAv
 
-  call continuity_init(Time, G, param_file, diag, CS%continuity_CSp)
+  call continuity_init(Time, G, GV, param_file, diag, CS%continuity_CSp)
   call CoriolisAdv_init(Time, G, param_file, diag, CS%ADp, CS%CoriolisAdv_CSp)
   if (use_tides) call tidal_forcing_init(Time, G, param_file, CS%tides_CSp)
-  call PressureForce_init(Time, G, param_file, diag, CS%PressureForce_CSp, &
+  call PressureForce_init(Time, G, GV, param_file, diag, CS%PressureForce_CSp, &
                           CS%tides_CSp)
   call hor_visc_init(Time, G, param_file, diag, CS%hor_visc_CSp)
-  call vertvisc_init(MIS, Time, G, param_file, diag, CS%ADp, dirs, &
+  call vertvisc_init(MIS, Time, G, GV, param_file, diag, CS%ADp, dirs, &
                      ntrunc, CS%vertvisc_CSp)
   if (.not.associated(setVisc_CSp)) call MOM_error(FATAL, &
     "initialize_dyn_unsplit called with setVisc_CSp unassociated.")
@@ -676,7 +683,7 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, param_file, diag, CS, &
     call open_boundary_init(Time, G, param_file, diag, CS%open_boundary_CSp)
   endif
 
-  flux_units = get_flux_units(G%GV)
+  flux_units = get_flux_units(GV)
   CS%id_uh = register_diag_field('ocean_model', 'uh', diag%axesCuL, Time, &
       'Zonal Thickness Flux', flux_units)
   CS%id_vh = register_diag_field('ocean_model', 'vh', diag%axesCvL, Time, &

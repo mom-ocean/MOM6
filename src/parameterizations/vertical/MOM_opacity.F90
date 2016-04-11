@@ -63,6 +63,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_io, only : slasher
 use MOM_tracer_flow_control, only : get_chl_from_model, tracer_flow_control_CS
 use MOM_variables, only : thermo_var_ptrs
+use MOM_verticalGrid, only : verticalGrid_type
 use time_interp_external_mod, only : init_external_field, time_interp_external
 use time_interp_external_mod, only : time_interp_external_init
 implicit none ; private
@@ -111,16 +112,18 @@ character*(10), parameter :: MOREL_88_STRING = "MOREL_88"
 
 contains
 
-subroutine set_opacity(optics, fluxes, G, CS)
+subroutine set_opacity(optics, fluxes, G, GV, CS)
   type(optics_type),                   intent(inout) :: optics
   type(forcing),                       intent(in)    :: fluxes
   type(ocean_grid_type),               intent(in)    :: G
+  type(verticalGrid_type),             intent(in)    :: GV
   type(opacity_CS),                    pointer       :: CS
 ! Arguments: (inout) opacity - The inverse of the vertical absorption decay
 !                     scale for penetrating shortwave radiation, in m-1.
 !            (inout) fluxes - A structure containing pointers to any possible
 !                     forcing fields.  Unused fields have NULL ptrs.
 !            (in)    G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !            (in)    CS - The control structure earlier set up by opacity_init.
 
 ! local variables
@@ -151,8 +154,8 @@ subroutine set_opacity(optics, fluxes, G, CS)
     else ; Inv_nbands = 1.0 / real(optics%nbands) ; endif
 
     ! Make sure there is no division by 0.
-    inv_sw_pen_scale = 1.0 / max(CS%pen_sw_scale, 0.1*G%GV%Angstrom_z, &
-                                 G%GV%H_to_m*G%GV%H_subroundoff)
+    inv_sw_pen_scale = 1.0 / max(CS%pen_sw_scale, 0.1*GV%Angstrom_z, &
+                                 GV%H_to_m*GV%H_subroundoff)
 !$OMP parallel default(none) shared(is,ie,js,je,nz,optics,inv_sw_pen_scale,fluxes,CS,Inv_nbands)
 !$OMP do
     do k=1,nz ; do j=js,je ; do i=is,ie  ; do n=1,optics%nbands
@@ -220,7 +223,7 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
   type(forcing),                  intent(in)     :: fluxes
   type(ocean_grid_type),          intent(in)     :: G
   type(opacity_CS),               pointer        :: CS
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in), optional :: chl_in
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in), optional :: chl_in
 ! Arguments: fluxes - A structure containing pointers to any possible
 !                     forcing fields.  Unused fields have NULL ptrs.
 !  (out)     opacity - The inverse of the vertical absorption decay

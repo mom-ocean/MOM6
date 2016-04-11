@@ -24,6 +24,7 @@ use MOM_neutral_diffusion,     only : neutral_diffusion_calc_coeffs, neutral_dif
 use MOM_tracer_registry,       only : tracer_registry_type, tracer_type, MOM_tracer_chksum
 use MOM_variables,             only : ocean_OBC_type, thermo_var_ptrs, OBC_FLATHER_E
 use MOM_variables,             only : OBC_FLATHER_W, OBC_FLATHER_N, OBC_FLATHER_S
+use MOM_verticalGrid,          only : verticalGrid_type
 
 implicit none ; private
 
@@ -80,12 +81,13 @@ contains
 !! using the diffusivity in CS%KhTr, or using space-dependent diffusivity.  
 !! Multiple iterations are used (if necessary) so that there is no limit 
 !! on the acceptable time increment.
-subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h       !< Layer thickness (m or kg m-2)
+subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv)
+  type(ocean_grid_type),                 intent(inout) :: G       !< Grid type 
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h       !< Layer thickness (m or kg m-2)
   real,                                  intent(in)    :: dt      !< time step (seconds)
   type(MEKE_type),                       pointer       :: MEKE    !< MEKE type 
   type(VarMix_CS),                       pointer       :: VarMix  !< Variable mixing type 
-  type(ocean_grid_type),                 intent(inout) :: G       !< Grid type 
+  type(verticalGrid_type),               intent(in)    :: GV      !< ocean vertical grid structure
   type(tracer_hor_diff_CS),              pointer       :: CS      !< module control structure 
   type(tracer_registry_type),            intent(inout) :: Reg     !< registered tracers 
   type(thermo_var_ptrs),                 intent(in)    :: tv      !< A structure containing pointers to any available   
@@ -141,7 +143,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
 
   ntr = Reg%ntr
   Idt = 1.0/dt
-  h_neglect = G%GV%H_subroundoff
+  h_neglect = GV%H_subroundoff
 
   if (CS%Diffuse_ML_interior .and. CS%first_call) then ; if (is_root_pe()) then
     do m=1,ntr ; if (associated(Reg%Tr(m)%df_x) .or. associated(Reg%Tr(m)%df_y)) &
@@ -304,7 +306,8 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
     ! lateral diffusion iterations. Otherwise the call to neutral_diffusion_calc_coeffs()
     ! would be inside the itt-loop. -AJA
 
-    call neutral_diffusion_calc_coeffs(G, h, tv%T, tv%S, tv%eqn_of_state, CS%neutral_diffusion_CSp)
+    call neutral_diffusion_calc_coeffs(G, GV, h, tv%T, tv%S, tv%eqn_of_state, &
+                                       CS%neutral_diffusion_CSp)
     do J=js-1,je ; do i=is,ie
       Coef_y(i,J) = I_numitts * khdt_y(i,J)
     enddo ; enddo
@@ -321,7 +324,8 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
         call cpu_clock_end(id_clock_pass)
       endif
       do m=1,ntr ! for each tracer
-        call neutral_diffusion(G, h, Coef_x, Coef_y, Reg%Tr(m)%t, m, dt, Reg%Tr(m)%name, CS%neutral_diffusion_CSp)
+        call neutral_diffusion(G, GV,  h, Coef_x, Coef_y, Reg%Tr(m)%t, m, dt, &
+                               Reg%Tr(m)%name, CS%neutral_diffusion_CSp)
       enddo ! m
     enddo ! itt
 
@@ -332,17 +336,17 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
       call cpu_clock_begin(id_clock_pass)
       call do_group_pass(CS%pass_t, G%Domain)
       call cpu_clock_end(id_clock_pass)
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,I_numitts,CS,G,khdt_y,h, &
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,I_numitts,CS,G,GV,khdt_y,h, &
 !$OMP                                    h_neglect,khdt_x,ntr,Idt,Reg)           &
 !$OMP                            private(scale,Coef_y,Coef_x,Ihdxdy,dTr)
       do k=1,nz
         scale = I_numitts
         if (CS%Diffuse_ML_interior) then
-          if (k<=G%GV%nkml) then
+          if (k<=GV%nkml) then
             if (CS%ML_KhTr_scale <= 0.0) cycle
             scale = I_numitts * CS%ML_KhTr_scale
           endif
-          if ((k>G%GV%nkml) .and. (k<=G%GV%nk_rho_varies)) cycle
+          if ((k>GV%nkml) .and. (k<=GV%nk_rho_varies)) cycle
         endif
 
         do J=js-1,je ; do i=is,ie
@@ -403,7 +407,8 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
     if (CS%debug) call MOM_tracer_chksum("Before epipycnal diff ", Reg%Tr, ntr, G)
 
     call cpu_clock_begin(id_clock_epimix)
-    call tracer_epipycnal_ML_diff(h, dt, Reg%Tr, ntr, khdt_x, khdt_y, G, CS, tv, num_itts)
+    call tracer_epipycnal_ML_diff(h, dt, Reg%Tr, ntr, khdt_x, khdt_y, G, GV, &
+                                  CS, tv, num_itts)
     call cpu_clock_end(id_clock_epimix)
   endif
 
@@ -433,7 +438,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, CS, Reg, tv)
     do j=js,je ; do i=is,ie
       !### Add parentheses.
       normalize = 1.0 / (G%mask2dCu(i-1,j)+G%mask2dCu(i,j) + &
-                  G%mask2dCv(i,j-1)+G%mask2dCv(i,j) + G%GV%H_subroundoff)
+                  G%mask2dCv(i,j-1)+G%mask2dCv(i,j) + GV%H_subroundoff)
       Kh_h(i,j) = normalize*G%mask2dT(i,j)*(Kh_u(i-1,j)+Kh_u(i,j) + &
                                             Kh_v(i,j-1)+Kh_v(i,j))
     enddo ; enddo
@@ -450,22 +455,23 @@ end subroutine tracer_hordiff
 !! Multiple iterations are used (if necessary) so that there is no limit on the
 !! acceptable time increment.
 subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
-                                    CS, tv, num_itts)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h          !< layer thickness (m or kg m-2)
-  real,                                  intent(in)    :: dt         !< time step 
-  type(tracer_type),                     intent(inout) :: Tr(:)      !< tracer array 
-  integer,                               intent(in)    :: ntr        !< number of tracers 
-  real, dimension(NIMEMB_,NJMEM_),       intent(in)    :: khdt_epi_x !< needs a comment
-  real, dimension(NIMEM_,NJMEMB_),       intent(in)    :: khdt_epi_y !< needs a comment 
-  type(ocean_grid_type),                 intent(inout) :: G          !< ocean grid structure 
-  type(tracer_hor_diff_CS),              intent(inout) :: CS         !< module control structure 
-  type(thermo_var_ptrs),                 intent(in)    :: tv         !< thermodynamic structure 
-  integer,                               intent(in)    :: num_itts   !< number of iterations (usually=1)
+                                    GV, CS, tv, num_itts)
+  type(ocean_grid_type),                    intent(inout) :: G          !< ocean grid structure 
+  type(verticalGrid_type),                  intent(in)    :: GV         !< ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h          !< layer thickness (m or kg m-2)
+  real,                                     intent(in)    :: dt         !< time step 
+  type(tracer_type),                        intent(inout) :: Tr(:)      !< tracer array 
+  integer,                                  intent(in)    :: ntr        !< number of tracers 
+  real, dimension(SZIB_(G),SZJ_(G)),        intent(in)    :: khdt_epi_x !< needs a comment
+  real, dimension(SZI_(G),SZJB_(G)),        intent(in)    :: khdt_epi_y !< needs a comment 
+  type(tracer_hor_diff_CS),                 intent(inout) :: CS         !< module control structure 
+  type(thermo_var_ptrs),                    intent(in)    :: tv         !< thermodynamic structure 
+  integer,                                  intent(in)    :: num_itts   !< number of iterations (usually=1)
 
  
   real, dimension(SZI_(G), SZJ_(G)) :: &
     Rml_max  ! The maximum coordinate density within the mixed layer, in kg m-3.
-  real, dimension(SZI_(G), SZJ_(G), max(1,G%GV%nk_rho_varies)) :: &
+  real, dimension(SZI_(G), SZJ_(G), max(1,GV%nk_rho_varies)) :: &
     rho_coord ! The coordinate density that is used to mix along, in kg m-3.
 
   ! The naming mnemnonic is a=above,b=below,L=Left,R=Right,u=u-point,v=v-point.
@@ -553,7 +559,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB
   Idt = 1.0/dt
-  nkmb = G%GV%nk_rho_varies
+  nkmb = GV%nk_rho_varies
 
   if (num_itts <= 1) then
     max_itt = 1 ; I_maxitt = 1.0
@@ -584,18 +590,18 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   enddo ; enddo ; enddo
   !   Use bracketing and bisection to find the k-level that the densest of the
   ! mixed and buffer layer corresponds to, such that:
-  !     G%GV%Rlay(max_kRho-1) < Rml_max <= G%GV%Rlay(max_kRho)
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,nkmb,G,Rml_max,max_kRho) &
+  !     GV%Rlay(max_kRho-1) < Rml_max <= GV%Rlay(max_kRho)
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,nkmb,G,GV,Rml_max,max_kRho) &
 !$OMP                          private(k_min,k_max,k_test)
   do j=js-2,je+2 ; do i=is-2,ie+2 ; if (G%mask2dT(i,j) > 0.5) then
-    if (Rml_max(i,j) > G%GV%Rlay(nz)) then ; max_kRho(i,j) = nz+1
-    elseif (Rml_max(i,j) <= G%GV%Rlay(nkmb+1)) then ; max_kRho(i,j) = nkmb+1
+    if (Rml_max(i,j) > GV%Rlay(nz)) then ; max_kRho(i,j) = nz+1
+    elseif (Rml_max(i,j) <= GV%Rlay(nkmb+1)) then ; max_kRho(i,j) = nkmb+1
     else
       k_min = nkmb+2 ; k_max = nz
       do
         k_test = (k_min + k_max) / 2
-        if (Rml_max(i,j) <= G%GV%Rlay(k_test-1)) then ; k_max = k_test-1
-        elseif (G%GV%Rlay(k_test) < Rml_max(i,j)) then ; k_min = k_test+1
+        if (Rml_max(i,j) <= GV%Rlay(k_test-1)) then ; k_max = k_test-1
+        elseif (GV%Rlay(k_test) < Rml_max(i,j)) then ; k_min = k_test+1
         else ; max_kRho(i,j) = k_test ; exit ; endif
 
         if (k_min == k_max) then ; max_kRho(i,j) = k_max ; exit ; endif
@@ -611,8 +617,8 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   enddo ; enddo
   if (PEmax_kRho > nz) PEmax_kRho = nz ! PEmax_kRho could have been nz+1.
 
-  h_exclude = 10.0*(G%GV%Angstrom + G%GV%H_subroundoff)
-!$OMP parallel default(none) shared(is,ie,js,je,nkmb,G,h,h_exclude,num_srt,k0_srt, &
+  h_exclude = 10.0*(GV%Angstrom + GV%H_subroundoff)
+!$OMP parallel default(none) shared(is,ie,js,je,nkmb,G,GV,h,h_exclude,num_srt,k0_srt, &
 !$OMP                               rho_srt,h_srt,PEmax_kRho,k_end_srt,rho_coord,max_srt) &
 !$OMP                       private(ns,tmp,itmp)
 !$OMP do
@@ -629,7 +635,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
       if ((k<=k_end_srt(i,j)) .and. (h(i,j,k) > h_exclude)) then
         num_srt(i,j) = num_srt(i,j) + 1 ; ns = num_srt(i,j)
         k0_srt(i,ns,j) = k
-        rho_srt(i,ns,j) = G%GV%Rlay(k)
+        rho_srt(i,ns,j) = GV%Rlay(k)
         h_srt(i,ns,j) = h(i,j,k)
       endif
     endif ; enddo ; enddo
