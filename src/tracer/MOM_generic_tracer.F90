@@ -429,9 +429,13 @@ contains
 
     ! Register generic tracer modules diagnostics
 
+#ifdef _USE_MOM6_DIAG
     call g_tracer_set_csdiag(CS%diag)
+#endif
     call generic_tracer_register_diag()
+#ifdef _USE_MOM6_DIAG
     call g_tracer_set_csdiag(CS%diag)
+#endif
 
 
     ! Register Z diagnostic output.
@@ -540,8 +544,6 @@ contains
          trim(sub_name)//": No tracer in the list.")
 
     call enable_averaging(dt, get_diag_time_end(CS%diag), CS%diag) !Niki: This call is not needed since avaraging is already enabled. This is jjust to ensure it. 
-    call g_tracer_set_csdiag(CS%diag)
-  
     !
     !Extract the tracer surface fields from coupler and update tracer fields from sources
     !
@@ -619,9 +621,13 @@ contains
     call generic_tracer_update_from_bottom(dt, 1, get_diag_time_end(CS%diag)) !Second arg is tau which is always 1 for MOM
 
     !Output diagnostics via diag_manager for all generic tracers and their fluxes
-    call g_tracer_send_diag(CS%g_tracer_list, get_diag_time_end(CS%diag), tau=1)
-
+#ifdef _USE_MOM6_DIAG
     call g_tracer_set_csdiag(CS%diag)
+#endif
+    call g_tracer_send_diag(CS%g_tracer_list, get_diag_time_end(CS%diag), tau=1)
+#ifdef _USE_MOM6_DIAG
+    call g_tracer_set_csdiag(CS%diag)
+#endif
 
 !!!    call disable_averaging(CS%diag) !Niki: This interrupts and STOPS the diagnostics output for all modules!!!
 
