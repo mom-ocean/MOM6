@@ -65,8 +65,8 @@ contains
 ! Initialization of topography
 ! -----------------------------------------------------------------------------
 subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth)
-  real, intent(out), dimension(NIMEM_,NJMEM_) :: D
   type(ocean_grid_type), intent(in)           :: G
+  real, intent(out), dimension(SZI_(G),SZJ_(G)) :: D
   type(param_file_type), intent(in)           :: param_file
   real,                  intent(in)           :: max_depth
 ! Arguments: D          - the bottom depth in m. Intent out.
@@ -133,10 +133,9 @@ end subroutine ISOMIP_initialize_topography
 ! Initialization of thicknesses
 !------------------------------------------------------------------------------
 subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file )
-
-  real, intent(out), dimension(NIMEM_,NJMEM_, NKMEM_) :: h
   type(ocean_grid_type), intent(in) :: G
   type(verticalGrid_type), intent(in) :: GV
+  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h
   type(param_file_type), intent(in) :: param_file
 
 ! Arguments: h - The thickness that is being initialized.
@@ -206,9 +205,9 @@ end subroutine ISOMIP_initialize_thickness
 !------------------------------------------------------------------------------
 subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, param_file, &
                                                     eqn_of_state)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T, S
-  real, intent(in), dimension(NIMEM_,NJMEM_, NKMEM_)  :: h
   type(ocean_grid_type),               intent(in)  :: G
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T, S
+  real, intent(in), dimension(SZI_(G),SZJ_(G), SZK_(G))  :: h
   type(param_file_type),               intent(in)  :: param_file
   type(EOS_type),                      pointer     :: eqn_of_state
 
