@@ -44,13 +44,14 @@ interface assignment(=); module procedure HIT_assign ; end interface
 
 contains
 
-subroutine hor_index_init(Domain, HI, param_file)
-  type(MOM_domain_type),  intent(in)    :: Domain
-  type(hor_index_type), intent(inout) :: HI
-  type(param_file_type),  intent(in)    :: param_file
-! Arguments: HI - The ocean's horizontal array index structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
+!> hor_index_init sets various index values in a hor_index_type.
+subroutine hor_index_init(Domain, HI, param_file, local_indexing, index_offset)
+  type(MOM_domain_type),  intent(in)    :: Domain     !< The MOM domain from which to extract information.
+  type(hor_index_type),   intent(inout) :: HI         !< A horizontal index type to populate with data
+  type(param_file_type),  intent(in)    :: param_file !< Parameter file handle
+  logical, optional,      intent(in)    :: local_indexing !< If true, all tracer data domains start at 1
+  integer, optional,      intent(in)    :: index_offset   !< A fixed additional offset to all indices
+
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
 
@@ -59,7 +60,8 @@ subroutine hor_index_init(Domain, HI, param_file)
   call get_domain_extent(Domain, HI%isc, HI%iec, HI%jsc, HI%jec, &
                          HI%isd, HI%ied, HI%jsd, HI%jed, &
                          HI%isg, HI%ieg, HI%jsg, HI%jeg, &
-                         HI%idg_offset, HI%jdg_offset, HI%symmetric)
+                         HI%idg_offset, HI%jdg_offset, HI%symmetric, &
+                         local_indexing=local_indexing)
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, "MOM_hor_index", version, &
@@ -79,6 +81,8 @@ subroutine hor_index_init(Domain, HI, param_file)
 
 end subroutine hor_index_init
 
+!> HIT_assign copies one hor_index_type into another.  It is accessed via an
+!!   assignemnt (=) operator.
 subroutine HIT_assign(HI1, HI2)
   type(hor_index_type), intent(out) :: HI1
   type(hor_index_type), intent(in)  :: HI2
