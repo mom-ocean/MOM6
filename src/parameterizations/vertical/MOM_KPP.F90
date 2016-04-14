@@ -40,6 +40,10 @@ integer, private, parameter :: NLT_SHAPE_PARABOLIC = 2 !< Parabolic, \f$ G(\sigm
 integer, private, parameter :: NLT_SHAPE_CUBIC     = 3 !< Cubic, \f$ G(\sigma) = 1 + (2\sigma-3) \sigma^2\f$
 integer, private, parameter :: NLT_SHAPE_CUBIC_LMD = 4 !< Original shape, \f$ G(\sigma) = \frac{27}{4} \sigma (1-\sigma)^2 \f$
 
+integer, private, parameter :: SW_METHOD_ALL_SW = 0 !< Use all shortwave radiation
+integer, private, parameter :: SW_METHOD_MXL_SW = 1 !< Use shortwave radiation absorbed in mixing layer
+integer, private, parameter :: SW_METHOD_LV1_SW = 2 !< Use shortwave radiation absorbed in layer 1
+
 !> Control structure for containing KPP parameters/data
 type, public :: KPP_CS ; private
 
@@ -69,6 +73,7 @@ type, public :: KPP_CS ; private
   logical :: correctSurfLayerAvg       !< If true, applies a correction to the averaging of surface layer properties
   real    :: surfLayerDepth            !< A guess at the depth of the surface layer (which should 0.1 of OBLdepth) (m)
   ! smg: obsolete above
+  integer :: SW_METHOD                 !<Sets method for using shortwave radiation in surface buoyancy flux
 
   !> CVmix parameters
   type(CVmix_kpp_params_type), pointer :: KPP_params => NULL()
@@ -256,7 +261,20 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
                  'If true, adds KPP diffusivity to diffusivity from other schemes.'//&
                  'If false, KPP is the only diffusivity wherever KPP is non-zero.',  &
                  default=.True.)
-
+  call get_param(paramFile, mod, 'KPP_SHORTWAVE_METHOD',string,                      &
+                 'Determines contribution of shortwave radiation to KPP surface '// &
+                 'buoyancy flux.  Options include:\n'//                             &
+                 '  ALL_SW: use total shortwave radiation\n'//                      &
+                 '  MXL_SW:  use shortwave radiation absorbed by mixing layer\n'//  &
+                 '  LV1_SW:  use shortwave radiation absorbed by top model layer',  &
+                 default='MXL_SW')
+  select case ( trim(string) )
+    case ("ALL_SW") ; CS%SW_METHOD = SW_METHOD_ALL_SW
+    case ("MXL_SW") ; CS%SW_METHOD = SW_METHOD_MXL_SW
+    case ("LV1_SW") ; CS%SW_METHOD = SW_METHOD_LV1_SW
+    case default ; call MOM_error(FATAL,"KPP_init: "// &
+                   "Unrecognized KPP_SHORTWAVE_METHOD option"//trim(string))
+  end select
   call closeParameterBlock(paramFile)
   call get_param(paramFile, mod, 'DEBUG', CS%debug, default=.False., do_not_log=.True.)
 
@@ -709,9 +727,19 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
 
       ! Unlike LMD94, we do not match to interior diffusivities. If using the original
       ! LMD94 shape function, not matching is equivalent to matching to a zero diffusivity.
+      !BGR/ Match technique is set in KPP input block, are these lines needed?
+      !{
       Kdiffusivity(:,:) = 0. ! Diffusivities for heat and salt (m2/s)
       Kviscosity(:)     = 0. ! Viscosity (m2/s)
-      surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,int(kOBL)+1) ! We know the actual buoyancy flux into the OBL
+      !}
+      !BGR/ Add option for use of surface buoyancy flux with total sw flux.
+      if (CS%SW_METHOD .eq. SW_METHOD_ALL_SW) then
+         surfBuoyFlux = buoyFlux(i,j,1)
+      elseif (CS%SW_METHOD .eq. SW_METHOD_MXL_SW) then
+         surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,int(kOBL)+1) ! We know the actual buoyancy flux into the OBL
+      elseif (CS%SW_METHOD .eq. SW_METHOD_LV1_SW) then
+         surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,2) 
+      endif
       call cvmix_coeffs_kpp(Kviscosity,        & ! (inout) Total viscosity (m2/s)
                             Kdiffusivity(:,1), & ! (inout) Total heat diffusivity (m2/s)
                             Kdiffusivity(:,2), & ! (inout) Total salt diffusivity (m2/s)

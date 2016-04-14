@@ -84,6 +84,9 @@ type, public :: opacity_CS ; private
                              ! radiation to use.
   real :: pen_sw_scale       !   The vertical absorption e-folding depth of the
                              ! penetrating shortwave radiation, in m.
+  !BGR/ Add pen_sw_scale_2nd for use with 2-exponential decay shortwave radiation schme (i.e. Jerlov type)
+  real :: pen_sw_scale_2nd   !   The vertical absorption e-folding depth of the 
+                             ! 2nd exponential decay in 2 e-decay mode.
   real :: pen_sw_frac        !   The fraction of shortwave radiation that is
                              ! penetrating with a constant e-folding approach.
   real :: blue_frac          !   The fraction of the penetrating shortwave
@@ -105,10 +108,13 @@ type, public :: opacity_CS ; private
   integer, pointer :: id_opacity(:) => NULL()
 end type opacity_CS
 
-integer, parameter :: NO_SCHEME = 0, MANIZZA_05 = 1, MOREL_88 = 2
+integer, parameter :: NO_SCHEME = 0, MANIZZA_05 = 1, MOREL_88 = 2, &
+                      SINGLE_EXP = 3, DOUBLE_EXP = 4
 
 character*(10), parameter :: MANIZZA_05_STRING = "MANIZZA_05"
 character*(10), parameter :: MOREL_88_STRING = "MOREL_88"
+character*(10), parameter :: SINGLE_EXP_STRING = "SINGLE_EXP"
+character*(10), parameter :: DOUBLE_EXP_STRING = "DOUBLE_EXP"
 
 contains
 
@@ -129,6 +135,7 @@ subroutine set_opacity(optics, fluxes, G, GV, CS)
 ! local variables
   integer :: i, j, k, n, is, ie, js, je, nz
   real :: inv_sw_pen_scale  ! The inverse of the e-folding scale, in m-1.
+  real :: inv_sw_pen_scale_2nd   !    id.     (for 2nd exp)
   real :: Inv_nbands        ! The inverse of the number of bands of penetrating
                             ! shortwave radiation.
   logical :: call_for_surface  ! if horizontal slice is the surface layer
@@ -156,10 +163,15 @@ subroutine set_opacity(optics, fluxes, G, GV, CS)
     ! Make sure there is no division by 0.
     inv_sw_pen_scale = 1.0 / max(CS%pen_sw_scale, 0.1*GV%Angstrom_z, &
                                  GV%H_to_m*GV%H_subroundoff)
+    !BGR/ add 2nd (for 2-exponential form)
+    inv_sw_pen_scale_2nd = 1.0 / max(CS%pen_sw_scale_2nd, 0.1*GV%Angstrom_z, &
+                                 GV%H_to_m*GV%H_subroundoff)
 !$OMP parallel default(none) shared(is,ie,js,je,nz,optics,inv_sw_pen_scale,fluxes,CS,Inv_nbands)
 !$OMP do
     do k=1,nz ; do j=js,je ; do i=is,ie  ; do n=1,optics%nbands
       optics%opacity_band(n,i,j,k) = inv_sw_pen_scale
+      !BGR/ add 2nd band
+      optics%opacity_band_2nd(n,i,j,k) = inv_sw_pen_scale_2nd
     enddo ; enddo ; enddo ; enddo
     if (.not.associated(fluxes%sw) .or. (CS%pen_SW_scale <= 0.0)) then
 !$OMP do
@@ -547,12 +559,51 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
                  "The fraction of the penetrating shortwave radiation \n"//&
                  "that is in the blue band.", default=0.5, units="nondim")
   else
+    !BGR/ Add option for 2-exponential decay to existing switch "OPACITY_SCHEME"
+    !       Note that description and options for opacity scheme will also
+    !       need updated.
+    call get_param(param_file, mod, "OPACITY_SCHEME", tmpstr, &
+                 "This character string specifies how chlorophyll \n"//&
+                 "concentrations are translated into opacities. Currently \n"//&
+                 "valid options include:\n"//&
+                 " \t\t  MANIZZA_05 - Use Manizza et al., GRL, 2005. \n"//&
+                 " \t\t  MOREL_88 - Use Morel, JGR, 1988.", &
+                 default=Single_Exp_String)!New default for "else" above (non-Chl scheme)
+    if (len_trim(tmpstr) > 0) then
+      tmpstr = uppercase(tmpstr)
+      select case (tmpstr)
+        case (SINGLE_EXP_STRING)
+          CS%opacity_scheme = SINGLE_EXP ; scheme_string = SINGLE_EXP_STRING
+          OPTICS%Two_Exp_Form=.false.
+        case (DOUBLE_EXP_STRING)
+          CS%opacity_scheme = DOUBLE_EXP ; scheme_string = DOUBLE_EXP_STRING
+          OPTICS%Two_Exp_Form=.true.
+      end select
+      call MOM_mesg('opacity_init: opacity scheme set to "'//trim(tmpstr)//'".', 5)
+    endif
     call get_param(param_file, mod, "PEN_SW_SCALE", CS%pen_sw_scale, &
                  "The vertical absorption e-folding depth of the \n"//&
                  "penetrating shortwave radiation.", units="m", default=0.0)
+    !BGR/ Added for opacity_scheme==double_exp read in 2nd exp-decay and fraction
+    if (CS%Opacity_scheme == Double_Exp ) then
+      call get_param(param_file, mod, "PEN_SW_SCALE_2ND", CS%pen_sw_scale_2nd, &
+                 "The (2nd) vertical absorption e-folding depth of the \n"//&
+                 "penetrating shortwave radiation \n"//&
+                 "(use if SW_EXP_MODE==double.)",&
+                 units="m", default=0.0)
+      call get_param(param_file, mod, "SW_1ST_EXP_RATIO", Optics%sw_1st_exp_ratio, &
+                 "The fraction of 1st vertical absorption e-folding depth \n"//&
+                 "penetrating shortwave radiation if SW_EXP_MODE==double.",&
+                  units="m", default=0.0)
+    elseif (CS%OPACITY_SCHEME == Single_Exp) then
+      !/Else disable 2nd_exp scheme
+      CS%pen_sw_scale_2nd = 0.0
+      Optics%sw_1st_exp_ratio = 1.0
+    endif
     call get_param(param_file, mod, "PEN_SW_FRAC", CS%pen_sw_frac, &
                  "The fraction of the shortwave radiation that penetrates \n"//&
                  "below the surface.", units="nondim", default=0.0)
+
   endif
   call get_param(param_file, mod, "PEN_SW_NBANDS", optics%nbands, &
                  "The number of bands of penetrating shortwave radiation.", &
@@ -584,6 +635,8 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
 
   if (.not.ASSOCIATED(optics%opacity_band)) &
     allocate(optics%opacity_band(optics%nbands,isd:ied,jsd:jed,nz))
+  if (.not.ASSOCIATED(optics%opacity_band_2nd)) &
+    allocate(optics%opacity_band_2nd(optics%nbands,isd:ied,jsd:jed,nz))
   if (.not.ASSOCIATED(optics%sw_pen_band)) &
     allocate(optics%sw_pen_band(optics%nbands,isd:ied,jsd:jed))
   allocate(CS%id_opacity(optics%nbands)) ; CS%id_opacity(:) = -1
@@ -616,6 +669,7 @@ subroutine opacity_end(CS, optics)
 
   if (present(optics)) then ; if (associated(optics)) then
     if (ASSOCIATED(optics%opacity_band)) deallocate(optics%opacity_band)
+    if (ASSOCIATED(optics%opacity_band_2nd)) deallocate(optics%opacity_band_2nd)
     if (ASSOCIATED(optics%sw_pen_band)) deallocate(optics%sw_pen_band)
   endif ; endif
 

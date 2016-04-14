@@ -246,7 +246,7 @@ subroutine SCM_CVmix_tests_buoyancy_forcing(state, fluxes, day, G, CS)
     ! Note CVmix test inputs give evaporation in m/s
     ! This therefore must be converted to mass flux
     ! by multiplying by density
-      fluxes%evap(i,J) = CS%surf_evap !* CS%Rho0
+      fluxes%evap(i,J) = CS%surf_evap * CS%Rho0
     enddo; enddo
   endif
 
