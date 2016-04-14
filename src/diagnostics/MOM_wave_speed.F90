@@ -48,6 +48,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : thermo_var_ptrs
+use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs
 
 implicit none ; private
@@ -63,18 +64,20 @@ end type wave_speed_CS
 
 contains
 
-subroutine wave_speed(h, tv, G, cg1, CS, full_halos)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)  :: h
-  type(thermo_var_ptrs),                 intent(in)  :: tv
-  real, dimension(NIMEM_,NJMEM_),        intent(out) :: cg1
-  type(ocean_grid_type),                 intent(in)  :: G
-  type(wave_speed_CS), optional,         pointer     :: CS
-  logical,             optional,         intent(in)  :: full_halos
+subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos)
+  type(ocean_grid_type),                    intent(in)  :: G
+  type(verticalGrid_type),                  intent(in)  :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h
+  type(thermo_var_ptrs),                    intent(in)  :: tv
+  real, dimension(SZI_(G),SZJ_(G)),         intent(out) :: cg1
+  type(wave_speed_CS),            optional, pointer     :: CS
+  logical,                        optional, intent(in)  :: full_halos
 !    This subroutine determines the first mode internal wave speed.
 ! Arguments: h - Layer thickness, in m or kg m-2.
 !  (in)      tv - A structure containing the thermobaric variables.
 !  (out)     cg1 - The first mode internal gravity wave speed, in m s-1.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 wave_speed_init.
 !  (in,opt)  full_halos - If true, do the calculation over the entire
@@ -128,6 +131,7 @@ subroutine wave_speed(h, tv, G, cg1, CS, full_halos)
   real :: lam, dlam, lam0
   real :: min_h_frac
   real :: H_to_pres
+  real :: H_to_m     ! Local copy of a unit conversion factor.
   real, dimension(SZI_(G)) :: &
     htot, hmin, &  ! Thicknesses in m.
     H_here, HxT_here, HxS_here, HxR_here
@@ -156,15 +160,16 @@ subroutine wave_speed(h, tv, G, cg1, CS, full_halos)
   endif ; endif
 
   S => tv%S ; T => tv%T
-  g_Rho0 = G%g_Earth/G%GV%Rho0
+  g_Rho0 = G%g_Earth/GV%Rho0
   use_EOS = associated(tv%eqn_of_state)
 
-  H_to_pres = G%g_Earth * G%GV%Rho0
+  H_to_pres = G%g_Earth * GV%Rho0
+  H_to_m = GV%H_to_m
   rescale = 1024.0**4 ; I_rescale = 1.0/rescale
 
   min_h_frac = tol1 / real(nz)
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,h,G,min_h_frac,use_EOS,T,S,      &
-!$OMP                                  H_to_pres,tv,cg1,g_Rho0,rescale,I_rescale)      &
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,h,G,GV,min_h_frac,use_EOS,T,S,tv,&
+!$OMP                                  H_to_pres,H_to_m,cg1,g_Rho0,rescale,I_rescale)  &
 !$OMP                          private(htot,hmin,kf,H_here,HxT_here,HxS_here,HxR_here, &
 !$OMP                                  Hf,Tf,Sf,Rf,pres,T_int,S_int,drho_dT,           &
 !$OMP                                  drho_dS,drxh_sum,kc,Hc,Tc,Sc,I_Hnew,gprime,     &
@@ -175,7 +180,7 @@ subroutine wave_speed(h, tv, G, cg1, CS, full_halos)
     ! at the top).  This also transposes the row order so that columns can
     ! be worked upon one at a time.
     do i=is,ie ; htot(i) = 0.0 ; enddo
-    do k=1,nz ; do i=is,ie ; htot(i) = htot(i) + h(i,j,k)*G%GV%H_to_m ; enddo ; enddo
+    do k=1,nz ; do i=is,ie ; htot(i) = htot(i) + h(i,j,k)*H_to_m ; enddo ; enddo
 
     do i=is,ie
       hmin(i) = htot(i)*min_h_frac ; kf(i) = 1 ; H_here(i) = 0.0
@@ -183,20 +188,20 @@ subroutine wave_speed(h, tv, G, cg1, CS, full_halos)
     enddo
     if (use_EOS) then
       do k=1,nz ; do i=is,ie
-        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*G%GV%H_to_m > hmin(i))) then
+        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*H_to_m > hmin(i))) then
           Hf(kf(i),i) = H_here(i)
           Tf(kf(i),i) = HxT_here(i) / H_here(i)
           Sf(kf(i),i) = HxS_here(i) / H_here(i)
           kf(i) = kf(i) + 1
 
           ! Start a new layer
-          H_here(i) = h(i,j,k)*G%GV%H_to_m
-          HxT_here(i) = (h(i,j,k)*G%GV%H_to_m)*T(i,j,k)
-          HxS_here(i) = (h(i,j,k)*G%GV%H_to_m)*S(i,j,k)
+          H_here(i) = h(i,j,k)*H_to_m
+          HxT_here(i) = (h(i,j,k)*H_to_m)*T(i,j,k)
+          HxS_here(i) = (h(i,j,k)*H_to_m)*S(i,j,k)
         else
-          H_here(i) = H_here(i) + h(i,j,k)*G%GV%H_to_m
-          HxT_here(i) = HxT_here(i) + (h(i,j,k)*G%GV%H_to_m)*T(i,j,k)
-          HxS_here(i) = HxS_here(i) + (h(i,j,k)*G%GV%H_to_m)*S(i,j,k)
+          H_here(i) = H_here(i) + h(i,j,k)*H_to_m
+          HxT_here(i) = HxT_here(i) + (h(i,j,k)*H_to_m)*T(i,j,k)
+          HxS_here(i) = HxS_here(i) + (h(i,j,k)*H_to_m)*S(i,j,k)
         endif
       enddo ; enddo
       do i=is,ie ; if (H_here(i) > 0.0) then
@@ -206,16 +211,16 @@ subroutine wave_speed(h, tv, G, cg1, CS, full_halos)
       endif ; enddo
     else
       do k=1,nz ; do i=is,ie
-        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*G%GV%H_to_m > hmin(i))) then
+        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*H_to_m > hmin(i))) then
           Hf(kf(i),i) = H_here(i) ; Rf(kf(i),i) = HxR_here(i) / H_here(i)
           kf(i) = kf(i) + 1
 
           ! Start a new layer
-          H_here(i) = h(i,j,k)*G%GV%H_to_m
-          HxR_here(i) = (h(i,j,k)*G%GV%H_to_m)*G%GV%Rlay(k)
+          H_here(i) = h(i,j,k)*H_to_m
+          HxR_here(i) = (h(i,j,k)*H_to_m)*GV%Rlay(k)
         else
-          H_here(i) = H_here(i) + h(i,j,k)*G%GV%H_to_m
-          HxR_here(i) = HxR_here(i) + (h(i,j,k)*G%GV%H_to_m)*G%GV%Rlay(k)
+          H_here(i) = H_here(i) + h(i,j,k)*H_to_m
+          HxR_here(i) = HxR_here(i) + (h(i,j,k)*H_to_m)*GV%Rlay(k)
         endif
       enddo ; enddo
       do i=is,ie ; if (H_here(i) > 0.0) then
@@ -383,19 +388,21 @@ subroutine wave_speed(h, tv, G, cg1, CS, full_halos)
 
 end subroutine wave_speed
 
-subroutine wave_speeds(h, tv, G, nmodes, cn, CS, full_halos)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)  :: h
-  type(thermo_var_ptrs),                  intent(in)  :: tv
-  type(ocean_grid_type),                  intent(in)  :: G
-  integer,                                intent(in)  :: nmodes
+subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
+  type(ocean_grid_type),                    intent(in)  :: G
+  type(verticalGrid_type),                  intent(in)  :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h
+  type(thermo_var_ptrs),                    intent(in)  :: tv
+  integer,                                  intent(in)  :: nmodes
   real, dimension(G%isd:G%ied,G%jsd:G%jed,nmodes), intent(out) :: cn
-  type(wave_speed_CS), optional,          pointer     :: CS  
-  logical,             optional,          intent(in)  :: full_halos
+  type(wave_speed_CS), optional,            pointer     :: CS  
+  logical,             optional,            intent(in)  :: full_halos
 !    This subroutine determines the first mode internal wave speed.
 ! Arguments: h - Layer thickness, in m or kg m-2.
 !  (in)      tv - A structure containing the thermobaric variables.
 !  (out)     cn - The internal gravity wave mode speeds, in m s-1.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 wave_speed_init.
 !  (in,opt)  full_halos - If true, do the calculation over the entire
@@ -469,8 +476,9 @@ subroutine wave_speeds(h, tv, G, nmodes, cn, CS, full_halos)
   integer :: nrootsfound  ! number of extra roots found (not including 1st root)                    
   real :: min_h_frac
   real :: H_to_pres
+  real :: H_to_m     ! Local copy of a unit conversion factor.
   real, dimension(SZI_(G)) :: &
-    htot, hmin, &  ! Thicknesses in m.
+    htot, hmin, &    ! Thicknesses in m.
     H_here, HxT_here, HxS_here, HxR_here
   real :: speed2_tot ! overestimate of the mode-1 speed squared, m2 s-2
   real :: speed2_min ! minimum mode speed (squared) to consider in root searching
@@ -507,14 +515,15 @@ subroutine wave_speeds(h, tv, G, nmodes, cn, CS, full_halos)
   endif ; endif
     
   S => tv%S ; T => tv%T
-  g_Rho0 = G%g_Earth/G%GV%Rho0
+  g_Rho0 = G%g_Earth/GV%Rho0
   use_EOS = associated(tv%eqn_of_state)
 
-  H_to_pres = G%g_Earth * G%GV%Rho0
+  H_to_pres = G%g_Earth * GV%Rho0
+  H_to_m = GV%H_to_m
 
   min_h_frac = tol1 / real(nz)
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,h,G,min_h_frac,use_EOS,T,S,      &
-!$OMP                                  H_to_pres,tv,cn,g_Rho0)                         &
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,h,G,GV,min_h_frac,use_EOS,T,S,   &
+!$OMP                                  H_to_pres,H_to_m,tv,cn,g_Rho0)                  &
 !$OMP                          private(htot,hmin,kf,H_here,HxT_here,HxS_here,HxR_here, &
 !$OMP                                  Hf,Tf,Sf,Rf,pres,T_int,S_int,drho_dT,           &
 !$OMP                                  drho_dS,drxh_sum,kc,Hc,Tc,Sc,I_Hnew,gprime,     &
@@ -530,7 +539,7 @@ subroutine wave_speeds(h, tv, G, nmodes, cn, CS, full_halos)
     ! at the top).  This also transposes the row order so that columns can
     ! be worked upon one at a time.
     do i=is,ie ; htot(i) = 0.0 ; enddo
-    do k=1,nz ; do i=is,ie ; htot(i) = htot(i) + h(i,j,k)*G%GV%H_to_m ; enddo ; enddo
+    do k=1,nz ; do i=is,ie ; htot(i) = htot(i) + h(i,j,k)*H_to_m ; enddo ; enddo
 
     do i=is,ie
       hmin(i) = htot(i)*min_h_frac ; kf(i) = 1 ; H_here(i) = 0.0
@@ -538,20 +547,20 @@ subroutine wave_speeds(h, tv, G, nmodes, cn, CS, full_halos)
     enddo
     if (use_EOS) then
       do k=1,nz ; do i=is,ie
-        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*G%GV%H_to_m > hmin(i))) then
+        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*H_to_m > hmin(i))) then
           Hf(kf(i),i) = H_here(i)
           Tf(kf(i),i) = HxT_here(i) / H_here(i)
           Sf(kf(i),i) = HxS_here(i) / H_here(i)
           kf(i) = kf(i) + 1
 
           ! Start a new layer
-          H_here(i) = h(i,j,k)*G%GV%H_to_m
-          HxT_here(i) = (h(i,j,k)*G%GV%H_to_m)*T(i,j,k)
-          HxS_here(i) = (h(i,j,k)*G%GV%H_to_m)*S(i,j,k)
+          H_here(i) = h(i,j,k)*H_to_m
+          HxT_here(i) = (h(i,j,k)*H_to_m)*T(i,j,k)
+          HxS_here(i) = (h(i,j,k)*H_to_m)*S(i,j,k)
         else
-          H_here(i) = H_here(i) + h(i,j,k)*G%GV%H_to_m
-          HxT_here(i) = HxT_here(i) + (h(i,j,k)*G%GV%H_to_m)*T(i,j,k)
-          HxS_here(i) = HxS_here(i) + (h(i,j,k)*G%GV%H_to_m)*S(i,j,k)
+          H_here(i) = H_here(i) + h(i,j,k)*H_to_m
+          HxT_here(i) = HxT_here(i) + (h(i,j,k)*H_to_m)*T(i,j,k)
+          HxS_here(i) = HxS_here(i) + (h(i,j,k)*H_to_m)*S(i,j,k)
         endif
       enddo ; enddo
       do i=is,ie ; if (H_here(i) > 0.0) then
@@ -561,16 +570,16 @@ subroutine wave_speeds(h, tv, G, nmodes, cn, CS, full_halos)
       endif ; enddo
     else
       do k=1,nz ; do i=is,ie
-        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*G%GV%H_to_m > hmin(i))) then
+        if ((H_here(i) > hmin(i)) .and. (h(i,j,k)*H_to_m > hmin(i))) then
           Hf(kf(i),i) = H_here(i) ; Rf(kf(i),i) = HxR_here(i) / H_here(i)
           kf(i) = kf(i) + 1
 
           ! Start a new layer
-          H_here(i) = h(i,j,k)*G%GV%H_to_m
-          HxR_here(i) = (h(i,j,k)*G%GV%H_to_m)*G%GV%Rlay(k)
+          H_here(i) = h(i,j,k)*H_to_m
+          HxR_here(i) = (h(i,j,k)*H_to_m)*GV%Rlay(k)
         else
-          H_here(i) = H_here(i) + h(i,j,k)*G%GV%H_to_m
-          HxR_here(i) = HxR_here(i) + (h(i,j,k)*G%GV%H_to_m)*G%GV%Rlay(k)
+          H_here(i) = H_here(i) + h(i,j,k)*H_to_m
+          HxR_here(i) = HxR_here(i) + (h(i,j,k)*H_to_m)*GV%Rlay(k)
         endif
       enddo ; enddo
       do i=is,ie ; if (H_here(i) > 0.0) then

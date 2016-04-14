@@ -24,23 +24,17 @@ use MOM_hor_index, only : hor_index_type, hor_index_init
 use MOM_domains, only : MOM_domain_type, get_domain_extent, compute_block_extent
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_verticalGrid, only : verticalGrid_type
-use MOM_verticalGrid, only : verticalGridInit, verticalGridEnd
-use MOM_verticalGrid, only : get_flux_units, get_thickness_units, get_tr_flux_units
 
 implicit none ; private
 
 #include <MOM_memory.h>
 
 public MOM_grid_init, MOM_grid_end, set_first_direction
-public get_flux_units, get_thickness_units, get_tr_flux_units
-public isPointInCell
-public hor_index_type, verticalGrid_type
+public isPointInCell, hor_index_type
 
 type, public :: ocean_grid_type
   type(MOM_domain_type), pointer :: Domain => NULL()
   type(MOM_domain_type), pointer :: Domain_aux => NULL()
-  type(verticalGrid_type), pointer :: GV => NULL()
   type(hor_index_type) :: HI
   integer :: isc, iec, jsc, jec ! The range of the computational domain indices
   integer :: isd, ied, jsd, jed ! and data domain indices at tracer cell centers.
@@ -50,7 +44,7 @@ type, public :: ocean_grid_type
   integer :: IsgB, IegB, JsgB, JegB ! The range of the global domain vertex indices.
   integer :: isd_global         ! The values of isd and jsd in the global
   integer :: jsd_global         ! (decomposition invariant) index space.
-  integer :: ks, ke             ! The range of layer's vertical indices.
+  integer :: ke                 ! The number of layers in the vertical.
   logical :: symmetric          ! True if symmetric memory is used.
   logical :: nonblocking_updates  ! If true, non-blocking halo updates are
                                   ! allowed.  The default is .false. (for now).
@@ -67,7 +61,9 @@ type, public :: ocean_grid_type
     dxT, IdxT, & ! dxT is delta x at h points, in m, and IdxT is 1/dxT in m-1.
     dyT, IdyT, & ! dyT is delta y at h points, in m, and IdyT is 1/dyT in m-1.
     areaT, &     ! areaT is the area of an h-cell, in m2.
-    IareaT       ! IareaT = 1/areaT, in m-2.
+    IareaT, &    ! IareaT = 1/areaT, in m-2.
+    sin_rot, &   ! The sine and cosine of the angular rotation between the local
+    cos_rot      ! model grid's northward and the true northward directions.
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
     mask2dCu, &  ! 0 for boundary points and 1 for ocean points on the u grid.  Nondim.
@@ -110,17 +106,8 @@ type, public :: ocean_grid_type
                         ! On many grids these are the same as geoLonT & geoLonBu.
   character(len=40) :: &
     x_axis_units, &     !   The units that are used in labeling the coordinate
-    y_axis_units        ! axes.
-
-  ! These parameters are run-time parameters that are used during some
-  ! initialization routines (but not all)
-  real :: south_lat     ! The latitude (or y-coordinate) of the first v-line
-  real :: west_lon      ! The longitude (or x-coordinate) of the first u-line
-  real :: len_lat = 0.  ! The latitudinal (or y-coord) extent of physical domain
-  real :: len_lon = 0.  ! The longitudinal (or x-coord) extent of physical domain
-  real :: Rad_Earth = 6.378e6 ! The radius of the planet in meters.
-  real :: max_depth     ! The maximum depth of the ocean in meters.
-  character(len=40) :: axis_units = ' '! Units for the horizontal coordinates.
+    y_axis_units        ! axes.  Except on a Cartesian grid, these are usually
+                        ! some variant of "degrees".
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
     bathyT        ! Ocean bottom depth at tracer points, in m.
@@ -147,6 +134,15 @@ type, public :: ocean_grid_type
   ! These variables are for block structures.
   integer                   :: nblocks
   type(hor_index_type), pointer :: Block(:) => NULL() ! store indices for each block
+
+  ! These parameters are run-time parameters that are used during some
+  ! initialization routines (but not all)
+  real :: south_lat     ! The latitude (or y-coordinate) of the first v-line
+  real :: west_lon      ! The longitude (or x-coordinate) of the first u-line
+  real :: len_lat = 0.  ! The latitudinal (or y-coord) extent of physical domain
+  real :: len_lon = 0.  ! The longitudinal (or x-coord) extent of physical domain
+  real :: Rad_Earth = 6.378e6 ! The radius of the planet in meters.
+  real :: max_depth     ! The maximum depth of the ocean in meters.
 end type ocean_grid_type
 
 contains
@@ -300,13 +296,6 @@ subroutine MOM_grid_init(G, param_file)
   if ( G%block(nblocks)%jed+G%block(nblocks)%jdg_offset > G%HI%jed + G%HI%jdg_offset ) &
         call MOM_error(FATAL, "MOM_grid_init: G%jed_bk > G%jed")
 
-  call verticalGridInit( param_file, G%GV )
-
-  ! Copy over several common variables from the vertical grid.
-  ! Consider removing these later.
-  G%ks = 1 ; G%ke = G%GV%ke
-  G%bathyT(:,:) = G%GV%Angstrom_z !### Should this be 0 instead, in which case this line can go?
-
 end subroutine MOM_grid_init
 
 !> Returns true if the coordinates (x,y) are within the h-cell (i,j)
@@ -410,6 +399,9 @@ subroutine allocate_metrics(G)
   ALLOC_(G%dF_dx(isd:ied, jsd:jed)) ; G%dF_dx(:,:) = 0.0
   ALLOC_(G%dF_dy(isd:ied, jsd:jed)) ; G%dF_dy(:,:) = 0.0
 
+  ALLOC_(G%sin_rot(isd:ied,jsd:jed)) ; G%sin_rot(:,:) = 0.0
+  ALLOC_(G%cos_rot(isd:ied,jsd:jed)) ; G%cos_rot(:,:) = 1.0
+
   allocate(G%gridLonT(isg:ieg))   ; G%gridLonT(:) = 0.0
   allocate(G%gridLonB(G%IsgB:G%IegB)) ; G%gridLonB(:) = 0.0
   allocate(G%gridLatT(jsg:jeg))   ; G%gridLatT(:) = 0.0
@@ -445,11 +437,11 @@ subroutine MOM_grid_end(G)
 
   DEALLOC_(G%bathyT)  ; DEALLOC_(G%CoriolisBu)
   DEALLOC_(G%dF_dx)  ; DEALLOC_(G%dF_dy)
+  DEALLOC_(G%sin_rot) ; DEALLOC_(G%cos_rot)
 
   deallocate(G%gridLonT) ; deallocate(G%gridLatT)
   deallocate(G%gridLonB) ; deallocate(G%gridLatB)
 
-  call verticalGridEnd( G%GV )
 end subroutine MOM_grid_end
 
 end module MOM_grid

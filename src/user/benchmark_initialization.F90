@@ -33,7 +33,9 @@ use MOM_grid, only : ocean_grid_type
 use MOM_tracer_registry, only : tracer_registry_type, add_tracer_OBC_values
 use MOM_variables, only : thermo_var_ptrs
 use MOM_variables, only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE
+use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
+
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -46,10 +48,10 @@ contains
 
 ! -----------------------------------------------------------------------------
 subroutine benchmark_initialize_topography(D, G, param_file, max_depth)
-  real, intent(out), dimension(NIMEM_,NJMEM_) :: D
-  type(ocean_grid_type), intent(in)           :: G
-  type(param_file_type), intent(in)           :: param_file
-  real,                  intent(in)           :: max_depth
+  type(ocean_grid_type),           intent(in) :: G
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: D
+  type(param_file_type),           intent(in) :: param_file
+  real,                            intent(in) :: max_depth
 ! Arguments: D          - the bottom depth in m. Intent out.
 !  (in)      G          - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
@@ -93,14 +95,16 @@ end subroutine benchmark_initialize_topography
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine benchmark_initialize_thickness(h, G, param_file, eqn_of_state, P_ref)
-  real, intent(out), dimension(NIMEM_,NJMEM_, NKMEM_) :: h
-  type(ocean_grid_type), intent(in) :: G
-  type(param_file_type), intent(in) :: param_file
-  type(EOS_type),        pointer    :: eqn_of_state
-  real,                                intent(in)  :: P_Ref
+subroutine benchmark_initialize_thickness(h, G, GV, param_file, eqn_of_state, P_ref)
+  type(ocean_grid_type),   intent(in) :: G
+  type(verticalGrid_type), intent(in) :: GV
+  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h
+  type(param_file_type),   intent(in) :: param_file
+  type(EOS_type),          pointer    :: eqn_of_state
+  real,                    intent(in) :: P_Ref
 ! Arguments: h - The thickness that is being initialized.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in)      eqn_of_state - integer that selects the equatio of state
@@ -135,7 +139,7 @@ subroutine benchmark_initialize_thickness(h, G, param_file, eqn_of_state, P_ref)
 
   call MOM_mesg("  benchmark_initialization.F90, benchmark_initialize_thickness: setting thickness", 5)
 
-  k1 = G%GV%nk_rho_varies + 1
+  k1 = GV%nk_rho_varies + 1
 
   ML_depth = 50.0
   thermocline_scale = 500.0
@@ -152,7 +156,7 @@ subroutine benchmark_initialize_thickness(h, G, param_file, eqn_of_state, P_ref)
 
 ! A first guess of the layers' temperatures.
   do k=1,nz
-    T0(k) = T0(k1) + (G%GV%Rlay(k) - rho_guess(k1)) / drho_dT(k1)
+    T0(k) = T0(k1) + (GV%Rlay(k) - rho_guess(k1)) / drho_dT(k1)
   enddo
 
 ! Refine the guesses for each layer.
@@ -160,7 +164,7 @@ subroutine benchmark_initialize_thickness(h, G, param_file, eqn_of_state, P_ref)
     call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
     call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
     do k=1,nz
-      T0(k) = T0(k) + (G%GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
+      T0(k) = T0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
     enddo
   enddo
 
@@ -199,12 +203,12 @@ subroutine benchmark_initialize_thickness(h, G, param_file, eqn_of_state, P_ref)
 
       if (eta1D(K) > -ML_depth) eta1D(K) = -ML_depth
 
-      if (eta1D(K) < eta1D(K+1) + G%GV%Angstrom_z) &
-        eta1D(K) = eta1D(K+1) + G%GV%Angstrom_z
+      if (eta1D(K) < eta1D(K+1) + GV%Angstrom_z) &
+        eta1D(K) = eta1D(K+1) + GV%Angstrom_z
 
-      h(i,j,k) = max(eta1D(K) - eta1D(K+1), G%GV%Angstrom_z)
+      h(i,j,k) = max(eta1D(K) - eta1D(K+1), GV%Angstrom_z)
     enddo
-    h(i,j,1) = max(0.0 - eta1D(2), G%GV%Angstrom_z)
+    h(i,j,1) = max(0.0 - eta1D(2), GV%Angstrom_z)
 
   enddo ; enddo
 
@@ -212,10 +216,11 @@ end subroutine benchmark_initialize_thickness
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine benchmark_init_temperature_salinity(T, S, G, param_file, &
+subroutine benchmark_init_temperature_salinity(T, S, G, GV, param_file, &
                eqn_of_state, P_Ref)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T, S
   type(ocean_grid_type),               intent(in)  :: G
+  type(verticalGrid_type),             intent(in)  :: GV
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T, S
   type(param_file_type),               intent(in)  :: param_file
   type(EOS_type),                      pointer     :: eqn_of_state
   real,                                intent(in)  :: P_Ref
@@ -225,6 +230,7 @@ subroutine benchmark_init_temperature_salinity(T, S, G, param_file, &
 ! Arguments: T - The potential temperature that is being initialized.
 !  (out)     S - The salinity that is being initialized.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in)      eqn_of_state - integer that selects the equatio of state
@@ -244,7 +250,7 @@ subroutine benchmark_init_temperature_salinity(T, S, G, param_file, &
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  k1 = G%GV%nk_rho_varies + 1
+  k1 = GV%nk_rho_varies + 1
 
   do k=1,nz
     pres(k) = P_Ref ; S0(k) = 35.0
@@ -256,7 +262,7 @@ subroutine benchmark_init_temperature_salinity(T, S, G, param_file, &
 
 ! A first guess of the layers' temperatures.                         !
   do k=1,nz
-    T0(k) = T0(k1) + (G%GV%Rlay(k) - rho_guess(k1)) / drho_dT(k1)
+    T0(k) = T0(k1) + (GV%Rlay(k) - rho_guess(k1)) / drho_dT(k1)
   enddo
 
 ! Refine the guesses for each layer.                                 !
@@ -264,7 +270,7 @@ subroutine benchmark_init_temperature_salinity(T, S, G, param_file, &
     call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
     call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
     do k=1,nz
-      T0(k) = T0(k) + (G%GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
+      T0(k) = T0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
     enddo
   enddo
 

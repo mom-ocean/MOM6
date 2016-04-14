@@ -17,6 +17,7 @@ use MOM_grid,            only : ocean_grid_type
 use MOM_tracer_registry, only : tracer_registry_type, tracer_type, MOM_tracer_chksum
 use MOM_variables,       only : ocean_OBC_type, OBC_FLATHER_E
 use MOM_variables,       only : OBC_FLATHER_W, OBC_FLATHER_N, OBC_FLATHER_S
+use MOM_verticalGrid,    only : verticalGrid_type
 
 implicit none ; private
 
@@ -44,15 +45,16 @@ contains
 
 !> This routine time steps the tracer concentration using a 
 !! monotonic, conservative, weakly diffusive scheme.
-subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS, Reg)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h_end !< layer thickness after advection (m or kg m-2)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: uhtr  !< accumulated volume/mass flux through zonal face (m3 or kg)
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: vhtr  !< accumulated volume/mass flux through merid face (m3 or kg) 
-  type(ocean_OBC_type),                   pointer       :: OBC   !< specifies whether, where, and what OBCs are used
-  real,                                   intent(in)    :: dt    !< time increment (seconds)
-  type(ocean_grid_type),                  intent(inout) :: G     !< ocean grid structure 
-  type(tracer_advect_CS),                 pointer       :: CS    !< control structure for module 
-  type(tracer_registry_type),             pointer       :: Reg   !< pointer to tracer registry 
+subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg)
+  type(ocean_grid_type),                     intent(inout) :: G     !< ocean grid structure 
+  type(verticalGrid_type),                   intent(in)    :: GV    !< ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h_end !< layer thickness after advection (m or kg m-2)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uhtr  !< accumulated volume/mass flux through zonal face (m3 or kg)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vhtr  !< accumulated volume/mass flux through merid face (m3 or kg) 
+  type(ocean_OBC_type),                      pointer       :: OBC   !< specifies whether, where, and what OBCs are used
+  real,                                      intent(in)    :: dt    !< time increment (seconds)
+  type(tracer_advect_CS),                    pointer       :: CS    !< control structure for module 
+  type(tracer_registry_type),                pointer       :: Reg   !< pointer to tracer registry 
 
 
   type(tracer_type) :: Tr(MAX_FIELDS_) ! The array of registered tracers
@@ -111,7 +113,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS, Reg)
   call cpu_clock_end(id_clock_pass)
 
 !$OMP parallel default(none) shared(nz,jsd,jed,IsdB,IedB,uhr,jsdB,jedB,Isd,Ied,vhr, &
-!$OMP                               hprev,domore_k,js,je,is,ie,uhtr,vhtr,G,h_end,   &
+!$OMP                               hprev,domore_k,js,je,is,ie,uhtr,vhtr,G,GV,h_end,&
 !$OMP                               uh_neglect,vh_neglect,ntr,Tr)
 
 ! This initializes the halos of uhr and vhr because pass_vector might do
@@ -141,11 +143,11 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS, Reg)
 
 !$OMP do
   do j=jsd,jed ; do I=isd,ied-1
-    uh_neglect(I,j) = G%GV%H_subroundoff*MIN(G%areaT(i,j),G%areaT(i+1,j))
+    uh_neglect(I,j) = GV%H_subroundoff*MIN(G%areaT(i,j),G%areaT(i+1,j))
   enddo ; enddo
 !$OMP do
   do J=jsd,jed-1 ; do i=isd,ied
-    vh_neglect(i,J) = G%GV%H_subroundoff*MIN(G%areaT(i,j),G%areaT(i,j+1))
+    vh_neglect(i,J) = GV%H_subroundoff*MIN(G%areaT(i,j),G%areaT(i,j+1))
   enddo ; enddo
 
 !$OMP do
@@ -220,7 +222,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS, Reg)
 
 !$OMP parallel do default(none) shared(nz,domore_k,x_first,Tr,hprev,uhr,uh_neglect,  &
 !$OMP                                  OBC,domore_u,ntr,Idt,isv,iev,jsv,jev,stencil, &
-!$OMP                                  G,CS,vhr,vh_neglect,domore_v)
+!$OMP                                  G,GV,CS,vhr,vh_neglect,domore_v)
 
     !  To ensure positive definiteness of the thickness at each iteration, the
     !  mass fluxes out of each layer are checked each step, and limited to keep  
@@ -233,11 +235,11 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS, Reg)
 
         ! First, advect zonally.
         call advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
-                      isv, iev, jsv-stencil, jev+stencil, k, G, CS%usePPM)
+                      isv, iev, jsv-stencil, jev+stencil, k, G, GV, CS%usePPM)
 
         !  Next, advect meridionally.
         call advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
-                      isv, iev, jsv, jev, k, G, CS%usePPM)
+                      isv, iev, jsv, jev, k, G, GV, CS%usePPM)
 
         domore_k(k) = 0
         do j=jsv-stencil,jev+stencil ; if (domore_u(j,k)) domore_k(k) = 1 ; enddo
@@ -247,11 +249,11 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, CS, Reg)
 
         ! First, advect meridionally.
         call advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
-                      isv-stencil, iev+stencil, jsv, jev, k, G, CS%usePPM)
+                      isv-stencil, iev+stencil, jsv, jev, k, G, GV, CS%usePPM)
 
         ! Next, advect zonally.
         call advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
-                      isv, iev, jsv, jev, k, G, CS%usePPM)
+                      isv, iev, jsv, jev, k, G, GV, CS%usePPM)
 
         domore_k(k) = 0
         do j=jsv,jev ; if (domore_u(j,k)) domore_k(k) = 1 ; enddo
@@ -285,17 +287,18 @@ end subroutine advect_tracer
 !> This subroutine does 1-d flux-form advection in the zonal direction using
 !! a monotonic piecewise linear scheme.
 subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
-                    is, ie, js, je, k, G, usePPM)
-  type(tracer_type), dimension(ntr),      intent(inout) :: Tr
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: hprev
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uhr
-   real, dimension(NIMEMB_,NJMEM_),        intent(inout) :: uh_neglect
-  type(ocean_OBC_type),                   pointer       :: OBC
-  logical, dimension(NJMEM_,NKMEM_),      intent(inout) :: domore_u
-  real,                                   intent(in)    :: Idt
-  integer,                                intent(in)    :: ntr, is, ie, js, je,k
-  type(ocean_grid_type),                  intent(inout) :: G
-  logical,                                intent(in)    :: usePPM
+                    is, ie, js, je, k, G, GV, usePPM)
+  type(ocean_grid_type),                     intent(inout) :: G
+  type(verticalGrid_type),                   intent(in)    :: GV
+  type(tracer_type), dimension(ntr),         intent(inout) :: Tr
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: hprev
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhr
+   real, dimension(SZIB_(G),SZJ_(G)),        intent(inout) :: uh_neglect
+  type(ocean_OBC_type),                      pointer       :: OBC
+  logical, dimension(SZJ_(G),SZK_(G)),       intent(inout) :: domore_u
+  real,                                      intent(in)    :: Idt
+  integer,                                   intent(in)    :: ntr, is, ie, js, je,k
+  logical,                                   intent(in)    :: usePPM
 
   real, dimension(SZIB_(G),ntr) :: &
     slope_x, &          ! The concentration slope per grid point in units of
@@ -324,8 +327,8 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
 
   usePLMslope = .not. usePPM
 
-  min_h = 0.1*G%GV%Angstrom
-  h_neglect = G%GV%H_subroundoff
+  min_h = 0.1*GV%Angstrom
+  h_neglect = GV%H_subroundoff
 
 ! do I=is-1,ie ; ts2(I) = 0.0 ; enddo
   do I=is-1,ie ; CFL(I) = 0.0 ; enddo
@@ -368,7 +371,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
         uhh(I) = 0.0
         CFL(I) = 0.0
       elseif (uhr(I,j,k) < 0.0) then
-        hup = (hprev(i+1,j,k)-G%areaT(i+1,j)*G%GV%Angstrom*0.1) !### Change to *min_h
+        hup = hprev(i+1,j,k) - G%areaT(i+1,j)*min_h
         hlos = MAX(0.0,uhr(I+1,j,k))
         if (((hup + uhr(I,j,k) - hlos) < 0.0) .and. &
             ((0.5*hup + uhr(I,j,k)) < 0.0)) then !### Add parentheses.
@@ -380,7 +383,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
        !ts2(I) = 0.5*(1.0 + uhh(I)/(hprev(i+1,j,k)+h_neglect))
         CFL(I) = - uhh(I)/(hprev(i+1,j,k)+h_neglect) ! CFL is positive
       else
-        hup = (hprev(i,j,k)-G%areaT(i,j)*G%GV%Angstrom*0.1) !### Change to *min_h
+        hup = hprev(i,j,k) - G%areaT(i,j)*min_h
         hlos = MAX(0.0,-uhr(I-1,j,k))
         if (((hup - uhr(I,j,k) - hlos) < 0.0) .and. &
             ((0.5*hup - uhr(I,j,k)) < 0.0)) then !### Add parentheses.
@@ -545,17 +548,18 @@ end subroutine advect_x
 !> This subroutine does 1-d flux-form advection using a monotonic piecewise
 !! linear scheme.
 subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
-                    is, ie, js, je, k, G, usePPM)
-  type(tracer_type), dimension(ntr),      intent(inout) :: Tr
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: hprev
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vhr
-  real, dimension(NIMEM_,NJMEMB_),        intent(inout) :: vh_neglect
-  type(ocean_OBC_type),                   pointer       :: OBC
-  logical, dimension(NJMEMB_,NKMEM_),     intent(inout) :: domore_v
-  real,                                   intent(in)    :: Idt
-  integer,                                intent(in)    :: ntr, is, ie, js, je,k
-  type(ocean_grid_type),                  intent(inout) :: G
-  logical,                                intent(in)    :: usePPM
+                    is, ie, js, je, k, G, GV, usePPM)
+  type(ocean_grid_type),                     intent(inout) :: G
+  type(verticalGrid_type),                   intent(in)    :: GV
+  type(tracer_type), dimension(ntr),         intent(inout) :: Tr
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: hprev
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhr
+  real, dimension(SZI_(G),SZJB_(G)),         intent(inout) :: vh_neglect
+  type(ocean_OBC_type),                      pointer       :: OBC
+  logical, dimension(SZJB_(G),SZK_(G)),      intent(inout) :: domore_v
+  real,                                      intent(in)    :: Idt
+  integer,                                   intent(in)    :: ntr, is, ie, js, je,k
+  logical,                                   intent(in)    :: usePPM
 
   real, dimension(SZI_(G),ntr,SZJB_(G)) :: &
     slope_y, &                  ! The concentration slope per grid point in units of
@@ -585,8 +589,8 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
 
   usePLMslope = .not. usePPM
 
-  min_h = 0.1*G%GV%Angstrom
-  h_neglect = G%GV%H_subroundoff
+  min_h = 0.1*GV%Angstrom
+  h_neglect = GV%H_subroundoff
 
  !do i=is,ie ; ts2(i) = 0.0 ; enddo
   do_j_tr(js-1) = domore_v(js-1,k) ; do_j_tr(je+1) = domore_v(je,k)
@@ -629,7 +633,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
         vhh(i,J) = 0.0
         CFL(i) = 0.0
       elseif (vhr(i,J,k) < 0.0) then
-        hup = (hprev(i,j+1,k)-G%areaT(i,j+1)*G%GV%Angstrom*0.1) !### Change to *min_h
+        hup = hprev(i,j+1,k) - G%areaT(i,j+1)*min_h
         hlos = MAX(0.0,vhr(i,J+1,k))
         if ((((hup - hlos) + vhr(i,J,k)) < 0.0) .and. &
             ((0.5*hup + vhr(i,J,k)) < 0.0)) then
@@ -641,7 +645,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
        !ts2(i) = 0.5*(1.0 + vhh(i,J) / (hprev(i,j+1,k)+h_neglect))
         CFL(i) = - vhh(i,J) / (hprev(i,j+1,k)+h_neglect) ! CFL is positive
       else
-        hup = (hprev(i,j,k)-G%areaT(i,j)*G%GV%Angstrom*0.1) !### Change to *min_h
+        hup = hprev(i,j,k) - G%areaT(i,j)*min_h
         hlos = MAX(0.0,-vhr(i,J-1,k))
         if ((((hup - hlos) - vhr(i,J,k)) < 0.0) .and. &
             ((0.5*hup - vhr(i,J,k)) < 0.0)) then

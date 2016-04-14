@@ -12,6 +12,8 @@ use MOM_safe_alloc, only : safe_alloc_ptr
 use MOM_time_manager, only : time_type, operator(+), operator(/), get_time,&
                              time_type_to_real
 use MOM_variables, only : thermo_var_ptrs, surface
+use MOM_verticalGrid, only : verticalGrid_type
+
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -31,6 +33,7 @@ type SCM_idealized_hurricane_CS ; private
   real :: YY     !< Distance (positive north) of storm center
   real :: tran_speed !< Hurricane translation speed
   real :: gust_const !< Gustiness (used in u*)
+  real :: Rho0   !< A reference ocean density in kg/m3
 end type
 
 ! This include declares and sets the variable "version".
@@ -41,12 +44,13 @@ character(len=40)  :: mod = "SCM_idealized_hurricane" ! This module's name.
 contains
 
 !> Initializes temperature and salinity for the SCM idealized hurricane example
-subroutine SCM_idealized_hurricane_TS_init(T, S, h, G, param_file)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T !< Potential temperature (degC)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: S !< Salinity (psu)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)  :: h !< Layer thickness (m or Pa)
-  type(ocean_grid_type),                  intent(in)  :: G !< Grid structure
-  type(param_file_type),                  intent(in)  :: param_file !< Input parameter structure
+subroutine SCM_idealized_hurricane_TS_init(T, S, h, G, GV, param_file)
+  type(ocean_grid_type),                     intent(in)  :: G !< Grid structure
+  type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< Potential temperature (degC)
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< Salinity (psu)
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< Layer thickness (m or Pa)
+  type(param_file_type),                     intent(in)  :: param_file !< Input parameter structure
   ! Local variables
   real :: eta(SZK_(G)+1) ! The 1-d nominal positions of the interfaces.
   real :: S_ref, SST_ref, dTdZ, MLD
@@ -70,7 +74,7 @@ subroutine SCM_idealized_hurricane_TS_init(T, S, h, G, param_file)
   do j=js,je ; do i=is,ie
     eta(1) = 0. ! Reference to surface
     do k=1,nz
-      eta(K+1) = eta(K) - h(i,j,k)*G%GV%H_to_m ! Interface below layer (in m)
+      eta(K+1) = eta(K) - h(i,j,k)*GV%H_to_m ! Interface below layer (in m)
       zC = 0.5*( eta(K) + eta(K+1) )        ! Z of middle of layer (in m)
       T(i,j,k) = SST_ref + dTdz*min(0., zC+MLD)
       S(i,j,k) = S_ref
@@ -126,6 +130,12 @@ subroutine SCM_idealized_hurricane_wind_init(Time, G, param_file, CS)
                  "Translation speed of hurricane"//                   &
                  "used in the SCM idealized hurricane wind profile.", &
                  units='m/s', default=5.0)
+  call get_param(param_file, mod, "RHO_0", CS%Rho0, &
+                 "The mean ocean density used with BOUSSINESQ true to \n"//&
+                 "calculate accelerations and the mass for conservation \n"//&
+                 "properties, or with BOUSSINSEQ false to convert some \n"//&
+                 "parameters from vertical units of m to kg m-2.", &
+                 units="kg m-3", default=1035.0)
   ! The following parameter is a model run-time parameter which is used
   ! and logged elsewhere and so should not be logged here. The default
   ! value should be consistent with the rest of the model.
@@ -298,9 +308,9 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
   ! Set the surface friction velocity, in units of m s-1. ustar is always positive.
   do j=js,je ; do i=is,ie
     !  This expression can be changed if desired, but need not be.
-    fluxes%ustar(i,j) = G%mask2dT(i,j) * sqrt(CS%gust_const/G%GV%Rho0 + &
+    fluxes%ustar(i,j) = G%mask2dT(i,j) * sqrt(CS%gust_const/CS%Rho0 + &
        sqrt(0.5*(fluxes%taux(I-1,j)**2 + fluxes%taux(I,j)**2) + &
-            0.5*(fluxes%tauy(i,J-1)**2 + fluxes%tauy(i,J)**2))/G%GV%Rho0)
+            0.5*(fluxes%tauy(i,J-1)**2 + fluxes%tauy(i,J)**2))/CS%Rho0)
   enddo ; enddo
 
 end subroutine SCM_idealized_hurricane_wind_forcing

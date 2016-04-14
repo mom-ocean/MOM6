@@ -383,6 +383,8 @@ subroutine set_grid_metrics(G, param_file)
   call get_param(param_file, "MOM_grid_init", "DEBUG", debug, &
                  "If true, write out verbose debugging data.", default=.false.)
 
+  ! These are defaults that may be changed in the next select block.
+  G%x_axis_units = "degrees_E" ; G%y_axis_units = "degrees_N"
   select case (trim(config))
     case ("mosaic");    call set_grid_metrics_from_mosaic(G, param_file)
     case ("cartesian"); call set_grid_metrics_cartesian(G, param_file)
@@ -866,7 +868,8 @@ subroutine set_grid_metrics_cartesian(G, param_file)
   real :: grid_latT(G%jsd:G%jed), grid_latB(G%JsdB:G%JedB)
   real :: grid_lonT(G%isd:G%ied), grid_lonB(G%IsdB:G%IedB)
   real :: PI
-  character(len=48)  :: mod  = "MOM_grid_init set_grid_metrics_cartesian"
+  character(len=80) :: units_temp
+  character(len=48) :: mod  = "MOM_grid_init set_grid_metrics_cartesian"
 
   niglobal = G%Domain%niglobal ; njglobal = G%Domain%njglobal
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -877,26 +880,33 @@ subroutine set_grid_metrics_cartesian(G, param_file)
  
   PI = 4.0*atan(1.0) ;
 
-  call get_param(param_file, mod, "AXIS_UNITS", G%axis_units, &
+  call get_param(param_file, mod, "AXIS_UNITS", units_temp, &
                  "The units for the Cartesian axes. Valid entries are: \n"//&
                  " \t degrees - degrees of latitude and longitude \n"//&
                  " \t m - meters \n \t k - kilometers", default="degrees")
   call get_param(param_file, mod, "SOUTHLAT", G%south_lat, &
                  "The southern latitude of the domain or the equivalent \n"//&
-                 "starting value for the y-axis.", units=G%axis_units, &
+                 "starting value for the y-axis.", units=units_temp, &
                  fail_if_missing=.true.)
   call get_param(param_file, mod, "LENLAT", G%len_lat, &
                  "The latitudinal or y-direction length of the domain.", &
-                 units=G%axis_units, fail_if_missing=.true.)
+                 units=units_temp, fail_if_missing=.true.)
   call get_param(param_file, mod, "WESTLON", G%west_lon, &
                  "The western longitude of the domain or the equivalent \n"//&
-                 "starting value for the x-axis.", units=G%axis_units, &
+                 "starting value for the x-axis.", units=units_temp, &
                  default=0.0)
   call get_param(param_file, mod, "LENLON", G%len_lon, &
                  "The longitudinal or x-direction length of the domain.", &
-                 units=G%axis_units, fail_if_missing=.true.)
+                 units=units_temp, fail_if_missing=.true.)
   call get_param(param_file, mod, "RAD_EARTH", G%Rad_Earth, &
                  "The radius of the Earth.", units="m", default=6.378e6)
+
+  if (units_temp(1:1) == 'k') then
+    G%x_axis_units = "kilometers" ; G%y_axis_units = "kilometers"
+  elseif (units_temp(1:1) == 'm') then
+    G%x_axis_units = "meters" ; G%y_axis_units = "meters"
+  endif
+  call log_param(param_file, mod, "explicit AXIS_UNITS", G%x_axis_units)
 
   ! These are larger in case symmetric memory is being used.
   do J=G%JsgB,G%JegB
@@ -931,10 +941,10 @@ subroutine set_grid_metrics_cartesian(G, param_file)
     G%dxBu(I,J) = G%Rad_Earth * G%len_lon * PI / (180.0 * niglobal)
     G%dyBu(I,J) = G%Rad_Earth * G%len_lat * PI / (180.0 * njglobal)
 
-    if (G%axis_units(1:1) == 'k') then ! Axes are measured in km.
+    if (units_temp(1:1) == 'k') then ! Axes are measured in km.
       G%dxBu(I,J) = 1000.0 * G%len_lon / (REAL(niglobal))
       G%dyBu(I,J) = 1000.0 * G%len_lat / (REAL(njglobal))
-    else if (G%axis_units(1:1) == 'm') then ! Axes are measured in m.
+    else if (units_temp(1:1) == 'm') then ! Axes are measured in m.
       G%dxBu(I,J) = G%len_lon / (REAL(niglobal))
       G%dyBu(I,J) = G%len_lat / (REAL(njglobal))
     else ! Axes are measured in degrees of latitude and longitude.
@@ -1009,12 +1019,6 @@ subroutine set_grid_metrics_spherical(G, param_file)
 !  and save them in arrays.
   PI = 4.0*atan(1.0); PI_180 = atan(1.0)/45.
  
-  call get_param(param_file, mod, "AXIS_UNITS", G%axis_units, default="degrees")
-  if (trim(G%axis_units) == "") G%axis_units = "degrees"
-  if (trim(G%axis_units) .ne. "degrees") call MOM_error(FATAL, &
-    "MOM_grid_init.F90, set_grid_metrics_simple_spherical: "// &
-    "axis_units must be degrees")
-
   call get_param(param_file, mod, "SOUTHLAT", G%south_lat, &
                  "The southern latitude of the domain.", units="degrees", &
                  fail_if_missing=.true.)
@@ -1444,7 +1448,7 @@ subroutine initialize_masks(G, PF)
     call MOM_error(FATAL, "Symmetric memory must be used when "//&
       "APPLY_OBC_U_FLATHER_WEST or APPLY_OBC_V_FLATHER_SOUTH is true.")
 
-  Dmin = MAX(min_depth,2.0*G%GV%Angstrom_z)
+  Dmin = min_depth
   if (mask_depth>=0.) Dmin = mask_depth
 
   call pass_var(G%bathyT, G%Domain)

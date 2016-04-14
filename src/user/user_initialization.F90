@@ -107,8 +107,8 @@ logical :: first_call = .true.
 contains
 
 subroutine USER_set_coord(Rlay, g_prime, G, param_file, eqn_of_state)
-  real, dimension(:), intent(out) :: Rlay, g_prime
   type(ocean_grid_type), intent(in) :: G
+  real, dimension(:), intent(out) :: Rlay, g_prime
   type(param_file_type), intent(in) :: param_file
   type(EOS_type),        pointer    :: eqn_of_state
 
@@ -123,8 +123,8 @@ subroutine USER_set_coord(Rlay, g_prime, G, param_file, eqn_of_state)
 end subroutine USER_set_coord
 
 subroutine USER_initialize_topography(D, G, param_file)
-  real, dimension(NIMEM_,NJMEM_), intent(out) :: D
   type(ocean_grid_type), intent(in) :: G
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: D
   type(param_file_type), intent(in) :: param_file
   call MOM_error(FATAL, &
    "USER_initialization.F90, USER_initialize_topography: " // &
@@ -137,10 +137,10 @@ subroutine USER_initialize_topography(D, G, param_file)
 end subroutine USER_initialize_topography
 
 subroutine USER_initialize_thickness(h, G, param_file, T)
-  real, intent(out), dimension(NIMEM_,NJMEM_, NKMEM_) :: h
   type(ocean_grid_type), intent(in) :: G
+  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h
   type(param_file_type), intent(in) :: param_file
-  real, intent(in), dimension(NIMEM_,NJMEM_, NKMEM_)  :: T
+  real, intent(in), dimension(SZI_(G),SZJ_(G), SZK_(G))  :: T
   call MOM_error(FATAL, &
    "USER_initialization.F90, USER_initialize_thickness: " // &
    "Unmodified user routine called - you must edit the routine to use it")
@@ -152,10 +152,10 @@ subroutine USER_initialize_thickness(h, G, param_file, T)
 end subroutine USER_initialize_thickness
 
 subroutine USER_initialize_velocity(u, v, G, param_file)
-  real, dimension(NIMEMB_, NJMEM_, NKMEM_), intent(out) :: u
-  real, dimension(NIMEM_, NJMEMB_, NKMEM_), intent(out) :: v
-  type(ocean_grid_type),                    intent(in)  :: G
-  type(param_file_type),                    intent(in)  :: param_file
+  type(ocean_grid_type),                       intent(in)  :: G
+  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)), intent(out) :: u
+  real, dimension(SZI_(G), SZJB_(G), SZK_(G)), intent(out) :: v
+  type(param_file_type),                       intent(in)  :: param_file
   call MOM_error(FATAL, &
    "USER_initialization.F90, USER_initialize_velocity: " // &
    "Unmodified user routine called - you must edit the routine to use it")
@@ -168,10 +168,10 @@ subroutine USER_initialize_velocity(u, v, G, param_file)
 end subroutine USER_initialize_velocity
 
 subroutine USER_init_temperature_salinity(T, S, G, param_file, eqn_of_state)
-  real, dimension(NIMEM_, NJMEM_, NKMEM_), intent(out) :: T, S
-  type(ocean_grid_type),                   intent(in)  :: G
-  type(param_file_type),                   intent(in)  :: param_file
-  type(EOS_type),                          pointer     :: eqn_of_state
+  type(ocean_grid_type),                      intent(in)  :: G
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G)), intent(out) :: T, S
+  type(param_file_type),                      intent(in)  :: param_file
+  type(EOS_type),                             pointer     :: eqn_of_state
   call MOM_error(FATAL, &
    "USER_initialization.F90, USER_init_temperature_salinity: " // &
    "Unmodified user routine called - you must edit the routine to use it")
@@ -185,12 +185,12 @@ end subroutine USER_init_temperature_salinity
 
 subroutine USER_init_mixed_layer_density(Rml, G, param_file, use_temperature, &
                                          eqn_of_state, T, S, P_Ref)
-  real, dimension(NIMEM_, NJMEM_, NKMEM_),       intent(out) :: Rml
   type(ocean_grid_type),                         intent(in)  :: G
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G)),    intent(out) :: Rml
   type(param_file_type),                         intent(in)  :: param_file
   logical,                                       intent(in)  :: use_temperature
   type(EOS_type),                      optional, pointer     :: eqn_of_state
-  real, dimension(NIMEM_, NJMEM_, NKMEM_), optional, intent(in) :: T, S
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G)), optional, intent(in) :: T, S
   real,                                optional, intent(in)  :: P_Ref
   call MOM_error(FATAL, &
    "USER_initialization.F90, USER_init_mixed_layer_density: " // &
@@ -208,7 +208,7 @@ subroutine USER_initialize_sponges(G, use_temperature, tv, param_file, CSp, h)
   type(thermo_var_ptrs), intent(in) :: tv
   type(param_file_type), intent(in) :: param_file
   type(sponge_CS),       pointer    :: CSp
-  real, dimension(NIMEM_, NJMEM_, NKMEM_), intent(in) :: h
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G)), intent(in) :: h
   call MOM_error(FATAL, &
    "USER_initialization.F90, USER_initialize_sponges: " // &
    "Unmodified user routine called - you must edit the routine to use it")

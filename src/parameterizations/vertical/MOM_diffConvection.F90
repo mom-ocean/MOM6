@@ -8,6 +8,7 @@ use MOM_EOS, only : EOS_type, calculate_density
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_file_parser, only : openParameterBlock, closeParameterBlock
 use MOM_grid, only : ocean_grid_type, isPointInCell
+use MOM_verticalGrid, only : verticalGrid_type
 
 implicit none ; private
 
@@ -95,17 +96,18 @@ logical function diffConvection_init(paramFile, G, diag, Time, CS)
 end function diffConvection_init
 
 
-subroutine diffConvection_calculate(CS, G, h, Temp, Salt, EOS, Kd_int)
+subroutine diffConvection_calculate(CS, G, GV, h, Temp, Salt, EOS, Kd_int)
 ! Calculates diffusivity and non-local transport for KPP parameterization
 
 ! Arguments
-  type(diffConvection_CS),                pointer       :: CS    ! Control structure
-  type(ocean_grid_type),                  intent(in)    :: G     ! Ocean grid
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h     ! Layer/level thicknesses (units of H)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: Temp  ! Pot. temperature (degrees C)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: Salt  ! Salinity (ppt)
-  type(EOS_type),                         pointer       :: EOS   ! Equation of state
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: Kd_int ! (in) Vertical diffusivity on interfaces (m2/s)
+  type(diffConvection_CS),                   pointer       :: CS    ! Control structure
+  type(ocean_grid_type),                     intent(in)    :: G     ! Ocean grid
+  type(verticalGrid_type),                   intent(in)    :: GV    ! Ocean vertical grid
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h     ! Layer/level thicknesses (units of H)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: Temp  ! Pot. temperature (degrees C)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: Salt  ! Salinity (ppt)
+  type(EOS_type),                            pointer       :: EOS   ! Equation of state
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kd_int ! (in) Vertical diffusivity on interfaces (m2/s)
                                                                  ! (out) Modified vertical diffusivity (m2/s)
 ! Local variables
   integer :: i, j, k
@@ -113,7 +115,7 @@ subroutine diffConvection_calculate(CS, G, h, Temp, Salt, EOS, Kd_int)
   real, dimension( G%ke+1 ) :: Kd_1d ! Vertical diffusivity at interfaces (m2/s)
   real :: GoRho, pRef, rhoK, rhoKm1
 
-  GoRho = G%g_Earth / G%GV%Rho0
+  GoRho = G%g_Earth / GV%Rho0
 
   N2_1d( 1 ) = 0.
   N2_1d( G%ke+1 ) = 0.
@@ -125,12 +127,12 @@ subroutine diffConvection_calculate(CS, G, h, Temp, Salt, EOS, Kd_int)
     pRef = 0. ! Ignore atmospheric pressure
     do K = 2, G%ke
       ! Pressure at interface K is incremented by mass of level above
-      pRef = pRef + G%g_Earth * G%GV%Rho0 * h(i,j,k-1) * G%GV%H_to_m ! Boussinesq approximation!!!! ?????
+      pRef = pRef + G%g_Earth * GV%Rho0 * h(i,j,k-1) * GV%H_to_m ! Boussinesq approximation!!!! ?????
       ! Compute Brunt-Vaisala frequency (static stability) on interfaces
       call calculate_density(Temp(i,j,k),   Salt(i,j,k),   pRef, rhoK,   EOS)
       call calculate_density(Temp(i,j,k-1), Salt(i,j,k-1), pRef, rhoKm1, EOS)
       N2_1d(K) = GoRho * (rhoK - rhoKm1) / &
-              (0.5*(h(i,j,k-1) + h(i,j,k)) + G%GV%H_subroundoff) ! Can be negative
+              (0.5*(h(i,j,k-1) + h(i,j,k)) + GV%H_subroundoff) ! Can be negative
       Kd_1d(K) = 0.
       if (N2_1d(K) < 0.) Kd_1d(K) = CS%Kd_convection
     enddo ! k
