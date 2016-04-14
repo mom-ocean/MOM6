@@ -90,7 +90,9 @@ use MOM_tracer_registry, only : tracer_registry_type, add_tracer_OBC_values
 use MOM_variables, only : thermo_var_ptrs
 use MOM_variables, only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE
 use MOM_variables, only : OBC_FLATHER_E, OBC_FLATHER_W, OBC_FLATHER_N, OBC_FLATHER_S
+use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
+
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -105,10 +107,11 @@ public Phillips_initialize_topography
 
 contains
 
-subroutine Phillips_initialize_thickness(h, G, param_file)
-  real, intent(out), dimension(NIMEM_,NJMEM_, NKMEM_) :: h
-  type(ocean_grid_type), intent(in) :: G
-  type(param_file_type), intent(in) :: param_file
+subroutine Phillips_initialize_thickness(h, G, GV, param_file)
+  type(ocean_grid_type),   intent(in) :: G
+  type(verticalGrid_type), intent(in) :: GV
+  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h
+  type(param_file_type),   intent(in) :: param_file
 
   real :: eta0(SZK_(G)+1)   ! The 1-d nominal positions of the interfaces.
   real :: eta_im(SZJ_(G),SZK_(G)+1) ! A temporary array for zonal-mean eta, m.
@@ -164,9 +167,9 @@ subroutine Phillips_initialize_thickness(h, G, param_file)
     eta1D(nz+1) = -1.0*G%bathyT(i,j)
     do k=nz,1,-1
       eta1D(K) = eta_im(j,K)
-      if (eta1D(K) < (eta1D(K+1) + G%GV%Angstrom_z)) then
-        eta1D(K) = eta1D(K+1) + G%GV%Angstrom_z
-        h(i,j,k) = G%GV%Angstrom_z
+      if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_z)) then
+        eta1D(K) = eta1D(K+1) + GV%Angstrom_z
+        h(i,j,k) = GV%Angstrom_z
       else
         h(i,j,k) = eta1D(K) - eta1D(K+1)
       endif
@@ -175,10 +178,11 @@ subroutine Phillips_initialize_thickness(h, G, param_file)
 
 end subroutine Phillips_initialize_thickness
 
-subroutine Phillips_initialize_velocity(u, v, G, param_file)
-  real, dimension(NIMEMB_,NJMEM_, NKMEM_), intent(out) :: u
-  real, dimension(NIMEM_,NJMEMB_, NKMEM_), intent(out) :: v
+subroutine Phillips_initialize_velocity(u, v, G, GV, param_file)
   type(ocean_grid_type),                intent(in)  :: G
+  type(verticalGrid_type),              intent(in)  :: GV
+  real, dimension(SZIB_(G),SZJ_(G), SZK_(G)), intent(out) :: u
+  real, dimension(SZI_(G),SZJB_(G), SZK_(G)), intent(out) :: v
   type(param_file_type),                intent(in)  :: param_file
 
   real :: damp_rate, jet_width, jet_height, x_2, y_2
@@ -210,11 +214,11 @@ subroutine Phillips_initialize_velocity(u, v, G, param_file)
 ! This uses d/d y_2 atan(y_2 / jet_width)
 !    u(I,j,k) = u(i,j,k+1) + (1e-3 * jet_height / &
 !           (jet_width * (1.0 + (y_2 / jet_width)**2))) * &
-!           (2.0 * G%GV%g_prime(K+1) / (G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)))
+!           (2.0 * GV%g_prime(K+1) / (G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)))
 ! This uses d/d y_2 tanh(y_2 / jet_width)
     u(I,j,k) = u(i,j,k+1) + (1e-3 * (jet_height / jet_width) * &
            (sech(y_2 / jet_width))**2 ) * &
-           (2.0 * G%GV%g_prime(K+1) / (G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)))
+           (2.0 * GV%g_prime(K+1) / (G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)))
   enddo ; enddo ; enddo
 
   do k=1,nz ; do j=js,je ; do I=is-1,ie
@@ -236,7 +240,7 @@ subroutine Phillips_initialize_sponges(G, use_temperature, tv, param_file, CSp, 
   type(thermo_var_ptrs), intent(in) :: tv
   type(param_file_type), intent(in) :: param_file
   type(sponge_CS),       pointer    :: CSp
-  real, intent(in), dimension(NIMEM_,NJMEM_, NKMEM_) :: h
+  real, intent(in), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h
 
   real :: eta0(SZK_(G)+1)   ! The 1-d nominal positions of the interfaces.
   real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta, m.
@@ -312,9 +316,10 @@ function sech(x)
 end function sech
 
 subroutine Phillips_initialize_topography(D, G, param_file)
-  real, dimension(NIMEM_,NJMEM_), intent(out) :: D
   type(ocean_grid_type), intent(in) :: G
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: D
   type(param_file_type), intent(in) :: param_file
+
   real :: PI, Htop, Wtop, Ltop, offset, dist, &
           x1, x2, x3, x4, y1, y2
   integer :: i,j,is,ie,js,je

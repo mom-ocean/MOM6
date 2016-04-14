@@ -34,6 +34,7 @@ use MOM_io, only : close_file, create_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
 use MOM_io, only : write_field, slasher
 use MOM_variables, only : thermo_var_ptrs, ocean_OBC_type
+use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
@@ -59,14 +60,16 @@ contains
 !------------------------------------------------------------------------------
 ! Initialization of thicknesses
 !------------------------------------------------------------------------------
-subroutine adjustment_initialize_thickness ( h, G, param_file )
+subroutine adjustment_initialize_thickness ( h, G, GV, param_file )
 
-  real, intent(out), dimension(NIMEM_,NJMEM_, NKMEM_) :: h
-  type(ocean_grid_type), intent(in) :: G
-  type(param_file_type), intent(in) :: param_file
+  type(ocean_grid_type),   intent(in) :: G
+  type(verticalGrid_type), intent(in) :: GV
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: h
+  type(param_file_type),   intent(in) :: param_file
 
 ! Arguments: h - The thickness that is being initialized.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 
@@ -137,10 +140,10 @@ subroutine adjustment_initialize_thickness ( h, G, param_file )
           e0(k) = -(G%max_depth) * (real(k-1) / real(nz))
         enddo
       endif
-      target_values(1)    = G%GV%Rlay(1)+0.5*(G%GV%Rlay(1)-G%GV%Rlay(2))
-      target_values(nz+1) = G%GV%Rlay(nz)+0.5*(G%GV%Rlay(nz)-G%GV%Rlay(nz-1))
+      target_values(1)    = GV%Rlay(1)+0.5*(GV%Rlay(1)-GV%Rlay(2))
+      target_values(nz+1) = GV%Rlay(nz)+0.5*(GV%Rlay(nz)-GV%Rlay(nz-1))
       do k = 2,nz
-        target_values(k) = target_values(k-1) + ( G%GV%Rlay(nz) - G%GV%Rlay(1) ) / (nz-1)
+        target_values(k) = target_values(k-1) + ( GV%Rlay(nz) - GV%Rlay(1) ) / (nz-1)
       end do
       target_values = target_values - 1000.
       do j=js,je ; do i=is,ie
@@ -205,9 +208,9 @@ end subroutine adjustment_initialize_thickness
 !------------------------------------------------------------------------------
 subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, param_file, &
                                                     eqn_of_state)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T, S
-  real, intent(in), dimension(NIMEM_,NJMEM_, NKMEM_)  :: h
   type(ocean_grid_type),               intent(in)  :: G
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T, S
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h
   type(param_file_type),               intent(in)  :: param_file
   type(EOS_type),                      pointer     :: eqn_of_state
 

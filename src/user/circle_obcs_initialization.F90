@@ -33,7 +33,9 @@ use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_tracer_registry, only : tracer_registry_type, add_tracer_OBC_values
 use MOM_variables, only : thermo_var_ptrs, ocean_OBC_type
+use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
+
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -42,12 +44,14 @@ public circle_obcs_initialize_thickness
 
 contains
 
-subroutine circle_obcs_initialize_thickness(h, G, param_file)
-  real, intent(out), dimension(NIMEM_,NJMEM_, NKMEM_) :: h
-  type(ocean_grid_type), intent(in) :: G
-  type(param_file_type), intent(in) :: param_file
+subroutine circle_obcs_initialize_thickness(h, G, GV, param_file)
+  type(ocean_grid_type),   intent(in) :: G
+  type(verticalGrid_type), intent(in) :: GV
+  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h
+  type(param_file_type),   intent(in) :: param_file
 ! Arguments: h - The thickness that is being initialized.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 
@@ -70,7 +74,7 @@ subroutine circle_obcs_initialize_thickness(h, G, param_file)
   call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "DISK_RADIUS", diskrad, &
                  "The radius of the initially elevated disk in the \n"//&
-                 "circle_obcs test case.", units=G%axis_units, &
+                 "circle_obcs test case.", units=G%x_axis_units, &
                  fail_if_missing=.true.)
 
   do k=1,nz
@@ -82,9 +86,9 @@ subroutine circle_obcs_initialize_thickness(h, G, param_file)
     eta1D(nz+1) = -1.0*G%bathyT(i,j)
     do k=nz,1,-1
       eta1D(K) = e0(K)
-      if (eta1D(K) < (eta1D(K+1) + G%GV%Angstrom_z)) then
-        eta1D(K) = eta1D(K+1) + G%GV%Angstrom_z
-        h(i,j,k) = G%GV%Angstrom_z
+      if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_z)) then
+        eta1D(K) = eta1D(K+1) + GV%Angstrom_z
+        h(i,j,k) = GV%Angstrom_z
       else
         h(i,j,k) = eta1D(K) - eta1D(K+1)
       endif
