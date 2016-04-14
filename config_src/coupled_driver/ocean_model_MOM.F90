@@ -631,7 +631,8 @@ subroutine convert_state_to_ocean_type(state, Ocean_sfc, G, patm, press_to_z)
     Ocean_sfc%sea_lev(i,j) = state%sea_lev(i+i0,j+j0)
     if (present(patm)) &
       Ocean_sfc%sea_lev(i,j) = Ocean_sfc%sea_lev(i,j) + patm(i,j) * press_to_z
-    Ocean_sfc%frazil(i,j) = state%frazil(i+i0,j+j0)
+      if (associated(state%frazil)) &
+      Ocean_sfc%frazil(i,j) = state%frazil(i+i0,j+j0)
     Ocean_sfc%area(i,j)   =  G%areaT(i+i0,j+j0)  
   enddo ; enddo
   
