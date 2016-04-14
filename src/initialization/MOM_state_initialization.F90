@@ -41,6 +41,9 @@ use user_initialization, only : user_set_Open_Bdry_Conds, user_initialize_sponge
 use DOME_initialization, only : DOME_initialize_thickness
 use DOME_initialization, only : DOME_set_Open_Bdry_Conds
 use DOME_initialization, only : DOME_initialize_sponges
+use CCS1_initialization, only : CCS1_set_Open_Bdry_Conds
+use CCS1_initialization, only : CCS1_set_Open_Bdry_Vals
+use CCS1_initialization, only : CCS1_initialize_sponges
 use baroclinic_zone_initialization, only : baroclinic_zone_init_temperature_salinity
 use benchmark_initialization, only : benchmark_initialize_thickness
 use benchmark_initialization, only : benchmark_init_temperature_salinity
@@ -418,6 +421,9 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                  fail_if_missing=.true.)
     if (trim(config) == "DOME") then
       call DOME_set_Open_Bdry_Conds(CS%OBC, tv, G, GV, PF, CS%tracer_Reg)
+    elseif (trim(config) == "CCS1") then
+      call CCS1_set_Open_Bdry_Conds(CS%OBC, tv, G, GV, PF, CS%tracer_Reg)
+      call CCS1_set_Open_Bdry_Vals(CS%OBC, u, v, h, tv, G, GV, PF, CS%tracer_Reg)
     elseif (trim(config) == "USER") then
       call user_set_Open_Bdry_Conds(CS%OBC, tv, G, PF, CS%tracer_Reg)
     else

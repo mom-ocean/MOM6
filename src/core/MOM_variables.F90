@@ -238,6 +238,10 @@ end type vertvisc_type
 integer, parameter, public :: OBC_NONE = 0, OBC_SIMPLE = 1, OBC_WALL = 2
 integer, parameter, public :: OBC_FLATHER_E = 4, OBC_FLATHER_W = 5
 integer, parameter, public :: OBC_FLATHER_N = 6, OBC_FLATHER_S = 7
+integer, parameter, public :: OBC_RADIATION_E = 8, OBC_RADIATION_W = 9
+integer, parameter, public :: OBC_RADIATION_N = 10, OBC_RADIATION_S = 11
+integer, parameter, public :: OBC_RADNUD_E = 12, OBC_RADNUD_W = 13
+integer, parameter, public :: OBC_RADNUD_N = 14, OBC_RADNUD_S = 15
 
 type, public :: ocean_OBC_type
 ! This structure is used to apply specified open boundary conditions.
@@ -247,6 +251,12 @@ type, public :: ocean_OBC_type
   logical :: apply_OBC_v_flather_north = .false.  ! If true, some meridional velocity
   logical :: apply_OBC_v_flather_south = .false.  ! points in the local domain use flather open
                                                   ! boundary conditions.
+  logical :: apply_OBC_u_radiation_east = .false.  ! If true, some zonal velocity
+  logical :: apply_OBC_u_radiation_west = .false.  ! points in the local domain use radiation
+                                                   ! open boundary conditions.
+  logical :: apply_OBC_v_radiation_north = .false.  ! If true, some meridional velocity
+  logical :: apply_OBC_v_radiation_south = .false.  ! points in the local domain use radiation
+                                                    ! open boundary conditions.
   logical :: apply_OBC_u = .false.  ! If true, some zonal or meridional velocity
   logical :: apply_OBC_v = .false.  ! points in the local domain use open
                                     ! boundary conditions.
@@ -264,10 +274,10 @@ type, public :: ocean_OBC_type
                             ! and true for all other values.
   ! The following apply at points with OBC_kind_[uv] = OBC_FLATHER_x.
   real, pointer, dimension(:,:,:) :: &
-    rx_old_u => NULL(), &  ! The rx_old_u value for radition coeff for u-velocity in x-direction
-    ry_old_v => NULL(), &  ! The ry_old_v value for radition coeff for v-velocity in y-direction
-    rx_old_h => NULL(), &  ! The rx_old_h value for radition coeff for layer thickness h in x-direction
-    ry_old_h => NULL()     ! The ry_old_h value for radition coeff for layer thickness h in y-direction
+    rx_old_u => NULL(), &  ! The rx_old_u value for radiation coeff for u-velocity in x-direction
+    ry_old_v => NULL(), &  ! The ry_old_v value for radiation coeff for v-velocity in y-direction
+    rx_old_h => NULL(), &  ! The rx_old_h value for radiation coeff for layer thickness h in x-direction
+    ry_old_h => NULL()     ! The ry_old_h value for radiation coeff for layer thickness h in y-direction
 
   !   The following can be used to specify the outer-domain values of the
   ! surface height and barotropic velocity.  If these are not allocated, the
