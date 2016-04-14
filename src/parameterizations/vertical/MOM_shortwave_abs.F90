@@ -207,7 +207,6 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
         opt_depth = h(i,k) * opacity_band(n,i,k)
         exp_OD = exp(-opt_depth)
         SW_trans = exp_OD
-
         ! Heating at a rate of less than 10-4 W m-2 = 10-3 K m / Century,
         ! and of the layer in question less than 1 K / Century, can be
         ! absorbed without further penetration.
@@ -412,13 +411,12 @@ subroutine sumSWoverBands(G, h, opacity_band, opacity_band_2nd,nsw, j, dt, &
           !/BGR added for 2-exp shortwave scheme
           !{
           if (TwoExpForm) then
-            opt_depth_2nd = h(i,k) * opacity_band_2nd(n,i,k)
+            opt_depth_2nd = h(i,k)*G%GV%H_to_m * opacity_band_2nd(n,i,k)
             exp_OD_2nd = (1.-First_exp_ratio) * exp(-opt_depth_2nd)
             exp_OD = First_exp_ratio * EXP_OD + EXP_OD_2nd
           endif
           !}
           SW_trans = exp_OD
-
           ! Heating at a rate of less than 10-4 W m-2 = 10-3 K m / Century,
           ! and of the layer in question less than 1 K / Century, can be
           ! absorbed without further penetration.
@@ -583,6 +581,7 @@ subroutine absorbRemainingSW2exp(G, h, opacity_band, opacity_band_2nd, nsw, j, d
   logical :: TKE_calc       ! If true, calculate the implications to the
                             ! TKE budget of the shortwave heating.
   real :: C1_6, C1_60
+  real, dimension(SZI_(G),SZK_(G)) :: celltopdepth
   integer :: is, ie, nz, i, k, ks, n
   SW_Remains = .false.
 
@@ -600,6 +599,13 @@ subroutine absorbRemainingSW2exp(G, h, opacity_band, opacity_band_2nd, nsw, j, d
 
   ! Apply penetrating SW radiation to remaining parts of layers.
   ! Excessively thin layers are not heated to avoid runaway temps.
+  ! for a 2 exp decay the algorithm isn't as nice
+  do i=is,ie
+  celltopdepth(i,1)=0.0!for non-1d will need to update
+  do k=2,nz;
+     celltopdepth(i,k) = celltopdepth(i,k-1)-h(i,k);
+  enddo;enddo
+
   do ks=1,nz ; do i=is,ie
     k = ks
     if (present(ksort)) then
@@ -617,14 +623,24 @@ subroutine absorbRemainingSW2exp(G, h, opacity_band, opacity_band_2nd, nsw, j, d
         exp_OD = exp(-opt_depth)
         !/BGR added for 2-exp shortwave scheme
         !{
+        !BGR ALERT
+        ! This needs fixed to work right with 2 exp scheme
         if (TwoExpForm) then
-          opt_depth_2nd = h(i,k) * opacity_band_2nd(n,i,k)
-          exp_OD_2nd = (1.-First_exp_ratio) * exp(-opt_depth_2nd)
-          exp_OD = First_exp_ratio * EXP_OD + EXP_OD_2nd
+           ! We want B, first compute
+           !upper/lower of B, where (delta E)/E = 1 - B
+           exp_od = (First_exp_ratio) * exp(opacity_band(n,i,k)*&
+                    (celltopdepth(i,k)-h(i,k))) &
+                   + (1.-First_exp_ratio) * exp(opacity_band_2nd(n,i,k)*&
+                    (celltopdepth(i,k)-h(i,k)))
+           exp_od_2nd = (First_exp_ratio) * exp(opacity_band(n,i,k)*&
+                    (celltopdepth(i,k))) &
+                   + (1.-First_exp_ratio) * exp(opacity_band_2nd(n,i,k)*&
+                    (celltopdepth(i,k)))           
+           ! Now get B
+          exp_od = exp_od/exp_od_2nd
         endif
         !}
         SW_trans = exp_OD
-
         ! Heating at a rate of less than 10-4 W m-2 = 10-3 K m / Century,
         ! and of the layer in question less than 1 K / Century, can be
         ! absorbed without further penetration.
