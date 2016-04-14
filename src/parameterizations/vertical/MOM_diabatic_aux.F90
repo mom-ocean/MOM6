@@ -81,7 +81,7 @@ use MOM_forcing_type,      only : forcing, MOM_forcing_chksum
 use MOM_forcing_type,      only : extractFluxes1d, forcing_SinglePointPrint
 use MOM_grid,              only : ocean_grid_type
 use MOM_io,                only : vardesc
-use MOM_shortwave_abs,     only : absorbRemainingSW, optics_type
+use MOM_shortwave_abs,     only : absorbRemainingSW, absorbRemainingSw2exp, optics_type
 use MOM_variables,         only : thermo_var_ptrs, vertvisc_type! , accel_diag_ptrs
 use MOM_verticalGrid,      only : verticalGrid_type
 ! use MOM_variables,         only : cont_diag_ptrs, MOM_thermovar_chksum, p3d
@@ -845,6 +845,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
   real, dimension(SZI_(G), SZK_(G))                     :: pen_TKE_2d, dSV_dT_2d
   real, dimension(max(optics%nbands,1),SZI_(G))         :: Pen_SW_bnd
   real, dimension(max(optics%nbands,1),SZI_(G),SZK_(G)) :: opacityBand
+  real, dimension(max(optics%nbands,1),SZI_(G),SZK_(G)) :: opacityBand2nd
   real                                                  :: hGrounding(maxGroundings)
   real    :: Temp_in, Salin_in
   real    :: I_G_Earth, g_Hconv2
@@ -898,6 +899,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
       T2d(i,k) = tv%T(i,j,k)
       do n=1,nsw
         opacityBand(n,i,k) = (1.0 / GV%m_to_H)*optics%opacity_band(n,i,j,k)
+        opacityBand2nd(n,i,k) = (1.0 / GV%m_to_H)*optics%opacity_band_2nd(n,i,j,k)
       enddo
     enddo ; enddo
 
@@ -1140,15 +1142,33 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
     endif
 
     if (calculate_energetics) then
-      call absorbRemainingSW(G, GV, h2d, opacityBand, nsw, j, dt, H_limit_fluxes, &
-                             .false., .true., T2d, Pen_SW_bnd, TKE=pen_TKE_2d, dSV_dT=dSV_dT_2d)
+       if (optics%two_exp_form) then
+          call absorbRemainingSW2exp(G, GV, h2d, opacityBand, opacityBand2nd,&
+                             nsw, j, dt, H_limit_fluxes, &
+                             .false., .true., T2d, Pen_SW_bnd, &
+                             optics%two_exp_form, optics%sw_1st_exp_ratio, &
+                             TKE=pen_TKE_2d,dSV_dT=dSV_dT_2d)
+       else
+          call absorbRemainingSW(G, GV, h2d, opacityBand, nsw, j, dt, H_limit_fluxes, &
+                             .false., .true., T2d, Pen_SW_bnd, &
+                             TKE=pen_TKE_2d,dSV_dT=dSV_dT_2d)
+       endif
       k = 1 ! For setting break-points.
       do k=1,nz ; do i=is,ie
         cTKE(i,j,k) = cTKE(i,j,k) + pen_TKE_2d(i,k)
       enddo ; enddo
     else
-      call absorbRemainingSW(G, GV, h2d, opacityBand, nsw, j, dt, H_limit_fluxes, &
-                             .false., .true., T2d, Pen_SW_bnd)
+       if (optics%two_exp_form) then
+          call absorbRemainingSW2exp(G, GV, h2d, opacityBand, opacityBand2nd,&
+                             nsw, j, dt, H_limit_fluxes, &
+                             .false., .true., T2d, Pen_SW_bnd, &
+                             optics%two_exp_form, optics%sw_1st_exp_ratio, &
+                             TKE=pen_TKE_2d,dSV_dT=dSV_dT_2d)
+       else
+          call absorbRemainingSW(G, GV, h2d, opacityBand, nsw, j, dt, H_limit_fluxes, &
+                             .false., .true., T2d, Pen_SW_bnd, &
+                             TKE=pen_TKE_2d,dSV_dT=dSV_dT_2d)
+       endif
     endif
 
 
