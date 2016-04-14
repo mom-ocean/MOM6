@@ -8,6 +8,7 @@ use MOM_error_handler, only : MOM_error, FATAL
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing, allocate_forcing_type
 use MOM_grid, only : ocean_grid_type
+use MOM_verticalgrid, only: verticalGrid_type
 use MOM_safe_alloc, only : safe_alloc_ptr
 use MOM_time_manager, only : time_type, operator(+), operator(/), get_time,&
                              time_type_to_real
@@ -45,11 +46,12 @@ character(len=40)  :: mod = "SCM_CVmix_tests" ! This module's name.
 contains
 
 !> Initializes temperature and salinity for the SCM CVmix test example
-subroutine SCM_CVmix_tests_TS_init(T, S, h, G, param_file)
+subroutine SCM_CVmix_tests_TS_init(T, S, h, G, GV, param_file)
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T !< Potential tempera\ture (degC)
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: S !< Salinity (psu)
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)  :: h !< Layer thickness (m or Pa)
   type(ocean_grid_type),                  intent(in)  :: G !< Grid structure
+  type(verticalGrid_type),                intent(in)  :: GV!< Vertical grid structure
   type(param_file_type),                  intent(in)  :: param_file !< Input parameter structure
   ! Local variables
   real :: eta(SZK_(G)+1) ! The 1-d nominal positions of the interfaces.
@@ -91,7 +93,7 @@ subroutine SCM_CVmix_tests_TS_init(T, S, h, G, param_file)
   do j=js,je ; do i=is,ie
     eta(1) = 0. ! Reference to surface
     do k=1,nz
-      eta(K+1) = eta(K) - h(i,j,k)*G%GV%H_to_m ! Interface below layer (in m)
+      eta(K+1) = eta(K) - h(i,j,k)*GV%H_to_m ! Interface below layer (in m)
       zC = 0.5*( eta(K) + eta(K+1) )        ! Z of middle of layer (in m)
       DZ = min(0., zC+UpperLayerTempMLD)
       if (DZ.ge.0.0) then ! in Layer 1
