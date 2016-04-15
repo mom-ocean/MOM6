@@ -66,8 +66,8 @@ module MOM_grid_initialize
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_domains, only : pass_var, pass_vector, pe_here, root_PE, broadcast
 use MOM_checksums, only : hchksum, qchksum, uchksum, vchksum
+use MOM_domains, only : pass_var, pass_vector, pe_here, root_PE, broadcast
 use MOM_domains, only : AGRID, BGRID_NE, CGRID_NE, To_All, Scalar_Pair
 use MOM_domains, only : To_North, To_South, To_East, To_West
 use MOM_domains, only : MOM_define_domain, MOM_define_IO_domain
@@ -78,15 +78,13 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : read_data, slasher, file_exists
 use MOM_io, only : CORNER, NORTH_FACE, EAST_FACE
-use mpp_domains_mod, only : mpp_get_compute_domain,mpp_get_compute_domains
-use mpp_domains_mod, only : mpp_get_data_domain
 use mpp_domains_mod, only : mpp_get_domain_extents, mpp_deallocate_domain
 
 implicit none ; private
 
 #include <MOM_memory.h>
 
-public set_grid_metrics, initialize_masks
+public set_grid_metrics, initialize_masks, Adcroft_reciprocal
 
 type, public :: GPS ; private
   real :: len_lon
@@ -422,78 +420,78 @@ subroutine set_grid_derived_metrics(G, param_file)
 !  calculated, as are the geographic locations of each of these 4
 !  sets of points.
   character( len = 128) :: warnmesg
-  integer :: i,j, isd, ied, jsd, jed
-  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, IsdB, IedB, JsdB, JedB
+  integer :: i, j, isd, ied, jsd, jed
+  integer :: IsdB, IedB, JsdB, JedB
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   call callTree_enter("set_grid_derived_metrics(), MOM_grid_initialize.F90")
  
   do j=jsd,jed ; do i=isd,ied
-    if (G%dxT(i,j) <= 0.0) then
-      write(warnmesg,68)  pe_here(),"dxT",i,j,G%dxT(i,j),Epsln
-      call MOM_error(NOTE, warnmesg, all_print=.true.)
-      G%dxT(i,j) = Epsln
+    if (G%dxT(i,j) < 0.0) then
+      write(warnmesg,68)  pe_here(),"dxT",i,j,G%dxT(i,j),0.0
+      call MOM_mesg(warnmesg, all_print=.true.)
+      G%dxT(i,j) = 0.0
     endif
-    if (G%dyT(i,j) <= 0.0) then
-      write(warnmesg,68)  pe_here(),"dyT",i,j,G%dyT(i,j),Epsln
-      call MOM_error(NOTE, warnmesg, all_print=.true.)
-      G%dyT(i,j) = Epsln
+    if (G%dyT(i,j) < 0.0) then
+      write(warnmesg,68)  pe_here(),"dyT",i,j,G%dyT(i,j),0.0
+      call MOM_mesg(warnmesg, all_print=.true.)
+      G%dyT(i,j) = 0.0
     endif
-    G%IdxT(i,j) = 1.0 / G%dxT(i,j)
-    G%IdyT(i,j) = 1.0 / G%dyT(i,j)
-    G%IareaT(i,j) = 1.0 / G%areaT(i,j)
+    G%IdxT(i,j) = Adcroft_reciprocal(G%dxT(i,j))
+    G%IdyT(i,j) = Adcroft_reciprocal(G%dyT(i,j))
+    G%IareaT(i,j) = Adcroft_reciprocal(G%areaT(i,j))
   enddo ; enddo
 
   do j=jsd,jed ; do I=IsdB,IedB
-    if (G%dxCu(I,j) <= 0.0) then
-      write(warnmesg,68)  pe_here(),"dxCu",I,j,G%dxCu(I,j),Epsln
-      call MOM_error(NOTE, warnmesg, all_print=.true.)
-      G%dxCu(I,j) = Epsln
+    if (G%dxCu(I,j) < 0.0) then
+      write(warnmesg,68)  pe_here(),"dxCu",I,j,G%dxCu(I,j),0.0
+      call MOM_mesg(warnmesg, all_print=.true.)
+      G%dxCu(I,j) = 0.0
     endif
-    if (G%dyCu(I,j) <= 0.0) then
-      write(warnmesg,68)  pe_here(),"dyCu",I,j,G%dyCu(I,j),Epsln
-      call MOM_error(NOTE, warnmesg, all_print=.true.)
-      G%dyCu(I,j) = Epsln
+    if (G%dyCu(I,j) < 0.0) then
+      write(warnmesg,68)  pe_here(),"dyCu",I,j,G%dyCu(I,j),0.0
+      call MOM_mesg(warnmesg, all_print=.true.)
+      G%dyCu(I,j) = 0.0
     endif
-    G%IdxCu(i,j) = 1.0 / G%dxCu(i,j)
-    G%IdyCu(i,j) = 1.0 / G%dyCu(i,j)
+    G%IdxCu(I,j) = Adcroft_reciprocal(G%dxCu(I,j))
+    G%IdyCu(I,j) = Adcroft_reciprocal(G%dyCu(I,j))
   enddo ; enddo
 
   do J=JsdB,JedB ; do i=isd,ied
-    if (G%dxCv(i,j) <= 0.0) then
-      write(warnmesg,68)  pe_here(),"dxCv",i,j,G%dxCv(i,j),Epsln
-      call MOM_error(NOTE, warnmesg, all_print=.true.)
-      G%dxCv(i,j) = Epsln
+    if (G%dxCv(i,J) < 0.0) then
+      write(warnmesg,68)  pe_here(),"dxCv",i,J,G%dxCv(i,J),0.0
+      call MOM_mesg(warnmesg, all_print=.true.)
+      G%dxCv(i,J) = 0.0
     endif
-    if (G%dyCv(i,j) <= 0.0) then
-      write(warnmesg,68)  pe_here(),"dyCv",i,j,G%dyCv(i,j),Epsln
-      call MOM_error(NOTE, warnmesg, all_print=.true.)
-      G%dyCv(i,j) = Epsln
+    if (G%dyCv(i,J) < 0.0) then
+      write(warnmesg,68)  pe_here(),"dyCv",i,J,G%dyCv(i,J),0.0
+      call MOM_mesg(warnmesg, all_print=.true.)
+      G%dyCv(i,J) = 0.0
     endif
-    G%IdxCv(i,j) = 1.0 / G%dxCv(i,j)
-    G%IdyCv(i,j) = 1.0 / G%dyCv(i,j)
+    G%IdxCv(i,J) = Adcroft_reciprocal(G%dxCv(i,J))
+    G%IdyCv(i,J) = Adcroft_reciprocal(G%dyCv(i,J))
   enddo ; enddo
 
   do J=JsdB,JedB ; do I=IsdB,IedB
-    if (G%dxBu(I,J) <= 0.0) then
-      write(warnmesg,68)  pe_here(),"dxBu",I,J,G%dxBu(I,J),Epsln
-      call MOM_error(NOTE, warnmesg, all_print=.true.)
-      G%dxBu(I,J) = Epsln
+    if (G%dxBu(I,J) < 0.0) then
+      write(warnmesg,68)  pe_here(),"dxBu",I,J,G%dxBu(I,J),0.0
+      call MOM_mesg(warnmesg, all_print=.true.)
+      G%dxBu(I,J) = 0.0
     endif
-    if (G%dyBu(I,J) <= 0.0) then
-      write(warnmesg,68)  pe_here(),"dyBu",I,J,G%dyBu(I,J),Epsln
-      call MOM_error(NOTE, warnmesg, all_print=.true.)
-      G%dyBu(I,J) = Epsln
+    if (G%dyBu(I,J) < 0.0) then
+      write(warnmesg,68)  pe_here(),"dyBu",I,J,G%dyBu(I,J),0.0
+      call MOM_mesg(warnmesg, all_print=.true.)
+      G%dyBu(I,J) = 0.0
     endif
 
-    G%IdxBu(I,J) = 1.0 / G%dxBu(I,J)
-    G%IdyBu(I,J) = 1.0 / G%dyBu(I,J)
+    G%IdxBu(I,J) = Adcroft_reciprocal(G%dxBu(I,J))
+    G%IdyBu(I,J) = Adcroft_reciprocal(G%dyBu(I,J))
     G%areaBu(I,J) = G%dxBu(I,J) * G%dyBu(I,J)
     G%IareaBu(I,J) = G%IdxBu(I,J) * G%IdyBu(I,J)
+    ! Changing this to G%IareaBu(I,J) =  Adcroft_reciprocal(G%areaBu(I,J))
+    ! would change answers at the level of roundoff.
   enddo ; enddo
 
 68 FORMAT ("WARNING: PE ",I4," ",a4,"(",I4,",",I4,") = ",ES12.4, &
@@ -659,19 +657,17 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
                            trim(filename))
 
 ! Initialize everything to a small number
-  dxCu(:,:)=Epsln; dyCu(:,:)=Epsln
-  dxCv(:,:)=Epsln; dyCv(:,:)=Epsln
-  dxBu(:,:)=Epsln; dyBu(:,:)=Epsln; areaBu(:,:)=Epsln
+  dxCu(:,:) = 0.0; dyCu(:,:) = 0.0
+  dxCv(:,:) = 0.0; dyCv(:,:) = 0.0
+  dxBu(:,:) = 0.0; dyBu(:,:) = 0.0; areaBu(:,:) = 0.0
 
 !<MISSING CODE TO READ REFINEMENT LEVEL>
-  ni=2*(G%iec-G%isc+1) ! i size of supergrid
-  nj=2*(G%jec-G%jsc+1) ! j size of supergrid
+  ni = 2*(G%iec-G%isc+1) ! i size of supergrid
+  nj = 2*(G%jec-G%jsc+1) ! j size of supergrid
 
 ! Define a domain for the supergrid (SGdom)
-  npei=G%domain%layout(1)
-  npej=G%domain%layout(2)
-  allocate(exni(npei))
-  allocate(exnj(npej))
+  npei = G%domain%layout(1) ; npej = G%domain%layout(2)
+  allocate(exni(npei)) ; allocate(exnj(npej))
   call mpp_get_domain_extents(G%domain%mpp_domain, exni, exnj)
   allocate(SGdom%mpp_domain)
   SGdom%nihalo = 2*G%domain%nihalo+1
@@ -685,7 +681,7 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
   global_indices(2) = SGdom%niglobal+SGdom%nihalo
   global_indices(3) = 1+SGdom%njhalo
   global_indices(4) = SGdom%njglobal+SGdom%njhalo
-  exni(:)=2*exni(:); exnj(:)=2*exnj(:)
+  exni(:) = 2*exni(:) ; exnj(:) = 2*exnj(:)
   if(ASSOCIATED(G%domain%maskmap)) then
      call MOM_define_domain(global_indices, SGdom%layout, SGdom%mpp_domain, &
             xflags=G%domain%X_FLAGS, yflags=G%domain%Y_FLAGS, &
@@ -706,10 +702,11 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
   deallocate(exnj)
 
 ! Read X from the supergrid
-  tmpZ(:,:)=999.
-  call read_data(filename,'x',tmpZ,domain=SGdom%mpp_domain,position=CORNER)
+  tmpZ(:,:) = 999.
+  call read_data(filename, 'x', tmpZ, domain=SGdom%mpp_domain, position=CORNER)
 
   call pass_var(tmpZ, SGdom, position=CORNER)
+  call extrapolate_metric(tmpZ, 2*(G%jsc-G%jsd)+2, missing=999.)
   do j=G%jsd,G%jed ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*j
     G%geoLonT(i,j) = tmpZ(i2-1,j2-1)
   enddo ; enddo
@@ -723,13 +720,14 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
     G%geoLonCv(i,J) = tmpZ(i2-1,j2)
   enddo ; enddo
  ! For some reason, this messes up the solution...
- ! call pass_var(G%geoLonBu, G%domain, position=CORNER)
+ !   call pass_var(G%geoLonBu, G%domain, position=CORNER)
 
 ! Read Y from the supergrid
-  tmpZ(:,:)=999.
-  call read_data(filename,'y',tmpZ,domain=SGdom%mpp_domain,position=CORNER)
+  tmpZ(:,:) = 999.
+  call read_data(filename, 'y', tmpZ, domain=SGdom%mpp_domain, position=CORNER)
 
   call pass_var(tmpZ, SGdom, position=CORNER)
+  call extrapolate_metric(tmpZ, 2*(G%jsc-G%jsd)+2, missing=999.)
   do j=G%jsd,G%jed ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*j
     G%geoLatT(i,j) = tmpZ(i2-1,j2-1)
   enddo ; enddo
@@ -744,12 +742,12 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
   enddo ; enddo
 
 ! Read DX,DY from the supergrid
-  tmpU(:,:)=0.; tmpV(:,:)=0.
+  tmpU(:,:) = 0. ; tmpV(:,:) = 0.
   call read_data(filename,'dx',tmpV,domain=SGdom%mpp_domain,position=NORTH_FACE)
   call read_data(filename,'dy',tmpU,domain=SGdom%mpp_domain,position=EAST_FACE)
-  call pass_vector(tmpU,tmpV,SGdom,To_All+Scalar_Pair,CGRID_NE)
-  call extrapolate_metric(tmpV,2*(G%jsc-G%jsd)+2)
-  call extrapolate_metric(tmpU,2*(G%jsc-G%jsd)+2)
+  call pass_vector(tmpU, tmpV, SGdom, To_All+Scalar_Pair, CGRID_NE)
+  call extrapolate_metric(tmpV, 2*(G%jsc-G%jsd)+2, missing=0.)
+  call extrapolate_metric(tmpU, 2*(G%jsc-G%jsd)+2, missing=0.)
 
   do j=G%jsd,G%jed ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*j
     dxT(i,j) = tmpV(i2-1,j2-1) + tmpV(i2,j2-1)
@@ -772,10 +770,10 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
   enddo ; enddo
 
 ! Read AREA from the supergrid
-  tmpT(:,:)=0.
-  call read_data(filename,'area',tmpT,domain=SGdom%mpp_domain)
+  tmpT(:,:) = 0.
+  call read_data(filename, 'area', tmpT, domain=SGdom%mpp_domain)
   call pass_var(tmpT, SGdom)
-  call extrapolate_metric(tmpT,2*(G%jsc-G%jsd)+2)
+  call extrapolate_metric(tmpT, 2*(G%jsc-G%jsd)+2, missing=0.)
 
   do j=G%jsd,G%jed ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*j
     areaT(i,j) = (tmpT(i2-1,j2-1) + tmpT(i2,j2)) + &
@@ -819,7 +817,7 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
     call read_data(filename, "x", tmpGlbl, start, nread, no_domain=.TRUE.)
   call broadcast(tmpGlbl, 2*(ni+1), root_PE())
   
-  ! I don't know why the second axis is 1 or 2 here.
+  ! I don't know why the second axis is 1 or 2 here. -RWH
   do i=G%isg,G%ieg
     G%gridLonT(i) = tmpGlbl(2*(i-G%isg)+2,2)
   enddo
@@ -828,9 +826,9 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
   enddo
   deallocate( tmpGlbl )
 
-  allocate  ( tmpGlbl(1, nj+1) )  
+  allocate( tmpGlbl(1, nj+1) )
   start(:) = 1 ; nread(:) = 1
-  start(1) = int(ni/4)+1 ; nread(2) = nj+1  
+  start(1) = int(ni/4)+1 ; nread(2) = nj+1
   if (is_root_PE()) &
     call read_data(filename, "y", tmpGlbl, start, nread, no_domain=.TRUE.)
   call broadcast(tmpGlbl, nj+1, root_PE())
@@ -1368,33 +1366,47 @@ end subroutine set_grid_metrics_mercator
 
 ! ------------------------------------------------------------------------------
 
-subroutine extrapolate_metric(var, jh)
-  real, dimension(:,:), intent(inout) ::  var
-  integer, intent(in) :: jh
+!> extrapolate_metric extrapolates missing metric data into all the halo regions.
+subroutine extrapolate_metric(var, jh, missing)
+  real, dimension(:,:), intent(inout) :: var     !< The array in which to fill in halos
+  integer,              intent(in)    :: jh      !< The size of the halos to be filled
+  real,       optional, intent(in)    :: missing !< The missing data fill value, 0 by default.
+  real :: badval
   integer :: i,j
 
+  badval = 0.0 ; if (present(missing)) badval = missing
+
   ! Fill in southern halo by extrapolating from the computational domain
-  do j=lbound(var,2)+jh,lbound(var,2),-1; do i=lbound(var,1),ubound(var,1)
-    if (var(i,j)==0.) var(i,j)=2.0*var(i,j+1)-var(i,j+2)
-  enddo; enddo
+  do j=lbound(var,2)+jh,lbound(var,2),-1 ; do i=lbound(var,1),ubound(var,1)
+    if (var(i,j)==badval) var(i,j) = 2.0*var(i,j+1)-var(i,j+2)
+  enddo ; enddo
 
   ! Fill in northern halo by extrapolating from the computational domain
-  do j=ubound(var,2)-jh,ubound(var,2); do i=lbound(var,1),ubound(var,1)
-    if (var(i,j)==0.) var(i,j)=2.0*var(i,j-1)-var(i,j-2)
-  enddo; enddo
-  
+  do j=ubound(var,2)-jh,ubound(var,2) ; do i=lbound(var,1),ubound(var,1)
+    if (var(i,j)==badval) var(i,j) = 2.0*var(i,j-1)-var(i,j-2)
+  enddo ; enddo
+
   ! Fill in western halo by extrapolating from the computational domain
-  do j=lbound(var,2),ubound(var,2); do i=lbound(var,1)+jh,lbound(var,1),-1
-    if (var(i,j)==0.) var(i,j)=2.0*var(i+1,j)-var(i+2,j)
-  enddo; enddo
+  do j=lbound(var,2),ubound(var,2) ; do i=lbound(var,1)+jh,lbound(var,1),-1
+    if (var(i,j)==badval) var(i,j) = 2.0*var(i+1,j)-var(i+2,j)
+  enddo ; enddo
 
   ! Fill in eastern halo by extrapolating from the computational domain
-  do j=lbound(var,2),ubound(var,2); do i=ubound(var,1)-jh,ubound(var,1)
-    if (var(i,j)==0.) var(i,j)=2.0*var(i-1,j)-var(i-2,j)
-  enddo; enddo
+  do j=lbound(var,2),ubound(var,2) ; do i=ubound(var,1)-jh,ubound(var,1)
+    if (var(i,j)==badval) var(i,j) = 2.0*var(i-1,j)-var(i-2,j)
+  enddo ; enddo
 
 end subroutine extrapolate_metric
 
+!> This function implements Adcroft's rule for reciprocals, namely that
+!!   Adcroft_Inv(x) = 1/x for |x|>0 or 0 for x=0.
+function Adcroft_reciprocal(val) result(I_val)
+  real, intent(in) :: val  !< The value being inverted.
+  real :: I_val            !< The Adcroft reciprocal of val.
+
+  I_val = 0.0
+  if (val /= 0.0) I_val = 1.0/val
+end function Adcroft_reciprocal
 
 
 subroutine initialize_masks(G, PF)
@@ -1524,19 +1536,18 @@ subroutine initialize_masks(G, PF)
 
   call pass_vector(G%mask2dCu, G%mask2dCv, G%Domain, To_All+Scalar_Pair, CGRID_NE)
 
-  do j=G%JsdB,G%JedB ; do i=G%isd,G%ied
-    G%dx_Cv(i,j) = G%mask2dCv(i,j)*G%dxCv(i,j)
-    G%dx_Cv_obc(i,j) = G%mask2dCv(i,j)*G%dxCv(i,j)
-    G%areaCv(i,j) = G%dyCv(i,j)*G%dx_Cv(i,j)
-    G%IareaCv(i,j) = 0.0
-    if (G%areaCv(i,j) > 0.0) G%IareaCv(i,j) = G%mask2dCv(i,j) / G%areaCv(i,j)
+  do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+    G%dx_Cv(i,J) = G%mask2dCv(i,J)*G%dxCv(i,J)
+    G%dx_Cv_obc(i,J) = G%mask2dCv(i,J)*G%dxCv(i,J)
+    G%areaCv(i,J) = G%dyCv(i,J)*G%dx_Cv(i,J)
+    G%IareaCv(i,J) = 0.0
+    G%IareaCv(i,J) = G%mask2dCv(i,J) * Adcroft_reciprocal(G%areaCv(i,J))
   enddo ; enddo
-  do j=G%jsd,G%jed ; do i=G%IsdB,G%IedB  
-    G%dy_Cu(i,j) = G%mask2dCu(i,j)*G%dyCu(i,j)
-    G%dy_Cu_obc(i,j) = G%mask2dCu(i,j)*G%dyCu(i,j)  
-    G%areaCu(i,j) = G%dxCu(i,j)*G%dy_Cu(i,j)
-    G%IareaCu(i,j) = 0.0
-    if (G%areaCu(i,j) > 0.0) G%IareaCu(i,j) = G%mask2dCu(i,j) / G%areaCu(i,j)
+  do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB  
+    G%dy_Cu(I,j) = G%mask2dCu(I,j)*G%dyCu(I,j)
+    G%dy_Cu_obc(I,j) = G%mask2dCu(I,j)*G%dyCu(I,j)  
+    G%areaCu(I,j) = G%dxCu(I,j)*G%dy_Cu(I,j)
+    G%IareaCu(I,j) = G%mask2dCu(I,j) * Adcroft_reciprocal(G%areaCu(I,j))
   enddo ; enddo
 
   call callTree_leave("initialize_masks()")
