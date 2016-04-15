@@ -13,7 +13,6 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
 use MOM_file_parser, only : log_version
-use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type, isPointInCell
 use MOM_io, only : close_file, create_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE, MULTIPLE
@@ -50,20 +49,20 @@ character(len=40) :: mod = "MOM_fixed_initialization" ! This module's name.
 contains
 
 ! -----------------------------------------------------------------------------
-subroutine MOM_initialize_fixed(G, GV, PF, dirs, tv)
+subroutine MOM_initialize_fixed(G, GV, PF, write_geom, output_dir, tv)
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(inout) :: GV   !< Ocean vertical grid structure
   type(param_file_type),   intent(in)    :: PF   !< A structure indicating the open file
                                                  !! to parse for model parameter values.
-  type(directories),       intent(in)    :: dirs !< A structure containing relevant paths.
+  logical,                 intent(in)    :: write_geom !< If true, write grid geometry files.
+  character(len=*),        intent(in)    :: output_dir !< The directory into which to write files.
   type(thermo_var_ptrs),   intent(inout) :: tv   !< TO BE DELETED -aja
   ! Local
   character(len=200) :: filename   ! The name of an input file.
   character(len=200) :: filename2  ! The name of an input files.
-  character(len = 200) :: inputdir ! The directory where NetCDF input files are.
+  character(len=200) :: inputdir   ! The directory where NetCDF input files are.
   character(len=200) :: config
-  integer :: write_geom
-  logical :: debug, new_sim
+  logical :: debug
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
@@ -201,19 +200,9 @@ subroutine MOM_initialize_fixed(G, GV, PF, dirs, tv)
   call compute_global_grid_integrals(G)
 
 ! Write out all of the grid data used by this run.
-  call get_param(PF, mod, "WRITE_GEOM", write_geom, &
-                 "If =0, never write the geometry and vertical grid files.\n"//&
-                 "If =1, write the geometry and vertical grid files only for\n"//&
-                 "a new simulation. If =2, always write the geometry and\n"//&
-                 "vertical grid files. Other values are invalid.", default=1)
-  if (write_geom<0 .or. write_geom>2) call MOM_error(FATAL,"MOM_initialize_fixed: "//&
-         "WRITE_GEOM must be equal to 0, 1 or 2.")
-  new_sim = .false.
-  if ((dirs%input_filename(1:1)=='n') .and. (LEN_TRIM(dirs%input_filename)==1)) new_sim = .true.
-  if ((write_geom==1 .and. new_sim) .or. write_geom==2) then
-    call write_ocean_geometry_file(G, PF, dirs%output_directory)
-    call write_vertgrid_file(GV, G, PF, dirs%output_directory)
-  endif
+  if (write_geom) call write_ocean_geometry_file(G, PF, output_dir)
+
+  if (write_geom) call write_vertgrid_file(GV, G, PF, output_dir)
 
   call callTree_leave('MOM_initialize_fixed()')
 
