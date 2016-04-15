@@ -43,7 +43,7 @@ use MOM_error_handler,        only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler,        only : MOM_set_verbosity, callTree_showQuery
 use MOM_error_handler,        only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,          only : read_param, get_param, log_version, param_file_type
-use MOM_fixed_initialization, only : MOM_initialize_fixed
+use MOM_fixed_initialization, only : MOM_initialize_fixed, MOM_initialize_coord
 use MOM_forcing_type,         only : MOM_forcing_chksum
 use MOM_get_input,            only : Get_MOM_Input, directories
 use MOM_io,                   only : MOM_io_init, vardesc, var_desc
@@ -1629,7 +1629,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                  "If =1, write the geometry and vertical grid files only for\n"//&
                  "a new simulation. If =2, always write the geometry and\n"//&
                  "vertical grid files. Other values are invalid.", default=1)
-  if (write_geom<0 .or. write_geom>2) call MOM_error(FATAL,"MOM_initialize_fixed: "//&
+  if (write_geom<0 .or. write_geom>2) call MOM_error(FATAL,"MOM: "//&
          "WRITE_GEOM must be equal to 0, 1 or 2.")
   write_geom_files = ((write_geom==2) .or. ((write_geom==1) .and. &
      ((dirs%input_filename(1:1)=='n') .and. (LEN_TRIM(dirs%input_filename)==1))))
@@ -1764,9 +1764,11 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call callTree_waypoint("restart registration complete (initialize_MOM)")
 
   call cpu_clock_begin(id_clock_MOM_init)
-  call MOM_initialize_fixed(G, GV, param_file, write_geom_files, &
-                           dirs%output_directory, CS%tv)
+  call MOM_initialize_fixed(G, param_file, write_geom_files, dirs%output_directory)
   call callTree_waypoint("returned from MOM_initialize_fixed() (initialize_MOM)")
+  call MOM_initialize_coord(G, GV, param_file, write_geom_files, &
+                            dirs%output_directory, CS%tv)
+  call callTree_waypoint("returned from MOM_initialize_coord() (initialize_MOM)")
 
   if (CS%use_ALE_algorithm) then
     call ALE_init(param_file, G, GV, CS%ALE_CSp)
