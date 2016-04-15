@@ -99,254 +99,8 @@ type, public :: GPS ; private
   integer :: niglobal, njglobal         ! Duplicates of niglobal and njglobal from MOM_dom
 end type GPS
 
-real, parameter :: Epsln = 1.0e-10  !   A distance used to replace negative
-                                    ! distances in the metric arrays.
-
 contains
 
-function ds_di(x, y, GP)
-  real, intent(in) :: x, y
-  type(GPS), intent(in) :: GP
-  real :: ds_di
-! This function returns the grid spacing in the logical x direction.
-! Arguments: x - The latitude in question.
-!  (in)      y - The longitude in question.
-  ds_di = GP%Rad_Earth * cos(y) * dx_di(x,GP)
-! In general, this might be...
-! ds_di = GP%Rad_Earth * sqrt( cos(y)*cos(y) * dx_di(x,y,GP)*dx_di(x,y,GP) + &
-!                           dy_di(x,y,GP)*dy_di(x,y,GP))
-end function ds_di
-
-function ds_dj(x, y, GP)
-  real, intent(in) :: x, y
-  type(GPS), intent(in) :: GP
-  real :: ds_dj
-! This function returns the grid spacing in the logical y direction.
-! Arguments: x - The latitude in question.
-!  (in)      y - The longitude in question.
-  ds_dj = GP%Rad_Earth * dy_dj(y,GP)
-! In general, this might be...
-! ds_dj = GP%Rad_Earth * sqrt( cos(y)*cos(y) * dx_dj(x,y,GP)*dx_dj(x,y,GP) + &
-!                           dy_dj(x,y,GP)*dy_dj(x,y,GP))
-end function ds_dj
-
-
-function  dL(x1, x2, y1, y2)
-  real, intent(in) :: x1, x2, y1, y2
-  real :: dL
-!  This subroutine calculates the contribution from the line integral
-! along one of the four sides of a cell face to the area of a cell,
-! assuming that the sides follow a linear path in latitude and long-
-! itude (i.e., on a Mercator grid).
-! Argumnts: x1 - Segment starting longitude.
-!  (in)     x2 - Segment ending longitude.
-!  (in)     y1 - Segment ending latitude.
-!  (in)     y2 - Segment ending latitude.
-  real :: r, dy
-
-  dy = y2 - y1
-
-  if (ABS(dy) > 2.5e-8) then
-    r = ((1.0 - cos(dy))*cos(y1) + sin(dy)*sin(y1)) / dy
-  else
-    r = (0.5*dy*cos(y1) + sin(y1))
-  endif
-  dL = r * (x2 - x1)
-
-end function  dL
-
-function find_root( fn, dy_df, GP, fnval, y1, ymin, ymax, ittmax)
-  real :: find_root
-  real, external :: fn, dy_df
-  type(GPS), intent(in) :: GP
-  real, intent(in) :: fnval, y1, ymin, ymax
-  integer, intent(out) :: ittmax
-  real :: y
-! This subroutine finds and returns the value of y at which the
-! monotonic function fn takes the value fnval, also returning
-! in ittmax the number of iterations of Newton's method that were
-! used to polish the root.
-  real :: ybot, ytop, fnbot, fntop
-  integer :: itt
-  character(len =256) :: warnmesg
-
-  real :: dy_dfn, dy, fny
-
-! For Fortran we need to copy the input y1 to y.
-! Otherwise the value of y gets changed globally.
-! i.e. y_h = find_root(fn,dy_df,fnval, y_q, ...) modifies y_q in
-! the code above
-
-!  Bracket the root.
-  y = y1 ; ybot = y1
-  fnbot = fn(ybot,GP) - fnval
-  itt = 0
-  do while (fnbot > 0.0)
-    if ((ybot - 2.0*dy_df(ybot,GP)) < (0.5*(ybot+ymin))) then
-      ybot = ybot - 2.0*dy_df(ybot,GP)
-    else
-      ybot = 0.5*(ybot+ymin) ; itt = itt + 1
-    endif
-    fnbot = fn(ybot,GP) - fnval
-
-    if ((itt > 50) .and. (fnbot > 0.0)) then
-      write(warnmesg, '("PE ",I2," unable to find bottom bound for grid function. &
-        &x = ",ES10.4,", xmax = ",ES10.4,", fn = ",ES10.4,", dfn_dx = ",ES10.4,&
-        &", seeking fn = ",ES10.4," - fn = ",ES10.4,".")') &
-          pe_here(),ybot,ymin,fn(ybot,GP),dy_df(ybot,GP),fnval, fnbot
-
-      call MOM_error(FATAL,warnmesg)
-    endif
-  enddo
-
-  if ((y + 2.0*dy_df(y,GP)) < (0.5*(y+ymax))) then
-    ytop = y + 2.0*dy_df(y,GP)
-  else
-    ytop = 0.5*(y+ymax)
-  endif
-  fntop = fn(ytop,GP) - fnval ; itt = 0
-  do while (fntop < 0.0)
-    if ((ytop + 2.0*dy_df(ytop,GP)) < (0.5*(ytop+ymax))) then
-      ytop = ytop + 2.0*dy_df(ytop,GP)
-    else
-      ytop = 0.5*(ytop+ymax) ; itt = itt + 1
-    endif
-    fntop = fn(ytop,GP) - fnval
-
-    if ((itt > 50) .and. (fntop < 0.0)) then
-      write(warnmesg, '("PE ",I2," unable to find top bound for grid function. &
-        &x = ",ES10.4,", xmax = ",ES10.4,", fn = ",ES10.4,", dfn_dx = ",ES10.4, &
-        &", seeking fn = ",ES10.4," - fn = ",ES10.4,".")') &
-          pe_here(),ytop,ymax,fn(ytop,GP),dy_df(ytop,GP),fnval,fntop
-
-      call MOM_error(FATAL,warnmesg)
-    endif
-  enddo
-!  Bisect several times to insure that the root is within the radius
-!  of convergence in the Newton's method polisher.
-  do itt=1,10
-    y = 0.5*(ybot + ytop)
-    fny = fn(y,GP) - fnval
-    if (fny < 0.0) then
-      fnbot = fny ; ybot = y
-    else
-      fntop = fny ; ytop = y
-    endif
-  enddo
-
-!    Polish the root using Newton's method.
-  do itt=1,10
-    dy_dfn = dy_df(y,GP)
-    fny = fn(y,GP) - fnval
-
-    dy = -1.0* fny * dy_dfn
-    y = y + dy
-    if (y > ytop) y = ytop
-    if (y < ybot) y = ybot
-    if (ABS(dy) < (8.0e-15*ABS(y)+1.e-20)) exit
-  enddo
-  if (ABS(y) < 1e-12) y = 0.0
-
-  ittmax = itt
-  find_root = y
-end function find_root
-
-function dx_di(x, GP)
-  real, intent(in) :: x
-  type(GPS), intent(in) :: GP
-  real :: dx_di
-! This subroutine calculates and returns the value of dx/di, where
-! x is the longitude in Radians, and i is the integral north-south
-! grid index.
-
-  dx_di = (GP%len_lon * 4.0*atan(1.0)) / (180.0 * GP%niglobal)
-
-end function dx_di
-
-function Int_di_dx(x, GP)
-  real, intent(in) :: x
-  type(GPS), intent(in) :: GP
-  real :: Int_di_dx
-! This subroutine calculates and returns the integral of the inverse
-! of dx/di to the point x, in radians.
-
-  Int_di_dx = x * ((180.0 * GP%niglobal) / (GP%len_lon * 4.0*atan(1.0)))
-
-end function Int_di_dx
-
-function dy_dj(y, GP)
-  real, intent(in) :: y
-  type(GPS), intent(in) :: GP
-  real :: dy_dj
-! This subroutine calculates and returns the value of dy/dj, where
-! y is the latitude in Radians, and j is the integral north-south
-! grid index.
-  real :: PI            ! 3.1415926... calculated as 4*atan(1)
-  real :: C0            ! The constant that converts the nominal y-spacing in
-                        ! gridpoints to the nominal spacing in Radians.
-  real :: y_eq_enhance  ! The latitude in radians within which the resolution
-                        ! is enhanced.
-  PI = 4.0*atan(1.0)
-  if (GP%isotropic) then
-    C0 = (GP%len_lon * PI) / (180.0 * GP%niglobal)
-    y_eq_enhance = PI*abs(GP%lat_eq_enhance)/180.0
-    if (ABS(y) < y_eq_enhance) then
-      dy_dj = C0 * (cos(y) / (1.0 + 0.5*cos(y) * (GP%lat_enhance_factor - 1.0) * &
-                         (1.0+cos(PI*y/y_eq_enhance)) ))
-    else
-      dy_dj = C0 * cos(y)
-    endif
-  else
-    C0 = (GP%len_lat * PI) / (180.0 * GP%njglobal)
-    dy_dj = C0
-  endif
-
-end function dy_dj
-
-function Int_dj_dy(y, GP)
-  real, intent(in) :: y
-  type(GPS), intent(in) :: GP
-  real :: Int_dj_dy
-! This subroutine calculates and returns the integral of the inverse
-! of dy/dj to the point y, in radians.
-  real :: I_C0 = 0.0       !   The inverse of the constant that converts the
-                           ! nominal spacing in gridpoints to the nominal
-                           ! spacing in Radians.
-  real :: PI               ! 3.1415926... calculated as 4*atan(1)
-  real :: y_eq_enhance     ! The latitude in radians from
-                           ! from the equator within which the
-                           ! meridional grid spacing is enhanced by
-                           ! a factor of GP%lat_enhance_factor.
-  real :: r
-
-  PI = 4.0*atan(1.0)
-  if (GP%isotropic) then
-    I_C0 = (180.0 * GP%niglobal) / (GP%len_lon * PI)
-    y_eq_enhance = PI*ABS(GP%lat_eq_enhance)/180.0
-
-    if (y >= 0.0) then
-      r = I_C0 * log((1.0 + sin(y))/cos(y))
-    else
-      r = -1.0 * I_C0 * log((1.0 - sin(y))/cos(y))
-    endif
-
-    if (y >= y_eq_enhance) then
-      r = r + I_C0*0.5*(GP%lat_enhance_factor - 1.0)*y_eq_enhance
-    else if (y <= -y_eq_enhance) then
-      r = r - I_C0*0.5*(GP%lat_enhance_factor - 1.0)*y_eq_enhance
-    else
-      r = r + I_C0*0.5*(GP%lat_enhance_factor - 1.0) * &
-              (y + (y_eq_enhance/PI)*sin(PI*y/y_eq_enhance))
-    endif
-  else
-    I_C0 = (180.0 * GP%njglobal) / (GP%len_lat * PI)
-    r = I_C0 * y
-  endif
-
-  Int_dj_dy = r
-end function Int_dj_dy
-
-! ------------------------------------------------------------------------------
 
 subroutine set_grid_metrics(G, param_file)
   type(ocean_grid_type), intent(inout) :: G
@@ -656,10 +410,10 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
     call MOM_error(FATAL," set_grid_metrics_from_mosaic: Unable to open "//&
                            trim(filename))
 
-! Initialize everything to a small number
-  dxCu(:,:) = 0.0; dyCu(:,:) = 0.0
-  dxCv(:,:) = 0.0; dyCv(:,:) = 0.0
-  dxBu(:,:) = 0.0; dyBu(:,:) = 0.0; areaBu(:,:) = 0.0
+! Initialize everything to 0.
+  dxCu(:,:) = 0.0 ; dyCu(:,:) = 0.0
+  dxCv(:,:) = 0.0 ; dyCv(:,:) = 0.0
+  dxBu(:,:) = 0.0 ; dyBu(:,:) = 0.0 ; areaBu(:,:) = 0.0
 
 !<MISSING CODE TO READ REFINEMENT LEVEL>
   ni = 2*(G%iec-G%isc+1) ! i size of supergrid
@@ -816,7 +570,7 @@ subroutine set_grid_metrics_from_mosaic(G,param_file)
   if (is_root_PE()) &
     call read_data(filename, "x", tmpGlbl, start, nread, no_domain=.TRUE.)
   call broadcast(tmpGlbl, 2*(ni+1), root_PE())
-  
+
   ! I don't know why the second axis is 1 or 2 here. -RWH
   do i=G%isg,G%ieg
     G%gridLonT(i) = tmpGlbl(2*(i-G%isg)+2,2)
@@ -1364,6 +1118,251 @@ subroutine set_grid_metrics_mercator(G, param_file)
   call callTree_leave("set_grid_metrics_mercator()")
 end subroutine set_grid_metrics_mercator
 
+
+function ds_di(x, y, GP)
+  real, intent(in) :: x, y
+  type(GPS), intent(in) :: GP
+  real :: ds_di
+! This function returns the grid spacing in the logical x direction.
+! Arguments: x - The latitude in question.
+!  (in)      y - The longitude in question.
+  ds_di = GP%Rad_Earth * cos(y) * dx_di(x,GP)
+! In general, this might be...
+! ds_di = GP%Rad_Earth * sqrt( cos(y)*cos(y) * dx_di(x,y,GP)*dx_di(x,y,GP) + &
+!                           dy_di(x,y,GP)*dy_di(x,y,GP))
+end function ds_di
+
+function ds_dj(x, y, GP)
+  real, intent(in) :: x, y
+  type(GPS), intent(in) :: GP
+  real :: ds_dj
+! This function returns the grid spacing in the logical y direction.
+! Arguments: x - The latitude in question.
+!  (in)      y - The longitude in question.
+  ds_dj = GP%Rad_Earth * dy_dj(y,GP)
+! In general, this might be...
+! ds_dj = GP%Rad_Earth * sqrt( cos(y)*cos(y) * dx_dj(x,y,GP)*dx_dj(x,y,GP) + &
+!                           dy_dj(x,y,GP)*dy_dj(x,y,GP))
+end function ds_dj
+
+
+function  dL(x1, x2, y1, y2)
+  real, intent(in) :: x1, x2, y1, y2
+  real :: dL
+!  This subroutine calculates the contribution from the line integral
+! along one of the four sides of a cell face to the area of a cell,
+! assuming that the sides follow a linear path in latitude and long-
+! itude (i.e., on a Mercator grid).
+! Argumnts: x1 - Segment starting longitude.
+!  (in)     x2 - Segment ending longitude.
+!  (in)     y1 - Segment ending latitude.
+!  (in)     y2 - Segment ending latitude.
+  real :: r, dy
+
+  dy = y2 - y1
+
+  if (ABS(dy) > 2.5e-8) then
+    r = ((1.0 - cos(dy))*cos(y1) + sin(dy)*sin(y1)) / dy
+  else
+    r = (0.5*dy*cos(y1) + sin(y1))
+  endif
+  dL = r * (x2 - x1)
+
+end function  dL
+
+function find_root( fn, dy_df, GP, fnval, y1, ymin, ymax, ittmax)
+  real :: find_root
+  real, external :: fn, dy_df
+  type(GPS), intent(in) :: GP
+  real, intent(in) :: fnval, y1, ymin, ymax
+  integer, intent(out) :: ittmax
+  real :: y
+! This subroutine finds and returns the value of y at which the
+! monotonic function fn takes the value fnval, also returning
+! in ittmax the number of iterations of Newton's method that were
+! used to polish the root.
+  real :: ybot, ytop, fnbot, fntop
+  integer :: itt
+  character(len =256) :: warnmesg
+
+  real :: dy_dfn, dy, fny
+
+! For Fortran we need to copy the input y1 to y.
+! Otherwise the value of y gets changed globally.
+! i.e. y_h = find_root(fn,dy_df,fnval, y_q, ...) modifies y_q in
+! the code above
+
+!  Bracket the root.
+  y = y1 ; ybot = y1
+  fnbot = fn(ybot,GP) - fnval
+  itt = 0
+  do while (fnbot > 0.0)
+    if ((ybot - 2.0*dy_df(ybot,GP)) < (0.5*(ybot+ymin))) then
+      ybot = ybot - 2.0*dy_df(ybot,GP)
+    else
+      ybot = 0.5*(ybot+ymin) ; itt = itt + 1
+    endif
+    fnbot = fn(ybot,GP) - fnval
+
+    if ((itt > 50) .and. (fnbot > 0.0)) then
+      write(warnmesg, '("PE ",I2," unable to find bottom bound for grid function. &
+        &x = ",ES10.4,", xmax = ",ES10.4,", fn = ",ES10.4,", dfn_dx = ",ES10.4,&
+        &", seeking fn = ",ES10.4," - fn = ",ES10.4,".")') &
+          pe_here(),ybot,ymin,fn(ybot,GP),dy_df(ybot,GP),fnval, fnbot
+
+      call MOM_error(FATAL,warnmesg)
+    endif
+  enddo
+
+  if ((y + 2.0*dy_df(y,GP)) < (0.5*(y+ymax))) then
+    ytop = y + 2.0*dy_df(y,GP)
+  else
+    ytop = 0.5*(y+ymax)
+  endif
+  fntop = fn(ytop,GP) - fnval ; itt = 0
+  do while (fntop < 0.0)
+    if ((ytop + 2.0*dy_df(ytop,GP)) < (0.5*(ytop+ymax))) then
+      ytop = ytop + 2.0*dy_df(ytop,GP)
+    else
+      ytop = 0.5*(ytop+ymax) ; itt = itt + 1
+    endif
+    fntop = fn(ytop,GP) - fnval
+
+    if ((itt > 50) .and. (fntop < 0.0)) then
+      write(warnmesg, '("PE ",I2," unable to find top bound for grid function. &
+        &x = ",ES10.4,", xmax = ",ES10.4,", fn = ",ES10.4,", dfn_dx = ",ES10.4, &
+        &", seeking fn = ",ES10.4," - fn = ",ES10.4,".")') &
+          pe_here(),ytop,ymax,fn(ytop,GP),dy_df(ytop,GP),fnval,fntop
+
+      call MOM_error(FATAL,warnmesg)
+    endif
+  enddo
+!  Bisect several times to insure that the root is within the radius
+!  of convergence in the Newton's method polisher.
+  do itt=1,10
+    y = 0.5*(ybot + ytop)
+    fny = fn(y,GP) - fnval
+    if (fny < 0.0) then
+      fnbot = fny ; ybot = y
+    else
+      fntop = fny ; ytop = y
+    endif
+  enddo
+
+!    Polish the root using Newton's method.
+  do itt=1,10
+    dy_dfn = dy_df(y,GP)
+    fny = fn(y,GP) - fnval
+
+    dy = -1.0* fny * dy_dfn
+    y = y + dy
+    if (y > ytop) y = ytop
+    if (y < ybot) y = ybot
+    if (ABS(dy) < (8.0e-15*ABS(y)+1.e-20)) exit
+  enddo
+  if (ABS(y) < 1e-12) y = 0.0
+
+  ittmax = itt
+  find_root = y
+end function find_root
+
+function dx_di(x, GP)
+  real, intent(in) :: x
+  type(GPS), intent(in) :: GP
+  real :: dx_di
+! This subroutine calculates and returns the value of dx/di, where
+! x is the longitude in Radians, and i is the integral north-south
+! grid index.
+
+  dx_di = (GP%len_lon * 4.0*atan(1.0)) / (180.0 * GP%niglobal)
+
+end function dx_di
+
+function Int_di_dx(x, GP)
+  real, intent(in) :: x
+  type(GPS), intent(in) :: GP
+  real :: Int_di_dx
+! This subroutine calculates and returns the integral of the inverse
+! of dx/di to the point x, in radians.
+
+  Int_di_dx = x * ((180.0 * GP%niglobal) / (GP%len_lon * 4.0*atan(1.0)))
+
+end function Int_di_dx
+
+function dy_dj(y, GP)
+  real, intent(in) :: y
+  type(GPS), intent(in) :: GP
+  real :: dy_dj
+! This subroutine calculates and returns the value of dy/dj, where
+! y is the latitude in Radians, and j is the integral north-south
+! grid index.
+  real :: PI            ! 3.1415926... calculated as 4*atan(1)
+  real :: C0            ! The constant that converts the nominal y-spacing in
+                        ! gridpoints to the nominal spacing in Radians.
+  real :: y_eq_enhance  ! The latitude in radians within which the resolution
+                        ! is enhanced.
+  PI = 4.0*atan(1.0)
+  if (GP%isotropic) then
+    C0 = (GP%len_lon * PI) / (180.0 * GP%niglobal)
+    y_eq_enhance = PI*abs(GP%lat_eq_enhance)/180.0
+    if (ABS(y) < y_eq_enhance) then
+      dy_dj = C0 * (cos(y) / (1.0 + 0.5*cos(y) * (GP%lat_enhance_factor - 1.0) * &
+                         (1.0+cos(PI*y/y_eq_enhance)) ))
+    else
+      dy_dj = C0 * cos(y)
+    endif
+  else
+    C0 = (GP%len_lat * PI) / (180.0 * GP%njglobal)
+    dy_dj = C0
+  endif
+
+end function dy_dj
+
+function Int_dj_dy(y, GP)
+  real, intent(in) :: y
+  type(GPS), intent(in) :: GP
+  real :: Int_dj_dy
+! This subroutine calculates and returns the integral of the inverse
+! of dy/dj to the point y, in radians.
+  real :: I_C0 = 0.0       !   The inverse of the constant that converts the
+                           ! nominal spacing in gridpoints to the nominal
+                           ! spacing in Radians.
+  real :: PI               ! 3.1415926... calculated as 4*atan(1)
+  real :: y_eq_enhance     ! The latitude in radians from
+                           ! from the equator within which the
+                           ! meridional grid spacing is enhanced by
+                           ! a factor of GP%lat_enhance_factor.
+  real :: r
+
+  PI = 4.0*atan(1.0)
+  if (GP%isotropic) then
+    I_C0 = (180.0 * GP%niglobal) / (GP%len_lon * PI)
+    y_eq_enhance = PI*ABS(GP%lat_eq_enhance)/180.0
+
+    if (y >= 0.0) then
+      r = I_C0 * log((1.0 + sin(y))/cos(y))
+    else
+      r = -1.0 * I_C0 * log((1.0 - sin(y))/cos(y))
+    endif
+
+    if (y >= y_eq_enhance) then
+      r = r + I_C0*0.5*(GP%lat_enhance_factor - 1.0)*y_eq_enhance
+    else if (y <= -y_eq_enhance) then
+      r = r - I_C0*0.5*(GP%lat_enhance_factor - 1.0)*y_eq_enhance
+    else
+      r = r + I_C0*0.5*(GP%lat_enhance_factor - 1.0) * &
+              (y + (y_eq_enhance/PI)*sin(PI*y/y_eq_enhance))
+    endif
+  else
+    I_C0 = (180.0 * GP%njglobal) / (GP%len_lat * PI)
+    r = I_C0 * y
+  endif
+
+  Int_dj_dy = r
+end function Int_dj_dy
+
+! ------------------------------------------------------------------------------
+
 ! ------------------------------------------------------------------------------
 
 !> extrapolate_metric extrapolates missing metric data into all the halo regions.
@@ -1408,10 +1407,11 @@ function Adcroft_reciprocal(val) result(I_val)
   if (val /= 0.0) I_val = 1.0/val
 end function Adcroft_reciprocal
 
-
+!> initialize_masks initializes the grid masks and any metrics that come
+!!    with masks already applied.
 subroutine initialize_masks(G, PF)
-  type(ocean_grid_type), intent(inout) :: G
-  type(param_file_type), intent(in)    :: PF
+  type(ocean_grid_type), intent(inout) :: G  !< The ocean's grid structure
+  type(param_file_type), intent(in)    :: PF !< The param_file handle
 ! Arguments:
 !  (inout)   G - The ocean's grid structure.
 !  (in)      PF - A structure indicating the open file to parse for
@@ -1536,18 +1536,18 @@ subroutine initialize_masks(G, PF)
 
   call pass_vector(G%mask2dCu, G%mask2dCv, G%Domain, To_All+Scalar_Pair, CGRID_NE)
 
-  do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-    G%dx_Cv(i,J) = G%mask2dCv(i,J)*G%dxCv(i,J)
-    G%dx_Cv_obc(i,J) = G%mask2dCv(i,J)*G%dxCv(i,J)
-    G%areaCv(i,J) = G%dyCv(i,J)*G%dx_Cv(i,J)
-    G%IareaCv(i,J) = 0.0
-    G%IareaCv(i,J) = G%mask2dCv(i,J) * Adcroft_reciprocal(G%areaCv(i,J))
-  enddo ; enddo
   do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB  
-    G%dy_Cu(I,j) = G%mask2dCu(I,j)*G%dyCu(I,j)
-    G%dy_Cu_obc(I,j) = G%mask2dCu(I,j)*G%dyCu(I,j)  
-    G%areaCu(I,j) = G%dxCu(I,j)*G%dy_Cu(I,j)
+    G%dy_Cu(I,j) = G%mask2dCu(I,j) * G%dyCu(I,j)
+    G%dy_Cu_obc(I,j) = G%mask2dCu(I,j) * G%dyCu(I,j)  
+    G%areaCu(I,j) = G%dxCu(I,j) * G%dy_Cu(I,j)
     G%IareaCu(I,j) = G%mask2dCu(I,j) * Adcroft_reciprocal(G%areaCu(I,j))
+  enddo ; enddo
+
+  do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+    G%dx_Cv(i,J) = G%mask2dCv(i,J) * G%dxCv(i,J)
+    G%dx_Cv_obc(i,J) = G%mask2dCv(i,J) * G%dxCv(i,J)
+    G%areaCv(i,J) = G%dyCv(i,J) * G%dx_Cv(i,J)
+    G%IareaCv(i,J) = G%mask2dCv(i,J) * Adcroft_reciprocal(G%areaCv(i,J))
   enddo ; enddo
 
   call callTree_leave("initialize_masks()")
