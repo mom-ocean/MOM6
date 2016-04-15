@@ -197,6 +197,7 @@ subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
   ! The following variables are used to set up the transport in the CCS1 example.
   real :: tr_0, y1, y2, tr_k, rst, rsb, rc, v_k, lon_im1
   character(len=40)  :: mod = "CCS1_set_Open_Bdry_Conds" ! This subroutine's name.
+  character(len=1000)  :: string
   integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB, IscB, IecB, JscB, JecB
 
@@ -222,7 +223,7 @@ subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
     ! West
     if (is_root_pe()) print *, 'inside CCS1_set_open_bdry_conds 1', &
       apply_OBC_u, apply_OBC_v, G%isd_global, isd, is, ie, IscB, IecB, G%mask2dCu(iscB,js)
-    if (G%isd_global == isd) then
+    if (G%isd_global - isd == isd - is) then
       do j=js,je
         if (G%mask2dCu(IscB-1,j) == 1) then
           OBC_mask_u(IscB-1,j) = .true. ; any_OBC = .true.
@@ -246,6 +247,9 @@ subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
       enddo
     endif
     ! North
+    print *, 'inside CCS1_set_open_bdry_conds ', any_OBC, G%jsd_global, jsd, &
+        js, je, jscB, jecB
+!    MOM_mesg(string, all_print=.true.)
     if (G%jsd_global + G%jed == G%Domain%njglobal) then
       do I=IscB,IecB
         if (G%mask2dCu(I,je+1) == 1) then
