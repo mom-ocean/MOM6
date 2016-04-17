@@ -404,28 +404,28 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
                   visc_rem_u, visc_rem_v, etaav, OBC, &
                   BT_cont, eta_PF_start, &
                   taux_bot, tauy_bot, uh0, vh0, u_uh0, v_vh0)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)  :: U_in
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)  :: V_in
-  real, dimension(NIMEM_,NJMEM_),         intent(in)  :: eta_in
-  real,                                   intent(in)  :: dt
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)  :: bc_accel_u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)  :: bc_accel_v
-  type(forcing),                          intent(in)  :: fluxes
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)   :: pbce
-  real, dimension(NIMEM_,NJMEM_),         intent(in)  :: eta_PF_in
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)  :: U_Cor
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)  :: V_Cor
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(out) :: accel_layer_u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out) :: accel_layer_v
-  real, dimension(NIMEM_,NJMEM_),         intent(out) :: eta_out
-  real, dimension(NIMEMB_,NJMEM_),        intent(out) :: uhbtav
-  real, dimension(NIMEM_,NJMEMB_),        intent(out) :: vhbtav
-  type(ocean_grid_type),                  intent(inout) :: G
-  type(verticalGrid_type),                intent(in)    :: GV
-  type(barotropic_CS),                    pointer     :: CS
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)  :: visc_rem_u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)  :: visc_rem_v
-  real, dimension(NIMEM_,NJMEM_),      intent(out), optional :: etaav
+  type(ocean_grid_type),                   intent(inout) :: G
+  type(verticalGrid_type),                   intent(in)  :: GV
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: U_in
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: V_in
+  real, dimension(SZI_(G),SZJ_(G)),          intent(in)  :: eta_in
+  real,                                      intent(in)  :: dt
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: bc_accel_u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: bc_accel_v
+  type(forcing),                             intent(in)  :: fluxes
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: pbce
+  real, dimension(SZI_(G),SZJ_(G)),          intent(in)  :: eta_PF_in
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: U_Cor
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: V_Cor
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: accel_layer_u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: accel_layer_v
+  real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: eta_out
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(out) :: uhbtav
+  real, dimension(SZI_(G),SZJB_(G)),         intent(out) :: vhbtav
+  type(barotropic_CS),                       pointer     :: CS
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: visc_rem_u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: visc_rem_v
+  real, dimension(SZI_(G),SZJ_(G)),    intent(out), optional :: etaav
   type(ocean_OBC_type),                pointer,     optional :: OBC
   type(BT_cont_type),                  pointer,     optional :: BT_cont
   real, dimension(:,:),                pointer,     optional :: eta_PF_start
@@ -2196,8 +2196,8 @@ subroutine set_dtbt(G, GV, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
   type(ocean_grid_type),                 intent(inout) :: G
   type(verticalGrid_type),               intent(in)    :: GV
   type(barotropic_CS),                   pointer       :: CS
-  real, dimension(NIMEM_,NJMEM_),        intent(in), optional :: eta
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in), optional :: pbce
+  real, dimension(SZI_(G),SZJ_(G)),         intent(in), optional :: eta
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in), optional :: pbce
   type(BT_cont_type),                    pointer,    optional :: BT_cont
   real,                                  intent(in), optional :: gtot_est
   real,                                  intent(in), optional :: SSH_add
@@ -2314,24 +2314,24 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
                                eta, ubt_old, vbt_old, BT_OBC, &
                                G, MS, halo, dtbt, bebt, use_BT_cont, Datu, Datv, &
                                BTCL_u, BTCL_v, uhbt0, vhbt0)
-  type(ocean_OBC_type),              pointer       :: OBC
-  type(ocean_grid_type),             intent(inout) :: G
-  type(memory_size_type),            intent(in)    :: MS
+  type(ocean_OBC_type),                  pointer       :: OBC
+  type(ocean_grid_type),                 intent(inout) :: G
+  type(memory_size_type),                intent(in)    :: MS
   real, dimension(SZIBW_(MS),SZJW_(MS)), intent(inout) :: ubt, uhbt, ubt_trans
   real, dimension(SZIW_(MS),SZJBW_(MS)), intent(inout) :: vbt, vhbt, vbt_trans
-  real, dimension(SZIW_(MS),SZJW_(MS)),   intent(in)    :: eta
-  real, dimension(SZIBW_(MS),SZJW_(MS)),  intent(in)    :: ubt_old
-  real, dimension(SZIW_(MS),SZJBW_(MS)),  intent(in)    :: vbt_old
-  type(BT_OBC_type),                 intent(in)    :: BT_OBC
-  integer,                           intent(in)    :: halo
-  real,                              intent(in)    :: dtbt, bebt
-  logical,                           intent(in)    :: use_BT_cont
-  real, dimension(SZIBW_(MS),SZJW_(MS)),  intent(in)    :: Datu
-  real, dimension(SZIW_(MS),SZJBW_(MS)),  intent(in)    :: Datv
+  real, dimension(SZIW_(MS),SZJW_(MS)),  intent(in)    :: eta
+  real, dimension(SZIBW_(MS),SZJW_(MS)), intent(in)    :: ubt_old
+  real, dimension(SZIW_(MS),SZJBW_(MS)), intent(in)    :: vbt_old
+  type(BT_OBC_type),                     intent(in)    :: BT_OBC
+  integer,                               intent(in)    :: halo
+  real,                                  intent(in)    :: dtbt, bebt
+  logical,                               intent(in)    :: use_BT_cont
+  real, dimension(SZIBW_(MS),SZJW_(MS)), intent(in)    :: Datu
+  real, dimension(SZIW_(MS),SZJBW_(MS)), intent(in)    :: Datv
   type(local_BT_cont_u_type), dimension(SZIBW_(MS),SZJW_(MS)), intent(in) :: BTCL_u
   type(local_BT_cont_v_type), dimension(SZIW_(MS),SZJBW_(MS)), intent(in) :: BTCL_v
-  real, dimension(SZIBW_(MS),SZJW_(MS)),  intent(in)    :: uhbt0
-  real, dimension(SZIW_(MS),SZJBW_(MS)),  intent(in)    :: vhbt0
+  real, dimension(SZIBW_(MS),SZJW_(MS)), intent(in)    :: uhbt0
+  real, dimension(SZIW_(MS),SZJBW_(MS)), intent(in)    :: vhbt0
 !   This subroutine applies the open boundary conditions on barotropic
 ! velocities and mass transports, as developed by Mehmet Ilicak.
 
@@ -2748,13 +2748,13 @@ end subroutine destroy_BT_OBC
 
 
 subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)  :: h
-  type(ocean_grid_type),               intent(inout) :: G
-  type(verticalGrid_type),             intent(in)    :: GV
-  type(barotropic_CS),                 pointer       :: CS
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in), optional :: h_u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in), optional :: h_v
-  logical,                             intent(in), optional :: may_use_default
+  type(ocean_grid_type),                  intent(inout) :: G
+  type(verticalGrid_type),                intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h
+  type(barotropic_CS),                    pointer       :: CS
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in), optional :: h_u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in), optional :: h_v
+  logical,                                   intent(in), optional :: may_use_default
 !   btcalc calculates the barotropic velocities from the full velocity and
 ! thickness fields, determines the fraction of the total water column in each
 ! layer at velocity points, and determines a corrective fictitious mass source
@@ -3561,13 +3561,13 @@ end subroutine find_face_areas
 
 subroutine bt_mass_source(h, eta, fluxes, set_cor, dt_therm, dt_since_therm, &
                           G, GV, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
-  real, dimension(NIMEM_,NJMEM_),     intent(in) :: eta
+  type(ocean_grid_type),              intent(in) :: G
+  type(verticalGrid_type),            intent(in) :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  real, dimension(SZI_(G),SZJ_(G)),   intent(in) :: eta
   type(forcing),                      intent(in) :: fluxes
   logical,                            intent(in) :: set_cor
   real,                               intent(in) :: dt_therm, dt_since_therm
-  type(ocean_grid_type),              intent(in) :: G
-  type(verticalGrid_type),            intent(in) :: GV
   type(barotropic_CS),                pointer    :: CS
 !   bt_mass_source determines the appropriately limited mass source for
 ! the barotropic solver, along with a corrective fictitious mass source that
@@ -3667,13 +3667,13 @@ end subroutine bt_mass_source
 
 subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
                            restart_CS, BT_cont, tides_CSp)
-  real, intent(in), dimension(NIMEMB_,NJMEM_,NKMEM_) :: u
-  real, intent(in), dimension(NIMEM_,NJMEMB_,NKMEM_) :: v
-  real, intent(in), dimension(NIMEM_,NJMEM_,NKMEM_)  :: h
-  real, intent(in), dimension(NIMEM_,NJMEM_)      :: eta
-  type(time_type), target,          intent(in)    :: Time
   type(ocean_grid_type),            intent(inout) :: G
   type(verticalGrid_type),          intent(in)    :: GV
+  real, intent(in), dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: u
+  real, intent(in), dimension(SZI_(G),SZJB_(G),SZK_(G)) :: v
+  real, intent(in), dimension(SZI_(G),SZJ_(G),SZK_(G))  :: h
+  real, intent(in), dimension(SZI_(G),SZJ_(G))    :: eta
+  type(time_type), target,          intent(in)    :: Time
   type(param_file_type),            intent(in)    :: param_file
   type(diag_ctrl), target,          intent(inout) :: diag
   type(barotropic_CS),              pointer       :: CS
