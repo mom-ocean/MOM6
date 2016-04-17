@@ -79,9 +79,9 @@ subroutine CCS1_initialize_sponges(G, GV, tv, PF, CSp)
   real :: min_depth
   real :: damp, e_dense, damp_new
   character(len=40)  :: mod = "CCS1_initialize_sponges" ! This subroutine's name.
-  integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
+  integer :: i, j, k, isc, iec, jsc, jec, isd, ied, jsd, jed, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   eta(:,:,:) = 0.0 ; temp(:,:,:) = 0.0 ; Idamp(:,:) = 0.0
@@ -97,7 +97,7 @@ subroutine CCS1_initialize_sponges(G, GV, tv, PF, CSp)
 
   H0(1) = 0.0
   do k=2,nz ; H0(k) = -(real(k-1)-0.5)*G%max_depth/real(nz-1) ; enddo
-  do i=is,ie; do j=js,je
+  do i=isc,iec; do j=jsc,jec
     if (G%geoLonT(i,j) < 100.0) then ; damp = 10.0
     elseif (G%geoLonT(i,j) < 200.0) then
       damp = 10.0*(200.0-G%geoLonT(i,j))/100.0
@@ -197,11 +197,10 @@ subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
   ! The following variables are used to set up the transport in the CCS1 example.
   real :: tr_0, y1, y2, tr_k, rst, rsb, rc, v_k, lon_im1
   character(len=40)  :: mod = "CCS1_set_Open_Bdry_Conds" ! This subroutine's name.
-  character(len=1000)  :: string
-  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
+  integer :: i, j, k, itt, isc, iec, jsc, jec, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB, IscB, IecB, JscB, JecB
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   IscB = G%IscB ; IecB = G%IecB ; JscB = G%JscB ; JecB = G%JecB
@@ -222,41 +221,40 @@ subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
     ! Check for edges of full domain
     ! West
     if (is_root_pe()) print *, 'inside CCS1_set_open_bdry_conds 1', &
-      apply_OBC_u, apply_OBC_v, G%isd_global, isd, is, ie, IscB, IecB, G%mask2dCu(iscB,js)
-    if (G%isd_global - isd == isd - is) then
-      do j=js,je
-        if (G%mask2dCu(IscB-1,j) == 1) then
+      apply_OBC_u, apply_OBC_v, G%isd_global, isd, isc, iec, IscB, IecB, G%mask2dCu(iscB,jsc)
+    if (G%isd_global - isd == isd - isc) then
+      do j=jsc,jec
+        if (G%mask2dCu(IscB-1,j) == 1.0) then
           OBC_mask_u(IscB-1,j) = .true. ; any_OBC = .true.
         endif
       enddo
     endif
     ! East
-    if (G%isd_global + G%ied == G%Domain%niglobal) then
-      do j=js,je
-        if (G%mask2dCu(IecB+1,j) == 1) then
+    if (G%isd_global - isd + iec == G%Domain%niglobal) then
+      do j=jsc,jec
+        if (G%mask2dCu(IecB+1,j) == 1.0) then
           OBC_mask_u(IecB+1,j) = .true. ; any_OBC = .true.
         endif
       enddo
     endif
     ! South
-    if (G%jsd_global == G%jsd) then
+    if (G%jsd_global - jsd == jsd - jsc) then
       do I=IscB,IecB
-        if (G%mask2dCu(I,js-1) == 1) then
-          OBC_mask_u(I,js-1) = .true. ; any_OBC = .true.
+        if (G%mask2dCu(I,jsc-1) == 1.0) then
+          OBC_mask_u(I,jsc-1) = .true. ; any_OBC = .true.
         endif
       enddo
     endif
     ! North
-    print *, 'inside CCS1_set_open_bdry_conds ', any_OBC, G%jsd_global, jsd, &
-        js, je, jscB, jecB
-!    MOM_mesg(string, all_print=.true.)
-    if (G%jsd_global + G%jed == G%Domain%njglobal) then
+    if (G%jsd_global - jsd + jec == G%Domain%njglobal) then
       do I=IscB,IecB
-        if (G%mask2dCu(I,je+1) == 1) then
-          OBC_mask_u(I,je+1) = .true. ; any_OBC = .true.
+        if (G%mask2dCu(I,jec+1) == 1.0) then
+          OBC_mask_u(I,jec+1) = .true. ; any_OBC = .true.
         endif
       enddo
     endif
+    print *, 'inside CCS1_set_open_bdry_conds ', any_OBC, G%jsd_global, jsd, &
+        jsc, jec, jscB, jecB, G%Domain%njglobal
     if (.not.any_OBC) then
       ! This processor has no u points at which open boundary conditions are
       ! to be applied.
@@ -270,32 +268,32 @@ subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
     any_OBC = .false.
     ! Check for edges of full domain
     ! West
-    if (G%isd_global == G%isd) then
+    if (G%isd_global - isd == isd - isc) then
       do J=JscB,JecB
-        if (G%mask2dCv(is-1,J) == 1) then
-          OBC_mask_v(is-1,J) = .true. ; any_OBC = .true.
+        if (G%mask2dCv(isc-1,J) == 1) then
+          OBC_mask_v(isc-1,J) = .true. ; any_OBC = .true.
         endif
       enddo
     endif
     ! East
-    if (G%isd_global + G%ied == G%Domain%niglobal) then
+    if (G%isd_global - isd + iec == G%Domain%niglobal) then
       do J=JscB,JecB
-        if (G%mask2dCv(ie+1,J) == 1) then
-          OBC_mask_v(ie+1,J) = .true. ; any_OBC = .true.
+        if (G%mask2dCv(iec+1,J) == 1) then
+          OBC_mask_v(iec+1,J) = .true. ; any_OBC = .true.
         endif
       enddo
     endif
     ! South
-    if (G%jsd_global == G%jsd) then
-      do i=is,ie
+    if (G%jsd_global - jsd == jsd - jsc) then
+      do i=isc,iec
         if (G%mask2dCv(i,JscB-1) == 1) then
           OBC_mask_v(i,JscB-1) = .true. ; any_OBC = .true.
         endif
       enddo
     endif
     ! North
-    if (G%jsd_global + G%jed == G%Domain%njglobal) then
-      do i=is,ie
+    if (G%jsd_global - jsd + jec == G%Domain%njglobal) then
+      do i=isc,iec
         if (G%mask2dCv(i,JecB+1) == 1) then
           OBC_mask_v(i,JecB+1) = .true. ; any_OBC = .true.
         endif
