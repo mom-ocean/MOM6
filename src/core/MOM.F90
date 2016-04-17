@@ -43,7 +43,7 @@ use MOM_error_handler,        only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler,        only : MOM_set_verbosity, callTree_showQuery
 use MOM_error_handler,        only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,          only : read_param, get_param, log_version, param_file_type
-use MOM_fixed_initialization, only : MOM_initialize_fixed
+use MOM_fixed_initialization, only : MOM_initialize_fixed, MOM_initialize_coord
 use MOM_forcing_type,         only : MOM_forcing_chksum
 use MOM_get_input,            only : Get_MOM_Input, directories
 use MOM_io,                   only : MOM_io_init, vardesc, var_desc
@@ -1360,8 +1360,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   real, allocatable, dimension(:,:)   :: eta ! free surface height (m) or bottom press (Pa)
   type(MOM_restart_CS),  pointer      :: restart_CSp_tmp => NULL()
 
-  integer :: nkml, nkbl, verbosity
+  integer :: nkml, nkbl, verbosity, write_geom
   real    :: default_val       ! default value for a parameter
+  logical :: write_geom_files  ! If true, write out the grid geometry files.
   logical :: new_sim
   logical :: use_geothermal    ! If true, apply geothermal heating.
   logical :: use_EOS           ! If true, density calculated from T & S using an equation of state.
@@ -1623,6 +1624,15 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call get_param(param_file, "MOM", "IC_OUTPUT_FILE", IC_file, &
                  "The file into which to write the initial conditions.", &
                  default="MOM_IC")
+  call get_param(param_file, "MOM", "WRITE_GEOM", write_geom, &
+                 "If =0, never write the geometry and vertical grid files.\n"//&
+                 "If =1, write the geometry and vertical grid files only for\n"//&
+                 "a new simulation. If =2, always write the geometry and\n"//&
+                 "vertical grid files. Other values are invalid.", default=1)
+  if (write_geom<0 .or. write_geom>2) call MOM_error(FATAL,"MOM: "//&
+         "WRITE_GEOM must be equal to 0, 1 or 2.")
+  write_geom_files = ((write_geom==2) .or. ((write_geom==1) .and. &
+     ((dirs%input_filename(1:1)=='n') .and. (LEN_TRIM(dirs%input_filename)==1))))
 
   ! Check for inconsistent settings.
   if (CS%adiabatic .and. CS%use_temperature) call MOM_error(WARNING, &
@@ -1754,8 +1764,11 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call callTree_waypoint("restart registration complete (initialize_MOM)")
 
   call cpu_clock_begin(id_clock_MOM_init)
-  call MOM_initialize_fixed(G, GV, param_file, dirs, CS%tv)
+  call MOM_initialize_fixed(G, param_file, write_geom_files, dirs%output_directory)
   call callTree_waypoint("returned from MOM_initialize_fixed() (initialize_MOM)")
+  call MOM_initialize_coord(G, GV, param_file, write_geom_files, &
+                            dirs%output_directory, CS%tv)
+  call callTree_waypoint("returned from MOM_initialize_coord() (initialize_MOM)")
 
   if (CS%use_ALE_algorithm) then
     call ALE_init(param_file, G, GV, CS%ALE_CSp)
@@ -2704,13 +2717,13 @@ end subroutine set_restart_fields
 !! model by setting the appropriate pointers in state.  Unused fields
 !! are set to NULL.
 subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
-  type(surface),                                  intent(inout) :: state  !< ocean surface state
-  real, target, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u      !< zonal velocity (m/s)
-  real, target, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v      !< meridional velocity (m/s)
-  real, target, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h      !< layer thickness (m or kg/m2)
-  real, target, dimension(NIMEM_,NJMEM_),         intent(inout) :: ssh    !< time mean surface height (m)
   type(ocean_grid_type),                          intent(inout) :: G      !< ocean grid structure
   type(verticalGrid_type),                        intent(inout) :: GV     !< ocean vertical grid structure
+  type(surface),                                  intent(inout) :: state  !< ocean surface state
+  real, target, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u      !< zonal velocity (m/s)
+  real, target, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v      !< meridional velocity (m/s)
+  real, target, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h      !< layer thickness (m or kg/m2)
+  real, target, dimension(SZI_(G),SZJ_(G)),       intent(inout) :: ssh    !< time mean surface height (m)
   type(MOM_control_struct),                       intent(inout) :: CS     !< control structure
   real, optional, pointer, dimension(:,:)                       :: p_atm  !< atmospheric pressure (Pascal)
 
