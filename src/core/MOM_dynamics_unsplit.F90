@@ -180,25 +180,25 @@ contains
 subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
                   p_surf_begin, p_surf_end, uh, vh, uhtr, vhtr, eta_av, G, GV, CS, &
                   VarMix, MEKE)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h
-  type(thermo_var_ptrs),                  intent(in)    :: tv
-  type(vertvisc_type),                    intent(inout) :: visc
-  type(time_type),                        intent(in)    :: Time_local
-  real,                                   intent(in)    :: dt
-  type(forcing),                          intent(in)    :: fluxes
-  real, dimension(:,:),                   pointer       :: p_surf_begin, p_surf_end
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uh
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vh
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uhtr
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vhtr
-  real, dimension(NIMEM_,NJMEM_),         intent(out)   :: eta_av
-  type(ocean_grid_type),                  intent(inout) :: G
-  type(verticalGrid_type),                intent(in)    :: GV
-  type(MOM_dyn_unsplit_CS),               pointer       :: CS
-  type(VarMix_CS),                        pointer       :: VarMix
-  type(MEKE_type),                        pointer       :: MEKE
+  type(ocean_grid_type),                     intent(inout) :: G
+  type(verticalGrid_type),                   intent(in)    :: GV
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h
+  type(thermo_var_ptrs),                     intent(in)    :: tv
+  type(vertvisc_type),                       intent(inout) :: visc
+  type(time_type),                           intent(in)    :: Time_local
+  real,                                      intent(in)    :: dt
+  type(forcing),                             intent(in)    :: fluxes
+  real, dimension(:,:),                      pointer       :: p_surf_begin, p_surf_end
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uh
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vh
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr
+  real, dimension(SZI_(G),SZJ_(G)),          intent(out)   :: eta_av
+  type(MOM_dyn_unsplit_CS),                  pointer       :: CS
+  type(VarMix_CS),                           pointer       :: VarMix
+  type(MEKE_type),                           pointer       :: MEKE
 ! Arguments: u - The input and output zonal velocity, in m s-1.
 !  (inout)   v - The input and output meridional velocity, in m s-1.
 !  (inout)   h - The input and output layer thicknesses, in m or kg m-2,
@@ -579,25 +579,25 @@ end subroutine register_restarts_dyn_unsplit
 subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, param_file, diag, CS, &
                                   restart_CS, Accel_diag, Cont_diag, MIS, &
                                   OBC, ALE_CSp, setVisc_CSp, visc, dirs, ntrunc)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_) , intent(inout) :: h
-  type(time_type),                target, intent(in)    :: Time
-  type(ocean_grid_type),                  intent(inout) :: G
-  type(verticalGrid_type),                intent(in)    :: GV
-  type(param_file_type),                  intent(in)    :: param_file
-  type(diag_ctrl),                target, intent(inout) :: diag
-  type(MOM_dyn_unsplit_CS),               pointer       :: CS
-  type(MOM_restart_CS),                   pointer       :: restart_CS
-  type(accel_diag_ptrs),          target, intent(inout) :: Accel_diag
-  type(cont_diag_ptrs),           target, intent(inout) :: Cont_diag
-  type(ocean_internal_state),             intent(inout) :: MIS
-  type(ocean_OBC_type),                   pointer       :: OBC
-  type(ALE_CS),                           pointer       :: ALE_CSp
-  type(set_visc_CS),                      pointer       :: setVisc_CSp
-  type(vertvisc_type),                    intent(inout) :: visc
-  type(directories),                      intent(in)    :: dirs
-  integer, target,                        intent(inout) :: ntrunc
+  type(ocean_grid_type),                     intent(inout) :: G
+  type(verticalGrid_type),                   intent(in)    :: GV
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout) :: h
+  type(time_type),                   target, intent(in)    :: Time
+  type(param_file_type),                     intent(in)    :: param_file
+  type(diag_ctrl),                   target, intent(inout) :: diag
+  type(MOM_dyn_unsplit_CS),                  pointer       :: CS
+  type(MOM_restart_CS),                      pointer       :: restart_CS
+  type(accel_diag_ptrs),             target, intent(inout) :: Accel_diag
+  type(cont_diag_ptrs),              target, intent(inout) :: Cont_diag
+  type(ocean_internal_state),                intent(inout) :: MIS
+  type(ocean_OBC_type),                      pointer       :: OBC
+  type(ALE_CS),                              pointer       :: ALE_CSp
+  type(set_visc_CS),                         pointer       :: setVisc_CSp
+  type(vertvisc_type),                       intent(inout) :: visc
+  type(directories),                         intent(in)    :: dirs
+  integer, target,                           intent(inout) :: ntrunc
 
 ! Arguments: u - The zonal velocity, in m s-1.
 !  (inout)   v - The meridional velocity, in m s-1.
