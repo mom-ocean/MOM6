@@ -183,10 +183,10 @@ program MOM_main
 contains
 
 subroutine benchmark_init_topog_local(D, G, param_file, max_depth)
-  real, intent(out), dimension(NIMEM_,NJMEM_) :: D
-  type(ocean_grid_type), intent(in)           :: G
-  type(param_file_type), intent(in)           :: param_file
-  real,                  intent(in)           :: max_depth
+  type(ocean_grid_type), intent(in)             :: G
+  real, intent(out), dimension(SZI_(G),SZJ_(G)) :: D
+  type(param_file_type), intent(in)             :: param_file
+  real,                  intent(in)             :: max_depth
 ! Arguments: D          - the bottom depth in m. Intent out.
 !  (in)      G          - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for

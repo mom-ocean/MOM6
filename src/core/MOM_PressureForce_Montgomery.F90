@@ -91,16 +91,16 @@ end type PressureForce_Mont_CS
 contains
 
 subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)  :: h
-  type(thermo_var_ptrs),                  intent(in)  :: tv
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(out) :: PFu
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out) :: PFv
-  type(ocean_grid_type),                  intent(in)  :: G
-  type(verticalGrid_type),                intent(in)  :: GV
-  type(PressureForce_Mont_CS),            pointer     :: CS
-  real, dimension(:,:),                  optional, pointer     :: p_atm
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: pbce
-  real, dimension(NIMEM_,NJMEM_),        optional, intent(out) :: eta
+  type(ocean_grid_type),                     intent(in)  :: G
+  type(verticalGrid_type),                   intent(in)  :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h
+  type(thermo_var_ptrs),                     intent(in)  :: tv
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: PFu
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: PFv
+  type(PressureForce_Mont_CS),               pointer     :: CS
+  real, dimension(:,:),                     optional, pointer     :: p_atm
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(out) :: pbce
+  real, dimension(SZI_(G),SZJ_(G)),         optional, intent(out) :: eta
 
 !    This subroutine determines the acceleration due to pressure forces in a
 !  non-Boussinesq fluid using the compressibility compensated (if appropriate)
@@ -415,16 +415,16 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, 
 end subroutine PressureForce_Mont_nonBouss
 
 subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)  :: h
-  type(thermo_var_ptrs),                  intent(in)  :: tv
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(out) :: PFu
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out) :: PFv
-  type(ocean_grid_type),                  intent(in)  :: G
-  type(verticalGrid_type),                intent(in)  :: GV
-  type(PressureForce_Mont_CS),            pointer     :: CS
-  real, dimension(:,:),                  optional, pointer     :: p_atm
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: pbce
-  real, dimension(NIMEM_,NJMEM_),        optional, intent(out) :: eta
+  type(ocean_grid_type),                     intent(in)  :: G
+  type(verticalGrid_type),                   intent(in)  :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h
+  type(thermo_var_ptrs),                     intent(in)  :: tv
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: PFu
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: PFv
+  type(PressureForce_Mont_CS),               pointer     :: CS
+  real, dimension(:,:),                     optional, pointer     :: p_atm
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(out) :: pbce
+  real, dimension(SZI_(G),SZJ_(G)),         optional, intent(out) :: eta
 
 !    This subroutine determines the acceleration due to pressure
 !  forces.
@@ -684,16 +684,16 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta
 end subroutine PressureForce_Mont_Bouss
 
 subroutine Set_pbce_Bouss(e, tv, G, GV, g_Earth, Rho0, GFS_scale, pbce, rho_star)
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(in)  :: e
-  type(thermo_var_ptrs),                intent(in)  :: tv
   type(ocean_grid_type),                intent(in)  :: G
-  type(verticalGrid_type),             intent(in)    :: GV
+  type(verticalGrid_type),              intent(in)  :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)  :: e
+  type(thermo_var_ptrs),                intent(in)  :: tv
   real,                                 intent(in)  :: g_Earth
   real,                                 intent(in)  :: Rho0
   real,                                 intent(in)  :: GFS_scale
 !  type(PressureForce_Mont_CS),          pointer     :: CS
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(out) :: pbce
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(in) :: rho_star
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: pbce
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(in) :: rho_star
 !    This subroutine determines the partial derivative of the acceleration due
 !  to pressure forces with the free surface height.
 ! Arguments: e - Interface height, in H (m).
@@ -801,15 +801,15 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, g_Earth, Rho0, GFS_scale, pbce, rho_star
 end subroutine Set_pbce_Bouss
 
 subroutine Set_pbce_nonBouss(p, tv, G, GV, g_Earth, GFS_scale, pbce, alpha_star)
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(in)  :: p
-  type(thermo_var_ptrs),                intent(in)  :: tv
   type(ocean_grid_type),                intent(in)  :: G
   type(verticalGrid_type),              intent(in)  :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)  :: p
+  type(thermo_var_ptrs),                intent(in)  :: tv
   real,                                 intent(in)  :: g_Earth
   real,                                 intent(in)  :: GFS_scale
 !  type(PressureForce_Mont_CS),          pointer     :: CS
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(out) :: pbce
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(in) :: alpha_star
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: pbce
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(in) :: alpha_star
 !    This subroutine determines the partial derivative of the acceleration due
 !  to pressure forces with the column mass.
 ! Arguments: p - Interface pressures, in Pa.

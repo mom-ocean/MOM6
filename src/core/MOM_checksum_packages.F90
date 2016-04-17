@@ -53,15 +53,15 @@ contains
 ! =============================================================================
 
 subroutine MOM_state_chksum_5arg(mesg, u, v, h, uh, vh, G, GV, haloshift)
-  character(len=*),                       intent(in) :: mesg
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in) :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in) :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in) :: uh
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in) :: vh
-  type(ocean_grid_type),                  intent(in) :: G
-  type(verticalGrid_type),                intent(in)    :: GV
-  integer, optional,                      intent(in) :: haloshift
+  character(len=*),                          intent(in) :: mesg
+  type(ocean_grid_type),                     intent(in) :: G
+  type(verticalGrid_type),                   intent(in) :: GV
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: uh
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: vh
+  integer, optional,                         intent(in) :: haloshift
 !   This subroutine writes out chksums for the model's basic state variables.
 ! Arguments: mesg - A message that appears on the chksum lines.
 !  (in)      u - Zonal velocity, in m s-1.
@@ -88,13 +88,13 @@ end subroutine MOM_state_chksum_5arg
 ! =============================================================================
 
 subroutine MOM_state_chksum_3arg(mesg, u, v, h, G, GV, haloshift)
-  character(len=*),                       intent(in) :: mesg
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in) :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in) :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h
-  type(ocean_grid_type),                  intent(in) :: G
-  type(verticalGrid_type),                intent(in)    :: GV
-  integer, optional,                      intent(in) :: haloshift
+  character(len=*),                          intent(in) :: mesg
+  type(ocean_grid_type),                     intent(in) :: G
+  type(verticalGrid_type),                   intent(in) :: GV
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h
+  integer, optional,                         intent(in) :: haloshift
 !   This subroutine writes out chksums for the model's basic state variables.
 ! Arguments: mesg - A message that appears on the chksum lines.
 !  (in)      u - Zonal velocity, in m s-1.
@@ -144,18 +144,18 @@ end subroutine MOM_thermo_chksum
 
 subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, GV, pbce, &
                             u_accel_bt, v_accel_bt)
-  character(len=*),                       intent(in) :: mesg
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in) :: CAu
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in) :: CAv
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in) :: PFu
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in) :: PFv
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in) :: diffu
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in) :: diffv
-  type(ocean_grid_type),                  intent(in) :: G
-  type(verticalGrid_type),                intent(in)    :: GV
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  optional, intent(in) :: pbce
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), optional, intent(in) :: u_accel_bt
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), optional, intent(in) :: v_accel_bt
+  character(len=*),                          intent(in) :: mesg
+  type(ocean_grid_type),                     intent(in) :: G
+  type(verticalGrid_type),                   intent(in) :: GV
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: CAu
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: CAv
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: PFu
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: PFv
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: diffu
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: diffv
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional, intent(in) :: pbce
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), optional, intent(in) :: u_accel_bt
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), optional, intent(in) :: v_accel_bt
 !   This subroutine writes out chksums for the model's accelerations.
 ! Arguments: mesg - A message that appears on the chksum lines.
 !  (in)      CAu - Zonal acceleration due to Coriolis and momentum
@@ -202,13 +202,13 @@ end subroutine MOM_accel_chksum
 ! =============================================================================
 
 subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, allowChange, permitDiminishing)
-  character(len=*),                       intent(in) :: mesg
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in) :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in) :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h
-  real, pointer, dimension(:,:,:),        intent(in) :: Temp, Salt
-  type(ocean_grid_type),                  intent(in) :: G
-  logical, optional,                      intent(in) :: allowChange, permitDiminishing
+  type(ocean_grid_type),                     intent(in) :: G
+  character(len=*),                          intent(in) :: mesg
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h
+  real, pointer, dimension(:,:,:),           intent(in) :: Temp, Salt
+  logical, optional,                         intent(in) :: allowChange, permitDiminishing
 !   This subroutine monitors statistics for the model's state variables.
 ! Arguments: mesg - A message that appears on the chksum lines.
 !  (in) u - Zonal velocity, in m s-1.
