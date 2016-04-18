@@ -65,13 +65,13 @@ end type wave_speed_CS
 contains
 
 subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)  :: h
-  type(thermo_var_ptrs),                 intent(in)  :: tv
-  real, dimension(NIMEM_,NJMEM_),        intent(out) :: cg1
-  type(ocean_grid_type),                 intent(in)  :: G
-  type(verticalGrid_type),               intent(in)  :: GV
-  type(wave_speed_CS), optional,         pointer     :: CS
-  logical,             optional,         intent(in)  :: full_halos
+  type(ocean_grid_type),                    intent(in)  :: G
+  type(verticalGrid_type),                  intent(in)  :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h
+  type(thermo_var_ptrs),                    intent(in)  :: tv
+  real, dimension(SZI_(G),SZJ_(G)),         intent(out) :: cg1
+  type(wave_speed_CS),            optional, pointer     :: CS
+  logical,                        optional, intent(in)  :: full_halos
 !    This subroutine determines the first mode internal wave speed.
 ! Arguments: h - Layer thickness, in m or kg m-2.
 !  (in)      tv - A structure containing the thermobaric variables.
@@ -389,14 +389,14 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos)
 end subroutine wave_speed
 
 subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)  :: h
-  type(thermo_var_ptrs),                  intent(in)  :: tv
-  type(ocean_grid_type),                  intent(in)  :: G
-  type(verticalGrid_type),                intent(in)  :: GV
-  integer,                                intent(in)  :: nmodes
+  type(ocean_grid_type),                    intent(in)  :: G
+  type(verticalGrid_type),                  intent(in)  :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h
+  type(thermo_var_ptrs),                    intent(in)  :: tv
+  integer,                                  intent(in)  :: nmodes
   real, dimension(G%isd:G%ied,G%jsd:G%jed,nmodes), intent(out) :: cn
-  type(wave_speed_CS), optional,          pointer     :: CS  
-  logical,             optional,          intent(in)  :: full_halos
+  type(wave_speed_CS), optional,            pointer     :: CS  
+  logical,             optional,            intent(in)  :: full_halos
 !    This subroutine determines the first mode internal wave speed.
 ! Arguments: h - Layer thickness, in m or kg m-2.
 !  (in)      tv - A structure containing the thermobaric variables.

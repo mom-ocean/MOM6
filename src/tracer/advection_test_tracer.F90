@@ -127,12 +127,12 @@ contains
 
 function register_advection_test_tracer(G, param_file, CS, diag, tr_Reg, &
                                       restart_CS)
-  type(ocean_grid_type),   intent(in) :: G
-  type(param_file_type),   intent(in) :: param_file
-  type(advection_test_tracer_CS),    pointer    :: CS
-  type(diag_ctrl), target, intent(in) :: diag
+  type(ocean_grid_type),       intent(in) :: G
+  type(param_file_type),       intent(in) :: param_file
+  type(advection_test_tracer_CS), pointer :: CS
+  type(diag_ctrl),     target, intent(in) :: diag
   type(tracer_registry_type),  pointer    :: tr_Reg
-  type(MOM_restart_CS),   pointer    :: restart_CS
+  type(MOM_restart_CS),        pointer    :: restart_CS
 ! This subroutine is used to register tracer fields and subroutines
 ! to be used with MOM.
 ! Arguments: G - The ocean's grid structure.
@@ -210,7 +210,7 @@ function register_advection_test_tracer(G, param_file, CS, diag, tr_Reg, &
     ! Register the tracer for the restart file.
     call register_restart_field(tr_ptr, CS%tr_desc(m), .true., restart_CS)
     ! Register the tracer for horizontal advection & diffusion.
-    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, tr_Reg, &
+    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, G, tr_Reg, &
                          tr_desc_ptr=CS%tr_desc(m))
 
     !   Set coupled_tracers to be true (hard-coded above) to provide the surface
@@ -231,9 +231,9 @@ subroutine initialize_advection_test_tracer(restart, day, G, GV, h, OBC, CS, spo
   type(time_type), target,            intent(in) :: day
   type(ocean_grid_type),              intent(in) :: G
   type(verticalGrid_type),            intent(in) :: GV
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
   type(ocean_OBC_type),               pointer    :: OBC
-  type(advection_test_tracer_CS),               pointer    :: CS
+  type(advection_test_tracer_CS),     pointer    :: CS
   type(sponge_CS),                    pointer    :: sponge_CSp
   type(diag_to_Z_CS),                 pointer    :: diag_to_Z_CSp
 !   This subroutine initializes the NTR tracer fields in tr(:,:,:,:)
@@ -359,11 +359,11 @@ end subroutine initialize_advection_test_tracer
 
 
 subroutine advection_test_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h_old, h_new, ea, eb
-  type(forcing),                         intent(in) :: fluxes
-  real,                                  intent(in) :: dt
   type(ocean_grid_type),                 intent(in) :: G
   type(verticalGrid_type),               intent(in) :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
+  type(forcing),                         intent(in) :: fluxes
+  real,                                  intent(in) :: dt
   type(advection_test_tracer_CS),        pointer    :: CS
 !   This subroutine applies diapycnal diffusion and any other column
 ! tracer physics or chemistry to the tracers from this file.
@@ -431,10 +431,10 @@ subroutine advection_test_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, 
 end subroutine advection_test_tracer_column_physics
 
 subroutine advection_test_tracer_surface_state(state, h, G, CS)
-  type(surface),                         intent(inout) :: state
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
-  type(ocean_grid_type),                 intent(in)    :: G
-  type(advection_test_tracer_CS),        pointer       :: CS
+  type(ocean_grid_type),                    intent(in)    :: G
+  type(surface),                            intent(inout) :: state
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
+  type(advection_test_tracer_CS),           pointer       :: CS
 !   This particular tracer package does not report anything back to the coupler.
 ! The code that is here is just a rough guide for packages that would.
 ! Arguments: state - A structure containing fields that describe the

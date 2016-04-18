@@ -42,8 +42,8 @@ contains
 
 ! -----------------------------------------------------------------------------
 subroutine external_gwave_initialize_thickness(h, G, param_file)
-  real, intent(out), dimension(NIMEM_,NJMEM_, NKMEM_) :: h
   type(ocean_grid_type), intent(in) :: G
+  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h
   type(param_file_type), intent(in) :: param_file
 ! Arguments: h - The thickness that is being initialized.
 !  (in)      G - The ocean's grid structure.

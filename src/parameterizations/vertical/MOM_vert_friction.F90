@@ -179,20 +179,20 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, GV, CS, &
                     taux_bot, tauy_bot)
 !    This subroutine does a fully implicit vertical diffusion
 !  of momentum.  Stress top and bottom b.c.s are used.
-  real, intent(inout), dimension(NIMEMB_,NJMEM_,NKMEM_) :: u
-  real, intent(inout), dimension(NIMEM_,NJMEMB_,NKMEM_) :: v
-  real, intent(in),    dimension(NIMEM_,NJMEM_,NKMEM_)  :: h
+  type(ocean_grid_type), intent(in)                     :: G
+  type(verticalGrid_type), intent(in)                   :: GV
+  real, intent(inout), dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: u
+  real, intent(inout), dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: v
+  real, intent(in),    dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: h
   type(forcing), intent(in)                             :: fluxes
   type(vertvisc_type), intent(inout)                    :: visc
   real, intent(in)                                      :: dt
   type(ocean_OBC_type), pointer                         :: OBC
   type(accel_diag_ptrs), intent(inout)                  :: ADp
   type(cont_diag_ptrs),  intent(inout)                  :: CDp
-  type(ocean_grid_type), intent(in)                     :: G
-  type(verticalGrid_type), intent(in)                   :: GV
   type(vertvisc_CS), pointer                            :: CS
-  real, dimension(NIMEMB_,NJMEM_), optional, intent(out) :: taux_bot
-  real, dimension(NIMEM_,NJMEMB_), optional, intent(out) :: tauy_bot
+  real, dimension(SZIB_(G),SZJ_(G)), optional, intent(out) :: taux_bot
+  real, dimension(SZI_(G),SZJB_(G)), optional, intent(out) :: tauy_bot
 
 ! Arguments: u - Zonal velocity, in m s-1.  Intent in/out.
 !  (in/out)  v - Meridional velocity, in m s-1.
@@ -448,12 +448,12 @@ end subroutine vertvisc
 subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, CS)
 !    This subroutine does a fully implicit vertical diffusion
 !  of momentum.  Stress top and bottom b.c.s are used.
-  type(vertvisc_type), intent(in)                       :: visc
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: visc_rem_u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: visc_rem_v
-  real, intent(in)                                      :: dt
   type(ocean_grid_type), intent(in)                     :: G
   type(verticalGrid_type), intent(in)                   :: GV
+  type(vertvisc_type), intent(in)                       :: visc
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: visc_rem_u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: visc_rem_v
+  real, intent(in)                                      :: dt
   type(vertvisc_CS), pointer                            :: CS
 ! Arguments: visc - The vertical viscosity type, containing information about
 !                   viscosities and bottom drag-related quantities, intent in.
@@ -565,14 +565,14 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS)
 !    This subroutine calculates the coupling coefficients (CS%a_u and CS%a_v)
 ! and effective layer thicknesses (CS%h_u and CS%h_v) for later use in the
 ! applying the implicit vertical viscosity via vertvisc.
-  real, intent(in),    dimension(NIMEMB_,NJMEM_,NKMEM_) :: u
-  real, intent(in),    dimension(NIMEM_,NJMEMB_,NKMEM_) :: v
-  real, intent(in),    dimension(NIMEM_,NJMEM_,NKMEM_)  :: h
+  type(ocean_grid_type), intent(in)                     :: G
+  type(verticalGrid_type),                intent(in)    :: GV
+  real, intent(in),    dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: u
+  real, intent(in),    dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: v
+  real, intent(in),    dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: h
   type(forcing), intent(in)                             :: fluxes
   type(vertvisc_type), intent(in)                       :: visc
   real, intent(in)                                      :: dt
-  type(ocean_grid_type), intent(in)                     :: G
-  type(verticalGrid_type),                intent(in)    :: GV
   type(vertvisc_CS), pointer                            :: CS
 
 ! Arguments: u - Zonal velocity, in m s-1.  Intent in.
@@ -938,17 +938,17 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
 !    This subroutine calculates the 'coupling coefficient' (a[k]) at the
 !  interfaces. If BOTTOMDRAGLAW is defined, the minimum of Hbbl and half the
 !  adjacent layer thicknesses are used to calculate a[k] near the bottom.
-  real,    dimension(NIMEMB_,NK_INTERFACE_), intent(out) :: a
-  real,    dimension(NIMEMB_,NKMEM_),   intent(in)  :: hvel
-  logical, dimension(NIMEMB_),          intent(in)  :: do_i
-  real,    dimension(NIMEMB_,NKMEM_),   intent(in)  :: h_harm
-  real,    dimension(NIMEMB_),          intent(in)  :: bbl_thick, kv_bbl
-  real,    dimension(NIMEMB_,NK_INTERFACE_), intent(in)  :: z_i
-  real,    dimension(NIMEMB_),          intent(out) :: h_ml
-  integer,                              intent(in)  :: j
-  real,                                 intent(in)  :: dt
   type(ocean_grid_type), intent(in)                 :: G
   type(verticalGrid_type),               intent(in) :: GV
+  real,    dimension(SZIB_(G),SZK_(GV)+1), intent(out) :: a
+  real,    dimension(SZIB_(G),SZK_(GV)),   intent(in)  :: hvel
+  logical, dimension(SZIB_(G)),            intent(in)  :: do_i
+  real,    dimension(SZIB_(G),SZK_(GV)),   intent(in)  :: h_harm
+  real,    dimension(SZIB_(G)),            intent(in)  :: bbl_thick, kv_bbl
+  real,    dimension(SZIB_(G),SZK_(GV)+1), intent(in)  :: z_i
+  real,    dimension(SZIB_(G)),         intent(out) :: h_ml
+  integer,                              intent(in)  :: j
+  real,                                 intent(in)  :: dt
   type(vertvisc_CS), pointer                        :: CS
   type(vertvisc_type), intent(in)                   :: visc
   type(forcing), intent(in)                         :: fluxes
@@ -1151,21 +1151,20 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
 end subroutine find_coupling_coef
 
 
-
 subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, GV, CS)
 !  Within this subroutine, velocity components which exceed a threshold for
 ! physically reasonable values are truncated. Optionally, any column with
 ! excessive velocities may be sent to a diagnostic reporting subroutine.
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
+  type(ocean_grid_type),                  intent(in)    :: G
+  type(verticalGrid_type),                intent(in)    :: GV
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h
   type(accel_diag_ptrs),                  intent(in)    :: ADp
   type(cont_diag_ptrs),                   intent(in)    :: CDp
   type(forcing),                          intent(in)    :: fluxes
   type(vertvisc_type),                    intent(in)    :: visc
   real,                                   intent(in)    :: dt
-  type(ocean_grid_type),                  intent(in)    :: G
-  type(verticalGrid_type),                intent(in)    :: GV
   type(vertvisc_CS),                      pointer       :: CS
 
   real :: maxvel           ! Velocities components greater than maxvel

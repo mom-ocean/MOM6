@@ -67,8 +67,8 @@ subroutine absorbRemainingSW(G, GV, h, opacity_band, nsw, j, dt, H_limit_fluxes,
 ! left in Pen_SW) should go into an (absent for now) ocean bottom sediment layer.
 
   type(ocean_grid_type),             intent(in)    :: G
-  type(verticalGrid_type),               intent(in)    :: GV
-  real, dimension(NIMEM_,NKMEM_),    intent(in)    :: h
+  type(verticalGrid_type),           intent(in)    :: GV
+  real, dimension(SZI_(G),SZK_(G)),  intent(in)    :: h
   real, dimension(:,:,:),            intent(in)    :: opacity_band
   integer,                           intent(in)    :: nsw
   integer,                           intent(in)    :: j
@@ -76,14 +76,14 @@ subroutine absorbRemainingSW(G, GV, h, opacity_band, nsw, j, dt, H_limit_fluxes,
   real,                              intent(in)    :: H_limit_fluxes
   logical,                           intent(in)    :: adjustAbsorptionProfile
   logical,                           intent(in)    :: absorbAllSW
-  real, dimension(NIMEM_,NKMEM_),    intent(inout) :: T
+  real, dimension(SZI_(G),SZK_(G)),  intent(inout) :: T
   real, dimension(:,:),              intent(inout) :: Pen_SW_bnd
-  real, dimension(NIMEM_,NKMEM_),    optional, intent(in)    :: eps
-  integer, dimension(NIMEM_,NKMEM_), optional, intent(in)    :: ksort
-  real, dimension(NIMEM_),           optional, intent(in)    :: htot
-  real, dimension(NIMEM_),           optional, intent(inout) :: Ttot
-  real, dimension(NIMEM_,NKMEM_),    optional, intent(in)    :: dSV_dT
-  real, dimension(NIMEM_,NKMEM_),    optional, intent(inout) :: TKE
+  real, dimension(SZI_(G),SZK_(G)),    optional, intent(in)    :: eps
+  integer, dimension(SZI_(G),SZK_(G)), optional, intent(in)    :: ksort
+  real, dimension(SZI_(G)),            optional, intent(in)    :: htot
+  real, dimension(SZI_(G)),            optional, intent(inout) :: Ttot
+  real, dimension(SZI_(G),SZK_(G)),    optional, intent(in)    :: dSV_dT
+  real, dimension(SZI_(G),SZK_(G)),    optional, intent(inout) :: TKE
 
 ! Arguments:
 !  (in)    G            = the ocean grid structure.
@@ -108,7 +108,7 @@ subroutine absorbRemainingSW(G, GV, h, opacity_band, nsw, j, dt, H_limit_fluxes,
 !  (inout) T            = layer potential/conservative temperatures (deg C)
 !  (inout) Pen_SW_bnd   = penetrating shortwave heating in each band that
 !                         hits the bottom and will be redistributed through
-!                         the water column (units of K*H), size nsw x NIMEM_.
+!                         the water column (units of K*H), size nsw x SZI_(G).
 
 ! These optional arguments apply when the bulk mixed layer is used
 ! but are unnecessary with other schemes.
@@ -329,7 +329,7 @@ subroutine sumSWoverBands(G, GV, h, opacity_band, nsw, j, dt, &
 ! buoyancy fluxes for use in KPP. This routine does not update the state.
   type(ocean_grid_type),                 intent(in)    :: G
   type(verticalGrid_type),               intent(in)    :: GV
-  real, dimension(NIMEM_,NKMEM_),        intent(in)    :: h
+  real, dimension(SZI_(G),SZK_(G)),      intent(in)    :: h
   real, dimension(:,:,:),                intent(in)    :: opacity_band
   integer,                               intent(in)    :: nsw
   integer,                               intent(in)    :: j
@@ -337,7 +337,7 @@ subroutine sumSWoverBands(G, GV, h, opacity_band, nsw, j, dt, &
   real,                                  intent(in)    :: H_limit_fluxes
   logical,                               intent(in)    :: absorbAllSW
   real, dimension(:,:),                  intent(in)    :: iPen_SW_bnd
-  real, dimension(NIMEM_,NK_INTERFACE_), intent(inout) :: netPen ! Units of K H
+  real, dimension(SZI_(G),SZK_(G)+1), intent(inout) :: netPen ! Units of K H
 
 ! Arguments:
 !  (in)      G             = ocean grid structure
@@ -351,7 +351,7 @@ subroutine sumSWoverBands(G, GV, h, opacity_band, nsw, j, dt, &
 !  (in)      dt            = time step (seconds)
 !  (inout)   Pen_SW_bnd    = penetrating shortwave heating in each band that
 !                            hits the bottom and will be redistributed through
-!                            the water column (K H units); size nsw x NIMEM_.
+!                            the water column (K H units); size nsw x SZI_(G).
 !  (out)     netPen        = attenuated flux at interfaces, summed over bands (K H units)
 
   real :: h_heat(SZI_(G))     ! thickness of the water column that receives

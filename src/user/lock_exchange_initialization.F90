@@ -44,9 +44,9 @@ contains
 
 ! -----------------------------------------------------------------------------
 subroutine lock_exchange_initialize_thickness(h, G, GV, param_file)
-  real, intent(out), dimension(NIMEM_,NJMEM_, NKMEM_) :: h
   type(ocean_grid_type),   intent(in) :: G
   type(verticalGrid_type), intent(in) :: GV
+  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h
   type(param_file_type),   intent(in) :: param_file
 ! Arguments: h - The thickness that is being initialized.
 !  (in)      G - The ocean's grid structure.

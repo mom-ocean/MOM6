@@ -256,7 +256,7 @@ contains
        ! the vardesc type, a pointer to this type can not be set as a target
        ! for register_tracer to use.
        if (g_tracer_is_prog(g_tracer)) &
-         call register_tracer(tr_ptr, vdesc, param_file, tr_Reg)
+         call register_tracer(tr_ptr, vdesc, param_file, G, tr_Reg)
 
        !traverse the linked list till hit NULL
        call g_tracer_get_next(g_tracer, g_tracer_next)
@@ -288,7 +288,7 @@ contains
     type(time_type), target,               intent(in) :: day
     type(ocean_grid_type),                 intent(inout) :: G
     type(verticalGrid_type),               intent(in) :: GV
-    real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
     type(param_file_type),                 intent(in) :: param_file
     type(ocean_OBC_type),                  pointer    :: OBC
     type(MOM_generic_tracer_CS),           pointer    :: CS
@@ -492,7 +492,7 @@ contains
   ! </SUBROUTINE>
 
   subroutine MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS, tv, optics)
-    real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h_old, h_new, ea, eb
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
     type(forcing),                         intent(in) :: fluxes
     real,                                  intent(in) :: dt
     type(ocean_grid_type),                 intent(in) :: G
@@ -636,7 +636,7 @@ contains
   ! </SUBROUTINE>
 
   function MOM_generic_tracer_stock(h, stocks, G, GV, CS, names, units, stock_index)
-    real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
     real, dimension(:),                 intent(out)   :: stocks
     type(ocean_grid_type),              intent(in)    :: G
     type(verticalGrid_type),            intent(in)    :: GV
@@ -727,7 +727,7 @@ contains
     real, dimension(:),                 intent(out)   :: gmin,gmax
     real, dimension(:),                 intent(out)   :: xgmin, ygmin, zgmin, xgmax, ygmax, zgmax
     type(ocean_grid_type),              intent(in)    :: G
-    type(MOM_generic_tracer_CS),       pointer       :: CS
+    type(MOM_generic_tracer_CS),        pointer       :: CS
     character(len=*), dimension(:),     intent(out)   :: names
     character(len=*), dimension(:),     intent(out)   :: units
     integer                                           :: MOM_generic_tracer_min_max
@@ -818,9 +818,9 @@ contains
   ! </SUBROUTINE>
 
   subroutine MOM_generic_tracer_surface_state(state, h, G, CS)
-    type(surface),                         intent(inout) :: state
-    real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
     type(ocean_grid_type),                 intent(in) :: G
+    type(surface),                         intent(inout) :: state
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
     type(MOM_generic_tracer_CS),           pointer    :: CS
     !   This subroutine sets up the fields that the coupler needs to calculate the
     ! CFC fluxes between the ocean and atmosphere.

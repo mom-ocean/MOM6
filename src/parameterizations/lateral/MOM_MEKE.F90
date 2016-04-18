@@ -84,17 +84,17 @@ contains
 !> Integrates forward-in-time the MEKE eddy energy equation.
 !! See \ref section_MEKE_equations.
 subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
-  type(MEKE_type),                       pointer       :: MEKE !< MEKE data.
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h    !< Layer thickness (m or kg m-2).
-  real, dimension(NIMEMB_,NJMEM_),       intent(in)    :: SN_u !< Eady growth rate at u-points (s-1).
-  real, dimension(NIMEM_,NJMEMB_),       intent(in)    :: SN_v !< Eady growth rate at u-points (s-1).
-  type(vertvisc_type),                   intent(in)    :: visc !< The vertical viscosity type.
-  real,                                  intent(in)    :: dt   !< Model(baroclinic) time-step (s).
-  type(ocean_grid_type),                 intent(inout) :: G    !< Ocean grid.
-  type(verticalGrid_type),               intent(in)    :: GV   !< Ocean vertical grid structure.
-  type(MEKE_CS),                         pointer       :: CS   !< MEKE control structure.
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_),intent(in)    :: hu   !< Zonal flux flux (m3).
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_),intent(in)    :: hv   !< Meridional mass flux (m3).
+  type(MEKE_type),                          pointer       :: MEKE !< MEKE data.
+  type(ocean_grid_type),                    intent(inout) :: G    !< Ocean grid.
+  type(verticalGrid_type),                  intent(in)    :: GV   !< Ocean vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thickness (m or kg m-2).
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(in)    :: SN_u !< Eady growth rate at u-points (s-1).
+  real, dimension(SZI_(G),SZJB_(G)),         intent(in)    :: SN_v !< Eady growth rate at u-points (s-1).
+  type(vertvisc_type),                      intent(in)    :: visc !< The vertical viscosity type.
+  real,                                     intent(in)    :: dt   !< Model(baroclinic) time-step (s).
+  type(MEKE_CS),                            pointer       :: CS   !< MEKE control structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: hu   !< Zonal flux flux (m3).
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: hv   !< Meridional mass flux (m3).
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
     mass, &         ! The total mass of the water column, in kg m-2.
@@ -544,14 +544,14 @@ end subroutine step_forward_MEKE
 !! and there is no lateral diffusion of MEKE.
 !! Results is in MEKE%MEKE.
 subroutine MEKE_equilibrium(CS, MEKE, G, GV, SN_u, SN_v, drag_rate_visc, I_mass)
-  type(MEKE_CS),                   pointer       :: CS   !< MEKE control structure.
-  type(MEKE_type),                 pointer       :: MEKE !< MEKE data.
-  type(ocean_grid_type),           intent(inout) :: G    !< Ocean grid.
-  type(verticalGrid_type),         intent(in)    :: GV   !< Ocean vertical grid structure.
-  real, dimension(NIMEMB_,NJMEM_), intent(in)    :: SN_u !< Eady growth rate at u-points (s-1).
-  real, dimension(NIMEM_,NJMEMB_), intent(in)    :: SN_v !< Eady growth rate at u-points (s-1).
-  real, dimension(NIMEM_,NJMEM_),  intent(in)    :: drag_rate_visc  !< Mean flow contrib. to drag rate
-  real, dimension(NIMEM_,NJMEM_),  intent(in)    :: I_mass  !< Inverse of column mass.
+  type(ocean_grid_type),             intent(inout) :: G    !< Ocean grid.
+  type(verticalGrid_type),           intent(in)    :: GV   !< Ocean vertical grid structure.
+  type(MEKE_CS),                     pointer       :: CS   !< MEKE control structure.
+  type(MEKE_type),                   pointer       :: MEKE !< MEKE data.
+  real, dimension(SZIB_(G),SZJ_(G)), intent(in)    :: SN_u !< Eady growth rate at u-points (s-1).
+  real, dimension(SZI_(G),SZJB_(G)), intent(in)    :: SN_v !< Eady growth rate at u-points (s-1).
+  real, dimension(SZI_(G),SZJ_(G)),  intent(in)    :: drag_rate_visc  !< Mean flow contrib. to drag rate
+  real, dimension(SZI_(G),SZJ_(G)),  intent(in)    :: I_mass  !< Inverse of column mass.
   ! Local variables
   real :: beta, SN, bottomFac2, barotrFac2, LmixScale, Lrhines, Leady
   real :: I_H, KhCoeff, Kh, Ubg2, cd2, drag_rate, ldamping, src
@@ -665,15 +665,15 @@ end subroutine MEKE_equilibrium
 !! column eddy energy, respectively.  See \ref section_MEKE_equations.
 subroutine MEKE_lengthScales(CS, MEKE, G, SN_u, SN_v, &
             EKE, bottomFac2, barotrFac2, LmixScale)
-  type(MEKE_CS),                         pointer       :: CS   !< MEKE control structure.
-  type(MEKE_type),                       pointer       :: MEKE !< MEKE data.
-  type(ocean_grid_type),                 intent(inout) :: G    !< Ocean grid.
-  real, dimension(NIMEMB_,NJMEM_),       intent(in)    :: SN_u !< Eady growth rate at u-points (s-1).
-  real, dimension(NIMEM_,NJMEMB_),       intent(in)    :: SN_v !< Eady growth rate at u-points (s-1).
-  real, dimension(NIMEM_,NJMEM_),        intent(in)    :: EKE  !< Eddy kinetic energy (m2/s2).
-  real, dimension(NIMEM_,NJMEM_),        intent(out)   :: bottomFac2 !< gamma_b^2
-  real, dimension(NIMEM_,NJMEM_),        intent(out)   :: barotrFac2 !< gamma_t^2
-  real, dimension(NIMEM_,NJMEM_),        intent(out)   :: LmixScale !< Eddy mixing length (m).
+  type(MEKE_CS),                     pointer       :: CS   !< MEKE control structure.
+  type(MEKE_type),                   pointer       :: MEKE !< MEKE data.
+  type(ocean_grid_type),             intent(inout) :: G    !< Ocean grid.
+  real, dimension(SZIB_(G),SZJ_(G)), intent(in)    :: SN_u !< Eady growth rate at u-points (s-1).
+  real, dimension(SZI_(G),SZJB_(G)), intent(in)    :: SN_v !< Eady growth rate at u-points (s-1).
+  real, dimension(SZI_(G),SZJ_(G)),  intent(in)    :: EKE  !< Eddy kinetic energy (m2/s2).
+  real, dimension(SZI_(G),SZJ_(G)),  intent(out)   :: bottomFac2 !< gamma_b^2
+  real, dimension(SZI_(G),SZJ_(G)),  intent(out)   :: barotrFac2 !< gamma_t^2
+  real, dimension(SZI_(G),SZJ_(G)),  intent(out)   :: LmixScale !< Eddy mixing length (m).
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: Lrhines, Leady
   real :: beta, SN

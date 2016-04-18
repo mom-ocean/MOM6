@@ -292,16 +292,16 @@ subroutine MOM_sum_output_end(CS)
 end subroutine MOM_sum_output_end
 
 subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
-  type(thermo_var_ptrs),                  intent(in)    :: tv
-  type(time_type),                        intent(inout) :: day
-  integer,                                intent(in)    :: n
-  type(ocean_grid_type),                  intent(in)    :: G
-  type(verticalGrid_type),                intent(in)    :: GV
-  type(Sum_output_CS),                    pointer       :: CS
-  type(tracer_flow_control_CS), optional, pointer       :: tracer_CSp
+  type(ocean_grid_type),                     intent(in)    :: G
+  type(verticalGrid_type),                   intent(in)    :: GV
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
+  type(thermo_var_ptrs),                     intent(in)    :: tv
+  type(time_type),                           intent(inout) :: day
+  integer,                                   intent(in)    :: n
+  type(Sum_output_CS),                       pointer       :: CS
+  type(tracer_flow_control_CS),    optional, pointer       :: tracer_CSp
 
 
 !  This subroutine calculates and writes the total model energy, the

@@ -131,14 +131,14 @@ end type set_visc_CS
 contains
 
 subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in) :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in) :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h
-  type(thermo_var_ptrs),                  intent(in) :: tv
-  type(vertvisc_type),                 intent(inout) :: visc
-  type(ocean_grid_type),               intent(inout) :: G
-  type(verticalGrid_type),             intent(in)    :: GV
-  type(set_visc_CS),                      pointer    :: CS
+  type(ocean_grid_type),                  intent(inout) :: G
+  type(verticalGrid_type),                intent(in)    :: GV
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h
+  type(thermo_var_ptrs),                     intent(in) :: tv
+  type(vertvisc_type),                    intent(inout) :: visc
+  type(set_visc_CS),                         pointer    :: CS
 !   The following subroutine calculates the thickness of the bottom
 ! boundary layer and the viscosity within that layer.  A drag law is
 ! used, either linearized about an assumed bottom velocity or using
@@ -815,11 +815,11 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
 end subroutine set_viscous_BBL
 
 function set_v_at_u(v, h, G, i, j, k)
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in) :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h
-  type(ocean_grid_type),                  intent(in) :: G
-  integer,                                intent(in) :: i, j, k
-  real                                               :: set_v_at_u
+  type(ocean_grid_type),                     intent(in) :: G
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h
+  integer,                                   intent(in) :: i, j, k
+  real                                                  :: set_v_at_u
   ! This subroutine finds a thickness-weighted value of v at the u-points.
   real :: hwt(4)           ! Masked weights used to average v onto u, in H.
   real :: hwt_tot          ! The sum of the masked thicknesses, in H.
@@ -836,9 +836,9 @@ function set_v_at_u(v, h, G, i, j, k)
 end function set_v_at_u
 
 function set_u_at_v(u, h, G, i, j, k)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in) :: u
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h
   type(ocean_grid_type),                  intent(in) :: G
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h
   integer,                                intent(in) :: i, j, k
   real                                               :: set_u_at_v
   ! This subroutine finds a thickness-weighted value of u at the v-points.
@@ -857,15 +857,15 @@ function set_u_at_v(u, h, G, i, j, k)
 end function set_u_at_v
 
 subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in) :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in) :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h
+  type(ocean_grid_type),               intent(inout) :: G
+  type(verticalGrid_type),             intent(in)    :: GV
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h
   type(thermo_var_ptrs),               intent(in)    :: tv
   type(forcing),                       intent(in)    :: fluxes
   type(vertvisc_type),                 intent(inout) :: visc
   real,                                intent(in)    :: dt
-  type(ocean_grid_type),               intent(inout) :: G
-  type(verticalGrid_type),             intent(in)    :: GV
   type(set_visc_CS),                   pointer       :: CS
 !   The following subroutine calculates the thickness of the surface boundary
 ! layer for applying an elevated viscosity.  A bulk Richardson criterion or

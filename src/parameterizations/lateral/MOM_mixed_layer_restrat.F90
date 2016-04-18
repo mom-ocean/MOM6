@@ -76,16 +76,16 @@ contains
 !!  limited to give positive definiteness, and the diffusivities are
 !!  limited to guarantee stability.
 subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h       !< layer thickness (H units = m or kg/m2)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uhtr    !< accumulated zonal mass flux (m3 or kg)
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vhtr    !< accumulated merid mass flux (m3 or kg)
-  type(thermo_var_ptrs),                  intent(in)    :: tv      !< thermodynamic variables structure
-  type(forcing),                          intent(in)    :: fluxes  !< pointers to forcing fields
-  real,                                   intent(in)    :: dt      !< time increment (sec)
-  real, dimension(:,:),                   pointer       :: MLD     !< Mixed layer depth provided by PBL (H units)
-  type(ocean_grid_type),                  intent(inout) :: G       !< ocean grid structure
-  type(verticalGrid_type),                intent(in)    :: GV      !< ocean vertical grid structure
-  type(mixedlayer_restrat_CS),            pointer       :: CS      !< module control structure
+  type(ocean_grid_type),                     intent(inout) :: G      !< ocean grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV     !< ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h      !< layer thickness (H units = m or kg/m2)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr   !< accumulated zonal mass flux (m3 or kg)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr   !< accumulated merid mass flux (m3 or kg)
+  type(thermo_var_ptrs),                     intent(in)    :: tv     !< thermodynamic variables structure
+  type(forcing),                             intent(in)    :: fluxes !< pointers to forcing fields
+  real,                                      intent(in)    :: dt     !< time increment (sec)
+  real, dimension(:,:),                      pointer       :: MLD    !< Mixed layer depth provided by PBL (H units)
+  type(mixedlayer_restrat_CS),               pointer       :: CS     !< module control structure
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "Module must be initialized before it is used.")
@@ -103,16 +103,16 @@ end subroutine mixedlayer_restrat
 !! limited to give positive definiteness, and the diffusivities are
 !! limited to guarantee stability.
 subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h       !< layer thickness (H units = m or kg/m2)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uhtr    !< accumulated zonal mass flux (m3 or kg)
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vhtr    !< accumulated merid mass flux (m3 or kg)
-  type(thermo_var_ptrs),                  intent(in)    :: tv      !< thermodynamic variables structure
-  type(forcing),                          intent(in)    :: fluxes  !< pointers to forcing fields
-  real,                                   intent(in)    :: dt      !< time increment (sec)
-  real, dimension(:,:),                   pointer       :: MLD     !< Mixed layer depth provided by PBL (H units)
-  type(ocean_grid_type),                  intent(inout) :: G       !< ocean grid structure
-  type(verticalGrid_type),                intent(in)    :: GV      !< ocean vertical grid structure
-  type(mixedlayer_restrat_CS),            pointer       :: CS      !< module control structure
+  type(ocean_grid_type),                     intent(inout) :: G       !< ocean grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV      !< ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h       !< layer thickness (H units = m or kg/m2)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr    !< accumulated zonal mass flux (m3 or kg)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr    !< accumulated merid mass flux (m3 or kg)
+  type(thermo_var_ptrs),                     intent(in)    :: tv      !< thermodynamic variables structure
+  type(forcing),                             intent(in)    :: fluxes  !< pointers to forcing fields
+  real,                                      intent(in)    :: dt      !< time increment (sec)
+  real, dimension(:,:),                      pointer       :: MLD     !< Mixed layer depth provided by PBL (H units)
+  type(mixedlayer_restrat_CS),               pointer       :: CS      !< module control structure
 
   real :: uhml(SZIB_(G),SZJ_(G),SZK_(G)) ! zonal mixed layer transport (m3/s or kg/s)
   real :: vhml(SZI_(G),SZJB_(G),SZK_(G)) ! merid mixed layer transport (m3/s or kg/s)
@@ -411,15 +411,15 @@ end subroutine mixedlayer_restrat_general
 !! limited to give positive definiteness, and the diffusivities are
 !! limited to guarantee stability.
 subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, GV, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h       !< layer thickness (H units = m or kg/m2)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uhtr    !< accumulated zonal mass flux (m3 or kg)
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vhtr    !< accumulated merid mass flux (m3 or kg)
-  type(thermo_var_ptrs),                  intent(in)    :: tv      !< thermodynamic variables structure
-  type(forcing),                          intent(in)    :: fluxes  !< pointers to forcing fields
-  real,                                   intent(in)    :: dt      !< time increment (sec)
-  type(ocean_grid_type),                  intent(in)    :: G       !< ocean grid structure
-  type(verticalGrid_type),                intent(in)    :: GV      !< ocean vertical grid structure
-  type(mixedlayer_restrat_CS),            pointer       :: CS      !< module control structure
+  type(ocean_grid_type),                     intent(in)    :: G      !< ocean grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV     !< ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h      !< layer thickness (H units = m or kg/m2)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr   !< accumulated zonal mass flux (m3 or kg)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr   !< accumulated merid mass flux (m3 or kg)
+  type(thermo_var_ptrs),                     intent(in)    :: tv     !< thermodynamic variables structure
+  type(forcing),                             intent(in)    :: fluxes !< pointers to forcing fields
+  real,                                      intent(in)    :: dt     !< time increment (sec)
+  type(mixedlayer_restrat_CS),               pointer       :: CS     !< module control structure
 
   real :: uhml(SZIB_(G),SZJ_(G),SZK_(G)) ! zonal mixed layer transport (m3/s or kg/s)
   real :: vhml(SZI_(G),SZJB_(G),SZK_(G)) ! merid mixed layer transport (m3/s or kg/s)

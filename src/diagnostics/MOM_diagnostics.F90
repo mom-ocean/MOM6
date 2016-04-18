@@ -164,20 +164,20 @@ contains
 
 subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
                                        dt, G, GV, CS, eta_bt)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_),   intent(in)    :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_),   intent(in)    :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),    intent(in)    :: h
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_),   intent(in)    :: uh
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_),   intent(in)    :: vh
-  type(thermo_var_ptrs),                    intent(in)    :: tv
-  type(accel_diag_ptrs),                    intent(in)    :: ADp
-  type(cont_diag_ptrs),                     intent(in)    :: CDp
-  type(forcing),                            intent(in)    :: fluxes
-  real,                                     intent(in)    :: dt
-  type(ocean_grid_type),                    intent(inout) :: G
-  type(verticalGrid_type),                  intent(in)    :: GV
-  type(diagnostics_CS),                     intent(inout) :: CS
-  real, dimension(NIMEM_,NJMEM_), optional, intent(in)    :: eta_bt
+  type(ocean_grid_type),                     intent(inout) :: G
+  type(verticalGrid_type),                   intent(in)    :: GV
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uh
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vh
+  type(thermo_var_ptrs),                     intent(in)    :: tv
+  type(accel_diag_ptrs),                     intent(in)    :: ADp
+  type(cont_diag_ptrs),                      intent(in)    :: CDp
+  type(forcing),                             intent(in)    :: fluxes
+  real,                                      intent(in)    :: dt
+  type(diagnostics_CS),                      intent(inout) :: CS
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)    :: eta_bt
 
 ! Diagnostics not more naturally calculated elsewhere are computed here. 
 
@@ -374,7 +374,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
 
     if (associated(tv%eqn_of_state)) then
       pressure_1d(:) = tv%P_Ref
-!$OMP parallel do default(none) shared(tv,Rcv,is,ie,js,je,nz,pres)
+!$OMP parallel do default(none) shared(tv,Rcv,is,ie,js,je,nz,pressure_1d)
       do k=1,nz ; do j=js,je+1
         call calculate_density(tv%T(:,j,k),tv%S(:,j,k),pressure_1d, &
                                Rcv(:,j,k),is,ie-is+2, tv%eqn_of_state)
@@ -640,11 +640,11 @@ subroutine find_weights(Rlist, R_in, k, nz, wt, wt_p)
 end subroutine find_weights
 
 subroutine calculate_vertical_integrals(h, tv, fluxes, G, GV, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),    intent(in)    :: h
-  type(thermo_var_ptrs),                    intent(in)    :: tv
-  type(forcing),                            intent(in)    :: fluxes
   type(ocean_grid_type),                    intent(inout) :: G
   type(verticalGrid_type),                  intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
+  type(thermo_var_ptrs),                    intent(in)    :: tv
+  type(forcing),                            intent(in)    :: fluxes
   type(diagnostics_CS),                     intent(inout) :: CS
 
 ! Subroutine calculates vertical integrals of several tracers, along
@@ -762,15 +762,15 @@ end subroutine calculate_vertical_integrals
 
 
 subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, CS)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: uh
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: vh
-  type(accel_diag_ptrs),                  intent(in)    :: ADp
-  type(cont_diag_ptrs),                   intent(in)    :: CDp
-  type(ocean_grid_type),                  intent(inout) :: G
-  type(diagnostics_CS),                   intent(inout) :: CS
+  type(ocean_grid_type),                     intent(inout) :: G
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uh
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vh
+  type(accel_diag_ptrs),                     intent(in)    :: ADp
+  type(cont_diag_ptrs),                      intent(in)    :: CDp
+  type(diagnostics_CS),                      intent(inout) :: CS
 
 ! This subroutine calculates terms in the mechanical energy budget.
 

@@ -82,11 +82,11 @@ contains
 !! Multiple iterations are used (if necessary) so that there is no limit 
 !! on the acceptable time increment.
 subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h       !< Layer thickness (m or kg m-2)
+  type(ocean_grid_type),                 intent(inout) :: G       !< Grid type 
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h       !< Layer thickness (m or kg m-2)
   real,                                  intent(in)    :: dt      !< time step (seconds)
   type(MEKE_type),                       pointer       :: MEKE    !< MEKE type 
   type(VarMix_CS),                       pointer       :: VarMix  !< Variable mixing type 
-  type(ocean_grid_type),                 intent(inout) :: G       !< Grid type 
   type(verticalGrid_type),               intent(in)    :: GV      !< ocean vertical grid structure
   type(tracer_hor_diff_CS),              pointer       :: CS      !< module control structure 
   type(tracer_registry_type),            intent(inout) :: Reg     !< registered tracers 
@@ -456,17 +456,17 @@ end subroutine tracer_hordiff
 !! acceptable time increment.
 subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
                                     GV, CS, tv, num_itts)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h          !< layer thickness (m or kg m-2)
-  real,                                  intent(in)    :: dt         !< time step 
-  type(tracer_type),                     intent(inout) :: Tr(:)      !< tracer array 
-  integer,                               intent(in)    :: ntr        !< number of tracers 
-  real, dimension(NIMEMB_,NJMEM_),       intent(in)    :: khdt_epi_x !< needs a comment
-  real, dimension(NIMEM_,NJMEMB_),       intent(in)    :: khdt_epi_y !< needs a comment 
-  type(ocean_grid_type),                 intent(inout) :: G          !< ocean grid structure 
-  type(verticalGrid_type),               intent(in)    :: GV         !< ocean vertical grid structure
-  type(tracer_hor_diff_CS),              intent(inout) :: CS         !< module control structure 
-  type(thermo_var_ptrs),                 intent(in)    :: tv         !< thermodynamic structure 
-  integer,                               intent(in)    :: num_itts   !< number of iterations (usually=1)
+  type(ocean_grid_type),                    intent(inout) :: G          !< ocean grid structure 
+  type(verticalGrid_type),                  intent(in)    :: GV         !< ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h          !< layer thickness (m or kg m-2)
+  real,                                     intent(in)    :: dt         !< time step 
+  type(tracer_type),                        intent(inout) :: Tr(:)      !< tracer array 
+  integer,                                  intent(in)    :: ntr        !< number of tracers 
+  real, dimension(SZIB_(G),SZJ_(G)),        intent(in)    :: khdt_epi_x !< needs a comment
+  real, dimension(SZI_(G),SZJB_(G)),        intent(in)    :: khdt_epi_y !< needs a comment 
+  type(tracer_hor_diff_CS),                 intent(inout) :: CS         !< module control structure 
+  type(thermo_var_ptrs),                    intent(in)    :: tv         !< thermodynamic structure 
+  integer,                                  intent(in)    :: num_itts   !< number of iterations (usually=1)
 
  
   real, dimension(SZI_(G), SZJ_(G)) :: &

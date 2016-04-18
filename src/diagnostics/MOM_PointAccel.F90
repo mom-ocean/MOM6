@@ -95,17 +95,17 @@ contains
 subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, CS, &
                          maxvel, minvel, str, a, hv)
   integer,                                intent(in) :: I, j
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in) :: um
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: hin
+  type(ocean_grid_type),                  intent(in) :: G
+  type(verticalGrid_type),                intent(in) :: GV
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: um
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: hin
   type(accel_diag_ptrs),                  intent(in) :: ADp
   type(cont_diag_ptrs),                   intent(in) :: CDp
   real,                                   intent(in) :: dt
-  type(ocean_grid_type),                  intent(in) :: G
-  type(verticalGrid_type),                intent(in) :: GV
   type(PointAccel_CS),                    pointer    :: CS
   real,                                   intent(in) :: maxvel, minvel
   real, optional,                         intent(in) :: str
-  real, dimension(NIMEMB_,NKMEM_), optional, intent(in) :: a, hv
+  real, dimension(SZIB_(G),SZK_(G)), optional, intent(in) :: a, hv
 ! This subroutine writes to an output file all of the accelerations
 ! that have been applied to a column of zonal velocities over the
 ! previous timestep.  This subroutine is called from vertvisc.
@@ -433,17 +433,17 @@ end subroutine write_u_accel
 subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, CS, &
                          maxvel, minvel, str, a, hv)
   integer,                                intent(in) :: i, J
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in) :: vm
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: hin
+  type(ocean_grid_type),                  intent(in) :: G
+  type(verticalGrid_type),                intent(in) :: GV
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: vm
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: hin
   type(accel_diag_ptrs),                  intent(in) :: ADp
   type(cont_diag_ptrs),                   intent(in) :: CDp
   real,                                   intent(in) :: dt
-  type(ocean_grid_type),                  intent(in) :: G
-  type(verticalGrid_type),                intent(in) :: GV
   type(PointAccel_CS),                    pointer    :: CS
   real,                                   intent(in) :: maxvel, minvel
   real, optional,                         intent(in) :: str
-  real, dimension(NIMEM_,NKMEM_), optional, intent(in) :: a, hv
+  real, dimension(SZI_(G),SZK_(G)), optional, intent(in) :: a, hv
 
 ! This subroutine writes to an output file all of the accelerations
 ! that have been applied to a column of meridional velocities over

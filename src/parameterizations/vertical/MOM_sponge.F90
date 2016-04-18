@@ -139,13 +139,13 @@ contains
 
 subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, &
                              Iresttime_i_mean, int_height_i_mean)
-  real, dimension(NIMEM_,NJMEM_),       intent(in) :: Iresttime
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(in) :: int_height
-  type(ocean_grid_type),                intent(in) :: G
-  type(param_file_type),                intent(in) :: param_file
-  type(sponge_CS),                      pointer    :: CS
-  real, dimension(NJMEM_),    optional, intent(in) :: Iresttime_i_mean
-  real, dimension(NJMEM_,NK_INTERFACE_), optional, intent(in) :: int_height_i_mean
+  type(ocean_grid_type),                  intent(in) :: G
+  real, dimension(SZI_(G),SZJ_(G)),       intent(in) :: Iresttime
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in) :: int_height
+  type(param_file_type),                  intent(in) :: param_file
+  type(sponge_CS),                        pointer    :: CS
+  real, dimension(SZJ_(G)),     optional, intent(in) :: Iresttime_i_mean
+  real, dimension(SZJ_(G),SZK_(G)+1), optional, intent(in) :: int_height_i_mean
 
 !   This subroutine determines the number of points which are within
 ! sponges in this computational domain.  Only points that have
@@ -267,12 +267,13 @@ subroutine init_sponge_diags(Time, G, diag, CS)
 
 end subroutine init_sponge_diags
 
-subroutine set_up_sponge_field(sp_val, f_ptr, nlay, CS, sp_val_i_mean)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),         intent(in) :: sp_val
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), target, intent(in) :: f_ptr
-  integer,                                       intent(in) :: nlay
-  type(sponge_CS),                               pointer    :: CS
-  real, dimension(NJMEM_,NKMEM_),      optional, intent(in) :: sp_val_i_mean
+subroutine set_up_sponge_field(sp_val, f_ptr, G, nlay, CS, sp_val_i_mean)
+  type(ocean_grid_type),                            intent(in) :: G
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),         intent(in) :: sp_val
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target, intent(in) :: f_ptr
+  integer,                                          intent(in) :: nlay
+  type(sponge_CS),                                  pointer    :: CS
+  real, dimension(SZJ_(G),SZK_(G)),       optional, intent(in) :: sp_val_i_mean
 !   This subroutine stores the reference profile for the variable
 ! whose address is given by f_ptr. nlay is the number of layers in
 ! this variable.
@@ -334,10 +335,11 @@ subroutine set_up_sponge_field(sp_val, f_ptr, nlay, CS, sp_val_i_mean)
 end subroutine set_up_sponge_field
 
 
-subroutine set_up_sponge_ML_density(sp_val, CS, sp_val_i_mean)
-  real, dimension(NIMEM_,NJMEM_), intent(in) :: sp_val
-  type(sponge_CS),                pointer    :: CS
-  real, dimension(NJMEM_), optional, intent(in) :: sp_val_i_mean
+subroutine set_up_sponge_ML_density(sp_val, G, CS, sp_val_i_mean)
+  type(ocean_grid_type),              intent(in) :: G
+  real, dimension(SZI_(G),SZJ_(G)),   intent(in) :: sp_val
+  type(sponge_CS),                    pointer    :: CS
+  real, dimension(SZJ_(G)), optional, intent(in) :: sp_val_i_mean
 !   This subroutine stores the reference value for mixed layer density.  It is
 ! handled differently from other values because it is only used in determining
 ! which layers can be inflated.
@@ -375,14 +377,14 @@ subroutine set_up_sponge_ML_density(sp_val, CS, sp_val_i_mean)
 end subroutine set_up_sponge_ML_density
 
 subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: h
-  real,                                  intent(in)    :: dt
-  type(ocean_grid_type),                 intent(inout) :: G
-  type(verticalGrid_type),               intent(in)    :: GV
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(out)   :: ea
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(out)   :: eb
-  type(sponge_CS),                       pointer       :: CS
-  real, dimension(NIMEM_,NJMEM_), optional, intent(inout) :: Rcv_ml
+  type(ocean_grid_type),                    intent(inout) :: G
+  type(verticalGrid_type),                  intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h
+  real,                                     intent(in)    :: dt
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)   :: ea
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)   :: eb
+  type(sponge_CS),                          pointer       :: CS
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(inout) :: Rcv_ml
 
 ! This subroutine applies damping to the layers thicknesses, mixed
 ! layer buoyancy, and a variety of tracers for every column where
