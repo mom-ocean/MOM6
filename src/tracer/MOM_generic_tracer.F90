@@ -544,6 +544,10 @@ contains
          trim(sub_name)//": No tracer in the list.")
 
     call enable_averaging(dt, get_diag_time_end(CS%diag), CS%diag) !Niki: This call is not needed since avaraging is already enabled. This is jjust to ensure it. 
+#ifdef _USE_MOM6_DIAG
+    call g_tracer_set_csdiag(CS%diag)
+#endif
+
     !
     !Extract the tracer surface fields from coupler and update tracer fields from sources
     !
@@ -621,9 +625,6 @@ contains
     call generic_tracer_update_from_bottom(dt, 1, get_diag_time_end(CS%diag)) !Second arg is tau which is always 1 for MOM
 
     !Output diagnostics via diag_manager for all generic tracers and their fluxes
-#ifdef _USE_MOM6_DIAG
-    call g_tracer_set_csdiag(CS%diag)
-#endif
     call g_tracer_send_diag(CS%g_tracer_list, get_diag_time_end(CS%diag), tau=1)
 #ifdef _USE_MOM6_DIAG
     call g_tracer_set_csdiag(CS%diag)
