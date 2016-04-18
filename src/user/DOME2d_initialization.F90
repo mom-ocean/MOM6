@@ -33,10 +33,10 @@ contains
 !> Initialize topography with a shelf and slope in a 2D domain
 subroutine DOME2d_initialize_topography ( D, G, param_file, max_depth )
   ! Arguments
-  real, dimension(NIMEM_,NJMEM_), intent(out) :: D !< Ocean bottom depth
-  type(ocean_grid_type),          intent(in)  :: G !< Ocean grid structure
-  type(param_file_type),          intent(in)  :: param_file !< Parameter file structure
-  real,                           intent(in)  :: max_depth !< Maximum depth of model
+  type(ocean_grid_type),            intent(in)  :: G !< Ocean grid structure
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: D !< Ocean bottom depth
+  type(param_file_type),            intent(in)  :: param_file !< Parameter file structure
+  real,                             intent(in)  :: max_depth !< Maximum depth of model
   ! Local variables
   integer :: i, j
   real    :: x, bay_depth, l1, l2
@@ -81,10 +81,10 @@ end subroutine DOME2d_initialize_topography
 
 !> Initialize thicknesses according to coordinate mode
 subroutine DOME2d_initialize_thickness ( h, G, GV, param_file )
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: h !< Layer thicknesses
-  type(ocean_grid_type),                  intent(in)  :: G !< Ocean grid structure
-  type(verticalGrid_type),                intent(in)  :: GV !< Vertical grid structure
-  type(param_file_type),                  intent(in)  :: param_file !< Parameter file structure
+  type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: h !< Layer thicknesses
+  type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid structure
+  type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
   ! Local variables
   real :: e0(SZK_(G))     ! The resting interface heights, in m, usually !
                           ! negative because it is positive upward.      !
@@ -201,12 +201,12 @@ end subroutine DOME2d_initialize_thickness
 
 !> Initialize temperature and salinity in the 2d DOME configuration
 subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, param_file, eqn_of_state)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T !< Potential temperature (degC)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: S !< Salinity (ppt)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)  :: h !< Layer thickness (m or Pa)
-  type(ocean_grid_type),                  intent(in)  :: G !< Ocean grid structure
-  type(param_file_type),                  intent(in)  :: param_file !< Parameter file structure
-  type(EOS_type),                         pointer     :: eqn_of_state !< Equation of state structure
+  type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< Potential temperature (degC)
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< Salinity (ppt)
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< Layer thickness (m or Pa)
+  type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
+  type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure
   ! Local variables
   integer   :: i, j, k, is, ie, js, je, nz
   real      :: x;

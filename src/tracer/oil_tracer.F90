@@ -258,7 +258,7 @@ function register_oil_tracer(G, param_file, CS, diag, tr_Reg, &
     call register_restart_field(tr_ptr, CS%tr_desc(m), &
                                 .not.CS%oil_may_reinit, restart_CS)
     ! Register the tracer for horizontal advection & diffusion.
-    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, tr_Reg, &
+    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, G, tr_Reg, &
                          tr_desc_ptr=CS%tr_desc(m))
 
     !   Set coupled_tracers to be true (hard-coded above) to provide the surface
@@ -281,7 +281,7 @@ subroutine initialize_oil_tracer(restart, day, G, GV, h, OBC, CS, sponge_CSp, &
   type(time_type), target,            intent(in) :: day
   type(ocean_grid_type),              intent(in) :: G
   type(verticalGrid_type),            intent(in) :: GV
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
   type(ocean_OBC_type),               pointer    :: OBC
   type(oil_tracer_CS),                pointer    :: CS
   type(sponge_CS),                    pointer    :: sponge_CSp
@@ -419,11 +419,11 @@ subroutine initialize_oil_tracer(restart, day, G, GV, h, OBC, CS, sponge_CSp, &
 end subroutine initialize_oil_tracer
 
 subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS, tv)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h_old, h_new, ea, eb
-  type(forcing),                      intent(in) :: fluxes
-  real,                               intent(in) :: dt
   type(ocean_grid_type),              intent(in) :: G
   type(verticalGrid_type),            intent(in) :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
+  type(forcing),                      intent(in) :: fluxes
+  real,                               intent(in) :: dt
   type(oil_tracer_CS),                pointer    :: CS
   type(thermo_var_ptrs),              intent(in) :: tv
 !   This subroutine applies diapycnal diffusion and any other column
@@ -543,10 +543,10 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
 end subroutine oil_tracer_column_physics
 
 function oil_stock(h, stocks, G, GV, CS, names, units, stock_index)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
-  real, dimension(:),                 intent(out)   :: stocks
   type(ocean_grid_type),              intent(in)    :: G
   type(verticalGrid_type),            intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  real, dimension(:),                 intent(out)   :: stocks
   type(oil_tracer_CS),                pointer       :: CS
   character(len=*), dimension(:),     intent(out)   :: names
   character(len=*), dimension(:),     intent(out)   :: units
@@ -597,9 +597,9 @@ function oil_stock(h, stocks, G, GV, CS, names, units, stock_index)
 end function oil_stock
 
 subroutine oil_tracer_surface_state(state, h, G, CS)
-  type(surface),                         intent(inout) :: state
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
   type(ocean_grid_type),                 intent(in)    :: G
+  type(surface),                         intent(inout) :: state
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
   type(oil_tracer_CS),                   pointer       :: CS
 !   This particular tracer package does not report anything back to the coupler.
 ! The code that is here is just a rough guide for packages that would.

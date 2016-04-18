@@ -49,8 +49,8 @@ contains
 
 ! -----------------------------------------------------------------------------
 subroutine DOME_initialize_topography(D, G, param_file, max_depth)
-  real, intent(out), dimension(NIMEM_,NJMEM_) :: D
   type(ocean_grid_type), intent(in)           :: G
+  real, intent(out), dimension(SZI_(G),SZJ_(G)) :: D
   type(param_file_type), intent(in)           :: param_file
   real,                  intent(in)           :: max_depth
 ! Arguments: D          - the bottom depth in m. Intent out.
@@ -97,9 +97,9 @@ end subroutine DOME_initialize_topography
 
 ! -----------------------------------------------------------------------------
 subroutine DOME_initialize_thickness(h, G, GV, param_file)
-  real, intent(out), dimension(NIMEM_,NJMEM_, NKMEM_) :: h
   type(ocean_grid_type),   intent(in) :: G
   type(verticalGrid_type), intent(in) :: GV
+  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h
   type(param_file_type),   intent(in) :: param_file
 ! Arguments: h - The thickness that is being initialized.
 !  (in)      G - The ocean's grid structure.
@@ -243,9 +243,9 @@ subroutine DOME_initialize_sponges(G, GV, tv, PF, CSp)
     call MOM_error(FATAL,"DOME_initialize_sponges is not set up for use with"//&
                          " a temperatures defined.")
     ! This should use the target values of T in temp.
-    call set_up_sponge_field(temp,tv%T,nz,CSp)
+    call set_up_sponge_field(temp, tv%T, G, nz, CSp)
     ! This should use the target values of S in temp.
-    call set_up_sponge_field(temp,tv%S,nz,CSp)
+    call set_up_sponge_field(temp, tv%S, G, nz, CSp)
   endif
 
 end subroutine DOME_initialize_sponges

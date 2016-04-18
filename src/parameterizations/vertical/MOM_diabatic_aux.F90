@@ -141,12 +141,12 @@ integer :: id_clock_uv_at_h, id_clock_frazil
 contains
 
 subroutine make_frazil(h, tv, G, GV, CS, p_surf)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
-  type(thermo_var_ptrs),                 intent(inout) :: tv
   type(ocean_grid_type),                 intent(in)    :: G
   type(verticalGrid_type),               intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  type(thermo_var_ptrs),                 intent(inout) :: tv
   type(diabatic_aux_CS),                 intent(in)    :: CS
-  real, dimension(NIMEM_,NJMEM_), intent(in), optional :: p_surf
+  real, dimension(SZI_(G),SZJ_(G)), intent(in), optional :: p_surf
 
 !   Frazil formation keeps the temperature above the freezing point.
 ! This subroutine warms any water that is colder than the (currently
@@ -263,12 +263,12 @@ subroutine make_frazil(h, tv, G, GV, CS, p_surf)
 end subroutine make_frazil
 
 subroutine differential_diffuse_T_S(h, tv, visc, dt, G, GV)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
+  type(ocean_grid_type),                 intent(in)    :: G
+  type(verticalGrid_type),               intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
   type(thermo_var_ptrs),                 intent(inout) :: tv
   type(vertvisc_type),                   intent(in)    :: visc
   real,                                  intent(in)    :: dt
-  type(ocean_grid_type),                 intent(in)    :: G
-  type(verticalGrid_type),               intent(in)    :: GV
 
 ! This subroutine applies double diffusion to T & S, assuming no diapycal mass
 ! fluxes, using a simple triadiagonal solver.
@@ -372,10 +372,10 @@ subroutine differential_diffuse_T_S(h, tv, visc, dt, G, GV)
 end subroutine differential_diffuse_T_S
 
 subroutine adjust_salt(h, tv, G, GV, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
-  type(thermo_var_ptrs),                 intent(inout) :: tv
   type(ocean_grid_type),                 intent(in)    :: G
   type(verticalGrid_type),               intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  type(thermo_var_ptrs),                 intent(inout) :: tv
   type(diabatic_aux_CS),                 intent(in)    :: CS
 
 !  Keep salinity from falling below a small but positive threshold
@@ -434,10 +434,10 @@ subroutine adjust_salt(h, tv, G, GV, CS)
 end subroutine adjust_salt
 
 subroutine insert_brine(h, tv, G, GV, fluxes, nkmb, CS, dt, id_brine_lay)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
-  type(thermo_var_ptrs),                 intent(inout) :: tv
   type(ocean_grid_type),                 intent(in)    :: G
   type(verticalGrid_type),               intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  type(thermo_var_ptrs),                 intent(inout) :: tv
   type(forcing),                         intent(in)    :: fluxes
   integer,                               intent(in)    :: nkmb
   type(diabatic_aux_CS),                 intent(in)    :: CS
@@ -564,11 +564,11 @@ subroutine triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, T, S)
 ! Simple tri-diagnonal solver for T and S
 ! "Simple" means it only uses arrays hold, ea and eb
   ! Arguments
-  type(ocean_grid_type),                 intent(in)    :: G
-  type(verticalGrid_type),               intent(in)    :: GV
-  integer,                               intent(in)    :: is, ie, js, je
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: hold, ea, eb
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: T, S
+  type(ocean_grid_type),                    intent(in)    :: G
+  type(verticalGrid_type),                  intent(in)    :: GV
+  integer,                                  intent(in)    :: is, ie, js, je
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: hold, ea, eb
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: T, S
   ! Local variables
   real :: b1(SZIB_(G)), d1(SZIB_(G)) ! b1, c1, and d1 are variables used by the
   real :: c1(SZIB_(G),SZK_(G))       ! tridiagonal solver.
@@ -603,13 +603,13 @@ end subroutine triDiagTS
 
 
 subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, ea, eb)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)  :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)  :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)  :: h
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(out) :: u_h, v_h
-  type(ocean_grid_type),                  intent(in)  :: G
-  type(verticalGrid_type),                intent(in)  :: GV
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in), optional  :: ea, eb
+  type(ocean_grid_type),                     intent(in)  :: G
+  type(verticalGrid_type),                   intent(in)  :: GV
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(out) :: u_h, v_h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in), optional  :: ea, eb
 !   This subroutine calculates u_h and v_h (velocities at thickness
 ! points), optionally using the entrainments (in m) passed in as arguments.
 
@@ -709,12 +709,12 @@ end subroutine find_uv_at_h
 !> Diagnose a mixed layer depth (MLD) determined by a given density difference with the surface.
 !> This routine is appropriate in MOM_diabatic_driver due to its position within the time stepping.
 subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, diagPtr, id_N2subML, id_MLDsq)
-  integer,                               intent(in) :: id_MLD      !< Handle (ID) of MLD diagnostic
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h           !< Layer thickness
-  type(thermo_var_ptrs),                 intent(in) :: tv          !< Thermodynamics type
-  real,                                  intent(in) :: densityDiff !< Density difference to determine MLD (kg/m3)
   type(ocean_grid_type),                 intent(in) :: G           !< Grid type
   type(verticalGrid_type),               intent(in) :: GV          !< ocean vertical grid structure
+  integer,                               intent(in) :: id_MLD      !< Handle (ID) of MLD diagnostic
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h        !< Layer thickness
+  type(thermo_var_ptrs),                 intent(in) :: tv          !< Thermodynamics type
+  real,                                  intent(in) :: densityDiff !< Density difference to determine MLD (kg/m3)
   type(diag_ctrl),                       pointer    :: diagPtr     !< Diagnostics structure
   integer,                     optional, intent(in) :: id_N2subML  !< Optional handle (ID) of subML stratification
   integer,                     optional, intent(in) :: id_MLDsq    !< Optional handle (ID) of squared MLD
@@ -811,17 +811,17 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
   real,                                  intent(in)    :: dt !< Time-step over which forcing is applied (s)
   type(forcing),                         intent(inout) :: fluxes !< Surface fluxes container
   type(optics_type),                     pointer       :: optics !< Optical properties container
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: ea !< The entrainment distance at interfaces (H units)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: h  !< Layer thickness in H units
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: ea !< The entrainment distance at interfaces (H units)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thickness in H units
   type(thermo_var_ptrs),                 intent(inout) :: tv !< Thermodynamics container
   !> If False, treat in/out fluxes separately.
   logical,                               intent(in)    :: aggregate_FW_forcing
   !> Turbulent kinetic energy requirement to mix forcing through each layer, in W m-2
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: cTKE
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(out) :: cTKE
   !> Partial derivative of specific volume with potential temperature, in m3 kg-1 K-1.
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: dSV_dT
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(out) :: dSV_dT
   !> Partial derivative of specific a volume with potential salinity, in m3 kg-1 / (g kg-1).
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), optional, intent(out) :: dSV_dS
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(out) :: dSV_dS
 
   ! Local variables
   integer, parameter :: maxGroundings = 5

@@ -98,17 +98,17 @@ end type thickness_diffuse_CS
 contains
 
 subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: uhtr
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: vhtr
-  type(thermo_var_ptrs),                  intent(in)    :: tv
-  real,                                   intent(in)    :: dt
-  type(ocean_grid_type),                  intent(in)    :: G
-  type(verticalGrid_type),                intent(in)    :: GV
-  type(MEKE_type),                        intent(inout) :: MEKE
-  type(VarMix_CS),                        pointer       :: VarMix
-  type(cont_diag_ptrs),                   intent(inout) :: CDp
-  type(thickness_diffuse_CS),             pointer       :: CS
+  type(ocean_grid_type),                     intent(in)    :: G
+  type(verticalGrid_type),                   intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr
+  type(thermo_var_ptrs),                     intent(in)    :: tv
+  real,                                      intent(in)    :: dt
+  type(MEKE_type),                           intent(inout) :: MEKE
+  type(VarMix_CS),                           pointer       :: VarMix
+  type(cont_diag_ptrs),                      intent(inout) :: CDp
+  type(thickness_diffuse_CS),                pointer       :: CS
 
 !  This subroutine does interface depth diffusion.  The fluxes are
 !  limited to give positive definiteness, and the diffusivities are
@@ -416,22 +416,22 @@ end subroutine thickness_diffuse
 
 subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, GV, MEKE, &
                                   CS, int_slope_u, int_slope_v, slope_x, slope_y)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)  :: h
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_),   intent(in)  :: e
-  real, dimension(NIMEMB_,NJMEM_,NK_INTERFACE_),  intent(in)  :: Kh_u
-  real, dimension(NIMEM_,NJMEMB_,NK_INTERFACE_),  intent(in)  :: Kh_v
-  type(thermo_var_ptrs),                  intent(in)  :: tv
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(out) :: uhD
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out) :: vhD
-  real,                                   intent(in)  :: dt
-  type(ocean_grid_type),                  intent(in)  :: G
-  type(verticalGrid_type),                intent(in)  :: GV
-  type(MEKE_type),                        intent(inout) :: MEKE
-  type(thickness_diffuse_CS),             pointer     :: CS
-  real, dimension(NIMEMB_,NJMEM_,NK_INTERFACE_), optional, intent(in)  :: int_slope_u
-  real, dimension(NIMEM_,NJMEMB_,NK_INTERFACE_), optional, intent(in)  :: int_slope_v
-  real, dimension(NIMEMB_,NJMEM_,NK_INTERFACE_), optional, intent(in)  :: slope_x
-  real, dimension(NIMEM_,NJMEMB_,NK_INTERFACE_), optional, intent(in)  :: slope_y
+  type(ocean_grid_type),                       intent(in)  :: G
+  type(verticalGrid_type),                     intent(in)  :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)  :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),  intent(in)  :: e
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(in)  :: Kh_u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(in)  :: Kh_v
+  type(thermo_var_ptrs),                       intent(in)  :: tv
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)),   intent(out) :: uhD
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)),   intent(out) :: vhD
+  real,                                        intent(in)  :: dt
+  type(MEKE_type),                             intent(inout) :: MEKE
+  type(thickness_diffuse_CS),                  pointer     :: CS
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), optional, intent(in)  :: int_slope_u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), optional, intent(in)  :: int_slope_v
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), optional, intent(in)  :: slope_x
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), optional, intent(in)  :: slope_y
 !    This subroutine does interface depth diffusion.  The fluxes are
 !  limited to give positive definiteness, and the diffusivities are
 !  limited to guarantee stability.
@@ -1055,19 +1055,19 @@ end subroutine thickness_diffuse_full
 
 subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV, CS, &
                              int_slope_u, int_slope_v)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_),  intent(in)    :: e
-  real, dimension(NIMEMB_,NJMEM_,NK_INTERFACE_), intent(inout) :: Kh_u
-  real, dimension(NIMEM_,NJMEMB_,NK_INTERFACE_), intent(inout) :: Kh_v
-  real, dimension(NIMEMB_,NJMEM_),       intent(in)    :: Kh_u_CFL
-  real, dimension(NIMEM_,NJMEMB_),       intent(in)    :: Kh_v_CFL
-  type(thermo_var_ptrs),                 intent(in)    :: tv
-  real,                                  intent(in)    :: dt
-  type(ocean_grid_type),                 intent(in)    :: G
-  type(verticalGrid_type),               intent(in)    :: GV
-  type(thickness_diffuse_CS),            pointer       :: CS
-  real, dimension(NIMEMB_,NJMEM_,NK_INTERFACE_), intent(inout) :: int_slope_u
-  real, dimension(NIMEM_,NJMEMB_,NK_INTERFACE_), intent(inout) :: int_slope_v
+  type(ocean_grid_type),                       intent(in)    :: G
+  type(verticalGrid_type),                     intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),  intent(in)    :: e
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kh_u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(inout) :: Kh_v
+  real, dimension(SZIB_(G),SZJ_(G)),           intent(in)    :: Kh_u_CFL
+  real, dimension(SZI_(G),SZJB_(G)),           intent(in)    :: Kh_v_CFL
+  type(thermo_var_ptrs),                       intent(in)    :: tv
+  real,                                        intent(in)    :: dt
+  type(thickness_diffuse_CS),                  pointer       :: CS
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: int_slope_u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(inout) :: int_slope_v
 ! Arguments: h - Layer thickness, in H.
 !  (in)      e - Interface heights relative to mean sea level, in m.
 !  (inout)   Kh_u - Thickness diffusivity on interfaces at u points, in m2 s-1.
@@ -1478,16 +1478,16 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
 end subroutine add_detangling_Kh
 
 subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, GV, halo_here)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: T_in
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: S_in
-  real,                                  intent(in)    :: kappa
-  real,                                  intent(in)    :: dt
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(out)   :: T_f
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(out)   :: S_f
-  type(ocean_grid_type),                 intent(in)    :: G
-  type(verticalGrid_type),             intent(in)    :: GV
-  integer,                     optional, intent(in)    :: halo_here
+  type(ocean_grid_type),                    intent(in)    :: G
+  type(verticalGrid_type),                  intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: T_in
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: S_in
+  real,                                     intent(in)    :: kappa
+  real,                                     intent(in)    :: dt
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)   :: T_f
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)   :: S_f
+  integer,                        optional, intent(in)    :: halo_here
 !    This subroutine fills massless layers with sensible values of two
 !   tracer arrays (nominally temperature and salinity) by diffusing
 !   vertically with a (small?) constant diffusivity.

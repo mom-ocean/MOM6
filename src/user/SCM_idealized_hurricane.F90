@@ -45,12 +45,12 @@ contains
 
 !> Initializes temperature and salinity for the SCM idealized hurricane example
 subroutine SCM_idealized_hurricane_TS_init(T, S, h, G, GV, param_file)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T !< Potential temperature (degC)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: S !< Salinity (psu)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)  :: h !< Layer thickness (m or Pa)
-  type(ocean_grid_type),                  intent(in)  :: G !< Grid structure
-  type(verticalGrid_type),                intent(in)  :: GV !< Vertical grid structure
-  type(param_file_type),                  intent(in)  :: param_file !< Input parameter structure
+  type(ocean_grid_type),                     intent(in)  :: G !< Grid structure
+  type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< Potential temperature (degC)
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< Salinity (psu)
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< Layer thickness (m or Pa)
+  type(param_file_type),                     intent(in)  :: param_file !< Input parameter structure
   ! Local variables
   real :: eta(SZK_(G)+1) ! The 1-d nominal positions of the interfaces.
   real :: S_ref, SST_ref, dTdZ, MLD

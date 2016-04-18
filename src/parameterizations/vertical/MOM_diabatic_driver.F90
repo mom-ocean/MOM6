@@ -213,19 +213,19 @@ contains
 !>  This subroutine imposes the diapycnal mass fluxes and the
 !!  accompanying diapycnal advection of momentum and tracers.
 subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(inout) :: u       !< zonal velocity (m/s)
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(inout) :: v       !< meridional velocity (m/s)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h       !< thickness (m for Bouss / kg/m2 for non-Bouss)
-  type(thermo_var_ptrs),                  intent(inout) :: tv      !< points to thermodynamic fields; unused have NULL ptrs
-  type(forcing),                          intent(inout) :: fluxes  !< points to forcing fields; unused fields have NULL ptrs
-  type(vertvisc_type),                    intent(inout) :: visc    !< vertical viscosities, BBL properies, and related
-  type(accel_diag_ptrs),                  intent(inout) :: ADp     !< points to accelerations in momentum equations,
-                                                                   !! to enable the later derived diagn, like energy budgets
-  type(cont_diag_ptrs),                   intent(inout) :: CDp     !< points to terms in continuity equations
-  real,                                   intent(in)    :: dt      !< time increment (seconds)
-  type(ocean_grid_type),                  intent(inout) :: G       !< ocean grid structure
-  type(verticalGrid_type),                intent(in)    :: GV      !< ocean vertical grid structure
-  type(diabatic_CS),                      pointer       :: CS      !< module control structure
+  type(ocean_grid_type),                     intent(inout) :: G      !< ocean grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV     !< ocean vertical grid structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u      !< zonal velocity (m/s)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v      !< meridional velocity (m/s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h      !< thickness (m for Bouss / kg/m2 for non-Bouss)
+  type(thermo_var_ptrs),                     intent(inout) :: tv     !< points to thermodynamic fields; unused have NULL ptrs
+  type(forcing),                             intent(inout) :: fluxes !< points to forcing fields; unused fields have NULL ptrs
+  type(vertvisc_type),                       intent(inout) :: visc   !< vertical viscosities, BBL properies, and related
+  type(accel_diag_ptrs),                     intent(inout) :: ADp    !< points to accelerations in momentum equations,
+                                                                     !! to enable the later derived diagn, like energy budgets
+  type(cont_diag_ptrs),                      intent(inout) :: CDp    !< points to terms in continuity equations
+  real,                                      intent(in)    :: dt     !< time increment (seconds)
+  type(diabatic_CS),                         pointer       :: CS     !< module control structure
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     ea,     &    ! amount of fluid entrained from the layer above within
@@ -1413,13 +1413,13 @@ end subroutine diabatic
 
 !> Routine called for adiabatic physics
 subroutine adiabatic(h, tv, fluxes, dt, G, GV, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(inout) :: h      !< thickness (m for Bouss or kg/m2 for non-Bouss)
-  type(thermo_var_ptrs),                  intent(inout) :: tv     !< points to thermodynamic fields
-  type(forcing),                          intent(inout) :: fluxes !< boundary fluxes
-  real,                                   intent(in)    :: dt     !< time step (seconds)
-  type(ocean_grid_type),                  intent(inout) :: G      !< ocean grid structure
-  type(verticalGrid_type),                intent(in)    :: GV     !< ocean vertical grid structure
-  type(diabatic_CS),                      pointer       :: CS     !< module control structure
+  type(ocean_grid_type),                    intent(inout) :: G      !< ocean grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h      !< thickness (m for Bouss or kg/m2 for non-Bouss)
+  type(thermo_var_ptrs),                    intent(inout) :: tv     !< points to thermodynamic fields
+  type(forcing),                            intent(inout) :: fluxes !< boundary fluxes
+  real,                                     intent(in)    :: dt     !< time step (seconds)
+  type(verticalGrid_type),                  intent(in)    :: GV     !< ocean vertical grid structure
+  type(diabatic_CS),                        pointer       :: CS     !< module control structure
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: zeros  ! An array of zeros.
 
@@ -1435,14 +1435,14 @@ end subroutine adiabatic
 !! using ALE algorithm. Note that layer thickness is not altered by
 !! diabatic diffusion.
 subroutine diagnose_diabatic_diff_tendency(tv, h, temp_old, saln_old, dt, G, GV, CS)
-  type(thermo_var_ptrs),                  intent(in) :: tv        !< points to updated thermodynamic fields
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h         !< thickness (m or kg/m2)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: temp_old  !< temperature prior to diabatic physics
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: saln_old  !< salinity prior to diabatic physics (PPT)
-  real,                                   intent(in) :: dt        !< time step (sec)
-  type(ocean_grid_type),                  intent(in) :: G         !< ocean grid structure
-  type(verticalGrid_type),                intent(in) :: GV        !< ocean vertical grid structure
-  type(diabatic_CS),                      pointer    :: CS        !< module control structure
+  type(ocean_grid_type),                     intent(in) :: G        !< ocean grid structure
+  type(verticalGrid_type),                   intent(in) :: GV       !< ocean vertical grid structure
+  type(thermo_var_ptrs),                     intent(in) :: tv       !< points to updated thermodynamic fields
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h        !< thickness (m or kg/m2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: temp_old !< temperature prior to diabatic physics
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: saln_old !< salinity prior to diabatic physics (PPT)
+  real,                                      intent(in) :: dt       !< time step (sec)
+  type(diabatic_CS),                         pointer    :: CS       !< module control structure
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: work_3d
   real, dimension(SZI_(G),SZJ_(G))         :: work_2d
@@ -1518,15 +1518,15 @@ end subroutine diagnose_diabatic_diff_tendency
 !! in which case we distribute the flux into k > 1 layers.
 subroutine diagnose_boundary_forcing_tendency(tv, h, temp_old, saln_old, h_old, &
                                               dt, G, GV, CS)
-  type(thermo_var_ptrs),                  intent(in) :: tv        !< points to updated thermodynamic fields
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h         !< thickness after boundary flux application (m or kg/m2)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: temp_old  !< temperature prior to boundary flux application
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: saln_old  !< salinity prior to boundary flux application (PPT)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h_old     !< thickness prior to boundary flux application (m or kg/m2)
-  real,                                   intent(in) :: dt        !< time step (sec)
-  type(ocean_grid_type),                  intent(in) :: G         !< ocean grid structure
-  type(verticalGrid_type),                intent(in) :: GV        !< ocean vertical grid structure
-  type(diabatic_CS),                      pointer    :: CS        !< module control structure
+  type(ocean_grid_type),                    intent(in) :: G        !< ocean grid structure
+  type(verticalGrid_type),                  intent(in) :: GV       !< ocean vertical grid structure
+  type(thermo_var_ptrs),                    intent(in) :: tv       !< points to updated thermodynamic fields
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h        !< thickness after boundary flux application (m or kg/m2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: temp_old !< temperature prior to boundary flux application
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: saln_old !< salinity prior to boundary flux application (PPT)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old    !< thickness prior to boundary flux application (m or kg/m2)
+  real,                                     intent(in) :: dt       !< time step (sec)
+  type(diabatic_CS),                        pointer    :: CS       !< module control structure
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: work_3d
   real, dimension(SZI_(G),SZJ_(G))         :: work_2d
@@ -1601,14 +1601,14 @@ end subroutine diagnose_boundary_forcing_tendency
 !! end of the diabatic processes. The impacts from frazil are generally a function
 !! of depth.  Hence, when checking heat budget, be sure to remove HFSIFRAZIL from HFDS in k=1.
 subroutine diagnose_frazil_tendency(tv, h, temp_old, dt, G, GV, CS, ncall)
-  type(thermo_var_ptrs),                  intent(in) :: tv        !< points to updated thermodynamic fields
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: h         !< thickness (m or kg/m2)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in) :: temp_old  !< temperature prior to frazil formation
-  real,                                   intent(in) :: dt        !< time step (sec)
-  integer,                                intent(in) :: ncall     !< the first or second call of this routine
-  type(ocean_grid_type),                  intent(in) :: G         !< ocean grid structure
-  type(verticalGrid_type),                intent(in) :: GV        !< ocean vertical grid structure
-  type(diabatic_CS),                      pointer    :: CS        !< module control structure
+  type(ocean_grid_type),                    intent(in) :: G        !< ocean grid structure
+  type(verticalGrid_type),                  intent(in) :: GV       !< ocean vertical grid structure
+  type(thermo_var_ptrs),                    intent(in) :: tv       !< points to updated thermodynamic fields
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h        !< thickness (m or kg/m2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: temp_old !< temperature prior to frazil formation
+  real,                                     intent(in) :: dt       !< time step (sec)
+  integer,                                  intent(in) :: ncall    !< the first or second call of this routine
+  type(diabatic_CS),                        pointer    :: CS       !< module control structure
 
   real, dimension(SZI_(G),SZJ_(G))         :: work_2d
   real    :: Idt
@@ -1659,8 +1659,6 @@ subroutine diagnose_frazil_tendency(tv, h, temp_old, dt, G, GV, CS, ncall)
 
 
 end subroutine diagnose_frazil_tendency
-
-
 
 
 !> A simplified version of diabatic_driver_init that will allow

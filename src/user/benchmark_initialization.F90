@@ -48,10 +48,10 @@ contains
 
 ! -----------------------------------------------------------------------------
 subroutine benchmark_initialize_topography(D, G, param_file, max_depth)
-  real, intent(out), dimension(NIMEM_,NJMEM_) :: D
-  type(ocean_grid_type), intent(in)           :: G
-  type(param_file_type), intent(in)           :: param_file
-  real,                  intent(in)           :: max_depth
+  type(ocean_grid_type),           intent(in) :: G
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: D
+  type(param_file_type),           intent(in) :: param_file
+  real,                            intent(in) :: max_depth
 ! Arguments: D          - the bottom depth in m. Intent out.
 !  (in)      G          - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
@@ -96,9 +96,9 @@ end subroutine benchmark_initialize_topography
 
 ! -----------------------------------------------------------------------------
 subroutine benchmark_initialize_thickness(h, G, GV, param_file, eqn_of_state, P_ref)
-  real, intent(out), dimension(NIMEM_,NJMEM_, NKMEM_) :: h
   type(ocean_grid_type),   intent(in) :: G
   type(verticalGrid_type), intent(in) :: GV
+  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h
   type(param_file_type),   intent(in) :: param_file
   type(EOS_type),          pointer    :: eqn_of_state
   real,                    intent(in) :: P_Ref
@@ -218,9 +218,9 @@ end subroutine benchmark_initialize_thickness
 ! -----------------------------------------------------------------------------
 subroutine benchmark_init_temperature_salinity(T, S, G, GV, param_file, &
                eqn_of_state, P_Ref)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T, S
   type(ocean_grid_type),               intent(in)  :: G
   type(verticalGrid_type),             intent(in)  :: GV
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T, S
   type(param_file_type),               intent(in)  :: param_file
   type(EOS_type),                      pointer     :: eqn_of_state
   real,                                intent(in)  :: P_Ref

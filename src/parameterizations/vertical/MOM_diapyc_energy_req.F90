@@ -50,11 +50,11 @@ end type diapyc_energy_req_CS
 contains
 
 subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h_3d
-  type(thermo_var_ptrs),                 intent(inout) :: tv
-  real,                                  intent(in)    :: dt
   type(ocean_grid_type),                 intent(in)    :: G
   type(verticalGrid_type),               intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_3d
+  type(thermo_var_ptrs),                 intent(inout) :: tv
+  real,                                  intent(in)    :: dt
 ! Arguments: h_3d -  Layer thickness before entrainment, in m or kg m-2.
 !  (in/out)  tv - A structure containing pointers to any available
 !                 thermodynamic fields. Absent fields have NULL ptrs.

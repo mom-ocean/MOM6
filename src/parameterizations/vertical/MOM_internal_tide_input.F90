@@ -91,16 +91,16 @@ end type int_tide_input_type
 contains
 
 subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, CS)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
-  type(thermo_var_ptrs),                  intent(in)    :: tv
-  type(forcing),                          intent(in)    :: fluxes
-  type(int_tide_input_type),              intent(inout) :: itide
-  real,                                   intent(in)    :: dt
-  type(ocean_grid_type),                  intent(in)    :: G
-  type(verticalGrid_type),                intent(in)    :: GV
-  type(int_tide_input_CS),                pointer       :: CS
+  type(ocean_grid_type),                     intent(in)    :: G
+  type(verticalGrid_type),                   intent(in)    :: GV
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
+  type(thermo_var_ptrs),                     intent(in)    :: tv
+  type(forcing),                             intent(in)    :: fluxes
+  type(int_tide_input_type),                 intent(inout) :: itide
+  real,                                      intent(in)    :: dt
+  type(int_tide_input_CS),                   pointer       :: CS
 
 ! Arguments: u - Zonal velocity, in m s-1.
 !  (in)      v - Meridional velocity, in m s-1.
@@ -165,15 +165,15 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, CS)
 end subroutine set_int_tide_input
 
 subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, N2_bot)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)   :: h
-  type(thermo_var_ptrs),                 intent(in)   :: tv
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)   :: T_f, S_f
-  real, dimension(NIMEM_,NJMEM_),        intent(in)   :: h2
-  type(forcing),                         intent(in)   :: fluxes
-  type(ocean_grid_type),                 intent(in)   :: G
-  type(verticalGrid_type),               intent(in)   :: GV
-  type(int_tide_input_CS),               pointer      :: CS
-  real, dimension(NIMEM_,NJMEM_),        intent(out)  :: N2_bot
+  type(ocean_grid_type),                    intent(in)   :: G
+  type(verticalGrid_type),                  intent(in)   :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)   :: h
+  type(thermo_var_ptrs),                    intent(in)   :: tv
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)   :: T_f, S_f
+  real, dimension(SZI_(G),SZJ_(G)),         intent(in)   :: h2
+  type(forcing),                            intent(in)   :: fluxes
+  type(int_tide_input_CS),                  pointer      :: CS
+  real, dimension(SZI_(G),SZJ_(G)),         intent(out)  :: N2_bot
 
   real, dimension(SZI_(G),SZK_(G)+1) :: &
     dRho_int      ! The unfiltered density differences across interfaces.

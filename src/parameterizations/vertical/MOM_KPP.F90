@@ -380,22 +380,22 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
   type(KPP_CS),                           pointer       :: CS             !< Control structure
   type(ocean_grid_type),                  intent(in)    :: G              !< Ocean grid
   type(verticalGrid_type),                intent(in)    :: GV             !< Ocean vertical grid
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h              !< Layer/level thicknesses (units of H)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: Temp           !< potential/cons temp (deg C)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: Salt           !< Salinity (ppt)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u              !< Velocity i-component (m/s)
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v              !< Velocity j-component (m/s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h              !< Layer/level thicknesses (units of H)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: Temp           !< potential/cons temp (deg C)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: Salt           !< Salinity (ppt)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u              !< Velocity i-component (m/s)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v              !< Velocity j-component (m/s)
   type(EOS_type),                         pointer       :: EOS            !< Equation of state
-  real, dimension(NIMEM_,NJMEM_),         intent(in)    :: uStar          !< Surface friction velocity (m/s)
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(in)    :: buoyFlux !< Surface buoyancy flux (m2/s3)
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: Kt       !< (in)  Vertical diffusivity of heat w/o KPP (m2/s)
+  real, dimension(SZI_(G),SZJ_(G)),         intent(in)    :: uStar          !< Surface friction velocity (m/s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: buoyFlux !< Surface buoyancy flux (m2/s3)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kt       !< (in)  Vertical diffusivity of heat w/o KPP (m2/s)
                                                                           !< (out) Vertical diffusivity including KPP (m2/s)
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: Ks       !< (in)  Vertical diffusivity of salt w/o KPP (m2/s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Ks       !< (in)  Vertical diffusivity of salt w/o KPP (m2/s)
                                                                           !< (out) Vertical diffusivity including KPP (m2/s)
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: Kv       !< (in)  Vertical viscosity w/o KPP (m2/s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kv       !< (in)  Vertical viscosity w/o KPP (m2/s)
                                                                           !< (out) Vertical viscosity including KPP (m2/s)
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: nonLocalTransHeat   !< Temp non-local transport (m/s)
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(inout) :: nonLocalTransScalar !< scalar non-local transport (m/s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: nonLocalTransHeat   !< Temp non-local transport (m/s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: nonLocalTransScalar !< scalar non-local transport (m/s)
 
   ! Local variables
   integer :: i, j, k, km1                        ! Loop indices
@@ -884,15 +884,15 @@ end subroutine KPP_calculate
 subroutine KPP_NonLocalTransport_temp(CS, G, GV, h, nonLocalTrans, surfFlux, &
                                       dt, scalar, C_p)
 
-  type(KPP_CS),                                 intent(in)    :: CS            !< Control structure
-  type(ocean_grid_type),                        intent(in)    :: G             !< Ocean grid
-  type(verticalGrid_type),                      intent(in)    :: GV            !< Ocean vertical grid
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: h             !< Layer/level thickness (units of H)
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(in)    :: nonLocalTrans !< Non-local transport (non-dimensional)
-  real, dimension(NIMEM_,NJMEM_),               intent(in)    :: surfFlux      !< Surface flux of scalar (H/s * scalar)
-  real,                                         intent(in)    :: dt            !< Time-step (s)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(inout) :: scalar        !< temperature
-  real,                                         intent(in)    :: C_p           !< Seawater specific heat capacity (J/(kg*K))
+  type(KPP_CS),                               intent(in)    :: CS            !< Control structure
+  type(ocean_grid_type),                      intent(in)    :: G             !< Ocean grid
+  type(verticalGrid_type),                    intent(in)    :: GV            !< Ocean vertical grid
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h             !< Layer/level thickness (units of H)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: nonLocalTrans !< Non-local transport (non-dimensional)
+  real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: surfFlux      !< Surface flux of scalar (H/s * scalar)
+  real,                                       intent(in)    :: dt            !< Time-step (s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: scalar        !< temperature
+  real,                                       intent(in)    :: C_p           !< Seawater specific heat capacity (J/(kg*K))
 
   integer :: i, j, k
   real, dimension( SZI_(G), SZJ_(G), SZK_(G) ) :: dtracer
@@ -943,14 +943,14 @@ end subroutine KPP_NonLocalTransport_temp
 !> This routine is a useful prototype for other material tracers.
 subroutine KPP_NonLocalTransport_saln(CS, G, GV, h, nonLocalTrans, surfFlux, dt, scalar)
 
-  type(KPP_CS),                                 intent(in)    :: CS            !< Control structure
-  type(ocean_grid_type),                        intent(in)    :: G             !< Ocean grid
-  type(verticalGrid_type),                      intent(in)    :: GV            !< Ocean vertical grid
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(in)    :: h             !< Layer/level thickness (units of H)
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_), intent(in)    :: nonLocalTrans !< Non-local transport (non-dimensional)
-  real, dimension(NIMEM_,NJMEM_),               intent(in)    :: surfFlux      !< Surface flux of scalar (H/s * scalar)
-  real,                                         intent(in)    :: dt            !< Time-step (s)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),        intent(inout) :: scalar        !< Scalar (scalar units)
+  type(KPP_CS),                               intent(in)    :: CS            !< Control structure
+  type(ocean_grid_type),                      intent(in)    :: G             !< Ocean grid
+  type(verticalGrid_type),                    intent(in)    :: GV            !< Ocean vertical grid
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h             !< Layer/level thickness (units of H)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: nonLocalTrans !< Non-local transport (non-dimensional)
+  real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: surfFlux      !< Surface flux of scalar (H/s * scalar)
+  real,                                       intent(in)    :: dt            !< Time-step (s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: scalar        !< Scalar (scalar units)
 
   integer :: i, j, k
   real, dimension( SZI_(G), SZJ_(G), SZK_(G) ) :: dtracer

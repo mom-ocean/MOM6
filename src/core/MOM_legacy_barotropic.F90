@@ -394,31 +394,31 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
                   visc_rem_u, visc_rem_v, etaav, uhbt_out, vhbt_out, OBC, &
                   BT_cont, eta_PF_start, &
                   taux_bot, tauy_bot, uh0, vh0, u_uh0, v_vh0)
-  logical,                              intent(in)    :: use_fluxes
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)  :: U_in
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)  :: V_in
-  real, dimension(NIMEM_,NJMEM_),       intent(in)    :: eta_in
-  real,                                 intent(in)    :: dt
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)  :: bc_accel_u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)  :: bc_accel_v
-  type(forcing),                        intent(in)    :: fluxes
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)   :: pbce
-  real, dimension(NIMEM_,NJMEM_),       intent(in)    :: eta_PF_in
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)  :: U_Cor
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)  :: V_Cor
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(out) :: accel_layer_u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(out) :: accel_layer_v
-  real, dimension(NIMEM_,NJMEM_),       intent(inout) :: eta_out
-  real, dimension(NIMEMB_,NJMEM_),      intent(out)   :: uhbtav
-  real, dimension(NIMEM_,NJMEMB_),      intent(out)   :: vhbtav
-  type(ocean_grid_type),                intent(inout) :: G
-  type(verticalGrid_type),              intent(in)    :: GV
-  type(legacy_barotropic_CS),           pointer       :: CS
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in), optional :: visc_rem_u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in), optional :: visc_rem_v
-  real, dimension(NIMEM_,NJMEM_),      intent(out), optional :: etaav
-  real, dimension(NIMEMB_,NJMEM_),     intent(out), optional :: uhbt_out
-  real, dimension(NIMEM_,NJMEMB_),     intent(out), optional :: vhbt_out
+  type(ocean_grid_type),                   intent(inout) :: G
+  type(verticalGrid_type),                 intent(in)    :: GV
+  logical,                                 intent(in)    :: use_fluxes
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: U_in
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: V_in
+  real, dimension(SZI_(G),SZJ_(G)),        intent(in)    :: eta_in
+  real,                                    intent(in)    :: dt
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: bc_accel_u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: bc_accel_v
+  type(forcing),                           intent(in)    :: fluxes
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)   :: pbce
+  real, dimension(SZI_(G),SZJ_(G)),        intent(in)    :: eta_PF_in
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: U_Cor
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: V_Cor
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: accel_layer_u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: accel_layer_v
+  real, dimension(SZI_(G),SZJ_(G)),        intent(inout) :: eta_out
+  real, dimension(SZIB_(G),SZJ_(G)),       intent(out)   :: uhbtav
+  real, dimension(SZI_(G),SZJB_(G)),       intent(out)   :: vhbtav
+  type(legacy_barotropic_CS),              pointer       :: CS
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in), optional :: visc_rem_u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in), optional :: visc_rem_v
+  real, dimension(SZI_(G),SZJ_(G)),    intent(out), optional :: etaav
+  real, dimension(SZIB_(G),SZJ_(G)),   intent(out), optional :: uhbt_out
+  real, dimension(SZI_(G),SZJB_(G)),   intent(out), optional :: vhbt_out
   type(ocean_OBC_type),                pointer,     optional :: OBC
   type(BT_cont_type),                  pointer,     optional :: BT_cont
   real, dimension(:,:),                pointer,     optional :: eta_PF_start
@@ -2051,14 +2051,14 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
 end subroutine legacy_btstep
 
 subroutine legacy_set_dtbt(G, GV, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
-  type(ocean_grid_type),                 intent(inout) :: G
-  type(verticalGrid_type),             intent(in)    :: GV
-  type(legacy_barotropic_CS),            pointer       :: CS
-  real, dimension(NIMEM_,NJMEM_),        intent(in), optional :: eta
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in), optional :: pbce
-  type(BT_cont_type),                    pointer,    optional :: BT_cont
-  real,                                  intent(in), optional :: gtot_est
-  real,                                  intent(in), optional :: SSH_add
+  type(ocean_grid_type),                    intent(inout) :: G
+  type(verticalGrid_type),                  intent(in)    :: GV
+  type(legacy_barotropic_CS),               pointer       :: CS
+  real, dimension(SZI_(G),SZJ_(G)),         intent(in), optional :: eta
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in), optional :: pbce
+  type(BT_cont_type),                       pointer,    optional :: BT_cont
+  real,                                     intent(in), optional :: gtot_est
+  real,                                     intent(in), optional :: SSH_add
 ! Arguments: G - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
@@ -2606,13 +2606,13 @@ end subroutine destroy_BT_OBC
 
 
 subroutine legacy_btcalc(h, G, GV, CS, h_u, h_v, may_use_default)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)  :: h
-  type(ocean_grid_type),               intent(inout) :: G
-  type(verticalGrid_type),             intent(in)    :: GV
-  type(legacy_barotropic_CS),          pointer       :: CS
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in), optional :: h_u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in), optional :: h_v
-  logical,                             intent(in), optional :: may_use_default
+  type(ocean_grid_type),                  intent(inout) :: G
+  type(verticalGrid_type),                intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h
+  type(legacy_barotropic_CS),             pointer       :: CS
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in), optional :: h_u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in), optional :: h_v
+  logical,                                   intent(in), optional :: may_use_default
 !   btcalc calculates the barotropic velocities from the full velocity and
 ! thickness fields, determines the fraction of the total water column in each
 ! layer at velocity points, and determines a corrective fictitious mass source
@@ -3347,14 +3347,14 @@ end subroutine find_face_areas
 
 subroutine legacy_bt_mass_source(h, eta, fluxes, set_cor, dt_therm, &
                                  dt_since_therm, G, GV, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
-  real, dimension(NIMEM_,NJMEM_),     intent(in) :: eta
-  type(forcing),                      intent(in) :: fluxes
-  logical,                            intent(in) :: set_cor
-  real,                               intent(in) :: dt_therm, dt_since_therm
-  type(ocean_grid_type),              intent(in) :: G
-  type(verticalGrid_type),            intent(in) :: GV
-  type(legacy_barotropic_CS),         pointer    :: CS
+  type(ocean_grid_type),                intent(in) :: G
+  type(verticalGrid_type),              intent(in) :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  real, dimension(SZI_(G),SZJ_(G)),     intent(in) :: eta
+  type(forcing),                        intent(in) :: fluxes
+  logical,                              intent(in) :: set_cor
+  real,                                 intent(in) :: dt_therm, dt_since_therm
+  type(legacy_barotropic_CS),           pointer    :: CS
 !   bt_mass_source determines the appropriately limited mass source for
 ! the barotropic solver, along with a corrective fictitious mass source that
 ! will drive the barotropic estimate of the free surface height toward the
@@ -3453,19 +3453,19 @@ end subroutine legacy_bt_mass_source
 
 subroutine legacy_barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
                            restart_CS, BT_cont, tides_CSp)
-  real, intent(in), dimension(NIMEMB_,NJMEM_,NKMEM_) :: u
-  real, intent(in), dimension(NIMEM_,NJMEMB_,NKMEM_) :: v
-  real, intent(in), dimension(NIMEM_,NJMEM_,NKMEM_)  :: h
-  real, intent(in), dimension(NIMEM_,NJMEM_)      :: eta
-  type(time_type), target,          intent(in)    :: Time
-  type(ocean_grid_type),            intent(inout) :: G
-  type(verticalGrid_type),          intent(in)    :: GV
-  type(param_file_type),            intent(in)    :: param_file
-  type(diag_ctrl), target,          intent(inout) :: diag
-  type(legacy_barotropic_CS),       pointer       :: CS
-  type(MOM_restart_CS),             pointer       :: restart_CS
-  type(BT_cont_type),     optional, pointer       :: BT_cont
-  type(tidal_forcing_CS), optional, pointer       :: tides_CSp
+  type(ocean_grid_type),              intent(inout) :: G
+  type(verticalGrid_type),            intent(in)    :: GV
+  real, intent(in), dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: u
+  real, intent(in), dimension(SZI_(G),SZJB_(G),SZK_(G)) :: v
+  real, intent(in), dimension(SZI_(G),SZJ_(G),SZK_(G))  :: h
+  real, intent(in), dimension(SZI_(G),SZJ_(G))      :: eta
+  type(time_type), target,            intent(in)    :: Time
+  type(param_file_type),              intent(in)    :: param_file
+  type(diag_ctrl), target,            intent(inout) :: diag
+  type(legacy_barotropic_CS),         pointer       :: CS
+  type(MOM_restart_CS),               pointer       :: restart_CS
+  type(BT_cont_type),       optional, pointer       :: BT_cont
+  type(tidal_forcing_CS),   optional, pointer       :: tides_CSp
 !   barotropic_init initializes a number of time-invariant fields used in the
 ! barotropic calculation and initializes any barotropic fields that have not
 ! already been initialized.

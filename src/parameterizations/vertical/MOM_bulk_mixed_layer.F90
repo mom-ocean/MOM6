@@ -195,19 +195,19 @@ contains
 
 subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
                           optics, aggregate_FW_forcing, dt_diag, last_call)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: h_3d
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: u_3d, v_3d
-  type(thermo_var_ptrs),                 intent(inout) :: tv
-  type(forcing),                         intent(inout) :: fluxes
-  real,                                  intent(in)    :: dt
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: ea, eb
-  type(ocean_grid_type),                 intent(inout) :: G
-  type(verticalGrid_type),               intent(in)    :: GV
-  type(bulkmixedlayer_CS),               pointer       :: CS
-  type(optics_type),                     pointer       :: optics
-  logical,                               intent(in)    :: aggregate_FW_forcing
-  real,                        optional, intent(in)    :: dt_diag
-  logical,                     optional, intent(in)    :: last_call
+  type(ocean_grid_type),                    intent(inout) :: G
+  type(verticalGrid_type),                  intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h_3d
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: u_3d, v_3d
+  type(thermo_var_ptrs),                    intent(inout) :: tv
+  type(forcing),                            intent(inout) :: fluxes
+  real,                                     intent(in)    :: dt
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: ea, eb
+  type(bulkmixedlayer_CS),                  pointer       :: CS
+  type(optics_type),                        pointer       :: optics
+  logical,                                  intent(in)    :: aggregate_FW_forcing
+  real,                           optional, intent(in)    :: dt_diag
+  logical,                        optional, intent(in)    :: last_call
 
 !    This subroutine partially steps the bulk mixed layer model.
 !  The following processes are executed, in the order listed.
@@ -851,15 +851,15 @@ end subroutine bulkmixedlayer
 
 subroutine convective_adjustment(h, u, v, R0, Rcv, T, S, eps, d_eb, &
                                  dKE_CA, cTKE, j, G, GV, CS, nz_conv)
-  real, dimension(NIMEM_,NKMEM_), intent(inout) :: h, u, v
-  real, dimension(NIMEM_,NKMEM_), intent(inout) :: T, S, R0, Rcv, d_eb
-  real, dimension(NIMEM_,NKMEM_), intent(in)    :: eps
-  real, dimension(NIMEM_,NKMEM_), intent(out)   :: dKE_CA, cTKE
-  integer,                        intent(in)    :: j
-  type(ocean_grid_type),          intent(in)    :: G
-  type(verticalGrid_type),        intent(in)    :: GV
-  type(bulkmixedlayer_CS),        pointer       :: CS
-  integer,              optional, intent(in)    :: nz_conv
+  type(ocean_grid_type),            intent(in)    :: G
+  type(verticalGrid_type),          intent(in)    :: GV
+  real, dimension(SZI_(G),SZK_(G)), intent(inout) :: h, u, v
+  real, dimension(SZI_(G),SZK_(G)), intent(inout) :: T, S, R0, Rcv, d_eb
+  real, dimension(SZI_(G),SZK_(G)), intent(in)    :: eps
+  real, dimension(SZI_(G),SZK_(G)), intent(out)   :: dKE_CA, cTKE
+  integer,                          intent(in)    :: j
+  type(bulkmixedlayer_CS),          pointer       :: CS
+  integer,                optional, intent(in)    :: nz_conv
 !   This subroutine does instantaneous convective entrainment into the buffer
 ! layers and mixed layers to remove hydrostatic instabilities.  Any water that
 ! is lighter than currently in the mixed- or buffer- layer is entrained.
@@ -980,26 +980,26 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
                                  nsw, Pen_SW_bnd, opacity_band, Conv_en,       &
                                  dKE_FC, j, ksort, G, GV, CS, tv, fluxes, dt,      &
                                  aggregate_FW_forcing)
-  real, dimension(NIMEM_,NKMEM_), intent(inout) :: h, d_eb
-  real, dimension(NIMEM_),        intent(out)   :: htot, Ttot, Stot
-  real, dimension(NIMEM_),        intent(out)   :: uhtot, vhtot, R0_tot, Rcv_tot
-  real, dimension(NIMEM_,NKMEM_), intent(in)    :: u, v, T, S, R0, Rcv, eps
-  real, dimension(NIMEM_),        intent(in)    :: dR0_dT, dRcv_dT, dR0_dS, dRcv_dS
-  real, dimension(NIMEM_),        intent(in)    :: netMassInOut, netMassOut
-  real, dimension(NIMEM_),        intent(in)    :: Net_heat, Net_salt
-  integer,                        intent(in)    :: nsw
-  real, dimension(:,:),           intent(inout) :: Pen_SW_bnd
-  real, dimension(:,:,:),         intent(in)    :: opacity_band
-  real, dimension(NIMEM_),        intent(out)   :: Conv_en, dKE_FC
-  integer,                        intent(in)    :: j
-  integer, dimension(NIMEM_,NKMEM_), intent(in) :: ksort
-  type(ocean_grid_type),          intent(in)    :: G
-  type(verticalGrid_type),        intent(in)    :: GV
-  type(bulkmixedlayer_CS),        pointer       :: CS
-  type(thermo_var_ptrs),          intent(inout) :: tv
-  type(forcing),                  intent(inout) :: fluxes
-  real,                           intent(in)    :: dt
-  logical,                        intent(in)    :: aggregate_FW_forcing
+  type(ocean_grid_type),            intent(in)    :: G
+  type(verticalGrid_type),          intent(in)    :: GV
+  real, dimension(SZI_(G),SZK_(G)), intent(inout) :: h, d_eb
+  real, dimension(SZI_(G)),         intent(out)   :: htot, Ttot, Stot
+  real, dimension(SZI_(G)),         intent(out)   :: uhtot, vhtot, R0_tot, Rcv_tot
+  real, dimension(SZI_(G),SZK_(G)), intent(in)    :: u, v, T, S, R0, Rcv, eps
+  real, dimension(SZI_(G)),         intent(in)    :: dR0_dT, dRcv_dT, dR0_dS, dRcv_dS
+  real, dimension(SZI_(G)),         intent(in)    :: netMassInOut, netMassOut
+  real, dimension(SZI_(G)),         intent(in)    :: Net_heat, Net_salt
+  integer,                          intent(in)    :: nsw
+  real, dimension(:,:),             intent(inout) :: Pen_SW_bnd
+  real, dimension(:,:,:),           intent(in)    :: opacity_band
+  real, dimension(SZI_(G)),         intent(out)   :: Conv_en, dKE_FC
+  integer,                          intent(in)    :: j
+  integer, dimension(SZI_(G),SZK_(G)), intent(in) :: ksort
+  type(bulkmixedlayer_CS),          pointer       :: CS
+  type(thermo_var_ptrs),            intent(inout) :: tv
+  type(forcing),                    intent(inout) :: fluxes
+  real,                             intent(in)    :: dt
+  logical,                          intent(in)    :: aggregate_FW_forcing
 
 !   This subroutine causes the mixed layer to entrain to the depth of free
 ! convection.  The depth of free convection is the shallowest depth at which the
@@ -1019,7 +1019,7 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
 !                      potential density, in kg m-2.
 !  (in)      nsw - The number of bands of penetrating shortwave radiation.
 !  (out)     Pen_SW_bnd - The penetrating shortwave heating at the sea surface
-!                         in each penetrating band, in K H, size nsw x NIMEM_.
+!                         in each penetrating band, in K H, size nsw x SZI_(G).
 !  (out)     Conv_en - The buoyant turbulent kinetic energy source due to
 !                      free convection, in m3 s-2.
 !  (out)     dKE_FC - The vertically integrated change in kinetic energy due
@@ -1303,20 +1303,20 @@ end subroutine mixedlayer_convection
 subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, &
                              TKE, TKE_river, Idecay_len_TKE, cMKE, dt, Idt_diag, &
                              j, ksort, G, GV, CS)
-  real, dimension(NIMEM_),        intent(in)    :: htot, h_CA
-  type(forcing),                  intent(in)    :: fluxes
-  real, dimension(NIMEM_),        intent(inout) :: Conv_En
-  real, dimension(NIMEM_),        intent(in)    :: dKE_FC
-  real, dimension(NIMEM_,NKMEM_), intent(in)    :: cTKE, dKE_CA
-  real, dimension(NIMEM_),        intent(out)   :: TKE, Idecay_len_TKE
-  real, dimension(NIMEM_),        intent(in)    :: TKE_river
-  real, dimension(C2_,NIMEM_),    intent(out)   :: cMKE
-  real,                           intent(in)    :: dt, Idt_diag
-  integer,                        intent(in)    :: j
-  integer, dimension(NIMEM_,NKMEM_), intent(in) :: ksort
-  type(ocean_grid_type),          intent(in)    :: G
-  type(verticalGrid_type),         intent(in)    :: GV
-  type(bulkmixedlayer_CS),        pointer       :: CS
+  type(ocean_grid_type),            intent(in)    :: G
+  type(verticalGrid_type),          intent(in)    :: GV
+  real, dimension(SZI_(G)),         intent(in)    :: htot, h_CA
+  type(forcing),                    intent(in)    :: fluxes
+  real, dimension(SZI_(G)),         intent(inout) :: Conv_En
+  real, dimension(SZI_(G)),         intent(in)    :: dKE_FC
+  real, dimension(SZI_(G),SZK_(G)), intent(in)    :: cTKE, dKE_CA
+  real, dimension(SZI_(G)),         intent(out)   :: TKE, Idecay_len_TKE
+  real, dimension(SZI_(G)),         intent(in)    :: TKE_river
+  real, dimension(2,SZI_(G)),       intent(out)   :: cMKE
+  real,                             intent(in)    :: dt, Idt_diag
+  integer,                          intent(in)    :: j
+  integer, dimension(SZI_(G),SZK_(G)), intent(in) :: ksort
+  type(bulkmixedlayer_CS),          pointer       :: CS
 !   This subroutine determines the TKE available at the depth of free
 ! convection to drive mechanical entrainment.
 
@@ -1485,24 +1485,24 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
                                   dR0_dT, dRcv_dT, cMKE, Idt_diag, nsw, &
                                   Pen_SW_bnd, opacity_band, TKE, &
                                   Idecay_len_TKE, j, ksort, G, GV, CS)
-  real, dimension(NIMEM_,NKMEM_), intent(inout) :: h, d_eb
-  real, dimension(NIMEM_),        intent(inout) :: htot, Ttot, Stot
-  real, dimension(NIMEM_),        intent(inout) :: uhtot, vhtot
-  real, dimension(NIMEM_),        intent(inout) :: R0_tot, Rcv_tot
-  real, dimension(NIMEM_,NKMEM_), intent(in)    :: u, v, T, S, R0, Rcv, eps
-  real, dimension(NIMEM_),        intent(in)    :: dR0_dT, dRcv_dT
-  real, dimension(C2_,NIMEM_),    intent(in)    :: cMKE
-  real,                           intent(in)    :: Idt_diag
-  integer,                        intent(in)    :: nsw
-  real, dimension(:,:),           intent(inout) :: Pen_SW_bnd
-  real, dimension(:,:,:),         intent(in)    :: opacity_band
-  real, dimension(NIMEM_),        intent(inout) :: TKE
-  real, dimension(NIMEM_),        intent(inout) :: Idecay_len_TKE
-  integer,                        intent(in)    :: j
-  integer, dimension(NIMEM_,NKMEM_), intent(in) :: ksort
-  type(ocean_grid_type),          intent(in)    :: G
-  type(verticalGrid_type),         intent(in)    :: GV
-  type(bulkmixedlayer_CS),        pointer       :: CS
+  type(ocean_grid_type),            intent(in)    :: G
+  type(verticalGrid_type),          intent(in)    :: GV
+  real, dimension(SZI_(G),SZK_(G)), intent(inout) :: h, d_eb
+  real, dimension(SZI_(G)),         intent(inout) :: htot, Ttot, Stot
+  real, dimension(SZI_(G)),         intent(inout) :: uhtot, vhtot
+  real, dimension(SZI_(G)),         intent(inout) :: R0_tot, Rcv_tot
+  real, dimension(SZI_(G),SZK_(G)), intent(in)    :: u, v, T, S, R0, Rcv, eps
+  real, dimension(SZI_(G)),         intent(in)    :: dR0_dT, dRcv_dT
+  real, dimension(2,SZI_(G)),       intent(in)    :: cMKE
+  real,                             intent(in)    :: Idt_diag
+  integer,                          intent(in)    :: nsw
+  real, dimension(:,:),             intent(inout) :: Pen_SW_bnd
+  real, dimension(:,:,:),           intent(in)    :: opacity_band
+  real, dimension(SZI_(G)),         intent(inout) :: TKE
+  real, dimension(SZI_(G)),         intent(inout) :: Idecay_len_TKE
+  integer,                          intent(in)    :: j
+  integer, dimension(SZI_(G),SZK_(G)), intent(in) :: ksort
+  type(bulkmixedlayer_CS),          pointer       :: CS
 
 ! This subroutine calculates mechanically driven entrainment.
 ! Arguments: h - Layer thickness, in m or kg m-2. (Intent in/out)  The units
@@ -1520,7 +1520,7 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
 !                   potential density, in H kg m-3.
 !  (in)      nsw - The number of bands of penetrating shortwave radiation.
 !  (in/out)  Pen_SW_bnd - The penetrating shortwave heating at the sea surface
-!                         in each penetrating band, in K H, size nsw x NIMEM_.
+!                         in each penetrating band, in K H, size nsw x SZI_(G).
 !  (in/out)  TKE - The turbulent kinetic energy available for mixing over a
 !               time step, in m3 s-2.
 !  (in)      j - The j-index to work on.
@@ -1800,10 +1800,10 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
 end subroutine mechanical_entrainment
 
 subroutine sort_ML(h, R0, eps, G, CS, ksort)
-  real, dimension(NIMEM_,NKMEM_),    intent(in)  :: h, R0, eps
-  type(ocean_grid_type),             intent(in)  :: G
-  type(bulkmixedlayer_CS),           pointer     :: CS
-  integer, dimension(NIMEM_,NKMEM_), intent(out) :: ksort
+  type(ocean_grid_type),               intent(in)  :: G
+  real, dimension(SZI_(G),SZK_(G)),    intent(in)  :: h, R0, eps
+  type(bulkmixedlayer_CS),             pointer     :: CS
+  integer, dimension(SZI_(G),SZK_(G)), intent(out) :: ksort
 
 !   This subroutine generates an array of indices that are sorted by layer
 ! density.
@@ -1856,14 +1856,14 @@ end subroutine sort_ML
 
 subroutine resort_ML(h, T, S, R0, Rcv, RcvTgt, eps, d_ea, d_eb, ksort, G, CS, &
                      dR0_dT, dR0_dS, dRcv_dT, dRcv_dS)
-  real, dimension(NIMEM_,NKMEM0_),   intent(inout) :: h, T, S, R0, Rcv
-  real, dimension(NKMEM_),           intent(in)    :: RcvTgt
-  real, dimension(NIMEM_,NKMEM_),    intent(inout) :: eps, d_ea, d_eb
-  integer, dimension(NIMEM_,NKMEM_), intent(in)    :: ksort
-  type(ocean_grid_type),             intent(in)    :: G
-  type(bulkmixedlayer_CS),           pointer       :: CS
-  real, dimension(NIMEM_),           intent(in)    :: dR0_dT, dR0_dS
-  real, dimension(NIMEM_),           intent(in)    :: dRcv_dT, dRcv_dS
+  type(ocean_grid_type),               intent(in)    :: G
+  real, dimension(SZI_(G),SZK0_(G)),   intent(inout) :: h, T, S, R0, Rcv
+  real, dimension(SZK_(G)),            intent(in)    :: RcvTgt
+  real, dimension(SZI_(G),SZK_(G)),    intent(inout) :: eps, d_ea, d_eb
+  integer, dimension(SZI_(G),SZK_(G)), intent(in)    :: ksort
+  type(bulkmixedlayer_CS),             pointer       :: CS
+  real, dimension(SZI_(G)),            intent(in)    :: dR0_dT, dR0_dS
+  real, dimension(SZI_(G)),            intent(in)    :: dRcv_dT, dRcv_dS
 !   This subroutine actually moves properties between layers to achieve a
 ! resorted state, with all of the resorted water either moved into the correct
 ! interior layers or in the top nkmb layers.
@@ -2167,16 +2167,16 @@ end subroutine resort_ML
 
 subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, G, GV, CS, &
                                 dR0_dT, dR0_dS, dRcv_dT, dRcv_dS, max_BL_det)
-  real, dimension(NIMEM_,NKMEM0_), intent(inout) :: h, T, S, R0, Rcv
-  real, dimension(NKMEM_),           intent(in)    :: RcvTgt
-  real,                            intent(in)    :: dt, dt_diag
-  real, dimension(NIMEM_,NKMEM_),  intent(inout) :: d_ea
-  integer,                         intent(in)    :: j
-  type(ocean_grid_type),           intent(in)    :: G
-  type(verticalGrid_type),         intent(in)    :: GV
-  type(bulkmixedlayer_CS),         pointer       :: CS
-  real, dimension(NIMEM_),         intent(in)    :: dR0_dT, dR0_dS, dRcv_dT, dRcv_dS
-  real, dimension(NIMEM_),         intent(in)    :: max_BL_det
+  type(ocean_grid_type),             intent(in)    :: G
+  type(verticalGrid_type),           intent(in)    :: GV
+  real, dimension(SZI_(G),SZK0_(G)), intent(inout) :: h, T, S, R0, Rcv
+  real, dimension(SZK_(G)),          intent(in)    :: RcvTgt
+  real,                              intent(in)    :: dt, dt_diag
+  real, dimension(SZI_(G),SZK_(G)),  intent(inout) :: d_ea
+  integer,                           intent(in)    :: j
+  type(bulkmixedlayer_CS),           pointer       :: CS
+  real, dimension(SZI_(G)),          intent(in)    :: dR0_dT, dR0_dS, dRcv_dT, dRcv_dS
+  real, dimension(SZI_(G)),          intent(in)    :: max_BL_det
 ! This subroutine moves any water left in the former mixed layers into the
 ! two buffer layers and may also move buffer layer water into the interior
 ! isopycnal layers.
@@ -3055,15 +3055,15 @@ end subroutine mixedlayer_detrain_2
 
 subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_eb, &
                                 j, G, GV, CS, dRcv_dT, dRcv_dS, max_BL_det)
-  real, dimension(NIMEM_,NKMEM0_), intent(inout) :: h, T, S, R0, Rcv
-  real, dimension(NKMEM_),         intent(in)    :: RcvTgt
-  real,                            intent(in)    :: dt, dt_diag
-  real, dimension(NIMEM_,NKMEM_),  intent(inout) :: d_ea, d_eb
-  integer,                         intent(in)    :: j
-  type(ocean_grid_type),           intent(in)    :: G
-  type(verticalGrid_type),         intent(in)    :: GV
-  type(bulkmixedlayer_CS),         pointer       :: CS
-  real, dimension(NIMEM_),         intent(in)    :: dRcv_dT, dRcv_dS, max_BL_det
+  type(ocean_grid_type),             intent(in)    :: G
+  type(verticalGrid_type),           intent(in)    :: GV
+  real, dimension(SZI_(G),SZK0_(G)), intent(inout) :: h, T, S, R0, Rcv
+  real, dimension(SZK_(G)),          intent(in)    :: RcvTgt
+  real,                              intent(in)    :: dt, dt_diag
+  real, dimension(SZI_(G),SZK_(G)),  intent(inout) :: d_ea, d_eb
+  integer,                           intent(in)    :: j
+  type(bulkmixedlayer_CS),           pointer       :: CS
+  real, dimension(SZI_(G)),          intent(in)    :: dRcv_dT, dRcv_dS, max_BL_det
 ! This subroutine moves any water left in the former mixed layers into the
 ! single buffer layers and may also move buffer layer water into the interior
 ! isopycnal layers.
