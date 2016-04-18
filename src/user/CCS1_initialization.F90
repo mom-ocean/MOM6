@@ -220,27 +220,27 @@ subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
     any_OBC = .false.
     ! Check for edges of full domain
     ! West
-    if (is_root_pe()) print *, 'inside CCS1_set_open_bdry_conds 1', &
-      apply_OBC_u, apply_OBC_v, G%isd_global, isd, isc, iec, IscB, IecB, G%mask2dCu(iscB,jsc)
+!    if (is_root_pe()) print *, 'inside CCS1_set_open_bdry_conds 1', &
+!      apply_OBC_u, apply_OBC_v, G%isd_global, isd, isc, iec, IscB, IecB, G%mask2dCu(iscB,jsc)
     if (G%isd_global - isd == isd - isc) then
       do j=jsc,jec
-        if (G%mask2dCu(IscB-1,j) == 1.0) then
-          OBC_mask_u(IscB-1,j) = .true. ; any_OBC = .true.
+        if (G%mask2dT(isc,j) == 1.0) then
+          OBC_mask_u(isc-1,j) = .true. ; any_OBC = .true.
         endif
       enddo
     endif
-    ! East
-    if (G%isd_global - isd + iec == G%Domain%niglobal) then
-      do j=jsc,jec
-        if (G%mask2dCu(IecB+1,j) == 1.0) then
-          OBC_mask_u(IecB+1,j) = .true. ; any_OBC = .true.
-        endif
-      enddo
-    endif
+    ! East - not wanted for CCS1
+!    if (G%isd_global - isd + iec == G%Domain%niglobal) then
+!      do j=jsc,jec
+!        if (G%mask2dT(Iec,j) == 1.0) then
+!          OBC_mask_u(Iec,j) = .true. ; any_OBC = .true.
+!        endif
+!      enddo
+!    endif
     ! South
     if (G%jsd_global - jsd == jsd - jsc) then
       do I=IscB,IecB
-        if (G%mask2dCu(I,jsc-1) == 1.0) then
+        if (G%mask2dCu(I,jsc) == 1.0) then
           OBC_mask_u(I,jsc-1) = .true. ; any_OBC = .true.
         endif
       enddo
@@ -248,7 +248,7 @@ subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
     ! North
     if (G%jsd_global - jsd + jec == G%Domain%njglobal) then
       do I=IscB,IecB
-        if (G%mask2dCu(I,jec+1) == 1.0) then
+        if (G%mask2dCu(I,jec) == 1.0) then
           OBC_mask_u(I,jec+1) = .true. ; any_OBC = .true.
         endif
       enddo
@@ -270,32 +270,32 @@ subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
     ! West
     if (G%isd_global - isd == isd - isc) then
       do J=JscB,JecB
-        if (G%mask2dCv(isc-1,J) == 1) then
+        if (G%mask2dCv(isc,J) == 1) then
           OBC_mask_v(isc-1,J) = .true. ; any_OBC = .true.
         endif
       enddo
     endif
-    ! East
-    if (G%isd_global - isd + iec == G%Domain%niglobal) then
-      do J=JscB,JecB
-        if (G%mask2dCv(iec+1,J) == 1) then
-          OBC_mask_v(iec+1,J) = .true. ; any_OBC = .true.
-        endif
-      enddo
-    endif
+    ! East - not for CCS
+!    if (G%isd_global - isd + iec == G%Domain%niglobal) then
+!      do J=JscB,JecB
+!        if (G%mask2dCv(iec,J) == 1) then
+!          OBC_mask_v(iec+1,J) = .true. ; any_OBC = .true.
+!        endif
+!      enddo
+!    endif
     ! South
     if (G%jsd_global - jsd == jsd - jsc) then
       do i=isc,iec
-        if (G%mask2dCv(i,JscB-1) == 1) then
-          OBC_mask_v(i,JscB-1) = .true. ; any_OBC = .true.
+        if (G%mask2dT(i,jsc) == 1) then
+          OBC_mask_v(i,jsc-1) = .true. ; any_OBC = .true.
         endif
       enddo
     endif
     ! North
     if (G%jsd_global - jsd + jec == G%Domain%njglobal) then
       do i=isc,iec
-        if (G%mask2dCv(i,JecB+1) == 1) then
-          OBC_mask_v(i,JecB+1) = .true. ; any_OBC = .true.
+        if (G%mask2dT(i,jec) == 1) then
+          OBC_mask_v(i,Jec) = .true. ; any_OBC = .true.
         endif
       enddo
     endif
@@ -437,7 +437,7 @@ subroutine CCS1_set_Open_Bdry_Vals(OBC, u, v, h, tv, G, GV, param_file, tr_Reg)
       if (OBC%OBC_mask_u(I,j)) then
         ! An appropriate expression for the zonal inflow velocities and
         ! transports should go here.
-!        OBC%uh(I,j,k) = h(I,j,k) * u(I,j,k)
+        OBC%uh(I,j,k) = h(I,j,k) * u(I,j,k)
         OBC%u(I,j,k) = u(I,j,k)
       else
         OBC%uh(I,j,k) = 0.0 ; OBC%u(I,j,k) = 0.0
@@ -449,7 +449,7 @@ subroutine CCS1_set_Open_Bdry_Vals(OBC, u, v, h, tv, G, GV, param_file, tr_Reg)
     do k=1,nz
       do J=JsdB,JedB ; do i=isd,ied
         if (OBC%OBC_mask_v(i,J)) then
-!          OBC%vh(i,J,k) = v(i,J,k)*h(i,J,k)
+          OBC%vh(i,J,k) = v(i,J,k)*h(i,J,k)
           OBC%v(i,J,k) = v(i,J,k)
         else
           OBC%vh(i,J,k) = 0.0 ; OBC%v(i,J,k) = 0.0
