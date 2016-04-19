@@ -28,6 +28,7 @@ use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_en
 use MOM_cpu_clock,            only : CLOCK_COMPONENT, CLOCK_SUBCOMPONENT
 use MOM_cpu_clock,            only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_coms,                 only : reproducing_sum
+use MOM_coord_initialization, only : MOM_initialize_coord
 use MOM_diag_mediator,        only : diag_mediator_init, enable_averaging
 use MOM_diag_mediator,        only : diag_set_thickness_ptr, diag_update_target_grids
 use MOM_diag_mediator,        only : disable_averaging, post_data, safe_alloc_ptr
@@ -1360,8 +1361,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   real, allocatable, dimension(:,:)   :: eta ! free surface height (m) or bottom press (Pa)
   type(MOM_restart_CS),  pointer      :: restart_CSp_tmp => NULL()
 
-  integer :: nkml, nkbl, verbosity
+  integer :: nkml, nkbl, verbosity, write_geom
   real    :: default_val       ! default value for a parameter
+  logical :: write_geom_files  ! If true, write out the grid geometry files.
   logical :: new_sim
   logical :: use_geothermal    ! If true, apply geothermal heating.
   logical :: use_EOS           ! If true, density calculated from T & S using an equation of state.
@@ -1424,7 +1426,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   ! Copy several common variables from the vertical grid to the horizontal grid.
   ! Consider removing these later?
   G%ke = GV%ke
-  G%bathyT(:,:) = GV%Angstrom_z !### Should this be 0 instead, in which case this line can go?
 
   is   = G%isc   ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = G%ke
   isd  = G%isd   ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
@@ -1623,6 +1624,15 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call get_param(param_file, "MOM", "IC_OUTPUT_FILE", IC_file, &
                  "The file into which to write the initial conditions.", &
                  default="MOM_IC")
+  call get_param(param_file, "MOM", "WRITE_GEOM", write_geom, &
+                 "If =0, never write the geometry and vertical grid files.\n"//&
+                 "If =1, write the geometry and vertical grid files only for\n"//&
+                 "a new simulation. If =2, always write the geometry and\n"//&
+                 "vertical grid files. Other values are invalid.", default=1)
+  if (write_geom<0 .or. write_geom>2) call MOM_error(FATAL,"MOM: "//&
+         "WRITE_GEOM must be equal to 0, 1 or 2.")
+  write_geom_files = ((write_geom==2) .or. ((write_geom==1) .and. &
+     ((dirs%input_filename(1:1)=='n') .and. (LEN_TRIM(dirs%input_filename)==1))))
 
   ! Check for inconsistent settings.
   if (CS%adiabatic .and. CS%use_temperature) call MOM_error(WARNING, &
@@ -1754,8 +1764,11 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call callTree_waypoint("restart registration complete (initialize_MOM)")
 
   call cpu_clock_begin(id_clock_MOM_init)
-  call MOM_initialize_fixed(G, GV, param_file, dirs, CS%tv)
+  call MOM_initialize_fixed(G, param_file, write_geom_files, dirs%output_directory)
   call callTree_waypoint("returned from MOM_initialize_fixed() (initialize_MOM)")
+  call MOM_initialize_coord(G, GV, param_file, write_geom_files, &
+                            dirs%output_directory, CS%tv)
+  call callTree_waypoint("returned from MOM_initialize_coord() (initialize_MOM)")
 
   if (CS%use_ALE_algorithm) then
     call ALE_init(param_file, G, GV, CS%ALE_CSp)

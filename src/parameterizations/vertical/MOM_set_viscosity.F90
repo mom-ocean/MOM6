@@ -1597,6 +1597,7 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS)
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
   real    :: Csmag_chan_dflt, smag_const1, TKE_decay_dflt, bulk_Ri_ML_dflt
+  real    :: Kv_background
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
   logical :: use_kappa_shear, adiabatic, differential_diffusion
 ! This include declares and sets the variable "version".
@@ -1723,13 +1724,17 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS)
                  "The thickness over which near-surface velocities are \n"//&
                  "averaged for the drag law under an ice shelf.  By \n"//&
                  "default this is the same as HBBL", units="m", default=CS%Hbbl)
-  ! ###  Change the default values of ,CS%KV_BBL_min and CS%KV_TBL_min to "KV"?
+
+  call get_param(param_file, mod, "KV", Kv_background, &
+                 "The background kinematic viscosity in the interior. \n"//&
+                 "The molecular value, ~1e-6 m2 s-1, may be used.", &
+                 units="m2 s-1", fail_if_missing=.true.)
   call get_param(param_file, mod, "KV_BBL_MIN", CS%KV_BBL_min, &
                  "The minimum viscosities in the bottom boundary layer.", &
-                 units="m2 s-1", default=0.0)
+                 units="m2 s-1", default=Kv_background)
   call get_param(param_file, mod, "KV_TBL_MIN", CS%KV_TBL_min, &
                  "The minimum viscosities in the top boundary layer.", &
-                 units="m2 s-1", default=0.0)
+                 units="m2 s-1", default=Kv_background)
 
   if (CS%Channel_drag) then
     call get_param(param_file, mod, "SMAG_LAP_CONST", smag_const1, default=-1.0)
