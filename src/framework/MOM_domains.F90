@@ -1368,7 +1368,7 @@ end subroutine clone_MD_to_d2D
 
 subroutine get_domain_extent(Domain, isc, iec, jsc, jec, isd, ied, jsd, jed, &
                              isg, ieg, jsg, jeg, idg_offset, jdg_offset, &
-                             symmetric, local_indexing)
+                             symmetric, local_indexing, index_offset)
   type(MOM_domain_type), intent(in) :: Domain
   integer, intent(out) :: isc, iec, jsc, jec
   integer, intent(out) :: isd, ied, jsd, jed
@@ -1376,6 +1376,7 @@ subroutine get_domain_extent(Domain, isc, iec, jsc, jec, isd, ied, jsd, jed, &
   integer, intent(out) :: idg_offset, jdg_offset
   logical, intent(out) :: symmetric
   logical, optional, intent(in) :: local_indexing
+  integer, optional, intent(in) :: index_offset
 ! Arguments: Domain - The MOM_domain_type from which the indices are extracted.
 !  (out)     isc, iec, jsc, jec - the start & end indices of the
 !                                 computational domain.
@@ -1386,9 +1387,14 @@ subroutine get_domain_extent(Domain, isc, iec, jsc, jec, isd, ied, jsd, jed, &
 !  (out)     symmetric - true if symmetric memory is used.
 !  (in,opt)  local_indexing - if true, local tracer array indices start at 1, as
 !                             in most MOM6 or GOLD code.
+!  (in,opt)  index_offset - A fixed additional offset to all indices.  This can
+!                           be useful for some types of debugging with dynamic
+!                           memory allocation.
 
+  integer :: ind_off
   logical :: local
   local = .true. ; if (present(local_indexing)) local = local_indexing
+  ind_off = 0 ; if (present(index_offset)) ind_off = index_offset
 
   call mpp_get_compute_domain(Domain%mpp_domain, isc, iec, jsc, jec)
   call mpp_get_data_domain(Domain%mpp_domain, isd, ied, jsd, jed)
@@ -1402,6 +1408,13 @@ subroutine get_domain_extent(Domain, isc, iec, jsc, jec, isd, ied, jsd, jed, &
     isd = 1 ; jsd = 1
   else
     idg_offset = 0 ; jdg_offset = 0
+  endif
+  if (ind_off /= 0) then
+    idg_offset = idg_offset + ind_off ; jdg_offset = jdg_offset + ind_off
+    isc = isc + ind_off ; iec = iec + ind_off
+    jsc = jsc + ind_off ; jec = jec + ind_off
+    isd = isd + ind_off ; ied = ied + ind_off
+    jsd = jsd + ind_off ; jed = jed + ind_off
   endif
   symmetric = Domain%symmetric
 
