@@ -285,7 +285,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
           case ("DOME2D"); call DOME2d_initialize_temperature_salinity ( tv%T, &
                                 tv%S, h, G, PF, eos)
           case ("ISOMIP"); call ISOMIP_initialize_temperature_salinity ( tv%T, &
-                                tv%S, h, G, PF, eos)
+                                tv%S, h, G, GV, PF, eos)
           case ("adjustment2d"); call adjustment_initialize_temperature_salinity ( tv%T, &
                                       tv%S, h, G, PF, eos)
           case ("baroclinic_zone"); call baroclinic_zone_init_temperature_salinity( tv%T, &
