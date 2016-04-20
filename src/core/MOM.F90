@@ -236,7 +236,7 @@ type, public :: MOM_control_struct
   real, pointer, dimension(:,:) :: & !< diagnostic arrays of vertically integrated advective/diffusive fluxes
     T_adx_2d => NULL(), T_ady_2d => NULL(), T_diffx_2d => NULL(), T_diffy_2d => NULL(), &
     S_adx_2d => NULL(), S_ady_2d => NULL(), S_diffx_2d => NULL(), S_diffy_2d => NULL(), &
-    SST_sq   => NULL()
+    SST_sq   => NULL(), SSS_sq   => NULL()
 
   real, pointer, dimension(:,:,:) :: &  !< diagnostic arrays for advection tendencies and total tendencies
     T_advection_xy => NULL(), S_advection_xy => NULL(),  &
@@ -266,6 +266,7 @@ type, public :: MOM_control_struct
   integer :: id_sst      = -1
   integer :: id_sst_sq   = -1
   integer :: id_sss      = -1
+  integer :: id_sss_sq   = -1
   integer :: id_ssu      = -1
   integer :: id_ssv      = -1
   integer :: id_speed    = -1
@@ -1303,6 +1304,13 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
   if (CS%id_sss > 0) &
     call post_data(CS%id_sss, state%SSS, CS%diag, mask=G%mask2dT)
+  if (CS%id_sss_sq > 0) then
+    do j=js,je ; do i=is,ie
+      CS%SSS_sq(i,j) = state%SSS(i,j)*state%SSS(i,j)
+    enddo ; enddo
+    call post_data(CS%id_sss_sq, CS%SSS_sq, CS%diag, mask=G%mask2dT)
+  endif 
+
   if (CS%id_ssu > 0) &
     call post_data(CS%id_ssu, state%u, CS%diag, mask=G%mask2dCu)
   if (CS%id_ssv > 0) &
@@ -2130,6 +2138,11 @@ subroutine register_diags(Time, G, GV, CS, ADp)
         'Sea Surface Salinity', 'PPT', CS%missing, cmor_field_name='sos', &
         cmor_long_name='Sea Surface Salinity', cmor_units='ppt',          &
         cmor_standard_name='sea_surface_salinity')
+    CS%id_sss_sq = register_diag_field('ocean_model', 'SSS_sq', diag%axesT1, Time, &
+        'Sea Surface Salinity Squared', 'ppt**2', CS%missing, cmor_field_name='sossq', &
+        cmor_long_name='Square of Sea Surface Salinity ', cmor_units='ppt^2', &
+        cmor_standard_name='square_of_sea_surface_salinity')
+    if (CS%id_sss_sq > 0) call safe_alloc_ptr(CS%SSS_sq,isd,ied,jsd,jed)
   endif
 
   if (CS%use_temperature .and. CS%use_frazil) then
@@ -3383,7 +3396,7 @@ end subroutine MOM_end
 !!
 !! * BOUNDARY_FORCING_HEAT_TENDENCY generally has 3d structure, with k > 1 contributions from
 !!   penetrative shortwave, and from other fluxes for the case when layers are tiny, in which
-!!   case MOM6 partitions tendencies into k < 1 layers.
+!!   case MOM6 partitions tendencies into k > 1 layers.
 !!
 !! * FRAZIL_HEAT_TENDENCY generally has 3d structure, since MOM6 frazil calculation checks the
 !!   full ocean column.
