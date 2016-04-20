@@ -57,6 +57,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_io, only : read_data, slasher
 use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : thermo_var_ptrs
+use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs
 use MOM_EOS, only : calculate_2_densities
 
@@ -85,13 +86,14 @@ end type geothermal_CS
 
 contains
 
-subroutine geothermal(h, tv, dt, ea, eb, G, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: h
-  type(thermo_var_ptrs),                 intent(inout) :: tv
-  real,                                  intent(in)    :: dt
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: ea, eb
-  type(ocean_grid_type),                 intent(inout) :: G
-  type(geothermal_CS),                   pointer       :: CS
+subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS)
+  type(ocean_grid_type),                    intent(inout) :: G
+  type(verticalGrid_type),                  intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h
+  type(thermo_var_ptrs),                    intent(inout) :: tv
+  real,                                     intent(in)    :: dt
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: ea, eb
+  type(geothermal_CS),                      pointer       :: CS
 
 !   This subroutine applies geothermal heating, including the movement of water
 ! between isopycnal layers to match the target densities.  The heating is
@@ -112,6 +114,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
 !                 be increased due to mixed layer entrainment, in the same units
 !                 as h - usually m or kg m-2 (i.e., H).
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 geothermal_init.
 
@@ -157,10 +160,10 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
          "Module must be initialized before it is used.")
   if (.not.CS%apply_geothermal) return
 
-  nkmb      = G%GV%nk_rho_varies
-  Irho_cp   = 1.0 / (G%GV%H_to_kg_m2 * tv%C_p)
-  Angstrom  = G%GV%Angstrom
-  H_neglect = G%GV%H_subroundoff
+  nkmb      = GV%nk_rho_varies
+  Irho_cp   = 1.0 / (GV%H_to_kg_m2 * tv%C_p)
+  Angstrom  = GV%Angstrom
+  H_neglect = GV%H_subroundoff
   p_ref(:)  = tv%P_Ref
 
   if (.not.ASSOCIATED(tv%T)) call MOM_error(FATAL, "MOM geothermal: "//&
@@ -170,8 +173,8 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
 !    resid(i,j) = tv%internal_heat(i,j)
 !  enddo ; enddo
 
-!$OMP parallel do default(none) shared(is,ie,js,je,G,CS,dt,Irho_cp,nkmb,tv,p_Ref, &
-!$OMP                                  h,Angstrom,nz,H_neglect,eb)                &
+!$OMP parallel do default(none) shared(is,ie,js,je,G,GV,CS,dt,Irho_cp,nkmb,tv,    &
+!$OMP                                  p_Ref,h,Angstrom,nz,H_neglect,eb)          &
 !$OMP                          private(num_start,heat_rem,do_i,h_geo_rem,num_left,&
 !$OMP                                  isj,iej,Rcv_BL,h_heated,heat_avail,k_tgt,  &
 !$OMP                                  Rcv_tgt,Rcv,dRcv_dT,T2,S2,dRcv_dT_,        &
@@ -199,7 +202,7 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
       heat_rem(i) = G%mask2dT(i,j) * (CS%geo_heat(i,j) * (dt*Irho_cp))
       do_i(i) = .true. ; if (heat_rem(i) <= 0.0) do_i(i) = .false.
       if (do_i(i)) num_start = num_start + 1
-      h_geo_rem(i) = CS%Geothermal_thick * G%GV%m_to_H
+      h_geo_rem(i) = CS%Geothermal_thick * GV%m_to_H
     enddo
     if (num_start == 0) cycle
     num_left = num_start
@@ -234,14 +237,14 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
             ! Simply heat the layer; convective adjustment occurs later
             ! if necessary.
             k_tgt = k
-          elseif ((k==nkmb+1) .or. (G%GV%Rlay(k-1) < Rcv_BL(i))) then
+          elseif ((k==nkmb+1) .or. (GV%Rlay(k-1) < Rcv_BL(i))) then
             ! Add enough heat to match the lowest buffer layer density.
             k_tgt = nkmb
             Rcv_tgt = Rcv_BL(i)
           else
             ! Add enough heat to match the target density of layer k-1.
             k_tgt = k-1
-            Rcv_tgt = G%GV%Rlay(k-1)
+            Rcv_tgt = GV%Rlay(k-1)
           endif
 
           if (k<=nkmb .or. nkmb<=0) then
@@ -263,13 +266,13 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
           elseif (dRcv_dT <= CS%dRcv_dT_inplace) then
             ! This is the option that usually applies in isopycnal coordinates.
             heat_in_place = min(heat_avail, max(0.0, h(i,j,k) * &
-                                            ((G%GV%Rlay(k)-Rcv) / dRcv_dT)))
+                                            ((GV%Rlay(k)-Rcv) / dRcv_dT)))
             heat_trans = heat_avail - heat_in_place
           else
             ! wt_in_place should go from 0 to 1.
             wt_in_place = (CS%dRcv_dT_inplace - dRcv_dT) / CS%dRcv_dT_inplace
             heat_in_place = max(wt_in_place*heat_avail, &
-                                h(i,j,k) * ((G%GV%Rlay(k)-Rcv) / dRcv_dT) )
+                                h(i,j,k) * ((GV%Rlay(k)-Rcv) / dRcv_dT) )
             heat_trans = heat_avail - heat_in_place
           endif
 
@@ -342,13 +345,13 @@ subroutine geothermal(h, tv, dt, ea, eb, G, CS)
     enddo ! k-loop
 
     if (associated(tv%internal_heat)) then ; do i=is,ie
-      tv%internal_heat(i,j) = tv%internal_heat(i,j) + G%GV%H_to_kg_m2 * &
+      tv%internal_heat(i,j) = tv%internal_heat(i,j) + GV%H_to_kg_m2 * &
            (G%mask2dT(i,j) * (CS%geo_heat(i,j) * (dt*Irho_cp)) - heat_rem(i))
     enddo ; endif
   enddo ! j-loop
 
 !  do i=is,ie ; do j=js,je
-!    resid(i,j) = tv%internal_heat(i,j) - resid(i,j) - G%GV%H_to_kg_m2 * &
+!    resid(i,j) = tv%internal_heat(i,j) - resid(i,j) - GV%H_to_kg_m2 * &
 !           (G%mask2dT(i,j) * (CS%geo_heat(i,j) * (dt*Irho_cp)))
 !  enddo ; enddo
 

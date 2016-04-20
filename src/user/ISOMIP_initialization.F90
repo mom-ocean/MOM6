@@ -33,6 +33,7 @@ use MOM_io, only : close_file, create_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
 use MOM_io, only : write_field, slasher, vardesc
 use MOM_variables, only : thermo_var_ptrs, ocean_OBC_type
+use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
@@ -60,12 +61,10 @@ public ISOMIP_initialize_sponges
 ! -----------------------------------------------------------------------------
 contains
 
-!------------------------------------------------------------------------------
-! Initialization of topography
-! -----------------------------------------------------------------------------
+!> Initialization of topography
 subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth)
-  real, intent(out), dimension(NIMEM_,NJMEM_) :: D
   type(ocean_grid_type), intent(in)           :: G
+  real, intent(out), dimension(SZI_(G),SZJ_(G)) :: D
   type(param_file_type), intent(in)           :: param_file
   real,                  intent(in)           :: max_depth
 ! Arguments: D          - the bottom depth in m. Intent out.
@@ -128,29 +127,28 @@ subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth)
 end subroutine ISOMIP_initialize_topography
 ! -----------------------------------------------------------------------------
 
-!------------------------------------------------------------------------------
-! Initialization of thicknesses
-!------------------------------------------------------------------------------
-subroutine ISOMIP_initialize_thickness ( h, G, param_file )
-
-  real, intent(out), dimension(NIMEM_,NJMEM_, NKMEM_) :: h
+!> Initialization of thicknesses
+subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv )
   type(ocean_grid_type), intent(in) :: G
+  type(verticalGrid_type), intent(in) :: GV
+  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h
   type(param_file_type), intent(in) :: param_file
+  type(thermo_var_ptrs), intent(in) :: tv
 
 ! Arguments: h - The thickness that is being initialized.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-
-!  This subroutine initializes the layer thicknesses to be uniform.
-  real :: e0(SZK_(G))     ! The resting interface heights, in m, usually !
+!  (in)      tv - A structure containing pointers to any available
+!                 thermodynamic fields, including eq. of state
+  real :: e0(SZK_(G)+1)     ! The resting interface heights, in m, usually !
                           ! negative because it is positive upward.      !
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
                           ! positive upward, in m.                       !
-  integer :: i, j, k, is, ie, js, je, nz
+  integer :: i, j, k, is, ie, js, je, nz, tmp1, nz_zero_surf, nz_zero_bot
   real    :: x
-  real    :: delta_h
-  real    :: min_thickness
+  real    :: delta_h, rho_range 
+  real    :: min_thickness, s_sur, s_bot, t_sur, t_bot, rho_sur, rho_bot
   character(len=40) :: verticalCoordinate
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -169,28 +167,86 @@ subroutine ISOMIP_initialize_thickness ( h, G, param_file )
   !          vanished and the other thicknesses uniformly distributed, use:
   !          e0(k) = -G%max_depth * real(k-1) / real(nz-1)
   
-  do k=1,nz
-    e0(k) = -G%max_depth * real(k-1) / real(nz)
-  enddo
-
   select case ( coordinateMode(verticalCoordinate) )
-
-    case ( REGRIDDING_LAYER, REGRIDDING_RHO )
-      do j=js,je ; do i=is,ie
-        eta1D(nz+1) = -1.0*G%bathyT(i,j)
-        do k=nz,1,-1
-          eta1D(k) = e0(k)
-          if (eta1D(k) < (eta1D(k+1) + G%GV%Angstrom_z)) then
-            eta1D(k) = eta1D(k+1) + G%GV%Angstrom_z
-            h(i,j,k) = G%GV%Angstrom_z
-          else
-            h(i,j,k) = eta1D(k) - eta1D(k+1)
-          endif
-        enddo
-      end do ; end do   
     
+  case ( REGRIDDING_LAYER, REGRIDDING_RHO ) ! Initial thicknesses for isopycnal coordinates
+    call get_param(param_file, mod, "T_SUR",t_sur,'Temperature at the surface (interface)', default=-1.9)
+    call get_param(param_file, mod, "S_SUF", s_sur, 'Salinity at the surface (interface)',  default=33.8)
+    call get_param(param_file, mod, "T_BOT", t_bot, 'Temperature at the bottom (interface)', default=-1.9)
+    call get_param(param_file, mod, "S_BOT", s_bot,'Salinity at the bottom (interface)', default=34.55)
+    call get_param(param_file, mod, "NZ_ZERO_SURF", nz_zero_surf,'Number of layers at the surface  &
+                                    are initialy zero', units='nondim', default=0)
+    call get_param(param_file, mod, "NZ_ZERO_BOT", nz_zero_bot,'Number of layers at the bottom  &
+                                    are initialy zero', units='nondim', default=0)
 
-    case default
+    ! Compute min/max density using T_SUR/S_SUR and T_BOT/S_BOT
+    call calculate_density(t_sur,s_sur,0.0,rho_sur,tv%eqn_of_state)
+    write (*,*)'Surface density is:', rho_sur
+    call calculate_density(t_bot,s_bot,0.0,rho_bot,tv%eqn_of_state)
+    write (*,*)'Bottom density is:', rho_bot
+    rho_range = rho_bot - rho_sur
+    write (*,*)'Density range is:', rho_range
+ 
+    if ((NZ_ZERO_SURF + NZ_ZERO_BOT) == 0) then
+      ! with NZ_ZERO_SURF = NZ_ZERO_BOT = 0
+      do K=1,nz+1
+        e0(k) = -G%max_depth * real(k-1) / real(nz)
+      enddo
+        e0(nz+1) = -G%max_depth
+
+    else
+      ! with NZ_ZERO* =! 0
+      ! Surface interfaces
+      do k=1,NZ_ZERO_SURF+1
+        e0(k) = (K-1) * GV%Angstrom_z
+      enddo
+      ! Interior interfaces
+      do k=NZ_ZERO_SURF+2,nz+1-NZ_ZERO_BOT
+        e0(k) = -G%max_depth * real(k-1-NZ_ZERO_SURF) / real(nz - (NZ_ZERO_SURF + NZ_ZERO_BOT))
+      enddo
+      ! Bottom interfaces
+      tmp1 = 1
+      do k=nz+2-NZ_ZERO_BOT,nz+1
+        e0(k) = -G%max_depth - tmp1 * GV%Angstrom_z
+        tmp1 = tmp1 + 1
+      enddo
+    write(*,*)'Initial interfaces, e0:',e0(:)
+    endif
+
+    do j=js,je ; do i=is,ie
+      eta1D(nz+1) = -1.0*G%bathyT(i,j)
+      do k=nz,1,-1
+        eta1D(k) = e0(k)
+        if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_z)) then
+          eta1D(k) = eta1D(k+1) + GV%Angstrom_z
+          h(i,j,k) = GV%Angstrom_z
+        else
+          h(i,j,k) = eta1D(k) - eta1D(k+1)
+        endif
+      enddo
+    enddo ; enddo
+
+  case ( REGRIDDING_ZSTAR )                       ! Initial thicknesses for z coordinates
+    do j=js,je ; do i=is,ie
+      eta1D(nz+1) = -1.0*G%bathyT(i,j)
+      do k=nz,1,-1
+        eta1D(k) =  -G%max_depth * real(k-1) / real(nz)
+        if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
+          eta1D(k) = eta1D(k+1) + min_thickness
+          h(i,j,k) = min_thickness
+        else
+          h(i,j,k) = eta1D(k) - eta1D(k+1)
+        endif
+      enddo
+   enddo ; enddo
+
+  case ( REGRIDDING_SIGMA )             ! Initial thicknesses for sigma coordinates
+    do j=js,je ; do i=is,ie
+      delta_h = G%bathyT(i,j) / dfloat(nz)
+      h(i,j,:) = delta_h
+    end do ; end do 
+
+  case default
       call MOM_error(FATAL,"isomip_initialize: "// &
       "Unrecognized i.c. setup - set REGRIDDING_COORDINATE_MODE")
 
@@ -198,60 +254,66 @@ subroutine ISOMIP_initialize_thickness ( h, G, param_file )
 
 end subroutine ISOMIP_initialize_thickness
 
-
-!------------------------------------------------------------------------------
-! Initialization of temperature and salinity
-!------------------------------------------------------------------------------
-subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, param_file, &
+!> Initial values for temperature and salinity
+subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, &
                                                     eqn_of_state)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T, S
-  real, intent(in), dimension(NIMEM_,NJMEM_, NKMEM_)  :: h
-  type(ocean_grid_type),               intent(in)  :: G
-  type(param_file_type),               intent(in)  :: param_file
-  type(EOS_type),                      pointer     :: eqn_of_state
+  type(ocean_grid_type),               intent(in)  :: G !< Ocean grid structure
+  type(verticalGrid_type),                   intent(in) :: GV !< Vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< Potential temperature (degC)
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< Salinity (ppt)
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< Layer thickness (m or Pa)
+  type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
+  type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure
+  ! Local variables
 
-  real :: pres(SZK_(G))      ! An array of the reference pressure in Pa.
-
-  integer   :: i, j, k, is, ie, js, je, nz
-  real      :: x;
-  real      :: delta_S, delta_T;
-  real :: bmax            ! max depth of bedrock topography
-  real      :: S_ref, T_ref;        ! Reference salinity and temerature within
-                                    ! surface layer
-  real      :: S_range, T_range;    ! Range of salinities and temperatures over the
-                                    ! vertical
-  real      :: xi0, xi1;
+  integer   :: i, j, k, is, ie, js, je, nz, NZ_ZERO_SURF, NZ_ZERO_BOT
+  real      :: x, ds, dt, rho_sur, rho_bot
+  real      :: xi0, xi1, dxi, r, S_sur, T_sur, S_bot, T_bot, S_range, T_range
+!  real    :: T_ref, T_Light, T_Dense, S_ref, S_Light, S_Dense, a1, frac_dense, k_frac, res_rat, k_light
   real      :: z          ! vertical position in z space
-  character(len=40) :: verticalCoordinate
+  character(len=40) :: verticalCoordinate, density_profile
   
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   call get_param(param_file,mod,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
             default=DEFAULT_COORDINATE_MODE)
-  call get_param(param_file,mod,"S_REF",S_ref,'Reference salinity',units='1e-3',fail_if_missing=.true.)
-  call get_param(param_file,mod,"T_REF",T_ref,'Reference temperature',units='C',fail_if_missing=.true.)
-  call get_param(param_file,mod,"S_RANGE",S_range,'Initial salinity range',units='1e-3',default=2.0)
-  call get_param(param_file,mod,"T_RANGE",T_range,'Initial temperature range',units='1e-3',default=0.0)
-  
-  T(:,:,:) = 0.0
-  S(:,:,:) = 0.0
-  bmax = 720.0 
-  ! Linear salinity profile
+  call get_param(param_file, mod, "T_SUR",t_sur,'Temperature at the surface (interface)', default=-1.9,&
+                 do_not_log=.true.)
+  call get_param(param_file, mod, "S_SUF", s_sur, 'Salinity at the surface (interface)',  default=33.8,&
+                 do_not_log=.true.)
+  call get_param(param_file, mod, "T_BOT", t_bot, 'Temperature at the bottom (interface)', default=-1.9,&
+                 do_not_log=.true.)
+  call get_param(param_file, mod, "S_BOT", s_bot,'Salinity at the bottom (interface)', default=34.55,&
+                 do_not_log=.true.)
+  call get_param(param_file, mod, "NZ_ZERO_SURF", nz_zero_surf,'Number of layers at the surface  &
+                                    are initialy zero', units='nondim', default=0,do_not_log=.true.)
+  call get_param(param_file, mod, "NZ_ZERO_BOT", nz_zero_bot,'Number of layers at the bottom  &
+                                    are initialy zero', units='nondim', default=0,do_not_log=.true.)
+
+  ds = ((s_bot - s_sur)/(nz - (nz_zero_surf + nz_zero_bot))) * 0.5
+  dt = ((t_bot - t_sur)/(nz - (nz_zero_surf + nz_zero_bot))) * 0.5
+  s_sur = s_sur + ds; 
+  s_bot = s_bot - ds;
+  t_sur = t_sur + dt;
+  t_bot = t_bot - dt;
+  call calculate_density(t_sur,s_sur,0.0,rho_sur,eqn_of_state)
+  write (*,*)'Density in the surface layer:', rho_sur
+  call calculate_density(t_bot,s_bot,0.0,rho_bot,eqn_of_state)
+  write (*,*)'Density in the bottom layer::', rho_bot
+
+  S_range = s_bot - s_sur
+  T_range = t_bot - t_sur
+  write(*,*)'s_bot, s_sur, S_range, t_bot, t_sur, T_range', s_bot, s_sur, S_range, t_bot, t_sur, T_range
 
   select case ( coordinateMode(verticalCoordinate) )
 
-    case ( REGRIDDING_RHO )
+    case (  REGRIDDING_SIGMA, REGRIDDING_ZSTAR, REGRIDDING_RHO )
       do j=js,je ; do i=is,ie
         xi0 = 0.0;
         do k = 1,nz
-          xi1 = xi0 + (h(i,j,k) / G%max_depth)
-!          z = (G%bathyT(i,j)/(nz-1))* (k -1)
-          z = (G%max_depth/(nz-1))* (k -1)
-
-          S(i,j,k) = S_REF + (S_RANGE*z/Bmax)
-!          S(i,j,k) = S_REF + (S_RANGE*xi1*0.5)
-          T(i,j,k) = T_REF + (T_RANGE*z/Bmax)
-!          T(i,j,k) = T_REF + (T_RANGE*xi1*0.5)
+          xi1 = xi0 + h(i,j,k) / G%max_depth
+          S(i,j,k) = S_sur + ( 0.5 * S_range ) * (xi0 + xi1)
+          T(i,j,k) = T_sur + ( 0.5 * T_range ) * (xi0 + xi1)
           xi0 = xi1;
         enddo
       enddo ; enddo
@@ -264,17 +326,15 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, param_file, &
 
 end subroutine ISOMIP_initialize_temperature_salinity
 
-! -----------------------------------------------------------------------------
-subroutine ISOMIP_initialize_sponges(G, tv, PF, CSp)
+!> Sets up the the inverse restoration time (Idamp), and   !
+! the values towards which the interface heights and an arbitrary    !
+! number of tracers should be restored within each sponge.
+subroutine ISOMIP_initialize_sponges(G,GV, tv, PF, CSp)
   type(ocean_grid_type), intent(in) :: G
+  type(verticalGrid_type), intent(in) :: GV
   type(thermo_var_ptrs), intent(in) :: tv
   type(param_file_type), intent(in) :: PF
   type(ALE_sponge_CS),   pointer    :: CSp
-!   This subroutine sets the inverse restoration time (Idamp), and   !
-! the values towards which the interface heights and an arbitrary    !
-! number of tracers should be restored within each sponge. The       !
-! interface height is always subject to damping, and must always be  !
-! the first registered field.                                        !
 
 ! Arguments: G - The ocean's grid structure.
 !  (in)      tv - A structure containing pointers to any available
@@ -327,9 +387,9 @@ subroutine ISOMIP_initialize_sponges(G, tv, PF, CSp)
      eta1D(nz+1) = -1.0*G%bathyT(i,j)
         do k=nz,1,-1
           eta1D(k) = e0(k)
-          if (eta1D(k) < (eta1D(k+1) + G%GV%Angstrom_z)) then
-            eta1D(k) = eta1D(k+1) + G%GV%Angstrom_z
-            h(i,j,k) = G%GV%Angstrom_z
+          if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_z)) then
+            eta1D(k) = eta1D(k+1) + GV%Angstrom_z
+            h(i,j,k) = GV%Angstrom_z
           else
             h(i,j,k) = eta1D(k) - eta1D(k+1)
           endif
@@ -378,13 +438,10 @@ subroutine ISOMIP_initialize_sponges(G, tv, PF, CSp)
           z = (G%max_depth/(nz-1))* (k -1)
           S(i,j,k) = S_REF + (S_RANGE*z/Bmax)
           T(i,j,k) = T_REF + (T_RANGE*z/Bmax)
-          call calculate_density(T(i,j,k),S(i,j,k),0.0,rho_dummy,tv%eqn_of_state)
-          RHO(i,j,k) = rho_dummy
+!          call calculate_density(T(i,j,k),S(i,j,k),0.0,rho_dummy,tv%eqn_of_state)
+!          RHO(i,j,k) = rho_dummy
         enddo
       enddo ; enddo
-!      write(*,*)'max(T)',maxval(T(10:20,10,:)),minval(T(10:20,10,:))
-!      write(*,*)'max(S)',maxval(S(10:20,10,:)),minval(S(10:20,10,:))
-!      write(*,*)'max(RHO)',maxval(RHO(10:20,10,:)),minval(RHO(10:20,10,:))
 
 !   Now register all of the fields which are damped in the sponge.   !
 ! By default, momentum is advected vertically within the sponge, but !

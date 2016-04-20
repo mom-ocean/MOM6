@@ -24,23 +24,17 @@ use MOM_hor_index, only : hor_index_type, hor_index_init
 use MOM_domains, only : MOM_domain_type, get_domain_extent, compute_block_extent
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_verticalGrid, only : verticalGrid_type
-use MOM_verticalGrid, only : verticalGridInit, verticalGridEnd
-use MOM_verticalGrid, only : get_flux_units, get_thickness_units, get_tr_flux_units
 
 implicit none ; private
 
 #include <MOM_memory.h>
 
 public MOM_grid_init, MOM_grid_end, set_first_direction
-public get_flux_units, get_thickness_units, get_tr_flux_units
-public isPointInCell
-public hor_index_type, verticalGrid_type
+public isPointInCell, hor_index_type
 
 type, public :: ocean_grid_type
   type(MOM_domain_type), pointer :: Domain => NULL()
-  type(MOM_domain_type), pointer :: Domain_aux => NULL()
-  type(verticalGrid_type), pointer :: GV => NULL()
+  type(MOM_domain_type), pointer :: Domain_aux => NULL() ! A non-symmetric auxiliary domain type.
   type(hor_index_type) :: HI
   integer :: isc, iec, jsc, jec ! The range of the computational domain indices
   integer :: isd, ied, jsd, jed ! and data domain indices at tracer cell centers.
@@ -50,7 +44,7 @@ type, public :: ocean_grid_type
   integer :: IsgB, IegB, JsgB, JegB ! The range of the global domain vertex indices.
   integer :: isd_global         ! The values of isd and jsd in the global
   integer :: jsd_global         ! (decomposition invariant) index space.
-  integer :: ks, ke             ! The range of layer's vertical indices.
+  integer :: ke                 ! The number of layers in the vertical.
   logical :: symmetric          ! True if symmetric memory is used.
   logical :: nonblocking_updates  ! If true, non-blocking halo updates are
                                   ! allowed.  The default is .false. (for now).
@@ -67,7 +61,9 @@ type, public :: ocean_grid_type
     dxT, IdxT, & ! dxT is delta x at h points, in m, and IdxT is 1/dxT in m-1.
     dyT, IdyT, & ! dyT is delta y at h points, in m, and IdyT is 1/dyT in m-1.
     areaT, &     ! areaT is the area of an h-cell, in m2.
-    IareaT       ! IareaT = 1/areaT, in m-2.
+    IareaT, &    ! IareaT = 1/areaT, in m-2.
+    sin_rot, &   ! The sine and cosine of the angular rotation between the local
+    cos_rot      ! model grid's northward and the true northward directions.
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
     mask2dCu, &  ! 0 for boundary points and 1 for ocean points on the u grid.  Nondim.
@@ -110,17 +106,8 @@ type, public :: ocean_grid_type
                         ! On many grids these are the same as geoLonT & geoLonBu.
   character(len=40) :: &
     x_axis_units, &     !   The units that are used in labeling the coordinate
-    y_axis_units        ! axes.
-
-  ! These parameters are run-time parameters that are used during some
-  ! initialization routines (but not all)
-  real :: south_lat     ! The latitude (or y-coordinate) of the first v-line
-  real :: west_lon      ! The longitude (or x-coordinate) of the first u-line
-  real :: len_lat = 0.  ! The latitudinal (or y-coord) extent of physical domain
-  real :: len_lon = 0.  ! The longitudinal (or x-coord) extent of physical domain
-  real :: Rad_Earth = 6.378e6 ! The radius of the planet in meters.
-  real :: max_depth     ! The maximum depth of the ocean in meters.
-  character(len=40) :: axis_units = ' '! Units for the horizontal coordinates.
+    y_axis_units        ! axes.  Except on a Cartesian grid, these are usually
+                        ! some variant of "degrees".
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
     bathyT        ! Ocean bottom depth at tracer points, in m.
@@ -147,61 +134,89 @@ type, public :: ocean_grid_type
   ! These variables are for block structures.
   integer                   :: nblocks
   type(hor_index_type), pointer :: Block(:) => NULL() ! store indices for each block
+
+  ! These parameters are run-time parameters that are used during some
+  ! initialization routines (but not all)
+  real :: south_lat     ! The latitude (or y-coordinate) of the first v-line
+  real :: west_lon      ! The longitude (or x-coordinate) of the first u-line
+  real :: len_lat = 0.  ! The latitudinal (or y-coord) extent of physical domain
+  real :: len_lon = 0.  ! The longitudinal (or x-coord) extent of physical domain
+  real :: Rad_Earth = 6.378e6 ! The radius of the planet in meters.
+  real :: max_depth     ! The maximum depth of the ocean in meters.
 end type ocean_grid_type
 
 contains
 
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~!
+!> MOM_grid_init initializes the ocean grid array sizes and grid memory.
 subroutine MOM_grid_init(G, param_file)
-  type(ocean_grid_type), intent(inout) :: G
-  type(param_file_type), intent(in)    :: param_file
+  type(ocean_grid_type), intent(inout) :: G          !< The horizontal grid type
+  type(param_file_type), intent(in)    :: param_file !< Parameter file handle
 ! Arguments: G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
+
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   integer :: isd, ied, jsd, jed, nk, idg_off, jdg_off
   integer :: IsdB, IedB, JsdB, JedB
   integer :: ied_max, jed_max
   integer :: niblock, njblock, nihalo, njhalo, nblocks, n, i, j
+  logical :: global_indexing ! If true use global index values instead of having
+                             ! the data domain on each processor start at 1.
   integer, allocatable, dimension(:) :: ibegin, iend, jbegin, jend
+  character(len=40)  :: mod_nm  = "MOM_grid" ! This module's name.
 
-  ! get_domain_extent ensures that domains start at 1 for compatibility between
-  ! static and dynamically allocated arrays.
-  call get_domain_extent(G%Domain, G%isc, G%iec, G%jsc, G%jec, &
-                         G%isd, G%ied, G%jsd, G%jed, &
-                         G%isg, G%ieg, G%jsg, G%jeg, &
-                         idg_off, jdg_off, G%symmetric)
-  G%isd_global = G%isd+idg_off ; G%jsd_global = G%jsd+jdg_off
-
-  call hor_index_init(G%Domain, G%HI, param_file)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, "MOM_grid", version, &
+  call log_version(param_file, mod_nm, version, &
                    "Parameters providing information about the lateral grid.")
   call get_param(param_file, "MOM", "G_EARTH", G%g_Earth, &
                  "The gravitational acceleration of the Earth.", &
                  units="m s-2", default = 9.80)
-  call get_param(param_file, "MOM_grid", "FIRST_DIRECTION", G%first_direction, &
+  call get_param(param_file, mod_nm, "GLOBAL_INDEXING", global_indexing, &
+                 "If true, use a global lateral indexing convention, so \n"//&
+                 "that corresponding points on different processors have \n"//&
+                 "the same index. This does not work with static memory.", &
+                 default=.false.)
+#ifdef STATIC_MEMORY_
+  if (global_indexing) call MOM_error(FATAL, "MOM_grid_init : "//&
+       "GLOBAL_INDEXING can not be true with STATIC_MEMORY.")
+#endif
+  call get_param(param_file, mod_nm, "FIRST_DIRECTION", G%first_direction, &
                  "An integer that indicates which direction goes first \n"//&
                  "in parts of the code that use directionally split \n"//&
                  "updates, with even numbers (or 0) used for x- first \n"//&
                  "and odd numbers used for y-first.", default=0)
 
-  call get_param(param_file, "MOM_grid", "BATHYMETRY_AT_VEL", G%bathymetry_at_vel, &
+  call get_param(param_file, mod_nm, "BATHYMETRY_AT_VEL", G%bathymetry_at_vel, &
                  "If true, there are separate values for the basin depths \n"//&
                  "at velocity points.  Otherwise the effects of of \n"//&
                  "topography are entirely determined from thickness points.", &
                  default=.false.)
 
-  call get_param(param_file, "MOM_grid", "NIBLOCK", niblock, "The number of blocks "// &
+  call get_param(param_file, mod_nm, "NIBLOCK", niblock, "The number of blocks "// &
                  "in the x-direction on each processor (for openmp).", default=1, &
                  layoutParam=.true.)
-  call get_param(param_file, "MOM_grid", "NJBLOCK", njblock, "The number of blocks "// &
+  call get_param(param_file, mod_nm, "NJBLOCK", njblock, "The number of blocks "// &
                  "in the y-direction on each processor (for openmp).", default=1, &
                  layoutParam=.true.)
 
+  call hor_index_init(G%Domain, G%HI, param_file, &
+                      local_indexing=.not.global_indexing)
+
+  ! get_domain_extent ensures that domains start at 1 for compatibility between
+  ! static and dynamically allocated arrays, unless global_indexing is true.
+  call get_domain_extent(G%Domain, G%isc, G%iec, G%jsc, G%jec, &
+                         G%isd, G%ied, G%jsd, G%jed, &
+                         G%isg, G%ieg, G%jsg, G%jeg, &
+                         idg_off, jdg_off, G%symmetric, &
+                         local_indexing=.not.global_indexing)
+  G%isd_global = G%isd+idg_off ; G%jsd_global = G%jsd+jdg_off
+
   G%nonblocking_updates = G%Domain%nonblocking_updates
 
+  ! Set array sizes for fields that are discretized at tracer cell boundaries.
   G%IscB = G%isc ; G%JscB = G%jsc
   G%IsdB = G%isd ; G%JsdB = G%jsd
   G%IsgB = G%isg ; G%JsgB = G%jsg
@@ -220,7 +235,6 @@ subroutine MOM_grid_init(G, param_file)
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-
   if (G%bathymetry_at_vel) then
     ALLOC_(G%Dblock_u(IsdB:IedB, jsd:jed)) ; G%Dblock_u(:,:) = 0.0
     ALLOC_(G%Dopen_u(IsdB:IedB, jsd:jed))  ; G%Dopen_u(:,:) = 0.0
@@ -267,21 +281,23 @@ subroutine MOM_grid_init(G, param_file)
     G%Block(n)%jed = G%Block(n)%jec + njhalo
     G%Block(n)%IscB = G%Block(n)%isc; G%Block(n)%IecB = G%Block(n)%iec
     G%Block(n)%JscB = G%Block(n)%jsc; G%Block(n)%JecB = G%Block(n)%jec
-    !--- For symmetry domain, the first block will have the extra point.
+    !   For symmetric memory domains, the first block will have the extra point
+    ! at the lower boundary of its computational domain.
     if (G%symmetric) then
       if (i==1) G%Block(n)%IscB = G%Block(n)%IscB-1
       if (j==1) G%Block(n)%JscB = G%Block(n)%JscB-1
     endif
     G%Block(n)%IsdB = G%Block(n)%isd; G%Block(n)%IedB = G%Block(n)%ied
     G%Block(n)%JsdB = G%Block(n)%jsd; G%Block(n)%JedB = G%Block(n)%jed
-    !--- For symmetry domain, every block will have the extra point.
+    !--- For symmetric memory domain, every block will have an extra point
+    !--- at the lower boundary of its data domain.
     if (G%symmetric) then
       G%Block(n)%IsdB = G%Block(n)%IsdB-1
       G%Block(n)%JsdB = G%Block(n)%JsdB-1
     endif
     G%Block(n)%idg_offset = (ibegin(i) - G%Block(n)%isc) + G%HI%idg_offset
     G%Block(n)%jdg_offset = (jbegin(j) - G%Block(n)%jsc) + G%HI%jdg_offset
-    ! Find the largest values of ied and jed so that all blocks wi;ll have the
+    ! Find the largest values of ied and jed so that all blocks will have the
     ! same size in memory.
     ied_max = max(ied_max, G%Block(n)%ied)
     jed_max = max(jed_max, G%Block(n)%jed)
@@ -294,18 +310,11 @@ subroutine MOM_grid_init(G, param_file)
     G%Block(n)%jed = jed_max ; G%Block(n)%JedB = jed_max
   enddo
 
-  !-- do some bounds checking
+  !-- do some bounds error checking
   if ( G%block(nblocks)%ied+G%block(nblocks)%idg_offset > G%HI%ied + G%HI%idg_offset ) &
         call MOM_error(FATAL, "MOM_grid_init: G%ied_bk > G%ied")
   if ( G%block(nblocks)%jed+G%block(nblocks)%jdg_offset > G%HI%jed + G%HI%jdg_offset ) &
         call MOM_error(FATAL, "MOM_grid_init: G%jed_bk > G%jed")
-
-  call verticalGridInit( param_file, G%GV )
-
-  ! Copy over several common variables from the vertical grid.
-  ! Consider removing these later.
-  G%ks = 1 ; G%ke = G%GV%ke
-  G%bathyT(:,:) = G%GV%Angstrom_z !### Should this be 0 instead, in which case this line can go?
 
 end subroutine MOM_grid_init
 
@@ -348,8 +357,10 @@ subroutine set_first_direction(G, y_first)
   G%first_direction = y_first
 end subroutine set_first_direction
 
+!---------------------------------------------------------------------
+!> Allocate memory used by the ocean_grid_type and related structures.
 subroutine allocate_metrics(G)
-  type(ocean_grid_type), intent(inout) :: G
+  type(ocean_grid_type), intent(inout) :: G !< The horizontal grid type
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, isg, ieg, jsg, jeg
 
   ! This subroutine allocates the lateral elements of the ocean_grid_type that
@@ -405,10 +416,13 @@ subroutine allocate_metrics(G)
   ALLOC_(G%IareaCu(IsdB:IedB,jsd:jed)) ; G%IareaCu(:,:) = 0.0
   ALLOC_(G%IareaCv(isd:ied,JsdB:JedB)) ; G%IareaCv(:,:) = 0.0
 
-  ALLOC_(G%bathyT(isd:ied, jsd:jed)) ; G%bathyT(:,:) = 0.0  ! This was Angstrom_z.
+  ALLOC_(G%bathyT(isd:ied, jsd:jed)) ; G%bathyT(:,:) = 0.0
   ALLOC_(G%CoriolisBu(IsdB:IedB, JsdB:JedB)) ; G%CoriolisBu(:,:) = 0.0
   ALLOC_(G%dF_dx(isd:ied, jsd:jed)) ; G%dF_dx(:,:) = 0.0
   ALLOC_(G%dF_dy(isd:ied, jsd:jed)) ; G%dF_dy(:,:) = 0.0
+
+  ALLOC_(G%sin_rot(isd:ied,jsd:jed)) ; G%sin_rot(:,:) = 0.0
+  ALLOC_(G%cos_rot(isd:ied,jsd:jed)) ; G%cos_rot(:,:) = 1.0
 
   allocate(G%gridLonT(isg:ieg))   ; G%gridLonT(:) = 0.0
   allocate(G%gridLonB(G%IsgB:G%IegB)) ; G%gridLonB(:) = 0.0
@@ -417,9 +431,10 @@ subroutine allocate_metrics(G)
 
 end subroutine allocate_metrics
 
+!---------------------------------------------------------------------
+!> Release memory used by the ocean_grid_type and related structures.
 subroutine MOM_grid_end(G)
-! Arguments: G - The ocean's grid structure.
-  type(ocean_grid_type), intent(inout) :: G
+  type(ocean_grid_type), intent(inout) :: G !< The horizontal grid type
 
   DEALLOC_(G%dxT)  ; DEALLOC_(G%dxCu)  ; DEALLOC_(G%dxCv)  ; DEALLOC_(G%dxBu)
   DEALLOC_(G%IdxT) ; DEALLOC_(G%IdxCu) ; DEALLOC_(G%IdxCv) ; DEALLOC_(G%IdxBu)
@@ -445,11 +460,14 @@ subroutine MOM_grid_end(G)
 
   DEALLOC_(G%bathyT)  ; DEALLOC_(G%CoriolisBu)
   DEALLOC_(G%dF_dx)  ; DEALLOC_(G%dF_dy)
+  DEALLOC_(G%sin_rot) ; DEALLOC_(G%cos_rot)
 
   deallocate(G%gridLonT) ; deallocate(G%gridLatT)
   deallocate(G%gridLonB) ; deallocate(G%gridLatB)
 
-  call verticalGridEnd( G%GV )
+  deallocate(G%Domain%mpp_domain)
+  deallocate(G%Domain)
+
 end subroutine MOM_grid_end
 
 end module MOM_grid
