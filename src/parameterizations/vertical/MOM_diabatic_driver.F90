@@ -1240,84 +1240,85 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   call do_group_pass(CS%pass_hold_eb_ea,G%Domain)
   call cpu_clock_end(id_clock_pass)
 
-
-  !  Use a tridiagonal solver to determine effect of the diapycnal
-  !  advection on velocity field. It is assumed that water leaves
-  !  or enters the ocean with the surface velocity.
-  if (CS%debug) then
-    call MOM_state_chksum("before u/v tridiag ", u, v, h, G, GV)
-    call hchksum(ea, "before u/v tridiag ea",G)
-    call hchksum(eb, "before u/v tridiag eb",G)
-    call hchksum(hold, "before u/v tridiag hold",G)
-  endif
-  call cpu_clock_begin(id_clock_tridiag)
+  if (.not. CS%useALEalgorithm) then
+    !  Use a tridiagonal solver to determine effect of the diapycnal
+    !  advection on velocity field. It is assumed that water leaves
+    !  or enters the ocean with the surface velocity.
+    if (CS%debug) then
+      call MOM_state_chksum("before u/v tridiag ", u, v, h, G, GV)
+      call hchksum(ea, "before u/v tridiag ea",G)
+      call hchksum(eb, "before u/v tridiag eb",G)
+      call hchksum(hold, "before u/v tridiag hold",G)
+    endif
+    call cpu_clock_begin(id_clock_tridiag)
 !$OMP parallel do default(none) shared(js,je,Isq,Ieq,ADp,u,hold,ea,h_neglect,eb,nz,Idt) &
 !$OMP                          private(hval,b1,d1,c1,eaval)
-  do j=js,je
-    do I=Isq,Ieq
-      if (ASSOCIATED(ADp%du_dt_dia)) ADp%du_dt_dia(I,j,1) = u(I,j,1)
-      hval = (hold(i,j,1) + hold(i+1,j,1)) + (ea(i,j,1) + ea(i+1,j,1)) + h_neglect
-      b1(I) = 1.0 / (hval + (eb(i,j,1) + eb(i+1,j,1)))
-      d1(I) = hval * b1(I)
-      u(I,j,1) = b1(I) * (hval * u(I,j,1))
-    enddo
-    do k=2,nz ; do I=Isq,Ieq
-      if (ASSOCIATED(ADp%du_dt_dia)) ADp%du_dt_dia(I,j,k) = u(I,j,k)
-      c1(I,k) = (eb(i,j,k-1)+eb(i+1,j,k-1)) * b1(I)
-      eaval = ea(i,j,k) + ea(i+1,j,k)
-      hval = hold(i,j,k) + hold(i+1,j,k) + h_neglect
-      b1(I) = 1.0 / ((eb(i,j,k) + eb(i+1,j,k)) + (hval + d1(I)*eaval))
-      d1(I) = (hval + d1(I)*eaval) * b1(I)
-      u(I,j,k) = (hval*u(I,j,k) + eaval*u(I,j,k-1))*b1(I)
-    enddo ; enddo
-    do k=nz-1,1,-1 ; do I=Isq,Ieq
-      u(I,j,k) = u(I,j,k) + c1(I,k+1)*u(I,j,k+1)
-      if (ASSOCIATED(ADp%du_dt_dia)) &
-        ADp%du_dt_dia(I,j,k) = (u(I,j,k) - ADp%du_dt_dia(I,j,k)) * Idt
-    enddo ; enddo
-    if (ASSOCIATED(ADp%du_dt_dia)) then
+    do j=js,je
       do I=Isq,Ieq
-        ADp%du_dt_dia(I,j,nz) = (u(I,j,nz)-ADp%du_dt_dia(I,j,nz)) * Idt
+        if (ASSOCIATED(ADp%du_dt_dia)) ADp%du_dt_dia(I,j,1) = u(I,j,1)
+        hval = (hold(i,j,1) + hold(i+1,j,1)) + (ea(i,j,1) + ea(i+1,j,1)) + h_neglect
+        b1(I) = 1.0 / (hval + (eb(i,j,1) + eb(i+1,j,1)))
+        d1(I) = hval * b1(I)
+        u(I,j,1) = b1(I) * (hval * u(I,j,1))
       enddo
+      do k=2,nz ; do I=Isq,Ieq
+        if (ASSOCIATED(ADp%du_dt_dia)) ADp%du_dt_dia(I,j,k) = u(I,j,k)
+        c1(I,k) = (eb(i,j,k-1)+eb(i+1,j,k-1)) * b1(I)
+        eaval = ea(i,j,k) + ea(i+1,j,k)
+        hval = hold(i,j,k) + hold(i+1,j,k) + h_neglect
+        b1(I) = 1.0 / ((eb(i,j,k) + eb(i+1,j,k)) + (hval + d1(I)*eaval))
+        d1(I) = (hval + d1(I)*eaval) * b1(I)
+        u(I,j,k) = (hval*u(I,j,k) + eaval*u(I,j,k-1))*b1(I)
+      enddo ; enddo
+      do k=nz-1,1,-1 ; do I=Isq,Ieq
+        u(I,j,k) = u(I,j,k) + c1(I,k+1)*u(I,j,k+1)
+        if (ASSOCIATED(ADp%du_dt_dia)) &
+          ADp%du_dt_dia(I,j,k) = (u(I,j,k) - ADp%du_dt_dia(I,j,k)) * Idt
+      enddo ; enddo
+      if (ASSOCIATED(ADp%du_dt_dia)) then
+        do I=Isq,Ieq
+          ADp%du_dt_dia(I,j,nz) = (u(I,j,nz)-ADp%du_dt_dia(I,j,nz)) * Idt
+        enddo
+      endif
+    enddo
+    if (CS%debug) then
+      call MOM_state_chksum("aft 1st loop tridiag ", u, v, h, G, GV)
     endif
-  enddo
-  if (CS%debug) then
-    call MOM_state_chksum("aft 1st loop tridiag ", u, v, h, G, GV)
-  endif
 !$OMP parallel do default(none) shared(Jsq,Jeq,is,ie,ADp,v,hold,ea,h_neglect,eb,nz,Idt) &
 !$OMP                          private(hval,b1,d1,c1,eaval)
-  do J=Jsq,Jeq
-    do i=is,ie
-      if (ASSOCIATED(ADp%dv_dt_dia)) ADp%dv_dt_dia(i,J,1) = v(i,J,1)
-      hval = (hold(i,j,1) + hold(i,j+1,1)) + (ea(i,j,1) + ea(i,j+1,1)) + h_neglect
-      b1(i) = 1.0 / (hval + (eb(i,j,1) + eb(i,j+1,1)))
-      d1(I) = hval * b1(I)
-      v(i,J,1) = b1(i) * (hval * v(i,J,1))
-    enddo
-    do k=2,nz ; do i=is,ie
-      if (ASSOCIATED(ADp%dv_dt_dia)) ADp%dv_dt_dia(i,J,k) = v(i,J,k)
-      c1(i,k) = (eb(i,j,k-1)+eb(i,j+1,k-1)) * b1(i)
-      eaval = ea(i,j,k) + ea(i,j+1,k)
-      hval = hold(i,j,k) + hold(i,j+1,k) + h_neglect
-      b1(i) = 1.0 / ((eb(i,j,k) + eb(i,j+1,k)) + (hval + d1(i)*eaval))
-      d1(i) = (hval + d1(i)*eaval) * b1(i)
-      v(i,J,k) = (hval*v(i,J,k) + eaval*v(i,J,k-1))*b1(i)
-    enddo ; enddo
-    do k=nz-1,1,-1 ; do i=is,ie
-      v(i,J,k) = v(i,J,k) + c1(i,k+1)*v(i,J,k+1)
-      if (ASSOCIATED(ADp%dv_dt_dia)) &
-        ADp%dv_dt_dia(i,J,k) = (v(i,J,k) - ADp%dv_dt_dia(i,J,k)) * Idt
-    enddo ; enddo
-    if (ASSOCIATED(ADp%dv_dt_dia)) then
+    do J=Jsq,Jeq
       do i=is,ie
-        ADp%dv_dt_dia(i,J,nz) = (v(i,J,nz)-ADp%dv_dt_dia(i,J,nz)) * Idt
+        if (ASSOCIATED(ADp%dv_dt_dia)) ADp%dv_dt_dia(i,J,1) = v(i,J,1)
+        hval = (hold(i,j,1) + hold(i,j+1,1)) + (ea(i,j,1) + ea(i,j+1,1)) + h_neglect
+        b1(i) = 1.0 / (hval + (eb(i,j,1) + eb(i,j+1,1)))
+        d1(I) = hval * b1(I)
+        v(i,J,1) = b1(i) * (hval * v(i,J,1))
       enddo
+      do k=2,nz ; do i=is,ie
+        if (ASSOCIATED(ADp%dv_dt_dia)) ADp%dv_dt_dia(i,J,k) = v(i,J,k)
+        c1(i,k) = (eb(i,j,k-1)+eb(i,j+1,k-1)) * b1(i)
+        eaval = ea(i,j,k) + ea(i,j+1,k)
+        hval = hold(i,j,k) + hold(i,j+1,k) + h_neglect
+        b1(i) = 1.0 / ((eb(i,j,k) + eb(i,j+1,k)) + (hval + d1(i)*eaval))
+        d1(i) = (hval + d1(i)*eaval) * b1(i)
+        v(i,J,k) = (hval*v(i,J,k) + eaval*v(i,J,k-1))*b1(i)
+      enddo ; enddo
+      do k=nz-1,1,-1 ; do i=is,ie
+        v(i,J,k) = v(i,J,k) + c1(i,k+1)*v(i,J,k+1)
+        if (ASSOCIATED(ADp%dv_dt_dia)) &
+          ADp%dv_dt_dia(i,J,k) = (v(i,J,k) - ADp%dv_dt_dia(i,J,k)) * Idt
+      enddo ; enddo
+      if (ASSOCIATED(ADp%dv_dt_dia)) then
+        do i=is,ie
+          ADp%dv_dt_dia(i,J,nz) = (v(i,J,nz)-ADp%dv_dt_dia(i,J,nz)) * Idt
+        enddo
+      endif
+    enddo
+    call cpu_clock_end(id_clock_tridiag)
+    if (CS%debug) then
+      call MOM_state_chksum("after u/v tridiag ", u, v, h, G, GV)
     endif
-  enddo
-  call cpu_clock_end(id_clock_tridiag)
-  if (CS%debug) then
-    call MOM_state_chksum("after u/v tridiag ", u, v, h, G, GV)
-  endif
+  endif ! useALEalgorithm
 
   ! Frazil formation keeps temperature above the freezing point.
   ! make_frazil is deliberately called at both the beginning and at
