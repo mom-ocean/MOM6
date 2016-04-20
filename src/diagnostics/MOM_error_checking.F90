@@ -49,10 +49,10 @@ contains
 
 subroutine check_redundant_v3d(mesg, u_comp, v_comp, G, is, ie, js, je, &
                                direction, stagger)
-  character(len=*),                    intent(in)    :: mesg
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in) :: u_comp
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in) :: v_comp
   type(ocean_grid_type),               intent(inout) :: G
+  character(len=*),                    intent(in)    :: mesg
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u_comp
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v_comp
   integer,                   optional, intent(in)    :: is, ie, js, je
   integer,                   optional, intent(in)    :: direction
   integer,                   optional, intent(in)    :: stagger
@@ -80,10 +80,10 @@ end subroutine  check_redundant_v3d
 
 subroutine check_redundant_v2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
                                direction, stagger)
-  character(len=*),                intent(in)    :: mesg
-  real, dimension(NIMEMB_,NJMEM_), intent(in)    :: u_comp
-  real, dimension(NIMEM_,NJMEMB_), intent(in)    :: v_comp
   type(ocean_grid_type),           intent(inout) :: G
+  character(len=*),                intent(in)    :: mesg
+  real, dimension(SZIB_(G),SZJ_(G)), intent(in)  :: u_comp
+  real, dimension(SZI_(G),SZJB_(G)), intent(in)  :: v_comp
   integer,               optional, intent(in)    :: is, ie, js, je
   integer,               optional, intent(in)    :: direction
   integer,               optional, intent(in)    :: stagger
@@ -156,8 +156,8 @@ end subroutine  check_redundant_v2d
 
 subroutine check_redundant_s3d(mesg, array, G, is, ie, js, je, stagger)
   character(len=*),                     intent(in)    :: mesg
-  real, dimension(NIMEMB_,NJMEMB_,NKMEM_), intent(in) :: array
   type(ocean_grid_type),                intent(inout) :: G
+  real, dimension(SZIB_(G),SZJB_(G),SZK_(G)), intent(in) :: array
   integer,                    optional, intent(in)    :: is, ie, js, je
   integer,                    optional, intent(in)    :: stagger
 ! Arguments: u_comp - The u-component of the vector being checked.
@@ -184,8 +184,8 @@ end subroutine  check_redundant_s3d
 
 subroutine check_redundant_s2d(mesg, array, G, is, ie, js, je, stagger)
   character(len=*),                intent(in)    :: mesg
-  real, dimension(NIMEMB_,NJMEMB_), intent(in)   :: array
   type(ocean_grid_type),           intent(inout) :: G
+  real, dimension(SZIB_(G),SZJB_(G)), intent(in) :: array
   integer,               optional, intent(in)    :: is, ie, js, je
   integer,               optional, intent(in)    :: stagger
 ! Arguments: u_comp - The u-component of the vector being checked.

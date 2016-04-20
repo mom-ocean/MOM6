@@ -20,7 +20,7 @@ use MOM_io,               only : create_file, write_field, close_file, slasher
 use MOM_regridding,       only : initialize_regridding, regridding_main, end_regridding
 use MOM_regridding,       only : uniformResolution
 use MOM_regridding,       only : inflate_vanished_layers_old, setCoordinateResolution
-use MOM_regridding,       only : set_target_densities_from_G, set_target_densities
+use MOM_regridding,       only : set_target_densities_from_GV, set_target_densities
 use MOM_regridding,       only : regriddingCoordinateModeDoc, DEFAULT_COORDINATE_MODE
 use MOM_regridding,       only : regriddingInterpSchemeDoc, regriddingDefaultInterpScheme
 use MOM_regridding,       only : regriddingDefaultBoundaryExtrapolation
@@ -83,9 +83,6 @@ type, public :: ALE_CS
   integer :: degree_linear=1 !< Degree of linear piecewise polynomial
   integer :: degree_parab=2  !< Degree of parabolic piecewise polynomial
 
-  real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NK_INTERFACE_) :: dzRegrid  !< Work space for communicating
-                                                                       !! between regridding and remapping
-
   logical :: remap_after_initialization !<   Indicates whether to regrid/remap after initializing the state.
 
   logical :: show_call_tree !< For debugging
@@ -128,9 +125,10 @@ contains
 !! before the main time integration loop to initialize the regridding stuff.
 !! We read the MOM_input file to register the values of different
 !! regridding/remapping parameters.
-subroutine ALE_init( param_file, G, CS)
+subroutine ALE_init( param_file, G, GV, CS)
   type(param_file_type),   intent(in) :: param_file !< Parameter file
   type(ocean_grid_type),   intent(in) :: G          !< Ocean grid structure
+  type(verticalGrid_type), intent(in) :: GV         !< Ocean vertical grid structure
   type(ALE_CS),            pointer    :: CS         !< Module control structure
 
   ! Local variables
@@ -151,9 +149,6 @@ subroutine ALE_init( param_file, G, CS)
 
   CS%show_call_tree = callTree_showQuery()
   if (CS%show_call_tree) call callTree_enter("ALE_init(), MOM_ALE.F90")
-
-  ! Memory allocation for regridding
-  call ALE_memory_allocation( G, CS )
 
   ! --- BOUNDARY EXTRAPOLATION --
   ! This sets whether high-order (rather than PCM) reconstruction schemes
@@ -184,7 +179,7 @@ subroutine ALE_init( param_file, G, CS)
 
   ! Initialize and configure regridding
   allocate( dz(G%ke) )
-  call ALE_initRegridding( G, param_file, mod, CS%regridCS, dz )
+  call ALE_initRegridding( G, GV, param_file, mod, CS%regridCS, dz )
   deallocate( dz )
 
   ! Initialize and configure remapping
@@ -231,8 +226,8 @@ subroutine ALE_init( param_file, G, CS)
                  "REGRID_TIME_SCALE. Between depths REGRID_FILTER_SHALLOW_DEPTH and\n"//&
                  "REGRID_FILTER_SHALLOW_DEPTH the filter wieghts adopt a cubic profile.", &
                  units="m", default=0.)
-  call set_regrid_params(CS%regridCS, depth_of_time_filter_shallow=filter_shallow_depth*G%GV%m_to_H, &
-                                      depth_of_time_filter_deep=filter_deep_depth*G%GV%m_to_H)
+  call set_regrid_params(CS%regridCS, depth_of_time_filter_shallow=filter_shallow_depth*GV%m_to_H, &
+                                      depth_of_time_filter_deep=filter_deep_depth*GV%m_to_H)
 
   ! Keep a record of values for subsequent queries
   CS%nk = G%ke
@@ -327,7 +322,7 @@ end subroutine ALE_register_diags
 subroutine adjustGridForIntegrity( CS, G, h )
   type(ALE_CS), pointer                                 :: CS
   type(ocean_grid_type), intent(in)                     :: G
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(inout) :: h
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h
 
   call inflate_vanished_layers_old( CS%regridCS, G, h(:,:,:) )
 
@@ -343,7 +338,6 @@ subroutine ALE_end(CS)
   ! Deallocate memory used for the regridding
   call end_remapping( CS%remapCS )
   call end_regridding( CS%regridCS )
-  call ALE_memory_deallocation( CS )
 
   deallocate(CS)
 
@@ -353,19 +347,21 @@ end subroutine ALE_end
 !! the old grid and the new grid. The creation of the new grid can be based
 !! on z coordinates, target interface densities, sigma coordinates or any
 !! arbitrary coordinate system.
-subroutine ALE_main( G, h, u, v, tv, Reg, CS, dt)
-  type(ocean_grid_type),                   intent(in)    :: G   !< Ocean grid informations
-  real, dimension(NIMEM_,NJMEM_, NKMEM_),  intent(inout) :: h   !< Current 3D grid obtained after last time step (m or Pa)
-  real, dimension(NIMEMB_,NJMEM_, NKMEM_), intent(inout) :: u   !< Zonal velocity field (m/s)
-  real, dimension(NIMEM_,NJMEMB_, NKMEM_), intent(inout) :: v   !< Meridional velocity field (m/s)
-  type(thermo_var_ptrs),                   intent(inout) :: tv  !< Thermodynamic variable structure
-  type(tracer_registry_type),              pointer       :: Reg !< Tracer registry structure
-  type(ALE_CS),                            pointer       :: CS  !< Regridding parameters and options
-  real,                          optional, intent(in)    :: dt  !< Time step between calls to ALE_main()
+subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt)
+  type(ocean_grid_type),                      intent(in)    :: G   !< Ocean grid informations
+  type(verticalGrid_type),                    intent(in)    :: GV  !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)),  intent(inout) :: h   !< Current 3D grid obtained after last time step (m or Pa)
+  real, dimension(SZIB_(G),SZJ_(G), SZK_(G)), intent(inout) :: u   !< Zonal velocity field (m/s)
+  real, dimension(SZI_(G),SZJB_(G), SZK_(G)), intent(inout) :: v   !< Meridional velocity field (m/s)
+  type(thermo_var_ptrs),                      intent(inout) :: tv  !< Thermodynamic variable structure
+  type(tracer_registry_type),                 pointer       :: Reg !< Tracer registry structure
+  type(ALE_CS),                               pointer       :: CS  !< Regridding parameters and options
+  real,                             optional, intent(in)    :: dt  !< Time step between calls to ALE_main()
 
   ! Local variables
-  integer :: nk, i, j, k, isc, iec, jsc, jec
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: dzRegrid ! The change in grid interface positions
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_new ! New 3D grid obtained after last time step (m or Pa)
+  integer :: nk, i, j, k, isc, iec, jsc, jec
 
   nk = G%ke; isc = G%isc; iec = G%iec; jsc = G%jsc; jec = G%jec
 
@@ -374,26 +370,28 @@ subroutine ALE_main( G, h, u, v, tv, Reg, CS, dt)
   if (present(dt)) then
     call ALE_update_regrid_weights( dt, CS )
   endif
+  dzRegrid(:,:,:) = 0.0
 
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
-  call regridding_main( CS%remapCS, CS%regridCS, G, h, tv, CS%dzRegrid )
+  call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, dzRegrid )
 
-  call check_remapping_grid( G, h, CS%dzRegrid, 'in ALE_main()' )
+  call check_remapping_grid( G, h, dzRegrid, 'in ALE_main()' )
 
   ! Override old grid with new one. The new grid 'h_new' is built in
   ! one of the 'build_...' routines above.
-!$OMP parallel do default(none) shared(isd,ied,jsd,jed,nk,h,h_new,CS)
+!$OMP parallel do default(none) shared(isc,iec,jsc,jec,nk,h,h_new,dzRegrid,CS)
   do k = 1,nk
     do j = jsc-1,jec+1 ; do i = isc-1,iec+1
-      h_new(i,j,k) = max( 0., h(i,j,k) + ( CS%dzRegrid(i,j,k) - CS%dzRegrid(i,j,k+1) ) )
+      h_new(i,j,k) = max( 0., h(i,j,k) + ( dzRegrid(i,j,k) - dzRegrid(i,j,k+1) ) )
     enddo ; enddo
   enddo
 
   if (CS%show_call_tree) call callTree_waypoint("new grid generated (ALE_main)")
 
   ! Remap all variables from old grid h onto new grid h_new
-  call remap_all_state_vars( CS%remapCS, CS, G, h, h_new, -CS%dzRegrid, Reg, u, v, CS%show_call_tree, dt)
+  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, -dzRegrid, Reg, &
+                             u, v, CS%show_call_tree, dt )
 
   if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_main)")
 
@@ -411,12 +409,13 @@ end subroutine ALE_main
 
 
 !> Generates new grid
-subroutine ALE_build_grid( G, regridCS, remapCS, h, tv, debug )
+subroutine ALE_build_grid( G, GV, regridCS, remapCS, h, tv, debug )
   type(ocean_grid_type),                   intent(in)    :: G        !< Ocean grid structure 
+  type(verticalGrid_type),                 intent(in)    :: GV       !< Ocean vertical grid structure
   type(regridding_CS),                     intent(in)    :: regridCS !< Regridding parameters and options
   type(remapping_CS),                      intent(in)    :: remapCS  !< Remapping parameters and options
   type(thermo_var_ptrs),                   intent(inout) :: tv       !< Thermodynamical variable structure
-  real, dimension(NIMEM_,NJMEM_, NKMEM_),  intent(inout) :: h        !< Current 3D grid obtained after the last time step (m or Pa)
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h      !< Current 3D grid obtained after the last time step (m or Pa)
   logical,                       optional, intent(in)    :: debug    !< If true, show the call tree
 
   ! Local variables
@@ -430,7 +429,7 @@ subroutine ALE_build_grid( G, regridCS, remapCS, h, tv, debug )
 
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
-  call regridding_main( remapCS, regridCS, G, h, tv, dzRegrid )
+  call regridding_main( remapCS, regridCS, G, GV, h, tv, dzRegrid )
 
   call check_remapping_grid( G, h, dzRegrid, 'in ALE_build_grid()' )
 
@@ -454,18 +453,19 @@ end subroutine ALE_build_grid
 !! This routine is called during initialization of the model at time=0, to 
 !! remap initiali conditions to the model grid.  It is also called during a
 !! time step to update the state.  
-subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, h_old, h_new, dxInterface, Reg, u, v, debug, dt)
+subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, dxInterface, Reg, u, v, debug, dt)
   type(remapping_CS),                               intent(in)    :: CS_remapping  !< Remapping control structure
   type(ALE_CS),                                     intent(in)    :: CS_ALE        !< ALE control structure 
   type(ocean_grid_type),                            intent(in)    :: G             !< Ocean grid structure
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),            intent(in)    :: h_old         !< Thickness of source grid (m or Pa)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),            intent(in)    :: h_new         !< Thickness of destination grid (m or Pa)
-  real, dimension(NIMEM_,NJMEM_,NK_INTERFACE_),     intent(in)    :: dxInterface   !< Change in interface position (Hm or Pa)
+  type(verticalGrid_type),                          intent(in)    :: GV            !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),         intent(in)    :: h_old         !< Thickness of source grid (m or Pa)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),         intent(in)    :: h_new         !< Thickness of destination grid (m or Pa)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),       intent(in)    :: dxInterface   !< Change in interface position (Hm or Pa)
   type(tracer_registry_type),                       pointer       :: Reg           !< Tracer registry structure
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), optional, intent(inout) :: u             !< Zonal velocity component (m/s)
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), optional, intent(inout) :: v             !< Meridional velocity component (m/s)
-  logical,                                optional, intent(in)    :: debug         !< If true, show the call tree
-  real,                                   optional, intent(in)    :: dt            !< time step for diagnostics 
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), optional, intent(inout) :: u          !< Zonal velocity component (m/s)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), optional, intent(inout) :: v          !< Meridional velocity component (m/s)
+  logical,                                   optional, intent(in)    :: debug      !< If true, show the call tree
+  real,                                      optional, intent(in)    :: dt         !< time step for diagnostics 
 
   ! Local variables
   integer                                     :: i, j, k, m
@@ -500,7 +500,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, h_old, h_new, dxInterfa
   endif 
 
   ! Remap tracer
-!$OMP parallel default(none) shared(G,h,dxInterface,CS_remapping,nz,Reg,u,v,ntr,show_call_tree, &
+!$OMP parallel default(none) shared(G,GV,h_old,h_new,dxInterface,CS_remapping,nz,Reg,u,v,ntr,show_call_tree, &
 !$OMP                               dt,h2,CS_ALE,work_conc,work_cont,work_2d,Idt,ppt2mks) &
 !$OMP                       private(h1,dx,u_column)
   if (ntr>0) then
@@ -525,7 +525,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, h_old, h_new, dxInterfa
               if(CS_ALE%do_tendency_diag(m)) then 
                 do k=1,G%ke
                   work_conc(i,j,k) = (u_column(k)    - Reg%Tr(m)%t(i,j,k)      ) * Idt
-                  work_cont(i,j,k) = (u_column(k)*h2(k) - Reg%Tr(m)%t(i,j,k)*h1(k)) * Idt * G%GV%H_to_kg_m2
+                  work_cont(i,j,k) = (u_column(k)*h2(k) - Reg%Tr(m)%t(i,j,k)*h1(k)) * Idt * GV%H_to_kg_m2
                 enddo 
               endif 
             endif 
@@ -655,8 +655,8 @@ subroutine ALE_remap_scalar(CS, G, nk_src, h_src, s_src, h_dst, s_dst, all_cells
   integer,                                 intent(in)    :: nk_src    !< Number of levels on source grid
   real, dimension(SZI_(G),SZJ_(G),nk_src), intent(in)    :: h_src     !< Level thickness of source grid (m or Pa)
   real, dimension(SZI_(G),SZJ_(G),nk_src), intent(in)    :: s_src     !< Scalar on source grid
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),   intent(in)    :: h_dst     !< Level thickness of destination grid (m or Pa)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),   intent(inout) :: s_dst     !< Scalar on destination grid
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h_dst     !< Level thickness of destination grid (m or Pa)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: s_dst     !< Scalar on destination grid
   logical, optional,                       intent(in)    :: all_cells !< If false, only reconstruct for
                                                                       !! non-vanished cells. Use all vanished
                                                                       !! layers otherwise (default).
@@ -702,15 +702,16 @@ end subroutine ALE_remap_scalar
 !! routine determines the edge values for the salinity and temperature 
 !! within each layer. These edge values are returned and are used to compute 
 !! the pressure gradient (by computing the densities).
-subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, tv, h )
-  type(ALE_CS), intent(inout)                          :: CS   !< module control structure 
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: S_t  !< Salinity at the top edge of each layer
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: S_b  !< Salinity at the bottom edge of each layer
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: T_t  !< Temperature at the top edge of each layer
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: T_b  !< Temperature at the bottom edge of each layer
-  type(ocean_grid_type), intent(in)                    :: G    !< ocean grid structure 
-  type(thermo_var_ptrs), intent(in)                    :: tv   !< thermodynamics structure 
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h    !< layer thickness 
+subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h )
+  type(ocean_grid_type),                    intent(in)    :: G    !< ocean grid structure 
+  type(verticalGrid_type),                  intent(in)    :: GV   !< Ocean vertical grid structure
+  type(ALE_CS),                             intent(inout) :: CS   !< module control structure 
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: S_t  !< Salinity at the top edge of each layer
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: S_b  !< Salinity at the bottom edge of each layer
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: T_t  !< Temperature at the top edge of each layer
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: T_b  !< Temperature at the bottom edge of each layer
+  type(thermo_var_ptrs),                    intent(in)    :: tv   !< thermodynamics structure 
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< layer thickness 
 
   ! Local variables
   integer :: i, j, k
@@ -720,16 +721,15 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, tv, h )
   real, dimension(CS%nk,CS%degree_linear+1) :: ppoly_linear_coefficients !Coefficients of polynomial
 
   ! NOTE: the variables 'CS%grid_generic' and 'CS%ppoly_linear' are declared at
-  ! the module level. Memory is allocated once at the beginning of the run
-  ! in 'ALE_memory_allocation'.
+  ! the module level.
 
   ! Determine reconstruction within each column
-!$OMP parallel do default(none) shared(G,h,tv,CS,S_t,S_b,T_t,T_b)                     &
+!$OMP parallel do default(none) shared(G,GV,h,tv,CS,S_t,S_b,T_t,T_b)                  &
 !$OMP                          private(hTmp,ppoly_linear_E,ppoly_linear_coefficients,tmp)
   do j = G%jsc,G%jec+1
     do i = G%isc,G%iec+1
       ! Build current grid
-      hTmp(:) = h(i,j,:)*G%GV%H_to_m
+      hTmp(:) = h(i,j,:)*GV%H_to_m
       tmp(:) = tv%S(i,j,:)
       ! Reconstruct salinity profile    
       ppoly_linear_E = 0.0
@@ -767,15 +767,16 @@ end subroutine pressure_gradient_plm
 !> routine determines the edge values for the salinity and temperature 
 !> within each layer. These edge values are returned and are used to compute 
 !> the pressure gradient (by computing the densities).
-subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, tv, h )
-  type(ALE_CS), intent(inout)                          :: CS   !< module control structure 
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: S_t  !< Salinity at top edge of each layer
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: S_b  !< Salinity at bottom edge of each layer
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: T_t  !< Temperature at the top edge of each layer
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(inout) :: T_b  !< Temperature at the bottom edge of each layer
-  type(ocean_grid_type), intent(in)                    :: G    !< ocean grid structure 
-  type(thermo_var_ptrs), intent(in)                    :: tv   !< ocean thermodynamics structure 
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h    !< layer thickness 
+subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h )
+  type(ocean_grid_type),                    intent(in)    :: G    !< ocean grid structure 
+  type(verticalGrid_type),                  intent(in)    :: GV   !< Ocean vertical grid structure
+  type(ALE_CS),                             intent(inout) :: CS   !< module control structure 
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: S_t  !< Salinity at top edge of each layer
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: S_b  !< Salinity at bottom edge of each layer
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: T_t  !< Temperature at the top edge of each layer
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: T_b  !< Temperature at the bottom edge of each layer
+  type(thermo_var_ptrs),                    intent(in)    :: tv   !< ocean thermodynamics structure 
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< layer thickness 
 
   ! Local variables
   integer :: i, j, k
@@ -788,17 +789,16 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, tv, h )
 
 
   ! NOTE: the variables 'CS%grid_generic' and 'CS%ppoly_parab' are declared at
-  ! the module level. Memory is allocated once at the beginning of the run
-  ! in 'ALE_memory_allocation'.
+  ! the module level.
 
   ! Determine reconstruction within each column
-!$OMP parallel do default(none) shared(G,h,tv,CS,S_t,S_b,T_t,T_b) &
+!$OMP parallel do default(none) shared(G,GV,h,tv,CS,S_t,S_b,T_t,T_b) &
 !$OMP                          private(hTmp,tmp,ppoly_parab_E,ppoly_parab_coefficients)
   do j = G%jsc,G%jec+1
     do i = G%isc,G%iec+1
      
       ! Build current grid
-      hTmp(:) = h(i,j,:) * G%GV%H_to_m
+      hTmp(:) = h(i,j,:) * GV%H_to_m
       tmp(:) = tv%S(i,j,:)
       
       ! Reconstruct salinity profile    
@@ -834,36 +834,6 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, tv, h )
 end subroutine pressure_gradient_ppm
 
 
-!> Allocate memory for regridding.
-!! In this routine, we allocate the memory needed to carry out regridding
-!! steps in the course of the simulation. 
-!! For example, to compute implicit edge-value estimates, a tridiagonal system
-!! must be solved. We allocate the needed memory at the beginning of the
-!! simulation because the number of layers never changes.
-subroutine ALE_memory_allocation( G, CS )
-  type(ocean_grid_type), intent(in) :: G   !< ocean grid structure 
-  type(ALE_CS), intent(inout)       :: CS  !< module control structure 
-
-  ! Local variables
-  integer :: nz
-  nz = G%ke
-
-  ! Work space
-  ALLOC_(CS%dzRegrid(G%isd:G%ied,G%jsd:G%jed,nz+1)); CS%dzRegrid(:,:,:) = 0.
-  
-end subroutine ALE_memory_allocation
-
-
-!> Deallocate memory for regridding.
-!! In this routine, we reclaim the memory that was allocated for the regridding. 
-subroutine ALE_memory_deallocation( CS )
-  type(ALE_CS), intent(inout) :: CS  !< module control structure 
-  
-  ! Work space
-  DEALLOC_(CS%dzRegrid)
-
-end subroutine ALE_memory_deallocation
-
 !> pressure reconstruction logical 
 logical function usePressureReconstruction(CS)
   type(ALE_CS), pointer :: CS  !< control structure 
@@ -891,12 +861,13 @@ end function pressureReconstructionScheme
 
 
 !> Initialize regridding module 
-subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
-  type(ocean_grid_type), intent(in)  :: G            !< ocean grid structure 
-  type(param_file_type), intent(in)  :: param_file   !< parameter file 
-  character(len=*),      intent(in)  :: mod          !< Name of calling module
-  type(regridding_CS),   intent(out) :: regridCS     !< Regridding parameters and work arrays
-  real, dimension(:),    intent(out) :: dz           !< Resolution (thickness) in units of coordinate
+subroutine ALE_initRegridding( G, GV, param_file, mod, regridCS, dz )
+  type(ocean_grid_type),   intent(in)  :: G            !< ocean grid structure 
+  type(verticalGrid_type), intent(in)  :: GV           !< Ocean vertical grid structure
+  type(param_file_type),   intent(in)  :: param_file   !< parameter file 
+  character(len=*),        intent(in)  :: mod          !< Name of calling module
+  type(regridding_CS),     intent(out) :: regridCS     !< Regridding parameters and work arrays
+  real, dimension(:),      intent(out) :: dz           !< Resolution (thickness) in units of coordinate
 
   ! Local variables
   character(len=80)  :: string, varName ! Temporary strings
@@ -964,8 +935,8 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
   select case ( trim(string) )
     case ("UNIFORM")
       dz(:) = uniformResolution(G%ke, coordMode, G%max_depth, &
-                 G%GV%Rlay(1)+0.5*(G%GV%Rlay(1)-G%GV%Rlay(2)), &
-                 G%GV%Rlay(G%ke)+0.5*(G%GV%Rlay(G%ke)-G%GV%Rlay(G%ke-1)) )
+                 GV%Rlay(1)+0.5*(GV%Rlay(1)-GV%Rlay(2)), &
+                 GV%Rlay(G%ke)+0.5*(GV%Rlay(G%ke)-GV%Rlay(G%ke-1)) )
       call log_param(param_file, mod, "!ALE_RESOLUTION", dz, &
                    trim(message), units=trim(coordUnits))
     case ("PARAM")
@@ -1054,7 +1025,7 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
     endif
   endif
   call setCoordinateResolution( dz, regridCS )
-  if (coordinateMode(coordMode) == REGRIDDING_RHO) call set_target_densities_from_G( G, regridCS )
+  if (coordinateMode(coordMode) == REGRIDDING_RHO) call set_target_densities_from_GV( GV, regridCS )
 
   call get_param(param_file, mod, "MIN_THICKNESS", tmpReal, &
                  "When regridding, this is the minimum layer\n"//&
@@ -1128,7 +1099,7 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
   elseif ( trim(string) ==  "PARAM") then
     call get_param(param_file, mod, "MAXIMUM_INTERFACE_DEPTHS", z_max, &
                  trim(message), units="m", fail_if_missing=.true.)
-    call set_regrid_max_depths( regridCS, z_max, G%GV%m_to_H )
+    call set_regrid_max_depths( regridCS, z_max, GV%m_to_H )
   elseif (index(trim(string),'FILE:')==1) then
     call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
     inputdir = slasher(inputdir)
@@ -1163,7 +1134,7 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
     endif
     call log_param(param_file, mod, "!MAXIMUM_INT_DEPTHS", z_max, &
                trim(message), units=coordinateUnits(coordMode))
-    call set_regrid_max_depths( regridCS, z_max, G%GV%m_to_H )
+    call set_regrid_max_depths( regridCS, z_max, GV%m_to_H )
   elseif (index(trim(string),'FNC1:')==1) then
     call dz_function1( trim(string(6:)), dz_max )
     if ((coordinateMode(coordMode) == REGRIDDING_SLIGHT) .and. &
@@ -1173,7 +1144,7 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
     z_max(1) = 0.0 ; do K=1,ke ; z_max(K+1) = z_max(K) + dz_max(K) ; enddo
     call log_param(param_file, mod, "!MAXIMUM_INT_DEPTHS", z_max, &
                trim(message), units=coordinateUnits(coordMode))
-    call set_regrid_max_depths( regridCS, z_max, G%GV%m_to_H )
+    call set_regrid_max_depths( regridCS, z_max, GV%m_to_H )
   else
     call MOM_error(FATAL,"ALE_initRegridding: "// &
       "Unrecognized MAXIMUM_INT_DEPTH_CONFIG "//trim(string))
@@ -1197,7 +1168,7 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
   elseif ( trim(string) ==  "PARAM") then
     call get_param(param_file, mod, "MAX_LAYER_THICKNESS", h_max, &
                  trim(message), units="m", fail_if_missing=.true.)
-    call set_regrid_max_thickness( regridCS, h_max, G%GV%m_to_H )
+    call set_regrid_max_thickness( regridCS, h_max, GV%m_to_H )
   elseif (index(trim(string),'FILE:')==1) then
     call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
     inputdir = slasher(inputdir)
@@ -1225,12 +1196,12 @@ subroutine ALE_initRegridding( G, param_file, mod, regridCS, dz )
     call MOM_read_data(trim(fileName), trim(varName), h_max)
     call log_param(param_file, mod, "!MAX_LAYER_THICKNESS", h_max, &
                trim(message), units=coordinateUnits(coordMode))
-    call set_regrid_max_thickness( regridCS, h_max, G%GV%m_to_H )
+    call set_regrid_max_thickness( regridCS, h_max, GV%m_to_H )
   elseif (index(trim(string),'FNC1:')==1) then
     call dz_function1( trim(string(6:)), h_max )
     call log_param(param_file, mod, "!MAX_LAYER_THICKNESS", h_max, &
                trim(message), units=coordinateUnits(coordMode))
-    call set_regrid_max_thickness( regridCS, h_max, G%GV%m_to_H )
+    call set_regrid_max_thickness( regridCS, h_max, GV%m_to_H )
   else
     call MOM_error(FATAL,"ALE_initRegridding: "// &
       "Unrecognized MAX_LAYER_THICKNESS_CONFIG "//trim(string))
@@ -1337,9 +1308,10 @@ end subroutine ALE_updateVerticalGridType
 !> Write the vertical coordinate information into a file.
 !! This subroutine writes out a file containing any available data related
 !! to the vertical grid used by the MOM ocean model when in ALE mode.
-subroutine ALE_writeCoordinateFile( CS, G, directory )
+subroutine ALE_writeCoordinateFile( CS, G, GV, directory )
   type(ALE_CS),          pointer       :: CS         !< module control structure 
   type(ocean_grid_type), intent(inout) :: G          !< model grid structure 
+  type(verticalGrid_type), intent(in)  :: GV         !< ocean vertical grid structure
   character(len=*),      intent(in)    :: directory  !< directory for writing grid info 
 
   character(len=120) :: filepath
@@ -1359,7 +1331,7 @@ subroutine ALE_writeCoordinateFile( CS, G, directory )
   vars(2) = var_desc('ds_interface', getCoordinateUnits( CS%regridCS ), &
                     'Layer Center Coordinate Separation','1','i','1')
 
-  call create_file(unit, trim(filepath), vars, 2, G, fields, SINGLE_FILE)
+  call create_file(unit, trim(filepath), vars, 2, G, fields, SINGLE_FILE, GV=GV)
   call write_field(unit, fields(1), ds)
   call write_field(unit, fields(2), dsi)
   call close_file(unit)
@@ -1369,9 +1341,9 @@ end subroutine ALE_writeCoordinateFile
 
 !> Set h to coordinate values for fixed coordinate systems
 subroutine ALE_initThicknessToCoord( CS, G, h )
-  type(ALE_CS), intent(inout)                        :: CS  !< module control structure 
-  type(ocean_grid_type), intent(in)                  :: G   !< module grid structure 
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(out) :: h   !< layer thickness 
+  type(ALE_CS), intent(inout)                           :: CS  !< module control structure 
+  type(ocean_grid_type), intent(in)                     :: G   !< module grid structure 
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: h   !< layer thickness 
 
   ! Local variables
   integer :: i, j, k

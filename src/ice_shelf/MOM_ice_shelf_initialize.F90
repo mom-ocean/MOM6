@@ -244,12 +244,12 @@ end subroutine initialize_ice_thickness_channel
 !      h_boundary_values, &
 !      hmask, G, PF)
 
-!   real, intent(inout), dimension(NIMEMQ_IS_,NJMEM_)     :: u_face_mask_boundary, u_flux_boundary_values
-!   real, intent(inout), dimension(NIMEM_,NJMEMQ_IS_)     :: v_face_mask_boundary, v_flux_boundary_values
-!   real, intent(inout), dimension(NIMEMQ_IS_,NJMEMQ_IS_) :: u_boundary_values, v_boundary_values
-!   real, intent(inout), dimension(:,:)                   :: hmask, h_boundary_values
-!   type(ocean_grid_type), intent(in)                     :: G
-!   type(param_file_type), intent(in)                     :: PF
+!   type(ocean_grid_type), intent(in)                 :: G
+!   real, intent(inout), dimension(SZIB_(G),SZJ_(G))  :: u_face_mask_boundary, u_flux_boundary_values
+!   real, intent(inout), dimension(SZI_(G),SZJB_(G))  :: v_face_mask_boundary, v_flux_boundary_values
+!   real, intent(inout), dimension(SZIB_(G),SZJB_(G)) :: u_boundary_values, v_boundary_values
+!   real, intent(inout), dimension(:,:)               :: hmask, h_boundary_values
+!   type(param_file_type), intent(in)                 :: PF
 
 !   character(len=40)  :: mod = "initialize_ice_shelf_boundary" ! This subroutine's name.
 !   character(len=200) :: config
@@ -290,13 +290,13 @@ end subroutine initialize_ice_thickness_channel
 !   hmask, &
 !   G, flux_bdry, PF )
 
-!   real, intent(inout), dimension(NIMEMQ_IS_,NJMEM_)     :: u_face_mask_boundary, u_flux_boundary_values
-!   real, intent(inout), dimension(NIMEM_,NJMEMQ_IS_)     :: v_face_mask_boundary, v_flux_boundary_values
-!   real, intent(inout), dimension(NIMEMQ_IS_,NJMEMQ_IS_) :: u_boundary_values, v_boundary_values
-!   real, intent(inout), dimension(:,:)                   :: h_boundary_values, hmask
-!   type(ocean_grid_type), intent(in)                     :: G
-!   logical, intent(in)                                   :: flux_bdry
-!   type (param_file_type), intent(in)                    :: PF 
+!   type(ocean_grid_type), intent(in)                 :: G
+!   real, dimension(SZIB_(G),SZJ_(G)),  intent(inout) :: u_face_mask_boundary, u_flux_boundary_values
+!   real, dimension(SZI_(G),SZJB_(G)),  intent(inout) :: v_face_mask_boundary, v_flux_boundary_values
+!   real, dimension(SZIB_(G),SZJB_(G)), intent(inout) :: u_boundary_values, v_boundary_values
+!   real, dimension(:,:), intent(inout)               :: h_boundary_values, hmask
+!   logical, intent(in)                               :: flux_bdry
+!   type (param_file_type), intent(in)                :: PF 
   
 !   character(len=40)  :: mod = "initialize_ice_shelf_boundary_channel" ! This subroutine's name.
 !   integer :: i, j, gjsd, gisd, isd, jsd, is, js, iegq, jegq, giec, gjec, gisc, gjsc, isc, jsc, iec, jec, ied, jed 

@@ -22,6 +22,7 @@ module MOM_shortwave_abs
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
+use MOM_verticalGrid,  only : verticalGrid_type
 
 implicit none ; private
 
@@ -53,7 +54,7 @@ end type optics_type
 contains
 
 !> Apply shortwave heating below surface boundary layer.
-subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
+subroutine absorbRemainingSW(G, GV, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
                              adjustAbsorptionProfile, absorbAllSW, T, Pen_SW_bnd, &
                              eps, ksort, htot, Ttot, TKE, dSV_dT)
 
@@ -66,7 +67,8 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
 ! left in Pen_SW) should go into an (absent for now) ocean bottom sediment layer.
 
   type(ocean_grid_type),             intent(in)    :: G
-  real, dimension(NIMEM_,NKMEM_),    intent(in)    :: h
+  type(verticalGrid_type),           intent(in)    :: GV
+  real, dimension(SZI_(G),SZK_(G)),  intent(in)    :: h
   real, dimension(:,:,:),            intent(in)    :: opacity_band
   integer,                           intent(in)    :: nsw
   integer,                           intent(in)    :: j
@@ -74,17 +76,18 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
   real,                              intent(in)    :: H_limit_fluxes
   logical,                           intent(in)    :: adjustAbsorptionProfile
   logical,                           intent(in)    :: absorbAllSW
-  real, dimension(NIMEM_,NKMEM_),    intent(inout) :: T
+  real, dimension(SZI_(G),SZK_(G)),  intent(inout) :: T
   real, dimension(:,:),              intent(inout) :: Pen_SW_bnd
-  real, dimension(NIMEM_,NKMEM_),    optional, intent(in)    :: eps
-  integer, dimension(NIMEM_,NKMEM_), optional, intent(in)    :: ksort
-  real, dimension(NIMEM_),           optional, intent(in)    :: htot
-  real, dimension(NIMEM_),           optional, intent(inout) :: Ttot
-  real, dimension(NIMEM_,NKMEM_),    optional, intent(in)    :: dSV_dT
-  real, dimension(NIMEM_,NKMEM_),    optional, intent(inout) :: TKE
+  real, dimension(SZI_(G),SZK_(G)),    optional, intent(in)    :: eps
+  integer, dimension(SZI_(G),SZK_(G)), optional, intent(in)    :: ksort
+  real, dimension(SZI_(G)),            optional, intent(in)    :: htot
+  real, dimension(SZI_(G)),            optional, intent(inout) :: Ttot
+  real, dimension(SZI_(G),SZK_(G)),    optional, intent(in)    :: dSV_dT
+  real, dimension(SZI_(G),SZK_(G)),    optional, intent(inout) :: TKE
 
 ! Arguments:
 !  (in)    G            = the ocean grid structure.
+!  (in)    GV           = The ocean's vertical grid structure.
 !  (in)    h            = the layer thicknesses, in m or kg m-2.
 !                         units of h are referred to as "H" below.
 !  (in)    opacity_band = opacity in each band of penetrating shortwave
@@ -105,7 +108,7 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
 !  (inout) T            = layer potential/conservative temperatures (deg C)
 !  (inout) Pen_SW_bnd   = penetrating shortwave heating in each band that
 !                         hits the bottom and will be redistributed through
-!                         the water column (units of K*H), size nsw x NIMEM_.
+!                         the water column (units of K*H), size nsw x SZI_(G).
 
 ! These optional arguments apply when the bulk mixed layer is used
 ! but are unnecessary with other schemes.
@@ -166,12 +169,12 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
 
   min_SW_heating = 2.5e-11
 
-  h_min_heat = 2.0*G%GV%Angstrom + G%GV%H_subroundoff
+  h_min_heat = 2.0*GV%Angstrom + GV%H_subroundoff
   is = G%isc ; ie = G%iec ; nz = G%ke
   C1_6 = 1.0 / 6.0 ; C1_60 = 1.0 / 60.0
 
   TKE_calc = (present(TKE) .and. present(dSV_dT))
-  g_Hconv2 = G%G_earth * G%GV%H_to_kg_m2**2
+  g_Hconv2 = G%G_earth * GV%H_to_kg_m2**2
 
   h_heat(:) = 0.0
   if (present(htot)) then ; do i=is,ie ; h_heat(i) = htot(i) ; enddo ; endif
@@ -200,7 +203,7 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
         ! absorbed without further penetration.
         ! ###Make these numbers into parameters!
         if (nsw*Pen_SW_bnd(n,i)*SW_trans < &
-            dt*min_SW_heating*min(G%GV%m_to_H,1e3*h(i,k)) ) SW_trans = 0.0
+            dt*min_SW_heating*min(GV%m_to_H,1e3*h(i,k)) ) SW_trans = 0.0
 
         Heat_bnd = Pen_SW_bnd(n,i) * (1.0 - SW_trans)
         if (adjustAbsorptionProfile .and. (h_heat(i) > 0.0)) then
@@ -319,13 +322,14 @@ subroutine absorbRemainingSW(G, h, opacity_band, nsw, j, dt, H_limit_fluxes, &
 end subroutine absorbRemainingSW
 
 
-subroutine sumSWoverBands(G, h, opacity_band, nsw, j, dt, &
+subroutine sumSWoverBands(G, GV, h, opacity_band, nsw, j, dt, &
                           H_limit_fluxes, absorbAllSW, iPen_SW_bnd, netPen)
 ! This subroutine calculates the total shortwave heat flux integrated over
 ! bands as a function of depth.  This routine is only called for computing
 ! buoyancy fluxes for use in KPP. This routine does not update the state.
   type(ocean_grid_type),                 intent(in)    :: G
-  real, dimension(NIMEM_,NKMEM_),        intent(in)    :: h
+  type(verticalGrid_type),               intent(in)    :: GV
+  real, dimension(SZI_(G),SZK_(G)),      intent(in)    :: h
   real, dimension(:,:,:),                intent(in)    :: opacity_band
   integer,                               intent(in)    :: nsw
   integer,                               intent(in)    :: j
@@ -333,10 +337,11 @@ subroutine sumSWoverBands(G, h, opacity_band, nsw, j, dt, &
   real,                                  intent(in)    :: H_limit_fluxes
   logical,                               intent(in)    :: absorbAllSW
   real, dimension(:,:),                  intent(in)    :: iPen_SW_bnd
-  real, dimension(NIMEM_,NK_INTERFACE_), intent(inout) :: netPen ! Units of K H
+  real, dimension(SZI_(G),SZK_(G)+1), intent(inout) :: netPen ! Units of K H
 
 ! Arguments:
 !  (in)      G             = ocean grid structure
+!  (in)      GV            = The ocean's vertical grid structure.
 !  (in)      h             = layer thickness (units of m or kg/m^2);
 !                            units of h are referred to as H below.
 !  (in)      opacity_band  = opacity in each band of penetrating shortwave
@@ -346,7 +351,7 @@ subroutine sumSWoverBands(G, h, opacity_band, nsw, j, dt, &
 !  (in)      dt            = time step (seconds)
 !  (inout)   Pen_SW_bnd    = penetrating shortwave heating in each band that
 !                            hits the bottom and will be redistributed through
-!                            the water column (K H units); size nsw x NIMEM_.
+!                            the water column (K H units); size nsw x SZI_(G).
 !  (out)     netPen        = attenuated flux at interfaces, summed over bands (K H units)
 
   real :: h_heat(SZI_(G))     ! thickness of the water column that receives
@@ -372,7 +377,7 @@ subroutine sumSWoverBands(G, h, opacity_band, nsw, j, dt, &
   integer :: is, ie, nz, i, k, ks, n
   SW_Remains = .false.
 
-  h_min_heat = 2.0*G%GV%Angstrom + G%GV%H_subroundoff
+  h_min_heat = 2.0*GV%Angstrom + GV%H_subroundoff
   is = G%isc ; ie = G%iec ; nz = G%ke
 
   pen_SW_bnd(:,:) = iPen_SW_bnd(:,:)
@@ -389,14 +394,14 @@ subroutine sumSWoverBands(G, h, opacity_band, nsw, j, dt, &
       if (h(i,k) > 0.0) then
         do n=1,nsw ; if (Pen_SW_bnd(n,i) > 0.0) then
           ! SW_trans is the SW that is transmitted THROUGH the layer
-          opt_depth = h(i,k)*G%GV%H_to_m * opacity_band(n,i,k)
+          opt_depth = h(i,k)*GV%H_to_m * opacity_band(n,i,k)
           exp_OD = exp(-opt_depth)
           SW_trans = exp_OD
 
           ! Heating at a rate of less than 10-4 W m-2 = 10-3 K m / Century,
           ! and of the layer in question less than 1 K / Century, can be
           ! absorbed without further penetration.
-          if ((nsw*Pen_SW_bnd(n,i)*SW_trans < G%GV%m_to_H*2.5e-11*dt) .and. &
+          if ((nsw*Pen_SW_bnd(n,i)*SW_trans < GV%m_to_H*2.5e-11*dt) .and. &
               (nsw*Pen_SW_bnd(n,i)*SW_trans < h(i,k)*dt*2.5e-8)) &
             SW_trans = 0.0
 
