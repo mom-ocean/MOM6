@@ -330,6 +330,7 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
   real :: S(SZI_(G),SZJ_(G),SZK_(G))   ! A temporary array for salt
   real :: RHO(SZI_(G),SZJ_(G),SZK_(G)) ! A temporary array for RHO
   real :: h(SZI_(G),SZJ_(G),SZK_(G))   ! A temporary array for thickness
+  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for thickness
   real :: Idamp(SZI_(G),SZJ_(G))       ! The inverse damping rate, in s-1.
   real :: S_ref, T_ref                 ! Reference salinity and temerature within surface layer
   real :: S_range, T_range             ! Range of salinities and temperatures over the vertical
@@ -337,20 +338,34 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
                                     ! negative because it is positive upward.      !
   real :: eta1D(SZK_(G)+1)          ! Interface height relative to the sea surface !
                                     ! positive upward, in m.
-  real :: dome2d_width_bay, dome2d_width_bottom, dome2d_depth_bay, dome2d_sponge_time_scale
+  real :: dome2d_width_bay, dome2d_width_bottom, dome2d_depth_bay
+  real :: dome2d_west_sponge_time_scale, dome2d_east_sponge_time_scale
+  real :: dome2d_west_sponge_width, dome2d_east_sponge_width
   real :: dummy1, x, z
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
-  call get_param(param_file, mod, "DOME2D_SPONGE_TIME_SCALE", dome2d_sponge_time_scale, &
-                 'The time-scale on the edge of the domain for restoring T/S\n' //&
-                 'in the sponges. If zero, sponges are disabled', &
+  call get_param(param_file, mod, "DOME2D_WEST_SPONGE_TIME_SCALE", dome2d_west_sponge_time_scale, &
+                 'The time-scale on the west edge of the domain for restoring T/S\n' //&
+                 'in the sponge. If zero, the western sponge is disabled', &
                  units='s', default=0.)
+  call get_param(param_file, mod, "DOME2D_EAST_SPONGE_TIME_SCALE", dome2d_east_sponge_time_scale, &
+                 'The time-scale on the east edge of the domain for restoring T/S\n' //&
+                 'in the sponge. If zero, the eastern sponge is disabled', &
+                 units='s', default=0.)
+  call get_param(param_file, mod, "DOME2D_WEST_SPONGE_WIDTH", dome2d_west_sponge_width, &
+                 'The fraction of the domain in which the western sponge for restoring T/S\n' //&
+                 'is active.', &
+                 units='nondim', default=0.1)
+  call get_param(param_file, mod, "DOME2D_EAST_SPONGE_WIDTH", dome2d_east_sponge_width, &
+                 'The fraction of the domain in which the eastern sponge for restoring T/S\n' //&
+                 'is active.', &
+                 units='nondim', default=0.1)
 
   ! Return if sponges are not in use
-  if (dome2d_sponge_time_scale <= 0.) return
+  if (dome2d_west_sponge_time_scale <= 0. .and. dome2d_east_sponge_time_scale <= 0.) return
 
   if (associated(CSp)) call MOM_error(FATAL, &
      "DOME2d_initialize_sponges called with an associated control structure.")
@@ -363,31 +378,35 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
                  default=0.3, do_not_log=.true.)
   call get_param(param_file, mod, "DOME2D_SHELF_DEPTH", dome2d_depth_bay, &
                  default=0.2, do_not_log=.true.)
+  call get_param(param_file,mod,"S_REF",S_ref)
+  call get_param(param_file,mod,"T_REF",T_ref)
+  call get_param(param_file,mod,"S_RANGE",S_range,default=2.0)
+  call get_param(param_file,mod,"T_RANGE",T_range,default=0.0)
 
-! Set the inverse damping rate as a function of position
+
+  ! Set the inverse damping rate as a function of position
+  Idamp(:,:) = 0.0
   do j=js,je ; do i=is,ie
     if (G%mask2dT(i,j) > 0.) then ! Only set damping rate for wet points
       x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon ! Non-dimensional position within domain (0,1)
-      if (x < 0.5 * dome2d_width_bay ) then ! Within half the shelf width from the left edge
-        dummy1 = 1. - x / ( 0.5 * dome2d_width_bay )
-        Idamp(i,j) = 1.0/3600. * max(0., min(1., dummy1))
-      elseif (x > ( 1. - 0.25 * dome2d_width_bottom ) ) then ! Within a quarter of the basin width from the right
-        dummy1 = 1. - ( 1. - x ) / ( 0.25 * dome2d_width_bottom )
-        Idamp(i,j) = 1.0/3600. * max(0., min(1., dummy1))
+      if ( dome2d_west_sponge_time_scale > 0. .and. x < dome2d_west_sponge_width ) then
+        ! Within half the shelf width from the left edge
+        dummy1 = 1. - x / dome2d_west_sponge_width
+        Idamp(i,j) = 1./dome2d_west_sponge_time_scale * max(0., min(1., dummy1))
+      elseif ( dome2d_east_sponge_time_scale > 0. .and. x > ( 1. - dome2d_east_sponge_width ) ) then
+        ! Within a quarter of the basin width from the right
+        dummy1 = 1. - ( 1. - x ) / dome2d_east_sponge_width
+        Idamp(i,j) = 1./dome2d_east_sponge_time_scale * max(0., min(1., dummy1))
       else
         Idamp(i,j) = 0.
       endif
     else
-      Idamp(i,j) = 0.0
+      Idamp(i,j) = 0.
     endif
   enddo ; enddo
 
-  T(:,:,:) = 0.0 ; S(:,:,:) = 0.0 ; Idamp(:,:) = 0.0
-  S_ref = 33.8; S_range = 0.90
-  T_ref = -1.9; T_range = 2.9
 
   if (use_ALE) then
-    call initialize_ALE_sponge(Idamp,h, nz, G, param_file, ACSp)
 
     ! Construct a grid (somewhat arbitrarily) to describe  the sponge T/S on
     do k=1,nz
@@ -406,14 +425,17 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
         endif
       enddo
     enddo;  enddo
+    ! Store the grid on which the T/S sponge data will reside
+    call initialize_ALE_sponge(Idamp, h, nz, G, param_file, ACSp)
 
     ! Construct temperature and salinity on the arbitrary grid
+    T(:,:,:) = 0.0 ; S(:,:,:) = 0.0
     do j=js,je ; do i=is,ie
       z = -G%bathyT(i,j)
       do k = nz,1,-1
         z = z + 0.5 * h(i,j,k) ! Position of the center of layer k
-        S(i,j,k) = S_REF + (S_RANGE*z/9999999999.)
-        T(i,j,k) = T_REF + (T_RANGE*z/9999999999.)
+        S(i,j,k) = 34.0 - 1.0 * (z/G%max_depth)
+        if ( ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon < dome2d_west_sponge_width ) S(i,j,k) = S_ref + S_range
         z = z + 0.5 * h(i,j,k) ! Position of the interface k
       enddo
     enddo ; enddo
@@ -426,7 +448,33 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
     endif
 
   else
-    stop 'Not coded yet!'
+
+    ! Construct thicknesses to restore to
+    do j=js,je ; do i=is,ie
+      eta1D(nz+1) = -1.0*G%bathyT(i,j)
+      do k=nz,1,-1
+        eta1D(k) = -G%max_depth * real(k-1) / real(nz)
+        if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_z)) then
+          eta1D(k) = eta1D(k+1) + GV%Angstrom_z
+          h(i,j,k) = GV%Angstrom_z
+        else
+          h(i,j,k) = eta1D(k) - eta1D(k+1)
+        endif
+      enddo
+
+      x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon;
+      if ( x .le. dome2d_width_bay ) then
+        h(i,j,1:nz-1) = GV%Angstrom;
+        h(i,j,nz) = dome2d_depth_bay * G%max_depth - (nz-1) * GV%Angstrom;
+      end if
+
+      eta(i,j,nz+1) = -G%bathyT(i,j)
+      do K=nz,1,-1
+        eta(i,j,K) = eta(i,j,K+1) + h(i,j,k)
+      enddo
+    enddo ; enddo
+    call initialize_sponge(Idamp, eta, G, param_file, CSp)
+
   endif
 
 end subroutine DOME2d_initialize_sponges
