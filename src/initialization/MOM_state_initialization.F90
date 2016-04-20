@@ -49,6 +49,7 @@ use lock_exchange_initialization, only : lock_exchange_initialize_thickness
 use external_gwave_initialization, only : external_gwave_initialize_thickness
 use DOME2d_initialization, only : DOME2d_initialize_thickness
 use DOME2d_initialization, only : DOME2d_initialize_temperature_salinity
+use DOME2d_initialization, only : DOME2d_initialize_sponges
 use adjustment_initialization, only : adjustment_initialize_thickness
 use adjustment_initialization, only : adjustment_initialize_temperature_salinity
 use sloshing_initialization, only : sloshing_initialize_thickness
@@ -381,16 +382,18 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                  " \t\t DOME sill-overflow test case. \n"//&
                  " \t USER - call a user modified routine.", default="file")
 
-    if (useALE) then
-      select case (trim(config))
-        case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
-             "Unrecognized ALE sponge configuration "//trim(config))
-      end select
+  ! if (useALE) then
+  !   select case (trim(config))
+  !     case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
+  !          "Unrecognized ALE sponge configuration "//trim(config))
+  !   end select
 
-    else
+  ! else
 
       select case (trim(config))
         case ("DOME"); call DOME_initialize_sponges(G, GV, tv, PF, CS%sponge_CSp)
+        case ("DOME2D"); call DOME2d_initialize_sponges(G, GV, tv, PF, useALE, &
+                                                        CS%sponge_CSp, CS%ALE_sponge_CSp)
         case ("USER"); call user_initialize_sponges(G, use_temperature, tv, &
                                                  PF, CS%sponge_CSp, h)
         case ("phillips"); call Phillips_initialize_sponges(G, use_temperature, tv, &
@@ -400,7 +403,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
         case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
                "Unrecognized sponge configuration "//trim(config))
       end select
-    endif
+  ! endif
   endif
 
 ! This subroutine call sets optional open boundary conditions.
