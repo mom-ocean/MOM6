@@ -178,7 +178,7 @@ subroutine MOM_grid_init(G, param_file)
                  "If true, use a global lateral indexing convention, so \n"//&
                  "that corresponding points on different processors have \n"//&
                  "the same index. This does not work with static memory.", &
-                 default=.false.)
+                 default=.false., layoutParam=.true.)
 #ifdef STATIC_MEMORY_
   if (global_indexing) call MOM_error(FATAL, "MOM_grid_init : "//&
        "GLOBAL_INDEXING can not be true with STATIC_MEMORY.")
