@@ -233,7 +233,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
          case ("coord"); call ALE_initThicknessToCoord( ALE_CSp, G, h )
          case ("uniform"); call initialize_thickness_uniform(h, G, GV, PF)
          case ("DOME"); call DOME_initialize_thickness(h, G, GV, PF)
-         case ("ISOMIP"); call ISOMIP_initialize_thickness(h, G, GV, PF)
+         case ("ISOMIP"); call ISOMIP_initialize_thickness(h, G, GV, PF, tv)
          case ("benchmark"); call benchmark_initialize_thickness(h, G, GV, PF, &
                                  tv%eqn_of_state, tv%P_Ref)
          case ("search"); call initialize_thickness_search
