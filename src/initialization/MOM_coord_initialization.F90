@@ -99,6 +99,9 @@ subroutine MOM_initialize_coord(G, GV, PF, write_geom, output_dir, tv)
   if (debug) call chksum(GV%g_prime, "MOM_initialize_fixed: g_prime ", 1, nz)
   call setVerticalGridAxes( GV%Rlay, GV )
 
+! Copy the maximum depth across from the ocean grid structure
+  GV%max_depth = G%max_depth
+
 ! Write out all of the grid data used by this run.
   if (write_geom) call write_vertgrid_file(GV, G, PF, output_dir)
 
