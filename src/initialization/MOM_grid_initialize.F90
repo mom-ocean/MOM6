@@ -630,7 +630,7 @@ subroutine set_grid_metrics_cartesian(G, param_file)
   niglobal = G%Domain%niglobal ; njglobal = G%Domain%njglobal
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-  I1off = G%isd_global - isd ; J1off = G%jsd_global - jsd;
+  I1off = G%idg_offset ; J1off = G%jdg_offset
 
   call callTree_enter("set_grid_metrics_cartesian(), MOM_grid_initialize.F90")
  
@@ -765,7 +765,7 @@ subroutine set_grid_metrics_spherical(G, param_file)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-  i_offset = G%isd_global - isd; j_offset = G%jsd_global - jsd
+  i_offset = G%idg_offset ; j_offset = G%jdg_offset
 
   call callTree_enter("set_grid_metrics_spherical(), MOM_grid_initialize.F90")
  
@@ -927,7 +927,7 @@ subroutine set_grid_metrics_mercator(G, param_file)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-  X1off = G%isd_global - isd ; Y1off = G%jsd_global - jsd;
+  X1off = G%idg_offset ; Y1off = G%jdg_offset
 
   GP%niglobal = G%Domain%niglobal
   GP%njglobal = G%Domain%njglobal
@@ -1428,7 +1428,6 @@ subroutine initialize_masks(G, PF)
 
   real :: Dmin, min_depth, mask_depth
   integer :: i, j
-!  integer :: isd, isd_global, jsd, jsd_global 
   logical :: apply_OBC_u_flather_east, apply_OBC_u_flather_west
   logical :: apply_OBC_v_flather_north, apply_OBC_v_flather_south
   character(len=40)  :: mod = "MOM_grid_init initialize_masks"
@@ -1473,7 +1472,7 @@ subroutine initialize_masks(G, PF)
   ! that are not necessarily at the edges of the domain.
   if (apply_OBC_u_flather_west) then
     do j=G%jsd,G%jed ; do I=G%isd+1,G%ied
-      if ((I+G%isd_global-G%isd) == G%isg) then
+      if ((I+G%idg_offset) == G%isg) then
         G%bathyT(i-1,j) = G%bathyT(i,j)
       endif
     enddo; enddo       
@@ -1481,7 +1480,7 @@ subroutine initialize_masks(G, PF)
 
   if (apply_OBC_u_flather_east) then
     do j=G%jsd,G%jed ; do I=G%isd,G%ied-1
-      if ((i+G%isd_global-G%isd) == G%ieg) then
+      if ((i+G%idg_offset) == G%ieg) then
         G%bathyT(i+1,j) = G%bathyT(i,j)
       endif
     enddo; enddo    
@@ -1489,7 +1488,7 @@ subroutine initialize_masks(G, PF)
 
   if (apply_OBC_v_flather_north) then
     do J=G%jsd,G%jed-1 ; do i=G%isd,G%ied
-      if ((j+G%jsd_global-G%jsd) == G%jeg) then
+      if ((j+G%jdg_offset) == G%jeg) then
         G%bathyT(i,j+1) = G%bathyT(i,j)
       endif
     enddo; enddo    
@@ -1497,7 +1496,7 @@ subroutine initialize_masks(G, PF)
 
   if (apply_OBC_v_flather_south) then
     do J=G%jsd+1,G%jed ; do i=G%isd,G%ied
-      if ((J+G%jsd_global-G%jsd) == G%jsg) then
+      if ((J+G%jdg_offset) == G%jsg) then
         G%bathyT(i,j-1) = G%bathyT(i,j)
       endif
     enddo; enddo

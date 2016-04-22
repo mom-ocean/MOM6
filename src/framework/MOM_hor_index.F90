@@ -36,7 +36,7 @@ type, public :: hor_index_type
   integer :: IsdB, IedB, JsdB, JedB ! data indices at tracer cell vertices.
   integer :: IsgB, IegB, JsgB, JegB ! The range of the global domain vertex indices.
   integer :: idg_offset             ! The offset between the corresponding global
-  integer :: jdg_offset             ! and array indices.
+  integer :: jdg_offset             ! and local array indices.
   logical :: symmetric              ! True if symmetric memory is used.
 end type hor_index_type
 
@@ -82,7 +82,7 @@ subroutine hor_index_init(Domain, HI, param_file, local_indexing, index_offset)
 end subroutine hor_index_init
 
 !> HIT_assign copies one hor_index_type into another.  It is accessed via an
-!!   assignemnt (=) operator.
+!!   assignment (=) operator.
 subroutine HIT_assign(HI1, HI2)
   type(hor_index_type), intent(out) :: HI1
   type(hor_index_type), intent(in)  :: HI2

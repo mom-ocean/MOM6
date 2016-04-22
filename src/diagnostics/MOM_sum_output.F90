@@ -1159,8 +1159,8 @@ subroutine create_depth_list(G, CS)
   Arealist(:) = 0.0
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     ! Set global indices that start the global domain at 1 (Fortran convention).
-    j_global = j + (G%jsd_global - G%jsd) - (G%jsg-1)
-    i_global = i + (G%isd_global - G%isd) - (G%isg-1)
+    j_global = j + G%jdg_offset - (G%jsg-1)
+    i_global = i + G%idg_offset - (G%isg-1)
 
     list_pos = (j_global-1)*G%Domain%niglobal + i_global
     Dlist(list_pos) = G%bathyT(i,j)

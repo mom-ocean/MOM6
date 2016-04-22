@@ -510,12 +510,11 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       avg_enabled = query_averaging_enabled(CS%diag,time_end=CS%time_end)
       if (CS%time_end <= CS%time_max_source) then
         do j=G%jsc,G%jec ; do i=G%isc,G%iec
-         ig = G%isd_global + i - 1.0
-         jg = G%jsd_global + j - 1.0
-         !INPUT ARBITRARY ENERGY POINT SOURCE
-         if (ig .eq. CS%int_tide_source_x .and. jg .eq. CS%int_tide_source_y) then
-             TKE_itidal_input_test(i,j) = 1.0
-        endif
+          !INPUT ARBITRARY ENERGY POINT SOURCE
+          if ((G%idg_offset + i == CS%int_tide_source_x) .and. &
+              (G%jdg_offset + j == CS%int_tide_source_y)) then
+            TKE_itidal_input_test(i,j) = 1.0
+          endif
         enddo ; enddo
       endif
       ! CALL ROUTINE USING PRESCRIBED KE FOR TESTING
