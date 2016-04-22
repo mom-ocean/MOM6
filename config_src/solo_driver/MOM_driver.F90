@@ -45,8 +45,8 @@ program MOM_main
   use MOM_cpu_clock,       only : CLOCK_COMPONENT
   use MOM_diag_mediator,   only : enable_averaging, disable_averaging, diag_mediator_end
   use MOM_diag_mediator,   only : diag_mediator_close_registration, diag_mediator_end
-  use MOM,                 only : initialize_MOM, step_MOM, MOM_control_struct
-  use MOM,                 only : calculate_surface_state, MOM_end
+  use MOM,                 only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
+  use MOM,                 only : calculate_surface_state, finish_MOM_initialization
   use MOM_domains,         only : MOM_infra_init, MOM_infra_end
   use MOM_error_handler,   only : MOM_error, MOM_mesg, WARNING, FATAL, is_root_pe
   use MOM_error_handler,   only : callTree_enter, callTree_leave, callTree_waypoint
@@ -369,8 +369,9 @@ program MOM_main
     call close_file(unit)
   endif
 
-  call write_energy(MOM_CSp%u, MOM_CSp%v, MOM_CSp%h, &
-                    MOM_CSp%tv, Time, 0, grid, GV, sum_output_CSp, MOM_CSp%tracer_flow_CSp)
+!  This has been moved inside the loop to be applied when n=1.
+!  call write_energy(MOM_CSp%u, MOM_CSp%v, MOM_CSp%h, &
+!                    MOM_CSp%tv, Time, 0, grid, GV, sum_output_CSp, MOM_CSp%tracer_flow_CSp)
   call write_cputime(Time, 0, nmax, write_CPU_CSp)
 
   write_energy_time = Start_time + energysavedays * &
@@ -412,6 +413,13 @@ program MOM_main
     endif
     fluxes%fluxes_used = .false.
     fluxes%dt_buoy_accum = time_step
+
+    if (n==1) then
+      call finish_MOM_initialization(Time, dirs, MOM_CSp, fluxes)
+      
+      call write_energy(MOM_CSp%u, MOM_CSp%v, MOM_CSp%h, MOM_CSp%tv, &
+                        Time, 0, grid, GV, sum_output_CSp, MOM_CSp%tracer_flow_CSp)
+    endif
 
     ! This call steps the model over a time time_step.
     Time1 = Master_Time ; Time = Master_Time

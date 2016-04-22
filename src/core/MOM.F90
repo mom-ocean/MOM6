@@ -366,6 +366,7 @@ type, public :: MOM_control_struct
 end type MOM_control_struct
 
 public initialize_MOM
+public finish_MOM_initialization
 public step_MOM
 public MOM_end
 public calculate_surface_state
@@ -2029,6 +2030,21 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
 
 end subroutine initialize_MOM
+
+!> This subroutine finishes initializing MOM and writes out the initial conditions.
+subroutine finish_MOM_initialization(Time, dirs, CS, fluxes)
+  type(time_type),           intent(in)    :: Time        !< model time, used in this routine
+  type(directories),         intent(in)    :: dirs        !< structure with directory paths
+  type(MOM_control_struct),  pointer       :: CS          !< pointer set in this routine to MOM control structure
+  type(forcing),             intent(inout) :: fluxes      !< pointers to forcing fields
+
+  call cpu_clock_begin(id_clock_init)
+  call callTree_enter("finish_MOM_initialization()")
+
+  call callTree_leave("finish_MOM_initialization()")
+  call cpu_clock_end(id_clock_init)
+
+end subroutine finish_MOM_initialization
 
 
 !> This s/r calls unit tests for other modules. These are NOT normally invoked

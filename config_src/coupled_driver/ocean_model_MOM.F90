@@ -35,7 +35,7 @@ module ocean_model_mod
 !</OVERVIEW>
 
 use MOM, only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
-use MOM, only : calculate_surface_state
+use MOM, only : calculate_surface_state, finish_MOM_initialization
 use MOM_constants, only : CELSIUS_KELVIN_OFFSET
 use MOM_diag_mediator, only : diag_ctrl, enable_averaging, disable_averaging
 use MOM_diag_mediator, only : diag_mediator_close_registration, diag_mediator_end
@@ -132,7 +132,6 @@ type, public ::  ocean_public_type
   integer                  :: avg_kount ! Used for accumulating averages of this type.
   integer, dimension(3)    :: axes = 0  ! Axis numbers that are available
                                         ! for I/O using this surface data.
-
 end type ocean_public_type
 
 
@@ -287,8 +286,9 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   call MOM_sum_output_init(OS%grid, param_file, OS%dirs%output_directory, &
                             OS%MOM_CSp%ntrunc, Time_init, OS%sum_output_CSp)
 
-  call write_energy(OS%MOM_CSp%u, OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%tv, &
-             OS%Time, 0, OS%grid, OS%GV, OS%sum_output_CSp, OS%MOM_CSp%tracer_flow_CSp)
+  ! This call has been moved into the first call to update_ocean_model.
+!  call write_energy(OS%MOM_CSp%u, OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%tv, &
+!             OS%Time, 0, OS%grid, OS%GV, OS%sum_output_CSp, OS%MOM_CSp%tracer_flow_CSp)
 
   ! write_energy_time is the next integral multiple of energysavedays.
   OS%write_energy_time = Time_init + OS%energysavedays * &
@@ -409,6 +409,14 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 #ifdef _USE_GENERIC_TRACER
     call MOM_generic_tracer_fluxes_accumulate(OS%flux_tmp, weight) !weight of the current flux in the running average
 #endif
+  endif
+
+  if (OS%nstep==0) then
+    call finish_MOM_initialization(OS%Time, OS%dirs, OS%MOM_CSp, OS%fluxes)
+      
+    call write_energy(OS%MOM_CSp%u, OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%tv, &
+                      OS%Time, 0, OS%grid, OS%GV, OS%sum_output_CSp, &
+                      OS%MOM_CSp%tracer_flow_CSp)
   endif
 
   call disable_averaging(OS%MOM_CSp%diag)

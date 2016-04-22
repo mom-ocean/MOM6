@@ -2479,7 +2479,7 @@ subroutine ice_shelf_solve_inner (CS, u, v, taudx, taudy, H_node, float_cond, FE
     isumstart = ISUMSTART_INT_
   endif
 
-  if (jsd .eq. G%jsd_global) then
+  if (G%jsc+G%jdg_offset==G%jsg) then
   ! tile is at south bdry
     jsumstart = G%jscB
   else
