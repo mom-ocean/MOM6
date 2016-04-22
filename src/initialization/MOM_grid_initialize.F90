@@ -245,11 +245,9 @@ subroutine set_grid_derived_metrics(G, param_file)
 
     G%IdxBu(I,J) = Adcroft_reciprocal(G%dxBu(I,J))
     G%IdyBu(I,J) = Adcroft_reciprocal(G%dyBu(I,J))
-    ! ### if (G%areaBu(I,J) <= 0.0) G%areaBu(I,J) = G%dxBu(I,J) * G%dyBu(I,J)
-    G%areaBu(I,J) = G%dxBu(I,J) * G%dyBu(I,J)
-    G%IareaBu(I,J) = G%IdxBu(I,J) * G%IdyBu(I,J)
-    !### Changing this to G%IareaBu(I,J) =  Adcroft_reciprocal(G%areaBu(I,J))
-    ! would change answers at the level of roundoff.
+    ! areaBu has usually been set to a positive area elsewhere.
+    if (G%areaBu(I,J) <= 0.0) G%areaBu(I,J) = G%dxBu(I,J) * G%dyBu(I,J)
+    G%IareaBu(I,J) =  Adcroft_reciprocal(G%areaBu(I,J))
   enddo ; enddo
 
 68 FORMAT ("WARNING: PE ",I4," ",a4,"(",I4,",",I4,") = ",ES12.4, &
