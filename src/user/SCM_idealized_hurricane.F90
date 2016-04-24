@@ -155,8 +155,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
   ! Local variables
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
-  real, parameter :: pie=3.141592653589793
-  real, parameter :: Deg2Rad = pie/180.
+  real :: pie, Deg2Rad
   real :: U10, A, B, C, r, f,du10,rkm ! For wind profile expression
   real :: xx, t0 !for location
   real :: dp, rB
@@ -174,6 +173,8 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
 
   ! Allocate the forcing arrays, if necessary.
   call allocate_forcing_type(G, fluxes, stress=.true., ustar=.true.)
+  
+  pie = 4.0*atan(1.0) ; Deg2Rad = pie/180.
 
   !/ BR
   ! Implementing Holland (1980) parameteric wind profile

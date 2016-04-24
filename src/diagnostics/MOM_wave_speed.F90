@@ -693,8 +693,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
           endif  ! use_EOS
           
           !-----------------NOW FIND WAVE SPEEDS---------------------------------------
-          ig = G%isd_global + i - 1.0
-          jg = G%jsd_global + j - 1.0
+          ig = i + G%idg_offset ; jg = j + G%jdg_offset
           !   Sum the contributions from all of the interfaces to give an over-estimate
           ! of the first-mode wave speed.
           if (kc >= 2) then
@@ -843,8 +842,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
                     !call MOM_error(WARNING, "determinant changes sign"// &
                     !            "but has a local max/min in interval;"//&
                     !            " reduce increment in lam.")
-                    ig_need_sub = G%isd_global + i - 1.0
-                    jg_need_sub = G%jsd_global + j - 1.0
+                    ig_need_sub = i + G%idg_offset ; jg_need_sub = j + G%jdg_offset
                     ! begin subdivision loop -------------------------------------------
                     !print *, "subdividing interval at ig=",ig_need_sub,"jg=",jg_need_sub
                     sub_rootfound = .false. ! initialize
@@ -950,9 +948,9 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
         cn(i,j,:) = 0.0 ! This is a land point.
       endif ! if not land
       ! ----- Spot check - comment out later (BDM) ----------
-      !ig = G%isd_global + i - 1.0
-      !jg = G%jsd_global + j - 1.0 
-      !if(ig .eq. 83 .and. jg .eq. 2) then
+      !ig = G%idg_offset + i
+      !jg = G%jdg_offset + j 
+      !if (ig .eq. 83 .and. jg .eq. 2) then
       !!  print *, "nmodes=",nmodes
       !  print *, "lam_1=",lam_1
       !  print *, "lamMin=",lamMin
