@@ -995,6 +995,8 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
   integer :: nz
   real    :: botfn
 
+  a(:,:) = 0.0
+
   if (work_on_u) then ; is = G%IscB ; ie = G%IecB
   else ; is = G%isc ; ie = G%iec ; endif
   nz = G%ke
@@ -1034,13 +1036,17 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
   endif ; enddo
 
   if (associated(visc%Kv_turb)) then
+     ! BGR/ Add factor of 2. * the averaged Kv_turb.
+     !      this is needed to reproduce the analytical solution to
+     !      a simple diffusion problem, likely due to h_shear being
+     !      equal to 2 x \delta z
     if (work_on_u) then
       do K=nz,2,-1 ; do i=is,ie ; if (do_i(i)) then
-        a(i,K) = a(i,K) + 0.5*(visc%Kv_turb(i,j,k) + visc%Kv_turb(i+1,j,k))
+        a(i,K) = a(i,K) + (2.*0.5)*(visc%Kv_turb(i,j,k) + visc%Kv_turb(i+1,j,k))
       endif ; enddo ; enddo
     else
       do K=nz,2,-1 ; do i=is,ie ; if (do_i(i)) then
-        a(i,K) = a(i,K) + 0.5*(visc%Kv_turb(i,j,k) + visc%Kv_turb(i,j+1,k))
+        a(i,K) = a(i,K) + (2.*0.5)*(visc%Kv_turb(i,j,k) + visc%Kv_turb(i,j+1,k))
       endif ; enddo ; enddo
     endif
   endif
