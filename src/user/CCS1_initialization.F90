@@ -33,6 +33,8 @@ use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_tracer_registry, only : tracer_registry_type, add_tracer_OBC_values
 use MOM_variables, only : thermo_var_ptrs, ocean_OBC_type, OBC_NONE, OBC_SIMPLE
+use MOM_variables, only : OBC_FLATHER_E, OBC_FLATHER_W
+use MOM_variables, only : OBC_FLATHER_N, OBC_FLATHER_S
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 
@@ -182,12 +184,18 @@ subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
     OBC_mask_u => NULL(), & ! These arrays are true at zonal or meridional
     OBC_mask_v => NULL()    ! velocity points that have prescribed open boundary
                             ! conditions.
+  integer, pointer, dimension(:,:) :: &
+    OBC_kind_u => NULL(), & ! These arrays are true at zonal or meridional
+    OBC_kind_v => NULL()    ! velocity points that have prescribed open boundary
+                            ! conditions.
   real, pointer, dimension(:,:,:) :: &
     OBC_T_u => NULL(), &    ! These arrays should be allocated and set to
     OBC_T_v => NULL(), &    ! specify the values of T and S that should come
     OBC_S_u => NULL(), &    ! in through u- and v- points through the open
     OBC_S_v => NULL()       ! boundary conditions, in C and psu.
   logical :: apply_OBC_u, apply_OBC_v
+  logical :: apply_OBC_flather_east, apply_OBC_flather_west
+  logical :: apply_OBC_flather_north, apply_OBC_flather_south
   ! The following variables are used to set the target temperature and salinity.
   real :: T0(SZK_(G)), S0(SZK_(G))
   real :: pres(SZK_(G))      ! An array of the reference pressure in Pa.
@@ -213,10 +221,27 @@ subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
                  "If true, open boundary conditions may be set at some \n"//&
                  "v-points, with the configuration controlled by OBC_CONFIG", &
                  default=.false.)
+  call get_param(param_file, mod, "APPLY_OBC_U_FLATHER_WEST", apply_OBC_flather_west, &
+                 "If true, some grid cells may behave as western boundary cells \n"//&
+                 "with the configuration controlled by OBC_CONFIG", &
+                 default=.false.)
+  call get_param(param_file, mod, "APPLY_OBC_U_FLATHER_EAST", apply_OBC_flather_east, &
+                 "If true, some grid cells may behave as eastern boundary cells \n"//&
+                 "with the configuration controlled by OBC_CONFIG", &
+                 default=.false.)
+  call get_param(param_file, mod, "APPLY_OBC_V_FLATHER_NORTH", apply_OBC_flather_north, &
+                 "If true, some grid cells may behave as northern boundary cells \n"//&
+                 "with the configuration controlled by OBC_CONFIG", &
+                 default=.false.)
+  call get_param(param_file, mod, "APPLY_OBC_V_FLATHER_SOUTH", apply_OBC_flather_south, &
+                 "If true, some grid cells may behave as southern boundary cells \n"//&
+                 "with the configuration controlled by OBC_CONFIG", &
+                 default=.false.)
 
   if (apply_OBC_u) then
     ! Determine where u points are applied.
     allocate(OBC_mask_u(IsdB:IedB,jsd:jed)) ; OBC_mask_u(:,:) = .false.
+    allocate(OBC_kind_u(IsdB:IedB,jsd:jed)) ; OBC_kind_u(:,:) = OBC_NONE
     any_OBC = .false.
     ! Check for edges of full domain
     ! West
@@ -225,7 +250,12 @@ subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
     if (G%isd_global - isd == isd - isc) then
       do j=jsc,jec
         if (G%mask2dT(isc,j) == 1.0) then
-          OBC_mask_u(isc-1,j) = .true. ; any_OBC = .true.
+          OBC_mask_u(Isc-1,j) = .true. ; any_OBC = .true.
+          if (apply_OBC_flather_west) then
+            OBC_kind_u(Isc-1,j) = OBC_FLATHER_W
+          else
+            OBC_kind_u(Isc-1,j) = OBC_SIMPLE
+          endif
         endif
       enddo
     endif
@@ -234,6 +264,11 @@ subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
 !      do j=jsc,jec
 !        if (G%mask2dT(Iec,j) == 1.0) then
 !          OBC_mask_u(Iec,j) = .true. ; any_OBC = .true.
+!          if (apply_OBC_flather_east) then
+!            OBC_kind_u(Iec,j) = OBC_FLATHER_E
+!          else
+!            OBC_kind_u(Iec,j) = OBC_SIMPLE
+!          endif
 !        endif
 !      enddo
 !    endif
@@ -242,6 +277,11 @@ subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
       do I=IscB,IecB
         if (G%mask2dCu(I,jsc) == 1.0) then
           OBC_mask_u(I,jsc-1) = .true. ; any_OBC = .true.
+          if (apply_OBC_flather_south) then
+            OBC_kind_u(I,jsc-1) = OBC_FLATHER_S
+          else
+            OBC_kind_u(I,jsc-1) = OBC_SIMPLE
+          endif
         endif
       enddo
     endif
@@ -250,6 +290,11 @@ subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
       do I=IscB,IecB
         if (G%mask2dCu(I,jec) == 1.0) then
           OBC_mask_u(I,jec+1) = .true. ; any_OBC = .true.
+          if (apply_OBC_flather_north) then
+            OBC_kind_u(I,jec+1) = OBC_FLATHER_N
+          else
+            OBC_kind_u(I,jec+1) = OBC_SIMPLE
+          endif
         endif
       enddo
     endif
@@ -272,6 +317,11 @@ subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
       do J=JscB,JecB
         if (G%mask2dCv(isc,J) == 1) then
           OBC_mask_v(isc-1,J) = .true. ; any_OBC = .true.
+          if (apply_OBC_flather_west) then
+            OBC_kind_v(isc-1,J) = OBC_FLATHER_W
+          else
+            OBC_kind_v(isc-1,J) = OBC_SIMPLE
+          endif
         endif
       enddo
     endif
@@ -280,6 +330,11 @@ subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
 !      do J=JscB,JecB
 !        if (G%mask2dCv(iec,J) == 1) then
 !          OBC_mask_v(iec+1,J) = .true. ; any_OBC = .true.
+!          if (apply_OBC_flather_east) then
+!            OBC_kind_v(iec+1,J) = OBC_FLATHER_E
+!          else
+!            OBC_kind_v(iec+1,J) = OBC_SIMPLE
+!          endif
 !        endif
 !      enddo
 !    endif
@@ -287,7 +342,12 @@ subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
     if (G%jsd_global - jsd == jsd - jsc) then
       do i=isc,iec
         if (G%mask2dT(i,jsc) == 1) then
-          OBC_mask_v(i,jsc-1) = .true. ; any_OBC = .true.
+          OBC_mask_v(i,Jsc-1) = .true. ; any_OBC = .true.
+          if (apply_OBC_flather_south) then
+            OBC_kind_v(i,Jsc-1) = OBC_FLATHER_S
+          else
+            OBC_kind_v(i,Jsc-1) = OBC_SIMPLE
+          endif
         endif
       enddo
     endif
@@ -296,6 +356,11 @@ subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
       do i=isc,iec
         if (G%mask2dT(i,jec) == 1) then
           OBC_mask_v(i,Jec) = .true. ; any_OBC = .true.
+          if (apply_OBC_flather_north) then
+            OBC_kind_v(i,Jec) = OBC_FLATHER_N
+          else
+            OBC_kind_v(i,Jec) = OBC_SIMPLE
+          endif
         endif
       enddo
     endif
@@ -317,20 +382,14 @@ subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
     OBC%OBC_mask_u => OBC_mask_u
     allocate(OBC%u(IsdB:IedB,jsd:jed,nz)) ; OBC%u(:,:,:) = 0.0
     allocate(OBC%uh(IsdB:IedB,jsd:jed,nz)) ; OBC%uh(:,:,:) = 0.0
-    allocate(OBC%OBC_kind_u(IsdB:IedB,jsd:jed)) ; OBC%OBC_kind_u(:,:) = OBC_NONE
-    do j=jsd,jed ; do I=IsdB,IedB
-      if (OBC%OBC_mask_u(I,j)) OBC%OBC_kind_u(I,j) = OBC_SIMPLE
-    enddo ; enddo
+    allocate(OBC%OBC_kind_u(IsdB:IedB,jsd:jed)) ; OBC%OBC_kind_u = OBC_kind_u
   endif
   if (apply_OBC_v) then
     OBC%apply_OBC_v = .true.
     OBC%OBC_mask_v => OBC_mask_v
     allocate(OBC%v(isd:ied,JsdB:JedB,nz)) ; OBC%v(:,:,:) = 0.0
     allocate(OBC%vh(isd:ied,JsdB:JedB,nz)) ; OBC%vh(:,:,:) = 0.0
-    allocate(OBC%OBC_kind_v(isd:ied,JsdB:JedB)) ; OBC%OBC_kind_v(:,:) = OBC_NONE
-    do J=JsdB,JedB ; do i=isd,ied
-      if (OBC%OBC_mask_v(i,J)) OBC%OBC_kind_v(i,J) = OBC_SIMPLE
-    enddo ; enddo
+    allocate(OBC%OBC_kind_v(isd:ied,JsdB:JedB)) ; OBC%OBC_kind_v = OBC_kind_v
   endif
 
   !   The inflow values of temperature and salinity also need to be set here if
