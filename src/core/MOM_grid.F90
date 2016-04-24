@@ -44,6 +44,8 @@ type, public :: ocean_grid_type
   integer :: IsgB, IegB, JsgB, JegB ! The range of the global domain vertex indices.
   integer :: isd_global         ! The values of isd and jsd in the global
   integer :: jsd_global         ! (decomposition invariant) index space.
+  integer :: idg_offset         ! The offset between the corresponding global
+  integer :: jdg_offset         ! and local array indices; add to local to get global.
   integer :: ke                 ! The number of layers in the vertical.
   logical :: symmetric          ! True if symmetric memory is used.
   logical :: nonblocking_updates  ! If true, non-blocking halo updates are
@@ -158,7 +160,7 @@ subroutine MOM_grid_init(G, param_file)
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  integer :: isd, ied, jsd, jed, nk, idg_off, jdg_off
+  integer :: isd, ied, jsd, jed, nk
   integer :: IsdB, IedB, JsdB, JedB
   integer :: ied_max, jed_max
   integer :: niblock, njblock, nihalo, njhalo, nblocks, n, i, j
@@ -178,7 +180,7 @@ subroutine MOM_grid_init(G, param_file)
                  "If true, use a global lateral indexing convention, so \n"//&
                  "that corresponding points on different processors have \n"//&
                  "the same index. This does not work with static memory.", &
-                 default=.false.)
+                 default=.false., layoutParam=.true.)
 #ifdef STATIC_MEMORY_
   if (global_indexing) call MOM_error(FATAL, "MOM_grid_init : "//&
        "GLOBAL_INDEXING can not be true with STATIC_MEMORY.")
@@ -210,9 +212,9 @@ subroutine MOM_grid_init(G, param_file)
   call get_domain_extent(G%Domain, G%isc, G%iec, G%jsc, G%jec, &
                          G%isd, G%ied, G%jsd, G%jed, &
                          G%isg, G%ieg, G%jsg, G%jeg, &
-                         idg_off, jdg_off, G%symmetric, &
+                         G%idg_offset, G%jdg_offset, G%symmetric, &
                          local_indexing=.not.global_indexing)
-  G%isd_global = G%isd+idg_off ; G%jsd_global = G%jsd+jdg_off
+  G%isd_global = G%isd+G%idg_offset ; G%jsd_global = G%jsd+G%jdg_offset
 
   G%nonblocking_updates = G%Domain%nonblocking_updates
 

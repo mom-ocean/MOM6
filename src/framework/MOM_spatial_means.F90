@@ -143,7 +143,7 @@ subroutine global_i_mean(array, i_mean, G, mask)
   integer :: i, j
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  idg_off = G%isd_global - G%isd ; jdg_off = G%jsd_global - G%jsd
+  idg_off = G%idg_offset ; jdg_off = G%jdg_offset
 
   call reset_EFP_overflow_error()
 
@@ -221,7 +221,7 @@ subroutine global_j_mean(array, j_mean, G, mask)
   integer :: i, j
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  idg_off = G%isd_global - G%isd ; jdg_off = G%jsd_global - G%jsd
+  idg_off = G%idg_offset ; jdg_off = G%jdg_offset
 
   call reset_EFP_overflow_error()
 
