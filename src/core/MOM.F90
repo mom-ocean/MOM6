@@ -28,6 +28,7 @@ use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_en
 use MOM_cpu_clock,            only : CLOCK_COMPONENT, CLOCK_SUBCOMPONENT
 use MOM_cpu_clock,            only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_coms,                 only : reproducing_sum
+use MOM_coord_initialization, only : MOM_initialize_coord
 use MOM_diag_mediator,        only : diag_mediator_init, enable_averaging
 use MOM_diag_mediator,        only : diag_set_thickness_ptr, diag_update_target_grids
 use MOM_diag_mediator,        only : disable_averaging, post_data, safe_alloc_ptr
@@ -43,7 +44,7 @@ use MOM_error_handler,        only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler,        only : MOM_set_verbosity, callTree_showQuery
 use MOM_error_handler,        only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,          only : read_param, get_param, log_version, param_file_type
-use MOM_fixed_initialization, only : MOM_initialize_fixed, MOM_initialize_coord
+use MOM_fixed_initialization, only : MOM_initialize_fixed
 use MOM_forcing_type,         only : MOM_forcing_chksum
 use MOM_get_input,            only : Get_MOM_Input, directories
 use MOM_io,                   only : MOM_io_init, vardesc, var_desc
@@ -235,7 +236,7 @@ type, public :: MOM_control_struct
   real, pointer, dimension(:,:) :: & !< diagnostic arrays of vertically integrated advective/diffusive fluxes
     T_adx_2d => NULL(), T_ady_2d => NULL(), T_diffx_2d => NULL(), T_diffy_2d => NULL(), &
     S_adx_2d => NULL(), S_ady_2d => NULL(), S_diffx_2d => NULL(), S_diffy_2d => NULL(), &
-    SST_sq   => NULL()
+    SST_sq   => NULL(), SSS_sq   => NULL()
 
   real, pointer, dimension(:,:,:) :: &  !< diagnostic arrays for advection tendencies and total tendencies
     T_advection_xy => NULL(), S_advection_xy => NULL(),  &
@@ -265,6 +266,7 @@ type, public :: MOM_control_struct
   integer :: id_sst      = -1
   integer :: id_sst_sq   = -1
   integer :: id_sss      = -1
+  integer :: id_sss_sq   = -1
   integer :: id_ssu      = -1
   integer :: id_ssv      = -1
   integer :: id_speed    = -1
@@ -364,6 +366,7 @@ type, public :: MOM_control_struct
 end type MOM_control_struct
 
 public initialize_MOM
+public finish_MOM_initialization
 public step_MOM
 public MOM_end
 public calculate_surface_state
@@ -1302,6 +1305,13 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
   if (CS%id_sss > 0) &
     call post_data(CS%id_sss, state%SSS, CS%diag, mask=G%mask2dT)
+  if (CS%id_sss_sq > 0) then
+    do j=js,je ; do i=is,ie
+      CS%SSS_sq(i,j) = state%SSS(i,j)*state%SSS(i,j)
+    enddo ; enddo
+    call post_data(CS%id_sss_sq, CS%SSS_sq, CS%diag, mask=G%mask2dT)
+  endif 
+
   if (CS%id_ssu > 0) &
     call post_data(CS%id_ssu, state%u, CS%diag, mask=G%mask2dCu)
   if (CS%id_ssv > 0) &
@@ -1425,7 +1435,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   ! Copy several common variables from the vertical grid to the horizontal grid.
   ! Consider removing these later?
   G%ke = GV%ke
-  G%bathyT(:,:) = GV%Angstrom_z !### Should this be 0 instead, in which case this line can go?
 
   is   = G%isc   ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = G%ke
   isd  = G%isd   ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
@@ -2022,6 +2031,21 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
 end subroutine initialize_MOM
 
+!> This subroutine finishes initializing MOM and writes out the initial conditions.
+subroutine finish_MOM_initialization(Time, dirs, CS, fluxes)
+  type(time_type),           intent(in)    :: Time        !< model time, used in this routine
+  type(directories),         intent(in)    :: dirs        !< structure with directory paths
+  type(MOM_control_struct),  pointer       :: CS          !< pointer set in this routine to MOM control structure
+  type(forcing),             intent(inout) :: fluxes      !< pointers to forcing fields
+
+  call cpu_clock_begin(id_clock_init)
+  call callTree_enter("finish_MOM_initialization()")
+
+  call callTree_leave("finish_MOM_initialization()")
+  call cpu_clock_end(id_clock_init)
+
+end subroutine finish_MOM_initialization
+
 
 !> This s/r calls unit tests for other modules. These are NOT normally invoked
 !! and so we provide the module use statments here rather than in the module
@@ -2130,6 +2154,11 @@ subroutine register_diags(Time, G, GV, CS, ADp)
         'Sea Surface Salinity', 'PPT', CS%missing, cmor_field_name='sos', &
         cmor_long_name='Sea Surface Salinity', cmor_units='ppt',          &
         cmor_standard_name='sea_surface_salinity')
+    CS%id_sss_sq = register_diag_field('ocean_model', 'SSS_sq', diag%axesT1, Time, &
+        'Sea Surface Salinity Squared', 'ppt**2', CS%missing, cmor_field_name='sossq', &
+        cmor_long_name='Square of Sea Surface Salinity ', cmor_units='ppt^2', &
+        cmor_standard_name='square_of_sea_surface_salinity')
+    if (CS%id_sss_sq > 0) call safe_alloc_ptr(CS%SSS_sq,isd,ied,jsd,jed)
   endif
 
   if (CS%use_temperature .and. CS%use_frazil) then
@@ -3383,7 +3412,7 @@ end subroutine MOM_end
 !!
 !! * BOUNDARY_FORCING_HEAT_TENDENCY generally has 3d structure, with k > 1 contributions from
 !!   penetrative shortwave, and from other fluxes for the case when layers are tiny, in which
-!!   case MOM6 partitions tendencies into k < 1 layers.
+!!   case MOM6 partitions tendencies into k > 1 layers.
 !!
 !! * FRAZIL_HEAT_TENDENCY generally has 3d structure, since MOM6 frazil calculation checks the
 !!   full ocean column.

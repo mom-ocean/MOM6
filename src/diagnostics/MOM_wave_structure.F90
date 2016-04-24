@@ -279,8 +279,7 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
     ! to have page faults.
     do i=is,ie ; if(cn(i,j)>0.0)then
       !----for debugging, remove later----
-      ig = G%isd_global + i - 1.0
-      jg = G%jsd_global + j - 1.0
+      ig = i + G%idg_offset ; jg = j + G%jdg_offset
       !if(ig .eq. CS%int_tide_source_x .and. jg .eq. CS%int_tide_source_y) then
       !-----------------------------------
       if (G%mask2dT(i,j) > 0.5) then

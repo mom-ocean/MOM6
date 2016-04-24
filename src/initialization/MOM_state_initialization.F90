@@ -52,6 +52,7 @@ use lock_exchange_initialization, only : lock_exchange_initialize_thickness
 use external_gwave_initialization, only : external_gwave_initialize_thickness
 use DOME2d_initialization, only : DOME2d_initialize_thickness
 use DOME2d_initialization, only : DOME2d_initialize_temperature_salinity
+use DOME2d_initialization, only : DOME2d_initialize_sponges
 use adjustment_initialization, only : adjustment_initialize_thickness
 use adjustment_initialization, only : adjustment_initialize_temperature_salinity
 use sloshing_initialization, only : sloshing_initialize_thickness
@@ -380,16 +381,18 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                  " \t\t DOME sill-overflow test case. \n"//&
                  " \t USER - call a user modified routine.", default="file")
 
-    if (useALE) then
-      select case (trim(config))
-        case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
-             "Unrecognized ALE sponge configuration "//trim(config))
-      end select
+  ! if (useALE) then
+  !   select case (trim(config))
+  !     case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
+  !          "Unrecognized ALE sponge configuration "//trim(config))
+  !   end select
 
-    else
+  ! else
 
       select case (trim(config))
         case ("DOME"); call DOME_initialize_sponges(G, GV, tv, PF, CS%sponge_CSp)
+        case ("DOME2D"); call DOME2d_initialize_sponges(G, GV, tv, PF, useALE, &
+                                                        CS%sponge_CSp, CS%ALE_sponge_CSp)
         case ("USER"); call user_initialize_sponges(G, use_temperature, tv, &
                                                  PF, CS%sponge_CSp, h)
         case ("phillips"); call Phillips_initialize_sponges(G, use_temperature, tv, &
@@ -399,7 +402,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
         case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
                "Unrecognized sponge configuration "//trim(config))
       end select
-    endif
+  ! endif
   endif
 
 ! This subroutine call sets optional open boundary conditions.
@@ -1538,7 +1541,6 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   logical :: read_OBC_uv = .false.
   logical :: read_OBC_TS = .false.
 
-  integer :: isd_global, jsd_global
   integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: isd_off, jsd_off
   integer :: IsdB, IedB, JsdB, JedB
@@ -1559,8 +1561,6 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   
-  isd_global = G%isd_global
-  jsd_global = G%jsd_global
   call get_param(PF, mod, "APPLY_OBC_U_FLATHER_EAST", apply_OBC_u_flather_east,&
                  "Apply a Flather open boundary condition on the eastern \n"//&
                  "side of the global domain", default=.false.)
@@ -1670,7 +1670,7 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   if (apply_OBC_u_flather_east) then
     ! Determine where u points are applied at east side 
     do j=jsd,jed ; do I=IsdB,IedB
-      if ((I+isd_global-isd) == east_boundary) then !eastern side
+      if ((I+G%idg_offset) == east_boundary) then !eastern side
         OBC%OBC_mask_u(I,j) = .true.
         OBC%OBC_kind_u(I,j) = OBC_FLATHER_E
         if ((i+1>isd) .and. (i+1<ied) .and. (J>JsdB) .and. (J<JedB)) then
@@ -1688,7 +1688,7 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   if (apply_OBC_u_flather_west) then
     ! Determine where u points are applied at west side 
     do j=jsd,jed ; do I=IsdB,IedB
-      if ((I+isd_global-isd) == west_boundary) then !western side
+      if ((I+G%idg_offset) == west_boundary) then !western side
         OBC%OBC_mask_u(I,j) = .true.
         OBC%OBC_kind_u(I,j) = OBC_FLATHER_W
         if ((i>isd) .and. (i<ied) .and. (J>JsdB) .and. (J<JedB)) then
@@ -1707,7 +1707,7 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   if (apply_OBC_v_flather_north) then
     ! Determine where v points are applied at north side 
     do J=JsdB,JedB ; do i=isd,ied
-      if ((J+jsd_global-jsd) == north_boundary) then         !northern side
+      if ((J+G%jdg_offset) == north_boundary) then         !northern side
         OBC%OBC_mask_v(i,J) = .true.
         OBC%OBC_kind_v(i,J) = OBC_FLATHER_N
         if ((I>IsdB) .and. (I<IedB) .and. (j+1>jsd) .and. (j+1<jed)) then
@@ -1725,7 +1725,7 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   if (apply_OBC_v_flather_south) then
     ! Determine where v points are applied at south side 
     do J=JsdB,JedB ; do i=isd,ied
-      if ((J+jsd_global-jsd) == south_boundary) then         !southern side
+      if ((J+G%jdg_offset) == south_boundary) then         !southern side
         OBC%OBC_mask_v(i,J) = .true.
         OBC%OBC_kind_v(i,J) = OBC_FLATHER_S
         if ((I>IsdB) .and. (I<IedB) .and. (j>jsd) .and. (j<jed)) then

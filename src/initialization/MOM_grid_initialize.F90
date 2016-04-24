@@ -72,12 +72,13 @@ use MOM_domains, only : AGRID, BGRID_NE, CGRID_NE, To_All, Scalar_Pair
 use MOM_domains, only : To_North, To_South, To_East, To_West
 use MOM_domains, only : MOM_define_domain, MOM_define_IO_domain
 use MOM_domains, only : MOM_domain_type
-use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, NOTE, is_root_pe
+use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : read_data, slasher, file_exists
 use MOM_io, only : CORNER, NORTH_FACE, EAST_FACE
+
 use mpp_domains_mod, only : mpp_get_domain_extents, mpp_deallocate_domain
 
 implicit none ; private
@@ -102,9 +103,12 @@ end type GPS
 contains
 
 
+!> set_grid_metrics is used to set the primary values in the model's horizontal
+!!   grid.  The bathymetry, land-sea mask and any restricted channel widths are
+!!   not know yet, so these are set later.
 subroutine set_grid_metrics(G, param_file)
-  type(ocean_grid_type), intent(inout) :: G
-  type(param_file_type), intent(in)    :: param_file
+  type(ocean_grid_type), intent(inout) :: G           !< The horizontal grid structure
+  type(param_file_type), intent(in)    :: param_file  !< Parameter file structure
 ! Arguments:
 !  (inout)   G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
@@ -159,13 +163,12 @@ end subroutine set_grid_metrics
 
 ! ------------------------------------------------------------------------------
 
+
+!> set_grid_derived_metrics is sets additional grid metrics that can be derived
+!!   from the basic grid lengths and areas.
 subroutine set_grid_derived_metrics(G, param_file)
-  type(ocean_grid_type), intent(inout) :: G
-  type(param_file_type), intent(in)    :: param_file
-! Arguments:
-!  (inout)   G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
+  type(ocean_grid_type), intent(inout) :: G           !< The horizontal grid structure
+  type(param_file_type), intent(in)    :: param_file  !< Parameter file structure
 
 !    Calculate the values of the metric terms that might be used
 !  and save them in arrays.
@@ -242,10 +245,9 @@ subroutine set_grid_derived_metrics(G, param_file)
 
     G%IdxBu(I,J) = Adcroft_reciprocal(G%dxBu(I,J))
     G%IdyBu(I,J) = Adcroft_reciprocal(G%dyBu(I,J))
-    G%areaBu(I,J) = G%dxBu(I,J) * G%dyBu(I,J)
-    G%IareaBu(I,J) = G%IdxBu(I,J) * G%IdyBu(I,J)
-    ! Changing this to G%IareaBu(I,J) =  Adcroft_reciprocal(G%areaBu(I,J))
-    ! would change answers at the level of roundoff.
+    ! areaBu has usually been set to a positive area elsewhere.
+    if (G%areaBu(I,J) <= 0.0) G%areaBu(I,J) = G%dxBu(I,J) * G%dyBu(I,J)
+    G%IareaBu(I,J) =  Adcroft_reciprocal(G%areaBu(I,J))
   enddo ; enddo
 
 68 FORMAT ("WARNING: PE ",I4," ",a4,"(",I4,",",I4,") = ",ES12.4, &
@@ -256,12 +258,12 @@ end subroutine set_grid_derived_metrics
 
 ! ------------------------------------------------------------------------------
 
+!> grid_metrics_chksum performs a set of checksums on metrics on the grid for
+!!   debugging.
 subroutine grid_metrics_chksum(parent, G)
-  character(len=*),      intent(in) :: parent
-  type(ocean_grid_type), intent(in) :: G
-! Arguments:
-!  (in)          parent - String indentifying caller
-!  (in)               G - The ocean's grid structure.
+  character(len=*),      intent(in) :: parent  !< A string identifying the caller
+  type(ocean_grid_type), intent(in) :: G       !< The horizontal grid structure
+
   real, dimension(G%isd :G%ied ,G%jsd :G%jed ) :: tempH
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB) :: tempQ
   real, dimension(G%IsdB:G%IedB,G%jsd :G%jed ) :: tempE
@@ -619,6 +621,8 @@ subroutine set_grid_metrics_cartesian(G, param_file)
   integer :: niglobal, njglobal
   real :: grid_latT(G%jsd:G%jed), grid_latB(G%JsdB:G%JedB)
   real :: grid_lonT(G%isd:G%ied), grid_lonB(G%IsdB:G%IedB)
+  real :: dx_everywhere, dy_everywhere ! Grid spacings in m.
+  real :: I_dx, I_dy                   ! Inverse grid spacings in m.
   real :: PI
   character(len=80) :: units_temp
   character(len=48) :: mod  = "MOM_grid_init set_grid_metrics_cartesian"
@@ -626,7 +630,7 @@ subroutine set_grid_metrics_cartesian(G, param_file)
   niglobal = G%Domain%niglobal ; njglobal = G%Domain%njglobal
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-  I1off = G%isd_global - isd ; J1off = G%jsd_global - jsd;
+  I1off = G%idg_offset ; J1off = G%jdg_offset
 
   call callTree_enter("set_grid_metrics_cartesian(), MOM_grid_initialize.F90")
  
@@ -687,48 +691,46 @@ subroutine set_grid_metrics_cartesian(G, param_file)
     grid_lonT(i) = G%west_lon + G%len_lon*(REAL(i+I1off-G%isg)+0.5)/REAL(niglobal)
   enddo
 
+  if (units_temp(1:1) == 'k') then ! Axes are measured in km.
+    dx_everywhere = 1000.0 * G%len_lon / (REAL(niglobal))
+    dy_everywhere = 1000.0 * G%len_lat / (REAL(njglobal))
+  else if (units_temp(1:1) == 'm') then ! Axes are measured in m.
+    dx_everywhere = G%len_lon / (REAL(niglobal))
+    dy_everywhere = G%len_lat / (REAL(njglobal))
+  else ! Axes are measured in degrees of latitude and longitude.
+    dx_everywhere = G%Rad_Earth * G%len_lon * PI / (180.0 * niglobal)
+    dy_everywhere = G%Rad_Earth * G%len_lat * PI / (180.0 * njglobal)
+  endif
+
+  I_dx = 1.0 / dx_everywhere ; I_dy = 1.0 / dy_everywhere
+
   do J=JsdB,JedB ; do I=IsdB,IedB
     G%geoLonBu(I,J) = grid_lonB(I) ; G%geoLatBu(I,J) = grid_latB(J)
 
-    G%dxBu(I,J) = G%Rad_Earth * G%len_lon * PI / (180.0 * niglobal)
-    G%dyBu(I,J) = G%Rad_Earth * G%len_lat * PI / (180.0 * njglobal)
-
-    if (units_temp(1:1) == 'k') then ! Axes are measured in km.
-      G%dxBu(I,J) = 1000.0 * G%len_lon / (REAL(niglobal))
-      G%dyBu(I,J) = 1000.0 * G%len_lat / (REAL(njglobal))
-    else if (units_temp(1:1) == 'm') then ! Axes are measured in m.
-      G%dxBu(I,J) = G%len_lon / (REAL(niglobal))
-      G%dyBu(I,J) = G%len_lat / (REAL(njglobal))
-    else ! Axes are measured in degrees of latitude and longitude.
-      G%dxBu(I,J) = G%Rad_Earth * G%len_lon * PI / (180.0 * niglobal)
-      G%dyBu(I,J) = G%Rad_Earth * G%len_lat * PI / (180.0 * njglobal)
-    endif
-
-    G%IdxBu(I,J) = 1.0 / G%dxBu(I,J)
-    G%IdyBu(I,J) = 1.0 / G%dyBu(I,J)
-    G%areaBu(I,J) = G%dxBu(I,J) * G%dyBu(I,J)
-    G%IareaBu(I,J) = G%IdxBu(I,J) * G%IdyBu(I,J)
+    G%dxBu(I,J) = dx_everywhere ; G%IdxBu(I,J) = I_dx
+    G%dyBu(I,J) = dy_everywhere ; G%IdyBu(I,J) = I_dy
+    G%areaBu(I,J) = dx_everywhere * dy_everywhere ; G%IareaBu(I,J) = I_dx * I_dy
   enddo ; enddo
 
   do j=jsd,jed ; do i=isd,ied
     G%geoLonT(i,j) = grid_lonT(i) ; G%geoLatT(i,j) = grid_LatT(j)
-    G%dxT(i,j) = G%dxBu(I,J) ; G%IdxT(i,j) = G%IdxBu(I,J)
-    G%dyT(i,j) = G%dyBu(I,J) ; G%IdyT(i,j) = G%IdyBu(I,J)
-    G%areaT(i,j) = G%areaBu(I,J) ; G%IareaT(i,j) = G%IareaBu(I,J)
+    G%dxT(i,j) = dx_everywhere ; G%IdxT(i,j) = I_dx
+    G%dyT(i,j) = dy_everywhere ; G%IdyT(i,j) = I_dy
+    G%areaT(i,j) = dx_everywhere * dy_everywhere ; G%IareaT(i,j) = I_dx * I_dy
   enddo ; enddo
 
   do j=jsd,jed ; do I=IsdB,IedB
     G%geoLonCu(I,j) = grid_lonB(I) ; G%geoLatCu(I,j) = grid_LatT(j)
 
-    G%dxCu(I,j) = G%dxBu(I,J) ; G%IdxCu(I,j) = G%IdxBu(I,J)
-    G%dyCu(I,j) = G%dyBu(I,J) ; G%IdyCu(I,j) = G%IdyBu(I,J)
+    G%dxCu(I,j) = dx_everywhere ; G%IdxCu(I,j) = I_dx
+    G%dyCu(I,j) = dy_everywhere ; G%IdyCu(I,j) = I_dy
   enddo ; enddo
 
   do J=JsdB,JedB ; do i=isd,ied
     G%geoLonCv(i,J) = grid_lonT(i) ; G%geoLatCv(i,J) = grid_latB(J)
 
-    G%dxCv(i,J) = G%dxBu(I,J) ; G%IdxCv(i,J) = G%IdxBu(I,J)
-    G%dyCv(i,J) = G%dyBu(I,J) ; G%IdyCv(i,J) = G%IdyBu(I,J)
+    G%dxCv(i,J) = dx_everywhere ; G%IdxCv(i,J) = I_dx
+    G%dyCv(i,J) = dy_everywhere ; G%IdyCv(i,J) = I_dy
   enddo ; enddo
 
   call callTree_leave("set_grid_metrics_cartesian()")
@@ -763,7 +765,7 @@ subroutine set_grid_metrics_spherical(G, param_file)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-  i_offset = G%isd_global - isd; j_offset = G%jsd_global - jsd
+  i_offset = G%idg_offset ; j_offset = G%jdg_offset
 
   call callTree_enter("set_grid_metrics_spherical(), MOM_grid_initialize.F90")
  
@@ -925,7 +927,7 @@ subroutine set_grid_metrics_mercator(G, param_file)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-  X1off = G%isd_global - isd ; Y1off = G%jsd_global - jsd;
+  X1off = G%idg_offset ; Y1off = G%jdg_offset
 
   GP%niglobal = G%Domain%niglobal
   GP%njglobal = G%Domain%njglobal
@@ -1426,19 +1428,18 @@ subroutine initialize_masks(G, PF)
 
   real :: Dmin, min_depth, mask_depth
   integer :: i, j
-  integer :: isd, isd_global, jsd, jsd_global 
   logical :: apply_OBC_u_flather_east, apply_OBC_u_flather_west
   logical :: apply_OBC_v_flather_north, apply_OBC_v_flather_south
   character(len=40)  :: mod = "MOM_grid_init initialize_masks"
 
   call callTree_enter("initialize_masks(), MOM_grid_initialize.F90")
-  call get_param(PF, "MOM_grid_init initialize_masks", "MINIMUM_DEPTH", min_depth, &
+  call get_param(PF, mod, "MINIMUM_DEPTH", min_depth, &
                  "If MASKING_DEPTH is unspecified, then anything shallower than\n"//&
                  "MINIMUM_DEPTH is assumed to be land and all fluxes are masked out.\n"//&
                  "If MASKING_DEPTH is specified, then all depths shallower than\n"//&
-                 "MINIMUM_DEPTH but depper than MASKING_DEPTH are rounded to MINIMUM_DEPTH.", &
+                 "MINIMUM_DEPTH but deeper than MASKING_DEPTH are rounded to MINIMUM_DEPTH.", &
                  units="m", default=0.0)
-  call get_param(PF, "MOM_grid_init initialize_masks", "MASKING_DEPTH", mask_depth, &
+  call get_param(PF, mod, "MASKING_DEPTH", mask_depth, &
                  "The depth below which to mask points as land points, for which all\n"//&
                  "fluxes are zeroed out. MASKING_DEPTH is ignored if negative.", &
                  units="m", default=-9999.0)
@@ -1471,7 +1472,7 @@ subroutine initialize_masks(G, PF)
   ! that are not necessarily at the edges of the domain.
   if (apply_OBC_u_flather_west) then
     do j=G%jsd,G%jed ; do I=G%isd+1,G%ied
-      if ((I+G%isd_global-G%isd) == G%isg) then
+      if ((I+G%idg_offset) == G%isg) then
         G%bathyT(i-1,j) = G%bathyT(i,j)
       endif
     enddo; enddo       
@@ -1479,7 +1480,7 @@ subroutine initialize_masks(G, PF)
 
   if (apply_OBC_u_flather_east) then
     do j=G%jsd,G%jed ; do I=G%isd,G%ied-1
-      if ((i+G%isd_global-G%isd) == G%ieg) then
+      if ((i+G%idg_offset) == G%ieg) then
         G%bathyT(i+1,j) = G%bathyT(i,j)
       endif
     enddo; enddo    
@@ -1487,7 +1488,7 @@ subroutine initialize_masks(G, PF)
 
   if (apply_OBC_v_flather_north) then
     do J=G%jsd,G%jed-1 ; do i=G%isd,G%ied
-      if ((j+G%jsd_global-G%jsd) == G%jeg) then
+      if ((j+G%jdg_offset) == G%jeg) then
         G%bathyT(i,j+1) = G%bathyT(i,j)
       endif
     enddo; enddo    
@@ -1495,7 +1496,7 @@ subroutine initialize_masks(G, PF)
 
   if (apply_OBC_v_flather_south) then
     do J=G%jsd+1,G%jed ; do i=G%isd,G%ied
-      if ((J+G%jsd_global-G%jsd) == G%jsg) then
+      if ((J+G%jdg_offset) == G%jsg) then
         G%bathyT(i,j-1) = G%bathyT(i,j)
       endif
     enddo; enddo
@@ -1536,9 +1537,9 @@ subroutine initialize_masks(G, PF)
 
   call pass_vector(G%mask2dCu, G%mask2dCv, G%Domain, To_All+Scalar_Pair, CGRID_NE)
 
-  do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB  
+  do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
     G%dy_Cu(I,j) = G%mask2dCu(I,j) * G%dyCu(I,j)
-    G%dy_Cu_obc(I,j) = G%mask2dCu(I,j) * G%dyCu(I,j)  
+    G%dy_Cu_obc(I,j) = G%mask2dCu(I,j) * G%dyCu(I,j)
     G%areaCu(I,j) = G%dxCu(I,j) * G%dy_Cu(I,j)
     G%IareaCu(I,j) = G%mask2dCu(I,j) * Adcroft_reciprocal(G%areaCu(I,j))
   enddo ; enddo
