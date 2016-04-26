@@ -1389,7 +1389,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   type(time_type)                 :: Start_time
   type(ocean_internal_state)      :: MOM_internal_state
-  type(group_pass_type)           :: pass_p_surf_prev
 
   if (associated(CS)) then
     call MOM_error(WARNING, "initialize_MOM called with an associated "// &
@@ -1973,10 +1972,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     CS%p_surf_prev_set = &
       query_initialized(CS%p_surf_prev,"p_surf_prev",CS%restart_CSp)
 
-    if (CS%p_surf_prev_set) then
-      call create_group_pass(pass_p_surf_prev, CS%p_surf_prev,G%domain)
-      call do_group_pass(pass_p_surf_prev, G%domain)
-    endif
+    if (CS%p_surf_prev_set) call pass_var(CS%p_surf_prev, G%domain)
   endif
 
   if (.not.query_initialized(CS%ave_ssh,"ave_ssh",CS%restart_CSp)) then
