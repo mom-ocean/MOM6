@@ -213,6 +213,11 @@ type, public :: MOM_control_struct
                                      !! bulk mixed layer is not used.
   real :: missing=-1.0e34            !< missing data value for masked fields
 
+  ! Flags needed to reach between start and finish phases of initialization
+  logical :: write_IC                !< If true, then the initial conditions will be written to file
+  character(len=80) :: IC_file       !< A file into which the initial conditions are
+                                     !! written in a new run if SAVE_INITIAL_CONDS is true.
+
   integer :: ntrunc                  !< number u,v truncations since last call to write_energy
   logical :: check_bad_surface_vals  !< If true, scan surface state for ridiculous values.
   real    :: bad_val_ssh_max         !< Maximum SSH before triggering bad value message
@@ -1379,10 +1384,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   logical :: symmetric         ! If true, use symmetric memory allocation.
   logical :: save_IC           ! If true, save the initial conditions.
   logical :: do_unit_tests     ! If true, call unit tests.
-  character(len=80) :: IC_file ! A file into which the initial conditions are
-                               ! written in a new run if save_IC is true.
 
-  type(vardesc)                   :: vd
   type(time_type)                 :: Start_time
   type(MOM_initialization_struct) :: init_CS
   type(ocean_internal_state)      :: MOM_internal_state
@@ -1630,7 +1632,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call get_param(param_file, "MOM", "SAVE_INITIAL_CONDS", save_IC, &
                  "If true, write the initial conditions to a file given \n"//&
                  "by IC_OUTPUT_FILE.", default=.false.)
-  call get_param(param_file, "MOM", "IC_OUTPUT_FILE", IC_file, &
+  call get_param(param_file, "MOM", "IC_OUTPUT_FILE", CS%IC_file, &
                  "The file into which to write the initial conditions.", &
                  default="MOM_IC")
   call get_param(param_file, "MOM", "WRITE_GEOM", write_geom, &
@@ -1967,17 +1969,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   call write_static_fields(G, CS%diag)
   call callTree_waypoint("static fields written (initialize_MOM)")
-  call enable_averaging(0.0, Time, CS%diag)
-
-!  smg: can we remove this code?
-!  call calculate_diagnostic_fields(CS%u, CS%v, CS%h, uh, vh, CS%tv, 0.0, G, CS%diagnostics_CSp)
-!  if (CS%id_u > 0) call post_data(CS%id_u, CS%u,    CS%diag)
-!  if (CS%id_v > 0) call post_data(CS%id_v, CS%v,    CS%diag)
-!  if (CS%id_h > 0) call post_data(CS%id_h, CS%h,    CS%diag)
-!  if (CS%id_T > 0) call post_data(CS%id_T, CS%tv%T, CS%diag)
-!  if (CS%id_S > 0) call post_data(CS%id_S, CS%tv%S, CS%diag)
-
-  call disable_averaging(CS%diag)
 
   if (CS%use_frazil) then
     if (.not.query_initialized(CS%tv%frazil,"frazil",CS%restart_CSp)) &
@@ -2003,22 +1994,10 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   endif
   if (CS%split) deallocate(eta)
 
-  if (save_IC .and. .not.((dirs%input_filename(1:1) == 'r') .and. &
-                          (LEN_TRIM(dirs%input_filename) == 1))) then
-    allocate(restart_CSp_tmp)
-    restart_CSp_tmp = CS%restart_CSp
-    allocate(e(SZI_(G),SZJ_(G),SZK_(G)+1))
-    call find_eta(CS%h, CS%tv, G%g_Earth, G, GV, e)
-    vd = var_desc("eta","meter","Interface heights",z_grid='i')
-    call register_restart_field(e, vd, .true., restart_CSp_tmp)
-
-    call save_restart(dirs%output_directory, Time, G, &
-                      restart_CSp_tmp, filename=IC_file, GV=GV)
-    deallocate(e)
-    deallocate(restart_CSp_tmp)
-  endif
-
-!  call calculate_surface_state(state, CS%u, CS%v, CS%h, CS%ave_ssh, G, GV, CS)
+  ! Flag whether to save initial conditions in finish_MOM_initialization() or not.
+  CS%write_IC = save_IC .and. &
+                .not.((dirs%input_filename(1:1) == 'r') .and. &
+                      (LEN_TRIM(dirs%input_filename) == 1))
 
   ! Undocumented parameter: set DO_UNIT_TESTS=True to invoke unitTests s/r
   ! which calls unit tests provided by some modules.
@@ -2028,7 +2007,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call callTree_leave("initialize_MOM()")
   call cpu_clock_end(id_clock_init)
 
-
 end subroutine initialize_MOM
 
 !> This subroutine finishes initializing MOM and writes out the initial conditions.
@@ -2037,9 +2015,34 @@ subroutine finish_MOM_initialization(Time, dirs, CS, fluxes)
   type(directories),         intent(in)    :: dirs        !< structure with directory paths
   type(MOM_control_struct),  pointer       :: CS          !< pointer set in this routine to MOM control structure
   type(forcing),             intent(inout) :: fluxes      !< pointers to forcing fields
+  ! Local variables
+  type(ocean_grid_type), pointer :: G => NULL()
+  type(verticalGrid_type), pointer :: GV => NULL()
+  type(MOM_restart_CS), pointer :: restart_CSp_tmp => NULL()
+  real, allocatable :: z_interface(:,:,:) ! Interface heights (meter)
+  real, allocatable :: eta(:,:) ! Interface heights (meter)
+  type(vardesc) :: vd
 
   call cpu_clock_begin(id_clock_init)
   call callTree_enter("finish_MOM_initialization()")
+
+  ! Pointers for convenience
+  G => CS%G ; GV => CS%GV
+
+  ! Write initial conditions
+  if (CS%write_IC) then
+    allocate(restart_CSp_tmp)
+    restart_CSp_tmp = CS%restart_CSp
+    allocate(z_interface(SZI_(G),SZJ_(G),SZK_(G)+1))
+    call find_eta(CS%h, CS%tv, G%g_Earth, G, GV, z_interface)
+    vd = var_desc("eta","meter","Interface heights",z_grid='i')
+    call register_restart_field(z_interface, vd, .true., restart_CSp_tmp)
+
+    call save_restart(dirs%output_directory, Time, G, &
+                      restart_CSp_tmp, filename=CS%IC_file, GV=GV)
+    deallocate(z_interface)
+    deallocate(restart_CSp_tmp)
+  endif
 
   call callTree_leave("finish_MOM_initialization()")
   call cpu_clock_end(id_clock_init)
