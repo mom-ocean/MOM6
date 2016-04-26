@@ -52,7 +52,7 @@ use MOM_obsolete_params,      only : find_obsolete_params
 use MOM_restart,              only : register_restart_field, query_initialized, save_restart
 use MOM_restart,              only : restart_init, MOM_restart_CS
 use MOM_spatial_means,        only : global_area_mean, global_area_integral
-use MOM_state_initialization, only : MOM_initialize_state, MOM_initialization_struct
+use MOM_state_initialization, only : MOM_initialize_state
 use MOM_time_manager,         only : time_type, set_time, time_type_to_real, operator(+)
 use MOM_time_manager,         only : operator(-), operator(>), operator(*), operator(/)
 
@@ -355,6 +355,8 @@ type, public :: MOM_control_struct
   type(diag_to_Z_CS),            pointer :: diag_to_Z_CSp          => NULL()
   type(MOM_restart_CS),          pointer :: restart_CSp            => NULL()
   type(ocean_OBC_type),          pointer :: OBC                    => NULL()
+  type(sponge_CS),               pointer :: sponge_CSp             => NULL()
+  type(ALE_sponge_CS),           pointer :: ALE_sponge_CSp         => NULL()
   type(ALE_CS),                  pointer :: ALE_CSp                => NULL()
 
   ! These are used for group halo updates.
@@ -1386,7 +1388,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   logical :: do_unit_tests     ! If true, call unit tests.
 
   type(time_type)                 :: Start_time
-  type(MOM_initialization_struct) :: init_CS
   type(ocean_internal_state)      :: MOM_internal_state
   type(group_pass_type)           :: pass_p_surf_prev
 
@@ -1771,7 +1772,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call mixedlayer_restrat_register_restarts(G, param_file, CS%mixedlayer_restrat_CSp, CS%restart_CSp)
 
   ! Initialize fields
-  if (associated(CS%tracer_Reg)) init_CS%tracer_Reg => CS%tracer_Reg
   call callTree_waypoint("restart registration complete (initialize_MOM)")
 
   call cpu_clock_begin(id_clock_MOM_init)
@@ -1787,7 +1787,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   endif
 
   call MOM_initialize_state(CS%u, CS%v, CS%h, CS%tv, Time, G, GV, param_file, &
-                            dirs, CS%restart_CSp, CS%ALE_CSp, init_CS, Time_in)
+                            dirs, CS%restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
+                            CS%sponge_CSp, CS%ALE_sponge_CSp, CS%OBC, Time_in)
   call cpu_clock_end(id_clock_MOM_init)
   call callTree_waypoint("returned from MOM_initialize_state() (initialize_MOM)")
 
@@ -1803,7 +1804,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     call callTree_waypoint("Calling adjustGridForIntegrity() to remap initial conditions (initialize_MOM)")
     call adjustGridForIntegrity(CS%ALE_CSp, G, CS%h )
     call callTree_waypoint("Calling ALE_main() to remap initial conditions (initialize_MOM)")
-    call ALE_main( G, GV, CS%h, CS%u, CS%v, CS%tv, CS%tracer_Reg, CS%ALE_CSp ) ! Or init_CS%tracer_Reg ??? -AJA
+    call ALE_main( G, GV, CS%h, CS%u, CS%v, CS%tv, CS%tracer_Reg, CS%ALE_CSp )
     if (CS%debug) then
       call uchksum(CS%u,"Post ALE adjust init cond u", G, haloshift=1)
       call vchksum(CS%v,"Post ALE adjust init cond v", G, haloshift=1)
@@ -1842,34 +1843,29 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call VarMix_init(Time, G, param_file, diag, CS%VarMix, CS%wave_speed_CSp)
   call set_visc_init(Time, G, GV, param_file, diag, CS%visc, CS%set_visc_CSp)
 
-  if (associated(init_CS%tracer_Reg)) &
-    CS%tracer_Reg => init_CS%tracer_Reg
-
-! if (associated(init_CS%sponge_CSp)) CS%sponge_CSp => init_CS%sponge_CSp
-
   if (CS%split) then
     allocate(eta(SZI_(G),SZJ_(G))) ; eta(:,:) = 0.0
     if (CS%legacy_split) then
       call initialize_dyn_legacy_split(CS%u, CS%v, CS%h, CS%uh, CS%vh, eta, Time, &
                   G, GV, param_file, diag, CS%dyn_legacy_split_CSp, CS%restart_CSp, &
                   CS%dt, CS%ADp, CS%CDp, MOM_internal_state, CS%VarMix, CS%MEKE,  &
-                  init_CS%OBC, CS%ALE_CSp, CS%set_visc_CSp, CS%visc, dirs, CS%ntrunc)
+                  CS%OBC, CS%ALE_CSp, CS%set_visc_CSp, CS%visc, dirs, CS%ntrunc)
     else
       call initialize_dyn_split_RK2(CS%u, CS%v, CS%h, CS%uh, CS%vh, eta, Time,   &
                   G, GV, param_file, diag, CS%dyn_split_RK2_CSp, CS%restart_CSp, &
                   CS%dt, CS%ADp, CS%CDp, MOM_internal_state, CS%VarMix, CS%MEKE, &
-                  init_CS%OBC, CS%ALE_CSp, CS%set_visc_CSp, CS%visc, dirs, CS%ntrunc)
+                  CS%OBC, CS%ALE_CSp, CS%set_visc_CSp, CS%visc, dirs, CS%ntrunc)
     endif
   else
     if (CS%use_RK2) then
       call initialize_dyn_unsplit_RK2(CS%u, CS%v, CS%h, Time, G, GV,       &
               param_file, diag, CS%dyn_unsplit_RK2_CSp, CS%restart_CSp,    &
-              CS%ADp, CS%CDp, MOM_internal_state, init_CS%OBC, CS%ALE_CSp, &
+              CS%ADp, CS%CDp, MOM_internal_state, CS%OBC, CS%ALE_CSp, &
               CS%set_visc_CSp, CS%visc, dirs, CS%ntrunc)
     else
       call initialize_dyn_unsplit(CS%u, CS%v, CS%h, Time, G, GV,           &
               param_file, diag, CS%dyn_unsplit_CSp, CS%restart_CSp,        &
-              CS%ADp, CS%CDp, MOM_internal_state, init_CS%OBC, CS%ALE_CSp, &
+              CS%ADp, CS%CDp, MOM_internal_state, CS%OBC, CS%ALE_CSp, &
               CS%set_visc_CSp, CS%visc, dirs, CS%ntrunc)
     endif
   endif
@@ -1884,11 +1880,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     ! When DIABATIC_FIRST=False and using CS%visc%ML in mixedlayer_restrat we need to update after a restart
     if (.not. CS%diabatic_first .and. associated(CS%visc%MLD)) call pass_var(CS%visc%MLD, G%domain)
   endif
-  if (associated(init_CS%OBC)) CS%OBC => init_CS%OBC
 
   call MOM_diagnostics_init(MOM_internal_state, CS%ADp, CS%CDp, Time, G, GV, &
               param_file, diag, CS%diagnostics_CSp, CS%wave_speed_CSp)
-
 
   CS%Z_diag_interval = set_time(int((CS%dt_therm) * &
        max(1,floor(0.01 + Z_diag_int/(CS%dt_therm)))))
@@ -1896,11 +1890,11 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   CS%Z_diag_time = Start_time + CS%Z_diag_interval * (1 + &
     ((Time + set_time(int(CS%dt_therm))) - Start_time) / CS%Z_diag_interval)
 
-  if (associated(init_CS%sponge_CSp)) &
-    call init_sponge_diags(Time, G, diag, init_CS%sponge_CSp)
+  if (associated(CS%sponge_CSp)) &
+    call init_sponge_diags(Time, G, diag, CS%sponge_CSp)
 
-  if (associated(init_CS%ALE_sponge_CSp)) &
-    call init_ALE_sponge_diags(Time, G, diag, init_CS%ALE_sponge_CSp)
+  if (associated(CS%ALE_sponge_CSp)) &
+    call init_ALE_sponge_diags(Time, G, diag, CS%ALE_sponge_CSp)
 
   if (CS%adiabatic) then
     call adiabatic_driver_init(Time, G, param_file, diag, CS%diabatic_CSp, &
@@ -1908,7 +1902,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   else
     call diabatic_driver_init(Time, G, GV, param_file, CS%use_ALE_algorithm, diag,     &
                               CS%ADp, CS%CDp, CS%diabatic_CSp, CS%tracer_flow_CSp, &
-                              init_CS%sponge_CSp, init_CS%ALE_sponge_CSp, CS%diag_to_Z_CSp)
+                              CS%sponge_CSp, CS%ALE_sponge_CSp, CS%diag_to_Z_CSp)
   endif
 
   call tracer_advect_init(Time, G, param_file, diag, CS%tracer_adv_CSp)
@@ -1951,7 +1945,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   new_sim = ((dirs%input_filename(1:1) == 'n') .and. &
              (LEN_TRIM(dirs%input_filename) == 1))
   call tracer_flow_control_init(.not.new_sim, Time, G, GV, CS%h, param_file, CS%OBC, &
-           CS%tracer_flow_CSp, init_CS%sponge_CSp, init_CS%ALE_sponge_CSp, CS%diag_to_Z_CSp)
+           CS%tracer_flow_CSp, CS%sponge_CSp, CS%ALE_sponge_CSp, CS%diag_to_Z_CSp)
 
   call cpu_clock_begin(id_clock_pass_init)
   !--- set up group pass for u,v,T,S and h. pass_uv_T_S_h also is used in step_MOM
