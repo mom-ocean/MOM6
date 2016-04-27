@@ -246,14 +246,23 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
                  " FILE:<file>,<variable> - where <file> is a file within\n"//&
                  "                          the INPUTDIR, <variable> is\n"//&
                  "                          the name of the variable that\n"//&
-                 "                          contains interface positions.\n",&
+                 "                          contains interface positions.\n"//&
+                 " UNIFORM                - vertical grid is uniform\n"//&
+                 "                          between surface and max depth.\n",&
                  default="")
   if (len_trim(string) > 0) then
-    if (index(trim(string),'FILE:')/=1) then
-      call MOM_error(FATAL,"set_axes_info: "//&
-         "Only the 'FILE:file,var' format has been implemented so far. "//&
-         "Found '"//trim(string)//"'")
-    else
+    if (trim(string) == 'UNIFORM') then
+      ! initialise a uniform coordinate with depth
+      nzi(1) = G%ke + 1
+      allocate(diag_cs%zi_remap(nzi(1)))
+      allocate(diag_cs%zl_remap(nzi(1) - 1))
+
+      diag_cs%zi_remap(1) = 0
+      do k = 2,nzi(1)
+        diag_cs%zi_remap(K) = diag_cs%zi_remap(K - 1) + G%max_depth / real(nzi(1) - 1)
+      enddo
+    elseif (index(trim(string), 'FILE:') == 1) then
+      ! read coordinate information from a file
       if (string(6:6)=='.' .or. string(6:6)=='/') then
         inputdir = "."
         filename = trim(extractWord(trim(string(6:200)), 1))
@@ -277,15 +286,22 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
       ! Log the expanded result as a comment since it cannot be read back in
       call log_param(param_file, mod, "! Remapping z diagnostics", &
                      trim(inputdir)//"/"//trim(filename)//","//trim(varname))
+
+      ! Get interface dimensions
+      call field_size(filename, varname, nzi)
+      call assert(nzi(1) /= 0, 'set_axes_info: bad z-axis dimension size')
+      allocate(diag_cs%zi_remap(nzi(1)))
+      allocate(diag_cs%zl_remap(nzi(1) - 1))
+      call MOM_read_data(filename, varname, diag_cs%zi_remap)
+    else
+      ! unsupported method
+      call MOM_error(FATAL,"set_axes_info: "//&
+         "Incorrect remapping grid specification. Only 'FILE:file,var' and"//&
+         "'UNIFORM' are currently supported."//&
+         "Found '"//trim(string)//"'")
     endif
 
-    ! Get interface dimensions
-    call field_size(filename, varname, nzi)
-    call assert(nzi(1) /= 0, 'set_axes_info: bad z-axis dimension size')
-    allocate(diag_cs%zi_remap(nzi(1)))
-    allocate(diag_cs%zl_remap(nzi(1) - 1))
-    call MOM_read_data(filename, varname, diag_cs%zi_remap)
-    diag_cs%zi_remap(:) = abs( diag_cs%zi_remap(:) ) ! Always convert heights into depths
+    diag_cs%zi_remap(:) = abs(diag_cs%zi_remap(:)) ! Always convert heights into depths
     ! Calculate layer positions
     diag_cs%zl_remap(:) = diag_cs%zi_remap(1:nzi(1)-1) + &
                           (diag_cs%zi_remap(2:) - diag_cs%zi_remap(:nzi(1)-1)) / 2
