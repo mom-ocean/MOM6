@@ -726,8 +726,8 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h )
   ! Determine reconstruction within each column
 !$OMP parallel do default(none) shared(G,GV,h,tv,CS,S_t,S_b,T_t,T_b)                  &
 !$OMP                          private(hTmp,ppoly_linear_E,ppoly_linear_coefficients,tmp)
-  do j = G%jsc,G%jec+1
-    do i = G%isc,G%iec+1
+  do j = G%jsc-1,G%jec+1
+    do i = G%isc-1,G%iec+1
       ! Build current grid
       hTmp(:) = h(i,j,:)*GV%H_to_m
       tmp(:) = tv%S(i,j,:)
@@ -794,8 +794,8 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h )
   ! Determine reconstruction within each column
 !$OMP parallel do default(none) shared(G,GV,h,tv,CS,S_t,S_b,T_t,T_b) &
 !$OMP                          private(hTmp,tmp,ppoly_parab_E,ppoly_parab_coefficients)
-  do j = G%jsc,G%jec+1
-    do i = G%isc,G%iec+1
+  do j = G%jsc-1,G%jec+1
+    do i = G%isc-1,G%iec+1
      
       ! Build current grid
       hTmp(:) = h(i,j,:) * GV%H_to_m
