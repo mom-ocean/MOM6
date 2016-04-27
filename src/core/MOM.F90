@@ -3399,9 +3399,9 @@ end subroutine MOM_end
 !! * BOUNDARY_FORCING_HEAT_TENDENCY = heating of cell from boundary fluxes
 !! * FRAZIL_HEAT_TENDENCY           = heating of cell from frazil
 !!
-!! * TH_TENDENCY_VERT_REMAP has zero vertical sum, as it merely redistributes heat in vertical.
+!! * TH_TENDENCY_VERT_REMAP has zero vertical sum, as it redistributes heat in vertical.
 !!
-!! * OPOTTEMPDIFF has zero vertical sum, as it merely redistributes heat in the vertical.
+!! * OPOTTEMPDIFF has zero vertical sum, as it redistributes heat in the vertical.
 !!
 !! * BOUNDARY_FORCING_HEAT_TENDENCY generally has 3d structure, with k > 1 contributions from
 !!   penetrative shortwave, and from other fluxes for the case when layers are tiny, in which
@@ -3412,5 +3412,40 @@ end subroutine MOM_end
 !!
 !! * FRAZIL_HEAT_TENDENCY[k=@sum] = HFSIFRAZIL = column integrated frazil heating.
 !!
+!! * HFDS = FRAZIL_HEAT_TENDENCY[k=@sum] + BOUNDARY_FORCING_HEAT_TENDENCY[k=@sum]
+!!
+!!  Here is an example 2d heat budget (depth summed) diagnostic for MOM.
+!!
+!! * OPOTTEMPTEND_2d = T_ADVECTION_XY_2d + OPOTTEMPPMDIFF_2d + HFDS 
+!!
+!!
+!!  Here is an example 3d salt budget diagnostic for MOM.
+!!
+!! * OSALTTEND = S_ADVECTION_XY + SH_TENDENCY_VERT_REMAP + OSALTDIFF + OSALTPMDIFF
+!!                + BOUNDARY_FORCING_SALT_TENDENCY 
+!!
+!! * OSALTTEND                      = net tendency of salt as diagnosed in MOM.F90
+!! * S_ADVECTION_XY                 = salt convergence to cell from lateral advection
+!! * SH_TENDENCY_VERT_REMAP         = salt convergence to cell from vertical remapping
+!! * OSALTDIFF                      = salt convergence to cell from diabatic diffusion
+!! * OSALTPMDIFF                    = salt convergence to cell from neutral diffusion
+!! * BOUNDARY_FORCING_SALT_TENDENCY = salt convergence to cell from boundary fluxes
+!!
+!! * SH_TENDENCY_VERT_REMAP has zero vertical sum, as it redistributes salt in vertical.
+!!
+!! * OSALTDIFF has zero vertical sum, as it redistributes salt in the vertical.
+!!
+!! * BOUNDARY_FORCING_SALT_TENDENCY generally has 3d structure, with k > 1 contributions from
+!!   the case when layers are tiny, in which case MOM6 partitions tendencies into k > 1 layers.
+!!
+!! * SFDSI = BOUNDARY_FORCING_SALT_TENDENCY[k=@sum] 
+!!
+!!  Here is an example 2d salt budget (depth summed) diagnostic for MOM.
+!!
+!! * OSALTTEND_2d = S_ADVECTION_XY_2d + OSALTPMDIFF_2d + SFDSI (+ SALT_FLUX_RESTORE) 
+!!
+!!
+!!
+
 
 end module MOM
