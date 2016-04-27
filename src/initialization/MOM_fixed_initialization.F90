@@ -68,6 +68,8 @@ subroutine MOM_initialize_fixed(G, PF, write_geom, output_dir)
   call set_grid_metrics(G, PF)
 
 ! Set up the bottom depth, G%bathyT either analytically or from file
+! This also sets G%max_depth based on the input parameter MAXIMUM_DEPTH,
+! or, if absent, is diagnosed as G%max_depth = max( G%D(:,:) )
   call MOM_initialize_topography(G%bathyT, G%max_depth, G, PF)
 
 ! ====================================================================
