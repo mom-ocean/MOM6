@@ -319,7 +319,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
   real, dimension(SZI_(G),SZJB_(G)),         intent(in)    :: Coef_y !< dt * Kh * dx / dy at u-points (m^2)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: Tracer !< Tracer concentration
   integer,                                   intent(in)    :: m      !< Tracer number 
-  real,                                      intent(in)    :: dt     !< Tracer time step 
+  real,                                      intent(in)    :: dt     !< Tracer time step * I_numitts (I_numitts in tracer_hordiff) 
   character(len=32),                         intent(in)    :: name   !< Tracer name 
   type(neutral_diffusion_CS),                pointer       :: CS     !< Neutral diffusion control structure
 
@@ -332,7 +332,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
   real, dimension(SZI_(G),SZJB_(G))          :: trans_y_2d  ! depth integrated diffusive tracer y-transport diagn
   real, dimension(G%ke)                      :: dTracer     ! change in tracer concentration due to ndiffusion 
   integer :: i, j, k, ks, nk
-  real :: Ihdxdy, ppt2mks, Idt, convert
+  real :: ppt2mks, Idt, convert
 
   nk = G%ke
 
@@ -1241,13 +1241,13 @@ logical function neutralDiffusionUnitTests()
 
   !> Returns true if a test of fv_diff() fails, and conditionally writes results to stream
   logical function test_fv_diff(hkm1, hk, hkp1, Skm1, Sk, Skp1, Ptrue, title)
-    real,             intent(in) :: hkm1 !< Left cell width
-    real,             intent(in) :: hk   !< Center cell width
-    real,             intent(in) :: hkp1 !< Right cell width
-    real,             intent(in) :: Skm1 !< Left cell average value
-    real,             intent(in) :: Sk   !< Center cell average value
-    real,             intent(in) :: Skp1 !< Right cell average value
-    real,             intent(in) :: Ptrue  !< True answer (Pa)
+    real,             intent(in) :: hkm1  !< Left cell width
+    real,             intent(in) :: hk    !< Center cell width
+    real,             intent(in) :: hkp1  !< Right cell width
+    real,             intent(in) :: Skm1  !< Left cell average value
+    real,             intent(in) :: Sk    !< Center cell average value
+    real,             intent(in) :: Skp1  !< Right cell average value
+    real,             intent(in) :: Ptrue !< True answer (Pa)
     character(len=*), intent(in) :: title !< Title for messages
 
     ! Local variables
@@ -1272,13 +1272,13 @@ logical function neutralDiffusionUnitTests()
 
   !> Returns true if a test of fvlsq_slope() fails, and conditionally writes results to stream
   logical function test_fvlsq_slope(hkm1, hk, hkp1, Skm1, Sk, Skp1, Ptrue, title)
-    real,             intent(in) :: hkm1 !< Left cell width
-    real,             intent(in) :: hk   !< Center cell width
-    real,             intent(in) :: hkp1 !< Right cell width
-    real,             intent(in) :: Skm1 !< Left cell average value
-    real,             intent(in) :: Sk   !< Center cell average value
-    real,             intent(in) :: Skp1 !< Right cell average value
-    real,             intent(in) :: Ptrue  !< True answer (Pa)
+    real,             intent(in) :: hkm1  !< Left cell width
+    real,             intent(in) :: hk    !< Center cell width
+    real,             intent(in) :: hkp1  !< Right cell width
+    real,             intent(in) :: Skm1  !< Left cell average value
+    real,             intent(in) :: Sk    !< Center cell average value
+    real,             intent(in) :: Skp1  !< Right cell average value
+    real,             intent(in) :: Ptrue !< True answer (Pa)
     character(len=*), intent(in) :: title !< Title for messages
 
     ! Local variables
