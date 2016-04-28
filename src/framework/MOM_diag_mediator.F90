@@ -168,6 +168,8 @@ type, public :: diag_ctrl
   ! Keep track of which remapping is needed for diagnostic output
   logical :: do_z_remapping_on_u, do_z_remapping_on_v, do_z_remapping_on_T
   logical :: remapping_initialized
+  logical :: apply_3d_diag_mask_for_zstar_only  ! this flag allows for skipping remapping
+                                                ! in zstar mode only and masking vanished cells
 
   ! Pointer to H and G for remapping
   real, dimension(:,:,:), pointer :: h => null()
@@ -683,7 +685,14 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask)
       endif
       deallocate(remapped_field)
     else
-      call post_data_3d_low(diag, field, diag_cs, is_static, mask)
+    ! Should additionally test to make sure this diagnostic is a primary
+    ! variable, as opposed to a remapped or cmor diagnostic. The mask should
+    ! only be used for primary diagnostics right now.
+      if (diag_cs%apply_3d_diag_mask_for_zstar_only ) then
+        call post_data_3d_low(diag, field, diag_cs, is_static, diag%mask3d)	
+      else
+        call post_data_3d_low(diag, field, diag_cs, is_static, mask)
+      endif
     endif
     diag => diag%next
   enddo
@@ -1623,6 +1632,7 @@ subroutine diag_mediator_init(G, param_file, diag_cs, err_msg, doc_file_dir)
   character(len=8)   :: this_pe
   character(len=240) :: doc_file, doc_file_dflt, doc_path
   character(len=40)  :: mod  = "MOM_diag_mediator" ! This module's name.
+  character(len=80)  :: regrid_coord_mode
 
   call diag_manager_init(err_msg=err_msg)
 
@@ -1655,6 +1665,17 @@ subroutine diag_mediator_init(G, param_file, diag_cs, err_msg, doc_file_dir)
   diag_cs%isd = G%isd ; diag_cs%ied = G%ied
   diag_cs%jsd = G%jsd ; diag_cs%jed = G%jed
 
+  call get_param(param_file,mod,"APPLY_DIAGNOSTIC_MASK_FOR_ZSTAR",diag_cs%apply_3d_diag_mask_for_zstar_only, &
+                 "This option is used in ZSTAR mode only to apply a 3-d mask based on topography.",&
+                 fail_if_missing=.false.,default=.false.)
+
+  if (diag_cs%apply_3d_diag_mask_for_zstar_only) then
+     call get_param(param_file,'MOM_ALE',"REGRIDDING_COORDINATE_MODE",regrid_coord_mode)
+     if (regrid_coord_mode /= "Z*") then
+       call MOM_error(FATAL,"set_axis_info: "//&
+         "REGRIDDING MODE is NOT Z* but APPLY_DIAGNOSTIC_MASK_FOR_ZSTAR is True ")
+     endif
+  endif
   if (is_root_pe() .and. (diag_CS%doc_unit < 0)) then
     write(this_pe,'(i6.6)') PE_here()
     doc_file_dflt = "available_diags."//this_pe
@@ -1714,7 +1735,8 @@ subroutine diag_masks_set(G, missing_value, diag_cs)
   real,                          intent(in) :: missing_value
   type(diag_ctrl),          pointer    :: diag_cs
   ! Local variables
-  integer :: k
+  integer :: i,j,k
+  real :: zinter(G%ks:G%ke+1)
 
   diag_cs%mask2dT => G%mask2dT
   diag_cs%mask2dBu=> G%mask2dBu
@@ -1730,6 +1752,23 @@ subroutine diag_masks_set(G, missing_value, diag_cs)
     diag_cs%mask3dCuL(:,:,k) = diag_cs%mask2dCu(:,:)
     diag_cs%mask3dCvL(:,:,k) = diag_cs%mask2dCv(:,:)
   enddo
+
+  if (diag_cs%apply_3d_diag_mask_for_zstar_only) then
+     zinter(1:G%ke+1) = G%GV%sInterface(1:G%ke+1)
+     do k = 1,G%ke
+        do j = G%jsc,G%jec
+          do i = G%isc,G%iec
+             if (zinter(k) > G%bathyT(i,j)) then
+                diag_cs%mask3dTL(i,j,k) = 0.
+                diag_cs%mask3dBuL(i,j,k) = 0.
+                diag_cs%mask3dCuL(i,j,k) = 0.
+                diag_cs%mask3dCvL(i,j,k) = 0.
+             endif
+          enddo
+       enddo
+     enddo
+  endif
+
   allocate(diag_cs%mask3dTi(G%isd:G%ied,G%jsd:G%jed,1:G%ke+1))
   allocate(diag_cs%mask3dBui(G%IsdB:G%IedB,G%JsdB:G%JedB,1:G%ke+1))
   allocate(diag_cs%mask3dCui(G%IsdB:G%IedB,G%jsd:G%jed,1:G%ke+1))
@@ -1740,6 +1779,21 @@ subroutine diag_masks_set(G, missing_value, diag_cs)
     diag_cs%mask3dCui(:,:,k) = diag_cs%mask2dCu(:,:)
     diag_cs%mask3dCvi(:,:,k) = diag_cs%mask2dCv(:,:)
   enddo
+
+  if (diag_cs%apply_3d_diag_mask_for_zstar_only) then
+     do k = 1,G%ke
+        do j = G%jsc,G%jec
+          do i = G%isc,G%iec
+             if (zinter(k+1) < G%bathyT(i,j)) then
+                diag_cs%mask3dTi(i,j,k) = 0.
+                diag_cs%mask3dBui(i,j,k) = 0.
+                diag_cs%mask3dCui(i,j,k) = 0.
+                diag_cs%mask3dCvi(i,j,k) = 0.
+             endif
+          enddo
+       enddo
+     enddo
+  endif
 
   diag_cs%missing_value = missing_value
 
