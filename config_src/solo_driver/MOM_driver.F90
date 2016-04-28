@@ -81,6 +81,8 @@ program MOM_main
   use MOM_ice_shelf, only : shelf_calc_flux, ice_shelf_save_restart
 ! , add_shelf_flux_forcing, add_shelf_flux_IOB
 
+  use MOM_wave_interface, only: wave_parameters_CS, MOM_wave_interface_init
+
   implicit none
 
 #include <MOM_memory.h>
@@ -97,6 +99,9 @@ program MOM_main
                                        
   ! If .true., use the ice shelf model for part of the domain.
   logical :: use_ice_shelf = .false. 
+
+  ! If .true., use wave coupling
+  logical :: use_waves = .false.
 
   ! This is .true. if incremental restart files may be saved.
   logical :: permit_incr_restart = .true. 
@@ -174,6 +179,7 @@ program MOM_main
   type(sum_output_CS),       pointer :: sum_output_CSp => NULL()
   type(write_cputime_CS),    pointer :: write_CPU_CSp => NULL()
   type(ice_shelf_CS),        pointer :: ice_shelf_CSp => NULL()
+  type(wave_parameters_CS),  pointer :: wave_parameter_CSp =>NULL()
   !-----------------------------------------------------------------------
 
   character(len=4), parameter :: vers_num = 'v2.0'
@@ -278,6 +284,11 @@ program MOM_main
   use_ice_shelf=.false. ; call read_param(param_file,"ICE_SHELF",use_ice_shelf)
   if (use_ice_shelf) then
     call initialize_ice_shelf(Time, ice_shelf_CSp, MOM_CSp%diag, fluxes)
+  endif
+
+  use_waves=.false. ; call read_param(param_file,"Use_Waves",Use_Waves)
+  if (use_waves) then
+     call MOM_wave_interface_init(grid,GV,param_file,Wave_Parameter_CSp)
   endif
 
   call MOM_sum_output_init(grid, param_file, dirs%output_directory, &
