@@ -9,6 +9,7 @@ use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only :  CLOCK_ROUTINE, CLOCK_LOOP
 use MOM_domains, only : pass_var, pass_vector, sum_across_PEs, broadcast
 use MOM_domains, only : root_PE, To_All, SCALAR_PAIR, CGRID_NE, AGRID
+use MOM_EOS, only : find_depth_of_pressure_in_cell
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
@@ -814,6 +815,98 @@ subroutine depress_surface(h, G, GV, param_file, tv)
   endif ; enddo ; enddo
 
 end subroutine depress_surface
+
+!> Adjust the layer thicknesses by cutting away the top at the depth where the hydrostatic
+!! pressure matches p_surf
+subroutine trim_for_iceshelf(G, GV, ALE_CSp, tv, p_surf, h)
+  type(ocean_grid_type),                    intent(in)    :: G !< Ocean grid structure
+  type(verticalGrid_type),                  intent(in)    :: GV !< Vertical grid structure
+  type(ALE_CS),                             pointer       :: ALE_CSp !< ALE control structure
+  type(thermo_var_ptrs),                    intent(in)    :: tv !< Thermodynamics structure
+  real, dimension(SZI_(G),SZJ_(G)),         intent(in)    :: p_surf !< Weight on ocean at surface (Pa)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h !< Layer thickness (H units, m or Pa)
+  ! Local variables
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: S_t, S_b, T_t, T_b ! Top and bottom edge values for reconstructions
+                                                                 ! of salinity and temperature within each layer.
+  integer :: i, j
+
+  ! Find edge values of T and S used in reconstructions
+! if ( use_ALE ) then
+!   if ( PRScheme == PRESSURE_RECONSTRUCTION_PLM ) then
+!     call pressure_gradient_plm (ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h);
+!   elseif ( PRScheme == PRESSURE_RECONSTRUCTION_PPM ) then
+!     call pressure_gradient_ppm (ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h);
+!   endif
+! endif
+
+  do j=G%jsc,G%jec ; do i=G%isc,G%iec
+    call cut_off_column_top(GV%ke, tv, GV%Rho0, G%G_earth, G%bathyT(i,j), GV%Angstrom, &
+               tv%T(i,j,:), T_t(i,j,:), T_b(i,j,:), tv%S(i,j,:), S_t(i,j,:), S_b(i,j,:), p_surf(i,j), h(i,j,:))
+  enddo ; enddo
+
+end subroutine trim_for_iceshelf
+
+!> Adjust the layer thicknesses by cutting away the top at the depth where the hydrostatic
+!! pressure matches p_surf
+subroutine cut_off_column_top(nk, tv, Rho0, G_earth, depth, Angstrom, T, T_t, T_b, S, S_t, S_b, p_surf, h)
+  integer,               intent(in)    :: nk !< Number of layers
+  type(thermo_var_ptrs), intent(in)    :: tv !< Thermodynamics structure
+  real,                  intent(in)    :: Rho0 !< Reference density (kg/m3)
+  real,                  intent(in)    :: G_earth !< Gravitational acceleration (m/s2)
+  real,                  intent(in)    :: depth !< Depth of ocean column (m)
+  real,                  intent(in)    :: Angstrom !< Smallest thickness allowed (m)
+  real, dimension(nk),   intent(in)    :: T !< 
+  real, dimension(nk),   intent(in)    :: T_t !< 
+  real, dimension(nk),   intent(in)    :: T_b !< 
+  real, dimension(nk),   intent(in)    :: S !< 
+  real, dimension(nk),   intent(in)    :: S_t !< 
+  real, dimension(nk),   intent(in)    :: S_b !< 
+  real,                  intent(in)    :: p_surf !< Weight on ocean at surface (Pa)
+  real, dimension(nk),   intent(inout) :: h !< Layer thickness (H units, m or Pa)
+  ! Local variables
+  real, dimension(nk+1) :: e ! Top and bottom edge values for reconstructions
+  real :: P_t, P_b, z_out, e_top
+  integer :: k
+
+  ! Calculate original interface positions
+  e(nk+1) = -depth
+  do k=nk,1,-1
+    e(K) = e(K+1) + h(k)
+  enddo
+
+  P_t = 0.
+  e_top = e(1)
+  do k=1,nk
+    call find_depth_of_pressure_in_cell(T_t(k), T_b(k), S_t(k), S_b(k), e(K), e(K+1), &
+                                        P_t, p_surf, Rho0, G_earth, tv%eqn_of_state, P_b, z_out)
+    if (z_out>=e(K)) then
+      ! Imposed pressure was less that pressure at top of cell
+      exit
+    elseif (z_out<=e(K+1)) then
+      ! Imposed pressure was greater than pressure at bottom of cell
+      e_top = e(K+1)
+    else
+      ! Imposed pressure was fell between pressures at top and bottom of cell
+      e_top = z_out
+      exit
+    endif
+    P_t = P_b
+  enddo
+  if (e_top<e(1)) then
+    ! Clip layers from the top down, if at all
+    do K=1,nk
+      if (e(K)>e_top) then
+        ! Original e(K) is too high
+        e(K) = e_top
+        e_top = e_top - Angstrom ! Next interface must be at least this deep
+      endif
+      ! This layer needs trimming
+      h(k) = max( Angstrom, e(K) - e(K+1) )
+      if (e(K)<e_top) exit ! No need to go further
+    enddo
+  endif
+
+end subroutine cut_off_column_top
 
 ! -----------------------------------------------------------------------------
 subroutine initialize_velocity_from_file(u, v, G, param_file)
@@ -2299,5 +2392,56 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
   call cpu_clock_end(id_clock_routine)
 
 end subroutine MOM_temp_salt_initialize_from_Z
+
+!> Run simple unit tests
+subroutine MOM_state_init_tests(G, GV, tv)
+  type(ocean_grid_type),     intent(inout) :: G
+  type(verticalGrid_type),   intent(in)    :: GV
+  type(thermo_var_ptrs),     intent(in)    :: tv !< Thermodynamics structure
+  ! Local variables
+  integer, parameter :: nk=5
+  real, dimension(nk) :: T, T_t, T_b, S, S_t, S_b, rho, h, z
+  real, dimension(nk+1) :: e
+  integer :: k
+  real :: P_tot, P_t, P_b, z_out
+
+  do k = 1, nk
+    h(k) = 100.
+  enddo
+  e(1) = 0.
+  do K = 1, nk
+    e(K+1) = e(K) - h(k)
+  enddo
+  P_tot = 0.
+  do k = 1, nk
+    z(k) = 0.5 * ( e(K) + e(K+1) )
+    T_t(k) = 20.+(0./500.)*e(k)
+    T(k)   = 20.+(0./500.)*z(k)
+    T_b(k) = 20.+(0./500.)*e(k+1)
+    S_t(k) = 35.-(0./500.)*e(k)
+    S(k)   = 35.+(0./500.)*z(k)
+    S_b(k) = 35.-(0./500.)*e(k+1)
+    call calculate_density(0.5*(T_t(k)+T_b(k)), 0.5*(S_t(k)+S_b(k)), -GV%Rho0*G%G_earth*z(k), rho(k), tv%eqn_of_state)
+    P_tot = P_tot + G%G_earth * rho(k) * h(k)
+  enddo
+
+  P_t = 0.
+  do k = 1, nk
+    call find_depth_of_pressure_in_cell(T_t(k), T_b(k), S_t(k), S_b(k), e(K), e(K+1), &
+                                        P_t, 0.5*P_tot, GV%Rho0, G%G_earth, tv%eqn_of_state, P_b, z_out)
+    write(0,*) k,P_t,P_b,0.5*P_tot,e(K),e(K+1),z_out
+    P_t = P_b
+  enddo
+  write(0,*) P_b,P_tot
+
+  write(0,*) ''
+  write(0,*) ' ==================================================================== '
+  write(0,*) ''
+  write(0,*) h
+  call cut_off_column_top(nk, tv, GV%Rho0, G%G_earth, -e(nk+1), GV%Angstrom, &
+               T, T_t, T_b, S, S_t, S_b, 1.5*P_tot, h)
+  write(0,*) h
+
+end subroutine MOM_state_init_tests
 
 end module MOM_state_initialization

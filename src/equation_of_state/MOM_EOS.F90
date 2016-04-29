@@ -24,6 +24,7 @@ public EOS_use_linear
 public int_density_dz, int_specific_vol_dp
 public int_density_dz_generic_plm, int_density_dz_generic_ppm
 public int_density_dz_generic_plm_analytic
+public find_depth_of_pressure_in_cell
 public calculate_TFreeze
 
 !> Calculates density of sea water from T, S and P
@@ -1184,6 +1185,103 @@ end subroutine int_density_dz_generic_plm
 ! Above is the routine where only the S and T profiles are modified
 ! The real topography is still used
 ! ==========================================================================
+
+!> Find the depth at which the reconstructed pressure matches P_tgt
+subroutine find_depth_of_pressure_in_cell(T_t, T_b, S_t, S_b, z_t, z_b, P_t, P_tgt, &
+                       rho_ref, G_e, EOS, P_b, z_out)
+  real,           intent(in)  :: T_t !< Potential temperatue at the cell top (degC)
+  real,           intent(in)  :: T_b !< Potential temperatue at the cell bottom (degC)
+  real,           intent(in)  :: S_t !< Salinity at the cell top (ppt)
+  real,           intent(in)  :: S_b !< Salinity at the cell bottom (ppt)
+  real,           intent(in)  :: z_t !< Absolute height of top of cell (m)   (Boussinesq ????)
+  real,           intent(in)  :: z_b !< Absolute height of bottom of cell (m)
+  real,           intent(in)  :: P_t !< Anomalous pressure of top of cell, relative to g*rho_ref*z_t (Pa)
+  real,           intent(in)  :: P_tgt !< Target pressure at height z_out, relative to g*rho_ref*z_out (Pa)
+  real,           intent(in)  :: rho_ref !< Reference density with which calculation are anomalous to
+  real,           intent(in)  :: G_e !< Gravitational acceleration (m/s2)
+  type(EOS_type), pointer     :: EOS !< Equation of state structure
+  real,           intent(out) :: P_b !< Pressure at the bottom of the cell (Pa)
+  real,           intent(out) :: z_out !< Absolute depth at which anomalous pressure = p_tgt (m)
+  ! Local variables
+  real :: top_weight, bottom_weight, rho_anom, w_left, w_right, GxRho, dz, dp, F_guess, F_l, F_r
+  real :: Pa, Pa_left, Pa_right, Pa_tol ! Pressure anomalies, P = integral of g*(rho-rho_ref) dz
+
+  GxRho = G_e * rho_ref
+
+  ! Anomalous pressure difference across whole cell
+  dp = frac_dp_at_pos(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, G_e, 1.0, EOS)
+
+  P_b = P_t + dp ! Anomalous pressure at bottom of cell
+
+  if (P_tgt < P_t ) then
+    z_out = z_t
+    return
+  endif
+
+  if (P_tgt > P_b) then
+    z_out = z_b
+    return
+  endif
+
+  F_l = 0.
+  Pa_left = P_t - P_tgt ! Pa_left < 0
+  F_r = 1.
+  Pa_right = P_b - P_tgt ! Pa_right > 0
+  Pa_tol = GxRho * 1.e-5
+  F_guess = F_l - Pa_left / ( Pa_right -Pa_left ) * ( F_r - F_l )
+  do while ( Pa_right - Pa_left > Pa_tol )
+
+    z_out = z_t + ( z_b - z_t ) * F_guess
+    Pa = frac_dp_at_pos(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, G_e, F_guess, EOS) - ( P_tgt - P_t )
+
+    if (Pa<Pa_left) then
+      stop 'Blurgh! Too negative'
+    elseif (Pa<0.) then
+      Pa_left = Pa
+      F_l = F_guess
+    elseif (Pa>Pa_right) then
+      stop 'Blurgh! Too positive'
+    elseif (Pa>0.) then
+      Pa_right = Pa
+      F_r = F_guess
+    else ! Pa == 0
+      return
+    endif
+    F_guess = F_l - Pa_left / ( Pa_right -Pa_left ) * ( F_r - F_l )
+
+  enddo
+
+end subroutine find_depth_of_pressure_in_cell
+
+!> Returns change in anomalous pressure change from top to non-dimensional position pos between z_t and z_b
+real function frac_dp_at_pos(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, G_e, pos, EOS)
+  real,           intent(in) :: T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, G_e, pos
+  type(EOS_type), pointer    :: EOS !< Equation of state structure
+  ! Local variables
+  real, parameter :: C1_90 = 1.0/90.0  ! Rational constants.
+  real :: dz, top_weight, bottom_weight, rho_ave
+  real, dimension(5) :: T5, S5, p5, rho5
+  integer :: n
+
+  do n=1,5
+    ! Evalute density at five quadrature points
+    bottom_weight = 0.25*real(n-1) * pos
+    top_weight = 1.0 - bottom_weight
+    ! Salinity and temperature points are linearly interpolated
+    S5(n) = top_weight * S_t + bottom_weight * S_b
+    T5(n) = top_weight * T_t + bottom_weight * T_b
+    p5(n) = ( top_weight * z_t + bottom_weight * z_b ) * ( G_e * rho_ref )
+  enddo
+  call calculate_density_array(T5, S5, p5, rho5, 1, 5, EOS)
+  rho5(:) = rho5(:) !- rho_ref ! Work with anomalies relative to rho_ref
+
+  ! Use Boole's rule to estimate the average density
+  rho_ave = C1_90*(7.0*(rho5(1)+rho5(5)) + 32.0*(rho5(2)+rho5(4)) + 12.0*rho5(3))
+
+  dz = ( z_t - z_b ) * pos
+  frac_dp_at_pos = G_e * dz * rho_ave
+end function frac_dp_at_pos
+
 
 ! ==========================================================================
 ! Compute pressure gradient force integrals for the case where T and S
