@@ -107,7 +107,7 @@ subroutine calc_isoneutral_slopes(G, h, e, tv, dt_kappa_smooth, slope_x, slope_y
   endif
 
   if (use_EOS) then
-    call vert_fill_TS(h, tv%T, tv%S, dt_kappa_smooth, 1.0, T, S, G, 1)
+    call vert_fill_TS(h, tv%T, tv%S, dt_kappa_smooth, 1.0, T, S, G, halo+1)
   endif
 
   ! Find the maximum and minimum permitted streamfunction.
