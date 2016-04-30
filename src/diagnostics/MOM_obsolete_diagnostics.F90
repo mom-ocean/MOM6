@@ -36,21 +36,21 @@ subroutine register_obsolete_diagnostics(param_file, diag)
   foundEntry = .false.
   ! Each obsolete entry, with replacement name is available.
   if (found_in_diagtable(diag, 'Net_Heat', 'net_heat_surface or net_heat_coupler')) foundEntry = .true.
-  if (found_in_diagtable(diag, 'PmE', 'PRCmE')) foundEntry = .true.
-  if (found_in_diagtable(diag, 'froz_precip', 'fprec')) foundEntry = .true.
-  if (found_in_diagtable(diag, 'liq_precip', 'lprec')) foundEntry = .true.
-  if (found_in_diagtable(diag, 'virt_precip', 'vprec')) foundEntry = .true.
-  if (found_in_diagtable(diag, 'froz_runoff', 'frunoff')) foundEntry = .true.
-  if (found_in_diagtable(diag, 'liq_runoff', 'lrunoff')) foundEntry = .true.
-  if (found_in_diagtable(diag, 'calving_heat_content', 'heat_content_frunoff')) foundEntry = .true.
-  if (found_in_diagtable(diag, 'precip_heat_content', 'heat_content_lprec')) foundEntry = .true.
-  if (found_in_diagtable(diag, 'evap_heat_content', 'heat_content_massout')) foundEntry = .true.
-  if (found_in_diagtable(diag, 'runoff_heat_content', 'heat_content_lrunoff')) foundEntry = .true.
-  if (found_in_diagtable(diag, 'latent_fprec')) foundEntry = .true.
-  if (found_in_diagtable(diag, 'latent_calve')) foundEntry = .true.
-  if (found_in_diagtable(diag, 'heat_rest', 'heat_restore')) foundEntry = .true.
-  if (found_in_diagtable(diag, 'KPP_dTdt', 'KPP_NLT_dTdt')) foundEntry = .true.
-  if (found_in_diagtable(diag, 'KPP_dSdt', 'KPP_NLT_dSdt')) foundEntry = .true.
+  if (found_in_diagtable(diag, 'PmE', 'PRCmE'))                                     foundEntry = .true.
+  if (found_in_diagtable(diag, 'froz_precip', 'fprec'))                             foundEntry = .true.
+  if (found_in_diagtable(diag, 'liq_precip', 'lprec'))                              foundEntry = .true.
+  if (found_in_diagtable(diag, 'virt_precip', 'vprec'))                             foundEntry = .true.
+  if (found_in_diagtable(diag, 'froz_runoff', 'frunoff'))                           foundEntry = .true.
+  if (found_in_diagtable(diag, 'liq_runoff', 'lrunoff'))                            foundEntry = .true.
+  if (found_in_diagtable(diag, 'calving_heat_content', 'heat_content_frunoff'))     foundEntry = .true.
+  if (found_in_diagtable(diag, 'precip_heat_content', 'heat_content_lprec'))        foundEntry = .true.
+  if (found_in_diagtable(diag, 'evap_heat_content', 'heat_content_massout'))        foundEntry = .true.
+  if (found_in_diagtable(diag, 'runoff_heat_content', 'heat_content_lrunoff'))      foundEntry = .true.
+  if (found_in_diagtable(diag, 'latent_fprec'))                                     foundEntry = .true.
+  if (found_in_diagtable(diag, 'latent_calve'))                                     foundEntry = .true.
+  if (found_in_diagtable(diag, 'heat_rest', 'heat_restore'))                        foundEntry = .true.
+  if (found_in_diagtable(diag, 'KPP_dTdt', 'KPP_NLT_dTdt'))                         foundEntry = .true.
+  if (found_in_diagtable(diag, 'KPP_dSdt', 'KPP_NLT_dSdt'))                         foundEntry = .true.
 
   if (causeFatal) then; errType = FATAL
   else ; errType = WARNING ; endif

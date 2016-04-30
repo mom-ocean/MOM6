@@ -3,19 +3,20 @@ module MOM_MEKE
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_checksums, only : hchksum, uchksum, vchksum
-use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
+use MOM_checksums,     only : hchksum, uchksum, vchksum
+use MOM_cpu_clock,     only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_domains,       only : create_group_pass, do_group_pass
 use MOM_domains,       only : group_pass_type
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, MOM_mesg
-use MOM_file_parser, only : read_param, get_param, log_version, param_file_type
-use MOM_grid, only : ocean_grid_type
-use MOM_io, only : vardesc, var_desc
-use MOM_restart, only : MOM_restart_CS, register_restart_field, query_initialized
-use MOM_variables, only : vertvisc_type
-use MOM_MEKE_types, only : MEKE_type
+use MOM_file_parser,   only : read_param, get_param, log_version, param_file_type
+use MOM_grid,          only : ocean_grid_type
+use MOM_io,            only : vardesc, var_desc
+use MOM_restart,       only : MOM_restart_CS, register_restart_field, query_initialized
+use MOM_variables,     only : vertvisc_type
+use MOM_verticalGrid,  only : verticalGrid_type
+use MOM_MEKE_types,    only : MEKE_type
 
 implicit none ; private
 
@@ -82,17 +83,18 @@ contains
 
 !> Integrates forward-in-time the MEKE eddy energy equation.
 !! See \ref section_MEKE_equations.
-subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS, hu, hv)
-  type(MEKE_type),                       pointer       :: MEKE !< MEKE data.
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h    !< Layer thickness (m or kg m-2).
-  real, dimension(NIMEMB_,NJMEM_),       intent(in)    :: SN_u !< Eady growth rate at u-points (s-1).
-  real, dimension(NIMEM_,NJMEMB_),       intent(in)    :: SN_v !< Eady growth rate at u-points (s-1).
-  type(vertvisc_type),                   intent(in)    :: visc !< The vertical viscosity type.
-  real,                                  intent(in)    :: dt   !< Model(baroclinic) time-step (s).
-  type(ocean_grid_type),                 intent(inout) :: G    !< Ocean grid.
-  type(MEKE_CS),                         pointer       :: CS   !< MEKE control structure.
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_),intent(in)    :: hu   !< Zonal flux flux (m3).
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_),intent(in)    :: hv   !< Meridional mass flux (m3).
+subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
+  type(MEKE_type),                          pointer       :: MEKE !< MEKE data.
+  type(ocean_grid_type),                    intent(inout) :: G    !< Ocean grid.
+  type(verticalGrid_type),                  intent(in)    :: GV   !< Ocean vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thickness (m or kg m-2).
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(in)    :: SN_u !< Eady growth rate at u-points (s-1).
+  real, dimension(SZI_(G),SZJB_(G)),         intent(in)    :: SN_v !< Eady growth rate at u-points (s-1).
+  type(vertvisc_type),                      intent(in)    :: visc !< The vertical viscosity type.
+  real,                                     intent(in)    :: dt   !< Model(baroclinic) time-step (s).
+  type(MEKE_CS),                            pointer       :: CS   !< MEKE control structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: hu   !< Zonal flux flux (m3).
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: hv   !< Meridional mass flux (m3).
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
     mass, &         ! The total mass of the water column, in kg m-2.
@@ -137,8 +139,8 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS, hu, hv)
   if (.not.associated(MEKE)) call MOM_error(FATAL, &
          "MOM_MEKE: MEKE must be initialized before it is used.")
 
-  Rho0 = G%GV%H_to_kg_m2 * G%GV%m_to_H
-  mass_neglect = G%GV%H_to_kg_m2 * G%GV%H_subroundoff
+  Rho0 = GV%H_to_kg_m2 * GV%m_to_H
+  mass_neglect = GV%H_to_kg_m2 * GV%H_subroundoff
   sdt = dt*CS%MEKE_dtScale ! Scaled dt to use for time-stepping
   if (CS%MEKE_damping + CS%MEKE_Cd_scale > 0.0 .or. CS%MEKE_Cb>0. &
       .or. CS%visc_drag) then
@@ -158,8 +160,8 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS, hu, hv)
 
     ! Why are these 3 lines repeated from above?
     sdt = dt*CS%MEKE_dtScale ! Scaled dt to use for time-stepping
-    Rho0 = G%GV%H_to_kg_m2 * G%GV%m_to_H
-    mass_neglect = G%GV%H_to_kg_m2 * G%GV%H_subroundoff
+    Rho0 = GV%H_to_kg_m2 * GV%m_to_H
+    mass_neglect = GV%H_to_kg_m2 * GV%H_subroundoff
     cdrag2 = CS%cdrag**2
 
     ! With a depth-dependent (and possibly strong) damping, it seems
@@ -186,7 +188,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS, hu, hv)
       enddo
     endif
 
-!$OMP parallel default(none) shared(MEKE,CS,is,ie,js,je,nz,src,mass,G,h,I_mass, &
+!$OMP parallel default(none) shared(MEKE,CS,is,ie,js,je,nz,src,mass,G,GV,h,I_mass, &
 !$OMP                               sdt,drag_vel_u,visc,drag_vel_v,drag_rate_visc, &
 !$OMP                               drag_rate,Rho0,MEKE_decay,sdt_damp,cdrag2, &
 !$OMP                               bottomFac2) &
@@ -233,7 +235,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS, hu, hv)
     do j=js-1,je+1
       do i=is-1,ie+1 ; mass(i,j) = 0.0 ; enddo
       do k=1,nz ; do i=is-1,ie+1
-        mass(i,j) = mass(i,j) + G%GV%H_to_kg_m2 * h(i,j,k)
+        mass(i,j) = mass(i,j) + GV%H_to_kg_m2 * h(i,j,k)
       enddo ; enddo
       do i=is-1,ie+1
         I_mass(i,j) = 0.0
@@ -243,7 +245,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, CS, hu, hv)
 !$OMP end parallel
 
     if (CS%initialize) then
-      call MEKE_equilibrium(CS, MEKE, G, SN_u, SN_v, drag_rate_visc, I_mass)
+      call MEKE_equilibrium(CS, MEKE, G, GV, SN_u, SN_v, drag_rate_visc, I_mass)
       CS%initialize = .false.
     endif
 
@@ -541,14 +543,15 @@ end subroutine step_forward_MEKE
 !> Calculates the equilibrium solutino where the source depends only on MEKE diffusivity
 !! and there is no lateral diffusion of MEKE.
 !! Results is in MEKE%MEKE.
-subroutine MEKE_equilibrium(CS, MEKE, G, SN_u, SN_v, drag_rate_visc, I_mass)
-  type(MEKE_CS),                   pointer       :: CS   !< MEKE control structure.
-  type(MEKE_type),                 pointer       :: MEKE !< MEKE data.
-  type(ocean_grid_type),           intent(inout) :: G    !< Ocean grid.
-  real, dimension(NIMEMB_,NJMEM_), intent(in)    :: SN_u !< Eady growth rate at u-points (s-1).
-  real, dimension(NIMEM_,NJMEMB_), intent(in)    :: SN_v !< Eady growth rate at u-points (s-1).
-  real, dimension(NIMEM_,NJMEM_),  intent(in)    :: drag_rate_visc  !< Mean flow contrib. to drag rate
-  real, dimension(NIMEM_,NJMEM_),  intent(in)    :: I_mass  !< Inverse of column mass.
+subroutine MEKE_equilibrium(CS, MEKE, G, GV, SN_u, SN_v, drag_rate_visc, I_mass)
+  type(ocean_grid_type),             intent(inout) :: G    !< Ocean grid.
+  type(verticalGrid_type),           intent(in)    :: GV   !< Ocean vertical grid structure.
+  type(MEKE_CS),                     pointer       :: CS   !< MEKE control structure.
+  type(MEKE_type),                   pointer       :: MEKE !< MEKE data.
+  real, dimension(SZIB_(G),SZJ_(G)), intent(in)    :: SN_u !< Eady growth rate at u-points (s-1).
+  real, dimension(SZI_(G),SZJB_(G)), intent(in)    :: SN_v !< Eady growth rate at u-points (s-1).
+  real, dimension(SZI_(G),SZJ_(G)),  intent(in)    :: drag_rate_visc  !< Mean flow contrib. to drag rate
+  real, dimension(SZI_(G),SZJ_(G)),  intent(in)    :: I_mass  !< Inverse of column mass.
   ! Local variables
   real :: beta, SN, bottomFac2, barotrFac2, LmixScale, Lrhines, Leady
   real :: I_H, KhCoeff, Kh, Ubg2, cd2, drag_rate, ldamping, src
@@ -570,7 +573,7 @@ subroutine MEKE_equilibrium(CS, MEKE, G, SN_u, SN_v, drag_rate_visc, I_mass)
     ! This avoids extremes values in equilibrium solution due to bad values in SN_u, SN_v
     SN = min( min(SN_u(I,j) , SN_u(I-1,j)) , min(SN_v(i,J), SN_v(i,J-1)) )
     beta = sqrt( G%dF_dx(i,j)**2 + G%dF_dy(i,j)**2 )
-    I_H = G%GV%Rho0 * I_mass(i,j)
+    I_H = GV%Rho0 * I_mass(i,j)
 
     if (KhCoeff*SN*I_H>0.) then
       ! Solve resid(E) = 0, where resid = Kh(E) * (SN)^2 - damp_rate(E) E
@@ -662,15 +665,15 @@ end subroutine MEKE_equilibrium
 !! column eddy energy, respectively.  See \ref section_MEKE_equations.
 subroutine MEKE_lengthScales(CS, MEKE, G, SN_u, SN_v, &
             EKE, bottomFac2, barotrFac2, LmixScale)
-  type(MEKE_CS),                         pointer       :: CS   !< MEKE control structure.
-  type(MEKE_type),                       pointer       :: MEKE !< MEKE data.
-  type(ocean_grid_type),                 intent(inout) :: G    !< Ocean grid.
-  real, dimension(NIMEMB_,NJMEM_),       intent(in)    :: SN_u !< Eady growth rate at u-points (s-1).
-  real, dimension(NIMEM_,NJMEMB_),       intent(in)    :: SN_v !< Eady growth rate at u-points (s-1).
-  real, dimension(NIMEM_,NJMEM_),        intent(in)    :: EKE  !< Eddy kinetic energy (m2/s2).
-  real, dimension(NIMEM_,NJMEM_),        intent(out)   :: bottomFac2 !< gamma_b^2
-  real, dimension(NIMEM_,NJMEM_),        intent(out)   :: barotrFac2 !< gamma_t^2
-  real, dimension(NIMEM_,NJMEM_),        intent(out)   :: LmixScale !< Eddy mixing length (m).
+  type(MEKE_CS),                     pointer       :: CS   !< MEKE control structure.
+  type(MEKE_type),                   pointer       :: MEKE !< MEKE data.
+  type(ocean_grid_type),             intent(inout) :: G    !< Ocean grid.
+  real, dimension(SZIB_(G),SZJ_(G)), intent(in)    :: SN_u !< Eady growth rate at u-points (s-1).
+  real, dimension(SZI_(G),SZJB_(G)), intent(in)    :: SN_v !< Eady growth rate at u-points (s-1).
+  real, dimension(SZI_(G),SZJ_(G)),  intent(in)    :: EKE  !< Eddy kinetic energy (m2/s2).
+  real, dimension(SZI_(G),SZJ_(G)),  intent(out)   :: bottomFac2 !< gamma_b^2
+  real, dimension(SZI_(G),SZJ_(G)),  intent(out)   :: barotrFac2 !< gamma_t^2
+  real, dimension(SZI_(G),SZJ_(G)),  intent(out)   :: LmixScale !< Eddy mixing length (m).
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: Lrhines, Leady
   real :: beta, SN
