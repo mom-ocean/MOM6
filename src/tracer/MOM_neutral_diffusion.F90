@@ -171,14 +171,14 @@ subroutine neutral_diffusion_diag_init(Time, G, diag, C_p, Reg, CS)
       'Tendency of sea water potential temperature expressed as heat content due to parameterized mesocale diffusion depth integrated') 
 
       CS%id_neutral_diff_tracer_trans_x_2d(n) = register_diag_field('ocean_model',           &
-      'ndiff_tracer_trans_x_2d_'//trim(Reg%Tr(n)%name), diag%axesCuL, Time,                  &
+      'ndiff_tracer_trans_x_2d_'//trim(Reg%Tr(n)%name), diag%axesCu1, Time,                  &
       'Depth integrated neutral diffusion zonal tracer transport for '//trim(Reg%Tr(n)%name),&
-      'Watts/m2')
+      'Watts')
   
       CS%id_neutral_diff_tracer_trans_y_2d(n) = register_diag_field('ocean_model',           &
-      'ndiff_tracer_trans_y_2d_'//trim(Reg%Tr(n)%name), diag%axesCvL, Time,                  &
+      'ndiff_tracer_trans_y_2d_'//trim(Reg%Tr(n)%name), diag%axesCv1, Time,                  &
       'Depth integrated neutral diffusion merid tracer transport for '//trim(Reg%Tr(n)%name),&
-      'Watts/m2')
+      'Watts')
   
     elseif(trim(Reg%Tr(n)%name) == 'S') then 
 
@@ -206,14 +206,14 @@ subroutine neutral_diffusion_diag_init(Time, G, diag, C_p, Reg, CS)
       'Tendency of sea water salinity expressed as salt content due to parameterized mesocale diffusion depth integrated') 
 
       CS%id_neutral_diff_tracer_trans_x_2d(n) = register_diag_field('ocean_model',           &
-      'ndiff_tracer_trans_x_2d_'//trim(Reg%Tr(n)%name), diag%axesCuL, Time,                  &
+      'ndiff_tracer_trans_x_2d_'//trim(Reg%Tr(n)%name), diag%axesCu1, Time,                  &
       'Depth integrated neutral diffusion zonal tracer transport for '//trim(Reg%Tr(n)%name),&
-      'tracer concentration * m-2 s-1')
+      'kg/s')
 
       CS%id_neutral_diff_tracer_trans_y_2d(n) = register_diag_field('ocean_model',           &
-      'ndiff_tracer_trans_y_2d_'//trim(Reg%Tr(n)%name), diag%axesCvL, Time,                  &
+      'ndiff_tracer_trans_y_2d_'//trim(Reg%Tr(n)%name), diag%axesCv1, Time,                  &
       'Depth integrated neutral diffusion merid tracer transport for '//trim(Reg%Tr(n)%name),&
-      'tracer concentration * m-2 s-1')
+      'kg/s')
 
     else 
 
@@ -233,14 +233,14 @@ subroutine neutral_diffusion_diag_init(Time, G, diag, C_p, Reg, CS)
       'tracer content * m-2 s-1')
 
       CS%id_neutral_diff_tracer_trans_x_2d(n) = register_diag_field('ocean_model',           &
-      'ndiff_tracer_trans_x_2d_'//trim(Reg%Tr(n)%name), diag%axesCuL, Time,                  &
+      'ndiff_tracer_trans_x_2d_'//trim(Reg%Tr(n)%name), diag%axesCu1, Time,                  &
       'Depth integrated neutral diffusion zonal tracer transport for '//trim(Reg%Tr(n)%name),&
-      'tracer concentration * m-2 s-1')
+      'kg/s')
 
       CS%id_neutral_diff_tracer_trans_y_2d(n) = register_diag_field('ocean_model',           &
-      'ndiff_tracer_trans_y_2d_'//trim(Reg%Tr(n)%name), diag%axesCvL, Time,                  &
+      'ndiff_tracer_trans_y_2d_'//trim(Reg%Tr(n)%name), diag%axesCv1, Time,                  &
       'Depth integrated neutral diffusion merid tracer transport for '//trim(Reg%Tr(n)%name),&
-      'tracer concentration * m-2 s-1')
+      'kg/s')
 
     endif 
 
@@ -319,7 +319,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
   real, dimension(SZI_(G),SZJB_(G)),         intent(in)    :: Coef_y !< dt * Kh * dx / dy at u-points (m^2)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: Tracer !< Tracer concentration
   integer,                                   intent(in)    :: m      !< Tracer number 
-  real,                                      intent(in)    :: dt     !< Tracer time step 
+  real,                                      intent(in)    :: dt     !< Tracer time step * I_numitts (I_numitts in tracer_hordiff) 
   character(len=32),                         intent(in)    :: name   !< Tracer name 
   type(neutral_diffusion_CS),                pointer       :: CS     !< Neutral diffusion control structure
 
@@ -328,10 +328,11 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
   real, dimension(SZI_(G),SZJB_(G),2*G%ke+1) :: vFlx        ! Meridional flux of tracer (concentration * H)
   real, dimension(SZI_(G),SZJ_(G),G%ke)      :: tendency    ! tendency array for diagn
   real, dimension(SZI_(G),SZJ_(G))           :: tendency_2d ! depth integrated content tendency for diagn 
-  real, dimension(SZI_(G),SZJ_(G))           :: trans_2d    ! depth integrated diffusive tracer transport diagn
-  real, dimension(G%ke)                      :: dTracer     ! Change in tracer concentration 
+  real, dimension(SZIB_(G),SZJ_(G))          :: trans_x_2d  ! depth integrated diffusive tracer x-transport diagn
+  real, dimension(SZI_(G),SZJB_(G))          :: trans_y_2d  ! depth integrated diffusive tracer y-transport diagn
+  real, dimension(G%ke)                      :: dTracer     ! change in tracer concentration due to ndiffusion 
   integer :: i, j, k, ks, nk
-  real :: Ihdxdy, ppt2mks, Idt, convert
+  real :: ppt2mks, Idt, convert
 
   nk = G%ke
 
@@ -345,7 +346,8 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
      Idt              = 1.0/dt
      tendency(:,:,:)  = 0.0
      tendency_2d(:,:) = 0.0
-     trans_2d(:,:)    = 0.0
+     trans_x_2d(:,:)  = 0.0
+     trans_y_2d(:,:)  = 0.0
      convert          = 1.0 
      if(trim(name) == 'T') convert = CS%C_p  * GV%H_to_kg_m2
      if(trim(name) == 'S') convert = ppt2mks * GV%H_to_kg_m2
@@ -385,11 +387,11 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
       dTracer(:) = 0.
       do ks = 1,2*nk+1 ;
         k = CS%uKoL(I,j,ks)
-        dTracer(k) = dTracer(k) + Coef_x(I,j) * uFlx(I,j,ks)
+        dTracer(k) = dTracer(k) + Coef_x(I,j)   * uFlx(I,j,ks)
         k = CS%uKoR(I-1,j,ks)
         dTracer(k) = dTracer(k) - Coef_x(I-1,j) * uFlx(I-1,j,ks)
         k = CS%vKoL(i,J,ks)
-        dTracer(k) = dTracer(k) + Coef_y(i,J) * vFlx(i,J,ks)
+        dTracer(k) = dTracer(k) + Coef_y(i,J)   * vFlx(i,J,ks)
         k = CS%vKoR(i,J-1,ks)
         dTracer(k) = dTracer(k) - Coef_y(i,J-1) * vFlx(i,J-1,ks)
       enddo
@@ -414,34 +416,30 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
   ! Note sign corresponds to downgradient flux convention.
   if(CS%id_neutral_diff_tracer_trans_x_2d(m) > 0) then 
     do j = G%jsc,G%jec ; do I = G%isc-1,G%iec
+      trans_x_2d(I,j) = 0.
       if (G%mask2dCu(I,j)>0.) then
-        trans_2d(I,j) = 0.
         do ks = 1,2*nk+1 ;
-          trans_2d(I,j) = trans_2d(I,j) - Coef_x(I,j) * uFlx(I,j,ks)
+          trans_x_2d(I,j) = trans_x_2d(I,j) - Coef_x(I,j) * uFlx(I,j,ks)
         enddo
-        trans_2d(I,j) = trans_2d(I,j) * Idt
-      else
-        trans_2d(I,j) = 0.
+        trans_x_2d(I,j) = trans_x_2d(I,j) * Idt * convert
       endif
     enddo ; enddo
-    call post_data(CS%id_neutral_diff_tracer_trans_x_2d(m), trans_2d(:,:)*convert, CS%diag)
+    call post_data(CS%id_neutral_diff_tracer_trans_x_2d(m), trans_x_2d(:,:), CS%diag)
   endif   
 
   ! Diagnose vertically summed merid flux, giving meridional tracer transport from ndiff.
   ! Note sign corresponds to downgradient flux convention.
   if(CS%id_neutral_diff_tracer_trans_y_2d(m) > 0) then 
     do J = G%jsc-1,G%jec ; do i = G%isc,G%iec
+      trans_y_2d(i,J) = 0.
       if (G%mask2dCv(i,J)>0.) then
-        trans_2d(i,J) = 0.
         do ks = 1,2*nk+1 ;
-          trans_2d(i,J) = trans_2d(i,J) - Coef_y(i,J) * vFlx(i,J,ks)
+          trans_y_2d(i,J) = trans_y_2d(i,J) - Coef_y(i,J) * vFlx(i,J,ks)
         enddo
-        trans_2d(i,J) = trans_2d(i,J) * Idt
-      else
-        trans_2d(i,J) = 0.
+        trans_y_2d(i,J) = trans_y_2d(i,J) * Idt * convert
       endif
     enddo ; enddo
-    call post_data(CS%id_neutral_diff_tracer_trans_y_2d(m), trans_2d(:,:)*convert, CS%diag)
+    call post_data(CS%id_neutral_diff_tracer_trans_y_2d(m), trans_y_2d(:,:), CS%diag)
   endif 
 
   ! post tendency of tracer content 
@@ -1243,13 +1241,13 @@ logical function neutralDiffusionUnitTests()
 
   !> Returns true if a test of fv_diff() fails, and conditionally writes results to stream
   logical function test_fv_diff(hkm1, hk, hkp1, Skm1, Sk, Skp1, Ptrue, title)
-    real,             intent(in) :: hkm1 !< Left cell width
-    real,             intent(in) :: hk   !< Center cell width
-    real,             intent(in) :: hkp1 !< Right cell width
-    real,             intent(in) :: Skm1 !< Left cell average value
-    real,             intent(in) :: Sk   !< Center cell average value
-    real,             intent(in) :: Skp1 !< Right cell average value
-    real,             intent(in) :: Ptrue  !< True answer (Pa)
+    real,             intent(in) :: hkm1  !< Left cell width
+    real,             intent(in) :: hk    !< Center cell width
+    real,             intent(in) :: hkp1  !< Right cell width
+    real,             intent(in) :: Skm1  !< Left cell average value
+    real,             intent(in) :: Sk    !< Center cell average value
+    real,             intent(in) :: Skp1  !< Right cell average value
+    real,             intent(in) :: Ptrue !< True answer (Pa)
     character(len=*), intent(in) :: title !< Title for messages
 
     ! Local variables
@@ -1274,13 +1272,13 @@ logical function neutralDiffusionUnitTests()
 
   !> Returns true if a test of fvlsq_slope() fails, and conditionally writes results to stream
   logical function test_fvlsq_slope(hkm1, hk, hkp1, Skm1, Sk, Skp1, Ptrue, title)
-    real,             intent(in) :: hkm1 !< Left cell width
-    real,             intent(in) :: hk   !< Center cell width
-    real,             intent(in) :: hkp1 !< Right cell width
-    real,             intent(in) :: Skm1 !< Left cell average value
-    real,             intent(in) :: Sk   !< Center cell average value
-    real,             intent(in) :: Skp1 !< Right cell average value
-    real,             intent(in) :: Ptrue  !< True answer (Pa)
+    real,             intent(in) :: hkm1  !< Left cell width
+    real,             intent(in) :: hk    !< Center cell width
+    real,             intent(in) :: hkp1  !< Right cell width
+    real,             intent(in) :: Skm1  !< Left cell average value
+    real,             intent(in) :: Sk    !< Center cell average value
+    real,             intent(in) :: Skp1  !< Right cell average value
+    real,             intent(in) :: Ptrue !< True answer (Pa)
     character(len=*), intent(in) :: title !< Title for messages
 
     ! Local variables
