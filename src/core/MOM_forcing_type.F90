@@ -1440,9 +1440,10 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
   !===============================================================
   ! maps of surface salt fluxes, virtual precip fluxes, and adjustments
 
-  handles%id_saltflux = register_diag_field('ocean_model', 'salt_flux', diag%axesT1, Time,        &
-        'Salt flux into ocean at surface', 'kilogram meter-2 second-1', cmor_field_name='sfdsi',  &
-        cmor_units='kg m-2 s-1', cmor_standard_name='downward_sea_ice_basal_salt_flux',           &
+  handles%id_saltflux = register_diag_field('ocean_model', 'salt_flux', diag%axesT1, Time,&
+        'Net salt flux into ocean at surface (restoring + sea-ice)',                      &
+        'kilogram meter-2 second-1',cmor_field_name='sfdsi', cmor_units='kg m-2 s-1',     &
+        cmor_standard_name='downward_sea_ice_basal_salt_flux',                            &
         cmor_long_name='Downward Sea Ice Basal Salt Flux')
 
   handles%id_saltFluxIn = register_diag_field('ocean_model', 'salt_flux_in', diag%axesT1, Time, &
