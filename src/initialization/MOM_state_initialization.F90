@@ -399,6 +399,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                                                  PF, CS%sponge_CSp, h)
         case ("file"); call initialize_sponges_file(G, GV, use_temperature, tv, &
                                                  PF, CS%sponge_CSp)
+        case ("CCS1"); call CCS1_initialize_sponges(G, GV, tv, PF, &
+                                                 CS%ALE_sponge_CSp)
         case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
                "Unrecognized sponge configuration "//trim(config))
       end select

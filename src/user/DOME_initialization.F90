@@ -311,7 +311,7 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
   D_edge = 300.0  ! The thickness of dense fluid in the inflow.
   Ri_trans = 1.0/3.0 ! The shear Richardson number in the transition region
                      ! region of the specified shear profile.
-                        
+
   call get_param(param_file, mod, "APPLY_OBC_U", apply_OBC_u, &
                  "If true, open boundary conditions may be set at some \n"//&
                  "u-points, with the configuration controlled by OBC_CONFIG", &
@@ -357,7 +357,7 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
 
   if (.not.(apply_OBC_u .or. apply_OBC_v)) return
 
-  if (.not.associated(OBC)) allocate(OBC)   
+  if (.not.associated(OBC)) allocate(OBC)
 
   if (apply_OBC_u) then
     OBC%apply_OBC_u = .true.
