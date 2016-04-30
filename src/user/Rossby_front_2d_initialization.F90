@@ -11,6 +11,7 @@ use MOM_io, only : close_file, create_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
 use MOM_io, only : write_field, slasher, vardesc
 use MOM_variables, only : thermo_var_ptrs, ocean_OBC_type
+use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
@@ -35,10 +36,11 @@ real, parameter :: HMLmax = 0.75 !< Deepest ML as fractional depth of ocean
 contains
 
 !> Initialization of thicknesses in 2D Rossby front test
-subroutine Rossby_front_initialize_thickness(h, G, param_file )
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: h !< Thickness
-  type(ocean_grid_type), intent(in) :: G                   !< Grid structure
-  type(param_file_type), intent(in) :: param_file          !< Parameter file handle
+subroutine Rossby_front_initialize_thickness(h, G, GV, param_file )
+  type(ocean_grid_type),   intent(in) :: G                 !< Grid structure
+  type(verticalGrid_type), intent(in) :: GV                !< Vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: h !< Thickness
+  type(param_file_type),   intent(in) :: param_file        !< Parameter file handle
 
   integer :: i, j, k, is, ie, js, je, nz
   real    :: Tz, Dml, eta, stretch, h0
@@ -64,7 +66,7 @@ subroutine Rossby_front_initialize_thickness(h, G, param_file )
     case (REGRIDDING_LAYER, REGRIDDING_RHO)
       do j = G%jsc,G%jec ; do i = G%isc,G%iec
         Dml = Hml( G, G%geoLatT(i,j) )
-        eta = -( -dRho_DT / G%GV%Rho0 ) * Tz * 0.5 * ( Dml * Dml )
+        eta = -( -dRho_DT / GV%Rho0 ) * Tz * 0.5 * ( Dml * Dml )
         stretch = ( ( G%max_depth + eta ) / G%max_depth )
         h0 = ( G%max_depth / real(nz) ) * stretch
         do k = 1, nz
@@ -75,7 +77,7 @@ subroutine Rossby_front_initialize_thickness(h, G, param_file )
     case (REGRIDDING_ZSTAR, REGRIDDING_SIGMA)
       do j = G%jsc,G%jec ; do i = G%isc,G%iec
         Dml = Hml( G, G%geoLatT(i,j) )
-        eta = -( -dRho_DT / G%GV%Rho0 ) * Tz * 0.5 * ( Dml * Dml )
+        eta = -( -dRho_DT / GV%Rho0 ) * Tz * 0.5 * ( Dml * Dml )
         stretch = ( ( G%max_depth + eta ) / G%max_depth )
         h0 = ( G%max_depth / real(nz) ) * stretch
         do k = 1, nz
@@ -94,12 +96,12 @@ end subroutine Rossby_front_initialize_thickness
 
 !> Initialization of temperature and salinity in the Rossby front test
 subroutine Rossby_front_initialize_temperature_salinity(T, S, h, G, param_file, eqn_of_state)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T            !< Potential temperature [deg C]
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: S            !< Salinity [ppt]
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)  :: h            !< Thickness
-  type(ocean_grid_type),               intent(in)     :: G            !< Grid structure
-  type(param_file_type),               intent(in)     :: param_file   !< Parameter file handle
-  type(EOS_type),                      pointer        :: eqn_of_state !< Equation of state structure
+  type(ocean_grid_type),                     intent(in)  :: G  !< Grid structure
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T  !< Potential temperature [deg C]
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S  !< Salinity [ppt]
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< Thickness
+  type(param_file_type),                     intent(in)  :: param_file   !< Parameter file handle
+  type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure
 
   integer   :: i, j, k, is, ie, js, je, nz
   real      :: T_ref, S_ref ! Reference salinity and temerature within surface layer
@@ -134,12 +136,13 @@ end subroutine Rossby_front_initialize_temperature_salinity
 
 
 !> Initialization of u and v in the Rossby front test
-subroutine Rossby_front_initialize_velocity(u, v, h, G, param_file)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: u            !< i-component of velocity [m/s]
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: v            !< j-component of velocity [m/s]
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)  :: h            !< Thickness
-  type(ocean_grid_type),               intent(in)     :: G            !< Grid structure
-  type(param_file_type),               intent(in)     :: param_file   !< Parameter file handle
+subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, param_file)
+  type(ocean_grid_type),                  intent(in)     :: G  !< Grid structure
+  type(verticalGrid_type),                intent(in)     :: GV !< Vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: u  !< i-component of velocity [m/s]
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: v  !< j-component of velocity [m/s]
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< Thickness [H]
+  type(param_file_type),                  intent(in)     :: param_file !< Parameter file handle
 
   real    :: y              ! Non-dimensional coordinate across channel, 0..pi
   real    :: T_range        ! Range of salinities and temperatures over the vertical
@@ -160,7 +163,7 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, param_file)
   
   do j = G%jsc,G%jec ; do I = G%isc-1,G%iec+1
     f = 0.5*( G%CoriolisBu(I,j) + G%CoriolisBu(I,j-1) )
-    dUdT = ( G%g_Earth * dRho_dT ) / ( f * G%GV%Rho0 )
+    dUdT = ( G%g_Earth * dRho_dT ) / ( f * GV%Rho0 )
     Dml = Hml( G, G%geoLatT(i,j) )
     Ty = dTdy( G, T_range, G%geoLatT(i,j) )
     zi = 0.

@@ -163,11 +163,13 @@ subroutine initialize_ice_thickness_channel (h_shelf, area_shelf_h, hmask, G, PF
   character(len=40)  :: mod = "initialize_ice_shelf_thickness_channel" ! This subroutine's name.
   real :: max_draft, min_draft, flat_shelf_width, c1, slope_pos
   real :: edge_pos, shelf_slope_scale, Rho_ocean
-  integer :: i, j, jsc, jec, jsd, jed, jsdg, jedg, nyh, isc, iec, isd, ied
+  integer :: i, j, jsc, jec, jsd, jed, jedg, nyh, isc, iec, isd, ied
+  integer :: j_off
 
   jsc = G%jsc ; jec = G%jec ; isc = G%isc ; iec = G%iec
   jsd = G%jsd ; jed = G%jed ; isd = G%isd ; ied = G%ied
-  jsdg = G%jsd_global ; nyh = G%domain%njhalo ; jedg = G%domain%njglobal+nyh 
+  nyh = G%domain%njhalo ; jedg = G%domain%njglobal+nyh 
+  j_off = G%jdg_offset
   
   call MOM_mesg(mod//": setting thickness")
   
@@ -187,8 +189,7 @@ subroutine initialize_ice_thickness_channel (h_shelf, area_shelf_h, hmask, G, PF
 
   do j=G%jsd,G%jed
 
-  if (((j+jsdg-jsd) .le. jedg) .AND. &
-           ((j+jsdg-jsd) .ge. nyh+1)) then
+  if (((j+j_off) <= jedg) .AND. ((j+j_off) >= nyh+1)) then
    
     do i=G%isc,G%iec
 
@@ -225,7 +226,7 @@ subroutine initialize_ice_thickness_channel (h_shelf, area_shelf_h, hmask, G, PF
         endif  
       endif
 
-      if ((i+G%isd_global-isd) .eq. G%domain%nihalo+1) then
+      if ((i+G%idg_offset) .eq. G%domain%nihalo+1) then
         hmask(i-1,j) = 3.0
       endif
 
@@ -244,12 +245,12 @@ end subroutine initialize_ice_thickness_channel
 !      h_boundary_values, &
 !      hmask, G, PF)
 
-!   real, intent(inout), dimension(NIMEMQ_IS_,NJMEM_)     :: u_face_mask_boundary, u_flux_boundary_values
-!   real, intent(inout), dimension(NIMEM_,NJMEMQ_IS_)     :: v_face_mask_boundary, v_flux_boundary_values
-!   real, intent(inout), dimension(NIMEMQ_IS_,NJMEMQ_IS_) :: u_boundary_values, v_boundary_values
-!   real, intent(inout), dimension(:,:)                   :: hmask, h_boundary_values
-!   type(ocean_grid_type), intent(in)                     :: G
-!   type(param_file_type), intent(in)                     :: PF
+!   type(ocean_grid_type), intent(in)                 :: G
+!   real, intent(inout), dimension(SZIB_(G),SZJ_(G))  :: u_face_mask_boundary, u_flux_boundary_values
+!   real, intent(inout), dimension(SZI_(G),SZJB_(G))  :: v_face_mask_boundary, v_flux_boundary_values
+!   real, intent(inout), dimension(SZIB_(G),SZJB_(G)) :: u_boundary_values, v_boundary_values
+!   real, intent(inout), dimension(:,:)               :: hmask, h_boundary_values
+!   type(param_file_type), intent(in)                 :: PF
 
 !   character(len=40)  :: mod = "initialize_ice_shelf_boundary" ! This subroutine's name.
 !   character(len=200) :: config
@@ -290,16 +291,16 @@ end subroutine initialize_ice_thickness_channel
 !   hmask, &
 !   G, flux_bdry, PF )
 
-!   real, intent(inout), dimension(NIMEMQ_IS_,NJMEM_)     :: u_face_mask_boundary, u_flux_boundary_values
-!   real, intent(inout), dimension(NIMEM_,NJMEMQ_IS_)     :: v_face_mask_boundary, v_flux_boundary_values
-!   real, intent(inout), dimension(NIMEMQ_IS_,NJMEMQ_IS_) :: u_boundary_values, v_boundary_values
-!   real, intent(inout), dimension(:,:)                   :: h_boundary_values, hmask
-!   type(ocean_grid_type), intent(in)                     :: G
-!   logical, intent(in)                                   :: flux_bdry
-!   type (param_file_type), intent(in)                    :: PF 
+!   type(ocean_grid_type), intent(in)                 :: G
+!   real, dimension(SZIB_(G),SZJ_(G)),  intent(inout) :: u_face_mask_boundary, u_flux_boundary_values
+!   real, dimension(SZI_(G),SZJB_(G)),  intent(inout) :: v_face_mask_boundary, v_flux_boundary_values
+!   real, dimension(SZIB_(G),SZJB_(G)), intent(inout) :: u_boundary_values, v_boundary_values
+!   real, dimension(:,:), intent(inout)               :: h_boundary_values, hmask
+!   logical, intent(in)                               :: flux_bdry
+!   type (param_file_type), intent(in)                :: PF 
   
 !   character(len=40)  :: mod = "initialize_ice_shelf_boundary_channel" ! This subroutine's name.
-!   integer :: i, j, gjsd, gisd, isd, jsd, is, js, iegq, jegq, giec, gjec, gisc, gjsc, isc, jsc, iec, jec, ied, jed 
+!   integer :: i, j, isd, jsd, is, js, iegq, jegq, giec, gjec, gisc, gjsc, isc, jsc, iec, jec, ied, jed 
 !   real                                                  :: lenlat, input_thick, input_flux, len_stress
   
 !   call get_param(PF, mod, "LENLAT", lenlat, fail_if_missing=.true.)
@@ -319,7 +320,6 @@ end subroutine initialize_ice_thickness_channel
 !   isd = G%isd ; ied = G%ied  
 !   jsd = G%jsd ; jed = G%jed
 !   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
-!   gjsd = G%jsd_global ; gisd = G%isd_global
 !   gisc = G%Domain%nihalo ; gjsc = G%Domain%njhalo
 !   giec = G%Domain%niglobal+gisc ; gjec = G%Domain%njglobal+gjsc
    
@@ -328,7 +328,7 @@ end subroutine initialize_ice_thickness_channel
 
 !       ! upstream boundary - set either dirichlet or flux condition
 
-!       if ((i+gisd-isd) .eq. G%domain%nihalo+1) then
+!       if ((i+G%idg_offset) .eq. G%domain%nihalo+1) then
 !         if (flux_bdry) then
 !           u_face_mask_boundary (i-1,j) = 4.0
 !           u_flux_boundary_values (i-1,j) = input_flux
@@ -345,13 +345,13 @@ end subroutine initialize_ice_thickness_channel
 
 !       ! side boundaries: no flow
 
-!       if (gjsd-jsd+j .eq. gjsc+1) then !bot boundary
+!       if (G%jdg_offset+j .eq. gjsc+1) then !bot boundary
 !         if (len_stress .eq. 0. .OR. G%geoLonCv(i,j-1) .le. len_stress) then
 !           v_face_mask_boundary (i,j-1) = 0.
 !         else
 !           v_face_mask_boundary (i,j-1) = 1.
 !         endif
-!       elseif (gjsd-jsd+j .eq. gjec) then !top boundary
+!       elseif (G%jdg_offset+j .eq. gjec) then !top boundary
 !         if (len_stress .eq. 0. .OR. G%geoLonCv(i,j-1) .le. len_stress) then
 !           v_face_mask_boundary (i,j) = 0.
 !         else
@@ -361,7 +361,7 @@ end subroutine initialize_ice_thickness_channel
 
 !       ! downstream boundary - CFBC
 
-!       if (i+gisd-isd .eq. giec) then
+!       if (i+G%idg_offset .eq. giec) then
 !         u_face_mask_boundary(i,j) = 2.0
 !       endif
 
