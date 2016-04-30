@@ -33,6 +33,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : thermo_var_ptrs
+use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_specific_vol_derivs
 
 implicit none ; private
@@ -48,16 +49,18 @@ end type diapyc_energy_req_CS
 
 contains
 
-subroutine diapyc_energy_req_test(h_3d, dt, tv, G)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h_3d
+subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV)
+  type(ocean_grid_type),                 intent(in)    :: G
+  type(verticalGrid_type),               intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_3d
   type(thermo_var_ptrs),                 intent(inout) :: tv
   real,                                  intent(in)    :: dt
-  type(ocean_grid_type),                 intent(in)    :: G
 ! Arguments: h_3d -  Layer thickness before entrainment, in m or kg m-2.
 !  (in/out)  tv - A structure containing pointers to any available
 !                 thermodynamic fields. Absent fields have NULL ptrs.
 !  (in)      dt - The amount of time covered by this call, in s.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 
   real, dimension(SZK_(G)) :: &
     T0, S0, &   ! T0 & S0 are columns of initial temperatures and salinities, in degC and g/kg.
@@ -91,16 +94,17 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G)
                  (abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))))
     Kd(1) = 0.0 ; Kd(nz+1) = 0.0
     do K=2,nz
-      tmp1 = h_top(K) * h_bot(K) * G%GV%H_to_m
+      tmp1 = h_top(K) * h_bot(K) * GV%H_to_m
       Kd(k) = ustar * 0.41 * (tmp1*ustar) / (absf*tmp1 + htot*ustar)
     enddo
-    call diapyc_energy_req_calc(h_col, T0, S0, Kd, energy_Kd, dt, tv, G)
+    call diapyc_energy_req_calc(h_col, T0, S0, Kd, energy_Kd, dt, tv, G, GV)
   endif ; enddo ; enddo
 
 end subroutine diapyc_energy_req_test
 
-subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, G)
+subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, G, GV)
   type(ocean_grid_type),                 intent(in)    :: G
+  type(verticalGrid_type),               intent(in)    :: GV
   real, dimension(SZK_(G)),              intent(in)    :: h_in, T_in, S_in
   real, dimension(SZK_(G)+1),            intent(in)    :: Kd
   real,                                  intent(in)    :: dt
@@ -116,6 +120,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, G)
 !  (out)     energy_Kd - The column-integrated rate of energy consumption
 !                 by diapycnal diffusion, in W m-2.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 
 !   This subroutine uses a substantially refactored tridiagonal equation for
 ! diapycnal mixing of temperature and salinity to estimate the potential energy
@@ -177,7 +182,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, G)
   integer :: k, nz, itt, max_itt
   logical :: surface_BL, bottom_BL, debug
   nz = G%ke
-  h_neglect = G%GV%H_subroundoff
+  h_neglect = GV%H_subroundoff
 
   I_G_Earth = 1.0 / G%G_earth
   surface_BL = .true. ; bottom_BL = .true. ; debug = .true.
@@ -190,7 +195,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, G)
     T0(k) = T_in(k) ; S0(k) = S_in(k)
     h_tr(k) = h_in(k)
     htot = htot + h_tr(k)
-    pres(K+1) = pres(K) + G%g_Earth * G%GV%H_to_kg_m2 * h_tr(k)
+    pres(K+1) = pres(K) + G%g_Earth * GV%H_to_kg_m2 * h_tr(k)
     p_lay(k) = 0.5*(pres(K) + pres(K+1))
   enddo
   do k=1,nz
@@ -201,7 +206,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, G)
 
   Kddt_h(1) = 0.0 ; Kddt_h(nz+1) = 0.0
   do K=2,nz
-    Kddt_h(K) = min((G%GV%m_to_H**2*dt)*Kd(k) / (0.5*(h_tr(k-1) + h_tr(k))),1e3*htot)
+    Kddt_h(K) = min((GV%m_to_H**2*dt)*Kd(k) / (0.5*(h_tr(k-1) + h_tr(k))),1e3*htot)
   enddo
 
   ! Solve the tridiagonal equations for new temperatures.

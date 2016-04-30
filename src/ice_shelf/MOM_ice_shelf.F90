@@ -237,6 +237,7 @@ type, public :: ice_shelf_CS ; private
   real :: ustar_bg     ! A minimum value for ustar under ice shelves, in m s-1.
   real :: cdrag        ! drag coefficient under ice shelves , non-dimensional.
   real :: Cp           ! The heat capacity of sea water, in J kg-1 K-1.
+  real :: Rho0         ! A reference ocean density in kg/m3.
   real :: Cp_ice       ! The heat capacity of fresh ice, in J kg-1 K-1.
   real :: gamma_t      !   The (fixed) turbulent exchange velocity in the
                        ! 2-equation formulation, in m s-1.
@@ -475,12 +476,12 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
 
   I_ZETA_N = 1.0 / ZETA_N
   LF = CS%Lat_fusion
-  I_RhoLF = 1.0/(G%GV%Rho0*LF)
+  I_RhoLF = 1.0/(CS%Rho0*LF)
   I_LF = 1.0 / LF
   SC = CS%kv_molec/CS%kd_molec_salt
   PR = CS%kv_molec/CS%kd_molec_temp
   I_VK = 1.0/VK
-  RhoCp = G%GV%Rho0 * CS%Cp
+  RhoCp = CS%Rho0 * CS%Cp
   Isqrt2 = 1.0/sqrt(2.0)
 
 !first calculate molecular component  
@@ -526,7 +527,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
           fluxes%ustar_shelf(i,j) = ustar_h
 
           if (associated(state%taux_shelf) .and. associated(state%tauy_shelf)) then
-            state%taux_shelf(i,j) = ustar_h*ustar_h*G%GV%Rho0*Isqrt2
+            state%taux_shelf(i,j) = ustar_h*ustar_h*CS%Rho0*Isqrt2
             state%tauy_shelf(i,j) = state%taux_shelf(i,j)
           endif
 
@@ -636,7 +637,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
   !            CS%tflux_shelf(i,j) = 0.0
   !            CS%lprec(i,j) = I_LF * (- CS%tflux_shelf(i,j) + CS%t_flux(i,j))
 
-            mass_exch = CS%exch_vel_s(i,j) * G%GV%Rho0
+            mass_exch = CS%exch_vel_s(i,j) * CS%Rho0
             Sbdry_it = (state%sss(i,j) * mass_exch + CS%Salin_ice * CS%lprec(i,j)) / &
                        (mass_exch + CS%lprec(i,j))
             dS_it = Sbdry_it - Sbdry
@@ -783,7 +784,7 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
 
-  Irho0 = 1.0 / G%GV%Rho0
+  Irho0 = 1.0 / CS%Rho0
   ! Determine ustar and the square magnitude of the velocity in the
   ! bottom boundary layer. Together these give the TKE source and
   ! vertical decay scale.
@@ -946,7 +947,7 @@ end subroutine add_shelf_flux
 !   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 !   isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
 
-!   Irho0 = 1.0 / G%GV%Rho0
+!   Irho0 = 1.0 / CS%Rho0
 !   ! Determine ustar and the square magnitude of the velocity in the
 !   ! bottom boundary layer. Together these give the TKE source and
 !   ! vertical decay scale.
@@ -1166,6 +1167,12 @@ subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
   call get_param(param_file, mod, "C_P", CS%Cp, &
                  "The heat capacity of sea water.", units="J kg-1 K-1", &
                  fail_if_missing=.true.)
+  call get_param(param_file, mod, "RHO_0", CS%Rho0, &
+                 "The mean ocean density used with BOUSSINESQ true to \n"//&
+                 "calculate accelerations and the mass for conservation \n"//&
+                 "properties, or with BOUSSINSEQ false to convert some \n"//&
+                 "parameters from vertical units of m to kg m-2.", &
+                 units="kg m-3", default=1035.0) !### MAKE THIS A SEPARATE PARAMETER.
   call get_param(param_file, mod, "C_P_ICE", CS%Cp_ice, &
                  "The heat capacity of ice.", units="J kg-1 K-1", &
                  default=2.10e3)
@@ -1515,11 +1522,11 @@ subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
       if (.not. G%symmetric) then
         do j=G%jsd,G%jed
           do i=G%isd,G%ied
-            if (((i+G%isd_global-G%isd) .eq. (G%domain%nihalo+1)).and.(CS%u_face_mask(i-1,j).eq.3)) then
+            if (((i+G%idg_offset) .eq. (G%domain%nihalo+1)).and.(CS%u_face_mask(i-1,j).eq.3)) then
               CS%u_shelf (i-1,j-1) = CS%u_boundary_values (i-1,j-1)
               CS%u_shelf (i-1,j) = CS%u_boundary_values (i-1,j)
             endif
-            if (((j+G%jsd_global-G%jsd) .eq. (G%domain%njhalo+1)).and.(CS%v_face_mask(i,j-1).eq.3)) then
+            if (((j+G%jdg_offset) .eq. (G%domain%njhalo+1)).and.(CS%v_face_mask(i,j-1).eq.3)) then
               CS%u_shelf (i-1,j-1) = CS%u_boundary_values (i-1,j-1)
               CS%u_shelf (i,j-1) = CS%u_boundary_values (i,j-1)
             endif
@@ -2087,7 +2094,7 @@ subroutine ice_shelf_solve_outer (CS, u, v, FE, iters, time)
 
   geolonq => G%geoLonBu ; geolatq => G%geoLatBu
 
-  if (isd .eq. G%isd_global) then
+  if (G%isc+G%idg_offset==G%isg) then
   ! tile is at west bdry
     isumstart = G%iscB
   else
@@ -2095,7 +2102,7 @@ subroutine ice_shelf_solve_outer (CS, u, v, FE, iters, time)
     isumstart = ISUMSTART_INT_
   endif
 
-  if (jsd .eq. G%jsd_global) then
+  if (G%jsc+G%jdg_offset==G%jsg) then
   ! tile is at south bdry
     jsumstart = G%jscB
   else
@@ -2464,7 +2471,7 @@ subroutine ice_shelf_solve_inner (CS, u, v, taudx, taudy, H_node, float_cond, FE
 
   isym = 0
 
-  if (isd .eq. G%isd_global) then
+  if (G%isc+G%idg_offset==G%isg) then
   ! tile is at west bdry
     isumstart = G%iscB
   else
@@ -2472,7 +2479,7 @@ subroutine ice_shelf_solve_inner (CS, u, v, taudx, taudy, H_node, float_cond, FE
     isumstart = ISUMSTART_INT_
   endif
 
-  if (jsd .eq. G%jsd_global) then
+  if (G%jsc+G%jdg_offset==G%jsg) then
   ! tile is at south bdry
     jsumstart = G%jscB
   else
@@ -2867,7 +2874,8 @@ subroutine ice_shelf_advect_thickness_x (CS, time_step, h0, h_after_uflux, flux_
   !        o--- (3) ---o
   !
 
-  integer :: isym, i, j, is, ie, js, je, isd, ied, jsd, jed, gjed, gjsd, gied, gisd
+  integer :: isym, i, j, is, ie, js, je, isd, ied, jsd, jed, gjed, gied
+  integer :: i_off, j_off
   logical :: at_east_bdry, at_west_bdry, one_off_west_bdry, one_off_east_bdry
   type(ocean_grid_type), pointer :: G
   real, dimension(-2:2) :: stencil
@@ -2890,26 +2898,26 @@ subroutine ice_shelf_advect_thickness_x (CS, time_step, h0, h_after_uflux, flux_
   u_face_mask => CS%u_face_mask
   u_flux_boundary_values => CS%u_flux_boundary_values
   is = G%isc-2 ; ie = G%iec+2 ; js = G%jsc ; je = G%jec ; isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  gjsd = G%jsd_global ; gisd = G%isd_global
+  i_off = G%idg_offset ; j_off = G%jdg_offset 
 
   do j=jsd+1,jed-1
-    if (((j+gjsd-G%jsd) .le. G%domain%njglobal+G%domain%njhalo) .AND. & 
-        ((j+gjsd-G%jsd) .ge. G%domain%njhalo+1)) then ! based on mehmet's code - only if btw north & south boundaries
+    if (((j+j_off) .le. G%domain%njglobal+G%domain%njhalo) .AND. & 
+        ((j+j_off) .ge. G%domain%njhalo+1)) then ! based on mehmet's code - only if btw north & south boundaries
 
       stencil(:) = -1
-!     if (i+Gisd-isd .eq. G%domain%nihalo+G%domain%nihalo) 
+!     if (i+i_off .eq. G%domain%nihalo+G%domain%nihalo) 
       do i=is,ie
 
-        if (((i+gisd-G%isd) .le. G%domain%niglobal+G%domain%nihalo) .AND. & 
-             ((i+gisd-G%isd) .ge. G%domain%nihalo+1)) then
+        if (((i+i_off) .le. G%domain%niglobal+G%domain%nihalo) .AND. & 
+             ((i+i_off) .ge. G%domain%nihalo+1)) then
 
-          if (i+Gisd-isd .eq. G%domain%nihalo+1) then
+          if (i+i_off .eq. G%domain%nihalo+1) then
             at_west_bdry=.true.
           else
             at_west_bdry=.false.
           endif
 
-          if (i+Gisd-isd .eq. G%domain%niglobal+G%domain%nihalo) then
+          if (i+i_off .eq. G%domain%niglobal+G%domain%nihalo) then
             at_east_bdry=.true.
           else
             at_east_bdry=.false.
@@ -3105,7 +3113,8 @@ subroutine ice_shelf_advect_thickness_y (CS, time_step, h_after_uflux, h_after_v
   !        o--- (3) ---o
   !
 
-  integer :: isym, i, j, is, ie, js, je, isd, ied, jsd, jed, gjed, gjsd, gied, gisd
+  integer :: isym, i, j, is, ie, js, je, isd, ied, jsd, jed, gjed, gied
+  integer :: i_off, j_off
   logical :: at_north_bdry, at_south_bdry, one_off_west_bdry, one_off_east_bdry
   type(ocean_grid_type), pointer :: G
   real, dimension(-2:2) :: stencil
@@ -3127,26 +3136,26 @@ subroutine ice_shelf_advect_thickness_y (CS, time_step, h_after_uflux, h_after_v
   v_face_mask => CS%v_face_mask
   v_flux_boundary_values => CS%v_flux_boundary_values
   is = G%isc ; ie = G%iec ; js = G%jsc-1 ; je = G%jec+1 ; isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  gjsd = G%jsd_global ; gisd = G%isd_global
+  i_off = G%idg_offset ; j_off = G%jdg_offset 
 
   do i=isd+2,ied-2
-    if (((i+gisd-G%isd) .le. G%domain%niglobal+G%domain%nihalo) .AND. & 
-       ((i+gisd-G%isd) .ge. G%domain%nihalo+1)) then  ! based on mehmet's code - only if btw east & west boundaries
+    if (((i+i_off) .le. G%domain%niglobal+G%domain%nihalo) .AND. & 
+       ((i+i_off) .ge. G%domain%nihalo+1)) then  ! based on mehmet's code - only if btw east & west boundaries
 
       stencil(:) = -1
 
       do j=js,je
 
-        if (((j+gjsd-G%jsd) .le. G%domain%njglobal+G%domain%njhalo) .AND. & 
-             ((j+gjsd-G%jsd) .ge. G%domain%njhalo+1)) then
+        if (((j+j_off) .le. G%domain%njglobal+G%domain%njhalo) .AND. & 
+             ((j+j_off) .ge. G%domain%njhalo+1)) then
 
-          if (j+Gjsd-jsd .eq. G%domain%njhalo+1) then
+          if (j+j_off .eq. G%domain%njhalo+1) then
             at_south_bdry=.true.
           else
             at_south_bdry=.false.
           endif
 
-          if (j+Gjsd-jsd .eq. G%domain%njglobal+G%domain%njhalo) then    
+          if (j+j_off .eq. G%domain%njglobal+G%domain%njhalo) then    
             at_north_bdry=.true.
           else
             at_north_bdry=.false.
@@ -3323,7 +3332,8 @@ subroutine shelf_advance_front (CS, flux_enter)
   !        o--- (3) ---o
   !
 
-  integer :: i, j, isc, iec, jsc, jec, n_flux, k, l, iter_count, isym, gisd, gjsd
+  integer :: i, j, isc, iec, jsc, jec, n_flux, k, l, iter_count, isym
+  integer :: i_off, j_off
   integer :: iter_flag
   type(ocean_grid_type), pointer :: G
   real, dimension(:,:), pointer  :: hmask, mass_shelf, area_shelf_h, u_face_mask, v_face_mask, h_shelf
@@ -3340,7 +3350,7 @@ subroutine shelf_advance_front (CS, flux_enter)
   u_face_mask => CS%u_face_mask
   v_face_mask => CS%v_face_mask
   isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec 
-  gjsd = G%jsd_global ; gisd = G%isd_global
+  i_off = G%idg_offset ; j_off = G%jdg_offset 
   rho = CS%density_ice
   iter_count = 0 ; iter_flag = 1
   
@@ -3372,13 +3382,13 @@ subroutine shelf_advance_front (CS, flux_enter)
 
     do j=jsc-1,jec+1
 
-      if (((j+gjsd-G%jsd) .le. G%domain%njglobal+G%domain%njhalo) .AND. & 
-         ((j+gjsd-G%jsd) .ge. G%domain%njhalo+1)) then
+      if (((j+j_off) .le. G%domain%njglobal+G%domain%njhalo) .AND. & 
+         ((j+j_off) .ge. G%domain%njhalo+1)) then
 
       do i=isc-1,iec+1
 
-         if (((i+gisd-G%isd) .le. G%domain%niglobal+G%domain%nihalo) .AND. & 
-             ((i+gisd-G%isd) .ge. G%domain%nihalo+1)) then
+         if (((i+i_off) .le. G%domain%niglobal+G%domain%nihalo) .AND. & 
+             ((i+i_off) .ge. G%domain%nihalo+1)) then
         ! first get reference thickness by averaging over cells that are fluxing into this cell
             n_flux = 0
             h_reference = 0.0
@@ -3559,19 +3569,20 @@ subroutine calc_shelf_driving_stress (CS, TAUD_X, TAUD_Y, OD, FE)
   real      :: rho, rhow, sx, sy, neumann_val, dxh, dyh, dxdyh
 
   type(ocean_grid_type), pointer :: G
-  integer :: isym, i, j, iscq, iecq, jscq, jecq, gjsd, gisd, isd, jsd, is, js, iegq, jegq, giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec
+  integer :: isym, i, j, iscq, iecq, jscq, jecq, isd, jsd, is, js, iegq, jegq, giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec
+  integer :: i_off, j_off
 
   G => CS%grid
 
   isym = 0
   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
   iscq = G%iscB ; iecq = G%iecB ; jscq = G%jscB ; jecq = G%jecB
-  gjsd = G%jsd_global ; gisd = G%isd_global
   isd = G%isd ; jsd = G%jsd
   iegq = G%iegB ; jegq = G%jegB
   gisc = G%domain%nihalo+1 ; gjsc = G%domain%njhalo+1
   giec = G%domain%niglobal+G%domain%nihalo ; gjec = G%domain%njglobal+G%domain%njhalo
   is = iscq - (1-isym); js = jscq - (1-isym) 
+  i_off = G%idg_offset ; j_off = G%jdg_offset 
 
   D => G%bathyT
   H => CS%h_shelf
@@ -3618,13 +3629,13 @@ subroutine calc_shelf_driving_stress (CS, TAUD_X, TAUD_Y, OD, FE)
       if (hmask(i,j) .eq. 1) then ! we are inside the global computational bdry, at an ice-filled cell
 
         ! calculate sx
-        if ((i+gisd-isd) .eq. gisc) then ! at left computational bdry
+        if ((i+i_off) .eq. gisc) then ! at left computational bdry
           if (hmask(i+1,j) .eq. 1) then
             sx = (S(i+1,j)-S(i,j))/dxh
           else
             sx = 0
           endif
-        elseif ((i+gisd-isd) .eq. giec) then ! at right computational bdry
+        elseif ((i+i_off) .eq. giec) then ! at right computational bdry
           if (hmask(i-1,j) .eq. 1) then
             sx = (S(i,j)-S(i-1,j))/dxh
           else
@@ -3653,13 +3664,13 @@ subroutine calc_shelf_driving_stress (CS, TAUD_X, TAUD_Y, OD, FE)
         cnt = 0
 
         ! calculate sy, similarly
-        if ((j+gjsd-jsd) .eq. gjsc) then ! at south computational bdry
+        if ((j+j_off) .eq. gjsc) then ! at south computational bdry
           if (hmask(i,j+1) .eq. 1) then
             sy = (S(i,j+1)-S(i,j))/dyh
           else
             sy = 0
           endif
-        elseif ((j+gjsd-jsd) .eq. gjec) then ! at nprth computational bdry
+        elseif ((j+j_off) .eq. gjec) then ! at nprth computational bdry
           if (hmask(i,j-1) .eq. 1) then
             sy = (S(i,j)-S(i,j-1))/dyh
           else
@@ -3786,7 +3797,8 @@ subroutine init_boundary_values (CS, time, input_flux, input_thick, new_sim)
                           v_boundary_values, &
                           u_face_mask, v_face_mask, hmask
   type(ocean_grid_type), pointer :: G
-  integer :: isym, i, j, iscq, iecq, jscq, jecq, gjsd, gisd, isd, jsd, ied, jed, iegq, jegq, giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec
+  integer :: isym, i, j, iscq, iecq, jscq, jecq, isd, jsd, ied, jed, iegq, jegq, giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec
+  integer :: i_off, j_off
   real :: A, n, ux, uy, vx, vy, eps_min, domain_width
 
   G => CS%grid
@@ -3803,8 +3815,7 @@ subroutine init_boundary_values (CS, time, input_flux, input_thick, new_sim)
 !   iscq = G%iscq ; iecq = G%iecq ; jscq = G%jscq ; jecq = G%jecq
   isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
 !   iegq = G%iegq ; jegq = G%jegq
-  gjsd = G%jsd_global
-  gisd = G%isd_global
+  i_off = G%idg_offset ; j_off = G%jdg_offset 
 
   thickness_boundary_values => CS%thickness_boundary_values
   u_boundary_values => CS%u_boundary_values ; v_boundary_values => CS%v_boundary_values
@@ -3838,12 +3849,12 @@ subroutine init_boundary_values (CS, time, input_flux, input_thick, new_sim)
 
       if (.not.(new_sim)) then
         if (.not. G%symmetric) then
-          if (((i+gisd-isd) .eq. (G%domain%nihalo+1)).and.(u_face_mask(i-1,j).eq.3)) then
+          if (((i+i_off) .eq. (G%domain%nihalo+1)).and.(u_face_mask(i-1,j).eq.3)) then
             CS%u_shelf (i-1,j-1) = u_boundary_values (i-1,j-1)
             CS%u_shelf (i-1,j) = u_boundary_values (i-1,j)
 !            print *, u_boundary_values (i-1,j)
           endif
-          if (((j+gjsd-jsd) .eq. (G%domain%njhalo+1)).and.(v_face_mask(i,j-1).eq.3)) then
+          if (((j+j_off) .eq. (G%domain%njhalo+1)).and.(v_face_mask(i,j-1).eq.3)) then
             CS%u_shelf (i-1,j-1) = u_boundary_values (i-1,j-1)
             CS%u_shelf (i,j-1) = u_boundary_values (i,j-1)
           endif
@@ -4956,7 +4967,7 @@ subroutine calc_shelf_visc_triangular (CS,u,v)
                        hmask
 
   type(ocean_grid_type), pointer :: G
-  integer :: isym, i, j, iscq, iecq, jscq, jecq, gjsd, gisd, isd, jsd, ied, jed, iegq, jegq, giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec, is, js
+  integer :: isym, i, j, iscq, iecq, jscq, jecq, isd, jsd, ied, jed, iegq, jegq, giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec, is, js
   real :: A, n, ux, uy, vx, vy, eps_min, umid, vmid, unorm, C_basal_friction, n_basal_friction, dxh, dyh, dxdyh
 
   G => CS%grid
@@ -4969,7 +4980,6 @@ subroutine calc_shelf_visc_triangular (CS,u,v)
 
   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
   iscq = G%iscB ; iecq = G%iecB ; jscq = G%jscB ; jecq = G%jecB
-  gjsd = G%jsd_global ; gisd = G%isd_global
   isd = G%isd ; jsd = G%jsd ; ied = G%isd ; jed = G%jsd
   iegq = G%iegB ; jegq = G%jegB
   gisc = G%domain%nihalo+1 ; gjsc = G%domain%njhalo+1
@@ -5038,7 +5048,7 @@ subroutine calc_shelf_visc_bilinear (CS, u, v)
                        hmask
 
   type(ocean_grid_type), pointer :: G
-  integer :: isym, i, j, iscq, iecq, jscq, jecq, gjsd, gisd, isd, jsd, ied, jed, iegq, jegq, giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec, is, js
+  integer :: isym, i, j, iscq, iecq, jscq, jecq, isd, jsd, ied, jed, iegq, jegq, giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec, is, js
   real :: A, n, ux, uy, vx, vy, eps_min, umid, vmid, unorm, C_basal_friction, n_basal_friction, dxh, dyh, dxdyh
 
   G => CS%grid
@@ -5046,7 +5056,6 @@ subroutine calc_shelf_visc_bilinear (CS, u, v)
   isym=0
   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
   iscq = G%iscB ; iecq = G%iecB ; jscq = G%jscB ; jecq = G%jecB
-  gjsd = G%jsd_global ; gisd = G%isd_global
   isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
   iegq = G%iegB ; jegq = G%jegB
   gisc = G%domain%nihalo+1 ; gjsc = G%domain%njhalo+1
@@ -5315,14 +5324,15 @@ subroutine update_velocity_masks (CS)
   
   ! !!!!IMPORTANT!!!! relies on thickness mask - assumed that this is called after hmask has been updated (and halo-updated)
   
-  integer :: isym, i, j, iscq, iecq, jscq, jecq, gjsd, gisd, isd, jsd, is, js, iegq, jegq, giec, gjec, gisc, gjsc, isc, jsc, iec, jec, k
+  integer :: isym, i, j, iscq, iecq, jscq, jecq, isd, jsd, is, js, iegq, jegq, giec, gjec, gisc, gjsc, isc, jsc, iec, jec, k
+  integer :: i_off, j_off
   type(ocean_grid_type), pointer :: G
   real, dimension(:,:), pointer  :: umask, vmask, u_face_mask, v_face_mask, hmask, u_face_mask_boundary, v_face_mask_boundary
 
   G => CS%grid
   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
   iscq = G%iscB ; iecq = G%iecB ; jscq = G%jscB ; jecq = G%jecB
-  gjsd = G%jsd_global ; gisd = G%isd_global
+  i_off = G%idg_offset ; j_off = G%jdg_offset 
   isd = G%isd ; jsd = G%jsd
   iegq = G%iegB ; jegq = G%jegB
   gisc = G%Domain%nihalo ; gjsc = G%Domain%njhalo
@@ -5414,11 +5424,11 @@ subroutine update_velocity_masks (CS)
         !  vmask (i-1,j-1:j) = 0.
         !endif
 
-        !if (gjsd-jsd+j .eq. gjsc+1) then !bot boundary
+        !if (j_off+j .eq. gjsc+1) then !bot boundary
         !  v_face_mask (i,j-1) = 0.
         !  umask (i-1:i,j-1) = 0.
         !  vmask (i-1:i,j-1) = 0.
-        !elseif (gjsd-jsd+j .eq. gjec) then !top boundary
+        !elseif (j_off+j .eq. gjec) then !top boundary
         !  v_face_mask (i,j) = 0.
         !  umask (i-1:i,j) = 0.
         !  vmask (i-1:i,j) = 0.
@@ -5948,7 +5958,8 @@ subroutine ice_shelf_advect_temp_x (CS, time_step, h0, h_after_uflux, flux_enter
   !        o--- (3) ---o
   !
 
-  integer :: isym, i, j, is, ie, js, je, isd, ied, jsd, jed, gjed, gjsd, gied, gisd
+  integer :: isym, i, j, is, ie, js, je, isd, ied, jsd, jed, gjed, gied
+  integer :: i_off, j_off
   logical :: at_east_bdry, at_west_bdry, one_off_west_bdry, one_off_east_bdry
   type(ocean_grid_type), pointer :: G
   real, dimension(-2:2) :: stencil
@@ -5974,26 +5985,26 @@ subroutine ice_shelf_advect_temp_x (CS, time_step, h0, h_after_uflux, flux_enter
 !  h_boundaries => CS%h_shelf
   t_boundary => CS%t_boundary_values
   is = G%isc-2 ; ie = G%iec+2 ; js = G%jsc ; je = G%jec ; isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  gjsd = G%jsd_global ; gisd = G%isd_global
+  i_off = G%idg_offset ; j_off = G%jdg_offset 
 
   do j=jsd+1,jed-1
-    if (((j+gjsd-G%jsd) .le. G%domain%njglobal+G%domain%njhalo) .AND. &
-        ((j+gjsd-G%jsd) .ge. G%domain%njhalo+1)) then ! based on mehmet's code - only if btw north & south boundaries
+    if (((j+j_off) .le. G%domain%njglobal+G%domain%njhalo) .AND. &
+        ((j+j_off) .ge. G%domain%njhalo+1)) then ! based on mehmet's code - only if btw north & south boundaries
 
       stencil(:) = -1
-!     if (i+Gisd-isd .eq. G%domain%nihalo+G%domain%nihalo) 
+!     if (i+i_off .eq. G%domain%nihalo+G%domain%nihalo) 
       do i=is,ie
 
-        if (((i+gisd-G%isd) .le. G%domain%niglobal+G%domain%nihalo) .AND. &
-             ((i+gisd-G%isd) .ge. G%domain%nihalo+1)) then
+        if (((i+i_off) .le. G%domain%niglobal+G%domain%nihalo) .AND. &
+             ((i+i_off) .ge. G%domain%nihalo+1)) then
 
-          if (i+Gisd-isd .eq. G%domain%nihalo+1) then
+          if (i+i_off .eq. G%domain%nihalo+1) then
             at_west_bdry=.true.
           else
             at_west_bdry=.false.
           endif
 
-          if (i+Gisd-isd .eq. G%domain%niglobal+G%domain%nihalo) then
+          if (i+i_off .eq. G%domain%niglobal+G%domain%nihalo) then
             at_east_bdry=.true.
           else
             at_east_bdry=.false.
@@ -6200,7 +6211,8 @@ subroutine ice_shelf_advect_temp_y (CS, time_step, h_after_uflux, h_after_vflux,
   !        o--- (3) ---o
   !
 
-  integer :: isym, i, j, is, ie, js, je, isd, ied, jsd, jed, gjed, gjsd, gied, gisd
+  integer :: isym, i, j, is, ie, js, je, isd, ied, jsd, jed, gjed, gied
+  integer :: i_off, j_off
   logical :: at_north_bdry, at_south_bdry, one_off_west_bdry, one_off_east_bdry
   type(ocean_grid_type), pointer :: G
   real, dimension(-2:2) :: stencil
@@ -6224,25 +6236,25 @@ subroutine ice_shelf_advect_temp_y (CS, time_step, h_after_uflux, h_after_vflux,
   t_boundary => CS%t_boundary_values
   v_boundary_values => CS%v_shelf
   is = G%isc ; ie = G%iec ; js = G%jsc-1 ; je = G%jec+1 ; isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  gjsd = G%jsd_global ; gisd = G%isd_global
+  i_off = G%idg_offset ; j_off = G%jdg_offset 
 
   do i=isd+2,ied-2
-    if (((i+gisd-G%isd) .le. G%domain%niglobal+G%domain%nihalo) .AND. &
-       ((i+gisd-G%isd) .ge. G%domain%nihalo+1)) then  ! based on mehmet's code - only if btw east & west boundaries
+    if (((i+i_off) .le. G%domain%niglobal+G%domain%nihalo) .AND. &
+       ((i+i_off) .ge. G%domain%nihalo+1)) then  ! based on mehmet's code - only if btw east & west boundaries
 
       stencil(:) = -1
 
       do j=js,je
 
-        if (((j+gjsd-G%jsd) .le. G%domain%njglobal+G%domain%njhalo) .AND. &
-             ((j+gjsd-G%jsd) .ge. G%domain%njhalo+1)) then
+        if (((j+j_off) .le. G%domain%njglobal+G%domain%njhalo) .AND. &
+             ((j+j_off) .ge. G%domain%njhalo+1)) then
 
-          if (j+Gjsd-jsd .eq. G%domain%njhalo+1) then
+          if (j+j_off .eq. G%domain%njhalo+1) then
             at_south_bdry=.true.
           else
             at_south_bdry=.false.
           endif
-          if (j+Gjsd-jsd .eq. G%domain%njglobal+G%domain%njhalo) then
+          if (j+j_off .eq. G%domain%njglobal+G%domain%njhalo) then
             at_north_bdry=.true.
           else
             at_north_bdry=.false.

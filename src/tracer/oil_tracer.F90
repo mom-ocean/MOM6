@@ -71,6 +71,7 @@ use MOM_tracer_registry, only : tracer_vertdiff
 use MOM_tracer_Z_init, only : tracer_Z_init
 use MOM_variables, only : surface, ocean_OBC_type
 use MOM_variables, only : thermo_var_ptrs
+use MOM_verticalGrid, only : verticalGrid_type
 use coupler_util, only : set_coupler_values, ind_csurf
 use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
 
@@ -257,7 +258,7 @@ function register_oil_tracer(G, param_file, CS, diag, tr_Reg, &
     call register_restart_field(tr_ptr, CS%tr_desc(m), &
                                 .not.CS%oil_may_reinit, restart_CS)
     ! Register the tracer for horizontal advection & diffusion.
-    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, tr_Reg, &
+    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, G, tr_Reg, &
                          tr_desc_ptr=CS%tr_desc(m))
 
     !   Set coupled_tracers to be true (hard-coded above) to provide the surface
@@ -274,12 +275,13 @@ function register_oil_tracer(G, param_file, CS, diag, tr_Reg, &
 
 end function register_oil_tracer
 
-subroutine initialize_oil_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
+subroutine initialize_oil_tracer(restart, day, G, GV, h, OBC, CS, sponge_CSp, &
                                        diag_to_Z_CSp)
   logical,                            intent(in) :: restart
   type(time_type), target,            intent(in) :: day
   type(ocean_grid_type),              intent(in) :: G
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
+  type(verticalGrid_type),            intent(in) :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
   type(ocean_OBC_type),               pointer    :: OBC
   type(oil_tracer_CS),                pointer    :: CS
   type(sponge_CS),                    pointer    :: sponge_CSp
@@ -291,6 +293,7 @@ subroutine initialize_oil_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
 !                     a restart file.
 !  (in)      day - Time of the start of the run.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      h - Layer thickness, in m or kg m-2.
 !  (in)      OBC - This open boundary condition type specifies whether, where,
 !                  and what open boundary conditions are used.
@@ -377,7 +380,7 @@ subroutine initialize_oil_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
   endif
 
   ! This needs to be changed if the units of tracer are changed above.
-  if (G%GV%Boussinesq) then ; flux_units = "years m3 s-1"
+  if (GV%Boussinesq) then ; flux_units = "years m3 s-1"
   else ; flux_units = "years kg s-1" ; endif
 
   do m=1,CS%ntr
@@ -415,11 +418,12 @@ subroutine initialize_oil_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
 
 end subroutine initialize_oil_tracer
 
-subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, CS, tv)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h_old, h_new, ea, eb
+subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS, tv)
+  type(ocean_grid_type),              intent(in) :: G
+  type(verticalGrid_type),            intent(in) :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
   type(forcing),                      intent(in) :: fluxes
   real,                               intent(in) :: dt
-  type(ocean_grid_type),              intent(in) :: G
   type(oil_tracer_CS),                pointer    :: CS
   type(thermo_var_ptrs),              intent(in) :: tv
 !   This subroutine applies diapycnal diffusion and any other column
@@ -438,6 +442,7 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, CS, tv
 !                     forcing fields.  Unused fields have NULL ptrs.
 !  (in)      dt - The amount of time covered by this call, in s.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 register_oil_tracer.
 !
@@ -455,7 +460,7 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, CS, tv
   if (CS%ntr < 1) return
 
   do m=1,CS%ntr
-    call tracer_vertdiff(h_old, ea, eb, dt, CS%tr(:,:,:,m), G)
+    call tracer_vertdiff(h_old, ea, eb, dt, CS%tr(:,:,:,m), G, GV)
   enddo
 
   !   Set the surface value of tracer 1 to increase exponentially
@@ -492,9 +497,9 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, CS, tv
       if (k>0) then
         k=min(k,k_max) ! Only insert k or first layer with interface 10 m above bottom
         CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + CS%oil_source_rate*dt / &
-                ((h_new(i,j,k)+G%GV%H_subroundoff) * G%areaT(i,j) )
+                ((h_new(i,j,k)+GV%H_subroundoff) * G%areaT(i,j) )
       elseif (k<0) then
-        h_total=G%GV%H_subroundoff
+        h_total=GV%H_subroundoff
         do k=1, nz
           h_total = h_total + h_new(i,j,k)
         enddo
@@ -511,7 +516,7 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, CS, tv
     if (CS%id_tracer(m)>0) then
       if (CS%mask_tracers) then
         do k=1,nz ; do j=js,je ; do i=is,ie
-          if (h_new(i,j,k) < 1.1*G%GV%Angstrom) then
+          if (h_new(i,j,k) < 1.1*GV%Angstrom) then
             local_tr(i,j,k) = CS%land_val(m)
           else
             local_tr(i,j,k) = CS%tr(i,j,k,m)
@@ -537,11 +542,12 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, CS, tv
 
 end subroutine oil_tracer_column_physics
 
-function oil_stock(h, stocks, G, CS, names, units, stock_index)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
-  real, dimension(:),                 intent(out)   :: stocks
+function oil_stock(h, stocks, G, GV, CS, names, units, stock_index)
   type(ocean_grid_type),              intent(in)    :: G
-  type(oil_tracer_CS),          pointer       :: CS
+  type(verticalGrid_type),            intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  real, dimension(:),                 intent(out)   :: stocks
+  type(oil_tracer_CS),                pointer       :: CS
   character(len=*), dimension(:),     intent(out)   :: names
   character(len=*), dimension(:),     intent(out)   :: units
   integer, optional,                  intent(in)    :: stock_index
@@ -554,6 +560,7 @@ function oil_stock(h, stocks, G, CS, names, units, stock_index)
 !  (out)     stocks - the mass-weighted integrated amount of each tracer,
 !                     in kg times concentration units.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 register_oil_tracer.
 !  (out)     names - the names of the stocks calculated.
@@ -583,16 +590,16 @@ function oil_stock(h, stocks, G, CS, names, units, stock_index)
       stocks(m) = stocks(m) + CS%tr(i,j,k,m) * &
                              (G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k))
     enddo ; enddo ; enddo
-    stocks(m) = G%GV%H_to_kg_m2 * stocks(m)
+    stocks(m) = GV%H_to_kg_m2 * stocks(m)
   enddo
   oil_stock = CS%ntr
 
 end function oil_stock
 
 subroutine oil_tracer_surface_state(state, h, G, CS)
-  type(surface),                         intent(inout) :: state
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
   type(ocean_grid_type),                 intent(in)    :: G
+  type(surface),                         intent(inout) :: state
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
   type(oil_tracer_CS),                   pointer       :: CS
 !   This particular tracer package does not report anything back to the coupler.
 ! The code that is here is just a rough guide for packages that would.

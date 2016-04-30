@@ -53,6 +53,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_io, only : slasher, vardesc
 use MOM_thickness_diffuse, only : vert_fill_TS
 use MOM_variables, only : thermo_var_ptrs, vertvisc_type, p3d
+use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs
 
 use fms_mod, only : read_data
@@ -89,16 +90,17 @@ end type int_tide_input_type
 
 contains
 
-subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, CS)
-  real, dimension(NIMEMB_,NJMEM_,NKMEM_), intent(in)    :: u
-  real, dimension(NIMEM_,NJMEMB_,NKMEM_), intent(in)    :: v
-  real, dimension(NIMEM_,NJMEM_,NKMEM_),  intent(in)    :: h
-  type(thermo_var_ptrs),                  intent(in)    :: tv
-  type(forcing),                          intent(in)    :: fluxes
-  type(int_tide_input_type),              intent(inout) :: itide
-  real,                                   intent(in)    :: dt
-  type(ocean_grid_type),                  intent(in)    :: G
-  type(int_tide_input_CS),                pointer       :: CS
+subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, CS)
+  type(ocean_grid_type),                     intent(in)    :: G
+  type(verticalGrid_type),                   intent(in)    :: GV
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
+  type(thermo_var_ptrs),                     intent(in)    :: tv
+  type(forcing),                             intent(in)    :: fluxes
+  type(int_tide_input_type),                 intent(inout) :: itide
+  real,                                      intent(in)    :: dt
+  type(int_tide_input_CS),                   pointer       :: CS
 
 ! Arguments: u - Zonal velocity, in m s-1.
 !  (in)      v - Meridional velocity, in m s-1.
@@ -110,6 +112,7 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, CS)
 !                    tide sources.
 !  (in)      dt - The time increment in s.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - This module's control structure.
 
   real, dimension(SZI_(G),SZJ_(G)) :: &
@@ -139,10 +142,10 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, CS)
 
   ! Smooth the properties through massless layers.
   if (use_EOS) then
-    call vert_fill_TS(h, tv%T, tv%S, kappa_fill, dt_fill, T_f, S_f, G)
+    call vert_fill_TS(h, tv%T, tv%S, kappa_fill, dt_fill, T_f, S_f, G, GV)
   endif
 
-  call find_N2_bottom(h, tv, T_f, S_f, itide%h2, fluxes, G, N2_bot)
+  call find_N2_bottom(h, tv, T_f, S_f, itide%h2, fluxes, G, GV, N2_bot)
 
 !$OMP parallel do default(none) shared(is,ie,js,je,G,itide,N2_bot,CS)
   do j=js,je ; do i=is,ie
@@ -161,15 +164,16 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, CS)
 
 end subroutine set_int_tide_input
 
-subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, N2_bot)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)   :: h
-  type(thermo_var_ptrs),                 intent(in)   :: tv
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)   :: T_f, S_f
-  real, dimension(NIMEM_,NJMEM_),        intent(in)   :: h2
-  type(forcing),                         intent(in)   :: fluxes
-  type(ocean_grid_type),                 intent(in)   :: G
-  type(int_tide_input_CS),               pointer      :: CS
-  real, dimension(NIMEM_,NJMEM_),        intent(out)  :: N2_bot
+subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, N2_bot)
+  type(ocean_grid_type),                    intent(in)   :: G
+  type(verticalGrid_type),                  intent(in)   :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)   :: h
+  type(thermo_var_ptrs),                    intent(in)   :: tv
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)   :: T_f, S_f
+  real, dimension(SZI_(G),SZJ_(G)),         intent(in)   :: h2
+  type(forcing),                            intent(in)   :: fluxes
+  type(int_tide_input_CS),                  pointer      :: CS
+  real, dimension(SZI_(G),SZJ_(G)),         intent(out)  :: N2_bot
 
   real, dimension(SZI_(G),SZK_(G)+1) :: &
     dRho_int      ! The unfiltered density differences across interfaces.
@@ -190,13 +194,13 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, N2_bot)
   logical :: do_i(SZI_(G)), do_any
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  G_Rho0 = G%g_Earth / G%GV%Rho0
+  G_Rho0 = G%g_Earth / GV%Rho0
 
   ! Find the (limited) density jump across each interface.
   do i=is,ie
     dRho_int(i,1) = 0.0 ; dRho_int(i,nz+1) = 0.0
   enddo
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,tv,fluxes,G,h,T_f,S_f,    &
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,tv,fluxes,G,GV,h,T_f,S_f, &
 !$OMP                                  h2,N2_bot,G_Rho0) &
 !$OMP                          private(pres,Temp_Int,Salin_Int,dRho_dT,dRho_dS, &
 !$OMP                                  hb,dRho_bot,z_from_bot,do_i,h_amp,       &
@@ -211,7 +215,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, N2_bot)
       endif
       do K=2,nz
         do i=is,ie
-          pres(i) = pres(i) + G%GV%H_to_Pa*h(i,j,k-1)
+          pres(i) = pres(i) + GV%H_to_Pa*h(i,j,k-1)
           Temp_Int(i) = 0.5 * (T_f(i,j,k) + T_f(i,j,k-1))
           Salin_Int(i) = 0.5 * (S_f(i,j,k) + S_f(i,j,k-1))
         enddo
@@ -224,14 +228,14 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, N2_bot)
       enddo
     else
       do K=2,nz ; do i=is,ie
-        dRho_int(i,K) = G%GV%Rlay(k) - G%GV%Rlay(k-1)
+        dRho_int(i,K) = GV%Rlay(k) - GV%Rlay(k-1)
       enddo ; enddo
     endif
 
     ! Find the bottom boundary layer stratification.
     do i=is,ie
       hb(i) = 0.0 ; dRho_bot(i) = 0.0
-      z_from_bot(i) = 0.5*G%GV%H_to_m*h(i,j,nz)
+      z_from_bot(i) = 0.5*GV%H_to_m*h(i,j,nz)
       do_i(i) = (G%mask2dT(i,j) > 0.5)
       h_amp(i) = sqrt(h2(i,j))
     enddo
@@ -239,7 +243,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, N2_bot)
     do k=nz,2,-1
       do_any = .false.
       do i=is,ie ; if (do_i(i)) then
-        dz_int = 0.5*G%GV%H_to_m*(h(i,j,k) + h(i,j,k-1))
+        dz_int = 0.5*GV%H_to_m*(h(i,j,k) + h(i,j,k-1))
         z_from_bot(i) = z_from_bot(i) + dz_int ! middle of the layer above
 
         hb(i) = hb(i) + dz_int
@@ -248,7 +252,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, N2_bot)
         if (z_from_bot(i) > h_amp(i)) then
           if (k>2) then
             ! Always include at least one full layer.
-            hb(i) = hb(i) + 0.5*G%GV%H_to_m*(h(i,j,k-1) + h(i,j,k-2))
+            hb(i) = hb(i) + 0.5*GV%H_to_m*(h(i,j,k-1) + h(i,j,k-2))
             dRho_bot(i) = dRho_bot(i) + dRho_int(i,K-1)
           endif
           do_i(i) = .false.
@@ -268,15 +272,17 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, N2_bot)
 
 end subroutine find_N2_bottom
 
-subroutine int_tide_input_init(Time, G, param_file, diag, CS, itide)
+subroutine int_tide_input_init(Time, G, GV, param_file, diag, CS, itide)
   type(time_type),          intent(in)    :: Time
   type(ocean_grid_type),    intent(in)    :: G
+  type(verticalGrid_type),  intent(in)    :: GV
   type(param_file_type),    intent(in)    :: param_file
   type(diag_ctrl), target,  intent(inout) :: diag
   type(int_tide_input_CS),   pointer      :: CS
   type(int_tide_input_type), pointer      :: itide
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in)      diag - A structure that is used to regulate diagnostic output.
@@ -385,7 +391,7 @@ subroutine int_tide_input_init(Time, G, param_file, diag, CS, itide)
     itide%h2(i,j) = min(0.01*G%bathyT(i,j)**2, itide%h2(i,j))
 
     ! Compute the fixed part of internal tidal forcing; units are [J m-2] here.
-    CS%TKE_itidal_coef(i,j) = 0.5*kappa_h2_factor*G%GV%Rho0*&
+    CS%TKE_itidal_coef(i,j) = 0.5*kappa_h2_factor*GV%Rho0*&
          kappa_itides * itide%h2(i,j) * itide%tideamp(i,j)**2
   enddo; enddo
 
