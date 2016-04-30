@@ -26,7 +26,9 @@ module CCS1_initialization
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_sponge, only : sponge_CS, set_up_sponge_field, initialize_sponge
+use MOM_ALE_sponge, only : ALE_sponge_CS, set_up_ALE_sponge_field, &
+         initialize_ALE_sponge
+!use MOM_sponge, only : sponge_CS, set_up_sponge_field, initialize_sponge
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
@@ -51,34 +53,30 @@ contains
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
+!>   This subroutine sets the inverse restoration time (Idamp), and   !
+!> the values towards which the interface heights and an arbitrary    !
+!> number of tracers should be restored within each sponge. The       !
+!> interface height is always subject to damping, and must always be  !
+!> the first registered field.                                        !
 subroutine CCS1_initialize_sponges(G, GV, tv, PF, CSp)
-  type(ocean_grid_type), intent(in) :: G
-  type(verticalGrid_type), intent(in) :: GV
-  type(thermo_var_ptrs), intent(in) :: tv
-  type(param_file_type), intent(in) :: PF
-  type(sponge_CS),       pointer    :: CSp
-!   This subroutine sets the inverse restoration time (Idamp), and   !
-! the values towards which the interface heights and an arbitrary    !
-! number of tracers should be restored within each sponge. The       !
-! interface height is always subject to damping, and must always be  !
-! the first registered field.                                        !
-
-! Arguments: G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      tv - A structure containing pointers to any available
-!                 thermodynamic fields, including potential temperature and
-!                 salinity or mixed layer density. Absent fields have NULL ptrs.
-!  (in)      PF - A structure indicating the open file to parse for
-!                 model parameter values.
-!  (in/out)  CSp - A pointer that is set to point to the control structure
-!                  for this module
+  type(ocean_grid_type), intent(in) :: G     !< ocean's grid structure
+  type(verticalGrid_type), intent(in) :: GV  !< ocean's vertical grid structure
+  type(thermo_var_ptrs), intent(in) :: tv    !< A structure containing pointers to any available
+                                             !! thermodynamic fields, including potential
+                                             !! temperature and salinity or mixed layer density.
+                                             !! Absent fields have NULL ptrs.
+  type(param_file_type), intent(in) :: PF    !< A structure indicating the open file to parse for
+                                             !! model parameter values
+  type(ALE_sponge_CS),   pointer    :: CSp   !< A pointer that is set to point to the control
+                                             !! structure for this module
 
   real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta.
   real :: temp(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for other variables. !
   real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate, in s-1.
 
   real :: H0(SZK_(G))
-  real :: min_depth
+  real :: cff1, cff2
+  integer :: cff3
   real :: damp, e_dense, damp_new
   character(len=40)  :: mod = "CCS1_initialize_sponges" ! This subroutine's name.
   integer :: i, j, k, isc, iec, jsc, jec, isd, ied, jsd, jed, nz
@@ -93,90 +91,115 @@ subroutine CCS1_initialize_sponges(G, GV, tv, PF, CSp)
 !  will automatically set up the sponges only where Idamp is positive!
 !  and mask2dT is 1.                                                   !
 
-!   Set up sponges for CCS1 configuration
-  call get_param(PF, mod, "MINIMUM_DEPTH", min_depth, &
-                 "The minimum depth of the ocean.", units="m", default=0.0)
+!  Set up sponges for CCS1 configuration
+!  nudging coefficients vary from a thirty
+!  days time scale at the boundary point to decrease linearly to 0 days
+!  (i.e no nudging) 15 grids points away from the boundary.
 
-  H0(1) = 0.0
-  do k=2,nz ; H0(k) = -(real(k-1)-0.5)*G%max_depth/real(nz-1) ; enddo
-  do i=isc,iec; do j=jsc,jec
-    if (G%geoLonT(i,j) < 100.0) then ; damp = 10.0
-    elseif (G%geoLonT(i,j) < 200.0) then
-      damp = 10.0*(200.0-G%geoLonT(i,j))/100.0
-    else ; damp=0.0
+  cff1=1.0/(30*86400.0)                ! 30-day outer limit
+  cff2=0.0                             ! Inf days (no nudge) inner limit
+  cff3=10                              ! width of layer in grid points
+
+! South
+! cff3-point wide linearly tapered nudging zone
+  do i=isc,iec
+    if (G%jsd_global - jsd + jsc <= jsd + cff3 - 1) then
+      do j=jsc,MIN(jsc+cff3-1,jec)
+        Idamp(i,j) = cff2+(cff3-jsc-real(j))*(cff1-cff2)/cff3
+      enddo
     endif
-
-    if (G%geoLonT(i,j) > 1400.0) then ; damp_new = 10.0
-    elseif (G%geoLonT(i,j) > 1300.0) then
-       damp_new = 10.0*(G%geoLonT(i,j)-1300.0)/100.0
-    else ; damp_new = 0.0
+! North
+! cff3-point wide linearly tapered nudging zone
+    if (G%jsd_global - jsd + jec >= G%Domain%njglobal - cff3) then
+      do j=MAX(jsc,jec+1-cff3),jec
+        Idamp(i,j) = cff1+real(jec-j)*(cff2-cff1)/cff3
+      enddo
     endif
-
-    if (damp <= damp_new) damp=damp_new
-
-    ! These will be stretched inside of apply_sponge, so they can be in
-    ! depth space for Boussinesq or non-Boussinesq models.
-    eta(i,j,1) = 0.0
-    do k=2,nz
-!     eta(i,j,K)=max(H0(k), -G%bathyT(i,j), GV%Angstrom_z*(nz-k+1)-G%bathyT(i,j))
-      e_dense = -G%bathyT(i,j)
-      if (e_dense >= H0(k)) then ; eta(i,j,K) = e_dense
-      else ; eta(i,j,K) = H0(k) ; endif
-      if (eta(i,j,K) < GV%Angstrom_z*(nz-k+1)-G%bathyT(i,j)) &
-          eta(i,j,K) = GV%Angstrom_z*(nz-k+1)-G%bathyT(i,j)
-    enddo
-    eta(i,j,nz+1) = -G%bathyT(i,j)
-
-    if (G%bathyT(i,j) > min_depth) then
-      Idamp(i,j) = damp/86400.0
-    else ; Idamp(i,j) = 0.0 ; endif
-  enddo ; enddo
+  enddo
+! West
+! cff3-point wide linearly tapered nudging zone
+  do j=jsc,jec
+    if (G%isd_global - isd + isc <= isd + cff3 - 1) then
+      do i=isc,MIN(isc+cff3-1,iec)
+          Idamp(i,j) = MAX(Idamp(i,j),                                        &
+                  cff2+(cff3-real(i))*(cff1-cff2)/cff3)
+      enddo
+    endif
+! East
+!    if (G%isd_global - isd + iec >= G%Domain%niglobal - cff3) then
+!      do i=MAX(isc,iec+1-cff3),iec
+!        Idamp(i,j) = MAX(Idamp(i,j),                                        &
+!                  cff1+REAL(iec-i)*(cff2-cff1)/cff3)
+!      enddo
+!    endif
+  enddo
 
 !  This call sets up the damping rates and interface heights.
 !  This sets the inverse damping timescale fields in the sponges.    !
-  call initialize_sponge(Idamp, eta, G, PF, CSp)
+!  call initialize_sponge(Idamp, eta, G, PF, CSp)
+  call initialize_ALE_sponge(Idamp, eta, nz, G, PF, CSp)
+
+
+!! Doesn't make sense in z-star mode, I believe.
+!  H0(1) = 0.0
+!
+!    ! These will be stretched inside of apply_sponge, so they can be in
+!    ! depth space for Boussinesq or non-Boussinesq models.
+!!     eta(i,j,K)=max(H0(k), -G%bathyT(i,j), GV%Angstrom_z*(nz-k+1)-G%bathyT(i,j))
+!      e_dense = -G%bathyT(i,j)
+!      if (e_dense >= H0(k)) then ; eta(i,j,K) = e_dense
+!      else ; eta(i,j,K) = H0(k) ; endif
+!      if (eta(i,j,K) < GV%Angstrom_z*(nz-k+1)-G%bathyT(i,j)) &
+!          eta(i,j,K) = GV%Angstrom_z*(nz-k+1)-G%bathyT(i,j)
+!    enddo
+!    eta(i,j,nz+1) = -G%bathyT(i,j)
+!
+!    if (G%bathyT(i,j) > min_depth) then
+!      Idamp(i,j) = damp/86400.0
+!    else ; Idamp(i,j) = 0.0 ; endif
+!  enddo ; enddo
+!
+!  This call sets up the damping rates and interface heights.
+!  This sets the inverse damping timescale fields in the sponges.    !
+!  call initialize_sponge(Idamp, eta, G, PF, CSp)
 
 !   Now register all of the fields which are damped in the sponge.   !
 ! By default, momentum is advected vertically within the sponge, but !
 ! momentum is typically not damped within the sponge.                !
 
-! At this point, the CCS1 configuration is done. The following are here as a
-! template for other configurations.
-
 !  The remaining calls to set_up_sponge_field can be in any order. !
   if ( associated(tv%T) ) then
-    call MOM_error(FATAL,"CCS1_initialize_sponges is not set up for use with"//&
-                         " a temperature defined.")
+    do i=isc,iec; do j=jsc,jec
     ! This should use the target values of T in temp.
-    call set_up_sponge_field(temp, tv%T, G, nz, CSp)
+      temp = tv%T
+      call set_up_ALE_sponge_field(temp, G, tv%T, CSp)
     ! This should use the target values of S in temp.
-    call set_up_sponge_field(temp, tv%S, G, nz, CSp)
+      temp = tv%S
+      call set_up_ALE_sponge_field(temp, G, tv%S, CSp)
+    enddo ; enddo
   endif
 
 end subroutine CCS1_initialize_sponges
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
+!>   This subroutine sets the structure for open boundary conditions.
+!> This particular example is for the CCS1, or any rectangular domain with open
+!> boundaries at the edges.
 subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
-  type(ocean_OBC_type),       pointer    :: OBC
-  type(thermo_var_ptrs),      intent(in) :: tv
-  type(ocean_grid_type),      intent(in) :: G
-  type(verticalGrid_type),    intent(in) :: GV
-  type(param_file_type),      intent(in) :: param_file
-  type(tracer_registry_type), pointer    :: tr_Reg
-!   This subroutine sets the structure for open boundary conditions.
-! This particular example is for the CCS1, or any rectangular domain with open
-! boundaries at the edges.
-
-! Arguments: OBC - This open boundary condition type specifies whether, where,
-!                  and what open boundary conditions are used.
-!  (in)      tv - A structure containing pointers to any available
-!                 thermodynamic fields, including potential temperature and
-!                 salinity or mixed layer density. Absent fields have NULL ptrs.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
+  type(ocean_OBC_type),       pointer    :: OBC         !< This open boundary condition type specifies
+                                                        !! whether, where, and what open boundary
+                                                        !! conditions are used.
+  type(thermo_var_ptrs),      intent(in) :: tv          !< A structure containing pointers to any
+                                                        !! available thermodynamic fields, including
+                                                        !! potential temperature and salinity or
+                                                        !! mixed layer density. Absent fields
+                                                        !! have NULL ptrs.
+  type(ocean_grid_type),      intent(in) :: G           !< ocean's grid structure
+  type(verticalGrid_type),    intent(in) :: GV          !< ocean's vertical grid structure
+  type(param_file_type),      intent(in) :: param_file  !< A structure indicating the open file to
+                                                        !! parse for model parameter values
+  type(tracer_registry_type), pointer    :: tr_Reg      !< Tracer registry
 
   logical :: any_OBC        ! Set to true if any points in this subdomain use
                             ! open boundary conditions.
@@ -249,12 +272,12 @@ subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
 !      apply_OBC_u, apply_OBC_v, G%isd_global, isd, isc, iec, IscB, IecB, G%mask2dCu(iscB,jsc)
     if (G%isd_global - isd == isd - isc) then
       do j=jsc,jec
-        if (G%mask2dT(isc,j) == 1.0) then
-          OBC_mask_u(Isc-1,j) = .true. ; any_OBC = .true.
+        if (G%mask2dT(isc,j)*G%mask2dT(isc,j+1) > 0.99) then
+          OBC_mask_u(Isc,j) = .true. ; any_OBC = .true.
           if (apply_OBC_flather_west) then
-            OBC_kind_u(Isc-1,j) = OBC_FLATHER_W
+            OBC_kind_u(Isc,j) = OBC_FLATHER_W
           else
-            OBC_kind_u(Isc-1,j) = OBC_SIMPLE
+            OBC_kind_u(Isc,j) = OBC_SIMPLE
           endif
         endif
       enddo
@@ -262,12 +285,12 @@ subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
     ! East - not wanted for CCS1
 !    if (G%isd_global - isd + iec == G%Domain%niglobal) then
 !      do j=jsc,jec
-!        if (G%mask2dT(Iec,j) == 1.0) then
-!          OBC_mask_u(Iec,j) = .true. ; any_OBC = .true.
+!        if (G%mask2dT(iec,j)*G%mask2dT(iec-1,j) > 0.99) then
+!          OBC_mask_u(Iec-1,j) = .true. ; any_OBC = .true.
 !          if (apply_OBC_flather_east) then
-!            OBC_kind_u(Iec,j) = OBC_FLATHER_E
+!            OBC_kind_u(Iec-1,j) = OBC_FLATHER_E
 !          else
-!            OBC_kind_u(Iec,j) = OBC_SIMPLE
+!            OBC_kind_u(Iec-1,j) = OBC_SIMPLE
 !          endif
 !        endif
 !      enddo
@@ -275,12 +298,12 @@ subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
     ! South
     if (G%jsd_global - jsd == jsd - jsc) then
       do I=IscB,IecB
-        if (G%mask2dCu(I,jsc) == 1.0) then
-          OBC_mask_u(I,jsc-1) = .true. ; any_OBC = .true.
+        if (G%mask2dCu(I,jsc) > 0.99) then
+          OBC_mask_u(I,jsc) = .true. ; any_OBC = .true.
           if (apply_OBC_flather_south) then
-            OBC_kind_u(I,jsc-1) = OBC_FLATHER_S
+            OBC_kind_u(I,jsc) = OBC_FLATHER_S
           else
-            OBC_kind_u(I,jsc-1) = OBC_SIMPLE
+            OBC_kind_u(I,jsc) = OBC_SIMPLE
           endif
         endif
       enddo
@@ -288,12 +311,12 @@ subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
     ! North
     if (G%jsd_global - jsd + jec == G%Domain%njglobal) then
       do I=IscB,IecB
-        if (G%mask2dCu(I,jec) == 1.0) then
-          OBC_mask_u(I,jec+1) = .true. ; any_OBC = .true.
+        if (G%mask2dCu(I,jec) > 0.99) then
+          OBC_mask_u(I,jec) = .true. ; any_OBC = .true.
           if (apply_OBC_flather_north) then
-            OBC_kind_u(I,jec+1) = OBC_FLATHER_N
+            OBC_kind_u(I,jec) = OBC_FLATHER_N
           else
-            OBC_kind_u(I,jec+1) = OBC_SIMPLE
+            OBC_kind_u(I,jec) = OBC_SIMPLE
           endif
         endif
       enddo
@@ -315,12 +338,12 @@ subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
     ! West
     if (G%isd_global - isd == isd - isc) then
       do J=JscB,JecB
-        if (G%mask2dCv(isc,J) == 1) then
-          OBC_mask_v(isc-1,J) = .true. ; any_OBC = .true.
+        if (G%mask2dCv(isc,J) > 0.99) then
+          OBC_mask_v(isc,J) = .true. ; any_OBC = .true.
           if (apply_OBC_flather_west) then
-            OBC_kind_v(isc-1,J) = OBC_FLATHER_W
+            OBC_kind_v(isc,J) = OBC_FLATHER_W
           else
-            OBC_kind_v(isc-1,J) = OBC_SIMPLE
+            OBC_kind_v(isc,J) = OBC_SIMPLE
           endif
         endif
       enddo
@@ -328,12 +351,12 @@ subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
     ! East - not for CCS
 !    if (G%isd_global - isd + iec == G%Domain%niglobal) then
 !      do J=JscB,JecB
-!        if (G%mask2dCv(iec,J) == 1) then
-!          OBC_mask_v(iec+1,J) = .true. ; any_OBC = .true.
+!        if (G%mask2dCv(iec,J) > 0.99) then
+!          OBC_mask_v(iec,J) = .true. ; any_OBC = .true.
 !          if (apply_OBC_flather_east) then
-!            OBC_kind_v(iec+1,J) = OBC_FLATHER_E
+!            OBC_kind_v(iec,J) = OBC_FLATHER_E
 !          else
-!            OBC_kind_v(iec+1,J) = OBC_SIMPLE
+!            OBC_kind_v(iec,J) = OBC_SIMPLE
 !          endif
 !        endif
 !      enddo
@@ -341,12 +364,12 @@ subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
     ! South
     if (G%jsd_global - jsd == jsd - jsc) then
       do i=isc,iec
-        if (G%mask2dT(i,jsc) == 1) then
-          OBC_mask_v(i,Jsc-1) = .true. ; any_OBC = .true.
+        if (G%mask2dT(i,jsc)*G%mask2dT(i,jsc+1) > 0.99) then
+          OBC_mask_v(i,Jsc) = .true. ; any_OBC = .true.
           if (apply_OBC_flather_south) then
-            OBC_kind_v(i,Jsc-1) = OBC_FLATHER_S
+            OBC_kind_v(i,Jsc) = OBC_FLATHER_S
           else
-            OBC_kind_v(i,Jsc-1) = OBC_SIMPLE
+            OBC_kind_v(i,Jsc) = OBC_SIMPLE
           endif
         endif
       enddo
@@ -354,12 +377,12 @@ subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
     ! North
     if (G%jsd_global - jsd + jec == G%Domain%njglobal) then
       do i=isc,iec
-        if (G%mask2dT(i,jec) == 1) then
-          OBC_mask_v(i,Jec) = .true. ; any_OBC = .true.
+        if (G%mask2dT(i,jec)*G%mask2dT(i,jec-1) > 0.99) then
+          OBC_mask_v(i,Jec-1) = .true. ; any_OBC = .true.
           if (apply_OBC_flather_north) then
-            OBC_kind_v(i,Jec) = OBC_FLATHER_N
+            OBC_kind_v(i,Jec-1) = OBC_FLATHER_N
           else
-            OBC_kind_v(i,Jec) = OBC_SIMPLE
+            OBC_kind_v(i,Jec-1) = OBC_SIMPLE
           endif
         endif
       enddo
@@ -375,7 +398,7 @@ subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
   if (is_root_pe()) print *, 'inside CCS1_set_open_bdry_conds', apply_OBC_u, apply_OBC_v
   if (.not.(apply_OBC_u .or. apply_OBC_v)) return
 
-  if (.not.associated(OBC)) allocate(OBC)   
+  if (.not.associated(OBC)) allocate(OBC)
 
   if (apply_OBC_u) then
     OBC%apply_OBC_u = .true.
