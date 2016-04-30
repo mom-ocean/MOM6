@@ -48,6 +48,7 @@ use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_string_functions, only : uppercase
 use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : ocean_OBC_type, BT_cont_type
+use MOM_verticalGrid, only : verticalGrid_type
 
 implicit none ; private
 
@@ -72,30 +73,31 @@ character(len=20), parameter :: PPM_STRING = "PPM"
 
 contains
 
-subroutine continuity(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
+subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, &
                       visc_rem_u, visc_rem_v, u_cor, v_cor, &
                       uhbt_aux, vhbt_aux, u_cor_aux, v_cor_aux, BT_cont)
-  real, intent(in),  dimension(NIMEMB_,NJMEM_,NKMEM_) :: u
-  real, intent(in),  dimension(NIMEM_,NJMEMB_,NKMEM_) :: v
-  real, intent(in),  dimension(NIMEM_,NJMEM_,NKMEM_)  :: hin
-  real, intent(inout), dimension(NIMEM_,NJMEM_,NKMEM_)  :: h
-  real, intent(out), dimension(NIMEMB_,NJMEM_,NKMEM_) :: uh
-  real, intent(out), dimension(NIMEM_,NJMEMB_,NKMEM_) :: vh
-  real, intent(in)                                    :: dt
-  type(ocean_grid_type), intent(inout)                :: G
-  type(continuity_CS), pointer                        :: CS
-  real, intent(in), optional, dimension(NIMEMB_,NJMEM_) :: uhbt
-  real, intent(in), optional, dimension(NIMEM_,NJMEMB_) :: vhbt
-  type(ocean_OBC_type), pointer, optional             :: OBC
-  real, intent(in), optional, dimension(NIMEMB_,NJMEM_,NKMEM_) :: visc_rem_u
-  real, intent(in), optional, dimension(NIMEM_,NJMEMB_,NKMEM_) :: visc_rem_v
-  real, intent(out), optional, dimension(NIMEMB_,NJMEM_,NKMEM_) :: u_cor
-  real, intent(out), optional, dimension(NIMEM_,NJMEMB_,NKMEM_) :: v_cor
-  real, intent(in), optional, dimension(NIMEMB_,NJMEM_) :: uhbt_aux
-  real, intent(in), optional, dimension(NIMEM_,NJMEMB_) :: vhbt_aux
-  real, intent(inout), optional, dimension(NIMEMB_,NJMEM_,NKMEM_) :: u_cor_aux
-  real, intent(inout), optional, dimension(NIMEM_,NJMEMB_,NKMEM_) :: v_cor_aux
-  type(BT_cont_type),                  pointer,     optional :: BT_cont
+  type(ocean_grid_type), intent(inout)                     :: G
+  type(verticalGrid_type), intent(in)                      :: GV
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: hin
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: uh
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: vh
+  real,                                      intent(in)    :: dt
+  type(continuity_CS),                       pointer       :: CS
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(in), optional :: uhbt
+  real, dimension(SZI_(G),SZJB_(G)),         intent(in), optional :: vhbt
+  type(ocean_OBC_type),                      pointer,    optional :: OBC
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in), optional :: visc_rem_u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in), optional :: visc_rem_v
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out), optional :: u_cor
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out), optional :: v_cor
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(in), optional :: uhbt_aux
+  real, dimension(SZI_(G),SZJB_(G)),         intent(in), optional :: vhbt_aux
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout), optional :: u_cor_aux
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout), optional :: v_cor_aux
+  type(BT_cont_type),                        pointer,      optional :: BT_cont
 !    This subroutine time steps the layer thicknesses, using a monotonically
 !  limit, directionally split PPM scheme, based on Lin (1994).
 
@@ -108,6 +110,7 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
 !                  in m3 s-1.
 !  (in)      dt - Time increment in s.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 continuity_init.
 !  (in, opt) uhbt - The summed volume flux through zonal faces, m3 s-1.
@@ -150,7 +153,7 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
       " or neither.")
 
   if (CS%continuity_scheme == PPM_SCHEME) then
-    call continuity_PPM(u, v, hin, h, uh, vh, dt, G, CS%PPM_CSp, uhbt, vhbt, OBC, &
+    call continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS%PPM_CSp, uhbt, vhbt, OBC, &
                         visc_rem_u, visc_rem_v, u_cor, v_cor, &
                         uhbt_aux, vhbt_aux, u_cor_aux, v_cor_aux, BT_cont)
   else
@@ -159,14 +162,16 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, CS, uhbt, vhbt, OBC, &
 
 end subroutine continuity
 
-subroutine continuity_init(Time, G, param_file, diag, CS)
+subroutine continuity_init(Time, G, GV, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
+  type(verticalGrid_type), intent(in)    :: GV
   type(param_file_type),   intent(in)    :: param_file
   type(diag_ctrl), target, intent(inout) :: diag
   type(continuity_CS),     pointer       :: CS
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in)      diag - A structure that is used to regulate diagnostic output.
@@ -204,7 +209,7 @@ subroutine continuity_init(Time, G, param_file, diag, CS)
   end select
 
   if (CS%continuity_scheme == PPM_SCHEME) then
-    call continuity_PPM_init(Time, G, param_file, diag, CS%PPM_CSp)
+    call continuity_PPM_init(Time, G, GV, param_file, diag, CS%PPM_CSp)
   endif
 
 end subroutine continuity_init
