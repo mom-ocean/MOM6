@@ -397,8 +397,14 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                                                  PF, CS%sponge_CSp, h)
         case ("phillips"); call Phillips_initialize_sponges(G, use_temperature, tv, &
                                                  PF, CS%sponge_CSp, h)
-        case ("file"); call initialize_sponges_file(G, GV, use_temperature, tv, &
+        case ("file"); 
+          if (useALE) then
+              call initialize_sponges_file(G, GV, use_temperature, tv, &
                                                  PF, CS%sponge_CSp)
+          else
+              call initialize_ALE_sponges_file(G, GV, use_temperature, tv, &
+                                                 PF, CS%ALE_sponge_CSp)
+          endif
         case ("CCS1"); call CCS1_initialize_sponges(G, GV, tv, PF, &
                                                  CS%ALE_sponge_CSp)
         case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
@@ -1338,6 +1344,143 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp)
 
 
 end subroutine initialize_sponges_file
+! -----------------------------------------------------------------------------
+
+! -----------------------------------------------------------------------------
+subroutine initialize_ALE_sponges_file(G, GV, use_temperature, tv, param_file, CSp)
+  type(ocean_grid_type), intent(in) :: G
+  type(verticalGrid_type), intent(in) :: GV
+  logical,               intent(in) :: use_temperature
+  type(thermo_var_ptrs), intent(in) :: tv
+  type(param_file_type), intent(in) :: param_file
+  type(ALE_sponge_CS),       pointer    :: CSp
+!   This subroutine sets the inverse restoration time (Idamp), and   !
+! the values towards which the interface heights and an arbitrary    !
+! number of tracers should be restored within each sponge. The       !
+! interface height is always subject to damping, and must always be  !
+! the first registered field.                                        !
+
+! Arguments: from_file - .true. if the variables that are used here are to
+!                        be read from a file; .false. to be set internally.
+!  (in)      filename - The name of the file to read for all fields
+!                       except the inverse damping rate.
+!  (in)      damp_file - The name of the file from which to read the
+!                        inverse damping rate.
+!  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
+!  (in)      use_temperature - If true, T & S are state variables.
+!  (in)      tv - A structure containing pointers to any available
+!                 thermodynamic fields, including potential temperature and
+!                 salinity or mixed layer density. Absent fields have NULL ptrs.
+!  (in)      param_file - A structure indicating the open file to parse for
+!                         model parameter values.
+!  (in/out)  CSp - A pointer that is set to point to the control structure
+!                  for this module
+
+  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! The target interface heights, in m.
+  real, dimension (SZI_(G),SZJ_(G),SZK_(G)) :: &
+    tmp, tmp2 ! A temporary array for tracers.
+  real, dimension (SZI_(G),SZJ_(G)) :: &
+    tmp_2d ! A temporary array for tracers.
+
+  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate, in s-1.
+  real :: pres(SZI_(G))     ! An array of the reference pressure, in Pa.
+
+  integer :: i, j, k, is, ie, js, je, nz
+  character(len=40) :: potemp_var, salin_var, Idamp_var, eta_var
+  character(len=40) :: mod = "initialize_sponges_file"
+  character(len=200) :: damping_file, state_file  ! Strings for filenames
+  character(len=200) :: filename, inputdir ! Strings for file/path and path.
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  pres(:) = 0.0 ; eta(:,:,:) = 0.0 ; tmp(:,:,:) = 0.0 ; Idamp(:,:) = 0.0
+
+  call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
+  inputdir = slasher(inputdir)
+  call get_param(param_file, mod, "SPONGE_DAMPING_FILE", damping_file, &
+                 "The name of the file with the sponge damping rates.", &
+                 fail_if_missing=.true.)
+  call get_param(param_file, mod, "SPONGE_STATE_FILE", state_file, &
+                 "The name of the file with the state to damp toward.", &
+                 default=damping_file)
+
+  call get_param(param_file, mod, "SPONGE_PTEMP_VAR", potemp_var, &
+                 "The name of the potential temperature variable in \n"//&
+                 "SPONGE_STATE_FILE.", default="PTEMP")
+  call get_param(param_file, mod, "SPONGE_SALT_VAR", salin_var, &
+                 "The name of the salinity variable in \n"//&
+                 "SPONGE_STATE_FILE.", default="SALT")
+  call get_param(param_file, mod, "SPONGE_ETA_VAR", eta_var, &
+                 "The name of the interface height variable in \n"//&
+                 "SPONGE_STATE_FILE.", default="ETA")
+  call get_param(param_file, mod, "SPONGE_IDAMP_VAR", Idamp_var, &
+                 "The name of the inverse damping rate variable in \n"//&
+                 "SPONGE_DAMPING_FILE.", default="IDAMP")
+
+  filename = trim(inputdir)//trim(damping_file)
+  call log_param(param_file, mod, "INPUTDIR/SPONGE_DAMPING_FILE", filename)
+  if (.not.file_exists(filename, G%Domain)) &
+    call MOM_error(FATAL, " initialize_sponges: Unable to open "//trim(filename))
+
+
+  call read_data(filename,"Idamp",Idamp(:,:), domain=G%Domain%mpp_domain)
+
+! Now register all of the fields which are damped in the sponge.     !
+! By default, momentum is advected vertically within the sponge, but !
+! momentum is typically not damped within the sponge.                !
+
+  filename = trim(inputdir)//trim(state_file)
+  call log_param(param_file, mod, "INPUTDIR/SPONGE_STATE_FILE", filename)
+  if (.not.file_exists(filename, G%Domain)) &
+    call MOM_error(FATAL, " initialize_sponges: Unable to open "//trim(filename))
+
+
+!!  NOT YET
+!!!  The first call to set_up_sponge_field is for the interface height.!
+!  call read_data(filename, eta_var, eta(:,:,:), domain=G%Domain%mpp_domain)
+!
+!  do j=js,je ; do i=is,ie
+!    eta(i,j,nz+1) = -G%bathyT(i,j)
+!  enddo ; enddo
+!  do k=nz,1,-1 ; do j=js,je ; do i=is,ie
+!    if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_z)) &
+!      eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_z
+!  enddo ; enddo ; enddo
+!! Set the inverse damping rates so that the model will know where to !
+!! apply the sponges, along with the interface heights.               !
+  call initialize_ALE_sponge(Idamp, eta, nz, G, param_file, CSp)
+
+!   Now register all of the tracer fields which are damped in the    !
+! sponge. By default, momentum is advected vertically within the     !
+! sponge, but momentum is typically not damped within the sponge.    !
+
+  if ( GV%nkml>0 ) then
+!   This call to set_up_sponge_ML_density registers the target values of the
+! mixed layer density, which is used in determining which layers can be
+! inflated without causing static instabilities.
+    do i=is-1,ie ; pres(i) = tv%P_Ref ; enddo
+
+    call read_data(filename, potemp_var, tmp(:,:,:), domain=G%Domain%mpp_domain)
+    call read_data(filename, salin_var, tmp2(:,:,:), domain=G%Domain%mpp_domain)
+
+!    do j=js,je
+!      call calculate_density(tmp(:,j,1), tmp2(:,j,1), pres, tmp_2d(:,j), &
+!                             is, ie-is+1, tv%eqn_of_state)
+!    enddo
+!
+!    call set_up_sponge_ML_density(tmp_2d, G, CSp)
+  endif
+
+!  The remaining calls to set_up_sponge_field can be in any order.   !
+  if ( use_temperature ) then
+    call read_data(filename, potemp_var, tmp(:,:,:), domain=G%Domain%mpp_domain)
+    call set_up_ALE_sponge_field(tmp, G, tv%T, CSp)
+    call read_data(filename, salin_var, tmp(:,:,:), domain=G%Domain%mpp_domain)
+    call set_up_ALE_sponge_field(tmp, G, tv%S, CSp)
+  endif
+
+
+end subroutine initialize_ALE_sponges_file
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
