@@ -52,7 +52,7 @@ use MOM_obsolete_params,      only : find_obsolete_params
 use MOM_restart,              only : register_restart_field, query_initialized, save_restart
 use MOM_restart,              only : restart_init, MOM_restart_CS
 use MOM_spatial_means,        only : global_area_mean, global_area_integral
-use MOM_state_initialization, only : MOM_initialize_state, MOM_initialization_struct
+use MOM_state_initialization, only : MOM_initialize_state
 use MOM_time_manager,         only : time_type, set_time, time_type_to_real, operator(+)
 use MOM_time_manager,         only : operator(-), operator(>), operator(*), operator(/)
 
@@ -213,6 +213,11 @@ type, public :: MOM_control_struct
                                      !! bulk mixed layer is not used.
   real :: missing=-1.0e34            !< missing data value for masked fields
 
+  ! Flags needed to reach between start and finish phases of initialization
+  logical :: write_IC                !< If true, then the initial conditions will be written to file
+  character(len=80) :: IC_file       !< A file into which the initial conditions are
+                                     !! written in a new run if SAVE_INITIAL_CONDS is true.
+
   integer :: ntrunc                  !< number u,v truncations since last call to write_energy
   logical :: check_bad_surface_vals  !< If true, scan surface state for ridiculous values.
   real    :: bad_val_ssh_max         !< Maximum SSH before triggering bad value message
@@ -350,6 +355,8 @@ type, public :: MOM_control_struct
   type(diag_to_Z_CS),            pointer :: diag_to_Z_CSp          => NULL()
   type(MOM_restart_CS),          pointer :: restart_CSp            => NULL()
   type(ocean_OBC_type),          pointer :: OBC                    => NULL()
+  type(sponge_CS),               pointer :: sponge_CSp             => NULL()
+  type(ALE_sponge_CS),           pointer :: ALE_sponge_CSp         => NULL()
   type(ALE_CS),                  pointer :: ALE_CSp                => NULL()
 
   ! These are used for group halo updates.
@@ -1379,14 +1386,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   logical :: symmetric         ! If true, use symmetric memory allocation.
   logical :: save_IC           ! If true, save the initial conditions.
   logical :: do_unit_tests     ! If true, call unit tests.
-  character(len=80) :: IC_file ! A file into which the initial conditions are
-                               ! written in a new run if save_IC is true.
 
-  type(vardesc)                   :: vd
   type(time_type)                 :: Start_time
-  type(MOM_initialization_struct) :: init_CS
   type(ocean_internal_state)      :: MOM_internal_state
-  type(group_pass_type)           :: pass_p_surf_prev
 
   if (associated(CS)) then
     call MOM_error(WARNING, "initialize_MOM called with an associated "// &
@@ -1630,7 +1632,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call get_param(param_file, "MOM", "SAVE_INITIAL_CONDS", save_IC, &
                  "If true, write the initial conditions to a file given \n"//&
                  "by IC_OUTPUT_FILE.", default=.false.)
-  call get_param(param_file, "MOM", "IC_OUTPUT_FILE", IC_file, &
+  call get_param(param_file, "MOM", "IC_OUTPUT_FILE", CS%IC_file, &
                  "The file into which to write the initial conditions.", &
                  default="MOM_IC")
   call get_param(param_file, "MOM", "WRITE_GEOM", write_geom, &
@@ -1769,7 +1771,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call mixedlayer_restrat_register_restarts(G, param_file, CS%mixedlayer_restrat_CSp, CS%restart_CSp)
 
   ! Initialize fields
-  if (associated(CS%tracer_Reg)) init_CS%tracer_Reg => CS%tracer_Reg
   call callTree_waypoint("restart registration complete (initialize_MOM)")
 
   call cpu_clock_begin(id_clock_MOM_init)
@@ -1785,7 +1786,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   endif
 
   call MOM_initialize_state(CS%u, CS%v, CS%h, CS%tv, Time, G, GV, param_file, &
-                            dirs, CS%restart_CSp, CS%ALE_CSp, init_CS, Time_in)
+                            dirs, CS%restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
+                            CS%sponge_CSp, CS%ALE_sponge_CSp, CS%OBC, Time_in)
   call cpu_clock_end(id_clock_MOM_init)
   call callTree_waypoint("returned from MOM_initialize_state() (initialize_MOM)")
 
@@ -1801,7 +1803,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     call callTree_waypoint("Calling adjustGridForIntegrity() to remap initial conditions (initialize_MOM)")
     call adjustGridForIntegrity(CS%ALE_CSp, G, CS%h )
     call callTree_waypoint("Calling ALE_main() to remap initial conditions (initialize_MOM)")
-    call ALE_main( G, GV, CS%h, CS%u, CS%v, CS%tv, CS%tracer_Reg, CS%ALE_CSp ) ! Or init_CS%tracer_Reg ??? -AJA
+    call ALE_main( G, GV, CS%h, CS%u, CS%v, CS%tv, CS%tracer_Reg, CS%ALE_CSp )
     if (CS%debug) then
       call uchksum(CS%u,"Post ALE adjust init cond u", G, haloshift=1)
       call vchksum(CS%v,"Post ALE adjust init cond v", G, haloshift=1)
@@ -1840,34 +1842,29 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call VarMix_init(Time, G, param_file, diag, CS%VarMix, CS%wave_speed_CSp)
   call set_visc_init(Time, G, GV, param_file, diag, CS%visc, CS%set_visc_CSp)
 
-  if (associated(init_CS%tracer_Reg)) &
-    CS%tracer_Reg => init_CS%tracer_Reg
-
-! if (associated(init_CS%sponge_CSp)) CS%sponge_CSp => init_CS%sponge_CSp
-
   if (CS%split) then
     allocate(eta(SZI_(G),SZJ_(G))) ; eta(:,:) = 0.0
     if (CS%legacy_split) then
       call initialize_dyn_legacy_split(CS%u, CS%v, CS%h, CS%uh, CS%vh, eta, Time, &
                   G, GV, param_file, diag, CS%dyn_legacy_split_CSp, CS%restart_CSp, &
                   CS%dt, CS%ADp, CS%CDp, MOM_internal_state, CS%VarMix, CS%MEKE,  &
-                  init_CS%OBC, CS%ALE_CSp, CS%set_visc_CSp, CS%visc, dirs, CS%ntrunc)
+                  CS%OBC, CS%ALE_CSp, CS%set_visc_CSp, CS%visc, dirs, CS%ntrunc)
     else
       call initialize_dyn_split_RK2(CS%u, CS%v, CS%h, CS%uh, CS%vh, eta, Time,   &
                   G, GV, param_file, diag, CS%dyn_split_RK2_CSp, CS%restart_CSp, &
                   CS%dt, CS%ADp, CS%CDp, MOM_internal_state, CS%VarMix, CS%MEKE, &
-                  init_CS%OBC, CS%ALE_CSp, CS%set_visc_CSp, CS%visc, dirs, CS%ntrunc)
+                  CS%OBC, CS%ALE_CSp, CS%set_visc_CSp, CS%visc, dirs, CS%ntrunc)
     endif
   else
     if (CS%use_RK2) then
       call initialize_dyn_unsplit_RK2(CS%u, CS%v, CS%h, Time, G, GV,       &
               param_file, diag, CS%dyn_unsplit_RK2_CSp, CS%restart_CSp,    &
-              CS%ADp, CS%CDp, MOM_internal_state, init_CS%OBC, CS%ALE_CSp, &
+              CS%ADp, CS%CDp, MOM_internal_state, CS%OBC, CS%ALE_CSp, &
               CS%set_visc_CSp, CS%visc, dirs, CS%ntrunc)
     else
       call initialize_dyn_unsplit(CS%u, CS%v, CS%h, Time, G, GV,           &
               param_file, diag, CS%dyn_unsplit_CSp, CS%restart_CSp,        &
-              CS%ADp, CS%CDp, MOM_internal_state, init_CS%OBC, CS%ALE_CSp, &
+              CS%ADp, CS%CDp, MOM_internal_state, CS%OBC, CS%ALE_CSp, &
               CS%set_visc_CSp, CS%visc, dirs, CS%ntrunc)
     endif
   endif
@@ -1882,11 +1879,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     ! When DIABATIC_FIRST=False and using CS%visc%ML in mixedlayer_restrat we need to update after a restart
     if (.not. CS%diabatic_first .and. associated(CS%visc%MLD)) call pass_var(CS%visc%MLD, G%domain)
   endif
-  if (associated(init_CS%OBC)) CS%OBC => init_CS%OBC
 
   call MOM_diagnostics_init(MOM_internal_state, CS%ADp, CS%CDp, Time, G, GV, &
               param_file, diag, CS%diagnostics_CSp, CS%wave_speed_CSp)
-
 
   CS%Z_diag_interval = set_time(int((CS%dt_therm) * &
        max(1,floor(0.01 + Z_diag_int/(CS%dt_therm)))))
@@ -1894,11 +1889,11 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   CS%Z_diag_time = Start_time + CS%Z_diag_interval * (1 + &
     ((Time + set_time(int(CS%dt_therm))) - Start_time) / CS%Z_diag_interval)
 
-  if (associated(init_CS%sponge_CSp)) &
-    call init_sponge_diags(Time, G, diag, init_CS%sponge_CSp)
+  if (associated(CS%sponge_CSp)) &
+    call init_sponge_diags(Time, G, diag, CS%sponge_CSp)
 
-  if (associated(init_CS%ALE_sponge_CSp)) &
-    call init_ALE_sponge_diags(Time, G, diag, init_CS%ALE_sponge_CSp)
+  if (associated(CS%ALE_sponge_CSp)) &
+    call init_ALE_sponge_diags(Time, G, diag, CS%ALE_sponge_CSp)
 
   if (CS%adiabatic) then
     call adiabatic_driver_init(Time, G, param_file, diag, CS%diabatic_CSp, &
@@ -1906,7 +1901,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   else
     call diabatic_driver_init(Time, G, GV, param_file, CS%use_ALE_algorithm, diag,     &
                               CS%ADp, CS%CDp, CS%diabatic_CSp, CS%tracer_flow_CSp, &
-                              init_CS%sponge_CSp, init_CS%ALE_sponge_CSp, CS%diag_to_Z_CSp)
+                              CS%sponge_CSp, CS%ALE_sponge_CSp, CS%diag_to_Z_CSp)
   endif
 
   call tracer_advect_init(Time, G, param_file, diag, CS%tracer_adv_CSp)
@@ -1949,7 +1944,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   new_sim = ((dirs%input_filename(1:1) == 'n') .and. &
              (LEN_TRIM(dirs%input_filename) == 1))
   call tracer_flow_control_init(.not.new_sim, Time, G, GV, CS%h, param_file, CS%OBC, &
-           CS%tracer_flow_CSp, init_CS%sponge_CSp, init_CS%ALE_sponge_CSp, CS%diag_to_Z_CSp)
+           CS%tracer_flow_CSp, CS%sponge_CSp, CS%ALE_sponge_CSp, CS%diag_to_Z_CSp)
 
   call cpu_clock_begin(id_clock_pass_init)
   !--- set up group pass for u,v,T,S and h. pass_uv_T_S_h also is used in step_MOM
@@ -1967,17 +1962,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   call write_static_fields(G, CS%diag)
   call callTree_waypoint("static fields written (initialize_MOM)")
-  call enable_averaging(0.0, Time, CS%diag)
-
-!  smg: can we remove this code?
-!  call calculate_diagnostic_fields(CS%u, CS%v, CS%h, uh, vh, CS%tv, 0.0, G, CS%diagnostics_CSp)
-!  if (CS%id_u > 0) call post_data(CS%id_u, CS%u,    CS%diag)
-!  if (CS%id_v > 0) call post_data(CS%id_v, CS%v,    CS%diag)
-!  if (CS%id_h > 0) call post_data(CS%id_h, CS%h,    CS%diag)
-!  if (CS%id_T > 0) call post_data(CS%id_T, CS%tv%T, CS%diag)
-!  if (CS%id_S > 0) call post_data(CS%id_S, CS%tv%S, CS%diag)
-
-  call disable_averaging(CS%diag)
 
   if (CS%use_frazil) then
     if (.not.query_initialized(CS%tv%frazil,"frazil",CS%restart_CSp)) &
@@ -1988,10 +1972,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     CS%p_surf_prev_set = &
       query_initialized(CS%p_surf_prev,"p_surf_prev",CS%restart_CSp)
 
-    if (CS%p_surf_prev_set) then
-      call create_group_pass(pass_p_surf_prev, CS%p_surf_prev,G%domain)
-      call do_group_pass(pass_p_surf_prev, G%domain)
-    endif
+    if (CS%p_surf_prev_set) call pass_var(CS%p_surf_prev, G%domain)
   endif
 
   if (.not.query_initialized(CS%ave_ssh,"ave_ssh",CS%restart_CSp)) then
@@ -2003,22 +1984,10 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   endif
   if (CS%split) deallocate(eta)
 
-  if (save_IC .and. .not.((dirs%input_filename(1:1) == 'r') .and. &
-                          (LEN_TRIM(dirs%input_filename) == 1))) then
-    allocate(restart_CSp_tmp)
-    restart_CSp_tmp = CS%restart_CSp
-    allocate(e(SZI_(G),SZJ_(G),SZK_(G)+1))
-    call find_eta(CS%h, CS%tv, G%g_Earth, G, GV, e)
-    vd = var_desc("eta","meter","Interface heights",z_grid='i')
-    call register_restart_field(e, vd, .true., restart_CSp_tmp)
-
-    call save_restart(dirs%output_directory, Time, G, &
-                      restart_CSp_tmp, filename=IC_file, GV=GV)
-    deallocate(e)
-    deallocate(restart_CSp_tmp)
-  endif
-
-!  call calculate_surface_state(state, CS%u, CS%v, CS%h, CS%ave_ssh, G, GV, CS)
+  ! Flag whether to save initial conditions in finish_MOM_initialization() or not.
+  CS%write_IC = save_IC .and. &
+                .not.((dirs%input_filename(1:1) == 'r') .and. &
+                      (LEN_TRIM(dirs%input_filename) == 1))
 
   ! Undocumented parameter: set DO_UNIT_TESTS=True to invoke unitTests s/r
   ! which calls unit tests provided by some modules.
@@ -2028,7 +1997,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call callTree_leave("initialize_MOM()")
   call cpu_clock_end(id_clock_init)
 
-
 end subroutine initialize_MOM
 
 !> This subroutine finishes initializing MOM and writes out the initial conditions.
@@ -2037,9 +2005,34 @@ subroutine finish_MOM_initialization(Time, dirs, CS, fluxes)
   type(directories),         intent(in)    :: dirs        !< structure with directory paths
   type(MOM_control_struct),  pointer       :: CS          !< pointer set in this routine to MOM control structure
   type(forcing),             intent(inout) :: fluxes      !< pointers to forcing fields
+  ! Local variables
+  type(ocean_grid_type), pointer :: G => NULL()
+  type(verticalGrid_type), pointer :: GV => NULL()
+  type(MOM_restart_CS), pointer :: restart_CSp_tmp => NULL()
+  real, allocatable :: z_interface(:,:,:) ! Interface heights (meter)
+  real, allocatable :: eta(:,:) ! Interface heights (meter)
+  type(vardesc) :: vd
 
   call cpu_clock_begin(id_clock_init)
   call callTree_enter("finish_MOM_initialization()")
+
+  ! Pointers for convenience
+  G => CS%G ; GV => CS%GV
+
+  ! Write initial conditions
+  if (CS%write_IC) then
+    allocate(restart_CSp_tmp)
+    restart_CSp_tmp = CS%restart_CSp
+    allocate(z_interface(SZI_(G),SZJ_(G),SZK_(G)+1))
+    call find_eta(CS%h, CS%tv, G%g_Earth, G, GV, z_interface)
+    vd = var_desc("eta","meter","Interface heights",z_grid='i')
+    call register_restart_field(z_interface, vd, .true., restart_CSp_tmp)
+
+    call save_restart(dirs%output_directory, Time, G, &
+                      restart_CSp_tmp, filename=CS%IC_file, GV=GV)
+    deallocate(z_interface)
+    deallocate(restart_CSp_tmp)
+  endif
 
   call callTree_leave("finish_MOM_initialization()")
   call cpu_clock_end(id_clock_init)
@@ -3406,9 +3399,9 @@ end subroutine MOM_end
 !! * BOUNDARY_FORCING_HEAT_TENDENCY = heating of cell from boundary fluxes
 !! * FRAZIL_HEAT_TENDENCY           = heating of cell from frazil
 !!
-!! * TH_TENDENCY_VERT_REMAP has zero vertical sum, as it merely redistributes heat in vertical.
+!! * TH_TENDENCY_VERT_REMAP has zero vertical sum, as it redistributes heat in vertical.
 !!
-!! * OPOTTEMPDIFF has zero vertical sum, as it merely redistributes heat in the vertical.
+!! * OPOTTEMPDIFF has zero vertical sum, as it redistributes heat in the vertical.
 !!
 !! * BOUNDARY_FORCING_HEAT_TENDENCY generally has 3d structure, with k > 1 contributions from
 !!   penetrative shortwave, and from other fluxes for the case when layers are tiny, in which
@@ -3419,5 +3412,40 @@ end subroutine MOM_end
 !!
 !! * FRAZIL_HEAT_TENDENCY[k=@sum] = HFSIFRAZIL = column integrated frazil heating.
 !!
+!! * HFDS = FRAZIL_HEAT_TENDENCY[k=@sum] + BOUNDARY_FORCING_HEAT_TENDENCY[k=@sum]
+!!
+!!  Here is an example 2d heat budget (depth summed) diagnostic for MOM.
+!!
+!! * OPOTTEMPTEND_2d = T_ADVECTION_XY_2d + OPOTTEMPPMDIFF_2d + HFDS 
+!!
+!!
+!!  Here is an example 3d salt budget diagnostic for MOM.
+!!
+!! * OSALTTEND = S_ADVECTION_XY + SH_TENDENCY_VERT_REMAP + OSALTDIFF + OSALTPMDIFF
+!!                + BOUNDARY_FORCING_SALT_TENDENCY 
+!!
+!! * OSALTTEND                      = net tendency of salt as diagnosed in MOM.F90
+!! * S_ADVECTION_XY                 = salt convergence to cell from lateral advection
+!! * SH_TENDENCY_VERT_REMAP         = salt convergence to cell from vertical remapping
+!! * OSALTDIFF                      = salt convergence to cell from diabatic diffusion
+!! * OSALTPMDIFF                    = salt convergence to cell from neutral diffusion
+!! * BOUNDARY_FORCING_SALT_TENDENCY = salt convergence to cell from boundary fluxes
+!!
+!! * SH_TENDENCY_VERT_REMAP has zero vertical sum, as it redistributes salt in vertical.
+!!
+!! * OSALTDIFF has zero vertical sum, as it redistributes salt in the vertical.
+!!
+!! * BOUNDARY_FORCING_SALT_TENDENCY generally has 3d structure, with k > 1 contributions from
+!!   the case when layers are tiny, in which case MOM6 partitions tendencies into k > 1 layers.
+!!
+!! * SFDSI = BOUNDARY_FORCING_SALT_TENDENCY[k=@sum] 
+!!
+!!  Here is an example 2d salt budget (depth summed) diagnostic for MOM.
+!!
+!! * OSALTTEND_2d = S_ADVECTION_XY_2d + OSALTPMDIFF_2d + SFDSI (+ SALT_FLUX_RESTORE) 
+!!
+!!
+!!
+
 
 end module MOM

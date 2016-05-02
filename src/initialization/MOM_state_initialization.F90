@@ -82,21 +82,14 @@ implicit none ; private
 
 public MOM_initialize_state
 
-! This structure is to simplify communication with the calling code.
-type, public :: MOM_initialization_struct
-  type(tracer_registry_type), pointer :: tracer_Reg => NULL()
-  type(sponge_CS), pointer :: sponge_CSp => NULL()
-  type(ALE_sponge_CS), pointer :: ALE_sponge_CSp => NULL()
-  type(ocean_OBC_type), pointer :: OBC => NULL()
-end type MOM_initialization_struct
-
 character(len=40)  :: mod = "MOM_state_initialization" ! This module's name.
 
 contains
 
 ! -----------------------------------------------------------------------------
 subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
-                                restart_CS, ALE_CSp, CS, Time_in)
+                                restart_CS, ALE_CSp, tracer_Reg, sponge_CSp, &
+                                ALE_sponge_CSp, OBC, Time_in)
   type(ocean_grid_type),                     intent(inout) :: G
   type(verticalGrid_type),                   intent(in)    :: GV
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: u
@@ -108,7 +101,10 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   type(directories),                         intent(in)    :: dirs
   type(MOM_restart_CS),                      pointer       :: restart_CS
   type(ALE_CS),                              pointer       :: ALE_CSp
-  type(MOM_initialization_struct),           intent(inout) :: CS
+  type(tracer_registry_type),                pointer       :: tracer_Reg
+  type(sponge_CS),                           pointer       :: sponge_CSp
+  type(ALE_sponge_CS),                       pointer       :: ALE_sponge_CSp
+  type(ocean_OBC_type),                      pointer       :: OBC
   type(time_type), optional,                 intent(in)    :: Time_in
 ! Arguments: u  - Zonal velocity, in m s-1.
 !  (out)     v  - Meridional velocity, in m s-1.
@@ -390,23 +386,23 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   ! else
 
       select case (trim(config))
-        case ("DOME"); call DOME_initialize_sponges(G, GV, tv, PF, CS%sponge_CSp)
+        case ("DOME"); call DOME_initialize_sponges(G, GV, tv, PF, sponge_CSp)
         case ("DOME2D"); call DOME2d_initialize_sponges(G, GV, tv, PF, useALE, &
-                                                        CS%sponge_CSp, CS%ALE_sponge_CSp)
+                                                        sponge_CSp, ALE_sponge_CSp)
         case ("USER"); call user_initialize_sponges(G, use_temperature, tv, &
-                                                 PF, CS%sponge_CSp, h)
+                                                 PF, sponge_CSp, h)
         case ("phillips"); call Phillips_initialize_sponges(G, use_temperature, tv, &
-                                                 PF, CS%sponge_CSp, h)
+                                                 PF, sponge_CSp, h)
         case ("file"); 
           if (useALE) then
               call initialize_sponges_file(G, GV, use_temperature, tv, &
-                                                 PF, CS%sponge_CSp)
+                                                 PF, sponge_CSp)
           else
               call initialize_ALE_sponges_file(G, GV, use_temperature, tv, &
-                                                 PF, CS%ALE_sponge_CSp)
+                                                 PF, ALE_sponge_CSp)
           endif
         case ("CCS1"); call CCS1_initialize_sponges(G, GV, tv, PF, &
-                                                 CS%ALE_sponge_CSp)
+                                                 ALE_sponge_CSp)
         case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
                "Unrecognized sponge configuration "//trim(config))
       end select
@@ -431,16 +427,16 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                  " \t USER - call a user modified routine.", default="file", &
                  fail_if_missing=.true.)
     if (trim(config) == "DOME") then
-      call DOME_set_Open_Bdry_Conds(CS%OBC, tv, G, GV, PF, CS%tracer_Reg)
+      call DOME_set_Open_Bdry_Conds(OBC, tv, G, GV, PF, tracer_Reg)
     elseif (trim(config) == "CCS1") then
-      call CCS1_set_Open_Bdry_Conds(CS%OBC, tv, G, GV, PF, CS%tracer_Reg)
-      call CCS1_set_Open_Bdry_Vals(CS%OBC, u, v, h, tv, G, GV, PF, CS%tracer_Reg)
+      call CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, PF, tracer_Reg)
+      call CCS1_set_Open_Bdry_Vals(OBC, u, v, h, tv, G, GV, PF, tracer_Reg)
     elseif (trim(config) == "USER") then
-      call user_set_Open_Bdry_Conds(CS%OBC, tv, G, PF, CS%tracer_Reg)
+      call user_set_Open_Bdry_Conds(OBC, tv, G, PF, tracer_Reg)
     else
       call MOM_error(FATAL, "The open boundary conditions specified by "//&
               "OBC_CONFIG = "//trim(config)//" have not been fully implemented.")
-      call set_Open_Bdry_Conds(CS%OBC, tv, G, GV, PF, CS%tracer_Reg)
+      call set_Open_Bdry_Conds(OBC, tv, G, GV, PF, tracer_Reg)
     endif
   endif
 
@@ -457,7 +453,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                  "Apply a Flather open boundary condition on the southern \n"//&
                  "side of the global domain", default=.false.)
   if (apply_OBC_u_flather_east .or. apply_OBC_u_flather_west .or. apply_OBC_v_flather_north .or. apply_OBC_v_flather_south) then
-    call set_Flather_Bdry_Conds(CS%OBC, tv, h, G, PF, CS%tracer_Reg)
+    call set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   endif
 
   call callTree_leave('MOM_initialize_state()')
