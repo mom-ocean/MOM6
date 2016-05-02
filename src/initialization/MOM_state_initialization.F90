@@ -42,6 +42,9 @@ use user_initialization, only : user_set_Open_Bdry_Conds, user_initialize_sponge
 use DOME_initialization, only : DOME_initialize_thickness
 use DOME_initialization, only : DOME_set_Open_Bdry_Conds
 use DOME_initialization, only : DOME_initialize_sponges
+use ISOMIP_initialization, only : ISOMIP_initialize_thickness
+use ISOMIP_initialization, only : ISOMIP_initialize_sponges
+use ISOMIP_initialization, only : ISOMIP_initialize_temperature_salinity
 use baroclinic_zone_initialization, only : baroclinic_zone_init_temperature_salinity
 use benchmark_initialization, only : benchmark_initialize_thickness
 use benchmark_initialization, only : benchmark_init_temperature_salinity
@@ -164,6 +167,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   inputdir = slasher(inputdir)
 
   use_temperature = ASSOCIATED(tv%T)
+  useALE = associated(ALE_CSp)
   use_EOS = associated(tv%eqn_of_state)
   useALE = associated(ALE_CSp)
   if (use_EOS) eos => tv%eqn_of_state
@@ -208,6 +212,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                " \t\t between the surface and MAXIMUM_DEPTH. \n"//&
                " \t DOME - use a slope and channel configuration for the \n"//&
                " \t\t DOME sill-overflow test case. \n"//&
+               " \t ISOMIP - use a configuration for the \n"//&
+               " \t\t ISOMIP test case. \n"//&
                " \t benchmark - use the benchmark test case thicknesses. \n"//&
                " \t search - search a density profile for the interface \n"//&
                " \t\t densities. This is not yet implemented. \n"//&
@@ -225,6 +231,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
          case ("coord"); call ALE_initThicknessToCoord( ALE_CSp, G, h )
          case ("uniform"); call initialize_thickness_uniform(h, G, GV, PF)
          case ("DOME"); call DOME_initialize_thickness(h, G, GV, PF)
+         case ("ISOMIP"); call ISOMIP_initialize_thickness(h, G, GV, PF, tv)
          case ("benchmark"); call benchmark_initialize_thickness(h, G, GV, PF, &
                                  tv%eqn_of_state, tv%P_Ref)
          case ("search"); call initialize_thickness_search
@@ -257,6 +264,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                " \t benchmark - use the benchmark test case T & S. \n"//&
                " \t linear - linear in logical layer space. \n"//&
                " \t DOME2D - 2D DOME initialization. \n"//&
+               " \t ISOMIP - ISOMIP initialization. \n"//&
                " \t adjustment2d - TBD AJA. \n"//&
                " \t sloshing - TBD AJA. \n"//&
                " \t seamount - TBD AJA. \n"//&
@@ -274,6 +282,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
           case ("linear"); call initialize_temp_salt_linear(tv%T, tv%S, G, PF)
           case ("DOME2D"); call DOME2d_initialize_temperature_salinity ( tv%T, &
                                 tv%S, h, G, PF, eos)
+          case ("ISOMIP"); call ISOMIP_initialize_temperature_salinity ( tv%T, &
+                                tv%S, h, G, GV, PF, eos)
           case ("adjustment2d"); call adjustment_initialize_temperature_salinity ( tv%T, &
                                       tv%S, h, G, PF, eos)
           case ("baroclinic_zone"); call baroclinic_zone_init_temperature_salinity( tv%T, &
@@ -371,32 +381,24 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                  "A string that sets how the sponges are configured: \n"//&
                  " \t file - read sponge properties from the file \n"//&
                  " \t\t specified by (SPONGE_FILE).\n"//&
+                 " \t ISOMIP - apply ale sponge in the ISOMIP case \n"//&
                  " \t DOME - use a slope and channel configuration for the \n"//&
                  " \t\t DOME sill-overflow test case. \n"//&
                  " \t USER - call a user modified routine.", default="file")
-
-  ! if (useALE) then
-  !   select case (trim(config))
-  !     case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
-  !          "Unrecognized ALE sponge configuration "//trim(config))
-  !   end select
-
-  ! else
-
-      select case (trim(config))
-        case ("DOME"); call DOME_initialize_sponges(G, GV, tv, PF, sponge_CSp)
-        case ("DOME2D"); call DOME2d_initialize_sponges(G, GV, tv, PF, useALE, &
-                                                        sponge_CSp, ALE_sponge_CSp)
-        case ("USER"); call user_initialize_sponges(G, use_temperature, tv, &
-                                                 PF, sponge_CSp, h)
-        case ("phillips"); call Phillips_initialize_sponges(G, use_temperature, tv, &
-                                                 PF, sponge_CSp, h)
-        case ("file"); call initialize_sponges_file(G, GV, use_temperature, tv, &
-                                                 PF, sponge_CSp)
-        case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
-               "Unrecognized sponge configuration "//trim(config))
-      end select
-  ! endif
+    select case (trim(config))
+      case ("DOME"); call DOME_initialize_sponges(G, GV, tv, PF, sponge_CSp)
+      case ("DOME2D"); call DOME2d_initialize_sponges(G, GV, tv, PF, useALE, &
+                                                      sponge_CSp, ALE_sponge_CSp)
+      case ("ISOMIP"); call ISOMIP_initialize_sponges(G, GV, tv, PF, CS%ALE_sponge_CSp) 
+      case ("USER"); call user_initialize_sponges(G, use_temperature, tv, &
+                                               PF, sponge_CSp, h)
+      case ("phillips"); call Phillips_initialize_sponges(G, use_temperature, tv, &
+                                               PF, sponge_CSp, h)
+      case ("file"); call initialize_sponges_file(G, GV, use_temperature, tv, &
+                                               PF, sponge_CSp)
+      case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
+             "Unrecognized sponge configuration "//trim(config))
+    end select
   endif
 
 ! This subroutine call sets optional open boundary conditions.
