@@ -136,7 +136,6 @@ subroutine CCS1_initialize_sponges(G, GV, tv, PF, CSp)
 
 !  This call sets up the damping rates and interface heights.
 !  This sets the inverse damping timescale fields in the sponges.    !
-!  call initialize_sponge(Idamp, eta, G, PF, CSp)
   call initialize_ALE_sponge(Idamp, eta, nz, G, PF, CSp)
 
 
