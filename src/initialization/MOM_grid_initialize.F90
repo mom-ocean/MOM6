@@ -892,7 +892,7 @@ subroutine set_grid_metrics_mercator(G, param_file)
 !  calculated, as are the geographic locations of each of these 4
 !  sets of points.
   integer :: i, j, isd, ied, jsd, jed
-  integer :: X1off, Y1off
+  integer :: I_off, J_off
   type(GPS) :: GP
   character(len=128) :: warnmesg
   character(len=48)  :: mod = "MOM_grid_init set_grid_metrics_mercator"
@@ -916,18 +916,15 @@ subroutine set_grid_metrics_mercator(G, param_file)
   real :: fnRef           ! fnRef is the value of Int_dj_dy or
                           ! Int_dj_dy at a latitude or longitude that is
   real :: jRef, iRef      ! being set to be at grid index jRef or iRef.
-  real :: dx_q, x_q_west
   integer :: itt1, itt2
-  integer :: err
   logical :: debug = .FALSE., simple_area = .true.
-  real    :: temp(G%isdB:G%iedB,G%jsdB:G%jedB)
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, IsdB, IedB, JsdB, JedB
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-  X1off = G%idg_offset ; Y1off = G%jdg_offset
+  I_off = G%idg_offset ; J_off = G%jdg_offset
 
   GP%niglobal = G%Domain%niglobal
   GP%njglobal = G%Domain%njglobal
@@ -987,79 +984,75 @@ subroutine set_grid_metrics_mercator(G, param_file)
 ! on either h or q points, in a position consistent with the ratio
 ! GP%south_lat to GP%len_lat.
     jRef =  (G%jsg-1) + 0.5*FLOOR(GP%njglobal*((-1.0*GP%south_lat*2.0)/GP%len_lat)+0.5)
-    fnRef = Int_dj_dy(0.0,GP)
+    fnRef = Int_dj_dy(0.0, GP)
   else
 !  The following line sets the reference latitude GP%south_lat at j=js-1 (or -2?)
     jRef = (G%jsg-1)
-    fnRef = Int_dj_dy((GP%south_lat*PI/180.0),GP)
+    fnRef = Int_dj_dy((GP%south_lat*PI/180.0), GP)
   endif
 
-  y_q = GP%south_lat*PI/180.0
-  if ((0 >= JsdB+Y1off) .and. (0 <= JedB+Y1off)) then
-    do I=IsdB,IedB ; yq(I, -Y1off) = y_q ; enddo
-    do i=isd,ied ; yv(i, -Y1off) = y_q ; enddo
-  endif
-  ! The grid latitudes are still calculated iteratively, but find_root has been
-  ! rewritten to work reasonably efficiently with the same starting guess in
-  ! the middle of the domian for each point.
-  do j=G%jsg-G%Domain%njhalo,G%jeg+G%Domain%njhalo
-  
+  ! These calculations no longer depend on the the order in which they
+  ! are performed because they all use the same (poor) starting guess and
+  ! iterate to convergence.
+  do J=G%JsgB,G%JegB
+    jd = fnRef + (J - jRef)
+    y_q = find_root(Int_dj_dy, dy_dj, GP, jd, 0.0, -1.0*PI_2, PI_2, itt2)
+    G%gridLatB(J) = y_q*180.0/PI
+    ! if (is_root_pe()) &
+    !   write(*, '("J, y_q = ",I4,ES14.4," itts = ",I4)')  j, y_q, itt2
+  enddo
+  do j=G%jsg,G%jeg
     jd = fnRef + (j - jRef) - 0.5
-    y_h = find_root(Int_dj_dy,dy_dj,GP,jd,0.0,-1.0*PI_2,PI_2,itt1)
-
-    jd = fnRef + (j - jRef)
-    y_q = find_root(Int_dj_dy,dy_dj,GP,jd,0.0,-1.0*PI_2,PI_2,itt2)
-
-    if (j>=G%JsgB .and. j<=G%JegB) G%gridLatB(j) = y_q*180.0/PI
-    if (j>=G%jsg .and. j<=G%jeg)   G%gridLatT(j) = y_h*180.0/PI
-
-    if ((j >= jsd+Y1off) .and. (j <= jed+Y1off)) then
-      do i=isd,ied ; yh(i,j-Y1off) = y_h ; enddo
-      do I=IsdB,IedB ; yu(I,j-Y1off) = y_h ; enddo
+    y_h = find_root(Int_dj_dy, dy_dj, GP, jd, 0.0, -1.0*PI_2, PI_2, itt1)
+    G%gridLatT(j) = y_h*180.0/PI
+    ! if (is_root_pe()) &
+    !   write(*, '("j, y_h = ",I4,ES14.4," itts = ",I4)')  j, y_h, itt1
+  enddo
+  do J=JsdB+J_off,JedB+J_off
+    jd = fnRef + (J - jRef)
+    y_q = find_root(Int_dj_dy, dy_dj, GP, jd, 0.0, -1.0*PI_2, PI_2, itt2)
+    do I=IsdB,IedB ; yq(I,J-J_off) = y_q ; enddo
+    do i=isd,ied ; yv(i,J-J_off) = y_q ; enddo
+  enddo
+  do j=jsd+J_off,jed+J_off
+    jd = fnRef + (j - jRef) - 0.5
+    y_h = find_root(Int_dj_dy, dy_dj, GP, jd, 0.0, -1.0*PI_2, PI_2, itt1)
+    if ((j >= jsd+J_off) .and. (j <= jed+J_off)) then
+      do i=isd,ied ; yh(i,j-J_off) = y_h ; enddo
+      do I=IsdB,IedB ; yu(I,j-J_off) = y_h ; enddo
     endif
-    if ((J >= JsdB+Y1off) .and. (J <= JedB+Y1off)) then
-      do I=IsdB,IedB ; yq(I,J-Y1off) = y_q ; enddo
-      do i=isd,ied ; yv(i,J-Y1off) = y_q ; enddo
-    endif
-    ! if (is_root_pe()) then
-    !   write(*, '("j, y_hq = ",I4,2(ES14.4)," itts = ",2(I4))') &
-    !        j, y_h, y_q, itt1, itt2
-    ! endif
   enddo
 
 ! Determine the longitudes of the various points.
 
 ! These two lines place the western edge of the domain at GP%west_lon.
   iRef = (G%isg-1) + GP%niglobal
-  fnRef = Int_di_dx(((GP%west_lon+GP%len_lon)*PI/180.0),GP)
+  fnRef = Int_di_dx(((GP%west_lon+GP%len_lon)*PI/180.0), GP)
 
-  x_q = GP%west_lon*PI/180.0
-  x_q_west = x_q
-! If the model is in parallel in the X-direction, do the same set of
-! calculations which would occur on a single processor.
-  if ((0 >= IsdB+X1off) .and. (0 <= IedB+X1off)) then
-    do J=JsdB,JedB ; xq(-X1off,j) = x_q ; enddo
-    do j=jsd,jed ; xu(-X1off,j) = x_q ; enddo
-  endif
-  do i=G%isg-G%Domain%nihalo,G%ieg+G%Domain%nihalo
+  ! These calculations no longer depend on the the order in which they
+  ! are performed because they all use the same (poor) starting guess and
+  ! iterate to convergence.
+  do I=G%IsgB,G%IegB
+    id = fnRef + (I - iRef)
+    x_q = find_root(Int_di_dx, dx_di, GP, id, 0.0, -4.0*PI, 4.0*PI, itt2)
+    G%gridLonB(I) = x_q*180.0/PI
+  enddo
+  do i=G%isg,G%ieg
     id = fnRef + (i - iRef) - 0.5
-    x_h = find_root(Int_di_dx,dx_di,GP,id,0.0,-4.0*PI,4.0*PI,itt1)
-
-    id = fnRef + (i - iRef)
-    x_q = find_root(Int_di_dx,dx_di,GP,id,0.0,-4.0*PI,4.0*PI,itt2)
-    if(i == G%isc) dx_q = x_q - x_q_west
-
-    if (i>=G%IsgB .and. i<=G%IegB) G%gridLonB(i) = x_q*180.0/PI
-    if (i>=G%isg .and. i<=G%ieg)   G%gridLonT(i) = x_h*180.0/PI
-
-    if ((i >= isd+X1off) .and. (i <= ied+X1off)) then
-      do j=jsd,jed ; xh(i-X1off,j) = x_h ; enddo
-      do J=JsdB,JedB ; xv(i-X1off,J) = x_h ; enddo
-    endif
-    if ((I >= IsdB+X1off) .and. (I <= IedB+X1off)) then
-      do J=JsdB,JedB ; xq(I-X1off,J) = x_q ; enddo
-      do j=jsd,jed ; xu(I-X1off,j) = x_q ; enddo
-    endif
+    x_h = find_root(Int_di_dx, dx_di, GP, id, 0.0, -4.0*PI, 4.0*PI, itt1)
+    G%gridLonT(i) = x_h*180.0/PI
+  enddo
+  do I=IsdB+I_off,IedB+I_off
+    id = fnRef + (I - iRef)
+    x_q = find_root(Int_di_dx, dx_di, GP, id, 0.0, -4.0*PI, 4.0*PI, itt2)
+    do J=JsdB,JedB ; xq(I-I_off,J) = x_q ; enddo
+    do j=jsd,jed ; xu(I-I_off,j) = x_q ; enddo
+  enddo
+  do i=isd+I_off,ied+I_off
+    id = fnRef + (i - iRef) - 0.5
+    x_h = find_root(Int_di_dx, dx_di, GP, id, 0.0, -4.0*PI, 4.0*PI, itt1)
+    do j=jsd,jed ; xh(i-I_off,j) = x_h ; enddo
+    do J=JsdB,JedB ; xv(i-I_off,J) = x_h ; enddo
   enddo
 
   do J=JsdB,JedB ; do I=IsdB,IedB
@@ -1098,29 +1091,23 @@ subroutine set_grid_metrics_mercator(G, param_file)
 
   if (.not.simple_area) then
     do j=JsdB+1,jed ; do i=IsdB+1,ied
-  !         The following test is to ensure parallel reproducibility.
-      if (size(G%areaT(:,:),1) == 1) then !{
-        temp(i,j) = GP%Rad_Earth**2 * &
-            (dL(0.0,0.0,yq(I-1,J-1),yq(I-1,J)) + &
-            (dL(0.0,dx_q,yq(I-1,J),yq(I,J)) +   &
-            (dL(0.0,0.0,yq(I,J),yq(I,J-1)) +      &
-             dL(dx_q,0.0,yq(I,J-1),yq(I-1,J-1)))))
-      else
-        temp(I,J) = GP%Rad_Earth**2 * &
-            (dL(xq(I-1,J-1),xq(I-1,J),yq(I-1,J-1),yq(I-1,J)) + &
-            (dL(xq(I-1,J),xq(I,J),yq(I-1,J),yq(I,J)) +          &
-            (dL(xq(I,J),xq(I,J-1),yq(I,J),yq(I,J-1)) +          &
-             dL(xq(I,J-1),xq(I-1,J-1),yq(I,J-1),yq(I-1,J-1)))))
-      endif
+      G%areaT(I,J) = GP%Rad_Earth**2 * &
+          (dL(xq(I-1,J-1),xq(I-1,J),yq(I-1,J-1),yq(I-1,J)) + &
+          (dL(xq(I-1,J),xq(I,J),yq(I-1,J),yq(I,J)) +          &
+          (dL(xq(I,J),xq(I,J-1),yq(I,J),yq(I,J-1)) +          &
+           dL(xq(I,J-1),xq(I-1,J-1),yq(I,J-1),yq(I-1,J-1)))))
     enddo ;enddo
-  ! Fill in row and column one.
     if ((IsdB == isd) .or. (JsdB == jsq)) then
-      temp(isd,:) = temp(isd+1,jsd+1) ; temp(:,jsd) = temp(isd+1,jsd+1)
-      temp(isd,:) = temp(isd+1,:)     ; temp(:,jsd) = temp(:,jsd+1)
-      call pass_var(temp,G%Domain)
+      ! Fill in row and column 1 to calculate the area in the southernmost
+      ! and westernmost land cells when we are not using symmetric memory.
+      ! The pass_var call updates these values if they are not land cells.
+      G%areaT(isd+1,jsd) = G%areaT(isd+1,jsd+1)
+      do j=jsd,jed ; G%areaT(isd,j) = G%areaT(isd+1,j) ; enddo
+      do i=isd,ied ; G%areaT(i,jsd) = G%areaT(i,jsd+1) ; enddo
+      ! Now replace the data in the halos, if value values exist.
+      call pass_var(G%areaT,G%Domain)
     endif
     do j=jsd,jed ; do i=isd,ied
-      G%areaT(i,j) = temp(i,j)
       G%IareaT(i,j) = 1.0 / G%areaT(i,j)
     enddo ; enddo
   endif
