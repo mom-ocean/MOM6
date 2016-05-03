@@ -319,8 +319,16 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
     call vchksum(Kh_v(:,:,:),"Kh_v",G,haloshift=0)
     call uchksum(int_slope_u(:,:,:),"int_slope_u",G,haloshift=0)
     call vchksum(int_slope_v(:,:,:),"int_slope_v",G,haloshift=0)
-    call hchksum(h(:,:,:)*H_to_m,"thickness_diffuse_1 h",G,haloshift=0)
-    call hchksum(e(:,:,:),"thickness_diffuse_1 e",G,haloshift=0)
+    call hchksum(h(:,:,:)*H_to_m,"thickness_diffuse_1 h",G,haloshift=1)
+    call hchksum(e(:,:,:),"thickness_diffuse_1 e",G,haloshift=1)
+    if (use_stored_slopes) then
+      call uchksum(VarMix%slope_x(:,:,:),"VarMix%slope_x",G,haloshift=0)
+      call vchksum(VarMix%slope_y(:,:,:),"VarMix%slope_y",G,haloshift=0)
+    endif
+    if (associated(tv%eqn_of_state)) then
+      call hchksum(tv%T(:,:,:),"thickness_diffuse T",G,haloshift=1)
+      call hchksum(tv%S(:,:,:),"thickness_diffuse S",G,haloshift=1)
+    endif
   endif
 
   ! Calculate uhD, vhD from h, e, KH_u, KH_v, tv%T/S
