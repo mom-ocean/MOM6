@@ -283,7 +283,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   logical :: showCallTree
 
   ! for diagnostics
-  real, dimension(SZI_(G),SZJ_(G)) :: work2d
+  real, dimension(SZIB_(G),SZJ_(G)) :: uwork2d
+  real, dimension(SZI_(G),SZJB_(G)) :: vwork2d
 
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
@@ -895,23 +896,23 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   ! depth summed zonal mass transport
   if (CS%id_umo_2d > 0) then
-    do j=js,je ; do i=is,ie
-      work2d(i,j) = 0.0
+    do j=js,je ; do I=Isq,Ieq
+      uwork2d(i,j) = 0.0
       do k=1,nz
-        work2d(i,j) = work2d(i,j) + uh(i,j,k)*GV%H_to_kg_m2
+        uwork2d(i,j) = uwork2d(i,j) + uh(i,j,k)*GV%H_to_kg_m2
       enddo
     enddo ; enddo
-    call post_data(CS%id_umo_2d, work2d, CS%diag)
+    call post_data(CS%id_umo_2d, uwork2d, CS%diag)
   endif
   ! depth summed merid mass transport
   if (CS%id_vmo_2d > 0) then
-    do j=js,je ; do i=is,ie
-      work2d(i,j) = 0.0
+    do J=Jsq,Jeq ; do i=is,ie
+      vwork2d(i,j) = 0.0
       do k=1,nz
-        work2d(i,j) = work2d(i,j) + vh(i,j,k)*GV%H_to_kg_m2
+        vwork2d(i,j) = vwork2d(i,j) + vh(i,j,k)*GV%H_to_kg_m2
       enddo
     enddo ; enddo
-    call post_data(CS%id_vmo_2d, work2d, CS%diag)
+    call post_data(CS%id_vmo_2d, vwork2d, CS%diag)
   endif
 
   if (CS%debug) then
