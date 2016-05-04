@@ -246,24 +246,24 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   real, dimension(SZI_(G),SZJB_(G)) :: v0 ! Laplacian of v (m-1 s-1)
 
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    sh_xx, & ! horizontal tension (du/dx - dv/dy) (1/sec) including metric terms
-    str_xx,& ! str_xx is the diagonal term in the stress tensor (H m2 s-2)
-    bhstr_xx ! A copy of str_xx that only contains the biharmonic contribution (H m2 s-2)
+    sh_xx, &      ! horizontal tension (du/dx - dv/dy) (1/sec) including metric terms
+    str_xx,&      ! str_xx is the diagonal term in the stress tensor (H m2 s-2)
+    bhstr_xx,&    ! A copy of str_xx that only contains the biharmonic contribution (H m2 s-2)
+    FrictWorkIntz ! depth integrated energy dissipated by lateral friction (W/m2)
 
   real, dimension(SZIB_(G),SZJB_(G)) :: &
     sh_xy,  &     ! horizontal shearing strain (du/dy + dv/dx) (1/sec) including metric terms
     str_xy, &     ! str_xy is the cross term in the stress tensor (H m2 s-2)
-    bhstr_xy,&    ! A copy of str_xy that only contains the biharmonic contribution (H m2 s-2)
-    FrictWorkIntz ! depth integrated energy dissipated by lateral friction (W/m2)
+    bhstr_xy      ! A copy of str_xy that only contains the biharmonic contribution (H m2 s-2)
 
   real, dimension(SZIB_(G),SZJB_(G),SZK_(G)) :: &
     Ah_q, &   ! biharmonic viscosity at corner points (m4/s)
-    Kh_q, &   ! Laplacian viscosity at corner points (m2/s)
-    FrictWork ! energy dissipated by lateral friction (W/m2)
+    Kh_q      ! Laplacian viscosity at corner points (m2/s)
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     Ah_h, &          ! biharmonic viscosity at thickness points (m4/s)
-    Kh_h             ! Laplacian viscosity at thickness points (m2/s)
+    Kh_h, &          ! Laplacian viscosity at thickness points (m2/s)
+    FrictWork        ! energy dissipated by lateral friction (W/m2)
 
   real :: Ah         ! biharmonic viscosity (m4/s)
   real :: Kh         ! Laplacian  viscosity (m2/s)
