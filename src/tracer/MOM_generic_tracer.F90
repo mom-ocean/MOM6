@@ -53,7 +53,6 @@ module MOM_generic_tracer
 
   use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
   use MOM_diag_mediator, only : diag_ctrl, get_diag_time_end
-  use MOM_diag_mediator, only : enable_averaging, disable_averaging
   use MOM_diag_to_Z, only : register_Z_tracer, diag_to_Z_CS
   use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, is_root_pe
   use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
@@ -543,7 +542,6 @@ contains
     if(.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL,&
          trim(sub_name)//": No tracer in the list.")
 
-    call enable_averaging(dt, get_diag_time_end(CS%diag), CS%diag) !Niki: This call is not needed since avaraging is already enabled. This is jjust to ensure it. 
 #ifdef _USE_MOM6_DIAG
     call g_tracer_set_csdiag(CS%diag)
 #endif
@@ -630,7 +628,6 @@ contains
     call g_tracer_set_csdiag(CS%diag)
 #endif
 
-!!!    call disable_averaging(CS%diag) !Niki: This interrupts and STOPS the diagnostics output for all modules!!!
 
   end subroutine MOM_generic_tracer_column_physics
 
