@@ -375,13 +375,17 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
     if (associated(tv%eqn_of_state)) then
       pressure_1d(:) = tv%P_Ref
 !$OMP parallel do default(none) shared(tv,Rcv,is,ie,js,je,nz,pressure_1d)
-      do k=1,nz ; do j=js,je+1
-        call calculate_density(tv%T(:,j,k),tv%S(:,j,k),pressure_1d, &
-                               Rcv(:,j,k),is,ie-is+2, tv%eqn_of_state)
+      do k=1,nz ; do j=js-1,je+1
+        call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pressure_1d, &
+                               Rcv(:,j,k), is-1, ie-is+3, tv%eqn_of_state)
       enddo ; enddo
-      if (CS%id_Rml > 0) call post_data(CS%id_Rml, Rcv, CS%diag)
-      if (CS%id_Rcv > 0) call post_data(CS%id_Rcv, Rcv, CS%diag)
+    else ! Rcv should not be used much in this case, so fill in sensible values.
+      do k=1,nz ; do j=js-1,je+1 ; do i=is-1,ie+1
+        Rcv(i,j,k) = GV%Rlay(k)
+      enddo ; enddo ; enddo
     endif
+    if (CS%id_Rml > 0) call post_data(CS%id_Rml, Rcv, CS%diag)
+    if (CS%id_Rcv > 0) call post_data(CS%id_Rcv, Rcv, CS%diag)
 
     if (ASSOCIATED(CS%h_Rlay)) then
       k_list = nz/2
