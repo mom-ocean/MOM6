@@ -1127,7 +1127,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
   ! Remap to z vertical coordinate, note that only diagnostics on layers
   ! (not interfaces) are supported, also B axes are not supported yet
   if (is_layer_axes(axes, diag_cs) .and. (.not. is_B_axes(axes, diag_cs)) .and. axes%rank == 3) then
-    if (get_diag_field_id_fms(module_name//'_z_new', field_name) /= DIAG_FIELD_NOT_FOUND) then
+    if (get_diag_field_id_fms(trim(module_name)//'_z_new', field_name) /= DIAG_FIELD_NOT_FOUND) then
       if (.not. allocated(diag_cs%zi_remap)) then
         call MOM_error(FATAL, 'register_diag_field: Request to regrid but no '// &
                        'destination grid spec provided, see param DIAG_REMAP_Z_GRID_DEF')

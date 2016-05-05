@@ -796,7 +796,7 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, haloshift)
   if (associated(fluxes%tauy)) &
     call vchksum(fluxes%tauy, mesg//" fluxes%tauy",G,haloshift=1)
   if (associated(fluxes%ustar)) &
-    call hchksum(fluxes%ustar, mesg//" fluxes%ustar",G,haloshift=1)
+    call hchksum(fluxes%ustar, mesg//" fluxes%ustar",G,haloshift=hshift)
   if (associated(fluxes%buoy)) &
     call hchksum(fluxes%buoy, mesg//" fluxes%buoy ",G,haloshift=hshift)
   if (associated(fluxes%sw)) &
