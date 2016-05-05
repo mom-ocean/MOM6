@@ -492,11 +492,11 @@ contains
   ! </SUBROUTINE>
 
   subroutine MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS, tv, optics)
+    type(ocean_grid_type),                 intent(in) :: G
+    type(verticalGrid_type),               intent(in) :: GV
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
     type(forcing),                         intent(in) :: fluxes
     real,                                  intent(in) :: dt
-    type(ocean_grid_type),                 intent(in) :: G
-    type(verticalGrid_type),               intent(in) :: GV
     type(MOM_generic_tracer_CS),           pointer    :: CS
     type(thermo_var_ptrs),                 intent(in) :: tv
     type(optics_type),                     intent(in) :: optics
@@ -636,10 +636,10 @@ contains
   ! </SUBROUTINE>
 
   function MOM_generic_tracer_stock(h, stocks, G, GV, CS, names, units, stock_index)
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
-    real, dimension(:),                 intent(out)   :: stocks
     type(ocean_grid_type),              intent(in)    :: G
     type(verticalGrid_type),            intent(in)    :: GV
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
+    real, dimension(:),                 intent(out)   :: stocks
     type(MOM_generic_tracer_CS),        pointer       :: CS
     character(len=*), dimension(:),     intent(out)   :: names
     character(len=*), dimension(:),     intent(out)   :: units
