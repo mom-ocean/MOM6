@@ -21,8 +21,8 @@ module ocean_model_mod
 
 !-----------------------------------------------------------------------
 !
-! This is the top level module for the ocean model.  It contains routines for
-! initialization, termination and update of ocean model state.  This
+! This is the top level module for the MOM6 ocean model.  It contains routines
+! for initialization, termination and update of ocean model state.  This
 ! particular version wraps all of the calls for MOM6 in the calls that had
 ! been used for MOM4.
 !
@@ -35,7 +35,7 @@ module ocean_model_mod
 !</OVERVIEW>
 
 use MOM, only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
-use MOM, only : calculate_surface_state
+use MOM, only : calculate_surface_state, finish_MOM_initialization
 use MOM_constants, only : CELSIUS_KELVIN_OFFSET
 use MOM_diag_mediator, only : diag_ctrl, enable_averaging, disable_averaging
 use MOM_diag_mediator, only : diag_mediator_close_registration, diag_mediator_end
@@ -60,6 +60,7 @@ use MOM_time_manager, only : operator(+), operator(-), operator(*), operator(/)
 use MOM_time_manager, only : operator(/=)
 use MOM_tracer_flow_control, only : call_tracer_register, tracer_flow_control_init
 use MOM_variables, only : surface
+use MOM_verticalGrid, only : verticalGrid_type
 use MOM_ice_shelf, only : initialize_ice_shelf, shelf_calc_flux, ice_shelf_CS
 use MOM_ice_shelf, only : ice_shelf_end, ice_shelf_save_restart
 use coupler_types_mod, only : coupler_2d_bc_type
@@ -131,7 +132,6 @@ type, public ::  ocean_public_type
   integer                  :: avg_kount ! Used for accumulating averages of this type.
   integer, dimension(3)    :: axes = 0  ! Axis numbers that are available
                                         ! for I/O using this surface data.
-
 end type ocean_public_type
 
 
@@ -170,6 +170,8 @@ type, public :: ocean_state_type ; private
                               ! the ocean surface state fields.
   type(ocean_grid_type), pointer :: grid => NULL() ! A pointer to a grid structure
                               ! containing metrics and related information.
+  type(verticalGrid_type), pointer :: GV => NULL() ! A pointer to a vertical grid
+                              ! structure containing metrics and related information.
   type(MOM_control_struct), pointer :: MOM_CSp => NULL()
   type(surface_forcing_CS), pointer :: forcing_CSp => NULL()
   type(sum_output_CS),      pointer :: sum_output_CSp => NULL()
@@ -224,7 +226,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   OS%state%tr_fields => Ocean_sfc%fields
   OS%Time = Time_in
   call initialize_MOM(OS%Time, param_file, OS%dirs, OS%MOM_CSp, Time_in)
-  OS%grid => OS%MOM_CSp%G
+  OS%grid => OS%MOM_CSp%G ; OS%GV => OS%MOM_CSp%GV
   OS%C_p = OS%MOM_CSp%tv%C_p
   OS%fluxes%C_p = OS%MOM_CSp%tv%C_p
 
@@ -284,8 +286,9 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   call MOM_sum_output_init(OS%grid, param_file, OS%dirs%output_directory, &
                             OS%MOM_CSp%ntrunc, Time_init, OS%sum_output_CSp)
 
-  call write_energy(OS%MOM_CSp%u, OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%tv, &
-             OS%Time, 0, OS%grid, OS%sum_output_CSp, OS%MOM_CSp%tracer_flow_CSp)
+  ! This call has been moved into the first call to update_ocean_model.
+!  call write_energy(OS%MOM_CSp%u, OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%tv, &
+!             OS%Time, 0, OS%grid, OS%GV, OS%sum_output_CSp, OS%MOM_CSp%tracer_flow_CSp)
 
   ! write_energy_time is the next integral multiple of energysavedays.
   OS%write_energy_time = Time_init + OS%energysavedays * &
@@ -408,6 +411,14 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 #endif
   endif
 
+  if (OS%nstep==0) then
+    call finish_MOM_initialization(OS%Time, OS%dirs, OS%MOM_CSp, OS%fluxes)
+      
+    call write_energy(OS%MOM_CSp%u, OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%tv, &
+                      OS%Time, 0, OS%grid, OS%GV, OS%sum_output_CSp, &
+                      OS%MOM_CSp%tracer_flow_CSp)
+  endif
+
   call disable_averaging(OS%MOM_CSp%diag)
   Master_time = OS%Time ; Time1 = OS%Time
 
@@ -434,7 +445,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   if ((OS%Time + ((Ocean_coupling_time_step)/2) > OS%write_energy_time) .and. &
       (OS%MOM_CSp%dt_trans==0.0)) then
     call write_energy(OS%MOM_CSp%u, OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%tv, &
-                      OS%Time, OS%nstep, OS%grid, OS%sum_output_CSp, &
+                      OS%Time, OS%nstep, OS%grid, OS%GV, OS%sum_output_CSp, &
                       OS%MOM_CSp%tracer_flow_CSp)
     OS%write_energy_time = OS%write_energy_time + OS%energysavedays
   endif
@@ -471,7 +482,7 @@ subroutine ocean_model_restart(OS, timestamp)
 
    if (BTEST(OS%Restart_control,1)) then
      call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
-                       OS%MOM_CSp%restart_CSp, .true.)
+                       OS%MOM_CSp%restart_CSp, .true., GV=OS%GV)
      call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
                                OS%dirs%restart_output_dir, .true.)
      if (OS%use_ice_shelf) then
@@ -480,7 +491,7 @@ subroutine ocean_model_restart(OS, timestamp)
    endif
    if (BTEST(OS%Restart_control,0)) then
      call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
-                       OS%MOM_CSp%restart_CSp)
+                       OS%MOM_CSp%restart_CSp, GV=OS%GV)
      call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
                                OS%dirs%restart_output_dir)
      if (OS%use_ice_shelf) then
@@ -545,7 +556,7 @@ subroutine ocean_model_save_restart(OS, Time, directory, filename_suffix)
   if (present(directory)) then ; restart_dir = directory
   else ; restart_dir = OS%dirs%restart_output_dir ; endif
 
-  call save_restart(restart_dir, Time, OS%grid, OS%MOM_CSp%restart_CSp)
+  call save_restart(restart_dir, Time, OS%grid, OS%MOM_CSp%restart_CSp, GV=OS%GV)
 
   call forcing_save_restart(OS%forcing_CSp, OS%grid, Time, restart_dir)
 
@@ -628,7 +639,8 @@ subroutine convert_state_to_ocean_type(state, Ocean_sfc, G, patm, press_to_z)
     Ocean_sfc%sea_lev(i,j) = state%sea_lev(i+i0,j+j0)
     if (present(patm)) &
       Ocean_sfc%sea_lev(i,j) = Ocean_sfc%sea_lev(i,j) + patm(i,j) * press_to_z
-    Ocean_sfc%frazil(i,j) = state%frazil(i+i0,j+j0)
+      if (associated(state%frazil)) &
+      Ocean_sfc%frazil(i,j) = state%frazil(i+i0,j+j0)
     Ocean_sfc%area(i,j)   =  G%areaT(i+i0,j+j0)  
   enddo ; enddo
   
@@ -675,7 +687,7 @@ subroutine ocean_model_init_sfc(OS, Ocean_sfc)
 
   call calculate_surface_state(OS%state, OS%MOM_CSp%u, &
            OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%ave_ssh,&
-           OS%grid, OS%MOM_CSp)
+           OS%grid, OS%GV, OS%MOM_CSp)
 
   call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid)
 
@@ -777,8 +789,8 @@ subroutine Ocean_stock_pe(OS, index, value, time_index)
   select case (index)
     case (ISTOCK_WATER)
       ! Return the mass of fresh water in the ocean on this PE in kg.
-      to_mass = OS%grid%GV%H_to_kg_m2
-      if (OS%grid%GV%Boussinesq) then
+      to_mass = OS%GV%H_to_kg_m2
+      if (OS%GV%Boussinesq) then
         do k=1,nz ; do j=js,je ; do i=is,ie ; if (OS%grid%mask2dT(i,j) > 0.5) then
           value = value + to_mass*(OS%MOM_CSp%h(i,j,k) * OS%grid%areaT(i,j))
         endif ; enddo ; enddo ; enddo
@@ -792,7 +804,7 @@ subroutine Ocean_stock_pe(OS, index, value, time_index)
       endif
     case (ISTOCK_HEAT)
       ! Return the heat content of the ocean on this PE in J.
-      to_heat = OS%grid%GV%H_to_kg_m2 * OS%C_p
+      to_heat = OS%GV%H_to_kg_m2 * OS%C_p
       do k=1,nz ; do j=js,je ; do i=is,ie ; if (OS%grid%mask2dT(i,j) > 0.5) then
         value = value + (to_heat * OS%MOM_CSp%tv%T(i,j,k)) * &
                         (OS%MOM_CSp%h(i,j,k)*OS%grid%areaT(i,j))
@@ -800,7 +812,7 @@ subroutine Ocean_stock_pe(OS, index, value, time_index)
     case (ISTOCK_SALT)
       ! Return the mass of the salt in the ocean on this PE in kg.
       ! The 1000 converts salinity in PSU to salt in kg kg-1.
-      to_salt = OS%grid%GV%H_to_kg_m2 / 1000.0
+      to_salt = OS%GV%H_to_kg_m2 / 1000.0
       do k=1,nz ; do j=js,je ; do i=is,ie ; if (OS%grid%mask2dT(i,j) > 0.5) then
         value = value + (to_salt * OS%MOM_CSp%tv%S(i,j,k)) * &
                         (OS%MOM_CSp%h(i,j,k)*OS%grid%areaT(i,j))

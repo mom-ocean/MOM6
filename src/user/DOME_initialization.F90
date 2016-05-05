@@ -33,7 +33,9 @@ use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_tracer_registry, only : tracer_registry_type, add_tracer_OBC_values
 use MOM_variables, only : thermo_var_ptrs, ocean_OBC_type, OBC_NONE, OBC_SIMPLE
+use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
+
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -47,8 +49,8 @@ contains
 
 ! -----------------------------------------------------------------------------
 subroutine DOME_initialize_topography(D, G, param_file, max_depth)
-  real, intent(out), dimension(NIMEM_,NJMEM_) :: D
   type(ocean_grid_type), intent(in)           :: G
+  real, intent(out), dimension(SZI_(G),SZJ_(G)) :: D
   type(param_file_type), intent(in)           :: param_file
   real,                  intent(in)           :: max_depth
 ! Arguments: D          - the bottom depth in m. Intent out.
@@ -94,12 +96,14 @@ end subroutine DOME_initialize_topography
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine DOME_initialize_thickness(h, G, param_file)
-  real, intent(out), dimension(NIMEM_,NJMEM_, NKMEM_) :: h
-  type(ocean_grid_type), intent(in) :: G
-  type(param_file_type), intent(in) :: param_file
+subroutine DOME_initialize_thickness(h, G, GV, param_file)
+  type(ocean_grid_type),   intent(in) :: G
+  type(verticalGrid_type), intent(in) :: GV
+  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h
+  type(param_file_type),   intent(in) :: param_file
 ! Arguments: h - The thickness that is being initialized.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 
@@ -129,9 +133,9 @@ subroutine DOME_initialize_thickness(h, G, param_file)
     eta1D(nz+1) = -1.0*G%bathyT(i,j)
     do k=nz,1,-1
       eta1D(K) = e0(K)
-      if (eta1D(K) < (eta1D(K+1) + G%GV%Angstrom_z)) then
-        eta1D(K) = eta1D(K+1) + G%GV%Angstrom_z
-        h(i,j,k) = G%GV%Angstrom_z
+      if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_z)) then
+        eta1D(K) = eta1D(K+1) + GV%Angstrom_z
+        h(i,j,k) = GV%Angstrom_z
       else
         h(i,j,k) = eta1D(K) - eta1D(K+1)
       endif
@@ -142,8 +146,9 @@ end subroutine DOME_initialize_thickness
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine DOME_initialize_sponges(G, tv, PF, CSp)
+subroutine DOME_initialize_sponges(G, GV, tv, PF, CSp)
   type(ocean_grid_type), intent(in) :: G
+  type(verticalGrid_type), intent(in) :: GV
   type(thermo_var_ptrs), intent(in) :: tv
   type(param_file_type), intent(in) :: PF
   type(sponge_CS),       pointer    :: CSp
@@ -154,6 +159,7 @@ subroutine DOME_initialize_sponges(G, tv, PF, CSp)
 ! the first registered field.                                        !
 
 ! Arguments: G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      tv - A structure containing pointers to any available
 !                 thermodynamic fields, including potential temperature and
 !                 salinity or mixed layer density. Absent fields have NULL ptrs.
@@ -207,12 +213,12 @@ subroutine DOME_initialize_sponges(G, tv, PF, CSp)
     ! depth space for Boussinesq or non-Boussinesq models.
     eta(i,j,1) = 0.0
     do k=2,nz
-!     eta(i,j,K)=max(H0(k), -G%bathyT(i,j), G%GV%Angstrom_z*(nz-k+1)-G%bathyT(i,j))
+!     eta(i,j,K)=max(H0(k), -G%bathyT(i,j), GV%Angstrom_z*(nz-k+1)-G%bathyT(i,j))
       e_dense = -G%bathyT(i,j)
       if (e_dense >= H0(k)) then ; eta(i,j,K) = e_dense
       else ; eta(i,j,K) = H0(k) ; endif
-      if (eta(i,j,K) < G%GV%Angstrom_z*(nz-k+1)-G%bathyT(i,j)) &
-          eta(i,j,K) = G%GV%Angstrom_z*(nz-k+1)-G%bathyT(i,j)
+      if (eta(i,j,K) < GV%Angstrom_z*(nz-k+1)-G%bathyT(i,j)) &
+          eta(i,j,K) = GV%Angstrom_z*(nz-k+1)-G%bathyT(i,j)
     enddo
     eta(i,j,nz+1) = -G%bathyT(i,j)
 
@@ -237,19 +243,20 @@ subroutine DOME_initialize_sponges(G, tv, PF, CSp)
     call MOM_error(FATAL,"DOME_initialize_sponges is not set up for use with"//&
                          " a temperatures defined.")
     ! This should use the target values of T in temp.
-    call set_up_sponge_field(temp,tv%T,nz,CSp)
+    call set_up_sponge_field(temp, tv%T, G, nz, CSp)
     ! This should use the target values of S in temp.
-    call set_up_sponge_field(temp,tv%S,nz,CSp)
+    call set_up_sponge_field(temp, tv%S, G, nz, CSp)
   endif
 
 end subroutine DOME_initialize_sponges
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, param_file, tr_Reg)
+subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
   type(ocean_OBC_type),       pointer    :: OBC
   type(thermo_var_ptrs),      intent(in) :: tv
   type(ocean_grid_type),      intent(in) :: G
+  type(verticalGrid_type),    intent(in) :: GV
   type(param_file_type),      intent(in) :: param_file
   type(tracer_registry_type), pointer    :: tr_Reg
 !   This subroutine sets the properties of flow at open boundary conditions.
@@ -261,6 +268,7 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, param_file, tr_Reg)
 !                 thermodynamic fields, including potential temperature and
 !                 salinity or mixed layer density. Absent fields have NULL ptrs.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 
@@ -373,9 +381,9 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, param_file, tr_Reg)
   endif
 
   if (apply_OBC_v) then
-    g_prime_tot = (G%g_Earth/G%GV%Rho0)*2.0
+    g_prime_tot = (G%g_Earth/GV%Rho0)*2.0
     Def_Rad = sqrt(D_edge*g_prime_tot) / (1.0e-4*1000.0)
-    tr_0 = (-D_edge*sqrt(D_edge*g_prime_tot)*0.5e3*Def_Rad) * G%GV%m_to_H
+    tr_0 = (-D_edge*sqrt(D_edge*g_prime_tot)*0.5e3*Def_Rad) * GV%m_to_H
 
     do k=1,nz
       rst = -1.0
@@ -414,7 +422,7 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, param_file, tr_Reg)
       if (OBC_mask_u(I,j)) then
         ! An appropriate expression for the zonal inflow velocities and
         ! transports should go here.
-        OBC%uh(I,j,k) = 0.0 * G%GV%m_to_H ; OBC%u(I,j,k) = 0.0
+        OBC%uh(I,j,k) = 0.0 * GV%m_to_H ; OBC%u(I,j,k) = 0.0
       else
         OBC%uh(I,j,k) = 0.0 ; OBC%u(I,j,k) = 0.0
       endif
@@ -436,11 +444,11 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, param_file, tr_Reg)
       call calculate_density(T0(1),S0(1),pres(1),rho_guess(1),tv%eqn_of_state)
       call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,1,tv%eqn_of_state)
 
-      do k=1,nz ; T0(k) = T0(1) + (G%GV%Rlay(k)-rho_guess(1)) / drho_dT(1) ; enddo
+      do k=1,nz ; T0(k) = T0(1) + (GV%Rlay(k)-rho_guess(1)) / drho_dT(1) ; enddo
       do itt=1,6
         call calculate_density(T0,S0,pres,rho_guess,1,nz,tv%eqn_of_state)
         call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,tv%eqn_of_state)
-        do k=1,nz ; T0(k) = T0(k) + (G%GV%Rlay(k)-rho_guess(k)) / drho_dT(k) ; enddo
+        do k=1,nz ; T0(k) = T0(k) + (GV%Rlay(k)-rho_guess(k)) / drho_dT(k) ; enddo
       enddo
 
       if (apply_OBC_u) then
@@ -456,7 +464,7 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, param_file, tr_Reg)
         enddo ; enddo ; enddo
       endif
       call add_tracer_OBC_values("T", tr_Reg, OBC_in_u=OBC_T_u, &
-                                                         OBC_in_v=OBC_T_v)
+                                              OBC_in_v=OBC_T_v)
     endif
   endif
 

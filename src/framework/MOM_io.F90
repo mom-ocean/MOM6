@@ -9,6 +9,7 @@ use MOM_domains,          only : MOM_domain_type
 use MOM_file_parser,      only : log_version, param_file_type
 use MOM_string_functions, only : lowercase
 use MOM_grid,             only : ocean_grid_type
+use MOM_verticalGrid,     only : verticalGrid_type
 
 use ensemble_manager_mod, only : get_ensemble_id
 use fms_mod,              only : write_version_number, open_namelist_file, check_nml_error
@@ -75,7 +76,7 @@ contains
 !> Routine creates a new NetCDF file.  It also sets up
 !! structures that describe this file and variables that will
 !! later be written to this file. Type for describing a variable, typically a tracer
-subroutine create_file(unit, filename, vars, novars, G, fields, threading, timeunit)
+subroutine create_file(unit, filename, vars, novars, G, fields, threading, timeunit, GV)
   integer,               intent(out)   :: unit       !< unit id of an open file or -1 on a
                                                      !! nonwriting PE with single file output
   character(len=*),      intent(in)    :: filename   !< full path to the file to create
@@ -86,6 +87,9 @@ subroutine create_file(unit, filename, vars, novars, G, fields, threading, timeu
   integer, optional,     intent(in)    :: threading  !< SINGLE_FILE or MULTIPLE
   real, optional,        intent(in)    :: timeunit   !< length, in seconds, of the units for time. The
                                                      !! default value is 86400.0, for 1 day.
+  type(verticalGrid_type), optional, intent(in) :: GV !< ocean vertical grid structure, which is
+                                                     !! required if the new file uses any
+                                                     !! vertical grid axes.
 
   logical        :: use_lath, use_lonh, use_latq, use_lonq, use_time
   logical        :: use_layer, use_int, use_periodic
@@ -95,7 +99,7 @@ subroutine create_file(unit, filename, vars, novars, G, fields, threading, timeu
   type(domain1d) :: x_domain, y_domain
   integer        :: numaxes, pack, thread, k, nz
   integer        :: var_periods, num_periods=0
-  real           :: layer_val(G%ks:G%ke), interface_val(G%ks:G%ke+1)
+  real           :: layer_val(G%ke), interface_val(G%ke+1)
   real, dimension(:), allocatable :: period_val
   character(len=40) :: time_units
   character(len=8)  :: t_grid, t_grid_read
@@ -116,8 +120,10 @@ subroutine create_file(unit, filename, vars, novars, G, fields, threading, timeu
     call open_file(unit, filename, MPP_OVERWR, MPP_NETCDF, domain=G%Domain%mpp_domain)
   endif
 
-  interface_val(1:nz+1) = G%GV%sInterface(1:nz+1)
-  layer_val(1:nz) = G%GV%sLayer(1:nz)
+  if (present(GV)) then
+    interface_val(1:nz+1) = GV%sInterface(1:nz+1)
+    layer_val(1:nz) = GV%sLayer(1:nz)
+  endif
 
   call mpp_get_domain_components(G%Domain%mpp_domain, x_domain, y_domain)
 
@@ -178,6 +184,9 @@ subroutine create_file(unit, filename, vars, novars, G, fields, threading, timeu
     end select
   end do
 
+  if ((use_layer .or. use_int) .and. .not.present(GV)) call MOM_error(FATAL, &
+    "create_file: A vertical grid type is required to create a file with a vertical coordinate.")
+
 ! Specify all optional arguments to mpp_write_meta: name, units, longname, cartesian, calendar, sense, domain, data, min)
 ! Otherwise if optional arguments are added to mpp_write_meta the compiler may (and in case of GNU is) get confused and crash.
   if (use_lath) &
@@ -197,12 +206,12 @@ subroutine create_file(unit, filename, vars, novars, G, fields, threading, timeu
                    cartesian='X', domain = x_domain, data=G%gridLonB(G%IsgB:G%IegB))
 
   if (use_layer) &
-    call mpp_write_meta(unit, axis_layer, name="Layer", units=trim(G%GV%zAxisUnits), &
-          longname="Layer "//trim(G%GV%zAxisLongName), cartesian='Z', sense=1, data=layer_val)
+    call mpp_write_meta(unit, axis_layer, name="Layer", units=trim(GV%zAxisUnits), &
+          longname="Layer "//trim(GV%zAxisLongName), cartesian='Z', sense=1, data=layer_val)
 
   if (use_int) &
-    call mpp_write_meta(unit, axis_int, name="Interface", units=trim(G%GV%zAxisUnits), &
-          longname="Interface "//trim(G%GV%zAxisLongName), cartesian='Z', sense=1, data=interface_val)
+    call mpp_write_meta(unit, axis_int, name="Interface", units=trim(GV%zAxisUnits), &
+          longname="Interface "//trim(GV%zAxisLongName), cartesian='Z', sense=1, data=interface_val)
 
   if (use_time) then ; if (present(timeunit)) then
     ! Set appropriate units, depending on the value.
@@ -290,7 +299,7 @@ end subroutine create_file
 !! does not find the file, a new file is created.  It also sets up
 !! structures that describe this file and the variables that will
 !! later be written to this file.
-subroutine reopen_file(unit, filename, vars, novars, G, fields, threading, timeunit)
+subroutine reopen_file(unit, filename, vars, novars, G, fields, threading, timeunit, GV)
   integer,               intent(out)   :: unit       !< unit id of an open file or -1 on a
                                                      !! nonwriting PE with single file output
   character(len=*),      intent(in)    :: filename   !< full path to the file to create
@@ -301,6 +310,9 @@ subroutine reopen_file(unit, filename, vars, novars, G, fields, threading, timeu
   integer, optional,     intent(in)    :: threading  !< SINGLE_FILE or MULTIPLE
   real, optional,        intent(in)    :: timeunit   !< length, in seconds, of the units for time. The
                                                      !! default value is 86400.0, for 1 day.
+  type(verticalGrid_type), optional, intent(in) :: GV !< ocean vertical grid structure, which is
+                                                     !! required if the new file uses any
+                                                     !! vertical grid axes.
 
   character(len=200) :: check_name, mesg
   integer :: length, ndim, nvar, natt, ntime, thread
@@ -317,7 +329,7 @@ subroutine reopen_file(unit, filename, vars, novars, G, fields, threading, timeu
   inquire(file=check_name,EXIST=exists)
 
   if (.not.exists) then
-    call create_file(unit, filename, vars, novars, G, fields, threading, timeunit)
+    call create_file(unit, filename, vars, novars, G, fields, threading, timeunit, GV=GV)
   else
     if ((thread == SINGLE_FILE) .or. .not.G%Domain%use_io_layout) then
       call open_file(unit, filename, MPP_APPEND, MPP_NETCDF, threading=thread)
@@ -328,13 +340,18 @@ subroutine reopen_file(unit, filename, vars, novars, G, fields, threading, timeu
 
     call mpp_get_info(unit, ndim, nvar, natt, ntime)
 
-    if (nvar /= novars) then
+    if (nvar == -1) then
+      write (mesg,*) "Reopening file ",trim(filename)," apparently had ",nvar,&
+                     " variables. Clobbering and creating file with ",novars," instead."
+      call MOM_error(WARNING,"MOM_io: "//mesg)
+      call create_file(unit, filename, vars, novars, G, fields, threading, timeunit, GV=GV)
+    elseif (nvar /= novars) then
       write (mesg,*) "Reopening file ",trim(filename)," with ",novars,&
                      " variables instead of ",nvar,"."
       call MOM_error(FATAL,"MOM_io: "//mesg)
     endif
 
-    call mpp_get_fields(unit,fields(1:nvar))
+    if (nvar>0) call mpp_get_fields(unit,fields(1:nvar))
 
     ! Check the field names...
 !    do i=1,nvar

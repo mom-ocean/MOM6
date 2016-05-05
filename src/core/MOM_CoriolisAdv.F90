@@ -65,10 +65,11 @@ module MOM_CoriolisAdv
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
-use MOM_file_parser, only : get_param, log_version, param_file_type
-use MOM_grid, only : ocean_grid_type
-use MOM_variables, only : accel_diag_ptrs
+use MOM_file_parser,   only : get_param, log_version, param_file_type
+use MOM_grid,          only : ocean_grid_type
 use MOM_string_functions, only : uppercase
+use MOM_variables,     only : accel_diag_ptrs
+use MOM_verticalGrid,  only : verticalGrid_type
 
 implicit none ; private
 
@@ -162,17 +163,18 @@ character*(20), parameter :: PV_ADV_UPWIND1_STRING = "PV_ADV_UPWIND1"
 
 contains
 
-subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, AD, G, CS)
-  real, intent(in),  dimension(NIMEMB_,NJMEM_,NKMEM_) :: u
-  real, intent(in),  dimension(NIMEM_,NJMEMB_,NKMEM_) :: v
-  real, intent(in),  dimension(NIMEM_,NJMEM_,NKMEM_)  :: h
-  real, intent(in),  dimension(NIMEMB_,NJMEM_,NKMEM_) :: uh
-  real, intent(in),  dimension(NIMEM_,NJMEMB_,NKMEM_) :: vh
-  real, intent(out), dimension(NIMEMB_,NJMEM_,NKMEM_) :: CAu
-  real, intent(out), dimension(NIMEM_,NJMEMB_,NKMEM_) :: CAv
-  type(accel_diag_ptrs), intent(inout)                :: AD
-  type(ocean_grid_type), intent(in)                   :: G
-  type(CoriolisAdv_CS), pointer                       :: CS
+subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, AD, G, GV, CS)
+  type(ocean_grid_type),                     intent(in)    :: G
+  type(verticalGrid_type),                   intent(in)    :: GV
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uh
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vh
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: CAu
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: CAv
+  type(accel_diag_ptrs),                     intent(inout) :: AD
+  type(CoriolisAdv_CS),                      pointer       :: CS
 !    This subroutine calculates the Coriolis and momentum advection
 !  contributions to the acceleration.
 !
@@ -189,6 +191,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, AD, G, CS)
 !  (in)      AD - A structure pointing to the various accelerations in
 !                 the momentum equations.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 CoriolisAdv_init.
 !
@@ -282,8 +285,8 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, AD, G, CS)
          "MOM_CoriolisAdv: Module must be initialized before it is used.")
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
-  h_neglect = G%GV%H_subroundoff
-  h_tiny = G%GV%Angstrom  ! Perhaps this should be set to h_neglect instead.
+  h_neglect = GV%H_subroundoff
+  h_tiny = GV%Angstrom  ! Perhaps this should be set to h_neglect instead.
 
 !$OMP parallel default(none) shared(u,v,h,uh,vh,CAu,CAv,G,CS,AD,Area_h,Area_q,nz,RV,PV, &
 !$OMP                               is,ie,js,je,Isq,Ieq,Jsq,Jeq,h_neglect,h_tiny)       &
@@ -314,11 +317,13 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, AD, G, CS)
       if (CS%no_slip ) then
         relative_vorticity = (2.0-G%mask2dBu(I,J)) * &
            ((v(i+1,J,k)*G%dyCv(i+1,J) - v(i,J,k)*G%dyCv(i,J)) - &
-            (u(I,j+1,k)*G%dxCu(I,j+1) - u(I,j,k)*G%dxCu(I,j)))* G%IareaBu(I,J)
+            (u(I,j+1,k)*G%dxCu(I,j+1) - u(I,j,k)*G%dxCu(I,j))) * &
+            (G%IdxBu(I,J) * G%IdyBu(I,J)) ! ### Using G%IareaBu(I,J) changes answers.
       else
         relative_vorticity = G%mask2dBu(I,J) * &
            ((v(i+1,J,k)*G%dyCv(i+1,J) - v(i,J,k)*G%dyCv(i,J)) - &
-            (u(I,j+1,k)*G%dxCu(I,j+1) - u(I,j,k)*G%dxCu(I,j)))* G%IareaBu(I,J)
+            (u(I,j+1,k)*G%dxCu(I,j+1) - u(I,j,k)*G%dxCu(I,j))) * &
+            (G%IdxBu(I,J) * G%IdyBu(I,J)) ! ### Using G%IareaBu(I,J) changes answers.
       endif
       absolute_vorticity = G%CoriolisBu(I,J) + relative_vorticity
       Ih = 0.0
@@ -750,17 +755,17 @@ end subroutine CorAdCalc
 ! =========================================================================================
 
 subroutine gradKE(u, v, h, uh, vh, KE, KEx, KEy, k, G, CS)
-  real, intent(in),  dimension(NIMEMB_,NJMEM_ ,NKMEM_) :: u
-  real, intent(in),  dimension(NIMEM_ ,NJMEMB_,NKMEM_) :: v
-  real, intent(in),  dimension(NIMEM_ ,NJMEM_ ,NKMEM_) :: h
-  real, intent(in),  dimension(NIMEMB_,NJMEM_ ,NKMEM_) :: uh
-  real, intent(in),  dimension(NIMEM_,NJMEMB_ ,NKMEM_) :: vh
-  real, intent(out), dimension(NIMEM_ ,NJMEM_ )        :: KE
-  real, intent(out), dimension(NIMEMB_,NJMEM_ )        :: KEx
-  real, intent(out), dimension(NIMEM_ ,NJMEMB_)        :: KEy
-  integer, intent(in)                                  :: k
-  type(ocean_grid_type), intent(in)                    :: G
-  type(CoriolisAdv_CS), pointer                        :: CS
+  type(ocean_grid_type),                      intent(in)  :: G
+  real, dimension(SZIB_(G),SZJ_(G) ,SZK_(G)), intent(in)  :: u
+  real, dimension(SZI_(G) ,SZJB_(G),SZK_(G)), intent(in)  :: v
+  real, dimension(SZI_(G) ,SZJ_(G) ,SZK_(G)), intent(in)  :: h
+  real, dimension(SZIB_(G),SZJ_(G) ,SZK_(G)), intent(in)  :: uh
+  real, dimension(SZI_(G),SZJB_(G) ,SZK_(G)), intent(in)  :: vh
+  real, dimension(SZI_(G) ,SZJ_(G) ),         intent(out) :: KE
+  real, dimension(SZIB_(G),SZJ_(G) ),         intent(out) :: KEx
+  real, dimension(SZI_(G) ,SZJB_(G)),         intent(out) :: KEy
+  integer,                                    intent(in)  :: k
+  type(CoriolisAdv_CS),                       pointer     :: CS
 !    This subroutine calculates the acceleration due to the gradient of kinetic energy.
 !
 ! Arguments: u   - Zonal velocity, in m s-1.
