@@ -107,16 +107,16 @@ subroutine PLM_reconstruction( N, h, u, ppoly_E, ppoly_coefficients )
     if (abs(slope) < 1.E-140) slope = 0.
 
     ! Safety check - this block really should not be needed ...
-    if (u_c - 0.5*abs(slope) < u_min .or.  u_c + 0.5*abs(slope) > u_max) then
-      write(0,*) 'l,c,r=',u_l,u_c,u_r
-      write(0,*) 'min,max=',u_min,u_max
-      write(0,*) 'slp=',slope
-      sigma_l = u_c-0.5*abs(slope)
-      sigma_r = u_c+0.5*abs(slope)
-      write(0,*) 'lo,hi=',sigma_l,sigma_r
-      write(0,*) 'elo,ehi=',sigma_l-u_min,sigma_r-u_max
-      stop 'Limiter failed!'
-    endif
+!   if (u_c - 0.5*abs(slope) < u_min .or.  u_c + 0.5*abs(slope) > u_max) then
+!     write(0,*) 'l,c,r=',u_l,u_c,u_r
+!     write(0,*) 'min,max=',u_min,u_max
+!     write(0,*) 'slp=',slope
+!     sigma_l = u_c-0.5*abs(slope)
+!     sigma_r = u_c+0.5*abs(slope)
+!     write(0,*) 'lo,hi=',sigma_l,sigma_r
+!     write(0,*) 'elo,ehi=',sigma_l-u_min,sigma_r-u_max
+!     stop 'Limiter failed!'
+!   endif
 
     slp(k) = slope
     ppoly_E(k,1) = u_c - 0.5 * slope
@@ -153,13 +153,13 @@ subroutine PLM_reconstruction( N, h, u, ppoly_E, ppoly_coefficients )
   mslp(N) = 0.
 
   ! Check that the above adjustment worked
-  do K = 2, N-1
-    u_r = u(k-1) + 0.5 * sign( mslp(k-1), slp(k-1) ) ! Right edge from cell k-1
-    u_l = u(k) - 0.5 * sign( mslp(k), slp(k) ) ! Left edge from cell k
-    if ( (u(k)-u(k-1)) * (u_l-u_r) < 0. ) then
-      stop 'Adjustment failed!'
-    endif
-  enddo ! end loop on interior cells
+! do K = 2, N-1
+!   u_r = u(k-1) + 0.5 * sign( mslp(k-1), slp(k-1) ) ! Right edge from cell k-1
+!   u_l = u(k) - 0.5 * sign( mslp(k), slp(k) ) ! Left edge from cell k
+!   if ( (u(k)-u(k-1)) * (u_l-u_r) < 0. ) then
+!     stop 'Adjustment failed!'
+!   endif
+! enddo ! end loop on interior cells
 
   ! Store and return edge values and polynomial coefficients.
   ppoly_E(1,1) = u(1)

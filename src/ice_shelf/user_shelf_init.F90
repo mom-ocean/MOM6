@@ -113,11 +113,11 @@ contains
 
 subroutine USER_initialize_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, CS, param_file, new_sim)
 
-  real, dimension(NIMEM_,NJMEM_), intent(out) :: mass_shelf, area_shelf_h, hmask, h_shelf
-  type(ocean_grid_type),          intent(in)  :: G
-  type(user_ice_shelf_CS),        pointer     :: CS
-  type(param_file_type),          intent(in)  :: param_file
-  logical                                     :: new_sim
+  type(ocean_grid_type),            intent(in)  :: G
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: mass_shelf, area_shelf_h, hmask, h_shelf
+  type(user_ice_shelf_CS),          pointer     :: CS
+  type(param_file_type),            intent(in)  :: param_file
+  logical                                       :: new_sim
 
 ! Arguments: mass_shelf - The mass per unit area averaged over the full ocean
 !                         cell, in kg m-2. (Intent out)
@@ -170,9 +170,9 @@ subroutine USER_initialize_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, 
 end subroutine USER_initialize_shelf_mass
 
 subroutine USER_init_ice_thickness(h_shelf, area_shelf_h, hmask, G, param_file)
-  real, dimension(NIMEM_,NJMEM_), intent(out) :: area_shelf_h, hmask, h_shelf
-  type(ocean_grid_type),          intent(in)  :: G
-  type(param_file_type),          intent(in)  :: param_file
+  type(ocean_grid_type),            intent(in)  :: G
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: area_shelf_h, hmask, h_shelf
+  type(param_file_type),            intent(in)  :: param_file
   
   ! This subroutine initializes the ice shelf thickness.  Currently it does so
   ! calling USER_initialize_shelf_mass, but this can be revised as needed.
@@ -184,11 +184,11 @@ subroutine USER_init_ice_thickness(h_shelf, area_shelf_h, hmask, G, param_file)
 end subroutine USER_init_ice_thickness
 
 subroutine USER_update_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, CS, Time, new_sim)
-  real, dimension(NIMEM_,NJMEM_), intent(inout) :: mass_shelf, area_shelf_h, hmask, h_shelf
-  type(ocean_grid_type),          intent(in)    :: G
-  type(user_ice_shelf_CS),        pointer       :: CS
-  type(time_type),                intent(in)    :: Time
-  logical,                        intent(in)    :: new_sim
+  type(ocean_grid_type),            intent(in)    :: G
+  real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: mass_shelf, area_shelf_h, hmask, h_shelf
+  type(user_ice_shelf_CS),          pointer       :: CS
+  type(time_type),                  intent(in)    :: Time
+  logical,                          intent(in)    :: new_sim
 
 ! Arguments: mass_shelf - The mass per unit area averaged over the full ocean
 !                         cell, in kg m-2. (Intent out)
@@ -209,13 +209,13 @@ subroutine USER_update_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, C
 
   do j=G%jsd,G%jed ; 
 
-   if (((j+G%jsd_global-G%jsd) .le. G%domain%njglobal+G%domain%njhalo) .AND. &
-           ((j+G%jsd_global-G%jsd) .ge. G%domain%njhalo+1)) then
+   if (((j+G%jdg_offset) .le. G%domain%njglobal+G%domain%njhalo) .AND. &
+       ((j+G%jdg_offset) .ge. G%domain%njhalo+1)) then
 
     do i=G%isc,G%iec
   
-!    if (((i+G%isd_global-G%isd) .le. G%domain%niglobal+G%domain%nihalo) .AND. &
-!           ((i+G%isd_global-G%isd) .ge. G%domain%nihalo+1)) then
+!    if (((i+G%idg_offset) <= G%domain%niglobal+G%domain%nihalo) .AND. &
+!           ((i+G%idg_offset) >= G%domain%nihalo+1)) then
 
     if ((j.ge.G%jsc) .and. (j.le.G%jec)) then 
 
@@ -249,7 +249,7 @@ subroutine USER_update_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, C
 
     endif ; endif ; endif
 
-    if ((i+G%isd_global-G%isd) .eq. G%domain%nihalo+1) then
+    if ((i+G%idg_offset) .eq. G%domain%nihalo+1) then
       hmask(i-1,j) = 3.0
     endif
 

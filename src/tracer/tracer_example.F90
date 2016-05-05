@@ -64,6 +64,7 @@ use MOM_time_manager, only : time_type, get_time
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_registry, only : add_tracer_diagnostics, add_tracer_OBC_values
 use MOM_variables, only : surface, ocean_OBC_type
+use MOM_verticalGrid, only : verticalGrid_type
 
 use coupler_util, only : set_coupler_values, ind_csurf
 use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
@@ -118,12 +119,12 @@ contains
 
 function USER_register_tracer_example(G, param_file, CS, diag, tr_Reg, &
                                       restart_CS)
-  type(ocean_grid_type), intent(in)     :: G
-  type(param_file_type), intent(in)     :: param_file
+  type(ocean_grid_type),   intent(in)   :: G
+  type(param_file_type),   intent(in)   :: param_file
   type(USER_tracer_example_CS), pointer :: CS
   type(diag_ctrl), target, intent(in)   :: diag
-  type(tracer_registry_type), pointer       :: tr_Reg
-  type(MOM_restart_CS),   pointer      :: restart_CS
+  type(tracer_registry_type), pointer   :: tr_Reg
+  type(MOM_restart_CS),       pointer   :: restart_CS
 ! This subroutine is used to register tracer fields and subroutines
 ! to be used with MOM.
 ! Arguments: G - The ocean's grid structure.
@@ -187,7 +188,7 @@ function USER_register_tracer_example(G, param_file, CS, diag, tr_Reg, &
     ! Register the tracer for the restart file.
     call register_restart_field(tr_ptr, CS%tr_desc(m), .true., restart_CS)
     ! Register the tracer for horizontal advection & diffusion.
-    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, tr_Reg, &
+    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, G, tr_Reg, &
                          tr_desc_ptr=CS%tr_desc(m))
 
     !   Set coupled_tracers to be true (hard-coded above) to provide the surface
@@ -202,12 +203,13 @@ function USER_register_tracer_example(G, param_file, CS, diag, tr_Reg, &
   USER_register_tracer_example = .true.
 end function USER_register_tracer_example
 
-subroutine USER_initialize_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
+subroutine USER_initialize_tracer(restart, day, G, GV, h, OBC, CS, sponge_CSp, &
                                   diag_to_Z_CSp)
   logical,                            intent(in) :: restart
   type(time_type), target,            intent(in) :: day
   type(ocean_grid_type),              intent(in) :: G
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
+  type(verticalGrid_type),            intent(in) :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
   type(ocean_OBC_type),               pointer    :: OBC
   type(USER_tracer_example_CS),       pointer    :: CS
   type(sponge_CS),                    pointer    :: sponge_CSp
@@ -219,6 +221,7 @@ subroutine USER_initialize_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
 !                     a restart file.
 !  (in)      day - Time of the start of the run.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      h - Layer thickness, in m or kg m-2.
 !  (in)      OBC - This open boundary condition type specifies whether, where,
 !                  and what open boundary conditions are used.
@@ -310,7 +313,7 @@ subroutine USER_initialize_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
       ! This is needed to force the compiler not to do a copy in the sponge
       ! calls.  Curses on the designers and implementers of Fortran90.
       tr_ptr => CS%tr(:,:,:,m)
-      call set_up_sponge_field(temp,tr_ptr,nz,sponge_CSp)
+      call set_up_sponge_field(temp, tr_ptr, G, nz, sponge_CSp)
     enddo
     deallocate(temp)
   endif
@@ -338,7 +341,7 @@ subroutine USER_initialize_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
   endif
 
   ! This needs to be changed if the units of tracer are changed above.
-  if (G%GV%Boussinesq) then ; flux_units = "kg kg-1 m3 s-1"
+  if (GV%Boussinesq) then ; flux_units = "kg kg-1 m3 s-1"
   else ; flux_units = "kg s-1" ; endif
 
   do m=1,NTR
@@ -376,11 +379,12 @@ subroutine USER_initialize_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
 
 end subroutine USER_initialize_tracer
 
-subroutine tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h_old, h_new, ea, eb
+subroutine tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS)
+  type(ocean_grid_type),              intent(in) :: G
+  type(verticalGrid_type),            intent(in) :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
   type(forcing),                      intent(in) :: fluxes
   real,                               intent(in) :: dt
-  type(ocean_grid_type),              intent(in) :: G
   type(USER_tracer_example_CS),       pointer    :: CS
 !   This subroutine applies diapycnal diffusion and any other column
 ! tracer physics or chemistry to the tracers from this file.
@@ -398,6 +402,7 @@ subroutine tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, CS)
 !                     forcing fields.  Unused fields have NULL ptrs.
 !  (in)      dt - The amount of time covered by this call, in s.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 USER_register_tracer_example.
 !
@@ -436,7 +441,7 @@ subroutine tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, CS)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   if (.not.associated(CS)) return
-  h_neglect = G%GV%H_subroundoff
+  h_neglect = GV%H_subroundoff
 
   do j=js,je
     do i=is,ie
@@ -478,7 +483,7 @@ subroutine tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, CS)
   if (CS%mask_tracers) then
     do m = 1,NTR ; if (CS%id_tracer(m) > 0) then
       do k=1,nz ; do j=js,je ; do i=is,ie
-        if (h_new(i,j,k) < 1.1*G%GV%Angstrom) then
+        if (h_new(i,j,k) < 1.1*GV%Angstrom) then
           CS%tr_aux(i,j,k,m) = CS%land_val(m)
         else
           CS%tr_aux(i,j,k,m) = CS%tr(i,j,k,m)
@@ -507,10 +512,11 @@ subroutine tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, CS)
 
 end subroutine tracer_column_physics
 
-function USER_tracer_stock(h, stocks, G, CS, names, units, stock_index)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
-  real, dimension(:),                 intent(out)   :: stocks
+function USER_tracer_stock(h, stocks, G, GV, CS, names, units, stock_index)
   type(ocean_grid_type),              intent(in)    :: G
+  type(verticalGrid_type),            intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  real, dimension(:),                 intent(out)   :: stocks
   type(USER_tracer_example_CS),       pointer       :: CS
   character(len=*), dimension(:),     intent(out)   :: names
   character(len=*), dimension(:),     intent(out)   :: units
@@ -524,6 +530,7 @@ function USER_tracer_stock(h, stocks, G, CS, names, units, stock_index)
 !  (out)     stocks - the mass-weighted integrated amount of each tracer,
 !                     in kg times concentration units.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 register_USER_tracer.
 !  (out)     names - the names of the stocks calculated.
@@ -552,16 +559,16 @@ function USER_tracer_stock(h, stocks, G, CS, names, units, stock_index)
       stocks(m) = stocks(m) + CS%tr(i,j,k,m) * &
                              (G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k))
     enddo ; enddo ; enddo
-    stocks(m) = G%GV%H_to_kg_m2 * stocks(m)
+    stocks(m) = GV%H_to_kg_m2 * stocks(m)
   enddo
   USER_tracer_stock = NTR
 
 end function USER_tracer_stock
 
 subroutine USER_tracer_surface_state(state, h, G, CS)
-  type(surface),                      intent(inout) :: state
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
   type(ocean_grid_type),              intent(in)    :: G
+  type(surface),                      intent(inout) :: state
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
   type(USER_tracer_example_CS),       pointer       :: CS
 !   This particular tracer package does not report anything back to the coupler.
 ! The code that is here is just a rough guide for packages that would.

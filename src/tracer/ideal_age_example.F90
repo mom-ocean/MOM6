@@ -70,6 +70,7 @@ use MOM_tracer_registry, only : add_tracer_diagnostics, add_tracer_OBC_values
 use MOM_tracer_registry, only : tracer_vertdiff
 use MOM_tracer_Z_init, only : tracer_Z_init
 use MOM_variables, only : surface, ocean_OBC_type
+use MOM_verticalGrid, only : verticalGrid_type
 
 use coupler_util, only : set_coupler_values, ind_csurf
 use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
@@ -218,8 +219,6 @@ function register_ideal_age_tracer(G, param_file, CS, diag, tr_Reg, &
                  "it is a fatal error if the tracers are not found in the \n"//&
                  "restart files of a restarted run.", default=.false.)
 
-  CS%nkml = max(G%GV%nkml,1)
-
   CS%ntr = 0
   if (do_ideal_age) then
     CS%ntr = CS%ntr + 1 ; m = CS%ntr
@@ -265,7 +264,7 @@ function register_ideal_age_tracer(G, param_file, CS, diag, tr_Reg, &
     call register_restart_field(tr_ptr, CS%tr_desc(m), &
                                 .not.CS%tracers_may_reinit, restart_CS)
     ! Register the tracer for horizontal advection & diffusion.
-    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, tr_Reg, &
+    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, G, tr_Reg, &
                          tr_desc_ptr=CS%tr_desc(m))
 
     !   Set coupled_tracers to be true (hard-coded above) to provide the surface
@@ -281,12 +280,13 @@ function register_ideal_age_tracer(G, param_file, CS, diag, tr_Reg, &
   register_ideal_age_tracer = .true.
 end function register_ideal_age_tracer
 
-subroutine initialize_ideal_age_tracer(restart, day, G, h, OBC, CS, sponge_CSp, &
+subroutine initialize_ideal_age_tracer(restart, day, G, GV, h, OBC, CS, sponge_CSp, &
                                        diag_to_Z_CSp)
   logical,                            intent(in) :: restart
   type(time_type), target,            intent(in) :: day
   type(ocean_grid_type),              intent(in) :: G
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
+  type(verticalGrid_type),            intent(in) :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
   type(ocean_OBC_type),               pointer    :: OBC
   type(ideal_age_tracer_CS),          pointer    :: CS
   type(sponge_CS),                    pointer    :: sponge_CSp
@@ -298,6 +298,7 @@ subroutine initialize_ideal_age_tracer(restart, day, G, h, OBC, CS, sponge_CSp, 
 !                     a restart file.
 !  (in)      day - Time of the start of the run.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      h - Layer thickness, in m or kg m-2.
 !  (in)      OBC - This open boundary condition type specifies whether, where,
 !                  and what open boundary conditions are used.
@@ -323,6 +324,7 @@ subroutine initialize_ideal_age_tracer(restart, day, G, h, OBC, CS, sponge_CSp, 
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   CS%Time => day
+  CS%nkml = max(GV%nkml,1)
 
   do m=1,CS%ntr
     call query_vardesc(CS%tr_desc(m), name=name, &
@@ -372,7 +374,7 @@ subroutine initialize_ideal_age_tracer(restart, day, G, h, OBC, CS, sponge_CSp, 
   endif
 
   ! This needs to be changed if the units of tracer are changed above.
-  if (G%GV%Boussinesq) then ; flux_units = "years m3 s-1"
+  if (GV%Boussinesq) then ; flux_units = "years m3 s-1"
   else ; flux_units = "years kg s-1" ; endif
 
   do m=1,CS%ntr
@@ -410,11 +412,12 @@ subroutine initialize_ideal_age_tracer(restart, day, G, h, OBC, CS, sponge_CSp, 
 
 end subroutine initialize_ideal_age_tracer
 
-subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, CS)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h_old, h_new, ea, eb
+subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS)
+  type(ocean_grid_type),              intent(in) :: G
+  type(verticalGrid_type),            intent(in) :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
   type(forcing),                      intent(in) :: fluxes
   real,                               intent(in) :: dt
-  type(ocean_grid_type),              intent(in) :: G
   type(ideal_age_tracer_CS),          pointer    :: CS
 !   This subroutine applies diapycnal diffusion and any other column
 ! tracer physics or chemistry to the tracers from this file.
@@ -432,6 +435,7 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
 !                     forcing fields.  Unused fields have NULL ptrs.
 !  (in)      dt - The amount of time covered by this call, in s.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 register_ideal_age_tracer.
 !
@@ -449,7 +453,7 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
   if (CS%ntr < 1) return
 
   do m=1,CS%ntr
-    call tracer_vertdiff(h_old, ea, eb, dt, CS%tr(:,:,:,m), G)
+    call tracer_vertdiff(h_old, ea, eb, dt, CS%tr(:,:,:,m), G, GV)
   enddo
 
   Isecs_per_year = 1.0 / (365.0*86400.0)
@@ -484,7 +488,7 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
   if (CS%mask_tracers) then
     do m=1,CS%ntr ; if (CS%id_tracer(m) > 0) then
       do k=1,nz ; do j=js,je ; do i=is,ie
-        if (h_new(i,j,k) < 1.1*G%GV%Angstrom) then
+        if (h_new(i,j,k) < 1.1*GV%Angstrom) then
           CS%tr_aux(i,j,k,m) = CS%land_val(m)
         else
           CS%tr_aux(i,j,k,m) = CS%tr(i,j,k,m)
@@ -513,10 +517,11 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
 
 end subroutine ideal_age_tracer_column_physics
 
-function ideal_age_stock(h, stocks, G, CS, names, units, stock_index)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
-  real, dimension(:),                 intent(out)   :: stocks
+function ideal_age_stock(h, stocks, G, GV, CS, names, units, stock_index)
   type(ocean_grid_type),              intent(in)    :: G
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
+  real, dimension(:),                 intent(out)   :: stocks
+  type(verticalGrid_type),            intent(in)    :: GV
   type(ideal_age_tracer_CS),          pointer       :: CS
   character(len=*), dimension(:),     intent(out)   :: names
   character(len=*), dimension(:),     intent(out)   :: units
@@ -530,6 +535,7 @@ function ideal_age_stock(h, stocks, G, CS, names, units, stock_index)
 !  (out)     stocks - the mass-weighted integrated amount of each tracer,
 !                     in kg times concentration units.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 register_ideal_age_tracer.
 !  (out)     names - the names of the stocks calculated.
@@ -559,17 +565,17 @@ function ideal_age_stock(h, stocks, G, CS, names, units, stock_index)
       stocks(m) = stocks(m) + CS%tr(i,j,k,m) * &
                              (G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k))
     enddo ; enddo ; enddo
-    stocks(m) = G%GV%H_to_kg_m2 * stocks(m)
+    stocks(m) = GV%H_to_kg_m2 * stocks(m)
   enddo
   ideal_age_stock = CS%ntr
 
 end function ideal_age_stock
 
 subroutine ideal_age_tracer_surface_state(state, h, G, CS)
-  type(surface),                         intent(inout) :: state
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
-  type(ocean_grid_type),                 intent(in)    :: G
-  type(ideal_age_tracer_CS),             pointer       :: CS
+  type(ocean_grid_type),                    intent(in)    :: G
+  type(surface),                            intent(inout) :: state
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
+  type(ideal_age_tracer_CS),                pointer       :: CS
 !   This particular tracer package does not report anything back to the coupler.
 ! The code that is here is just a rough guide for packages that would.
 ! Arguments: state - A structure containing fields that describe the
