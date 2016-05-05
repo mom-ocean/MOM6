@@ -326,7 +326,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
 !$OMP                                  L_direct,Ibma_2,L,vol,vol_below,Vol_err,            &
 !$OMP                                  BBL_visc_frac,h_vel,L0,Vol_0,dV_dL2,dVol,L_max,     &
 !$OMP                                  L_min,Vol_err_min,Vol_err_max,BBL_frac,Cell_width,  &
-!$OMP                                  gam,Rayleigh, Vol_tol, Vol_quit)
+!$OMP                                  gam,Rayleigh, Vol_tol, Vol_quit, tmp_val_m1_to_p1)
   do j=G%JscB,G%JecB ; do m=1,2
 
     if (m==1) then
