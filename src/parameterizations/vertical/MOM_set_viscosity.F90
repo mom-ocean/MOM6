@@ -281,6 +281,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
   logical :: use_BBL_EOS, do_i(SZIB_(G))
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, m, K2, nkmb, nkml
   integer :: itt, maxitt=20
+  real :: tmp_val_m1_to_p1
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nkmb = GV%nk_rho_varies ; nkml = GV%nkml
@@ -325,7 +326,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
 !$OMP                                  L_direct,Ibma_2,L,vol,vol_below,Vol_err,            &
 !$OMP                                  BBL_visc_frac,h_vel,L0,Vol_0,dV_dL2,dVol,L_max,     &
 !$OMP                                  L_min,Vol_err_min,Vol_err_max,BBL_frac,Cell_width,  &
-!$OMP                                  gam,Rayleigh, Vol_tol, Vol_quit)
+!$OMP                                  gam,Rayleigh, Vol_tol, Vol_quit, tmp_val_m1_to_p1)
   do j=G%JscB,G%JecB ; do m=1,2
 
     if (m==1) then
@@ -653,7 +654,10 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
             else ! There are two separate open regions.
               !   vol = slope^2/4a + a/12 - (a/12)*(1-L)^2*(1+2L)
               ! At the deepest volume, L = slope/a, at the top L = 1.
-              L(K) = 0.5 - cos(C1_3*acos(1.0 - C24_a*(Vol_open - vol)) - C2pi_3)
+              !L(K) = 0.5 - cos(C1_3*acos(1.0 - C24_a*(Vol_open - vol)) - C2pi_3)
+              tmp_val_m1_to_p1 = 1.0 - C24_a*(Vol_open - vol)
+              tmp_val_m1_to_p1 = max(-1., min(1., tmp_val_m1_to_p1))
+              L(K) = 0.5 - cos(C1_3*acos(tmp_val_m1_to_p1) - C2pi_3)
               ! To check the answers.
               ! Vol_err = Vol_open - a_12*(1.0+2.0*L(K)) * (1.0-L(K))**2 - vol
             endif

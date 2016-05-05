@@ -2825,7 +2825,7 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default)
       do k=2,nz ; do I=is-2,ie+1
         hatutot(I) = hatutot(I) + h_u(i,j,k)
       enddo ; enddo
-      do I=is-2,ie+1 ; Ihatutot(I) = 1.0 / (hatutot(I) + h_neglect) ; enddo
+      do I=is-2,ie+1 ; Ihatutot(I) = G%mask2dCu(I,j) / (hatutot(I) + h_neglect) ; enddo
       do k=1,nz ; do I=is-2,ie+1
         CS%frhatu(I,j,k) = h_u(i,j,k) * Ihatutot(I)
       enddo ; enddo
@@ -2873,7 +2873,7 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default)
           hatutot(I) = hatutot(I) + CS%frhatu(I,j,k)
         enddo ; enddo
       endif
-      do I=is-2,ie+1 ; Ihatutot(I) = 1.0 / (hatutot(I) + h_neglect) ; enddo
+      do I=is-2,ie+1 ; Ihatutot(I) = G%mask2dCu(I,j) / (hatutot(I) + h_neglect) ; enddo
       do k=1,nz ; do I=is-2,ie+1
         CS%frhatu(I,j,k) = CS%frhatu(I,j,k) * Ihatutot(I)
       enddo ; enddo
@@ -2888,7 +2888,7 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default)
       do k=2,nz ; do i=is-1,ie+1
         hatvtot(i) = hatvtot(i) + h_v(i,j,k)
       enddo ; enddo
-      do i=is-1,ie+1 ; Ihatvtot(i) = 1.0 / (hatvtot(i) + h_neglect) ; enddo
+      do i=is-1,ie+1 ; Ihatvtot(i) = G%mask2dCv(i,J) / (hatvtot(i) + h_neglect) ; enddo
       do k=1,nz ; do i=is-1,ie+1
         CS%frhatv(i,J,k) = h_v(i,j,k) * Ihatvtot(i)
       enddo ; enddo
@@ -2936,7 +2936,7 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default)
           hatvtot(i) = hatvtot(i) + CS%frhatv(i,J,k)
         enddo ; enddo
       endif
-      do i=is-1,ie+1 ; Ihatvtot(i) = 1.0 / (hatvtot(i) + h_neglect) ; enddo
+      do i=is-1,ie+1 ; Ihatvtot(i) = G%mask2dCv(i,J) / (hatvtot(i) + h_neglect) ; enddo
       do k=1,nz ; do i=is-1,ie+1
         CS%frhatv(i,J,k) = CS%frhatv(i,J,k) * Ihatvtot(i)
       enddo ; enddo
