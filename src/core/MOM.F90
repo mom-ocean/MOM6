@@ -711,18 +711,18 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
           call cpu_clock_begin(id_clock_ALE)
           call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, dtdia)
           call cpu_clock_end(id_clock_ALE)
-          if (CS%debug) then
-            call MOM_state_chksum("Post-ALE 1 ", u, v, h, CS%uh, CS%vh, G, GV)
-            call hchksum(CS%tv%T,"Post-ALE 1 T", G, haloshift=1)
-            call hchksum(CS%tv%S,"Post-ALE 1 S", G, haloshift=1)
-            call check_redundant("Post-ALE 1 ", u, v, G)
-          endif
         endif   ! endif for the block "if ( CS%use_ALE_algorithm )"
 
         call cpu_clock_begin(id_clock_pass)
         call do_group_pass(CS%pass_uv_T_S_h, G%Domain)
         call cpu_clock_end(id_clock_pass)
 
+        if (CS%debug .and. CS%use_ALE_algorithm) then
+          call MOM_state_chksum("Post-ALE 1 ", u, v, h, CS%uh, CS%vh, G, GV)
+          call hchksum(CS%tv%T,"Post-ALE 1 T", G, haloshift=1)
+          call hchksum(CS%tv%S,"Post-ALE 1 S", G, haloshift=1)
+          call check_redundant("Post-ALE 1 ", u, v, G)
+        endif
 
         ! Whenever thickness changes let the diag manager know, target grids
         ! for vertical remapping may need to be regenerated.
@@ -1033,17 +1033,18 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
           call cpu_clock_begin(id_clock_ALE)
           call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%dt_trans)
           call cpu_clock_end(id_clock_ALE)
-          if (CS%debug) then
-            call MOM_state_chksum("Post-ALE ", u, v, h, CS%uh, CS%vh, G, GV)
-            call hchksum(CS%tv%T,"Post-ALE T", G, haloshift=1)
-            call hchksum(CS%tv%S,"Post-ALE S", G, haloshift=1)
-            call check_redundant("Post-ALE ", u, v, G)
-          endif
         endif
 
         call cpu_clock_begin(id_clock_pass)
         call do_group_pass(CS%pass_uv_T_S_h, G%Domain)
         call cpu_clock_end(id_clock_pass)
+
+        if (CS%debug .and.  CS%use_ALE_algorithm) then
+          call MOM_state_chksum("Post-ALE ", u, v, h, CS%uh, CS%vh, G, GV)
+          call hchksum(CS%tv%T,"Post-ALE 1 T", G, haloshift=1)
+          call hchksum(CS%tv%S,"Post-ALE 1 S", G, haloshift=1)
+          call check_redundant("Post-ALE ", u, v, G)
+        endif
 
         ! Whenever thickness changes let the diag manager know, target grids
         ! for vertical remapping may need to be regenerated. This needs to
@@ -1770,6 +1771,16 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call set_visc_register_restarts(G, param_file, CS%visc, CS%restart_CSp)
   call mixedlayer_restrat_register_restarts(G, param_file, CS%mixedlayer_restrat_CSp, CS%restart_CSp)
 
+  call cpu_clock_begin(id_clock_pass_init)
+  !--- set up group pass for u,v,T,S and h. pass_uv_T_S_h also is used in step_MOM
+  call create_group_pass(CS%pass_uv_T_S_h, CS%u, CS%v, G%Domain)
+  if (CS%use_temperature) then
+    call create_group_pass(CS%pass_uv_T_S_h, CS%tv%T, G%Domain)
+    call create_group_pass(CS%pass_uv_T_S_h, CS%tv%S, G%Domain)
+  endif
+  call create_group_pass(CS%pass_uv_T_S_h, CS%h, G%Domain)
+  call cpu_clock_end(id_clock_pass_init)
+
   ! Initialize fields
   call callTree_waypoint("restart registration complete (initialize_MOM)")
 
@@ -1947,13 +1958,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
            CS%tracer_flow_CSp, CS%sponge_CSp, CS%ALE_sponge_CSp, CS%diag_to_Z_CSp)
 
   call cpu_clock_begin(id_clock_pass_init)
-  !--- set up group pass for u,v,T,S and h. pass_uv_T_S_h also is used in step_MOM
-  call create_group_pass(CS%pass_uv_T_S_h, CS%u, CS%v, G%Domain)
-  if (CS%use_temperature) then
-    call create_group_pass(CS%pass_uv_T_S_h, CS%tv%T, G%Domain)
-    call create_group_pass(CS%pass_uv_T_S_h, CS%tv%S, G%Domain)
-  endif
-  call create_group_pass(CS%pass_uv_T_S_h, CS%h, G%Domain)
   call do_group_pass(CS%pass_uv_T_S_h, G%Domain)
   call cpu_clock_end(id_clock_pass_init)
 
