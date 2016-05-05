@@ -1815,6 +1815,10 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     call adjustGridForIntegrity(CS%ALE_CSp, G, CS%h )
     call callTree_waypoint("Calling ALE_main() to remap initial conditions (initialize_MOM)")
     call ALE_main( G, GV, CS%h, CS%u, CS%v, CS%tv, CS%tracer_Reg, CS%ALE_CSp )
+    call cpu_clock_begin(id_clock_pass_init)
+    call do_group_pass(CS%pass_uv_T_S_h, G%Domain)
+    call cpu_clock_end(id_clock_pass_init)
+
     if (CS%debug) then
       call uchksum(CS%u,"Post ALE adjust init cond u", G, haloshift=1)
       call vchksum(CS%v,"Post ALE adjust init cond v", G, haloshift=1)
