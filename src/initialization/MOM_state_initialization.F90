@@ -336,12 +336,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
       h(:,:,:) = h(:,:,:)*GV%kg_m2_to_H
     endif
 
-    if (debug) then
-      call hchksum(h*GV%H_to_m, "MOM_initialize_state: h ", G, haloshift=1)
-      if ( use_temperature ) call hchksum(tv%T, "MOM_initialize_state: T ", G, haloshift=1)
-      if ( use_temperature ) call hchksum(tv%S, "MOM_initialize_state: S ", G, haloshift=1)
-    endif
-
 !  Remove the mass that would be displaced by an ice shelf or inverse barometer.
     call get_param(PF, mod, "DEPRESS_INITIAL_SURFACE", depress_sfc, &
                  "If true,  depress the initial surface to avoid huge \n"//&
@@ -355,6 +349,18 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
     call restore_state(dirs%input_filename, dirs%restart_input_dir, Time, &
                        G, restart_CS)
     if (present(Time_in)) Time = Time_in
+  endif
+
+  if ( use_temperature ) then
+    call pass_var(tv%T, G%Domain, complete=.false.)
+    call pass_var(tv%S, G%Domain, complete=.false.)
+  endif
+  call pass_var(h, G%Domain)
+
+  if (debug) then
+    call hchksum(h*GV%H_to_m, "MOM_initialize_state: h ", G, haloshift=1)
+    if ( use_temperature ) call hchksum(tv%T, "MOM_initialize_state: T ", G, haloshift=1)
+    if ( use_temperature ) call hchksum(tv%S, "MOM_initialize_state: S ", G, haloshift=1)
   endif
 
   call get_param(PF, mod, "SPONGE", use_sponge, &

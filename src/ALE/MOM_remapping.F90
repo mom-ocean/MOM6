@@ -76,6 +76,10 @@ real, parameter :: h_neglect = 1.E-30 !< A dimensional (H units) number that can
                                       !! changing the numerical result, except where
                                       !! a division by zero would otherwise occur.
 
+logical, parameter :: old_algorithm = .true.  !< Use the old "broken" algorithm.
+                                              !! This is a temporary measure to assist
+                                              !! debugging until we delete the old algorithm.
+
 contains
 
 !> Set parameters within remapping object
@@ -449,18 +453,22 @@ end subroutine check_reconstructions_1d
 !! the n0+n1+1 sub-integrals of the intersection of h0 and h1, and the summing the
 !! appropriate integrals into the h1*u1 values.
 subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, h1, method, &
-                                force_bounds_in_subcell, u1, uh_err )
-  integer,       intent(in)    :: n0     !< Number of cells in source grid
-  real,          intent(in)    :: h0(:)  !< Source grid widths (size n0)
-  real,          intent(in)    :: u0(:)  !< Source cell averages (size n0)
-  real,          intent(in)    :: ppoly0_E(:,:)            !< Edge value of polynomial
-  real,          intent(in)    :: ppoly0_coefficients(:,:) !< Coefficients of polynomial
-  integer,       intent(in)    :: n1     !< Number of cells in target grid
-  real,          intent(in)    :: h1(:)  !< Target grid widths (size n1)
-  integer,       intent(in)    :: method !< Remapping scheme to use
-  logical,       intent(in)    :: force_bounds_in_subcell !< Force sub-cell values to be bounded
-  real,          intent(out)   :: u1(:)  !< Target cell averages (size n1)
-  real,          intent(out)   :: uh_err !< Estimate of bound on error in sum of u*h
+                                force_bounds_in_subcell, u1, uh_err, ah_sub, aisub_src, aiss, aise )
+  integer,           intent(in)    :: n0     !< Number of cells in source grid
+  real,              intent(in)    :: h0(n0)  !< Source grid widths (size n0)
+  real,              intent(in)    :: u0(n0)  !< Source cell averages (size n0)
+  real,              intent(in)    :: ppoly0_E(n0,2)            !< Edge value of polynomial
+  real,              intent(in)    :: ppoly0_coefficients(:,:) !< Coefficients of polynomial
+  integer,           intent(in)    :: n1     !< Number of cells in target grid
+  real,              intent(in)    :: h1(n1)  !< Target grid widths (size n1)
+  integer,           intent(in)    :: method !< Remapping scheme to use
+  logical,           intent(in)    :: force_bounds_in_subcell !< Force sub-cell values to be bounded
+  real,              intent(out)   :: u1(n1)  !< Target cell averages (size n1)
+  real,              intent(out)   :: uh_err !< Estimate of bound on error in sum of u*h
+  real, optional,    intent(out)   :: ah_sub(n0+n1+1) !< h_sub
+  integer, optional, intent(out)   :: aisub_src(n0+n1+1) !< i_sub_src
+  integer, optional, intent(out)   :: aiss(n0) !< isrc_start
+  integer, optional, intent(out)   :: aise(n0) !< isrc_ens
   ! Local variables
   integer :: i_sub ! Index of sub-cell
   integer :: i0 ! Index into h0(1:n0), source column
@@ -486,7 +494,6 @@ subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, h
   real :: dh ! The width of the sub-cell
   real :: duh ! The total amount of accumulated stuff (u*h)
   real :: dh0_eff ! Running sum of source cell thickness
-  real, parameter :: h_very_large = 1.E30 ! A large thickness, larger than will ever be encountered
   ! For error checking/debugging
   logical, parameter :: force_bounds_in_target = .true. ! To fix round-off issues
   logical, parameter :: adjust_thickest_subcell = .true. ! To fix round-off conservation issues
@@ -494,6 +501,10 @@ subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, h
   integer :: k, i0_last_thick_cell
   real :: h0tot, h0err, h1tot, h1err, h2tot, h2err, u02_err
   real :: u0tot, u0err, u0min, u0max, u1tot, u1err, u1min, u1max, u2tot, u2err, u2min, u2max, u_orig
+  logical :: src_has_volume !< True if h0 has not been consumed
+  logical :: tgt_has_volume !< True if h1 has not been consumed
+
+  if (old_algorithm) isrc_max(:)=1
 
   i0_last_thick_cell = 0
   do i0 = 1, n0
@@ -505,6 +516,8 @@ subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, h
   ! Initialize algorithm
   h0_supply = h0(1)
   h1_supply = h1(1)
+  src_has_volume = .true.
+  tgt_has_volume = .true.
   i0 = 1 ; i1 = 1
   i_start0 = 1 ; i_start1 = 1
   i_max = 1
@@ -544,7 +557,7 @@ subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, h
 
     ! Which ever column (source or target) has the least width left to consume determined
     ! the width, dh, of sub-cell i_sub in the expression for dh above.
-    if (h0_supply <= h1_supply) then
+    if (h0_supply <= h1_supply .and. src_has_volume) then
       ! h0_supply is smaller than h1_supply) so we consume h0_supply and increment the
       ! source cell index.
       h1_supply = h1_supply - dh ! Although this is a difference the result will
@@ -560,19 +573,30 @@ subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, h
       ! Record the source cell thickness found by summing the sub-cell thicknesses.
       h0_eff(i0) = dh0_eff
       ! Move the source index.
-      if (i0 < i0_last_thick_cell) then
-        i0 = i0 + 1
-        h0_supply = h0(i0)
-        dh0_eff = 0.
-        do while (h0_supply==0. .and. i0<i0_last_thick_cell)
-          ! This loop skips over vanished source cells
+      if (old_algorithm) then
+        if (i0 < i0_last_thick_cell) then
           i0 = i0 + 1
           h0_supply = h0(i0)
-        enddo
+          dh0_eff = 0.
+          do while (h0_supply==0. .and. i0<i0_last_thick_cell)
+            ! This loop skips over vanished source cells
+            i0 = i0 + 1
+            h0_supply = h0(i0)
+          enddo
+        else
+          h0_supply = 1.E30
+        endif
       else
-        h0_supply = h_very_large
+        if (i0 < n0) then
+          i0 = i0 + 1
+          h0_supply = h0(i0)
+          dh0_eff = 0.
+        else
+          h0_supply = 0.
+          src_has_volume = .false.
+        endif
       endif
-    else
+    elseif (h0_supply >= h1_supply .and. tgt_has_volume) then
       ! h1_supply is smaller than h0_supply) so we consume h1_supply and increment the
       ! target cell index.
       h0_supply = h0_supply - dh ! Although this is a difference the result will
@@ -586,8 +610,49 @@ subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, h
         i1 = i1 + 1
         h1_supply = h1(i1)
       else
-        h1_supply = h_very_large
+        if (old_algorithm) then
+          h1_supply = 1.E30
+        else
+          h1_supply = 0.
+          tgt_has_volume = .false.
+        endif
       endif
+    elseif (src_has_volume) then
+      ! We ran out of target volume but still have source cells to consume
+      h_sub(i_sub) = h0_supply
+      ! Record the sub-cell start/end index that span the source cell i0.
+      isrc_start(i0) = i_start0
+      isrc_end(i0) = i_sub
+      i_start0 = i_sub + 1
+      ! Record the sub-cell that is the largest fraction of the source cell.
+      isrc_max(i0) = i_max
+      i_max = i_sub + 1
+      dh_max = 0.
+      if (i0 < n0) then
+        i0 = i0 + 1
+        h0_supply = h0(i0)
+        dh0_eff = 0.
+      else
+        h0_supply = 0.
+        src_has_volume = .false.
+      endif
+    elseif (tgt_has_volume) then
+      ! We ran out of source volume but still have target cells to consume
+      h_sub(i_sub) = h1_supply
+      ! Record the sub-cell start/end index that span the target cell i1.
+      itgt_start(i1) = i_start1
+      itgt_end(i1) = i_sub
+      i_start1 = i_sub + 1
+      ! Move the target index.
+      if (i1 < n1) then
+        i1 = i1 + 1
+        h1_supply = h1(i1)
+      else
+        h1_supply = 0.
+        tgt_has_volume = .false.
+      endif
+    else
+      stop 'remap_via_sub_cells: THIS SHOULD NEVER HAPPEN!'
     endif
 
   enddo
@@ -610,9 +675,14 @@ subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, h
     ! Integral is over distance dh but expressed in terms of non-dimensional
     ! positions with source cell from xa to xb  (0 <= xa <= xb <= 1).
     dh0_eff = dh0_eff + dh ! Cumulative thickness within the source cell
-    xb = dh0_eff / h0_eff(i0) ! This expression yields xa <= xb <= 1.0
-    xb = min(1., xb) ! This is only needed when the total target column is wider than the source column
-    u_sub(i_sub) = average_value_ppoly( n0, u0, ppoly0_E, ppoly0_coefficients, method, i0, xa, xb)
+    if (h0_eff(i0)>0.) then
+      xb = dh0_eff / h0_eff(i0) ! This expression yields xa <= xb <= 1.0
+      xb = min(1., xb) ! This is only needed when the total target column is wider than the source column
+      u_sub(i_sub) = average_value_ppoly( n0, u0, ppoly0_E, ppoly0_coefficients, method, i0, xa, xb)
+    else ! Vanished cell
+      xb = 1.
+      u_sub(i_sub) = u0(i0)
+    endif
     if (debug_bounds) then
       if (method<5 .and.(u_sub(i_sub)<u0_min(i0) .or. u_sub(i_sub)>u0_max(i0))) then
         write(0,*) 'Sub cell average is out of bounds',i_sub,'method=',method
@@ -773,6 +843,11 @@ subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, h
 
   ! Include the error remapping from source to sub-cells in the estimate of total remapping error
   uh_err = uh_err + u02_err
+
+  if (present(ah_sub)) ah_sub(1:n0+n1+1) = h_sub(1:n0+n1+1)
+  if (present(aisub_src)) aisub_src(1:n0+n1+1) = isub_src(1:n0+n1+1)
+  if (present(aiss)) aiss(1:n0) = isrc_start(1:n0)
+  if (present(aise)) aise(1:n0) = isrc_end(1:n0)
 
 end subroutine remap_via_sub_cells
 
