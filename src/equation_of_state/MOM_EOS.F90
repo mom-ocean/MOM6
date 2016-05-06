@@ -1229,17 +1229,20 @@ subroutine find_depth_of_pressure_in_cell(T_t, T_b, S_t, S_b, z_t, z_b, P_t, P_t
   Pa_right = P_b - P_tgt ! Pa_right > 0
   Pa_tol = GxRho * 1.e-5
   F_guess = F_l - Pa_left / ( Pa_right -Pa_left ) * ( F_r - F_l )
-  do while ( Pa_right - Pa_left > Pa_tol )
+  Pa = Pa_right - Pa_left ! To get into iterative loop
+  do while ( abs(Pa) > Pa_tol )
 
     z_out = z_t + ( z_b - z_t ) * F_guess
     Pa = frac_dp_at_pos(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, G_e, F_guess, EOS) - ( P_tgt - P_t )
 
     if (Pa<Pa_left) then
+      write(0,*) Pa_left,Pa,Pa_right,P_t-P_tgt,P_b-P_tgt
       stop 'Blurgh! Too negative'
     elseif (Pa<0.) then
       Pa_left = Pa
       F_l = F_guess
     elseif (Pa>Pa_right) then
+      write(0,*) Pa_left,Pa,Pa_right,P_t-P_tgt,P_b-P_tgt
       stop 'Blurgh! Too positive'
     elseif (Pa>0.) then
       Pa_right = Pa
