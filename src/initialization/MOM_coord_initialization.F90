@@ -92,11 +92,11 @@ subroutine MOM_initialize_coord(G, GV, PF, write_geom, output_dir, tv)
     case ("USER")
       call user_set_coord(GV%Rlay, GV%g_prime, G, PF, eos)
     case ("none")
-    case default ; call MOM_error(FATAL,"MOM_initialize_fixed: "// &
+    case default ; call MOM_error(FATAL,"MOM_initialize_coord: "// &
       "Unrecognized coordinate setup"//trim(config))
   end select
-  if (debug) call chksum(GV%Rlay, "MOM_initialize_fixed: Rlay ", 1, nz)
-  if (debug) call chksum(GV%g_prime, "MOM_initialize_fixed: g_prime ", 1, nz)
+  if (debug) call chksum(GV%Rlay, "MOM_initialize_coord: Rlay ", 1, nz)
+  if (debug) call chksum(GV%g_prime, "MOM_initialize_coord: g_prime ", 1, nz)
   call setVerticalGridAxes( GV%Rlay, GV )
 
 ! Copy the maximum depth across from the ocean grid structure
