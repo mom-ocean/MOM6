@@ -29,7 +29,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public MOM_grid_init, MOM_grid_end, set_first_direction
+public MOM_grid_init, MOM_grid_end, set_derived_metrics, set_first_direction
 public isPointInCell, hor_index_type
 
 type, public :: ocean_grid_type
@@ -319,6 +319,60 @@ subroutine MOM_grid_init(G, param_file)
         call MOM_error(FATAL, "MOM_grid_init: G%jed_bk > G%jed")
 
 end subroutine MOM_grid_init
+
+
+!> set_derived_metrics calculates metric terms that are derived from other metrics.
+subroutine set_derived_metrics(G)
+  type(ocean_grid_type), intent(inout) :: G    !< The horizontal grid structure
+!    Various inverse grid spacings and derived areas are calculated within this
+!  subroutine.
+  integer :: i, j, isd, ied, jsd, jed
+  integer :: IsdB, IedB, JsdB, JedB
+
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+
+  do j=jsd,jed ; do i=isd,ied
+    if (G%dxT(i,j) < 0.0) G%dxT(i,j) = 0.0
+    if (G%dyT(i,j) < 0.0) G%dyT(i,j) = 0.0
+    G%IdxT(i,j) = Adcroft_reciprocal(G%dxT(i,j))
+    G%IdyT(i,j) = Adcroft_reciprocal(G%dyT(i,j))
+    G%IareaT(i,j) = Adcroft_reciprocal(G%areaT(i,j))
+  enddo ; enddo
+
+  do j=jsd,jed ; do I=IsdB,IedB
+    if (G%dxCu(I,j) < 0.0) G%dxCu(I,j) = 0.0
+    if (G%dyCu(I,j) < 0.0) G%dyCu(I,j) = 0.0
+    G%IdxCu(I,j) = Adcroft_reciprocal(G%dxCu(I,j))
+    G%IdyCu(I,j) = Adcroft_reciprocal(G%dyCu(I,j))
+  enddo ; enddo
+
+  do J=JsdB,JedB ; do i=isd,ied
+    if (G%dxCv(i,J) < 0.0) G%dxCv(i,J) = 0.0
+    if (G%dyCv(i,J) < 0.0) G%dyCv(i,J) = 0.0
+    G%IdxCv(i,J) = Adcroft_reciprocal(G%dxCv(i,J))
+    G%IdyCv(i,J) = Adcroft_reciprocal(G%dyCv(i,J))
+  enddo ; enddo
+
+  do J=JsdB,JedB ; do I=IsdB,IedB
+    if (G%dxBu(I,J) < 0.0) G%dxBu(I,J) = 0.0
+    if (G%dyBu(I,J) < 0.0) G%dyBu(I,J) = 0.0
+
+    G%IdxBu(I,J) = Adcroft_reciprocal(G%dxBu(I,J))
+    G%IdyBu(I,J) = Adcroft_reciprocal(G%dyBu(I,J))
+    ! areaBu has usually been set to a positive area elsewhere.
+    if (G%areaBu(I,J) <= 0.0) G%areaBu(I,J) = G%dxBu(I,J) * G%dyBu(I,J)
+    G%IareaBu(I,J) =  Adcroft_reciprocal(G%areaBu(I,J))
+  enddo ; enddo
+end subroutine set_derived_metrics
+
+!> Adcroft_reciprocal(x) = 1/x for |x|>0 or 0 for x=0.
+function Adcroft_reciprocal(val) result(I_val)
+  real, intent(in) :: val  !< The value being inverted.
+  real :: I_val            !< The Adcroft reciprocal of val.
+
+  I_val = 0.0 ; if (val /= 0.0) I_val = 1.0/val
+end function Adcroft_reciprocal
 
 !> Returns true if the coordinates (x,y) are within the h-cell (i,j)
 logical function isPointInCell(G, i, j, x, y)
