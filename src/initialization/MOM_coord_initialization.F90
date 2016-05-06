@@ -53,7 +53,7 @@ subroutine MOM_initialize_coord(G, GV, PF, write_geom, output_dir, tv)
 
   nz = GV%ke
 
-  call callTree_enter("MOM_initialize_coord(), MOM_fixed_initialization.F90")
+  call callTree_enter("MOM_initialize_coord(), MOM_coord_initialization.F90")
 !  call log_version(PF, mod, version)
   call get_param(PF, mod, "DEBUG", debug, default=.false.)
 
@@ -92,11 +92,11 @@ subroutine MOM_initialize_coord(G, GV, PF, write_geom, output_dir, tv)
     case ("USER")
       call user_set_coord(GV%Rlay, GV%g_prime, G, PF, eos)
     case ("none")
-    case default ; call MOM_error(FATAL,"MOM_initialize_fixed: "// &
+    case default ; call MOM_error(FATAL,"MOM_initialize_coord: "// &
       "Unrecognized coordinate setup"//trim(config))
   end select
-  if (debug) call chksum(GV%Rlay, "MOM_initialize_fixed: Rlay ", 1, nz)
-  if (debug) call chksum(GV%g_prime, "MOM_initialize_fixed: g_prime ", 1, nz)
+  if (debug) call chksum(GV%Rlay, "MOM_initialize_coord: Rlay ", 1, nz)
+  if (debug) call chksum(GV%g_prime, "MOM_initialize_coord: g_prime ", 1, nz)
   call setVerticalGridAxes( GV%Rlay, GV )
 
 ! Copy the maximum depth across from the ocean grid structure
@@ -132,7 +132,7 @@ subroutine set_coord_from_gprime(Rlay, g_prime, G, GV, param_file)
   integer :: k, nz
   nz = G%ke
 
-  call callTree_enter(trim(mod)//"(), MOM_fixed_initialization.F90")
+  call callTree_enter(trim(mod)//"(), MOM_coord_initialization.F90")
 
   call get_param(param_file, mod, "GFS" , g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
@@ -173,7 +173,7 @@ subroutine set_coord_from_layer_density(Rlay, g_prime, G, GV, param_file)
   integer :: k, nz
   nz = G%ke
 
-  call callTree_enter(trim(mod)//"(), MOM_fixed_initialization.F90")
+  call callTree_enter(trim(mod)//"(), MOM_coord_initialization.F90")
 
   call get_param(param_file, mod, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
@@ -227,7 +227,7 @@ subroutine set_coord_from_TS_ref(Rlay, g_prime, G, GV, param_file, eqn_of_state,
   integer :: k, nz
   nz = G%ke
 
-  call callTree_enter(trim(mod)//"(), MOM_fixed_initialization.F90")
+  call callTree_enter(trim(mod)//"(), MOM_coord_initialization.F90")
 
   call get_param(param_file, mod, "T_REF", T_Ref, &
                  "The initial temperature of the lightest layer.", units="degC", &
@@ -284,7 +284,7 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, G, GV, param_file, &
   character(len=200) :: filename, coord_file, inputdir ! Strings for file/path
   nz = G%ke
 
-  call callTree_enter(trim(mod)//"(), MOM_fixed_initialization.F90")
+  call callTree_enter(trim(mod)//"(), MOM_coord_initialization.F90")
 
   call get_param(param_file, mod, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
@@ -346,7 +346,7 @@ subroutine set_coord_from_TS_range(Rlay, g_prime, G, GV, param_file, &
   character(len=200) :: filename, coord_file, inputdir ! Strings for file/path
   nz = G%ke
 
-  call callTree_enter(trim(mod)//"(), MOM_fixed_initialization.F90")
+  call callTree_enter(trim(mod)//"(), MOM_coord_initialization.F90")
 
   call get_param(param_file, mod, "T_REF", T_Ref, &
                  "The default initial temperatures.", units="degC", default=10.0)
@@ -424,7 +424,7 @@ subroutine set_coord_from_file(Rlay, g_prime, G, GV, param_file)
   character(len=200) :: filename,coord_file,inputdir ! Strings for file/path
   nz = G%ke
 
-  call callTree_enter(trim(mod)//"(), MOM_fixed_initialization.F90")
+  call callTree_enter(trim(mod)//"(), MOM_coord_initialization.F90")
 
   call get_param(param_file, mod, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
@@ -478,7 +478,7 @@ subroutine set_coord_linear(Rlay, g_prime, G, GV, param_file)
   integer :: k, nz
   nz = G%ke
 
-  call callTree_enter(trim(mod)//"(), MOM_fixed_initialization.F90")
+  call callTree_enter(trim(mod)//"(), MOM_coord_initialization.F90")
 
   call get_param(param_file, mod, "LIGHTEST_DENSITY", Rlay_Ref, &
                  "The reference potential density used for the surface \n"// &
