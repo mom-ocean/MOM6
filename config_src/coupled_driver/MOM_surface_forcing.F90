@@ -52,7 +52,8 @@ use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,        only : CLOCK_SUBCOMPONENT
 use MOM_diag_mediator,    only : diag_ctrl
 use MOM_diag_mediator,    only : safe_alloc_ptr, time_type
-use MOM_domains,          only : pass_vector, pass_var, global_field_sum, BITWISE_EXACT_SUM
+use MOM_domains,          only : pass_vector, pass_var, fill_symmetric_edges
+use MOM_domains,          only : global_field_sum, BITWISE_EXACT_SUM
 use MOM_domains,          only : AGRID, BGRID_NE, CGRID_NE, To_All
 use MOM_error_handler,    only : MOM_error, WARNING, FATAL, is_root_pe, MOM_mesg
 use MOM_file_parser,      only : get_param, log_version, param_file_type
@@ -556,7 +557,9 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
 
   ! surface momentum stress related fields as function of staggering
   if (wind_stagger == BGRID_NE) then
-    call pass_vector(taux_at_q,tauy_at_q,G%Domain,stagger=BGRID_NE)
+    if (G%symmetric) &
+      call fill_symmetric_edges(taux_at_q, tauy_at_q, G%Domain, stagger=BGRID_NE)
+    call pass_vector(taux_at_q, tauy_at_q, G%Domain, stagger=BGRID_NE)
 
     do j=js,je ; do I=Isq,Ieq
       fluxes%taux(I,j) = 0.0
@@ -619,6 +622,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
     enddo ; enddo
 
   else ! C-grid wind stresses.
+    if (G%symmetric) &
+      call fill_symmetric_edges(fluxes%taux, fluxes%tauy, G%Domain)
     call pass_vector(fluxes%taux, fluxes%tauy, G%Domain)
 
     do j=js,je ; do i=is,ie
