@@ -82,6 +82,7 @@ program MOM_main
 ! , add_shelf_flux_forcing, add_shelf_flux_IOB
 
   use MOM_wave_interface, only: wave_parameters_CS, MOM_wave_interface_init
+  use MOM_wave_interface, only: Import_Stokes_Drift
 
   implicit none
 
@@ -179,7 +180,6 @@ program MOM_main
   type(sum_output_CS),       pointer :: sum_output_CSp => NULL()
   type(write_cputime_CS),    pointer :: write_CPU_CSp => NULL()
   type(ice_shelf_CS),        pointer :: ice_shelf_CSp => NULL()
-  type(wave_parameters_CS),  pointer :: wave_parameter_CSp =>NULL()
   !-----------------------------------------------------------------------
 
   character(len=4), parameter :: vers_num = 'v2.0'
@@ -286,9 +286,9 @@ program MOM_main
     call initialize_ice_shelf(Time, ice_shelf_CSp, MOM_CSp%diag, fluxes)
   endif
 
-  use_waves=.false. ; call read_param(param_file,"Use_Waves",Use_Waves)
+  use_waves=.false. ; call read_param(param_file,"USE_WAVES",Use_Waves)
   if (use_waves) then
-     call MOM_wave_interface_init(grid,GV,param_file,Wave_Parameter_CSp)
+     call MOM_wave_interface_init(grid,GV,param_file,MOM_CSp%Wave_Parameter_CSp)
   endif
 
   call MOM_sum_output_init(grid, param_file, dirs%output_directory, &
@@ -423,6 +423,10 @@ program MOM_main
     endif
     fluxes%fluxes_used = .false.
     fluxes%dt_buoy_accum = time_step
+
+    if (use_waves) then
+       call Import_Stokes_Drift(grid,GV,time,time_step_ocean,MOM_CSp%wave_parameter_csp, MOM_CSp%h)
+    endif
 
     ! This call steps the model over a time time_step.
     Time1 = Master_Time ; Time = Master_Time

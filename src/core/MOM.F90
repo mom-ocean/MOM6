@@ -116,6 +116,7 @@ use MOM_vert_friction,         only : vertvisc_limit_vel, vertvisc_init
 use MOM_verticalGrid,          only : verticalGrid_type, verticalGridInit, verticalGridEnd
 use MOM_verticalGrid,          only : get_thickness_units, get_flux_units, get_tr_flux_units
 use MOM_wave_speed,            only : wave_speed_init, wave_speed_CS
+use MOM_wave_interface,        only : wave_parameters_CS
 
 implicit none ; private
 
@@ -350,6 +351,8 @@ type, public :: MOM_control_struct
   type(MOM_restart_CS),          pointer :: restart_CSp            => NULL()
   type(ocean_OBC_type),          pointer :: OBC                    => NULL()
   type(ALE_CS),                  pointer :: ALE_CSp                => NULL()
+  type(wave_parameters_CS),      pointer :: wave_parameter_CSp     => NULL()
+
 
   ! These are used for group halo updates.
   type(group_pass_type) :: pass_tau_ustar_psurf
@@ -871,7 +874,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       else
         call step_MOM_dyn_unsplit(u, v, h, CS%tv, CS%visc, Time_local, dt, fluxes, &
                  CS%p_surf_begin, CS%p_surf_end, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
-                 eta_av, G, GV, CS%dyn_unsplit_CSp, CS%VarMix, CS%MEKE)
+                 eta_av, G, GV, CS%dyn_unsplit_CSp, CS%VarMix, CS%MEKE, &
+                 CS%Wave_Parameter_CSp)
       endif
       if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_unsplit (step_MOM)")
 
