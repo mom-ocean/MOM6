@@ -60,8 +60,8 @@ implicit none ; private
 type, public :: ALE_CS
   private
 
-  logical :: boundary_extrapolation_for_pressure !<  Indicate whether high-order boundary 
-                                                 !!  extrapolation should be used within boundary cells
+  logical :: boundary_extrapolation_for_pressure !< Indicate whether high-order boundary 
+                                                 !! extrapolation should be used within boundary cells
 
   logical :: reconstructForPressure = .false.    !< Indicates whether integrals for FV 
                                                  !! pressure gradient calculation will
@@ -69,9 +69,13 @@ type, public :: ALE_CS
                                                  !! By default, it is true if regridding 
                                                  !! has been initialized, otherwise false.
 
-  integer :: pressureReconstructionScheme        !<  Form of the reconstruction of T/S 
+  integer :: pressureReconstructionScheme        !< Form of the reconstruction of T/S 
                                                  !! for FV pressure gradient calculation.
                                                  !! By default, it is =1 (PLM)
+
+  logical :: remap_uv_using_old_alg              !< If true, uses the old "remapping via a delta z"
+                                                 !! method. If False, uses the new method that
+                                                 !! remaps between grids described by h.
 
   real :: regrid_time_scale !< The time-scale used in blending between the current (old) grid
                             !! and the target (new) grid. (s)
@@ -176,6 +180,13 @@ subroutine ALE_init( param_file, G, GV, CS)
                  "within the FV pressure gradient calculation."//&
                  " 1: PLM reconstruction.\n"//&
                  " 2: PPM reconstruction.", default=PRESSURE_RECONSTRUCTION_PLM)
+
+  call get_param(param_file, mod, "REMAP_UV_USING_OLD_ALG", &
+                 CS%remap_uv_using_old_alg, &
+                 "If true, uses the old remapping-via-a-delta-z method for\n"//&
+                 "remapping u and v. If false, uses the new method that remaps\n"//&
+                 "between grids described by a old and new thickness.", &
+                 default=.true., do_not_log=.true.)
 
   ! Initialize and configure regridding
   allocate( dz(G%ke) )
@@ -452,7 +463,6 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, dxInt
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), optional, intent(inout) :: v          !< Meridional velocity component (m/s)
   logical,                                   optional, intent(in)    :: debug      !< If true, show the call tree
   real,                                      optional, intent(in)    :: dt         !< time step for diagnostics 
-
   ! Local variables
   integer                                     :: i, j, k, m
   integer                                     :: nz, ntr
@@ -589,12 +599,14 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, dxInt
         if (G%mask2dCu(i,j)>0.) then
           ! Build the start and final grids
           h1(:) = 0.5 * ( h_old(i,j,:) + h_old(i+1,j,:) )
-          dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i+1,j,:) )
-          do k = 1, nz
-            h2(k) = max( 0., h1(k) + ( dx(k+1) - dx(k) ) )
-          enddo
-         !Todo: Using h_new directly changes answers!!! - AJA
-         !h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i+1,j,:) )
+          if (CS_ALE%remap_uv_using_old_alg) then
+            dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i+1,j,:) )
+            do k = 1, nz
+              h2(k) = max( 0., h1(k) + ( dx(k+1) - dx(k) ) )
+            enddo
+          else
+            h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i+1,j,:) )
+          endif
           call remapping_core_h( nz, h1, u(I,j,:), nz, h2, u_column, CS_remapping )
           u(I,j,:) = u_column(:)
         endif
@@ -612,12 +624,14 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, dxInt
         if (G%mask2dCv(i,j)>0.) then
           ! Build the start and final grids
           h1(:) = 0.5 * ( h_old(i,j,:) + h_old(i,j+1,:) )
-          dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i,j+1,:) )
-          do k = 1, nz
-            h2(k) = max( 0., h1(k) + ( dx(k+1) - dx(k) ) )
-          enddo
-         !Todo: Using h_new directly changes answers!!! - AJA
-         !h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i,j+1,:) )
+          if (CS_ALE%remap_uv_using_old_alg) then
+            dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i,j+1,:) )
+            do k = 1, nz
+              h2(k) = max( 0., h1(k) + ( dx(k+1) - dx(k) ) )
+            enddo
+          else
+            h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i,j+1,:) )
+          endif
           call remapping_core_h( nz, h1, v(i,J,:), nz, h2, u_column, CS_remapping )
           v(i,J,:) = u_column(:)
         endif
