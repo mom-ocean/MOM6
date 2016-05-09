@@ -279,11 +279,9 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, dzInterface )
   type(verticalGrid_type),                   intent(in)    :: GV     !< Ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h      !< Current 3D grid obtained after the last time step
   type(thermo_var_ptrs),                     intent(inout) :: tv     !< Thermodynamical variables (T, S, ...)
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)+1), intent(inout) :: dzInterface  ! The change in position of each interface
-
-  real :: trickGnuCompiler
-
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)+1), intent(inout) :: dzInterface !< The change in position of each interface
   ! Local variables
+  real :: trickGnuCompiler
 
   select case ( CS%regridding_scheme )
 
@@ -291,11 +289,11 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, dzInterface )
       call build_zstar_grid( CS, G, GV, h, dzInterface )
 
     case ( REGRIDDING_SIGMA )
-      call buildGridSigma( CS, G, GV, h, dzInterface )
+      call build_sigma_grid( CS, G, GV, h, dzInterface )
 
     case ( REGRIDDING_RHO )
       call convective_adjustment(G, h, tv)
-      call buildGridRho( G, GV, h, tv, dzInterface, remapCS, CS )
+      call build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
 
     case ( REGRIDDING_ARBITRARY )
       call build_grid_arbitrary( G, GV, h, dzInterface, trickGnuCompiler, CS )
@@ -644,7 +642,7 @@ end subroutine build_zstar_column
 !------------------------------------------------------------------------------
 ! Build sigma grid
 !------------------------------------------------------------------------------
-subroutine buildGridSigma( CS, G, GV, h, dzInterface )
+subroutine build_sigma_grid( CS, G, GV, h, dzInterface )
 !------------------------------------------------------------------------------
 ! This routine builds a grid based on terrain-following coordinates.
 ! The module parameter coordinateResolution(:) determines the resolution in
@@ -706,7 +704,7 @@ subroutine buildGridSigma( CS, G, GV, h, dzInterface )
           write(0,*) k,h(i,j,k),zNew(k)-zNew(k+1),totalThickness*CS%coordinateResolution(k),CS%coordinateResolution(k)
         enddo
         call MOM_error( FATAL, &
-               'MOM_regridding, buildGridSigma: top surface has moved!!!' )
+               'MOM_regridding, build_sigma_grid: top surface has moved!!!' )
       endif
       dzInterface(i,j,1) = 0.
       dzInterface(i,j,nz+1) = 0.
@@ -715,13 +713,13 @@ subroutine buildGridSigma( CS, G, GV, h, dzInterface )
     end do
   end do
 
-end subroutine buildGridSigma
+end subroutine build_sigma_grid
 
 
 !------------------------------------------------------------------------------
 ! Build grid based on target interface densities
 !------------------------------------------------------------------------------
-subroutine buildGridRho( G, GV, h, tv, dzInterface, remapCS, CS )
+subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
 !------------------------------------------------------------------------------
 ! This routine builds a new grid based on a given set of target interface
 ! densities (these target densities are computed by taking the mean value
@@ -772,8 +770,8 @@ subroutine buildGridRho( G, GV, h, tv, dzInterface, remapCS, CS )
   nz = G%ke
   threshold = CS%min_thickness
   p_col(:) = CS%ref_pressure
-  if (.not.CS%target_density_set) call MOM_error(FATAL, "buildGridRho : "//&
-        "Target densities must be set before buildGridRho is called.")
+  if (.not.CS%target_density_set) call MOM_error(FATAL, "build_rho_grid: "//&
+        "Target densities must be set before build_rho_grid is called.")
 
   ! Build grid based on target interface densities
   do j = G%jsc-1,G%jec+1
@@ -916,13 +914,13 @@ subroutine buildGridRho( G, GV, h, tv, dzInterface, remapCS, CS )
         if (zNew(k) > zOld(1)) then
           write(0,*) 'zOld=',zOld
           write(0,*) 'zNew=',zNew
-          call MOM_error( FATAL, 'MOM_regridding, buildGridRho: '//&
+          call MOM_error( FATAL, 'MOM_regridding, build_rho_grid: '//&
                'interior interface above surface!' )
         endif
         if (zNew(k) > zNew(k-1)) then
           write(0,*) 'zOld=',zOld
           write(0,*) 'zNew=',zNew
-          call MOM_error( FATAL, 'MOM_regridding, buildGridRho: '//&
+          call MOM_error( FATAL, 'MOM_regridding, build_rho_grid: '//&
                'interior interfaces cross!' )
         endif
       enddo
@@ -941,14 +939,14 @@ subroutine buildGridRho( G, GV, h, tv, dzInterface, remapCS, CS )
           write(0,*) k,h(i,j,k),zNew(k)-zNew(k+1)
         enddo
         call MOM_error( FATAL, &
-               'MOM_regridding, buildGridRho: top surface has moved!!!' )
+               'MOM_regridding, build_rho_grid: top surface has moved!!!' )
       endif
 #endif
 
     end do  ! end loop on i
   end do  ! end loop on j
 
-end subroutine buildGridRho
+end subroutine build_rho_grid
 
 !> Builds a simple HyCOM-like grid with the deepest location of potential
 !! density interpolated from the column profile and a clipping of depth for
