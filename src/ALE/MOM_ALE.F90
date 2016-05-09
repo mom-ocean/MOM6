@@ -374,18 +374,9 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt)
 
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
-  call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, dzRegrid )
+  call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, h_new, dzRegrid )
 
   call check_remapping_grid( G, h, dzRegrid, 'in ALE_main()' )
-
-  ! Override old grid with new one. The new grid 'h_new' is built in
-  ! one of the 'build_...' routines above.
-!$OMP parallel do default(none) shared(isc,iec,jsc,jec,nk,h,h_new,dzRegrid,CS)
-  do k = 1,nk
-    do j = jsc-1,jec+1 ; do i = isc-1,iec+1
-      h_new(i,j,k) = max( 0., h(i,j,k) + ( dzRegrid(i,j,k) - dzRegrid(i,j,k+1) ) )
-    enddo ; enddo
-  enddo
 
   if (CS%show_call_tree) call callTree_waypoint("new grid generated (ALE_main)")
 
@@ -420,7 +411,8 @@ subroutine ALE_build_grid( G, GV, regridCS, remapCS, h, tv, debug )
 
   ! Local variables
   integer :: nk, i, j, k
-  real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: dzRegrid ! The changein grid interface positions
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: dzRegrid ! The change in grid interface positions
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: h_new ! The new grid thicknesses
   logical :: show_call_tree
 
   show_call_tree = .false.
@@ -429,19 +421,13 @@ subroutine ALE_build_grid( G, GV, regridCS, remapCS, h, tv, debug )
 
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
-  call regridding_main( remapCS, regridCS, G, GV, h, tv, dzRegrid )
-
-  call check_remapping_grid( G, h, dzRegrid, 'in ALE_build_grid()' )
+  call regridding_main( remapCS, regridCS, G, GV, h, tv, h_new, dzRegrid )
 
   ! Override old grid with new one. The new grid 'h_new' is built in
   ! one of the 'build_...' routines above.
-!$OMP parallel do default(none) shared(G,h,dzRegrid)
+!$OMP parallel do default(none) shared(G,h,h_new)
   do j = G%jsc,G%jec ; do i = G%isc,G%iec
-    if (G%mask2dT(i,j)>0.) then
-      do k = 1,G%ke
-        h(i,j,k) = h(i,j,k) + ( dzRegrid(i,j,k) - dzRegrid(i,j,k+1) )
-      enddo
-    endif
+    if (G%mask2dT(i,j)>0.) h(i,j,:) = h_new(i,j,:)
   enddo ; enddo
 
   if (show_call_tree) call callTree_leave("ALE_build_grid()")
