@@ -110,6 +110,7 @@ use MOM_vert_friction, only : vertvisc, vertvisc_coef
 use MOM_vert_friction, only : vertvisc_limit_vel, vertvisc_init, vertvisc_CS
 use MOM_verticalGrid, only : verticalGrid_type, get_thickness_units
 use MOM_verticalGrid, only : get_flux_units, get_tr_flux_units
+use MOM_wave_interface, only: wave_parameters_CS
 
 implicit none ; private
 
@@ -179,7 +180,7 @@ contains
 
 subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
                   p_surf_begin, p_surf_end, uh, vh, uhtr, vhtr, eta_av, G, GV, CS, &
-                  VarMix, MEKE)
+                  VarMix, MEKE, Waves)
   type(ocean_grid_type),                     intent(inout) :: G
   type(verticalGrid_type),                   intent(in)    :: GV
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u
@@ -199,6 +200,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   type(MOM_dyn_unsplit_CS),                  pointer       :: CS
   type(VarMix_CS),                           pointer       :: VarMix
   type(MEKE_type),                           pointer       :: MEKE
+  type(wave_parameters_CS), pointer, optional               :: Waves
 ! Arguments: u - The input and output zonal velocity, in m s-1.
 !  (inout)   v - The input and output meridional velocity, in m s-1.
 !  (inout)   h - The input and output layer thicknesses, in m or kg m-2,
@@ -371,7 +373,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   call disable_averaging(CS%diag)
   call vertvisc_coef(up, vp, h_av, fluxes, visc, dt*0.5, G, GV, CS%vertvisc_CSp)
   call vertvisc(up, vp, h_av, fluxes, visc, dt*0.5, CS%OBC, CS%ADp, CS%CDp, &
-                G, GV, CS%vertvisc_CSp)
+                G, GV, CS%vertvisc_CSp,Waves=Waves)
   call cpu_clock_end(id_clock_vertvisc)
   call cpu_clock_begin(id_clock_pass)
   call pass_vector(up, vp, G%Domain)
@@ -430,7 +432,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   call cpu_clock_begin(id_clock_vertvisc)
   call vertvisc_coef(upp, vpp, hp, fluxes, visc, dt*0.5, G, GV, CS%vertvisc_CSp)
   call vertvisc(upp, vpp, hp, fluxes, visc, dt*0.5, CS%OBC, CS%ADp, CS%CDp, &
-                G, GV, CS%vertvisc_CSp)
+                G, GV, CS%vertvisc_CSp,Waves=Waves)
   call cpu_clock_end(id_clock_vertvisc)
   call cpu_clock_begin(id_clock_pass)
   call pass_vector(upp, vpp, G%Domain)
@@ -496,7 +498,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   call cpu_clock_begin(id_clock_vertvisc)
   call vertvisc_coef(u, v, h_av, fluxes, visc, dt, G, GV, CS%vertvisc_CSp)
   call vertvisc(u, v, h_av, fluxes, visc, dt, CS%OBC, CS%ADp, CS%CDp, &
-                G, GV, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
+                G, GV, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot,Waves=Waves)
   call cpu_clock_end(id_clock_vertvisc)
   call cpu_clock_begin(id_clock_pass)
   call pass_vector(u, v, G%Domain)

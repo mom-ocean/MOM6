@@ -79,6 +79,7 @@ use MOM_diag_mediator, only : diag_ctrl
 use MOM_checksums, only : uchksum, vchksum, hchksum
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE
 use MOM_file_parser, only : get_param, log_version, param_file_type
+use MOM_file_parser, only : read_param!BGR added to check UseWaves
 use MOM_forcing_type, only : forcing
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
@@ -89,7 +90,7 @@ use MOM_variables, only : thermo_var_ptrs, vertvisc_type
 use MOM_variables, only : cont_diag_ptrs, accel_diag_ptrs
 use MOM_variables, only : ocean_internal_state, ocean_OBC_type, OBC_SIMPLE
 use MOM_verticalGrid, only : verticalGrid_type
-
+use MOM_wave_interface, only : wave_parameters_CS
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -171,12 +172,16 @@ type, public :: vertvisc_CS ; private
   integer :: id_Ray_u = -1, id_Ray_v = -1, id_taux_bot = -1, id_tauy_bot = -1
 
   type(PointAccel_CS), pointer :: PointAccel_CSp => NULL()
+  logical :: LagrangianMixing !If Stokes drift is present and viscous mixing
+                              ! should be applied to Lagrangian current
+  logical :: WaveEnhancedDiff !If viscosity/diffusivity should be enhanced
+                              ! due to presence of wave modified turbulence
 end type vertvisc_CS
 
 contains
 
 subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, GV, CS, &
-                    taux_bot, tauy_bot)
+                    taux_bot, tauy_bot, Waves)
 !    This subroutine does a fully implicit vertical diffusion
 !  of momentum.  Stress top and bottom b.c.s are used.
   type(ocean_grid_type), intent(in)                     :: G
@@ -191,6 +196,7 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, GV, CS, &
   type(accel_diag_ptrs), intent(inout)                  :: ADp
   type(cont_diag_ptrs),  intent(inout)                  :: CDp
   type(vertvisc_CS), pointer                            :: CS
+  type(wave_parameters_CS), pointer, optional           :: Waves
   real, dimension(SZIB_(G),SZJ_(G)), optional, intent(out) :: taux_bot
   real, dimension(SZI_(G),SZJB_(G)), optional, intent(out) :: tauy_bot
 
@@ -271,6 +277,9 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, GV, CS, &
 
   !   Update the zonal velocity component using a modification of a standard
   ! tridagonal solver.
+  if (CS%LagrangianMixing) then
+     u = u + Waves%Us_x
+  endif
 !$OMP parallel do default(none) shared(G,Isq,Ieq,ADp,nz,u,CS,dt_Rho0,fluxes,h, &
 !$OMP                                  h_neglect,Hmix,I_Hmix,visc,dt_m_to_H,   &
 !$OMP                                  Idt,taux_bot,Rho0)                      &
@@ -343,7 +352,14 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, GV, CS, &
     endif
   enddo ! end u-component j loop
 
+  if (CS%LagrangianMixing) then
+     u = u - Waves%Us_x
+  endif
+
   ! Now work on the meridional velocity component.
+  if (CS%LagrangianMixing) then
+     v = v + Waves%Us_y
+  endif
 !$OMP parallel do default(none) shared(G,Jsq,Jeq,ADp,nz,v,CS,dt_Rho0,fluxes,h, &
 !$OMP                                  Hmix,I_Hmix,visc,dt_m_to_H,Idt,Rho0,    &
 !$OMP                                  tauy_bot,is,ie)                         &
@@ -415,6 +431,10 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, GV, CS, &
       enddo ; enddo ; endif
     endif
   enddo ! end of v-component J loop
+
+  if (CS%LagrangianMixing) then
+     v = v - Waves%Us_y
+  endif
 
   call vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, GV, CS)
 
@@ -1385,6 +1405,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
 
   real :: hmix_str_dflt
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
+  logical :: UseWaves
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_vert_friction" ! This module's name.
@@ -1534,6 +1555,35 @@ subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
 
   if ((len_trim(CS%v_trunc_file) > 0) .or. (len_trim(CS%v_trunc_file) > 0)) &
     call PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS%PointAccel_CSp)
+
+!Modifications to initialize wave mixing
+  UseWaves=.false.;call read_param(param_file, "USE_WAVES", UseWaves)
+  call get_param(param_file, mod, "LAGRANGIAN_MIXING", CS%LagrangianMixing, &
+                 "Flag to use Lagrangian Mixing", units="", &
+                 Default=.false.)
+  call get_param(param_file, mod, "WAVE_ENHANCED_MIXING", CS%WaveEnhancedDiff, &
+                 "Flag to use wave enhancement in mixing", units="", &
+                 Default=.false.) 
+  if ( (CS%LagrangianMixing.or.CS%WaveEnhancedDiff) .and. (.not.UseWaves)) then
+     call MOM_error(FATAL,"MOM_vert_friction(visc): "// &
+          "LagrangianMixing and WaveEnhancedDiff cannot"//&
+          "be called without USE_WAVES = .true.")
+  endif
+    !\BGRTEMP{
+  print*,' '
+  print*,'In vertvisc_init:'
+  print*,'Use Waves: ',UseWaves
+  print*,'Lagrangian:  ',CS%LagrangianMixing
+  print*,'Enhancement: ',CS%WaveEnhancedDiff
+  !print*,'***********************************************'
+  !print*,'** Made it to end of vertvisc_init **'
+  !print*,'** Now stopping test...                      **'
+  !print*,'***********************************************'
+  !stop
+  print*,'Leaving vertvisc_init...'
+  print*,' '
+  !\BGRTEMP}
+!End modifications to include wave mixing
 
 end subroutine vertvisc_init
 
