@@ -245,7 +245,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
                               v_cor, vhbt_aux, v_cor_aux, BT_cont)
 
     call cpu_clock_begin(id_clock_update)
-!$OMP parallel do default(none) private(h_min) shared(nz,LB,h,dt,G,vh)
+!$OMP parallel do default(none) shared(h_min,nz,LB,h,dt,G,vh)
     do k=1,nz ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
       h(i,j,k) = h(i,j,k) - dt*G%IareaT(i,j) * (vh(i,J,k) - vh(i,J-1,k))
   !   This line prevents underflow.
@@ -300,7 +300,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
                          u_cor, uhbt_aux, u_cor_aux, BT_cont)
 
     call cpu_clock_begin(id_clock_update)
-!$OMP parallel do default(none) private(h_min) shared(nz,LB,h,dt,G,uh)
+!$OMP parallel do default(none) shared(h_min,nz,LB,h,dt,G,uh)
     do k=1,nz ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
       h(i,j,k) = h(i,j,k) - dt* G%IareaT(i,j) * (uh(I,j,k) - uh(I-1,j,k))
   !   This line prevents underflow.

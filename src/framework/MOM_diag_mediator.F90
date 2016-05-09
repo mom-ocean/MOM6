@@ -1815,8 +1815,8 @@ end function i2s
 
 subroutine set_diag_remap_axes(diag, diag_cs, axes)
   ! Associate a remapping axes with the a diagnostic based on the axes info.
-  type(diag_ctrl), target, intent(inout) :: diag_cs
-  type(diag_type), pointer, intent(out) :: diag
+  type(diag_ctrl), target, intent(in) :: diag_cs
+  type(diag_type), pointer, intent(inout) :: diag
   type(axes_grp),   intent(in) :: axes
 
   diag%remap_axes => null()
@@ -1837,8 +1837,8 @@ end subroutine set_diag_remap_axes
 subroutine set_diag_mask(diag, diag_cs, axes)
   ! Associate a mask with the a diagnostic based on the axes info.
 
-  type(diag_ctrl), target, intent(inout) :: diag_cs
-  type(diag_type), pointer, intent(out) :: diag
+  type(diag_ctrl), target, intent(in) :: diag_cs
+  type(diag_type), pointer, intent(inout) :: diag
   type(axes_grp),   intent(in) :: axes
 
   diag%mask2d => null()
