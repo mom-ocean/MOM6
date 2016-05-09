@@ -671,7 +671,7 @@ subroutine ALE_remap_scalar(CS, G, nk_src, h_src, s_src, h_dst, s_dst, all_cells
 
 !$OMP parallel default(none) shared(CS,G,h_src,s_src,h_dst,s_dst &
 !$OMP                               ,ignore_vanished_layers, nk_src,dx ) &
-!$OMP                        private(n_points)
+!$OMP                        firstprivate(n_points)
 !$OMP do
   do j = G%jsc,G%jec
     do i = G%isc,G%iec
