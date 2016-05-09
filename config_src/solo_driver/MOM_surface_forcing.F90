@@ -71,6 +71,7 @@ use MOM_cpu_clock,           only : CLOCK_MODULE
 use MOM_diag_mediator,       only : post_data, query_averaging_enabled
 use MOM_diag_mediator,       only : diag_ctrl, safe_alloc_ptr
 use MOM_domains,             only : pass_var, pass_vector, AGRID, To_South, To_West, To_All
+use MOM_domains,             only : fill_symmetric_edges, CGRID_NE
 use MOM_error_handler,       only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_error_handler,       only : callTree_enter, callTree_leave
 use MOM_file_parser,         only : get_param, log_version, param_file_type
@@ -685,13 +686,11 @@ subroutine wind_forcing_from_file(state, fluxes, day, G, CS)
         call read_data(filename, CS%stress_y_var, temp_y(:,:), position=NORTH_FACE, &
                        domain=G%Domain_aux%mpp_domain, timelevel=time_lev)
 
-        call pass_vector(temp_x, temp_y, G%Domain_aux)
-        do j=js,je ; do I=Isq,Ieq
+        do j=js,je ; do i=is,ie
           fluxes%taux(I,j) = CS%wind_scale * temp_x(I,j)
-        enddo ; enddo
-        do J=Jsq,Jeq ; do i=is,ie
           fluxes%tauy(i,J) = CS%wind_scale * temp_y(i,J)
         enddo ; enddo
+        call fill_symmetric_edges(fluxes%taux, fluxes%taux, G%Domain, stagger=CGRID_NE)
       else
         call read_data(filename, CS%stress_x_var, fluxes%taux(:,:), &
                        domain=G%Domain%mpp_domain, position=EAST_FACE, &
