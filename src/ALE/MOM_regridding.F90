@@ -20,7 +20,7 @@ use PQM_functions, only : PQM_reconstruction, PQM_boundary_extrapolation_v1
 
 use P1M_functions, only : P1M_interpolation, P1M_boundary_extrapolation
 use P3M_functions, only : P3M_interpolation, P3M_boundary_extrapolation
-use MOM_remapping, only : remapping_core_w, remapping_core_h
+use MOM_remapping, only : remapping_core_h
 use MOM_remapping, only : remapping_CS
 use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
@@ -795,7 +795,7 @@ subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
   real    :: nominalDepth, totalThickness, dh
   real, dimension(SZK_(G)+1) :: zOld, zNew
   real, dimension(SZK_(G)) :: h0, h1, hTmp
-  real, dimension(SZK_(G)+1) :: x0, x1, xTmp, dx
+  real, dimension(SZK_(G)+1) :: x0, x1, xTmp
 
   nz = G%ke
   threshold = CS%min_thickness
@@ -893,14 +893,11 @@ subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
           h0(k) = x0(k+1) - x0(k)
           h1(k) = x1(k+1) - x1(k)
         end do
-        dx(:) = x1(:) - x0(:)
-        dx(1) = 0.
-        dx(nz+1) = 0.
 
-        call remapping_core_w(remapCS, nz, h0, S_col, nz, dx, Tmp_col)
+        call remapping_core_h(nz, h0, S_col, nz, h1, Tmp_col, remapCS)
         S_col(:) = Tmp_col(:)
 
-        call remapping_core_w(remapCS, nz, h0, T_col, nz, dx, Tmp_col)
+        call remapping_core_h(nz, h0, T_col, nz, h1, Tmp_col, remapCS)
         T_col(:) = Tmp_col(:)
 
         ! Compute the deviation between two successive grids
