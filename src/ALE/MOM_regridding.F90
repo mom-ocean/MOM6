@@ -254,7 +254,7 @@ end subroutine end_regridding
 !------------------------------------------------------------------------------
 ! Dispatching regridding routine: regridding & remapping
 !------------------------------------------------------------------------------
-subroutine regridding_main( remapCS, CS, G, GV, h, tv, dzInterface )
+subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface )
 !------------------------------------------------------------------------------
 ! This routine takes care of (1) building a new grid and (2) remapping between
 ! the old grid and the new grid. The creation of the new grid can be based
@@ -279,6 +279,7 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, dzInterface )
   type(verticalGrid_type),                   intent(in)    :: GV     !< Ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h      !< Current 3D grid obtained after the last time step
   type(thermo_var_ptrs),                     intent(inout) :: tv     !< Thermodynamical variables (T, S, ...)
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h_new  !< New 3D grid consistent with target coordinate
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)+1), intent(inout) :: dzInterface !< The change in position of each interface
   ! Local variables
   real :: trickGnuCompiler
@@ -287,22 +288,28 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, dzInterface )
 
     case ( REGRIDDING_ZSTAR )
       call build_zstar_grid( CS, G, GV, h, dzInterface )
+      call calc_h_new_by_dz(G, h, dzInterface, h_new)
 
     case ( REGRIDDING_SIGMA )
       call build_sigma_grid( CS, G, GV, h, dzInterface )
+      call calc_h_new_by_dz(G, h, dzInterface, h_new)
 
     case ( REGRIDDING_RHO )
       call convective_adjustment(G, h, tv)
       call build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
+      call calc_h_new_by_dz(G, h, dzInterface, h_new)
 
     case ( REGRIDDING_ARBITRARY )
       call build_grid_arbitrary( G, GV, h, dzInterface, trickGnuCompiler, CS )
+      call calc_h_new_by_dz(G, h, dzInterface, h_new)
 
     case ( REGRIDDING_HYCOM1 )
       call build_grid_HyCOM1( G, GV, h, tv, dzInterface, remapCS, CS )
+      call calc_h_new_by_dz(G, h, dzInterface, h_new)
 
     case ( REGRIDDING_SLIGHT )
       call build_grid_SLight( G, GV, h, tv, dzInterface, remapCS, CS )
+      call calc_h_new_by_dz(G, h, dzInterface, h_new)
 
     case default
       call MOM_error(FATAL,'MOM_regridding, regridding_main: '//&
@@ -316,6 +323,29 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, dzInterface )
 
 end subroutine regridding_main
 
+!> Calculates h_new from h + delta_k dzInterface
+subroutine calc_h_new_by_dz(G, h, dzInterface, h_new)
+  type(ocean_grid_type),                      intent(in)    :: G !< Grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h !< Old layer thicknesses (m)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: dzInterface !< Change in interface positions (m)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: h_new !< New layer thicknesses (m)
+  ! Local variables
+  integer :: i, j, k
+
+!$OMP parallel do default(none) shared(G,h,dzInterface,h_new)
+  do j = G%jsc-1,G%jec+1
+    do i = G%isc-1,G%iec+1
+      if (G%mask2dT(i,j)>0.) then
+        do k=1,G%ke
+          h_new(i,j,k) = max( 0., h(i,j,k) + ( dzInterface(i,j,k) - dzInterface(i,j,k+1) ) )
+        enddo
+      else
+        h_new(i,j,:) = h(i,j,:)
+      endif
+    enddo
+  enddo
+
+end subroutine calc_h_new_by_dz
 
 !> Check that the total thickness of two grids match
 subroutine check_remapping_grid( G, h, dzInterface, msg )
