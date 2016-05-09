@@ -568,6 +568,19 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   tot_wt_ssh = 0.0
   do j=js,je ; do i=is,ie ; CS%ave_ssh(i,j) = 0.0 ; enddo ; enddo
 
+  if (associated(CS%VarMix)) then
+    call enable_averaging(time_interval, Time_start+set_time(int(time_interval)), &
+                          CS%diag)
+    call calc_resoln_function(h, CS%tv, G, GV, CS%VarMix)
+    call disable_averaging(CS%diag)
+  endif
+
+  if (G%nonblocking_updates) then
+    call cpu_clock_begin(id_clock_pass)
+    call complete_group_pass(CS%pass_tau_ustar_psurf, G%Domain)
+    call cpu_clock_end(id_clock_pass)
+  endif
+
   if (CS%interp_p_surf) then
     if (.not.ASSOCIATED(CS%p_surf_end))   allocate(CS%p_surf_end(isd:ied,jsd:jed))
     if (.not.ASSOCIATED(CS%p_surf_begin)) allocate(CS%p_surf_begin(isd:ied,jsd:jed))
@@ -585,19 +598,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     call MOM_state_chksum("Before steps ", u, v, h, CS%uh, CS%vh, G, GV)
     call MOM_forcing_chksum("Before steps", fluxes, G, haloshift=0)
     call check_redundant("Before steps ", u, v, G)
-  endif
-
-  if (associated(CS%VarMix)) then
-    call enable_averaging(time_interval, Time_start+set_time(int(time_interval)), &
-                          CS%diag)
-    call calc_resoln_function(h, CS%tv, G, GV, CS%VarMix)
-    call disable_averaging(CS%diag)
-  endif
-
-  if (G%nonblocking_updates) then
-    call cpu_clock_begin(id_clock_pass)
-    call complete_group_pass(CS%pass_tau_ustar_psurf, G%Domain)
-    call cpu_clock_end(id_clock_pass)
+    call check_redundant("Before steps ", fluxes%taux, fluxes%tauy, G)
   endif
   call cpu_clock_end(id_clock_other)
 
