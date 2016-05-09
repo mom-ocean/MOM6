@@ -635,24 +635,28 @@ end subroutine remap_all_state_vars
 !> Remaps a single scalar between grids described by thicknesses h_src and h_dst.
 !! h_dst must be dimensioned as a model array with G%ke layers while h_src can
 !! have an arbitrary number of layers specified by nk_src.
-subroutine ALE_remap_scalar(CS, G, nk_src, h_src, s_src, h_dst, s_dst, all_cells )
+subroutine ALE_remap_scalar(CS, G, nk_src, h_src, s_src, h_dst, s_dst, all_cells, old_remap )
   type(remapping_CS),                      intent(in)    :: CS        !< Remapping control structure
   type(ocean_grid_type),                   intent(in)    :: G         !< Ocean grid structure
   integer,                                 intent(in)    :: nk_src    !< Number of levels on source grid
   real, dimension(SZI_(G),SZJ_(G),nk_src), intent(in)    :: h_src     !< Level thickness of source grid (m or Pa)
   real, dimension(SZI_(G),SZJ_(G),nk_src), intent(in)    :: s_src     !< Scalar on source grid
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h_dst     !< Level thickness of destination grid (m or Pa)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: s_dst     !< Scalar on destination grid
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),intent(in)    :: h_dst     !< Level thickness of destination grid (m or Pa)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),intent(inout) :: s_dst     !< Scalar on destination grid
   logical, optional,                       intent(in)    :: all_cells !< If false, only reconstruct for
                                                                       !! non-vanished cells. Use all vanished
                                                                       !! layers otherwise (default).
+  logical, optional,                       intent(in)    :: old_remap !< If true, use the old "remapping_core_w"
+                                                                      !! method, otherwise use "remapping_core_h".
   ! Local variables
   integer :: i, j, k, n_points
   real :: dx(G%ke+1)
-  logical :: ignore_vanished_layers
+  logical :: ignore_vanished_layers, use_remapping_core_w
 
   ignore_vanished_layers = .false.
   if (present(all_cells)) ignore_vanished_layers = .not. all_cells
+  use_remapping_core_w = .false.
+  if (present(old_remap)) use_remapping_core_w = old_remap
   n_points = nk_src
 
 !$OMP parallel default(none) shared(CS,G,h_src,s_src,h_dst,s_dst &
@@ -669,10 +673,12 @@ subroutine ALE_remap_scalar(CS, G, nk_src, h_src, s_src, h_dst, s_dst, all_cells
           enddo
           s_dst(i,j,:) = 0.
         endif
-       !Todo: Using remapping_core_h() is what we want to do but changes answers !!! -AJA
-       !call remapping_core_h(n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), G%ke, h_dst(i,j,:), s_dst(i,j,:), CS)
-        call dzFromH1H2( n_points, h_src(i,j,1:n_points), G%ke, h_dst(i,j,:), dx )
-        call remapping_core_w(CS, n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), G%ke, dx, s_dst(i,j,:))
+        if (use_remapping_core_w) then
+          call dzFromH1H2( n_points, h_src(i,j,1:n_points), G%ke, h_dst(i,j,:), dx )
+          call remapping_core_w(CS, n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), G%ke, dx, s_dst(i,j,:))
+        else
+          call remapping_core_h(n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), G%ke, h_dst(i,j,:), s_dst(i,j,:), CS)
+        endif
       else
         s_dst(i,j,:) = 0.
       endif
