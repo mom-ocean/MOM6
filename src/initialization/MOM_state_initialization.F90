@@ -1994,7 +1994,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
   type(regridding_CS) :: regridCS ! Regridding parameters and work arrays
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
 
-  logical :: homogenize, useALEremapping, remap_full_column, remap_general
+  logical :: homogenize, useALEremapping, remap_full_column, remap_general, remap_old_alg
   character(len=10) :: remappingScheme
   real :: tempAvg, saltAvg
   integer :: nPoints, ans
@@ -2060,6 +2060,10 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
                  "If false, only reconstructsa for valid data points.\n"//&
                  "If true, inserts vanished layers below the valid data.",&
                  default=remap_general, do_not_log=.true.)
+  call get_param(PF, mod, "Z_INIT_REMAP_OLD_ALG", remap_old_alg, &
+                 "If false, uses the preferred remapping algorihtm.\n"//&
+                 "If true, use an older, less robust algorith for remapping.",&
+                 default=.true., do_not_log=.true.)
 
 !   Read input grid coordinates for temperature and salinity field
 !   in z-coordinate dataset. The file is REQUIRED to contain the
@@ -2183,8 +2187,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
       call pass_var(tv%S, G%Domain) ! ALE_build_grid() only updates h on the computational domain.
       call ALE_build_grid( G, GV, regridCS, remapCS, h, tv, .true. )
     endif
-    call ALE_remap_scalar( remapCS, G, nz, h1, tmpT1dIn, h, tv%T, all_cells=remap_full_column )
-    call ALE_remap_scalar( remapCS, G, nz, h1, tmpS1dIn, h, tv%S, all_cells=remap_full_column )
+    call ALE_remap_scalar( remapCS, G, nz, h1, tmpT1dIn, h, tv%T, all_cells=remap_full_column, old_remap=remap_old_alg )
+    call ALE_remap_scalar( remapCS, G, nz, h1, tmpS1dIn, h, tv%S, all_cells=remap_full_column, old_remap=remap_old_alg )
     deallocate( h1 )
     deallocate( tmpT1dIn )
     deallocate( tmpS1dIn )
