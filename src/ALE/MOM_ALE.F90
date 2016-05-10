@@ -25,7 +25,7 @@ use MOM_regridding,       only : regriddingCoordinateModeDoc, DEFAULT_COORDINATE
 use MOM_regridding,       only : regriddingInterpSchemeDoc, regriddingDefaultInterpScheme
 use MOM_regridding,       only : regriddingDefaultBoundaryExtrapolation
 use MOM_regridding,       only : regriddingDefaultMinThickness
-use MOM_regridding,       only : check_remapping_grid, set_regrid_max_depths
+use MOM_regridding,       only : set_regrid_max_depths
 use MOM_regridding,       only : set_regrid_max_thickness
 use MOM_regridding,       only : regridding_CS, set_regrid_params
 use MOM_regridding,       only : getCoordinateInterfaces, getCoordinateResolution
@@ -119,7 +119,6 @@ public ALE_writeCoordinateFile
 public ALE_updateVerticalGridType
 public ALE_initThicknessToCoord
 public ALE_update_regrid_weights
-public check_remapping_grid
 public ALE_remap_init_conds
 public ALE_register_diags
 
@@ -143,6 +142,7 @@ subroutine ALE_init( param_file, G, GV, CS)
   logical                         :: check_reconstruction
   logical                         :: check_remapping
   logical                         :: force_bounds_in_subcell
+  logical                         :: local_logical
 
   if (associated(CS)) then
     call MOM_error(WARNING, "ALE_init called with an associated "// &
@@ -239,6 +239,12 @@ subroutine ALE_init( param_file, G, GV, CS)
                  units="m", default=0.)
   call set_regrid_params(CS%regridCS, depth_of_time_filter_shallow=filter_shallow_depth*GV%m_to_H, &
                                       depth_of_time_filter_deep=filter_deep_depth*GV%m_to_H)
+  call get_param(param_file, mod, "REGRID_USE_OLD_DIRECTION", local_logical, &
+                 "If true, the regridding ntegrates upwards from the bottom for\n"//&
+                 "interface positions, much as the main model does. If false\n"//&
+                 "regridding integrates downward, consistant with the remapping\n"//&
+                 "code.", default=.true., do_not_log=.true.)
+  call set_regrid_params(CS%regridCS, integrate_downward_for_e=.not.local_logical)
 
   ! Keep a record of values for subsequent queries
   CS%nk = G%ke
@@ -387,7 +393,7 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt)
   ! Both are needed for the subsequent remapping of variables.
   call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, h_new, dzRegrid )
 
-  call check_remapping_grid( G, h, dzRegrid, 'in ALE_main()' )
+  call check_grid( G, h, 0. )
 
   if (CS%show_call_tree) call callTree_waypoint("new grid generated (ALE_main)")
 
@@ -409,6 +415,29 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt)
   if (CS%show_call_tree) call callTree_leave("ALE_main()")
 end subroutine ALE_main
 
+!> Check grid for negative thicknesses
+subroutine check_grid( G, h, threshold )
+  type(ocean_grid_type),                     intent(in) :: G !< Ocean grid structure
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in) :: h !< Current 3D grid obtained after the last time step (H units)
+  real,                                      intent(in) :: threshold !< Value below which to flag issues (H units)
+  ! Local variables
+  integer :: i, j
+
+  do j = G%jsc,G%jec ; do i = G%isc,G%iec
+    if (G%mask2dT(i,j)>0.) then
+      if (minval(h(i,j,:)) < threshold) then
+        write(0,*) 'check_grid: i,j=',i,j,'h(i,j,:)=',h(i,j,:)
+        if (threshold <= 0.) then
+          call MOM_error(FATAL,"MOM_ALE, check_grid: negative thickness encountered.")
+        else
+          call MOM_error(FATAL,"MOM_ALE, check_grid: too tiny thickness encountered.")
+        endif
+      endif
+    endif
+  enddo ; enddo
+
+
+end subroutine check_grid
 
 !> Generates new grid
 subroutine ALE_build_grid( G, GV, regridCS, remapCS, h, tv, debug )
