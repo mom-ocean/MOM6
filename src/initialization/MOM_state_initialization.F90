@@ -34,6 +34,7 @@ use MOM_variables, only : thermo_var_ptrs, ocean_OBC_type
 use MOM_variables, only : OBC_NONE, OBC_SIMPLE, OBC_FLATHER_E, OBC_FLATHER_W
 use MOM_variables, only : OBC_FLATHER_N, OBC_FLATHER_S
 use MOM_verticalGrid, only : setVerticalGridAxes, verticalGrid_type
+use MOM_ALE, only : pressure_gradient_plm
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use MOM_EOS, only : int_specific_vol_dp
 use user_initialization, only : user_initialize_thickness, user_initialize_velocity
@@ -135,8 +136,9 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   logical :: use_EOS    ! If true, density is calculated from T & S using an
                         ! equation of state.
   logical :: depress_sfc ! If true, remove the mass that would be displaced
-                         ! by a large surface pressure, such as with an ice
-                         ! sheet.
+                         ! by a large surface pressure by squeezing the column.
+  logical :: trim_ic_for_p_surf ! If true, remove the mass that would be displaced
+                         ! by a large surface pressure, such as with an ice sheet.
   logical :: Analytic_FV_PGF, obsol_test
   logical :: apply_OBC_u, apply_OBC_v
   logical :: apply_OBC_u_flather_east, apply_OBC_u_flather_west
@@ -352,7 +354,14 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                  "If true,  depress the initial surface to avoid huge \n"//&
                  "tsunamis when a large surface pressure is applied.", &
                  default=.false.)
+    call get_param(PF, mod, "TRIM_IC_FOR_P_SURF", trim_ic_for_p_surf, &
+                 "If true, cuts way the top of the column for initial conditions\n"//&
+                 "at the depth where the hydrostatic presure matches the imposed\n"//&
+                 "surface pressure which is read from file.", default=.false.)
+    if (depress_sfc .and. trim_ic_for_p_surf) call MOM_error(FATAL, "MOM_initialize_state: "//&
+             "DEPRESS_INITIAL_SURFACE and TRIM_IC_FOR_P_SURF are exclusive and cannot both be True")
     if (depress_sfc) call depress_surface(h, G, GV, PF, tv)
+    if (trim_ic_for_p_surf) call trim_for_ice(PF, G, GV, ALE_CSp, tv, h)
 
   else ! Previous block for new_sim=.T., this block restores state
 !    This line calls a subroutine that reads the initial conditions  !
@@ -824,52 +833,77 @@ subroutine depress_surface(h, G, GV, param_file, tv)
 
 end subroutine depress_surface
 
-!> Adjust the layer thicknesses by cutting away the top at the depth where the hydrostatic
-!! pressure matches p_surf
-subroutine trim_for_iceshelf(G, GV, ALE_CSp, tv, p_surf, h)
+!> Adjust the layer thicknesses by cutting away the top of each model column at the depth
+!! where the hydrostatic pressure matches an imposed surface pressure read from file.
+subroutine trim_for_ice(PF, G, GV, ALE_CSp, tv, h)
+  type(param_file_type),                    intent(in)    :: PF !< Parameter file structure
   type(ocean_grid_type),                    intent(in)    :: G !< Ocean grid structure
   type(verticalGrid_type),                  intent(in)    :: GV !< Vertical grid structure
   type(ALE_CS),                             pointer       :: ALE_CSp !< ALE control structure
   type(thermo_var_ptrs),                    intent(in)    :: tv !< Thermodynamics structure
-  real, dimension(SZI_(G),SZJ_(G)),         intent(in)    :: p_surf !< Weight on ocean at surface (Pa)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h !< Layer thickness (H units, m or Pa)
   ! Local variables
+  character(len=200) :: mod = "trim_for_ice"
+  real, dimension(SZI_(G),SZJ_(G)) :: p_surf ! Imposed pressure on ocean at surface (Pa)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: S_t, S_b, T_t, T_b ! Top and bottom edge values for reconstructions
                                                                  ! of salinity and temperature within each layer.
+  character(len=200) :: inputdir, filename, p_surf_file, p_surf_var ! Strings for file/path
+  real :: scale_factor, min_thickness
   integer :: i, j
 
+  call get_param(PF, mod, "SURFACE_PRESSURE_FILE", p_surf_file, &
+                 "The initial condition file for the surface height.", &
+                 fail_if_missing=.true.)
+  call get_param(PF, mod, "SURFACE_PRESSURE_VAR", p_surf_var, &
+                 "The initial condition variable for the surface height.", &
+                 units="kg m-2", default="")
+  call get_param(PF, mod, "INPUTDIR", inputdir, default=".", do_not_log=.true.)
+  filename = trim(slasher(inputdir))//trim(p_surf_file)
+  call log_param(PF,  mod, "!INPUTDIR/SURFACE_HEIGHT_IC_FILE", filename)
+
+  call read_data(filename, p_surf_var, p_surf, domain=G%Domain%mpp_domain)
+  call get_param(PF, mod, "SURFACE_PRESSURE_SCALE", scale_factor, &
+                 "A scaling factor to convert SURFACE_PRESSURE_VAR from\n"//&
+                 "file SURFACE_PRESSURE_FILE into a surface pressure.", &
+                 units="file dependent", default=1.)
+  if (scale_factor /= 1.) p_surf(:,:) = scale_factor * p_surf(:,:)
+  call get_param(PF, mod, "MIN_THICKNESS", min_thickness, 'Minimum layer thickness', &
+                 units='m', default=1.e-3)
+
   ! Find edge values of T and S used in reconstructions
-! if ( use_ALE ) then
+  if ( associated(ALE_CSp) ) then ! This should only be associated if we are in ALE mode
 !   if ( PRScheme == PRESSURE_RECONSTRUCTION_PLM ) then
-!     call pressure_gradient_plm (ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h);
+      call pressure_gradient_plm(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h)
 !   elseif ( PRScheme == PRESSURE_RECONSTRUCTION_PPM ) then
-!     call pressure_gradient_ppm (ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h);
+!     call pressure_gradient_ppm(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h)
 !   endif
-! endif
+  else
+    call MOM_error(FATAL, "trim_for_ice: Does not work without ALE mode")
+  endif
 
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    call cut_off_column_top(GV%ke, tv, GV%Rho0, G%G_earth, G%bathyT(i,j), GV%Angstrom, &
+    call cut_off_column_top(GV%ke, tv, GV%Rho0, G%G_earth, G%bathyT(i,j), min_thickness, &
                tv%T(i,j,:), T_t(i,j,:), T_b(i,j,:), tv%S(i,j,:), S_t(i,j,:), S_b(i,j,:), p_surf(i,j), h(i,j,:))
   enddo ; enddo
 
-end subroutine trim_for_iceshelf
+end subroutine trim_for_ice
 
 !> Adjust the layer thicknesses by cutting away the top at the depth where the hydrostatic
 !! pressure matches p_surf
-subroutine cut_off_column_top(nk, tv, Rho0, G_earth, depth, Angstrom, T, T_t, T_b, S, S_t, S_b, p_surf, h)
+subroutine cut_off_column_top(nk, tv, Rho0, G_earth, depth, min_thickness, T, T_t, T_b, S, S_t, S_b, p_surf, h)
   integer,               intent(in)    :: nk !< Number of layers
   type(thermo_var_ptrs), intent(in)    :: tv !< Thermodynamics structure
   real,                  intent(in)    :: Rho0 !< Reference density (kg/m3)
   real,                  intent(in)    :: G_earth !< Gravitational acceleration (m/s2)
   real,                  intent(in)    :: depth !< Depth of ocean column (m)
-  real,                  intent(in)    :: Angstrom !< Smallest thickness allowed (m)
+  real,                  intent(in)    :: min_thickness !< Smallest thickness allowed (m)
   real, dimension(nk),   intent(in)    :: T !< 
   real, dimension(nk),   intent(in)    :: T_t !< 
   real, dimension(nk),   intent(in)    :: T_b !< 
   real, dimension(nk),   intent(in)    :: S !< 
   real, dimension(nk),   intent(in)    :: S_t !< 
   real, dimension(nk),   intent(in)    :: S_b !< 
-  real,                  intent(in)    :: p_surf !< Weight on ocean at surface (Pa)
+  real,                  intent(in)    :: p_surf !< Imposed pressure on ocean at surface (Pa)
   real, dimension(nk),   intent(inout) :: h !< Layer thickness (H units, m or Pa)
   ! Local variables
   real, dimension(nk+1) :: e ! Top and bottom edge values for reconstructions
@@ -906,10 +940,10 @@ subroutine cut_off_column_top(nk, tv, Rho0, G_earth, depth, Angstrom, T, T_t, T_
       if (e(K)>e_top) then
         ! Original e(K) is too high
         e(K) = e_top
-        e_top = e_top - Angstrom ! Next interface must be at least this deep
+        e_top = e_top - min_thickness ! Next interface must be at least this deep
       endif
       ! This layer needs trimming
-      h(k) = max( Angstrom, e(K) - e(K+1) )
+      h(k) = max( min_thickness, e(K) - e(K+1) )
       if (e(K)<e_top) exit ! No need to go further
     enddo
   endif
@@ -2451,7 +2485,7 @@ subroutine MOM_state_init_tests(G, GV, tv)
   write(0,*) ''
   write(0,*) h
   call cut_off_column_top(nk, tv, GV%Rho0, G%G_earth, -e(nk+1), GV%Angstrom, &
-               T, T_t, T_b, S, S_t, S_b, 1.5*P_tot, h)
+               T, T_t, T_b, S, S_t, S_b, 0.5*P_tot, h)
   write(0,*) h
 
 end subroutine MOM_state_init_tests
