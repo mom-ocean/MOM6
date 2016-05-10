@@ -277,7 +277,7 @@ subroutine Stokes_Drift_by_data_override(day_center,G,GV,CS,h)
     CS%dataOverrideIsInitialized = .true.
     
     ! Read in number of wavenumber bands in file to set number to be read in
-    filename = 'StkSpec1d.nc'
+    filename = 'StkSpec.nc'
     varread = 'wavenumber'
 
     rcode = NF90_OPEN(trim(filename), NF90_NOWRITE, ncid)
@@ -318,12 +318,12 @@ subroutine Stokes_Drift_by_data_override(day_center,G,GV,CS,h)
   
   !BGR simplified to only reading 1 band for first test.
   do b=1,1!,CS%NumBands
-     write(varname,'(A3),(I0)') 'Usx',b
-     print*,varname
-     !call data_override('OCN',trim(varname), CS%STKx0(:,:,b), day_center)
-     write(varname,'(A3),(I0)') 'USy',b
-     print*,varname
-     !call data_override('OCN',trim(varname), CS%STKy0(:,:,b), day_center)
+     varname = '                    '
+     write(varname,"(A3,I0)")'Usx',b
+     call data_override('OCN',trim(varname), CS%STKx0(:,:,b), day_center)
+     varname = '                    '
+     write(varname,'(A3,I0)')'Usy',b
+     call data_override('OCN',trim(varname), CS%STKy0(:,:,b), day_center)
   enddo
 
   print*,'End of Stokes Drift By Data Override.'
