@@ -145,14 +145,11 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv )
                           ! negative because it is positive upward.      !
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
                           ! positive upward, in m.                       !
-  real, dimension(SZI_(G), SZJ_(G))          :: height
-  integer :: i, j, k, is, ie, js, je, nz, tmp1, nz_zero_surf, nz_zero_bot
+  integer :: i, j, k, is, ie, js, je, nz, tmp1
   real    :: x
   real    :: delta_h, rho_range
   real    :: min_thickness, s_sur, s_bot, t_sur, t_bot, rho_sur, rho_bot
   character(len=40) :: verticalCoordinate
-  character(len=200) :: filename,height_file,inputdir ! Strings for file/path
-  character(len=200) :: height_varname                ! Variable name in file
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
@@ -162,32 +159,6 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv )
   call get_param(param_file,mod,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
             default=DEFAULT_COORDINATE_MODE)
  
-  ! WARNING: this routine specifies the interface heights so that the last layer
-  !          is vanished, even at maximum depth. In order to have a uniform
-  !          layer distribution, use this line of code within the loop:
-  !          e0(k) = -G%max_depth * real(k-1) / real(nz)
-  !          To obtain a thickness distribution where the last layer is 
-  !          vanished and the other thicknesses uniformly distributed, use:
-  !          e0(k) = -G%max_depth * real(k-1) / real(nz-1)
-
-  ! read ice0shelf thickness from a nc file
-  call get_param(param_file, mod, "INPUTDIR", inputdir, default=".",do_not_log=.true.)
-  inputdir = slasher(inputdir)
-  call get_param(param_file, mod, "SURFACE_HEIGHT_IC_FILE", height_file, &
-                 "The file from which the ice height is read.", &
-                 default="ice_shelf_h.nc",do_not_log=.true.)
-  filename = trim(inputdir)//trim(height_file)
-  call get_param(param_file, mod, "SURFACE_HEIGHT_IC_VAR", height_varname, &
-                 "The name of the height variable in SURFACE_HEIGHT_IC_FILE.", &
-                 default="height",do_not_log=.true.)
-
-  ! fatal error if file does not exist
-  if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
-       " initialize_topography_from_file: Unable to open "//trim(filename))
-
-  ! read data
-  call read_data(filename,trim(height_varname),height, domain=G%Domain%mpp_domain)
-
   select case ( coordinateMode(verticalCoordinate) )
     
   case ( REGRIDDING_LAYER, REGRIDDING_RHO ) ! Initial thicknesses for isopycnal coordinates
@@ -195,10 +166,6 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv )
     call get_param(param_file, mod, "S_SUF", s_sur, 'Salinity at the surface (interface)',  default=33.8)
     call get_param(param_file, mod, "T_BOT", t_bot, 'Temperature at the bottom (interface)', default=-1.9)
     call get_param(param_file, mod, "S_BOT", s_bot,'Salinity at the bottom (interface)', default=34.55)
-    call get_param(param_file, mod, "NZ_ZERO_SURF", nz_zero_surf,'Number of layers at the surface  &
-                                    are initialy zero', units='nondim', default=0)
-    call get_param(param_file, mod, "NZ_ZERO_BOT", nz_zero_bot,'Number of layers at the bottom  &
-                                    are initialy zero', units='nondim', default=0)
 
     ! Compute min/max density using T_SUR/S_SUR and T_BOT/S_BOT
     call calculate_density(t_sur,s_sur,0.0,rho_sur,tv%eqn_of_state)
@@ -208,32 +175,7 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv )
     rho_range = rho_bot - rho_sur
     write (*,*)'Density range is:', rho_range
  
-!   if ((NZ_ZERO_SURF + NZ_ZERO_BOT) == 0) then
-!     ! with NZ_ZERO_SURF = NZ_ZERO_BOT = 0
-!     do K=1,nz+1
-!       e0(k) = -G%max_depth * real(k-1) / real(nz)
-!     enddo
-!     e0(nz+1) = -G%max_depth
-
-!   else
-!     ! with NZ_ZERO* =! 0
-!     ! Surface interfaces
-!     do k=1,NZ_ZERO_SURF+1
-!       e0(k) = (K-1) * GV%Angstrom_z
-!     enddo
-!     ! Interior interfaces
-!     do k=NZ_ZERO_SURF+2,nz+1-NZ_ZERO_BOT
-!       e0(k) = -G%max_depth * real(k-1-NZ_ZERO_SURF) / real(nz - (NZ_ZERO_SURF + NZ_ZERO_BOT))
-!     enddo
-!     ! Bottom interfaces
-!     tmp1 = 1
-!     do k=nz+2-NZ_ZERO_BOT,nz+1
-!       e0(k) = -G%max_depth - tmp1 * GV%Angstrom_z
-!       tmp1 = tmp1 + 1
-!     enddo
-!   write(*,*)'Initial interfaces, e0:',e0(:)
-!   endif
-
+    ! Construct notional interface positions
     e0(1) = 0.
     do K=2,nz
       e0(k) = -G%max_depth * ( 0.5 * ( GV%Rlay(k-1) + GV%Rlay(k) ) - rho_sur ) / rho_range
@@ -242,36 +184,18 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv )
     enddo
     e0(nz+1) = -G%max_depth
     
+    ! Calculate thicknesses
     do j=js,je ; do i=is,ie
-      ! bottom to top
       eta1D(nz+1) = -1.0*G%bathyT(i,j)
       do k=nz,1,-1
-         eta1D(k) = e0(k)
-         if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_z)) then
-           eta1D(k) = eta1D(k+1) + GV%Angstrom_z
-           h(i,j,k) = GV%Angstrom_z
-         else
-           h(i,j,k) = eta1D(k) - eta1D(k+1)
-         endif
-
+        eta1D(k) = e0(k)
+        if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_z)) then
+          eta1D(k) = eta1D(k+1) + GV%Angstrom_z
+          h(i,j,k) = GV%Angstrom_z
+        else
+          h(i,j,k) = eta1D(k) - eta1D(k+1)
+        endif
       enddo
-
-!   height(i,j) = 0.
-      ! explain why we need the following
-      ! basically, it is to avoid having non-zero h when
-      ! ice shelf is close to bottom
-      if ((G%bathyT(i,j) + height(i,j)) < G%max_depth/(nz-(NZ_ZERO_SURF+NZ_ZERO_BOT))) &
-         height(i,j) = -1.0*G%bathyT(i,j)-1.0
-      ! top to bottom
-      eta1D(1)=height(i,j)
-      do k=1,nz
-         if (eta1D(k+1) > (eta1D(k) - GV%Angstrom_z)) then
-            eta1D(k+1) = eta1D(k) - GV%Angstrom_z
-            h(i,j,k) = GV%Angstrom_z
-         endif
-      enddo
-!      if (height(i,j)<0) write(*,*)'i,height,j,eta',i,height(i,j),eta1D(:)    
-      
     enddo ; enddo
 
   case ( REGRIDDING_ZSTAR )                       ! Initial thicknesses for z coordinates
@@ -314,7 +238,7 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
   type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure
   ! Local variables
 
-  integer   :: i, j, k, is, ie, js, je, nz, NZ_ZERO_SURF, NZ_ZERO_BOT
+  integer   :: i, j, k, is, ie, js, je, nz
   real      :: x, ds, dt, rho_sur, rho_bot
   real      :: xi0, xi1, dxi, r, S_sur, T_sur, S_bot, T_bot, S_range, T_range
 !  real    :: T_ref, T_Light, T_Dense, S_ref, S_Light, S_Dense, a1, frac_dense, k_frac, res_rat, k_light
@@ -334,17 +258,7 @@ real :: rho_light, delta_rho, z_tmp, rho_tmp
                  do_not_log=.true.)
   call get_param(param_file, mod, "S_BOT", s_bot,'Salinity at the bottom (interface)', default=34.55,&
                  do_not_log=.true.)
-  call get_param(param_file, mod, "NZ_ZERO_SURF", nz_zero_surf,'Number of layers at the surface  &
-                                    are initialy zero', units='nondim', default=0,do_not_log=.true.)
-  call get_param(param_file, mod, "NZ_ZERO_BOT", nz_zero_bot,'Number of layers at the bottom  &
-                                    are initialy zero', units='nondim', default=0,do_not_log=.true.)
 
-! ds = ((s_bot - s_sur)/(nz - (nz_zero_surf + nz_zero_bot))) * 0.5
-! dt = ((t_bot - t_sur)/(nz - (nz_zero_surf + nz_zero_bot))) * 0.5
-! s_sur = s_sur + ds; 
-! s_bot = s_bot - ds;
-! t_sur = t_sur + dt;
-! t_bot = t_bot - dt;
   call calculate_density(t_sur,s_sur,0.0,rho_sur,eqn_of_state)
   write (*,*)'Density in the surface layer:', rho_sur
   call calculate_density(t_bot,s_bot,0.0,rho_bot,eqn_of_state)
