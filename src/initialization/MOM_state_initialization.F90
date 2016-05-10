@@ -2055,15 +2055,15 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
   call get_param(PF, mod, "Z_INIT_REMAP_GENERAL", remap_general, &
                  "If false, only initializes to z* coordinates.\n"//&
                  "If true, allows initialization directly to general coordinates.",&
-                 default=.false., do_not_log=.true.)
+                 default=.false.)
   call get_param(PF, mod, "Z_INIT_REMAP_FULL_COLUMN", remap_full_column, &
-                 "If false, only reconstructsa for valid data points.\n"//&
+                 "If false, only reconstructs profiles for valid data points.\n"//&
                  "If true, inserts vanished layers below the valid data.",&
-                 default=remap_general, do_not_log=.true.)
+                 default=remap_general)
   call get_param(PF, mod, "Z_INIT_REMAP_OLD_ALG", remap_old_alg, &
-                 "If false, uses the preferred remapping algorihtm.\n"//&
-                 "If true, use an older, less robust algorith for remapping.",&
-                 default=.true., do_not_log=.true.)
+                 "If false, uses the preferred remapping algorithm for initialization.\n"//&
+                 "If true, use an older, less robust algorithm for remapping.",&
+                 default=.true.)
 
 !   Read input grid coordinates for temperature and salinity field
 !   in z-coordinate dataset. The file is REQUIRED to contain the
