@@ -115,7 +115,7 @@ use MOM_restart, only : restart_init, restore_state, MOM_restart_CS
 use MOM_time_manager, only : time_type, set_time, time_type_to_real
 !use MOM_variables, only : forcing, surface
 use MOM_variables, only : surface
-use MOM_forcing_type, only : forcing
+use MOM_forcing_type, only : forcing, allocate_forcing_type
 use MOM_get_input, only : directories, Get_MOM_input
 use MOM_EOS, only : calculate_density, calculate_density_derivs, calculate_TFreeze
 use MOM_EOS, only : EOS_type, EOS_init
@@ -151,7 +151,8 @@ public ice_shelf_save_restart, solo_time_step
   !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~!
 type, public :: ice_shelf_CS ; private
   type(MOM_restart_CS), pointer :: restart_CSp => NULL()
-  type(ocean_grid_type) :: grid ! A structure containing metrics, etc.
+  type(ocean_grid_type) :: grid !< Grid for the ice-shelf model
+  type(ocean_grid_type), pointer :: ocn_grid => NULL() !< A pointer to the ocean model grid
   ! The rest is private
   real ::   flux_factor = 1.0
   character(len=128) :: restart_output_dir = ' '
@@ -262,7 +263,7 @@ type, public :: ice_shelf_CS ; private
 
 !!! all need to be initialized
 
-  logical :: solo_mode     ! whether the ice model is running without being coupled to the ocean
+  logical :: solo_ice_sheet ! whether the ice model is running without being coupled to the ocean
   logical :: GL_regularize ! whether to regularize the floatation condition at the grounding line
                            !   a la Goldberg Holland Schoof 2009
   integer :: n_sub_regularize
@@ -320,7 +321,6 @@ type, public :: ice_shelf_CS ; private
   type(time_type) :: Time ! The component's time.
   type(EOS_type), pointer :: eqn_of_state => NULL() ! Type that indicates the
                                         ! equation of state to use.
-  logical :: isshelf   ! True if a shelf model is to be used.
   logical :: shelf_mass_is_dynamic ! True if the ice shelf mass changes with
                        ! time.
   logical :: override_shelf_movement ! If true, user code specifies the shelf
@@ -718,7 +718,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
 
     CS%velocity_update_sub_counter = CS%velocity_update_sub_counter+1
 
-    if (CS%GL_couple .and. .not. CS%solo_mode) then
+    if (CS%GL_couple .and. .not. CS%solo_ice_sheet) then
       call update_OD_ffrac (CS, state%ocean_mass, CS%velocity_update_sub_counter, CS%nstep_velocity, CS%time_step, CS%velocity_update_time_step)
     else
       call update_OD_ffrac_uncoupled (CS)
@@ -844,10 +844,6 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
   if (associated(fluxes%sw_nir_dir)) fluxes%sw_nir_dir = 0.0
   if (associated(fluxes%sw_nir_dif)) fluxes%sw_nir_dif = 0.0
 
-  if (.NOT.ASSOCIATED(state%frazil)) then
-    call MOM_error (FATAL, "FRAZIL NEEDS TO BE TURNED ON FOR THE ICE SHELF MODEL. ")
-  endif
-
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     frac_area = fluxes%frac_shelf_h(i,j)
     if (frac_area > 0.0) then
@@ -865,36 +861,32 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
                  asv2 * state%tauy_shelf(i,j)**2  ) / (asv1 + asv2)
       fluxes%ustar(i,j) = MAX(CS%ustar_bg, sqrt(Irho0 * sqrt(taux2 + tauy2)))
 
-      fluxes%sw(i,j) = 0.0
-      fluxes%lw(i,j) = 0.0
-      fluxes%latent(i,j) = 0.0
-
-      fluxes%evap(i,j) = 0.0
-
-
-      if (CS%lprec(i,j) > 0.0 ) then
-        fluxes%lprec(i,j) =  frac_area*CS%lprec(i,j)*CS%flux_factor
-      else
-        fluxes%evap(i,j) = frac_area*CS%lprec(i,j)*CS%flux_factor
+      if (associated(fluxes%sw)) fluxes%sw(i,j) = 0.0
+      if (associated(fluxes%lw)) fluxes%lw(i,j) = 0.0
+      if (associated(fluxes%latent)) fluxes%latent(i,j) = 0.0
+      if (associated(fluxes%evap)) fluxes%evap(i,j) = 0.0
+      if (associated(fluxes%lprec)) then
+        if (CS%lprec(i,j) > 0.0 ) then
+          fluxes%lprec(i,j) =  frac_area*CS%lprec(i,j)*CS%flux_factor
+        else
+          fluxes%evap(i,j) = frac_area*CS%lprec(i,j)*CS%flux_factor
+        endif
       endif
 
       ! Add frazil formation diagnosed by the ocean model (J m-2) in the
       ! form of surface layer evaporation (kg m-2 s-1). Update lprec in the
       ! control structure for diagnostic purposes.
 
-      fraz= state%frazil(i,j) / CS%time_step / CS%Lat_fusion
-      fluxes%evap(i,j) = fluxes%evap(i,j) - fraz
-      CS%lprec(i,j)=CS%lprec(i,j) - fraz  
+      if (associated(state%frazil)) then
+        fraz = state%frazil(i,j) / CS%time_step / CS%Lat_fusion
+        if (associated(fluxes%evap)) fluxes%evap(i,j) = fluxes%evap(i,j) - fraz
+        CS%lprec(i,j)=CS%lprec(i,j) - fraz  
+        state%frazil(i,j) = 0.0
+      endif
 
-                                             
-      state%frazil(i,j) = 0.0
-
-      fluxes%sens(i,j) = -frac_area*CS%t_flux(i,j)*CS%flux_factor
-
-      fluxes%salt_flux(i,j) = frac_area * CS%salt_flux(i,j)*CS%flux_factor
-
-      fluxes%p_surf(i,j) =  &
-                           frac_area * G%g_Earth * CS%mass_shelf(i,j)
+      if (associated(fluxes%sens)) fluxes%sens(i,j) = -frac_area*CS%t_flux(i,j)*CS%flux_factor
+      if (associated(fluxes%salt_flux)) fluxes%salt_flux(i,j) = frac_area * CS%salt_flux(i,j)*CS%flux_factor
+      if (associated(fluxes%p_surf)) fluxes%p_surf(i,j) = frac_area * G%g_Earth * CS%mass_shelf(i,j)
       ! Same for IOB%p
       if (associated(fluxes%p_surf_full) ) fluxes%p_surf_full(i,j) = &
            frac_area * G%g_Earth * CS%mass_shelf(i,j)
@@ -1050,23 +1042,23 @@ end subroutine add_shelf_flux
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~!
 ! shelf_model_init - initializes shelf model data, parameters and diagnostics  !
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~!
-subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
-  type(time_type),    intent(inout)      :: Time
+subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Time_in, solo_ice_sheet_in)
+  type(param_file_type), intent(in) :: param_file
+  type(ocean_grid_type), pointer    :: ocn_grid
+  type(time_type),    intent(inout)   :: Time
   type(ice_shelf_CS), pointer         :: CS
   type(diag_ctrl), target, intent(in) :: diag
   type(forcing), optional, intent(inout) :: fluxes
   type(time_type), optional, intent(in)  :: Time_in
-  logical, optional,intent(in)         :: solo_mode_in
+  logical, optional,intent(in)         :: solo_ice_sheet_in
 
-  type(ocean_grid_type), pointer :: G
-  type(param_file_type) :: param_file
+  type(ocean_grid_type), pointer :: G, OG ! Convenience pointers
   type(directories)  :: dirs
   type(vardesc) :: vd
   real :: cdrag, drag_bg_vel
   logical :: new_sim, save_IC, var_force
-  logical :: isshelf ! True if a shelf model is to be used.
-  character(len=128) :: version = '$Id: MOM_ice_shelf.F90,v 1.1.2.30 2012/07/19 19:36:08 Robert.Hallberg Exp $'
-  character(len=128) :: tagname = '$Name: MOM_ogrp $'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=200) :: config
   character(len=200) :: IC_file,filename,inputdir
   character(len=40)  :: var_name
@@ -1074,51 +1066,52 @@ subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
   character(len=2)   :: procnum
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq, iters
   integer :: wd_halos(2)
-  logical :: solo_mode, read_TideAmp
+  logical :: solo_ice_sheet, read_TideAmp
   character(len=128) :: Tideamp_file
   real    :: utide
 
   if (associated(CS)) then
-    call MOM_error(WARNING, "shelf_model_init called with an associated "// &
-                             "control structure.")
+    call MOM_error(FATAL, "MOM_ice_shelf.F90, initialize_ice_shelf: "// &
+                          "called with an associated control structure.")
     return
   endif
+  allocate(CS)
   
   !   Go through all of the infrastructure initialization calls, since this is
   ! being treated as an independent component that just happens to use the
   ! MOM's grid and infrastructure.
-  call Get_MOM_Input(param_file, dirs)
-  isshelf = .false. ; call read_param(param_file,"ICE_SHELF",isshelf)
-  if (.not.isshelf) return
+  call Get_MOM_Input(dirs=dirs)
 
-  allocate(CS)
- 
+  ! Set up the ice-shelf domain and grid
   wd_halos(:)=0
- 
   call MOM_domains_init(CS%grid%domain, param_file, min_halo=wd_halos, symmetric=GRID_SYM_)
-
-! this needs to be fixed - will probably break when not using coupled driver 0
-!  call diag_mediator_init(CS%grid,param_file,CS%diag)
+! call diag_mediator_init(CS%grid,param_file,CS%diag) ! this needs to be fixed - will probably break when not using coupled driver 0
   call MOM_grid_init(CS%grid, param_file)
   call set_grid_metrics(CS%grid, param_file)
-!  call set_diag_mediator_grid(CS%grid, CS%diag)
-  
-  CS%Time = Time ! ### This might not be in the right place?
-  G => CS%grid
-  CS%diag => diag
-  solo_mode = .true.
+! call set_diag_mediator_grid(CS%grid, CS%diag)
 
-  if (present(Time_in)) Time = Time_in
-  if (present(solo_mode_in)) then
-    solo_mode = solo_mode_in
-  else
-    if (present(fluxes)) then
-        solo_mode = .false.
-        if (is_root_pe()) print *, "setting solo mode false"
-    endif
+  ! The ocean grid is possibly different
+  if (associated(ocn_grid)) CS%ocn_grid => ocn_grid
+  
+  ! Convenience pointers
+  G => CS%grid
+  OG => CS%ocn_grid
+
+  if (is_root_pe()) then
+   write(0,*) 'OG: ', OG%isd, OG%isc, OG%iec, OG%ied, OG%jsd, OG%jsc, OG%jsd, OG%jed
+   write(0,*) 'IG: ', G%isd, G%isc, G%iec, G%ied, G%jsd, G%jsc, G%jsd, G%jed
   endif
 
-  CS%solo_mode = solo_mode
+  CS%Time = Time ! ### This might not be in the right place?
+  CS%diag => diag
+
+  ! Are we being called from the solo ice-sheet driver? When called by the ocean
+  ! model solo_ice_sheet_in is not preset.
+  solo_ice_sheet = .false.
+  if (present(solo_ice_sheet_in)) solo_ice_sheet = solo_ice_sheet_in
+  CS%solo_ice_sheet = solo_ice_sheet
+
+  if (present(Time_in)) Time = Time_in
   
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
@@ -1131,8 +1124,6 @@ subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
   CS%switch_var = .false.
 
   call log_version(param_file, mod, version, "")
-  call log_param(param_file, mod, "ICE_SHELF", isshelf, &
-                 "If true, use an ice shelf model.", default=.false.)
   call get_param(param_file, mod, "DEBUG_IS", CS%debug, default=.false.) 
   call get_param(param_file, mod, "DYNAMIC_SHELF_MASS", CS%shelf_mass_is_dynamic, &
                  "If true, the ice sheet mass can evolve with time.", &
@@ -1201,10 +1192,6 @@ subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
   call get_param(param_file, mod, "RHO_0", CS%density_ocean_avg, &
                  "avg ocean density used in floatation cond", &
                  units="kg m-3", default=1035.)
-!MJH 
-!  call get_param(param_file, mod, "LENLAT", CS%len_lat, &
-!                 "The latitudinal or y-direction length of the domain.", &
-!                 units="axis_units", fail_if_missing=.true.)
   call get_param(param_file, mod, "DT_FORCING", CS%time_step, &
                  "The time step for changing forcing, coupling with other \n"//&
                  "components, or potentially writing certain diagnostics. \n"//&
@@ -1303,8 +1290,6 @@ subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
 
     if (CS%debug) CS%use_reproducing_sums = .true.
 
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
     CS%nstep_velocity = FLOOR (CS%velocity_update_time_step / CS%time_step)
     CS%velocity_update_counter = 0
     CS%velocity_update_sub_counter = 0
@@ -1351,13 +1336,13 @@ subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
   allocate ( CS%hmask(isd:ied,jsd:jed) )   ; CS%hmask(:,:) = -2.0
 
 
-!!! OVS vertically integrated Temperature
+  ! OVS vertically integrated Temperature
   allocate ( CS%t_shelf(isd:ied,jsd:jed) )   ; CS%t_shelf(:,:) = -10.0
   allocate ( CS%t_boundary_values(isd:ied,jsd:jed) )   ; CS%t_boundary_values(:,:) = -15.0
   allocate ( CS%tmask(Isdq:Iedq,Jsdq:Jedq) ) ; CS%tmask(:,:) = -1.0
 
   if (CS%shelf_mass_is_dynamic .and. .not.CS%override_shelf_movement) then
-!!! DNG
+    ! DNG
     allocate ( CS%u_shelf(Isdq:Iedq,Jsdq:Jedq) ) ; CS%u_shelf(:,:) = 0.0
     allocate ( CS%v_shelf(Isdq:Iedq,Jsdq:Jedq) ) ; CS%v_shelf(:,:) = 0.0
     allocate ( CS%u_boundary_values(Isdq:Iedq,Jsdq:Jedq) ) ; CS%u_boundary_values(:,:) = 0.0
@@ -1388,12 +1373,11 @@ subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
       allocate ( CS%calve_mask (isd:ied,jsd:jed) ) ; CS%calve_mask(:,:) = 0.0
     endif
 
-!!!
   endif
 
   ! Allocate the arrays for passing ice-shelf data through the forcing type.
-  if (.not. solo_mode) then
-    if (is_root_pe())  print *,"allocating fluxes"
+  if (.not. solo_ice_sheet) then
+    if (is_root_pe())  print *,"initialize_ice_shelf: allocating fluxes"
     allocate( fluxes%frac_shelf_h(isd:ied,jsd:jed) ) ; fluxes%frac_shelf_h(:,:) = 0.0
     allocate( fluxes%frac_shelf_u(Isdq:Iedq,jsd:jed) ) ; fluxes%frac_shelf_u(:,:) = 0.0
     allocate( fluxes%frac_shelf_v(isd:ied,Jsdq:Jedq) ) ; fluxes%frac_shelf_v(:,:) = 0.0
@@ -1403,6 +1387,9 @@ subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
     endif
     allocate( fluxes%rigidity_ice_u(Isdq:Iedq,jsd:jed) ) ; fluxes%rigidity_ice_u(:,:) = 0.0
     allocate( fluxes%rigidity_ice_v(isd:ied,Jsdq:Jedq) ) ; fluxes%rigidity_ice_v(:,:) = 0.0
+  else
+    if (is_root_pe())  print *,"allocating fluxes in solo mode"
+    call allocate_forcing_type(G, fluxes, ustar=.true., shelf=.true., press=.true.)
   endif
 
 ! Set up the bottom depth, G%D either analytically or from file
@@ -1429,7 +1416,7 @@ subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
     vd = var_desc("h_mask","none","ice sheet/shelf thickness mask",z_grid='1')
     call register_restart_field(CS%hmask, vd, .true., CS%restart_CSp)
 
-!!! OVS vertically integrated stream/shelf temperature
+    ! OVS vertically integrated stream/shelf temperature
     vd = var_desc("t_shelf","deg C","ice sheet/shelf temperature",z_grid='1')
     call register_restart_field(CS%t_shelf, vd, .true., CS%restart_CSp)
 
@@ -1455,7 +1442,7 @@ subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
     call register_restart_field(CS%taub_beta_eff_bilinear, vd, .true., CS%restart_CSp)  
   endif
 
-  if (.not. solo_mode) then
+  if (.not. solo_ice_sheet) then
     vd = var_desc("ustar_shelf","m s-1","Friction velocity under ice shelves",z_grid='1')
     call register_restart_field(fluxes%ustar_shelf, vd, .true., CS%restart_CSp)
   endif
@@ -1570,16 +1557,17 @@ subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
       call MOM_error(WARNING,"Initialize_ice_shelf: area_shelf_h exceeds G%areaT.") 
       CS%area_shelf_h(i,j) = G%areaT(i,j)
     endif
-    if (.not. solo_mode) then
+   !if (.not. solo_ice_sheet) then
     if (G%areaT(i,j) > 0.0) fluxes%frac_shelf_h(i,j) = CS%area_shelf_h(i,j) / G%areaT(i,j)
-    fluxes%p_surf(i,j) = fluxes%p_surf(i,j) + fluxes%frac_shelf_h(i,j) * (G%g_Earth * CS%mass_shelf(i,j))
+    if (associated(fluxes%p_surf)) &
+      fluxes%p_surf(i,j) = fluxes%p_surf(i,j) + fluxes%frac_shelf_h(i,j) * (G%g_Earth * CS%mass_shelf(i,j))
     if (associated(fluxes%p_surf_full)) &
-    fluxes%p_surf_full(i,j) = fluxes%p_surf_full(i,j) + &
+      fluxes%p_surf_full(i,j) = fluxes%p_surf_full(i,j) + &
         fluxes%frac_shelf_h(i,j) * (G%g_Earth * CS%mass_shelf(i,j))
-    endif
+   !endif
   enddo ; enddo
 
-  if (.not. solo_mode) then
+  if (.not. solo_ice_sheet) then
     do j=isd,jed ; do i=isd,ied-1 ! changed stride
     !do I=isd,ied-1 ; do j=isd,jed 
     fluxes%frac_shelf_u(I,j) = 0.0
@@ -1603,7 +1591,7 @@ subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
   endif
   
   write (procnum,'(I2)') mpp_pe()
-  if (.not. solo_mode) then
+  if (.not. solo_ice_sheet) then
   call pass_vector(fluxes%frac_shelf_u, fluxes%frac_shelf_v, G%domain, TO_ALL, CGRID_NE)
   endif
  ! call savearray2 ('frac_shelf_u'//procnum,fluxes%frac_shelf_u,CS%write_output_to_file)
