@@ -37,9 +37,9 @@ private
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) ::&
        LangNum !Langmuir number
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,:), public :: &
-       STKx0_Bands
+       STKx0
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,:), public :: &
-       STKy0_Bands  
+       STKy0  
 
   logical :: dataoverrideisinitialized
 end type
@@ -87,6 +87,9 @@ subroutine MOM_wave_interface_init(G,GV,param_file, CS)
   endif
   
   allocate(CS)
+
+  ! Add any initializations needed here
+  CS%dataOverrideIsInitialized = .false.
 
   call log_version(param_file, mod, version)
   call get_param(param_file,mod,"USE_WAVES",CS%UseWaves, &
@@ -254,7 +257,9 @@ subroutine Stokes_Drift_by_data_override(day_center,G,GV,CS,h)
   ! local variables
   real    :: Top, MidPoint, Bottom
   real    :: DecayScale
+  integer :: b
   integer :: i, j, is_in, ie_in, js_in, je_in
+  integer :: is, ie, js, je
 
   integer, dimension(4) :: start, count, dims, dim_id 
   character(len=12)  :: dim_name(4)
@@ -264,9 +269,7 @@ subroutine Stokes_Drift_by_data_override(day_center,G,GV,CS,h)
   ie_in = G%iec - G%isd + 1
   js_in = G%jsc - G%jsd + 1
   je_in = G%jec - G%jsd + 1
-
-  !/temp
-  CS%dataOverrideIsInitialized = .false.
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ;
 
   if (.not.CS%dataOverrideIsInitialized) then
 
@@ -298,26 +301,30 @@ subroutine Stokes_Drift_by_data_override(day_center,G,GV,CS,h)
 
     ! Allocating size of wavenumber bins
     ALLOC_ ( CS%WaveNum_Cen(1:id) ) ; CS%WaveNum_Cen(:)=0.0
-
+    ALLOC_ ( CS%STKx0(is:ie,js:je,1:id)) ; CS%STKx0(:,:,:) = 0.0
+    ALLOC_ ( CS%STKy0(is:ie,js:je,1:id)) ; CS%STKy0(:,:,:) = 0.0
 
     ! Reading wavenumber bins
     start = 1; count = 1; count(1) = id
     rcode = NF90_GET_VAR(ncid, dim_id(1), CS%WaveNum_Cen, start, count)
-  if (rcode .ne. 0) call MOM_error(FATAL,"error reading dimension 1 values for var_name "// &
-                trim(varread)//",dim_name "//trim(dim_name(1))//" in file "// trim(filename)//" in MOM_wave_interface")
+    if (rcode .ne. 0) call MOM_error(FATAL,"error reading dimension 1 values for var_name "// &
+         trim(varread)//",dim_name "//trim(dim_name(1))//" in file "// trim(filename)//" in MOM_wave_interface")
 
     print*,CS%WaveNum_Cen
 
     print*,'******************'
     print*,'End of NetCDF Read'
- endif
+  endif
   
-  !do b=1,CS%NumBands
-  !   write(varname,'(A15),(I0)') 'StokesX_Band',b
-  !   call data_override('OCN',trim(varname), CS%STKx0_Bands(:,:,b), day, is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
-  !   write(varname,'(A15),(I0)') 'StokesY_Band',b
-  !   call data_override('OCN',trim(varname), CS%STKy0_Bands(:,:,b), day, is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
-  !enddo
+  !BGR simplified to only reading 1 band for first test.
+  do b=1,1!,CS%NumBands
+     write(varname,'(A3),(I0)') 'Usx',b
+     print*,varname
+     !call data_override('OCN',trim(varname), CS%STKx0(:,:,b), day_center)
+     write(varname,'(A3),(I0)') 'USy',b
+     print*,varname
+     !call data_override('OCN',trim(varname), CS%STKy0(:,:,b), day_center)
+  enddo
 
   print*,'End of Stokes Drift By Data Override.'
   stop
