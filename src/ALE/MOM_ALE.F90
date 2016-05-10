@@ -185,8 +185,8 @@ subroutine ALE_init( param_file, G, GV, CS)
                  CS%remap_uv_using_old_alg, &
                  "If true, uses the old remapping-via-a-delta-z method for\n"//&
                  "remapping u and v. If false, uses the new method that remaps\n"//&
-                 "between grids described by a old and new thickness.", &
-                 default=.true., do_not_log=.true.)
+                 "between grids described by an old and new thickness.", &
+                 default=.true.)
 
   ! Initialize and configure regridding
   allocate( dz(G%ke) )
