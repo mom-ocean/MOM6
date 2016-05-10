@@ -673,7 +673,7 @@ subroutine ALE_remap_scalar(CS, G, nk_src, h_src, s_src, h_dst, s_dst, all_cells
   if (present(old_remap)) use_remapping_core_w = old_remap
   n_points = nk_src
 
-!$OMP parallel default(none) shared(CS,G,h_src,s_src,h_dst,s_dst &
+!$OMP parallel default(none) shared(CS,G,h_src,s_src,h_dst,s_dst,use_remapping_core_w &
 !$OMP                               ,ignore_vanished_layers, nk_src,dx ) &
 !$OMP                        firstprivate(n_points)
 !$OMP do
