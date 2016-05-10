@@ -44,7 +44,6 @@ program MOM_main
   use MOM_cpu_clock,       only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
   use MOM_cpu_clock,       only : CLOCK_COMPONENT
   use MOM_diag_mediator,   only : enable_averaging, disable_averaging, diag_mediator_end
-  use MOM_diag_mediator,   only : safe_alloc_ptr
   use MOM_diag_mediator,   only : diag_mediator_close_registration, diag_mediator_end
   use MOM,                 only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
   use MOM,                 only : calculate_surface_state, finish_MOM_initialization
@@ -97,7 +96,7 @@ program MOM_main
   type(verticalGrid_type), pointer :: GV
                                        
   ! If .true., use the ice shelf model for part of the domain.
-  logical :: use_ice_shelf = .false. 
+  logical :: use_ice_shelf
 
   ! This is .true. if incremental restart files may be saved.
   logical :: permit_incr_restart = .true. 
@@ -276,14 +275,12 @@ program MOM_main
                             surface_forcing_CSp, MOM_CSp%tracer_flow_CSp)
   call callTree_waypoint("done surface_forcing_init")
 
-  use_ice_shelf=.false. ; call read_param(param_file,"ICE_SHELF",use_ice_shelf)
+  call get_param(param_file, mod, "ICE_SHELF", use_ice_shelf, &
+                 "If true, enables the ice shelf model.", default=.false.)
   if (use_ice_shelf) then
     ! These arrays are not initialized in most solo cases, but are needed
     ! when using an ice shelf 
-    call safe_alloc_ptr(fluxes%p_surf,grid%isd,grid%ied,grid%jsd,grid%jed)
-    call safe_alloc_ptr(fluxes%p_surf_full,grid%isd,grid%ied,grid%jsd,grid%jed)
-    call safe_alloc_ptr(fluxes%salt_flux,grid%isd,grid%ied,grid%jsd,grid%jed)
-    call initialize_ice_shelf(Time, ice_shelf_CSp, MOM_CSp%diag, fluxes)
+    call initialize_ice_shelf(param_file, grid, Time, ice_shelf_CSp, MOM_CSp%diag, fluxes)
   endif
 
   call MOM_sum_output_init(grid, param_file, dirs%output_directory, &
@@ -353,9 +350,6 @@ program MOM_main
                  "The interval in units of TIMEUNIT between saves of the \n"//&
                  "energies of the run and other globally summed diagnostics.", &
                  default=set_time(int(time_step+0.5)), timeunit=Time_unit)
-  call log_param(param_file, mod, "ICE_SHELF", use_ice_shelf, &
-                 "If true, call the code to apply an ice shelf model over \n"//&
-                 "some of the domain.", default=.false.)
   call log_param(param_file, mod, "ELAPSED TIME AS MASTER", elapsed_time_master)
 
   ! Close the param_file.  No further parsing of input is possible after this.
