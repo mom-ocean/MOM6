@@ -1047,7 +1047,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
 !$OMP                                  dR_dS,hlay,v_at_u,Uh2,T_lay,S_lay,gHprime,           &
 !$OMP                                  RiBulk,Shtot,Rhtot,absf,do_any_shelf,                &
 !$OMP                                  h_at_vel,ustar,htot_vel,hwtot,hutot,hweight,ustarsq, &
-!$OMP                                  oldfn,Dfn,Dh,Rlay,Rlb,h2f2,star1)
+!$OMP                                  oldfn,Dfn,Dh,Rlay,Rlb,h2f2,ustar1)
   do j=js,je  ! u-point loop
     if (CS%dynamic_viscous_ML) then
       do_any = .false.
