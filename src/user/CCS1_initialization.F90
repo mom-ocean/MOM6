@@ -44,7 +44,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public CCS1_initialize_sponges
+!public CCS1_initialize_sponges
 public CCS1_set_Open_Bdry_Conds
 public CCS1_set_Open_Bdry_Vals
 
@@ -227,10 +227,10 @@ subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
   ! The following variables are used to set up the transport in the CCS1 example.
   real :: tr_0, y1, y2, tr_k, rst, rsb, rc, v_k, lon_im1
   character(len=40)  :: mod = "CCS1_set_Open_Bdry_Conds" ! This subroutine's name.
-  integer :: i, j, k, itt, isc, iec, jsc, jec, isd, ied, jsd, jed, nz
+  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB, IscB, IecB, JscB, JecB
 
-  isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   IscB = G%IscB ; IecB = G%IecB ; JscB = G%JscB ; JecB = G%JecB
@@ -268,60 +268,60 @@ subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
     ! Check for edges of full domain
     ! West
 !    if (is_root_pe()) print *, 'inside CCS1_set_open_bdry_conds 1', &
-!      apply_OBC_u, apply_OBC_v, G%isd_global, isd, isc, iec, IscB, IecB, G%mask2dCu(iscB,jsc)
-    if (G%isd_global - isd == isd - isc) then
-      do j=jsc,jec
-        if (G%mask2dT(isc,j)*G%mask2dT(isc,j+1) > 0.99) then
-          OBC_mask_u(Isc,j) = .true. ; any_OBC = .true.
+!      apply_OBC_u, apply_OBC_v, G%isd_global, isd, is, ie, IscB, IecB, G%mask2dCu(iscB,js)
+    if (G%isd_global - isd == isd - is) then
+      do j=js,je
+        if (G%mask2dT(is,j)*G%mask2dT(is,j+1) > 0.99) then
+          OBC_mask_u(Is,j) = .true. ; any_OBC = .true.
           if (apply_OBC_flather_west) then
-            OBC_kind_u(Isc,j) = OBC_FLATHER_W
+            OBC_kind_u(Is,j) = OBC_FLATHER_W
           else
-            OBC_kind_u(Isc,j) = OBC_SIMPLE
+            OBC_kind_u(Is,j) = OBC_SIMPLE
           endif
         endif
       enddo
     endif
     ! East - not wanted for CCS1
-!    if (G%isd_global - isd + iec == G%Domain%niglobal) then
-!      do j=jsc,jec
-!        if (G%mask2dT(iec,j)*G%mask2dT(iec-1,j) > 0.99) then
-!          OBC_mask_u(Iec-1,j) = .true. ; any_OBC = .true.
+!    if (G%isd_global - isd + ie == G%Domain%niglobal) then
+!      do j=js,je
+!        if (G%mask2dT(ie,j)*G%mask2dT(ie-1,j) > 0.99) then
+!          OBC_mask_u(Ie-1,j) = .true. ; any_OBC = .true.
 !          if (apply_OBC_flather_east) then
-!            OBC_kind_u(Iec-1,j) = OBC_FLATHER_E
+!            OBC_kind_u(Ie-1,j) = OBC_FLATHER_E
 !          else
-!            OBC_kind_u(Iec-1,j) = OBC_SIMPLE
+!            OBC_kind_u(Ie-1,j) = OBC_SIMPLE
 !          endif
 !        endif
 !      enddo
 !    endif
     ! South
-    if (G%jsd_global - jsd == jsd - jsc) then
-      do I=IscB,IecB
-        if (G%mask2dCu(I,jsc) > 0.99) then
-          OBC_mask_u(I,jsc) = .true. ; any_OBC = .true.
+    if (G%jsd_global - jsd == jsd - js) then
+      do I=Is,Ie-1
+        if (G%mask2dCu(I,js) > 0.99) then
+          OBC_mask_u(I,js) = .true. ; any_OBC = .true.
           if (apply_OBC_flather_south) then
-            OBC_kind_u(I,jsc) = OBC_FLATHER_S
+            OBC_kind_u(I,js) = OBC_FLATHER_S
           else
-            OBC_kind_u(I,jsc) = OBC_SIMPLE
+            OBC_kind_u(I,js) = OBC_SIMPLE
           endif
         endif
       enddo
     endif
     ! North
-    if (G%jsd_global - jsd + jec == G%Domain%njglobal) then
-      do I=IscB,IecB
-        if (G%mask2dCu(I,jec) > 0.99) then
-          OBC_mask_u(I,jec) = .true. ; any_OBC = .true.
+    if (G%jsd_global - jsd + je == G%Domain%njglobal) then
+      do I=Is,Ie-1
+        if (G%mask2dCu(I,je) > 0.99) then
+          OBC_mask_u(I,je) = .true. ; any_OBC = .true.
           if (apply_OBC_flather_north) then
-            OBC_kind_u(I,jec) = OBC_FLATHER_N
+            OBC_kind_u(I,je) = OBC_FLATHER_N
           else
-            OBC_kind_u(I,jec) = OBC_SIMPLE
+            OBC_kind_u(I,je) = OBC_SIMPLE
           endif
         endif
       enddo
     endif
     print *, 'inside CCS1_set_open_bdry_conds ', any_OBC, G%jsd_global, jsd, &
-        jsc, jec, jscB, jecB, G%Domain%njglobal
+        js, je, jscB, jecB, G%Domain%njglobal
     if (.not.any_OBC) then
       ! This processor has no u points at which open boundary conditions are
       ! to be applied.
@@ -332,56 +332,57 @@ subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
   if (apply_OBC_v) then
     ! Determine where v points are applied.
     allocate(OBC_mask_v(isd:ied,JsdB:JedB)) ; OBC_mask_v(:,:) = .false.
+    allocate(OBC_kind_v(isd:ied,JsdB:JedB)) ; OBC_kind_v(:,:) = OBC_NONE
     any_OBC = .false.
     ! Check for edges of full domain
     ! West
-    if (G%isd_global - isd == isd - isc) then
-      do J=JscB,JecB
-        if (G%mask2dCv(isc,J) > 0.99) then
-          OBC_mask_v(isc,J) = .true. ; any_OBC = .true.
+    if (G%isd_global - isd == isd - is) then
+      do J=Js,Je-1
+        if (G%mask2dCv(is,J) > 0.99) then
+          OBC_mask_v(is,J) = .true. ; any_OBC = .true.
           if (apply_OBC_flather_west) then
-            OBC_kind_v(isc,J) = OBC_FLATHER_W
+            OBC_kind_v(is,J) = OBC_FLATHER_W
           else
-            OBC_kind_v(isc,J) = OBC_SIMPLE
+            OBC_kind_v(is,J) = OBC_SIMPLE
           endif
         endif
       enddo
     endif
     ! East - not for CCS
-!    if (G%isd_global - isd + iec == G%Domain%niglobal) then
-!      do J=JscB,JecB
-!        if (G%mask2dCv(iec,J) > 0.99) then
-!          OBC_mask_v(iec,J) = .true. ; any_OBC = .true.
+!    if (G%isd_global - isd + ie == G%Domain%niglobal) then
+!      do J=Js,Je-1
+!        if (G%mask2dCv(ie,J) > 0.99) then
+!          OBC_mask_v(ie,J) = .true. ; any_OBC = .true.
 !          if (apply_OBC_flather_east) then
-!            OBC_kind_v(iec,J) = OBC_FLATHER_E
+!            OBC_kind_v(ie,J) = OBC_FLATHER_E
 !          else
-!            OBC_kind_v(iec,J) = OBC_SIMPLE
+!            OBC_kind_v(ie,J) = OBC_SIMPLE
 !          endif
 !        endif
 !      enddo
 !    endif
     ! South
-    if (G%jsd_global - jsd == jsd - jsc) then
-      do i=isc,iec
-        if (G%mask2dT(i,jsc)*G%mask2dT(i,jsc+1) > 0.99) then
-          OBC_mask_v(i,Jsc) = .true. ; any_OBC = .true.
+    if (G%jsd_global - jsd == jsd - js) then
+      do i=is,ie
+        if (G%mask2dT(i,js)*G%mask2dT(i,js+1) > 0.99) then
+          OBC_mask_v(i,Js) = .true. ; any_OBC = .true.
           if (apply_OBC_flather_south) then
-            OBC_kind_v(i,Jsc) = OBC_FLATHER_S
+            OBC_kind_v(i,Js) = OBC_FLATHER_S
           else
-            OBC_kind_v(i,Jsc) = OBC_SIMPLE
+            OBC_kind_v(i,Js) = OBC_SIMPLE
           endif
         endif
       enddo
     endif
     ! North
-    if (G%jsd_global - jsd + jec == G%Domain%njglobal) then
-      do i=isc,iec
-        if (G%mask2dT(i,jec)*G%mask2dT(i,jec-1) > 0.99) then
-          OBC_mask_v(i,Jec-1) = .true. ; any_OBC = .true.
+    if (G%jsd_global - jsd + je == G%Domain%njglobal) then
+      do i=is,ie
+        if (G%mask2dT(i,je)*G%mask2dT(i,je-1) > 0.99) then
+          OBC_mask_v(i,Je-1) = .true. ; any_OBC = .true.
           if (apply_OBC_flather_north) then
-            OBC_kind_v(i,Jec-1) = OBC_FLATHER_N
+            OBC_kind_v(i,Je-1) = OBC_FLATHER_N
           else
-            OBC_kind_v(i,Jec-1) = OBC_SIMPLE
+            OBC_kind_v(i,Je-1) = OBC_SIMPLE
           endif
         endif
       enddo
@@ -417,40 +418,41 @@ subroutine CCS1_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
   !   The inflow values of temperature and salinity also need to be set here if
   ! these variables are used.  The following code is just a naive example.
   if (apply_OBC_u .or. apply_OBC_v) then
-    if (associated(tv%S)) then
-      ! In this example, all S inflows have values of 35 psu.
-      call add_tracer_OBC_values("S", tr_Reg, OBC_inflow=35.0)
-    endif
-    if (associated(tv%T)) then
-      ! In this example, the T values are set to be consistent with the layer
-      ! target density and a salinity of 35 psu.  This code is taken from
-      ! USER_initialize_temp_sal.
-      pres(:) = tv%P_Ref ; S0(:) = 35.0 ; T0(1) = 25.0
-      call calculate_density(T0(1),S0(1),pres(1),rho_guess(1),tv%eqn_of_state)
-      call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,1,tv%eqn_of_state)
-
-      do k=1,nz ; T0(k) = T0(1) + (GV%Rlay(k)-rho_guess(1)) / drho_dT(1) ; enddo
-      do itt=1,6
-        call calculate_density(T0,S0,pres,rho_guess,1,nz,tv%eqn_of_state)
-        call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,tv%eqn_of_state)
-        do k=1,nz ; T0(k) = T0(k) + (GV%Rlay(k)-rho_guess(k)) / drho_dT(k) ; enddo
-      enddo
-
-      if (apply_OBC_u) then
-        allocate(OBC_T_u(IsdB:IedB,jsd:jed,nz))
-        do k=1,nz ; do j=jsd,jed ; do I=IsdB,IedB
-          OBC_T_u(I,j,k) = T0(k)
-        enddo ; enddo ; enddo
-      endif
-      if (apply_OBC_v) then
-        allocate(OBC_T_v(isd:ied,JsdB:JedB,nz))
-        do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied
-          OBC_T_v(i,J,k) = T0(k)
-        enddo ; enddo ; enddo
-      endif
-      call add_tracer_OBC_values("T", tr_Reg, OBC_in_u=OBC_T_u, &
-                                              OBC_in_v=OBC_T_v)
-    endif
+!    if (associated(tv%S)) then
+!      ! In this example, all S inflows have values of 35 psu.
+!      call add_tracer_OBC_values("S", tr_Reg, OBC_inflow=35.0)
+!    endif
+! NOT_YET
+!    if (associated(tv%T)) then
+!      ! In this example, the T values are set to be consistent with the layer
+!      ! target density and a salinity of 35 psu.  This code is taken from
+!      ! USER_initialize_temp_sal.
+!      pres(:) = tv%P_Ref ; S0(:) = 35.0 ; T0(1) = 25.0
+!      call calculate_density(T0(1),S0(1),pres(1),rho_guess(1),tv%eqn_of_state)
+!      call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,1,tv%eqn_of_state)
+!
+!      do k=1,nz ; T0(k) = T0(1) + (GV%Rlay(k)-rho_guess(1)) / drho_dT(1) ; enddo
+!      do itt=1,6
+!        call calculate_density(T0,S0,pres,rho_guess,1,nz,tv%eqn_of_state)
+!        call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,tv%eqn_of_state)
+!        do k=1,nz ; T0(k) = T0(k) + (GV%Rlay(k)-rho_guess(k)) / drho_dT(k) ; enddo
+!      enddo
+!
+!      if (apply_OBC_u) then
+!        allocate(OBC_T_u(IsdB:IedB,jsd:jed,nz))
+!        do k=1,nz ; do j=jsd,jed ; do I=IsdB,IedB
+!          OBC_T_u(I,j,k) = T0(k)
+!        enddo ; enddo ; enddo
+!      endif
+!      if (apply_OBC_v) then
+!        allocate(OBC_T_v(isd:ied,JsdB:JedB,nz))
+!        do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied
+!          OBC_T_v(i,J,k) = T0(k)
+!        enddo ; enddo ; enddo
+!      endif
+!      call add_tracer_OBC_values("T", tr_Reg, OBC_in_u=OBC_T_u, &
+!                                              OBC_in_v=OBC_T_v)
+!    endif
   endif
 
 end subroutine CCS1_set_Open_Bdry_Conds
