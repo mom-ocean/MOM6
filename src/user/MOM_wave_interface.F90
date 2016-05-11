@@ -182,7 +182,7 @@ subroutine Import_Stokes_Drift(G,GV,Day,DT,CS,h)
   real    :: Top, MidPoint, Bottom
   real    :: DecayScale
   type(time_type) :: Day_Center
-  integer :: ii, jj, kk
+  integer :: ii, jj, kk, b
   integer :: is, ie, js, je, isd, ied, jsd, jed, isdB, iedB, jsdB, jedB, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -218,7 +218,50 @@ subroutine Import_Stokes_Drift(G,GV,Day,DT,CS,h)
         !print*,MIDPOINT,CS%US_x(1,1,kk),CS%Us_y(1,1,kk)
      enddo     
   elseif (CS%WaveMethod==DATAOVERRIDE) then
-     call Stokes_Drift_by_data_override(day_center,G,GV,CS,h)
+     call Stokes_Drift_by_data_override(day_center,G,GV,CS)
+     CS%Us_x(:,:,:) = 0.0
+     CS%Us_y(:,:,:) = 0.0
+     ! ---------------------------------------------------------|
+     ! This computes the average Stokes drift based on the      |
+     !  analytical integral over the layer divided by the layer |
+     !  thickness.                                              |
+     ! ---------------------------------------------------------|
+     do ii=isdB,iedB
+        do jj=jsd,jed
+           bottom = 0.0
+           do kk=1, nz
+              Top = Bottom
+              !****************************************************
+              !NOTE THIS H WILL NOT BE CORRECT FOR NON-UNIFORM GRID
+              MidPoint = Bottom - GV%H_to_m * h(ii,jj,kk)/2.
+              Bottom = Bottom - GV%H_to_m * h(ii,jj,kk)
+              do b=1,CS%NumBands
+                 CS%US_x(ii,jj,kk)=CS%US_x(ii,jj,kk) + CS%STKx0(ii,jj,b) *&
+                      (EXP(TOP*2*CS%WaveNum_Cen(b))- &
+                      EXP(BOTTOM*2*CS%WaveNum_Cen(b))) /2. /&
+                      CS%WaveNum_Cen(b) / (Top-Bottom)
+              enddo
+           enddo
+        enddo
+     enddo
+     do ii=isd,ied
+        do jj=jsdB,jedB
+           bottom = 0.0
+           do kk=1, nz
+              Top = Bottom
+              !****************************************************
+              !NOTE THIS H WILL NOT BE CORRECT FOR NON-UNIFORM GRID
+              MidPoint = Bottom - GV%H_to_m * h(ii,jj,kk)/2.
+              Bottom = Bottom - GV%H_to_m * h(ii,jj,kk)
+              do b=1,CS%NumBands
+                 CS%US_y(ii,jj,kk)=CS%US_Y(ii,jj,kk) + CS%STKy0(ii,jj,b) *&
+                      (EXP(TOP*2*CS%WaveNum_Cen(b))- &
+                       EXP(BOTTOM*2*CS%WaveNum_Cen(b))) /2. /&
+                       CS%WaveNum_Cen(b) / (Top-Bottom)
+              enddo
+           enddo
+        enddo
+     enddo
   else!Keep this else, fallback to 0 Stokes drift
      do ii=isdB,iedB
            do jj=jsd,jed
@@ -236,24 +279,23 @@ subroutine Import_Stokes_Drift(G,GV,Day,DT,CS,h)
   !print*,' '
  
   !\BGRTEMP{
-  !print*,' '
-  !print*,'***********************************************'
-  !print*,'** Made it to end of MOM_wave_interface_init **'
-  !print*,'** Now stopping test...                      **'
-  !print*,'***********************************************'
-  !print*,' '
-  !stop
+  print*,' '
+  print*,'***********************************************'
+  print*,'** Made it to end of MOM_wave_interface_init **'
+  print*,'** Now stopping test...                      **'
+  print*,'***********************************************'
+  print*,' '
+  stop
   !\BGRTEMP}
 
 end subroutine Import_Stokes_Drift
 !
-subroutine Stokes_Drift_by_data_override(day_center,G,GV,CS,h)
+subroutine Stokes_Drift_by_data_override(day_center,G,GV,CS)
   use NETCDF
   type(time_type),             intent(in)  :: day_center
   type(wave_parameters_CS),    pointer     :: CS
   type(ocean_grid_type),       intent(in)  :: G !< Grid structure
   type(verticalGrid_type),     intent(in)  :: GV!< Vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
   ! local variables
   real    :: Top, MidPoint, Bottom
   real    :: DecayScale
@@ -272,8 +314,9 @@ subroutine Stokes_Drift_by_data_override(day_center,G,GV,CS,h)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ;
 
   if (.not.CS%dataOverrideIsInitialized) then
-
+    print*,'into init'
     call data_override_init(Ocean_domain_in=G%Domain%mpp_domain)
+    print*,'out of init'
     CS%dataOverrideIsInitialized = .true.
     
     ! Read in number of wavenumber bands in file to set number to be read in
@@ -310,6 +353,7 @@ subroutine Stokes_Drift_by_data_override(day_center,G,GV,CS,h)
     if (rcode .ne. 0) call MOM_error(FATAL,"error reading dimension 1 values for var_name "// &
          trim(varread)//",dim_name "//trim(dim_name(1))//" in file "// trim(filename)//" in MOM_wave_interface")
 
+    CS%NUMBANDS = ID
     print*,CS%WaveNum_Cen
 
     print*,'******************'
@@ -317,17 +361,25 @@ subroutine Stokes_Drift_by_data_override(day_center,G,GV,CS,h)
   endif
   
   !BGR simplified to only reading 1 band for first test.
-  do b=1,1!,CS%NumBands
+  do b=1,CS%NumBands
+     print*,b
+     print*,'**********'
      varname = '                    '
      write(varname,"(A3,I0)")'Usx',b
      call data_override('OCN',trim(varname), CS%STKx0(:,:,b), day_center)
      varname = '                    '
      write(varname,'(A3,I0)')'Usy',b
-     call data_override('OCN',trim(varname), CS%STKy0(:,:,b), day_center)
+     call data_override('OCN',trim(varname), CS%STKy0(:,:,b), day_center)     
+     print*,minval(CS%STKx0(:,:,b)),maxval(CS%STKx0(:,:,b))
+     print*,minval(CS%STKy0(:,:,b)),maxval(CS%STKy0(:,:,b))
   enddo
 
+  
+  print*,' '
+  print*,'-------------------------------------'
   print*,'End of Stokes Drift By Data Override.'
-  stop
+  print*,'-------------------------------------'
+  print*,' '
 
 end subroutine Stokes_Drift_by_Data_Override
 end module MOM_wave_interface
