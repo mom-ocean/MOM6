@@ -43,7 +43,7 @@ use DOME_initialization, only : DOME_set_Open_Bdry_Conds
 use DOME_initialization, only : DOME_initialize_sponges
 use CCS1_initialization, only : CCS1_set_Open_Bdry_Conds
 use CCS1_initialization, only : CCS1_set_Open_Bdry_Vals
-use CCS1_initialization, only : CCS1_initialize_sponges
+!use CCS1_initialization, only : CCS1_initialize_sponges
 use baroclinic_zone_initialization, only : baroclinic_zone_init_temperature_salinity
 use benchmark_initialization, only : benchmark_initialize_thickness
 use benchmark_initialization, only : benchmark_init_temperature_salinity
@@ -407,8 +407,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
               call initialize_ALE_sponges_file(G, GV, use_temperature, tv, &
                                                  PF, ALE_sponge_CSp)
           endif
-        case ("CCS1"); call CCS1_initialize_sponges(G, GV, tv, PF, &
-                                                 ALE_sponge_CSp)
+!        case ("CCS1"); call CCS1_initialize_sponges(G, GV, tv, PF, &
+!                                                 ALE_sponge_CSp)
         case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
                "Unrecognized sponge configuration "//trim(config))
       end select
@@ -1754,10 +1754,10 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   endif
 
   if (G%symmetric) then
-    east_boundary = G%ieg
-    west_boundary = G%isg-1
-    north_boundary = G%jeg
-    south_boundary = G%jsg-1
+    east_boundary = G%ieg-1
+    west_boundary = G%isg
+    north_boundary = G%jeg-1
+    south_boundary = G%jsg
   else
     ! I am not entirely sure that this works properly. -RWH
     east_boundary = G%ieg-1
@@ -1817,16 +1817,18 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   if (apply_OBC_u_flather_east) then
     ! Determine where u points are applied at east side 
     do j=jsd,jed ; do I=IsdB,IedB
-      if ((I+G%idg_offset) == east_boundary) then !eastern side
-        OBC%OBC_mask_u(I,j) = .true.
-        OBC%OBC_kind_u(I,j) = OBC_FLATHER_E
-        if ((i+1>isd) .and. (i+1<ied) .and. (J>JsdB) .and. (J<JedB)) then
-          OBC%OBC_mask_v(i+1,J) = .true.
-          if (OBC%OBC_kind_v(i+1,J) == OBC_NONE) OBC%OBC_kind_v(i+1,J) = OBC_FLATHER_E
-        endif
-        if ((i+1>isd) .and. (i+1<ied) .and. (J-1>JsdB) .and. (J-1<JedB)) then
-          OBC%OBC_mask_v(i+1,J-1) = .true.
-          if (OBC%OBC_kind_v(i+1,J-1) == OBC_NONE) OBC%OBC_kind_v(i+1,J-1) = OBC_FLATHER_E
+      if ((I+G%idg_offset) == east_boundary) then
+        if (G%mask2dT(i,j)*G%mask2dT(i+1,j) > 0.99) then
+          OBC%OBC_mask_u(I,j) = .true.
+          OBC%OBC_kind_u(I,j) = OBC_FLATHER_E
+          if (G%mask2dCv(i+1,J) > 0.99) then
+            OBC%OBC_mask_v(i+1,J) = .true.
+            if (OBC%OBC_kind_v(i+1,J) == OBC_NONE) OBC%OBC_kind_v(i+1,J) = OBC_FLATHER_E
+          endif
+          if (G%mask2dCv(i+1,J-1) > 0.99) then
+            OBC%OBC_mask_v(i+1,J-1) = .true.
+            if (OBC%OBC_kind_v(i+1,J-1) == OBC_NONE) OBC%OBC_kind_v(i+1,J-1) = OBC_FLATHER_E
+          endif
         endif
       endif
     enddo ; enddo
@@ -1835,16 +1837,18 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   if (apply_OBC_u_flather_west) then
     ! Determine where u points are applied at west side 
     do j=jsd,jed ; do I=IsdB,IedB
-      if ((I+G%idg_offset) == west_boundary) then !western side
-        OBC%OBC_mask_u(I,j) = .true.
-        OBC%OBC_kind_u(I,j) = OBC_FLATHER_W
-        if ((i>isd) .and. (i<ied) .and. (J>JsdB) .and. (J<JedB)) then
-          OBC%OBC_mask_v(i,J) = .true.
-          if (OBC%OBC_kind_v(i,J) == OBC_NONE) OBC%OBC_kind_v(i,J) = OBC_FLATHER_W
-        endif
-        if ((i>isd) .and. (i<ied) .and. (J-1>JsdB) .and. (J-1<JedB)) then
-          OBC%OBC_mask_v(i,J-1) = .true.
-          if (OBC%OBC_kind_v(i,J-1) == OBC_NONE) OBC%OBC_kind_v(i,J-1) = OBC_FLATHER_W
+      if ((I+G%idg_offset) == west_boundary) then
+        if (G%mask2dT(i,j)*G%mask2dT(i+1,j) > 0.99) then
+          OBC%OBC_mask_u(I,j) = .true.
+          OBC%OBC_kind_u(I,j) = OBC_FLATHER_W
+          if (G%mask2dCv(i,J) > 0.99) then
+            OBC%OBC_mask_v(i,J) = .true.
+            if (OBC%OBC_kind_v(i,J) == OBC_NONE) OBC%OBC_kind_v(i,J) = OBC_FLATHER_W
+          endif
+          if (G%mask2dCv(i,J-1) > 0.99) then
+            OBC%OBC_mask_v(i,J-1) = .true.
+            if (OBC%OBC_kind_v(i,J-1) == OBC_NONE) OBC%OBC_kind_v(i,J-1) = OBC_FLATHER_W
+          endif
         endif
       endif
     enddo ; enddo
@@ -1854,34 +1858,38 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   if (apply_OBC_v_flather_north) then
     ! Determine where v points are applied at north side 
     do J=JsdB,JedB ; do i=isd,ied
-      if ((J+G%jdg_offset) == north_boundary) then         !northern side
-        OBC%OBC_mask_v(i,J) = .true.
-        OBC%OBC_kind_v(i,J) = OBC_FLATHER_N
-        if ((I>IsdB) .and. (I<IedB) .and. (j+1>jsd) .and. (j+1<jed)) then
-          OBC%OBC_mask_u(I,j+1) = .true.
-          if (OBC%OBC_kind_u(I,j+1) == OBC_NONE) OBC%OBC_kind_u(I,j+1) = OBC_FLATHER_N
+      if ((J+G%jdg_offset) == north_boundary) then
+        if (G%mask2dT(i,j)*G%mask2dT(i,j+1) > 0.99) then
+          OBC%OBC_mask_v(i,J) = .true.
+          OBC%OBC_kind_v(i,J) = OBC_FLATHER_N
+          if (G%mask2dCu(I,j+1) > 0.99) then
+            OBC%OBC_mask_u(I,j+1) = .true.
+            if (OBC%OBC_kind_u(I,j+1) == OBC_NONE) OBC%OBC_kind_u(I,j+1) = OBC_FLATHER_N
+          endif
+          if (G%mask2dCu(I-1,j+1) > 0.99) then
+            OBC%OBC_mask_u(I-1,j+1) = .true.
+            if (OBC%OBC_kind_u(I-1,j+1) == OBC_NONE) OBC%OBC_kind_u(I-1,j+1) = OBC_FLATHER_N
+          endif
         endif
-        if ((I-1>IsdB) .and. (I-1<IedB) .and. (j+1>jsd) .and. (j+1<jed)) then
-          OBC%OBC_mask_u(I-1,j+1) = .true.
-          if (OBC%OBC_kind_u(I-1,j+1) == OBC_NONE) OBC%OBC_kind_u(I-1,j+1) = OBC_FLATHER_N
-        endif
-     endif
+      endif
     enddo ; enddo
   endif
   
   if (apply_OBC_v_flather_south) then
     ! Determine where v points are applied at south side 
     do J=JsdB,JedB ; do i=isd,ied
-      if ((J+G%jdg_offset) == south_boundary) then         !southern side
-        OBC%OBC_mask_v(i,J) = .true.
-        OBC%OBC_kind_v(i,J) = OBC_FLATHER_S
-        if ((I>IsdB) .and. (I<IedB) .and. (j>jsd) .and. (j<jed)) then
-          OBC%OBC_mask_u(I,j) = .true.
-          if (OBC%OBC_kind_u(I,j) == OBC_NONE) OBC%OBC_kind_u(I,j) = OBC_FLATHER_S
-        endif
-        if ((I-1>IsdB) .and. (I-1<IedB) .and. (j>jsd) .and. (j<jed)) then
-          OBC%OBC_mask_u(I-1,j) = .true.
-          if (OBC%OBC_kind_u(I-1,j) == OBC_NONE) OBC%OBC_kind_u(I-1,j) = OBC_FLATHER_S
+      if ((J+G%jdg_offset) == south_boundary) then
+        if (G%mask2dT(i,j)*G%mask2dT(i,j+1) > 0.99) then
+          OBC%OBC_mask_v(i,J) = .true.
+          OBC%OBC_kind_v(i,J) = OBC_FLATHER_S
+          if (G%mask2dCu(I,j) > 0.99) then
+            OBC%OBC_mask_u(I,j) = .true.
+            if (OBC%OBC_kind_u(I,j) == OBC_NONE) OBC%OBC_kind_u(I,j) = OBC_FLATHER_S
+          endif
+          if (G%mask2dCu(I-1,j) > 0.99) then
+            OBC%OBC_mask_u(I-1,j) = .true.
+            if (OBC%OBC_kind_u(I-1,j) == OBC_NONE) OBC%OBC_kind_u(I-1,j) = OBC_FLATHER_S
+          endif
         endif
       endif
     enddo ; enddo
@@ -1994,11 +2002,11 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
     enddo ; enddo ; enddo
   endif
 
-  do k=1,nz ; do j=js,je ; do I=is-1,ie
+  do k=1,nz ; do j=js,je ; do I=is,ie-1
     if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) h(i+1,j,k) = h(i,j,k)
     if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W) h(i,j,k) = h(i+1,j,k)
   enddo ; enddo ; enddo
-  do k=1,nz ; do J=js-1,je ; do i=is,ie
+  do k=1,nz ; do J=js,je-1 ; do i=is,ie
     if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) h(i,j+1,k) = h(i,j,k)
     if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S) h(i,j,k) = h(i,j+1,k)
   enddo ; enddo ; enddo

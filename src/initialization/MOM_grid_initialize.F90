@@ -1382,40 +1382,40 @@ subroutine initialize_masks(G, PF)
   call pass_var(G%bathyT, G%Domain)
   G%mask2dCu(:,:) = 0.0 ; G%mask2dCv(:,:) = 0.0 ; G%mask2dBu(:,:) = 0.0
 
-  ! Extrapolate the bottom depths at any points that are subject to Flather
-  ! open boundary conditions.  This should be generalized for Flather OBCs
-  ! that are not necessarily at the edges of the domain.
-  if (apply_OBC_u_flather_west) then
-    do j=G%jsd,G%jed ; do I=G%isd+1,G%ied
-      if ((I+G%idg_offset) == G%isg) then
-        G%bathyT(i-1,j) = G%bathyT(i,j)
-      endif
-    enddo; enddo       
-  endif
+!  ! Extrapolate the bottom depths at any points that are subject to Flather
+!  ! open boundary conditions.  This should be generalized for Flather OBCs
+!  ! that are not necessarily at the edges of the domain.
+!  if (apply_OBC_u_flather_west) then
+!    do j=G%jsd,G%jed ; do I=G%isd+1,G%ied
+!      if ((I+G%idg_offset) == G%isg) then
+!        G%bathyT(i-1,j) = G%bathyT(i,j)
+!      endif
+!    enddo; enddo       
+!  endif
+!
+!  if (apply_OBC_u_flather_east) then
+!    do j=G%jsd,G%jed ; do I=G%isd,G%ied-1
+!      if ((i+G%idg_offset) == G%ieg) then
+!        G%bathyT(i+1,j) = G%bathyT(i,j)
+!      endif
+!    enddo; enddo    
+!  endif
 
-  if (apply_OBC_u_flather_east) then
-    do j=G%jsd,G%jed ; do I=G%isd,G%ied-1
-      if ((i+G%idg_offset) == G%ieg) then
-        G%bathyT(i+1,j) = G%bathyT(i,j)
-      endif
-    enddo; enddo    
-  endif
+!  if (apply_OBC_v_flather_north) then
+!    do J=G%jsd,G%jed-1 ; do i=G%isd,G%ied
+!      if ((j+G%jdg_offset) == G%jeg) then
+!        G%bathyT(i,j+1) = G%bathyT(i,j)
+!      endif
+!    enddo; enddo    
+!  endif
 
-  if (apply_OBC_v_flather_north) then
-    do J=G%jsd,G%jed-1 ; do i=G%isd,G%ied
-      if ((j+G%jdg_offset) == G%jeg) then
-        G%bathyT(i,j+1) = G%bathyT(i,j)
-      endif
-    enddo; enddo    
-  endif
-
-  if (apply_OBC_v_flather_south) then
-    do J=G%jsd+1,G%jed ; do i=G%isd,G%ied
-      if ((J+G%jdg_offset) == G%jsg) then
-        G%bathyT(i,j-1) = G%bathyT(i,j)
-      endif
-    enddo; enddo
-  endif
+!  if (apply_OBC_v_flather_south) then
+!    do J=G%jsd+1,G%jed ; do i=G%isd,G%ied
+!      if ((J+G%jdg_offset) == G%jsg) then
+!        G%bathyT(i,j-1) = G%bathyT(i,j)
+!      endif
+!    enddo; enddo
+!  endif
 
   do j=G%jsd,G%jed ; do i=G%isd,G%ied
     if (G%bathyT(i,j) <= Dmin) then
