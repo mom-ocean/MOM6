@@ -25,7 +25,7 @@ use MOM_regridding,       only : regriddingCoordinateModeDoc, DEFAULT_COORDINATE
 use MOM_regridding,       only : regriddingInterpSchemeDoc, regriddingDefaultInterpScheme
 use MOM_regridding,       only : regriddingDefaultBoundaryExtrapolation
 use MOM_regridding,       only : regriddingDefaultMinThickness
-use MOM_regridding,       only : check_remapping_grid, set_regrid_max_depths
+use MOM_regridding,       only : set_regrid_max_depths
 use MOM_regridding,       only : set_regrid_max_thickness
 use MOM_regridding,       only : regridding_CS, set_regrid_params
 use MOM_regridding,       only : getCoordinateInterfaces, getCoordinateResolution
@@ -60,8 +60,8 @@ implicit none ; private
 type, public :: ALE_CS
   private
 
-  logical :: boundary_extrapolation_for_pressure !<  Indicate whether high-order boundary 
-                                                 !!  extrapolation should be used within boundary cells
+  logical :: boundary_extrapolation_for_pressure !< Indicate whether high-order boundary 
+                                                 !! extrapolation should be used within boundary cells
 
   logical :: reconstructForPressure = .false.    !< Indicates whether integrals for FV 
                                                  !! pressure gradient calculation will
@@ -69,9 +69,13 @@ type, public :: ALE_CS
                                                  !! By default, it is true if regridding 
                                                  !! has been initialized, otherwise false.
 
-  integer :: pressureReconstructionScheme        !<  Form of the reconstruction of T/S 
+  integer :: pressureReconstructionScheme        !< Form of the reconstruction of T/S 
                                                  !! for FV pressure gradient calculation.
                                                  !! By default, it is =1 (PLM)
+
+  logical :: remap_uv_using_old_alg              !< If true, uses the old "remapping via a delta z"
+                                                 !! method. If False, uses the new method that
+                                                 !! remaps between grids described by h.
 
   real :: regrid_time_scale !< The time-scale used in blending between the current (old) grid
                             !! and the target (new) grid. (s)
@@ -115,7 +119,6 @@ public ALE_writeCoordinateFile
 public ALE_updateVerticalGridType
 public ALE_initThicknessToCoord
 public ALE_update_regrid_weights
-public check_remapping_grid
 public ALE_remap_init_conds
 public ALE_register_diags
 
@@ -139,6 +142,7 @@ subroutine ALE_init( param_file, G, GV, CS)
   logical                         :: check_reconstruction
   logical                         :: check_remapping
   logical                         :: force_bounds_in_subcell
+  logical                         :: local_logical
 
   if (associated(CS)) then
     call MOM_error(WARNING, "ALE_init called with an associated "// &
@@ -176,6 +180,13 @@ subroutine ALE_init( param_file, G, GV, CS)
                  "within the FV pressure gradient calculation."//&
                  " 1: PLM reconstruction.\n"//&
                  " 2: PPM reconstruction.", default=PRESSURE_RECONSTRUCTION_PLM)
+
+  call get_param(param_file, mod, "REMAP_UV_USING_OLD_ALG", &
+                 CS%remap_uv_using_old_alg, &
+                 "If true, uses the old remapping-via-a-delta-z method for\n"//&
+                 "remapping u and v. If false, uses the new method that remaps\n"//&
+                 "between grids described by an old and new thickness.", &
+                 default=.true.)
 
   ! Initialize and configure regridding
   allocate( dz(G%ke) )
@@ -228,6 +239,12 @@ subroutine ALE_init( param_file, G, GV, CS)
                  units="m", default=0.)
   call set_regrid_params(CS%regridCS, depth_of_time_filter_shallow=filter_shallow_depth*GV%m_to_H, &
                                       depth_of_time_filter_deep=filter_deep_depth*GV%m_to_H)
+  call get_param(param_file, mod, "REGRID_USE_OLD_DIRECTION", local_logical, &
+                 "If true, the regridding ntegrates upwards from the bottom for\n"//&
+                 "interface positions, much as the main model does. If false\n"//&
+                 "regridding integrates downward, consistant with the remapping\n"//&
+                 "code.", default=.true., do_not_log=.true.)
+  call set_regrid_params(CS%regridCS, integrate_downward_for_e=.not.local_logical)
 
   ! Keep a record of values for subsequent queries
   CS%nk = G%ke
@@ -374,18 +391,9 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt)
 
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
-  call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, dzRegrid )
+  call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, h_new, dzRegrid )
 
-  call check_remapping_grid( G, h, dzRegrid, 'in ALE_main()' )
-
-  ! Override old grid with new one. The new grid 'h_new' is built in
-  ! one of the 'build_...' routines above.
-!$OMP parallel do default(none) shared(isc,iec,jsc,jec,nk,h,h_new,dzRegrid,CS)
-  do k = 1,nk
-    do j = jsc-1,jec+1 ; do i = isc-1,iec+1
-      h_new(i,j,k) = max( 0., h(i,j,k) + ( dzRegrid(i,j,k) - dzRegrid(i,j,k+1) ) )
-    enddo ; enddo
-  enddo
+  call check_grid( G, h, 0. )
 
   if (CS%show_call_tree) call callTree_waypoint("new grid generated (ALE_main)")
 
@@ -407,6 +415,29 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt)
   if (CS%show_call_tree) call callTree_leave("ALE_main()")
 end subroutine ALE_main
 
+!> Check grid for negative thicknesses
+subroutine check_grid( G, h, threshold )
+  type(ocean_grid_type),                     intent(in) :: G !< Ocean grid structure
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in) :: h !< Current 3D grid obtained after the last time step (H units)
+  real,                                      intent(in) :: threshold !< Value below which to flag issues (H units)
+  ! Local variables
+  integer :: i, j
+
+  do j = G%jsc,G%jec ; do i = G%isc,G%iec
+    if (G%mask2dT(i,j)>0.) then
+      if (minval(h(i,j,:)) < threshold) then
+        write(0,*) 'check_grid: i,j=',i,j,'h(i,j,:)=',h(i,j,:)
+        if (threshold <= 0.) then
+          call MOM_error(FATAL,"MOM_ALE, check_grid: negative thickness encountered.")
+        else
+          call MOM_error(FATAL,"MOM_ALE, check_grid: too tiny thickness encountered.")
+        endif
+      endif
+    endif
+  enddo ; enddo
+
+
+end subroutine check_grid
 
 !> Generates new grid
 subroutine ALE_build_grid( G, GV, regridCS, remapCS, h, tv, debug )
@@ -420,7 +451,8 @@ subroutine ALE_build_grid( G, GV, regridCS, remapCS, h, tv, debug )
 
   ! Local variables
   integer :: nk, i, j, k
-  real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: dzRegrid ! The changein grid interface positions
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: dzRegrid ! The change in grid interface positions
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: h_new ! The new grid thicknesses
   logical :: show_call_tree
 
   show_call_tree = .false.
@@ -429,19 +461,13 @@ subroutine ALE_build_grid( G, GV, regridCS, remapCS, h, tv, debug )
 
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
-  call regridding_main( remapCS, regridCS, G, GV, h, tv, dzRegrid )
-
-  call check_remapping_grid( G, h, dzRegrid, 'in ALE_build_grid()' )
+  call regridding_main( remapCS, regridCS, G, GV, h, tv, h_new, dzRegrid )
 
   ! Override old grid with new one. The new grid 'h_new' is built in
   ! one of the 'build_...' routines above.
-!$OMP parallel do default(none) shared(G,h,dzRegrid)
+!$OMP parallel do default(none) shared(G,h,h_new)
   do j = G%jsc,G%jec ; do i = G%isc,G%iec
-    if (G%mask2dT(i,j)>0.) then
-      do k = 1,G%ke
-        h(i,j,k) = h(i,j,k) + ( dzRegrid(i,j,k) - dzRegrid(i,j,k+1) )
-      enddo
-    endif
+    if (G%mask2dT(i,j)>0.) h(i,j,:) = h_new(i,j,:)
   enddo ; enddo
 
   if (show_call_tree) call callTree_leave("ALE_build_grid()")
@@ -466,7 +492,6 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, dxInt
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), optional, intent(inout) :: v          !< Meridional velocity component (m/s)
   logical,                                   optional, intent(in)    :: debug      !< If true, show the call tree
   real,                                      optional, intent(in)    :: dt         !< time step for diagnostics 
-
   ! Local variables
   integer                                     :: i, j, k, m
   integer                                     :: nz, ntr
@@ -603,12 +628,14 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, dxInt
         if (G%mask2dCu(i,j)>0.) then
           ! Build the start and final grids
           h1(:) = 0.5 * ( h_old(i,j,:) + h_old(i+1,j,:) )
-          dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i+1,j,:) )
-          do k = 1, nz
-            h2(k) = max( 0., h1(k) + ( dx(k+1) - dx(k) ) )
-          enddo
-         !Todo: Using h_new directly changes answers!!! - AJA
-         !h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i+1,j,:) )
+          if (CS_ALE%remap_uv_using_old_alg) then
+            dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i+1,j,:) )
+            do k = 1, nz
+              h2(k) = max( 0., h1(k) + ( dx(k+1) - dx(k) ) )
+            enddo
+          else
+            h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i+1,j,:) )
+          endif
           call remapping_core_h( nz, h1, u(I,j,:), nz, h2, u_column, CS_remapping )
           u(I,j,:) = u_column(:)
         endif
@@ -626,12 +653,14 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, dxInt
         if (G%mask2dCv(i,j)>0.) then
           ! Build the start and final grids
           h1(:) = 0.5 * ( h_old(i,j,:) + h_old(i,j+1,:) )
-          dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i,j+1,:) )
-          do k = 1, nz
-            h2(k) = max( 0., h1(k) + ( dx(k+1) - dx(k) ) )
-          enddo
-         !Todo: Using h_new directly changes answers!!! - AJA
-         !h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i,j+1,:) )
+          if (CS_ALE%remap_uv_using_old_alg) then
+            dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i,j+1,:) )
+            do k = 1, nz
+              h2(k) = max( 0., h1(k) + ( dx(k+1) - dx(k) ) )
+            enddo
+          else
+            h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i,j+1,:) )
+          endif
           call remapping_core_h( nz, h1, v(i,J,:), nz, h2, u_column, CS_remapping )
           v(i,J,:) = u_column(:)
         endif
@@ -649,29 +678,33 @@ end subroutine remap_all_state_vars
 !> Remaps a single scalar between grids described by thicknesses h_src and h_dst.
 !! h_dst must be dimensioned as a model array with G%ke layers while h_src can
 !! have an arbitrary number of layers specified by nk_src.
-subroutine ALE_remap_scalar(CS, G, nk_src, h_src, s_src, h_dst, s_dst, all_cells )
+subroutine ALE_remap_scalar(CS, G, nk_src, h_src, s_src, h_dst, s_dst, all_cells, old_remap )
   type(remapping_CS),                      intent(in)    :: CS        !< Remapping control structure
   type(ocean_grid_type),                   intent(in)    :: G         !< Ocean grid structure
   integer,                                 intent(in)    :: nk_src    !< Number of levels on source grid
   real, dimension(SZI_(G),SZJ_(G),nk_src), intent(in)    :: h_src     !< Level thickness of source grid (m or Pa)
   real, dimension(SZI_(G),SZJ_(G),nk_src), intent(in)    :: s_src     !< Scalar on source grid
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h_dst     !< Level thickness of destination grid (m or Pa)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: s_dst     !< Scalar on destination grid
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),intent(in)    :: h_dst     !< Level thickness of destination grid (m or Pa)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),intent(inout) :: s_dst     !< Scalar on destination grid
   logical, optional,                       intent(in)    :: all_cells !< If false, only reconstruct for
                                                                       !! non-vanished cells. Use all vanished
                                                                       !! layers otherwise (default).
+  logical, optional,                       intent(in)    :: old_remap !< If true, use the old "remapping_core_w"
+                                                                      !! method, otherwise use "remapping_core_h".
   ! Local variables
   integer :: i, j, k, n_points
   real :: dx(G%ke+1)
-  logical :: ignore_vanished_layers
+  logical :: ignore_vanished_layers, use_remapping_core_w
 
   ignore_vanished_layers = .false.
   if (present(all_cells)) ignore_vanished_layers = .not. all_cells
+  use_remapping_core_w = .false.
+  if (present(old_remap)) use_remapping_core_w = old_remap
   n_points = nk_src
 
-!$OMP parallel default(none) shared(CS,G,h_src,s_src,h_dst,s_dst &
+!$OMP parallel default(none) shared(CS,G,h_src,s_src,h_dst,s_dst,use_remapping_core_w &
 !$OMP                               ,ignore_vanished_layers, nk_src,dx ) &
-!$OMP                        private(n_points)
+!$OMP                        firstprivate(n_points)
 !$OMP do
   do j = G%jsc,G%jec
     do i = G%isc,G%iec
@@ -683,10 +716,12 @@ subroutine ALE_remap_scalar(CS, G, nk_src, h_src, s_src, h_dst, s_dst, all_cells
           enddo
           s_dst(i,j,:) = 0.
         endif
-       !Todo: Using remapping_core_h() is what we want to do but changes answers !!! -AJA
-       !call remapping_core_h(n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), G%ke, h_dst(i,j,:), s_dst(i,j,:), CS)
-        call dzFromH1H2( n_points, h_src(i,j,1:n_points), G%ke, h_dst(i,j,:), dx )
-        call remapping_core_w(CS, n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), G%ke, dx, s_dst(i,j,:))
+        if (use_remapping_core_w) then
+          call dzFromH1H2( n_points, h_src(i,j,1:n_points), G%ke, h_dst(i,j,:), dx )
+          call remapping_core_w(CS, n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), G%ke, dx, s_dst(i,j,:))
+        else
+          call remapping_core_h(n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), G%ke, h_dst(i,j,:), s_dst(i,j,:), CS)
+        endif
       else
         s_dst(i,j,:) = 0.
       endif
