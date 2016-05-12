@@ -152,7 +152,7 @@ type, public :: ocean_state_type ; private
   type(time_type) :: write_energy_time ! The next time to write to the energy file.
 
   integer :: nstep = 0        ! The number of calls to update_ocean.
-  logical :: use_ice_shelf = .false. ! If true, the ice shelf model is enabled.
+  logical :: use_ice_shelf    ! If true, the ice shelf model is enabled.
   type(ice_shelf_CS), pointer :: Ice_shelf_CSp => NULL()
   logical :: restore_salinity ! If true, the coupled MOM driver adds a term to
                               ! restore salinity to a specified value.
@@ -271,8 +271,8 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
                  "The gravitational acceleration of the Earth.", &
                  units="m s-2", default = 9.80)
 
-  call get_param(param_file,mod,"ICE_SHELF",OS%use_ice_shelf)
-
+  call get_param(param_file, mod, "ICE_SHELF",  OS%use_ice_shelf, &
+                 "If true, enables the ice shelf model.", default=.false.)
 
   OS%press_to_z = 1.0/(Rho0*G_Earth)
 
@@ -280,7 +280,8 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
                             OS%forcing_CSp, OS%restore_salinity)
 
   if (OS%use_ice_shelf)  then
-     call initialize_ice_shelf(OS%Time, OS%ice_shelf_CSp,OS%MOM_CSp%diag, OS%fluxes)
+     call initialize_ice_shelf(param_file, OS%grid, OS%Time, OS%ice_shelf_CSp, &
+                               OS%MOM_CSp%diag, OS%fluxes)
   endif
 
   call MOM_sum_output_init(OS%grid, param_file, OS%dirs%output_directory, &
