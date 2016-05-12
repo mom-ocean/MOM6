@@ -671,11 +671,11 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS)
   endif
 
 !$OMP parallel do default(none) shared(G,GV,CS,visc,Isq,ieq,nz,u,h,fluxes,hML_u, &
-!$OMP                                  h_neglect,dt,m_to_H) &
+!$OMP                                  h_neglect,dt,m_to_H,I_valBL) &
 !$OMP                     firstprivate(i_hbbl)                                             &
 !$OMP                          private(do_i,kv_bbl,bbl_thick,z_i,h_harm,h_arith,hvel,z2,   &
 !$OMP                                  botfn,zh,Dmin,zcol,a,do_any_shelf,do_i_shelf,       &
-!$OMP                                  a_shelf,Ztop_min,I_HTbl,hvel_shelf,topfn,h_ml)
+!$OMP                                  a_shelf,Ztop_min,I_HTbl,hvel_shelf,topfn,h_ml,z2_wt)
   do j=G%Jsc,G%Jec
     do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0) ; enddo
 
@@ -812,11 +812,11 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS)
 
   ! Now work on v-points.
 !$OMP parallel do default(none) shared(G,GV,CS,visc,is,ie,Jsq,Jeq,nz,v,h,fluxes,hML_v, &
-!$OMP                                  h_neglect,dt,m_to_H) &
+!$OMP                                  h_neglect,dt,m_to_H,I_valBL) &
 !$OMP                     firstprivate(i_hbbl)                                                &
 !$OMP                          private(do_i,kv_bbl,bbl_thick,z_i,h_harm,h_arith,hvel,z2,      &
 !$OMP                                  botfn,zh,Dmin,zcol1,zcol2,a,do_any_shelf,do_i_shelf,  &
-!$OMP                                  a_shelf,Ztop_min,I_HTbl,hvel_shelf,topfn,h_ml)
+!$OMP                                  a_shelf,Ztop_min,I_HTbl,hvel_shelf,topfn,h_ml,z2_wt)
   do J=Jsq,Jeq
     do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0) ; enddo
 
