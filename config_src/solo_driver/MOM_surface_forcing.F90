@@ -690,7 +690,7 @@ subroutine wind_forcing_from_file(state, fluxes, day, G, CS)
           fluxes%taux(I,j) = CS%wind_scale * temp_x(I,j)
           fluxes%tauy(i,J) = CS%wind_scale * temp_y(i,J)
         enddo ; enddo
-        call fill_symmetric_edges(fluxes%taux, fluxes%taux, G%Domain, stagger=CGRID_NE)
+        call fill_symmetric_edges(fluxes%taux, fluxes%tauy, G%Domain, stagger=CGRID_NE)
       else
         call read_data(filename, CS%stress_x_var, fluxes%taux(:,:), &
                        domain=G%Domain%mpp_domain, position=EAST_FACE, &

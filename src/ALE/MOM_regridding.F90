@@ -129,6 +129,10 @@ type, public :: regridding_CS
   !! is traversed to set the minimum depth of interfaces.
   real :: max_depth_index_scale = 2.0
 
+  !> If true, integrate for interface positions from the top downward.
+  !! If false, integrate from the bottom upward, as does the rest of the model.
+  logical :: integrate_downward_for_e = .true.
+
 end type
 
 ! The following routines are visible to the outside world
@@ -815,10 +819,6 @@ subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
 
       ! Copy original grid
       h0(1:nz) = h(i,j,1:nz)
-      x0(1) = 0.0
-      do k = 1,nz
-        x0(k+1) = x0(k) + h0(k)
-      end do
 
       ! Start iterations to build grid
       m = 1
@@ -890,7 +890,6 @@ subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
 
         ! Remap T and S from previous grid to new grid
         do k = 1,nz
-          h0(k) = x0(k+1) - x0(k)
           h1(k) = x1(k+1) - x1(k)
         end do
 
@@ -902,16 +901,18 @@ subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
 
         ! Compute the deviation between two successive grids
         deviation = 0.0
+        x0(1) = 0.0
+        x1(1) = 0.0
         do k = 2,nz
+          x0(k) = x0(k-1) + h0(k-1)
+          x1(k) = x1(k-1) + h1(k-1)
           deviation = deviation + (x0(k)-x1(k))**2
         end do
         deviation = sqrt( deviation / (nz-1) )
 
-
         m = m + 1
 
         ! Copy final grid onto start grid for next iteration
-        x0(:) = x1(:)
         h0(:) = h1(:)
 
       end do ! end regridding iterations
@@ -919,20 +920,29 @@ subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
       ! Local depth (G%bathyT is positive)
       nominalDepth = G%bathyT(i,j)*GV%m_to_H
 
-      ! The rest of the model defines grids integrating up from the bottom
       totalThickness = 0.0
-      zOld(nz+1) = - nominalDepth
-      zNew(nz+1) = - nominalDepth
-      do k = nz,1,-1
-        totalThickness = totalThickness + h(i,j,k)
-        zNew(k) = zNew(k+1) + h1(k)
-        ! Adjust interface position to accomodate inflating layers
-        ! without disturbing the interface above
-  !     if ( zNew(k) < (zNew(k+1) + CS%min_thickness) ) then
-  !       zNew(k) = zNew(k+1) + CS%min_thickness
-  !     endif
-        zOld(k) = zOld(k+1) + h(i,j,k)
-      enddo
+      if (CS%integrate_downward_for_e) then
+        zOld(1) = 0.
+        zNew(1) = 0.
+        do k = 1,nz
+          totalThickness = totalThickness + h(i,j,k)
+          zNew(k+1) = zNew(k) - h1(k)
+          ! Adjust interface position to accomodate inflating layers
+          ! without disturbing the interface above
+          zOld(k+1) = zOld(k) - h(i,j,k)
+        enddo
+      else
+        ! The rest of the model defines grids integrating up from the bottom
+        zOld(nz+1) = - nominalDepth
+        zNew(nz+1) = - nominalDepth
+        do k = nz,1,-1
+          totalThickness = totalThickness + h(i,j,k)
+          zNew(k) = zNew(k+1) + h1(k)
+          ! Adjust interface position to accomodate inflating layers
+          ! without disturbing the interface above
+          zOld(k) = zOld(k+1) + h(i,j,k)
+        enddo
+      endif
 
       ! Calculate the final change in grid position after blending new and old grids
       call filtered_grid_motion( CS, nz, zOld, zNew, dzInterface(i,j,:) )
@@ -2575,7 +2585,7 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
              depth_of_time_filter_shallow, depth_of_time_filter_deep, &
              compress_fraction, dz_min_surface, nz_fixed_surface, Rho_ML_avg_depth, &
              nlay_ML_to_interior, fix_haloclines, halocline_filt_len, &
-             halocline_strat_tol)
+             halocline_strat_tol, integrate_downward_for_e)
   type(regridding_CS), intent(inout) :: CS !< Regridding control structure
   logical, optional, intent(in) :: boundary_extrapolation !< Extrapolate in boundary cells
   real,    optional, intent(in) :: min_thickness !< Minimum thickness allowed when building the new grid (m)
@@ -2590,6 +2600,7 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
   logical, optional, intent(in) :: fix_haloclines !< Detect regions with much weaker stratification in the coordinate
   real,    optional, intent(in) :: halocline_filt_len !< Length scale over which to filter T & S when looking for spuriously unstable water mass profiles (m)
   real,    optional, intent(in) :: halocline_strat_tol !< Value of the stratification ratio that defines a problematic halocline region.
+  logical, optional, intent(in) :: integrate_downward_for_e !< If true, integrate for interface positions downward from the top.
 
   if (present(boundary_extrapolation)) CS%boundary_extrapolation = boundary_extrapolation
   if (present(min_thickness)) CS%min_thickness = min_Thickness
@@ -2616,6 +2627,7 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
         "HALOCLINE_STRAT_TOL must not exceed 1.0.")
     CS%halocline_strat_tol = halocline_strat_tol
   endif
+  if (present(integrate_downward_for_e)) CS%integrate_downward_for_e = integrate_downward_for_e
 
 end subroutine set_regrid_params
 
