@@ -976,6 +976,8 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
   real :: Rho0x400_G  ! 400*Rho0/G_Earth, in kg s2 m-4.  The 400 is a
                       ! constant proposed by Killworth and Edwards, 1999.
   real :: H_to_m, m_to_H   ! Local copies of unit conversion factors.
+  real :: ustar1    ! ustar in units of H/s
+  real :: h2f2      ! (h*2*f)^2
   logical :: use_EOS, do_any, do_any_shelf, do_i(SZIB_(G))
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, K2, nkmb, nkml
 
@@ -1045,7 +1047,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
 !$OMP                                  dR_dS,hlay,v_at_u,Uh2,T_lay,S_lay,gHprime,           &
 !$OMP                                  RiBulk,Shtot,Rhtot,absf,do_any_shelf,                &
 !$OMP                                  h_at_vel,ustar,htot_vel,hwtot,hutot,hweight,ustarsq, &
-!$OMP                                  oldfn,Dfn,Dh,Rlay,Rlb)
+!$OMP                                  oldfn,Dfn,Dh,Rlay,Rlb,h2f2,ustar1)
   do j=js,je  ! u-point loop
     if (CS%dynamic_viscous_ML) then
       do_any = .false.
@@ -1260,10 +1262,14 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
             htot(i) = htot(i) + h_at_vel(i,nz)
         endif ! use_EOS
 
+       !visc%tbl_thick_shelf_u(I,j) = max(CS%Htbl_shelf_min, &
+       !    htot(I) / (0.5 + sqrt(0.25 + &
+       !                 (htot(i)*(G%CoriolisBu(I,J-1)+G%CoriolisBu(I,J)))**2 / &
+       !                 (ustar(i)*m_to_H)**2 )) )
+        ustar1 = ustar(i)*m_to_H
+        h2f2 = (htot(i)*(G%CoriolisBu(I,J-1)+G%CoriolisBu(I,J)) + h_neglect*CS%Omega)**2
         visc%tbl_thick_shelf_u(I,j) = max(CS%Htbl_shelf_min, &
-            htot(I) / (0.5 + sqrt(0.25 + &
-                         (htot(i)*(G%CoriolisBu(I,J-1)+G%CoriolisBu(I,J)))**2 / &
-                         (ustar(i)*m_to_H)**2 )) )
+            ( htot(I)*ustar1 ) / ( 0.5*ustar1 + sqrt((0.5*ustar1)**2 + h2f2 ) ) )
         visc%kv_tbl_shelf_u(I,j) = max(CS%KV_TBL_min, &
                        cdrag_sqrt*ustar(I)*visc%tbl_thick_shelf_u(I,j))
       endif ; enddo ! I-loop
@@ -1280,7 +1286,8 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
 !$OMP                                  S_EOS,dR_dT, dR_dS,hlay,u_at_v,Uh2,               &
 !$OMP                                  T_lay,S_lay,gHprime,RiBulk,do_any_shelf,          &
 !$OMP                                  Shtot,Rhtot,ustar,h_at_vel,htot_vel,hwtot,        &
-!$OMP                                  hutot,hweight,ustarsq,oldfn,Dh,Rlay,Rlb,Dfn)
+!$OMP                                  hutot,hweight,ustarsq,oldfn,Dh,Rlay,Rlb,Dfn,      &
+!$OMP                                  h2f2,ustar1)
   do J=Jsq,Jeq  ! v-point loop
     if (CS%dynamic_viscous_ML) then
       do_any = .false.
@@ -1496,10 +1503,14 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
             htot(i) = htot(i) + h_at_vel(i,nz)
         endif ! use_EOS
 
+       !visc%tbl_thick_shelf_v(i,J) = max(CS%Htbl_shelf_min, &
+       !    htot(i) / (0.5 + sqrt(0.25 + &
+       !        (htot(i)*(G%CoriolisBu(I-1,J)+G%CoriolisBu(I,J)))**2 / &
+       !        (ustar(i)*m_to_H)**2 )) )
+        ustar1 = ustar(i)*m_to_H
+        h2f2 = (htot(i)*(G%CoriolisBu(I-1,J)+G%CoriolisBu(I,J)) + h_neglect*CS%Omega)**2
         visc%tbl_thick_shelf_v(i,J) = max(CS%Htbl_shelf_min, &
-            htot(i) / (0.5 + sqrt(0.25 + &
-                (htot(i)*(G%CoriolisBu(I-1,J)+G%CoriolisBu(I,J)))**2 / &
-                (ustar(i)*m_to_H)**2 )) )
+            ( htot(i)*ustar1 ) / ( 0.5*ustar1 + sqrt((0.5*ustar1)**2 + h2f2 ) ) )
         visc%kv_tbl_shelf_v(i,J) = max(CS%KV_TBL_min, &
                        cdrag_sqrt*ustar(i)*visc%tbl_thick_shelf_v(i,J))
       endif ; enddo ! i-loop
@@ -1689,6 +1700,10 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS)
                  default=7.2921e-5)
     ! This give a minimum decay scale that is typically much less than Angstrom.
     CS%ustar_min = 2e-4*CS%omega*(GV%Angstrom_z + GV%H_to_m*GV%H_subroundoff)
+  else
+    call get_param(param_file, mod, "OMEGA", CS%omega, &
+                 "The rotation rate of the earth.", units="s-1", &
+                 default=7.2921e-5)
   endif
 
   call get_param(param_file, mod, "HBBL", CS%Hbbl, &
