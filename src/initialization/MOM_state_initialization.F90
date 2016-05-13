@@ -9,6 +9,7 @@ use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only :  CLOCK_ROUTINE, CLOCK_LOOP
 use MOM_domains, only : pass_var, pass_vector, sum_across_PEs, broadcast
 use MOM_domains, only : root_PE, To_All, SCALAR_PAIR, CGRID_NE, AGRID
+use MOM_EOS, only : find_depth_of_pressure_in_cell
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
@@ -33,6 +34,7 @@ use MOM_variables, only : thermo_var_ptrs, ocean_OBC_type
 use MOM_variables, only : OBC_NONE, OBC_SIMPLE, OBC_FLATHER_E, OBC_FLATHER_W
 use MOM_variables, only : OBC_FLATHER_N, OBC_FLATHER_S
 use MOM_verticalGrid, only : setVerticalGridAxes, verticalGrid_type
+use MOM_ALE, only : pressure_gradient_plm
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use MOM_EOS, only : int_specific_vol_dp
 use user_initialization, only : user_initialize_thickness, user_initialize_velocity
@@ -41,6 +43,9 @@ use user_initialization, only : user_set_Open_Bdry_Conds, user_initialize_sponge
 use DOME_initialization, only : DOME_initialize_thickness
 use DOME_initialization, only : DOME_set_Open_Bdry_Conds
 use DOME_initialization, only : DOME_initialize_sponges
+use ISOMIP_initialization, only : ISOMIP_initialize_thickness
+use ISOMIP_initialization, only : ISOMIP_initialize_sponges
+use ISOMIP_initialization, only : ISOMIP_initialize_temperature_salinity
 use baroclinic_zone_initialization, only : baroclinic_zone_init_temperature_salinity
 use benchmark_initialization, only : benchmark_initialize_thickness
 use benchmark_initialization, only : benchmark_init_temperature_salinity
@@ -131,8 +136,9 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   logical :: use_EOS    ! If true, density is calculated from T & S using an
                         ! equation of state.
   logical :: depress_sfc ! If true, remove the mass that would be displaced
-                         ! by a large surface pressure, such as with an ice
-                         ! sheet.
+                         ! by a large surface pressure by squeezing the column.
+  logical :: trim_ic_for_p_surf ! If true, remove the mass that would be displaced
+                         ! by a large surface pressure, such as with an ice sheet.
   logical :: Analytic_FV_PGF, obsol_test
   logical :: apply_OBC_u, apply_OBC_v
   logical :: apply_OBC_u_flather_east, apply_OBC_u_flather_west
@@ -163,6 +169,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   inputdir = slasher(inputdir)
 
   use_temperature = ASSOCIATED(tv%T)
+  useALE = associated(ALE_CSp)
   use_EOS = associated(tv%eqn_of_state)
   useALE = associated(ALE_CSp)
   if (use_EOS) eos => tv%eqn_of_state
@@ -207,6 +214,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                " \t\t between the surface and MAXIMUM_DEPTH. \n"//&
                " \t DOME - use a slope and channel configuration for the \n"//&
                " \t\t DOME sill-overflow test case. \n"//&
+               " \t ISOMIP - use a configuration for the \n"//&
+               " \t\t ISOMIP test case. \n"//&
                " \t benchmark - use the benchmark test case thicknesses. \n"//&
                " \t search - search a density profile for the interface \n"//&
                " \t\t densities. This is not yet implemented. \n"//&
@@ -224,6 +233,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
          case ("coord"); call ALE_initThicknessToCoord( ALE_CSp, G, h )
          case ("uniform"); call initialize_thickness_uniform(h, G, GV, PF)
          case ("DOME"); call DOME_initialize_thickness(h, G, GV, PF)
+         case ("ISOMIP"); call ISOMIP_initialize_thickness(h, G, GV, PF, tv)
          case ("benchmark"); call benchmark_initialize_thickness(h, G, GV, PF, &
                                  tv%eqn_of_state, tv%P_Ref)
          case ("search"); call initialize_thickness_search
@@ -256,6 +266,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                " \t benchmark - use the benchmark test case T & S. \n"//&
                " \t linear - linear in logical layer space. \n"//&
                " \t DOME2D - 2D DOME initialization. \n"//&
+               " \t ISOMIP - ISOMIP initialization. \n"//&
                " \t adjustment2d - TBD AJA. \n"//&
                " \t sloshing - TBD AJA. \n"//&
                " \t seamount - TBD AJA. \n"//&
@@ -273,6 +284,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
           case ("linear"); call initialize_temp_salt_linear(tv%T, tv%S, G, PF)
           case ("DOME2D"); call DOME2d_initialize_temperature_salinity ( tv%T, &
                                 tv%S, h, G, PF, eos)
+          case ("ISOMIP"); call ISOMIP_initialize_temperature_salinity ( tv%T, &
+                                tv%S, h, G, GV, PF, eos)
           case ("adjustment2d"); call adjustment_initialize_temperature_salinity ( tv%T, &
                                       tv%S, h, G, PF, eos)
           case ("baroclinic_zone"); call baroclinic_zone_init_temperature_salinity( tv%T, &
@@ -341,7 +354,14 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                  "If true,  depress the initial surface to avoid huge \n"//&
                  "tsunamis when a large surface pressure is applied.", &
                  default=.false.)
+    call get_param(PF, mod, "TRIM_IC_FOR_P_SURF", trim_ic_for_p_surf, &
+                 "If true, cuts way the top of the column for initial conditions\n"//&
+                 "at the depth where the hydrostatic presure matches the imposed\n"//&
+                 "surface pressure which is read from file.", default=.false.)
+    if (depress_sfc .and. trim_ic_for_p_surf) call MOM_error(FATAL, "MOM_initialize_state: "//&
+             "DEPRESS_INITIAL_SURFACE and TRIM_IC_FOR_P_SURF are exclusive and cannot both be True")
     if (depress_sfc) call depress_surface(h, G, GV, PF, tv)
+    if (trim_ic_for_p_surf) call trim_for_ice(PF, G, GV, ALE_CSp, tv, h)
 
   else ! Previous block for new_sim=.T., this block restores state
 !    This line calls a subroutine that reads the initial conditions  !
@@ -376,32 +396,24 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                  "A string that sets how the sponges are configured: \n"//&
                  " \t file - read sponge properties from the file \n"//&
                  " \t\t specified by (SPONGE_FILE).\n"//&
+                 " \t ISOMIP - apply ale sponge in the ISOMIP case \n"//&
                  " \t DOME - use a slope and channel configuration for the \n"//&
                  " \t\t DOME sill-overflow test case. \n"//&
                  " \t USER - call a user modified routine.", default="file")
-
-  ! if (useALE) then
-  !   select case (trim(config))
-  !     case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
-  !          "Unrecognized ALE sponge configuration "//trim(config))
-  !   end select
-
-  ! else
-
-      select case (trim(config))
-        case ("DOME"); call DOME_initialize_sponges(G, GV, tv, PF, sponge_CSp)
-        case ("DOME2D"); call DOME2d_initialize_sponges(G, GV, tv, PF, useALE, &
-                                                        sponge_CSp, ALE_sponge_CSp)
-        case ("USER"); call user_initialize_sponges(G, use_temperature, tv, &
-                                                 PF, sponge_CSp, h)
-        case ("phillips"); call Phillips_initialize_sponges(G, use_temperature, tv, &
-                                                 PF, sponge_CSp, h)
-        case ("file"); call initialize_sponges_file(G, GV, use_temperature, tv, &
-                                                 PF, sponge_CSp)
-        case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
-               "Unrecognized sponge configuration "//trim(config))
-      end select
-  ! endif
+    select case (trim(config))
+      case ("DOME"); call DOME_initialize_sponges(G, GV, tv, PF, sponge_CSp)
+      case ("DOME2D"); call DOME2d_initialize_sponges(G, GV, tv, PF, useALE, &
+                                                      sponge_CSp, ALE_sponge_CSp)
+      case ("ISOMIP"); call ISOMIP_initialize_sponges(G, GV, tv, PF, ALE_sponge_CSp)
+      case ("USER"); call user_initialize_sponges(G, use_temperature, tv, &
+                                               PF, sponge_CSp, h)
+      case ("phillips"); call Phillips_initialize_sponges(G, use_temperature, tv, &
+                                               PF, sponge_CSp, h)
+      case ("file"); call initialize_sponges_file(G, GV, use_temperature, tv, &
+                                               PF, sponge_CSp)
+      case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
+             "Unrecognized sponge configuration "//trim(config))
+    end select
   endif
 
 ! This subroutine call sets optional open boundary conditions.
@@ -820,6 +832,123 @@ subroutine depress_surface(h, G, GV, param_file, tv)
   endif ; enddo ; enddo
 
 end subroutine depress_surface
+
+!> Adjust the layer thicknesses by cutting away the top of each model column at the depth
+!! where the hydrostatic pressure matches an imposed surface pressure read from file.
+subroutine trim_for_ice(PF, G, GV, ALE_CSp, tv, h)
+  type(param_file_type),                    intent(in)    :: PF !< Parameter file structure
+  type(ocean_grid_type),                    intent(in)    :: G !< Ocean grid structure
+  type(verticalGrid_type),                  intent(in)    :: GV !< Vertical grid structure
+  type(ALE_CS),                             pointer       :: ALE_CSp !< ALE control structure
+  type(thermo_var_ptrs),                    intent(in)    :: tv !< Thermodynamics structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h !< Layer thickness (H units, m or Pa)
+  ! Local variables
+  character(len=200) :: mod = "trim_for_ice"
+  real, dimension(SZI_(G),SZJ_(G)) :: p_surf ! Imposed pressure on ocean at surface (Pa)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: S_t, S_b, T_t, T_b ! Top and bottom edge values for reconstructions
+                                                                 ! of salinity and temperature within each layer.
+  character(len=200) :: inputdir, filename, p_surf_file, p_surf_var ! Strings for file/path
+  real :: scale_factor, min_thickness
+  integer :: i, j
+
+  call get_param(PF, mod, "SURFACE_PRESSURE_FILE", p_surf_file, &
+                 "The initial condition file for the surface height.", &
+                 fail_if_missing=.true.)
+  call get_param(PF, mod, "SURFACE_PRESSURE_VAR", p_surf_var, &
+                 "The initial condition variable for the surface height.", &
+                 units="kg m-2", default="")
+  call get_param(PF, mod, "INPUTDIR", inputdir, default=".", do_not_log=.true.)
+  filename = trim(slasher(inputdir))//trim(p_surf_file)
+  call log_param(PF,  mod, "!INPUTDIR/SURFACE_HEIGHT_IC_FILE", filename)
+
+  call read_data(filename, p_surf_var, p_surf, domain=G%Domain%mpp_domain)
+  call get_param(PF, mod, "SURFACE_PRESSURE_SCALE", scale_factor, &
+                 "A scaling factor to convert SURFACE_PRESSURE_VAR from\n"//&
+                 "file SURFACE_PRESSURE_FILE into a surface pressure.", &
+                 units="file dependent", default=1.)
+  if (scale_factor /= 1.) p_surf(:,:) = scale_factor * p_surf(:,:)
+  call get_param(PF, mod, "MIN_THICKNESS", min_thickness, 'Minimum layer thickness', &
+                 units='m', default=1.e-3)
+
+  ! Find edge values of T and S used in reconstructions
+  if ( associated(ALE_CSp) ) then ! This should only be associated if we are in ALE mode
+!   if ( PRScheme == PRESSURE_RECONSTRUCTION_PLM ) then
+      call pressure_gradient_plm(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h)
+!   elseif ( PRScheme == PRESSURE_RECONSTRUCTION_PPM ) then
+!     call pressure_gradient_ppm(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h)
+!   endif
+  else
+    call MOM_error(FATAL, "trim_for_ice: Does not work without ALE mode")
+  endif
+
+  do j=G%jsc,G%jec ; do i=G%isc,G%iec
+    call cut_off_column_top(GV%ke, tv, GV%Rho0, G%G_earth, G%bathyT(i,j), min_thickness, &
+               tv%T(i,j,:), T_t(i,j,:), T_b(i,j,:), tv%S(i,j,:), S_t(i,j,:), S_b(i,j,:), p_surf(i,j), h(i,j,:))
+  enddo ; enddo
+
+end subroutine trim_for_ice
+
+!> Adjust the layer thicknesses by cutting away the top at the depth where the hydrostatic
+!! pressure matches p_surf
+subroutine cut_off_column_top(nk, tv, Rho0, G_earth, depth, min_thickness, T, T_t, T_b, S, S_t, S_b, p_surf, h)
+  integer,               intent(in)    :: nk !< Number of layers
+  type(thermo_var_ptrs), intent(in)    :: tv !< Thermodynamics structure
+  real,                  intent(in)    :: Rho0 !< Reference density (kg/m3)
+  real,                  intent(in)    :: G_earth !< Gravitational acceleration (m/s2)
+  real,                  intent(in)    :: depth !< Depth of ocean column (m)
+  real,                  intent(in)    :: min_thickness !< Smallest thickness allowed (m)
+  real, dimension(nk),   intent(in)    :: T !< 
+  real, dimension(nk),   intent(in)    :: T_t !< 
+  real, dimension(nk),   intent(in)    :: T_b !< 
+  real, dimension(nk),   intent(in)    :: S !< 
+  real, dimension(nk),   intent(in)    :: S_t !< 
+  real, dimension(nk),   intent(in)    :: S_b !< 
+  real,                  intent(in)    :: p_surf !< Imposed pressure on ocean at surface (Pa)
+  real, dimension(nk),   intent(inout) :: h !< Layer thickness (H units, m or Pa)
+  ! Local variables
+  real, dimension(nk+1) :: e ! Top and bottom edge values for reconstructions
+  real :: P_t, P_b, z_out, e_top
+  integer :: k
+
+  ! Calculate original interface positions
+  e(nk+1) = -depth
+  do k=nk,1,-1
+    e(K) = e(K+1) + h(k)
+  enddo
+
+  P_t = 0.
+  e_top = e(1)
+  do k=1,nk
+    call find_depth_of_pressure_in_cell(T_t(k), T_b(k), S_t(k), S_b(k), e(K), e(K+1), &
+                                        P_t, p_surf, Rho0, G_earth, tv%eqn_of_state, P_b, z_out)
+    if (z_out>=e(K)) then
+      ! Imposed pressure was less that pressure at top of cell
+      exit
+    elseif (z_out<=e(K+1)) then
+      ! Imposed pressure was greater than pressure at bottom of cell
+      e_top = e(K+1)
+    else
+      ! Imposed pressure was fell between pressures at top and bottom of cell
+      e_top = z_out
+      exit
+    endif
+    P_t = P_b
+  enddo
+  if (e_top<e(1)) then
+    ! Clip layers from the top down, if at all
+    do K=1,nk
+      if (e(K)>e_top) then
+        ! Original e(K) is too high
+        e(K) = e_top
+        e_top = e_top - min_thickness ! Next interface must be at least this deep
+      endif
+      ! This layer needs trimming
+      h(k) = max( min_thickness, e(K) - e(K+1) )
+      if (e(K)<e_top) exit ! No need to go further
+    enddo
+  endif
+
+end subroutine cut_off_column_top
 
 ! -----------------------------------------------------------------------------
 subroutine initialize_velocity_from_file(u, v, G, param_file)
@@ -1994,7 +2123,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
   type(regridding_CS) :: regridCS ! Regridding parameters and work arrays
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
 
-  logical :: homogenize, useALEremapping, remap_full_column, remap_general
+  logical :: homogenize, useALEremapping, remap_full_column, remap_general, remap_old_alg
   character(len=10) :: remappingScheme
   real :: tempAvg, saltAvg
   integer :: nPoints, ans
@@ -2055,11 +2184,15 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
   call get_param(PF, mod, "Z_INIT_REMAP_GENERAL", remap_general, &
                  "If false, only initializes to z* coordinates.\n"//&
                  "If true, allows initialization directly to general coordinates.",&
-                 default=.false., do_not_log=.true.)
+                 default=.false.)
   call get_param(PF, mod, "Z_INIT_REMAP_FULL_COLUMN", remap_full_column, &
-                 "If false, only reconstructsa for valid data points.\n"//&
+                 "If false, only reconstructs profiles for valid data points.\n"//&
                  "If true, inserts vanished layers below the valid data.",&
-                 default=remap_general, do_not_log=.true.)
+                 default=remap_general)
+  call get_param(PF, mod, "Z_INIT_REMAP_OLD_ALG", remap_old_alg, &
+                 "If false, uses the preferred remapping algorithm for initialization.\n"//&
+                 "If true, use an older, less robust algorithm for remapping.",&
+                 default=.true.)
 
 !   Read input grid coordinates for temperature and salinity field
 !   in z-coordinate dataset. The file is REQUIRED to contain the
@@ -2183,8 +2316,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
       call pass_var(tv%S, G%Domain) ! ALE_build_grid() only updates h on the computational domain.
       call ALE_build_grid( G, GV, regridCS, remapCS, h, tv, .true. )
     endif
-    call ALE_remap_scalar( remapCS, G, nz, h1, tmpT1dIn, h, tv%T, all_cells=remap_full_column )
-    call ALE_remap_scalar( remapCS, G, nz, h1, tmpS1dIn, h, tv%S, all_cells=remap_full_column )
+    call ALE_remap_scalar( remapCS, G, nz, h1, tmpT1dIn, h, tv%T, all_cells=remap_full_column, old_remap=remap_old_alg )
+    call ALE_remap_scalar( remapCS, G, nz, h1, tmpS1dIn, h, tv%S, all_cells=remap_full_column, old_remap=remap_old_alg )
     deallocate( h1 )
     deallocate( tmpT1dIn )
     deallocate( tmpS1dIn )
@@ -2305,5 +2438,56 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
   call cpu_clock_end(id_clock_routine)
 
 end subroutine MOM_temp_salt_initialize_from_Z
+
+!> Run simple unit tests
+subroutine MOM_state_init_tests(G, GV, tv)
+  type(ocean_grid_type),     intent(inout) :: G
+  type(verticalGrid_type),   intent(in)    :: GV
+  type(thermo_var_ptrs),     intent(in)    :: tv !< Thermodynamics structure
+  ! Local variables
+  integer, parameter :: nk=5
+  real, dimension(nk) :: T, T_t, T_b, S, S_t, S_b, rho, h, z
+  real, dimension(nk+1) :: e
+  integer :: k
+  real :: P_tot, P_t, P_b, z_out
+
+  do k = 1, nk
+    h(k) = 100.
+  enddo
+  e(1) = 0.
+  do K = 1, nk
+    e(K+1) = e(K) - h(k)
+  enddo
+  P_tot = 0.
+  do k = 1, nk
+    z(k) = 0.5 * ( e(K) + e(K+1) )
+    T_t(k) = 20.+(0./500.)*e(k)
+    T(k)   = 20.+(0./500.)*z(k)
+    T_b(k) = 20.+(0./500.)*e(k+1)
+    S_t(k) = 35.-(0./500.)*e(k)
+    S(k)   = 35.+(0./500.)*z(k)
+    S_b(k) = 35.-(0./500.)*e(k+1)
+    call calculate_density(0.5*(T_t(k)+T_b(k)), 0.5*(S_t(k)+S_b(k)), -GV%Rho0*G%G_earth*z(k), rho(k), tv%eqn_of_state)
+    P_tot = P_tot + G%G_earth * rho(k) * h(k)
+  enddo
+
+  P_t = 0.
+  do k = 1, nk
+    call find_depth_of_pressure_in_cell(T_t(k), T_b(k), S_t(k), S_b(k), e(K), e(K+1), &
+                                        P_t, 0.5*P_tot, GV%Rho0, G%G_earth, tv%eqn_of_state, P_b, z_out)
+    write(0,*) k,P_t,P_b,0.5*P_tot,e(K),e(K+1),z_out
+    P_t = P_b
+  enddo
+  write(0,*) P_b,P_tot
+
+  write(0,*) ''
+  write(0,*) ' ==================================================================== '
+  write(0,*) ''
+  write(0,*) h
+  call cut_off_column_top(nk, tv, GV%Rho0, G%G_earth, -e(nk+1), GV%Angstrom, &
+               T, T_t, T_b, S, S_t, S_b, 0.5*P_tot, h)
+  write(0,*) h
+
+end subroutine MOM_state_init_tests
 
 end module MOM_state_initialization

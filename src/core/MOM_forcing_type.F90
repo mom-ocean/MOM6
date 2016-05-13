@@ -2146,13 +2146,15 @@ end subroutine forcing_diagnostics
 
 
 !> Conditionally allocate fields within the forcing type
-subroutine allocate_forcing_type(G, fluxes, stress, ustar, water, heat)
+subroutine allocate_forcing_type(G, fluxes, stress, ustar, water, heat, shelf, press)
   type(ocean_grid_type), intent(in) :: G       !< Ocean grid structure
   type(forcing),      intent(inout) :: fluxes  !< Forcing fields structure
   logical, optional,     intent(in) :: stress  !< If present and true, allocate taux, tauy
   logical, optional,     intent(in) :: ustar   !< If present and true, allocate ustar
   logical, optional,     intent(in) :: water   !< If present and true, allocate water fluxes
   logical, optional,     intent(in) :: heat    !< If present and true, allocate heat fluxes
+  logical, optional,     intent(in) :: shelf   !< If present and true, allocate fluxes for ice-shelf
+  logical, optional,     intent(in) :: press   !< If present and true, allocate p_surf
 
   ! Local variables
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -2191,6 +2193,15 @@ subroutine allocate_forcing_type(G, fluxes, stress, ustar, water, heat)
     call myAlloc(fluxes%heat_content_massout,isd,ied,jsd,jed, .true.)
     call myAlloc(fluxes%heat_content_massin,isd,ied,jsd,jed, .true.)
   endif ; endif
+
+  call myAlloc(fluxes%frac_shelf_h,isd,ied,jsd,jed, shelf)
+  call myAlloc(fluxes%frac_shelf_u,IsdB,IedB,jsd,jed, shelf)
+  call myAlloc(fluxes%frac_shelf_v,isd,ied,JsdB,JedB, shelf)
+  call myAlloc(fluxes%ustar_shelf,isd,ied,jsd,jed, shelf)
+  call myAlloc(fluxes%rigidity_ice_u,IsdB,IedB,jsd,jed, shelf)
+  call myAlloc(fluxes%rigidity_ice_v,isd,ied,JsdB,JedB, shelf)
+
+  call myAlloc(fluxes%p_surf,isd,ied,jsd,jed, press)
 
   contains
 
