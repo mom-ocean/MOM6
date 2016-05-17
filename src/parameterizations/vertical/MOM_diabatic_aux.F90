@@ -845,7 +845,6 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
   real, dimension(SZI_(G), SZK_(G))                     :: pen_TKE_2d, dSV_dT_2d
   real, dimension(max(optics%nbands,1),SZI_(G))         :: Pen_SW_bnd
   real, dimension(max(optics%nbands,1),SZI_(G),SZK_(G)) :: opacityBand
-  real, dimension(max(optics%nbands,1),SZI_(G),SZK_(G)) :: opacityBand2nd
   real                                                  :: hGrounding(maxGroundings)
   real    :: Temp_in, Salin_in
   real    :: I_G_Earth, g_Hconv2
@@ -1142,16 +1141,14 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
 
     if (calculate_energetics) then
       call absorbRemainingSW(G, GV, h2d, opacityBand, nsw, j, dt, H_limit_fluxes, &
-                             .false., .true., T2d, Pen_SW_bnd, &
-                             TKE=pen_TKE_2d,dSV_dT=dSV_dT_2d)
+                             .false., .true., T2d, Pen_SW_bnd, TKE=pen_TKE_2d, dSV_dT=dSV_dT_2d)
       k = 1 ! For setting break-points.
       do k=1,nz ; do i=is,ie
         cTKE(i,j,k) = cTKE(i,j,k) + pen_TKE_2d(i,k)
       enddo ; enddo
     else
       call absorbRemainingSW(G, GV, h2d, opacityBand, nsw, j, dt, H_limit_fluxes, &
-                             .false., .true., T2d, Pen_SW_bnd, &
-                             TKE=pen_TKE_2d,dSV_dT=dSV_dT_2d)
+                             .false., .true., T2d, Pen_SW_bnd)
     endif
 
 

@@ -275,6 +275,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
     case default ; call MOM_error(FATAL,"KPP_init: "// &
                    "Unrecognized KPP_SHORTWAVE_METHOD option"//trim(string))
   end select
+
   call closeParameterBlock(paramFile)
   call get_param(paramFile, mod, 'DEBUG', CS%debug, default=.False., do_not_log=.True.)
 
