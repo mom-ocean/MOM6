@@ -425,7 +425,7 @@ program MOM_main
     fluxes%dt_buoy_accum = time_step
 
     if (use_waves) then
-       call Import_Stokes_Drift(grid,GV,time,time_step_ocean,MOM_CSp%wave_parameter_csp, MOM_CSp%h)
+       call Import_Stokes_Drift(grid,GV,time,time_step_ocean,MOM_CSp%wave_parameter_csp, MOM_CSp%h,FLUXES)
     endif
 
     ! This call steps the model over a time time_step.
