@@ -21,6 +21,7 @@ use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
 use MOM_string_functions, only : uppercase
 use user_initialization, only : user_initialize_topography
 use DOME_initialization, only : DOME_initialize_topography
+use ISOMIP_initialization, only : ISOMIP_initialize_topography
 use benchmark_initialization, only : benchmark_initialize_topography
 use DOME2d_initialization, only : DOME2d_initialize_topography
 use sloshing_initialization, only : sloshing_initialize_topography
@@ -68,6 +69,8 @@ subroutine MOM_initialize_fixed(G, PF, write_geom, output_dir)
   call set_grid_metrics(G, PF)
 
 ! Set up the bottom depth, G%bathyT either analytically or from file
+! This also sets G%max_depth based on the input parameter MAXIMUM_DEPTH,
+! or, if absent, is diagnosed as G%max_depth = max( G%D(:,:) )
   call MOM_initialize_topography(G%bathyT, G%max_depth, G, PF)
 
 ! ====================================================================
@@ -230,6 +233,8 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
                  " \t benchmark - use the benchmark test case topography. \n"//&
                  " \t DOME - use a slope and channel configuration for the \n"//&
                  " \t\t DOME sill-overflow test case. \n"//&
+                 " \t ISOMIP - use a slope and channel configuration for the \n"//&
+                 " \t\t ISOMIP test case. \n"//&
                  " \t DOME2D - use a shelf and slope configuration for the \n"//&
                  " \t\t DOME2D gravity current/overflow test case. \n"//&
                  " \t seamount - Gaussian bump for spontaneous motion test case.\n"//&
@@ -244,6 +249,7 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
     case ("bowl");      call initialize_topography_named(D, G, PF, config, max_depth)
     case ("halfpipe");  call initialize_topography_named(D, G, PF, config, max_depth)
     case ("DOME");      call DOME_initialize_topography(D, G, PF, max_depth)
+    case ("ISOMIP");      call ISOMIP_initialize_topography(D, G, PF, max_depth)
     case ("benchmark"); call benchmark_initialize_topography(D, G, PF, max_depth)
     case ("DOME2D");    call DOME2d_initialize_topography(D, G, PF, max_depth)
     case ("sloshing");  call sloshing_initialize_topography(D, G, PF, max_depth)

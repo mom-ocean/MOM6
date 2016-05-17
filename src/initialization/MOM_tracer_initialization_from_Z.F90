@@ -26,12 +26,12 @@ use MOM_EOS, only : int_specific_vol_dp
 use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord
 use MOM_regridding, only : regridding_CS
 use MOM_remapping, only : remapping_CS, initialize_remapping
-use MOM_remapping, only : remapping_core_w
-use MOM_remapping, only : dzFromH1H2
+use MOM_remapping, only : remapping_core_h
 use MOM_verticalGrid,     only : verticalGrid_type
 
 use mpp_domains_mod, only  : mpp_global_field, mpp_get_compute_domain
 use mpp_mod, only          : mpp_broadcast,mpp_root_pe,mpp_sync,mpp_sync_self
+use mpp_mod, only          : mpp_max
 use horiz_interp_mod, only : horiz_interp_new, horiz_interp,horiz_interp_type
 use horiz_interp_mod, only : horiz_interp_init, horiz_interp_del
 
@@ -99,7 +99,6 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam,
   integer :: i, j, k, kd
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: zi
-  real, dimension(:,:), allocatable :: Depth
   real, allocatable, dimension(:,:,:), target :: tr_z, mask_z
   real, allocatable, dimension(:), target :: z_edges_in, z_in
 
@@ -204,15 +203,12 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam,
           h2(k) = zTopOfCell - zBottomOfCell
           zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
         enddo
-        ! Calcaulate an effectiveadisplacement, deltaE
-        call dzFromH1H2( nPoints, h1, nz, h2, deltaE ) ! sets deltaE
-        ! Now remap from h1 to h2=h1+div.deltaE
-        call remapping_core_w( remapCS, nPoints, h1, tmpT1dIn, nz, deltaE, tmpT1d ) ! sets tmpT1d
+        ! Now remap from h1 to h2
+        call remapping_core_h( nPoints, h1, tmpT1dIn, nz, h2, tmpT1d, remapCS ) ! sets tmpT1d
 !!!MJH        h(i,j,:) = h2(:)
         tr(i,j,:) = tmpT1d(:)
       else
         tr(i,j,:) = 0.
-
 !!!MJH         h(i,j,:) = 0.
       endif ! mask2dT
     enddo ; enddo
@@ -483,7 +479,6 @@ subroutine horiz_interp_and_extrap_tracer(filename, varnam,  conversion, recnum,
   character(len=12)  :: dim_name(4)
   logical :: debug=.false.
   real :: npoints,varAvg
-  real, dimension(:,:), allocatable :: Depth
   real, dimension(SZI_(G),SZJ_(G)) :: lon_out, lat_out, tr_out, mask_out
   real, dimension(SZI_(G),SZJ_(G)) :: good, fill
   real, dimension(SZI_(G),SZJ_(G)) :: tr_outf,tr_prev
@@ -612,14 +607,9 @@ subroutine horiz_interp_and_extrap_tracer(filename, varnam,  conversion, recnum,
   allocate(mask_in(id,jdp)) ; mask_in(:,:)=0.0
   allocate(last_row(id))    ; last_row(:)=0.0
 
-  ni=ieg-isg+1 ; nj = jeg-jsg+1
-  allocate(Depth(ni,nj))
+  max_depth = maxval(G%bathyT)
+  call mpp_max(max_depth)
 
-! get the global depth array
-
-  call mpp_global_field(G%domain%mpp_domain, G%bathyT, Depth)    
-
-  max_depth = maxval(Depth)
   if (z_edges_in(kd+1)<max_depth) z_edges_in(kd+1)=max_depth
 
 

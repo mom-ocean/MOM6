@@ -151,6 +151,10 @@ type, public :: vertvisc_CS ; private
                             ! to calculate the viscous coupling between layers
                             ! except near the bottom.  Otherwise the arithmetic
                             ! mean thickness is used except near the bottom.
+  real    :: harm_BL_val    ! A scale to determine when water is in the boundary
+                            ! layers based solely on harmonic mean thicknesses
+                            ! for the purpose of determining the extent to which
+                            ! the thicknesses used in the viscosities are upwinded.
   logical :: direct_stress  ! If true, the wind stress is distributed over the
                             ! topmost Hmix_stress of fluid and KVML may be very small.
   logical :: dynamic_viscous_ML  ! If true, use the results from a dynamic
@@ -626,11 +630,15 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS)
   real :: topfn   ! A function which goes from 1 at the top to 0 much more
                   ! than Htbl into the interior.
   real :: z2      ! The distance from the bottom, normalized by Hbbl, nondim.
+  real :: z2_wt   ! A nondimensional (0-1) weight used when calculating z2.
   real :: h_neglect     ! A thickness that is so small it is usually lost
                         ! in roundoff and can be neglected, in H.
   real :: H_to_m, m_to_H ! Unit conversion factors.
 
   real :: h_arith ! The arithmetic mean thickness, in m or kg m-2.
+  real :: I_valBL ! The inverse of a scaling factor determining when water is
+                  ! still within the boundary layer, as determined by the sum
+                  ! of the harmonic mean thicknesses.
   logical, dimension(SZIB_(G)) :: do_i, do_i_shelf
   logical :: do_any_shelf
 
@@ -644,6 +652,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS)
   h_neglect = GV%H_subroundoff
   H_to_m = GV%H_to_m ; m_to_H = GV%m_to_H
   I_Hbbl(:) = 1.0 / (CS%Hbbl * GV%m_to_H + h_neglect)
+  I_valBL = 0.0 ; if (CS%harm_BL_val > 0.0) I_valBL = 1.0 / CS%harm_BL_val
 
   if (CS%debug .or. (CS%id_hML_u > 0)) then
     allocate(hML_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; hML_u(:,:) = 0.0
@@ -662,11 +671,11 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS)
   endif
 
 !$OMP parallel do default(none) shared(G,GV,CS,visc,Isq,ieq,nz,u,h,fluxes,hML_u, &
-!$OMP                                  h_neglect,dt,m_to_H) &
+!$OMP                                  h_neglect,dt,m_to_H,I_valBL) &
 !$OMP                     firstprivate(i_hbbl)                                             &
 !$OMP                          private(do_i,kv_bbl,bbl_thick,z_i,h_harm,h_arith,hvel,z2,   &
 !$OMP                                  botfn,zh,Dmin,zcol,a,do_any_shelf,do_i_shelf,       &
-!$OMP                                  a_shelf,Ztop_min,I_HTbl,hvel_shelf,topfn,h_ml)
+!$OMP                                  a_shelf,Ztop_min,I_HTbl,hvel_shelf,topfn,h_ml,z2_wt)
   do j=G%Jsc,G%Jec
     do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0) ; enddo
 
@@ -710,9 +719,15 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS)
 
           hvel(I,k) = h_arith
           if (u(I,j,k) * (h(i+1,j,k)-h(i,j,k)) > 0) then
-            z2 = max(zh(I), max(zcol(i),zcol(i+1)) + Dmin(I)) * I_Hbbl(I)
-            botfn = 1.0 / (1.0 + 0.09*z2*z2*z2*z2*z2*z2)
-            hvel(I,k) = (1.0-botfn)*h_arith + botfn*h_harm(I,k)
+            if (zh(I) * I_Hbbl(I) < CS%harm_BL_val) then
+              hvel(I,k) = h_harm(I,k)
+            else
+              z2_wt = 1.0  ; if (zh(I) * I_Hbbl(I) < 2.0*CS%harm_BL_val) &
+                z2_wt = max(0.0, min(1.0, zh(I) * I_Hbbl(I) * I_valBL - 1.0))
+              z2 = z2_wt * (max(zh(I), max(zcol(i),zcol(i+1)) + Dmin(I)) * I_Hbbl(I))
+              botfn = 1.0 / (1.0 + 0.09*z2*z2*z2*z2*z2*z2)
+              hvel(I,k) = (1.0-botfn)*h_arith + botfn*h_harm(I,k)
+            endif
           endif
 
         endif ; enddo ! i  loop
@@ -750,9 +765,15 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS)
 
               hvel_shelf(I,k) = hvel(I,k)
               if (u(I,j,k) * (h(i+1,j,k)-h(i,j,k)) > 0) then
-                z2 = max(zh(I), Ztop_min(I) - min(zcol(i),zcol(i+1))) * I_HTbl(I)
-                topfn = 1.0 / (1.0 + 0.09*z2**6)
-                hvel_shelf(I,k) = min(hvel(I,k), (1.0-topfn)*h_arith + topfn*h_harm(I,k))
+                if (zh(I) * I_HTbl(I) < CS%harm_BL_val) then
+                  hvel_shelf(I,k) = min(hvel(I,k), h_harm(I,k))
+                else
+                  z2_wt = 1.0  ; if (zh(I) * I_HTbl(I) < 2.0*CS%harm_BL_val) &
+                    z2_wt = max(0.0, min(1.0, zh(I) * I_HTbl(I) * I_valBL - 1.0))
+                  z2 = z2_wt * (max(zh(I), Ztop_min(I) - min(zcol(i),zcol(i+1))) * I_HTbl(I))
+                  topfn = 1.0 / (1.0 + 0.09*z2**6)
+                  hvel_shelf(I,k) = min(hvel(I,k), (1.0-topfn)*h_arith + topfn*h_harm(I,k))
+                endif
               endif
             endif ; enddo
           enddo
@@ -766,8 +787,11 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS)
 
     if (do_any_shelf) then
       do K=1,nz+1 ; do I=Isq,Ieq ; if (do_i_shelf(I)) then
-        CS%a_u(I,j,K) = fluxes%frac_shelf_u(I,j)  * a_shelf(I,k) + &
+        CS%a_u(I,j,K) = fluxes%frac_shelf_u(I,j)  * a_shelf(I,K) + &
                    (1.0-fluxes%frac_shelf_u(I,j)) * a(I,K)
+! This is Alistair's suggestion, but it destabilizes the model. I do not know why. RWH
+!        CS%a_u(I,j,K) = fluxes%frac_shelf_u(I,j)  * max(a_shelf(I,K), a(I,K)) + &
+!                   (1.0-fluxes%frac_shelf_u(I,j)) * a(I,K)
       elseif (do_i(I)) then
         CS%a_u(I,j,K) = a(I,K)
       endif ; enddo ; enddo
@@ -788,11 +812,11 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS)
 
   ! Now work on v-points.
 !$OMP parallel do default(none) shared(G,GV,CS,visc,is,ie,Jsq,Jeq,nz,v,h,fluxes,hML_v, &
-!$OMP                                  h_neglect,dt,m_to_H) &
+!$OMP                                  h_neglect,dt,m_to_H,I_valBL) &
 !$OMP                     firstprivate(i_hbbl)                                                &
 !$OMP                          private(do_i,kv_bbl,bbl_thick,z_i,h_harm,h_arith,hvel,z2,      &
 !$OMP                                  botfn,zh,Dmin,zcol1,zcol2,a,do_any_shelf,do_i_shelf,  &
-!$OMP                                  a_shelf,Ztop_min,I_HTbl,hvel_shelf,topfn,h_ml)
+!$OMP                                  a_shelf,Ztop_min,I_HTbl,hvel_shelf,topfn,h_ml,z2_wt)
   do J=Jsq,Jeq
     do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0) ; enddo
 
@@ -837,10 +861,16 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS)
 
         hvel(i,k) = h_arith
         if (v(i,J,k) * (h(i,j+1,k)-h(i,j,k)) > 0) then
-          z2 = max(zh(i), max(zcol1(i),zcol2(i)) + Dmin(i)) * I_Hbbl(i)
-          botfn = 1.0 / (1.0 + 0.09*z2*z2*z2*z2*z2*z2)
-          hvel(i,k) = (1.0-botfn)*h_arith + botfn*h_harm(i,k)
-        endif
+          if (zh(i) * I_Hbbl(i) < CS%harm_BL_val) then
+            hvel(i,k) = h_harm(i,k)
+          else
+            z2_wt = 1.0  ; if (zh(i) * I_Hbbl(i) < 2.0*CS%harm_BL_val) &
+              z2_wt = max(0.0, min(1.0, zh(i) * I_Hbbl(i) * I_valBL - 1.0))
+            z2 = z2_wt * (max(zh(i), max(zcol1(i),zcol2(i)) + Dmin(i)) * I_Hbbl(i))
+            botfn = 1.0 / (1.0 + 0.09*z2*z2*z2*z2*z2*z2)
+            hvel(i,k) = (1.0-botfn)*h_arith + botfn*h_harm(i,k)
+          endif
+       endif
 
       endif ; enddo ; enddo ! i & k loops
     endif
@@ -876,10 +906,16 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS)
 
               hvel_shelf(i,k) = hvel(i,k)
               if (v(i,j,k) * (h(i,j+1,k)-h(i,j,k)) > 0) then
-                z2 = max(zh(i), Ztop_min(i) - min(zcol1(i),zcol2(i))) * I_HTbl(i)
-                topfn = 1.0 / (1.0 + 0.09*z2**6)
-                hvel_shelf(i,k) = min(hvel(i,k), (1.0-topfn)*h_arith + topfn*h_harm(i,k))
-              endif
+                if (zh(i) * I_HTbl(i) < CS%harm_BL_val) then
+                  hvel_shelf(i,k) = min(hvel(i,k), h_harm(i,k))
+                else
+                  z2_wt = 1.0  ; if (zh(i) * I_HTbl(i) < 2.0*CS%harm_BL_val) &
+                    z2_wt = max(0.0, min(1.0, zh(i) * I_HTbl(i) * I_valBL - 1.0))
+                  z2 = z2_wt * (max(zh(i), Ztop_min(i) - min(zcol1(i),zcol2(i))) * I_HTbl(i))
+                  topfn = 1.0 / (1.0 + 0.09*z2**6)
+                  hvel_shelf(i,k) = min(hvel(i,k), (1.0-topfn)*h_arith + topfn*h_harm(i,k))
+                endif
+             endif
             endif ; enddo
           enddo
           call find_coupling_coef(a_shelf, hvel_shelf, do_i_shelf, h_harm, &
@@ -894,6 +930,9 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS)
       do K=1,nz+1 ; do i=is,ie ; if (do_i_shelf(i)) then
         CS%a_v(i,J,K) = fluxes%frac_shelf_v(i,J)  * a_shelf(i,k) + &
                    (1.0-fluxes%frac_shelf_v(i,J)) * a(i,K)
+! This is Alistair's suggestion, but it destabilizes the model. I do not know why. RWH
+!        CS%a_v(i,J,K) = fluxes%frac_shelf_v(i,J)  * max(a_shelf(i,K), a(i,K)) + &
+!                   (1.0-fluxes%frac_shelf_v(i,J)) * a(i,K)
       elseif (do_i(i)) then
         CS%a_v(i,J,K) = a(i,K)
       endif ; enddo ; enddo
@@ -1435,6 +1474,12 @@ subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
   call get_param(param_file, mod, "HARMONIC_VISC", CS%harmonic_visc, &
                  "If true, use the harmonic mean thicknesses for \n"//&
                  "calculating the vertical viscosity.", default=.false.)
+  call get_param(param_file, mod, "HARMONIC_BL_SCALE", CS%harm_BL_val, &
+                 "A scale to determine when water is in the boundary \n"//&
+                 "layers based solely on harmonic mean thicknesses for \n"//&
+                 "the purpose of determining the extent to which the \n"//&
+                 "thicknesses used in the viscosities are upwinded.", &
+                 default=0.0, units="nondim")
   call get_param(param_file, mod, "DEBUG", CS%debug, default=.false.)
 
   if (GV%nkml < 1) &
@@ -1532,7 +1577,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
   CS%id_tauy_bot = register_diag_field('ocean_model', 'tauy_bot', diag%axesCv1, &
      Time, 'Meridional Bottom Stress from Ocean to Earth', 'Pa')
 
-  if ((len_trim(CS%v_trunc_file) > 0) .or. (len_trim(CS%v_trunc_file) > 0)) &
+  if ((len_trim(CS%u_trunc_file) > 0) .or. (len_trim(CS%v_trunc_file) > 0)) &
     call PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS%PointAccel_CSp)
 
 end subroutine vertvisc_init

@@ -115,7 +115,7 @@ use MOM_restart, only : restart_init, restore_state, MOM_restart_CS
 use MOM_time_manager, only : time_type, set_time, time_type_to_real
 !use MOM_variables, only : forcing, surface
 use MOM_variables, only : surface
-use MOM_forcing_type, only : forcing
+use MOM_forcing_type, only : forcing, allocate_forcing_type
 use MOM_get_input, only : directories, Get_MOM_input
 use MOM_EOS, only : calculate_density, calculate_density_derivs, calculate_TFreeze
 use MOM_EOS, only : EOS_type, EOS_init
@@ -151,7 +151,8 @@ public ice_shelf_save_restart, solo_time_step
   !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~!
 type, public :: ice_shelf_CS ; private
   type(MOM_restart_CS), pointer :: restart_CSp => NULL()
-  type(ocean_grid_type) :: grid ! A structure containing metrics, etc.
+  type(ocean_grid_type) :: grid !< Grid for the ice-shelf model
+  type(ocean_grid_type), pointer :: ocn_grid => NULL() !< A pointer to the ocean model grid
   ! The rest is private
   real ::   flux_factor = 1.0
   character(len=128) :: restart_output_dir = ' '
@@ -262,7 +263,7 @@ type, public :: ice_shelf_CS ; private
 
 !!! all need to be initialized
 
-  logical :: solo_mode     ! whether the ice model is running without being coupled to the ocean
+  logical :: solo_ice_sheet ! whether the ice model is running without being coupled to the ocean
   logical :: GL_regularize ! whether to regularize the floatation condition at the grounding line
                            !   a la Goldberg Holland Schoof 2009
   integer :: n_sub_regularize
@@ -320,7 +321,6 @@ type, public :: ice_shelf_CS ; private
   type(time_type) :: Time ! The component's time.
   type(EOS_type), pointer :: eqn_of_state => NULL() ! Type that indicates the
                                         ! equation of state to use.
-  logical :: isshelf   ! True if a shelf model is to be used.
   logical :: shelf_mass_is_dynamic ! True if the ice shelf mass changes with
                        ! time.
   logical :: override_shelf_movement ! If true, user code specifies the shelf
@@ -718,7 +718,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
 
     CS%velocity_update_sub_counter = CS%velocity_update_sub_counter+1
 
-    if (CS%GL_couple .and. .not. CS%solo_mode) then
+    if (CS%GL_couple .and. .not. CS%solo_ice_sheet) then
       call update_OD_ffrac (CS, state%ocean_mass, CS%velocity_update_sub_counter, CS%nstep_velocity, CS%time_step, CS%velocity_update_time_step)
     else
       call update_OD_ffrac_uncoupled (CS)
@@ -844,10 +844,6 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
   if (associated(fluxes%sw_nir_dir)) fluxes%sw_nir_dir = 0.0
   if (associated(fluxes%sw_nir_dif)) fluxes%sw_nir_dif = 0.0
 
-  if (.NOT.ASSOCIATED(state%frazil)) then
-    call MOM_error (FATAL, "FRAZIL NEEDS TO BE TURNED ON FOR THE ICE SHELF MODEL. ")
-  endif
-
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     frac_area = fluxes%frac_shelf_h(i,j)
     if (frac_area > 0.0) then
@@ -865,42 +861,38 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
                  asv2 * state%tauy_shelf(i,j)**2  ) / (asv1 + asv2)
       fluxes%ustar(i,j) = MAX(CS%ustar_bg, sqrt(Irho0 * sqrt(taux2 + tauy2)))
 
-      fluxes%sw(i,j) = 0.0
-      fluxes%lw(i,j) = 0.0
-      fluxes%latent(i,j) = 0.0
-      fluxes%evap(i,j) = 0.0
-
-
-      if (CS%lprec(i,j) > 0.0 ) then
-        fluxes%lprec(i,j) =  frac_area*CS%lprec(i,j)*CS%flux_factor
-      else
-        fluxes%evap(i,j) = frac_area*CS%lprec(i,j)*CS%flux_factor
+      if (associated(fluxes%sw)) fluxes%sw(i,j) = 0.0
+      if (associated(fluxes%lw)) fluxes%lw(i,j) = 0.0
+      if (associated(fluxes%latent)) fluxes%latent(i,j) = 0.0
+      if (associated(fluxes%evap)) fluxes%evap(i,j) = 0.0
+      if (associated(fluxes%lprec)) then
+        if (CS%lprec(i,j) > 0.0 ) then
+          fluxes%lprec(i,j) =  frac_area*CS%lprec(i,j)*CS%flux_factor
+        else
+          fluxes%evap(i,j) = frac_area*CS%lprec(i,j)*CS%flux_factor
+        endif
       endif
 
       ! Add frazil formation diagnosed by the ocean model (J m-2) in the
       ! form of surface layer evaporation (kg m-2 s-1). Update lprec in the
       ! control structure for diagnostic purposes.
 
-      fraz= state%frazil(i,j) / CS%time_step / CS%Lat_fusion
-      fluxes%evap(i,j) = fluxes%evap(i,j) - fraz
-      CS%lprec(i,j)=CS%lprec(i,j) - fraz  
+      if (associated(state%frazil)) then
+        fraz = state%frazil(i,j) / CS%time_step / CS%Lat_fusion
+        if (associated(fluxes%evap)) fluxes%evap(i,j) = fluxes%evap(i,j) - fraz
+        CS%lprec(i,j)=CS%lprec(i,j) - fraz  
+        state%frazil(i,j) = 0.0
+      endif
 
-                                             
-      state%frazil(i,j) = 0.0
-
-      fluxes%sens(i,j) = -frac_area*CS%t_flux(i,j)*CS%flux_factor
-
-      fluxes%salt_flux(i,j) = frac_area * CS%salt_flux(i,j)*CS%flux_factor
-
-      fluxes%p_surf(i,j) =  &
-                           frac_area * G%g_Earth * CS%mass_shelf(i,j)
+      if (associated(fluxes%sens)) fluxes%sens(i,j) = -frac_area*CS%t_flux(i,j)*CS%flux_factor
+      if (associated(fluxes%salt_flux)) fluxes%salt_flux(i,j) = frac_area * CS%salt_flux(i,j)*CS%flux_factor
+      if (associated(fluxes%p_surf)) fluxes%p_surf(i,j) = frac_area * G%g_Earth * CS%mass_shelf(i,j)
       ! Same for IOB%p
       if (associated(fluxes%p_surf_full) ) fluxes%p_surf_full(i,j) = &
            frac_area * G%g_Earth * CS%mass_shelf(i,j)
 
     endif
   enddo ; enddo
-
   if (CS%debug) then
     call hchksum(fluxes%ustar_shelf, "ustar_shelf", G, haloshift=0)
   endif
@@ -1050,23 +1042,23 @@ end subroutine add_shelf_flux
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~!
 ! shelf_model_init - initializes shelf model data, parameters and diagnostics  !
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~!
-subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
-  type(time_type),    intent(inout)      :: Time
+subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Time_in, solo_ice_sheet_in)
+  type(param_file_type), intent(in) :: param_file
+  type(ocean_grid_type), pointer    :: ocn_grid
+  type(time_type),    intent(inout)   :: Time
   type(ice_shelf_CS), pointer         :: CS
   type(diag_ctrl), target, intent(in) :: diag
   type(forcing), optional, intent(inout) :: fluxes
   type(time_type), optional, intent(in)  :: Time_in
-  logical, optional,intent(in)         :: solo_mode_in
+  logical, optional,intent(in)         :: solo_ice_sheet_in
 
-  type(ocean_grid_type), pointer :: G
-  type(param_file_type) :: param_file
+  type(ocean_grid_type), pointer :: G, OG ! Convenience pointers
   type(directories)  :: dirs
   type(vardesc) :: vd
   real :: cdrag, drag_bg_vel
   logical :: new_sim, save_IC, var_force
-  logical :: isshelf ! True if a shelf model is to be used.
-  character(len=128) :: version = '$Id: MOM_ice_shelf.F90,v 1.1.2.30 2012/07/19 19:36:08 Robert.Hallberg Exp $'
-  character(len=128) :: tagname = '$Name: MOM_ogrp $'
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=200) :: config
   character(len=200) :: IC_file,filename,inputdir
   character(len=40)  :: var_name
@@ -1074,51 +1066,52 @@ subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
   character(len=2)   :: procnum
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq, iters
   integer :: wd_halos(2)
-  logical :: solo_mode, read_TideAmp
+  logical :: solo_ice_sheet, read_TideAmp
   character(len=128) :: Tideamp_file
   real    :: utide
 
   if (associated(CS)) then
-    call MOM_error(WARNING, "shelf_model_init called with an associated "// &
-                             "control structure.")
+    call MOM_error(FATAL, "MOM_ice_shelf.F90, initialize_ice_shelf: "// &
+                          "called with an associated control structure.")
     return
   endif
+  allocate(CS)
   
   !   Go through all of the infrastructure initialization calls, since this is
   ! being treated as an independent component that just happens to use the
   ! MOM's grid and infrastructure.
-  call Get_MOM_Input(param_file, dirs)
-  isshelf = .false. ; call read_param(param_file,"ICE_SHELF",isshelf)
-  if (.not.isshelf) return
+  call Get_MOM_Input(dirs=dirs)
 
-  allocate(CS)
- 
+  ! Set up the ice-shelf domain and grid
   wd_halos(:)=0
- 
   call MOM_domains_init(CS%grid%domain, param_file, min_halo=wd_halos, symmetric=GRID_SYM_)
-
-! this needs to be fixed - will probably break when not using coupled driver 0
-!  call diag_mediator_init(CS%grid,param_file,CS%diag)
+! call diag_mediator_init(CS%grid,param_file,CS%diag) ! this needs to be fixed - will probably break when not using coupled driver 0
   call MOM_grid_init(CS%grid, param_file)
   call set_grid_metrics(CS%grid, param_file)
-!  call set_diag_mediator_grid(CS%grid, CS%diag)
-  
-  CS%Time = Time ! ### This might not be in the right place?
-  G => CS%grid
-  CS%diag => diag
-  solo_mode = .true.
+! call set_diag_mediator_grid(CS%grid, CS%diag)
 
-  if (present(Time_in)) Time = Time_in
-  if (present(solo_mode_in)) then
-    solo_mode = solo_mode_in
-  else
-    if (present(fluxes)) then
-        solo_mode = .false.
-        if (is_root_pe()) print *, "setting solo mode false"
-    endif
+  ! The ocean grid is possibly different
+  if (associated(ocn_grid)) CS%ocn_grid => ocn_grid
+  
+  ! Convenience pointers
+  G => CS%grid
+  OG => CS%ocn_grid
+
+  if (is_root_pe()) then
+   write(0,*) 'OG: ', OG%isd, OG%isc, OG%iec, OG%ied, OG%jsd, OG%jsc, OG%jsd, OG%jed
+   write(0,*) 'IG: ', G%isd, G%isc, G%iec, G%ied, G%jsd, G%jsc, G%jsd, G%jed
   endif
 
-  CS%solo_mode = solo_mode
+  CS%Time = Time ! ### This might not be in the right place?
+  CS%diag => diag
+
+  ! Are we being called from the solo ice-sheet driver? When called by the ocean
+  ! model solo_ice_sheet_in is not preset.
+  solo_ice_sheet = .false.
+  if (present(solo_ice_sheet_in)) solo_ice_sheet = solo_ice_sheet_in
+  CS%solo_ice_sheet = solo_ice_sheet
+
+  if (present(Time_in)) Time = Time_in
   
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
@@ -1131,8 +1124,6 @@ subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
   CS%switch_var = .false.
 
   call log_version(param_file, mod, version, "")
-  call log_param(param_file, mod, "ICE_SHELF", isshelf, &
-                 "If true, use an ice shelf model.", default=.false.)
   call get_param(param_file, mod, "DEBUG_IS", CS%debug, default=.false.) 
   call get_param(param_file, mod, "DYNAMIC_SHELF_MASS", CS%shelf_mass_is_dynamic, &
                  "If true, the ice sheet mass can evolve with time.", &
@@ -1201,10 +1192,6 @@ subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
   call get_param(param_file, mod, "RHO_0", CS%density_ocean_avg, &
                  "avg ocean density used in floatation cond", &
                  units="kg m-3", default=1035.)
-!MJH 
-!  call get_param(param_file, mod, "LENLAT", CS%len_lat, &
-!                 "The latitudinal or y-direction length of the domain.", &
-!                 units="axis_units", fail_if_missing=.true.)
   call get_param(param_file, mod, "DT_FORCING", CS%time_step, &
                  "The time step for changing forcing, coupling with other \n"//&
                  "components, or potentially writing certain diagnostics. \n"//&
@@ -1303,8 +1290,6 @@ subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
 
     if (CS%debug) CS%use_reproducing_sums = .true.
 
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
     CS%nstep_velocity = FLOOR (CS%velocity_update_time_step / CS%time_step)
     CS%velocity_update_counter = 0
     CS%velocity_update_sub_counter = 0
@@ -1351,13 +1336,13 @@ subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
   allocate ( CS%hmask(isd:ied,jsd:jed) )   ; CS%hmask(:,:) = -2.0
 
 
-!!! OVS vertically integrated Temperature
+  ! OVS vertically integrated Temperature
   allocate ( CS%t_shelf(isd:ied,jsd:jed) )   ; CS%t_shelf(:,:) = -10.0
   allocate ( CS%t_boundary_values(isd:ied,jsd:jed) )   ; CS%t_boundary_values(:,:) = -15.0
   allocate ( CS%tmask(Isdq:Iedq,Jsdq:Jedq) ) ; CS%tmask(:,:) = -1.0
 
   if (CS%shelf_mass_is_dynamic .and. .not.CS%override_shelf_movement) then
-!!! DNG
+    ! DNG
     allocate ( CS%u_shelf(Isdq:Iedq,Jsdq:Jedq) ) ; CS%u_shelf(:,:) = 0.0
     allocate ( CS%v_shelf(Isdq:Iedq,Jsdq:Jedq) ) ; CS%v_shelf(:,:) = 0.0
     allocate ( CS%u_boundary_values(Isdq:Iedq,Jsdq:Jedq) ) ; CS%u_boundary_values(:,:) = 0.0
@@ -1388,12 +1373,11 @@ subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
       allocate ( CS%calve_mask (isd:ied,jsd:jed) ) ; CS%calve_mask(:,:) = 0.0
     endif
 
-!!!
   endif
 
   ! Allocate the arrays for passing ice-shelf data through the forcing type.
-  if (.not. solo_mode) then
-    if (is_root_pe())  print *,"allocating fluxes"
+  if (.not. solo_ice_sheet) then
+    if (is_root_pe())  print *,"initialize_ice_shelf: allocating fluxes"
     allocate( fluxes%frac_shelf_h(isd:ied,jsd:jed) ) ; fluxes%frac_shelf_h(:,:) = 0.0
     allocate( fluxes%frac_shelf_u(Isdq:Iedq,jsd:jed) ) ; fluxes%frac_shelf_u(:,:) = 0.0
     allocate( fluxes%frac_shelf_v(isd:ied,Jsdq:Jedq) ) ; fluxes%frac_shelf_v(:,:) = 0.0
@@ -1403,6 +1387,9 @@ subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
     endif
     allocate( fluxes%rigidity_ice_u(Isdq:Iedq,jsd:jed) ) ; fluxes%rigidity_ice_u(:,:) = 0.0
     allocate( fluxes%rigidity_ice_v(isd:ied,Jsdq:Jedq) ) ; fluxes%rigidity_ice_v(:,:) = 0.0
+  else
+    if (is_root_pe())  print *,"allocating fluxes in solo mode"
+    call allocate_forcing_type(G, fluxes, ustar=.true., shelf=.true., press=.true.)
   endif
 
 ! Set up the bottom depth, G%D either analytically or from file
@@ -1429,7 +1416,7 @@ subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
     vd = var_desc("h_mask","none","ice sheet/shelf thickness mask",z_grid='1')
     call register_restart_field(CS%hmask, vd, .true., CS%restart_CSp)
 
-!!! OVS vertically integrated stream/shelf temperature
+    ! OVS vertically integrated stream/shelf temperature
     vd = var_desc("t_shelf","deg C","ice sheet/shelf temperature",z_grid='1')
     call register_restart_field(CS%t_shelf, vd, .true., CS%restart_CSp)
 
@@ -1455,7 +1442,7 @@ subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
     call register_restart_field(CS%taub_beta_eff_bilinear, vd, .true., CS%restart_CSp)  
   endif
 
-  if (.not. solo_mode) then
+  if (.not. solo_ice_sheet) then
     vd = var_desc("ustar_shelf","m s-1","Friction velocity under ice shelves",z_grid='1')
     call register_restart_field(fluxes%ustar_shelf, vd, .true., CS%restart_CSp)
   endif
@@ -1522,11 +1509,11 @@ subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
       if (.not. G%symmetric) then
         do j=G%jsd,G%jed
           do i=G%isd,G%ied
-            if (((i+G%isd_global-G%isd) .eq. (G%domain%nihalo+1)).and.(CS%u_face_mask(i-1,j).eq.3)) then
+            if (((i+G%idg_offset) .eq. (G%domain%nihalo+1)).and.(CS%u_face_mask(i-1,j).eq.3)) then
               CS%u_shelf (i-1,j-1) = CS%u_boundary_values (i-1,j-1)
               CS%u_shelf (i-1,j) = CS%u_boundary_values (i-1,j)
             endif
-            if (((j+G%jsd_global-G%jsd) .eq. (G%domain%njhalo+1)).and.(CS%v_face_mask(i,j-1).eq.3)) then
+            if (((j+G%jdg_offset) .eq. (G%domain%njhalo+1)).and.(CS%v_face_mask(i,j-1).eq.3)) then
               CS%u_shelf (i-1,j-1) = CS%u_boundary_values (i-1,j-1)
               CS%u_shelf (i,j-1) = CS%u_boundary_values (i,j-1)
             endif
@@ -1570,16 +1557,17 @@ subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
       call MOM_error(WARNING,"Initialize_ice_shelf: area_shelf_h exceeds G%areaT.") 
       CS%area_shelf_h(i,j) = G%areaT(i,j)
     endif
-    if (.not. solo_mode) then
+   !if (.not. solo_ice_sheet) then
     if (G%areaT(i,j) > 0.0) fluxes%frac_shelf_h(i,j) = CS%area_shelf_h(i,j) / G%areaT(i,j)
-    fluxes%p_surf(i,j) = fluxes%p_surf(i,j) + fluxes%frac_shelf_h(i,j) * (G%g_Earth * CS%mass_shelf(i,j))
+    if (associated(fluxes%p_surf)) &
+      fluxes%p_surf(i,j) = fluxes%p_surf(i,j) + fluxes%frac_shelf_h(i,j) * (G%g_Earth * CS%mass_shelf(i,j))
     if (associated(fluxes%p_surf_full)) &
-    fluxes%p_surf_full(i,j) = fluxes%p_surf_full(i,j) + &
+      fluxes%p_surf_full(i,j) = fluxes%p_surf_full(i,j) + &
         fluxes%frac_shelf_h(i,j) * (G%g_Earth * CS%mass_shelf(i,j))
-    endif
+   !endif
   enddo ; enddo
 
-  if (.not. solo_mode) then
+  if (.not. solo_ice_sheet) then
     do j=isd,jed ; do i=isd,ied-1 ! changed stride
     !do I=isd,ied-1 ; do j=isd,jed 
     fluxes%frac_shelf_u(I,j) = 0.0
@@ -1603,7 +1591,7 @@ subroutine initialize_ice_shelf(Time, CS, diag, fluxes, Time_in, solo_mode_in)
   endif
   
   write (procnum,'(I2)') mpp_pe()
-  if (.not. solo_mode) then
+  if (.not. solo_ice_sheet) then
   call pass_vector(fluxes%frac_shelf_u, fluxes%frac_shelf_v, G%domain, TO_ALL, CGRID_NE)
   endif
  ! call savearray2 ('frac_shelf_u'//procnum,fluxes%frac_shelf_u,CS%write_output_to_file)
@@ -2094,7 +2082,7 @@ subroutine ice_shelf_solve_outer (CS, u, v, FE, iters, time)
 
   geolonq => G%geoLonBu ; geolatq => G%geoLatBu
 
-  if (isd .eq. G%isd_global) then
+  if (G%isc+G%idg_offset==G%isg) then
   ! tile is at west bdry
     isumstart = G%iscB
   else
@@ -2102,7 +2090,7 @@ subroutine ice_shelf_solve_outer (CS, u, v, FE, iters, time)
     isumstart = ISUMSTART_INT_
   endif
 
-  if (jsd .eq. G%jsd_global) then
+  if (G%jsc+G%jdg_offset==G%jsg) then
   ! tile is at south bdry
     jsumstart = G%jscB
   else
@@ -2471,7 +2459,7 @@ subroutine ice_shelf_solve_inner (CS, u, v, taudx, taudy, H_node, float_cond, FE
 
   isym = 0
 
-  if (isd .eq. G%isd_global) then
+  if (G%isc+G%idg_offset==G%isg) then
   ! tile is at west bdry
     isumstart = G%iscB
   else
@@ -2479,7 +2467,7 @@ subroutine ice_shelf_solve_inner (CS, u, v, taudx, taudy, H_node, float_cond, FE
     isumstart = ISUMSTART_INT_
   endif
 
-  if (jsd .eq. G%jsd_global) then
+  if (G%jsc+G%jdg_offset==G%jsg) then
   ! tile is at south bdry
     jsumstart = G%jscB
   else
@@ -2874,7 +2862,8 @@ subroutine ice_shelf_advect_thickness_x (CS, time_step, h0, h_after_uflux, flux_
   !        o--- (3) ---o
   !
 
-  integer :: isym, i, j, is, ie, js, je, isd, ied, jsd, jed, gjed, gjsd, gied, gisd
+  integer :: isym, i, j, is, ie, js, je, isd, ied, jsd, jed, gjed, gied
+  integer :: i_off, j_off
   logical :: at_east_bdry, at_west_bdry, one_off_west_bdry, one_off_east_bdry
   type(ocean_grid_type), pointer :: G
   real, dimension(-2:2) :: stencil
@@ -2897,26 +2886,26 @@ subroutine ice_shelf_advect_thickness_x (CS, time_step, h0, h_after_uflux, flux_
   u_face_mask => CS%u_face_mask
   u_flux_boundary_values => CS%u_flux_boundary_values
   is = G%isc-2 ; ie = G%iec+2 ; js = G%jsc ; je = G%jec ; isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  gjsd = G%jsd_global ; gisd = G%isd_global
+  i_off = G%idg_offset ; j_off = G%jdg_offset 
 
   do j=jsd+1,jed-1
-    if (((j+gjsd-G%jsd) .le. G%domain%njglobal+G%domain%njhalo) .AND. & 
-        ((j+gjsd-G%jsd) .ge. G%domain%njhalo+1)) then ! based on mehmet's code - only if btw north & south boundaries
+    if (((j+j_off) .le. G%domain%njglobal+G%domain%njhalo) .AND. & 
+        ((j+j_off) .ge. G%domain%njhalo+1)) then ! based on mehmet's code - only if btw north & south boundaries
 
       stencil(:) = -1
-!     if (i+Gisd-isd .eq. G%domain%nihalo+G%domain%nihalo) 
+!     if (i+i_off .eq. G%domain%nihalo+G%domain%nihalo) 
       do i=is,ie
 
-        if (((i+gisd-G%isd) .le. G%domain%niglobal+G%domain%nihalo) .AND. & 
-             ((i+gisd-G%isd) .ge. G%domain%nihalo+1)) then
+        if (((i+i_off) .le. G%domain%niglobal+G%domain%nihalo) .AND. & 
+             ((i+i_off) .ge. G%domain%nihalo+1)) then
 
-          if (i+Gisd-isd .eq. G%domain%nihalo+1) then
+          if (i+i_off .eq. G%domain%nihalo+1) then
             at_west_bdry=.true.
           else
             at_west_bdry=.false.
           endif
 
-          if (i+Gisd-isd .eq. G%domain%niglobal+G%domain%nihalo) then
+          if (i+i_off .eq. G%domain%niglobal+G%domain%nihalo) then
             at_east_bdry=.true.
           else
             at_east_bdry=.false.
@@ -3112,7 +3101,8 @@ subroutine ice_shelf_advect_thickness_y (CS, time_step, h_after_uflux, h_after_v
   !        o--- (3) ---o
   !
 
-  integer :: isym, i, j, is, ie, js, je, isd, ied, jsd, jed, gjed, gjsd, gied, gisd
+  integer :: isym, i, j, is, ie, js, je, isd, ied, jsd, jed, gjed, gied
+  integer :: i_off, j_off
   logical :: at_north_bdry, at_south_bdry, one_off_west_bdry, one_off_east_bdry
   type(ocean_grid_type), pointer :: G
   real, dimension(-2:2) :: stencil
@@ -3134,26 +3124,26 @@ subroutine ice_shelf_advect_thickness_y (CS, time_step, h_after_uflux, h_after_v
   v_face_mask => CS%v_face_mask
   v_flux_boundary_values => CS%v_flux_boundary_values
   is = G%isc ; ie = G%iec ; js = G%jsc-1 ; je = G%jec+1 ; isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  gjsd = G%jsd_global ; gisd = G%isd_global
+  i_off = G%idg_offset ; j_off = G%jdg_offset 
 
   do i=isd+2,ied-2
-    if (((i+gisd-G%isd) .le. G%domain%niglobal+G%domain%nihalo) .AND. & 
-       ((i+gisd-G%isd) .ge. G%domain%nihalo+1)) then  ! based on mehmet's code - only if btw east & west boundaries
+    if (((i+i_off) .le. G%domain%niglobal+G%domain%nihalo) .AND. & 
+       ((i+i_off) .ge. G%domain%nihalo+1)) then  ! based on mehmet's code - only if btw east & west boundaries
 
       stencil(:) = -1
 
       do j=js,je
 
-        if (((j+gjsd-G%jsd) .le. G%domain%njglobal+G%domain%njhalo) .AND. & 
-             ((j+gjsd-G%jsd) .ge. G%domain%njhalo+1)) then
+        if (((j+j_off) .le. G%domain%njglobal+G%domain%njhalo) .AND. & 
+             ((j+j_off) .ge. G%domain%njhalo+1)) then
 
-          if (j+Gjsd-jsd .eq. G%domain%njhalo+1) then
+          if (j+j_off .eq. G%domain%njhalo+1) then
             at_south_bdry=.true.
           else
             at_south_bdry=.false.
           endif
 
-          if (j+Gjsd-jsd .eq. G%domain%njglobal+G%domain%njhalo) then    
+          if (j+j_off .eq. G%domain%njglobal+G%domain%njhalo) then    
             at_north_bdry=.true.
           else
             at_north_bdry=.false.
@@ -3330,7 +3320,8 @@ subroutine shelf_advance_front (CS, flux_enter)
   !        o--- (3) ---o
   !
 
-  integer :: i, j, isc, iec, jsc, jec, n_flux, k, l, iter_count, isym, gisd, gjsd
+  integer :: i, j, isc, iec, jsc, jec, n_flux, k, l, iter_count, isym
+  integer :: i_off, j_off
   integer :: iter_flag
   type(ocean_grid_type), pointer :: G
   real, dimension(:,:), pointer  :: hmask, mass_shelf, area_shelf_h, u_face_mask, v_face_mask, h_shelf
@@ -3347,7 +3338,7 @@ subroutine shelf_advance_front (CS, flux_enter)
   u_face_mask => CS%u_face_mask
   v_face_mask => CS%v_face_mask
   isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec 
-  gjsd = G%jsd_global ; gisd = G%isd_global
+  i_off = G%idg_offset ; j_off = G%jdg_offset 
   rho = CS%density_ice
   iter_count = 0 ; iter_flag = 1
   
@@ -3379,13 +3370,13 @@ subroutine shelf_advance_front (CS, flux_enter)
 
     do j=jsc-1,jec+1
 
-      if (((j+gjsd-G%jsd) .le. G%domain%njglobal+G%domain%njhalo) .AND. & 
-         ((j+gjsd-G%jsd) .ge. G%domain%njhalo+1)) then
+      if (((j+j_off) .le. G%domain%njglobal+G%domain%njhalo) .AND. & 
+         ((j+j_off) .ge. G%domain%njhalo+1)) then
 
       do i=isc-1,iec+1
 
-         if (((i+gisd-G%isd) .le. G%domain%niglobal+G%domain%nihalo) .AND. & 
-             ((i+gisd-G%isd) .ge. G%domain%nihalo+1)) then
+         if (((i+i_off) .le. G%domain%niglobal+G%domain%nihalo) .AND. & 
+             ((i+i_off) .ge. G%domain%nihalo+1)) then
         ! first get reference thickness by averaging over cells that are fluxing into this cell
             n_flux = 0
             h_reference = 0.0
@@ -3566,19 +3557,20 @@ subroutine calc_shelf_driving_stress (CS, TAUD_X, TAUD_Y, OD, FE)
   real      :: rho, rhow, sx, sy, neumann_val, dxh, dyh, dxdyh
 
   type(ocean_grid_type), pointer :: G
-  integer :: isym, i, j, iscq, iecq, jscq, jecq, gjsd, gisd, isd, jsd, is, js, iegq, jegq, giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec
+  integer :: isym, i, j, iscq, iecq, jscq, jecq, isd, jsd, is, js, iegq, jegq, giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec
+  integer :: i_off, j_off
 
   G => CS%grid
 
   isym = 0
   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
   iscq = G%iscB ; iecq = G%iecB ; jscq = G%jscB ; jecq = G%jecB
-  gjsd = G%jsd_global ; gisd = G%isd_global
   isd = G%isd ; jsd = G%jsd
   iegq = G%iegB ; jegq = G%jegB
   gisc = G%domain%nihalo+1 ; gjsc = G%domain%njhalo+1
   giec = G%domain%niglobal+G%domain%nihalo ; gjec = G%domain%njglobal+G%domain%njhalo
   is = iscq - (1-isym); js = jscq - (1-isym) 
+  i_off = G%idg_offset ; j_off = G%jdg_offset 
 
   D => G%bathyT
   H => CS%h_shelf
@@ -3625,13 +3617,13 @@ subroutine calc_shelf_driving_stress (CS, TAUD_X, TAUD_Y, OD, FE)
       if (hmask(i,j) .eq. 1) then ! we are inside the global computational bdry, at an ice-filled cell
 
         ! calculate sx
-        if ((i+gisd-isd) .eq. gisc) then ! at left computational bdry
+        if ((i+i_off) .eq. gisc) then ! at left computational bdry
           if (hmask(i+1,j) .eq. 1) then
             sx = (S(i+1,j)-S(i,j))/dxh
           else
             sx = 0
           endif
-        elseif ((i+gisd-isd) .eq. giec) then ! at right computational bdry
+        elseif ((i+i_off) .eq. giec) then ! at right computational bdry
           if (hmask(i-1,j) .eq. 1) then
             sx = (S(i,j)-S(i-1,j))/dxh
           else
@@ -3660,13 +3652,13 @@ subroutine calc_shelf_driving_stress (CS, TAUD_X, TAUD_Y, OD, FE)
         cnt = 0
 
         ! calculate sy, similarly
-        if ((j+gjsd-jsd) .eq. gjsc) then ! at south computational bdry
+        if ((j+j_off) .eq. gjsc) then ! at south computational bdry
           if (hmask(i,j+1) .eq. 1) then
             sy = (S(i,j+1)-S(i,j))/dyh
           else
             sy = 0
           endif
-        elseif ((j+gjsd-jsd) .eq. gjec) then ! at nprth computational bdry
+        elseif ((j+j_off) .eq. gjec) then ! at nprth computational bdry
           if (hmask(i,j-1) .eq. 1) then
             sy = (S(i,j)-S(i,j-1))/dyh
           else
@@ -3793,7 +3785,8 @@ subroutine init_boundary_values (CS, time, input_flux, input_thick, new_sim)
                           v_boundary_values, &
                           u_face_mask, v_face_mask, hmask
   type(ocean_grid_type), pointer :: G
-  integer :: isym, i, j, iscq, iecq, jscq, jecq, gjsd, gisd, isd, jsd, ied, jed, iegq, jegq, giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec
+  integer :: isym, i, j, iscq, iecq, jscq, jecq, isd, jsd, ied, jed, iegq, jegq, giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec
+  integer :: i_off, j_off
   real :: A, n, ux, uy, vx, vy, eps_min, domain_width
 
   G => CS%grid
@@ -3810,8 +3803,7 @@ subroutine init_boundary_values (CS, time, input_flux, input_thick, new_sim)
 !   iscq = G%iscq ; iecq = G%iecq ; jscq = G%jscq ; jecq = G%jecq
   isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
 !   iegq = G%iegq ; jegq = G%jegq
-  gjsd = G%jsd_global
-  gisd = G%isd_global
+  i_off = G%idg_offset ; j_off = G%jdg_offset 
 
   thickness_boundary_values => CS%thickness_boundary_values
   u_boundary_values => CS%u_boundary_values ; v_boundary_values => CS%v_boundary_values
@@ -3845,12 +3837,12 @@ subroutine init_boundary_values (CS, time, input_flux, input_thick, new_sim)
 
       if (.not.(new_sim)) then
         if (.not. G%symmetric) then
-          if (((i+gisd-isd) .eq. (G%domain%nihalo+1)).and.(u_face_mask(i-1,j).eq.3)) then
+          if (((i+i_off) .eq. (G%domain%nihalo+1)).and.(u_face_mask(i-1,j).eq.3)) then
             CS%u_shelf (i-1,j-1) = u_boundary_values (i-1,j-1)
             CS%u_shelf (i-1,j) = u_boundary_values (i-1,j)
 !            print *, u_boundary_values (i-1,j)
           endif
-          if (((j+gjsd-jsd) .eq. (G%domain%njhalo+1)).and.(v_face_mask(i,j-1).eq.3)) then
+          if (((j+j_off) .eq. (G%domain%njhalo+1)).and.(v_face_mask(i,j-1).eq.3)) then
             CS%u_shelf (i-1,j-1) = u_boundary_values (i-1,j-1)
             CS%u_shelf (i,j-1) = u_boundary_values (i,j-1)
           endif
@@ -4963,7 +4955,7 @@ subroutine calc_shelf_visc_triangular (CS,u,v)
                        hmask
 
   type(ocean_grid_type), pointer :: G
-  integer :: isym, i, j, iscq, iecq, jscq, jecq, gjsd, gisd, isd, jsd, ied, jed, iegq, jegq, giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec, is, js
+  integer :: isym, i, j, iscq, iecq, jscq, jecq, isd, jsd, ied, jed, iegq, jegq, giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec, is, js
   real :: A, n, ux, uy, vx, vy, eps_min, umid, vmid, unorm, C_basal_friction, n_basal_friction, dxh, dyh, dxdyh
 
   G => CS%grid
@@ -4976,7 +4968,6 @@ subroutine calc_shelf_visc_triangular (CS,u,v)
 
   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
   iscq = G%iscB ; iecq = G%iecB ; jscq = G%jscB ; jecq = G%jecB
-  gjsd = G%jsd_global ; gisd = G%isd_global
   isd = G%isd ; jsd = G%jsd ; ied = G%isd ; jed = G%jsd
   iegq = G%iegB ; jegq = G%jegB
   gisc = G%domain%nihalo+1 ; gjsc = G%domain%njhalo+1
@@ -5045,7 +5036,7 @@ subroutine calc_shelf_visc_bilinear (CS, u, v)
                        hmask
 
   type(ocean_grid_type), pointer :: G
-  integer :: isym, i, j, iscq, iecq, jscq, jecq, gjsd, gisd, isd, jsd, ied, jed, iegq, jegq, giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec, is, js
+  integer :: isym, i, j, iscq, iecq, jscq, jecq, isd, jsd, ied, jed, iegq, jegq, giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec, is, js
   real :: A, n, ux, uy, vx, vy, eps_min, umid, vmid, unorm, C_basal_friction, n_basal_friction, dxh, dyh, dxdyh
 
   G => CS%grid
@@ -5053,7 +5044,6 @@ subroutine calc_shelf_visc_bilinear (CS, u, v)
   isym=0
   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
   iscq = G%iscB ; iecq = G%iecB ; jscq = G%jscB ; jecq = G%jecB
-  gjsd = G%jsd_global ; gisd = G%isd_global
   isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
   iegq = G%iegB ; jegq = G%jegB
   gisc = G%domain%nihalo+1 ; gjsc = G%domain%njhalo+1
@@ -5322,14 +5312,15 @@ subroutine update_velocity_masks (CS)
   
   ! !!!!IMPORTANT!!!! relies on thickness mask - assumed that this is called after hmask has been updated (and halo-updated)
   
-  integer :: isym, i, j, iscq, iecq, jscq, jecq, gjsd, gisd, isd, jsd, is, js, iegq, jegq, giec, gjec, gisc, gjsc, isc, jsc, iec, jec, k
+  integer :: isym, i, j, iscq, iecq, jscq, jecq, isd, jsd, is, js, iegq, jegq, giec, gjec, gisc, gjsc, isc, jsc, iec, jec, k
+  integer :: i_off, j_off
   type(ocean_grid_type), pointer :: G
   real, dimension(:,:), pointer  :: umask, vmask, u_face_mask, v_face_mask, hmask, u_face_mask_boundary, v_face_mask_boundary
 
   G => CS%grid
   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
   iscq = G%iscB ; iecq = G%iecB ; jscq = G%jscB ; jecq = G%jecB
-  gjsd = G%jsd_global ; gisd = G%isd_global
+  i_off = G%idg_offset ; j_off = G%jdg_offset 
   isd = G%isd ; jsd = G%jsd
   iegq = G%iegB ; jegq = G%jegB
   gisc = G%Domain%nihalo ; gjsc = G%Domain%njhalo
@@ -5421,11 +5412,11 @@ subroutine update_velocity_masks (CS)
         !  vmask (i-1,j-1:j) = 0.
         !endif
 
-        !if (gjsd-jsd+j .eq. gjsc+1) then !bot boundary
+        !if (j_off+j .eq. gjsc+1) then !bot boundary
         !  v_face_mask (i,j-1) = 0.
         !  umask (i-1:i,j-1) = 0.
         !  vmask (i-1:i,j-1) = 0.
-        !elseif (gjsd-jsd+j .eq. gjec) then !top boundary
+        !elseif (j_off+j .eq. gjec) then !top boundary
         !  v_face_mask (i,j) = 0.
         !  umask (i-1:i,j) = 0.
         !  vmask (i-1:i,j) = 0.
@@ -5955,7 +5946,8 @@ subroutine ice_shelf_advect_temp_x (CS, time_step, h0, h_after_uflux, flux_enter
   !        o--- (3) ---o
   !
 
-  integer :: isym, i, j, is, ie, js, je, isd, ied, jsd, jed, gjed, gjsd, gied, gisd
+  integer :: isym, i, j, is, ie, js, je, isd, ied, jsd, jed, gjed, gied
+  integer :: i_off, j_off
   logical :: at_east_bdry, at_west_bdry, one_off_west_bdry, one_off_east_bdry
   type(ocean_grid_type), pointer :: G
   real, dimension(-2:2) :: stencil
@@ -5981,26 +5973,26 @@ subroutine ice_shelf_advect_temp_x (CS, time_step, h0, h_after_uflux, flux_enter
 !  h_boundaries => CS%h_shelf
   t_boundary => CS%t_boundary_values
   is = G%isc-2 ; ie = G%iec+2 ; js = G%jsc ; je = G%jec ; isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  gjsd = G%jsd_global ; gisd = G%isd_global
+  i_off = G%idg_offset ; j_off = G%jdg_offset 
 
   do j=jsd+1,jed-1
-    if (((j+gjsd-G%jsd) .le. G%domain%njglobal+G%domain%njhalo) .AND. &
-        ((j+gjsd-G%jsd) .ge. G%domain%njhalo+1)) then ! based on mehmet's code - only if btw north & south boundaries
+    if (((j+j_off) .le. G%domain%njglobal+G%domain%njhalo) .AND. &
+        ((j+j_off) .ge. G%domain%njhalo+1)) then ! based on mehmet's code - only if btw north & south boundaries
 
       stencil(:) = -1
-!     if (i+Gisd-isd .eq. G%domain%nihalo+G%domain%nihalo) 
+!     if (i+i_off .eq. G%domain%nihalo+G%domain%nihalo) 
       do i=is,ie
 
-        if (((i+gisd-G%isd) .le. G%domain%niglobal+G%domain%nihalo) .AND. &
-             ((i+gisd-G%isd) .ge. G%domain%nihalo+1)) then
+        if (((i+i_off) .le. G%domain%niglobal+G%domain%nihalo) .AND. &
+             ((i+i_off) .ge. G%domain%nihalo+1)) then
 
-          if (i+Gisd-isd .eq. G%domain%nihalo+1) then
+          if (i+i_off .eq. G%domain%nihalo+1) then
             at_west_bdry=.true.
           else
             at_west_bdry=.false.
           endif
 
-          if (i+Gisd-isd .eq. G%domain%niglobal+G%domain%nihalo) then
+          if (i+i_off .eq. G%domain%niglobal+G%domain%nihalo) then
             at_east_bdry=.true.
           else
             at_east_bdry=.false.
@@ -6207,7 +6199,8 @@ subroutine ice_shelf_advect_temp_y (CS, time_step, h_after_uflux, h_after_vflux,
   !        o--- (3) ---o
   !
 
-  integer :: isym, i, j, is, ie, js, je, isd, ied, jsd, jed, gjed, gjsd, gied, gisd
+  integer :: isym, i, j, is, ie, js, je, isd, ied, jsd, jed, gjed, gied
+  integer :: i_off, j_off
   logical :: at_north_bdry, at_south_bdry, one_off_west_bdry, one_off_east_bdry
   type(ocean_grid_type), pointer :: G
   real, dimension(-2:2) :: stencil
@@ -6231,25 +6224,25 @@ subroutine ice_shelf_advect_temp_y (CS, time_step, h_after_uflux, h_after_vflux,
   t_boundary => CS%t_boundary_values
   v_boundary_values => CS%v_shelf
   is = G%isc ; ie = G%iec ; js = G%jsc-1 ; je = G%jec+1 ; isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  gjsd = G%jsd_global ; gisd = G%isd_global
+  i_off = G%idg_offset ; j_off = G%jdg_offset 
 
   do i=isd+2,ied-2
-    if (((i+gisd-G%isd) .le. G%domain%niglobal+G%domain%nihalo) .AND. &
-       ((i+gisd-G%isd) .ge. G%domain%nihalo+1)) then  ! based on mehmet's code - only if btw east & west boundaries
+    if (((i+i_off) .le. G%domain%niglobal+G%domain%nihalo) .AND. &
+       ((i+i_off) .ge. G%domain%nihalo+1)) then  ! based on mehmet's code - only if btw east & west boundaries
 
       stencil(:) = -1
 
       do j=js,je
 
-        if (((j+gjsd-G%jsd) .le. G%domain%njglobal+G%domain%njhalo) .AND. &
-             ((j+gjsd-G%jsd) .ge. G%domain%njhalo+1)) then
+        if (((j+j_off) .le. G%domain%njglobal+G%domain%njhalo) .AND. &
+             ((j+j_off) .ge. G%domain%njhalo+1)) then
 
-          if (j+Gjsd-jsd .eq. G%domain%njhalo+1) then
+          if (j+j_off .eq. G%domain%njhalo+1) then
             at_south_bdry=.true.
           else
             at_south_bdry=.false.
           endif
-          if (j+Gjsd-jsd .eq. G%domain%njglobal+G%domain%njhalo) then
+          if (j+j_off .eq. G%domain%njglobal+G%domain%njhalo) then
             at_north_bdry=.true.
           else
             at_north_bdry=.false.

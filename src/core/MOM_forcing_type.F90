@@ -798,7 +798,7 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, haloshift)
   if (associated(fluxes%tauy)) &
     call vchksum(fluxes%tauy, mesg//" fluxes%tauy",G,haloshift=1)
   if (associated(fluxes%ustar)) &
-    call hchksum(fluxes%ustar, mesg//" fluxes%ustar",G,haloshift=1)
+    call hchksum(fluxes%ustar, mesg//" fluxes%ustar",G,haloshift=hshift)
   if (associated(fluxes%buoy)) &
     call hchksum(fluxes%buoy, mesg//" fluxes%buoy ",G,haloshift=hshift)
   if (associated(fluxes%sw)) &
@@ -1442,9 +1442,10 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
   !===============================================================
   ! maps of surface salt fluxes, virtual precip fluxes, and adjustments
 
-  handles%id_saltflux = register_diag_field('ocean_model', 'salt_flux', diag%axesT1, Time,        &
-        'Salt flux into ocean at surface', 'kilogram meter-2 second-1', cmor_field_name='sfdsi',  &
-        cmor_units='kg m-2 s-1', cmor_standard_name='downward_sea_ice_basal_salt_flux',           &
+  handles%id_saltflux = register_diag_field('ocean_model', 'salt_flux', diag%axesT1, Time,&
+        'Net salt flux into ocean at surface (restoring + sea-ice)',                      &
+        'kilogram meter-2 second-1',cmor_field_name='sfdsi', cmor_units='kg m-2 s-1',     &
+        cmor_standard_name='downward_sea_ice_basal_salt_flux',                            &
         cmor_long_name='Downward Sea Ice Basal Salt Flux')
 
   handles%id_saltFluxIn = register_diag_field('ocean_model', 'salt_flux_in', diag%axesT1, Time, &
@@ -2147,13 +2148,15 @@ end subroutine forcing_diagnostics
 
 
 !> Conditionally allocate fields within the forcing type
-subroutine allocate_forcing_type(G, fluxes, stress, ustar, water, heat)
+subroutine allocate_forcing_type(G, fluxes, stress, ustar, water, heat, shelf, press)
   type(ocean_grid_type), intent(in) :: G       !< Ocean grid structure
   type(forcing),      intent(inout) :: fluxes  !< Forcing fields structure
   logical, optional,     intent(in) :: stress  !< If present and true, allocate taux, tauy
   logical, optional,     intent(in) :: ustar   !< If present and true, allocate ustar
   logical, optional,     intent(in) :: water   !< If present and true, allocate water fluxes
   logical, optional,     intent(in) :: heat    !< If present and true, allocate heat fluxes
+  logical, optional,     intent(in) :: shelf   !< If present and true, allocate fluxes for ice-shelf
+  logical, optional,     intent(in) :: press   !< If present and true, allocate p_surf
 
   ! Local variables
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -2192,6 +2195,15 @@ subroutine allocate_forcing_type(G, fluxes, stress, ustar, water, heat)
     call myAlloc(fluxes%heat_content_massout,isd,ied,jsd,jed, .true.)
     call myAlloc(fluxes%heat_content_massin,isd,ied,jsd,jed, .true.)
   endif ; endif
+
+  call myAlloc(fluxes%frac_shelf_h,isd,ied,jsd,jed, shelf)
+  call myAlloc(fluxes%frac_shelf_u,IsdB,IedB,jsd,jed, shelf)
+  call myAlloc(fluxes%frac_shelf_v,isd,ied,JsdB,JedB, shelf)
+  call myAlloc(fluxes%ustar_shelf,isd,ied,jsd,jed, shelf)
+  call myAlloc(fluxes%rigidity_ice_u,IsdB,IedB,jsd,jed, shelf)
+  call myAlloc(fluxes%rigidity_ice_v,isd,ied,JsdB,JedB, shelf)
+
+  call myAlloc(fluxes%p_surf,isd,ied,jsd,jed, press)
 
   contains
 
