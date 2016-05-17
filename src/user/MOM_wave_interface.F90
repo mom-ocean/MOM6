@@ -26,6 +26,10 @@ public Import_Stokes_Drift
 type, public:: wave_parameters_CS ;
 private
   logical :: UseWaves    !< True to Compute Wave parameters
+  logical, public :: LagrangianMixing !If Stokes drift is present and viscous mixing
+                              ! should be applied to Lagrangian current
+  logical, public :: WaveEnhancedDiff !If viscosity/diffusivity should be enhanced
+                              ! due to presence of wave modified turbulence
   integer :: WaveMethod  !< Options for various wave methods
   integer :: SpecMethod  !< Options for various wave spectra
   integer :: NumBands    !< Number of wavenumber bands to recieve
@@ -36,6 +40,7 @@ private
        Us_y ! Stokes drift (meridional) 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) ::&
        LangNum !Langmuir number
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_),public ::     LangEF, OBLdepth
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,:), public :: &
        STKx0
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,:), public :: &
@@ -94,6 +99,17 @@ subroutine MOM_wave_interface_init(G,GV,param_file, CS)
   call log_version(param_file, mod, version)
   call get_param(param_file,mod,"USE_WAVES",CS%UseWaves, &
                  'Main switch to use wave input', units='',default=.false.)
+  call get_param(param_file, mod, "LAGRANGIAN_MIXING", CS%LagrangianMixing, &
+       "Flag to use Lagrangian Mixing", units="", &
+       Default=.false.)
+  call get_param(param_file, mod, "WAVE_ENHANCED_MIXING", CS%WaveEnhancedDiff, &
+       "Flag to use wave enhancement in mixing", units="", &
+       Default=.false.) 
+  if ( (CS%LagrangianMixing.or.CS%WaveEnhancedDiff) .and. (.not.CS%UseWaves)) then
+     call MOM_error(FATAL,"MOM_vert_friction(visc): "// &
+          "LagrangianMixing and WaveEnhancedDiff cannot"//&
+          "be called without USE_WAVES = .true.")
+  endif
 
   if (CS%UseWaves) then 
      ! 1. Get Wave Method and write to integer WaveMethod
@@ -139,6 +155,8 @@ subroutine MOM_wave_interface_init(G,GV,param_file, CS)
      ALLOC_ (CS%Us_y(isd:Ied,jsdB:jedB,nz)) ; CS%Us_y(:,:,:) = 0.0
      !    Langmuir number
      ALLOC_ (CS%LangNum(isd:ied,jsd:jed)) ; CS%LangNum(:,:) = 1e10
+     ALLOC_ (CS%LangEF(isd:ied,jsd:jed)) ; CS%LangEF(:,:) = 1.
+     ALLOC_ (CS%OBLdepth(isd:ied,jsd:jed)) ; CS%OBLdepth(:,:) = 0.
   endif
 
   !/BGRTEMP{
@@ -160,25 +178,22 @@ subroutine MOM_wave_interface_init(G,GV,param_file, CS)
   print*,' '
   !\BGRTEMP}
 
-  !----
-  !/This will be moved, but for now call to construct Stokes drift profile here
-  !----
-  !Call Import_Stokes_Drift(G,GV,CS)
-
 end subroutine MOM_wave_interface_init
 !/
 !/
 !/
 ! Constructs the Stokes Drift profile on the model grid based on 
 ! desired coupling options
-subroutine Import_Stokes_Drift(G,GV,Day,DT,CS,h)
-  type(wave_parameters_CS),              pointer       :: CS
-  type(ocean_grid_type),                  intent(in)   :: G !< Grid structure
-  type(verticalGrid_type),                intent(in)   :: GV!< Vertical grid structure
-  type(time_type), intent(in)                          :: Day
-  type(time_type), intent(in)                          :: DT
- real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h
+subroutine Import_Stokes_Drift(G,GV,Day,DT,CS,h,FLUXES)
+  type(wave_parameters_CS),              pointer        :: CS
+  type(ocean_grid_type),                  intent(in)    :: G !< Grid structure
+  type(verticalGrid_type),                intent(in)    :: GV!< Vertical grid structure
+  type(time_type), intent(in)                           :: Day
+  type(time_type), intent(in)                           :: DT
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h
+  type(forcing), intent(in)                             :: FLUXES
   ! local variables
+  real    :: USy20pcnt, USx20pcnt, H20pct
   real    :: Top, MidPoint, Bottom
   real    :: DecayScale
   type(time_type) :: Day_Center
@@ -238,8 +253,8 @@ subroutine Import_Stokes_Drift(G,GV,Day,DT,CS,h)
               do b=1,CS%NumBands
                  CS%US_x(ii,jj,kk)=CS%US_x(ii,jj,kk) + CS%STKx0(ii,jj,b) *&
                       (EXP(TOP*2*CS%WaveNum_Cen(b))- &
-                      EXP(BOTTOM*2*CS%WaveNum_Cen(b))) /2. /&
-                      CS%WaveNum_Cen(b) / (Top-Bottom)
+                      EXP(BOTTOM*2*CS%WaveNum_Cen(b))) / (Top-Bottom)/&
+                       (2*CS%WaveNum_Cen(b))
               enddo
            enddo
         enddo
@@ -256,10 +271,33 @@ subroutine Import_Stokes_Drift(G,GV,Day,DT,CS,h)
               do b=1,CS%NumBands
                  CS%US_y(ii,jj,kk)=CS%US_Y(ii,jj,kk) + CS%STKy0(ii,jj,b) *&
                       (EXP(TOP*2*CS%WaveNum_Cen(b))- &
-                       EXP(BOTTOM*2*CS%WaveNum_Cen(b))) /2. /&
-                       CS%WaveNum_Cen(b) / (Top-Bottom)
+                       EXP(BOTTOM*2*CS%WaveNum_Cen(b))) / (Top-Bottom) /&
+                       (2*CS%WaveNum_Cen(b))
               enddo
            enddo
+        enddo
+     enddo
+     !At h points for Langmuir number
+     do ii=isd,ied
+        do jj=jsd,jed
+           USy20pcnt = 0.0;USx20pcnt = 0.0; 
+           H20pct=min(-0.1,-CS%OBLdepth(ii,jj)*0.2);
+           do b=1,CS%NumBands
+              USy20pcnt=USy20pcnt + CS%STKy0(ii,jj,b) *&
+                   (1.0 - EXP(H20pct*2*CS%WaveNum_Cen(b))) &
+                   / (0.0-H20pct) / (2*CS%WaveNum_Cen(b))
+              USx20pcnt=USx20pcnt + CS%STKx0(ii,jj,b) *&
+                   (1.0 - EXP(H20pct*2*CS%WaveNum_Cen(b))) &
+                   / (0.0-H20pct) / (2*CS%WaveNum_Cen(b))
+           enddo
+           CS%LangNum(ii,jj) = sqrt(FLUXES%ustar(ii,jj) / &
+                sqrt(USx20pcnt**2 + USy20pcnt**2))
+           if (CS%WaveEnhancedDiff) then
+              !McWilliams et al., 2000
+              CS%LangEF(ii,jj) = sqrt(1+0.08/CS%LangNum(ii,jj)**4)
+           else
+              CS%LangEF(ii,jj) = 1.0
+           endif
         enddo
      enddo
   else!Keep this else, fallback to 0 Stokes drift
@@ -274,19 +312,6 @@ subroutine Import_Stokes_Drift(G,GV,Day,DT,CS,h)
            enddo
         enddo
   endif
-
-  !print*,'Out of Import_Stokes_Drift'
-  !print*,' '
- 
-  !\BGRTEMP{
-  print*,' '
-  print*,'***********************************************'
-  print*,'** Made it to end of MOM_wave_interface_init **'
-  print*,'** Now stopping test...                      **'
-  print*,'***********************************************'
-  print*,' '
-  stop
-  !\BGRTEMP}
 
 end subroutine Import_Stokes_Drift
 !
@@ -362,24 +387,25 @@ subroutine Stokes_Drift_by_data_override(day_center,G,GV,CS)
   
   !BGR simplified to only reading 1 band for first test.
   do b=1,CS%NumBands
-     print*,b
-     print*,'**********'
+     !print*,b
+     !print*,'**********'
      varname = '                    '
      write(varname,"(A3,I0)")'Usx',b
      call data_override('OCN',trim(varname), CS%STKx0(:,:,b), day_center)
      varname = '                    '
      write(varname,'(A3,I0)')'Usy',b
      call data_override('OCN',trim(varname), CS%STKy0(:,:,b), day_center)     
-     print*,minval(CS%STKx0(:,:,b)),maxval(CS%STKx0(:,:,b))
-     print*,minval(CS%STKy0(:,:,b)),maxval(CS%STKy0(:,:,b))
+     !print*,(CS%STKx0(:,:,b))
+     !print*,(CS%STKy0(:,:,b))
   enddo
 
   
-  print*,' '
-  print*,'-------------------------------------'
-  print*,'End of Stokes Drift By Data Override.'
-  print*,'-------------------------------------'
-  print*,' '
+  !print*,' '
+  !print*,'-------------------------------------'
+  !print*,'End of Stokes Drift By Data Override.'
+  !print*,'-------------------------------------'
+  !print*,' '
+
 
 end subroutine Stokes_Drift_by_Data_Override
 end module MOM_wave_interface

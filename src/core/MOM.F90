@@ -669,7 +669,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
         call cpu_clock_begin(id_clock_diabatic)
         call diabatic(u, v, h, CS%tv, fluxes, CS%visc, CS%ADp, CS%CDp, &
-                      dtdia, G, GV, CS%diabatic_CSp)
+                      dtdia, G, GV, CS%diabatic_CSp,Waves=CS%Wave_Parameter_CSp)
         fluxes%fluxes_used = .true.
         call cpu_clock_end(id_clock_diabatic)
 
@@ -1002,7 +1002,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         endif
         call cpu_clock_begin(id_clock_diabatic)
         call diabatic(u, v, h, CS%tv, fluxes, CS%visc, CS%ADp, CS%CDp, &
-                      CS%dt_trans, G, GV, CS%diabatic_CSp)
+                      CS%dt_trans, G, GV, CS%diabatic_CSp,Waves=CS%Wave_Parameter_CSp)
         fluxes%fluxes_used = .true.
         call cpu_clock_end(id_clock_diabatic)
 

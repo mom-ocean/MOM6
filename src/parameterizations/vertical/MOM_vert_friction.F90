@@ -172,10 +172,7 @@ type, public :: vertvisc_CS ; private
   integer :: id_Ray_u = -1, id_Ray_v = -1, id_taux_bot = -1, id_tauy_bot = -1
 
   type(PointAccel_CS), pointer :: PointAccel_CSp => NULL()
-  logical :: LagrangianMixing !If Stokes drift is present and viscous mixing
-                              ! should be applied to Lagrangian current
-  logical :: WaveEnhancedDiff !If viscosity/diffusivity should be enhanced
-                              ! due to presence of wave modified turbulence
+  logical :: LagrangianMixing
 end type vertvisc_CS
 
 contains
@@ -1405,7 +1402,6 @@ subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
 
   real :: hmix_str_dflt
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
-  logical :: UseWaves
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_vert_friction" ! This module's name.
@@ -1521,6 +1517,10 @@ subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
                  "The start value of the truncation CFL number used when\n"//&
                  "ramping up CFL_TRUNC.", &
                  units="nondim", default=0.)
+  call get_param(param_file, mod, "LAGRANGIAN_MIXING", CS%LagrangianMixing, &
+       "Flag to use Lagrangian Mixing", units="", &
+       Default=.false.)
+
 
   ALLOC_(CS%a_u(IsdB:IedB,jsd:jed,nz+1)) ; CS%a_u(:,:,:) = 0.0
   ALLOC_(CS%h_u(IsdB:IedB,jsd:jed,nz))   ; CS%h_u(:,:,:) = 0.0
@@ -1556,34 +1556,6 @@ subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
   if ((len_trim(CS%v_trunc_file) > 0) .or. (len_trim(CS%v_trunc_file) > 0)) &
     call PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS%PointAccel_CSp)
 
-!Modifications to initialize wave mixing
-  UseWaves=.false.;call read_param(param_file, "USE_WAVES", UseWaves)
-  call get_param(param_file, mod, "LAGRANGIAN_MIXING", CS%LagrangianMixing, &
-                 "Flag to use Lagrangian Mixing", units="", &
-                 Default=.false.)
-  call get_param(param_file, mod, "WAVE_ENHANCED_MIXING", CS%WaveEnhancedDiff, &
-                 "Flag to use wave enhancement in mixing", units="", &
-                 Default=.false.) 
-  if ( (CS%LagrangianMixing.or.CS%WaveEnhancedDiff) .and. (.not.UseWaves)) then
-     call MOM_error(FATAL,"MOM_vert_friction(visc): "// &
-          "LagrangianMixing and WaveEnhancedDiff cannot"//&
-          "be called without USE_WAVES = .true.")
-  endif
-    !\BGRTEMP{
-  print*,' '
-  print*,'In vertvisc_init:'
-  print*,'Use Waves: ',UseWaves
-  print*,'Lagrangian:  ',CS%LagrangianMixing
-  print*,'Enhancement: ',CS%WaveEnhancedDiff
-  !print*,'***********************************************'
-  !print*,'** Made it to end of vertvisc_init **'
-  !print*,'** Now stopping test...                      **'
-  !print*,'***********************************************'
-  !stop
-  print*,'Leaving vertvisc_init...'
-  print*,' '
-  !\BGRTEMP}
-!End modifications to include wave mixing
 
 end subroutine vertvisc_init
 
