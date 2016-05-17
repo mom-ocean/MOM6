@@ -76,12 +76,12 @@ subroutine absorbRemainingSW(G, GV, h, opacity_band, nsw, j, dt, H_limit_fluxes,
   real,                              intent(in)    :: H_limit_fluxes
   logical,                           intent(in)    :: adjustAbsorptionProfile
   logical,                           intent(in)    :: absorbAllSW
-  real, dimension(SZI_(G),SZK_(G)),    intent(inout) :: T
+  real, dimension(SZI_(G),SZK_(G)),  intent(inout) :: T
   real, dimension(:,:),              intent(inout) :: Pen_SW_bnd
   real, dimension(SZI_(G),SZK_(G)),    optional, intent(in)    :: eps
   integer, dimension(SZI_(G),SZK_(G)), optional, intent(in)    :: ksort
-  real, dimension(SZI_(G)),           optional, intent(in)    :: htot
-  real, dimension(SZI_(G)),           optional, intent(inout) :: Ttot
+  real, dimension(SZI_(G)),            optional, intent(in)    :: htot
+  real, dimension(SZI_(G)),            optional, intent(inout) :: Ttot
   real, dimension(SZI_(G),SZK_(G)),    optional, intent(in)    :: dSV_dT
   real, dimension(SZI_(G),SZK_(G)),    optional, intent(inout) :: TKE
 
@@ -143,9 +143,8 @@ subroutine absorbRemainingSW(G, GV, h, opacity_band, nsw, j, dt, H_limit_fluxes,
   real :: Ih_limit          ! inverse of the total depth at which the
                             ! surface fluxes start to be limited (1/H)
   real :: h_min_heat        ! minimum thickness layer that should get heated (H)
-  real :: sw_1st_exp_ratio  ! Fraction of 1st exp (if using 2 exp method, otherwise=1)
   real :: opt_depth         ! optical depth of a layer (non-dim)
-  real :: exp_OD            ! sw_1st_exp_ratio * exp(-opt_depth) (non-dim)
+  real :: exp_OD            ! exp(-opt_depth) (non-dim)
   real :: heat_bnd          ! heating due to absorption in the current
                             ! layer by the current band, including any piece that
                             ! is moved upward (K H units)
@@ -182,7 +181,6 @@ subroutine absorbRemainingSW(G, GV, h, opacity_band, nsw, j, dt, H_limit_fluxes,
 
   ! Apply penetrating SW radiation to remaining parts of layers.
   ! Excessively thin layers are not heated to avoid runaway temps.
-  
   do ks=1,nz ; do i=is,ie
     k = ks
     if (present(ksort)) then
@@ -199,6 +197,7 @@ subroutine absorbRemainingSW(G, GV, h, opacity_band, nsw, j, dt, H_limit_fluxes,
         opt_depth = h(i,k) * opacity_band(n,i,k)
         exp_OD = exp(-opt_depth)
         SW_trans = exp_OD
+
         ! Heating at a rate of less than 10-4 W m-2 = 10-3 K m / Century,
         ! and of the layer in question less than 1 K / Century, can be
         ! absorbed without further penetration.
@@ -322,7 +321,8 @@ subroutine absorbRemainingSW(G, GV, h, opacity_band, nsw, j, dt, H_limit_fluxes,
 
 end subroutine absorbRemainingSW
 
-subroutine sumSWoverBands(G, GV, h, opacity_band,nsw, j, dt, &
+
+subroutine sumSWoverBands(G, GV, h, opacity_band, nsw, j, dt, &
                           H_limit_fluxes, absorbAllSW, iPen_SW_bnd, netPen)
 ! This subroutine calculates the total shortwave heat flux integrated over
 ! bands as a function of depth.  This routine is only called for computing
@@ -338,6 +338,7 @@ subroutine sumSWoverBands(G, GV, h, opacity_band,nsw, j, dt, &
   logical,                               intent(in)    :: absorbAllSW
   real, dimension(:,:),                  intent(in)    :: iPen_SW_bnd
   real, dimension(SZI_(G),SZK_(G)+1), intent(inout) :: netPen ! Units of K H
+
 ! Arguments:
 !  (in)      G             = ocean grid structure
 !  (in)      GV            = The ocean's vertical grid structure.
@@ -396,6 +397,7 @@ subroutine sumSWoverBands(G, GV, h, opacity_band,nsw, j, dt, &
           opt_depth = h(i,k)*GV%H_to_m * opacity_band(n,i,k)
           exp_OD = exp(-opt_depth)
           SW_trans = exp_OD
+
           ! Heating at a rate of less than 10-4 W m-2 = 10-3 K m / Century,
           ! and of the layer in question less than 1 K / Century, can be
           ! absorbed without further penetration.
