@@ -346,7 +346,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
          "Module must be initialized before it is used.")
 
   if (CS%debug) then
-    call MOM_state_chksum("Start of diabatic ", u(:,:,:), v(:,:,:), h(:,:,:), G, GV)
+    call MOM_state_chksum("Start of diabatic ", u, v, h, G, GV, haloshift=0)
     call MOM_forcing_chksum("Start of diabatic", fluxes, G, haloshift=0)
   endif
   if (CS%debugConservation) call MOM_state_stats('Start of diabatic', u, v, h, tv%T, tv%S, G)
@@ -447,7 +447,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
         call adjust_salt(h, tv, G, GV, CS%diabatic_aux_CSp)
       call cpu_clock_end(id_clock_mixedlayer)
       if (CS%debug) then
-        call MOM_state_chksum("After mixedlayer ", u, v, h, G, GV)
+        call MOM_state_chksum("After mixedlayer ", u, v, h, G, GV, haloshift=0)
         call MOM_forcing_chksum("After mixedlayer", fluxes, G, haloshift=0)
       endif
       if (showCallTree) call callTree_waypoint("done with 1st bulkmixedlayer (diabatic)")
@@ -455,20 +455,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     endif
   endif
 
-!  smg: this comment is orphaned.  Should be removed?
-!  This subroutine applies diapycnal diffusion and the
-!  surface buoyancy forcing.  No layer is less than an Angstrom thick at
-!  the end, and total density (heat or salt) is conserved unless all
-!  of the mass is in the lightest or densest layer.
-!  When the bulk mixed layer is used, the flux from the buffer layer
-!  is applied to the next denser layer, while all lighter layers are
-!  effectively removed from the calculation.  Also, buoyancy forcing
-!  is applied to the bulk mixed layer elsewhere.
-
-  ! Calculate appropriately limited diapycnal mass fluxes to account
-  ! for diapycnal diffusion and advection.
   if (CS%debug) then
-    call MOM_state_chksum("before find_uv_at_h", u(:,:,:), v(:,:,:), h(:,:,:), G, GV)
+    call MOM_state_chksum("before find_uv_at_h", u, v, h, G, GV, haloshift=0)
   endif
   if (CS%use_kappa_shear) then
     if ((CS%ML_mix_first > 0.0) .or. CS%use_geothermal) then
@@ -510,12 +498,11 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       avg_enabled = query_averaging_enabled(CS%diag,time_end=CS%time_end)
       if (CS%time_end <= CS%time_max_source) then
         do j=G%jsc,G%jec ; do i=G%isc,G%iec
-         ig = G%isd_global + i - 1.0
-         jg = G%jsd_global + j - 1.0
-         !INPUT ARBITRARY ENERGY POINT SOURCE
-         if (ig .eq. CS%int_tide_source_x .and. jg .eq. CS%int_tide_source_y) then
-             TKE_itidal_input_test(i,j) = 1.0
-        endif
+          !INPUT ARBITRARY ENERGY POINT SOURCE
+          if ((G%idg_offset + i == CS%int_tide_source_x) .and. &
+              (G%jdg_offset + j == CS%int_tide_source_y)) then
+            TKE_itidal_input_test(i,j) = 1.0
+          endif
         enddo ; enddo
       endif
       ! CALL ROUTINE USING PRESCRIBED KE FOR TESTING
@@ -538,7 +525,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   if (showCallTree) call callTree_waypoint("done with set_diffusivity (diabatic)")
 
   if (CS%debug) then
-    call MOM_state_chksum("after set_diffusivity ", u(:,:,:), v(:,:,:), h(:,:,:), G, GV)
+    call MOM_state_chksum("after set_diffusivity ", u, v, h, G, GV, haloshift=0)
     call MOM_forcing_chksum("after set_diffusivity ", fluxes, G, haloshift=0)
     call MOM_thermovar_chksum("after set_diffusivity ", tv, G)
     call hchksum(Kd, "after set_diffusivity Kd",G,haloshift=0)
@@ -606,7 +593,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     call cpu_clock_end(id_clock_kpp)
     if (showCallTree) call callTree_waypoint("done with KPP_calculate (diabatic)")
     if (CS%debug) then
-      call MOM_state_chksum("after KPP", u(:,:,:), v(:,:,:), h(:,:,:), G, GV)
+      call MOM_state_chksum("after KPP", u, v, h, G, GV, haloshift=0)
       call MOM_forcing_chksum("after KPP", fluxes, G, haloshift=0)
       call MOM_thermovar_chksum("after KPP", tv, G)
       call hchksum(Kd, "after KPP Kd",G,haloshift=0)
@@ -637,7 +624,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     if (CS%debugConservation) call MOM_state_stats('KPP_applyNonLocalTransport', u, v, h, tv%T, tv%S, G)
 
     if (CS%debug) then
-      call MOM_state_chksum("after KPP_applyNLT ", u(:,:,:), v(:,:,:), h(:,:,:), G, GV)
+      call MOM_state_chksum("after KPP_applyNLT ", u, v, h, G, GV, haloshift=0)
       call MOM_forcing_chksum("after KPP_applyNLT ", fluxes, G, haloshift=0)
       call MOM_thermovar_chksum("after KPP_applyNLT ", tv, G)
     endif
@@ -696,7 +683,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     ! When not using ALE, calculate layer entrainments/detrainments from
     ! diffusivities and differences between layer and target densities
     call cpu_clock_begin(id_clock_entrain)
-    ! Sets: ea, eb. Changes: kb
+    ! Calculate appropriately limited diapycnal mass fluxes to account
+    ! for diapycnal diffusion and advection.  Sets: ea, eb. Changes: kb
     call Entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, CS%entrain_diffusive_CSp, &
                                ea, eb, kb, Kd_Lay=Kd, Kd_int=Kd_int)
     call cpu_clock_end(id_clock_entrain)
@@ -707,7 +695,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   if (CS%debug) then
     call MOM_forcing_chksum("after calc_entrain ", fluxes, G, haloshift=0)
     call MOM_thermovar_chksum("after calc_entrain ", tv, G)
-    call MOM_state_chksum("after calc_entrain ", u(:,:,:), v(:,:,:), h(:,:,:), G, GV)
+    call MOM_state_chksum("after calc_entrain ", u, v, h, G, GV, haloshift=0)
     call hchksum(GV%H_to_m*ea, "after calc_entrain ea",G,haloshift=0)
     call hchksum(GV%H_to_m*eb, "after calc_entrain eb",G,haloshift=0)
   endif
@@ -788,7 +776,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     if (CS%debug) then
       call MOM_forcing_chksum("after applyBoundaryFluxes ", fluxes, G, haloshift=0)
       call MOM_thermovar_chksum("after applyBoundaryFluxes ", tv, G)
-      call MOM_state_chksum("after applyBoundaryFluxes ", u(:,:,:), v(:,:,:), h(:,:,:), G, GV)
+      call MOM_state_chksum("after applyBoundaryFluxes ", u, v, h, G, GV, haloshift=0)
     endif
     if (showCallTree) call callTree_waypoint("done with applyBoundaryFluxes (diabatic)")
     if (CS%debugConservation)  call MOM_state_stats('applyBoundaryFluxes', u, v, h, tv%T, tv%S, G)
@@ -828,7 +816,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     enddo ; enddo
   enddo
   if (CS%debug) then
-    call MOM_state_chksum("after negative check ", u(:,:,:), v(:,:,:), h(:,:,:), G, GV)
+    call MOM_state_chksum("after negative check ", u, v, h, G, GV, haloshift=0)
     call MOM_forcing_chksum("after negative check ", fluxes, G, haloshift=0)
     call MOM_thermovar_chksum("after negative check ", tv, G)
   endif
@@ -949,7 +937,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     !    (5) Possibly splits the buffer layer into two isopycnal layers.
 
       call find_uv_at_h(u, v, hold, u_h, v_h, G, GV, ea, eb)
-      if (CS%debug) call MOM_state_chksum("find_uv_at_h1 ", u, v, h, G, GV)
+      if (CS%debug) call MOM_state_chksum("find_uv_at_h1 ", u, v, h, G, GV, haloshift=0)
 
       dt_mix = min(dt,dt*(1.0 - CS%ML_mix_first))
       call cpu_clock_begin(id_clock_mixedlayer)
@@ -1014,10 +1002,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
 
 
   if (CS%debug) then
-    call MOM_state_chksum("after mixed layer ", u, v, h, G, GV)
+    call MOM_state_chksum("after mixed layer ", u, v, h, G, GV, haloshift=0)
     call MOM_thermovar_chksum("after mixed layer ", tv, G)
-    call hchksum(ea, "after mixed layer ea",G)
-    call hchksum(eb, "after mixed layer eb",G)
+    call hchksum(ea, "after mixed layer ea", G)
+    call hchksum(eb, "after mixed layer eb", G)
   endif
 
   if (.not. CS%useALEalgorithm) then
@@ -1169,7 +1157,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     endif
     call cpu_clock_end(id_clock_sponge)
     if (CS%debug) then
-      call MOM_state_chksum("apply_sponge ", u, v, h, G, GV)
+      call MOM_state_chksum("apply_sponge ", u, v, h, G, GV, haloshift=0)
       call MOM_thermovar_chksum("apply_sponge ", tv, G)
     endif
   endif ! CS%use_sponge
@@ -1245,7 +1233,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     !  advection on velocity field. It is assumed that water leaves
     !  or enters the ocean with the surface velocity.
     if (CS%debug) then
-      call MOM_state_chksum("before u/v tridiag ", u, v, h, G, GV)
+      call MOM_state_chksum("before u/v tridiag ", u, v, h, G, GV, haloshift=0)
       call hchksum(ea, "before u/v tridiag ea",G)
       call hchksum(eb, "before u/v tridiag eb",G)
       call hchksum(hold, "before u/v tridiag hold",G)
@@ -1282,7 +1270,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       endif
     enddo
     if (CS%debug) then
-      call MOM_state_chksum("aft 1st loop tridiag ", u, v, h, G, GV)
+      call MOM_state_chksum("aft 1st loop tridiag ", u, v, h, G, GV, haloshift=0)
     endif
 !$OMP parallel do default(none) shared(Jsq,Jeq,is,ie,ADp,v,hold,ea,h_neglect,eb,nz,Idt) &
 !$OMP                          private(hval,b1,d1,c1,eaval)
@@ -1316,7 +1304,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     enddo
     call cpu_clock_end(id_clock_tridiag)
     if (CS%debug) then
-      call MOM_state_chksum("after u/v tridiag ", u, v, h, G, GV)
+      call MOM_state_chksum("after u/v tridiag ", u, v, h, G, GV, haloshift=0)
     endif
   endif ! useALEalgorithm
 

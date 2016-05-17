@@ -281,6 +281,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
   logical :: use_BBL_EOS, do_i(SZIB_(G))
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, m, K2, nkmb, nkml
   integer :: itt, maxitt=20
+  real :: tmp_val_m1_to_p1
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nkmb = GV%nk_rho_varies ; nkml = GV%nkml
@@ -315,7 +316,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
 !$OMP parallel do default(none) shared(u, v, h, tv, visc, G, GV, CS, Rml, is, ie, js, je,  &
 !$OMP                                  nz, Isq, Ieq, Jsq, Jeq, nkmb, h_neglect, Rho0x400_G,&
 !$OMP                                  C2pi_3, U_bg_sq, cdrag_sqrt,K2,use_BBL_EOS,         &
-!$OMP                                  maxitt,nkml,m_to_H,H_to_m)                          &
+!$OMP                                  maxitt,nkml,m_to_H,H_to_m,Vol_quit)                 &
 !$OMP                          private(do_i,h_at_vel,htot_vel,hwtot,hutot,Thtot,Shtot,     &
 !$OMP                                  hweight,v_at_u,u_at_v,ustar,T_EOS,S_EOS,press,      &
 !$OMP                                  dR_dT, dR_dS,ustarsq,htot,TLay,SLay,Tabove,Sabove,  &
@@ -325,7 +326,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
 !$OMP                                  L_direct,Ibma_2,L,vol,vol_below,Vol_err,            &
 !$OMP                                  BBL_visc_frac,h_vel,L0,Vol_0,dV_dL2,dVol,L_max,     &
 !$OMP                                  L_min,Vol_err_min,Vol_err_max,BBL_frac,Cell_width,  &
-!$OMP                                  gam,Rayleigh, Vol_tol, Vol_quit)
+!$OMP                                  gam,Rayleigh, Vol_tol, tmp_val_m1_to_p1)
   do j=G%JscB,G%JecB ; do m=1,2
 
     if (m==1) then
@@ -653,7 +654,10 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
             else ! There are two separate open regions.
               !   vol = slope^2/4a + a/12 - (a/12)*(1-L)^2*(1+2L)
               ! At the deepest volume, L = slope/a, at the top L = 1.
-              L(K) = 0.5 - cos(C1_3*acos(1.0 - C24_a*(Vol_open - vol)) - C2pi_3)
+              !L(K) = 0.5 - cos(C1_3*acos(1.0 - C24_a*(Vol_open - vol)) - C2pi_3)
+              tmp_val_m1_to_p1 = 1.0 - C24_a*(Vol_open - vol)
+              tmp_val_m1_to_p1 = max(-1., min(1., tmp_val_m1_to_p1))
+              L(K) = 0.5 - cos(C1_3*acos(tmp_val_m1_to_p1) - C2pi_3)
               ! To check the answers.
               ! Vol_err = Vol_open - a_12*(1.0+2.0*L(K)) * (1.0-L(K))**2 - vol
             endif
@@ -972,6 +976,8 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
   real :: Rho0x400_G  ! 400*Rho0/G_Earth, in kg s2 m-4.  The 400 is a
                       ! constant proposed by Killworth and Edwards, 1999.
   real :: H_to_m, m_to_H   ! Local copies of unit conversion factors.
+  real :: ustar1    ! ustar in units of H/s
+  real :: h2f2      ! (h*2*f)^2
   logical :: use_EOS, do_any, do_any_shelf, do_i(SZIB_(G))
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, K2, nkmb, nkml
 
@@ -1041,7 +1047,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
 !$OMP                                  dR_dS,hlay,v_at_u,Uh2,T_lay,S_lay,gHprime,           &
 !$OMP                                  RiBulk,Shtot,Rhtot,absf,do_any_shelf,                &
 !$OMP                                  h_at_vel,ustar,htot_vel,hwtot,hutot,hweight,ustarsq, &
-!$OMP                                  oldfn,Dfn,Dh,Rlay,Rlb)
+!$OMP                                  oldfn,Dfn,Dh,Rlay,Rlb,h2f2,ustar1)
   do j=js,je  ! u-point loop
     if (CS%dynamic_viscous_ML) then
       do_any = .false.
@@ -1256,10 +1262,14 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
             htot(i) = htot(i) + h_at_vel(i,nz)
         endif ! use_EOS
 
+       !visc%tbl_thick_shelf_u(I,j) = max(CS%Htbl_shelf_min, &
+       !    htot(I) / (0.5 + sqrt(0.25 + &
+       !                 (htot(i)*(G%CoriolisBu(I,J-1)+G%CoriolisBu(I,J)))**2 / &
+       !                 (ustar(i)*m_to_H)**2 )) )
+        ustar1 = ustar(i)*m_to_H
+        h2f2 = (htot(i)*(G%CoriolisBu(I,J-1)+G%CoriolisBu(I,J)) + h_neglect*CS%Omega)**2
         visc%tbl_thick_shelf_u(I,j) = max(CS%Htbl_shelf_min, &
-            htot(I) / (0.5 + sqrt(0.25 + &
-                         (htot(i)*(G%CoriolisBu(I,J-1)+G%CoriolisBu(I,J)))**2 / &
-                         (ustar(i)*m_to_H)**2 )) )
+            ( htot(I)*ustar1 ) / ( 0.5*ustar1 + sqrt((0.5*ustar1)**2 + h2f2 ) ) )
         visc%kv_tbl_shelf_u(I,j) = max(CS%KV_TBL_min, &
                        cdrag_sqrt*ustar(I)*visc%tbl_thick_shelf_u(I,j))
       endif ; enddo ! I-loop
@@ -1276,7 +1286,8 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
 !$OMP                                  S_EOS,dR_dT, dR_dS,hlay,u_at_v,Uh2,               &
 !$OMP                                  T_lay,S_lay,gHprime,RiBulk,do_any_shelf,          &
 !$OMP                                  Shtot,Rhtot,ustar,h_at_vel,htot_vel,hwtot,        &
-!$OMP                                  hutot,hweight,ustarsq,oldfn,Dh,Rlay,Rlb,Dfn)
+!$OMP                                  hutot,hweight,ustarsq,oldfn,Dh,Rlay,Rlb,Dfn,      &
+!$OMP                                  h2f2,ustar1)
   do J=Jsq,Jeq  ! v-point loop
     if (CS%dynamic_viscous_ML) then
       do_any = .false.
@@ -1492,10 +1503,14 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
             htot(i) = htot(i) + h_at_vel(i,nz)
         endif ! use_EOS
 
+       !visc%tbl_thick_shelf_v(i,J) = max(CS%Htbl_shelf_min, &
+       !    htot(i) / (0.5 + sqrt(0.25 + &
+       !        (htot(i)*(G%CoriolisBu(I-1,J)+G%CoriolisBu(I,J)))**2 / &
+       !        (ustar(i)*m_to_H)**2 )) )
+        ustar1 = ustar(i)*m_to_H
+        h2f2 = (htot(i)*(G%CoriolisBu(I-1,J)+G%CoriolisBu(I,J)) + h_neglect*CS%Omega)**2
         visc%tbl_thick_shelf_v(i,J) = max(CS%Htbl_shelf_min, &
-            htot(i) / (0.5 + sqrt(0.25 + &
-                (htot(i)*(G%CoriolisBu(I-1,J)+G%CoriolisBu(I,J)))**2 / &
-                (ustar(i)*m_to_H)**2 )) )
+            ( htot(i)*ustar1 ) / ( 0.5*ustar1 + sqrt((0.5*ustar1)**2 + h2f2 ) ) )
         visc%kv_tbl_shelf_v(i,J) = max(CS%KV_TBL_min, &
                        cdrag_sqrt*ustar(i)*visc%tbl_thick_shelf_v(i,J))
       endif ; enddo ! i-loop
@@ -1685,6 +1700,10 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS)
                  default=7.2921e-5)
     ! This give a minimum decay scale that is typically much less than Angstrom.
     CS%ustar_min = 2e-4*CS%omega*(GV%Angstrom_z + GV%H_to_m*GV%H_subroundoff)
+  else
+    call get_param(param_file, mod, "OMEGA", CS%omega, &
+                 "The rotation rate of the earth.", units="s-1", &
+                 default=7.2921e-5)
   endif
 
   call get_param(param_file, mod, "HBBL", CS%Hbbl, &

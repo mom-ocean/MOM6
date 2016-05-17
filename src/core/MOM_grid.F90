@@ -29,7 +29,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public MOM_grid_init, MOM_grid_end, set_first_direction
+public MOM_grid_init, MOM_grid_end, set_derived_metrics, set_first_direction
 public isPointInCell, hor_index_type
 
 type, public :: ocean_grid_type
@@ -44,6 +44,8 @@ type, public :: ocean_grid_type
   integer :: IsgB, IegB, JsgB, JegB ! The range of the global domain vertex indices.
   integer :: isd_global         ! The values of isd and jsd in the global
   integer :: jsd_global         ! (decomposition invariant) index space.
+  integer :: idg_offset         ! The offset between the corresponding global
+  integer :: jdg_offset         ! and local array indices; add to local to get global.
   integer :: ke                 ! The number of layers in the vertical.
   logical :: symmetric          ! True if symmetric memory is used.
   logical :: nonblocking_updates  ! If true, non-blocking halo updates are
@@ -158,7 +160,7 @@ subroutine MOM_grid_init(G, param_file)
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  integer :: isd, ied, jsd, jed, nk, idg_off, jdg_off
+  integer :: isd, ied, jsd, jed, nk
   integer :: IsdB, IedB, JsdB, JedB
   integer :: ied_max, jed_max
   integer :: niblock, njblock, nihalo, njhalo, nblocks, n, i, j
@@ -210,9 +212,9 @@ subroutine MOM_grid_init(G, param_file)
   call get_domain_extent(G%Domain, G%isc, G%iec, G%jsc, G%jec, &
                          G%isd, G%ied, G%jsd, G%jed, &
                          G%isg, G%ieg, G%jsg, G%jeg, &
-                         idg_off, jdg_off, G%symmetric, &
+                         G%idg_offset, G%jdg_offset, G%symmetric, &
                          local_indexing=.not.global_indexing)
-  G%isd_global = G%isd+idg_off ; G%jsd_global = G%jsd+jdg_off
+  G%isd_global = G%isd+G%idg_offset ; G%jsd_global = G%jsd+G%jdg_offset
 
   G%nonblocking_updates = G%Domain%nonblocking_updates
 
@@ -317,6 +319,60 @@ subroutine MOM_grid_init(G, param_file)
         call MOM_error(FATAL, "MOM_grid_init: G%jed_bk > G%jed")
 
 end subroutine MOM_grid_init
+
+
+!> set_derived_metrics calculates metric terms that are derived from other metrics.
+subroutine set_derived_metrics(G)
+  type(ocean_grid_type), intent(inout) :: G    !< The horizontal grid structure
+!    Various inverse grid spacings and derived areas are calculated within this
+!  subroutine.
+  integer :: i, j, isd, ied, jsd, jed
+  integer :: IsdB, IedB, JsdB, JedB
+
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+
+  do j=jsd,jed ; do i=isd,ied
+    if (G%dxT(i,j) < 0.0) G%dxT(i,j) = 0.0
+    if (G%dyT(i,j) < 0.0) G%dyT(i,j) = 0.0
+    G%IdxT(i,j) = Adcroft_reciprocal(G%dxT(i,j))
+    G%IdyT(i,j) = Adcroft_reciprocal(G%dyT(i,j))
+    G%IareaT(i,j) = Adcroft_reciprocal(G%areaT(i,j))
+  enddo ; enddo
+
+  do j=jsd,jed ; do I=IsdB,IedB
+    if (G%dxCu(I,j) < 0.0) G%dxCu(I,j) = 0.0
+    if (G%dyCu(I,j) < 0.0) G%dyCu(I,j) = 0.0
+    G%IdxCu(I,j) = Adcroft_reciprocal(G%dxCu(I,j))
+    G%IdyCu(I,j) = Adcroft_reciprocal(G%dyCu(I,j))
+  enddo ; enddo
+
+  do J=JsdB,JedB ; do i=isd,ied
+    if (G%dxCv(i,J) < 0.0) G%dxCv(i,J) = 0.0
+    if (G%dyCv(i,J) < 0.0) G%dyCv(i,J) = 0.0
+    G%IdxCv(i,J) = Adcroft_reciprocal(G%dxCv(i,J))
+    G%IdyCv(i,J) = Adcroft_reciprocal(G%dyCv(i,J))
+  enddo ; enddo
+
+  do J=JsdB,JedB ; do I=IsdB,IedB
+    if (G%dxBu(I,J) < 0.0) G%dxBu(I,J) = 0.0
+    if (G%dyBu(I,J) < 0.0) G%dyBu(I,J) = 0.0
+
+    G%IdxBu(I,J) = Adcroft_reciprocal(G%dxBu(I,J))
+    G%IdyBu(I,J) = Adcroft_reciprocal(G%dyBu(I,J))
+    ! areaBu has usually been set to a positive area elsewhere.
+    if (G%areaBu(I,J) <= 0.0) G%areaBu(I,J) = G%dxBu(I,J) * G%dyBu(I,J)
+    G%IareaBu(I,J) =  Adcroft_reciprocal(G%areaBu(I,J))
+  enddo ; enddo
+end subroutine set_derived_metrics
+
+!> Adcroft_reciprocal(x) = 1/x for |x|>0 or 0 for x=0.
+function Adcroft_reciprocal(val) result(I_val)
+  real, intent(in) :: val  !< The value being inverted.
+  real :: I_val            !< The Adcroft reciprocal of val.
+
+  I_val = 0.0 ; if (val /= 0.0) I_val = 1.0/val
+end function Adcroft_reciprocal
 
 !> Returns true if the coordinates (x,y) are within the h-cell (i,j)
 logical function isPointInCell(G, i, j, x, y)
