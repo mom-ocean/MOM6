@@ -171,7 +171,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   use_temperature = ASSOCIATED(tv%T)
   useALE = associated(ALE_CSp)
   use_EOS = associated(tv%eqn_of_state)
-  useALE = associated(ALE_CSp)
   if (use_EOS) eos => tv%eqn_of_state
 
 !====================================================================
@@ -230,7 +229,13 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
       select case (trim(config))
          case ("file"); call initialize_thickness_from_file(h, G, GV, PF, .false.)
          case ("thickness_file"); call initialize_thickness_from_file(h, G, GV, PF, .true.)
-         case ("coord"); call ALE_initThicknessToCoord( ALE_CSp, G, h )
+         case ("coord")
+           if (useALE) then
+             call ALE_initThicknessToCoord( ALE_CSp, G, h )
+           else
+             call MOM_error(FATAL, "MOM_initialize_state: USE_REGRIDDING must be True "//&
+                                   "for THICKNESS_CONFIG of 'coord'")
+           endif
          case ("uniform"); call initialize_thickness_uniform(h, G, GV, PF)
          case ("DOME"); call DOME_initialize_thickness(h, G, GV, PF)
          case ("ISOMIP"); call ISOMIP_initialize_thickness(h, G, GV, PF, tv)
