@@ -847,6 +847,10 @@ subroutine diag_update_target_grids(diag_cs)
   ! Store z-star thicknesses on h-points
   do j=G%jsc, G%jec+1
     do i=G%isc, G%iec+1
+      if (G%mask2dT(i,j)==0.0) then
+        diag_cs%h_zoutput(i,j,:)=0.
+        cycle
+      endif
       h_src_1d(:) = diag_cs%h(i,j,:)
       call build_zstar_column(diag_cs%regrid_cs, nz_dest, G%bathyT(i,j), &
                               sum(h_src_1d(:)), z_out_1d)
