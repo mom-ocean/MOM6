@@ -24,7 +24,7 @@ use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : setVerticalGridAxes
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use MOM_EOS, only : int_specific_vol_dp
-use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord
+use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord, ALE_remap_scalar
 use MOM_regridding, only : regridding_CS
 use MOM_remapping, only : remapping_CS, initialize_remapping
 use MOM_remapping, only : remapping_core_w
@@ -111,6 +111,8 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, PF, src_file, src_var_nam, &
   ! Local variables for ALE remapping
   real, dimension(:), allocatable :: h1, h2, hTarget, deltaE, tmpT1d
   real, dimension(:), allocatable :: tmpT1dIn
+  real, allocatable, dimension(:,:,:) :: hSrc
+
   real :: zTopOfCell, zBottomOfCell
   type(regridding_CS) :: regridCS ! Regridding parameters and work arrays
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
@@ -173,6 +175,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, PF, src_file, src_var_nam, &
     call cpu_clock_begin(id_clock_ALE)
     ! First we reserve a work space for reconstructions of the source data
     allocate( h1(kd) )
+    allocate( hSrc(isd:ied,jsd:jed,kd) )
     allocate( tmpT1dIn(kd) )
     call initialize_remapping( remapCS, remapScheme, boundary_extrapolation=.false. ) ! Data for reconstructions
     ! Next we initialize the regridding package so that it knows about the target grid
@@ -181,7 +184,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, PF, src_file, src_var_nam, &
     allocate( tmpT1d(nz) )
     allocate( deltaE(nz+1) )
     ! This call can be more general but is hard-coded for z* coordinates...  ????
-    call ALE_initRegridding( G, PF, mod, regridCS, hTarget ) ! sets regridCS and hTarget(1:nz)
+!!    call ALE_initRegridding( G, PF, mod, regridCS, hTarget ) ! sets regridCS and hTarget(1:nz)
     ! For each column ...
     do j = js, je ; do i = is, ie
       if (G%mask2dT(i,j)>0.) then
@@ -202,25 +205,15 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, PF, src_file, src_var_nam, &
           zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
         enddo
         h1(kd) = h1(kd) + ( zTopOfCell + G%bathyT(i,j) ) ! In case data is deeper than model
-        ! Build the target grid combining hTarget and topography
-        zTopOfCell = 0. ; zBottomOfCell = 0.
-        do k = 1, nz
-          zBottomOfCell = max( zTopOfCell - hTarget(k), -G%bathyT(i,j) )
-          h2(k) = zTopOfCell - zBottomOfCell
-          zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
-        enddo
-        ! Calcaulate an effectiveadisplacement, deltaE
-        call dzFromH1H2( nPoints, h1, nz, h2, deltaE ) ! sets deltaE
-        ! Now remap from h1 to h2=h1+div.deltaE
-        call remapping_core_w( remapCS, nPoints, h1, tmpT1dIn, nz, deltaE, tmpT1d ) ! sets tmpT1d
-!!!MJH        h(i,j,:) = h2(:)
-        tr(i,j,:) = tmpT1d(:)
       else
         tr(i,j,:) = 0.
-
-!!!MJH         h(i,j,:) = 0.
       endif ! mask2dT
+      hSrc(i,j,:) = h1(:)
     enddo ; enddo
+
+    call ALE_remap_scalar(remapCS, G, kd, hSrc, tr_z, h, tr, all_cells=.true. )
+
+    deallocate( hSrc ) 
     deallocate( h1 )
     deallocate( h2 )
     deallocate( hTarget )

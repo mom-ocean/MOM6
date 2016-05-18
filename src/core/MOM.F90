@@ -2394,6 +2394,8 @@ subroutine post_diags_TS_tendency(G, CS, dt)
 
   if(.not. CS%tendency_diagnostics) return
 
+  if (dt == 0.0) return  
+
   Idt           = 1.0/dt
   ppt2mks       = 0.001
   work3d(:,:,:) = 0.0
