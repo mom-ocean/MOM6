@@ -223,9 +223,9 @@ subroutine USER_set_Open_Bdry_Conds(OBC, tv, G, param_file, tr_Reg)
   type(ocean_grid_type),      intent(in) :: G
   type(param_file_type),      intent(in) :: param_file
   type(tracer_registry_type), pointer    :: tr_Reg
-  call MOM_error(FATAL, &
-   "USER_initialization.F90, USER_set_Open_Bdry_Conds: " // &
-   "Unmodified user routine called - you must edit the routine to use it")
+!  call MOM_error(FATAL, &
+!   "USER_initialization.F90, USER_set_Open_Bdry_Conds: " // &
+!   "Unmodified user routine called - you must edit the routine to use it")
 
   if (first_call) call write_user_log(param_file)
 
