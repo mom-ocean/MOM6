@@ -162,12 +162,15 @@ type, public :: diag_ctrl
   ! Number of z levels used for remapping
   integer :: nz_remap
 
-  ! Define z star on u, v, T grids, these are the interface positions
+  ! Output grid thicknesses
   real, dimension(:,:,:), allocatable :: h_zoutput
 
   ! Keep track of which remapping is needed for diagnostic output
   logical :: do_z_remapping_on_u, do_z_remapping_on_v, do_z_remapping_on_T
   logical :: remapping_initialized
+
+  !> String appended to module name for z*-remapped diagnostics
+  character(len=6) :: z_remap_suffix = '_z_new'
 
   ! Pointer to H and G for remapping
   real, dimension(:,:,:), pointer :: h => null()
@@ -312,6 +315,17 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
                             "Depth of cell center", direction=-1)
     id_zzi = diag_axis_init('zi_remap', diag_cs%zi_remap, "meters", "z", &
                             'Depth of interfaces', direction=-1)
+    call get_param(param_file, mod, "DIAG_REMAP_Z_MODULE_SUFFIX", diag_cs%z_remap_suffix, &
+                 'This is the string attached to the end of "ocean_model"\n'// &
+                 'for use in the model column of the diag_table to indicate\n'// &
+                 'a diagnostic should be remapped to z*-coordinates.', &
+                 default='_z_new')
+    if (trim(diag_cs%z_remap_suffix) == '_z') then
+      ! This will conflict with the older MOM_diag_to_Z module for z-output
+      call get_param(param_file, mod, "Z_OUTPUT_GRID_FILE", string, default="", do_not_log=.true.)
+      if (len(trim(string))>0) call MOM_error(FATAL,"MOM_diag_mediator, set_axes_info: "// &
+           "Z_OUTPUT_GRID_FILE must be blank to use DIAG_REMAP_Z_MODULE_SUFFIX='_z'")
+    endif
   else
     ! In this case the axes associated with these will never be used, however
     ! they need to be positive otherwise FMS complains.
@@ -1127,7 +1141,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
   ! Remap to z vertical coordinate, note that only diagnostics on layers
   ! (not interfaces) are supported, also B axes are not supported yet
   if (is_layer_axes(axes, diag_cs) .and. (.not. is_B_axes(axes, diag_cs)) .and. axes%rank == 3) then
-    if (get_diag_field_id_fms(trim(module_name)//'_z_new', field_name) /= DIAG_FIELD_NOT_FOUND) then
+    if (get_diag_field_id_fms(trim(module_name)//trim(diag_cs%z_remap_suffix), field_name) /= DIAG_FIELD_NOT_FOUND) then
       if (.not. allocated(diag_cs%zi_remap)) then
         call MOM_error(FATAL, 'register_diag_field: Request to regrid but no '// &
                        'destination grid spec provided, see param DIAG_REMAP_Z_GRID_DEF')
@@ -1139,7 +1153,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
       call set_diag_mask(z_remap_diag, diag_cs, axes)
       call set_diag_remap_axes(z_remap_diag, diag_cs, axes)
       call assert(associated(z_remap_diag%remap_axes), 'register_diag_field: remap axes not set')
-      fms_id = register_diag_field_fms(module_name//'_z_new', field_name, &
+      fms_id = register_diag_field_fms(module_name//trim(diag_cs%z_remap_suffix), field_name, &
            z_remap_diag%remap_axes%handles, &
            init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
            range=range, mask_variant=mask_variant, standard_name=standard_name, &
@@ -1160,13 +1174,13 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
     if (is_root_pe() .and. diag_CS%doc_unit > 0) then
       msg = ''
       if (present(cmor_field_name)) msg = 'CMOR equivalent is "'//trim(cmor_field_name)//'"'
-      call log_available_diag(associated(z_remap_diag), module_name//'_z_new', field_name, &
+      call log_available_diag(associated(z_remap_diag), module_name//trim(diag_cs%z_remap_suffix), field_name, &
                               cm_string, msg, diag_CS, long_name, units, standard_name)
     endif
 
     ! Remap to z vertical coordinate with CMOR names and attributes
     if (present(cmor_field_name)) then
-      if (get_diag_field_id_fms(module_name//'_z_new', cmor_field_name) /= DIAG_FIELD_NOT_FOUND) then
+      if (get_diag_field_id_fms(module_name//trim(diag_cs%z_remap_suffix), cmor_field_name) /= DIAG_FIELD_NOT_FOUND) then
         if (.not. allocated(diag_cs%zi_remap)) then
           call MOM_error(FATAL, 'register_diag_field: Request to regrid but no '// &
                          'destination grid spec provided, see param DIAG_REMAP_Z_GRID_DEF')
@@ -1178,7 +1192,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
         call set_diag_mask(cmor_z_remap_diag, diag_cs, axes)
         call set_diag_remap_axes(cmor_z_remap_diag, diag_cs, axes)
         call assert(associated(cmor_z_remap_diag%remap_axes), 'register_diag_field: remap axes not set')
-        fms_id = register_diag_field_fms(module_name//'_z_new', cmor_field_name, &
+        fms_id = register_diag_field_fms(module_name//trim(diag_cs%z_remap_suffix), cmor_field_name, &
              cmor_z_remap_diag%remap_axes%handles, &
              init_time, long_name=trim(posted_cmor_long_name), units=trim(posted_cmor_units), missing_value=MOM_missing_value, &
              range=range, mask_variant=mask_variant, standard_name=trim(posted_cmor_standard_name), &
@@ -1198,7 +1212,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
       endif
       if (is_root_pe() .and. diag_CS%doc_unit > 0) then
         msg = 'native name is "'//trim(field_name)//'"'
-        call log_available_diag(associated(cmor_z_remap_diag), module_name//'_z_new', cmor_field_name, &
+        call log_available_diag(associated(cmor_z_remap_diag), module_name//trim(diag_cs%z_remap_suffix), cmor_field_name, &
                                 cm_string, msg, diag_CS, posted_cmor_long_name, posted_cmor_units, &
                                 posted_cmor_standard_name)
       endif
