@@ -682,6 +682,9 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
     enddo ! i-loop
   enddo ! j-loop
 
+  ! melt in m/year
+  fluxes%iceshelf_melt = CS%lprec  * (86400.0*365.0/CS%density_ice)
+
   if (CS%DEBUG) then
    call hchksum (CS%h_shelf, "melt rate", G, haloshift=0)
   endif
@@ -1382,6 +1385,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
     allocate( fluxes%frac_shelf_u(Isdq:Iedq,jsd:jed) ) ; fluxes%frac_shelf_u(:,:) = 0.0
     allocate( fluxes%frac_shelf_v(isd:ied,Jsdq:Jedq) ) ; fluxes%frac_shelf_v(:,:) = 0.0
     allocate( fluxes%ustar_shelf(isd:ied,jsd:jed) ) ; fluxes%ustar_shelf(:,:) = 0.0
+    allocate( fluxes%iceshelf_melt(isd:ied,jsd:jed) ) ; fluxes%iceshelf_melt(:,:) = 0.0
     if (.not.associated(fluxes%p_surf)) then
     allocate( fluxes%p_surf(isd:ied,jsd:jed) ) ; fluxes%p_surf(:,:) = 0.0
     endif
@@ -1445,6 +1449,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
   if (.not. solo_ice_sheet) then
     vd = var_desc("ustar_shelf","m s-1","Friction velocity under ice shelves",z_grid='1')
     call register_restart_field(fluxes%ustar_shelf, vd, .true., CS%restart_CSp)
+    vd = var_desc("iceshelf_melt","m year-1","Ice Shelf Melt Rate",z_grid='1')
+    call register_restart_field(fluxes%iceshelf_melt, vd, .true., CS%restart_CSp)
   endif
  
   CS%restart_output_dir = dirs%restart_output_dir

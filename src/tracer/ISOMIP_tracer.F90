@@ -44,7 +44,7 @@ public register_ISOMIP_tracer, initialize_ISOMIP_tracer
 public ISOMIP_tracer_column_physics, ISOMIP_tracer_surface_state, ISOMIP_tracer_end
 
 !< ntr is the number of tracers in this module.
-integer, parameter :: ntr = 1
+integer, parameter :: ntr = 2
 
 type p3d
   real, dimension(:,:,:), pointer :: p => NULL()
@@ -334,6 +334,17 @@ subroutine ISOMIP_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, G
 
   do m=1,NTR
     call tracer_vertdiff(h_old, ea, eb, dt, CS%tr(:,:,:,m), G, GV)
+  enddo
+
+  ! dye melt water (m=2)
+  ! converting melt (m/year) to (m/s)
+  do m=2,NTR
+     do j=js,je ; do i=is,ie
+      if (fluxes%iceshelf_melt(i,j) > 0.0) then
+        CS%tr(i,j,1,m) = (dt*fluxes%iceshelf_melt(i,j)/(365.0 * 86400.0)  &
+                       + h_old(i,j,1)*CS%tr(i,j,1,m))/h_new(i,j,1)
+      endif
+    enddo ; enddo
   enddo
 
   if (CS%mask_tracers) then
