@@ -28,6 +28,8 @@ module MOM_diag_mediator
 !********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_coms,             only : PE_here
+use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
+use MOM_cpu_clock,        only : CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_error_handler,    only : MOM_error, FATAL, is_root_pe
 use MOM_file_parser,      only : get_param, log_param, log_version, param_file_type
 use MOM_grid,             only : ocean_grid_type
@@ -183,6 +185,9 @@ type, public :: diag_ctrl
 #endif
 
 end type diag_ctrl
+
+! CPU clocks
+integer :: id_clock_diag_mediator, id_clock_diag_z_remap, id_clock_diag_grid_updates
 
 contains
 
@@ -485,6 +490,7 @@ subroutine post_data_0d(diag_field_id, field, diag_cs, is_static, mask)
   logical :: used, is_stat
   type(diag_type), pointer :: diag => null()
 
+  if (id_clock_diag_mediator>0) call cpu_clock_begin(id_clock_diag_mediator)
   is_stat = .false. ; if (present(is_static)) is_stat = is_static
 
   ! Iterate over list of diag 'variants', e.g. CMOR aliases, call send_data
@@ -501,6 +507,7 @@ subroutine post_data_0d(diag_field_id, field, diag_cs, is_static, mask)
     diag => diag%next
   enddo
 
+  if (id_clock_diag_mediator>0) call cpu_clock_end(id_clock_diag_mediator)
 end subroutine post_data_0d
 
 subroutine post_data_1d_k(diag_field_id, field, diag_cs, is_static)
@@ -521,6 +528,7 @@ subroutine post_data_1d_k(diag_field_id, field, diag_cs, is_static)
   integer :: isv, iev, jsv, jev
   type(diag_type), pointer :: diag => null()
 
+  if (id_clock_diag_mediator>0) call cpu_clock_begin(id_clock_diag_mediator)
   is_stat = .false. ; if (present(is_static)) is_stat = is_static
 
   ! Iterate over list of diag 'variants', e.g. CMOR aliases.
@@ -536,6 +544,7 @@ subroutine post_data_1d_k(diag_field_id, field, diag_cs, is_static)
     diag => diag%next
   enddo
 
+  if (id_clock_diag_mediator>0) call cpu_clock_end(id_clock_diag_mediator)
 end subroutine post_data_1d_k
 
 subroutine post_data_2d(diag_field_id, field, diag_cs, is_static, mask)
@@ -555,6 +564,7 @@ subroutine post_data_2d(diag_field_id, field, diag_cs, is_static, mask)
 
   type(diag_type), pointer :: diag => null()
 
+  if (id_clock_diag_mediator>0) call cpu_clock_begin(id_clock_diag_mediator)
   ! Iterate over list of diag 'variants' (e.g. CMOR aliases) and post each.
   call assert(diag_field_id < diag_cs%next_free_diag_id, &
               'post_data_2d: Unregistered diagnostic id')
@@ -564,6 +574,7 @@ subroutine post_data_2d(diag_field_id, field, diag_cs, is_static, mask)
     diag => diag%next
   enddo
 
+  if (id_clock_diag_mediator>0) call cpu_clock_end(id_clock_diag_mediator)
 end subroutine post_data_2d
 
 subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
@@ -671,6 +682,7 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask)
   type(diag_type), pointer :: diag => null()
   real, allocatable :: remapped_field(:,:,:)
 
+  if (id_clock_diag_mediator>0) call cpu_clock_begin(id_clock_diag_mediator)
   ! Iterate over list of diag 'variants', e.g. CMOR aliases, different vertical
   ! grids, and post each.
   call assert(diag_field_id < diag_cs%next_free_diag_id, &
@@ -685,8 +697,10 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask)
         call MOM_error(FATAL,"post_data_3d: no mask for regridded field.")
       endif
 
+      if (id_clock_diag_z_remap>0) call cpu_clock_begin(id_clock_diag_z_remap)
       allocate(remapped_field(DIM_I(field),DIM_J(field), diag_cs%nz_remap))
       call remap_diag_to_z(field, diag, diag_cs, remapped_field)
+      if (id_clock_diag_z_remap>0) call cpu_clock_end(id_clock_diag_z_remap)
       if (associated(diag%mask3d)) then
         ! Since 3d masks do not vary in the vertical, just use as much as is
         ! needed.
@@ -695,12 +709,15 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask)
       else
         call post_data_3d_low(diag, remapped_field, diag_cs, is_static)
       endif
+      if (id_clock_diag_z_remap>0) call cpu_clock_begin(id_clock_diag_z_remap)
       deallocate(remapped_field)
+      if (id_clock_diag_z_remap>0) call cpu_clock_end(id_clock_diag_z_remap)
     else
       call post_data_3d_low(diag, field, diag_cs, is_static, mask)
     endif
     diag => diag%next
   enddo
+  if (id_clock_diag_mediator>0) call cpu_clock_end(id_clock_diag_mediator)
 
 end subroutine post_data_3d
 
@@ -831,6 +848,7 @@ subroutine diag_update_target_grids(diag_cs)
   if (.not. allocated(diag_cs%zi_remap)) then
     return
   endif
+  if (id_clock_diag_grid_updates>0) call cpu_clock_begin(id_clock_diag_grid_updates)
 
   if (.not. diag_cs%remapping_initialized) then
     call assert(allocated(diag_cs%zi_remap), &
@@ -868,6 +886,7 @@ subroutine diag_update_target_grids(diag_cs)
   ! when doing remapping.
   diag_cs%h_old(:,:,:) = diag_cs%h(:,:,:)
 #endif
+  if (id_clock_diag_grid_updates>0) call cpu_clock_end(id_clock_diag_grid_updates)
 
 end subroutine diag_update_target_grids
 
@@ -1642,6 +1661,10 @@ subroutine diag_mediator_init(G, param_file, diag_cs, err_msg, doc_file_dir)
   character(len=8)   :: this_pe
   character(len=240) :: doc_file, doc_file_dflt, doc_path
   character(len=40)  :: mod  = "MOM_diag_mediator" ! This module's name.
+
+  id_clock_diag_mediator = cpu_clock_id('(Ocean diagnostics framework)', grain=CLOCK_MODULE)
+  id_clock_diag_z_remap = cpu_clock_id('(Ocean diagnostics remapping)', grain=CLOCK_ROUTINE)
+  id_clock_diag_grid_updates = cpu_clock_id('(Ocean diagnostics grid updates)', grain=CLOCK_ROUTINE)
 
   call diag_manager_init(err_msg=err_msg)
 
