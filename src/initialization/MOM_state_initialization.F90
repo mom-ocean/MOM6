@@ -854,7 +854,7 @@ subroutine trim_for_ice(PF, G, GV, ALE_CSp, tv, h)
                                                                  ! of salinity and temperature within each layer.
   character(len=200) :: inputdir, filename, p_surf_file, p_surf_var ! Strings for file/path
   real :: scale_factor, min_thickness
-  integer :: i, j
+  integer :: i, j, k
 
   call get_param(PF, mod, "SURFACE_PRESSURE_FILE", p_surf_file, &
                  "The initial condition file for the surface height.", &
@@ -883,7 +883,11 @@ subroutine trim_for_ice(PF, G, GV, ALE_CSp, tv, h)
 !     call pressure_gradient_ppm(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h)
 !   endif
   else
-    call MOM_error(FATAL, "trim_for_ice: Does not work without ALE mode")
+!    call MOM_error(FATAL, "trim_for_ice: Does not work without ALE mode")
+    do k=1,G%ke ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
+      T_t(i,j,k) = tv%T(i,j,k) ; T_b(i,j,k) = tv%T(i,j,k)
+      S_t(i,j,k) = tv%S(i,j,k) ; S_b(i,j,k) = tv%S(i,j,k)
+    enddo ; enddo ; enddo
   endif
 
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
@@ -1236,6 +1240,7 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, param_file, eqn_of_state, P_Ref
   real :: drho_dT(SZK_(G))   ! Derivative of density with temperature in kg m-3 K-1.                              !
   real :: drho_dS(SZK_(G))   ! Derivative of density with salinity in kg m-3 PSU-1.                             !
   real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 in kg m-3.
+  logical :: fit_salin       ! If true, accept the prescribed temperature and fit the salinity.
   character(len=40)  :: mod = "initialize_temp_salt_fit" ! This subroutine's name.
   integer :: i, j, k, itt, nz
   nz = G%ke
@@ -1248,27 +1253,44 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, param_file, eqn_of_state, P_Ref
   call get_param(param_file, mod, "S_REF", S_Ref, &
                  "A reference salinity used in initialization.", units="PSU", &
                  default=35.0)
+  call get_param(param_file, mod, "FIT_SALINITY", fit_salin, &
+                 "If true, accept the prescribed temperature and fit the \n"//&
+                 "salinity; otherwise take salinity and fit temperature.", &
+                 default=.false.)
   do k=1,nz
     pres(k) = P_Ref ; S0(k) = S_Ref
+    T0(k) = T_Ref
   enddo
-  T0(1) = T_Ref
 
   call calculate_density(T0(1),S0(1),pres(1),rho_guess(1),eqn_of_state)
   call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,1,eqn_of_state)
 
-! A first guess of the layers' temperatures.                         !
-  do k=nz,1,-1
-    T0(k) = T0(1) + (GV%Rlay(k) - rho_guess(1)) / drho_dT(1)
-  enddo
-
-! Refine the guesses for each layer.                                 !
-  do itt=1,6
-    call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
-    call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
-    do k=1,nz
-      T0(k) = T0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
+  if (fit_salin) then
+! A first guess of the layers' temperatures.
+    do k=nz,1,-1
+      S0(k) = max(0.0, S0(1) + (GV%Rlay(k) - rho_guess(1)) / drho_dS(1))
     enddo
-  enddo
+! Refine the guesses for each layer.
+    do itt=1,6
+      call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
+      call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
+      do k=1,nz
+        S0(k) = max(0.0, S0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dS(k))
+      enddo
+    enddo
+  else
+! A first guess of the layers' temperatures.
+    do k=nz,1,-1
+      T0(k) = T0(1) + (GV%Rlay(k) - rho_guess(1)) / drho_dT(1)
+    enddo
+    do itt=1,6
+      call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
+      call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
+      do k=1,nz
+        T0(k) = T0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
+      enddo
+    enddo
+  endif
 
   do k=1,nz ; do j=G%jsd,G%jed ; do i=G%isd,G%ied
     T(i,j,k) = T0(k) ; S(i,j,k) = S0(k)
