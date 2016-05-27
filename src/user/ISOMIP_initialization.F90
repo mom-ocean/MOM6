@@ -332,10 +332,10 @@ subroutine ISOMIP_initialize_sponges(G,GV, tv, PF, CSp)
 
   call get_param(PF, mod, "ISOMIP_TNUDG", TNUDG, 'Nudging time scale for sponge layers (days)',  default=0.0)
 
-  call get_param(PF, mod, "ISOMIP_T_REF", t_ref, 'Reference temperature',  default=10.0,&
+  call get_param(PF, mod, "T_REF", t_ref, 'Reference temperature',  default=10.0,&
                  do_not_log=.true.)
 
-  call get_param(PF, mod, "ISOMIP_S_REF", s_ref, 'Reference salinity',  default=35.0,&
+  call get_param(PF, mod, "S_REF", s_ref, 'Reference salinity',  default=35.0,&
                  do_not_log=.true.)
 
   call get_param(PF, mod, "ISOMIP_S_SUR_SPONGE", s_sur, 'Surface salinity in sponge layer.',  default=s_ref)
