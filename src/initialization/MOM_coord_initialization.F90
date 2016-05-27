@@ -9,7 +9,6 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
 use MOM_file_parser, only : log_version
-use MOM_grid, only : ocean_grid_type
 use MOM_io, only : close_file, create_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE, MULTIPLE
 use MOM_io, only : slasher, vardesc, write_field, var_desc
@@ -33,14 +32,14 @@ contains
 ! -----------------------------------------------------------------------------
 !> MOM_initialize_coord sets up time-invariant quantities related to MOM6's
 !!   vertical coordinate.
-subroutine MOM_initialize_coord(G, GV, PF, write_geom, output_dir, tv)
-  type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
+subroutine MOM_initialize_coord(GV, PF, write_geom, output_dir, tv, max_depth)
   type(verticalGrid_type), intent(inout) :: GV   !< Ocean vertical grid structure
   type(param_file_type),   intent(in)    :: PF   !< A structure indicating the open file
                                                  !! to parse for model parameter values.
   logical,                 intent(in)    :: write_geom !< If true, write grid geometry files.
   character(len=*),        intent(in)    :: output_dir !< The directory into which to write files.
   type(thermo_var_ptrs),   intent(inout) :: tv   !< The thermodynamic variable structure.
+  real,                    intent(in)    :: max_depth !< The ocean's maximum depth, in m.
   ! Local
   character(len=200) :: config
   logical :: debug
@@ -76,19 +75,19 @@ subroutine MOM_initialize_coord(G, GV, PF, write_geom, output_dir, tv)
                  fail_if_missing=.true.)
   select case ( trim(config) )
     case ("gprime")
-      call set_coord_from_gprime(GV%Rlay, GV%g_prime, G, GV, PF)
+      call set_coord_from_gprime(GV%Rlay, GV%g_prime, GV, PF)
     case ("layer_ref")
-      call set_coord_from_layer_density(GV%Rlay, GV%g_prime, G, GV, PF)
+      call set_coord_from_layer_density(GV%Rlay, GV%g_prime, GV, PF)
     case ("linear")
-      call set_coord_linear(GV%Rlay, GV%g_prime, G, GV, PF)
+      call set_coord_linear(GV%Rlay, GV%g_prime, GV, PF)
     case ("ts_ref")
-      call set_coord_from_ts_ref(GV%Rlay, GV%g_prime, G, GV, PF, eos, tv%P_Ref)
+      call set_coord_from_ts_ref(GV%Rlay, GV%g_prime, GV, PF, eos, tv%P_Ref)
     case ("ts_profile")
-      call set_coord_from_TS_profile(GV%Rlay, GV%g_prime, G, GV, PF, eos, tv%P_Ref)
+      call set_coord_from_TS_profile(GV%Rlay, GV%g_prime, GV, PF, eos, tv%P_Ref)
     case ("ts_range")
-      call set_coord_from_TS_range(GV%Rlay, GV%g_prime, G, GV, PF, eos, tv%P_Ref)
+      call set_coord_from_TS_range(GV%Rlay, GV%g_prime, GV, PF, eos, tv%P_Ref)
     case ("file")
-      call set_coord_from_file(GV%Rlay, GV%g_prime, G, GV, PF)
+      call set_coord_from_file(GV%Rlay, GV%g_prime, GV, PF)
     case ("USER")
       call user_set_coord(GV%Rlay, GV%g_prime, GV, PF, eos)
     case ("none")
@@ -99,11 +98,11 @@ subroutine MOM_initialize_coord(G, GV, PF, write_geom, output_dir, tv)
   if (debug) call chksum(GV%g_prime, "MOM_initialize_coord: g_prime ", 1, nz)
   call setVerticalGridAxes( GV%Rlay, GV )
 
-! Copy the maximum depth across from the ocean grid structure
-  GV%max_depth = G%max_depth
+! Copy the maximum depth across from the input argument
+  GV%max_depth = max_depth
 
 ! Write out all of the grid data used by this run.
-  if (write_geom) call write_vertgrid_file(GV, G, PF, output_dir)
+  if (write_geom) call write_vertgrid_file(GV, PF, output_dir)
 
   call callTree_leave('MOM_initialize_coord()')
 
@@ -112,14 +111,12 @@ end subroutine MOM_initialize_coord
 
 ! The set_coord routines deal with initializing aspects of the vertical grid.
 ! -----------------------------------------------------------------------------
-subroutine set_coord_from_gprime(Rlay, g_prime, G, GV, param_file)
+subroutine set_coord_from_gprime(Rlay, g_prime, GV, param_file)
   real, dimension(:),      intent(out) :: Rlay, g_prime
-  type(ocean_grid_type),   intent(in)  :: G
   type(verticalGrid_type), intent(in)  :: GV
   type(param_file_type),   intent(in)  :: param_file
 ! Arguments: Rlay - the layers' target coordinate values (potential density).
 !  (out)     g_prime - the reduced gravity across the interfaces, in m s-2.
-!  (in)      G - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
@@ -152,14 +149,12 @@ end subroutine set_coord_from_gprime
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine set_coord_from_layer_density(Rlay, g_prime, G, GV, param_file)
+subroutine set_coord_from_layer_density(Rlay, g_prime, GV, param_file)
   real, dimension(:),      intent(out) :: Rlay, g_prime
-  type(ocean_grid_type),   intent(in)  :: G
   type(verticalGrid_type), intent(in)  :: GV
   type(param_file_type),   intent(in)  :: param_file
 ! Arguments: Rlay - the layers' target coordinate values (potential density).
 !  (out)     g_prime - the reduced gravity across the interfaces, in m s-2.
-!  (in)      G - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
@@ -200,17 +195,15 @@ end subroutine set_coord_from_layer_density
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine set_coord_from_TS_ref(Rlay, g_prime, G, GV, param_file, eqn_of_state, &
+subroutine set_coord_from_TS_ref(Rlay, g_prime, GV, param_file, eqn_of_state, &
                                  P_Ref)
   real, dimension(:),      intent(out) :: Rlay, g_prime
-  type(ocean_grid_type),   intent(in)  :: G
   type(verticalGrid_type), intent(in)  :: GV
   type(param_file_type),   intent(in)  :: param_file
   type(EOS_type),          pointer     :: eqn_of_state
   real,                    intent(in)  :: P_Ref
 ! Arguments: Rlay - the layers' target coordinate values (potential density).
 !  (out)     g_prime - the reduced gravity across the interfaces, in m s-2.
-!  (in)      G - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
@@ -258,17 +251,15 @@ end subroutine set_coord_from_TS_ref
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine set_coord_from_TS_profile(Rlay, g_prime, G, GV, param_file, &
+subroutine set_coord_from_TS_profile(Rlay, g_prime, GV, param_file, &
                                      eqn_of_state, P_Ref)
   real, dimension(:),      intent(out) :: Rlay, g_prime
-  type(ocean_grid_type),   intent(in)  :: G
   type(verticalGrid_type), intent(in)  :: GV
   type(param_file_type),   intent(in)  :: param_file
   type(EOS_type),          pointer     :: eqn_of_state
   real,                    intent(in)  :: P_Ref
 ! Arguments: Rlay - the layers' target coordinate values (potential density).
 !  (out)     g_prime - the reduced gravity across the interfaces, in m s-2.
-!  (in)      G - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
@@ -313,17 +304,15 @@ end subroutine set_coord_from_TS_profile
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine set_coord_from_TS_range(Rlay, g_prime, G, GV, param_file, &
+subroutine set_coord_from_TS_range(Rlay, g_prime, GV, param_file, &
                                      eqn_of_state, P_Ref)
   real, dimension(:),      intent(out) :: Rlay, g_prime
-  type(ocean_grid_type),   intent(in)  :: G
   type(verticalGrid_type), intent(in)  :: GV
   type(param_file_type),   intent(in)  :: param_file
   type(EOS_type),          pointer     :: eqn_of_state
   real,                    intent(in)  :: P_Ref
 ! Arguments: Rlay - the layers' target coordinate values (potential density).
 !  (out)     g_prime - the reduced gravity across the interfaces, in m s-2.
-!  (in)      G - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
@@ -403,14 +392,12 @@ end subroutine set_coord_from_TS_range
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine set_coord_from_file(Rlay, g_prime, G, GV, param_file)
+subroutine set_coord_from_file(Rlay, g_prime, GV, param_file)
   real, dimension(:),      intent(out) :: Rlay, g_prime
-  type(ocean_grid_type),   intent(in)  :: G
   type(verticalGrid_type), intent(in)  :: GV
   type(param_file_type),   intent(in)  :: param_file
 ! Arguments: Rlay - the layers' target coordinate values (potential density).
 !  (out)     g_prime - the reduced gravity across the interfaces, in m s-2.
-!  (in)      G - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
@@ -456,14 +443,12 @@ end subroutine set_coord_from_file
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine set_coord_linear(Rlay, g_prime, G, GV, param_file)
+subroutine set_coord_linear(Rlay, g_prime, GV, param_file)
   real, dimension(:),      intent(out) :: Rlay, g_prime
-  type(ocean_grid_type),   intent(in)  :: G
   type(verticalGrid_type), intent(in)  :: GV
   type(param_file_type),   intent(in)  :: param_file
 ! Arguments: Rlay - the layers' target coordinate values (potential density).
 !  (out)     g_prime - the reduced gravity across the interfaces, in m s-2.
-!  (in)      G - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
@@ -506,15 +491,13 @@ subroutine set_coord_linear(Rlay, g_prime, G, GV, param_file)
 end subroutine set_coord_linear
 
 ! -----------------------------------------------------------------------------
-subroutine write_vertgrid_file(GV, G, param_file, directory)
+subroutine write_vertgrid_file(GV, param_file, directory)
   type(verticalGrid_type), intent(in)  :: GV
-  type(ocean_grid_type), intent(inout) :: G
   type(param_file_type), intent(in)    :: param_file
   character(len=*),      intent(in)    :: directory
 !   This subroutine writes out a file containing any available data related
 ! to the vertical grid used by the MOM ocean model.
-! Arguments: Gv - The container for the vertical grid data.
-!  (in)      G - The ocean's grid structure.  Effectively intent in.
+! Arguments: GV - The container for the vertical grid data.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in)      directory - The directory into which to place the file.
