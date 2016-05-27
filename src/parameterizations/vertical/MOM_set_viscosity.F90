@@ -1668,7 +1668,7 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS)
   endif
   call get_param(param_file, mod, "PRANDTL_TURB", visc%Prandtl_turb, &
                  "The turbulent Prandtl number applied to shear \n"//&
-                 "instability.", units="nondim", default=0.0)
+                 "instability.", units="nondim", default=1.0)
   call get_param(param_file, mod, "DEBUG", CS%debug, default=.false.)
 
   call get_param(param_file, mod, "DYNAMIC_VISCOUS_ML", CS%dynamic_viscous_ML, &
