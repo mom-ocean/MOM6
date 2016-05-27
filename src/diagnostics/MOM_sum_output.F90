@@ -595,7 +595,8 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
                        num_nc_fields, G, CS%fields, SINGLE_FILE, CS%timeunit, GV=GV)
     else
       call create_file(CS%fileenergy_nc, trim(energypath_nc), vars, &
-                       num_nc_fields, G, CS%fields, SINGLE_FILE, CS%timeunit, GV=GV)
+                       num_nc_fields, CS%fields, SINGLE_FILE, CS%timeunit, &
+                       G=G, GV=GV)
     endif
   endif
 
