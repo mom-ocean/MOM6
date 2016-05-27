@@ -139,8 +139,8 @@ end subroutine Rossby_front_initialize_temperature_salinity
 subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, param_file)
   type(ocean_grid_type),                  intent(in)     :: G  !< Grid structure
   type(verticalGrid_type),                intent(in)     :: GV !< Vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: u  !< i-component of velocity [m/s]
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: v  !< j-component of velocity [m/s]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: u  !< i-component of velocity [m/s]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: v  !< j-component of velocity [m/s]
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< Thickness [H]
   type(param_file_type),                  intent(in)     :: param_file !< Parameter file handle
 
@@ -163,7 +163,8 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, param_file)
   
   do j = G%jsc,G%jec ; do I = G%isc-1,G%iec+1
     f = 0.5*( G%CoriolisBu(I,j) + G%CoriolisBu(I,j-1) )
-    dUdT = ( G%g_Earth * dRho_dT ) / ( f * GV%Rho0 )
+    dUdT = 0.0 ; if (abs(f) > 0.0) &
+      dUdT = ( G%g_Earth * dRho_dT ) / ( f * GV%Rho0 )
     Dml = Hml( G, G%geoLatT(i,j) )
     Ty = dTdy( G, T_range, G%geoLatT(i,j) )
     zi = 0.
@@ -174,7 +175,7 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, param_file)
       zm = max( zc + Dml, 0. )    ! Height above bottom of mixed layer
       u(I,j,k) = dUdT * Ty * zm   ! Thermal wind starting at base of ML
     enddo
-  end do ; end do
+  enddo ; enddo
 
 end subroutine Rossby_front_initialize_velocity
 
