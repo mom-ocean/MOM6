@@ -1353,20 +1353,20 @@ subroutine ALE_writeCoordinateFile( CS, G, GV, directory )
   type(vardesc)      :: vars(2)
   type(fieldtype)    :: fields(2)
   integer            :: unit
-  real               :: ds(G%ke), dsi(G%ke+1)
+  real               :: ds(GV%ke), dsi(GV%ke+1)
 
   filepath    = trim(directory) // trim("Vertical_coordinate")
   ds(:)       = getCoordinateResolution( CS%regridCS )
   dsi(1)      = 0.5*ds(1)
-  dsi(2:G%ke) = 0.5*( ds(1:G%ke-1) + ds(2:G%ke) )
-  dsi(G%ke+1) = 0.5*ds(G%ke)
+  dsi(2:GV%ke) = 0.5*( ds(1:GV%ke-1) + ds(2:GV%ke) )
+  dsi(GV%ke+1) = 0.5*ds(GV%ke)
 
   vars(1) = var_desc('ds', getCoordinateUnits( CS%regridCS ), &
                     'Layer Coordinate Thickness','1','L','1')
   vars(2) = var_desc('ds_interface', getCoordinateUnits( CS%regridCS ), &
                     'Layer Center Coordinate Separation','1','i','1')
 
-  call create_file(unit, trim(filepath), vars, 2, G, fields, SINGLE_FILE, GV=GV)
+  call create_file(unit, trim(filepath), vars, 2, fields, SINGLE_FILE, GV=GV)
   call write_field(unit, fields(1), ds)
   call write_field(unit, fields(2), dsi)
   call close_file(unit)
