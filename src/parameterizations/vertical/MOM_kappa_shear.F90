@@ -1749,7 +1749,7 @@ logical function kappa_shear_init(Time, G, GV, param_file, diag, CS)
                  default=13)
   call get_param(param_file, mod, "PRANDTL_TURB", CS%Prandtl_turb, &
                  "The turbulent Prandtl number applied to shear \n"//&
-                 "instability.", units="nondim", default=0.0, do_not_log=.true.)
+                 "instability.", units="nondim", default=1.0, do_not_log=.true.)
   call get_param(param_file, mod, "DEBUG_KAPPA_SHEAR", CS%debug, &
                  "If true, write debugging data for the kappa-shear code. \n"//&
                  "Caution: this option is _very_ verbose and should only \n"//&
