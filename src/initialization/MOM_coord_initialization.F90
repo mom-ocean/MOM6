@@ -90,7 +90,7 @@ subroutine MOM_initialize_coord(G, GV, PF, write_geom, output_dir, tv)
     case ("file")
       call set_coord_from_file(GV%Rlay, GV%g_prime, G, GV, PF)
     case ("USER")
-      call user_set_coord(GV%Rlay, GV%g_prime, G, PF, eos)
+      call user_set_coord(GV%Rlay, GV%g_prime, GV, PF, eos)
     case ("none")
     case default ; call MOM_error(FATAL,"MOM_initialize_coord: "// &
       "Unrecognized coordinate setup"//trim(config))
@@ -130,13 +130,13 @@ subroutine set_coord_from_gprime(Rlay, g_prime, G, GV, param_file)
   real :: g_fs    ! Reduced gravity across the free surface, in m s-2.
   character(len=40)  :: mod = "set_coord_from_gprime" ! This subroutine's name.
   integer :: k, nz
-  nz = G%ke
+  nz = GV%ke
 
   call callTree_enter(trim(mod)//"(), MOM_coord_initialization.F90")
 
   call get_param(param_file, mod, "GFS" , g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
-                 default=G%g_Earth)
+                 default=GV%g_Earth)
   call get_param(param_file, mod, "GINT", g_int, &
                  "The reduced gravity across internal interfaces.", &
                  units="m s-2", fail_if_missing=.true.)
@@ -144,7 +144,7 @@ subroutine set_coord_from_gprime(Rlay, g_prime, G, GV, param_file)
   g_prime(1) = g_fs
   do k=2,nz ; g_prime(k) = g_int ; enddo
   Rlay(1) = GV%Rho0
-  do k=2,nz ; Rlay(k) = Rlay(k-1) + g_prime(k)*(GV%Rho0/G%g_Earth) ; enddo
+  do k=2,nz ; Rlay(k) = Rlay(k-1) + g_prime(k)*(GV%Rho0/GV%g_Earth) ; enddo
 
   call callTree_leave(trim(mod)//'()')
 
@@ -171,13 +171,13 @@ subroutine set_coord_from_layer_density(Rlay, g_prime, G, GV, param_file)
   real :: RLay_range ! The range of densities, in kg m-3.
   character(len=40)  :: mod = "set_coord_from_layer_density" ! This subroutine's name.
   integer :: k, nz
-  nz = G%ke
+  nz = GV%ke
 
   call callTree_enter(trim(mod)//"(), MOM_coord_initialization.F90")
 
   call get_param(param_file, mod, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
-                 default=G%g_Earth)
+                 default=GV%g_Earth)
   call get_param(param_file, mod, "LIGHTEST_DENSITY", Rlay_Ref, &
                  "The reference potential density used for layer 1.", &
                  units="kg m-3", default=GV%Rho0)
@@ -192,7 +192,7 @@ subroutine set_coord_from_layer_density(Rlay, g_prime, G, GV, param_file)
   enddo
 !    These statements set the interface reduced gravities.           !
   do k=2,nz
-     g_prime(k) = (G%g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1))
+     g_prime(k) = (GV%g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1))
   enddo
 
   call callTree_leave(trim(mod)//'()')
@@ -225,7 +225,7 @@ subroutine set_coord_from_TS_ref(Rlay, g_prime, G, GV, param_file, eqn_of_state,
   real :: g_fs    ! Reduced gravity across the free surface, in m s-2.
   character(len=40)  :: mod = "set_coord_from_TS_ref" ! This subroutine's name.
   integer :: k, nz
-  nz = G%ke
+  nz = GV%ke
 
   call callTree_enter(trim(mod)//"(), MOM_coord_initialization.F90")
 
@@ -236,7 +236,7 @@ subroutine set_coord_from_TS_ref(Rlay, g_prime, G, GV, param_file, eqn_of_state,
                  "The initial salinities.", units="PSU", default=35.0)
   call get_param(param_file, mod, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
-                 default=G%g_Earth)
+                 default=GV%g_Earth)
   call get_param(param_file, mod, "GINT", g_int, &
                  "The reduced gravity across internal interfaces.", &
                  units="m s-2", fail_if_missing=.true.)
@@ -251,7 +251,7 @@ subroutine set_coord_from_TS_ref(Rlay, g_prime, G, GV, param_file, eqn_of_state,
   call calculate_density(T_ref, S_ref, P_ref, Rlay(1), eqn_of_state)
 
 !    These statements set the layer densities.                       !
-  do k=2,nz ; Rlay(k) = Rlay(k-1) + g_prime(k)*(GV%Rho0/G%g_Earth) ; enddo
+  do k=2,nz ; Rlay(k) = Rlay(k-1) + g_prime(k)*(GV%Rho0/GV%g_Earth) ; enddo
 
   call callTree_leave(trim(mod)//'()')
 end subroutine set_coord_from_TS_ref
@@ -277,18 +277,18 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, G, GV, param_file, &
 
 ! This subroutine sets the layer densities (Rlay) and the interface  !
 ! reduced gravities (g).                                             !
-  real, dimension(SZK_(G)) :: T0, S0,  Pref
+  real, dimension(SZK_(GV)) :: T0, S0,  Pref
   real :: g_fs    ! Reduced gravity across the free surface, in m s-2.
   integer :: k, nz
   character(len=40)  :: mod = "set_coord_from_TS_profile" ! This subroutine's name.
   character(len=200) :: filename, coord_file, inputdir ! Strings for file/path
-  nz = G%ke
+  nz = GV%ke
 
   call callTree_enter(trim(mod)//"(), MOM_coord_initialization.F90")
 
   call get_param(param_file, mod, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
-                 default=G%g_Earth)
+                 default=GV%g_Earth)
   call get_param(param_file, mod, "COORD_FILE", coord_file, &
                  "The file from which the coordinate temperatures and \n"//&
                  "salnities are read.", fail_if_missing=.true.)
@@ -297,8 +297,8 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, G, GV, param_file, &
   filename = trim(slasher(inputdir))//trim(coord_file)
   call log_param(param_file, mod, "INPUTDIR/COORD_FILE", filename)
 
-  call read_data(filename,"PTEMP",T0(:),domain=G%Domain%mpp_domain)
-  call read_data(filename,"SALT",S0(:),domain=G%Domain%mpp_domain)
+  call read_data(filename,"PTEMP",T0(:))
+  call read_data(filename,"SALT",S0(:))
 
   if (.not.file_exists(filename)) call MOM_error(FATAL, &
       " set_coord_from_TS_profile: Unable to open " //trim(filename))
@@ -306,7 +306,7 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, G, GV, param_file, &
   g_prime(1) = g_fs
   do k=1,nz ; Pref(k) = P_ref ; enddo
   call calculate_density(T0, S0, Pref, Rlay, 1,nz,eqn_of_state)
-  do k=2,nz; g_prime(k) = (G%g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1)); enddo
+  do k=2,nz; g_prime(k) = (GV%g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1)); enddo
 
   call callTree_leave(trim(mod)//'()')
 end subroutine set_coord_from_TS_profile
@@ -332,7 +332,7 @@ subroutine set_coord_from_TS_range(Rlay, g_prime, G, GV, param_file, &
 
 ! This subroutine sets the layer densities (Rlay) and the interface  !
 ! reduced gravities (g).                                             !
-  real, dimension(SZK_(G)) :: T0, S0,  Pref
+  real, dimension(SZK_(GV)) :: T0, S0,  Pref
   real :: S_Ref, S_Light, S_Dense ! Salnity range parameters in PSU.
   real :: T_Ref, T_Light, T_Dense ! Temperature range parameters in dec C.
   real :: res_rat ! The ratio of density space resolution in the denser part
@@ -344,7 +344,7 @@ subroutine set_coord_from_TS_range(Rlay, g_prime, G, GV, param_file, &
   integer :: k, nz, k_light
   character(len=40)  :: mod = "set_coord_from_TS_range" ! This subroutine's name.
   character(len=200) :: filename, coord_file, inputdir ! Strings for file/path
-  nz = G%ke
+  nz = GV%ke
 
   call callTree_enter(trim(mod)//"(), MOM_coord_initialization.F90")
 
@@ -375,7 +375,7 @@ subroutine set_coord_from_TS_range(Rlay, g_prime, G, GV, param_file, &
 
   call get_param(param_file, mod, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
-                 default=G%g_Earth)
+                 default=GV%g_Earth)
 
   k_light = GV%nk_rho_varies + 1
 
@@ -396,7 +396,7 @@ subroutine set_coord_from_TS_range(Rlay, g_prime, G, GV, param_file, &
   do k=k_light-1,1,-1
     Rlay(k) = 2.0*Rlay(k+1) -  Rlay(k+2)
   enddo
-  do k=2,nz; g_prime(k) = (G%g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1)); enddo
+  do k=2,nz; g_prime(k) = (GV%g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1)); enddo
 
   call callTree_leave(trim(mod)//'()')
 end subroutine set_coord_from_TS_range
@@ -422,13 +422,13 @@ subroutine set_coord_from_file(Rlay, g_prime, G, GV, param_file)
   character(len=40)  :: mod = "set_coord_from_file" ! This subroutine's name.
   character(len=40)  :: coord_var
   character(len=200) :: filename,coord_file,inputdir ! Strings for file/path
-  nz = G%ke
+  nz = GV%ke
 
   call callTree_enter(trim(mod)//"(), MOM_coord_initialization.F90")
 
   call get_param(param_file, mod, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
-                 default=G%g_Earth)
+                 default=GV%g_Earth)
   call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
   call get_param(param_file, mod, "COORD_FILE", coord_file, &
@@ -444,7 +444,7 @@ subroutine set_coord_from_file(Rlay, g_prime, G, GV, param_file)
 
   call read_axis_data(filename, coord_var, Rlay)
   g_prime(1) = g_fs
-  do k=2,nz ; g_prime(k) = (G%g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1)) ; enddo
+  do k=2,nz ; g_prime(k) = (GV%g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1)) ; enddo
   do k=1,nz ; if (g_prime(k) <= 0.0) then
     call MOM_error(FATAL, "MOM_initialization set_coord_from_file: "//&
        "Zero or negative g_primes read from variable "//"Layer"//" in file "//&
@@ -476,7 +476,7 @@ subroutine set_coord_linear(Rlay, g_prime, G, GV, param_file)
   character(len=40)  :: mod = "set_coord_linear" ! This subroutine
   real :: Rlay_ref, Rlay_range, g_fs
   integer :: k, nz
-  nz = G%ke
+  nz = GV%ke
 
   call callTree_enter(trim(mod)//"(), MOM_coord_initialization.F90")
 
@@ -488,7 +488,7 @@ subroutine set_coord_linear(Rlay, g_prime, G, GV, param_file)
                  "all interfaces.", units="kg m-3", default=2.0)
   call get_param(param_file, mod, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
-                 default=G%g_Earth)
+                 default=GV%g_Earth)
 
   ! This following sets the target layer densities such that a the
   ! surface interface has density Rlay_ref and the bottom
@@ -499,7 +499,7 @@ subroutine set_coord_linear(Rlay, g_prime, G, GV, param_file)
   ! These statements set the interface reduced gravities.
   g_prime(1) = g_fs
   do k=2,nz 
-     g_prime(k) = (G%g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1))
+     g_prime(k) = (GV%g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1))
   enddo
 
   call callTree_leave(trim(mod)//'()')
