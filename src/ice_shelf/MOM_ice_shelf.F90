@@ -678,7 +678,6 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
       else !not shelf
         CS%t_flux(i,j) = 0.0
       endif
-
     enddo ! i-loop
   enddo ! j-loop
 
