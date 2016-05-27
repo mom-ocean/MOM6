@@ -109,7 +109,7 @@ use MOM_fixed_initialization, only : MOM_initialize_rotation
 use user_initialization, only : user_initialize_topography
 use MOM_io, only : field_exists, file_exists, read_data, write_version_number
 use MOM_io, only : slasher, vardesc, var_desc, fieldtype
-use MOM_io, only : create_file, write_field, close_file, SINGLE_FILE, MULTIPLE
+use MOM_io, only : write_field, close_file, SINGLE_FILE, MULTIPLE
 use MOM_restart, only : register_restart_field, query_initialized, save_restart
 use MOM_restart, only : restart_init, restore_state, MOM_restart_CS
 use MOM_time_manager, only : time_type, set_time, time_type_to_real
