@@ -839,10 +839,10 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
 
     if (CS%parallel_restartfiles) then
       call create_file(unit, trim(restartpath), vars, (next_var-start_var), &
-                       G, fields, MULTIPLE, GV=GV)
+                       fields, MULTIPLE, G=G, GV=GV)
     else
       call create_file(unit, trim(restartpath), vars, (next_var-start_var), &
-                       G, fields, SINGLE_FILE, GV=GV)
+                       fields, SINGLE_FILE, G=G, GV=GV)
     endif
 
     do m=start_var,next_var-1
