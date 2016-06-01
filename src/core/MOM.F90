@@ -1788,8 +1788,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call cpu_clock_begin(id_clock_MOM_init)
   call MOM_initialize_fixed(G, param_file, write_geom_files, dirs%output_directory)
   call callTree_waypoint("returned from MOM_initialize_fixed() (initialize_MOM)")
-  call MOM_initialize_coord(G, GV, param_file, write_geom_files, &
-                            dirs%output_directory, CS%tv)
+  call MOM_initialize_coord(GV, param_file, write_geom_files, &
+                            dirs%output_directory, CS%tv, G%max_depth)
   call callTree_waypoint("returned from MOM_initialize_coord() (initialize_MOM)")
 
   if (CS%use_ALE_algorithm) then

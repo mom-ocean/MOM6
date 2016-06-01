@@ -85,13 +85,14 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : close_file, create_file, fieldtype, file_exists
+use MOM_io, only : close_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
 use MOM_io, only : write_field, slasher
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
 use MOM_tracer_registry, only : tracer_registry_type, add_tracer_OBC_values
 use MOM_variables, only : thermo_var_ptrs, ocean_OBC_type, OBC_NONE, OBC_SIMPLE
 use MOM_variables, only : OBC_FLATHER_E, OBC_FLATHER_W, OBC_FLATHER_N, OBC_FLATHER_S
+use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 implicit none ; private
 
@@ -106,11 +107,11 @@ logical :: first_call = .true.
 
 contains
 
-subroutine USER_set_coord(Rlay, g_prime, G, param_file, eqn_of_state)
-  type(ocean_grid_type), intent(in) :: G
-  real, dimension(:), intent(out) :: Rlay, g_prime
-  type(param_file_type), intent(in) :: param_file
-  type(EOS_type),        pointer    :: eqn_of_state
+subroutine USER_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
+  type(verticalGrid_type), intent(in)  :: GV
+  real, dimension(:),      intent(out) :: Rlay, g_prime
+  type(param_file_type),   intent(in)  :: param_file
+  type(EOS_type),          pointer     :: eqn_of_state
 
   call MOM_error(FATAL, &
    "USER_initialization.F90, USER_set_coord: " // &
