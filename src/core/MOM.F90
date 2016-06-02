@@ -1398,9 +1398,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     return
   endif
   allocate(CS)
-  G       => CS%G
+
+  G => CS%G
   CS%Time => Time
-  diag    => CS%diag
 
   id_clock_init = cpu_clock_id('Ocean Initialization', grain=CLOCK_SUBCOMPONENT)
   call cpu_clock_begin(id_clock_init)
@@ -1436,15 +1436,13 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call MOM_grid_init(G, param_file)
   call verticalGridInit( param_file, CS%GV )
   GV => CS%GV
-  ! Copy several common variables from the vertical grid to the horizontal grid.
-  ! Consider removing these later?
+  ! Copy a common variable from the vertical grid to the horizontal grid.
+  ! Consider removing this later?
   G%ke = GV%ke
 
-  is   = G%isc   ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = G%ke
+  is   = G%isc   ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = GV%ke
   isd  = G%isd   ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
   IsdB = G%IsdB  ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-
-  call diag_mediator_init(G, param_file, diag, doc_file_dir=dirs%output_directory)
 
   ! Read relevant parameters and write them to the model log.
   call log_version(param_file, "MOM", version, "")
@@ -1766,7 +1764,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   ! This subroutine calls user-specified tracer registration routines.
   ! Additional calls can be added to MOM_tracer_flow_control.F90.
   call call_tracer_register(G, param_file, CS%tracer_flow_CSp, &
-                            diag, CS%tracer_Reg, CS%restart_CSp)
+                            CS%tracer_Reg, CS%restart_CSp)
 
   call MEKE_alloc_register_restart(G, param_file, CS%MEKE, CS%restart_CSp)
   call set_visc_register_restarts(G, param_file, CS%visc, CS%restart_CSp)
@@ -1827,6 +1825,10 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     endif
   endif
   if ( CS%use_ALE_algorithm ) call ALE_updateVerticalGridType( CS%ALE_CSp, GV )
+
+  diag    => CS%diag
+  ! Initialize the diag mediator.
+  call diag_mediator_init(G, param_file, diag, doc_file_dir=dirs%output_directory)
 
   ! Initialize the diagnostics mask arrays.
   ! This step has to be done after call to MOM_initialize_state
@@ -1926,7 +1928,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   if (CS%use_ALE_algorithm) &
     call register_diags_TS_vardec(Time, G, param_file, CS)
 
-  call lock_tracer_registry(CS%tracer_Reg, diag, Time, G)
+  call lock_tracer_registry(CS%tracer_Reg)
   call callTree_waypoint("tracer registry now locked (initialize_MOM)")
 
   ! now register some diagnostics since tracer registry is locked
@@ -1959,8 +1961,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   ! This subroutine initializes any tracer packages.
   new_sim = ((dirs%input_filename(1:1) == 'n') .and. &
              (LEN_TRIM(dirs%input_filename) == 1))
-  call tracer_flow_control_init(.not.new_sim, Time, G, GV, CS%h, param_file, CS%OBC, &
-           CS%tracer_flow_CSp, CS%sponge_CSp, CS%ALE_sponge_CSp, CS%diag_to_Z_CSp)
+  call tracer_flow_control_init(.not.new_sim, Time, G, GV, CS%h, param_file, &
+             CS%diag, CS%OBC, CS%tracer_flow_CSp, CS%sponge_CSp, &
+             CS%ALE_sponge_CSp, CS%diag_to_Z_CSp)
 
   call cpu_clock_begin(id_clock_pass_init)
   call do_group_pass(CS%pass_uv_T_S_h, G%Domain)

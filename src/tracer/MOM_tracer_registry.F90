@@ -6,7 +6,7 @@ module MOM_tracer_registry
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_diag_mediator, only : diag_ctrl
+! use MOM_diag_mediator, only : diag_ctrl
 use MOM_checksums,     only : hchksum
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser,   only : get_param, log_version, param_file_type
@@ -63,7 +63,7 @@ end type tracer_type
 type, public :: tracer_registry_type
   integer                  :: ntr = 0           !< number of registered tracers
   type(tracer_type)        :: Tr(MAX_FIELDS_)   !< array of registered tracers
-  type(diag_ctrl), pointer :: diag              !< structure to regulate timing of diagnostics
+! type(diag_ctrl), pointer :: diag              !< structure to regulate timing of diagnostics
   logical                  :: locked = .false.  !< New tracers may be registered if locked=.false. 
                                                 !! When locked=.true.,no more tracers can be registered,
                                                 !! at which point common diagnostics can be set up 
@@ -154,11 +154,8 @@ end subroutine register_tracer
 
 !> This subroutine locks the tracer registry to prevent the addition of more
 !! tracers.  After locked=.true., can then register common diagnostics.
-subroutine lock_tracer_registry(Reg, diag, Time, G)
+subroutine lock_tracer_registry(Reg)
   type(tracer_registry_type), pointer    :: Reg    !< pointer to the tracer registry
-  type(diag_ctrl), target,    intent(in) :: diag   !< regulates diagnostic output
-  type(time_type), target,    intent(in) :: Time   !< time of the start of the run segment
-  type(ocean_grid_type),      intent(in) :: G      !< ocean grid type 
 
   if (.not. associated(Reg)) call MOM_error(WARNING, &
     "lock_tracer_registry called with an unassocaited registry.")
