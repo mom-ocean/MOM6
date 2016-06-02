@@ -19,13 +19,6 @@ module circle_obcs_initialization
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
 !***********************************************************************
 
-!***********************************************************************
-!*                                                                     *
-!>  The module configures the model for the "circle_obcs" experiment.  *
-!!  circle_obcs = Test of Open Boundary Conditions for an SSH anomaly  *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
-
 use MOM_sponge, only : sponge_CS, set_up_sponge_field, initialize_sponge
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
@@ -44,7 +37,7 @@ public circle_obcs_initialize_thickness
 
 contains
 
-!> This subroutine initializes layer thicknesses for the circle_obcs experiment
+!> This subroutine initializes layer thicknesses for the circle_obcs experiment.
 subroutine circle_obcs_initialize_thickness(h, G, GV, param_file)
   type(ocean_grid_type),   intent(in) :: G   !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV  !< The ocean's vertical grid structure.
@@ -106,4 +99,8 @@ subroutine circle_obcs_initialize_thickness(h, G, GV, param_file)
 
 end subroutine circle_obcs_initialize_thickness
 
+!> \class circle_obcs_initialization
+!!
+!! The module configures the model for the "circle_obcs" experiment.
+!! circle_obcs = Test of Open Boundary Conditions for an SSH anomaly.
 end module circle_obcs_initialization

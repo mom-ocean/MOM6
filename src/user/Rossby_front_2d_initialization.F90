@@ -142,7 +142,9 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, param_file)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: u  !< i-component of velocity [m/s]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: v  !< j-component of velocity [m/s]
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< Thickness [H]
-  type(param_file_type),                  intent(in)     :: param_file !< Parameter file handle
+  type(param_file_type),                  intent(in)     :: param_file !< A structure indicating the
+                                                               !! open file to parse for model
+                                                               !! parameter values.
 
   real    :: y              ! Non-dimensional coordinate across channel, 0..pi
   real    :: T_range        ! Range of salinities and temperatures over the vertical

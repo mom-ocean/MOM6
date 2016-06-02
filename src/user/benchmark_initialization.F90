@@ -19,12 +19,6 @@ module benchmark_initialization
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
 !***********************************************************************
 
-!***********************************************************************
-!*                                                                     *
-!*  The module configures the model for the benchmark experiment.      *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
-
 use MOM_sponge, only : sponge_CS, set_up_sponge_field, initialize_sponge
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
@@ -47,15 +41,13 @@ public benchmark_init_temperature_salinity
 contains
 
 ! -----------------------------------------------------------------------------
+!> This subroutine sets up the benchmark test case topography.
 subroutine benchmark_initialize_topography(D, G, param_file, max_depth)
-  type(ocean_grid_type),           intent(in) :: G
-  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: D
-  type(param_file_type),           intent(in) :: param_file
-  real,                            intent(in) :: max_depth
-! Arguments: D          - the bottom depth in m. Intent out.
-!  (in)      G          - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
+  type(ocean_grid_type),           intent(in) :: G          !< The ocean's grid structure.
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: D        !< the bottom depth in m.
+  type(param_file_type),           intent(in) :: param_file !< A structure indicating the open
+                                                   !! file to parse for model parameter values.
+  real,                            intent(in) :: max_depth  !< The Maximum depth.
 
 ! This subroutine sets up the benchmark test case topography
   real :: min_depth            ! The minimum and maximum depths in m.
@@ -95,25 +87,23 @@ end subroutine benchmark_initialize_topography
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
+!> This subroutine initializes layer thicknesses for the benchmark test case,
+!! by finding the depths of interfaces in a specified latitude-dependent
+!! temperature profile with an exponentially decaying thermocline on top of a
+!! linear stratification.
 subroutine benchmark_initialize_thickness(h, G, GV, param_file, eqn_of_state, P_ref)
-  type(ocean_grid_type),   intent(in) :: G
-  type(verticalGrid_type), intent(in) :: GV
-  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h
-  type(param_file_type),   intent(in) :: param_file
-  type(EOS_type),          pointer    :: eqn_of_state
-  real,                    intent(in) :: P_Ref
-! Arguments: h - The thickness that is being initialized.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      eqn_of_state - integer that selects the equatio of state
-!  (in)      P_Ref - The coordinate-density reference pressure in Pa.
+  type(ocean_grid_type),   intent(in) :: G                    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in) :: GV                   !< The ocean's vertical grid structure.
+  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h !< The thickness that is being
+                                                              !! initialized.
+  type(param_file_type),   intent(in) :: param_file           !< A structure indicating the open
+                                                              !! file to parse for model
+                                                              !! parameter values.
+  type(EOS_type),          pointer    :: eqn_of_state         !< integer that selects the
+                                                              !! equation of state.
+  real,                    intent(in) :: P_Ref                !< The coordinate-density
+                                                              !! reference pressure in Pa.
 
-!   This subroutine initializes layer thicknesses for the benchmark test case,
-! by finding the depths of interfaces in a specified latitude-dependent
-! temperature profile with an exponentially decaying thermocline on top of a
-! linear stratification.
   real :: e0(SZK_(G)+1)     ! The resting interface heights, in m, usually !
                             ! negative because it is positive upward.      !
   real :: e_pert(SZK_(G)+1) ! Interface height perturbations, positive     !
@@ -216,25 +206,24 @@ end subroutine benchmark_initialize_thickness
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
+!> This function puts the initial layer temperatures and salinities
+!! into T(:,:,:) and S(:,:,:).
 subroutine benchmark_init_temperature_salinity(T, S, G, GV, param_file, &
                eqn_of_state, P_Ref)
-  type(ocean_grid_type),               intent(in)  :: G
-  type(verticalGrid_type),             intent(in)  :: GV
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T, S
-  type(param_file_type),               intent(in)  :: param_file
-  type(EOS_type),                      pointer     :: eqn_of_state
-  real,                                intent(in)  :: P_Ref
-!  This function puts the initial layer temperatures and salinities  !
-! into T(:,:,:) and S(:,:,:).                                        !
+  type(ocean_grid_type),               intent(in)  :: G            !< The ocean's grid structure.
+  type(verticalGrid_type),             intent(in)  :: GV           !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T      !< The potential temperature
+                                                                   !! that is being initialized.
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S      !< The salinity that is being
+                                                                   !! initialized.
+  type(param_file_type),               intent(in)  :: param_file   !< A structure indicating the
+                                                                   !! open file to parse for
+                                                                   !! model parameter values.
+  type(EOS_type),                      pointer     :: eqn_of_state !< integer that selects the
+                                                                   !! equation of state.
+  real,                                intent(in)  :: P_Ref        !< The coordinate-density
+                                                                   !! reference pressure in Pa.
 
-! Arguments: T - The potential temperature that is being initialized.
-!  (out)     S - The salinity that is being initialized.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      eqn_of_state - integer that selects the equatio of state
-!  (in)      P_Ref - The coordinate-density reference pressure in Pa.
   real :: T0(SZK_(G)), S0(SZK_(G))
   real :: pres(SZK_(G))      ! Reference pressure in kg m-3.             !
   real :: drho_dT(SZK_(G))   ! Derivative of density with temperature in !
@@ -290,4 +279,7 @@ subroutine benchmark_init_temperature_salinity(T, S, G, GV, param_file, &
 end subroutine benchmark_init_temperature_salinity
 ! -----------------------------------------------------------------------------
 
+!! \class benchmark_initialization
+!!
+!! The module configures the model for the benchmark experiment.
 end module benchmark_initialization
