@@ -101,19 +101,17 @@ contains
 ! machinery to register and call the subroutines that initialize
 ! tracers and apply vertical column processes to tracers.
 
-subroutine call_tracer_register(G, param_file, CS, diag, tr_Reg, restart_CS)
+subroutine call_tracer_register(G, param_file, CS, tr_Reg, restart_CS)
   type(ocean_grid_type),        intent(in) :: G
   type(param_file_type),        intent(in) :: param_file
   type(tracer_flow_control_CS), pointer    :: CS
-  type(diag_ctrl), target,      intent(in) :: diag
-  type(tracer_registry_type),       pointer    :: tr_Reg
+  type(tracer_registry_type),   pointer    :: tr_Reg
   type(MOM_restart_CS),         pointer    :: restart_CS
 ! Argument:  G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
-!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  tr_Reg - A pointer that is set to point to the control structure
 !                  for the tracer advection and diffusion module.
 !  (in)      restart_CS - A pointer to the restart control structure.
@@ -165,31 +163,31 @@ subroutine call_tracer_register(G, param_file, CS, diag, tr_Reg, restart_CS)
 !  for some reason.  This then overrides the run-time selection from above.
   if (CS%use_USER_tracer_example) CS%use_USER_tracer_example = &
     USER_register_tracer_example(G, param_file, CS%USER_tracer_example_CSp, &
-                                 diag, tr_Reg, restart_CS)
+                                 tr_Reg, restart_CS)
   if (CS%use_DOME_tracer) CS%use_DOME_tracer = &
     register_DOME_tracer(G, param_file, CS%DOME_tracer_CSp, &
-                         diag, tr_Reg, restart_CS)
+                         tr_Reg, restart_CS)
   if (CS%use_ideal_age) CS%use_ideal_age = &
     register_ideal_age_tracer(G, param_file,  CS%ideal_age_tracer_CSp, &
-                              diag, tr_Reg, restart_CS)
+                              tr_Reg, restart_CS)
   if (CS%use_oil) CS%use_oil = &
     register_oil_tracer(G, param_file,  CS%oil_tracer_CSp, &
-                              diag, tr_Reg, restart_CS)
+                              tr_Reg, restart_CS)
   if (CS%use_advection_test_tracer) CS%use_advection_test_tracer = &
     register_advection_test_tracer(G, param_file, CS%advection_test_tracer_CSp, &
-                         diag, tr_Reg, restart_CS)
+                                   tr_Reg, restart_CS)
   if (CS%use_OCMIP2_CFC) CS%use_OCMIP2_CFC = &
     register_OCMIP2_CFC(G, param_file,  CS%OCMIP2_CFC_CSp, &
-                        diag, tr_Reg, restart_CS)
+                        tr_Reg, restart_CS)
 #ifdef _USE_GENERIC_TRACER
   if (CS%use_MOM_generic_tracer) CS%use_MOM_generic_tracer = &
     register_MOM_generic_tracer(G, param_file,  CS%MOM_generic_tracer_CSp, &
-                        diag, tr_Reg, restart_CS)
+                                tr_Reg, restart_CS)
 #endif
 
 end subroutine call_tracer_register
 
-subroutine tracer_flow_control_init(restart, day, G, GV, h, param_file, OBC, & 
+subroutine tracer_flow_control_init(restart, day, G, GV, h, param_file, diag, OBC, &
                                 CS, sponge_CSp, ALE_sponge_CSp, diag_to_Z_CSp)
   logical,                               intent(in) :: restart
   type(time_type), target,               intent(in) :: day
@@ -197,6 +195,7 @@ subroutine tracer_flow_control_init(restart, day, G, GV, h, param_file, OBC, &
   type(verticalGrid_type),               intent(in) :: GV
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
   type(param_file_type),                 intent(in) :: param_file
+  type(diag_ctrl), target,               intent(in) :: diag
   type(ocean_OBC_type),                  pointer    :: OBC
   type(tracer_flow_control_CS),          pointer    :: CS
   type(sponge_CS),                       pointer    :: sponge_CSp
@@ -211,6 +210,7 @@ subroutine tracer_flow_control_init(restart, day, G, GV, h, param_file, OBC, &
 !  (in)      G - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
 !  (in)      h - Layer thickness, in m (Boussinesq) or kg m-2 (non-Boussinesq).
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in)      OBC - This open boundary condition type specifies whether, where,
 !                  and what open boundary conditions are used.
 !  (in)      CS - The control structure returned by a previous call to
@@ -225,26 +225,26 @@ subroutine tracer_flow_control_init(restart, day, G, GV, h, param_file, OBC, &
 
 !  Add other user-provided calls here.
   if (CS%use_USER_tracer_example) &
-    call USER_initialize_tracer(restart, day, G, GV, h, OBC, CS%USER_tracer_example_CSp, &
+    call USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS%USER_tracer_example_CSp, &
                                 sponge_CSp, diag_to_Z_CSp)
   if (CS%use_DOME_tracer) &
-    call initialize_DOME_tracer(restart, day, G, GV, h, OBC, CS%DOME_tracer_CSp, &
+    call initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS%DOME_tracer_CSp, &
                                 sponge_CSp, diag_to_Z_CSp)
   if (CS%use_ideal_age) &
-    call initialize_ideal_age_tracer(restart, day, G, GV, h, OBC, CS%ideal_age_tracer_CSp, &
+    call initialize_ideal_age_tracer(restart, day, G, GV, h, diag, OBC, CS%ideal_age_tracer_CSp, &
                                      sponge_CSp, diag_to_Z_CSp)
   if (CS%use_oil) &
-    call initialize_oil_tracer(restart, day, G, GV, h, OBC, CS%oil_tracer_CSp, &
+    call initialize_oil_tracer(restart, day, G, GV, h, diag, OBC, CS%oil_tracer_CSp, &
                                      sponge_CSp, diag_to_Z_CSp)
   if (CS%use_advection_test_tracer) &
-    call initialize_advection_test_tracer(restart, day, G, GV, h, OBC, CS%advection_test_tracer_CSp, &
+    call initialize_advection_test_tracer(restart, day, G, GV, h, diag, OBC, CS%advection_test_tracer_CSp, &
                                 sponge_CSp, diag_to_Z_CSp)
   if (CS%use_OCMIP2_CFC) &
-    call initialize_OCMIP2_CFC(restart, day, G, GV, h, OBC, CS%OCMIP2_CFC_CSp, &
+    call initialize_OCMIP2_CFC(restart, day, G, GV, h, diag, OBC, CS%OCMIP2_CFC_CSp, &
                                 sponge_CSp, diag_to_Z_CSp)
 #ifdef _USE_GENERIC_TRACER
   if (CS%use_MOM_generic_tracer) &
-    call initialize_MOM_generic_tracer(restart, day, G, GV, h, param_file, OBC, &
+    call initialize_MOM_generic_tracer(restart, day, G, GV, h, param_file, diag, OBC, &
         CS%MOM_generic_tracer_CSp, sponge_CSp, ALE_sponge_CSp, diag_to_Z_CSp)
 #endif
 
