@@ -19,18 +19,11 @@ module adjustment_initialization
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
 !***********************************************************************
 
-!***********************************************************************
-!*                                                                     *
-!*  The module configures the model for the geostrophic adjustment     *
-!* test case.                                                          *
-!*                                                                     *
-!***********************************************************************
-
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : close_file, create_file, fieldtype, file_exists
+use MOM_io, only : close_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
 use MOM_io, only : write_field, slasher
 use MOM_variables, only : thermo_var_ptrs, ocean_OBC_type
@@ -58,22 +51,17 @@ public adjustment_initialize_temperature_salinity
 contains
 
 !------------------------------------------------------------------------------
-! Initialization of thicknesses
+!> Initialization of thicknesses.
+!! This subroutine initializes the layer thicknesses to be uniform.
 !------------------------------------------------------------------------------
 subroutine adjustment_initialize_thickness ( h, G, GV, param_file )
 
-  type(ocean_grid_type),   intent(in) :: G
-  type(verticalGrid_type), intent(in) :: GV
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: h
-  type(param_file_type),   intent(in) :: param_file
+  type(ocean_grid_type),   intent(in) :: G                    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in) :: GV                   !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: h !< The thickness that is being initialized.
+  type(param_file_type),   intent(in) :: param_file           !< A structure indicating the
+                                         !! open file to parse for model parameter values.
 
-! Arguments: h - The thickness that is being initialized.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-
-!  This subroutine initializes the layer thicknesses to be uniform.
   real :: e0(SZK_(G)+1)   ! The resting interface heights, in m, usually !
                           ! negative because it is positive upward.      !
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
@@ -204,15 +192,17 @@ end subroutine adjustment_initialize_thickness
 
 
 !------------------------------------------------------------------------------
-! Initialization of temperature and salinity
+!> Initialization of temperature and salinity.
 !------------------------------------------------------------------------------
 subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, param_file, &
                                                     eqn_of_state)
-  type(ocean_grid_type),               intent(in)  :: G
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T, S
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h
-  type(param_file_type),               intent(in)  :: param_file
-  type(EOS_type),                      pointer     :: eqn_of_state
+  type(ocean_grid_type),   intent(in) :: G                    !< The ocean's grid structure.
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< The temperature that is being initialized.
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< The salinity that is being initialized.
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< The model thickness.
+  type(param_file_type),   intent(in) :: param_file           !< A structure indicating the
+                                         !! open file to parse for model parameter values.
+  type(EOS_type),                 pointer     :: eqn_of_state !< Equation of state.
 
   integer   :: i, j, k, is, ie, js, je, nz
   real      :: x, y, yy
@@ -298,4 +288,8 @@ subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, param_file, 
 
 end subroutine adjustment_initialize_temperature_salinity
 
+!> \class adjustment_initialization
+!!
+!! The module configures the model for the geostrophic adjustment
+!! test case.
 end module adjustment_initialization

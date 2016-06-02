@@ -19,20 +19,12 @@ module seamount_initialization
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
 !***********************************************************************
 
-!***********************************************************************
-!*                                                                     *
-!*  The module configures the model for the idealized seamount         *
-!* test case.                                                          *
-!*                                                                     *
-!***********************************************************************
-
-
 use MOM_domains, only : sum_across_PEs
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : close_file, create_file, fieldtype, file_exists
+use MOM_io, only : close_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
 use MOM_io, only : write_field, slasher, vardesc
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
@@ -62,15 +54,15 @@ public seamount_initialize_temperature_salinity
 ! -----------------------------------------------------------------------------
 contains
 
-!------------------------------------------------------------------------------
-! Initialization of topography
-!------------------------------------------------------------------------------
+!> Initialization of topography.
 subroutine seamount_initialize_topography ( D, G, param_file, max_depth )
   ! Arguments 
-  type(ocean_grid_type), intent(in) :: G
-  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: D
-  type(param_file_type), intent(in) :: param_file
-  real,                  intent(in) :: max_depth
+  type(ocean_grid_type), intent(in)           :: G          !< The ocean's grid structure.
+  real, intent(out), dimension(SZI_(G),SZJ_(G)) :: D        !< The bottom depth in m.
+  type(param_file_type), intent(in)           :: param_file !< A structure indicating the
+                                                            !! open file to parse for model
+                                                            !! parameter values.
+  real,                  intent(in)           :: max_depth  !< Maximum depth.
   
   ! Local variables 
   integer   :: i, j
@@ -96,23 +88,17 @@ subroutine seamount_initialize_topography ( D, G, param_file, max_depth )
 
 end subroutine seamount_initialize_topography
 
-!------------------------------------------------------------------------------
-! Initialization of thicknesses
-!------------------------------------------------------------------------------
+!> Initialization of thicknesses.
+!! This subroutine initializes the layer thicknesses to be uniform.
 subroutine seamount_initialize_thickness ( h, G, GV, param_file )
+  type(ocean_grid_type), intent(in)           :: G          !< The ocean's grid structure.
+  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h !< The thicknesses being
+                                                            !! initialized.
+  type(verticalGrid_type), intent(in)         :: GV         !< The ocean's vertical grid structure.
+  type(param_file_type), intent(in)           :: param_file !< A structure indicating the
+                                                            !! open file to parse for model
+                                                            !! parameter values.
 
-  type(ocean_grid_type),   intent(in) :: G
-  type(verticalGrid_type), intent(in) :: GV
-  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h
-  type(param_file_type),   intent(in) :: param_file
-
-! Arguments: h - The thickness that is being initialized.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-
-!  This subroutine initializes the layer thicknesses to be uniform.
   real :: e0(SZK_(G)+1)   ! The resting interface heights, in m, usually !
                           ! negative because it is positive upward.      !
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
@@ -130,7 +116,6 @@ subroutine seamount_initialize_thickness ( h, G, GV, param_file )
   call get_param(param_file,mod,"MIN_THICKNESS",min_thickness,'Minimum thickness for layer',units='m',default=1.0e-3)
   call get_param(param_file,mod,"REGRIDDING_COORDINATE_MODE",verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE)
-
  
   ! WARNING: this routine specifies the interface heights so that the last layer
   !          is vanished, even at maximum depth. In order to have a uniform
@@ -280,4 +265,8 @@ subroutine seamount_initialize_temperature_salinity ( T, S, h, G, GV, param_file
   
 end subroutine seamount_initialize_temperature_salinity
 
+!> \class seamount_initialization
+!!
+!! The module configures the model for the idealized seamount
+!! test case.
 end module seamount_initialization
