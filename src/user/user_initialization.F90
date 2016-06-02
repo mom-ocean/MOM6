@@ -47,7 +47,7 @@ contains
 
 !> Set vertical coordinates.
 subroutine USER_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
-  type(verticalGrid_type), intent(in)  :: GV         !< The ocean's vertical grid structure.
+  type(verticalGrid_type), intent(in)  :: GV         !< The ocean's vertical grid
                                                      !! structure.
   real, dimension(:),      intent(out) :: Rlay       !< Layer potential density.
   real, dimension(:),      intent(out) :: g_prime    !< The reduced gravity at
