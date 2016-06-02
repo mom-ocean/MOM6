@@ -81,6 +81,7 @@ use MOM_dynamics_unsplit_RK2,  only : MOM_dyn_unsplit_RK2_CS
 use MOM_dynamics_legacy_split, only : step_MOM_dyn_legacy_split, register_restarts_dyn_legacy_split
 use MOM_dynamics_legacy_split, only : initialize_dyn_legacy_split, end_dyn_legacy_split
 use MOM_dynamics_legacy_split, only : adjustments_dyn_legacy_split, MOM_dyn_legacy_split_CS
+use MOM_dyn_horgrid,           only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
 use MOM_EOS,                   only : EOS_init
 use MOM_error_checking,        only : check_redundant
 use MOM_grid,                  only : MOM_grid_init, ocean_grid_type, MOM_grid_end
@@ -111,6 +112,7 @@ use MOM_tracer_registry,       only : add_tracer_diagnostics, tracer_registry_ty
 use MOM_tracer_registry,       only : lock_tracer_registry, tracer_registry_end
 use MOM_tracer_flow_control,   only : call_tracer_register, tracer_flow_control_CS
 use MOM_tracer_flow_control,   only : tracer_flow_control_init, call_tracer_surface_state
+use MOM_transcribe_grid,       only : copy_dyngrid_to_MOM_grid, copy_MOM_grid_to_dyngrid
 use MOM_vert_friction,         only : vertvisc, vertvisc_remnant
 use MOM_vert_friction,         only : vertvisc_limit_vel, vertvisc_init
 use MOM_verticalGrid,          only : verticalGrid_type, verticalGridInit, verticalGridEnd
@@ -1363,6 +1365,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   ! local
   type(ocean_grid_type), pointer :: G ! pointer to a structure with metrics and related
   type(verticalGrid_type), pointer :: GV => NULL()
+  type(dyn_horgrid_type), pointer :: dG => NULL()
   type(diag_ctrl),       pointer :: diag
 
   character(len=4), parameter :: vers_num = 'v2.0'
@@ -1388,6 +1391,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   logical :: symmetric         ! If true, use symmetric memory allocation.
   logical :: save_IC           ! If true, save the initial conditions.
   logical :: do_unit_tests     ! If true, call unit tests.
+  logical :: test_grid_copy = .false.
 
   type(time_type)                 :: Start_time
   type(ocean_internal_state)      :: MOM_internal_state
@@ -1399,7 +1403,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   endif
   allocate(CS)
 
-  G => CS%G
+  if (test_grid_copy) then ; allocate(G)
+  else ; G => CS%G ; endif
+
   CS%Time => Time
 
   id_clock_init = cpu_clock_id('Ocean Initialization', grain=CLOCK_SUBCOMPONENT)
@@ -1826,6 +1832,31 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   endif
   if ( CS%use_ALE_algorithm ) call ALE_updateVerticalGridType( CS%ALE_CSp, GV )
 
+  ! At this point, there will be pointers being set, so the final grid type
+  ! that will persist through the run has to be used.
+  if (test_grid_copy) then
+    !  Copy the data from the temporary grid to the dyn_hor_grid to CS%G.
+    call create_dyn_horgrid(dG, G%HI)
+    call clone_MOM_domain(G%Domain, dG%Domain)
+
+    call clone_MOM_domain(G%Domain, CS%G%Domain)
+    call MOM_grid_init(CS%G, param_file)
+
+    call copy_MOM_grid_to_dyngrid(G, dg)
+    call copy_dyngrid_to_MOM_grid(dg, CS%G)
+    ! Copy a common variable from the vertical grid to the horizontal grid.
+    ! Consider removing this later?
+    CS%G%ke = GV%ke
+
+    call destroy_dyn_horgrid(dG)
+    call MOM_grid_end(G) ; deallocate(G)
+
+    G => CS%G
+
+    if (CS%debug .or. CS%G%symmetric) &
+      call clone_MOM_domain(CS%G%Domain, CS%G%Domain_aux, symmetric=.false.)
+  endif
+  
   diag    => CS%diag
   ! Initialize the diag mediator.
   call diag_mediator_init(G, param_file, diag, doc_file_dir=dirs%output_directory)
