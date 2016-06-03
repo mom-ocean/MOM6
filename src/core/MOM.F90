@@ -30,6 +30,7 @@ use MOM_cpu_clock,            only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_RO
 use MOM_coms,                 only : reproducing_sum
 use MOM_coord_initialization, only : MOM_initialize_coord
 use MOM_diag_mediator,        only : diag_mediator_init, enable_averaging
+use MOM_diag_mediator,        only : diag_mediator_infrastructure_init
 use MOM_diag_mediator,        only : diag_set_thickness_ptr, diag_update_target_grids
 use MOM_diag_mediator,        only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator,        only : register_diag_field, register_static_field
@@ -1438,6 +1439,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   call MOM_checksums_init(param_file)
 
+  call diag_mediator_infrastructure_init()
   call MOM_io_init(param_file)
   call MOM_grid_init(G, param_file)
   call verticalGridInit( param_file, CS%GV )
