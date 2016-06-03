@@ -19,13 +19,6 @@ module external_gwave_initialization
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
 !***********************************************************************
 
-!**************************************************************************
-!*                                                                        *
-!*  The module configures the model for the "external_gwave" experiment.  *
-!*  external_gwave = External Gravity Wave                                *
-!*                                                                        *
-!********+*********+*********+*********+*********+*********+*********+*****
-
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
@@ -41,16 +34,15 @@ public external_gwave_initialize_thickness
 contains
 
 ! -----------------------------------------------------------------------------
+!> This subroutine initializes layer thicknesses for the external_gwave experiment.
 subroutine external_gwave_initialize_thickness(h, G, param_file)
-  type(ocean_grid_type), intent(in) :: G
-  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h
-  type(param_file_type), intent(in) :: param_file
-! Arguments: h - The thickness that is being initialized.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
+  type(ocean_grid_type), intent(in) :: G                      !< The ocean's grid structure.
+  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h !< The thickness that is being
+                                                              !! initialized. 
+  type(param_file_type), intent(in) :: param_file             !< A structure indicating the
+                                                              !! open file to parse for model
+                                                              !! parameter values.
 
-!  This subroutine initializes layer thicknesses for the external_gwave experiment
   real :: e0(SZK_(G))     ! The resting interface heights, in m, usually !
                           ! negative because it is positive upward.      !
   real :: e_pert(SZK_(G)) ! Interface height perturbations, positive     !
@@ -91,4 +83,8 @@ subroutine external_gwave_initialize_thickness(h, G, param_file)
 end subroutine external_gwave_initialize_thickness
 ! -----------------------------------------------------------------------------
 
+!> \class external_gwave_initialization
+!!
+!! The module configures the model for the "external_gwave" experiment.
+!! external_gwave = External Gravity Wave
 end module external_gwave_initialization
