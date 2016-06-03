@@ -71,6 +71,7 @@ public post_data_1d_k
 public safe_alloc_ptr, safe_alloc_alloc
 public enable_averaging, disable_averaging, query_averaging_enabled
 public diag_mediator_init, diag_mediator_end, set_diag_mediator_grid
+public diag_mediator_infrastructure_init
 public diag_mediator_close_registration, get_diag_time_end
 public diag_axis_init, ocean_register_diag, register_static_field
 public register_scalar_field
@@ -1646,11 +1647,17 @@ function ocean_register_diag(var_desc, G, diag_CS, day)
 
 end function ocean_register_diag
 
-subroutine diag_mediator_init(G, param_file, diag_cs, err_msg, doc_file_dir)
+subroutine diag_mediator_infrastructure_init(err_msg)
+  ! This subroutine initializes the FMS diag_manager.
+  character(len=*), optional, intent(out)   :: err_msg
+
+  call diag_manager_init(err_msg=err_msg)
+end subroutine diag_mediator_infrastructure_init
+
+subroutine diag_mediator_init(G, param_file, diag_cs, doc_file_dir)
   type(ocean_grid_type), target, intent(inout) :: G
   type(param_file_type),      intent(in)    :: param_file
   type(diag_ctrl),            intent(inout) :: diag_cs
-  character(len=*), optional, intent(out)   :: err_msg
   character(len=*), optional, intent(in)    :: doc_file_dir
 
   ! This subroutine initializes the diag_mediator and the diag_manager.
@@ -1665,8 +1672,6 @@ subroutine diag_mediator_init(G, param_file, diag_cs, err_msg, doc_file_dir)
   id_clock_diag_mediator = cpu_clock_id('(Ocean diagnostics framework)', grain=CLOCK_MODULE)
   id_clock_diag_z_remap = cpu_clock_id('(Ocean diagnostics remapping)', grain=CLOCK_ROUTINE)
   id_clock_diag_grid_updates = cpu_clock_id('(Ocean diagnostics grid updates)', grain=CLOCK_ROUTINE)
-
-  call diag_manager_init(err_msg=err_msg)
 
   ! Allocate and initialise list of all diagnostics (and variants)
   allocate(diag_cs%diags(DIAG_ALLOC_CHUNK_SIZE))
