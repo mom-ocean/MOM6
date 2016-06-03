@@ -1067,7 +1067,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq, iters
   integer :: wd_halos(2)
   logical :: solo_ice_sheet, read_TideAmp
-  character(len=128) :: Tideamp_file
+  character(len=240) :: Tideamp_file
   real    :: utide
 
   if (associated(CS)) then
@@ -1733,7 +1733,7 @@ subroutine initialize_shelf_mass(G, param_file, CS, new_sim)
 
   integer :: i, j, is, ie, js, je
   logical :: read_shelf_area, new_sim_2
-  character(len=200) :: config, inputdir, shelf_file, filename
+  character(len=240) :: config, inputdir, shelf_file, filename
   character(len=120) :: shelf_mass_var  ! The name of shelf mass in the file.
   character(len=120) :: shelf_area_var ! The name of shelf area in the file.
   character(len=40)  :: mod = "MOM_ice_shelf"

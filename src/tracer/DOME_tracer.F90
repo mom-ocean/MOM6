@@ -90,7 +90,7 @@ end type p3d
 type, public :: DOME_tracer_CS ; private
   logical :: coupled_tracers = .false.  ! These tracers are not offered to the
                                         ! coupler.
-  character(len = 200) :: tracer_IC_file ! The full path to the IC file, or " "
+  character(len=200) :: tracer_IC_file ! The full path to the IC file, or " "
                                    ! to initialize internally.
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
   type(tracer_registry_type), pointer :: tr_Reg => NULL()

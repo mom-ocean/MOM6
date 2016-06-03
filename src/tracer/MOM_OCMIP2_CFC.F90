@@ -103,7 +103,7 @@ type p3d
 end type p3d
 
 type, public :: OCMIP2_CFC_CS ; private
-  character(len = 200) :: IC_file ! The file in which the CFC initial values can
+  character(len=200) :: IC_file ! The file in which the CFC initial values can
                     ! be found, or an empty string for internal initilaization.
   logical :: Z_IC_file ! If true, the IC_file is in Z-space.  The default is false..
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.

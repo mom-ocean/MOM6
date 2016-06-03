@@ -94,7 +94,7 @@ type, public :: oil_tracer_CS ; private
   integer :: ntr    ! The number of tracers that are actually used.
   logical :: coupled_tracers = .false.  ! These tracers are not offered to the
                                         ! coupler.
-  character(len = 200) :: IC_file ! The file in which the age-tracer initial values
+  character(len=200) :: IC_file ! The file in which the age-tracer initial values
                     ! can be found, or an empty string for internal initialization.
   logical :: Z_IC_file ! If true, the IC_file is in Z-space.  The default is false.
   real :: oil_source_longitude, oil_source_latitude ! Lat,lon of source location (geographic)
