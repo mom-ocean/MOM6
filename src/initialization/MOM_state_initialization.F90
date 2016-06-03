@@ -127,7 +127,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
 
   character(len=200) :: filename   ! The name of an input file.
   character(len=200) :: filename2  ! The name of an input files.
-  character(len = 200) :: inputdir ! The directory where NetCDF input files are.
+  character(len=200) :: inputdir   ! The directory where NetCDF input files are.
   character(len=200) :: config
   logical :: from_Z_file, useALE
   logical :: new_sim
