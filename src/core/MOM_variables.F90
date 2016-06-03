@@ -264,10 +264,10 @@ type, public :: ocean_OBC_type
                             ! and true for all other values.
   ! The following apply at points with OBC_kind_[uv] = OBC_FLATHER_x.
   real, pointer, dimension(:,:,:) :: &
-    rx_old_u => NULL(), &  ! The rx_old_u value for radition coeff for u-velocity in x-direction
-    ry_old_v => NULL(), &  ! The ry_old_v value for radition coeff for v-velocity in y-direction
-    rx_old_h => NULL(), &  ! The rx_old_h value for radition coeff for layer thickness h in x-direction
-    ry_old_h => NULL()     ! The ry_old_h value for radition coeff for layer thickness h in y-direction
+    rx_old_u => NULL(), &  ! The rx_old_u value for radiation coeff for u-velocity in x-direction
+    ry_old_v => NULL(), &  ! The ry_old_v value for radiation coeff for v-velocity in y-direction
+    rx_old_h => NULL(), &  ! The rx_old_h value for radiation coeff for layer thickness h in x-direction
+    ry_old_h => NULL()     ! The ry_old_h value for radiation coeff for layer thickness h in y-direction
 
   !   The following can be used to specify the outer-domain values of the
   ! surface height and barotropic velocity.  If these are not allocated, the
