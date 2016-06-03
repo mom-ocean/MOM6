@@ -54,6 +54,9 @@ use DOME_tracer, only : DOME_tracer_end, DOME_tracer_CS
 use ideal_age_example, only : register_ideal_age_tracer, initialize_ideal_age_tracer
 use ideal_age_example, only : ideal_age_tracer_column_physics, ideal_age_tracer_surface_state
 use ideal_age_example, only : ideal_age_stock, ideal_age_example_end, ideal_age_tracer_CS
+use regional_dyes, only : register_dye_tracer, initialize_dye_tracer
+use regional_dyes, only : dye_tracer_column_physics, dye_tracer_surface_state
+use regional_dyes, only : dye_stock, regional_dyes_end, dye_tracer_CS
 use MOM_OCMIP2_CFC, only : register_OCMIP2_CFC, initialize_OCMIP2_CFC
 use MOM_OCMIP2_CFC, only : OCMIP2_CFC_column_physics, OCMIP2_CFC_surface_state
 use MOM_OCMIP2_CFC, only : OCMIP2_CFC_stock, OCMIP2_CFC_end, OCMIP2_CFC_CS
@@ -80,6 +83,7 @@ type, public :: tracer_flow_control_CS ; private
   logical :: use_USER_tracer_example = .false.
   logical :: use_DOME_tracer = .false.
   logical :: use_ideal_age = .false.
+  logical :: use_regional_dyes = .false.
   logical :: use_oil = .false.
   logical :: use_advection_test_tracer = .false.
   logical :: use_OCMIP2_CFC = .false.
@@ -87,6 +91,7 @@ type, public :: tracer_flow_control_CS ; private
   type(USER_tracer_example_CS), pointer :: USER_tracer_example_CSp => NULL()
   type(DOME_tracer_CS), pointer :: DOME_tracer_CSp => NULL()
   type(ideal_age_tracer_CS), pointer :: ideal_age_tracer_CSp => NULL()
+  type(dye_tracer_CS), pointer :: dye_tracer_CSp => NULL()
   type(oil_tracer_CS), pointer :: oil_tracer_CSp => NULL()
   type(advection_test_tracer_CS), pointer :: advection_test_tracer_CSp => NULL()
   type(OCMIP2_CFC_CS), pointer :: OCMIP2_CFC_CSp => NULL()
@@ -138,6 +143,9 @@ subroutine call_tracer_register(G, param_file, CS, tr_Reg, restart_CS)
   call get_param(param_file, mod, "USE_IDEAL_AGE_TRACER", CS%use_ideal_age, &
                  "If true, use the ideal_age_example tracer package.", &
                  default=.false.)
+  call get_param(param_file, mod, "USE_REGIONAL_DYES", CS%use_regional_dyes, &
+                 "If true, use the regional_dyes tracer package.", &
+                 default=.false.)
   call get_param(param_file, mod, "USE_OIL_TRACER", CS%use_oil, &
                  "If true, use the oil_tracer tracer package.", &
                  default=.false.)
@@ -170,9 +178,12 @@ subroutine call_tracer_register(G, param_file, CS, tr_Reg, restart_CS)
   if (CS%use_ideal_age) CS%use_ideal_age = &
     register_ideal_age_tracer(G, param_file,  CS%ideal_age_tracer_CSp, &
                               tr_Reg, restart_CS)
+  if (CS%use_regional_dyes) CS%use_regional_dyes = &
+    register_dye_tracer(G, param_file,  CS%dye_tracer_CSp, &
+                        tr_Reg, restart_CS)
   if (CS%use_oil) CS%use_oil = &
     register_oil_tracer(G, param_file,  CS%oil_tracer_CSp, &
-                              tr_Reg, restart_CS)
+                        tr_Reg, restart_CS)
   if (CS%use_advection_test_tracer) CS%use_advection_test_tracer = &
     register_advection_test_tracer(G, param_file, CS%advection_test_tracer_CSp, &
                                    tr_Reg, restart_CS)
@@ -193,7 +204,7 @@ subroutine tracer_flow_control_init(restart, day, G, GV, h, param_file, diag, OB
   type(time_type), target,               intent(in) :: day
   type(ocean_grid_type),                 intent(inout) :: G
   type(verticalGrid_type),               intent(in) :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
   type(param_file_type),                 intent(in) :: param_file
   type(diag_ctrl), target,               intent(in) :: diag
   type(ocean_OBC_type),                  pointer    :: OBC
@@ -233,6 +244,9 @@ subroutine tracer_flow_control_init(restart, day, G, GV, h, param_file, diag, OB
   if (CS%use_ideal_age) &
     call initialize_ideal_age_tracer(restart, day, G, GV, h, diag, OBC, CS%ideal_age_tracer_CSp, &
                                      sponge_CSp, diag_to_Z_CSp)
+  if (CS%use_regional_dyes) &
+    call initialize_dye_tracer(restart, day, G, GV, h, diag, OBC, CS%dye_tracer_CSp, &
+                                     sponge_CSp, diag_to_Z_CSp)
   if (CS%use_oil) &
     call initialize_oil_tracer(restart, day, G, GV, h, diag, OBC, CS%oil_tracer_CSp, &
                                      sponge_CSp, diag_to_Z_CSp)
@@ -251,8 +265,8 @@ subroutine tracer_flow_control_init(restart, day, G, GV, h, param_file, diag, OB
 end subroutine tracer_flow_control_init
 
 subroutine get_chl_from_model(Chl_array, G, CS)
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(out) :: Chl_array
   type(ocean_grid_type),                 intent(in)  :: G
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: Chl_array
   type(tracer_flow_control_CS),          pointer     :: CS
 ! Arguments: Chl_array - The array into which the model's Chlorophyll-A
 !                        concentrations in mg m-3 are to be read.
@@ -307,11 +321,11 @@ subroutine call_tracer_set_forcing(state, fluxes, day_start, day_interval, G, CS
 end subroutine call_tracer_set_forcing
 
 subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, dt, G, GV, tv, optics, CS)
-  type(ocean_grid_type),                 intent(in) :: G
-  type(verticalGrid_type),               intent(in) :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h_old, h_new, ea, eb
   type(forcing),                         intent(in) :: fluxes
   real,                                  intent(in) :: dt
+  type(ocean_grid_type),                 intent(in) :: G
+  type(verticalGrid_type),               intent(in) :: GV
   type(thermo_var_ptrs),                 intent(in) :: tv
   type(optics_type),                     pointer    :: optics
   type(tracer_flow_control_CS),          pointer    :: CS
@@ -349,6 +363,9 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, dt, G, GV, tv, o
   if (CS%use_ideal_age) &
     call ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
                                          G, GV, CS%ideal_age_tracer_CSp)
+  if (CS%use_regional_dyes) &
+    call dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                         G, GV, CS%dye_tracer_CSp)
   if (CS%use_oil) &
     call oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
                                    G, GV, CS%oil_tracer_CSp, tv)
@@ -370,9 +387,9 @@ end subroutine call_tracer_column_fns
 
 subroutine call_tracer_stocks(h, stock_values, G, GV, CS, stock_names, stock_units, &
                               num_stocks, stock_index, got_min_max,global_min,  global_max,xgmin, ygmin, zgmin, xgmax, ygmax, zgmax)
-  type(ocean_grid_type),                    intent(in)  :: G
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_),    intent(in)  :: h
   real, dimension(:),                       intent(out) :: stock_values
+  type(ocean_grid_type),                    intent(in)  :: G
   type(verticalGrid_type),                  intent(in)  :: GV
   type(tracer_flow_control_CS),             pointer     :: CS
   character(len=*), dimension(:), optional, intent(out) :: stock_names
@@ -429,6 +446,12 @@ subroutine call_tracer_stocks(h, stock_values, G, GV, CS, stock_names, stock_uni
     ns = ideal_age_stock(h, values, G, GV, CS%ideal_age_tracer_CSp, &
                          names, units, stock_index)
     call store_stocks("ideal_age_example", ns, names, units, values, index, &
+           stock_values, set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
+  endif
+  if (CS%use_regional_dyes) then
+    ns = dye_stock(h, values, G, GV, CS%dye_tracer_CSp, &
+                         names, units, stock_index)
+    call store_stocks("regional_dyes", ns, names, units, values, index, &
            stock_values, set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
   endif
   if (CS%use_oil) then
@@ -511,9 +534,9 @@ end subroutine store_stocks
 
 subroutine call_tracer_surface_state(state, h, G, CS)
   type(surface),                         intent(inout) :: state
-  type(ocean_grid_type),                    intent(in) :: G
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
-  type(tracer_flow_control_CS),             pointer    :: CS
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
+  type(ocean_grid_type),                 intent(in) :: G
+  type(tracer_flow_control_CS),          pointer    :: CS
 !   This subroutine calls all registered tracer packages to enable them to
 ! add to the surface state returned to the coupler. These routines are optional.
 
@@ -534,6 +557,8 @@ subroutine call_tracer_surface_state(state, h, G, CS)
     call DOME_tracer_surface_state(state, h, G, CS%DOME_tracer_CSp)
   if (CS%use_ideal_age) &
     call ideal_age_tracer_surface_state(state, h, G, CS%ideal_age_tracer_CSp)
+  if (CS%use_regional_dyes) &
+    call dye_tracer_surface_state(state, h, G, CS%dye_tracer_CSp)
   if (CS%use_oil) &
     call oil_tracer_surface_state(state, h, G, CS%oil_tracer_CSp)
   if (CS%use_advection_test_tracer) &
@@ -554,6 +579,7 @@ subroutine tracer_flow_control_end(CS)
     call USER_tracer_example_end(CS%USER_tracer_example_CSp)
   if (CS%use_DOME_tracer) call DOME_tracer_end(CS%DOME_tracer_CSp)
   if (CS%use_ideal_age) call ideal_age_example_end(CS%ideal_age_tracer_CSp)
+  if (CS%use_regional_dyes) call regional_dyes_end(CS%dye_tracer_CSp)
   if (CS%use_oil) call oil_tracer_end(CS%oil_tracer_CSp)
   if (CS%use_advection_test_tracer) call advection_test_tracer_end(CS%advection_test_tracer_CSp)
   if (CS%use_OCMIP2_CFC) call OCMIP2_CFC_end(CS%OCMIP2_CFC_CSp)
