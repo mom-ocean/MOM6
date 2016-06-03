@@ -118,6 +118,7 @@ type, public :: dye_tracer_CS ; private
   type(MOM_restart_CS), pointer :: restart_CSp => NULL()
 
   type(vardesc), allocatable :: tr_desc(:)
+  logical :: tracers_may_reinit = .false. ! hard-coding here (mjh)
 end type dye_tracer_CS
 
 contains
@@ -247,8 +248,8 @@ function register_dye_tracer(G, param_file, CS, tr_Reg, &
     call query_vardesc(CS%tr_desc(m), name=var_name, &
                        caller="register_dye_tracer")
 !    ! Register the tracer for the restart file.
-!    call register_restart_field(tr_ptr, CS%tr_desc(m), &
-!                                .not.CS%tracers_may_reinit, restart_CS)
+    call register_restart_field(tr_ptr, CS%tr_desc(m), &
+                                .not.CS%tracers_may_reinit, restart_CS)
     ! Register the tracer for horizontal advection & diffusion.
     call register_tracer(tr_ptr, CS%tr_desc(m), param_file, G, tr_Reg, &
                          tr_desc_ptr=CS%tr_desc(m))
