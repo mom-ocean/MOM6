@@ -2522,7 +2522,7 @@ function getCoordinateInterfaces( CS )
       call MOM_error(FATAL, 'MOM_regridding, getCoordinateInterfaces: '//&
                             'target densities not set!')
 
-    getCoordinateInterfaces = CS%target_density
+    getCoordinateInterfaces(:) = CS%target_density(:)
   else
     getCoordinateInterfaces(1) = 0.
     do k = 1, CS%nk
