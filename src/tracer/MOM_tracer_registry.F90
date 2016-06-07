@@ -10,10 +10,11 @@ module MOM_tracer_registry
 use MOM_checksums,     only : hchksum
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser,   only : get_param, log_version, param_file_type
+use MOM_hor_index,     only : hor_index_type
 use MOM_grid,          only : ocean_grid_type
 use MOM_io,            only : vardesc, query_vardesc
 use MOM_time_manager,  only : time_type
-use MOM_verticalGrid, only : verticalGrid_type
+use MOM_verticalGrid,  only : verticalGrid_type
 
 implicit none ; private
 
@@ -73,12 +74,12 @@ end type tracer_registry_type
 contains
 
 !> This subroutine registers a tracer to be advected and laterally diffused.
-subroutine register_tracer(tr1, tr_desc, param_file, G, GV, Reg, tr_desc_ptr, ad_x, ad_y,&
+subroutine register_tracer(tr1, tr_desc, param_file, HI, GV, Reg, tr_desc_ptr, ad_x, ad_y,&
                            df_x, df_y, OBC_inflow, OBC_in_u, OBC_in_v,            &
                            ad_2d_x, ad_2d_y, df_2d_x, df_2d_y, advection_xy)
-  type(ocean_grid_type),          intent(in)    :: G            !< ocean grid type 
+  type(hor_index_type),           intent(in)    :: HI           !< horizontal index type 
   type(verticalGrid_type),        intent(in)    :: GV           !< ocean vertical grid structure 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), target :: tr1      !< pointer to the tracer (concentration units)
+  real, dimension(SZI_(HI),SZJ_(HI),SZK_(GV)), target :: tr1    !< pointer to the tracer (concentration units)
   type(vardesc),         intent(in)             :: tr_desc      !< metadata about the tracer
   type(param_file_type), intent(in)             :: param_file   !< file to parse for  model parameter values
   type(tracer_registry_type), pointer           :: Reg          !< pointer to the tracer registry

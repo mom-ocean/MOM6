@@ -86,6 +86,7 @@ use MOM_dyn_horgrid,           only : dyn_horgrid_type, create_dyn_horgrid, dest
 use MOM_EOS,                   only : EOS_init
 use MOM_error_checking,        only : check_redundant
 use MOM_grid,                  only : MOM_grid_init, ocean_grid_type, MOM_grid_end
+use MOM_hor_index,             only : hor_index_type
 use MOM_hor_visc,              only : horizontal_viscosity, hor_visc_init
 use MOM_interface_heights,     only : find_eta
 use MOM_lateral_mixing_coeffs, only : calc_slope_functions, VarMix_init
@@ -1686,8 +1687,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     CS%vd_S = var_desc(name="S",units="PPT",longname="Salinity",&
                        cmor_field_name="so",cmor_units="ppt",   &
                        conversion=0.001)
-    call register_tracer(CS%tv%T, CS%vd_T, param_file, G, GV, CS%tracer_Reg, CS%vd_T)
-    call register_tracer(CS%tv%S, CS%vd_S, param_file, G, GV, CS%tracer_Reg, CS%vd_S)
+    call register_tracer(CS%tv%T, CS%vd_T, param_file, G%HI, GV, CS%tracer_Reg, CS%vd_T)
+    call register_tracer(CS%tv%S, CS%vd_S, param_file, G%HI, GV, CS%tracer_Reg, CS%vd_S)
   endif
   if (CS%use_frazil) then
     allocate(CS%tv%frazil(isd:ied,jsd:jed)) ; CS%tv%frazil(:,:) = 0.0
@@ -1772,7 +1773,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   ! This subroutine calls user-specified tracer registration routines.
   ! Additional calls can be added to MOM_tracer_flow_control.F90.
-  call call_tracer_register(G, GV, param_file, CS%tracer_flow_CSp, &
+  call call_tracer_register(G%HI, GV, param_file, CS%tracer_flow_CSp, &
                             CS%tracer_Reg, CS%restart_CSp)
 
   call MEKE_alloc_register_restart(G, param_file, CS%MEKE, CS%restart_CSp)
@@ -1981,7 +1982,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call tracer_hor_diff_init(Time, G, param_file, diag, CS%tracer_diff_CSp, CS%neutral_diffusion_CSp)
 
   if (CS%use_ALE_algorithm) &
-    call register_diags_TS_vardec(Time, G, GV, param_file, CS)
+    call register_diags_TS_vardec(Time, G%HI, GV, param_file, CS)
 
   call lock_tracer_registry(CS%tracer_Reg)
   call callTree_waypoint("tracer registry now locked (initialize_MOM)")
@@ -2438,9 +2439,9 @@ end subroutine register_diags_TS_tendency
 
 !> Initialize diagnostics for the variance decay of temp/salt
 !! across regridding/remapping
-subroutine register_diags_TS_vardec(Time, G, GV, param_file, CS)
+subroutine register_diags_TS_vardec(Time, HI, GV, param_file, CS)
   type(time_type),         intent(in) :: Time     !< current model time
-  type(ocean_grid_type),   intent(in) :: G        !< ocean grid structure
+  type(hor_index_type),    intent(in) :: HI       !< horizontal index type 
   type(verticalGrid_type), intent(in) :: GV       !< ocean vertical grid structure
   type(param_file_type),   intent(in) :: param_file !< parameter file
   type(MOM_control_struct), pointer :: CS   !< control structure for MOM
@@ -2450,7 +2451,7 @@ subroutine register_diags_TS_vardec(Time, G, GV, param_file, CS)
   type(diag_ctrl), pointer :: diag
 
   diag => CS%diag
-  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nz = G%ke
+  isd  = HI%isd  ; ied  = HI%ied  ; jsd  = HI%jsd  ; jed  = HI%jed ; nz = GV%ke
 
   ! variancy decay through ALE operation
   CS%id_T_vardec = register_diag_field('ocean_model', 'T_vardec', diag%axesTL, Time, &
@@ -2460,7 +2461,7 @@ subroutine register_diags_TS_vardec(Time, G, GV, param_file, CS)
     CS%T_squared(:,:,:) = 0.
 
     vd_tmp = var_desc(name="T2", units="degC2", longname="Squared Potential Temperature")
-    call register_tracer(CS%T_squared, vd_tmp, param_file, G, GV, CS%tracer_reg)
+    call register_tracer(CS%T_squared, vd_tmp, param_file, HI, GV, CS%tracer_reg)
   endif
 
   CS%id_S_vardec = register_diag_field('ocean_model', 'S_vardec', diag%axesTL, Time, &
@@ -2470,7 +2471,7 @@ subroutine register_diags_TS_vardec(Time, G, GV, param_file, CS)
     CS%S_squared(:,:,:) = 0.
 
     vd_tmp = var_desc(name="S2", units="PPT2", longname="Squared Salinity")
-    call register_tracer(CS%S_squared, vd_tmp, param_file, G, GV, CS%tracer_reg)
+    call register_tracer(CS%S_squared, vd_tmp, param_file, HI, GV, CS%tracer_reg)
   endif
 
 end subroutine register_diags_TS_vardec
