@@ -113,10 +113,17 @@ subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth)
   bx = 0.0; by = 0.0; xtil = 0.0
 
   do j=js,je ; do i=is,ie
+       ! this is for 2D
+       !xtil = G%geoLonT(i,j)*1.0e3/xbar 
+       !bx = b0+b2*xtil**2 + b4*xtil**4 + b6*xtil**6
+       !by = (dc/(1.+exp(-2.*(1.*1.0e3- ly/2. - wc)/fc))) + &
+       !     (dc/(1.+exp(2.*(1.*1.0e3- ly/2. + wc)/fc)))  
+       
        xtil = G%geoLonT(i,j)*1.0e3/xbar 
        bx = b0+b2*xtil**2 + b4*xtil**4 + b6*xtil**6
        by = (dc/(1.+exp(-2.*(G%geoLatT(i,j)*1.0e3- ly/2. - wc)/fc))) + &
-            (dc/(1.+exp(2.*(G%geoLatT(i,j)*1.0e3- ly/2. + wc)/fc)))  
+            (dc/(1.+exp(2.*(G%geoLatT(i,j)*1.0e3- ly/2. + wc)/fc)))
+
 ! depth is positive
         D(i,j) = -max(bx+by,-bmax)
 
@@ -264,7 +271,7 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
 
   select case ( coordinateMode(verticalCoordinate) )
 
-    case (  REGRIDDING_SIGMA, REGRIDDING_ZSTAR, REGRIDDING_RHO )
+    case (  REGRIDDING_RHO, REGRIDDING_ZSTAR, REGRIDDING_SIGMA )
       S_range = S_range / G%max_depth ! Convert S_range into dS/dz
       T_range = T_range / G%max_depth ! Convert T_range into dT/dz
       do j=js,je ; do i=is,ie
@@ -276,11 +283,24 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
           xi0 = xi0 + 0.5 * h(i,j,k) ! Depth at top of layer
         enddo
       enddo ; enddo
-i=G%iec; j=G%jec
-do k = 1,nz
-  call calculate_density(T(i,j,k),S(i,j,k),0.0,rho_tmp,eqn_of_state)
-  !write(*,*) 'k,h,T,S,rho,Rlay',k,h(i,j,k),T(i,j,k),S(i,j,k),rho_tmp,GV%Rlay(k)
-enddo
+
+!i=G%iec; j=G%jec
+!do k = 1,nz
+!  call calculate_density(T(i,j,k),S(i,j,k),0.0,rho_tmp,eqn_of_state)
+!  !write(*,*) 'k,h,T,S,rho,Rlay',k,h(i,j,k),T(i,j,k),S(i,j,k),rho_tmp,GV%Rlay(k)
+!enddo
+
+!   case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA )
+!
+!      do j=js,je ; do i=is,ie
+!        xi0 = 0.0;
+!        do k = 1,nz
+!          xi1 = xi0 + h(i,j,k) / G%max_depth;
+!          S(i,j,k) = S_sur + 0.5 * S_range * (xi0 + xi1);
+!          T(i,j,k) = T_sur + 0.5 * T_range * (xi0 + xi1);
+!          xi0 = xi1;
+!        enddo
+!      enddo ; enddo
     
    case default
       call MOM_error(FATAL,"isomip_initialize: "// &
