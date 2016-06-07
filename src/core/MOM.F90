@@ -1750,8 +1750,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   ! Set the fields that are needed for bitwise identical restarting
   ! the time stepping scheme.
-  call restart_init(G, param_file, CS%restart_CSp)
-  call set_restart_fields(G, GV, param_file, CS)
+  call restart_init(param_file, CS%restart_CSp)
+  call set_restart_fields(GV, param_file, CS)
   if (CS%split) then
     if (CS%legacy_split) then
       call register_restarts_dyn_legacy_split(G, GV, param_file, &
@@ -2758,8 +2758,7 @@ end subroutine write_static_fields
 !! This routine should be altered if there are any changes to the
 !! time stepping scheme.  The CHECK_RESTART facility may be used to
 !! confirm that all needed restart fields have been included.
-subroutine set_restart_fields(G, GV, param_file, CS)
-  type(ocean_grid_type),    intent(in) :: G             !< ocean grid structure
+subroutine set_restart_fields(GV, param_file, CS)
   type(verticalGrid_type),  intent(inout) :: GV         !< ocean vertical grid structure
   type(param_file_type),    intent(in) :: param_file    !< opened file for parsing to get parameters
   type(MOM_control_struct), intent(in) :: CS            !< control structure set up by inialize_MOM
