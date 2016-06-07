@@ -86,7 +86,7 @@ end type p3d
 type, public :: USER_tracer_example_CS ; private
   logical :: coupled_tracers = .false.  ! These tracers are not offered to the
                                         ! coupler.
-  character(len = 200) :: tracer_IC_file ! The full path to the IC file, or " "
+  character(len=200) :: tracer_IC_file ! The full path to the IC file, or " "
                                    ! to initialize internally.
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
   type(tracer_registry_type), pointer :: tr_Reg => NULL()
@@ -117,12 +117,10 @@ end type USER_tracer_example_CS
 
 contains
 
-function USER_register_tracer_example(G, param_file, CS, diag, tr_Reg, &
-                                      restart_CS)
+function USER_register_tracer_example(G, param_file, CS, tr_Reg, restart_CS)
   type(ocean_grid_type),   intent(in)   :: G
   type(param_file_type),   intent(in)   :: param_file
   type(USER_tracer_example_CS), pointer :: CS
-  type(diag_ctrl), target, intent(in)   :: diag
   type(tracer_registry_type), pointer   :: tr_Reg
   type(MOM_restart_CS),       pointer   :: restart_CS
 ! This subroutine is used to register tracer fields and subroutines
@@ -132,7 +130,6 @@ function USER_register_tracer_example(G, param_file, CS, diag, tr_Reg, &
 !                         model parameter values.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
-!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  tr_Reg - A pointer that is set to point to the control structure
 !                  for the tracer advection and diffusion module.
 !  (in)      restart_CS - A pointer to the restart control structure.
@@ -153,7 +150,6 @@ function USER_register_tracer_example(G, param_file, CS, diag, tr_Reg, &
   endif
   allocate(CS)
 
-  CS%diag => diag
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "TRACER_EXAMPLE_IC_FILE", CS%tracer_IC_file, &
@@ -203,13 +199,14 @@ function USER_register_tracer_example(G, param_file, CS, diag, tr_Reg, &
   USER_register_tracer_example = .true.
 end function USER_register_tracer_example
 
-subroutine USER_initialize_tracer(restart, day, G, GV, h, OBC, CS, sponge_CSp, &
-                                  diag_to_Z_CSp)
+subroutine USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS, &
+                                  sponge_CSp, diag_to_Z_CSp)
   logical,                            intent(in) :: restart
   type(time_type), target,            intent(in) :: day
   type(ocean_grid_type),              intent(in) :: G
   type(verticalGrid_type),            intent(in) :: GV
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  type(diag_ctrl), target,            intent(in) :: diag
   type(ocean_OBC_type),               pointer    :: OBC
   type(USER_tracer_example_CS),       pointer    :: CS
   type(sponge_CS),                    pointer    :: sponge_CSp
@@ -223,6 +220,7 @@ subroutine USER_initialize_tracer(restart, day, G, GV, h, OBC, CS, sponge_CSp, &
 !  (in)      G - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
 !  (in)      h - Layer thickness, in m or kg m-2.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in)      OBC - This open boundary condition type specifies whether, where,
 !                  and what open boundary conditions are used.
 !  (in/out)  CS - The control structure returned by a previous call to
@@ -256,6 +254,7 @@ subroutine USER_initialize_tracer(restart, day, G, GV, h, OBC, CS, sponge_CSp, &
 
   lntr = NTR ! Avoids compile-time warning when NTR<2
   CS%Time => day
+  CS%diag => diag
 
   if (.not.restart) then
     if (len_trim(CS%tracer_IC_file) >= 1) then

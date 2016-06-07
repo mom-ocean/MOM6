@@ -19,13 +19,6 @@ module DOME_initialization
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
 !***********************************************************************
 
-!***********************************************************************
-!*                                                                     *
-!>  The module configures the model for the "DOME" experiment.         *
-!!  DOME = Dynamics of Overflows and Mixing Experiment                 *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
-
 use MOM_sponge, only : sponge_CS, set_up_sponge_field, initialize_sponge
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
@@ -454,4 +447,8 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
 end subroutine DOME_set_Open_Bdry_Conds
 ! -----------------------------------------------------------------------------
 
+!> \class DOME_initialization
+!!
+!! The module configures the model for the "DOME" experiment.
+!! DOME = Dynamics of Overflows and Mixing Experiment
 end module DOME_initialization

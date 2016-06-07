@@ -94,7 +94,7 @@ type, public :: oil_tracer_CS ; private
   integer :: ntr    ! The number of tracers that are actually used.
   logical :: coupled_tracers = .false.  ! These tracers are not offered to the
                                         ! coupler.
-  character(len = 200) :: IC_file ! The file in which the age-tracer initial values
+  character(len=200) :: IC_file ! The file in which the age-tracer initial values
                     ! can be found, or an empty string for internal initialization.
   logical :: Z_IC_file ! If true, the IC_file is in Z-space.  The default is false.
   real :: oil_source_longitude, oil_source_latitude ! Lat,lon of source location (geographic)
@@ -141,14 +141,12 @@ end type oil_tracer_CS
 
 contains
 
-function register_oil_tracer(G, param_file, CS, diag, tr_Reg, &
-                                   restart_CS)
-  type(ocean_grid_type),     intent(in) :: G
-  type(param_file_type),     intent(in) :: param_file
-  type(oil_tracer_CS),       pointer    :: CS
-  type(diag_ctrl), target,   intent(in) :: diag
-  type(tracer_registry_type),    pointer    :: tr_Reg
-  type(MOM_restart_CS),     pointer    :: restart_CS
+function register_oil_tracer(G, param_file, CS, tr_Reg, restart_CS)
+  type(ocean_grid_type),      intent(in) :: G
+  type(param_file_type),      intent(in) :: param_file
+  type(oil_tracer_CS),        pointer    :: CS
+  type(tracer_registry_type), pointer    :: tr_Reg
+  type(MOM_restart_CS),       pointer    :: restart_CS
 ! This subroutine is used to register tracer fields and subroutines
 ! to be used with MOM.
 ! Arguments: G - The ocean's grid structure.
@@ -156,7 +154,6 @@ function register_oil_tracer(G, param_file, CS, diag, tr_Reg, &
 !                         model parameter values.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
-!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  tr_Reg - A pointer that is set to point to the control structure
 !                  for the tracer advection and diffusion module.
 !  (in)      restart_CS - A pointer to the restart control structure.
@@ -178,8 +175,6 @@ function register_oil_tracer(G, param_file, CS, diag, tr_Reg, &
     return
   endif
   allocate(CS)
-
-  CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mod, version, "")
@@ -275,13 +270,14 @@ function register_oil_tracer(G, param_file, CS, diag, tr_Reg, &
 
 end function register_oil_tracer
 
-subroutine initialize_oil_tracer(restart, day, G, GV, h, OBC, CS, sponge_CSp, &
-                                       diag_to_Z_CSp)
+subroutine initialize_oil_tracer(restart, day, G, GV, h, diag, OBC, CS, &
+                                  sponge_CSp, diag_to_Z_CSp)
   logical,                            intent(in) :: restart
   type(time_type), target,            intent(in) :: day
   type(ocean_grid_type),              intent(in) :: G
   type(verticalGrid_type),            intent(in) :: GV
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  type(diag_ctrl), target,            intent(in) :: diag
   type(ocean_OBC_type),               pointer    :: OBC
   type(oil_tracer_CS),                pointer    :: CS
   type(sponge_CS),                    pointer    :: sponge_CSp
@@ -295,6 +291,7 @@ subroutine initialize_oil_tracer(restart, day, G, GV, h, OBC, CS, sponge_CSp, &
 !  (in)      G - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
 !  (in)      h - Layer thickness, in m or kg m-2.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in)      OBC - This open boundary condition type specifies whether, where,
 !                  and what open boundary conditions are used.
 !  (in/out)  CS - The control structure returned by a previous call to
@@ -332,6 +329,7 @@ subroutine initialize_oil_tracer(restart, day, G, GV, h, OBC, CS, sponge_CSp, &
   enddo; enddo
 
   CS%Time => day
+  CS%diag => diag
 
   do m=1,CS%ntr
     call query_vardesc(CS%tr_desc(m), name=name, caller="initialize_oil_tracer")

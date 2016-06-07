@@ -1087,7 +1087,7 @@ function find_root( fn, dy_df, GP, fnval, y1, ymin, ymax, ittmax)
 ! used to polish the root.
   real :: ybot, ytop, fnbot, fntop
   integer :: itt
-  character(len =256) :: warnmesg
+  character(len=256) :: warnmesg
 
   real :: dy_dfn, dy, fny
 

@@ -2508,23 +2508,31 @@ function getCoordinateResolution( CS )
 
 end function getCoordinateResolution
 
-!------------------------------------------------------------------------------
-! Query the target coordinate interfaces positions
-!------------------------------------------------------------------------------
+!> Query the target coordinate interface positions
 function getCoordinateInterfaces( CS )
-  type(regridding_CS), intent(in) :: CS
-  real, dimension(CS%nk+1)        :: getCoordinateInterfaces
+  type(regridding_CS), intent(in) :: CS                      !< Regridding control structure
+  real, dimension(CS%nk+1)        :: getCoordinateInterfaces !< Interface positions in target coordinate
 
   integer :: k
 
-  getCoordinateInterfaces(1) = 0.
-  do k = 1, CS%nk
-    getCoordinateInterfaces(k+1) = getCoordinateInterfaces(k) &
-                                  -CS%coordinateResolution(k)
-  enddo
-  ! The following line has an "abs()" to allow ferret users to reference
-  ! data by index. It is a temporary work around...  :(  -AJA
-  getCoordinateInterfaces(:) = abs( getCoordinateInterfaces(:) )
+  ! When using a coordinate with target densities, we need to get the actual
+  ! densities, rather than computing the interfaces based on resolution
+  if (CS%regridding_scheme == REGRIDDING_RHO) then
+    if (.not. CS%target_density_set) &
+      call MOM_error(FATAL, 'MOM_regridding, getCoordinateInterfaces: '//&
+                            'target densities not set!')
+
+    getCoordinateInterfaces(:) = CS%target_density(:)
+  else
+    getCoordinateInterfaces(1) = 0.
+    do k = 1, CS%nk
+      getCoordinateInterfaces(k+1) = getCoordinateInterfaces(k) &
+                                    -CS%coordinateResolution(k)
+    enddo
+    ! The following line has an "abs()" to allow ferret users to reference
+    ! data by index. It is a temporary work around...  :(  -AJA
+    getCoordinateInterfaces(:) = abs( getCoordinateInterfaces(:) )
+  end if
 
 end function getCoordinateInterfaces
 

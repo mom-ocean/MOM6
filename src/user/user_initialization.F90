@@ -47,14 +47,16 @@ contains
 
 !> Set vertical coordinates.
 subroutine USER_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
-  type(verticalGrid_type), intent(in)  :: GV         !< The ocean's vertical grid structure.
+  type(verticalGrid_type), intent(in)  :: GV         !< The ocean's vertical grid
+                                                     !! structure.
   real, dimension(:),      intent(out) :: Rlay       !< Layer potential density.
   real, dimension(:),      intent(out) :: g_prime    !< The reduced gravity at
                                                      !! each interface, in m s-2.
   type(param_file_type),   intent(in)  :: param_file !< A structure indicating the
                                                      !! open file to parse for model
                                                      !! parameter values.
-  type(EOS_type),          pointer     :: eqn_of_state !< Equation of state structure.
+  type(EOS_type),          pointer     :: eqn_of_state !< Integer that selects the
+                                                     !! equation of state.
 
   call MOM_error(FATAL, &
    "USER_initialization.F90, USER_set_coord: " // &
