@@ -1398,7 +1398,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
   call MOM_initialize_rotation(G%CoriolisBu, G, param_file)
 
   ! Set up the restarts.
-  call restart_init(G, param_file, CS%restart_CSp, "Shelf.res")
+  call restart_init(param_file, CS%restart_CSp, "Shelf.res")
   vd = var_desc("shelf_mass","kg m-2","Ice shelf mass",z_grid='1')
   call register_restart_field(CS%mass_shelf, vd, .true., CS%restart_CSp)
   vd = var_desc("shelf_area","m2","Ice shelf area in cell",z_grid='1')
