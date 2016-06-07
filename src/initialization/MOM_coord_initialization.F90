@@ -501,7 +501,7 @@ subroutine write_vertgrid_file(GV, param_file, directory)
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in)      directory - The directory into which to place the file.
-  character(len=120) :: filepath
+  character(len=240) :: filepath
   type(vardesc) :: vars(2)
   type(fieldtype) :: fields(2)
   integer :: unit

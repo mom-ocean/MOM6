@@ -394,7 +394,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
                                  ! limits for l in the search for lH.
   integer :: start_of_day, num_days
   real    :: reday, var
-  character(len=120) :: energypath_nc
+  character(len=240) :: energypath_nc
   character(len=200) :: mesg
   character(len=32)  :: mesg_intro, time_units, day_str, n_str, date_str
   logical :: date_stamped
@@ -1342,7 +1342,7 @@ subroutine read_depth_list(G, CS, filename)
 ! This subroutine reads in the depth list to the specified file
 ! and allocates and sets up CS%DL and CS%list_size .
   character(len=32) :: mod
-  character(len=120) :: var_name, var_msg
+  character(len=240) :: var_name, var_msg
   real, allocatable :: tmp(:)
   integer :: ncid, status, varid, list_size, k
   integer :: ndim, len, var_dim_ids(NF90_MAX_VAR_DIMS)

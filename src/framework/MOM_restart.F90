@@ -121,7 +121,7 @@ type, public :: MOM_restart_CS ; private
                                     ! otherwise they are combined internally.
   logical :: large_file_support     ! If true, NetCDF 3.6 or later is being used
                                     ! and large-file-support is enabled.
-  character(len=120) :: restartfile ! The name or name root for MOM restart files.
+  character(len=240) :: restartfile ! The name or name root for MOM restart files.
   type(ocean_grid_type), pointer :: G => NULL()
 
   type(field_restart), pointer :: restart_field(:) => NULL()

@@ -218,7 +218,7 @@ type, public :: MOM_control_struct
 
   ! Flags needed to reach between start and finish phases of initialization
   logical :: write_IC                !< If true, then the initial conditions will be written to file
-  character(len=80) :: IC_file       !< A file into which the initial conditions are
+  character(len=120) :: IC_file      !< A file into which the initial conditions are
                                      !! written in a new run if SAVE_INITIAL_CONDS is true.
 
   integer :: ntrunc                  !< number u,v truncations since last call to write_energy
