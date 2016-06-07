@@ -60,6 +60,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
+use MOM_hor_index, only : hor_index_type
 use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc, query_vardesc
 use MOM_restart, only : register_restart_field, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
@@ -125,8 +126,8 @@ end type advection_test_tracer_CS
 
 contains
 
-function register_advection_test_tracer(G, GV, param_file, CS, tr_Reg, restart_CS)
-  type(ocean_grid_type),       intent(in) :: G
+function register_advection_test_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
+  type(hor_index_type),        intent(in) :: HI
   type(verticalGrid_type),     intent(in) :: GV
   type(param_file_type),       intent(in) :: param_file
   type(advection_test_tracer_CS), pointer :: CS
@@ -134,7 +135,7 @@ function register_advection_test_tracer(G, GV, param_file, CS, tr_Reg, restart_C
   type(MOM_restart_CS),        pointer    :: restart_CS
 ! This subroutine is used to register tracer fields and subroutines
 ! to be used with MOM.
-! Arguments: G - The ocean's grid structure.
+! Arguments: HI - A horizontal index type structure.
 !  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
@@ -151,7 +152,7 @@ function register_advection_test_tracer(G, GV, param_file, CS, tr_Reg, restart_C
   real, pointer :: tr_ptr(:,:,:) => NULL()
   logical :: register_advection_test_tracer
   integer :: isd, ied, jsd, jed, nz, m
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
+  isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
   if (associated(CS)) then
     call MOM_error(WARNING, "register_advection_test_tracer called with an "// &
@@ -208,7 +209,7 @@ function register_advection_test_tracer(G, GV, param_file, CS, tr_Reg, restart_C
     ! Register the tracer for the restart file.
     call register_restart_field(tr_ptr, CS%tr_desc(m), .true., restart_CS)
     ! Register the tracer for horizontal advection & diffusion.
-    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, G, GV, tr_Reg, &
+    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, HI, GV, tr_Reg, &
                          tr_desc_ptr=CS%tr_desc(m))
 
     !   Set coupled_tracers to be true (hard-coded above) to provide the surface
