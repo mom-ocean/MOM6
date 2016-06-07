@@ -1755,18 +1755,18 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call set_restart_fields(GV, param_file, CS)
   if (CS%split) then
     if (CS%legacy_split) then
-      call register_restarts_dyn_legacy_split(G, GV, param_file, &
+      call register_restarts_dyn_legacy_split(G%HI, GV, param_file, &
                CS%dyn_legacy_split_CSp, CS%restart_CSp, CS%uh, CS%vh)
     else
-      call register_restarts_dyn_split_RK2(G, GV, param_file, &
+      call register_restarts_dyn_split_RK2(G%HI, GV, param_file, &
                CS%dyn_split_RK2_CSp, CS%restart_CSp, CS%uh, CS%vh)
     endif
   else
     if (CS%use_RK2) then
-      call register_restarts_dyn_unsplit_RK2(G, GV, param_file, &
+      call register_restarts_dyn_unsplit_RK2(G%HI, GV, param_file, &
              CS%dyn_unsplit_RK2_CSp, CS%restart_CSp)
     else
-      call register_restarts_dyn_unsplit(G, GV, param_file, &
+      call register_restarts_dyn_unsplit(G%HI, GV, param_file, &
              CS%dyn_unsplit_CSp, CS%restart_CSp)
     endif
   endif
@@ -1776,9 +1776,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call call_tracer_register(G%HI, GV, param_file, CS%tracer_flow_CSp, &
                             CS%tracer_Reg, CS%restart_CSp)
 
-  call MEKE_alloc_register_restart(G, param_file, CS%MEKE, CS%restart_CSp)
-  call set_visc_register_restarts(G, GV, param_file, CS%visc, CS%restart_CSp)
-  call mixedlayer_restrat_register_restarts(G, param_file, CS%mixedlayer_restrat_CSp, CS%restart_CSp)
+  call MEKE_alloc_register_restart(G%HI, param_file, CS%MEKE, CS%restart_CSp)
+  call set_visc_register_restarts(G%HI, GV, param_file, CS%visc, CS%restart_CSp)
+  call mixedlayer_restrat_register_restarts(G%HI, param_file, CS%mixedlayer_restrat_CSp, CS%restart_CSp)
 
   ! Initialize fields
   call callTree_waypoint("restart registration complete (initialize_MOM)")
