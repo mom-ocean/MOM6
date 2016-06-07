@@ -1531,14 +1531,16 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
 
 end subroutine set_viscous_ML
 
-subroutine set_visc_register_restarts(G, param_file, visc, restart_CS)
+subroutine set_visc_register_restarts(G, GV, param_file, visc, restart_CS)
   type(ocean_grid_type),   intent(in)    :: G
+  type(verticalGrid_type), intent(in)    :: GV
   type(param_file_type),   intent(in)    :: param_file
   type(vertvisc_type),     intent(inout) :: visc
   type(MOM_restart_CS),    pointer       :: restart_CS
 !   This subroutine is used to register any fields associated with the
 ! vertvisc_type.
 ! Arguments: G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (out)     visc - A structure containing vertical viscosities and related
@@ -1548,7 +1550,7 @@ subroutine set_visc_register_restarts(G, param_file, visc, restart_CS)
   logical :: use_kappa_shear, adiabatic, useKPP, useEPBL, MLE_use_PBL_MLD
   integer :: isd, ied, jsd, jed, nz
   character(len=40)  :: mod = "MOM_set_visc"  ! This module's name.
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
 
   call get_param(param_file, mod, "ADIABATIC", adiabatic, default=.false., &
                  do_not_log=.true.)
@@ -1604,6 +1606,7 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS)
   type(set_visc_CS),       pointer       :: CS
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in)      diag - A structure that is used to regulate diagnostic output.
@@ -1626,7 +1629,7 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS)
   endif
   allocate(CS)
 
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   CS%diag => diag

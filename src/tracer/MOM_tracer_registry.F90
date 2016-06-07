@@ -73,11 +73,12 @@ end type tracer_registry_type
 contains
 
 !> This subroutine registers a tracer to be advected and laterally diffused.
-subroutine register_tracer(tr1, tr_desc, param_file, G, Reg, tr_desc_ptr, ad_x, ad_y,&
+subroutine register_tracer(tr1, tr_desc, param_file, G, GV, Reg, tr_desc_ptr, ad_x, ad_y,&
                            df_x, df_y, OBC_inflow, OBC_in_u, OBC_in_v,            &
                            ad_2d_x, ad_2d_y, df_2d_x, df_2d_y, advection_xy)
-  type(ocean_grid_type),  intent(in)            :: G            !< ocean grid type 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target :: tr1       !< pointer to the tracer (concentration units)
+  type(ocean_grid_type),          intent(in)    :: G            !< ocean grid type 
+  type(verticalGrid_type),        intent(in)    :: GV           !< ocean vertical grid structure 
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), target :: tr1      !< pointer to the tracer (concentration units)
   type(vardesc),         intent(in)             :: tr_desc      !< metadata about the tracer
   type(param_file_type), intent(in)             :: param_file   !< file to parse for  model parameter values
   type(tracer_registry_type), pointer           :: Reg          !< pointer to the tracer registry
@@ -254,10 +255,10 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
                            sfc_flux, btm_flux, btm_reservoir, sink_rate)
   type(ocean_grid_type),                     intent(in)    :: G             !< ocean grid structure 
   type(verticalGrid_type),                   intent(in)    :: GV            !< ocean vertical grid structure 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h_old         !< layer thickness before entrainment (m or kg m-2)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: ea            !< amount of fluid entrained from the layer above (units of h_old)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: eb            !< amount of fluid entrained from the layer below (units of h_old)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: tr            !< tracer concentration (in concentration units CU)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_old         !< layer thickness before entrainment (m or kg m-2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: ea            !< amount of fluid entrained from the layer above (units of h_old)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: eb            !< amount of fluid entrained from the layer below (units of h_old)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: tr            !< tracer concentration (in concentration units CU)
   real,                                      intent(in)    :: dt            !< amount of time covered by this call (seconds)
   real, dimension(SZI_(G),SZJ_(G)), optional,intent(in)    :: sfc_flux      !< surface flux of the tracer (in CU * kg m-2 s-1)
   real, dimension(SZI_(G),SZJ_(G)), optional,intent(in)    :: btm_flux      !< The (negative upward) bottom flux of the tracer,
@@ -275,11 +276,11 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
   real, dimension(SZI_(G)) :: &
     b1, &           ! b1 is used by the tridiagonal solver, in m-1 or m2 kg-1.
     d1              ! d1=1-c1 is used by the tridiagonal solver, nondimensional.
-  real :: c1(SZI_(G),SZK_(G))     ! c1 is used by the tridiagonal solver, ND.
-  real :: h_minus_dsink(SZI_(G),SZK_(G))  ! The layer thickness minus the
+  real :: c1(SZI_(G),SZK_(GV))    ! c1 is used by the tridiagonal solver, ND.
+  real :: h_minus_dsink(SZI_(G),SZK_(GV)) ! The layer thickness minus the
                     ! difference in sinking rates across the layer, in m or kg m-2.
                     ! By construction, 0 <= h_minus_dsink < h_old.
-  real :: sink(SZI_(G),SZK_(G)+1) ! The tracer's sinking distances at the
+  real :: sink(SZI_(G),SZK_(GV)+1) ! The tracer's sinking distances at the
                     ! interfaces, limited to prevent characteristics from
                     ! crossing within a single timestep, in m or kg m-2.
   real :: b_denom_1 ! The first term in the denominator of b1, in m or kg m-2.
@@ -289,7 +290,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
                     ! in roundoff and can be neglected, in m.
 
   integer :: i, j, k, is, ie, js, je, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   h_neglect = GV%H_subroundoff
   sink_dist = 0.0

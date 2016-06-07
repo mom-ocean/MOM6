@@ -117,8 +117,9 @@ end type USER_tracer_example_CS
 
 contains
 
-function USER_register_tracer_example(G, param_file, CS, tr_Reg, restart_CS)
+function USER_register_tracer_example(G, GV, param_file, CS, tr_Reg, restart_CS)
   type(ocean_grid_type),   intent(in)   :: G
+  type(verticalGrid_type), intent(in)   :: GV
   type(param_file_type),   intent(in)   :: param_file
   type(USER_tracer_example_CS), pointer :: CS
   type(tracer_registry_type), pointer   :: tr_Reg
@@ -126,6 +127,7 @@ function USER_register_tracer_example(G, param_file, CS, tr_Reg, restart_CS)
 ! This subroutine is used to register tracer fields and subroutines
 ! to be used with MOM.
 ! Arguments: G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in/out)  CS - A pointer that is set to point to the control structure
@@ -141,7 +143,7 @@ function USER_register_tracer_example(G, param_file, CS, tr_Reg, restart_CS)
   real, pointer :: tr_ptr(:,:,:) => NULL()
   logical :: USER_register_tracer_example
   integer :: isd, ied, jsd, jed, nz, m
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
 
   if (associated(CS)) then
     call MOM_error(WARNING, "USER_register_tracer_example called with an "// &
@@ -184,7 +186,7 @@ function USER_register_tracer_example(G, param_file, CS, tr_Reg, restart_CS)
     ! Register the tracer for the restart file.
     call register_restart_field(tr_ptr, CS%tr_desc(m), .true., restart_CS)
     ! Register the tracer for horizontal advection & diffusion.
-    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, G, tr_Reg, &
+    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, G, GV, tr_Reg, &
                          tr_desc_ptr=CS%tr_desc(m))
 
     !   Set coupled_tracers to be true (hard-coded above) to provide the surface
@@ -248,7 +250,7 @@ subroutine USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   integer :: IsdB, IedB, JsdB, JedB, lntr
 
   if (.not.associated(CS)) return
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
@@ -437,7 +439,7 @@ subroutine tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS)
 !   Uncomment the following line for most "physical" tracers, which
 ! are advected diapycnally in the usual manner.
   data trdc / 1.0,0.0,0.0 /
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not.associated(CS)) return
   h_neglect = GV%H_subroundoff
@@ -538,7 +540,7 @@ function USER_tracer_stock(h, stocks, G, GV, CS, names, units, stock_index)
 ! Return value: the number of stocks calculated here.
 
   integer :: i, j, k, is, ie, js, je, nz, m
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   USER_tracer_stock = 0
   if (.not.associated(CS)) return
@@ -577,8 +579,8 @@ subroutine USER_tracer_surface_state(state, h, G, CS)
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 register_USER_tracer.
-  integer :: i, j, m, is, ie, js, je, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  integer :: i, j, m, is, ie, js, je
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   
   if (.not.associated(CS)) return
 

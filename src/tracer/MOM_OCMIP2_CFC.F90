@@ -155,11 +155,12 @@ end type OCMIP2_CFC_CS
 
 contains
 
-function register_OCMIP2_CFC(G, param_file, CS, tr_Reg, restart_CS)
+function register_OCMIP2_CFC(G, GV, param_file, CS, tr_Reg, restart_CS)
   type(ocean_grid_type),   intent(in) :: G
+  type(verticalGrid_type), intent(in) :: GV
   type(param_file_type),   intent(in) :: param_file
   type(OCMIP2_CFC_CS),     pointer    :: CS
-  type(tracer_registry_type),  pointer    :: tr_Reg
+  type(tracer_registry_type), pointer :: tr_Reg
   type(MOM_restart_CS),    pointer    :: restart_CS
 ! This subroutine is used to register tracer fields and subroutines
 ! to be used with MOM.
@@ -185,7 +186,7 @@ function register_OCMIP2_CFC(G, param_file, CS, tr_Reg, restart_CS)
   logical :: register_OCMIP2_CFC
   integer :: isd, ied, jsd, jed, nz, m
 
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
 
   if (associated(CS)) then
     call MOM_error(WARNING, "register_OCMIP2_CFC called with an "// &
@@ -261,13 +262,13 @@ function register_OCMIP2_CFC(G, param_file, CS, tr_Reg, restart_CS)
   call register_restart_field(tr_ptr, CS%CFC11_desc, &
                               .not.CS%tracers_may_reinit, restart_CS)
   ! Register CFC11 for horizontal advection & diffusion.
-  call register_tracer(tr_ptr, CS%CFC11_desc, param_file, G, tr_Reg, &
+  call register_tracer(tr_ptr, CS%CFC11_desc, param_file, G, GV, tr_Reg, &
                        tr_desc_ptr=CS%CFC11_desc)
   ! Do the same for CFC12
   tr_ptr => CS%CFC12
   call register_restart_field(tr_ptr, CS%CFC12_desc, &
                               .not.CS%tracers_may_reinit, restart_CS)
-  call register_tracer(tr_ptr, CS%CFC12_desc, param_file, G, tr_Reg, &
+  call register_tracer(tr_ptr, CS%CFC12_desc, param_file, G, GV, tr_Reg, &
                        tr_desc_ptr=CS%CFC12_desc)
 
   ! Set and read the various empirical coefficients.
@@ -402,7 +403,7 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, GV, h, diag, OBC, CS, &
   integer :: IsdB, IedB, JsdB, JedB
 
   if (.not.associated(CS)) return
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
@@ -561,7 +562,7 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
   real, pointer, dimension(:,:,:) :: CFC11, CFC12
   integer :: i, j, k, is, ie, js, je, nz, m
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not.associated(CS)) return
   
@@ -638,7 +639,7 @@ function OCMIP2_CFC_stock(h, stocks, G, GV, CS, names, units, stock_index)
 
   real :: mass
   integer :: i, j, k, is, ie, js, je, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   OCMIP2_CFC_stock = 0
   if (.not.associated(CS)) return
@@ -693,9 +694,9 @@ subroutine OCMIP2_CFC_surface_state(state, h, G, CS)
   real :: alpha_12  ! The solubility of CFC 12 in mol m-3 pptv-1.
   real :: sc_11, sc_12 ! The Schmidt numbers of CFC 11 and CFC 12.
   real :: sc_no_term   ! A term related to the Schmidt number.
-  integer :: i, j, k, is, ie, js, je, nz, m
+  integer :: i, j, k, is, ie, js, je, m
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
   if (.not.associated(CS)) return
 

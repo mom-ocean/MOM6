@@ -141,8 +141,9 @@ end type oil_tracer_CS
 
 contains
 
-function register_oil_tracer(G, param_file, CS, tr_Reg, restart_CS)
+function register_oil_tracer(G, GV, param_file, CS, tr_Reg, restart_CS)
   type(ocean_grid_type),      intent(in) :: G
+  type(verticalGrid_type),    intent(in) :: GV
   type(param_file_type),      intent(in) :: param_file
   type(oil_tracer_CS),        pointer    :: CS
   type(tracer_registry_type), pointer    :: tr_Reg
@@ -150,6 +151,7 @@ function register_oil_tracer(G, param_file, CS, tr_Reg, restart_CS)
 ! This subroutine is used to register tracer fields and subroutines
 ! to be used with MOM.
 ! Arguments: G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in/out)  CS - A pointer that is set to point to the control structure
@@ -167,7 +169,7 @@ function register_oil_tracer(G, param_file, CS, tr_Reg, restart_CS)
   real, pointer :: tr_ptr(:,:,:) => NULL()
   logical :: register_oil_tracer
   integer :: isd, ied, jsd, jed, nz, m, i, j
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
 
   if (associated(CS)) then
     call MOM_error(WARNING, "register_oil_tracer called with an "// &
@@ -253,7 +255,7 @@ function register_oil_tracer(G, param_file, CS, tr_Reg, restart_CS)
     call register_restart_field(tr_ptr, CS%tr_desc(m), &
                                 .not.CS%oil_may_reinit, restart_CS)
     ! Register the tracer for horizontal advection & diffusion.
-    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, G, tr_Reg, &
+    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, G, GV, tr_Reg, &
                          tr_desc_ptr=CS%tr_desc(m))
 
     !   Set coupled_tracers to be true (hard-coded above) to provide the surface
@@ -311,7 +313,7 @@ subroutine initialize_oil_tracer(restart, day, G, GV, h, diag, OBC, CS, &
 
   if (.not.associated(CS)) return
   if (CS%ntr < 1) return
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
@@ -452,7 +454,7 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
   integer :: secs, days
   integer :: i, j, k, is, ie, js, je, nz, m, k_max
   real, allocatable :: local_tr(:,:,:)
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not.associated(CS)) return
   if (CS%ntr < 1) return
@@ -567,7 +569,7 @@ function oil_stock(h, stocks, G, GV, CS, names, units, stock_index)
 ! Return value: the number of stocks calculated here.
 
   integer :: i, j, k, is, ie, js, je, nz, m
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   oil_stock = 0
   if (.not.associated(CS)) return
@@ -607,8 +609,8 @@ subroutine oil_tracer_surface_state(state, h, G, CS)
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 register_oil_tracer.
-  integer :: m, is, ie, js, je, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  integer :: m, is, ie, js, je
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   
   if (.not.associated(CS)) return
 
