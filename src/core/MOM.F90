@@ -30,6 +30,7 @@ use MOM_cpu_clock,            only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_RO
 use MOM_coms,                 only : reproducing_sum
 use MOM_coord_initialization, only : MOM_initialize_coord
 use MOM_diag_mediator,        only : diag_mediator_init, enable_averaging
+use MOM_diag_mediator,        only : diag_mediator_infrastructure_init
 use MOM_diag_mediator,        only : diag_set_thickness_ptr, diag_update_target_grids
 use MOM_diag_mediator,        only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator,        only : register_diag_field, register_static_field
@@ -81,6 +82,7 @@ use MOM_dynamics_unsplit_RK2,  only : MOM_dyn_unsplit_RK2_CS
 use MOM_dynamics_legacy_split, only : step_MOM_dyn_legacy_split, register_restarts_dyn_legacy_split
 use MOM_dynamics_legacy_split, only : initialize_dyn_legacy_split, end_dyn_legacy_split
 use MOM_dynamics_legacy_split, only : adjustments_dyn_legacy_split, MOM_dyn_legacy_split_CS
+use MOM_dyn_horgrid,           only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
 use MOM_EOS,                   only : EOS_init
 use MOM_error_checking,        only : check_redundant
 use MOM_grid,                  only : MOM_grid_init, ocean_grid_type, MOM_grid_end
@@ -111,6 +113,7 @@ use MOM_tracer_registry,       only : add_tracer_diagnostics, tracer_registry_ty
 use MOM_tracer_registry,       only : lock_tracer_registry, tracer_registry_end
 use MOM_tracer_flow_control,   only : call_tracer_register, tracer_flow_control_CS
 use MOM_tracer_flow_control,   only : tracer_flow_control_init, call_tracer_surface_state
+use MOM_transcribe_grid,       only : copy_dyngrid_to_MOM_grid, copy_MOM_grid_to_dyngrid
 use MOM_vert_friction,         only : vertvisc, vertvisc_remnant
 use MOM_vert_friction,         only : vertvisc_limit_vel, vertvisc_init
 use MOM_verticalGrid,          only : verticalGrid_type, verticalGridInit, verticalGridEnd
@@ -215,7 +218,7 @@ type, public :: MOM_control_struct
 
   ! Flags needed to reach between start and finish phases of initialization
   logical :: write_IC                !< If true, then the initial conditions will be written to file
-  character(len=80) :: IC_file       !< A file into which the initial conditions are
+  character(len=120) :: IC_file      !< A file into which the initial conditions are
                                      !! written in a new run if SAVE_INITIAL_CONDS is true.
 
   integer :: ntrunc                  !< number u,v truncations since last call to write_energy
@@ -1363,6 +1366,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   ! local
   type(ocean_grid_type), pointer :: G ! pointer to a structure with metrics and related
   type(verticalGrid_type), pointer :: GV => NULL()
+  type(dyn_horgrid_type), pointer :: dG => NULL()
   type(diag_ctrl),       pointer :: diag
 
   character(len=4), parameter :: vers_num = 'v2.0'
@@ -1388,6 +1392,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   logical :: symmetric         ! If true, use symmetric memory allocation.
   logical :: save_IC           ! If true, save the initial conditions.
   logical :: do_unit_tests     ! If true, call unit tests.
+  logical :: test_grid_copy = .false.
 
   type(time_type)                 :: Start_time
   type(ocean_internal_state)      :: MOM_internal_state
@@ -1398,9 +1403,11 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     return
   endif
   allocate(CS)
-  G       => CS%G
+
+  if (test_grid_copy) then ; allocate(G)
+  else ; G => CS%G ; endif
+
   CS%Time => Time
-  diag    => CS%diag
 
   id_clock_init = cpu_clock_id('Ocean Initialization', grain=CLOCK_SUBCOMPONENT)
   call cpu_clock_begin(id_clock_init)
@@ -1432,19 +1439,18 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   call MOM_checksums_init(param_file)
 
+  call diag_mediator_infrastructure_init()
   call MOM_io_init(param_file)
   call MOM_grid_init(G, param_file)
   call verticalGridInit( param_file, CS%GV )
   GV => CS%GV
-  ! Copy several common variables from the vertical grid to the horizontal grid.
-  ! Consider removing these later?
+  ! Copy a common variable from the vertical grid to the horizontal grid.
+  ! Consider removing this later?
   G%ke = GV%ke
 
-  is   = G%isc   ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = G%ke
+  is   = G%isc   ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = GV%ke
   isd  = G%isd   ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
   IsdB = G%IsdB  ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-
-  call diag_mediator_init(G, param_file, diag, doc_file_dir=dirs%output_directory)
 
   ! Read relevant parameters and write them to the model log.
   call log_version(param_file, "MOM", version, "")
@@ -1766,7 +1772,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   ! This subroutine calls user-specified tracer registration routines.
   ! Additional calls can be added to MOM_tracer_flow_control.F90.
   call call_tracer_register(G, param_file, CS%tracer_flow_CSp, &
-                            diag, CS%tracer_Reg, CS%restart_CSp)
+                            CS%tracer_Reg, CS%restart_CSp)
 
   call MEKE_alloc_register_restart(G, param_file, CS%MEKE, CS%restart_CSp)
   call set_visc_register_restarts(G, param_file, CS%visc, CS%restart_CSp)
@@ -1827,6 +1833,35 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     endif
   endif
   if ( CS%use_ALE_algorithm ) call ALE_updateVerticalGridType( CS%ALE_CSp, GV )
+
+  ! At this point, there will be pointers being set, so the final grid type
+  ! that will persist through the run has to be used.
+  if (test_grid_copy) then
+    !  Copy the data from the temporary grid to the dyn_hor_grid to CS%G.
+    call create_dyn_horgrid(dG, G%HI)
+    call clone_MOM_domain(G%Domain, dG%Domain)
+
+    call clone_MOM_domain(G%Domain, CS%G%Domain)
+    call MOM_grid_init(CS%G, param_file)
+
+    call copy_MOM_grid_to_dyngrid(G, dg)
+    call copy_dyngrid_to_MOM_grid(dg, CS%G)
+    ! Copy a common variable from the vertical grid to the horizontal grid.
+    ! Consider removing this later?
+    CS%G%ke = GV%ke
+
+    call destroy_dyn_horgrid(dG)
+    call MOM_grid_end(G) ; deallocate(G)
+
+    G => CS%G
+
+    if (CS%debug .or. CS%G%symmetric) &
+      call clone_MOM_domain(CS%G%Domain, CS%G%Domain_aux, symmetric=.false.)
+  endif
+  
+  diag    => CS%diag
+  ! Initialize the diag mediator.
+  call diag_mediator_init(G, param_file, diag, doc_file_dir=dirs%output_directory)
 
   ! Initialize the diagnostics mask arrays.
   ! This step has to be done after call to MOM_initialize_state
@@ -1926,7 +1961,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   if (CS%use_ALE_algorithm) &
     call register_diags_TS_vardec(Time, G, param_file, CS)
 
-  call lock_tracer_registry(CS%tracer_Reg, diag, Time, G)
+  call lock_tracer_registry(CS%tracer_Reg)
   call callTree_waypoint("tracer registry now locked (initialize_MOM)")
 
   ! now register some diagnostics since tracer registry is locked
@@ -1959,8 +1994,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   ! This subroutine initializes any tracer packages.
   new_sim = ((dirs%input_filename(1:1) == 'n') .and. &
              (LEN_TRIM(dirs%input_filename) == 1))
-  call tracer_flow_control_init(.not.new_sim, Time, G, GV, CS%h, param_file, CS%OBC, &
-           CS%tracer_flow_CSp, CS%sponge_CSp, CS%ALE_sponge_CSp, CS%diag_to_Z_CSp)
+  call tracer_flow_control_init(.not.new_sim, Time, G, GV, CS%h, param_file, &
+             CS%diag, CS%OBC, CS%tracer_flow_CSp, CS%sponge_CSp, &
+             CS%ALE_sponge_CSp, CS%diag_to_Z_CSp)
 
   call cpu_clock_begin(id_clock_pass_init)
   call do_group_pass(CS%pass_uv_T_S_h, G%Domain)

@@ -62,9 +62,9 @@ implicit none ; private
 public write_u_accel, write_v_accel, PointAccel_init
 
 type, public :: PointAccel_CS ; private
-  character(len = 200) :: u_trunc_file ! The complete path to files in which a
-  character(len = 200) :: v_trunc_file ! column's worth of accelerations are
-                                       ! written if velocity truncations occur.
+  character(len=200) :: u_trunc_file ! The complete path to files in which a
+  character(len=200) :: v_trunc_file ! column's worth of accelerations are
+                                     ! written if velocity truncations occur.
   integer :: u_file, v_file ! The unit numbers for opened u- or v- truncation
                             ! files, or -1 if they have not yet been opened.
   integer :: cols_written   ! The number of columns whose output has been

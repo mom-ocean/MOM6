@@ -62,7 +62,7 @@ module MOM_generic_tracer
   use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
   use MOM_sponge, only : set_up_sponge_field, sponge_CS
   use MOM_ALE_sponge, only : set_up_ALE_sponge_field, ALE_sponge_CS
-  use MOM_time_manager, only : time_type, get_time
+  use MOM_time_manager, only : time_type, get_time, set_time
   use MOM_tracer_registry, only : register_tracer, tracer_registry_type
   use MOM_tracer_registry, only : add_tracer_diagnostics, add_tracer_OBC_values
   use MOM_tracer_registry, only : tracer_vertdiff
@@ -84,7 +84,7 @@ module MOM_generic_tracer
   public MOM_generic_tracer_fluxes_accumulate
 
   type, public :: MOM_generic_tracer_CS ; private
-     character(len = 200) :: IC_file ! The file in which the generic tracer initial values can
+     character(len=200) :: IC_file ! The file in which the generic tracer initial values can
                        ! be found, or an empty string for internal initialization.
      logical :: Z_IC_file ! If true, the generic_tracer IC_file is in Z-space.  The default is false.
      real :: tracer_IC_val = 0.0    ! The initial value assigned to tracers.
@@ -126,11 +126,10 @@ contains
   !  </TEMPLATE>
   ! </SUBROUTINE>
 
-  function register_MOM_generic_tracer(G, param_file, CS, diag, tr_Reg, restart_CS)
+  function register_MOM_generic_tracer(G, param_file, CS, tr_Reg, restart_CS)
     type(ocean_grid_type), intent(in)   :: G
     type(param_file_type), intent(in)   :: param_file
     type(MOM_generic_tracer_CS),   pointer      :: CS
-    type(diag_ctrl), target, intent(in) :: diag
     type(tracer_registry_type), pointer     :: tr_Reg
     type(MOM_restart_CS),   pointer     :: restart_CS
     ! This subroutine is used to register tracer fields and subroutines
@@ -140,7 +139,6 @@ contains
     !                         model parameter values.
     !  (in/out)  CS - A pointer that is set to point to the control structure
     !                 for this module
-    !  (in)      diag - A structure that is used to regulate diagnostic output.
     !  (in/out)  tr_Reg - A pointer that is set to point to the control structure
     !                  for the tracer advection and diffusion module.
     !  (in)      restart_CS - A pointer to the restart control structure.
@@ -176,9 +174,6 @@ contains
        g_registered = .true.
     endif
 
-    ! diag is an opaque type that contains information about the diagnostics.
-    CS%diag => diag
-
   ! Read all relevant parameters and write them to the model log.
     call log_version(param_file, sub_name, version, "")
     call get_param(param_file, sub_name, "GENERIC_TRACER_IC_FILE", CS%IC_file, &
@@ -205,7 +200,6 @@ contains
 
     ntau=1 ! MOM needs the fields at only one time step
 
-
     !   At this point G%mask2dT and CS%diag%axesTL are not allocated.
     ! postpone diag_registeration to initialize_MOM_generic_tracer
 
@@ -218,7 +212,7 @@ contains
     ! Initialize all generic tracers
     !
     call generic_tracer_init(G%isc,G%iec,G%jsc,G%jec,G%isd,G%ied,G%jsd,G%jed,&
-         G%ke,ntau,axes,grid_tmask,grid_kmt,get_diag_time_end(CS%diag))
+           G%ke,ntau,axes,grid_tmask,grid_kmt,set_time(0,0))
 
 
     !
@@ -282,7 +276,7 @@ contains
   !  <TEMPLATE>
   !   call initialize_MOM_generic_tracer(restart, day, G, h, OBC, CS, sponge_CSp,ALE_sponge_CSp, diag_to_Z_CSp)
  ! </SUBROUTINE>
-  subroutine initialize_MOM_generic_tracer(restart, day, G, GV, h, param_file, OBC, CS, &
+  subroutine initialize_MOM_generic_tracer(restart, day, G, GV, h, param_file, diag, OBC, CS, &
                                           sponge_CSp, ALE_sponge_CSp,diag_to_Z_CSp)
     logical,                               intent(in) :: restart
     type(time_type), target,               intent(in) :: day
@@ -290,6 +284,7 @@ contains
     type(verticalGrid_type),               intent(in) :: GV
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
     type(param_file_type),                 intent(in) :: param_file
+    type(diag_ctrl), target,               intent(in) :: diag
     type(ocean_OBC_type),                  pointer    :: OBC
     type(MOM_generic_tracer_CS),           pointer    :: CS
     type(sponge_CS),                       pointer    :: sponge_CSp
@@ -304,6 +299,7 @@ contains
     !  (in)      G - The ocean's grid structure.
     !  (in)      GV - The ocean's vertical grid structure.
     !  (in)      h - Layer thickness, in m or kg m-2.
+    !  (in)      diag - A structure that is used to regulate diagnostic output.
     !  (in)      OBC - This open boundary condition type specifies whether, where,
     !                  and what open boundary conditions are used.
     !  (in/out)  CS - The control structure returned by a previous call to
@@ -337,6 +333,9 @@ contains
          ": No tracer in the list.")
     !For each tracer name get its  fields
     g_tracer=>CS%g_tracer_list
+
+    ! diag is an opaque type that contains information about the diagnostics.
+    CS%diag => diag
 
     do
       if(INDEX(CS%IC_file, '_NULL_') .ne. 0) then
