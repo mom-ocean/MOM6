@@ -334,7 +334,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
   integer :: i, j, k, ks, nk
   real :: ppt2mks, Idt, convert
 
-  nk = G%ke
+  nk = GV%ke
 
   ! for diagnostics 
   if(CS%id_neutral_diff_tracer_conc_tend(m)    > 0  .or.  &
@@ -395,7 +395,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
         k = CS%vKoR(i,J-1,ks)
         dTracer(k) = dTracer(k) - Coef_y(i,J-1) * vFlx(i,J-1,ks)
       enddo
-      do k = 1, G%ke
+      do k = 1, GV%ke
         Tracer(i,j,k) = Tracer(i,j,k) + dTracer(k) * &
                         ( G%IareaT(i,j) / ( h(i,j,k) + GV%H_subroundoff ) )
       enddo
@@ -403,7 +403,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
       if(CS%id_neutral_diff_tracer_conc_tend(m)    > 0  .or.  &
          CS%id_neutral_diff_tracer_cont_tend(m)    > 0  .or.  &
          CS%id_neutral_diff_tracer_cont_tend_2d(m) > 0 ) then 
-        do k = 1, G%ke
+        do k = 1, GV%ke
           tendency(i,j,k) = dTracer(k) * G%IareaT(i,j) * Idt
         enddo
       endif 
@@ -450,7 +450,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
   ! post depth summed tendency for tracer content 
   if(CS%id_neutral_diff_tracer_cont_tend_2d(m) > 0) then 
     do j = G%jsc,G%jec ; do i = G%isc,G%iec
-      do k = 1, G%ke
+      do k = 1, GV%ke
         tendency_2d(i,j) = tendency_2d(i,j) + tendency(i,j,k)  
       enddo
     enddo ; enddo
@@ -461,7 +461,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
   ! done after posting tracer content tendency, since we alter 
   ! the tendency array.
   if(CS%id_neutral_diff_tracer_conc_tend(m) > 0) then 
-    do k = 1, G%ke ; do j = G%jsc,G%jec ; do i = G%isc,G%iec
+    do k = 1, GV%ke ; do j = G%jsc,G%jec ; do i = G%isc,G%iec
       tendency(i,j,k) =  tendency(i,j,k) / ( h(i,j,k) + GV%H_subroundoff )
     enddo ; enddo ; enddo
     call post_data(CS%id_neutral_diff_tracer_conc_tend(m), tendency, CS%diag)

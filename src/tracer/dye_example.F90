@@ -122,13 +122,14 @@ end type dye_tracer_CS
 
 contains
 
-function register_dye_tracer(G, param_file, CS, tr_Reg, &
+function register_dye_tracer(G, GV, param_file, CS, tr_Reg, &
                                    restart_CS)
-  type(ocean_grid_type),     intent(in) :: G
-  type(param_file_type),     intent(in) :: param_file
-  type(dye_tracer_CS), pointer    :: CS
-  type(tracer_registry_type),    pointer    :: tr_Reg
-  type(MOM_restart_CS),     pointer    :: restart_CS
+  type(ocean_grid_type),      intent(in) :: G
+  type(verticalGrid_type),    intent(in) :: GV
+  type(param_file_type),      intent(in) :: param_file
+  type(dye_tracer_CS),        pointer    :: CS
+  type(tracer_registry_type), pointer    :: tr_Reg
+  type(MOM_restart_CS),       pointer    :: restart_CS
 ! This subroutine is used to register tracer fields and subroutines
 ! to be used with MOM.
 ! Arguments: G - The ocean's grid structure.
@@ -150,7 +151,7 @@ function register_dye_tracer(G, param_file, CS, tr_Reg, &
   real, pointer :: tr_ptr(:,:,:) => NULL()
   logical :: register_dye_tracer
   integer :: isd, ied, jsd, jed, nz, m
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
 
   if (associated(CS)) then
     call MOM_error(WARNING, "register_dye_tracer called with an "// &
@@ -193,42 +194,42 @@ function register_dye_tracer(G, param_file, CS, tr_Reg, &
                  "This is the starting longitude at which we start injecting dyes.", &
                  fail_if_missing=.true.)
   if (minval(CS%dye_source_minlon(:)) < -1.e29) &
-          call MOM_error(FATAL, "register_dye_tracer: Not enough values provided for DYE_SOURCE_MINLON ")
+    call MOM_error(FATAL, "register_dye_tracer: Not enough values provided for DYE_SOURCE_MINLON ")
 
   CS%dye_source_maxlon(:) = -1.e30
   call get_param(param_file, mod, "DYE_SOURCE_MAXLON", CS%dye_source_maxlon, &
                  "This is the ending longitude at which we finish injecting dyes.", &
                  fail_if_missing=.true.)
   if (minval(CS%dye_source_maxlon(:)) < -1.e29) &
-          call MOM_error(FATAL, "register_dye_tracer: Not enough values provided for DYE_SOURCE_MAXLON ")
+    call MOM_error(FATAL, "register_dye_tracer: Not enough values provided for DYE_SOURCE_MAXLON ")
 
   CS%dye_source_minlat(:) = -1.e30
   call get_param(param_file, mod, "DYE_SOURCE_MINLAT", CS%dye_source_minlat, &
                  "This is the starting latitude at which we start injecting dyes.", &
                  fail_if_missing=.true.)
   if (minval(CS%dye_source_minlat(:)) < -1.e29) &
-          call MOM_error(FATAL, "register_dye_tracer: Not enough values provided for DYE_SOURCE_MINLAT ")
+    call MOM_error(FATAL, "register_dye_tracer: Not enough values provided for DYE_SOURCE_MINLAT ")
 
   CS%dye_source_maxlat(:) = -1.e30
   call get_param(param_file, mod, "DYE_SOURCE_MAXLAT", CS%dye_source_maxlat, &
                  "This is the ending latitude at which we finish injecting dyes.", &
                  fail_if_missing=.true.)
   if (minval(CS%dye_source_maxlat(:)) < -1.e29) &
-          call MOM_error(FATAL, "register_dye_tracer: Not enough values provided for DYE_SOURCE_MAXLAT ")
+    call MOM_error(FATAL, "register_dye_tracer: Not enough values provided for DYE_SOURCE_MAXLAT ")
 
   CS%dye_source_mindepth(:) = -1.e30
   call get_param(param_file, mod, "DYE_SOURCE_MINDEPTH", CS%dye_source_mindepth, &
                  "This is the minumum depth at which we inject dyes.", &
                  fail_if_missing=.true.)
   if (minval(CS%dye_source_mindepth(:)) < -1.e29) &
-          call MOM_error(FATAL, "register_dye_tracer: Not enough values provided for DYE_SOURCE_MINDEPTH")
+    call MOM_error(FATAL, "register_dye_tracer: Not enough values provided for DYE_SOURCE_MINDEPTH")
 
   CS%dye_source_maxdepth(:) = -1.e30
   call get_param(param_file, mod, "DYE_SOURCE_MAXDEPTH", CS%dye_source_maxdepth, &
                  "This is the maximum depth at which we inject dyes.", &
                  fail_if_missing=.true.)
   if (minval(CS%dye_source_maxdepth(:)) < -1.e29) &
-          call MOM_error(FATAL, "register_dye_tracer: Not enough values provided for DYE_SOURCE_MAXDEPTH ")
+    call MOM_error(FATAL, "register_dye_tracer: Not enough values provided for DYE_SOURCE_MAXDEPTH ")
 
   do m = 1, CS%ntr
     write(var_name(:),'(A,I3.3)') "dye",m
@@ -250,7 +251,7 @@ function register_dye_tracer(G, param_file, CS, tr_Reg, &
 !    call register_restart_field(tr_ptr, CS%tr_desc(m), &
 !                                .not.CS%tracers_may_reinit, restart_CS)
     ! Register the tracer for horizontal advection & diffusion.
-    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, G, tr_Reg, &
+    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, G, GV, tr_Reg, &
                          tr_desc_ptr=CS%tr_desc(m))
 
     !   Set coupled_tracers to be true (hard-coded above) to provide the surface
@@ -319,7 +320,7 @@ subroutine initialize_dye_tracer(restart, day, G, GV, h, diag, OBC, CS, sponge_C
           CS%dye_source_maxlat(m)>=G%geoLatT(i,j) .and. &
           G%mask2dT(i,j) > 0.0 ) then
         z_bot = -G%bathyT(i,j)
-        do k = G%ke, 1, -1
+        do k = GV%ke, 1, -1
           z_center = z_bot + 0.5*h(i,j,k)*GV%H_to_m
           if ( z_center > -CS%dye_source_maxdepth(m) .and. &
                z_center < -CS%dye_source_mindepth(m) ) then
@@ -349,10 +350,10 @@ subroutine initialize_dye_tracer(restart, day, G, GV, h, diag, OBC, CS, sponge_C
     CS%id_tr_dfy(m) = register_diag_field("ocean_model", trim(name)//"_dfy", &
         CS%diag%axesCvL, day, trim(longname)//" diffusive zonal flux" , &
         trim(flux_units))
-    if (CS%id_tr_adx(m) > 0) call safe_alloc_ptr(CS%tr_adx(m)%p,G%IsdB,G%IedB,G%jsd,G%jed,G%ke)
-    if (CS%id_tr_ady(m) > 0) call safe_alloc_ptr(CS%tr_ady(m)%p,G%isd,G%ied,G%JsdB,G%JedB,G%ke)
-    if (CS%id_tr_dfx(m) > 0) call safe_alloc_ptr(CS%tr_dfx(m)%p,G%IsdB,G%IedB,G%jsd,G%jed,G%ke)
-    if (CS%id_tr_dfy(m) > 0) call safe_alloc_ptr(CS%tr_dfy(m)%p,G%isd,G%ied,G%JsdB,G%JedB,G%ke)
+    if (CS%id_tr_adx(m) > 0) call safe_alloc_ptr(CS%tr_adx(m)%p,G%IsdB,G%IedB,G%jsd,G%jed,GV%ke)
+    if (CS%id_tr_ady(m) > 0) call safe_alloc_ptr(CS%tr_ady(m)%p,G%isd,G%ied,G%JsdB,G%JedB,GV%ke)
+    if (CS%id_tr_dfx(m) > 0) call safe_alloc_ptr(CS%tr_dfx(m)%p,G%IsdB,G%IedB,G%jsd,G%jed,GV%ke)
+    if (CS%id_tr_dfy(m) > 0) call safe_alloc_ptr(CS%tr_dfy(m)%p,G%isd,G%ied,G%JsdB,G%JedB,GV%ke)
 
 !    Register the tracer for horizontal advection & diffusion.
     if ((CS%id_tr_adx(m) > 0) .or. (CS%id_tr_ady(m) > 0) .or. &
@@ -403,7 +404,7 @@ subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
   integer :: i, j, k, is, ie, js, je, nz, m
   real    :: z_bot, z_center
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not.associated(CS)) return
   if (CS%ntr < 1) return
@@ -412,7 +413,7 @@ subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
     call tracer_vertdiff(h_old, ea, eb, dt, CS%tr(:,:,:,m), G, GV)
   enddo
 
-  do m= 1, CS%ntr
+  do m=1,CS%ntr
     do j=G%jsd,G%jed ; do i=G%isd,G%ied
       ! A dye is set dependent on the center of the cell being inside the rectangular box.
       if (CS%dye_source_minlon(m)<G%geoLonT(i,j) .and. &
@@ -421,7 +422,7 @@ subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
           CS%dye_source_maxlat(m)>=G%geoLatT(i,j) .and. &
           G%mask2dT(i,j) > 0.0 ) then
         z_bot = -G%bathyT(i,j)
-        do k = G%ke, 1, -1
+        do k=nz,1,-1
           z_center = z_bot + 0.5*h_new(i,j,k)*GV%H_to_m
           if ( z_center > -CS%dye_source_maxdepth(m) .and. &
                z_center < -CS%dye_source_mindepth(m) ) then
@@ -476,7 +477,7 @@ function dye_stock(h, stocks, G, GV, CS, names, units, stock_index)
 ! Return value: the number of stocks calculated here.
 
   integer :: i, j, k, is, ie, js, je, nz, m
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   dye_stock = 0
   if (.not.associated(CS)) return
@@ -507,7 +508,7 @@ subroutine dye_tracer_surface_state(state, h, G, CS)
   type(surface),                         intent(inout) :: state
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
   type(ocean_grid_type),                 intent(in)    :: G
-  type(dye_tracer_CS),             pointer       :: CS
+  type(dye_tracer_CS),                   pointer       :: CS
 !   This particular tracer package does not report anything back to the coupler.
 ! The code that is here is just a rough guide for packages that would.
 ! Arguments: state - A structure containing fields that describe the
@@ -516,8 +517,8 @@ subroutine dye_tracer_surface_state(state, h, G, CS)
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 register_dye_tracer.
-  integer :: i, j, m, is, ie, js, je, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  integer :: i, j, m, is, ie, js, je
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   
   if (.not.associated(CS)) return
 

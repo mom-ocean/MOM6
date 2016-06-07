@@ -106,13 +106,15 @@ contains
 ! machinery to register and call the subroutines that initialize
 ! tracers and apply vertical column processes to tracers.
 
-subroutine call_tracer_register(G, param_file, CS, tr_Reg, restart_CS)
+subroutine call_tracer_register(G, GV, param_file, CS, tr_Reg, restart_CS)
   type(ocean_grid_type),        intent(in) :: G
+  type(verticalGrid_type),      intent(in) :: GV
   type(param_file_type),        intent(in) :: param_file
   type(tracer_flow_control_CS), pointer    :: CS
   type(tracer_registry_type),   pointer    :: tr_Reg
   type(MOM_restart_CS),         pointer    :: restart_CS
 ! Argument:  G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in/out)  CS - A pointer that is set to point to the control structure
@@ -170,29 +172,29 @@ subroutine call_tracer_register(G, param_file, CS, tr_Reg, restart_CS)
 !  tracer package registration call returns a logical false if it cannot be run
 !  for some reason.  This then overrides the run-time selection from above.
   if (CS%use_USER_tracer_example) CS%use_USER_tracer_example = &
-    USER_register_tracer_example(G, param_file, CS%USER_tracer_example_CSp, &
+    USER_register_tracer_example(G, GV, param_file, CS%USER_tracer_example_CSp, &
                                  tr_Reg, restart_CS)
   if (CS%use_DOME_tracer) CS%use_DOME_tracer = &
-    register_DOME_tracer(G, param_file, CS%DOME_tracer_CSp, &
+    register_DOME_tracer(G, GV, param_file, CS%DOME_tracer_CSp, &
                          tr_Reg, restart_CS)
   if (CS%use_ideal_age) CS%use_ideal_age = &
-    register_ideal_age_tracer(G, param_file,  CS%ideal_age_tracer_CSp, &
+    register_ideal_age_tracer(G, GV, param_file,  CS%ideal_age_tracer_CSp, &
                               tr_Reg, restart_CS)
   if (CS%use_regional_dyes) CS%use_regional_dyes = &
-    register_dye_tracer(G, param_file,  CS%dye_tracer_CSp, &
+    register_dye_tracer(G, GV, param_file,  CS%dye_tracer_CSp, &
                         tr_Reg, restart_CS)
   if (CS%use_oil) CS%use_oil = &
-    register_oil_tracer(G, param_file,  CS%oil_tracer_CSp, &
+    register_oil_tracer(G, GV, param_file,  CS%oil_tracer_CSp, &
                         tr_Reg, restart_CS)
   if (CS%use_advection_test_tracer) CS%use_advection_test_tracer = &
-    register_advection_test_tracer(G, param_file, CS%advection_test_tracer_CSp, &
+    register_advection_test_tracer(G, GV, param_file, CS%advection_test_tracer_CSp, &
                                    tr_Reg, restart_CS)
   if (CS%use_OCMIP2_CFC) CS%use_OCMIP2_CFC = &
-    register_OCMIP2_CFC(G, param_file,  CS%OCMIP2_CFC_CSp, &
+    register_OCMIP2_CFC(G, GV, param_file,  CS%OCMIP2_CFC_CSp, &
                         tr_Reg, restart_CS)
 #ifdef _USE_GENERIC_TRACER
   if (CS%use_MOM_generic_tracer) CS%use_MOM_generic_tracer = &
-    register_MOM_generic_tracer(G, param_file,  CS%MOM_generic_tracer_CSp, &
+    register_MOM_generic_tracer(G, GV, param_file,  CS%MOM_generic_tracer_CSp, &
                                 tr_Reg, restart_CS)
 #endif
 

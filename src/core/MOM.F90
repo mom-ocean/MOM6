@@ -1444,13 +1444,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call MOM_grid_init(G, param_file)
   call verticalGridInit( param_file, CS%GV )
   GV => CS%GV
-  ! Copy a common variable from the vertical grid to the horizontal grid.
-  ! Consider removing this later?
-  G%ke = GV%ke
-
-  is   = G%isc   ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = GV%ke
-  isd  = G%isd   ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
-  IsdB = G%IsdB  ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   ! Read relevant parameters and write them to the model log.
   call log_version(param_file, "MOM", version, "")
@@ -1669,6 +1662,14 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   call tracer_registry_init(param_file, CS%tracer_Reg)
 
+  ! Copy a common variable from the vertical grid to the horizontal grid.
+  ! Consider removing this later?
+  G%ke = GV%ke
+
+  is   = G%isc   ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = GV%ke
+  isd  = G%isd   ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
+  IsdB = G%IsdB  ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+
   ! Allocate and initialize space for primary MOM variables.
   ALLOC_(CS%u(IsdB:IedB,jsd:jed,nz))   ; CS%u(:,:,:) = 0.0
   ALLOC_(CS%v(isd:ied,JsdB:JedB,nz))   ; CS%v(:,:,:) = 0.0
@@ -1685,8 +1686,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     CS%vd_S = var_desc(name="S",units="PPT",longname="Salinity",&
                        cmor_field_name="so",cmor_units="ppt",   &
                        conversion=0.001)
-    call register_tracer(CS%tv%T, CS%vd_T, param_file, G, CS%tracer_Reg, CS%vd_T)
-    call register_tracer(CS%tv%S, CS%vd_S, param_file, G, CS%tracer_Reg, CS%vd_S)
+    call register_tracer(CS%tv%T, CS%vd_T, param_file, G, GV, CS%tracer_Reg, CS%vd_T)
+    call register_tracer(CS%tv%S, CS%vd_S, param_file, G, GV, CS%tracer_Reg, CS%vd_S)
   endif
   if (CS%use_frazil) then
     allocate(CS%tv%frazil(isd:ied,jsd:jed)) ; CS%tv%frazil(:,:) = 0.0
@@ -1771,22 +1772,12 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   ! This subroutine calls user-specified tracer registration routines.
   ! Additional calls can be added to MOM_tracer_flow_control.F90.
-  call call_tracer_register(G, param_file, CS%tracer_flow_CSp, &
+  call call_tracer_register(G, GV, param_file, CS%tracer_flow_CSp, &
                             CS%tracer_Reg, CS%restart_CSp)
 
   call MEKE_alloc_register_restart(G, param_file, CS%MEKE, CS%restart_CSp)
-  call set_visc_register_restarts(G, param_file, CS%visc, CS%restart_CSp)
+  call set_visc_register_restarts(G, GV, param_file, CS%visc, CS%restart_CSp)
   call mixedlayer_restrat_register_restarts(G, param_file, CS%mixedlayer_restrat_CSp, CS%restart_CSp)
-
-  call cpu_clock_begin(id_clock_pass_init)
-  !--- set up group pass for u,v,T,S and h. pass_uv_T_S_h also is used in step_MOM
-  call create_group_pass(CS%pass_uv_T_S_h, CS%u, CS%v, G%Domain)
-  if (CS%use_temperature) then
-    call create_group_pass(CS%pass_uv_T_S_h, CS%tv%T, G%Domain)
-    call create_group_pass(CS%pass_uv_T_S_h, CS%tv%S, G%Domain)
-  endif
-  call create_group_pass(CS%pass_uv_T_S_h, CS%h, G%Domain)
-  call cpu_clock_end(id_clock_pass_init)
 
   ! Initialize fields
   call callTree_waypoint("restart registration complete (initialize_MOM)")
@@ -1808,6 +1799,62 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                             CS%sponge_CSp, CS%ALE_sponge_CSp, CS%OBC, Time_in)
   call cpu_clock_end(id_clock_MOM_init)
   call callTree_waypoint("returned from MOM_initialize_state() (initialize_MOM)")
+
+  ! From this point, there may be pointers being set, so the final grid type
+  ! that will persist through the run has to be used.
+ 
+  !   Shift from using the temporary dynamic grid type to using the final (potentially
+  ! static) ocean grid type.
+  ! call clone_MOM_domain(dG%Domain, CS%G%Domain)
+  ! call MOM_grid_init(CS%G, param_file)
+  ! call copy_dyngrid_to_MOM_grid(dg, CS%G)
+  ! Allocate the auxiliary non-symmetric domain for debugging or I/O purposes.
+  ! if (CS%debug .or. CS%G%symmetric) &
+  !  call clone_MOM_domain(CS%G%Domain, CS%G%Domain_aux, symmetric=.false.)
+
+  ! ! Copy a common variable from the vertical grid to the horizontal grid.
+  ! ! Consider removing this later?
+  ! CS%G%ke = GV%ke
+  ! G => CS%G
+
+  if (test_grid_copy) then
+    !  Copy the data from the temporary grid to the dyn_hor_grid to CS%G.
+    call create_dyn_horgrid(dG, G%HI)
+    call clone_MOM_domain(G%Domain, dG%Domain)
+
+    call clone_MOM_domain(G%Domain, CS%G%Domain)
+    call MOM_grid_init(CS%G, param_file)
+
+    call copy_MOM_grid_to_dyngrid(G, dg)
+    call copy_dyngrid_to_MOM_grid(dg, CS%G)
+    ! Copy a common variable from the vertical grid to the horizontal grid.
+    ! Consider removing this later?
+    CS%G%ke = GV%ke
+
+    call destroy_dyn_horgrid(dG)
+    call MOM_grid_end(G) ; deallocate(G)
+
+    G => CS%G
+
+    if (CS%debug .or. CS%G%symmetric) &
+      call clone_MOM_domain(CS%G%Domain, CS%G%Domain_aux, symmetric=.false.)
+  endif
+
+
+  ! At this point, all user-modified initialization code has been called.  The
+  ! remainder of this subroutine is controlled by the parameters that have
+  ! have already been set.
+
+
+  call cpu_clock_begin(id_clock_pass_init)
+  !--- set up group pass for u,v,T,S and h. pass_uv_T_S_h also is used in step_MOM
+  call create_group_pass(CS%pass_uv_T_S_h, CS%u, CS%v, G%Domain)
+  if (CS%use_temperature) then
+    call create_group_pass(CS%pass_uv_T_S_h, CS%tv%T, G%Domain)
+    call create_group_pass(CS%pass_uv_T_S_h, CS%tv%S, G%Domain)
+  endif
+  call create_group_pass(CS%pass_uv_T_S_h, CS%h, G%Domain)
+  call cpu_clock_end(id_clock_pass_init)
 
   if (ALE_remap_init_conds(CS%ALE_CSp) .and. .not. query_initialized(CS%h,"h",CS%restart_CSp)) then
     ! This block is controlled by the ALE parameter REMAP_AFTER_INITIALIZATION.
@@ -1834,32 +1881,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   endif
   if ( CS%use_ALE_algorithm ) call ALE_updateVerticalGridType( CS%ALE_CSp, GV )
 
-  ! At this point, there will be pointers being set, so the final grid type
-  ! that will persist through the run has to be used.
-  if (test_grid_copy) then
-    !  Copy the data from the temporary grid to the dyn_hor_grid to CS%G.
-    call create_dyn_horgrid(dG, G%HI)
-    call clone_MOM_domain(G%Domain, dG%Domain)
-
-    call clone_MOM_domain(G%Domain, CS%G%Domain)
-    call MOM_grid_init(CS%G, param_file)
-
-    call copy_MOM_grid_to_dyngrid(G, dg)
-    call copy_dyngrid_to_MOM_grid(dg, CS%G)
-    ! Copy a common variable from the vertical grid to the horizontal grid.
-    ! Consider removing this later?
-    CS%G%ke = GV%ke
-
-    call destroy_dyn_horgrid(dG)
-    call MOM_grid_end(G) ; deallocate(G)
-
-    G => CS%G
-
-    if (CS%debug .or. CS%G%symmetric) &
-      call clone_MOM_domain(CS%G%Domain, CS%G%Domain_aux, symmetric=.false.)
-  endif
-  
-  diag    => CS%diag
+   diag    => CS%diag
   ! Initialize the diag mediator.
   call diag_mediator_init(G, param_file, diag, doc_file_dir=dirs%output_directory)
 
@@ -1959,7 +1981,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call tracer_hor_diff_init(Time, G, param_file, diag, CS%tracer_diff_CSp, CS%neutral_diffusion_CSp)
 
   if (CS%use_ALE_algorithm) &
-    call register_diags_TS_vardec(Time, G, param_file, CS)
+    call register_diags_TS_vardec(Time, G, GV, param_file, CS)
 
   call lock_tracer_registry(CS%tracer_Reg)
   call callTree_waypoint("tracer registry now locked (initialize_MOM)")
@@ -2416,10 +2438,11 @@ end subroutine register_diags_TS_tendency
 
 !> Initialize diagnostics for the variance decay of temp/salt
 !! across regridding/remapping
-subroutine register_diags_TS_vardec(Time, G, param_file, CS)
-  type(time_type), intent(in) :: Time             !< current model time
-  type(ocean_grid_type), intent(in) :: G          !< ocean grid structure
-  type(param_file_type), intent(in) :: param_file !< parameter file
+subroutine register_diags_TS_vardec(Time, G, GV, param_file, CS)
+  type(time_type),         intent(in) :: Time     !< current model time
+  type(ocean_grid_type),   intent(in) :: G        !< ocean grid structure
+  type(verticalGrid_type), intent(in) :: GV       !< ocean vertical grid structure
+  type(param_file_type),   intent(in) :: param_file !< parameter file
   type(MOM_control_struct), pointer :: CS   !< control structure for MOM
 
   integer :: isd, ied, jsd, jed, nz
@@ -2437,7 +2460,7 @@ subroutine register_diags_TS_vardec(Time, G, param_file, CS)
     CS%T_squared(:,:,:) = 0.
 
     vd_tmp = var_desc(name="T2", units="degC2", longname="Squared Potential Temperature")
-    call register_tracer(CS%T_squared, vd_tmp, param_file, G, CS%tracer_reg)
+    call register_tracer(CS%T_squared, vd_tmp, param_file, G, GV, CS%tracer_reg)
   endif
 
   CS%id_S_vardec = register_diag_field('ocean_model', 'S_vardec', diag%axesTL, Time, &
@@ -2447,7 +2470,7 @@ subroutine register_diags_TS_vardec(Time, G, param_file, CS)
     CS%S_squared(:,:,:) = 0.
 
     vd_tmp = var_desc(name="S2", units="PPT2", longname="Squared Salinity")
-    call register_tracer(CS%S_squared, vd_tmp, param_file, G, CS%tracer_reg)
+    call register_tracer(CS%S_squared, vd_tmp, param_file, G, GV, CS%tracer_reg)
   endif
 
 end subroutine register_diags_TS_vardec

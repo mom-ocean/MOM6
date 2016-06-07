@@ -121,8 +121,9 @@ end type DOME_tracer_CS
 
 contains
 
-function register_DOME_tracer(G, param_file, CS, tr_Reg, restart_CS)
+function register_DOME_tracer(G, GV, param_file, CS, tr_Reg, restart_CS)
   type(ocean_grid_type),      intent(in) :: G
+  type(verticalGrid_type),    intent(in) :: GV
   type(param_file_type),      intent(in) :: param_file
   type(DOME_tracer_CS),       pointer    :: CS
   type(tracer_registry_type), pointer    :: tr_Reg
@@ -144,7 +145,7 @@ function register_DOME_tracer(G, param_file, CS, tr_Reg, restart_CS)
   real, pointer :: tr_ptr(:,:,:) => NULL()
   logical :: register_DOME_tracer
   integer :: isd, ied, jsd, jed, nz, m
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
 
   if (associated(CS)) then
     call MOM_error(WARNING, "DOME_register_tracer called with an "// &
@@ -188,7 +189,7 @@ function register_DOME_tracer(G, param_file, CS, tr_Reg, restart_CS)
     ! Register the tracer for the restart file.
     call register_restart_field(tr_ptr, CS%tr_desc(m), .true., restart_CS)
     ! Register the tracer for horizontal advection & diffusion.
-    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, G, tr_Reg, &
+    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, G, GV, tr_Reg, &
                          tr_desc_ptr=CS%tr_desc(m))
 
     !   Set coupled_tracers to be true (hard-coded above) to provide the surface
@@ -255,7 +256,7 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   integer :: IsdB, IedB, JsdB, JedB
 
   if (.not.associated(CS)) return
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   h_neglect = GV%H_subroundoff
@@ -445,7 +446,7 @@ subroutine DOME_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV,
   real :: b1(SZI_(G))          ! b1 and c1 are variables used by the
   real :: c1(SZI_(G),SZK_(G))  ! tridiagonal solver.
   integer :: i, j, k, is, ie, js, je, nz, m
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not.associated(CS)) return
 
@@ -498,8 +499,8 @@ subroutine DOME_tracer_surface_state(state, h, G, CS)
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 DOME_register_tracer.
-  integer :: i, j, m, is, ie, js, je, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  integer :: i, j, m, is, ie, js, je
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   
   if (.not.associated(CS)) return
 

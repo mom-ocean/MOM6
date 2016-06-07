@@ -139,8 +139,9 @@ end type ideal_age_tracer_CS
 
 contains
 
-function register_ideal_age_tracer(G, param_file, CS, tr_Reg, restart_CS)
+function register_ideal_age_tracer(G, GV, param_file, CS, tr_Reg, restart_CS)
   type(ocean_grid_type),      intent(in) :: G
+  type(verticalGrid_type),    intent(in) :: GV
   type(param_file_type),      intent(in) :: param_file
   type(ideal_age_tracer_CS),  pointer    :: CS
   type(tracer_registry_type), pointer    :: tr_Reg
@@ -165,7 +166,7 @@ function register_ideal_age_tracer(G, param_file, CS, tr_Reg, restart_CS)
   logical :: register_ideal_age_tracer
   logical :: do_ideal_age, do_vintage, do_ideal_age_dated
   integer :: isd, ied, jsd, jed, nz, m
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
 
   if (associated(CS)) then
     call MOM_error(WARNING, "register_ideal_age_tracer called with an "// &
@@ -259,7 +260,7 @@ function register_ideal_age_tracer(G, param_file, CS, tr_Reg, restart_CS)
     call register_restart_field(tr_ptr, CS%tr_desc(m), &
                                 .not.CS%tracers_may_reinit, restart_CS)
     ! Register the tracer for horizontal advection & diffusion.
-    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, G, tr_Reg, &
+    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, G, GV, tr_Reg, &
                          tr_desc_ptr=CS%tr_desc(m))
 
     !   Set coupled_tracers to be true (hard-coded above) to provide the surface
@@ -316,7 +317,7 @@ subroutine initialize_ideal_age_tracer(restart, day, G, GV, h, diag, OBC, CS, &
 
   if (.not.associated(CS)) return
   if (CS%ntr < 1) return
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
@@ -445,7 +446,7 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
   real :: year            ! The time in years.
   integer :: secs, days   ! Integer components of the time type.
   integer :: i, j, k, is, ie, js, je, nz, m
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not.associated(CS)) return
   if (CS%ntr < 1) return
@@ -542,7 +543,7 @@ function ideal_age_stock(h, stocks, G, GV, CS, names, units, stock_index)
 ! Return value: the number of stocks calculated here.
 
   integer :: i, j, k, is, ie, js, je, nz, m
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   ideal_age_stock = 0
   if (.not.associated(CS)) return
@@ -582,8 +583,8 @@ subroutine ideal_age_tracer_surface_state(state, h, G, CS)
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 register_ideal_age_tracer.
-  integer :: i, j, m, is, ie, js, je, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  integer :: i, j, m, is, ie, js, je
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   
   if (.not.associated(CS)) return
 
