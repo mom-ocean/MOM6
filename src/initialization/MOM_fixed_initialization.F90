@@ -1195,7 +1195,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory)
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in)      directory - The directory into which to place the file.
-  character(len=120) :: filepath
+  character(len=240) :: filepath
   character(len=40)  :: mod = "write_ocean_geometry_file"
   integer, parameter :: nFlds=23
   type(vardesc) :: vars(nFlds)

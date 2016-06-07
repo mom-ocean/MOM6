@@ -84,7 +84,7 @@ module MOM_generic_tracer
   public MOM_generic_tracer_fluxes_accumulate
 
   type, public :: MOM_generic_tracer_CS ; private
-     character(len = 200) :: IC_file ! The file in which the generic tracer initial values can
+     character(len=200) :: IC_file ! The file in which the generic tracer initial values can
                        ! be found, or an empty string for internal initialization.
      logical :: Z_IC_file ! If true, the generic_tracer IC_file is in Z-space.  The default is false.
      real :: tracer_IC_val = 0.0    ! The initial value assigned to tracers.

@@ -96,7 +96,7 @@ type, public :: ideal_age_tracer_CS ; private
                                         ! coupler.
   integer :: nkml       ! The number of layers in the mixed layer.  The ideal
                         ! age tracers are reset in the top nkml layers.
-  character(len = 200) :: IC_file ! The file in which the age-tracer initial values
+  character(len=200) :: IC_file ! The file in which the age-tracer initial values
                     ! can be found, or an empty string for internal initialization.
   logical :: Z_IC_file ! If true, the IC_file is in Z-space.  The default is false.
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.

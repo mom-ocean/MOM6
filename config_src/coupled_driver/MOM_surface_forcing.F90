@@ -804,7 +804,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_surface_forcing"  ! This module's name.
   character(len=48)  :: stagger
-  character(len=128) :: basin_file
+  character(len=240) :: basin_file
   integer :: i, j, isd, ied, jsd, jed
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed

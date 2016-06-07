@@ -470,7 +470,7 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=200) :: inputdir   ! The directory where NetCDF input files
-  character(len=200) :: filename
+  character(len=240) :: filename
   character(len=200) :: tmpstr
   character(len=40)  :: mod = "MOM_opacity"
   character(len=40)  :: bandnum, shortname

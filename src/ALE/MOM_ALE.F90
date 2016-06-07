@@ -1349,7 +1349,7 @@ subroutine ALE_writeCoordinateFile( CS, G, GV, directory )
   type(verticalGrid_type), intent(in)  :: GV         !< ocean vertical grid structure
   character(len=*),      intent(in)    :: directory  !< directory for writing grid info 
 
-  character(len=120) :: filepath
+  character(len=240) :: filepath
   type(vardesc)      :: vars(2)
   type(fieldtype)    :: fields(2)
   integer            :: unit
