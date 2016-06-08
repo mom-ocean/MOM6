@@ -336,12 +336,13 @@ end subroutine ALE_register_diags
 !! before the main time integration loop to initialize the regridding stuff.
 !! We read the MOM_input file to register the values of different
 !! regridding/remapping parameters.
-subroutine adjustGridForIntegrity( CS, G, h )
-  type(ALE_CS), pointer                                 :: CS
-  type(ocean_grid_type), intent(in)                     :: G
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h
-
-  call inflate_vanished_layers_old( CS%regridCS, G, h(:,:,:) )
+subroutine adjustGridForIntegrity( CS, G, GV, h )
+  type(ALE_CS),                              pointer       :: CS  !< Regridding parameters and options
+  type(ocean_grid_type),                     intent(in)    :: G   !< Ocean grid informations
+  type(verticalGrid_type),                   intent(in)    :: GV  !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: h   !< Current 3D grid thickness that
+                                                                   !! are to be adjusted (m or Pa)
+  call inflate_vanished_layers_old( CS%regridCS, G, GV, h(:,:,:) )
 
 end subroutine adjustGridForIntegrity
 
@@ -393,7 +394,7 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt)
   ! Both are needed for the subsequent remapping of variables.
   call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, h_new, dzRegrid )
 
-  call check_grid( G, h, 0. )
+  call check_grid( G, GV, h, 0. )
 
   if (CS%show_call_tree) call callTree_waypoint("new grid generated (ALE_main)")
 
@@ -416,9 +417,10 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt)
 end subroutine ALE_main
 
 !> Check grid for negative thicknesses
-subroutine check_grid( G, h, threshold )
+subroutine check_grid( G, GV, h, threshold )
   type(ocean_grid_type),                     intent(in) :: G !< Ocean grid structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in) :: h !< Current 3D grid obtained after the last time step (H units)
+  type(verticalGrid_type),                   intent(in) :: GV  !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h !< Current 3D grid obtained after the last time step (H units)
   real,                                      intent(in) :: threshold !< Value below which to flag issues (H units)
   ! Local variables
   integer :: i, j
@@ -676,16 +678,17 @@ end subroutine remap_all_state_vars
 
 
 !> Remaps a single scalar between grids described by thicknesses h_src and h_dst.
-!! h_dst must be dimensioned as a model array with G%ke layers while h_src can
+!! h_dst must be dimensioned as a model array with GV%ke layers while h_src can
 !! have an arbitrary number of layers specified by nk_src.
-subroutine ALE_remap_scalar(CS, G, nk_src, h_src, s_src, h_dst, s_dst, all_cells, old_remap )
+subroutine ALE_remap_scalar(CS, G, GV, nk_src, h_src, s_src, h_dst, s_dst, all_cells, old_remap )
   type(remapping_CS),                      intent(in)    :: CS        !< Remapping control structure
   type(ocean_grid_type),                   intent(in)    :: G         !< Ocean grid structure
+  type(verticalGrid_type),                 intent(in)    :: GV        !< Ocean vertical grid structure
   integer,                                 intent(in)    :: nk_src    !< Number of levels on source grid
   real, dimension(SZI_(G),SZJ_(G),nk_src), intent(in)    :: h_src     !< Level thickness of source grid (m or Pa)
   real, dimension(SZI_(G),SZJ_(G),nk_src), intent(in)    :: s_src     !< Scalar on source grid
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),intent(in)    :: h_dst     !< Level thickness of destination grid (m or Pa)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),intent(inout) :: s_dst     !< Scalar on destination grid
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),intent(in)    :: h_dst    !< Level thickness of destination grid (m or Pa)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),intent(inout) :: s_dst    !< Scalar on destination grid
   logical, optional,                       intent(in)    :: all_cells !< If false, only reconstruct for
                                                                       !! non-vanished cells. Use all vanished
                                                                       !! layers otherwise (default).
@@ -693,7 +696,7 @@ subroutine ALE_remap_scalar(CS, G, nk_src, h_src, s_src, h_dst, s_dst, all_cells
                                                                       !! method, otherwise use "remapping_core_h".
   ! Local variables
   integer :: i, j, k, n_points
-  real :: dx(G%ke+1)
+  real :: dx(GV%ke+1)
   logical :: ignore_vanished_layers, use_remapping_core_w
 
   ignore_vanished_layers = .false.
@@ -717,10 +720,10 @@ subroutine ALE_remap_scalar(CS, G, nk_src, h_src, s_src, h_dst, s_dst, all_cells
           s_dst(i,j,:) = 0.
         endif
         if (use_remapping_core_w) then
-          call dzFromH1H2( n_points, h_src(i,j,1:n_points), G%ke, h_dst(i,j,:), dx )
-          call remapping_core_w(CS, n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), G%ke, dx, s_dst(i,j,:))
+          call dzFromH1H2( n_points, h_src(i,j,1:n_points), GV%ke, h_dst(i,j,:), dx )
+          call remapping_core_w(CS, n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), GV%ke, dx, s_dst(i,j,:))
         else
-          call remapping_core_h(n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), G%ke, h_dst(i,j,:), s_dst(i,j,:), CS)
+          call remapping_core_h(n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), GV%ke, h_dst(i,j,:), s_dst(i,j,:), CS)
         endif
       else
         s_dst(i,j,:) = 0.
@@ -1374,10 +1377,11 @@ end subroutine ALE_writeCoordinateFile
 
 
 !> Set h to coordinate values for fixed coordinate systems
-subroutine ALE_initThicknessToCoord( CS, G, h )
-  type(ALE_CS), intent(inout)                           :: CS  !< module control structure 
-  type(ocean_grid_type), intent(in)                     :: G   !< module grid structure 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: h   !< layer thickness 
+subroutine ALE_initThicknessToCoord( CS, G, GV, h )
+  type(ALE_CS), intent(inout)                            :: CS  !< module control structure 
+  type(ocean_grid_type), intent(in)                      :: G   !< module grid structure 
+  type(verticalGrid_type), intent(in)                    :: GV  !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: h   !< layer thickness 
 
   ! Local variables
   integer :: i, j, k
