@@ -1791,7 +1791,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call callTree_waypoint("returned from MOM_initialize_coord() (initialize_MOM)")
 
   if (CS%use_ALE_algorithm) then
-    call ALE_init(param_file, G, GV, CS%ALE_CSp)
+    call ALE_init(param_file, GV, G%max_depth, CS%ALE_CSp)
     call callTree_waypoint("returned from ALE_init() (initialize_MOM)")
   endif
 
@@ -1905,7 +1905,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   call cpu_clock_begin(id_clock_MOM_init)
   if (CS%use_ALE_algorithm) then
-    call ALE_writeCoordinateFile( CS%ALE_CSp, G, GV, dirs%output_directory )
+    call ALE_writeCoordinateFile( CS%ALE_CSp, GV, dirs%output_directory )
   endif
   call cpu_clock_end(id_clock_MOM_init)
   call callTree_waypoint("ALE initialized (initialize_MOM)")
