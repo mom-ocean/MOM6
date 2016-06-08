@@ -2306,7 +2306,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
     ! Build the target grid (and set the model thickness to it)
     allocate( hTarget(nz) )
     ! This call can be more general but is hard-coded for z* coordinates...  ????
-    call ALE_initRegridding( G, GV, PF, mod, regridCS, hTarget ) ! sets regridCS and hTarget(1:nz)
+    call ALE_initRegridding( GV, G%max_depth, PF, mod, regridCS, hTarget ) ! sets regridCS and hTarget(1:nz)
 
     if (.not. remap_general) then
       ! This is the old way of initializing to z* coordinates only

@@ -128,10 +128,10 @@ contains
 !! before the main time integration loop to initialize the regridding stuff.
 !! We read the MOM_input file to register the values of different
 !! regridding/remapping parameters.
-subroutine ALE_init( param_file, G, GV, CS)
+subroutine ALE_init( param_file, GV, max_depth, CS)
   type(param_file_type),   intent(in) :: param_file !< Parameter file
-  type(ocean_grid_type),   intent(in) :: G          !< Ocean grid structure
   type(verticalGrid_type), intent(in) :: GV         !< Ocean vertical grid structure
+  real,                    intent(in) :: max_depth  !< The maximum depth of the ocean, in m.
   type(ALE_CS),            pointer    :: CS         !< Module control structure
 
   ! Local variables
@@ -189,8 +189,8 @@ subroutine ALE_init( param_file, G, GV, CS)
                  default=.true.)
 
   ! Initialize and configure regridding
-  allocate( dz(G%ke) )
-  call ALE_initRegridding( G, GV, param_file, mod, CS%regridCS, dz )
+  allocate( dz(GV%ke) )
+  call ALE_initRegridding( GV, max_depth, param_file, mod, CS%regridCS, dz )
   deallocate( dz )
 
   ! Initialize and configure remapping
@@ -247,7 +247,7 @@ subroutine ALE_init( param_file, G, GV, CS)
   call set_regrid_params(CS%regridCS, integrate_downward_for_e=.not.local_logical)
 
   ! Keep a record of values for subsequent queries
-  CS%nk = G%ke
+  CS%nk = GV%ke
 
   if (CS%show_call_tree) call callTree_leave("ALE_init()")
 end subroutine ALE_init
@@ -896,13 +896,13 @@ end function pressureReconstructionScheme
 
 
 !> Initialize regridding module 
-subroutine ALE_initRegridding( G, GV, param_file, mod, regridCS, dz )
-  type(ocean_grid_type),   intent(in)  :: G            !< ocean grid structure 
-  type(verticalGrid_type), intent(in)  :: GV           !< Ocean vertical grid structure
-  type(param_file_type),   intent(in)  :: param_file   !< parameter file 
-  character(len=*),        intent(in)  :: mod          !< Name of calling module
-  type(regridding_CS),     intent(out) :: regridCS     !< Regridding parameters and work arrays
-  real, dimension(:),      intent(out) :: dz           !< Resolution (thickness) in units of coordinate
+subroutine ALE_initRegridding(GV, max_depth, param_file, mod, regridCS, dz )
+  type(verticalGrid_type), intent(in)  :: GV         !< Ocean vertical grid structure
+  real,                    intent(in)  :: max_depth  !< The maximum depth of the ocean, in m.
+  type(param_file_type),   intent(in)  :: param_file !< parameter file 
+  character(len=*),        intent(in)  :: mod        !< Name of calling module
+  type(regridding_CS),     intent(out) :: regridCS   !< Regridding parameters and work arrays
+  real, dimension(:),      intent(out) :: dz         !< Resolution (thickness) in units of coordinate
 
   ! Local variables
   character(len=80)  :: string, varName ! Temporary strings
@@ -915,7 +915,7 @@ subroutine ALE_initRegridding( G, GV, param_file, mod, regridCS, dz )
   real :: tmpReal, compress_fraction
   real :: dz_fixed_sfc, Rho_avg_depth, nlay_sfc_int
   integer :: nz_fixed_sfc
-  real :: rho_target(G%ke+1) ! Target density used in HYBRID mode
+  real :: rho_target(GV%ke+1) ! Target density used in HYBRID mode
   real, dimension(size(dz))   :: h_max  ! Maximum layer thicknesses, in m.
   real, dimension(size(dz))   :: dz_max ! Thicknesses used to find maximum interface depths, in m.
   real, dimension(size(dz)+1) :: z_max  ! Maximum tinterface depths, in m.
@@ -945,7 +945,7 @@ subroutine ALE_initRegridding( G, GV, param_file, mod, regridCS, dz )
                  "some artificial compressibility solely to make homogenous\n"//&
                  "regions appear stratified.", default=0.)
 
-  call initialize_regridding( G%ke, coordMode, interpScheme, regridCS, &
+  call initialize_regridding( GV%ke, coordMode, interpScheme, regridCS, &
                               compressibility_fraction=compress_fraction )
 
   call get_param(param_file, mod, "ALE_COORDINATE_CONFIG", string, &
@@ -969,9 +969,9 @@ subroutine ALE_initRegridding( G, GV, param_file, mod, regridCS, dz )
             "is of non-dimensional fractions of the water column."
   select case ( trim(string) )
     case ("UNIFORM")
-      dz(:) = uniformResolution(G%ke, coordMode, G%max_depth, &
+      dz(:) = uniformResolution(GV%ke, coordMode, max_depth, &
                  GV%Rlay(1)+0.5*(GV%Rlay(1)-GV%Rlay(2)), &
-                 GV%Rlay(G%ke)+0.5*(GV%Rlay(G%ke)-GV%Rlay(G%ke-1)) )
+                 GV%Rlay(GV%ke)+0.5*(GV%Rlay(GV%ke)-GV%Rlay(GV%ke-1)) )
       call log_param(param_file, mod, "!ALE_RESOLUTION", dz, &
                    trim(message), units=trim(coordUnits))
     case ("PARAM")
@@ -1045,14 +1045,14 @@ subroutine ALE_initRegridding( G, GV, param_file, mod, regridCS, dz )
   if (coordinateMode(coordMode) == REGRIDDING_ZSTAR .or. &
       coordinateMode(coordMode) == REGRIDDING_HYCOM1 .or. &
       coordinateMode(coordMode) == REGRIDDING_SLIGHT) then
-    ! Adjust target grid to be consistent with G%max_depth
+    ! Adjust target grid to be consistent with max_depth
     ! This is a work around to the from_Z initialization...  ???
     tmpReal = sum( dz(:) )
-    if (tmpReal < G%max_depth) then
-      dz(ke) = dz(ke) + ( G%max_depth - tmpReal )
-    elseif (tmpReal > G%max_depth) then
-      if ( dz(ke) + ( G%max_depth - tmpReal ) > 0. ) then
-        dz(ke) = dz(ke) + ( G%max_depth - tmpReal )
+    if (tmpReal < max_depth) then
+      dz(ke) = dz(ke) + ( max_depth - tmpReal )
+    elseif (tmpReal > max_depth) then
+      if ( dz(ke) + ( max_depth - tmpReal ) > 0. ) then
+        dz(ke) = dz(ke) + ( max_depth - tmpReal )
       else
         call MOM_error(FATAL,"ALE_initRegridding: "// &
           "MAXIMUM_DEPTH was too shallow to adjust bottom layer of DZ!"//trim(string))
@@ -1343,11 +1343,10 @@ end subroutine ALE_updateVerticalGridType
 !> Write the vertical coordinate information into a file.
 !! This subroutine writes out a file containing any available data related
 !! to the vertical grid used by the MOM ocean model when in ALE mode.
-subroutine ALE_writeCoordinateFile( CS, G, GV, directory )
-  type(ALE_CS),          pointer       :: CS         !< module control structure 
-  type(ocean_grid_type), intent(inout) :: G          !< model grid structure 
+subroutine ALE_writeCoordinateFile( CS, GV, directory )
+  type(ALE_CS),            pointer     :: CS         !< module control structure 
   type(verticalGrid_type), intent(in)  :: GV         !< ocean vertical grid structure
-  character(len=*),      intent(in)    :: directory  !< directory for writing grid info 
+  character(len=*),        intent(in)  :: directory  !< directory for writing grid info 
 
   character(len=240) :: filepath
   type(vardesc)      :: vars(2)
