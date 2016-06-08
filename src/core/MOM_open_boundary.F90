@@ -103,7 +103,7 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
   rx_max = CS%rx_max ; ry_max = CS%rx_max
 
   if (OBC%apply_OBC_u_flather_east .or. OBC%apply_OBC_u_flather_west) then
-    do k=1,nz ; do j=js,je ; do I=is,ie-1 ; if (OBC%OBC_mask_u(I,j)) then
+    do k=1,nz ; do j=js,je ; do I=is-1,ie ; if (OBC%OBC_mask_u(I,j)) then
       if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) then
         dhdt = u_old(I-1,j,k)-u_new(I-1,j,k) !old-new
         dhdx = u_new(I-1,j,k)-u_new(I-2,j,k) !in new time backward sasha for I-1
@@ -142,7 +142,7 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
   endif
 
   if (OBC%apply_OBC_v_flather_north .or. OBC%apply_OBC_v_flather_south) then
-    do k=1,nz ; do J=js,je-1 ; do i=is,ie ; if (OBC%OBC_mask_v(i,J)) then
+    do k=1,nz ; do J=js-1,je ; do i=is,ie ; if (OBC%OBC_mask_v(i,J)) then
       if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) then
         dhdt = v_old(i,J-1,k)-v_new(i,J-1,k) !old-new
         dhdx = v_new(i,J-1,k)-v_new(i,J-2,k) !in new time backward sasha for J-1

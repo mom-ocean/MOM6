@@ -1687,8 +1687,6 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   logical :: any_OBC        ! Set to true if any points in this subdomain use
                             ! open boundary conditions.
 
-  logical :: apply_OBC_u = .false.
-  logical :: apply_OBC_v = .false.
   logical :: apply_OBC_u_flather_east = .false., apply_OBC_u_flather_west = .false.
   logical :: apply_OBC_v_flather_north = .false., apply_OBC_v_flather_south = .false.  
   logical :: read_OBC_eta = .false.
@@ -1715,15 +1713,6 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   
-  call get_param(PF, mod, "APPLY_OBC_U", apply_OBC_u, &
-                 "If true, open boundary conditions may be set at some \n"//&
-                 "u-points, with the configuration controlled by OBC_CONFIG", &
-                 default=.false.)
-  call get_param(PF, mod, "APPLY_OBC_V", apply_OBC_v, &
-                 "If true, open boundary conditions may be set at some \n"//&
-                 "v-points, with the configuration controlled by OBC_CONFIG", &
-                 default=.false.)
-
   call get_param(PF, mod, "APPLY_OBC_U_FLATHER_EAST", apply_OBC_u_flather_east,&
                  "Apply a Flather open boundary condition on the eastern \n"//&
                  "side of the global domain", default=.false.)
@@ -1746,8 +1735,6 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   OBC%apply_OBC_u_flather_west = apply_OBC_u_flather_west 
   OBC%apply_OBC_v_flather_north = apply_OBC_v_flather_north 
   OBC%apply_OBC_v_flather_south = apply_OBC_v_flather_south
-  OBC%apply_OBC_u = apply_OBC_u
-  OBC%apply_OBC_v = apply_OBC_v
 
   call get_param(PF, mod, "READ_OBC_UV", read_OBC_uv, &
                  "If true, read the values for the velocity open boundary \n"//&
@@ -1772,10 +1759,10 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   endif
 
   if (G%symmetric) then
-    east_boundary = G%ieg-1
-    west_boundary = G%isg
-    north_boundary = G%jeg-1
-    south_boundary = G%jsg
+    east_boundary = G%ieg
+    west_boundary = G%isg-1
+    north_boundary = G%jeg
+    south_boundary = G%jsg-1
   else
     ! I am not entirely sure that this works properly. -RWH
     east_boundary = G%ieg-1
@@ -1835,17 +1822,17 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   if (apply_OBC_u_flather_east) then
     ! Determine where u points are applied at east side 
     do j=jsd,jed ; do I=IsdB,IedB
-      if ((I+G%idg_offset) == east_boundary) then
+      if ((I+G%idg_offset) == east_boundary) then !eastern side
         if (G%mask2dCu(I,j) > 0.99) then
           OBC%OBC_mask_u(I,j) = .true.
           OBC%OBC_kind_u(I,j) = OBC_FLATHER_E
           if (G%mask2dCv(i+1,J) > 0.99) then
             OBC%OBC_mask_v(i+1,J) = .true.
-            if (OBC%OBC_kind_v(i+1,J) == OBC_NONE) OBC%OBC_kind_v(i+1,J) = OBC_SIMPLE
+            if (OBC%OBC_kind_v(i+1,J) == OBC_NONE) OBC%OBC_kind_v(i+1,J) = OBC_FLATHER_E
           endif
           if (G%mask2dCv(i+1,J-1) > 0.99) then
             OBC%OBC_mask_v(i+1,J-1) = .true.
-            if (OBC%OBC_kind_v(i+1,J-1) == OBC_NONE) OBC%OBC_kind_v(i+1,J-1) = OBC_SIMPLE
+            if (OBC%OBC_kind_v(i+1,J-1) == OBC_NONE) OBC%OBC_kind_v(i+1,J-1) = OBC_FLATHER_E
           endif
         endif
       endif
@@ -1855,17 +1842,17 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   if (apply_OBC_u_flather_west) then
     ! Determine where u points are applied at west side 
     do j=jsd,jed ; do I=IsdB,IedB
-      if ((I+G%idg_offset) == west_boundary) then
+      if ((I+G%idg_offset) == west_boundary) then !western side
         if (G%mask2dCu(I,j) > 0.99) then
           OBC%OBC_mask_u(I,j) = .true.
           OBC%OBC_kind_u(I,j) = OBC_FLATHER_W
           if (G%mask2dCv(i,J) > 0.99) then
             OBC%OBC_mask_v(i,J) = .true.
-            if (OBC%OBC_kind_v(i,J) == OBC_NONE) OBC%OBC_kind_v(i,J) = OBC_SIMPLE
+            if (OBC%OBC_kind_v(i,J) == OBC_NONE) OBC%OBC_kind_v(i,J) = OBC_FLATHER_W
           endif
           if (G%mask2dCv(i,J-1) > 0.99) then
             OBC%OBC_mask_v(i,J-1) = .true.
-            if (OBC%OBC_kind_v(i,J-1) == OBC_NONE) OBC%OBC_kind_v(i,J-1) = OBC_SIMPLE
+            if (OBC%OBC_kind_v(i,J-1) == OBC_NONE) OBC%OBC_kind_v(i,J-1) = OBC_FLATHER_W
           endif
         endif
       endif
@@ -1876,17 +1863,17 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   if (apply_OBC_v_flather_north) then
     ! Determine where v points are applied at north side 
     do J=JsdB,JedB ; do i=isd,ied
-      if ((J+G%jdg_offset) == north_boundary) then
+      if ((J+G%jdg_offset) == north_boundary) then         !northern side
         if (G%mask2dCv(i,J) > 0.99) then
           OBC%OBC_mask_v(i,J) = .true.
           OBC%OBC_kind_v(i,J) = OBC_FLATHER_N
           if (G%mask2dCu(I,j+1) > 0.99) then
             OBC%OBC_mask_u(I,j+1) = .true.
-            if (OBC%OBC_kind_u(I,j+1) == OBC_NONE) OBC%OBC_kind_u(I,j+1) = OBC_SIMPLE
+            if (OBC%OBC_kind_u(I,j+1) == OBC_NONE) OBC%OBC_kind_u(I,j+1) = OBC_FLATHER_N
           endif
           if (G%mask2dCu(I-1,j+1) > 0.99) then
             OBC%OBC_mask_u(I-1,j+1) = .true.
-            if (OBC%OBC_kind_u(I-1,j+1) == OBC_NONE) OBC%OBC_kind_u(I-1,j+1) = OBC_SIMPLE
+            if (OBC%OBC_kind_u(I-1,j+1) == OBC_NONE) OBC%OBC_kind_u(I-1,j+1) = OBC_FLATHER_N
           endif
         endif
       endif
@@ -1896,17 +1883,17 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   if (apply_OBC_v_flather_south) then
     ! Determine where v points are applied at south side 
     do J=JsdB,JedB ; do i=isd,ied
-      if ((J+G%jdg_offset) == south_boundary) then
+      if ((J+G%jdg_offset) == south_boundary) then         !southern side
         if (G%mask2dCv(i,J) > 0.99) then
           OBC%OBC_mask_v(i,J) = .true.
           OBC%OBC_kind_v(i,J) = OBC_FLATHER_S
           if (G%mask2dCu(I,j) > 0.99) then
             OBC%OBC_mask_u(I,j) = .true.
-            if (OBC%OBC_kind_u(I,j) == OBC_NONE) OBC%OBC_kind_u(I,j) = OBC_SIMPLE
+            if (OBC%OBC_kind_u(I,j) == OBC_NONE) OBC%OBC_kind_u(I,j) = OBC_FLATHER_S
           endif
           if (G%mask2dCu(I-1,j) > 0.99) then
             OBC%OBC_mask_u(I-1,j) = .true.
-            if (OBC%OBC_kind_u(I-1,j) == OBC_NONE) OBC%OBC_kind_u(I-1,j) = OBC_SIMPLE
+            if (OBC%OBC_kind_u(I-1,j) == OBC_NONE) OBC%OBC_kind_u(I-1,j) = OBC_FLATHER_S
           endif
         endif
       endif
@@ -1923,17 +1910,11 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   ! enforce the near-boundary layer structure.
   if (apply_OBC_u_flather_west .or. apply_OBC_u_flather_east) then
     allocate(OBC%rx_old_u(IsdB:IedB,jsd:jed,nz)) ; OBC%rx_old_u(:,:,:) = 0.0
-  endif
-  if (apply_OBC_u) then
-    allocate(OBC%u(Isd:Ied,jsd:jed,nz))   ; OBC%u(:,:,:) = 0.0
-    allocate(OBC%uh(Isd:Ied,jsd:jed,nz))  ; OBC%uh(:,:,:) = 0.0
+ !   allocate(OBC%rx_old_h(Isd:Ied,jsd:jed,nz))   ; OBC%rx_old_h(:,:,:) = 0.0
   endif
   if (apply_OBC_v_flather_south .or. apply_OBC_v_flather_north) then
     allocate(OBC%ry_old_v(isd:ied,JsdB:JedB,nz)) ; OBC%ry_old_v(:,:,:) = 0.0
-  endif
-  if (apply_OBC_v) then
-    allocate(OBC%v(isd:ied,Jsd:Jed,nz))   ; OBC%v(:,:,:) = 0.0
-    allocate(OBC%vh(isd:ied,Jsd:Jed,nz))  ; OBC%vh(:,:,:) = 0.0
+ !   allocate(OBC%ry_old_h(isd:ied,Jsd:Jed,nz))   ; OBC%ry_old_h(:,:,:) = 0.0
   endif
 
 
@@ -2026,11 +2007,11 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
     enddo ; enddo ; enddo
   endif
 
-  do k=1,nz ; do j=js,je ; do I=is,ie-1
+  do k=1,nz ; do j=js-1,je+1 ; do I=is-1,ie+1
     if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) h(i+1,j,k) = h(i,j,k)
     if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W) h(i,j,k) = h(i+1,j,k)
   enddo ; enddo ; enddo
-  do k=1,nz ; do J=js,je-1 ; do i=is,ie
+  do k=1,nz ; do J=js-1,je+1 ; do i=is-1,ie+1
     if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) h(i,j+1,k) = h(i,j,k)
     if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S) h(i,j,k) = h(i,j+1,k)
   enddo ; enddo ; enddo
