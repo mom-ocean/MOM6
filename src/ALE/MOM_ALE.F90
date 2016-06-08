@@ -367,20 +367,20 @@ end subroutine ALE_end
 subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt)
   type(ocean_grid_type),                      intent(in)    :: G   !< Ocean grid informations
   type(verticalGrid_type),                    intent(in)    :: GV  !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)),  intent(inout) :: h   !< Current 3D grid obtained after last time step (m or Pa)
-  real, dimension(SZIB_(G),SZJ_(G), SZK_(G)), intent(inout) :: u   !< Zonal velocity field (m/s)
-  real, dimension(SZI_(G),SZJB_(G), SZK_(G)), intent(inout) :: v   !< Meridional velocity field (m/s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h   !< Current 3D grid obtained after last time step (m or Pa)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: u   !< Zonal velocity field (m/s)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: v   !< Meridional velocity field (m/s)
   type(thermo_var_ptrs),                      intent(inout) :: tv  !< Thermodynamic variable structure
   type(tracer_registry_type),                 pointer       :: Reg !< Tracer registry structure
   type(ALE_CS),                               pointer       :: CS  !< Regridding parameters and options
   real,                             optional, intent(in)    :: dt  !< Time step between calls to ALE_main()
 
   ! Local variables
-  real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: dzRegrid ! The change in grid interface positions
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_new ! New 3D grid obtained after last time step (m or Pa)
+  real, dimension(SZI_(G), SZJ_(G), SZK_(GV)+1) :: dzRegrid ! The change in grid interface positions
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_new ! New 3D grid obtained after last time step (m or Pa)
   integer :: nk, i, j, k, isc, iec, jsc, jec
 
-  nk = G%ke; isc = G%isc; iec = G%iec; jsc = G%jsc; jec = G%jec
+  nk = GV%ke; isc = G%isc; iec = G%iec; jsc = G%jsc; jec = G%jec
 
   if (CS%show_call_tree) call callTree_enter("ALE_main(), MOM_ALE.F90")
 
@@ -446,13 +446,13 @@ subroutine ALE_build_grid( G, GV, regridCS, remapCS, h, tv, debug )
   type(regridding_CS),                     intent(in)    :: regridCS !< Regridding parameters and options
   type(remapping_CS),                      intent(in)    :: remapCS  !< Remapping parameters and options
   type(thermo_var_ptrs),                   intent(inout) :: tv       !< Thermodynamical variable structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h      !< Current 3D grid obtained after the last time step (m or Pa)
+  real, dimension(SZI_(G),SZJ_(G), SZK_(GV)), intent(inout) :: h      !< Current 3D grid obtained after the last time step (m or Pa)
   logical,                       optional, intent(in)    :: debug    !< If true, show the call tree
 
   ! Local variables
   integer :: nk, i, j, k
-  real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) :: dzRegrid ! The change in grid interface positions
-  real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: h_new ! The new grid thicknesses
+  real, dimension(SZI_(G), SZJ_(G), SZK_(GV)+1) :: dzRegrid ! The change in grid interface positions
+  real, dimension(SZI_(G), SZJ_(G), SZK_(GV)) :: h_new ! The new grid thicknesses
   logical :: show_call_tree
 
   show_call_tree = .false.
@@ -484,31 +484,31 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, dxInt
   type(ALE_CS),                                     intent(in)    :: CS_ALE        !< ALE control structure 
   type(ocean_grid_type),                            intent(in)    :: G             !< Ocean grid structure
   type(verticalGrid_type),                          intent(in)    :: GV            !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),         intent(in)    :: h_old         !< Thickness of source grid (m or Pa)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),         intent(in)    :: h_new         !< Thickness of destination grid (m or Pa)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),       intent(in)    :: dxInterface   !< Change in interface position (Hm or Pa)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),        intent(in)    :: h_old         !< Thickness of source grid (m or Pa)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),        intent(in)    :: h_new         !< Thickness of destination grid (m or Pa)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1),      intent(in)    :: dxInterface   !< Change in interface position (Hm or Pa)
   type(tracer_registry_type),                       pointer       :: Reg           !< Tracer registry structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), optional, intent(inout) :: u          !< Zonal velocity component (m/s)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), optional, intent(inout) :: v          !< Meridional velocity component (m/s)
-  logical,                                   optional, intent(in)    :: debug      !< If true, show the call tree
-  real,                                      optional, intent(in)    :: dt         !< time step for diagnostics 
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), optional, intent(inout) :: u          !< Zonal velocity component (m/s)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), optional, intent(inout) :: v          !< Meridional velocity component (m/s)
+  logical,                                    optional, intent(in)    :: debug      !< If true, show the call tree
+  real,                                       optional, intent(in)    :: dt         !< time step for diagnostics 
   ! Local variables
   integer                                     :: i, j, k, m
   integer                                     :: nz, ntr
-  real, dimension(G%ke+1)                     :: dx
-  real, dimension(G%ke)                       :: h1, u_column
-  real, dimension(SZI_(G), SZJ_(G), SZK_(G))  :: work_conc 
-  real, dimension(SZI_(G), SZJ_(G), SZK_(G))  :: work_cont
+  real, dimension(GV%ke+1)                    :: dx
+  real, dimension(GV%ke)                      :: h1, u_column
+  real, dimension(SZI_(G), SZJ_(G), SZK_(GV)) :: work_conc 
+  real, dimension(SZI_(G), SZJ_(G), SZK_(GV)) :: work_cont
   real, dimension(SZI_(G), SZJ_(G))           :: work_2d 
   real                                        :: Idt, ppt2mks
-  real, dimension(G%ke)                       :: h2
+  real, dimension(GV%ke)                      :: h2
   logical                                     :: show_call_tree
 
   show_call_tree = .false.
   if (present(debug)) show_call_tree = debug
   if (show_call_tree) call callTree_enter("remap_all_state_vars(), MOM_ALE.F90")
 
-  nz      = G%ke
+  nz      = GV%ke
   ppt2mks = 0.001 
 
   if (associated(Reg)) then
@@ -548,7 +548,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, dxInt
             ! allocated during the time=0 initialization call to this routine. 
             if(present(dt)) then 
               if(CS_ALE%do_tendency_diag(m)) then 
-                do k=1,G%ke
+                do k=1,GV%ke
                   work_conc(i,j,k) = (u_column(k)    - Reg%Tr(m)%t(i,j,k)      ) * Idt
                   work_cont(i,j,k) = (u_column(k)*h2(k) - Reg%Tr(m)%t(i,j,k)*h1(k)) * Idt * GV%H_to_kg_m2
                 enddo 
@@ -578,7 +578,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, dxInt
 
           if (CS_ALE%id_Htracer_remap_tendency(m) > 0 .or. CS_ALE%id_Htracer_remap_tendency_2d(m) > 0) then 
             if(trim(Reg%Tr(m)%name) == 'T') then 
-              do k=1,G%ke
+              do k=1,GV%ke
                 do j = G%jsc,G%jec
                   do i = G%isc,G%iec
                     work_cont(i,j,k) = work_cont(i,j,k) * CS_ALE%C_p
@@ -586,7 +586,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, dxInt
                 enddo
               enddo
             elseif(trim(Reg%Tr(m)%name) == 'S') then 
-              do k=1,G%ke
+              do k=1,GV%ke
                 do j = G%jsc,G%jec
                   do i = G%isc,G%iec
                     work_cont(i,j,k) = work_cont(i,j,k) * ppt2mks 
@@ -603,7 +603,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, dxInt
             do j = G%jsc,G%jec
               do i = G%isc,G%iec
                 work_2d(i,j) = 0.0
-                do k = 1,G%ke
+                do k = 1,GV%ke
                   work_2d(i,j) = work_2d(i,j) + work_cont(i,j,k)
                 enddo 
               enddo 
@@ -738,20 +738,20 @@ end subroutine ALE_remap_scalar
 !! within each layer. These edge values are returned and are used to compute 
 !! the pressure gradient (by computing the densities).
 subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h )
-  type(ocean_grid_type),                    intent(in)    :: G    !< ocean grid structure 
-  type(verticalGrid_type),                  intent(in)    :: GV   !< Ocean vertical grid structure
-  type(ALE_CS),                             intent(inout) :: CS   !< module control structure 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: S_t  !< Salinity at the top edge of each layer
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: S_b  !< Salinity at the bottom edge of each layer
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: T_t  !< Temperature at the top edge of each layer
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: T_b  !< Temperature at the bottom edge of each layer
-  type(thermo_var_ptrs),                    intent(in)    :: tv   !< thermodynamics structure 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< layer thickness 
+  type(ocean_grid_type),                     intent(in)    :: G    !< ocean grid structure 
+  type(verticalGrid_type),                   intent(in)    :: GV   !< Ocean vertical grid structure
+  type(ALE_CS),                              intent(inout) :: CS   !< module control structure 
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: S_t  !< Salinity at the top edge of each layer
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: S_b  !< Salinity at the bottom edge of each layer
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: T_t  !< Temperature at the top edge of each layer
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: T_b  !< Temperature at the bottom edge of each layer
+  type(thermo_var_ptrs),                     intent(in)    :: tv   !< thermodynamics structure 
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h    !< layer thickness 
 
   ! Local variables
   integer :: i, j, k
-  real    :: hTmp(G%ke)
-  real    :: tmp(G%ke)
+  real    :: hTmp(GV%ke)
+  real    :: tmp(GV%ke)
   real, dimension(CS%nk,2)                  :: ppoly_linear_E            !Edge value of polynomial
   real, dimension(CS%nk,CS%degree_linear+1) :: ppoly_linear_coefficients !Coefficients of polynomial
 
@@ -769,11 +769,11 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h )
       ! Reconstruct salinity profile    
       ppoly_linear_E = 0.0
       ppoly_linear_coefficients = 0.0
-      call PLM_reconstruction( G%ke, hTmp, tmp, ppoly_linear_E, ppoly_linear_coefficients )
+      call PLM_reconstruction( GV%ke, hTmp, tmp, ppoly_linear_E, ppoly_linear_coefficients )
       if (CS%boundary_extrapolation_for_pressure) call &
-        PLM_boundary_extrapolation( G%ke, hTmp, tmp, ppoly_linear_E, ppoly_linear_coefficients )
+        PLM_boundary_extrapolation( GV%ke, hTmp, tmp, ppoly_linear_E, ppoly_linear_coefficients )
       
-      do k = 1,G%ke
+      do k = 1,GV%ke
         S_t(i,j,k) = ppoly_linear_E(k,1)
         S_b(i,j,k) = ppoly_linear_E(k,2)
       end do
@@ -782,11 +782,11 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h )
       ppoly_linear_E = 0.0
       ppoly_linear_coefficients = 0.0
       tmp(:) = tv%T(i,j,:)
-      call PLM_reconstruction( G%ke, hTmp, tmp, ppoly_linear_E, ppoly_linear_coefficients )
+      call PLM_reconstruction( GV%ke, hTmp, tmp, ppoly_linear_E, ppoly_linear_coefficients )
       if (CS%boundary_extrapolation_for_pressure) call &
-        PLM_boundary_extrapolation( G%ke, hTmp, tmp, ppoly_linear_E, ppoly_linear_coefficients )
+        PLM_boundary_extrapolation( GV%ke, hTmp, tmp, ppoly_linear_E, ppoly_linear_coefficients )
       
-      do k = 1,G%ke
+      do k = 1,GV%ke
         T_t(i,j,k) = ppoly_linear_E(k,1)
         T_b(i,j,k) = ppoly_linear_E(k,2)
       end do
@@ -803,20 +803,20 @@ end subroutine pressure_gradient_plm
 !> within each layer. These edge values are returned and are used to compute 
 !> the pressure gradient (by computing the densities).
 subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h )
-  type(ocean_grid_type),                    intent(in)    :: G    !< ocean grid structure 
-  type(verticalGrid_type),                  intent(in)    :: GV   !< Ocean vertical grid structure
-  type(ALE_CS),                             intent(inout) :: CS   !< module control structure 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: S_t  !< Salinity at top edge of each layer
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: S_b  !< Salinity at bottom edge of each layer
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: T_t  !< Temperature at the top edge of each layer
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: T_b  !< Temperature at the bottom edge of each layer
-  type(thermo_var_ptrs),                    intent(in)    :: tv   !< ocean thermodynamics structure 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< layer thickness 
+  type(ocean_grid_type),                     intent(in)    :: G    !< ocean grid structure 
+  type(verticalGrid_type),                   intent(in)    :: GV   !< Ocean vertical grid structure
+  type(ALE_CS),                              intent(inout) :: CS   !< module control structure 
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: S_t  !< Salinity at top edge of each layer
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: S_b  !< Salinity at bottom edge of each layer
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: T_t  !< Temperature at the top edge of each layer
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: T_b  !< Temperature at the bottom edge of each layer
+  type(thermo_var_ptrs),                     intent(in)    :: tv   !< ocean thermodynamics structure 
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h    !< layer thickness 
 
   ! Local variables
   integer :: i, j, k
-  real    :: hTmp(G%ke)
-  real    :: tmp(G%ke)
+  real    :: hTmp(GV%ke)
+  real    :: tmp(GV%ke)
   real, dimension(CS%nk,2) :: &
       ppoly_parab_E            !Edge value of polynomial
   real, dimension(CS%nk,CS%degree_parab+1) :: &
@@ -839,12 +839,12 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h )
       ! Reconstruct salinity profile    
       ppoly_parab_E = 0.0
       ppoly_parab_coefficients = 0.0
-      call edge_values_implicit_h4( G%ke, hTmp, tmp, ppoly_parab_E )
-      call PPM_reconstruction( G%ke, hTmp, tmp, ppoly_parab_E, ppoly_parab_coefficients )
+      call edge_values_implicit_h4( GV%ke, hTmp, tmp, ppoly_parab_E )
+      call PPM_reconstruction( GV%ke, hTmp, tmp, ppoly_parab_E, ppoly_parab_coefficients )
       if (CS%boundary_extrapolation_for_pressure) call &
-        PPM_boundary_extrapolation( G%ke, hTmp, tmp, ppoly_parab_E, ppoly_parab_coefficients )
+        PPM_boundary_extrapolation( GV%ke, hTmp, tmp, ppoly_parab_E, ppoly_parab_coefficients )
       
-      do k = 1,G%ke
+      do k = 1,GV%ke
         S_t(i,j,k) = ppoly_parab_E(k,1)
         S_b(i,j,k) = ppoly_parab_E(k,2)
       end do
@@ -853,12 +853,12 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h )
       ppoly_parab_E = 0.0
       ppoly_parab_coefficients = 0.0
       tmp(:) = tv%T(i,j,:)
-      call edge_values_implicit_h4( G%ke, hTmp, tmp, ppoly_parab_E )
-      call PPM_reconstruction( G%ke, hTmp, tmp, ppoly_parab_E, ppoly_parab_coefficients )
+      call edge_values_implicit_h4( GV%ke, hTmp, tmp, ppoly_parab_E )
+      call PPM_reconstruction( GV%ke, hTmp, tmp, ppoly_parab_E, ppoly_parab_coefficients )
       if (CS%boundary_extrapolation_for_pressure) call &
-        PPM_boundary_extrapolation( G%ke, hTmp, tmp, ppoly_parab_E, ppoly_parab_coefficients )
+        PPM_boundary_extrapolation( GV%ke, hTmp, tmp, ppoly_parab_E, ppoly_parab_coefficients )
       
-      do k = 1,G%ke
+      do k = 1,GV%ke
         T_t(i,j,k) = ppoly_parab_E(k,1)
         T_b(i,j,k) = ppoly_parab_E(k,2)
       end do
