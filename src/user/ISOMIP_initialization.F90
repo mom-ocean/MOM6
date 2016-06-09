@@ -86,7 +86,8 @@ subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth)
   real :: wc              ! half-width of the trough
   real :: ly              ! domain width (across ice flow)
   real :: bx, by, xtil    ! dummy vatiables
- 
+  logical :: is_2D         ! If true, use 2D setup
+
 ! G%ieg and G%jeg are the last indices in the global domain
 !  real, dimension (G%ieg) :: xtil    ! eq. 3
 !  real, dimension (G%ieg) :: bx            ! eq. 2
@@ -106,30 +107,40 @@ subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth)
   call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0)
+  call get_param(param_file, mod, "ISOMIP_2D",is_2D,'If true, use a 2D setup.', default=.false.)
 
 ! The following variables should be transformed into runtime parameters?
   bmax=720.0; b0=-150.0; b2=-728.8; b4=343.91; b6=-50.57
   xbar=300.0E3; dc=500.0; fc=4.0E3; wc=24.0E3; ly=80.0E3
   bx = 0.0; by = 0.0; xtil = 0.0
 
-  do j=js,je ; do i=is,ie
-       ! this is for 2D
-       !xtil = G%geoLonT(i,j)*1.0e3/xbar 
-       !bx = b0+b2*xtil**2 + b4*xtil**4 + b6*xtil**6
-       !by = (dc/(1.+exp(-2.*(1.*1.0e3- ly/2. - wc)/fc))) + &
-       !     (dc/(1.+exp(2.*(1.*1.0e3- ly/2. + wc)/fc)))  
-       
-       xtil = G%geoLonT(i,j)*1.0e3/xbar 
-       bx = b0+b2*xtil**2 + b4*xtil**4 + b6*xtil**6
-       by = (dc/(1.+exp(-2.*(G%geoLatT(i,j)*1.0e3- ly/2. - wc)/fc))) + &
-            (dc/(1.+exp(2.*(G%geoLatT(i,j)*1.0e3- ly/2. + wc)/fc)))
 
-! depth is positive
-        D(i,j) = -max(bx+by,-bmax)
+  if (is_2D) then
+    do j=js,je ; do i=is,ie
+      ! 2D setup
+      xtil = G%geoLonT(i,j)*1.0e3/xbar 
+      bx = b0+b2*xtil**2 + b4*xtil**4 + b6*xtil**6
+      by = (dc/(1.+exp(-2.*(40.*1.0e3- ly/2. - wc)/fc))) + &
+           (dc/(1.+exp(2.*(40.*1.0e3- ly/2. + wc)/fc)))  
 
-    if (D(i,j) > max_depth) D(i,j) = max_depth
-    if (D(i,j) < min_depth) D(i,j) = 0.5*min_depth
-  enddo ; enddo
+      D(i,j) = -max(bx+by,-bmax)
+      if (D(i,j) > max_depth) D(i,j) = max_depth
+      if (D(i,j) < min_depth) D(i,j) = 0.5*min_depth
+    enddo ; enddo
+
+  else 
+    do j=js,je ; do i=is,ie
+      ! 3D         
+      xtil = G%geoLonT(i,j)*1.0e3/xbar 
+      bx = b0+b2*xtil**2 + b4*xtil**4 + b6*xtil**6
+      by = (dc/(1.+exp(-2.*(G%geoLatT(i,j)*1.0e3- ly/2. - wc)/fc))) + &
+              (dc/(1.+exp(2.*(G%geoLatT(i,j)*1.0e3- ly/2. + wc)/fc)))
+
+      D(i,j) = -max(bx+by,-bmax)
+      if (D(i,j) > max_depth) D(i,j) = max_depth
+      if (D(i,j) < min_depth) D(i,j) = 0.5*min_depth
+    enddo ; enddo
+  endif
 
 end subroutine ISOMIP_initialize_topography
 ! -----------------------------------------------------------------------------
