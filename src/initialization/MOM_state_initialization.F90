@@ -1823,14 +1823,14 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
     ! Determine where u points are applied at east side 
     do j=jsd,jed ; do I=IsdB,IedB
       if ((I+G%idg_offset) == east_boundary) then !eastern side
-        if (G%mask2dCu(I,j) > 0.99) then
+        if (G%mask2dCu(I,j) > 0.50) then
           OBC%OBC_mask_u(I,j) = .true.
           OBC%OBC_kind_u(I,j) = OBC_FLATHER_E
-          if (G%mask2dCv(i+1,J) > 0.99) then
+          if (G%mask2dCv(i+1,J) > 0.50) then
             OBC%OBC_mask_v(i+1,J) = .true.
             if (OBC%OBC_kind_v(i+1,J) == OBC_NONE) OBC%OBC_kind_v(i+1,J) = OBC_FLATHER_E
           endif
-          if (G%mask2dCv(i+1,J-1) > 0.99) then
+          if (G%mask2dCv(i+1,J-1) > 0.50) then
             OBC%OBC_mask_v(i+1,J-1) = .true.
             if (OBC%OBC_kind_v(i+1,J-1) == OBC_NONE) OBC%OBC_kind_v(i+1,J-1) = OBC_FLATHER_E
           endif
@@ -1843,14 +1843,14 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
     ! Determine where u points are applied at west side 
     do j=jsd,jed ; do I=IsdB,IedB
       if ((I+G%idg_offset) == west_boundary) then !western side
-        if (G%mask2dCu(I,j) > 0.99) then
+        if (G%mask2dCu(I,j) > 0.50) then
           OBC%OBC_mask_u(I,j) = .true.
           OBC%OBC_kind_u(I,j) = OBC_FLATHER_W
-          if (G%mask2dCv(i,J) > 0.99) then
+          if (G%mask2dCv(i,J) > 0.50) then
             OBC%OBC_mask_v(i,J) = .true.
             if (OBC%OBC_kind_v(i,J) == OBC_NONE) OBC%OBC_kind_v(i,J) = OBC_FLATHER_W
           endif
-          if (G%mask2dCv(i,J-1) > 0.99) then
+          if (G%mask2dCv(i,J-1) > 0.50) then
             OBC%OBC_mask_v(i,J-1) = .true.
             if (OBC%OBC_kind_v(i,J-1) == OBC_NONE) OBC%OBC_kind_v(i,J-1) = OBC_FLATHER_W
           endif
@@ -1864,14 +1864,14 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
     ! Determine where v points are applied at north side 
     do J=JsdB,JedB ; do i=isd,ied
       if ((J+G%jdg_offset) == north_boundary) then         !northern side
-        if (G%mask2dCv(i,J) > 0.99) then
+        if (G%mask2dCv(i,J) > 0.50) then
           OBC%OBC_mask_v(i,J) = .true.
           OBC%OBC_kind_v(i,J) = OBC_FLATHER_N
-          if (G%mask2dCu(I,j+1) > 0.99) then
+          if (G%mask2dCu(I,j+1) > 0.50) then
             OBC%OBC_mask_u(I,j+1) = .true.
             if (OBC%OBC_kind_u(I,j+1) == OBC_NONE) OBC%OBC_kind_u(I,j+1) = OBC_FLATHER_N
           endif
-          if (G%mask2dCu(I-1,j+1) > 0.99) then
+          if (G%mask2dCu(I-1,j+1) > 0.50) then
             OBC%OBC_mask_u(I-1,j+1) = .true.
             if (OBC%OBC_kind_u(I-1,j+1) == OBC_NONE) OBC%OBC_kind_u(I-1,j+1) = OBC_FLATHER_N
           endif
@@ -1884,14 +1884,14 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
     ! Determine where v points are applied at south side 
     do J=JsdB,JedB ; do i=isd,ied
       if ((J+G%jdg_offset) == south_boundary) then         !southern side
-        if (G%mask2dCv(i,J) > 0.99) then
+        if (G%mask2dCv(i,J) > 0.50) then
           OBC%OBC_mask_v(i,J) = .true.
           OBC%OBC_kind_v(i,J) = OBC_FLATHER_S
-          if (G%mask2dCu(I,j) > 0.99) then
+          if (G%mask2dCu(I,j) > 0.50) then
             OBC%OBC_mask_u(I,j) = .true.
             if (OBC%OBC_kind_u(I,j) == OBC_NONE) OBC%OBC_kind_u(I,j) = OBC_FLATHER_S
           endif
-          if (G%mask2dCu(I-1,j) > 0.99) then
+          if (G%mask2dCu(I-1,j) > 0.50) then
             OBC%OBC_mask_u(I-1,j) = .true.
             if (OBC%OBC_kind_u(I-1,j) == OBC_NONE) OBC%OBC_kind_u(I-1,j) = OBC_FLATHER_S
           endif
