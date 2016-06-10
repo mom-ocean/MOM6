@@ -66,23 +66,30 @@ subroutine seamount_initialize_topography ( D, G, param_file, max_depth )
   
   ! Local variables 
   integer   :: i, j
-  real      :: x, delta, L
+  real      :: x, y, delta, Lx, rLx, Ly, rLy
 
   call get_param(param_file,mod,"SEAMOUNT_DELTA",delta, &
                  "Non-dimensional height of seamount.", &
                  units="non-dim", default=0.5)
-  call get_param(param_file,mod,"SEAMOUNT_LENGTH_SCALE",L, &
-                 "Length scale of seamount.", &
+  call get_param(param_file,mod,"SEAMOUNT_X_LENGTH_SCALE",Lx, &
+                 "Length scale of seamount in x-direction.\n"//&
+                 "Set to zero make topography uniform in the x-direction.", &
                  units="Same as x,y", default=20.)
+  call get_param(param_file,mod,"SEAMOUNT_Y_LENGTH_SCALE",Ly, &
+                 "Length scale of seamount in y-direction.\n"//&
+                 "Set to zero make topography uniform in the y-direction.", &
+                 units="Same as x,y", default=0.)
   
-  ! Domain extent in kilometers
-  
-  L = L / G%len_lon
+  Lx = Lx / G%len_lon
+  Ly = Ly / G%len_lat
+  rLx = 0. ; if (Lx>0.) rLx = 1. / Lx
+  rLy = 0. ; if (Ly>0.) rLy = 1. / Ly
   do i=G%isc,G%iec 
     do j=G%jsc,G%jec 
-      ! Compute normalized zonal coordinate (x=0 at center of domain)
+      ! Compute normalized zonal coordinates (x,y=0 at center of domain)
       x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon - 0.5
-      D(i,j) = G%max_depth * ( 1.0 - delta * exp(-(x/L)**2) )
+      y = ( G%geoLatT(i,j) - G%south_lat ) / G%len_lat - 0.5
+      D(i,j) = G%max_depth * ( 1.0 - delta * exp(-(rLx*x)**2 -(rLy*y)**2) )
     enddo
   enddo
 
