@@ -103,6 +103,7 @@ use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
+use MOM_hor_index, only : hor_index_type
 use MOM_io, only : vardesc, var_desc
 use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
 use MOM_tidal_forcing, only : tidal_forcing_sensitivity, tidal_forcing_CS
@@ -4280,15 +4281,15 @@ subroutine barotropic_end(CS)
   deallocate(CS)
 end subroutine barotropic_end
 
-subroutine register_barotropic_restarts(G, GV, param_file, CS, restart_CS)
-  type(ocean_grid_type), intent(in) :: G
-  type(param_file_type), intent(in) :: param_file
-  type(barotropic_CS),   pointer    :: CS
+subroutine register_barotropic_restarts(HI, GV, param_file, CS, restart_CS)
+  type(hor_index_type),    intent(in) :: HI
+  type(param_file_type),   intent(in) :: param_file
+  type(barotropic_CS),     pointer    :: CS
   type(verticalGrid_type), intent(in) :: GV
-  type(MOM_restart_CS),  pointer    :: restart_CS
+  type(MOM_restart_CS),    pointer    :: restart_CS
 ! This subroutine is used to register any fields from MOM_barotropic.F90
 ! that should be written to or read from the restart file.
-! Arguments: G - The ocean's grid structure.
+! Arguments: HI - A horizontal index type structure.
 !  (in)      GV - The ocean's vertical grid structure.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
@@ -4296,8 +4297,8 @@ subroutine register_barotropic_restarts(G, GV, param_file, CS, restart_CS)
   type(vardesc) :: vd(3)
   real :: slow_rate
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+  isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed
+  IsdB = HI%IsdB ; IedB = HI%IedB ; JsdB = HI%JsdB ; JedB = HI%JedB
 
   if (associated(CS)) then
     call MOM_error(WARNING, "register_barotropic_restarts called with an associated "// &

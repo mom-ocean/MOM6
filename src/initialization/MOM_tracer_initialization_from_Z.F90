@@ -200,7 +200,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam,
       hSrc(i,j,:) = h1(:)
     enddo ; enddo
 
-    call ALE_remap_scalar(remapCS, G, kd, hSrc, tr_z, h, tr, all_cells=.true. )
+    call ALE_remap_scalar(remapCS, G, GV, kd, hSrc, tr_z, h, tr, all_cells=.true. )
 
     deallocate( hSrc )
     deallocate( h1 )

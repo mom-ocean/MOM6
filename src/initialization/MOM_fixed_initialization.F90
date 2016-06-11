@@ -82,11 +82,11 @@ subroutine MOM_initialize_fixed(G, PF, write_geom, output_dir)
 !  a bottom that is shallower than min_depth from PF.                !
   call initialize_masks(G, PF)
   if (debug) then
-    call hchksum(G%bathyT, 'MOM_initialize_fixed: depth ', G, haloshift=1)
-    call hchksum(G%mask2dT, 'MOM_initialize_fixed: mask2dT ', G)
-    call uchksum(G%mask2dCu, 'MOM_initialize_fixed: mask2dCu ', G)
-    call vchksum(G%mask2dCv, 'MOM_initialize_fixed: mask2dCv ', G)
-    call qchksum(G%mask2dBu, 'MOM_initialize_fixed: mask2dBu ', G)
+    call hchksum(G%bathyT, 'MOM_initialize_fixed: depth ', G%HI, haloshift=1)
+    call hchksum(G%mask2dT, 'MOM_initialize_fixed: mask2dT ', G%HI)
+    call uchksum(G%mask2dCu, 'MOM_initialize_fixed: mask2dCu ', G%HI)
+    call vchksum(G%mask2dCv, 'MOM_initialize_fixed: mask2dCv ', G%HI)
+    call qchksum(G%mask2dBu, 'MOM_initialize_fixed: mask2dBu ', G%HI)
   endif
 
 ! Modulate geometric scales according to geography.
@@ -131,9 +131,9 @@ subroutine MOM_initialize_fixed(G, PF, write_geom, output_dir)
 !   Calculate the components of grad f (beta)
   call MOM_calculate_grad_Coriolis(G%dF_dx, G%dF_dy, G)
   if (debug) then
-    call qchksum(G%CoriolisBu, "MOM_initialize_fixed: f ", G)
-    call hchksum(G%dF_dx, "MOM_initialize_fixed: dF_dx ", G)
-    call hchksum(G%dF_dy, "MOM_initialize_fixed: dF_dy ", G)
+    call qchksum(G%CoriolisBu, "MOM_initialize_fixed: f ", G%HI)
+    call hchksum(G%dF_dx, "MOM_initialize_fixed: dF_dx ", G%HI)
+    call hchksum(G%dF_dy, "MOM_initialize_fixed: dF_dy ", G%HI)
   endif
 
 ! Compute global integrals of grid values for later use in scalar diagnostics !
