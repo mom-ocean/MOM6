@@ -231,7 +231,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
          case ("thickness_file"); call initialize_thickness_from_file(h, G, GV, PF, .true.)
          case ("coord")
            if (useALE) then
-             call ALE_initThicknessToCoord( ALE_CSp, G, h )
+             call ALE_initThicknessToCoord( ALE_CSp, G, GV, h )
            else
              call MOM_error(FATAL, "MOM_initialize_state: USE_REGRIDDING must be True "//&
                                    "for THICKNESS_CONFIG of 'coord'")
@@ -2306,7 +2306,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
     ! Build the target grid (and set the model thickness to it)
     allocate( hTarget(nz) )
     ! This call can be more general but is hard-coded for z* coordinates...  ????
-    call ALE_initRegridding( G, GV, PF, mod, regridCS, hTarget ) ! sets regridCS and hTarget(1:nz)
+    call ALE_initRegridding( GV, G%max_depth, PF, mod, regridCS, hTarget ) ! sets regridCS and hTarget(1:nz)
 
     if (.not. remap_general) then
       ! This is the old way of initializing to z* coordinates only
@@ -2343,8 +2343,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
       call pass_var(tv%S, G%Domain) ! ALE_build_grid() only updates h on the computational domain.
       call ALE_build_grid( G, GV, regridCS, remapCS, h, tv, .true. )
     endif
-    call ALE_remap_scalar( remapCS, G, nz, h1, tmpT1dIn, h, tv%T, all_cells=remap_full_column, old_remap=remap_old_alg )
-    call ALE_remap_scalar( remapCS, G, nz, h1, tmpS1dIn, h, tv%S, all_cells=remap_full_column, old_remap=remap_old_alg )
+    call ALE_remap_scalar( remapCS, G, GV, nz, h1, tmpT1dIn, h, tv%T, all_cells=remap_full_column, old_remap=remap_old_alg )
+    call ALE_remap_scalar( remapCS, G, GV, nz, h1, tmpS1dIn, h, tv%S, all_cells=remap_full_column, old_remap=remap_old_alg )
     deallocate( h1 )
     deallocate( tmpT1dIn )
     deallocate( tmpS1dIn )
