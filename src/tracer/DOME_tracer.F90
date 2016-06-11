@@ -59,6 +59,7 @@ use MOM_diag_to_Z, only : register_Z_tracer, diag_to_Z_CS
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
+use MOM_hor_index, only : hor_index_type
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc, query_vardesc
 use MOM_restart, only : register_restart_field, MOM_restart_CS
@@ -121,15 +122,16 @@ end type DOME_tracer_CS
 
 contains
 
-function register_DOME_tracer(G, param_file, CS, tr_Reg, restart_CS)
-  type(ocean_grid_type),      intent(in) :: G
+function register_DOME_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
+  type(hor_index_type),       intent(in) :: HI
+  type(verticalGrid_type),    intent(in) :: GV
   type(param_file_type),      intent(in) :: param_file
   type(DOME_tracer_CS),       pointer    :: CS
   type(tracer_registry_type), pointer    :: tr_Reg
   type(MOM_restart_CS),       pointer    :: restart_CS
 ! This subroutine is used to register tracer fields and subroutines
 ! to be used with MOM.
-! Arguments: G - The ocean's grid structure.
+! Arguments: HI - A horizontal index type structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in/out)  CS - A pointer that is set to point to the control structure
@@ -144,7 +146,7 @@ function register_DOME_tracer(G, param_file, CS, tr_Reg, restart_CS)
   real, pointer :: tr_ptr(:,:,:) => NULL()
   logical :: register_DOME_tracer
   integer :: isd, ied, jsd, jed, nz, m
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
+  isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
   if (associated(CS)) then
     call MOM_error(WARNING, "DOME_register_tracer called with an "// &
@@ -188,7 +190,7 @@ function register_DOME_tracer(G, param_file, CS, tr_Reg, restart_CS)
     ! Register the tracer for the restart file.
     call register_restart_field(tr_ptr, CS%tr_desc(m), .true., restart_CS)
     ! Register the tracer for horizontal advection & diffusion.
-    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, G, tr_Reg, &
+    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, HI, GV, tr_Reg, &
                          tr_desc_ptr=CS%tr_desc(m))
 
     !   Set coupled_tracers to be true (hard-coded above) to provide the surface
@@ -255,7 +257,7 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   integer :: IsdB, IedB, JsdB, JedB
 
   if (.not.associated(CS)) return
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   h_neglect = GV%H_subroundoff
@@ -445,7 +447,7 @@ subroutine DOME_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV,
   real :: b1(SZI_(G))          ! b1 and c1 are variables used by the
   real :: c1(SZI_(G),SZK_(G))  ! tridiagonal solver.
   integer :: i, j, k, is, ie, js, je, nz, m
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not.associated(CS)) return
 
@@ -498,8 +500,8 @@ subroutine DOME_tracer_surface_state(state, h, G, CS)
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 DOME_register_tracer.
-  integer :: i, j, m, is, ie, js, je, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  integer :: i, j, m, is, ie, js, je
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   
   if (.not.associated(CS)) return
 

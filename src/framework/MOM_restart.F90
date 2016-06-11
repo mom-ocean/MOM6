@@ -122,7 +122,6 @@ type, public :: MOM_restart_CS ; private
   logical :: large_file_support     ! If true, NetCDF 3.6 or later is being used
                                     ! and large-file-support is enabled.
   character(len=240) :: restartfile ! The name or name root for MOM restart files.
-  type(ocean_grid_type), pointer :: G => NULL()
 
   type(field_restart), pointer :: restart_field(:) => NULL()
   type(p0d), pointer :: var_ptr0d(:) => NULL()
@@ -1216,8 +1215,7 @@ subroutine restore_state(filename, directory, day, G, CS)
 
 end subroutine restore_state
 
-subroutine restart_init(G, param_file, CS, restart_root)
-  type(ocean_grid_type), target     :: G
+subroutine restart_init(param_file, CS, restart_root)
   type(param_file_type), intent(in) :: param_file
   type(MOM_restart_CS),  pointer    :: CS
   character(len=*), optional, intent(in) :: restart_root
@@ -1260,7 +1258,6 @@ subroutine restart_init(G, param_file, CS, restart_root)
   call get_param(param_file, mod, "MAX_FIELDS", CS%max_fields, &
                  "The maximum number of restart fields that can be used.", &
                  default=100)
-  CS%G => G
 
   allocate(CS%restart_field(CS%max_fields))
   allocate(CS%var_ptr0d(CS%max_fields))
