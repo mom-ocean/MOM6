@@ -68,7 +68,7 @@ module MOM_dynamics_unsplit
 !********+*********+*********+*********+*********+*********+*********+**
 
 
-use MOM_variables, only : vertvisc_type, ocean_OBC_type, thermo_var_ptrs
+use MOM_variables, only : vertvisc_type, thermo_var_ptrs
 use MOM_variables, only : accel_diag_ptrs, ocean_internal_state, cont_diag_ptrs
 use MOM_forcing_type, only : forcing
 use MOM_checksum_packages, only : MOM_thermo_chksum, MOM_state_chksum, MOM_accel_chksum
@@ -102,6 +102,7 @@ use MOM_hor_visc, only : horizontal_viscosity, hor_visc_init, hor_visc_CS
 use MOM_interface_heights, only : find_eta
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types, only : MEKE_type
+use MOM_open_boundary, only : ocean_OBC_type
 use MOM_open_boundary, only : Radiation_Open_Bdry_Conds, open_boundary_init
 use MOM_open_boundary, only : open_boundary_CS
 use MOM_PressureForce, only : PressureForce, PressureForce_init, PressureForce_CS

@@ -235,59 +235,6 @@ type, public :: vertvisc_type
                         ! at the interfaces between each layer, in m2 s-2.
 end type vertvisc_type
 
-integer, parameter, public :: OBC_NONE = 0, OBC_SIMPLE = 1, OBC_WALL = 2
-integer, parameter, public :: OBC_FLATHER_E = 4, OBC_FLATHER_W = 5
-integer, parameter, public :: OBC_FLATHER_N = 6, OBC_FLATHER_S = 7
-
-type, public :: ocean_OBC_type
-! This structure is used to apply specified open boundary conditions.
-  logical :: apply_OBC_u_flather_east = .false.  ! If true, some zonal velocity
-  logical :: apply_OBC_u_flather_west = .false.  ! points in the local domain use flather open
-                                                 ! boundary conditions.
-  logical :: apply_OBC_v_flather_north = .false.  ! If true, some meridional velocity
-  logical :: apply_OBC_v_flather_south = .false.  ! points in the local domain use flather open
-                                                  ! boundary conditions.
-  logical :: apply_OBC_u = .false.  ! If true, some zonal or meridional velocity
-  logical :: apply_OBC_v = .false.  ! points in the local domain use open
-                                    ! boundary conditions.
-  logical, pointer, dimension(:,:) :: &
-    OBC_mask_u => NULL(), & ! These arrays are true at zonal or meridional
-    OBC_mask_v => NULL()    ! velocity points that have prescribed open boundary
-                            ! conditions.
-  integer, pointer, dimension(:,:) :: &
-    OBC_kind_u => NULL(), & ! These arrays indicate the kind of open boundary
-    OBC_kind_v => NULL()    ! conditions that are to be applied at the u and v
-                            ! points, and can be OBC_NONE, OBC_SIMPLE, OBC_WALL,
-                            ! or one of OBC_FLATHER_[EWNS].  Generally these
-                            ! should be consistent with OBC_mask_[uv], with
-                            ! OBC_mask_[uv] .false. for OBC_kind_[uv] = NONE
-                            ! and true for all other values.
-  ! The following apply at points with OBC_kind_[uv] = OBC_FLATHER_x.
-  real, pointer, dimension(:,:,:) :: &
-    rx_old_u => NULL(), &  ! The rx_old_u value for radiation coeff for u-velocity in x-direction
-    ry_old_v => NULL(), &  ! The ry_old_v value for radiation coeff for v-velocity in y-direction
-    rx_old_h => NULL(), &  ! The rx_old_h value for radiation coeff for layer thickness h in x-direction
-    ry_old_h => NULL()     ! The ry_old_h value for radiation coeff for layer thickness h in y-direction
-
-  !   The following can be used to specify the outer-domain values of the
-  ! surface height and barotropic velocity.  If these are not allocated, the
-  ! default with Flather boundary conditions is the same as if they were
-  ! filled with zeros.  With simple OBCs, these should not be allocated.
-  real, pointer, dimension(:,:) :: &
-    ubt_outer => NULL(), &    ! The u-velocity in the outer domain, in m s-1.
-    vbt_outer => NULL(), &    ! The v-velocity in the outer domain, in m s-1.
-    eta_outer_u => NULL(), &  ! The sea surface height anomaly or water column
-    eta_outer_v => NULL()     ! mass anomaly in the outer domain in m or kg m-2.
-
-  ! The following apply at points with OBC_kind_[uv] = OBC_SIMPLE.
-  real, pointer, dimension(:,:,:) :: &
-    u => NULL(), &  ! The prescribed values of the zonal (u) or meridional (v)
-    v => NULL(), &  ! velocities at OBC points, in m s-1.
-    uh => NULL(), & ! The prescribed values of the zonal (uh) or meridional (vh)
-    vh => NULL()    ! volume transports at OBC points, in m3 s-1.
-end type ocean_OBC_type
-
-
 type, public :: BT_cont_type
   real, pointer, dimension(:,:) :: &
     FA_u_EE => NULL(), &  ! The FA_u_XX variables are the effective open face

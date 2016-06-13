@@ -14,9 +14,9 @@ use MOM_checksums,       only : hchksum
 use MOM_error_handler,   only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser,     only : get_param, log_version, param_file_type
 use MOM_grid,            only : ocean_grid_type
+use MOM_open_boundary,   only : ocean_OBC_type, OBC_FLATHER_E
+use MOM_open_boundary,   only : OBC_FLATHER_W, OBC_FLATHER_N, OBC_FLATHER_S
 use MOM_tracer_registry, only : tracer_registry_type, tracer_type, MOM_tracer_chksum
-use MOM_variables,       only : ocean_OBC_type, OBC_FLATHER_E
-use MOM_variables,       only : OBC_FLATHER_W, OBC_FLATHER_N, OBC_FLATHER_S
 use MOM_verticalGrid,    only : verticalGrid_type
 
 implicit none ; private
