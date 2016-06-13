@@ -110,7 +110,7 @@ use MOM_hor_visc, only : horizontal_viscosity, hor_visc_init, hor_visc_CS
 use MOM_interface_heights, only : find_eta
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types, only : MEKE_type
-use MOM_open_boundary, only : Radiation_Open_Bdry_Conds, open_boundary_init
+use MOM_open_boundary, only : Radiation_Open_Bdry_Conds
 use MOM_PressureForce, only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_tidal_forcing, only : tidal_forcing_init, tidal_forcing_CS
 use MOM_vert_friction, only : vertvisc, vertvisc_coef, vertvisc_remnant
@@ -1378,10 +1378,7 @@ subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, GV, param_
   CS%set_visc_CSp => setVisc_CSp
 
   if (associated(ALE_CSp)) CS%ALE_CSp => ALE_CSp
-  if (associated(OBC)) then
-    CS%OBC => OBC
-    call open_boundary_init(Time, G, param_file, diag, CS%OBC)
-  endif
+  if (associated(OBC)) CS%OBC => OBC
 
   if (.not. query_initialized(CS%eta,"sfc",restart_CS))  then
     ! Estimate eta based on the layer thicknesses - h.  With the Boussinesq

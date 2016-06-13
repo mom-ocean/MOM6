@@ -1799,6 +1799,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call MOM_initialize_state(CS%u, CS%v, CS%h, CS%tv, Time, G, GV, param_file, &
                             dirs, CS%restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
                             CS%sponge_CSp, CS%ALE_sponge_CSp, CS%OBC, Time_in)
+  call open_boundary_init(Time, G, param_file, diag, CS%OBC)
   call cpu_clock_end(id_clock_MOM_init)
   call callTree_waypoint("returned from MOM_initialize_state() (initialize_MOM)")
 
@@ -1916,7 +1917,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call wave_speed_init(Time, G, param_file, diag, CS%wave_speed_CSp)
   call VarMix_init(Time, G, param_file, diag, CS%VarMix, CS%wave_speed_CSp)
   call set_visc_init(Time, G, GV, param_file, diag, CS%visc, CS%set_visc_CSp)
-
   if (CS%split) then
     allocate(eta(SZI_(G),SZJ_(G))) ; eta(:,:) = 0.0
     if (CS%legacy_split) then
