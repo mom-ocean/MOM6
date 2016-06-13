@@ -14,21 +14,6 @@ implicit none ; private
 
 public Radiation_Open_Bdry_Conds, open_boundary_init, open_boundary_end
 
-!> The control structure for open-boundaries
-type, public :: open_boundary_CS ; private
-  real :: gamma_uv !< The relative weighting for the baroclinic radiation
-                   !! velocities (or speed of characteristics) at the
-                   !! new time level (1) or the running mean (0) for velocities.
-                   !! Valid values range from 0 to 1, with a default of 0.3.
-  real :: gamma_h  !< The relative weighting for the baroclinic radiation
-                   !! velocities (or speed of characteristics) at the
-                   !! new time level (1) or the running mean (0) for thicknesses.
-                   !! Valid values range from 0 to 1, with a default of 0.2.
-  real :: rx_max   !< The maximum magnitude of the baroclinic radiation
-                   !! velocity (or speed of characteristics), in m s-1.  The
-                   !! default value is 10 m s-1.
-end type open_boundary_CS
-
 integer, parameter, public :: OBC_NONE = 0, OBC_SIMPLE = 1, OBC_WALL = 2
 integer, parameter, public :: OBC_FLATHER_E = 4, OBC_FLATHER_W = 5
 integer, parameter, public :: OBC_FLATHER_N = 6, OBC_FLATHER_S = 7
@@ -78,6 +63,19 @@ type, public :: ocean_OBC_type
     v => NULL(), &  !< The prescribed values of the meridional velocity (v) at OBC points.
     uh => NULL(), & !< The prescribed values of the zonal volume transport (uh) at OBC points.
     vh => NULL()    !< The prescribed values of the meridional volume transport (vh) at OBC points.
+
+  ! The following parameters are used in the baroclinic radiation code:
+  real :: gamma_uv !< The relative weighting for the baroclinic radiation
+                   !! velocities (or speed of characteristics) at the
+                   !! new time level (1) or the running mean (0) for velocities.
+                   !! Valid values range from 0 to 1, with a default of 0.3.
+  real :: gamma_h  !< The relative weighting for the baroclinic radiation
+                   !! velocities (or speed of characteristics) at the
+                   !! new time level (1) or the running mean (0) for thicknesses.
+                   !! Valid values range from 0 to 1, with a default of 0.2.
+  real :: rx_max   !< The maximum magnitude of the baroclinic radiation
+                   !! velocity (or speed of characteristics), in m s-1.  The
+                   !! default value is 10 m s-1.
 end type ocean_OBC_type
 
 integer :: id_clock_pass
@@ -90,16 +88,15 @@ contains
 
 !> Diagnose radiation conditions at open boundaries
 subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
-                                     h_new, h_old, G, CS)
+                                     h_new, h_old, G)
   type(ocean_grid_type),                     intent(inout) :: G !< Ocean grid structure
-  type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary data
+  type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary control structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u_new
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u_old
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v_new
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v_old
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h_new
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h_old
-  type(open_boundary_CS),                    pointer       :: CS !< Open boundary control structure
   ! Local variables
   real :: dhdt, dhdx, gamma_u, gamma_h, gamma_v
   real :: rx_max, ry_max ! coefficients for radiation
@@ -112,11 +109,9 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
   if (.not.(OBC%apply_OBC_u_flather_east .or. OBC%apply_OBC_u_flather_west .or. &
             OBC%apply_OBC_v_flather_north .or. OBC%apply_OBC_v_flather_south)) &
     return
-  if (.not.associated(CS)) call MOM_error(FATAL, &
-         "MOM_open_boundary: Module must be initialized before it is used.")
 
-  gamma_u = CS%gamma_uv ; gamma_v = CS%gamma_uv ; gamma_h = CS%gamma_h
-  rx_max = CS%rx_max ; ry_max = CS%rx_max
+  gamma_u = OBC%gamma_uv ; gamma_v = OBC%gamma_uv ; gamma_h = OBC%gamma_h
+  rx_max = OBC%rx_max ; ry_max = OBC%rx_max
 
   if (OBC%apply_OBC_u_flather_east .or. OBC%apply_OBC_u_flather_west) then
     do k=1,nz ; do j=js,je ; do I=is-1,ie ; if (OBC%OBC_mask_u(I,j)) then
@@ -206,19 +201,14 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
 end subroutine Radiation_Open_Bdry_Conds
 
 !> Initialize open boundary control structure
-subroutine open_boundary_init(Time, G, param_file, diag, CS)
+subroutine open_boundary_init(Time, G, param_file, diag, OBC)
   type(time_type), target, intent(in)    :: Time !< Current model time
   type(ocean_grid_type),   intent(in)    :: G !< Ocean grid structure
   type(param_file_type),   intent(in)    :: param_file !< Parameter file handle
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
-  type(open_boundary_CS),  pointer       :: CS !< Open boundary control structure
+  type(ocean_OBC_type),    pointer       :: OBC !< Open boundary control structure
   ! Local variables
   logical :: flather_east, flather_west, flather_north, flather_south
-
-  if (associated(CS)) then
-    call MOM_error(WARNING, "MOM_open_boundary: open_boundary_init called with associated control structure.")
-    return
-  endif
 
   call log_version(param_file, mod, version)
   call get_param(param_file, mod, "APPLY_OBC_U_FLATHER_EAST", flather_east, &
@@ -240,20 +230,19 @@ subroutine open_boundary_init(Time, G, param_file, diag, CS)
   if (.not.(flather_east .or. flather_west .or. flather_north .or. &
             flather_south)) return
 
-  allocate(CS)
-  call get_param(param_file, mod, "OBC_RADIATION_MAX", CS%rx_max, &
+  call get_param(param_file, mod, "OBC_RADIATION_MAX", OBC%rx_max, &
                  "The maximum magnitude of the baroclinic radiation \n"//&
                  "velocity (or speed of characteristics).  This is only \n"//&
                  "used if one of the APPLY_OBC_[UV]_FLATHER_... is true.", &
                  units="m s-1", default=10.0)
-  call get_param(param_file, mod, "OBC_RAD_VEL_WT", CS%gamma_uv, &
+  call get_param(param_file, mod, "OBC_RAD_VEL_WT", OBC%gamma_uv, &
                  "The relative weighting for the baroclinic radiation \n"//&
                  "velocities (or speed of characteristics) at the new \n"//&
                  "time level (1) or the running mean (0) for velocities. \n"//&
                  "Valid values range from 0 to 1. This is only used if \n"//&
                  "one of the APPLY_OBC_[UV]_FLATHER_...  is true.", &
                  units="nondim",  default=0.3)
-  call get_param(param_file, mod, "OBC_RAD_THICK_WT", CS%gamma_h, &
+  call get_param(param_file, mod, "OBC_RAD_THICK_WT", OBC%gamma_h, &
                  "The relative weighting for the baroclinic radiation \n"//&
                  "velocities (or speed of characteristics) at the new \n"//&
                  "time level (1) or the running mean (0) for thicknesses. \n"//&
@@ -266,9 +255,9 @@ subroutine open_boundary_init(Time, G, param_file, diag, CS)
 end subroutine open_boundary_init
 
 !> Deallocate open boundary data
-subroutine open_boundary_end(CS)
-  type(open_boundary_CS), pointer :: CS !< Open boundary control structure
-  deallocate(CS)
+subroutine open_boundary_end(OBC)
+  type(ocean_OBC_type), pointer :: OBC !< Open boundary control structure
+  deallocate(OBC)
 end subroutine open_boundary_end
 
 !> \namespace mom_open_boundary

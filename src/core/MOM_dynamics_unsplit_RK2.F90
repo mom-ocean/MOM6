@@ -102,7 +102,6 @@ use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types, only : MEKE_type
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_open_boundary, only : Radiation_Open_Bdry_Conds, open_boundary_init
-use MOM_open_boundary, only : open_boundary_CS
 use MOM_PressureForce, only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc, only : set_viscous_BBL, set_viscous_ML, set_visc_CS
 use MOM_tidal_forcing, only : tidal_forcing_init, tidal_forcing_CS
@@ -162,7 +161,6 @@ type, public :: MOM_dyn_unsplit_RK2_CS ; private
   type(PressureForce_CS), pointer :: PressureForce_CSp => NULL()
   type(vertvisc_CS), pointer :: vertvisc_CSp => NULL()
   type(set_visc_CS), pointer :: set_visc_CSp => NULL()
-  type(open_boundary_CS), pointer :: open_boundary_CSp => NULL()
   type(ocean_OBC_type), pointer :: OBC => NULL() ! A pointer to an open boundary
      ! condition type that specifies whether, where, and  what open boundary
      ! conditions are used.  If no open BCs are used, this pointer stays
@@ -646,7 +644,7 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, param_file, diag, CS
   if (associated(ALE_CSp)) CS%ALE_CSp => ALE_CSp
   if (associated(OBC)) then
     CS%OBC => OBC
-    call open_boundary_init(Time, G, param_file, diag, CS%open_boundary_CSp)
+    call open_boundary_init(Time, G, param_file, diag, CS%OBC)
   endif
 
   flux_units = get_flux_units(GV)
