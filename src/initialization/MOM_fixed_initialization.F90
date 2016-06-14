@@ -18,9 +18,10 @@ use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE, MULTIPLE
 use MOM_io, only : slasher, vardesc, write_field, var_desc
 use MOM_io, only : EAST_FACE, NORTH_FACE
 use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
+use MOM_open_boundary, only : ocean_OBC_type
 use MOM_string_functions, only : uppercase
-use user_initialization, only : user_initialize_topography
-use DOME_initialization, only : DOME_initialize_topography
+use user_initialization, only : user_initialize_topography, USER_set_OBC_positions
+use DOME_initialization, only : DOME_initialize_topography, DOME_set_OBC_positions
 use ISOMIP_initialization, only : ISOMIP_initialize_topography
 use benchmark_initialization, only : benchmark_initialize_topography
 use DOME2d_initialization, only : DOME2d_initialize_topography
@@ -43,8 +44,9 @@ contains
 ! -----------------------------------------------------------------------------
 !> MOM_initialize_fixed sets up time-invariant quantities related to MOM6's
 !!   horizontal grid, bathymetry, and the Coriolis parameter.
-subroutine MOM_initialize_fixed(G, PF, write_geom, output_dir)
+subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
+  type(ocean_OBC_type),    pointer       :: OBC  !< Open boundary structure.
   type(param_file_type),   intent(in)    :: PF   !< A structure indicating the open file
                                                  !! to parse for model parameter values.
   logical,                 intent(in)    :: write_geom !< If true, write grid geometry files.
@@ -53,7 +55,7 @@ subroutine MOM_initialize_fixed(G, PF, write_geom, output_dir)
   ! Local
   character(len=200) :: inputdir   ! The directory where NetCDF input files are.
   character(len=200) :: config
-  logical :: debug
+  logical :: debug, apply_OBC_u, apply_OBC_v
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
 
@@ -77,6 +79,33 @@ subroutine MOM_initialize_fixed(G, PF, write_geom, output_dir)
 !    Initialize fields that are time invariant - metrics, topography,
 !  masks, and Coriolis parameter.
 ! ====================================================================
+
+! Determine the position of any open boundaries
+  call get_param(PF, mod, "APPLY_OBC_U", apply_OBC_u, &
+                 "If true, open boundary conditions may be set at some \n"//&
+                 "u-points, with the configuration controlled by OBC_CONFIG", &
+                 default=.false.)
+  call get_param(PF, mod, "APPLY_OBC_V", apply_OBC_v, &
+                 "If true, open boundary conditions may be set at some \n"//&
+                 "v-points, with the configuration controlled by OBC_CONFIG", &
+                 default=.false.)
+  if (apply_OBC_u .or. apply_OBC_v) then 
+    call get_param(PF, mod, "OBC_CONFIG", config, &
+                 "A string that sets how the open boundary conditions are \n"//&
+                 " configured: \n"//&
+                 " \t DOME - use a slope and channel configuration for the \n"//&
+                 " \t\t DOME sill-overflow test case. \n"//&
+                 " \t USER - call a user modified routine.", default="file", &
+                 fail_if_missing=.true.)
+    select case ( trim(config) )
+      case ("none")
+      case ("DOME") ; call DOME_set_OBC_positions(G, PF, OBC)
+      case ("USER") ; call user_set_OBC_positions(G, PF, OBC)
+      case default ; call MOM_error(FATAL, "MOM_initialize_fixed: "// &
+                       "The open boundary positions specified by OBC_CONFIG="//&
+                       trim(config)//" have not been fully implemented.")
+    end select
+  endif
 
 !    This call sets seamasks that prohibit flow over any point with  !
 !  a bottom that is shallower than min_depth from PF.                !
