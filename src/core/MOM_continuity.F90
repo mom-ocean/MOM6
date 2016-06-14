@@ -47,7 +47,8 @@ use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_string_functions, only : uppercase
 use MOM_grid, only : ocean_grid_type
-use MOM_variables, only : ocean_OBC_type, BT_cont_type
+use MOM_open_boundary, only : ocean_OBC_type
+use MOM_variables, only : BT_cont_type
 use MOM_verticalGrid, only : verticalGrid_type
 
 implicit none ; private

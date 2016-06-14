@@ -66,7 +66,8 @@ module MOM_dynamics_legacy_split
 !********+*********+*********+*********+*********+*********+*********+**
 
 
-use MOM_variables, only : vertvisc_type, ocean_OBC_type, thermo_var_ptrs
+use MOM_open_boundary, only : ocean_OBC_type
+use MOM_variables, only : vertvisc_type, thermo_var_ptrs
 use MOM_variables, only : BT_cont_type, alloc_bt_cont_type, dealloc_bt_cont_type
 use MOM_variables, only : accel_diag_ptrs, ocean_internal_state, cont_diag_ptrs
 use MOM_forcing_type, only : forcing
