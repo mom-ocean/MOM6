@@ -20,6 +20,7 @@ use MOM_io, only : EAST_FACE, NORTH_FACE
 use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_open_boundary, only : open_boundary_config, open_boundary_query
+use MOM_open_boundary, only : set_Flather_positions
 use MOM_string_functions, only : uppercase
 use user_initialization, only : user_initialize_topography, USER_set_OBC_positions
 use DOME_initialization, only : DOME_initialize_topography, DOME_set_OBC_positions
@@ -99,6 +100,8 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
                        "The open boundary positions specified by OBC_CONFIG="//&
                        trim(config)//" have not been fully implemented.")
     end select
+  elseif (open_boundary_query(OBC, apply_orig_Flather=.true.)) then
+    call set_Flather_positions(G, OBC)
   endif
 
 !    This call sets seamasks that prohibit flow over any point with  !

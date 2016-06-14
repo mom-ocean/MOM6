@@ -22,7 +22,8 @@ public open_boundary_init
 public open_boundary_query
 public open_boundary_end
 public Radiation_Open_Bdry_Conds
-public set_Flather_Bdry_Conds
+public set_Flather_positions
+public set_Flather_data
 
 integer, parameter, public :: OBC_NONE = 0, OBC_SIMPLE = 1, OBC_WALL = 2
 integer, parameter, public :: OBC_FLATHER_E = 4, OBC_FLATHER_W = 5
@@ -312,9 +313,106 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
 
 end subroutine Radiation_Open_Bdry_Conds
 
+!> Sets the domain boundaries as Flather open boundaries using the original
+!! Flather run-time logicals
+subroutine set_Flather_positions(G, OBC)
+  type(ocean_grid_type),                  intent(inout) :: G
+  type(ocean_OBC_type),                   pointer    :: OBC
+  ! Local variables
+  integer :: east_boundary, west_boundary, north_boundary, south_boundary
+  integer :: i, j
+
+  if (.not.associated(OBC%OBC_mask_u)) then
+    allocate(OBC%OBC_mask_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; OBC%OBC_mask_u(:,:) = .false.
+  endif
+  if (.not.associated(OBC%OBC_kind_u)) then
+    allocate(OBC%OBC_kind_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; OBC%OBC_kind_u(:,:) = OBC_NONE
+  endif
+  if (.not.associated(OBC%OBC_mask_v)) then
+    allocate(OBC%OBC_mask_v(G%isd:G%ied,G%JsdB:G%JedB)) ; OBC%OBC_mask_v(:,:) = .false.
+  endif
+  if (.not.associated(OBC%OBC_kind_v)) then
+    allocate(OBC%OBC_kind_v(G%isd:G%ied,G%JsdB:G%JedB)) ; OBC%OBC_kind_v(:,:) = OBC_NONE
+  endif
+
+  ! This code should be modified to allow OBCs to be applied anywhere.
+
+  if (G%symmetric) then
+    east_boundary = G%ieg
+    west_boundary = G%isg-1
+    north_boundary = G%jeg
+    south_boundary = G%jsg-1
+  else
+    ! I am not entirely sure that this works properly. -RWH
+    east_boundary = G%ieg-1
+    west_boundary = G%isg
+    north_boundary = G%jeg-1
+    south_boundary = G%jsg
+  endif
+
+  if (OBC%apply_OBC_u_flather_east) then
+    ! Determine where u points are applied at east side
+    do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
+      if ((I+G%idg_offset) == east_boundary) then !eastern side
+        OBC%OBC_mask_u(I,j) = .true.
+        OBC%OBC_kind_u(I,j) = OBC_FLATHER_E
+        OBC%OBC_mask_v(i+1,J) = .true.
+        if (OBC%OBC_kind_v(i+1,J) == OBC_NONE) OBC%OBC_kind_v(i+1,J) = OBC_FLATHER_E
+        OBC%OBC_mask_v(i+1,J-1) = .true.
+        if (OBC%OBC_kind_v(i+1,J-1) == OBC_NONE) OBC%OBC_kind_v(i+1,J-1) = OBC_FLATHER_E
+      endif
+    enddo ; enddo
+  endif
+
+  if (OBC%apply_OBC_u_flather_west) then
+    ! Determine where u points are applied at west side
+    do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
+      if ((I+G%idg_offset) == west_boundary) then !western side
+        OBC%OBC_mask_u(I,j) = .true.
+        OBC%OBC_kind_u(I,j) = OBC_FLATHER_W
+        OBC%OBC_mask_v(i,J) = .true.
+        if (OBC%OBC_kind_v(i,J) == OBC_NONE) OBC%OBC_kind_v(i,J) = OBC_FLATHER_W
+        OBC%OBC_mask_v(i,J-1) = .true.
+        if (OBC%OBC_kind_v(i,J-1) == OBC_NONE) OBC%OBC_kind_v(i,J-1) = OBC_FLATHER_W
+      endif
+    enddo ; enddo
+  endif
+
+  if (OBC%apply_OBC_v_flather_north) then
+    ! Determine where v points are applied at north side
+    do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+      if ((J+G%jdg_offset) == north_boundary) then         !northern side
+        OBC%OBC_mask_v(i,J) = .true.
+        OBC%OBC_kind_v(i,J) = OBC_FLATHER_N
+        OBC%OBC_mask_u(I,j+1) = .true.
+        if (OBC%OBC_kind_u(I,j+1) == OBC_NONE) OBC%OBC_kind_u(I,j+1) = OBC_FLATHER_N
+        OBC%OBC_mask_u(I-1,j+1) = .true.
+        if (OBC%OBC_kind_u(I-1,j+1) == OBC_NONE) OBC%OBC_kind_u(I-1,j+1) = OBC_FLATHER_N
+      endif
+    enddo ; enddo
+  endif
+
+  if (OBC%apply_OBC_v_flather_south) then
+    ! Determine where v points are applied at south side
+    do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+      if ((J+G%jdg_offset) == south_boundary) then         !southern side
+        OBC%OBC_mask_v(i,J) = .true.
+        OBC%OBC_kind_v(i,J) = OBC_FLATHER_S
+        OBC%OBC_mask_u(I,j) = .true.
+        if (OBC%OBC_kind_u(I,j) == OBC_NONE) OBC%OBC_kind_u(I,j) = OBC_FLATHER_S
+        OBC%OBC_mask_u(I-1,j) = .true.
+        if (OBC%OBC_kind_u(I-1,j) == OBC_NONE) OBC%OBC_kind_u(I-1,j) = OBC_FLATHER_S
+      endif
+    enddo ; enddo
+  endif
+
+  !   If there are no OBC points on this PE, there is no reason to keep the OBC
+  ! type, and it could be deallocated.
+end subroutine set_Flather_positions
+
 !> Sets the initial definitions of the characteristic open boundary conditions.
 !! \author Mehmet Ilicak
-subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
+subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
   type(ocean_grid_type),                     intent(inout) :: G !< Ocean grid structure
   type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary structure
   type(thermo_var_ptrs),                     intent(inout) :: tv !< Thermodynamics structure
@@ -328,7 +426,6 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
   integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: isd_off, jsd_off
   integer :: IsdB, IedB, JsdB, JedB
-  integer :: east_boundary, west_boundary, north_boundary, south_boundary
   character(len=40)  :: mod = "set_Flather_Bdry_Conds" ! This subroutine's name.
   character(len=200) :: filename, OBC_file, inputdir ! Strings for file/path
 
@@ -367,32 +464,6 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
     call log_param(PF, mod, "INPUTDIR/OBC_FILE", filename)
   endif
 
-  if (G%symmetric) then
-    east_boundary = G%ieg
-    west_boundary = G%isg-1
-    north_boundary = G%jeg
-    south_boundary = G%jsg-1
-  else
-    ! I am not entirely sure that this works properly. -RWH
-    east_boundary = G%ieg-1
-    west_boundary = G%isg
-    north_boundary = G%jeg-1
-    south_boundary = G%jsg
-  endif
-
-  if (.not.associated(OBC%OBC_mask_u)) then
-    allocate(OBC%OBC_mask_u(IsdB:IedB,jsd:jed)) ; OBC%OBC_mask_u(:,:) = .false.
-  endif
-  if (.not.associated(OBC%OBC_kind_u)) then
-    allocate(OBC%OBC_kind_u(IsdB:IedB,jsd:jed)) ; OBC%OBC_kind_u(:,:) = OBC_NONE
-  endif
-  if (.not.associated(OBC%OBC_mask_v)) then
-    allocate(OBC%OBC_mask_v(isd:ied,JsdB:JedB)) ; OBC%OBC_mask_v(:,:) = .false.
-  endif
-  if (.not.associated(OBC%OBC_kind_v)) then
-    allocate(OBC%OBC_kind_v(isd:ied,JsdB:JedB)) ; OBC%OBC_kind_v(:,:) = OBC_NONE
-  endif
-
   if (.not.associated(OBC%vbt_outer)) then
     allocate(OBC%vbt_outer(isd:ied,JsdB:JedB)) ; OBC%vbt_outer(:,:) = 0.0
   endif
@@ -425,93 +496,6 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
 
   call pass_vector(OBC%eta_outer_u,OBC%eta_outer_v,G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
   call pass_vector(OBC%ubt_outer,OBC%vbt_outer,G%Domain)
-
-  ! This code should be modified to allow OBCs to be applied anywhere.
-
-  if (OBC%apply_OBC_u_flather_east) then
-    ! Determine where u points are applied at east side 
-    do j=jsd,jed ; do I=IsdB,IedB
-      if ((I+G%idg_offset) == east_boundary) then !eastern side
-        if (G%mask2dCu(I,j) > 0.50) then
-          OBC%OBC_mask_u(I,j) = .true.
-          OBC%OBC_kind_u(I,j) = OBC_FLATHER_E
-          if (G%mask2dCv(i+1,J) > 0.50) then
-            OBC%OBC_mask_v(i+1,J) = .true.
-            if (OBC%OBC_kind_v(i+1,J) == OBC_NONE) OBC%OBC_kind_v(i+1,J) = OBC_FLATHER_E
-          endif
-          if (G%mask2dCv(i+1,J-1) > 0.50) then
-            OBC%OBC_mask_v(i+1,J-1) = .true.
-            if (OBC%OBC_kind_v(i+1,J-1) == OBC_NONE) OBC%OBC_kind_v(i+1,J-1) = OBC_FLATHER_E
-          endif
-        endif
-      endif
-    enddo ; enddo
-  endif
-
-  if (OBC%apply_OBC_u_flather_west) then
-    ! Determine where u points are applied at west side 
-    do j=jsd,jed ; do I=IsdB,IedB
-      if ((I+G%idg_offset) == west_boundary) then !western side
-        if (G%mask2dCu(I,j) > 0.50) then
-          OBC%OBC_mask_u(I,j) = .true.
-          OBC%OBC_kind_u(I,j) = OBC_FLATHER_W
-          if (G%mask2dCv(i,J) > 0.50) then
-            OBC%OBC_mask_v(i,J) = .true.
-            if (OBC%OBC_kind_v(i,J) == OBC_NONE) OBC%OBC_kind_v(i,J) = OBC_FLATHER_W
-          endif
-          if (G%mask2dCv(i,J-1) > 0.50) then
-            OBC%OBC_mask_v(i,J-1) = .true.
-            if (OBC%OBC_kind_v(i,J-1) == OBC_NONE) OBC%OBC_kind_v(i,J-1) = OBC_FLATHER_W
-          endif
-        endif
-      endif
-    enddo ; enddo
-  endif
-
-
-  if (OBC%apply_OBC_v_flather_north) then
-    ! Determine where v points are applied at north side 
-    do J=JsdB,JedB ; do i=isd,ied
-      if ((J+G%jdg_offset) == north_boundary) then         !northern side
-        if (G%mask2dCv(i,J) > 0.50) then
-          OBC%OBC_mask_v(i,J) = .true.
-          OBC%OBC_kind_v(i,J) = OBC_FLATHER_N
-          if (G%mask2dCu(I,j+1) > 0.50) then
-            OBC%OBC_mask_u(I,j+1) = .true.
-            if (OBC%OBC_kind_u(I,j+1) == OBC_NONE) OBC%OBC_kind_u(I,j+1) = OBC_FLATHER_N
-          endif
-          if (G%mask2dCu(I-1,j+1) > 0.50) then
-            OBC%OBC_mask_u(I-1,j+1) = .true.
-            if (OBC%OBC_kind_u(I-1,j+1) == OBC_NONE) OBC%OBC_kind_u(I-1,j+1) = OBC_FLATHER_N
-          endif
-        endif
-      endif
-    enddo ; enddo
-  endif
-  
-  if (OBC%apply_OBC_v_flather_south) then
-    ! Determine where v points are applied at south side 
-    do J=JsdB,JedB ; do i=isd,ied
-      if ((J+G%jdg_offset) == south_boundary) then         !southern side
-        if (G%mask2dCv(i,J) > 0.50) then
-          OBC%OBC_mask_v(i,J) = .true.
-          OBC%OBC_kind_v(i,J) = OBC_FLATHER_S
-          if (G%mask2dCu(I,j) > 0.50) then
-            OBC%OBC_mask_u(I,j) = .true.
-            if (OBC%OBC_kind_u(I,j) == OBC_NONE) OBC%OBC_kind_u(I,j) = OBC_FLATHER_S
-          endif
-          if (G%mask2dCu(I-1,j) > 0.50) then
-            OBC%OBC_mask_u(I-1,j) = .true.
-            if (OBC%OBC_kind_u(I-1,j) == OBC_NONE) OBC%OBC_kind_u(I-1,j) = OBC_FLATHER_S
-          endif
-        endif
-      endif
-    enddo ; enddo
-  endif
-
-  !   If there are no OBC points on this PE, there is no reason to keep the OBC
-  ! type, and it could be deallocated.
-
 
   ! Define radiation coefficients r[xy]_old_[uvh] as needed.  For now, there are
   ! no radiation conditions applied to the thicknesses, since the thicknesses
@@ -625,7 +609,7 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
     if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S) h(i,j,k) = h(i,j+1,k)
   enddo ; enddo ; enddo
 
-end subroutine set_Flather_Bdry_Conds   
+end subroutine set_Flather_data
 
 !> \namespace mom_open_boundary
 !! This module implements some aspects of internal open boundary
