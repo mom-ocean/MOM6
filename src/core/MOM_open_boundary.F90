@@ -12,7 +12,9 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
+public open_boundary_config
 public open_boundary_init
+public open_boundary_query
 public open_boundary_end
 public Radiation_Open_Bdry_Conds
 
@@ -88,6 +90,50 @@ character(len=40)  :: mod = "MOM_open_boundary" ! This module's name.
 
 contains
 
+!> Enables OBC module and reads configuration parameters
+subroutine open_boundary_config(G, param_file, OBC)
+  type(ocean_grid_type),   intent(in)    :: G !< Ocean grid structure
+  type(param_file_type),   intent(in)    :: param_file !< Parameter file handle
+  type(ocean_OBC_type),    pointer       :: OBC !< Open boundary control structure
+  ! Local variables
+  logical :: flather_east, flather_west, flather_north, flather_south
+
+  allocate(OBC)
+
+  call log_version(param_file, mod, version)
+  call get_param(param_file, mod, "APPLY_OBC_U", OBC%apply_OBC_u, &
+                 "If true, open boundary conditions may be set at some \n"//&
+                 "u-points, with the configuration controlled by OBC_CONFIG", &
+                 default=.false.)
+  call get_param(param_file, mod, "APPLY_OBC_V", OBC%apply_OBC_v, &
+                 "If true, open boundary conditions may be set at some \n"//&
+                 "v-points, with the configuration controlled by OBC_CONFIG", &
+                 default=.false.)
+  call get_param(param_file, mod, "APPLY_OBC_U_FLATHER_EAST", OBC%apply_OBC_u_flather_east, &
+                 "Apply a Flather open boundary condition on the eastern\n"//&
+                 "side of the global domain", &
+                 default=.false.)
+  call get_param(param_file, mod, "APPLY_OBC_U_FLATHER_WEST", OBC%apply_OBC_u_flather_west, &
+                 "Apply a Flather open boundary condition on the western\n"//&
+                 "side of the global domain", &
+                 default=.false.)
+  call get_param(param_file, mod, "APPLY_OBC_V_FLATHER_NORTH", OBC%apply_OBC_v_flather_north, &
+                 "Apply a Flather open boundary condition on the northern\n"//&
+                 "side of the global domain", &
+                 default=.false.)
+  call get_param(param_file, mod, "APPLY_OBC_V_FLATHER_SOUTH", OBC%apply_OBC_v_flather_south, &
+                 "Apply a Flather open boundary condition on the southern\n"//&
+                 "side of the global domain", &
+                 default=.false.)
+  if (.not.(OBC%apply_OBC_u .or. OBC%apply_OBC_v .or. &
+            OBC%apply_OBC_v_flather_north .or. OBC%apply_OBC_v_flather_south .or. &
+            OBC%apply_OBC_u_flather_east .or. OBC%apply_OBC_u_flather_west)) then
+    ! No open boundaries have been requested
+    deallocate(OBC)
+  endif
+
+end subroutine open_boundary_config
+
 !> Initialize open boundary control structure
 subroutine open_boundary_init(Time, G, param_file, diag, OBC)
   type(time_type), target, intent(in)    :: Time !< Current model time
@@ -96,51 +142,49 @@ subroutine open_boundary_init(Time, G, param_file, diag, OBC)
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
   type(ocean_OBC_type),    pointer       :: OBC !< Open boundary control structure
   ! Local variables
-  logical :: flather_east, flather_west, flather_north, flather_south
 
-  call log_version(param_file, mod, version)
-  call get_param(param_file, mod, "APPLY_OBC_U_FLATHER_EAST", flather_east, &
-                 "If true, some zonal velocity points use Flather open \n"//&
-                 "boundary conditions on the east side of the ocean.", &
-                 default=.false.)
-  call get_param(param_file, mod, "APPLY_OBC_U_FLATHER_WEST", flather_west, &
-                 "If true, some zonal velocity points use Flather open \n"//&
-                 "boundary conditions on the west side of the ocean.", &
-                 default=.false.)
-  call get_param(param_file, mod, "APPLY_OBC_V_FLATHER_NORTH", flather_north, &
-                 "If true, some meridional velocity points use Flather \n"//&
-                 "open boundary conditions on the north side of the ocean.", &
-                 default=.false.)
-  call get_param(param_file, mod, "APPLY_OBC_V_FLATHER_SOUTH", flather_south, &
-                 "If true, some meridional velocity points use Flather \n"//&
-                 "open boundary conditions on the north side of the ocean.", &
-                 default=.false.)
-  if (.not.(flather_east .or. flather_west .or. flather_north .or. &
-            flather_south)) return
+  if (.not.associated(OBC)) return
 
-  call get_param(param_file, mod, "OBC_RADIATION_MAX", OBC%rx_max, &
-                 "The maximum magnitude of the baroclinic radiation \n"//&
-                 "velocity (or speed of characteristics).  This is only \n"//&
-                 "used if one of the APPLY_OBC_[UV]_FLATHER_... is true.", &
-                 units="m s-1", default=10.0)
-  call get_param(param_file, mod, "OBC_RAD_VEL_WT", OBC%gamma_uv, &
-                 "The relative weighting for the baroclinic radiation \n"//&
-                 "velocities (or speed of characteristics) at the new \n"//&
-                 "time level (1) or the running mean (0) for velocities. \n"//&
-                 "Valid values range from 0 to 1. This is only used if \n"//&
-                 "one of the APPLY_OBC_[UV]_FLATHER_...  is true.", &
-                 units="nondim",  default=0.3)
-  call get_param(param_file, mod, "OBC_RAD_THICK_WT", OBC%gamma_h, &
-                 "The relative weighting for the baroclinic radiation \n"//&
-                 "velocities (or speed of characteristics) at the new \n"//&
-                 "time level (1) or the running mean (0) for thicknesses. \n"//&
-                 "Valid values range from 0 to 1. This is only used if \n"//&
-                 "one of the APPLY_OBC_[UV]_FLATHER_...  is true.", &
-                 units="nondim",  default=0.2)
+  if ( OBC%apply_OBC_v_flather_north .or. OBC%apply_OBC_v_flather_south .or. &
+       OBC%apply_OBC_u_flather_east .or. OBC%apply_OBC_u_flather_west ) then
+    call get_param(param_file, mod, "OBC_RADIATION_MAX", OBC%rx_max, &
+                   "The maximum magnitude of the baroclinic radiation \n"//&
+                   "velocity (or speed of characteristics).  This is only \n"//&
+                   "used if one of the APPLY_OBC_[UV]_FLATHER_... is true.", &
+                   units="m s-1", default=10.0)
+    call get_param(param_file, mod, "OBC_RAD_VEL_WT", OBC%gamma_uv, &
+                   "The relative weighting for the baroclinic radiation \n"//&
+                   "velocities (or speed of characteristics) at the new \n"//&
+                   "time level (1) or the running mean (0) for velocities. \n"//&
+                   "Valid values range from 0 to 1. This is only used if \n"//&
+                   "one of the APPLY_OBC_[UV]_FLATHER_...  is true.", &
+                   units="nondim",  default=0.3)
+    call get_param(param_file, mod, "OBC_RAD_THICK_WT", OBC%gamma_h, &
+                   "The relative weighting for the baroclinic radiation \n"//&
+                   "velocities (or speed of characteristics) at the new \n"//&
+                   "time level (1) or the running mean (0) for thicknesses. \n"//&
+                   "Valid values range from 0 to 1. This is only used if \n"//&
+                   "one of the APPLY_OBC_[UV]_FLATHER_...  is true.", &
+                   units="nondim",  default=0.2)
+  endif
 
   id_clock_pass = cpu_clock_id('(Ocean OBC halo updates)', grain=CLOCK_ROUTINE)
 
 end subroutine open_boundary_init
+
+!> Query the state of open boundary module configuration
+logical function open_boundary_query(OBC, apply_orig_OBCs, apply_orig_Flather)
+  type(ocean_OBC_type), pointer     :: OBC !< Open boundary control structure
+  logical, optional,    intent(in)  :: apply_orig_OBCs !< If present, returns True if APPLY_OBC_U/V was set
+  logical, optional,    intent(in)  :: apply_orig_Flather !< If present, returns True if APPLY_OBC_*_FLATHER_* was set
+  open_boundary_query = .false.
+  if (.not. associated(OBC)) return
+  if (present(apply_orig_OBCs)) open_boundary_query = OBC%apply_OBC_u .or. OBC%apply_OBC_v
+  if (present(apply_orig_Flather)) open_boundary_query = OBC%apply_OBC_v_flather_north .or. &
+                                                         OBC%apply_OBC_v_flather_south .or. &
+                                                         OBC%apply_OBC_u_flather_east .or. &
+                                                         OBC%apply_OBC_u_flather_west
+end function open_boundary_query
 
 !> Deallocate open boundary data
 subroutine open_boundary_end(OBC)

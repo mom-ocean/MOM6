@@ -19,6 +19,7 @@ use MOM_io, only : slasher, vardesc, write_field, var_desc
 use MOM_io, only : EAST_FACE, NORTH_FACE
 use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
 use MOM_open_boundary, only : ocean_OBC_type
+use MOM_open_boundary, only : open_boundary_config, open_boundary_query
 use MOM_string_functions, only : uppercase
 use user_initialization, only : user_initialize_topography, USER_set_OBC_positions
 use DOME_initialization, only : DOME_initialize_topography, DOME_set_OBC_positions
@@ -55,7 +56,7 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
   ! Local
   character(len=200) :: inputdir   ! The directory where NetCDF input files are.
   character(len=200) :: config
-  logical :: debug, apply_OBC_u, apply_OBC_v
+  logical :: debug
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
 
@@ -81,15 +82,8 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
 ! ====================================================================
 
 ! Determine the position of any open boundaries
-  call get_param(PF, mod, "APPLY_OBC_U", apply_OBC_u, &
-                 "If true, open boundary conditions may be set at some \n"//&
-                 "u-points, with the configuration controlled by OBC_CONFIG", &
-                 default=.false.)
-  call get_param(PF, mod, "APPLY_OBC_V", apply_OBC_v, &
-                 "If true, open boundary conditions may be set at some \n"//&
-                 "v-points, with the configuration controlled by OBC_CONFIG", &
-                 default=.false.)
-  if (apply_OBC_u .or. apply_OBC_v) then 
+  call open_boundary_config(G, PF, OBC)
+  if (open_boundary_query(OBC, apply_orig_OBCs=.true.)) then
     call get_param(PF, mod, "OBC_CONFIG", config, &
                  "A string that sets how the open boundary conditions are \n"//&
                  " configured: \n"//&

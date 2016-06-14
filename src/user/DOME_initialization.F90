@@ -242,16 +242,8 @@ subroutine DOME_set_OBC_positions(G, param_file, OBC)
   integer :: i, j
   logical :: any_OBC ! Set to true if any points in this subdomain use OBCs
 
-  if (.not.associated(OBC)) allocate(OBC)
-
-  call get_param(param_file, mod, "APPLY_OBC_U", OBC%apply_OBC_u, &
-                 "If true, open boundary conditions may be set at some \n"//&
-                 "u-points, with the configuration controlled by OBC_CONFIG", &
-                 default=.false.)
-  call get_param(param_file, mod, "APPLY_OBC_V", OBC%apply_OBC_v, &
-                 "If true, open boundary conditions may be set at some \n"//&
-                 "v-points, with the configuration controlled by OBC_CONFIG", &
-                 default=.false.)
+  if (.not.associated(OBC)) call MOM_error(FATAL, &
+           "DOME_initialization, DOME_set_OBC_positions: OBC type was not allocated!")
 
   any_OBC = .false.
   if (OBC%apply_OBC_u) then
