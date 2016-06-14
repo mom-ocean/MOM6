@@ -107,13 +107,13 @@ use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
 use MOM_io, only : vardesc, var_desc
+use MOM_open_boundary, only : ocean_OBC_type, OBC_SIMPLE, OBC_NONE
+use MOM_open_boundary, only : OBC_FLATHER_E, OBC_FLATHER_W
+use MOM_open_boundary, only : OBC_FLATHER_N, OBC_FLATHER_S
 use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
 use MOM_tidal_forcing, only : tidal_forcing_sensitivity, tidal_forcing_CS
 use MOM_time_manager, only : time_type, set_time, operator(+), operator(-)
 use MOM_variables, only : BT_cont_type, alloc_bt_cont_type
-use MOM_variables, only : ocean_OBC_type, OBC_SIMPLE, OBC_NONE
-use MOM_variables, only : OBC_FLATHER_E, OBC_FLATHER_W
-use MOM_variables, only : OBC_FLATHER_N, OBC_FLATHER_S
 use MOM_verticalGrid, only : verticalGrid_type
 
 implicit none ; private

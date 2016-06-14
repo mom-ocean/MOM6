@@ -93,8 +93,8 @@ use MOM_file_parser,           only : get_param, log_version, param_file_type
 use MOM_grid,                  only : ocean_grid_type
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types,            only : MEKE_type
-use MOM_variables,             only : ocean_OBC_type, OBC_FLATHER_E, OBC_FLATHER_W
-use MOM_variables,             only : OBC_FLATHER_N, OBC_FLATHER_S
+use MOM_open_boundary,         only : ocean_OBC_type, OBC_FLATHER_E, OBC_FLATHER_W
+use MOM_open_boundary,         only : OBC_FLATHER_N, OBC_FLATHER_S
 use MOM_verticalGrid,          only : verticalGrid_type
 
 implicit none ; private
