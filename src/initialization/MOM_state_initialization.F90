@@ -42,7 +42,7 @@ use user_initialization, only : user_initialize_thickness, user_initialize_veloc
 use user_initialization, only : user_init_temperature_salinity
 use user_initialization, only : user_set_Open_Bdry_Conds, user_initialize_sponges
 use DOME_initialization, only : DOME_initialize_thickness
-use DOME_initialization, only : DOME_set_Open_Bdry_Conds
+use DOME_initialization, only : DOME_set_OBC_positions, DOME_set_OBC_data
 use DOME_initialization, only : DOME_initialize_sponges
 use ISOMIP_initialization, only : ISOMIP_initialize_thickness
 use ISOMIP_initialization, only : ISOMIP_initialize_sponges
@@ -440,7 +440,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                  " \t USER - call a user modified routine.", default="file", &
                  fail_if_missing=.true.)
     if (trim(config) == "DOME") then
-      call DOME_set_Open_Bdry_Conds(OBC, tv, G, GV, PF, tracer_Reg)
+      call DOME_set_OBC_positions(G, PF, OBC)
+      call DOME_set_OBC_data(OBC, tv, G, GV, PF, tracer_Reg)
     elseif (trim(config) == "USER") then
       call user_set_Open_Bdry_Conds(OBC, tv, G, PF, tracer_Reg)
     else
