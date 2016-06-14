@@ -433,18 +433,10 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                  "v-points, with the configuration controlled by OBC_CONFIG", &
                  default=.false.)
   if (apply_OBC_u .or. apply_OBC_v) then 
-    call get_param(PF, mod, "OBC_CONFIG", config, &
-                 "A string that sets how the open boundary conditions are \n"//&
-                 " configured: \n"//&
-                 " \t DOME - use a slope and channel configuration for the \n"//&
-                 " \t\t DOME sill-overflow test case. \n"//&
-                 " \t USER - call a user modified routine.", default="file", &
-                 fail_if_missing=.true.)
+    call get_param(PF, mod, "OBC_CONFIG", config, fail_if_missing=.true., do_not_log=.true.)
     if (trim(config) == "DOME") then
-      call DOME_set_OBC_positions(G, PF, OBC)
       call DOME_set_OBC_data(OBC, tv, G, GV, PF, tracer_Reg)
     elseif (trim(config) == "USER") then
-      call user_set_OBC_positions(G, PF, OBC)
       call user_set_OBC_data(OBC, tv, G, PF, tracer_Reg)
     else
       call MOM_error(FATAL, "The open boundary conditions specified by "//&
