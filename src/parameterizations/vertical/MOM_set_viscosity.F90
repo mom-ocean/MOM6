@@ -64,7 +64,7 @@ use MOM_kappa_shear, only : kappa_shear_is_used
 use MOM_io, only : vardesc, var_desc
 use MOM_restart, only : register_restart_field, MOM_restart_CS
 use MOM_variables, only : thermo_var_ptrs
-use MOM_variables, only : vertvisc_type, ocean_OBC_type
+use MOM_variables, only : vertvisc_type
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs
 

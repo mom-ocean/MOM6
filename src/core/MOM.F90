@@ -3,7 +3,8 @@ module MOM
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_variables, only : vertvisc_type, ocean_OBC_type
+use MOM_variables, only : vertvisc_type
+use MOM_open_boundary, only : ocean_OBC_type
 
 ! A Structure with pointers to forcing fields to drive MOM;
 ! all fluxes are positive downward.
