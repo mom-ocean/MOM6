@@ -318,7 +318,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
 
     call safe_alloc_ptr(fluxes%salt_flux,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%salt_flux_in,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%salt_flux_restore,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%salt_flux_added,isd,ied,jsd,jed)
 
     call safe_alloc_ptr(fluxes%TKE_tidal,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%ustar_tidal,isd,ied,jsd,jed)
@@ -376,7 +376,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
           fluxes%salt_flux(is:ie,js:je) = fluxes%salt_flux(is:ie,js:je) - fluxes%saltFluxGlobalAdj
         endif
       endif
-      fluxes%salt_flux_restore(is:ie,js:je) = fluxes%salt_flux(is:ie,js:je) ! Diagnostic
+      fluxes%salt_flux_added(is:ie,js:je) = fluxes%salt_flux(is:ie,js:je) ! Diagnostic
     else
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0.5) then
@@ -707,14 +707,53 @@ subroutine apply_flux_adjustments(G, CS, Time, fluxes)
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: tempx_at_h ! Delta to zonal wind stress at h points (Pa)
   real, dimension(SZI_(G),SZJ_(G)) :: tempy_at_h ! Delta to meridional wind stress at h points (Pa)
+  real, dimension(SZI_(G),SZJ_(G)) :: temp_at_h ! Fluxes at h points 
   integer :: is_in, ie_in, js_in, je_in, i, j
   real :: dLonDx, dLonDy, rDlon, cosA, sinA, zonal_tau, merid_tau
-  logical :: overrode_x, overrode_y
+  logical :: overrode_x, overrode_y, overrode_h
 
   is_in = G%isc - G%isd + 1
   ie_in = G%iec - G%isd + 1
   js_in = G%jsc - G%jsd + 1
   je_in = G%jec - G%jsd + 1
+
+  overrode_h = .false.
+  call data_override('OCN', 'hflx_adj', temp_at_h, Time, override=overrode_h, &
+                     is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+
+  if (overrode_h) then 
+    do j=G%jsc,G%jec ; do i=G%isc,G%iec
+      fluxes%heat_added(i,j) = fluxes%heat_added(i,j) + temp_at_h(i,j)
+    enddo; enddo
+  endif
+
+  call pass_var(fluxes%heat_added, G%Domain)
+
+  overrode_h = .false.
+  call data_override('OCN', 'sflx_adj', temp_at_h, Time, override=overrode_h, &
+                     is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+
+  if (overrode_h) then 
+    do j=G%jsc,G%jec ; do i=G%isc,G%iec
+      fluxes%salt_flux_added(i,j) = fluxes%salt_flux_added(i,j) + temp_at_h(i,j)
+    enddo; enddo
+  endif
+
+  call pass_var(fluxes%salt_flux_added, G%Domain)
+
+  overrode_h = .false.
+  call data_override('OCN', 'prcme_adj', temp_at_h, Time, override=overrode_h, &
+                     is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+
+  if (overrode_h) then 
+    do j=G%jsc,G%jec ; do i=G%isc,G%iec
+      fluxes%vprec(i,j) = fluxes%vprec(i,j) + temp_at_h(i,j)
+    enddo; enddo
+  endif
+
+  call pass_var(fluxes%vprec, G%Domain)
+
+  ! Do we need to halo update these adjusted fluxes ? (mjh)
 
   tempx_at_h(:,:) = 0.0 ; tempy_at_h(:,:) = 0.0
   ! Either reads data or leaves contents unchanged
