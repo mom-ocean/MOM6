@@ -82,12 +82,13 @@ use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
+use MOM_open_boundary, only : ocean_OBC_type, OBC_SIMPLE
 use MOM_PointAccel, only : write_u_accel, write_v_accel, PointAccel_init
 use MOM_PointAccel, only : PointAccel_CS
 use MOM_time_manager, only : time_type, time_type_to_real, operator(-)
 use MOM_variables, only : thermo_var_ptrs, vertvisc_type
 use MOM_variables, only : cont_diag_ptrs, accel_diag_ptrs
-use MOM_variables, only : ocean_internal_state, ocean_OBC_type, OBC_SIMPLE
+use MOM_variables, only : ocean_internal_state
 use MOM_verticalGrid, only : verticalGrid_type
 
 implicit none ; private

@@ -48,8 +48,9 @@ use MOM_diag_mediator, only : time_type, diag_ctrl
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
-use MOM_variables, only : ocean_OBC_type, BT_cont_type, OBC_SIMPLE
-use MOM_variables, only : OBC_FLATHER_E, OBC_FLATHER_W, OBC_FLATHER_N, OBC_FLATHER_S
+use MOM_open_boundary, only : ocean_OBC_type, OBC_SIMPLE
+use MOM_open_boundary, only : OBC_FLATHER_E, OBC_FLATHER_W, OBC_FLATHER_N, OBC_FLATHER_S
+use MOM_variables, only : BT_cont_type
 use MOM_verticalGrid, only : verticalGrid_type
 
 implicit none ; private
