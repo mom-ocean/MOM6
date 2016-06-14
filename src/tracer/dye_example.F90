@@ -248,8 +248,8 @@ function register_dye_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
     call query_vardesc(CS%tr_desc(m), name=var_name, &
                        caller="register_dye_tracer")
 !    ! Register the tracer for the restart file.
-!    call register_restart_field(tr_ptr, CS%tr_desc(m), &
-!                                .not.CS%tracers_may_reinit, restart_CS)
+    call register_restart_field(tr_ptr, CS%tr_desc(m), &
+                                .not.CS%tracers_may_reinit, restart_CS)
     ! Register the tracer for horizontal advection & diffusion.
     call register_tracer(tr_ptr, CS%tr_desc(m), param_file, HI, GV, tr_Reg, &
                          tr_desc_ptr=CS%tr_desc(m))
