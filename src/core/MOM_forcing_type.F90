@@ -616,7 +616,7 @@ subroutine extractFluxes2d(G, GV, fluxes, optics, nsw, dt,                      
                                                                                    !! over a time step (H units).
   real, dimension(SZI_(G),SZJ_(G)),        intent(out) :: net_heat                 !< net heat at the surface accumulated over a
                                                                                    !! time step associated with coupler + additional
-                                                                                   !! ficticous fluxes.
+                                                                                   !! ficticious fluxes.
                                                                                    !! Exclude two terms from net_heat:
                                                                                    !! (1) downwelling (penetrative) SW,
                                                                                    !! (2) evaporation heat content,
