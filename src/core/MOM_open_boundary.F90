@@ -4,9 +4,14 @@ module MOM_open_boundary
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_domains, only : pass_var, pass_vector
+use MOM_domains, only : To_All, SCALAR_PAIR, CGRID_NE
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING
-use MOM_file_parser, only : get_param, log_version, param_file_type
+use MOM_file_parser, only : get_param, log_version, param_file_type, log_param
 use MOM_grid, only : ocean_grid_type
+use MOM_io, only : EAST_FACE, NORTH_FACE
+use MOM_io, only : slasher, read_data
+use MOM_tracer_registry, only : add_tracer_OBC_values, tracer_registry_type
+use MOM_variables, only : thermo_var_ptrs
 
 implicit none ; private
 
@@ -17,6 +22,7 @@ public open_boundary_init
 public open_boundary_query
 public open_boundary_end
 public Radiation_Open_Bdry_Conds
+public set_Flather_Bdry_Conds
 
 integer, parameter, public :: OBC_NONE = 0, OBC_SIMPLE = 1, OBC_WALL = 2
 integer, parameter, public :: OBC_FLATHER_E = 4, OBC_FLATHER_W = 5
@@ -305,6 +311,321 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
   call cpu_clock_end(id_clock_pass)
 
 end subroutine Radiation_Open_Bdry_Conds
+
+!> Sets the initial definitions of the characteristic open boundary conditions.
+!! \author Mehmet Ilicak
+subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
+  type(ocean_grid_type),                     intent(inout) :: G !< Ocean grid structure
+  type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary structure
+  type(thermo_var_ptrs),                     intent(inout) :: tv !< Thermodynamics structure
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h !< Thickness
+  type(param_file_type),                     intent(in)    :: PF !< Parameter file handle
+  type(tracer_registry_type),                pointer       :: tracer_Reg !< Tracer registry
+  ! Local variables
+  logical :: read_OBC_eta = .false.
+  logical :: read_OBC_uv = .false.
+  logical :: read_OBC_TS = .false.
+  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
+  integer :: isd_off, jsd_off
+  integer :: IsdB, IedB, JsdB, JedB
+  integer :: east_boundary, west_boundary, north_boundary, south_boundary
+  character(len=40)  :: mod = "set_Flather_Bdry_Conds" ! This subroutine's name.
+  character(len=200) :: filename, OBC_file, inputdir ! Strings for file/path
+
+  real :: temp_u(G%domain%niglobal+1,G%domain%njglobal)
+  real :: temp_v(G%domain%niglobal,G%domain%njglobal+1)
+
+  real, pointer, dimension(:,:,:) :: &
+    OBC_T_u => NULL(), &    ! These arrays should be allocated and set to
+    OBC_T_v => NULL(), &    ! specify the values of T and S that should come
+    OBC_S_u => NULL(), & 
+    OBC_S_v => NULL()     
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+
+  call get_param(PF, mod, "READ_OBC_UV", read_OBC_uv, &
+                 "If true, read the values for the velocity open boundary \n"//&
+                 "conditions from the file specified by OBC_FILE.", &
+                 default=.false.)
+  call get_param(PF, mod, "READ_OBC_ETA", read_OBC_eta, &
+                 "If true, read the values for the sea surface height \n"//&
+                 "open boundary conditions from the file specified by \n"//&
+                 "OBC_FILE.", default=.false.)
+  call get_param(PF, mod, "READ_OBC_TS", read_OBC_TS, &
+                 "If true, read the values for the temperature and \n"//&
+                 "salinity open boundary conditions from the file \n"//&
+                 "specified by OBC_FILE.", default=.false.)
+  if (read_OBC_uv .or. read_OBC_eta .or. read_OBC_TS) then
+    call get_param(PF, mod, "OBC_FILE", OBC_file, &
+                 "The file from which the appropriate open boundary \n"//&
+                 "condition values are read.", default="MOM_OBC_FILE.nc")
+    call get_param(PF, mod, "INPUTDIR", inputdir, default=".")
+    inputdir = slasher(inputdir)
+    filename = trim(inputdir)//trim(OBC_file)
+    call log_param(PF, mod, "INPUTDIR/OBC_FILE", filename)
+  endif
+
+  if (G%symmetric) then
+    east_boundary = G%ieg
+    west_boundary = G%isg-1
+    north_boundary = G%jeg
+    south_boundary = G%jsg-1
+  else
+    ! I am not entirely sure that this works properly. -RWH
+    east_boundary = G%ieg-1
+    west_boundary = G%isg
+    north_boundary = G%jeg-1
+    south_boundary = G%jsg
+  endif
+
+  if (.not.associated(OBC%OBC_mask_u)) then
+    allocate(OBC%OBC_mask_u(IsdB:IedB,jsd:jed)) ; OBC%OBC_mask_u(:,:) = .false.
+  endif
+  if (.not.associated(OBC%OBC_kind_u)) then
+    allocate(OBC%OBC_kind_u(IsdB:IedB,jsd:jed)) ; OBC%OBC_kind_u(:,:) = OBC_NONE
+  endif
+  if (.not.associated(OBC%OBC_mask_v)) then
+    allocate(OBC%OBC_mask_v(isd:ied,JsdB:JedB)) ; OBC%OBC_mask_v(:,:) = .false.
+  endif
+  if (.not.associated(OBC%OBC_kind_v)) then
+    allocate(OBC%OBC_kind_v(isd:ied,JsdB:JedB)) ; OBC%OBC_kind_v(:,:) = OBC_NONE
+  endif
+
+  if (.not.associated(OBC%vbt_outer)) then
+    allocate(OBC%vbt_outer(isd:ied,JsdB:JedB)) ; OBC%vbt_outer(:,:) = 0.0
+  endif
+
+  if (.not.associated(OBC%ubt_outer)) then
+    allocate(OBC%ubt_outer(IsdB:IedB,jsd:jed)) ; OBC%ubt_outer(:,:) = 0.0
+  endif
+
+  if (.not.associated(OBC%eta_outer_u)) then
+    allocate(OBC%eta_outer_u(IsdB:IedB,jsd:jed)) ; OBC%eta_outer_u(:,:) = 0.0
+  endif
+
+  if (.not.associated(OBC%eta_outer_v)) then
+    allocate(OBC%eta_outer_v(isd:ied,JsdB:JedB)) ; OBC%eta_outer_v(:,:) = 0.0
+  endif
+  
+  if (read_OBC_uv) then
+    call read_data(filename, 'ubt', OBC%ubt_outer, &
+                   domain=G%Domain%mpp_domain, position=EAST_FACE)
+    call read_data(filename, 'vbt', OBC%vbt_outer, &
+                   domain=G%Domain%mpp_domain, position=NORTH_FACE)
+  endif
+
+  if (read_OBC_eta) then
+    call read_data(filename, 'eta_outer_u', OBC%eta_outer_u, &
+                   domain=G%Domain%mpp_domain, position=EAST_FACE)
+    call read_data(filename, 'eta_outer_v', OBC%eta_outer_v, &
+                   domain=G%Domain%mpp_domain, position=NORTH_FACE)
+  endif
+
+  call pass_vector(OBC%eta_outer_u,OBC%eta_outer_v,G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
+  call pass_vector(OBC%ubt_outer,OBC%vbt_outer,G%Domain)
+
+  ! This code should be modified to allow OBCs to be applied anywhere.
+
+  if (OBC%apply_OBC_u_flather_east) then
+    ! Determine where u points are applied at east side 
+    do j=jsd,jed ; do I=IsdB,IedB
+      if ((I+G%idg_offset) == east_boundary) then !eastern side
+        if (G%mask2dCu(I,j) > 0.50) then
+          OBC%OBC_mask_u(I,j) = .true.
+          OBC%OBC_kind_u(I,j) = OBC_FLATHER_E
+          if (G%mask2dCv(i+1,J) > 0.50) then
+            OBC%OBC_mask_v(i+1,J) = .true.
+            if (OBC%OBC_kind_v(i+1,J) == OBC_NONE) OBC%OBC_kind_v(i+1,J) = OBC_FLATHER_E
+          endif
+          if (G%mask2dCv(i+1,J-1) > 0.50) then
+            OBC%OBC_mask_v(i+1,J-1) = .true.
+            if (OBC%OBC_kind_v(i+1,J-1) == OBC_NONE) OBC%OBC_kind_v(i+1,J-1) = OBC_FLATHER_E
+          endif
+        endif
+      endif
+    enddo ; enddo
+  endif
+
+  if (OBC%apply_OBC_u_flather_west) then
+    ! Determine where u points are applied at west side 
+    do j=jsd,jed ; do I=IsdB,IedB
+      if ((I+G%idg_offset) == west_boundary) then !western side
+        if (G%mask2dCu(I,j) > 0.50) then
+          OBC%OBC_mask_u(I,j) = .true.
+          OBC%OBC_kind_u(I,j) = OBC_FLATHER_W
+          if (G%mask2dCv(i,J) > 0.50) then
+            OBC%OBC_mask_v(i,J) = .true.
+            if (OBC%OBC_kind_v(i,J) == OBC_NONE) OBC%OBC_kind_v(i,J) = OBC_FLATHER_W
+          endif
+          if (G%mask2dCv(i,J-1) > 0.50) then
+            OBC%OBC_mask_v(i,J-1) = .true.
+            if (OBC%OBC_kind_v(i,J-1) == OBC_NONE) OBC%OBC_kind_v(i,J-1) = OBC_FLATHER_W
+          endif
+        endif
+      endif
+    enddo ; enddo
+  endif
+
+
+  if (OBC%apply_OBC_v_flather_north) then
+    ! Determine where v points are applied at north side 
+    do J=JsdB,JedB ; do i=isd,ied
+      if ((J+G%jdg_offset) == north_boundary) then         !northern side
+        if (G%mask2dCv(i,J) > 0.50) then
+          OBC%OBC_mask_v(i,J) = .true.
+          OBC%OBC_kind_v(i,J) = OBC_FLATHER_N
+          if (G%mask2dCu(I,j+1) > 0.50) then
+            OBC%OBC_mask_u(I,j+1) = .true.
+            if (OBC%OBC_kind_u(I,j+1) == OBC_NONE) OBC%OBC_kind_u(I,j+1) = OBC_FLATHER_N
+          endif
+          if (G%mask2dCu(I-1,j+1) > 0.50) then
+            OBC%OBC_mask_u(I-1,j+1) = .true.
+            if (OBC%OBC_kind_u(I-1,j+1) == OBC_NONE) OBC%OBC_kind_u(I-1,j+1) = OBC_FLATHER_N
+          endif
+        endif
+      endif
+    enddo ; enddo
+  endif
+  
+  if (OBC%apply_OBC_v_flather_south) then
+    ! Determine where v points are applied at south side 
+    do J=JsdB,JedB ; do i=isd,ied
+      if ((J+G%jdg_offset) == south_boundary) then         !southern side
+        if (G%mask2dCv(i,J) > 0.50) then
+          OBC%OBC_mask_v(i,J) = .true.
+          OBC%OBC_kind_v(i,J) = OBC_FLATHER_S
+          if (G%mask2dCu(I,j) > 0.50) then
+            OBC%OBC_mask_u(I,j) = .true.
+            if (OBC%OBC_kind_u(I,j) == OBC_NONE) OBC%OBC_kind_u(I,j) = OBC_FLATHER_S
+          endif
+          if (G%mask2dCu(I-1,j) > 0.50) then
+            OBC%OBC_mask_u(I-1,j) = .true.
+            if (OBC%OBC_kind_u(I-1,j) == OBC_NONE) OBC%OBC_kind_u(I-1,j) = OBC_FLATHER_S
+          endif
+        endif
+      endif
+    enddo ; enddo
+  endif
+
+  !   If there are no OBC points on this PE, there is no reason to keep the OBC
+  ! type, and it could be deallocated.
+
+
+  ! Define radiation coefficients r[xy]_old_[uvh] as needed.  For now, there are
+  ! no radiation conditions applied to the thicknesses, since the thicknesses
+  ! might not be physically motivated.  Instead, sponges should be used to
+  ! enforce the near-boundary layer structure.
+  if (OBC%apply_OBC_u_flather_west .or. OBC%apply_OBC_u_flather_east) then
+    allocate(OBC%rx_old_u(IsdB:IedB,jsd:jed,nz)) ; OBC%rx_old_u(:,:,:) = 0.0
+ !   allocate(OBC%rx_old_h(Isd:Ied,jsd:jed,nz))   ; OBC%rx_old_h(:,:,:) = 0.0
+  endif
+  if (OBC%apply_OBC_v_flather_south .or. OBC%apply_OBC_v_flather_north) then
+    allocate(OBC%ry_old_v(isd:ied,JsdB:JedB,nz)) ; OBC%ry_old_v(:,:,:) = 0.0
+ !   allocate(OBC%ry_old_h(isd:ied,Jsd:Jed,nz))   ; OBC%ry_old_h(:,:,:) = 0.0
+  endif
+
+
+  if (associated(tv%T)) then
+    allocate(OBC_T_u(IsdB:IedB,jsd:jed,nz)) ; OBC_T_u(:,:,:) = 0.0
+    allocate(OBC_S_u(IsdB:IedB,jsd:jed,nz)) ; OBC_S_u(:,:,:) = 0.0
+    allocate(OBC_T_v(isd:ied,JsdB:JedB,nz)) ; OBC_T_v(:,:,:) = 0.0
+    allocate(OBC_S_v(isd:ied,JsdB:JedB,nz)) ; OBC_S_v(:,:,:) = 0.0
+
+    if (read_OBC_TS) then
+      call read_data(filename, 'OBC_T_u', OBC_T_u, &
+                     domain=G%Domain%mpp_domain, position=EAST_FACE)
+      call read_data(filename, 'OBC_S_u', OBC_S_u, &
+                     domain=G%Domain%mpp_domain, position=EAST_FACE)
+
+      call read_data(filename, 'OBC_T_v', OBC_T_v, &
+                     domain=G%Domain%mpp_domain, position=NORTH_FACE)
+      call read_data(filename, 'OBC_S_v', OBC_S_v, &
+                     domain=G%Domain%mpp_domain, position=NORTH_FACE)
+    else
+      call pass_var(tv%T, G%Domain)
+      call pass_var(tv%S, G%Domain)
+      do k=1,nz ; do j=js,je ; do I=is-1,ie
+        if (OBC%OBC_mask_u(I,j)) then
+          if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) then
+            OBC_T_u(I,j,k) = tv%T(i,j,k)
+            OBC_S_u(I,j,k) = tv%S(i,j,k)
+          elseif (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W) then
+            OBC_T_u(I,j,k) = tv%T(i+1,j,k)
+            OBC_S_u(I,j,k) = tv%S(i+1,j,k)
+          elseif (G%mask2dT(i,j) + G%mask2dT(i+1,j) > 0) then
+            OBC_T_u(I,j,k) = (G%mask2dT(i,j)*tv%T(i,j,k) + G%mask2dT(i+1,j)*tv%T(i+1,j,k)) / &
+                             (G%mask2dT(i,j) + G%mask2dT(i+1,j))
+            OBC_S_u(I,j,k) = (G%mask2dT(i,j)*tv%S(i,j,k) + G%mask2dT(i+1,j)*tv%S(i+1,j,k)) / &
+                             (G%mask2dT(i,j) + G%mask2dT(i+1,j))
+          else ! This probably shouldn't happen or maybe it doesn't matter?
+            OBC_T_u(I,j,k) = 0.5*(tv%T(i,j,k)+tv%T(i+1,j,k))
+            OBC_S_u(I,j,k) = 0.5*(tv%S(i,j,k)+tv%S(i+1,j,k))
+          endif
+        else
+          OBC_T_u(I,j,k) = 0.5*(tv%T(i,j,k)+tv%T(i+1,j,k))
+          OBC_S_u(I,j,k) = 0.5*(tv%S(i,j,k)+tv%S(i+1,j,k))
+        endif
+      enddo; enddo ; enddo
+
+      do k=1,nz ; do J=js-1,je ; do i=is,ie
+        if (OBC%OBC_mask_v(i,J)) then
+          if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) then
+            OBC_T_v(i,J,k) = tv%T(i,j,k)
+            OBC_S_v(i,J,k) = tv%S(i,j,k)
+          elseif (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S) then
+            OBC_T_v(i,J,k) = tv%T(i,j+1,k)
+            OBC_S_v(i,J,k) = tv%S(i,j+1,k)
+          elseif (G%mask2dT(i,j) + G%mask2dT(i,j+1) > 0) then
+            OBC_T_v(i,J,k) = (G%mask2dT(i,j)*tv%T(i,j,k) + G%mask2dT(i,j+1)*tv%T(i,j+1,k)) / &
+                             (G%mask2dT(i,j) + G%mask2dT(i,j+1))
+            OBC_S_v(i,J,k) = (G%mask2dT(i,j)*tv%S(i,j,k) + G%mask2dT(i,j+1)*tv%S(i,j+1,k)) / &
+                             (G%mask2dT(i,j) + G%mask2dT(i,j+1))
+          else ! This probably shouldn't happen or maybe it doesn't matter?
+            OBC_T_v(i,J,k) = 0.5*(tv%T(i,j,k)+tv%T(i,j+1,k))
+            OBC_S_v(i,J,k) = 0.5*(tv%S(i,j,k)+tv%S(i,j+1,k))
+          endif
+        else
+          OBC_T_v(i,J,k) = 0.5*(tv%T(i,j,k)+tv%T(i,j+1,k))
+          OBC_S_v(i,J,k) = 0.5*(tv%S(i,j,k)+tv%S(i,j+1,k))
+        endif
+      enddo; enddo ; enddo
+    endif
+
+    call pass_vector(OBC_T_u, OBC_T_v, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
+    call pass_vector(OBC_S_u, OBC_S_v, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
+
+    call add_tracer_OBC_values("T", tracer_Reg, OBC_in_u=OBC_T_u, &
+                                                OBC_in_v=OBC_T_v)
+    call add_tracer_OBC_values("S", tracer_Reg, OBC_in_u=OBC_S_u, &
+                                                OBC_in_v=OBC_S_v)
+    do k=1,nz ; do j=js,je ; do I=is-1,ie
+      if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) then
+        tv%T(i+1,j,k) = tv%T(i,j,k) ; tv%S(i+1,j,k) = tv%S(i,j,k)
+      elseif (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W) then
+        tv%T(i,j,k) = tv%T(i+1,j,k) ; tv%S(i,j,k) = tv%S(i+1,j,k)
+      endif
+    enddo ; enddo ; enddo
+    do k=1,nz ; do J=js-1,je ; do i=is,ie
+      if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) then
+        tv%T(i,j+1,k) = tv%T(i,j,k) ; tv%S(i,j+1,k) = tv%S(i,j,k)
+      elseif (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S) then
+        tv%T(i,j,k) = tv%T(i,j+1,k) ; tv%S(i,j,k) = tv%S(i,j+1,k)
+      endif
+    enddo ; enddo ; enddo
+  endif
+
+  do k=1,nz ; do j=js-1,je+1 ; do I=is-1,ie+1
+    if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) h(i+1,j,k) = h(i,j,k)
+    if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W) h(i,j,k) = h(i+1,j,k)
+  enddo ; enddo ; enddo
+  do k=1,nz ; do J=js-1,je+1 ; do i=is-1,ie+1
+    if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) h(i,j+1,k) = h(i,j,k)
+    if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S) h(i,j,k) = h(i,j+1,k)
+  enddo ; enddo ; enddo
+
+end subroutine set_Flather_Bdry_Conds   
 
 !> \namespace mom_open_boundary
 !! This module implements some aspects of internal open boundary
