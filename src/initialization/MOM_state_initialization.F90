@@ -23,7 +23,7 @@ use MOM_io, only : slasher, vardesc, write_field
 use MOM_io, only : EAST_FACE, NORTH_FACE
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_open_boundary, only : OBC_NONE, OBC_SIMPLE
-use MOM_open_boundary, only : open_boundary_query, set_Flather_Bdry_Conds
+use MOM_open_boundary, only : open_boundary_query, set_Flather_data, set_Flather_positions
 use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
 use MOM_restart, only : restore_state, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, set_up_sponge_ML_density
@@ -432,10 +432,15 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
               "OBC_CONFIG = "//trim(config)//" have not been fully implemented.")
       call set_Open_Bdry_Conds(OBC, tv, G, GV, PF, tracer_Reg)
     endif
+  elseif (open_boundary_query(OBC, apply_orig_Flather=.true.)) then
+!   call set_Flather_positions(G, OBC)
+    call set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
   endif
-
-  if (open_boundary_query(OBC, apply_orig_Flather=.true.)) then
-    call set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
+  if (debug.and.associated(OBC)) then
+    call hchksum(G%mask2dT, 'MOM_initialize_state: mask2dT ', G%HI)
+    call uchksum(G%mask2dCu, 'MOM_initialize_state: mask2dCu ', G%HI)
+    call vchksum(G%mask2dCv, 'MOM_initialize_state: mask2dCv ', G%HI)
+    call qchksum(G%mask2dBu, 'MOM_initialize_state: mask2dBu ', G%HI)
   endif
 
   call callTree_leave('MOM_initialize_state()')
