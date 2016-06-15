@@ -619,14 +619,14 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
                                                 OBC_in_v=OBC_T_v)
     call add_tracer_OBC_values("S", tracer_Reg, OBC_in_u=OBC_S_u, &
                                                 OBC_in_v=OBC_S_v)
-    do k=1,nz ; do j=js,je ; do I=is-1,ie
+    do k=1,nz ; do j=jsd,jed ; do I=isd,ied-1
       if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) then
         tv%T(i+1,j,k) = tv%T(i,j,k) ; tv%S(i+1,j,k) = tv%S(i,j,k)
       elseif (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W) then
         tv%T(i,j,k) = tv%T(i+1,j,k) ; tv%S(i,j,k) = tv%S(i+1,j,k)
       endif
     enddo ; enddo ; enddo
-    do k=1,nz ; do J=js-1,je ; do i=is,ie
+    do k=1,nz ; do J=jsd,jed-1 ; do i=isd,ied
       if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) then
         tv%T(i,j+1,k) = tv%T(i,j,k) ; tv%S(i,j+1,k) = tv%S(i,j,k)
       elseif (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S) then
@@ -635,11 +635,11 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
     enddo ; enddo ; enddo
   endif
 
-  do k=1,nz ; do j=js-1,je+1 ; do I=is-1,ie+1
+  do k=1,nz ; do j=jsd,jed ; do I=isd,ied-1
     if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) h(i+1,j,k) = h(i,j,k)
     if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W) h(i,j,k) = h(i+1,j,k)
   enddo ; enddo ; enddo
-  do k=1,nz ; do J=js-1,je+1 ; do i=is-1,ie+1
+  do k=1,nz ; do J=jsd,jed-1 ; do i=isd,ied
     if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) h(i,j+1,k) = h(i,j,k)
     if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S) h(i,j,k) = h(i,j+1,k)
   enddo ; enddo ; enddo
