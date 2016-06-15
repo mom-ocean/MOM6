@@ -153,11 +153,9 @@ subroutine open_boundary_config(G, param_file, OBC)
 end subroutine open_boundary_config
 
 !> Initialize open boundary control structure
-subroutine open_boundary_init(Time, G, param_file, diag, OBC)
-  type(time_type), target, intent(in)    :: Time !< Current model time
+subroutine open_boundary_init(G, param_file, OBC)
   type(ocean_grid_type),   intent(in)    :: G !< Ocean grid structure
   type(param_file_type),   intent(in)    :: param_file !< Parameter file handle
-  type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
   type(ocean_OBC_type),    pointer       :: OBC !< Open boundary control structure
   ! Local variables
 
