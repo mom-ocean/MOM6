@@ -46,8 +46,7 @@ use MOM_interface_heights,     only : find_eta
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types,            only : MEKE_type
 use MOM_open_boundary,         only : ocean_OBC_type
-use MOM_open_boundary,         only : Radiation_Open_Bdry_Conds, open_boundary_init
-use MOM_open_boundary,         only : open_boundary_CS
+use MOM_open_boundary,         only : Radiation_Open_Bdry_Conds
 use MOM_PressureForce,         only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc,              only : set_viscous_BBL, set_viscous_ML, set_visc_CS
 use MOM_tidal_forcing,         only : tidal_forcing_init, tidal_forcing_CS
@@ -161,7 +160,6 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   type(barotropic_CS),    pointer :: barotropic_CSp    => NULL()
   type(vertvisc_CS),      pointer :: vertvisc_CSp      => NULL()
   type(set_visc_CS),      pointer :: set_visc_CSp      => NULL()
-  type(open_boundary_CS), pointer :: open_boundary_CSp => NULL()
   type(tidal_forcing_CS), pointer :: tides_CSp         => NULL()
 
   type(ocean_OBC_type),   pointer :: OBC => NULL() !< A pointer to an open boundary
@@ -640,7 +638,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (associated(CS%OBC)) then
     call Radiation_Open_Bdry_Conds(CS%OBC, u_av, u_old_rad_OBC, v_av, &
-             v_old_rad_OBC, hp, h_old_rad_OBC, G, CS%open_boundary_CSp)
+             v_old_rad_OBC, hp, h_old_rad_OBC, G)
   endif
 
   ! h_av = (h + hp)/2
@@ -852,7 +850,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (associated(CS%OBC)) then
     call Radiation_Open_Bdry_Conds(CS%OBC, u, u_old_rad_OBC, v, &
-             v_old_rad_OBC, h, h_old_rad_OBC, G, CS%open_boundary_CSp)
+             v_old_rad_OBC, h, h_old_rad_OBC, G)
   endif
 
 ! h_av = (h_in + h_out)/2 . Going in to this line, h_av = h_in.
@@ -1141,10 +1139,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
              (LEN_TRIM(dirs%input_filename) == 1))   )
 
   if (associated(ALE_CSp)) CS%ALE_CSp => ALE_CSp
-  if (associated(OBC)) then
-    CS%OBC => OBC
-    call open_boundary_init(Time, G, param_file, diag, CS%open_boundary_CSp)
-  endif
+  if (associated(OBC)) CS%OBC => OBC
 
   if (.not. query_initialized(CS%eta,"sfc",restart_CS))  then
     ! Estimate eta based on the layer thicknesses - h.  With the Boussinesq

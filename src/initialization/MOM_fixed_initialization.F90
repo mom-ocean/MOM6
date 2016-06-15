@@ -18,9 +18,12 @@ use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE, MULTIPLE
 use MOM_io, only : slasher, vardesc, write_field, var_desc
 use MOM_io, only : EAST_FACE, NORTH_FACE
 use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
+use MOM_open_boundary, only : ocean_OBC_type
+use MOM_open_boundary, only : open_boundary_config, open_boundary_query
+use MOM_open_boundary, only : set_Flather_positions, open_boundary_impose_normal_slope
 use MOM_string_functions, only : uppercase
-use user_initialization, only : user_initialize_topography
-use DOME_initialization, only : DOME_initialize_topography
+use user_initialization, only : user_initialize_topography, USER_set_OBC_positions
+use DOME_initialization, only : DOME_initialize_topography, DOME_set_OBC_positions
 use ISOMIP_initialization, only : ISOMIP_initialize_topography
 use benchmark_initialization, only : benchmark_initialize_topography
 use DOME2d_initialization, only : DOME2d_initialize_topography
@@ -43,8 +46,9 @@ contains
 ! -----------------------------------------------------------------------------
 !> MOM_initialize_fixed sets up time-invariant quantities related to MOM6's
 !!   horizontal grid, bathymetry, and the Coriolis parameter.
-subroutine MOM_initialize_fixed(G, PF, write_geom, output_dir)
+subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
+  type(ocean_OBC_type),    pointer       :: OBC  !< Open boundary structure.
   type(param_file_type),   intent(in)    :: PF   !< A structure indicating the open file
                                                  !! to parse for model parameter values.
   logical,                 intent(in)    :: write_geom !< If true, write grid geometry files.
@@ -78,8 +82,35 @@ subroutine MOM_initialize_fixed(G, PF, write_geom, output_dir)
 !  masks, and Coriolis parameter.
 ! ====================================================================
 
-!    This call sets seamasks that prohibit flow over any point with  !
-!  a bottom that is shallower than min_depth from PF.                !
+! Determine the position of any open boundaries
+  call open_boundary_config(G, PF, OBC)
+  if (open_boundary_query(OBC, apply_orig_OBCs=.true.)) then
+    call get_param(PF, mod, "OBC_CONFIG", config, &
+                 "A string that sets how the open boundary conditions are \n"//&
+                 " configured: \n"//&
+                 " \t DOME - use a slope and channel configuration for the \n"//&
+                 " \t\t DOME sill-overflow test case. \n"//&
+                 " \t USER - call a user modified routine.", default="file", &
+                 fail_if_missing=.true.)
+    select case ( trim(config) )
+      case ("none")
+      case ("DOME") ; call DOME_set_OBC_positions(G, PF, OBC)
+      case ("USER") ; call user_set_OBC_positions(G, PF, OBC)
+      case default ; call MOM_error(FATAL, "MOM_initialize_fixed: "// &
+                       "The open boundary positions specified by OBC_CONFIG="//&
+                       trim(config)//" have not been fully implemented.")
+    end select
+  elseif (open_boundary_query(OBC, apply_orig_Flather=.true.)) then
+    call set_Flather_positions(G, OBC)
+  endif
+
+  ! To initialize masks, the bathymetry in halo regions must be filled in
+  call pass_var(G%bathyT, G%Domain)
+
+  ! Make bathymetry consistent with open boundaries
+  call open_boundary_impose_normal_slope(OBC, G, G%bathyT)
+
+  ! This call sets masks that prohibit flow over any point interpreted as land
   call initialize_masks(G, PF)
   if (debug) then
     call hchksum(G%bathyT, 'MOM_initialize_fixed: depth ', G%HI, haloshift=1)
