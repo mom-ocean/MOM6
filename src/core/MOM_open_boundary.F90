@@ -21,6 +21,7 @@ public open_boundary_config
 public open_boundary_init
 public open_boundary_query
 public open_boundary_end
+public open_boundary_impose_normal_slope
 public Radiation_Open_Bdry_Conds
 public set_Flather_positions
 public set_Flather_data
@@ -132,6 +133,14 @@ subroutine open_boundary_config(G, param_file, OBC)
                  "Apply a Flather open boundary condition on the southern\n"//&
                  "side of the global domain", &
                  default=.false.)
+
+  ! Safety check
+  if ((OBC%apply_OBC_u_flather_west .or. OBC%apply_OBC_v_flather_south) .and. &
+      .not.G%symmetric ) call MOM_error(FATAL, &
+                 "MOM_open_boundary, open_boundary_config: "//&
+                 "Symmetric memory must be used when APPLY_OBC_U_FLATHER_WEST "//&
+                 "or APPLY_OBC_V_FLATHER_SOUTH is true.")
+
   if (.not.(OBC%apply_OBC_u .or. OBC%apply_OBC_v .or. &
             OBC%apply_OBC_v_flather_north .or. OBC%apply_OBC_v_flather_south .or. &
             OBC%apply_OBC_u_flather_east .or. OBC%apply_OBC_u_flather_west)) then
@@ -198,6 +207,32 @@ subroutine open_boundary_end(OBC)
   type(ocean_OBC_type), pointer :: OBC !< Open boundary control structure
   deallocate(OBC)
 end subroutine open_boundary_end
+
+!> Sets the slope of bathymetry normal to an open bounndary to zero.
+subroutine open_boundary_impose_normal_slope(OBC, G, depth)
+  type(ocean_OBC_type),              pointer       :: OBC !< Open boundary control structure
+  type(ocean_grid_type),             intent(inout) :: G !< Ocean grid structure
+  real, dimension(SZI_(G),SZJ_(G)),  intent(inout) :: depth !< Bathymetry at h-points
+  ! Local variables
+  integer :: i, j
+
+  if (.not.associated(OBC)) return
+
+  if (associated(OBC%OBC_kind_u)) then
+    do j=G%jsd,G%jed ; do I=G%isd,G%ied-1
+      if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) depth(i+1,j) = depth(i,j)
+      if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W) depth(i,j) = depth(i+1,j)
+    enddo ; enddo
+  endif
+
+  if (associated(OBC%OBC_kind_v)) then
+    do J=G%jsd,G%jed-1 ; do i=G%isd,G%ied
+      if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) depth(i,j+1) = depth(i,j)
+      if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S) depth(i,j) = depth(i,j+1)
+    enddo ; enddo
+  endif
+
+end subroutine open_boundary_impose_normal_slope
 
 !> Diagnose radiation conditions at open boundaries
 subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
