@@ -1,3 +1,4 @@
+! This file is part of MOM6. See LICENSE.md for the license.
 !> Controls where open boundary conditions are applied 
 module MOM_open_boundary
 

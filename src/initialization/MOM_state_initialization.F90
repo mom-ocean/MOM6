@@ -2008,11 +2008,11 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
     enddo ; enddo ; enddo
   endif
 
-  do k=1,nz ; do j=js-1,je+1 ; do I=is-1,ie+1
+  do k=1,nz ; do j=jsd,jed ; do I=isd,ied
     if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) h(i+1,j,k) = h(i,j,k)
     if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W) h(i,j,k) = h(i+1,j,k)
   enddo ; enddo ; enddo
-  do k=1,nz ; do J=js-1,je+1 ; do i=is-1,ie+1
+  do k=1,nz ; do J=jsd,jed ; do i=isd,ied
     if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) h(i,j+1,k) = h(i,j,k)
     if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S) h(i,j,k) = h(i,j+1,k)
   enddo ; enddo ; enddo
