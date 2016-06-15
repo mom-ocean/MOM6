@@ -2,33 +2,32 @@
 !> Controls where open boundary conditions are applied 
 module MOM_open_boundary
 
+! This file is part of MOM6. See LICENSE.md for the license.
+
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_domains, only : pass_var, pass_vector
+use MOM_domains, only : To_All, SCALAR_PAIR, CGRID_NE
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING
-use MOM_file_parser, only : get_param, log_version, param_file_type
+use MOM_file_parser, only : get_param, log_version, param_file_type, log_param
 use MOM_grid, only : ocean_grid_type
+use MOM_io, only : EAST_FACE, NORTH_FACE
+use MOM_io, only : slasher, read_data
+use MOM_tracer_registry, only : add_tracer_OBC_values, tracer_registry_type
+use MOM_variables, only : thermo_var_ptrs
 
 implicit none ; private
 
 #include <MOM_memory.h>
 
-public Radiation_Open_Bdry_Conds, open_boundary_init, open_boundary_end
-
-!> The control structure for open-boundaries
-type, public :: open_boundary_CS ; private
-  real :: gamma_uv !< The relative weighting for the baroclinic radiation
-                   !! velocities (or speed of characteristics) at the
-                   !! new time level (1) or the running mean (0) for velocities.
-                   !! Valid values range from 0 to 1, with a default of 0.3.
-  real :: gamma_h  !< The relative weighting for the baroclinic radiation
-                   !! velocities (or speed of characteristics) at the
-                   !! new time level (1) or the running mean (0) for thicknesses.
-                   !! Valid values range from 0 to 1, with a default of 0.2.
-  real :: rx_max   !< The maximum magnitude of the baroclinic radiation
-                   !! velocity (or speed of characteristics), in m s-1.  The
-                   !! default value is 10 m s-1.
-end type open_boundary_CS
+public open_boundary_config
+public open_boundary_init
+public open_boundary_query
+public open_boundary_end
+public open_boundary_impose_normal_slope
+public Radiation_Open_Bdry_Conds
+public set_Flather_positions
+public set_Flather_data
 
 integer, parameter, public :: OBC_NONE = 0, OBC_SIMPLE = 1, OBC_WALL = 2
 integer, parameter, public :: OBC_FLATHER_E = 4, OBC_FLATHER_W = 5
@@ -79,6 +78,19 @@ type, public :: ocean_OBC_type
     v => NULL(), &  !< The prescribed values of the meridional velocity (v) at OBC points.
     uh => NULL(), & !< The prescribed values of the zonal volume transport (uh) at OBC points.
     vh => NULL()    !< The prescribed values of the meridional volume transport (vh) at OBC points.
+
+  ! The following parameters are used in the baroclinic radiation code:
+  real :: gamma_uv !< The relative weighting for the baroclinic radiation
+                   !! velocities (or speed of characteristics) at the
+                   !! new time level (1) or the running mean (0) for velocities.
+                   !! Valid values range from 0 to 1, with a default of 0.3.
+  real :: gamma_h  !< The relative weighting for the baroclinic radiation
+                   !! velocities (or speed of characteristics) at the
+                   !! new time level (1) or the running mean (0) for thicknesses.
+                   !! Valid values range from 0 to 1, with a default of 0.2.
+  real :: rx_max   !< The maximum magnitude of the baroclinic radiation
+                   !! velocity (or speed of characteristics), in m s-1.  The
+                   !! default value is 10 m s-1.
 end type ocean_OBC_type
 
 integer :: id_clock_pass
@@ -89,18 +101,151 @@ character(len=40)  :: mod = "MOM_open_boundary" ! This module's name.
 
 contains
 
+!> Enables OBC module and reads configuration parameters
+subroutine open_boundary_config(G, param_file, OBC)
+  type(ocean_grid_type),   intent(in)    :: G !< Ocean grid structure
+  type(param_file_type),   intent(in)    :: param_file !< Parameter file handle
+  type(ocean_OBC_type),    pointer       :: OBC !< Open boundary control structure
+  ! Local variables
+  logical :: flather_east, flather_west, flather_north, flather_south
+
+  allocate(OBC)
+
+  call log_version(param_file, mod, version)
+  call get_param(param_file, mod, "APPLY_OBC_U", OBC%apply_OBC_u, &
+                 "If true, open boundary conditions may be set at some \n"//&
+                 "u-points, with the configuration controlled by OBC_CONFIG", &
+                 default=.false.)
+  call get_param(param_file, mod, "APPLY_OBC_V", OBC%apply_OBC_v, &
+                 "If true, open boundary conditions may be set at some \n"//&
+                 "v-points, with the configuration controlled by OBC_CONFIG", &
+                 default=.false.)
+  call get_param(param_file, mod, "APPLY_OBC_U_FLATHER_EAST", OBC%apply_OBC_u_flather_east, &
+                 "Apply a Flather open boundary condition on the eastern\n"//&
+                 "side of the global domain", &
+                 default=.false.)
+  call get_param(param_file, mod, "APPLY_OBC_U_FLATHER_WEST", OBC%apply_OBC_u_flather_west, &
+                 "Apply a Flather open boundary condition on the western\n"//&
+                 "side of the global domain", &
+                 default=.false.)
+  call get_param(param_file, mod, "APPLY_OBC_V_FLATHER_NORTH", OBC%apply_OBC_v_flather_north, &
+                 "Apply a Flather open boundary condition on the northern\n"//&
+                 "side of the global domain", &
+                 default=.false.)
+  call get_param(param_file, mod, "APPLY_OBC_V_FLATHER_SOUTH", OBC%apply_OBC_v_flather_south, &
+                 "Apply a Flather open boundary condition on the southern\n"//&
+                 "side of the global domain", &
+                 default=.false.)
+
+  ! Safety check
+  if ((OBC%apply_OBC_u_flather_west .or. OBC%apply_OBC_v_flather_south) .and. &
+      .not.G%symmetric ) call MOM_error(FATAL, &
+                 "MOM_open_boundary, open_boundary_config: "//&
+                 "Symmetric memory must be used when APPLY_OBC_U_FLATHER_WEST "//&
+                 "or APPLY_OBC_V_FLATHER_SOUTH is true.")
+
+  if (.not.(OBC%apply_OBC_u .or. OBC%apply_OBC_v .or. &
+            OBC%apply_OBC_v_flather_north .or. OBC%apply_OBC_v_flather_south .or. &
+            OBC%apply_OBC_u_flather_east .or. OBC%apply_OBC_u_flather_west)) then
+    ! No open boundaries have been requested
+    deallocate(OBC)
+  endif
+
+end subroutine open_boundary_config
+
+!> Initialize open boundary control structure
+subroutine open_boundary_init(G, param_file, OBC)
+  type(ocean_grid_type),   intent(in)    :: G !< Ocean grid structure
+  type(param_file_type),   intent(in)    :: param_file !< Parameter file handle
+  type(ocean_OBC_type),    pointer       :: OBC !< Open boundary control structure
+  ! Local variables
+
+  if (.not.associated(OBC)) return
+
+  if ( OBC%apply_OBC_v_flather_north .or. OBC%apply_OBC_v_flather_south .or. &
+       OBC%apply_OBC_u_flather_east .or. OBC%apply_OBC_u_flather_west ) then
+    call get_param(param_file, mod, "OBC_RADIATION_MAX", OBC%rx_max, &
+                   "The maximum magnitude of the baroclinic radiation \n"//&
+                   "velocity (or speed of characteristics).  This is only \n"//&
+                   "used if one of the APPLY_OBC_[UV]_FLATHER_... is true.", &
+                   units="m s-1", default=10.0)
+    call get_param(param_file, mod, "OBC_RAD_VEL_WT", OBC%gamma_uv, &
+                   "The relative weighting for the baroclinic radiation \n"//&
+                   "velocities (or speed of characteristics) at the new \n"//&
+                   "time level (1) or the running mean (0) for velocities. \n"//&
+                   "Valid values range from 0 to 1. This is only used if \n"//&
+                   "one of the APPLY_OBC_[UV]_FLATHER_...  is true.", &
+                   units="nondim",  default=0.3)
+    call get_param(param_file, mod, "OBC_RAD_THICK_WT", OBC%gamma_h, &
+                   "The relative weighting for the baroclinic radiation \n"//&
+                   "velocities (or speed of characteristics) at the new \n"//&
+                   "time level (1) or the running mean (0) for thicknesses. \n"//&
+                   "Valid values range from 0 to 1. This is only used if \n"//&
+                   "one of the APPLY_OBC_[UV]_FLATHER_...  is true.", &
+                   units="nondim",  default=0.2)
+  endif
+
+  id_clock_pass = cpu_clock_id('(Ocean OBC halo updates)', grain=CLOCK_ROUTINE)
+
+end subroutine open_boundary_init
+
+!> Query the state of open boundary module configuration
+logical function open_boundary_query(OBC, apply_orig_OBCs, apply_orig_Flather)
+  type(ocean_OBC_type), pointer     :: OBC !< Open boundary control structure
+  logical, optional,    intent(in)  :: apply_orig_OBCs !< If present, returns True if APPLY_OBC_U/V was set
+  logical, optional,    intent(in)  :: apply_orig_Flather !< If present, returns True if APPLY_OBC_*_FLATHER_* was set
+  open_boundary_query = .false.
+  if (.not. associated(OBC)) return
+  if (present(apply_orig_OBCs)) open_boundary_query = OBC%apply_OBC_u .or. OBC%apply_OBC_v
+  if (present(apply_orig_Flather)) open_boundary_query = OBC%apply_OBC_v_flather_north .or. &
+                                                         OBC%apply_OBC_v_flather_south .or. &
+                                                         OBC%apply_OBC_u_flather_east .or. &
+                                                         OBC%apply_OBC_u_flather_west
+end function open_boundary_query
+
+!> Deallocate open boundary data
+subroutine open_boundary_end(OBC)
+  type(ocean_OBC_type), pointer :: OBC !< Open boundary control structure
+  deallocate(OBC)
+end subroutine open_boundary_end
+
+!> Sets the slope of bathymetry normal to an open bounndary to zero.
+subroutine open_boundary_impose_normal_slope(OBC, G, depth)
+  type(ocean_OBC_type),              pointer       :: OBC !< Open boundary control structure
+  type(ocean_grid_type),             intent(inout) :: G !< Ocean grid structure
+  real, dimension(SZI_(G),SZJ_(G)),  intent(inout) :: depth !< Bathymetry at h-points
+  ! Local variables
+  integer :: i, j
+
+  if (.not.associated(OBC)) return
+
+  if (associated(OBC%OBC_kind_u)) then
+    do j=G%jsd,G%jed ; do I=G%isd,G%ied-1
+      if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) depth(i+1,j) = depth(i,j)
+      if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W) depth(i,j) = depth(i+1,j)
+    enddo ; enddo
+  endif
+
+  if (associated(OBC%OBC_kind_v)) then
+    do J=G%jsd,G%jed-1 ; do i=G%isd,G%ied
+      if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) depth(i,j+1) = depth(i,j)
+      if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S) depth(i,j) = depth(i,j+1)
+    enddo ; enddo
+  endif
+
+end subroutine open_boundary_impose_normal_slope
+
 !> Diagnose radiation conditions at open boundaries
 subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
-                                     h_new, h_old, G, CS)
+                                     h_new, h_old, G)
   type(ocean_grid_type),                     intent(inout) :: G !< Ocean grid structure
-  type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary data
+  type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary control structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u_new
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u_old
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v_new
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v_old
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h_new
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h_old
-  type(open_boundary_CS),                    pointer       :: CS !< Open boundary control structure
   ! Local variables
   real :: dhdt, dhdx, gamma_u, gamma_h, gamma_v
   real :: rx_max, ry_max ! coefficients for radiation
@@ -113,11 +258,9 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
   if (.not.(OBC%apply_OBC_u_flather_east .or. OBC%apply_OBC_u_flather_west .or. &
             OBC%apply_OBC_v_flather_north .or. OBC%apply_OBC_v_flather_south)) &
     return
-  if (.not.associated(CS)) call MOM_error(FATAL, &
-         "MOM_open_boundary: Module must be initialized before it is used.")
 
-  gamma_u = CS%gamma_uv ; gamma_v = CS%gamma_uv ; gamma_h = CS%gamma_h
-  rx_max = CS%rx_max ; ry_max = CS%rx_max
+  gamma_u = OBC%gamma_uv ; gamma_v = OBC%gamma_uv ; gamma_h = OBC%gamma_h
+  rx_max = OBC%rx_max ; ry_max = OBC%rx_max
 
   if (OBC%apply_OBC_u_flather_east .or. OBC%apply_OBC_u_flather_west) then
     do k=1,nz ; do j=js,je ; do I=is-1,ie ; if (OBC%OBC_mask_u(I,j)) then
@@ -206,71 +349,303 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
 
 end subroutine Radiation_Open_Bdry_Conds
 
-!> Initialize open boundary control structure
-subroutine open_boundary_init(Time, G, param_file, diag, CS)
-  type(time_type), target, intent(in)    :: Time !< Current model time
-  type(ocean_grid_type),   intent(in)    :: G !< Ocean grid structure
-  type(param_file_type),   intent(in)    :: param_file !< Parameter file handle
-  type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
-  type(open_boundary_CS),  pointer       :: CS !< Open boundary control structure
+!> Sets the domain boundaries as Flather open boundaries using the original
+!! Flather run-time logicals
+subroutine set_Flather_positions(G, OBC)
+  type(ocean_grid_type),                  intent(inout) :: G
+  type(ocean_OBC_type),                   pointer    :: OBC
   ! Local variables
-  logical :: flather_east, flather_west, flather_north, flather_south
+  integer :: east_boundary, west_boundary, north_boundary, south_boundary
+  integer :: i, j
 
-  if (associated(CS)) then
-    call MOM_error(WARNING, "MOM_open_boundary: open_boundary_init called with associated control structure.")
-    return
+  if (.not.associated(OBC%OBC_mask_u)) then
+    allocate(OBC%OBC_mask_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; OBC%OBC_mask_u(:,:) = .false.
+  endif
+  if (.not.associated(OBC%OBC_kind_u)) then
+    allocate(OBC%OBC_kind_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; OBC%OBC_kind_u(:,:) = OBC_NONE
+  endif
+  if (.not.associated(OBC%OBC_mask_v)) then
+    allocate(OBC%OBC_mask_v(G%isd:G%ied,G%JsdB:G%JedB)) ; OBC%OBC_mask_v(:,:) = .false.
+  endif
+  if (.not.associated(OBC%OBC_kind_v)) then
+    allocate(OBC%OBC_kind_v(G%isd:G%ied,G%JsdB:G%JedB)) ; OBC%OBC_kind_v(:,:) = OBC_NONE
   endif
 
-  call log_version(param_file, mod, version)
-  call get_param(param_file, mod, "APPLY_OBC_U_FLATHER_EAST", flather_east, &
-                 "If true, some zonal velocity points use Flather open \n"//&
-                 "boundary conditions on the east side of the ocean.", &
-                 default=.false.)
-  call get_param(param_file, mod, "APPLY_OBC_U_FLATHER_WEST", flather_west, &
-                 "If true, some zonal velocity points use Flather open \n"//&
-                 "boundary conditions on the west side of the ocean.", &
-                 default=.false.)
-  call get_param(param_file, mod, "APPLY_OBC_V_FLATHER_NORTH", flather_north, &
-                 "If true, some meridional velocity points use Flather \n"//&
-                 "open boundary conditions on the north side of the ocean.", &
-                 default=.false.)
-  call get_param(param_file, mod, "APPLY_OBC_V_FLATHER_SOUTH", flather_south, &
-                 "If true, some meridional velocity points use Flather \n"//&
-                 "open boundary conditions on the north side of the ocean.", &
-                 default=.false.)
-  if (.not.(flather_east .or. flather_west .or. flather_north .or. &
-            flather_south)) return
+  ! This code should be modified to allow OBCs to be applied anywhere.
 
-  allocate(CS)
-  call get_param(param_file, mod, "OBC_RADIATION_MAX", CS%rx_max, &
-                 "The maximum magnitude of the baroclinic radiation \n"//&
-                 "velocity (or speed of characteristics).  This is only \n"//&
-                 "used if one of the APPLY_OBC_[UV]_FLATHER_... is true.", &
-                 units="m s-1", default=10.0)
-  call get_param(param_file, mod, "OBC_RAD_VEL_WT", CS%gamma_uv, &
-                 "The relative weighting for the baroclinic radiation \n"//&
-                 "velocities (or speed of characteristics) at the new \n"//&
-                 "time level (1) or the running mean (0) for velocities. \n"//&
-                 "Valid values range from 0 to 1. This is only used if \n"//&
-                 "one of the APPLY_OBC_[UV]_FLATHER_...  is true.", &
-                 units="nondim",  default=0.3)
-  call get_param(param_file, mod, "OBC_RAD_THICK_WT", CS%gamma_h, &
-                 "The relative weighting for the baroclinic radiation \n"//&
-                 "velocities (or speed of characteristics) at the new \n"//&
-                 "time level (1) or the running mean (0) for thicknesses. \n"//&
-                 "Valid values range from 0 to 1. This is only used if \n"//&
-                 "one of the APPLY_OBC_[UV]_FLATHER_...  is true.", &
-                 units="nondim",  default=0.2)
+  if (G%symmetric) then
+    east_boundary = G%ieg
+    west_boundary = G%isg-1
+    north_boundary = G%jeg
+    south_boundary = G%jsg-1
+  else
+    ! I am not entirely sure that this works properly. -RWH
+    east_boundary = G%ieg-1
+    west_boundary = G%isg
+    north_boundary = G%jeg-1
+    south_boundary = G%jsg
+  endif
 
-  id_clock_pass = cpu_clock_id('(Ocean OBC halo updates)', grain=CLOCK_ROUTINE)
+  if (OBC%apply_OBC_u_flather_east) then
+    ! Determine where u points are applied at east side
+    do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
+      if ((I+G%idg_offset) == east_boundary) then !eastern side
+        OBC%OBC_mask_u(I,j) = .true.
+        OBC%OBC_kind_u(I,j) = OBC_FLATHER_E
+        OBC%OBC_mask_v(i+1,J) = .true.
+        if (OBC%OBC_kind_v(i+1,J) == OBC_NONE) OBC%OBC_kind_v(i+1,J) = OBC_FLATHER_E
+        OBC%OBC_mask_v(i+1,J-1) = .true.
+        if (OBC%OBC_kind_v(i+1,J-1) == OBC_NONE) OBC%OBC_kind_v(i+1,J-1) = OBC_FLATHER_E
+      endif
+    enddo ; enddo
+  endif
 
-end subroutine open_boundary_init
+  if (OBC%apply_OBC_u_flather_west) then
+    ! Determine where u points are applied at west side
+    do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
+      if ((I+G%idg_offset) == west_boundary) then !western side
+        OBC%OBC_mask_u(I,j) = .true.
+        OBC%OBC_kind_u(I,j) = OBC_FLATHER_W
+        OBC%OBC_mask_v(i,J) = .true.
+        if (OBC%OBC_kind_v(i,J) == OBC_NONE) OBC%OBC_kind_v(i,J) = OBC_FLATHER_W
+        OBC%OBC_mask_v(i,J-1) = .true.
+        if (OBC%OBC_kind_v(i,J-1) == OBC_NONE) OBC%OBC_kind_v(i,J-1) = OBC_FLATHER_W
+      endif
+    enddo ; enddo
+  endif
 
-!> Deallocate open boundary data
-subroutine open_boundary_end(CS)
-  type(open_boundary_CS), pointer :: CS !< Open boundary control structure
-  deallocate(CS)
-end subroutine open_boundary_end
+  if (OBC%apply_OBC_v_flather_north) then
+    ! Determine where v points are applied at north side
+    do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+      if ((J+G%jdg_offset) == north_boundary) then         !northern side
+        OBC%OBC_mask_v(i,J) = .true.
+        OBC%OBC_kind_v(i,J) = OBC_FLATHER_N
+        OBC%OBC_mask_u(I,j+1) = .true.
+        if (OBC%OBC_kind_u(I,j+1) == OBC_NONE) OBC%OBC_kind_u(I,j+1) = OBC_FLATHER_N
+        OBC%OBC_mask_u(I-1,j+1) = .true.
+        if (OBC%OBC_kind_u(I-1,j+1) == OBC_NONE) OBC%OBC_kind_u(I-1,j+1) = OBC_FLATHER_N
+      endif
+    enddo ; enddo
+  endif
+
+  if (OBC%apply_OBC_v_flather_south) then
+    ! Determine where v points are applied at south side
+    do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+      if ((J+G%jdg_offset) == south_boundary) then         !southern side
+        OBC%OBC_mask_v(i,J) = .true.
+        OBC%OBC_kind_v(i,J) = OBC_FLATHER_S
+        OBC%OBC_mask_u(I,j) = .true.
+        if (OBC%OBC_kind_u(I,j) == OBC_NONE) OBC%OBC_kind_u(I,j) = OBC_FLATHER_S
+        OBC%OBC_mask_u(I-1,j) = .true.
+        if (OBC%OBC_kind_u(I-1,j) == OBC_NONE) OBC%OBC_kind_u(I-1,j) = OBC_FLATHER_S
+      endif
+    enddo ; enddo
+  endif
+
+  !   If there are no OBC points on this PE, there is no reason to keep the OBC
+  ! type, and it could be deallocated.
+end subroutine set_Flather_positions
+
+!> Sets the initial definitions of the characteristic open boundary conditions.
+!! \author Mehmet Ilicak
+subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
+  type(ocean_grid_type),                     intent(inout) :: G !< Ocean grid structure
+  type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary structure
+  type(thermo_var_ptrs),                     intent(inout) :: tv !< Thermodynamics structure
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h !< Thickness
+  type(param_file_type),                     intent(in)    :: PF !< Parameter file handle
+  type(tracer_registry_type),                pointer       :: tracer_Reg !< Tracer registry
+  ! Local variables
+  logical :: read_OBC_eta = .false.
+  logical :: read_OBC_uv = .false.
+  logical :: read_OBC_TS = .false.
+  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
+  integer :: isd_off, jsd_off
+  integer :: IsdB, IedB, JsdB, JedB
+  character(len=40)  :: mod = "set_Flather_Bdry_Conds" ! This subroutine's name.
+  character(len=200) :: filename, OBC_file, inputdir ! Strings for file/path
+
+  real :: temp_u(G%domain%niglobal+1,G%domain%njglobal)
+  real :: temp_v(G%domain%niglobal,G%domain%njglobal+1)
+
+  real, pointer, dimension(:,:,:) :: &
+    OBC_T_u => NULL(), &    ! These arrays should be allocated and set to
+    OBC_T_v => NULL(), &    ! specify the values of T and S that should come
+    OBC_S_u => NULL(), & 
+    OBC_S_v => NULL()     
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+
+  call get_param(PF, mod, "READ_OBC_UV", read_OBC_uv, &
+                 "If true, read the values for the velocity open boundary \n"//&
+                 "conditions from the file specified by OBC_FILE.", &
+                 default=.false.)
+  call get_param(PF, mod, "READ_OBC_ETA", read_OBC_eta, &
+                 "If true, read the values for the sea surface height \n"//&
+                 "open boundary conditions from the file specified by \n"//&
+                 "OBC_FILE.", default=.false.)
+  call get_param(PF, mod, "READ_OBC_TS", read_OBC_TS, &
+                 "If true, read the values for the temperature and \n"//&
+                 "salinity open boundary conditions from the file \n"//&
+                 "specified by OBC_FILE.", default=.false.)
+  if (read_OBC_uv .or. read_OBC_eta .or. read_OBC_TS) then
+    call get_param(PF, mod, "OBC_FILE", OBC_file, &
+                 "The file from which the appropriate open boundary \n"//&
+                 "condition values are read.", default="MOM_OBC_FILE.nc")
+    call get_param(PF, mod, "INPUTDIR", inputdir, default=".")
+    inputdir = slasher(inputdir)
+    filename = trim(inputdir)//trim(OBC_file)
+    call log_param(PF, mod, "INPUTDIR/OBC_FILE", filename)
+  endif
+
+  if (.not.associated(OBC%vbt_outer)) then
+    allocate(OBC%vbt_outer(isd:ied,JsdB:JedB)) ; OBC%vbt_outer(:,:) = 0.0
+  endif
+
+  if (.not.associated(OBC%ubt_outer)) then
+    allocate(OBC%ubt_outer(IsdB:IedB,jsd:jed)) ; OBC%ubt_outer(:,:) = 0.0
+  endif
+
+  if (.not.associated(OBC%eta_outer_u)) then
+    allocate(OBC%eta_outer_u(IsdB:IedB,jsd:jed)) ; OBC%eta_outer_u(:,:) = 0.0
+  endif
+
+  if (.not.associated(OBC%eta_outer_v)) then
+    allocate(OBC%eta_outer_v(isd:ied,JsdB:JedB)) ; OBC%eta_outer_v(:,:) = 0.0
+  endif
+  
+  if (read_OBC_uv) then
+    call read_data(filename, 'ubt', OBC%ubt_outer, &
+                   domain=G%Domain%mpp_domain, position=EAST_FACE)
+    call read_data(filename, 'vbt', OBC%vbt_outer, &
+                   domain=G%Domain%mpp_domain, position=NORTH_FACE)
+  endif
+
+  if (read_OBC_eta) then
+    call read_data(filename, 'eta_outer_u', OBC%eta_outer_u, &
+                   domain=G%Domain%mpp_domain, position=EAST_FACE)
+    call read_data(filename, 'eta_outer_v', OBC%eta_outer_v, &
+                   domain=G%Domain%mpp_domain, position=NORTH_FACE)
+  endif
+
+  call pass_vector(OBC%eta_outer_u,OBC%eta_outer_v,G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
+  call pass_vector(OBC%ubt_outer,OBC%vbt_outer,G%Domain)
+
+  ! Define radiation coefficients r[xy]_old_[uvh] as needed.  For now, there are
+  ! no radiation conditions applied to the thicknesses, since the thicknesses
+  ! might not be physically motivated.  Instead, sponges should be used to
+  ! enforce the near-boundary layer structure.
+  if (OBC%apply_OBC_u_flather_west .or. OBC%apply_OBC_u_flather_east) then
+    allocate(OBC%rx_old_u(IsdB:IedB,jsd:jed,nz)) ; OBC%rx_old_u(:,:,:) = 0.0
+ !   allocate(OBC%rx_old_h(Isd:Ied,jsd:jed,nz))   ; OBC%rx_old_h(:,:,:) = 0.0
+  endif
+  if (OBC%apply_OBC_v_flather_south .or. OBC%apply_OBC_v_flather_north) then
+    allocate(OBC%ry_old_v(isd:ied,JsdB:JedB,nz)) ; OBC%ry_old_v(:,:,:) = 0.0
+ !   allocate(OBC%ry_old_h(isd:ied,Jsd:Jed,nz))   ; OBC%ry_old_h(:,:,:) = 0.0
+  endif
+
+
+  if (associated(tv%T)) then
+    allocate(OBC_T_u(IsdB:IedB,jsd:jed,nz)) ; OBC_T_u(:,:,:) = 0.0
+    allocate(OBC_S_u(IsdB:IedB,jsd:jed,nz)) ; OBC_S_u(:,:,:) = 0.0
+    allocate(OBC_T_v(isd:ied,JsdB:JedB,nz)) ; OBC_T_v(:,:,:) = 0.0
+    allocate(OBC_S_v(isd:ied,JsdB:JedB,nz)) ; OBC_S_v(:,:,:) = 0.0
+
+    if (read_OBC_TS) then
+      call read_data(filename, 'OBC_T_u', OBC_T_u, &
+                     domain=G%Domain%mpp_domain, position=EAST_FACE)
+      call read_data(filename, 'OBC_S_u', OBC_S_u, &
+                     domain=G%Domain%mpp_domain, position=EAST_FACE)
+
+      call read_data(filename, 'OBC_T_v', OBC_T_v, &
+                     domain=G%Domain%mpp_domain, position=NORTH_FACE)
+      call read_data(filename, 'OBC_S_v', OBC_S_v, &
+                     domain=G%Domain%mpp_domain, position=NORTH_FACE)
+    else
+      call pass_var(tv%T, G%Domain)
+      call pass_var(tv%S, G%Domain)
+      do k=1,nz ; do j=js,je ; do I=is-1,ie
+        if (OBC%OBC_mask_u(I,j)) then
+          if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) then
+            OBC_T_u(I,j,k) = tv%T(i,j,k)
+            OBC_S_u(I,j,k) = tv%S(i,j,k)
+          elseif (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W) then
+            OBC_T_u(I,j,k) = tv%T(i+1,j,k)
+            OBC_S_u(I,j,k) = tv%S(i+1,j,k)
+          elseif (G%mask2dT(i,j) + G%mask2dT(i+1,j) > 0) then
+            OBC_T_u(I,j,k) = (G%mask2dT(i,j)*tv%T(i,j,k) + G%mask2dT(i+1,j)*tv%T(i+1,j,k)) / &
+                             (G%mask2dT(i,j) + G%mask2dT(i+1,j))
+            OBC_S_u(I,j,k) = (G%mask2dT(i,j)*tv%S(i,j,k) + G%mask2dT(i+1,j)*tv%S(i+1,j,k)) / &
+                             (G%mask2dT(i,j) + G%mask2dT(i+1,j))
+          else ! This probably shouldn't happen or maybe it doesn't matter?
+            OBC_T_u(I,j,k) = 0.5*(tv%T(i,j,k)+tv%T(i+1,j,k))
+            OBC_S_u(I,j,k) = 0.5*(tv%S(i,j,k)+tv%S(i+1,j,k))
+          endif
+        else
+          OBC_T_u(I,j,k) = 0.5*(tv%T(i,j,k)+tv%T(i+1,j,k))
+          OBC_S_u(I,j,k) = 0.5*(tv%S(i,j,k)+tv%S(i+1,j,k))
+        endif
+      enddo; enddo ; enddo
+
+      do k=1,nz ; do J=js-1,je ; do i=is,ie
+        if (OBC%OBC_mask_v(i,J)) then
+          if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) then
+            OBC_T_v(i,J,k) = tv%T(i,j,k)
+            OBC_S_v(i,J,k) = tv%S(i,j,k)
+          elseif (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S) then
+            OBC_T_v(i,J,k) = tv%T(i,j+1,k)
+            OBC_S_v(i,J,k) = tv%S(i,j+1,k)
+          elseif (G%mask2dT(i,j) + G%mask2dT(i,j+1) > 0) then
+            OBC_T_v(i,J,k) = (G%mask2dT(i,j)*tv%T(i,j,k) + G%mask2dT(i,j+1)*tv%T(i,j+1,k)) / &
+                             (G%mask2dT(i,j) + G%mask2dT(i,j+1))
+            OBC_S_v(i,J,k) = (G%mask2dT(i,j)*tv%S(i,j,k) + G%mask2dT(i,j+1)*tv%S(i,j+1,k)) / &
+                             (G%mask2dT(i,j) + G%mask2dT(i,j+1))
+          else ! This probably shouldn't happen or maybe it doesn't matter?
+            OBC_T_v(i,J,k) = 0.5*(tv%T(i,j,k)+tv%T(i,j+1,k))
+            OBC_S_v(i,J,k) = 0.5*(tv%S(i,j,k)+tv%S(i,j+1,k))
+          endif
+        else
+          OBC_T_v(i,J,k) = 0.5*(tv%T(i,j,k)+tv%T(i,j+1,k))
+          OBC_S_v(i,J,k) = 0.5*(tv%S(i,j,k)+tv%S(i,j+1,k))
+        endif
+      enddo; enddo ; enddo
+    endif
+
+    call pass_vector(OBC_T_u, OBC_T_v, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
+    call pass_vector(OBC_S_u, OBC_S_v, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
+
+    call add_tracer_OBC_values("T", tracer_Reg, OBC_in_u=OBC_T_u, &
+                                                OBC_in_v=OBC_T_v)
+    call add_tracer_OBC_values("S", tracer_Reg, OBC_in_u=OBC_S_u, &
+                                                OBC_in_v=OBC_S_v)
+    do k=1,nz ; do j=jsd,jed ; do I=isd,ied-1
+      if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) then
+        tv%T(i+1,j,k) = tv%T(i,j,k) ; tv%S(i+1,j,k) = tv%S(i,j,k)
+      elseif (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W) then
+        tv%T(i,j,k) = tv%T(i+1,j,k) ; tv%S(i,j,k) = tv%S(i+1,j,k)
+      endif
+    enddo ; enddo ; enddo
+    do k=1,nz ; do J=jsd,jed-1 ; do i=isd,ied
+      if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) then
+        tv%T(i,j+1,k) = tv%T(i,j,k) ; tv%S(i,j+1,k) = tv%S(i,j,k)
+      elseif (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S) then
+        tv%T(i,j,k) = tv%T(i,j+1,k) ; tv%S(i,j,k) = tv%S(i,j+1,k)
+      endif
+    enddo ; enddo ; enddo
+  endif
+
+  do k=1,nz ; do j=jsd,jed ; do I=isd,ied-1
+    if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) h(i+1,j,k) = h(i,j,k)
+    if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W) h(i,j,k) = h(i+1,j,k)
+  enddo ; enddo ; enddo
+  do k=1,nz ; do J=jsd,jed-1 ; do i=isd,ied
+    if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) h(i,j+1,k) = h(i,j,k)
+    if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S) h(i,j,k) = h(i,j+1,k)
+  enddo ; enddo ; enddo
+
+end subroutine set_Flather_data
 
 !> \namespace mom_open_boundary
 !! This module implements some aspects of internal open boundary
