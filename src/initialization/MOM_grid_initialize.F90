@@ -1343,8 +1343,6 @@ subroutine initialize_masks(G, PF)
 
   real :: Dmin, min_depth, mask_depth
   integer :: i, j
-  logical :: apply_OBC_u_flather_east, apply_OBC_u_flather_west
-  logical :: apply_OBC_v_flather_north, apply_OBC_v_flather_south
   character(len=40)  :: mod = "MOM_grid_init initialize_masks"
 
   call callTree_enter("initialize_masks(), MOM_grid_initialize.F90")
@@ -1358,65 +1356,13 @@ subroutine initialize_masks(G, PF)
                  "The depth below which to mask points as land points, for which all\n"//&
                  "fluxes are zeroed out. MASKING_DEPTH is ignored if negative.", &
                  units="m", default=-9999.0)
-  call get_param(PF, mod, "APPLY_OBC_U_FLATHER_EAST", apply_OBC_u_flather_east,&
-                 "Apply a Flather open boundary condition on the eastern \n"//&
-                 "side of the global domain", default=.false.)
-  call get_param(PF, mod, "APPLY_OBC_U_FLATHER_WEST", apply_OBC_u_flather_west,&
-                 "Apply a Flather open boundary condition on the western \n"//&
-                 "side of the global domain", default=.false.)
-  call get_param(PF, mod, "APPLY_OBC_V_FLATHER_NORTH", apply_OBC_v_flather_north,&
-                 "Apply a Flather open boundary condition on the northern \n"//&
-                 "side of the global domain", default=.false.)
-  call get_param(PF, mod, "APPLY_OBC_V_FLATHER_SOUTH", apply_OBC_v_flather_south,&
-                 "Apply a Flather open boundary condition on the southern \n"//&
-                 "side of the global domain", default=.false.)
-
-  if ((apply_OBC_u_flather_west .or. apply_OBC_v_flather_south) .and. &
-      .not.G%symmetric ) &
-    call MOM_error(FATAL, "Symmetric memory must be used when "//&
-      "APPLY_OBC_U_FLATHER_WEST or APPLY_OBC_V_FLATHER_SOUTH is true.")
 
   Dmin = min_depth
   if (mask_depth>=0.) Dmin = mask_depth
 
-  call pass_var(G%bathyT, G%Domain)
   G%mask2dCu(:,:) = 0.0 ; G%mask2dCv(:,:) = 0.0 ; G%mask2dBu(:,:) = 0.0
 
-  ! Extrapolate the bottom depths at any points that are subject to Flather
-  ! open boundary conditions.  This should be generalized for Flather OBCs
-  ! that are not necessarily at the edges of the domain.
-  if (apply_OBC_u_flather_west) then
-    do j=G%jsd,G%jed ; do I=G%isd+1,G%ied
-      if ((I+G%idg_offset) == G%isg) then
-        G%bathyT(i-1,j) = G%bathyT(i,j)
-      endif
-    enddo; enddo       
-  endif
-
-  if (apply_OBC_u_flather_east) then
-    do j=G%jsd,G%jed ; do I=G%isd,G%ied-1
-      if ((i+G%idg_offset) == G%ieg) then
-        G%bathyT(i+1,j) = G%bathyT(i,j)
-      endif
-    enddo; enddo    
-  endif
-
-  if (apply_OBC_v_flather_north) then
-    do J=G%jsd,G%jed-1 ; do i=G%isd,G%ied
-      if ((j+G%jdg_offset) == G%jeg) then
-        G%bathyT(i,j+1) = G%bathyT(i,j)
-      endif
-    enddo; enddo    
-  endif
-
-  if (apply_OBC_v_flather_south) then
-    do J=G%jsd+1,G%jed ; do i=G%isd,G%ied
-      if ((J+G%jdg_offset) == G%jsg) then
-        G%bathyT(i,j-1) = G%bathyT(i,j)
-      endif
-    enddo; enddo
-  endif
-
+  ! Construct the h-point or T-point mask
   do j=G%jsd,G%jed ; do i=G%isd,G%ied
     if (G%bathyT(i,j) <= Dmin) then
       G%mask2dT(i,j) = 0.0
