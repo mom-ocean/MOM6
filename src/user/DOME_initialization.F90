@@ -277,7 +277,7 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
                                                 !! whether, where, and what open boundary
                                                 !! conditions are used.
   type(thermo_var_ptrs),      intent(in) :: tv  !< A structure containing pointers to any
-                              !! available thermodynamic fields, including potential 
+                              !! available thermodynamic fields, including potential
                               !! temperature and salinity or mixed layer density. Absent
                               !! fields have NULL ptrs.
   type(ocean_grid_type),      intent(in) :: G   !< The ocean's grid structure.
