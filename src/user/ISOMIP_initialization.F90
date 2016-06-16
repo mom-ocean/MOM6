@@ -25,6 +25,7 @@ module ISOMIP_initialization
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 use MOM_ALE_sponge, only : ALE_sponge_CS, set_up_ALE_sponge_field, initialize_ALE_sponge
+use MOM_sponge, only : sponge_CS, set_up_sponge_field, initialize_sponge
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
@@ -89,10 +90,6 @@ subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth)
   logical :: is_2D         ! If true, use 2D setup
 
 ! G%ieg and G%jeg are the last indices in the global domain
-!  real, dimension (G%ieg) :: xtil    ! eq. 3
-!  real, dimension (G%ieg) :: bx            ! eq. 2
-!  real, dimension (G%ieg,G%jeg) :: dummy1            ! dummy array
-!  real, dimension (G%jeg) :: by            ! eq. 4
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -124,8 +121,9 @@ subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth)
       !by = (dc/(1.+exp(-2.*(G%geoLatT(i,j)*1.0e3- ly/2. - wc)/fc))) + &
       !        (dc/(1.+exp(2.*(G%geoLatT(i,j)*1.0e3- ly/2. + wc)/fc)))
 
-      by = (dc/(1.+exp(-2.*(20.*1.0e3- ly/2. - wc)/fc))) + &
-           (dc/(1.+exp(2.*(20.*1.0e3- ly/2. + wc)/fc)))  
+      ! slice at y = 40 km
+      by = (dc/(1.+exp(-2.*(40.0*1.0e3- ly/2. - wc)/fc))) + &
+           (dc/(1.+exp(2.*(40.0*1.0e3- ly/2. + wc)/fc)))  
 
       D(i,j) = -max(bx+by,-bmax)
       if (D(i,j) > max_depth) D(i,j) = max_depth
@@ -134,8 +132,8 @@ subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth)
 
   else 
     do j=js,je ; do i=is,ie
-      ! 3D         
-      !xtil = G%geoLonT(i,j)*1.0e3/xbar 
+      ! 3D setup        
+      xtil = G%geoLonT(i,j)*1.0e3/xbar 
       bx = b0+b2*xtil**2 + b4*xtil**4 + b6*xtil**6
       by = (dc/(1.+exp(-2.*(G%geoLatT(i,j)*1.0e3- ly/2. - wc)/fc))) + &
               (dc/(1.+exp(2.*(G%geoLatT(i,j)*1.0e3- ly/2. + wc)/fc)))
@@ -328,12 +326,14 @@ end subroutine ISOMIP_initialize_temperature_salinity
 !> Sets up the the inverse restoration time (Idamp), and   !
 ! the values towards which the interface heights and an arbitrary    !
 ! number of tracers should be restored within each sponge.
-subroutine ISOMIP_initialize_sponges(G,GV, tv, PF, CSp)
+subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
   type(ocean_grid_type), intent(in) :: G !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV !< The container for vertical grid data
   type(thermo_var_ptrs), intent(in) :: tv !< A structure containing pointers to any available thermodynamic fields, including potential temperature and salinity or mixed layer density. Absent fields have NULL ptrs.
   type(param_file_type), intent(in) :: PF !< A structure indicating the open file to parse for model parameter values.
-  type(ALE_sponge_CS),   pointer    :: CSp !< A pointer that is set to point to the control structure for this module.
+  logical,                 intent(in) :: use_ALE !< If true, indicates model is in ALE mode
+  type(sponge_CS),         pointer    :: CSp !< Layer-mode sponge structure
+  type(ALE_sponge_CS),   pointer    :: ACSp !< ALE-mode sponge structure
 
   real :: T(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for temp 
   real :: S(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for salt
@@ -346,9 +346,11 @@ subroutine ISOMIP_initialize_sponges(G,GV, tv, PF, CSp)
   real      :: t_ref, s_ref         ! reference T and S
   real      :: rho_sur, rho_bot, rho_range, t_range, s_range
 
-  real :: e0(SZK_(G))               ! The resting interface heights, in m, usually !
+  real :: e0(SZK_(G)+1)               ! The resting interface heights, in m, usually !
                                     ! negative because it is positive upward.      !
   real :: eta1D(SZK_(G)+1)          ! Interface height relative to the sea surface !
+  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta.
+  
                                     ! positive upward, in m.
   real :: min_depth, dummy1, z, delta_h
   real :: damp, rho_dummy, min_thickness, rho_tmp, xi0
@@ -389,107 +391,102 @@ subroutine ISOMIP_initialize_sponges(G,GV, tv, PF, CSp)
   call get_param(PF, mod, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0)
 
-   
-  select case ( coordinateMode(verticalCoordinate) )
+   if (associated(CSp)) call MOM_error(FATAL, &
+          "ISOMIP_initialize_sponges called with an associated control structure.")
+   if (associated(ACSp)) call MOM_error(FATAL, &
+          "ISOMIP_initialize_sponges called with an associated ALE-sponge control structure.")
 
-  case ( REGRIDDING_LAYER, REGRIDDING_RHO ) 
-    ! Compute min/max density using T_SUR/S_SUR and T_BOT/S_BOT
-    call calculate_density(t_sur,s_sur,0.0,rho_sur,tv%eqn_of_state)
-    !write (*,*)'Surface density in sponge:', rho_sur
-    call calculate_density(t_bot,s_bot,0.0,rho_bot,tv%eqn_of_state)
-    !write (*,*)'Bottom density in sponge:', rho_bot
-    rho_range = rho_bot - rho_sur
-    !write (*,*)'Density range in sponge:', rho_range
-
-    ! Construct notional interface positions
-    e0(1) = 0.
-    do K=2,nz
-      e0(k) = -G%max_depth * ( 0.5 * ( GV%Rlay(k-1) + GV%Rlay(k) ) - rho_sur ) / rho_range
-      e0(k) = min( 0., e0(k) ) ! Bound by surface
-      e0(k) = max( -G%max_depth, e0(k) ) ! Bound by possible deepest point in model
-      !write(*,*)'G%max_depth,GV%Rlay(k-1),GV%Rlay(k),e0(k)',G%max_depth,GV%Rlay(k-1),GV%Rlay(k),e0(k)  
-
-    enddo
-    e0(nz+1) = -G%max_depth
-
-    ! Calculate thicknesses
-    do j=js,je ; do i=is,ie
-      eta1D(nz+1) = -1.0*G%bathyT(i,j)
-      do k=nz,1,-1
-        eta1D(k) = e0(k)
-        if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_z)) then
-          eta1D(k) = eta1D(k+1) + GV%Angstrom_z
-          h(i,j,k) = GV%Angstrom_z
-        else
-          h(i,j,k) = eta1D(k) - eta1D(k+1)
-        endif
-      enddo
-    enddo ; enddo
-
-  case ( REGRIDDING_ZSTAR )                       ! Initial thicknesses for z coordinates
-    do j=js,je ; do i=is,ie
-      eta1D(nz+1) = -1.0*G%bathyT(i,j)
-      do k=nz,1,-1
-        eta1D(k) =  -G%max_depth * real(k-1) / real(nz)
-        if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
-          eta1D(k) = eta1D(k+1) + min_thickness
-          h(i,j,k) = min_thickness
-        else
-          h(i,j,k) = eta1D(k) - eta1D(k+1)
-        endif
-      enddo
-   enddo ; enddo
-
-   case ( REGRIDDING_SIGMA )             ! Initial thicknesses for sigma coordinates
-    do j=js,je ; do i=is,ie
-      delta_h = G%bathyT(i,j) / dfloat(nz)
-      h(i,j,:) = delta_h
-    end do ; end do
-
-  case default
-      call MOM_error(FATAL,"ISOMIP_initialize_sponges: "// &
-      "Unrecognized i.c. setup - set REGRIDDING_COORDINATE_MODE")
-
-  end select
-
-!  Here the inverse damping time, in s-1, is set. Set Idamp to 0     !
-!  wherever there is no sponge, and the subroutines that are called  !
-!  will automatically set up the sponges only where Idamp is positive!
-!  and mask2dT is 1.  
+  !  Here the inverse damping time, in s-1, is set. Set Idamp to 0     !
+  !  wherever there is no sponge, and the subroutines that are called  !
+  !  will automatically set up the sponges only where Idamp is positive!
+  !  and mask2dT is 1.  
 
    do i=is,ie; do j=js,je
       if (G%geoLonT(i,j) >= 790.0 .AND. G%geoLonT(i,j) <= 800.0) then
 
-! 1 / day
+  ! 1 / day
         dummy1=(G%geoLonT(i,j)-790.0)/(800.0-790.0)
         damp = 1.0/TNUDG * max(0.0,dummy1)
 
       else ; damp=0.0
       endif
 
-! convert to 1 / seconds
+  ! convert to 1 / seconds
       if (G%bathyT(i,j) > min_depth) then
           Idamp(i,j) = damp/86400.0
       else ; Idamp(i,j) = 0.0 ; endif
-   
+
 
    enddo ; enddo
 
-   if (associated(CSp)) then
-    call MOM_error(WARNING, "ISOMIP_initialize_sponges called with an associated "// &
-                            "control structure.")
-    return
-  endif
+  ! Compute min/max density using T_SUR/S_SUR and T_BOT/S_BOT
+  call calculate_density(t_sur,s_sur,0.0,rho_sur,tv%eqn_of_state)
+  !write (*,*)'Surface density in sponge:', rho_sur
+  call calculate_density(t_bot,s_bot,0.0,rho_bot,tv%eqn_of_state)
+  !write (*,*)'Bottom density in sponge:', rho_bot
+  rho_range = rho_bot - rho_sur
+  !write (*,*)'Density range in sponge:', rho_range
 
-!  This call sets up the damping rates and interface heights.
-!  This sets the inverse damping timescale fields in the sponges.    !
 
-  call initialize_ALE_sponge(Idamp,h, nz, G, PF, CSp)
+  if (use_ALE) then 
+    select case ( coordinateMode(verticalCoordinate) )
 
-! setup temp and salt at the sponge zone
-  select case ( coordinateMode(verticalCoordinate) )
+     case ( REGRIDDING_RHO ) 
+       ! Construct notional interface positions
+       e0(1) = 0.
+       do K=2,nz
+         e0(k) = -G%max_depth * ( 0.5 * ( GV%Rlay(k-1) + GV%Rlay(k) ) - rho_sur ) / rho_range
+         e0(k) = min( 0., e0(k) ) ! Bound by surface
+         e0(k) = max( -G%max_depth, e0(k) ) ! Bound by possible deepest point in model
+         !write(*,*)'G%max_depth,GV%Rlay(k-1),GV%Rlay(k),e0(k)',G%max_depth,GV%Rlay(k-1),GV%Rlay(k),e0(k)  
 
-    case (  REGRIDDING_SIGMA, REGRIDDING_ZSTAR, REGRIDDING_RHO )
+       enddo
+       e0(nz+1) = -G%max_depth
+
+       ! Calculate thicknesses
+       do j=js,je ; do i=is,ie
+         eta1D(nz+1) = -1.0*G%bathyT(i,j)
+         do k=nz,1,-1
+           eta1D(k) = e0(k)
+           if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_z)) then
+             eta1D(k) = eta1D(k+1) + GV%Angstrom_z
+             h(i,j,k) = GV%Angstrom_z
+           else
+             h(i,j,k) = eta1D(k) - eta1D(k+1)
+           endif
+         enddo
+       enddo ; enddo
+
+     case ( REGRIDDING_ZSTAR )                       ! Initial thicknesses for z coordinates
+       do j=js,je ; do i=is,ie
+         eta1D(nz+1) = -1.0*G%bathyT(i,j)
+         do k=nz,1,-1
+           eta1D(k) =  -G%max_depth * real(k-1) / real(nz)
+           if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
+             eta1D(k) = eta1D(k+1) + min_thickness
+             h(i,j,k) = min_thickness
+           else
+             h(i,j,k) = eta1D(k) - eta1D(k+1)
+           endif
+         enddo
+      enddo ; enddo
+
+      case ( REGRIDDING_SIGMA )             ! Initial thicknesses for sigma coordinates
+       do j=js,je ; do i=is,ie
+         delta_h = G%bathyT(i,j) / dfloat(nz)
+         h(i,j,:) = delta_h
+       end do ; end do
+
+     case default
+         call MOM_error(FATAL,"ISOMIP_initialize_sponges: "// &
+         "Unrecognized i.c. setup - set REGRIDDING_COORDINATE_MODE")
+
+    end select
+
+      !  This call sets up the damping rates and interface heights.
+      !  This sets the inverse damping timescale fields in the sponges.  
+      call initialize_ALE_sponge(Idamp,h, nz, G, PF, ACSp)
+
       S_range = S_range / G%max_depth ! Convert S_range into dS/dz
       T_range = T_range / G%max_depth ! Convert T_range into dT/dz
       do j=js,je ; do i=is,ie
@@ -501,32 +498,60 @@ subroutine ISOMIP_initialize_sponges(G,GV, tv, PF, CSp)
           xi0 = xi0 + 0.5 * h(i,j,k) ! Depth at top of layer
         enddo
       enddo ; enddo
-  i=G%iec; j=G%jec
-  do k = 1,nz
-    call calculate_density(T(i,j,k),S(i,j,k),0.0,rho_tmp,tv%eqn_of_state)
-    !write(*,*) 'Sponge - k,h,T,S,rho,Rlay',k,h(i,j,k),T(i,j,k),S(i,j,k),rho_tmp,GV%Rlay(k)
-  enddo
+      ! for debugging
+      !i=G%iec; j=G%jec
+      !do k = 1,nz
+      !  call calculate_density(T(i,j,k),S(i,j,k),0.0,rho_tmp,tv%eqn_of_state)
+        !write(*,*) 'Sponge - k,h,T,S,rho,Rlay',k,h(i,j,k),T(i,j,k),S(i,j,k),rho_tmp,GV%Rlay(k)
+      !enddo
 
-   case default
-      call MOM_error(FATAL,"isomip_initialize_sponge: "// &
-      "Unrecognized i.c. setup - set REGRIDDING_COORDINATE_MODE")
+      !   Now register all of the fields which are damped in the sponge.   !
+      ! By default, momentum is advected vertically within the sponge, but !
+      ! momentum is typically not damped within the sponge.                !
 
-  end select
+      !  The remaining calls to set_up_sponge_field can be in any order. !
+      if ( associated(tv%T) ) then
+        call set_up_ALE_sponge_field(T,G,tv%T,ACSp)
+      endif
+
+      if ( associated(tv%S) ) then
+        call set_up_ALE_sponge_field(S,G,tv%S,ACSp)
+      endif
 
 
-!   Now register all of the fields which are damped in the sponge.   !
-! By default, momentum is advected vertically within the sponge, but !
-! momentum is typically not damped within the sponge.                !
+  else  ! layer mode
 
-!  The remaining calls to set_up_sponge_field can be in any order. !
-  if ( associated(tv%T) ) then
-      call set_up_ALE_sponge_field(T,G,tv%T,CSp)
+       ! Construct notional interface positions
+       e0(1) = 0.
+       do K=2,nz
+         e0(k) = -G%max_depth * ( 0.5 * ( GV%Rlay(k-1) + GV%Rlay(k) ) - rho_sur ) / rho_range
+         e0(k) = min( 0., e0(k) ) ! Bound by surface
+         e0(k) = max( -G%max_depth, e0(k) ) ! Bound by possible deepest point in model
+         !write(*,*)'G%max_depth,GV%Rlay(k-1),GV%Rlay(k),e0(k)',G%max_depth,GV%Rlay(k-1),GV%Rlay(k),e0(k)
+       enddo
+       e0(nz+1) = -G%max_depth
+
+       ! Calculate thicknesses
+       do j=js,je ; do i=is,ie
+         eta1D(nz+1) = -1.0*G%bathyT(i,j)
+         do k=nz,1,-1
+           eta1D(k) = e0(k)
+           if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_z)) then
+             eta1D(k) = eta1D(k+1) + GV%Angstrom_z
+             h(i,j,k) = GV%Angstrom_z
+           else
+             h(i,j,k) = eta1D(k) - eta1D(k+1)
+           endif
+         enddo
+
+         eta(i,j,nz+1) = -G%bathyT(i,j)
+         do K=nz,1,-1
+           eta(i,j,K) = eta(i,j,K+1) + h(i,j,k)
+         enddo
+       enddo ; enddo
+      call initialize_sponge(Idamp, eta, G, PF, CSp)
+
   endif
-
-  if ( associated(tv%S) ) then
-    call set_up_ALE_sponge_field(S,G,tv%S,CSp)
-  endif
-
 
 end subroutine ISOMIP_initialize_sponges
 ! -----------------------------------------------------------------------------
