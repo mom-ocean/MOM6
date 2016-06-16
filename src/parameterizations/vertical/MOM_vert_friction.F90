@@ -165,9 +165,9 @@ type, public :: vertvisc_CS ; private
   integer :: nkml           ! The number of layers in the mixed layer.
   integer, pointer :: ntrunc  ! The number of times the velocity has been
                               ! truncated since the last call to write_energy.
-  character(len = 200) :: u_trunc_file ! The complete path to files in which a
-  character(len = 200) :: v_trunc_file ! column's worth of accelerations are
-                                       ! written when velocity truncations occur.
+  character(len=200) :: u_trunc_file ! The complete path to files in which a
+  character(len=200) :: v_trunc_file ! column's worth of accelerations are
+                                     ! written when velocity truncations occur.
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                             ! timing of diagnostic output.
   integer :: id_du_dt_visc = -1, id_dv_dt_visc = -1, id_au_vv = -1, id_av_vv = -1

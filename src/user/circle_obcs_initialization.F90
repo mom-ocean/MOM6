@@ -19,13 +19,6 @@ module circle_obcs_initialization
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
 !***********************************************************************
 
-!***********************************************************************
-!*                                                                     *
-!*  The module configures the model for the "circle_obcs" experiment.  *
-!*  circle_obcs = Test of Open Boundary Conditions for an anomaly      *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
-
 use MOM_sponge, only : sponge_CS, set_up_sponge_field, initialize_sponge
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
@@ -44,18 +37,14 @@ public circle_obcs_initialize_thickness
 
 contains
 
+!> This subroutine initializes layer thicknesses for the circle_obcs experiment.
 subroutine circle_obcs_initialize_thickness(h, G, GV, param_file)
-  type(ocean_grid_type),   intent(in) :: G
-  type(verticalGrid_type), intent(in) :: GV
-  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h
-  type(param_file_type),   intent(in) :: param_file
-! Arguments: h - The thickness that is being initialized.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
+  type(ocean_grid_type),   intent(in) :: G   !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in) :: GV  !< The ocean's vertical grid structure.
+  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h !< The thickness that is being initialized.
+  type(param_file_type),   intent(in) :: param_file  !< A structure indicating the open
+                                   !! file to parse for model parameter values.
 
-!  This subroutine initializes layer thicknesses for the circle_obcs experiment
   real :: e0(SZK_(G)+1)   ! The resting interface heights, in m, usually !
                           ! negative because it is positive upward.      !
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
@@ -110,4 +99,8 @@ subroutine circle_obcs_initialize_thickness(h, G, GV, param_file)
 
 end subroutine circle_obcs_initialize_thickness
 
+!> \class circle_obcs_initialization
+!!
+!! The module configures the model for the "circle_obcs" experiment.
+!! circle_obcs = Test of Open Boundary Conditions for an SSH anomaly.
 end module circle_obcs_initialization
