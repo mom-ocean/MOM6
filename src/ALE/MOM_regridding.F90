@@ -344,7 +344,7 @@ subroutine calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
   ! Local variables
   integer :: i, j, k
 
-!$OMP parallel do default(none) shared(G,h,dzInterface,h_new)
+!$OMP parallel do default(none) shared(G,GV,h,dzInterface,h_new)
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
       if (G%mask2dT(i,j)>0.) then
@@ -369,7 +369,7 @@ subroutine check_remapping_grid( G, GV, h, dzInterface, msg )
   ! Local variables
   integer :: i, j
 
-!$OMP parallel do default(none) shared(G,h,dzInterface,msg)
+!$OMP parallel do default(none) shared(G,GV,h,dzInterface,msg)
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
       if (G%mask2dT(i,j)>0.) call check_grid_column( GV%ke, G%bathyT(i,j), h(i,j,:), dzInterface(i,j,:), msg )
