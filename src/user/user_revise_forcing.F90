@@ -48,28 +48,27 @@ end type user_revise_forcing_CS
 
 contains
 
+!> This subroutine sets the surface wind stresses.
 subroutine user_alter_forcing(state, fluxes, day, G, CS)
-  type(surface),            intent(in)    :: state
-  type(forcing),            intent(inout) :: fluxes
-  type(time_type),          intent(in)    :: day
-  type(ocean_grid_type),    intent(in)    :: G
-  type(user_revise_forcing_CS), pointer   :: CS
-! This subroutine sets the surface wind stresses.
-!
-! Arguments: state - A structure containing fields that describe the
-!                    surface state of the ocean.
-!  (out)     fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields have NULL ptrs.
-!  (in)      day - Time of the fluxes.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - A pointer to the control structure returned by a previous
-!                 call to surface_forcing_init
+  type(surface),            intent(in)    :: state  !< A structure containing fields that
+                                                    !! describe the surface state of the ocean.
+  type(forcing),            intent(inout) :: fluxes !< A structure containing pointers to any
+                                                    !! possible forcing fields. Unused fields
+                                                    !! have NULL ptrs.
+  type(time_type),          intent(in)    :: day    !< Time of the fluxes.
+  type(ocean_grid_type),    intent(in)    :: G      !< The ocean's grid structure.
+  type(user_revise_forcing_CS), pointer   :: CS     !< A pointer to the control structure
+                                                    !! returned by a previous call to
+                                                    !! surface_forcing_init.
 
 end subroutine user_alter_forcing
 
 subroutine user_revise_forcing_init(param_file,CS)
-  type(param_file_type),     intent(in) :: param_file
-  type(user_revise_forcing_CS), pointer :: CS
+  type(param_file_type), intent(in) :: param_file   !< !< A structure indicating the open file to
+                                                    !! parse for model parameter values.
+  type(user_revise_forcing_CS), pointer   :: CS     !< A pointer to the control structure
+                                                    !! returned by a previous call to
+                                                    !! surface_forcing_init.
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"

@@ -82,11 +82,11 @@ subroutine MOM_initialize_fixed(G, PF, write_geom, output_dir)
 !  a bottom that is shallower than min_depth from PF.                !
   call initialize_masks(G, PF)
   if (debug) then
-    call hchksum(G%bathyT, 'MOM_initialize_fixed: depth ', G, haloshift=1)
-    call hchksum(G%mask2dT, 'MOM_initialize_fixed: mask2dT ', G)
-    call uchksum(G%mask2dCu, 'MOM_initialize_fixed: mask2dCu ', G)
-    call vchksum(G%mask2dCv, 'MOM_initialize_fixed: mask2dCv ', G)
-    call qchksum(G%mask2dBu, 'MOM_initialize_fixed: mask2dBu ', G)
+    call hchksum(G%bathyT, 'MOM_initialize_fixed: depth ', G%HI, haloshift=1)
+    call hchksum(G%mask2dT, 'MOM_initialize_fixed: mask2dT ', G%HI)
+    call uchksum(G%mask2dCu, 'MOM_initialize_fixed: mask2dCu ', G%HI)
+    call vchksum(G%mask2dCv, 'MOM_initialize_fixed: mask2dCv ', G%HI)
+    call qchksum(G%mask2dBu, 'MOM_initialize_fixed: mask2dBu ', G%HI)
   endif
 
 ! Modulate geometric scales according to geography.
@@ -131,9 +131,9 @@ subroutine MOM_initialize_fixed(G, PF, write_geom, output_dir)
 !   Calculate the components of grad f (beta)
   call MOM_calculate_grad_Coriolis(G%dF_dx, G%dF_dy, G)
   if (debug) then
-    call qchksum(G%CoriolisBu, "MOM_initialize_fixed: f ", G)
-    call hchksum(G%dF_dx, "MOM_initialize_fixed: dF_dx ", G)
-    call hchksum(G%dF_dy, "MOM_initialize_fixed: dF_dy ", G)
+    call qchksum(G%CoriolisBu, "MOM_initialize_fixed: f ", G%HI)
+    call hchksum(G%dF_dx, "MOM_initialize_fixed: dF_dx ", G%HI)
+    call hchksum(G%dF_dy, "MOM_initialize_fixed: dF_dy ", G%HI)
   endif
 
 ! Compute global integrals of grid values for later use in scalar diagnostics !
@@ -1195,7 +1195,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory)
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in)      directory - The directory into which to place the file.
-  character(len=120) :: filepath
+  character(len=240) :: filepath
   character(len=40)  :: mod = "write_ocean_geometry_file"
   integer, parameter :: nFlds=23
   type(vardesc) :: vars(nFlds)
@@ -1268,7 +1268,8 @@ subroutine write_ocean_geometry_file(G, param_file, directory)
   file_threading = SINGLE_FILE
   if (multiple_files) file_threading = MULTIPLE
 
-  call create_file(unit, trim(filepath), vars, nFlds_used, G, fields, file_threading)
+  call create_file(unit, trim(filepath), vars, nFlds_used, fields, &
+                   file_threading, G=G)
 
   do J=Jsq,Jeq; do I=Isq,Ieq; out_q(I,J) = G%geoLatBu(I,J); enddo; enddo
   call write_field(unit, fields(1), G%Domain%mpp_domain, out_q)

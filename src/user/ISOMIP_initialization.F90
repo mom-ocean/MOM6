@@ -19,18 +19,13 @@ module ISOMIP_initialization
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
 !***********************************************************************
 
-!***********************************************************************
-!*                                                                     *
-!*  The module configures the ISOMIP test case                         *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 use MOM_ALE_sponge, only : ALE_sponge_CS, set_up_ALE_sponge_field, initialize_ALE_sponge
 use MOM_sponge, only : sponge_CS, set_up_sponge_field, initialize_sponge
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : close_file, create_file, fieldtype, file_exists
+use MOM_io, only : close_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
 use MOM_io, only : write_field, slasher, vardesc
 use MOM_variables, only : thermo_var_ptrs, ocean_OBC_type
@@ -64,14 +59,12 @@ contains
 
 !> Initialization of topography
 subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth)
-  type(ocean_grid_type), intent(in)           :: G
-  real, intent(out), dimension(SZI_(G),SZJ_(G)) :: D
-  type(param_file_type), intent(in)           :: param_file
-  real,                  intent(in)           :: max_depth
-! Arguments: D          - the bottom depth in m. Intent out.
-!  (in)      G          - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
+  type(ocean_grid_type), intent(in)           :: G          !< The ocean's grid structure.
+  real, intent(out), dimension(SZI_(G),SZJ_(G)) :: D        !< The bottom depth in m.
+  type(param_file_type), intent(in)           :: param_file !< A structure indicating the
+                                                            !! open file to parse for model
+                                                            !! parameter values.
+  real,                  intent(in)           :: max_depth  !< Maximum depth.
 
 ! This subroutine sets up the ISOMIP topography
   real :: min_depth ! The minimum and maximum depths in m.
@@ -149,12 +142,17 @@ end subroutine ISOMIP_initialize_topography
 
 !> Initialization of thicknesses
 subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv )
-  type(ocean_grid_type), intent(in) :: G !< The ocean's grid structure.
-  type(verticalGrid_type), intent(in) :: GV !< The container for vertical grid data
-  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h !< The thickness that is being initialized.
-  type(param_file_type), intent(in) :: param_file !< A structure indicating the open file to parse for model parameter values.
-  type(thermo_var_ptrs), intent(in) :: tv !< A structure containing pointers to any available thermodynamic fields, including eq. of state.
-
+  type(ocean_grid_type), intent(in) :: G                !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in) :: GV             !< The ocean's vertical grid structure.
+  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h !< The thickness that is being
+                                                        !! initialized.
+  type(param_file_type), intent(in) :: param_file       !< A structure indicating the
+                                                        !! open file to parse for model
+                                                        !! parameter values.
+  type(thermo_var_ptrs), intent(in) :: tv               !< A structure containing pointers
+                                                        !! to any available thermodynamic
+                                                        !! fields, including eq. of state.
+  ! Local variables
   real :: e0(SZK_(G)+1)     ! The resting interface heights, in m, usually !
                           ! negative because it is positive upward.      !
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
@@ -245,8 +243,8 @@ end subroutine ISOMIP_initialize_thickness
 !> Initial values for temperature and salinity
 subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, &
                                                     eqn_of_state)
-  type(ocean_grid_type),               intent(in)  :: G !< Ocean grid structure
-  type(verticalGrid_type),                   intent(in) :: GV !< Vertical grid structure
+  type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure
+  type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< Potential temperature (degC)
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< Salinity (ppt)
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< Layer thickness (m or Pa)
@@ -323,18 +321,25 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
 
 end subroutine ISOMIP_initialize_temperature_salinity
 
-!> Sets up the the inverse restoration time (Idamp), and   !
-! the values towards which the interface heights and an arbitrary    !
+!> Sets up the the inverse restoration time (Idamp), and
+! the values towards which the interface heights and an arbitrary
 ! number of tracers should be restored within each sponge.
 subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
-  type(ocean_grid_type), intent(in) :: G !< The ocean's grid structure.
-  type(verticalGrid_type), intent(in) :: GV !< The container for vertical grid data
-  type(thermo_var_ptrs), intent(in) :: tv !< A structure containing pointers to any available thermodynamic fields, including potential temperature and salinity or mixed layer density. Absent fields have NULL ptrs.
-  type(param_file_type), intent(in) :: PF !< A structure indicating the open file to parse for model parameter values.
-  logical,                 intent(in) :: use_ALE !< If true, indicates model is in ALE mode
-  type(sponge_CS),         pointer    :: CSp !< Layer-mode sponge structure
+  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in) :: GV !< The ocean's vertical grid structure.
+  type(thermo_var_ptrs), intent(in) :: tv   !< A structure containing pointers
+                                            !! to any available thermodynamic
+                                            !! fields, potential temperature and
+                                            !! salinity or mixed layer density.
+                                            !! Absent fields have NULL ptrs.
+  type(param_file_type), intent(in) :: PF   !< A structure indicating the
+                                            !! open file to parse for model
+                                            !! parameter values.
+  logical, intent(in) :: use_ALE            !< If true, indicates model is in ALE mode
+  type(sponge_CS),   pointer    :: CSp      !< Layer-mode sponge structure
   type(ALE_sponge_CS),   pointer    :: ACSp !< ALE-mode sponge structure
-
+  
+! Local variables
   real :: T(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for temp 
   real :: S(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for salt
   real :: RHO(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for RHO
@@ -395,7 +400,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
           "ISOMIP_initialize_sponges called with an associated control structure.")
    if (associated(ACSp)) call MOM_error(FATAL, &
           "ISOMIP_initialize_sponges called with an associated ALE-sponge control structure.")
-
+   
   !  Here the inverse damping time, in s-1, is set. Set Idamp to 0     !
   !  wherever there is no sponge, and the subroutines that are called  !
   !  will automatically set up the sponges only where Idamp is positive!
@@ -481,8 +486,6 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
          call MOM_error(FATAL,"ISOMIP_initialize_sponges: "// &
          "Unrecognized i.c. setup - set REGRIDDING_COORDINATE_MODE")
 
-    end select
-
       !  This call sets up the damping rates and interface heights.
       !  This sets the inverse damping timescale fields in the sponges.  
       call initialize_ALE_sponge(Idamp,h, nz, G, PF, ACSp)
@@ -513,11 +516,9 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
       if ( associated(tv%T) ) then
         call set_up_ALE_sponge_field(T,G,tv%T,ACSp)
       endif
-
       if ( associated(tv%S) ) then
         call set_up_ALE_sponge_field(S,G,tv%S,ACSp)
       endif
-
 
   else  ! layer mode
 
@@ -554,6 +555,8 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
   endif
 
 end subroutine ISOMIP_initialize_sponges
-! -----------------------------------------------------------------------------
 
+!> \class ISOMIP_initialization
+!!
+!!  The module configures the ISOMIP test case.
 end module ISOMIP_initialization

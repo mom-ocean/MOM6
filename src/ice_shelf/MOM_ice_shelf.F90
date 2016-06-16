@@ -109,7 +109,7 @@ use MOM_fixed_initialization, only : MOM_initialize_rotation
 use user_initialization, only : user_initialize_topography
 use MOM_io, only : field_exists, file_exists, read_data, write_version_number
 use MOM_io, only : slasher, vardesc, var_desc, fieldtype
-use MOM_io, only : create_file, write_field, close_file, SINGLE_FILE, MULTIPLE
+use MOM_io, only : write_field, close_file, SINGLE_FILE, MULTIPLE
 use MOM_restart, only : register_restart_field, query_initialized, save_restart
 use MOM_restart, only : restart_init, restore_state, MOM_restart_CS
 use MOM_time_manager, only : time_type, set_time, time_type_to_real
@@ -1069,7 +1069,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq, iters
   integer :: wd_halos(2)
   logical :: solo_ice_sheet, read_TideAmp
-  character(len=128) :: Tideamp_file
+  character(len=240) :: Tideamp_file
   real    :: utide
 
   if (associated(CS)) then
@@ -1401,7 +1401,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
   call MOM_initialize_rotation(G%CoriolisBu, G, param_file)
 
   ! Set up the restarts.
-  call restart_init(G, param_file, CS%restart_CSp, "Shelf.res")
+  call restart_init(param_file, CS%restart_CSp, "Shelf.res")
   vd = var_desc("shelf_mass","kg m-2","Ice shelf mass",z_grid='1')
   call register_restart_field(CS%mass_shelf, vd, .true., CS%restart_CSp)
   vd = var_desc("shelf_area","m2","Ice shelf area in cell",z_grid='1')
@@ -1738,7 +1738,7 @@ subroutine initialize_shelf_mass(G, param_file, CS, new_sim)
 
   integer :: i, j, is, ie, js, je
   logical :: read_shelf_area, new_sim_2
-  character(len=200) :: config, inputdir, shelf_file, filename
+  character(len=240) :: config, inputdir, shelf_file, filename
   character(len=120) :: shelf_mass_var  ! The name of shelf mass in the file.
   character(len=120) :: shelf_area_var ! The name of shelf area in the file.
   character(len=40)  :: mod = "MOM_ice_shelf"

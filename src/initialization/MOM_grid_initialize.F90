@@ -186,86 +186,86 @@ subroutine grid_metrics_chksum(parent, G)
 halo=1 ! AJA
 
   do i=isd,ied ; do j=jsd,jed ; tempH(i,j) = G%dxT(i,j) ; enddo ; enddo
-  call hchksum(tempH,trim(parent)//': dxT',G,haloshift=halo)
+  call hchksum(tempH,trim(parent)//': dxT',G%HI, haloshift=halo)
 
   do I=IsdB,IedB ; do j=jsd,jed ; tempE(I,j) = G%dxCu(I,j) ; enddo ; enddo
-  call uchksum(tempE,trim(parent)//': dxCu',G,haloshift=halo)
+  call uchksum(tempE,trim(parent)//': dxCu',G%HI, haloshift=halo)
 
   do i=isd,ied ; do J=JsdB,JedB ; tempN(i,J) = G%dxCv(i,J) ; enddo ; enddo
-  call vchksum(tempN,trim(parent)//': dxCv',G,haloshift=halo)
+  call vchksum(tempN,trim(parent)//': dxCv',G%HI, haloshift=halo)
  
   do I=IsdB,IedB ; do J=JsdB,JedB ; tempQ(I,J) = G%dxBu(I,J) ; enddo ; enddo
-  call qchksum(tempQ,trim(parent)//': dxBu',G,haloshift=halo)
+  call qchksum(tempQ,trim(parent)//': dxBu',G%HI, haloshift=halo)
  
   do i=isd,ied ; do j=jsd,jed ; tempH(i,j) = G%dyT(i,j) ; enddo ; enddo
-  call hchksum(tempH,trim(parent)//': dyT',G,haloshift=halo)
+  call hchksum(tempH,trim(parent)//': dyT',G%HI, haloshift=halo)
  
   do I=IsdB,IedB ; do j=jsd,jed ; tempE(I,j) = G%dyCu(I,j) ; enddo ; enddo
-  call uchksum(tempE,trim(parent)//': dyCu',G,haloshift=halo)
+  call uchksum(tempE,trim(parent)//': dyCu',G%HI, haloshift=halo)
  
   do i=isd,ied ; do J=JsdB,JedB ; tempN(i,J) = G%dyCv(i,J) ; enddo ; enddo
-  call vchksum(tempN,trim(parent)//': dyCv',G,haloshift=halo)
+  call vchksum(tempN,trim(parent)//': dyCv',G%HI, haloshift=halo)
  
   do I=IsdB,IedB ; do J=JsdB,JedB ; tempQ(I,J) = G%dyBu(I,J) ; enddo ; enddo
-  call qchksum(tempQ,trim(parent)//': dyBu',G,haloshift=halo)
+  call qchksum(tempQ,trim(parent)//': dyBu',G%HI, haloshift=halo)
 
   do i=isd,ied ; do j=jsd,jed ; tempH(i,j) = G%IdxT(i,j) ; enddo ; enddo
-  call hchksum(tempH,trim(parent)//': IdxT',G,haloshift=halo)
+  call hchksum(tempH,trim(parent)//': IdxT',G%HI, haloshift=halo)
 
   do I=IsdB,IedB ; do j=jsd,jed ; tempE(I,j) = G%IdxCu(I,j) ; enddo ; enddo
-  call uchksum(tempE,trim(parent)//': IdxCu',G,haloshift=halo)
+  call uchksum(tempE,trim(parent)//': IdxCu',G%HI, haloshift=halo)
  
   do i=isd,ied ; do J=JsdB,JedB ; tempN(i,J) = G%IdxCv(i,J) ; enddo ; enddo
-  call vchksum(tempN,trim(parent)//': IdxCv',G,haloshift=halo)
+  call vchksum(tempN,trim(parent)//': IdxCv',G%HI, haloshift=halo)
  
   do I=IsdB,IedB ; do J=JsdB,JedB ; tempQ(I,J) = G%IdxBu(I,J) ; enddo ; enddo
-  call qchksum(tempQ,trim(parent)//': IdxBu',G,haloshift=halo)
+  call qchksum(tempQ,trim(parent)//': IdxBu',G%HI, haloshift=halo)
 
   do i=isd,ied ; do j=jsd,jed ; tempH(i,j) = G%IdyT(i,j) ; enddo ; enddo
-  call hchksum(tempH,trim(parent)//': IdyT',G,haloshift=halo)
+  call hchksum(tempH,trim(parent)//': IdyT',G%HI, haloshift=halo)
  
   do I=IsdB,IedB ; do j=jsd,jed ; tempE(I,j) = G%IdyCu(I,j) ; enddo ; enddo
-  call uchksum(tempE,trim(parent)//': IdyCu',G,haloshift=halo)
+  call uchksum(tempE,trim(parent)//': IdyCu',G%HI, haloshift=halo)
  
   do i=isd,ied ; do J=JsdB,JedB ; tempN(i,J) = G%IdyCv(i,J) ; enddo ; enddo
-  call vchksum(tempN,trim(parent)//': IdyCv',G,haloshift=halo)
+  call vchksum(tempN,trim(parent)//': IdyCv',G%HI, haloshift=halo)
  
   do I=IsdB,IedB ; do J=JsdB,JedB ; tempQ(I,J) = G%IdyBu(I,J) ; enddo ; enddo
-  call qchksum(tempQ,trim(parent)//': IdyBu',G,haloshift=halo)
+  call qchksum(tempQ,trim(parent)//': IdyBu',G%HI, haloshift=halo)
 
   do i=isd,ied ; do j=jsd,jed ; tempH(i,j) = G%areaT(i,j) ; enddo ; enddo
-  call hchksum(tempH,trim(parent)//': areaT',G,haloshift=halo)
+  call hchksum(tempH,trim(parent)//': areaT',G%HI, haloshift=halo)
  
   do I=IsdB,IedB ; do J=JsdB,JedB ; tempQ(I,J) = G%areaBu(I,J) ; enddo ; enddo
-  call qchksum(tempQ,trim(parent)//': areaBu',G,haloshift=halo)
+  call qchksum(tempQ,trim(parent)//': areaBu',G%HI, haloshift=halo)
  
   do i=isd,ied ; do j=jsd,jed ; tempH(i,j) = G%IareaT(i,j) ; enddo ; enddo
-  call hchksum(tempH,trim(parent)//': IareaT',G,haloshift=halo)
+  call hchksum(tempH,trim(parent)//': IareaT',G%HI, haloshift=halo)
  
   do I=IsdB,IedB ; do J=JsdB,JedB ; tempQ(I,J) = G%IareaBu(I,J) ; enddo ; enddo
-  call qchksum(tempQ,trim(parent)//': IareaBu',G,haloshift=halo)
+  call qchksum(tempQ,trim(parent)//': IareaBu',G%HI, haloshift=halo)
 
-  call hchksum(G%geoLonT,trim(parent)//': geoLonT',G,haloshift=halo)
+  call hchksum(G%geoLonT,trim(parent)//': geoLonT',G%HI, haloshift=halo)
 
-  call hchksum(G%geoLatT,trim(parent)//': geoLatT',G,haloshift=halo)
+  call hchksum(G%geoLatT,trim(parent)//': geoLatT',G%HI, haloshift=halo)
 
   do I=IsdB,IedB ; do J=JsdB,JedB ; tempQ(I,J) = G%geoLonBu(I,J) ; enddo ; enddo
-  call qchksum(tempQ,trim(parent)//': geoLonBu',G,haloshift=halo)
+  call qchksum(tempQ,trim(parent)//': geoLonBu',G%HI, haloshift=halo)
 
   do I=IsdB,IedB ; do J=JsdB,JedB ; tempQ(I,J) = G%geoLatBu(I,J) ; enddo ; enddo
-  call qchksum(tempQ,trim(parent)//': geoLatBu',G,haloshift=halo)
+  call qchksum(tempQ,trim(parent)//': geoLatBu',G%HI, haloshift=halo)
 
   do I=IsdB,IedB ; do j=jsd,jed ; tempE(I,J) = G%geoLonCu(I,J) ; enddo ; enddo
-  call uchksum(tempE,trim(parent)//': geoLonCu',G,haloshift=halo)
+  call uchksum(tempE,trim(parent)//': geoLonCu',G%HI, haloshift=halo)
 
   do I=IsdB,IedB ; do j=jsd,jed ; tempE(I,J) = G%geoLatCu(I,J) ; enddo ; enddo
-  call uchksum(tempE,trim(parent)//': geoLatCu',G,haloshift=halo)
+  call uchksum(tempE,trim(parent)//': geoLatCu',G%HI, haloshift=halo)
 
   do i=isd,ied ; do J=JsdB,JedB ; tempN(I,J) = G%geoLonCv(I,J) ; enddo ; enddo
-  call vchksum(tempN,trim(parent)//': geoLonCv',G,haloshift=halo)
+  call vchksum(tempN,trim(parent)//': geoLonCv',G%HI, haloshift=halo)
 
   do i=isd,ied ; do J=JsdB,JedB ; tempN(I,J) = G%geoLatCv(I,J) ; enddo ; enddo
-  call vchksum(tempN,trim(parent)//': geoLatCv',G,haloshift=halo)
+  call vchksum(tempN,trim(parent)//': geoLatCv',G%HI, haloshift=halo)
 
 end subroutine grid_metrics_chksum
 
@@ -1087,7 +1087,7 @@ function find_root( fn, dy_df, GP, fnval, y1, ymin, ymax, ittmax)
 ! used to polish the root.
   real :: ybot, ytop, fnbot, fntop
   integer :: itt
-  character(len =256) :: warnmesg
+  character(len=256) :: warnmesg
 
   real :: dy_dfn, dy, fny
 

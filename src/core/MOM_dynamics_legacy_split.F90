@@ -104,6 +104,7 @@ use MOM_CoriolisAdv, only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
 use MOM_diabatic_driver, only : diabatic, diabatic_driver_init, diabatic_CS
 use MOM_error_checking, only : check_redundant
 use MOM_grid, only : ocean_grid_type
+use MOM_hor_index, only : hor_index_type
 use MOM_hor_visc, only : horizontal_viscosity, hor_visc_init, hor_visc_CS
 use MOM_interface_heights, only : find_eta
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
@@ -1103,19 +1104,19 @@ end subroutine adjustments_dyn_legacy_split
 
 ! =============================================================================
 
-subroutine register_restarts_dyn_legacy_split(G, GV, param_file, CS, restart_CS, uh, vh)
-  type(ocean_grid_type),         intent(in)    :: G
+subroutine register_restarts_dyn_legacy_split(HI, GV, param_file, CS, restart_CS, uh, vh)
+  type(hor_index_type),          intent(in)    :: HI
   type(verticalGrid_type),       intent(in)    :: GV
   type(param_file_type),         intent(in)    :: param_file
   type(MOM_dyn_legacy_split_CS), pointer       :: CS
   type(MOM_restart_CS),          pointer       :: restart_CS
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target, intent(inout) :: uh
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target, intent(inout) :: vh
+  real, dimension(SZIB_(HI),SZJ_(HI),SZK_(GV)), target, intent(inout) :: uh
+  real, dimension(SZI_(HI),SZJB_(HI),SZK_(GV)), target, intent(inout) :: vh
 !   This subroutine sets up any auxiliary restart variables that are specific
 ! to the unsplit time stepping scheme.  All variables registered here should
 ! have the ability to be recreated if they are not present in a restart file.
 
-! Arguments: G - The ocean's grid structure.
+! Arguments: HI - A horizontal index type structure.
 !  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
@@ -1129,8 +1130,8 @@ subroutine register_restarts_dyn_legacy_split(G, GV, param_file, CS, restart_CS,
   character(len=48) :: thickness_units, flux_units
   logical :: adiabatic, flux_BT_coupling, readjust_BT_trans
   integer :: isd, ied, jsd, jed, nz, IsdB, IedB, JsdB, JedB
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+  isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
+  IsdB = HI%IsdB ; IedB = HI%IedB ; JsdB = HI%JsdB ; JedB = HI%JedB
 
 ! This is where a control structure that is specific to this module would be allocated.
   if (associated(CS)) then
@@ -1189,7 +1190,7 @@ subroutine register_restarts_dyn_legacy_split(G, GV, param_file, CS, restart_CS,
   vd = var_desc("diffv","meter second-2","Meridional horizontal viscous acceleration",'v','L')
   call register_restart_field(CS%diffv, vd, .false., restart_CS)
 
-  call register_legacy_barotropic_restarts(G, GV, param_file, &
+  call register_legacy_barotropic_restarts(HI, GV, param_file, &
            CS%barotropic_CSp, restart_CS)
 
   if (readjust_bt_trans) then
