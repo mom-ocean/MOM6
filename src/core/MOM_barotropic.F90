@@ -3541,6 +3541,7 @@ subroutine find_face_areas(Datu, Datv, G, GV, CS, MS, eta, halo, add_max)
   else
 !$OMP do
     do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
+      Datu(I, j) = 0.0
       !Would be "if (G%mask2dCu(I,j)>0.) &" is G was valid on BT domain
       if (CS%bathyT(i+1,j)+CS%bathyT(i,j)>0.) &
         Datu(I,j) = 2.0*CS%dy_Cu(I,j) * GV%m_to_H * &
@@ -3549,6 +3550,7 @@ subroutine find_face_areas(Datu, Datv, G, GV, CS, MS, eta, halo, add_max)
     enddo ; enddo
 !$OMP do
     do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
+      Datv(i, J) = 0.0
       !Would be "if (G%mask2dCv(i,J)>0.) &" is G was valid on BT domain
       if (CS%bathyT(i,j+1)+CS%bathyT(i,j)>0.) &
         Datv(i,J) = 2.0*CS%dx_Cv(i,J) * GV%m_to_H * &
