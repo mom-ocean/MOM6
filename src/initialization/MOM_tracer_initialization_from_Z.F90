@@ -14,7 +14,7 @@ use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
 use MOM_file_parser, only : log_version
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type, isPointInCell
-use MOM_io, only : close_file, create_file, fieldtype, file_exists
+use MOM_io, only : close_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE, MULTIPLE
 use MOM_io, only : slasher, vardesc, write_field
 use MOM_string_functions, only : uppercase
@@ -23,15 +23,15 @@ use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : setVerticalGridAxes
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use MOM_EOS, only : int_specific_vol_dp
-use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord
+use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord, ALE_remap_scalar
 use MOM_regridding, only : regridding_CS
 use MOM_remapping, only : remapping_CS, initialize_remapping
-use MOM_remapping, only : remapping_core_w
-use MOM_remapping, only : dzFromH1H2
+use MOM_remapping, only : remapping_core_h
 use MOM_verticalGrid,     only : verticalGrid_type
 
 use mpp_domains_mod, only  : mpp_global_field, mpp_get_compute_domain
 use mpp_mod, only          : mpp_broadcast,mpp_root_pe,mpp_sync,mpp_sync_self
+use mpp_mod, only          : mpp_max
 use horiz_interp_mod, only : horiz_interp_new, horiz_interp,horiz_interp_type
 use horiz_interp_mod, only : horiz_interp_init, horiz_interp_del
 
@@ -99,7 +99,6 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam,
   integer :: i, j, k, kd
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: zi
-  real, dimension(:,:), allocatable :: Depth
   real, allocatable, dimension(:,:,:), target :: tr_z, mask_z
   real, allocatable, dimension(:), target :: z_edges_in, z_in
 
@@ -107,10 +106,9 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam,
   real, dimension(:), allocatable :: h1, h2, hTarget, deltaE, tmpT1d
   real, dimension(:), allocatable :: tmpT1dIn
   real :: zTopOfCell, zBottomOfCell
-  type(regridding_CS) :: regridCS ! Regridding parameters and work arrays
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
 
-  real, dimension(:,:,:), allocatable :: tmp1
+  real, dimension(:,:,:), allocatable :: hSrc
 
   real :: tempAvg, missing_value
   integer :: nPoints, ans
@@ -168,6 +166,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam,
     call cpu_clock_begin(id_clock_ALE)
     ! First we reserve a work space for reconstructions of the source data
     allocate( h1(kd) )
+    allocate( hSrc(isd:ied,jsd:jed,kd) )
     allocate( tmpT1dIn(kd) )
     call initialize_remapping( remapCS, remapScheme, boundary_extrapolation=.false. ) ! Data for reconstructions
     ! Next we initialize the regridding package so that it knows about the target grid
@@ -175,9 +174,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam,
     allocate( h2(nz) )
     allocate( tmpT1d(nz) )
     allocate( deltaE(nz+1) )
-    ! This call can be more general but is hard-coded for z* coordinates...  ????
-    call ALE_initRegridding( G, GV, PF, mod, regridCS, hTarget ) ! sets regridCS and hTarget(1:nz)
-    ! For each column ...
+
     do j = js, je ; do i = is, ie
       if (G%mask2dT(i,j)>0.) then
         ! Build the source grid
@@ -197,25 +194,15 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam,
           zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
         enddo
         h1(kd) = h1(kd) + ( zTopOfCell + G%bathyT(i,j) ) ! In case data is deeper than model
-        ! Build the target grid combining hTarget and topography
-        zTopOfCell = 0. ; zBottomOfCell = 0.
-        do k = 1, nz
-          zBottomOfCell = max( zTopOfCell - hTarget(k), -G%bathyT(i,j) )
-          h2(k) = zTopOfCell - zBottomOfCell
-          zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
-        enddo
-        ! Calcaulate an effectiveadisplacement, deltaE
-        call dzFromH1H2( nPoints, h1, nz, h2, deltaE ) ! sets deltaE
-        ! Now remap from h1 to h2=h1+div.deltaE
-        call remapping_core_w( remapCS, nPoints, h1, tmpT1dIn, nz, deltaE, tmpT1d ) ! sets tmpT1d
-!!!MJH        h(i,j,:) = h2(:)
-        tr(i,j,:) = tmpT1d(:)
       else
         tr(i,j,:) = 0.
-
-!!!MJH         h(i,j,:) = 0.
       endif ! mask2dT
+      hSrc(i,j,:) = h1(:)
     enddo ; enddo
+
+    call ALE_remap_scalar(remapCS, G, GV, kd, hSrc, tr_z, h, tr, all_cells=.true. )
+
+    deallocate( hSrc )
     deallocate( h1 )
     deallocate( h2 )
     deallocate( hTarget )
@@ -483,7 +470,6 @@ subroutine horiz_interp_and_extrap_tracer(filename, varnam,  conversion, recnum,
   character(len=12)  :: dim_name(4)
   logical :: debug=.false.
   real :: npoints,varAvg
-  real, dimension(:,:), allocatable :: Depth
   real, dimension(SZI_(G),SZJ_(G)) :: lon_out, lat_out, tr_out, mask_out
   real, dimension(SZI_(G),SZJ_(G)) :: good, fill
   real, dimension(SZI_(G),SZJ_(G)) :: tr_outf,tr_prev
@@ -612,14 +598,9 @@ subroutine horiz_interp_and_extrap_tracer(filename, varnam,  conversion, recnum,
   allocate(mask_in(id,jdp)) ; mask_in(:,:)=0.0
   allocate(last_row(id))    ; last_row(:)=0.0
 
-  ni=ieg-isg+1 ; nj = jeg-jsg+1
-  allocate(Depth(ni,nj))
+  max_depth = maxval(G%bathyT)
+  call mpp_max(max_depth)
 
-! get the global depth array
-
-  call mpp_global_field(G%domain%mpp_domain, G%bathyT, Depth)    
-
-  max_depth = maxval(Depth)
   if (z_edges_in(kd+1)<max_depth) z_edges_in(kd+1)=max_depth
 
 

@@ -40,6 +40,7 @@ use MOM_CoriolisAdv,           only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_C
 use MOM_diabatic_driver,       only : diabatic, diabatic_driver_init, diabatic_CS
 use MOM_error_checking,        only : check_redundant
 use MOM_grid,                  only : ocean_grid_type
+use MOM_hor_index,             only : hor_index_type
 use MOM_hor_visc,              only : horizontal_viscosity, hor_visc_init, hor_visc_CS
 use MOM_interface_heights,     only : find_eta
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
@@ -99,7 +100,7 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_)        :: uhbt    !< average x-volume or mass flux determined by barotropic solver
                                                                    !! (m3 s-1 or kg s-1). uhbt should (roughly?) equal to vertical sum of uh.
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_)        :: vhbt    !< average y-volume or mass flux determined by barotropic solver
-                                                                   !! (m3 s-1 or kg s-1). uhbt should (roughly?) equal to vertical sum of uh.
+                                                                   !! (m3 s-1 or kg s-1). vhbt should (roughly?) equal to vertical sum of vh.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_)      :: pbce    !<  pbce times eta gives the baroclinic pressure anomaly in each layer due
                                                                    !! to free surface height anomalies.  pbce has units of m2 H-1 s-2.
 
@@ -930,22 +931,22 @@ end subroutine step_MOM_dyn_split_RK2
 !> This subroutine sets up any auxiliary restart variables that are specific
 !! to the unsplit time stepping scheme.  All variables registered here should
 !! have the ability to be recreated if they are not present in a restart file.
-subroutine register_restarts_dyn_split_RK2(G, GV, param_file, CS, restart_CS, uh, vh)
-  type(ocean_grid_type),         intent(in)    :: G                    !< ocean grid structure
-  type(verticalGrid_type),       intent(in)    :: GV                   !< ocean vertical grid structure
-  type(param_file_type),         intent(in)    :: param_file           !< parameter file
-  type(MOM_dyn_split_RK2_CS),    pointer       :: CS                   !< module control structure
-  type(MOM_restart_CS),          pointer       :: restart_CS           !< restart control structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target, intent(inout) :: uh !< zonal volume/mass transport (m3/s or kg/s)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target, intent(inout) :: vh !< merid volume/mass transport (m3/s or kg/s)
+subroutine register_restarts_dyn_split_RK2(HI, GV, param_file, CS, restart_CS, uh, vh)
+  type(hor_index_type),          intent(in)    :: HI         !< Horizontal index structure
+  type(verticalGrid_type),       intent(in)    :: GV         !< ocean vertical grid structure
+  type(param_file_type),         intent(in)    :: param_file !< parameter file
+  type(MOM_dyn_split_RK2_CS),    pointer       :: CS         !< module control structure
+  type(MOM_restart_CS),          pointer       :: restart_CS !< restart control structure
+  real, dimension(SZIB_(HI),SZJ_(HI),SZK_(GV)), target, intent(inout) :: uh !< zonal volume/mass transport (m3/s or kg/s)
+  real, dimension(SZI_(HI),SZJB_(HI),SZK_(GV)), target, intent(inout) :: vh !< merid volume/mass transport (m3/s or kg/s)
 
   type(vardesc)      :: vd
   character(len=40)  :: mod = "MOM_dynamics_split_RK2" ! This module's name.
   character(len=48)  :: thickness_units, flux_units
 
   integer :: isd, ied, jsd, jed, nz, IsdB, IedB, JsdB, JedB
-  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nz = G%ke
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+  isd  = HI%isd  ; ied  = HI%ied  ; jsd  = HI%jsd  ; jed  = HI%jed ; nz = GV%ke
+  IsdB = HI%IsdB ; IedB = HI%IedB ; JsdB = HI%JsdB ; JedB = HI%JedB
 
   ! This is where a control structure specific to this module would be allocated.
   if (associated(CS)) then
@@ -994,7 +995,7 @@ subroutine register_restarts_dyn_split_RK2(G, GV, param_file, CS, restart_CS, uh
   vd = var_desc("diffv","meter second-2","Meridional horizontal viscous acceleration",'v','L')
   call register_restart_field(CS%diffv, vd, .false., restart_CS)
 
-  call register_barotropic_restarts(G, GV, param_file, CS%barotropic_CSp, &
+  call register_barotropic_restarts(HI, GV, param_file, CS%barotropic_CSp, &
                                     restart_CS)
 
 end subroutine register_restarts_dyn_split_RK2
