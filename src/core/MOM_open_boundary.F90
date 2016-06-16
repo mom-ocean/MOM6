@@ -150,7 +150,7 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
         if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max)
         rx_avg = (1.0-gamma_v)*OBC%ry_old_v(i,J,k) + gamma_v*rx_new
         OBC%ry_old_v(i,J,k) = rx_avg
-        v_new(i,J,k) = (v_old(I,j,k) + rx_avg*v_new(i,J-1,k)) / (1.0+rx_avg)
+        v_new(i,J,k) = (v_old(i,J,k) + rx_avg*v_new(i,J-1,k)) / (1.0+rx_avg)
 
     !   dhdt = h_old(i,J,k)-h_new(i,J,k) !old-new
     !   dhdx = h_new(i,J,k)-h_new(i,J-1,k) !in new time
@@ -168,7 +168,7 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
         if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max)
         rx_avg = (1.0-gamma_v)*OBC%ry_old_v(i,J,k) + gamma_v*rx_new
         OBC%ry_old_v(i,J,k) = rx_avg
-        v_new(i,J,k) = (v_old(I,j,k) + rx_avg*v_new(i,J+1,k)) / (1.0+rx_avg)
+        v_new(i,J,k) = (v_old(i,J,k) + rx_avg*v_new(i,J+1,k)) / (1.0+rx_avg)
 
     !   dhdt = h_old(i,J+1,k)-h_new(i,J+1,k) !old-new
     !   dhdx = h_new(i,J+1,k)-h_new(i,J+2,k) !in new time

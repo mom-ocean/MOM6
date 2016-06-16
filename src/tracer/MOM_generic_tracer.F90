@@ -58,11 +58,12 @@ module MOM_generic_tracer
   use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
   use MOM_forcing_type, only : forcing, optics_type
   use MOM_grid, only : ocean_grid_type
+  use MOM_hor_index, only : hor_index_type
   use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc
   use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
   use MOM_sponge, only : set_up_sponge_field, sponge_CS
   use MOM_ALE_sponge, only : set_up_ALE_sponge_field, ALE_sponge_CS
-  use MOM_time_manager, only : time_type, get_time
+  use MOM_time_manager, only : time_type, get_time, set_time
   use MOM_tracer_registry, only : register_tracer, tracer_registry_type
   use MOM_tracer_registry, only : add_tracer_diagnostics, add_tracer_OBC_values
   use MOM_tracer_registry, only : tracer_vertdiff
@@ -84,7 +85,7 @@ module MOM_generic_tracer
   public MOM_generic_tracer_fluxes_accumulate
 
   type, public :: MOM_generic_tracer_CS ; private
-     character(len = 200) :: IC_file ! The file in which the generic tracer initial values can
+     character(len=200) :: IC_file ! The file in which the generic tracer initial values can
                        ! be found, or an empty string for internal initialization.
      logical :: Z_IC_file ! If true, the generic_tracer IC_file is in Z-space.  The default is false.
      real :: tracer_IC_val = 0.0    ! The initial value assigned to tracers.
@@ -122,25 +123,25 @@ contains
   !     Register these tracers for restart
   !  </DESCRIPTION>
   !  <TEMPLATE>
-  !   call register_MOM_generic_tracer(G, param_file, CS, diag, tr_Reg, restart_CS)
+  !   call register_MOM_generic_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   !  </TEMPLATE>
   ! </SUBROUTINE>
 
-  function register_MOM_generic_tracer(G, param_file, CS, diag, tr_Reg, restart_CS)
-    type(ocean_grid_type), intent(in)   :: G
-    type(param_file_type), intent(in)   :: param_file
-    type(MOM_generic_tracer_CS),   pointer      :: CS
-    type(diag_ctrl), target, intent(in) :: diag
-    type(tracer_registry_type), pointer     :: tr_Reg
-    type(MOM_restart_CS),   pointer     :: restart_CS
+  function register_MOM_generic_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
+    type(hor_index_type),    intent(in)   :: HI
+    type(verticalGrid_type), intent(in)   :: GV
+    type(param_file_type),   intent(in)   :: param_file
+    type(MOM_generic_tracer_CS), pointer  :: CS
+    type(tracer_registry_type), pointer   :: tr_Reg
+    type(MOM_restart_CS),       pointer   :: restart_CS
     ! This subroutine is used to register tracer fields and subroutines
     ! to be used with MOM.
-    ! Arguments: G - The ocean's grid structure.
+    ! Arguments: HI - A horizontal index type structure.
+    !  (in)      GV - The ocean's vertical grid structure.
     !  (in)      param_file - A structure indicating the open file to parse for
     !                         model parameter values.
     !  (in/out)  CS - A pointer that is set to point to the control structure
     !                 for this module
-    !  (in)      diag - A structure that is used to regulate diagnostic output.
     !  (in/out)  tr_Reg - A pointer that is set to point to the control structure
     !                  for the tracer advection and diffusion module.
     !  (in)      restart_CS - A pointer to the restart control structure.
@@ -156,8 +157,8 @@ contains
     character(len=fm_string_len)      :: g_tracer_name,longname,units
     real, dimension(:,:,:,:), pointer   :: tr_field
     real, dimension(:,:,:), pointer     :: tr_ptr
-    real, dimension(G%isd:G%ied, G%jsd:G%jed,G%ke)         :: grid_tmask
-    integer, dimension(G%isd:G%ied, G%jsd:G%jed)           :: grid_kmt
+    real, dimension(HI%isd:HI%ied, HI%jsd:HI%jed, GV%ke)   :: grid_tmask
+    integer, dimension(HI%isd:HI%ied, HI%jsd:HI%jed)       :: grid_kmt
     type(vardesc) :: vdesc
 
     register_MOM_generic_tracer = .false.
@@ -168,16 +169,12 @@ contains
     endif
     allocate(CS)
 
-
     !Register all the generic tracers used and create the list of them.
     !This can be called by ALL PE's. No array fields allocated.
     if (.not. g_registered) then
        call generic_tracer_register
        g_registered = .true.
     endif
-
-    ! diag is an opaque type that contains information about the diagnostics.
-    CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
     call log_version(param_file, sub_name, version, "")
@@ -205,8 +202,7 @@ contains
 
     ntau=1 ! MOM needs the fields at only one time step
 
-
-    !   At this point G%mask2dT and CS%diag%axesTL are not allocated.
+    !   At this point HI%mask2dT and CS%diag%axesTL are not allocated.
     ! postpone diag_registeration to initialize_MOM_generic_tracer
 
     !Fields cannot be diag registered as they are allocated and have to registered later.
@@ -217,8 +213,8 @@ contains
     !
     ! Initialize all generic tracers
     !
-    call generic_tracer_init(G%isc,G%iec,G%jsc,G%jec,G%isd,G%ied,G%jsd,G%jed,&
-         G%ke,ntau,axes,grid_tmask,grid_kmt,get_diag_time_end(CS%diag))
+    call generic_tracer_init(HI%isc,HI%iec,HI%jsc,HI%jec,HI%isd,HI%ied,HI%jsd,HI%jed,&
+           GV%ke,ntau,axes,grid_tmask,grid_kmt,set_time(0,0))
 
 
     !
@@ -256,7 +252,7 @@ contains
        ! the vardesc type, a pointer to this type can not be set as a target
        ! for register_tracer to use.
        if (g_tracer_is_prog(g_tracer)) &
-         call register_tracer(tr_ptr, vdesc, param_file, G, tr_Reg)
+         call register_tracer(tr_ptr, vdesc, param_file, HI, GV, tr_Reg)
 
        !traverse the linked list till hit NULL
        call g_tracer_get_next(g_tracer, g_tracer_next)
@@ -282,7 +278,7 @@ contains
   !  <TEMPLATE>
   !   call initialize_MOM_generic_tracer(restart, day, G, h, OBC, CS, sponge_CSp,ALE_sponge_CSp, diag_to_Z_CSp)
  ! </SUBROUTINE>
-  subroutine initialize_MOM_generic_tracer(restart, day, G, GV, h, param_file, OBC, CS, &
+  subroutine initialize_MOM_generic_tracer(restart, day, G, GV, h, param_file, diag, OBC, CS, &
                                           sponge_CSp, ALE_sponge_CSp,diag_to_Z_CSp)
     logical,                               intent(in) :: restart
     type(time_type), target,               intent(in) :: day
@@ -290,6 +286,7 @@ contains
     type(verticalGrid_type),               intent(in) :: GV
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
     type(param_file_type),                 intent(in) :: param_file
+    type(diag_ctrl), target,               intent(in) :: diag
     type(ocean_OBC_type),                  pointer    :: OBC
     type(MOM_generic_tracer_CS),           pointer    :: CS
     type(sponge_CS),                       pointer    :: sponge_CSp
@@ -304,6 +301,7 @@ contains
     !  (in)      G - The ocean's grid structure.
     !  (in)      GV - The ocean's vertical grid structure.
     !  (in)      h - Layer thickness, in m or kg m-2.
+    !  (in)      diag - A structure that is used to regulate diagnostic output.
     !  (in)      OBC - This open boundary condition type specifies whether, where,
     !                  and what open boundary conditions are used.
     !  (in/out)  CS - The control structure returned by a previous call to
@@ -323,20 +321,23 @@ contains
     character(len=fm_string_len)      :: g_tracer_name, longname, units
     real, dimension(:,:,:,:), pointer   :: tr_field
     real, dimension(:,:,:), pointer     :: tr_ptr
-    real,    dimension(G%isd:G%ied, G%jsd:G%jed,1:G%ke) :: grid_tmask
-    integer, dimension(G%isd:G%ied, G%jsd:G%jed)        :: grid_kmt
+    real,    dimension(G%isd:G%ied, G%jsd:G%jed,1:GV%ke) :: grid_tmask
+    integer, dimension(G%isd:G%ied, G%jsd:G%jed)         :: grid_kmt
 
     !! 2010/02/04  Add code to re-initialize Generic Tracers if needed during a model simulation
     !! By default, restart cpio should not contain a Generic Tracer IC file and step below will be skipped.
     !! Ideally, the generic tracer IC file should have the tracers on Z levels.
 
-    isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec ; nk = G%ke
+    isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec ; nk = GV%ke
 
     !Get the tracer list
     if(.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
          ": No tracer in the list.")
     !For each tracer name get its  fields
     g_tracer=>CS%g_tracer_list
+
+    ! diag is an opaque type that contains information about the diagnostics.
+    CS%diag => diag
 
     do
       if(INDEX(CS%IC_file, '_NULL_') .ne. 0) then
@@ -421,12 +422,12 @@ contains
     do j = G%jsd, G%jed ; do i = G%isd, G%ied
        if (G%mask2dT(i,j) .gt. 0) then
           grid_tmask(i,j,:) = 1.0
-          grid_kmt(i,j) = G%ke ! Tell the code that a layer thicker than 1m is the bottom layer.
+          grid_kmt(i,j) = GV%ke ! Tell the code that a layer thicker than 1m is the bottom layer.
        endif
     enddo ; enddo
 
     call g_tracer_set_common(G%isc,G%iec,G%jsc,G%jec,G%isd,G%ied,G%jsd,G%jed,&
-                             G%ke,1,CS%diag%axesTL%handles,grid_tmask,grid_kmt,day)
+                             GV%ke,1,CS%diag%axesTL%handles,grid_tmask,grid_kmt,day)
 
     ! Register generic tracer modules diagnostics
 
@@ -536,11 +537,11 @@ contains
     character(len=fm_string_len)  :: g_tracer_name
     real, dimension(:,:), pointer :: stf_array,trunoff_array,runoff_tracer_flux_array
 
-    real, dimension(G%isd:G%ied,G%jsd:G%jed,G%ke) :: rho_dzt, dzt
-    real, dimension(G%isd:G%ied,G%jsd:G%jed)      :: hblt_depth
+    real, dimension(G%isd:G%ied,G%jsd:G%jed,GV%ke) :: rho_dzt, dzt
+    real, dimension(G%isd:G%ied,G%jsd:G%jed)       :: hblt_depth
     integer :: i, j, k, isc, iec, jsc, jec, nk
 
-    isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec ; nk = G%ke
+    isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec ; nk = GV%ke
 
     !Get the tracer list
     if(.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL,&
@@ -681,7 +682,7 @@ contains
     character(len=fm_string_len), parameter :: sub_name = 'MOM_generic_tracer_stock'
 
     integer :: i, j, k, is, ie, js, je, nz, m
-    is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+    is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
     MOM_generic_tracer_stock = 0
     if (.not.associated(CS)) return
@@ -857,7 +858,7 @@ contains
     call generic_tracer_coupler_set(state%tr_fields,&
          ST=state%SST,&
          SS=state%SSS,&
-         rho=rho0,& !nnz: required for MOM
+         rho=rho0,& !nnz: required for MOM5 and previous versions.
          ilb=G%isd, jlb=G%jsd,&
          tau=1)
 

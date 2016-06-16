@@ -76,35 +76,35 @@ contains
 !> Routine creates a new NetCDF file.  It also sets up
 !! structures that describe this file and variables that will
 !! later be written to this file. Type for describing a variable, typically a tracer
-subroutine create_file(unit, filename, vars, novars, G, fields, threading, timeunit, GV)
+subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit, G, GV)
   integer,               intent(out)   :: unit       !< unit id of an open file or -1 on a
                                                      !! nonwriting PE with single file output
   character(len=*),      intent(in)    :: filename   !< full path to the file to create
   type(vardesc),         intent(in)    :: vars(:)    !< structures describing fields written to filename
   integer,               intent(in)    :: novars     !< number of fields written to filename
-  type(ocean_grid_type), intent(in)    :: G          !< ocean grid structure
   type(fieldtype),       intent(inout) :: fields(:)  !< array of fieldtypes for each variable
   integer, optional,     intent(in)    :: threading  !< SINGLE_FILE or MULTIPLE
   real, optional,        intent(in)    :: timeunit   !< length, in seconds, of the units for time. The
                                                      !! default value is 86400.0, for 1 day.
+  type(ocean_grid_type),   optional, intent(in) :: G  !< ocean grid structure structure, which is
+                                                     !! required if the new file uses any
+                                                     !! horizontal grid axes.
   type(verticalGrid_type), optional, intent(in) :: GV !< ocean vertical grid structure, which is
                                                      !! required if the new file uses any
                                                      !! vertical grid axes.
 
   logical        :: use_lath, use_lonh, use_latq, use_lonq, use_time
   logical        :: use_layer, use_int, use_periodic
+  logical        :: one_file
   type(axistype) :: axis_lath, axis_latq, axis_lonh, axis_lonq
   type(axistype) :: axis_layer, axis_int, axis_time, axis_periodic
   type(axistype) :: axes(4)
   type(domain1d) :: x_domain, y_domain
-  integer        :: numaxes, pack, thread, k, nz
+  integer        :: numaxes, pack, thread, k
   integer        :: var_periods, num_periods=0
-  real           :: layer_val(G%ke), interface_val(G%ke+1)
   real, dimension(:), allocatable :: period_val
   character(len=40) :: time_units
   character(len=8)  :: t_grid, t_grid_read
-
-  nz = G%ke
 
   use_lath  = .false. ; use_lonh     = .false.
   use_latq  = .false. ; use_lonq     = .false.
@@ -114,18 +114,16 @@ subroutine create_file(unit, filename, vars, novars, G, fields, threading, timeu
   thread = SINGLE_FILE
   if (PRESENT(threading)) thread = threading
 
-  if ((thread == SINGLE_FILE) .or. .not.G%Domain%use_io_layout) then
+  one_file = .true.
+  if (present(G)) then
+    one_file = ((thread == SINGLE_FILE) .or. .not.G%Domain%use_io_layout)
+  endif
+
+  if (one_file) then
     call open_file(unit, filename, MPP_OVERWR, MPP_NETCDF, threading=thread)
   else
     call open_file(unit, filename, MPP_OVERWR, MPP_NETCDF, domain=G%Domain%mpp_domain)
   endif
-
-  if (present(GV)) then
-    interface_val(1:nz+1) = GV%sInterface(1:nz+1)
-    layer_val(1:nz) = GV%sLayer(1:nz)
-  endif
-
-  call mpp_get_domain_components(G%Domain%mpp_domain, x_domain, y_domain)
 
 ! Define the coordinates.
   do k=1,novars
@@ -184,6 +182,12 @@ subroutine create_file(unit, filename, vars, novars, G, fields, threading, timeu
     end select
   end do
 
+  if ((use_lath .or. use_lonh .or. use_latq .or. use_lonq)) then
+    if (.not.present(G)) call MOM_error(FATAL, "create_file: "//&
+      "An ocean_grid_type is required to create a file with a vertical coordinate.")
+
+    call mpp_get_domain_components(G%Domain%mpp_domain, x_domain, y_domain)
+  endif
   if ((use_layer .or. use_int) .and. .not.present(GV)) call MOM_error(FATAL, &
     "create_file: A vertical grid type is required to create a file with a vertical coordinate.")
 
@@ -207,11 +211,13 @@ subroutine create_file(unit, filename, vars, novars, G, fields, threading, timeu
 
   if (use_layer) &
     call mpp_write_meta(unit, axis_layer, name="Layer", units=trim(GV%zAxisUnits), &
-          longname="Layer "//trim(GV%zAxisLongName), cartesian='Z', sense=1, data=layer_val)
+          longname="Layer "//trim(GV%zAxisLongName), cartesian='Z', &
+          sense=1, data=GV%sLayer(1:GV%ke))
 
   if (use_int) &
     call mpp_write_meta(unit, axis_int, name="Interface", units=trim(GV%zAxisUnits), &
-          longname="Interface "//trim(GV%zAxisLongName), cartesian='Z', sense=1, data=interface_val)
+          longname="Interface "//trim(GV%zAxisLongName), cartesian='Z', &
+          sense=1, data=GV%sInterface(1:GV%ke+1))
 
   if (use_time) then ; if (present(timeunit)) then
     ! Set appropriate units, depending on the value.
@@ -329,7 +335,7 @@ subroutine reopen_file(unit, filename, vars, novars, G, fields, threading, timeu
   inquire(file=check_name,EXIST=exists)
 
   if (.not.exists) then
-    call create_file(unit, filename, vars, novars, G, fields, threading, timeunit, GV=GV)
+    call create_file(unit, filename, vars, novars, fields, threading, timeunit, G=G, GV=GV)
   else
     if ((thread == SINGLE_FILE) .or. .not.G%Domain%use_io_layout) then
       call open_file(unit, filename, MPP_APPEND, MPP_NETCDF, threading=thread)
@@ -344,7 +350,7 @@ subroutine reopen_file(unit, filename, vars, novars, G, fields, threading, timeu
       write (mesg,*) "Reopening file ",trim(filename)," apparently had ",nvar,&
                      " variables. Clobbering and creating file with ",novars," instead."
       call MOM_error(WARNING,"MOM_io: "//mesg)
-      call create_file(unit, filename, vars, novars, G, fields, threading, timeunit, GV=GV)
+      call create_file(unit, filename, vars, novars, fields, threading, timeunit, G=G, GV=GV)
     elseif (nvar /= novars) then
       write (mesg,*) "Reopening file ",trim(filename)," with ",novars,&
                      " variables instead of ",nvar,"."

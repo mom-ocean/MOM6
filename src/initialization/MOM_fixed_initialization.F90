@@ -21,6 +21,7 @@ use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
 use MOM_string_functions, only : uppercase
 use user_initialization, only : user_initialize_topography
 use DOME_initialization, only : DOME_initialize_topography
+use ISOMIP_initialization, only : ISOMIP_initialize_topography
 use benchmark_initialization, only : benchmark_initialize_topography
 use DOME2d_initialization, only : DOME2d_initialize_topography
 use sloshing_initialization, only : sloshing_initialize_topography
@@ -232,6 +233,8 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
                  " \t benchmark - use the benchmark test case topography. \n"//&
                  " \t DOME - use a slope and channel configuration for the \n"//&
                  " \t\t DOME sill-overflow test case. \n"//&
+                 " \t ISOMIP - use a slope and channel configuration for the \n"//&
+                 " \t\t ISOMIP test case. \n"//&
                  " \t DOME2D - use a shelf and slope configuration for the \n"//&
                  " \t\t DOME2D gravity current/overflow test case. \n"//&
                  " \t seamount - Gaussian bump for spontaneous motion test case.\n"//&
@@ -246,6 +249,7 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
     case ("bowl");      call initialize_topography_named(D, G, PF, config, max_depth)
     case ("halfpipe");  call initialize_topography_named(D, G, PF, config, max_depth)
     case ("DOME");      call DOME_initialize_topography(D, G, PF, max_depth)
+    case ("ISOMIP");      call ISOMIP_initialize_topography(D, G, PF, max_depth)
     case ("benchmark"); call benchmark_initialize_topography(D, G, PF, max_depth)
     case ("DOME2D");    call DOME2d_initialize_topography(D, G, PF, max_depth)
     case ("sloshing");  call sloshing_initialize_topography(D, G, PF, max_depth)
@@ -1191,7 +1195,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory)
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in)      directory - The directory into which to place the file.
-  character(len=120) :: filepath
+  character(len=240) :: filepath
   character(len=40)  :: mod = "write_ocean_geometry_file"
   integer, parameter :: nFlds=23
   type(vardesc) :: vars(nFlds)
@@ -1264,7 +1268,8 @@ subroutine write_ocean_geometry_file(G, param_file, directory)
   file_threading = SINGLE_FILE
   if (multiple_files) file_threading = MULTIPLE
 
-  call create_file(unit, trim(filepath), vars, nFlds_used, G, fields, file_threading)
+  call create_file(unit, trim(filepath), vars, nFlds_used, fields, &
+                   file_threading, G=G)
 
   do J=Jsq,Jeq; do I=Isq,Ieq; out_q(I,J) = G%geoLatBu(I,J); enddo; enddo
   call write_field(unit, fields(1), G%Domain%mpp_domain, out_q)
