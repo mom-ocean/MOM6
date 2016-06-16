@@ -17,7 +17,7 @@ use MOM_file_parser, only : log_version
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type, isPointInCell
 use MOM_interface_heights, only : find_eta
-use MOM_io, only : close_file, create_file, fieldtype, file_exists
+use MOM_io, only : close_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE, MULTIPLE
 use MOM_io, only : slasher, vardesc, write_field
 use MOM_io, only : EAST_FACE, NORTH_FACE
@@ -127,7 +127,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
 
   character(len=200) :: filename   ! The name of an input file.
   character(len=200) :: filename2  ! The name of an input files.
-  character(len = 200) :: inputdir ! The directory where NetCDF input files are.
+  character(len=200) :: inputdir   ! The directory where NetCDF input files are.
   character(len=200) :: config
   logical :: from_Z_file, useALE
   logical :: new_sim
@@ -231,7 +231,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
          case ("thickness_file"); call initialize_thickness_from_file(h, G, GV, PF, .true.)
          case ("coord")
            if (useALE) then
-             call ALE_initThicknessToCoord( ALE_CSp, G, h )
+             call ALE_initThicknessToCoord( ALE_CSp, G, GV, h )
            else
              call MOM_error(FATAL, "MOM_initialize_state: USE_REGRIDDING must be True "//&
                                    "for THICKNESS_CONFIG of 'coord'")
@@ -1823,15 +1823,17 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
     ! Determine where u points are applied at east side 
     do j=jsd,jed ; do I=IsdB,IedB
       if ((I+G%idg_offset) == east_boundary) then !eastern side
-        OBC%OBC_mask_u(I,j) = .true.
-        OBC%OBC_kind_u(I,j) = OBC_FLATHER_E
-        if ((i+1>isd) .and. (i+1<ied) .and. (J>JsdB) .and. (J<JedB)) then
-          OBC%OBC_mask_v(i+1,J) = .true.
-          if (OBC%OBC_kind_v(i+1,J) == OBC_NONE) OBC%OBC_kind_v(i+1,J) = OBC_FLATHER_E
-        endif
-        if ((i+1>isd) .and. (i+1<ied) .and. (J-1>JsdB) .and. (J-1<JedB)) then
-          OBC%OBC_mask_v(i+1,J-1) = .true.
-          if (OBC%OBC_kind_v(i+1,J-1) == OBC_NONE) OBC%OBC_kind_v(i+1,J-1) = OBC_FLATHER_E
+        if (G%mask2dCu(I,j) > 0.50) then
+          OBC%OBC_mask_u(I,j) = .true.
+          OBC%OBC_kind_u(I,j) = OBC_FLATHER_E
+          if (G%mask2dCv(i+1,J) > 0.50) then
+            OBC%OBC_mask_v(i+1,J) = .true.
+            if (OBC%OBC_kind_v(i+1,J) == OBC_NONE) OBC%OBC_kind_v(i+1,J) = OBC_FLATHER_E
+          endif
+          if (G%mask2dCv(i+1,J-1) > 0.50) then
+            OBC%OBC_mask_v(i+1,J-1) = .true.
+            if (OBC%OBC_kind_v(i+1,J-1) == OBC_NONE) OBC%OBC_kind_v(i+1,J-1) = OBC_FLATHER_E
+          endif
         endif
       endif
     enddo ; enddo
@@ -1841,15 +1843,17 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
     ! Determine where u points are applied at west side 
     do j=jsd,jed ; do I=IsdB,IedB
       if ((I+G%idg_offset) == west_boundary) then !western side
-        OBC%OBC_mask_u(I,j) = .true.
-        OBC%OBC_kind_u(I,j) = OBC_FLATHER_W
-        if ((i>isd) .and. (i<ied) .and. (J>JsdB) .and. (J<JedB)) then
-          OBC%OBC_mask_v(i,J) = .true.
-          if (OBC%OBC_kind_v(i,J) == OBC_NONE) OBC%OBC_kind_v(i,J) = OBC_FLATHER_W
-        endif
-        if ((i>isd) .and. (i<ied) .and. (J-1>JsdB) .and. (J-1<JedB)) then
-          OBC%OBC_mask_v(i,J-1) = .true.
-          if (OBC%OBC_kind_v(i,J-1) == OBC_NONE) OBC%OBC_kind_v(i,J-1) = OBC_FLATHER_W
+        if (G%mask2dCu(I,j) > 0.50) then
+          OBC%OBC_mask_u(I,j) = .true.
+          OBC%OBC_kind_u(I,j) = OBC_FLATHER_W
+          if (G%mask2dCv(i,J) > 0.50) then
+            OBC%OBC_mask_v(i,J) = .true.
+            if (OBC%OBC_kind_v(i,J) == OBC_NONE) OBC%OBC_kind_v(i,J) = OBC_FLATHER_W
+          endif
+          if (G%mask2dCv(i,J-1) > 0.50) then
+            OBC%OBC_mask_v(i,J-1) = .true.
+            if (OBC%OBC_kind_v(i,J-1) == OBC_NONE) OBC%OBC_kind_v(i,J-1) = OBC_FLATHER_W
+          endif
         endif
       endif
     enddo ; enddo
@@ -1860,17 +1864,19 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
     ! Determine where v points are applied at north side 
     do J=JsdB,JedB ; do i=isd,ied
       if ((J+G%jdg_offset) == north_boundary) then         !northern side
-        OBC%OBC_mask_v(i,J) = .true.
-        OBC%OBC_kind_v(i,J) = OBC_FLATHER_N
-        if ((I>IsdB) .and. (I<IedB) .and. (j+1>jsd) .and. (j+1<jed)) then
-          OBC%OBC_mask_u(I,j+1) = .true.
-          if (OBC%OBC_kind_u(I,j+1) == OBC_NONE) OBC%OBC_kind_u(I,j+1) = OBC_FLATHER_N
+        if (G%mask2dCv(i,J) > 0.50) then
+          OBC%OBC_mask_v(i,J) = .true.
+          OBC%OBC_kind_v(i,J) = OBC_FLATHER_N
+          if (G%mask2dCu(I,j+1) > 0.50) then
+            OBC%OBC_mask_u(I,j+1) = .true.
+            if (OBC%OBC_kind_u(I,j+1) == OBC_NONE) OBC%OBC_kind_u(I,j+1) = OBC_FLATHER_N
+          endif
+          if (G%mask2dCu(I-1,j+1) > 0.50) then
+            OBC%OBC_mask_u(I-1,j+1) = .true.
+            if (OBC%OBC_kind_u(I-1,j+1) == OBC_NONE) OBC%OBC_kind_u(I-1,j+1) = OBC_FLATHER_N
+          endif
         endif
-        if ((I-1>IsdB) .and. (I-1<IedB) .and. (j+1>jsd) .and. (j+1<jed)) then
-          OBC%OBC_mask_u(I-1,j+1) = .true.
-          if (OBC%OBC_kind_u(I-1,j+1) == OBC_NONE) OBC%OBC_kind_u(I-1,j+1) = OBC_FLATHER_N
-        endif
-     endif
+      endif
     enddo ; enddo
   endif
   
@@ -1878,15 +1884,17 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
     ! Determine where v points are applied at south side 
     do J=JsdB,JedB ; do i=isd,ied
       if ((J+G%jdg_offset) == south_boundary) then         !southern side
-        OBC%OBC_mask_v(i,J) = .true.
-        OBC%OBC_kind_v(i,J) = OBC_FLATHER_S
-        if ((I>IsdB) .and. (I<IedB) .and. (j>jsd) .and. (j<jed)) then
-          OBC%OBC_mask_u(I,j) = .true.
-          if (OBC%OBC_kind_u(I,j) == OBC_NONE) OBC%OBC_kind_u(I,j) = OBC_FLATHER_S
-        endif
-        if ((I-1>IsdB) .and. (I-1<IedB) .and. (j>jsd) .and. (j<jed)) then
-          OBC%OBC_mask_u(I-1,j) = .true.
-          if (OBC%OBC_kind_u(I-1,j) == OBC_NONE) OBC%OBC_kind_u(I-1,j) = OBC_FLATHER_S
+        if (G%mask2dCv(i,J) > 0.50) then
+          OBC%OBC_mask_v(i,J) = .true.
+          OBC%OBC_kind_v(i,J) = OBC_FLATHER_S
+          if (G%mask2dCu(I,j) > 0.50) then
+            OBC%OBC_mask_u(I,j) = .true.
+            if (OBC%OBC_kind_u(I,j) == OBC_NONE) OBC%OBC_kind_u(I,j) = OBC_FLATHER_S
+          endif
+          if (G%mask2dCu(I-1,j) > 0.50) then
+            OBC%OBC_mask_u(I-1,j) = .true.
+            if (OBC%OBC_kind_u(I-1,j) == OBC_NONE) OBC%OBC_kind_u(I-1,j) = OBC_FLATHER_S
+          endif
         endif
       endif
     enddo ; enddo
@@ -1999,11 +2007,11 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
     enddo ; enddo ; enddo
   endif
 
-  do k=1,nz ; do j=js,je ; do I=is-1,ie
+  do k=1,nz ; do j=js-1,je+1 ; do I=is-1,ie+1
     if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) h(i+1,j,k) = h(i,j,k)
     if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W) h(i,j,k) = h(i+1,j,k)
   enddo ; enddo ; enddo
-  do k=1,nz ; do J=js-1,je ; do i=is,ie
+  do k=1,nz ; do J=js-1,je+1 ; do i=is-1,ie+1
     if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) h(i,j+1,k) = h(i,j,k)
     if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S) h(i,j,k) = h(i,j+1,k)
   enddo ; enddo ; enddo
@@ -2306,7 +2314,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
     ! Build the target grid (and set the model thickness to it)
     allocate( hTarget(nz) )
     ! This call can be more general but is hard-coded for z* coordinates...  ????
-    call ALE_initRegridding( G, GV, PF, mod, regridCS, hTarget ) ! sets regridCS and hTarget(1:nz)
+    call ALE_initRegridding( GV, G%max_depth, PF, mod, regridCS, hTarget ) ! sets regridCS and hTarget(1:nz)
 
     if (.not. remap_general) then
       ! This is the old way of initializing to z* coordinates only
@@ -2343,8 +2351,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
       call pass_var(tv%S, G%Domain) ! ALE_build_grid() only updates h on the computational domain.
       call ALE_build_grid( G, GV, regridCS, remapCS, h, tv, .true. )
     endif
-    call ALE_remap_scalar( remapCS, G, nz, h1, tmpT1dIn, h, tv%T, all_cells=remap_full_column, old_remap=remap_old_alg )
-    call ALE_remap_scalar( remapCS, G, nz, h1, tmpS1dIn, h, tv%S, all_cells=remap_full_column, old_remap=remap_old_alg )
+    call ALE_remap_scalar( remapCS, G, GV, nz, h1, tmpT1dIn, h, tv%T, all_cells=remap_full_column, old_remap=remap_old_alg )
+    call ALE_remap_scalar( remapCS, G, GV, nz, h1, tmpS1dIn, h, tv%S, all_cells=remap_full_column, old_remap=remap_old_alg )
     deallocate( h1 )
     deallocate( tmpT1dIn )
     deallocate( tmpS1dIn )
