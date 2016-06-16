@@ -22,7 +22,7 @@ module MOM_dyn_horgrid
 
 use MOM_hor_index, only : hor_index_type
 use MOM_domains, only : MOM_domain_type
-use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL
+use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
 
 implicit none ; private
 
@@ -33,7 +33,7 @@ type, public :: dyn_horgrid_type
   type(MOM_domain_type), pointer :: Domain_aux => NULL() ! A non-symmetric auxiliary domain type.
 
   ! These elements can be copied from a provided hor_index_type.
-  type(hor_index_type), pointer  :: HI
+  type(hor_index_type)  :: HI   ! Make this a pointer?
   integer :: isc, iec, jsc, jec ! The range of the computational domain indices
   integer :: isd, ied, jsd, jed ! and data domain indices at tracer cell centers.
   integer :: isg, ieg, jsg, jeg ! The range of the global domain tracer cell indices.
@@ -155,9 +155,10 @@ subroutine create_dyn_horgrid(G, HI)
   ! are always used and zeros them out.
 
   if (associated(G)) then
-    call MOM_error(FATAL, "destroy_dyn_horgrid called with an unassociated horgrid_type.")
+    call MOM_error(WARNING, "create_dyn_horgrid called with an associated horgrid_type.")
+  else
+    allocate(G)
   endif
-  allocate(G)
 
   G%HI = HI
 
@@ -245,7 +246,7 @@ end subroutine create_dyn_horgrid
 
 !> set_derived_dyn_horgrid calculates metric terms that are derived from other metrics.
 subroutine set_derived_dyn_horgrid(G)
-  type(dyn_horgrid_type), pointer :: G !< The dynamic horizontal grid type
+  type(dyn_horgrid_type), intent(inout) :: G !< The dynamic horizontal grid type
 !    Various inverse grid spacings and derived areas are calculated within this
 !  subroutine.
   integer :: i, j, isd, ied, jsd, jed
