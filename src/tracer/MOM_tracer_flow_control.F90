@@ -184,11 +184,11 @@ subroutine call_tracer_register(HI, GV, param_file, CS, tr_Reg, restart_CS)
     USER_register_tracer_example(HI, GV, param_file, CS%USER_tracer_example_CSp, &
                                  tr_Reg, restart_CS)
   if (CS%use_DOME_tracer) CS%use_DOME_tracer = &
-    register_DOME_tracer(G, param_file, CS%DOME_tracer_CSp, &
-                         diag, tr_Reg, restart_CS)
+    register_DOME_tracer(HI, GV, param_file, CS%DOME_tracer_CSp, &
+                         tr_Reg, restart_CS)
   if (CS%use_ISOMIP_tracer) CS%use_ISOMIP_tracer = &
-    register_ISOMIP_tracer(G, param_file, CS%ISOMIP_tracer_CSp, &
-                         diag, tr_Reg, restart_CS)
+    register_ISOMIP_tracer(HI, GV, param_file, CS%ISOMIP_tracer_CSp, &
+                           tr_Reg, restart_CS)
   if (CS%use_ideal_age) CS%use_ideal_age = &
     register_ideal_age_tracer(HI, GV, param_file,  CS%ideal_age_tracer_CSp, &
                               tr_Reg, restart_CS)

@@ -432,8 +432,8 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
   rho_range = rho_bot - rho_sur
   !write (*,*)'Density range in sponge:', rho_range
 
-
-  if (use_ALE) then 
+  if (use_ALE) then
+ 
     select case ( coordinateMode(verticalCoordinate) )
 
      case ( REGRIDDING_RHO ) 
@@ -482,43 +482,44 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
          h(i,j,:) = delta_h
        end do ; end do
 
-     case default
+      case default
          call MOM_error(FATAL,"ISOMIP_initialize_sponges: "// &
          "Unrecognized i.c. setup - set REGRIDDING_COORDINATE_MODE")
 
-      !  This call sets up the damping rates and interface heights.
-      !  This sets the inverse damping timescale fields in the sponges.  
-      call initialize_ALE_sponge(Idamp,h, nz, G, PF, ACSp)
+    end select
+    !  This call sets up the damping rates and interface heights.
+    !  This sets the inverse damping timescale fields in the sponges.  
+    call initialize_ALE_sponge(Idamp,h, nz, G, PF, ACSp)
 
-      S_range = S_range / G%max_depth ! Convert S_range into dS/dz
-      T_range = T_range / G%max_depth ! Convert T_range into dT/dz
-      do j=js,je ; do i=is,ie
-        xi0 = -G%bathyT(i,j);
-        do k = nz,1,-1
-          xi0 = xi0 + 0.5 * h(i,j,k) ! Depth in middle of layer
-          S(i,j,k) = S_sur + S_range * xi0
-          T(i,j,k) = T_sur + T_range * xi0
-          xi0 = xi0 + 0.5 * h(i,j,k) ! Depth at top of layer
-        enddo
-      enddo ; enddo
-      ! for debugging
-      !i=G%iec; j=G%jec
-      !do k = 1,nz
-      !  call calculate_density(T(i,j,k),S(i,j,k),0.0,rho_tmp,tv%eqn_of_state)
-        !write(*,*) 'Sponge - k,h,T,S,rho,Rlay',k,h(i,j,k),T(i,j,k),S(i,j,k),rho_tmp,GV%Rlay(k)
-      !enddo
+    S_range = S_range / G%max_depth ! Convert S_range into dS/dz
+    T_range = T_range / G%max_depth ! Convert T_range into dT/dz
+    do j=js,je ; do i=is,ie
+      xi0 = -G%bathyT(i,j);
+      do k = nz,1,-1
+        xi0 = xi0 + 0.5 * h(i,j,k) ! Depth in middle of layer
+        S(i,j,k) = S_sur + S_range * xi0
+        T(i,j,k) = T_sur + T_range * xi0
+        xi0 = xi0 + 0.5 * h(i,j,k) ! Depth at top of layer
+      enddo
+    enddo ; enddo
+    ! for debugging
+    !i=G%iec; j=G%jec
+    !do k = 1,nz
+    !  call calculate_density(T(i,j,k),S(i,j,k),0.0,rho_tmp,tv%eqn_of_state)
+      !write(*,*) 'Sponge - k,h,T,S,rho,Rlay',k,h(i,j,k),T(i,j,k),S(i,j,k),rho_tmp,GV%Rlay(k)
+    !enddo
 
-      !   Now register all of the fields which are damped in the sponge.   !
-      ! By default, momentum is advected vertically within the sponge, but !
-      ! momentum is typically not damped within the sponge.                !
+    !   Now register all of the fields which are damped in the sponge.   !
+    ! By default, momentum is advected vertically within the sponge, but !
+    ! momentum is typically not damped within the sponge.                !
 
-      !  The remaining calls to set_up_sponge_field can be in any order. !
-      if ( associated(tv%T) ) then
-        call set_up_ALE_sponge_field(T,G,tv%T,ACSp)
-      endif
-      if ( associated(tv%S) ) then
-        call set_up_ALE_sponge_field(S,G,tv%S,ACSp)
-      endif
+    !  The remaining calls to set_up_sponge_field can be in any order. !
+    if ( associated(tv%T) ) then
+      call set_up_ALE_sponge_field(T,G,tv%T,ACSp)
+    endif
+    if ( associated(tv%S) ) then
+      call set_up_ALE_sponge_field(S,G,tv%S,ACSp)
+    endif
 
   else  ! layer mode
 
