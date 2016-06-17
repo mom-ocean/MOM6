@@ -78,6 +78,7 @@ use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord
 use MOM_ALE, only : ALE_remap_scalar, ALE_build_grid
 use MOM_regridding, only : regridding_CS, set_regrid_params
 use MOM_remapping, only : remapping_CS, initialize_remapping
+use MOM_remapping, only : remapping_core_h
 use MOM_tracer_initialization_from_Z, only : horiz_interp_and_extrap_tracer
 
 implicit none ; private
@@ -825,7 +826,7 @@ subroutine trim_for_ice(PF, G, GV, ALE_CSp, tv, h)
   type(ocean_grid_type),                    intent(in)    :: G !< Ocean grid structure
   type(verticalGrid_type),                  intent(in)    :: GV !< Vertical grid structure
   type(ALE_CS),                             pointer       :: ALE_CSp !< ALE control structure
-  type(thermo_var_ptrs),                    intent(in)    :: tv !< Thermodynamics structure
+  type(thermo_var_ptrs),                    intent(inout) :: tv !< Thermodynamics structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h !< Layer thickness (H units, m or Pa)
   ! Local variables
   character(len=200) :: mod = "trim_for_ice"
@@ -835,6 +836,8 @@ subroutine trim_for_ice(PF, G, GV, ALE_CSp, tv, h)
   character(len=200) :: inputdir, filename, p_surf_file, p_surf_var ! Strings for file/path
   real :: scale_factor, min_thickness
   integer :: i, j, k
+  logical :: use_remapping
+  type(remapping_CS), pointer :: remap_CS => NULL()
 
   call get_param(PF, mod, "SURFACE_PRESSURE_FILE", p_surf_file, &
                  "The initial condition file for the surface height.", &
@@ -854,6 +857,13 @@ subroutine trim_for_ice(PF, G, GV, ALE_CSp, tv, h)
   if (scale_factor /= 1.) p_surf(:,:) = scale_factor * p_surf(:,:)
   call get_param(PF, mod, "MIN_THICKNESS", min_thickness, 'Minimum layer thickness', &
                  units='m', default=1.e-3)
+  call get_param(PF, mod, "TRIMMING_USES_REMAPPING", use_remapping, &
+                 'When trimming the column, also remap T and S.', &
+                 default=.false.)
+  if (use_remapping) then
+    allocate(remap_CS)
+    call initialize_remapping(remap_CS, 'PLM', boundary_extrapolation=.true.)
+  endif
 
   ! Find edge values of T and S used in reconstructions
   if ( associated(ALE_CSp) ) then ! This should only be associated if we are in ALE mode
@@ -872,30 +882,34 @@ subroutine trim_for_ice(PF, G, GV, ALE_CSp, tv, h)
 
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     call cut_off_column_top(GV%ke, tv, GV%Rho0, G%G_earth, G%bathyT(i,j), min_thickness, &
-               tv%T(i,j,:), T_t(i,j,:), T_b(i,j,:), tv%S(i,j,:), S_t(i,j,:), S_b(i,j,:), p_surf(i,j), h(i,j,:))
+               tv%T(i,j,:), T_t(i,j,:), T_b(i,j,:), tv%S(i,j,:), S_t(i,j,:), S_b(i,j,:), &
+               p_surf(i,j), h(i,j,:), remap_CS)
   enddo ; enddo
 
 end subroutine trim_for_ice
 
 !> Adjust the layer thicknesses by cutting away the top at the depth where the hydrostatic
 !! pressure matches p_surf
-subroutine cut_off_column_top(nk, tv, Rho0, G_earth, depth, min_thickness, T, T_t, T_b, S, S_t, S_b, p_surf, h)
+subroutine cut_off_column_top(nk, tv, Rho0, G_earth, depth, min_thickness, &
+                              T, T_t, T_b, S, S_t, S_b, p_surf, h, remap_CS)
   integer,               intent(in)    :: nk !< Number of layers
   type(thermo_var_ptrs), intent(in)    :: tv !< Thermodynamics structure
   real,                  intent(in)    :: Rho0 !< Reference density (kg/m3)
   real,                  intent(in)    :: G_earth !< Gravitational acceleration (m/s2)
   real,                  intent(in)    :: depth !< Depth of ocean column (m)
   real,                  intent(in)    :: min_thickness !< Smallest thickness allowed (m)
-  real, dimension(nk),   intent(in)    :: T !< 
-  real, dimension(nk),   intent(in)    :: T_t !< 
-  real, dimension(nk),   intent(in)    :: T_b !< 
-  real, dimension(nk),   intent(in)    :: S !< 
-  real, dimension(nk),   intent(in)    :: S_t !< 
-  real, dimension(nk),   intent(in)    :: S_b !< 
+  real, dimension(nk),   intent(inout) :: T !< Layer mean temperature
+  real, dimension(nk),   intent(in)    :: T_t !< Temperature at top of layer
+  real, dimension(nk),   intent(in)    :: T_b !< Temperature at bottom of layer
+  real, dimension(nk),   intent(inout) :: S !< Layer mean salinity
+  real, dimension(nk),   intent(in)    :: S_t !< Salinity at top of layer
+  real, dimension(nk),   intent(in)    :: S_b !< Salinity at bottom of layer
   real,                  intent(in)    :: p_surf !< Imposed pressure on ocean at surface (Pa)
   real, dimension(nk),   intent(inout) :: h !< Layer thickness (H units, m or Pa)
+  type(remapping_CS),    pointer       :: remap_CS ! Remapping structure for remapping T and S, if associated
   ! Local variables
   real, dimension(nk+1) :: e ! Top and bottom edge values for reconstructions
+  real, dimension(nk) :: h0, S0, T0, h1, S1, T1
   real :: P_t, P_b, z_out, e_top
   integer :: k
 
@@ -903,6 +917,7 @@ subroutine cut_off_column_top(nk, tv, Rho0, G_earth, depth, min_thickness, T, T_
   e(nk+1) = -depth
   do k=nk,1,-1
     e(K) = e(K+1) + h(k)
+    h0(k) = h(nk+1-k) ! Keep a copy to use in remapping
   enddo
 
   P_t = 0.
@@ -934,6 +949,22 @@ subroutine cut_off_column_top(nk, tv, Rho0, G_earth, depth, min_thickness, T, T_
       ! This layer needs trimming
       h(k) = max( min_thickness, e(K) - e(K+1) )
       if (e(K)<e_top) exit ! No need to go further
+    enddo
+  endif
+
+  ! Now we need to remap but remapping assumes the surface is at the
+  ! same place in the two columns so we turn the column upside down.
+  if (associated(remap_CS)) then
+    do k=1,nk
+      S0(k) = S(nk+1-k)
+      T0(k) = T(nk+1-k)
+      h1(k) = h(nk+1-k)
+    enddo
+    call remapping_core_h(nk, h0, T0, nk, h1, T1, remap_CS )
+    call remapping_core_h(nk, h0, S0, nk, h1, S1, remap_CS )
+    do k=1,nk
+      S(k) = S1(nk+1-k)
+      T(k) = T1(nk+1-k)
     enddo
   endif
 
@@ -2110,6 +2141,7 @@ subroutine MOM_state_init_tests(G, GV, tv)
   real, dimension(nk+1) :: e
   integer :: k
   real :: P_tot, P_t, P_b, z_out
+  type(remapping_CS), pointer :: remap_CS => NULL()
 
   do k = 1, nk
     h(k) = 100.
@@ -2145,7 +2177,7 @@ subroutine MOM_state_init_tests(G, GV, tv)
   write(0,*) ''
   write(0,*) h
   call cut_off_column_top(nk, tv, GV%Rho0, G%G_earth, -e(nk+1), GV%Angstrom, &
-               T, T_t, T_b, S, S_t, S_b, 0.5*P_tot, h)
+               T, T_t, T_b, S, S_t, S_b, 0.5*P_tot, h, remap_CS)
   write(0,*) h
 
 end subroutine MOM_state_init_tests
