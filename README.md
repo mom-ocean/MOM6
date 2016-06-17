@@ -21,8 +21,9 @@ git clone https://github.com/doxygen/doxygen
 ./doxygen/bin/doxygen .doxygen
 ./doxygen/bin/doxygen .doxygen
 git checkout gh-pages
+git reset --hard gh-pages-static
 rm -rf APIs
 mv html APIs
 git add APIs
-git commit --amend
+git commit -m "Generated API documentation with doxygen"
 ```
