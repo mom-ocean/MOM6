@@ -2770,7 +2770,7 @@ subroutine regridding_memory_deallocation( CS )
 
 end subroutine regridding_memory_deallocation
 
-!> \namespace MOM_regridding
+!> \namespace mom_regridding
 !!
 !! A vertical grid is defined solely by the cell thicknesses, \f$h\f$.
 !! Most calculations in this module start with the coordinate at the bottom
