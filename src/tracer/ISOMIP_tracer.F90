@@ -21,6 +21,7 @@ use MOM_diag_to_Z, only : register_Z_tracer, diag_to_Z_CS
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
+use MOM_hor_index, only : hor_index_type
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc, query_vardesc
 use MOM_restart, only : register_restart_field, MOM_restart_CS
@@ -87,12 +88,12 @@ contains
 
 
 !> This subroutine is used to register tracer fields
-function register_ISOMIP_tracer(G, param_file, CS, diag, tr_Reg, &
+function register_ISOMIP_tracer(HI, GV, param_file, CS, tr_Reg, &
                                       restart_CS)
-  type(ocean_grid_type),      intent(in) :: G !<The ocean's grid structure.
+  type(hor_index_type),      intent(in) :: HI    !<A horizontal index type structure.
+  type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure.
   type(param_file_type),      intent(in) :: param_file !<A structure indicating the open file to parse for model parameter values.
   type(ISOMIP_tracer_CS),       pointer    :: CS !<A pointer that is set to point to the control structure for this module (in/out).
-  type(diag_ctrl),    target, intent(in) :: diag !<A structure that is used to regulate diagnostic output.
   type(tracer_registry_type), pointer    :: tr_Reg !<A pointer to the tracer registry.
   type(MOM_restart_CS),       pointer    :: restart_CS !<A pointer to the restart control structure.
 
@@ -104,7 +105,7 @@ function register_ISOMIP_tracer(G, param_file, CS, diag, tr_Reg, &
   real, pointer :: tr_ptr(:,:,:) => NULL()
   logical :: register_ISOMIP_tracer
   integer :: isd, ied, jsd, jed, nz, m
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
+  isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
   if (associated(CS)) then
     call MOM_error(WARNING, "ISOMIP_register_tracer called with an "// &
@@ -113,7 +114,6 @@ function register_ISOMIP_tracer(G, param_file, CS, diag, tr_Reg, &
   endif
   allocate(CS)
 
-  CS%diag => diag
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "ISOMIP_TRACER_IC_FILE", CS%tracer_IC_file, &
@@ -149,7 +149,7 @@ function register_ISOMIP_tracer(G, param_file, CS, diag, tr_Reg, &
     ! Register the tracer for the restart file.
     call register_restart_field(tr_ptr, CS%tr_desc(m), .true., restart_CS)
     ! Register the tracer for horizontal advection & diffusion.
-    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, G, tr_Reg, &
+    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, HI, GV, tr_Reg, &
                          tr_desc_ptr=CS%tr_desc(m))
 
     !   Set coupled_tracers to be true (hard-coded above) to provide the surface
