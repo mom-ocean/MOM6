@@ -121,14 +121,15 @@ type, public :: forcing
 
   ! land ice-shelf related inputs
   real, pointer, dimension(:,:) :: &
-  ustar_shelf   => NULL(), & !< friction velocity under ice-shelves (m/s)
-                             !! as computed by the ocean at the previous time step.
-  frac_shelf_h  => NULL(), & !< Fractional ice shelf coverage of h-, u-, and v-
-  frac_shelf_u  => NULL(), & !< cells, nondimensional from 0 to 1. These are only
-  frac_shelf_v  => NULL(), & !< associated if ice shelves are enabled, and are
-                             !! exactly 0 away from shelves or on land.
-  rigidity_ice_u => NULL(),& !< Depth-integrated lateral viscosity of ice
-  rigidity_ice_v => NULL()   !< shelves or sea ice at u- or v-points (m3/s)
+  ustar_shelf   => NULL(), &   !< friction velocity under ice-shelves (m/s)
+                               !! as computed by the ocean at the previous time step.
+  frac_shelf_h  => NULL(), &   !< Fractional ice shelf coverage of h-, u-, and v-
+  frac_shelf_u  => NULL(), &   !< cells, nondimensional from 0 to 1. These are only
+  frac_shelf_v  => NULL(), &   !< associated if ice shelves are enabled, and are
+                               !! exactly 0 away from shelves or on land.
+  iceshelf_melt   => NULL(), & !< ice shelf melt rate (positive) or freezing (negative) ( m/year )
+  rigidity_ice_u => NULL(),&   !< Depth-integrated lateral viscosity of ice
+  rigidity_ice_v => NULL()     !< shelves or sea ice at u- or v-points (m3/s)
 
   ! Scalars set by surface forcing modules
   real :: vPrecGlobalAdj     !< adjustment to restoring vprec to zero out global net ( kg/(m^2 s) )
@@ -1615,6 +1616,13 @@ subroutine forcing_accumulate(flux_tmp, fluxes, dt, G, wt2)
       fluxes%ustar_shelf(i,j)  = flux_tmp%ustar_shelf(i,j)
     enddo ; enddo
   endif
+  
+  if (associated(fluxes%iceshelf_melt) .and. associated(flux_tmp%iceshelf_melt)) then
+    do i=isd,ied ; do j=jsd,jed
+      fluxes%iceshelf_melt(i,j)  = flux_tmp%iceshelf_melt(i,j)
+    enddo ; enddo
+  endif
+
   if (associated(fluxes%frac_shelf_h) .and. associated(flux_tmp%frac_shelf_h)) then
     do i=isd,ied ; do j=jsd,jed
       fluxes%frac_shelf_h(i,j)  = flux_tmp%frac_shelf_h(i,j)
@@ -2198,6 +2206,7 @@ subroutine allocate_forcing_type(G, fluxes, stress, ustar, water, heat, shelf, p
   call myAlloc(fluxes%frac_shelf_u,IsdB,IedB,jsd,jed, shelf)
   call myAlloc(fluxes%frac_shelf_v,isd,ied,JsdB,JedB, shelf)
   call myAlloc(fluxes%ustar_shelf,isd,ied,jsd,jed, shelf)
+  call myAlloc(fluxes%iceshelf_melt,isd,ied,jsd,jed, shelf)
   call myAlloc(fluxes%rigidity_ice_u,IsdB,IedB,jsd,jed, shelf)
   call myAlloc(fluxes%rigidity_ice_v,isd,ied,JsdB,JedB, shelf)
 
@@ -2263,6 +2272,7 @@ subroutine deallocate_forcing_type(fluxes)
   if (associated(fluxes%TKE_tidal))            deallocate(fluxes%TKE_tidal)
   if (associated(fluxes%ustar_tidal))          deallocate(fluxes%ustar_tidal)
   if (associated(fluxes%ustar_shelf))          deallocate(fluxes%ustar_shelf)
+  if (associated(fluxes%iceshelf_melt))        deallocate(fluxes%iceshelf_melt)
   if (associated(fluxes%frac_shelf_h))         deallocate(fluxes%frac_shelf_h)
   if (associated(fluxes%frac_shelf_u))         deallocate(fluxes%frac_shelf_u)
   if (associated(fluxes%frac_shelf_v))         deallocate(fluxes%frac_shelf_v)
