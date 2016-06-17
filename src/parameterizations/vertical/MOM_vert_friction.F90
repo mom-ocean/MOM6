@@ -1583,8 +1583,7 @@ subroutine vertvisc_end(CS)
   deallocate(CS)
 end subroutine vertvisc_end
 
-end module MOM_vert_friction
-!> \namespace MOM_vert_friction
+!> \namespace mom_vert_friction
 !! \author Robert Hallberg
 !! \date April 1994 - October 2006
 !!
@@ -1623,7 +1622,7 @@ end module MOM_vert_friction
 !!  Macros written all in capital letters are defined in MOM_memory.h.
 !!
 !!     A small fragment of the grid is shown below:
-!!
+!! \verbatim
 !!    j+1  x ^ x ^ x   At x:  q
 !!    j+1  > o > o >   At ^:  v, frhatv, tauy
 !!    j    x ^ x ^ x   At >:  u, frhatu, taux
@@ -1631,5 +1630,7 @@ end module MOM_vert_friction
 !!    j-1  x ^ x ^ x
 !!        i-1  i  i+1  At x & ^:
 !!           i  i+1    At > & o:
+!! \endverbatim
 !!
 !!  The boundaries always run through q grid points (x).
+end module MOM_vert_friction
