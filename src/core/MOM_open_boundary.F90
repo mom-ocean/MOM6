@@ -25,6 +25,7 @@ public open_boundary_init
 public open_boundary_query
 public open_boundary_end
 public open_boundary_impose_normal_slope
+public open_boundary_impose_land_mask
 public Radiation_Open_Bdry_Conds
 public set_Flather_positions
 public set_Flather_data
@@ -234,6 +235,35 @@ subroutine open_boundary_impose_normal_slope(OBC, G, depth)
   endif
 
 end subroutine open_boundary_impose_normal_slope
+
+!> Sets the slope of bathymetry normal to an open bounndary to zero.
+subroutine open_boundary_impose_land_mask(OBC, G)
+  type(ocean_OBC_type),              pointer       :: OBC !< Open boundary control structure
+  type(ocean_grid_type),             intent(in) :: G !< Ocean grid structure
+  ! Local variables
+  integer :: i, j
+
+  if (.not.associated(OBC)) return
+
+  if (associated(OBC%OBC_kind_u)) then
+    do j=G%jsd,G%jed ; do I=G%isd,G%ied-1
+      if (G%mask2dCu(I,j) == 0) then
+        OBC%OBC_kind_u(I,j) = OBC_NONE
+        OBC%OBC_mask_u(I,j) = .false.
+      endif
+    enddo ; enddo
+  endif
+
+  if (associated(OBC%OBC_kind_v)) then
+    do J=G%jsd,G%jed-1 ; do i=G%isd,G%ied
+      if (G%mask2dCv(i,J) == 0) then
+        OBC%OBC_kind_v(i,J) = OBC_NONE
+        OBC%OBC_mask_v(i,J) = .false.
+      endif
+    enddo ; enddo
+  endif
+
+end subroutine open_boundary_impose_land_mask
 
 !> Diagnose radiation conditions at open boundaries
 subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
