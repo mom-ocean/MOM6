@@ -21,6 +21,7 @@ use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_open_boundary, only : open_boundary_config, open_boundary_query
 use MOM_open_boundary, only : set_Flather_positions, open_boundary_impose_normal_slope
+use MOM_open_boundary, only : open_boundary_impose_land_mask
 use MOM_string_functions, only : uppercase
 use user_initialization, only : user_initialize_topography, USER_set_OBC_positions
 use DOME_initialization, only : DOME_initialize_topography, DOME_set_OBC_positions
@@ -112,6 +113,9 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
 
   ! This call sets masks that prohibit flow over any point interpreted as land
   call initialize_masks(G, PF)
+
+  ! Make OBC mask consistent with land mask
+  call open_boundary_impose_land_mask(OBC, G)
   if (debug) then
     call hchksum(G%bathyT, 'MOM_initialize_fixed: depth ', G%HI, haloshift=1)
     call hchksum(G%mask2dT, 'MOM_initialize_fixed: mask2dT ', G%HI)
