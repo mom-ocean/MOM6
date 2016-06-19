@@ -240,12 +240,10 @@ subroutine DOME_set_OBC_positions(G, param_file, OBC)
   ! Local variables
   character(len=40)  :: mod = "DOME_set_OBC_positions" ! This subroutine's name.
   integer :: i, j
-  logical :: any_OBC ! Set to true if any points in this subdomain use OBCs
 
   if (.not.associated(OBC)) call MOM_error(FATAL, &
            "DOME_initialization, DOME_set_OBC_positions: OBC type was not allocated!")
 
-  any_OBC = .false.
   if (OBC%apply_OBC_u) then
     ! Set where u points are determined by OBCs.
     !allocate(OBC_mask_u(IsdB:IedB,jsd:jed)) ; OBC_mask_u(:,:) = .false.
@@ -259,14 +257,8 @@ subroutine DOME_set_OBC_positions(G, param_file, OBC)
       if ((G%geoLonCv(i,J) > 1000.0) .and. (G%geoLonCv(i,J)  < 1100.0) .and. &
           (abs(G%geoLatCv(i,J) - G%gridLatB(G%JegB)) < 0.1)) then
         OBC%OBC_mask_v(i,J) = .true.
-        any_OBC = .true.
       endif
     enddo ; enddo
-  endif
-  if (.not.any_OBC) then
-    ! If this PE does not have any OBC points then we do not need the mask
-    OBC%apply_OBC_v = .false.
-    deallocate(OBC%OBC_mask_v)
   endif
 end subroutine DOME_set_OBC_positions
 

@@ -157,7 +157,7 @@ subroutine open_boundary_config(G, param_file, OBC)
             OBC%apply_OBC_v_flather_north .or. OBC%apply_OBC_v_flather_south .or. &
             OBC%apply_OBC_u_flather_east .or. OBC%apply_OBC_u_flather_west)) then
     ! No open boundaries have been requested
-    deallocate(OBC)
+    call open_boundary_dealloc(OBC)
   endif
 
 end subroutine open_boundary_config
@@ -213,16 +213,39 @@ logical function open_boundary_query(OBC, apply_orig_OBCs, apply_orig_Flather)
 end function open_boundary_query
 
 !> Deallocate open boundary data
+subroutine open_boundary_dealloc(OBC)
+  type(ocean_OBC_type), pointer :: OBC !< Open boundary control structure
+  if (.not. associated(OBC)) return
+  if (associated(OBC%OBC_mask_u)) deallocate(OBC%OBC_mask_u)
+  if (associated(OBC%OBC_mask_v)) deallocate(OBC%OBC_mask_v)
+  if (associated(OBC%OBC_kind_u)) deallocate(OBC%OBC_kind_u)
+  if (associated(OBC%OBC_kind_v)) deallocate(OBC%OBC_kind_v)
+  if (associated(OBC%rx_old_u)) deallocate(OBC%rx_old_u)
+  if (associated(OBC%ry_old_v)) deallocate(OBC%ry_old_v)
+  if (associated(OBC%rx_old_h)) deallocate(OBC%rx_old_h)
+  if (associated(OBC%ry_old_h)) deallocate(OBC%ry_old_h)
+  if (associated(OBC%ubt_outer)) deallocate(OBC%ubt_outer)
+  if (associated(OBC%vbt_outer)) deallocate(OBC%vbt_outer)
+  if (associated(OBC%eta_outer_u)) deallocate(OBC%eta_outer_u)
+  if (associated(OBC%eta_outer_v)) deallocate(OBC%eta_outer_v)
+  if (associated(OBC%u)) deallocate(OBC%u)
+  if (associated(OBC%v)) deallocate(OBC%v)
+  if (associated(OBC%uh)) deallocate(OBC%uh)
+  if (associated(OBC%vh)) deallocate(OBC%vh)
+  deallocate(OBC)
+end subroutine open_boundary_dealloc
+
+!> Close open boundary data
 subroutine open_boundary_end(OBC)
   type(ocean_OBC_type), pointer :: OBC !< Open boundary control structure
-  deallocate(OBC)
+  call open_boundary_dealloc(OBC)
 end subroutine open_boundary_end
 
 !> Sets the slope of bathymetry normal to an open bounndary to zero.
 subroutine open_boundary_impose_normal_slope(OBC, G, depth)
-  type(ocean_OBC_type),              pointer       :: OBC !< Open boundary control structure
-  type(ocean_grid_type),             intent(inout) :: G !< Ocean grid structure
-  real, dimension(SZI_(G),SZJ_(G)),  intent(inout) :: depth !< Bathymetry at h-points
+  type(ocean_OBC_type),             pointer       :: OBC !< Open boundary control structure
+  type(ocean_grid_type),            intent(in)    :: G !< Ocean grid structure
+  real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: depth !< Bathymetry at h-points
   ! Local variables
   integer :: i, j
 
@@ -244,12 +267,13 @@ subroutine open_boundary_impose_normal_slope(OBC, G, depth)
 
 end subroutine open_boundary_impose_normal_slope
 
-!> Sets the slope of bathymetry normal to an open bounndary to zero.
+!> Reconcile masks and open boundaries, deallocate OBC on PEs where it is not needed
 subroutine open_boundary_impose_land_mask(OBC, G)
   type(ocean_OBC_type),              pointer       :: OBC !< Open boundary control structure
   type(ocean_grid_type),             intent(in) :: G !< Ocean grid structure
   ! Local variables
   integer :: i, j
+  logical :: any_U, any_V
 
   if (.not.associated(OBC)) return
 
@@ -257,6 +281,7 @@ subroutine open_boundary_impose_land_mask(OBC, G)
     do j=G%jsd,G%jed ; do I=G%isd,G%ied-1
       if (G%mask2dCu(I,j) == 0) then
         OBC%OBC_kind_u(I,j) = OBC_NONE
+        OBC%OBC_direction_u(I,j) = OBC_NONE
         OBC%OBC_mask_u(I,j) = .false.
       endif
     enddo ; enddo
@@ -266,10 +291,37 @@ subroutine open_boundary_impose_land_mask(OBC, G)
     do J=G%jsd,G%jed-1 ; do i=G%isd,G%ied
       if (G%mask2dCv(i,J) == 0) then
         OBC%OBC_kind_v(i,J) = OBC_NONE
+        OBC%OBC_direction_v(i,J) = OBC_NONE
         OBC%OBC_mask_v(i,J) = .false.
       endif
     enddo ; enddo
   endif
+
+  any_U = .false.
+  if (associated(OBC%OBC_mask_u)) then
+    do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
+      ! G%mask2du will be open wherever bathymetry allows it.
+      ! Bathymetry outside of the open boundary was adjusted to match
+      ! the bathymetry inside so these points will be open unless the
+      ! bathymetry inside the boundary was do shallow and flagged as land.
+      if (OBC%OBC_mask_u(I,j)) any_U = .true.
+    enddo ; enddo
+    if (.not. any_U) then
+      deallocate(OBC%OBC_mask_u)
+    endif
+  endif
+
+  any_V = .false.
+  if (associated(OBC%OBC_mask_v)) then
+    do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+      if (OBC%OBC_mask_v(i,J)) any_V = .true.
+    enddo ; enddo
+    if (.not. any_V) then
+      deallocate(OBC%OBC_mask_v)
+    endif
+  endif
+
+  if (.not.(any_U .or. any_V)) call open_boundary_dealloc(OBC)
 
 end subroutine open_boundary_impose_land_mask
 

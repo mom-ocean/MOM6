@@ -114,8 +114,9 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
   ! This call sets masks that prohibit flow over any point interpreted as land
   call initialize_masks(G, PF)
 
-  ! Make OBC mask consistent with land mask
+  ! Make OBC mask consistent with land mask, deallocate OBC on PEs where it is not needed
   call open_boundary_impose_land_mask(OBC, G)
+
   if (debug) then
     call hchksum(G%bathyT, 'MOM_initialize_fixed: depth ', G%HI, haloshift=1)
     call hchksum(G%mask2dT, 'MOM_initialize_fixed: mask2dT ', G%HI)
