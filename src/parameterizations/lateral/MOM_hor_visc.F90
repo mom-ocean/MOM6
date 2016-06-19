@@ -93,8 +93,7 @@ use MOM_file_parser,           only : get_param, log_version, param_file_type
 use MOM_grid,                  only : ocean_grid_type
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types,            only : MEKE_type
-use MOM_open_boundary,         only : ocean_OBC_type, OBC_FLATHER_E, OBC_FLATHER_W
-use MOM_open_boundary,         only : OBC_FLATHER_N, OBC_FLATHER_S
+use MOM_open_boundary,         only : ocean_OBC_type, OBC_FLATHER
 use MOM_verticalGrid,          only : verticalGrid_type
 
 implicit none ; private
@@ -587,8 +586,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                      G%IareaCu(I,j)) / (0.5*(h(i+1,j,k) + h(i,j,k)) + h_neglect)
 
       if (apply_OBC) then ; if (OBC%OBC_mask_u(I,j)) then
-        if ((OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) .or. &
-            (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W)) diffu(I,j,k) = 0.0
+        if ((OBC%OBC_kind_u(I,j) == OBC_FLATHER)) diffu(I,j,k) = 0.0
       endif ; endif
     enddo ; enddo
 
@@ -600,8 +598,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                                     CS%DX2h(i,j+1)*str_xx(i,j+1))) * &
                      G%IareaCv(i,J)) / (0.5*(h(i,j+1,k) + h(i,j,k)) + h_neglect)
       if (apply_OBC) then ; if (OBC%OBC_mask_v(i,J)) then
-        if ((OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) .or. &
-            (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S)) diffv(I,j,k) = 0.0
+        if ((OBC%OBC_kind_v(i,J) == OBC_FLATHER)) diffv(I,j,k) = 0.0
       endif ; endif
     enddo ; enddo
 

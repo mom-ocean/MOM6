@@ -31,8 +31,11 @@ public set_Flather_positions
 public set_Flather_data
 
 integer, parameter, public :: OBC_NONE = 0, OBC_SIMPLE = 1, OBC_WALL = 2
-integer, parameter, public :: OBC_FLATHER_E = 4, OBC_FLATHER_W = 5
-integer, parameter, public :: OBC_FLATHER_N = 6, OBC_FLATHER_S = 7
+integer, parameter, public :: OBC_FLATHER = 3
+integer, parameter, public :: OBC_DIRECTION_N = 100 !< Indicates the boundary is an effective northern boundary
+integer, parameter, public :: OBC_DIRECTION_S = 200 !< Indicates the boundary is an effective southern boundary
+integer, parameter, public :: OBC_DIRECTION_E = 300 !< Indicates the boundary is an effective eastern boundary
+integer, parameter, public :: OBC_DIRECTION_W = 400 !< Indicates the boundary is an effective western boundary
 
 !> Open-boundary data
 type, public :: ocean_OBC_type
@@ -50,13 +53,18 @@ type, public :: ocean_OBC_type
     OBC_mask_u => NULL(), & !< True at zonal velocity points that have prescribed OBCs.
     OBC_mask_v => NULL()    !< True at meridional velocity points that have prescribed OBCs.
   ! These arrays indicate the kind of open boundary conditions that are to be applied at the u and v
-  ! points, and can be OBC_NONE, OBC_SIMPLE, OBC_WALL, or one of OBC_FLATHER_[EWNS].  Generally these
+  ! points, and can be OBC_NONE, OBC_SIMPLE, OBC_WALL, or OBC_FLATHER.  Generally these
   ! should be consistent with OBC_mask_[uv], with OBC_mask_[uv] .false. for OBC_kind_[uv] = NONE
   ! and true for all other values.
   integer, pointer, dimension(:,:) :: &
     OBC_kind_u => NULL(), & !< Type of OBC at u-points.
     OBC_kind_v => NULL()    !< Type of OBC at v-points.
-  ! The following apply at points with OBC_kind_[uv] = OBC_FLATHER_x.
+  ! These arrays indicate the outward-pointing orientation of the open boundary and will be set to
+  ! one of OBC_DIRECTION_N, OBC_DIRECTION_S, OBC_DIRECTION_E or OBC_DIRECTION_W.
+  integer, pointer, dimension(:,:) :: &
+    OBC_direction_u => NULL(), & !< Orientation of OBC at u-points.
+    OBC_direction_v => NULL()    !< Orientation of OBC at v-points.
+  ! The following apply at points with OBC_kind_[uv] = OBC_FLATHER.
   real, pointer, dimension(:,:,:) :: &
     rx_old_u => NULL(), &  !< The rx_old_u value for radiation coeff for u-velocity in x-direction
     ry_old_v => NULL(), &  !< The ry_old_v value for radiation coeff for v-velocity in y-direction
@@ -220,17 +228,17 @@ subroutine open_boundary_impose_normal_slope(OBC, G, depth)
 
   if (.not.associated(OBC)) return
 
-  if (associated(OBC%OBC_kind_u)) then
+  if (associated(OBC%OBC_direction_u)) then
     do j=G%jsd,G%jed ; do I=G%isd,G%ied-1
-      if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) depth(i+1,j) = depth(i,j)
-      if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W) depth(i,j) = depth(i+1,j)
+      if (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_E) depth(i+1,j) = depth(i,j)
+      if (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_W) depth(i,j) = depth(i+1,j)
     enddo ; enddo
   endif
 
   if (associated(OBC%OBC_kind_v)) then
     do J=G%jsd,G%jed-1 ; do i=G%isd,G%ied
-      if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) depth(i,j+1) = depth(i,j)
-      if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S) depth(i,j) = depth(i,j+1)
+      if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N) depth(i,j+1) = depth(i,j)
+      if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S) depth(i,j) = depth(i,j+1)
     enddo ; enddo
   endif
 
@@ -294,7 +302,7 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
 
   if (OBC%apply_OBC_u_flather_east .or. OBC%apply_OBC_u_flather_west) then
     do k=1,nz ; do j=js,je ; do I=is-1,ie ; if (OBC%OBC_mask_u(I,j)) then
-      if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) then
+      if (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_E) then
         dhdt = u_old(I-1,j,k)-u_new(I-1,j,k) !old-new
         dhdx = u_new(I-1,j,k)-u_new(I-2,j,k) !in new time backward sasha for I-1
         rx_new = 0.0
@@ -311,7 +319,7 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
     !   OBC%rx_old_h(I,j,k) = rx_avg
     !    h_new(I+1,j,k) = (h_old(I+1,j,k) + rx_avg*h_new(I,j,k)) / (1.0+rx_avg) !original
       endif
-      if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W) then
+      if (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_W) then
         dhdt = u_old(I+1,j,k)-u_new(I+1,j,k) !old-new
         dhdx = u_new(I+1,j,k)-u_new(I+2,j,k) !in new time backward sasha for I+1
         rx_new = 0.0
@@ -333,7 +341,7 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
 
   if (OBC%apply_OBC_v_flather_north .or. OBC%apply_OBC_v_flather_south) then
     do k=1,nz ; do J=js-1,je ; do i=is,ie ; if (OBC%OBC_mask_v(i,J)) then
-      if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) then
+      if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N) then
         dhdt = v_old(i,J-1,k)-v_new(i,J-1,k) !old-new
         dhdx = v_new(i,J-1,k)-v_new(i,J-2,k) !in new time backward sasha for J-1
         rx_new = 0.0
@@ -351,7 +359,7 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
     !   h_new(i,J+1,k) = (h_old(i,J+1,k) + rx_avg*h_new(i,J,k)) / (1.0+rx_avg) !original
       endif
 
-      if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S) then
+      if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S) then
         dhdt = v_old(i,J+1,k)-v_new(i,J+1,k) !old-new
         dhdx = v_new(i,J+1,k)-v_new(i,J+2,k) !in new time backward sasha for J+1
         rx_new = 0.0
@@ -391,11 +399,17 @@ subroutine set_Flather_positions(G, OBC)
   if (.not.associated(OBC%OBC_mask_u)) then
     allocate(OBC%OBC_mask_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; OBC%OBC_mask_u(:,:) = .false.
   endif
+  if (.not.associated(OBC%OBC_direction_u)) then
+    allocate(OBC%OBC_direction_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; OBC%OBC_direction_u(:,:) = OBC_NONE
+  endif
   if (.not.associated(OBC%OBC_kind_u)) then
     allocate(OBC%OBC_kind_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; OBC%OBC_kind_u(:,:) = OBC_NONE
   endif
   if (.not.associated(OBC%OBC_mask_v)) then
     allocate(OBC%OBC_mask_v(G%isd:G%ied,G%JsdB:G%JedB)) ; OBC%OBC_mask_v(:,:) = .false.
+  endif
+  if (.not.associated(OBC%OBC_direction_v)) then
+    allocate(OBC%OBC_direction_v(G%isd:G%ied,G%JsdB:G%JedB)) ; OBC%OBC_direction_v(:,:) = OBC_NONE
   endif
   if (.not.associated(OBC%OBC_kind_v)) then
     allocate(OBC%OBC_kind_v(G%isd:G%ied,G%JsdB:G%JedB)) ; OBC%OBC_kind_v(:,:) = OBC_NONE
@@ -421,11 +435,18 @@ subroutine set_Flather_positions(G, OBC)
     do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
       if ((I+G%idg_offset) == east_boundary) then !eastern side
         OBC%OBC_mask_u(I,j) = .true.
-        OBC%OBC_kind_u(I,j) = OBC_FLATHER_E
+        OBC%OBC_direction_u(I,j) = OBC_DIRECTION_E
+        OBC%OBC_kind_u(I,j) = OBC_FLATHER
         OBC%OBC_mask_v(i+1,J) = .true.
-        if (OBC%OBC_kind_v(i+1,J) == OBC_NONE) OBC%OBC_kind_v(i+1,J) = OBC_FLATHER_E
+        if (OBC%OBC_direction_v(i+1,J) == OBC_NONE) then
+          OBC%OBC_direction_v(i+1,J) = OBC_DIRECTION_E
+          OBC%OBC_kind_v(i+1,J) = OBC_FLATHER
+        endif
         OBC%OBC_mask_v(i+1,J-1) = .true.
-        if (OBC%OBC_kind_v(i+1,J-1) == OBC_NONE) OBC%OBC_kind_v(i+1,J-1) = OBC_FLATHER_E
+        if (OBC%OBC_direction_v(i+1,J-1) == OBC_NONE) then
+          OBC%OBC_direction_v(i+1,J-1) = OBC_DIRECTION_E
+          OBC%OBC_kind_v(i+1,J-1) = OBC_FLATHER
+        endif
       endif
     enddo ; enddo
   endif
@@ -435,11 +456,18 @@ subroutine set_Flather_positions(G, OBC)
     do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
       if ((I+G%idg_offset) == west_boundary) then !western side
         OBC%OBC_mask_u(I,j) = .true.
-        OBC%OBC_kind_u(I,j) = OBC_FLATHER_W
+        OBC%OBC_direction_u(I,j) = OBC_DIRECTION_W
+        OBC%OBC_kind_u(I,j) = OBC_FLATHER
         OBC%OBC_mask_v(i,J) = .true.
-        if (OBC%OBC_kind_v(i,J) == OBC_NONE) OBC%OBC_kind_v(i,J) = OBC_FLATHER_W
+        if (OBC%OBC_direction_v(i,J) == OBC_NONE) then
+          OBC%OBC_direction_v(i,J) = OBC_DIRECTION_W
+          OBC%OBC_kind_v(i,J) = OBC_FLATHER
+        endif
         OBC%OBC_mask_v(i,J-1) = .true.
-        if (OBC%OBC_kind_v(i,J-1) == OBC_NONE) OBC%OBC_kind_v(i,J-1) = OBC_FLATHER_W
+        if (OBC%OBC_direction_v(i,J-1) == OBC_NONE) then
+          OBC%OBC_direction_v(i,J-1) = OBC_DIRECTION_W
+          OBC%OBC_kind_v(i,J-1) = OBC_FLATHER
+        endif
       endif
     enddo ; enddo
   endif
@@ -449,11 +477,18 @@ subroutine set_Flather_positions(G, OBC)
     do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
       if ((J+G%jdg_offset) == north_boundary) then         !northern side
         OBC%OBC_mask_v(i,J) = .true.
-        OBC%OBC_kind_v(i,J) = OBC_FLATHER_N
+        OBC%OBC_direction_v(i,J) = OBC_DIRECTION_N
+        OBC%OBC_kind_v(i,J) = OBC_FLATHER
         OBC%OBC_mask_u(I,j+1) = .true.
-        if (OBC%OBC_kind_u(I,j+1) == OBC_NONE) OBC%OBC_kind_u(I,j+1) = OBC_FLATHER_N
+        if (OBC%OBC_direction_u(I,j+1) == OBC_NONE) then
+          OBC%OBC_direction_u(I,j+1) = OBC_DIRECTION_N
+          OBC%OBC_kind_u(I,j+1) = OBC_FLATHER
+        endif
         OBC%OBC_mask_u(I-1,j+1) = .true.
-        if (OBC%OBC_kind_u(I-1,j+1) == OBC_NONE) OBC%OBC_kind_u(I-1,j+1) = OBC_FLATHER_N
+        if (OBC%OBC_direction_u(I-1,j+1) == OBC_NONE) then
+          OBC%OBC_direction_u(I-1,j+1) = OBC_DIRECTION_N
+          OBC%OBC_kind_u(I-1,j+1) = OBC_FLATHER
+        endif
       endif
     enddo ; enddo
   endif
@@ -463,11 +498,18 @@ subroutine set_Flather_positions(G, OBC)
     do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
       if ((J+G%jdg_offset) == south_boundary) then         !southern side
         OBC%OBC_mask_v(i,J) = .true.
-        OBC%OBC_kind_v(i,J) = OBC_FLATHER_S
+        OBC%OBC_direction_v(i,J) = OBC_DIRECTION_S
+        OBC%OBC_kind_v(i,J) = OBC_FLATHER
         OBC%OBC_mask_u(I,j) = .true.
-        if (OBC%OBC_kind_u(I,j) == OBC_NONE) OBC%OBC_kind_u(I,j) = OBC_FLATHER_S
+        if (OBC%OBC_direction_u(I,j) == OBC_NONE) then
+          OBC%OBC_direction_u(I,j) = OBC_DIRECTION_S
+          OBC%OBC_kind_u(I,j) = OBC_FLATHER
+        endif
         OBC%OBC_mask_u(I-1,j) = .true.
-        if (OBC%OBC_kind_u(I-1,j) == OBC_NONE) OBC%OBC_kind_u(I-1,j) = OBC_FLATHER_S
+        if (OBC%OBC_direction_u(I-1,j) == OBC_NONE) then
+          OBC%OBC_direction_u(I-1,j) = OBC_DIRECTION_S
+          OBC%OBC_kind_u(I-1,j) = OBC_FLATHER
+        endif
       endif
     enddo ; enddo
   endif
@@ -598,10 +640,10 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
       call pass_var(tv%S, G%Domain)
       do k=1,nz ; do j=js,je ; do I=is-1,ie
         if (OBC%OBC_mask_u(I,j)) then
-          if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) then
+          if (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_E) then
             OBC_T_u(I,j,k) = tv%T(i,j,k)
             OBC_S_u(I,j,k) = tv%S(i,j,k)
-          elseif (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W) then
+          elseif (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_W) then
             OBC_T_u(I,j,k) = tv%T(i+1,j,k)
             OBC_S_u(I,j,k) = tv%S(i+1,j,k)
           elseif (G%mask2dT(i,j) + G%mask2dT(i+1,j) > 0) then
@@ -621,10 +663,10 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
 
       do k=1,nz ; do J=js-1,je ; do i=is,ie
         if (OBC%OBC_mask_v(i,J)) then
-          if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) then
+          if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N) then
             OBC_T_v(i,J,k) = tv%T(i,j,k)
             OBC_S_v(i,J,k) = tv%S(i,j,k)
-          elseif (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S) then
+          elseif (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S) then
             OBC_T_v(i,J,k) = tv%T(i,j+1,k)
             OBC_S_v(i,J,k) = tv%S(i,j+1,k)
           elseif (G%mask2dT(i,j) + G%mask2dT(i,j+1) > 0) then
@@ -651,28 +693,28 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
     call add_tracer_OBC_values("S", tracer_Reg, OBC_in_u=OBC_S_u, &
                                                 OBC_in_v=OBC_S_v)
     do k=1,nz ; do j=jsd,jed ; do I=isd,ied-1
-      if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) then
+      if (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_E) then
         tv%T(i+1,j,k) = tv%T(i,j,k) ; tv%S(i+1,j,k) = tv%S(i,j,k)
-      elseif (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W) then
+      elseif (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_W) then
         tv%T(i,j,k) = tv%T(i+1,j,k) ; tv%S(i,j,k) = tv%S(i+1,j,k)
       endif
     enddo ; enddo ; enddo
     do k=1,nz ; do J=jsd,jed-1 ; do i=isd,ied
-      if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) then
+      if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N) then
         tv%T(i,j+1,k) = tv%T(i,j,k) ; tv%S(i,j+1,k) = tv%S(i,j,k)
-      elseif (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S) then
+      elseif (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S) then
         tv%T(i,j,k) = tv%T(i,j+1,k) ; tv%S(i,j,k) = tv%S(i,j+1,k)
       endif
     enddo ; enddo ; enddo
   endif
 
   do k=1,nz ; do j=jsd,jed ; do I=isd,ied-1
-    if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) h(i+1,j,k) = h(i,j,k)
-    if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W) h(i,j,k) = h(i+1,j,k)
+    if (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_E) h(i+1,j,k) = h(i,j,k)
+    if (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_W) h(i,j,k) = h(i+1,j,k)
   enddo ; enddo ; enddo
   do k=1,nz ; do J=jsd,jed-1 ; do i=isd,ied
-    if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) h(i,j+1,k) = h(i,j,k)
-    if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S) h(i,j,k) = h(i,j+1,k)
+    if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N) h(i,j+1,k) = h(i,j,k)
+    if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S) h(i,j,k) = h(i,j+1,k)
   enddo ; enddo ; enddo
 
 end subroutine set_Flather_data

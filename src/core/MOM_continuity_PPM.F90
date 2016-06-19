@@ -48,8 +48,8 @@ use MOM_diag_mediator, only : time_type, diag_ctrl
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
-use MOM_open_boundary, only : ocean_OBC_type, OBC_SIMPLE
-use MOM_open_boundary, only : OBC_FLATHER_E, OBC_FLATHER_W, OBC_FLATHER_N, OBC_FLATHER_S
+use MOM_open_boundary, only : ocean_OBC_type, OBC_SIMPLE, OBC_FLATHER
+use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_variables, only : BT_cont_type
 use MOM_verticalGrid, only : verticalGrid_type
 
@@ -229,11 +229,11 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
     if (apply_OBC_u_flather_east .or. apply_OBC_u_flather_west) then
       do k=1,nz ; do j=LB%jsh,LB%jeh
         do I=LB%ish,LB%ieh+1
-          if (OBC%OBC_mask_u(I-1,j) .and. (OBC%OBC_kind_u(I-1,j) == OBC_FLATHER_E)) &
+          if (OBC%OBC_kind_u(I-1,j) == OBC_FLATHER .and. (OBC%OBC_direction_u(I-1,j) == OBC_DIRECTION_E)) &
             h(i,j,k) = h_input(i-1,j,k)
         enddo
         do i=LB%ish-1,LB%ieh
-          if (OBC%OBC_mask_u(I,j) .and. (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W)) &
+          if (OBC%OBC_kind_u(I,j) == OBC_FLATHER .and. (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_W)) &
             h(i,j,k) = h_input(i+1,j,k)
         enddo
       enddo ; enddo
@@ -257,11 +257,11 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
     if (apply_OBC_v_flather_north .or. apply_OBC_v_flather_south) then
       do k=1,nz
         do J=LB%jsh,LB%jeh+1 ; do i=LB%ish-1,LB%ieh+1
-          if (OBC%OBC_mask_v(i,J-1) .and. (OBC%OBC_kind_v(i,J-1) == OBC_FLATHER_N)) &
+          if (OBC%OBC_kind_v(i,J-1) == OBC_FLATHER .and. (OBC%OBC_direction_v(i,J-1) == OBC_DIRECTION_N)) &
             h(i,j,k) = h_input(i,j-1,k)
         enddo ; enddo
         do J=LB%jsh-1,LB%jeh ; do i=LB%ish-1,LB%ieh+1
-          if (OBC%OBC_mask_v(i,J) .and. (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S)) &
+          if (OBC%OBC_kind_v(i,J) == OBC_FLATHER .and. (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S)) &
             h(i,j,k) = h_input(i,j+1,k)
         enddo ; enddo
       enddo
@@ -284,11 +284,11 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
     if (apply_OBC_v_flather_north .or. apply_OBC_v_flather_south) then
       do k=1,nz
         do J=LB%jsh,LB%jeh+1 ; do i=LB%ish-1,LB%ieh+1
-          if (OBC%OBC_mask_v(i,J-1) .and. (OBC%OBC_kind_v(i,J-1) == OBC_FLATHER_N)) &
+          if (OBC%OBC_kind_v(i,J-1) == OBC_FLATHER .and. (OBC%OBC_direction_v(i,J-1) == OBC_DIRECTION_N)) &
             h(i,j,k) = h_input(i,j-1,k)
         enddo ; enddo
         do J=LB%jsh-1,LB%jeh ; do i=LB%ish-1,LB%ieh+1
-          if (OBC%OBC_mask_v(i,J) .and. (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S)) &
+          if (OBC%OBC_kind_v(i,J) == OBC_FLATHER .and. (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S)) &
             h(i,j,k) = h_input(i,j+1,k)
         enddo ; enddo
       enddo
@@ -312,11 +312,11 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
     if (apply_OBC_u_flather_east .or. apply_OBC_u_flather_west) then
       do k=1,nz ; do j=LB%jsh,LB%jeh
         do I=LB%ish,LB%ieh+1
-          if (OBC%OBC_mask_u(I-1,j) .and. (OBC%OBC_kind_u(I-1,j) == OBC_FLATHER_E)) &
+          if (OBC%OBC_kind_u(I-1,j) == OBC_FLATHER .and. (OBC%OBC_direction_u(I-1,j) == OBC_DIRECTION_E)) &
             h(i,j,k) = h_input(i-1,j,k)
         enddo
         do i=LB%ish-1,LB%ieh
-          if (OBC%OBC_mask_u(I,j) .and. (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W)) &
+          if (OBC%OBC_kind_u(I,j) == OBC_FLATHER .and. (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_W)) &
             h(i,j,k) = h_input(i+1,j,k)
         enddo
       enddo ; enddo
