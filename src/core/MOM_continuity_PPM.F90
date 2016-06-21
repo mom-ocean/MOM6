@@ -110,8 +110,8 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
                           uhbt_aux, vhbt_aux, u_cor_aux, v_cor_aux, BT_cont)
   type(ocean_grid_type),                     intent(inout) :: G
   type(continuity_PPM_CS),                   pointer       :: CS
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: hin
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: uh
@@ -236,6 +236,14 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
           if (OBC%OBC_kind_u(I,j) == OBC_FLATHER .and. (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_W)) &
             h(i,j,k) = h_input(i+1,j,k)
         enddo
+      enddo
+      do J=LB%jsh-1,LB%jeh
+        do i=LB%ish-1,LB%ieh+1
+          if (OBC%OBC_kind_v(i,J) == OBC_FLATHER .and. (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_E)) &
+            v(i,J,k) = v(i-1,J,k)
+          if (OBC%OBC_kind_v(i,J) == OBC_FLATHER .and. (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_W)) &
+            v(i,J,k) = v(i+1,J,k)
+        enddo
       enddo ; enddo
     endif
     LB%ish = G%isc ; LB%ieh = G%iec ; LB%jsh = G%jsc ; LB%jeh = G%jec
@@ -264,6 +272,12 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
           if (OBC%OBC_kind_v(i,J) == OBC_FLATHER .and. (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S)) &
             h(i,j,k) = h_input(i,j+1,k)
         enddo ; enddo
+        do j=LB%jsh-1,LB%jeh+1 ; do I=LB%ish-1,LB%ieh
+          if (OBC%OBC_kind_u(I,j) == OBC_FLATHER .and. (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_N)) &
+            u(I,j,k) = u(I,j-1,k)
+          if (OBC%OBC_kind_u(I,j) == OBC_FLATHER .and. (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_S)) &
+            u(I,j,k) = u(I,j+1,k)
+        enddo ; enddo
       enddo
     endif
   else  ! .not. x_first
@@ -290,6 +304,12 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
         do J=LB%jsh-1,LB%jeh ; do i=LB%ish-1,LB%ieh+1
           if (OBC%OBC_kind_v(i,J) == OBC_FLATHER .and. (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S)) &
             h(i,j,k) = h_input(i,j+1,k)
+        enddo ; enddo
+        do j=LB%jsh-1,LB%jeh+1 ; do I=LB%ish-1,LB%ieh
+          if (OBC%OBC_kind_u(I,j) == OBC_FLATHER .and. (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_N)) &
+            u(I,j,k) = u(I,j-1,k)
+          if (OBC%OBC_kind_u(I,j) == OBC_FLATHER .and. (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_S)) &
+            u(I,j,k) = u(I,j+1,k)
         enddo ; enddo
       enddo
     endif
@@ -318,6 +338,14 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
         do i=LB%ish-1,LB%ieh
           if (OBC%OBC_kind_u(I,j) == OBC_FLATHER .and. (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_W)) &
             h(i,j,k) = h_input(i+1,j,k)
+        enddo
+      enddo
+      do J=LB%jsh-1,LB%jeh
+        do i=LB%ish-1,LB%ieh+1
+          if (OBC%OBC_kind_v(i,J) == OBC_FLATHER .and. (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_E)) &
+            v(i,J,k) = v(i-1,J,k)
+          if (OBC%OBC_kind_v(i,J) == OBC_FLATHER .and. (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_W)) &
+            v(i,J,k) = v(i+1,J,k)
         enddo
       enddo ; enddo
     endif

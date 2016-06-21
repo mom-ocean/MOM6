@@ -1052,8 +1052,8 @@ end subroutine step_MOM_dyn_legacy_split
 subroutine adjustments_dyn_legacy_split(u, v, h, dt, G, GV, CS)
   type(ocean_grid_type),                     intent(inout) :: G
   type(verticalGrid_type),                   intent(in)    :: GV
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
   real,                                      intent(in)    :: dt
   type(MOM_dyn_legacy_split_CS),             pointer       :: CS

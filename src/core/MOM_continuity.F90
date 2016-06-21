@@ -79,8 +79,8 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, &
                       uhbt_aux, vhbt_aux, u_cor_aux, v_cor_aux, BT_cont)
   type(ocean_grid_type), intent(inout)                     :: G
   type(verticalGrid_type), intent(in)                      :: GV
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: hin
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: uh
