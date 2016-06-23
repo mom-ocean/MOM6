@@ -17,7 +17,7 @@ use MOM_file_parser, only : log_version
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type, isPointInCell
 use MOM_interface_heights, only : find_eta
-use MOM_io, only : close_file, create_file, fieldtype, file_exists
+use MOM_io, only : close_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE, MULTIPLE
 use MOM_io, only : slasher, vardesc, write_field
 use MOM_io, only : EAST_FACE, NORTH_FACE
@@ -77,6 +77,7 @@ use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord
 use MOM_ALE, only : ALE_remap_scalar, ALE_build_grid
 use MOM_regridding, only : regridding_CS, set_regrid_params
 use MOM_remapping, only : remapping_CS, initialize_remapping
+use MOM_remapping, only : remapping_core_h
 use MOM_tracer_initialization_from_Z, only : horiz_interp_and_extrap_tracer
 
 implicit none ; private
@@ -128,7 +129,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
 
   character(len=200) :: filename   ! The name of an input file.
   character(len=200) :: filename2  ! The name of an input files.
-  character(len = 200) :: inputdir ! The directory where NetCDF input files are.
+  character(len=200) :: inputdir   ! The directory where NetCDF input files are.
   character(len=200) :: config
   logical :: from_Z_file, useALE
   logical :: new_sim
@@ -172,7 +173,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   use_temperature = ASSOCIATED(tv%T)
   useALE = associated(ALE_CSp)
   use_EOS = associated(tv%eqn_of_state)
-  useALE = associated(ALE_CSp)
   if (use_EOS) eos => tv%eqn_of_state
 
 !====================================================================
@@ -231,7 +231,13 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
       select case (trim(config))
          case ("file"); call initialize_thickness_from_file(h, G, GV, PF, .false.)
          case ("thickness_file"); call initialize_thickness_from_file(h, G, GV, PF, .true.)
-         case ("coord"); call ALE_initThicknessToCoord( ALE_CSp, G, h )
+         case ("coord")
+           if (useALE) then
+             call ALE_initThicknessToCoord( ALE_CSp, G, GV, h )
+           else
+             call MOM_error(FATAL, "MOM_initialize_state: USE_REGRIDDING must be True "//&
+                                   "for THICKNESS_CONFIG of 'coord'")
+           endif
          case ("uniform"); call initialize_thickness_uniform(h, G, GV, PF)
          case ("DOME"); call DOME_initialize_thickness(h, G, GV, PF)
          case ("ISOMIP"); call ISOMIP_initialize_thickness(h, G, GV, PF, tv)
@@ -844,7 +850,7 @@ subroutine trim_for_ice(PF, G, GV, ALE_CSp, tv, h)
   type(ocean_grid_type),                    intent(in)    :: G !< Ocean grid structure
   type(verticalGrid_type),                  intent(in)    :: GV !< Vertical grid structure
   type(ALE_CS),                             pointer       :: ALE_CSp !< ALE control structure
-  type(thermo_var_ptrs),                    intent(in)    :: tv !< Thermodynamics structure
+  type(thermo_var_ptrs),                    intent(inout) :: tv !< Thermodynamics structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h !< Layer thickness (H units, m or Pa)
   ! Local variables
   character(len=200) :: mod = "trim_for_ice"
@@ -853,7 +859,9 @@ subroutine trim_for_ice(PF, G, GV, ALE_CSp, tv, h)
                                                                  ! of salinity and temperature within each layer.
   character(len=200) :: inputdir, filename, p_surf_file, p_surf_var ! Strings for file/path
   real :: scale_factor, min_thickness
-  integer :: i, j
+  integer :: i, j, k
+  logical :: use_remapping
+  type(remapping_CS), pointer :: remap_CS => NULL()
 
   call get_param(PF, mod, "SURFACE_PRESSURE_FILE", p_surf_file, &
                  "The initial condition file for the surface height.", &
@@ -873,6 +881,13 @@ subroutine trim_for_ice(PF, G, GV, ALE_CSp, tv, h)
   if (scale_factor /= 1.) p_surf(:,:) = scale_factor * p_surf(:,:)
   call get_param(PF, mod, "MIN_THICKNESS", min_thickness, 'Minimum layer thickness', &
                  units='m', default=1.e-3)
+  call get_param(PF, mod, "TRIMMING_USES_REMAPPING", use_remapping, &
+                 'When trimming the column, also remap T and S.', &
+                 default=.false.)
+  if (use_remapping) then
+    allocate(remap_CS)
+    call initialize_remapping(remap_CS, 'PLM', boundary_extrapolation=.true.)
+  endif
 
   ! Find edge values of T and S used in reconstructions
   if ( associated(ALE_CSp) ) then ! This should only be associated if we are in ALE mode
@@ -882,35 +897,43 @@ subroutine trim_for_ice(PF, G, GV, ALE_CSp, tv, h)
 !     call pressure_gradient_ppm(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h)
 !   endif
   else
-    call MOM_error(FATAL, "trim_for_ice: Does not work without ALE mode")
+!    call MOM_error(FATAL, "trim_for_ice: Does not work without ALE mode")
+    do k=1,G%ke ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
+      T_t(i,j,k) = tv%T(i,j,k) ; T_b(i,j,k) = tv%T(i,j,k)
+      S_t(i,j,k) = tv%S(i,j,k) ; S_b(i,j,k) = tv%S(i,j,k)
+    enddo ; enddo ; enddo
   endif
 
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     call cut_off_column_top(GV%ke, tv, GV%Rho0, G%G_earth, G%bathyT(i,j), min_thickness, &
-               tv%T(i,j,:), T_t(i,j,:), T_b(i,j,:), tv%S(i,j,:), S_t(i,j,:), S_b(i,j,:), p_surf(i,j), h(i,j,:))
+               tv%T(i,j,:), T_t(i,j,:), T_b(i,j,:), tv%S(i,j,:), S_t(i,j,:), S_b(i,j,:), &
+               p_surf(i,j), h(i,j,:), remap_CS)
   enddo ; enddo
 
 end subroutine trim_for_ice
 
 !> Adjust the layer thicknesses by cutting away the top at the depth where the hydrostatic
 !! pressure matches p_surf
-subroutine cut_off_column_top(nk, tv, Rho0, G_earth, depth, min_thickness, T, T_t, T_b, S, S_t, S_b, p_surf, h)
+subroutine cut_off_column_top(nk, tv, Rho0, G_earth, depth, min_thickness, &
+                              T, T_t, T_b, S, S_t, S_b, p_surf, h, remap_CS)
   integer,               intent(in)    :: nk !< Number of layers
   type(thermo_var_ptrs), intent(in)    :: tv !< Thermodynamics structure
   real,                  intent(in)    :: Rho0 !< Reference density (kg/m3)
   real,                  intent(in)    :: G_earth !< Gravitational acceleration (m/s2)
   real,                  intent(in)    :: depth !< Depth of ocean column (m)
   real,                  intent(in)    :: min_thickness !< Smallest thickness allowed (m)
-  real, dimension(nk),   intent(in)    :: T !< 
-  real, dimension(nk),   intent(in)    :: T_t !< 
-  real, dimension(nk),   intent(in)    :: T_b !< 
-  real, dimension(nk),   intent(in)    :: S !< 
-  real, dimension(nk),   intent(in)    :: S_t !< 
-  real, dimension(nk),   intent(in)    :: S_b !< 
+  real, dimension(nk),   intent(inout) :: T !< Layer mean temperature
+  real, dimension(nk),   intent(in)    :: T_t !< Temperature at top of layer
+  real, dimension(nk),   intent(in)    :: T_b !< Temperature at bottom of layer
+  real, dimension(nk),   intent(inout) :: S !< Layer mean salinity
+  real, dimension(nk),   intent(in)    :: S_t !< Salinity at top of layer
+  real, dimension(nk),   intent(in)    :: S_b !< Salinity at bottom of layer
   real,                  intent(in)    :: p_surf !< Imposed pressure on ocean at surface (Pa)
   real, dimension(nk),   intent(inout) :: h !< Layer thickness (H units, m or Pa)
+  type(remapping_CS),    pointer       :: remap_CS ! Remapping structure for remapping T and S, if associated
   ! Local variables
   real, dimension(nk+1) :: e ! Top and bottom edge values for reconstructions
+  real, dimension(nk) :: h0, S0, T0, h1, S1, T1
   real :: P_t, P_b, z_out, e_top
   integer :: k
 
@@ -918,6 +941,7 @@ subroutine cut_off_column_top(nk, tv, Rho0, G_earth, depth, min_thickness, T, T_
   e(nk+1) = -depth
   do k=nk,1,-1
     e(K) = e(K+1) + h(k)
+    h0(k) = h(nk+1-k) ! Keep a copy to use in remapping
   enddo
 
   P_t = 0.
@@ -949,6 +973,22 @@ subroutine cut_off_column_top(nk, tv, Rho0, G_earth, depth, min_thickness, T, T_
       ! This layer needs trimming
       h(k) = max( min_thickness, e(K) - e(K+1) )
       if (e(K)<e_top) exit ! No need to go further
+    enddo
+  endif
+
+  ! Now we need to remap but remapping assumes the surface is at the
+  ! same place in the two columns so we turn the column upside down.
+  if (associated(remap_CS)) then
+    do k=1,nk
+      S0(k) = S(nk+1-k)
+      T0(k) = T(nk+1-k)
+      h1(k) = h(nk+1-k)
+    enddo
+    call remapping_core_h(nk, h0, T0, nk, h1, T1, remap_CS )
+    call remapping_core_h(nk, h0, S0, nk, h1, S1, remap_CS )
+    do k=1,nk
+      S(k) = S1(nk+1-k)
+      T(k) = T1(nk+1-k)
     enddo
   endif
 
@@ -1235,6 +1275,7 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, param_file, eqn_of_state, P_Ref
   real :: drho_dT(SZK_(G))   ! Derivative of density with temperature in kg m-3 K-1.                              !
   real :: drho_dS(SZK_(G))   ! Derivative of density with salinity in kg m-3 PSU-1.                             !
   real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 in kg m-3.
+  logical :: fit_salin       ! If true, accept the prescribed temperature and fit the salinity.
   character(len=40)  :: mod = "initialize_temp_salt_fit" ! This subroutine's name.
   integer :: i, j, k, itt, nz
   nz = G%ke
@@ -1247,27 +1288,44 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, param_file, eqn_of_state, P_Ref
   call get_param(param_file, mod, "S_REF", S_Ref, &
                  "A reference salinity used in initialization.", units="PSU", &
                  default=35.0)
+  call get_param(param_file, mod, "FIT_SALINITY", fit_salin, &
+                 "If true, accept the prescribed temperature and fit the \n"//&
+                 "salinity; otherwise take salinity and fit temperature.", &
+                 default=.false.)
   do k=1,nz
     pres(k) = P_Ref ; S0(k) = S_Ref
+    T0(k) = T_Ref
   enddo
-  T0(1) = T_Ref
 
   call calculate_density(T0(1),S0(1),pres(1),rho_guess(1),eqn_of_state)
   call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,1,eqn_of_state)
 
-! A first guess of the layers' temperatures.                         !
-  do k=nz,1,-1
-    T0(k) = T0(1) + (GV%Rlay(k) - rho_guess(1)) / drho_dT(1)
-  enddo
-
-! Refine the guesses for each layer.                                 !
-  do itt=1,6
-    call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
-    call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
-    do k=1,nz
-      T0(k) = T0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
+  if (fit_salin) then
+! A first guess of the layers' temperatures.
+    do k=nz,1,-1
+      S0(k) = max(0.0, S0(1) + (GV%Rlay(k) - rho_guess(1)) / drho_dS(1))
     enddo
-  enddo
+! Refine the guesses for each layer.
+    do itt=1,6
+      call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
+      call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
+      do k=1,nz
+        S0(k) = max(0.0, S0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dS(k))
+      enddo
+    enddo
+  else
+! A first guess of the layers' temperatures.
+    do k=nz,1,-1
+      T0(k) = T0(1) + (GV%Rlay(k) - rho_guess(1)) / drho_dT(1)
+    enddo
+    do itt=1,6
+      call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
+      call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
+      do k=1,nz
+        T0(k) = T0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
+      enddo
+    enddo
+  endif
 
   do k=1,nz ; do j=G%jsd,G%jed ; do i=G%isd,G%ied
     T(i,j,k) = T0(k) ; S(i,j,k) = S0(k)
@@ -1800,15 +1858,17 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
     ! Determine where u points are applied at east side 
     do j=jsd,jed ; do I=IsdB,IedB
       if ((I+G%idg_offset) == east_boundary) then !eastern side
-        OBC%OBC_mask_u(I,j) = .true.
-        OBC%OBC_kind_u(I,j) = OBC_FLATHER_E
-        if ((i+1>isd) .and. (i+1<ied) .and. (J>JsdB) .and. (J<JedB)) then
-          OBC%OBC_mask_v(i+1,J) = .true.
-          if (OBC%OBC_kind_v(i+1,J) == OBC_NONE) OBC%OBC_kind_v(i+1,J) = OBC_FLATHER_E
-        endif
-        if ((i+1>isd) .and. (i+1<ied) .and. (J-1>JsdB) .and. (J-1<JedB)) then
-          OBC%OBC_mask_v(i+1,J-1) = .true.
-          if (OBC%OBC_kind_v(i+1,J-1) == OBC_NONE) OBC%OBC_kind_v(i+1,J-1) = OBC_FLATHER_E
+        if (G%mask2dCu(I,j) > 0.50) then
+          OBC%OBC_mask_u(I,j) = .true.
+          OBC%OBC_kind_u(I,j) = OBC_FLATHER_E
+          if (G%mask2dCv(i+1,J) > 0.50) then
+            OBC%OBC_mask_v(i+1,J) = .true.
+            if (OBC%OBC_kind_v(i+1,J) == OBC_NONE) OBC%OBC_kind_v(i+1,J) = OBC_FLATHER_E
+          endif
+          if (G%mask2dCv(i+1,J-1) > 0.50) then
+            OBC%OBC_mask_v(i+1,J-1) = .true.
+            if (OBC%OBC_kind_v(i+1,J-1) == OBC_NONE) OBC%OBC_kind_v(i+1,J-1) = OBC_FLATHER_E
+          endif
         endif
       endif
     enddo ; enddo
@@ -1818,15 +1878,17 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
     ! Determine where u points are applied at west side 
     do j=jsd,jed ; do I=IsdB,IedB
       if ((I+G%idg_offset) == west_boundary) then !western side
-        OBC%OBC_mask_u(I,j) = .true.
-        OBC%OBC_kind_u(I,j) = OBC_FLATHER_W
-        if ((i>isd) .and. (i<ied) .and. (J>JsdB) .and. (J<JedB)) then
-          OBC%OBC_mask_v(i,J) = .true.
-          if (OBC%OBC_kind_v(i,J) == OBC_NONE) OBC%OBC_kind_v(i,J) = OBC_FLATHER_W
-        endif
-        if ((i>isd) .and. (i<ied) .and. (J-1>JsdB) .and. (J-1<JedB)) then
-          OBC%OBC_mask_v(i,J-1) = .true.
-          if (OBC%OBC_kind_v(i,J-1) == OBC_NONE) OBC%OBC_kind_v(i,J-1) = OBC_FLATHER_W
+        if (G%mask2dCu(I,j) > 0.50) then
+          OBC%OBC_mask_u(I,j) = .true.
+          OBC%OBC_kind_u(I,j) = OBC_FLATHER_W
+          if (G%mask2dCv(i,J) > 0.50) then
+            OBC%OBC_mask_v(i,J) = .true.
+            if (OBC%OBC_kind_v(i,J) == OBC_NONE) OBC%OBC_kind_v(i,J) = OBC_FLATHER_W
+          endif
+          if (G%mask2dCv(i,J-1) > 0.50) then
+            OBC%OBC_mask_v(i,J-1) = .true.
+            if (OBC%OBC_kind_v(i,J-1) == OBC_NONE) OBC%OBC_kind_v(i,J-1) = OBC_FLATHER_W
+          endif
         endif
       endif
     enddo ; enddo
@@ -1837,17 +1899,19 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
     ! Determine where v points are applied at north side 
     do J=JsdB,JedB ; do i=isd,ied
       if ((J+G%jdg_offset) == north_boundary) then         !northern side
-        OBC%OBC_mask_v(i,J) = .true.
-        OBC%OBC_kind_v(i,J) = OBC_FLATHER_N
-        if ((I>IsdB) .and. (I<IedB) .and. (j+1>jsd) .and. (j+1<jed)) then
-          OBC%OBC_mask_u(I,j+1) = .true.
-          if (OBC%OBC_kind_u(I,j+1) == OBC_NONE) OBC%OBC_kind_u(I,j+1) = OBC_FLATHER_N
+        if (G%mask2dCv(i,J) > 0.50) then
+          OBC%OBC_mask_v(i,J) = .true.
+          OBC%OBC_kind_v(i,J) = OBC_FLATHER_N
+          if (G%mask2dCu(I,j+1) > 0.50) then
+            OBC%OBC_mask_u(I,j+1) = .true.
+            if (OBC%OBC_kind_u(I,j+1) == OBC_NONE) OBC%OBC_kind_u(I,j+1) = OBC_FLATHER_N
+          endif
+          if (G%mask2dCu(I-1,j+1) > 0.50) then
+            OBC%OBC_mask_u(I-1,j+1) = .true.
+            if (OBC%OBC_kind_u(I-1,j+1) == OBC_NONE) OBC%OBC_kind_u(I-1,j+1) = OBC_FLATHER_N
+          endif
         endif
-        if ((I-1>IsdB) .and. (I-1<IedB) .and. (j+1>jsd) .and. (j+1<jed)) then
-          OBC%OBC_mask_u(I-1,j+1) = .true.
-          if (OBC%OBC_kind_u(I-1,j+1) == OBC_NONE) OBC%OBC_kind_u(I-1,j+1) = OBC_FLATHER_N
-        endif
-     endif
+      endif
     enddo ; enddo
   endif
   
@@ -1855,15 +1919,17 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
     ! Determine where v points are applied at south side 
     do J=JsdB,JedB ; do i=isd,ied
       if ((J+G%jdg_offset) == south_boundary) then         !southern side
-        OBC%OBC_mask_v(i,J) = .true.
-        OBC%OBC_kind_v(i,J) = OBC_FLATHER_S
-        if ((I>IsdB) .and. (I<IedB) .and. (j>jsd) .and. (j<jed)) then
-          OBC%OBC_mask_u(I,j) = .true.
-          if (OBC%OBC_kind_u(I,j) == OBC_NONE) OBC%OBC_kind_u(I,j) = OBC_FLATHER_S
-        endif
-        if ((I-1>IsdB) .and. (I-1<IedB) .and. (j>jsd) .and. (j<jed)) then
-          OBC%OBC_mask_u(I-1,j) = .true.
-          if (OBC%OBC_kind_u(I-1,j) == OBC_NONE) OBC%OBC_kind_u(I-1,j) = OBC_FLATHER_S
+        if (G%mask2dCv(i,J) > 0.50) then
+          OBC%OBC_mask_v(i,J) = .true.
+          OBC%OBC_kind_v(i,J) = OBC_FLATHER_S
+          if (G%mask2dCu(I,j) > 0.50) then
+            OBC%OBC_mask_u(I,j) = .true.
+            if (OBC%OBC_kind_u(I,j) == OBC_NONE) OBC%OBC_kind_u(I,j) = OBC_FLATHER_S
+          endif
+          if (G%mask2dCu(I-1,j) > 0.50) then
+            OBC%OBC_mask_u(I-1,j) = .true.
+            if (OBC%OBC_kind_u(I-1,j) == OBC_NONE) OBC%OBC_kind_u(I-1,j) = OBC_FLATHER_S
+          endif
         endif
       endif
     enddo ; enddo
@@ -1976,11 +2042,11 @@ subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
     enddo ; enddo ; enddo
   endif
 
-  do k=1,nz ; do j=js,je ; do I=is-1,ie
+  do k=1,nz ; do j=js-1,je+1 ; do I=is-1,ie+1
     if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) h(i+1,j,k) = h(i,j,k)
     if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W) h(i,j,k) = h(i+1,j,k)
   enddo ; enddo ; enddo
-  do k=1,nz ; do J=js-1,je ; do i=is,ie
+  do k=1,nz ; do J=js-1,je+1 ; do i=is-1,ie+1
     if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) h(i,j+1,k) = h(i,j,k)
     if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S) h(i,j,k) = h(i,j+1,k)
   enddo ; enddo ; enddo
@@ -2283,7 +2349,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
     ! Build the target grid (and set the model thickness to it)
     allocate( hTarget(nz) )
     ! This call can be more general but is hard-coded for z* coordinates...  ????
-    call ALE_initRegridding( G, GV, PF, mod, regridCS, hTarget ) ! sets regridCS and hTarget(1:nz)
+    call ALE_initRegridding( GV, G%max_depth, PF, mod, regridCS, hTarget ) ! sets regridCS and hTarget(1:nz)
 
     if (.not. remap_general) then
       ! This is the old way of initializing to z* coordinates only
@@ -2320,8 +2386,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
       call pass_var(tv%S, G%Domain) ! ALE_build_grid() only updates h on the computational domain.
       call ALE_build_grid( G, GV, regridCS, remapCS, h, tv, .true. )
     endif
-    call ALE_remap_scalar( remapCS, G, nz, h1, tmpT1dIn, h, tv%T, all_cells=remap_full_column, old_remap=remap_old_alg )
-    call ALE_remap_scalar( remapCS, G, nz, h1, tmpS1dIn, h, tv%S, all_cells=remap_full_column, old_remap=remap_old_alg )
+    call ALE_remap_scalar( remapCS, G, GV, nz, h1, tmpT1dIn, h, tv%T, all_cells=remap_full_column, old_remap=remap_old_alg )
+    call ALE_remap_scalar( remapCS, G, GV, nz, h1, tmpS1dIn, h, tv%S, all_cells=remap_full_column, old_remap=remap_old_alg )
     deallocate( h1 )
     deallocate( tmpT1dIn )
     deallocate( tmpS1dIn )
@@ -2454,6 +2520,7 @@ subroutine MOM_state_init_tests(G, GV, tv)
   real, dimension(nk+1) :: e
   integer :: k
   real :: P_tot, P_t, P_b, z_out
+  type(remapping_CS), pointer :: remap_CS => NULL()
 
   do k = 1, nk
     h(k) = 100.
@@ -2489,7 +2556,7 @@ subroutine MOM_state_init_tests(G, GV, tv)
   write(0,*) ''
   write(0,*) h
   call cut_off_column_top(nk, tv, GV%Rho0, G%G_earth, -e(nk+1), GV%Angstrom, &
-               T, T_t, T_b, S, S_t, S_b, 0.5*P_tot, h)
+               T, T_t, T_b, S, S_t, S_b, 0.5*P_tot, h, remap_CS)
   write(0,*) h
 
 end subroutine MOM_state_init_tests

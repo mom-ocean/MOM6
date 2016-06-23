@@ -109,7 +109,7 @@ use MOM_fixed_initialization, only : MOM_initialize_rotation
 use user_initialization, only : user_initialize_topography
 use MOM_io, only : field_exists, file_exists, read_data, write_version_number
 use MOM_io, only : slasher, vardesc, var_desc, fieldtype
-use MOM_io, only : create_file, write_field, close_file, SINGLE_FILE, MULTIPLE
+use MOM_io, only : write_field, close_file, SINGLE_FILE, MULTIPLE
 use MOM_restart, only : register_restart_field, query_initialized, save_restart
 use MOM_restart, only : restart_init, restore_state, MOM_restart_CS
 use MOM_time_manager, only : time_type, set_time, time_type_to_real
@@ -678,9 +678,11 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
       else !not shelf
         CS%t_flux(i,j) = 0.0
       endif
-
     enddo ! i-loop
   enddo ! j-loop
+
+  ! melt in m/year
+  fluxes%iceshelf_melt = CS%lprec  * (86400.0*365.0/CS%density_ice)
 
   if (CS%DEBUG) then
    call hchksum (CS%h_shelf, "melt rate", G, haloshift=0)
@@ -1067,7 +1069,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq, iters
   integer :: wd_halos(2)
   logical :: solo_ice_sheet, read_TideAmp
-  character(len=128) :: Tideamp_file
+  character(len=240) :: Tideamp_file
   real    :: utide
 
   if (associated(CS)) then
@@ -1382,6 +1384,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
     allocate( fluxes%frac_shelf_u(Isdq:Iedq,jsd:jed) ) ; fluxes%frac_shelf_u(:,:) = 0.0
     allocate( fluxes%frac_shelf_v(isd:ied,Jsdq:Jedq) ) ; fluxes%frac_shelf_v(:,:) = 0.0
     allocate( fluxes%ustar_shelf(isd:ied,jsd:jed) ) ; fluxes%ustar_shelf(:,:) = 0.0
+    allocate( fluxes%iceshelf_melt(isd:ied,jsd:jed) ) ; fluxes%iceshelf_melt(:,:) = 0.0
     if (.not.associated(fluxes%p_surf)) then
     allocate( fluxes%p_surf(isd:ied,jsd:jed) ) ; fluxes%p_surf(:,:) = 0.0
     endif
@@ -1398,7 +1401,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
   call MOM_initialize_rotation(G%CoriolisBu, G, param_file)
 
   ! Set up the restarts.
-  call restart_init(G, param_file, CS%restart_CSp, "Shelf.res")
+  call restart_init(param_file, CS%restart_CSp, "Shelf.res")
   vd = var_desc("shelf_mass","kg m-2","Ice shelf mass",z_grid='1')
   call register_restart_field(CS%mass_shelf, vd, .true., CS%restart_CSp)
   vd = var_desc("shelf_area","m2","Ice shelf area in cell",z_grid='1')
@@ -1445,6 +1448,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
   if (.not. solo_ice_sheet) then
     vd = var_desc("ustar_shelf","m s-1","Friction velocity under ice shelves",z_grid='1')
     call register_restart_field(fluxes%ustar_shelf, vd, .true., CS%restart_CSp)
+    vd = var_desc("iceshelf_melt","m year-1","Ice Shelf Melt Rate",z_grid='1')
+    call register_restart_field(fluxes%iceshelf_melt, vd, .true., CS%restart_CSp)
   endif
  
   CS%restart_output_dir = dirs%restart_output_dir
@@ -1733,7 +1738,7 @@ subroutine initialize_shelf_mass(G, param_file, CS, new_sim)
 
   integer :: i, j, is, ie, js, je
   logical :: read_shelf_area, new_sim_2
-  character(len=200) :: config, inputdir, shelf_file, filename
+  character(len=240) :: config, inputdir, shelf_file, filename
   character(len=120) :: shelf_mass_var  ! The name of shelf mass in the file.
   character(len=120) :: shelf_area_var ! The name of shelf area in the file.
   character(len=40)  :: mod = "MOM_ice_shelf"

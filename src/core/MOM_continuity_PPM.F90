@@ -1017,10 +1017,12 @@ subroutine set_zonal_BT_cont(u, h_in, hL, hR, BT_cont, uh_tot_0, duhdu_tot_0, &
 
   do k=1,nz ; do I=ish-1,ieh ; if (do_i(I)) then
     visc_rem_lim = max(visc_rem(I,k), min_visc_rem*visc_rem_max(I))
-    if (u(I,j,k) + duR(I)*visc_rem_lim > -du_CFL(I)*visc_rem(I,k)) &
-      duR(I) = -(u(I,j,k) + du_CFL(I)*visc_rem(I,k)) / visc_rem_lim
-    if (u(I,j,k) + duL(I)*visc_rem_lim < du_CFL(I)*visc_rem(I,k)) &
-      duL(I) = -(u(I,j,k) - du_CFL(I)*visc_rem(I,k)) / visc_rem_lim
+    if (visc_rem_lim > 0.0) then ! This is almost always true for ocean points.
+      if (u(I,j,k) + duR(I)*visc_rem_lim > -du_CFL(I)*visc_rem(I,k)) &
+        duR(I) = -(u(I,j,k) + du_CFL(I)*visc_rem(I,k)) / visc_rem_lim
+      if (u(I,j,k) + duL(I)*visc_rem_lim < du_CFL(I)*visc_rem(I,k)) &
+        duL(I) = -(u(I,j,k) - du_CFL(I)*visc_rem(I,k)) / visc_rem_lim
+    endif
   endif ; enddo ; enddo
 
   do k=1,nz
@@ -1770,10 +1772,12 @@ subroutine set_merid_BT_cont(v, h_in, hL, hR, BT_cont, vh_tot_0, dvhdv_tot_0, &
 
   do k=1,nz ; do i=ish,ieh ; if (do_i(i)) then
     visc_rem_lim = max(visc_rem(i,k), min_visc_rem*visc_rem_max(i))
-    if (v(i,J,k) + dvR(i)*visc_rem_lim > -dv_CFL(i)*visc_rem(i,k)) &
-      dvR(i) = -(v(i,J,k) + dv_CFL(i)*visc_rem(i,k)) / visc_rem_lim
-    if (v(i,J,k) + dvL(i)*visc_rem_lim < dv_CFL(i)*visc_rem(i,k)) &
-      dvL(i) = -(v(i,J,k) - dv_CFL(i)*visc_rem(i,k)) / visc_rem_lim
+    if (visc_rem_lim > 0.0) then ! This is almost always true for ocean points.
+      if (v(i,J,k) + dvR(i)*visc_rem_lim > -dv_CFL(i)*visc_rem(i,k)) &
+        dvR(i) = -(v(i,J,k) + dv_CFL(i)*visc_rem(i,k)) / visc_rem_lim
+      if (v(i,J,k) + dvL(i)*visc_rem_lim < dv_CFL(i)*visc_rem(i,k)) &
+        dvL(i) = -(v(i,J,k) - dv_CFL(i)*visc_rem(i,k)) / visc_rem_lim
+    endif
   endif ; enddo ; enddo
   do k=1,nz
     do i=ish,ieh ; if (do_i(i)) then
