@@ -1884,12 +1884,12 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
    diag    => CS%diag
   ! Initialize the diag mediator.
-  call diag_mediator_init(G, param_file, diag, doc_file_dir=dirs%output_directory)
+  call diag_mediator_init(G, GV%ke, param_file, diag, doc_file_dir=dirs%output_directory)
 
   ! Initialize the diagnostics mask arrays.
   ! This step has to be done after call to MOM_initialize_state
   ! and before MOM_diagnostics_init
-  call diag_masks_set(G, CS%missing, diag)
+  call diag_masks_set(G, GV%ke, CS%missing, diag)
 
   ! Set up a pointers h within diag mediator control structure,
   ! this needs to occur _after_ CS%h has been allocated.

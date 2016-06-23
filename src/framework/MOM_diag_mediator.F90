@@ -204,7 +204,7 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
   integer :: id_xq, id_yq, id_zl, id_zi, id_xh, id_yh, id_zzl, id_zzi
   integer :: k, nz
   integer :: nzi(4)
-  real :: zlev(G%ke), zinter(G%ke+1)
+  real :: zlev(GV%ke), zinter(GV%ke+1)
   logical :: set_vert
   character(len=200) :: inputdir, string, filename, varname, dimname
 
@@ -234,7 +234,7 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
               'h point nominal latitude', Domain2=G%Domain%mpp_domain)
 
   if (set_vert) then
-    nz = G%ke
+    nz = GV%ke
     zinter(1:nz+1) = GV%sInterface(1:nz+1)
     zlev(1:nz) = GV%sLayer(1:nz)
     id_zl = diag_axis_init('zl', zlev, trim(GV%zAxisUnits), 'z', &
@@ -262,7 +262,7 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
   if (len_trim(string) > 0) then
     if (trim(string) == 'UNIFORM') then
       ! initialise a uniform coordinate with depth
-      nzi(1) = G%ke + 1
+      nzi(1) = GV%ke + 1
       allocate(diag_cs%zi_remap(nzi(1)))
       allocate(diag_cs%zl_remap(nzi(1) - 1))
 
@@ -828,14 +828,14 @@ end subroutine remap_diag_to_z
 !! height changes.
 subroutine diag_update_target_grids(diag_cs)
   type(diag_ctrl), intent(inout) :: diag_cs !< Diagnostics control structure
+
   ! Local variables
-  real, dimension(size(diag_cs%h, 3)) :: h_src
   type(ocean_grid_type), pointer :: G
   real :: depth
   integer :: nz_src, nz_dest
   integer :: i, j, k
   logical :: force, h_changed
-  real, dimension(diag_cs%G%ke) :: h_src_1d
+  real, dimension(size(diag_cs%h, 3)) :: h_src_1d
   real, dimension(diag_cs%nz_remap) :: h_zout_1d
   real, dimension(diag_cs%nz_remap+1) :: z_out_1d
 
@@ -1654,11 +1654,16 @@ subroutine diag_mediator_infrastructure_init(err_msg)
   call diag_manager_init(err_msg=err_msg)
 end subroutine diag_mediator_infrastructure_init
 
-subroutine diag_mediator_init(G, param_file, diag_cs, doc_file_dir)
-  type(ocean_grid_type), target, intent(inout) :: G
-  type(param_file_type),      intent(in)    :: param_file
-  type(diag_ctrl),            intent(inout) :: diag_cs
-  character(len=*), optional, intent(in)    :: doc_file_dir
+!> diag_mediator_init initializes the MOM diag_mediator and opens the available
+!! diagnostics file, if appropriate.
+subroutine diag_mediator_init(G, nz, param_file, diag_cs, doc_file_dir)
+  type(ocean_grid_type), target, intent(inout) :: G  !< The ocean grid type.
+  integer,                    intent(in)    :: nz    !< The number of layers in the model's native grid.
+  type(param_file_type),      intent(in)    :: param_file !< Parameter file structure
+  type(diag_ctrl),            intent(inout) :: diag_cs !< A pointer to a type with many variables
+                                                     !! used for diagnostics
+  character(len=*), optional, intent(in)    :: doc_file_dir !< A directory in which to create the
+                                                     !! file 
 
   ! This subroutine initializes the diag_mediator and the diag_manager.
   ! The grid type should have its dimensions set by this point, but it
@@ -1693,7 +1698,7 @@ subroutine diag_mediator_init(G, param_file, diag_cs, doc_file_dir)
   diag_cs%do_z_remapping_on_T = .false.
   diag_cs%remapping_initialized = .false.
 #if defined(DEBUG) || defined(__DO_SAFETY_CHECKS__)
-  allocate(diag_cs%h_old(G%isd:G%ied,G%jsd:G%jed,G%ke))
+  allocate(diag_cs%h_old(G%isd:G%ied,G%jsd:G%jed,nz))
   diag_cs%h_old(:,:,:) = 0.0
 #endif
 
@@ -1755,11 +1760,13 @@ subroutine diag_set_thickness_ptr(h, diag_cs)
 
 end subroutine
 
-subroutine diag_masks_set(G, missing_value, diag_cs)
-! Setup the 2d masks for diagnostics
-  type(ocean_grid_type), target, intent(in) :: G
-  real,                          intent(in) :: missing_value
-  type(diag_ctrl),          pointer    :: diag_cs
+!> diag_masks_set sets up the 2d and 3d masks for diagnostics
+subroutine diag_masks_set(G, nz, missing_value, diag_cs)
+  type(ocean_grid_type), target, intent(in) :: G  !< The ocean grid type.
+  integer,                       intent(in) :: nz !< The number of layers in the model's native grid.
+  real,                          intent(in) :: missing_value !< A value to use for masked points.
+  type(diag_ctrl),               pointer    :: diag_cs !< A pointer to a type with many variables
+                                                  !! used for diagnostics
   ! Local variables
   integer :: k
 
@@ -1767,21 +1774,21 @@ subroutine diag_masks_set(G, missing_value, diag_cs)
   diag_cs%mask2dBu=> G%mask2dBu
   diag_cs%mask2dCu=> G%mask2dCu
   diag_cs%mask2dCv=> G%mask2dCv
-  allocate(diag_cs%mask3dTL(G%isd:G%ied,G%jsd:G%jed,1:G%ke))
-  allocate(diag_cs%mask3dBuL(G%IsdB:G%IedB,G%JsdB:G%JedB,1:G%ke))
-  allocate(diag_cs%mask3dCuL(G%IsdB:G%IedB,G%jsd:G%jed,1:G%ke))
-  allocate(diag_cs%mask3dCvL(G%isd:G%ied,G%JsdB:G%JedB,1:G%ke))
-  do k = 1,G%ke
+  allocate(diag_cs%mask3dTL(G%isd:G%ied,G%jsd:G%jed,1:nz))
+  allocate(diag_cs%mask3dBuL(G%IsdB:G%IedB,G%JsdB:G%JedB,1:nz))
+  allocate(diag_cs%mask3dCuL(G%IsdB:G%IedB,G%jsd:G%jed,1:nz))
+  allocate(diag_cs%mask3dCvL(G%isd:G%ied,G%JsdB:G%JedB,1:nz))
+  do k=1,nz
     diag_cs%mask3dTL(:,:,k)  = diag_cs%mask2dT (:,:)
     diag_cs%mask3dBuL(:,:,k) = diag_cs%mask2dBu(:,:)
     diag_cs%mask3dCuL(:,:,k) = diag_cs%mask2dCu(:,:)
     diag_cs%mask3dCvL(:,:,k) = diag_cs%mask2dCv(:,:)
   enddo
-  allocate(diag_cs%mask3dTi(G%isd:G%ied,G%jsd:G%jed,1:G%ke+1))
-  allocate(diag_cs%mask3dBui(G%IsdB:G%IedB,G%JsdB:G%JedB,1:G%ke+1))
-  allocate(diag_cs%mask3dCui(G%IsdB:G%IedB,G%jsd:G%jed,1:G%ke+1))
-  allocate(diag_cs%mask3dCvi(G%isd:G%ied,G%JsdB:G%JedB,1:G%ke+1))
-  do k = 1,G%ke+1
+  allocate(diag_cs%mask3dTi(G%isd:G%ied,G%jsd:G%jed,1:nz+1))
+  allocate(diag_cs%mask3dBui(G%IsdB:G%IedB,G%JsdB:G%JedB,1:nz+1))
+  allocate(diag_cs%mask3dCui(G%IsdB:G%IedB,G%jsd:G%jed,1:nz+1))
+  allocate(diag_cs%mask3dCvi(G%isd:G%ied,G%JsdB:G%JedB,1:nz+1))
+  do k=1,nz+1
     diag_cs%mask3dTi(:,:,k)  = diag_cs%mask2dT (:,:)
     diag_cs%mask3dBui(:,:,k) = diag_cs%mask2dBu(:,:)
     diag_cs%mask3dCui(:,:,k) = diag_cs%mask2dCu(:,:)
