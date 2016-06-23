@@ -94,6 +94,7 @@ type, public :: surface_forcing_CS ; private
                                 ! the winds that are being provided in calls to
                                 ! update_ocean_model.
   logical :: use_temperature    ! If true, temp and saln used as state variables
+  real :: wind_stress_multiplier !< A multiplier applied to incoming wind stress (nondim).
 
   ! smg: remove when have A=B code reconciled
   logical :: bulkmixedlayer     ! If true, model based on bulk mixed layer code
@@ -419,14 +420,14 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   do j=js,je ; do i=is,ie
 
     if (wind_stagger == BGRID_NE) then
-      if (ASSOCIATED(IOB%u_flux)) taux_at_q(I,J) = IOB%u_flux(i-i0,j-j0)
-      if (ASSOCIATED(IOB%v_flux)) tauy_at_q(I,J) = IOB%v_flux(i-i0,j-j0)
+      if (ASSOCIATED(IOB%u_flux)) taux_at_q(I,J) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
+      if (ASSOCIATED(IOB%v_flux)) tauy_at_q(I,J) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
     elseif (wind_stagger == AGRID) then
-      if (ASSOCIATED(IOB%u_flux)) taux_at_h(i,j) = IOB%u_flux(i-i0,j-j0)
-      if (ASSOCIATED(IOB%v_flux)) tauy_at_h(i,j) = IOB%v_flux(i-i0,j-j0)
+      if (ASSOCIATED(IOB%u_flux)) taux_at_h(i,j) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
+      if (ASSOCIATED(IOB%v_flux)) tauy_at_h(i,j) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
     else ! C-grid wind stresses.
-      if (ASSOCIATED(IOB%u_flux)) fluxes%taux(I,j) = IOB%u_flux(i-i0,j-j0)
-      if (ASSOCIATED(IOB%v_flux)) fluxes%tauy(i,J) = IOB%v_flux(i-i0,j-j0)
+      if (ASSOCIATED(IOB%u_flux)) fluxes%taux(I,j) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
+      if (ASSOCIATED(IOB%v_flux)) fluxes%tauy(i,J) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
     endif
 
     if (ASSOCIATED(IOB%lprec)) &
@@ -803,7 +804,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_surface_forcing"  ! This module's name.
   character(len=48)  :: stagger
-  character(len=128) :: basin_file
+  character(len=240) :: basin_file
   integer :: i, j, isd, ied, jsd, jed
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -893,6 +894,10 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
   elseif (uppercase(stagger(1:1)) == 'C') then ; CS%wind_stagger = CGRID_NE
   else ; call MOM_error(FATAL,"surface_forcing_init: WIND_STAGGER = "// &
                         trim(stagger)//" is invalid.") ; endif
+  call get_param(param_file, mod, "WIND_STRESS_MULTIPLIER", CS%wind_stress_multiplier, &
+                 "A factor multiplying the wind-stress given to the ocean by the\n"//&
+                 "coupler. This is used for testing and should be =1.0 for any\n"//&
+                 "production runs.", default=1.0)
 
   if (restore_salt) then
     call get_param(param_file, mod, "FLUXCONST", CS%Flux_const, &
@@ -1036,7 +1041,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
   endif ; endif
 
   ! Set up any restart fields associated with the forcing.
-  call restart_init(G, param_file, CS%restart_CSp, "MOM_forcing.res")
+  call restart_init(param_file, CS%restart_CSp, "MOM_forcing.res")
 !###  call register_ctrl_forcing_restarts(G, param_file, CS%ctrl_forcing_CSp, &
 !###                                      CS%restart_CSp)
   call restart_init_end(CS%restart_CSp)
