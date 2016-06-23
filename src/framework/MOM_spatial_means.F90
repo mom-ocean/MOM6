@@ -27,6 +27,7 @@ use MOM_coms, only : query_EFP_overflow_error, reset_EFP_overflow_error
 use MOM_error_handler, only : MOM_error, NOTE, WARNING, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
+use MOM_verticalGrid, only : verticalGrid_type
 
 implicit none ; private
 
@@ -74,21 +75,22 @@ function global_area_integral(var,G)
 
 end function global_area_integral
 
-function global_layer_mean(var,h,G)
-  type(ocean_grid_type),                       intent(in)  :: G
-  real, dimension(SZI_(G), SZJ_(G), SZK_(G)),  intent(in)  :: var
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)  :: h
-  real, dimension(SZK_(G))                   :: global_layer_mean
+function global_layer_mean(var, h, G, GV)
+  type(ocean_grid_type),                     intent(in)  :: G
+  type(verticalGrid_type),                   intent(in)  :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: var
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h
+  real, dimension(SZK_(GV))                   :: global_layer_mean
 
-  real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: tmpForSumming, weight
-  real, dimension(SZK_(G)) :: scalarij, weightij
-  real, dimension(SZK_(G)) :: global_temp_scalar, global_weight_scalar
+  real, dimension(SZI_(G), SZJ_(G), SZK_(GV)) :: tmpForSumming, weight
+  real, dimension(SZK_(GV)) :: scalarij, weightij
+  real, dimension(SZK_(GV)) :: global_temp_scalar, global_weight_scalar
   integer :: i, j, k, is, ie, js, je, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   tmpForSumming(:,:,:) = 0. ; weight(:,:,:) = 0.
 
-  do k=1, nz ; do j=js,je ; do i=is, ie
+  do k=1,nz ; do j=js,je ; do i=is,ie
     weight(i,j,k)  =  h(i,j,k) * (G%areaT(i,j) * G%mask2dT(i,j))
     tmpForSumming(i,j,k) =  var(i,j,k) * weight(i,j,k)
   enddo ; enddo ; enddo
@@ -102,23 +104,27 @@ function global_layer_mean(var,h,G)
 
 end function global_layer_mean
 
-function global_volume_mean(var,h,G)
-  type(ocean_grid_type),                       intent(in)  :: G
-  real, dimension(SZI_(G), SZJ_(G), SZK_(G)),  intent(in)  :: var
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)  :: h
+function global_volume_mean(var, h, G, GV)
+  type(ocean_grid_type),                     intent(in)  :: G
+  type(verticalGrid_type),                   intent(in)  :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: var
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h
   real :: global_volume_mean
 
-  real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: tmpForSumming, weight
+  real :: weight_here
+  real, dimension(SZI_(G), SZJ_(G)) :: tmpForSumming, sum_weight
   integer :: i, j, k, is, ie, js, je, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  tmpForSumming(:,:,:) = 0. ; weight(:,:,:) = 0.
+  tmpForSumming(:,:) = 0. ; sum_weight(:,:) = 0.
 
-  do k=1, nz ; do j=js,je ; do i=is, ie
-    weight(i,j,k)  =  h(i,j,k) * (G%areaT(i,j) * G%mask2dT(i,j))
-    tmpForSumming(i,j,k) =  var(i,j,k) * weight(i,j,k)
+  do k=1,nz ; do j=js,je ; do i=is,ie
+    weight_here  =  h(i,j,k) * (G%areaT(i,j) * G%mask2dT(i,j))
+    tmpForSumming(i,j) = tmpForSumming(i,j) + var(i,j,k) * weight_here
+    sum_weight(i,j) = sum_weight(i,j) + weight_here
   enddo ; enddo ; enddo
-  global_volume_mean = (reproducing_sum(sum(tmpForSumming,3))) / (reproducing_sum(sum(weight,3)))
+  global_volume_mean = (reproducing_sum(tmpForSumming)) / &
+                       (reproducing_sum(sum_weight))
 
 end function global_volume_mean
 
@@ -137,7 +143,7 @@ subroutine global_i_mean(array, i_mean, G, mask)
 !  (in)      G - The ocean's grid structure.
 !  (in)      mask - An array used for weighting the i-mean.
 
-  type(EFP_type), allocatable, dimension(:) :: sum, mask_sum
+  type(EFP_type), allocatable, dimension(:) :: asum, mask_sum
   real :: mask_sum_r
   integer :: is, ie, js, je, idg_off, jdg_off
   integer :: i, j
@@ -147,23 +153,23 @@ subroutine global_i_mean(array, i_mean, G, mask)
 
   call reset_EFP_overflow_error()
 
-  allocate(sum(G%jsg:G%jeg))
+  allocate(asum(G%jsg:G%jeg))
   if (present(mask)) then
     allocate(mask_sum(G%jsg:G%jeg))
 
     do j=G%jsg,G%jeg
-      sum(j) = real_to_EFP(0.0) ; mask_sum(j) = real_to_EFP(0.0)
+      asum(j) = real_to_EFP(0.0) ; mask_sum(j) = real_to_EFP(0.0)
     enddo
 
     do i=is,ie ; do j=js,je
-      sum(j+jdg_off) = sum(j+jdg_off) + real_to_EFP(array(i,j)*mask(i,j))
+      asum(j+jdg_off) = asum(j+jdg_off) + real_to_EFP(array(i,j)*mask(i,j))
       mask_sum(j+jdg_off) = mask_sum(j+jdg_off) + real_to_EFP(mask(i,j))
     enddo ; enddo
 
     if (query_EFP_overflow_error()) call MOM_error(FATAL, &
       "global_i_mean overflow error occurred before sums across PEs.")
 
-    call EFP_list_sum_across_PEs(sum(G%jsg:G%jeg), G%jeg-G%jsg+1)
+    call EFP_list_sum_across_PEs(asum(G%jsg:G%jeg), G%jeg-G%jsg+1)
     call EFP_list_sum_across_PEs(mask_sum(G%jsg:G%jeg), G%jeg-G%jsg+1)
 
     if (query_EFP_overflow_error()) call MOM_error(FATAL, &
@@ -172,32 +178,32 @@ subroutine global_i_mean(array, i_mean, G, mask)
     do j=js,je
       mask_sum_r = EFP_to_real(mask_sum(j+jdg_off))
       if (mask_sum_r == 0.0 ) then ; i_mean(j) = 0.0 ; else
-        i_mean(j) = EFP_to_real(sum(j+jdg_off)) / mask_sum_r
+        i_mean(j) = EFP_to_real(asum(j+jdg_off)) / mask_sum_r
       endif
     enddo
 
     deallocate(mask_sum)
   else
-    do j=G%jsg,G%jeg ; sum(j) = real_to_EFP(0.0) ; enddo
+    do j=G%jsg,G%jeg ; asum(j) = real_to_EFP(0.0) ; enddo
 
     do i=is,ie ; do j=js,je
-      sum(j+jdg_off) = sum(j+jdg_off) + real_to_EFP(array(i,j))
+      asum(j+jdg_off) = asum(j+jdg_off) + real_to_EFP(array(i,j))
     enddo ; enddo
 
     if (query_EFP_overflow_error()) call MOM_error(FATAL, &
       "global_i_mean overflow error occurred before sum across PEs.")
 
-    call EFP_list_sum_across_PEs(sum(G%jsg:G%jeg), G%jeg-G%jsg+1)
+    call EFP_list_sum_across_PEs(asum(G%jsg:G%jeg), G%jeg-G%jsg+1)
 
     if (query_EFP_overflow_error()) call MOM_error(FATAL, &
       "global_i_mean overflow error occurred during sum across PEs.")
 
     do j=js,je
-      i_mean(j) = EFP_to_real(sum(j+jdg_off)) / real(G%ieg-G%isg+1)
+      i_mean(j) = EFP_to_real(asum(j+jdg_off)) / real(G%ieg-G%isg+1)
     enddo
   endif
 
-  deallocate(sum)
+  deallocate(asum)
 
 end subroutine global_i_mean
 
@@ -215,7 +221,7 @@ subroutine global_j_mean(array, j_mean, G, mask)
 !  (in)      G - The ocean's grid structure.
 !  (in)      mask - An array used for weighting the j-mean.
 
-  type(EFP_type), allocatable, dimension(:) :: sum, mask_sum
+  type(EFP_type), allocatable, dimension(:) :: asum, mask_sum
   real :: mask_sum_r
   integer :: is, ie, js, je, idg_off, jdg_off
   integer :: i, j
@@ -225,23 +231,23 @@ subroutine global_j_mean(array, j_mean, G, mask)
 
   call reset_EFP_overflow_error()
 
-  allocate(sum(G%isg:G%ieg))
+  allocate(asum(G%isg:G%ieg))
   if (present(mask)) then
     allocate (mask_sum(G%isg:G%ieg))
 
     do i=G%isg,G%ieg
-      sum(i) = real_to_EFP(0.0) ; mask_sum(i) = real_to_EFP(0.0)
+      asum(i) = real_to_EFP(0.0) ; mask_sum(i) = real_to_EFP(0.0)
     enddo
 
     do i=is,ie ; do j=js,je
-      sum(i+idg_off) = sum(i+idg_off) + real_to_EFP(array(i,j)*mask(i,j))
+      asum(i+idg_off) = asum(i+idg_off) + real_to_EFP(array(i,j)*mask(i,j))
       mask_sum(i+idg_off) = mask_sum(i+idg_off) + real_to_EFP(mask(i,j))
     enddo ; enddo
 
     if (query_EFP_overflow_error()) call MOM_error(FATAL, &
       "global_j_mean overflow error occurred before sums across PEs.")
 
-    call EFP_list_sum_across_PEs(sum(G%isg:G%ieg), G%ieg-G%isg+1)
+    call EFP_list_sum_across_PEs(asum(G%isg:G%ieg), G%ieg-G%isg+1)
     call EFP_list_sum_across_PEs(mask_sum(G%isg:G%ieg), G%ieg-G%isg+1)
 
     if (query_EFP_overflow_error()) call MOM_error(FATAL, &
@@ -250,32 +256,32 @@ subroutine global_j_mean(array, j_mean, G, mask)
     do i=is,ie
       mask_sum_r = EFP_to_real(mask_sum(i+idg_off))
       if (mask_sum_r == 0.0 ) then ; j_mean(i) = 0.0 ; else
-        j_mean(i) = EFP_to_real(sum(i+idg_off)) / mask_sum_r
+        j_mean(i) = EFP_to_real(asum(i+idg_off)) / mask_sum_r
       endif
     enddo
 
     deallocate(mask_sum)
   else
-    do i=G%isg,G%ieg ; sum(i) = real_to_EFP(0.0) ; enddo
+    do i=G%isg,G%ieg ; asum(i) = real_to_EFP(0.0) ; enddo
 
     do i=is,ie ; do j=js,je
-      sum(i+idg_off) = sum(i+idg_off) + real_to_EFP(array(i,j))
+      asum(i+idg_off) = asum(i+idg_off) + real_to_EFP(array(i,j))
     enddo ; enddo
 
     if (query_EFP_overflow_error()) call MOM_error(FATAL, &
       "global_j_mean overflow error occurred before sum across PEs.")
 
-    call EFP_list_sum_across_PEs(sum(G%isg:G%ieg), G%ieg-G%isg+1)
+    call EFP_list_sum_across_PEs(asum(G%isg:G%ieg), G%ieg-G%isg+1)
 
     if (query_EFP_overflow_error()) call MOM_error(FATAL, &
       "global_j_mean overflow error occurred during sum across PEs.")
 
     do i=is,ie
-      j_mean(i) = EFP_to_real(sum(i+idg_off)) / real(G%jeg-G%jsg+1)
+      j_mean(i) = EFP_to_real(asum(i+idg_off)) / real(G%jeg-G%jsg+1)
     enddo
   endif
 
-  deallocate(sum)
+  deallocate(asum)
 
 end subroutine global_j_mean
 
