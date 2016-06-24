@@ -1205,13 +1205,13 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     CS%ave_ssh(i,j) = CS%ave_ssh(i,j)*Itot_wt_ssh
   enddo ; enddo
 
+  call enable_averaging(dt*n_max,Time_local, CS%diag)
   ! area mean SSH
   if (CS%id_ssh_ga > 0) then
     ssh_ga = global_area_mean(CS%ave_ssh, G)
     call post_data(CS%id_ssh_ga, ssh_ga, CS%diag)
   endif
 
-  call enable_averaging(dt*n_max,Time_local, CS%diag)
   I_time_int = 1.0/(dt*n_max)
   if (CS%id_ssh > 0) &
     call post_data(CS%id_ssh, CS%ave_ssh, CS%diag, mask=G%mask2dT)
