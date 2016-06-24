@@ -1216,13 +1216,14 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
 end subroutine applyBoundaryFluxesInOut
 
 
-subroutine diabatic_aux_init(Time, G, GV, param_file, diag, CS, use_ePBL)
+subroutine diabatic_aux_init(Time, G, GV, param_file, diag, CS, useALEalgorithm, use_ePBL)
   type(time_type),         intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
   type(verticalGrid_type),               intent(in)    :: GV
   type(param_file_type),   intent(in)    :: param_file
   type(diag_ctrl), target, intent(inout) :: diag
   type(diabatic_aux_CS),   pointer       :: CS
+  logical,                 intent(in)    :: useALEalgorithm
   logical,                 intent(in)    :: use_ePBL
 
 ! Arguments:
@@ -1306,40 +1307,40 @@ subroutine diabatic_aux_init(Time, G, GV, param_file, diag, CS, use_ePBL)
     CS%use_calving_heat_content = .false.
   endif
 
-  CS%id_createdH = register_diag_field('ocean_model',"created_H",diag%axesT1, &
-      Time, "The volume flux added to stop the ocean from drying out and becoming negative in depth", &
-      "meter second-1")
-  if (CS%id_createdH>0) allocate(CS%createdH(isd:ied,jsd:jed))
+  if (useALEalgorithm) then
+    CS%id_createdH = register_diag_field('ocean_model',"created_H",diag%axesT1, &
+        Time, "The volume flux added to stop the ocean from drying out and becoming negative in depth", &
+        "meter second-1")
+    if (CS%id_createdH>0) allocate(CS%createdH(isd:ied,jsd:jed))
 
+    ! diagnostic for heating of a grid cell from convergence of SW heat into the cell
+    CS%id_penSW_diag = register_diag_field('ocean_model', 'rsdoabsorb',                     &
+          diag%axesTL, Time, 'Convergence of Penetrative Shortwave Flux in Sea Water Layer',&
+          'Watt meter-2', standard_name='net_rate_of_absorption_of_shortwave_energy_in_ocean_layer')
 
-  ! diagnostic for heating of a grid cell from convergence of SW heat into the cell
-  CS%id_penSW_diag = register_diag_field('ocean_model', 'rsdoabsorb',                     &
-        diag%axesTL, Time, 'Convergence of Penetrative Shortwave Flux in Sea Water Layer',&
-        'Watt meter-2', standard_name='net_rate_of_absorption_of_shortwave_energy_in_ocean_layer')
+    ! diagnostic for penetrative SW heat flux at top interface of tracer cell (nz+1 interfaces)
+    ! k=1 gives penetrative SW at surface; SW(k=nz+1)=0 (no penetration through rock).
+    CS%id_penSWflux_diag = register_diag_field('ocean_model', 'rsdo',                               &
+          diag%axesTi, Time, 'Downwelling Shortwave Flux in Sea Water at Grid Cell Upper Interface',&
+          'Watt meter-2', standard_name='downwelling_shortwave_flux_in_sea_water')
 
-  ! diagnostic for penetrative SW heat flux at top interface of tracer cell (nz+1 interfaces)
-  ! k=1 gives penetrative SW at surface; SW(k=nz+1)=0 (no penetration through rock).
-  CS%id_penSWflux_diag = register_diag_field('ocean_model', 'rsdo',                               &
-        diag%axesTi, Time, 'Downwelling Shortwave Flux in Sea Water at Grid Cell Upper Interface',&
-        'Watt meter-2', standard_name='downwelling_shortwave_flux_in_sea_water')
+    ! need both arrays for the SW diagnostics (one for flux, one for convergence)
+    if (CS%id_penSW_diag>0 .or. CS%id_penSWflux_diag>0) then
+       allocate(CS%penSW_diag(isd:ied,jsd:jed,nz))
+       CS%penSW_diag(:,:,:) = 0.0
+       allocate(CS%penSWflux_diag(isd:ied,jsd:jed,nz+1))
+       CS%penSWflux_diag(:,:,:) = 0.0
+    endif
 
-  ! need both arrays for the SW diagnostics (one for flux, one for convergence)
-  if (CS%id_penSW_diag>0 .or. CS%id_penSWflux_diag>0) then
-     allocate(CS%penSW_diag(isd:ied,jsd:jed,nz))
-     CS%penSW_diag(:,:,:) = 0.0
-     allocate(CS%penSWflux_diag(isd:ied,jsd:jed,nz+1))
-     CS%penSWflux_diag(:,:,:) = 0.0
-  endif
-
-
-  ! diagnostic for non-downwelling SW radiation (i.e., SW absorbed at ocean surface)
-  CS%id_nonpenSW_diag = register_diag_field('ocean_model', 'nonpenSW',                       &
-        diag%axesT1, Time,                                                                   &
-        'Non-downwelling SW radiation (i.e., SW absorbed in ocean surface with LW,SENS,LAT)',&
-        'Watt meter-2', standard_name='nondownwelling_shortwave_flux_in_sea_water')
-  if (CS%id_nonpenSW_diag > 0) then
-     allocate(CS%nonpenSW_diag(isd:ied,jsd:jed))
-     CS%nonpenSW_diag(:,:) = 0.0
+    ! diagnostic for non-downwelling SW radiation (i.e., SW absorbed at ocean surface)
+    CS%id_nonpenSW_diag = register_diag_field('ocean_model', 'nonpenSW',                       &
+          diag%axesT1, Time,                                                                   &
+          'Non-downwelling SW radiation (i.e., SW absorbed in ocean surface with LW,SENS,LAT)',&
+          'Watt meter-2', standard_name='nondownwelling_shortwave_flux_in_sea_water')
+    if (CS%id_nonpenSW_diag > 0) then
+       allocate(CS%nonpenSW_diag(isd:ied,jsd:jed))
+       CS%nonpenSW_diag(:,:) = 0.0
+    endif
   endif
 
   id_clock_uv_at_h = cpu_clock_id('(Ocean find_uv_at_h)', grain=CLOCK_ROUTINE)

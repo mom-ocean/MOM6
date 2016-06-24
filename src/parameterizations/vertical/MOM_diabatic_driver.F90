@@ -2154,7 +2154,7 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
 
   ! initialize the auxiliary diabatic driver module
   call diabatic_aux_init(Time, G, GV, param_file, diag, CS%diabatic_aux_CSp, &
-                         CS%use_energetic_PBL)
+                         CS%useALEalgorithm, CS%use_energetic_PBL)
 
   ! initialize the boundary layer modules
   if (CS%bulkmixedlayer) &
