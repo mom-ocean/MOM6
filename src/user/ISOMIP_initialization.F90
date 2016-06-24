@@ -359,7 +359,8 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
                                     ! positive upward, in m.
   real :: min_depth, dummy1, z, delta_h
   real :: damp, rho_dummy, min_thickness, rho_tmp, xi0
-  character(len=40) :: verticalCoordinate
+  character(len=40) :: verticalCoordinate, filename, state_file, inputdir
+  character(len=40) :: temp_var, salt_var, eta_var
 
   character(len=40)  :: mod = "ISOMIP_initialize_sponges" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
@@ -521,37 +522,49 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
       call set_up_ALE_sponge_field(S,G,tv%S,ACSp)
     endif
 
-  else  ! layer mode
+  else ! layer mode
+       ! 1) Read eta, salt and temp from IC file
+       call get_param(PF, mod, "INPUTDIR", inputdir, default=".")
+       inputdir = slasher(inputdir)
+       call get_param(PF, mod, "ISOMIP_SPONGE_FILE", state_file, &
+                 "The name of the file with the state to damp toward.", &
+                 fail_if_missing=.true.)
+       write(*,*)'state_file', state_file
 
-       ! Construct notional interface positions
-       e0(1) = 0.
-       do K=2,nz
-         e0(k) = -G%max_depth * ( 0.5 * ( GV%Rlay(k-1) + GV%Rlay(k) ) - rho_sur ) / rho_range
-         e0(k) = min( 0., e0(k) ) ! Bound by surface
-         e0(k) = max( -G%max_depth, e0(k) ) ! Bound by possible deepest point in model
-         !write(*,*)'G%max_depth,GV%Rlay(k-1),GV%Rlay(k),e0(k)',G%max_depth,GV%Rlay(k-1),GV%Rlay(k),e0(k)
-       enddo
-       e0(nz+1) = -G%max_depth
+       call get_param(PF, mod, "SPONGE_PTEMP_VAR", temp_var, &
+                 "The name of the potential temperature variable in \n"//&
+                 "SPONGE_STATE_FILE.", default="Temp")
+       call get_param(PF, mod, "SPONGE_SALT_VAR", salt_var, &
+                 "The name of the salinity variable in \n"//&
+                 "SPONGE_STATE_FILE.", default="Salt")
+       call get_param(PF, mod, "SPONGE_ETA_VAR", eta_var, &
+                 "The name of the interface height variable in \n"//&
+                 "SPONGE_STATE_FILE.", default="eta")
+       
+       filename = trim(inputdir)//trim(state_file)
 
-       ! Calculate thicknesses
-       do j=js,je ; do i=is,ie
-         eta1D(nz+1) = -1.0*G%bathyT(i,j)
-         do k=nz,1,-1
-           eta1D(k) = e0(k)
-           if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_z)) then
-             eta1D(k) = eta1D(k+1) + GV%Angstrom_z
-             h(i,j,k) = GV%Angstrom_z
-           else
-             h(i,j,k) = eta1D(k) - eta1D(k+1)
-           endif
-         enddo
+       if (.not.file_exists(filename, G%Domain)) &
+          call MOM_error(FATAL, " ISOMIP_initialize_sponges: Unable to open "//trim(filename))
+       
+       !call read_data("",eta_var,eta(:,:,:), domain=G%Domain%mpp_domain)
+       call read_data(filename,eta_var,eta(:,:,:), domain=G%Domain%mpp_domain)
+       call read_data(filename,temp_var,T(:,:,:), domain=G%Domain%mpp_domain)
+       call read_data(filename,salt_var,S(:,:,:), domain=G%Domain%mpp_domain)
 
-         eta(i,j,nz+1) = -G%bathyT(i,j)
-         do K=nz,1,-1
-           eta(i,j,K) = eta(i,j,K+1) + h(i,j,k)
-         enddo
-       enddo ; enddo
-      call initialize_sponge(Idamp, eta, G, PF, CSp)
+       ! for debugging
+       !i=G%iec; j=G%jec
+       !do k = 1,nz
+       !    call calculate_density(T(i,j,k),S(i,j,k),0.0,rho_tmp,tv%eqn_of_state)
+       !    write(*,*) 'Sponge - k,eta,T,S,rho,Rlay',k,eta(i,j,k),T(i,j,k),&
+       !                S(i,j,k),rho_tmp,GV%Rlay(k)
+       !enddo
+
+       ! Set the inverse damping rates so that the model will know where to 
+       ! apply the sponges, along with the interface heights. 
+       call initialize_sponge(Idamp, eta, G, PF, CSp)
+       ! Apply sponge in tracer fields
+       call set_up_sponge_field(T, tv%T, G, nz, CSp)
+       call set_up_sponge_field(S, tv%S, G, nz, CSp)
 
   endif
 
