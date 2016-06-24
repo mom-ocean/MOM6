@@ -1930,8 +1930,11 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
   !call set_diffusivity_init(Time, G, param_file, diag, CS%set_diff_CSp, diag_to_Z_CSp, CS%int_tide_CSp)
   CS%id_Kd_interface = register_diag_field('ocean_model', 'Kd_interface', diag%axesTi, Time, &
       'Total diapycnal diffusivity at interfaces', 'meter2 second-1')
-  CS%id_Kd_ePBL = register_diag_field('ocean_model', 'Kd_ePBL', diag%axesTi, Time, &
-      'ePBL diapycnal diffusivity at interfaces', 'meter2 second-1')
+  if (CS%use_energetic_PBL) then
+      CS%id_Kd_ePBL = register_diag_field('ocean_model', 'Kd_ePBL', diag%axesTi, Time, &
+          'ePBL diapycnal diffusivity at interfaces', 'meter2 second-1')
+  endif
+
   CS%id_Kd_heat = register_diag_field('ocean_model', 'Kd_heat', diag%axesTi, Time, &
       'Total diapycnal diffusivity for heat at interfaces', 'meter2 second-1',     &
        cmor_field_name='difvho', cmor_units='m2 s-1',                              &
