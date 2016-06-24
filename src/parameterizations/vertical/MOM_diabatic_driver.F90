@@ -2035,54 +2035,53 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
     CS%diabatic_diff_tendency_diag = .true.
   endif
 
-
   ! diagnostics for tendencies of temp and saln due to boundary forcing;
   ! available only for ALE algorithm.
+  if (CS%useALEalgorithm) then
+    CS%id_boundary_forcing_temp_tend = register_diag_field('ocean_model',&
+        'boundary_forcing_temp_tendency', diag%axesTL, Time,             &
+        'Boundary forcing temperature tendency', 'Degree C per second')
+    if(CS%id_boundary_forcing_temp_tend > 0) then
+      CS%boundary_forcing_tendency_diag = .true.
+    endif
 
-  CS%id_boundary_forcing_temp_tend = register_diag_field('ocean_model',&
-      'boundary_forcing_temp_tendency', diag%axesTL, Time,             &
-      'Boundary forcing temperature tendency', 'Degree C per second')
-  if(CS%id_boundary_forcing_temp_tend > 0) then
-    CS%boundary_forcing_tendency_diag = .true.
+    CS%id_boundary_forcing_saln_tend = register_diag_field('ocean_model',&
+        'boundary_forcing_saln_tendency', diag%axesTL, Time,             &
+        'Boundary forcing saln tendency', 'PPT per second')
+    if(CS%id_boundary_forcing_saln_tend > 0) then
+      CS%boundary_forcing_tendency_diag = .true.
+    endif
+
+    CS%id_boundary_forcing_heat_tend = register_diag_field('ocean_model',&
+        'boundary_forcing_heat_tendency', diag%axesTL, Time,             &
+        'Boundary forcing heat tendency','Watts/m2')
+    if(CS%id_boundary_forcing_heat_tend > 0) then
+      CS%boundary_forcing_tendency_diag = .true.
+    endif
+
+    CS%id_boundary_forcing_salt_tend = register_diag_field('ocean_model',&
+        'boundary_forcing_salt_tendency', diag%axesTL, Time,             &
+        'Boundary forcing salt tendency','kg m-2 s-1')
+    if(CS%id_boundary_forcing_salt_tend > 0) then
+      CS%boundary_forcing_tendency_diag = .true.
+    endif
+
+    ! This diagnostic should equal to surface heat flux if all is working well.
+    CS%id_boundary_forcing_heat_tend_2d = register_diag_field('ocean_model',&
+        'boundary_forcing_heat_tendency_2d', diag%axesT1, Time,             &
+        'Depth integrated boundary forcing of ocean heat','Watts/m2')
+    if(CS%id_boundary_forcing_heat_tend_2d > 0) then
+      CS%boundary_forcing_tendency_diag = .true.
+    endif
+
+    ! This diagnostic should equal to surface salt flux if all is working well.
+    CS%id_boundary_forcing_salt_tend_2d = register_diag_field('ocean_model',&
+        'boundary_forcing_salt_tendency_2d', diag%axesT1, Time,             &
+        'Depth integrated boundary forcing of ocean salt','kg m-2 s-1')
+    if(CS%id_boundary_forcing_salt_tend_2d > 0) then
+      CS%boundary_forcing_tendency_diag = .true.
+    endif
   endif
-
-  CS%id_boundary_forcing_saln_tend = register_diag_field('ocean_model',&
-      'boundary_forcing_saln_tendency', diag%axesTL, Time,             &
-      'Boundary forcing saln tendency', 'PPT per second')
-  if(CS%id_boundary_forcing_saln_tend > 0) then
-    CS%boundary_forcing_tendency_diag = .true.
-  endif
-
-  CS%id_boundary_forcing_heat_tend = register_diag_field('ocean_model',&
-      'boundary_forcing_heat_tendency', diag%axesTL, Time,             &
-      'Boundary forcing heat tendency','Watts/m2')
-  if(CS%id_boundary_forcing_heat_tend > 0) then
-    CS%boundary_forcing_tendency_diag = .true.
-  endif
-
-  CS%id_boundary_forcing_salt_tend = register_diag_field('ocean_model',&
-      'boundary_forcing_salt_tendency', diag%axesTL, Time,             &
-      'Boundary forcing salt tendency','kg m-2 s-1')
-  if(CS%id_boundary_forcing_salt_tend > 0) then
-    CS%boundary_forcing_tendency_diag = .true.
-  endif
-
-  ! This diagnostic should equal to surface heat flux if all is working well.
-  CS%id_boundary_forcing_heat_tend_2d = register_diag_field('ocean_model',&
-      'boundary_forcing_heat_tendency_2d', diag%axesT1, Time,             &
-      'Depth integrated boundary forcing of ocean heat','Watts/m2')
-  if(CS%id_boundary_forcing_heat_tend_2d > 0) then
-    CS%boundary_forcing_tendency_diag = .true.
-  endif
-
-  ! This diagnostic should equal to surface salt flux if all is working well.
-  CS%id_boundary_forcing_salt_tend_2d = register_diag_field('ocean_model',&
-      'boundary_forcing_salt_tendency_2d', diag%axesT1, Time,             &
-      'Depth integrated boundary forcing of ocean salt','kg m-2 s-1')
-  if(CS%id_boundary_forcing_salt_tend_2d > 0) then
-    CS%boundary_forcing_tendency_diag = .true.
-  endif
-
 
   ! diagnostics for tendencies of temp and heat due to frazil
 
