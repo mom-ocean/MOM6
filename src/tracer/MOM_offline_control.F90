@@ -49,7 +49,9 @@ module MOM_offline_transport
     use MOM_io,            only : read_data
     use MOM_file_parser,   only : get_param, log_version, param_file_type
     use MOM_diag_mediator, only : diag_ctrl, register_diag_field
-    use mpp_domains_mod,      only : CENTER, CORNER, NORTH, EAST
+    use mpp_domains_mod,   only : CENTER, CORNER, NORTH, EAST
+    use MOM_variables,     only : vertvisc_type
+
     implicit none
 
 
@@ -79,7 +81,14 @@ module MOM_offline_transport
             id_u = -1, id_v = -1, &
             id_uh = -1, id_vh = -1, &
             id_uhtr = -1, id_vhtr = -1, &
-            id_eta = -1
+            id_eta = -1, &
+            id_ea = -1, id_eb = -1, &
+            id_ray_u = -1, id_ray_v = -1, &
+            id_bbl_thick_u = -1, id_bbl_thick_v = -1, &
+            id_kv_bbl_u = -1, id_kv_bbl_v = -1, &
+            id_temp = -1, id_salt = -1
+    !            id_ustar = -1
+
 
     end type offline_transport_CS
 
@@ -117,24 +126,56 @@ contains
         type(time_type), intent(in) :: Time             !< current model time
         type(diag_ctrl)             :: diag
 
-        CS%id_uhtr = register_diag_field('ocean_model', 'uhtr_off', diag%axesCuL, Time, &
+        CS%id_uhtr = register_diag_field('ocean_model', 'uhtr_off',     diag%axesCuL, Time, &
             'Accumulated zonal thickness fluxes to advect tracers', 'kg')
-        CS%id_vhtr = register_diag_field('ocean_model', 'vhtr_off', diag%axesCvL, Time, &
+        CS%id_uh = register_diag_field('ocean_model', 'uh_off',         diag%axesCuL, Time, &
             'Accumulated meridional thickness fluxes to advect tracers', 'kg')
-        CS%id_uh = register_diag_field('ocean_model', 'uh_off', diag%axesCuL, Time, &
+        CS%id_u = register_diag_field('ocean_model', 'u_off',           diag%axesCuL, Time, &
             'Accumulated meridional thickness fluxes to advect tracers', 'kg')
-        CS%id_vh = register_diag_field('ocean_model', 'vh_off', diag%axesCvL, Time, &
+        CS%id_ray_u = register_diag_field('ocean_model', 'ray_u_off',   diag%axesCuL, Time, &
             'Accumulated meridional thickness fluxes to advect tracers', 'kg')
-        CS%id_u = register_diag_field('ocean_model', 'u_off', diag%axesCuL, Time, &
+        CS%id_kv_bbl_u = register_diag_field('ocean_model', 'kv_bbl_u_off',   diag%axesCu1, Time, &
             'Accumulated meridional thickness fluxes to advect tracers', 'kg')
-        CS%id_v = register_diag_field('ocean_model', 'v_off', diag%axesCvL, Time, &
+        CS%id_bbl_thick_u = register_diag_field('ocean_model', 'bbl_thick_u_off',   diag%axesCu1, Time, &
             'Accumulated meridional thickness fluxes to advect tracers', 'kg')
+
+        CS%id_vhtr = register_diag_field('ocean_model', 'vhtr_off',             diag%axesCvL, Time, &
+            'Accumulated meridional thickness fluxes to advect tracers', 'kg')
+        CS%id_vh = register_diag_field('ocean_model', 'vh_off',                 diag%axesCvL, Time, &
+            'Accumulated meridional thickness fluxes to advect tracers', 'kg')
+        CS%id_v = register_diag_field('ocean_model', 'v_off',                   diag%axesCvL, Time, &
+            'Accumulated meridional thickness fluxes to advect tracers', 'kg')
+        CS%id_ray_v = register_diag_field('ocean_model', 'ray_v_off',           diag%axesCvL, Time, &
+            'Accumulated meridional thickness fluxes to advect tracers', 'kg')
+        CS%id_kv_bbl_v = register_diag_field('ocean_model', 'kv_bbl_v_off',     diag%axesCv1, Time, &
+            'Accumulated meridional thickness fluxes to advect tracers', 'kg')
+        CS%id_bbl_thick_v = register_diag_field('ocean_model', 'bbl_thick_v_off',diag%axesCv1, Time, &
+            'Accumulated meridional thickness fluxes to advect tracers', 'kg')
+
         CS%id_h = register_diag_field('ocean_model', 'h_off', diag%axesTL, Time, &
             'Accumulated meridional thickness fluxes to advect tracers', 'kg')
         CS%id_eta = register_diag_field('ocean_model', 'eta_av', diag%axesT1, Time, &
             'Accumulated meridional thickness fluxes to advect tracers', 'kg')
-        CS%id_eta = register_diag_field('ocean_model', 'p_surf_begin', diag%axesT1, Time, &
+        CS%id_temp = register_diag_field('ocean_model', 'temp_off', diag%axesTL, Time, &
             'Accumulated meridional thickness fluxes to advect tracers', 'kg')
+        CS%id_salt = register_diag_field('ocean_model', 'salt_off', diag%axesTL, Time, &
+            'Accumulated meridional thickness fluxes to advect tracers', 'kg')
+
+
+
+    !        CS%id_kvbbl_u = register_diag_field('ocean_model', 'kvbbl_u', diag%axesCu1, Time, &
+    !            'Accumulated meridional thickness fluxes to advect tracers', 'kg')
+    !        CS%id_kvbbl_v = register_diag_field('ocean_model', 'kvbbl_v', diag%axesCv1, Time, &
+    !            'Accumulated meridional thickness fluxes to advect tracers', 'kg')
+    !
+    !        CS%id_bbl_thick_u = register_diag_field('ocean_model', 'bbl_thick_u_off', diag%axesCu1, Time, &
+    !            'Accumulated meridional thickness fluxes to advect tracers', 'kg')
+    !        CS%id_bbl_thick_v = register_diag_field('ocean_model', 'bbl_thick_v_off', diag%axesCv1, Time, &
+    !            'Accumulated meridional thickness fluxes to advect tracers', 'kg')
+    !
+    !        CS%id_ustar = register_diag_field('ocean_model', 'ustar_bbl_off', diag%axesT1, Time, &
+    !            'Accumulated meridional thickness fluxes to advect tracers', 'kg')
+
 
     end subroutine register_diags_offline_transport
 
@@ -183,62 +224,103 @@ contains
 
     end subroutine offline_transport_init
 
-    subroutine transport_by_files(G, CS, angstrom, u, v, uh, vh, uhtr, vhtr, h , eta_av, missing)
+    subroutine transport_by_files(G, CS, angstrom, u, v, uh, vh, uhtr, vhtr, h, eta_av, missing, visc, temp, salt) !, kv_bbl_u, kv_bbl_v, bbl_thick_u, bbl_thick_v, ustar_bbl, missing)
         type(ocean_grid_type)                    , intent(inout)       :: G
         type(offline_transport_CS)               , intent(inout)       :: CS
         real                                                        :: angstrom
-        real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: u
-        real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout)    :: v
-        real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: uh
-        real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout)    :: vh
-        real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: uhtr  !< accumulated volume/mass flux through zonal face (m3 or kg)
-        real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout)    :: vhtr  !< accumulated volume/mass flux through merid face (m3 or kg)
-        real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)    :: h     !< layer thickness after advection (m or kg m-2)
-        real, dimension(SZI_(G),SZJ_(G)) , intent(inout)            :: eta_av
+        ! Fields at U-points
+        real, dimension(SZIB_(G),SZJ_(G),SZK_(G))                   :: u, uh, uhtr
+        ! Fields at V-points
+        real, dimension(SZI_(G),SZJB_(G),SZK_(G))                   :: v, vh, vhtr
+        ! Fields at T-point
+        real, dimension(SZI_(G),SZJ_(G),SZK_(G))                    :: h, temp, salt
+        ! Fields at T-point (2D)
+        real, dimension(SZI_(G),SZJ_(G))                            :: eta_av
+        ! Scalars
         real                                                        :: missing
+        ! Derived types
+        type(vertvisc_type)                                         :: visc
+
 
         integer :: i, j, k
 
         call callTree_enter("transport_by_files, MOM_offline_control.F90")
 
-        if ( is_root_pe() ) print *, "Read index: ", CS%ridx_mean
+        !        if ( is_root_pe() ) print *, "Read index: ", CS%ridx_mean
 
         ! Read time-averaged fields (middle of time interval timestamp)
         call read_data(CS%transport_file, 'u', u(:,:,:),domain=G%Domain%mpp_domain, &
             timelevel=CS%ridx_mean,position=EAST)
-        call read_data(CS%transport_file, 'v', v(:,:,:),domain=G%Domain%mpp_domain, &
-            timelevel=CS%ridx_mean,position=NORTH)
-!
         call read_data(CS%transport_file, 'uh', uh(:,:,:),domain=G%Domain%mpp_domain, &
             timelevel=CS%ridx_mean,position=EAST)
-        call read_data(CS%transport_file, 'vh', vh(:,:,:),domain=G%Domain%mpp_domain, &
-            timelevel=CS%ridx_mean,position=NORTH)
-
-
         call read_data(CS%transport_file, 'uhtr', uhtr(:,:,:),domain=G%Domain%mpp_domain, &
             timelevel=CS%ridx_mean,position=EAST)
+        call read_data(CS%transport_file, 'ray_u', visc%Ray_u(:,:,:),domain=G%Domain%mpp_domain, &
+            timelevel=CS%ridx_mean,position=EAST)
+        call read_data(CS%transport_file, 'kv_bbl_u', visc%kv_bbl_u(:,:),domain=G%Domain%mpp_domain, &
+            timelevel=CS%ridx_mean,position=EAST)
+        call read_data(CS%transport_file, 'bbl_thick_u', visc%bbl_thick_u(:,:),domain=G%Domain%mpp_domain, &
+            timelevel=CS%ridx_mean,position=EAST)
+
+        call read_data(CS%transport_file, 'v', v(:,:,:),domain=G%Domain%mpp_domain, &
+            timelevel=CS%ridx_mean,position=NORTH)
+        call read_data(CS%transport_file, 'vh', vh(:,:,:),domain=G%Domain%mpp_domain, &
+            timelevel=CS%ridx_mean,position=NORTH)
         call read_data(CS%transport_file, 'vhtr', vhtr(:,:,:),domain=G%Domain%mpp_domain, &
             timelevel=CS%ridx_mean,position=NORTH)
-!
-!        call read_data(CS%transport_file, 'eta_av', eta_av(:,:), domain=G%Domain%mpp_domain, &
-!            timelevel=CS%ridx_mean,position=CENTER)
-!
-!        ! Read snapshot fields (end of time interval timestamp)
+        call read_data(CS%transport_file, 'ray_v', visc%Ray_v(:,:,:),domain=G%Domain%mpp_domain, &
+            timelevel=CS%ridx_mean,position=NORTH)
+        call read_data(CS%transport_file, 'kv_bbl_v', visc%kv_bbl_v(:,:),domain=G%Domain%mpp_domain, &
+            timelevel=CS%ridx_mean,position=NORTH)
+        call read_data(CS%transport_file, 'bbl_thick_v', visc%bbl_thick_v(:,:),domain=G%Domain%mpp_domain, &
+            timelevel=CS%ridx_mean,position=NORTH)
+
+        !
+        call read_data(CS%transport_file, 'eta_av', eta_av(:,:), domain=G%Domain%mpp_domain, &
+            timelevel=CS%ridx_mean,position=CENTER)
+        !
+        !        ! Read snapshot fields (end of time interval timestamp)
         call read_data(CS%transport_file, 'h', h(:,:,:),domain=G%Domain%mpp_domain, &
             timelevel=CS%ridx_mean,position=CENTER)
+        call read_data(CS%transport_file, 'temp', temp(:,:,:),domain=G%Domain%mpp_domain, &
+            timelevel=CS%ridx_mean,position=CENTER)
+        call read_data(CS%transport_file, 'salt', salt(:,:,:),domain=G%Domain%mpp_domain, &
+            timelevel=CS%ridx_mean,position=CENTER)
+      
+
+        call read_data(CS%transport_file, 'eta_av', eta_av(:,:), domain=G%Domain%mpp_domain, &
+            timelevel=CS%ridx_mean,position=CENTER)
+        !
+        !
+        !        call read_data(CS%transport_file, 'kvbbl_u', kv_bbl_u(:,:),domain=G%Domain%mpp_domain, &
+        !            timelevel=CS%ridx_mean,position=EAST)
+        !        call read_data(CS%transport_file, 'kvbbl_v', kv_bbl_v(:,:),domain=G%Domain%mpp_domain, &
+        !            timelevel=CS%ridx_mean,position=NORTH)
+        !
+        !        call read_data(CS%transport_file, 'bbl_thick_u', bbl_thick_u(:,:),domain=G%Domain%mpp_domain, &
+        !            timelevel=CS%ridx_mean,position=EAST)
+        !        call read_data(CS%transport_file, 'bbl_thick_v', bbl_thick_v(:,:),domain=G%Domain%mpp_domain, &
+        !            timelevel=CS%ridx_mean,position=NORTH)
+        !        call read_data(CS%transport_file, 'ustar_bbl', ustar_bbl(:,:),domain=G%Domain%mpp_domain, &
+        !            timelevel=CS%ridx_mean,position=CENTER)
 
         ! Apply masks sinice read_data doesn't account for missing values?!
         do k = 1,G%ke
-!
-!            ! Fields on T-cell
+            !
+            !            ! Fields on T-cell
             do j=G%jsd, G%jed ; do i=G%isd, G%ied
-                if( h(i,j,k)<0.0 )  h(i,j,k) = angstrom
-!                if(eta_av(i,j).EQ.missing) eta_av = 0
+                if( h(i,j,k).EQ.missing )  h(i,j,k) = angstrom
+                if( temp(i,j,k).EQ.missing )  temp(i,j,k) = 0
+                if( salt(i,j,k).EQ.missing )  salt(i,j,k) = 0
+                if(eta_av(i,j).EQ.missing) eta_av(i,j) = 0
             enddo ; enddo
-!
-!
+            !
+            !
             ! Fields on U-Grid
             do j=G%jsd, G%jed ; do i=G%isdb, G%iedb
+                if(visc%bbl_thick_u(i,j) .EQ. missing) visc%bbl_thick_u(i,j) = 0
+                if(visc%kv_bbl_u(i,j) .EQ. missing) visc%kv_bbl_u(i,j) = 0
+                if(visc%ray_u(i,j,k) .EQ. missing) visc%ray_u(i,j,k) = 0
                 if(uhtr(i,j,k) .EQ. missing)  uhtr(i,j,k) = 0
                 if(uh(i,j,k)   .EQ. missing)  uh(i,j,k) = 0
                 if(u(i,j,k)    .EQ. missing)  u(i,j,k) = 0
@@ -246,27 +328,31 @@ contains
 
             ! Fields on V-Grid
             do j=G%jsdb, G%jedb ; do i=G%isd, G%ied
+                if(visc%bbl_thick_v(i,j) .EQ. missing) visc%bbl_thick_v(i,j) = 0
+                if(visc%kv_bbl_v(i,j) .EQ. missing) visc%kv_bbl_v(i,j) = 0
+                if(visc%ray_v(i,j,k) .EQ. missing) visc%ray_v(i,j,k) = 0
                 if(vhtr(i,j,k) .EQ. missing)  vhtr(i,j,k) = 0
                 if(vh(i,j,k)   .EQ. missing)  vh(i,j,k) = 0
                 if(v(i,j,k)    .EQ. missing)  v(i,j,k) = 0
             enddo ; enddo
 
-!
-!
+        !
+        !
         enddo
-!
-!        ! Make sure all halos have been updated
+        !
+        !        ! Make sure all halos have been updated
         call pass_vector(uhtr, vhtr, G%Domain)
         call pass_vector(uh, vh, G%Domain)
         call pass_vector(u, v, G%Domain)
+        call pass_vector(visc%ray_u, visc%ray_v, G%Domain)
         call pass_var(h,G%Domain)
         call pass_var(eta_av, G%Domain)
+        call pass_var(temp, G%Domain)
+        call pass_var(salt, G%Domain)
 
         ! Update the read indices
         CS%ridx_snap = next_modulo_time(CS%ridx_snap,CS%numtime)
         CS%ridx_mean = next_modulo_time(CS%ridx_mean,CS%numtime)
-
-
 
         call callTree_leave("transport_by_file")
 
