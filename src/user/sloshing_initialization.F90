@@ -20,6 +20,7 @@ module sloshing_initialization
 !***********************************************************************
 
 use MOM_domains, only : sum_across_PEs
+use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, param_file_type
 use MOM_get_input, only : directories
@@ -53,12 +54,11 @@ contains
 
 !> Initialization of topography.
 subroutine sloshing_initialize_topography ( D, G, param_file, max_depth )
-  type(ocean_grid_type), intent(in)           :: G          !< The ocean's grid structure.
-  real, intent(out), dimension(SZI_(G),SZJ_(G)) :: D        !< The bottom depth in m.
-  type(param_file_type), intent(in)           :: param_file !< A structure indicating the
-                                                            !! open file to parse for model
-                                                            !! parameter values.
-  real,                  intent(in)           :: max_depth  !< Maximum depth.
+  type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
+  real, dimension(G%isd:G%ied,G%jsd:G%jed), &
+                                      intent(out) :: D !< Ocean bottom depth in m
+  type(param_file_type),              intent(in)  :: param_file !< Parameter file structure
+  real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
   
   ! Local variables 
   integer   :: i, j
@@ -84,9 +84,9 @@ end subroutine sloshing_initialize_topography
 !! left and minimum value on the right. This sets off a regular sloshing motion.
 subroutine sloshing_initialize_thickness ( h, G, GV, param_file )
   type(ocean_grid_type), intent(in)           :: G          !< The ocean's grid structure.
-  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h !< The thicknesses being
-                                                            !! initialized.
   type(verticalGrid_type), intent(in)         :: GV         !< The ocean's vertical grid structure.
+  real, intent(out), dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h !< The thicknesses being
+                                                            !! initialized.
   type(param_file_type), intent(in)           :: param_file !< A structure indicating the
                                                             !! open file to parse for model
                                                             !! parameter values.
