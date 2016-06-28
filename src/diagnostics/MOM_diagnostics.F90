@@ -326,7 +326,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
 
   ! volume mean potential temperature 
   if (CS%id_thetaoga>0) then
-    thetaoga = global_volume_mean(tv%T, h, G)
+    thetaoga = global_volume_mean(tv%T, h, G, GV)
     call post_data(CS%id_thetaoga, thetaoga, CS%diag)
   endif
 
@@ -341,7 +341,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
 
   ! volume mean salinity 
   if (CS%id_soga>0) then
-    soga = global_volume_mean(tv%S, h, G)
+    soga = global_volume_mean(tv%S, h, G, GV)
     call post_data(CS%id_soga, soga, CS%diag)
   endif
 
@@ -356,13 +356,13 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
 
   ! layer mean potential temperature 
   if (CS%id_temp_layer_ave>0) then
-    temp_layer_ave = global_layer_mean(tv%T, h, G)
+    temp_layer_ave = global_layer_mean(tv%T, h, G, GV)
     call post_data_1d_k(CS%id_temp_layer_ave, temp_layer_ave, CS%diag)
   endif
 
   ! layer mean salinity 
   if (CS%id_salt_layer_ave>0) then
-    salt_layer_ave = global_layer_mean(tv%S, h, G)
+    salt_layer_ave = global_layer_mean(tv%S, h, G, GV)
     call post_data_1d_k(CS%id_salt_layer_ave, salt_layer_ave, CS%diag)
   endif
 
