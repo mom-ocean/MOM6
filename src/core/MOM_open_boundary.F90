@@ -11,6 +11,7 @@ use MOM_domains, only : To_All, SCALAR_PAIR, CGRID_NE
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type, log_param
 use MOM_grid, only : ocean_grid_type
+use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_io, only : EAST_FACE, NORTH_FACE
 use MOM_io, only : slasher, read_data
 use MOM_tracer_registry, only : add_tracer_OBC_values, tracer_registry_type
@@ -112,7 +113,7 @@ contains
 
 !> Enables OBC module and reads configuration parameters
 subroutine open_boundary_config(G, param_file, OBC)
-  type(ocean_grid_type),   intent(in)    :: G !< Ocean grid structure
+  type(dyn_horgrid_type),  intent(in)    :: G !< Ocean grid structure
   type(param_file_type),   intent(in)    :: param_file !< Parameter file handle
   type(ocean_OBC_type),    pointer       :: OBC !< Open boundary control structure
   ! Local variables
@@ -164,9 +165,9 @@ end subroutine open_boundary_config
 
 !> Initialize open boundary control structure
 subroutine open_boundary_init(G, param_file, OBC)
-  type(ocean_grid_type),   intent(in)    :: G !< Ocean grid structure
-  type(param_file_type),   intent(in)    :: param_file !< Parameter file handle
-  type(ocean_OBC_type),    pointer       :: OBC !< Open boundary control structure
+  type(ocean_grid_type), intent(in)    :: G !< Ocean grid structure
+  type(param_file_type), intent(in)    :: param_file !< Parameter file handle
+  type(ocean_OBC_type),  pointer       :: OBC !< Open boundary control structure
   ! Local variables
 
   if (.not.associated(OBC)) return
@@ -244,7 +245,7 @@ end subroutine open_boundary_end
 !> Sets the slope of bathymetry normal to an open bounndary to zero.
 subroutine open_boundary_impose_normal_slope(OBC, G, depth)
   type(ocean_OBC_type),             pointer       :: OBC !< Open boundary control structure
-  type(ocean_grid_type),            intent(in)    :: G !< Ocean grid structure
+  type(dyn_horgrid_type),           intent(in)    :: G !< Ocean grid structure
   real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: depth !< Bathymetry at h-points
   ! Local variables
   integer :: i, j
@@ -270,7 +271,7 @@ end subroutine open_boundary_impose_normal_slope
 !> Reconcile masks and open boundaries, deallocate OBC on PEs where it is not needed
 subroutine open_boundary_impose_land_mask(OBC, G)
   type(ocean_OBC_type),              pointer       :: OBC !< Open boundary control structure
-  type(ocean_grid_type),             intent(in) :: G !< Ocean grid structure
+  type(dyn_horgrid_type),            intent(in) :: G !< Ocean grid structure
   ! Local variables
   integer :: i, j
   logical :: any_U, any_V
@@ -442,7 +443,7 @@ end subroutine Radiation_Open_Bdry_Conds
 !> Sets the domain boundaries as Flather open boundaries using the original
 !! Flather run-time logicals
 subroutine set_Flather_positions(G, OBC)
-  type(ocean_grid_type),                  intent(inout) :: G
+  type(dyn_horgrid_type),                 intent(inout) :: G
   type(ocean_OBC_type),                   pointer    :: OBC
   ! Local variables
   integer :: east_boundary, west_boundary, north_boundary, south_boundary

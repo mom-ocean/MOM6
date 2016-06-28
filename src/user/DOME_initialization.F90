@@ -235,7 +235,7 @@ end subroutine DOME_initialize_sponges
 
 !> Set the positions of the open boundary needed for the DOME experiment.
 subroutine DOME_set_OBC_positions(G, param_file, OBC)
-  type(ocean_grid_type),      intent(in) :: G   !< Grid structure.
+  type(dyn_horgrid_type),     intent(in) :: G   !< Grid structure.
   type(param_file_type),      intent(in) :: param_file !< Parameter file handle.
   type(ocean_OBC_type),       pointer    :: OBC !< Open boundary control structure.
   ! Local variables
