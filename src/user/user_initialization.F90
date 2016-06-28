@@ -201,7 +201,7 @@ end subroutine USER_initialize_sponges
 
 !> This subroutine sets the location of open boundaries.
 subroutine USER_set_OBC_positions(G, param_file, OBC)
-  type(ocean_grid_type),      intent(in) :: G     !< The ocean's grid structure.
+  type(dyn_horgrid_type),     intent(in) :: G     !< The ocean's grid structure.
   type(param_file_type),      intent(in) :: param_file !< A structure indicating the
                                                   !! open file to parse for model
                                                   !! parameter values.
