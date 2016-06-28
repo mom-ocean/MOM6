@@ -1237,7 +1237,7 @@ subroutine restart_init(param_file, CS, restart_root)
   allocate(CS)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version)
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "PARALLEL_RESTARTFILES", &
                                 CS%parallel_restartfiles, &
                  "If true, each processor writes its own restart file, \n"//&

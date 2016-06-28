@@ -215,7 +215,7 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
   set_vert = .true. ; if (present(set_vertical)) set_vert = set_vertical
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version)
+  call log_version(param_file, mod, version, "")
 
   if(G%symmetric) then
     id_xq = diag_axis_init('xq', G%gridLonB(G%isgB:G%iegB), G%x_axis_units, 'x', &
