@@ -101,6 +101,7 @@ type, public :: ocean_OBC_type
   real :: rx_max   !< The maximum magnitude of the baroclinic radiation
                    !! velocity (or speed of characteristics), in m s-1.  The
                    !! default value is 10 m s-1.
+  logical :: this_pe !< Is there an open boundary on this tile?
 end type ocean_OBC_type
 
 integer :: id_clock_pass
@@ -307,9 +308,9 @@ subroutine open_boundary_impose_land_mask(OBC, G)
       ! bathymetry inside the boundary was do shallow and flagged as land.
       if (OBC%OBC_mask_u(I,j)) any_U = .true.
     enddo ; enddo
-    if (.not. any_U) then
-      deallocate(OBC%OBC_mask_u)
-    endif
+!    if (.not. any_U) then
+!      deallocate(OBC%OBC_mask_u)
+!    endif
   endif
 
   any_V = .false.
@@ -317,12 +318,14 @@ subroutine open_boundary_impose_land_mask(OBC, G)
     do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
       if (OBC%OBC_mask_v(i,J)) any_V = .true.
     enddo ; enddo
-    if (.not. any_V) then
-      deallocate(OBC%OBC_mask_v)
-    endif
+!    if (.not. any_V) then
+!      deallocate(OBC%OBC_mask_v)
+!    endif
   endif
 
-  if (.not.(any_U .or. any_V)) call open_boundary_dealloc(OBC)
+!  if (.not.(any_U .or. any_V)) call open_boundary_dealloc(OBC)
+  OBC%this_pe = .true.
+  if (.not.(any_U .or. any_V)) OBC%this_pe = .false.
 
 end subroutine open_boundary_impose_land_mask
 
@@ -346,6 +349,7 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   if (.not.associated(OBC)) return
+  if (.not. OBC%this_pe) return
   if (.not.(OBC%apply_OBC_u_flather_east .or. OBC%apply_OBC_u_flather_west .or. &
             OBC%apply_OBC_v_flather_north .or. OBC%apply_OBC_v_flather_south)) &
     return
@@ -567,8 +571,6 @@ subroutine set_Flather_positions(G, OBC)
     enddo ; enddo
   endif
 
-  !   If there are no OBC points on this PE, there is no reason to keep the OBC
-  ! type, and it could be deallocated.
 end subroutine set_Flather_positions
 
 !> Sets the initial definitions of the characteristic open boundary conditions.
