@@ -184,7 +184,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, G, GV
   nz = G%ke
   h_neglect = GV%H_subroundoff
 
-  I_G_Earth = 1.0 / G%G_earth
+  I_G_Earth = 1.0 / GV%g_Earth
   surface_BL = .true. ; bottom_BL = .true. ; debug = .true.
 
   dPEa_dKd(:) = 0.0 ; dPEa_dKd_est(:) = 0.0 ; dPEa_dKd_err(:) = 0.0 ; dPEa_dKd_err_norm(:) = 0.0 ; dPEa_dKd_trunc(:) = 0.0
@@ -195,7 +195,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, G, GV
     T0(k) = T_in(k) ; S0(k) = S_in(k)
     h_tr(k) = h_in(k)
     htot = htot + h_tr(k)
-    pres(K+1) = pres(K) + G%g_Earth * GV%H_to_kg_m2 * h_tr(k)
+    pres(K+1) = pres(K) + GV%g_Earth * GV%H_to_kg_m2 * h_tr(k)
     p_lay(k) = 0.5*(pres(K) + pres(K+1))
   enddo
   do k=1,nz
