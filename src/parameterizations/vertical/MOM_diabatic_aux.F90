@@ -746,7 +746,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, dia
       subMLN2(:,j) = 0.
       rho1(:) = 0.
       d1(:) = 0.
-      pRef_N2(:) = G%g_Earth * GV%Rho0 * h(:,j,1) * GV%H_to_m ! Boussinesq approximation!!!! ?????
+      pRef_N2(:) = GV%g_Earth * GV%Rho0 * h(:,j,1) * GV%H_to_m ! Boussinesq approximation!!!! ?????
     endif
     do k = 2, nz
       dKm1(:) = dK(:) ! Depth of center of layer K-1
@@ -754,7 +754,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, dia
 
       ! Stratification, N2, immediately below the mixed layer, averaged over at least 50 m.
       if (id_N2>0) then
-        pRef_N2(:) = pRef_N2(:) + G%g_Earth * GV%Rho0 * h(:,j,k) * GV%H_to_m ! Boussinesq approximation!!!! ?????
+        pRef_N2(:) = pRef_N2(:) + GV%g_Earth * GV%Rho0 * h(:,j,k) * GV%H_to_m ! Boussinesq approximation!!!! ?????
         call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_N2, rhoAtK, is, ie-is+1, tv%eqn_of_state)
         do i = is, ie
           if (MLD(i,j)>0. .and. subMLN2(i,j)==0.) then ! This block is below the mixed layer
@@ -762,10 +762,10 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, dia
               rho1(i) = rhoAtK(i)
               d1(i) = dK(i)
               ! Use pressure at the bottom of the upper layer used in calculating d/dz rho
-              pRef_N2(i) = pRef_N2(i) + G%g_Earth * GV%Rho0 * h(i,j,k) * GV%H_to_m ! Boussinesq approximation!!!! ?????
+              pRef_N2(i) = pRef_N2(i) + GV%g_Earth * GV%Rho0 * h(i,j,k) * GV%H_to_m ! Boussinesq approximation!!!! ?????
             endif
             if (d1(i)>0. .and. dK(i)-d1(i)>=dz_subML) then
-              subMLN2(i,j) = G%g_Earth/ GV%Rho0 * (rho1(i)-rhoAtK(i)) / (d1(i) - dK(i))
+              subMLN2(i,j) = GV%g_Earth/ GV%Rho0 * (rho1(i)-rhoAtK(i)) / (d1(i) - dK(i))
             endif
           endif
         enddo ! i-loop
@@ -789,7 +789,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, dia
       if ((MLD(i,j)==0.) .and. (deltaRhoAtK(i)<densityDiff)) MLD(i,j) = dK(i) ! Assume mixing to the bottom
    !  if (id_N2>0 .and. subMLN2(i,j)==0. .and. d1(i)>0. .and. dK(i)-d1(i)>0.) then
    !    ! Use what ever stratification we can, measured over what ever distance is available
-   !    subMLN2(i,j) = G%g_Earth/ GV%Rho0 * (rho1(i)-rhoAtK(i)) / (d1(i) - dK(i))
+   !    subMLN2(i,j) = GV%g_Earth/ GV%Rho0 * (rho1(i)-rhoAtK(i)) / (d1(i) - dK(i))
    !  endif
     enddo
   enddo ! j-loop
@@ -862,8 +862,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
   Idt = 1.0/dt
 
   calculate_energetics = (present(cTKE) .and. present(dSV_dT) .and. present(dSV_dS))
-  I_G_Earth = 1.0 / G%G_earth
-  g_Hconv2 = G%G_earth * GV%H_to_kg_m2**2
+  I_G_Earth = 1.0 / GV%g_Earth
+  g_Hconv2 = GV%g_Earth * GV%H_to_kg_m2**2
 
   if (present(cTKE)) cTKE(:,:,:) = 0.0
 
@@ -908,7 +908,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
       do i=is,ie ; pres(i) = 0.0 ; enddo ! Add surface pressure?
       do k=1,nz
         do i=is,ie
-          d_pres(i) = G%g_Earth * GV%H_to_kg_m2 * h2d(i,k)
+          d_pres(i) = GV%g_Earth * GV%H_to_kg_m2 * h2d(i,k)
           p_lay(i) = pres(i) + 0.5*d_pres(i)
           pres(i) = pres(i) + d_pres(i)
         enddo

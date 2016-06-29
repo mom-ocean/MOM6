@@ -371,7 +371,7 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, CS)
   if (.not. ASSOCIATED(CS)) call MOM_error(FATAL, "MOM_lateral_mixing_coeffs.F90, calc_slope_functions:"//&
          "Module must be initialized before it is used.")
 
-  call find_eta(h, tv, G%g_Earth, G, GV, e, halo_size=2)
+  call find_eta(h, tv, GV%g_Earth, G, GV, e, halo_size=2)
   if (CS%use_variable_mixing) then
     if (CS%use_stored_slopes) then
       call calc_isoneutral_slopes(G, GV, h, e, tv, dt*CS%kappa_smooth, &
