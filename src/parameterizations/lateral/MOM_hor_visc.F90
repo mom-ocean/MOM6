@@ -298,7 +298,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   h_neglect  = GV%H_subroundoff
   h_neglect3 = h_neglect**3
 
-  if (present(OBC)) then ; if (associated(OBC)) then
+  if (present(OBC)) then ; if (OBC%this_pe) then
     apply_OBC = OBC%apply_OBC_u_flather_east .or. OBC%apply_OBC_u_flather_west .or. &
                 OBC%apply_OBC_v_flather_north .or. OBC%apply_OBC_v_flather_south
   endif ; endif

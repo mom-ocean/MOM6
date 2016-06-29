@@ -192,7 +192,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
 
   apply_OBC_u_flather_east = .false. ; apply_OBC_u_flather_west = .false.
   apply_OBC_v_flather_north = .false. ; apply_OBC_v_flather_south = .false.
-  if (present(OBC)) then ; if (associated(OBC)) then
+  if (present(OBC)) then ; if (OBC%this_pe) then
     apply_OBC_u_flather_east = OBC%apply_OBC_u_flather_east
     apply_OBC_u_flather_west = OBC%apply_OBC_u_flather_west
     apply_OBC_v_flather_north = OBC%apply_OBC_v_flather_north
@@ -396,7 +396,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
   use_visc_rem = present(visc_rem_u)
   apply_OBC_u = .false. ; set_BT_cont = .false.
   if (present(BT_cont)) set_BT_cont = (associated(BT_cont))
-  if (present(OBC)) then ; if (associated(OBC)) then
+  if (present(OBC)) then ; if (OBC%this_pe) then
     apply_OBC_u = OBC%apply_OBC_u
   endif ; endif
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = G%ke
@@ -1153,7 +1153,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
   use_visc_rem = present(visc_rem_v)
   apply_OBC_v = .false. ; set_BT_cont = .false.
   if (present(BT_cont)) set_BT_cont = (associated(BT_cont))
-  if (present(OBC)) then ; if (associated(OBC)) then
+  if (present(OBC)) then ; if (OBC%this_pe) then
     apply_OBC_v = OBC%apply_OBC_v
   endif ; endif
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = G%ke
