@@ -84,6 +84,9 @@ type, public :: diabatic_CS ; private
   logical :: use_geothermal          !< If true, apply geothermal heating.
   logical :: use_int_tides           !< If true, use the code that advances a separate set
                                      !! of equations for the internal tide energy density.
+  logical :: ePBL_is_additive        !< If true, the diffusivity from ePBL is added to all
+                                     !! other diffusivities. Otherwise, the larger of kappa-
+                                     !! shear and ePBL diffusivities are used.
   integer :: nMode = 1               !< Number of baroclinic modes to consider
   logical :: int_tide_source_test    !< If true, apply an arbitrary generation site
                                      !! for internal tide testing (BDM)
@@ -324,6 +327,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
 
   integer :: ig, jg      ! global indices for testing testing itide point source (BDM)
   logical :: avg_enabled ! for testing internal tides (BDM)
+  real :: Kd_add_here    ! An added diffusivity in m2/s
 
   is   = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
   Isq  = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -741,12 +745,18 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       ! Augment the diffusivities due to those diagnosed in energetic_PBL.
       do K=2,nz ; do j=js,je ; do i=is,ie
 
-        Ent_int = Kd_ePBL(i,j,K) * (GV%m_to_H**2 * dt) / &
-                  (0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect)
+        if (CS%ePBL_is_additive) then
+          Kd_add_here = Kd_ePBL(i,j,K)
+          visc%Kv_turb(i,j,K) = visc%Kv_turb(i,j,K) + Kd_ePBL(i,j,K)
+        else
+          Kd_add_here = max(Kd_ePBL(i,j,K) - visc%Kd_turb(i,j,K), 0.0)
+          visc%Kv_turb(i,j,K) = max(visc%Kv_turb(i,j,K), Kd_ePBL(i,j,K))
+        endif
+        Ent_int = Kd_add_here * (GV%m_to_H**2 * dt) / &
+                    (0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect)
         eb(i,j,k-1) = eb(i,j,k-1) + Ent_int
         ea(i,j,k) = ea(i,j,k) + Ent_int
-        visc%Kv_turb(i,j,K) = visc%Kv_turb(i,j,K) + Kd_ePBL(i,j,K)
-        Kd_int(i,j,K)  = Kd_int(i,j,K) + Kd_ePBL(i,j,K)
+        Kd_int(i,j,K)  = Kd_int(i,j,K) + Kd_add_here
 
         ! for diagnostics
         Kd_heat(i,j,K) = Kd_heat(i,j,K) + Kd_int(i,j,K)
@@ -1751,6 +1761,10 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
                  "If true, use an implied energetics planetary boundary \n"//&
                  "layer scheme to determine the diffusivity and viscosity \n"//&
                  "in the surface boundary layer.", default=.false.)
+  call get_param(param_file, mod, "EPBL_IS_ADDITIVE", CS%ePBL_is_additive, &
+                 "If true, the diffusivity from ePBL is added to all\n"//&
+                 "other diffusivities. Otherwise, the larger of kappa-\n"//&
+                 "shear and ePBL diffusivities are used.", default=.true.)
   call get_param(param_file, mod, "DOUBLE_DIFFUSION", differentialDiffusion, &
                  "If true, apply parameterization of double-diffusion.", &
                  default=.false. )
