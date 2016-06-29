@@ -967,7 +967,7 @@ subroutine PressureForce_Mont_init(Time, G, GV, param_file, diag, CS, tides_CSp)
   endif
 
   mod = "MOM_PressureForce_Mont"
-  call log_version(param_file, mod, version)
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "RHO_0", CS%Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to \n"//&
                  "calculate accelerations and the mass for conservation \n"//&

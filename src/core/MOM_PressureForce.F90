@@ -144,7 +144,7 @@ subroutine PressureForce_init(Time, G, GV, param_file, diag, CS, tides_CSp)
   else ; allocate(CS) ; endif
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version)
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "ANALYTIC_FV_PGF", CS%Analytic_FV_PGF, &
                  "If true the pressure gradient forces are calculated \n"//&
                  "with a finite volume form that analytically integrates \n"//&
