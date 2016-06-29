@@ -1,5 +1,5 @@
 ! This file is part of MOM6. See LICENSE.md for the license.
-!> Controls where open boundary conditions are applied 
+!> Controls where open boundary conditions are applied
 module MOM_open_boundary
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -595,8 +595,8 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
   real, pointer, dimension(:,:,:) :: &
     OBC_T_u => NULL(), &    ! These arrays should be allocated and set to
     OBC_T_v => NULL(), &    ! specify the values of T and S that should come
-    OBC_S_u => NULL(), & 
-    OBC_S_v => NULL()     
+    OBC_S_u => NULL(), &
+    OBC_S_v => NULL()
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -639,7 +639,7 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
   if (.not.associated(OBC%eta_outer_v)) then
     allocate(OBC%eta_outer_v(isd:ied,JsdB:JedB)) ; OBC%eta_outer_v(:,:) = 0.0
   endif
-  
+
   if (read_OBC_uv) then
     call read_data(filename, 'ubt', OBC%ubt_outer, &
                    domain=G%Domain%mpp_domain, position=EAST_FACE)
