@@ -359,7 +359,7 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
   endif
 
   if (apply_OBC_v) then
-    g_prime_tot = (G%g_Earth/GV%Rho0)*2.0
+    g_prime_tot = (GV%g_Earth/GV%Rho0)*2.0
     Def_Rad = sqrt(D_edge*g_prime_tot) / (1.0e-4*1000.0)
     tr_0 = (-D_edge*sqrt(D_edge*g_prime_tot)*0.5e3*Def_Rad) * GV%m_to_H
 

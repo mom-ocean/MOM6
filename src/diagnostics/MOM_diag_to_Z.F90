@@ -153,7 +153,11 @@ function global_z_mean(var,G,CS,tracer)
   global_weight_scalar = reproducing_sum(weight,sums=weightij)
 
   do k=1, nz
-    global_z_mean(k) = scalarij(k) / weightij(k)
+    if (scalarij(k) == 0) then
+        global_z_mean(k) = 0.0
+    else
+        global_z_mean(k) = scalarij(k) / weightij(k)
+    endif
   enddo
 
 end function global_z_mean

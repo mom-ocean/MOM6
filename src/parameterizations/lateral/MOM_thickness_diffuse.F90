@@ -202,7 +202,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
       (dt*(G%IdxCv(i,J)*G%IdxCv(i,J) + G%IdyCv(i,J)*G%IdyCv(i,J)))
   enddo ; enddo
 
-  call find_eta(h, tv, G%g_Earth, G, GV, e, halo_size=1)
+  call find_eta(h, tv, GV%g_Earth, G, GV, e, halo_size=1)
 
   ! Set the diffusivities.
 !$OMP parallel default(none) shared(is,ie,js,je,Khth_Loc_u,CS,use_VarMix,VarMix,    &
@@ -546,7 +546,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, GV, MEK
   H_to_m = GV%H_to_m ; m_to_H = GV%m_to_H
   I4dt = 0.25 / dt
   I_slope_max2 = 1.0 / (CS%slope_max**2)
-  G_scale = G%g_Earth * H_to_m
+  G_scale = GV%g_Earth * H_to_m
   h_neglect = GV%H_subroundoff ; h_neglect2 = h_neglect**2
   dz_neglect = GV%H_subroundoff*H_to_m
 
