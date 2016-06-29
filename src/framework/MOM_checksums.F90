@@ -1156,10 +1156,11 @@ function totalStuff(G, hThick, stuff)
   real, dimension(G%isd:,G%jsd:,:), intent(in) :: hThick !< The array of thicknesses to use as weights
   real, dimension(G%isd:,G%jsd:,:), intent(in) :: stuff  !< The array of stuff to be summed 
   real                                         :: totalStuff
-  integer :: i, j, k
+  integer :: i, j, k, nz
 
+  nz = size(hThick,3)
   totalStuff = 0.
-  do k = 1, G%ke ; do j = G%jsc, G%jec ; do i = G%isc, G%iec
+  do k = 1, nz ; do j = G%jsc, G%jec ; do i = G%isc, G%iec
     totalStuff = totalStuff + hThick(i,j,k) * stuff(i,j,k) * G%areaT(i,j)
   enddo ; enddo ; enddo
   call sum_across_PEs(totalStuff)
@@ -1185,10 +1186,11 @@ subroutine totalTandS(G, hThick, temperature, salinity, mesg)
 
   logical, save :: firstCall = .true.
   real :: thisH, thisT, thisS, delH, delT, delS
-  integer :: i, j, k
+  integer :: i, j, k, nz
 
+  nz = size(hThick,3)
   thisH = 0.
-  do k = 1, G%ke ; do j = G%jsc, G%jec ; do i = G%isc, G%iec
+  do k = 1, nz ; do j = G%jsc, G%jec ; do i = G%isc, G%iec
     thisH = thisH + hThick(i,j,k) * G%areaT(i,j)
   enddo ; enddo ; enddo
   call sum_across_PEs(thisH)

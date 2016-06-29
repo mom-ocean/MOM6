@@ -192,7 +192,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
 
   apply_OBC_u_flather_east = .false. ; apply_OBC_u_flather_west = .false.
   apply_OBC_v_flather_north = .false. ; apply_OBC_v_flather_south = .false.
-  if (present(OBC)) then ; if (associated(OBC)) then
+  if (present(OBC)) then ; if (associated(OBC)) then ; if (OBC%this_pe) then
     apply_OBC_u_flather_east = OBC%apply_OBC_u_flather_east
     apply_OBC_u_flather_west = OBC%apply_OBC_u_flather_west
     apply_OBC_v_flather_north = OBC%apply_OBC_v_flather_north
@@ -202,7 +202,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
     if (apply_OBC_u_flather_east .or. apply_OBC_u_flather_west .or. &
         apply_OBC_v_flather_north .or. apply_OBC_v_flather_south) &
       h_input(:,:,:) = hin(:,:,:)
-  endif ; endif
+  endif ; endif ; endif
 
   if (present(visc_rem_u) .neqv. present(visc_rem_v)) call MOM_error(FATAL, &
       "MOM_continuity_PPM: Either both visc_rem_u and visc_rem_v or neither"// &
@@ -424,9 +424,9 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
   use_visc_rem = present(visc_rem_u)
   apply_OBC_u = .false. ; set_BT_cont = .false.
   if (present(BT_cont)) set_BT_cont = (associated(BT_cont))
-  if (present(OBC)) then ; if (associated(OBC)) then
+  if (present(OBC)) then ; if (associated(OBC)) then ; if (OBC%this_pe) then
     apply_OBC_u = OBC%apply_OBC_u
-  endif ; endif
+  endif ; endif ; endif
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = G%ke
 
   CFL_dt = CS%CFL_limit_adjust / dt
@@ -1181,9 +1181,9 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
   use_visc_rem = present(visc_rem_v)
   apply_OBC_v = .false. ; set_BT_cont = .false.
   if (present(BT_cont)) set_BT_cont = (associated(BT_cont))
-  if (present(OBC)) then ; if (associated(OBC)) then
+  if (present(OBC)) then ; if (associated(OBC)) then ; if (OBC%this_pe) then
     apply_OBC_v = OBC%apply_OBC_v
-  endif ; endif
+  endif ; endif ; endif
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = G%ke
 
   CFL_dt = CS%CFL_limit_adjust / dt
@@ -2163,7 +2163,7 @@ subroutine continuity_PPM_init(Time, G, GV, param_file, diag, CS)
   allocate(CS)
 
 ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version)
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "MONOTONIC_CONTINUITY", CS%monotonic, &
                  "If true, CONTINUITY_PPM uses the Colella and Woodward \n"//&
                  "monotonic limiter.  The default (false) is to use a \n"//&

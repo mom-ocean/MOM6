@@ -190,7 +190,7 @@ subroutine continuity_init(Time, G, GV, param_file, diag, CS)
   allocate(CS)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version)
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "CONTINUITY_SCHEME", tmpstr, &
                  "CONTINUITY_SCHEME selects the discretization for the \n"//&
                  "continuity solver. The only valid value currently is: \n"//&

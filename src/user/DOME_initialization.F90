@@ -20,6 +20,7 @@ module DOME_initialization
 !***********************************************************************
 
 use MOM_sponge, only : sponge_CS, set_up_sponge_field, initialize_sponge
+use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
@@ -45,11 +46,11 @@ contains
 ! -----------------------------------------------------------------------------
 !> This subroutine sets up the DOME topography
 subroutine DOME_initialize_topography(D, G, param_file, max_depth)
-  type(ocean_grid_type), intent(in)           :: G !< The ocean's grid structure.
-  real, intent(out), dimension(SZI_(G),SZJ_(G)) :: D !< The bottom depth in m.
-  type(param_file_type), intent(in) :: param_file !< A structure indicating the open file
-                                                  !! to parse for model parameter values.
-  real,                  intent(in)               :: max_depth !< Maximum depth.
+  type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
+  real, dimension(G%isd:G%ied,G%jsd:G%jed), &
+                                      intent(out) :: D !< Ocean bottom depth in m
+  type(param_file_type),              intent(in)  :: param_file !< Parameter file structure
+  real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
 
   real :: min_depth ! The minimum and maximum depths in m.
 ! This include declares and sets the variable "version".
@@ -92,7 +93,7 @@ end subroutine DOME_initialize_topography
 subroutine DOME_initialize_thickness(h, G, GV, param_file)
   type(ocean_grid_type),   intent(in) :: G  !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV !< The ocean's vertical grid structure.
-  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h !< The thickness that is being initialized.
+  real, intent(out), dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h !< The thickness that is being initialized.
   type(param_file_type),   intent(in) :: param_file !< A structure indicating the open file
                                                     !! to parse for model parameter values.
 
@@ -234,7 +235,7 @@ end subroutine DOME_initialize_sponges
 
 !> Set the positions of the open boundary needed for the DOME experiment.
 subroutine DOME_set_OBC_positions(G, param_file, OBC)
-  type(ocean_grid_type),      intent(in) :: G   !< Grid structure.
+  type(dyn_horgrid_type),     intent(in) :: G   !< Grid structure.
   type(param_file_type),      intent(in) :: param_file !< Parameter file handle.
   type(ocean_OBC_type),       pointer    :: OBC !< Open boundary control structure.
   ! Local variables
