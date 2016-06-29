@@ -690,7 +690,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         if (CS%id_T_preale > 0) call post_data(CS%id_T_preale, CS%tv%T, CS%diag)
         if (CS%id_S_preale > 0) call post_data(CS%id_S_preale, CS%tv%S, CS%diag)
         if (CS%id_e_preale > 0) then
-            call find_eta(h, CS%tv, G%g_Earth, G, GV, eta_preale)
+            call find_eta(h, CS%tv, GV%g_Earth, G, GV, eta_preale)
             call post_data(CS%id_e_preale, eta_preale, CS%diag)
         endif
 
@@ -984,7 +984,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       if (CS%id_T_predia > 0) call post_data(CS%id_T_predia, CS%tv%T, CS%diag)
       if (CS%id_S_predia > 0) call post_data(CS%id_S_predia, CS%tv%S, CS%diag)
       if (CS%id_e_predia > 0) then
-        call find_eta(h, CS%tv, G%g_Earth, G, GV, eta_predia)
+        call find_eta(h, CS%tv, GV%g_Earth, G, GV, eta_predia)
         call post_data(CS%id_e_predia, eta_predia, CS%diag)
       endif
 
@@ -1184,7 +1184,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     ! diagnosed ssh for non-Bouss; call "find_eta" for this
     ! purpose.
     tot_wt_ssh = tot_wt_ssh + dt
-    call find_eta(h, CS%tv, G%g_Earth, G, GV, ssh, eta_av)
+    call find_eta(h, CS%tv, GV%g_Earth, G, GV, ssh, eta_av)
     do j=js,je ; do i=is,ie
       CS%ave_ssh(i,j) = CS%ave_ssh(i,j) + dt*ssh(i,j)
     enddo ; enddo
@@ -1227,7 +1227,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
      enddo ; enddo
      if (ASSOCIATED(fluxes%p_surf)) then
        do j=js,je ; do i=is,ie
-         zos(i,j) = zos(i,j)+G%mask2dT(i,j)*fluxes%p_surf(i,j)/(GV%Rho0 * G%g_Earth)
+         zos(i,j) = zos(i,j)+G%mask2dT(i,j)*fluxes%p_surf(i,j)/(GV%Rho0 * GV%g_Earth)
        enddo ; enddo
      endif
      zos_area_mean = global_area_mean(zos, G)
@@ -1423,36 +1423,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   call find_obsolete_params(param_file)
 
-#ifdef SYMMETRIC_MEMORY_
-  symmetric = .true.
-#else
-  symmetric = .false.
-#endif
-#ifdef STATIC_MEMORY_
-  call MOM_domains_init(G%domain, param_file, symmetric=symmetric, &
-            static_memory=.true., NIHALO=NIHALO_, NJHALO=NJHALO_, &
-            NIGLOBAL=NIGLOBAL_, NJGLOBAL=NJGLOBAL_, NIPROC=NIPROC_, &
-            NJPROC=NJPROC_)
-#else
-  call MOM_domains_init(G%domain, param_file, symmetric=symmetric)
-#endif
-  call callTree_waypoint("domains initialized (initialize_MOM)")
-
-  call MOM_checksums_init(param_file)
-
-  call diag_mediator_infrastructure_init()
-  call MOM_io_init(param_file)
-  call MOM_grid_init(G, param_file)
-
-  call create_dyn_horgrid(dG, G%HI)
-  dG%first_direction = G%first_direction
-  dG%bathymetry_at_vel = G%bathymetry_at_vel
-  call clone_MOM_domain(G%Domain, dG%Domain)
-
-  call verticalGridInit( param_file, CS%GV )
-  GV => CS%GV
-  dG%g_Earth = GV%g_Earth
-
   ! Read relevant parameters and write them to the model log.
   call log_version(param_file, "MOM", version, "")
   call get_param(param_file, "MOM", "VERBOSITY", verbosity,  &
@@ -1474,6 +1444,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                  default=.false.)
     CS%legacy_split = .false.
   endif
+
   call get_param(param_file, "MOM", "ENABLE_THERMODYNAMICS", CS%use_temperature, &
                  "If true, Temperature and salinity are used as state \n"//&
                  "variables.", default=.true.)
@@ -1491,27 +1462,22 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                  "true. This assumes that KD = KDML = 0.0 and that \n"//&
                  "there is no buoyancy forcing, but makes the model \n"//&
                  "faster by eliminating subroutine calls.", default=.false.)
+  call get_param(param_file, "MOM", "DO_DYNAMICS", CS%do_dynamics, &
+                 "If False, skips the dynamics calls that update u & v, as well as\n"//&
+                 "the gravity wave adjustment to h. This is a fragile feature and\n"//&
+                 "thus undocumented.", default=.true., do_not_log=.true. )
+
+  call get_param(param_file, "MOM", "USE_REGRIDDING", CS%use_ALE_algorithm , &
+                 "If True, use the ALE algorithm (regridding/remapping).\n"//&
+                 "If False, use the layered isopycnal algorithm.", default=.false. )
   call get_param(param_file, "MOM", "BULKMIXEDLAYER", CS%bulkmixedlayer, &
                  "If true, use a Kraus-Turner-like bulk mixed layer \n"//&
                  "with transitional buffer layers.  Layers 1 through  \n"//&
                  "NKML+NKBL have variable densities. There must be at \n"//&
                  "least NKML+NKBL+1 layers if BULKMIXEDLAYER is true. \n"//&
-                 "The default is the same setting as ENABLE_THERMODYNAMICS.", &
-                 default=CS%use_temperature)
-  call get_param(param_file, "MOM", "USE_REGRIDDING", &
-                 CS%use_ALE_algorithm , &
-                 "If True, use the ALE algorithm (regridding/remapping).\n"//&
-                 "If False, use the layered isopycnal algorithm.", default=.false. )
-  if (CS%use_ALE_algorithm) then
-    if (CS%bulkmixedlayer) call MOM_error(FATAL, &
-                 "MOM: BULKMIXEDLAYER can not currently be used with the ALE algorithm.")
-    if (.not. CS%use_temperature) call MOM_error(FATAL, &
-                 "MOM: At this time, USE_EOS should be True when using the ALE algorithm.")
-  endif
-  call get_param(param_file, "MOM", "DO_DYNAMICS", CS%do_dynamics, &
-                 "If False, skips the dynamics calls that update u & v, as well as\n"//&
-                 "the gravity wave adjustment to h. This is a fragile feature and\n"//&
-                 "thus undocumented.", default=.true., do_not_log=.true. )
+                 "BULKMIXEDLAYER can not be used with USE_REGRIDDING. \n"//&
+                 "The default is influenced by ENABLE_THERMODYNAMICS.", &
+                 default=CS%use_temperature .and. .not.CS%use_ALE_algorithm)
   call get_param(param_file, "MOM", "THICKNESSDIFFUSE", CS%thickness_diffuse, &
                  "If true, interface heights are diffused with a \n"//&
                  "coefficient of KHTH.", default=.false.)
@@ -1654,7 +1620,11 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   write_geom_files = ((write_geom==2) .or. ((write_geom==1) .and. &
      ((dirs%input_filename(1:1)=='n') .and. (LEN_TRIM(dirs%input_filename)==1))))
 
-  ! Check for inconsistent settings.
+  ! Check for inconsistent parameter settings.
+  if (CS%use_ALE_algorithm .and. CS%bulkmixedlayer) call MOM_error(FATAL, &
+    "MOM: BULKMIXEDLAYER can not currently be used with the ALE algorithm.")
+  if (CS%use_ALE_algorithm .and. .not.CS%use_temperature) call MOM_error(FATAL, &
+     "MOM: At this time, USE_EOS should be True when using the ALE algorithm.")
   if (CS%adiabatic .and. CS%use_temperature) call MOM_error(WARNING, &
     "MOM: ADIABATIC and ENABLE_THERMODYNAMICS both defined is usually unwise.")
   if (use_EOS .and. .not.CS%use_temperature) call MOM_error(FATAL, &
@@ -1662,9 +1632,46 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   if (CS%adiabatic .and. CS%bulkmixedlayer) call MOM_error(FATAL, &
     "MOM: ADIABATIC and BULKMIXEDLAYER can not both be defined.")
 
+  call callTree_waypoint("MOM parameters read (initialize_MOM)")
+
+  ! Set up the model domain and grids.
+#ifdef SYMMETRIC_MEMORY_
+  symmetric = .true.
+#else
+  symmetric = .false.
+#endif
+#ifdef STATIC_MEMORY_
+  call MOM_domains_init(G%domain, param_file, symmetric=symmetric, &
+            static_memory=.true., NIHALO=NIHALO_, NJHALO=NJHALO_, &
+            NIGLOBAL=NIGLOBAL_, NJGLOBAL=NJGLOBAL_, NIPROC=NIPROC_, &
+            NJPROC=NJPROC_)
+#else
+  call MOM_domains_init(G%domain, param_file, symmetric=symmetric)
+#endif
+  call callTree_waypoint("domains initialized (initialize_MOM)")
+
+  call MOM_checksums_init(param_file)
+
+  call diag_mediator_infrastructure_init()
+  call MOM_io_init(param_file)
+  call MOM_grid_init(G, param_file)
+
+  call create_dyn_horgrid(dG, G%HI)
+  dG%first_direction = G%first_direction
+  dG%bathymetry_at_vel = G%bathymetry_at_vel
+  call clone_MOM_domain(G%Domain, dG%Domain)
+
+  call verticalGridInit( param_file, CS%GV )
+  GV => CS%GV
+  dG%g_Earth = GV%g_Earth ; G%g_Earth = GV%g_Earth
+
+
   ! Allocate the auxiliary non-symmetric domain for debugging or I/O purposes.
   if (CS%debug .or. dG%symmetric) &
     call clone_MOM_domain(dG%Domain, dG%Domain_aux, symmetric=.false.)
+
+  call callTree_waypoint("grids initialized (initialize_MOM)")
+
 
   call MOM_timing_init(CS)
 
@@ -2049,9 +2056,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   if (.not.query_initialized(CS%ave_ssh,"ave_ssh",CS%restart_CSp)) then
     if (CS%split) then
-      call find_eta(CS%h, CS%tv, G%g_Earth, G, GV, CS%ave_ssh, eta)
+      call find_eta(CS%h, CS%tv, GV%g_Earth, G, GV, CS%ave_ssh, eta)
     else
-      call find_eta(CS%h, CS%tv, G%g_Earth, G, GV, CS%ave_ssh)
+      call find_eta(CS%h, CS%tv, GV%g_Earth, G, GV, CS%ave_ssh)
     endif
   endif
   if (CS%split) deallocate(eta)
@@ -2096,7 +2103,7 @@ subroutine finish_MOM_initialization(Time, dirs, CS, fluxes)
     allocate(restart_CSp_tmp)
     restart_CSp_tmp = CS%restart_CSp
     allocate(z_interface(SZI_(G),SZJ_(G),SZK_(G)+1))
-    call find_eta(CS%h, CS%tv, G%g_Earth, G, GV, z_interface)
+    call find_eta(CS%h, CS%tv, GV%g_Earth, G, GV, z_interface)
     vd = var_desc("eta","meter","Interface heights",z_grid='i')
     call register_restart_field(z_interface, vd, .true., restart_CSp_tmp)
 
@@ -2841,7 +2848,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
   state%sea_lev => ssh
 
   if (present(p_atm)) then ; if (ASSOCIATED(p_atm)) then
-    IgR0 = 1.0 / (GV%Rho0 * G%g_Earth)
+    IgR0 = 1.0 / (GV%Rho0 * GV%g_Earth)
     do j=js,je ; do i=is,ie
       ssh(i,j) = ssh(i,j) + p_atm(i,j) * IgR0
     enddo ; enddo
