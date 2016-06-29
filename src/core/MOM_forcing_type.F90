@@ -977,13 +977,13 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
        cmor_long_name='Water Evaporation Flux Where Ice Free Ocean over Sea')
 
   ! smg: seaice_melt field requires updates to the sea ice model
-  handles%id_seaice_melt = register_diag_field('ocean_model', 'seaice_melt',       &
-     diag%axesT1, Time, 'water flux to ocean from sea ice melt(> 0) or form(< 0)', &
-     'kilogram/(meter^2 * second)',                                                &
-      standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics',     &
-      cmor_field_name='fsitherm', cmor_units='kg m-2 s-1',                         &
-      cmor_standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics',&
-      cmor_long_name='water flux to ocean from sea ice melt(> 0) or form(< 0)')
+  !handles%id_seaice_melt = register_diag_field('ocean_model', 'seaice_melt',       &
+  !   diag%axesT1, Time, 'water flux to ocean from sea ice melt(> 0) or form(< 0)', &
+  !   'kilogram/(meter^2 * second)',                                                &
+  !    standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics',     &
+  !    cmor_field_name='fsitherm', cmor_units='kg m-2 s-1',                         &
+  !    cmor_standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics',&
+  !    cmor_long_name='water flux to ocean from sea ice melt(> 0) or form(< 0)')
 
   handles%id_precip = register_diag_field('ocean_model', 'precip', diag%axesT1, Time, &
         'Liquid + frozen precipitation into ocean', 'kilogram/(meter^2 * second)')
@@ -1039,12 +1039,13 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
       cmor_standard_name='water_evaporation_flux_area_integrated',                      &
       cmor_long_name='Evaporation Where Ice Free Ocean over Sea Area Integrated')
 
-  handles%id_total_seaice_melt = register_scalar_field('ocean_model', 'total_seaice_melt', Time, diag, &
-      long_name='Area integrated sea ice melt (>0) or form (<0)', units='kg/s',                        &
-      standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics_area_integrated',         &
-      cmor_field_name='total_fsitherm', cmor_units='kg s-1',                                           &
-      cmor_standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics_area_integrated',    &
-      cmor_long_name='Water Melt/Form from Sea Ice Area Integrated')
+  ! seaice_melt field requires updates to the sea ice model
+  !handles%id_total_seaice_melt = register_scalar_field('ocean_model', 'total_seaice_melt', Time, diag, &
+  !    long_name='Area integrated sea ice melt (>0) or form (<0)', units='kg/s',                        &
+  !    standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics_area_integrated',         &
+  !    cmor_field_name='total_fsitherm', cmor_units='kg s-1',                                           &
+  !    cmor_standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics_area_integrated',    &
+  !    cmor_long_name='Water Melt/Form from Sea Ice Area Integrated')
 
   handles%id_total_precip = register_scalar_field('ocean_model', 'total_precip', Time, diag, &
       long_name='Area integrated liquid+frozen precip into ocean', units='kg/s')
