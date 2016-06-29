@@ -223,7 +223,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV,
 
   uDml(:) = 0.0 ; vDml(:) = 0.0
   I4dt = 0.25 / dt
-  g_Rho0 = G%g_Earth/GV%Rho0
+  g_Rho0 = GV%g_Earth/GV%Rho0
   h_neglect = GV%H_subroundoff
   dz_neglect = GV%H_subroundoff*GV%H_to_m
 
@@ -465,7 +465,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, GV, CS)
 
   uDml(:)    = 0.0 ; vDml(:) = 0.0
   I4dt       = 0.25 / dt
-  g_Rho0     = G%g_Earth/GV%Rho0
+  g_Rho0     = GV%g_Earth/GV%Rho0
   use_EOS    = associated(tv%eqn_of_state)
   h_neglect  = GV%H_subroundoff
   dz_neglect = GV%H_subroundoff*GV%H_to_m

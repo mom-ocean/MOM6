@@ -474,7 +474,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
                      CS%ALE_CSp, p_surf, CS%pbce, CS%eta_PF)
   if (dyn_p_surf) then
     if (GV%Boussinesq) then
-      Pa_to_eta = 1.0 / (GV%Rho0*G%g_Earth)
+      Pa_to_eta = 1.0 / (GV%Rho0*GV%g_Earth)
     else
       Pa_to_eta = 1.0 / GV%H_to_Pa
     endif
