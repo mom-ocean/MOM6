@@ -866,7 +866,6 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
         tauy2 = (asv1 * state%tauy_shelf(i,j-1)**2 + &
                  asv2 * state%tauy_shelf(i,j)**2  ) / (asv1 + asv2)
       fluxes%ustar(i,j) = MAX(CS%ustar_bg, sqrt(Irho0 * sqrt(taux2 + tauy2)))
-
       if (associated(fluxes%sw)) fluxes%sw(i,j) = 0.0
       if (associated(fluxes%lw)) fluxes%lw(i,j) = 0.0
       if (associated(fluxes%latent)) fluxes%latent(i,j) = 0.0
@@ -1389,16 +1388,9 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
   ! Allocate the arrays for passing ice-shelf data through the forcing type.
   if (.not. solo_ice_sheet) then
     if (is_root_pe())  print *,"initialize_ice_shelf: allocating fluxes"
-    allocate( fluxes%frac_shelf_h(isd:ied,jsd:jed) ) ; fluxes%frac_shelf_h(:,:) = 0.0
-    allocate( fluxes%frac_shelf_u(Isdq:Iedq,jsd:jed) ) ; fluxes%frac_shelf_u(:,:) = 0.0
-    allocate( fluxes%frac_shelf_v(isd:ied,Jsdq:Jedq) ) ; fluxes%frac_shelf_v(:,:) = 0.0
-    allocate( fluxes%ustar_shelf(isd:ied,jsd:jed) ) ; fluxes%ustar_shelf(:,:) = 0.0
-    allocate( fluxes%iceshelf_melt(isd:ied,jsd:jed) ) ; fluxes%iceshelf_melt(:,:) = 0.0
-    if (.not.associated(fluxes%p_surf)) then
-    allocate( fluxes%p_surf(isd:ied,jsd:jed) ) ; fluxes%p_surf(:,:) = 0.0
-    endif
-    allocate( fluxes%rigidity_ice_u(Isdq:Iedq,jsd:jed) ) ; fluxes%rigidity_ice_u(:,:) = 0.0
-    allocate( fluxes%rigidity_ice_v(isd:ied,Jsdq:Jedq) ) ; fluxes%rigidity_ice_v(:,:) = 0.0
+       !GM, the following is necessary to make ENERGETICS_SFC_PBL work
+       call allocate_forcing_type(G, fluxes, ustar=.true., shelf=.true., &
+                                  press=.true., water=.true., heat=.true.)
   else
     if (is_root_pe())  print *,"allocating fluxes in solo mode"
     call allocate_forcing_type(G, fluxes, ustar=.true., shelf=.true., press=.true.)
