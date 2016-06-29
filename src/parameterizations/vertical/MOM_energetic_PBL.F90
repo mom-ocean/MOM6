@@ -499,7 +499,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       pres(i,1) = 0.0
       do k=1,nz
         dMass = GV%H_to_kg_m2 * h(i,k)
-        dPres = G%G_Earth * dMass
+        dPres = GV%g_Earth * dMass
         dT_to_dPE(i,k) = (dMass * (pres(i,K) + 0.5*dPres)) * dSV_dT(i,j,k)
         dS_to_dPE(i,k) = (dMass * (pres(i,K) + 0.5*dPres)) * dSV_dS(i,j,k)
         dT_to_dColHt(i,k) = dMass * dSV_dT(i,j,k)
