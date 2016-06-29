@@ -349,7 +349,6 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   if (.not.associated(OBC)) return
-  if (.not. OBC%this_pe) return
   if (.not.(OBC%apply_OBC_u_flather_east .or. OBC%apply_OBC_u_flather_west .or. &
             OBC%apply_OBC_v_flather_north .or. OBC%apply_OBC_v_flather_south)) &
     return
