@@ -1396,8 +1396,10 @@ subroutine tracer_hor_diff_init(Time, G, param_file, diag, CS, CSnd)
      cmor_field_name='diftrelo', cmor_units='m2 sec-1',                         &
      cmor_standard_name= 'ocean_tracer_epineutral_laplacian_diffusivity',       &
      cmor_long_name = 'Ocean Tracer Epineutral Laplacian Diffusivity') 
-  CS%id_CFL = register_diag_field('ocean_model', 'CFL_lateral_diff', diag%axesT1, Time,&
-     'Grid CFL number for lateral/neutral tracer diffusion', 'dimensionless') 
+  if (CS%check_diffusive_CFL) then 
+    CS%id_CFL = register_diag_field('ocean_model', 'CFL_lateral_diff', diag%axesT1, Time,&
+       'Grid CFL number for lateral/neutral tracer diffusion', 'dimensionless') 
+  endif
 
 end subroutine tracer_hor_diff_init
 

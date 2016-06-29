@@ -846,6 +846,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     if (CS%id_Kd_itidal > 0) call post_data(CS%id_Kd_itidal, dd%Kd_itidal, CS%diag)
     if (CS%id_Kd_Niku   > 0) call post_data(CS%id_Kd_Niku,   dd%Kd_Niku,   CS%diag)
     if (CS%id_Kd_lowmode> 0) call post_data(CS%id_Kd_lowmode, dd%Kd_lowmode, CS%diag)
+    if (CS%id_Fl_lowmode> 0) call post_data(CS%id_Fl_lowmode, dd%Fl_lowmode, CS%diag)
     if (CS%id_Kd_user   > 0) call post_data(CS%id_Kd_user,   dd%Kd_user,   CS%diag)
     if (CS%id_Kd_Work   > 0) call post_data(CS%id_Kd_Work,   dd%Kd_Work,   CS%diag)
     if (CS%id_Kd_Itidal_Work > 0) &
@@ -3006,81 +3007,85 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
     CS%Decay_scale_factor_lee = -9.e99 ! This should never be used if CS%Lee_wave_dissipation = False
   endif
 
-  CS%id_TKE_itidal = register_diag_field('ocean_model','TKE_itidal',diag%axesT1,Time, &
-      'Internal Tide Driven Turbulent Kinetic Energy', 'Watt meter-2')
-  CS%id_maxTKE = register_diag_field('ocean_model','maxTKE',diag%axesTL,Time, &
-         'Maximum layer TKE', 'meter3 second-3')
-  CS%id_TKE_to_Kd = register_diag_field('ocean_model','TKE_to_Kd',diag%axesTL,Time, &
-         'Convert TKE to Kd', 'second2 meter')
+  if (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation .or. &
+      CS%Lowmode_itidal_dissipation) then
 
-  CS%id_Nb = register_diag_field('ocean_model','Nb',diag%axesT1,Time, &
-       'Bottom Buoyancy Frequency', 'sec-1')
+    CS%id_TKE_itidal = register_diag_field('ocean_model','TKE_itidal',diag%axesT1,Time, &
+        'Internal Tide Driven Turbulent Kinetic Energy', 'Watt meter-2')
+    CS%id_maxTKE = register_diag_field('ocean_model','maxTKE',diag%axesTL,Time, &
+           'Maximum layer TKE', 'meter3 second-3')
+    CS%id_TKE_to_Kd = register_diag_field('ocean_model','TKE_to_Kd',diag%axesTL,Time, &
+           'Convert TKE to Kd', 'second2 meter')
 
-  CS%id_Kd_itidal = register_diag_field('ocean_model','Kd_itides',diag%axesTi,Time, &
-       'Internal Tide Driven Diffusivity', 'meter2 sec-1')
+    CS%id_Nb = register_diag_field('ocean_model','Nb',diag%axesT1,Time, &
+         'Bottom Buoyancy Frequency', 'sec-1')
 
-  CS%id_Kd_lowmode = register_diag_field('ocean_model','Kd_lowmode',diag%axesTi,Time, &
-       'Internal Tide Driven Diffusivity (from propagating low modes)', 'meter2 sec-1')
+    CS%id_Kd_itidal = register_diag_field('ocean_model','Kd_itides',diag%axesTi,Time, &
+         'Internal Tide Driven Diffusivity', 'meter2 sec-1')
 
-  CS%id_Fl_itidal = register_diag_field('ocean_model','Fl_itides',diag%axesTi,Time, &
-       'Vertical flux of tidal turbulent dissipation', 'meter3 sec-3')
+    CS%id_Kd_lowmode = register_diag_field('ocean_model','Kd_lowmode',diag%axesTi,Time, &
+         'Internal Tide Driven Diffusivity (from propagating low modes)', 'meter2 sec-1')
 
-  CS%id_Fl_lowmode = register_diag_field('ocean_model','Fl_lowmode',diag%axesTi,Time, &
-       'Vertical flux of tidal turbulent dissipation (from propagating low modes)', 'meter3 sec-3')
+    CS%id_Fl_itidal = register_diag_field('ocean_model','Fl_itides',diag%axesTi,Time, &
+        'Vertical flux of tidal turbulent dissipation', 'meter3 sec-3')
 
-  CS%id_Polzin_decay_scale = register_diag_field('ocean_model','Polzin_decay_scale',diag%axesT1,Time, &
-       'Vertical decay scale for the tidal turbulent dissipation with Polzin scheme', 'meter')
+    CS%id_Fl_lowmode = register_diag_field('ocean_model','Fl_lowmode',diag%axesTi,Time, &
+         'Vertical flux of tidal turbulent dissipation (from propagating low modes)', 'meter3 sec-3')
 
-  CS%id_Polzin_decay_scale_scaled = register_diag_field('ocean_model','Polzin_decay_scale_scaled',diag%axesT1,Time, &
-       'Vertical decay scale for the tidal turbulent dissipation with Polzin scheme, scaled by N2_bot/N2_meanz', 'meter')
+    CS%id_Polzin_decay_scale = register_diag_field('ocean_model','Polzin_decay_scale',diag%axesT1,Time, &
+         'Vertical decay scale for the tidal turbulent dissipation with Polzin scheme', 'meter')
 
-  CS%id_N2_bot = register_diag_field('ocean_model','N2_b',diag%axesT1,Time, &
-       'Bottom Buoyancy frequency squared', 's-2')
+    CS%id_Polzin_decay_scale_scaled = register_diag_field('ocean_model','Polzin_decay_scale_scaled',diag%axesT1,Time, &
+         'Vertical decay scale for the tidal turbulent dissipation with Polzin scheme, scaled by N2_bot/N2_meanz', 'meter')
 
-  CS%id_N2_meanz = register_diag_field('ocean_model','N2_meanz',diag%axesT1,Time, &
-       'Buoyancy frequency squared averaged over the water column', 's-2')
+    CS%id_N2_bot = register_diag_field('ocean_model','N2_b',diag%axesT1,Time, &
+         'Bottom Buoyancy frequency squared', 's-2')
 
-  CS%id_Kd_Work = register_diag_field('ocean_model','Kd_Work',diag%axesTL,Time, &
-       'Work done by Diapycnal Mixing', 'Watts m-2')
+    CS%id_N2_meanz = register_diag_field('ocean_model','N2_meanz',diag%axesT1,Time, &
+         'Buoyancy frequency squared averaged over the water column', 's-2')
 
-  CS%id_Kd_Itidal_Work = register_diag_field('ocean_model','Kd_Itidal_Work',diag%axesTL,Time, &
-       'Work done by Internal Tide Diapycnal Mixing', 'Watts m-2')
+    CS%id_Kd_Work = register_diag_field('ocean_model','Kd_Work',diag%axesTL,Time, &
+         'Work done by Diapycnal Mixing', 'Watts m-2')
 
-  CS%id_Kd_Niku_Work = register_diag_field('ocean_model','Kd_Nikurashin_Work',diag%axesTL,Time, &
-       'Work done by Nikurashin Lee Wave Drag Scheme', 'Watts m-2')
+    CS%id_Kd_Itidal_Work = register_diag_field('ocean_model','Kd_Itidal_Work',diag%axesTL,Time, &
+         'Work done by Internal Tide Diapycnal Mixing', 'Watts m-2')
 
-  CS%id_Kd_Lowmode_Work = register_diag_field('ocean_model','Kd_Lowmode_Work',diag%axesTL,Time, &
-       'Work done by Internal Tide Diapycnal Mixing (low modes)', 'Watts m-2')
+    CS%id_Kd_Niku_Work = register_diag_field('ocean_model','Kd_Nikurashin_Work',diag%axesTL,Time, &
+         'Work done by Nikurashin Lee Wave Drag Scheme', 'Watts m-2')
 
-  CS%id_N2 = register_diag_field('ocean_model','N2',diag%axesTi,Time,            &
-       'Buoyancy frequency squared', 'sec-2', cmor_field_name='obvfsq',          &
-        cmor_units='s-2', cmor_long_name='Square of seawater buoyancy frequency',&
-        cmor_standard_name='square_of_brunt_vaisala_frequency_in_sea_water')
+    CS%id_Kd_Lowmode_Work = register_diag_field('ocean_model','Kd_Lowmode_Work',diag%axesTL,Time, &
+         'Work done by Internal Tide Diapycnal Mixing (low modes)', 'Watts m-2')
 
-  if (CS%user_change_diff) &
-    CS%id_Kd_user = register_diag_field('ocean_model','Kd_user',diag%axesTi,Time, &
-         'User-specified Extra Diffusivity', 'meter2 sec-1')
+    CS%id_N2 = register_diag_field('ocean_model','N2',diag%axesTi,Time,            &
+         'Buoyancy frequency squared', 'sec-2', cmor_field_name='obvfsq',          &
+          cmor_units='s-2', cmor_long_name='Square of seawater buoyancy frequency',&
+          cmor_standard_name='square_of_brunt_vaisala_frequency_in_sea_water')
 
-  if (associated(diag_to_Z_CSp)) then
-    vd = var_desc("N2", "second-2",&
-                  "Buoyancy frequency, interpolated to z", z_grid='z')
-    CS%id_N2_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
-    vd = var_desc("Kd_itides","meter2 second-1", &
-                  "Internal Tide Driven Diffusivity, interpolated to z", z_grid='z')
-    CS%id_Kd_itidal_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
-    if (CS%Lee_wave_dissipation) then
-       vd = var_desc("Kd_Nikurashin", "meter2 second-1", &
-                     "Lee Wave Driven Diffusivity, interpolated to z", z_grid='z')
-       CS%id_Kd_Niku_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
-    endif
-    if (CS%Lowmode_itidal_dissipation) then
-      vd = var_desc("Kd_lowmode","meter2 second-1", &
-                "Internal Tide Driven Diffusivity (from low modes), interpolated to z",&
-                z_grid='z')
-      CS%id_Kd_lowmode_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
-    endif
     if (CS%user_change_diff) &
-      CS%id_Kd_user_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
+      CS%id_Kd_user = register_diag_field('ocean_model','Kd_user',diag%axesTi,Time, &
+           'User-specified Extra Diffusivity', 'meter2 sec-1')
+
+    if (associated(diag_to_Z_CSp)) then
+      vd = var_desc("N2", "second-2",&
+                    "Buoyancy frequency, interpolated to z", z_grid='z')
+      CS%id_N2_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
+      vd = var_desc("Kd_itides","meter2 second-1", &
+                    "Internal Tide Driven Diffusivity, interpolated to z", z_grid='z')
+      CS%id_Kd_itidal_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
+      if (CS%Lee_wave_dissipation) then
+         vd = var_desc("Kd_Nikurashin", "meter2 second-1", &
+                       "Lee Wave Driven Diffusivity, interpolated to z", z_grid='z')
+         CS%id_Kd_Niku_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
+      endif
+      if (CS%Lowmode_itidal_dissipation) then
+        vd = var_desc("Kd_lowmode","meter2 second-1", &
+                  "Internal Tide Driven Diffusivity (from low modes), interpolated to z",&
+                  z_grid='z')
+        CS%id_Kd_lowmode_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
+      endif
+      if (CS%user_change_diff) &
+        CS%id_Kd_user_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
+    endif
   endif
 
   call get_param(param_file, mod, "DOUBLE_DIFFUSION", CS%double_diffusion, &
