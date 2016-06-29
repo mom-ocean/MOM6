@@ -117,8 +117,6 @@ subroutine open_boundary_config(G, param_file, OBC)
   type(dyn_horgrid_type),  intent(in)    :: G !< Ocean grid structure
   type(param_file_type),   intent(in)    :: param_file !< Parameter file handle
   type(ocean_OBC_type),    pointer       :: OBC !< Open boundary control structure
-  ! Local variables
-  logical :: flather_east, flather_west, flather_north, flather_south
 
   allocate(OBC)
 
@@ -471,22 +469,6 @@ subroutine set_Flather_positions(G, OBC)
     allocate(OBC%OBC_kind_v(G%isd:G%ied,G%JsdB:G%JedB)) ; OBC%OBC_kind_v(:,:) = OBC_NONE
   endif
 
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "APPLY_OBC_U_FLATHER_EAST", flather_east, &
-                 "If true, some zonal velocity points use Flather open \n"//&
-                 "boundary conditions on the east side of the ocean.", &
-                 default=.false.)
-  call get_param(param_file, mod, "APPLY_OBC_U_FLATHER_WEST", flather_west, &
-                 "If true, some zonal velocity points use Flather open \n"//&
-                 "boundary conditions on the west side of the ocean.", &
-                 default=.false.)
-  call get_param(param_file, mod, "APPLY_OBC_V_FLATHER_NORTH", flather_north, &
-                 "If true, some meridional velocity points use Flather \n"//&
-                 "open boundary conditions on the north side of the ocean.", &
-                 default=.false.)
-  call get_param(param_file, mod, "APPLY_OBC_V_FLATHER_SOUTH", flather_south, &
-                 "If true, some meridional velocity points use Flather \n"//&
-                 "open boundary conditions on the north side of the ocean.", &
   ! This code should be modified to allow OBCs to be applied anywhere.
 
   if (G%symmetric) then
