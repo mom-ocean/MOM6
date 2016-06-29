@@ -1423,36 +1423,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   call find_obsolete_params(param_file)
 
-#ifdef SYMMETRIC_MEMORY_
-  symmetric = .true.
-#else
-  symmetric = .false.
-#endif
-#ifdef STATIC_MEMORY_
-  call MOM_domains_init(G%domain, param_file, symmetric=symmetric, &
-            static_memory=.true., NIHALO=NIHALO_, NJHALO=NJHALO_, &
-            NIGLOBAL=NIGLOBAL_, NJGLOBAL=NJGLOBAL_, NIPROC=NIPROC_, &
-            NJPROC=NJPROC_)
-#else
-  call MOM_domains_init(G%domain, param_file, symmetric=symmetric)
-#endif
-  call callTree_waypoint("domains initialized (initialize_MOM)")
-
-  call MOM_checksums_init(param_file)
-
-  call diag_mediator_infrastructure_init()
-  call MOM_io_init(param_file)
-  call MOM_grid_init(G, param_file)
-
-  call create_dyn_horgrid(dG, G%HI)
-  dG%first_direction = G%first_direction
-  dG%bathymetry_at_vel = G%bathymetry_at_vel
-  call clone_MOM_domain(G%Domain, dG%Domain)
-
-  call verticalGridInit( param_file, CS%GV )
-  GV => CS%GV
-  dG%g_Earth = GV%g_Earth
-
   ! Read relevant parameters and write them to the model log.
   call log_version(param_file, "MOM", version, "")
   call get_param(param_file, "MOM", "VERBOSITY", verbosity,  &
@@ -1661,6 +1631,38 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     "MOM: ENABLE_THERMODYNAMICS must be defined to use USE_EOS.")
   if (CS%adiabatic .and. CS%bulkmixedlayer) call MOM_error(FATAL, &
     "MOM: ADIABATIC and BULKMIXEDLAYER can not both be defined.")
+
+  ! Set up the model domain and grids.
+#ifdef SYMMETRIC_MEMORY_
+  symmetric = .true.
+#else
+  symmetric = .false.
+#endif
+#ifdef STATIC_MEMORY_
+  call MOM_domains_init(G%domain, param_file, symmetric=symmetric, &
+            static_memory=.true., NIHALO=NIHALO_, NJHALO=NJHALO_, &
+            NIGLOBAL=NIGLOBAL_, NJGLOBAL=NJGLOBAL_, NIPROC=NIPROC_, &
+            NJPROC=NJPROC_)
+#else
+  call MOM_domains_init(G%domain, param_file, symmetric=symmetric)
+#endif
+  call callTree_waypoint("domains initialized (initialize_MOM)")
+
+  call MOM_checksums_init(param_file)
+
+  call diag_mediator_infrastructure_init()
+  call MOM_io_init(param_file)
+  call MOM_grid_init(G, param_file)
+
+  call create_dyn_horgrid(dG, G%HI)
+  dG%first_direction = G%first_direction
+  dG%bathymetry_at_vel = G%bathymetry_at_vel
+  call clone_MOM_domain(G%Domain, dG%Domain)
+
+  call verticalGridInit( param_file, CS%GV )
+  GV => CS%GV
+  dG%g_Earth = GV%g_Earth
+
 
   ! Allocate the auxiliary non-symmetric domain for debugging or I/O purposes.
   if (CS%debug .or. dG%symmetric) &
