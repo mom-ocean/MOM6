@@ -8,11 +8,12 @@ use MOM_checksums, only : hchksum, qchksum, uchksum, vchksum, chksum
 use MOM_coms, only : max_across_PEs
 use MOM_domains, only : pass_var, pass_vector, sum_across_PEs, broadcast
 use MOM_domains, only : root_PE, To_All, SCALAR_PAIR, CGRID_NE, AGRID
+use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
 use MOM_file_parser, only : log_version
-use MOM_grid, only : ocean_grid_type, isPointInCell
+! use MOM_grid, only : ocean_grid_type
 use MOM_io, only : close_file, create_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE, MULTIPLE
 use MOM_io, only : slasher, vardesc, write_field, var_desc
@@ -48,7 +49,7 @@ contains
 !> MOM_initialize_fixed sets up time-invariant quantities related to MOM6's
 !!   horizontal grid, bathymetry, and the Coriolis parameter.
 subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
-  type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
+  type(dyn_horgrid_type),  intent(inout) :: G    !< The ocean's grid structure.
   type(ocean_OBC_type),    pointer       :: OBC  !< Open boundary structure.
   type(param_file_type),   intent(in)    :: PF   !< A structure indicating the open file
                                                  !! to parse for model parameter values.
@@ -63,7 +64,7 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
 #include "version_variable.h"
 
   call callTree_enter("MOM_initialize_fixed(), MOM_fixed_initialization.F90")
-  call log_version(PF, mod, version)
+  call log_version(PF, mod, version, "")
   call get_param(PF, mod, "DEBUG", debug, default=.false.)
 
   call get_param(PF, mod, "INPUTDIR", inputdir, &
@@ -183,15 +184,11 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
 end subroutine MOM_initialize_fixed
 ! -----------------------------------------------------------------------------
 
-
+!> MOM_initialize_rotation makes the appropriate call to set up the Coriolis parameter.
 subroutine MOM_initialize_rotation(f, G, PF)
-  type(ocean_grid_type),                        intent(in)  :: G
-  real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), intent(out) :: f
-  type(param_file_type),                        intent(in)  :: PF
-! Arguments: f  - the Coriolis parameter in s-1. Intent out.
-!  (in)      G  - The ocean's grid structure.
-!  (in)      PF - A structure indicating the open file to parse for
-!                         model parameter values.
+  type(dyn_horgrid_type),                       intent(in)  :: G  !< The dynamic horizontal grid type
+  real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), intent(out) :: f  !< The Coriolis parameter in s-1
+  type(param_file_type),                        intent(in)  :: PF !< Parameter file structure
 
 !   This subroutine makes the appropriate call to set up the Coriolis parameter.
 ! This is a separate subroutine so that it can be made public and shared with
@@ -221,9 +218,11 @@ end subroutine MOM_initialize_rotation
 
 !> Calculates the components of grad f (Coriolis parameter)
 subroutine MOM_calculate_grad_Coriolis(dF_dx, dF_dy, G)
-  type(ocean_grid_type),            intent(inout) :: G !< Grid type
-  real, dimension(SZI_(G),SZJ_(G)), intent(out)   :: dF_dx !< x-component of grad f
-  real, dimension(SZI_(G),SZJ_(G)), intent(out)   :: dF_dy !< y-component of grad f
+  type(dyn_horgrid_type),             intent(inout) :: G !< The dynamic horizontal grid type
+  real, dimension(G%isd:G%ied,G%jsd:G%jed), &
+                                      intent(out)   :: dF_dx !< x-component of grad f
+  real, dimension(G%isd:G%ied,G%jsd:G%jed), &
+                                      intent(out)   :: dF_dy !< y-component of grad f
   ! Local variables
   integer :: i,j
   real :: f1, f2
@@ -238,15 +237,13 @@ subroutine MOM_calculate_grad_Coriolis(dF_dx, dF_dy, G)
   call pass_vector(dF_dx, dF_dy, G%Domain, stagger=AGRID)
 end subroutine MOM_calculate_grad_Coriolis
 
+!> MOM_initialize_topography makes the appropriate call to set up the bathymetry.
 subroutine MOM_initialize_topography(D, max_depth, G, PF)
-  type(ocean_grid_type),            intent(in)  :: G
-  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: D
-  real,                             intent(out) :: max_depth
-  type(param_file_type),            intent(in)  :: PF
-! Arguments: D  - the bottom depth in m. Intent out.
-!  (in)      G  - The ocean's grid structure.
-!  (in)      PF - A structure indicating the open file to parse for
-!                         model parameter values.
+  type(dyn_horgrid_type),           intent(in)  :: G  !< The dynamic horizontal grid type
+  real, dimension(G%isd:G%ied,G%jsd:G%jed), &
+                                    intent(out) :: D  !< Ocean bottom depth in m
+  type(param_file_type),            intent(in)  :: PF !< Parameter file structure
+  real,                             intent(out) :: max_depth !< Maximum depth of model in m
 
 !  This subroutine makes the appropriate call to set up the bottom depth.
 !  This is a separate subroutine so that it can be made public and shared with
@@ -285,13 +282,13 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
     case ("bowl");      call initialize_topography_named(D, G, PF, config, max_depth)
     case ("halfpipe");  call initialize_topography_named(D, G, PF, config, max_depth)
     case ("DOME");      call DOME_initialize_topography(D, G, PF, max_depth)
-    case ("ISOMIP");      call ISOMIP_initialize_topography(D, G, PF, max_depth)
+    case ("ISOMIP");    call ISOMIP_initialize_topography(D, G, PF, max_depth)
     case ("benchmark"); call benchmark_initialize_topography(D, G, PF, max_depth)
     case ("DOME2D");    call DOME2d_initialize_topography(D, G, PF, max_depth)
     case ("sloshing");  call sloshing_initialize_topography(D, G, PF, max_depth)
     case ("seamount");  call seamount_initialize_topography(D, G, PF, max_depth)
-    case ("Phillips");  call Phillips_initialize_topography(D, G, PF)
-    case ("USER");      call user_initialize_topography(D, G, PF)
+    case ("Phillips");  call Phillips_initialize_topography(D, G, PF, max_depth)
+    case ("USER");      call user_initialize_topography(D, G, PF, max_depth)
     case default ;      call MOM_error(FATAL,"MOM_initialize_topography: "// &
       "Unrecognized topography setup '"//trim(config)//"'")
   end select
@@ -311,7 +308,7 @@ end subroutine MOM_initialize_topography
 
 ! -----------------------------------------------------------------------------
 function diagnoseMaximumDepth(D,G)
-  type(ocean_grid_type),            intent(in) :: G
+  type(dyn_horgrid_type),            intent(in) :: G
   real, dimension(SZI_(G),SZJ_(G)), intent(in) :: D
   real :: diagnoseMaximumDepth
   ! Local variables
@@ -328,8 +325,9 @@ end function diagnoseMaximumDepth
 
 !> Read gridded depths from file
 subroutine initialize_topography_from_file(D, G, param_file)
-  type(ocean_grid_type),            intent(in)  :: G !< Grid structure
-  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: D !< Bottom depth (positive, in m)
+  type(dyn_horgrid_type),           intent(in)  :: G !< The dynamic horizontal grid type
+  real, dimension(G%isd:G%ied,G%jsd:G%jed), &
+                                    intent(out) :: D !< Ocean bottom depth in m
   type(param_file_type),            intent(in)  :: param_file !< Parameter file structure
   ! Local variables
   character(len=200) :: filename, topo_file, inputdir ! Strings for file/path
@@ -369,9 +367,11 @@ end subroutine initialize_topography_from_file
 
 !> Applies a list of topography overrides read from a netcdf file
 subroutine apply_topography_edits_from_file(D, G, param_file)
-  type(ocean_grid_type),            intent(in)    :: G !< Grid structure
-  real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: D !< Bottom depth (positive, in m)
+  type(dyn_horgrid_type),           intent(in)    :: G !< The dynamic horizontal grid type
+  real, dimension(G%isd:G%ied,G%jsd:G%jed), &
+                                    intent(inout) :: D !< Ocean bottom depth in m
   type(param_file_type),            intent(in)    :: param_file !< Parameter file structure
+
   ! Local variables
   character(len=200) :: topo_edits_file, inputdir ! Strings for file/path
   character(len=40)  :: mod = "apply_topography_edits_from_file" ! This subroutine's name.
@@ -477,12 +477,16 @@ subroutine apply_topography_edits_from_file(D, G, param_file)
 end subroutine apply_topography_edits_from_file
 
 ! -----------------------------------------------------------------------------
+!> initialized the bathymetry based on one of several named idealized configurations
 subroutine initialize_topography_named(D, G, param_file, topog_config, max_depth)
-  type(ocean_grid_type),            intent(in)  :: G
-  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: D
-  type(param_file_type),            intent(in)  :: param_file
-  character(len=*),                 intent(in)  :: topog_config
-  real,                             intent(in)  :: max_depth
+  type(dyn_horgrid_type),           intent(in)  :: G !< The dynamic horizontal grid type
+  real, dimension(G%isd:G%ied,G%jsd:G%jed), &
+                                    intent(out) :: D !< Ocean bottom depth in m
+  type(param_file_type),            intent(in)  :: param_file !< Parameter file structure
+  character(len=*),                 intent(in)  :: topog_config !< The name of an idealized
+                                                              !! topographic configuration
+  real,                             intent(in)  :: max_depth  !< Maximum depth of model in m
+
 ! Arguments: D          - the bottom depth in m. Intent out.
 !  (in)      G          - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
@@ -589,11 +593,13 @@ end subroutine initialize_topography_named
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
+!> limit_topography ensures that  min_depth < D(x,y) < max_depth
 subroutine limit_topography(D, G, param_file, max_depth)
-  type(ocean_grid_type),            intent(in)    :: G
-  real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: D
-  type(param_file_type),            intent(in)    :: param_file
-  real,                             intent(in)    :: max_depth
+  type(dyn_horgrid_type), intent(in)    :: G !< The dynamic horizontal grid type
+  real, dimension(G%isd:G%ied,G%jsd:G%jed), &
+                          intent(inout) :: D !< Ocean bottom depth in m
+  type(param_file_type),  intent(in)    :: param_file !< Parameter file structure
+  real,                   intent(in)    :: max_depth  !< Maximum depth of model in m
 ! Arguments: D          - the bottom depth in m. Intent in/out.
 !  (in)      G          - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
@@ -638,7 +644,7 @@ end subroutine limit_topography
 
 ! -----------------------------------------------------------------------------
 subroutine set_rotation_planetary(f, G, param_file)
-  type(ocean_grid_type),                        intent(in)  :: G
+  type(dyn_horgrid_type),                        intent(in)  :: G
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), intent(out) :: f
   type(param_file_type),                        intent(in)  :: param_file
 ! Arguments: f          - Coriolis parameter (vertical component) in s^-1
@@ -667,7 +673,7 @@ end subroutine set_rotation_planetary
 
 ! -----------------------------------------------------------------------------
 subroutine set_rotation_beta_plane(f, G, param_file)
-  type(ocean_grid_type),                        intent(in)  :: G
+  type(dyn_horgrid_type),                        intent(in)  :: G
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), intent(out) :: f
   type(param_file_type),                        intent(in)  :: param_file
 ! Arguments: f          - Coriolis parameter (vertical component) in s^-1
@@ -713,7 +719,7 @@ end subroutine set_rotation_beta_plane
 
 ! -----------------------------------------------------------------------------
 subroutine reset_face_lengths_named(G, param_file, name)
-  type(ocean_grid_type), intent(inout) :: G
+  type(dyn_horgrid_type), intent(inout) :: G
   type(param_file_type), intent(in)    :: param_file
   character(len=*),      intent(in)    :: name
 !   This subroutine sets the open face lengths at selected points to restrict
@@ -838,7 +844,7 @@ end subroutine reset_face_lengths_named
 
 ! -----------------------------------------------------------------------------
 subroutine reset_face_lengths_file(G, param_file)
-  type(ocean_grid_type), intent(inout) :: G
+  type(dyn_horgrid_type), intent(inout) :: G
   type(param_file_type), intent(in)    :: param_file
 !   This subroutine sets the open face lengths at selected points to restrict
 ! passages to their observed widths.
@@ -906,7 +912,7 @@ end subroutine reset_face_lengths_file
 
 ! -----------------------------------------------------------------------------
 subroutine reset_face_lengths_list(G, param_file)
-  type(ocean_grid_type), intent(inout) :: G
+  type(dyn_horgrid_type), intent(inout) :: G
   type(param_file_type), intent(in)    :: param_file
 !   This subroutine sets the open face lengths at selected points to restrict
 ! passages to their observed widths.
@@ -1165,7 +1171,7 @@ end subroutine read_face_length_list
 
 ! -----------------------------------------------------------------------------
 subroutine set_velocity_depth_max(G)
-  type(ocean_grid_type), intent(inout) :: G
+  type(dyn_horgrid_type), intent(inout) :: G
   ! This subroutine sets the 4 bottom depths at velocity points to be the
   ! maximum of the adjacent depths.
   integer :: i, j
@@ -1183,7 +1189,7 @@ end subroutine set_velocity_depth_max
 
 ! -----------------------------------------------------------------------------
 subroutine compute_global_grid_integrals(G)
-  type(ocean_grid_type), intent(inout) :: G
+  type(dyn_horgrid_type), intent(inout) :: G
   ! Subroutine to pre-compute global integrals of grid quantities for
   ! later use in reporting diagnostics
   integer :: i,j
@@ -1204,7 +1210,7 @@ end subroutine compute_global_grid_integrals
 
 ! -----------------------------------------------------------------------------
 subroutine set_velocity_depth_min(G)
-  type(ocean_grid_type), intent(inout) :: G
+  type(dyn_horgrid_type), intent(inout) :: G
   ! This subroutine sets the 4 bottom depths at velocity points to be the
   ! minimum of the adjacent depths.
   integer :: i, j
@@ -1222,9 +1228,9 @@ end subroutine set_velocity_depth_min
 
 ! -----------------------------------------------------------------------------
 subroutine write_ocean_geometry_file(G, param_file, directory)
-  type(ocean_grid_type), intent(inout) :: G
-  type(param_file_type), intent(in)    :: param_file
-  character(len=*),      intent(in)    :: directory
+  type(dyn_horgrid_type), intent(inout) :: G
+  type(param_file_type),  intent(in)    :: param_file
+  character(len=*),       intent(in)    :: directory
 !   This subroutine writes out a file containing all of the ocean geometry
 ! and grid data uses by the MOM ocean model.
 ! Arguments: G - The ocean's grid structure.  Effectively intent in.
@@ -1305,7 +1311,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory)
   if (multiple_files) file_threading = MULTIPLE
 
   call create_file(unit, trim(filepath), vars, nFlds_used, fields, &
-                   file_threading, G=G)
+                   file_threading, dG=G)
 
   do J=Jsq,Jeq; do I=Isq,Ieq; out_q(I,J) = G%geoLatBu(I,J); enddo; enddo
   call write_field(unit, fields(1), G%Domain%mpp_domain, out_q)

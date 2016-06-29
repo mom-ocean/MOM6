@@ -1424,29 +1424,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   call find_obsolete_params(param_file)
 
-#ifdef SYMMETRIC_MEMORY_
-  symmetric = .true.
-#else
-  symmetric = .false.
-#endif
-#ifdef STATIC_MEMORY_
-  call MOM_domains_init(G%domain, param_file, symmetric=symmetric, &
-            static_memory=.true., NIHALO=NIHALO_, NJHALO=NJHALO_, &
-            NIGLOBAL=NIGLOBAL_, NJGLOBAL=NJGLOBAL_, NIPROC=NIPROC_, &
-            NJPROC=NJPROC_)
-#else
-  call MOM_domains_init(G%domain, param_file, symmetric=symmetric)
-#endif
-  call callTree_waypoint("domains initialized (initialize_MOM)")
-
-  call MOM_checksums_init(param_file)
-
-  call diag_mediator_infrastructure_init()
-  call MOM_io_init(param_file)
-  call MOM_grid_init(G, param_file)
-  call verticalGridInit( param_file, CS%GV )
-  GV => CS%GV
-
   ! Read relevant parameters and write them to the model log.
   call log_version(param_file, "MOM", version, "")
   call get_param(param_file, "MOM", "VERBOSITY", verbosity,  &
@@ -1656,9 +1633,41 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   if (CS%adiabatic .and. CS%bulkmixedlayer) call MOM_error(FATAL, &
     "MOM: ADIABATIC and BULKMIXEDLAYER can not both be defined.")
 
+  ! Set up the model domain and grids.
+#ifdef SYMMETRIC_MEMORY_
+  symmetric = .true.
+#else
+  symmetric = .false.
+#endif
+#ifdef STATIC_MEMORY_
+  call MOM_domains_init(G%domain, param_file, symmetric=symmetric, &
+            static_memory=.true., NIHALO=NIHALO_, NJHALO=NJHALO_, &
+            NIGLOBAL=NIGLOBAL_, NJGLOBAL=NJGLOBAL_, NIPROC=NIPROC_, &
+            NJPROC=NJPROC_)
+#else
+  call MOM_domains_init(G%domain, param_file, symmetric=symmetric)
+#endif
+  call callTree_waypoint("domains initialized (initialize_MOM)")
+
+  call MOM_checksums_init(param_file)
+
+  call diag_mediator_infrastructure_init()
+  call MOM_io_init(param_file)
+  call MOM_grid_init(G, param_file)
+
+  call create_dyn_horgrid(dG, G%HI)
+  dG%first_direction = G%first_direction
+  dG%bathymetry_at_vel = G%bathymetry_at_vel
+  call clone_MOM_domain(G%Domain, dG%Domain)
+
+  call verticalGridInit( param_file, CS%GV )
+  GV => CS%GV
+  dG%g_Earth = GV%g_Earth
+
+
   ! Allocate the auxiliary non-symmetric domain for debugging or I/O purposes.
-  if (CS%debug .or. G%symmetric) &
-    call clone_MOM_domain(G%Domain, G%Domain_aux, symmetric=.false.)
+  if (CS%debug .or. dG%symmetric) &
+    call clone_MOM_domain(dG%Domain, dG%Domain_aux, symmetric=.false.)
 
   call MOM_timing_init(CS)
 
@@ -1666,11 +1675,11 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   ! Copy a common variable from the vertical grid to the horizontal grid.
   ! Consider removing this later?
-  G%ke = GV%ke
+!  G%ke = GV%ke
 
-  is   = G%isc   ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = GV%ke
-  isd  = G%isd   ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
-  IsdB = G%IsdB  ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+  is   = dG%isc   ; ie   = dG%iec  ; js   = dG%jsc  ; je   = dG%jec ; nz = GV%ke
+  isd  = dG%isd   ; ied  = dG%ied  ; jsd  = dG%jsd  ; jed  = dG%jed
+  IsdB = dG%IsdB  ; IedB = dG%IedB ; JsdB = dG%JsdB ; JedB = dG%JedB
 
   ! Allocate and initialize space for primary MOM variables.
   ALLOC_(CS%u(IsdB:IedB,jsd:jed,nz))   ; CS%u(:,:,:) = 0.0
@@ -1785,16 +1794,27 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call callTree_waypoint("restart registration complete (initialize_MOM)")
 
   call cpu_clock_begin(id_clock_MOM_init)
-  call MOM_initialize_fixed(G, CS%OBC, param_file, write_geom_files, dirs%output_directory)
+  call MOM_initialize_fixed(dG, CS%OBC, param_file, write_geom_files, dirs%output_directory)
   call callTree_waypoint("returned from MOM_initialize_fixed() (initialize_MOM)")
   call MOM_initialize_coord(GV, param_file, write_geom_files, &
-                            dirs%output_directory, CS%tv, G%max_depth)
+                            dirs%output_directory, CS%tv, dG%max_depth)
   call callTree_waypoint("returned from MOM_initialize_coord() (initialize_MOM)")
 
   if (CS%use_ALE_algorithm) then
-    call ALE_init(param_file, GV, G%max_depth, CS%ALE_CSp)
+    call ALE_init(param_file, GV, dG%max_depth, CS%ALE_CSp)
     call callTree_waypoint("returned from ALE_init() (initialize_MOM)")
   endif
+
+  !   Shift from using the temporary dynamic grid type to using the final (potentially
+  ! static) ocean grid type.
+  ! call clone_MOM_domain(dG%Domain, CS%G%Domain)
+  ! call MOM_grid_init(CS%G, param_file)
+
+  call copy_dyngrid_to_MOM_grid(dg, G)
+  ! Allocate the auxiliary non-symmetric domain for debugging or I/O purposes.
+  if (CS%debug .or. G%symmetric) &
+    call clone_MOM_domain(G%Domain, G%Domain_aux, symmetric=.false.)
+  G%ke = GV%ke
 
   call MOM_initialize_state(CS%u, CS%v, CS%h, CS%tv, Time, G, GV, param_file, &
                             dirs, CS%restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
@@ -1805,20 +1825,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   ! From this point, there may be pointers being set, so the final grid type
   ! that will persist through the run has to be used.
  
-  !   Shift from using the temporary dynamic grid type to using the final (potentially
-  ! static) ocean grid type.
-  ! call clone_MOM_domain(dG%Domain, CS%G%Domain)
-  ! call MOM_grid_init(CS%G, param_file)
-  ! call copy_dyngrid_to_MOM_grid(dg, CS%G)
-  ! Allocate the auxiliary non-symmetric domain for debugging or I/O purposes.
-  ! if (CS%debug .or. CS%G%symmetric) &
-  !  call clone_MOM_domain(CS%G%Domain, CS%G%Domain_aux, symmetric=.false.)
-
-  ! ! Copy a common variable from the vertical grid to the horizontal grid.
-  ! ! Consider removing this later?
-  ! CS%G%ke = GV%ke
-  ! G => CS%G
-
   if (test_grid_copy) then
     !  Copy the data from the temporary grid to the dyn_hor_grid to CS%G.
     call create_dyn_horgrid(dG, G%HI)
@@ -1885,12 +1891,12 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
    diag    => CS%diag
   ! Initialize the diag mediator.
-  call diag_mediator_init(G, param_file, diag, doc_file_dir=dirs%output_directory)
+  call diag_mediator_init(G, GV%ke, param_file, diag, doc_file_dir=dirs%output_directory)
 
   ! Initialize the diagnostics mask arrays.
   ! This step has to be done after call to MOM_initialize_state
   ! and before MOM_diagnostics_init
-  call diag_masks_set(G, CS%missing, diag)
+  call diag_masks_set(G, GV%ke, CS%missing, diag)
 
   ! Set up a pointers h within diag mediator control structure,
   ! this needs to occur _after_ CS%h has been allocated.

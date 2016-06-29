@@ -53,7 +53,7 @@ subroutine MOM_initialize_coord(GV, PF, write_geom, output_dir, tv, max_depth)
   nz = GV%ke
 
   call callTree_enter("MOM_initialize_coord(), MOM_coord_initialization.F90")
-!  call log_version(PF, mod, version)
+  call log_version(PF, mod, version, "")
   call get_param(PF, mod, "DEBUG", debug, default=.false.)
 
 ! Set-up the layer densities, GV%Rlay, and reduced gravities, GV%g_prime.

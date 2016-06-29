@@ -1,5 +1,5 @@
 ! This file is part of MOM6. See LICENSE.md for the license.
-!> Controls where open boundary conditions are applied 
+!> Controls where open boundary conditions are applied
 module MOM_open_boundary
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -11,6 +11,7 @@ use MOM_domains, only : To_All, SCALAR_PAIR, CGRID_NE
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type, log_param
 use MOM_grid, only : ocean_grid_type
+use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_io, only : EAST_FACE, NORTH_FACE
 use MOM_io, only : slasher, read_data
 use MOM_tracer_registry, only : add_tracer_OBC_values, tracer_registry_type
@@ -100,6 +101,7 @@ type, public :: ocean_OBC_type
   real :: rx_max   !< The maximum magnitude of the baroclinic radiation
                    !! velocity (or speed of characteristics), in m s-1.  The
                    !! default value is 10 m s-1.
+  logical :: this_pe !< Is there an open boundary on this tile?
 end type ocean_OBC_type
 
 integer :: id_clock_pass
@@ -112,11 +114,9 @@ contains
 
 !> Enables OBC module and reads configuration parameters
 subroutine open_boundary_config(G, param_file, OBC)
-  type(ocean_grid_type),   intent(in)    :: G !< Ocean grid structure
+  type(dyn_horgrid_type),  intent(in)    :: G !< Ocean grid structure
   type(param_file_type),   intent(in)    :: param_file !< Parameter file handle
   type(ocean_OBC_type),    pointer       :: OBC !< Open boundary control structure
-  ! Local variables
-  logical :: flather_east, flather_west, flather_north, flather_south
 
   allocate(OBC)
 
@@ -164,9 +164,9 @@ end subroutine open_boundary_config
 
 !> Initialize open boundary control structure
 subroutine open_boundary_init(G, param_file, OBC)
-  type(ocean_grid_type),   intent(in)    :: G !< Ocean grid structure
-  type(param_file_type),   intent(in)    :: param_file !< Parameter file handle
-  type(ocean_OBC_type),    pointer       :: OBC !< Open boundary control structure
+  type(ocean_grid_type), intent(in)    :: G !< Ocean grid structure
+  type(param_file_type), intent(in)    :: param_file !< Parameter file handle
+  type(ocean_OBC_type),  pointer       :: OBC !< Open boundary control structure
   ! Local variables
 
   if (.not.associated(OBC)) return
@@ -244,7 +244,7 @@ end subroutine open_boundary_end
 !> Sets the slope of bathymetry normal to an open bounndary to zero.
 subroutine open_boundary_impose_normal_slope(OBC, G, depth)
   type(ocean_OBC_type),             pointer       :: OBC !< Open boundary control structure
-  type(ocean_grid_type),            intent(in)    :: G !< Ocean grid structure
+  type(dyn_horgrid_type),           intent(in)    :: G !< Ocean grid structure
   real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: depth !< Bathymetry at h-points
   ! Local variables
   integer :: i, j
@@ -270,7 +270,7 @@ end subroutine open_boundary_impose_normal_slope
 !> Reconcile masks and open boundaries, deallocate OBC on PEs where it is not needed
 subroutine open_boundary_impose_land_mask(OBC, G)
   type(ocean_OBC_type),              pointer       :: OBC !< Open boundary control structure
-  type(ocean_grid_type),             intent(in) :: G !< Ocean grid structure
+  type(dyn_horgrid_type),            intent(in) :: G !< Ocean grid structure
   ! Local variables
   integer :: i, j
   logical :: any_U, any_V
@@ -306,9 +306,9 @@ subroutine open_boundary_impose_land_mask(OBC, G)
       ! bathymetry inside the boundary was do shallow and flagged as land.
       if (OBC%OBC_mask_u(I,j)) any_U = .true.
     enddo ; enddo
-    if (.not. any_U) then
-      deallocate(OBC%OBC_mask_u)
-    endif
+!    if (.not. any_U) then
+!      deallocate(OBC%OBC_mask_u)
+!    endif
   endif
 
   any_V = .false.
@@ -316,12 +316,14 @@ subroutine open_boundary_impose_land_mask(OBC, G)
     do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
       if (OBC%OBC_mask_v(i,J)) any_V = .true.
     enddo ; enddo
-    if (.not. any_V) then
-      deallocate(OBC%OBC_mask_v)
-    endif
+!    if (.not. any_V) then
+!      deallocate(OBC%OBC_mask_v)
+!    endif
   endif
 
-  if (.not.(any_U .or. any_V)) call open_boundary_dealloc(OBC)
+!  if (.not.(any_U .or. any_V)) call open_boundary_dealloc(OBC)
+  OBC%this_pe = .true.
+  if (.not.(any_U .or. any_V)) OBC%this_pe = .false.
 
 end subroutine open_boundary_impose_land_mask
 
@@ -442,7 +444,7 @@ end subroutine Radiation_Open_Bdry_Conds
 !> Sets the domain boundaries as Flather open boundaries using the original
 !! Flather run-time logicals
 subroutine set_Flather_positions(G, OBC)
-  type(ocean_grid_type),                  intent(inout) :: G
+  type(dyn_horgrid_type),                 intent(inout) :: G
   type(ocean_OBC_type),                   pointer    :: OBC
   ! Local variables
   integer :: east_boundary, west_boundary, north_boundary, south_boundary
@@ -566,8 +568,6 @@ subroutine set_Flather_positions(G, OBC)
     enddo ; enddo
   endif
 
-  !   If there are no OBC points on this PE, there is no reason to keep the OBC
-  ! type, and it could be deallocated.
 end subroutine set_Flather_positions
 
 !> Sets the initial definitions of the characteristic open boundary conditions.
@@ -595,8 +595,8 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
   real, pointer, dimension(:,:,:) :: &
     OBC_T_u => NULL(), &    ! These arrays should be allocated and set to
     OBC_T_v => NULL(), &    ! specify the values of T and S that should come
-    OBC_S_u => NULL(), & 
-    OBC_S_v => NULL()     
+    OBC_S_u => NULL(), &
+    OBC_S_v => NULL()
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -639,7 +639,7 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
   if (.not.associated(OBC%eta_outer_v)) then
     allocate(OBC%eta_outer_v(isd:ied,JsdB:JedB)) ; OBC%eta_outer_v(:,:) = 0.0
   endif
-  
+
   if (read_OBC_uv) then
     call read_data(filename, 'ubt', OBC%ubt_outer, &
                    domain=G%Domain%mpp_domain, position=EAST_FACE)
