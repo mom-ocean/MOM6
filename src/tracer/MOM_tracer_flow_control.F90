@@ -257,7 +257,7 @@ subroutine tracer_flow_control_init(restart, day, G, GV, h, param_file, diag, OB
     call initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS%DOME_tracer_CSp, &
                                 sponge_CSp, diag_to_Z_CSp)
   if (CS%use_ISOMIP_tracer) &
-    call initialize_ISOMIP_tracer(restart, day, G, GV, h, OBC, CS%ISOMIP_tracer_CSp, &
+    call initialize_ISOMIP_tracer(restart, day, G, GV, h, diag, OBC, CS%ISOMIP_tracer_CSp, &
                                 ALE_sponge_CSp, diag_to_Z_CSp)
   if (CS%use_ideal_age) &
     call initialize_ideal_age_tracer(restart, day, G, GV, h, diag, OBC, CS%ideal_age_tracer_CSp, &

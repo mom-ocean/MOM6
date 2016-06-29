@@ -692,7 +692,7 @@ subroutine convert_thickness(h, G, GV, param_file, tv)
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   max_itt = 10
   Boussinesq = GV%Boussinesq
-  I_gEarth = 1.0 / G%g_Earth
+  I_gEarth = 1.0 / GV%g_Earth
 
   if (Boussinesq) then
     call MOM_error(FATAL,"Not yet converting thickness with Boussinesq approx.")
@@ -707,7 +707,7 @@ subroutine convert_thickness(h, G, GV, param_file, tv)
           call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_top(:,j), rho, &
                                  is, ie-is+1, tv%eqn_of_state)
           do i=is,ie
-            p_bot(i,j) = p_top(i,j) + G%g_Earth * h(i,j,k) * rho(i)
+            p_bot(i,j) = p_top(i,j) + GV%g_Earth * h(i,j,k) * rho(i)
           enddo
         enddo
 
@@ -721,7 +721,7 @@ subroutine convert_thickness(h, G, GV, param_file, tv)
             !   The hydrostatic equation is linear to such a
             ! high degree that no bounds-checking is needed.
             do i=is,ie
-              p_bot(i,j) = p_bot(i,j) + rho(i) * (G%g_Earth*h(i,j,k) - dz_geo(i,j))
+              p_bot(i,j) = p_bot(i,j) + rho(i) * (GV%g_Earth*h(i,j,k) - dz_geo(i,j))
             enddo
           enddo ; endif
         enddo
@@ -787,7 +787,7 @@ subroutine depress_surface(h, G, GV, param_file, tv)
   enddo ; enddo ; endif
 
   ! Convert thicknesses to interface heights.
-  call find_eta(h, tv, G%g_Earth, G, GV, eta)
+  call find_eta(h, tv, GV%g_Earth, G, GV, eta)
   
   do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
 !    if (eta_sfc(i,j) < eta(i,j,nz+1)) then
@@ -881,7 +881,7 @@ subroutine trim_for_ice(PF, G, GV, ALE_CSp, tv, h)
   endif
 
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    call cut_off_column_top(GV%ke, tv, GV%Rho0, G%G_earth, G%bathyT(i,j), min_thickness, &
+    call cut_off_column_top(GV%ke, tv, GV%Rho0, GV%g_Earth, G%bathyT(i,j), min_thickness, &
                tv%T(i,j,:), T_t(i,j,:), T_b(i,j,:), tv%S(i,j,:), S_t(i,j,:), S_b(i,j,:), &
                p_surf(i,j), h(i,j,:), remap_CS)
   enddo ; enddo
@@ -2154,14 +2154,14 @@ subroutine MOM_state_init_tests(G, GV, tv)
     S_t(k) = 35.-(0./500.)*e(k)
     S(k)   = 35.+(0./500.)*z(k)
     S_b(k) = 35.-(0./500.)*e(k+1)
-    call calculate_density(0.5*(T_t(k)+T_b(k)), 0.5*(S_t(k)+S_b(k)), -GV%Rho0*G%G_earth*z(k), rho(k), tv%eqn_of_state)
-    P_tot = P_tot + G%G_earth * rho(k) * h(k)
+    call calculate_density(0.5*(T_t(k)+T_b(k)), 0.5*(S_t(k)+S_b(k)), -GV%Rho0*GV%g_Earth*z(k), rho(k), tv%eqn_of_state)
+    P_tot = P_tot + GV%g_Earth * rho(k) * h(k)
   enddo
 
   P_t = 0.
   do k = 1, nk
     call find_depth_of_pressure_in_cell(T_t(k), T_b(k), S_t(k), S_b(k), e(K), e(K+1), &
-                                        P_t, 0.5*P_tot, GV%Rho0, G%G_earth, tv%eqn_of_state, P_b, z_out)
+                                        P_t, 0.5*P_tot, GV%Rho0, GV%g_Earth, tv%eqn_of_state, P_b, z_out)
     write(0,*) k,P_t,P_b,0.5*P_tot,e(K),e(K+1),z_out
     P_t = P_b
   enddo
@@ -2171,7 +2171,7 @@ subroutine MOM_state_init_tests(G, GV, tv)
   write(0,*) ' ==================================================================== '
   write(0,*) ''
   write(0,*) h
-  call cut_off_column_top(nk, tv, GV%Rho0, G%G_earth, -e(nk+1), GV%Angstrom, &
+  call cut_off_column_top(nk, tv, GV%Rho0, GV%g_Earth, -e(nk+1), GV%Angstrom, &
                T, T_t, T_b, S, S_t, S_b, 0.5*P_tot, h, remap_CS)
   write(0,*) h
 
