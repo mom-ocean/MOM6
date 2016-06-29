@@ -470,7 +470,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
       enddo ; enddo
     endif ! usePPM
 
-    if (OBC%this_pe) then ; if (OBC%apply_OBC_u) then
+    if (associated(OBC)) then ; if (OBC%this_pe) then ; if (OBC%apply_OBC_u) then
       do_any_i = .false.
       do I=is-1,ie
         do_i(I) = .false.
@@ -491,7 +491,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
           flux_x(I,m) = uhh(I)*Tr(m)%OBC_in_u(I,j,k)
         else ; flux_x(I,m) = uhh(I)*Tr(m)%OBC_inflow_conc ; endif
       endif ; enddo ; enddo ; endif
-    endif ; endif
+    endif ; endif ; endif
 
     ! Calculate new tracer concentration in each cell after accounting
     ! for the i-direction fluxes.
@@ -730,7 +730,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
       enddo ; enddo
     endif ! usePPM
 
-    if (OBC%this_pe) then ; if (OBC%apply_OBC_v) then
+    if (associated(OBC)) then ; if (OBC%this_pe) then ; if (OBC%apply_OBC_v) then
       do_any_i = .false.
       do i=is,ie
         do_i(i) = .false.
@@ -751,7 +751,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
           flux_y(i,m,J) = vhh(i,J)*Tr(m)%OBC_in_v(i,J,k)
         else ; flux_y(i,m,J) = vhh(i,J)*Tr(m)%OBC_inflow_conc ; endif
       endif ; enddo ; enddo ; endif
-    endif ; endif
+    endif ; endif ; endif
   else ! not domore_v.
     do i=is,ie ; vhh(i,J) = 0.0 ; enddo
     do m=1,ntr ; do i=is,ie ; flux_y(i,m,J) = 0.0 ; enddo ; enddo
