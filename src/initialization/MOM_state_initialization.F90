@@ -36,7 +36,7 @@ use MOM_variables, only : OBC_FLATHER_N, OBC_FLATHER_S
 use MOM_verticalGrid, only : setVerticalGridAxes, verticalGrid_type
 use MOM_ALE, only : pressure_gradient_plm
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
-use MOM_EOS, only : int_specific_vol_dp
+use MOM_EOS, only : int_specific_vol_dp, convert_temp_salt_for_TEOS10
 use user_initialization, only : user_initialize_thickness, user_initialize_velocity
 use user_initialization, only : user_init_temperature_salinity
 use user_initialization, only : user_set_Open_Bdry_Conds, user_initialize_sponges
@@ -2248,6 +2248,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
   allocate(rho_z(isd:ied,jsd:jed,kd))
 
   press(:)=tv%p_ref
+
+  !Convert T&S to Absolute Salinity and Conservative Temperature if using TEOS10
+  call convert_temp_salt_for_TEOS10(temp_z,salt_z, press, G, kd, mask_z, eos)
 
   do k=1, kd
     do j=js,je
