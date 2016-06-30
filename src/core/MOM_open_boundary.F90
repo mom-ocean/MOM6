@@ -212,7 +212,7 @@ subroutine open_boundary_init(Time, G, param_file, diag, CS)
     return
   endif
 
-  call log_version(param_file, mod, version)
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "APPLY_OBC_U_FLATHER_EAST", flather_east, &
                  "If true, some zonal velocity points use Flather open \n"//&
                  "boundary conditions on the east side of the ocean.", &

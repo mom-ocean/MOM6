@@ -20,6 +20,7 @@ module user_initialization
 !***********************************************************************
 
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
+use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
@@ -69,12 +70,13 @@ subroutine USER_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
 end subroutine USER_set_coord
 
 !> Initialize topography.
-subroutine USER_initialize_topography(D, G, param_file)
-  type(ocean_grid_type), intent(in)           :: G          !< The ocean's grid structure.
-  real, intent(out), dimension(SZI_(G),SZJ_(G)) :: D        !< The bottom depth in m.
-  type(param_file_type), intent(in)           :: param_file !< A structure indicating the
-                                                            !! open file to parse for model
-                                                            !! parameter values.
+subroutine USER_initialize_topography(D, G, param_file, max_depth)
+  type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
+  real, dimension(G%isd:G%ied,G%jsd:G%jed), &
+                                      intent(out) :: D !< Ocean bottom depth in m
+  type(param_file_type),              intent(in)  :: param_file !< Parameter file structure
+  real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
+
   call MOM_error(FATAL, &
    "USER_initialization.F90, USER_initialize_topography: " // &
    "Unmodified user routine called - you must edit the routine to use it")
@@ -88,7 +90,7 @@ end subroutine USER_initialize_topography
 !> initialize thicknesses.
 subroutine USER_initialize_thickness(h, G, param_file, T)
   type(ocean_grid_type), intent(in)           :: G          !< The ocean's grid structure.
-  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h !< The thicknesses being
+  real, intent(out), dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h !< The thicknesses being
                                                             !! initialized.
   type(param_file_type), intent(in)           :: param_file !< A structure indicating the
                                                             !! open file to parse for model

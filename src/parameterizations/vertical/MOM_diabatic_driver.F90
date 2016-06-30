@@ -84,6 +84,9 @@ type, public :: diabatic_CS ; private
   logical :: use_geothermal          !< If true, apply geothermal heating.
   logical :: use_int_tides           !< If true, use the code that advances a separate set
                                      !! of equations for the internal tide energy density.
+  logical :: ePBL_is_additive        !< If true, the diffusivity from ePBL is added to all
+                                     !! other diffusivities. Otherwise, the larger of kappa-
+                                     !! shear and ePBL diffusivities are used.
   integer :: nMode = 1               !< Number of baroclinic modes to consider
   logical :: int_tide_source_test    !< If true, apply an arbitrary generation site
                                      !! for internal tide testing (BDM)
@@ -324,6 +327,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
 
   integer :: ig, jg      ! global indices for testing testing itide point source (BDM)
   logical :: avg_enabled ! for testing internal tides (BDM)
+  real :: Kd_add_here    ! An added diffusivity in m2/s
 
   is   = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
   Isq  = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -741,12 +745,18 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       ! Augment the diffusivities due to those diagnosed in energetic_PBL.
       do K=2,nz ; do j=js,je ; do i=is,ie
 
-        Ent_int = Kd_ePBL(i,j,K) * (GV%m_to_H**2 * dt) / &
-                  (0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect)
+        if (CS%ePBL_is_additive) then
+          Kd_add_here = Kd_ePBL(i,j,K)
+          visc%Kv_turb(i,j,K) = visc%Kv_turb(i,j,K) + Kd_ePBL(i,j,K)
+        else
+          Kd_add_here = max(Kd_ePBL(i,j,K) - visc%Kd_turb(i,j,K), 0.0)
+          visc%Kv_turb(i,j,K) = max(visc%Kv_turb(i,j,K), Kd_ePBL(i,j,K))
+        endif
+        Ent_int = Kd_add_here * (GV%m_to_H**2 * dt) / &
+                    (0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect)
         eb(i,j,k-1) = eb(i,j,k-1) + Ent_int
         ea(i,j,k) = ea(i,j,k) + Ent_int
-        visc%Kv_turb(i,j,K) = visc%Kv_turb(i,j,K) + Kd_ePBL(i,j,K)
-        Kd_int(i,j,K)  = Kd_int(i,j,K) + Kd_ePBL(i,j,K)
+        Kd_int(i,j,K)  = Kd_int(i,j,K) + Kd_add_here
 
         ! for diagnostics
         Kd_heat(i,j,K) = Kd_heat(i,j,K) + Kd_int(i,j,K)
@@ -1751,6 +1761,10 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
                  "If true, use an implied energetics planetary boundary \n"//&
                  "layer scheme to determine the diffusivity and viscosity \n"//&
                  "in the surface boundary layer.", default=.false.)
+  call get_param(param_file, mod, "EPBL_IS_ADDITIVE", CS%ePBL_is_additive, &
+                 "If true, the diffusivity from ePBL is added to all\n"//&
+                 "other diffusivities. Otherwise, the larger of kappa-\n"//&
+                 "shear and ePBL diffusivities are used.", default=.true.)
   call get_param(param_file, mod, "DOUBLE_DIFFUSION", differentialDiffusion, &
                  "If true, apply parameterization of double-diffusion.", &
                  default=.false. )
@@ -1930,8 +1944,11 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
   !call set_diffusivity_init(Time, G, param_file, diag, CS%set_diff_CSp, diag_to_Z_CSp, CS%int_tide_CSp)
   CS%id_Kd_interface = register_diag_field('ocean_model', 'Kd_interface', diag%axesTi, Time, &
       'Total diapycnal diffusivity at interfaces', 'meter2 second-1')
-  CS%id_Kd_ePBL = register_diag_field('ocean_model', 'Kd_ePBL', diag%axesTi, Time, &
-      'ePBL diapycnal diffusivity at interfaces', 'meter2 second-1')
+  if (CS%use_energetic_PBL) then
+      CS%id_Kd_ePBL = register_diag_field('ocean_model', 'Kd_ePBL', diag%axesTi, Time, &
+          'ePBL diapycnal diffusivity at interfaces', 'meter2 second-1')
+  endif
+
   CS%id_Kd_heat = register_diag_field('ocean_model', 'Kd_heat', diag%axesTi, Time, &
       'Total diapycnal diffusivity for heat at interfaces', 'meter2 second-1',     &
        cmor_field_name='difvho', cmor_units='m2 s-1',                              &
@@ -1967,119 +1984,117 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
 
   ! diagnostics for tendencies of temp and saln due to diabatic processes;
   ! available only for ALE algorithm.
+  if (CS%useALEalgorithm) then
+    CS%id_diabatic_diff_temp_tend = register_diag_field('ocean_model', &
+        'diabatic_diff_temp_tendency', diag%axesTL, Time,              &
+        'Diabatic diffusion temperature tendency', 'Degree C per second')
+    if(CS%id_diabatic_diff_temp_tend > 0) then
+      CS%diabatic_diff_tendency_diag = .true.
+    endif
 
-  CS%id_diabatic_diff_temp_tend = register_diag_field('ocean_model', &
-      'diabatic_diff_temp_tendency', diag%axesTL, Time,              &
-      'Diabatic diffusion temperature tendency', 'Degree C per second')
-  if(CS%id_diabatic_diff_temp_tend > 0) then
-    CS%diabatic_diff_tendency_diag = .true.
+    CS%id_diabatic_diff_saln_tend = register_diag_field('ocean_model',&
+        'diabatic_diff_saln_tendency', diag%axesTL, Time,             &
+        'Diabatic diffusion salinity tendency', 'PPT per second')
+    if(CS%id_diabatic_diff_saln_tend > 0) then
+      CS%diabatic_diff_tendency_diag = .true.
+    endif
+
+    CS%id_diabatic_diff_heat_tend = register_diag_field('ocean_model',                                                 &
+        'diabatic_heat_tendency', diag%axesTL, Time,                                                                   &
+        'Diabatic diffusion heat tendency',                                                                            &
+        'Watts/m2',cmor_field_name='opottempdiff', cmor_units='W m-2',                                                 &
+        cmor_standard_name=                                                                                            &
+        'tendency_of_sea_water_potential_temperature_expressed_as_heat_content_due_to_parameterized_dianeutral_mixing',&
+        cmor_long_name =                                                                                               &
+        'Tendency of sea water potential temperature expressed as heat content due to parameterized dianeutral mixing')
+    if(CS%id_diabatic_diff_heat_tend > 0) then
+      CS%diabatic_diff_tendency_diag = .true.
+    endif
+
+    CS%id_diabatic_diff_salt_tend = register_diag_field('ocean_model',                                     &
+        'diabatic_salt_tendency', diag%axesTL, Time,                                                       &
+        'Diabatic diffusion of salt tendency',                                                             &
+        'kg/(m2 * s)',cmor_field_name='osaltdiff', cmor_units='kg m-2 s-1',                                &
+        cmor_standard_name=                                                                                &
+        'tendency_of_sea_water_salinity_expressed_as_salt_content_due_to_parameterized_dianeutral_mixing', &
+        cmor_long_name =                                                                                   &
+        'Tendency of sea water salinity expressed as salt content due to parameterized dianeutral mixing')
+    if(CS%id_diabatic_diff_salt_tend > 0) then
+      CS%diabatic_diff_tendency_diag = .true.
+    endif
+
+    ! This diagnostic should equal to roundoff if all is working well.
+    CS%id_diabatic_diff_heat_tend_2d = register_diag_field('ocean_model',                                                               &
+        'diabatic_heat_tendency_2d', diag%axesT1, Time,                                                                                 &
+        'Depth integrated diabatic diffusion heat tendency',                                                                            &
+        'Watts/m2',cmor_field_name='opottempdiff_2d', cmor_units='W m-2',                                                               &
+        cmor_standard_name=                                                                                                             &
+        'tendency_of_sea_water_potential_temperature_expressed_as_heat_content_due_to_parameterized_dianeutral_mixing_depth_integrated',&
+        cmor_long_name =                                                                                                                &
+        'Tendency of sea water potential temperature expressed as heat content due to parameterized dianeutral mixing depth integrated')
+    if(CS%id_diabatic_diff_heat_tend_2d > 0) then
+      CS%diabatic_diff_tendency_diag = .true.
+    endif
+
+    ! This diagnostic should equal to roundoff if all is working well.
+    CS%id_diabatic_diff_salt_tend_2d = register_diag_field('ocean_model',                                                  &
+        'diabatic_salt_tendency_2d', diag%axesT1, Time,                                                                    &
+        'Depth integrated diabatic diffusion salt tendency',                                                               &
+        'kg/(m2 * s)',cmor_field_name='osaltdiff_2d', cmor_units='kg m-2 s-1',                                             &
+        cmor_standard_name=                                                                                                &
+        'tendency_of_sea_water_salinity_expressed_as_salt_content_due_to_parameterized_dianeutral_mixing_depth_integrated',&
+        cmor_long_name =                                                                                                   &
+        'Tendency of sea water salinity expressed as salt content due to parameterized dianeutral mixing depth integrated')
+    if(CS%id_diabatic_diff_salt_tend_2d > 0) then
+      CS%diabatic_diff_tendency_diag = .true.
+    endif
+
+    ! diagnostics for tendencies of temp and saln due to boundary forcing;
+    ! available only for ALE algorithm.
+    CS%id_boundary_forcing_temp_tend = register_diag_field('ocean_model',&
+        'boundary_forcing_temp_tendency', diag%axesTL, Time,             &
+        'Boundary forcing temperature tendency', 'Degree C per second')
+    if(CS%id_boundary_forcing_temp_tend > 0) then
+      CS%boundary_forcing_tendency_diag = .true.
+    endif
+
+    CS%id_boundary_forcing_saln_tend = register_diag_field('ocean_model',&
+        'boundary_forcing_saln_tendency', diag%axesTL, Time,             &
+        'Boundary forcing saln tendency', 'PPT per second')
+    if(CS%id_boundary_forcing_saln_tend > 0) then
+      CS%boundary_forcing_tendency_diag = .true.
+    endif
+
+    CS%id_boundary_forcing_heat_tend = register_diag_field('ocean_model',&
+        'boundary_forcing_heat_tendency', diag%axesTL, Time,             &
+        'Boundary forcing heat tendency','Watts/m2')
+    if(CS%id_boundary_forcing_heat_tend > 0) then
+      CS%boundary_forcing_tendency_diag = .true.
+    endif
+
+    CS%id_boundary_forcing_salt_tend = register_diag_field('ocean_model',&
+        'boundary_forcing_salt_tendency', diag%axesTL, Time,             &
+        'Boundary forcing salt tendency','kg m-2 s-1')
+    if(CS%id_boundary_forcing_salt_tend > 0) then
+      CS%boundary_forcing_tendency_diag = .true.
+    endif
+
+    ! This diagnostic should equal to surface heat flux if all is working well.
+    CS%id_boundary_forcing_heat_tend_2d = register_diag_field('ocean_model',&
+        'boundary_forcing_heat_tendency_2d', diag%axesT1, Time,             &
+        'Depth integrated boundary forcing of ocean heat','Watts/m2')
+    if(CS%id_boundary_forcing_heat_tend_2d > 0) then
+      CS%boundary_forcing_tendency_diag = .true.
+    endif
+
+    ! This diagnostic should equal to surface salt flux if all is working well.
+    CS%id_boundary_forcing_salt_tend_2d = register_diag_field('ocean_model',&
+        'boundary_forcing_salt_tendency_2d', diag%axesT1, Time,             &
+        'Depth integrated boundary forcing of ocean salt','kg m-2 s-1')
+    if(CS%id_boundary_forcing_salt_tend_2d > 0) then
+      CS%boundary_forcing_tendency_diag = .true.
+    endif
   endif
-
-  CS%id_diabatic_diff_saln_tend = register_diag_field('ocean_model',&
-      'diabatic_diff_saln_tendency', diag%axesTL, Time,             &
-      'Diabatic diffusion salinity tendency', 'PPT per second')
-  if(CS%id_diabatic_diff_saln_tend > 0) then
-    CS%diabatic_diff_tendency_diag = .true.
-  endif
-
-  CS%id_diabatic_diff_heat_tend = register_diag_field('ocean_model',                                                 &
-      'diabatic_heat_tendency', diag%axesTL, Time,                                                                   &
-      'Diabatic diffusion heat tendency',                                                                            &
-      'Watts/m2',cmor_field_name='opottempdiff', cmor_units='W m-2',                                                 &
-      cmor_standard_name=                                                                                            &
-      'tendency_of_sea_water_potential_temperature_expressed_as_heat_content_due_to_parameterized_dianeutral_mixing',&
-      cmor_long_name =                                                                                               &
-      'Tendency of sea water potential temperature expressed as heat content due to parameterized dianeutral mixing')
-  if(CS%id_diabatic_diff_heat_tend > 0) then
-    CS%diabatic_diff_tendency_diag = .true.
-  endif
-
-  CS%id_diabatic_diff_salt_tend = register_diag_field('ocean_model',                                     &
-      'diabatic_salt_tendency', diag%axesTL, Time,                                                       &
-      'Diabatic diffusion of salt tendency',                                                             &
-      'kg/(m2 * s)',cmor_field_name='osaltdiff', cmor_units='kg m-2 s-1',                                &
-      cmor_standard_name=                                                                                &
-      'tendency_of_sea_water_salinity_expressed_as_salt_content_due_to_parameterized_dianeutral_mixing', &
-      cmor_long_name =                                                                                   &
-      'Tendency of sea water salinity expressed as salt content due to parameterized dianeutral mixing')
-  if(CS%id_diabatic_diff_salt_tend > 0) then
-    CS%diabatic_diff_tendency_diag = .true.
-  endif
-
-  ! This diagnostic should equal to roundoff if all is working well.
-  CS%id_diabatic_diff_heat_tend_2d = register_diag_field('ocean_model',                                                               &
-      'diabatic_heat_tendency_2d', diag%axesT1, Time,                                                                                 &
-      'Depth integrated diabatic diffusion heat tendency',                                                                            &
-      'Watts/m2',cmor_field_name='opottempdiff_2d', cmor_units='W m-2',                                                               &
-      cmor_standard_name=                                                                                                             &
-      'tendency_of_sea_water_potential_temperature_expressed_as_heat_content_due_to_parameterized_dianeutral_mixing_depth_integrated',&
-      cmor_long_name =                                                                                                                &
-      'Tendency of sea water potential temperature expressed as heat content due to parameterized dianeutral mixing depth integrated')
-  if(CS%id_diabatic_diff_heat_tend_2d > 0) then
-    CS%diabatic_diff_tendency_diag = .true.
-  endif
-
-  ! This diagnostic should equal to roundoff if all is working well.
-  CS%id_diabatic_diff_salt_tend_2d = register_diag_field('ocean_model',                                                  &
-      'diabatic_salt_tendency_2d', diag%axesT1, Time,                                                                    &
-      'Depth integrated diabatic diffusion salt tendency',                                                               &
-      'kg/(m2 * s)',cmor_field_name='osaltdiff_2d', cmor_units='kg m-2 s-1',                                             &
-      cmor_standard_name=                                                                                                &
-      'tendency_of_sea_water_salinity_expressed_as_salt_content_due_to_parameterized_dianeutral_mixing_depth_integrated',&
-      cmor_long_name =                                                                                                   &
-      'Tendency of sea water salinity expressed as salt content due to parameterized dianeutral mixing depth integrated')
-  if(CS%id_diabatic_diff_salt_tend_2d > 0) then
-    CS%diabatic_diff_tendency_diag = .true.
-  endif
-
-
-  ! diagnostics for tendencies of temp and saln due to boundary forcing;
-  ! available only for ALE algorithm.
-
-  CS%id_boundary_forcing_temp_tend = register_diag_field('ocean_model',&
-      'boundary_forcing_temp_tendency', diag%axesTL, Time,             &
-      'Boundary forcing temperature tendency', 'Degree C per second')
-  if(CS%id_boundary_forcing_temp_tend > 0) then
-    CS%boundary_forcing_tendency_diag = .true.
-  endif
-
-  CS%id_boundary_forcing_saln_tend = register_diag_field('ocean_model',&
-      'boundary_forcing_saln_tendency', diag%axesTL, Time,             &
-      'Boundary forcing saln tendency', 'PPT per second')
-  if(CS%id_boundary_forcing_saln_tend > 0) then
-    CS%boundary_forcing_tendency_diag = .true.
-  endif
-
-  CS%id_boundary_forcing_heat_tend = register_diag_field('ocean_model',&
-      'boundary_forcing_heat_tendency', diag%axesTL, Time,             &
-      'Boundary forcing heat tendency','Watts/m2')
-  if(CS%id_boundary_forcing_heat_tend > 0) then
-    CS%boundary_forcing_tendency_diag = .true.
-  endif
-
-  CS%id_boundary_forcing_salt_tend = register_diag_field('ocean_model',&
-      'boundary_forcing_salt_tendency', diag%axesTL, Time,             &
-      'Boundary forcing salt tendency','kg m-2 s-1')
-  if(CS%id_boundary_forcing_salt_tend > 0) then
-    CS%boundary_forcing_tendency_diag = .true.
-  endif
-
-  ! This diagnostic should equal to surface heat flux if all is working well.
-  CS%id_boundary_forcing_heat_tend_2d = register_diag_field('ocean_model',&
-      'boundary_forcing_heat_tendency_2d', diag%axesT1, Time,             &
-      'Depth integrated boundary forcing of ocean heat','Watts/m2')
-  if(CS%id_boundary_forcing_heat_tend_2d > 0) then
-    CS%boundary_forcing_tendency_diag = .true.
-  endif
-
-  ! This diagnostic should equal to surface salt flux if all is working well.
-  CS%id_boundary_forcing_salt_tend_2d = register_diag_field('ocean_model',&
-      'boundary_forcing_salt_tendency_2d', diag%axesT1, Time,             &
-      'Depth integrated boundary forcing of ocean salt','kg m-2 s-1')
-  if(CS%id_boundary_forcing_salt_tend_2d > 0) then
-    CS%boundary_forcing_tendency_diag = .true.
-  endif
-
 
   ! diagnostics for tendencies of temp and heat due to frazil
 
@@ -2153,7 +2168,7 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
 
   ! initialize the auxiliary diabatic driver module
   call diabatic_aux_init(Time, G, GV, param_file, diag, CS%diabatic_aux_CSp, &
-                         CS%use_energetic_PBL)
+                         CS%useALEalgorithm, CS%use_energetic_PBL)
 
   ! initialize the boundary layer modules
   if (CS%bulkmixedlayer) &

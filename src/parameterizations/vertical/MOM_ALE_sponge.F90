@@ -93,7 +93,7 @@ subroutine initialize_ALE_sponge(Iresttime, data_h, nz_data, G, param_file, CS)
   endif
 
 ! Set default, read and log parameters
-  call log_version(param_file, mod, version)
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "SPONGE", use_sponge, &
                  "If true, sponges may be applied anywhere in the domain. \n"//&
                  "The exact location and properties of those sponges are \n"//&
