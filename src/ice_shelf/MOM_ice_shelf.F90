@@ -1389,11 +1389,13 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
   if (.not. solo_ice_sheet) then
     if (is_root_pe())  print *,"initialize_ice_shelf: allocating fluxes"
        !GM, the following is necessary to make ENERGETICS_SFC_PBL work
+       !call allocate_forcing_type(G, fluxes, ustar=.true., shelf=.true., &
+       !                          press=.true., water=CS%isthermo, heat=CS%isthermo)
        call allocate_forcing_type(G, fluxes, ustar=.true., shelf=.true., &
-                                  press=.true., water=CS%isthermo, heat=CS%isthermo)
+                                  press=.true., water=.true., heat=.true.)
        ! This is to make it work with layer mode without BULKMIXEDLAYER 
-       !allocate( fluxes%buoy(isd:ied,jsd:jed) )  
-       !fluxes%buoy(:,:) = 0.0
+       allocate( fluxes%buoy(isd:ied,jsd:jed) )  
+       fluxes%buoy(:,:) = 0.0
   else
     if (is_root_pe())  print *,"allocating fluxes in solo mode"
     call allocate_forcing_type(G, fluxes, ustar=.true., shelf=.true., press=.true.)
