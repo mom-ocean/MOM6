@@ -125,7 +125,6 @@ type, public :: dyn_horgrid_type
     CoriolisBu    ! The Coriolis parameter at corner points, in s-1.
   real, allocatable, dimension(:,:) :: &
     dF_dx, dF_dy  ! Derivatives of f (Coriolis parameter) at h-points, in s-1 m-1.
-!  real :: g_Earth !   The gravitational acceleration in m s-2.
 
   ! These variables are global sums that are useful for 1-d diagnostics
   real :: areaT_global  ! Global sum of h-cell area in m2
@@ -350,11 +349,8 @@ subroutine destroy_dyn_horgrid(G)
   deallocate(G%gridLonT) ; deallocate(G%gridLatT)
   deallocate(G%gridLonB) ; deallocate(G%gridLatB)
 
-  ! Do not deallocate G%Domain%mpp_domain or deallocate(G%Domain) because
-  ! these are pointers to types used elsewhere.
-  G%Domain => NULL()
-  ! deallocate(G%Domain%mpp_domain)
-  ! deallocate(G%Domain)
+  deallocate(G%Domain%mpp_domain)
+  deallocate(G%Domain)
 
   deallocate(G)
 
