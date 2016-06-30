@@ -20,6 +20,7 @@ module ISOMIP_initialization
 !***********************************************************************
 
 use MOM_ALE_sponge, only : ALE_sponge_CS, set_up_ALE_sponge_field, initialize_ALE_sponge
+use MOM_sponge, only : sponge_CS, set_up_sponge_field, initialize_sponge
 use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
