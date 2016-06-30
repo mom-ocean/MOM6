@@ -284,7 +284,7 @@ subroutine close_param_file(CS, quiet_close, component)
 
   ! Log the parameters for the parser.
   mod = "MOM_file_parser"
-  call log_version(CS, mod, version)
+  call log_version(CS, mod, version, "")
   call log_param(CS, mod, "SEND_LOG_TO_STDOUT", &
                         CS%log_to_stdout, &
                  "If true, all log messages are also sent to stdout.", &

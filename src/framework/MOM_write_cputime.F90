@@ -100,7 +100,7 @@ subroutine MOM_write_cputime_init(param_file, directory, Input_start_time, CS)
   endif
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version)
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "MAXCPU", CS%maxcpu, &
                  "The maximum amount of cpu time per processor for which \n"//&
                  "MOM should run before saving a restart file and \n"//&

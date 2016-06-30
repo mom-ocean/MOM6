@@ -474,7 +474,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
         enddo ; enddo ; enddo
         mass_tot = reproducing_sum(tmp1, sums=mass_lay, EFP_sum=mass_EFP)
 
-        call find_eta(h, tv, G%g_Earth, G, GV, eta)
+        call find_eta(h, tv, GV%g_Earth, G, GV, eta)
         do k=1,nz ; do j=js,je ; do i=is,ie
           tmp1(i,j,k) = (eta(i,j,K)-eta(i,j,K+1)) * areaTm(i,j)
         enddo ; enddo ; enddo
@@ -494,7 +494,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
         enddo ; enddo
       enddo
       if (CS%do_APE_calc) then
-        call find_eta(h, tv, G%g_Earth, G, GV, eta)
+        call find_eta(h, tv, GV%g_Earth, G, GV, eta)
 
         do k=1,nz
           vol_lay(k) = 0.0
@@ -592,7 +592,8 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
     energypath_nc = trim(CS%energyfile) // ".nc"
     if (day > CS%Start_time) then
       call reopen_file(CS%fileenergy_nc, trim(energypath_nc), vars, &
-                       num_nc_fields, G, CS%fields, SINGLE_FILE, CS%timeunit, GV=GV)
+                       num_nc_fields, CS%fields, SINGLE_FILE, CS%timeunit, &
+                       G=G, GV=GV)
     else
       call create_file(CS%fileenergy_nc, trim(energypath_nc), vars, &
                        num_nc_fields, CS%fields, SINGLE_FILE, CS%timeunit, &

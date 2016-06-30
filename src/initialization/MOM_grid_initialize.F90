@@ -72,10 +72,11 @@ use MOM_domains, only : AGRID, BGRID_NE, CGRID_NE, To_All, Scalar_Pair
 use MOM_domains, only : To_North, To_South, To_East, To_West
 use MOM_domains, only : MOM_define_domain, MOM_define_IO_domain
 use MOM_domains, only : MOM_domain_type
+use MOM_dyn_horgrid, only : dyn_horgrid_type, set_derived_dyn_horgrid
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_grid, only : ocean_grid_type, set_derived_metrics
+! use MOM_grid, only : ocean_grid_type, set_derived_metrics
 use MOM_io, only : read_data, slasher, file_exists
 use MOM_io, only : CORNER, NORTH_FACE, EAST_FACE
 
@@ -107,7 +108,7 @@ contains
 !!   grid.  The bathymetry, land-sea mask and any restricted channel widths are
 !!   not know yet, so these are set later.
 subroutine set_grid_metrics(G, param_file)
-  type(ocean_grid_type), intent(inout) :: G           !< The horizontal grid structure
+  type(dyn_horgrid_type), intent(inout) :: G          !< The dynamic horizontal grid type
   type(param_file_type), intent(in)    :: param_file  !< Parameter file structure
 ! Arguments:
 !  (inout)   G - The ocean's grid structure.
@@ -155,7 +156,8 @@ subroutine set_grid_metrics(G, param_file)
 
 ! Calculate derived metrics (i.e. reciprocals and products)
   call callTree_enter("set_derived_metrics(), MOM_grid_initialize.F90")
-  call set_derived_metrics(G)
+!  call set_derived_metrics(G)
+  call set_derived_dyn_horgrid(G)
   call callTree_leave("set_derived_metrics()")
 
   if (debug) call grid_metrics_chksum('MOM_grid_init/set_grid_metrics',G)
@@ -169,7 +171,7 @@ end subroutine set_grid_metrics
 !!   debugging.
 subroutine grid_metrics_chksum(parent, G)
   character(len=*),      intent(in) :: parent  !< A string identifying the caller
-  type(ocean_grid_type), intent(in) :: G       !< The horizontal grid structure
+  type(dyn_horgrid_type), intent(in) :: G      !< The dynamic horizontal grid type
 
   real, dimension(G%isd :G%ied ,G%jsd :G%jed ) :: tempH
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB) :: tempQ
@@ -271,9 +273,10 @@ end subroutine grid_metrics_chksum
 
 ! ------------------------------------------------------------------------------
 
-subroutine set_grid_metrics_from_mosaic(G,param_file)
-  type(ocean_grid_type), intent(inout) :: G
-  type(param_file_type), intent(in)    :: param_file
+!>  et_grid_metrics_from_mosaic sets the grid metrics from a mosaic file.
+subroutine set_grid_metrics_from_mosaic(G, param_file)
+  type(dyn_horgrid_type), intent(inout) :: G           !< The dynamic horizontal grid type
+  type(param_file_type), intent(in)     :: param_file  !< Parameter file structure
 !   This subroutine sets the grid metrics from a mosaic file.
 !  
 ! Arguments:
@@ -511,8 +514,9 @@ end subroutine set_grid_metrics_from_mosaic
 ! ------------------------------------------------------------------------------
 
 subroutine set_grid_metrics_cartesian(G, param_file)
-  type(ocean_grid_type), intent(inout) :: G
-  type(param_file_type), intent(in)    :: param_file
+  type(dyn_horgrid_type), intent(inout) :: G           !< The dynamic horizontal grid type
+  type(param_file_type), intent(in)     :: param_file  !< Parameter file structure
+
 ! Arguments:
 !  (inout)   G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
@@ -646,8 +650,9 @@ end subroutine set_grid_metrics_cartesian
 ! ------------------------------------------------------------------------------
 
 subroutine set_grid_metrics_spherical(G, param_file)
-  type(ocean_grid_type), intent(inout) :: G
-  type(param_file_type), intent(in)    :: param_file
+  type(dyn_horgrid_type), intent(inout) :: G           !< The dynamic horizontal grid type
+  type(param_file_type), intent(in)     :: param_file  !< Parameter file structure
+
 ! Arguments:
 !  (inout)   G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
@@ -785,8 +790,9 @@ end subroutine set_grid_metrics_spherical
 ! ------------------------------------------------------------------------------
 
 subroutine set_grid_metrics_mercator(G, param_file)
-  type(ocean_grid_type), intent(inout) :: G
-  type(param_file_type), intent(in)    :: param_file
+  type(dyn_horgrid_type), intent(inout) :: G           !< The dynamic horizontal grid type
+  type(param_file_type), intent(in)     :: param_file  !< Parameter file structure
+
 ! Arguments:
 !  (inout)   G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
@@ -1327,8 +1333,9 @@ end function Adcroft_reciprocal
 !> initialize_masks initializes the grid masks and any metrics that come
 !!    with masks already applied.
 subroutine initialize_masks(G, PF)
-  type(ocean_grid_type), intent(inout) :: G  !< The ocean's grid structure
-  type(param_file_type), intent(in)    :: PF !< The param_file handle
+  type(dyn_horgrid_type), intent(inout) :: G   !< The dynamic horizontal grid type
+  type(param_file_type), intent(in)     :: PF  !< Parameter file structure
+
 ! Arguments:
 !  (inout)   G - The ocean's grid structure.
 !  (in)      PF - A structure indicating the open file to parse for
