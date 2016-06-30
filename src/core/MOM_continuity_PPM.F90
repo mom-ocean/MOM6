@@ -19,30 +19,6 @@ module MOM_continuity_PPM
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
 !***********************************************************************
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg and Alistair Adcroft, September 2006 - .        *
-!*                                                                     *
-!*    This program contains the subroutine that advects layer          *
-!*  thickness.  The scheme here uses a Piecewise-Parabolic method with *
-!*  a positive definite limiter.                                       *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v, vh                                    *
-!*    j    x ^ x ^ x   At >:  u, uh                                    *
-!*    j    > o > o >   At o:  h, hin                                   *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
-
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : time_type, diag_ctrl
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
@@ -105,10 +81,13 @@ end type loop_bounds_type
 
 contains
 
+!> This subroutine time steps the layer thicknesses, using a monotonically
+!  limit, directionally split PPM scheme, based on Lin (1994).  In the following
+!  documentation, H is used for the units of thickness (usually m or kg m-2.)
 subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, &
                           visc_rem_u, visc_rem_v, u_cor, v_cor, &
                           uhbt_aux, vhbt_aux, u_cor_aux, v_cor_aux, BT_cont)
-  type(ocean_grid_type),                     intent(inout) :: G
+  type(ocean_grid_type),                     intent(inout) :: G   !< The ocean's grid structure.
   type(continuity_PPM_CS),                   pointer       :: CS
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v
@@ -130,9 +109,6 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out), optional :: u_cor_aux
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out), optional :: v_cor_aux
   type(BT_cont_type),                        pointer,     optional :: BT_cont
-!    This subroutine time steps the layer thicknesses, using a monotonically
-!  limit, directionally split PPM scheme, based on Lin (1994).  In the following
-!  documentation, H is used for the units of thickness (usually m or kg m-2.)
 
 ! Arguments: u - Zonal velocity, in m s-1.
 !  (in)      v - Meridional velocity, in m s-1.
@@ -237,14 +213,14 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
             h(i,j,k) = h_input(i+1,j,k)
         enddo
       enddo
-!      do J=LB%jsh-1,LB%jeh
-!        do i=LB%ish-1,LB%ieh+1
-!          if (OBC%OBC_kind_v(i,J) == OBC_FLATHER .and. (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_E)) &
-!            v(i,J,k) = v(i-1,J,k)
-!          if (OBC%OBC_kind_v(i,J) == OBC_FLATHER .and. (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_W)) &
-!            v(i,J,k) = v(i+1,J,k)
+      do J=LB%jsh-1,LB%jeh
+        do i=LB%ish-1,LB%ieh+1
+          if (OBC%OBC_kind_v(i,J) == OBC_FLATHER .and. (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_E)) &
+            v(i,J,k) = v(i-1,J,k)
+          if (OBC%OBC_kind_v(i,J) == OBC_FLATHER .and. (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_W)) &
+            v(i,J,k) = v(i+1,J,k)
         enddo
-!      enddo ; enddo
+      enddo ; enddo
     endif
     LB%ish = G%isc ; LB%ieh = G%iec ; LB%jsh = G%jsc ; LB%jeh = G%jec
 
@@ -272,12 +248,12 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
           if (OBC%OBC_kind_v(i,J) == OBC_FLATHER .and. (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S)) &
             h(i,j,k) = h_input(i,j+1,k)
         enddo ; enddo
-!        do j=LB%jsh-1,LB%jeh+1 ; do I=LB%ish-1,LB%ieh
-!          if (OBC%OBC_kind_u(I,j) == OBC_FLATHER .and. (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_N)) &
-!            u(I,j,k) = u(I,j-1,k)
-!          if (OBC%OBC_kind_u(I,j) == OBC_FLATHER .and. (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_S)) &
-!            u(I,j,k) = u(I,j+1,k)
-!        enddo ; enddo
+        do j=LB%jsh-1,LB%jeh+1 ; do I=LB%ish-1,LB%ieh
+          if (OBC%OBC_kind_u(I,j) == OBC_FLATHER .and. (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_N)) &
+            u(I,j,k) = u(I,j-1,k)
+          if (OBC%OBC_kind_u(I,j) == OBC_FLATHER .and. (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_S)) &
+            u(I,j,k) = u(I,j+1,k)
+        enddo ; enddo
       enddo
     endif
   else  ! .not. x_first
@@ -305,12 +281,12 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
           if (OBC%OBC_kind_v(i,J) == OBC_FLATHER .and. (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S)) &
             h(i,j,k) = h_input(i,j+1,k)
         enddo ; enddo
-!        do j=LB%jsh-1,LB%jeh+1 ; do I=LB%ish-1,LB%ieh
-!          if (OBC%OBC_kind_u(I,j) == OBC_FLATHER .and. (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_N)) &
-!            u(I,j,k) = u(I,j-1,k)
-!          if (OBC%OBC_kind_u(I,j) == OBC_FLATHER .and. (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_S)) &
-!            u(I,j,k) = u(I,j+1,k)
-!        enddo ; enddo
+        do j=LB%jsh-1,LB%jeh+1 ; do I=LB%ish-1,LB%ieh
+          if (OBC%OBC_kind_u(I,j) == OBC_FLATHER .and. (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_N)) &
+            u(I,j,k) = u(I,j-1,k)
+          if (OBC%OBC_kind_u(I,j) == OBC_FLATHER .and. (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_S)) &
+            u(I,j,k) = u(I,j+1,k)
+        enddo ; enddo
       enddo
     endif
 
@@ -340,14 +316,14 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
             h(i,j,k) = h_input(i+1,j,k)
         enddo
       enddo
-!      do J=LB%jsh-1,LB%jeh
-!        do i=LB%ish-1,LB%ieh+1
-!          if (OBC%OBC_kind_v(i,J) == OBC_FLATHER .and. (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_E)) &
-!            v(i,J,k) = v(i-1,J,k)
-!          if (OBC%OBC_kind_v(i,J) == OBC_FLATHER .and. (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_W)) &
-!            v(i,J,k) = v(i+1,J,k)
+      do J=LB%jsh-1,LB%jeh
+        do i=LB%ish-1,LB%ieh+1
+          if (OBC%OBC_kind_v(i,J) == OBC_FLATHER .and. (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_E)) &
+            v(i,J,k) = v(i-1,J,k)
+          if (OBC%OBC_kind_v(i,J) == OBC_FLATHER .and. (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_W)) &
+            v(i,J,k) = v(i+1,J,k)
         enddo
-!      enddo ; enddo
+      enddo ; enddo
     endif
   endif
 
@@ -419,14 +395,19 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
   real :: dx_E, dx_W ! Effective x-grid spacings to the east and west, in m.
   integer :: i, j, k, ish, ieh, jsh, jeh, nz
   logical :: do_aux, apply_OBC_u, use_visc_rem, set_BT_cont, any_simple_OBC
+  logical :: apply_OBC_flather
 
   do_aux = (present(uhbt_aux) .and. present(u_cor_aux))
   use_visc_rem = present(visc_rem_u)
   apply_OBC_u = .false. ; set_BT_cont = .false.
   if (present(BT_cont)) set_BT_cont = (associated(BT_cont))
-  if (present(OBC)) then ; if (associated(OBC)) then ; if (OBC%this_pe) then
+  if (present(OBC)) then ; if (associated(OBC)) then
     apply_OBC_u = OBC%apply_OBC_u
-  endif ; endif ; endif
+    apply_OBC_flather = OBC%apply_OBC_u_flather_east .or. &
+                        OBC%apply_OBC_u_flather_west .or. &
+                        OBC%apply_OBC_v_flather_north .or. &
+                        OBC%apply_OBC_v_flather_south
+  endif ; endif
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = G%ke
 
   CFL_dt = CS%CFL_limit_adjust / dt
@@ -558,12 +539,16 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
 
       any_simple_OBC = .false.
       if (present(uhbt) .or. do_aux .or. set_BT_cont) then
-        if (.not.apply_OBC_u) then ; do I=ish-1,ieh
-          do_i(I) = .true.
-        enddo ; else ; do I=ish-1,ieh
-          do_i(I) = .not.(OBC%OBC_mask_u(I,j) .and. &
-                          (OBC%OBC_kind_u(I,j) == OBC_SIMPLE))
+        if (apply_OBC_u) then ; do I=ish-1,ieh
+          do_i(I) = .not.(OBC%OBC_mask_u(I,j))
           if (.not.do_i(I)) any_simple_OBC = .true.
+        enddo ; else if (apply_OBC_flather) then ; do I=ish-1,ieh
+          do_i(I) = .not.(OBC%OBC_mask_u(I,j) .and. &
+                 OBC%OBC_kind_u(I,j) == OBC_FLATHER .and. &
+                (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_N .or. &
+                 OBC%OBC_direction_u(I,j) == OBC_DIRECTION_S))
+        enddo ; else ; do I=ish-1,ieh
+          do_i(I) = .true.
         enddo ; endif
       endif
 
@@ -602,8 +587,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
                                visc_rem_max, j, ish, ieh, do_i)
         if (any_simple_OBC) then
           do I=ish-1,ieh
-            do_i(I) = (OBC%OBC_mask_u(I,j) .and. &
-                       (OBC%OBC_kind_u(I,j) == OBC_SIMPLE))
+            do_i(I) = (OBC%OBC_mask_u(I,j))
             if (do_i(I)) BT_cont%Fa_u_W0(I,j) = GV%H_subroundoff*G%dy_Cu(I,j)
           enddo
           do k=1,nz ; do I=ish-1,ieh ; if (do_i(I)) then
@@ -1176,6 +1160,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
   real :: dy_N, dy_S ! Effective y-grid spacings to the north and south, in m.
   integer :: i, j, k, ish, ieh, jsh, jeh, nz
   logical :: do_aux, apply_OBC_v, use_visc_rem, set_BT_cont, any_simple_OBC
+  logical :: apply_OBC_flather
 
   do_aux = (present(vhbt_aux) .and. present(v_cor_aux))
   use_visc_rem = present(visc_rem_v)
@@ -1183,6 +1168,10 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
   if (present(BT_cont)) set_BT_cont = (associated(BT_cont))
   if (present(OBC)) then ; if (associated(OBC)) then ; if (OBC%this_pe) then
     apply_OBC_v = OBC%apply_OBC_v
+    apply_OBC_flather = OBC%apply_OBC_u_flather_east .or. &
+                        OBC%apply_OBC_u_flather_west .or. &
+                        OBC%apply_OBC_v_flather_north .or. &
+                        OBC%apply_OBC_v_flather_south
   endif ; endif ; endif
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = G%ke
 
@@ -1313,12 +1302,16 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
 
       any_simple_OBC = .false.
       if (present(vhbt) .or. do_aux .or. set_BT_cont) then
-        if (.not.apply_OBC_v) then ; do i=ish,ieh
-          do_i(i) = .true.
-        enddo ; else ; do i=ish,ieh
+        if (apply_OBC_v) then ; do i=ish,ieh
+          do_i(i) = .not.(OBC%OBC_mask_v(i,J))
+          if (.not.do_i(i)) any_simple_OBC = .true.
+        enddo ; else if (apply_OBC_flather) then ; do i=ish,ieh
           do_i(i) = .not.(OBC%OBC_mask_v(i,J) .and. &
-                          (OBC%OBC_kind_v(i,J) == OBC_SIMPLE))
-          if (.not.do_i(I)) any_simple_OBC = .true.
+                 OBC%OBC_kind_v(i,J) == OBC_FLATHER .and. &
+                (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_E .or. &
+                 OBC%OBC_direction_v(i,J) == OBC_DIRECTION_W))
+        enddo ; else ; do i=ish,ieh
+          do_i(i) = .true.
         enddo ; endif
       endif
 
@@ -1356,8 +1349,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
                                visc_rem_max, J, ish, ieh, do_i)
         if (any_simple_OBC) then
           do i=ish,ieh
-            do_i(i) = (OBC%OBC_mask_v(i,J) .and. &
-                       (OBC%OBC_kind_v(i,J) == OBC_SIMPLE))
+            do_i(i) = (OBC%OBC_mask_v(i,J))
             if (do_i(i)) BT_cont%Fa_v_S0(i,J) = GV%H_subroundoff*G%dx_Cv(I,j)
           enddo
           do k=1,nz ; do i=ish,ieh ; if (do_i(i)) then
@@ -2241,5 +2233,29 @@ subroutine continuity_PPM_end(CS)
   type(continuity_PPM_CS), pointer :: CS
   deallocate(CS)
 end subroutine continuity_PPM_end
+
+!********+*********+*********+*********+*********+*********+*********+**
+!*                                                                     *
+!*  By Robert Hallberg and Alistair Adcroft, September 2006 - .        *
+!*                                                                     *
+!*    This program contains the subroutine that advects layer          *
+!*  thickness.  The scheme here uses a Piecewise-Parabolic method with *
+!*  a positive definite limiter.                                       *
+!*                                                                     *
+!*  Macros written all in capital letters are defined in MOM_memory.h. *
+!*                                                                     *
+!*     A small fragment of the grid is shown below:                    *
+!*                                                                     *
+!*    j+1  x ^ x ^ x   At x:  q                                        *
+!*    j+1  > o > o >   At ^:  v, vh                                    *
+!*    j    x ^ x ^ x   At >:  u, uh                                    *
+!*    j    > o > o >   At o:  h, hin                                   *
+!*    j-1  x ^ x ^ x                                                   *
+!*        i-1  i  i+1  At x & ^:                                       *
+!*           i  i+1    At > & o:                                       *
+!*                                                                     *
+!*  The boundaries always run through q grid points (x).               *
+!*                                                                     *
+!********+*********+*********+*********+*********+*********+*********+**
 
 end module MOM_continuity_PPM
