@@ -125,7 +125,6 @@ type, public :: dyn_horgrid_type
     CoriolisBu    ! The Coriolis parameter at corner points, in s-1.
   real, allocatable, dimension(:,:) :: &
     dF_dx, dF_dy  ! Derivatives of f (Coriolis parameter) at h-points, in s-1 m-1.
-  real :: g_Earth !   The gravitational acceleration in m s-2.
 
   ! These variables are global sums that are useful for 1-d diagnostics
   real :: areaT_global  ! Global sum of h-cell area in m2
@@ -146,9 +145,13 @@ contains
 
 !---------------------------------------------------------------------
 !> Allocate memory used by the dyn_horgrid_type and related structures.
-subroutine create_dyn_horgrid(G, HI)
+subroutine create_dyn_horgrid(G, HI, bathymetry_at_vel)
   type(dyn_horgrid_type), pointer    :: G  !< A pointer to the dynamic horizontal grid type
   type(hor_index_type),   intent(in) :: HI !< A hor_index_type for array extents
+  logical,        optional, intent(in) :: bathymetry_at_vel !< If true, there are
+                             !! separate values for the basin depths at velocity
+                             !! points.  Otherwise the effects of topography are
+                             !! entirely determined from thickness points.
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, isg, ieg, jsg, jeg
 
   ! This subroutine allocates the lateral elements of the dyn_horgrid_type that
@@ -173,6 +176,9 @@ subroutine create_dyn_horgrid(G, HI)
   G%idg_offset = HI%idg_offset ; G%jdg_offset = HI%jdg_offset
   G%isd_global = G%isd + HI%idg_offset ; G%jsd_global = G%jsd + HI%jdg_offset
   G%symmetric = HI%symmetric
+
+  G%bathymetry_at_vel = .false.
+  if (present(bathymetry_at_vel)) G%bathymetry_at_vel = bathymetry_at_vel
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
@@ -232,10 +238,12 @@ subroutine create_dyn_horgrid(G, HI)
   allocate(G%sin_rot(isd:ied,jsd:jed)) ; G%sin_rot(:,:) = 0.0
   allocate(G%cos_rot(isd:ied,jsd:jed)) ; G%cos_rot(:,:) = 1.0
 
-  allocate(G%Dblock_u(IsdB:IedB, jsd:jed)) ; G%Dblock_u(:,:) = 0.0
-  allocate(G%Dopen_u(IsdB:IedB, jsd:jed))  ; G%Dopen_u(:,:) = 0.0
-  allocate(G%Dblock_v(isd:ied, JsdB:JedB)) ; G%Dblock_v(:,:) = 0.0
-  allocate(G%Dopen_v(isd:ied, JsdB:JedB))  ; G%Dopen_v(:,:) = 0.0
+  if (G%bathymetry_at_vel) then
+    allocate(G%Dblock_u(IsdB:IedB, jsd:jed)) ; G%Dblock_u(:,:) = 0.0
+    allocate(G%Dopen_u(IsdB:IedB, jsd:jed))  ; G%Dopen_u(:,:) = 0.0
+    allocate(G%Dblock_v(isd:ied, JsdB:JedB)) ; G%Dblock_v(:,:) = 0.0
+    allocate(G%Dopen_v(isd:ied, JsdB:JedB))  ; G%Dopen_v(:,:) = 0.0
+  endif
 
   allocate(G%gridLonT(isg:ieg))       ; G%gridLonT(:) = 0.0
   allocate(G%gridLonB(G%IsgB:G%IegB)) ; G%gridLonB(:) = 0.0
@@ -333,15 +341,16 @@ subroutine destroy_dyn_horgrid(G)
   deallocate(G%dF_dx)  ; deallocate(G%dF_dy)
   deallocate(G%sin_rot) ; deallocate(G%cos_rot)
 
-  deallocate(G%Dblock_u) ; deallocate(G%Dopen_u)
-  deallocate(G%Dblock_v) ; deallocate(G%Dopen_v)
+  if (allocated(G%Dblock_u)) deallocate(G%Dblock_u)
+  if (allocated(G%Dopen_u)) deallocate(G%Dopen_u)
+  if (allocated(G%Dblock_v)) deallocate(G%Dblock_v)
+  if (allocated(G%Dopen_v)) deallocate(G%Dopen_v)
 
   deallocate(G%gridLonT) ; deallocate(G%gridLatT)
   deallocate(G%gridLonB) ; deallocate(G%gridLatB)
 
-  ! Do not deallocate G%Domain%mpp_domain or deallocate(G%Domain) because
-  ! these are pointers to types used elsewhere.
-  G%Domain => NULL()
+  deallocate(G%Domain%mpp_domain)
+  deallocate(G%Domain)
 
   deallocate(G)
 
