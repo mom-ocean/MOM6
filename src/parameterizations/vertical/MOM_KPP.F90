@@ -51,6 +51,7 @@ type, public :: KPP_CS ; private
   real    :: Ri_crit                   !< Critical bulk Richardson number (defines OBL depth)
   real    :: vonKarman                 !< von Karman constant (dimensionless)
   real    :: cs                        !< Parameter for computing velocity scale function (dimensionless)
+  real    :: cs2
   logical :: enhance_diffusion         !< If True, add enhanced diffusivity at base of boundary layer.
   character(len=10) :: interpType      !< Type of interpolation in determining OBL depth
   logical :: computeEkman              !< If True, compute Ekman depth limit for OBLdepth
@@ -140,7 +141,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
 #include "version_variable.h"
   character(len=40) :: mod = 'MOM_KPP' ! name of this module
   character(len=20) :: string          ! local temporary string
-
+  logical :: CS_IS_ONE=.false.
   if (associated(CS)) call MOM_error(FATAL, 'MOM_KPP, KPP_init: '// &
            'Control structure has already been initialized')
   allocate(CS)
@@ -190,6 +191,9 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
   call get_param(paramFile, mod, 'CS', CS%cs,                        &
                  'Parameter for computing velocity scale function.', &
                  units='nondim', default=98.96)
+  call get_param(paramFile, mod, 'CS2', CS%cs2,                        &
+                 'Parameter for computing velocity scale function.', &
+                 units='nondim', default=6.32)
   call get_param(paramFile, mod, 'DEEP_OBL_OFFSET', CS%deepOBLoffset,                             &
                  'If non-zero, the distance above the bottom to which the OBL is clipped\n'//     &
                  'if it would otherwise reach the bottom. The smaller of this and 0.1D is used.', &
@@ -253,7 +257,9 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
                  '\t MatchBoth         = match gradient for both diffusivity and NLT\n'//                 &
                  '\t ParabolicNonLocal = sigma*(1-sigma)^2 for diffusivity; (1-sigma)^2 for NLT',         &
                  default='SimpleShapes')
-
+  if (CS%MatchTechnique.eq.'ParabolicNonLocal') then
+     Cs_is_one=.true.
+  endif
   call get_param(paramFile, mod, 'KPP_ZERO_DIFFUSIVITY', CS%KPPzeroDiffusivity,            &
                  'If True, zeroes the KPP diffusivity and viscosity; for testing purpose.',&
                  default=.False.)
@@ -289,6 +295,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
                        lMonOb=CS%computeMoninObukhov,      &
                        MatchTechnique=CS%MatchTechnique,   &
                        lenhanced_diff=CS%enhance_diffusion,&
+                       lnonzero_surf_nonlocal=Cs_is_one   ,&
                        CVmix_kpp_params_user=CS%KPP_params )
 
   ! Register diagnostics
@@ -417,7 +424,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: nonLocalTransScalar !< scalar non-local transport (m/s)
 
   ! Local variables
-  integer :: i, j, k, km1                        ! Loop indices
+  integer :: i, j, k, km1,kp1                    ! Loop indices
   real, dimension( G%ke )     :: cellHeight      ! Cell center heights referenced to surface (m) (negative in ocean)
   real, dimension( G%ke+1 )   :: iFaceHeight     ! Interface heights referenced to surface (m) (negative in ocean)
   real, dimension( G%ke+1 )   :: N2_1d           ! Brunt-Vaisala frequency squared, at interfaces (1/s2)
@@ -451,7 +458,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
   real :: surfHu, surfU        ! Integral and average of u over the surface layer
   real :: surfHv, surfV        ! Integral and average of v over the surface layer
   integer :: kk, ksfc, ktmp
-
+  real :: Tup, Hup, Tlo, Hlo, DPT
 #ifdef __DO_SAFETY_CHECKS__
   if (CS%debug) then
     call hchksum(h*GV%H_to_m, "KPP in: h",G,haloshift=0)
@@ -598,7 +605,12 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       N2_1d(G%ke+1 ) = 0.0
       N_1d(G%ke+1 )  = 0.0
 
-
+      !Apply N2 smoothing
+       !do k = 1, G%ke
+       ! kp1 = min(k+5, G%ke)
+       ! N2_1d(k)    = N2_1d(kp1)
+       ! N_1d(k)     = sqrt( max( N2_1d(k), 0.) )
+      !enddo
       ! turbulent velocity scales w_s and w_m computed at the cell centers.
       ! Note that if sigma > CS%surf_layer_ext, then CVmix_kpp_compute_turbulent_scales
       ! computes w_s and w_m velocity scale at sigma=CS%surf_layer_ext. So we only pass
@@ -767,29 +779,49 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       ! MOM6 recommended shape is the parabolic; it gives deeper boundary layer
       ! and no spurious extrema.
       if (surfBuoyFlux < 0.0) then
+         Hup=h(i,j,1)*GV%H_to_m;
+         Tup=Temp(i,j,1)*Hup
+         Tlo=0.0;Hlo=0.0;
+         DPT=0.0;
+        !  do ktmp = 2,G%ke
+        !     DPT=DPT+ h(i,j,ktmp)*GV%H_to_m 
+        !     if (DPT.lt..2*OBLdepth_0d) then
+        !        delH = h(i,j,ktmp)*GV%H_to_m
+        !        Hup = Hup + delH              
+        !        Tup = Tup + Temp(i,j,ktmp) * delH
+        !     elseif (DPT.lt.OBLdepth_0d) then
+        !        delH = h(i,j,ktmp)*GV%H_to_m
+        !        Hlo = Hlo + delH
+        !        Tlo = Tlo + Temp(i,j,ktmp) * delH 
+        !        Tlo = max(Tlo,Temp(i,j,ktmp))
+        !     endif
+        ! enddo
+        ! Tup=Tup/Hup;!Tlo=Tlo/Hlo;
+        ! CS%CS2=6.32*max((Tlo-Tup)/0.01,0.0)
+        ! print*,DPT,OBLdepth_0d,CS%CS2
         if (CS%NLT_shape == NLT_SHAPE_CUBIC) then
           do k = 2, G%ke
             sigma = min(1.0,-iFaceHeight(k)/OBLdepth_0d)
-            nonLocalTrans(k,1) = (1.0 - sigma)**2 * (1.0 + 2.0*sigma)
+            nonLocalTrans(k,1) = CS%CS2 *(1.0 - sigma)**2 * (1.0 + 2.0*sigma)
             nonLocalTrans(k,2) = nonLocalTrans(k,1)
           enddo
         elseif (CS%NLT_shape == NLT_SHAPE_PARABOLIC) then
           do k = 2, G%ke
             sigma = min(1.0,-iFaceHeight(k)/OBLdepth_0d)
-            nonLocalTrans(k,1) = (1.0 - sigma)**2
+            nonLocalTrans(k,1) = CS%CS2 *(1.0 - sigma)**2
             nonLocalTrans(k,2) = nonLocalTrans(k,1)
           enddo
         elseif (CS%NLT_shape == NLT_SHAPE_LINEAR) then
           do k = 2, G%ke
             sigma = min(1.0,-iFaceHeight(k)/OBLdepth_0d)
-            nonLocalTrans(k,1) = (1.0 - sigma)
+            nonLocalTrans(k,1) = CS%CS2 *(1.0 - sigma)
             nonLocalTrans(k,2) = nonLocalTrans(k,1)
           enddo
         elseif (CS%NLT_shape == NLT_SHAPE_CUBIC_LMD) then
           ! Sanity check (should agree with CVMix result using simple matching)
           do k = 2, G%ke
             sigma = min(1.0,-iFaceHeight(k)/OBLdepth_0d)
-            nonLocalTrans(k,1) = 6.32739901508 * sigma*(1.0 -sigma)**2
+            nonLocalTrans(k,1) = CS%CS2 * sigma*(1.0 -sigma)**2
             nonLocalTrans(k,2) = nonLocalTrans(k,1)
           enddo
         endif
