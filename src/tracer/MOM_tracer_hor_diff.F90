@@ -22,8 +22,7 @@ use MOM_neutral_diffusion,     only : neutral_diffusion_init, neutral_diffusion_
 use MOM_neutral_diffusion,     only : neutral_diffusion_CS
 use MOM_neutral_diffusion,     only : neutral_diffusion_calc_coeffs, neutral_diffusion
 use MOM_tracer_registry,       only : tracer_registry_type, tracer_type, MOM_tracer_chksum
-use MOM_variables,             only : ocean_OBC_type, thermo_var_ptrs, OBC_FLATHER_E
-use MOM_variables,             only : OBC_FLATHER_W, OBC_FLATHER_N, OBC_FLATHER_S
+use MOM_variables,             only : thermo_var_ptrs
 use MOM_verticalGrid,          only : verticalGrid_type
 
 implicit none ; private
