@@ -382,7 +382,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
 
   do_aux = (present(uhbt_aux) .and. present(u_cor_aux))
   use_visc_rem = present(visc_rem_u)
-  apply_OBC_u = .false. ; set_BT_cont = .false.
+  apply_OBC_u = .false. ; set_BT_cont = .false. ; apply_OBC_flather = .false.
   if (present(BT_cont)) set_BT_cont = (associated(BT_cont))
   if (present(OBC)) then ; if (associated(OBC)) then
     apply_OBC_u = OBC%apply_OBC_u
@@ -1147,7 +1147,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
 
   do_aux = (present(vhbt_aux) .and. present(v_cor_aux))
   use_visc_rem = present(visc_rem_v)
-  apply_OBC_v = .false. ; set_BT_cont = .false.
+  apply_OBC_v = .false. ; set_BT_cont = .false. ; apply_OBC_flather = .false.
   if (present(BT_cont)) set_BT_cont = (associated(BT_cont))
   if (present(OBC)) then ; if (associated(OBC)) then ; if (OBC%this_pe) then
     apply_OBC_v = OBC%apply_OBC_v
