@@ -47,7 +47,8 @@ use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_string_functions, only : uppercase
 use MOM_grid, only : ocean_grid_type
-use MOM_variables, only : ocean_OBC_type, BT_cont_type
+use MOM_open_boundary, only : ocean_OBC_type
+use MOM_variables, only : BT_cont_type
 use MOM_verticalGrid, only : verticalGrid_type
 
 implicit none ; private
@@ -78,8 +79,8 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, &
                       uhbt_aux, vhbt_aux, u_cor_aux, v_cor_aux, BT_cont)
   type(ocean_grid_type), intent(inout)                     :: G
   type(verticalGrid_type), intent(in)                      :: GV
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: hin
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: uh
