@@ -13,7 +13,6 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
 use MOM_file_parser, only : log_version
-! use MOM_grid, only : ocean_grid_type
 use MOM_io, only : close_file, create_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE, MULTIPLE
 use MOM_io, only : slasher, vardesc, write_field, var_desc
@@ -32,8 +31,6 @@ use Phillips_initialization, only : Phillips_initialize_topography
 use netcdf
 
 implicit none ; private
-
-#include <MOM_memory.h>
 
 public MOM_initialize_fixed, MOM_initialize_rotation, MOM_initialize_topography
 
@@ -271,10 +268,13 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
 end subroutine MOM_initialize_topography
 
 ! -----------------------------------------------------------------------------
+
+!> Return the global maximum ocean bottom depth in m.
 function diagnoseMaximumDepth(D,G)
-  type(dyn_horgrid_type),            intent(in) :: G
-  real, dimension(SZI_(G),SZJ_(G)), intent(in) :: D
-  real :: diagnoseMaximumDepth
+  type(dyn_horgrid_type),  intent(in) :: G !< The dynamic horizontal grid type
+  real, dimension(G%isd:G%ied,G%jsd:G%jed), &
+                           intent(in) :: D !< Ocean bottom depth in m
+  real :: diagnoseMaximumDepth             !< The global maximum ocean bottom depth in m
   ! Local variables
   integer :: i,j
   diagnoseMaximumDepth=D(G%isc,G%jsc)
@@ -877,7 +877,7 @@ end subroutine reset_face_lengths_file
 ! -----------------------------------------------------------------------------
 subroutine reset_face_lengths_list(G, param_file)
   type(dyn_horgrid_type), intent(inout) :: G
-  type(param_file_type), intent(in)    :: param_file
+  type(param_file_type),  intent(in)    :: param_file
 !   This subroutine sets the open face lengths at selected points to restrict
 ! passages to their observed widths.
 
@@ -1212,10 +1212,11 @@ subroutine write_ocean_geometry_file(G, param_file, directory)
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   logical :: multiple_files
-  real :: out_h(SZI_(G),SZJ_(G))
-  real :: out_u(SZIB_(G),SZJ_(G))
-  real :: out_v(SZI_(G),SZJB_(G))
-  real :: out_q(SZIB_(G),SZJB_(G))
+  real, dimension(G%isd :G%ied ,G%jsd :G%jed ) :: out_h
+  real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB) :: out_q
+  real, dimension(G%IsdB:G%IedB,G%jsd :G%jed ) :: out_u
+  real, dimension(G%isd :G%ied ,G%JsdB:G%JedB) :: out_v
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
