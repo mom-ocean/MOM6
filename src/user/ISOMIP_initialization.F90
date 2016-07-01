@@ -108,7 +108,7 @@ subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth)
   if (is_2D) then
     do j=js,je ; do i=is,ie
       ! 2D setup
-      xtil = G%geoLonT(i,j)*1.0e3/xbar 
+      xtil = G%geoLatT(i,j)*1.0e3/xbar 
       !xtil = 450*1.0e3/xbar
       bx = b0+b2*xtil**2 + b4*xtil**4 + b6*xtil**6
       !by = (dc/(1.+exp(-2.*(G%geoLatT(i,j)*1.0e3- ly/2. - wc)/fc))) + &
@@ -127,18 +127,18 @@ subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth)
     do j=js,je ; do i=is,ie
       ! 3D setup       
       ! #### TEST #######
-      !if (G%geoLonT(i,j)<500.) then
+      !if (G%geoLatT(i,j)<500.) then
       !  xtil = 500.*1.0e3/xbar
       !else
-      !  xtil = G%geoLonT(i,j)*1.0e3/xbar 
+      !  xtil = G%geoLatT(i,j)*1.0e3/xbar 
       !endif
       ! ##### TEST #####
       
-      xtil = G%geoLonT(i,j)*1.0e3/xbar 
+      xtil = G%geoLatT(i,j)*1.0e3/xbar 
 
       bx = b0+b2*xtil**2 + b4*xtil**4 + b6*xtil**6
-      by = (dc/(1.+exp(-2.*(G%geoLatT(i,j)*1.0e3- ly/2. - wc)/fc))) + &
-              (dc/(1.+exp(2.*(G%geoLatT(i,j)*1.0e3- ly/2. + wc)/fc)))
+      by = (dc/(1.+exp(-2.*(G%geoLonT(i,j)*1.0e3- ly/2. - wc)/fc))) + &
+              (dc/(1.+exp(2.*(G%geoLonT(i,j)*1.0e3- ly/2. + wc)/fc)))
 
       D(i,j) = -max(bx+by,-bmax)
       if (D(i,j) > max_depth) D(i,j) = max_depth
@@ -476,10 +476,10 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
   !  and mask2dT is 1.  
 
    do i=is,ie; do j=js,je
-      if (G%geoLonT(i,j) >= 790.0 .AND. G%geoLonT(i,j) <= 800.0) then
+      if (G%geoLatT(i,j) >= 790.0 .AND. G%geoLatT(i,j) <= 800.0) then
 
   ! 1 / day
-        dummy1=(G%geoLonT(i,j)-790.0)/(800.0-790.0)
+        dummy1=(G%geoLatT(i,j)-790.0)/(800.0-790.0)
         damp = 1.0/TNUDG * max(0.0,dummy1)
 
       else ; damp=0.0
