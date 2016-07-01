@@ -241,6 +241,7 @@ type, public :: ice_shelf_CS ; private
 
   real :: ustar_bg     ! A minimum value for ustar under ice shelves, in m s-1.
   real :: cdrag        ! drag coefficient under ice shelves , non-dimensional.
+  real :: g_Earth      ! The gravitational acceleration in m s-2.
   real :: Cp           ! The heat capacity of sea water, in J kg-1 K-1.
   real :: Rho0         ! A reference ocean density in kg/m3.
   real :: Cp_ice       ! The heat capacity of fresh ice, in J kg-1 K-1.
@@ -499,7 +500,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
   do j=js,je 
     ! Find the pressure at the ice-ocean interface, averaged only over the
     ! part of the cell covered by ice shelf.
-    do i=is,ie ; p_int(i) = G%g_Earth * CS%mass_shelf(i,j) ; enddo
+    do i=is,ie ; p_int(i) = CS%g_Earth * CS%mass_shelf(i,j) ; enddo
 
     ! Calculate insitu densities and expansion coefficients      
     call calculate_density(state%sst(:,j),state%sss(:,j), p_int, &
@@ -548,8 +549,8 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
           Sbdry = state%sss(i,j) ; Sb_max_set = .false. ; Sb_min_set = .false.
 
           ! Determine the mixed layer buoyancy flux, wB_flux.      
-          dB_dS = (G%g_Earth / Rhoml(i)) * dR0_dS(i)
-          dB_dT = (G%g_Earth / Rhoml(i)) * dR0_dT(i)
+          dB_dS = (CS%g_Earth / Rhoml(i)) * dR0_dS(i)
+          dB_dT = (CS%g_Earth / Rhoml(i)) * dR0_dT(i)
           ln_neut = 0.0 ; if (hBL_neut_h_molec > 1.0) ln_neut = log(hBL_neut_h_molec)
 
           do it1 = 1,20
@@ -891,10 +892,10 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
 
       if (associated(fluxes%sens)) fluxes%sens(i,j) = -frac_area*CS%t_flux(i,j)*CS%flux_factor
       if (associated(fluxes%salt_flux)) fluxes%salt_flux(i,j) = frac_area * CS%salt_flux(i,j)*CS%flux_factor
-      if (associated(fluxes%p_surf)) fluxes%p_surf(i,j) = frac_area * G%g_Earth * CS%mass_shelf(i,j)
+      if (associated(fluxes%p_surf)) fluxes%p_surf(i,j) = frac_area * CS%g_Earth * CS%mass_shelf(i,j)
       ! Same for IOB%p
       if (associated(fluxes%p_surf_full) ) fluxes%p_surf_full(i,j) = &
-           frac_area * G%g_Earth * CS%mass_shelf(i,j)
+           frac_area * CS%g_Earth * CS%mass_shelf(i,j)
 
     endif
   enddo ; enddo
@@ -1016,10 +1017,10 @@ end subroutine add_shelf_flux
 !     ! fluxes%salt_flux(i,j) = fluxes%salt_flux(i,j) + frac_area * CS%salt_flux(i,j)
 !     ! ! Same for IOB%salt_flux.
 !       fluxes%p_surf(i,j) = fluxes%p_surf(i,j) + &
-!                            frac_area * G%g_Earth * CS%mass_shelf(i,j)
+!                            frac_area * CS%g_Earth * CS%mass_shelf(i,j)
 !       ! Same for IOB%p
 !       if (associated(fluxes%p_surf_full)) fluxes%p_surf_full(i,j) = &
-!            fluxes%p_surf_full(i,j) + frac_area * G%g_Earth * CS%mass_shelf(i,j)
+!            fluxes%p_surf_full(i,j) + frac_area * CS%g_Earth * CS%mass_shelf(i,j)
 !     endif
 !   enddo ; enddo
 
@@ -1165,6 +1166,9 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
                  "exchange velocity at the ice-ocean interface.", &
                  units="m s-1", fail_if_missing=.true.)
 
+  call get_param(param_file, mod, "G_EARTH", CS%g_Earth, &
+                 "The gravitational acceleration of the Earth.", &
+                 units="m s-2", default = 9.80)
   call get_param(param_file, mod, "C_P", CS%Cp, &
                  "The heat capacity of sea water.", units="J kg-1 K-1", &
                  fail_if_missing=.true.)
@@ -1574,10 +1578,11 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
    !if (.not. solo_ice_sheet) then
     if (G%areaT(i,j) > 0.0) fluxes%frac_shelf_h(i,j) = CS%area_shelf_h(i,j) / G%areaT(i,j)
     if (associated(fluxes%p_surf)) &
-      fluxes%p_surf(i,j) = fluxes%p_surf(i,j) + fluxes%frac_shelf_h(i,j) * (G%g_Earth * CS%mass_shelf(i,j))
+      fluxes%p_surf(i,j) = fluxes%p_surf(i,j) + &
+        fluxes%frac_shelf_h(i,j) * (CS%g_Earth * CS%mass_shelf(i,j))
     if (associated(fluxes%p_surf_full)) &
       fluxes%p_surf_full(i,j) = fluxes%p_surf_full(i,j) + &
-        fluxes%frac_shelf_h(i,j) * (G%g_Earth * CS%mass_shelf(i,j))
+        fluxes%frac_shelf_h(i,j) * (CS%g_Earth * CS%mass_shelf(i,j))
    !endif
   enddo ; enddo
 
@@ -1811,9 +1816,9 @@ subroutine initialize_shelf_mass(G, param_file, CS, new_sim)
         CS%area_shelf_h(i,j) = 0.0
       enddo ; enddo
 
-
     case ("USER")
-      call USER_initialize_shelf_mass(CS%mass_shelf, CS%area_shelf_h, CS%h_shelf, CS%hmask, G, CS%user_CS, param_file, new_sim_2)
+      call USER_initialize_shelf_mass(CS%mass_shelf, CS%area_shelf_h, &
+               CS%h_shelf, CS%hmask, G, CS%user_CS, param_file, new_sim_2)
 
     case default ;  call MOM_error(FATAL,"initialize_ice_shelf: "// &
       "Unrecognized ice shelf setup "//trim(config))
@@ -1825,7 +1830,8 @@ subroutine update_shelf_mass(CS, Time)
   type(ice_shelf_CS),         pointer    :: CS
   type(time_type),            intent(in) :: Time
 
-  call USER_update_shelf_mass(CS%mass_shelf, CS%area_shelf_h, CS%h_shelf, CS%hmask, CS%grid, CS%user_CS, Time, .true.)
+  call USER_update_shelf_mass(CS%mass_shelf, CS%area_shelf_h, CS%h_shelf, &
+                              CS%hmask, CS%grid, CS%user_CS, Time, .true.)
 
 end subroutine update_shelf_mass
 

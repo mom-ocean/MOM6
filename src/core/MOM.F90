@@ -85,8 +85,9 @@ use MOM_dynamics_legacy_split, only : adjustments_dyn_legacy_split, MOM_dyn_lega
 use MOM_dyn_horgrid,           only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
 use MOM_EOS,                   only : EOS_init
 use MOM_error_checking,        only : check_redundant
-use MOM_grid,                  only : MOM_grid_init, ocean_grid_type, MOM_grid_end
-use MOM_hor_index,             only : hor_index_type
+use MOM_grid,                  only : ocean_grid_type, set_first_direction
+use MOM_grid,                  only : MOM_grid_init, MOM_grid_end
+use MOM_hor_index,             only : hor_index_type, hor_index_init
 use MOM_hor_visc,              only : horizontal_viscosity, hor_visc_init
 use MOM_interface_heights,     only : find_eta
 use MOM_lateral_mixing_coeffs, only : calc_slope_functions, VarMix_init
@@ -1365,10 +1366,11 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                                                           !! model is not being started from a restart file
 
   ! local
-  type(ocean_grid_type), pointer :: G ! pointer to a structure with metrics and related
+  type(ocean_grid_type),  pointer :: G => NULL() ! A pointer to a structure with metrics and related
+  type(hor_index_type)            :: HI  !  A hor_index_type for array extents
   type(verticalGrid_type), pointer :: GV => NULL()
   type(dyn_horgrid_type), pointer :: dG => NULL()
-  type(diag_ctrl),       pointer :: diag
+  type(diag_ctrl),        pointer :: diag
 
   character(len=4), parameter :: vers_num = 'v2.0'
 
@@ -1384,7 +1386,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   real, allocatable, dimension(:,:)   :: eta ! free surface height (m) or bottom press (Pa)
   type(MOM_restart_CS),  pointer      :: restart_CSp_tmp => NULL()
 
-  integer :: nkml, nkbl, verbosity, write_geom
   real    :: default_val       ! default value for a parameter
   logical :: write_geom_files  ! If true, write out the grid geometry files.
   logical :: new_sim
@@ -1394,6 +1395,15 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   logical :: save_IC           ! If true, save the initial conditions.
   logical :: do_unit_tests     ! If true, call unit tests.
   logical :: test_grid_copy = .false.
+  logical :: global_indexing   ! If true use global horizontal index values instead
+                               ! of having the data domain on each processor start at 1.
+  logical :: bathy_at_vel      ! If true, also define bathymetric fields at the
+                               ! the velocity points.
+  integer :: first_direction   ! An integer that indicates which direction is to be
+                               ! updated first in directionally split parts of the
+                               ! calculation.  This can be altered during the course
+                               ! of the run via calls to set_first_direction.
+  integer :: nkml, nkbl, verbosity, write_geom
 
   type(time_type)                 :: Start_time
   type(ocean_internal_state)      :: MOM_internal_state
@@ -1485,6 +1495,11 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                                      CS%thickness_diffuse_first, &
                  "If true, do thickness diffusion before dynamics.\n"//&
                  "This is only used if THICKNESSDIFFUSE is true.", &
+                 default=.false.)
+  call get_param(param_file, "MOM", "BATHYMETRY_AT_VEL", bathy_at_vel, &
+                 "If true, there are separate values for the basin depths \n"//&
+                 "at velocity points.  Otherwise the effects of topography \n"//&
+                 "are entirely determined from thickness points.", &
                  default=.false.)
 
   call get_param(param_file, "MOM", "DEBUG", CS%debug, &
@@ -1581,6 +1596,21 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                  default=2)
   endif
 
+  call get_param(param_file, "MOM", "GLOBAL_INDEXING", global_indexing, &
+                 "If true, use a global lateral indexing convention, so \n"//&
+                 "that corresponding points on different processors have \n"//&
+                 "the same index. This does not work with static memory.", &
+                 default=.false., layoutParam=.true.)
+#ifdef STATIC_MEMORY_
+  if (global_indexing) call MOM_error(FATAL, "initialize_MOM: "//&
+       "GLOBAL_INDEXING can not be true with STATIC_MEMORY.")
+#endif
+  call get_param(param_file, "MOM", "FIRST_DIRECTION", first_direction, &
+                 "An integer that indicates which direction goes first \n"//&
+                 "in parts of the code that use directionally split \n"//&
+                 "updates, with even numbers (or 0) used for x- first \n"//&
+                 "and odd numbers used for y-first.", default=0)
+
   call get_param(param_file, "MOM", "CHECK_BAD_SURFACE_VALS", &
                                      CS%check_bad_surface_vals, &
                  "If true, check the surface state for ridiculous values.", &
@@ -1631,6 +1661,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     "MOM: ENABLE_THERMODYNAMICS must be defined to use USE_EOS.")
   if (CS%adiabatic .and. CS%bulkmixedlayer) call MOM_error(FATAL, &
     "MOM: ADIABATIC and BULKMIXEDLAYER can not both be defined.")
+  if (CS%bulkmixedlayer .and. .not.use_EOS) call MOM_error(FATAL, &
+      "initialize_MOM: A bulk mixed layer can only be used with T & S as "//&
+      "state variables. Add USE_EOS = True to MOM_input.")
 
   call callTree_waypoint("MOM parameters read (initialize_MOM)")
 
@@ -1651,20 +1684,18 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call callTree_waypoint("domains initialized (initialize_MOM)")
 
   call MOM_checksums_init(param_file)
-
   call diag_mediator_infrastructure_init()
   call MOM_io_init(param_file)
-  call MOM_grid_init(G, param_file)
 
-  call create_dyn_horgrid(dG, G%HI)
-  dG%first_direction = G%first_direction
-  dG%bathymetry_at_vel = G%bathymetry_at_vel
+  call hor_index_init(G%Domain, HI, param_file, &
+                      local_indexing=.not.global_indexing)
+
+  call create_dyn_horgrid(dG, HI, bathymetry_at_vel=bathy_at_vel)
   call clone_MOM_domain(G%Domain, dG%Domain)
 
   call verticalGridInit( param_file, CS%GV )
   GV => CS%GV
-  dG%g_Earth = GV%g_Earth ; G%g_Earth = GV%g_Earth
-
+!  dG%g_Earth = GV%g_Earth
 
   ! Allocate the auxiliary non-symmetric domain for debugging or I/O purposes.
   if (CS%debug .or. dG%symmetric) &
@@ -1676,10 +1707,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call MOM_timing_init(CS)
 
   call tracer_registry_init(param_file, CS%tracer_Reg)
-
-  ! Copy a common variable from the vertical grid to the horizontal grid.
-  ! Consider removing this later?
-!  G%ke = GV%ke
 
   is   = dG%isc   ; ie   = dG%iec  ; js   = dG%jsc  ; je   = dG%jec ; nz = GV%ke
   isd  = dG%isd   ; ied  = dG%ied  ; jsd  = dG%jsd  ; jed  = dG%jed
@@ -1701,8 +1728,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     CS%vd_S = var_desc(name="S",units="PPT",longname="Salinity",&
                        cmor_field_name="so",cmor_units="ppt",   &
                        conversion=0.001)
-    call register_tracer(CS%tv%T, CS%vd_T, param_file, G%HI, GV, CS%tracer_Reg, CS%vd_T)
-    call register_tracer(CS%tv%S, CS%vd_S, param_file, G%HI, GV, CS%tracer_Reg, CS%vd_S)
+    call register_tracer(CS%tv%T, CS%vd_T, param_file, dG%HI, GV, CS%tracer_Reg, CS%vd_T)
+    call register_tracer(CS%tv%S, CS%vd_S, param_file, dG%HI, GV, CS%tracer_Reg, CS%vd_S)
   endif
   if (CS%use_frazil) then
     allocate(CS%tv%frazil(isd:ied,jsd:jed)) ; CS%tv%frazil(:,:) = 0.0
@@ -1712,11 +1739,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   endif
 
   if (CS%bulkmixedlayer) then
-    if (.not.use_EOS) call MOM_error(FATAL, &
-      "initialize_MOM: A bulk mixed layer can only be used with T & S as "//&
-      "state variables. Add #define USE_EOS.")
-    GV%nkml = nkml
-    GV%nk_rho_varies = nkml + nkbl
+    GV%nkml = nkml ; GV%nk_rho_varies = nkml + nkbl
     allocate(CS%tv%Hml(isd:ied,jsd:jed)) ; CS%tv%Hml(:,:) = 0.0
   else
     GV%nkml = 0 ; GV%nk_rho_varies = 0
@@ -1769,30 +1792,30 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call set_restart_fields(GV, param_file, CS)
   if (CS%split) then
     if (CS%legacy_split) then
-      call register_restarts_dyn_legacy_split(G%HI, GV, param_file, &
+      call register_restarts_dyn_legacy_split(dG%HI, GV, param_file, &
                CS%dyn_legacy_split_CSp, CS%restart_CSp, CS%uh, CS%vh)
     else
-      call register_restarts_dyn_split_RK2(G%HI, GV, param_file, &
+      call register_restarts_dyn_split_RK2(dG%HI, GV, param_file, &
                CS%dyn_split_RK2_CSp, CS%restart_CSp, CS%uh, CS%vh)
     endif
   else
     if (CS%use_RK2) then
-      call register_restarts_dyn_unsplit_RK2(G%HI, GV, param_file, &
+      call register_restarts_dyn_unsplit_RK2(dG%HI, GV, param_file, &
              CS%dyn_unsplit_RK2_CSp, CS%restart_CSp)
     else
-      call register_restarts_dyn_unsplit(G%HI, GV, param_file, &
+      call register_restarts_dyn_unsplit(dG%HI, GV, param_file, &
              CS%dyn_unsplit_CSp, CS%restart_CSp)
     endif
   endif
 
   ! This subroutine calls user-specified tracer registration routines.
   ! Additional calls can be added to MOM_tracer_flow_control.F90.
-  call call_tracer_register(G%HI, GV, param_file, CS%tracer_flow_CSp, &
+  call call_tracer_register(dG%HI, GV, param_file, CS%tracer_flow_CSp, &
                             CS%tracer_Reg, CS%restart_CSp)
 
-  call MEKE_alloc_register_restart(G%HI, param_file, CS%MEKE, CS%restart_CSp)
-  call set_visc_register_restarts(G%HI, GV, param_file, CS%visc, CS%restart_CSp)
-  call mixedlayer_restrat_register_restarts(G%HI, param_file, CS%mixedlayer_restrat_CSp, CS%restart_CSp)
+  call MEKE_alloc_register_restart(dG%HI, param_file, CS%MEKE, CS%restart_CSp)
+  call set_visc_register_restarts(dG%HI, GV, param_file, CS%visc, CS%restart_CSp)
+  call mixedlayer_restrat_register_restarts(dG%HI, param_file, CS%mixedlayer_restrat_CSp, CS%restart_CSp)
 
   ! Initialize fields
   call callTree_waypoint("restart registration complete (initialize_MOM)")
@@ -1809,16 +1832,22 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     call callTree_waypoint("returned from ALE_init() (initialize_MOM)")
   endif
 
-  !   Shift from using the temporary dynamic grid type to using the final (potentially
-  ! static) ocean grid type.
-  ! call clone_MOM_domain(dG%Domain, CS%G%Domain)
-  ! call MOM_grid_init(CS%G, param_file)
+  !   Shift from using the temporary dynamic grid type to using the final
+  ! (potentially static) ocean-specific grid type.
+  !   The next line would be needed if G%Domain had not already been init'd above:
+  !     call clone_MOM_domain(dG%Domain, G%Domain)
+  call MOM_grid_init(G, param_file, HI, bathymetry_at_vel=bathy_at_vel)
+  call copy_dyngrid_to_MOM_grid(dG, G)
+  call destroy_dyn_horgrid(dG)
 
-  call copy_dyngrid_to_MOM_grid(dg, G)
+  ! Set a few remaining fields that are specific to the ocean grid type.
+  call set_first_direction(G, first_direction)
   ! Allocate the auxiliary non-symmetric domain for debugging or I/O purposes.
   if (CS%debug .or. G%symmetric) &
     call clone_MOM_domain(G%Domain, G%Domain_aux, symmetric=.false.)
-  G%ke = GV%ke
+  ! Copy common variables from the vertical grid to the horizontal grid.
+  ! Consider removing this later?
+  G%ke = GV%ke ; G%g_Earth = GV%g_Earth
 
   call MOM_initialize_state(CS%u, CS%v, CS%h, CS%tv, Time, G, GV, param_file, &
                             dirs, CS%restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
@@ -1827,7 +1856,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call callTree_waypoint("returned from MOM_initialize_state() (initialize_MOM)")
 
   ! From this point, there may be pointers being set, so the final grid type
-  ! that will persist through the run has to be used.
+  ! that will persist throughout the run has to be used.
  
   if (test_grid_copy) then
     !  Copy the data from the temporary grid to the dyn_hor_grid to CS%G.
@@ -1839,17 +1868,14 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
     call copy_MOM_grid_to_dyngrid(G, dg)
     call copy_dyngrid_to_MOM_grid(dg, CS%G)
-    ! Copy a common variable from the vertical grid to the horizontal grid.
-    ! Consider removing this later?
-    CS%G%ke = GV%ke
 
     call destroy_dyn_horgrid(dG)
     call MOM_grid_end(G) ; deallocate(G)
 
     G => CS%G
-
     if (CS%debug .or. CS%G%symmetric) &
       call clone_MOM_domain(CS%G%Domain, CS%G%Domain_aux, symmetric=.false.)
+    G%ke = GV%ke ; G%g_Earth = GV%g_Earth
   endif
 
 
