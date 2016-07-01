@@ -120,7 +120,8 @@ subroutine open_boundary_config(G, param_file, OBC)
 
   allocate(OBC)
 
-  call log_version(param_file, mod, version)
+  call log_version(param_file, mod, version, "Controls where open boundaries are located, what "//&
+                 "kind of boundary condition to impose, and what data to apply, if any.")
   call get_param(param_file, mod, "APPLY_OBC_U", OBC%apply_OBC_u, &
                  "If true, open boundary conditions may be set at some \n"//&
                  "u-points, with the configuration controlled by OBC_CONFIG", &
