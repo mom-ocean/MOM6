@@ -809,12 +809,12 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
     call post_data(CS%id_Ray_v, visc%Ray_v, CS%diag)
 
   if (CS%debug) then
-    if (associated(visc%Ray_u)) call uchksum(visc%Ray_u,"Ray u",G,haloshift=0)
-    if (associated(visc%Ray_v)) call vchksum(visc%Ray_v,"Ray v",G,haloshift=0)
-    if (associated(visc%kv_bbl_u)) call uchksum(visc%kv_bbl_u,"kv_bbl_u",G,haloshift=0)
-    if (associated(visc%kv_bbl_v)) call vchksum(visc%kv_bbl_v,"kv_bbl_v",G,haloshift=0)
-    if (associated(visc%bbl_thick_u)) call uchksum(visc%bbl_thick_u,"bbl_thick_u",G,haloshift=0)
-    if (associated(visc%bbl_thick_v)) call vchksum(visc%bbl_thick_v,"bbl_thick_v",G,haloshift=0)
+    if (associated(visc%Ray_u)) call uchksum(visc%Ray_u,"Ray u",G%HI,haloshift=0)
+    if (associated(visc%Ray_v)) call vchksum(visc%Ray_v,"Ray v",G%HI,haloshift=0)
+    if (associated(visc%kv_bbl_u)) call uchksum(visc%kv_bbl_u,"kv_bbl_u",G%HI,haloshift=0)
+    if (associated(visc%kv_bbl_v)) call vchksum(visc%kv_bbl_v,"kv_bbl_v",G%HI,haloshift=0)
+    if (associated(visc%bbl_thick_u)) call uchksum(visc%bbl_thick_u,"bbl_thick_u",G%HI,haloshift=0)
+    if (associated(visc%bbl_thick_v)) call vchksum(visc%bbl_thick_v,"bbl_thick_v",G%HI,haloshift=0)
   endif
 
 end subroutine set_viscous_BBL
@@ -1528,9 +1528,9 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
 
   if (CS%debug) then
     if (associated(visc%nkml_visc_u)) &
-      call uchksum(visc%nkml_visc_u,"nkml_visc_u",G,haloshift=0)
+      call uchksum(visc%nkml_visc_u,"nkml_visc_u",G%HI,haloshift=0)
     if (associated(visc%nkml_visc_v)) &
-      call vchksum(visc%nkml_visc_v,"nkml_visc_v",G,haloshift=0)
+      call vchksum(visc%nkml_visc_v,"nkml_visc_v",G%HI,haloshift=0)
   endif
   if (CS%id_nkml_visc_u > 0) &
     call post_data(CS%id_nkml_visc_u, visc%nkml_visc_u, CS%diag)

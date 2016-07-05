@@ -315,19 +315,19 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
   endif
 
   if (CS%debug) then
-    call uchksum(Kh_u(:,:,:),"Kh_u",G,haloshift=0)
-    call vchksum(Kh_v(:,:,:),"Kh_v",G,haloshift=0)
-    call uchksum(int_slope_u(:,:,:),"int_slope_u",G,haloshift=0)
-    call vchksum(int_slope_v(:,:,:),"int_slope_v",G,haloshift=0)
-    call hchksum(h(:,:,:)*H_to_m,"thickness_diffuse_1 h",G,haloshift=1)
-    call hchksum(e(:,:,:),"thickness_diffuse_1 e",G,haloshift=1)
+    call uchksum(Kh_u(:,:,:),"Kh_u",G%HI,haloshift=0)
+    call vchksum(Kh_v(:,:,:),"Kh_v",G%HI,haloshift=0)
+    call uchksum(int_slope_u(:,:,:),"int_slope_u",G%HI,haloshift=0)
+    call vchksum(int_slope_v(:,:,:),"int_slope_v",G%HI,haloshift=0)
+    call hchksum(h(:,:,:)*H_to_m,"thickness_diffuse_1 h",G%HI,haloshift=1)
+    call hchksum(e(:,:,:),"thickness_diffuse_1 e",G%HI,haloshift=1)
     if (use_stored_slopes) then
-      call uchksum(VarMix%slope_x(:,:,:),"VarMix%slope_x",G,haloshift=0)
-      call vchksum(VarMix%slope_y(:,:,:),"VarMix%slope_y",G,haloshift=0)
+      call uchksum(VarMix%slope_x(:,:,:),"VarMix%slope_x",G%HI,haloshift=0)
+      call vchksum(VarMix%slope_y(:,:,:),"VarMix%slope_y",G%HI,haloshift=0)
     endif
     if (associated(tv%eqn_of_state)) then
-      call hchksum(tv%T(:,:,:),"thickness_diffuse T",G,haloshift=1)
-      call hchksum(tv%S(:,:,:),"thickness_diffuse S",G,haloshift=1)
+      call hchksum(tv%T(:,:,:),"thickness_diffuse T",G%HI,haloshift=1)
+      call hchksum(tv%S(:,:,:),"thickness_diffuse S",G%HI,haloshift=1)
     endif
   endif
 
@@ -371,11 +371,11 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
   endif
 
   if (CS%debug) then
-    call uchksum(uhD(:,:,:)*H_to_m,"thickness_diffuse uhD",G,haloshift=0)
-    call vchksum(vhD(:,:,:)*H_to_m,"thickness_diffuse vhD",G,haloshift=0)
-    call uchksum(uhtr(:,:,:)*H_to_m,"thickness_diffuse uhtr",G,haloshift=0)
-    call vchksum(vhtr(:,:,:)*H_to_m,"thickness_diffuse vhtr",G,haloshift=0)
-    call hchksum(h(:,:,:)*H_to_m,"thickness_diffuse h",G,haloshift=0)
+    call uchksum(uhD(:,:,:)*H_to_m,"thickness_diffuse uhD",G%HI,haloshift=0)
+    call vchksum(vhD(:,:,:)*H_to_m,"thickness_diffuse vhD",G%HI,haloshift=0)
+    call uchksum(uhtr(:,:,:)*H_to_m,"thickness_diffuse uhtr",G%HI,haloshift=0)
+    call vchksum(vhtr(:,:,:)*H_to_m,"thickness_diffuse vhtr",G%HI,haloshift=0)
+    call hchksum(h(:,:,:)*H_to_m,"thickness_diffuse h",G%HI,haloshift=0)
   endif
 
   ! offer diagnostic fields for averaging

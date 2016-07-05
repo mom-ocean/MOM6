@@ -647,11 +647,11 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       ! and set_viscous_BBL is called as a part of the dynamic stepping.
 
       if (CS%debug) then
-        call uchksum(u,"Pre set_viscous_BBL u", G, haloshift=1)
-        call vchksum(v,"Pre set_viscous_BBL v", G, haloshift=1)
-        call hchksum(h*GV%H_to_m,"Pre set_viscous_BBL h", G, haloshift=1)
-        if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Pre set_viscous_BBL T", G, haloshift=1)
-        if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Pre set_viscous_BBL S", G, haloshift=1)
+        call uchksum(u,"Pre set_viscous_BBL u", G%HI, haloshift=1)
+        call vchksum(v,"Pre set_viscous_BBL v", G%HI, haloshift=1)
+        call hchksum(h*GV%H_to_m,"Pre set_viscous_BBL h", G%HI, haloshift=1)
+        if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Pre set_viscous_BBL T", G%HI, haloshift=1)
+        if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Pre set_viscous_BBL S", G%HI, haloshift=1)
       endif
 
       !call cpu_clock_begin(id_clock_vertvisc)
@@ -711,8 +711,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
           if (CS%debug) then
             call MOM_state_chksum("Pre-ALE 1 ", u, v, h, CS%uh, CS%vh, G, GV)
-            call hchksum(CS%tv%T,"Pre-ALE 1 T", G, haloshift=1)
-            call hchksum(CS%tv%S,"Pre-ALE 1 S", G, haloshift=1)
+            call hchksum(CS%tv%T,"Pre-ALE 1 T", G%HI, haloshift=1)
+            call hchksum(CS%tv%S,"Pre-ALE 1 S", G%HI, haloshift=1)
             call check_redundant("Pre-ALE 1 ", u, v, G)
           endif
           call cpu_clock_begin(id_clock_ALE)
@@ -726,8 +726,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
         if (CS%debug .and. CS%use_ALE_algorithm) then
           call MOM_state_chksum("Post-ALE 1 ", u, v, h, CS%uh, CS%vh, G, GV)
-          call hchksum(CS%tv%T,"Post-ALE 1 T", G, haloshift=1)
-          call hchksum(CS%tv%S,"Post-ALE 1 S", G, haloshift=1)
+          call hchksum(CS%tv%T,"Post-ALE 1 T", G%HI, haloshift=1)
+          call hchksum(CS%tv%S,"Post-ALE 1 S", G%HI, haloshift=1)
           call check_redundant("Post-ALE 1 ", u, v, G)
         endif
 
@@ -738,19 +738,19 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         call post_diags_TS_vardec(G, CS, dtdia)
 
         if (CS%debug) then
-          call uchksum(u,"Post-dia first u", G, haloshift=2)
-          call vchksum(v,"Post-dia first v", G, haloshift=2)
-          call hchksum(h,"Post-dia first h", G, haloshift=1)
-          call uchksum(CS%uhtr,"Post-dia first uh", G, haloshift=0)
-          call vchksum(CS%vhtr,"Post-dia first vh", G, haloshift=0)
+          call uchksum(u,"Post-dia first u", G%HI, haloshift=2)
+          call vchksum(v,"Post-dia first v", G%HI, haloshift=2)
+          call hchksum(h,"Post-dia first h", G%HI, haloshift=1)
+          call uchksum(CS%uhtr,"Post-dia first uh", G%HI, haloshift=0)
+          call vchksum(CS%vhtr,"Post-dia first vh", G%HI, haloshift=0)
         ! call MOM_state_chksum("Post-dia first ", u, v, &
         !                       h, CS%uhtr, CS%vhtr, G, GV, haloshift=1)
-          if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Post-dia first T", G, haloshift=1)
-          if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Post-dia first S", G, haloshift=1)
+          if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Post-dia first T", G%HI, haloshift=1)
+          if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Post-dia first S", G%HI, haloshift=1)
           if (associated(CS%tv%frazil)) call hchksum(CS%tv%frazil, &
-                                  "Post-dia first frazil", G, haloshift=0)
+                                  "Post-dia first frazil", G%HI, haloshift=0)
           if (associated(CS%tv%salt_deficit)) call hchksum(CS%tv%salt_deficit, &
-                                  "Post-dia first salt deficit", G, haloshift=0)
+                                  "Post-dia first salt deficit", G%HI, haloshift=0)
         ! call MOM_thermo_chksum("Post-dia first ", CS%tv, G)
           call check_redundant("Post-dia first ", u, v, G)
         endif
@@ -767,8 +767,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
           call do_group_pass(CS%pass_T_S, G%Domain)
           call cpu_clock_end(id_clock_pass)
           if (CS%debug) then
-            if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Post-dia first T", G, haloshift=1)
-            if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Post-dia first S", G, haloshift=1)
+            if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Post-dia first T", G%HI, haloshift=1)
+            if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Post-dia first S", G%HI, haloshift=1)
           endif
         endif
 
@@ -909,9 +909,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     ! apply the submesoscale mixed layer restratification parameterization
     if (CS%mixedlayer_restrat) then
       if (CS%debug) then
-        call hchksum(h,"Pre-mixedlayer_restrat h", G, haloshift=1)
-        call uchksum(CS%uhtr,"Pre-mixedlayer_restrat uhtr", G, haloshift=0)
-        call vchksum(CS%vhtr,"Pre-mixedlayer_restrat vhtr", G, haloshift=0)
+        call hchksum(h,"Pre-mixedlayer_restrat h", G%HI, haloshift=1)
+        call uchksum(CS%uhtr,"Pre-mixedlayer_restrat uhtr", G%HI, haloshift=0)
+        call vchksum(CS%vhtr,"Pre-mixedlayer_restrat vhtr", G%HI, haloshift=0)
       endif
       call cpu_clock_begin(id_clock_ml_restrat)
       call mixedlayer_restrat(h, CS%uhtr ,CS%vhtr, CS%tv, fluxes, dt, CS%visc%MLD, &
@@ -921,9 +921,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       call do_group_pass(CS%pass_h, G%Domain)
       call cpu_clock_end(id_clock_pass)
       if (CS%debug) then
-        call hchksum(h,"Post-mixedlayer_restrat h", G, haloshift=1)
-        call uchksum(CS%uhtr,"Post-mixedlayer_restrat uhtr", G, haloshift=0)
-        call vchksum(CS%vhtr,"Post-mixedlayer_restrat vhtr", G, haloshift=0)
+        call hchksum(h,"Post-mixedlayer_restrat h", G%HI, haloshift=1)
+        call uchksum(CS%uhtr,"Post-mixedlayer_restrat uhtr", G%HI, haloshift=0)
+        call vchksum(CS%vhtr,"Post-mixedlayer_restrat vhtr", G%HI, haloshift=0)
       endif
     endif
 
@@ -945,19 +945,19 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       call cpu_clock_begin(id_clock_other)
 
       if (CS%debug) then
-        call uchksum(u,"Pre-advection u", G, haloshift=2)
-        call vchksum(v,"Pre-advection v", G, haloshift=2)
-        call hchksum(h*GV%H_to_m,"Pre-advection h", G, haloshift=1)
-        call uchksum(CS%uhtr*GV%H_to_m,"Pre-advection uhtr", G, haloshift=0)
-        call vchksum(CS%vhtr*GV%H_to_m,"Pre-advection vhtr", G, haloshift=0)
+        call uchksum(u,"Pre-advection u", G%HI, haloshift=2)
+        call vchksum(v,"Pre-advection v", G%HI, haloshift=2)
+        call hchksum(h*GV%H_to_m,"Pre-advection h", G%HI, haloshift=1)
+        call uchksum(CS%uhtr*GV%H_to_m,"Pre-advection uhtr", G%HI, haloshift=0)
+        call vchksum(CS%vhtr*GV%H_to_m,"Pre-advection vhtr", G%HI, haloshift=0)
       ! call MOM_state_chksum("Pre-advection ", u, v, &
       !                       h, CS%uhtr, CS%vhtr, G, GV, haloshift=1)
-          if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Pre-advection T", G, haloshift=1)
-          if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Pre-advection S", G, haloshift=1)
+          if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Pre-advection T", G%HI, haloshift=1)
+          if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Pre-advection S", G%HI, haloshift=1)
           if (associated(CS%tv%frazil)) call hchksum(CS%tv%frazil, &
-                         "Pre-advection frazil", G, haloshift=0)
+                         "Pre-advection frazil", G%HI, haloshift=0)
           if (associated(CS%tv%salt_deficit)) call hchksum(CS%tv%salt_deficit, &
-                         "Pre-advection salt deficit", G, haloshift=0)
+                         "Pre-advection salt deficit", G%HI, haloshift=0)
       ! call MOM_thermo_chksum("Pre-advection ", CS%tv, G)
         call check_redundant("Pre-advection ", u, v, G)
       endif
@@ -998,11 +998,11 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       if (.not.CS%diabatic_first) then ; if (.not.CS%adiabatic) then
 
         if (CS%debug) then
-          call uchksum(u,"Pre-diabatic u", G, haloshift=2)
-          call vchksum(v,"Pre-diabatic v", G, haloshift=2)
-          call hchksum(h*GV%H_to_m,"Pre-diabatic h", G, haloshift=1)
-          call uchksum(CS%uhtr*GV%H_to_m,"Pre-diabatic uh", G, haloshift=0)
-          call vchksum(CS%vhtr*GV%H_to_m,"Pre-diabatic vh", G, haloshift=0)
+          call uchksum(u,"Pre-diabatic u", G%HI, haloshift=2)
+          call vchksum(v,"Pre-diabatic v", G%HI, haloshift=2)
+          call hchksum(h*GV%H_to_m,"Pre-diabatic h", G%HI, haloshift=1)
+          call uchksum(CS%uhtr*GV%H_to_m,"Pre-diabatic uh", G%HI, haloshift=0)
+          call vchksum(CS%vhtr*GV%H_to_m,"Pre-diabatic vh", G%HI, haloshift=0)
         ! call MOM_state_chksum("Pre-diabatic ",u, v, h, CS%uhtr, CS%vhtr, G, GV)
           call MOM_thermo_chksum("Pre-diabatic ", CS%tv, G,haloshift=0)
           call check_redundant("Pre-diabatic ", u, v, G)
@@ -1033,8 +1033,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
           if (CS%debug) then
             call MOM_state_chksum("Pre-ALE ", u, v, h, CS%uh, CS%vh, G, GV)
-            call hchksum(CS%tv%T,"Pre-ALE T", G, haloshift=1)
-            call hchksum(CS%tv%S,"Pre-ALE S", G, haloshift=1)
+            call hchksum(CS%tv%T,"Pre-ALE T", G%HI, haloshift=1)
+            call hchksum(CS%tv%S,"Pre-ALE S", G%HI, haloshift=1)
             call check_redundant("Pre-ALE ", u, v, G)
           endif
           call cpu_clock_begin(id_clock_ALE)
@@ -1048,8 +1048,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
         if (CS%debug .and.  CS%use_ALE_algorithm) then
           call MOM_state_chksum("Post-ALE ", u, v, h, CS%uh, CS%vh, G, GV)
-          call hchksum(CS%tv%T,"Post-ALE 1 T", G, haloshift=1)
-          call hchksum(CS%tv%S,"Post-ALE 1 S", G, haloshift=1)
+          call hchksum(CS%tv%T,"Post-ALE 1 T", G%HI, haloshift=1)
+          call hchksum(CS%tv%S,"Post-ALE 1 S", G%HI, haloshift=1)
           call check_redundant("Post-ALE ", u, v, G)
         endif
 
@@ -1061,19 +1061,19 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         call post_diags_TS_vardec(G, CS, CS%dt_trans)
 
         if (CS%debug) then
-          call uchksum(u,"Post-diabatic u", G, haloshift=2)
-          call vchksum(v,"Post-diabatic v", G, haloshift=2)
-          call hchksum(h*GV%H_to_m,"Post-diabatic h", G, haloshift=1)
-          call uchksum(CS%uhtr*GV%H_to_m,"Post-diabatic uh", G, haloshift=0)
-          call vchksum(CS%vhtr*GV%H_to_m,"Post-diabatic vh", G, haloshift=0)
+          call uchksum(u,"Post-diabatic u", G%HI, haloshift=2)
+          call vchksum(v,"Post-diabatic v", G%HI, haloshift=2)
+          call hchksum(h*GV%H_to_m,"Post-diabatic h", G%HI, haloshift=1)
+          call uchksum(CS%uhtr*GV%H_to_m,"Post-diabatic uh", G%HI, haloshift=0)
+          call vchksum(CS%vhtr*GV%H_to_m,"Post-diabatic vh", G%HI, haloshift=0)
         ! call MOM_state_chksum("Post-diabatic ", u, v, &
         !                       h, CS%uhtr, CS%vhtr, G, GV, haloshift=1)
-          if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Post-diabatic T", G, haloshift=1)
-          if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Post-diabatic S", G, haloshift=1)
+          if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Post-diabatic T", G%HI, haloshift=1)
+          if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Post-diabatic S", G%HI, haloshift=1)
           if (associated(CS%tv%frazil)) call hchksum(CS%tv%frazil, &
-                                   "Post-diabatic frazil", G, haloshift=0)
+                                   "Post-diabatic frazil", G%HI, haloshift=0)
           if (associated(CS%tv%salt_deficit)) call hchksum(CS%tv%salt_deficit, &
-                                   "Post-diabatic salt deficit", G, haloshift=0)
+                                   "Post-diabatic salt deficit", G%HI, haloshift=0)
         ! call MOM_thermo_chksum("Post-diabatic ", CS%tv, G)
           call check_redundant("Post-diabatic ", u, v, G)
         endif
@@ -1091,8 +1091,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
           call do_group_pass(CS%pass_T_S, G%Domain)
           call cpu_clock_end(id_clock_pass)
           if (CS%debug) then
-            if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Post-diabatic T", G, haloshift=1)
-            if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Post-diabatic S", G, haloshift=1)
+            if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Post-diabatic T", G%HI, haloshift=1)
+            if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Post-diabatic S", G%HI, haloshift=1)
           endif
         endif
 
@@ -1900,9 +1900,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     ! \todo This block exists for legacy reasons and we should phase it out of
     ! all examples.
     if (CS%debug) then
-      call uchksum(CS%u,"Pre ALE adjust init cond u", G, haloshift=1)
-      call vchksum(CS%v,"Pre ALE adjust init cond v", G, haloshift=1)
-      call hchksum(CS%h*GV%H_to_m,"Pre ALE adjust init cond h", G, haloshift=1)
+      call uchksum(CS%u,"Pre ALE adjust init cond u", G%HI, haloshift=1)
+      call vchksum(CS%v,"Pre ALE adjust init cond v", G%HI, haloshift=1)
+      call hchksum(CS%h*GV%H_to_m,"Pre ALE adjust init cond h", G%HI, haloshift=1)
     endif
     call callTree_waypoint("Calling adjustGridForIntegrity() to remap initial conditions (initialize_MOM)")
     call adjustGridForIntegrity(CS%ALE_CSp, G, GV, CS%h )
@@ -1913,9 +1913,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     call cpu_clock_end(id_clock_pass_init)
 
     if (CS%debug) then
-      call uchksum(CS%u,"Post ALE adjust init cond u", G, haloshift=1)
-      call vchksum(CS%v,"Post ALE adjust init cond v", G, haloshift=1)
-      call hchksum(CS%h*GV%H_to_m, "Post ALE adjust init cond h", G, haloshift=1)
+      call uchksum(CS%u,"Post ALE adjust init cond u", G%HI, haloshift=1)
+      call vchksum(CS%v,"Post ALE adjust init cond v", G%HI, haloshift=1)
+      call hchksum(CS%h*GV%H_to_m, "Post ALE adjust init cond h", G%HI, haloshift=1)
     endif
   endif
   if ( CS%use_ALE_algorithm ) call ALE_updateVerticalGridType( CS%ALE_CSp, GV )

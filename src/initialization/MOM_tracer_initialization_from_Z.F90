@@ -727,17 +727,14 @@ subroutine horiz_interp_and_extrap_tracer(filename, varnam,  conversion, recnum,
     call fill_miss_2d(tr_outf,good2,fill2,tr_prev,G,smooth=.true.)
     call myStats(tr_outf,missing_value,is,ie,js,je,k,'field from fill_miss_2d()')
 
-
     tr_z(:,:,k) = tr_outf(:,:)*G%mask2dT(:,:)
     mask_z(:,:,k) = good2(:,:)+fill2(:,:)
 
     tr_prev(:,:)=tr_z(:,:,k)
 
-
     if (debug) then
-      call hchksum(tr_prev,'field after fill ',G)
+      call hchksum(tr_prev,'field after fill ',G%HI)
     endif
-
 
   enddo ! kd
 

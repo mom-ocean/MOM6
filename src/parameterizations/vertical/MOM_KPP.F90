@@ -435,15 +435,15 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
 
 #ifdef __DO_SAFETY_CHECKS__
   if (CS%debug) then
-    call hchksum(h*GV%H_to_m, "KPP in: h",G,haloshift=0)
-    call hchksum(Temp, "KPP in: T",G,haloshift=0)
-    call hchksum(Salt, "KPP in: S",G,haloshift=0)
-    call hchksum(u, "KPP in: u",G,haloshift=0)
-    call hchksum(v, "KPP in: v",G,haloshift=0)
-    call hchksum(uStar, "KPP in: uStar",G,haloshift=0)
-    call hchksum(buoyFlux, "KPP in: buoyFlux",G,haloshift=0)
-    call hchksum(Kt, "KPP in: Kt",G,haloshift=0)
-    call hchksum(Ks, "KPP in: Ks",G,haloshift=0)
+    call hchksum(h*GV%H_to_m, "KPP in: h",G%HI,haloshift=0)
+    call hchksum(Temp, "KPP in: T",G%HI,haloshift=0)
+    call hchksum(Salt, "KPP in: S",G%HI,haloshift=0)
+    call hchksum(u, "KPP in: u",G%HI,haloshift=0)
+    call hchksum(v, "KPP in: v",G%HI,haloshift=0)
+    call hchksum(uStar, "KPP in: uStar",G%HI,haloshift=0)
+    call hchksum(buoyFlux, "KPP in: buoyFlux",G%HI,haloshift=0)
+    call hchksum(Kt, "KPP in: Kt",G%HI,haloshift=0)
+    call hchksum(Ks, "KPP in: Ks",G%HI,haloshift=0)
   endif
 #endif
 
@@ -849,8 +849,8 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
 
 #ifdef __DO_SAFETY_CHECKS__
   if (CS%debug) then
-    call hchksum(Kt, "KPP out: Kt",G,haloshift=0)
-    call hchksum(Ks, "KPP out: Ks",G,haloshift=0)
+    call hchksum(Kt, "KPP out: Kt",G%HI,haloshift=0)
+    call hchksum(Ks, "KPP out: Ks",G%HI,haloshift=0)
   endif
 #endif
 
