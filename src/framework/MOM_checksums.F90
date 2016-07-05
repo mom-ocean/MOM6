@@ -34,37 +34,27 @@ public :: totalStuff, totalTandS
 public :: MOM_checksums_init
 
 interface hchksum
-  module procedure chksum_h_2d
-  module procedure chksum_h_3d
-  module procedure chksum_h_2d_G
-  module procedure chksum_h_3d_G
+  module procedure chksum_h_2d, chksum_h_3d !, chksum_h_2d_G, chksum_h_3d_G
 end interface
 
 interface qchksum
-  module procedure chksum_q_2d
-  module procedure chksum_q_3d
-  module procedure chksum_q_2d_G
-  module procedure chksum_q_3d_G
+  module procedure chksum_q_2d, chksum_q_3d !, chksum_q_2d_G, chksum_q_3d_G
+end interface
+
+interface Bchksum
+  module procedure chksum_q_2d, chksum_q_3d
 end interface
 
 interface uchksum
-  module procedure chksum_u_2d
-  module procedure chksum_u_3d
-  module procedure chksum_u_2d_G
-  module procedure chksum_u_3d_G
+  module procedure chksum_u_2d, chksum_u_3d !, chksum_u_2d_G, chksum_u_3d_G
 end interface
 
 interface vchksum
-  module procedure chksum_v_2d
-  module procedure chksum_v_3d
-  module procedure chksum_v_2d_G
-  module procedure chksum_v_3d_G
+  module procedure chksum_v_2d, chksum_v_3d !, chksum_v_2d_G, chksum_v_3d_G
 end interface
 
 interface chksum
-  module procedure chksum1d
-!  module procedure chksum2d
-!  module procedure chksum3d
+  module procedure chksum1d! , chksum2d, chksum3d
 end interface
 
 interface chk_sum_msg
@@ -1151,17 +1141,18 @@ end function is_NaN_3d
 
 !> This function returns the sum over computational domain of all
 !! processors of hThick*stuff, where stuff is a 3-d array at tracer points.
-function totalStuff(G, hThick, stuff)
-  type(ocean_grid_type),            intent(in) :: G      !< The ocean grid type
-  real, dimension(G%isd:,G%jsd:,:), intent(in) :: hThick !< The array of thicknesses to use as weights
-  real, dimension(G%isd:,G%jsd:,:), intent(in) :: stuff  !< The array of stuff to be summed 
+function totalStuff(HI, hThick, areaT, stuff)
+  type(hor_index_type),               intent(in) :: HI     !< A horizontal index type
+  real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: hThick !< The array of thicknesses to use as weights
+  real, dimension(HI%isd:,HI%jsd:),   intent(in) :: areaT  !< The array of cell areas in m2
+  real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: stuff  !< The array of stuff to be summed 
   real                                         :: totalStuff
   integer :: i, j, k, nz
 
   nz = size(hThick,3)
   totalStuff = 0.
-  do k = 1, nz ; do j = G%jsc, G%jec ; do i = G%isc, G%iec
-    totalStuff = totalStuff + hThick(i,j,k) * stuff(i,j,k) * G%areaT(i,j)
+  do k = 1, nz ; do j = HI%jsc, HI%jec ; do i = HI%isc, HI%iec
+    totalStuff = totalStuff + hThick(i,j,k) * stuff(i,j,k) * areaT(i,j)
   enddo ; enddo ; enddo
   call sum_across_PEs(totalStuff)
 
@@ -1173,12 +1164,13 @@ end function totalStuff
 !! as well as the change since the last call.
 !! NOTE: This subroutine uses "save" data which is not thread safe and is purely
 !! for extreme debugging without a proper debugger.
-subroutine totalTandS(G, hThick, temperature, salinity, mesg)
-  type(ocean_grid_type),            intent(in) :: G      !< The ocean grid type
-  real, dimension(G%isd:,G%jsd:,:), intent(in) :: hThick !< The array of thicknesses to use as weights
-  real, dimension(G%isd:,G%jsd:,:), intent(in) :: temperature !< The temperature field to sum
-  real, dimension(G%isd:,G%jsd:,:), intent(in) :: salinity    !< The salinity field to sum
-  character(len=*),                 intent(in) :: mesg        !< An identifying message
+subroutine totalTandS(HI, hThick, areaT, temperature, salinity, mesg)
+  type(hor_index_type),               intent(in) :: HI     !< A horizontal index type
+  real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: hThick !< The array of thicknesses to use as weights
+  real, dimension(HI%isd:,HI%jsd:),   intent(in) :: areaT  !< The array of cell areas in m2
+  real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: temperature !< The temperature field to sum
+  real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: salinity    !< The salinity field to sum
+  character(len=*),                   intent(in) :: mesg        !< An identifying message
 
   ! NOTE: This subroutine uses "save" data which is not thread safe and is purely for
   ! extreme debugging without a proper debugger.
@@ -1190,12 +1182,12 @@ subroutine totalTandS(G, hThick, temperature, salinity, mesg)
 
   nz = size(hThick,3)
   thisH = 0.
-  do k = 1, nz ; do j = G%jsc, G%jec ; do i = G%isc, G%iec
-    thisH = thisH + hThick(i,j,k) * G%areaT(i,j)
+  do k = 1, nz ; do j = HI%jsc, HI%jec ; do i = HI%isc, HI%iec
+    thisH = thisH + hThick(i,j,k) * areaT(i,j)
   enddo ; enddo ; enddo
   call sum_across_PEs(thisH)
-  thisT = totalStuff(G, hThick, temperature)
-  thisS = totalStuff(G, hThick, salinity)
+  thisT = totalStuff(HI, hThick, areaT, temperature)
+  thisS = totalStuff(HI, hThick, areaT, salinity)
 
   if (is_root_pe()) then
     if (firstCall) then

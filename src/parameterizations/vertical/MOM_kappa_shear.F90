@@ -888,8 +888,8 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   enddo ! end of j-loop
 
   if (CS%debug) then
-    call hchksum(kappa_io,"kappa",G)
-    call hchksum(tke_io,"tke",G)
+    call hchksum(kappa_io,"kappa",G%HI)
+    call hchksum(tke_io,"tke",G%HI)
   endif
 
   if (CS%id_Kd_shear > 0) call post_data(CS%id_Kd_shear, kappa_io, CS%diag)
