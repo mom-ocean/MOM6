@@ -24,7 +24,6 @@ module MOM_checksum_packages
 ! of variables in the various dynamic solver routines.
 
 use MOM_checksums, only : hchksum, uchksum, vchksum
-use MOM_checksums, only : totalStuff
 use MOM_domains, only : sum_across_PEs, min_across_PEs, max_across_PEs
 use MOM_error_handler, only : MOM_mesg, is_root_pe
 use MOM_grid, only : ocean_grid_type
