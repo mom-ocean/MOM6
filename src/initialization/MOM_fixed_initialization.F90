@@ -38,8 +38,6 @@ implicit none ; private
 
 public MOM_initialize_fixed, MOM_initialize_rotation, MOM_initialize_topography
 
-character(len=40) :: mod = "MOM_fixed_initialization" ! This module's name.
-
 contains
 
 ! -----------------------------------------------------------------------------
@@ -56,6 +54,7 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
   ! Local
   character(len=200) :: inputdir   ! The directory where NetCDF input files are.
   character(len=200) :: config
+  character(len=40)  :: mod = "MOM_fixed_initialization" ! This module's name.
   logical :: debug
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -1165,8 +1164,10 @@ end subroutine read_face_length_list
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
+!> Set the bathymetry at velocity points to be the maximum of the depths at the
+!! neighoring tracer points.
 subroutine set_velocity_depth_max(G)
-  type(dyn_horgrid_type), intent(inout) :: G
+  type(dyn_horgrid_type), intent(inout) :: G   !< The dynamic horizontal grid
   ! This subroutine sets the 4 bottom depths at velocity points to be the
   ! maximum of the adjacent depths.
   integer :: i, j
@@ -1183,8 +1184,10 @@ end subroutine set_velocity_depth_max
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
+!> Pre-compute global integrals of grid quantities (like masked ocean area) for
+!! later use in reporting diagnostics
 subroutine compute_global_grid_integrals(G)
-  type(dyn_horgrid_type), intent(inout) :: G
+  type(dyn_horgrid_type), intent(inout) :: G  !< The dynamic horizontal grid
   ! Subroutine to pre-compute global integrals of grid quantities for
   ! later use in reporting diagnostics
   integer :: i,j
@@ -1204,8 +1207,10 @@ end subroutine compute_global_grid_integrals
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
+!> Set the bathymetry at velocity points to be the minimum of the depths at the
+!! neighoring tracer points.
 subroutine set_velocity_depth_min(G)
-  type(dyn_horgrid_type), intent(inout) :: G
+  type(dyn_horgrid_type), intent(inout) :: G  !< The dynamic horizontal grid
   ! This subroutine sets the 4 bottom depths at velocity points to be the
   ! minimum of the adjacent depths.
   integer :: i, j
@@ -1222,10 +1227,14 @@ end subroutine set_velocity_depth_min
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine write_ocean_geometry_file(G, param_file, directory)
-  type(dyn_horgrid_type), intent(inout) :: G
-  type(param_file_type),  intent(in)    :: param_file
-  character(len=*),       intent(in)    :: directory
+!> Write out a file describing the topography, Coriolis parameter, grid locations
+!! and various other fixed fields from the grid.
+subroutine write_ocean_geometry_file(G, param_file, directory, geom_file)
+  type(dyn_horgrid_type),     intent(inout) :: G         !< The dynamic horizontal grid
+  type(param_file_type),      intent(in)    :: param_file !< Parameter file structure
+  character(len=*),           intent(in)    :: directory !< The directory into which to place the geometry file.
+  character(len=*), optional, intent(in)    :: geom_file !< If present, the name of the geometry file
+                                                         !! (otherwise the file is "ocean_geometry")
 !   This subroutine writes out a file containing all of the ocean geometry
 ! and grid data uses by the MOM ocean model.
 ! Arguments: G - The ocean's grid structure.  Effectively intent in.
@@ -1292,7 +1301,11 @@ subroutine write_ocean_geometry_file(G, param_file, directory)
 
   nFlds_used = 19 ; if (G%bathymetry_at_vel) nFlds_used = 23
 
-  filepath = trim(directory) // "ocean_geometry"
+  if (present(geom_file)) then
+    filepath = trim(directory) // trim(geom_file)
+  else
+    filepath = trim(directory) // "ocean_geometry"
+  endif
 
   out_h(:,:) = 0.0
   out_u(:,:) = 0.0
