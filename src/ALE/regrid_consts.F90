@@ -8,22 +8,36 @@ use MOM_string_functions, only : uppercase
 
 implicit none ; public
 
-! List of regridding types
-integer, parameter :: REGRIDDING_LAYER     = -1     !< Layer mode
-integer, parameter :: REGRIDDING_ZSTAR     = 0      !< z* coordinates
-integer, parameter :: REGRIDDING_RHO       = 1      !< Target interface densities
-integer, parameter :: REGRIDDING_SIGMA     = 2      !< Sigma coordinates
-integer, parameter :: REGRIDDING_ARBITRARY = 3      !< Arbitrary coordinates
-integer, parameter :: REGRIDDING_HYCOM1    = 4      !< Simple HyCOM coordinates without BBL
-integer, parameter :: REGRIDDING_SLIGHT    = 5      !< Stretched coordinates in the
+integer, parameter :: REGRIDDING_NUM_TYPES  = 7
+
+! List of regridding types. These should be consecutive and starting at 1.
+! This allows them to be used as array indices.
+integer, parameter :: REGRIDDING_LAYER     = 1      !< Layer mode
+integer, parameter :: REGRIDDING_ZSTAR     = 2      !< z* coordinates
+integer, parameter :: REGRIDDING_RHO       = 3      !< Target interface densities
+integer, parameter :: REGRIDDING_SIGMA     = 4      !< Sigma coordinates
+integer, parameter :: REGRIDDING_ARBITRARY = 5      !< Arbitrary coordinates
+integer, parameter :: REGRIDDING_HYCOM1    = 6      !< Simple HyCOM coordinates without BBL
+integer, parameter :: REGRIDDING_SLIGHT    = REGRIDDING_NUM_TYPES !< Stretched coordinates in the
                                                     !! lightest water, isopycnal below
-character(len=5), parameter :: REGRIDDING_LAYER_STRING = "LAYER"   !< Layer string
-character(len=2), parameter :: REGRIDDING_ZSTAR_STRING = "Z*"      !< z* string
-character(len=3), parameter :: REGRIDDING_RHO_STRING   = "RHO"     !< Rho string
-character(len=5), parameter :: REGRIDDING_SIGMA_STRING = "SIGMA"   !< Sigma string
+character(len=6), parameter :: REGRIDDING_LAYER_STRING = "LAYER"   !< Layer string
+character(len=6), parameter :: REGRIDDING_ZSTAR_STRING = "ZSTAR"   !< z* string
+character(len=6), parameter :: REGRIDDING_RHO_STRING   = "RHO"     !< Rho string
+character(len=6), parameter :: REGRIDDING_SIGMA_STRING = "SIGMA"   !< Sigma string
+character(len=6), parameter :: REGRIDDING_ARBITRARY_STRING = "ARB" !< Arbitrary coordinates
 character(len=6), parameter :: REGRIDDING_HYCOM1_STRING = "HYCOM1" !< Hycom string
 character(len=6), parameter :: REGRIDDING_SLIGHT_STRING = "SLIGHT" !< Hybrid S-rho string
-character(len=5), parameter :: DEFAULT_COORDINATE_MODE = REGRIDDING_LAYER_STRING !< Default coordinate mode
+character(len=6), parameter :: DEFAULT_COORDINATE_MODE = REGRIDDING_LAYER_STRING !< Default coordinate mode
+
+integer, dimension(REGRIDDING_NUM_TYPES), parameter :: vertical_coords = &
+  (/ REGRIDDING_LAYER, REGRIDDING_ZSTAR, REGRIDDING_RHO, &
+    REGRIDDING_SIGMA, REGRIDDING_ARBITRARY, &
+    REGRIDDING_HYCOM1, REGRIDDING_SLIGHT /)
+
+character(len=*), dimension(REGRIDDING_NUM_TYPES), parameter :: vertical_coord_strings = &
+  (/ REGRIDDING_LAYER_STRING, REGRIDDING_ZSTAR_STRING, REGRIDDING_RHO_STRING, &
+    REGRIDDING_SIGMA_STRING, REGRIDDING_ARBITRARY_STRING, &
+    REGRIDDING_HYCOM1_STRING, REGRIDDING_SLIGHT_STRING /)
 
 interface coordinateUnits
   module procedure coordinateUnitsI
@@ -44,6 +58,7 @@ function coordinateMode(string)
     case (trim(REGRIDDING_SIGMA_STRING)); coordinateMode = REGRIDDING_SIGMA
     case (trim(REGRIDDING_HYCOM1_STRING)); coordinateMode = REGRIDDING_HYCOM1
     case (trim(REGRIDDING_SLIGHT_STRING)); coordinateMode = REGRIDDING_SLIGHT
+    case (trim(REGRIDDING_ARBITRARY_STRING)); coordinateMode = REGRIDDING_ARBITRARY
     case default ; call MOM_error(FATAL, "coordinateMode: "//&
        "Unrecognized choice of coordinate ("//trim(string)//").")
   end select

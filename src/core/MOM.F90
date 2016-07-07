@@ -33,7 +33,7 @@ use MOM_coord_initialization, only : MOM_initialize_coord
 use MOM_diag_mediator,        only : diag_mediator_init, enable_averaging
 use MOM_diag_mediator,        only : diag_mediator_infrastructure_init
 use MOM_diag_mediator,        only : diag_register_area_ids
-use MOM_diag_mediator,        only : diag_set_thickness_ptr, diag_update_target_grids
+use MOM_diag_mediator,        only : diag_set_state_ptrs, diag_update_remap_grids
 use MOM_diag_mediator,        only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator,        only : register_diag_field, register_static_field
 use MOM_diag_mediator,        only : register_scalar_field
@@ -737,7 +737,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
         ! Whenever thickness changes let the diag manager know, target grids
         ! for vertical remapping may need to be regenerated.
-        call diag_update_target_grids(CS%diag)
+        call diag_update_remap_grids(CS%diag)
 
         call post_diags_TS_vardec(G, CS, dtdia)
 
@@ -819,7 +819,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
         ! Whenever thickness changes let the diag manager know, target grids
         ! for vertical remapping may need to be regenerated.
-        call diag_update_target_grids(CS%diag)
+        call diag_update_remap_grids(CS%diag)
 
       endif
     endif
@@ -1064,7 +1064,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         ! Whenever thickness changes let the diag manager know, target grids
         ! for vertical remapping may need to be regenerated. This needs to
         ! happen after the H update and before the next post_data.
-        call diag_update_target_grids(CS%diag)
+        call diag_update_remap_grids(CS%diag)
 
         call post_diags_TS_vardec(G, CS, CS%dt_trans)
 
@@ -1942,17 +1942,18 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   ! and before MOM_diagnostics_init
   call diag_masks_set(G, GV%ke, CS%missing, diag)
 
-  ! Set up a pointers h within diag mediator control structure,
-  ! this needs to occur _after_ CS%h has been allocated.
-  call diag_set_thickness_ptr(CS%h, diag)
+  ! Set up pointers within diag mediator control structure,
+  ! this needs to occur _after_ CS%h etc. have been allocated.
+  call diag_set_state_ptrs(CS%h, CS%T, CS%S, CS%tv%eqn_of_state, diag)
 
   ! This call sets up the diagnostic axes. These are needed,
   ! e.g. to generate the target grids below.
   call set_axes_info(G, GV, param_file, diag)
 
-  ! Whenever thickness changes let the diag manager know, target grids
-  ! for vertical remapping may need to be regenerated. 
-  call diag_update_target_grids(diag)
+  ! Whenever thickness/T/S changes let the diag manager know, target grids
+  ! for vertical remapping may need to be regenerated.
+  ! FIXME: are h, T, S updated at the same time? Review these for T, S updates.
+  call diag_update_remap_grids(diag)
 
   ! Diagnose static fields AND associate areas/volumes with axes
   call write_static_fields(G, CS%diag)
