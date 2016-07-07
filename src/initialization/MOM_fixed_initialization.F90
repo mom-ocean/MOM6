@@ -5,24 +5,19 @@ module MOM_fixed_initialization
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_checksums, only : hchksum, qchksum, uchksum, vchksum, chksum
-use MOM_coms, only : max_across_PEs
-use MOM_domains, only : pass_var, pass_vector, sum_across_PEs, broadcast
-use MOM_domains, only : root_PE, To_All, SCALAR_PAIR, CGRID_NE, AGRID
+use MOM_domains, only : pass_var
 use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
 use MOM_file_parser, only : log_version
-use MOM_io, only : close_file, create_file, fieldtype, file_exists
-use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE, MULTIPLE
-use MOM_io, only : slasher, vardesc, write_field, var_desc
-use MOM_io, only : EAST_FACE, NORTH_FACE
+use MOM_io, only : slasher
 use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_open_boundary, only : open_boundary_config, open_boundary_query
 use MOM_open_boundary, only : set_Flather_positions, open_boundary_impose_normal_slope
 use MOM_open_boundary, only : open_boundary_impose_land_mask
-use MOM_shared_initialization, only : MOM_shared_init_init
+! use MOM_shared_initialization, only : MOM_shared_init_init
 use MOM_shared_initialization, only : MOM_initialize_rotation, MOM_calculate_grad_Coriolis
 use MOM_shared_initialization, only : initialize_topography_from_file, apply_topography_edits_from_file
 use MOM_shared_initialization, only : initialize_topography_named, limit_topography, diagnoseMaximumDepth
@@ -30,7 +25,6 @@ use MOM_shared_initialization, only : set_rotation_planetary, set_rotation_beta_
 use MOM_shared_initialization, only : reset_face_lengths_named, reset_face_lengths_file, reset_face_lengths_list
 use MOM_shared_initialization, only : read_face_length_list, set_velocity_depth_max, set_velocity_depth_min
 use MOM_shared_initialization, only : compute_global_grid_integrals, write_ocean_geometry_file
-use MOM_string_functions, only : uppercase
 use user_initialization, only : user_initialize_topography, USER_set_OBC_positions
 use DOME_initialization, only : DOME_initialize_topography, DOME_set_OBC_positions
 use ISOMIP_initialization, only : ISOMIP_initialize_topography
