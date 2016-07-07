@@ -76,10 +76,8 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
 ! or, if absent, is diagnosed as G%max_depth = max( G%D(:,:) )
   call MOM_initialize_topography(G%bathyT, G%max_depth, G, PF)
 
-! ====================================================================
-!    Initialize fields that are time invariant - metrics, topography,
-!  masks, and Coriolis parameter.
-! ====================================================================
+  ! To initialize masks, the bathymetry in halo regions must be filled in
+  call pass_var(G%bathyT, G%Domain)
 
 ! Determine the position of any open boundaries
   call open_boundary_config(G, PF, OBC)
@@ -102,9 +100,6 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
   elseif (open_boundary_query(OBC, apply_orig_Flather=.true.)) then
     call set_Flather_positions(G, OBC)
   endif
-
-  ! To initialize masks, the bathymetry in halo regions must be filled in
-  call pass_var(G%bathyT, G%Domain)
 
   ! Make bathymetry consistent with open boundaries
   call open_boundary_impose_normal_slope(OBC, G, G%bathyT)
