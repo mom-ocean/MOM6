@@ -4,17 +4,15 @@ module MOM_shared_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_checksums, only : hchksum, qchksum, uchksum, vchksum, chksum
 use MOM_coms, only : max_across_PEs
 use MOM_domains, only : pass_var, pass_vector, sum_across_PEs, broadcast
 use MOM_domains, only : root_PE, To_All, SCALAR_PAIR, CGRID_NE, AGRID
 use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
-use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
-use MOM_file_parser, only : log_version
+use MOM_file_parser, only : get_param, log_param, param_file_type, log_version
 use MOM_io, only : close_file, create_file, fieldtype, file_exists
-use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE, MULTIPLE
+use MOM_io, only : read_data, SINGLE_FILE, MULTIPLE
 use MOM_io, only : slasher, vardesc, write_field, var_desc
 use MOM_string_functions, only : uppercase
 
