@@ -22,6 +22,7 @@ module MOM_checksums
 
 use MOM_coms, only : PE_here, root_PE, num_PEs, sum_across_PEs
 use MOM_coms, only : min_across_PEs, max_across_PEs
+use MOM_coms, only : reproducing_sum
 use MOM_error_handler, only : MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : log_version, param_file_type
 use MOM_hor_index, only : hor_index_type
@@ -208,13 +209,8 @@ subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric)
 
   bc0=subchk(array, HI, 0, 0)
 
-  if (hshift==0) then
-    if (sym) then
-      bcSW=subchk(array, HI, -1, -1)
-      if (is_root_pe()) call chk_sum_msg("B-point:",bc0,bcSW,mesg)
-    else
-      if (is_root_pe()) call chk_sum_msg("B-point:",bc0,mesg)
-    endif
+  if ((hshift==0) .and. .not.sym) then
+    if (is_root_pe()) call chk_sum_msg("B-point:",bc0,mesg)
     return
   endif
 
@@ -900,8 +896,6 @@ subroutine chksum2d(array, mesg, start_x, end_x, start_y, end_y)
   integer :: bitcount
   integer :: xs,xe,ys,ye,i,j,sum1,bc
   real :: sum
-  real, allocatable :: sum_here(:)
-  integer :: pe_num   ! pe number of the data
 
   xs = LBOUND(array,1) ; xe = UBOUND(array,1)
   ys = LBOUND(array,2) ; ye = UBOUND(array,2)
@@ -912,20 +906,12 @@ subroutine chksum2d(array, mesg, start_x, end_x, start_y, end_y)
 
   sum = 0.0 ; sum1 = 0
   do i=xs,xe ; do j=ys,ye
-    sum = sum + array(i,j)
     bc = bitcount(abs(array(i,j)))
     sum1 = sum1 + bc
   enddo ; enddo
-
-  pe_num = pe_here() + 1 - root_pe()
-  allocate(sum_here(num_pes())) ; sum_here(:) = 0.0
-  sum_here(pe_num) = sum
-  call sum_across_PEs(sum_here,num_pes())
-  sum = 0.0
-  do i=1,num_pes() ; sum = sum + sum_here(i) ; enddo
-!   call sum_across_PEs(sum)
   call sum_across_PEs(sum1)
-  deallocate(sum_here)
+
+  sum = reproducing_sum(array(xs:xe,ys:ye))
 
   if (is_root_pe()) &
     write(0,'(A40,1X,ES22.13,1X,I12)') mesg, sum, sum1
@@ -943,8 +929,6 @@ subroutine chksum3d(array, mesg, start_x, end_x, start_y, end_y, start_z, end_z)
   integer :: bitcount
   integer :: xs,xe,ys,ye,zs,ze,i,j,k, bc,sum1
   real :: sum
-  real, allocatable :: sum_here(:)
-  integer :: pe_num   ! pe number of the data
 
   xs = LBOUND(array,1) ; xe = UBOUND(array,1)
   ys = LBOUND(array,2) ; ye = UBOUND(array,2)
@@ -958,20 +942,12 @@ subroutine chksum3d(array, mesg, start_x, end_x, start_y, end_y, start_z, end_z)
 
   sum = 0.0 ; sum1 = 0
   do i=xs,xe ; do j=ys,ye ; do k=zs,ze
-    sum = sum + array(i,j,k)
     bc = bitcount(ABS(array(i,j,k)))
     sum1 = sum1 + bc
   enddo ; enddo ; enddo
 
-  pe_num = pe_here() + 1 - root_pe()
-  allocate(sum_here(num_pes())) ; sum_here(:) = 0.0
-  sum_here(pe_num) = sum
-  call sum_across_PEs(sum_here,num_pes())
-  sum = 0.0
-  do i=1,num_pes() ; sum = sum + sum_here(i) ; enddo
-!   call sum_across_PEs(sum)
   call sum_across_PEs(sum1)
-  deallocate(sum_here)
+  sum = reproducing_sum(array(xs:xe,ys:ye,zs:ze))
 
   if (is_root_pe()) &
     write(0,'(A40,1X,ES22.13,1X,I12)') mesg, sum, sum1
