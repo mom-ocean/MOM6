@@ -66,8 +66,8 @@ interface is_NaN
 end interface
 
 integer, parameter :: default_shift=0
-logical :: calculateStatistics=.false. ! If true, report min, max and mean
-                               ! instead of the bitcount checksum
+logical :: calculateStatistics=.true. ! If true, report min, max and mean.
+logical :: writeChksums=.true. ! If true, report the bitcount checksum
 logical :: checkForNaNs=.true. ! If true, checks array for NaNs and cause
                                ! FATAL error is any are found
 
@@ -91,18 +91,16 @@ subroutine chksum_h_2d(array, mesg, HI, haloshift)
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
-  if (calculateStatistics) then
-    call subStats(HI, array, mesg); return
-  endif
+  if (calculateStatistics) call subStats(HI, array, mesg)
+
+  if (.not.writeChksums) return
 
   hshift=default_shift
   if (present(haloshift)) hshift=haloshift
   if (hshift<0) hshift=HI%ied-HI%iec
 
-  if ( HI%isc-hshift<HI%isd .or. &
-       HI%iec+hshift>HI%ied .or. &
-       HI%jsc-hshift<HI%jsd .or. &
-       HI%jec+hshift>HI%jed ) then
+  if ( HI%isc-hshift<HI%isd .or. HI%iec+hshift>HI%ied .or. &
+       HI%jsc-hshift<HI%jsd .or. HI%jec+hshift>HI%jed ) then
     write(0,*) 'chksum_h_2d: haloshift =',hshift
     write(0,*) 'chksum_h_2d: isd,isc,iec,ied=',HI%isd,HI%isc,HI%iec,HI%ied
     write(0,*) 'chksum_h_2d: jsd,jsc,jec,jed=',HI%jsd,HI%jsc,HI%jec,HI%jed
@@ -145,17 +143,16 @@ subroutine chksum_h_2d(array, mesg, HI, haloshift)
     character(len=*), intent(in) :: mesg
     integer :: i, j, n
     real :: aMean, aMin, aMax
-    aMean = 0.
+
     aMin = array(HI%isc,HI%jsc)
     aMax = array(HI%isc,HI%jsc)
     n = 0
-    do j=HI%jsc,HI%jec; do i=HI%isc,HI%iec
-        aMean = aMean + array(i,j)
-        aMin = min(aMin, array(i,j))
-        aMax = max(aMax, array(i,j))
-        n = n + 1
-    enddo; enddo
-    call sum_across_PEs(aMean)
+    do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
+      aMin = min(aMin, array(i,j))
+      aMax = max(aMax, array(i,j))
+      n = n + 1
+    enddo ; enddo
+    aMean = reproducing_sum(array(HI%isc:HI%iec,HI%jsc:HI%jec))
     call sum_across_PEs(n)
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
@@ -187,18 +184,16 @@ subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric)
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
-  if (calculateStatistics) then
-    call subStats(HI, array, mesg); return
-  endif
+  if (calculateStatistics) call subStats(HI, array, mesg)
+
+  if (.not.writeChksums) return
 
   hshift=default_shift
   if (present(haloshift)) hshift=haloshift
   if (hshift<0) hshift=HI%ied-HI%iec
 
-  if ( HI%isc-hshift<HI%isd .or. &
-       HI%iec+hshift>HI%ied .or. &
-       HI%jsc-hshift<HI%jsd .or. &
-       HI%jec+hshift>HI%jed ) then
+  if ( HI%isc-hshift<HI%isd .or. HI%iec+hshift>HI%ied .or. &
+       HI%jsc-hshift<HI%jsd .or. HI%jec+hshift>HI%jed ) then
     write(0,*) 'chksum_B_2d: haloshift =',hshift
     write(0,*) 'chksum_B_2d: isd,isc,iec,ied=',HI%isd,HI%isc,HI%iec,HI%ied
     write(0,*) 'chksum_B_2d: jsd,jsc,jec,jed=',HI%jsd,HI%jsc,HI%jec,HI%jed
@@ -253,13 +248,12 @@ subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric)
     aMin = array(HI%isc,HI%jsc)
     aMax = array(HI%isc,HI%jsc)
     n = 0
-    do j=HI%jsc,HI%jec; do i=HI%isc,HI%iec
-        aMean = aMean + array(i,j)
-        aMin = min(aMin, array(i,j))
-        aMax = max(aMax, array(i,j))
-        n = n + 1
-    enddo; enddo
-    call sum_across_PEs(aMean)
+    do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
+      aMin = min(aMin, array(i,j))
+      aMax = max(aMax, array(i,j))
+      n = n + 1
+    enddo ; enddo
+    aMean = reproducing_sum(array(HI%isc:HI%iec,HI%jsc:HI%jec))
     call sum_across_PEs(n)
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
@@ -287,18 +281,16 @@ subroutine chksum_u_2d(array, mesg, HI, haloshift)
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
-  if (calculateStatistics) then
-    call subStats(HI, array, mesg); return
-  endif
+  if (calculateStatistics) call subStats(HI, array, mesg)
+
+  if (.not.writeChksums) return
 
   hshift=default_shift
   if (present(haloshift)) hshift=haloshift
   if (hshift<0) hshift=HI%ied-HI%iec
 
-  if ( HI%isc-hshift<HI%isd .or. &
-       HI%iec+hshift>HI%ied .or. &
-       HI%jsc-hshift<HI%jsd .or. &
-       HI%jec+hshift>HI%jed ) then
+  if ( HI%isc-hshift<HI%isd .or. HI%iec+hshift>HI%ied .or. &
+       HI%jsc-hshift<HI%jsd .or. HI%jec+hshift>HI%jed ) then
     write(0,*) 'chksum_u_2d: haloshift =',hshift
     write(0,*) 'chksum_u_2d: isd,isc,iec,ied=',HI%isd,HI%isc,HI%iec,HI%ied
     write(0,*) 'chksum_u_2d: jsd,jsc,jec,jed=',HI%jsd,HI%jsc,HI%jec,HI%jed
@@ -341,17 +333,16 @@ subroutine chksum_u_2d(array, mesg, HI, haloshift)
     character(len=*), intent(in) :: mesg
     integer :: i, j, n
     real :: aMean, aMin, aMax
-    aMean = 0.
+
     aMin = array(HI%isc,HI%jsc)
     aMax = array(HI%isc,HI%jsc)
     n = 0
-    do j=HI%jsc,HI%jec; do i=HI%isc,HI%iec
-        aMean = aMean + array(i,j)
-        aMin = min(aMin, array(i,j))
-        aMax = max(aMax, array(i,j))
-        n = n + 1
-    enddo; enddo
-    call sum_across_PEs(aMean)
+    do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
+      aMin = min(aMin, array(i,j))
+      aMax = max(aMax, array(i,j))
+      n = n + 1
+    enddo ; enddo
+    aMean = reproducing_sum(array(HI%isc:HI%iec,HI%jsc:HI%jec))
     call sum_across_PEs(n)
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
@@ -379,18 +370,16 @@ subroutine chksum_v_2d(array, mesg, HI, haloshift)
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
-  if (calculateStatistics) then
-    call subStats(HI, array, mesg); return
-  endif
+  if (calculateStatistics) call subStats(HI, array, mesg)
+
+  if (.not.writeChksums) return
 
   hshift=default_shift
   if (present(haloshift)) hshift=haloshift
   if (hshift<0) hshift=HI%ied-HI%iec
 
-  if ( HI%isc-hshift<HI%isd .or. &
-       HI%iec+hshift>HI%ied .or. &
-       HI%jsc-hshift<HI%jsd .or. &
-       HI%jec+hshift>HI%jed ) then
+  if ( HI%isc-hshift<HI%isd .or. HI%iec+hshift>HI%ied .or. &
+       HI%jsc-hshift<HI%jsd .or. HI%jec+hshift>HI%jed ) then
     write(0,*) 'chksum_v_2d: haloshift =',hshift
     write(0,*) 'chksum_v_2d: isd,isc,iec,ied=',HI%isd,HI%isc,HI%iec,HI%ied
     write(0,*) 'chksum_v_2d: jsd,jsc,jec,jed=',HI%jsd,HI%jsc,HI%jec,HI%jed
@@ -433,17 +422,16 @@ subroutine chksum_v_2d(array, mesg, HI, haloshift)
     character(len=*), intent(in) :: mesg
     integer :: i, j, n
     real :: aMean, aMin, aMax
-    aMean = 0.
+
     aMin = array(HI%isc,HI%jsc)
     aMax = array(HI%isc,HI%jsc)
     n = 0
-    do j=HI%jsc,HI%jec; do i=HI%isc,HI%iec
-        aMean = aMean + array(i,j)
-        aMin = min(aMin, array(i,j))
-        aMax = max(aMax, array(i,j))
-        n = n + 1
-    enddo; enddo
-    call sum_across_PEs(aMean)
+    do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
+      aMin = min(aMin, array(i,j))
+      aMax = max(aMax, array(i,j))
+      n = n + 1
+    enddo ; enddo
+    aMean = reproducing_sum(array(HI%isc:HI%iec,HI%jsc:HI%jec))
     call sum_across_PEs(n)
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
@@ -471,18 +459,16 @@ subroutine chksum_h_3d(array, mesg, HI, haloshift)
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
-  if (calculateStatistics) then
-    call subStats(HI, array, mesg); return
-  endif
+  if (calculateStatistics) call subStats(HI, array, mesg)
+
+  if (.not.writeChksums) return
 
   hshift=default_shift
   if (present(haloshift)) hshift=haloshift
   if (hshift<0) hshift=HI%ied-HI%iec
 
-  if ( HI%isc-hshift<HI%isd .or. &
-       HI%iec+hshift>HI%ied .or. &
-       HI%jsc-hshift<HI%jsd .or. &
-       HI%jec+hshift>HI%jed ) then
+  if ( HI%isc-hshift<HI%isd .or. HI%iec+hshift>HI%ied .or. &
+       HI%jsc-hshift<HI%jsd .or. HI%jec+hshift>HI%jed ) then
     write(0,*) 'chksum_h_3d: haloshift =',hshift
     write(0,*) 'chksum_h_3d: isd,isc,iec,ied=',HI%isd,HI%isc,HI%iec,HI%ied
     write(0,*) 'chksum_h_3d: jsd,jsc,jec,jed=',HI%jsd,HI%jsc,HI%jec,HI%jed
@@ -525,17 +511,16 @@ subroutine chksum_h_3d(array, mesg, HI, haloshift)
     character(len=*), intent(in) :: mesg
     integer :: i, j, k, n
     real :: aMean, aMin, aMax
-    aMean = 0.
+
     aMin = array(HI%isc,HI%jsc,1)
     aMax = array(HI%isc,HI%jsc,1)
     n = 0
     do k=LBOUND(array,3),UBOUND(array,3) ; do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
-      aMean = aMean + array(i,j,k)
       aMin = min(aMin, array(i,j,k))
       aMax = max(aMax, array(i,j,k))
       n = n + 1
     enddo ; enddo ; enddo
-    call sum_across_PEs(aMean)
+    aMean = reproducing_sum(array(HI%isc:HI%iec,HI%jsc:HI%jec,:))
     call sum_across_PEs(n)
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
@@ -563,18 +548,16 @@ subroutine chksum_B_3d(array, mesg, HI, haloshift)
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
-  if (calculateStatistics) then
-    call subStats(HI, array, mesg); return
-  endif
+  if (calculateStatistics) call subStats(HI, array, mesg)
+
+  if (.not.writeChksums) return
 
   hshift=default_shift
   if (present(haloshift)) hshift=haloshift
   if (hshift<0) hshift=HI%ied-HI%iec
 
-  if ( HI%isc-hshift<HI%isd .or. &
-       HI%iec+hshift>HI%ied .or. &
-       HI%jsc-hshift<HI%jsd .or. &
-       HI%jec+hshift>HI%jed ) then
+  if ( HI%isc-hshift<HI%isd .or. HI%iec+hshift>HI%ied .or. &
+       HI%jsc-hshift<HI%jsd .or. HI%jec+hshift>HI%jed ) then
     write(0,*) 'chksum_B_3d: haloshift =',hshift
     write(0,*) 'chksum_B_3d: isd,isc,iec,ied=',HI%isd,HI%isc,HI%iec,HI%ied
     write(0,*) 'chksum_B_3d: jsd,jsc,jec,jed=',HI%jsd,HI%jsc,HI%jec,HI%jed
@@ -617,17 +600,16 @@ subroutine chksum_B_3d(array, mesg, HI, haloshift)
     character(len=*), intent(in) :: mesg
     integer :: i, j, k, n
     real :: aMean, aMin, aMax
-    aMean = 0.
+
     aMin = array(HI%isc,HI%jsc,1)
     aMax = array(HI%isc,HI%jsc,1)
     n = 0
     do k=LBOUND(array,3),UBOUND(array,3) ; do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
-      aMean = aMean + array(i,j,k)
       aMin = min(aMin, array(i,j,k))
       aMax = max(aMax, array(i,j,k))
       n = n + 1
     enddo ; enddo ; enddo
-    call sum_across_PEs(aMean)
+    aMean = reproducing_sum(array(HI%isc:HI%iec,HI%jsc:HI%jec,:))
     call sum_across_PEs(n)
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
@@ -655,18 +637,16 @@ subroutine chksum_u_3d(array, mesg, HI, haloshift)
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
-  if (calculateStatistics) then
-    call subStats(HI, array, mesg); return
-  endif
+  if (calculateStatistics) call subStats(HI, array, mesg)
+
+  if (.not.writeChksums) return
 
   hshift=default_shift
   if (present(haloshift)) hshift=haloshift
   if (hshift<0) hshift=HI%ied-HI%iec
 
-  if ( HI%isc-hshift<HI%isd .or. &
-       HI%iec+hshift>HI%ied .or. &
-       HI%jsc-hshift<HI%jsd .or. &
-       HI%jec+hshift>HI%jed ) then
+  if ( HI%isc-hshift<HI%isd .or. HI%iec+hshift>HI%ied .or. &
+       HI%jsc-hshift<HI%jsd .or. HI%jec+hshift>HI%jed ) then
     write(0,*) 'chksum_u_3d: haloshift =',hshift
     write(0,*) 'chksum_u_3d: isd,isc,iec,ied=',HI%isd,HI%isc,HI%iec,HI%ied
     write(0,*) 'chksum_u_3d: jsd,jsc,jec,jed=',HI%jsd,HI%jsc,HI%jec,HI%jed
@@ -709,17 +689,16 @@ subroutine chksum_u_3d(array, mesg, HI, haloshift)
     character(len=*), intent(in) :: mesg
     integer :: i, j, k, n
     real :: aMean, aMin, aMax
-    aMean = 0.
+
     aMin = array(HI%isc,HI%jsc,1)
     aMax = array(HI%isc,HI%jsc,1)
     n = 0
     do k=LBOUND(array,3),UBOUND(array,3) ; do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
-      aMean = aMean + array(i,j,k)
       aMin = min(aMin, array(i,j,k))
       aMax = max(aMax, array(i,j,k))
       n = n + 1
     enddo ; enddo ; enddo
-    call sum_across_PEs(aMean)
+    aMean = reproducing_sum(array(HI%isc:HI%iec,HI%jsc:HI%jec,:))
     call sum_across_PEs(n)
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
@@ -747,18 +726,16 @@ subroutine chksum_v_3d(array, mesg, HI, haloshift)
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
-  if (calculateStatistics) then
-    call subStats(HI, array, mesg); return
-  endif
+  if (calculateStatistics) call subStats(HI, array, mesg)
+
+  if (.not.writeChksums) return
 
   hshift=default_shift
   if (present(haloshift)) hshift=haloshift
   if (hshift<0) hshift=HI%ied-HI%iec
 
-  if ( HI%isc-hshift<HI%isd .or. &
-       HI%iec+hshift>HI%ied .or. &
-       HI%jsc-hshift<HI%jsd .or. &
-       HI%jec+hshift>HI%jed ) then
+  if ( HI%isc-hshift<HI%isd .or. HI%iec+hshift>HI%ied .or. &
+       HI%jsc-hshift<HI%jsd .or. HI%jec+hshift>HI%jed ) then
     write(0,*) 'chksum_v_3d: haloshift =',hshift
     write(0,*) 'chksum_v_3d: isd,isc,iec,ied=',HI%isd,HI%isc,HI%iec,HI%ied
     write(0,*) 'chksum_v_3d: jsd,jsc,jec,jed=',HI%jsd,HI%jsc,HI%jec,HI%jed
@@ -801,17 +778,16 @@ subroutine chksum_v_3d(array, mesg, HI, haloshift)
     character(len=*), intent(in) :: mesg
     integer :: i, j, k, n
     real :: aMean, aMin, aMax
-    aMean = 0.
+
     aMin = array(HI%isc,HI%jsc,1)
     aMax = array(HI%isc,HI%jsc,1)
     n = 0
     do k=LBOUND(array,3),UBOUND(array,3) ; do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
-      aMean = aMean + array(i,j,k)
       aMin = min(aMin, array(i,j,k))
       aMax = max(aMax, array(i,j,k))
       n = n + 1
     enddo ; enddo ; enddo
-    call sum_across_PEs(aMean)
+    aMean = reproducing_sum(array(HI%isc:HI%iec,HI%jsc:HI%jec,:))
     call sum_across_PEs(n)
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
@@ -879,7 +855,7 @@ subroutine chksum1d(array, mesg, start_i, end_i, compare_PEs)
   deallocate(sum_here)
 
   if (is_root_pe()) &
-    write(0,'(A40,1X,ES22.13,1X,I12)') mesg, sum, sum_bc
+    write(0,'(A50,1X,ES25.16,1X,I12)') mesg, sum, sum_bc
 
 end subroutine chksum1d
 
@@ -914,7 +890,7 @@ subroutine chksum2d(array, mesg, start_x, end_x, start_y, end_y)
   sum = reproducing_sum(array(xs:xe,ys:ye))
 
   if (is_root_pe()) &
-    write(0,'(A40,1X,ES22.13,1X,I12)') mesg, sum, sum1
+    write(0,'(A50,1X,ES25.16,1X,I12)') mesg, sum, sum1
 !    write(0,'(A40,1X,Z16.16,1X,Z16.16,1X,ES25.16,1X,I12)') &
 !      mesg, sum, sum1, sum, sum1
 
@@ -950,7 +926,7 @@ subroutine chksum3d(array, mesg, start_x, end_x, start_y, end_y, start_z, end_z)
   sum = reproducing_sum(array(xs:xe,ys:ye,zs:ze))
 
   if (is_root_pe()) &
-    write(0,'(A40,1X,ES22.13,1X,I12)') mesg, sum, sum1
+    write(0,'(A50,1X,ES25.16,1X,I12)') mesg, sum, sum1
 !    write(0,'(A40,1X,Z16.16,1X,Z16.16,1X,ES25.16,1X,I12)') &
 !      mesg, sum, sum1, sum, sum1
 
@@ -1043,7 +1019,7 @@ end function is_NaN_3d
 subroutine chk_sum_msg1(fmsg,bc0,mesg)
   character(len=*), intent(in) :: fmsg, mesg
   integer,          intent(in) :: bc0
-  if (is_root_pe()) write(0,'(A,1(A,I10,X),A)') fmsg," c=",bc0,mesg
+  if (is_root_pe()) write(0,'(A,1(A,I10,X),A)') fmsg," c=",bc0,trim(mesg)
 end subroutine chk_sum_msg1
 
 ! =====================================================================
@@ -1052,7 +1028,7 @@ subroutine chk_sum_msg5(fmsg,bc0,bcSW,bcSE,bcNW,bcNE,mesg)
   character(len=*), intent(in) :: fmsg, mesg
   integer,          intent(in) :: bc0,bcSW,bcSE,bcNW,bcNE
   if (is_root_pe()) write(0,'(A,5(A,I10,1X),A)') &
-     fmsg," c=",bc0,"sw=",bcSW,"se=",bcSE,"nw=",bcNW,"ne=",bcNE,mesg
+     fmsg," c=",bc0,"sw=",bcSW,"se=",bcSE,"nw=",bcNW,"ne=",bcNE,trim(mesg)
 end subroutine chk_sum_msg5
 
 ! =====================================================================
@@ -1061,7 +1037,7 @@ subroutine chk_sum_msg2(fmsg,bc0,bcSW,mesg)
   character(len=*), intent(in) :: fmsg, mesg
   integer,          intent(in) :: bc0,bcSW
   if (is_root_pe()) write(0,'(A,2(A,I9,1X),A)') &
-     fmsg," c=",bc0,"s/w=",bcSW,mesg
+     fmsg," c=",bc0,"s/w=",bcSW,trim(mesg)
 end subroutine chk_sum_msg2
 
 ! =====================================================================
@@ -1069,8 +1045,8 @@ end subroutine chk_sum_msg2
 subroutine chk_sum_msg3(fmsg,aMean,aMin,aMax,mesg)
   character(len=*), intent(in) :: fmsg, mesg
   real,             intent(in) :: aMean,aMin,aMax
-  if (is_root_pe()) write(0,'(A,3(A,ES12.4,1X),A)') &
-     fmsg," mean=",aMean,"min=",aMin,"max=",aMax,mesg
+  if (is_root_pe()) write(0,'(A,3(A,ES25.16,1X),A)') &
+     fmsg," mean=",aMean,"min=",aMin,"max=",aMax,trim(mesg)
 end subroutine chk_sum_msg3
 
 ! =====================================================================
