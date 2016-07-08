@@ -18,7 +18,6 @@ use MOM_tracer_registry, only : tracer_registry_type, tracer_type, MOM_tracer_ch
 use MOM_variables,       only : ocean_OBC_type, OBC_FLATHER_E
 use MOM_variables,       only : OBC_FLATHER_W, OBC_FLATHER_N, OBC_FLATHER_S
 use MOM_verticalGrid,    only : verticalGrid_type
-
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -54,7 +53,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg)
   type(ocean_OBC_type),                      pointer       :: OBC   !< specifies whether, where, and what OBCs are used
   real,                                      intent(in)    :: dt    !< time increment (seconds)
   type(tracer_advect_CS),                    pointer       :: CS    !< control structure for module 
-  type(tracer_registry_type),                pointer       :: Reg   !< pointer to tracer registry 
+  type(tracer_registry_type),                pointer       :: Reg   !< pointer to tracer registry
 
 
   type(tracer_type) :: Tr(MAX_FIELDS_) ! The array of registered tracers

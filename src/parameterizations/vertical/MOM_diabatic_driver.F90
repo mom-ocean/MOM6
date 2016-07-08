@@ -57,6 +57,8 @@ use MOM_variables,           only : cont_diag_ptrs, MOM_thermovar_chksum, p3d
 use MOM_verticalGrid,        only : verticalGrid_type
 use MOM_wave_speed,          only : wave_speeds
 use time_manager_mod,        only : increment_time ! for testing itides (BDM)
+use MOM_offline_transport,         only : offline_transport_CS, post_diabatic_fields
+
 
 implicit none ; private
 
@@ -69,7 +71,7 @@ public adiabatic
 public adiabatic_driver_init
 
 !> Control structure for this module
-type, public :: diabatic_CS ; private
+type, public :: diabatic_CS ;
   logical :: bulkmixedlayer          !< If true, a refined bulk mixed layer is used with
                                      !! nkml sublayers (and additional buffer layers).
   logical :: use_energetic_PBL       !< If true, use the implicit energetics planetary
@@ -212,7 +214,7 @@ contains
 
 !>  This subroutine imposes the diapycnal mass fluxes and the
 !!  accompanying diapycnal advection of momentum and tracers.
-subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
+subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS, offline_CSp)
   type(ocean_grid_type),                     intent(inout) :: G      !< ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV     !< ocean vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u      !< zonal velocity (m/s)
@@ -226,6 +228,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   type(cont_diag_ptrs),                      intent(inout) :: CDp    !< points to terms in continuity equations
   real,                                      intent(in)    :: dt     !< time increment (seconds)
   type(diabatic_CS),                         pointer       :: CS     !< module control structure
+  type(offline_transport_CS),                pointer       :: offline_CSp     !< module control structure
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     ea,     &    ! amount of fluid entrained from the layer above within
@@ -1102,10 +1105,11 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       do i=is,ie ; eatr(i,j,1) = ea(i,j,1) ; enddo
     enddo
 
-!    if(do_online) then
-        call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
-            CS%optics, CS%tracer_flow_CSp)
-!    endif
+   ! Post the fields used for tracers here
+    call post_diabatic_fields( G, offline_CSp, CS%diag, dt, hold, h, eatr, ebtr )
+    call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
+        CS%optics, CS%tracer_flow_CSp)
+
 
   elseif (associated(visc%Kd_extra_S)) then  ! extra diffusivity for passive tracers
 
@@ -1127,19 +1131,15 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       eatr(i,j,k) = ea(i,j,k) + add_ent
     enddo ; enddo ; enddo
 
-!    if(do_online) then
-        call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
-            CS%optics, CS%tracer_flow_CSp)
-!    endif
+    call post_diabatic_fields( G, offline_CSp, CS%diag, dt, hold, h, eatr, ebtr)
+    call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
+        CS%optics, CS%tracer_flow_CSp)
 
 
   else
-
-!      if(do_online) then
-          call call_tracer_column_fns(hold, h, ea, eb, fluxes, dt, G, GV, tv, &
-              CS%optics, CS%tracer_flow_CSp)
-!      endif
-
+    call post_diabatic_fields( G, offline_CSp, CS%diag, dt, hold, h, ea, eb)
+    call call_tracer_column_fns(hold, h, ea, eb, fluxes, dt, G, GV, tv, &
+        CS%optics, CS%tracer_flow_CSp)
 
   endif  ! (CS%mix_boundary_tracers)
 
