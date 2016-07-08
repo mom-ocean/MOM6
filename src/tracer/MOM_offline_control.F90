@@ -355,11 +355,11 @@ contains
             "Input directory where the offline fields can be found", fail_if_missing=.true.)
         call get_param(param_file, mod, "TRANSPORT_FILE", CS%transport_file, &
             "Filename where uhtr, vhtr, ea, eb fields can be found")
-        call get_param(param_file, mod, "H_FILE", CS%h_file, &
+        call get_param(param_file, mod, "OFF_H_FILE", CS%h_file, &
             "Filename where the h fields can be found")
-        call get_param(param_file, mod, "TS_FILE", CS%ts_file, &
+        call get_param(param_file, mod, "OFF_TS_FILE", CS%ts_file, &
             "Filename where the temperature and salinity fields can be found")
-        call get_param(param_file, mod, "PREALE_FILE", CS%preale_file, &
+        call get_param(param_file, mod, "OFF_PREALE_FILE", CS%preale_file, &
             "Filename where the preale T, S, u, v, and h fields are found")
         call get_param(param_file, mod, "START_INDEX", CS%start_index, &
             "Which time index to start from", fail_if_missing=.true.)
