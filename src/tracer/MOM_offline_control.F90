@@ -353,7 +353,7 @@ contains
         ! Parse MOM_input for offline control
         call get_param(param_file, mod, "OFFLINEDIR", CS%offlinedir, &
             "Input directory where the offline fields can be found", fail_if_missing=.true.)
-        call get_param(param_file, mod, "TRANSPORT_FILE", CS%transport_file, &
+        call get_param(param_file, mod, "OFF_TRANSPORT_FILE", CS%transport_file, &
             "Filename where uhtr, vhtr, ea, eb fields can be found")
         call get_param(param_file, mod, "OFF_H_FILE", CS%h_file, &
             "Filename where the h fields can be found")
