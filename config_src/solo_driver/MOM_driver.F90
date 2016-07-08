@@ -47,6 +47,7 @@ program MOM_main
   use MOM_diag_mediator,   only : diag_mediator_close_registration, diag_mediator_end
   use MOM,                 only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
   use MOM,                 only : calculate_surface_state, finish_MOM_initialization
+  use MOM,                 only : step_tracers
   use MOM_domains,         only : MOM_infra_init, MOM_infra_end
   use MOM_error_handler,   only : MOM_error, MOM_mesg, WARNING, FATAL, is_root_pe
   use MOM_error_handler,   only : callTree_enter, callTree_leave, callTree_waypoint
@@ -168,6 +169,14 @@ program MOM_main
   integer, dimension(:), allocatable :: ocean_PElist
   logical :: unit_in_use
   integer :: initClock, mainClock, termClock
+
+  logical :: do_online          ! If true, use the model in prognostic mode where
+                                ! the barotropic and baroclinic dynamics, thermodynamics,
+                                ! etc. are stepped forward integrated in time.
+                                ! If false, the all of the above are bypassed with all
+                                ! fields necessary to integrate only the tracer advection
+                                ! and diffusion equation are read in from files stored from
+                                ! a previous integration of the prognostic model
 
   type(MOM_control_struct),  pointer :: MOM_CSp => NULL()
   type(surface_forcing_CS),  pointer :: surface_forcing_CSp => NULL()
@@ -350,6 +359,15 @@ program MOM_main
                  "The interval in units of TIMEUNIT between saves of the \n"//&
                  "energies of the run and other globally summed diagnostics.", &
                  default=set_time(int(time_step+0.5)), timeunit=Time_unit)
+   call get_param(param_file, mod, "DO_ONLINE", do_online, &
+                 "If true, use the model in prognostic mode where\n"//&
+                 "the barotropic and baroclinic dynamics, thermodynamics,\n"//&
+                 "etc. are stepped forward integrated in time.\n"//&
+                 "If false, the all of the above are bypassed with all\n"//&
+                 "fields necessary to integrate only the tracer advection\n"//&
+                 "and diffusion equation are read in from files stored from\n"//&
+                 "a previous integration of the prognostic model", default=.true.)
+
   call log_param(param_file, mod, "ELAPSED TIME AS MASTER", elapsed_time_master)
 
   ! Close the param_file.  No further parsing of input is possible after this.
@@ -399,8 +417,10 @@ program MOM_main
     call callTree_enter("Main loop, MOM_driver.F90",n)
 
     ! Set the forcing for the next steps.
-    call set_forcing(state, fluxes, Time, Time_step_ocean, grid, &
+    if (do_online) then
+        call set_forcing(state, fluxes, Time, Time_step_ocean, grid, &
                      surface_forcing_CSp)
+    endif
     if (MOM_CSp%debug) then
       call MOM_forcing_chksum("After set forcing", fluxes, grid, haloshift=0)
     endif
@@ -423,7 +443,8 @@ program MOM_main
 
     ! This call steps the model over a time time_step.
     Time1 = Master_Time ; Time = Master_Time
-    call step_MOM(fluxes, state, Time1, time_step, MOM_CSp)
+    if (do_online)    call step_MOM(fluxes, state, Time1, time_step, MOM_CSp)
+
 
 !    Time = Time + Time_step_ocean
 !  This is here to enable fractional-second time steps.
@@ -450,6 +471,7 @@ program MOM_main
                             surface_forcing_CSp%handles)
     call disable_averaging(MOM_CSp%diag)
 
+    if (do_online) then
     if (fluxes%fluxes_used) then
       call enable_averaging(fluxes%dt_buoy_accum, Time, MOM_CSp%diag)
       call forcing_diagnostics(fluxes, state, fluxes%dt_buoy_accum, grid, &
@@ -458,8 +480,10 @@ program MOM_main
       call disable_averaging(MOM_CSp%diag)
     else
       call MOM_error(FATAL, "The solo MOM_driver is not yet set up to handle "//&
-             "thermodynamic time steps that are longer than the couping timestep.")
-    endif
+             "thermodynamic time steps that are longer than the coupling timestep.")
+    endif ; endif
+
+    if (.not. do_online)  call step_tracers(fluxes, state, Time1, time_step, MOM_CSp)
 
 !  See if it is time to write out the energy.
     if ((Time + (Time_step_ocean/2) > write_energy_time) .and. &
@@ -502,7 +526,7 @@ program MOM_main
   if (Restart_control>=0) then
     if (MOM_CSp%dt_trans > 0.0) call MOM_error(WARNING, "End of MOM_main reached "//&
          "with a non-zero dt_trans.  Additional restart fields are required.")
-     if (.not.fluxes%fluxes_used) call MOM_error(FATAL, "End of MOM_main reached "//&
+     if (.not.fluxes%fluxes_used .and. do_online) call MOM_error(FATAL, "End of MOM_main reached "//&
          "with unused buoyancy fluxes.  For conservation, the ocean restart "//&
          "files can only be created after the buoyancy forcing is applied.")
 
