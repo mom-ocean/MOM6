@@ -1582,26 +1582,27 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
             call ALE_main(G, GV, CS%offline_CSp%h_preale, CS%offline_CSp%u_preale, &
                             CS%offline_CSp%v_preale, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%dt_therm)
             call cpu_clock_end(id_clock_ALE)
+        
+
+
+            if (CS%debug) then
+                call uchksum(CS%offline_CSp%u_preale, "Post-ALE 1 u", G, haloshift=1)
+                call vchksum(CS%offline_CSp%v_preale, "Post-ALE 1 v", G, haloshift=1)
+                call hchksum(CS%offline_CSp%h_preale, "Post-ALE 1 h", G, haloshift=1)
+                call hchksum(CS%tv%T,"Post-ALE 1 T", G, haloshift=1)
+                call hchksum(CS%tv%S,"Post-ALE 1 S", G, haloshift=1)
+            endif
+
+            CS%tv%T = temp_old
+            CS%tv%S = salt_old
+
+            ! Whenever thickness changes let the diag manager know, target grids
+            ! for vertical remapping may need to be regenerated. This needs to
+            ! happen after the H update and before the next post_data.
+            call diag_update_target_grids(CS%diag)
+            call post_diags_TS_vardec(G, CS, CS%dt_trans)
         endif   ! endif for the block "if ( CS%use_ALE_algorithm )"
-
-
-        if (CS%debug .and. CS%use_ALE_algorithm) then
-            call uchksum(CS%offline_CSp%u_preale, "Post-ALE 1 u", G, haloshift=1)
-            call vchksum(CS%offline_CSp%v_preale, "Post-ALE 1 v", G, haloshift=1)
-            call hchksum(CS%offline_CSp%h_preale, "Post-ALE 1 h", G, haloshift=1)
-            call hchksum(CS%tv%T,"Post-ALE 1 T", G, haloshift=1)
-            call hchksum(CS%tv%S,"Post-ALE 1 S", G, haloshift=1)
-        endif
-
-        CS%tv%T = temp_old
-        CS%tv%S = salt_old
-
-        ! Whenever thickness changes let the diag manager know, target grids
-        ! for vertical remapping may need to be regenerated. This needs to
-        ! happen after the H update and before the next post_data.
-        call diag_update_target_grids(CS%diag)
-        call post_diags_TS_vardec(G, CS, CS%dt_trans)
-    endif
+    endif ! diabatic second
 
     call disable_averaging(CS%diag)
     call cpu_clock_end(id_clock_tracer)
