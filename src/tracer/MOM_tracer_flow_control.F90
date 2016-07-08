@@ -42,7 +42,6 @@ use MOM_ALE_sponge, only : ALE_sponge_CS
 use MOM_tracer_registry, only : tracer_registry_type
 use MOM_variables, only : surface, ocean_OBC_type, thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
-
 #include <MOM_memory.h>
 
 ! Add references to other user-provide tracer modules here.
@@ -356,6 +355,7 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, dt, G, GV, tv, o
 
   if (.not. associated(CS)) call MOM_error(FATAL, "call_tracer_column_fns: "// &
          "Module must be initialized via call_tracer_register before it is used.")
+
 ! Add calls to tracer column functions here.
   if (CS%use_USER_tracer_example) &
     call tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
