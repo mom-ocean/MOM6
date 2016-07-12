@@ -16,9 +16,8 @@ The workflow for re-generating the API documentation with doxygen (http://www.do
 ```bash
 git checkout dev/master
 git clone https://github.com/doxygen/doxygen
-(cd doxygen/; ./configure)
+(cd doxygen/; cmake -G "Unix Makefiles" .)
 (cd doxygen/; make -j 4)
-./doxygen/bin/doxygen .doxygen
 ./doxygen/bin/doxygen .doxygen
 git checkout gh-pages
 git reset --hard gh-pages-static
