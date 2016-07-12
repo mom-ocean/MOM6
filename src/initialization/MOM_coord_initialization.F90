@@ -21,8 +21,6 @@ use netcdf
 
 implicit none ; private
 
-#include <MOM_memory.h>
-
 public MOM_initialize_coord
 
 character(len=40) :: mod = "MOM_coord_initialization" ! This module's name.
@@ -268,7 +266,7 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, GV, param_file, &
 
 ! This subroutine sets the layer densities (Rlay) and the interface  !
 ! reduced gravities (g).                                             !
-  real, dimension(SZK_(GV)) :: T0, S0,  Pref
+  real, dimension(GV%ke) :: T0, S0,  Pref
   real :: g_fs    ! Reduced gravity across the free surface, in m s-2.
   integer :: k, nz
   character(len=40)  :: mod = "set_coord_from_TS_profile" ! This subroutine's name.
@@ -321,7 +319,7 @@ subroutine set_coord_from_TS_range(Rlay, g_prime, GV, param_file, &
 
 ! This subroutine sets the layer densities (Rlay) and the interface  !
 ! reduced gravities (g).                                             !
-  real, dimension(SZK_(GV)) :: T0, S0,  Pref
+  real, dimension(GV%ke) :: T0, S0,  Pref
   real :: S_Ref, S_Light, S_Dense ! Salnity range parameters in PSU.
   real :: T_Ref, T_Light, T_Dense ! Temperature range parameters in dec C.
   real :: res_rat ! The ratio of density space resolution in the denser part

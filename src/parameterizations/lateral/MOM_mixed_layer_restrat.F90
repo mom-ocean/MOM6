@@ -204,8 +204,8 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV,
     if (.not. associated(MLD)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "Argument MLD was not associated!")
     if (CS%debug) then
-      call hchksum(CS%MLD_filtered,'mixed_layer_restrat: MLD_filtered',G,haloshift=1)
-      call hchksum(MLD,'mixed_layer_restrat: MLD in',G,haloshift=1)
+      call hchksum(CS%MLD_filtered,'mixed_layer_restrat: MLD_filtered',G%HI,haloshift=1)
+      call hchksum(MLD,'mixed_layer_restrat: MLD in',G%HI,haloshift=1)
     endif
     aFac = CS%MLE_MLD_decay_time / ( dt + CS%MLE_MLD_decay_time )
     bFac = dt / ( dt + CS%MLE_MLD_decay_time )
@@ -256,10 +256,10 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV,
   enddo
 
   if (CS%debug) then
-    call hchksum(h,'mixed_layer_restrat: h',G,haloshift=1)
-    call hchksum(fluxes%ustar,'mixed_layer_restrat: u*',G,haloshift=1)
-    call hchksum(CS%MLD,'mixed_layer_restrat: MLD',G,haloshift=1)
-    call hchksum(Rml_av,'mixed_layer_restrat: rml',G,haloshift=1)
+    call hchksum(h,'mixed_layer_restrat: h',G%HI,haloshift=1)
+    call hchksum(fluxes%ustar,'mixed_layer_restrat: u*',G%HI,haloshift=1)
+    call hchksum(CS%MLD,'mixed_layer_restrat: MLD',G%HI,haloshift=1)
+    call hchksum(Rml_av,'mixed_layer_restrat: rml',G%HI,haloshift=1)
   endif
 
 ! TO DO:
