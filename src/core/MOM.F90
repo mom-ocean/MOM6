@@ -1443,13 +1443,12 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     khdt_y = 0.0
     eatr = 0.0
     ebtr = 0.0
-    h_old = 0.0
-    h_new = 0.0
-    h_adv = 0.0
-    h_end = 0.0
+    h_old = GV%Angstrom
+    h_new = GV%Angstrom
+    h_adv = GV%Angstrom
+    h_end = GV%Angstrom
     temp_old = 0.0
     salt_old = 0.0
-
 
 
     if (.not.CS%adiabatic .AND. CS%use_ALE_algorithm ) then
@@ -1464,10 +1463,12 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     call enable_averaging(time_interval, Time_start+set_time(int(time_interval)), &
                           CS%diag)
     call transport_by_files(G, CS%offline_CSp, h_old, h_new, h_adv, h_end, eatr, ebtr, uhtr, vhtr, &
-        khdt_x, khdt_y, CS%tv%T, CS%tv%S, CS%dt_therm, fluxes, CS%diabatic_CSp%optics, CS%use_ALE_algorithm)
+        khdt_x, khdt_y, temp_old, salt_old, fluxes, CS%diabatic_CSp%optics, CS%use_ALE_algorithm)
 
     CS%uhtr = uhtr
     CS%vhtr = vhtr
+    CS%T = temp_old
+    CS%S = salt_old
 
 !------------DIABATIC FIRST
 
@@ -1484,8 +1485,6 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
         if ( CS%use_ALE_algorithm ) then
 
-            temp_old = CS%tv%T
-            salt_old = CS%tv%S
             CS%tv%T = CS%offline_CSp%T_preale
             CS%tv%S = CS%offline_CSp%S_preale
 
@@ -2574,7 +2573,7 @@ subroutine register_diags(Time, G, GV, CS, ADp)
       'Layer Thickness before diabatic forcing', thickness_units, v_cell_method='sum')
   CS%id_e_predia = register_diag_field('ocean_model', 'e_predia', diag%axesTi, Time, &
       'Interface Heights before diabatic forcing', 'meter')
-  if (CS%diabatic_first .and. (.not. CS%adiabatic)) then
+!  if (CS%diabatic_first .and. (.not. CS%adiabatic)) then
     CS%id_u_preale = register_diag_field('ocean_model', 'u_preale', diag%axesCuL, Time, &
         'Zonal velocity before remapping', 'meter second-1')
     CS%id_v_preale = register_diag_field('ocean_model', 'v_preale', diag%axesCvL, Time, &
@@ -2587,7 +2586,7 @@ subroutine register_diags(Time, G, GV, CS, ADp)
         'Salinity before remapping', 'ppt')
     CS%id_e_preale = register_diag_field('ocean_model', 'e_preale', diag%axesTi, Time, &
         'Interface Heights before remapping', 'meter')
-  endif
+!  endif
 
   if (CS%use_temperature) then
     CS%id_T_predia = register_diag_field('ocean_model', 'temp_predia', diag%axesTL, Time, &
