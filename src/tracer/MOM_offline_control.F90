@@ -163,12 +163,11 @@ contains
     end subroutine post_advection_fields
 
     subroutine transport_by_files(G, CS, h_old, h_new, h_adv, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, khdt_y, &
-        temp, salt, dt, fluxes, optics, do_ale_in)
+        temp, salt, fluxes, optics, do_ale_in)
         type(ocean_grid_type),                     intent(inout)    :: G
         type(offline_transport_CS),                intent(inout)    :: CS
         type(forcing),                             intent(inout)    :: fluxes
         type(optics_type),                         intent(inout)    :: optics
-        real,                                      intent(in)       :: dt
         logical, optional                                           :: do_ale_in
 
         !! Mandatory variables
@@ -231,6 +230,11 @@ contains
             timelevel=CS%ridx_snap,position=CENTER)
 
         if (do_ale) then
+            CS%h_preale = 1.0e-10
+            CS%T_preale = 0.0
+            CS%S_preale = 0.0
+            CS%u_preale = 0.0
+            CS%v_preale = 0.0
             call read_data(CS%preale_file, 'h_preale',   CS%h_preale, domain=G%Domain%mpp_domain, &
                 timelevel=CS%ridx_snap,position=CENTER)
             call read_data(CS%preale_file, 'T_preale',   CS%T_preale, domain=G%Domain%mpp_domain, &
@@ -271,7 +275,7 @@ contains
 
         if (do_ale) then
 
-            call pass_vector(CS%u_preale,CS%v_preale,G%Domain)
+!            call pass_vector(CS%u_preale,CS%v_preale,G%Domain)
             call pass_var(CS%h_preale, G%Domain)
             call pass_var(CS%T_preale, G%Domain)
             call pass_var(CS%S_preale, G%Domain)
@@ -353,7 +357,7 @@ contains
         ! Parse MOM_input for offline control
         call get_param(param_file, mod, "OFFLINEDIR", CS%offlinedir, &
             "Input directory where the offline fields can be found", fail_if_missing=.true.)
-        call get_param(param_file, mod, "TRANSPORT_FILE", CS%transport_file, &
+        call get_param(param_file, mod, "OFF_TRANSPORT_FILE", CS%transport_file, &
             "Filename where uhtr, vhtr, ea, eb fields can be found")
         call get_param(param_file, mod, "OFF_H_FILE", CS%h_file, &
             "Filename where the h fields can be found")
