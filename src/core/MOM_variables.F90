@@ -345,15 +345,15 @@ subroutine MOM_thermovar_chksum(mesg, tv, G)
   ! counts, there must be no redundant points, so all variables use is..ie
   ! and js...je as their extent.
   if (associated(tv%T)) &
-    call hchksum(tv%T, mesg//" tv%T",G)
+    call hchksum(tv%T, mesg//" tv%T",G%HI)
   if (associated(tv%S)) &
-    call hchksum(tv%S, mesg//" tv%S",G)
+    call hchksum(tv%S, mesg//" tv%S",G%HI)
   if (associated(tv%frazil)) &
-    call hchksum(tv%frazil, mesg//" tv%frazil",G)
+    call hchksum(tv%frazil, mesg//" tv%frazil",G%HI)
   if (associated(tv%salt_deficit)) &
-    call hchksum(tv%salt_deficit, mesg//" tv%salt_deficit",G)
+    call hchksum(tv%salt_deficit, mesg//" tv%salt_deficit",G%HI)
   if (associated(tv%TempxPmE)) &
-    call hchksum(tv%TempxPmE, mesg//" tv%TempxPmE",G)
+    call hchksum(tv%TempxPmE, mesg//" tv%TempxPmE",G%HI)
 end subroutine MOM_thermovar_chksum
 
 end module MOM_variables

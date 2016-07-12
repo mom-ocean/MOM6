@@ -466,8 +466,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     if ((CS%ML_mix_first > 0.0) .or. CS%use_geothermal) then
       call find_uv_at_h(u, v, h_orig, u_h, v_h, G, GV, eaml, ebml)
       if (CS%debug) then
-        call hchksum(eaml, "after find_uv_at_h eaml",G)
-        call hchksum(ebml, "after find_uv_at_h ebml",G)
+        call hchksum(eaml, "after find_uv_at_h eaml",G%HI)
+        call hchksum(ebml, "after find_uv_at_h ebml",G%HI)
       endif
     else
       call find_uv_at_h(u, v, h, u_h, v_h, G, GV)
@@ -532,8 +532,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     call MOM_state_chksum("after set_diffusivity ", u, v, h, G, GV, haloshift=0)
     call MOM_forcing_chksum("after set_diffusivity ", fluxes, G, haloshift=0)
     call MOM_thermovar_chksum("after set_diffusivity ", tv, G)
-    call hchksum(Kd, "after set_diffusivity Kd",G,haloshift=0)
-    call hchksum(Kd_Int, "after set_diffusivity Kd_Int",G,haloshift=0)
+    call hchksum(Kd, "after set_diffusivity Kd",G%HI,haloshift=0)
+    call hchksum(Kd_Int, "after set_diffusivity Kd_Int",G%HI,haloshift=0)
   endif
 
 
@@ -600,8 +600,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       call MOM_state_chksum("after KPP", u, v, h, G, GV, haloshift=0)
       call MOM_forcing_chksum("after KPP", fluxes, G, haloshift=0)
       call MOM_thermovar_chksum("after KPP", tv, G)
-      call hchksum(Kd, "after KPP Kd",G,haloshift=0)
-      call hchksum(Kd_Int, "after KPP Kd_Int",G,haloshift=0)
+      call hchksum(Kd, "after KPP Kd",G%HI,haloshift=0)
+      call hchksum(Kd_Int, "after KPP Kd_Int",G%HI,haloshift=0)
     endif
 
   endif  ! endif for KPP
@@ -614,10 +614,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
 
     call cpu_clock_begin(id_clock_kpp)
     if (CS%debug) then
-      call hchksum(CS%KPP_temp_flux*GV%H_to_m, "before KPP_applyNLT netHeat",G,haloshift=0)
-      call hchksum(CS%KPP_salt_flux*GV%H_to_m, "before KPP_applyNLT netSalt",G,haloshift=0)
-      call hchksum(CS%KPP_NLTheat, "before KPP_applyNLT NLTheat",G,haloshift=0)
-      call hchksum(CS%KPP_NLTscalar, "before KPP_applyNLT NLTscalar",G,haloshift=0)
+      call hchksum(CS%KPP_temp_flux*GV%H_to_m, "before KPP_applyNLT netHeat",G%HI,haloshift=0)
+      call hchksum(CS%KPP_salt_flux*GV%H_to_m, "before KPP_applyNLT netSalt",G%HI,haloshift=0)
+      call hchksum(CS%KPP_NLTheat, "before KPP_applyNLT NLTheat",G%HI,haloshift=0)
+      call hchksum(CS%KPP_NLTscalar, "before KPP_applyNLT NLTscalar",G%HI,haloshift=0)
     endif
     ! Apply non-local transport of heat and salt
     ! Changes: tv%T, tv%S
@@ -700,8 +700,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     call MOM_forcing_chksum("after calc_entrain ", fluxes, G, haloshift=0)
     call MOM_thermovar_chksum("after calc_entrain ", tv, G)
     call MOM_state_chksum("after calc_entrain ", u, v, h, G, GV, haloshift=0)
-    call hchksum(GV%H_to_m*ea, "after calc_entrain ea",G,haloshift=0)
-    call hchksum(GV%H_to_m*eb, "after calc_entrain eb",G,haloshift=0)
+    call hchksum(GV%H_to_m*ea, "after calc_entrain ea",G%HI,haloshift=0)
+    call hchksum(GV%H_to_m*eb, "after calc_entrain eb",G%HI,haloshift=0)
   endif
 
   ! Apply forcing when using the ALE algorithm
@@ -725,11 +725,11 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
                           ea, h, tv, CS%aggregate_FW_forcing, cTKE, dSV_dT, dSV_dS)
 
       if (CS%debug) then
-        call hchksum(ea, "after applyBoundaryFluxes ea",G,haloshift=0)
-        call hchksum(eb, "after applyBoundaryFluxes eb",G,haloshift=0)
-        call hchksum(cTKE, "after applyBoundaryFluxes cTKE",G,haloshift=0)
-        call hchksum(dSV_dT, "after applyBoundaryFluxes dSV_dT",G,haloshift=0)
-        call hchksum(dSV_dS, "after applyBoundaryFluxes dSV_dS",G,haloshift=0)
+        call hchksum(ea, "after applyBoundaryFluxes ea",G%HI,haloshift=0)
+        call hchksum(eb, "after applyBoundaryFluxes eb",G%HI,haloshift=0)
+        call hchksum(cTKE, "after applyBoundaryFluxes cTKE",G%HI,haloshift=0)
+        call hchksum(dSV_dT, "after applyBoundaryFluxes dSV_dT",G%HI,haloshift=0)
+        call hchksum(dSV_dS, "after applyBoundaryFluxes dSV_dS",G%HI,haloshift=0)
       endif
 
       call find_uv_at_h(u, v, h, u_h, v_h, G, GV)
@@ -765,9 +765,9 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       enddo ; enddo ; enddo
 
       if (CS%debug) then
-        call hchksum(ea, "after ePBL ea",G,haloshift=0)
-        call hchksum(eb, "after ePBL eb",G,haloshift=0)
-        call hchksum(Kd_ePBL, "after ePBL Kd_ePBL",G,haloshift=0)
+        call hchksum(ea, "after ePBL ea",G%HI,haloshift=0)
+        call hchksum(eb, "after ePBL eb",G%HI,haloshift=0)
+        call hchksum(Kd_ePBL, "after ePBL Kd_ePBL",G%HI,haloshift=0)
       endif
 
     else
@@ -932,8 +932,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
         eb(i,j,k) = eb(i,j,k) + ebml(i,j,k)
       enddo ; enddo ; enddo
       if (CS%debug) then
-        call hchksum(GV%H_to_m*ea, "after ea = ea + eaml",G,haloshift=0)
-        call hchksum(GV%H_to_m*eb, "after eb = eb + ebml",G,haloshift=0)
+        call hchksum(GV%H_to_m*ea, "after ea = ea + eaml",G%HI,haloshift=0)
+        call hchksum(GV%H_to_m*eb, "after eb = eb + ebml",G%HI,haloshift=0)
       endif
     endif
 
@@ -981,8 +981,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     if (ASSOCIATED(tv%T)) then
 
       if (CS%debug) then
-        call hchksum(GV%H_to_m*ea, "before triDiagTS ea ",G,haloshift=0)
-        call hchksum(GV%H_to_m*eb, "before triDiagTS eb ",G,haloshift=0)
+        call hchksum(GV%H_to_m*ea, "before triDiagTS ea ",G%HI,haloshift=0)
+        call hchksum(GV%H_to_m*eb, "before triDiagTS eb ",G%HI,haloshift=0)
       endif
       call cpu_clock_begin(id_clock_tridiag)
 
@@ -1014,8 +1014,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   if (CS%debug) then
     call MOM_state_chksum("after mixed layer ", u, v, h, G, GV, haloshift=0)
     call MOM_thermovar_chksum("after mixed layer ", tv, G)
-    call hchksum(ea, "after mixed layer ea", G)
-    call hchksum(eb, "after mixed layer eb", G)
+    call hchksum(ea, "after mixed layer ea", G%HI)
+    call hchksum(eb, "after mixed layer eb", G%HI)
   endif
 
   if (.not. CS%useALEalgorithm) then
@@ -1193,8 +1193,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
 ! mixed layer turbulence is applied elsewhere.
   if (CS%bulkmixedlayer) then
     if (CS%debug) then
-      call hchksum(ea, "before net flux rearrangement ea",G)
-      call hchksum(eb, "before net flux rearrangement eb",G)
+      call hchksum(ea, "before net flux rearrangement ea",G%HI)
+      call hchksum(eb, "before net flux rearrangement eb",G%HI)
     endif
 !$OMP do
     do j=js,je
@@ -1205,8 +1205,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       enddo ; enddo
     enddo
     if (CS%debug) then
-      call hchksum(ea, "after net flux rearrangement ea",G)
-      call hchksum(eb, "after net flux rearrangement eb",G)
+      call hchksum(ea, "after net flux rearrangement ea",G%HI)
+      call hchksum(eb, "after net flux rearrangement eb",G%HI)
     endif
   endif
 
@@ -1244,9 +1244,9 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     !  or enters the ocean with the surface velocity.
     if (CS%debug) then
       call MOM_state_chksum("before u/v tridiag ", u, v, h, G, GV, haloshift=0)
-      call hchksum(ea, "before u/v tridiag ea",G)
-      call hchksum(eb, "before u/v tridiag eb",G)
-      call hchksum(hold, "before u/v tridiag hold",G)
+      call hchksum(ea, "before u/v tridiag ea",G%HI)
+      call hchksum(eb, "before u/v tridiag eb",G%HI)
+      call hchksum(hold, "before u/v tridiag hold",G%HI)
     endif
     call cpu_clock_begin(id_clock_tridiag)
 !$OMP parallel do default(none) shared(js,je,Isq,Ieq,ADp,u,hold,ea,h_neglect,eb,nz,Idt) &

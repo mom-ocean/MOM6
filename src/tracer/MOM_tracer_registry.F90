@@ -432,7 +432,7 @@ subroutine MOM_tracer_chksum(mesg, Tr, ntr, G)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   do m=1,ntr
-    call hchksum(Tr(m)%t, mesg//trim(Tr(m)%name), G)
+    call hchksum(Tr(m)%t, mesg//trim(Tr(m)%name), G%HI)
   enddo
 
 end subroutine MOM_tracer_chksum

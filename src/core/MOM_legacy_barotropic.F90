@@ -310,7 +310,7 @@ type, public :: legacy_barotropic_CS ; private
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
   type(MOM_domain_type), pointer :: BT_Domain => NULL()
-  type(ocean_grid_type), pointer :: debug_BT_G ! debugging copy of ocean grid
+  type(hor_index_type), pointer :: debug_BT_HI ! debugging copy of horizontal index_type
   type(tidal_forcing_CS), pointer :: tides_CSp => NULL()
   logical :: module_is_initialized = .false.
 
@@ -1449,39 +1449,39 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
   endif
 
   if (CS%debug) then
-    call uchksum(uhbt, "BT uhbt",CS%debug_BT_G,haloshift=0)
-    call vchksum(vhbt, "BT vhbt",CS%debug_BT_G,haloshift=0)
-    call uchksum(ubt, "BT Initial ubt",CS%debug_BT_G,haloshift=0)
-    call vchksum(vbt, "BT Initial vbt",CS%debug_BT_G,haloshift=0)
-    call hchksum(GV%H_to_kg_m2*eta, "BT Initial eta",CS%debug_BT_G,haloshift=0)
-    call uchksum(BT_force_u, "BT BT_force_u",CS%debug_BT_G,haloshift=0)
-    call vchksum(BT_force_v, "BT BT_force_v",CS%debug_BT_G,haloshift=0)
+    call uchksum(uhbt, "BT uhbt",CS%debug_BT_HI,haloshift=0)
+    call vchksum(vhbt, "BT vhbt",CS%debug_BT_HI,haloshift=0)
+    call uchksum(ubt, "BT Initial ubt",CS%debug_BT_HI,haloshift=0)
+    call vchksum(vbt, "BT Initial vbt",CS%debug_BT_HI,haloshift=0)
+    call hchksum(GV%H_to_kg_m2*eta, "BT Initial eta",CS%debug_BT_HI,haloshift=0)
+    call uchksum(BT_force_u, "BT BT_force_u",CS%debug_BT_HI,haloshift=0)
+    call vchksum(BT_force_v, "BT BT_force_v",CS%debug_BT_HI,haloshift=0)
     if (interp_eta_PF) then
-      call hchksum(GV%H_to_kg_m2*eta_PF_1, "BT eta_PF_1",CS%debug_BT_G,haloshift=0)
-      call hchksum(GV%H_to_kg_m2*d_eta_PF, "BT d_eta_PF",CS%debug_BT_G,haloshift=0)
+      call hchksum(GV%H_to_kg_m2*eta_PF_1, "BT eta_PF_1",CS%debug_BT_HI,haloshift=0)
+      call hchksum(GV%H_to_kg_m2*d_eta_PF, "BT d_eta_PF",CS%debug_BT_HI,haloshift=0)
     else
-      call hchksum(GV%H_to_kg_m2*eta_PF, "BT eta_PF",CS%debug_BT_G,haloshift=0)
-      call hchksum(GV%H_to_kg_m2*eta_PF_in, "BT eta_PF_in",G,haloshift=0)
+      call hchksum(GV%H_to_kg_m2*eta_PF, "BT eta_PF",CS%debug_BT_HI,haloshift=0)
+      call hchksum(GV%H_to_kg_m2*eta_PF_in, "BT eta_PF_in",G%HI,haloshift=0)
     endif
-    call uchksum(Cor_ref_u, "BT Cor_ref_u",CS%debug_BT_G,haloshift=0)
-    call vchksum(Cor_ref_v, "BT Cor_ref_v",CS%debug_BT_G,haloshift=0)
-    call uchksum(uhbt0, "BT uhbt0",CS%debug_BT_G,haloshift=0)
-    call vchksum(vhbt0, "BT vhbt0",CS%debug_BT_G,haloshift=0)
+    call uchksum(Cor_ref_u, "BT Cor_ref_u",CS%debug_BT_HI,haloshift=0)
+    call vchksum(Cor_ref_v, "BT Cor_ref_v",CS%debug_BT_HI,haloshift=0)
+    call uchksum(uhbt0, "BT uhbt0",CS%debug_BT_HI,haloshift=0)
+    call vchksum(vhbt0, "BT vhbt0",CS%debug_BT_HI,haloshift=0)
     if (.not. use_BT_cont) then
-      call uchksum(GV%H_to_m*Datu, "BT Datu",CS%debug_BT_G,haloshift=1)
-      call vchksum(GV%H_to_m*Datv, "BT Datv",CS%debug_BT_G,haloshift=1)
+      call uchksum(GV%H_to_m*Datu, "BT Datu",CS%debug_BT_HI,haloshift=1)
+      call vchksum(GV%H_to_m*Datv, "BT Datv",CS%debug_BT_HI,haloshift=1)
     endif
-    call uchksum(wt_u, "BT wt_u",G,haloshift=1)
-    call vchksum(wt_v, "BT wt_v",G,haloshift=1)
-    call uchksum(CS%frhatu, "BT frhatu",G,haloshift=1)
-    call vchksum(CS%frhatv, "BT frhatv",G,haloshift=1)
-    call uchksum(bc_accel_u, "BT bc_accel_u",G,haloshift=0)
-    call vchksum(bc_accel_v, "BT bc_accel_v",G,haloshift=0)
-    call uchksum(CS%IDatu, "BT IDatu",G,haloshift=0)
-    call vchksum(CS%IDatv, "BT IDatv",G,haloshift=0)
+    call uchksum(wt_u, "BT wt_u",G%HI,haloshift=1)
+    call vchksum(wt_v, "BT wt_v",G%HI,haloshift=1)
+    call uchksum(CS%frhatu, "BT frhatu",G%HI,haloshift=1)
+    call vchksum(CS%frhatv, "BT frhatv",G%HI,haloshift=1)
+    call uchksum(bc_accel_u, "BT bc_accel_u",G%HI,haloshift=0)
+    call vchksum(bc_accel_v, "BT bc_accel_v",G%HI,haloshift=0)
+    call uchksum(CS%IDatu, "BT IDatu",G%HI,haloshift=0)
+    call vchksum(CS%IDatv, "BT IDatv",G%HI,haloshift=0)
     if (use_visc_rem) then
-      call uchksum(visc_rem_u, "BT visc_rem_u",G,haloshift=1)
-      call vchksum(visc_rem_v, "BT visc_rem_v",G,haloshift=1)
+      call uchksum(visc_rem_u, "BT visc_rem_u",G%HI,haloshift=1)
+      call vchksum(visc_rem_v, "BT visc_rem_v",G%HI,haloshift=1)
     endif
   endif
 
@@ -1824,8 +1824,8 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
     endif
 
     if (CS%debug_bt) then
-      call uchksum(uhbt, "BT uhbt just after OBC",CS%debug_BT_G,haloshift=iev-ie)
-      call vchksum(vhbt, "BT vhbt just after OBC",CS%debug_BT_G,haloshift=iev-ie)
+      call uchksum(uhbt, "BT uhbt just after OBC",CS%debug_BT_HI,haloshift=iev-ie)
+      call vchksum(vhbt, "BT vhbt just after OBC",CS%debug_BT_HI,haloshift=iev-ie)
     endif
 
 !$OMP parallel do default(none) shared(isv,iev,jsv,jev,n,eta,eta_src,dtbt,CS,uhbt,vhbt,eta_wtd,wt_eta)
@@ -1850,9 +1850,9 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
 
     if (CS%debug_bt) then
       write(mesg,'("BT step ",I4)') n
-      call uchksum(ubt, trim(mesg)//" ubt",CS%debug_BT_G,haloshift=iev-ie)
-      call vchksum(vbt, trim(mesg)//" vbt",CS%debug_BT_G,haloshift=iev-ie)
-      call hchksum(GV%H_to_kg_m2*eta, trim(mesg)//" eta",CS%debug_BT_G,haloshift=iev-ie)
+      call uchksum(ubt, trim(mesg)//" ubt",CS%debug_BT_HI,haloshift=iev-ie)
+      call vchksum(vbt, trim(mesg)//" vbt",CS%debug_BT_HI,haloshift=iev-ie)
+      call hchksum(GV%H_to_kg_m2*eta, trim(mesg)//" eta",CS%debug_BT_HI,haloshift=iev-ie)
     endif
 
   enddo ! end of do n=1,ntimestep
@@ -2861,9 +2861,9 @@ subroutine legacy_btcalc(h, G, GV, CS, h_u, h_v, may_use_default)
   endif
 
   if (CS%debug) then
-    call uchksum(CS%frhatu, "btcalc frhatu",G,haloshift=1)
-    call vchksum(CS%frhatv, "btcalc frhatv",G,haloshift=1)
-    call hchksum(GV%H_to_m*h, "btcalc h",G,haloshift=1)
+    call uchksum(CS%frhatu, "btcalc frhatu",G%HI,haloshift=1)
+    call vchksum(CS%frhatv, "btcalc frhatv",G%HI,haloshift=1)
+    call hchksum(GV%H_to_m*h, "btcalc h",G%HI,haloshift=1)
   endif
 
 end subroutine legacy_btcalc
@@ -3785,23 +3785,24 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, C
     call alloc_BT_cont_type(BT_cont, G, (CS%hvel_scheme == FROM_BT_CONT))
 
   if (CS%debug) then ! Make a local copy of loop ranges for chksum calls
-    allocate(CS%debug_BT_G)
-    CS%debug_BT_G%isc=G%isc
-    CS%debug_BT_G%iec=G%iec
-    CS%debug_BT_G%jsc=G%jsc
-    CS%debug_BT_G%jec=G%jec
-    CS%debug_BT_G%IscB=G%isc-1
-    CS%debug_BT_G%IecB=G%iec
-    CS%debug_BT_G%JscB=G%jsc-1
-    CS%debug_BT_G%JecB=G%jec
-    CS%debug_BT_G%isd=CS%isdw
-    CS%debug_BT_G%ied=CS%iedw
-    CS%debug_BT_G%jsd=CS%jsdw
-    CS%debug_BT_G%jed=CS%jedw
-    CS%debug_BT_G%IsdB=CS%isdw-1
-    CS%debug_BT_G%IedB=CS%iedw
-    CS%debug_BT_G%JsdB=CS%jsdw-1
-    CS%debug_BT_G%JedB=CS%jedw
+    allocate(CS%debug_BT_HI)
+    CS%debug_BT_HI%isc=G%isc
+    CS%debug_BT_HI%iec=G%iec
+    CS%debug_BT_HI%jsc=G%jsc
+    CS%debug_BT_HI%jec=G%jec
+    CS%debug_BT_HI%IscB=G%isc-1
+    CS%debug_BT_HI%IecB=G%iec
+    CS%debug_BT_HI%JscB=G%jsc-1
+    CS%debug_BT_HI%JecB=G%jec
+    CS%debug_BT_HI%isd=CS%isdw
+    CS%debug_BT_HI%ied=CS%iedw
+    CS%debug_BT_HI%jsd=CS%jsdw
+    CS%debug_BT_HI%jed=CS%jedw
+    CS%debug_BT_HI%IsdB=CS%isdw-1
+    CS%debug_BT_HI%IedB=CS%iedw
+    CS%debug_BT_HI%JsdB=CS%jsdw-1
+    CS%debug_BT_HI%JedB=CS%jedw
+    
   endif
 
   ! IareaT, IdxCu, and IdyCv need to be allocated with wide halos.
