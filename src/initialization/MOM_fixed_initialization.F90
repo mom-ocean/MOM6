@@ -25,6 +25,7 @@ use MOM_open_boundary, only : open_boundary_impose_land_mask
 use MOM_string_functions, only : uppercase
 use user_initialization, only : user_initialize_topography, USER_set_OBC_positions
 use DOME_initialization, only : DOME_initialize_topography, DOME_set_OBC_positions
+use TIDAL_BAY_initialization, only : TIDAL_BAY_set_OBC_positions
 use ISOMIP_initialization, only : ISOMIP_initialize_topography
 use benchmark_initialization, only : benchmark_initialize_topography
 use DOME2d_initialization, only : DOME2d_initialize_topography
@@ -89,11 +90,13 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
                  " configured: \n"//&
                  " \t DOME - use a slope and channel configuration for the \n"//&
                  " \t\t DOME sill-overflow test case. \n"//&
+                 " \t TIDAL_BAY - tidally-resonant rectangular basin. \n"//&
                  " \t USER - call a user modified routine.", default="file", &
                  fail_if_missing=.true.)
     select case ( trim(config) )
       case ("none")
       case ("DOME") ; call DOME_set_OBC_positions(G, PF, OBC)
+      case ("TIDAL_BAY") ; call TIDAL_BAY_set_OBC_positions(G, PF, OBC)
       case ("USER") ; call user_set_OBC_positions(G, PF, OBC)
       case default ; call MOM_error(FATAL, "MOM_initialize_fixed: "// &
                        "The open boundary positions specified by OBC_CONFIG="//&
