@@ -147,6 +147,9 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
 
   if (present(do_online_flag)) do_online = do_online_flag
 
+  khdt_x = 0.0 ; khdt_y = 0.0
+  Coef_x = 0.0 ; Coef_y = 0.0
+
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
        "register_tracer must be called before tracer_hordiff.")
   if (LOC(Reg)==0) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
