@@ -995,7 +995,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       call cpu_clock_begin(id_clock_tracer)
 
       ! Post fields used for offline tracer model
-      call post_advection_fields( G, CS%offline_CSp, CS%diag, CS%dt_trans, h, &
+      call post_advection_fields( G, CS%offline_CSp, CS%diag, h, &
                                   CS%uhtr, CS%vhtr, CS%tv%T, CS%tv%S )
       call advect_tracer(h, CS%uhtr, CS%vhtr, CS%OBC, CS%dt_trans, G, GV, &
                          CS%tracer_adv_CSp, CS%tracer_Reg)
@@ -1401,7 +1401,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     type(MOM_control_struct), pointer  :: CS            !< control structure from initialize_MOM
 
     ! Local pointers
-    type(ocean_grid_type),      pointer :: G     ! Pointer to a structure containing
+    type(ocean_grid_type),      pointer :: G  => NULL()    ! Pointer to a structure containing
                                                         ! metrics and related information
     type(verticalGrid_type),    pointer :: GV => NULL() ! Pointer to structure containing information
                                                         ! about the vertical grid
@@ -1437,18 +1437,18 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     ! U-cell pointer assignments
 
     ! V-cell pointer assignments
-    uhtr = 0.0
-    khdt_x = 0.0
-    vhtr = 0.0
-    khdt_y = 0.0
-    eatr = 0.0
-    ebtr = 0.0
-    h_old = GV%Angstrom
-    h_new = GV%Angstrom
-    h_adv = GV%Angstrom
-    h_end = GV%Angstrom
-    temp_old = 0.0
-    salt_old = 0.0
+    uhtr(:,:,:) = 0.0
+    vhtr(:,:,:) = 0.0
+    khdt_x(:,:) = 0.0
+    khdt_y(:,:) = 0.0
+    eatr(:,:,:) = 0.0
+    ebtr(:,:,:) = 0.0
+    h_old(:,:,:) = GV%Angstrom
+    h_new(:,:,:) = GV%Angstrom
+    h_adv(:,:,:) = GV%Angstrom
+    h_end(:,:,:) = GV%Angstrom
+    temp_old(:,:,:) = 0.0
+    salt_old(:,:,:) = 0.0
 
 
     if (.not.CS%adiabatic .AND. CS%use_ALE_algorithm ) then
@@ -1488,7 +1488,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
             CS%tv%T = CS%offline_CSp%T_preale
             CS%tv%S = CS%offline_CSp%S_preale
 
-            call do_group_pass(CS%pass_T_S_h, G%Domain)
+!            call do_group_pass(CS%pass_T_S_h, G%Domain)
 
         ! update squared quantities
             if (associated(CS%S_squared)) &
@@ -1524,11 +1524,9 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
 
         endif   ! endif for the block "if ( CS%use_ALE_algorithm )"
 
-
-
     endif
 !-----------ADVECTION AND DIFFUSION
-    call post_advection_fields( G, CS%offline_CSp, CS%diag, CS%dt_therm, h_adv, CS%uhtr, CS%vhtr, CS%tv%T, CS%tv%S )
+    call post_advection_fields( G, CS%offline_CSp, CS%diag, h_adv, CS%uhtr, CS%vhtr, CS%tv%T, CS%tv%S )
 
     if (CS%debug) then
       call hchksum(h_adv*GV%H_to_m,"Pre-advection h", G, haloshift=1)
