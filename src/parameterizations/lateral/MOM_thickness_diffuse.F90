@@ -202,7 +202,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
       (dt*(G%IdxCv(i,J)*G%IdxCv(i,J) + G%IdyCv(i,J)*G%IdyCv(i,J)))
   enddo ; enddo
 
-  call find_eta(h, tv, G%g_Earth, G, GV, e, halo_size=1)
+  call find_eta(h, tv, GV%g_Earth, G, GV, e, halo_size=1)
 
   ! Set the diffusivities.
 !$OMP parallel default(none) shared(is,ie,js,je,Khth_Loc_u,CS,use_VarMix,VarMix,    &
@@ -315,12 +315,20 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
   endif
 
   if (CS%debug) then
-    call uchksum(Kh_u(:,:,:),"Kh_u",G,haloshift=0)
-    call vchksum(Kh_v(:,:,:),"Kh_v",G,haloshift=0)
-    call uchksum(int_slope_u(:,:,:),"int_slope_u",G,haloshift=0)
-    call vchksum(int_slope_v(:,:,:),"int_slope_v",G,haloshift=0)
-    call hchksum(h(:,:,:)*H_to_m,"thickness_diffuse_1 h",G,haloshift=0)
-    call hchksum(e(:,:,:),"thickness_diffuse_1 e",G,haloshift=0)
+    call uchksum(Kh_u(:,:,:),"Kh_u",G%HI,haloshift=0)
+    call vchksum(Kh_v(:,:,:),"Kh_v",G%HI,haloshift=0)
+    call uchksum(int_slope_u(:,:,:),"int_slope_u",G%HI,haloshift=0)
+    call vchksum(int_slope_v(:,:,:),"int_slope_v",G%HI,haloshift=0)
+    call hchksum(h(:,:,:)*H_to_m,"thickness_diffuse_1 h",G%HI,haloshift=1)
+    call hchksum(e(:,:,:),"thickness_diffuse_1 e",G%HI,haloshift=1)
+    if (use_stored_slopes) then
+      call uchksum(VarMix%slope_x(:,:,:),"VarMix%slope_x",G%HI,haloshift=0)
+      call vchksum(VarMix%slope_y(:,:,:),"VarMix%slope_y",G%HI,haloshift=0)
+    endif
+    if (associated(tv%eqn_of_state)) then
+      call hchksum(tv%T(:,:,:),"thickness_diffuse T",G%HI,haloshift=1)
+      call hchksum(tv%S(:,:,:),"thickness_diffuse S",G%HI,haloshift=1)
+    endif
   endif
 
   ! Calculate uhD, vhD from h, e, KH_u, KH_v, tv%T/S
@@ -363,11 +371,11 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
   endif
 
   if (CS%debug) then
-    call uchksum(uhD(:,:,:)*H_to_m,"thickness_diffuse uhD",G,haloshift=0)
-    call vchksum(vhD(:,:,:)*H_to_m,"thickness_diffuse vhD",G,haloshift=0)
-    call uchksum(uhtr(:,:,:)*H_to_m,"thickness_diffuse uhtr",G,haloshift=0)
-    call vchksum(vhtr(:,:,:)*H_to_m,"thickness_diffuse vhtr",G,haloshift=0)
-    call hchksum(h(:,:,:)*H_to_m,"thickness_diffuse h",G,haloshift=0)
+    call uchksum(uhD(:,:,:)*H_to_m,"thickness_diffuse uhD",G%HI,haloshift=0)
+    call vchksum(vhD(:,:,:)*H_to_m,"thickness_diffuse vhD",G%HI,haloshift=0)
+    call uchksum(uhtr(:,:,:)*H_to_m,"thickness_diffuse uhtr",G%HI,haloshift=0)
+    call vchksum(vhtr(:,:,:)*H_to_m,"thickness_diffuse vhtr",G%HI,haloshift=0)
+    call hchksum(h(:,:,:)*H_to_m,"thickness_diffuse h",G%HI,haloshift=0)
   endif
 
   ! offer diagnostic fields for averaging
@@ -538,7 +546,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, GV, MEK
   H_to_m = GV%H_to_m ; m_to_H = GV%m_to_H
   I4dt = 0.25 / dt
   I_slope_max2 = 1.0 / (CS%slope_max**2)
-  G_scale = G%g_Earth * H_to_m
+  G_scale = GV%g_Earth * H_to_m
   h_neglect = GV%H_subroundoff ; h_neglect2 = h_neglect**2
   dz_neglect = GV%H_subroundoff*H_to_m
 

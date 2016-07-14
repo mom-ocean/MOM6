@@ -20,7 +20,7 @@ use PQM_functions, only : PQM_reconstruction, PQM_boundary_extrapolation_v1
 
 use P1M_functions, only : P1M_interpolation, P1M_boundary_extrapolation
 use P3M_functions, only : P3M_interpolation, P3M_boundary_extrapolation
-use MOM_remapping, only : remapping_core_w, remapping_core_h
+use MOM_remapping, only : remapping_core_h
 use MOM_remapping, only : remapping_CS
 use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
@@ -128,6 +128,17 @@ type, public :: regridding_CS
   !> A scaling factor (> 1) of the rate at which the coordinateResolution list
   !! is traversed to set the minimum depth of interfaces.
   real :: max_depth_index_scale = 2.0
+
+  !> If true, integrate for interface positions from the top downward.
+  !! If false, integrate from the bottom upward, as does the rest of the model.
+  logical :: integrate_downward_for_e = .true.
+
+
+  !> The height to use as a threshold for detection of a "rigid lid" such as an ice shelf
+  !! base. If the free-surface is depressed below this height the z* coordinate generator
+  !! assumes the depression is due to a rigid surface. This is a kludge until we provide
+  !! the position of such a surface to the ALE code.
+  real :: height_of_rigid_surface = -1.E30
 
 end type
 
@@ -254,14 +265,14 @@ end subroutine end_regridding
 !------------------------------------------------------------------------------
 ! Dispatching regridding routine: regridding & remapping
 !------------------------------------------------------------------------------
-subroutine regridding_main( remapCS, CS, G, GV, h, tv, dzInterface )
+subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface )
 !------------------------------------------------------------------------------
 ! This routine takes care of (1) building a new grid and (2) remapping between
 ! the old grid and the new grid. The creation of the new grid can be based
 ! on z coordinates, target interface densities, sigma coordinates or any
 ! arbitrary coordinate system.
 !   The MOM6 interface positions are always calculated from the bottom up by
-! accumulating the layer thicknessea starting at z=-G%bathyT.  z increases
+! accumulating the layer thicknesses starting at z=-G%bathyT.  z increases
 ! upwards (decreasing k-index).
 !   The new grid is defined by the change in position of those interfaces in z
 !       dzInterface = zNew - zOld.
@@ -273,38 +284,43 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, dzInterface )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(remapping_CS),                        intent(in)    :: remapCS !< Remapping parameters and options
-  type(regridding_CS),                       intent(in)    :: CS     !< Regridding control structure
-  type(ocean_grid_type),                     intent(in)    :: G      !< Ocean grid structure
-  type(verticalGrid_type),                   intent(in)    :: GV     !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h      !< Current 3D grid obtained after the last time step
-  type(thermo_var_ptrs),                     intent(inout) :: tv     !< Thermodynamical variables (T, S, ...)
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)+1), intent(inout) :: dzInterface  ! The change in position of each interface
-
-  real :: trickGnuCompiler
-
+  type(remapping_CS),                         intent(in)    :: remapCS !< Remapping parameters and options
+  type(regridding_CS),                        intent(in)    :: CS     !< Regridding control structure
+  type(ocean_grid_type),                      intent(in)    :: G      !< Ocean grid structure
+  type(verticalGrid_type),                    intent(in)    :: GV     !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G), SZK_(GV)), intent(inout) :: h      !< Current 3D grid obtained after the last time step
+  type(thermo_var_ptrs),                      intent(inout) :: tv     !< Thermodynamical variables (T, S, ...)
+  real, dimension(SZI_(G),SZJ_(G), SZK_(GV)), intent(inout) :: h_new  !< New 3D grid consistent with target coordinate
+  real, dimension(SZI_(G),SZJ_(G), SZK_(GV)+1), intent(inout) :: dzInterface !< The change in position of each interface
   ! Local variables
+  real :: trickGnuCompiler
 
   select case ( CS%regridding_scheme )
 
     case ( REGRIDDING_ZSTAR )
       call build_zstar_grid( CS, G, GV, h, dzInterface )
+      call calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
 
     case ( REGRIDDING_SIGMA )
-      call buildGridSigma( CS, G, GV, h, dzInterface )
+      call build_sigma_grid( CS, G, GV, h, dzInterface )
+      call calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
 
     case ( REGRIDDING_RHO )
-      call convective_adjustment(G, h, tv)
-      call buildGridRho( G, GV, h, tv, dzInterface, remapCS, CS )
+      call convective_adjustment(G, GV, h, tv)
+      call build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
+      call calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
 
     case ( REGRIDDING_ARBITRARY )
       call build_grid_arbitrary( G, GV, h, dzInterface, trickGnuCompiler, CS )
+      call calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
 
     case ( REGRIDDING_HYCOM1 )
       call build_grid_HyCOM1( G, GV, h, tv, dzInterface, remapCS, CS )
+      call calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
 
     case ( REGRIDDING_SLIGHT )
       call build_grid_SLight( G, GV, h, tv, dzInterface, remapCS, CS )
+      call calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
 
     case default
       call MOM_error(FATAL,'MOM_regridding, regridding_main: '//&
@@ -313,25 +329,50 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, dzInterface )
   end select ! type of grid
 
 #ifdef __DO_SAFETY_CHECKS__
-  call check_remapping_grid(G, h, dzInterface,'in regridding_main')
+  call check_remapping_grid(G, GV, h, dzInterface,'in regridding_main')
 #endif
 
 end subroutine regridding_main
 
+!> Calculates h_new from h + delta_k dzInterface
+subroutine calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
+  type(ocean_grid_type),                      intent(in)    :: G !< Grid structure
+  type(verticalGrid_type),                    intent(in)    :: GV !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)    :: h !< Old layer thicknesses (m)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: dzInterface !< Change in interface positions (m)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(inout) :: h_new !< New layer thicknesses (m)
+  ! Local variables
+  integer :: i, j, k
+
+!$OMP parallel do default(none) shared(G,GV,h,dzInterface,h_new)
+  do j = G%jsc-1,G%jec+1
+    do i = G%isc-1,G%iec+1
+      if (G%mask2dT(i,j)>0.) then
+        do k=1,GV%ke
+          h_new(i,j,k) = max( 0., h(i,j,k) + ( dzInterface(i,j,k) - dzInterface(i,j,k+1) ) )
+        enddo
+      else
+        h_new(i,j,:) = h(i,j,:)
+      endif
+    enddo
+  enddo
+
+end subroutine calc_h_new_by_dz
 
 !> Check that the total thickness of two grids match
-subroutine check_remapping_grid( G, h, dzInterface, msg )
-  type(ocean_grid_type),                      intent(in) :: G !< Grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in) :: h !< Layer thicknesses (m)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in) :: dzInterface !< Change in interface positions (m)
-  character(len=*),                           intent(in) :: msg !< Message to append to errors
+subroutine check_remapping_grid( G, GV, h, dzInterface, msg )
+  type(ocean_grid_type),                       intent(in) :: G !< Grid structure
+  type(verticalGrid_type),                     intent(in) :: GV !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in) :: h !< Layer thicknesses (m)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in) :: dzInterface !< Change in interface positions (m)
+  character(len=*),                            intent(in) :: msg !< Message to append to errors
   ! Local variables
   integer :: i, j
 
-!$OMP parallel do default(none) shared(G,h,dzInterface,msg)
+!$OMP parallel do default(none) shared(G,GV,h,dzInterface,msg)
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
-      if (G%mask2dT(i,j)>0.) call check_grid_column( G%ke, G%bathyT(i,j), h(i,j,:), dzInterface(i,j,:), msg )
+      if (G%mask2dT(i,j)>0.) call check_grid_column( GV%ke, G%bathyT(i,j), h(i,j,:), dzInterface(i,j,:), msg )
     enddo
   enddo
 
@@ -532,20 +573,20 @@ end subroutine filtered_grid_motion
 subroutine build_zstar_grid( CS, G, GV, h, dzInterface )
 
   ! Arguments
-  type(regridding_CS),                         intent(in)    :: CS !< Regridding control structure
-  type(ocean_grid_type),                       intent(in)    :: G  !< Ocean grid structure
-  type(verticalGrid_type),                     intent(in)    :: GV !< ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h  !< Layer thicknesses, in H
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)+1), intent(inout) :: dzInterface !< The change in interface depth in H.
+  type(regridding_CS),                          intent(in)    :: CS !< Regridding control structure
+  type(ocean_grid_type),                        intent(in)    :: G  !< Ocean grid structure
+  type(verticalGrid_type),                      intent(in)    :: GV !< ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    intent(in)    :: h  !< Layer thicknesses, in H
+  real, dimension(SZI_(G),SZJ_(G), SZK_(GV)+1), intent(inout) :: dzInterface !< The change in interface depth in H.
 
   ! Local variables
   integer :: i, j, k
   integer :: nz
   real    :: nominalDepth, totalThickness, dh
-  real, dimension(SZK_(G)+1) :: zOld, zNew
+  real, dimension(SZK_(GV)+1) :: zOld, zNew
   real :: minThickness
 
-  nz = G%ke
+  nz = GV%ke
   minThickness = CS%min_thickness
 
 !$OMP parallel do default(none) shared(G,GV,dzInterface,CS,nz,h)                 &
@@ -568,12 +609,18 @@ subroutine build_zstar_grid( CS, G, GV, h, dzInterface )
         totalThickness = totalThickness + h(i,j,k)
       end do
 
-      call build_zstar_column(CS, nz, nominalDepth, totalThickness, zNew)
-
       zOld(nz+1) = - nominalDepth
       do k = nz,1,-1
         zOld(k) = zOld(k+1) + h(i,j,k)
       enddo
+
+      if (totalThickness-nominalDepth<CS%height_of_rigid_surface) then
+        call build_zstar_column(CS, nz, nominalDepth, totalThickness, zNew, &
+                                z_rigid_top = totalThickness-nominalDepth, &
+                                eta_orig = zOld(1))
+      else
+        call build_zstar_column(CS, nz, nominalDepth, totalThickness, zNew)
+      endif
 
       ! Calculate the final change in grid position after blending new and old grids
       call filtered_grid_motion( CS, nz, zOld, zNew, dzInterface(i,j,:) )
@@ -603,40 +650,74 @@ subroutine build_zstar_grid( CS, G, GV, h, dzInterface )
 end subroutine build_zstar_grid
 
 !> Builds a z* coordinate with a minimum thickness
-subroutine build_zstar_column( CS, nz, depth, total_thickness, zInterface)
+subroutine build_zstar_column(CS, nz, depth, total_thickness, zInterface, z_rigid_top, eta_orig)
   type(regridding_CS),   intent(in)    :: CS !< Regridding control structure
   integer,               intent(in)    :: nz !< Number of levels
   real,                  intent(in)    :: depth !< Depth of ocean bottom (positive in m)
   real,                  intent(in)    :: total_thickness !< Column thickness (positive in m)
   real, dimension(nz+1), intent(inout) :: zInterface !< Absolute positions of interfaces
+  real, optional,        intent(in)    :: z_rigid_top !< The height of a rigid top (negative in m)
+  real, optional,        intent(in)    :: eta_orig !< The actual original height of the top (m)
   ! Local variables
-  real :: eta, stretching, dh, min_thickness
+  real :: eta, stretching, dh, min_thickness, z0_top, z_star
   integer :: k
+  logical :: new_zstar_def
 
+  new_zstar_def = .false.
   min_thickness = min( CS%min_thickness, total_thickness/real(nz) )
+  z0_top = 0.
+  if (present(z_rigid_top)) then
+    z0_top = z_rigid_top
+    new_zstar_def = .true.
+  endif
 
-  ! Position of free-surface
+  ! Position of free-surface (or the rigid top, for which eta ~ z0_top)
   eta = total_thickness - depth
+  if (present(eta_orig)) eta = eta_orig
 
-  ! z* = (z-eta) / stretching   where stretching = (H+eta)/H
-  ! z = eta + stretching * z*
-  stretching = total_thickness / depth
+  ! Conventional z* coordinate:
+  !   z* = (z-eta) / stretching   where stretching = (H+eta)/H
+  !   z = eta + stretching * z*
+  ! The above gives z*(z=eta) = 0, z*(z=-H) = -H.
+  ! With a rigid top boundary at eta = z0_top then
+  !   z* = z0 + (z-eta) / stretching   where stretching = (H+eta)/(H+z0)
+  !   z = eta + stretching * (z*-z0) * stretching
+  stretching = total_thickness / ( depth + z0_top )
 
-  ! Integrate down from the top for a notional new grid, ignoring topography
-  zInterface(1) = eta
-  do k = 1,nz
-    dh = stretching * CS%coordinateResolution(k) ! Notional grid spacing
-    zInterface(k+1) = zInterface(k) - dh
-  enddo
+  if (new_zstar_def) then
+    ! z_star is the notional z* coordinate in absence of upper/lower topography
+    z_star = 0. ! z*=0 at the free-surface
+    zInterface(1) = eta ! The actual position of the top of the column
+    do k = 2,nz
+      z_star = z_star - CS%coordinateResolution(k-1)
+      ! This ensures that z is below a rigid upper surface (ice shelf bottom)
+      zInterface(k) = min( eta + stretching * ( z_star - z0_top ), z0_top )
+      ! This ensures that the layer in inflated
+      zInterface(k) = min( zInterface(k), zInterface(k-1) - min_thickness )
+      ! This ensures that z is above or at the topography
+      zInterface(k) = max( zInterface(k), -depth + real(nz+1-k) * min_thickness )
+    enddo
+    zInterface(nz+1) = -depth
 
-  ! Integrating up from the bottom adjusting interface position to accommodate
-  ! inflating layers without disturbing the interface above
-  zInterface(nz+1) = -depth
-  do k = nz,1,-1
-    if ( zInterface(k) < (zInterface(k+1) + min_thickness) ) then
-      zInterface(k) = zInterface(k+1) + min_thickness
-    endif
-  enddo
+  else
+    ! Integrate down from the top for a notional new grid, ignoring topography
+    ! The starting position is offset by z0_top which, if z0_top<0, will place
+    ! interfaces above the rigid boundary.
+    zInterface(1) = eta
+    do k = 1,nz
+      dh = stretching * CS%coordinateResolution(k) ! Notional grid spacing
+      zInterface(k+1) = zInterface(k) - dh
+    enddo
+
+    ! Integrating up from the bottom adjusting interface position to accommodate
+    ! inflating layers without disturbing the interface above
+    zInterface(nz+1) = -depth
+    do k = nz,1,-1
+      if ( zInterface(k) < (zInterface(k+1) + min_thickness) ) then
+        zInterface(k) = zInterface(k+1) + min_thickness
+      endif
+    enddo
+  endif
 
 end subroutine build_zstar_column
 
@@ -644,7 +725,7 @@ end subroutine build_zstar_column
 !------------------------------------------------------------------------------
 ! Build sigma grid
 !------------------------------------------------------------------------------
-subroutine buildGridSigma( CS, G, GV, h, dzInterface )
+subroutine build_sigma_grid( CS, G, GV, h, dzInterface )
 !------------------------------------------------------------------------------
 ! This routine builds a grid based on terrain-following coordinates.
 ! The module parameter coordinateResolution(:) determines the resolution in
@@ -653,19 +734,19 @@ subroutine buildGridSigma( CS, G, GV, h, dzInterface )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(regridding_CS),                         intent(in)    :: CS !< Regridding control structure
-  type(ocean_grid_type),                       intent(in)    :: G  !< Ocean grid structure
-  type(verticalGrid_type),                     intent(in)    :: GV !< ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h  !< Layer thicknesses, in H
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)+1), intent(inout) :: dzInterface !< The change in interface depth in H.
+  type(regridding_CS),                          intent(in)    :: CS !< Regridding control structure
+  type(ocean_grid_type),                        intent(in)    :: G  !< Ocean grid structure
+  type(verticalGrid_type),                      intent(in)    :: GV !< ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    intent(in)    :: h  !< Layer thicknesses, in H
+  real, dimension(SZI_(G),SZJ_(G), SZK_(GV)+1), intent(inout) :: dzInterface !< The change in interface depth in H.
 
   ! Local variables
   integer :: i, j, k
   integer :: nz
   real    :: nominalDepth, totalThickness, dh
-  real, dimension(SZK_(G)+1) :: zOld, zNew
+  real, dimension(SZK_(GV)+1) :: zOld, zNew
 
-  nz = G%ke
+  nz = GV%ke
 
   do i = G%isc-1,G%iec+1
     do j = G%jsc-1,G%jec+1
@@ -706,7 +787,7 @@ subroutine buildGridSigma( CS, G, GV, h, dzInterface )
           write(0,*) k,h(i,j,k),zNew(k)-zNew(k+1),totalThickness*CS%coordinateResolution(k),CS%coordinateResolution(k)
         enddo
         call MOM_error( FATAL, &
-               'MOM_regridding, buildGridSigma: top surface has moved!!!' )
+               'MOM_regridding, build_sigma_grid: top surface has moved!!!' )
       endif
       dzInterface(i,j,1) = 0.
       dzInterface(i,j,nz+1) = 0.
@@ -715,13 +796,13 @@ subroutine buildGridSigma( CS, G, GV, h, dzInterface )
     end do
   end do
 
-end subroutine buildGridSigma
+end subroutine build_sigma_grid
 
 
 !------------------------------------------------------------------------------
 ! Build grid based on target interface densities
 !------------------------------------------------------------------------------
-subroutine buildGridRho( G, GV, h, tv, dzInterface, remapCS, CS )
+subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
 !------------------------------------------------------------------------------
 ! This routine builds a new grid based on a given set of target interface
 ! densities (these target densities are computed by taking the mean value
@@ -738,13 +819,13 @@ subroutine buildGridRho( G, GV, h, tv, dzInterface, remapCS, CS )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(ocean_grid_type),                       intent(in)    :: G  !< Ocean grid structure
-  type(verticalGrid_type),                     intent(in)    :: GV !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h  !< Layer thicknesses, in H
-  type(thermo_var_ptrs),                       intent(in)    :: tv !< Thermodynamics structure 
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)+1), intent(inout) :: dzInterface !< The change in interface depth in H
-  type(remapping_CS),                          intent(in)    :: remapCS !< The remapping control structure
-  type(regridding_CS),                         intent(in)    :: CS !< Regridding control structure
+  type(ocean_grid_type),                        intent(in)    :: G  !< Ocean grid structure
+  type(verticalGrid_type),                      intent(in)    :: GV !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    intent(in)    :: h  !< Layer thicknesses, in H
+  type(thermo_var_ptrs),                        intent(in)    :: tv !< Thermodynamics structure 
+  real, dimension(SZI_(G),SZJ_(G), SZK_(GV)+1), intent(inout) :: dzInterface !< The change in interface depth in H
+  type(remapping_CS),                           intent(in)    :: remapCS !< The remapping control structure
+  type(regridding_CS),                          intent(in)    :: CS !< Regridding control structure
 
   ! Local variables
   integer   :: i, j, k, m
@@ -762,18 +843,18 @@ subroutine buildGridRho( G, GV, h, tv, dzInterface, remapCS, CS )
   real, dimension(CS%nk,2) :: ppoly_i_S            !Edge slope of polynomial
   real, dimension(CS%nk,CS%degree_i+1) :: ppoly_i_coefficients !Coefficients of polynomial
   integer   :: ppoly_degree         ! The actual degree of the polynomials.
-  real, dimension(SZK_(G)) :: p_col, densities, T_col, S_col, Tmp_col
-  integer, dimension(SZK_(G)) :: mapping
+  real, dimension(SZK_(GV)) :: p_col, densities, T_col, S_col, Tmp_col
+  integer, dimension(SZK_(GV)) :: mapping
   real    :: nominalDepth, totalThickness, dh
-  real, dimension(SZK_(G)+1) :: zOld, zNew
-  real, dimension(SZK_(G)) :: h0, h1, hTmp
-  real, dimension(SZK_(G)+1) :: x0, x1, xTmp, dx
+  real, dimension(SZK_(GV)+1) :: zOld, zNew
+  real, dimension(SZK_(GV)) :: h0, h1, hTmp
+  real, dimension(SZK_(GV)+1) :: x0, x1, xTmp
 
-  nz = G%ke
+  nz = GV%ke
   threshold = CS%min_thickness
   p_col(:) = CS%ref_pressure
-  if (.not.CS%target_density_set) call MOM_error(FATAL, "buildGridRho : "//&
-        "Target densities must be set before buildGridRho is called.")
+  if (.not.CS%target_density_set) call MOM_error(FATAL, "build_rho_grid: "//&
+        "Target densities must be set before build_rho_grid is called.")
 
   ! Build grid based on target interface densities
   do j = G%jsc-1,G%jec+1
@@ -787,10 +868,6 @@ subroutine buildGridRho( G, GV, h, tv, dzInterface, remapCS, CS )
 
       ! Copy original grid
       h0(1:nz) = h(i,j,1:nz)
-      x0(1) = 0.0
-      do k = 1,nz
-        x0(k+1) = x0(k) + h0(k)
-      end do
 
       ! Start iterations to build grid
       m = 1
@@ -862,31 +939,29 @@ subroutine buildGridRho( G, GV, h, tv, dzInterface, remapCS, CS )
 
         ! Remap T and S from previous grid to new grid
         do k = 1,nz
-          h0(k) = x0(k+1) - x0(k)
           h1(k) = x1(k+1) - x1(k)
         end do
-        dx(:) = x1(:) - x0(:)
-        dx(1) = 0.
-        dx(nz+1) = 0.
 
-        call remapping_core_w(remapCS, nz, h0, S_col, nz, dx, Tmp_col)
+        call remapping_core_h(nz, h0, S_col, nz, h1, Tmp_col, remapCS)
         S_col(:) = Tmp_col(:)
 
-        call remapping_core_w(remapCS, nz, h0, T_col, nz, dx, Tmp_col)
+        call remapping_core_h(nz, h0, T_col, nz, h1, Tmp_col, remapCS)
         T_col(:) = Tmp_col(:)
 
         ! Compute the deviation between two successive grids
         deviation = 0.0
+        x0(1) = 0.0
+        x1(1) = 0.0
         do k = 2,nz
+          x0(k) = x0(k-1) + h0(k-1)
+          x1(k) = x1(k-1) + h1(k-1)
           deviation = deviation + (x0(k)-x1(k))**2
         end do
         deviation = sqrt( deviation / (nz-1) )
 
-
         m = m + 1
 
         ! Copy final grid onto start grid for next iteration
-        x0(:) = x1(:)
         h0(:) = h1(:)
 
       end do ! end regridding iterations
@@ -894,20 +969,29 @@ subroutine buildGridRho( G, GV, h, tv, dzInterface, remapCS, CS )
       ! Local depth (G%bathyT is positive)
       nominalDepth = G%bathyT(i,j)*GV%m_to_H
 
-      ! The rest of the model defines grids integrating up from the bottom
       totalThickness = 0.0
-      zOld(nz+1) = - nominalDepth
-      zNew(nz+1) = - nominalDepth
-      do k = nz,1,-1
-        totalThickness = totalThickness + h(i,j,k)
-        zNew(k) = zNew(k+1) + h1(k)
-        ! Adjust interface position to accomodate inflating layers
-        ! without disturbing the interface above
-  !     if ( zNew(k) < (zNew(k+1) + CS%min_thickness) ) then
-  !       zNew(k) = zNew(k+1) + CS%min_thickness
-  !     endif
-        zOld(k) = zOld(k+1) + h(i,j,k)
-      enddo
+      if (CS%integrate_downward_for_e) then
+        zOld(1) = 0.
+        zNew(1) = 0.
+        do k = 1,nz
+          totalThickness = totalThickness + h(i,j,k)
+          zNew(k+1) = zNew(k) - h1(k)
+          ! Adjust interface position to accomodate inflating layers
+          ! without disturbing the interface above
+          zOld(k+1) = zOld(k) - h(i,j,k)
+        enddo
+      else
+        ! The rest of the model defines grids integrating up from the bottom
+        zOld(nz+1) = - nominalDepth
+        zNew(nz+1) = - nominalDepth
+        do k = nz,1,-1
+          totalThickness = totalThickness + h(i,j,k)
+          zNew(k) = zNew(k+1) + h1(k)
+          ! Adjust interface position to accomodate inflating layers
+          ! without disturbing the interface above
+          zOld(k) = zOld(k+1) + h(i,j,k)
+        enddo
+      endif
 
       ! Calculate the final change in grid position after blending new and old grids
       call filtered_grid_motion( CS, nz, zOld, zNew, dzInterface(i,j,:) )
@@ -916,13 +1000,13 @@ subroutine buildGridRho( G, GV, h, tv, dzInterface, remapCS, CS )
         if (zNew(k) > zOld(1)) then
           write(0,*) 'zOld=',zOld
           write(0,*) 'zNew=',zNew
-          call MOM_error( FATAL, 'MOM_regridding, buildGridRho: '//&
+          call MOM_error( FATAL, 'MOM_regridding, build_rho_grid: '//&
                'interior interface above surface!' )
         endif
         if (zNew(k) > zNew(k-1)) then
           write(0,*) 'zOld=',zOld
           write(0,*) 'zNew=',zNew
-          call MOM_error( FATAL, 'MOM_regridding, buildGridRho: '//&
+          call MOM_error( FATAL, 'MOM_regridding, build_rho_grid: '//&
                'interior interfaces cross!' )
         endif
       enddo
@@ -941,14 +1025,14 @@ subroutine buildGridRho( G, GV, h, tv, dzInterface, remapCS, CS )
           write(0,*) k,h(i,j,k),zNew(k)-zNew(k+1)
         enddo
         call MOM_error( FATAL, &
-               'MOM_regridding, buildGridRho: top surface has moved!!!' )
+               'MOM_regridding, build_rho_grid: top surface has moved!!!' )
       endif
 #endif
 
     end do  ! end loop on i
   end do  ! end loop on j
 
-end subroutine buildGridRho
+end subroutine build_rho_grid
 
 !> Builds a simple HyCOM-like grid with the deepest location of potential
 !! density interpolated from the column profile and a clipping of depth for
@@ -958,18 +1042,18 @@ end subroutine buildGridRho
 !! hybrid isopycnic-Cartesian coordinates, Ocean Modelling 37, 55-88.
 !! http://dx.doi.org/10.1016/S1463-5003(01)00012-9 }
 subroutine build_grid_HyCOM1( G, GV, h, tv, dzInterface, remapCS, CS )
-  type(ocean_grid_type),                      intent(in)    :: G  !< Grid structure
-  type(verticalGrid_type),                    intent(in)    :: GV !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h  !< Existing model thickness, in H units
-  type(thermo_var_ptrs),                      intent(in)    :: tv !< Thermodynamics structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: dzInterface !< Changes in interface position
-  type(remapping_CS),                         intent(in)    :: remapCS !< Remapping control structure
-  type(regridding_CS),                        intent(in)    :: CS !< Regridding control structure
+  type(ocean_grid_type),                       intent(in)    :: G  !< Grid structure
+  type(verticalGrid_type),                     intent(in)    :: GV !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)    :: h  !< Existing model thickness, in H units
+  type(thermo_var_ptrs),                       intent(in)    :: tv !< Thermodynamics structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: dzInterface !< Changes in interface position
+  type(remapping_CS),                          intent(in)    :: remapCS !< Remapping control structure
+  type(regridding_CS),                         intent(in)    :: CS !< Regridding control structure
   ! Local variables
   integer   :: i, j, k, nz
-  real, dimension(SZK_(G)) :: T_col, S_col, p_col, rho_col, h_col_new ! Layer quantities
-  real, dimension(SZK_(G)+1) :: z_col, z_col_new ! Interface positions relative to the surface in H units (m or kg m-2)
-  real, dimension(SZK_(G)+1) :: dz_col  ! The realized change in z_col in H units (m or kg m-2)
+  real, dimension(SZK_(GV)) :: T_col, S_col, p_col, rho_col, h_col_new ! Layer quantities
+  real, dimension(SZK_(GV)+1) :: z_col, z_col_new ! Interface positions relative to the surface in H units (m or kg m-2)
+  real, dimension(SZK_(GV)+1) :: dz_col  ! The realized change in z_col in H units (m or kg m-2)
   real, dimension(CS%nk,2) :: ppoly_i_E ! Edge value of polynomial
   real, dimension(CS%nk,2) :: ppoly_i_S ! Edge slope of polynomial
   real, dimension(CS%nk,CS%degree_i+1) :: ppoly_i_coefficients ! Coefficients of polynomial
@@ -980,7 +1064,7 @@ subroutine build_grid_HyCOM1( G, GV, h, tv, dzInterface, remapCS, CS )
   logical :: maximum_h_set      ! If true, the maximum layer thicknesses have been set.
   integer :: ppoly_degree
 
-  nz = G%ke
+  nz = GV%ke
   maximum_depths_set = allocated(CS%max_interface_depths)
   maximum_h_set = allocated(CS%max_layer_thickness)
 
@@ -1064,25 +1148,25 @@ end subroutine build_grid_HyCOM1
 !! For sufficiently shallow water, a minimum grid spacing is used to avoid
 !! certain instabilities.
 subroutine build_grid_SLight( G, GV, h, tv, dzInterface, remapCS, CS )
-  type(ocean_grid_type),                        intent(in)    :: G  !< Grid structure
-  type(verticalGrid_type),                      intent(in)    :: GV !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),     intent(in)    :: h  !< Existing model thickness, in H units
-  type(thermo_var_ptrs),                        intent(in)    :: tv !< Thermodynamics structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),   intent(inout) :: dzInterface !< Changes in interface position
-  type(remapping_CS),                           intent(in)    :: remapCS !< Remapping control structure
-  type(regridding_CS),                          intent(in)    :: CS !< Regridding control structure
+  type(ocean_grid_type),                       intent(in)    :: G  !< Grid structure
+  type(verticalGrid_type),                     intent(in)    :: GV !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)    :: h  !< Existing model thickness, in H units
+  type(thermo_var_ptrs),                       intent(in)    :: tv !< Thermodynamics structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: dzInterface !< Changes in interface position
+  type(remapping_CS),                          intent(in)    :: remapCS !< Remapping control structure
+  type(regridding_CS),                         intent(in)    :: CS !< Regridding control structure
   ! Local variables
-  real, dimension(SZK_(G)) :: T_col, S_col, p_col, rho_col ! Layer quantities
-  real, dimension(SZK_(G)) :: h_col     ! A column of layer thicknesses on the original grid in H units.
-  real, dimension(SZK_(G)) :: T_f, S_f  ! Filtered ayer quantities
-  real, dimension(SZK_(G)+1) :: z_col, z_col_new ! Interface positions relative to the surface in H units (m or kg m-2)
-  real, dimension(SZK_(G)+1) :: dz_col  ! The realized change in z_col in H units (m or kg m-2)
-  logical, dimension(SZK_(G)+1) :: reliable  ! If true, this interface is in a reliable position.
-  real, dimension(SZK_(G)+1) :: T_int, S_int ! Temperature and salinity interpolated to interfaces.
-  real, dimension(SZK_(G)+1) :: rho_tmp, drho_dp, p_IS, p_R
-  real, dimension(SZK_(G)+1) :: drhoIS_dT, drhoIS_dS
-  real, dimension(SZK_(G)+1) :: drhoR_dT, drhoR_dS
-  real, dimension(SZK_(G)+1) :: strat_rat
+  real, dimension(SZK_(GV)) :: T_col, S_col, p_col, rho_col ! Layer quantities
+  real, dimension(SZK_(GV)) :: h_col     ! A column of layer thicknesses on the original grid in H units.
+  real, dimension(SZK_(GV)) :: T_f, S_f  ! Filtered ayer quantities
+  real, dimension(SZK_(GV)+1) :: z_col, z_col_new ! Interface positions relative to the surface in H units (m or kg m-2)
+  real, dimension(SZK_(GV)+1) :: dz_col  ! The realized change in z_col in H units (m or kg m-2)
+  logical, dimension(SZK_(GV)+1) :: reliable  ! If true, this interface is in a reliable position.
+  real, dimension(SZK_(GV)+1) :: T_int, S_int ! Temperature and salinity interpolated to interfaces.
+  real, dimension(SZK_(GV)+1) :: rho_tmp, drho_dp, p_IS, p_R
+  real, dimension(SZK_(GV)+1) :: drhoIS_dT, drhoIS_dS
+  real, dimension(SZK_(GV)+1) :: drhoR_dT, drhoR_dS
+  real, dimension(SZK_(GV)+1) :: strat_rat
   real :: H_to_cPa
   real :: drIS, drR, Fn_now, I_HStol, Fn_zero_val
   real :: z_int_unst
@@ -1105,12 +1189,12 @@ subroutine build_grid_SLight( G, GV, h, tv, dzInterface, remapCS, CS )
   real :: k2_used, k2here, dz_sum, z_max
   integer :: k2
   real :: h_tr, b_denom_1, b1, d1 ! Temporary variables used by the tridiagonal solver.
-  real, dimension(SZK_(G)) :: c1  ! Temporary variables used by the tridiagonal solver.
+  real, dimension(SZK_(GV)) :: c1  ! Temporary variables used by the tridiagonal solver.
   integer :: kur1, kur2  ! The indicies at the top and bottom of an unreliable region.
   integer :: kur_ss      ! The index to start with in the search for the next unstable region.
   integer :: i, j, k, nz, nkml
 
-  nz = G%ke
+  nz = GV%ke
   maximum_depths_set = allocated(CS%max_interface_depths)
   maximum_h_set = allocated(CS%max_layer_thickness)
 
@@ -1662,7 +1746,7 @@ subroutine adjust_interface_motion( nk, min_thickness, h_old, dz_int )
                      'implied h<0 is larger than roundoff!')
     endif
   enddo
-  do k = nk,1,-1
+  do k = nk,2,-1
     h_new = h_old(k) + ( dz_int(k) - dz_int(k+1) )
     if (h_new<min_thickness) dz_int(k) = ( dz_int(k+1) - h_old(k) ) + min_thickness ! Implies next h_new = min_thickness
     h_new = h_old(k) + ( dz_int(k) - dz_int(k+1) )
@@ -1677,7 +1761,7 @@ subroutine adjust_interface_motion( nk, min_thickness, h_old, dz_int )
                      'Repeated adjustment for roundoff h<0 failed!')
     endif
   enddo
-  if (dz_int(1)/=0.) stop 'MOM_regridding: adjust_interface_motion() surface moved'
+ !if (dz_int(1)/=0.) stop 'MOM_regridding: adjust_interface_motion() surface moved'
 
 end subroutine adjust_interface_motion
 
@@ -1690,17 +1774,17 @@ subroutine build_grid_arbitrary( G, GV, h, dzInterface, h_new, CS )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(ocean_grid_type),                       intent(in)    :: G  !< Ocean grid structure
-  type(verticalGrid_type),                     intent(in)    :: GV !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)),   intent(in)    :: h  !< Original ayer thicknesses, in H
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)+1), intent(inout) :: dzInterface !< The change in interface depth in H
-  real,                                        intent(inout) :: h_new !< New layer thicknesses, in H
-  type(regridding_CS),                         intent(in)    :: CS !< Regridding control structure
+  type(ocean_grid_type),                        intent(in)    :: G  !< Ocean grid structure
+  type(verticalGrid_type),                      intent(in)    :: GV !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G), SZK_(GV)),   intent(in)    :: h  !< Original ayer thicknesses, in H
+  real, dimension(SZI_(G),SZJ_(G), SZK_(GV)+1), intent(inout) :: dzInterface !< The change in interface depth in H
+  real,                                         intent(inout) :: h_new !< New layer thicknesses, in H
+  type(regridding_CS),                          intent(in)    :: CS !< Regridding control structure
 
   ! Local variables
   integer   :: i, j, k
   integer   :: nz
-  real      :: z_inter(SZK_(G)+1)
+  real      :: z_inter(SZK_(GV)+1)
   real      :: total_height
   real      :: delta_h
   real      :: max_depth
@@ -1710,7 +1794,7 @@ subroutine build_grid_arbitrary( G, GV, h, dzInterface, h_new, CS )
   real      :: x1, y1, x2, y2
   real      :: x, t
 
-  nz = G%ke
+  nz = GV%ke
 
   max_depth = G%max_depth
   min_thickness = CS%min_thickness
@@ -2168,7 +2252,7 @@ end function get_polynomial_coordinate
 !------------------------------------------------------------------------------
 ! Check grid integrity
 !------------------------------------------------------------------------------
-subroutine inflate_vanished_layers_old( CS, G, h )
+subroutine inflate_vanished_layers_old( CS, G, GV, h )
 !------------------------------------------------------------------------------
 ! This routine is called when initializing the regridding options. The
 ! objective is to make sure all layers are at least as thick as the minimum
@@ -2180,24 +2264,25 @@ subroutine inflate_vanished_layers_old( CS, G, h )
   ! Arguments
   type(regridding_CS),                    intent(in)    :: CS
   type(ocean_grid_type),                  intent(in)    :: G
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h
+  type(verticalGrid_type),                intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G), SZK_(GV)), intent(inout) :: h
 
   ! Local variables
   integer :: i, j, k
-  real    :: hTmp(G%ke)
+  real    :: hTmp(GV%ke)
 
   do i = G%isc-1,G%iec+1
     do j = G%jsc-1,G%jec+1
 
       ! Build grid for current column
-      do k = 1,G%ke
+      do k = 1,GV%ke
         hTmp(k) = h(i,j,k)
       end do
 
-      call old_inflate_layers_1d( CS%min_thickness, G%ke, hTmp )
+      call old_inflate_layers_1d( CS%min_thickness, GV%ke, hTmp )
 
       ! Save modified grid
-      do k = 1,G%ke
+      do k = 1,GV%ke
         h(i,j,k) = hTmp(k)
       end do
 
@@ -2271,7 +2356,7 @@ end subroutine old_inflate_layers_1d
 !------------------------------------------------------------------------------
 ! Convective adjustment by swapping layers
 !------------------------------------------------------------------------------
-subroutine convective_adjustment(G, h, tv)
+subroutine convective_adjustment(G, GV, h, tv)
 !------------------------------------------------------------------------------
 ! Check each water column to see whether it is stratified. If not, sort the
 ! layers by successive swappings of water masses (bubble sort algorithm)
@@ -2279,7 +2364,8 @@ subroutine convective_adjustment(G, h, tv)
 
   ! Arguments
   type(ocean_grid_type), intent(in)                  :: G
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h
+  type(verticalGrid_type), intent(in)                :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: h
   type(thermo_var_ptrs), intent(inout)               :: tv
 
   ! Local variables
@@ -2289,7 +2375,7 @@ subroutine convective_adjustment(G, h, tv)
   real      :: r0, r1       ! densities
   real      :: h0, h1
   logical   :: stratified
-  real, dimension(G%kE) :: p_col, densities
+  real, dimension(GV%ke) :: p_col, densities
 
   p_col(:) = 0.
 
@@ -2298,12 +2384,12 @@ subroutine convective_adjustment(G, h, tv)
 
     ! Compute densities within current water column
     call calculate_density( tv%T(i,j,:), tv%S(i,j,:), p_col, &
-                            densities, 1, G%ke, tv%eqn_of_state )
+                            densities, 1, GV%ke, tv%eqn_of_state )
 
     ! Repeat restratification until complete
     do
       stratified = .true.
-      do k = 1,G%ke-1
+      do k = 1,GV%ke-1
         ! Gather information of current and next cells
         T0 = tv%T(i,j,k)  ; T1 = tv%T(i,j,k+1)
         S0 = tv%S(i,j,k)  ; S1 = tv%S(i,j,k+1)
@@ -2473,23 +2559,31 @@ function getCoordinateResolution( CS )
 
 end function getCoordinateResolution
 
-!------------------------------------------------------------------------------
-! Query the target coordinate interfaces positions
-!------------------------------------------------------------------------------
+!> Query the target coordinate interface positions
 function getCoordinateInterfaces( CS )
-  type(regridding_CS), intent(in) :: CS
-  real, dimension(CS%nk+1)        :: getCoordinateInterfaces
+  type(regridding_CS), intent(in) :: CS                      !< Regridding control structure
+  real, dimension(CS%nk+1)        :: getCoordinateInterfaces !< Interface positions in target coordinate
 
   integer :: k
 
-  getCoordinateInterfaces(1) = 0.
-  do k = 1, CS%nk
-    getCoordinateInterfaces(k+1) = getCoordinateInterfaces(k) &
-                                  -CS%coordinateResolution(k)
-  enddo
-  ! The following line has an "abs()" to allow ferret users to reference
-  ! data by index. It is a temporary work around...  :(  -AJA
-  getCoordinateInterfaces(:) = abs( getCoordinateInterfaces(:) )
+  ! When using a coordinate with target densities, we need to get the actual
+  ! densities, rather than computing the interfaces based on resolution
+  if (CS%regridding_scheme == REGRIDDING_RHO) then
+    if (.not. CS%target_density_set) &
+      call MOM_error(FATAL, 'MOM_regridding, getCoordinateInterfaces: '//&
+                            'target densities not set!')
+
+    getCoordinateInterfaces(:) = CS%target_density(:)
+  else
+    getCoordinateInterfaces(1) = 0.
+    do k = 1, CS%nk
+      getCoordinateInterfaces(k+1) = getCoordinateInterfaces(k) &
+                                    -CS%coordinateResolution(k)
+    enddo
+    ! The following line has an "abs()" to allow ferret users to reference
+    ! data by index. It is a temporary work around...  :(  -AJA
+    getCoordinateInterfaces(:) = abs( getCoordinateInterfaces(:) )
+  end if
 
 end function getCoordinateInterfaces
 
@@ -2550,7 +2644,7 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
              depth_of_time_filter_shallow, depth_of_time_filter_deep, &
              compress_fraction, dz_min_surface, nz_fixed_surface, Rho_ML_avg_depth, &
              nlay_ML_to_interior, fix_haloclines, halocline_filt_len, &
-             halocline_strat_tol)
+             halocline_strat_tol, integrate_downward_for_e, height_of_rigid_surface)
   type(regridding_CS), intent(inout) :: CS !< Regridding control structure
   logical, optional, intent(in) :: boundary_extrapolation !< Extrapolate in boundary cells
   real,    optional, intent(in) :: min_thickness !< Minimum thickness allowed when building the new grid (m)
@@ -2565,6 +2659,8 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
   logical, optional, intent(in) :: fix_haloclines !< Detect regions with much weaker stratification in the coordinate
   real,    optional, intent(in) :: halocline_filt_len !< Length scale over which to filter T & S when looking for spuriously unstable water mass profiles (m)
   real,    optional, intent(in) :: halocline_strat_tol !< Value of the stratification ratio that defines a problematic halocline region.
+  logical, optional, intent(in) :: integrate_downward_for_e !< If true, integrate for interface positions downward from the top.
+  real,    optional, intent(in) :: height_of_rigid_surface !< Threshold height for detection of a rigid upper surface.
 
   if (present(boundary_extrapolation)) CS%boundary_extrapolation = boundary_extrapolation
   if (present(min_thickness)) CS%min_thickness = min_Thickness
@@ -2591,6 +2687,8 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
         "HALOCLINE_STRAT_TOL must not exceed 1.0.")
     CS%halocline_strat_tol = halocline_strat_tol
   endif
+  if (present(integrate_downward_for_e)) CS%integrate_downward_for_e = integrate_downward_for_e
+  if (present(height_of_rigid_surface)) CS%height_of_rigid_surface = height_of_rigid_surface
 
 end subroutine set_regrid_params
 
@@ -2672,7 +2770,7 @@ subroutine regridding_memory_deallocation( CS )
 
 end subroutine regridding_memory_deallocation
 
-!> \namespace MOM_regridding
+!> \namespace mom_regridding
 !!
 !! A vertical grid is defined solely by the cell thicknesses, \f$h\f$.
 !! Most calculations in this module start with the coordinate at the bottom

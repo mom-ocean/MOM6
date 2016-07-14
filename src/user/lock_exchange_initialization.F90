@@ -19,18 +19,11 @@ module lock_exchange_initialization
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
 !***********************************************************************
 
-!***********************************************************************
-!*                                                                     *
-!*  The module configures the model for the "lock_exchange" experiment.*
-!*  lock_exchange = A 2-d density driven hydraulic exchange flow.      *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
-
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_tracer_registry, only : tracer_registry_type, add_tracer_OBC_values
+use MOM_tracer_registry, only : tracer_registry_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 
@@ -42,19 +35,15 @@ public lock_exchange_initialize_thickness
 
 contains
 
+!> This subroutine initializes layer thicknesses for the lock_exchange experiment.
 ! -----------------------------------------------------------------------------
 subroutine lock_exchange_initialize_thickness(h, G, GV, param_file)
-  type(ocean_grid_type),   intent(in) :: G
-  type(verticalGrid_type), intent(in) :: GV
-  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h
-  type(param_file_type),   intent(in) :: param_file
-! Arguments: h - The thickness that is being initialized.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
+  type(ocean_grid_type),   intent(in) :: G                    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in) :: GV                   !< The ocean's vertical grid structure.
+  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h !< The thickness that is being initialized.
+  type(param_file_type),   intent(in) :: param_file           !< A structure indicating the open file to
+                                                              !! parse for model parameter values.
 
-!  This subroutine initializes layer thicknesses for the lock_exchange experiment
   real :: e0(SZK_(G))     ! The resting interface heights, in m, usually !
                           ! negative because it is positive upward.      !
   real :: e_pert(SZK_(G)) ! Interface height perturbations, positive     !
@@ -106,4 +95,8 @@ subroutine lock_exchange_initialize_thickness(h, G, GV, param_file)
 end subroutine lock_exchange_initialize_thickness
 ! -----------------------------------------------------------------------------
 
+!> \class lock_exchange_initialization
+!!
+!! The module configures the model for the "lock_exchange" experiment.
+!! lock_exchange = A 2-d density driven hydraulic exchange flow.
 end module lock_exchange_initialization

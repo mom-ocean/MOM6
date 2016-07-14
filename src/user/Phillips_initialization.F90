@@ -19,77 +19,17 @@ module Phillips_initialization
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
 !***********************************************************************
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, April 1994 - June 2002                         *
-!*                                                                     *
-!*    This subroutine initializes the fields for the simulations.      *
-!*  The one argument passed to initialize, Time, is set to the         *
-!*  current time of the simulation.  The fields which are initialized  *
-!*  here are:                                                          *
-!*    u - Zonal velocity in m s-1.                                     *
-!*    v - Meridional velocity in m s-1.                                *
-!*    h - Layer thickness in m.  (Must be positive.)                   *
-!*    D - Basin depth in m.  (Must be positive.)                       *
-!*    f - The Coriolis parameter, in s-1.                              *
-!*    g - The reduced gravity at each interface, in m s-2.             *
-!*    Rlay - Layer potential density (coordinate variable) in kg m-3.  *
-!*  If ENABLE_THERMODYNAMICS is defined:                               *
-!*    T - Temperature in C.                                            *
-!*    S - Salinity in psu.                                             *
-!*  If SPONGE is defined:                                              *
-!*    A series of subroutine calls are made to set up the damping      *
-!*    rates and reference profiles for all variables that are damped   *
-!*    in the sponge.                                                   *
-!*  Any user provided tracer code is also first linked through this    *
-!*  subroutine.                                                        *
-!*                                                                     *
-!*    Forcing-related fields (taux, tauy, buoy, ustar, etc.) are set   *
-!*  in MOM_surface_forcing.F90.                                        *
-!*                                                                     *
-!*    These variables are all set in the set of subroutines (in this   *
-!*  file) USER_initialize_bottom_depth, USER_initialize_thickness,     *
-!*  USER_initialize_velocity,  USER_initialize_temperature_salinity,   *
-!*  USER_initialize_mixed_layer_density, USER_initialize_sponges,      *
-!*  USER_set_coord, and USER_set_ref_profile.                          *
-!*                                                                     *
-!*    The names of these subroutines should be self-explanatory. They  *
-!*  start with "USER_" to indicate that they will likely have to be    *
-!*  modified for each simulation to set the initial conditions and     *
-!*  boundary conditions.  Most of these take two arguments: an integer *
-!*  argument specifying whether the fields are to be calculated        *
-!*  internally or read from a NetCDF file; and a string giving the     *
-!*  path to that file.  If the field is initialized internally, the    *
-!*  path is ignored.                                                   *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, f                                     *
-!*    j+1  > o > o >   At ^:  v, tauy                                  *
-!*    j    x ^ x ^ x   At >:  u, taux                                  *
-!*    j    > o > o >   At o:  h, D, buoy, tr, T, S, ustar              *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
-
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
+use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : close_file, create_file, fieldtype, file_exists
+use MOM_io, only : close_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
 use MOM_io, only : write_field, slasher
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
-use MOM_tracer_registry, only : tracer_registry_type, add_tracer_OBC_values
+use MOM_tracer_registry, only : tracer_registry_type
 use MOM_variables, only : thermo_var_ptrs
-use MOM_variables, only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE
-use MOM_variables, only : OBC_FLATHER_E, OBC_FLATHER_W, OBC_FLATHER_N, OBC_FLATHER_S
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 
@@ -107,11 +47,15 @@ public Phillips_initialize_topography
 
 contains
 
+!> Initialize thickness field.
 subroutine Phillips_initialize_thickness(h, G, GV, param_file)
-  type(ocean_grid_type),   intent(in) :: G
-  type(verticalGrid_type), intent(in) :: GV
-  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h
-  type(param_file_type),   intent(in) :: param_file
+  type(ocean_grid_type),   intent(in) :: G          !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in) :: GV         !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(out) :: h         !< The thickness that is being initialized.
+  type(param_file_type),   intent(in) :: param_file !< A structure indicating the
+                                                    !! open file to parse for model
+                                                    !! parameter values.
 
   real :: eta0(SZK_(G)+1)   ! The 1-d nominal positions of the interfaces.
   real :: eta_im(SZJ_(G),SZK_(G)+1) ! A temporary array for zonal-mean eta, m.
@@ -178,12 +122,15 @@ subroutine Phillips_initialize_thickness(h, G, GV, param_file)
 
 end subroutine Phillips_initialize_thickness
 
+!> Initialize velocity fields.
 subroutine Phillips_initialize_velocity(u, v, G, GV, param_file)
-  type(ocean_grid_type),                intent(in)  :: G
-  type(verticalGrid_type),              intent(in)  :: GV
-  real, dimension(SZIB_(G),SZJ_(G), SZK_(G)), intent(out) :: u
-  real, dimension(SZI_(G),SZJB_(G), SZK_(G)), intent(out) :: v
-  type(param_file_type),                intent(in)  :: param_file
+  type(ocean_grid_type),                  intent(in)     :: G  !< Grid structure
+  type(verticalGrid_type),                intent(in)     :: GV !< Vertical grid structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: u  !< i-component of velocity [m/s]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: v  !< j-component of velocity [m/s]
+  type(param_file_type),                  intent(in)     :: param_file !< A structure indicating
+                                                            !! the open file to parse for model
+                                                            !! parameter values.
 
   real :: damp_rate, jet_width, jet_height, x_2, y_2
   real :: velocity_amplitude, pi
@@ -234,13 +181,24 @@ subroutine Phillips_initialize_velocity(u, v, G, GV, param_file)
 
 end subroutine Phillips_initialize_velocity
 
+!> Sets up the the inverse restoration time (Idamp), and
+! the values towards which the interface heights and an arbitrary
+! number of tracers should be restored within each sponge.
 subroutine Phillips_initialize_sponges(G, use_temperature, tv, param_file, CSp, h)
-  type(ocean_grid_type), intent(in) :: G
-  logical, intent(in) :: use_temperature
-  type(thermo_var_ptrs), intent(in) :: tv
-  type(param_file_type), intent(in) :: param_file
-  type(sponge_CS),       pointer    :: CSp
-  real, intent(in), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h
+  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure.
+  logical, intent(in) :: use_temperature    !< Switch for temperature.
+  type(thermo_var_ptrs), intent(in) :: tv   !< A structure containing pointers
+                                            !! to any available thermodynamic
+                                            !! fields, potential temperature and
+                                            !! salinity or mixed layer density.
+                                            !! Absent fields have NULL ptrs.
+  type(param_file_type), intent(in) :: param_file !< A structure indicating the
+                                            !! open file to parse for model
+                                            !! parameter values.
+  type(sponge_CS),   pointer    :: CSp      !< A pointer that is set to point to
+                                            !! the control structure for the
+                                            !! sponge module.
+  real, intent(in), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h !< Thickness field.
 
   real :: eta0(SZK_(G)+1)   ! The 1-d nominal positions of the interfaces.
   real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta, m.
@@ -302,10 +260,10 @@ subroutine Phillips_initialize_sponges(G, use_temperature, tv, param_file, CSp, 
 
 end subroutine Phillips_initialize_sponges
 
+!> sech calculates the hyperbolic secant.
 function sech(x)
-  real, intent(in) :: x
-  real             :: sech
-  ! sech calculates the hyperbolic secant.
+  real, intent(in) :: x    !< Input value.
+  real             :: sech !< Result.
 
   ! This is here to prevent overflows or underflows.
   if (abs(x) > 228.) then
@@ -315,10 +273,13 @@ function sech(x)
   endif
 end function sech
 
-subroutine Phillips_initialize_topography(D, G, param_file)
-  type(ocean_grid_type), intent(in) :: G
-  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: D
-  type(param_file_type), intent(in) :: param_file
+!> Initialize topography.
+subroutine Phillips_initialize_topography(D, G, param_file, max_depth)
+  type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
+  real, dimension(G%isd:G%ied,G%jsd:G%jed), &
+                                      intent(out) :: D !< Ocean bottom depth in m
+  type(param_file_type),              intent(in)  :: param_file !< Parameter file structure
+  real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
 
   real :: PI, Htop, Wtop, Ltop, offset, dist, &
           x1, x2, x3, x4, y1, y2
@@ -354,9 +315,65 @@ subroutine Phillips_initialize_topography(D, G, param_file)
        D(i,j) = 2.0/3.0*Htop*sin(PI*(G%geoLonT(i,j)-x3)/(x4-x3))**2 &
                     *sin(PI*(G%geoLatT(i,j)-y1)/(y2-y1))**2
      end if
-     D(i,j)=G%max_depth-D(i,j)
+     D(i,j)=max_depth-D(i,j)
   enddo; enddo
 
 end subroutine Phillips_initialize_topography
 
+!> \class Phillips_initialization
+!!
+!!  By Robert Hallberg, April 1994 - June 2002                         *
+!!                                                                     *
+!!    This subroutine initializes the fields for the simulations.      *
+!!  The one argument passed to initialize, Time, is set to the         *
+!!  current time of the simulation.  The fields which are initialized  *
+!!  here are:                                                          *
+!!    u - Zonal velocity in m s-1.                                     *
+!!    v - Meridional velocity in m s-1.                                *
+!!    h - Layer thickness in m.  (Must be positive.)                   *
+!!    D - Basin depth in m.  (Must be positive.)                       *
+!!    f - The Coriolis parameter, in s-1.                              *
+!!    g - The reduced gravity at each interface, in m s-2.             *
+!!    Rlay - Layer potential density (coordinate variable) in kg m-3.  *
+!!  If ENABLE_THERMODYNAMICS is defined:                               *
+!!    T - Temperature in C.                                            *
+!!    S - Salinity in psu.                                             *
+!!  If SPONGE is defined:                                              *
+!!    A series of subroutine calls are made to set up the damping      *
+!!    rates and reference profiles for all variables that are damped   *
+!!    in the sponge.                                                   *
+!!  Any user provided tracer code is also first linked through this    *
+!!  subroutine.                                                        *
+!!                                                                     *
+!!    Forcing-related fields (taux, tauy, buoy, ustar, etc.) are set   *
+!!  in MOM_surface_forcing.F90.                                        *
+!!                                                                     *
+!!    These variables are all set in the set of subroutines (in this   *
+!!  file) USER_initialize_bottom_depth, USER_initialize_thickness,     *
+!!  USER_initialize_velocity,  USER_initialize_temperature_salinity,   *
+!!  USER_initialize_mixed_layer_density, USER_initialize_sponges,      *
+!!  USER_set_coord, and USER_set_ref_profile.                          *
+!!                                                                     *
+!!    The names of these subroutines should be self-explanatory. They  *
+!!  start with "USER_" to indicate that they will likely have to be    *
+!!  modified for each simulation to set the initial conditions and     *
+!!  boundary conditions.  Most of these take two arguments: an integer *
+!!  argument specifying whether the fields are to be calculated        *
+!!  internally or read from a NetCDF file; and a string giving the     *
+!!  path to that file.  If the field is initialized internally, the    *
+!!  path is ignored.                                                   *
+!!                                                                     *
+!!  Macros written all in capital letters are defined in MOM_memory.h. *
+!!                                                                     *
+!!     A small fragment of the grid is shown below:                    *
+!!                                                                     *
+!!    j+1  x ^ x ^ x   At x:  q, f                                     *
+!!    j+1  > o > o >   At ^:  v, tauy                                  *
+!!    j    x ^ x ^ x   At >:  u, taux                                  *
+!!    j    > o > o >   At o:  h, D, buoy, tr, T, S, ustar              *
+!!    j-1  x ^ x ^ x                                                   *
+!!        i-1  i  i+1  At x & ^:                                       *
+!!           i  i+1    At > & o:                                       *
+!!                                                                     *
+!!  The boundaries always run through q grid points (x).               *
 end module Phillips_initialization

@@ -213,10 +213,10 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
   Pi = (4.0*atan(1.0))
   
   S => tv%S ; T => tv%T
-  g_Rho0 = G%g_Earth/GV%Rho0
+  g_Rho0 = GV%g_Earth/GV%Rho0
   use_EOS = associated(tv%eqn_of_state)
 
-  H_to_pres = G%g_Earth * GV%Rho0
+  H_to_pres = GV%g_Earth * GV%Rho0
   H_to_m = GV%H_to_m
   rescale = 1024.0**4 ; I_rescale = 1.0/rescale
 
@@ -279,8 +279,7 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
     ! to have page faults.
     do i=is,ie ; if(cn(i,j)>0.0)then
       !----for debugging, remove later----
-      ig = G%isd_global + i - 1.0
-      jg = G%jsd_global + j - 1.0
+      ig = i + G%idg_offset ; jg = j + G%jdg_offset
       !if(ig .eq. CS%int_tide_source_x .and. jg .eq. CS%int_tide_source_y) then
       !-----------------------------------
       if (G%mask2dT(i,j) > 0.5) then

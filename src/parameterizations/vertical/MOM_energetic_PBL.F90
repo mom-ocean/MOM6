@@ -99,9 +99,9 @@ type, public :: energetic_PBL_CS ; private
                              ! problems, in m s-1.  If the value is small enough,
                              ! this should not affect the solution.
   real    :: omega           !   The Earth's rotation rate, in s-1.
-  logical :: use_omega       !   If true, use the absolute rotation rate instead
-                             ! of the vertical component of rotation when
-                             ! setting the decay scale for turbulence.
+  real    :: omega_frac      !   When setting the decay scale for turbulence, use
+                             ! this fraction of the absolute rotation rate blended
+                             ! with the local value of f, as sqrt((1-of)*f^2 + of*4*omega^2).
   real    :: wstar_ustar_coef ! A ratio relating the efficiency with which
                              ! convectively released energy is converted to a
                              ! turbulent velocity, relative to mechanically
@@ -374,9 +374,9 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
     reset_diags = .false.  ! This is the second call to mixedlayer.
 
   if (reset_diags) then
-!$OMP parallel default(none) shared(is,ie,js,je,CS)
+!!OMP parallel default(none) shared(is,ie,js,je,CS)
     if (CS%TKE_diagnostics) then
-!$OMP do
+!!OMP do
       do j=js,je ; do i=is,ie
         CS%diag_TKE_wind(i,j) = 0.0 ; CS%diag_TKE_MKE(i,j) = 0.0
         CS%diag_TKE_conv(i,j) = 0.0 ; CS%diag_TKE_forcing(i,j) = 0.0
@@ -384,37 +384,37 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
         CS%diag_TKE_conv_decay(i,j) = 0.0
       enddo ; enddo
     endif
-!$OMP end parallel
+!!OMP end parallel
   endif
 
 
-!$OMP parallel do default(none) shared(js,je,nz,is,ie,h_3d,u_3d,v_3d,tv,dt,      &
-!$OMP                                  CS,G,GV,sfc_connected,fluxes,IdtdR0,         &
-!$OMP                                  TKE_forced,debug,H_neglect,dSV_dT,        &
-!$OMP                                  dSV_dS,I_dtmrho,C1_3,h_tt_min,vonKar,     &
-!$OMP                                  max_itt,Kd_int)                           &
-!$OMP                           private(h,u,v,T,S,Kd,mech_TKE_k,conv_PErel_k,    &
-!$OMP                                   U_Star,absf,mech_TKE,conv_PErel,nstar_k, &
-!$OMP                                   h_sum,I_hs,h_bot,hb_hs,T0,S0,num_itts,   &
-!$OMP                                   pres,dMass,dPres,dT_to_dPE,dS_to_dPE,    &
-!$OMP                                   dT_to_dColHt,dS_to_dColHt,Kddt_h,        &
-!$OMP                                   b_den_1,dT_to_dPE_a,dT_to_dColHt_a,      &
-!$OMP                                   dS_to_dColHt_a,htot,uhtot,vhtot,         &
-!$OMP                                   Idecay_len_TKE,exp_kh,nstar_FC,tot_TKE,  &
-!$OMP                                   TKE_reduc,dTe_t2,dSe_t2,dTe,dSe,dt_h,    &
-!$OMP                                   Convectively_stable,sfc_disconnect,b1,   &
-!$OMP                                   c1,dT_km1_t2,dS_km1_t2,dTe_term,         &
-!$OMP                                   dSe_term,MKE2_Hharm,vstar,h_tt,          &
-!$OMP                                   Kd_guess0,Kddt_h_g0,dPEc_dKd_Kd0,        &
-!$OMP                                   PE_chg_max,dPEa_dKd_g0,PE_chg_g0,        &
-!$OMP                                   MKE_src,dPE_conv,Kddt_h_max,Kddt_h_min,  &
-!$OMP                                   TKE_left_max,TKE_left_min,Kddt_h_guess,  &
-!$OMP                                   TKE_left_itt,dPEa_dKd_itt,PE_chg_itt,    &
-!$OMP                                   MKE_src_itt,Kddt_h_itt,dPEc_dKd,PE_chg,  &
-!$OMP                                   dMKE_src_dK,TKE_left,use_Newt,           &
-!$OMP                                   dKddt_h_Newt,Kddt_h_Newt,Kddt_h_next,    &
-!$OMP                                   dKddt_h,Te,Se,Hsfc_used,dS_to_dPE_a,     &
-!$OMP                                   dMKE_max,TKE_here)
+!!OMP parallel do default(none) shared(js,je,nz,is,ie,h_3d,u_3d,v_3d,tv,dt,      &
+!!OMP                                  CS,G,GV,fluxes,IdtdR0,                    &
+!!OMP                                  TKE_forced,debug,H_neglect,dSV_dT,        &
+!!OMP                                  dSV_dS,I_dtmrho,C1_3,h_tt_min,vonKar,     &
+!!OMP                                  max_itt,Kd_int)                           &
+!!OMP                           private(i,j,k,h,u,v,T,S,Kd,mech_TKE_k,conv_PErel_k,    &
+!!OMP                                   U_Star,absf,mech_TKE,conv_PErel,nstar_k, &
+!!OMP                                   h_sum,I_hs,h_bot,hb_hs,T0,S0,num_itts,   &
+!!OMP                                   pres,dMass,dPres,dT_to_dPE,dS_to_dPE,    &
+!!OMP                                   dT_to_dColHt,dS_to_dColHt,Kddt_h,        &
+!!OMP                                   b_den_1,dT_to_dPE_a,dT_to_dColHt_a,      &
+!!OMP                                   dS_to_dColHt_a,htot,uhtot,vhtot,         &
+!!OMP                                   Idecay_len_TKE,exp_kh,nstar_FC,tot_TKE,  &
+!!OMP                                   TKE_reduc,dTe_t2,dSe_t2,dTe,dSe,dt_h,    &
+!!OMP                                   Convectively_stable,sfc_disconnect,b1,   &
+!!OMP                                   c1,dT_km1_t2,dS_km1_t2,dTe_term,         &
+!!OMP                                   dSe_term,MKE2_Hharm,vstar,h_tt,          &
+!!OMP                                   Kd_guess0,Kddt_h_g0,dPEc_dKd_Kd0,        &
+!!OMP                                   PE_chg_max,dPEa_dKd_g0,PE_chg_g0,        &
+!!OMP                                   MKE_src,dPE_conv,Kddt_h_max,Kddt_h_min,  &
+!!OMP                                   TKE_left_max,TKE_left_min,Kddt_h_guess,  &
+!!OMP                                   TKE_left_itt,dPEa_dKd_itt,PE_chg_itt,    &
+!!OMP                                   MKE_src_itt,Kddt_h_itt,dPEc_dKd,PE_chg,  &
+!!OMP                                   dMKE_src_dK,TKE_left,use_Newt,           &
+!!OMP                                   dKddt_h_Newt,Kddt_h_Newt,Kddt_h_next,    &
+!!OMP                                   dKddt_h,Te,Se,Hsfc_used,dS_to_dPE_a,     &
+!!OMP                                   dMKE_max,sfc_connected,TKE_here)
   do j=js,je
     ! Copy the thicknesses and other fields to 2-d arrays.
     do k=1,nz ; do i=is,ie
@@ -443,10 +443,12 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       endif
       if (U_Star < CS%ustar_min) U_Star = CS%ustar_min
 
-      if (CS%use_omega) then ; absf(i) = 2.0*CS%omega
+      if (CS%omega_frac >= 1.0) then ; absf(i) = 2.0*CS%omega
       else
         absf(i) = 0.25*((abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I-1,J-1))) + &
                      (abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I-1,J))))
+        if (CS%omega_frac > 0.0) &
+          absf = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf**2)
       endif
 
       mech_TKE(i) = (dt*CS%mstar*GV%Rho0)*((U_Star**3))
@@ -497,7 +499,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       pres(i,1) = 0.0
       do k=1,nz
         dMass = GV%H_to_kg_m2 * h(i,k)
-        dPres = G%G_Earth * dMass
+        dPres = GV%g_Earth * dMass
         dT_to_dPE(i,k) = (dMass * (pres(i,K) + 0.5*dPres)) * dSV_dT(i,j,k)
         dS_to_dPE(i,k) = (dMass * (pres(i,K) + 0.5*dPres)) * dSV_dS(i,j,k)
         dT_to_dColHt(i,k) = dMass * dSV_dT(i,j,k)
@@ -1117,8 +1119,9 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_energetic_PBL"  ! This module's name.
+  real :: omega_frac_dflt
   integer :: isd, ied, jsd, jed
-  logical :: use_temperature
+  logical :: use_temperature, use_omega
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   if (associated(CS)) then
@@ -1157,10 +1160,20 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   call get_param(param_file, mod, "OMEGA",CS%omega, &
                  "The rotation rate of the earth.", units="s-1", &
                  default=7.2921e-5)
-  call get_param(param_file, mod, "ML_USE_OMEGA", CS%use_omega, &
+  call get_param(param_file, mod, "ML_USE_OMEGA", use_omega, &
                  "If true, use the absolute rotation rate instead of the \n"//&
                  "vertical component of rotation when setting the decay \n"//&
-                 "scale for turbulence.", default=.false.)
+                 "scale for turbulence.", default=.false., do_not_log=.true.)
+  omega_frac_dflt = 0.0
+  if (use_omega) then
+    call MOM_error(WARNING, "ML_USE_OMEGA is depricated; use ML_OMEGA_FRAC=1.0 instead.")
+    omega_frac_dflt = 1.0
+  endif
+  call get_param(param_file, mod, "ML_OMEGA_FRAC", CS%omega_frac, &
+                 "When setting the decay scale for turbulence, use this \n"//&
+                 "fraction of the absolute rotation rate blended with the \n"//&
+                 "local value of f, as sqrt((1-of)*f^2 + of*4*omega^2).", &
+                 units="nondim", default=omega_frac_dflt)
   call get_param(param_file, mod, "WSTAR_USTAR_COEF", CS%wstar_ustar_coef, &
                  "A ratio relating the efficiency with which convectively\n"//&
                  "released energy is converted to a turbulent velocity,\n"//&
