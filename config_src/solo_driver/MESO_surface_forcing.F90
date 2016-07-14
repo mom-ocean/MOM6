@@ -293,7 +293,7 @@ subroutine MESO_buoyancy_forcing(state, fluxes, day, dt, G, CS)
 
   if (CS%restorebuoy) then
     if (CS%use_temperature) then
-      call alloc_if_needed(fluxes%heat_restore, isd, ied, jsd, jed)
+      call alloc_if_needed(fluxes%heat_added, isd, ied, jsd, jed)
       !   When modifying the code, comment out this error message.  It is here
       ! so that the original (unmodified) version is not accidentally used.
 !      call MOM_error(FATAL, "MESO_buoyancy_surface_forcing: " // &
@@ -304,13 +304,13 @@ subroutine MESO_buoyancy_forcing(state, fluxes, day, dt, G, CS)
         !   Set Temp_restore and Salin_restore to the temperature (in C) and
         ! salinity (in PSU) that are being restored toward.
         if (G%mask2dT(i,j) > 0) then
-          fluxes%heat_restore(i,j) = G%mask2dT(i,j) * &
+          fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
               ((CS%T_Restore(i,j) - state%SST(i,j)) * rhoXcp * CS%Flux_const)
           fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const) * &
               (CS%S_Restore(i,j) - state%SSS(i,j)) / &
               (0.5*(state%SSS(i,j) + CS%S_Restore(i,j)))
         else
-          fluxes%heat_restore(i,j) = 0.0
+          fluxes%heat_added(i,j) = 0.0
           fluxes%vprec(i,j) = 0.0
         endif
       enddo ; enddo

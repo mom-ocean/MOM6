@@ -377,7 +377,7 @@ subroutine buoyancy_forcing_allocate(fluxes, G, CS)
     ! surface restoring fields 
     if (CS%restorebuoy) then
       call safe_alloc_ptr(CS%T_Restore,isd,ied,jsd,jed)
-      call safe_alloc_ptr(fluxes%heat_restore,isd,ied,jsd,jed)
+      call safe_alloc_ptr(fluxes%heat_added,isd,ied,jsd,jed)
       call safe_alloc_ptr(CS%S_Restore,isd,ied,jsd,jed)
     endif
 
@@ -1059,13 +1059,13 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
     if (CS%use_temperature) then
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0) then
-          fluxes%heat_restore(i,j) = G%mask2dT(i,j) * &
+          fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
               ((CS%T_Restore(i,j) - state%SST(i,j)) * rhoXcp * CS%Flux_const)
           fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const) * &
               (CS%S_Restore(i,j) - state%SSS(i,j)) / &
               (0.5*(state%SSS(i,j) + CS%S_Restore(i,j)))
         else
-          fluxes%heat_restore(i,j) = 0.0
+          fluxes%heat_added(i,j) = 0.0
           fluxes%vprec(i,j)        = 0.0
         endif
       enddo ; enddo
@@ -1094,7 +1094,7 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
 !###     SSS_anom(i,j) = state%SSS(i,j) - CS%S_Restore(i,j)
 !###     SSS_mean(i,j) = 0.5*(state%SSS(i,j) + CS%S_Restore(i,j))
 !###   enddo ; enddo
-!###   call apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, fluxes%heat_restore, &
+!###   call apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, fluxes%heat_added, &
 !###                           fluxes%vprec, day, dt, G, CS%ctrl_forcing_CSp)
 !### endif
 
@@ -1213,13 +1213,13 @@ subroutine buoyancy_forcing_from_data_override(state, fluxes, day, dt, G, CS)
     if (CS%use_temperature) then
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0) then
-          fluxes%heat_restore(i,j) = G%mask2dT(i,j) * &
+          fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
               ((CS%T_Restore(i,j) - state%SST(i,j)) * rhoXcp * CS%Flux_const)
           fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const) * &
               (CS%S_Restore(i,j) - state%SSS(i,j)) / &
               (0.5*(state%SSS(i,j) + CS%S_Restore(i,j)))
         else
-          fluxes%heat_restore(i,j) = 0.0
+          fluxes%heat_added(i,j) = 0.0
           fluxes%vprec(i,j)        = 0.0
         endif
       enddo ; enddo
@@ -1270,7 +1270,7 @@ subroutine buoyancy_forcing_from_data_override(state, fluxes, day, dt, G, CS)
 !###     SSS_anom(i,j) = state%SSS(i,j) - CS%S_Restore(i,j)
 !###     SSS_mean(i,j) = 0.5*(state%SSS(i,j) + CS%S_Restore(i,j))
 !###   enddo ; enddo
-!###   call apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, fluxes%heat_restore, &
+!###   call apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, fluxes%heat_added, &
 !###                           fluxes%vprec, day, dt, G, CS%ctrl_forcing_CSp)
 !### endif
 
@@ -1437,13 +1437,13 @@ subroutine buoyancy_forcing_linear(state, fluxes, day, dt, G, CS)
         T_restore = CS%T_south + (CS%T_north-CS%T_south)*y
         S_restore = CS%S_south + (CS%S_north-CS%S_south)*y
         if (G%mask2dT(i,j) > 0) then
-          fluxes%heat_restore(i,j) = G%mask2dT(i,j) * &
+          fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
               ((T_Restore - state%SST(i,j)) * ((CS%Rho0 * fluxes%C_p) * CS%Flux_const))
           fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const) * &
               (S_Restore - state%SSS(i,j)) / &
               (0.5*(state%SSS(i,j) + S_Restore))
         else
-          fluxes%heat_restore(i,j) = 0.0
+          fluxes%heat_added(i,j) = 0.0
           fluxes%vprec(i,j)        = 0.0
         endif
       enddo ; enddo
