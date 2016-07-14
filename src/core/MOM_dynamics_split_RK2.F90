@@ -3,7 +3,7 @@ module MOM_dynamics_split_RK2
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_variables,    only : vertvisc_type, ocean_OBC_type, thermo_var_ptrs
+use MOM_variables,    only : vertvisc_type, thermo_var_ptrs
 use MOM_variables,    only : BT_cont_type, alloc_bt_cont_type, dealloc_bt_cont_type
 use MOM_variables,    only : accel_diag_ptrs, ocean_internal_state, cont_diag_ptrs
 use MOM_forcing_type, only : forcing
@@ -40,12 +40,13 @@ use MOM_CoriolisAdv,           only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_C
 use MOM_diabatic_driver,       only : diabatic, diabatic_driver_init, diabatic_CS
 use MOM_error_checking,        only : check_redundant
 use MOM_grid,                  only : ocean_grid_type
+use MOM_hor_index,             only : hor_index_type
 use MOM_hor_visc,              only : horizontal_viscosity, hor_visc_init, hor_visc_CS
 use MOM_interface_heights,     only : find_eta
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types,            only : MEKE_type
-use MOM_open_boundary,         only : Radiation_Open_Bdry_Conds, open_boundary_init
-use MOM_open_boundary,         only : open_boundary_CS
+use MOM_open_boundary,         only : ocean_OBC_type
+use MOM_open_boundary,         only : Radiation_Open_Bdry_Conds
 use MOM_PressureForce,         only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc,              only : set_viscous_BBL, set_viscous_ML, set_visc_CS
 use MOM_tidal_forcing,         only : tidal_forcing_init, tidal_forcing_CS
@@ -99,7 +100,7 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_)        :: uhbt    !< average x-volume or mass flux determined by barotropic solver
                                                                    !! (m3 s-1 or kg s-1). uhbt should (roughly?) equal to vertical sum of uh.
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_)        :: vhbt    !< average y-volume or mass flux determined by barotropic solver
-                                                                   !! (m3 s-1 or kg s-1). uhbt should (roughly?) equal to vertical sum of uh.
+                                                                   !! (m3 s-1 or kg s-1). vhbt should (roughly?) equal to vertical sum of vh.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_)      :: pbce    !<  pbce times eta gives the baroclinic pressure anomaly in each layer due
                                                                    !! to free surface height anomalies.  pbce has units of m2 H-1 s-2.
 
@@ -159,7 +160,6 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   type(barotropic_CS),    pointer :: barotropic_CSp    => NULL()
   type(vertvisc_CS),      pointer :: vertvisc_CSp      => NULL()
   type(set_visc_CS),      pointer :: set_visc_CSp      => NULL()
-  type(open_boundary_CS), pointer :: open_boundary_CSp => NULL()
   type(tidal_forcing_CS), pointer :: tides_CSp         => NULL()
 
   type(ocean_OBC_type),   pointer :: OBC => NULL() !< A pointer to an open boundary
@@ -283,7 +283,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   logical :: showCallTree
 
   ! for diagnostics
-  real, dimension(SZI_(G),SZJ_(G)) :: work2d
+  real, dimension(SZIB_(G),SZJ_(G)) :: uwork2d
+  real, dimension(SZI_(G),SZJB_(G)) :: vwork2d
 
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
@@ -414,8 +415,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call PressureForce(h, tv, CS%PFu, CS%PFv, G, GV, CS%PressureForce_CSp, &
                      CS%ALE_CSp, p_surf, CS%pbce, CS%eta_PF)
   if (CS%debug) then
-    call uchksum(CS%PFu,"After PressureForce CS%PFu",G,haloshift=0)
-    call vchksum(CS%PFv,"After PressureForce CS%PFv",G,haloshift=0)
+    call uchksum(CS%PFu,"After PressureForce CS%PFu",G%HI,haloshift=0)
+    call vchksum(CS%PFv,"After PressureForce CS%PFv",G%HI,haloshift=0)
   endif
 
   if (dyn_p_surf) then
@@ -493,8 +494,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call disable_averaging(CS%diag)
 
   if (CS%debug) then
-    call uchksum(up,"before vertvisc: up",G,haloshift=0)
-    call vchksum(vp,"before vertvisc: vp",G,haloshift=0)
+    call uchksum(up,"before vertvisc: up",G%HI,haloshift=0)
+    call vchksum(vp,"before vertvisc: vp",G%HI,haloshift=0)
   endif
   call vertvisc_coef(up, vp, h, fluxes, visc, dt, G, GV, CS%vertvisc_CSp)
   call vertvisc_remnant(visc, CS%visc_rem_u, CS%visc_rem_v, dt, G, GV, CS%vertvisc_CSp)
@@ -578,11 +579,11 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call cpu_clock_end(id_clock_mom_update)
 
   if (CS%debug) then
-    call uchksum(up,"Predictor 1 u",G,haloshift=0)
-    call vchksum(vp,"Predictor 1 v",G,haloshift=0)
-    call hchksum(GV%H_to_kg_m2*h,"Predictor 1 h",G,haloshift=1)
-    call uchksum(GV%H_to_kg_m2*uh,"Predictor 1 uh",G,haloshift=2)
-    call vchksum(GV%H_to_kg_m2*vh,"Predictor 1 vh",G,haloshift=2)
+    call uchksum(up,"Predictor 1 u",G%HI,haloshift=0)
+    call vchksum(vp,"Predictor 1 v",G%HI,haloshift=0)
+    call hchksum(GV%H_to_kg_m2*h,"Predictor 1 h",G%HI,haloshift=1)
+    call uchksum(GV%H_to_kg_m2*uh,"Predictor 1 uh",G%HI,haloshift=2)
+    call vchksum(GV%H_to_kg_m2*vh,"Predictor 1 vh",G%HI,haloshift=2)
 !   call MOM_state_chksum("Predictor 1", up, vp, h, uh, vh, G, GV, haloshift=1)
     call MOM_accel_chksum("Predictor accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
              CS%diffu, CS%diffv, G, GV, CS%pbce, CS%u_accel_bt, CS%v_accel_bt)
@@ -595,8 +596,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 ! u_av  <- u_av  + dt_pred d/dz visc d/dz u_av
   call cpu_clock_begin(id_clock_vertvisc)
   if (CS%debug) then
-    call uchksum(up,"0 before vertvisc: up",G,haloshift=0)
-    call vchksum(vp,"0 before vertvisc: vp",G,haloshift=0)
+    call uchksum(up,"0 before vertvisc: up",G%HI,haloshift=0)
+    call vchksum(vp,"0 before vertvisc: vp",G%HI,haloshift=0)
   endif
   call vertvisc_coef(up, vp, h, fluxes, visc, dt_pred, G, GV, CS%vertvisc_CSp)
   call vertvisc(up, vp, h, fluxes, visc, dt_pred, CS%OBC, CS%ADp, CS%CDp, G, &
@@ -637,7 +638,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (associated(CS%OBC)) then
     call Radiation_Open_Bdry_Conds(CS%OBC, u_av, u_old_rad_OBC, v_av, &
-             v_old_rad_OBC, hp, h_old_rad_OBC, G, CS%open_boundary_CSp)
+             v_old_rad_OBC, hp, h_old_rad_OBC, G)
   endif
 
   ! h_av = (h + hp)/2
@@ -696,9 +697,9 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (CS%debug) then
     call MOM_state_chksum("Predictor ", up, vp, hp, uh, vh, G, GV)
-    call uchksum(u_av,"Predictor avg u",G,haloshift=1)
-    call vchksum(v_av,"Predictor avg v",G,haloshift=1)
-    call hchksum(GV%H_to_kg_m2*h_av,"Predictor avg h",G,haloshift=0)
+    call uchksum(u_av,"Predictor avg u",G%HI,haloshift=1)
+    call vchksum(v_av,"Predictor avg v",G%HI,haloshift=1)
+    call hchksum(GV%H_to_kg_m2*h_av,"Predictor avg h",G%HI,haloshift=0)
   ! call MOM_state_chksum("Predictor avg ", u_av, v_av,  h_av,uh, vh, G, GV)
     call check_redundant("Predictor up ", up, vp, G)
     call check_redundant("Predictor uh ", uh, vh, G)
@@ -783,11 +784,11 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call cpu_clock_end(id_clock_mom_update)
 
   if (CS%debug) then
-    call uchksum(u,"Corrector 1 u",G,haloshift=0)
-    call vchksum(v,"Corrector 1 v",G,haloshift=0)
-    call hchksum(GV%H_to_kg_m2*h,"Corrector 1 h",G,haloshift=2)
-    call uchksum(GV%H_to_kg_m2*uh,"Corrector 1 uh",G,haloshift=2)
-    call vchksum(GV%H_to_kg_m2*vh,"Corrector 1 vh",G,haloshift=2)
+    call uchksum(u,"Corrector 1 u",G%HI,haloshift=0)
+    call vchksum(v,"Corrector 1 v",G%HI,haloshift=0)
+    call hchksum(GV%H_to_kg_m2*h,"Corrector 1 h",G%HI,haloshift=2)
+    call uchksum(GV%H_to_kg_m2*uh,"Corrector 1 uh",G%HI,haloshift=2)
+    call vchksum(GV%H_to_kg_m2*vh,"Corrector 1 vh",G%HI,haloshift=2)
   ! call MOM_state_chksum("Corrector 1", u, v, h, uh, vh, G, GV, haloshift=1)
     call MOM_accel_chksum("Corrector accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
              CS%diffu, CS%diffv, G, GV, CS%pbce, CS%u_accel_bt, CS%v_accel_bt)
@@ -849,7 +850,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (associated(CS%OBC)) then
     call Radiation_Open_Bdry_Conds(CS%OBC, u, u_old_rad_OBC, v, &
-             v_old_rad_OBC, h, h_old_rad_OBC, G, CS%open_boundary_CSp)
+             v_old_rad_OBC, h, h_old_rad_OBC, G)
   endif
 
 ! h_av = (h_in + h_out)/2 . Going in to this line, h_av = h_in.
@@ -895,30 +896,30 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   ! depth summed zonal mass transport
   if (CS%id_umo_2d > 0) then
-    do j=js,je ; do i=is,ie
-      work2d(i,j) = 0.0
+    do j=js,je ; do I=Isq,Ieq
+      uwork2d(i,j) = 0.0
       do k=1,nz
-        work2d(i,j) = work2d(i,j) + uh(i,j,k)*GV%H_to_kg_m2
+        uwork2d(i,j) = uwork2d(i,j) + uh(i,j,k)*GV%H_to_kg_m2
       enddo
     enddo ; enddo
-    call post_data(CS%id_umo_2d, work2d, CS%diag)
+    call post_data(CS%id_umo_2d, uwork2d, CS%diag)
   endif
   ! depth summed merid mass transport
   if (CS%id_vmo_2d > 0) then
-    do j=js,je ; do i=is,ie
-      work2d(i,j) = 0.0
+    do J=Jsq,Jeq ; do i=is,ie
+      vwork2d(i,j) = 0.0
       do k=1,nz
-        work2d(i,j) = work2d(i,j) + vh(i,j,k)*GV%H_to_kg_m2
+        vwork2d(i,j) = vwork2d(i,j) + vh(i,j,k)*GV%H_to_kg_m2
       enddo
     enddo ; enddo
-    call post_data(CS%id_vmo_2d, work2d, CS%diag)
+    call post_data(CS%id_vmo_2d, vwork2d, CS%diag)
   endif
 
   if (CS%debug) then
     call MOM_state_chksum("Corrector ", u, v, h, uh, vh, G, GV)
-    call uchksum(u_av,"Corrector avg u",G,haloshift=1)
-    call vchksum(v_av,"Corrector avg v",G,haloshift=1)
-    call hchksum(GV%H_to_kg_m2*h_av,"Corrector avg h",G,haloshift=1)
+    call uchksum(u_av,"Corrector avg u",G%HI,haloshift=1)
+    call vchksum(v_av,"Corrector avg v",G%HI,haloshift=1)
+    call hchksum(GV%H_to_kg_m2*h_av,"Corrector avg h",G%HI,haloshift=1)
  !  call MOM_state_chksum("Corrector avg ", u_av, v_av, h_av, uh, vh, G, GV)
   endif
 
@@ -929,22 +930,22 @@ end subroutine step_MOM_dyn_split_RK2
 !> This subroutine sets up any auxiliary restart variables that are specific
 !! to the unsplit time stepping scheme.  All variables registered here should
 !! have the ability to be recreated if they are not present in a restart file.
-subroutine register_restarts_dyn_split_RK2(G, GV, param_file, CS, restart_CS, uh, vh)
-  type(ocean_grid_type),         intent(in)    :: G                    !< ocean grid structure
-  type(verticalGrid_type),       intent(in)    :: GV                   !< ocean vertical grid structure
-  type(param_file_type),         intent(in)    :: param_file           !< parameter file
-  type(MOM_dyn_split_RK2_CS),    pointer       :: CS                   !< module control structure
-  type(MOM_restart_CS),          pointer       :: restart_CS           !< restart control structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target, intent(inout) :: uh !< zonal volume/mass transport (m3/s or kg/s)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target, intent(inout) :: vh !< merid volume/mass transport (m3/s or kg/s)
+subroutine register_restarts_dyn_split_RK2(HI, GV, param_file, CS, restart_CS, uh, vh)
+  type(hor_index_type),          intent(in)    :: HI         !< Horizontal index structure
+  type(verticalGrid_type),       intent(in)    :: GV         !< ocean vertical grid structure
+  type(param_file_type),         intent(in)    :: param_file !< parameter file
+  type(MOM_dyn_split_RK2_CS),    pointer       :: CS         !< module control structure
+  type(MOM_restart_CS),          pointer       :: restart_CS !< restart control structure
+  real, dimension(SZIB_(HI),SZJ_(HI),SZK_(GV)), target, intent(inout) :: uh !< zonal volume/mass transport (m3/s or kg/s)
+  real, dimension(SZI_(HI),SZJB_(HI),SZK_(GV)), target, intent(inout) :: vh !< merid volume/mass transport (m3/s or kg/s)
 
   type(vardesc)      :: vd
   character(len=40)  :: mod = "MOM_dynamics_split_RK2" ! This module's name.
   character(len=48)  :: thickness_units, flux_units
 
   integer :: isd, ied, jsd, jed, nz, IsdB, IedB, JsdB, JedB
-  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nz = G%ke
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+  isd  = HI%isd  ; ied  = HI%ied  ; jsd  = HI%jsd  ; jed  = HI%jed ; nz = GV%ke
+  IsdB = HI%IsdB ; IedB = HI%IedB ; JsdB = HI%JsdB ; JedB = HI%JedB
 
   ! This is where a control structure specific to this module would be allocated.
   if (associated(CS)) then
@@ -993,7 +994,7 @@ subroutine register_restarts_dyn_split_RK2(G, GV, param_file, CS, restart_CS, uh
   vd = var_desc("diffv","meter second-2","Meridional horizontal viscous acceleration",'v','L')
   call register_restart_field(CS%diffv, vd, .false., restart_CS)
 
-  call register_barotropic_restarts(G, GV, param_file, CS%barotropic_CSp, &
+  call register_barotropic_restarts(HI, GV, param_file, CS%barotropic_CSp, &
                                     restart_CS)
 
 end subroutine register_restarts_dyn_split_RK2
@@ -1138,10 +1139,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
              (LEN_TRIM(dirs%input_filename) == 1))   )
 
   if (associated(ALE_CSp)) CS%ALE_CSp => ALE_CSp
-  if (associated(OBC)) then
-    CS%OBC => OBC
-    call open_boundary_init(Time, G, param_file, diag, CS%open_boundary_CSp)
-  endif
+  if (associated(OBC)) CS%OBC => OBC
 
   if (.not. query_initialized(CS%eta,"sfc",restart_CS))  then
     ! Estimate eta based on the layer thicknesses - h.  With the Boussinesq

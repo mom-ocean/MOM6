@@ -88,7 +88,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_time_manager, only : time_type, set_time, time_type_to_real
 
 use mpp_mod, only : mpp_pe, mpp_sync
-! use MOM_io, only : close_file, create_file, fieldtype, file_exists
+! use MOM_io, only : close_file, fieldtype, file_exists
 ! use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
 ! use MOM_io, only : write_field, slasher, vardesc
 implicit none ; private
@@ -209,13 +209,13 @@ subroutine USER_update_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, C
 
   do j=G%jsd,G%jed ; 
 
-   if (((j+G%jsd_global-G%jsd) .le. G%domain%njglobal+G%domain%njhalo) .AND. &
-           ((j+G%jsd_global-G%jsd) .ge. G%domain%njhalo+1)) then
+   if (((j+G%jdg_offset) .le. G%domain%njglobal+G%domain%njhalo) .AND. &
+       ((j+G%jdg_offset) .ge. G%domain%njhalo+1)) then
 
     do i=G%isc,G%iec
   
-!    if (((i+G%isd_global-G%isd) .le. G%domain%niglobal+G%domain%nihalo) .AND. &
-!           ((i+G%isd_global-G%isd) .ge. G%domain%nihalo+1)) then
+!    if (((i+G%idg_offset) <= G%domain%niglobal+G%domain%nihalo) .AND. &
+!           ((i+G%idg_offset) >= G%domain%nihalo+1)) then
 
     if ((j.ge.G%jsc) .and. (j.le.G%jec)) then 
 
@@ -249,7 +249,7 @@ subroutine USER_update_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, C
 
     endif ; endif ; endif
 
-    if ((i+G%isd_global-G%isd) .eq. G%domain%nihalo+1) then
+    if ((i+G%idg_offset) .eq. G%domain%nihalo+1) then
       hmask(i-1,j) = 3.0
     endif
 

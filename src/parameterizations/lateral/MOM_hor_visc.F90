@@ -93,8 +93,7 @@ use MOM_file_parser,           only : get_param, log_version, param_file_type
 use MOM_grid,                  only : ocean_grid_type
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types,            only : MEKE_type
-use MOM_variables,             only : ocean_OBC_type, OBC_FLATHER_E, OBC_FLATHER_W
-use MOM_variables,             only : OBC_FLATHER_N, OBC_FLATHER_S
+use MOM_open_boundary,         only : ocean_OBC_type, OBC_FLATHER
 use MOM_verticalGrid,          only : verticalGrid_type
 
 implicit none ; private
@@ -246,24 +245,24 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   real, dimension(SZI_(G),SZJB_(G)) :: v0 ! Laplacian of v (m-1 s-1)
 
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    sh_xx, & ! horizontal tension (du/dx - dv/dy) (1/sec) including metric terms
-    str_xx,& ! str_xx is the diagonal term in the stress tensor (H m2 s-2)
-    bhstr_xx ! A copy of str_xx that only contains the biharmonic contribution (H m2 s-2)
+    sh_xx, &      ! horizontal tension (du/dx - dv/dy) (1/sec) including metric terms
+    str_xx,&      ! str_xx is the diagonal term in the stress tensor (H m2 s-2)
+    bhstr_xx,&    ! A copy of str_xx that only contains the biharmonic contribution (H m2 s-2)
+    FrictWorkIntz ! depth integrated energy dissipated by lateral friction (W/m2)
 
   real, dimension(SZIB_(G),SZJB_(G)) :: &
     sh_xy,  &     ! horizontal shearing strain (du/dy + dv/dx) (1/sec) including metric terms
     str_xy, &     ! str_xy is the cross term in the stress tensor (H m2 s-2)
-    bhstr_xy,&    ! A copy of str_xy that only contains the biharmonic contribution (H m2 s-2)
-    FrictWorkIntz ! depth integrated energy dissipated by lateral friction (W/m2)
+    bhstr_xy      ! A copy of str_xy that only contains the biharmonic contribution (H m2 s-2)
 
   real, dimension(SZIB_(G),SZJB_(G),SZK_(G)) :: &
     Ah_q, &   ! biharmonic viscosity at corner points (m4/s)
-    Kh_q, &   ! Laplacian viscosity at corner points (m2/s)
-    FrictWork ! energy dissipated by lateral friction (W/m2)
+    Kh_q      ! Laplacian viscosity at corner points (m2/s)
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     Ah_h, &          ! biharmonic viscosity at thickness points (m4/s)
-    Kh_h             ! Laplacian viscosity at thickness points (m2/s)
+    Kh_h, &          ! Laplacian viscosity at thickness points (m2/s)
+    FrictWork        ! energy dissipated by lateral friction (W/m2)
 
   real :: Ah         ! biharmonic viscosity (m4/s)
   real :: Kh         ! Laplacian  viscosity (m2/s)
@@ -299,10 +298,10 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   h_neglect  = GV%H_subroundoff
   h_neglect3 = h_neglect**3
 
-  if (present(OBC)) then ; if (associated(OBC)) then
+  if (present(OBC)) then ; if (associated(OBC)) then ; if (OBC%this_pe) then
     apply_OBC = OBC%apply_OBC_u_flather_east .or. OBC%apply_OBC_u_flather_west .or. &
                 OBC%apply_OBC_v_flather_north .or. OBC%apply_OBC_v_flather_south
-  endif ; endif
+  endif ; endif ; endif
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "MOM_hor_visc: Module must be initialized before it is used.")
@@ -587,8 +586,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                      G%IareaCu(I,j)) / (0.5*(h(i+1,j,k) + h(i,j,k)) + h_neglect)
 
       if (apply_OBC) then ; if (OBC%OBC_mask_u(I,j)) then
-        if ((OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) .or. &
-            (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W)) diffu(I,j,k) = 0.0
+        if ((OBC%OBC_kind_u(I,j) == OBC_FLATHER)) diffu(I,j,k) = 0.0
       endif ; endif
     enddo ; enddo
 
@@ -600,8 +598,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                                     CS%DX2h(i,j+1)*str_xx(i,j+1))) * &
                      G%IareaCv(i,J)) / (0.5*(h(i,j+1,k) + h(i,j,k)) + h_neglect)
       if (apply_OBC) then ; if (OBC%OBC_mask_v(i,J)) then
-        if ((OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) .or. &
-            (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S)) diffv(I,j,k) = 0.0
+        if ((OBC%OBC_kind_v(i,J) == OBC_FLATHER)) diffv(I,j,k) = 0.0
       endif ; endif
     enddo ; enddo
 

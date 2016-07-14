@@ -134,7 +134,7 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_tidal_forcing" ! This module's name.
   character(len=128) :: mesg
-  character(len=128) :: tidal_input_files(4*MAX_CONSTITUENTS)
+  character(len=200) :: tidal_input_files(4*MAX_CONSTITUENTS)
   integer :: i, j, c, is, ie, js, je, isd, ied, jsd, jed, nc
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd; jed = G%jed

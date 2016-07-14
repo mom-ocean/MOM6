@@ -160,10 +160,10 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos)
   endif ; endif
 
   S => tv%S ; T => tv%T
-  g_Rho0 = G%g_Earth/GV%Rho0
+  g_Rho0 = GV%g_Earth/GV%Rho0
   use_EOS = associated(tv%eqn_of_state)
 
-  H_to_pres = G%g_Earth * GV%Rho0
+  H_to_pres = GV%g_Earth * GV%Rho0
   H_to_m = GV%H_to_m
   rescale = 1024.0**4 ; I_rescale = 1.0/rescale
 
@@ -515,15 +515,15 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
   endif ; endif
     
   S => tv%S ; T => tv%T
-  g_Rho0 = G%g_Earth/GV%Rho0
+  g_Rho0 = GV%g_Earth/GV%Rho0
   use_EOS = associated(tv%eqn_of_state)
 
-  H_to_pres = G%g_Earth * GV%Rho0
+  H_to_pres = GV%g_Earth * GV%Rho0
   H_to_m = GV%H_to_m
 
   min_h_frac = tol1 / real(nz)
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,h,G,GV,min_h_frac,use_EOS,T,S,   &
-!$OMP                                  H_to_pres,H_to_m,tv,cn,g_Rho0)                  &
+!$OMP                                  H_to_pres,H_to_m,tv,cn,g_Rho0,nmodes)           &
 !$OMP                          private(htot,hmin,kf,H_here,HxT_here,HxS_here,HxR_here, &
 !$OMP                                  Hf,Tf,Sf,Rf,pres,T_int,S_int,drho_dT,           &
 !$OMP                                  drho_dS,drxh_sum,kc,Hc,Tc,Sc,I_Hnew,gprime,     &
@@ -533,7 +533,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
 !$OMP                                  ddet_l,xr,xl,det_r,xbl,xbr,ddet_r,xl_sub,       &
 !$OMP                                  ig_need_sub,jg_need_sub,sub_rootfound,nsub,     &
 !$OMP                                  det_sub,ddet_sub,lam_n,                         &
-!$OMP                                  a_diag,b_diag,c_diag,nrootsfound,nmodes)
+!$OMP                                  a_diag,b_diag,c_diag,nrootsfound)
   do j=js,je
     !   First merge very thin layers with the one above (or below if they are
     ! at the top).  This also transposes the row order so that columns can
@@ -693,8 +693,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
           endif  ! use_EOS
           
           !-----------------NOW FIND WAVE SPEEDS---------------------------------------
-          ig = G%isd_global + i - 1.0
-          jg = G%jsd_global + j - 1.0
+          ig = i + G%idg_offset ; jg = j + G%jdg_offset
           !   Sum the contributions from all of the interfaces to give an over-estimate
           ! of the first-mode wave speed.
           if (kc >= 2) then
@@ -843,8 +842,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
                     !call MOM_error(WARNING, "determinant changes sign"// &
                     !            "but has a local max/min in interval;"//&
                     !            " reduce increment in lam.")
-                    ig_need_sub = G%isd_global + i - 1.0
-                    jg_need_sub = G%jsd_global + j - 1.0
+                    ig_need_sub = i + G%idg_offset ; jg_need_sub = j + G%jdg_offset
                     ! begin subdivision loop -------------------------------------------
                     !print *, "subdividing interval at ig=",ig_need_sub,"jg=",jg_need_sub
                     sub_rootfound = .false. ! initialize
@@ -950,9 +948,9 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
         cn(i,j,:) = 0.0 ! This is a land point.
       endif ! if not land
       ! ----- Spot check - comment out later (BDM) ----------
-      !ig = G%isd_global + i - 1.0
-      !jg = G%jsd_global + j - 1.0 
-      !if(ig .eq. 83 .and. jg .eq. 2) then
+      !ig = G%idg_offset + i
+      !jg = G%jdg_offset + j 
+      !if (ig .eq. 83 .and. jg .eq. 2) then
       !!  print *, "nmodes=",nmodes
       !  print *, "lam_1=",lam_1
       !  print *, "lamMin=",lamMin

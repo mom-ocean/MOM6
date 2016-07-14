@@ -243,7 +243,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
   call calculate_derivs(dt, G, CS)
 
   if (ASSOCIATED(CS%e)) then
-    call find_eta(h, tv, G%g_Earth, G, GV, CS%e, eta_bt)
+    call find_eta(h, tv, GV%g_Earth, G, GV, CS%e, eta_bt)
     if (CS%id_e > 0) call post_data(CS%id_e, CS%e, CS%diag)
   endif
 
@@ -253,7 +253,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
         CS%e_D(i,j,k) = CS%e(i,j,k) + G%bathyT(i,j)
       enddo ; enddo ; enddo
     else
-      call find_eta(h, tv, G%g_Earth, G, GV, CS%e_D, eta_bt)
+      call find_eta(h, tv, GV%g_Earth, G, GV, CS%e_D, eta_bt)
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
         CS%e_D(i,j,k) = CS%e_D(i,j,k) + G%bathyT(i,j)
       enddo ; enddo ; enddo
@@ -304,7 +304,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
         do k=1,nz
           ! pressure for EOS at the layer center (Pa)
           do i=is,ie
-            pressure_1d(i) = pressure_1d(i) + 0.5*(G%G_Earth*GV%H_to_kg_m2)*h(i,j,k)
+            pressure_1d(i) = pressure_1d(i) + 0.5*(GV%g_Earth*GV%H_to_kg_m2)*h(i,j,k)
           enddo
           ! store in-situ density (kg/m3) in diag_tmp3d
           call calculate_density(tv%T(:,j,k),tv%S(:,j,k), pressure_1d, &
@@ -315,7 +315,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
           enddo
           ! pressure for EOS at the bottom interface (Pa)
           do i=is,ie
-            pressure_1d(i) = pressure_1d(i) + 0.5*(G%G_Earth*GV%H_to_kg_m2)*h(i,j,k)
+            pressure_1d(i) = pressure_1d(i) + 0.5*(GV%g_Earth*GV%H_to_kg_m2)*h(i,j,k)
           enddo
         enddo ! k
 
@@ -326,7 +326,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
 
   ! volume mean potential temperature 
   if (CS%id_thetaoga>0) then
-    thetaoga = global_volume_mean(tv%T, h, G)
+    thetaoga = global_volume_mean(tv%T, h, G, GV)
     call post_data(CS%id_thetaoga, thetaoga, CS%diag)
   endif
 
@@ -341,7 +341,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
 
   ! volume mean salinity 
   if (CS%id_soga>0) then
-    soga = global_volume_mean(tv%S, h, G)
+    soga = global_volume_mean(tv%S, h, G, GV)
     call post_data(CS%id_soga, soga, CS%diag)
   endif
 
@@ -356,13 +356,13 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
 
   ! layer mean potential temperature 
   if (CS%id_temp_layer_ave>0) then
-    temp_layer_ave = global_layer_mean(tv%T, h, G)
+    temp_layer_ave = global_layer_mean(tv%T, h, G, GV)
     call post_data_1d_k(CS%id_temp_layer_ave, temp_layer_ave, CS%diag)
   endif
 
   ! layer mean salinity 
   if (CS%id_salt_layer_ave>0) then
-    salt_layer_ave = global_layer_mean(tv%S, h, G)
+    salt_layer_ave = global_layer_mean(tv%S, h, G, GV)
     call post_data_1d_k(CS%id_salt_layer_ave, salt_layer_ave, CS%diag)
   endif
 
@@ -375,13 +375,17 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
     if (associated(tv%eqn_of_state)) then
       pressure_1d(:) = tv%P_Ref
 !$OMP parallel do default(none) shared(tv,Rcv,is,ie,js,je,nz,pressure_1d)
-      do k=1,nz ; do j=js,je+1
-        call calculate_density(tv%T(:,j,k),tv%S(:,j,k),pressure_1d, &
-                               Rcv(:,j,k),is,ie-is+2, tv%eqn_of_state)
+      do k=1,nz ; do j=js-1,je+1
+        call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pressure_1d, &
+                               Rcv(:,j,k), is-1, ie-is+3, tv%eqn_of_state)
       enddo ; enddo
-      if (CS%id_Rml > 0) call post_data(CS%id_Rml, Rcv, CS%diag)
-      if (CS%id_Rcv > 0) call post_data(CS%id_Rcv, Rcv, CS%diag)
+    else ! Rcv should not be used much in this case, so fill in sensible values.
+      do k=1,nz ; do j=js-1,je+1 ; do i=is-1,ie+1
+        Rcv(i,j,k) = GV%Rlay(k)
+      enddo ; enddo ; enddo
     endif
+    if (CS%id_Rml > 0) call post_data(CS%id_Rml, Rcv, CS%diag)
+    if (CS%id_Rcv > 0) call post_data(CS%id_Rcv, Rcv, CS%diag)
 
     if (ASSOCIATED(CS%h_Rlay)) then
       k_list = nz/2
@@ -703,7 +707,7 @@ subroutine calculate_vertical_integrals(h, tv, fluxes, G, GV, CS)
   endif
 
   if (CS%id_col_ht > 0) then
-    call find_eta(h, tv, G%g_Earth, G, GV, z_top)
+    call find_eta(h, tv, GV%g_Earth, G, GV, z_top)
     do j=js,je ; do i=is,ie
       z_bot(i,j) = z_top(i,j) + G%bathyT(i,j)
     enddo ; enddo
@@ -714,7 +718,7 @@ subroutine calculate_vertical_integrals(h, tv, fluxes, G, GV, CS)
     do j=js,je ; do i=is,ie ; mass(i,j) = 0.0 ; enddo ; enddo
     if (GV%Boussinesq) then
       if (associated(tv%eqn_of_state)) then
-        IG_Earth = 1.0 / G%g_Earth
+        IG_Earth = 1.0 / GV%g_Earth
 !       do j=js,je ; do i=is,ie ; z_bot(i,j) = -P_SURF(i,j)/GV%H_to_Pa ; enddo ; enddo
         do j=js,je ; do i=is,ie ; z_bot(i,j) = 0.0 ; enddo ; enddo
         do k=1,nz
@@ -723,7 +727,7 @@ subroutine calculate_vertical_integrals(h, tv, fluxes, G, GV, CS)
             z_bot(i,j) = z_top(i,j) - GV%H_to_m*h(i,j,k)
           enddo ; enddo
           call int_density_dz(tv%T(:,:,k), tv%S(:,:,k), &
-                              z_top, z_bot, 0.0, GV%H_to_kg_m2, G%g_Earth, &
+                              z_top, z_bot, 0.0, GV%H_to_kg_m2, GV%g_Earth, &
                               G%HI, G%HI, tv%eqn_of_state, dpress)
           do j=js,je ; do i=is,ie
             mass(i,j) = mass(i,j) + dpress(i,j) * IG_Earth
@@ -749,7 +753,7 @@ subroutine calculate_vertical_integrals(h, tv, fluxes, G, GV, CS)
       ! where pso is the sea water pressure at sea water surface
       ! note that pso is equivalent to fluxes%p_surf
       do j=js,je ; do i=is,ie
-        btm_pres(i,j) = mass(i,j) * G%g_Earth
+        btm_pres(i,j) = mass(i,j) * GV%g_Earth
         if (ASSOCIATED(fluxes%p_surf)) then
           btm_pres(i,j) = btm_pres(i,j) + fluxes%p_surf(i,j)
         endif

@@ -22,8 +22,7 @@ use MOM_neutral_diffusion,     only : neutral_diffusion_init, neutral_diffusion_
 use MOM_neutral_diffusion,     only : neutral_diffusion_CS
 use MOM_neutral_diffusion,     only : neutral_diffusion_calc_coeffs, neutral_diffusion
 use MOM_tracer_registry,       only : tracer_registry_type, tracer_type, MOM_tracer_chksum
-use MOM_variables,             only : ocean_OBC_type, thermo_var_ptrs, OBC_FLATHER_E
-use MOM_variables,             only : OBC_FLATHER_W, OBC_FLATHER_N, OBC_FLATHER_S
+use MOM_variables,             only : thermo_var_ptrs
 use MOM_verticalGrid,          only : verticalGrid_type
 
 implicit none ; private
@@ -58,9 +57,10 @@ type, public :: tracer_hor_diff_CS ; private
   logical :: debug                 ! If true, write verbose checksums for debugging purposes.
   logical :: show_call_tree        ! Display the call tree while running. Set by VERBOSITY level.
   logical :: first_call = .true.
-  integer :: id_KhTr_u = -1
-  integer :: id_KhTr_v = -1
-  integer :: id_KhTr_h = -1
+  integer :: id_KhTr_u  = -1
+  integer :: id_KhTr_v  = -1
+  integer :: id_KhTr_h  = -1
+  integer :: id_CFL     = -1
 
   type(group_pass_type) :: pass_t !For group halo pass, used in both 
                                   !tracer_hordiff and tracer_epipycnal_ML_diff
@@ -83,7 +83,7 @@ contains
 !! on the acceptable time increment.
 subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv)
   type(ocean_grid_type),                 intent(inout) :: G       !< Grid type 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h       !< Layer thickness (m or kg m-2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h       !< Layer thickness (m or kg m-2)
   real,                                  intent(in)    :: dt      !< time step (seconds)
   type(MEKE_type),                       pointer       :: MEKE    !< MEKE type 
   type(VarMix_CS),                       pointer       :: VarMix  !< Variable mixing type 
@@ -130,7 +130,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv)
   real :: Rd_dx      ! The local value of deformation radius over grid-spacing, nondim.
   real :: normalize  ! normalization used for diagnostic Kh_h; diffusivity averaged to h-points. 
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
        "register_tracer must be called before tracer_hordiff.")
   if (LOC(Reg)==0) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
@@ -273,6 +273,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv)
     call cpu_clock_end(id_clock_sync)
     num_itts = max(1,ceiling(max_CFL))
     I_numitts = 1.0 ; if (num_itts > 1) I_numitts = 1.0 / (real(num_itts))
+    if(CS%id_CFL > 0) call post_data(CS%id_CFL, CFL, CS%diag, mask=G%mask2dT)
   else
     num_itts = 1 ; I_numitts = 1.0
   endif
@@ -316,6 +317,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv)
         Coef_x(I,j) = I_numitts * khdt_x(I,j)
       enddo
     enddo
+
     do itt=1,num_itts
       if (CS%show_call_tree) call callTree_waypoint("Calling neutral diffusion (tracer_hordiff)",itt)
       if (itt>1) then ! Update halos for subsequent iterations
@@ -324,7 +326,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv)
         call cpu_clock_end(id_clock_pass)
       endif
       do m=1,ntr ! for each tracer
-        call neutral_diffusion(G, GV,  h, Coef_x, Coef_y, Reg%Tr(m)%t, m, dt, &
+        call neutral_diffusion(G, GV,  h, Coef_x, Coef_y, Reg%Tr(m)%t, m, I_numitts*dt, &
                                Reg%Tr(m)%name, CS%neutral_diffusion_CSp)
       enddo ! m
     enddo ! itt
@@ -555,7 +557,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   integer :: PEmax_kRho
   integer :: isv, iev, jsv, jev ! The valid range of the indices.
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB
   Idt = 1.0/dt
@@ -1382,6 +1384,7 @@ subroutine tracer_hor_diff_init(Time, G, param_file, diag, CS, CSnd)
   CS%id_KhTr_u = -1 
   CS%id_KhTr_v = -1 
   CS%id_KhTr_h = -1
+  CS%id_CFL    = -1
 
   CS%id_KhTr_u = register_diag_field('ocean_model', 'KHTR_u', diag%axesCu1, Time, &
      'Epipycnal tracer diffusivity at zonal faces of tracer cell', 'meter2 second-1')
@@ -1392,6 +1395,10 @@ subroutine tracer_hor_diff_init(Time, G, param_file, diag, CS, CSnd)
      cmor_field_name='diftrelo', cmor_units='m2 sec-1',                         &
      cmor_standard_name= 'ocean_tracer_epineutral_laplacian_diffusivity',       &
      cmor_long_name = 'Ocean Tracer Epineutral Laplacian Diffusivity') 
+  if (CS%check_diffusive_CFL) then 
+    CS%id_CFL = register_diag_field('ocean_model', 'CFL_lateral_diff', diag%axesT1, Time,&
+       'Grid CFL number for lateral/neutral tracer diffusion', 'dimensionless') 
+  endif
 
 end subroutine tracer_hor_diff_init
 
