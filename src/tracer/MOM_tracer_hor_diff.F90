@@ -9,6 +9,7 @@ use MOM_diag_mediator,         only : post_data, diag_ctrl
 use MOM_diag_mediator,         only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_domains,               only : sum_across_PEs, max_across_PEs
 use MOM_domains,               only : create_group_pass, do_group_pass, group_pass_type
+use MOM_domains,               only : pass_vector
 use MOM_checksums,             only : hchksum, uchksum, vchksum
 use MOM_EOS,                   only : calculate_density
 use MOM_error_handler,         only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
@@ -286,6 +287,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
     khdt_y = read_khdt_y
   endif ! do_online
 
+  call pass_vector(khdt_x,khdt_y,G%Domain)
 
   if (CS%check_diffusive_CFL) then
     if (CS%show_call_tree) call callTree_waypoint("Checking diffusive CFL (tracer_hordiff)")
