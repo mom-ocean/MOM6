@@ -1530,13 +1530,13 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
 
     if (CS%debug) then
       call hchksum(h_adv*GV%H_to_m,"Pre-advection h", G, haloshift=1)
-      call uchksum(CS%uhtr*GV%H_to_m,"Pre-advection uhtr", G, haloshift=1)
-      call vchksum(CS%vhtr*GV%H_to_m,"Pre-advection vhtr", G, haloshift=1)
+      call uchksum(uhtr*GV%H_to_m,"Pre-advection uhtr", G, haloshift=1)
+      call vchksum(vhtr*GV%H_to_m,"Pre-advection vhtr", G, haloshift=1)
       if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Pre-advection T", G, haloshift=1)
       if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Pre-advection S", G, haloshift=1)
     endif
 
-    call advect_tracer(h_adv, CS%uhtr, CS%vhtr, CS%OBC, CS%dt_therm, G, GV, &
+    call advect_tracer(h_adv, uhtr, vhtr, CS%OBC, CS%dt_therm, G, GV, &
         CS%tracer_adv_CSp, CS%tracer_Reg)
     call tracer_hordiff(h_adv, CS%dt_therm, CS%MEKE, CS%VarMix, G, GV, &
         CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, CS%do_online, khdt_x, khdt_y)
