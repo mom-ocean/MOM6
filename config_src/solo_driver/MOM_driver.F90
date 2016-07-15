@@ -135,6 +135,7 @@ program MOM_main
                                   ! representation of time_step.
   real :: time_step               ! The time step of a call to step_MOM in seconds.
   real :: dt                      ! The baroclinic dynamics time step, in seconds.
+  real :: dt_off                  ! Offline time step in seconds
   integer :: ntstep               ! The number of baroclinic dynamics time steps
                                   ! within time_step.
 
@@ -307,8 +308,21 @@ program MOM_main
   call get_param(param_file, mod, "DT_FORCING", time_step, &
                  "The time step for changing forcing, coupling with other \n"//&
                  "components, or potentially writing certain diagnostics. \n"//&
-                 "The default value is given by DT.", units="s", default=dt)
+                 "The default value is given by DT.", units="s", default=dt) 
 
+  call get_param(param_file, mod, "DO_ONLINE", do_online, &
+                 "If true, use the model in prognostic mode where\n"//&
+                 "the barotropic and baroclinic dynamics, thermodynamics,\n"//&
+                 "etc. are stepped forward integrated in time.\n"//&
+                 "If false, the all of the above are bypassed with all\n"//&
+                 "fields necessary to integrate only the tracer advection\n"//&
+                 "and diffusion equation are read in from files stored from\n"//&
+                 "a previous integration of the prognostic model", default=.true.)
+  if (.not. do_online) then
+    call get_param(param_file, mod, "DT_OFFLINE", time_step, &
+                   "Time step for the offline time step")
+    dt = time_step
+  endif
   ntstep = MAX(1,ceiling(time_step/dt - 0.001))
 
   Time_step_ocean = set_time(int(floor(time_step+0.5)))
@@ -359,14 +373,6 @@ program MOM_main
                  "The interval in units of TIMEUNIT between saves of the \n"//&
                  "energies of the run and other globally summed diagnostics.", &
                  default=set_time(int(time_step+0.5)), timeunit=Time_unit)
-   call get_param(param_file, mod, "DO_ONLINE", do_online, &
-                 "If true, use the model in prognostic mode where\n"//&
-                 "the barotropic and baroclinic dynamics, thermodynamics,\n"//&
-                 "etc. are stepped forward integrated in time.\n"//&
-                 "If false, the all of the above are bypassed with all\n"//&
-                 "fields necessary to integrate only the tracer advection\n"//&
-                 "and diffusion equation are read in from files stored from\n"//&
-                 "a previous integration of the prognostic model", default=.true.)
 
   call log_param(param_file, mod, "ELAPSED TIME AS MASTER", elapsed_time_master)
 

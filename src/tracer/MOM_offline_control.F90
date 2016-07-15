@@ -91,6 +91,10 @@ module MOM_offline_transport
         real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
             v_preale
 
+        real              ::  dt_offline ! Timestep used for offline tracers
+
+        integer           ::  num_off_iter
+
         integer :: &
             id_h_new = -1, &
             id_h_old = -1, &
@@ -105,6 +109,7 @@ module MOM_offline_transport
     end type offline_transport_CS
 
 #include "MOM_memory.h"
+#include "version_variable.h"
     public offline_transport_init
     public post_diabatic_fields
     public post_advection_fields
@@ -349,25 +354,31 @@ contains
             return
         endif
         allocate(CS)
-
+        call log_version(param_file,mod,version, &
+                         "This module allows for tracers to be run offline")
+        
         ! Parse MOM_input for offline control
         call get_param(param_file, mod, "OFFLINEDIR", CS%offlinedir, &
-            "Input directory where the offline fields can be found", fail_if_missing=.true.)
+            "Input directory where the offline fields can be found", default=" ")
         call get_param(param_file, mod, "OFF_MEAN_FILE", CS%mean_file, &
-            "Filename where time-averaged fields are fund can be found")
+            "Filename where time-averaged fields are fund can be found", default=" ")
         call get_param(param_file, mod, "OFF_SUM_FILE", CS%sum_file, &
-            "Filename where the accumulated fields can be found")
+            "Filename where the accumulated fields can be found", default = " ")
         call get_param(param_file, mod, "OFF_SNAP_FILE", CS%snap_file, &
-            "Filename where snapshot fields can be found")
+            "Filename where snapshot fields can be found",default=" ")
         call get_param(param_file, mod, "OFF_PREALE_FILE", CS%preale_file, &
-            "Filename where the preale T, S, u, v, and h fields are found")
+            "Filename where the preale T, S, u, v, and h fields are found",default=" ")
         call get_param(param_file, mod, "START_INDEX", CS%start_index, &
-            "Which time index to start from", fail_if_missing=.true.)
+            "Which time index to start from", default=1)
         call get_param(param_file, mod, "NUMTIME", CS%numtime, &
-            "Number of timelevels in offline input files", fail_if_missing=.true.)
+            "Number of timelevels in offline input files", default=0)
         call get_param(param_file, mod, "FIELDS_ARE_OFFSET", CS%fields_are_offset, &
             "True if the time-averaged fields and snapshot fields are offset by one time level", &
             default=.false.)
+        call get_param(param_file, mod, "NUM_OFF_ITER", CS%num_off_iter, &
+            "Number of iterations to subdivide the offline tracer advection and diffusion" )
+        call get_param(param_file, mod, "DT_OFFLINE", CS%dt_offline, &
+            "Length of the offline timestep")
 
         ! Concatenate offline directory and file names
         CS%mean_file = trim(CS%offlinedir)//trim(CS%mean_file)
