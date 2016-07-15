@@ -1428,6 +1428,10 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
                      ! (m for Bouss, kg/m^2 for non-Bouss)
         h_end, &
         temp_old, salt_old     !
+    integer                                        :: niter, iter
+    real                                           :: Inum_iter, dt_iter
+
+    niter = CS%offline_CSp%num_off_iter
 
     ! Grid-related pointer assignments
     G => CS%G
@@ -1451,13 +1455,13 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     salt_old(:,:,:) = 0.0
 
 
-    if (.not.CS%adiabatic .AND. CS%use_ALE_algorithm ) then
-        if (CS%use_temperature) then
-            call create_group_pass(CS%pass_T_S_h, CS%tv%T, G%Domain)
-            call create_group_pass(CS%pass_T_S_h, CS%tv%S, G%Domain)
-        endif
-        call create_group_pass(CS%pass_T_S_h, CS%offline_CSp%h_preale, G%Domain)
-    endif
+!    if (.not.CS%adiabatic .AND. CS%use_ALE_algorithm ) then
+!        if (CS%use_temperature) then
+!            call create_group_pass(CS%pass_T_S_h, CS%tv%T, G%Domain)
+!            call create_group_pass(CS%pass_T_S_h, CS%tv%S, G%Domain)
+!        endif
+!        call create_group_pass(CS%pass_T_S_h, CS%offline_CSp%h_preale, G%Domain)
+!    endif
 
     call cpu_clock_begin(id_clock_tracer)
     call enable_averaging(time_interval, Time_start+set_time(int(time_interval)), &
@@ -1465,11 +1469,29 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     call transport_by_files(G, CS%offline_CSp, h_old, h_new, h_adv, h_end, eatr, ebtr, uhtr, vhtr, &
         khdt_x, khdt_y, temp_old, salt_old, fluxes, CS%diabatic_CSp%optics, CS%use_ALE_algorithm)
 
-    CS%uhtr = uhtr
-    CS%vhtr = vhtr
+    ! Scale accumated transport by number of sub iterations
+
+    dt_iter = CS%offline_CSp%dt_offline
+    
+    if (niter>1) then
+        Inum_iter = 1./real(niter)
+        dt_iter = CS%offline_CSp%dt_offline*Inum_iter
+        eatr = eatr * Inum_iter
+        ebtr = ebtr * Inum_iter
+        uhtr = uhtr * Inum_iter
+        vhtr = vhtr * Inum_iter
+        khdt_x = khdt_x * Inum_iter
+        khdt_y = khdt_y * Inum_iter    
+    endif
+
+
     CS%T = temp_old
     CS%S = salt_old
+    call pass_var(CS%T,G%Domain)
+    call pass_var(CS%S,G%Domain)
 
+
+    do iter=1,niter
 !------------DIABATIC FIRST
 
     if (CS%diabatic_first) then
@@ -1478,7 +1500,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         endif
 
         call call_tracer_column_fns(h_old, h_new, eatr, ebtr, &
-            fluxes, CS%dt_therm, G, GV, CS%tv, CS%diabatic_CSp%optics, CS%tracer_flow_CSp)
+            fluxes, dt_iter, G, GV, CS%tv, CS%diabatic_CSp%optics, CS%tracer_flow_CSp)
 
         ! Regridding/remapping is done here, at end of thermodynamics time step
         ! (that may comprise several dynamical time steps)
@@ -1505,7 +1527,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
             endif
             call cpu_clock_begin(id_clock_ALE)
             call ALE_main(G, GV, CS%offline_CSp%h_preale, CS%offline_CSp%u_preale, &
-                            CS%offline_CSp%v_preale, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%dt_therm)
+                            CS%offline_CSp%v_preale, CS%tv, CS%tracer_Reg, CS%ALE_CSp, dt_iter)
             call cpu_clock_end(id_clock_ALE)
 
             if (CS%debug) then
@@ -1515,6 +1537,9 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
 
             CS%tv%T = temp_old
             CS%tv%S = salt_old
+            
+            call pass_var(CS%T,G%Domain)
+            call pass_var(CS%S,G%Domain)
 
         ! Whenever thickness changes let the diag manager know, target grids
         ! for vertical remapping may need to be regenerated. This needs to
@@ -1526,7 +1551,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
 
     endif
 !-----------ADVECTION AND DIFFUSION
-    call post_advection_fields( G, CS%offline_CSp, CS%diag, h_adv, CS%uhtr, CS%vhtr, CS%tv%T, CS%tv%S )
+    call post_advection_fields( G, CS%offline_CSp, CS%diag, h_adv, uhtr, vhtr, CS%tv%T, CS%tv%S )
 
     if (CS%debug) then
       call hchksum(h_adv*GV%H_to_m,"Pre-advection h", G, haloshift=1)
@@ -1536,9 +1561,9 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Pre-advection S", G, haloshift=1)
     endif
 
-    call advect_tracer(h_adv, uhtr, vhtr, CS%OBC, CS%dt_therm, G, GV, &
+    call advect_tracer(h_adv, uhtr, vhtr, CS%OBC, dt_iter, G, GV, &
         CS%tracer_adv_CSp, CS%tracer_Reg)
-    call tracer_hordiff(h_adv, CS%dt_therm, CS%MEKE, CS%VarMix, G, GV, &
+    call tracer_hordiff(h_adv, dt_iter, CS%MEKE, CS%VarMix, G, GV, &
         CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, CS%do_online, khdt_x, khdt_y)
 
 !------------DIABATIC AFTER
@@ -1548,7 +1573,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         endif
 
         call call_tracer_column_fns(h_old, h_new, eatr, ebtr, &
-            fluxes, CS%dt_therm, G, GV, CS%tv, CS%diabatic_CSp%optics, CS%tracer_flow_CSp)
+            fluxes, dt_iter, G, GV, CS%tv, CS%diabatic_CSp%optics, CS%tracer_flow_CSp)
 
         ! Regridding/remapping is done here, at end of thermodynamics time step
         ! (that may comprise several dynamical time steps)
@@ -1560,7 +1585,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
             CS%tv%T = CS%offline_CSp%T_preale
             CS%tv%S = CS%offline_CSp%S_preale
 
-            call do_group_pass(CS%pass_T_S_h, G%Domain)
+            call pass_var(CS%tv%T,G%Domain)
+            call pass_var(CS%tv%S,G%Domain)
 
             ! update squared quantities
             if (associated(CS%S_squared)) &
@@ -1577,7 +1603,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
             endif
             call cpu_clock_begin(id_clock_ALE)
             call ALE_main(G, GV, CS%offline_CSp%h_preale, CS%offline_CSp%u_preale, &
-                            CS%offline_CSp%v_preale, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%dt_therm)
+                            CS%offline_CSp%v_preale, CS%tv, CS%tracer_Reg, CS%ALE_CSp, dt_iter)
             call cpu_clock_end(id_clock_ALE)
         
 
@@ -1592,20 +1618,20 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
 
             CS%tv%T = temp_old
             CS%tv%S = salt_old
+            call pass_var(CS%tv%T,G%Domain)
+            call pass_var(CS%tv%S,G%Domain)
 
             ! Whenever thickness changes let the diag manager know, target grids
             ! for vertical remapping may need to be regenerated. This needs to
             ! happen after the H update and before the next post_data.
             call diag_update_target_grids(CS%diag)
-            call post_diags_TS_vardec(G, CS, CS%dt_trans)
+            call post_diags_TS_vardec(G, CS, dt_iter)
         endif   ! endif for the block "if ( CS%use_ALE_algorithm )"
     endif ! diabatic second
-
+    end do
     call disable_averaging(CS%diag)
     call cpu_clock_end(id_clock_tracer)
     CS%h = h_end
-
-
 
 end subroutine step_tracers
 

@@ -148,9 +148,6 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
 
   if (present(do_online_flag)) do_online = do_online_flag
 
-  khdt_x = 0.0 ; khdt_y = 0.0
-  Coef_x = 0.0 ; Coef_y = 0.0
-
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
        "register_tracer must be called before tracer_hordiff.")
   if (LOC(Reg)==0) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
@@ -285,9 +282,10 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
   else ! .not. do_online
     khdt_x = read_khdt_x
     khdt_y = read_khdt_y
+    call pass_vector(khdt_x,khdt_y,G%Domain)
   endif ! do_online
 
-  call pass_vector(khdt_x,khdt_y,G%Domain)
+
 
   if (CS%check_diffusive_CFL) then
     if (CS%show_call_tree) call callTree_waypoint("Checking diffusive CFL (tracer_hordiff)")
