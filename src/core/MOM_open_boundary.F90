@@ -30,6 +30,7 @@ public open_boundary_impose_land_mask
 public Radiation_Open_Bdry_Conds
 public set_Flather_positions
 public set_Flather_data
+public update_OBC_data
 
 integer, parameter, public :: OBC_NONE = 0, OBC_SIMPLE = 1, OBC_WALL = 2
 integer, parameter, public :: OBC_FLATHER = 3
@@ -102,6 +103,8 @@ type, public :: ocean_OBC_type
                    !! velocity (or speed of characteristics), in m s-1.  The
                    !! default value is 10 m s-1.
   logical :: this_pe !< Is there an open boundary on this tile?
+  logical :: update_OBC !< Is the open boundary info going to get updated?
+  character(len=80) :: OBC_config
 end type ocean_OBC_type
 
 integer :: id_clock_pass
@@ -130,6 +133,9 @@ subroutine open_boundary_config(G, param_file, OBC)
                  "If true, open boundary conditions may be set at some \n"//&
                  "v-points, with the configuration controlled by OBC_CONFIG", &
                  default=.false.)
+  call get_param(param_file, mod, "OBC_CONFIG", OBC%OBC_config, &
+                 "If set, open boundary configuration string" &
+                 default="None")
   call get_param(param_file, mod, "APPLY_OBC_U_FLATHER_EAST", OBC%apply_OBC_u_flather_east, &
                  "Apply a Flather open boundary condition on the eastern\n"//&
                  "side of the global domain", &
@@ -194,6 +200,7 @@ subroutine open_boundary_init(G, param_file, OBC)
                    "one of the APPLY_OBC_[UV]_FLATHER_...  is true.", &
                    units="nondim",  default=0.2)
   endif
+  OBC%update_OBC = .false.
 
   id_clock_pass = cpu_clock_id('(Ocean OBC halo updates)', grain=CLOCK_ROUTINE)
 
@@ -771,6 +778,41 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
   enddo ; enddo ; enddo
 
 end subroutine set_Flather_data
+
+!> Calls appropriate routine to update the open boundary conditions.
+subroutine update_OBC_data(OBC, tv, h, G, Time)
+  type(ocean_grid_type),                     intent(inout) :: G !< Ocean grid structure
+  type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary structure
+  type(thermo_var_ptrs),                     intent(inout) :: tv !< Thermodynamics structure
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h !< Thickness
+  type(time_type),                           intent(in)    :: Time !< Model time
+  ! Local variables
+  logical :: read_OBC_eta = .false.
+  logical :: read_OBC_uv = .false.
+  logical :: read_OBC_TS = .false.
+  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
+  integer :: isd_off, jsd_off
+  integer :: IsdB, IedB, JsdB, JedB
+  character(len=40)  :: mod = "set_Flather_Bdry_Conds" ! This subroutine's name.
+  character(len=200) :: filename, OBC_file, inputdir ! Strings for file/path
+
+  real :: temp_u(G%domain%niglobal+1,G%domain%njglobal)
+  real :: temp_v(G%domain%niglobal,G%domain%njglobal+1)
+
+  real, pointer, dimension(:,:,:) :: &
+    OBC_T_u => NULL(), &    ! These arrays should be allocated and set to
+    OBC_T_v => NULL(), &    ! specify the values of T and S that should come
+    OBC_S_u => NULL(), &
+    OBC_S_v => NULL()
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+
+  if (OBC%OBC_config == "TIDAL_BAY") then
+    call TIDAL_BAY_set_OBC_data(OBC, G, Time)
+
+end subroutine update_OBC_data
 
 !> \namespace mom_open_boundary
 !! This module implements some aspects of internal open boundary

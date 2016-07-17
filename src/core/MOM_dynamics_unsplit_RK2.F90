@@ -102,6 +102,7 @@ use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types, only : MEKE_type
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_open_boundary, only : Radiation_Open_Bdry_Conds
+use MOM_open_boundary,         only : update_OBC_data
 use MOM_PressureForce, only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc, only : set_viscous_BBL, set_viscous_ML, set_visc_CS
 use MOM_tidal_forcing, only : tidal_forcing_init, tidal_forcing_CS
@@ -319,6 +320,10 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   call pass_vector(CS%PFu, CS%PFv, G%Domain)
   call pass_vector(CS%CAu, CS%CAv, G%Domain)
   call cpu_clock_end(id_clock_pass)
+
+  if (allocated(CS%OBC)) then; if (CS%OBC%update_OBC) then
+    call update_OBC_data(CS%OBC, tv, h, G, Time_local)
+  endif; endif
 
 ! up+[n-1/2] = u[n-1] + dt_pred * (PFu + CAu)
   call cpu_clock_begin(id_clock_mom_update)
