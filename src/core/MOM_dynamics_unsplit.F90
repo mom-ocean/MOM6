@@ -104,6 +104,7 @@ use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types, only : MEKE_type
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_open_boundary, only : Radiation_Open_Bdry_Conds
+use MOM_open_boundary,         only : update_OBC_data
 use MOM_PressureForce, only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc, only : set_viscous_BBL, set_viscous_ML, set_visc_CS
 use MOM_tidal_forcing, only : tidal_forcing_init, tidal_forcing_CS
@@ -325,6 +326,10 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
                      CS%PressureForce_CSp, CS%ALE_CSp, p_surf)
   call cpu_clock_end(id_clock_pres)
 
+  if (allocated(CS%OBC)) then; if (CS%OBC%update_OBC) then
+    call update_OBC_data(CS%OBC, tv, h, G, Time_local)
+  endif; endif
+
 ! up = u + dt_pred * (PFu + CAu)
   call cpu_clock_begin(id_clock_mom_update)
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
@@ -408,6 +413,10 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
                      CS%PressureForce_CSp, CS%ALE_CSp, p_surf)
   call cpu_clock_end(id_clock_pres)
 
+  if (allocated(CS%OBC)) then; if (CS%OBC%update_OBC) then
+    call update_OBC_data(CS%OBC, tv, h, G, Time_local)
+  endif; endif
+
 ! upp = u + dt/2 * ( PFu + CAu )
   call cpu_clock_begin(id_clock_mom_update)
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
@@ -481,6 +490,10 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   call PressureForce(h_av, tv, CS%PFu, CS%PFv, G, GV, &
                      CS%PressureForce_CSp, CS%ALE_CSp, p_surf)
   call cpu_clock_end(id_clock_pres)
+
+  if (allocated(CS%OBC)) then; if (CS%OBC%update_OBC) then
+    call update_OBC_data(CS%OBC, tv, h, G, Time_local)
+  endif; endif
 
 ! u = u + dt * ( PFu + CAu )
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
