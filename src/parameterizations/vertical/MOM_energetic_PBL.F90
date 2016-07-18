@@ -143,7 +143,8 @@ integer :: num_msg = 0, max_msg = 2
 contains
 
 subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
-                         dSV_dT, dSV_dS, TKE_forced, dt_diag, last_call)
+                         dSV_dT, dSV_dS, TKE_forced, dt_diag, last_call, &
+                         dT_expected, dS_expected)
   type(ocean_grid_type),                    intent(inout) :: G
   type(verticalGrid_type),                  intent(in)    :: GV
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h_3d
@@ -156,6 +157,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   type(energetic_PBL_CS),                   pointer       :: CS
   real,                           optional, intent(in)    :: dt_diag
   logical,                        optional, intent(in)    :: last_call
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                  optional, intent(out)   :: dT_expected, dS_expected
 
 !    This subroutine determines the diffusivities from the integrated energetics
 !  mixed layer model.  It assumes that heating, cooling and freshwater fluxes
@@ -324,8 +327,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   logical :: sfc_disconnect ! If true, any turbulence has become disconnected
                     ! from the surface.
 
-  real :: CSE(10)
-
 ! The following is only used as a diagnostic.
   real :: dt__diag  ! A copy of dt_diag (if present) or dt, in s.
   real :: IdtdR0    !  = 1.0 / (dt__diag * Rho0), in m3 kg-1 s-1.
@@ -335,8 +336,9 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   logical :: reset_diags  ! If true, zero out the accumulated diagnostics.
                 ! detrainment, in units of m.
 
-  logical :: debug=.true.
+  logical :: debug=.false.  ! Change this hard-coded value for debugging.
 !  The following arrays are used only for debugging purposes.
+  real :: dPE_debug, mixing_debug
   real, dimension(20) :: TKE_left_itt, PE_chg_itt, Kddt_h_itt, dPEa_dKd_itt, MKE_src_itt
   real, dimension(SZI_(G),SZK_(G)) :: &
     mech_TKE_k, conv_PErel_k
@@ -355,6 +357,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       "must now be used.")
   if (.NOT. ASSOCIATED(fluxes%ustar)) call MOM_error(FATAL, &
       "energetic_PBL: No surface TKE fluxes (ustar) defined in mixedlayer!")
+  if (present(dT_expected) .or. present(dS_expected)) debug = .true.
 
   h_neglect = GV%H_subroundoff
 
@@ -381,7 +384,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
         CS%diag_TKE_wind(i,j) = 0.0 ; CS%diag_TKE_MKE(i,j) = 0.0
         CS%diag_TKE_conv(i,j) = 0.0 ; CS%diag_TKE_forcing(i,j) = 0.0
         CS%diag_TKE_mixing(i,j) = 0.0 ; CS%diag_TKE_mech_decay(i,j) = 0.0
-        CS%diag_TKE_conv_decay(i,j) = 0.0
+        CS%diag_TKE_conv_decay(i,j) = 0.0 !; CS%diag_TKE_unbalanced_forcing(i,j) = 0.0
       enddo ; enddo
     endif
 !!OMP end parallel
@@ -459,6 +462,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
         if (TKE_forced(i,j,1) <= 0.0) then
           CS%diag_TKE_forcing(i,j) = CS%diag_TKE_forcing(i,j) + &
                                      max(-mech_TKE(i), TKE_forced(i,j,1)) * IdtdR0
+          ! CS%diag_TKE_unbalanced_forcing(i,j) = CS%diag_TKE_unbalanced_forcing(i,j) + &
+          !     min(0.0, TKE_forced(i,j,1) + mech_TKE(i)) * IdtdR0
         else
           CS%diag_TKE_forcing(i,j) = CS%diag_TKE_forcing(i,j) + CS%nstar*TKE_forced(i,j,1) * IdtdR0
         endif
@@ -567,9 +572,12 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           if (TKE_forced(i,j,k) + tot_TKE < 0.0) then
             ! The shortwave requirements deplete all the energy in this layer.
             if (CS%TKE_diagnostics) then
-              CS%diag_TKE_mixing(i,j) = CS%diag_TKE_mixing(i,j) - tot_TKE * IdtdR0
+              CS%diag_TKE_mixing(i,j) = CS%diag_TKE_mixing(i,j) + tot_TKE * IdtdR0
+              CS%diag_TKE_forcing(i,j) = CS%diag_TKE_forcing(i,j) - tot_TKE * IdtdR0
+              ! CS%diag_TKE_unbalanced_forcing(i,j) = CS%diag_TKE_unbalanced_forcing(i,j) + &
+              !     (TKE_forced(i,j,k) + tot_TKE) * IdtdR0
               CS%diag_TKE_conv_decay(i,j) = CS%diag_TKE_conv_decay(i,j) + &
-                  (1.0-TKE_reduc)*(CS%nstar-nstar_FC) * conv_PErel(i) * IdtdR0
+                      (CS%nstar-nstar_FC) * conv_PErel(i) * IdtdR0
             endif
             tot_TKE = 0.0 ; mech_TKE(i) = 0.0 ; conv_PErel(i) = 0.0
           else
@@ -581,7 +589,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
               CS%diag_TKE_conv_decay(i,j) = CS%diag_TKE_conv_decay(i,j) + &
                   (1.0-TKE_reduc)*(CS%nstar-nstar_FC) * conv_PErel(i) * IdtdR0
             endif
-            tot_TKE = TKE_reduc*tot_TKE
+            tot_TKE = TKE_reduc*tot_TKE   ! = tot_TKE + TKE_forced(i,j,k)
             mech_TKE(i) = TKE_reduc*mech_TKE(i)
             conv_PErel(i) = TKE_reduc*conv_PErel(i)
           endif
@@ -616,7 +624,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
          !   The estimated properties for layer k-1 can be calculated, using
          ! greatly simplified expressions when Kddt_h = 0.  This enables the
          ! tridiagonal solver for the whole column to be completed for debugging
-         ! purposes, and also allows for somethign akin to convective adjustment
+         ! purposes, and also allows for something akin to convective adjustment
          ! in unstable interior regions?
           b1 = 1.0 / (b_den_1(i))
           c1(K) = 0.0
@@ -721,7 +729,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
             conv_PErel(i) = conv_PErel(i) - dPE_conv
             mech_TKE(i) = mech_TKE(i) + MKE_src
             if (CS%TKE_diagnostics) then
-              CS%diag_TKE_conv(i,j) = CS%diag_TKE_conv(i,j) - dPE_conv * IdtdR0
+              CS%diag_TKE_conv(i,j) = CS%diag_TKE_conv(i,j) - CS%nstar*dPE_conv * IdtdR0
               CS%diag_TKE_MKE(i,j) = CS%diag_TKE_MKE(i,j) + MKE_src * IdtdR0
             endif
             if (sfc_connected(i)) CS%ML_depth(i,J) = CS%ML_depth(i,J) + &
@@ -893,12 +901,32 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           Se(k) = Se(k) + c1(K+1)*Se(k+1)
         enddo
       endif
+      if (present(dT_expected)) then
+        do k=1,nz ; dT_expected(i,j,k) = Te(k) - T0(k) ; enddo
+      endif
+      if (present(dS_expected)) then
+        do k=1,nz ; dS_expected(i,j,k) = Se(k) - S0(k) ; enddo
+      endif
+      if (debug) then
+        dPE_debug = 0.0
+        do k=1,nz
+          dPE_debug = dPE_debug + (dT_to_dPE(i,k) * (Te(k) - T0(k)) + &
+                                   dS_to_dPE(i,k) * (Se(k) - S0(k)))
+        enddo
+        mixing_debug = dPE_debug * IdtdR0
+      endif
       k = nz ! This is here to allow a breakpoint to be set.
     else
       ! For masked points, Kd_int must still be set (to 0) because it has intent(out).
       do K=1,nz+1
         Kd(i,K) = 0.
       enddo
+      if (present(dT_expected)) then
+        do k=1,nz ; dT_expected(i,j,k) = 0.0 ; enddo
+      endif
+      if (present(dS_expected)) then
+        do k=1,nz ; dS_expected(i,j,k) = 0.0 ; enddo
+      endif
     endif ; enddo ; ! Close of i-loop - Note unusual loop order!
 
     if (CS%id_Hsfc_used > 0) then
