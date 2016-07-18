@@ -16,7 +16,6 @@ use MOM_io, only : EAST_FACE, NORTH_FACE
 use MOM_io, only : slasher, read_data
 use MOM_tracer_registry, only : add_tracer_OBC_values, tracer_registry_type
 use MOM_variables, only : thermo_var_ptrs
-use TIDAL_BAY_initialization, only : TIDAL_BAY_set_OBC_data
 
 implicit none ; private
 
@@ -31,7 +30,6 @@ public open_boundary_impose_land_mask
 public Radiation_Open_Bdry_Conds
 public set_Flather_positions
 public set_Flather_data
-public update_OBC_data
 
 integer, parameter, public :: OBC_NONE = 0, OBC_SIMPLE = 1, OBC_WALL = 2
 integer, parameter, public :: OBC_FLATHER = 3
@@ -787,40 +785,6 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
   enddo ; enddo ; enddo
 
 end subroutine set_Flather_data
-
-!> Calls appropriate routine to update the open boundary conditions.
-subroutine update_OBC_data(OBC, G, Time)
-  type(ocean_grid_type),                     intent(inout) :: G !< Ocean grid structure
-  type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary structure
-  type(time_type),                           intent(in)    :: Time !< Model time
-  ! Local variables
-  logical :: read_OBC_eta = .false.
-  logical :: read_OBC_uv = .false.
-  logical :: read_OBC_TS = .false.
-  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
-  integer :: isd_off, jsd_off
-  integer :: IsdB, IedB, JsdB, JedB
-  character(len=40)  :: mod = "set_Flather_Bdry_Conds" ! This subroutine's name.
-  character(len=200) :: filename, OBC_file, inputdir ! Strings for file/path
-
-  real :: temp_u(G%domain%niglobal+1,G%domain%njglobal)
-  real :: temp_v(G%domain%niglobal,G%domain%njglobal+1)
-
-  real, pointer, dimension(:,:,:) :: &
-    OBC_T_u => NULL(), &    ! These arrays should be allocated and set to
-    OBC_T_v => NULL(), &    ! specify the values of T and S that should come
-    OBC_S_u => NULL(), &
-    OBC_S_v => NULL()
-
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-
-  if (OBC%OBC_config == "TIDAL_BAY") then
-    call TIDAL_BAY_set_OBC_data(OBC, G, Time)
-  endif
-
-end subroutine update_OBC_data
 
 !> \namespace mom_open_boundary
 !! This module implements some aspects of internal open boundary
