@@ -1147,7 +1147,7 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_energetic_PBL"  ! This module's name.
-  real :: omega_frac_dflt, vstar_scale_dflt
+  real :: omega_frac_dflt
   integer :: isd, ied, jsd, jed
   logical :: use_temperature, use_omega
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -1208,13 +1208,10 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
                  "relative to mechanically forced TKE. Making this larger\n"//&
                  "increases the BL diffusivity", &
                  "units=nondim", default=1.0)
-  vstar_scale_dflt = 1.0 / (max(CS%mstar,1e-6)**(1./3.))
   call get_param(param_file, mod, "VSTAR_SCALE_FACTOR", CS%vstar_scale_fac, &
                  "An overall nondimensional scaling factor for v*. \n"//&
-                 "Making this larger decreases the PBL diffusivity. \n"//&
-                 "The default here is set to 1/(MSTAR**1/3) for backward \n"//&
-                 "compatibility, but should be reexamined", "units=nondim", &
-                 default=vstar_scale_dflt )
+                 "Making this larger decreases the PBL diffusivity.", &
+                 "units=nondim", default=1.0)
   call get_param(param_file, mod, "EKMAN_SCALE_COEF", CS%Ekman_scale_coef, &
                  "A nondimensional scaling factor controlling the inhibition\n"//&
                  "of the diffusive length scale by rotation. Making this larger\n"//&
