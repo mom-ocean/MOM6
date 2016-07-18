@@ -22,8 +22,7 @@ use MOM_neutral_diffusion,     only : neutral_diffusion_init, neutral_diffusion_
 use MOM_neutral_diffusion,     only : neutral_diffusion_CS
 use MOM_neutral_diffusion,     only : neutral_diffusion_calc_coeffs, neutral_diffusion
 use MOM_tracer_registry,       only : tracer_registry_type, tracer_type, MOM_tracer_chksum
-use MOM_variables,             only : ocean_OBC_type, thermo_var_ptrs, OBC_FLATHER_E
-use MOM_variables,             only : OBC_FLATHER_W, OBC_FLATHER_N, OBC_FLATHER_S
+use MOM_variables,             only : thermo_var_ptrs
 use MOM_verticalGrid,          only : verticalGrid_type
 
 implicit none ; private
@@ -131,7 +130,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv)
   real :: Rd_dx      ! The local value of deformation radius over grid-spacing, nondim.
   real :: normalize  ! normalization used for diagnostic Kh_h; diffusivity averaged to h-points. 
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
        "register_tracer must be called before tracer_hordiff.")
   if (LOC(Reg)==0) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
@@ -558,7 +557,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   integer :: PEmax_kRho
   integer :: isv, iev, jsv, jev ! The valid range of the indices.
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB
   Idt = 1.0/dt
@@ -1396,8 +1395,10 @@ subroutine tracer_hor_diff_init(Time, G, param_file, diag, CS, CSnd)
      cmor_field_name='diftrelo', cmor_units='m2 sec-1',                         &
      cmor_standard_name= 'ocean_tracer_epineutral_laplacian_diffusivity',       &
      cmor_long_name = 'Ocean Tracer Epineutral Laplacian Diffusivity') 
-  CS%id_CFL = register_diag_field('ocean_model', 'CFL_lateral_diff', diag%axesT1, Time,&
-     'Grid CFL number for lateral/neutral tracer diffusion', 'dimensionless') 
+  if (CS%check_diffusive_CFL) then 
+    CS%id_CFL = register_diag_field('ocean_model', 'CFL_lateral_diff', diag%axesT1, Time,&
+       'Grid CFL number for lateral/neutral tracer diffusion', 'dimensionless') 
+  endif
 
 end subroutine tracer_hor_diff_init
 

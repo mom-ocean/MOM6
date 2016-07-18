@@ -12,6 +12,7 @@ use MOM_domains,       only : group_pass_type
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, MOM_mesg
 use MOM_file_parser,   only : read_param, get_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
+use MOM_hor_index,     only : hor_index_type
 use MOM_io,            only : vardesc, var_desc
 use MOM_restart,       only : MOM_restart_CS, register_restart_field, query_initialized
 use MOM_variables,     only : vertvisc_type
@@ -153,9 +154,9 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
   if (associated(MEKE%MEKE)) then
 
     if (CS%debug) then
-      if (associated(MEKE%mom_src)) call hchksum(MEKE%mom_src, 'MEKE mom_src',G)
-      if (associated(MEKE%GM_src)) call hchksum(MEKE%GM_src, 'MEKE GM_src',G)
-      if (associated(MEKE%MEKE)) call hchksum(MEKE%MEKE, 'MEKE MEKE',G)
+      if (associated(MEKE%mom_src)) call hchksum(MEKE%mom_src, 'MEKE mom_src',G%HI)
+      if (associated(MEKE%GM_src)) call hchksum(MEKE%GM_src, 'MEKE GM_src',G%HI)
+      if (associated(MEKE%MEKE)) call hchksum(MEKE%MEKE, 'MEKE MEKE',G%HI)
     endif
 
     ! Why are these 3 lines repeated from above?
@@ -1018,9 +1019,9 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
 end function MEKE_init
 
 !> Allocates memory and register restart fields for the MOM_MEKE module.
-subroutine MEKE_alloc_register_restart(G, param_file, MEKE, restart_CS)
+subroutine MEKE_alloc_register_restart(HI, param_file, MEKE, restart_CS)
 ! Arguments
-  type(ocean_grid_type), intent(inout) :: G          !< Grid structure
+  type(hor_index_type),  intent(in)    :: HI         !< Horizontal index structure
   type(param_file_type), intent(in)    :: param_file !< Parameter file parser structure.
   type(MEKE_type),       pointer       :: MEKE       !< A structure with MEKE-related fields.
   type(MOM_restart_CS),  pointer       :: restart_CS !< Restart control structure for MOM_MEKE.
@@ -1050,7 +1051,7 @@ subroutine MEKE_alloc_register_restart(G, param_file, MEKE, restart_CS)
 
 ! Allocate memory
   call MOM_mesg("MEKE_alloc_register_restart: allocating and registering", 5)
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+  isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed
   allocate(MEKE%MEKE(isd:ied,jsd:jed)) ; MEKE%MEKE(:,:) = 0.0
   vd = var_desc("MEKE", "m2 s-2", hor_grid='h', z_grid='1', &
            longname="Mesoscale Eddy Kinetic Energy")

@@ -1,6 +1,7 @@
 module DOME2d_initialization
 
 use MOM_ALE_sponge, only : ALE_sponge_CS, set_up_ALE_sponge_field, initialize_ALE_sponge
+use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
@@ -9,7 +10,7 @@ use MOM_io, only : close_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
 use MOM_io, only : write_field, slasher, vardesc
 use MOM_sponge, only : sponge_CS, set_up_sponge_field, initialize_sponge
-use MOM_variables, only : thermo_var_ptrs, ocean_OBC_type
+use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
@@ -33,10 +34,11 @@ contains
 !> Initialize topography with a shelf and slope in a 2D domain
 subroutine DOME2d_initialize_topography ( D, G, param_file, max_depth )
   ! Arguments
-  type(ocean_grid_type),            intent(in)  :: G !< Ocean grid structure
-  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: D !< Ocean bottom depth
-  type(param_file_type),            intent(in)  :: param_file !< Parameter file structure
-  real,                             intent(in)  :: max_depth !< Maximum depth of model
+  type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
+  real, dimension(G%isd:G%ied,G%jsd:G%jed), &
+                                      intent(out) :: D !< Ocean bottom depth in m
+  type(param_file_type),              intent(in)  :: param_file !< Parameter file structure
+  real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
   ! Local variables
   integer :: i, j
   real    :: x, bay_depth, l1, l2
@@ -82,8 +84,8 @@ end subroutine DOME2d_initialize_topography
 !> Initialize thicknesses according to coordinate mode
 subroutine DOME2d_initialize_thickness ( h, G, GV, param_file )
   type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: h !< Layer thicknesses
   type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: h !< Layer thicknesses
   type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
   ! Local variables
   real :: e0(SZK_(G))     ! The resting interface heights, in m, usually !

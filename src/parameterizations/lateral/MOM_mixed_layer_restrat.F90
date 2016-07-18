@@ -17,6 +17,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_forcing_type,  only : forcing
 use MOM_grid,          only : ocean_grid_type
+use MOM_hor_index,     only : hor_index_type
 use MOM_io,            only : vardesc, var_desc
 use MOM_restart,       only : register_restart_field, MOM_restart_CS
 use MOM_variables,     only : thermo_var_ptrs
@@ -203,8 +204,8 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV,
     if (.not. associated(MLD)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "Argument MLD was not associated!")
     if (CS%debug) then
-      call hchksum(CS%MLD_filtered,'mixed_layer_restrat: MLD_filtered',G,haloshift=1)
-      call hchksum(MLD,'mixed_layer_restrat: MLD in',G,haloshift=1)
+      call hchksum(CS%MLD_filtered,'mixed_layer_restrat: MLD_filtered',G%HI,haloshift=1)
+      call hchksum(MLD,'mixed_layer_restrat: MLD in',G%HI,haloshift=1)
     endif
     aFac = CS%MLE_MLD_decay_time / ( dt + CS%MLE_MLD_decay_time )
     bFac = dt / ( dt + CS%MLE_MLD_decay_time )
@@ -222,7 +223,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV,
 
   uDml(:) = 0.0 ; vDml(:) = 0.0
   I4dt = 0.25 / dt
-  g_Rho0 = G%g_Earth/GV%Rho0
+  g_Rho0 = GV%g_Earth/GV%Rho0
   h_neglect = GV%H_subroundoff
   dz_neglect = GV%H_subroundoff*GV%H_to_m
 
@@ -255,10 +256,10 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV,
   enddo
 
   if (CS%debug) then
-    call hchksum(h,'mixed_layer_restrat: h',G,haloshift=1)
-    call hchksum(fluxes%ustar,'mixed_layer_restrat: u*',G,haloshift=1)
-    call hchksum(CS%MLD,'mixed_layer_restrat: MLD',G,haloshift=1)
-    call hchksum(Rml_av,'mixed_layer_restrat: rml',G,haloshift=1)
+    call hchksum(h,'mixed_layer_restrat: h',G%HI,haloshift=1)
+    call hchksum(fluxes%ustar,'mixed_layer_restrat: u*',G%HI,haloshift=1)
+    call hchksum(CS%MLD,'mixed_layer_restrat: MLD',G%HI,haloshift=1)
+    call hchksum(Rml_av,'mixed_layer_restrat: rml',G%HI,haloshift=1)
   endif
 
 ! TO DO:
@@ -464,7 +465,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, GV, CS)
 
   uDml(:)    = 0.0 ; vDml(:) = 0.0
   I4dt       = 0.25 / dt
-  g_Rho0     = G%g_Earth/GV%Rho0
+  g_Rho0     = GV%g_Earth/GV%Rho0
   use_EOS    = associated(tv%eqn_of_state)
   h_neglect  = GV%H_subroundoff
   dz_neglect = GV%H_subroundoff*GV%H_to_m
@@ -737,8 +738,8 @@ logical function mixedlayer_restrat_init(Time, G, GV, param_file, diag, CS)
 end function mixedlayer_restrat_init
 
 !> Allocate and regsiter fields in the mixedlayer restratification structure for restarts
-subroutine mixedlayer_restrat_register_restarts(G, param_file, CS, restart_CS)
-  type(ocean_grid_type),       intent(in)    :: G          !< Ocean grid structure
+subroutine mixedlayer_restrat_register_restarts(HI, param_file, CS, restart_CS)
+  type(hor_index_type),        intent(in)    :: HI         !< Horizontal index structure
   type(param_file_type),       intent(in)    :: param_file !< Parameter file to parse
   type(mixedlayer_restrat_CS), pointer       :: CS         !< Module control structure
   type(MOM_restart_CS),        pointer       :: restart_CS !< Restart structure
@@ -758,12 +759,12 @@ subroutine mixedlayer_restrat_register_restarts(G, param_file, CS, restart_CS)
 
   ! CS%MLD is used either for the internally diagnosed MLD or
   ! for keep a running mean of the PBL's actively mixed MLD.
-  allocate(CS%MLD(G%isd:G%ied,G%jsd:G%jed)) ; CS%MLD(:,:) = 0.
+  allocate(CS%MLD(HI%isd:HI%ied,HI%jsd:HI%jed)) ; CS%MLD(:,:) = 0.
 
   call get_param(param_file, mod, "MLE_USE_PBL_MLD", CS%MLE_use_PBL_MLD, &
              default=.false., do_not_log=.true.)
   if (CS%MLE_use_PBL_MLD) then
-    allocate(CS%MLD_filtered(G%isd:G%ied,G%jsd:G%jed)) ; CS%MLD_filtered(:,:) = 0.
+    allocate(CS%MLD_filtered(HI%isd:HI%ied,HI%jsd:HI%jed)) ; CS%MLD_filtered(:,:) = 0.
     vd = var_desc("MLD_MLE_filtered","m","Time-filtered MLD for use in MLE", &
                   hor_grid='h', z_grid='1')
     call register_restart_field(CS%MLD_filtered, vd, .false., restart_CS)

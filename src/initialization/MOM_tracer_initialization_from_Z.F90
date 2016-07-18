@@ -14,7 +14,7 @@ use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
 use MOM_file_parser, only : log_version
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type, isPointInCell
-use MOM_io, only : close_file, create_file, fieldtype, file_exists
+use MOM_io, only : close_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE, MULTIPLE
 use MOM_io, only : slasher, vardesc, write_field
 use MOM_string_functions, only : uppercase
@@ -200,7 +200,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam,
       hSrc(i,j,:) = h1(:)
     enddo ; enddo
 
-    call ALE_remap_scalar(remapCS, G, kd, hSrc, tr_z, h, tr, all_cells=.true. )
+    call ALE_remap_scalar(remapCS, G, GV, kd, hSrc, tr_z, h, tr, all_cells=.true. )
 
     deallocate( hSrc )
     deallocate( h1 )
@@ -727,17 +727,14 @@ subroutine horiz_interp_and_extrap_tracer(filename, varnam,  conversion, recnum,
     call fill_miss_2d(tr_outf,good2,fill2,tr_prev,G,smooth=.true.)
     call myStats(tr_outf,missing_value,is,ie,js,je,k,'field from fill_miss_2d()')
 
-
     tr_z(:,:,k) = tr_outf(:,:)*G%mask2dT(:,:)
     mask_z(:,:,k) = good2(:,:)+fill2(:,:)
 
     tr_prev(:,:)=tr_z(:,:,k)
 
-
     if (debug) then
-      call hchksum(tr_prev,'field after fill ',G)
+      call hchksum(tr_prev,'field after fill ',G%HI)
     endif
-
 
   enddo ! kd
 

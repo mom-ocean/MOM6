@@ -121,14 +121,15 @@ type, public :: forcing
 
   ! land ice-shelf related inputs
   real, pointer, dimension(:,:) :: &
-  ustar_shelf   => NULL(), & !< friction velocity under ice-shelves (m/s)
-                             !! as computed by the ocean at the previous time step.
-  frac_shelf_h  => NULL(), & !< Fractional ice shelf coverage of h-, u-, and v-
-  frac_shelf_u  => NULL(), & !< cells, nondimensional from 0 to 1. These are only
-  frac_shelf_v  => NULL(), & !< associated if ice shelves are enabled, and are
-                             !! exactly 0 away from shelves or on land.
-  rigidity_ice_u => NULL(),& !< Depth-integrated lateral viscosity of ice
-  rigidity_ice_v => NULL()   !< shelves or sea ice at u- or v-points (m3/s)
+  ustar_shelf   => NULL(), &   !< friction velocity under ice-shelves (m/s)
+                               !! as computed by the ocean at the previous time step.
+  frac_shelf_h  => NULL(), &   !< Fractional ice shelf coverage of h-, u-, and v-
+  frac_shelf_u  => NULL(), &   !< cells, nondimensional from 0 to 1. These are only
+  frac_shelf_v  => NULL(), &   !< associated if ice shelves are enabled, and are
+                               !! exactly 0 away from shelves or on land.
+  iceshelf_melt   => NULL(), & !< ice shelf melt rate (positive) or freezing (negative) ( m/year )
+  rigidity_ice_u => NULL(),&   !< Depth-integrated lateral viscosity of ice
+  rigidity_ice_v => NULL()     !< shelves or sea ice at u- or v-points (m3/s)
 
   ! Scalars set by surface forcing modules
   real :: vPrecGlobalAdj     !< adjustment to restoring vprec to zero out global net ( kg/(m^2 s) )
@@ -695,7 +696,7 @@ subroutine calculateBuoyancyFlux1d(G, GV, fluxes, optics, h, Temp, Salt, tv, j, 
 
   depthBeforeScalingFluxes = max( GV%Angstrom, 1.e-30*GV%m_to_H )
   pressure(:) = 0. ! Ignore atmospheric pressure
-  GoRho       = G%g_Earth / GV%Rho0
+  GoRho       = GV%g_Earth / GV%Rho0
   start       = 1 + G%isc - G%isd
   npts        = 1 + G%iec - G%isc
 
@@ -792,69 +793,69 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, haloshift)
   ! counts, there must be no redundant points, so all variables use is..ie
   ! and js...je as their extent.
   if (associated(fluxes%taux)) &
-    call uchksum(fluxes%taux, mesg//" fluxes%taux",G,haloshift=1)
+    call uchksum(fluxes%taux, mesg//" fluxes%taux",G%HI,haloshift=1)
   if (associated(fluxes%tauy)) &
-    call vchksum(fluxes%tauy, mesg//" fluxes%tauy",G,haloshift=1)
+    call vchksum(fluxes%tauy, mesg//" fluxes%tauy",G%HI,haloshift=1)
   if (associated(fluxes%ustar)) &
-    call hchksum(fluxes%ustar, mesg//" fluxes%ustar",G,haloshift=hshift)
+    call hchksum(fluxes%ustar, mesg//" fluxes%ustar",G%HI,haloshift=hshift)
   if (associated(fluxes%buoy)) &
-    call hchksum(fluxes%buoy, mesg//" fluxes%buoy ",G,haloshift=hshift)
+    call hchksum(fluxes%buoy, mesg//" fluxes%buoy ",G%HI,haloshift=hshift)
   if (associated(fluxes%sw)) &
-    call hchksum(fluxes%sw, mesg//" fluxes%sw",G,haloshift=hshift)
+    call hchksum(fluxes%sw, mesg//" fluxes%sw",G%HI,haloshift=hshift)
   if (associated(fluxes%sw_vis_dir)) &
-    call hchksum(fluxes%sw_vis_dir, mesg//" fluxes%sw_vis_dir",G,haloshift=hshift)
+    call hchksum(fluxes%sw_vis_dir, mesg//" fluxes%sw_vis_dir",G%HI,haloshift=hshift)
   if (associated(fluxes%sw_vis_dif)) &
-    call hchksum(fluxes%sw_vis_dif, mesg//" fluxes%sw_vis_dif",G,haloshift=hshift)
+    call hchksum(fluxes%sw_vis_dif, mesg//" fluxes%sw_vis_dif",G%HI,haloshift=hshift)
   if (associated(fluxes%sw_nir_dir)) &
-    call hchksum(fluxes%sw_nir_dir, mesg//" fluxes%sw_nir_dir",G,haloshift=hshift)
+    call hchksum(fluxes%sw_nir_dir, mesg//" fluxes%sw_nir_dir",G%HI,haloshift=hshift)
   if (associated(fluxes%sw_nir_dif)) &
-    call hchksum(fluxes%sw_nir_dif, mesg//" fluxes%sw_nir_dif",G,haloshift=hshift)
+    call hchksum(fluxes%sw_nir_dif, mesg//" fluxes%sw_nir_dif",G%HI,haloshift=hshift)
   if (associated(fluxes%lw)) &
-    call hchksum(fluxes%lw, mesg//" fluxes%lw",G,haloshift=hshift)
+    call hchksum(fluxes%lw, mesg//" fluxes%lw",G%HI,haloshift=hshift)
   if (associated(fluxes%latent)) &
-    call hchksum(fluxes%latent, mesg//" fluxes%latent",G,haloshift=hshift)
+    call hchksum(fluxes%latent, mesg//" fluxes%latent",G%HI,haloshift=hshift)
   if (associated(fluxes%latent_evap_diag)) &
-    call hchksum(fluxes%latent_evap_diag, mesg//" fluxes%latent_evap_diag",G,haloshift=hshift)
+    call hchksum(fluxes%latent_evap_diag, mesg//" fluxes%latent_evap_diag",G%HI,haloshift=hshift)
   if (associated(fluxes%latent_fprec_diag)) &
-    call hchksum(fluxes%latent_fprec_diag, mesg//" fluxes%latent_fprec_diag",G,haloshift=hshift)
+    call hchksum(fluxes%latent_fprec_diag, mesg//" fluxes%latent_fprec_diag",G%HI,haloshift=hshift)
   if (associated(fluxes%latent_frunoff_diag)) &
-    call hchksum(fluxes%latent_frunoff_diag, mesg//" fluxes%latent_frunoff_diag",G,haloshift=hshift)
+    call hchksum(fluxes%latent_frunoff_diag, mesg//" fluxes%latent_frunoff_diag",G%HI,haloshift=hshift)
   if (associated(fluxes%sens)) &
-    call hchksum(fluxes%sens, mesg//" fluxes%sens",G,haloshift=hshift)
+    call hchksum(fluxes%sens, mesg//" fluxes%sens",G%HI,haloshift=hshift)
   if (associated(fluxes%evap)) &
-    call hchksum(fluxes%evap, mesg//" fluxes%evap",G,haloshift=hshift)
+    call hchksum(fluxes%evap, mesg//" fluxes%evap",G%HI,haloshift=hshift)
   if (associated(fluxes%lprec)) &
-    call hchksum(fluxes%lprec, mesg//" fluxes%lprec",G,haloshift=hshift)
+    call hchksum(fluxes%lprec, mesg//" fluxes%lprec",G%HI,haloshift=hshift)
   if (associated(fluxes%fprec)) &
-    call hchksum(fluxes%fprec, mesg//" fluxes%fprec",G,haloshift=hshift)
+    call hchksum(fluxes%fprec, mesg//" fluxes%fprec",G%HI,haloshift=hshift)
   if (associated(fluxes%vprec)) &
-    call hchksum(fluxes%vprec, mesg//" fluxes%vprec",G,haloshift=hshift)
+    call hchksum(fluxes%vprec, mesg//" fluxes%vprec",G%HI,haloshift=hshift)
   if (associated(fluxes%seaice_melt)) &
-    call hchksum(fluxes%seaice_melt, mesg//" fluxes%seaice_melt",G,haloshift=hshift)
+    call hchksum(fluxes%seaice_melt, mesg//" fluxes%seaice_melt",G%HI,haloshift=hshift)
   if (associated(fluxes%p_surf)) &
-    call hchksum(fluxes%p_surf, mesg//" fluxes%p_surf",G,haloshift=hshift)
+    call hchksum(fluxes%p_surf, mesg//" fluxes%p_surf",G%HI,haloshift=hshift)
   if (associated(fluxes%salt_flux)) &
-    call hchksum(fluxes%salt_flux, mesg//" fluxes%salt_flux",G,haloshift=hshift)
+    call hchksum(fluxes%salt_flux, mesg//" fluxes%salt_flux",G%HI,haloshift=hshift)
   if (associated(fluxes%TKE_tidal)) &
-    call hchksum(fluxes%TKE_tidal, mesg//" fluxes%TKE_tidal",G,haloshift=hshift)
+    call hchksum(fluxes%TKE_tidal, mesg//" fluxes%TKE_tidal",G%HI,haloshift=hshift)
   if (associated(fluxes%ustar_tidal)) &
-    call hchksum(fluxes%ustar_tidal, mesg//" fluxes%ustar_tidal",G,haloshift=hshift)
+    call hchksum(fluxes%ustar_tidal, mesg//" fluxes%ustar_tidal",G%HI,haloshift=hshift)
   if (associated(fluxes%lrunoff)) &
-    call hchksum(fluxes%lrunoff, mesg//" fluxes%lrunoff",G,haloshift=hshift)
+    call hchksum(fluxes%lrunoff, mesg//" fluxes%lrunoff",G%HI,haloshift=hshift)
   if (associated(fluxes%frunoff)) &
-    call hchksum(fluxes%frunoff, mesg//" fluxes%frunoff",G,haloshift=hshift)
+    call hchksum(fluxes%frunoff, mesg//" fluxes%frunoff",G%HI,haloshift=hshift)
   if (associated(fluxes%heat_content_lrunoff)) &
-    call hchksum(fluxes%heat_content_lrunoff, mesg//" fluxes%heat_content_lrunoff",G,haloshift=hshift)
+    call hchksum(fluxes%heat_content_lrunoff, mesg//" fluxes%heat_content_lrunoff",G%HI,haloshift=hshift)
   if (associated(fluxes%heat_content_frunoff)) &
-    call hchksum(fluxes%heat_content_frunoff, mesg//" fluxes%heat_content_frunoff",G,haloshift=hshift)
+    call hchksum(fluxes%heat_content_frunoff, mesg//" fluxes%heat_content_frunoff",G%HI,haloshift=hshift)
   if (associated(fluxes%heat_content_lprec)) &
-    call hchksum(fluxes%heat_content_lprec, mesg//" fluxes%heat_content_lprec",G,haloshift=hshift)
+    call hchksum(fluxes%heat_content_lprec, mesg//" fluxes%heat_content_lprec",G%HI,haloshift=hshift)
   if (associated(fluxes%heat_content_fprec)) &
-    call hchksum(fluxes%heat_content_fprec, mesg//" fluxes%heat_content_fprec",G,haloshift=hshift)
+    call hchksum(fluxes%heat_content_fprec, mesg//" fluxes%heat_content_fprec",G%HI,haloshift=hshift)
   if (associated(fluxes%heat_content_cond)) &
-    call hchksum(fluxes%heat_content_cond, mesg//" fluxes%heat_content_cond",G,haloshift=hshift)
+    call hchksum(fluxes%heat_content_cond, mesg//" fluxes%heat_content_cond",G%HI,haloshift=hshift)
   if (associated(fluxes%heat_content_massout)) &
-    call hchksum(fluxes%heat_content_massout, mesg//" fluxes%heat_content_massout",G,haloshift=hshift)
+    call hchksum(fluxes%heat_content_massout, mesg//" fluxes%heat_content_massout",G%HI,haloshift=hshift)
 end subroutine MOM_forcing_chksum
 
 
@@ -976,13 +977,13 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
        cmor_long_name='Water Evaporation Flux Where Ice Free Ocean over Sea')
 
   ! smg: seaice_melt field requires updates to the sea ice model
-  handles%id_seaice_melt = register_diag_field('ocean_model', 'seaice_melt',       &
-     diag%axesT1, Time, 'water flux to ocean from sea ice melt(> 0) or form(< 0)', &
-     'kilogram/(meter^2 * second)',                                                &
-      standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics',     &
-      cmor_field_name='fsitherm', cmor_units='kg m-2 s-1',                         &
-      cmor_standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics',&
-      cmor_long_name='water flux to ocean from sea ice melt(> 0) or form(< 0)')
+  !handles%id_seaice_melt = register_diag_field('ocean_model', 'seaice_melt',       &
+  !   diag%axesT1, Time, 'water flux to ocean from sea ice melt(> 0) or form(< 0)', &
+  !   'kilogram/(meter^2 * second)',                                                &
+  !    standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics',     &
+  !    cmor_field_name='fsitherm', cmor_units='kg m-2 s-1',                         &
+  !    cmor_standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics',&
+  !    cmor_long_name='water flux to ocean from sea ice melt(> 0) or form(< 0)')
 
   handles%id_precip = register_diag_field('ocean_model', 'precip', diag%axesT1, Time, &
         'Liquid + frozen precipitation into ocean', 'kilogram/(meter^2 * second)')
@@ -1038,12 +1039,13 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
       cmor_standard_name='water_evaporation_flux_area_integrated',                      &
       cmor_long_name='Evaporation Where Ice Free Ocean over Sea Area Integrated')
 
-  handles%id_total_seaice_melt = register_scalar_field('ocean_model', 'total_seaice_melt', Time, diag, &
-      long_name='Area integrated sea ice melt (>0) or form (<0)', units='kg/s',                        &
-      standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics_area_integrated',         &
-      cmor_field_name='total_fsitherm', cmor_units='kg s-1',                                           &
-      cmor_standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics_area_integrated',    &
-      cmor_long_name='Water Melt/Form from Sea Ice Area Integrated')
+  ! seaice_melt field requires updates to the sea ice model
+  !handles%id_total_seaice_melt = register_scalar_field('ocean_model', 'total_seaice_melt', Time, diag, &
+  !    long_name='Area integrated sea ice melt (>0) or form (<0)', units='kg/s',                        &
+  !    standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics_area_integrated',         &
+  !    cmor_field_name='total_fsitherm', cmor_units='kg s-1',                                           &
+  !    cmor_standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics_area_integrated',    &
+  !    cmor_long_name='Water Melt/Form from Sea Ice Area Integrated')
 
   handles%id_total_precip = register_scalar_field('ocean_model', 'total_precip', Time, diag, &
       long_name='Area integrated liquid+frozen precip into ocean', units='kg/s')
@@ -1615,6 +1617,13 @@ subroutine forcing_accumulate(flux_tmp, fluxes, dt, G, wt2)
       fluxes%ustar_shelf(i,j)  = flux_tmp%ustar_shelf(i,j)
     enddo ; enddo
   endif
+  
+  if (associated(fluxes%iceshelf_melt) .and. associated(flux_tmp%iceshelf_melt)) then
+    do i=isd,ied ; do j=jsd,jed
+      fluxes%iceshelf_melt(i,j)  = flux_tmp%iceshelf_melt(i,j)
+    enddo ; enddo
+  endif
+
   if (associated(fluxes%frac_shelf_h) .and. associated(flux_tmp%frac_shelf_h)) then
     do i=isd,ied ; do j=jsd,jed
       fluxes%frac_shelf_h(i,j)  = flux_tmp%frac_shelf_h(i,j)
@@ -2198,6 +2207,7 @@ subroutine allocate_forcing_type(G, fluxes, stress, ustar, water, heat, shelf, p
   call myAlloc(fluxes%frac_shelf_u,IsdB,IedB,jsd,jed, shelf)
   call myAlloc(fluxes%frac_shelf_v,isd,ied,JsdB,JedB, shelf)
   call myAlloc(fluxes%ustar_shelf,isd,ied,jsd,jed, shelf)
+  call myAlloc(fluxes%iceshelf_melt,isd,ied,jsd,jed, shelf)
   call myAlloc(fluxes%rigidity_ice_u,IsdB,IedB,jsd,jed, shelf)
   call myAlloc(fluxes%rigidity_ice_v,isd,ied,JsdB,JedB, shelf)
 
@@ -2263,6 +2273,7 @@ subroutine deallocate_forcing_type(fluxes)
   if (associated(fluxes%TKE_tidal))            deallocate(fluxes%TKE_tidal)
   if (associated(fluxes%ustar_tidal))          deallocate(fluxes%ustar_tidal)
   if (associated(fluxes%ustar_shelf))          deallocate(fluxes%ustar_shelf)
+  if (associated(fluxes%iceshelf_melt))        deallocate(fluxes%iceshelf_melt)
   if (associated(fluxes%frac_shelf_h))         deallocate(fluxes%frac_shelf_h)
   if (associated(fluxes%frac_shelf_u))         deallocate(fluxes%frac_shelf_u)
   if (associated(fluxes%frac_shelf_v))         deallocate(fluxes%frac_shelf_v)
