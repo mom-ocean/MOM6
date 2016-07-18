@@ -145,20 +145,20 @@ contains
 subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                          dSV_dT, dSV_dS, TKE_forced, dt_diag, last_call, &
                          dT_expected, dS_expected)
-  type(ocean_grid_type),                    intent(inout) :: G
-  type(verticalGrid_type),                  intent(in)    :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h_3d
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: u_3d, v_3d, dSV_dT, dSV_dS
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: TKE_forced
-  type(thermo_var_ptrs),                    intent(inout) :: tv
-  type(forcing),                            intent(inout) :: fluxes
-  real,                                     intent(in)    :: dt
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: Kd_int
-  type(energetic_PBL_CS),                   pointer       :: CS
-  real,                           optional, intent(in)    :: dt_diag
-  logical,                        optional, intent(in)    :: last_call
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                                  optional, intent(out)   :: dT_expected, dS_expected
+  type(ocean_grid_type),                     intent(inout) :: G
+  type(verticalGrid_type),                   intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: h_3d
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: u_3d, v_3d, dSV_dT, dSV_dS
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: TKE_forced
+  type(thermo_var_ptrs),                     intent(inout) :: tv
+  type(forcing),                             intent(inout) :: fluxes
+  real,                                      intent(in)    :: dt
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(out) :: Kd_int
+  type(energetic_PBL_CS),                    pointer       :: CS
+  real,                            optional, intent(in)    :: dt_diag
+  logical,                         optional, intent(in)    :: last_call
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                                   optional, intent(out)   :: dT_expected, dS_expected
 
 !    This subroutine determines the diffusivities from the integrated energetics
 !  mixed layer model.  It assumes that heating, cooling and freshwater fluxes
@@ -208,13 +208,13 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
 !                        current time step, so diagnostics will be written.
 !                        The default is .true.
 
-  real, dimension(SZI_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZK_(GV)) :: &
     h, &            !   The layer thickness, in H (usually m or kg m-2).
     T, &            !   The layer temperatures, in deg C.
     S, &            !   The layer salinities, in psu.
     u, &            !   The zonal velocity, in m s-1.
     v               !   The meridional velocity, in m s-1.
-  real, dimension(SZI_(G),SZK_(G)+1) :: &
+  real, dimension(SZI_(G),SZK_(GV)+1) :: &
     Kd, &           ! The diapycnal diffusivity, in m2 s-1.
     pres, &         ! Interface pressures in Pa.
     hb_hs           ! The distance from the bottom over the thickness of the water,
@@ -235,7 +235,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
     absf            ! The absolute value of f, in s-1.
 
 
-  real, dimension(SZI_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZK_(GV)) :: &
     dT_to_dColHt, & ! Partial derivatives of the total column height with the temperature
     dS_to_dColHt, & ! and salinity changes within a layer, in m K-1 and m ppt-1.
     dT_to_dPE, &    ! Partial derivatives of column potential energy with the temperature
@@ -247,14 +247,14 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
     dS_to_dPE_a     ! and salinity changes within a layer, including the implicit effects
                     ! of mixing with layers higher in the water column, in
                     ! units of J m-2 K-1 and J m-2 ppt-1.
-  real, dimension(SZK_(G)) :: &
+  real, dimension(SZK_(GV)) :: &
     T0, S0, &       ! Initial values of T and S in the column, in K and ppt.
     Te, Se, &       ! Estimated final values of T and S in the column, in K and ppt.
     c1, &           ! c1 is used by the tridiagonal solver, ND.
     dTe, dSe        ! Running (1-way) estimates of temperature and salinity change.
   real, dimension(SZI_(G)) :: &
     b_den_1         ! The first term in the denominator of b1, in H.
-  real, dimension(SZK_(G)+1) :: &
+  real, dimension(SZK_(GV)+1) :: &
     Kddt_h          ! The diapycnal diffusivity times a timestep divided by the
                     ! average thicknesses around a layer, in H (m or kg m-2).
   real :: b1        ! b1 is inverse of the pivot used by the tridiagonal solver, in H-1.
@@ -340,14 +340,14 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
 !  The following arrays are used only for debugging purposes.
   real :: dPE_debug, mixing_debug
   real, dimension(20) :: TKE_left_itt, PE_chg_itt, Kddt_h_itt, dPEa_dKd_itt, MKE_src_itt
-  real, dimension(SZI_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZK_(GV)) :: &
     mech_TKE_k, conv_PErel_k
-  real, dimension(SZK_(G)) :: nstar_k
-  integer, dimension(SZK_(G)) :: num_itts
+  real, dimension(SZK_(GV)) :: nstar_k
+  integer, dimension(SZK_(GV)) :: num_itts
 
   integer :: i, j, k, is, ie, js, je, nz, itt, max_itt
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not. associated(CS)) call MOM_error(FATAL, "energetic_PBL: "//&
          "Module must be initialized before it is used.")
