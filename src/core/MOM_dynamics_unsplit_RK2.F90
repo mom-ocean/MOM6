@@ -321,8 +321,8 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   call pass_vector(CS%CAu, CS%CAv, G%Domain)
   call cpu_clock_end(id_clock_pass)
 
-  if (allocated(CS%OBC)) then; if (CS%OBC%update_OBC) then
-    call update_OBC_data(CS%OBC, tv, h, G, Time_local)
+  if (associated(CS%OBC)) then; if (CS%OBC%update_OBC) then
+    call update_OBC_data(CS%OBC, G, Time_local)
   endif; endif
 
 ! up+[n-1/2] = u[n-1] + dt_pred * (PFu + CAu)

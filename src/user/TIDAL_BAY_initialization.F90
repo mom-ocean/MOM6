@@ -22,7 +22,6 @@ module TIDAL_BAY_initialization
 use MOM_dyn_horgrid,    only : dyn_horgrid_type
 use MOM_error_handler,  only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser,    only : get_param, log_version, param_file_type
-use MOM_grid,           only : ocean_grid_type
 use MOM_open_boundary,  only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE
 use MOM_open_boundary,  only : open_boundary_query, set_Flather_positions
 use MOM_verticalGrid,   only : verticalGrid_type
@@ -70,14 +69,14 @@ subroutine TIDAL_BAY_alloc_OBC_data(OBC, G)
   type(ocean_OBC_type),   pointer    :: OBC  !< This open boundary condition type specifies
                                              !! whether, where, and what open boundary
                                              !! conditions are used.
-  type(ocean_grid_type),  intent(in) :: G    !< The ocean's grid structure.
+  type(dyn_horgrid_type),  intent(in) :: G    !< The ocean's grid structure.
 
   logical :: apply_OBC_u, apply_OBC_v
   character(len=40)  :: mod = "TIDAL_BAY_set_OBC_data" ! This subroutine's name.
-  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
+  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed
   integer :: IsdB, IedB, JsdB, JedB
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
@@ -100,8 +99,8 @@ subroutine TIDAL_BAY_alloc_OBC_data(OBC, G)
     allocate(OBC%eta_outer_v(isd:ied,JsdB:JedB)) ; OBC%eta_outer_v(:,:) = 0.0
   endif
 
-  call pass_vector(OBC%eta_outer_u,OBC%eta_outer_v,G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
-  call pass_vector(OBC%ubt_outer,OBC%vbt_outer,G%Domain)
+!  call pass_vector(OBC%eta_outer_u,OBC%eta_outer_v,G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
+!  call pass_vector(OBC%ubt_outer,OBC%vbt_outer,G%Domain)
 
 end subroutine TIDAL_BAY_alloc_OBC_data
 
@@ -117,6 +116,7 @@ subroutine TIDAL_BAY_set_OBC_data(OBC, G, Time)
   ! The following variables are used to set up the transport in the TIDAL_BAY example.
   real :: time_sec, cff, cff2, tide_flow
   real :: my_area, my_flux
+  real, parameter :: pi = 3.1415926535
   character(len=40)  :: mod = "TIDAL_BAY_set_OBC_data" ! This subroutine's name.
   integer :: i, j, itt, is, ie, js, je, isd, ied, jsd, jed
   integer :: IsdB, IedB, JsdB, JedB
@@ -156,23 +156,6 @@ subroutine TIDAL_BAY_set_OBC_data(OBC, G, Time)
         OBC%vbt_outer(i,J) = 0.0
       endif
     enddo ; enddo
-  endif
-
-  if (OBC%apply_OBC_u) then
-    do k=1,nz ; do j=jsd,jed ; do I=IsdB,IedB
-      if (OBC%OBC_mask_u(I,j)) then
-        ! An appropriate expression for the zonal inflow velocities and
-        ! transports should go here.
-        OBC%uh(I,j,k) = 0.0 * GV%m_to_H ; OBC%u(I,j,k) = 0.0
-      else
-        OBC%uh(I,j,k) = 0.0 ; OBC%u(I,j,k) = 0.0
-      endif
-    enddo ; enddo ; enddo
-  endif
-
-  !   The inflow values of temperature and salinity also need to be set here if
-  ! these variables are used.  The following code is just a naive example.
-  if (OBC%apply_OBC_u .or. OBC%apply_OBC_v) then
   endif
 
 end subroutine TIDAL_BAY_set_OBC_data
