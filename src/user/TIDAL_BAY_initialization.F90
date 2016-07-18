@@ -71,7 +71,6 @@ subroutine TIDAL_BAY_alloc_OBC_data(OBC, G)
                                              !! whether, where, and what open boundary
                                              !! conditions are used.
   type(ocean_grid_type),  intent(in) :: G    !< The ocean's grid structure.
-  type(time_type),        intent(in) :: Time !< model time.
 
   logical :: apply_OBC_u, apply_OBC_v
   character(len=40)  :: mod = "TIDAL_BAY_set_OBC_data" ! This subroutine's name.
@@ -111,7 +110,7 @@ subroutine TIDAL_BAY_set_OBC_data(OBC, G, Time)
   type(ocean_OBC_type),   pointer    :: OBC  !< This open boundary condition type specifies
                                              !! whether, where, and what open boundary
                                              !! conditions are used.
-  type(ocean_grid_type),  intent(in) :: G    !< The ocean's grid structure.
+  type(dyn_horgrid_type), intent(in) :: G    !< The ocean's grid structure.
   type(time_type),        intent(in) :: Time !< model time.
 
   logical :: apply_OBC_u, apply_OBC_v
@@ -133,11 +132,11 @@ subroutine TIDAL_BAY_set_OBC_data(OBC, G, Time)
     time_sec = time_type_to_real(Time)
     cff = 0.1*sin(2.0*pi*time_sec/(12.0*3600.0))
     tide_flow = 3.0e6
-    my_area=0.0_r8
-    my_flux=0.0_r8
+    my_area=0.0
+    my_flux=0.0
     do J=JsdB,JedB ; do i=isd,ied
 ! HACK to fix
-!            cff2 = 0.5_r8*(zeta(Iend  ,j,knew)+h(Iend  ,j)+                &
+!            cff2 = 0.5*(zeta(Iend  ,j,knew)+h(Iend  ,j)+                &
 !     &                  zeta(Iend+1,j,knew)+h(Iend+1,j))/pn(Iend,j)
 !            my_area = my_area+cff2
       if (OBC%OBC_mask_u(I,j)) then
@@ -145,7 +144,7 @@ subroutine TIDAL_BAY_set_OBC_data(OBC, G, Time)
         my_area = my_area+cff2
       endif
     enddo ; enddo
-    my_flux = -tide_flow*SIN(2.0_r8*pi*time_sec/(12.0_r8*3600.0_r8))
+    my_flux = -tide_flow*SIN(2.0*pi*time_sec/(12.0*3600.0))
 
     do J=JsdB,JedB ; do i=isd,ied
       if (OBC%OBC_mask_u(I,j)) then

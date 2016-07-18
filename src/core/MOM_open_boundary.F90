@@ -104,7 +104,7 @@ type, public :: ocean_OBC_type
                    !! default value is 10 m s-1.
   logical :: this_pe !< Is there an open boundary on this tile?
   logical :: update_OBC !< Is the open boundary info going to get updated?
-  character(len=80) :: OBC_config
+  character(len=200) :: OBC_config
 end type ocean_OBC_type
 
 integer :: id_clock_pass
@@ -134,8 +134,16 @@ subroutine open_boundary_config(G, param_file, OBC)
                  "v-points, with the configuration controlled by OBC_CONFIG", &
                  default=.false.)
   call get_param(param_file, mod, "OBC_CONFIG", OBC%OBC_config, &
-                 "If set, open boundary configuration string" &
-                 default="None")
+                 "If set, open boundary configuration string", &
+                 default="file")
+!    call get_param(PF, mod, "OBC_CONFIG", config, &
+!                 "A string that sets how the open boundary conditions are \n"//&
+!                 " configured: \n"//&
+!                 " \t DOME - use a slope and channel configuration for the \n"//&
+!                 " \t\t DOME sill-overflow test case. \n"//&
+!                 " \t TIDAL_BAY - tidally-resonant rectangular basin. \n"//&
+!                 " \t USER - call a user modified routine.", default="file", &
+!                 fail_if_missing=.true.)
   call get_param(param_file, mod, "APPLY_OBC_U_FLATHER_EAST", OBC%apply_OBC_u_flather_east, &
                  "Apply a Flather open boundary condition on the eastern\n"//&
                  "side of the global domain", &
@@ -811,6 +819,7 @@ subroutine update_OBC_data(OBC, tv, h, G, Time)
 
   if (OBC%OBC_config == "TIDAL_BAY") then
     call TIDAL_BAY_set_OBC_data(OBC, G, Time)
+  endif
 
 end subroutine update_OBC_data
 
