@@ -429,6 +429,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
     call get_param(PF, mod, "OBC_CONFIG", config, fail_if_missing=.true., do_not_log=.true.)
     if (trim(config) == "DOME") then
       call DOME_set_OBC_data(OBC, tv, G, GV, PF, tracer_Reg)
+    elseif (trim(config) == "TIDAL_BAY") then
+      ! Do nothing
     elseif (trim(config) == "USER") then
       call user_set_OBC_data(OBC, tv, G, PF, tracer_Reg)
     else
