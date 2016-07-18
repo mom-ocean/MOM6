@@ -3358,7 +3358,7 @@ subroutine bulkmixedlayer_init(Time, G, GV, param_file, diag, CS)
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_mixed_layer"  ! This module's name.
-  real :: omega_frac_dflt
+  real :: omega_frac_dflt, ustar_min_dflt
   integer :: isd, ied, jsd, jed
   logical :: use_temperature, use_omega
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -3467,15 +3467,20 @@ subroutine bulkmixedlayer_init(Time, G, GV, param_file, diag, CS)
   call get_param(param_file, mod, "ML_RESORT", CS%ML_resort, &
                  "If true, resort the topmost layers by potential density \n"//&
                  "before the mixed layer calculations.", default=.false.)
- !CS%ML_presort_nz_conv_adj = 0 ! Not needed AJA?
   if (CS%ML_resort) &
     call get_param(param_file, mod, "ML_PRESORT_NK_CONV_ADJ", CS%ML_presort_nz_conv_adj, &
                  "Convectively mix the first ML_PRESORT_NK_CONV_ADJ \n"//&
                  "layers before sorting when ML_RESORT is true.", &
-                 units="nondim", default=0, fail_if_missing=.true.) ! Fail added by AJA??
+                 units="nondim", default=0, fail_if_missing=.true.) ! Fail added by AJA.
   ! This gives a minimum decay scale that is typically much less than Angstrom.
-  CS%ustar_min = 2e-4*CS%omega*(GV%Angstrom_z + GV%H_to_m*GV%H_subroundoff)
-  ! NOTE from AJA: The above parameter is not logged?
+  ustar_min_dflt = 2e-4*CS%omega*(GV%Angstrom_z + GV%H_to_m*GV%H_subroundoff)
+  call get_param(param_file, mod, "BML_USTAR_MIN", CS%ustar_min, &
+                 "The minimum value of ustar that should be used by the \n"//&
+                 "bulk mixed layer model in setting vertical TKE decay \n"//&
+                 "scales. This must be greater than 0.", units="m s-1", &
+                 default=ustar_min_dflt)
+  if (CS%ustar_min<=0.0) call MOM_error(FATAL, "BML_USTAR_MIN must be positive.")
+
   call get_param(param_file, mod, "RESOLVE_EKMAN", CS%Resolve_Ekman, &
                  "If true, the NKML>1 layers in the mixed layer are \n"//&
                  "chosen to optimally represent the impact of the Ekman \n"//&
