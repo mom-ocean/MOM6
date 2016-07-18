@@ -22,6 +22,7 @@ module TIDAL_BAY_initialization
 use MOM_dyn_horgrid,    only : dyn_horgrid_type
 use MOM_error_handler,  only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser,    only : get_param, log_version, param_file_type
+use MOM_grid,           only : ocean_grid_type
 use MOM_open_boundary,  only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE
 use MOM_open_boundary,  only : open_boundary_query, set_Flather_positions
 use MOM_verticalGrid,   only : verticalGrid_type
@@ -109,7 +110,7 @@ subroutine TIDAL_BAY_set_OBC_data(OBC, G, Time)
   type(ocean_OBC_type),   pointer    :: OBC  !< This open boundary condition type specifies
                                              !! whether, where, and what open boundary
                                              !! conditions are used.
-  type(dyn_horgrid_type), intent(in) :: G    !< The ocean's grid structure.
+  type(ocean_grid_type),  intent(in) :: G    !< The ocean's grid structure.
   type(time_type),        intent(in) :: Time !< model time.
 
   logical :: apply_OBC_u, apply_OBC_v
