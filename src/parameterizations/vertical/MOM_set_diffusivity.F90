@@ -2524,6 +2524,7 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
   real :: Niku_scale ! local variable for scaling the Nikurashin TKE flux data
   real :: omega_frac_dflt
   integer :: i, j, is, ie, js, je
+  integer :: isd, ied, jsd, jed
 
   if (associated(CS)) then
     call MOM_error(WARNING, "diabatic_entrain_init called with an associated "// &
@@ -2532,7 +2533,8 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
   endif
   allocate(CS)
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   CS%diag => diag
   if (associated(int_tide_CSp))  CS%int_tide_CSp  => int_tide_CSp
@@ -2905,10 +2907,10 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
                  "Turn off internal tidal dissipation when the total \n"//&
                  "ocean depth is less than this value.", units="m", default=0.0)
 
-    call safe_alloc_ptr(CS%Nb,is,ie,js,je)   ; CS%Nb(:,:) = 0.0
-    call safe_alloc_ptr(CS%h2,is,ie,js,je)   ; CS%h2(:,:) = 0.0
-    call safe_alloc_ptr(CS%TKE_itidal,is,ie,js,je)  ; CS%TKE_itidal(:,:) = 0.0
-    call safe_alloc_ptr(CS%mask_itidal,is,ie,js,je) ; CS%mask_itidal(:,:) = 1.0
+    call safe_alloc_ptr(CS%Nb,isd,ied,jsd,jed)
+    call safe_alloc_ptr(CS%h2,isd,ied,jsd,jed)
+    call safe_alloc_ptr(CS%TKE_itidal,isd,ied,jsd,jed)
+    call safe_alloc_ptr(CS%mask_itidal,isd,ied,jsd,jed) ; CS%mask_itidal(:,:) = 1.0
 
     call get_param(param_file, mod, "KAPPA_ITIDES", CS%kappa_itides, &
                  "A topographic wavenumber used with INT_TIDE_DISSIPATION. \n"//&
