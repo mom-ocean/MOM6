@@ -252,7 +252,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, e
   enddo ; enddo ; enddo
 !$OMP end parallel
 
-  I_gEarth = 1.0 / G%g_Earth
+  I_gEarth = 1.0 / GV%g_Earth
 
   if (use_EOS) then
   !   With a bulk mixed layer, replace the T & S of any layers that are
@@ -323,7 +323,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, e
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,za,alpha_ref,p,G,dza)
   do j=Jsq,Jeq+1
     do i=Isq,Ieq+1
-      za(i,j) = alpha_ref*p(i,j,nz+1) - G%g_Earth*G%bathyT(i,j)
+      za(i,j) = alpha_ref*p(i,j,nz+1) - GV%g_Earth*G%bathyT(i,j)
     enddo
     do k=nz,1,-1 ; do i=Isq,Ieq+1
     za(i,j) = za(i,j) + dza(i,j,k)
@@ -339,7 +339,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, e
     call calc_tidal_forcing(CS%Time, SSH, e_tidal, G, CS%tides_CSp)
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,za,G,e_tidal)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      za(i,j) = za(i,j) - G%g_Earth*e_tidal(i,j)
+      za(i,j) = za(i,j) - GV%g_Earth*e_tidal(i,j)
     enddo ; enddo
   endif
 
@@ -439,7 +439,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, e
   enddo
 
   if (present(pbce)) then
-    call set_pbce_nonBouss(p, tv_tmp, G, GV, G%g_Earth, CS%GFS_scale, pbce)
+    call set_pbce_nonBouss(p, tv_tmp, G, GV, GV%g_Earth, CS%GFS_scale, pbce)
   endif
 
   if (present(eta)) then
@@ -574,7 +574,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
   PRScheme = pressureReconstructionScheme(ALE_CSp)
   h_neglect = GV%H_subroundoff
   I_Rho0 = 1.0/GV%Rho0
-  G_Rho0 = G%g_Earth/GV%Rho0
+  G_Rho0 = GV%g_Earth/GV%Rho0
   rho_ref = CS%Rho0
 
   if (CS%tides) then
@@ -711,12 +711,12 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
     if (use_p_atm) then
       do jb=Jsq_bk,Jeq_bk+1 ; do ib=Isq_bk,Ieq_bk+1
         i = ib+ioff_bk ; j = jb+joff_bk
-        pa_bk(ib,jb) = (rho_ref*G%g_Earth)*e(i,j,1) + p_atm(i,j)
+        pa_bk(ib,jb) = (rho_ref*GV%g_Earth)*e(i,j,1) + p_atm(i,j)
       enddo ; enddo
     else
       do jb=Jsq_bk,Jeq_bk+1 ; do ib=Isq_bk,Ieq_bk+1
         i = ib+ioff_bk ; j = jb+joff_bk
-        pa_bk(ib,jb) = (rho_ref*G%g_Earth)*e(i,j,1)
+        pa_bk(ib,jb) = (rho_ref*GV%g_Earth)*e(i,j,1)
       enddo ; enddo
     endif
     do jb=js_bk,je_bk ; do Ib=Isq_bk,Ieq_bk
@@ -740,28 +740,28 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
           if ( PRScheme == PRESSURE_RECONSTRUCTION_PLM ) then
             call int_density_dz_generic_plm ( T_t(:,:,k), T_b(:,:,k), &
                       S_t(:,:,k), S_b(:,:,k), e(:,:,K), e(:,:,K+1), &
-                      rho_ref, CS%Rho0, G%g_Earth,    &
+                      rho_ref, CS%Rho0, GV%g_Earth,    &
                       GV%H_subroundoff, G%bathyT, G%HI, G%Block(n), &
                       tv%eqn_of_state, dpa_bk, intz_dpa_bk, intx_dpa_bk, inty_dpa_bk, &
                       useMassWghtInterp = CS%useMassWghtInterp)
           elseif ( PRScheme == PRESSURE_RECONSTRUCTION_PPM ) then
             call int_density_dz_generic_ppm ( tv%T(:,:,k), T_t(:,:,k), T_b(:,:,k), &
                       tv%S(:,:,k), S_t(:,:,k), S_b(:,:,k), e(:,:,K), e(:,:,K+1), &
-                      rho_ref, CS%Rho0, G%G_Earth, &
+                      rho_ref, CS%Rho0, GV%g_Earth, &
                       G%HI, G%Block(n), tv%eqn_of_state, dpa_bk, intz_dpa_bk,    &
                       intx_dpa_bk, inty_dpa_bk)
           endif
         else
           call int_density_dz(tv_tmp%T(:,:,k), tv_tmp%S(:,:,k), &
                     e(:,:,K), e(:,:,K+1),             &
-                    rho_ref, CS%Rho0, G%g_Earth, G%HI, G%Block(n), tv%eqn_of_state, &
+                    rho_ref, CS%Rho0, GV%g_Earth, G%HI, G%Block(n), tv%eqn_of_state, &
                     dpa_bk, intz_dpa_bk, intx_dpa_bk, inty_dpa_bk )
         endif
         intz_dpa_bk(:,:) = intz_dpa_bk(:,:)*GV%m_to_H
       else
         do jb=Jsq_bk,Jeq_bk+1 ; do ib=Isq_bk,Ieq_bk+1
           i = ib+ioff_bk ; j = jb+joff_bk
-          dz_bk(ib,jb) = G%g_Earth*GV%H_to_m*h(i,j,k)
+          dz_bk(ib,jb) = GV%g_Earth*GV%H_to_m*h(i,j,k)
           dpa_bk(ib,jb) = (GV%Rlay(k) - rho_ref)*dz_bk(ib,jb)
           intz_dpa_bk(ib,jb) = 0.5*(GV%Rlay(k) - rho_ref)*dz_bk(ib,jb)*h(i,j,k)
         enddo ; enddo
@@ -813,7 +813,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
   enddo
 
   if (present(pbce)) then
-    call set_pbce_Bouss(e, tv_tmp, G, GV, G%g_Earth, CS%Rho0, CS%GFS_scale, pbce)
+    call set_pbce_Bouss(e, tv_tmp, G, GV, GV%g_Earth, CS%Rho0, CS%GFS_scale, pbce)
   endif
 
   if (present(eta)) then
@@ -871,7 +871,7 @@ subroutine PressureForce_AFV_init(Time, G, GV, param_file, diag, CS, tides_CSp)
   endif
 
   mod = "MOM_PressureForce_AFV"
-  call log_version(param_file, mod, version)
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "RHO_0", CS%Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to \n"//&
                  "calculate accelerations and the mass for conservation \n"//&
@@ -890,7 +890,7 @@ subroutine PressureForce_AFV_init(Time, G, GV, param_file, diag, CS, tides_CSp)
   endif
 
   CS%GFS_scale = 1.0
-  if (GV%g_prime(1) /= G%g_Earth) CS%GFS_scale = GV%g_prime(1) / G%g_Earth
+  if (GV%g_prime(1) /= GV%g_Earth) CS%GFS_scale = GV%g_prime(1) / GV%g_Earth
 
   call log_param(param_file, mod, "GFS / G_EARTH", CS%GFS_scale)
 

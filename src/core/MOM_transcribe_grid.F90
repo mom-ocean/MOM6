@@ -20,171 +20,310 @@ module MOM_transcribe_grid
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
 !***********************************************************************
 
-use MOM_hor_index, only : hor_index_type, hor_index_init
-use MOM_domains, only : MOM_domain_type, get_domain_extent, compute_block_extent
-use MOM_domains, only : pass_var, pass_vector, sum_across_PEs, broadcast
-use MOM_domains, only : root_PE, To_All, SCALAR_PAIR, CGRID_NE, AGRID, BGRID_NE, CORNER
-use MOM_dyn_horgrid, only : dyn_horgrid_type
-use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL
-use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
+use MOM_domains, only : pass_var, pass_vector
+use MOM_domains, only : To_All, SCALAR_PAIR, CGRID_NE, AGRID, BGRID_NE, CORNER
+use MOM_dyn_horgrid, only : dyn_horgrid_type, set_derived_dyn_horgrid
+use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
 use MOM_grid, only : ocean_grid_type, set_derived_metrics
-! use MOM_grid, only :  ! , set_first_direction
 
 implicit none ; private
 
-#include <MOM_memory.h>
+public copy_dyngrid_to_MOM_grid, copy_MOM_grid_to_dyngrid
 
 contains
 
 !> Copies information from a dynamic (shared) horizontal grid type into an
 !! ocean_grid_type.
-subroutine copy_dyngrid_to_MOM_grid(dG, G)
+subroutine copy_dyngrid_to_MOM_grid(dG, oG)
   type(dyn_horgrid_type), intent(in)    :: dG  !< Common horizontal grid type
-  type(ocean_grid_type),  intent(inout) :: G   !< Ocean grid type
+  type(ocean_grid_type),  intent(inout) :: oG  !< Ocean grid type
 
-  integer :: isd, ied, jsd, jed, nk  ! Common data domains.
+  integer :: isd, ied, jsd, jed      ! Common data domains.
   integer :: IsdB, IedB, JsdB, JedB  ! Common data domains.
-  integer :: ido, jdo  ! Indexing offsets between the grids.
-  integer :: i, j, k
+  integer :: ido, jdo, Ido2, Jdo2    ! Indexing offsets between the grids.
+  integer :: Igst, Jgst              ! Global starting indices.
+  integer :: i, j
 
   ! MOM_grid_init and create_dyn_horgrid are called outside of this routine.
-  ! This routine copies over the fields that were set by MOM_initilized_fixed.
+  ! This routine copies over the fields that were set by MOM_initialized_fixed.
 
   ! Determine the indexing offsets between the grids.
-  ido = dG%idg_offset - G%idg_offset
-  jdo = dG%jdg_offset - G%jdg_offset
+  ido = dG%idg_offset - oG%idg_offset
+  jdo = dG%jdg_offset - oG%jdg_offset
 
-  isd = max(G%isd, dG%isd+ido) ; jsd = max(G%jsd, dG%jsd+jdo)
-  ied = min(G%ied, dG%ied+ido) ; jed = min(G%jed, dG%jed+jdo)
-  IsdB = max(G%IsdB, dG%IsdB+ido) ; JsdB = max(G%JsdB, dG%JsdB+jdo)
-  IedB = min(G%IedB, dG%IedB+ido) ; JedB = min(G%JedB, dG%JedB+jdo)
+  isd = max(oG%isd, dG%isd+ido) ; jsd = max(oG%jsd, dG%jsd+jdo)
+  ied = min(oG%ied, dG%ied+ido) ; jed = min(oG%jed, dG%jed+jdo)
+  IsdB = max(oG%IsdB, dG%IsdB+ido) ; JsdB = max(oG%JsdB, dG%JsdB+jdo)
+  IedB = min(oG%IedB, dG%IedB+ido) ; JedB = min(oG%JedB, dG%JedB+jdo)
 
   ! Check that the grids conform.
-  if ((isd > G%isc) .or. (ied < G%ied) .or. (jsd > G%jsc) .or. (jed > G%jed)) &
+  if ((isd > oG%isc) .or. (ied < oG%ied) .or. (jsd > oG%jsc) .or. (jed > oG%jed)) &
     call MOM_error(FATAL, "copy_dyngrid_to_MOM_grid called with incompatible grids.")
 
   do i=isd,ied ; do j=jsd,jed
-    G%geoLonT(i,j) = dG%geoLonT(i+ido,j+jdo)
-    G%geoLatT(i,j) = dG%geoLatT(i+ido,j+jdo)
-    G%dxT(i,j) = dG%dxT(i+ido,j+jdo)
-    G%dyT(i,j) = dG%dyT(i+ido,j+jdo)
-    G%areaT(i,j) = dG%areaT(i+ido,j+jdo)
-    G%bathyT(i,j) = dG%bathyT(i+ido,j+jdo)
+    oG%geoLonT(i,j) = dG%geoLonT(i+ido,j+jdo)
+    oG%geoLatT(i,j) = dG%geoLatT(i+ido,j+jdo)
+    oG%dxT(i,j) = dG%dxT(i+ido,j+jdo)
+    oG%dyT(i,j) = dG%dyT(i+ido,j+jdo)
+    oG%areaT(i,j) = dG%areaT(i+ido,j+jdo)
+    oG%bathyT(i,j) = dG%bathyT(i+ido,j+jdo)
+
+    oG%dF_dx(i,j) = dG%dF_dx(i+ido,j+jdo)
+    oG%dF_dy(i,j) = dG%dF_dy(i+ido,j+jdo)
+    oG%sin_rot(i,j) = dG%sin_rot(i+ido,j+jdo)
+    oG%cos_rot(i,j) = dG%cos_rot(i+ido,j+jdo)
+    oG%mask2dT(i,j) = dG%mask2dT(i+ido,j+jdo)
   enddo ; enddo
 
   do I=IsdB,IedB ; do j=jsd,jed
-    G%geoLonCu(I,j) = dG%geoLonCu(I+ido,j+jdo)
-    G%geoLatCu(I,j) = dG%geoLatCu(I+ido,j+jdo)
-    G%dxCu(I,j) = dG%dxCu(I+ido,j+jdo)
-    G%dyCu(I,j) = dG%dyCu(I+ido,j+jdo)
+    oG%geoLonCu(I,j) = dG%geoLonCu(I+ido,j+jdo)
+    oG%geoLatCu(I,j) = dG%geoLatCu(I+ido,j+jdo)
+    oG%dxCu(I,j) = dG%dxCu(I+ido,j+jdo)
+    oG%dyCu(I,j) = dG%dyCu(I+ido,j+jdo)
+    oG%dy_Cu(I,j) = dG%dy_Cu(I+ido,j+jdo)
+    oG%dy_Cu_obc(I,j) = dG%dy_Cu_obc(I+ido,j+jdo)
+
+    oG%mask2dCu(I,j) = dG%mask2dCu(I+ido,j+jdo)
+    oG%areaCu(I,j) = dG%areaCu(I+ido,j+jdo)
+    oG%IareaCu(I,j) = dG%IareaCu(I+ido,j+jdo)
   enddo ; enddo
 
   do i=isd,ied ; do J=JsdB,JedB
-    G%geoLonCv(i,J) = dG%geoLonCv(i+ido,J+jdo)
-    G%geoLatCv(i,J) = dG%geoLatCv(i+ido,J+jdo)
-    G%dxCv(i,J) = dG%dxCv(i+ido,J+jdo)
-    G%dyCv(i,J) = dG%dyCv(i+ido,J+jdo)
+    oG%geoLonCv(i,J) = dG%geoLonCv(i+ido,J+jdo)
+    oG%geoLatCv(i,J) = dG%geoLatCv(i+ido,J+jdo)
+    oG%dxCv(i,J) = dG%dxCv(i+ido,J+jdo)
+    oG%dyCv(i,J) = dG%dyCv(i+ido,J+jdo)
+    oG%dx_Cv(i,J) = dG%dx_Cv(i+ido,J+jdo)
+    oG%dx_Cv_obc(i,J) = dG%dx_Cv_obc(i+ido,J+jdo)
+
+    oG%mask2dCv(i,J) = dG%mask2dCv(i+ido,J+jdo)
+    oG%areaCv(i,J) = dG%areaCv(i+ido,J+jdo)
+    oG%IareaCv(i,J) = dG%IareaCv(i+ido,J+jdo)
   enddo ; enddo
 
   do I=IsdB,IedB ; do J=JsdB,JedB
-    G%geoLonBu(I,J) = dG%geoLonBu(I+ido,J+jdo)
-    G%geoLatBu(I,J) = dG%geoLatBu(I+ido,J+jdo)
-    G%dxBu(I,J) = dG%dxBu(I+ido,J+jdo)
-    G%dyBu(I,J) = dG%dyBu(I+ido,J+jdo)
-    G%areaBu(i,j) = dG%areaBu(I+ido,J+jdo)
+    oG%geoLonBu(I,J) = dG%geoLonBu(I+ido,J+jdo)
+    oG%geoLatBu(I,J) = dG%geoLatBu(I+ido,J+jdo)
+    oG%dxBu(I,J) = dG%dxBu(I+ido,J+jdo)
+    oG%dyBu(I,J) = dG%dyBu(I+ido,J+jdo)
+    oG%areaBu(I,J) = dG%areaBu(I+ido,J+jdo)
+    oG%CoriolisBu(I,J) = dG%CoriolisBu(I+ido,J+jdo)
+    oG%mask2dBu(I,J) = dG%mask2dBu(I+ido,J+jdo)
   enddo ; enddo
 
-! Update the halos in case the dynamic grid has smaller halos than the ocean grid.
-  call pass_vector(G%dyCu, G%dxCv, G%Domain, To_All+Scalar_Pair, CGRID_NE)
-  call pass_vector(G%dxCu, G%dyCv, G%Domain, To_All+Scalar_Pair, CGRID_NE)
-  call pass_vector(G%dxBu, G%dyBu, G%Domain, To_All+Scalar_Pair, BGRID_NE)
-  call pass_var(G%areaT, G%Domain)
-  call pass_var(G%areaBu, G%Domain, position=CORNER)
+  oG%bathymetry_at_vel = dG%bathymetry_at_vel
+  if (oG%bathymetry_at_vel) then
+    do I=IsdB,IedB ; do j=jsd,jed
+      oG%Dblock_u(I,j) = dG%Dblock_u(I+ido,j+jdo)
+      oG%Dopen_u(I,j) = dG%Dopen_u(I+ido,j+jdo)
+    enddo ; enddo
+    do i=isd,ied ; do J=JsdB,JedB
+      oG%Dblock_v(i,J) = dG%Dblock_v(i+ido,J+jdo)
+      oG%Dopen_v(i,J) = dG%Dopen_v(i+ido,J+jdo)
+    enddo ; enddo
+  endif
 
-  call set_derived_metrics(G)
+  oG%gridLonT(oG%isg:oG%ieg) = dG%gridLonT(dG%isg:dG%ieg)
+  oG%gridLatT(oG%jsg:oG%jeg) = dG%gridLatT(dG%jsg:dG%jeg)
+  ! The more complicated logic here avoids segmentation faults if one grid uses
+  ! global symmetric memory while the other does not.  Because a northeast grid
+  ! convention is being used, the upper bounds for each array correspond.
+  Ido2 = dG%IegB-oG%IegB ; Igst = max(oG%IsgB, dG%IsgB-Ido2)
+  Jdo2 = dG%JegB-oG%JegB ; Jgst = max(oG%JsgB, dG%JsgB-Jdo2)
+  do I=Igst,oG%IegB ; oG%gridLonB(I) = dG%gridLonB(I+Ido2) ; enddo
+  do J=Jgst,oG%JegB ; oG%gridLatB(J) = dG%gridLatB(J+Jdo2) ; enddo
+
+  ! Copy various scalar variables and strings.
+  oG%x_axis_units = dG%x_axis_units ; oG%y_axis_units = dG%y_axis_units
+  oG%areaT_global = dG%areaT_global ; oG%IareaT_global = dG%IareaT_global
+  oG%south_lat = dG%south_lat ; oG%west_lon  = dG%west_lon
+  oG%len_lat = dG%len_lat ; oG%len_lon = dG%len_lon
+  oG%Rad_Earth = dG%Rad_Earth ; oG%max_depth = dG%max_depth 
+
+! Update the halos in case the dynamic grid has smaller halos than the ocean grid.
+  call pass_var(oG%areaT, oG%Domain)
+  call pass_var(oG%bathyT, oG%Domain)
+  call pass_var(oG%geoLonT, oG%Domain)
+  call pass_var(oG%geoLatT, oG%Domain)
+  call pass_vector(oG%dxT, oG%dyT, oG%Domain, To_All+Scalar_Pair, AGRID)
+  call pass_vector(oG%dF_dx, oG%dF_dy, oG%Domain, To_All, AGRID)
+  call pass_vector(oG%cos_rot, oG%sin_rot, oG%Domain, To_All, AGRID)
+  call pass_var(oG%mask2dT, oG%Domain)
+
+  call pass_vector(oG%areaCu, oG%areaCv, oG%Domain, To_All+Scalar_Pair, CGRID_NE)
+  call pass_vector(oG%dyCu, oG%dxCv, oG%Domain, To_All+Scalar_Pair, CGRID_NE)
+  call pass_vector(oG%dxCu, oG%dyCv, oG%Domain, To_All+Scalar_Pair, CGRID_NE)
+  call pass_vector(oG%dy_Cu, oG%dx_Cv, oG%Domain, To_All+Scalar_Pair, CGRID_NE)
+  call pass_vector(oG%dy_Cu_obc, oG%dx_Cv_obc, oG%Domain, To_All+Scalar_Pair, CGRID_NE)
+  call pass_vector(oG%mask2dCu, oG%mask2dCv, oG%Domain, To_All+Scalar_Pair, CGRID_NE)
+  call pass_vector(oG%IareaCu, oG%IareaCv, oG%Domain, To_All+Scalar_Pair, CGRID_NE)
+  call pass_vector(oG%IareaCu, oG%IareaCv, oG%Domain, To_All+Scalar_Pair, CGRID_NE)
+  call pass_vector(oG%geoLatCu, oG%geoLatCv, oG%Domain, To_All+Scalar_Pair, CGRID_NE)
+
+  call pass_var(oG%areaBu, oG%Domain, position=CORNER)
+  call pass_var(oG%geoLonBu, oG%Domain, position=CORNER)
+  call pass_var(oG%geoLatBu, oG%Domain, position=CORNER)
+  call pass_vector(oG%dxBu, oG%dyBu, oG%Domain, To_All+Scalar_Pair, BGRID_NE)
+  call pass_var(oG%CoriolisBu, oG%Domain, position=CORNER)
+  call pass_var(oG%mask2dBu, oG%Domain, position=CORNER)
+
+  if (oG%bathymetry_at_vel) then
+    call pass_vector(oG%Dblock_u, oG%Dblock_v, oG%Domain, To_All+Scalar_Pair, CGRID_NE)
+    call pass_vector(oG%Dopen_u, oG%Dopen_v, oG%Domain, To_All+Scalar_Pair, CGRID_NE)
+  endif
+
+  call set_derived_metrics(oG)
 
 end subroutine copy_dyngrid_to_MOM_grid
 
-! subroutine set_first_direction(G, y_first)
-!   type(ocean_grid_type), intent(inout) :: G
-!   integer,               intent(in) :: y_first
 
-!   G%first_direction = y_first
-! end subroutine set_first_direction
+!> Copies information from an ocean_grid_type into a dynamic (shared)
+!! horizontal grid type.
+subroutine copy_MOM_grid_to_dyngrid(oG, dG)
+  type(ocean_grid_type),  intent(in)    :: oG  !< Ocean grid type
+  type(dyn_horgrid_type), intent(inout) :: dG  !< Common horizontal grid type
 
-!---------------------------------------------------------------------
-!> Allocate memory used by the ocean_grid_type and related structures.
-subroutine allocate_metrics(G)
-  type(ocean_grid_type), intent(inout) :: G !< The horizontal grid type
-  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, isg, ieg, jsg, jeg
+  integer :: isd, ied, jsd, jed      ! Common data domains.
+  integer :: IsdB, IedB, JsdB, JedB  ! Common data domains.
+  integer :: ido, jdo, Ido2, Jdo2    ! Indexing offsets between the grids.
+  integer :: Igst, Jgst              ! Global starting indices.
+  integer :: i, j
 
-  ! This subroutine allocates the lateral elements of the ocean_grid_type that
-  ! are always used and zeros them out.
+  ! MOM_grid_init and create_dyn_horgrid are called outside of this routine.
+  ! This routine copies over the fields that were set by MOM_initialized_fixed.
 
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-  isg = G%isg ; ieg = G%ieg ; jsg = G%jsg ; jeg = G%jeg
+  ! Determine the indexing offsets between the grids.
+  ido = oG%idG_offset - dG%idG_offset
+  jdo = oG%jdG_offset - dG%jdG_offset
 
-  ALLOC_(G%dxT(isd:ied,jsd:jed))       ; G%dxT(:,:) = 0.0
-  ALLOC_(G%dxCu(IsdB:IedB,jsd:jed))    ; G%dxCu(:,:) = 0.0
-  ALLOC_(G%dxCv(isd:ied,JsdB:JedB))    ; G%dxCv(:,:) = 0.0
-  ALLOC_(G%dxBu(IsdB:IedB,JsdB:JedB))  ; G%dxBu(:,:) = 0.0
-  ALLOC_(G%IdxT(isd:ied,jsd:jed))      ; G%IdxT(:,:) = 0.0
-  ALLOC_(G%IdxCu(IsdB:IedB,jsd:jed))   ; G%IdxCu(:,:) = 0.0
-  ALLOC_(G%IdxCv(isd:ied,JsdB:JedB))   ; G%IdxCv(:,:) = 0.0
-  ALLOC_(G%IdxBu(IsdB:IedB,JsdB:JedB)) ; G%IdxBu(:,:) = 0.0
+  isd = max(dG%isd, oG%isd+ido) ; jsd = max(dG%jsd, oG%jsd+jdo)
+  ied = min(dG%ied, oG%ied+ido) ; jed = min(dG%jed, oG%jed+jdo)
+  IsdB = max(dG%IsdB, oG%IsdB+ido) ; JsdB = max(dG%JsdB, oG%JsdB+jdo)
+  IedB = min(dG%IedB, oG%IedB+ido) ; JedB = min(dG%JedB, oG%JedB+jdo)
 
-  ALLOC_(G%dyT(isd:ied,jsd:jed))       ; G%dyT(:,:) = 0.0
-  ALLOC_(G%dyCu(IsdB:IedB,jsd:jed))    ; G%dyCu(:,:) = 0.0
-  ALLOC_(G%dyCv(isd:ied,JsdB:JedB))    ; G%dyCv(:,:) = 0.0
-  ALLOC_(G%dyBu(IsdB:IedB,JsdB:JedB))  ; G%dyBu(:,:) = 0.0
-  ALLOC_(G%IdyT(isd:ied,jsd:jed))      ; G%IdyT(:,:) = 0.0
-  ALLOC_(G%IdyCu(IsdB:IedB,jsd:jed))   ; G%IdyCu(:,:) = 0.0
-  ALLOC_(G%IdyCv(isd:ied,JsdB:JedB))   ; G%IdyCv(:,:) = 0.0
-  ALLOC_(G%IdyBu(IsdB:IedB,JsdB:JedB)) ; G%IdyBu(:,:) = 0.0
+  ! Check that the grids conform.
+  if ((isd > dG%isc) .or. (ied < dG%ied) .or. (jsd > dG%jsc) .or. (jed > dG%jed)) &
+    call MOM_error(FATAL, "copy_dyngrid_to_MOM_grid called with incompatible grids.")
 
-  ALLOC_(G%areaT(isd:ied,jsd:jed))       ; G%areaT(:,:) = 0.0
-  ALLOC_(G%IareaT(isd:ied,jsd:jed))      ; G%IareaT(:,:) = 0.0
-  ALLOC_(G%areaBu(IsdB:IedB,JsdB:JedB))  ; G%areaBu(:,:) = 0.0
-  ALLOC_(G%IareaBu(IsdB:IedB,JsdB:JedB)) ; G%IareaBu(:,:) = 0.0
+  do i=isd,ied ; do j=jsd,jed
+    dG%geoLonT(i,j) = oG%geoLonT(i+ido,j+jdo)
+    dG%geoLatT(i,j) = oG%geoLatT(i+ido,j+jdo)
+    dG%dxT(i,j) = oG%dxT(i+ido,j+jdo)
+    dG%dyT(i,j) = oG%dyT(i+ido,j+jdo)
+    dG%areaT(i,j) = oG%areaT(i+ido,j+jdo)
+    dG%bathyT(i,j) = oG%bathyT(i+ido,j+jdo)
 
-  ALLOC_(G%mask2dT(isd:ied,jsd:jed))      ; G%mask2dT(:,:) = 0.0
-  ALLOC_(G%mask2dCu(IsdB:IedB,jsd:jed))   ; G%mask2dCu(:,:) = 0.0
-  ALLOC_(G%mask2dCv(isd:ied,JsdB:JedB))   ; G%mask2dCv(:,:) = 0.0
-  ALLOC_(G%mask2dBu(IsdB:IedB,JsdB:JedB)) ; G%mask2dBu(:,:) = 0.0
-  ALLOC_(G%geoLatT(isd:ied,jsd:jed))      ; G%geoLatT(:,:) = 0.0
-  ALLOC_(G%geoLatCu(IsdB:IedB,jsd:jed))   ; G%geoLatCu(:,:) = 0.0
-  ALLOC_(G%geoLatCv(isd:ied,JsdB:JedB))   ; G%geoLatCv(:,:) = 0.0
-  ALLOC_(G%geoLatBu(IsdB:IedB,JsdB:JedB)) ; G%geoLatBu(:,:) = 0.0
-  ALLOC_(G%geoLonT(isd:ied,jsd:jed))      ; G%geoLonT(:,:) = 0.0
-  ALLOC_(G%geoLonCu(IsdB:IedB,jsd:jed))   ; G%geoLonCu(:,:) = 0.0
-  ALLOC_(G%geoLonCv(isd:ied,JsdB:JedB))   ; G%geoLonCv(:,:) = 0.0
-  ALLOC_(G%geoLonBu(IsdB:IedB,JsdB:JedB)) ; G%geoLonBu(:,:) = 0.0
+    dG%dF_dx(i,j) = oG%dF_dx(i+ido,j+jdo)
+    dG%dF_dy(i,j) = oG%dF_dy(i+ido,j+jdo)
+    dG%sin_rot(i,j) = oG%sin_rot(i+ido,j+jdo)
+    dG%cos_rot(i,j) = oG%cos_rot(i+ido,j+jdo)
+    dG%mask2dT(i,j) = oG%mask2dT(i+ido,j+jdo)
+  enddo ; enddo
 
-  ALLOC_(G%dx_Cv(isd:ied,JsdB:JedB))     ; G%dx_Cv(:,:) = 0.0
-  ALLOC_(G%dy_Cu(IsdB:IedB,jsd:jed))     ; G%dy_Cu(:,:) = 0.0
-  ALLOC_(G%dx_Cv_obc(isd:ied,JsdB:JedB)) ; G%dx_Cv_obc(:,:) = 0.0
-  ALLOC_(G%dy_Cu_obc(IsdB:IedB,jsd:jed)) ; G%dy_Cu_obc(:,:) = 0.0
+  do I=IsdB,IedB ; do j=jsd,jed
+    dG%geoLonCu(I,j) = oG%geoLonCu(I+ido,j+jdo)
+    dG%geoLatCu(I,j) = oG%geoLatCu(I+ido,j+jdo)
+    dG%dxCu(I,j) = oG%dxCu(I+ido,j+jdo)
+    dG%dyCu(I,j) = oG%dyCu(I+ido,j+jdo)
+    dG%dy_Cu(I,j) = oG%dy_Cu(I+ido,j+jdo)
+    dG%dy_Cu_obc(I,j) = oG%dy_Cu_obc(I+ido,j+jdo)
 
-  ALLOC_(G%areaCu(IsdB:IedB,jsd:jed))  ; G%areaCu(:,:) = 0.0
-  ALLOC_(G%areaCv(isd:ied,JsdB:JedB))  ; G%areaCv(:,:) = 0.0
-  ALLOC_(G%IareaCu(IsdB:IedB,jsd:jed)) ; G%IareaCu(:,:) = 0.0
-  ALLOC_(G%IareaCv(isd:ied,JsdB:JedB)) ; G%IareaCv(:,:) = 0.0
+    dG%mask2dCu(I,j) = oG%mask2dCu(I+ido,j+jdo)
+    dG%areaCu(I,j) = oG%areaCu(I+ido,j+jdo)
+    dG%IareaCu(I,j) = oG%IareaCu(I+ido,j+jdo)
+  enddo ; enddo
 
-  ALLOC_(G%bathyT(isd:ied, jsd:jed)) ; G%bathyT(:,:) = 0.0
-  ALLOC_(G%CoriolisBu(IsdB:IedB, JsdB:JedB)) ; G%CoriolisBu(:,:) = 0.0
-  ALLOC_(G%dF_dx(isd:ied, jsd:jed)) ; G%dF_dx(:,:) = 0.0
-  ALLOC_(G%dF_dy(isd:ied, jsd:jed)) ; G%dF_dy(:,:) = 0.0
+  do i=isd,ied ; do J=JsdB,JedB
+    dG%geoLonCv(i,J) = oG%geoLonCv(i+ido,J+jdo)
+    dG%geoLatCv(i,J) = oG%geoLatCv(i+ido,J+jdo)
+    dG%dxCv(i,J) = oG%dxCv(i+ido,J+jdo)
+    dG%dyCv(i,J) = oG%dyCv(i+ido,J+jdo)
+    dG%dx_Cv(i,J) = oG%dx_Cv(i+ido,J+jdo)
+    dG%dx_Cv_obc(i,J) = oG%dx_Cv_obc(i+ido,J+jdo)
 
-  ALLOC_(G%sin_rot(isd:ied,jsd:jed)) ; G%sin_rot(:,:) = 0.0
-  ALLOC_(G%cos_rot(isd:ied,jsd:jed)) ; G%cos_rot(:,:) = 1.0
+    dG%mask2dCv(i,J) = oG%mask2dCv(i+ido,J+jdo)
+    dG%areaCv(i,J) = oG%areaCv(i+ido,J+jdo)
+    dG%IareaCv(i,J) = oG%IareaCv(i+ido,J+jdo)
+  enddo ; enddo
 
-  allocate(G%gridLonT(isg:ieg))   ; G%gridLonT(:) = 0.0
-  allocate(G%gridLonB(G%IsgB:G%IegB)) ; G%gridLonB(:) = 0.0
-  allocate(G%gridLatT(jsg:jeg))   ; G%gridLatT(:) = 0.0
-  allocate(G%gridLatB(G%JsgB:G%JegB)) ; G%gridLatB(:) = 0.0
+  do I=IsdB,IedB ; do J=JsdB,JedB
+    dG%geoLonBu(I,J) = oG%geoLonBu(I+ido,J+jdo)
+    dG%geoLatBu(I,J) = oG%geoLatBu(I+ido,J+jdo)
+    dG%dxBu(I,J) = oG%dxBu(I+ido,J+jdo)
+    dG%dyBu(I,J) = oG%dyBu(I+ido,J+jdo)
+    dG%areaBu(I,J) = oG%areaBu(I+ido,J+jdo)
+    dG%CoriolisBu(I,J) = oG%CoriolisBu(I+ido,J+jdo)
+    dG%mask2dBu(I,J) = oG%mask2dBu(I+ido,J+jdo)
+  enddo ; enddo
 
-end subroutine allocate_metrics
+  dG%bathymetry_at_vel = oG%bathymetry_at_vel
+  if (dG%bathymetry_at_vel) then
+    do I=IsdB,IedB ; do j=jsd,jed
+      dG%Dblock_u(I,j) = oG%Dblock_u(I+ido,j+jdo)
+      dG%Dopen_u(I,j) = oG%Dopen_u(I+ido,j+jdo)
+    enddo ; enddo
+    do i=isd,ied ; do J=JsdB,JedB
+      dG%Dblock_v(i,J) = oG%Dblock_v(i+ido,J+jdo)
+      dG%Dopen_v(i,J) = oG%Dopen_v(i+ido,J+jdo)
+    enddo ; enddo
+  endif
 
+  dG%gridLonT(dG%isg:dG%ieg) = oG%gridLonT(oG%isg:oG%ieg)
+  dG%gridLatT(dG%jsg:dG%jeg) = oG%gridLatT(oG%jsg:oG%jeg)
+  ! These two might not be right with symmetric memory, however hopefully
+  ! a compiler would catch mismatched array sizes. ###REVISIT THIS?
+  dG%gridLonB(dG%IsgB:dG%IegB) = oG%gridLonB(oG%IsgB:oG%IegB)
+  dG%gridLatB(dG%JsgB:dG%JegB) = oG%gridLatB(oG%JsgB:oG%JegB)
+
+  ! The more complicated logic here avoids segmentation faults if one grid uses
+  ! global symmetric memory while the other does not.  Because a northeast grid
+  ! convention is being used, the upper bounds for each array correspond.
+  Ido2 = oG%IegB-dG%IegB ; Igst = max(dG%IsgB, oG%IsgB-Ido2)
+  Jdo2 = oG%JegB-dG%JegB ; Jgst = max(dG%JsgB, oG%JsgB-Jdo2)
+  do I=Igst,dG%IegB ; dG%gridLonB(I) = oG%gridLonB(I+Ido2) ; enddo
+  do J=Jgst,dG%JegB ; dG%gridLatB(J) = oG%gridLatB(J+Jdo2) ; enddo
+
+  ! Copy various scalar variables and strings.
+  dG%x_axis_units = oG%x_axis_units ; dG%y_axis_units = oG%y_axis_units
+  dG%areaT_global = oG%areaT_global ; dG%IareaT_global = oG%IareaT_global
+  dG%south_lat = oG%south_lat ; dG%west_lon  = oG%west_lon
+  dG%len_lat = oG%len_lat ; dG%len_lon = oG%len_lon
+  dG%Rad_Earth = oG%Rad_Earth ; dG%max_depth = oG%max_depth
+
+! Update the halos in case the dynamic grid has smaller halos than the ocean grid.
+  call pass_var(dG%areaT, dG%Domain)
+  call pass_var(dG%bathyT, dG%Domain)
+  call pass_var(dG%geoLonT, dG%Domain)
+  call pass_var(dG%geoLatT, dG%Domain)
+  call pass_vector(dG%dxT, dG%dyT, dG%Domain, To_All+Scalar_Pair, AGRID)
+  call pass_vector(dG%dF_dx, dG%dF_dy, dG%Domain, To_All, AGRID)
+  call pass_vector(dG%cos_rot, dG%sin_rot, dG%Domain, To_All, AGRID)
+  call pass_var(dG%mask2dT, dG%Domain)
+
+  call pass_vector(dG%areaCu, dG%areaCv, dG%Domain, To_All+Scalar_Pair, CGRID_NE)
+  call pass_vector(dG%dyCu, dG%dxCv, dG%Domain, To_All+Scalar_Pair, CGRID_NE)
+  call pass_vector(dG%dxCu, dG%dyCv, dG%Domain, To_All+Scalar_Pair, CGRID_NE)
+  call pass_vector(dG%dy_Cu, dG%dx_Cv, dG%Domain, To_All+Scalar_Pair, CGRID_NE)
+  call pass_vector(dG%dy_Cu_obc, dG%dx_Cv_obc, dG%Domain, To_All+Scalar_Pair, CGRID_NE)
+  call pass_vector(dG%mask2dCu, dG%mask2dCv, dG%Domain, To_All+Scalar_Pair, CGRID_NE)
+  call pass_vector(dG%IareaCu, dG%IareaCv, dG%Domain, To_All+Scalar_Pair, CGRID_NE)
+  call pass_vector(dG%IareaCu, dG%IareaCv, dG%Domain, To_All+Scalar_Pair, CGRID_NE)
+  call pass_vector(dG%geoLatCu, dG%geoLatCv, dG%Domain, To_All+Scalar_Pair, CGRID_NE)
+
+  call pass_var(dG%areaBu, dG%Domain, position=CORNER)
+  call pass_var(dG%geoLonBu, dG%Domain, position=CORNER)
+  call pass_var(dG%geoLatBu, dG%Domain, position=CORNER)
+  call pass_vector(dG%dxBu, dG%dyBu, dG%Domain, To_All+Scalar_Pair, BGRID_NE)
+  call pass_var(dG%CoriolisBu, dG%Domain, position=CORNER)
+  call pass_var(dG%mask2dBu, dG%Domain, position=CORNER)
+
+  if (dG%bathymetry_at_vel) then
+    call pass_vector(dG%Dblock_u, dG%Dblock_v, dG%Domain, To_All+Scalar_Pair, CGRID_NE)
+    call pass_vector(dG%Dopen_u, dG%Dopen_v, dG%Domain, To_All+Scalar_Pair, CGRID_NE)
+  endif
+
+  call  set_derived_dyn_horgrid(dG)
+
+end subroutine copy_MOM_grid_to_dyngrid
 
 end module MOM_transcribe_grid

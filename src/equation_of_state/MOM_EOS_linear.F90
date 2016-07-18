@@ -213,14 +213,19 @@ end subroutine calculate_2_densities_linear
 
 subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, HIO, &
                  Rho_T0_S0, dRho_dT, dRho_dS, dpa, intz_dpa, intx_dpa, inty_dpa)
-  type(hor_index_type),                    intent(in)  :: HII, HIO
-  real, dimension(SZDI_(HII),SZDJ_(HII)),  intent(in)  :: T, S, z_t, z_b
-  real,                                    intent(in)  :: rho_ref, rho_0_pres, G_e
-  real,                                    intent(in)  :: Rho_T0_S0, dRho_dT, dRho_dS
-  real, dimension(SZDI_(HIO),SZDJ_(HIO)),  intent(out) :: dpa
-  real, dimension(SZDI_(HIO),SZDJ_(HIO)),  optional, intent(out) :: intz_dpa
-  real, dimension(SZDIB_(HIO),SZDJ_(HIO)), optional, intent(out) :: intx_dpa
-  real, dimension(SZDI_(HIO),SZDJB_(HIO)), optional, intent(out) :: inty_dpa
+  type(hor_index_type), intent(in)  :: HII, HIO
+  real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
+                        intent(in)  :: T, S, z_t, z_b
+  real,                 intent(in)  :: rho_ref, rho_0_pres, G_e
+  real,                 intent(in)  :: Rho_T0_S0, dRho_dT, dRho_dS
+  real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
+                        intent(out) :: dpa
+  real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
+              optional, intent(out) :: intz_dpa
+  real, dimension(HIO%IsdB:HIO%IedB,HIO%jsd:HIO%jed),  &
+              optional, intent(out) :: intx_dpa
+  real, dimension(HIO%isd:HIO%ied,HIO%JsdB:HIO%JedB),  &
+              optional, intent(out) :: inty_dpa
 !   This subroutine calculates analytical and nearly-analytical integrals of
 ! pressure anomalies across layers, which are required for calculating the
 ! finite-volume form pressure accelerations in a Boussinesq model.
@@ -292,14 +297,19 @@ end subroutine int_density_dz_linear
 
 subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
                dRho_dT, dRho_dS, dza, intp_dza, intx_dza, inty_dza, halo_size)
-  type(hor_index_type),                  intent(in)  :: HI
-  real, dimension(SZDI_(HI),SZDJ_(HI)),  intent(in)  :: T, S, p_t, p_b
-  real,             intent(in)  :: alpha_ref
-  real,             intent(in)  :: Rho_T0_S0, dRho_dT, dRho_dS
-  real, dimension(SZDI_(HI),SZDJ_(HI)),  intent(out) :: dza
-  real, dimension(SZDI_(HI),SZDJ_(HI)),  optional, intent(out) :: intp_dza
-  real, dimension(SZDIB_(HI),SZDJ_(HI)), optional, intent(out) :: intx_dza
-  real, dimension(SZDI_(HI),SZDJB_(HI)), optional, intent(out) :: inty_dza
+  type(hor_index_type), intent(in)  :: HI
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed),  &
+                        intent(in)  :: T, S, p_t, p_b
+  real,                 intent(in)  :: alpha_ref
+  real,                 intent(in)  :: Rho_T0_S0, dRho_dT, dRho_dS
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+                        intent(out) :: dza
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+              optional, intent(out) :: intp_dza
+  real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), &
+              optional, intent(out) :: intx_dza
+  real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), &
+              optional, intent(out) :: inty_dza
   integer,                         optional, intent(in)  :: halo_size
 !   This subroutine calculates analytical and nearly-analytical integrals in
 ! pressure across layers of geopotential anomalies, which are required for

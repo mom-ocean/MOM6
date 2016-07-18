@@ -22,58 +22,52 @@ module MOM_checksums
 
 use MOM_coms, only : PE_here, root_PE, num_PEs, sum_across_PEs
 use MOM_coms, only : min_across_PEs, max_across_PEs
+use MOM_coms, only : reproducing_sum
 use MOM_error_handler, only : MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : log_version, param_file_type
-use MOM_grid, only : ocean_grid_type
+use MOM_hor_index, only : hor_index_type
 
 implicit none ; private
 
-public :: hchksum, qchksum, uchksum, vchksum, chksum, is_NaN
-public :: totalStuff, totalTandS
+public :: hchksum, Bchksum, uchksum, vchksum, qchksum, chksum, is_NaN
 public :: MOM_checksums_init
 
 interface hchksum
-  module procedure chksum_h_2d
-  module procedure chksum_h_3d
+  module procedure chksum_h_2d, chksum_h_3d
 end interface
 
-interface qchksum
-  module procedure chksum_q_2d
-  module procedure chksum_q_3d
+interface Bchksum
+  module procedure chksum_B_2d, chksum_B_3d
 end interface
 
 interface uchksum
-  module procedure chksum_u_2d
-  module procedure chksum_u_3d
+  module procedure chksum_u_2d, chksum_u_3d
 end interface
 
 interface vchksum
-  module procedure chksum_v_2d
-  module procedure chksum_v_3d
+  module procedure chksum_v_2d, chksum_v_3d
+end interface
+
+! This is an older interface that has been renamed Bchksum
+interface qchksum
+  module procedure chksum_B_2d, chksum_B_3d
 end interface
 
 interface chksum
-  module procedure chksum1d
-!  module procedure chksum2d
-!  module procedure chksum3d
+  module procedure chksum1d, chksum2d, chksum3d
 end interface
 
 interface chk_sum_msg
-  module procedure chk_sum_msg1
-  module procedure chk_sum_msg3
-  module procedure chk_sum_msg5
+  module procedure chk_sum_msg1, chk_sum_msg2, chk_sum_msg3, chk_sum_msg5
 end interface
 
 interface is_NaN
-  module procedure is_NaN_0d
-  module procedure is_NaN_1d
-  module procedure is_NaN_2d
-  module procedure is_NaN_3d
+  module procedure is_NaN_0d, is_NaN_1d, is_NaN_2d, is_NaN_3d
 end interface
 
 integer, parameter :: default_shift=0
-logical :: calculateStatistics=.false. ! If true, report min, max and mean
-                               ! instead of the bitcount checksum
+logical :: calculateStatistics=.true. ! If true, report min, max and mean.
+logical :: writeChksums=.true. ! If true, report the bitcount checksum
 logical :: checkForNaNs=.true. ! If true, checks array for NaNs and cause
                                ! FATAL error is any are found
 
@@ -82,62 +76,60 @@ contains
 ! =====================================================================
 
 !> chksum_h_2d performs checksums on a 2d array staggered at tracer points.
-subroutine chksum_h_2d(array, mesg, G, haloshift)
-  type(ocean_grid_type),           intent(in) :: G     !< The ocean grid type
-  real, dimension(G%isd:,G%jsd:),  intent(in) :: array !< The array to be checksummed
+subroutine chksum_h_2d(array, mesg, HI, haloshift)
+  type(hor_index_type),           intent(in) :: HI     !< A horizontal index type
+  real, dimension(HI%isd:,HI%jsd:), intent(in) :: array !< The array to be checksummed
   character(len=*),                intent(in) :: mesg  !< An identifying message
   integer,               optional, intent(in) :: haloshift !< The width of halos to check (default 0)
 
   integer :: bc0,bcSW,bcSE,bcNW,bcNE,hshift
 
   if (checkForNaNs) then
-    if (is_NaN(array(G%isc:G%iec,G%jsc:G%jec))) &
+    if (is_NaN(array(HI%isc:HI%iec,HI%jsc:HI%jec))) &
       call chksum_error(FATAL, 'NaN detected: '//trim(mesg))
 !   if (is_NaN(array)) &
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
-  if (calculateStatistics) then
-    call subStats(G, array, mesg); return
-  endif
+  if (calculateStatistics) call subStats(HI, array, mesg)
+
+  if (.not.writeChksums) return
 
   hshift=default_shift
   if (present(haloshift)) hshift=haloshift
-  if (hshift<0) hshift=G%ied-G%iec
+  if (hshift<0) hshift=HI%ied-HI%iec
 
-  if ( G%isc-hshift<G%isd .or. &
-       G%iec+hshift>G%ied .or. &
-       G%jsc-hshift<G%jsd .or. &
-       G%jec+hshift>G%jed ) then
+  if ( HI%isc-hshift<HI%isd .or. HI%iec+hshift>HI%ied .or. &
+       HI%jsc-hshift<HI%jsd .or. HI%jec+hshift>HI%jed ) then
     write(0,*) 'chksum_h_2d: haloshift =',hshift
-    write(0,*) 'chksum_h_2d: isd,isc,iec,ied=',G%isd,G%isc,G%iec,G%ied
-    write(0,*) 'chksum_h_2d: jsd,jsc,jec,jed=',G%jsd,G%jsc,G%jec,G%jed
+    write(0,*) 'chksum_h_2d: isd,isc,iec,ied=',HI%isd,HI%isc,HI%iec,HI%ied
+    write(0,*) 'chksum_h_2d: jsd,jsc,jec,jed=',HI%jsd,HI%jsc,HI%jec,HI%jed
     call chksum_error(FATAL,'Error in chksum_h_2d '//trim(mesg))
   endif
 
-  bc0=subchk(array, G, 0, 0)
+  bc0=subchk(array, HI, 0, 0)
 
   if (hshift==0) then
       if (is_root_pe()) call chk_sum_msg("h-point:",bc0,mesg)
       return
   endif
 
-  bcSW=subchk(array, G, -hshift, -hshift)
-  bcSE=subchk(array, G, hshift, -hshift)
-  bcNW=subchk(array, G, -hshift, hshift)
-  bcNE=subchk(array, G, hshift, hshift)
+  bcSW=subchk(array, HI, -hshift, -hshift)
+  bcSE=subchk(array, HI, hshift, -hshift)
+  bcNW=subchk(array, HI, -hshift, hshift)
+  bcNE=subchk(array, HI, hshift, hshift)
 
   if (is_root_pe()) call chk_sum_msg("h-point:",bc0,bcSW,bcSE,bcNW,bcNE,mesg)
 
   contains
 
-  integer function subchk(array, G, di, dj)
-    type(ocean_grid_type), intent(in) :: G
-    real, dimension(G%isd:,G%jsd:), intent(in) :: array
+  integer function subchk(array, HI, di, dj)
+    type(hor_index_type), intent(in) :: HI
+    real, dimension(HI%isd:,HI%jsd:), intent(in) :: array
     integer, intent(in) :: di, dj
     integer :: bitcount, i, j, bc
     subchk = 0
-    do j=G%jsc+dj,G%jec+dj; do i=G%isc+di,G%iec+di
+    do j=HI%jsc+dj,HI%jec+dj; do i=HI%isc+di,HI%iec+di
         bc = bitcount(abs(array(i,j)))
         subchk = subchk + bc
     enddo; enddo
@@ -145,23 +137,22 @@ subroutine chksum_h_2d(array, mesg, G, haloshift)
     subchk=mod(subchk,1000000000)
   end function subchk
 
-  subroutine subStats(G, array, mesg)
-    type(ocean_grid_type), intent(in) :: G
-    real, dimension(G%isd:,G%jsd:), intent(in) :: array
+  subroutine subStats(HI, array, mesg)
+    type(hor_index_type), intent(in) :: HI
+    real, dimension(HI%isd:,HI%jsd:), intent(in) :: array
     character(len=*), intent(in) :: mesg
     integer :: i, j, n
     real :: aMean, aMin, aMax
-    aMean = 0.
-    aMin = array(G%isc,G%jsc)
-    aMax = array(G%isc,G%jsc)
+
+    aMin = array(HI%isc,HI%jsc)
+    aMax = array(HI%isc,HI%jsc)
     n = 0
-    do j=G%jsc,G%jec; do i=G%isc,G%iec
-        aMean = aMean + array(i,j)
-        aMin = min(aMin, array(i,j))
-        aMax = max(aMax, array(i,j))
-        n = n + 1
-    enddo; enddo
-    call sum_across_PEs(aMean)
+    do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
+      aMin = min(aMin, array(i,j))
+      aMax = max(aMax, array(i,j))
+      n = n + 1
+    enddo ; enddo
+    aMean = reproducing_sum(array(HI%isc:HI%iec,HI%jsc:HI%jec))
     call sum_across_PEs(n)
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
@@ -173,63 +164,73 @@ end subroutine chksum_h_2d
 
 ! =====================================================================
 
-!> chksum_q_2d performs checksums on a 2d array staggered at corner points.
-subroutine chksum_q_2d(array, mesg, G, haloshift)
-  type(ocean_grid_type),            intent(in) :: G     !< The ocean grid type
-  real, dimension(G%IsdB:,G%JsdB:), intent(in) :: array !< The array to be checksummed
-  character(len=*),                 intent(in) :: mesg  !< An identifying message
-  integer,                optional, intent(in) :: haloshift !< The width of halos to check (default 0)
+!> chksum_B_2d performs checksums on a 2d array staggered at corner points.
+subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric)
+  type(hor_index_type), intent(in) :: HI     !< A horizontal index type
+  real, dimension(HI%IsdB:,HI%JsdB:), &
+                        intent(in) :: array !< The array to be checksummed
+  character(len=*),     intent(in) :: mesg  !< An identifying message
+  integer,    optional, intent(in) :: haloshift !< The width of halos to check (default 0)
+  logical,    optional, intent(in) :: symmetric !< If true, do the checksums on the
+                                                !! full symmetric computational domain.
 
   integer :: bc0,bcSW,bcSE,bcNW,bcNE,hshift
+  logical :: sym
 
   if (checkForNaNs) then
-    if (is_NaN(array(G%IscB:G%IecB,G%JscB:G%JecB))) &
+    if (is_NaN(array(HI%IscB:HI%IecB,HI%JscB:HI%JecB))) &
       call chksum_error(FATAL, 'NaN detected: '//trim(mesg))
 !   if (is_NaN(array)) &
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
-  if (calculateStatistics) then
-    call subStats(G, array, mesg); return
-  endif
+  if (calculateStatistics) call subStats(HI, array, mesg)
+
+  if (.not.writeChksums) return
 
   hshift=default_shift
   if (present(haloshift)) hshift=haloshift
-  if (hshift<0) hshift=G%ied-G%iec
+  if (hshift<0) hshift=HI%ied-HI%iec
 
-  if ( G%isc-hshift<G%isd .or. &
-       G%iec+hshift>G%ied .or. &
-       G%jsc-hshift<G%jsd .or. &
-       G%jec+hshift>G%jed ) then
-    write(0,*) 'chksum_q_2d: haloshift =',hshift
-    write(0,*) 'chksum_q_2d: isd,isc,iec,ied=',G%isd,G%isc,G%iec,G%ied
-    write(0,*) 'chksum_q_2d: jsd,jsc,jec,jed=',G%jsd,G%jsc,G%jec,G%jed
-    call chksum_error(FATAL,'Error in chksum_q_2d '//trim(mesg))
+  if ( HI%isc-hshift<HI%isd .or. HI%iec+hshift>HI%ied .or. &
+       HI%jsc-hshift<HI%jsd .or. HI%jec+hshift>HI%jed ) then
+    write(0,*) 'chksum_B_2d: haloshift =',hshift
+    write(0,*) 'chksum_B_2d: isd,isc,iec,ied=',HI%isd,HI%isc,HI%iec,HI%ied
+    write(0,*) 'chksum_B_2d: jsd,jsc,jec,jed=',HI%jsd,HI%jsc,HI%jec,HI%jed
+    call chksum_error(FATAL,'Error in chksum_B_2d '//trim(mesg))
   endif
 
-  bc0=subchk(array, G, 0, 0)
+  sym = .false. ; if (present(symmetric)) sym = symmetric
 
-  if (hshift==0) then
-      if (is_root_pe()) call chk_sum_msg("q-point:",bc0,mesg)
-      return
+  bc0=subchk(array, HI, 0, 0)
+
+  if ((hshift==0) .and. .not.sym) then
+    if (is_root_pe()) call chk_sum_msg("B-point:",bc0,mesg)
+    return
   endif
 
-  bcSW=subchk(array, G, -hshift, -hshift)
-  bcSE=subchk(array, G, hshift, -hshift)
-  bcNW=subchk(array, G, -hshift, hshift)
-  bcNE=subchk(array, G, hshift, hshift)
+  if (sym) then
+    bcSW=subchk(array, HI, -hshift-1, -hshift-1)
+    bcSE=subchk(array, HI, hshift, -hshift-1)
+    bcNW=subchk(array, HI, -hshift-1, hshift)
+  else
+    bcSW=subchk(array, HI, -hshift, -hshift)
+    bcSE=subchk(array, HI, hshift, -hshift)
+    bcNW=subchk(array, HI, -hshift, hshift)
+  endif
+  bcNE=subchk(array, HI, hshift, hshift)
 
-  if (is_root_pe()) call chk_sum_msg("q-point:",bc0,bcSW,bcSE,bcNW,bcNE,mesg)
+  if (is_root_pe()) call chk_sum_msg("B-point:",bc0,bcSW,bcSE,bcNW,bcNE,mesg)
 
   contains
 
-  integer function subchk(array, G, di, dj)
-    type(ocean_grid_type), intent(in) :: G
-    real, dimension(G%IsdB:,G%JsdB:), intent(in) :: array
+  integer function subchk(array, HI, di, dj)
+    type(hor_index_type), intent(in) :: HI
+    real, dimension(HI%IsdB:,HI%JsdB:), intent(in) :: array
     integer, intent(in) :: di, dj
     integer :: bitcount, i, j, bc
     subchk = 0
-    do j=G%jsc+dj,G%jec+dj; do i=G%isc+di,G%iec+di
+    do j=HI%jsc+dj,HI%jec+dj; do i=HI%isc+di,HI%iec+di
         bc = bitcount(abs(array(i,j)))
         subchk = subchk + bc
     enddo; enddo
@@ -237,91 +238,88 @@ subroutine chksum_q_2d(array, mesg, G, haloshift)
     subchk=mod(subchk,1000000000)
   end function subchk
 
-  subroutine subStats(G, array, mesg)
-    type(ocean_grid_type), intent(in) :: G
-    real, dimension(G%IsdB:,G%JsdB:), intent(in) :: array
+  subroutine subStats(HI, array, mesg)
+    type(hor_index_type), intent(in) :: HI
+    real, dimension(HI%IsdB:,HI%JsdB:), intent(in) :: array
     character(len=*), intent(in) :: mesg
     integer :: i, j, n
     real :: aMean, aMin, aMax
     aMean = 0.
-    aMin = array(G%isc,G%jsc)
-    aMax = array(G%isc,G%jsc)
+    aMin = array(HI%isc,HI%jsc)
+    aMax = array(HI%isc,HI%jsc)
     n = 0
-    do j=G%jsc,G%jec; do i=G%isc,G%iec
-        aMean = aMean + array(i,j)
-        aMin = min(aMin, array(i,j))
-        aMax = max(aMax, array(i,j))
-        n = n + 1
-    enddo; enddo
-    call sum_across_PEs(aMean)
+    do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
+      aMin = min(aMin, array(i,j))
+      aMax = max(aMax, array(i,j))
+      n = n + 1
+    enddo ; enddo
+    aMean = reproducing_sum(array(HI%isc:HI%iec,HI%jsc:HI%jec))
     call sum_across_PEs(n)
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
     aMean = aMean / real(n)
-    if (is_root_pe()) call chk_sum_msg("q-point:",aMean,aMin,aMax,mesg)
+    if (is_root_pe()) call chk_sum_msg("B-point:",aMean,aMin,aMax,mesg)
   end subroutine subStats
 
-end subroutine chksum_q_2d
+end subroutine chksum_B_2d
 
 ! =====================================================================
 
 !> chksum_u_2d performs checksums on a 2d array staggered at C-grid u points.
-subroutine chksum_u_2d(array, mesg, G, haloshift)
-  type(ocean_grid_type),           intent(in) :: G     !< The ocean grid type
-  real, dimension(G%IsdB:,G%jsd:), intent(in) :: array !< The array to be checksummed
+subroutine chksum_u_2d(array, mesg, HI, haloshift)
+  type(hor_index_type),           intent(in) :: HI     !< A horizontal index type
+  real, dimension(HI%IsdB:,HI%jsd:), intent(in) :: array !< The array to be checksummed
   character(len=*),                intent(in) :: mesg  !< An identifying message
   integer,               optional, intent(in) :: haloshift !< The width of halos to check (default 0)
 
   integer :: bc0,bcSW,bcSE,bcNW,bcNE,hshift
 
   if (checkForNaNs) then
-    if (is_NaN(array(G%IscB:G%IecB,G%jsc:G%jec))) &
+    if (is_NaN(array(HI%IscB:HI%IecB,HI%jsc:HI%jec))) &
       call chksum_error(FATAL, 'NaN detected: '//trim(mesg))
 !   if (is_NaN(array)) &
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
-  if (calculateStatistics) then
-    call subStats(G, array, mesg); return
-  endif
+  if (calculateStatistics) call subStats(HI, array, mesg)
+
+  if (.not.writeChksums) return
 
   hshift=default_shift
   if (present(haloshift)) hshift=haloshift
-  if (hshift<0) hshift=G%ied-G%iec
+  if (hshift<0) hshift=HI%ied-HI%iec
 
-  if ( G%isc-hshift<G%isd .or. &
-       G%iec+hshift>G%ied .or. &
-       G%jsc-hshift<G%jsd .or. &
-       G%jec+hshift>G%jed ) then
+  if ( HI%isc-hshift<HI%isd .or. HI%iec+hshift>HI%ied .or. &
+       HI%jsc-hshift<HI%jsd .or. HI%jec+hshift>HI%jed ) then
     write(0,*) 'chksum_u_2d: haloshift =',hshift
-    write(0,*) 'chksum_u_2d: isd,isc,iec,ied=',G%isd,G%isc,G%iec,G%ied
-    write(0,*) 'chksum_u_2d: jsd,jsc,jec,jed=',G%jsd,G%jsc,G%jec,G%jed
+    write(0,*) 'chksum_u_2d: isd,isc,iec,ied=',HI%isd,HI%isc,HI%iec,HI%ied
+    write(0,*) 'chksum_u_2d: jsd,jsc,jec,jed=',HI%jsd,HI%jsc,HI%jec,HI%jed
     call chksum_error(FATAL,'Error in chksum_u_2d '//trim(mesg))
   endif
 
-  bc0=subchk(array, G, 0, 0)
+  bc0=subchk(array, HI, 0, 0)
 
   if (hshift==0) then
       if (is_root_pe()) call chk_sum_msg("u-point:",bc0,mesg)
       return
   endif
 
-  bcSW=subchk(array, G, -hshift, -hshift)
-  bcSE=subchk(array, G, hshift, -hshift)
-  bcNW=subchk(array, G, -hshift, hshift)
-  bcNE=subchk(array, G, hshift, hshift)
+  bcSW=subchk(array, HI, -hshift, -hshift)
+  bcSE=subchk(array, HI, hshift, -hshift)
+  bcNW=subchk(array, HI, -hshift, hshift)
+  bcNE=subchk(array, HI, hshift, hshift)
 
   if (is_root_pe()) call chk_sum_msg("u-point:",bc0,bcSW,bcSE,bcNW,bcNE,mesg)
 
   contains
 
-  integer function subchk(array, G, di, dj)
-    type(ocean_grid_type), intent(in) :: G
-    real, dimension(G%IsdB:,G%jsd:), intent(in) :: array
+  integer function subchk(array, HI, di, dj)
+    type(hor_index_type), intent(in) :: HI
+    real, dimension(HI%IsdB:,HI%jsd:), intent(in) :: array
     integer, intent(in) :: di, dj
     integer :: bitcount, i, j, bc
     subchk = 0
-    do j=G%jsc+dj,G%jec+dj; do i=G%isc+di,G%iec+di
+    do j=HI%jsc+dj,HI%jec+dj; do i=HI%isc+di,HI%iec+di
         bc = bitcount(abs(array(i,j)))
         subchk = subchk + bc
     enddo; enddo
@@ -329,23 +327,22 @@ subroutine chksum_u_2d(array, mesg, G, haloshift)
     subchk=mod(subchk,1000000000)
   end function subchk
 
-  subroutine subStats(G, array, mesg)
-    type(ocean_grid_type), intent(in) :: G
-    real, dimension(G%IsdB:,G%jsd:), intent(in) :: array
+  subroutine subStats(HI, array, mesg)
+    type(hor_index_type), intent(in) :: HI
+    real, dimension(HI%IsdB:,HI%jsd:), intent(in) :: array
     character(len=*), intent(in) :: mesg
     integer :: i, j, n
     real :: aMean, aMin, aMax
-    aMean = 0.
-    aMin = array(G%isc,G%jsc)
-    aMax = array(G%isc,G%jsc)
+
+    aMin = array(HI%isc,HI%jsc)
+    aMax = array(HI%isc,HI%jsc)
     n = 0
-    do j=G%jsc,G%jec; do i=G%isc,G%iec
-        aMean = aMean + array(i,j)
-        aMin = min(aMin, array(i,j))
-        aMax = max(aMax, array(i,j))
-        n = n + 1
-    enddo; enddo
-    call sum_across_PEs(aMean)
+    do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
+      aMin = min(aMin, array(i,j))
+      aMax = max(aMax, array(i,j))
+      n = n + 1
+    enddo ; enddo
+    aMean = reproducing_sum(array(HI%isc:HI%iec,HI%jsc:HI%jec))
     call sum_across_PEs(n)
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
@@ -358,62 +355,60 @@ end subroutine chksum_u_2d
 ! =====================================================================
 
 !> chksum_v_2d performs checksums on a 2d array staggered at C-grid v points.
-subroutine chksum_v_2d(array, mesg, G, haloshift)
-  type(ocean_grid_type),           intent(in) :: G     !< The ocean grid type
-  real, dimension(G%isd:,G%JsdB:), intent(in) :: array !< The array to be checksummed
+subroutine chksum_v_2d(array, mesg, HI, haloshift)
+  type(hor_index_type),           intent(in) :: HI     !< A horizontal index type
+  real, dimension(HI%isd:,HI%JsdB:), intent(in) :: array !< The array to be checksummed
   character(len=*),                intent(in) :: mesg  !< An identifying message
   integer,               optional, intent(in) :: haloshift !< The width of halos to check (default 0)
 
   integer :: bc0,bcSW,bcSE,bcNW,bcNE,hshift
 
   if (checkForNaNs) then
-    if (is_NaN(array(G%isc:G%iec,G%JscB:G%JecB))) &
+    if (is_NaN(array(HI%isc:HI%iec,HI%JscB:HI%JecB))) &
       call chksum_error(FATAL, 'NaN detected: '//trim(mesg))
 !   if (is_NaN(array)) &
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
-  if (calculateStatistics) then
-    call subStats(G, array, mesg); return
-  endif
+  if (calculateStatistics) call subStats(HI, array, mesg)
+
+  if (.not.writeChksums) return
 
   hshift=default_shift
   if (present(haloshift)) hshift=haloshift
-  if (hshift<0) hshift=G%ied-G%iec
+  if (hshift<0) hshift=HI%ied-HI%iec
 
-  if ( G%isc-hshift<G%isd .or. &
-       G%iec+hshift>G%ied .or. &
-       G%jsc-hshift<G%jsd .or. &
-       G%jec+hshift>G%jed ) then
+  if ( HI%isc-hshift<HI%isd .or. HI%iec+hshift>HI%ied .or. &
+       HI%jsc-hshift<HI%jsd .or. HI%jec+hshift>HI%jed ) then
     write(0,*) 'chksum_v_2d: haloshift =',hshift
-    write(0,*) 'chksum_v_2d: isd,isc,iec,ied=',G%isd,G%isc,G%iec,G%ied
-    write(0,*) 'chksum_v_2d: jsd,jsc,jec,jed=',G%jsd,G%jsc,G%jec,G%jed
+    write(0,*) 'chksum_v_2d: isd,isc,iec,ied=',HI%isd,HI%isc,HI%iec,HI%ied
+    write(0,*) 'chksum_v_2d: jsd,jsc,jec,jed=',HI%jsd,HI%jsc,HI%jec,HI%jed
     call chksum_error(FATAL,'Error in chksum_v_2d '//trim(mesg))
   endif
 
-  bc0=subchk(array, G, 0, 0)
+  bc0=subchk(array, HI, 0, 0)
 
   if (hshift==0) then
       if (is_root_pe()) call chk_sum_msg("v-point:",bc0,mesg)
       return
   endif
 
-  bcSW=subchk(array, G, -hshift, -hshift)
-  bcSE=subchk(array, G, hshift, -hshift)
-  bcNW=subchk(array, G, -hshift, hshift)
-  bcNE=subchk(array, G, hshift, hshift)
+  bcSW=subchk(array, HI, -hshift, -hshift)
+  bcSE=subchk(array, HI, hshift, -hshift)
+  bcNW=subchk(array, HI, -hshift, hshift)
+  bcNE=subchk(array, HI, hshift, hshift)
 
   if (is_root_pe()) call chk_sum_msg("v-point:",bc0,bcSW,bcSE,bcNW,bcNE,mesg)
 
   contains
 
-  integer function subchk(array, G, di, dj)
-    type(ocean_grid_type), intent(in) :: G
-    real, dimension(G%isd:,G%JsdB:), intent(in) :: array
+  integer function subchk(array, HI, di, dj)
+    type(hor_index_type), intent(in) :: HI
+    real, dimension(HI%isd:,HI%JsdB:), intent(in) :: array
     integer, intent(in) :: di, dj
     integer :: bitcount, i, j, bc
     subchk = 0
-    do j=G%jsc+dj,G%jec+dj; do i=G%isc+di,G%iec+di
+    do j=HI%jsc+dj,HI%jec+dj; do i=HI%isc+di,HI%iec+di
         bc = bitcount(abs(array(i,j)))
         subchk = subchk + bc
     enddo; enddo
@@ -421,23 +416,22 @@ subroutine chksum_v_2d(array, mesg, G, haloshift)
     subchk=mod(subchk,1000000000)
   end function subchk
 
-  subroutine subStats(G, array, mesg)
-    type(ocean_grid_type), intent(in) :: G
-    real, dimension(G%isd:,G%JsdB:), intent(in) :: array
+  subroutine subStats(HI, array, mesg)
+    type(hor_index_type), intent(in) :: HI
+    real, dimension(HI%isd:,HI%JsdB:), intent(in) :: array
     character(len=*), intent(in) :: mesg
     integer :: i, j, n
     real :: aMean, aMin, aMax
-    aMean = 0.
-    aMin = array(G%isc,G%jsc)
-    aMax = array(G%isc,G%jsc)
+
+    aMin = array(HI%isc,HI%jsc)
+    aMax = array(HI%isc,HI%jsc)
     n = 0
-    do j=G%jsc,G%jec; do i=G%isc,G%iec
-        aMean = aMean + array(i,j)
-        aMin = min(aMin, array(i,j))
-        aMax = max(aMax, array(i,j))
-        n = n + 1
-    enddo; enddo
-    call sum_across_PEs(aMean)
+    do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
+      aMin = min(aMin, array(i,j))
+      aMax = max(aMax, array(i,j))
+      n = n + 1
+    enddo ; enddo
+    aMean = reproducing_sum(array(HI%isc:HI%iec,HI%jsc:HI%jec))
     call sum_across_PEs(n)
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
@@ -450,62 +444,60 @@ end subroutine chksum_v_2d
 ! =====================================================================
 
 !> chksum_h_3d performs checksums on a 3d array staggered at tracer points.
-subroutine chksum_h_3d(array, mesg, G, haloshift)
-  type(ocean_grid_type),             intent(in) :: G !< The ocean grid type
-  real, dimension(G%isd:,G%jsd:,:),  intent(in) :: array !< The array to be checksummed
+subroutine chksum_h_3d(array, mesg, HI, haloshift)
+  type(hor_index_type),             intent(in) :: HI !< A horizontal index type
+  real, dimension(HI%isd:,HI%jsd:,:),  intent(in) :: array !< The array to be checksummed
   character(len=*),                  intent(in) :: mesg  !< An identifying message
   integer,                 optional, intent(in) :: haloshift !< The width of halos to check (default 0)
 
   integer :: bc0,bcSW,bcSE,bcNW,bcNE,hshift
 
   if (checkForNaNs) then
-    if (is_NaN(array(G%isc:G%iec,G%jsc:G%jec,:))) &
+    if (is_NaN(array(HI%isc:HI%iec,HI%jsc:HI%jec,:))) &
       call chksum_error(FATAL, 'NaN detected: '//trim(mesg))
 !   if (is_NaN(array)) &
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
-  if (calculateStatistics) then
-    call subStats(G, array, mesg); return
-  endif
+  if (calculateStatistics) call subStats(HI, array, mesg)
+
+  if (.not.writeChksums) return
 
   hshift=default_shift
   if (present(haloshift)) hshift=haloshift
-  if (hshift<0) hshift=G%ied-G%iec
+  if (hshift<0) hshift=HI%ied-HI%iec
 
-  if ( G%isc-hshift<G%isd .or. &
-       G%iec+hshift>G%ied .or. &
-       G%jsc-hshift<G%jsd .or. &
-       G%jec+hshift>G%jed ) then
+  if ( HI%isc-hshift<HI%isd .or. HI%iec+hshift>HI%ied .or. &
+       HI%jsc-hshift<HI%jsd .or. HI%jec+hshift>HI%jed ) then
     write(0,*) 'chksum_h_3d: haloshift =',hshift
-    write(0,*) 'chksum_h_3d: isd,isc,iec,ied=',G%isd,G%isc,G%iec,G%ied
-    write(0,*) 'chksum_h_3d: jsd,jsc,jec,jed=',G%jsd,G%jsc,G%jec,G%jed
+    write(0,*) 'chksum_h_3d: isd,isc,iec,ied=',HI%isd,HI%isc,HI%iec,HI%ied
+    write(0,*) 'chksum_h_3d: jsd,jsc,jec,jed=',HI%jsd,HI%jsc,HI%jec,HI%jed
     call chksum_error(FATAL,'Error in chksum_h_3d '//trim(mesg))
   endif
 
-  bc0=subchk(array, G, 0, 0)
+  bc0=subchk(array, HI, 0, 0)
 
   if (hshift==0) then
       if (is_root_pe()) call chk_sum_msg("h-point:",bc0,mesg)
       return
   endif
 
-  bcSW=subchk(array, G, -hshift, -hshift)
-  bcSE=subchk(array, G, hshift, -hshift)
-  bcNW=subchk(array, G, -hshift, hshift)
-  bcNE=subchk(array, G, hshift, hshift)
+  bcSW=subchk(array, HI, -hshift, -hshift)
+  bcSE=subchk(array, HI, hshift, -hshift)
+  bcNW=subchk(array, HI, -hshift, hshift)
+  bcNE=subchk(array, HI, hshift, hshift)
 
   if (is_root_pe()) call chk_sum_msg("h-point:",bc0,bcSW,bcSE,bcNW,bcNE,mesg)
 
   contains
 
-  integer function subchk(array, G, di, dj)
-    type(ocean_grid_type), intent(in) :: G
-    real, dimension(G%isd:,G%jsd:,:), intent(in) :: array
+  integer function subchk(array, HI, di, dj)
+    type(hor_index_type), intent(in) :: HI
+    real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: array
     integer, intent(in) :: di, dj
     integer :: bitcount, i, j, k, bc
     subchk = 0
-    do k=LBOUND(array,3),UBOUND(array,3) ; do j=G%jsc+dj,G%jec+dj ; do i=G%isc+di,G%iec+di
+    do k=LBOUND(array,3),UBOUND(array,3) ; do j=HI%jsc+dj,HI%jec+dj ; do i=HI%isc+di,HI%iec+di
       bc = bitcount(abs(array(i,j,k)))
       subchk = subchk + bc
     enddo ; enddo ; enddo
@@ -513,23 +505,22 @@ subroutine chksum_h_3d(array, mesg, G, haloshift)
     subchk=mod(subchk,1000000000)
   end function subchk
 
-  subroutine subStats(G, array, mesg)
-    type(ocean_grid_type), intent(in) :: G
-    real, dimension(G%isd:,G%jsd:,:), intent(in) :: array
+  subroutine subStats(HI, array, mesg)
+    type(hor_index_type), intent(in) :: HI
+    real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: array
     character(len=*), intent(in) :: mesg
     integer :: i, j, k, n
     real :: aMean, aMin, aMax
-    aMean = 0.
-    aMin = array(G%isc,G%jsc,1)
-    aMax = array(G%isc,G%jsc,1)
+
+    aMin = array(HI%isc,HI%jsc,1)
+    aMax = array(HI%isc,HI%jsc,1)
     n = 0
-    do k=LBOUND(array,3),UBOUND(array,3) ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      aMean = aMean + array(i,j,k)
+    do k=LBOUND(array,3),UBOUND(array,3) ; do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
       aMin = min(aMin, array(i,j,k))
       aMax = max(aMax, array(i,j,k))
       n = n + 1
     enddo ; enddo ; enddo
-    call sum_across_PEs(aMean)
+    aMean = reproducing_sum(array(HI%isc:HI%iec,HI%jsc:HI%jec,:))
     call sum_across_PEs(n)
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
@@ -541,63 +532,61 @@ end subroutine chksum_h_3d
 
 ! =====================================================================
 
-!> chksum_q_3d performs checksums on a 3d array staggered at corner points.
-subroutine chksum_q_3d(array, mesg, G, haloshift)
-  type(ocean_grid_type),              intent(in) :: G !< The ocean grid type
-  real, dimension(G%IsdB:,G%JsdB:,:), intent(in) :: array !< The array to be checksummed
+!> chksum_B_3d performs checksums on a 3d array staggered at corner points.
+subroutine chksum_B_3d(array, mesg, HI, haloshift)
+  type(hor_index_type),              intent(in) :: HI !< A horizontal index type
+  real, dimension(HI%IsdB:,HI%JsdB:,:), intent(in) :: array !< The array to be checksummed
   character(len=*),                   intent(in) :: mesg  !< An identifying message
   integer,                  optional, intent(in) :: haloshift !< The width of halos to check (default 0)
 
   integer :: bc0,bcSW,bcSE,bcNW,bcNE,hshift
 
   if (checkForNaNs) then
-    if (is_NaN(array(G%IscB:G%IecB,G%JscB:G%JecB,:))) &
+    if (is_NaN(array(HI%IscB:HI%IecB,HI%JscB:HI%JecB,:))) &
       call chksum_error(FATAL, 'NaN detected: '//trim(mesg))
 !   if (is_NaN(array)) &
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
-  if (calculateStatistics) then
-    call subStats(G, array, mesg); return
-  endif
+  if (calculateStatistics) call subStats(HI, array, mesg)
+
+  if (.not.writeChksums) return
 
   hshift=default_shift
   if (present(haloshift)) hshift=haloshift
-  if (hshift<0) hshift=G%ied-G%iec
+  if (hshift<0) hshift=HI%ied-HI%iec
 
-  if ( G%isc-hshift<G%isd .or. &
-       G%iec+hshift>G%ied .or. &
-       G%jsc-hshift<G%jsd .or. &
-       G%jec+hshift>G%jed ) then
-    write(0,*) 'chksum_q_3d: haloshift =',hshift
-    write(0,*) 'chksum_q_3d: isd,isc,iec,ied=',G%isd,G%isc,G%iec,G%ied
-    write(0,*) 'chksum_q_3d: jsd,jsc,jec,jed=',G%jsd,G%jsc,G%jec,G%jed
-    call chksum_error(FATAL,'Error in chksum_q_3d '//trim(mesg))
+  if ( HI%isc-hshift<HI%isd .or. HI%iec+hshift>HI%ied .or. &
+       HI%jsc-hshift<HI%jsd .or. HI%jec+hshift>HI%jed ) then
+    write(0,*) 'chksum_B_3d: haloshift =',hshift
+    write(0,*) 'chksum_B_3d: isd,isc,iec,ied=',HI%isd,HI%isc,HI%iec,HI%ied
+    write(0,*) 'chksum_B_3d: jsd,jsc,jec,jed=',HI%jsd,HI%jsc,HI%jec,HI%jed
+    call chksum_error(FATAL,'Error in chksum_B_3d '//trim(mesg))
   endif
 
-  bc0=subchk(array, G, 0, 0)
+  bc0=subchk(array, HI, 0, 0)
 
   if (hshift==0) then
-    if (is_root_pe()) call chk_sum_msg("q-point:",bc0,mesg)
+    if (is_root_pe()) call chk_sum_msg("B-point:",bc0,mesg)
     return
   endif
 
-  bcSW=subchk(array, G, -hshift, -hshift)
-  bcSE=subchk(array, G, hshift, -hshift)
-  bcNW=subchk(array, G, -hshift, hshift)
-  bcNE=subchk(array, G, hshift, hshift)
+  bcSW=subchk(array, HI, -hshift, -hshift)
+  bcSE=subchk(array, HI, hshift, -hshift)
+  bcNW=subchk(array, HI, -hshift, hshift)
+  bcNE=subchk(array, HI, hshift, hshift)
 
-  if (is_root_pe()) call chk_sum_msg("q-point:",bc0,bcSW,bcSE,bcNW,bcNE,mesg)
+  if (is_root_pe()) call chk_sum_msg("B-point:",bc0,bcSW,bcSE,bcNW,bcNE,mesg)
 
   contains
 
-  integer function subchk(array, G, di, dj)
-    type(ocean_grid_type), intent(in) :: G
-    real, dimension(G%IsdB:,G%JsdB:,:), intent(in) :: array
+  integer function subchk(array, HI, di, dj)
+    type(hor_index_type), intent(in) :: HI
+    real, dimension(HI%IsdB:,HI%JsdB:,:), intent(in) :: array
     integer, intent(in) :: di, dj
     integer :: bitcount, i, j, k, bc
     subchk = 0
-    do k=LBOUND(array,3),UBOUND(array,3) ; do j=G%jsc+dj,G%jec+dj ; do i=G%isc+di,G%iec+di
+    do k=LBOUND(array,3),UBOUND(array,3) ; do j=HI%jsc+dj,HI%jec+dj ; do i=HI%isc+di,HI%iec+di
       bc = bitcount(abs(array(i,j,k)))
       subchk = subchk + bc
     enddo ; enddo ; enddo
@@ -605,91 +594,88 @@ subroutine chksum_q_3d(array, mesg, G, haloshift)
     subchk=mod(subchk,1000000000)
   end function subchk
 
-  subroutine subStats(G, array, mesg)
-    type(ocean_grid_type), intent(in) :: G
-    real, dimension(G%IsdB:,G%JsdB:,:), intent(in) :: array
+  subroutine subStats(HI, array, mesg)
+    type(hor_index_type), intent(in) :: HI
+    real, dimension(HI%IsdB:,HI%JsdB:,:), intent(in) :: array
     character(len=*), intent(in) :: mesg
     integer :: i, j, k, n
     real :: aMean, aMin, aMax
-    aMean = 0.
-    aMin = array(G%isc,G%jsc,1)
-    aMax = array(G%isc,G%jsc,1)
+
+    aMin = array(HI%isc,HI%jsc,1)
+    aMax = array(HI%isc,HI%jsc,1)
     n = 0
-    do k=LBOUND(array,3),UBOUND(array,3) ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      aMean = aMean + array(i,j,k)
+    do k=LBOUND(array,3),UBOUND(array,3) ; do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
       aMin = min(aMin, array(i,j,k))
       aMax = max(aMax, array(i,j,k))
       n = n + 1
     enddo ; enddo ; enddo
-    call sum_across_PEs(aMean)
+    aMean = reproducing_sum(array(HI%isc:HI%iec,HI%jsc:HI%jec,:))
     call sum_across_PEs(n)
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
     aMean = aMean / real(n)
-    if (is_root_pe()) call chk_sum_msg("q-point:",aMean,aMin,aMax,mesg)
+    if (is_root_pe()) call chk_sum_msg("B-point:",aMean,aMin,aMax,mesg)
   end subroutine subStats
 
-end subroutine chksum_q_3d
+end subroutine chksum_B_3d
 
 ! =====================================================================
 
 !> chksum_u_3d performs checksums on a 3d array staggered at C-grid u points.
-subroutine chksum_u_3d(array, mesg, G, haloshift)
-  type(ocean_grid_type),             intent(in) :: G !< The ocean grid type
-  real, dimension(G%isdB:,G%Jsd:,:), intent(in) :: array !< The array to be checksummed
+subroutine chksum_u_3d(array, mesg, HI, haloshift)
+  type(hor_index_type),             intent(in) :: HI !< A horizontal index type
+  real, dimension(HI%isdB:,HI%Jsd:,:), intent(in) :: array !< The array to be checksummed
   character(len=*),                  intent(in) :: mesg  !< An identifying message
   integer,                 optional, intent(in) :: haloshift !< The width of halos to check (default 0)
 
   integer :: bc0,bcSW,bcSE,bcNW,bcNE,hshift
 
   if (checkForNaNs) then
-    if (is_NaN(array(G%IscB:G%IecB,G%jsc:G%jec,:))) &
+    if (is_NaN(array(HI%IscB:HI%IecB,HI%jsc:HI%jec,:))) &
       call chksum_error(FATAL, 'NaN detected: '//trim(mesg))
 !   if (is_NaN(array)) &
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
-  if (calculateStatistics) then
-    call subStats(G, array, mesg); return
-  endif
+  if (calculateStatistics) call subStats(HI, array, mesg)
+
+  if (.not.writeChksums) return
 
   hshift=default_shift
   if (present(haloshift)) hshift=haloshift
-  if (hshift<0) hshift=G%ied-G%iec
+  if (hshift<0) hshift=HI%ied-HI%iec
 
-  if ( G%isc-hshift<G%isd .or. &
-       G%iec+hshift>G%ied .or. &
-       G%jsc-hshift<G%jsd .or. &
-       G%jec+hshift>G%jed ) then
+  if ( HI%isc-hshift<HI%isd .or. HI%iec+hshift>HI%ied .or. &
+       HI%jsc-hshift<HI%jsd .or. HI%jec+hshift>HI%jed ) then
     write(0,*) 'chksum_u_3d: haloshift =',hshift
-    write(0,*) 'chksum_u_3d: isd,isc,iec,ied=',G%isd,G%isc,G%iec,G%ied
-    write(0,*) 'chksum_u_3d: jsd,jsc,jec,jed=',G%jsd,G%jsc,G%jec,G%jed
+    write(0,*) 'chksum_u_3d: isd,isc,iec,ied=',HI%isd,HI%isc,HI%iec,HI%ied
+    write(0,*) 'chksum_u_3d: jsd,jsc,jec,jed=',HI%jsd,HI%jsc,HI%jec,HI%jed
     call chksum_error(FATAL,'Error in chksum_u_3d '//trim(mesg))
   endif
 
-  bc0=subchk(array, G, 0, 0)
+  bc0=subchk(array, HI, 0, 0)
 
   if (hshift==0) then
     if (is_root_pe()) call chk_sum_msg("u-point:",bc0,mesg)
     return
   endif
 
-  bcSW=subchk(array, G, -hshift, -hshift)
-  bcSE=subchk(array, G, hshift, -hshift)
-  bcNW=subchk(array, G, -hshift, hshift)
-  bcNE=subchk(array, G, hshift, hshift)
+  bcSW=subchk(array, HI, -hshift, -hshift)
+  bcSE=subchk(array, HI, hshift, -hshift)
+  bcNW=subchk(array, HI, -hshift, hshift)
+  bcNE=subchk(array, HI, hshift, hshift)
 
   if (is_root_pe()) call chk_sum_msg("u-point:",bc0,bcSW,bcSE,bcNW,bcNE,mesg)
 
   contains
 
-  integer function subchk(array, G, di, dj)
-    type(ocean_grid_type), intent(in) :: G
-    real, dimension(G%IsdB:,G%jsd:,:), intent(in) :: array
+  integer function subchk(array, HI, di, dj)
+    type(hor_index_type), intent(in) :: HI
+    real, dimension(HI%IsdB:,HI%jsd:,:), intent(in) :: array
     integer, intent(in) :: di, dj
     integer :: bitcount, i, j, k, bc
     subchk = 0
-    do k=LBOUND(array,3),UBOUND(array,3) ; do j=G%jsc+dj,G%jec+dj ; do i=G%isc+di,G%iec+di
+    do k=LBOUND(array,3),UBOUND(array,3) ; do j=HI%jsc+dj,HI%jec+dj ; do i=HI%isc+di,HI%iec+di
       bc = bitcount(abs(array(i,j,k)))
       subchk = subchk + bc
     enddo ; enddo ; enddo
@@ -697,23 +683,22 @@ subroutine chksum_u_3d(array, mesg, G, haloshift)
     subchk=mod(subchk,1000000000)
   end function subchk
 
-  subroutine subStats(G, array, mesg)
-    type(ocean_grid_type), intent(in) :: G
-    real, dimension(G%IsdB:,G%jsd:,:), intent(in) :: array
+  subroutine subStats(HI, array, mesg)
+    type(hor_index_type), intent(in) :: HI
+    real, dimension(HI%IsdB:,HI%jsd:,:), intent(in) :: array
     character(len=*), intent(in) :: mesg
     integer :: i, j, k, n
     real :: aMean, aMin, aMax
-    aMean = 0.
-    aMin = array(G%isc,G%jsc,1)
-    aMax = array(G%isc,G%jsc,1)
+
+    aMin = array(HI%isc,HI%jsc,1)
+    aMax = array(HI%isc,HI%jsc,1)
     n = 0
-    do k=LBOUND(array,3),UBOUND(array,3) ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      aMean = aMean + array(i,j,k)
+    do k=LBOUND(array,3),UBOUND(array,3) ; do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
       aMin = min(aMin, array(i,j,k))
       aMax = max(aMax, array(i,j,k))
       n = n + 1
     enddo ; enddo ; enddo
-    call sum_across_PEs(aMean)
+    aMean = reproducing_sum(array(HI%isc:HI%iec,HI%jsc:HI%jec,:))
     call sum_across_PEs(n)
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
@@ -726,62 +711,60 @@ end subroutine chksum_u_3d
 ! =====================================================================
 
 !> chksum_v_3d performs checksums on a 3d array staggered at C-grid v points.
-subroutine chksum_v_3d(array, mesg, G, haloshift)
-  type(ocean_grid_type),             intent(in) :: G !< The ocean grid type
-  real, dimension(G%isd:,G%JsdB:,:), intent(in) :: array !< The array to be checksummed
+subroutine chksum_v_3d(array, mesg, HI, haloshift)
+  type(hor_index_type),             intent(in) :: HI !< A horizontal index type
+  real, dimension(HI%isd:,HI%JsdB:,:), intent(in) :: array !< The array to be checksummed
   character(len=*),                  intent(in) :: mesg  !< An identifying message
   integer,                 optional, intent(in) :: haloshift !< The width of halos to check (default 0)
 
   integer :: bc0,bcSW,bcSE,bcNW,bcNE,hshift
 
   if (checkForNaNs) then
-    if (is_NaN(array(G%isc:G%iec,G%JscB:G%JecB,:))) &
+    if (is_NaN(array(HI%isc:HI%iec,HI%JscB:HI%JecB,:))) &
       call chksum_error(FATAL, 'NaN detected: '//trim(mesg))
 !   if (is_NaN(array)) &
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
-  if (calculateStatistics) then
-    call subStats(G, array, mesg); return
-  endif
+  if (calculateStatistics) call subStats(HI, array, mesg)
+
+  if (.not.writeChksums) return
 
   hshift=default_shift
   if (present(haloshift)) hshift=haloshift
-  if (hshift<0) hshift=G%ied-G%iec
+  if (hshift<0) hshift=HI%ied-HI%iec
 
-  if ( G%isc-hshift<G%isd .or. &
-       G%iec+hshift>G%ied .or. &
-       G%jsc-hshift<G%jsd .or. &
-       G%jec+hshift>G%jed ) then
+  if ( HI%isc-hshift<HI%isd .or. HI%iec+hshift>HI%ied .or. &
+       HI%jsc-hshift<HI%jsd .or. HI%jec+hshift>HI%jed ) then
     write(0,*) 'chksum_v_3d: haloshift =',hshift
-    write(0,*) 'chksum_v_3d: isd,isc,iec,ied=',G%isd,G%isc,G%iec,G%ied
-    write(0,*) 'chksum_v_3d: jsd,jsc,jec,jed=',G%jsd,G%jsc,G%jec,G%jed
+    write(0,*) 'chksum_v_3d: isd,isc,iec,ied=',HI%isd,HI%isc,HI%iec,HI%ied
+    write(0,*) 'chksum_v_3d: jsd,jsc,jec,jed=',HI%jsd,HI%jsc,HI%jec,HI%jed
     call chksum_error(FATAL,'Error in chksum_v_3d '//trim(mesg))
   endif
 
-  bc0=subchk(array, G, 0, 0)
+  bc0=subchk(array, HI, 0, 0)
 
   if (hshift==0) then
     if (is_root_pe()) call chk_sum_msg("v-point:",bc0,mesg)
     return
   endif
 
-  bcSW=subchk(array, G, -hshift, -hshift)
-  bcSE=subchk(array, G, hshift, -hshift)
-  bcNW=subchk(array, G, -hshift, hshift)
-  bcNE=subchk(array, G, hshift, hshift)
+  bcSW=subchk(array, HI, -hshift, -hshift)
+  bcSE=subchk(array, HI, hshift, -hshift)
+  bcNW=subchk(array, HI, -hshift, hshift)
+  bcNE=subchk(array, HI, hshift, hshift)
 
   if (is_root_pe()) call chk_sum_msg("v-point:",bc0,bcSW,bcSE,bcNW,bcNE,mesg)
 
   contains
 
-  integer function subchk(array, G, di, dj)
-    type(ocean_grid_type), intent(in) :: G
-    real, dimension(G%isd:,G%JsdB:,:), intent(in) :: array
+  integer function subchk(array, HI, di, dj)
+    type(hor_index_type), intent(in) :: HI
+    real, dimension(HI%isd:,HI%JsdB:,:), intent(in) :: array
     integer, intent(in) :: di, dj
     integer :: bitcount, i, j, k, bc
     subchk = 0
-    do k=LBOUND(array,3),UBOUND(array,3) ; do j=G%jsc+dj,G%jec+dj ; do i=G%isc+di,G%iec+di
+    do k=LBOUND(array,3),UBOUND(array,3) ; do j=HI%jsc+dj,HI%jec+dj ; do i=HI%isc+di,HI%iec+di
       bc = bitcount(abs(array(i,j,k)))
       subchk = subchk + bc
     enddo ; enddo ; enddo
@@ -789,23 +772,22 @@ subroutine chksum_v_3d(array, mesg, G, haloshift)
     subchk=mod(subchk,1000000000)
   end function subchk
 
-  subroutine subStats(G, array, mesg)
-    type(ocean_grid_type), intent(in) :: G
-    real, dimension(G%isd:,G%JsdB:,:), intent(in) :: array
+  subroutine subStats(HI, array, mesg)
+    type(hor_index_type), intent(in) :: HI
+    real, dimension(HI%isd:,HI%JsdB:,:), intent(in) :: array
     character(len=*), intent(in) :: mesg
     integer :: i, j, k, n
     real :: aMean, aMin, aMax
-    aMean = 0.
-    aMin = array(G%isc,G%jsc,1)
-    aMax = array(G%isc,G%jsc,1)
+
+    aMin = array(HI%isc,HI%jsc,1)
+    aMax = array(HI%isc,HI%jsc,1)
     n = 0
-    do k=LBOUND(array,3),UBOUND(array,3) ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      aMean = aMean + array(i,j,k)
+    do k=LBOUND(array,3),UBOUND(array,3) ; do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
       aMin = min(aMin, array(i,j,k))
       aMax = max(aMax, array(i,j,k))
       n = n + 1
     enddo ; enddo ; enddo
-    call sum_across_PEs(aMean)
+    aMean = reproducing_sum(array(HI%isc:HI%iec,HI%jsc:HI%jec,:))
     call sum_across_PEs(n)
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
@@ -873,7 +855,7 @@ subroutine chksum1d(array, mesg, start_i, end_i, compare_PEs)
   deallocate(sum_here)
 
   if (is_root_pe()) &
-    write(0,'(A40,1X,ES22.13,1X,I12)') mesg, sum, sum_bc
+    write(0,'(A50,1X,ES25.16,1X,I12)') mesg, sum, sum_bc
 
 end subroutine chksum1d
 
@@ -890,8 +872,6 @@ subroutine chksum2d(array, mesg, start_x, end_x, start_y, end_y)
   integer :: bitcount
   integer :: xs,xe,ys,ye,i,j,sum1,bc
   real :: sum
-  real, allocatable :: sum_here(:)
-  integer :: pe_num   ! pe number of the data
 
   xs = LBOUND(array,1) ; xe = UBOUND(array,1)
   ys = LBOUND(array,2) ; ye = UBOUND(array,2)
@@ -902,24 +882,15 @@ subroutine chksum2d(array, mesg, start_x, end_x, start_y, end_y)
 
   sum = 0.0 ; sum1 = 0
   do i=xs,xe ; do j=ys,ye
-    sum = sum + array(i,j)
     bc = bitcount(abs(array(i,j)))
     sum1 = sum1 + bc
   enddo ; enddo
-
-  pe_num = pe_here() + 1 - root_pe()
-  allocate(sum_here(num_pes())) ; sum_here(:) = 0.0
-  sum_here(pe_num) = sum
-  call sum_across_PEs(sum_here,num_pes())
-  sum = 0.0
-  do i=1,num_pes() ; sum = sum + sum_here(i) ; enddo
-!   call sum_across_PEs(sum)
   call sum_across_PEs(sum1)
-  deallocate(sum_here)
+
+  sum = reproducing_sum(array(xs:xe,ys:ye))
 
   if (is_root_pe()) &
-    write(0,'(A40,1X,ES22.13,1X,I12)') &
-      mesg, sum, sum1
+    write(0,'(A50,1X,ES25.16,1X,I12)') mesg, sum, sum1
 !    write(0,'(A40,1X,Z16.16,1X,Z16.16,1X,ES25.16,1X,I12)') &
 !      mesg, sum, sum1, sum, sum1
 
@@ -934,8 +905,6 @@ subroutine chksum3d(array, mesg, start_x, end_x, start_y, end_y, start_z, end_z)
   integer :: bitcount
   integer :: xs,xe,ys,ye,zs,ze,i,j,k, bc,sum1
   real :: sum
-  real, allocatable :: sum_here(:)
-  integer :: pe_num   ! pe number of the data
 
   xs = LBOUND(array,1) ; xe = UBOUND(array,1)
   ys = LBOUND(array,2) ; ye = UBOUND(array,2)
@@ -949,24 +918,15 @@ subroutine chksum3d(array, mesg, start_x, end_x, start_y, end_y, start_z, end_z)
 
   sum = 0.0 ; sum1 = 0
   do i=xs,xe ; do j=ys,ye ; do k=zs,ze
-    sum = sum + array(i,j,k)
     bc = bitcount(ABS(array(i,j,k)))
     sum1 = sum1 + bc
   enddo ; enddo ; enddo
 
-  pe_num = pe_here() + 1 - root_pe()
-  allocate(sum_here(num_pes())) ; sum_here(:) = 0.0
-  sum_here(pe_num) = sum
-  call sum_across_PEs(sum_here,num_pes())
-  sum = 0.0
-  do i=1,num_pes() ; sum = sum + sum_here(i) ; enddo
-!   call sum_across_PEs(sum)
   call sum_across_PEs(sum1)
-  deallocate(sum_here)
+  sum = reproducing_sum(array(xs:xe,ys:ye,zs:ze))
 
   if (is_root_pe()) &
-    write(0,'(A40,1X,ES22.13,1X,I12)') &
-      mesg, sum, sum1
+    write(0,'(A50,1X,ES25.16,1X,I12)') mesg, sum, sum1
 !    write(0,'(A40,1X,Z16.16,1X,Z16.16,1X,ES25.16,1X,I12)') &
 !      mesg, sum, sum1, sum, sum1
 
@@ -1056,74 +1016,10 @@ end function is_NaN_3d
 
 ! =====================================================================
 
-!> This function returns the sum over computational domain of all
-!! processors of hThick*stuff, where stuff is a 3-d array at tracer points.
-function totalStuff(G, hThick, stuff)
-  type(ocean_grid_type),            intent(in) :: G      !< The ocean grid type
-  real, dimension(G%isd:,G%jsd:,:), intent(in) :: hThick !< The array of thicknesses to use as weights
-  real, dimension(G%isd:,G%jsd:,:), intent(in) :: stuff  !< The array of stuff to be summed 
-  real                                         :: totalStuff
-  integer :: i, j, k
-
-  totalStuff = 0.
-  do k = 1, G%ke ; do j = G%jsc, G%jec ; do i = G%isc, G%iec
-    totalStuff = totalStuff + hThick(i,j,k) * stuff(i,j,k) * G%areaT(i,j)
-  enddo ; enddo ; enddo
-  call sum_across_PEs(totalStuff)
-
-end function totalStuff
-
-! =====================================================================
-
-!> This subroutine display the total thickness, temperature and salinity
-!! as well as the change since the last call.
-!! NOTE: This subroutine uses "save" data which is not thread safe and is purely
-!! for extreme debugging without a proper debugger.
-subroutine totalTandS(G, hThick, temperature, salinity, mesg)
-  type(ocean_grid_type),            intent(in) :: G      !< The ocean grid type
-  real, dimension(G%isd:,G%jsd:,:), intent(in) :: hThick !< The array of thicknesses to use as weights
-  real, dimension(G%isd:,G%jsd:,:), intent(in) :: temperature !< The temperature field to sum
-  real, dimension(G%isd:,G%jsd:,:), intent(in) :: salinity    !< The salinity field to sum
-  character(len=*),                 intent(in) :: mesg        !< An identifying message
-
-  ! NOTE: This subroutine uses "save" data which is not thread safe and is purely for
-  ! extreme debugging without a proper debugger.
-  real, save :: totalH = 0., totalT = 0., totalS = 0.
-
-  logical, save :: firstCall = .true.
-  real :: thisH, thisT, thisS, delH, delT, delS
-  integer :: i, j, k
-
-  thisH = 0.
-  do k = 1, G%ke ; do j = G%jsc, G%jec ; do i = G%isc, G%iec
-    thisH = thisH + hThick(i,j,k) * G%areaT(i,j)
-  enddo ; enddo ; enddo
-  call sum_across_PEs(thisH)
-  thisT = totalStuff(G, hThick, temperature)
-  thisS = totalStuff(G, hThick, salinity)
-
-  if (is_root_pe()) then
-    if (firstCall) then
-      totalH = thisH ; totalT = thisT ; totalS = thisS
-      write(0,*) 'Totals H,T,S:',thisH,thisT,thisS,' ',mesg
-      firstCall = .false.
-    else
-      delH = thisH - totalH
-      delT = thisT - totalT
-      delS = thisS - totalS
-      totalH = thisH ; totalT = thisT ; totalS = thisS
-      write(0,*) 'Tot/del H,T,S:',thisH,thisT,thisS,delH,delT,delS,' ',mesg
-    endif
-  endif
-
-end subroutine totalTandS
-
-! =====================================================================
-
 subroutine chk_sum_msg1(fmsg,bc0,mesg)
   character(len=*), intent(in) :: fmsg, mesg
   integer,          intent(in) :: bc0
-  if (is_root_pe()) write(0,'(A,1(A,I10,X),A)') fmsg," c=",bc0,mesg
+  if (is_root_pe()) write(0,'(A,1(A,I10,X),A)') fmsg," c=",bc0,trim(mesg)
 end subroutine chk_sum_msg1
 
 ! =====================================================================
@@ -1132,16 +1028,25 @@ subroutine chk_sum_msg5(fmsg,bc0,bcSW,bcSE,bcNW,bcNE,mesg)
   character(len=*), intent(in) :: fmsg, mesg
   integer,          intent(in) :: bc0,bcSW,bcSE,bcNW,bcNE
   if (is_root_pe()) write(0,'(A,5(A,I10,1X),A)') &
-     fmsg," c=",bc0,"sw=",bcSW,"se=",bcSE,"nw=",bcNW,"ne=",bcNE,mesg
+     fmsg," c=",bc0,"sw=",bcSW,"se=",bcSE,"nw=",bcNW,"ne=",bcNE,trim(mesg)
 end subroutine chk_sum_msg5
+
+! =====================================================================
+
+subroutine chk_sum_msg2(fmsg,bc0,bcSW,mesg)
+  character(len=*), intent(in) :: fmsg, mesg
+  integer,          intent(in) :: bc0,bcSW
+  if (is_root_pe()) write(0,'(A,2(A,I9,1X),A)') &
+     fmsg," c=",bc0,"s/w=",bcSW,trim(mesg)
+end subroutine chk_sum_msg2
 
 ! =====================================================================
 
 subroutine chk_sum_msg3(fmsg,aMean,aMin,aMax,mesg)
   character(len=*), intent(in) :: fmsg, mesg
   real,             intent(in) :: aMean,aMin,aMax
-  if (is_root_pe()) write(0,'(A,3(A,ES12.4,1X),A)') &
-     fmsg," mean=",aMean,"min=",aMin,"max=",aMax,mesg
+  if (is_root_pe()) write(0,'(A,3(A,ES25.16,1X),A)') &
+     fmsg," mean=",aMean,"min=",aMin,"max=",aMax,trim(mesg)
 end subroutine chk_sum_msg3
 
 ! =====================================================================

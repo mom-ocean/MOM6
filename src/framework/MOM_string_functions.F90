@@ -273,8 +273,11 @@ logical function stringFunctionsUnitTests()
   end subroutine localTest
 end function stringFunctionsUnitTests
 
+!> Returns a directory name that is terminated with a "/" or "./" if the
+!! argument is an empty string.
 function slasher(dir)
-  character(len=*), intent(in) :: dir
+  character(len=*), intent(in) :: dir !< A directory to be terminated with a "/"
+                                      !! or changed to "./" if it is blank.
   character(len=len(dir)+2) :: slasher
 
   if (len_trim(dir) == 0) then
