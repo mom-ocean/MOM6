@@ -16,6 +16,7 @@ use MOM_io, only : EAST_FACE, NORTH_FACE
 use MOM_io, only : slasher, read_data
 use MOM_tracer_registry, only : add_tracer_OBC_values, tracer_registry_type
 use MOM_variables, only : thermo_var_ptrs
+use TIDAL_BAY_initialization, only : TIDAL_BAY_set_OBC_data
 
 implicit none ; private
 
@@ -788,11 +789,9 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
 end subroutine set_Flather_data
 
 !> Calls appropriate routine to update the open boundary conditions.
-subroutine update_OBC_data(OBC, tv, h, G, Time)
+subroutine update_OBC_data(OBC, G, Time)
   type(ocean_grid_type),                     intent(inout) :: G !< Ocean grid structure
   type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary structure
-  type(thermo_var_ptrs),                     intent(inout) :: tv !< Thermodynamics structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h !< Thickness
   type(time_type),                           intent(in)    :: Time !< Model time
   ! Local variables
   logical :: read_OBC_eta = .false.
