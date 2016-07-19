@@ -34,8 +34,9 @@ character(len=40)  :: mod = "MOM_boundary_update" ! This module's name.
 contains
 
 !> Calls appropriate routine to update the open boundary conditions.
-subroutine update_OBC_data(OBC, G, Time)
+subroutine update_OBC_data(OBC, G, h, Time)
   type(ocean_grid_type),          intent(in) :: G !< Ocean grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h !< layer thickness
   type(ocean_OBC_type),           pointer    :: OBC !< Open boundary structure
   type(time_type),                intent(in) :: Time !< Model time
   ! Local variables
@@ -62,7 +63,7 @@ subroutine update_OBC_data(OBC, G, Time)
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   if (OBC%OBC_config == "TIDAL_BAY") then
-    call TIDAL_BAY_set_OBC_data(OBC, G, Time)
+    call TIDAL_BAY_set_OBC_data(OBC, G, h, Time)
   endif
 
 end subroutine update_OBC_data

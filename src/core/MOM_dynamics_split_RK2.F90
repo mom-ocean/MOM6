@@ -433,7 +433,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   if (showCallTree) call callTree_wayPoint("done with PressureForce (step_MOM_dyn_split_RK2)")
 
   if (associated(CS%OBC)) then; if (CS%OBC%update_OBC) then
-    call update_OBC_data(CS%OBC, G, Time_local)
+    call update_OBC_data(CS%OBC, G, h, Time_local)
   endif; endif
 
   if (G%nonblocking_updates) then
@@ -687,7 +687,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   endif
 
   if (associated(CS%OBC)) then; if (CS%OBC%update_OBC) then
-    call update_OBC_data(CS%OBC, G, Time_local)
+    call update_OBC_data(CS%OBC, G, h, Time_local)
   endif; endif
 
   if (G%nonblocking_updates) then

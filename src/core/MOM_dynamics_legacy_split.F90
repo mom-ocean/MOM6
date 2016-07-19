@@ -497,7 +497,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
   endif
 
   if (associated(CS%OBC)) then; if (CS%OBC%update_OBC) then
-    call update_OBC_data(CS%OBC, G, Time_local)
+    call update_OBC_data(CS%OBC, G, h, Time_local)
   endif; endif
 
 ! CAu = -(f+zeta_av)/h_av vh + d/dx KE_av
@@ -790,7 +790,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
   endif
 
   if (associated(CS%OBC)) then; if (CS%OBC%update_OBC) then
-    call update_OBC_data(CS%OBC, G, Time_local)
+    call update_OBC_data(CS%OBC, G, h, Time_local)
   endif; endif
 
   if (BT_cont_BT_thick) then

@@ -55,6 +55,8 @@ subroutine TIDAL_BAY_set_OBC_positions(G, param_file, OBC)
     call set_Flather_positions(G, OBC)
     call TIDAL_BAY_alloc_OBC_data(OBC, G)
   endif
+  ! Turn this off for BT_OBC
+  OBC%apply_OBC_u = .false.
   OBC%update_OBC = .true.
   if (OBC%apply_OBC_v) then
     ! Set where v points are determined by OBCs.
@@ -106,58 +108,56 @@ subroutine TIDAL_BAY_alloc_OBC_data(OBC, G)
 end subroutine TIDAL_BAY_alloc_OBC_data
 
 !> This subroutine sets the properties of flow at open boundary conditions.
-subroutine TIDAL_BAY_set_OBC_data(OBC, G, Time)
+subroutine TIDAL_BAY_set_OBC_data(OBC, G, h, Time)
   type(ocean_OBC_type),   pointer    :: OBC  !< This open boundary condition type specifies
                                              !! whether, where, and what open boundary
                                              !! conditions are used.
   type(ocean_grid_type),  intent(in) :: G    !< The ocean's grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h !< layer thickness.
   type(time_type),        intent(in) :: Time !< model time.
 
   logical :: apply_OBC_u, apply_OBC_v
   ! The following variables are used to set up the transport in the TIDAL_BAY example.
   real :: time_sec, cff, cff2, tide_flow
   real :: my_area, my_flux
-  real, parameter :: pi = 3.1415926535
+  real :: PI
   character(len=40)  :: mod = "TIDAL_BAY_set_OBC_data" ! This subroutine's name.
-  integer :: i, j, itt, is, ie, js, je, isd, ied, jsd, jed
+  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
+  PI = 4.0*atan(1.0) ;
+
   if (.not.associated(OBC)) return
-  if (.not.(OBC%apply_OBC_u .or. OBC%apply_OBC_v)) return
 
-  if (OBC%apply_OBC_u) then
-    time_sec = time_type_to_real(Time)
-    cff = 0.1*sin(2.0*pi*time_sec/(12.0*3600.0))
-    tide_flow = 3.0e6
-    my_area=0.0
-    my_flux=0.0
-    do J=JsdB,JedB ; do i=isd,ied
-! HACK to fix
-!            cff2 = 0.5*(zeta(Iend  ,j,knew)+h(Iend  ,j)+                &
-!     &                  zeta(Iend+1,j,knew)+h(Iend+1,j))/pn(Iend,j)
-!            my_area = my_area+cff2
-      if (OBC%OBC_mask_u(I,j)) then
-        cff2 = 35*2000.
-        my_area = my_area+cff2
-      endif
-    enddo ; enddo
-    my_flux = -tide_flow*SIN(2.0*pi*time_sec/(12.0*3600.0))
+  time_sec = time_type_to_real(Time)
+  cff = 0.1*sin(2.0*PI*time_sec/(12.0*3600.0))
+  tide_flow = 3.0e6
+  my_area=0.0
+  my_flux=0.0
+  do J=JsdB,JedB ; do i=isd,ied
+    if (OBC%OBC_mask_u(I,j)) then
+      do k=1,nz
+        cff2 = h(I,j,k)*G%dyCu(I,j)
+        my_area = my_area + cff2
+      enddo
+    endif
+  enddo ; enddo
+  my_flux = -tide_flow*SIN(2.0*PI*time_sec/(12.0*3600.0))
 
-    do J=JsdB,JedB ; do i=isd,ied
-      if (OBC%OBC_mask_u(I,j)) then
-        OBC%eta_outer_u(I,j) = cff
-        OBC%ubt_outer(I,j) = my_flux/my_area
-      endif
-      if (OBC%OBC_mask_v(i,J)) then
-        OBC%eta_outer_v(i,J) = cff
-        OBC%vbt_outer(i,J) = 0.0
-      endif
-    enddo ; enddo
-  endif
+  do J=JsdB,JedB ; do i=isd,ied
+    if (OBC%OBC_mask_u(I,j)) then
+      OBC%eta_outer_u(I,j) = cff
+      OBC%ubt_outer(I,j) = my_flux/my_area
+    endif
+    if (OBC%OBC_mask_v(i,J)) then
+      OBC%eta_outer_v(i,J) = cff
+      OBC%vbt_outer(i,J) = 0.0
+    endif
+  enddo ; enddo
 
 end subroutine TIDAL_BAY_set_OBC_data
 

@@ -102,7 +102,7 @@ type, public :: ocean_OBC_type
                    !! velocity (or speed of characteristics), in m s-1.  The
                    !! default value is 10 m s-1.
   logical :: this_pe !< Is there an open boundary on this tile?
-  logical :: update_OBC !< Is the open boundary info going to get updated?
+  logical :: update_OBC = .false. !< Is the open boundary info going to get updated?
   character(len=200) :: OBC_config
 end type ocean_OBC_type
 
@@ -207,7 +207,6 @@ subroutine open_boundary_init(G, param_file, OBC)
                    "one of the APPLY_OBC_[UV]_FLATHER_...  is true.", &
                    units="nondim",  default=0.2)
   endif
-  OBC%update_OBC = .false.
 
   id_clock_pass = cpu_clock_id('(Ocean OBC halo updates)', grain=CLOCK_ROUTINE)
 
