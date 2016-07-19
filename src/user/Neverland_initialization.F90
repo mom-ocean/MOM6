@@ -69,22 +69,55 @@ subroutine Neverland_initialize_topography(D, G, param_file, max_depth)
                  "The minimum depth of the ocean.", units="m", default=0.0)
 
   PI = 4.0*atan(1.0)
-  D0 = max_depth / 0.5;
 
 !  Calculate the depth of the bottom.
-  do i=is,ie ; do j=js,je
+  do i=is,ie  
+  do j=js,je
     x=(G%geoLonT(i,j)-G%west_lon)/G%len_lon
     y=(G%geoLatT(i,j)-G%south_lat)/G%len_lat
 !  This sets topography that has a reentrant channel to the south.
-    D(i,j) = -D0 * ( y*(1.0 + 0.6*cos(4.0*PI*x)) &
-                   + 0.75*exp(-6.0*y) &
-                   + 0.05*cos(10.0*PI*x) - 0.7 )
-    if (D(i,j) > max_depth) D(i,j) = max_depth
-    if (D(i,j) < min_depth) D(i,j) = 0.
-  enddo ; enddo
 
+    D(i,j) = 1.0 - (1.2 * spike(x,0.2) + 1.2 * spike(x-1.0,0.2)) * spike(MIN(0.0,y-0.3),0.2) & !< South America
+                -  1.2 * spike(x-0.5,0.2) * spike(MIN(0.0,y-0.55),0.2)                       & !< Africa  
+                -  1.1 * spike(y-1,0.12) - 1.1 * spike(y,0.12)                               & !< The great northern wall and Antarctica
+                -  1.2 * (spike(x,0.12)  + spike(x-1,0.12)) * spike(MAX(0.0,y-0.06),0.12)    & !< Antarctic Peninsula
+                -  0.1 * (cosbell(x,0.1) + cosbell(x-1,0.1))                                   & !< Drake Passage ridge
+                -  0.5 * cosbell(x-0.16,0.05) * (cosbell(y-0.18,0.13)**0.4)                  & !< Scotia Arc East 
+                -  0.4 * (cosbell(x-0.09,0.08)**0.4) * cosbell(y-0.26,0.05)                  & !< Scotia Arc North
+                -  0.4 * (cosbell(x-0.08,0.08)**0.4) * cosbell(y-0.1,0.05)                   & !< Scotia Arc South
+                -  0.05 * cos(14*PI*x) * sin(14*PI*y)                                        & !< roughness
+                -  0.05 * cos(20*PI*x) * cos(20*PI*y)                                         !< roughness 
+
+    if (D(i,j) < 0.0) D(i,j) = 0.0
+    D(i,j) = D(i,j) * max_depth
+  enddo 
+  enddo
+  
 end subroutine Neverland_initialize_topography
 ! -----------------------------------------------------------------------------
+
+!> Returns the value of a cosine-bell function evaluated at x/L
+ real function cosbell(x,L)
+
+   real , intent(in) :: x       !< non-dimensional position
+   real , intent(in) :: L       !< non-dimensional width
+   real              :: PI      !< 3.1415926... calculated as 4*atan(1) 
+
+   PI      = 4.0*atan(1.0)
+   cosbell = 0.5 * (1 + cos(PI*MIN(ABS(x/L),1.0)))
+ end function cosbell
+
+!> Returns the value of a sin-spike function evaluated at x/L
+ real function spike(x,L)
+
+   real , intent(in) :: x       !< non-dimensional position
+   real , intent(in) :: L       !< non-dimensional width
+   real              :: PI      !< 3.1415926... calculated as 4*atan(1) 
+
+   PI    = 4.0*atan(1.0)
+   spike = (1 - sin(PI*MIN(ABS(x/L),0.5)))
+ end function spike
+
 
 ! -----------------------------------------------------------------------------
 !> This subroutine initializes layer thicknesses for the Neverland test case,
