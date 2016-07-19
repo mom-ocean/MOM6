@@ -29,6 +29,7 @@ use user_initialization, only : user_initialize_topography, USER_set_OBC_positio
 use DOME_initialization, only : DOME_initialize_topography, DOME_set_OBC_positions
 use ISOMIP_initialization, only : ISOMIP_initialize_topography
 use benchmark_initialization, only : benchmark_initialize_topography
+use Neverland_initialization, only : Neverland_initialize_topography
 use DOME2d_initialization, only : DOME2d_initialize_topography
 use sloshing_initialization, only : sloshing_initialize_topography
 use seamount_initialization, only : seamount_initialize_topography
@@ -203,6 +204,7 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
                  " \t halfpipe - a zonally uniform channel with a half-sine \n"//&
                  " \t\t profile in the meridional direction. \n"//&
                  " \t benchmark - use the benchmark test case topography. \n"//&
+                 " \t Neverland - use the Neverland test case topography. \n"//&
                  " \t DOME - use a slope and channel configuration for the \n"//&
                  " \t\t DOME sill-overflow test case. \n"//&
                  " \t ISOMIP - use a slope and channel configuration for the \n"//&
@@ -223,6 +225,7 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
     case ("DOME");      call DOME_initialize_topography(D, G, PF, max_depth)
     case ("ISOMIP");    call ISOMIP_initialize_topography(D, G, PF, max_depth)
     case ("benchmark"); call benchmark_initialize_topography(D, G, PF, max_depth)
+    case ("Neverland"); call Neverland_initialize_topography(D, G, PF, max_depth)
     case ("DOME2D");    call DOME2d_initialize_topography(D, G, PF, max_depth)
     case ("sloshing");  call sloshing_initialize_topography(D, G, PF, max_depth)
     case ("seamount");  call seamount_initialize_topography(D, G, PF, max_depth)
