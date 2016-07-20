@@ -49,7 +49,6 @@ subroutine Neverland_initialize_topography(D, G, param_file, max_depth)
   real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
 
 ! This subroutine sets up the Neverland test case topography
-  real :: min_depth            ! The minimum and maximum depths in m.
   real :: PI                   ! 3.1415926... calculated as 4*atan(1)
   real :: D0                   ! A constant to make the maximum     !
                                ! basin depth MAXIMUM_DEPTH.         !
@@ -64,8 +63,6 @@ subroutine Neverland_initialize_topography(D, G, param_file, max_depth)
   call MOM_mesg("  Neverland_initialization.F90, Neverland_initialize_topography: setting topography", 5)
 
   call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "MINIMUM_DEPTH", min_depth, &
-                 "The minimum depth of the ocean.", units="m", default=0.0)
 
   PI = 4.0*atan(1.0)
 
@@ -135,102 +132,32 @@ subroutine Neverland_initialize_thickness(h, G, GV, param_file, eqn_of_state, P_
                                                               !! equation of state.
   real,                    intent(in) :: P_Ref                !< The coordinate-density
                                                               !! reference pressure in Pa.
-
+  ! Local variables
   real :: e0(SZK_(G)+1)     ! The resting interface heights, in m, usually !
                             ! negative because it is positive upward.      !
-  real :: e_pert(SZK_(G)+1) ! Interface height perturbations, positive     !
-                            ! upward, in m.                                !
-  real :: eta1D(SZK_(G)+1)  ! Interface height relative to the sea surface !
-                            ! positive upward, in m.                       !
-  real :: SST       !  The initial sea surface temperature, in deg C.
-  real :: T_int     !  The initial temperature of an interface, in deg C.
-  real :: ML_depth  !  The specified initial mixed layer depth, in m.
-  real :: thermocline_scale ! The e-folding scale of the thermocline, in m.
-  real, dimension(SZK_(G)) :: T0, pres, S0, rho_guess, drho, drho_dT, drho_dS
-  real :: a_exp      ! The fraction of the overall stratification that is exponential.
-  real :: I_ts, I_md ! Inverse lengthscales in m-1.
-  real :: T_frac     ! A ratio of the interface temperature to the range
-                     ! between SST and the bottom temperature.
-  real :: err, derr_dz  ! The error between the profile's temperature and the
-                     ! interface temperature for a given z and its derivative.
-  real :: pi, z
+  real, dimension(SZK_(G)) :: h_profile ! Vector of initial thickness profile (m)
+  real :: e_interface ! Current interface positoin (m)
   character(len=40)  :: mod = "Neverland_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, k1, is, ie, js, je, nz, itt
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   call MOM_mesg("  Neverland_initialization.F90, Neverland_initialize_thickness: setting thickness", 5)
+  call get_param(param_file, mod, "INIT_THICKNESS_PROFILE", h_profile, &
+                 "Profile of initial layer thicknesses.", units="m", fail_if_missing=.true.)
 
-  k1 = GV%nk_rho_varies + 1
-
-  ML_depth = 50.0
-  thermocline_scale = 500.0
-  a_exp = 0.9
-
-! This block calculates T0(k) for the purpose of diagnosing where the 
-! interfaces will be found.
+! e0 is the notional position of interfaces
+  e0(1) = 0. ! The surface
   do k=1,nz
-    pres(k) = P_Ref ; S0(k) = 35.0
-  enddo
-  T0(k1) = 29.0
-  call calculate_density(T0(k1),S0(k1),pres(k1),rho_guess(k1),eqn_of_state)
-  call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,k1,1,eqn_of_state)
-
-! A first guess of the layers' temperatures.
-  do k=1,nz
-    T0(k) = T0(k1) + (GV%Rlay(k) - rho_guess(k1)) / drho_dT(k1)
+    e0(k+1) = e0(k) - h_profile(k)
   enddo
 
-! Refine the guesses for each layer.
-  do itt=1,6
-    call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
-    call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
-    do k=1,nz
-      T0(k) = T0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
-    enddo
-  enddo
-
-  pi = 4.0*atan(1.0)
-  I_ts = 1.0 / thermocline_scale
-  I_md = 1.0 / G%max_depth
   do j=js,je ; do i=is,ie
-    SST = 0.5*(T0(k1)+T0(nz)) - 0.9*0.5*(T0(k1)-T0(nz)) * &
-                               cos(pi*(G%geoLatT(i,j)-G%south_lat)/(G%len_lat))
-
-    do k=1,nz ; e_pert(K) = 0.0 ; enddo
-
-!  The remainder of this subroutine should not be changed.           !
-
-!    This sets the initial thickness (in m) of the layers.  The      !
-!  thicknesses are set to insure that: 1.  each layer is at least    !
-!  Gv%Angstrom_z thick, and 2.  the interfaces are where they should be    !
-!  based on the resting depths and interface height perturbations,   !
-!  as long at this doesn't interfere with 1.                         !
-    eta1D(nz+1) = -1.0*G%bathyT(i,j)
-
-    do k=nz,2,-1
-      T_int = 0.5*(T0(k) + T0(k-1))
-      T_frac = (T_int - T0(nz)) / (SST - T0(nz))
-      ! Find the z such that T_frac = a exp(z/thermocline_scale) + (1-a) (z+D)/D
-      z = 0.0
-      do itt=1,6
-        err = a_exp * exp(z*I_ts) + (1.0 - a_exp) * (z*I_md + 1.0) - T_frac
-        derr_dz = a_exp * I_ts * exp(z*I_ts) + (1.0 - a_exp) * I_md
-        z = z - err / derr_dz
-      enddo
-      e0(K) = z
-!       e0(K) = -ML_depth + thermocline_scale * log((T_int - T0(nz)) / (SST - T0(nz)))
-
-      eta1D(K) = e0(K) + e_pert(K)
-
-      if (eta1D(K) > -ML_depth) eta1D(K) = -ML_depth
-
-      if (eta1D(K) < eta1D(K+1) + GV%Angstrom_z) &
-        eta1D(K) = eta1D(K+1) + GV%Angstrom_z
-
-      h(i,j,k) = max(eta1D(K) - eta1D(K+1), GV%Angstrom_z)
+    e_interface = -G%bathyT(i,j)
+    do k=nz,1,-1
+      h(i,j,k) = max( GV%Angstrom_z, e0(k) - e_interface )
+      e_interface = max( e0(k), e_interface - h(i,j,k) )
     enddo
-    h(i,j,1) = max(0.0 - eta1D(2), GV%Angstrom_z)
 
   enddo ; enddo
 
