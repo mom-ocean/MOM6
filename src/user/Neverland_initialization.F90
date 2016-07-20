@@ -57,12 +57,15 @@ subroutine Neverland_initialize_topography(D, G, param_file, max_depth)
 #include "version_variable.h"
   character(len=40)  :: mod = "Neverland_initialize_topography" ! This subroutine's name.
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
+  real :: nl_roughness_amp
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   call MOM_mesg("  Neverland_initialization.F90, Neverland_initialize_topography: setting topography", 5)
 
   call log_version(param_file, mod, version, "")
+  call get_param(param_file, mod, "NL_ROUGHNESS_AMP", nl_roughness_amp, &
+                 "Amplitude of wavy signal in bathymetry.", default=0.05)
 
   PI = 4.0*atan(1.0)
 
@@ -81,8 +84,8 @@ subroutine Neverland_initialize_topography(D, G, param_file, max_depth)
                 -  0.5 * cosbell(x-0.16,0.05) * (cosbell(y-0.18,0.13)**0.4)                  & !< Scotia Arc East 
                 -  0.4 * (cosbell(x-0.09,0.08)**0.4) * cosbell(y-0.26,0.05)                  & !< Scotia Arc North
                 -  0.4 * (cosbell(x-0.08,0.08)**0.4) * cosbell(y-0.1,0.05)                   & !< Scotia Arc South
-                -  0.05 * cos(14*PI*x) * sin(14*PI*y)                                        & !< roughness
-                -  0.05 * cos(20*PI*x) * cos(20*PI*y)                                         !< roughness 
+                -  nl_roughness_amp * cos(14*PI*x) * sin(14*PI*y)                            & !< roughness
+                -  nl_roughness_amp * cos(20*PI*x) * cos(20*PI*y)                              !< roughness 
 
     if (D(i,j) < 0.0) D(i,j) = 0.0
     D(i,j) = D(i,j) * max_depth
