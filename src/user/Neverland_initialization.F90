@@ -36,7 +36,6 @@ implicit none ; private
 
 public Neverland_initialize_topography
 public Neverland_initialize_thickness
-public Neverland_init_temperature_salinity
 
 contains
 
@@ -236,80 +235,6 @@ subroutine Neverland_initialize_thickness(h, G, GV, param_file, eqn_of_state, P_
   enddo ; enddo
 
 end subroutine Neverland_initialize_thickness
-! -----------------------------------------------------------------------------
-
-! -----------------------------------------------------------------------------
-!> This function puts the initial layer temperatures and salinities
-!! into T(:,:,:) and S(:,:,:).
-subroutine Neverland_init_temperature_salinity(T, S, G, GV, param_file, &
-               eqn_of_state, P_Ref)
-  type(ocean_grid_type),               intent(in)  :: G            !< The ocean's grid structure.
-  type(verticalGrid_type),             intent(in)  :: GV           !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T      !< The potential temperature
-                                                                   !! that is being initialized.
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S      !< The salinity that is being
-                                                                   !! initialized.
-  type(param_file_type),               intent(in)  :: param_file   !< A structure indicating the
-                                                                   !! open file to parse for
-                                                                   !! model parameter values.
-  type(EOS_type),                      pointer     :: eqn_of_state !< integer that selects the
-                                                                   !! equation of state.
-  real,                                intent(in)  :: P_Ref        !< The coordinate-density
-                                                                   !! reference pressure in Pa.
-
-  real :: T0(SZK_(G)), S0(SZK_(G))
-  real :: pres(SZK_(G))      ! Reference pressure in kg m-3.             !
-  real :: drho_dT(SZK_(G))   ! Derivative of density with temperature in !
-                        ! kg m-3 K-1.                               !
-  real :: drho_dS(SZK_(G))   ! Derivative of density with salinity in    !
-                        ! kg m-3 PSU-1.                             !
-  real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 in kg m-3.   !
-  real :: PI        ! 3.1415926... calculated as 4*atan(1)
-  real :: SST       !  The initial sea surface temperature, in deg C.
-  real :: lat
-  character(len=40)  :: mod = "Neverland_init_temperature_salinity" ! This subroutine's name.
-  integer :: i, j, k, k1, is, ie, js, je, nz, itt
-
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-
-  k1 = GV%nk_rho_varies + 1
-
-  do k=1,nz
-    pres(k) = P_Ref ; S0(k) = 35.0
-  enddo
-
-  T0(k1) = 29.0
-  call calculate_density(T0(k1),S0(k1),pres(k1),rho_guess(k1),eqn_of_state)
-  call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,k1,1,eqn_of_state)
-
-! A first guess of the layers' temperatures.                         !
-  do k=1,nz
-    T0(k) = T0(k1) + (GV%Rlay(k) - rho_guess(k1)) / drho_dT(k1)
-  enddo
-
-! Refine the guesses for each layer.                                 !
-  do itt = 1,6
-    call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
-    call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
-    do k=1,nz
-      T0(k) = T0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
-    enddo
-  enddo
-
-  do k=1,nz ; do i=is,ie ; do j=js,je
-    T(i,j,k) = T0(k)
-    S(i,j,k) = S0(k)
-  enddo ; enddo ; enddo
-  PI = 4.0*atan(1.0)
-  do i=is,ie ; do j=js,je
-    SST = 0.5*(T0(k1)+T0(nz)) - 0.9*0.5*(T0(k1)-T0(nz)) * &
-                               cos(PI*(G%geoLatT(i,j)-G%south_lat)/(G%len_lat))
-    do k=1,k1-1
-      T(i,j,k) = SST
-    enddo
-  enddo ; enddo
-
-end subroutine Neverland_init_temperature_salinity
 ! -----------------------------------------------------------------------------
 
 !! \class Neverland_initialization

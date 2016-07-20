@@ -52,7 +52,6 @@ use baroclinic_zone_initialization, only : baroclinic_zone_init_temperature_sali
 use benchmark_initialization, only : benchmark_initialize_thickness
 use benchmark_initialization, only : benchmark_init_temperature_salinity
 use Neverland_initialization, only : Neverland_initialize_thickness
-use Neverland_initialization, only : Neverland_init_temperature_salinity
 use circle_obcs_initialization, only : circle_obcs_initialize_thickness
 use lock_exchange_initialization, only : lock_exchange_initialize_thickness
 use external_gwave_initialization, only : external_gwave_initialize_thickness
@@ -290,8 +289,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
           case ("fit"); call initialize_temp_salt_fit(tv%T, tv%S, G, GV, PF, eos, tv%P_Ref)
           case ("file"); call initialize_temp_salt_from_file(tv%T, tv%S, G, PF)
           case ("benchmark"); call benchmark_init_temperature_salinity(tv%T, tv%S, &
-                                   G, GV, PF, eos, tv%P_Ref)
-          case ("Neverland"); call Neverland_init_temperature_salinity(tv%T, tv%S, &
                                    G, GV, PF, eos, tv%P_Ref)
           case ("TS_profile") ; call initialize_temp_salt_from_profile(tv%T, tv%S, G, PF)
           case ("linear"); call initialize_temp_salt_linear(tv%T, tv%S, G, PF)
