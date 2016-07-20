@@ -614,8 +614,8 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask)
 
       if (.not. diag_remap_axes_setup_done(diag_cs%diag_remaps(diag%vertical_coord))) then
         call MOM_error(FATAL,"post_data_3d: attempt to do diagnostic vertical "// &
-                             "remapping but vertical axes not configured. "// &
-                             "See option DIAG_REMAP_<VERTICAL_COORD>_GRID_DEF")
+                             "remapping but vertical axes not configured. See option "// &
+                             "DIAG_REMAP_"//vertical_coord_strings(diag%vertical_coord)//"_GRID_DEF")
       endif
 
       if (id_clock_diag_remap>0) call cpu_clock_begin(id_clock_diag_remap)
@@ -875,7 +875,8 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
   do i=1,size(vertical_coords)
     if (vertical_coord_strings(i) /= 'LAYER') then
         ! For now we don't support remapping diagnostics onto interfaces.
-        if (is_interface_axis(diag_cs, axes)) then
+        ! Also don't supprot arbitarary remapping.
+        if (is_interface_axis(diag_cs, axes) .or. vertical_coord_strings(i) == 'ARB') then
           cycle
         endif
         new_module_name = trim(module_name//'_'//lowercase(trim(vertical_coord_strings(i))))
@@ -912,10 +913,8 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
 
     endif
     ! This diag is being registered, so it is available.
-    print*, 'registering ', new_module_name, field_name
     if (is_root_pe() .and. diag_CS%doc_unit > 0) then
       msg = ''
-      print*, 'calling log_available_diag'
       if (present(cmor_field_name)) msg = 'CMOR equivalent is "'//trim(cmor_field_name)//'"'
       call log_available_diag(associated(diag), new_module_name, field_name, cm_string, &
                               msg, diag_CS, long_name, units, standard_name)

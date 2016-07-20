@@ -394,6 +394,12 @@ subroutine diag_remap_update(remap_cs, G, h, T, S, eqn_of_state)
         call build_rho_column(remap_cs%regrid_cs, remap_cs%remap_cs, nz, &
                               G%bathyT(i,j), h(i,j,:), T(i, j, :), S(i, j, :), &
                               eqn_of_state, zInterfaces)
+      elseif (remap_cs%vertical_coord == coordinateMode('SLIGHT')) then
+        call build_slight_column(remap_cs%regrid_cs, nz, &
+                              G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
+      elseif (remap_cs%vertical_coord == coordinateMode('HYCOM1')) then
+        call build_hycom1_column(remap_cs%regrid_cs, nz, &
+                              G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
       endif
       remap_cs%h(i,j,:) = zInterfaces(1:nz) - zInterfaces(2:nz+1)
     enddo
