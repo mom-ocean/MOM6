@@ -871,15 +871,19 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
 
   diag_cs => axes%diag_cs
   primary_id = DIAG_FIELD_NOT_FOUND
-  diag => null()
 
   do i=1,size(vertical_coords)
     if (vertical_coord_strings(i) /= 'LAYER') then
+        ! For now we don't support remapping diagnostics onto interfaces.
+        if (is_interface_axis(diag_cs, axes)) then
+          cycle
+        endif
         new_module_name = trim(module_name//'_'//lowercase(trim(vertical_coord_strings(i))))
     else
         new_module_name = module_name
     endif
 
+    diag => null()
     if (get_diag_field_id_fms(new_module_name, field_name) /= DIAG_FIELD_NOT_FOUND) then
       if (primary_id == DIAG_FIELD_NOT_FOUND) then
         primary_id = get_new_primary_diag_id(diag_cs)
@@ -906,12 +910,15 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
                   'register_diag_field: Could not register diag')
       diag%fms_diag_id = fms_id
 
-      if (is_root_pe() .and. diag_CS%doc_unit > 0) then
-        msg = ''
-        if (present(cmor_field_name)) msg = 'CMOR equivalent is "'//trim(cmor_field_name)//'"'
-        call log_available_diag(associated(diag), module_name, field_name, cm_string, &
-                                msg, diag_CS, long_name, units, standard_name)
-      endif
+    endif
+    ! This diag is being registered, so it is available.
+    print*, 'registering ', new_module_name, field_name
+    if (is_root_pe() .and. diag_CS%doc_unit > 0) then
+      msg = ''
+      print*, 'calling log_available_diag'
+      if (present(cmor_field_name)) msg = 'CMOR equivalent is "'//trim(cmor_field_name)//'"'
+      call log_available_diag(associated(diag), new_module_name, field_name, cm_string, &
+                              msg, diag_CS, long_name, units, standard_name)
     endif
 
     if (.not. present(cmor_field_name)) then
@@ -919,6 +926,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
     endif
 
     ! Set up the CMOR variation of the native diagnostic
+    diag => null()
     if (get_diag_field_id_fms(new_module_name, cmor_field_name) /= DIAG_FIELD_NOT_FOUND) then
       ! Fallback values for strings set to "NULL"
       ! Values might be able to be replaced with a CS%missing field?
@@ -963,12 +971,12 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
                   'register_diag_field: Could not register diag')
       diag%fms_diag_id = fms_id
 
-      if (is_root_pe() .and. diag_CS%doc_unit > 0) then
-        msg = 'native name is "'//trim(field_name)//'"'
-        call log_available_diag(associated(diag), module_name, cmor_field_name, cm_string, &
-                                msg, diag_CS, posted_cmor_long_name, posted_cmor_units,    &
-                                posted_cmor_standard_name)
-      endif
+    endif
+    if (is_root_pe() .and. diag_CS%doc_unit > 0) then
+      msg = 'native name is "'//trim(field_name)//'"'
+      call log_available_diag(associated(diag), new_module_name, cmor_field_name, cm_string, &
+                              msg, diag_CS, posted_cmor_long_name, posted_cmor_units,        &
+                              posted_cmor_standard_name)
     endif
   enddo
 
