@@ -53,6 +53,10 @@ subroutine Neverland_wind_forcing(state, fluxes, day, G, CS)
   ! Local variable
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
+  
+  real :: x, y
+  real :: PI 
+  real :: tau_max
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -67,9 +71,25 @@ subroutine Neverland_wind_forcing(state, fluxes, day, G, CS)
 
   !  The i-loop extends to is-1 so that taux can be used later in the
   ! calculation of ustar - otherwise the lower bound would be Isq.
+    PI = 4.0*atan(1.0)
+    fluxes%taux(:,:) = 0.0
+    tau_max = 0.2
   do j=js,je ; do I=is-1,Ieq
-    fluxes%taux(I,j) = G%mask2dCu(I,j) * 0.0  ! Change this to the desired expression.
+!    x=(G%geoLonT(i,j)-G%west_lon)/G%len_lon
+     y=(G%geoLatT(i,j)-G%south_lat)/G%len_lat
+!    fluxes%taux(I,j) =  G%mask2dCu(I,j) * 0.0
+    
+    if (y.le.0.28) then
+       fluxes%taux(I,j) = fluxes%taux(I,j) +  tau_max * (cosbell(y-0.28,0.28) )
+    endif
+    if (y.gt.0.28 .and. y.le.0.8) then
+       fluxes%taux(I,j)	= fluxes%taux(I,j) + tau_max *(0.35*cos(PI*(y-0.28)/0.52)  )
+    endif
+    if (y.gt.0.8) then
+       fluxes%taux(I,j) = fluxes%taux(I,j) + tau_max *( -0.3*cosbell(y-0.8,0.2)  )
+    endif
   enddo ; enddo
+ 
   do J=js-1,Jeq ; do i=is,ie
     fluxes%tauy(i,J) = G%mask2dCv(i,J) * 0.0  ! Change this to the desired expression.
   enddo ; enddo
@@ -84,6 +104,29 @@ subroutine Neverland_wind_forcing(state, fluxes, day, G, CS)
 ! enddo ; enddo ; endif
 
 end subroutine Neverland_wind_forcing
+
+!> Returns the value of a cosine-bell function evaluated at x/L
+ real function cosbell(x,L)
+
+   real , intent(in) :: x       !< non-dimensional position
+   real , intent(in) :: L       !< non-dimensional width
+   real              :: PI      !< 3.1415926... calculated as 4*atan(1) 
+
+   PI      = 4.0*atan(1.0)
+   cosbell = 0.5 * (1 + cos(PI*MIN(ABS(x/L),1.0)))
+ end function cosbell
+
+!> Returns the value of a sin-spike function evaluated at x/L
+ real function spike(x,L)
+
+   real , intent(in) :: x       !< non-dimensional position
+   real , intent(in) :: L       !< non-dimensional width
+   real              :: PI      !< 3.1415926... calculated as 4*atan(1) 
+
+   PI    = 4.0*atan(1.0)
+   spike = (1 - sin(PI*MIN(ABS(x/L),0.5)))
+ end function spike
+
 
 !> Surface fluxes of buoyancy for the Neverland configurations.
 subroutine Neverland_buoyancy_forcing(state, fluxes, day, dt, G, CS)
