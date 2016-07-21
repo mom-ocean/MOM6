@@ -56,7 +56,7 @@ subroutine Neverland_wind_forcing(state, fluxes, day, G, CS)
   
   real :: x, y
   real :: PI 
-  real :: tau_max
+  real :: tau_max, off
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -74,6 +74,7 @@ subroutine Neverland_wind_forcing(state, fluxes, day, G, CS)
     PI = 4.0*atan(1.0)
     fluxes%taux(:,:) = 0.0
     tau_max = 0.2
+    off = 0.04
   do j=js,je ; do I=is-1,Ieq
 !    x=(G%geoLonT(i,j)-G%west_lon)/G%len_lon
      y=(G%geoLatT(i,j)-G%south_lat)/G%len_lat
@@ -82,11 +83,11 @@ subroutine Neverland_wind_forcing(state, fluxes, day, G, CS)
     if (y.le.0.28) then
        fluxes%taux(I,j) = fluxes%taux(I,j) +  tau_max * (cosbell(y-0.28,0.28) )
     endif
-    if (y.gt.0.28 .and. y.le.0.8) then
-       fluxes%taux(I,j)	= fluxes%taux(I,j) + tau_max *(0.35+0.65*cos(PI*(y-0.28)/0.52)  )
+    if (y.gt.0.28 .and. y.le.(0.8-off)) then
+       fluxes%taux(I,j)	= fluxes%taux(I,j) + tau_max *(0.35+0.65*cos(PI*(y-0.28)/(0.52-off))  )
     endif
-    if (y.gt.0.8) then
-       fluxes%taux(I,j) = fluxes%taux(I,j) + tau_max *( -0.3*cosbell(y-0.8,0.2)  )
+    if (y.gt.(0.8-off) .and. y.le.(1-off) ) then
+       fluxes%taux(I,j) = fluxes%taux(I,j) + tau_max *( 1.5*( (y-1+off) - (0.1/PI)*sin(10.0*PI*(y-0.8+off)) ) )
     endif
   enddo ; enddo
  
