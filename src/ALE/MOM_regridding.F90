@@ -1105,10 +1105,11 @@ subroutine build_grid_HyCOM1( G, GV, h, tv, dzInterface, remapCS, CS )
   type(regridding_CS),                         intent(in)    :: CS !< Regridding control structure
 
   ! Local variables
-  integer   :: i, j, k, nz
-  real, dimension(SZK_(GV)) :: T_col, S_col, p_col, rho_col, h_col_new ! Layer quantities
   real, dimension(SZK_(GV)+1) :: z_col, z_col_new ! Interface positions relative to the surface in H units (m or kg m-2)
   real, dimension(SZK_(GV)+1) :: dz_col  ! The realized change in z_col in H units (m or kg m-2)
+  real, dimension(SZK_(GV))   :: p_col   ! Layer pressure in Pa
+  integer   :: i, j, k, nz
+  real :: depth
 
   nz = GV%ke
 
@@ -1119,13 +1120,17 @@ subroutine build_grid_HyCOM1( G, GV, h, tv, dzInterface, remapCS, CS )
   do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
     if (G%mask2dT(i,j)>0.) then
 
-      ! Copy T and S onto new variables so as to not alter the original values
-      ! of T and S (these are remapped at the end of the regridding iterations
-      ! once the final grid has been determined).
-      T_col(:) = tv%T(i,j,:)
-      S_col(:) = tv%S(i,j,:)
+      depth = G%bathyT(i,j) * GV%m_to_H
 
-      build_hycom1_column(CS, remapCS, eqn_of_state, nz, depth, h, T_col, S_col, z_col_new)
+      z_col(1) = 0. ! Work downward rather than bottom up
+      do K = 1, nz
+        z_col(K+1) = z_col(K) + h(i,j,k) ! Work in units of h (m or Pa)
+        p_col(k) = CS%ref_pressure + CS%compressibility_fraction * &
+             ( 0.5 * ( z_col(K) + z_col(K+1) ) * GV%H_to_Pa - CS%ref_pressure )
+      enddo
+
+      call build_hycom1_column(CS, remapCS, tv%eqn_of_state, nz, depth, &
+                               h(i, j, :), tv%T(i, j, :), tv%S(i, j, :), p_col, z_col, z_col_new)
 
       ! Calculate the final change in grid position after blending new and old grids
       call filtered_grid_motion( CS, nz, z_col, z_col_new, dz_col )
@@ -1141,20 +1146,21 @@ subroutine build_grid_HyCOM1( G, GV, h, tv, dzInterface, remapCS, CS )
 
 end subroutine build_grid_HyCOM1
 
-subroutine build_hycom1_column(CS, remapCS, eqn_of_state, nz, depth, h, T, S, z_col_new)
+subroutine build_hycom1_column(CS, remapCS, eqn_of_state, nz, depth, h, T, S, p_col, z_col, z_col_new)
   type(regridding_CS),   intent(in)    :: CS !< Regridding control structure
   type(remapping_CS),    intent(in)    :: remapCS !< Remapping parameters and options
   type(EOS_type),        pointer       :: eqn_of_state !< Equation of state structure
   integer,               intent(in)    :: nz !< Number of levels
-  real,                  intent(in)    :: depth !< Depth of ocean bottom (positive in m)
+  real,                  intent(in)    :: depth !< Depth of ocean bottom (positive in H)
   real, dimension(nz),   intent(in)    :: T, S !< T and S for column
   real, dimension(nz),   intent(in)    :: h  !< Layer thicknesses, in m
+  real, dimension(nz),   intent(in)    :: p_col !< Layer pressure in Pa
+  real, dimension(nz+1), intent(in)    :: z_col ! Interface positions relative to the surface in H units (m or kg m-2)
   real, dimension(nz+1), intent(inout) :: z_col_new !< Absolute positions of interfaces
 
   ! Local variables
-  integer   :: i, j, k, nz
-  real, dimension(SZK_(GV)) :: p_col, rho_col, h_col_new ! Layer quantities
-  real, dimension(SZK_(GV)+1) :: z_col ! Interface positions relative to the surface in H units (m or kg m-2)
+  integer   :: k
+  real, dimension(nz) :: rho_col, h_col_new ! Layer quantities
   real, dimension(CS%nk,2) :: ppoly_i_E ! Edge value of polynomial
   real, dimension(CS%nk,2) :: ppoly_i_S ! Edge slope of polynomial
   real, dimension(CS%nk,CS%degree_i+1) :: ppoly_i_coefficients ! Coefficients of polynomial
@@ -1168,13 +1174,6 @@ subroutine build_hycom1_column(CS, remapCS, eqn_of_state, nz, depth, h, T, S, z_
   maximum_depths_set = allocated(CS%max_interface_depths)
   maximum_h_set = allocated(CS%max_layer_thickness)
 
-  z_col(1) = 0. ! Work downward rather than bottom up
-  do K = 1, nz
-    z_col(K+1) = z_col(K) + h(i,j,k) ! Work in units of h (m or Pa)
-    p_col(k) = CS%ref_pressure + CS%compressibility_fraction * &
-         ( 0.5 * ( z_col(K) + z_col(K+1) ) * GV%H_to_Pa - CS%ref_pressure )
-  enddo
-
   ! Work bottom recording potential density
   call calculate_density(T, S, p_col, rho_col, 1, nz, eqn_of_state)
   ! This ensures the potential density profile is monotonic
@@ -1184,16 +1183,16 @@ subroutine build_hycom1_column(CS, remapCS, eqn_of_state, nz, depth, h, T, S, z_
   enddo
 
   ! Interpolates for the target interface position with the rho_col profile
-  call regridding_set_ppolys(rho_col, CS, nz, h(i,j,:), ppoly_i_E, ppoly_i_S, &
+  call regridding_set_ppolys(rho_col, CS, nz, h(:), ppoly_i_E, ppoly_i_S, &
                              ppoly_i_coefficients, ppoly_degree)
   ! Based on global density profile, interpolate to generate a new grid
-  call interpolate_grid(nz, h(i,j,:), z_col, ppoly_i_E, ppoly_i_coefficients, &
+  call interpolate_grid(nz, h(:), z_col, ppoly_i_E, ppoly_i_coefficients, &
                         CS%target_density, ppoly_degree, nz, h_col_new, z_col_new)
 
   ! Sweep down the interfaces and make sure that the interface is at least
   ! as deep as a nominal target z* grid
   nominal_z = 0.
-  stretching = z_col(nz+1) / G%bathyT(i,j) * GV%m_to_H ! Stretches z* to z
+  stretching = z_col(nz+1) / depth ! Stretches z* to z
   do k = 2, nz+1
     nominal_z = nominal_z + CS%coordinateResolution(k-1) * stretching
     z_col_new(k) = max( z_col_new(k), nominal_z )
@@ -1232,48 +1231,13 @@ subroutine build_grid_SLight( G, GV, h, tv, dzInterface, remapCS, CS )
   type(remapping_CS),                          intent(in)    :: remapCS !< Remapping control structure
   type(regridding_CS),                         intent(in)    :: CS !< Regridding control structure
 
-  ! Local variables
-  real, dimension(SZK_(GV)) :: T_col, S_col, p_col, rho_col ! Layer quantities
-  real, dimension(SZK_(GV)) :: h_col     ! A column of layer thicknesses on the original grid in H units.
-  real, dimension(SZK_(GV)) :: T_f, S_f  ! Filtered ayer quantities
   real, dimension(SZK_(GV)+1) :: z_col, z_col_new ! Interface positions relative to the surface in H units (m or kg m-2)
   real, dimension(SZK_(GV)+1) :: dz_col  ! The realized change in z_col in H units (m or kg m-2)
-  logical, dimension(SZK_(GV)+1) :: reliable  ! If true, this interface is in a reliable position.
-  real, dimension(SZK_(GV)+1) :: T_int, S_int ! Temperature and salinity interpolated to interfaces.
-  real, dimension(SZK_(GV)+1) :: rho_tmp, drho_dp, p_IS, p_R
-  real, dimension(SZK_(GV)+1) :: drhoIS_dT, drhoIS_dS
-  real, dimension(SZK_(GV)+1) :: drhoR_dT, drhoR_dS
-  real, dimension(SZK_(GV)+1) :: strat_rat
-  real :: H_to_cPa
-  real :: drIS, drR, Fn_now, I_HStol, Fn_zero_val
-  real :: z_int_unst
-  real :: dz      ! A uniform layer thickness in very shallow water, in H.
-  real :: dz_ur   ! The total thickness of an unstable region, in H.
-  real :: wgt, cowgt  ! A weight and its complement, nondim.
-  real :: rho_ml_av ! The average potential density in a near-surface region, in kg m-3.
-  real :: H_ml_av ! A thickness to try to use in taking the near-surface average, in H.
-  real :: rho_x_z ! A cumulative integral of a density, in kg m-3 H.
-  real :: z_wt    ! The thickness actually used in taking the near-surface average, in H.
-  real :: k_interior  ! The (real) value of k where the interior grid starts.
-  real :: k_int2      ! The (real) value of k where the interior grid starts.
-  real :: z_interior  ! The depth where the interior grid starts, in H.
-  real :: z_ml_fix    ! The depth at which the fixed-thickness near-surface layers end, in H.
-  real :: dz_dk       ! The thickness of layers between the fixed-thickness
-                      ! near-surface layars and the interior, in H.
-  real :: Lfilt       ! A filtering lengthscale, in H.
-  logical :: maximum_depths_set ! If true, the maximum depths of interface have been set.
-  logical :: maximum_h_set      ! If true, the maximum layer thicknesses have been set.
-  real :: k2_used, k2here, dz_sum, z_max
-  integer :: k2
-  real :: h_tr, b_denom_1, b1, d1 ! Temporary variables used by the tridiagonal solver.
-  real, dimension(SZK_(GV)) :: c1  ! Temporary variables used by the tridiagonal solver.
-  integer :: kur1, kur2  ! The indicies at the top and bottom of an unreliable region.
-  integer :: kur_ss      ! The index to start with in the search for the next unstable region.
-  integer :: i, j, k, nz, nkml
+  real, dimension(SZK_(GV))   :: p_col   ! Layer pressure in Pa
+  real :: depth
+  integer :: i, j, k, nz
 
   nz = GV%ke
-  maximum_depths_set = allocated(CS%max_interface_depths)
-  maximum_h_set = allocated(CS%max_layer_thickness)
 
   if (.not.CS%target_density_set) call MOM_error(FATAL, "build_grid_SLight : "//&
         "Target densities must be set before build_grid_SLight is called.")
@@ -1282,16 +1246,17 @@ subroutine build_grid_SLight( G, GV, h, tv, dzInterface, remapCS, CS )
   do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
     if (G%mask2dT(i,j)>0.) then
 
-      ! Copy T and S onto new variables so as to not alter the original values
-      ! of T and S (these are remapped at the end of the regridding iterations
-      ! once the final grid has been determined).
-
-      do k=1,nz
-        T_col(k) = tv%T(i,j,k) ; S_col(k) = tv%S(i,j,k)
-        h_col(k) = h(i,j,k)
+      depth = G%bathyT(i,j) * GV%m_to_H
+      z_col(1) = 0. ! Work downward rather than bottom up
+      do K=1,nz
+        z_col(K+1) = z_col(K) + h(i, j, k) ! Work in units of h (m or Pa)
+        p_col(k) = CS%ref_pressure + CS%compressibility_fraction * &
+                    ( 0.5 * ( z_col(K) + z_col(K+1) ) * GV%H_to_Pa - CS%ref_pressure )
       enddo
 
-      call build_slight_column(CS, remapCS, eqn_of_state, nz, depth, h, T, S, z_col_new)
+      call build_slight_column(CS, remapCS, tv%eqn_of_state, GV%H_to_Pa, GV%m_to_H, &
+                          GV%H_subroundoff, nz, depth, &
+                          h(i, j, :), tv%T(i, j, :), tv%S(i, j, :), p_col, z_col, z_col_new)
 
       ! Calculate the final change in grid position after blending new and old grids
       call filtered_grid_motion( CS, nz, z_col, z_col_new, dz_col )
@@ -1311,28 +1276,31 @@ subroutine build_grid_SLight( G, GV, h, tv, dzInterface, remapCS, CS )
 
 end subroutine build_grid_SLight
 
-subroutine build_slight_column(CS, remapCS, eqn_of_state, nz, depth, h, T, S, z_col_new)
+subroutine build_slight_column(CS, remapCS, eqn_of_state, H_to_Pa, m_to_H, H_subroundoff, &
+                                nz, depth, h_col, T_col, S_col, p_col, z_col, z_col_new)
   type(regridding_CS),   intent(in)    :: CS !< Regridding control structure
   type(remapping_CS),    intent(in)    :: remapCS !< Remapping parameters and options
   type(EOS_type),        pointer       :: eqn_of_state !< Equation of state structure
+  real,                  intent(in)    :: H_to_Pa !< GV%H_to_Pa
+  real,                  intent(in)    :: m_to_H  !< GV%m_to_H
+  real,                  intent(in)    :: H_subroundoff !< GV%H_subroundoff
   integer,               intent(in)    :: nz !< Number of levels
   real,                  intent(in)    :: depth !< Depth of ocean bottom (positive in m)
-  real, dimension(nz),   intent(in)    :: T, S !< T and S for column
-  real, dimension(nz),   intent(in)    :: h  !< Layer thicknesses, in m
+  real, dimension(nz),   intent(in)    :: T_col, S_col !< T and S for column
+  real, dimension(nz),   intent(in)    :: h_col !< Layer thicknesses, in m
+  real, dimension(nz),   intent(in)    :: p_col !< Layer quantities
+  real, dimension(nz+1), intent(in)    :: z_col !< Interface positions relative to the surface in H units (m or kg m-2)
   real, dimension(nz+1), intent(inout) :: z_col_new !< Absolute positions of interfaces
 
   ! Local variables
-  real, dimension(SZK_(GV)) :: T_col, S_col, p_col, rho_col ! Layer quantities
-  real, dimension(SZK_(GV)) :: h_col     ! A column of layer thicknesses on the original grid in H units.
-  real, dimension(SZK_(GV)) :: T_f, S_f  ! Filtered ayer quantities
-  real, dimension(SZK_(GV)+1) :: z_col, z_col_new ! Interface positions relative to the surface in H units (m or kg m-2)
-  real, dimension(SZK_(GV)+1) :: dz_col  ! The realized change in z_col in H units (m or kg m-2)
-  logical, dimension(SZK_(GV)+1) :: reliable  ! If true, this interface is in a reliable position.
-  real, dimension(SZK_(GV)+1) :: T_int, S_int ! Temperature and salinity interpolated to interfaces.
-  real, dimension(SZK_(GV)+1) :: rho_tmp, drho_dp, p_IS, p_R
-  real, dimension(SZK_(GV)+1) :: drhoIS_dT, drhoIS_dS
-  real, dimension(SZK_(GV)+1) :: drhoR_dT, drhoR_dS
-  real, dimension(SZK_(GV)+1) :: strat_rat
+  real, dimension(nz) :: rho_col ! Layer quantities
+  real, dimension(nz) :: T_f, S_f  ! Filtered ayer quantities
+  logical, dimension(nz+1) :: reliable  ! If true, this interface is in a reliable position.
+  real, dimension(nz+1) :: T_int, S_int ! Temperature and salinity interpolated to interfaces.
+  real, dimension(nz+1) :: rho_tmp, drho_dp, p_IS, p_R
+  real, dimension(nz+1) :: drhoIS_dT, drhoIS_dS
+  real, dimension(nz+1) :: drhoR_dT, drhoR_dS
+  real, dimension(nz+1) :: strat_rat
   real :: H_to_cPa
   real :: drIS, drR, Fn_now, I_HStol, Fn_zero_val
   real :: z_int_unst
@@ -1355,26 +1323,21 @@ subroutine build_slight_column(CS, remapCS, eqn_of_state, nz, depth, h, T, S, z_
   real :: k2_used, k2here, dz_sum, z_max
   integer :: k2
   real :: h_tr, b_denom_1, b1, d1 ! Temporary variables used by the tridiagonal solver.
-  real, dimension(SZK_(GV)) :: c1  ! Temporary variables used by the tridiagonal solver.
+  real, dimension(nz) :: c1  ! Temporary variables used by the tridiagonal solver.
   integer :: kur1, kur2  ! The indicies at the top and bottom of an unreliable region.
   integer :: kur_ss      ! The index to start with in the search for the next unstable region.
-  integer :: i, j, k, nz, nkml
+  integer :: i, j, k, nkml
 
-  z_col(1) = 0. ! Work downward rather than bottom up
-  do K=1,nz
-    z_col(K+1) = z_col(K) + h_col(k) ! Work in units of h (m or Pa)
-    p_col(k) = CS%ref_pressure + CS%compressibility_fraction * &
-         ( 0.5 * ( z_col(K) + z_col(K+1) ) * GV%H_to_Pa - CS%ref_pressure )
-  enddo
+  maximum_depths_set = allocated(CS%max_interface_depths)
+  maximum_h_set = allocated(CS%max_layer_thickness)
 
   if (z_col(nz+1) - z_col(1) < nz*CS%min_thickness) then
     ! This is a nearly massless total depth, so distribute the water evenly.
     dz = (z_col(nz+1) - z_col(1)) / real(nz)
     do K=2,nz ; z_col_new(K) = z_col(1) + dz*real(K-1) ; enddo
   else
-
     call calculate_density(T_col, S_col, p_col, rho_col, 1, nz, &
-                           tv%eqn_of_state)
+                           eqn_of_state)
 
     ! Find the locations of the target potential densities, flagging
     ! locations in apparently unstable regions as not reliable.
@@ -1412,7 +1375,7 @@ subroutine build_slight_column(CS, remapCS, eqn_of_state, nz, depth, h, T, S, z_
       if (kur2 < kur1) call MOM_error(FATAL, "Bad unreliable range.")
 
       dz_ur = z_col_new(kur2+1) - z_col_new(kur1-1)
-!        drho = CS%target_density(kur2+1) - CS%target_density(kur1-1)
+  !        drho = CS%target_density(kur2+1) - CS%target_density(kur1-1)
       ! Perhaps reset the wgt and cowgt depending on how bad the old interface
       ! locations were.
       wgt = 1.0 ; cowgt = 0.0 ! = 1.0-wgt
@@ -1425,7 +1388,7 @@ subroutine build_slight_column(CS, remapCS, eqn_of_state, nz, depth, h, T, S, z_
     ! Determine which interfaces are in the s-space region and the depth extent
     ! of this region.
     z_wt = 0.0 ; rho_x_z = 0.0
-    H_ml_av = GV%m_to_H*CS%Rho_ml_avg_depth
+    H_ml_av = m_to_H*CS%Rho_ml_avg_depth
     do k=1,nz
       if (z_wt + h_col(k) >= H_ml_av) then
         rho_x_z = rho_x_z + rho_col(k) * (H_ml_av - z_wt)
@@ -1460,21 +1423,21 @@ subroutine build_slight_column(CS, remapCS, eqn_of_state, nz, depth, h, T, S, z_
     z_interior = (K-k_interior)*z_col_new(K-1) + (1.0+(k_interior-K))*z_col_new(K)
 
     if (CS%fix_haloclines) then
-!       ! Identify regions above the reference pressure where the chosen
-!       ! potential density significantly underestimates the actual
-!       ! stratification, and use these to find a second estimate of
-!       ! z_int_unst and k_interior.
+  !       ! Identify regions above the reference pressure where the chosen
+  !       ! potential density significantly underestimates the actual
+  !       ! stratification, and use these to find a second estimate of
+  !       ! z_int_unst and k_interior.
 
       if (CS%halocline_filter_length > 0.0) then
-        Lfilt = CS%halocline_filter_length*GV%m_to_H
+        Lfilt = CS%halocline_filter_length*m_to_H
 
         ! Filter the temperature and salnity with a fixed lengthscale.
-        h_tr = h_col(1) + GV%H_subroundoff
+        h_tr = h_col(1) + H_subroundoff
         b1 = 1.0 / (h_tr + Lfilt) ; d1 = h_tr * b1
         T_f(1) = (b1*h_tr)*T_col(1) ;  S_f(1) = (b1*h_tr)*S_col(1)
         do k=2,nz
           c1(k) = Lfilt * b1
-          h_tr = h_col(k) + GV%H_subroundoff ; b_denom_1 = h_tr + d1*Lfilt
+          h_tr = h_col(k) + H_subroundoff ; b_denom_1 = h_tr + d1*Lfilt
           b1 = 1.0 / (b_denom_1 + Lfilt) ; d1 = b_denom_1 * b1
           T_f(k) = b1 * (h_tr*T_col(k) + Lfilt*T_f(k-1))
           S_f(k) = b1 * (h_tr*S_col(k) + Lfilt*S_f(k-1))
@@ -1489,23 +1452,23 @@ subroutine build_slight_column(CS, remapCS, eqn_of_state, nz, depth, h, T, S, z_
       T_int(1) = T_f(1) ; S_int(1) = S_f(1)
       do K=2,nz 
         T_int(K) = 0.5*(T_f(k-1) + T_f(k)) ; S_int(K) = 0.5*(S_f(k-1) + S_f(k))
-        p_IS(K) = z_col(K) * GV%H_to_Pa
+        p_IS(K) = z_col(K) * H_to_Pa
         p_R(K) = CS%ref_pressure + CS%compressibility_fraction * ( p_IS(K) - CS%ref_pressure )
       enddo
       T_int(nz+1) = T_f(nz) ; S_int(nz+1) = S_f(nz)
-      p_IS(nz+1) = z_col(nz+1) * GV%H_to_Pa
+      p_IS(nz+1) = z_col(nz+1) * H_to_Pa
       call calculate_density_derivs(T_int, S_int, p_IS, drhoIS_dT, drhoIS_dS, 2, nz-1, &
-                                    tv%eqn_of_state)
+                                    eqn_of_state)
       call calculate_density_derivs(T_int, S_int, p_R, drhoR_dT, drhoR_dS, 2, nz-1, &
-                                    tv%eqn_of_state)
+                                    eqn_of_state)
       if (CS%compressibility_fraction > 0.0) then
         call calculate_compress(T_int, S_int, p_R, rho_tmp, drho_dp, 2, nz-1, &
-                                      tv%eqn_of_state)
+                                      eqn_of_state)
       else
         do K=2,nz ; drho_dp(K) = 0.0 ; enddo
       endif
-      
-      H_to_cPa = CS%compressibility_fraction*GV%H_to_Pa
+
+      H_to_cPa = CS%compressibility_fraction*H_to_Pa
       strat_rat(1) = 1.0
       do K=2,nz
         drIS = drhoIS_dT(K) * (T_f(k) - T_f(k-1)) + &
@@ -1562,14 +1525,13 @@ subroutine build_slight_column(CS, remapCS, eqn_of_state, nz, depth, h, T, S, z_
             ! This should be unnecessary.
             z_int_unst = z_col_new(nz+1) ; k_int2 = real(nz+1)
           endif
-          
+
           ! Now take the larger values.
           if (k_int2 > k_interior) then
             k_interior = k_int2 ; z_interior = z_int_unst
           endif
         endif
       endif
-
     endif  ! fix_haloclines
 
     z_col_new(1) = 0.0
