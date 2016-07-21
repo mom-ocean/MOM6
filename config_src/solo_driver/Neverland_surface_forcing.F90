@@ -83,7 +83,7 @@ subroutine Neverland_wind_forcing(state, fluxes, day, G, CS)
        fluxes%taux(I,j) = fluxes%taux(I,j) +  tau_max * (cosbell(y-0.28,0.28) )
     endif
     if (y.gt.0.28 .and. y.le.0.8) then
-       fluxes%taux(I,j)	= fluxes%taux(I,j) + tau_max *(0.35*cos(PI*(y-0.28)/0.52)  )
+       fluxes%taux(I,j)	= fluxes%taux(I,j) + tau_max *(0.35+0.65*cos(PI*(y-0.28)/0.52)  )
     endif
     if (y.gt.0.8) then
        fluxes%taux(I,j) = fluxes%taux(I,j) + tau_max *( -0.3*cosbell(y-0.8,0.2)  )
