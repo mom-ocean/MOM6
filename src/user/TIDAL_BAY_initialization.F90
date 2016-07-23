@@ -138,7 +138,7 @@ subroutine TIDAL_BAY_set_OBC_data(OBC, G, h, Time)
   tide_flow = 3.0e6
   my_area=0.0
   my_flux=0.0
-  do J=JsdB,JedB ; do i=isd,ied
+  do j=jsd,jed ; do I=IsdB,IedB
     if (OBC%OBC_mask_u(I,j)) then
       do k=1,nz
         cff2 = h(I,j,k)*G%dyCu(I,j)
@@ -148,11 +148,13 @@ subroutine TIDAL_BAY_set_OBC_data(OBC, G, h, Time)
   enddo ; enddo
   my_flux = -tide_flow*SIN(2.0*PI*time_sec/(12.0*3600.0))
 
-  do J=JsdB,JedB ; do i=isd,ied
+  do j=jsd,jed ; do I=IsdB,IedB
     if (OBC%OBC_mask_u(I,j)) then
       OBC%eta_outer_u(I,j) = cff
       OBC%ubt_outer(I,j) = my_flux/my_area
     endif
+  enddo ; enddo
+  do J=JsdB,JedB ; do i=isd,ied
     if (OBC%OBC_mask_v(i,J)) then
       OBC%eta_outer_v(i,J) = cff
       OBC%vbt_outer(i,J) = 0.0
