@@ -136,7 +136,7 @@ subroutine buoy_forced_basin_set_coord(Rlay, g_prime, GV, param_file, eqn_of_sta
     !g_prime(:) = 0.0
   end do
  
-  if (first_call) call write_user_log(param_file)
+  if (first_call) call write_buoy_forced_basin_log(param_file)
 
 end subroutine buoy_forced_basin_set_coord
 
@@ -224,8 +224,23 @@ subroutine buoy_forced_basin_initialize_sponges_southonly(G, use_temperature, tv
 ! By default, momentum is advected vertically within the sponge, but !
 ! momentum is typically not damped within the sponge.                !
 
-  if (first_call) call write_user_log(param_file)
+  if (first_call) call write_buoy_forced_basin_log(param_file)
 
 end subroutine buoy_forced_basin_initialize_sponges_southonly
+
+!> Write output about the parameter values being used.
+subroutine write_buoy_forced_basin_log(param_file)
+  type(param_file_type), intent(in) :: param_file !< A structure indicating the
+                                                  !! open file to parse for model
+                                                  !! parameter values.
+
+! This include declares and sets the variable "version".
+#include "version_variable.h"
+  character(len=40)  :: mod = "buoy_forced_basin_initialization" ! This module's name.
+
+  call log_version(param_file, mod, version)
+  first_call = .false.
+
+end subroutine write_buoy_forced_basin_log
 
 end module buoy_forced_basin_initialization
