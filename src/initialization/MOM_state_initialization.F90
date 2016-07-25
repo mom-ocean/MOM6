@@ -70,6 +70,7 @@ use Rossby_front_2d_initialization, only : Rossby_front_initialize_thickness
 use Rossby_front_2d_initialization, only : Rossby_front_initialize_temperature_salinity
 use Rossby_front_2d_initialization, only : Rossby_front_initialize_velocity
 use SCM_idealized_hurricane, only : SCM_idealized_hurricane_TS_init
+use buoy_forced_basin_initialization, only : buoy_forced_basin_initialize_sponges
 
 use midas_vertmap, only : find_interfaces, tracer_Z_init
 use midas_vertmap, only : determine_temperature
@@ -412,6 +413,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
       case ("ISOMIP"); call ISOMIP_initialize_sponges(G, GV, tv, PF, ALE_sponge_CSp)
       case ("USER"); call user_initialize_sponges(G, use_temperature, tv, &
                                                PF, sponge_CSp, h)
+      case ("buoy_forced_basin"); call buoy_forced_basin_initialize_sponges(G, &
+                      use_temperature, tv, PF, sponge_CSp, h)
       case ("phillips"); call Phillips_initialize_sponges(G, use_temperature, tv, &
                                                PF, sponge_CSp, h)
       case ("file"); call initialize_sponges_file(G, GV, use_temperature, tv, &
