@@ -16,6 +16,7 @@ use MOM_string_functions, only : uppercase
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type, setVerticalGridAxes
 use user_initialization, only : user_set_coord
+use buoy_forced_basin_initialization, only : buoy_forced_basin_set_coord
 
 use netcdf
 
@@ -88,6 +89,8 @@ subroutine MOM_initialize_coord(GV, PF, write_geom, output_dir, tv, max_depth)
       call set_coord_from_file(GV%Rlay, GV%g_prime, GV, PF)
     case ("USER")
       call user_set_coord(GV%Rlay, GV%g_prime, GV, PF, eos)
+    case ("buoy_forced_basin")
+      call buoy_forced_basin_set_coord(GV%Rlay, GV%g_prime, GV, PF, eos)
     case ("none")
     case default ; call MOM_error(FATAL,"MOM_initialize_coord: "// &
       "Unrecognized coordinate setup"//trim(config))
