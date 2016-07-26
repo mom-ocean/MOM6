@@ -238,6 +238,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str)
     if  (Je_obc<Js_obc) OBC%apply_OBC_u_flather_west = .true. ! This line will not bee needed soon - AJA
   elseif (trim(action_str) == 'SIMPLE') then
     this_kind = OBC_SIMPLE
+    OBC%apply_OBC_u = .true. ! This avoids deallocation
   else
     call MOM_error(FATAL, "MOM_open_boundary.F90, setup_u_point_obc: "//&
                    "String '"//trim(action_str)//"' not understood.")
@@ -247,7 +248,6 @@ subroutine setup_u_point_obc(OBC, G, segment_str)
     if (j>min(Js_obc,Je_obc) .and. j<=max(Js_obc,Je_obc)) then
       OBC%OBC_mask_u(I_obc,j) = .true.
       OBC%OBC_kind_u(I_obc,j) = this_kind
-      OBC%apply_OBC_u = .true. ! This avoids deallocation
       if (Je_obc>Js_obc) then ! East is outward
         if (this_kind == OBC_FLATHER) then
           OBC%OBC_direction_u(I_obc,j) = OBC_DIRECTION_E ! We only use direction for Flather
@@ -308,6 +308,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str)
     if (Ie_obc<Is_obc) OBC%apply_OBC_v_flather_south = .true. ! This line will not bee needed soon - AJA
   elseif (trim(action_str) == 'SIMPLE') then
     this_kind = OBC_SIMPLE
+    OBC%apply_OBC_v = .true. ! This avoids deallocation
   else
     call MOM_error(FATAL, "MOM_open_boundary.F90, setup_v_point_obc: "//&
                    "String '"//trim(action_str)//"' not understood.")
@@ -317,7 +318,6 @@ subroutine setup_v_point_obc(OBC, G, segment_str)
     if (i>min(Is_obc,Ie_obc) .and. i<=max(Is_obc,Ie_obc)) then
       OBC%OBC_mask_v(i,J_obc) = .true.
       OBC%OBC_kind_v(i,J_obc) = this_kind
-      OBC%apply_OBC_v = .true. ! This avoids deallocation
       if (Is_obc>Ie_obc) then ! North is outward
         if (this_kind == OBC_FLATHER) then
           OBC%OBC_direction_v(i,J_obc) = OBC_DIRECTION_N ! We only use direction for Flather
