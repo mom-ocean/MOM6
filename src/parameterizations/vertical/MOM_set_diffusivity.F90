@@ -550,22 +550,22 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   ! Smooth the properties through massless layers.
   if (use_EOS) then
     if (CS%debug) then
-      call hchksum(tv%T, "before vert_fill_TS tv%T",G)
-      call hchksum(tv%S, "before vert_fill_TS tv%S",G)
-      call hchksum(h*GV%H_to_m, "before vert_fill_TS h",G)
+      call hchksum(tv%T, "before vert_fill_TS tv%T",G%HI)
+      call hchksum(tv%S, "before vert_fill_TS tv%S",G%HI)
+      call hchksum(h*GV%H_to_m, "before vert_fill_TS h",G%HI)
     endif
     call vert_fill_TS(h, tv%T, tv%S, kappa_fill, dt_fill, T_f, S_f, G, GV)
     if (CS%debug) then
-      call hchksum(tv%T, "after vert_fill_TS tv%T",G)
-      call hchksum(tv%S, "after vert_fill_TS tv%S",G)
-      call hchksum(h*GV%H_to_m, "after vert_fill_TS h",G)
+      call hchksum(tv%T, "after vert_fill_TS tv%T",G%HI)
+      call hchksum(tv%S, "after vert_fill_TS tv%S",G%HI)
+      call hchksum(h*GV%H_to_m, "after vert_fill_TS h",G%HI)
     endif
   endif
 
   if (CS%useKappaShear) then
     if (CS%debug) then
-      call hchksum(u_h, "before calc_KS u_h",G)
-      call hchksum(v_h, "before calc_KS v_h",G)
+      call hchksum(u_h, "before calc_KS u_h",G%HI)
+      call hchksum(v_h, "before calc_KS v_h",G%HI)
     endif
     call cpu_clock_begin(id_clock_kappaShear)
     ! Changes: visc%Kd_turb, visc%TKE_turb (not clear that TKE_turb is used as input ????)
@@ -574,9 +574,9 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
                                visc%Kv_turb, dt, G, GV, CS%kappaShear_CSp)
     call cpu_clock_end(id_clock_kappaShear)
     if (CS%debug) then
-      call hchksum(visc%Kd_turb, "after calc_KS visc%Kd_turb",G)
-      call hchksum(visc%Kv_turb, "after calc_KS visc%Kv_turb",G)
-      call hchksum(visc%TKE_turb, "after calc_KS visc%TKE_turb",G)
+      call hchksum(visc%Kd_turb, "after calc_KS visc%Kd_turb",G%HI)
+      call hchksum(visc%Kv_turb, "after calc_KS visc%Kv_turb",G%HI)
+      call hchksum(visc%TKE_turb, "after calc_KS visc%TKE_turb",G%HI)
     endif
     if (showCallTree) call callTree_waypoint("done with calculate_kappa_shear (set_diffusivity)")
   elseif (associated(visc%Kv_turb)) then
@@ -618,7 +618,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     enddo ; enddo
   endif
 
-  if (CS%debug) call hchksum(Kd_sfc,"Kd_sfc",G,haloshift=0)
+  if (CS%debug) call hchksum(Kd_sfc,"Kd_sfc",G%HI,haloshift=0)
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,G,GV,CS,h,tv,T_f,S_f,fluxes,dd, &
 !$OMP                                  Kd,Kd_sfc,epsilon,deg_to_rad,I_2Omega,visc,    &
 !$OMP                                  Kd_int,dt,u,v,Omega2)   &
@@ -795,19 +795,19 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   enddo ! j-loop
 
   if (CS%debug) then
-    call hchksum(Kd,"BBL Kd",G,haloshift=0)
-    if (CS%useKappaShear) call hchksum(visc%Kd_turb,"Turbulent Kd",G,haloshift=0)
+    call hchksum(Kd,"BBL Kd",G%HI,haloshift=0)
+    if (CS%useKappaShear) call hchksum(visc%Kd_turb,"Turbulent Kd",G%HI,haloshift=0)
     if (associated(visc%kv_bbl_u) .and. associated(visc%kv_bbl_v)) then
-      call uchksum(visc%kv_bbl_u,"BBL Kv_bbl_u",G,haloshift=1)
-      call vchksum(visc%kv_bbl_v,"BBL Kv_bbl_v",G,haloshift=1)
+      call uchksum(visc%kv_bbl_u,"BBL Kv_bbl_u",G%HI,haloshift=1)
+      call vchksum(visc%kv_bbl_v,"BBL Kv_bbl_v",G%HI,haloshift=1)
     endif
     if (associated(visc%bbl_thick_u) .and. associated(visc%bbl_thick_v)) then
-      call uchksum(visc%bbl_thick_u,"BBL bbl_thick_u",G,haloshift=1)
-      call vchksum(visc%bbl_thick_v,"BBL bbl_thick_v",G,haloshift=1)
+      call uchksum(visc%bbl_thick_u,"BBL bbl_thick_u",G%HI,haloshift=1)
+      call vchksum(visc%bbl_thick_v,"BBL bbl_thick_v",G%HI,haloshift=1)
     endif
     if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) then
-      call uchksum(visc%Ray_u,"Ray_u",G)
-      call vchksum(visc%Ray_v,"Ray_v",G)
+      call uchksum(visc%Ray_u,"Ray_u",G%HI)
+      call vchksum(visc%Ray_v,"Ray_v",G%HI)
     endif
   endif
 
@@ -2524,6 +2524,7 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
   real :: Niku_scale ! local variable for scaling the Nikurashin TKE flux data
   real :: omega_frac_dflt
   integer :: i, j, is, ie, js, je
+  integer :: isd, ied, jsd, jed
 
   if (associated(CS)) then
     call MOM_error(WARNING, "diabatic_entrain_init called with an associated "// &
@@ -2532,7 +2533,8 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
   endif
   allocate(CS)
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   CS%diag => diag
   if (associated(int_tide_CSp))  CS%int_tide_CSp  => int_tide_CSp
@@ -2905,10 +2907,10 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
                  "Turn off internal tidal dissipation when the total \n"//&
                  "ocean depth is less than this value.", units="m", default=0.0)
 
-    call safe_alloc_ptr(CS%Nb,is,ie,js,je)   ; CS%Nb(:,:) = 0.0
-    call safe_alloc_ptr(CS%h2,is,ie,js,je)   ; CS%h2(:,:) = 0.0
-    call safe_alloc_ptr(CS%TKE_itidal,is,ie,js,je)  ; CS%TKE_itidal(:,:) = 0.0
-    call safe_alloc_ptr(CS%mask_itidal,is,ie,js,je) ; CS%mask_itidal(:,:) = 1.0
+    call safe_alloc_ptr(CS%Nb,isd,ied,jsd,jed)
+    call safe_alloc_ptr(CS%h2,isd,ied,jsd,jed)
+    call safe_alloc_ptr(CS%TKE_itidal,isd,ied,jsd,jed)
+    call safe_alloc_ptr(CS%mask_itidal,isd,ied,jsd,jed) ; CS%mask_itidal(:,:) = 1.0
 
     call get_param(param_file, mod, "KAPPA_ITIDES", CS%kappa_itides, &
                  "A topographic wavenumber used with INT_TIDE_DISSIPATION. \n"//&

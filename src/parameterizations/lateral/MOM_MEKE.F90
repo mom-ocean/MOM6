@@ -154,9 +154,9 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
   if (associated(MEKE%MEKE)) then
 
     if (CS%debug) then
-      if (associated(MEKE%mom_src)) call hchksum(MEKE%mom_src, 'MEKE mom_src',G)
-      if (associated(MEKE%GM_src)) call hchksum(MEKE%GM_src, 'MEKE GM_src',G)
-      if (associated(MEKE%MEKE)) call hchksum(MEKE%MEKE, 'MEKE MEKE',G)
+      if (associated(MEKE%mom_src)) call hchksum(MEKE%mom_src, 'MEKE mom_src',G%HI)
+      if (associated(MEKE%GM_src)) call hchksum(MEKE%GM_src, 'MEKE GM_src',G%HI)
+      if (associated(MEKE%MEKE)) call hchksum(MEKE%MEKE, 'MEKE MEKE',G%HI)
     endif
 
     ! Why are these 3 lines repeated from above?

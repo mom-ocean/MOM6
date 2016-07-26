@@ -66,7 +66,8 @@ module MOM_dynamics_legacy_split
 !********+*********+*********+*********+*********+*********+*********+**
 
 
-use MOM_variables, only : vertvisc_type, ocean_OBC_type, thermo_var_ptrs
+use MOM_open_boundary, only : ocean_OBC_type
+use MOM_variables, only : vertvisc_type, thermo_var_ptrs
 use MOM_variables, only : BT_cont_type, alloc_bt_cont_type, dealloc_bt_cont_type
 use MOM_variables, only : accel_diag_ptrs, ocean_internal_state, cont_diag_ptrs
 use MOM_forcing_type, only : forcing
@@ -109,8 +110,7 @@ use MOM_hor_visc, only : horizontal_viscosity, hor_visc_init, hor_visc_CS
 use MOM_interface_heights, only : find_eta
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types, only : MEKE_type
-use MOM_open_boundary, only : Radiation_Open_Bdry_Conds, open_boundary_init
-use MOM_open_boundary, only : open_boundary_CS
+use MOM_open_boundary, only : Radiation_Open_Bdry_Conds
 use MOM_PressureForce, only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_tidal_forcing, only : tidal_forcing_init, tidal_forcing_CS
 use MOM_vert_friction, only : vertvisc, vertvisc_coef, vertvisc_remnant
@@ -240,7 +240,6 @@ type, public :: MOM_dyn_legacy_split_CS ; private
   type(legacy_barotropic_CS), pointer :: barotropic_CSp => NULL()
   type(vertvisc_CS), pointer :: vertvisc_CSp => NULL()
   type(set_visc_CS), pointer :: set_visc_CSp => NULL()
-  type(open_boundary_CS), pointer :: open_boundary_CSp => NULL()
   type(ocean_OBC_type), pointer :: OBC => NULL() ! A pointer to an open boundary
      ! condition type that specifies whether, where, and  what open boundary
      ! conditions are used.  If no open BCs are used, this pointer stays
@@ -680,11 +679,11 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
   call cpu_clock_end(id_clock_mom_update)
 
   if (CS%debug) then
-    call uchksum(up,"Predictor 1 u",G,haloshift=0)
-    call vchksum(vp,"Predictor 1 v",G,haloshift=0)
-    call hchksum(GV%H_to_kg_m2*h,"Predictor 1 h",G,haloshift=1)
-    call uchksum(GV%H_to_kg_m2*uh,"Predictor 1 uh",G,haloshift=2)
-    call vchksum(GV%H_to_kg_m2*vh,"Predictor 1 vh",G,haloshift=2)
+    call uchksum(up,"Predictor 1 u",G%HI,haloshift=0)
+    call vchksum(vp,"Predictor 1 v",G%HI,haloshift=0)
+    call hchksum(GV%H_to_kg_m2*h,"Predictor 1 h",G%HI,haloshift=1)
+    call uchksum(GV%H_to_kg_m2*uh,"Predictor 1 uh",G%HI,haloshift=2)
+    call vchksum(GV%H_to_kg_m2*vh,"Predictor 1 vh",G%HI,haloshift=2)
 !   call MOM_state_chksum("Predictor 1", up, vp, h, uh, vh, G, GV, haloshift=1)
     call MOM_accel_chksum("Predictor accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
              CS%diffu, CS%diffv, G, GV, CS%pbce, CS%u_accel_bt, CS%v_accel_bt)
@@ -738,7 +737,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
 
   if (associated(CS%OBC)) then
     call Radiation_Open_Bdry_Conds(CS%OBC, u_av, u_old_rad_OBC, v_av, &
-             v_old_rad_OBC, hp, h_old_rad_OBC, G, CS%open_boundary_CSp)
+             v_old_rad_OBC, hp, h_old_rad_OBC, G)
   endif
 
 ! h_av = (h + hp)/2
@@ -795,9 +794,9 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
 
   if (CS%debug) then
     call MOM_state_chksum("Predictor ", up, vp, hp, uh, vh, G, GV)
-    call uchksum(u_av,"Predictor avg u",G,haloshift=1)
-    call vchksum(v_av,"Predictor avg v",G,haloshift=1)
-    call hchksum(GV%H_to_kg_m2*h_av,"Predictor avg h",G,haloshift=0)
+    call uchksum(u_av,"Predictor avg u",G%HI,haloshift=1)
+    call vchksum(v_av,"Predictor avg v",G%HI,haloshift=1)
+    call hchksum(GV%H_to_kg_m2*h_av,"Predictor avg h",G%HI,haloshift=0)
   ! call MOM_state_chksum("Predictor avg ", u_av, v_av,  h_av,uh, vh, G, GV)
     call check_redundant("Predictor up ", up, vp, G)
     call check_redundant("Predictor uh ", uh, vh, G)
@@ -879,11 +878,11 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
   call cpu_clock_end(id_clock_mom_update)
 
   if (CS%debug) then
-    call uchksum(u,"Corrector 1 u",G,haloshift=0)
-    call vchksum(v,"Corrector 1 v",G,haloshift=0)
-    call hchksum(GV%H_to_kg_m2*h,"Corrector 1 h",G,haloshift=2)
-    call uchksum(GV%H_to_kg_m2*uh,"Corrector 1 uh",G,haloshift=2)
-    call vchksum(GV%H_to_kg_m2*vh,"Corrector 1 vh",G,haloshift=2)
+    call uchksum(u,"Corrector 1 u",G%HI,haloshift=0)
+    call vchksum(v,"Corrector 1 v",G%HI,haloshift=0)
+    call hchksum(GV%H_to_kg_m2*h,"Corrector 1 h",G%HI,haloshift=2)
+    call uchksum(GV%H_to_kg_m2*uh,"Corrector 1 uh",G%HI,haloshift=2)
+    call vchksum(GV%H_to_kg_m2*vh,"Corrector 1 vh",G%HI,haloshift=2)
   ! call MOM_state_chksum("Corrector 1", u, v, h, uh, vh, G, GV, haloshift=1)
     call MOM_accel_chksum("Corrector accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
              CS%diffu, CS%diffv, G, GV, CS%pbce, CS%u_accel_bt, CS%v_accel_bt)
@@ -997,7 +996,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
 
   if (associated(CS%OBC)) then
     call Radiation_Open_Bdry_Conds(CS%OBC, u, u_old_rad_OBC, v, &
-             v_old_rad_OBC, h, h_old_rad_OBC, G, CS%open_boundary_CSp)
+             v_old_rad_OBC, h, h_old_rad_OBC, G)
   endif
 
 ! h_av = (h_in + h_out)/2 . Going in to this line, h_av = h_in.
@@ -1040,9 +1039,9 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
   if (CS%id_dv_adj > 0) call post_data(CS%id_dv_adj, CS%ADp%dv_other, CS%diag)
   if (CS%debug) then
     call MOM_state_chksum("Corrector ", u, v, h, uh, vh, G, GV)
-    call uchksum(u_av,"Corrector avg u",G,haloshift=1)
-    call vchksum(v_av,"Corrector avg v",G,haloshift=1)
-    call hchksum(GV%H_to_kg_m2*h_av,"Corrector avg h",G,haloshift=1)
+    call uchksum(u_av,"Corrector avg u",G%HI,haloshift=1)
+    call vchksum(v_av,"Corrector avg v",G%HI,haloshift=1)
+    call hchksum(GV%H_to_kg_m2*h_av,"Corrector avg h",G%HI,haloshift=1)
  !  call MOM_state_chksum("Corrector avg ", u_av, v_av, h_av, uh, vh, G, GV)
   endif
 
@@ -1053,8 +1052,8 @@ end subroutine step_MOM_dyn_legacy_split
 subroutine adjustments_dyn_legacy_split(u, v, h, dt, G, GV, CS)
   type(ocean_grid_type),                     intent(inout) :: G
   type(verticalGrid_type),                   intent(in)    :: GV
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
   real,                                      intent(in)    :: dt
   type(MOM_dyn_legacy_split_CS),             pointer       :: CS
@@ -1379,10 +1378,7 @@ subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, GV, param_
   CS%set_visc_CSp => setVisc_CSp
 
   if (associated(ALE_CSp)) CS%ALE_CSp => ALE_CSp
-  if (associated(OBC)) then
-    CS%OBC => OBC
-    call open_boundary_init(Time, G, param_file, diag, CS%open_boundary_CSp)
-  endif
+  if (associated(OBC)) CS%OBC => OBC
 
   if (.not. query_initialized(CS%eta,"sfc",restart_CS))  then
     ! Estimate eta based on the layer thicknesses - h.  With the Boussinesq

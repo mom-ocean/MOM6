@@ -793,69 +793,69 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, haloshift)
   ! counts, there must be no redundant points, so all variables use is..ie
   ! and js...je as their extent.
   if (associated(fluxes%taux)) &
-    call uchksum(fluxes%taux, mesg//" fluxes%taux",G,haloshift=1)
+    call uchksum(fluxes%taux, mesg//" fluxes%taux",G%HI,haloshift=1)
   if (associated(fluxes%tauy)) &
-    call vchksum(fluxes%tauy, mesg//" fluxes%tauy",G,haloshift=1)
+    call vchksum(fluxes%tauy, mesg//" fluxes%tauy",G%HI,haloshift=1)
   if (associated(fluxes%ustar)) &
-    call hchksum(fluxes%ustar, mesg//" fluxes%ustar",G,haloshift=hshift)
+    call hchksum(fluxes%ustar, mesg//" fluxes%ustar",G%HI,haloshift=hshift)
   if (associated(fluxes%buoy)) &
-    call hchksum(fluxes%buoy, mesg//" fluxes%buoy ",G,haloshift=hshift)
+    call hchksum(fluxes%buoy, mesg//" fluxes%buoy ",G%HI,haloshift=hshift)
   if (associated(fluxes%sw)) &
-    call hchksum(fluxes%sw, mesg//" fluxes%sw",G,haloshift=hshift)
+    call hchksum(fluxes%sw, mesg//" fluxes%sw",G%HI,haloshift=hshift)
   if (associated(fluxes%sw_vis_dir)) &
-    call hchksum(fluxes%sw_vis_dir, mesg//" fluxes%sw_vis_dir",G,haloshift=hshift)
+    call hchksum(fluxes%sw_vis_dir, mesg//" fluxes%sw_vis_dir",G%HI,haloshift=hshift)
   if (associated(fluxes%sw_vis_dif)) &
-    call hchksum(fluxes%sw_vis_dif, mesg//" fluxes%sw_vis_dif",G,haloshift=hshift)
+    call hchksum(fluxes%sw_vis_dif, mesg//" fluxes%sw_vis_dif",G%HI,haloshift=hshift)
   if (associated(fluxes%sw_nir_dir)) &
-    call hchksum(fluxes%sw_nir_dir, mesg//" fluxes%sw_nir_dir",G,haloshift=hshift)
+    call hchksum(fluxes%sw_nir_dir, mesg//" fluxes%sw_nir_dir",G%HI,haloshift=hshift)
   if (associated(fluxes%sw_nir_dif)) &
-    call hchksum(fluxes%sw_nir_dif, mesg//" fluxes%sw_nir_dif",G,haloshift=hshift)
+    call hchksum(fluxes%sw_nir_dif, mesg//" fluxes%sw_nir_dif",G%HI,haloshift=hshift)
   if (associated(fluxes%lw)) &
-    call hchksum(fluxes%lw, mesg//" fluxes%lw",G,haloshift=hshift)
+    call hchksum(fluxes%lw, mesg//" fluxes%lw",G%HI,haloshift=hshift)
   if (associated(fluxes%latent)) &
-    call hchksum(fluxes%latent, mesg//" fluxes%latent",G,haloshift=hshift)
+    call hchksum(fluxes%latent, mesg//" fluxes%latent",G%HI,haloshift=hshift)
   if (associated(fluxes%latent_evap_diag)) &
-    call hchksum(fluxes%latent_evap_diag, mesg//" fluxes%latent_evap_diag",G,haloshift=hshift)
+    call hchksum(fluxes%latent_evap_diag, mesg//" fluxes%latent_evap_diag",G%HI,haloshift=hshift)
   if (associated(fluxes%latent_fprec_diag)) &
-    call hchksum(fluxes%latent_fprec_diag, mesg//" fluxes%latent_fprec_diag",G,haloshift=hshift)
+    call hchksum(fluxes%latent_fprec_diag, mesg//" fluxes%latent_fprec_diag",G%HI,haloshift=hshift)
   if (associated(fluxes%latent_frunoff_diag)) &
-    call hchksum(fluxes%latent_frunoff_diag, mesg//" fluxes%latent_frunoff_diag",G,haloshift=hshift)
+    call hchksum(fluxes%latent_frunoff_diag, mesg//" fluxes%latent_frunoff_diag",G%HI,haloshift=hshift)
   if (associated(fluxes%sens)) &
-    call hchksum(fluxes%sens, mesg//" fluxes%sens",G,haloshift=hshift)
+    call hchksum(fluxes%sens, mesg//" fluxes%sens",G%HI,haloshift=hshift)
   if (associated(fluxes%evap)) &
-    call hchksum(fluxes%evap, mesg//" fluxes%evap",G,haloshift=hshift)
+    call hchksum(fluxes%evap, mesg//" fluxes%evap",G%HI,haloshift=hshift)
   if (associated(fluxes%lprec)) &
-    call hchksum(fluxes%lprec, mesg//" fluxes%lprec",G,haloshift=hshift)
+    call hchksum(fluxes%lprec, mesg//" fluxes%lprec",G%HI,haloshift=hshift)
   if (associated(fluxes%fprec)) &
-    call hchksum(fluxes%fprec, mesg//" fluxes%fprec",G,haloshift=hshift)
+    call hchksum(fluxes%fprec, mesg//" fluxes%fprec",G%HI,haloshift=hshift)
   if (associated(fluxes%vprec)) &
-    call hchksum(fluxes%vprec, mesg//" fluxes%vprec",G,haloshift=hshift)
+    call hchksum(fluxes%vprec, mesg//" fluxes%vprec",G%HI,haloshift=hshift)
   if (associated(fluxes%seaice_melt)) &
-    call hchksum(fluxes%seaice_melt, mesg//" fluxes%seaice_melt",G,haloshift=hshift)
+    call hchksum(fluxes%seaice_melt, mesg//" fluxes%seaice_melt",G%HI,haloshift=hshift)
   if (associated(fluxes%p_surf)) &
-    call hchksum(fluxes%p_surf, mesg//" fluxes%p_surf",G,haloshift=hshift)
+    call hchksum(fluxes%p_surf, mesg//" fluxes%p_surf",G%HI,haloshift=hshift)
   if (associated(fluxes%salt_flux)) &
-    call hchksum(fluxes%salt_flux, mesg//" fluxes%salt_flux",G,haloshift=hshift)
+    call hchksum(fluxes%salt_flux, mesg//" fluxes%salt_flux",G%HI,haloshift=hshift)
   if (associated(fluxes%TKE_tidal)) &
-    call hchksum(fluxes%TKE_tidal, mesg//" fluxes%TKE_tidal",G,haloshift=hshift)
+    call hchksum(fluxes%TKE_tidal, mesg//" fluxes%TKE_tidal",G%HI,haloshift=hshift)
   if (associated(fluxes%ustar_tidal)) &
-    call hchksum(fluxes%ustar_tidal, mesg//" fluxes%ustar_tidal",G,haloshift=hshift)
+    call hchksum(fluxes%ustar_tidal, mesg//" fluxes%ustar_tidal",G%HI,haloshift=hshift)
   if (associated(fluxes%lrunoff)) &
-    call hchksum(fluxes%lrunoff, mesg//" fluxes%lrunoff",G,haloshift=hshift)
+    call hchksum(fluxes%lrunoff, mesg//" fluxes%lrunoff",G%HI,haloshift=hshift)
   if (associated(fluxes%frunoff)) &
-    call hchksum(fluxes%frunoff, mesg//" fluxes%frunoff",G,haloshift=hshift)
+    call hchksum(fluxes%frunoff, mesg//" fluxes%frunoff",G%HI,haloshift=hshift)
   if (associated(fluxes%heat_content_lrunoff)) &
-    call hchksum(fluxes%heat_content_lrunoff, mesg//" fluxes%heat_content_lrunoff",G,haloshift=hshift)
+    call hchksum(fluxes%heat_content_lrunoff, mesg//" fluxes%heat_content_lrunoff",G%HI,haloshift=hshift)
   if (associated(fluxes%heat_content_frunoff)) &
-    call hchksum(fluxes%heat_content_frunoff, mesg//" fluxes%heat_content_frunoff",G,haloshift=hshift)
+    call hchksum(fluxes%heat_content_frunoff, mesg//" fluxes%heat_content_frunoff",G%HI,haloshift=hshift)
   if (associated(fluxes%heat_content_lprec)) &
-    call hchksum(fluxes%heat_content_lprec, mesg//" fluxes%heat_content_lprec",G,haloshift=hshift)
+    call hchksum(fluxes%heat_content_lprec, mesg//" fluxes%heat_content_lprec",G%HI,haloshift=hshift)
   if (associated(fluxes%heat_content_fprec)) &
-    call hchksum(fluxes%heat_content_fprec, mesg//" fluxes%heat_content_fprec",G,haloshift=hshift)
+    call hchksum(fluxes%heat_content_fprec, mesg//" fluxes%heat_content_fprec",G%HI,haloshift=hshift)
   if (associated(fluxes%heat_content_cond)) &
-    call hchksum(fluxes%heat_content_cond, mesg//" fluxes%heat_content_cond",G,haloshift=hshift)
+    call hchksum(fluxes%heat_content_cond, mesg//" fluxes%heat_content_cond",G%HI,haloshift=hshift)
   if (associated(fluxes%heat_content_massout)) &
-    call hchksum(fluxes%heat_content_massout, mesg//" fluxes%heat_content_massout",G,haloshift=hshift)
+    call hchksum(fluxes%heat_content_massout, mesg//" fluxes%heat_content_massout",G%HI,haloshift=hshift)
 end subroutine MOM_forcing_chksum
 
 
