@@ -883,9 +883,9 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
                  "The (baroclinic) dynamics time step.", units = "s", &
                  fail_if_missing=.true.)
 
-  if (CS%no_slip .and. CS%biharmonic) &
-    call MOM_error(FATAL,"ERROR: NOSLIP and BIHARMONIC cannot be defined "// &
-                          "at the same time in MOM.")
+!  if (CS%no_slip .and. CS%biharmonic) &
+!    call MOM_error(FATAL,"ERROR: NOSLIP and BIHARMONIC cannot be defined "// &
+!                          "at the same time in MOM.")
 
   if (.not.(CS%Laplacian .or. CS%biharmonic)) call MOM_error(WARNING, &
     "hor_visc_init:  It is usually a very bad idea not to use either "//&
