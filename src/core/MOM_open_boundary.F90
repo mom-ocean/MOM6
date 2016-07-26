@@ -234,8 +234,8 @@ subroutine setup_u_point_obc(OBC, G, segment_str)
 
   if (trim(action_str) == 'FLATHER') then
     this_kind = OBC_FLATHER
-    OBC%apply_OBC_u_flather_east = (Je_obc>Js_obc) ! This line will not bee needed soon - AJA
-    OBC%apply_OBC_u_flather_west = (Je_obc<Js_obc) ! This line will not bee needed soon - AJA
+    if  (Je_obc>Js_obc) OBC%apply_OBC_u_flather_east = .true. ! This line will not bee needed soon - AJA
+    if  (Je_obc<Js_obc) OBC%apply_OBC_u_flather_west = .true. ! This line will not bee needed soon - AJA
   elseif (trim(action_str) == 'SIMPLE') then
     this_kind = OBC_SIMPLE
   else
@@ -304,8 +304,8 @@ subroutine setup_v_point_obc(OBC, G, segment_str)
 
   if (trim(action_str) == 'FLATHER') then
     this_kind = OBC_FLATHER
-    OBC%apply_OBC_v_flather_north = (Ie_obc>Is_obc) ! This line will not bee needed soon - AJA
-    OBC%apply_OBC_v_flather_south = (Ie_obc<Is_obc) ! This line will not bee needed soon - AJA
+    if (Ie_obc>Is_obc) OBC%apply_OBC_v_flather_north = .true. ! This line will not bee needed soon - AJA
+    if (Ie_obc<Is_obc) OBC%apply_OBC_v_flather_south = .true. ! This line will not bee needed soon - AJA
   elseif (trim(action_str) == 'SIMPLE') then
     this_kind = OBC_SIMPLE
   else
