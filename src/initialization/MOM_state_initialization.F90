@@ -40,7 +40,7 @@ use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use MOM_EOS, only : int_specific_vol_dp
 use user_initialization, only : user_initialize_thickness, user_initialize_velocity
 use user_initialization, only : user_init_temperature_salinity
-use user_initialization, only : user_set_OBC_positions, user_set_OBC_data
+use user_initialization, only : user_set_OBC_data
 use user_initialization, only : user_initialize_sponges
 use DOME_initialization, only : DOME_initialize_thickness
 use DOME_initialization, only : DOME_set_OBC_data
