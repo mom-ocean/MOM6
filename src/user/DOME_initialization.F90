@@ -38,7 +38,6 @@ implicit none ; private
 public DOME_initialize_topography
 public DOME_initialize_thickness
 public DOME_initialize_sponges
-public DOME_set_OBC_positions
 public DOME_set_OBC_data
 
 contains
@@ -233,36 +232,6 @@ subroutine DOME_initialize_sponges(G, GV, tv, PF, CSp)
 
 end subroutine DOME_initialize_sponges
 
-!> Set the positions of the open boundary needed for the DOME experiment.
-subroutine DOME_set_OBC_positions(G, param_file, OBC)
-  type(dyn_horgrid_type),     intent(in) :: G   !< Grid structure.
-  type(param_file_type),      intent(in) :: param_file !< Parameter file handle.
-  type(ocean_OBC_type),       pointer    :: OBC !< Open boundary control structure.
-  ! Local variables
-  character(len=40)  :: mod = "DOME_set_OBC_positions" ! This subroutine's name.
-  integer :: i, j
-
-  if (.not.associated(OBC)) call MOM_error(FATAL, &
-           "DOME_initialization, DOME_set_OBC_positions: OBC type was not allocated!")
-
-  if (OBC%apply_OBC_u) then
-    ! Set where u points are determined by OBCs.
-    !allocate(OBC_mask_u(IsdB:IedB,jsd:jed)) ; OBC_mask_u(:,:) = .false.
-    call MOM_error(FATAL,"DOME_initialization, DOME_set_OBC_positions: "//&
-                   "APPLY_OBC_U=True is not coded for the DOME experiment")
-  endif
-  if (OBC%apply_OBC_v) then
-    ! Set where v points are determined by OBCs.
-    allocate(OBC%OBC_mask_v(G%isd:G%ied,G%JsdB:G%JedB)) ; OBC%OBC_mask_v(:,:) = .false.
-    do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-      if ((G%geoLonCv(i,J) > 1000.0) .and. (G%geoLonCv(i,J)  < 1100.0) .and. &
-          (abs(G%geoLatCv(i,J) - G%gridLatB(G%JegB)) < 0.1)) then
-        OBC%OBC_mask_v(i,J) = .true.
-      endif
-    enddo ; enddo
-  endif
-end subroutine DOME_set_OBC_positions
-
 !> This subroutine sets the properties of flow at open boundary conditions.
 !! This particular example is for the DOME inflow describe in Legg et al. 2006.
 subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
@@ -319,20 +288,10 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
   if (OBC%apply_OBC_u) then
     allocate(OBC%u(IsdB:IedB,jsd:jed,nz)) ; OBC%u(:,:,:) = 0.0
     allocate(OBC%uh(IsdB:IedB,jsd:jed,nz)) ; OBC%uh(:,:,:) = 0.0
-    allocate(OBC%OBC_kind_u(IsdB:IedB,jsd:jed)) ; OBC%OBC_kind_u(:,:) = OBC_NONE
-    allocate(OBC%OBC_direction_u(IsdB:IedB,jsd:jed)) ; OBC%OBC_direction_u(:,:) = OBC_NONE
-    do j=jsd,jed ; do I=IsdB,IedB
-      if (OBC%OBC_mask_u(I,j)) OBC%OBC_kind_u(I,j) = OBC_SIMPLE
-    enddo ; enddo
   endif
   if (OBC%apply_OBC_v) then
     allocate(OBC%v(isd:ied,JsdB:JedB,nz)) ; OBC%v(:,:,:) = 0.0
     allocate(OBC%vh(isd:ied,JsdB:JedB,nz)) ; OBC%vh(:,:,:) = 0.0
-    allocate(OBC%OBC_kind_v(isd:ied,JsdB:JedB)) ; OBC%OBC_kind_v(:,:) = OBC_NONE
-    allocate(OBC%OBC_direction_v(isd:ied,JsdB:JedB)) ; OBC%OBC_direction_v(:,:) = OBC_NONE
-    do J=JsdB,JedB ; do i=isd,ied
-      if (OBC%OBC_mask_v(i,J)) OBC%OBC_kind_v(i,J) = OBC_SIMPLE
-    enddo ; enddo
   endif
 
   if (OBC%apply_OBC_v) then
