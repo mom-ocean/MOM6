@@ -36,6 +36,7 @@ public left_int, left_ints
 public left_real, left_reals
 public stringFunctionsUnitTests
 public extractWord
+public remove_spaces
 public slasher
 
 contains
@@ -244,6 +245,28 @@ function extractWord(string,n)
   enddo
   if (b<=ns) extractWord = trim(string(b:ns))
 end function extractWord
+
+!> Returns string with all spaces removed.
+character(len=120) function remove_spaces(string)
+  character(len=*),   intent(in) :: string     !< String to scan
+  ! Local variables
+  integer :: ns, i, o
+  logical :: lastCharIsSeperator
+  lastCharIsSeperator = .true.
+  ns = len_trim(string)
+  i = 0; o = 0
+  do while (i<ns)
+    i = i+1
+    if (string(i:i) /= ' ') then ! Copy character to output string
+      o = o + 1
+      remove_spaces(o:o) = string(i:i)
+    endif
+  enddo
+  do i = o+1, 120
+    remove_spaces(i:i) = ' ' ! Wipe any non-empty characters
+  enddo
+  remove_spaces = trim(remove_spaces)
+end function remove_spaces
 
 logical function stringFunctionsUnitTests()
   ! Should only be called from a single/root thread
