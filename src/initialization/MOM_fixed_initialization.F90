@@ -26,7 +26,7 @@ use MOM_shared_initialization, only : reset_face_lengths_named, reset_face_lengt
 use MOM_shared_initialization, only : read_face_length_list, set_velocity_depth_max, set_velocity_depth_min
 use MOM_shared_initialization, only : compute_global_grid_integrals, write_ocean_geometry_file
 use user_initialization, only : user_initialize_topography, USER_set_OBC_positions
-use DOME_initialization, only : DOME_initialize_topography, DOME_set_OBC_positions
+use DOME_initialization, only : DOME_initialize_topography
 use TIDAL_BAY_initialization, only : TIDAL_BAY_set_OBC_positions
 use ISOMIP_initialization, only : ISOMIP_initialize_topography
 use benchmark_initialization, only : benchmark_initialize_topography
@@ -87,14 +87,12 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
     call get_param(PF, mod, "OBC_CONFIG", config, &
                  "A string that sets how the open boundary conditions are \n"//&
                  " configured: \n"//&
-                 " \t DOME - use a slope and channel configuration for the \n"//&
-                 " \t\t DOME sill-overflow test case. \n"//&
                  " \t TIDAL_BAY - tidally-resonant rectangular basin. \n"//&
                  " \t USER - call a user modified routine.", default="file", &
                  fail_if_missing=.true.)
     select case ( trim(config) )
       case ("none")
-      case ("DOME") ; call DOME_set_OBC_positions(G, PF, OBC)
+      case ("DOME") ! Avoid FATAL when using segments
       case ("TIDAL_BAY") ; call TIDAL_BAY_set_OBC_positions(G, PF, OBC)
       case ("USER") ; call user_set_OBC_positions(G, PF, OBC)
       case default ; call MOM_error(FATAL, "MOM_initialize_fixed: "// &
