@@ -36,6 +36,7 @@ public left_int, left_ints
 public left_real, left_reals
 public stringFunctionsUnitTests
 public extractWord
+public extract_word
 public remove_spaces
 public slasher
 
@@ -245,6 +246,45 @@ function extractWord(string,n)
   enddo
   if (b<=ns) extractWord = trim(string(b:ns))
 end function extractWord
+
+!> Returns the string corresponding to the nth word in the argument
+!! or "" if the string is not long enough. Words are delineated
+!! by the mandatory separators argument.
+character(len=120) function extract_word(string, separators, n)
+  character(len=*),   intent(in) :: string     !< String to scan
+  character(len=*),   intent(in) :: separators !< Characters to use for delineation
+  integer,            intent(in) :: n          !< Number of word to extract
+  ! Local variables
+  integer :: ns, i, b, e, nw
+  logical :: lastCharIsSeperator
+  extract_word = ''
+  lastCharIsSeperator = .true.
+  ns = len_trim(string)
+  i = 0; b=0; e=0; nw=0;
+  do while (i<ns)
+    i = i+1
+    if (lastCharIsSeperator) then ! search for end of word
+      if (verify(string(i:i),separators)==0) then
+        continue ! Multiple separators
+      else
+        lastCharIsSeperator = .false. ! character is beginning of word
+        b = i
+        continue
+      endif
+    else ! continue search for end of word
+      if (verify(string(i:i),separators)==0) then
+        lastCharIsSeperator = .true.
+        e = i-1 ! Previous character is end of word
+        nw = nw+1
+        if (nw==n) then
+          extract_word = trim(string(b:e))
+          return
+        endif
+      endif
+    endif
+  enddo
+  if (b<=ns) extract_word = trim(string(b:ns))
+end function extract_word
 
 !> Returns string with all spaces removed.
 character(len=120) function remove_spaces(string)
