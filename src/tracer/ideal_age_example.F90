@@ -63,6 +63,7 @@ use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
 use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc, query_vardesc
+use MOM_open_boundary, only : ocean_OBC_type
 use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
 use MOM_time_manager, only : time_type, get_time
@@ -70,7 +71,7 @@ use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_registry, only : add_tracer_diagnostics, add_tracer_OBC_values
 use MOM_tracer_registry, only : tracer_vertdiff
 use MOM_tracer_Z_init, only : tracer_Z_init
-use MOM_variables, only : surface, ocean_OBC_type
+use MOM_variables, only : surface
 use MOM_verticalGrid, only : verticalGrid_type
 
 use coupler_util, only : set_coupler_values, ind_csurf

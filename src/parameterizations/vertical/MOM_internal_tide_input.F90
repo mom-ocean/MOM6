@@ -154,8 +154,8 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, CS)
   enddo ; enddo
 
   if (CS%debug) then
-    call hchksum(N2_bot,"N2_bot",G,haloshift=0)
-    call hchksum(itide%TKE_itidal_input,"TKE_itidal_input",G,haloshift=0)
+    call hchksum(N2_bot,"N2_bot",G%HI,haloshift=0)
+    call hchksum(itide%TKE_itidal_input,"TKE_itidal_input",G%HI,haloshift=0)
   endif
 
   if (CS%id_TKE_itidal > 0) call post_data(CS%id_TKE_itidal, itide%TKE_itidal_input, CS%diag)
