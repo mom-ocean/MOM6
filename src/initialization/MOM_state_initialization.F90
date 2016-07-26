@@ -426,14 +426,14 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
 
   ! This is the legacy approach to turning on open boundaries
   if (open_boundary_query(OBC, apply_orig_OBCs=.true.)) then
-    call get_param(PF, mod, "OBC_CONFIG", config, fail_if_missing=.true., do_not_log=.true.)
+    call get_param(PF, mod, "OBC_CONFIG", config, default="none", do_not_log=.true.)
     if (trim(config) == "DOME") then
       call DOME_set_OBC_data(OBC, tv, G, GV, PF, tracer_Reg)
     elseif (trim(config) == "TIDAL_BAY") then
       ! Do nothing
     elseif (trim(config) == "USER") then
       call user_set_OBC_data(OBC, tv, G, PF, tracer_Reg)
-    else
+    elseif (.not. trim(config) == "none") then
       call MOM_error(FATAL, "The open boundary conditions specified by "//&
               "OBC_CONFIG = "//trim(config)//" have not been fully implemented.")
       call set_Open_Bdry_Conds(OBC, tv, G, GV, PF, tracer_Reg)
