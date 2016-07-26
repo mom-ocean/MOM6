@@ -335,7 +335,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str)
         endif
       else ! South is outward
         if (this_kind == OBC_FLATHER) then
-          OBC%OBC_direction_u(i,J_obc) = OBC_DIRECTION_S ! We only use direction for Flather
+          OBC%OBC_direction_v(i,J_obc) = OBC_DIRECTION_S ! We only use direction for Flather
           ! Set u points outside segment
           OBC%OBC_mask_u(I,j_obc) = .true.
           if (OBC%OBC_direction_u(I,j_obc) == OBC_NONE) then
