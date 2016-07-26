@@ -208,43 +208,15 @@ function isFormattedFloatEqualTo(str, val)
  987 return
 end function isFormattedFloatEqualTo
 
-function extractWord(string,n)
-! Returns string corresponding to the nth word in the argument
-! or "" if the string is not long enough. Both spaces and commas
-! are interpretted as separators.
-  character(len=*), intent(in) :: string
-  integer,          intent(in) :: n
-  character(len=120) :: extractWord
-  ! Local variables
-  integer :: ns, i, b, e, nw
-  logical :: lastCharIsSeperator
-  extractWord = ''
-  lastCharIsSeperator = .true.
-  ns = len_trim(string)
-  i = 0; b=0; e=0; nw=0;
-  do while (i<ns)
-    i = i+1
-    if (lastCharIsSeperator) then ! search for end of word
-      if (string(i:i)==' ' .or. string(i:i)==',') then
-        continue ! Multiple separators, .e.g '  ' or ', '
-      else
-        lastCharIsSeperator = .false. ! character is beginning of word
-        b = i
-        continue
-      endif
-    else ! continue search for end of word
-      if (string(i:i)==' ' .or. string(i:i)==',') then
-        lastCharIsSeperator = .true.
-        e = i-1 ! Previous character is end of word
-        nw = nw+1
-        if (nw==n) then
-          extractWord = trim(string(b:e))
-          return
-        endif
-      endif
-    endif
-  enddo
-  if (b<=ns) extractWord = trim(string(b:ns))
+!> Returns the string corresponding to the nth word in the argument
+!! or "" if the string is not long enough. Both spaces and commas
+!! are interpreted as separators.
+character(len=120) function extractWord(string, n)
+  character(len=*),   intent(in) :: string
+  integer,            intent(in) :: n
+
+  extractWord = extract_word(string, ' ,', n)
+
 end function extractWord
 
 !> Returns the string corresponding to the nth word in the argument
