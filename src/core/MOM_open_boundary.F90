@@ -229,8 +229,6 @@ subroutine setup_u_point_obc(OBC, G, segment_str)
   I_obc = I_obc - G%idg_offset ! Convert to local tile indices on this tile
   Js_obc = Js_obc - G%jdg_offset ! Convert to local tile indices on this tile
   Je_obc = Je_obc - G%jdg_offset ! Convert to local tile indices on this tile
-  if (I_obc<G%HI%IsdB .or. I_obc>G%HI%IedB) return ! Boundary is not on tile
-  if (max(Js_obc,Je_obc)<G%HI%JsdB .or. min(Js_obc,Je_obc)>G%HI%JedB) return ! Segment is not on tile
 
   if (trim(action_str) == 'FLATHER') then
     this_kind = OBC_FLATHER
@@ -243,6 +241,9 @@ subroutine setup_u_point_obc(OBC, G, segment_str)
     call MOM_error(FATAL, "MOM_open_boundary.F90, setup_u_point_obc: "//&
                    "String '"//trim(action_str)//"' not understood.")
   endif
+
+  if (I_obc<G%HI%IsdB .or. I_obc>G%HI%IedB) return ! Boundary is not on tile
+  if (max(Js_obc,Je_obc)<G%HI%JsdB .or. min(Js_obc,Je_obc)>G%HI%JedB) return ! Segment is not on tile
 
   do j=G%HI%jsd, G%HI%jed
     if (j>min(Js_obc,Je_obc) .and. j<=max(Js_obc,Je_obc)) then
@@ -299,8 +300,6 @@ subroutine setup_v_point_obc(OBC, G, segment_str)
   J_obc = J_obc - G%jdg_offset ! Convert to local tile indices on this tile
   Is_obc = Is_obc - G%idg_offset ! Convert to local tile indices on this tile
   Ie_obc = Ie_obc - G%idg_offset ! Convert to local tile indices on this tile
-  if (J_obc<G%HI%JsdB .or. J_obc>G%HI%JedB) return ! Boundary is not on tile
-  if (max(Is_obc,Ie_obc)<G%HI%IsdB .or. min(Is_obc,Ie_obc)>G%HI%IedB) return ! Segment is not on tile
 
   if (trim(action_str) == 'FLATHER') then
     this_kind = OBC_FLATHER
@@ -313,6 +312,9 @@ subroutine setup_v_point_obc(OBC, G, segment_str)
     call MOM_error(FATAL, "MOM_open_boundary.F90, setup_v_point_obc: "//&
                    "String '"//trim(action_str)//"' not understood.")
   endif
+
+  if (J_obc<G%HI%JsdB .or. J_obc>G%HI%JedB) return ! Boundary is not on tile
+  if (max(Is_obc,Ie_obc)<G%HI%IsdB .or. min(Is_obc,Ie_obc)>G%HI%IedB) return ! Segment is not on tile
 
   do i=G%HI%isd, G%HI%ied
     if (i>min(Is_obc,Ie_obc) .and. i<=max(Is_obc,Ie_obc)) then
