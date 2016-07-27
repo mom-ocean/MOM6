@@ -24,7 +24,7 @@ use MOM_error_handler,  only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser,    only : get_param, log_version, param_file_type
 use MOM_grid,           only : ocean_grid_type
 use MOM_open_boundary,  only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE
-use MOM_open_boundary,  only : open_boundary_query, set_Flather_positions
+use MOM_open_boundary,  only : open_boundary_query
 use MOM_verticalGrid,   only : verticalGrid_type
 use MOM_time_manager,   only : time_type, set_time, time_type_to_real
 
@@ -52,7 +52,8 @@ subroutine TIDAL_BAY_set_OBC_positions(G, param_file, OBC)
 
   ! This isn't called when APPLY_OBC_U is requested.
   if (open_boundary_query(OBC, apply_orig_Flather=.true.)) then
-    call set_Flather_positions(G, OBC)
+    ! HOPEFULLY YOU CAN USE SEGMENTS NOT INSTEAD OF THIS CALL
+    !call set_Flather_positions(G, OBC)
     call TIDAL_BAY_alloc_OBC_data(OBC, G)
   endif
   ! Turn this off for BT_OBC
