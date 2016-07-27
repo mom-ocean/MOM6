@@ -105,17 +105,19 @@ logical :: first_call = .true.
 contains
 
 subroutine buoy_forced_basin_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
-  real, dimension(NKMEM_), intent(out)   :: Rlay, g_prime
-  type(verticalGrid_type), intent(in) :: GV
-  type(param_file_type), intent(in) :: param_file
-  type(EOS_type),        pointer    :: eqn_of_state
-  real                              :: drho_dt, SST_s, T_bot, rho_top, rho_bot
-  integer                           :: k, nz
+  real, dimension(NKMEM_), intent(out) :: Rlay, g_prime
+  type(verticalGrid_type), intent(in)  :: GV
+  type(param_file_type),   intent(in)  :: param_file
+  type(EOS_type),          pointer     :: eqn_of_state
+  real                                 :: drho_dt, SST_s, T_bot, rho_top, rho_bot
+  integer                              :: k, nz
   character(len=40)  :: mod = "buoy_forced_basin_set_coord" ! This subroutine's name.
 
-  drho_dt = -0.2
-  call get_param(param_file, mod, "SST_SOUTH", SST_s, &
-                 "Southern SST", units="C", default=20.0)
+  call get_param(param_file, mod, "DRHO_DT", drho_dt, &
+          "Rate of change of density with temperature.", &
+           units="kg m-3 K-1", default=-0.2)
+  call get_param(param_file, mod, "SST_S", SST_s, &
+          "SST at the suothern edge of the domain.", units="C", default=20.0)
   call get_param(param_file, mod, "T_BOT", T_bot, &
                  "Bottom Temp", units="C", default=5.0)
   rho_top = GV%rho0 + drho_dt*SST_s
@@ -141,11 +143,11 @@ subroutine buoy_forced_basin_set_coord(Rlay, g_prime, GV, param_file, eqn_of_sta
 end subroutine buoy_forced_basin_set_coord
 
 subroutine buoy_forced_basin_initialize_sponges_southonly(G, use_temperature, tv, param_file, CSp, h)
-  type(ocean_grid_type), intent(in) :: G
-  logical,               intent(in) :: use_temperature
-  type(thermo_var_ptrs), intent(in) :: tv
-  type(param_file_type), intent(in) :: param_file
-  type(sponge_CS),       pointer    :: CSp
+  type(ocean_grid_type), intent(in)                   :: G
+  logical,               intent(in)                   :: use_temperature
+  type(thermo_var_ptrs), intent(in)                   :: tv
+  type(param_file_type), intent(in)                   :: param_file
+  type(sponge_CS),       pointer                      :: CSp
   real, dimension(NIMEM_, NJMEM_, NKMEM_), intent(in) :: h
   !call MOM_error(FATAL, &
   ! "buoy_forced_basin_initialization.F90, buoy_forced_basin_initialize_sponges: " // &

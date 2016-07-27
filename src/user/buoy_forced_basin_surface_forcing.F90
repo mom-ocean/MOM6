@@ -23,21 +23,9 @@ module buoy_forced_basin_surface_forcing
 !*                                                                     *
 !*  Rewritten by Robert Hallberg, June 2009                            *
 !*                                                                     *
-!*    This file contains the subroutines that a user should modify to  *
-!*  to set the surface wind stresses and fluxes of buoyancy or         *
-!*  temperature and fresh water.  They are called when the run-time    *
-!*  parameters WIND_CONFIG or BUOY_CONFIG are set to "buoy_forced_basin".  The      *
-!*  standard version has simple examples, along with run-time error    *
-!*  messages that will cause the model to abort if this code has not   *
-!*  been modified.  This code is intended for use with relatively      *
-!*  simple specifications of the forcing.  For more complicated forms, *
-!*  it is probably a good idea to read the forcing from input files    *
-!*  using "file" for WIND_CONFIG and BUOY_CONFIG.                      *
-!*                                                                     *
-!*    buoy_forced_basin_wind_forcing should set the surface wind stresses (taux and *
-!*  tauy) perhaps along with the surface friction velocity (ustar).    *
-!*                                                                     *
-!*    buoy_forced_basin_buoyancy forcing is used to set the surface buoyancy        *
+!*  This file contains subroutines for specifying surface buoyancy     * 
+!*  forcing for the buoyancy-forced basin (BFB) case.                  *
+!*  BFB_forcing is used to set the surface buoyancy                    *
 !*  forcing, which may include a number of fresh water flux fields     *
 !*  (evap, lprec, fprec, lrunoff, frunoff, and                         *
 !*  vprec) and the surface heat fluxes (sw, lw, latent and sens)       *
@@ -94,6 +82,18 @@ type, public :: buoy_forced_basin_surface_forcing_CS ; private
   real :: Flux_const         !   The restoring rate at the surface, in m s-1.
   real :: gust_const         !   A constant unresolved background gustiness
                              ! that contributes to ustar, in Pa.
+  real :: SST_s              ! SST at the southern edge of the linear
+                             ! forcing ramp
+  real :: SST_n              ! SST at the northern edge of the linear
+                             ! forcing ramp
+  real :: lfrslat              ! Southern latitude where the linear forcing ramp 
+                             ! begins
+  real :: lfrnlat              ! Northern latitude where the linear forcing ramp 
+                             ! ends
+  real :: drho_dt            ! Rate of change of density with temperature.
+                             ! Note that temperature is being used as a dummy
+                             ! variable here. All temperatures are converted 
+                             ! into density. 
 
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
@@ -141,17 +141,11 @@ subroutine buoy_forced_basin_buoyancy_forcing(state, fluxes, day, dt, G, CS)
   real :: rhoXcp ! The mean density times the heat capacity, in J m-3 K-1.
   real :: buoy_rest_const  ! A constant relating density anomalies to the
                            ! restoring buoyancy flux, in m5 s-3 kg-1.
-  real :: drho_dt, SST_s, T_bot, sflat, nflat
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  SST_s = 20.0
-  T_bot = 10.0
-  sflat = 20.0
-  nflat = 40.0
-  drho_dt = -0.2
  
   !   When modifying the code, comment out this error message.  It is here
   ! so that the original (unmodified) version is not accidentally used.
@@ -238,28 +232,16 @@ subroutine buoy_forced_basin_buoyancy_forcing(state, fluxes, day, dt, G, CS)
       do j=js,je ; do i=is,ie
        !   Set density_restore to an expression for the surface potential
        ! density in kg m-3 that is being restored toward.
-        if (G%geoLatT(i,j) < sflat) then
-            Temp_restore = SST_s
-        else if (G%geoLatT(i,j) > nflat) then
-            Temp_restore = T_bot
+        if (G%geoLatT(i,j) < CS%lfrslat) then
+            Temp_restore = CS%SST_s
+        else if (G%geoLatT(i,j) > CS%lfrnlat) then
+            Temp_restore = CS%SST_n
         else
-            Temp_restore = (SST_s - T_bot)/(sflat - nflat)*(G%geoLatT(i,j) - sflat) + SST_s
+            Temp_restore = (CS%SST_s - CS%SST_n)/(CS%lfrslat - CS%lfrnlat) * &
+                    (G%geoLatT(i,j) - CS%lfrslat) + CS%SST_s
         end if
 
-        !if (G%geoLatT(i,j) < sflat) then
-        !    Temp_restore = SST_s
-        !    buoy_rest_const = -1.0 * (CS%G_Earth * CS%Flux_const) / CS%Rho0               
-        !else if (G%geoLatT(i,j) < nflat) then
-        !    Temp_restore = (SST_s - T_bot)/(sflat - nflat)*(G%geoLatT(i,j) - sflat) + SST_s
-        !    buoy_rest_const = -1.0 * (CS%G_Earth * CS%Flux_const) / CS%Rho0
-        !else
-        !   ! buoy_rest_const = 0.0
-        !    Temp_restore = T_bot
-        !    buoy_rest_const = -1.0 * (CS%G_Earth * CS%Flux_const) / CS%Rho0 / 8.0
-        !end if
-
-!        density_restore = 1030.0
-        density_restore = Temp_restore*drho_dt + CS%Rho0
+        density_restore = Temp_restore*CS%drho_dt + CS%Rho0
 
         fluxes%buoy(i,j) = G%mask2dT(i,j) * buoy_rest_const * &
                           (density_restore - state%sfc_density(i,j))
@@ -282,10 +264,10 @@ subroutine alloc_if_needed(ptr, isd, ied, jsd, jed)
 end subroutine alloc_if_needed
 
 subroutine buoy_forced_basin_surface_forcing_init(Time, G, param_file, diag, CS)
-  type(time_type),               intent(in) :: Time
-  type(ocean_grid_type),         intent(in) :: G
-  type(param_file_type),         intent(in) :: param_file
-  type(diag_ctrl), target,       intent(in) :: diag
+  type(time_type),                            intent(in) :: Time
+  type(ocean_grid_type),                      intent(in) :: G
+  type(param_file_type),                      intent(in) :: param_file
+  type(diag_ctrl), target,                    intent(in) :: diag
   type(buoy_forced_basin_surface_forcing_CS), pointer    :: CS
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
@@ -322,6 +304,21 @@ subroutine buoy_forced_basin_surface_forcing_init(Time, G, param_file, diag, CS)
                  "properties, or with BOUSSINSEQ false to convert some \n"//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0)
+  call get_param(param_file, mod, "LFR_SLAT", CS%lfrslat, &
+                 "Southern latitude where the linear forcing ramp begins.", &
+                 units="degrees", default = 20.0)
+  call get_param(param_file, mod, "LFR_NLAT", CS%lfrnlat, &
+                 "Northern latitude where the linear forcing ramp ends.", &
+                 units="degrees", default = 40.0)
+  call get_param(param_file, mod, "SST_S", CS%SST_s, &
+                 "SST at the southern edge of the linear forcing ramp.", &
+                 units="C", default = 20.0)
+  call get_param(param_file, mod, "SST_N", CS%SST_n, &
+                 "SST at the northern edge of the linear forcing ramp.", &
+                 units="C", default = 10.0)
+  call get_param(param_file, mod, "DRHO_DT", CS%drho_dt, &
+                 "The rate of change of density with temperature.", &
+                 units="kg m-3 K-1", default = -0.2)
   call get_param(param_file, mod, "GUST_CONST", CS%gust_const, &
                  "The background gustiness in the winds.", units="Pa", &
                  default=0.02)
