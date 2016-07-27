@@ -97,8 +97,8 @@ use user_revise_forcing,     only : user_revise_forcing_CS
 use SCM_idealized_hurricane, only : SCM_idealized_hurricane_wind_init
 use SCM_idealized_hurricane, only : SCM_idealized_hurricane_wind_forcing
 use SCM_idealized_hurricane, only : SCM_idealized_hurricane_CS
-use buoy_forced_basin_surface_forcing,    only : buoy_forced_basin_buoyancy_forcing
-use buoy_forced_basin_surface_forcing,    only : buoy_forced_basin_surface_forcing_init, buoy_forced_basin_surface_forcing_CS
+use BFB_surface_forcing,    only : BFB_buoyancy_forcing
+use BFB_surface_forcing,    only : BFB_surface_forcing_init, BFB_surface_forcing_CS
 
 use data_override_mod, only : data_override_init, data_override
 
@@ -208,7 +208,7 @@ type, public :: surface_forcing_CS ; private
 
   type(user_revise_forcing_CS),  pointer :: urf_CS => NULL()
   type(user_surface_forcing_CS), pointer :: user_forcing_CSp => NULL()
-  type(buoy_forced_basin_surface_forcing_CS), pointer :: buoy_forced_basin_forcing_CSp => NULL()
+  type(BFB_surface_forcing_CS), pointer :: BFB_forcing_CSp => NULL()
   type(MESO_surface_forcing_CS), pointer :: MESO_forcing_CSp => NULL()
   type(SCM_idealized_hurricane_CS), pointer :: SCM_idealized_hurricane_CSp => NULL()
 
@@ -323,8 +323,8 @@ subroutine set_forcing(state, fluxes, day_start, day_interval, G, CS)
       call MESO_buoyancy_forcing(state, fluxes, day_center, dt, G, CS%MESO_forcing_CSp)
     elseif (trim(CS%buoy_config) == "USER") then
       call USER_buoyancy_forcing(state, fluxes, day_center, dt, G, CS%user_forcing_CSp)
-    elseif (trim(CS%buoy_config) == "buoy_forced_basin") then
-      call buoy_forced_basin_buoyancy_forcing(state, fluxes, day_center, dt, G, CS%buoy_forced_basin_forcing_CSp)
+    elseif (trim(CS%buoy_config) == "BFB") then
+      call BFB_buoyancy_forcing(state, fluxes, day_center, dt, G, CS%BFB_forcing_CSp)
     elseif (trim(CS%buoy_config) == "NONE") then
       call MOM_mesg("MOM_surface_forcing: buoyancy forcing has been set to omitted.")
     elseif (CS%variable_buoyforce .and. .not.CS%first_call_set_forcing) then
@@ -1562,7 +1562,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
   call get_param(param_file, mod, "BUOY_CONFIG", CS%buoy_config, &
                  "The character string that indicates how buoyancy forcing \n"//&
                  "is specified. Valid options include (file), (zero), \n"//&
-                 "(linear), (USER), and (NONE).", fail_if_missing=.true.)
+                 "(linear), (USER), (BFB) and (NONE).", fail_if_missing=.true.)
   if (trim(CS%buoy_config) == "file") then
     call get_param(param_file, mod, "ARCHAIC_OMIP_FORCING_FILE", CS%archaic_OMIP_file, &
                  "If true, use the forcing variable decomposition from \n"//&
@@ -1822,8 +1822,8 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
 
   if (trim(CS%wind_config) == "USER" .or. trim(CS%buoy_config) == "USER" ) then
     call USER_surface_forcing_init(Time, G, param_file, diag, CS%user_forcing_CSp)
-  elseif (trim(CS%buoy_config) == "buoy_forced_basin" ) then
-    call buoy_forced_basin_surface_forcing_init(Time, G, param_file, diag, CS%buoy_forced_basin_forcing_CSp)
+  elseif (trim(CS%buoy_config) == "BFB" ) then
+    call BFB_surface_forcing_init(Time, G, param_file, diag, CS%BFB_forcing_CSp)
   elseif (trim(CS%wind_config) == "MESO" .or. trim(CS%buoy_config) == "MESO" ) then
     call MESO_surface_forcing_init(Time, G, param_file, diag, CS%MESO_forcing_CSp)
   elseif (trim(CS%wind_config) == "SCM_ideal_hurr") then
