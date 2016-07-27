@@ -14,6 +14,8 @@ use MOM_grid, only : ocean_grid_type
 use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_io, only : EAST_FACE, NORTH_FACE
 use MOM_io, only : slasher, read_data
+use MOM_obsolete_params, only : obsolete_logical, obsolete_int, obsolete_real, obsolete_char
+use MOM_string_functions, only : extract_word, remove_spaces
 use MOM_tracer_registry, only : add_tracer_OBC_values, tracer_registry_type
 use MOM_variables, only : thermo_var_ptrs
 
@@ -28,7 +30,6 @@ public open_boundary_end
 public open_boundary_impose_normal_slope
 public open_boundary_impose_land_mask
 public Radiation_Open_Bdry_Conds
-public set_Flather_positions
 public set_Flather_data
 
 integer, parameter, public :: OBC_NONE = 0, OBC_SIMPLE = 1, OBC_WALL = 2
@@ -40,6 +41,7 @@ integer, parameter, public :: OBC_DIRECTION_W = 400 !< Indicates the boundary is
 
 !> Open-boundary data
 type, public :: ocean_OBC_type
+  integer :: number_of_segments = 0 !< The number of open-boundary segments.
   logical :: apply_OBC_u_flather_east = .false.  !< True if any zonal velocity points in the
                                                  !! local domain use east-facing Flather OBCs.
   logical :: apply_OBC_u_flather_west = .false.  !< True if any zonal velocity points in the
@@ -119,46 +121,81 @@ subroutine open_boundary_config(G, param_file, OBC)
   type(dyn_horgrid_type),  intent(in)    :: G !< Ocean grid structure
   type(param_file_type),   intent(in)    :: param_file !< Parameter file handle
   type(ocean_OBC_type),    pointer       :: OBC !< Open boundary control structure
+  ! Local variables
+  integer :: l ! For looping over segments
+  character(len=15) :: segment_param_str ! The run-time parameter name for each segment
+  character(len=100) :: segment_str ! The contents (rhs) for parameter "segment_param_str"
 
   allocate(OBC)
 
   call log_version(param_file, mod, version, "Controls where open boundaries are located, what "//&
                  "kind of boundary condition to impose, and what data to apply, if any.")
-  call get_param(param_file, mod, "APPLY_OBC_U", OBC%apply_OBC_u, &
-                 "If true, open boundary conditions may be set at some \n"//&
-                 "u-points, with the configuration controlled by OBC_CONFIG", &
-                 default=.false.)
-  call get_param(param_file, mod, "APPLY_OBC_V", OBC%apply_OBC_v, &
-                 "If true, open boundary conditions may be set at some \n"//&
-                 "v-points, with the configuration controlled by OBC_CONFIG", &
-                 default=.false.)
-  call get_param(param_file, mod, "OBC_CONFIG", OBC%OBC_config, &
-                 "If set, open boundary configuration string", &
-                 default="file")
-!    call get_param(PF, mod, "OBC_CONFIG", config, &
-!                 "A string that sets how the open boundary conditions are \n"//&
-!                 " configured: \n"//&
-!                 " \t DOME - use a slope and channel configuration for the \n"//&
-!                 " \t\t DOME sill-overflow test case. \n"//&
-!                 " \t TIDAL_BAY - tidally-resonant rectangular basin. \n"//&
-!                 " \t USER - call a user modified routine.", default="file", &
-!                 fail_if_missing=.true.)
-  call get_param(param_file, mod, "APPLY_OBC_U_FLATHER_EAST", OBC%apply_OBC_u_flather_east, &
-                 "Apply a Flather open boundary condition on the eastern\n"//&
-                 "side of the global domain", &
-                 default=.false.)
-  call get_param(param_file, mod, "APPLY_OBC_U_FLATHER_WEST", OBC%apply_OBC_u_flather_west, &
-                 "Apply a Flather open boundary condition on the western\n"//&
-                 "side of the global domain", &
-                 default=.false.)
-  call get_param(param_file, mod, "APPLY_OBC_V_FLATHER_NORTH", OBC%apply_OBC_v_flather_north, &
-                 "Apply a Flather open boundary condition on the northern\n"//&
-                 "side of the global domain", &
-                 default=.false.)
-  call get_param(param_file, mod, "APPLY_OBC_V_FLATHER_SOUTH", OBC%apply_OBC_v_flather_south, &
-                 "Apply a Flather open boundary condition on the southern\n"//&
-                 "side of the global domain", &
-                 default=.false.)
+  call get_param(param_file, mod, "OBC_NUMBER_OF_SEGMENTS", OBC%number_of_segments, &
+                 "The number of open boundary segments.", &
+                 default=0)
+  if (OBC%number_of_segments == 0) then
+    ! For the interim, if segments are not set we'll interpret the old-style run-time OBC parameters as before
+    call get_param(param_file, mod, "APPLY_OBC_U", OBC%apply_OBC_u, &
+                   "If true, open boundary conditions may be set at some \n"//&
+                   "u-points, with the configuration controlled by OBC_CONFIG", &
+                   default=.false.)
+    call get_param(param_file, mod, "APPLY_OBC_V", OBC%apply_OBC_v, &
+                   "If true, open boundary conditions may be set at some \n"//&
+                   "v-points, with the configuration controlled by OBC_CONFIG", &
+                   default=.false.)
+    call get_param(param_file, mod, "OBC_CONFIG", OBC%OBC_config, &
+                   "If set, open boundary configuration string", &
+                   default="file")
+    call get_param(param_file, mod, "APPLY_OBC_U_FLATHER_EAST", OBC%apply_OBC_u_flather_east, &
+                   "Apply a Flather open boundary condition on the eastern\n"//&
+                   "side of the global domain", &
+                   default=.false.)
+    call get_param(param_file, mod, "APPLY_OBC_U_FLATHER_WEST", OBC%apply_OBC_u_flather_west, &
+                   "Apply a Flather open boundary condition on the western\n"//&
+                   "side of the global domain", &
+                   default=.false.)
+    call get_param(param_file, mod, "APPLY_OBC_V_FLATHER_NORTH", OBC%apply_OBC_v_flather_north, &
+                   "Apply a Flather open boundary condition on the northern\n"//&
+                   "side of the global domain", &
+                   default=.false.)
+    call get_param(param_file, mod, "APPLY_OBC_V_FLATHER_SOUTH", OBC%apply_OBC_v_flather_south, &
+                   "Apply a Flather open boundary condition on the southern\n"//&
+                   "side of the global domain", &
+                   default=.false.)
+  else
+    ! When specifying segments, we will consider the old-style run-time OBC parameters obsolete
+    ! Note: once we have finished transitioning to segments we can permanently obsolete these parameters
+    ! rather than conditionally.
+    call obsolete_logical(param_file, "APPLY_OBC_U", hint="APPLY_OBC_U cannot be used when using OBC_SEGMENTS")
+    call obsolete_logical(param_file, "APPLY_OBC_V", hint="APPLY_OBC_V cannot be used when using OBC_SEGMENTS")
+    call obsolete_logical(param_file, "APPLY_OBC_U_FLATHER_EAST", hint="APPLY_OBC_U_FLATHER_EAST cannot be used when using OBC_SEGMENTS")
+    call obsolete_logical(param_file, "APPLY_OBC_U_FLATHER_WEST", hint="APPLY_OBC_U_FLATHER_WEST cannot be used when using OBC_SEGMENTS")
+    call obsolete_logical(param_file, "APPLY_OBC_V_FLATHER_NORTH", hint="APPLY_OBC_V_FLATHER_NORTH cannot be used when using OBC_SEGMENTS")
+    call obsolete_logical(param_file, "APPLY_OBC_V_FLATHER_SOUTH", hint="APPLY_OBC_V_FLATHER_SOUTH cannot be used when using OBC_SEGMENTS")
+    ! Allocate everything
+    allocate(OBC%OBC_mask_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; OBC%OBC_mask_u(:,:) = .false.
+    allocate(OBC%OBC_direction_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; OBC%OBC_direction_u(:,:) = OBC_NONE
+    allocate(OBC%OBC_kind_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; OBC%OBC_kind_u(:,:) = OBC_NONE
+    allocate(OBC%OBC_mask_v(G%isd:G%ied,G%JsdB:G%JedB)) ; OBC%OBC_mask_v(:,:) = .false.
+    allocate(OBC%OBC_direction_v(G%isd:G%ied,G%JsdB:G%JedB)) ; OBC%OBC_direction_v(:,:) = OBC_NONE
+    allocate(OBC%OBC_kind_v(G%isd:G%ied,G%JsdB:G%JedB)) ; OBC%OBC_kind_v(:,:) = OBC_NONE
+
+    do l = 1, OBC%number_of_segments
+      write(segment_param_str(1:15),"('OBC_SEGMENT_',i3.3)") l
+      call get_param(param_file, mod, segment_param_str, segment_str, &
+                   "Documentation needs to be dynamic?????", &
+                   fail_if_missing=.true.)
+      segment_str = remove_spaces(segment_str)
+      if (segment_str(1:2) == 'I=') then
+        call setup_u_point_obc(OBC, G, segment_str)
+      elseif (segment_str(1:2) == 'J=') then
+        call setup_v_point_obc(OBC, G, segment_str)
+      else
+        call MOM_error(FATAL, "MOM_open_boundary.F90, open_boundary_config: "//&
+                       "Unable to interpret "//segment_param_str//" = "//trim(segment_str))
+      endif
+    enddo
+  endif
 
   ! Safety check
   if ((OBC%apply_OBC_u_flather_west .or. OBC%apply_OBC_v_flather_south) .and. &
@@ -175,6 +212,253 @@ subroutine open_boundary_config(G, param_file, OBC)
   endif
 
 end subroutine open_boundary_config
+
+!> Parse an OBC_SEGMENT_%%% string starting with "I=" and configure placement and type of OBC accordingly
+subroutine setup_u_point_obc(OBC, G, segment_str)
+  type(ocean_OBC_type),    pointer    :: OBC !< Open boundary control structure
+  type(dyn_horgrid_type),  intent(in) :: G !< Ocean grid structure
+  character(len=*),        intent(in) :: segment_str !< A string in form of "I=%,J=%:%,string"
+  ! Local variables
+  integer :: I_obc, Js_obc, Je_obc ! Position of segment in global index space
+  integer :: j, this_kind
+  character(len=32) :: action_str
+
+  ! This returns the global indices for the segment
+  call parse_segment_str(G%ieg, G%jeg, segment_str, I_obc, Js_obc, Je_obc, action_str )
+  I_obc = I_obc - G%idg_offset ! Convert to local tile indices on this tile
+  Js_obc = Js_obc - G%jdg_offset ! Convert to local tile indices on this tile
+  Je_obc = Je_obc - G%jdg_offset ! Convert to local tile indices on this tile
+
+  if (trim(action_str) == 'FLATHER') then
+    this_kind = OBC_FLATHER
+    if  (Je_obc>Js_obc) OBC%apply_OBC_u_flather_east = .true. ! This line will not bee needed soon - AJA
+    if  (Je_obc<Js_obc) OBC%apply_OBC_u_flather_west = .true. ! This line will not bee needed soon - AJA
+  elseif (trim(action_str) == 'SIMPLE') then
+    this_kind = OBC_SIMPLE
+    OBC%apply_OBC_u = .true. ! This avoids deallocation
+  else
+    call MOM_error(FATAL, "MOM_open_boundary.F90, setup_u_point_obc: "//&
+                   "String '"//trim(action_str)//"' not understood.")
+  endif
+
+  if (I_obc<G%HI%IsdB .or. I_obc>G%HI%IedB) return ! Boundary is not on tile
+  if (max(Js_obc,Je_obc)<G%HI%JsdB .or. min(Js_obc,Je_obc)>G%HI%JedB) return ! Segment is not on tile
+
+  ! These four lines extend the open boundary into the halo region of tiles on the edge of the physical
+  ! domain. They are used to reproduce the checksums of the circle_obcs test case and will be removed
+  ! in the fullness of time. -AJA
+  if (Js_obc == G%HI%JscB) Js_obc = G%HI%jsd-1
+  if (Js_obc == G%HI%JecB) Js_obc = G%HI%jed
+  if (Je_obc == G%HI%JscB) Je_obc = G%HI%jsd-1
+  if (Je_obc == G%HI%JecB) Je_obc = G%HI%jed
+
+  do j=G%HI%jsd, G%HI%jed
+    if (j>min(Js_obc,Je_obc) .and. j<=max(Js_obc,Je_obc)) then
+      OBC%OBC_mask_u(I_obc,j) = .true.
+      OBC%OBC_kind_u(I_obc,j) = this_kind
+      if (Je_obc>Js_obc) then ! East is outward
+        if (this_kind == OBC_FLATHER) then
+          OBC%OBC_direction_u(I_obc,j) = OBC_DIRECTION_E ! We only use direction for Flather
+          ! Set v points outside segment
+          OBC%OBC_mask_v(i_obc+1,J) = .true.
+          if (OBC%OBC_direction_v(i_obc+1,J) == OBC_NONE) then
+            OBC%OBC_direction_v(i_obc+1,J) = OBC_DIRECTION_E
+            OBC%OBC_kind_v(i_obc+1,J) = this_kind
+          endif
+          OBC%OBC_mask_v(i_obc+1,J-1) = .true.
+          if (OBC%OBC_direction_v(i_obc+1,J-1) == OBC_NONE) then
+            OBC%OBC_direction_v(i_obc+1,J-1) = OBC_DIRECTION_E
+            OBC%OBC_kind_v(i_obc+1,J-1) = this_kind
+          endif
+        endif
+      else ! West is outward
+        if (this_kind == OBC_FLATHER) then
+          OBC%OBC_direction_u(I_obc,j) = OBC_DIRECTION_W ! We only use direction for Flather
+          ! Set v points outside segment
+          OBC%OBC_mask_v(i_obc,J) = .true.
+          if (OBC%OBC_direction_v(i_obc,J) == OBC_NONE) then
+            OBC%OBC_direction_v(i_obc,J) = OBC_DIRECTION_W
+            OBC%OBC_kind_v(i_obc,J) = this_kind
+          endif
+          OBC%OBC_mask_v(i_obc,J-1) = .true.
+          if (OBC%OBC_direction_v(i_obc,J-1) == OBC_NONE) then
+            OBC%OBC_direction_v(i_obc,J-1) = OBC_DIRECTION_W
+            OBC%OBC_kind_v(i_obc,J-1) = this_kind
+          endif
+        endif
+      endif
+    endif
+  enddo
+
+end subroutine setup_u_point_obc
+
+!> Parse an OBC_SEGMENT_%%% string starting with "J=" and configure placement and type of OBC accordingly
+subroutine setup_v_point_obc(OBC, G, segment_str)
+  type(ocean_OBC_type),    pointer    :: OBC !< Open boundary control structure
+  type(dyn_horgrid_type),  intent(in) :: G !< Ocean grid structure
+  character(len=*),        intent(in) :: segment_str !< A string in form of "J=%,I=%:%,string"
+  ! Local variables
+  integer :: J_obc, Is_obc, Ie_obc ! Position of segment in global index space
+  integer :: i, this_kind
+  character(len=32) :: action_str
+
+  ! This returns the global indices for the segment
+  call parse_segment_str(G%ieg, G%jeg, segment_str, J_obc, Is_obc, Ie_obc, action_str )
+  J_obc = J_obc - G%jdg_offset ! Convert to local tile indices on this tile
+  Is_obc = Is_obc - G%idg_offset ! Convert to local tile indices on this tile
+  Ie_obc = Ie_obc - G%idg_offset ! Convert to local tile indices on this tile
+
+  if (trim(action_str) == 'FLATHER') then
+    this_kind = OBC_FLATHER
+    if (Ie_obc>Is_obc) OBC%apply_OBC_v_flather_north = .true. ! This line will not bee needed soon - AJA
+    if (Ie_obc<Is_obc) OBC%apply_OBC_v_flather_south = .true. ! This line will not bee needed soon - AJA
+  elseif (trim(action_str) == 'SIMPLE') then
+    this_kind = OBC_SIMPLE
+    OBC%apply_OBC_v = .true. ! This avoids deallocation
+  else
+    call MOM_error(FATAL, "MOM_open_boundary.F90, setup_v_point_obc: "//&
+                   "String '"//trim(action_str)//"' not understood.")
+  endif
+
+  if (J_obc<G%HI%JsdB .or. J_obc>G%HI%JedB) return ! Boundary is not on tile
+  if (max(Is_obc,Ie_obc)<G%HI%IsdB .or. min(Is_obc,Ie_obc)>G%HI%IedB) return ! Segment is not on tile
+
+  ! These four lines extend the open boundary into the halo region of tiles on the edge of the physical
+  ! domain. They are used to reproduce the checksums of the circle_obcs test case and will be removed
+  ! in the fullness of time. -AJA
+  if (Is_obc == G%HI%IscB) Is_obc = G%HI%isd-1
+  if (Is_obc == G%HI%IecB) Is_obc = G%HI%ied
+  if (Ie_obc == G%HI%IscB) Ie_obc = G%HI%isd-1
+  if (Ie_obc == G%HI%IecB) Ie_obc = G%HI%ied
+
+  do i=G%HI%isd, G%HI%ied
+    if (i>min(Is_obc,Ie_obc) .and. i<=max(Is_obc,Ie_obc)) then
+      OBC%OBC_mask_v(i,J_obc) = .true.
+      OBC%OBC_kind_v(i,J_obc) = this_kind
+      if (Is_obc>Ie_obc) then ! North is outward
+        if (this_kind == OBC_FLATHER) then
+          OBC%OBC_direction_v(i,J_obc) = OBC_DIRECTION_N ! We only use direction for Flather
+          ! Set u points outside segment
+          OBC%OBC_mask_u(I,j_obc+1) = .true.
+          if (OBC%OBC_direction_u(I,j_obc+1) == OBC_NONE) then
+            OBC%OBC_direction_u(I,j_obc+1) = OBC_DIRECTION_N
+            OBC%OBC_kind_u(I,j_obc+1) = this_kind
+          endif
+          OBC%OBC_mask_u(I-1,j_obc+1) = .true.
+          if (OBC%OBC_direction_u(I-1,j_obc+1) == OBC_NONE) then
+            OBC%OBC_direction_u(I-1,j_obc+1) = OBC_DIRECTION_N
+            OBC%OBC_kind_u(I-1,j_obc+1) = this_kind
+          endif
+        endif
+      else ! South is outward
+        if (this_kind == OBC_FLATHER) then
+          OBC%OBC_direction_v(i,J_obc) = OBC_DIRECTION_S ! We only use direction for Flather
+          ! Set u points outside segment
+          OBC%OBC_mask_u(I,j_obc) = .true.
+          if (OBC%OBC_direction_u(I,j_obc) == OBC_NONE) then
+            OBC%OBC_direction_u(I,j_obc) = OBC_DIRECTION_S
+            OBC%OBC_kind_u(I,j_obc) = this_kind
+          endif
+          OBC%OBC_mask_u(I-1,j_obc) = .true.
+          if (OBC%OBC_direction_u(I-1,j_obc) == OBC_NONE) then
+            OBC%OBC_direction_u(I-1,j_obc) = OBC_DIRECTION_S
+            OBC%OBC_kind_u(I-1,j_obc) = this_kind
+          endif
+        endif
+      endif
+    endif
+  enddo
+
+end subroutine setup_v_point_obc
+
+!> Parse an OBC_SEGMENT_%%% string
+subroutine parse_segment_str(ni_global, nj_global, segment_str, l, m, n, action_str )
+  integer,          intent(in)  :: ni_global !< Number of h-points in zonal direction
+  integer,          intent(in)  :: nj_global !< Number of h-points in meridional direction
+  character(len=*), intent(in)  :: segment_str !< A string in form of "I=l,J=m:n,string" or "J=l,I=m,n,string"
+  integer,          intent(out) :: l !< The value of I=l, if segment_str begins with I=l, or the value of J=l
+  integer,          intent(out) :: m !< The value of J=m, if segment_str begins with I=, or the value of I=m
+  integer,          intent(out) :: n !< The value of J=n, if segment_str begins with I=, or the value of I=n
+  character(len=*), intent(out) :: action_str !< The "string" part of segment_str
+  ! Local variables
+  character(len=24) :: word1, word2, m_word, n_word !< Words delineated by commas in a string in form of "I=%,J=%:%,string"
+  integer :: l_max !< Either ni_global or nj_global, depending on whether segment_str begins with "I=" or "J="
+  integer :: mn_max !< Either nj_global or ni_global, depending on whether segment_str begins with "I=" or "J="
+
+  ! Process first word which will started with either 'I=' or 'J='
+  word1 = extract_word(segment_str,',',1)
+  word2 = extract_word(segment_str,',',2)
+  if (word1(1:2)=='I=') then
+    l_max = ni_global
+    mn_max = nj_global
+    if (.not. (word2(1:2)=='J=')) call MOM_error(FATAL, "MOM_open_boundary.F90, parse_segment_str: "//&
+                     "Second word of string '"//trim(segment_str)//"' must start with 'J='.")
+  elseif (word1(1:2)=='J=') then ! Note that the file_parser uniformaly expands "=" to " = "
+    l_max = nj_global
+    mn_max = ni_global
+    if (.not. (word2(1:2)=='I=')) call MOM_error(FATAL, "MOM_open_boundary.F90, parse_segment_str: "//&
+                     "Second word of string '"//trim(segment_str)//"' must start with 'I='.")
+  else
+    call MOM_error(FATAL, "MOM_open_boundary.F90, parse_segment_str"//&
+                   "String '"//segment_str//"' must start with 'I=' or 'J='.")
+  endif
+
+  ! Read l
+  l = interpret_int_expr( word1(3:24), l_max )
+  if (l<0 .or. l>l_max) then
+    call MOM_error(FATAL, "MOM_open_boundary.F90, parse_segment_str: "//&
+                   "First value from string '"//trim(segment_str)//"' is outside of the physical domain.")
+  endif
+
+  ! Read m
+  m_word = extract_word(word2(3:24),':',1)
+  m = interpret_int_expr( m_word, mn_max )
+  if (m<0 .or. m>mn_max) then
+    call MOM_error(FATAL, "MOM_open_boundary.F90, parse_segment_str: "//&
+                   "Beginning of range in string '"//trim(segment_str)//"' is outside of the physical domain.")
+  endif
+
+  ! Read m
+  n_word = extract_word(word2(3:24),':',2)
+  n = interpret_int_expr( n_word, mn_max )
+  if (n<0 .or. n>mn_max) then
+    call MOM_error(FATAL, "MOM_open_boundary.F90, parse_segment_str: "//&
+                   "End of range in string '"//trim(segment_str)//"' is outside of the physical domain.")
+  endif
+
+  if (abs(n-m)==0) then
+    call MOM_error(FATAL, "MOM_open_boundary.F90, parse_segment_str: "//&
+                   "Range in string '"//trim(segment_str)//"' must span one cell.")
+  endif
+
+  ! Type of open boundary condition
+  action_str = extract_word(segment_str,',',3)
+
+  contains
+
+  ! Returns integer value interpreted from string in form of %I, N or N-%I
+  integer function interpret_int_expr(string, imax)
+    character(len=*), intent(in) :: string !< Integer in form or %I, N or N-%I
+    integer,          intent(in) :: imax !< Value to replace 'N' with
+    ! Local variables
+    integer slen
+
+    slen = len_trim(string)
+    if (slen==0) call MOM_error(FATAL, "MOM_open_boundary.F90, parse_segment_str"//&
+                                "Parsed string was empty!")
+    if (len_trim(string)==1 .and. string(1:1)=='N') then
+      interpret_int_expr = imax
+    elseif (string(1:1)=='N') then
+      read(string(2:slen),*,err=911) interpret_int_expr
+      interpret_int_expr = imax - interpret_int_expr
+    else
+      read(string(1:slen),*,err=911) interpret_int_expr
+    endif
+    return
+    911 call MOM_error(FATAL, "MOM_open_boundary.F90, parse_segment_str"//&
+                       "Problem reading value from string '"//trim(string)//"'.")
+  end function interpret_int_expr
+end subroutine parse_segment_str
 
 !> Initialize open boundary control structure
 subroutine open_boundary_init(G, param_file, OBC)
@@ -292,8 +576,8 @@ subroutine open_boundary_impose_land_mask(OBC, G)
   if (.not.associated(OBC)) return
 
   if (associated(OBC%OBC_kind_u)) then
-    do j=G%jsd,G%jed ; do I=G%isd,G%ied-1
-      if (G%mask2dCu(I,j) == 0) then
+    do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
+      if (G%mask2dCu(I,j) == 0 .and. OBC%OBC_kind_u(I,j) == OBC_FLATHER) then
         OBC%OBC_kind_u(I,j) = OBC_NONE
         OBC%OBC_direction_u(I,j) = OBC_NONE
         OBC%OBC_mask_u(I,j) = .false.
@@ -302,8 +586,8 @@ subroutine open_boundary_impose_land_mask(OBC, G)
   endif
 
   if (associated(OBC%OBC_kind_v)) then
-    do J=G%jsd,G%jed-1 ; do i=G%isd,G%ied
-      if (G%mask2dCv(i,J) == 0) then
+    do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+      if (G%mask2dCv(i,J) == 0 .and. OBC%OBC_kind_v(i,J) == OBC_FLATHER) then
         OBC%OBC_kind_v(i,J) = OBC_NONE
         OBC%OBC_direction_v(i,J) = OBC_NONE
         OBC%OBC_mask_v(i,J) = .false.
@@ -454,135 +738,6 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
   call cpu_clock_end(id_clock_pass)
 
 end subroutine Radiation_Open_Bdry_Conds
-
-!> Sets the domain boundaries as Flather open boundaries using the original
-!! Flather run-time logicals
-subroutine set_Flather_positions(G, OBC)
-  type(dyn_horgrid_type),                 intent(inout) :: G
-  type(ocean_OBC_type),                   pointer    :: OBC
-  ! Local variables
-  integer :: east_boundary, west_boundary, north_boundary, south_boundary
-  integer :: i, j
-
-  if (.not.associated(OBC%OBC_mask_u)) then
-    allocate(OBC%OBC_mask_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; OBC%OBC_mask_u(:,:) = .false.
-  endif
-  if (.not.associated(OBC%OBC_direction_u)) then
-    allocate(OBC%OBC_direction_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; OBC%OBC_direction_u(:,:) = OBC_NONE
-  endif
-  if (.not.associated(OBC%OBC_kind_u)) then
-    allocate(OBC%OBC_kind_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; OBC%OBC_kind_u(:,:) = OBC_NONE
-  endif
-  if (.not.associated(OBC%OBC_mask_v)) then
-    allocate(OBC%OBC_mask_v(G%isd:G%ied,G%JsdB:G%JedB)) ; OBC%OBC_mask_v(:,:) = .false.
-  endif
-  if (.not.associated(OBC%OBC_direction_v)) then
-    allocate(OBC%OBC_direction_v(G%isd:G%ied,G%JsdB:G%JedB)) ; OBC%OBC_direction_v(:,:) = OBC_NONE
-  endif
-  if (.not.associated(OBC%OBC_kind_v)) then
-    allocate(OBC%OBC_kind_v(G%isd:G%ied,G%JsdB:G%JedB)) ; OBC%OBC_kind_v(:,:) = OBC_NONE
-  endif
-
-  ! This code should be modified to allow OBCs to be applied anywhere.
-
-  if (G%symmetric) then
-    east_boundary = G%ieg
-    west_boundary = G%isg-1
-    north_boundary = G%jeg
-    south_boundary = G%jsg-1
-  else
-    ! I am not entirely sure that this works properly. -RWH
-    east_boundary = G%ieg-1
-    west_boundary = G%isg
-    north_boundary = G%jeg-1
-    south_boundary = G%jsg
-  endif
-
-  if (OBC%apply_OBC_u_flather_east) then
-    ! Determine where u points are applied at east side
-    do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-      if ((I+G%idg_offset) == east_boundary) then !eastern side
-        OBC%OBC_mask_u(I,j) = .true.
-        OBC%OBC_direction_u(I,j) = OBC_DIRECTION_E
-        OBC%OBC_kind_u(I,j) = OBC_FLATHER
-        OBC%OBC_mask_v(i+1,J) = .true.
-        if (OBC%OBC_direction_v(i+1,J) == OBC_NONE) then
-          OBC%OBC_direction_v(i+1,J) = OBC_DIRECTION_E
-          OBC%OBC_kind_v(i+1,J) = OBC_FLATHER
-        endif
-        OBC%OBC_mask_v(i+1,J-1) = .true.
-        if (OBC%OBC_direction_v(i+1,J-1) == OBC_NONE) then
-          OBC%OBC_direction_v(i+1,J-1) = OBC_DIRECTION_E
-          OBC%OBC_kind_v(i+1,J-1) = OBC_FLATHER
-        endif
-      endif
-    enddo ; enddo
-  endif
-
-  if (OBC%apply_OBC_u_flather_west) then
-    ! Determine where u points are applied at west side
-    do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-      if ((I+G%idg_offset) == west_boundary) then !western side
-        OBC%OBC_mask_u(I,j) = .true.
-        OBC%OBC_direction_u(I,j) = OBC_DIRECTION_W
-        OBC%OBC_kind_u(I,j) = OBC_FLATHER
-        OBC%OBC_mask_v(i,J) = .true.
-        if (OBC%OBC_direction_v(i,J) == OBC_NONE) then
-          OBC%OBC_direction_v(i,J) = OBC_DIRECTION_W
-          OBC%OBC_kind_v(i,J) = OBC_FLATHER
-        endif
-        OBC%OBC_mask_v(i,J-1) = .true.
-        if (OBC%OBC_direction_v(i,J-1) == OBC_NONE) then
-          OBC%OBC_direction_v(i,J-1) = OBC_DIRECTION_W
-          OBC%OBC_kind_v(i,J-1) = OBC_FLATHER
-        endif
-      endif
-    enddo ; enddo
-  endif
-
-  if (OBC%apply_OBC_v_flather_north) then
-    ! Determine where v points are applied at north side
-    do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-      if ((J+G%jdg_offset) == north_boundary) then         !northern side
-        OBC%OBC_mask_v(i,J) = .true.
-        OBC%OBC_direction_v(i,J) = OBC_DIRECTION_N
-        OBC%OBC_kind_v(i,J) = OBC_FLATHER
-        OBC%OBC_mask_u(I,j+1) = .true.
-        if (OBC%OBC_direction_u(I,j+1) == OBC_NONE) then
-          OBC%OBC_direction_u(I,j+1) = OBC_DIRECTION_N
-          OBC%OBC_kind_u(I,j+1) = OBC_FLATHER
-        endif
-        OBC%OBC_mask_u(I-1,j+1) = .true.
-        if (OBC%OBC_direction_u(I-1,j+1) == OBC_NONE) then
-          OBC%OBC_direction_u(I-1,j+1) = OBC_DIRECTION_N
-          OBC%OBC_kind_u(I-1,j+1) = OBC_FLATHER
-        endif
-      endif
-    enddo ; enddo
-  endif
-
-  if (OBC%apply_OBC_v_flather_south) then
-    ! Determine where v points are applied at south side
-    do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-      if ((J+G%jdg_offset) == south_boundary) then         !southern side
-        OBC%OBC_mask_v(i,J) = .true.
-        OBC%OBC_direction_v(i,J) = OBC_DIRECTION_S
-        OBC%OBC_kind_v(i,J) = OBC_FLATHER
-        OBC%OBC_mask_u(I,j) = .true.
-        if (OBC%OBC_direction_u(I,j) == OBC_NONE) then
-          OBC%OBC_direction_u(I,j) = OBC_DIRECTION_S
-          OBC%OBC_kind_u(I,j) = OBC_FLATHER
-        endif
-        OBC%OBC_mask_u(I-1,j) = .true.
-        if (OBC%OBC_direction_u(I-1,j) == OBC_NONE) then
-          OBC%OBC_direction_u(I-1,j) = OBC_DIRECTION_S
-          OBC%OBC_kind_u(I-1,j) = OBC_FLATHER
-        endif
-      endif
-    enddo ; enddo
-  endif
-
-end subroutine set_Flather_positions
 
 !> Sets the initial definitions of the characteristic open boundary conditions.
 !! \author Mehmet Ilicak
