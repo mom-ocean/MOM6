@@ -25,27 +25,11 @@ module BFB_surface_forcing
 !*                                                                     *
 !*  This file contains subroutines for specifying surface buoyancy     * 
 !*  forcing for the buoyancy-forced basin (BFB) case.                  *
-!*  BFB_forcing is used to set the surface buoyancy                    *
-!*  forcing, which may include a number of fresh water flux fields     *
-!*  (evap, lprec, fprec, lrunoff, frunoff, and                         *
-!*  vprec) and the surface heat fluxes (sw, lw, latent and sens)       *
-!*  if temperature and salinity are state variables, or it may simply  *
-!*  be the buoyancy flux if it is not.  This routine also has coded a  *
-!*  restoring to surface values of temperature and salinity.           *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v, tauy                                  *
-!*    j    x ^ x ^ x   At >:  u, taux                                  *
-!*    j    > o > o >   At o:  h, fluxes.                               *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
+!*  BFB_buoyancy_forcing is used to restore the surface buoayncy to    *
+!*  a linear meridional ramp of temperature. The extent of the ramp    *
+!*  can be specified by LFR_SLAT (linear forcing ramp southern         *
+!*  latitude) and LFR_NLAT. The temperatures at these edges of the     *
+!*  ramp can be specified by SST_S and SST_N.                          *
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 use MOM_diag_mediator, only : post_data, query_averaging_enabled

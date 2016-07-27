@@ -27,57 +27,15 @@ module BFB_initialization
 !*  The one argument passed to initialize, Time, is set to the         *
 !*  current time of the simulation.  The fields which are initialized  *
 !*  here are:                                                          *
-!*    u - Zonal velocity in m s-1.                                     *
-!*    v - Meridional velocity in m s-1.                                *
-!*    h - Layer thickness in m.  (Must be positive.)                   *
-!*    G%bathyT - Basin depth in m.  (Must be positive.)                *
-!*    G%CoriolisBu - The Coriolis parameter, in s-1.                   *
 !*    G%g_prime - The reduced gravity at each interface, in m s-2.     *
 !*    G%Rlay - Layer potential density (coordinate variable) in kg m-3.*
-!*  If ENABLE_THERMODYNAMICS is defined:                               *
-!*    T - Temperature in C.                                            *
-!*    S - Salinity in psu.                                             *
-!*  If BULKMIXEDLAYER is defined:                                      *
-!*    Rml - Mixed layer and buffer layer potential densities in        *
-!*          units of kg m-3.                                           *
 !*  If SPONGE is defined:                                              *
 !*    A series of subroutine calls are made to set up the damping      *
 !*    rates and reference profiles for all variables that are damped   *
 !*    in the sponge.                                                   *
-!*  Any user provided tracer code is also first linked through this    *
-!*  subroutine.                                                        *
-!*                                                                     *
-!*    Forcing-related fields (taux, tauy, buoy, ustar, etc.) are set   *
-!*  in MOM_surface_forcing.F90.                                        *
 !*                                                                     *
 !*    These variables are all set in the set of subroutines (in this   *
-!*  file) BFB_initialize_bottom_depth, BFB_initialize_thickness,     *
-!*  BFB_initialize_velocity,  BFB_initialize_temperature_salinity,   *
-!*  BFB_initialize_mixed_layer_density, BFB_initialize_sponges,      *
-!*  BFB_set_coord, and BFB_set_ref_profile.                          *
-!*                                                                     *
-!*    The names of these subroutines should be self-explanatory. They  *
-!*  start with "BFB_" to indicate that they will likely have to be    *
-!*  modified for each simulation to set the initial conditions and     *
-!*  boundary conditions.  Most of these take two arguments: an integer *
-!*  argument specifying whether the fields are to be calculated        *
-!*  internally or read from a NetCDF file; and a string giving the     *
-!*  path to that file.  If the field is initialized internally, the    *
-!*  path is ignored.                                                   *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, CoriolisBu                            *
-!*    j+1  > o > o >   At ^:  v, tauy                                  *
-!*    j    x ^ x ^ x   At >:  u, taux                                  *
-!*    j    > o > o >   At o:  h, bathyT, buoy, tr, T, S, Rml, ustar    *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
+!*  file) BFB_initialize_sponges_southonly and BFB_set_coord.          *
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
@@ -105,6 +63,9 @@ logical :: first_call = .true.
 contains
 
 subroutine BFB_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
+! This subroutine specifies the vertical coordinate in terms of temperature at the surface and at the bottom. This case is set up in
+! such a way that the temperature of the topmost layer is equal to the SST at the southern edge of the domain. The temperatures are
+! then converted to densities of the top and bottom layers and linearly interpolated for the intermediate layers.
   real, dimension(NKMEM_), intent(out) :: Rlay, g_prime
   type(verticalGrid_type), intent(in)  :: GV
   type(param_file_type),   intent(in)  :: param_file
@@ -143,6 +104,8 @@ subroutine BFB_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
 end subroutine BFB_set_coord
 
 subroutine BFB_initialize_sponges_southonly(G, use_temperature, tv, param_file, CSp, h)
+! This subroutine sets up the sponges for the southern bouundary of the domain. Maximum damping occurs within 2 degrees lat of the
+! boundary. The damping linearly decreases northward over the next 2 degrees. 
   type(ocean_grid_type), intent(in)                   :: G
   logical,               intent(in)                   :: use_temperature
   type(thermo_var_ptrs), intent(in)                   :: tv
