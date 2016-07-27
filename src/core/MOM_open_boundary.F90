@@ -559,7 +559,7 @@ subroutine open_boundary_impose_land_mask(OBC, G)
   if (.not.associated(OBC)) return
 
   if (associated(OBC%OBC_kind_u)) then
-    do j=G%jsd,G%jed ; do I=G%isd,G%ied-1
+    do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
       if (G%mask2dCu(I,j) == 0 .and. OBC%OBC_kind_u(I,j) == OBC_FLATHER) then
         OBC%OBC_kind_u(I,j) = OBC_NONE
         OBC%OBC_direction_u(I,j) = OBC_NONE
@@ -569,7 +569,7 @@ subroutine open_boundary_impose_land_mask(OBC, G)
   endif
 
   if (associated(OBC%OBC_kind_v)) then
-    do J=G%jsd,G%jed-1 ; do i=G%isd,G%ied
+    do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
       if (G%mask2dCv(i,J) == 0 .and. OBC%OBC_kind_v(i,J) == OBC_FLATHER) then
         OBC%OBC_kind_v(i,J) = OBC_NONE
         OBC%OBC_direction_v(i,J) = OBC_NONE
