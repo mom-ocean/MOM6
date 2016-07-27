@@ -65,7 +65,7 @@ use oil_tracer, only : oil_tracer_column_physics, oil_tracer_surface_state
 use oil_tracer, only : oil_stock, oil_tracer_end, oil_tracer_CS
 use advection_test_tracer, only : register_advection_test_tracer, initialize_advection_test_tracer
 use advection_test_tracer, only : advection_test_tracer_column_physics, advection_test_tracer_surface_state
-use advection_test_tracer, only : advection_test_tracer_end, advection_test_tracer_CS
+use advection_test_tracer, only : advection_test_tracer_end, advection_test_tracer_CS, advection_test_stock
 #ifdef _USE_GENERIC_TRACER
 use MOM_generic_tracer, only : register_MOM_generic_tracer, initialize_MOM_generic_tracer
 use MOM_generic_tracer, only : MOM_generic_tracer_column_physics, MOM_generic_tracer_surface_state
@@ -480,6 +480,13 @@ subroutine call_tracer_stocks(h, stock_values, G, GV, CS, stock_names, stock_uni
 
   endif
 #endif
+
+  if (CS%use_advection_test_tracer) then
+    ns = advection_test_stock( h, values, G, GV, CS%advection_test_tracer_CSp, &
+                         names, units, stock_index )
+    call store_stocks("advection_test_tracer", ns, names, units, values, index, &
+           stock_values, set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
+  endif
 
   if (ns_tot == 0) stock_values(1) = 0.0
 
