@@ -245,6 +245,14 @@ subroutine setup_u_point_obc(OBC, G, segment_str)
   if (I_obc<G%HI%IsdB .or. I_obc>G%HI%IedB) return ! Boundary is not on tile
   if (max(Js_obc,Je_obc)<G%HI%JsdB .or. min(Js_obc,Je_obc)>G%HI%JedB) return ! Segment is not on tile
 
+  ! These four lines extend the open boundary into the halo region of tiles on the edge of the physical
+  ! domain. They are used to reproduce the checksums of the circle_obcs test case and will be removed
+  ! in the fullness of time. -AJA
+  if (Js_obc == G%HI%JscB) Js_obc = G%HI%jsd-1
+  if (Js_obc == G%HI%JecB) Js_obc = G%HI%jed
+  if (Je_obc == G%HI%JscB) Je_obc = G%HI%jsd-1
+  if (Je_obc == G%HI%JecB) Je_obc = G%HI%jed
+
   do j=G%HI%jsd, G%HI%jed
     if (j>min(Js_obc,Je_obc) .and. j<=max(Js_obc,Je_obc)) then
       OBC%OBC_mask_u(I_obc,j) = .true.
@@ -315,6 +323,14 @@ subroutine setup_v_point_obc(OBC, G, segment_str)
 
   if (J_obc<G%HI%JsdB .or. J_obc>G%HI%JedB) return ! Boundary is not on tile
   if (max(Is_obc,Ie_obc)<G%HI%IsdB .or. min(Is_obc,Ie_obc)>G%HI%IedB) return ! Segment is not on tile
+
+  ! These four lines extend the open boundary into the halo region of tiles on the edge of the physical
+  ! domain. They are used to reproduce the checksums of the circle_obcs test case and will be removed
+  ! in the fullness of time. -AJA
+  if (Is_obc == G%HI%IscB) Is_obc = G%HI%isd-1
+  if (Is_obc == G%HI%IecB) Is_obc = G%HI%ied
+  if (Ie_obc == G%HI%IscB) Ie_obc = G%HI%isd-1
+  if (Ie_obc == G%HI%IecB) Ie_obc = G%HI%ied
 
   do i=G%HI%isd, G%HI%ied
     if (i>min(Is_obc,Ie_obc) .and. i<=max(Is_obc,Ie_obc)) then
