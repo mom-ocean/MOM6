@@ -27,7 +27,6 @@ use MOM_shared_initialization, only : read_face_length_list, set_velocity_depth_
 use MOM_shared_initialization, only : compute_global_grid_integrals, write_ocean_geometry_file
 use user_initialization, only : user_initialize_topography
 use DOME_initialization, only : DOME_initialize_topography
-use TIDAL_BAY_initialization, only : TIDAL_BAY_set_OBC_positions
 use ISOMIP_initialization, only : ISOMIP_initialize_topography
 use benchmark_initialization, only : benchmark_initialize_topography
 use DOME2d_initialization, only : DOME2d_initialize_topography
@@ -92,7 +91,7 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
     select case ( trim(config) )
       case ("none")
       case ("DOME") ! Avoid FATAL when using segments
-      case ("TIDAL_BAY") ; call TIDAL_BAY_set_OBC_positions(G, PF, OBC)
+      case ("TIDAL_BAY") ; !Using segments now
       case ("USER") ! Avoid FATAL when using segments
       case default ; call MOM_error(FATAL, "MOM_initialize_fixed: "// &
                        "The open boundary positions specified by OBC_CONFIG="//&

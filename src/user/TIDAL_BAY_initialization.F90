@@ -32,81 +32,9 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public TIDAL_BAY_set_OBC_positions
-public TIDAL_BAY_alloc_OBC_data
 public TIDAL_BAY_set_OBC_data
 
 contains
-
-!> Set the positions of the open boundary needed for the TIDAL_BAY experiment.
-subroutine TIDAL_BAY_set_OBC_positions(G, param_file, OBC)
-  type(dyn_horgrid_type),     intent(inout) :: G   !< Grid structure.
-  type(param_file_type),      intent(in)    :: param_file !< Parameter file handle.
-  type(ocean_OBC_type),       pointer       :: OBC !< Open boundary control structure.
-  ! Local variables
-  character(len=40)  :: mod = "TIDAL_BAY_set_OBC_positions" ! This subroutine's name.
-  integer :: i, j
-
-  if (.not.associated(OBC)) call MOM_error(FATAL, &
-           "TIDAL_BAY_initialization, TIDAL_BAY_set_OBC_positions: OBC type was not allocated!")
-
-  ! This isn't called when APPLY_OBC_U is requested.
-  if (open_boundary_query(OBC, apply_orig_Flather=.true.)) then
-    ! HOPEFULLY YOU CAN USE SEGMENTS NOT INSTEAD OF THIS CALL
-    !call set_Flather_positions(G, OBC)
-    call TIDAL_BAY_alloc_OBC_data(OBC, G)
-  endif
-  ! Turn this off for BT_OBC
-  OBC%apply_OBC_u = .false.
-  OBC%update_OBC = .true.
-  if (OBC%apply_OBC_v) then
-    ! Set where v points are determined by OBCs.
-    !allocate(OBC_mask_v(IsdB:IedB,jsd:jed)) ; OBC_mask_v(:,:) = .false.
-    call MOM_error(FATAL,"TIDAL_BAY_initialization, TIDAL_BAY_set_OBC_positions: "//&
-                   "APPLY_OBC_V=True is not coded for the TIDAL_BAY experiment")
-  endif
-
-end subroutine TIDAL_BAY_set_OBC_positions
-
-!> This subroutine allocates the arrays for open boundary conditions.
-subroutine TIDAL_BAY_alloc_OBC_data(OBC, G)
-  type(ocean_OBC_type),   pointer    :: OBC  !< This open boundary condition type specifies
-                                             !! whether, where, and what open boundary
-                                             !! conditions are used.
-  type(dyn_horgrid_type),  intent(in) :: G    !< The ocean's grid structure.
-
-  logical :: apply_OBC_u, apply_OBC_v
-  character(len=40)  :: mod = "TIDAL_BAY_set_OBC_data" ! This subroutine's name.
-  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed
-  integer :: IsdB, IedB, JsdB, JedB
-
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-
-  if (.not.associated(OBC)) return
-  if (.not.(OBC%apply_OBC_u .or. OBC%apply_OBC_v)) return
-
-  if (.not.associated(OBC%vbt_outer)) then
-    allocate(OBC%vbt_outer(isd:ied,JsdB:JedB)) ; OBC%vbt_outer(:,:) = 0.0 
-  endif
-
-  if (.not.associated(OBC%ubt_outer)) then
-    allocate(OBC%ubt_outer(IsdB:IedB,jsd:jed)) ; OBC%ubt_outer(:,:) = 0.0 
-  endif
-
-  if (.not.associated(OBC%eta_outer_u)) then
-    allocate(OBC%eta_outer_u(IsdB:IedB,jsd:jed)) ; OBC%eta_outer_u(:,:) = 0.0 
-  endif
-
-  if (.not.associated(OBC%eta_outer_v)) then
-    allocate(OBC%eta_outer_v(isd:ied,JsdB:JedB)) ; OBC%eta_outer_v(:,:) = 0.0
-  endif
-
-!  call pass_vector(OBC%eta_outer_u,OBC%eta_outer_v,G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
-!  call pass_vector(OBC%ubt_outer,OBC%vbt_outer,G%Domain)
-
-end subroutine TIDAL_BAY_alloc_OBC_data
 
 !> This subroutine sets the properties of flow at open boundary conditions.
 subroutine TIDAL_BAY_set_OBC_data(OBC, G, h, Time)
