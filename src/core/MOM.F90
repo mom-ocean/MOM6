@@ -126,7 +126,9 @@ use MOM_wave_speed,            only : wave_speed_init, wave_speed_CS
 use MOM_offline_transport,         only : offline_transport_CS
 use MOM_offline_transport,         only : transport_by_files, next_modulo_time, post_advection_fields
 use MOM_offline_transport,         only : offline_transport_init, register_diags_offline_transport
+use MOM_offline_transport,         only : update_h_horizontal_flux, update_h_vertical_flux
 use time_manager_mod,              only : print_date
+use MOM_sum_output,                only : write_energy
 
 
 implicit none ; private
@@ -1218,7 +1220,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     call enable_averaging(dt,Time_local, CS%diag)
     if (CS%id_u > 0) call post_data(CS%id_u, u, CS%diag)
     if (CS%id_v > 0) call post_data(CS%id_v, v, CS%diag)
-    if (CS%id_h > 0) call post_data(CS%id_h, h, CS%diag)
+    if (CS%id_h > 0) call post_data(CS%id_h, h, CS%diag, mask=write_all_3dt)
 
     ! compute ssh, which is either eta_av for Bouss, or
     ! diagnosed ssh for non-Bouss; call "find_eta" for this
@@ -1401,18 +1403,18 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     type(MOM_control_struct), pointer  :: CS            !< control structure from initialize_MOM
 
     ! Local pointers
-    type(ocean_grid_type),      pointer :: G  => NULL()    ! Pointer to a structure containing
+    type(ocean_grid_type),      pointer :: G  => NULL() ! Pointer to a structure containing
                                                         ! metrics and related information
     type(verticalGrid_type),    pointer :: GV => NULL() ! Pointer to structure containing information
                                                         ! about the vertical grid
     ! U-3D
-    real, dimension(SZIB_(CS%G),SZJ_(CS%G),SZK_(CS%G))   :: uhtr
+    real, dimension(SZIB_(CS%G),SZJ_(CS%G),SZK_(CS%G))   :: uhtr, uhtr_sub
     ! U-2D
-    real, dimension(SZIB_(CS%G),SZJ_(CS%G))   :: khdt_x
+    real, dimension(SZIB_(CS%G),SZJ_(CS%G))              :: khdt_x, khdt_x_sub
     ! V-3D
-    real, dimension(SZI_(CS%G),SZJB_(CS%G),SZK_(CS%G))   :: vhtr
+    real, dimension(SZI_(CS%G),SZJB_(CS%G),SZK_(CS%G))   :: vhtr, vhtr_sub
     ! V-2D
-    real, dimension(SZI_(CS%G),SZJB_(CS%G))   :: khdt_y
+    real, dimension(SZI_(CS%G),SZJB_(CS%G))              :: khdt_y, khdt_y_sub
 
     ! Local variables
     real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: &
@@ -1420,22 +1422,36 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
                      ! one time step  (m for Bouss, kg/m^2 for non-Bouss)
         ebtr,     &    ! Amount of fluid entrained from the layer below within
                      ! one time step  (m for Bouss, kg/m^2 for non-Bouss)
-        h_old,  &    ! Layer thickness before diapycnal entrainment
+        eatr_sub, &
+        ebtr_sub, &
+        h_beg,  &    ! Layer thickness before diapycnal entrainment
                       ! (m for Bouss, kg/m^2 for non-Bouss)
         h_new, &        ! Layer thickness after diapycnal entrainment
                      ! (m for Bouss, kg/m^2 for non-Bouss)
         h_adv, &         ! Layer thickness after diapycnal entrainment
                      ! (m for Bouss, kg/m^2 for non-Bouss)
         h_end, &
+        h_pre, &
+        h_vol, &
+        h_temp, &
         temp_old, salt_old     !
     integer                                        :: niter, iter
     real                                           :: Inum_iter, dt_iter
-
-    niter = CS%offline_CSp%num_off_iter
+    integer :: i, j, k, m, is, ie, js, je, isd, ied, jsd, jed, nz
+    integer :: isv, iev, jsv, jev ! The valid range of the indices.
+    integer :: IsdB, IedB, JsdB, JedB
 
     ! Grid-related pointer assignments
     G => CS%G
     GV => CS%GV
+
+    is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
+    isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+    IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+
+
+    niter = CS%offline_CSp%num_off_iter
+
     ! T-cell pointer assignments
 
     ! U-cell pointer assignments
@@ -1443,12 +1459,16 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     ! V-cell pointer assignments
     uhtr(:,:,:) = 0.0
     vhtr(:,:,:) = 0.0
+    uhtr_sub(:,:,:) = 0.0
+    vhtr_sub(:,:,:) = 0.0
+    eatr_sub(:,:,:) = 0.0
+    ebtr_sub(:,:,:) = 0.0
     khdt_x(:,:) = 0.0
     khdt_y(:,:) = 0.0
     eatr(:,:,:) = 0.0
     ebtr(:,:,:) = 0.0
-    h_old(:,:,:) = GV%Angstrom
-    h_new(:,:,:) = GV%Angstrom
+    h_beg(:,:,:) = GV%Angstrom
+    h_new(:,:,:) = 0.0
     h_adv(:,:,:) = GV%Angstrom
     h_end(:,:,:) = GV%Angstrom
     temp_old(:,:,:) = 0.0
@@ -1466,24 +1486,30 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     call cpu_clock_begin(id_clock_tracer)
     call enable_averaging(time_interval, Time_start+set_time(int(time_interval)), &
                           CS%diag)
-    call transport_by_files(G, CS%offline_CSp, h_old, h_new, h_adv, h_end, eatr, ebtr, uhtr, vhtr, &
+    call transport_by_files(G, CS%offline_CSp, h_beg, h_new, h_adv, h_end, eatr, ebtr, uhtr, vhtr, &
         khdt_x, khdt_y, temp_old, salt_old, fluxes, CS%diabatic_CSp%optics, CS%use_ALE_algorithm)
 
-    ! Scale accumated transport by number of sub iterations
+    h_pre(:,:,:) = 0.0
+    h_temp(:,:,:) = 0.0
+    ! Reconstruct h_sub at the beginning of the timestep as the total mass from the end of the timestep
+    ! minus horizontal and vertical mass fluxes. Both h_sub and h_new are updated later in the main transport loop
+    ! in this subroutine. Note that the order of h_end and h_pre are switched and negative, signs
+    ! added to 3d mass fluxes to account for the fact that we're constructing h at a previous time
+    call update_h_horizontal_flux(G, GV, -uhtr, -vhtr, h_end, h_pre)
+    h_temp = h_pre
+    call update_h_vertical_flux(G, GV, -eatr, -ebtr, h_temp, h_pre)
 
     dt_iter = CS%offline_CSp%dt_offline
-    
-    if (niter>1) then
-        Inum_iter = 1./real(niter)
-        dt_iter = CS%offline_CSp%dt_offline*Inum_iter
-        eatr = eatr * Inum_iter
-        ebtr = ebtr * Inum_iter
-        uhtr = uhtr * Inum_iter
-        vhtr = vhtr * Inum_iter
-        khdt_x = khdt_x * Inum_iter
-        khdt_y = khdt_y * Inum_iter    
-    endif
 
+    ! Scale accumated transport by number of sub iterations
+    Inum_iter = 1./real(niter)
+    dt_iter = CS%offline_CSp%dt_offline*Inum_iter
+    eatr_sub = eatr * Inum_iter
+    ebtr_sub = ebtr * Inum_iter
+    uhtr_sub = uhtr * Inum_iter
+    vhtr_sub = vhtr * Inum_iter
+    khdt_x_sub = khdt_x * Inum_iter
+    khdt_y_sub = khdt_y * Inum_iter
 
     CS%T = temp_old
     CS%S = salt_old
@@ -1494,144 +1520,166 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     do iter=1,niter
 !------------DIABATIC FIRST
 
-    if (CS%diabatic_first) then
-        if (CS%debug) then
-          call hchksum(h_old*GV%H_to_m,"Pre-diabatic h", G, haloshift=1)
-        endif
-
-        call call_tracer_column_fns(h_old, h_new, eatr, ebtr, &
-            fluxes, dt_iter, G, GV, CS%tv, CS%diabatic_CSp%optics, CS%tracer_flow_CSp)
-
-        ! Regridding/remapping is done here, at end of thermodynamics time step
-        ! (that may comprise several dynamical time steps)
-        ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
-        if ( CS%use_ALE_algorithm ) then
-
-            CS%tv%T = CS%offline_CSp%T_preale
-            CS%tv%S = CS%offline_CSp%S_preale
-
-!            call do_group_pass(CS%pass_T_S_h, G%Domain)
-
-        ! update squared quantities
-            if (associated(CS%S_squared)) &
-                CS%S_squared(:,:,:) = CS%tv%S(:,:,:) ** 2
-            if (associated(CS%T_squared)) &
-                CS%T_squared(:,:,:) = CS%tv%T(:,:,:) ** 2
-
+        if (CS%diabatic_first) then
             if (CS%debug) then
-                call uchksum(CS%offline_CSp%u_preale, "Pre-ALE 1 u", G, haloshift=1)
-                call vchksum(CS%offline_CSp%v_preale, "Pre-ALE 1 v", G, haloshift=1)
-                call hchksum(CS%offline_CSp%h_preale, "Pre-ALE 1 h", G, haloshift=1)
-                call hchksum(CS%tv%T,"Pre-ALE 1 T", G, haloshift=1)
-                call hchksum(CS%tv%S,"Pre-ALE 1 S", G, haloshift=1)
-            endif
-            call cpu_clock_begin(id_clock_ALE)
-            call ALE_main(G, GV, CS%offline_CSp%h_preale, CS%offline_CSp%u_preale, &
-                            CS%offline_CSp%v_preale, CS%tv, CS%tracer_Reg, CS%ALE_CSp, dt_iter)
-            call cpu_clock_end(id_clock_ALE)
-
-            if (CS%debug) then
-                call hchksum(CS%tv%T,"Post-ALE 1 T", G, haloshift=1)
-                call hchksum(CS%tv%S,"Post-ALE 1 S", G, haloshift=1)
+              call hchksum(h_beg*GV%H_to_m,"Pre-diabatic h", G, haloshift=1)
             endif
 
-            CS%tv%T = temp_old
-            CS%tv%S = salt_old
-            
-            call pass_var(CS%T,G%Domain)
-            call pass_var(CS%S,G%Domain)
+            call update_h_vertical_flux(G, GV, eatr_sub, ebtr_sub, h_pre, h_new)
 
-        ! Whenever thickness changes let the diag manager know, target grids
-        ! for vertical remapping may need to be regenerated. This needs to
-        ! happen after the H update and before the next post_data.
-        call diag_update_target_grids(CS%diag)
-        call post_diags_TS_vardec(G, CS, CS%dt_trans)
+            call call_tracer_column_fns(h_pre, h_new, eatr_sub, ebtr_sub, &
+                fluxes, dt_iter, G, GV, CS%tv, CS%diabatic_CSp%optics, CS%tracer_flow_CSp)
 
-        endif   ! endif for the block "if ( CS%use_ALE_algorithm )"
+            ! We are now done with the vertical mass transports, so now h_new is h_sub
+            do k = 1, nz ; do i=is,ie ; do j=js,je
+                h_pre(i,j,k) = h_new(i,j,k)
+            enddo ; enddo ; enddo
 
-    endif
-!-----------ADVECTION AND DIFFUSION
-    call post_advection_fields( G, CS%offline_CSp, CS%diag, h_adv, uhtr, vhtr, CS%tv%T, CS%tv%S )
+            ! Regridding/remapping is done here, at end of thermodynamics time step
+            ! (that may comprise several dynamical time steps)
+            ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
+            if ( CS%use_ALE_algorithm ) then
 
-    if (CS%debug) then
-      call hchksum(h_adv*GV%H_to_m,"Pre-advection h", G, haloshift=1)
-      call uchksum(uhtr*GV%H_to_m,"Pre-advection uhtr", G, haloshift=1)
-      call vchksum(vhtr*GV%H_to_m,"Pre-advection vhtr", G, haloshift=1)
-      if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Pre-advection T", G, haloshift=1)
-      if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Pre-advection S", G, haloshift=1)
-    endif
+                CS%tv%T = CS%offline_CSp%T_preale
+                CS%tv%S = CS%offline_CSp%S_preale
 
-    call advect_tracer(h_adv, uhtr, vhtr, CS%OBC, dt_iter, G, GV, &
-        CS%tracer_adv_CSp, CS%tracer_Reg)
-    call tracer_hordiff(h_adv, dt_iter, CS%MEKE, CS%VarMix, G, GV, &
-        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, CS%do_online, khdt_x, khdt_y)
-
-!------------DIABATIC AFTER
-    if (.not. CS%diabatic_first) then
-        if (CS%debug) then
-          call hchksum(h_adv*GV%H_to_m,"Pre-diabatic h", G, haloshift=1)
-        endif
-
-        call call_tracer_column_fns(h_old, h_new, eatr, ebtr, &
-            fluxes, dt_iter, G, GV, CS%tv, CS%diabatic_CSp%optics, CS%tracer_flow_CSp)
-
-        ! Regridding/remapping is done here, at end of thermodynamics time step
-        ! (that may comprise several dynamical time steps)
-        ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
-        if ( CS%use_ALE_algorithm ) then
-
-            temp_old = CS%tv%T
-            salt_old = CS%tv%S
-            CS%tv%T = CS%offline_CSp%T_preale
-            CS%tv%S = CS%offline_CSp%S_preale
-
-            call pass_var(CS%tv%T,G%Domain)
-            call pass_var(CS%tv%S,G%Domain)
+    !            call do_group_pass(CS%pass_T_S_h, G%Domain)
 
             ! update squared quantities
-            if (associated(CS%S_squared)) &
-                CS%S_squared(:,:,:) = CS%tv%S(:,:,:) ** 2
-            if (associated(CS%T_squared)) &
-                CS%T_squared(:,:,:) = CS%tv%T(:,:,:) ** 2
+                if (associated(CS%S_squared)) &
+                    CS%S_squared(:,:,:) = CS%tv%S(:,:,:) ** 2
+                if (associated(CS%T_squared)) &
+                    CS%T_squared(:,:,:) = CS%tv%T(:,:,:) ** 2
 
-            if (CS%debug) then
-                call uchksum(CS%offline_CSp%u_preale, "Pre-ALE 1 u", G, haloshift=1)
-                call vchksum(CS%offline_CSp%v_preale, "Pre-ALE 1 v", G, haloshift=1)
-                call hchksum(CS%offline_CSp%h_preale, "Pre-ALE 1 h", G, haloshift=1)
-                call hchksum(CS%tv%T,"Pre-ALE 1 T", G, haloshift=1)
-                call hchksum(CS%tv%S,"Pre-ALE 1 S", G, haloshift=1)
-            endif
-            call cpu_clock_begin(id_clock_ALE)
-            call ALE_main(G, GV, CS%offline_CSp%h_preale, CS%offline_CSp%u_preale, &
-                            CS%offline_CSp%v_preale, CS%tv, CS%tracer_Reg, CS%ALE_CSp, dt_iter)
-            call cpu_clock_end(id_clock_ALE)
-        
+                if (CS%debug) then
+                    call uchksum(CS%offline_CSp%u_preale, "Pre-ALE 1 u", G, haloshift=1)
+                    call vchksum(CS%offline_CSp%v_preale, "Pre-ALE 1 v", G, haloshift=1)
+                    call hchksum(CS%offline_CSp%h_preale, "Pre-ALE 1 h", G, haloshift=1)
+                    call hchksum(CS%tv%T,"Pre-ALE 1 T", G, haloshift=1)
+                    call hchksum(CS%tv%S,"Pre-ALE 1 S", G, haloshift=1)
+                endif
+                call cpu_clock_begin(id_clock_ALE)
+                call ALE_main(G, GV, CS%offline_CSp%h_preale, CS%offline_CSp%u_preale, &
+                                CS%offline_CSp%v_preale, CS%tv, CS%tracer_Reg, CS%ALE_CSp, dt_iter)
+                call cpu_clock_end(id_clock_ALE)
 
+                if (CS%debug) then
+                    call hchksum(CS%tv%T,"Post-ALE 1 T", G, haloshift=1)
+                    call hchksum(CS%tv%S,"Post-ALE 1 S", G, haloshift=1)
+                endif
 
-            if (CS%debug) then
-                call uchksum(CS%offline_CSp%u_preale, "Post-ALE 1 u", G, haloshift=1)
-                call vchksum(CS%offline_CSp%v_preale, "Post-ALE 1 v", G, haloshift=1)
-                call hchksum(CS%offline_CSp%h_preale, "Post-ALE 1 h", G, haloshift=1)
-                call hchksum(CS%tv%T,"Post-ALE 1 T", G, haloshift=1)
-                call hchksum(CS%tv%S,"Post-ALE 1 S", G, haloshift=1)
-            endif
+                CS%tv%T = temp_old
+                CS%tv%S = salt_old
 
-            CS%tv%T = temp_old
-            CS%tv%S = salt_old
-            call pass_var(CS%tv%T,G%Domain)
-            call pass_var(CS%tv%S,G%Domain)
+                call pass_var(CS%T,G%Domain)
+                call pass_var(CS%S,G%Domain)
 
             ! Whenever thickness changes let the diag manager know, target grids
             ! for vertical remapping may need to be regenerated. This needs to
             ! happen after the H update and before the next post_data.
             call diag_update_target_grids(CS%diag)
-            call post_diags_TS_vardec(G, CS, dt_iter)
-        endif   ! endif for the block "if ( CS%use_ALE_algorithm )"
-    endif ! diabatic second
+            call post_diags_TS_vardec(G, CS, CS%dt_trans)
+
+            endif   ! endif for the block "if ( CS%use_ALE_algorithm )"
+
+        endif
+    !-----------ADVECTION AND DIFFUSION
+        call update_h_horizontal_flux(G, GV, uhtr_sub, vhtr_sub, h_pre, h_new)
+        call post_advection_fields( G, CS%offline_CSp, CS%diag, h_pre, uhtr_sub, vhtr_sub, CS%tv%T, CS%tv%S)
+
+        if (CS%debug) then
+          call hchksum(h_adv*GV%H_to_m,"Pre-advection h", G, haloshift=1)
+          call uchksum(uhtr*GV%H_to_m,"Pre-advection uhtr", G, haloshift=1)
+          call vchksum(vhtr*GV%H_to_m,"Pre-advection vhtr", G, haloshift=1)
+          if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Pre-advection T", G, haloshift=1)
+          if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Pre-advection S", G, haloshift=1)
+        endif
+
+        call advect_tracer(h_new, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
+            CS%tracer_adv_CSp, CS%tracer_Reg)
+        call tracer_hordiff(h_new, dt_iter, CS%MEKE, CS%VarMix, G, GV, &
+            CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, CS%do_online, khdt_x_sub, khdt_y_sub)
+
+        ! Done with advection so now h_pre should be h_new
+        do k = 1, nz ; do i=is,ie ; do j=js,je
+            h_pre(i,j,k) = h_new(i,j,k)
+        enddo ; enddo ; enddo
+    !------------DIABATIC AFTER
+        if (.not. CS%diabatic_first) then
+            if (CS%debug) then
+              call hchksum(h_adv*GV%H_to_m,"Pre-diabatic h", G, haloshift=1)
+            endif
+
+            ! Update h_new with convergence of vertical mass transports
+            call update_h_vertical_flux(G, GV, eatr_sub, ebtr_sub, h_pre, h_new)
+
+            call call_tracer_column_fns(h_pre, h_new, eatr_sub, ebtr_sub, &
+                fluxes, dt_iter, G, GV, CS%tv, CS%diabatic_CSp%optics, CS%tracer_flow_CSp)
+
+            ! We are now done with the vertical mass transports, so now h_new is h_sub
+            do k = 1, nz ; do i=is,ie ; do j=js,je
+                h_pre(i,j,k) = h_new(i,j,k)
+            enddo ; enddo ; enddo
+
+            ! Regridding/remapping is done here, at end of thermodynamics time step
+            ! (that may comprise several dynamical time steps)
+            ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
+            if ( CS%use_ALE_algorithm ) then
+
+                temp_old = CS%tv%T
+                salt_old = CS%tv%S
+                CS%tv%T = CS%offline_CSp%T_preale
+                CS%tv%S = CS%offline_CSp%S_preale
+
+                call pass_var(CS%tv%T,G%Domain)
+                call pass_var(CS%tv%S,G%Domain)
+
+                ! update squared quantities
+                if (associated(CS%S_squared)) &
+                    CS%S_squared(:,:,:) = CS%tv%S(:,:,:) ** 2
+                if (associated(CS%T_squared)) &
+                    CS%T_squared(:,:,:) = CS%tv%T(:,:,:) ** 2
+
+                if (CS%debug) then
+                    call uchksum(CS%offline_CSp%u_preale, "Pre-ALE 1 u", G, haloshift=1)
+                    call vchksum(CS%offline_CSp%v_preale, "Pre-ALE 1 v", G, haloshift=1)
+                    call hchksum(CS%offline_CSp%h_preale, "Pre-ALE 1 h", G, haloshift=1)
+                    call hchksum(CS%tv%T,"Pre-ALE 1 T", G, haloshift=1)
+                    call hchksum(CS%tv%S,"Pre-ALE 1 S", G, haloshift=1)
+                endif
+                call cpu_clock_begin(id_clock_ALE)
+                call ALE_main(G, GV, CS%offline_CSp%h_preale, CS%offline_CSp%u_preale, &
+                                CS%offline_CSp%v_preale, CS%tv, CS%tracer_Reg, CS%ALE_CSp, dt_iter)
+                call cpu_clock_end(id_clock_ALE)
+
+
+
+                if (CS%debug) then
+                    call uchksum(CS%offline_CSp%u_preale, "Post-ALE 1 u", G, haloshift=1)
+                    call vchksum(CS%offline_CSp%v_preale, "Post-ALE 1 v", G, haloshift=1)
+                    call hchksum(CS%offline_CSp%h_preale, "Post-ALE 1 h", G, haloshift=1)
+                    call hchksum(CS%tv%T,"Post-ALE 1 T", G, haloshift=1)
+                    call hchksum(CS%tv%S,"Post-ALE 1 S", G, haloshift=1)
+                endif
+
+                CS%tv%T = temp_old
+                CS%tv%S = salt_old
+                call pass_var(CS%tv%T,G%Domain)
+                call pass_var(CS%tv%S,G%Domain)
+
+                ! Whenever thickness changes let the diag manager know, target grids
+                ! for vertical remapping may need to be regenerated. This needs to
+                ! happen after the H update and before the next post_data.
+                call diag_update_target_grids(CS%diag)
+                call post_diags_TS_vardec(G, CS, dt_iter)
+            endif   ! endif for the block "if ( CS%use_ALE_algorithm )"
+        endif ! diabatic second
     end do
     call disable_averaging(CS%diag)
     call cpu_clock_end(id_clock_tracer)
-    CS%h = h_end
+
+    CS%h = h_new
+    call pass_var(CS%h,G%Domain)
 
 end subroutine step_tracers
 

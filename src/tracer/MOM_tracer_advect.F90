@@ -9,7 +9,7 @@ use MOM_cpu_clock,       only : CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator,   only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator,   only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_domains,         only : sum_across_PEs, max_across_PEs
-use MOM_domains,         only : create_group_pass, do_group_pass, group_pass_type
+use MOM_domains,         only : create_group_pass, do_group_pass, group_pass_type, pass_var
 use MOM_checksums,       only : hchksum
 use MOM_error_handler,   only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser,     only : get_param, log_version, param_file_type
@@ -44,7 +44,7 @@ contains
 
 !> This routine time steps the tracer concentration using a 
 !! monotonic, conservative, weakly diffusive scheme.
-subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg)
+subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, h_prev_opt)
   type(ocean_grid_type),                     intent(inout) :: G     !< ocean grid structure 
   type(verticalGrid_type),                   intent(in)    :: GV    !< ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h_end !< layer thickness after advection (m or kg m-2)
@@ -54,6 +54,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg)
   real,                                      intent(in)    :: dt    !< time increment (seconds)
   type(tracer_advect_CS),                    pointer       :: CS    !< control structure for module 
   type(tracer_registry_type),                pointer       :: Reg   !< pointer to tracer registry
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional      :: h_prev_opt !< layer thickness before advection (m or kg m-2)
 
 
   type(tracer_type) :: Tr(MAX_FIELDS_) ! The array of registered tracers
@@ -118,6 +119,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg)
 ! This initializes the halos of uhr and vhr because pass_vector might do
 ! calculations on them, even though they are never used.
 !$OMP do
+
   do k = 1, nz
     do j = jsd,  jed;  do i = IsdB, IedB; uhr(i,j,k) = 0.0; enddo ; enddo
     do j = jsdB, jedB; do i = Isd,  Ied;  vhr(i,j,k) = 0.0; enddo ; enddo
@@ -126,19 +128,26 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg)
 !  Put the remaining (total) thickness fluxes into uhr and vhr.
     do j=js,je ; do I=is-1,ie ; uhr(I,j,k) = uhtr(I,j,k) ; enddo ; enddo
     do J=js-1,je ; do i=is,ie ; vhr(i,J,k) = vhtr(i,J,k) ; enddo ; enddo
-!   This loop reconstructs the thickness field the last time that the
-! tracers were updated, probably just after the diabatic forcing.  A useful
-! diagnostic could be to compare this reconstruction with that older value.
-    do i=is,ie ; do j=js,je
-      hprev(i,j,k) = max(0.0, G%areaT(i,j)*h_end(i,j,k) + &
-           ((uhr(I,j,k) - uhr(I-1,j,k)) + (vhr(i,J,k) - vhr(i,J-1,k))))
-! In the case that the layer is now dramatically thinner than it was previously,
-! add a bit of mass to avoid truncation errors.  This will lead to
-! non-conservation of tracers 
-      hprev(i,j,k) = hprev(i,j,k) + &
-                     max(0.0, 1.0e-13*hprev(i,j,k) - G%areaT(i,j)*h_end(i,j,k))
-    enddo ; enddo
+    if (.not. present(h_prev_opt)) then
+    !   This loop reconstructs the thickness field the last time that the
+    ! tracers were updated, probably just after the diabatic forcing.  A useful
+    ! diagnostic could be to compare this reconstruction with that older value.
+        do i=is,ie ; do j=js,je
+          hprev(i,j,k) = max(0.0, G%areaT(i,j)*h_end(i,j,k) + &
+               ((uhr(I,j,k) - uhr(I-1,j,k)) + (vhr(i,J,k) - vhr(i,J-1,k))))
+    ! In the case that the layer is now dramatically thinner than it was previously,
+    ! add a bit of mass to avoid truncation errors.  This will lead to
+    ! non-conservation of tracers
+          hprev(i,j,k) = hprev(i,j,k) + &
+                         max(0.0, 1.0e-13*hprev(i,j,k) - G%areaT(i,j)*h_end(i,j,k))
+        enddo ; enddo
+    else
+      do i=is,ie ; do j=js,je
+        hprev(i,j,k) = h_prev_opt(i,j,k);
+      enddo ; enddo
+  endif
   enddo
+
 
 !$OMP do
   do j=jsd,jed ; do I=isd,ied-1
