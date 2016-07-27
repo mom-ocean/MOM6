@@ -23,7 +23,7 @@ use MOM_io, only : slasher, vardesc, write_field
 use MOM_io, only : EAST_FACE, NORTH_FACE
 use MOM_open_boundary, only : ocean_OBC_type, open_boundary_init
 use MOM_open_boundary, only : OBC_NONE, OBC_SIMPLE
-use MOM_open_boundary, only : open_boundary_query, set_Flather_data, set_Flather_positions
+use MOM_open_boundary, only : open_boundary_query, set_Flather_data
 use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
 use MOM_restart, only : restore_state, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, set_up_sponge_ML_density
@@ -40,10 +40,10 @@ use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use MOM_EOS, only : int_specific_vol_dp
 use user_initialization, only : user_initialize_thickness, user_initialize_velocity
 use user_initialization, only : user_init_temperature_salinity
-use user_initialization, only : user_set_OBC_positions, user_set_OBC_data
+use user_initialization, only : user_set_OBC_data
 use user_initialization, only : user_initialize_sponges
 use DOME_initialization, only : DOME_initialize_thickness
-use DOME_initialization, only : DOME_set_OBC_positions, DOME_set_OBC_data
+use DOME_initialization, only : DOME_set_OBC_data
 use DOME_initialization, only : DOME_initialize_sponges
 use ISOMIP_initialization, only : ISOMIP_initialize_thickness
 use ISOMIP_initialization, only : ISOMIP_initialize_sponges
@@ -426,14 +426,14 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
 
   ! This is the legacy approach to turning on open boundaries
   if (open_boundary_query(OBC, apply_orig_OBCs=.true.)) then
-    call get_param(PF, mod, "OBC_CONFIG", config, fail_if_missing=.true., do_not_log=.true.)
+    call get_param(PF, mod, "OBC_CONFIG", config, default="none", do_not_log=.true.)
     if (trim(config) == "DOME") then
       call DOME_set_OBC_data(OBC, tv, G, GV, PF, tracer_Reg)
     elseif (trim(config) == "TIDAL_BAY") then
       ! Do nothing
     elseif (trim(config) == "USER") then
       call user_set_OBC_data(OBC, tv, G, PF, tracer_Reg)
-    else
+    elseif (.not. trim(config) == "none") then
       call MOM_error(FATAL, "The open boundary conditions specified by "//&
               "OBC_CONFIG = "//trim(config)//" have not been fully implemented.")
       call set_Open_Bdry_Conds(OBC, tv, G, GV, PF, tracer_Reg)
