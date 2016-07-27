@@ -15,7 +15,7 @@ use MOM_io, only : slasher
 use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_open_boundary, only : open_boundary_config, open_boundary_query
-use MOM_open_boundary, only : set_Flather_positions, open_boundary_impose_normal_slope
+use MOM_open_boundary, only : open_boundary_impose_normal_slope
 use MOM_open_boundary, only : open_boundary_impose_land_mask
 ! use MOM_shared_initialization, only : MOM_shared_init_init
 use MOM_shared_initialization, only : MOM_initialize_rotation, MOM_calculate_grad_Coriolis
@@ -98,8 +98,6 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
                        "The open boundary positions specified by OBC_CONFIG="//&
                        trim(config)//" have not been fully implemented.")
     end select
-  elseif (open_boundary_query(OBC, apply_orig_Flather=.true.)) then
-    call set_Flather_positions(G, OBC)
   endif
 
   ! Make bathymetry consistent with open boundaries
