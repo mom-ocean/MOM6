@@ -86,12 +86,12 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
     call get_param(PF, mod, "OBC_CONFIG", config, &
                  "A string that sets how the open boundary conditions are \n"//&
                  " configured: \n"//&
-                 " \t TIDAL_BAY - tidally-resonant rectangular basin. \n",&
+                 " \t tidal_bay - tidally-resonant rectangular basin. \n",&
                  default="none")
     select case ( trim(config) )
       case ("none")
       case ("DOME") ! Avoid FATAL when using segments
-      case ("TIDAL_BAY") ; !Using segments now
+      case ("tidal_bay") ; !Using segments now
       case ("USER") ! Avoid FATAL when using segments
       case default ; call MOM_error(FATAL, "MOM_initialize_fixed: "// &
                        "The open boundary positions specified by OBC_CONFIG="//&

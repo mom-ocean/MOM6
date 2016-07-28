@@ -17,7 +17,7 @@ use MOM_io, only : slasher, read_data
 use MOM_open_boundary, only : ocean_obc_type
 use MOM_tracer_registry, only : add_tracer_OBC_values, tracer_registry_type
 use MOM_variables, only : thermo_var_ptrs
-use TIDAL_BAY_initialization, only : TIDAL_BAY_set_OBC_data
+use tidal_bay_initialization, only : tidal_bay_set_OBC_data
 
 implicit none ; private
 
@@ -62,15 +62,15 @@ subroutine update_OBC_data(OBC, G, h, Time)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  if (OBC%OBC_config == "TIDAL_BAY") then
-    call TIDAL_BAY_set_OBC_data(OBC, G, h, Time)
+  if (OBC%OBC_config == "tidal_bay") then
+    call tidal_bay_set_OBC_data(OBC, G, h, Time)
   endif
 
 end subroutine update_OBC_data
 
 !> \namespace mom_boundary_update
 !! This module updates the open boundary arrays when time-varying.
-!! It caused a circular dependency with the TIDAL_BAY setup when
+!! It caused a circular dependency with the tidal_bay setup when
 !! MOM_open_boundary.
 !!
 !! A small fragment of the grid is shown below:

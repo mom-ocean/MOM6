@@ -1,4 +1,4 @@
-module TIDAL_BAY_initialization
+module tidal_bay_initialization
 !***********************************************************************
 !*                   GNU General Public License                        *
 !* This file is a part of MOM.                                         *
@@ -32,12 +32,12 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public TIDAL_BAY_set_OBC_data
+public tidal_bay_set_OBC_data
 
 contains
 
 !> This subroutine sets the properties of flow at open boundary conditions.
-subroutine TIDAL_BAY_set_OBC_data(OBC, G, h, Time)
+subroutine tidal_bay_set_OBC_data(OBC, G, h, Time)
   type(ocean_OBC_type),   pointer    :: OBC  !< This open boundary condition type specifies
                                              !! whether, where, and what open boundary
                                              !! conditions are used.
@@ -46,11 +46,11 @@ subroutine TIDAL_BAY_set_OBC_data(OBC, G, h, Time)
   type(time_type),        intent(in) :: Time !< model time.
 
   logical :: apply_OBC_u, apply_OBC_v
-  ! The following variables are used to set up the transport in the TIDAL_BAY example.
+  ! The following variables are used to set up the transport in the tidal_bay example.
   real :: time_sec, cff, cff2, tide_flow
   real :: my_area, my_flux
   real :: PI
-  character(len=40)  :: mod = "TIDAL_BAY_set_OBC_data" ! This subroutine's name.
+  character(len=40)  :: mod = "tidal_bay_set_OBC_data" ! This subroutine's name.
   integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
 
@@ -90,10 +90,10 @@ subroutine TIDAL_BAY_set_OBC_data(OBC, G, h, Time)
     endif
   enddo ; enddo
 
-end subroutine TIDAL_BAY_set_OBC_data
+end subroutine tidal_bay_set_OBC_data
 
-!> \class TIDAL_BAY_initialization
+!> \class tidal_bay_Initialization
 !!
-!! The module configures the model for the "TIDAL_BAY" experiment.
-!! TIDAL_BAY = Tidally resonant bay from Zygmunt Kowalik's class on tides.
-end module TIDAL_BAY_initialization
+!! The module configures the model for the "tidal_bay" experiment.
+!! tidal_bay = Tidally resonant bay from Zygmunt Kowalik's class on tides.
+end module tidal_bay_initialization
