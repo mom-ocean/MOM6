@@ -388,7 +388,7 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, GV, CS, &
   call vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, GV, CS)
 
   ! Here the velocities associated with open boundary conditions are applied.
-  if (associated(OBC)) then ; if (OBC%this_pe) then
+  if (associated(OBC)) then ; if (OBC%OBC_pe) then
     if (OBC%apply_OBC_u) then
       do k=1,nz ; do j=G%jsc,G%jec ; do I=Isq,Ieq
         if (OBC%OBC_mask_u(I,j) .and. (OBC%OBC_kind_u(I,j) == OBC_SIMPLE)) &

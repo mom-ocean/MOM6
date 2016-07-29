@@ -103,7 +103,7 @@ type, public :: ocean_OBC_type
   real :: rx_max   !< The maximum magnitude of the baroclinic radiation
                    !! velocity (or speed of characteristics), in m s-1.  The
                    !! default value is 10 m s-1.
-  logical :: this_pe !< Is there an open boundary on this tile?
+  logical :: OBC_pe !< Is there an open boundary on this tile?
   logical :: update_OBC = .false. !< Is the open boundary info going to get updated?
   character(len=200) :: OBC_config
 end type ocean_OBC_type
@@ -604,9 +604,6 @@ subroutine open_boundary_impose_land_mask(OBC, G)
       ! bathymetry inside the boundary was do shallow and flagged as land.
       if (OBC%OBC_mask_u(I,j)) any_U = .true.
     enddo ; enddo
-!    if (.not. any_U) then
-!      deallocate(OBC%OBC_mask_u)
-!    endif
   endif
 
   any_V = .false.
@@ -614,14 +611,10 @@ subroutine open_boundary_impose_land_mask(OBC, G)
     do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
       if (OBC%OBC_mask_v(i,J)) any_V = .true.
     enddo ; enddo
-!    if (.not. any_V) then
-!      deallocate(OBC%OBC_mask_v)
-!    endif
   endif
 
-!  if (.not.(any_U .or. any_V)) call open_boundary_dealloc(OBC)
-  OBC%this_pe = .true.
-  if (.not.(any_U .or. any_V)) OBC%this_pe = .false.
+  OBC%OBC_pe = .true.
+  if (.not.(any_U .or. any_V)) OBC%OBC_pe = .false.
 
 end subroutine open_boundary_impose_land_mask
 
