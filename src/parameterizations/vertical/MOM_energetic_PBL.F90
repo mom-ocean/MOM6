@@ -107,7 +107,7 @@ type, public :: energetic_PBL_CS ; private
                              ! turbulent velocity, relative to mechanically
                              ! forced turbulent kinetic energy, nondim. Making
                              ! this larger increases the diffusivity.
-  real    :: vstar_scale_coef ! An overall nondimensional scaling factor
+  real    :: vstar_scale_fac ! An overall nondimensional scaling factor
                              ! for vstar.  Making this larger increases the
                              ! diffusivity.
   real    :: Ekman_scale_coef ! A nondimensional scaling factor controlling
@@ -143,19 +143,22 @@ integer :: num_msg = 0, max_msg = 2
 contains
 
 subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
-                         dSV_dT, dSV_dS, TKE_forced, dt_diag, last_call)
-  type(ocean_grid_type),                    intent(inout) :: G
-  type(verticalGrid_type),                  intent(in)    :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h_3d
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: u_3d, v_3d, dSV_dT, dSV_dS
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: TKE_forced
-  type(thermo_var_ptrs),                    intent(inout) :: tv
-  type(forcing),                            intent(inout) :: fluxes
-  real,                                     intent(in)    :: dt
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: Kd_int
-  type(energetic_PBL_CS),                   pointer       :: CS
-  real,                           optional, intent(in)    :: dt_diag
-  logical,                        optional, intent(in)    :: last_call
+                         dSV_dT, dSV_dS, TKE_forced, dt_diag, last_call, &
+                         dT_expected, dS_expected)
+  type(ocean_grid_type),                     intent(inout) :: G
+  type(verticalGrid_type),                   intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: h_3d
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: u_3d, v_3d, dSV_dT, dSV_dS
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: TKE_forced
+  type(thermo_var_ptrs),                     intent(inout) :: tv
+  type(forcing),                             intent(inout) :: fluxes
+  real,                                      intent(in)    :: dt
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(out) :: Kd_int
+  type(energetic_PBL_CS),                    pointer       :: CS
+  real,                            optional, intent(in)    :: dt_diag
+  logical,                         optional, intent(in)    :: last_call
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                                   optional, intent(out)   :: dT_expected, dS_expected
 
 !    This subroutine determines the diffusivities from the integrated energetics
 !  mixed layer model.  It assumes that heating, cooling and freshwater fluxes
@@ -205,13 +208,13 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
 !                        current time step, so diagnostics will be written.
 !                        The default is .true.
 
-  real, dimension(SZI_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZK_(GV)) :: &
     h, &            !   The layer thickness, in H (usually m or kg m-2).
     T, &            !   The layer temperatures, in deg C.
     S, &            !   The layer salinities, in psu.
     u, &            !   The zonal velocity, in m s-1.
     v               !   The meridional velocity, in m s-1.
-  real, dimension(SZI_(G),SZK_(G)+1) :: &
+  real, dimension(SZI_(G),SZK_(GV)+1) :: &
     Kd, &           ! The diapycnal diffusivity, in m2 s-1.
     pres, &         ! Interface pressures in Pa.
     hb_hs           ! The distance from the bottom over the thickness of the water,
@@ -232,7 +235,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
     absf            ! The absolute value of f, in s-1.
 
 
-  real, dimension(SZI_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZK_(GV)) :: &
     dT_to_dColHt, & ! Partial derivatives of the total column height with the temperature
     dS_to_dColHt, & ! and salinity changes within a layer, in m K-1 and m ppt-1.
     dT_to_dPE, &    ! Partial derivatives of column potential energy with the temperature
@@ -244,14 +247,14 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
     dS_to_dPE_a     ! and salinity changes within a layer, including the implicit effects
                     ! of mixing with layers higher in the water column, in
                     ! units of J m-2 K-1 and J m-2 ppt-1.
-  real, dimension(SZK_(G)) :: &
+  real, dimension(SZK_(GV)) :: &
     T0, S0, &       ! Initial values of T and S in the column, in K and ppt.
     Te, Se, &       ! Estimated final values of T and S in the column, in K and ppt.
     c1, &           ! c1 is used by the tridiagonal solver, ND.
     dTe, dSe        ! Running (1-way) estimates of temperature and salinity change.
   real, dimension(SZI_(G)) :: &
     b_den_1         ! The first term in the denominator of b1, in H.
-  real, dimension(SZK_(G)+1) :: &
+  real, dimension(SZK_(GV)+1) :: &
     Kddt_h          ! The diapycnal diffusivity times a timestep divided by the
                     ! average thicknesses around a layer, in H (m or kg m-2).
   real :: b1        ! b1 is inverse of the pivot used by the tridiagonal solver, in H-1.
@@ -277,7 +280,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
 
   real :: C1_3      ! = 1/3.
   real :: vonKar    ! The vonKarman constant.
-  real :: I_dtmrho  ! 1.0 / (dt*mstar * Rho0) in m3 kg-1 s-1.  This is
+  real :: I_dtrho   ! 1.0 / (dt * Rho0) in m3 kg-1 s-1.  This is
                     ! used convert TKE back into ustar^3.
   real :: U_star    ! The surface friction velocity, in m s-1.
   real :: vstar     ! An in-situ turbulent velocity, in m s-1.
@@ -324,8 +327,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   logical :: sfc_disconnect ! If true, any turbulence has become disconnected
                     ! from the surface.
 
-  real :: CSE(10)
-
 ! The following is only used as a diagnostic.
   real :: dt__diag  ! A copy of dt_diag (if present) or dt, in s.
   real :: IdtdR0    !  = 1.0 / (dt__diag * Rho0), in m3 kg-1 s-1.
@@ -335,17 +336,18 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   logical :: reset_diags  ! If true, zero out the accumulated diagnostics.
                 ! detrainment, in units of m.
 
-  logical :: debug=.true.
+  logical :: debug=.false.  ! Change this hard-coded value for debugging.
 !  The following arrays are used only for debugging purposes.
+  real :: dPE_debug, mixing_debug
   real, dimension(20) :: TKE_left_itt, PE_chg_itt, Kddt_h_itt, dPEa_dKd_itt, MKE_src_itt
-  real, dimension(SZI_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZK_(GV)) :: &
     mech_TKE_k, conv_PErel_k
-  real, dimension(SZK_(G)) :: nstar_k
-  integer, dimension(SZK_(G)) :: num_itts
+  real, dimension(SZK_(GV)) :: nstar_k
+  integer, dimension(SZK_(GV)) :: num_itts
 
   integer :: i, j, k, is, ie, js, je, nz, itt, max_itt
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not. associated(CS)) call MOM_error(FATAL, "energetic_PBL: "//&
          "Module must be initialized before it is used.")
@@ -355,6 +357,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       "must now be used.")
   if (.NOT. ASSOCIATED(fluxes%ustar)) call MOM_error(FATAL, &
       "energetic_PBL: No surface TKE fluxes (ustar) defined in mixedlayer!")
+  if (present(dT_expected) .or. present(dS_expected)) debug = .true.
 
   h_neglect = GV%H_subroundoff
 
@@ -366,7 +369,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
 
   h_tt_min = 0.0
   vonKar = 0.41
-  I_dtmrho = 0.0 ; if (dt*CS%mstar*GV%Rho0 > 0.0) I_dtmrho = 1.0 / (dt*CS%mstar*GV%Rho0)
+  I_dtrho = 0.0 ; if (dt*GV%Rho0 > 0.0) I_dtrho = 1.0 / (dt*GV%Rho0)
 
   ! Determine whether to zero out diagnostics before accumulation.
   reset_diags = .true.
@@ -381,7 +384,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
         CS%diag_TKE_wind(i,j) = 0.0 ; CS%diag_TKE_MKE(i,j) = 0.0
         CS%diag_TKE_conv(i,j) = 0.0 ; CS%diag_TKE_forcing(i,j) = 0.0
         CS%diag_TKE_mixing(i,j) = 0.0 ; CS%diag_TKE_mech_decay(i,j) = 0.0
-        CS%diag_TKE_conv_decay(i,j) = 0.0
+        CS%diag_TKE_conv_decay(i,j) = 0.0 !; CS%diag_TKE_unbalanced_forcing(i,j) = 0.0
       enddo ; enddo
     endif
 !!OMP end parallel
@@ -391,7 +394,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
 !!OMP parallel do default(none) shared(js,je,nz,is,ie,h_3d,u_3d,v_3d,tv,dt,      &
 !!OMP                                  CS,G,GV,fluxes,IdtdR0,                    &
 !!OMP                                  TKE_forced,debug,H_neglect,dSV_dT,        &
-!!OMP                                  dSV_dS,I_dtmrho,C1_3,h_tt_min,vonKar,     &
+!!OMP                                  dSV_dS,I_dtrho,C1_3,h_tt_min,vonKar,     &
 !!OMP                                  max_itt,Kd_int)                           &
 !!OMP                           private(i,j,k,h,u,v,T,S,Kd,mech_TKE_k,conv_PErel_k,    &
 !!OMP                                   U_Star,absf,mech_TKE,conv_PErel,nstar_k, &
@@ -459,6 +462,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
         if (TKE_forced(i,j,1) <= 0.0) then
           CS%diag_TKE_forcing(i,j) = CS%diag_TKE_forcing(i,j) + &
                                      max(-mech_TKE(i), TKE_forced(i,j,1)) * IdtdR0
+          ! CS%diag_TKE_unbalanced_forcing(i,j) = CS%diag_TKE_unbalanced_forcing(i,j) + &
+          !     min(0.0, TKE_forced(i,j,1) + mech_TKE(i)) * IdtdR0
         else
           CS%diag_TKE_forcing(i,j) = CS%diag_TKE_forcing(i,j) + CS%nstar*TKE_forced(i,j,1) * IdtdR0
         endif
@@ -567,9 +572,12 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           if (TKE_forced(i,j,k) + tot_TKE < 0.0) then
             ! The shortwave requirements deplete all the energy in this layer.
             if (CS%TKE_diagnostics) then
-              CS%diag_TKE_mixing(i,j) = CS%diag_TKE_mixing(i,j) - tot_TKE * IdtdR0
+              CS%diag_TKE_mixing(i,j) = CS%diag_TKE_mixing(i,j) + tot_TKE * IdtdR0
+              CS%diag_TKE_forcing(i,j) = CS%diag_TKE_forcing(i,j) - tot_TKE * IdtdR0
+              ! CS%diag_TKE_unbalanced_forcing(i,j) = CS%diag_TKE_unbalanced_forcing(i,j) + &
+              !     (TKE_forced(i,j,k) + tot_TKE) * IdtdR0
               CS%diag_TKE_conv_decay(i,j) = CS%diag_TKE_conv_decay(i,j) + &
-                  (1.0-TKE_reduc)*(CS%nstar-nstar_FC) * conv_PErel(i) * IdtdR0
+                      (CS%nstar-nstar_FC) * conv_PErel(i) * IdtdR0
             endif
             tot_TKE = 0.0 ; mech_TKE(i) = 0.0 ; conv_PErel(i) = 0.0
           else
@@ -581,7 +589,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
               CS%diag_TKE_conv_decay(i,j) = CS%diag_TKE_conv_decay(i,j) + &
                   (1.0-TKE_reduc)*(CS%nstar-nstar_FC) * conv_PErel(i) * IdtdR0
             endif
-            tot_TKE = TKE_reduc*tot_TKE
+            tot_TKE = TKE_reduc*tot_TKE   ! = tot_TKE + TKE_forced(i,j,k)
             mech_TKE(i) = TKE_reduc*mech_TKE(i)
             conv_PErel(i) = TKE_reduc*conv_PErel(i)
           endif
@@ -616,7 +624,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
          !   The estimated properties for layer k-1 can be calculated, using
          ! greatly simplified expressions when Kddt_h = 0.  This enables the
          ! tridiagonal solver for the whole column to be completed for debugging
-         ! purposes, and also allows for somethign akin to convective adjustment
+         ! purposes, and also allows for something akin to convective adjustment
          ! in unstable interior regions?
           b1 = 1.0 / (b_den_1(i))
           c1(K) = 0.0
@@ -671,7 +679,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           h_tt = htot(i) + h_tt_min
           TKE_here = mech_TKE(i) + CS%wstar_ustar_coef*conv_PErel(i)
           if (TKE_here > 0.0) then
-            vstar = CS%vstar_scale_coef * (I_dtmrho*TKE_here)**C1_3
+            vstar = CS%vstar_scale_fac * (I_dtrho*TKE_here)**C1_3
             Kd_guess0 = vstar * vonKar * ((h_tt*hb_hs(i,K))*vstar) / &
                 ((CS%Ekman_scale_coef * absf(i)) * (h_tt*hb_hs(i,K)) + vstar)
           else
@@ -695,7 +703,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
               ! Does MKE_src need to be included in the calculation of vstar here?
               TKE_here = mech_TKE(i) + CS%wstar_ustar_coef*(conv_PErel(i)-PE_chg_max)
               if (TKE_here > 0.0) then
-                vstar = CS%vstar_scale_coef * (I_dtmrho*TKE_here)**C1_3
+                vstar = CS%vstar_scale_fac * (I_dtrho*TKE_here)**C1_3
                 Kd(i,k) = vstar * vonKar * ((h_tt*hb_hs(i,K))*vstar) / &
                     ((CS%Ekman_scale_coef * absf(i)) * (h_tt*hb_hs(i,K)) + vstar)
               else
@@ -721,7 +729,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
             conv_PErel(i) = conv_PErel(i) - dPE_conv
             mech_TKE(i) = mech_TKE(i) + MKE_src
             if (CS%TKE_diagnostics) then
-              CS%diag_TKE_conv(i,j) = CS%diag_TKE_conv(i,j) - dPE_conv * IdtdR0
+              CS%diag_TKE_conv(i,j) = CS%diag_TKE_conv(i,j) - CS%nstar*dPE_conv * IdtdR0
               CS%diag_TKE_MKE(i,j) = CS%diag_TKE_MKE(i,j) + MKE_src * IdtdR0
             endif
             if (sfc_connected(i)) CS%ML_depth(i,J) = CS%ML_depth(i,J) + &
@@ -893,12 +901,32 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           Se(k) = Se(k) + c1(K+1)*Se(k+1)
         enddo
       endif
+      if (present(dT_expected)) then
+        do k=1,nz ; dT_expected(i,j,k) = Te(k) - T0(k) ; enddo
+      endif
+      if (present(dS_expected)) then
+        do k=1,nz ; dS_expected(i,j,k) = Se(k) - S0(k) ; enddo
+      endif
+      if (debug) then
+        dPE_debug = 0.0
+        do k=1,nz
+          dPE_debug = dPE_debug + (dT_to_dPE(i,k) * (Te(k) - T0(k)) + &
+                                   dS_to_dPE(i,k) * (Se(k) - S0(k)))
+        enddo
+        mixing_debug = dPE_debug * IdtdR0
+      endif
       k = nz ! This is here to allow a breakpoint to be set.
     else
       ! For masked points, Kd_int must still be set (to 0) because it has intent(out).
       do K=1,nz+1
         Kd(i,K) = 0.
       enddo
+      if (present(dT_expected)) then
+        do k=1,nz ; dT_expected(i,j,k) = 0.0 ; enddo
+      endif
+      if (present(dS_expected)) then
+        do k=1,nz ; dS_expected(i,j,k) = 0.0 ; enddo
+      endif
     endif ; enddo ; ! Close of i-loop - Note unusual loop order!
 
     if (CS%id_Hsfc_used > 0) then
@@ -1180,8 +1208,8 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
                  "relative to mechanically forced TKE. Making this larger\n"//&
                  "increases the BL diffusivity", &
                  "units=nondim", default=1.0)
-  call get_param(param_file, mod, "VSTAR_SCALE_COEF", CS%vstar_scale_coef, &
-                 "An overall nondimensional scaling factor for v*.\n"//&
+  call get_param(param_file, mod, "VSTAR_SCALE_FACTOR", CS%vstar_scale_fac, &
+                 "An overall nondimensional scaling factor for v*. \n"//&
                  "Making this larger decreases the PBL diffusivity.", &
                  "units=nondim", default=1.0)
   call get_param(param_file, mod, "EKMAN_SCALE_COEF", CS%Ekman_scale_coef, &
