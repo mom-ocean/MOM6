@@ -16,6 +16,7 @@ use MOM_string_functions, only : uppercase
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type, setVerticalGridAxes
 use user_initialization, only : user_set_coord
+use BFB_initialization, only : BFB_set_coord
 
 use netcdf
 
@@ -59,6 +60,8 @@ subroutine MOM_initialize_coord(GV, PF, write_geom, output_dir, tv, max_depth)
                  "This specifies how layers are to be defined: \n"//&
                  " \t file - read coordinate information from the file \n"//&
                  " \t\t specified by (COORD_FILE).\n"//&
+                 " \t BFB - Custom coords for buoyancy-forced basin case \n"//&
+                 " \t\t based on SST_S, T_BOT and DRHO_DT.\n"//&
                  " \t linear - linear based on interfaces not layers \n"//&
                  " \t layer_ref - linear based on layer densities \n"//&
                  " \t ts_ref - use reference temperature and salinity \n"//&
@@ -88,6 +91,8 @@ subroutine MOM_initialize_coord(GV, PF, write_geom, output_dir, tv, max_depth)
       call set_coord_from_file(GV%Rlay, GV%g_prime, GV, PF)
     case ("USER")
       call user_set_coord(GV%Rlay, GV%g_prime, GV, PF, eos)
+    case ("BFB")
+      call BFB_set_coord(GV%Rlay, GV%g_prime, GV, PF, eos)
     case ("none")
     case default ; call MOM_error(FATAL,"MOM_initialize_coord: "// &
       "Unrecognized coordinate setup"//trim(config))
