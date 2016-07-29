@@ -32,10 +32,49 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
+public supercritical_initialize_topography
 public supercritical_set_OBC_data
 
 contains
 
+! -----------------------------------------------------------------------------
+!> This subroutine sets up the supercritical topography
+subroutine supercritical_initialize_topography(D, G, param_file, max_depth)
+  type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
+  real, dimension(G%isd:G%ied,G%jsd:G%jed), &
+                                      intent(out) :: D !< Ocean bottom depth in m
+  type(param_file_type),              intent(in)  :: param_file !< Parameter file structure
+  real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
+
+  real :: min_depth ! The minimum and maximum depths in m.
+  real :: PI
+! This include declares and sets the variable "version".
+#include "version_variable.h"
+  character(len=40)  :: mod = "supercritical_initialize_topography" ! This subroutine's name.
+  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+  PI = 4.0*atan(1.0) ;
+
+  call MOM_mesg("  supercritical_initialization.F90, supercritical_initialize_topography: setting topography", 5)
+
+  call log_version(param_file, mod, version, "")
+  call get_param(param_file, mod, "MINIMUM_DEPTH", min_depth, &
+                 "The minimum depth of the ocean.", units="m", default=0.0)
+
+  do j=js,je ; do i=is,ie
+    D(i,j)=max_depth
+    if ((G%geoLonT(i,j) > 10.0).AND. &
+            (atan2(G%geoLatT(i,j),G%geoLonT(i,j)-10.0) < 8.95*PI/180.)) then
+      D(i,j)=0.5*min_depth
+    endif
+
+    if (D(i,j) > max_depth) D(i,j) = max_depth
+    if (D(i,j) < min_depth) D(i,j) = 0.5*min_depth
+  enddo ; enddo
+
+end subroutine supercritical_initialize_topography
+! -----------------------------------------------------------------------------
 !> This subroutine sets the properties of flow at open boundary conditions.
 subroutine supercritical_set_OBC_data(OBC, G)
   type(ocean_OBC_type),   pointer    :: OBC  !< This open boundary condition type specifies

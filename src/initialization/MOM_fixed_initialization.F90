@@ -33,6 +33,7 @@ use DOME2d_initialization, only : DOME2d_initialize_topography
 use sloshing_initialization, only : sloshing_initialize_topography
 use seamount_initialization, only : seamount_initialize_topography
 use Phillips_initialization, only : Phillips_initialize_topography
+use supercritical_initialization, only : supercritical_initialize_topography
 
 use netcdf
 
@@ -224,6 +225,7 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
     case ("sloshing");  call sloshing_initialize_topography(D, G, PF, max_depth)
     case ("seamount");  call seamount_initialize_topography(D, G, PF, max_depth)
     case ("Phillips");  call Phillips_initialize_topography(D, G, PF, max_depth)
+    case ("supercritical"); call supercritical_initialize_topography(D, G, PF, max_depth)
     case ("USER");      call user_initialize_topography(D, G, PF, max_depth)
     case default ;      call MOM_error(FATAL,"MOM_initialize_topography: "// &
       "Unrecognized topography setup '"//trim(config)//"'")
