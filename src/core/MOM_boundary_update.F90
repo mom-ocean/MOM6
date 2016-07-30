@@ -62,7 +62,7 @@ subroutine update_OBC_data(OBC, G, h, Time)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  if (OBC%OBC_config == "tidal_bay") then
+  if (OBC%OBC_values_config == "tidal_bay") then
     call tidal_bay_set_OBC_data(OBC, G, h, Time)
   endif
 

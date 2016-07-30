@@ -427,12 +427,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
 
   ! This is the legacy approach to turning on open boundaries
   call get_param(PF, mod, "OBC_CONFIG", config, default="none", do_not_log=.true.)
-  if (trim(config) == "tidal_bay") then
-    OBC%update_OBC = .true.
-    OBC%OBC_config = "tidal_bay"
-  elseif (trim(config) == "supercritical") then
-    call supercritical_set_OBC_data(OBC, G)
-  endif
   if (open_boundary_query(OBC, apply_orig_OBCs=.true.)) then
     if (trim(config) == "DOME") then
       call DOME_set_OBC_data(OBC, tv, G, GV, PF, tracer_Reg)
@@ -443,8 +437,17 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
               "OBC_CONFIG = "//trim(config)//" have not been fully implemented.")
       call set_Open_Bdry_Conds(OBC, tv, G, GV, PF, tracer_Reg)
     endif
-  elseif (open_boundary_query(OBC, apply_orig_Flather=.true.)) then
+  endif
+  if (open_boundary_query(OBC, apply_orig_Flather=.true.)) then
     call set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
+  endif
+  ! Still need a way to specify the boundary values
+  call get_param(PF, mod, "OBC_VALUES_CONFIG", config, default="none", do_not_log=.true.)
+  if (trim(config) == "tidal_bay") then
+    OBC%update_OBC = .true.
+    OBC%OBC_values_config = "tidal_bay"
+  elseif (trim(config) == "supercritical") then
+    call supercritical_set_OBC_data(OBC, G)
   endif
   if (debug.and.associated(OBC)) then
     call hchksum(G%mask2dT, 'MOM_initialize_state: mask2dT ', G%HI)

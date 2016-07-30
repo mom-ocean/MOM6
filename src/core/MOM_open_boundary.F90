@@ -105,7 +105,7 @@ type, public :: ocean_OBC_type
                    !! default value is 10 m s-1.
   logical :: OBC_pe !< Is there an open boundary on this tile?
   logical :: update_OBC = .false. !< Is the open boundary info going to get updated?
-  character(len=200) :: OBC_config
+  character(len=200) :: OBC_values_config
 end type ocean_OBC_type
 
 integer :: id_clock_pass
@@ -143,7 +143,7 @@ subroutine open_boundary_config(G, param_file, OBC)
                    "If true, open boundary conditions may be set at some \n"//&
                    "v-points, with the configuration controlled by OBC_CONFIG", &
                    default=.false.)
-    call get_param(param_file, mod, "OBC_CONFIG", OBC%OBC_config, &
+    call get_param(param_file, mod, "OBC_CONFIG", OBC%OBC_values_config, &
                    "If set, open boundary configuration string", &
                    default="file")
     call get_param(param_file, mod, "APPLY_OBC_U_FLATHER_EAST", OBC%apply_OBC_u_flather_east, &
@@ -247,10 +247,11 @@ subroutine setup_u_point_obc(OBC, G, segment_str)
   ! These four lines extend the open boundary into the halo region of tiles on the edge of the physical
   ! domain. They are used to reproduce the checksums of the circle_obcs test case and will be removed
   ! in the fullness of time. -AJA
-  if (Js_obc == G%HI%JscB) Js_obc = G%HI%jsd-1
-  if (Js_obc == G%HI%JecB) Js_obc = G%HI%jed
-  if (Je_obc == G%HI%JscB) Je_obc = G%HI%jsd-1
-  if (Je_obc == G%HI%JecB) Je_obc = G%HI%jed
+! These were causing grief in the supercritical problem. - KSH
+!  if (Js_obc == G%HI%JscB) Js_obc = G%HI%jsd-1
+!  if (Js_obc == G%HI%JecB) Js_obc = G%HI%jed
+!  if (Je_obc == G%HI%JscB) Je_obc = G%HI%jsd-1
+!  if (Je_obc == G%HI%JecB) Je_obc = G%HI%jed
 
   do j=G%HI%jsd, G%HI%jed
     if (j>min(Js_obc,Je_obc) .and. j<=max(Js_obc,Je_obc)) then
