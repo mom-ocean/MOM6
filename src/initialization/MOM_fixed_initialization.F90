@@ -93,6 +93,7 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
       case ("none")
       case ("DOME") ! Avoid FATAL when using segments
       case ("tidal_bay") ; !Using segments now
+      case ("supercritical") ; !Using segments now
       case ("USER") ! Avoid FATAL when using segments
       case default ; call MOM_error(FATAL, "MOM_initialize_fixed: "// &
                        "The open boundary positions specified by OBC_CONFIG="//&
@@ -208,6 +209,7 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
                  " \t DOME2D - use a shelf and slope configuration for the \n"//&
                  " \t\t DOME2D gravity current/overflow test case. \n"//&
                  " \t seamount - Gaussian bump for spontaneous motion test case.\n"//&
+                 " \t supercritical - flat but with 8.95 degree land mask.\n"//&
                  " \t Phillips - ACC-like idealized topography used in the Phillips config.\n"//&
                  " \t USER - call a user modified routine.", &
                  fail_if_missing=.true.)

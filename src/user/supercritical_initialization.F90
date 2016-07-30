@@ -93,18 +93,29 @@ subroutine supercritical_set_OBC_data(OBC, G)
 
   if (.not.associated(OBC)) return
 
-  do j=jsd,jed ; do I=IsdB,IedB
-    if (OBC%OBC_mask_u(I,j)) then
-      OBC%eta_outer_u(I,j) = 0.0
-      OBC%ubt_outer(I,j) = 8.57
-    endif
-  enddo ; enddo
-  do J=JsdB,JedB ; do i=isd,ied
-    if (OBC%OBC_mask_v(i,J)) then
-      OBC%eta_outer_v(i,J) = 0.0
-      OBC%vbt_outer(i,J) = 0.0
-    endif
-  enddo ; enddo
+  if (OBC%apply_OBC_u) then
+    allocate(OBC%u(IsdB:IedB,jsd:jed,nz)) ; OBC%u(:,:,:) = 0.0
+    allocate(OBC%uh(IsdB:IedB,jsd:jed,nz)) ; OBC%uh(:,:,:) = 0.0
+  endif
+  if (OBC%apply_OBC_v) then
+    allocate(OBC%v(isd:ied,JsdB:JedB,nz)) ; OBC%v(:,:,:) = 0.0
+    allocate(OBC%vh(isd:ied,JsdB:JedB,nz)) ; OBC%vh(:,:,:) = 0.0
+  endif
+
+  do k=1,nz
+    do j=jsd,jed ; do I=IsdB,IedB
+      if (OBC%OBC_mask_u(I,j) .and. (OBC%OBC_kind_u(I,j)==OBC_SIMPLE)) then
+        OBC%u(I,j,k) = 8.57
+        OBC%uh(I,j,k) = 8.57
+      endif
+    enddo ; enddo
+    do J=JsdB,JedB ; do i=isd,ied
+      if (OBC%OBC_mask_v(i,J) .and. (OBC%OBC_kind_v(i,J)==OBC_SIMPLE)) then
+        OBC%v(i,J,k) = 0.0
+        OBC%vh(i,J,k) = 0.0
+      endif
+    enddo ; enddo
+  enddo
 
 end subroutine supercritical_set_OBC_data
 
