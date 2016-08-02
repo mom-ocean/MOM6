@@ -1106,7 +1106,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS, offline_
     enddo
 
    ! Post the fields used for tracers here
-    call post_diabatic_fields( G, offline_CSp, CS%diag, hold, h, eatr, ebtr )
+    call post_diabatic_fields( G, offline_CSp, CS%diag, hold, h, ea, eb )
     call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
         CS%optics, CS%tracer_flow_CSp)
 
@@ -1131,7 +1131,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS, offline_
       eatr(i,j,k) = ea(i,j,k) + add_ent
     enddo ; enddo ; enddo
 
-    call post_diabatic_fields( G, offline_CSp, CS%diag, hold, h, eatr, ebtr)
+    call post_diabatic_fields( G, offline_CSp, CS%diag, hold, h, ea, eb)
     call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
         CS%optics, CS%tracer_flow_CSp)
 

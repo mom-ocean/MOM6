@@ -164,7 +164,8 @@ contains
 
   end subroutine post_advection_fields
 
-  subroutine transport_by_files(G, CS, h_old, h_new, h_adv, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, khdt_y, &
+!  subroutine transport_by_files(G, CS, h_old, h_new, h_adv, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, khdt_y, &
+  subroutine transport_by_files(G, CS, h_new, h_adv, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, khdt_y, &
     temp, salt, fluxes, optics, do_ale_in)
     type(ocean_grid_type),                     intent(inout)    :: G
     type(offline_transport_CS),                intent(inout)    :: CS
@@ -185,7 +186,7 @@ contains
     real, dimension(SZI_(G),SZJB_(G))                           :: khdt_y
     ! Fields at T-point
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
-      h_new, h_old, h_adv, h_end, &
+      h_new, h_adv, h_end, &
       eatr, ebtr, &
       temp, salt
     logical                                                     :: do_ale
@@ -223,8 +224,8 @@ contains
     !! Read snapshot fields (end of time interval timestamp)
     call read_data(CS%snap_file, 'h_new', h_new, domain=G%Domain%mpp_domain, &
       timelevel=CS%ridx_snap,position=CENTER)
-    call read_data(CS%snap_file, 'h_old', h_old, domain=G%Domain%mpp_domain, &
-      timelevel=CS%ridx_snap,position=CENTER)
+!    call read_data(CS%snap_file, 'h_old', h_old, domain=G%Domain%mpp_domain, &
+!      timelevel=CS%ridx_snap,position=CENTER)
     call read_data(CS%snap_file, 'h_preadv', h_adv, domain=G%Domain%mpp_domain, &
       timelevel=CS%ridx_snap,position=CENTER)
     call read_data(CS%snap_file, 'h_end', h_end, domain=G%Domain%mpp_domain, &
@@ -266,7 +267,7 @@ contains
 
     ! Scalar fields
     call pass_var(h_adv, G%Domain)
-    call pass_var(h_old, G%Domain)
+!    call pass_var(h_old, G%Domain)
     call pass_var(h_new, G%Domain)
     call pass_var(h_end, G%Domain)
     call pass_var(eatr, G%Domain)
@@ -443,7 +444,7 @@ contains
         ! add a bit of mass to avoid truncation errors.  This will lead to
         ! non-conservation of tracers
         h_new(i,j,k) = h_new(i,j,k) + &
-            max(GV%Angstrom, 1.0e-14*h_new(i,j,k) - G%areaT(i,j)*h_pre(i,j,k))
+            max(GV%Angstrom, 1.0e-13*h_new(i,j,k) - G%areaT(i,j)*h_pre(i,j,k))
         h_new(i,j,k) = h_new(i,j,k)/G%areaT(i,j)
 
       enddo ; enddo
@@ -470,22 +471,25 @@ contains
       do i=is,ie
 
         ! Top layer
-        h_new(i,j,1) = h_pre(i,j,1) + (eb(i,j,1) - ea(i,j,2))
-        h_new(i,j,1) = max(GV%Angstrom, h_new(i,j,1))
+        h_new(i,j,1) = max(0.0, h_pre(i,j,1) + (eb(i,j,1) - ea(i,j,2)+ea(i,j,1) ))
+        h_new(i,j,1) = h_new(i,j,1) + &
+            max(0.0, 1.0e-13/G%areaT(i,j)*h_new(i,j,1) - h_pre(i,j,1))
 
         ! Bottom layer
-        h_new(i,j,nz) = h_pre(i,j,nz) + (ea(i,j,nz) - eb(i,j,nz-1))
-        h_new(i,j,nz) = max(GV%Angstrom, h_new(i,j,nz))
+        h_new(i,j,nz) = max(0.0, h_pre(i,j,nz) + (ea(i,j,nz) - eb(i,j,nz-1)))
+        h_new(i,j,nz) = h_new(i,j,nz) + &
+            max(0.0, 1.0e-13/G%areaT(i,j)*h_new(i,j,nz) - h_pre(i,j,nz))
 
       enddo
 
       ! Interior layers
       do k=2,nz-1 ; do i=is,ie
 
-        h_new(i,j,k) = h_pre(i,j,k) + ((ea(i,j,k) - eb(i,j,k-1)) + &
-            (eb(i,j,k) - ea(i,j,k+1)))
+        h_new(i,j,k) = max(0.0, h_pre(i,j,k) + ((ea(i,j,k) - eb(i,j,k-1)) + &
+            (eb(i,j,k) - ea(i,j,k+1))))
 
-        h_new(i,j,k) = max(GV%Angstrom, h_new(i,j,k))
+        h_new(i,j,k) = h_new(i,j,k) + &
+            max(0.0, 1.0e-13/G%areaT(i,j)*h_new(i,j,k) - h_pre(i,j,k))
 
 
       enddo ; enddo

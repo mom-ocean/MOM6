@@ -44,7 +44,7 @@ contains
 
 !> This routine time steps the tracer concentration using a 
 !! monotonic, conservative, weakly diffusive scheme.
-subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, h_prev_opt)
+subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, h_prev_opt, max_iter_in)
   type(ocean_grid_type),                     intent(inout) :: G     !< ocean grid structure 
   type(verticalGrid_type),                   intent(in)    :: GV    !< ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h_end !< layer thickness after advection (m or kg m-2)
@@ -55,6 +55,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, h_prev_opt)
   type(tracer_advect_CS),                    pointer       :: CS    !< control structure for module 
   type(tracer_registry_type),                pointer       :: Reg   !< pointer to tracer registry
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional      :: h_prev_opt !< layer thickness before advection (m or kg m-2)
+  integer,                                   optional      :: max_iter_in
 
 
   type(tracer_type) :: Tr(MAX_FIELDS_) ! The array of registered tracers
@@ -103,6 +104,8 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, h_prev_opt)
   Idt = 1.0/dt
 
   max_iter = 2*INT(CEILING(dt/CS%dt)) + 1
+
+  if(present(max_iter_in)) max_iter = max_iter_in
 
   call cpu_clock_begin(id_clock_pass)
   call create_group_pass(CS%pass_uhr_vhr_t_hprev, uhr, vhr, G%Domain)
