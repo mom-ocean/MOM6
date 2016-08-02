@@ -273,7 +273,7 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
   real :: drho_dS(SZK_(G))   ! Derivative of density with salinity in kg m-3 PSU-1.                             !
   real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 in kg m-3.
   real :: pres(SZK_(G))      ! An array of the reference pressure in Pa. (zero here) 
-  real :: drho_dT1, drho_dS1
+  real :: drho_dT1, drho_dS1, T_Ref, S_Ref
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   pres(:) = 0.0
 
@@ -319,7 +319,13 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
      call get_param(param_file, mod, "DRHO_DT", drho_dT1, &
                  "Partial derivative of density with temperature.", &
                  units="kg m-3 K-1", fail_if_missing=.true.)
-
+     call get_param(param_file, mod, "T_REF", T_Ref, &
+                 "A reference temperature used in initialization.", &
+                 units="degC", fail_if_missing=.true.)
+     call get_param(param_file, mod, "S_REF", S_Ref, &
+                 "A reference salinity used in initialization.", units="PSU", &
+                 default=35.0)
+    
      !write(*,*)'read drho_dS, drho_dT', drho_dS1, drho_dT1
 
      S_range = s_bot - s_sur
@@ -330,6 +336,7 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
 
      i=G%iec; j=G%jec; xi0 = 0.0;
      do k = 1,nz
+        !T0(k) = T_Ref; S0(k) = S_Ref        
         xi1 = xi0 + 0.5 * h(i,j,k);
         S0(k) = S_sur +  S_range * xi1;
         T0(k) = T_sur +  T_range * xi1;
@@ -370,7 +377,7 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
        enddo
      endif
 
-     do k=1,nz ; do j=G%jsd,G%jed ; do i=G%isd,G%ied
+     do k=1,nz ; do j=js,je ; do i=is,ie
        T(i,j,k) = T0(k) ; S(i,j,k) = S0(k)
      enddo ; enddo ; enddo
 
