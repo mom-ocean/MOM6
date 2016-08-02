@@ -1264,7 +1264,7 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, param_file, eqn_of_state, P_Ref
                  units="degC", fail_if_missing=.true.)
   call get_param(param_file, mod, "S_REF", S_Ref, &
                  "A reference salinity used in initialization.", units="PSU", &
-                 default=35.0)
+                 default=33.8)
   call get_param(param_file, mod, "FIT_SALINITY", fit_salin, &
                  "If true, accept the prescribed temperature and fit the \n"//&
                  "salinity; otherwise take salinity and fit temperature.", &
