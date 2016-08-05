@@ -249,9 +249,13 @@ subroutine apply_ALE_sponge(h, dt, G, CS)
 !            CS%var(m)%p(i,j,k) = I1pdamp * &
 !                                 (CS%var(m)%p(i,j,k) + tmp_val1 * damp)
         enddo
-
+        
   enddo ! end of c loop
-
+  ! for debugging
+  !c=CS%num_col
+  !do m=1,CS%fldno
+  !   write(*,*)'APPLY SPONGE,m,CS%Ref_h(:,c),h(i,j,:),tmp_val2,tmp_val1',m,CS%Ref_h(:,c),h(i,j,:),tmp_val2,tmp_val1
+  !enddo
 end subroutine apply_ALE_sponge
 
 !> GMM: I could not find where sponge_end is being called, but I am keeping
