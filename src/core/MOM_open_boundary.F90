@@ -557,7 +557,7 @@ subroutine open_boundary_impose_normal_slope(OBC, G, depth)
     enddo ; enddo
   endif
 
-  if (associated(OBC%OBC_kind_v)) then
+  if (associated(OBC%OBC_direction_v)) then
     do J=G%jsd,G%jed-1 ; do i=G%isd,G%ied
       if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N) depth(i,j+1) = depth(i,j)
       if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S) depth(i,j) = depth(i,j+1)
