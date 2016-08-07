@@ -254,12 +254,12 @@ subroutine setup_u_point_obc(OBC, G, segment_str)
 !  if (Je_obc == G%HI%JecB) Je_obc = G%HI%jed
 
   do j=G%HI%jsd, G%HI%jed
-    if (j>min(Js_obc,Je_obc) .and. j<=max(Js_obc,Je_obc)) then
+    if (j>=min(Js_obc,Je_obc) .and. j<=max(Js_obc,Je_obc)) then
       OBC%OBC_mask_u(I_obc,j) = .true.
       OBC%OBC_kind_u(I_obc,j) = this_kind
       if (Je_obc>Js_obc) then ! East is outward
+        OBC%OBC_direction_u(I_obc,j) = OBC_DIRECTION_E ! We only use direction for Flather (maybe)
         if (this_kind == OBC_FLATHER) then
-          OBC%OBC_direction_u(I_obc,j) = OBC_DIRECTION_E ! We only use direction for Flather
           ! Set v points outside segment
           OBC%OBC_mask_v(i_obc+1,J) = .true.
           if (OBC%OBC_direction_v(i_obc+1,J) == OBC_NONE) then
@@ -273,8 +273,8 @@ subroutine setup_u_point_obc(OBC, G, segment_str)
           endif
         endif
       else ! West is outward
+        OBC%OBC_direction_u(I_obc,j) = OBC_DIRECTION_W ! We only use direction for Flather
         if (this_kind == OBC_FLATHER) then
-          OBC%OBC_direction_u(I_obc,j) = OBC_DIRECTION_W ! We only use direction for Flather
           ! Set v points outside segment
           OBC%OBC_mask_v(i_obc,J) = .true.
           if (OBC%OBC_direction_v(i_obc,J) == OBC_NONE) then
@@ -333,12 +333,13 @@ subroutine setup_v_point_obc(OBC, G, segment_str)
   if (Ie_obc == G%HI%IecB) Ie_obc = G%HI%ied
 
   do i=G%HI%isd, G%HI%ied
-    if (i>min(Is_obc,Ie_obc) .and. i<=max(Is_obc,Ie_obc)) then
+    if (i>=min(Is_obc,Ie_obc) .and. i<=max(Is_obc,Ie_obc)) then
       OBC%OBC_mask_v(i,J_obc) = .true.
       OBC%OBC_kind_v(i,J_obc) = this_kind
       if (Is_obc>Ie_obc) then ! North is outward
+        OBC%OBC_direction_v(i,J_obc) = OBC_DIRECTION_N ! We only use direction for Flather
         if (this_kind == OBC_FLATHER) then
-          OBC%OBC_direction_v(i,J_obc) = OBC_DIRECTION_N ! We only use direction for Flather
+!          OBC%OBC_direction_v(i,J_obc) = OBC_DIRECTION_N ! We only use direction for Flather
           ! Set u points outside segment
           OBC%OBC_mask_u(I,j_obc+1) = .true.
           if (OBC%OBC_direction_u(I,j_obc+1) == OBC_NONE) then
@@ -352,8 +353,9 @@ subroutine setup_v_point_obc(OBC, G, segment_str)
           endif
         endif
       else ! South is outward
+        OBC%OBC_direction_v(i,J_obc) = OBC_DIRECTION_S ! We only use direction for Flather
         if (this_kind == OBC_FLATHER) then
-          OBC%OBC_direction_v(i,J_obc) = OBC_DIRECTION_S ! We only use direction for Flather
+!          OBC%OBC_direction_v(i,J_obc) = OBC_DIRECTION_S ! We only use direction for Flather
           ! Set u points outside segment
           OBC%OBC_mask_u(I,j_obc) = .true.
           if (OBC%OBC_direction_u(I,j_obc) == OBC_NONE) then
@@ -557,7 +559,7 @@ subroutine open_boundary_impose_normal_slope(OBC, G, depth)
     enddo ; enddo
   endif
 
-  if (associated(OBC%OBC_kind_v)) then
+  if (associated(OBC%OBC_direction_v)) then
     do J=G%jsd,G%jed-1 ; do i=G%isd,G%ied
       if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N) depth(i,j+1) = depth(i,j)
       if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S) depth(i,j) = depth(i,j+1)
