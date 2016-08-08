@@ -449,8 +449,8 @@ program MOM_main
 
     ! This call steps the model over a time time_step.
     Time1 = Master_Time ; Time = Master_Time
-    if (do_online)    call step_MOM(fluxes, state, Time1, time_step, MOM_CSp)
-
+    if (do_online)        call step_MOM(fluxes, state, Time1, time_step, MOM_CSp)
+    if (.not. do_online)  call step_tracers(fluxes, state, Time1, time_step, MOM_CSp)
 
 !    Time = Time + Time_step_ocean
 !  This is here to enable fractional-second time steps.
@@ -489,7 +489,7 @@ program MOM_main
              "thermodynamic time steps that are longer than the coupling timestep.")
     endif ; endif
 
-    if (.not. do_online)  call step_tracers(fluxes, state, Time1, time_step, MOM_CSp)
+
 
 !  See if it is time to write out the energy.
     if ((Time + (Time_step_ocean/2) > write_energy_time) .and. &

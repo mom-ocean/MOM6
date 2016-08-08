@@ -126,7 +126,7 @@ use MOM_wave_speed,            only : wave_speed_init, wave_speed_CS
 use MOM_offline_transport,         only : offline_transport_CS
 use MOM_offline_transport,         only : transport_by_files, next_modulo_time, post_advection_fields
 use MOM_offline_transport,         only : offline_transport_init, register_diags_offline_transport
-use MOM_offline_transport,         only : update_h_horizontal_flux, update_h_vertical_flux
+use MOM_offline_transport,         only : limit_mass_flux_3d, update_h_horizontal_flux, update_h_vertical_flux
 use time_manager_mod,              only : print_date
 use MOM_sum_output,                only : write_energy
 
@@ -1431,15 +1431,17 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         h_adv, &         ! Layer thickness after diapycnal entrainment
                      ! (m for Bouss, kg/m^2 for non-Bouss)
         h_end, &
-        h_pre, &
         h_vol, &
+        h_pre, &
         h_temp, &
         temp_old, salt_old     !
     integer                                        :: niter, iter
     real                                           :: Inum_iter, dt_iter
+    real                                           :: global_flux_sum
     integer :: i, j, k, m, is, ie, js, je, isd, ied, jsd, jed, nz
     integer :: isv, iev, jsv, jev ! The valid range of the indices.
     integer :: IsdB, IedB, JsdB, JedB
+    logical :: z_first, x_before_y
 
     ! Grid-related pointer assignments
     G => CS%G
@@ -1459,14 +1461,10 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     ! V-cell pointer assignments
     uhtr(:,:,:) = 0.0
     vhtr(:,:,:) = 0.0
-    uhtr_sub(:,:,:) = 0.0
-    vhtr_sub(:,:,:) = 0.0
     khdt_x(:,:) = 0.0
     khdt_y(:,:) = 0.0
     eatr(:,:,:) = 0.0
     ebtr(:,:,:) = 0.0
-        eatr_sub(:,:,:) = 0.0
-    ebtr_sub(:,:,:) = 0.0
     h_beg(:,:,:) = GV%Angstrom
     h_new(:,:,:) = GV%Angstrom
     h_adv(:,:,:) = GV%Angstrom
@@ -1482,40 +1480,16 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     call transport_by_files(G, CS%offline_CSp, h_new, h_adv, h_end, eatr, ebtr, uhtr, vhtr, &
         khdt_x, khdt_y, temp_old, salt_old, fluxes, CS%diabatic_CSp%optics, CS%use_ALE_algorithm)
 
-    ! Scale accumated transport by number of sub iterations
     Inum_iter = 1./real(niter)
     dt_iter = CS%offline_CSp%dt_offline*Inum_iter
-    eatr_sub = eatr * Inum_iter
-    ebtr_sub = ebtr * Inum_iter
-    uhtr_sub = uhtr * Inum_iter
-    vhtr_sub = vhtr * Inum_iter
-    khdt_x_sub = khdt_x * Inum_iter
-    khdt_y_sub = khdt_y * Inum_iter
 
     CS%T = temp_old
     CS%S = salt_old
     call pass_var(CS%T,G%Domain)
     call pass_var(CS%S,G%Domain)
 
-
     h_pre(:,:,:) = GV%Angstrom
-    h_temp(:,:,:) = GV%Angstrom
-    ! Reconstruct h_sub at the beginning of the timestep as the total mass from the end of the timestep
-    ! minus horizontal and vertical mass fluxes. Both h_sub and h_new are updated later in the main transport loop
-    ! in this subroutine. Note that the order of h_end and h_pre are switched and negative, signs
-    ! added to 3d mass fluxes to account for the fact that we're constructing h at a previous time
-
     h_pre = CS%h
-
-!    if (CS%diabatic_first) then
-!      call update_h_horizontal_flux(G, GV, -uhtr, -vhtr, h_pre, h_temp)
-!      call update_h_vertical_flux(G, GV, -eatr, -ebtr, h_temp, h_pre)
-!    else
-!      call update_h_vertical_flux(G, GV, -eatr, -ebtr, h_pre, h_temp)
-!      call update_h_horizontal_flux(G, GV, -uhtr, -vhtr, h_temp, h_pre)
-!    endif
-
-
     dt_iter = CS%offline_CSp%dt_offline
 
     if (CS%diabatic_first .and. CS%use_ALE_algorithm) then
@@ -1565,78 +1539,82 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
 
     endif !Diabatic first and ALE
 
+    h_new(:,:,:) = GV%Angstrom
+    ! Offline tracer advection is done by using a 3d flux-limited, Strang time-split method
+    ! The flux limiting follows the routine specified by Skamarock (Monthly Weather Review, 2005)
+    ! to make sure that offline advection is monotonic and postive-definite
 
-    do iter=1,niter
 
-!------------DIABATIC FIRST
+    x_before_y = (MOD(G%first_direction,2) == 0)
+    z_first = CS%diabatic_first
 
-      if (CS%diabatic_first) then
-        if (CS%debug) then
-          call hchksum(h_beg*GV%H_to_m,"Pre-diabatic h", G, haloshift=1)
-        endif
+    do iter=1,CS%offline_CSp%num_off_iter
 
+      do k = 1, nz ; do j=js,je ; do i=is,ie
+
+        eatr_sub(i,j,k) = eatr(i,j,k)
+        ebtr_sub(i,j,k) = ebtr(i,j,k)
+        uhtr_sub(i,j,k) = uhtr(i,j,k)
+        vhtr_sub(i,j,k) = vhtr(i,j,k)
+
+      enddo; enddo ; enddo
+
+      ! Calculate 3d mass transports to be used in this iteration
+      call limit_mass_flux_3d(G, GV, uhtr_sub, vhtr_sub, eatr_sub, ebtr_sub, h_pre)
+
+      if (z_first) then
+      ! Do vertical advection
         call update_h_vertical_flux(G, GV, eatr_sub, ebtr_sub, h_pre, h_new)
-
         call call_tracer_column_fns(h_pre, h_new, eatr_sub, ebtr_sub, &
             fluxes, dt_iter, G, GV, CS%tv, CS%diabatic_CSp%optics, CS%tracer_flow_CSp)
-
         ! We are now done with the vertical mass transports, so now h_new is h_sub
-        do k = 1, nz ; do i=is,ie ; do j=js,je
-              h_pre(i,j,k) = h_new(i,j,k)
+        do k = 1, nz ; do j=js,je ; do i=is,ie
+          h_pre(i,j,k) = h_new(i,j,k)
         enddo ; enddo ; enddo
-
       endif
-  !-----------ADVECTION AND DIFFUSION
 
-
+      ! Zonal and meridional advection
       call update_h_horizontal_flux(G, GV, uhtr_sub, vhtr_sub, h_pre, h_new)
-      call post_advection_fields( G, CS%offline_CSp, CS%diag, h_pre, uhtr_sub, vhtr_sub, CS%tv%T, CS%tv%S)
-
-      if (CS%debug) then
-        call hchksum(h_adv*GV%H_to_m,"Pre-advection h", G, haloshift=1)
-        call uchksum(uhtr*GV%H_to_m,"Pre-advection uhtr", G, haloshift=1)
-        call vchksum(vhtr*GV%H_to_m,"Pre-advection vhtr", G, haloshift=1)
-        if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Pre-advection T", G, haloshift=1)
-        if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Pre-advection S", G, haloshift=1)
-      endif
-
       do k = 1, nz ; do i = is, ie ; do j=js, je
         h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
       enddo; enddo; enddo
-
-!      if (iter.eq.niter) then
-!        call advect_tracer(h_end, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
-!          CS%tracer_adv_CSp, CS%tracer_Reg)
-!      else
-        call advect_tracer(h_new, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
-            CS%tracer_adv_CSp, CS%tracer_Reg, h_vol)
-!      endif
-!        call tracer_hordiff(h_new, dt_iter, CS%MEKE, CS%VarMix, G, GV, &
-!            CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, CS%do_online, khdt_x_sub, khdt_y_sub)
-
-      ! Done with advection so now h_pre should be h_new
+      call advect_tracer(h_new, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
+          CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, 1, x_before_y)
+      ! Done with horizontal so now h_pre should be h_new
       do k = 1, nz ; do i=is,ie ; do j=js,je
           h_pre(i,j,k) = h_new(i,j,k)
       enddo ; enddo ; enddo
-  !------------DIABATIC AFTER
-      if (.not. CS%diabatic_first) then
-          if (CS%debug) then
-            call hchksum(h_adv*GV%H_to_m,"Pre-diabatic h", G, haloshift=1)
-          endif
 
-          ! Update h_new with convergence of vertical mass transports
-          call update_h_vertical_flux(G, GV, eatr_sub, ebtr_sub, h_pre, h_new)
+      if (.not. z_first) then
+              ! Do vertical advection
+        call update_h_vertical_flux(G, GV, eatr_sub, ebtr_sub, h_pre, h_new)
+        call call_tracer_column_fns(h_pre, h_new, eatr_sub, ebtr_sub, &
+            fluxes, dt_iter, G, GV, CS%tv, CS%diabatic_CSp%optics, CS%tracer_flow_CSp)
+        ! We are now done with the vertical mass transports, so now h_new is h_sub
+        do k = 1, nz ; do j=js,je ; do i=is,ie
+          h_pre(i,j,k) = h_new(i,j,k)
+        enddo ; enddo ; enddo
+      endif
 
-          call call_tracer_column_fns(h_pre, h_new, eatr_sub, ebtr_sub, &
-              fluxes, dt_iter, G, GV, CS%tv, CS%diabatic_CSp%optics, CS%tracer_flow_CSp)
+      ! Update remaining transports
+      do k = 1, nz ; do j=js,je ; do i=is,ie
+        eatr(i,j,k) = eatr(i,j,k) - eatr_sub(i,j,k)
+        ebtr(i,j,k) = ebtr(i,j,k) - ebtr_sub(i,j,k)
+        uhtr(I,j,k) = uhtr(I,j,k) - uhtr_sub(I,j,k)
+        vhtr(i,J,k) = vhtr(i,J,k) - vhtr_sub(i,J,k)
+      enddo; enddo ; enddo
 
-          ! We are now done with the vertical mass transports, so now h_pre is set as h_new
-          do k = 1, nz ; do i=is,ie ; do j=js,je
-              h_pre(i,j,k) = h_new(i,j,k)
-          enddo ; enddo ; enddo
+      ! Stop if we've depleted all the mastransports
+      if ( (sum(eatr)+sum(ebtr)+sum(uhtr)+sum(vhtr)) ==0.0) exit
 
-      endif ! diabatic second
+      ! Switch order of Strang split
+      z_first = .not. z_first
+      x_before_y = .not. x_before_y
+
+
     end do
+
+    if (is_root_pe()) print *, 'Number of iterations: ', iter
 
     ! Tracer diffusion happens after the 3d advection
     call tracer_hordiff(h_end, CS%offline_CSp%dt_offline, CS%MEKE, CS%VarMix, G, GV, &
@@ -1690,14 +1668,19 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     endif !Diabatic second and ALE
 
     h_temp = h_end-h_new
-    if (CS%offline_CSp%id_h_new) call post_data(CS%offline_CSp%id_h_new, h_new, CS%diag)
+    if (CS%offline_CSp%id_h_new>0) call post_data(CS%offline_CSp%id_h_new, h_new, CS%diag)
     if (CS%id_h>0) call post_data(CS%id_h, h_temp, CS%diag)
-
+    if (CS%id_u>0) call post_data(CS%id_u, uhtr, CS%diag)
+    if (CS%id_v>0) call post_data(CS%id_v, vhtr, CS%diag)
+    if (CS%offline_CSp%id_eatr_dia>0) call post_data(CS%offline_CSp%id_eatr_dia, eatr, CS%diag)
+    if (CS%offline_CSp%id_ebtr_dia>0) call post_data(CS%offline_CSp%id_ebtr_dia, ebtr, CS%diag)
     call cpu_clock_end(id_clock_tracer)
 
     call disable_averaging(CS%diag)
 
-    CS%h = h_end
+    do i = is, ie ; do j = js, je ; do k=1,nz
+      CS%h(i,j,k) = h_end(i,j,k)
+    enddo ;  enddo; enddo
     call pass_var(CS%h,G%Domain)
 
 end subroutine step_tracers
