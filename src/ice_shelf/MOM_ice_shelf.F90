@@ -255,7 +255,8 @@ type, public :: ice_shelf_CS ; private
   real :: kd_molec_salt  ! The molecular diffusivity of salt, in m2 s-1.
   real :: kd_molec_temp  ! The molecular diffusivity of heat, in m2 s-1.
   real :: Lat_fusion   ! The latent heat of fusion, in J kg-1.
-
+  real :: Gamma_T_3EQ  !  Nondimensional heat-transfer coefficient, used in the 3Eq. formulation 
+                       !  This number should be specified by the user.
   real :: col_thick_melt_threshold ! if the mixed layer is below this threshold, melt rate 
                                   ! is not calculated for the cell
 
@@ -334,13 +335,18 @@ type, public :: ice_shelf_CS ; private
                        ! the underlying ocean.
   logical :: threeeq   ! If true, the 3 equation consistency equations are
                        ! used to calculate the flux at the ocean-ice interface.
+  logical :: insulator ! If true, ice shelf is a perfect insulator
+  logical :: const_gamma ! If true, gamma_T is specified by the user.
+
   integer :: id_melt = -1, id_exch_vel_s = -1, id_exch_vel_t = -1, &
              id_tfreeze = -1, id_tfl_shelf = -1, &
-         id_u_shelf = -1, id_v_shelf = -1, id_h_shelf = -1, id_h_mask = -1, &
-         id_u_mask = -1, id_v_mask = -1, id_t_shelf = -1, id_t_mask = -1, & 
-         id_surf_elev = -1, id_bathym = -1, id_float_frac = -1, id_col_thick = -1, &
-         id_area_shelf_h = -1, id_OD_av = -1, id_float_frac_rt = -1, id_ustar_shelf = -1, &
-         id_shelf_mass = -1
+             id_thermal_driving = -1, id_haline_driving = -1, &
+             id_u_ml = -1, id_v_ml = -1, &
+             id_u_shelf = -1, id_v_shelf = -1, id_h_shelf = -1, id_h_mask = -1, &
+             id_u_mask = -1, id_v_mask = -1, id_t_shelf = -1, id_t_mask = -1, & 
+             id_surf_elev = -1, id_bathym = -1, id_float_frac = -1, id_col_thick = -1, &
+             id_area_shelf_h = -1, id_OD_av = -1, id_float_frac_rt = -1,&
+              id_ustar_shelf = -1, id_shelf_mass = -1
 
   ! ids for outputting intermediate thickness in advection subroutine (debugging)
   !integer :: id_h_after_uflux = -1, id_h_after_vflux = -1, id_h_after_adv = -1
@@ -495,8 +501,9 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
 
   iDens = 1.0/CS%density_ocean_avg
 
-  if (CS%shelf_mass_is_dynamic .and. CS%override_shelf_movement) call update_shelf_mass(CS, Time)
 
+  if (CS%shelf_mass_is_dynamic .and. CS%override_shelf_movement) call update_shelf_mass(CS, Time)
+  
   do j=js,je 
     ! Find the pressure at the ice-ocean interface, averaged only over the
     ! part of the cell covered by ice shelf.
@@ -525,8 +532,8 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
           u_at_h = state%u(i,j)
           v_at_h = state%v(i,j)
 
-          fluxes%ustar_shelf(i,j)= sqrt(CS%cdrag)*((u_at_h**2.0 + v_at_h**2.0)**0.5 +&
-                                                    CS%utide(i,j))
+          fluxes%ustar_shelf(i,j)= sqrt(CS%cdrag)*sqrt((u_at_h**2.0 + v_at_h**2.0)**2 +&
+                                                    CS%utide(i,j)**2)
           ustar_h = MAX(CS%ustar_bg, fluxes%ustar_shelf(i,j))
 
           fluxes%ustar_shelf(i,j) = ustar_h
@@ -563,10 +570,18 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
             ! First, determine the buoyancy flux assuming no effects of stability
             ! on the turbulence.  Following H & J '99, this limit also applies
             ! when the buoyancy flux is destabilizing.
+      
+            if (CS%const_gamma) then ! if using a constant gamma_T
+               !I_Gam_T = 1.0 / CS%Gamma_T_3EQ
+               !I_Gam_S = 1.0 / (CS%Gamma_T_3EQ/35.)
+               I_Gam_T = CS%Gamma_T_3EQ
+               I_Gam_S = CS%Gamma_T_3EQ/35.
+            else
+               Gam_turb = I_VK * (ln_neut + (0.5 * I_ZETA_N - 1.0))
+               I_Gam_T = 1.0 / (Gam_mol_t + Gam_turb)
+               I_Gam_S = 1.0 / (Gam_mol_s + Gam_turb)
+            endif
 
-            Gam_turb = I_VK * (ln_neut + (0.5 * I_ZETA_N - 1.0))
-            I_Gam_T = 1.0 / (Gam_mol_t + Gam_turb)
-            I_Gam_S = 1.0 / (Gam_mol_s + Gam_turb)
             wT_flux = dT_ustar * I_Gam_T
             wB_flux = dB_dS * (dS_ustar * I_Gam_S) + dB_dT * wT_flux
 
@@ -592,8 +607,16 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
                   dG_dwB = I_VK * (0.5 * I_ZETA_N) * dIns_dwB
                 endif     
 
-                I_Gam_T = 1.0 / (Gam_mol_t + Gam_turb)
-                I_Gam_S = 1.0 / (Gam_mol_s + Gam_turb)
+                if (CS%const_gamma) then ! if using a constant gamma_T
+                   !I_Gam_T = 1.0 / CS%Gamma_T_3EQ
+                   I_Gam_T = CS%Gamma_T_3EQ
+                   !I_Gam_S = 1.0 / (CS%Gamma_T_3EQ/35.)
+                   I_Gam_S = CS%Gamma_T_3EQ/35.
+                else
+                  I_Gam_T = 1.0 / (Gam_mol_t + Gam_turb)
+                  I_Gam_S = 1.0 / (Gam_mol_s + Gam_turb)
+                endif
+
                 wT_flux = dT_ustar * I_Gam_T
                 wB_flux_new = dB_dS * (dS_ustar * I_Gam_S) + dB_dT * wT_flux
 
@@ -626,21 +649,26 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
               CS%lprec(i,j) = I_LF * CS%t_flux(i,j)
               CS%tflux_shelf(i,j) = 0.0
             else
-              ! With melting, from H&J 1999, eqs (31) & (26)...
-              !   Q_ice ~= cp_ice * (CS%Temp_Ice-T_freeze) * lprec
-              !   RhoLF*lprec = Q_ice + CS%t_flux(i,j)
-              !   lprec = (CS%t_flux(i,j)) / (LF + cp_ice * (T_freeze-CS%Temp_Ice))
-              CS%lprec(i,j) = CS%t_flux(i,j) / &
-                    (LF + CS%CP_Ice * (CS%Tfreeze(i,j) - CS%Temp_Ice))
+              if (CS%insulator) then
+                 !no conduction/perfect insulator
+                 CS%tflux_shelf(i,j) = 0.0
+                 CS%lprec(i,j) = I_LF * (- CS%tflux_shelf(i,j) + CS%t_flux(i,j))
 
-              CS%tflux_shelf(i,j) = CS%t_flux(i,j) - LF*CS%lprec(i,j)  
+              else
+                 ! With melting, from H&J 1999, eqs (31) & (26)...
+                 !   Q_ice ~= cp_ice * (CS%Temp_Ice-T_freeze) * lprec
+                 !   RhoLF*lprec = Q_ice + CS%t_flux(i,j)
+                 !   lprec = (CS%t_flux(i,j)) / (LF + cp_ice * (T_freeze-CS%Temp_Ice))
+                 CS%lprec(i,j) = CS%t_flux(i,j) / &
+                       (LF + CS%CP_Ice * (CS%Tfreeze(i,j) - CS%Temp_Ice))
+
+                CS%tflux_shelf(i,j) = CS%t_flux(i,j) - LF*CS%lprec(i,j)  
+              endif
+ 
             endif 
   !other options: dTi/dz linear through shelf
   !            dTi_dz = (CS%Temp_Ice - CS%tfreeze(i,j))/G%draft(i,j)
   !            CS%tflux_shelf(i,j) = - Rho_Ice * CS%CP_Ice * KTI * dTi_dz
-  !no conduction/perfect insulator
-  !            CS%tflux_shelf(i,j) = 0.0
-  !            CS%lprec(i,j) = I_LF * (- CS%tflux_shelf(i,j) + CS%t_flux(i,j))
 
             mass_exch = CS%exch_vel_s(i,j) * CS%Rho0
             Sbdry_it = (state%sss(i,j) * mass_exch + CS%Salin_ice * CS%lprec(i,j)) / &
@@ -688,6 +716,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
 
   ! melt in m/year
   fluxes%iceshelf_melt = CS%lprec  * (86400.0*365.0/CS%density_ice)
+  !CS%lprec(:,:) = 5.822E-6 ! testing
 
   if (CS%DEBUG) then
    call hchksum (CS%h_shelf, "melt rate", G%HI, haloshift=0)
@@ -750,6 +779,10 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
    if (CS%id_area_shelf_h > 0) call post_data(CS%id_area_shelf_h, CS%area_shelf_h, CS%diag)
    if (CS%id_ustar_shelf > 0) call post_data(CS%id_ustar_shelf, fluxes%ustar_shelf, CS%diag)
    if (CS%id_melt > 0) call post_data(CS%id_melt, (CS%lprec) * (86400.0*365.0/CS%density_ice), CS%diag)
+   if (CS%id_thermal_driving > 0) call post_data(CS%id_thermal_driving, (state%sst-CS%tfreeze), CS%diag)
+   if (CS%id_haline_driving > 0) call post_data(CS%id_haline_driving, (state%sss-Sbdry), CS%diag)
+   if (CS%id_u_ml > 0) call post_data(CS%id_u_ml,state%u,CS%diag)
+   if (CS%id_v_ml > 0) call post_data(CS%id_v_ml,state%v,CS%diag)
    if (CS%id_tfreeze > 0) call post_data(CS%id_tfreeze, CS%tfreeze, CS%diag)
    if (CS%id_tfl_shelf > 0) call post_data(CS%id_tfl_shelf, CS%tflux_shelf, CS%diag)
    if (CS%id_exch_vel_t > 0) call post_data(CS%id_exch_vel_t, CS%exch_vel_t, CS%diag)
@@ -1160,6 +1193,17 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
                  "If true, use the three equation expression of \n"//&
                  "consistency to calculate the fluxes at the ice-ocean \n"//&
                  "interface.", default=.true.)
+  call get_param(param_file, mod, "SHELF_INSULATOR", CS%insulator, &
+                 "If true, the ice shelf is a perfect insulatior \n"//&
+                 "(no conduction).", default=.false.)
+  call get_param(param_file, mod, "SHELF_3EQ_GAMMA", CS%const_gamma, &
+                 "If true, user specifies a constant nondimensional heat-transfer coefficient \n"//&
+                 "(GAMMA_T_3EQ), from which the salt-transfer coefficient is then computed \n"//&
+                 " as GAMMA_T_3EQ/35. This is used with SHELF_THREE_EQN.", default=.false.)
+  if (CS%const_gamma) call get_param(param_file, mod, "SHELF_3EQ_GAMMA_T", CS%Gamma_T_3EQ, &
+                 "Nondimensional heat-transfer coefficient.",default=2.2E-2, &
+                  units="nondim.", fail_if_missing=.true.)
+
   if (.not.CS%threeeq) &
     call get_param(param_file, mod, "SHELF_2EQ_GAMMA_T", CS%gamma_t, &
                  "If SHELF_THREE_EQN is false, this the fixed turbulent \n"//&
@@ -1688,6 +1732,14 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
      'mass of shelf', 'kg/m^2')
   CS%id_melt = register_diag_field('ocean_model', 'melt', CS%diag%axesT1, CS%Time, &
      'Ice Shelf Melt Rate', 'meter year-1')
+  CS%id_thermal_driving = register_diag_field('ocean_model', 'thermal_driving', CS%diag%axesT1, CS%Time, &
+     'pot. temp. in the boundary layer minus freezing pot. temp. at the ice-ocean interface.', 'Celsius')
+  CS%id_haline_driving = register_diag_field('ocean_model', 'haline_driving', CS%diag%axesT1, CS%Time, &     
+     'salinity in the boundary layer minus salinity at the ice-ocean interface.', 'PPT')
+  CS%id_u_ml = register_diag_field('ocean_model', 'u_ml', CS%diag%axesT1, CS%Time, &
+     'Eastward vel. in the boundary layer (used to compute ustar)', 'meter second-1')
+  CS%id_v_ml = register_diag_field('ocean_model', 'v_ml', CS%diag%axesT1, CS%Time, &
+     'Northward vel. in the boundary layer (used to compute ustar)', 'meter second-1')
   CS%id_exch_vel_s = register_diag_field('ocean_model', 'exch_vel_s', CS%diag%axesT1, CS%Time, &
      'Sub-shelf salinity exchange velocity', 'meter second-1')
   CS%id_exch_vel_t = register_diag_field('ocean_model', 'exch_vel_t', CS%diag%axesT1, CS%Time, &
