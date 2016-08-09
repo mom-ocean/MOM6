@@ -1550,6 +1550,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     ! The flux limiting follows the routine specified by Skamarock (Monthly Weather Review, 2005)
     ! to make sure that offline advection is monotonic and postive-definite
 
+    call tracer_hordiff(h_pre, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
+        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, CS%do_online, khdt_x*0.5, khdt_y*0.5)
 
     x_before_y = (MOD(G%first_direction,2) == 0)
     z_first = CS%diabatic_first
@@ -1567,11 +1569,11 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         ebtr_sub(i,j,k) = ebtr(i,j,k)
       enddo; enddo ; enddo
 
-      do k = 1, nz ; do j=js,je ; do i=is-1,ie
+      do k = 1, nz ; do j=js,je ; do i=is-1,ie+1
         uhtr_sub(I,j,k) = uhtr(I,j,k)
       enddo; enddo ; enddo
 
-      do k = 1, nz ; do j=js-1,je ; do i=is,ie
+      do k = 1, nz ; do j=js-1,je+1 ; do i=is,ie
         vhtr_sub(i,J,k) = vhtr(i,J,k)
       enddo; enddo ; enddo
 
@@ -1639,11 +1641,11 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         ebtr(i,j,k) = ebtr(i,j,k) - ebtr_sub(i,j,k)
       enddo; enddo ; enddo
 
-      do k = 1, nz ; do j=js,je ; do i=is-1,ie
+      do k = 1, nz ; do j=js,je ; do i=is-1,ie+1
         uhtr(I,j,k) = uhtr(I,j,k) - uhtr_sub(I,j,k)
       enddo; enddo ; enddo
 
-      do k = 1, nz ; do j=js-1,je ; do i=is,ie
+      do k = 1, nz ; do j=js-1,je+1 ; do i=is,ie
         vhtr(i,J,k) = vhtr(i,J,k) - vhtr_sub(i,J,k)
       enddo; enddo ; enddo
 !
@@ -1659,10 +1661,10 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     call pass_var(h_pre, G%Domain)
     if (is_root_pe()) print *, 'Number of iterations: ', iter
 
-    ! Tracer diffusion happens after the 3d advection
+    ! Tracer diffusion Strang split between advection and diffusion
 
-    call tracer_hordiff(h_pre, CS%offline_CSp%dt_offline, CS%MEKE, CS%VarMix, G, GV, &
-        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, CS%do_online, khdt_x, khdt_y)
+    call tracer_hordiff(h_pre, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
+        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, CS%do_online, khdt_x*0.5, khdt_y*0.5)
 
     if (.not.CS%diabatic_first .and. CS%use_ALE_algorithm) then
     ! Regridding/remapping is done here, at end of thermodynamics time step
