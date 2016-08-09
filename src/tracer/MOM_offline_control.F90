@@ -218,9 +218,9 @@ contains
       timelevel=CS%ridx_mean,position=CENTER)
 
     !! Time-averaged fields
-    call read_data(CS%snap_file, 'temp',   temp, domain=G%Domain%mpp_domain, &
+    call read_data(CS%mean_file, 'temp_preadv',   temp, domain=G%Domain%mpp_domain, &
       timelevel=CS%ridx_mean,position=CENTER)
-    call read_data(CS%snap_file, 'salt',   salt, domain=G%Domain%mpp_domain, &
+    call read_data(CS%mean_file, 'salt_preadv',   salt, domain=G%Domain%mpp_domain, &
       timelevel=CS%ridx_mean,position=CENTER)
 
     !! Read snapshot fields (end of time interval timestamp)
@@ -251,15 +251,6 @@ contains
         timelevel=CS%ridx_mean,position=NORTH)
 
     endif
-
-
-    ! Convert all transport from time-averages to total amounts
-    !        uhtr = uhtr * dt
-    !        vhtr = vhtr * dt
-    !        eatr = eatr * dt
-    !        ebtr = ebtr * dt
-    !        khdt_x = khdt_x * dt
-    !        khdt_y = khdt_y * dt
 
     !! Make sure all halos have been updated
     ! Vector fields
@@ -448,8 +439,7 @@ contains
 
         h_new(i,j,k) = max(0.0, G%areaT(i,j)*h_pre(i,j,k) + &
           ((uhtr(I-1,j,k) - uhtr(I,j,k)) + (vhtr(i,J-1,k) - vhtr(i,J,k))))
-!        h_new(i,j,k) = G%areaT(i,j)*h_pre(i,j,k) + &
-!          ((uhtr(I-1,j,k) - uhtr(I,j,k)) + (vhtr(i,J-1,k) - vhtr(i,J,k)))
+
         ! In the case that the layer is now dramatically thinner than it was previously,
         ! add a bit of mass to avoid truncation errors.  This will lead to
         ! non-conservation of tracers
