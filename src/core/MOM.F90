@@ -1494,7 +1494,6 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
 
     h_pre(:,:,:) = GV%Angstrom
     h_pre = CS%h
-    dt_iter = CS%offline_CSp%dt_offline
 
     hmix_min = CS%offline_CSp%hmix_min
 
