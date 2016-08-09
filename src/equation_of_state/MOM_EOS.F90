@@ -7,7 +7,6 @@ use MOM_EOS_linear
 use MOM_EOS_Wright
 use MOM_EOS_UNESCO
 use MOM_EOS_TEOS10
-use MOM_EOS_NEMO
 use MOM_TFreeze, only : calculate_TFreeze_linear, calculate_TFreeze_Millero
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg
 use MOM_file_parser, only : get_param, log_version, param_file_type
@@ -65,13 +64,11 @@ integer, parameter :: EOS_LINEAR = 1
 integer, parameter :: EOS_UNESCO = 2
 integer, parameter :: EOS_WRIGHT = 3
 integer, parameter :: EOS_TEOS10 = 4
-integer, parameter :: EOS_NEMO   = 5
 
 character*(10), parameter :: EOS_LINEAR_STRING = "LINEAR"
 character*(10), parameter :: EOS_UNESCO_STRING = "UNESCO"
 character*(10), parameter :: EOS_WRIGHT_STRING = "WRIGHT"
 character*(10), parameter :: EOS_TEOS10_STRING = "TEOS10"
-character*(10), parameter :: EOS_NEMO_STRING   = "NEMO"
 character*(10), parameter :: EOS_DEFAULT = EOS_WRIGHT_STRING
 
 integer, parameter :: TFREEZE_LINEAR = 1
@@ -103,8 +100,6 @@ subroutine calculate_density_scalar(T, S, pressure, rho, EOS)
       call calculate_density_scalar_wright(T, S, pressure, rho)
     case (EOS_TEOS10)
       call calculate_density_scalar_teos10(T, S, pressure, rho)
-    case (EOS_NEMO)
-      call calculate_density_scalar_nemo(T, S, pressure, rho)
     case default
       call MOM_error(FATAL, &
            "calculate_density_scalar: EOS is not valid.")
@@ -135,13 +130,10 @@ subroutine calculate_density_array(T, S, pressure, rho, start, npts, EOS)
       call calculate_density_array_wright(T, S, pressure, rho, start, npts)
     case (EOS_TEOS10)
       call calculate_density_array_teos10(T, S, pressure, rho, start, npts)
-    case (EOS_nemo)
-      call calculate_density_array_nemo  (T, S, pressure, rho, start, npts)
     case default
       call MOM_error(FATAL, &
            "calculate_density_array: EOS%form_of_EOS is not valid.")
   end select
-
 end subroutine calculate_density_array
 
 !> Calls the appropriate subroutine to calculate the freezing point for scalar inputs.
@@ -202,23 +194,7 @@ subroutine calculate_density_derivs(T, S, pressure, drho_dT, drho_dS, start, npt
   integer,            intent(in)  :: start !< Starting index within the array
   integer,            intent(in)  :: npts !< The number of values to calculate
   type(EOS_type),     pointer     :: EOS !< Equation of state structure
-  !!
-  !!Testing section
-  !!NEMO         Check value: rho = 1027.45140 kg/m^3 for p=1000 dbar, ct=10 Celcius, sa=30 g/kg
-  !real :: T0(1),S0(1),pressure0(1)
-  !T0(1) = 10.
-  !S0(1) = 30.
-  !pressure0(1) = 1000. * 1e4 !pa
-  !call calculate_density_derivs_nemo(T0, S0, pressure0, drho_dT, drho_dS, 1,1)
-  !print*, 'NEMO   drho: ', drho_dT(1), drho_dS(1)
-  !call calculate_density_derivs_teos10(T0, S0, pressure0, drho_dT, drho_dS, 1,1)
-  !print*, 'TEOS10 drho: ', drho_dT(1), drho_dS(1)
-  !call calculate_density_derivs_wright(T0, S0, pressure0, drho_dT, drho_dS, 1,1)
-  !print*, 'WRIGHT drho: ', drho_dT(1), drho_dS(1)
-  !call calculate_density_derivs_unesco(T0, S0, pressure0, drho_dT, drho_dS, 1,1)
-  !print*, 'UNESCO drho: ', drho_dT(1), drho_dS(1)
-  !stop
-  !!
+
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "calculate_density_derivs called with an unassociated EOS_type EOS.")
 
@@ -232,8 +208,6 @@ subroutine calculate_density_derivs(T, S, pressure, drho_dT, drho_dS, start, npt
       call calculate_density_derivs_wright(T, S, pressure, drho_dT, drho_dS, start, npts)
     case (EOS_TEOS10)
       call calculate_density_derivs_teos10(T, S, pressure, drho_dT, drho_dS, start, npts)
-    case (EOS_NEMO)
-      call calculate_density_derivs_nemo(T, S, pressure, drho_dT, drho_dS, start, npts)
     case default
       call MOM_error(FATAL, &
            "calculate_density_derivs: EOS%form_of_EOS is not valid.")
@@ -273,13 +247,6 @@ subroutine calculate_specific_vol_derivs(T, S, pressure, dSV_dT, dSV_dS, start, 
       call calculate_specvol_derivs_wright(T, S, pressure, dSV_dT, dSV_dS, start, npts)
     case (EOS_TEOS10)
       call calculate_specvol_derivs_teos10(T, S, pressure, dSV_dT, dSV_dS, start, npts)
-    case (EOS_NEMO)
-      call calculate_density_nemo(T, S, pressure, rho, start, npts)
-      call calculate_density_derivs_nemo(T, S, pressure, drho_dT, drho_dS, start, npts)
-      do j=start,start+npts-1
-        dSV_dT(j) = -dRho_DT(j)/(rho(j)**2)
-        dSV_dS(j) = -dRho_DS(j)/(rho(j)**2)
-      enddo
     case default
       call MOM_error(FATAL, &
            "calculate_density_derivs: EOS%form_of_EOS is not valid.")
@@ -312,8 +279,6 @@ subroutine calculate_compress(T, S, pressure, rho, drho_dp, start, npts, EOS)
       call calculate_compress_wright(T, S, pressure, rho, drho_dp, start, npts)
     case (EOS_TEOS10)
       call calculate_compress_teos10(T, S, pressure, rho, drho_dp, start, npts)
-    case (EOS_NEMO)
-      call calculate_compress_nemo(T, S, pressure, rho, drho_dp, start, npts)
     case default
       call MOM_error(FATAL, &
            "calculate_compress: EOS%form_of_EOS is not valid.")
@@ -346,8 +311,6 @@ subroutine calculate_2_densities( T, S, pressure1, pressure2, rho1, rho2, start,
       call calculate_2_densities_wright(T, S, pressure1, pressure2, rho1, rho2, start, npts)
     case (EOS_TEOS10)
       call calculate_2_densities_teos10(T, S, pressure1, pressure2, rho1, rho2, start, npts)
-    case (EOS_NEMO)
-      call calculate_2_densities_nemo(T, S, pressure1, pressure2, rho1, rho2, start, npts)
     case default
       call MOM_error(FATAL, &
            "calculate_2_densities: EOS%form_of_EOS is not valid.")
@@ -504,7 +467,7 @@ subroutine EOS_init(param_file, EOS)
   call get_param(param_file, mod, "EQN_OF_STATE", tmpstr, &
                  "EQN_OF_STATE determines which ocean equation of state \n"//&
                  "should be used.  Currently, the valid choices are \n"//&
-                 '"LINEAR", "UNESCO", "WRIGHT", "NEMO" and "TEOS10". \n'//&
+                 '"LINEAR", "UNESCO", "WRIGHT" and "TEOS10". \n'//&
                  "This is only used if USE_EOS is true.", default=EOS_DEFAULT)
   select case (uppercase(tmpstr))
     case (EOS_LINEAR_STRING)
@@ -515,8 +478,6 @@ subroutine EOS_init(param_file, EOS)
       EOS%form_of_EOS = EOS_WRIGHT
     case (EOS_TEOS10_STRING)
       EOS%form_of_EOS = EOS_TEOS10
-    case (EOS_NEMO_STRING)
-      EOS%form_of_EOS = EOS_NEMO
     case default
       call MOM_error(FATAL, "interpret_eos_selection: EQN_OF_STATE "//&
                               trim(tmpstr) // "in input file is invalid.")
