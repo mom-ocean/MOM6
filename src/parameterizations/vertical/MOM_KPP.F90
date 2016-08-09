@@ -363,9 +363,9 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
   if (CS%id_Ssurf > 0)    allocate( CS%Ssurf( SZI_(G), SZJ_(G)) )
   if (CS%id_Ssurf > 0)    CS%Ssurf(:,:) = 0.
   if (CS%id_Usurf > 0)    allocate( CS%Usurf( SZIB_(G), SZJ_(G)) )
-  if (CS%id_Usurf > 0)    CS%Tsurf(:,:) = 0.
+  if (CS%id_Usurf > 0)    CS%Usurf(:,:) = 0.
   if (CS%id_Vsurf > 0)    allocate( CS%Vsurf( SZI_(G), SZJB_(G)) )
-  if (CS%id_Vsurf > 0)    CS%Ssurf(:,:) = 0.
+  if (CS%id_Vsurf > 0)    CS%Vsurf(:,:) = 0.
 
 end function KPP_init
 

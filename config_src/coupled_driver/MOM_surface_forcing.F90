@@ -804,7 +804,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_surface_forcing"  ! This module's name.
   character(len=48)  :: stagger
-  character(len=128) :: basin_file
+  character(len=240) :: basin_file
   integer :: i, j, isd, ied, jsd, jed
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -1041,7 +1041,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
   endif ; endif
 
   ! Set up any restart fields associated with the forcing.
-  call restart_init(G, param_file, CS%restart_CSp, "MOM_forcing.res")
+  call restart_init(param_file, CS%restart_CSp, "MOM_forcing.res")
 !###  call register_ctrl_forcing_restarts(G, param_file, CS%ctrl_forcing_CSp, &
 !###                                      CS%restart_CSp)
   call restart_init_end(CS%restart_CSp)
