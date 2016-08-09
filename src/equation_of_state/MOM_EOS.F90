@@ -462,7 +462,7 @@ subroutine EOS_init(param_file, EOS)
   if (.not.associated(EOS)) call EOS_allocate(EOS)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version)
+  call log_version(param_file, mod, version, "")
 
   call get_param(param_file, mod, "EQN_OF_STATE", tmpstr, &
                  "EQN_OF_STATE determines which ocean equation of state \n"//&

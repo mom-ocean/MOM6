@@ -59,7 +59,7 @@ subroutine MOM_initialize_fixed(G, PF, write_geom, output_dir)
 #include "version_variable.h"
 
   call callTree_enter("MOM_initialize_fixed(), MOM_fixed_initialization.F90")
-  call log_version(PF, mod, version)
+  call log_version(PF, mod, version, "")
   call get_param(PF, mod, "DEBUG", debug, default=.false.)
 
   call get_param(PF, mod, "INPUTDIR", inputdir, &

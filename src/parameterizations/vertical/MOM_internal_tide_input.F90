@@ -325,7 +325,7 @@ subroutine int_tide_input_init(Time, G, GV, param_file, diag, CS, itide)
   CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version)
+  call log_version(param_file, mod, version, "")
 
   call get_param(param_file, mod, "INPUTDIR", CS%inputdir, default=".")
   CS%inputdir = slasher(CS%inputdir)

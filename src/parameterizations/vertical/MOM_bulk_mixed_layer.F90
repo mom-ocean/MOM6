@@ -118,9 +118,9 @@ type, public :: bulkmixedlayer_CS ; private
   integer :: ML_presort_nz_conv_adj ! If ML_resort is true, do convective
                              ! adjustment on this many layers (starting from the
                              ! top) before sorting the remaining layers.
-  logical :: use_omega       !   If true, use the absolute rotation rate instead
-                             ! of the vertical component of rotation when
-                             ! setting the decay scale for turbulence.
+  real    :: omega_frac      !   When setting the decay scale for turbulence, use
+                             ! this fraction of the absolute rotation rate blended
+                             ! with the local value of f, as sqrt((1-of)*f^2 + of*4*omega^2).
   logical :: correct_absorption ! If true, the depth at which penetrating
                              ! shortwave radiation is absorbed is corrected by
                              ! moving some of the heating upward in the water
@@ -1368,7 +1368,7 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
   is = G%isc ; ie = G%iec ; nz = G%ke
   diag_wt = dt * Idt_diag
 
-  if (CS%use_omega) absf = 2.0*CS%omega
+  if (CS%omega_frac >= 1.0) absf = 2.0*CS%omega
   do i=is,ie
     U_Star = fluxes%ustar(i,j)
     if (associated(fluxes%ustar_shelf) .and. associated(fluxes%frac_shelf_h)) then
@@ -1378,9 +1378,12 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
     endif
 
     if (U_Star < CS%ustar_min) U_Star = CS%ustar_min
-    if (.not.CS%use_omega) &
+    if (CS%omega_frac < 1.0) then
       absf = 0.25*((abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I-1,J-1))) + &
                    (abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I-1,J))))
+      if (CS%omega_frac > 0.0) &
+        absf = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf**2)
+    endif
     absf_Ustar = absf / U_Star
     Idecay_len_TKE(i) = (absf_Ustar * CS%TKE_decay) * GV%H_to_m
 
@@ -3355,8 +3358,9 @@ subroutine bulkmixedlayer_init(Time, G, GV, param_file, diag, CS)
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_mixed_layer"  ! This module's name.
+  real :: omega_frac_dflt
   integer :: isd, ied, jsd, jed
-  logical :: use_temperature
+  logical :: use_temperature, use_omega
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   if (associated(CS)) then
@@ -3446,10 +3450,20 @@ subroutine bulkmixedlayer_init(Time, G, GV, param_file, diag, CS)
   call get_param(param_file, mod, "OMEGA",CS%omega, &
                  "The rotation rate of the earth.", units="s-1", &
                  default=7.2921e-5)
-  call get_param(param_file, mod, "ML_USE_OMEGA", CS%use_omega, &
+  call get_param(param_file, mod, "ML_USE_OMEGA", use_omega, &
                  "If true, use the absolute rotation rate instead of the \n"//&
                  "vertical component of rotation when setting the decay \n"//&
-                 "scale for turbulence.", default=.false.)
+                 "scale for turbulence.", default=.false., do_not_log=.true.)
+  omega_frac_dflt = 0.0
+  if (use_omega) then
+    call MOM_error(WARNING, "ML_USE_OMEGA is depricated; use ML_OMEGA_FRAC=1.0 instead.")
+    omega_frac_dflt = 1.0
+  endif
+  call get_param(param_file, mod, "ML_OMEGA_FRAC", CS%omega_frac, &
+                 "When setting the decay scale for turbulence, use this \n"//&
+                 "fraction of the absolute rotation rate blended with the \n"//&
+                 "local value of f, as sqrt((1-of)*f^2 + of*4*omega^2).", &
+                 units="nondim", default=omega_frac_dflt)
   call get_param(param_file, mod, "ML_RESORT", CS%ML_resort, &
                  "If true, resort the topmost layers by potential density \n"//&
                  "before the mixed layer calculations.", default=.false.)

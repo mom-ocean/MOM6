@@ -158,7 +158,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   call callTree_enter("MOM_initialize_state(), MOM_state_initialization.F90")
-  call log_version(PF, mod, version)
+  call log_version(PF, mod, version, "")
   call get_param(PF, mod, "DEBUG", debug, default=.false.)
 
   new_sim = .false.
@@ -2122,7 +2122,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
 !                      model parameter values.
 !  (in)      dirs    - A structure containing several relevant directory paths.
 
-
   type(ocean_grid_type),                 intent(inout) :: G
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)   :: h    
   type(thermo_var_ptrs),                 intent(inout) :: tv
@@ -2139,11 +2138,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-
-
   character(len=40)  :: mod = "MOM_initialize_layers_from_Z" ! This module's name.
-
-
 
   integer :: is, ie, js, je, nz ! compute domain indices
   integer :: isc,iec,jsc,jec    ! global compute domain indices
@@ -2207,7 +2202,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
   PI_180=atan(1.0)/45.
 
   call callTree_enter(trim(mod)//"(), MOM_state_initialization.F90")
-  call log_version(PF, mod, version)
+  call log_version(PF, mod, version, "")
 
   new_sim = .false.
   if ((dirs%input_filename(1:1) == 'n') .and. &
