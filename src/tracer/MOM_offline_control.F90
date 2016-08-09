@@ -81,7 +81,6 @@ module MOM_offline_transport
     logical :: fields_are_offset ! True if the time-averaged fields and snapshot fields are
                                  ! offset by one time level
 
-    real :: hmix_min
     real :: max_off_cfl
     ! These fields for preale are allocatable because they are not necessary for all runs
     real, allocatable, dimension(NIMEM_,NJMEM_,NKMEM_)      :: &
@@ -98,13 +97,8 @@ module MOM_offline_transport
     integer           ::  num_off_iter
 
     integer :: &
-      id_h_new = -1, &
-      id_h_old = -1, &
-      id_h_preadv = -1, &
       id_uhtr_preadv = -1, &
       id_vhtr_preadv = -1, &
-      id_eatr_dia = -1, &
-      id_ebtr_dia = -1, &
       id_temp_preadv = -1, &
       id_salt_preadv = -1
 
@@ -113,30 +107,14 @@ module MOM_offline_transport
 #include "MOM_memory.h"
 #include "version_variable.h"
   public offline_transport_init
-  public post_diabatic_fields
   public post_advection_fields
+  public transport_by_files
+  public register_diags_offline_transport
+  public update_h_horizontal_flux
+  public update_h_vertical_flux
+  public limit_mass_flux_3d
 
 contains
-
-    ! Called from call_tracer_column_fns to make sure that all the terms in the
-    ! diabatic driver routine are the same online and offline
-  subroutine post_diabatic_fields( G, CS, diag, h_old, h_new, eatr, ebtr )
-
-    type(ocean_grid_type),                      intent(in)      :: G
-    type(offline_transport_CS),                 intent(in)      :: CS
-    type(diag_ctrl),                            intent(inout)   :: diag
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)      :: h_old, h_new, &
-      eatr, ebtr
-
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G))                    :: write_all_3dt
-    write_all_3dt = 1.
-
-    if (CS%id_h_old>0)  call post_data(CS%id_h_old, h_old,  diag, mask = write_all_3dt )
-    if (CS%id_h_new>0)  call post_data(CS%id_h_new, h_new,  diag, mask = write_all_3dt )
-    if (CS%id_eatr_dia>0)   call post_data(CS%id_eatr_dia,  eatr,   diag, mask = write_all_3dt)
-    if (CS%id_ebtr_dia>0)   call post_data(CS%id_ebtr_dia,  ebtr,   diag, mask = write_all_3dt)
-
-  end subroutine post_diabatic_fields
 
     ! Called right before tracer_advect call in MOM.F90 to ensure that all terms
     ! in the tracer advection routine are the same online and offline
@@ -158,21 +136,19 @@ contains
     write_all_3du = 1.
     write_all_3dv = 1.
 
-    if (CS%id_h_preadv>0)      call post_data(CS%id_h_preadv,     h_adv,  diag, mask = write_all_3dt )
-    if (CS%id_uhtr_preadv>0)   call post_data(CS%id_uhtr_preadv,  uhtr,   diag, mask = write_all_3du )
-    if (CS%id_vhtr_preadv>0)   call post_data(CS%id_vhtr_preadv,  vhtr,   diag, mask = write_all_3dv )
-    if (CS%id_temp_preadv>0)   call post_data(CS%id_temp_preadv,  temp,   diag, mask = write_all_3dt )
-    if (CS%id_salt_preadv>0)   call post_data(CS%id_salt_preadv,  salt,   diag, mask = write_all_3dt )
+
+    if (CS%id_uhtr_preadv>0)   call post_data(CS%id_uhtr_preadv,  uhtr, diag, mask = write_all_3du )
+    if (CS%id_vhtr_preadv>0)   call post_data(CS%id_vhtr_preadv,  vhtr, diag, mask = write_all_3dv )
+    if (CS%id_temp_preadv>0)   call post_data(CS%id_temp_preadv,  temp, diag, mask = write_all_3dt )
+    if (CS%id_salt_preadv>0)   call post_data(CS%id_salt_preadv,  salt, diag, mask = write_all_3dt )
 
   end subroutine post_advection_fields
 
   !  subroutine transport_by_files(G, CS, h_old, h_new, h_adv, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, khdt_y, &
-  subroutine transport_by_files(G, CS, h_new, h_adv, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, khdt_y, &
-    temp, salt, fluxes, optics, do_ale_in)
+  subroutine transport_by_files(G, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, khdt_y, &
+    temp, salt, do_ale_in)
     type(ocean_grid_type),                     intent(inout)    :: G
     type(offline_transport_CS),                intent(inout)    :: CS
-    type(forcing),                             intent(inout)    :: fluxes
-    type(optics_type),                         intent(inout)    :: optics
     logical, optional                                           :: do_ale_in
 
     !! Mandatory variables
@@ -188,7 +164,7 @@ contains
     real, dimension(SZI_(G),SZJB_(G))                           :: khdt_y
     ! Fields at T-point
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
-      h_new, h_adv, h_end, &
+      h_end, &
       eatr, ebtr, &
       temp, salt
     logical                                                     :: do_ale
@@ -212,9 +188,9 @@ contains
     call read_data(CS%sum_file, 'khdt_y_sum', khdt_y, domain=G%Domain%mpp_domain, &
       timelevel=CS%ridx_mean,position=NORTH)
     ! T-grid
-    call read_data(CS%sum_file, 'eatr_dia_sum',   eatr, domain=G%Domain%mpp_domain, &
+    call read_data(CS%sum_file, 'ea_sum',   eatr, domain=G%Domain%mpp_domain, &
       timelevel=CS%ridx_mean,position=CENTER)
-    call read_data(CS%sum_file, 'ebtr_dia_sum',   ebtr, domain=G%Domain%mpp_domain, &
+    call read_data(CS%sum_file, 'eb_sum',   ebtr, domain=G%Domain%mpp_domain, &
       timelevel=CS%ridx_mean,position=CENTER)
 
     !! Time-averaged fields
@@ -224,12 +200,6 @@ contains
       timelevel=CS%ridx_mean,position=CENTER)
 
     !! Read snapshot fields (end of time interval timestamp)
-    call read_data(CS%snap_file, 'h_new', h_new, domain=G%Domain%mpp_domain, &
-      timelevel=CS%ridx_snap,position=CENTER)
-    !    call read_data(CS%snap_file, 'h_old', h_old, domain=G%Domain%mpp_domain, &
-    !      timelevel=CS%ridx_snap,position=CENTER)
-    call read_data(CS%snap_file, 'h_preadv', h_adv, domain=G%Domain%mpp_domain, &
-      timelevel=CS%ridx_snap,position=CENTER)
     call read_data(CS%snap_file, 'h_end', h_end, domain=G%Domain%mpp_domain, &
       timelevel=CS%ridx_snap,position=CENTER)
 
@@ -258,9 +228,6 @@ contains
     call pass_vector(khdt_x, khdt_y, G%Domain)
 
     ! Scalar fields
-    call pass_var(h_adv, G%Domain)
-    !    call pass_var(h_old, G%Domain)
-    call pass_var(h_new, G%Domain)
     call pass_var(h_end, G%Domain)
     call pass_var(eatr, G%Domain)
     call pass_var(ebtr, G%Domain)
@@ -302,22 +269,10 @@ contains
       'Accumulated meridional thickness fluxes to advect tracers', 'kg')
 
     ! T-cell fields
-    CS%id_h_preadv = register_diag_field('ocean_model', 'h_preadv',    diag%axesTL, Time, &
-      'Layer Thickness prior to advection', 'm', v_cell_method = 'sum')
-    CS%id_h_old = register_diag_field('ocean_model', 'h_old',    diag%axesTL, Time, &
-      'Layer Thickness before diabatic', 'm', v_cell_method = 'sum')
-    CS%id_h_new = register_diag_field('ocean_model', 'h_new',    diag%axesTL, Time, &
-      'Layer Thickness after diabatic', 'm', v_cell_method = 'sum')
-    CS%id_eatr_dia  = register_diag_field('ocean_model', 'eatr_dia', diag%axesTL, Time, &
-      'Entrainment from layer above', 'kg')
-    CS%id_ebtr_dia  = register_diag_field('ocean_model', 'ebtr_dia', diag%axesTL, Time, &
-      'Entrainment from layer below', 'kg')
     CS%id_temp_preadv  = register_diag_field('ocean_model', 'temp_preadv', diag%axesTL, Time, &
       'Temperature prior to advection', 'C')
     CS%id_salt_preadv  = register_diag_field('ocean_model', 'salt_preadv', diag%axesTL, Time, &
       'Salinity prior to advection', 'S')
-
-
 
   end subroutine register_diags_offline_transport
 
@@ -371,9 +326,6 @@ contains
       "Number of iterations to subdivide the offline tracer advection and diffusion" )
     call get_param(param_file, mod, "DT_OFFLINE", CS%dt_offline, &
       "Length of the offline timestep")
-    call get_param(param_file, "MOM_mixed_layer", "HMIX_MIN", CS%hmix_min, &
-                 "The minimum mixed layer depth if the mixed layer depth \n"//&
-                 "is determined dynamically.", units="m", default=0.0)
     call get_param(param_file, "MOM_mixed_layer", "MAX_OFF_CFL", CS%max_off_cfl, &
       "Maximum CFL when advection is done offline. This should be less than 1 \n", &
       units="nondim", default=0.9)
@@ -415,19 +367,17 @@ contains
     if (read_index < 0)  read_index = inidx-read_index
     if (read_index == 0) read_index = numtime
 
-
     next_modulo_time = read_index
 
   end function next_modulo_time
 
-  subroutine update_h_horizontal_flux(G, GV, uhtr, vhtr, h_pre, h_new, hmix_min)
+  subroutine update_h_horizontal_flux(G, GV, uhtr, vhtr, h_pre, h_new)
     type(ocean_grid_type),    pointer                           :: G
     type(verticalGrid_type),  pointer                           :: GV
     real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)       :: uhtr
     real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)       :: vhtr
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(in)       :: h_pre
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)    :: h_new
-    real,                                      intent(in)       :: hmix_min
 
     ! Local variables
     integer :: i, j, k, m, is, ie, js, je, nz
@@ -451,27 +401,15 @@ contains
 
       enddo ; enddo
     enddo
-!
-!    do k=1, GV%nkml
-!      do i=is,ie ; do j=js,je
-!
-!        h_new(i,j,k) = max(hmix_min/2, h_new(i,j,k))
-!
-!      enddo ; enddo
-!    enddo
-
-
   end subroutine update_h_horizontal_flux
 
-
-  subroutine update_h_vertical_flux(G, GV, ea, eb, h_pre, h_new, hmix_min)
+  subroutine update_h_vertical_flux(G, GV, ea, eb, h_pre, h_new)
     type(ocean_grid_type),    pointer                           :: G
     type(verticalGrid_type),  pointer                           :: GV
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(in)       :: ea
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(in)       :: eb
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(in)       :: h_pre
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)    :: h_new
-    real                                     , intent(in)       :: hmix_min
 
     ! Local variables
     integer :: i, j, k, m, is, ie, js, je, nz
@@ -498,30 +436,18 @@ contains
       ! Interior layers
       do k=2,nz-1 ; do i=is,ie
 
-!        h_new(i,j,k) = h_pre(i,j,k) + ((ea(i,j,k) - eb(i,j,k-1)) + &
-!          (eb(i,j,k) - ea(i,j,k+1)))
         h_new(i,j,k) = max(0.0, h_pre(i,j,k) + ((ea(i,j,k) - eb(i,j,k-1)) + &
             (eb(i,j,k) - ea(i,j,k+1))))
         h_new(i,j,k) = h_new(i,j,k) + &
           max(0.0, 1.0e-13*h_new(i,j,k) - h_pre(i,j,k))
 
-
       enddo ; enddo
 
     enddo
 
-!    do k=1, GV%nkml
-!      do i=is,ie ; do j=js,je
-!
-!        h_new(i,j,k) = max(hmix_min/2, h_new(i,j,k))
-!
-!      enddo ; enddo
-!    enddo
-
-
   end subroutine update_h_vertical_flux
 
-  subroutine limit_mass_flux_3d(G, GV, uh, vh, ea, eb, h_pre, hmix_min, max_off_cfl)
+  subroutine limit_mass_flux_3d(G, GV, uh, vh, ea, eb, h_pre, max_off_cfl)
     type(ocean_grid_type),    pointer                           :: G
     type(verticalGrid_type),  pointer                           :: GV
     real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: uh
@@ -529,7 +455,6 @@ contains
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)    :: ea
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)    :: eb
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(in)       :: h_pre
-    real,                                      intent(in)       :: hmix_min
     real,                                      intent(in)       :: max_off_cfl
 
     ! Local variables
@@ -549,7 +474,6 @@ contains
     k = 1
     do j=js,je ; do i=is,ie
       top_flux(i,j,k) = -ea(i,j,k)
-
       bottom_flux(i,j,k) = -(eb(i,j,k)-ea(i,j,k+1))
     enddo ; enddo
 
@@ -574,18 +498,17 @@ contains
         max(0.0, uh(I,j,k)) + max(0.0, vh(i,J,k)) + &
         max(0.0, top_flux(i,j,k)*G%areaT(i,j)) + max(0.0, bottom_flux(i,j,k)*G%areaT(i,j))
 
-
       if (pos_flux>hvol .and. pos_flux>0.0) then
-        h_neglect = GV%Angstrom*G%areaT(i,j)
-        h_neglect = 0.0
-        scale_factor(i,j,k) = ( hvol - h_neglect )/pos_flux*max_off_cfl
-      else
+        scale_factor(i,j,k) = ( hvol )/pos_flux*max_off_cfl
+      else ! Don't scale
         scale_factor(i,j,k) = 1.0
       endif
 
     enddo ; enddo ; enddo
 
-    ! Scale vertical fluxes
+    call pass_var(scale_factor,G%Domain)
+
+    ! Scale vertical fluxes based on the sign of top and bottom flux
     k = 1
     do j=js,je ; do i=is,ie
       if (top_flux(i,j,k) > 0.0) then
@@ -619,7 +542,6 @@ contains
       endif
     enddo ; enddo
 
-    call pass_var(scale_factor,G%Domain)
     ! Scale horizontal fluxes
     do k = 1, nz ; do j=js,je ; do i=is-1,ie+1
 
