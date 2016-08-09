@@ -1437,7 +1437,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         temp_old, salt_old     !
     integer                                        :: niter, iter
     real                                           :: Inum_iter, dt_iter
-    real                                           :: global_flux_sum
+    real                                           :: hmix_min
     integer :: i, j, k, m, is, ie, js, je, isd, ied, jsd, jed, nz
     integer :: isv, iev, jsv, jev ! The valid range of the indices.
     integer :: IsdB, IedB, JsdB, JedB
@@ -1491,6 +1491,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     h_pre(:,:,:) = GV%Angstrom
     h_pre = CS%h
     dt_iter = CS%offline_CSp%dt_offline
+
+    hmix_min = CS%offline_CSp%hmix_min
 
     if (CS%diabatic_first .and. CS%use_ALE_algorithm) then
     ! Regridding/remapping is done here, at end of thermodynamics time step
@@ -1560,34 +1562,50 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       enddo; enddo ; enddo
 
       ! Calculate 3d mass transports to be used in this iteration
-      call limit_mass_flux_3d(G, GV, uhtr_sub, vhtr_sub, eatr_sub, ebtr_sub, h_pre)
+      call limit_mass_flux_3d(G, GV, uhtr_sub, vhtr_sub, eatr_sub, ebtr_sub, h_pre, hmix_min, &
+          CS%offline_CSp%max_off_cfl)
 
       if (z_first) then
-      ! Do vertical advection
-        call update_h_vertical_flux(G, GV, eatr_sub, ebtr_sub, h_pre, h_new)
+        ! First do vertical advection
+        call update_h_vertical_flux(G, GV, eatr_sub, ebtr_sub, h_pre, h_new, hmix_min)
         call call_tracer_column_fns(h_pre, h_new, eatr_sub, ebtr_sub, &
             fluxes, dt_iter, G, GV, CS%tv, CS%diabatic_CSp%optics, CS%tracer_flow_CSp)
         ! We are now done with the vertical mass transports, so now h_new is h_sub
         do k = 1, nz ; do j=js,je ; do i=is,ie
           h_pre(i,j,k) = h_new(i,j,k)
         enddo ; enddo ; enddo
+
+
+        ! Second zonal and meridional advection
+        call update_h_horizontal_flux(G, GV, uhtr_sub, vhtr_sub, h_pre, h_new, hmix_min)
+        do k = 1, nz ; do i = is, ie ; do j=js, je
+          h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
+        enddo; enddo; enddo
+        call advect_tracer(h_new, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
+            CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, 1, x_before_y)
+        ! Done with horizontal so now h_pre should be h_new
+        do k = 1, nz ; do i=is,ie ; do j=js,je
+            h_pre(i,j,k) = h_new(i,j,k)
+        enddo ; enddo ; enddo
+
       endif
 
-      ! Zonal and meridional advection
-      call update_h_horizontal_flux(G, GV, uhtr_sub, vhtr_sub, h_pre, h_new)
-      do k = 1, nz ; do i = is, ie ; do j=js, je
-        h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
-      enddo; enddo; enddo
-      call advect_tracer(h_new, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
-          CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, 1, x_before_y)
-      ! Done with horizontal so now h_pre should be h_new
-      do k = 1, nz ; do i=is,ie ; do j=js,je
-          h_pre(i,j,k) = h_new(i,j,k)
-      enddo ; enddo ; enddo
-
       if (.not. z_first) then
-              ! Do vertical advection
-        call update_h_vertical_flux(G, GV, eatr_sub, ebtr_sub, h_pre, h_new)
+
+        ! First zonal and meridional advection
+        call update_h_horizontal_flux(G, GV, uhtr_sub, vhtr_sub, h_pre, h_new, hmix_min)
+        do k = 1, nz ; do i = is, ie ; do j=js, je
+          h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
+        enddo; enddo; enddo
+        call advect_tracer(h_new, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
+            CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, 1, x_before_y)
+        ! Done with horizontal so now h_pre should be h_new
+        do k = 1, nz ; do i=is,ie ; do j=js,je
+            h_pre(i,j,k) = h_new(i,j,k)
+        enddo ; enddo ; enddo
+
+        ! Second vertical advection
+        call update_h_vertical_flux(G, GV, eatr_sub, ebtr_sub, h_pre, h_new, hmix_min)
         call call_tracer_column_fns(h_pre, h_new, eatr_sub, ebtr_sub, &
             fluxes, dt_iter, G, GV, CS%tv, CS%diabatic_CSp%optics, CS%tracer_flow_CSp)
         ! We are now done with the vertical mass transports, so now h_new is h_sub
@@ -1604,8 +1622,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         vhtr(i,J,k) = vhtr(i,J,k) - vhtr_sub(i,J,k)
       enddo; enddo ; enddo
 
-      ! Stop if we've depleted all the mastransports
-      if ( (sum(eatr)+sum(ebtr)+sum(uhtr)+sum(vhtr)) ==0.0) exit
+      ! Stop if we've depleted all the mass transports
+      if ( (sum(eatr)+sum(ebtr)+sum(uhtr)+sum(vhtr)) == 0.0) exit
 
       ! Switch order of Strang split
       z_first = .not. z_first

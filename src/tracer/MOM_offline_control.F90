@@ -81,6 +81,8 @@ module MOM_offline_transport
     logical :: fields_are_offset ! True if the time-averaged fields and snapshot fields are
                                  ! offset by one time level
 
+    real :: hmix_min
+    real :: max_off_cfl
     ! These fields for preale are allocatable because they are not necessary for all runs
     real, allocatable, dimension(NIMEM_,NJMEM_,NKMEM_)      :: &
       T_preale, &
@@ -378,6 +380,12 @@ contains
       "Number of iterations to subdivide the offline tracer advection and diffusion" )
     call get_param(param_file, mod, "DT_OFFLINE", CS%dt_offline, &
       "Length of the offline timestep")
+    call get_param(param_file, "MOM_mixed_layer", "HMIX_MIN", CS%hmix_min, &
+                 "The minimum mixed layer depth if the mixed layer depth \n"//&
+                 "is determined dynamically.", units="m", default=0.0)
+    call get_param(param_file, "MOM_mixed_layer", "MAX_OFF_CFL", CS%max_off_cfl, &
+      "Maximum CFL when advection is done offline. This should be less than 1 \n", &
+      units="nondim", default=0.9)
 
     ! Concatenate offline directory and file names
     CS%mean_file = trim(CS%offlinedir)//trim(CS%mean_file)
@@ -421,13 +429,14 @@ contains
 
   end function next_modulo_time
 
-  subroutine update_h_horizontal_flux(G, GV, uhtr, vhtr, h_pre, h_new)
+  subroutine update_h_horizontal_flux(G, GV, uhtr, vhtr, h_pre, h_new, hmix_min)
     type(ocean_grid_type),    pointer                           :: G
     type(verticalGrid_type),  pointer                           :: GV
     real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)       :: uhtr
     real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)       :: vhtr
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(in)       :: h_pre
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)    :: h_new
+    real,                                      intent(in)       :: hmix_min
 
     ! Local variables
     integer :: i, j, k, m, is, ie, js, je, nz
@@ -437,32 +446,42 @@ contains
     do k = 1, nz
       do i=is,ie ; do j=js,je
 
-!        h_new(i,j,k) = max(0.0, G%areaT(i,j)*h_pre(i,j,k) + &
-!          ((uhtr(I-1,j,k) - uhtr(I,j,k)) + (vhtr(i,J-1,k) - vhtr(i,J,k))))
-        h_new(i,j,k) = G%areaT(i,j)*h_pre(i,j,k) + &
-          ((uhtr(I-1,j,k) - uhtr(I,j,k)) + (vhtr(i,J-1,k) - vhtr(i,J,k)))
+        h_new(i,j,k) = max(0.0, G%areaT(i,j)*h_pre(i,j,k) + &
+          ((uhtr(I-1,j,k) - uhtr(I,j,k)) + (vhtr(i,J-1,k) - vhtr(i,J,k))))
+!        h_new(i,j,k) = G%areaT(i,j)*h_pre(i,j,k) + &
+!          ((uhtr(I-1,j,k) - uhtr(I,j,k)) + (vhtr(i,J-1,k) - vhtr(i,J,k)))
         ! In the case that the layer is now dramatically thinner than it was previously,
         ! add a bit of mass to avoid truncation errors.  This will lead to
         ! non-conservation of tracers
-!        h_new(i,j,k) = h_new(i,j,k) + &
-!          max(GV%Angstrom, 1.0e-13*h_new(i,j,k) - G%areaT(i,j)*h_pre(i,j,k))
+        h_new(i,j,k) = h_new(i,j,k) + &
+          max(GV%Angstrom, 1.0e-13*h_new(i,j,k) - G%areaT(i,j)*h_pre(i,j,k))
 
         ! Convert back to thickness
         h_new(i,j,k) = h_new(i,j,k)/G%areaT(i,j)
 
       enddo ; enddo
     enddo
+!
+!    do k=1, GV%nkml
+!      do i=is,ie ; do j=js,je
+!
+!        h_new(i,j,k) = max(hmix_min/2, h_new(i,j,k))
+!
+!      enddo ; enddo
+!    enddo
+
 
   end subroutine update_h_horizontal_flux
 
 
-  subroutine update_h_vertical_flux(G, GV, ea, eb, h_pre, h_new)
+  subroutine update_h_vertical_flux(G, GV, ea, eb, h_pre, h_new, hmix_min)
     type(ocean_grid_type),    pointer                           :: G
     type(verticalGrid_type),  pointer                           :: GV
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(in)       :: ea
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(in)       :: eb
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(in)       :: h_pre
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)    :: h_new
+    real                                     , intent(in)       :: hmix_min
 
     ! Local variables
     integer :: i, j, k, m, is, ie, js, je, nz
@@ -474,113 +493,45 @@ contains
       do i=is,ie
 
         ! Top layer
-        h_new(i,j,1) = h_pre(i,j,1) + (eb(i,j,1) - ea(i,j,2) + ea(i,j,1))
-        !        h_new(i,j,1) = max(0.0, h_pre(i,j,1) + (eb(i,j,1) - ea(i,j,2)+ea(i,j,1) ))
-        !        h_new(i,j,1) = h_new(i,j,1) + &
-        !            max(0.0, 1.0e-13/G%areaT(i,j)*h_new(i,j,1) - h_pre(i,j,1))
+        h_new(i,j,1) = max(0.0, h_pre(i,j,1) + (eb(i,j,1) - ea(i,j,2) + ea(i,j,1) ))
+        h_new(i,j,1) = h_new(i,j,1) + &
+            max(0.0, 1.0e-13*h_new(i,j,1) - h_pre(i,j,1))
 
         ! Bottom layer
-        h_new(i,j,nz) = h_pre(i,j,nz) + (ea(i,j,nz) - eb(i,j,nz-1)+eb(i,j,nz))
-      !        h_new(i,j,nz) = max(0.0, h_pre(i,j,nz) + (ea(i,j,nz) - eb(i,j,nz-1)+eb(i,j,nz)))
-      !        h_new(i,j,nz) = h_new(i,j,nz) + &
-      !            max(0.0, 1.0e-13/G%areaT(i,j)*h_new(i,j,nz) - h_pre(i,j,nz))
+!        h_new(i,j,nz) = h_pre(i,j,nz) + (ea(i,j,nz) - eb(i,j,nz-1)+eb(i,j,nz))
+        h_new(i,j,nz) = max(0.0, h_pre(i,j,nz) + (ea(i,j,nz) - eb(i,j,nz-1)+eb(i,j,nz)))
+        h_new(i,j,nz) = h_new(i,j,nz) + &
+            max(0.0, 1.0e-13*h_new(i,j,nz) - h_pre(i,j,nz))
 
       enddo
 
       ! Interior layers
       do k=2,nz-1 ; do i=is,ie
 
-        h_new(i,j,k) = h_pre(i,j,k) + ((ea(i,j,k) - eb(i,j,k-1)) + &
-          (eb(i,j,k) - ea(i,j,k+1)))
-!        h_new(i,j,k) = max(0.0, h_pre(i,j,k) + ((ea(i,j,k) - eb(i,j,k-1)) + &
-!          (eb(i,j,k) - ea(i,j,k+1))))
-!        h_new(i,j,k) = h_new(i,j,k) + &
-!          max(0.0, 1.0e-13/G%areaT(i,j)*h_new(i,j,k) - h_pre(i,j,k))
+!        h_new(i,j,k) = h_pre(i,j,k) + ((ea(i,j,k) - eb(i,j,k-1)) + &
+!          (eb(i,j,k) - ea(i,j,k+1)))
+        h_new(i,j,k) = max(0.0, h_pre(i,j,k) + ((ea(i,j,k) - eb(i,j,k-1)) + &
+            (eb(i,j,k) - ea(i,j,k+1))))
+        h_new(i,j,k) = h_new(i,j,k) + &
+          max(0.0, 1.0e-13*h_new(i,j,k) - h_pre(i,j,k))
 
 
       enddo ; enddo
 
-
     enddo
+
+!    do k=1, GV%nkml
+!      do i=is,ie ; do j=js,je
+!
+!        h_new(i,j,k) = max(hmix_min/2, h_new(i,j,k))
+!
+!      enddo ; enddo
+!    enddo
 
 
   end subroutine update_h_vertical_flux
-  !
-  !  subroutine offline_tracer_advection(G, GV, CS, uhr, vhr, ear, ebr, h_pre, dt_iter)
-  !    type(ocean_grid_type),      pointer                         :: G
-  !    type(verticalGrid_type),    pointer                         :: GV
-  !    type(offline_transport_CS), pointer                         :: CS         !< control structure for MOM
-  !    real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: uhr
-  !    real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout)    :: vhr
-  !    real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)    :: ear
-  !    real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)    :: ebr
-  !    real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)    :: h_pre
-  !
-  !    ! Local variables
-  !    real, dimension(SZIB_(G),SZJ_(G),SZK_(G))                   :: uhtr_sub
-  !    real, dimension(SZI_(G),SZJB_(G),SZK_(G))                   :: vhtr_sub
-  !    real, dimension(SZI_(G),SZJ_(G),SZK_(G))                    :: eatr_sub
-  !    real, dimension(SZI_(G),SZJ_(G),SZK_(G))                    :: ebtr_sub
-  !    real, dimension(SZI_(G),SZJ_(G),SZK_(G))                    :: h_new, h_vol
-  !    integer :: i, j, k, m, is, ie, js, je, nz, iter, niter
-  !    ! Set index-related variables for fields on T-grid
-  !    is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
-  !
-  !    h_new(:,:,:) = GV%Angstrom
-  !    ! Offline tracer advection is done by using a 3d flux-limited, Strang time-split method
-  !    ! The flux limiting follows the routine specified by Skamarock (Monthly Weather Review, 2005)
-  !    ! to make sure that offline advection is monotonic and postive-definite
-  !
-  !
-  !    do iter=1,CS%offline_CSp%num_off_iter
-  !      do k = 1, nz ; do j=js,je ; do i=is,ie
-  !
-  !        eatr_sub(i,j,k) = ear(i,j,k)
-  !        ebtr_sub(i,j,k) = ebr(i,j,k)
-  !        uhtr_sub(i,j,k) = uhr(i,j,k)
-  !        vhtr_sub(i,j,k) = vhr(i,j,k)
-  !
-  !      enddo; enddo ; enddo
-  !
-  !      ! Calculate 3d mass transports to be used in this iteration
-  !      call limit_mass_flux_3d(G, GV, uhtr_sub, vhtr_sub, eatr_sub, ebtr_sub, h_pre)
-  !
-  !
-  !      !! Now start doing the split advection
-  !      ! Zonal and meridional advection
-  !      call update_h_horizontal_flux(G, GV, uhtr_sub, vhtr_sub, h_pre, h_new)
-  !      do k = 1, nz ; do i = is, ie ; do j=js, je
-  !        h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
-  !      enddo; enddo; enddo
-  !      call advect_tracer(h_new, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
-  !          CS%tracer_adv_CSp, CS%tracer_Reg, h_vol)
-  !      ! Done with horizontal so now h_pre should be h_new
-  !      do k = 1, nz ; do i=is,ie ; do j=js,je
-  !          h_pre(i,j,k) = h_new(i,j,k)
-  !      enddo ; enddo ; enddo
-  !
-  !      !! Now do vertical advection
-  !      call update_h_vertical_flux(G, GV, eatr_sub, ebtr_sub, h_pre, h_new)
-  !      call call_tracer_column_fns(h_pre, h_new, eatr_sub, ebtr_sub, &
-  !          fluxes, dt_iter, G, GV, CS%tv, CS%diabatic_CSp%optics, CS%tracer_flow_CSp)
-  !      ! We are now done with the vertical mass transports, so now h_new is h_sub
-  !      do k = 1, nz ; do j=js,je ; do i=is,ie
-  !        h_pre(i,j,k) = h_new(i,j,k)
-  !      enddo ; enddo ; enddo
-  !
-  !      ! Update remaining transports
-  !      do k = 1, nz ; do j=js,je ; do i=is,ie
-  !        ear(i,j,k) = ear(i,j,k) - eatr_sub(i,j,k)
-  !        ebr(i,j,k) = ebr(i,j,k) - ebtr_sub(i,j,k)
-  !        uhr(I,j,k) = uhr(I,j,k) - uhtr_sub(I,j,k)
-  !        vhr(i,J,k) = vhr(i,J,k) - vhtr_sub(i,J,k)
-  !      enddo; enddo ; enddo
-  !
-  !    end do
-  !
-  !  end subroutine offline_tracer_advection
 
-  subroutine limit_mass_flux_3d(G, GV, uh, vh, ea, eb, h_pre)
+  subroutine limit_mass_flux_3d(G, GV, uh, vh, ea, eb, h_pre, hmix_min, max_off_cfl)
     type(ocean_grid_type),    pointer                           :: G
     type(verticalGrid_type),  pointer                           :: GV
     real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: uh
@@ -588,6 +539,8 @@ contains
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)    :: ea
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)    :: eb
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(in)       :: h_pre
+    real,                                      intent(in)       :: hmix_min
+    real,                                      intent(in)       :: max_off_cfl
 
     ! Local variables
     integer :: i, j, k, m, is, ie, js, je, nz
@@ -606,6 +559,7 @@ contains
     k = 1
     do j=js,je ; do i=is,ie
       top_flux(i,j,k) = -ea(i,j,k)
+
       bottom_flux(i,j,k) = -(eb(i,j,k)-ea(i,j,k+1))
     enddo ; enddo
 
@@ -629,10 +583,12 @@ contains
       pos_flux  = max(0.0,-uh(I-1,j,k)) + max(0.0, -vh(i,J-1,k)) + &
         max(0.0, uh(I,j,k)) + max(0.0, vh(i,J,k)) + &
         max(0.0, top_flux(i,j,k)*G%areaT(i,j)) + max(0.0, bottom_flux(i,j,k)*G%areaT(i,j))
-      if (pos_flux>hvol .and. pos_flux>0.0) then
 
-        h_neglect = GV%Angstrom * G%areaT(I,j)
-        scale_factor(i,j,k) = ( hvol )/pos_flux*0.8
+
+      if (pos_flux>hvol .and. pos_flux>0.0) then
+        h_neglect = GV%Angstrom*G%areaT(i,j)
+        h_neglect = 0.0
+        scale_factor(i,j,k) = ( hvol - h_neglect )/pos_flux*max_off_cfl
       else
         scale_factor(i,j,k) = 1.0
       endif
@@ -674,7 +630,7 @@ contains
     enddo ; enddo
 
     ! Scale horizontal fluxes
-    do k = 2, nz-1 ; do j=js,je ; do i=is,ie
+    do k = 1, nz ; do j=js,je ; do i=is,ie
 
       if (uh(I,j,k)>0.0)     uh(I,j,k) = uh(I,j,k)*scale_factor(i,j,k)
       if (-uh(I-1,j,k)>0.0)  uh(I-1,j,k) = uh(I-1,j,k)*scale_factor(i,j,k)
