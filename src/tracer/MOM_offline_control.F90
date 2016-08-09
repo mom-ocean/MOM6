@@ -619,15 +619,17 @@ contains
       endif
     enddo ; enddo
 
+    call pass_var(scale_factor,G%Domain)
     ! Scale horizontal fluxes
-    do k = 1, nz ; do j=js,je ; do i=is,ie
+    do k = 1, nz ; do j=js,je ; do i=is-1,ie+1
 
       if (uh(I,j,k)>0.0)     uh(I,j,k) = uh(I,j,k)*scale_factor(i,j,k)
       if (-uh(I-1,j,k)>0.0)  uh(I-1,j,k) = uh(I-1,j,k)*scale_factor(i,j,k)
+    enddo ; enddo ; enddo
 
+    do k = 1, nz ; do j=js-1,je+1 ; do i=is,ie
       if (vh(i,J,k)>0.0)    vh(i,J,k) = vh(i,J,k)*scale_factor(i,j,k)
       if (-vh(i,J-1,k)>0.0) vh(i,J-1,k) = vh(i,J-1,k)*scale_factor(i,j,k)
-
     enddo ; enddo ; enddo
 
   end subroutine limit_mass_flux_3d
