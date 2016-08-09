@@ -107,7 +107,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, h_prev_opt,
   max_iter = 2*INT(CEILING(dt/CS%dt)) + 1
 
   if(present(max_iter_in)) max_iter = max_iter_in
-  if(present(x_first_in)) x_first = x_first_in
+  if(present(x_first_in))  x_first = x_first_in
 
   call cpu_clock_begin(id_clock_pass)
   call create_group_pass(CS%pass_uhr_vhr_t_hprev, uhr, vhr, G%Domain)
