@@ -99,7 +99,9 @@ use MOM_cpu_clock, only : CLOCK_COMPONENT, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_mediator_init, set_diag_mediator_grid
 use MOM_diag_mediator, only : diag_ctrl, time_type, enable_averaging, disable_averaging
-use MOM_domains, only : MOM_domains_init, pass_var, pass_vector, TO_ALL, CGRID_NE, BGRID_NE
+use MOM_domains, only : MOM_domains_init, clone_MOM_domain
+use MOM_domains, only : pass_var, pass_vector, TO_ALL, CGRID_NE, BGRID_NE
+use MOM_dyn_horgrid, only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : read_param, get_param, log_param, log_version, param_file_type
 use MOM_grid, only : MOM_grid_init, ocean_grid_type
@@ -109,10 +111,11 @@ use MOM_fixed_initialization, only : MOM_initialize_rotation
 use user_initialization, only : user_initialize_topography
 use MOM_io, only : field_exists, file_exists, read_data, write_version_number
 use MOM_io, only : slasher, vardesc, var_desc, fieldtype
-use MOM_io, only : create_file, write_field, close_file, SINGLE_FILE, MULTIPLE
+use MOM_io, only : write_field, close_file, SINGLE_FILE, MULTIPLE
 use MOM_restart, only : register_restart_field, query_initialized, save_restart
 use MOM_restart, only : restart_init, restore_state, MOM_restart_CS
 use MOM_time_manager, only : time_type, set_time, time_type_to_real
+use MOM_transcribe_grid, only : copy_dyngrid_to_MOM_grid, copy_MOM_grid_to_dyngrid
 !use MOM_variables, only : forcing, surface
 use MOM_variables, only : surface
 use MOM_forcing_type, only : forcing, allocate_forcing_type
@@ -152,6 +155,7 @@ public ice_shelf_save_restart, solo_time_step
 type, public :: ice_shelf_CS ; private
   type(MOM_restart_CS), pointer :: restart_CSp => NULL()
   type(ocean_grid_type) :: grid !< Grid for the ice-shelf model
+!  type(dyn_horgrid_type), pointer :: dG  !< Dynamic grid for the ice-shelf model
   type(ocean_grid_type), pointer :: ocn_grid => NULL() !< A pointer to the ocean model grid
   ! The rest is private
   real ::   flux_factor = 1.0
@@ -678,12 +682,14 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
       else !not shelf
         CS%t_flux(i,j) = 0.0
       endif
-
     enddo ! i-loop
   enddo ! j-loop
 
+  ! melt in m/year
+  fluxes%iceshelf_melt = CS%lprec  * (86400.0*365.0/CS%density_ice)
+
   if (CS%DEBUG) then
-   call hchksum (CS%h_shelf, "melt rate", G, haloshift=0)
+   call hchksum (CS%h_shelf, "melt rate", G%HI, haloshift=0)
   endif
 
   if (CS%shelf_mass_is_dynamic) then
@@ -828,10 +834,10 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
 
   if (CS%debug) then
     if (associated(state%taux_shelf)) then
-      call uchksum(state%taux_shelf, "taux_shelf", G, haloshift=0)
+      call uchksum(state%taux_shelf, "taux_shelf", G%HI, haloshift=0)
     endif
     if (associated(state%tauy_shelf)) then
-      call vchksum(state%tauy_shelf, "tauy_shelf", G, haloshift=0)
+      call vchksum(state%tauy_shelf, "tauy_shelf", G%HI, haloshift=0)
     endif
   endif
 
@@ -894,7 +900,7 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
     endif
   enddo ; enddo
   if (CS%debug) then
-    call hchksum(fluxes%ustar_shelf, "ustar_shelf", G, haloshift=0)
+    call hchksum(fluxes%ustar_shelf, "ustar_shelf", G%HI, haloshift=0)
   endif
   
   ! If the shelf mass is changing, the fluxes%rigidity_ice_[uv] needs to be
@@ -971,10 +977,10 @@ end subroutine add_shelf_flux
 
 !   if (CS%debug) then
 !     if (associated(state%taux_shelf)) then
-!       call uchksum(state%taux_shelf, "taux_shelf", G, haloshift=0)
+!       call uchksum(state%taux_shelf, "taux_shelf", G%HI, haloshift=0)
 !     endif
 !     if (associated(state%tauy_shelf)) then
-!       call vchksum(state%tauy_shelf, "tauy_shelf", G, haloshift=0)
+!       call vchksum(state%tauy_shelf, "tauy_shelf", G%HI, haloshift=0)
 !     endif
 !   endif
 
@@ -1019,7 +1025,7 @@ end subroutine add_shelf_flux
 !   enddo ; enddo
 
 !   if (CS%debug) then
-!     call hchksum(fluxes%ustar_shelf, "ustar_shelf", G, haloshift=0)
+!     call hchksum(fluxes%ustar_shelf, "ustar_shelf", G%HI, haloshift=0)
 !   endif
   
 !   ! If the shelf mass is changing, the fluxes%rigidity_ice_[uv] needs to be
@@ -1055,6 +1061,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
   type(ocean_grid_type), pointer :: G, OG ! Convenience pointers
   type(directories)  :: dirs
   type(vardesc) :: vd
+  type(dyn_horgrid_type), pointer :: dG => NULL()
   real :: cdrag, drag_bg_vel
   logical :: new_sim, save_IC, var_force
 ! This include declares and sets the variable "version".
@@ -1067,7 +1074,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq, iters
   integer :: wd_halos(2)
   logical :: solo_ice_sheet, read_TideAmp
-  character(len=128) :: Tideamp_file
+  character(len=240) :: Tideamp_file
   real    :: utide
 
   if (associated(CS)) then
@@ -1087,7 +1094,11 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
   call MOM_domains_init(CS%grid%domain, param_file, min_halo=wd_halos, symmetric=GRID_SYM_)
 ! call diag_mediator_init(CS%grid,param_file,CS%diag) ! this needs to be fixed - will probably break when not using coupled driver 0
   call MOM_grid_init(CS%grid, param_file)
-  call set_grid_metrics(CS%grid, param_file)
+
+  call create_dyn_horgrid(dG, CS%grid%HI)
+  call clone_MOM_domain(CS%grid%Domain, dG%Domain)
+
+  call set_grid_metrics(dG, param_file)
 ! call set_diag_mediator_grid(CS%grid, CS%diag)
 
   ! The ocean grid is possibly different
@@ -1382,6 +1393,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
     allocate( fluxes%frac_shelf_u(Isdq:Iedq,jsd:jed) ) ; fluxes%frac_shelf_u(:,:) = 0.0
     allocate( fluxes%frac_shelf_v(isd:ied,Jsdq:Jedq) ) ; fluxes%frac_shelf_v(:,:) = 0.0
     allocate( fluxes%ustar_shelf(isd:ied,jsd:jed) ) ; fluxes%ustar_shelf(:,:) = 0.0
+    allocate( fluxes%iceshelf_melt(isd:ied,jsd:jed) ) ; fluxes%iceshelf_melt(:,:) = 0.0
     if (.not.associated(fluxes%p_surf)) then
     allocate( fluxes%p_surf(isd:ied,jsd:jed) ) ; fluxes%p_surf(:,:) = 0.0
     endif
@@ -1393,12 +1405,15 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
   endif
 
 ! Set up the bottom depth, G%D either analytically or from file
-  call MOM_initialize_topography(G%bathyT, G%max_depth, G, param_file)
+  call MOM_initialize_topography(G%bathyT, G%max_depth, dG, param_file)
 ! Set up the Coriolis parameter, G%f, usually analytically.
-  call MOM_initialize_rotation(G%CoriolisBu, G, param_file)
+  call MOM_initialize_rotation(G%CoriolisBu, dG, param_file)
+  call copy_dyngrid_to_MOM_grid(dG, CS%grid)
+
+  call destroy_dyn_horgrid(dG)
 
   ! Set up the restarts.
-  call restart_init(G, param_file, CS%restart_CSp, "Shelf.res")
+  call restart_init(param_file, CS%restart_CSp, "Shelf.res")
   vd = var_desc("shelf_mass","kg m-2","Ice shelf mass",z_grid='1')
   call register_restart_field(CS%mass_shelf, vd, .true., CS%restart_CSp)
   vd = var_desc("shelf_area","m2","Ice shelf area in cell",z_grid='1')
@@ -1445,6 +1460,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
   if (.not. solo_ice_sheet) then
     vd = var_desc("ustar_shelf","m s-1","Friction velocity under ice shelves",z_grid='1')
     call register_restart_field(fluxes%ustar_shelf, vd, .true., CS%restart_CSp)
+    vd = var_desc("iceshelf_melt","m year-1","Ice Shelf Melt Rate",z_grid='1')
+    call register_restart_field(fluxes%iceshelf_melt, vd, .true., CS%restart_CSp)
   endif
  
   CS%restart_output_dir = dirs%restart_output_dir
@@ -1733,7 +1750,7 @@ subroutine initialize_shelf_mass(G, param_file, CS, new_sim)
 
   integer :: i, j, is, ie, js, je
   logical :: read_shelf_area, new_sim_2
-  character(len=200) :: config, inputdir, shelf_file, filename
+  character(len=240) :: config, inputdir, shelf_file, filename
   character(len=120) :: shelf_mass_var  ! The name of shelf mass in the file.
   character(len=120) :: shelf_area_var ! The name of shelf area in the file.
   character(len=40)  :: mod = "MOM_ice_shelf"
@@ -2026,8 +2043,8 @@ subroutine ice_shelf_advect(CS, time_step, melt_rate, Time)
   call pass_var(CS%hmask, G%domain)
 
   if (CS%DEBUG) then
-    call hchksum (CS%h_shelf, "h after front", G, haloshift=3)
-    call hchksum (CS%h_shelf, "shelf area after front", G, haloshift=3)
+    call hchksum (CS%h_shelf, "h after front", G%HI, haloshift=3)
+    call hchksum (CS%h_shelf, "shelf area after front", G%HI, haloshift=3)
   endif
 
 
@@ -2252,8 +2269,8 @@ subroutine ice_shelf_solve_outer (CS, u, v, FE, iters, time)
 
 
     if (CS%DEBUG) then
-      call qchksum (u, "u shelf", G, haloshift=2)
-      call qchksum (v, "v shelf", G, haloshift=2)
+      call qchksum (u, "u shelf", G%HI, haloshift=2)
+      call qchksum (v, "v shelf", G%HI, haloshift=2)
     endif
 
     if (is_root_pe()) print *,"linear solve done",iters," iterations"
@@ -5915,7 +5932,7 @@ subroutine ice_shelf_temp(CS, time_step, melt_rate, Time)
   call pass_var(CS%tmask, G%domain)
 
   if (CS%DEBUG) then
-    call hchksum (CS%t_shelf, "temp after front", G, haloshift=3)
+    call hchksum (CS%t_shelf, "temp after front", G%HI, haloshift=3)
   endif
 
 end subroutine ice_shelf_temp

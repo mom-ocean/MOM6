@@ -255,6 +255,9 @@ type, public :: set_diffusivity_CS ; private
   logical :: ML_use_omega     ! If true, use absolute rotation rate instead
                               ! of the vertical component of rotation when
                               ! setting the decay scale for mixed layer turbulence.
+  real    :: ML_omega_frac    !   When setting the decay scale for turbulence, use
+                              ! this fraction of the absolute rotation rate blended
+                              ! with the local value of f, as f^2 ~= (1-of)*f^2 + of*4*omega^2.
   logical :: user_change_diff ! If true, call user-defined code to change diffusivity.
   logical :: useKappaShear    ! If true, use the kappa_shear module to find the
                               ! shear-driven diapycnal diffusivity.
@@ -1791,11 +1794,13 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, CS, Kd, TKE_to_Kd, Kd_int)
   do k=1,kml ; do i=is,ie ; h_ml(i) = h_ml(i) + GV%H_to_m*h(i,j,k) ; enddo ; enddo
 
   do i=is,ie ; if (do_i(i)) then
-    if (CS%ML_use_omega) then
+    if (CS%ML_omega_frac >= 1.0) then
       f_sq = 4.0*Omega2
     else
       f_sq = 0.25*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
                    (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
+      if (CS%ML_omega_frac > 0.0) &
+        f_sq = CS%ML_omega_frac*4.0*Omega2 + (1.0-CS%ML_omega_frac)*f_sq
     endif
 
     ustar_sq = max(fluxes%ustar(i,j), CS%ustar_min)**2
@@ -2509,13 +2514,14 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
 
   real :: decay_length, utide, zbot, hamp
   type(vardesc) :: vd
-  logical :: read_tideamp
+  logical :: read_tideamp, ML_use_omega
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_set_diffusivity"  ! This module's name.
   character(len=20)  :: tmpstr
   character(len=200) :: filename, tideamp_file, h2_file, Niku_TKE_input_file
   real :: Niku_scale ! local variable for scaling the Nikurashin TKE flux data
+  real :: omega_frac_dflt
   integer :: i, j, is, ie, js, je
 
   if (associated(CS)) then
@@ -2538,7 +2544,7 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
 
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version)
+  call log_version(param_file, mod, version, "")
 
   call get_param(param_file, mod, "INPUTDIR", CS%inputdir, default=".")
   CS%inputdir = slasher(CS%inputdir)
@@ -2587,11 +2593,20 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
     call get_param(param_file, mod, "TKE_DECAY", CS%TKE_decay, &
                  "The ratio of the natural Ekman depth to the TKE decay scale.", &
                  units="nondim", default=2.5)
-    call get_param(param_file, mod, "ML_USE_OMEGA", CS%ML_use_omega, &
+    call get_param(param_file, mod, "ML_USE_OMEGA", ML_use_omega, &
                  "If true, use the absolute rotation rate instead of the \n"//&
                  "vertical component of rotation when setting the decay \n"//&
-                 "scale for turbulence in the mixed layer. \n"//&
-                 "This is only used if ML_RADIATION is true.", default=.false.)
+                 "scale for turbulence.", default=.false., do_not_log=.true.)
+    omega_frac_dflt = 0.0
+    if (ML_use_omega) then
+      call MOM_error(WARNING, "ML_USE_OMEGA is depricated; use ML_OMEGA_FRAC=1.0 instead.")
+      omega_frac_dflt = 1.0
+    endif
+    call get_param(param_file, mod, "ML_OMEGA_FRAC", CS%ML_omega_frac, &
+                   "When setting the decay scale for turbulence, use this \n"//&
+                   "fraction of the absolute rotation rate blended with the \n"//&
+                   "local value of f, as sqrt((1-of)*f^2 + of*4*omega^2).", &
+                   units="nondim", default=omega_frac_dflt)
   endif
 
   call get_param(param_file, mod, "BOTTOMDRAGLAW", CS%bottomdraglaw, &

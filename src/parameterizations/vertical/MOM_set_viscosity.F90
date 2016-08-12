@@ -59,6 +59,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
+use MOM_hor_index, only : hor_index_type
 use MOM_kappa_shear, only : kappa_shear_is_used
 use MOM_io, only : vardesc, var_desc
 use MOM_restart, only : register_restart_field, MOM_restart_CS
@@ -115,9 +116,9 @@ type, public :: set_visc_CS ; private
                             ! this should not affect the solution.
   real    :: TKE_decay      ! The ratio of the natural Ekman depth to the TKE
                             ! decay scale, nondimensional.
-  logical :: use_omega      !   If true, use the absolute rotation rate instead
-                            ! of the vertical component of rotation when
-                            ! setting the decay scale for turbulence.
+  real    :: omega_frac     !   When setting the decay scale for turbulence, use
+                            ! this fraction of the absolute rotation rate blended
+                            ! with the local value of f, as sqrt((1-of)*f^2 + of*4*omega^2).
   logical :: debug          ! If true, write verbose checksums for debugging purposes.
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                             ! timing of diagnostic output.
@@ -1063,8 +1064,11 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
           vhtot(I) = 0.25 * dt_Rho0 * ((fluxes%tauy(i,J) + fluxes%tauy(i+1,J-1)) + &
                                        (fluxes%tauy(i,J-1) + fluxes%tauy(i+1,J)))
 
-          if (CS%use_omega) then ; absf = 2.0*CS%omega
-          else ; absf = 0.5*(abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I,J-1))) ; endif
+          if (CS%omega_frac >= 1.0) then ; absf = 2.0*CS%omega ; else
+            absf = 0.5*(abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I,J-1)))
+            if (CS%omega_frac > 0.0) &
+              absf = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf**2)
+          endif
           U_Star = max(CS%ustar_min, 0.5 * (fluxes%ustar(i,j) + fluxes%ustar(i+1,j)))
           Idecay_len_TKE(I) = ((absf / U_Star) * CS%TKE_decay) * H_to_m
         endif
@@ -1303,8 +1307,12 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
           uhtot(i) = 0.25 * dt_Rho0 * ((fluxes%taux(I,j) + fluxes%tauy(I-1,j+1)) + &
                                        (fluxes%taux(I-1,j) + fluxes%tauy(I,j+1)))
 
-         if (CS%use_omega) then ; absf = 2.0*CS%omega
-         else ; absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J))) ; endif
+         if (CS%omega_frac >= 1.0) then ; absf = 2.0*CS%omega ; else
+           absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
+           if (CS%omega_frac > 0.0) &
+             absf = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf**2)        
+         endif
+ 
          U_Star = max(CS%ustar_min, 0.5 * (fluxes%ustar(i,j) + fluxes%ustar(i,j+1)))
          Idecay_len_TKE(i) = ((absf / U_Star) * CS%TKE_decay) * H_to_m
 
@@ -1531,14 +1539,16 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
 
 end subroutine set_viscous_ML
 
-subroutine set_visc_register_restarts(G, param_file, visc, restart_CS)
-  type(ocean_grid_type),   intent(in)    :: G
+subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
+  type(hor_index_type),    intent(in)    :: HI
+  type(verticalGrid_type), intent(in)    :: GV
   type(param_file_type),   intent(in)    :: param_file
   type(vertvisc_type),     intent(inout) :: visc
   type(MOM_restart_CS),    pointer       :: restart_CS
 !   This subroutine is used to register any fields associated with the
 ! vertvisc_type.
-! Arguments: G - The ocean's grid structure.
+! Arguments: HI - A horizontal index type structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (out)     visc - A structure containing vertical viscosities and related
@@ -1548,7 +1558,7 @@ subroutine set_visc_register_restarts(G, param_file, visc, restart_CS)
   logical :: use_kappa_shear, adiabatic, useKPP, useEPBL, MLE_use_PBL_MLD
   integer :: isd, ied, jsd, jed, nz
   character(len=40)  :: mod = "MOM_set_visc"  ! This module's name.
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
+  isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
   call get_param(param_file, mod, "ADIABATIC", adiabatic, default=.false., &
                  do_not_log=.true.)
@@ -1604,6 +1614,7 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS)
   type(set_visc_CS),       pointer       :: CS
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in)      diag - A structure that is used to regulate diagnostic output.
@@ -1613,8 +1624,9 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS)
 !                 for this module
   real    :: Csmag_chan_dflt, smag_const1, TKE_decay_dflt, bulk_Ri_ML_dflt
   real    :: Kv_background
+  real    :: omega_frac_dflt
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
-  logical :: use_kappa_shear, adiabatic, differential_diffusion
+  logical :: use_kappa_shear, adiabatic, differential_diffusion, use_omega
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_set_visc"  ! This module's name.
@@ -1626,7 +1638,7 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS)
   endif
   allocate(CS)
 
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   CS%diag => diag
@@ -1668,7 +1680,7 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS)
   endif
   call get_param(param_file, mod, "PRANDTL_TURB", visc%Prandtl_turb, &
                  "The turbulent Prandtl number applied to shear \n"//&
-                 "instability.", units="nondim", default=0.0)
+                 "instability.", units="nondim", default=1.0)
   call get_param(param_file, mod, "DEBUG", CS%debug, default=.false.)
 
   call get_param(param_file, mod, "DYNAMIC_VISCOUS_ML", CS%dynamic_viscous_ML, &
@@ -1691,10 +1703,20 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS)
                  "mixed layer viscosity.  By default, \n"//&
                  "TKE_DECAY_VISC = TKE_DECAY or 0.", units="nondim", &
                  default=TKE_decay_dflt)
-    call get_param(param_file, mod, "ML_USE_OMEGA", CS%use_omega, &
+    call get_param(param_file, mod, "ML_USE_OMEGA", use_omega, &
                  "If true, use the absolute rotation rate instead of the \n"//&
                  "vertical component of rotation when setting the decay \n"//&
-                 "scale for turbulence.", default=.false.)
+                   "scale for turbulence.", default=.false., do_not_log=.true.)
+    omega_frac_dflt = 0.0
+    if (use_omega) then
+      call MOM_error(WARNING, "ML_USE_OMEGA is depricated; use ML_OMEGA_FRAC=1.0 instead.")
+      omega_frac_dflt = 1.0
+    endif
+    call get_param(param_file, mod, "ML_OMEGA_FRAC", CS%omega_frac, &
+                   "When setting the decay scale for turbulence, use this \n"//&
+                   "fraction of the absolute rotation rate blended with the \n"//&
+                   "local value of f, as sqrt((1-of)*f^2 + of*4*omega^2).", &
+                   units="nondim", default=omega_frac_dflt)
     call get_param(param_file, mod, "OMEGA", CS%omega, &
                  "The rotation rate of the earth.", units="s-1", &
                  default=7.2921e-5)
