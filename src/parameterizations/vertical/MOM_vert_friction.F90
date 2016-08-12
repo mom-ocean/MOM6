@@ -1,78 +1,7 @@
-module MOM_vert_friction
-!***********************************************************************
-!*                   GNU General Public License                        *
-!* This file is a part of MOM.                                         *
-!*                                                                     *
-!* MOM is free software; you can redistribute it and/or modify it and  *
-!* are expected to follow the terms of the GNU General Public License  *
-!* as published by the Free Software Foundation; either version 2 of   *
-!* the License, or (at your option) any later version.                 *
-!*                                                                     *
-!* MOM is distributed in the hope that it will be useful, but WITHOUT  *
-!* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY  *
-!* or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public    *
-!* License for more details.                                           *
-!*                                                                     *
-!* For the full text of the GNU General Public License,                *
-!* write to: Free Software Foundation, Inc.,                           *
-!*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
-!* or see:   http://www.gnu.org/licenses/gpl.html                      *
-!***********************************************************************
+!> Implements vertical viscosity (vertvisc)
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, April 1994 - October 2006                      *
-!*                                                                     *
-!*    This file contains the subroutine that implements vertical       *
-!*  viscosity (vertvisc).                                              *
-!*                                                                     *
-!*    The vertical diffusion of momentum is fully implicit.  This is   *
-!*  necessary to allow for vanishingly small layers.  The coupling     *
-!*  is based on the distance between the centers of adjacent layers,   *
-!*  except where a layer is close to the bottom compared with a        *
-!*  bottom boundary layer thickness when a bottom drag law is used.    *
-!*  A stress top b.c. and a no slip bottom  b.c. are used.  There      *
-!*  is no limit on the time step for vertvisc.                         *
-!*                                                                     *
-!*    Near the bottom, the horizontal thickness interpolation scheme   *
-!*  changes to an upwind biased estimate to control the effect of      *
-!*  spurious Montgomery potential gradients at the bottom where        *
-!*  nearly massless layers layers ride over the topography.  Within a  *
-!*  few boundary layer depths of the bottom, the harmonic mean         *
-!*  thickness (i.e. (2 h+ h-) / (h+ + h-) ) is used if the velocity    *
-!*  is from the thinner side and the arithmetic mean thickness         *
-!*  (i.e. (h+ + h-)/2) is used if the velocity is from the thicker     *
-!*  side.  Both of these thickness estimates are second order          *
-!*  accurate.  Above this the arithmetic mean thickness is used.       *
-!*                                                                     *
-!*    In addition, vertvisc truncates any velocity component that      *
-!*  exceeds maxvel to truncvel. This basically keeps instabilities     *
-!*  spatially localized.  The number of times the velocity is          *
-!*  truncated is reported each time the energies are saved, and if     *
-!*  exceeds CS%Maxtrunc the model will stop itself and change the time *
-!*  to a large value.  This has proven very useful in (1) diagnosing   *
-!*  model failures and (2) letting the model settle down to a          *
-!*  meaningful integration from a poorly specified initial condition.  *
-!*                                                                     *
-!*    The same code is used for the two velocity components, by        *
-!*  indirectly referencing the velocities and defining a handful of    *
-!*  direction-specific defined variables.                              *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v, frhatv, tauy                          *
-!*    j    x ^ x ^ x   At >:  u, frhatu, taux                          *
-!*    j    > o > o >   At o:  h                                        *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
+module MOM_vert_friction
+! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl
@@ -99,137 +28,146 @@ public vertvisc_limit_vel, vertvisc_init, vertvisc_end
 public updateCFLtruncationValue
 
 type, public :: vertvisc_CS ; private
-  real    :: Hmix           ! The mixed layer thickness in m.
-  real    :: Hmix_stress    ! The mixed layer thickness over which the wind
-                            ! stress is applied with direct_stress, in m.
-  real    :: Kvml           ! The mixed layer vertical viscosity in m2 s-1.
-  real    :: Kv             ! The interior vertical viscosity in m2 s-1.
-  real    :: Hbbl           ! The static bottom boundary layer thickness, in m.
-  real    :: Kvbbl          ! The vertical viscosity in the bottom boundary
-                            ! layer, in m2 s-1.
+  real    :: Hmix            !< The mixed layer thickness in m.
+  real    :: Hmix_stress     !< The mixed layer thickness over which the wind
+                             !! stress is applied with direct_stress, in m.
+  real    :: Kvml            !< The mixed layer vertical viscosity in m2 s-1.
+  real    :: Kv              !< The interior vertical viscosity in m2 s-1.
+  real    :: Hbbl            !< The static bottom boundary layer thickness, in m.
+  real    :: Kvbbl           !< The vertical viscosity in the bottom boundary
+                             !! layer, in m2 s-1.
 
-  real    :: maxvel         ! Velocity components greater than maxvel,
-                            ! in m s-1, are truncated.
-  logical :: CFL_based_trunc ! If true, base truncations on CFL numbers, not
-                            ! absolute velocities.
-  real    :: CFL_trunc      ! Velocity components will be truncated when they
-                            ! are large enough that the corresponding CFL number
-                            ! exceeds this value, nondim.
-  real    :: CFL_report     ! The value of the CFL number that will cause the
-                            ! accelerations to be reported, nondim.  CFL_report
-                            ! will often equal CFL_trunc.
-  real    :: truncRampTime  ! The time-scale over which to ramp up the value of
-                            ! CFL_trunc from zero to CFK_trunc0
-  real    :: CFL_truncS     ! The start value of CFL_trunc
-  real    :: CFL_truncE     ! The end/target value of CFL_trunc
-  logical :: CFLrampingIsActivated = .false. ! True of the ramping has been initialized
-  type(time_type) :: rampStartTime ! The time that the ramping of CFL_trunc starts
+  real    :: maxvel          !< Velocity components greater than maxvel,
+                             !! in m s-1, are truncated.
+  logical :: CFL_based_trunc !< If true, base truncations on CFL numbers, not
+                             !! absolute velocities.
+  real    :: CFL_trunc       !< Velocity components will be truncated when they
+                             !! are large enough that the corresponding CFL number
+                             !! exceeds this value, nondim.
+  real    :: CFL_report      !< The value of the CFL number that will cause the
+                             !! accelerations to be reported, nondim.  CFL_report
+                             !! will often equal CFL_trunc.
+  real    :: truncRampTime   !< The time-scale over which to ramp up the value of
+                             !! CFL_trunc from CFL_truncS to CFL_truncE
+  real    :: CFL_truncS      !< The start value of CFL_trunc
+  real    :: CFL_truncE      !< The end/target value of CFL_trunc
+  logical :: CFLrampingIsActivated = .false. !< True if the ramping has been initialized
+  type(time_type) :: rampStartTime !< The time at which the ramping of CFL_trunc starts
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NK_INTERFACE_) :: &
-    a_u                ! The u-drag coefficient across an interface, in m s-1.
+    a_u                !< The u-drag coefficient across an interface, in m s-1.
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
-    h_u                ! The effective layer thickness at u-points, m or kg m-2.
+    h_u                !< The effective layer thickness at u-points, m or kg m-2.
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NK_INTERFACE_) :: &
-    a_v                ! The v-drag coefficient across an interface, in m s-1.
+    a_v                !< The v-drag coefficient across an interface, in m s-1.
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
-    h_v                ! The effective layer thickness at v-points, m or kg m-2.
+    h_v                !< The effective layer thickness at v-points, m or kg m-2.
+  !>@{
+  !! The surface coupling coefficient under ice shelves
+  !! in m s-1. Retained to determine stress under shelves.
   real, pointer, dimension(:,:) :: &
-    a1_shelf_u => NULL(), & ! The surface coupling coefficients under ice
-    a1_shelf_v => NULL()    ! shelves, in m s-1. These are retained to determine
-                            ! the stress under shelves.
+    a1_shelf_u => NULL(), &
+    a1_shelf_v => NULL()
+  !>@}
 
-  logical :: split          ! If true, use the split time stepping scheme.
-  logical :: bottomdraglaw  ! If true, the  bottom stress is calculated with a
-                            ! drag law c_drag*|u|*u. The velocity magnitude
-                            ! may be an assumed value or it may be based on the
-                            ! actual velocity in the bottommost HBBL, depending
-                            ! on whether linear_drag is true.
-  logical :: Channel_drag   ! If true, the drag is exerted directly on each
-                            ! layer according to what fraction of the bottom
-                            ! they overlie.
-  logical :: harmonic_visc  ! If true, the harmonic mean thicknesses are used
-                            ! to calculate the viscous coupling between layers
-                            ! except near the bottom.  Otherwise the arithmetic
-                            ! mean thickness is used except near the bottom.
-  real    :: harm_BL_val    ! A scale to determine when water is in the boundary
-                            ! layers based solely on harmonic mean thicknesses
-                            ! for the purpose of determining the extent to which
-                            ! the thicknesses used in the viscosities are upwinded.
-  logical :: direct_stress  ! If true, the wind stress is distributed over the
-                            ! topmost Hmix_stress of fluid and KVML may be very small.
-  logical :: dynamic_viscous_ML  ! If true, use the results from a dynamic
-                            ! calculation, perhaps based on a bulk Richardson
-                            ! number criterion, to determine the mixed layer
-                            ! thickness for viscosity.
-  logical :: debug          ! If true, write verbose checksums for debugging purposes.
-  integer :: nkml           ! The number of layers in the mixed layer.
-  integer, pointer :: ntrunc  ! The number of times the velocity has been
-                              ! truncated since the last call to write_energy.
-  character(len = 200) :: u_trunc_file ! The complete path to files in which a
-  character(len = 200) :: v_trunc_file ! column's worth of accelerations are
-                                       ! written when velocity truncations occur.
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                            ! timing of diagnostic output.
+  logical :: split          !< If true, use the split time stepping scheme.
+  logical :: bottomdraglaw  !< If true, the  bottom stress is calculated with a
+                            !! drag law c_drag*|u|*u. The velocity magnitude
+                            !! may be an assumed value or it may be based on the
+                            !! actual velocity in the bottommost HBBL, depending
+                            !! on whether linear_drag is true.
+  logical :: Channel_drag   !< If true, the drag is exerted directly on each
+                            !! layer according to what fraction of the bottom
+                            !! they overlie.
+  logical :: harmonic_visc  !< If true, the harmonic mean thicknesses are used
+                            !! to calculate the viscous coupling between layers
+                            !! except near the bottom.  Otherwise the arithmetic
+                            !! mean thickness is used except near the bottom.
+  real    :: harm_BL_val    !< A scale to determine when water is in the boundary
+                            !! layers based solely on harmonic mean thicknesses
+                            !! for the purpose of determining the extent to which
+                            !! the thicknesses used in the viscosities are upwinded.
+  logical :: direct_stress  !< If true, the wind stress is distributed over the
+                            !! topmost Hmix_stress of fluid and KVML may be very small.
+  logical :: dynamic_viscous_ML  !< If true, use the results from a dynamic
+                            !! calculation, perhaps based on a bulk Richardson
+                            !! number criterion, to determine the mixed layer
+                            !! thickness for viscosity.
+  logical :: debug          !< If true, write verbose checksums for debugging purposes.
+  integer :: nkml           !< The number of layers in the mixed layer.
+  integer, pointer :: ntrunc  !< The number of times the velocity has been
+                              !! truncated since the last call to write_energy.
+  !>@{
+  !! The complete path to files in which a column's worth of
+  !! accelerations are written when velocity truncations occur.
+  character(len=200) :: u_trunc_file
+  character(len=200) :: v_trunc_file
+  !>@}
+
+  type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
+                                   !! timing of diagnostic output.
+
+  !>@{
+  !! Diagnostic identifiers
   integer :: id_du_dt_visc = -1, id_dv_dt_visc = -1, id_au_vv = -1, id_av_vv = -1
   integer :: id_h_u = -1, id_h_v = -1, id_hML_u = -1 , id_hML_v = -1
   integer :: id_Ray_u = -1, id_Ray_v = -1, id_taux_bot = -1, id_tauy_bot = -1
+  !>@}
 
   type(PointAccel_CS), pointer :: PointAccel_CSp => NULL()
 end type vertvisc_CS
 
 contains
 
+!> Perform a fully implicit vertical diffusion
+!! of momentum.  Stress top and bottom boundary conditions are used.
+!!
+!! This is solving the tridiagonal system
+!! \f[ \left(h_k + a_{k + 1/2} + a_{k - 1/2} + r_k\right) u_k^{n+1}
+!!     = h_k u_k^n + a_{k + 1/2} u_{k+1}^{n+1} + a_{k - 1/2} u_{k-1}^{n+1} \f]
+!! where \f$a_{k + 1/2} = \Delta t \nu_{k + 1/2} / h_{k + 1/2}\f$
+!! is the <em>interfacial coupling thickness per time step</em>,
+!! encompassing background viscosity as well as contributions from
+!! enhanced mixed and bottom layer viscosities.
+!! $r_k$ is a Rayleight drag term due to channel drag. 
+!! There is an additional stress term on the right-hand side
+!! if DIRECT_STRESS is true, applied to the surface layer.
+
 subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, GV, CS, &
                     taux_bot, tauy_bot)
-!    This subroutine does a fully implicit vertical diffusion
-!  of momentum.  Stress top and bottom b.c.s are used.
-  type(ocean_grid_type), intent(in)                     :: G
-  type(verticalGrid_type), intent(in)                   :: GV
-  real, intent(inout), dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: u
-  real, intent(inout), dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: v
-  real, intent(in),    dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: h
-  type(forcing), intent(in)                             :: fluxes
-  type(vertvisc_type), intent(inout)                    :: visc
-  real, intent(in)                                      :: dt
-  type(ocean_OBC_type), pointer                         :: OBC
-  type(accel_diag_ptrs), intent(inout)                  :: ADp
-  type(cont_diag_ptrs),  intent(inout)                  :: CDp
-  type(vertvisc_CS), pointer                            :: CS
-  real, dimension(SZIB_(G),SZJ_(G)), optional, intent(out) :: taux_bot
-  real, dimension(SZI_(G),SZJB_(G)), optional, intent(out) :: tauy_bot
+  type(ocean_grid_type),   intent(in)    :: G      !< Ocean grid structure
+  type(verticalGrid_type), intent(in)    :: GV     !< Ocean vertical grid structure
+  real, intent(inout), &
+    dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: u      !< Zonal velocity in m s-1
+  real, intent(inout), &
+    dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: v      !< Meridional velocity in m s-1
+  real, intent(in), &
+    dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: h      !< Layer thickness in H
+  type(forcing),         intent(in)      :: fluxes !< Structure containing forcing fields
+  type(vertvisc_type),   intent(inout)   :: visc   !< Viscosities and bottom drag
+  real,                  intent(in)      :: dt     !< Time increment in s
+  type(ocean_OBC_type),  pointer         :: OBC    !< Open boundary condition structure
+  type(accel_diag_ptrs), intent(inout)   :: ADp    !< Accelerations in the momentum
+                                                   !! equations for diagnostics
+  type(cont_diag_ptrs),  intent(inout)   :: CDp    !< Continuity equation terms
+  type(vertvisc_CS),     pointer         :: CS     !< Vertical viscosity control structure
+  !> Zonal bottom stress from ocean to rock in Pa
+  real, optional, intent(out), dimension(SZIB_(G),SZJ_(G)) :: taux_bot
+  !> Meridional bottom stress from ocean to rock in Pa
+  real, optional, intent(out), dimension(SZI_(G),SZJB_(G)) :: tauy_bot 
 
-! Arguments: u - Zonal velocity, in m s-1.  Intent in/out.
-!  (in/out)  v - Meridional velocity, in m s-1.
-!  (in)      h - Layer thickness, in m.
-!  (in)      fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields have NULL ptrs.
-!  (in)      visc - The vertical viscosity type, containing information about
-!                   viscosities and bottom drag-related quantities.
-!  (in)      dt - Time increment in s.
-!  (in)      OBC - This open boundary condition type specifies whether, where,
-!                  and what open boundary conditions are used.
-!  (in)      ADp - A structure pointing to the various accelerations in
-!                  the momentum equations, to enable the later calculation
-!                  of derived diagnostics, like energy budgets.
-!  (in)      CDp - A structure with pointers to various terms in the continuity
-!                  equations.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 vertvisc_init.
-!  (out,opt) taux_bot - The zonal bottom stress from ocean to rock, in Pa.
-!  (out,opt) tauy_bot - The meridional bottom stress from ocean to rock, in Pa.
-!
-! Fields from fluxes used in this subroutine:
-!   taux: Zonal wind stress in Pa.
-!   tauy: Meridional wind stress in Pa.
+  ! Fields from fluxes used in this subroutine:
+  !   taux: Zonal wind stress in Pa.
+  !   tauy: Meridional wind stress in Pa.
+
+  ! Local variables
 
   real :: b1(SZIB_(G))          ! b1 and c1 are variables used by the
   real :: c1(SZIB_(G),SZK_(G))  ! tridiagonal solver.  c1 is nondimensional,
                                 ! while b1 has units of inverse thickness.
   real :: d1(SZIB_(G))          ! d1=1-c1 is used by the tridiagonal solver, ND.
-  real :: Ray(SZIB_(G),SZK_(G)) ! Ray is the Rayleigh-drag velocity times the
-                                ! time step, in m.
-  real :: b_denom_1   ! The first term in the denominator of b1, in m or kg m-2.
+  real :: Ray(SZIB_(G),SZK_(G)) ! Ray is the Rayleigh-drag velocity in m s-1
+  real :: b_denom_1             ! The first term in the denominator of b1, in H.
 
   real :: Hmix             ! The mixed layer thickness over which stress
                            ! is applied with direct_stress, translated into
@@ -311,6 +249,29 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, GV, CS, &
       Ray(I,k) = visc%Ray_u(I,j,k)
     enddo ; enddo ; endif
 
+    ! perform forward elimination on the tridiagonal system
+    !
+    ! denote the diagonal of the system as b_i, the subdiagonal as a_i
+    ! and the superdiagonal as c_i. The right-hand side terms are d_i.
+    !
+    ! ignoring the rayleigh drag contribution,
+    ! we have a_i = -dt_m_to_H * a_u(i)
+    !         b_i = h_u(i) + dt_m_to_H * (a_u(i) + a_u(i+1))
+    !         c_i = -dt_m_to_H * a_u(i+1)
+    !
+    ! for forward elimination, we want to:
+    ! calculate c'_i = - c_i                / (b_i + a_i c'_(i-1))
+    ! and       d'_i = (d_i - a_i d'_(i-1)) / (b_i + a_i c'_(i-1))
+    ! where c'_1 = c_1/b_1 and d'_1 = d_1/b_1
+    ! (see Thomas' tridiagonal matrix algorithm)
+    !
+    ! b1 is the denominator term 1 / (b_i + a_i c'_(i-1))
+    ! b_denom_1 is (b_i + a_i + c_i) - a_i(1 - c'_(i-1))
+    !            = (b_i + c_i + c'_(i-1))
+    ! this is done so that d1 = b1 * b_denom_1 = 1 - c'_(i-1)
+    ! c1(i) is -c'_(i - 1)
+    ! and the right-hand-side is destructively updated to be d'_i
+    !
     do I=Isq,Ieq ; if (do_i(I)) then
       b_denom_1 = CS%h_u(I,j,1) + dt_m_to_H * (Ray(I,1) + CS%a_u(I,j,1))
       b1(I) = 1.0 / (b_denom_1 + dt_m_to_H*CS%a_u(I,j,2))
@@ -325,6 +286,9 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, GV, CS, &
       u(I,j,k) = (CS%h_u(I,j,k) * u(I,j,k) + &
                   dt_m_to_H * CS%a_u(I,j,K) * u(I,j,k-1)) * b1(I)
     endif ; enddo ; enddo
+
+    ! back substitute to solve for the new velocities
+    ! u_i = d'_i - c'_i x_(i+1)
     do k=nz-1,1,-1 ; do I=Isq,Ieq ; if (do_i(I)) then
       u(I,j,k) = u(I,j,k) + c1(I,k+1) * u(I,j,k+1)
     endif ; enddo ; enddo ! i and k loops
@@ -449,31 +413,24 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, GV, CS, &
 
 end subroutine vertvisc
 
+!> Calculate the fraction of momentum originally in a layer that remains
+!! after a time-step of viscosity, and the fraction of a time-step's
+!! worth of barotropic acceleration that a layer experiences after
+!! viscosity is applied.
 subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, CS)
-!    This subroutine does a fully implicit vertical diffusion
-!  of momentum.  Stress top and bottom b.c.s are used.
-  type(ocean_grid_type), intent(in)                     :: G
-  type(verticalGrid_type), intent(in)                   :: GV
-  type(vertvisc_type), intent(in)                       :: visc
+  type(ocean_grid_type), intent(in)   :: G    !< Ocean grid structure
+  type(verticalGrid_type), intent(in) :: GV   !< Ocean vertical grid structure
+  type(vertvisc_type), intent(in)     :: visc !< Viscosities and bottom drag
+  !> Fraction of a time-step's worth of a barotopic acceleration that
+  !! a layer experiences after viscosity is applied in the zonal direction
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: visc_rem_u
+  !> Fraction of a time-step's worth of a barotopic acceleration that
+  !! a layer experiences after viscosity is applied in the meridional direction
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: visc_rem_v
-  real, intent(in)                                      :: dt
-  type(vertvisc_CS), pointer                            :: CS
-! Arguments: visc - The vertical viscosity type, containing information about
-!                   viscosities and bottom drag-related quantities, intent in.
-!  (out)     visc_rem_u - Both the fraction of the momentum originally in a
-!  (out)     visc_rem_v - layer that remains after a time-step of viscosity,
-!                         and the fraction of a time-step's worth of a
-!                         barotropic acceleration that a layer experiences
-!                         after viscosity is applied, in the zonal (_u) and
-!                         meridional (_v) directions.  Nondimensional between
-!                         0 (at the bottom) and 1 (far above the bottom).
-!  (in)      dt - Time increment in s.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 vertvisc_init.
-!
+  real, intent(in)           :: dt !< Time increment in s
+  type(vertvisc_CS), pointer :: CS !< Vertical viscosity control structure
+
+  ! Local variables
 
   real :: b1(SZIB_(G))          ! b1 and c1 are variables used by the
   real :: c1(SZIB_(G),SZK_(G))  ! tridiagonal solver.  c1 is nondimensional,
@@ -565,37 +522,29 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, CS)
 end subroutine vertvisc_remnant
 
 
+!> Calculate the coupling coefficients (CS%a_u and CS%a_v)
+!! and effective layer thicknesses (CS%h_u and CS%h_v) for later use in the
+!! applying the implicit vertical viscosity via vertvisc().
 subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS)
-!    This subroutine calculates the coupling coefficients (CS%a_u and CS%a_v)
-! and effective layer thicknesses (CS%h_u and CS%h_v) for later use in the
-! applying the implicit vertical viscosity via vertvisc.
-  type(ocean_grid_type), intent(in)                     :: G
-  type(verticalGrid_type),                intent(in)    :: GV
-  real, intent(in),    dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: u
-  real, intent(in),    dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: v
-  real, intent(in),    dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: h
-  type(forcing), intent(in)                             :: fluxes
-  type(vertvisc_type), intent(in)                       :: visc
-  real, intent(in)                                      :: dt
-  type(vertvisc_CS), pointer                            :: CS
+  type(ocean_grid_type), intent(in)      :: G      !< Ocean grid structure
+  type(verticalGrid_type), intent(in)    :: GV     !< Ocean vertical grid structure
+  real, intent(in), &
+    dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: u      !< Zonal velocity in m s-1
+  real, intent(in), &
+    dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: v      !< Meridional velocity in m s-1
+  real, intent(in), &
+    dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: h      !< Layer thickness in H
+  type(forcing), intent(in)              :: fluxes !< Structure containing forcing fields
+  type(vertvisc_type), intent(in)        :: visc   !< Viscosities and bottom drag
+  real, intent(in)                       :: dt     !< Time increment in s
+  type(vertvisc_CS), pointer             :: CS     !< Vertical viscosity control structure
 
-! Arguments: u - Zonal velocity, in m s-1.  Intent in.
-!  (in)      v - Meridional velocity, in m s-1.
-!  (in)      h - Layer thickness, in H.
-!  (in)      fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields have NULL ptrs.
-!  (in)      visc - The vertical viscosity type, containing information about
-!                   viscosities and bottom drag-related quantities.
-!  (in)      dt - Time increment in s.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in/out)  CS - The control structure returned by a previous call to
-!                 vertvisc_init.
-!
-! Field from fluxes used in this subroutine:
-!   ustar: the friction velocity in m s-1, used here as the mixing
-!     velocity in the mixed layer if NKML > 1 in a bulk mixed layer.
-!
+  ! Field from fluxes used in this subroutine:
+  !   ustar: the friction velocity in m s-1, used here as the mixing
+  !     velocity in the mixed layer if NKML > 1 in a bulk mixed layer.
+
+  ! Local variables
+
   real, dimension(SZIB_(G),SZK_(G)) :: &
     h_harm, &   ! Harmonic mean of the thicknesses around a velocity grid point,
                 ! given by 2*(h+ * h-)/(h+ + h-), in m or kg m-2 (H for short).
@@ -972,39 +921,48 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS)
 
 end subroutine vertvisc_coef
 
+!> Calculate the 'coupling coefficient' (a[k]) at the
+!! interfaces. If BOTTOMDRAGLAW is defined, the minimum of Hbbl and half the
+!! adjacent layer thicknesses are used to calculate a[k] near the bottom.
 subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_ml, &
                               dt, j, G, GV, CS, visc, fluxes, work_on_u, shelf)
-!    This subroutine calculates the 'coupling coefficient' (a[k]) at the
-!  interfaces. If BOTTOMDRAGLAW is defined, the minimum of Hbbl and half the
-!  adjacent layer thicknesses are used to calculate a[k] near the bottom.
-  type(ocean_grid_type), intent(in)                 :: G
-  type(verticalGrid_type),               intent(in) :: GV
+  type(ocean_grid_type), intent(in)                 :: G  !< Ocean grid structure
+  type(verticalGrid_type),               intent(in) :: GV !< Ocean vertical grid structure
+  !> Coupling coefficient across interfaces, in m s-1
   real,    dimension(SZIB_(G),SZK_(GV)+1), intent(out) :: a
+  !> Thickness at velocity points, in H
   real,    dimension(SZIB_(G),SZK_(GV)),   intent(in)  :: hvel
+  !> If true, determine coupling coefficient for a column
   logical, dimension(SZIB_(G)),            intent(in)  :: do_i
+  !> Harmonic mean of thicknesses around a velocity grid point, in H
   real,    dimension(SZIB_(G),SZK_(GV)),   intent(in)  :: h_harm
-  real,    dimension(SZIB_(G)),            intent(in)  :: bbl_thick, kv_bbl
+  !> Bottom boundary layer thickness, in H
+  real,    dimension(SZIB_(G)),            intent(in)  :: bbl_thick
+  !> Bottom boundary layer viscosity, in m2 s-1
+  real,    dimension(SZIB_(G)),            intent(in)  :: kv_bbl
+  !> Estimate of interface heights above the bottom,
+  !! normalised by the bottom boundary layer thickness
   real,    dimension(SZIB_(G),SZK_(GV)+1), intent(in)  :: z_i
+  !> Mixed layer depth, in H
   real,    dimension(SZIB_(G)),         intent(out) :: h_ml
+  !> j-index to find coupling coefficient for
   integer,                              intent(in)  :: j
+  !> Time increment, in s
   real,                                 intent(in)  :: dt
+  !> Vertical viscosity control structure
   type(vertvisc_CS), pointer                        :: CS
+  !> Structure containing viscosities and bottom drag
   type(vertvisc_type), intent(in)                   :: visc
+  !> Structure containing forcing fields
   type(forcing), intent(in)                         :: fluxes
+  !> If true, u-points are being calculated, otherwise v-points
   logical,                              intent(in)  :: work_on_u
+  !> If present and true, use a surface boundary condition
+  !! appropriate for an ice shelf.
   logical, optional,                    intent(in)  :: shelf
-! Arguments: a - The coupling coefficent across interfaces, in m/s.  Intent out.
-!  (in)      hvel - The thickness at velocity points, in H.
-!  (in)      do_i - If true, determine the a for a column.
-!  ...
-!  (in)      dt - The amount of time covered by this call, in s.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  ...
-!  (in)      work_on_u - If true, u-points are being worked on, otherwise this
-!                        call is for v-points.
-!  (in)      shelf - If present and true, use a surface boundary condition
-!                    appropriate for an ice shelf.
+
+  ! Local variables
+
   real, dimension(SZIB_(G)) :: &
     u_star, &   ! ustar at a velocity point, in m s-1.
     absf, &     ! The average of the neighboring absolute values of f, in s-1.
@@ -1195,22 +1153,26 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
 
 end subroutine find_coupling_coef
 
-
+!> Velocity components which exceed a threshold for physically
+!! reasonable values are truncated. Optionally, any column with excessive
+!! velocities may be sent to a diagnostic reporting subroutine.
 subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, GV, CS)
-!  Within this subroutine, velocity components which exceed a threshold for
-! physically reasonable values are truncated. Optionally, any column with
-! excessive velocities may be sent to a diagnostic reporting subroutine.
-  type(ocean_grid_type),                  intent(in)    :: G
-  type(verticalGrid_type),                intent(in)    :: GV
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: u
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h
-  type(accel_diag_ptrs),                  intent(in)    :: ADp
-  type(cont_diag_ptrs),                   intent(in)    :: CDp
-  type(forcing),                          intent(in)    :: fluxes
-  type(vertvisc_type),                    intent(in)    :: visc
-  real,                                   intent(in)    :: dt
-  type(vertvisc_CS),                      pointer       :: CS
+  type(ocean_grid_type),   intent(in)    :: G      !< Ocean grid structure
+  type(verticalGrid_type), intent(in)    :: GV     !< Ocean vertical grid structure
+  real, intent(inout), &
+    dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: u      !< Zonal velocity in m s-1
+  real, intent(inout), &
+    dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: v      !< Meridional velocity in m s-1
+  real, intent(in), &
+    dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: h      !< Layer thickness in H
+  type(accel_diag_ptrs), intent(in)      :: ADp    !< Acceleration diagnostic pointers
+  type(cont_diag_ptrs),  intent(in)      :: CDp    !< Continuity diagnostic pointers
+  type(forcing),         intent(in)      :: fluxes !< Forcing fields
+  type(vertvisc_type),   intent(in)      :: visc   !< Viscosities and bottom drag
+  real,                  intent(in)      :: dt     !< Time increment in s
+  type(vertvisc_CS),     pointer         :: CS     !< Vertical viscosity control structure
+
+  ! Local variables
 
   real :: maxvel           ! Velocities components greater than maxvel
   real :: truncvel         ! are truncated to truncvel, both in m s-1.
@@ -1393,34 +1355,23 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, GV, CS)
 
 end subroutine vertvisc_limit_vel
 
+!> Initialise the vertical friction module
 subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
                          ntrunc, CS)
+  !> "MOM Internal State", a set of pointers to the fields and accelerations
+  !! that make up the ocean's physical state
   type(ocean_internal_state), target, intent(in) :: MIS
-  type(time_type), target, intent(in)    :: Time
-  type(ocean_grid_type),   intent(in)    :: G
-  type(verticalGrid_type), intent(in)    :: GV
-  type(param_file_type),   intent(in)    :: param_file
-  type(diag_ctrl), target, intent(inout) :: diag
-  type(accel_diag_ptrs),   intent(inout) :: ADp
-  type(directories),       intent(in)    :: dirs
-  integer, target,         intent(inout) :: ntrunc
-  type(vertvisc_CS),       pointer       :: CS
-! Arguments: MIS - For "MOM Internal State" a set of pointers to the fields and
-!                  accelerations that make up the ocean's physical state.
-!  (in)      Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (inout)   ADp - A structure pointing to the various accelerations in
-!                  the momentum equations, to enable the later calculation
-!                  of derived diagnostics, like energy budgets.
-!  (in)      dirs - A structure containing several relevant directory paths.
-!  (in/out)  ntrunc - The integer that stores the number of times the velocity
-!                     has been truncated since the last call to write_energy.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
+  type(time_type), target, intent(in)    :: Time       !< Current model time
+  type(ocean_grid_type),   intent(in)    :: G          !< Ocean grid structure
+  type(verticalGrid_type), intent(in)    :: GV         !< Ocean vertical grid structure
+  type(param_file_type),   intent(in)    :: param_file !< File to parse for parameters
+  type(diag_ctrl), target, intent(inout) :: diag       !< Diagnostic control structure
+  type(accel_diag_ptrs),   intent(inout) :: ADp        !< Acceleration diagnostic pointers
+  type(directories),       intent(in)    :: dirs       !< Relevant directory paths
+  integer, target,         intent(inout) :: ntrunc     !< Number of velocity truncations
+  type(vertvisc_CS),       pointer       :: CS         !< Vertical viscosity control structure
+
+  ! Local variables
 
   real :: hmix_str_dflt
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
@@ -1582,13 +1533,15 @@ subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
 
 end subroutine vertvisc_init
 
+!> Update the CFL truncation value as a function of time.
+!! If called with the optional argument activate=.true., record the
+!! value of Time as the beginning of the ramp period.
 subroutine updateCFLtruncationValue(Time, CS, activate)
-  ! This routine updates the CFL truncation value as a function of time
-  ! If called with the optional argument activate=.true., records the
-  ! value of Time as the beginning of the ramp period.
-  type(time_type), target, intent(in)    :: Time
-  type(vertvisc_CS),       pointer       :: CS
+  type(time_type), target, intent(in)    :: Time     !< Current model time
+  type(vertvisc_CS),       pointer       :: CS       !< Vertical viscosity control structure
+  !> Whether to record the value of Time as the beginning of the ramp period
   logical, optional,       intent(in)    :: activate
+
   ! Local variables
   real :: deltaTime, wghtA
   character(len=12) :: msg
@@ -1620,6 +1573,7 @@ subroutine updateCFLtruncationValue(Time, CS, activate)
                        " limit to "//trim(msg))
 end subroutine updateCFLtruncationValue
 
+!> Clean up and deallocate the vertical friction module
 subroutine vertvisc_end(CS)
   type(vertvisc_CS),   pointer       :: CS
   DEALLOC_(CS%a_u) ; DEALLOC_(CS%h_u)
@@ -1629,4 +1583,54 @@ subroutine vertvisc_end(CS)
   deallocate(CS)
 end subroutine vertvisc_end
 
+!> \namespace mom_vert_friction
+!! \author Robert Hallberg
+!! \date April 1994 - October 2006
+!!
+!!  The vertical diffusion of momentum is fully implicit.  This is
+!!  necessary to allow for vanishingly small layers.  The coupling
+!!  is based on the distance between the centers of adjacent layers,
+!!  except where a layer is close to the bottom compared with a
+!!  bottom boundary layer thickness when a bottom drag law is used.
+!!  A stress top b.c. and a no slip bottom  b.c. are used.  There
+!!  is no limit on the time step for vertvisc.
+!!
+!!  Near the bottom, the horizontal thickness interpolation scheme
+!!  changes to an upwind biased estimate to control the effect of
+!!  spurious Montgomery potential gradients at the bottom where
+!!  nearly massless layers layers ride over the topography.  Within a
+!!  few boundary layer depths of the bottom, the harmonic mean
+!!  thickness (i.e. (2 h+ h-) / (h+ + h-) ) is used if the velocity
+!!  is from the thinner side and the arithmetic mean thickness
+!!  (i.e. (h+ + h-)/2) is used if the velocity is from the thicker
+!!  side.  Both of these thickness estimates are second order
+!!  accurate.  Above this the arithmetic mean thickness is used.
+!!
+!!  In addition, vertvisc truncates any velocity component that
+!!  exceeds maxvel to truncvel. This basically keeps instabilities
+!!  spatially localized.  The number of times the velocity is
+!!  truncated is reported each time the energies are saved, and if
+!!  exceeds CS%Maxtrunc the model will stop itself and change the time
+!!  to a large value.  This has proven very useful in (1) diagnosing
+!!  model failures and (2) letting the model settle down to a
+!!  meaningful integration from a poorly specified initial condition.
+!!
+!!  The same code is used for the two velocity components, by
+!!  indirectly referencing the velocities and defining a handful of
+!!  direction-specific defined variables.
+!!
+!!  Macros written all in capital letters are defined in MOM_memory.h.
+!!
+!!     A small fragment of the grid is shown below:
+!! \verbatim
+!!    j+1  x ^ x ^ x   At x:  q
+!!    j+1  > o > o >   At ^:  v, frhatv, tauy
+!!    j    x ^ x ^ x   At >:  u, frhatu, taux
+!!    j    > o > o >   At o:  h
+!!    j-1  x ^ x ^ x
+!!        i-1  i  i+1  At x & ^:
+!!           i  i+1    At > & o:
+!! \endverbatim
+!!
+!!  The boundaries always run through q grid points (x).
 end module MOM_vert_friction

@@ -19,20 +19,13 @@ module sloshing_initialization
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
 !***********************************************************************
 
-!***********************************************************************
-!*                                                                     *
-!*  The module configures the model for the non-rotating sloshing      *
-!* test case.                                                          *
-!*                                                                     *
-!***********************************************************************
-
-
 use MOM_domains, only : sum_across_PEs
+use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : close_file, create_file, fieldtype, file_exists
+use MOM_io, only : close_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
 use MOM_io, only : write_field, slasher
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
@@ -59,15 +52,13 @@ character(len=40)  :: mod = "sloshing_initialization" ! This module's name.
 ! -----------------------------------------------------------------------------
 contains
 
-!------------------------------------------------------------------------------
-! Initialization of topography
-!------------------------------------------------------------------------------
+!> Initialization of topography.
 subroutine sloshing_initialize_topography ( D, G, param_file, max_depth )
-  ! Arguments 
-  type(ocean_grid_type), intent(in) :: G
-  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: D
-  type(param_file_type), intent(in) :: param_file
-  real,                  intent(in) :: max_depth
+  type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
+  real, dimension(G%isd:G%ied,G%jsd:G%jed), &
+                                      intent(out) :: D !< Ocean bottom depth in m
+  type(param_file_type),              intent(in)  :: param_file !< Parameter file structure
+  real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
   
   ! Local variables 
   integer   :: i, j
@@ -83,22 +74,23 @@ subroutine sloshing_initialize_topography ( D, G, param_file, max_depth )
 end subroutine sloshing_initialize_topography
 
 
-!------------------------------------------------------------------------------
-! Initialization of thicknesses
-!------------------------------------------------------------------------------
+!> Initialization of thicknesses
+!! This routine is called when THICKNESS_CONFIG is set to 'sloshing'
+!!
+!! This routine initializes layer positions to set off a sloshing motion in
+!! the zonal direction in a rectangular basin. All layers have initially the
+!! same thickness but all interfaces (except bottom and sea surface) are
+!! displaced according to a half-period cosine, with maximum value on the
+!! left and minimum value on the right. This sets off a regular sloshing motion.
 subroutine sloshing_initialize_thickness ( h, G, GV, param_file )
-  type(ocean_grid_type),   intent(in)                    :: G
-  type(verticalGrid_type), intent(in)                    :: GV
-  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h
-  type(param_file_type),   intent(in)                    :: param_file
+  type(ocean_grid_type), intent(in)           :: G          !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)         :: GV         !< The ocean's vertical grid structure.
+  real, intent(out), dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h !< The thicknesses being
+                                                            !! initialized.
+  type(param_file_type), intent(in)           :: param_file !< A structure indicating the
+                                                            !! open file to parse for model
+                                                            !! parameter values.
 
-! This routine is called when THICKNESS_CONFIG is set to 'sloshing'
-!
-! This routine initializes layer positions to set off a sloshing motion in
-! the zonal direction in a rectangular basin. All layers have initially the
-! same thickness but all interfaces (except bottom and sea surface) are
-! displaced according to a half-period cosine, with maximum value on the
-! left and minimum value on the right. This sets off a regular sloshing motion.
   real    :: displ(SZK_(G)+1)  
   real    :: z_unif(SZK_(G)+1)
   real    :: z_inter(SZK_(G)+1)
@@ -199,20 +191,23 @@ end subroutine sloshing_initialize_thickness
 
 
 !------------------------------------------------------------------------------
-! Initialization of temperature and salinity
-!------------------------------------------------------------------------------
+!> Initialization of temperature and salinity
+!!
+!! This subroutine initializes linear profiles for T and S according to
+!! reference surface layer salinity and temperature and a specified range.
+!! Note that the linear distribution is set up with respect to the layer
+!! number, not the physical position).
 subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, param_file, &
                                                       eqn_of_state)
-  type(ocean_grid_type),                     intent(in)  :: G
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T, S
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h
-  type(param_file_type),                     intent(in)  :: param_file
-  type(EOS_type),                            pointer     :: eqn_of_state
+  type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure.
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< Potential temperature (degC).
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< Salinity (ppt).
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< Layer thickness (m or Pa).
+  type(param_file_type),                     intent(in)  :: param_file !< A structure indicating the
+                                                            !! open file to parse for model
+                                                            !! parameter values.
+  type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure.
                                                       
-  ! This subroutine initializes linear profiles for T and S according to
-  ! reference surface layer salinity and temperature and a specified range.
-  ! Note that the linear distribution is set up with respect to the layer
-  ! number, not the physical position).
   integer :: i, j, k, is, ie, js, je, nz
   real    :: delta_S, delta_T
   real    :: S_ref, T_ref;      ! Reference salinity and temerature within
@@ -264,4 +259,8 @@ subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, param_file, &
   
 end subroutine sloshing_initialize_temperature_salinity
 
+!> \class sloshing_initialization
+!!
+!! The module configures the model for the non-rotating sloshing
+!! test case.
 end module sloshing_initialization

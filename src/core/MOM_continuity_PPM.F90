@@ -2134,7 +2134,7 @@ subroutine continuity_PPM_init(Time, G, GV, param_file, diag, CS)
   allocate(CS)
 
 ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version)
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "MONOTONIC_CONTINUITY", CS%monotonic, &
                  "If true, CONTINUITY_PPM uses the Colella and Woodward \n"//&
                  "monotonic limiter.  The default (false) is to use a \n"//&

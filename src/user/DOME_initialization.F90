@@ -19,14 +19,8 @@ module DOME_initialization
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
 !***********************************************************************
 
-!***********************************************************************
-!*                                                                     *
-!*  The module configures the model for the "DOME" experiment.         *
-!*  DOME = Dynamics of Overflows and Mixing Experiment                 *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
-
 use MOM_sponge, only : sponge_CS, set_up_sponge_field, initialize_sponge
+use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
@@ -48,17 +42,14 @@ public DOME_set_Open_Bdry_Conds
 contains
 
 ! -----------------------------------------------------------------------------
+!> This subroutine sets up the DOME topography
 subroutine DOME_initialize_topography(D, G, param_file, max_depth)
-  type(ocean_grid_type), intent(in)           :: G
-  real, intent(out), dimension(SZI_(G),SZJ_(G)) :: D
-  type(param_file_type), intent(in)           :: param_file
-  real,                  intent(in)           :: max_depth
-! Arguments: D          - the bottom depth in m. Intent out.
-!  (in)      G          - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
+  type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
+  real, dimension(G%isd:G%ied,G%jsd:G%jed), &
+                                      intent(out) :: D !< Ocean bottom depth in m
+  type(param_file_type),              intent(in)  :: param_file !< Parameter file structure
+  real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
 
-! This subroutine sets up the DOME topography
   real :: min_depth ! The minimum and maximum depths in m.
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -96,18 +87,14 @@ end subroutine DOME_initialize_topography
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
+!> This subroutine initializes layer thicknesses for the DOME experiment
 subroutine DOME_initialize_thickness(h, G, GV, param_file)
-  type(ocean_grid_type),   intent(in) :: G
-  type(verticalGrid_type), intent(in) :: GV
-  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h
-  type(param_file_type),   intent(in) :: param_file
-! Arguments: h - The thickness that is being initialized.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
+  type(ocean_grid_type),   intent(in) :: G  !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in) :: GV !< The ocean's vertical grid structure.
+  real, intent(out), dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h !< The thickness that is being initialized.
+  type(param_file_type),   intent(in) :: param_file !< A structure indicating the open file
+                                                    !! to parse for model parameter values.
 
-!  This subroutine initializes layer thicknesses for the DOME experiment
   real :: e0(SZK_(G)+1)     ! The resting interface heights, in m, usually !
                             ! negative because it is positive upward.      !
   real :: eta1D(SZK_(G)+1)  ! Interface height relative to the sea surface !
@@ -146,27 +133,21 @@ end subroutine DOME_initialize_thickness
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
+!> This subroutine sets the inverse restoration time (Idamp), and     !
+!! the values towards which the interface heights and an arbitrary    !
+!! number of tracers should be restored within each sponge. The       !
+!! interface height is always subject to damping, and must always be  !
+!! the first registered field.                                        !
 subroutine DOME_initialize_sponges(G, GV, tv, PF, CSp)
-  type(ocean_grid_type), intent(in) :: G
-  type(verticalGrid_type), intent(in) :: GV
-  type(thermo_var_ptrs), intent(in) :: tv
-  type(param_file_type), intent(in) :: PF
-  type(sponge_CS),       pointer    :: CSp
-!   This subroutine sets the inverse restoration time (Idamp), and   !
-! the values towards which the interface heights and an arbitrary    !
-! number of tracers should be restored within each sponge. The       !
-! interface height is always subject to damping, and must always be  !
-! the first registered field.                                        !
-
-! Arguments: G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      tv - A structure containing pointers to any available
-!                 thermodynamic fields, including potential temperature and
-!                 salinity or mixed layer density. Absent fields have NULL ptrs.
-!  (in)      PF - A structure indicating the open file to parse for
-!                 model parameter values.
-!  (in/out)  CSp - A pointer that is set to point to the control structure
-!                  for this module
+  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in) :: GV !< The ocean's vertical grid structure.
+  type(thermo_var_ptrs), intent(in) :: tv   !< A structure containing pointers to any available
+               !!                 thermodynamic fields, including potential temperature and
+               !!                 salinity or mixed layer density. Absent fields have NULL ptrs.
+  type(param_file_type), intent(in) :: PF   !< A structure indicating the open file to
+                                            !! parse for model parameter values.
+  type(sponge_CS),       pointer    :: CSp  !< A pointer that is set to point to the control
+                                            !! structure for this module.
 
   real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta.
   real :: temp(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for other variables. !
@@ -209,7 +190,7 @@ subroutine DOME_initialize_sponges(G, GV, tv, PF, CSp)
 
     if (damp <= damp_new) damp=damp_new
 
-    ! These will be streched inside of apply_sponge, so they can be in
+    ! These will be stretched inside of apply_sponge, so they can be in
     ! depth space for Boussinesq or non-Boussinesq models.
     eta(i,j,1) = 0.0
     do k=2,nz
@@ -252,25 +233,21 @@ end subroutine DOME_initialize_sponges
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
+!> This subroutine sets the properties of flow at open boundary conditions.
+!! This particular example is for the DOME inflow describe in Legg et al. 2006.
 subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
-  type(ocean_OBC_type),       pointer    :: OBC
-  type(thermo_var_ptrs),      intent(in) :: tv
-  type(ocean_grid_type),      intent(in) :: G
-  type(verticalGrid_type),    intent(in) :: GV
-  type(param_file_type),      intent(in) :: param_file
-  type(tracer_registry_type), pointer    :: tr_Reg
-!   This subroutine sets the properties of flow at open boundary conditions.
-! This particular example is for the DOME inflow describe in Legg et al. 2006.
-
-! Arguments: OBC - This open boundary condition type specifies whether, where,
-!                  and what open boundary conditions are used.
-!  (in)      tv - A structure containing pointers to any available
-!                 thermodynamic fields, including potential temperature and
-!                 salinity or mixed layer density. Absent fields have NULL ptrs.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
+  type(ocean_OBC_type),       pointer    :: OBC !< This open boundary condition type specifies
+                                                !! whether, where, and what open boundary
+                                                !! conditions are used.
+  type(thermo_var_ptrs),      intent(in) :: tv  !< A structure containing pointers to any
+                              !! available thermodynamic fields, including potential
+                              !! temperature and salinity or mixed layer density. Absent
+                              !! fields have NULL ptrs.
+  type(ocean_grid_type),      intent(in) :: G   !< The ocean's grid structure.
+  type(verticalGrid_type),    intent(in) :: GV  !< The ocean's vertical grid structure.
+  type(param_file_type),      intent(in) :: param_file !< A structure indicating the open file
+                              !! to parse for model parameter values.
+  type(tracer_registry_type), pointer    :: tr_Reg !< Tracer registry.
 
   logical :: any_OBC        ! Set to true if any points in this subdomain use
                             ! open boundary conditions.
@@ -311,7 +288,7 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
   D_edge = 300.0  ! The thickness of dense fluid in the inflow.
   Ri_trans = 1.0/3.0 ! The shear Richardson number in the transition region
                      ! region of the specified shear profile.
-                        
+
   call get_param(param_file, mod, "APPLY_OBC_U", apply_OBC_u, &
                  "If true, open boundary conditions may be set at some \n"//&
                  "u-points, with the configuration controlled by OBC_CONFIG", &
@@ -357,7 +334,7 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
 
   if (.not.(apply_OBC_u .or. apply_OBC_v)) return
 
-  if (.not.associated(OBC)) allocate(OBC)   
+  if (.not.associated(OBC)) allocate(OBC)
 
   if (apply_OBC_u) then
     OBC%apply_OBC_u = .true.
@@ -471,4 +448,8 @@ subroutine DOME_set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tr_Reg)
 end subroutine DOME_set_Open_Bdry_Conds
 ! -----------------------------------------------------------------------------
 
+!> \class DOME_initialization
+!!
+!! The module configures the model for the "DOME" experiment.
+!! DOME = Dynamics of Overflows and Mixing Experiment
 end module DOME_initialization

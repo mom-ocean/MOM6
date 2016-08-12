@@ -96,6 +96,7 @@ use MOM_continuity, only : continuity, continuity_init, continuity_CS
 use MOM_CoriolisAdv, only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
 use MOM_error_checking, only : check_redundant
 use MOM_grid, only : ocean_grid_type
+use MOM_hor_index, only : hor_index_type
 use MOM_hor_visc, only : horizontal_viscosity, hor_visc_init, hor_visc_CS
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types, only : MEKE_type
@@ -480,8 +481,8 @@ end subroutine step_MOM_dyn_unsplit_RK2
 
 ! =============================================================================
 
-subroutine register_restarts_dyn_unsplit_RK2(G, GV, param_file, CS, restart_CS)
-  type(ocean_grid_type),        intent(in)    :: G
+subroutine register_restarts_dyn_unsplit_RK2(HI, GV, param_file, CS, restart_CS)
+  type(hor_index_type),         intent(in)    :: HI
   type(verticalGrid_type),      intent(in)    :: GV
   type(param_file_type),        intent(in)    :: param_file
   type(MOM_dyn_unsplit_RK2_CS), pointer       :: CS
@@ -490,7 +491,7 @@ subroutine register_restarts_dyn_unsplit_RK2(G, GV, param_file, CS, restart_CS)
 ! to the unsplit time stepping scheme.  All variables registered here should
 ! have the ability to be recreated if they are not present in a restart file.
 
-! Arguments: G - The ocean's grid structure.
+! Arguments: HI - A horizontal index type structure.
 !  (in)      GV - The ocean's vertical grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
@@ -500,8 +501,8 @@ subroutine register_restarts_dyn_unsplit_RK2(G, GV, param_file, CS, restart_CS)
   type(vardesc) :: vd
   character(len=48) :: thickness_units, flux_units
   integer :: isd, ied, jsd, jed, nz, IsdB, IedB, JsdB, JedB
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+  isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
+  IsdB = HI%IsdB ; IedB = HI%IedB ; JsdB = HI%JsdB ; JedB = HI%JedB
 
 ! This is where a control structure that is specific to this module would be allocated.
   if (associated(CS)) then
