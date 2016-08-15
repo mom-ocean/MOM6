@@ -1,4 +1,4 @@
-module MESO_surface_forcing
+module BFB_surface_forcing
 !***********************************************************************
 !*                   GNU General Public License                        *
 !* This file is a part of MOM.                                         *
@@ -23,51 +23,23 @@ module MESO_surface_forcing
 !*                                                                     *
 !*  Rewritten by Robert Hallberg, June 2009                            *
 !*                                                                     *
-!*    This file contains the subroutines that a user should modify to  *
-!*  to set the surface wind stresses and fluxes of buoyancy or         *
-!*  temperature and fresh water.  They are called when the run-time    *
-!*  parameters WIND_CONFIG or BUOY_CONFIG are set to "USER".  The      *
-!*  standard version has simple examples, along with run-time error    *
-!*  messages that will cause the model to abort if this code has not   *
-!*  been modified.  This code is intended for use with relatively      *
-!*  simple specifications of the forcing.  For more complicated forms, *
-!*  it is probably a good idea to read the forcing from input files    *
-!*  using "file" for WIND_CONFIG and BUOY_CONFIG.                      *
-!*                                                                     *
-!*    MESO_wind_forcing should set the surface wind stresses (taux and *
-!*  tauy) perhaps along with the surface friction velocity (ustar).    *
-!*                                                                     *
-!*    MESO_buoyancy forcing is used to set the surface buoyancy        *
-!*  forcing, which may include a number of fresh water flux fields     *
-!*  (evap, liq_precip, froz_precip, liq_runoff, froz_runoff, and       *
-!*  vprec) and the surface heat fluxes (sw, lw, latent and sens)       *
-!*  if temperature and salinity are state variables, or it may simply  *
-!*  be the buoyancy flux if it is not.  This routine also has coded a  *
-!*  restoring to surface values of temperature and salinity.           *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v, tauy                                  *
-!*    j    x ^ x ^ x   At >:  u, taux                                  *
-!*    j    > o > o >   At o:  h, fluxes.                               *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
+!*  This file contains subroutines for specifying surface buoyancy     * 
+!*  forcing for the buoyancy-forced basin (BFB) case.                  *
+!*  BFB_buoyancy_forcing is used to restore the surface buoayncy to    *
+!*  a linear meridional ramp of temperature. The extent of the ramp    *
+!*  can be specified by LFR_SLAT (linear forcing ramp southern         *
+!*  latitude) and LFR_NLAT. The temperatures at these edges of the     *
+!*  ramp can be specified by SST_S and SST_N.                          *
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 use MOM_diag_mediator, only : post_data, query_averaging_enabled
 use MOM_diag_mediator, only : register_diag_field, diag_ctrl
 use MOM_domains, only : pass_var, pass_vector, AGRID
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
-use MOM_file_parser, only : get_param, log_version, param_file_type
+use MOM_file_parser, only : get_param, param_file_type, log_version
 use MOM_forcing_type, only : forcing, allocate_forcing_type
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : file_exists, read_data, slasher
+use MOM_io, only : file_exists, read_data
 use MOM_time_manager, only : time_type, operator(+), operator(/), get_time
 use MOM_tracer_flow_control, only : call_tracer_set_forcing
 use MOM_tracer_flow_control, only : tracer_flow_control_CS
@@ -75,9 +47,9 @@ use MOM_variables, only : surface
 
 implicit none ; private
 
-public MESO_wind_forcing, MESO_buoyancy_forcing, MESO_surface_forcing_init
+public BFB_buoyancy_forcing, BFB_surface_forcing_init
 
-type, public :: MESO_surface_forcing_CS ; private
+type, public :: BFB_surface_forcing_CS ; private
   !   This control structure should be used to store any run-time variables
   ! associated with the user-specified forcing.  It can be readily modified
   ! for a specific case, and because it is private there will be no changes
@@ -94,93 +66,32 @@ type, public :: MESO_surface_forcing_CS ; private
   real :: Flux_const         !   The restoring rate at the surface, in m s-1.
   real :: gust_const         !   A constant unresolved background gustiness
                              ! that contributes to ustar, in Pa.
-  real, dimension(:,:), pointer :: &
-    T_Restore(:,:) => NULL(), & ! The temperature to restore the SST to, in C.
-    S_Restore(:,:) => NULL(), & ! The salinity to restore the sea surface salnity
-                                ! toward, in PSU.
-    PmE(:,:) => NULL(), &       ! The prescribed precip minus evap, in  m s-1.
-    Solar(:,:) => NULL(), &     ! The shortwave forcing into the ocean, in W m-2 m s-1.
-    Heat(:,:) => NULL()         ! The prescribed longwave, latent and sensible
-                                ! heat flux into the ocean, in W m-2.
-  character(len=200) :: inputdir ! The directory where NetCDF input files are.
-  character(len=200) :: salinityrestore_file, SSTrestore_file
-  character(len=200) :: Solar_file, heating_file, PmE_file
+  real :: SST_s              ! SST at the southern edge of the linear
+                             ! forcing ramp
+  real :: SST_n              ! SST at the northern edge of the linear
+                             ! forcing ramp
+  real :: lfrslat              ! Southern latitude where the linear forcing ramp 
+                             ! begins
+  real :: lfrnlat              ! Northern latitude where the linear forcing ramp 
+                             ! ends
+  real :: drho_dt            ! Rate of change of density with temperature.
+                             ! Note that temperature is being used as a dummy
+                             ! variable here. All temperatures are converted 
+                             ! into density. 
+
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
-end type MESO_surface_forcing_CS
-
-logical :: first_call = .true.
+end type BFB_surface_forcing_CS
 
 contains
 
-subroutine MESO_wind_forcing(state, fluxes, day, G, CS)
-  type(surface),                 intent(inout) :: state
-  type(forcing),                 intent(inout) :: fluxes
-  type(time_type),               intent(in)    :: day
-  type(ocean_grid_type),         intent(inout) :: G
-  type(MESO_surface_forcing_CS), pointer       :: CS
-
-!   This subroutine sets the surface wind stresses, fluxes%taux and fluxes%tauy.
-! These are the stresses in the direction of the model grid (i.e. the same
-! direction as the u- and v- velocities.)  They are both in Pa.
-!   In addition, this subroutine can be used to set the surface friction
-! velocity, fluxes%ustar, in m s-1. This is needed with a bulk mixed layer.
-!
-! Arguments: state - A structure containing fields that describe the
-!                    surface state of the ocean.
-!  (out)     fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields have NULL ptrs.
-!  (in)      day - Time of the fluxes.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - A pointer to the control structure returned by a previous
-!                 call to MESO_surface_forcing_init
-
-  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
-  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
-
-  !   When modifying the code, comment out this error message.  It is here
-  ! so that the original (unmodified) version is not accidentally used.
-  call MOM_error(FATAL, "MESO_wind_surface_forcing: " // &
-     "User forcing routine called without modification." )
-
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-
-  ! Allocate the forcing arrays, if necessary.
-  call allocate_forcing_type(G, fluxes, stress=.true., ustar=.true.)
-
-  !  Set the surface wind stresses, in units of Pa.  A positive taux
-  !  accelerates the ocean to the (pseudo-)east.
-
-  !  The i-loop extends to is-1 so that taux can be used later in the
-  ! calculation of ustar - otherwise the lower bound would be Isq.
-  do j=js,je ; do I=is-1,Ieq
-    fluxes%taux(I,j) = G%mask2dCu(I,j) * 0.0  ! Change this to the desired expression.
-  enddo ; enddo
-  do J=js-1,Jeq ; do i=is,ie
-    fluxes%tauy(i,J) = G%mask2dCv(i,J) * 0.0  ! Change this to the desired expression.
-  enddo ; enddo
-
-  !    Set the surface friction velocity, in units of m s-1.  ustar
-  !  is always positive.
-  if (associated(fluxes%ustar)) then ; do j=js,je ; do i=is,ie
-    !  This expression can be changed if desired, but need not be.
-    fluxes%ustar(i,j) = G%mask2dT(i,j) * sqrt(CS%gust_const/CS%Rho0 + &
-       sqrt(0.5*(fluxes%taux(I-1,j)**2 + fluxes%taux(I,j)**2) + &
-            0.5*(fluxes%tauy(i,J-1)**2 + fluxes%tauy(i,J)**2))/CS%Rho0)
-  enddo ; enddo ; endif
-
-end subroutine MESO_wind_forcing
-
-subroutine MESO_buoyancy_forcing(state, fluxes, day, dt, G, CS)
+subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, CS)
   type(surface),                 intent(inout) :: state
   type(forcing),                 intent(inout) :: fluxes
   type(time_type),               intent(in)    :: day
   real,                          intent(in)    :: dt
   type(ocean_grid_type),         intent(in)    :: G
-  type(MESO_surface_forcing_CS), pointer       :: CS
+  type(BFB_surface_forcing_CS), pointer       :: CS
 
 !    This subroutine specifies the current surface fluxes of buoyancy or
 !  temperature and fresh water.  It may also be modified to add
@@ -205,7 +116,7 @@ subroutine MESO_buoyancy_forcing(state, fluxes, day, dt, G, CS)
 !                           will be applied.
 !  (in)      G - The ocean's grid structure.
 !  (in)      CS - A pointer to the control structure returned by a previous
-!                 call to MESO_surface_forcing_init
+!                 call to user_surface_forcing_init
 
   real :: Temp_restore   ! The temperature that is being restored toward, in C.
   real :: Salin_restore  ! The salinity that is being restored toward, in PSU.
@@ -214,15 +125,16 @@ subroutine MESO_buoyancy_forcing(state, fluxes, day, dt, G, CS)
   real :: rhoXcp ! The mean density times the heat capacity, in J m-3 K-1.
   real :: buoy_rest_const  ! A constant relating density anomalies to the
                            ! restoring buoyancy flux, in m5 s-3 kg-1.
-
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-
+ 
   !   When modifying the code, comment out this error message.  It is here
   ! so that the original (unmodified) version is not accidentally used.
+  ! call MOM_error(FATAL, "User_buoyancy_surface_forcing: " // &
+  !   "User forcing routine called without modification." )
 
   ! Allocate and zero out the forcing arrays, as necessary.  This portion is
   ! usually not changed.
@@ -238,32 +150,12 @@ subroutine MESO_buoyancy_forcing(state, fluxes, day, dt, G, CS)
     call alloc_if_needed(fluxes%lw, isd, ied, jsd, jed)
     call alloc_if_needed(fluxes%latent, isd, ied, jsd, jed)
     call alloc_if_needed(fluxes%sens, isd, ied, jsd, jed)
-    call alloc_if_needed(fluxes%heat_content_lprec, isd, ied, jsd, jed)
   else ! This is the buoyancy only mode.
     call alloc_if_needed(fluxes%buoy, isd, ied, jsd, jed)
   endif
 
 
   ! MODIFY THE CODE IN THE FOLLOWING LOOPS TO SET THE BUOYANCY FORCING TERMS.
-  if (CS%restorebuoy .and. first_call) then !### .or. associated(CS%ctrl_forcing_CSp)) then
-    call alloc_if_needed(CS%T_Restore, isd, ied, jsd, jed)
-    call alloc_if_needed(CS%S_Restore, isd, ied, jsd, jed)
-    call alloc_if_needed(CS%Heat, isd, ied, jsd, jed)
-    call alloc_if_needed(CS%PmE, isd, ied, jsd, jed)
-    call alloc_if_needed(CS%Solar, isd, ied, jsd, jed)
-
-    call read_data(trim(CS%inputdir)//trim(CS%SSTrestore_file), "SST", &
-             CS%T_Restore(:,:), domain=G%Domain%mpp_domain)
-    call read_data(trim(CS%inputdir)//trim(CS%salinityrestore_file), "SAL", &
-             CS%S_Restore(:,:), domain=G%Domain%mpp_domain)
-    call read_data(trim(CS%inputdir)//trim(CS%heating_file), "Heat", &
-             CS%Heat(:,:), domain=G%Domain%mpp_domain)
-    call read_data(trim(CS%inputdir)//trim(CS%PmE_file), "PmE", &
-             CS%PmE(:,:), domain=G%Domain%mpp_domain)
-    call read_data(trim(CS%inputdir)//trim(CS%Solar_file), "NET_SOL", &
-             CS%Solar(:,:), domain=G%Domain%mpp_domain)
-    first_call = .false.
-  endif
 
   if ( CS%use_temperature ) then
     ! Set whichever fluxes are to be used here.  Any fluxes that
@@ -272,16 +164,16 @@ subroutine MESO_buoyancy_forcing(state, fluxes, day, dt, G, CS)
       ! Fluxes of fresh water through the surface are in units of kg m-2 s-1
       ! and are positive downward - i.e. evaporation should be negative.
       fluxes%evap(i,j) = -0.0 * G%mask2dT(i,j)
-      fluxes%lprec(i,j) = CS%PmE(i,j) * CS%Rho0 * G%mask2dT(i,j)
+      fluxes%lprec(i,j) = 0.0 * G%mask2dT(i,j)
 
       ! vprec will be set later, if it is needed for salinity restoring.
       fluxes%vprec(i,j) = 0.0
 
       !   Heat fluxes are in units of W m-2 and are positive into the ocean.
-      fluxes%lw(i,j)                 = 0.0 * G%mask2dT(i,j)
-      fluxes%latent(i,j)             = 0.0 * G%mask2dT(i,j)
-      fluxes%sens(i,j)               = CS%Heat(i,j) * G%mask2dT(i,j)
-      fluxes%sw(i,j)                 = CS%Solar(i,j) * G%mask2dT(i,j)
+      fluxes%lw(i,j) = 0.0 * G%mask2dT(i,j)
+      fluxes%latent(i,j) = 0.0 * G%mask2dT(i,j)
+      fluxes%sens(i,j) = 0.0 * G%mask2dT(i,j)
+      fluxes%sw(i,j) = 0.0 * G%mask2dT(i,j)
     enddo ; enddo
   else ! This is the buoyancy only mode.
     do j=js,je ; do i=is,ie
@@ -296,44 +188,52 @@ subroutine MESO_buoyancy_forcing(state, fluxes, day, dt, G, CS)
       call alloc_if_needed(fluxes%heat_added, isd, ied, jsd, jed)
       !   When modifying the code, comment out this error message.  It is here
       ! so that the original (unmodified) version is not accidentally used.
-!      call MOM_error(FATAL, "MESO_buoyancy_surface_forcing: " // &
-!        "Temperature and salinity restoring used without modification." )
+      call MOM_error(FATAL, "User_buoyancy_surface_forcing: " // &
+        "Temperature and salinity restoring used without modification." )
 
       rhoXcp = CS%Rho0 * fluxes%C_p
       do j=js,je ; do i=is,ie
         !   Set Temp_restore and Salin_restore to the temperature (in C) and
         ! salinity (in PSU) that are being restored toward.
-        if (G%mask2dT(i,j) > 0) then
-          fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
-              ((CS%T_Restore(i,j) - state%SST(i,j)) * rhoXcp * CS%Flux_const)
-          fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const) * &
-              (CS%S_Restore(i,j) - state%SSS(i,j)) / &
-              (0.5*(state%SSS(i,j) + CS%S_Restore(i,j)))
-        else
-          fluxes%heat_added(i,j) = 0.0
-          fluxes%vprec(i,j) = 0.0
-        endif
+        Temp_restore = 0.0
+        Salin_restore = 0.0
+
+        fluxes%heat_added(i,j) = (G%mask2dT(i,j) * (rhoXcp * CS%Flux_const)) * &
+            (Temp_restore - state%SST(i,j)) 
+        fluxes%vprec(i,j) = - (G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)) * &
+            ((Salin_restore - state%SSS(i,j)) / &
+             (0.5 * (Salin_restore + state%SSS(i,j))))
       enddo ; enddo
     else
       !   When modifying the code, comment out this error message.  It is here
       ! so that the original (unmodified) version is not accidentally used.
-      call MOM_error(FATAL, "MESO_buoyancy_surface_forcing: " // &
-        "Buoyancy restoring used without modification." )
+      ! call MOM_error(FATAL, "User_buoyancy_surface_forcing: " // &
+      !   "Buoyancy restoring used without modification." )
 
       ! The -1 is because density has the opposite sign to buoyancy.
       buoy_rest_const = -1.0 * (CS%G_Earth * CS%Flux_const) / CS%Rho0
+      Temp_restore = 0.0
       do j=js,je ; do i=is,ie
        !   Set density_restore to an expression for the surface potential
        ! density in kg m-3 that is being restored toward.
-        density_restore = 1030.0
+        if (G%geoLatT(i,j) < CS%lfrslat) then
+            Temp_restore = CS%SST_s
+        else if (G%geoLatT(i,j) > CS%lfrnlat) then
+            Temp_restore = CS%SST_n
+        else
+            Temp_restore = (CS%SST_s - CS%SST_n)/(CS%lfrslat - CS%lfrnlat) * &
+                    (G%geoLatT(i,j) - CS%lfrslat) + CS%SST_s
+        end if
+
+        density_restore = Temp_restore*CS%drho_dt + CS%Rho0
 
         fluxes%buoy(i,j) = G%mask2dT(i,j) * buoy_rest_const * &
                           (density_restore - state%sfc_density(i,j))
       enddo ; enddo
     endif
   endif                                             ! end RESTOREBUOY
-
-end subroutine MESO_buoyancy_forcing
+ 
+end subroutine BFB_buoyancy_forcing
 
 subroutine alloc_if_needed(ptr, isd, ied, jsd, jed)
   ! If ptr is not associated, this routine allocates it with the given size
@@ -347,12 +247,12 @@ subroutine alloc_if_needed(ptr, isd, ied, jsd, jed)
   endif
 end subroutine alloc_if_needed
 
-subroutine MESO_surface_forcing_init(Time, G, param_file, diag, CS)
-  type(time_type),               intent(in) :: Time
-  type(ocean_grid_type),         intent(in) :: G
-  type(param_file_type),         intent(in) :: param_file
-  type(diag_ctrl), target,       intent(in) :: diag
-  type(MESO_surface_forcing_CS), pointer    :: CS
+subroutine BFB_surface_forcing_init(Time, G, param_file, diag, CS)
+  type(time_type),                            intent(in) :: Time
+  type(ocean_grid_type),                      intent(in) :: G
+  type(param_file_type),                      intent(in) :: param_file
+  type(diag_ctrl), target,                    intent(in) :: diag
+  type(BFB_surface_forcing_CS), pointer    :: CS
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
@@ -363,10 +263,10 @@ subroutine MESO_surface_forcing_init(Time, G, param_file, diag, CS)
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MESO_surface_forcing" ! This module's name.
+  character(len=40)  :: mod = "BFB_surface_forcing" ! This module's name.
 
   if (associated(CS)) then
-    call MOM_error(WARNING, "MESO_surface_forcing_init called with an associated "// &
+    call MOM_error(WARNING, "BFB_surface_forcing_init called with an associated "// &
                              "control structure.")
     return
   endif
@@ -388,6 +288,21 @@ subroutine MESO_surface_forcing_init(Time, G, param_file, diag, CS)
                  "properties, or with BOUSSINSEQ false to convert some \n"//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0)
+  call get_param(param_file, mod, "LFR_SLAT", CS%lfrslat, &
+                 "Southern latitude where the linear forcing ramp begins.", &
+                 units="degrees", default = 20.0)
+  call get_param(param_file, mod, "LFR_NLAT", CS%lfrnlat, &
+                 "Northern latitude where the linear forcing ramp ends.", &
+                 units="degrees", default = 40.0)
+  call get_param(param_file, mod, "SST_S", CS%SST_s, &
+                 "SST at the southern edge of the linear forcing ramp.", &
+                 units="C", default = 20.0)
+  call get_param(param_file, mod, "SST_N", CS%SST_n, &
+                 "SST at the northern edge of the linear forcing ramp.", &
+                 units="C", default = 10.0)
+  call get_param(param_file, mod, "DRHO_DT", CS%drho_dt, &
+                 "The rate of change of density with temperature.", &
+                 units="kg m-3 K-1", default = -0.2)
   call get_param(param_file, mod, "GUST_CONST", CS%gust_const, &
                  "The background gustiness in the winds.", units="Pa", &
                  default=0.02)
@@ -396,7 +311,6 @@ subroutine MESO_surface_forcing_init(Time, G, param_file, diag, CS)
                  "If true, the buoyancy fluxes drive the model back \n"//&
                  "toward some specified surface state with a rate \n"//&
                  "given by FLUXCONST.", default= .false.)
-
   if (CS%restorebuoy) then
     call get_param(param_file, mod, "FLUXCONST", CS%Flux_const, &
                  "The constant that relates the restoring surface fluxes \n"//&
@@ -405,27 +319,8 @@ subroutine MESO_surface_forcing_init(Time, G, param_file, diag, CS)
                  fail_if_missing=.true.)
     ! Convert CS%Flux_const from m day-1 to m s-1.
     CS%Flux_const = CS%Flux_const / 86400.0
+  endif
 
-    call get_param(param_file, mod, "SSTRESTORE_FILE", CS%SSTrestore_file, &
-                 "The file with the SST toward which to restore in \n"//&
-                 "variable TEMP.", fail_if_missing=.true.)
-    call get_param(param_file, mod, "SALINITYRESTORE_FILE", CS%salinityrestore_file, &
-                 "The file with the surface salinity toward which to \n"//&
-                 "restore in variable SALT.", fail_if_missing=.true.)
-    call get_param(param_file, mod, "SENSIBLEHEAT_FILE", CS%heating_file, &
-                 "The file with the non-shortwave heat flux in \n"//&
-                 "variable Heat.", fail_if_missing=.true.)
-    call get_param(param_file, mod, "PRECIP_FILE", CS%PmE_file, &
-                 "The file with the net precipiation minus evaporation \n"//&
-                 "in variable PmE.", fail_if_missing=.true.)
-    call get_param(param_file, mod, "SHORTWAVE_FILE", CS%Solar_file, &
-                 "The file with the shortwave heat flux in \n"//&
-                 "variable NET_SOL.", fail_if_missing=.true.)
-    call get_param(param_file, mod, "INPUTDIR", CS%inputdir, default=".")
-    CS%inputdir = slasher(CS%inputdir)
+end subroutine BFB_surface_forcing_init
 
-   endif
-
-end subroutine MESO_surface_forcing_init
-
-end module MESO_surface_forcing
+end module BFB_surface_forcing
