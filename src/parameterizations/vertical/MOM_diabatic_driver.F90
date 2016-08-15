@@ -57,7 +57,6 @@ use MOM_variables,           only : cont_diag_ptrs, MOM_thermovar_chksum, p3d
 use MOM_verticalGrid,        only : verticalGrid_type
 use MOM_wave_speed,          only : wave_speeds
 use time_manager_mod,        only : increment_time ! for testing itides (BDM)
-use MOM_offline_transport,         only : offline_transport_CS, post_diabatic_fields
 
 
 implicit none ; private
@@ -214,7 +213,7 @@ contains
 
 !>  This subroutine imposes the diapycnal mass fluxes and the
 !!  accompanying diapycnal advection of momentum and tracers.
-subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS, offline_CSp)
+subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   type(ocean_grid_type),                     intent(inout) :: G      !< ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV     !< ocean vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u      !< zonal velocity (m/s)
@@ -228,7 +227,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS, offline_
   type(cont_diag_ptrs),                      intent(inout) :: CDp    !< points to terms in continuity equations
   real,                                      intent(in)    :: dt     !< time increment (seconds)
   type(diabatic_CS),                         pointer       :: CS     !< module control structure
-  type(offline_transport_CS),                pointer       :: offline_CSp     !< module control structure
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     ea,     &    ! amount of fluid entrained from the layer above within
@@ -318,6 +316,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS, offline_
                   ! (H units = m for Bouss, kg/m^2 for non-Bouss).
   real :: dt_mix  ! amount of time over which to apply mixing (seconds)
   real :: Idt     ! inverse time step (1/s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: write_all_3dt
 
   type(p3d) :: z_ptrs(7)  ! pointers to diagnostics to be interpolated to depth
   integer :: num_z_diags  ! number of diagnostics to be interpolated to depth
@@ -1105,11 +1104,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS, offline_
       do i=is,ie ; eatr(i,j,1) = ea(i,j,1) ; enddo
     enddo
 
-   ! Post the fields used for tracers here
-    call post_diabatic_fields( G, offline_CSp, CS%diag, hold, h, ea, eb )
     call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
         CS%optics, CS%tracer_flow_CSp)
-
 
   elseif (associated(visc%Kd_extra_S)) then  ! extra diffusivity for passive tracers
 
@@ -1131,13 +1127,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS, offline_
       eatr(i,j,k) = ea(i,j,k) + add_ent
     enddo ; enddo ; enddo
 
-    call post_diabatic_fields( G, offline_CSp, CS%diag, hold, h, ea, eb)
     call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
         CS%optics, CS%tracer_flow_CSp)
 
-
   else
-    call post_diabatic_fields( G, offline_CSp, CS%diag, hold, h, ea, eb)
     call call_tracer_column_fns(hold, h, ea, eb, fluxes, dt, G, GV, tv, &
         CS%optics, CS%tracer_flow_CSp)
 
@@ -1354,8 +1347,9 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS, offline_
   if (CS%id_Kd_salt      > 0) call post_data(CS%id_Kd_salt,      Kd_salt, CS%diag)
   if (CS%id_Kd_ePBL      > 0) call post_data(CS%id_Kd_ePBL,      Kd_ePBL, CS%diag)
 
-  if (CS%id_ea       > 0) call post_data(CS%id_ea,       ea,             CS%diag)
-  if (CS%id_eb       > 0) call post_data(CS%id_eb,       eb,             CS%diag)
+  write_all_3dt = 1.
+  if (CS%id_ea       > 0) call post_data(CS%id_ea,       eatr, CS%diag, mask = write_all_3dt)
+  if (CS%id_eb       > 0) call post_data(CS%id_eb,       ebtr, CS%diag, mask = write_all_3dt)
   if (CS%id_dudt_dia > 0) call post_data(CS%id_dudt_dia, ADp%du_dt_dia,  CS%diag)
   if (CS%id_dvdt_dia > 0) call post_data(CS%id_dvdt_dia, ADp%dv_dt_dia,  CS%diag)
   if (CS%id_wd       > 0) call post_data(CS%id_wd,       CDp%diapyc_vel, CS%diag)

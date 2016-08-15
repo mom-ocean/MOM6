@@ -702,7 +702,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
         call cpu_clock_begin(id_clock_diabatic)
         call diabatic(u, v, h, CS%tv, fluxes, CS%visc, CS%ADp, CS%CDp, &
-                      dtdia, G, GV, CS%diabatic_CSp, CS%offline_CSp)
+                      dtdia, G, GV, CS%diabatic_CSp)
         fluxes%fluxes_used = .true.
         call cpu_clock_end(id_clock_diabatic)
 
@@ -1045,7 +1045,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         endif
         call cpu_clock_begin(id_clock_diabatic)
         call diabatic(u, v, h, CS%tv, fluxes, CS%visc, CS%ADp, CS%CDp, &
-                      CS%dt_trans, G, GV, CS%diabatic_CSp, CS%offline_CSp)
+                      CS%dt_trans, G, GV, CS%diabatic_CSp)
         fluxes%fluxes_used = .true.
         call cpu_clock_end(id_clock_diabatic)
 
@@ -1426,11 +1426,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
                      ! one time step  (m for Bouss, kg/m^2 for non-Bouss)
         eatr_sub, &
         ebtr_sub, &
-        h_beg,  &    ! Layer thickness before diapycnal entrainment
-                      ! (m for Bouss, kg/m^2 for non-Bouss)
         h_new, &        ! Layer thickness after diapycnal entrainment
-                     ! (m for Bouss, kg/m^2 for non-Bouss)
-        h_adv, &         ! Layer thickness after diapycnal entrainment
                      ! (m for Bouss, kg/m^2 for non-Bouss)
         h_end, &
         h_vol, &
@@ -1439,7 +1435,6 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         temp_old, salt_old     !
     integer                                        :: niter, iter
     real                                           :: Inum_iter, dt_iter
-    real                                           :: hmix_min
     integer :: i, j, k, m, is, ie, js, je, isd, ied, jsd, jed, nz
     integer :: isv, iev, jsv, jev ! The valid range of the indices.
     integer :: IsdB, IedB, JsdB, JedB
@@ -1467,9 +1462,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     khdt_y(:,:) = 0.0
     eatr(:,:,:) = 0.0
     ebtr(:,:,:) = 0.0
-    h_beg(:,:,:) = GV%Angstrom
+    h_pre(:,:,:) = GV%Angstrom
     h_new(:,:,:) = GV%Angstrom
-    h_adv(:,:,:) = GV%Angstrom
     h_end(:,:,:) = GV%Angstrom
     temp_old(:,:,:) = 0.0
     salt_old(:,:,:) = 0.0
@@ -1481,10 +1475,9 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     call cpu_clock_begin(id_clock_tracer)
     call enable_averaging(time_interval, Time_start+set_time(int(time_interval)), &
                           CS%diag)
-!    call transport_by_files(G, CS%offline_CSp, h_beg, h_new, h_adv, h_end, eatr, ebtr, uhtr, vhtr, &
-!        khdt_x, khdt_y, temp_old, salt_old, fluxes, CS%diabatic_CSp%optics, CS%use_ALE_algorithm)
-    call transport_by_files(G, CS%offline_CSp, h_new, h_adv, h_end, eatr, ebtr, uhtr, vhtr, &
-        khdt_x, khdt_y, temp_old, salt_old, fluxes, CS%diabatic_CSp%optics, CS%use_ALE_algorithm)
+
+    call transport_by_files(G, CS%offline_CSp, h_end, eatr, ebtr, uhtr, vhtr, &
+        khdt_x, khdt_y, temp_old, salt_old, CS%use_ALE_algorithm)
 
     Inum_iter = 1./real(niter)
     dt_iter = CS%offline_CSp%dt_offline*Inum_iter
@@ -1494,11 +1487,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     call pass_var(CS%T,G%Domain)
     call pass_var(CS%S,G%Domain)
 
-    h_pre(:,:,:) = GV%Angstrom
     h_pre = CS%h
     call pass_var(h_pre,G%Domain)
-
-    hmix_min = CS%offline_CSp%hmix_min
 
     if (CS%diabatic_first .and. CS%use_ALE_algorithm) then
     ! Regridding/remapping is done here, at end of thermodynamics time step
@@ -1575,13 +1565,13 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
 
 
       ! Calculate 3d mass transports to be used in this iteration
-      call limit_mass_flux_3d(G, GV, uhtr_sub, vhtr_sub, eatr_sub, ebtr_sub, h_pre, hmix_min, &
+      call limit_mass_flux_3d(G, GV, uhtr_sub, vhtr_sub, eatr_sub, ebtr_sub, h_pre, &
           CS%offline_CSp%max_off_cfl)
 
 
       if (z_first) then
         ! First do vertical advection
-        call update_h_vertical_flux(G, GV, eatr_sub, ebtr_sub, h_pre, h_new, hmix_min)
+        call update_h_vertical_flux(G, GV, eatr_sub, ebtr_sub, h_pre, h_new)
         call call_tracer_column_fns(h_pre, h_new, eatr_sub, ebtr_sub, &
             fluxes, dt_iter, G, GV, CS%tv, CS%diabatic_CSp%optics, CS%tracer_flow_CSp)
         ! We are now done with the vertical mass transports, so now h_new is h_sub
@@ -1591,8 +1581,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         call pass_var(h_pre,G%Domain)
 
         ! Second zonal and meridional advection
-        call update_h_horizontal_flux(G, GV, uhtr_sub, vhtr_sub, h_pre, h_new, hmix_min)
-
+        call update_h_horizontal_flux(G, GV, uhtr_sub, vhtr_sub, h_pre, h_new)
         do k = 1, nz ; do i = is-1, ie+1 ; do j=js-1, je+1
           h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
         enddo; enddo; enddo
@@ -1604,14 +1593,12 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
             h_pre(i,j,k) = h_new(i,j,k)
         enddo ; enddo ; enddo
 
-
-
       endif
 
       if (.not. z_first) then
 
         ! First zonal and meridional advection
-        call update_h_horizontal_flux(G, GV, uhtr_sub, vhtr_sub, h_pre, h_new, hmix_min)
+        call update_h_horizontal_flux(G, GV, uhtr_sub, vhtr_sub, h_pre, h_new)
         do k = 1, nz ; do i = is-1, ie+1 ; do j=js-1, je+1
           h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
         enddo; enddo; enddo
@@ -1625,7 +1612,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
 
 
         ! Second vertical advection
-        call update_h_vertical_flux(G, GV, eatr_sub, ebtr_sub, h_pre, h_new, hmix_min)
+        call update_h_vertical_flux(G, GV, eatr_sub, ebtr_sub, h_pre, h_new)
         call call_tracer_column_fns(h_pre, h_new, eatr_sub, ebtr_sub, &
             fluxes, dt_iter, G, GV, CS%tv, CS%diabatic_CSp%optics, CS%tracer_flow_CSp)
         ! We are now done with the vertical mass transports, so now h_new is h_sub
@@ -1661,15 +1648,13 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
 
       if ( sum_abs_fluxes == 0.0) exit
 
-      ! Switch order of Strang split
+      ! Switch order of Strang split every iteration
       z_first = .not. z_first
       x_before_y = .not. x_before_y
 
     end do
 
     call pass_var(h_pre, G%Domain)
-    if (is_root_pe()) print *, 'Number of iterations: ', iter
-
     ! Tracer diffusion Strang split between advection and diffusion
 
     call tracer_hordiff(h_pre, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
@@ -1723,12 +1708,10 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     endif !Diabatic second and ALE
 
     h_temp = h_end-h_new
-    if (CS%offline_CSp%id_h_new>0) call post_data(CS%offline_CSp%id_h_new, h_new, CS%diag)
     if (CS%id_h>0) call post_data(CS%id_h, h_temp, CS%diag)
     if (CS%id_u>0) call post_data(CS%id_u, uhtr, CS%diag)
     if (CS%id_v>0) call post_data(CS%id_v, vhtr, CS%diag)
-    if (CS%offline_CSp%id_eatr_dia>0) call post_data(CS%offline_CSp%id_eatr_dia, eatr, CS%diag)
-    if (CS%offline_CSp%id_ebtr_dia>0) call post_data(CS%offline_CSp%id_ebtr_dia, ebtr, CS%diag)
+
     call cpu_clock_end(id_clock_tracer)
 
     call disable_averaging(CS%diag)
