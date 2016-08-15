@@ -14,9 +14,9 @@ use MOM_checksums,       only : hchksum
 use MOM_error_handler,   only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser,     only : get_param, log_version, param_file_type
 use MOM_grid,            only : ocean_grid_type
+use MOM_open_boundary,   only : ocean_OBC_type, OBC_DIRECTION_E
+use MOM_open_boundary,   only : OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_tracer_registry, only : tracer_registry_type, tracer_type, MOM_tracer_chksum
-use MOM_variables,       only : ocean_OBC_type, OBC_FLATHER_E
-use MOM_variables,       only : OBC_FLATHER_W, OBC_FLATHER_N, OBC_FLATHER_S
 use MOM_verticalGrid,    only : verticalGrid_type
 implicit none ; private
 
@@ -510,7 +510,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
       enddo ; enddo
     endif ! usePPM
 
-    if (associated(OBC)) then ; if (OBC%apply_OBC_u) then
+    if (associated(OBC)) then ; if (OBC%this_pe) then ; if (OBC%apply_OBC_u) then
       do_any_i = .false.
       do I=is-1,ie
         do_i(I) = .false.
@@ -518,9 +518,9 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
           ! Tracer fluxes are set to prescribed values only for inflows
           ! from masked areas.
           if (((uhr(I,j,k) > 0.0) .and. ((G%mask2dT(i,j) < 0.5) .or. &
-                  (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W))) .or. &
+                  (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_W))) .or. &
               ((uhr(I,j,k) < 0.0) .and. ((G%mask2dT(i+1,j) < 0.5) .or. &
-                  (OBC%OBC_kind_u(I,j) == OBC_FLATHER_E))) ) then
+                  (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_E))) ) then
             do_i(I) = .true. ; do_any_i = .true.
             uhh(I) = uhr(I,j,k)
           endif
@@ -531,7 +531,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
           flux_x(I,m) = uhh(I)*Tr(m)%OBC_in_u(I,j,k)
         else ; flux_x(I,m) = uhh(I)*Tr(m)%OBC_inflow_conc ; endif
       endif ; enddo ; enddo ; endif
-    endif ; endif
+    endif ; endif ; endif
 
     ! Calculate new tracer concentration in each cell after accounting
     ! for the i-direction fluxes.
@@ -789,7 +789,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
       enddo ; enddo
     endif ! usePPM
 
-    if (associated(OBC)) then ; if (OBC%apply_OBC_v) then
+    if (associated(OBC)) then ; if (OBC%this_pe) then ; if (OBC%apply_OBC_v) then
       do_any_i = .false.
       do i=is,ie
         do_i(i) = .false.
@@ -797,9 +797,9 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
         ! Tracer fluxes are set to prescribed values only for inflows
         ! from masked areas.
           if (((vhr(i,J,k) > 0.0) .and. ((G%mask2dT(i,j) < 0.5) .or. &
-                  (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S))) .or. &
+                  (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S))) .or. &
               ((vhr(i,J,k) < 0.0) .and. ((G%mask2dT(i,j+1) < 0.5) .or. &
-                  (OBC%OBC_kind_v(i,J) == OBC_FLATHER_N))) ) then
+                  (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N))) ) then
             do_i(i) = .true. ; do_any_i = .true.
             vhh(i,J) = vhr(i,J,k)
           endif
@@ -810,7 +810,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
           flux_y(i,m,J) = vhh(i,J)*Tr(m)%OBC_in_v(i,J,k)
         else ; flux_y(i,m,J) = vhh(i,J)*Tr(m)%OBC_inflow_conc ; endif
       endif ; enddo ; enddo ; endif
-    endif ; endif
+    endif ; endif ; endif
   else ! not domore_v.
     do i=is,ie ; vhh(i,J) = 0.0 ; enddo
     do m=1,ntr ; do i=is,ie ; flux_y(i,m,J) = 0.0 ; enddo ; enddo

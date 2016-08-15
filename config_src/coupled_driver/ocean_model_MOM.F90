@@ -156,6 +156,8 @@ type, public :: ocean_state_type ; private
   type(ice_shelf_CS), pointer :: Ice_shelf_CSp => NULL()
   logical :: restore_salinity ! If true, the coupled MOM driver adds a term to
                               ! restore salinity to a specified value.
+  logical :: restore_temp     ! If true, the coupled MOM driver adds a term to
+                              ! restore sst to a specified value.
   real :: press_to_z          ! A conversion factor between pressure and ocean
                               ! depth in m, usually 1/(rho_0*g), in m Pa-1.
   real :: C_p                 !   The heat capacity of seawater, in J K-1 kg-1.
@@ -261,6 +263,10 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
                  "If true, the coupled driver will add a globally-balanced \n"//&
                  "fresh-water flux that drives sea-surface salinity \n"//&
                  "toward specified values.", default=.false.)
+  call get_param(param_file, mod, "RESTORE_TEMPERATURE",OS%restore_temp, &
+                 "If true, the coupled driver will add a  \n"//&
+                 "heat flux that drives sea-surface temperauture \n"//&
+                 "toward specified values.", default=.false.)
   call get_param(param_file, mod, "RHO_0", Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to \n"//&
                  "calculate accelerations and the mass for conservation \n"//&
@@ -277,7 +283,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   OS%press_to_z = 1.0/(Rho0*G_Earth)
 
   call surface_forcing_init(Time_in, OS%grid, param_file, OS%MOM_CSp%diag, &
-                            OS%forcing_CSp, OS%restore_salinity)
+                            OS%forcing_CSp, OS%restore_salinity, OS%restore_temp)
 
   if (OS%use_ice_shelf)  then
      call initialize_ice_shelf(param_file, OS%grid, OS%Time, OS%ice_shelf_CSp, &
@@ -383,7 +389,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   if (OS%fluxes%fluxes_used) then
     call enable_averaging(time_step, OS%Time + Ocean_coupling_time_step, OS%MOM_CSp%diag) ! Needed to allow diagnostics in convert_IOB
     call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, &
-                               OS%grid, OS%forcing_CSp, OS%state, OS%restore_salinity)
+                               OS%grid, OS%forcing_CSp, OS%state, OS%restore_salinity,OS%restore_temp)
 #ifdef _USE_GENERIC_TRACER
     call MOM_generic_tracer_fluxes_accumulate(OS%fluxes, weight) !here weight=1, just saving the current fluxes
 #endif
@@ -400,7 +406,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   else
     OS%flux_tmp%C_p = OS%fluxes%C_p
     call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%flux_tmp, index_bnds, OS%Time, &
-                               OS%grid, OS%forcing_CSp, OS%state, OS%restore_salinity)
+                               OS%grid, OS%forcing_CSp, OS%state, OS%restore_salinity,OS%restore_temp)
   
     if (OS%use_ice_shelf) then
       call shelf_calc_flux(OS%State, OS%flux_tmp, OS%Time, time_step, OS%Ice_shelf_CSp)
