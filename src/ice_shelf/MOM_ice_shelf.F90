@@ -346,7 +346,7 @@ type, public :: ice_shelf_CS ; private
              id_u_mask = -1, id_v_mask = -1, id_t_shelf = -1, id_t_mask = -1, & 
              id_surf_elev = -1, id_bathym = -1, id_float_frac = -1, id_col_thick = -1, &
              id_area_shelf_h = -1, id_OD_av = -1, id_float_frac_rt = -1,&
-              id_ustar_shelf = -1, id_shelf_mass = -1
+             id_ustar_shelf = -1, id_shelf_mass = -1, id_mass_flux = -1
 
   ! ids for outputting intermediate thickness in advection subroutine (debugging)
   !integer :: id_h_after_uflux = -1, id_h_after_vflux = -1, id_h_after_adv = -1
@@ -433,7 +433,12 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
                ! with temperature, in units of kg m-3 K-1.
     dR0_dS, &  ! Partial derivative of the mixed layer density
                ! with salinity, in units of kg m-3 psu-1.
-    p_int      ! The pressure at the ice-ocean interface, in Pa.
+    p_int   ! The pressure at the ice-ocean interface, in Pa.
+
+  real, dimension(:,:), allocatable :: mass_flux  ! total mass flux of freshwater across 
+                                     ! ice-ocean interface, positive for melting 
+                                     ! and negative for freezing. This is computed 
+                                     ! as part of the ISOMIP diagnostics.
   real, parameter :: VK    = 0.40     ! Von Karman's constant - dimensionless
   real :: ZETA_N = 0.052   ! The fraction of the boundary layer over which the
                            ! viscosity is linearly increasing. (Was 1/8. Why?)
@@ -477,7 +482,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
   type(ocean_grid_type), pointer :: G
   real, parameter :: c2_3 = 2.0/3.0
   integer :: i, j, is, ie, js, je, ied, jed, it1, it3, iters_vel_solve
-
+  real, parameter :: rho_fw = 1000.0 ! fresh water density
   if (.not. associated(CS)) call MOM_error(FATAL, "shelf_calc_flux: "// &
        "initialize_ice_shelf must be called before shelf_calc_flux.")
   call cpu_clock_begin(id_clock_shelf)
@@ -714,10 +719,16 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
     enddo ! i-loop
   enddo ! j-loop
 
-  ! melt in m/year
-  fluxes%iceshelf_melt = CS%lprec  * (86400.0*365.0/CS%density_ice)
-  !CS%lprec(:,:) = 5.822E-6 ! testing
-
+  ! CS%lprec = precipitating liquid water into the ocean ( kg/(m^2 s) )
+  ! melt in m/year 
+  !fluxes%iceshelf_melt = CS%lprec  * (86400.0*365.0/CS%density_ice)
+  ! Use rho_fw for ISOMIP experiments
+  fluxes%iceshelf_melt = CS%lprec  * (86400.0*365.0/rho_fw) 
+  ! mass flux (kg/s), part of ISOMIP diags.
+  ! first, allocate mass_flux. This is probably not the best way to do this.
+  !im,jm=SHAPE(CS%lprec) 
+  ALLOCATE ( mass_flux(G%ied,G%jed) )
+  mass_flux = (CS%lprec) * CS%area_shelf_h  
   if (CS%DEBUG) then
    call hchksum (CS%h_shelf, "melt rate", G%HI, haloshift=0)
   endif
@@ -778,9 +789,12 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
    if (CS%id_shelf_mass > 0) call post_data(CS%id_shelf_mass, CS%mass_shelf, CS%diag)
    if (CS%id_area_shelf_h > 0) call post_data(CS%id_area_shelf_h, CS%area_shelf_h, CS%diag)
    if (CS%id_ustar_shelf > 0) call post_data(CS%id_ustar_shelf, fluxes%ustar_shelf, CS%diag)
-   if (CS%id_melt > 0) call post_data(CS%id_melt, (CS%lprec) * (86400.0*365.0/CS%density_ice), CS%diag)
+   ! Use freshwater density fotr ISOMIP exps.
+   if (CS%id_melt > 0) call post_data(CS%id_melt, (CS%lprec) * (86400.0*365.0/rho_fw), CS%diag)
+   !if (CS%id_melt > 0) call post_data(CS%id_melt, (CS%lprec) * (86400.0*365.0/CS%density_ice), CS%diag)
    if (CS%id_thermal_driving > 0) call post_data(CS%id_thermal_driving, (state%sst-CS%tfreeze), CS%diag)
    if (CS%id_haline_driving > 0) call post_data(CS%id_haline_driving, (state%sss-Sbdry), CS%diag)
+   if (CS%id_mass_flux > 0) call post_data(CS%id_mass_flux, mass_flux, CS%diag)
    if (CS%id_u_ml > 0) call post_data(CS%id_u_ml,state%u,CS%diag)
    if (CS%id_v_ml > 0) call post_data(CS%id_v_ml,state%v,CS%diag)
    if (CS%id_tfreeze > 0) call post_data(CS%id_tfreeze, CS%tfreeze, CS%diag)
@@ -1109,7 +1123,6 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
   logical :: solo_ice_sheet, read_TideAmp
   character(len=240) :: Tideamp_file
   real    :: utide
-
   if (associated(CS)) then
     call MOM_error(FATAL, "MOM_ice_shelf.F90, initialize_ice_shelf: "// &
                           "called with an associated control structure.")
@@ -1730,6 +1743,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
      'Ice Shelf Area in cell', 'meter-2')
   CS%id_shelf_mass = register_diag_field('ocean_model', 'shelf_mass', CS%diag%axesT1, CS%Time, &
      'mass of shelf', 'kg/m^2')
+  CS%id_mass_flux = register_diag_field('ocean_model', 'mass_flux', CS%diag%axesT1,&
+     CS%Time,'Total mass flux of freshwater across the ice-ocean interface.', 'kg/s')
   CS%id_melt = register_diag_field('ocean_model', 'melt', CS%diag%axesT1, CS%Time, &
      'Ice Shelf Melt Rate', 'meter year-1')
   CS%id_thermal_driving = register_diag_field('ocean_model', 'thermal_driving', CS%diag%axesT1, CS%Time, &
