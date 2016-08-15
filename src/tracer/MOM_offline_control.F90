@@ -224,12 +224,12 @@ contains
       timelevel=CS%ridx_mean,position=CENTER)
 
     !! Read snapshot fields (end of time interval timestamp)
-    call read_data(CS%snap_file, 'h_new', h_new, domain=G%Domain%mpp_domain, &
-      timelevel=CS%ridx_snap,position=CENTER)
+!    call read_data(CS%snap_file, 'h_new', h_new, domain=G%Domain%mpp_domain, &
+!      timelevel=CS%ridx_snap,position=CENTER)
     !    call read_data(CS%snap_file, 'h_old', h_old, domain=G%Domain%mpp_domain, &
     !      timelevel=CS%ridx_snap,position=CENTER)
-    call read_data(CS%snap_file, 'h_preadv', h_adv, domain=G%Domain%mpp_domain, &
-      timelevel=CS%ridx_snap,position=CENTER)
+!    call read_data(CS%snap_file, 'h_preadv', h_adv, domain=G%Domain%mpp_domain, &
+!      timelevel=CS%ridx_snap,position=CENTER)
     call read_data(CS%snap_file, 'h_end', h_end, domain=G%Domain%mpp_domain, &
       timelevel=CS%ridx_snap,position=CENTER)
 
@@ -435,7 +435,7 @@ contains
     is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
 
     do k = 1, nz
-      do i=is,ie ; do j=js,je
+      do i=is-1,ie+1 ; do j=js-1,je+1
 
         h_new(i,j,k) = max(0.0, G%areaT(i,j)*h_pre(i,j,k) + &
           ((uhtr(I-1,j,k) - uhtr(I,j,k)) + (vhtr(i,J-1,k) - vhtr(i,J,k))))
@@ -479,8 +479,8 @@ contains
     is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
 
     ! Update h_new with convergence of vertical mass transports
-    do j=js,je
-      do i=is,ie
+    do j=js-1,je+1
+      do i=is-1,ie+1
 
         ! Top layer
         h_new(i,j,1) = max(0.0, h_pre(i,j,1) + (eb(i,j,1) - ea(i,j,2) + ea(i,j,1) ))
@@ -496,7 +496,7 @@ contains
       enddo
 
       ! Interior layers
-      do k=2,nz-1 ; do i=is,ie
+      do k=2,nz-1 ; do i=is-1,ie+1
 
 !        h_new(i,j,k) = h_pre(i,j,k) + ((ea(i,j,k) - eb(i,j,k-1)) + &
 !          (eb(i,j,k) - ea(i,j,k+1)))
@@ -534,8 +534,8 @@ contains
 
     ! Local variables
     integer :: i, j, k, m, is, ie, js, je, nz
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G))                    :: top_flux, bottom_flux, scale_factor
-    real                                                        :: pos_flux, hvol, h_neglect
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G))                    :: top_flux, bottom_flux
+    real                                                        :: pos_flux, hvol, h_neglect, scale_factor
 
     ! In this subroutine, fluxes out of the box are scaled away if they deplete
     ! the layer, note that we define the positive direction as flux out of the box.
@@ -547,19 +547,18 @@ contains
     ! Calculate top and bottom fluxes from ea and eb. Note the explicit negative signs
     ! to enforce the positive out convention
     k = 1
-    do j=js,je ; do i=is,ie
+    do j=js-1,je+1 ; do i=is-1,ie+1
       top_flux(i,j,k) = -ea(i,j,k)
-
       bottom_flux(i,j,k) = -(eb(i,j,k)-ea(i,j,k+1))
     enddo ; enddo
 
-    do k = 2, nz-1 ; do j=js,je ; do i=is,ie
+    do k=2, nz-1 ; do j=js-1,je+1 ; do i=is-1,ie+1
       top_flux(i,j,k) = -(ea(i,j,k)-eb(i,j,k-1))
       bottom_flux(i,j,k) = -(eb(i,j,k)-ea(i,j,k+1))
     enddo ; enddo ; enddo
 
     k=nz
-    do j=js,je ; do i=is,ie
+    do j=js-1,je+1 ; do i=is-1,ie+1
       top_flux(i,j,k) = -(ea(i,j,k)-eb(i,j,k-1))
       bottom_flux(i,j,k) = -eb(i,j,k)
     enddo ; enddo
@@ -567,70 +566,51 @@ contains
 
     ! Calculate sum of positive fluxes (negatives applied to enforce convention)
     ! in a given cell and scale it back if it would deplete a layer
-    do k = 1, nz ; do j=js,je ; do i=is,ie
+    do k = 1, nz ; do j=js-1,je+1 ; do i=is-1,ie+1
 
       hvol = h_pre(i,j,k)*G%areaT(i,j)
       pos_flux  = max(0.0,-uh(I-1,j,k)) + max(0.0, -vh(i,J-1,k)) + &
         max(0.0, uh(I,j,k)) + max(0.0, vh(i,J,k)) + &
         max(0.0, top_flux(i,j,k)*G%areaT(i,j)) + max(0.0, bottom_flux(i,j,k)*G%areaT(i,j))
 
-
       if (pos_flux>hvol .and. pos_flux>0.0) then
-        h_neglect = GV%Angstrom*G%areaT(i,j)
-        h_neglect = 0.0
-        scale_factor(i,j,k) = ( hvol - h_neglect )/pos_flux*max_off_cfl
-      else
-        scale_factor(i,j,k) = 1.0
+        scale_factor = ( hvol )/pos_flux*max_off_cfl
+      else ! Don't scale
+        scale_factor = 1.0
       endif
 
-    enddo ; enddo ; enddo
+      ! Scale horizontal fluxes
+      if (-uh(I-1,j,k)>0) uh(I-1,j,k) = uh(I-1,j,k)*scale_factor
+      if (uh(I,j,k)>0)    uh(I,j,k)   = uh(I,j,k)*scale_factor
+      if (-vh(i,J-1,k)>0) vh(i,J-1,k) = vh(i,J-1,k)*scale_factor
+      if (vh(i,J,k)>0)    vh(i,J,k)   = vh(i,J,k)*scale_factor
 
-    ! Scale vertical fluxes
-    k = 1
-    do j=js,je ; do i=is,ie
-      if (top_flux(i,j,k) > 0.0) then
-        ea(i,j,k) = ea(i,j,k)*scale_factor(i,j,k)
+      if (k>1 .and. k<nz) then
+      ! Scale interior layers
+        if(top_flux(i,j,k)>0.0) then
+          ea(i,j,k) = ea(i,j,k)*scale_factor
+          eb(i,j,k-1) = eb(i,j,k-1)*scale_factor
+        endif
+        if(bottom_flux(i,j,k)>0.0) then
+          eb(i,j,k) = eb(i,j,k)*scale_factor
+          ea(i,j,k+1) = ea(i,j,k+1)*scale_factor
+        endif
+      ! Scale top layer
+      elseif (k==1) then
+        if(top_flux(i,j,k)>0.0)    ea(i,j,k) = ea(i,j,k)*scale_factor
+        if(bottom_flux(i,j,k)>0.0) then
+          eb(i,j,k)   = eb(i,j,k)*scale_factor
+          ea(i,j,k+1) = ea(i,j,k+1)*scale_factor
+        endif
+      ! Scale bottom layer
+      elseif (k==nz) then
+        if(top_flux(i,j,k)>0.0) then
+          ea(i,j,k)   = ea(i,j,k)*scale_factor
+          eb(i,j,k-1) = eb(i,j,k-1)*scale_factor
+        endif
+        if (bottom_flux(i,j,k)>0.0) eb(i,j,k)=eb(i,j,k)*scale_factor
       endif
-      if (bottom_flux(i,j,k)>0.0) then
-        eb(i,j,k) = eb(i,j,k)*scale_factor(i,j,k)
-        ea(i,j,k+1) = ea(i,j,k+1)*scale_factor(i,j,k)
-      endif
-    enddo ; enddo
-
-    do k = 2, nz-1 ; do j=js,je ; do i=is,ie
-      if (top_flux(i,j,k) > 0.0) then
-        ea(i,j,k) = ea(i,j,k)*scale_factor(i,j,k)
-        eb(i,j,k-1) = eb(i,j,k-1)*scale_factor(i,j,k)
-      endif
-      if (bottom_flux(i,j,k) > 0.0) then
-        eb(i,j,k) = eb(i,j,k)*scale_factor(i,j,k)
-        ea(i,j,k+1) = ea(i,j,k+1)*scale_factor(i,j,k)
-      endif
-    enddo ; enddo ; enddo
-
-    k=nz
-    do j=js,je ; do i=is,ie
-      if (top_flux(i,j,k) > 0.0) then
-        ea(i,j,k) = ea(i,j,k)*scale_factor(i,j,k)
-        eb(i,j,k-1) = eb(i,j,k-1)*scale_factor(i,j,k)
-      endif
-      if (bottom_flux(i,j,k) > 0.0) then
-        eb(i,j,k) = eb(i,j,k)*scale_factor(i,j,k)
-      endif
-    enddo ; enddo
-
-    call pass_var(scale_factor,G%Domain)
-    ! Scale horizontal fluxes
-    do k = 1, nz ; do j=js,je ; do i=is-1,ie+1
-
-      if (uh(I,j,k)>0.0)     uh(I,j,k) = uh(I,j,k)*scale_factor(i,j,k)
-      if (-uh(I-1,j,k)>0.0)  uh(I-1,j,k) = uh(I-1,j,k)*scale_factor(i,j,k)
-    enddo ; enddo ; enddo
-
-    do k = 1, nz ; do j=js-1,je+1 ; do i=is,ie
-      if (vh(i,J,k)>0.0)    vh(i,J,k) = vh(i,J,k)*scale_factor(i,j,k)
-      if (-vh(i,J-1,k)>0.0) vh(i,J-1,k) = vh(i,J-1,k)*scale_factor(i,j,k)
-    enddo ; enddo ; enddo
+    enddo ; enddo; enddo
 
   end subroutine limit_mass_flux_3d
 
