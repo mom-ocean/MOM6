@@ -334,7 +334,8 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
      S_range = S_range / G%max_depth ! Convert S_range into dS/dz
      T_range = T_range / G%max_depth ! Convert T_range into dT/dz
 
-     i=G%iec; j=G%jec; xi0 = 0.0;
+   do j=js,je ; do i=is,ie
+     xi0 = 0.0;
      do k = 1,nz
         !T0(k) = T_Ref; S0(k) = S_Ref        
         xi1 = xi0 + 0.5 * h(i,j,k);
@@ -377,9 +378,11 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
        enddo
      endif
 
-     do k=1,nz ; do j=js,je ; do i=is,ie
+     do k=1,nz  
        T(i,j,k) = T0(k) ; S(i,j,k) = S0(k)
-     enddo ; enddo ; enddo
+     enddo
+   
+   enddo ; enddo
 
    case default
       call MOM_error(FATAL,"isomip_initialize: "// &
