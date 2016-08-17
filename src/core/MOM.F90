@@ -927,6 +927,10 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       endif
     endif
 
+    ! Whenever thickness changes let the diag manager know, target grids
+    ! for vertical remapping may need to be regenerated.
+    call diag_update_target_grids(CS%diag)
+
     if (CS%useMEKE) call step_forward_MEKE(CS%MEKE, h, CS%VarMix%SN_u, CS%VarMix%SN_v, &
                                            CS%visc, dt, G, GV, CS%MEKE_CSp, CS%uhtr, CS%vhtr)
     call disable_averaging(CS%diag)
@@ -1938,7 +1942,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call set_axes_info(G, GV, param_file, diag)
 
   ! Whenever thickness changes let the diag manager know, target grids
-  ! for vertical remapping may need to be regenerated. This needs to
+  ! for vertical remapping may need to be regenerated.
   call diag_update_target_grids(diag)
 
   call cpu_clock_begin(id_clock_MOM_init)
