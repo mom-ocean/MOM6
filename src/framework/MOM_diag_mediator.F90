@@ -754,7 +754,8 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
         ! Check that H is up-to-date.
         do k=RANGE_K(diag_cs%h)
           if (diag_cs%h_old(i,j,k) /= diag_cs%h(i,j,k)) call MOM_error(FATAL, &
-            "remap_diag_to_z: H has changed since remapping grids were updated")
+            "remap_diag_to_z: H has changed since remapping grids were updated."//&
+            " diag debug hint: "//diag%debug_str)
         enddo
 #endif
         h_src(:) = 0.5 * (diag_cs%h(i,j,:) + diag_cs%h(i+1,j,:))
@@ -779,7 +780,8 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
         ! Check that H is up-to-date.
         do k=RANGE_K(diag_cs%h)
           if (diag_cs%h_old(i,j,k) /= diag_cs%h(i,j,k)) call MOM_error(FATAL, &
-            "remap_diag_to_z: H has changed since remapping grids were updated")
+            "remap_diag_to_z: H has changed since remapping grids were updated."//&
+            " diag debug hint: "//diag%debug_str)
         enddo
 #endif
         h_src(:) = 0.5 * (diag_cs%h(i,j,:) + diag_cs%h(i,j+1,:))
@@ -804,7 +806,8 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
         ! Check that H is up-to-date.
         do k=RANGE_K(diag_cs%h)
           if (diag_cs%h_old(i,j,k) /= diag_cs%h(i,j,k)) call MOM_error(FATAL, &
-            "remap_diag_to_z: H has changed since remapping grids were updated")
+            "remap_diag_to_z: H has changed since remapping grids were updated."//&
+            " diag debug hint: "//diag%debug_str)
         enddo
 #endif
         h_dest(:) = diag_cs%h_zoutput(i,j,:)
