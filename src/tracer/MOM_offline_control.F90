@@ -100,7 +100,12 @@ module MOM_offline_transport
       id_uhtr_preadv = -1, &
       id_vhtr_preadv = -1, &
       id_temp_preadv = -1, &
-      id_salt_preadv = -1
+      id_salt_preadv = -1, &
+      id_uhr = -1, &
+      id_vhr = -1, &
+      id_ear = -1, &
+      id_ebr = -1, &
+      id_hr = -1
 
   end type offline_transport_CS
 
@@ -144,10 +149,10 @@ contains
 
   end subroutine post_advection_fields
 
-  !  subroutine transport_by_files(G, CS, h_old, h_new, h_adv, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, khdt_y, &
-  subroutine transport_by_files(G, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, khdt_y, &
+  subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, khdt_y, &
     temp, salt, do_ale_in)
     type(ocean_grid_type),                     intent(inout)    :: G
+    type(verticalGrid_type),                  intent(inout)    :: GV
     type(offline_transport_CS),                intent(inout)    :: CS
     logical, optional                                           :: do_ale_in
 
@@ -168,9 +173,12 @@ contains
       eatr, ebtr, &
       temp, salt
     logical                                                     :: do_ale
+    integer :: i, j, k, is, ie, js, je, nz
 
     do_ale = .false.;
     if (present(do_ale_in) ) do_ale = do_ale_in
+
+    is   = G%isc   ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = GV%ke
 
 
     call callTree_enter("transport_by_files, MOM_offline_control.F90")
@@ -194,14 +202,31 @@ contains
       timelevel=CS%ridx_mean,position=CENTER)
 
     !! Time-averaged fields
-    call read_data(CS%mean_file, 'temp_preadv',   temp, domain=G%Domain%mpp_domain, &
+    call read_data(CS%snap_file, 'temp_preadv',   temp, domain=G%Domain%mpp_domain, &
       timelevel=CS%ridx_mean,position=CENTER)
-    call read_data(CS%mean_file, 'salt_preadv',   salt, domain=G%Domain%mpp_domain, &
+    call read_data(CS%snap_file, 'salt_preadv',   salt, domain=G%Domain%mpp_domain, &
       timelevel=CS%ridx_mean,position=CENTER)
 
     !! Read snapshot fields (end of time interval timestamp)
     call read_data(CS%snap_file, 'h_end', h_end, domain=G%Domain%mpp_domain, &
       timelevel=CS%ridx_snap,position=CENTER)
+
+!          ! Apply masks at T, U, and V points
+    do k=1,nz ; do j=js-1,je ; do i=is-1,ie
+      if (G%mask2dCu(i,j)<1.0) then
+        uhtr(I,j,k) = 0.0
+        khdt_x(I,j) = 0.0;
+      endif
+      if (G%mask2dCv(i,j)<1.0) then
+        vhtr(i,J,k) = 0.0
+        khdt_y(i,J) = 0.0;
+      endif
+      if (G%mask2dT(i,j)<1.0) then
+        h_end(i,j,k) = GV%Angstrom
+        eatr(i,j,k) = 0.0
+        ebtr(i,j,k) = 0.0
+      endif
+    enddo; enddo; enddo
 
     if (do_ale) then
       CS%h_preale = 1.0e-10
@@ -219,6 +244,18 @@ contains
         timelevel=CS%ridx_mean,position=EAST)
       call read_data(CS%preale_file, 'v_preale',   CS%v_preale, domain=G%Domain%mpp_domain, &
         timelevel=CS%ridx_mean,position=NORTH)
+
+      do k=1,nz ; do j=js-1,je ; do i=is-1,ie
+        if (G%mask2dCu(i,j)<1.0) then
+          CS%u_preale(I,j,k) = 0.0
+        endif
+        if (G%mask2dCv(i,j)<1.0) then
+          CS%v_preale(I,j,k) = 0.0
+        endif
+        if (G%mask2dT(i,j)<1.0) then
+          CS%h_preale(i,j,k) = GV%Angstrom
+        endif
+      enddo; enddo; enddo
 
     endif
 
@@ -263,16 +300,26 @@ contains
     ! U-cell fields
     CS%id_uhtr_preadv = register_diag_field('ocean_model', 'uhtr_preadv', diag%axesCuL, Time, &
       'Accumulated zonal thickness fluxes to advect tracers', 'kg')
+    CS%id_uhr = register_diag_field('ocean_model', 'uhr', diag%axesCuL, Time, &
+      'Zonal thickness fluxes remaining at end of timestep', 'kg')
 
     ! V-cell fields
     CS%id_vhtr_preadv = register_diag_field('ocean_model', 'vhtr_preadv', diag%axesCvL, Time, &
       'Accumulated meridional thickness fluxes to advect tracers', 'kg')
+    CS%id_vhr = register_diag_field('ocean_model', 'vhr', diag%axesCvL, Time, &
+      'Meridional thickness fluxes remaining at end of timestep', 'kg')
 
     ! T-cell fields
     CS%id_temp_preadv  = register_diag_field('ocean_model', 'temp_preadv', diag%axesTL, Time, &
       'Temperature prior to advection', 'C')
     CS%id_salt_preadv  = register_diag_field('ocean_model', 'salt_preadv', diag%axesTL, Time, &
       'Salinity prior to advection', 'S')
+    CS%id_hr  = register_diag_field('ocean_model', 'hdiff', diag%axesTL, Time, &
+      'Difference between the stored and calculated layer thickness', 'm')
+    CS%id_ear  = register_diag_field('ocean_model', 'ear', diag%axesTL, Time, &
+      'Remaining thickness entrained from above', 'm')
+    CS%id_ebr  = register_diag_field('ocean_model', 'ebr', diag%axesTL, Time, &
+      'Remaining thickness entrained from below', 'm')
 
   end subroutine register_diags_offline_transport
 

@@ -475,10 +475,10 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
 
 
   if( CS%debug ) then
-    call uchksum(khdt_x,"After tracer diffusion khdt_x", G, haloshift=2)
-    call vchksum(khdt_y,"After tracer diffusion khdt_y", G, haloshift=2)
-    call uchksum(Coef_x,"After tracer diffusion Coef_x", G, haloshift=2)
-    call vchksum(Coef_y,"After tracer diffusion Coef_y", G, haloshift=2)
+    call uchksum(khdt_x,"After tracer diffusion khdt_x", G%HI, haloshift=2)
+    call vchksum(khdt_y,"After tracer diffusion khdt_y", G%HI, haloshift=2)
+    call uchksum(Coef_x,"After tracer diffusion Coef_x", G%HI, haloshift=2)
+    call vchksum(Coef_y,"After tracer diffusion Coef_y", G%HI, haloshift=2)
   endif
 
   write_all_2du = 1. ; write_all_2dv = 1.
