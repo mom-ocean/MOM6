@@ -337,7 +337,7 @@ type, public :: ice_shelf_CS ; private
                        ! used to calculate the flux at the ocean-ice interface.
   logical :: insulator ! If true, ice shelf is a perfect insulator
   logical :: const_gamma ! If true, gamma_T is specified by the user.
-
+  real    :: cutoff_depth ! depth above which melt is set to zero (>= 0).
   integer :: id_melt = -1, id_exch_vel_s = -1, id_exch_vel_t = -1, &
              id_tfreeze = -1, id_tfl_shelf = -1, &
              id_thermal_driving = -1, id_haline_driving = -1, &
@@ -507,7 +507,8 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
   iDens = 1.0/CS%density_ocean_avg
 
 
-  if (CS%shelf_mass_is_dynamic .and. CS%override_shelf_movement) call update_shelf_mass(CS, Time)
+  if (CS%shelf_mass_is_dynamic .and. CS%override_shelf_movement) & 
+                                  call update_shelf_mass(CS, Time)
   
   do j=js,je 
     ! Find the pressure at the ice-ocean interface, averaged only over the
@@ -525,7 +526,8 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
       ! DNG - to allow this everywhere Hml>0.0 allows for melting under grounded cells
       !       propose instead to allow where Hml > [some threshold]
 
-      if ((iDens*state%ocean_mass(i,j) > CS%col_thick_melt_threshold) .and. (CS%area_shelf_h(i,j) > 0.0) .and. &
+      if ((iDens*state%ocean_mass(i,j) > CS%col_thick_melt_threshold) .and. &
+          (CS%area_shelf_h(i,j) > 0.0) .and. &
           (CS%isthermo) .and. (state%Hml(i,j) > 0.0) ) then
 
         if (CS%threeeq) then
@@ -716,6 +718,11 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
       else !not shelf
         CS%t_flux(i,j) = 0.0
       endif
+
+      ! GM: set lprec (therefore melting) to zero above a cutoff pressure
+      ! (CS%Rho0*CS%cutoff_depth*CS%g_Earth) this is needed for the isomip test case
+      if (p_int(i) < CS%Rho0*CS%cutoff_depth*CS%g_Earth) CS%lprec(i,j) = 0.0
+
     enddo ! i-loop
   enddo ! j-loop
 
@@ -1209,6 +1216,12 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
   call get_param(param_file, mod, "SHELF_INSULATOR", CS%insulator, &
                  "If true, the ice shelf is a perfect insulatior \n"//&
                  "(no conduction).", default=.false.)
+  call get_param(param_file, mod, "MELTING_CUTOFF_DEPTH", CS%cutoff_depth, &
+                 "Depth above which the melt is set to zero (it must be >= 0) \n"//&
+                 "Default value won't affect the solution.", default=0.0)
+  if (CS%cutoff_depth < 0.) &
+     call MOM_error(WARNING,"Initialize_ice_shelf: MELTING_CUTOFF_DEPTH must be >= 0.")
+
   call get_param(param_file, mod, "SHELF_3EQ_GAMMA", CS%const_gamma, &
                  "If true, user specifies a constant nondimensional heat-transfer coefficient \n"//&
                  "(GAMMA_T_3EQ), from which the salt-transfer coefficient is then computed \n"//&
@@ -1473,6 +1486,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
   call register_restart_field(CS%mass_shelf, vd, .true., CS%restart_CSp)
   vd = var_desc("shelf_area","m2","Ice shelf area in cell",z_grid='1')
   call register_restart_field(CS%area_shelf_h, vd, .true., CS%restart_CSp)
+  vd = var_desc("h_shelf","m","ice sheet/shelf thickness",z_grid='1')
+  call register_restart_field(CS%h_shelf, vd, .true., CS%restart_CSp)
 
   if (CS%shelf_mass_is_dynamic .and. .not.CS%override_shelf_movement) then
     ! additional restarts for ice shelf state
@@ -1480,8 +1495,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
     call register_restart_field(CS%u_shelf, vd, .true., CS%restart_CSp)
     vd = var_desc("v_shelf","m s-1","ice sheet/shelf velocity",'q',z_grid='1')
     call register_restart_field(CS%v_shelf, vd, .true., CS%restart_CSp)
-    vd = var_desc("h_shelf","m","ice sheet/shelf thickness",z_grid='1')
-    call register_restart_field(CS%h_shelf, vd, .true., CS%restart_CSp)
+    !vd = var_desc("h_shelf","m","ice sheet/shelf thickness",z_grid='1')
+    !call register_restart_field(CS%h_shelf, vd, .true., CS%restart_CSp)
 
     vd = var_desc("h_mask","none","ice sheet/shelf thickness mask",z_grid='1')
     call register_restart_field(CS%hmask, vd, .true., CS%restart_CSp)
@@ -1764,7 +1779,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
   CS%id_tfl_shelf = register_diag_field('ocean_model', 'tflux_shelf', CS%diag%axesT1, CS%Time, &
      'Heat conduction into ice shelf', 'Watts meter-2')
   CS%id_ustar_shelf = register_diag_field('ocean_model', 'ustar_shelf', CS%diag%axesT1, CS%Time, &
-     'Fric vel under shelf', 'm/s?')
+     'Fric vel under shelf', 'm/s')
+
   if (CS%shelf_mass_is_dynamic .and. .not.CS%override_shelf_movement) then
     CS%id_u_shelf = register_diag_field('ocean_model','u_shelf',CS%diag%axesB1,CS%Time, &
        'x-velocity of ice', 'm year')
@@ -1774,8 +1790,6 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
        'mask for u-nodes', 'none')
     CS%id_v_mask = register_diag_field('ocean_model','v_mask',CS%diag%axesB1,CS%Time, &
        'mask for v-nodes', 'none')
-    CS%id_h_shelf = register_diag_field('ocean_model','h_shelf',CS%diag%axesT1,CS%Time, &
-       'land ice thickness', 'm')
     CS%id_h_mask = register_diag_field('ocean_model','h_mask',CS%diag%axesT1,CS%Time, &
        'ice shelf thickness', 'none')
     CS%id_surf_elev = register_diag_field('ocean_model','ice_surf',CS%diag%axesT1,CS%Time, &
