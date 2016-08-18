@@ -29,7 +29,8 @@ module MOM_EOS_NEMO
 !*  These algorithms are NOT from NEMO package!!                       * 
 !***********************************************************************
 
-use gsw_mod_toolbox, only : gsw_rho, gsw_rho_first_derivatives, gsw_specvol_first_derivatives
+use gsw_mod_toolbox, only : gsw_sr_from_sp, gsw_ct_from_pt
+use gsw_mod_toolbox, only : gsw_rho_first_derivatives
 
 
 implicit none ; private
@@ -227,12 +228,17 @@ subroutine calculate_density_array_nemo(T, S, pressure, rho, start, npts)
   integer :: j
 
   do j=start,start+npts-1
+    !Conversions
+    zs = gsw_sr_from_sp(S(j))       !Convert practical salinity to absolute salinity
+    zt = gsw_ct_from_pt(S(j),T(j))  !Convert potantial temp to conservative temp
+    zp = pressure(j)* Pa2db         !Convert pressure from Pascal to decibar
+
     if(S(j).lt.-1.0e-10) cycle !Can we assume safely that this is a missing value?
     !The following algorithm was provided by Roquet in a private communication.
     !It is not necessarily the algorithm used in NEMO ocean!
-    zp  = pressure(j)* r1_P0 *Pa2db !pressure (first converted to decibar)
-    zt  = T(j) * r1_T0                ! temperature
-    zs  = SQRT( ABS( S(j) + rdeltaS ) * r1_S0 )   ! square root salinity
+    zp  = zp * r1_P0 !pressure 
+    zt  = zt * r1_T0 !temperature
+    zs  = SQRT( ABS( zs + rdeltaS ) * r1_S0 )   ! square root salinity
     !
     zn3 = EOS013*zt   &
        &   + EOS103*zs+EOS003
@@ -281,12 +287,18 @@ subroutine calculate_density_derivs_nemo(T, S, pressure, drho_dT, drho_dS, start
   integer :: j
 
   do j=start,start+npts-1
+    !Conversions
+    zs = gsw_sr_from_sp(S(j))       !Convert practical salinity to absolute salinity
+    zt = gsw_ct_from_pt(S(j),T(j))  !Convert potantial temp to conservative temp
+    zp = pressure(j)* Pa2db         !Convert pressure from Pascal to decibar
+
     if(S(j).lt.-1.0e-10) cycle !Can we assume safely that this is a missing value?
+
     !The following algorithm was provided by Roquet in a private communication.
     !It is not necessarily the algorithm used in NEMO ocean!
-    zp  = pressure(j)*Pa2db * r1_P0  ! pressure (first converted to decibar)
-    zt  = T(j) * r1_T0                ! temperature
-    zs  = SQRT( ABS( S(j) + rdeltaS ) * r1_S0 )   ! square root salinity
+    zp  = zp * r1_P0  ! pressure (first converted to decibar)
+    zt  = zt * r1_T0                ! temperature
+    zs  = SQRT( ABS( zs + rdeltaS ) * r1_S0 )   ! square root salinity
     !
     ! alpha
     zn3 = ALP003
@@ -348,14 +360,21 @@ subroutine calculate_compress_nemo(T, S, pressure, rho, drho_dp, start, npts)
 ! *  (in)      start - the starting point in the arrays.               *
 ! *  (in)      npts - the number of values to calculate.               *
 ! *====================================================================*
-  real :: p_dbar 
+  real ::  zs,zt,zp 
   integer :: j
 
+  call calculate_density_array_nemo(T, S, pressure, rho, start, npts)
+  !
+  !NOTE: The following calculates the TEOS10 approximation to compressibility
+  !      since the corresponding NEMO approximation is not available yet.
+  !
   do j=start,start+npts-1
+   !Conversions
+    zs = gsw_sr_from_sp(S(j))       !Convert practical salinity to absolute salinity
+    zt = gsw_ct_from_pt(S(j),T(j))  !Convert potantial temp to conservative temp
+    zp = pressure(j)* Pa2db         !Convert pressure from Pascal to decibar
     if(S(j).lt.-1.0e-10) cycle !Can we assume safely that this is a missing value?
-    p_dbar = pressure(j)*1.0e-4 !convert pressure to dbar    
-    rho(j) = gsw_rho(S(j),T(j),p_dbar)
-    call gsw_rho_first_derivatives(S(j),T(j), p_dbar, drho_dp=drho_dp(j))
+    call gsw_rho_first_derivatives(zs,zt,zp, drho_dp=drho_dp(j))
  enddo
 end subroutine calculate_compress_nemo
 
@@ -376,14 +395,21 @@ subroutine calculate_2_densities_nemo( T, S, pressure1, pressure2, rho1, rho2, s
   real :: zp1, zp2, zt , zh , zs , zr0, zn , zn0, zn1, zn2, zn3
   integer :: j
 
+  zp1 = pressure1 * Pa2db         !Convert pressure from Pascal to decibar
+  zp2 = pressure2 * Pa2db         !Convert pressure from Pascal to decibar
+
   do j=start,start+npts-1
+   !Conversions
+    zs = gsw_sr_from_sp(S(j))       !Convert practical salinity to absolute salinity
+    zt = gsw_ct_from_pt(S(j),T(j))  !Convert potantial temp to conservative temp
+
     if(S(j).lt.-1.0e-10) cycle !Can we assume safely that this is a missing value?
     !The following algorithm was provided by Roquet in a private communication.
     !It is not necessarily the algorithm used in NEMO ocean!
-    zp1  = pressure1*Pa2db * r1_P0  ! pressure (first converted to decibar)
-    zp2  = pressure2*Pa2db * r1_P0  ! pressure (first converted to decibar)
-    zt  = T(j) * r1_T0                ! temperature
-    zs  = SQRT( ABS( S(j) + rdeltaS ) * r1_S0 )   ! square root salinity
+    zp1  = pressure1 * r1_P0  ! pressure (first converted to decibar)
+    zp2  = pressure2 * r1_P0  ! pressure (first converted to decibar)
+    zt  = zt * r1_T0                ! temperature
+    zs  = SQRT( ABS( zs + rdeltaS ) * r1_S0 )   ! square root salinity
     !
     zn3 = EOS013*zt   &
        &   + EOS103*zs+EOS003

@@ -24,6 +24,7 @@ module MOM_EOS_TEOS10
 !*  sea water using the TEOS10 functions                               *
 !***********************************************************************
 
+use gsw_mod_toolbox, only : gsw_sr_from_sp, gsw_ct_from_pt
 use gsw_mod_toolbox, only : gsw_rho, gsw_rho_first_derivatives, gsw_specvol_first_derivatives
 
 implicit none ; private
@@ -37,6 +38,7 @@ interface calculate_density_teos10
   module procedure calculate_density_scalar_teos10, calculate_density_array_teos10
 end interface calculate_density_teos10
 
+   real, parameter :: Pa2db  = 1.e-4
 
 contains
 
@@ -88,14 +90,17 @@ subroutine calculate_density_array_teos10(T, S, pressure, rho, start, npts)
 ! *  conservative temperature (T in deg C), and pressure in Pa.        *
 ! *  It uses the functions from TEOS10 website                         *
 ! *====================================================================*
-  real :: gsw_rho !external TEOS10 function
-  real :: p_dbar 
+  real :: zs,zt,zp 
   integer :: j
 
   do j=start,start+npts-1
+    !Conversions
+    zs = gsw_sr_from_sp(S(j))       !Convert practical salinity to absolute salinity
+    zt = gsw_ct_from_pt(S(j),T(j))  !Convert potantial temp to conservative temp
+    zp = pressure(j)* Pa2db         !Convert pressure from Pascal to decibar
+
     if(S(j).lt.-1.0e-10) cycle !Can we assume safely that this is a missing value?
-    p_dbar = pressure(j)*1.0e-4 !convert pressure to dbar    
-    rho(j) = gsw_rho(S(j),T(j),p_dbar)
+    rho(j) = gsw_rho(zs,zt,zp)
  enddo
 end subroutine calculate_density_array_teos10
 
@@ -112,13 +117,16 @@ subroutine calculate_density_derivs_teos10(T, S, pressure, drho_dT, drho_dS, sta
 ! *                      salinity, in kg m-3 psu-1.                    *
 ! *  (in)      start - the starting point in the arrays.               *
 ! *  (in)      npts - the number of values to calculate.               *
-  real :: p_dbar
+  real :: zs,zt,zp 
   integer :: j
 
   do j=start,start+npts-1
+    !Conversions
+    zs = gsw_sr_from_sp(S(j))       !Convert practical salinity to absolute salinity
+    zt = gsw_ct_from_pt(S(j),T(j))  !Convert potantial temp to conservative temp
+    zp = pressure(j)* Pa2db         !Convert pressure from Pascal to decibar
     if(S(j).lt.-1.0e-10) cycle !Can we assume safely that this is a missing value?
-    p_dbar = pressure(j)*1.0e-4 !convert pressure to dbar    
-    call gsw_rho_first_derivatives(S(j),T(j), p_dbar, drho_dsa=drho_dS(j), drho_dct=drho_dT(j))
+    call gsw_rho_first_derivatives(zs, zt, zp, drho_dsa=drho_dS(j), drho_dct=drho_dT(j))
   enddo
 
 end subroutine calculate_density_derivs_teos10
@@ -136,13 +144,16 @@ subroutine calculate_specvol_derivs_teos10(T, S, pressure, dSV_dT, dSV_dS, start
 ! *                      salinity, in m3 kg-1 / (g/kg).                *
 ! *  (in)      start - the starting point in the arrays.               *
 ! *  (in)      npts - the number of values to calculate.               *
-  real :: p_dbar
+  real :: zs, zt, zp
   integer :: j
 
   do j=start,start+npts-1
+    !Conversions
+    zs = gsw_sr_from_sp(S(j))       !Convert practical salinity to absolute salinity
+    zt = gsw_ct_from_pt(S(j),T(j))  !Convert potantial temp to conservative temp
+    zp = pressure(j)* Pa2db         !Convert pressure from Pascal to decibar
     if(S(j).lt.-1.0e-10) cycle !Can we assume safely that this is a missing value?
-    p_dbar = pressure(j)*1.0e-4 !convert pressure to dbar    
-    call gsw_specvol_first_derivatives(S(j),T(j), p_dbar, v_sa=dSV_dS(j), v_ct=dSV_dT(j))
+    call gsw_specvol_first_derivatives(zs,zt,zp, v_sa=dSV_dS(j), v_ct=dSV_dT(j))
   enddo
 
 end subroutine calculate_specvol_derivs_teos10
@@ -167,15 +178,17 @@ subroutine calculate_compress_teos10(T, S, pressure, rho, drho_dp, start, npts)
 ! *  temperature (T in deg C), and pressure in Pa.  It uses the        *
 ! *  subroutines from TEOS10 website                                   *
 ! *====================================================================*
-  real :: gsw_rho !external TEOS10 function
-  real :: p_dbar 
+  real :: zs,zt,zp 
   integer :: j
 
   do j=start,start+npts-1
+    !Conversions
+    zs = gsw_sr_from_sp(S(j))       !Convert practical salinity to absolute salinity
+    zt = gsw_ct_from_pt(S(j),T(j))  !Convert potantial temp to conservative temp
+    zp = pressure(j)* Pa2db         !Convert pressure from Pascal to decibar
     if(S(j).lt.-1.0e-10) cycle !Can we assume safely that this is a missing value?
-    p_dbar = pressure(j)*1.0e-4 !convert pressure to dbar    
-    rho(j) = gsw_rho(S(j),T(j),p_dbar)
-    call gsw_rho_first_derivatives(S(j),T(j), p_dbar, drho_dp=drho_dp(j))
+    rho(j) = gsw_rho(zs,zt,zp)
+    call gsw_rho_first_derivatives(zs,zt,zp, drho_dp=drho_dp(j))
  enddo
 end subroutine calculate_compress_teos10
 
@@ -193,17 +206,19 @@ subroutine calculate_2_densities_teos10( T, S, pressure1, pressure2, rho1, rho2,
 ! *  (in)      start - the starting point in the arrays.               *
 ! *  (in)      npts - the number of values to calculate.               *
 
-  real :: gsw_rho !external TEOS10 function
-  real :: p1_dbar,p2_dbar 
+  real :: zp1, zp2, zt, zs 
   integer :: j
 
-  p1_dbar = pressure1*1.0e-4 !convert pressure to dbar    
-  p2_dbar = pressure2*1.0e-4 !convert pressure to dbar    
+  zp1 = pressure1 * Pa2db         !Convert pressure from Pascal to decibar
+  zp2 = pressure2 * Pa2db         !Convert pressure from Pascal to decibar
 
   do j=start,start+npts-1
+   !Conversions
+    zs = gsw_sr_from_sp(S(j))       !Convert practical salinity to absolute salinity
+    zt = gsw_ct_from_pt(S(j),T(j))  !Convert potantial temp to conservative temp
     if(S(j).lt.-1.0e-10) cycle !Can we assume safely that this is a missing value?
-    rho1(j) = gsw_rho(S(j),T(j),p1_dbar)
-    rho2(j) = gsw_rho(S(j),T(j),p2_dbar)
+    rho1(j) = gsw_rho(zs,zt,zp1)
+    rho2(j) = gsw_rho(zs,zt,zp2)
  enddo
 end subroutine calculate_2_densities_teos10
 
