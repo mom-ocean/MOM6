@@ -672,6 +672,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
 
     do j=js,je ; do i=is,ie
       ea(i,j,1) = 0.
+      eb(i,j,1) = 0.
+
     enddo ; enddo
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,h_neglect,h,ea,GV,dt,Kd_int,eb) &
 !$OMP                          private(hval)
@@ -724,7 +726,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     if (CS%use_energetic_PBL) then
 
       call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, dt, fluxes, CS%optics, &
-                          ea, h, tv, CS%aggregate_FW_forcing, cTKE, dSV_dT, dSV_dS)
+                          ea, eb, h, tv, CS%aggregate_FW_forcing, cTKE, dSV_dT, dSV_dS)
 
       if (CS%debug) then
         call hchksum(ea, "after applyBoundaryFluxes ea",G%HI,haloshift=0)
@@ -775,7 +777,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     else
 
       call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, dt, fluxes, CS%optics, &
-                                    ea, h, tv, CS%aggregate_FW_forcing)
+                                    ea, eb, h, tv, CS%aggregate_FW_forcing)
 
     endif   ! endif for CS%use_energetic_PBL
 
@@ -1357,9 +1359,9 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   if (CS%id_Kd_salt      > 0) call post_data(CS%id_Kd_salt,      Kd_salt, CS%diag)
   if (CS%id_Kd_ePBL      > 0) call post_data(CS%id_Kd_ePBL,      Kd_ePBL, CS%diag)
 
-  write_all_3dt = 1.
-  if (CS%id_ea       > 0) call post_data(CS%id_ea,       eatr, CS%diag, mask = write_all_3dt)
-  if (CS%id_eb       > 0) call post_data(CS%id_eb,       ebtr, CS%diag, mask = write_all_3dt)
+  write_all_3dt(:,:,:) = 1.
+  if (CS%id_ea       > 0) call post_data(CS%id_ea,       ea, CS%diag, mask = write_all_3dt)
+  if (CS%id_eb       > 0) call post_data(CS%id_eb,       eb, CS%diag, mask = write_all_3dt)
   if (CS%id_dudt_dia > 0) call post_data(CS%id_dudt_dia, ADp%du_dt_dia,  CS%diag)
   if (CS%id_dvdt_dia > 0) call post_data(CS%id_dvdt_dia, ADp%dv_dt_dia,  CS%diag)
   if (CS%id_wd       > 0) call post_data(CS%id_wd,       CDp%diapyc_vel, CS%diag)

@@ -920,14 +920,14 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     if (CS%thickness_diffuse .and. .not.CS%thickness_diffuse_first) then
       call cpu_clock_begin(id_clock_thick_diff)
 
-      if (CS%debug) call hchksum(h,"Pre-thickness_diffuse h", G, haloshift=0)
+      if (CS%debug) call hchksum(h,"Pre-thickness_diffuse h", G%HI, haloshift=0)
 
       if (associated(CS%VarMix)) &
         call calc_slope_functions(h, CS%tv, dt, G, GV, CS%VarMix)
       call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dt, G, GV, &
                              CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
 
-      if (CS%debug) call hchksum(h,"Post-thickness_diffuse h", G, haloshift=1)
+      if (CS%debug) call hchksum(h,"Post-thickness_diffuse h", G%HI, haloshift=1)
       call cpu_clock_end(id_clock_thick_diff)
       call cpu_clock_begin(id_clock_pass)
       call do_group_pass(CS%pass_h, G%Domain)
@@ -1452,6 +1452,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
 
 
     niter = CS%offline_CSp%num_off_iter
+    Inum_iter = 1./real(niter)
+    dt_iter = CS%offline_CSp%dt_offline*Inum_iter
 
     ! T-cell pointer assignments
 
@@ -1478,19 +1480,9 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     call enable_averaging(time_interval, Time_start+set_time(int(time_interval)), &
                           CS%diag)
 
-    call transport_by_files(G, CS%offline_CSp, h_end, eatr, ebtr, uhtr, vhtr, &
+    ! Read in all fields that might be used this timestep
+    call transport_by_files(G, GV, CS%offline_CSp, h_end, eatr, ebtr, uhtr, vhtr, &
         khdt_x, khdt_y, temp_old, salt_old, CS%use_ALE_algorithm)
-
-    Inum_iter = 1./real(niter)
-    dt_iter = CS%offline_CSp%dt_offline*Inum_iter
-
-    CS%T = temp_old
-    CS%S = salt_old
-    call pass_var(CS%T,G%Domain)
-    call pass_var(CS%S,G%Domain)
-
-    h_pre = CS%h
-    call pass_var(h_pre,G%Domain)
 
     if (CS%diabatic_first .and. CS%use_ALE_algorithm) then
     ! Regridding/remapping is done here, at end of thermodynamics time step
@@ -1509,20 +1501,21 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
             CS%T_squared(:,:,:) = CS%tv%T(:,:,:) ** 2
 
         if (CS%debug) then
-            call uchksum(CS%offline_CSp%u_preale, "Pre-ALE 1 u", G, haloshift=1)
-            call vchksum(CS%offline_CSp%v_preale, "Pre-ALE 1 v", G, haloshift=1)
-            call hchksum(CS%offline_CSp%h_preale, "Pre-ALE 1 h", G, haloshift=1)
-            call hchksum(CS%tv%T,"Pre-ALE 1 T", G, haloshift=1)
-            call hchksum(CS%tv%S,"Pre-ALE 1 S", G, haloshift=1)
+            call uchksum(CS%offline_CSp%u_preale, "Pre-ALE 1 u", G%HI, haloshift=1)
+            call vchksum(CS%offline_CSp%v_preale, "Pre-ALE 1 v", G%HI, haloshift=1)
+            call hchksum(CS%offline_CSp%h_preale, "Pre-ALE 1 h", G%HI, haloshift=1)
+            call hchksum(CS%tv%T,"Pre-ALE 1 T", G%HI, haloshift=1)
+            call hchksum(CS%tv%S,"Pre-ALE 1 S", G%HI, haloshift=1)
         endif
         call cpu_clock_begin(id_clock_ALE)
         call ALE_main(G, GV, CS%offline_CSp%h_preale, CS%offline_CSp%u_preale, &
-                        CS%offline_CSp%v_preale, CS%tv, CS%tracer_Reg, CS%ALE_CSp, dt_iter)
+                        CS%offline_CSp%v_preale, CS%tv, CS%tracer_Reg, &
+                        CS%ALE_CSp, CS%offline_CSp%dt_offline)
         call cpu_clock_end(id_clock_ALE)
 
         if (CS%debug) then
-            call hchksum(CS%tv%T,"Post-ALE 1 T", G, haloshift=1)
-            call hchksum(CS%tv%S,"Post-ALE 1 S", G, haloshift=1)
+            call hchksum(CS%tv%T,"Post-ALE 1 T", G%HI, haloshift=1)
+            call hchksum(CS%tv%S,"Post-ALE 1 S", G%HI, haloshift=1)
         endif
 
         CS%tv%T = temp_old
@@ -1537,13 +1530,23 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       call diag_update_target_grids(CS%diag)
       call post_diags_TS_vardec(G, CS, CS%dt_trans)
 
+      h_pre = CS%offline_CSp%h_preale;
+      call pass_var(h_pre,G%Domain)
+
+    else !Not diabatic first or not ale
+      CS%T = temp_old
+      CS%S = salt_old
+      call pass_var(CS%T,G%Domain)
+      call pass_var(CS%S,G%Domain)
+      h_pre = CS%h
+      call pass_var(h_pre,G%Domain)
     endif !Diabatic first and ALE
 
     h_new(:,:,:) = GV%Angstrom
     ! Offline tracer advection is done by using a 3d flux-limited, Strang time-split method
     ! The flux limiting follows the routine specified by Skamarock (Monthly Weather Review, 2005)
-    ! to make sure that offline advection is monotonic and postive-definite
-
+    ! to make sure that offline advection is monotonic and positive-definite
+!
     call tracer_hordiff(h_pre, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
         CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, CS%do_online, khdt_x*0.5, khdt_y*0.5)
 
@@ -1588,7 +1591,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
           h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
         enddo; enddo; enddo
         call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
-            CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, 1, x_before_y)
+            CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=30, x_first_in=x_before_y)
 
         ! Done with horizontal so now h_pre should be h_new
         do k = 1, nz ; do i=is-1,ie+1 ; do j=js-1,je+1
@@ -1605,7 +1608,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
           h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
         enddo; enddo; enddo
         call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
-            CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, 1, x_before_y)
+            CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=30, x_first_in=x_before_y)
+
         ! Done with horizontal so now h_pre should be h_new
         do k = 1, nz ; do i=is-1,ie+1 ; do j=js-1,je+1
             h_pre(i,j,k) = h_new(i,j,k)
@@ -1644,11 +1648,19 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       call pass_var(h_pre,G%Domain)
       call pass_vector(uhtr,vhtr,G%Domain)
 !
-      ! Stop if we've depleted all the mass transports
-      sum_abs_fluxes = sum(abs(eatr))+sum(abs(eatr))+sum(abs(ebtr))+sum(abs(uhtr))+sum(abs(vhtr))
-      call sum_across_PEs(sum_abs_fluxes)
+      ! Stop if we've depleted all the mass transport by summing the remaining fluxes at each point
+      sum_abs_fluxes = 0.0
+      do k=1,nz; do j=js,je; do i=is,ie
+        sum_abs_fluxes = sum_abs_fluxes + abs(eatr(i,j,k)) + abs(ebtr(i,j,k)) + abs(uhtr(I-1,j,k)) + &
+            abs(uhtr(I,j,k)) + abs(vhtr(i,J-1,k)) + abs(vhtr(i,J,k))
+      enddo; enddo; enddo
 
-      if ( sum_abs_fluxes == 0.0) exit
+!      call sum_across_PEs(sum_abs_fluxes)
+!      if (is_root_pe()) print *, "Remaining fluxes", sum_abs_fluxes
+!      if ( sum_abs_fluxes == 0.0) then
+!        print *, "Advection converged early at ", iter, "iterations"
+!        exit
+!      endif
 
       ! Switch order of Strang split every iteration
       z_first = .not. z_first
@@ -1663,6 +1675,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, CS%do_online, khdt_x*0.5, khdt_y*0.5)
 
     if (.not.CS%diabatic_first .and. CS%use_ALE_algorithm) then
+
+    h_temp = CS%offline_CSp%h_preale-h_pre
     ! Regridding/remapping is done here, at end of thermodynamics time step
     ! (that may comprise several dynamical time steps)
     ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
@@ -1679,20 +1693,21 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
             CS%T_squared(:,:,:) = CS%tv%T(:,:,:) ** 2
 
         if (CS%debug) then
-            call uchksum(CS%offline_CSp%u_preale, "Pre-ALE 1 u", G, haloshift=1)
-            call vchksum(CS%offline_CSp%v_preale, "Pre-ALE 1 v", G, haloshift=1)
-            call hchksum(CS%offline_CSp%h_preale, "Pre-ALE 1 h", G, haloshift=1)
-            call hchksum(CS%tv%T,"Pre-ALE 1 T", G, haloshift=1)
-            call hchksum(CS%tv%S,"Pre-ALE 1 S", G, haloshift=1)
+            call uchksum(CS%offline_CSp%u_preale, "Pre-ALE 1 u", G%HI, haloshift=1)
+            call vchksum(CS%offline_CSp%v_preale, "Pre-ALE 1 v", G%HI, haloshift=1)
+            call hchksum(CS%offline_CSp%h_preale, "Pre-ALE 1 h", G%HI, haloshift=1)
+            call hchksum(CS%tv%T,"Pre-ALE 1 T", G%HI, haloshift=1)
+            call hchksum(CS%tv%S,"Pre-ALE 1 S", G%HI, haloshift=1)
         endif
         call cpu_clock_begin(id_clock_ALE)
         call ALE_main(G, GV, CS%offline_CSp%h_preale, CS%offline_CSp%u_preale, &
-                        CS%offline_CSp%v_preale, CS%tv, CS%tracer_Reg, CS%ALE_CSp, dt_iter)
+                        CS%offline_CSp%v_preale, CS%tv, CS%tracer_Reg, &
+                        CS%ALE_CSp, CS%offline_CSp%dt_offline)
         call cpu_clock_end(id_clock_ALE)
 
         if (CS%debug) then
-            call hchksum(CS%tv%T,"Post-ALE 1 T", G, haloshift=1)
-            call hchksum(CS%tv%S,"Post-ALE 1 S", G, haloshift=1)
+            call hchksum(CS%tv%T,"Post-ALE 1 T", G%HI, haloshift=1)
+            call hchksum(CS%tv%S,"Post-ALE 1 S", G%HI, haloshift=1)
         endif
 
         CS%tv%T = temp_old
@@ -1707,12 +1722,18 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       call diag_update_target_grids(CS%diag)
       call post_diags_TS_vardec(G, CS, CS%dt_trans)
 
+      h_new = CS%offline_CSp%h_preale
+      call pass_var(h_new,G%Domain)
+
     endif !Diabatic second and ALE
 
-    h_temp = h_end-h_new
-    if (CS%id_h>0) call post_data(CS%id_h, h_temp, CS%diag)
-    if (CS%id_u>0) call post_data(CS%id_u, uhtr, CS%diag)
-    if (CS%id_v>0) call post_data(CS%id_v, vhtr, CS%diag)
+
+
+    if (CS%offline_CSp%id_hr>0) call post_data(CS%offline_CSp%id_hr, h_temp, CS%diag)
+    if (CS%offline_CSp%id_uhr>0) call post_data(CS%offline_CSp%id_uhr, uhtr, CS%diag)
+    if (CS%offline_CSp%id_vhr>0) call post_data(CS%offline_CSp%id_vhr, vhtr, CS%diag)
+    if (CS%offline_CSp%id_ear>0) call post_data(CS%offline_CSp%id_ear, eatr, CS%diag)
+    if (CS%offline_CSp%id_ebr>0) call post_data(CS%offline_CSp%id_ebr, ebtr, CS%diag)
 
     call cpu_clock_end(id_clock_tracer)
 
@@ -1721,6 +1742,9 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     do i = is, ie ; do j = js, je ; do k=1,nz
       CS%h(i,j,k) = h_end(i,j,k)
     enddo ;  enddo; enddo
+
+    call pass_var(CS%h,G%Domain)
+
 
 
 end subroutine step_tracers
