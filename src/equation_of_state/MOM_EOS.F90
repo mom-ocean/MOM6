@@ -2173,7 +2173,7 @@ subroutine convert_temp_salt_for_TEOS10(T, S, press, G, kd, mask_z, EOS)
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "convert_temp_salt_to_TEOS10 called with an unassociated EOS_type EOS.")
 
-  if (EOS%form_of_EOS .ne. EOS_TEOS10) return
+  if ((EOS%form_of_EOS .ne. EOS_TEOS10) .and. (EOS%form_of_EOS .ne. EOS_NEMO)) return
 
   do k=1,kd ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
     if (mask_z(i,j,k) .ge. 1.0) then
