@@ -1158,34 +1158,35 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file)
   call write_field(unit, fields(5), G%Domain%mpp_domain, G%bathyT)
   call write_field(unit, fields(6), G%Domain%mpp_domain, G%CoriolisBu)
 
-  do J=Jsq,Jeq; do i=is,ie; out_v(i,J) = G%dxCv(i,J); enddo; enddo
+  !   I think that all of these copies are holdovers from a much earlier
+  ! ancestor code in which many of the metrics were macros that could have
+  ! had reduced dimensions, and that they are no longer needed in MOM6. -RWH
+  do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = G%dxCv(i,J) ; enddo ; enddo
   call write_field(unit, fields(7), G%Domain%mpp_domain, out_v)
-  do j=js,je; do I=Isq,Ieq; out_u(I,j) = G%dyCu(I,j); enddo; enddo
+  do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = G%dyCu(I,j) ; enddo ; enddo
   call write_field(unit, fields(8), G%Domain%mpp_domain, out_u)
 
-  do J=Jsq,Jeq; do i=is,ie; out_u(i,J) = G%dxCu(i,J); enddo; enddo
+  do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = G%dxCu(I,j) ; enddo ; enddo
   call write_field(unit, fields(9), G%Domain%mpp_domain, out_u)
-  do j=js,je; do I=Isq,Ieq; out_v(I,j) = G%dyCv(I,j); enddo; enddo
+  do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = G%dyCv(i,J) ; enddo ; enddo
   call write_field(unit, fields(10), G%Domain%mpp_domain, out_v)
 
-  do J=Jsq,Jeq; do i=is,ie; out_h(i,J) = G%dxT(i,J); enddo; enddo
+  do j=js,je ; do i=is,ie ; out_h(i,j) = G%dxT(i,j); enddo; enddo
   call write_field(unit, fields(11), G%Domain%mpp_domain, out_h)
-  do j=js,je; do I=Isq,Ieq; out_h(I,j) = G%dyT(I,j); enddo; enddo
+  do j=js,je ; do i=is,ie ; out_h(i,j) = G%dyT(i,j) ; enddo ; enddo
   call write_field(unit, fields(12), G%Domain%mpp_domain, out_h)
 
-  do J=Jsq,Jeq; do i=is,ie; out_q(i,J) = G%dxBu(i,J); enddo; enddo
+  do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(i,J) = G%dxBu(I,J) ; enddo ; enddo
   call write_field(unit, fields(13), G%Domain%mpp_domain, out_q)
-  do j=js,je; do I=Isq,Ieq; out_q(I,j) = G%dyBu(I,j); enddo; enddo
+  do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(I,J) = G%dyBu(I,J) ; enddo ; enddo
   call write_field(unit, fields(14), G%Domain%mpp_domain, out_q)
 
-  do j=js,je; do i=is,ie; out_h(i,j) = G%areaT(i,j); enddo; enddo
+  do j=js,je ; do i=is,ie ; out_h(i,j) = G%areaT(i,j) ; enddo ; enddo
   call write_field(unit, fields(15), G%Domain%mpp_domain, out_h)
-  do j=js,je; do i=is,ie; out_q(i,j) = G%areaBu(i,j); enddo; enddo
+  do J=Jsq,Jeq ; do I=Isq,Ieq ; out_q(I,J) = G%areaBu(I,J) ; enddo ; enddo
   call write_field(unit, fields(16), G%Domain%mpp_domain, out_q)
 
-!  do J=Jsq,Jeq; do i=is,ie; out_v(i,J) = G%dx_Cv(i,J); enddo; enddo
   call write_field(unit, fields(17), G%Domain%mpp_domain, G%dx_Cv)
-!  do j=js,je; do I=Isq,Ieq; out_u(I,j) = G%dy_Cu(I,j); enddo; enddo
   call write_field(unit, fields(18), G%Domain%mpp_domain, G%dy_Cu)
   call write_field(unit, fields(19), G%Domain%mpp_domain, G%mask2dT)
 
