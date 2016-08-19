@@ -327,10 +327,11 @@ subroutine setup_v_point_obc(OBC, G, segment_str)
   ! These four lines extend the open boundary into the halo region of tiles on the edge of the physical
   ! domain. They are used to reproduce the checksums of the circle_obcs test case and will be removed
   ! in the fullness of time. -AJA
-  if (Is_obc == G%HI%IscB) Is_obc = G%HI%isd-1
-  if (Is_obc == G%HI%IecB) Is_obc = G%HI%ied
-  if (Ie_obc == G%HI%IscB) Ie_obc = G%HI%isd-1
-  if (Ie_obc == G%HI%IecB) Ie_obc = G%HI%ied
+! These cause trouble with DOME
+!  if (Is_obc == G%HI%IscB) Is_obc = G%HI%isd-1
+!  if (Is_obc == G%HI%IecB) Is_obc = G%HI%ied
+!  if (Ie_obc == G%HI%IscB) Ie_obc = G%HI%isd-1
+!  if (Ie_obc == G%HI%IecB) Ie_obc = G%HI%ied
 
   do i=G%HI%isd, G%HI%ied
     if (i>=min(Is_obc,Ie_obc) .and. i<=max(Is_obc,Ie_obc)) then
