@@ -254,7 +254,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str)
 !  if (Je_obc == G%HI%JecB) Je_obc = G%HI%jed
 
   do j=G%HI%jsd, G%HI%jed
-    if (j>min(Js_obc,Je_obc) .and. j<=max(Js_obc,Je_obc)) then
+    if (j>=min(Js_obc,Je_obc) .and. j<=max(Js_obc,Je_obc)) then
       OBC%OBC_mask_u(I_obc,j) = .true.
       OBC%OBC_kind_u(I_obc,j) = this_kind
       if (Je_obc>Js_obc) then ! East is outward
@@ -333,7 +333,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str)
   if (Ie_obc == G%HI%IecB) Ie_obc = G%HI%ied
 
   do i=G%HI%isd, G%HI%ied
-    if (i>min(Is_obc,Ie_obc) .and. i<=max(Is_obc,Ie_obc)) then
+    if (i>=min(Is_obc,Ie_obc) .and. i<=max(Is_obc,Ie_obc)) then
       OBC%OBC_mask_v(i,J_obc) = .true.
       OBC%OBC_kind_v(i,J_obc) = this_kind
       if (Is_obc>Ie_obc) then ! North is outward
