@@ -34,6 +34,7 @@ public set_Flather_data
 
 integer, parameter, public :: OBC_NONE = 0, OBC_SIMPLE = 1, OBC_WALL = 2
 integer, parameter, public :: OBC_FLATHER = 3
+integer, parameter, public :: OBC_RADIATION2D = 4
 integer, parameter, public :: OBC_DIRECTION_N = 100 !< Indicates the boundary is an effective northern boundary
 integer, parameter, public :: OBC_DIRECTION_S = 200 !< Indicates the boundary is an effective southern boundary
 integer, parameter, public :: OBC_DIRECTION_E = 300 !< Indicates the boundary is an effective eastern boundary
@@ -56,7 +57,7 @@ type, public :: ocean_OBC_type
     OBC_mask_u => NULL(), & !< True at zonal velocity points that have prescribed OBCs.
     OBC_mask_v => NULL()    !< True at meridional velocity points that have prescribed OBCs.
   ! These arrays indicate the kind of open boundary conditions that are to be applied at the u and v
-  ! points, and can be OBC_NONE, OBC_SIMPLE, OBC_WALL, or OBC_FLATHER.  Generally these
+  ! points, and can be OBC_NONE, OBC_SIMPLE, OBC_WALL, OBC_FLATHER, or OBC_RADIATION2D.  Generally these
   ! should be consistent with OBC_mask_[uv], with OBC_mask_[uv] .false. for OBC_kind_[uv] = NONE
   ! and true for all other values.
   integer, pointer, dimension(:,:) :: &
@@ -233,6 +234,10 @@ subroutine setup_u_point_obc(OBC, G, segment_str)
     this_kind = OBC_FLATHER
     if  (Je_obc>Js_obc) OBC%apply_OBC_u_flather_east = .true. ! This line will not bee needed soon - AJA
     if  (Je_obc<Js_obc) OBC%apply_OBC_u_flather_west = .true. ! This line will not bee needed soon - AJA
+  elseif (trim(action_str) == 'RADIATION2D') then
+    this_kind = OBC_RADIATION2D
+    if  (Je_obc>Js_obc) OBC%apply_OBC_u_flather_east = .true. ! This line will not bee needed soon - AJA
+    if  (Je_obc<Js_obc) OBC%apply_OBC_u_flather_west = .true. ! This line will not bee needed soon - AJA
   elseif (trim(action_str) == 'SIMPLE') then
     this_kind = OBC_SIMPLE
     OBC%apply_OBC_u = .true. ! This avoids deallocation
@@ -259,7 +264,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str)
       OBC%OBC_kind_u(I_obc,j) = this_kind
       if (Je_obc>Js_obc) then ! East is outward
         OBC%OBC_direction_u(I_obc,j) = OBC_DIRECTION_E ! We only use direction for Flather (maybe)
-        if (this_kind == OBC_FLATHER) then
+        if (this_kind == OBC_FLATHER .or. this_kind == OBC_RADIATION2D) then
           ! Set v points outside segment
           OBC%OBC_mask_v(i_obc+1,J) = .true.
           if (OBC%OBC_direction_v(i_obc+1,J) == OBC_NONE) then
@@ -274,7 +279,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str)
         endif
       else ! West is outward
         OBC%OBC_direction_u(I_obc,j) = OBC_DIRECTION_W ! We only use direction for Flather (maybe)
-        if (this_kind == OBC_FLATHER) then
+        if (this_kind == OBC_FLATHER .or. this_kind == OBC_RADIATION2D) then
           ! Set v points outside segment
           OBC%OBC_mask_v(i_obc,J) = .true.
           if (OBC%OBC_direction_v(i_obc,J) == OBC_NONE) then
@@ -313,6 +318,10 @@ subroutine setup_v_point_obc(OBC, G, segment_str)
     this_kind = OBC_FLATHER
     if (Ie_obc>Is_obc) OBC%apply_OBC_v_flather_north = .true. ! This line will not bee needed soon - AJA
     if (Ie_obc<Is_obc) OBC%apply_OBC_v_flather_south = .true. ! This line will not bee needed soon - AJA
+  elseif (trim(action_str) == 'RADIATION2D') then
+    this_kind = OBC_RADIATION2D
+    if (Ie_obc>Is_obc) OBC%apply_OBC_v_flather_north = .true. ! This line will not bee needed soon - AJA
+    if (Ie_obc<Is_obc) OBC%apply_OBC_v_flather_south = .true. ! This line will not bee needed soon - AJA
   elseif (trim(action_str) == 'SIMPLE') then
     this_kind = OBC_SIMPLE
     OBC%apply_OBC_v = .true. ! This avoids deallocation
@@ -339,7 +348,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str)
       OBC%OBC_kind_v(i,J_obc) = this_kind
       if (Is_obc>Ie_obc) then ! North is outward
         OBC%OBC_direction_v(i,J_obc) = OBC_DIRECTION_N ! We only use direction for Flather
-        if (this_kind == OBC_FLATHER) then
+        if (this_kind == OBC_FLATHER .or. this_kind == OBC_RADIATION2D) then
           ! Set u points outside segment
           OBC%OBC_mask_u(I,j_obc+1) = .true.
           if (OBC%OBC_direction_u(I,j_obc+1) == OBC_NONE) then
@@ -354,7 +363,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str)
         endif
       else ! South is outward
         OBC%OBC_direction_v(i,J_obc) = OBC_DIRECTION_S ! We only use direction for Flather
-        if (this_kind == OBC_FLATHER) then
+        if (this_kind == OBC_FLATHER .or. this_kind == OBC_RADIATION2D) then
           ! Set u points outside segment
           OBC%OBC_mask_u(I,j_obc) = .true.
           if (OBC%OBC_direction_u(I,j_obc) == OBC_NONE) then
@@ -579,7 +588,8 @@ subroutine open_boundary_impose_land_mask(OBC, G)
 
   if (associated(OBC%OBC_kind_u)) then
     do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-      if (G%mask2dCu(I,j) == 0 .and. OBC%OBC_kind_u(I,j) == OBC_FLATHER) then
+      if (G%mask2dCu(I,j) == 0 .and. ((OBC%OBC_kind_u(I,j) == OBC_FLATHER) .or. &
+              (OBC%OBC_kind_u(I,j) == OBC_RADIATION2D))) then
         OBC%OBC_kind_u(I,j) = OBC_NONE
         OBC%OBC_direction_u(I,j) = OBC_NONE
         OBC%OBC_mask_u(I,j) = .false.
@@ -589,7 +599,8 @@ subroutine open_boundary_impose_land_mask(OBC, G)
 
   if (associated(OBC%OBC_kind_v)) then
     do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-      if (G%mask2dCv(i,J) == 0 .and. OBC%OBC_kind_v(i,J) == OBC_FLATHER) then
+      if (G%mask2dCv(i,J) == 0 .and. ((OBC%OBC_kind_v(i,J) == OBC_FLATHER) .or. &
+              (OBC%OBC_kind_v(i,J) == OBC_RADIATION2D))) then
         OBC%OBC_kind_v(i,J) = OBC_NONE
         OBC%OBC_direction_v(i,J) = OBC_NONE
         OBC%OBC_mask_v(i,J) = .false.
@@ -632,9 +643,12 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h_new
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h_old
   ! Local variables
-  real :: dhdt, dhdx, gamma_u, gamma_h, gamma_v
+  real, dimension(SZI_(G),SZJ_(G)) :: grad
+  real :: dhdt, dhdx, dhdy, gamma_u, gamma_h, gamma_v
+  real :: cff, Cx, Cy
   real :: rx_max, ry_max ! coefficients for radiation
   real :: rx_new, rx_avg ! coefficients for radiation
+  real, parameter :: eps = 1.0e-20
 
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -647,8 +661,9 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
   gamma_u = OBC%gamma_uv ; gamma_v = OBC%gamma_uv ; gamma_h = OBC%gamma_h
   rx_max = OBC%rx_max ; ry_max = OBC%rx_max
 
-  if (OBC%apply_OBC_u_flather_east .or. OBC%apply_OBC_u_flather_west) then
-    do k=1,nz ; do j=js,je ; do I=is-1,ie ; if (OBC%OBC_mask_u(I,j)) then
+  do k=1,nz ; do j=js,je ; do I=is-1,ie
+    if (OBC%OBC_mask_u(I,j) .and. ((OBC%OBC_kind_u(I,j) == OBC_FLATHER) .or. &
+                        (OBC%OBC_kind_u(I,j) == OBC_RADIATION2D))) then
       if (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_E) then
         dhdt = u_old(I-1,j,k)-u_new(I-1,j,k) !old-new
         dhdx = u_new(I-1,j,k)-u_new(I-2,j,k) !in new time backward sasha for I-1
@@ -683,16 +698,59 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
     !   OBC%rx_old_h(I,j,k) = rx_avg
     !   h_new(I,j,k) = (h_old(I,j,k) + rx_avg*h_new(I+1,j,k)) / (1.0+rx_avg) !original
       endif
-    endif ; enddo ; enddo ; enddo
-  endif
 
-  if (OBC%apply_OBC_v_flather_north .or. OBC%apply_OBC_v_flather_south) then
-    do k=1,nz ; do J=js-1,je ; do i=is,ie ; if (OBC%OBC_mask_v(i,J)) then
+      if (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_S) then
+        grad(i,j) = u_old(I,j,k) - u_old(I-1,j,k)
+        grad(i,j+1) = u_old(I,j+1,k) - u_old(I-1,j+1,k)
+        grad(i+1,j) = u_old(I+1,j,k) - u_old(I,j,k)
+        grad(i+1,j+1) = u_old(I+1,j+1,k) - u_old(I,j+1,k)
+        dhdt = u_old(I,j+1,k)-u_new(I,j+1,k) !old-new
+        dhdy = u_new(I,j+1,k)-u_new(I,j+2,k) !in new time backward sasha for I+1
+        if (dhdt*dhdx < 0.0) dhdt = 0.0
+        if (dhdt*(grad(i,j+1) + grad(i+1,j+1)) > 0.0) then
+          dhdx = grad(i,j+1)
+        else
+          dhdx = grad(i+1,j+1)
+        endif
+        cff = max(dhdx*dhdx + dhdy*dhdy, eps)
+        Cx = 0.0
+        if (OBC%OBC_kind_u(I,j) == OBC_RADIATION2D) Cx = min(cff, max(dhdt*dhdx, -cff))
+        Cy = dhdt*dhdy
+        u_new(I,j,k) = (cff*u_old(I,j,k) + Cy*u_new(I,j+1,k) - &
+            max(Cx, 0.0)*grad(i,j) - min(Cx, 0.0)*grad(i+1,j))/(cff + Cy)
+      endif
+
+      if (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_N) then
+        grad(i,j) = u_old(i,J,k) - u_old(i-1,J,k)
+        grad(i,j-1) = u_old(i,J-1,k) - u_old(i-1,J-1,k)
+        grad(i+1,j) = u_old(I+1,j,k) - u_old(I,j,k)
+        grad(i+1,j-1) = u_old(I+1,j-1,k) - u_old(I,j-1,k)
+        dhdt = u_old(I,j-1,k)-u_new(I,j-1,k) !old-new
+        dhdy = u_new(I,j-1,k)-u_new(I,j-2,k) !in new time backward sasha for I+1
+        if (dhdt*dhdx < 0.0) dhdt = 0.0
+        if (dhdt*(grad(i,j-1) + grad(i+1,j-1)) > 0.0) then
+          dhdx = grad(i,j-1)
+        else
+          dhdx = grad(i+1,j-1)
+        endif
+        cff = max(dhdx*dhdx + dhdy*dhdy, eps)
+        Cx = 0.0
+        if (OBC%OBC_kind_u(I,j) == OBC_RADIATION2D) Cx = min(cff, max(dhdt*dhdx, -cff))
+        Cy = dhdt*dhdy
+        u_new(I,j,k) = (cff*u_old(I,j,k) + Cy*u_new(I,j-1,k) - &
+            max(Cx, 0.0)*grad(i,j) - min(Cx, 0.0)*grad(i+1,j))/(cff + Cy)
+      endif
+    endif 
+  enddo ; enddo ; enddo
+
+  do k=1,nz ; do J=js-1,je ; do i=is,ie
+    if (OBC%OBC_mask_v(i,J) .and. ((OBC%OBC_kind_v(i,J) == OBC_FLATHER) .or. &
+              (OBC%OBC_kind_v(i,J) == OBC_RADIATION2D))) then
       if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N) then
         dhdt = v_old(i,J-1,k)-v_new(i,J-1,k) !old-new
-        dhdx = v_new(i,J-1,k)-v_new(i,J-2,k) !in new time backward sasha for J-1
+        dhdy = v_new(i,J-1,k)-v_new(i,J-2,k) !in new time backward sasha for J-1
         rx_new = 0.0
-        if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max)
+        if (dhdt*dhdy > 0.0) rx_new = min( (dhdt/dhdy), rx_max)
         rx_avg = (1.0-gamma_v)*OBC%ry_old_v(i,J,k) + gamma_v*rx_new
         OBC%ry_old_v(i,J,k) = rx_avg
         v_new(i,J,k) = (v_old(i,J,k) + rx_avg*v_new(i,J-1,k)) / (1.0+rx_avg)
@@ -708,9 +766,9 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
 
       if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S) then
         dhdt = v_old(i,J+1,k)-v_new(i,J+1,k) !old-new
-        dhdx = v_new(i,J+1,k)-v_new(i,J+2,k) !in new time backward sasha for J+1
+        dhdy = v_new(i,J+1,k)-v_new(i,J+2,k) !in new time backward sasha for J+1
         rx_new = 0.0
-        if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max)
+        if (dhdt*dhdy > 0.0) rx_new = min( (dhdt/dhdy), rx_max)
         rx_avg = (1.0-gamma_v)*OBC%ry_old_v(i,J,k) + gamma_v*rx_new
         OBC%ry_old_v(i,J,k) = rx_avg
         v_new(i,J,k) = (v_old(i,J,k) + rx_avg*v_new(i,J+1,k)) / (1.0+rx_avg)
@@ -724,8 +782,49 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
     !   h_new(i,J,k) = (h_old(i,J,k) + rx_avg*h_new(i,J+1,k)) / (1.0+rx_avg) !original
       endif
 
-    endif ; enddo ; enddo ; enddo
-  endif
+      if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_W) then
+        grad(i,j) = v_old(i,J,k) - v_old(i,J-1,k)
+        grad(i+1,j) = v_old(i+1,J,k) - v_old(i+1,J-1,k)
+        grad(i,j+1) = v_old(i,J+1,k) - v_old(i,J,k)
+        grad(i+1,j+1) = v_old(i+1,J+1,k) - v_old(i+1,J,k)
+        dhdt = v_old(i+1,J,k)-v_new(i+1,J,k) !old-new
+        dhdx = v_new(i+1,J,k)-v_new(i+2,J,k) !in new time backward sasha for I+1
+        if (dhdt*dhdx < 0.0) dhdt = 0.0
+        if (dhdt*(grad(i+1,j) + grad(i+1,j+1)) > 0.0) then
+          dhdy = grad(i+1,j)
+        else
+          dhdy = grad(i+1,j+1)
+        endif
+        cff = max(dhdx*dhdx + dhdy*dhdy, eps)
+        Cx = dhdt*dhdx
+        Cy = 0.0
+        if (OBC%OBC_kind_v(I,j) == OBC_RADIATION2D) Cy = min(cff, max(dhdt*dhdy, -cff))
+        v_new(i,J,k) = (cff*v_old(i,J,k) + Cx*v_new(i+1,J,k) - &
+            max(Cy, 0.0)*grad(i,j) - min(Cy, 0.0)*grad(i+1,j))/(cff + Cx)
+      endif
+
+      if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_E) then
+        grad(i,j) = v_old(i,J,k) - v_old(i,J-1,k)
+        grad(i-1,j) = v_old(i-1,J,k) - v_old(i-1,J-1,k)
+        grad(i,j+1) = v_old(i,J+1,k) - v_old(i,J,k)
+        grad(i-1,j+1) = v_old(i-1,J+1,k) - v_old(i-1,J,k)
+        dhdt = v_old(i-1,J,k)-v_new(i-1,J,k) !old-new
+        dhdx = v_new(i-1,J,k)-v_new(i-2,J,k) !in new time backward sasha for I+1
+        if (dhdt*dhdx < 0.0) dhdt = 0.0
+        if (dhdt*(grad(i-1,j) + grad(i-1,j+1)) > 0.0) then
+          dhdy = grad(i-1,j)
+        else
+          dhdy = grad(i-1,j+1)
+        endif
+        cff = max(dhdx*dhdx + dhdy*dhdy, eps)
+        Cx = dhdt*dhdx
+        Cy = 0.0
+        if (OBC%OBC_kind_v(I,j) == OBC_RADIATION2D) Cy = min(cff, max(dhdt*dhdy, -cff))
+        v_new(i,J,k) = (cff*v_old(i,J,k) + Cx*v_new(i-1,J,k) - &
+            max(Cy, 0.0)*grad(i,j) - min(Cy, 0.0)*grad(i,j+1))/(cff + Cx)
+      endif
+    endif
+  enddo ; enddo ; enddo
 
   call cpu_clock_begin(id_clock_pass)
   call pass_vector(u_new, v_new, G%Domain)

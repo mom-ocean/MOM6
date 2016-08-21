@@ -106,6 +106,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
 use MOM_io, only : vardesc, var_desc
 use MOM_open_boundary, only : ocean_OBC_type, OBC_SIMPLE, OBC_NONE, OBC_FLATHER
+use MOM_open_boundary, only : OBC_RADIATION2D
 use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W
 use MOM_open_boundary, only : OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
@@ -2380,7 +2381,8 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         uhbt(I,j) = BT_OBC%uhbt(I,j)
         ubt(I,j) = BT_OBC%ubt_outer(I,j)
         vel_trans = ubt(I,j)
-      elseif (BT_OBC%OBC_kind_u(I,j) == OBC_FLATHER) then
+      elseif ((BT_OBC%OBC_kind_u(I,j) == OBC_FLATHER) .or. &
+              (BT_OBC%OBC_kind_u(I,j) == OBC_RADIATION2D)) then
         if (BT_OBC%OBC_direction_u(I,j) == OBC_DIRECTION_E) then
           cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j)            ! CFL
           u_inlet = cfl*ubt_old(I-1,j) + (1.0-cfl)*ubt_old(I,j)  ! Valid for cfl<1
@@ -2440,7 +2442,8 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         vhbt(i,J) = BT_OBC%vhbt(i,J)
         vbt(i,J) = BT_OBC%vbt_outer(i,J)
         vel_trans = vbt(i,J)
-      elseif (BT_OBC%OBC_kind_v(i,J) == OBC_FLATHER) then
+      elseif ((BT_OBC%OBC_kind_v(i,J) == OBC_FLATHER) .or. &
+              (BT_OBC%OBC_kind_v(i,J) == OBC_RADIATION2D)) then
         if (BT_OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N) then
           cfl = dtbt * BT_OBC%Cg_v(i,J) * G%IdyCv(I,j)            ! CFL
           v_inlet = cfl*vbt_old(i,J-1) + (1.0-cfl)*vbt_old(i,J)  ! Valid for cfl<1
@@ -2538,52 +2541,58 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
 
   if ((OBC%apply_OBC_u_flather_east .or. OBC%apply_OBC_u_flather_west) .and. &
       associated(BT_OBC%OBC_mask_u)) then
-    do j=js,je ; do I=is-1,ie ; if (BT_OBC%OBC_kind_u(I,j) == OBC_FLATHER) then
-      if (BT_OBC%OBC_direction_u(I,j) == OBC_DIRECTION_E) then
-        cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j)            ! CFL
-        u_inlet = cfl*ubt(I-1,j) + (1.0-cfl)*ubt(I,j)          ! Valid for cfl <1
-!        h_in = 2.0*cfl*eta(i,j) + (1.0-2.0*cfl)*eta(i+1,j)    ! external
-        h_in = eta(i,j) + (0.5-cfl)*(eta(i,j)-eta(i-1,j))      ! internal
+    do j=js,je ; do I=is-1,ie
+      if ((BT_OBC%OBC_kind_u(I,j) == OBC_FLATHER) .or. &
+          (BT_OBC%OBC_kind_u(I,j) == OBC_RADIATION2D)) then
+        if (BT_OBC%OBC_direction_u(I,j) == OBC_DIRECTION_E) then
+          cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j)            ! CFL
+          u_inlet = cfl*ubt(I-1,j) + (1.0-cfl)*ubt(I,j)          ! Valid for cfl <1
+!          h_in = 2.0*cfl*eta(i,j) + (1.0-2.0*cfl)*eta(i+1,j)    ! external
+          h_in = eta(i,j) + (0.5-cfl)*(eta(i,j)-eta(i-1,j))      ! internal
 
-        H_u = BT_OBC%H_u(I,j)
-        eta(i+1,j) = 2.0 * 0.5*((BT_OBC%eta_outer_u(I,j)+h_in) + &
-            (H_u/BT_OBC%Cg_u(I,j))*(u_inlet-BT_OBC%ubt_outer(I,j))) - eta(i,j)
-      elseif (BT_OBC%OBC_direction_u(I,j) == OBC_DIRECTION_W) then
-        cfl = dtbt*BT_OBC%Cg_u(I,j)*G%IdxCu(I,j)                ! CFL
-        u_inlet = cfl*ubt(I+1,j) + (1.0-cfl)*ubt(I,j)          ! Valid for cfl <1
-!        h_in = 2.0*cfl*eta(i+1,j) + (1.0-2.0*cfl)*eta(i,j)    ! external
-        h_in = eta(i+1,j) + (0.5-cfl)*(eta(i+1,j)-eta(i+2,j))  ! internal
+          H_u = BT_OBC%H_u(I,j)
+          eta(i+1,j) = 2.0 * 0.5*((BT_OBC%eta_outer_u(I,j)+h_in) + &
+              (H_u/BT_OBC%Cg_u(I,j))*(u_inlet-BT_OBC%ubt_outer(I,j))) - eta(i,j)
+        elseif (BT_OBC%OBC_direction_u(I,j) == OBC_DIRECTION_W) then
+          cfl = dtbt*BT_OBC%Cg_u(I,j)*G%IdxCu(I,j)                ! CFL
+          u_inlet = cfl*ubt(I+1,j) + (1.0-cfl)*ubt(I,j)          ! Valid for cfl <1
+!          h_in = 2.0*cfl*eta(i+1,j) + (1.0-2.0*cfl)*eta(i,j)    ! external
+          h_in = eta(i+1,j) + (0.5-cfl)*(eta(i+1,j)-eta(i+2,j))  ! internal
 
-        H_u = BT_OBC%H_u(I,j)
-        eta(i,j) = 2.0 * 0.5*((BT_OBC%eta_outer_u(I,j)+h_in) + &
-            (H_u/BT_OBC%Cg_u(I,j))*(BT_OBC%ubt_outer(I,j)-u_inlet)) - eta(i+1,j)
+          H_u = BT_OBC%H_u(I,j)
+          eta(i,j) = 2.0 * 0.5*((BT_OBC%eta_outer_u(I,j)+h_in) + &
+              (H_u/BT_OBC%Cg_u(I,j))*(BT_OBC%ubt_outer(I,j)-u_inlet)) - eta(i+1,j)
+        endif
       endif
-    endif ; enddo ; enddo
+    enddo ; enddo
   endif
 
   if ((OBC%apply_OBC_v_flather_north .or. OBC%apply_OBC_v_flather_south) .and. &
     associated(BT_OBC%OBC_mask_v)) then
-    do J=js-1,je ; do i=is,ie ; if (BT_OBC%OBC_kind_v(i,J) == OBC_FLATHER) then
-      if (BT_OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N) then
-        cfl = dtbt*BT_OBC%Cg_v(i,J)*G%IdyCv(i,J)                ! CFL
-        v_inlet = cfl*vbt(i,J-1) + (1.0-cfl)*vbt(i,J)          ! Valid for cfl <1
-!        h_in = 2.0*cfl*eta(i,j) + (1.0-2.0*cfl)*eta(i,j+1)    ! external
-        h_in = eta(i,j) + (0.5-cfl)*(eta(i,j)-eta(i,j-1))      ! internal
+    do J=js-1,je ; do i=is,ie
+      if ((BT_OBC%OBC_kind_v(i,J) == OBC_FLATHER) .or. &
+          (BT_OBC%OBC_kind_v(i,J) == OBC_RADIATION2D)) then
+        if (BT_OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N) then
+          cfl = dtbt*BT_OBC%Cg_v(i,J)*G%IdyCv(i,J)                ! CFL
+          v_inlet = cfl*vbt(i,J-1) + (1.0-cfl)*vbt(i,J)          ! Valid for cfl <1
+!          h_in = 2.0*cfl*eta(i,j) + (1.0-2.0*cfl)*eta(i,j+1)    ! external
+          h_in = eta(i,j) + (0.5-cfl)*(eta(i,j)-eta(i,j-1))      ! internal
 
-        H_v = BT_OBC%H_v(i,J)
-        eta(i,j+1) = 2.0 * 0.5*((BT_OBC%eta_outer_v(i,J)+h_in) + &
-            (H_v/BT_OBC%Cg_v(i,J))*(v_inlet-BT_OBC%vbt_outer(i,J))) - eta(i,j)
-      elseif (BT_OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S) then
-        cfl = dtbt*BT_OBC%Cg_v(i,J)*G%IdyCv(i,J)                ! CFL
-        v_inlet = cfl*vbt(i,J+1) + (1.0-cfl)*vbt(i,J)          ! Valid for cfl <1
-!        h_in = 2.0*cfl*eta(i,j+1) + (1.0-2.0*cfl)*eta(i,j)    ! external
-        h_in = eta(i,j+1) + (0.5-cfl)*(eta(i,j+1)-eta(i,j+2))  ! internal
+          H_v = BT_OBC%H_v(i,J)
+          eta(i,j+1) = 2.0 * 0.5*((BT_OBC%eta_outer_v(i,J)+h_in) + &
+              (H_v/BT_OBC%Cg_v(i,J))*(v_inlet-BT_OBC%vbt_outer(i,J))) - eta(i,j)
+        elseif (BT_OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S) then
+          cfl = dtbt*BT_OBC%Cg_v(i,J)*G%IdyCv(i,J)                ! CFL
+          v_inlet = cfl*vbt(i,J+1) + (1.0-cfl)*vbt(i,J)          ! Valid for cfl <1
+!          h_in = 2.0*cfl*eta(i,j+1) + (1.0-2.0*cfl)*eta(i,j)    ! external
+          h_in = eta(i,j+1) + (0.5-cfl)*(eta(i,j+1)-eta(i,j+2))  ! internal
 
-        H_v = BT_OBC%H_v(i,J)
-        eta(i,j) = 2.0 * 0.5*((BT_OBC%eta_outer_v(i,J)+h_in) + &
-            (H_v/BT_OBC%Cg_v(i,J))*(BT_OBC%vbt_outer(i,J)-v_inlet)) - eta(i,j+1)
+          H_v = BT_OBC%H_v(i,J)
+          eta(i,j) = 2.0 * 0.5*((BT_OBC%eta_outer_v(i,J)+h_in) + &
+              (H_v/BT_OBC%Cg_v(i,J))*(BT_OBC%vbt_outer(i,J)-v_inlet)) - eta(i,j+1)
+        endif
       endif
-    endif ; enddo ; enddo
+    enddo ; enddo
   endif
 
 end subroutine apply_eta_OBCs
