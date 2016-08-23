@@ -2283,8 +2283,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
 
   press(:)=tv%p_ref
 
-  !Convert T&S to Absolute Salinity and Conservative Temperature if using TEOS10
-!  call convert_temp_salt_for_TEOS10(temp_z,salt_z, press, G, kd, mask_z, eos)
+  !Convert T&S to Absolute Salinity and Conservative Temperature if using TEOS10 or NEMO
+  call convert_temp_salt_for_TEOS10(temp_z,salt_z, press, G, kd, mask_z, eos)
 
   do k=1, kd
     do j=js,je

@@ -29,7 +29,7 @@ module MOM_EOS_NEMO
 !*  These algorithms are NOT from NEMO package!!                       * 
 !***********************************************************************
 
-use gsw_mod_toolbox, only : gsw_sr_from_sp, gsw_ct_from_pt
+!use gsw_mod_toolbox, only : gsw_sr_from_sp, gsw_ct_from_pt
 use gsw_mod_toolbox, only : gsw_rho_first_derivatives
 
 
@@ -229,8 +229,8 @@ subroutine calculate_density_array_nemo(T, S, pressure, rho, start, npts)
 
   do j=start,start+npts-1
     !Conversions
-    zs = gsw_sr_from_sp(S(j))       !Convert practical salinity to absolute salinity
-    zt = gsw_ct_from_pt(S(j),T(j))  !Convert potantial temp to conservative temp
+    zs = S(j) !gsw_sr_from_sp(S(j))       !Convert practical salinity to absolute salinity
+    zt = T(j) !gsw_ct_from_pt(S(j),T(j))  !Convert potantial temp to conservative temp
     zp = pressure(j)* Pa2db         !Convert pressure from Pascal to decibar
 
     if(S(j).lt.-1.0e-10) cycle !Can we assume safely that this is a missing value?
@@ -288,8 +288,8 @@ subroutine calculate_density_derivs_nemo(T, S, pressure, drho_dT, drho_dS, start
 
   do j=start,start+npts-1
     !Conversions
-    zs = gsw_sr_from_sp(S(j))       !Convert practical salinity to absolute salinity
-    zt = gsw_ct_from_pt(S(j),T(j))  !Convert potantial temp to conservative temp
+    zs = S(j) !gsw_sr_from_sp(S(j))       !Convert practical salinity to absolute salinity
+    zt = T(j) !gsw_ct_from_pt(S(j),T(j))  !Convert potantial temp to conservative temp
     zp = pressure(j)* Pa2db         !Convert pressure from Pascal to decibar
 
     if(S(j).lt.-1.0e-10) cycle !Can we assume safely that this is a missing value?
@@ -370,8 +370,8 @@ subroutine calculate_compress_nemo(T, S, pressure, rho, drho_dp, start, npts)
   !
   do j=start,start+npts-1
    !Conversions
-    zs = gsw_sr_from_sp(S(j))       !Convert practical salinity to absolute salinity
-    zt = gsw_ct_from_pt(S(j),T(j))  !Convert potantial temp to conservative temp
+    zs = S(j) !gsw_sr_from_sp(S(j))       !Convert practical salinity to absolute salinity
+    zt = T(j) !gsw_ct_from_pt(S(j),T(j))  !Convert potantial temp to conservative temp
     zp = pressure(j)* Pa2db         !Convert pressure from Pascal to decibar
     if(S(j).lt.-1.0e-10) cycle !Can we assume safely that this is a missing value?
     call gsw_rho_first_derivatives(zs,zt,zp, drho_dp=drho_dp(j))
@@ -400,8 +400,8 @@ subroutine calculate_2_densities_nemo( T, S, pressure1, pressure2, rho1, rho2, s
 
   do j=start,start+npts-1
    !Conversions
-    zs = gsw_sr_from_sp(S(j))       !Convert practical salinity to absolute salinity
-    zt = gsw_ct_from_pt(S(j),T(j))  !Convert potantial temp to conservative temp
+    zs = S(j) !gsw_sr_from_sp(S(j))       !Convert practical salinity to absolute salinity
+    zt = T(j) !gsw_ct_from_pt(S(j),T(j))  !Convert potantial temp to conservative temp
 
     if(S(j).lt.-1.0e-10) cycle !Can we assume safely that this is a missing value?
     !The following algorithm was provided by Roquet in a private communication.
