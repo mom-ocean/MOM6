@@ -120,6 +120,7 @@ use MOM_vert_friction,         only : vertvisc_limit_vel, vertvisc_init
 use MOM_verticalGrid,          only : verticalGrid_type, verticalGridInit, verticalGridEnd
 use MOM_verticalGrid,          only : get_thickness_units, get_flux_units, get_tr_flux_units
 use MOM_wave_speed,            only : wave_speed_init, wave_speed_CS
+use gsw_mod_toolbox,           only : gsw_sp_from_sr, gsw_pt_from_ct
 
 implicit none ; private
 
@@ -177,6 +178,10 @@ type, public :: MOM_control_struct
                                      !! with nkml sublayers and nkbl buffer layer.
   logical :: diabatic_first          !< If true, apply diabatic and thermodynamic
                                      !! processes before time stepping the dynamics.
+  logical :: use_conT_refS           !< If true, , the prognostics T&S are the conservative temperature 
+                                     !! and reference salinity. Care should be taken to convert them
+                                     !! to potential temperature and practical salinity before 
+                                     !! exchanging them with the coupler and/or reporting T&S diagnostics.
   logical :: thickness_diffuse       !< If true, diffuse interface height w/ a diffusivity KHTH.
   logical :: thickness_diffuse_first !< If true, diffuse thickness before dynamics.
   logical :: mixedlayer_restrat      !< If true, use submesoscale mixed layer restratifying scheme.
@@ -265,6 +270,8 @@ type, public :: MOM_control_struct
   integer :: id_h  = -1
   integer :: id_T  = -1
   integer :: id_S  = -1
+  integer :: id_Tcon  = -1
+  integer :: id_Sref  = -1
 
   ! 2-d surface and bottom fields
   integer :: id_zos      = -1
@@ -282,6 +289,8 @@ type, public :: MOM_control_struct
   integer :: id_ssh_inst = -1
   integer :: id_tob      = -1
   integer :: id_sob      = -1
+  integer :: id_consst   = -1
+  integer :: id_refsss   = -1
 
   ! heat and salt flux fields
   integer :: id_fraz         = -1
@@ -462,6 +471,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     h    ! h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
 
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)+1) :: eta_predia, eta_preale
+  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: potTemp, pracSal
 
   real :: tot_wt_ssh, Itot_wt_ssh, I_time_int
   real :: zos_area_mean, volo, ssh_ga
@@ -1118,11 +1128,31 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
 
       ! post some diagnostics
-      if (CS%id_T > 0) call post_data(CS%id_T, CS%tv%T, CS%diag)
-      if (CS%id_S > 0) call post_data(CS%id_S, CS%tv%S, CS%diag)
+      !
+      !In case the internal representation of the model is conservative temperature and reference salinity 
+      !convert, for diagnostics
+      !from conservative temp to potential temp and 
+      !from reference salinity to practical salinity
+      !
+      if(CS%use_conT_refS) then
+         if (CS%id_Tcon > 0) call post_data(CS%id_Tcon, CS%tv%T, CS%diag)
+         if (CS%id_Sref > 0) call post_data(CS%id_Sref, CS%tv%S, CS%diag)
+         !Conversions
+         do k=1,nz ; do j=js,je ; do i=is,ie
+            pracSal(i,j,k) = gsw_sp_from_sr(CS%tv%S(i,j,k))
+            potTemp(i,j,k) = gsw_pt_from_ct(CS%tv%S(i,j,k),CS%tv%T(i,j,k))
+         enddo; enddo ; enddo
+         if (CS%id_T > 0) call post_data(CS%id_T, potTemp, CS%diag)
+         if (CS%id_S > 0) call post_data(CS%id_S, pracSal, CS%diag)
+         if (CS%id_tob > 0) call post_data(CS%id_tob, potTemp(:,:,G%ke), CS%diag, mask=G%mask2dT)
+         if (CS%id_sob > 0) call post_data(CS%id_sob, pracSal(:,:,G%ke), CS%diag, mask=G%mask2dT)
+      else
+         if (CS%id_T > 0) call post_data(CS%id_T, CS%tv%T, CS%diag)
+         if (CS%id_S > 0) call post_data(CS%id_S, CS%tv%S, CS%diag)
 
-      if (CS%id_tob > 0) call post_data(CS%id_tob, CS%tv%T(:,:,G%ke), CS%diag, mask=G%mask2dT)
-      if (CS%id_sob > 0) call post_data(CS%id_sob, CS%tv%S(:,:,G%ke), CS%diag, mask=G%mask2dT)
+         if (CS%id_tob > 0) call post_data(CS%id_tob, CS%tv%T(:,:,G%ke), CS%diag, mask=G%mask2dT)
+         if (CS%id_sob > 0) call post_data(CS%id_sob, CS%tv%S(:,:,G%ke), CS%diag, mask=G%mask2dT)
+      endif
 
       if (CS%id_Tadx   > 0) call post_data(CS%id_Tadx,   CS%T_adx,   CS%diag)
       if (CS%id_Tady   > 0) call post_data(CS%id_Tady,   CS%T_ady,   CS%diag)
@@ -1486,6 +1516,12 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                  "If true, apply diabatic and thermodynamic processes, \n"//&
                  "including buoyancy forcing and mass gain or loss, \n"//&
                  "before stepping the dynamics forward.", default=.false.)
+  call get_param(param_file, "MOM", "USE_CONTEMP_REFSAL", CS%use_conT_refS, &
+                 "If true, , the prognostics T&S are the conservative temperature \n"//&
+                 "and reference salinity. Care should be taken to convert them \n"//&
+                 "to potential temperature and practical salinity before  \n"//&
+                 "exchanging them with the coupler and/or reporting T&S diagnostics. \n"&
+                 , default=.false.)
   call get_param(param_file, "MOM", "ADIABATIC", CS%adiabatic, &
                  "There are no diapycnal mass fluxes if ADIABATIC is \n"//&
                  "true. This assumes that KD = KDML = 0.0 and that \n"//&
@@ -2224,6 +2260,15 @@ subroutine register_diags(Time, G, GV, CS, ADp)
         cmor_long_name='Square of Sea Surface Salinity ', cmor_units='ppt^2', &
         cmor_standard_name='square_of_sea_surface_salinity')
     if (CS%id_sss_sq > 0) call safe_alloc_ptr(CS%SSS_sq,isd,ied,jsd,jed)
+    CS%id_Tcon = register_diag_field('ocean_model', 'contemp', diag%axesTL, Time, &
+        'Conservative Temperature', 'Celsius')
+    CS%id_Sref = register_diag_field('ocean_model', 'refsalt', diag%axesTL, Time, &
+        long_name='Reference Salinity', units='g/Kg')
+    CS%id_consst = register_diag_field('ocean_model', 'conSST', diag%axesT1, Time,     &
+        'Sea Surface Conservative Temperature', 'Celsius', CS%missing)
+    CS%id_refsss = register_diag_field('ocean_model', 'refSSS', diag%axesT1, Time,     &
+        'Sea Surface Reference Salinity', 'g/Kg', CS%missing)
+
   endif
 
   if (CS%use_temperature .and. CS%use_frazil) then
