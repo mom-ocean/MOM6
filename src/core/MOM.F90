@@ -708,11 +708,11 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         fluxes%fluxes_used = .true.
         call cpu_clock_end(id_clock_diabatic)
 
-        if (CS%id_u_preale > 0) call post_data(CS%id_u_preale, u,       CS%diag, mask = write_all_3du)
-        if (CS%id_v_preale > 0) call post_data(CS%id_v_preale, v,       CS%diag, mask = write_all_3dv)
-        if (CS%id_h_preale > 0) call post_data(CS%id_h_preale, h,       CS%diag, mask = write_all_3dt)
-        if (CS%id_T_preale > 0) call post_data(CS%id_T_preale, CS%tv%T, CS%diag, mask = write_all_3dt)
-        if (CS%id_S_preale > 0) call post_data(CS%id_S_preale, CS%tv%S, CS%diag, mask = write_all_3dt)
+        if (CS%id_u_preale > 0) call post_data(CS%id_u_preale, u,       CS%diag)
+        if (CS%id_v_preale > 0) call post_data(CS%id_v_preale, v,       CS%diag)
+        if (CS%id_h_preale > 0) call post_data(CS%id_h_preale, h,       CS%diag)
+        if (CS%id_T_preale > 0) call post_data(CS%id_T_preale, CS%tv%T, CS%diag)
+        if (CS%id_S_preale > 0) call post_data(CS%id_S_preale, CS%tv%S, CS%diag)
         if (CS%id_e_preale > 0) then
             call find_eta(h, CS%tv, GV%g_Earth, G, GV, eta_preale)
             call post_data(CS%id_e_preale, eta_preale, CS%diag)
@@ -1058,11 +1058,11 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         ! Regridding/remapping is done here, at the end of the thermodynamics time step
         ! (that may comprise several dynamical time steps)
         ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
-        if (CS%id_u_preale > 0) call post_data(CS%id_u_preale, u,       CS%diag, mask = write_all_3du)
-        if (CS%id_v_preale > 0) call post_data(CS%id_v_preale, v,       CS%diag, mask = write_all_3dv)
-        if (CS%id_h_preale > 0) call post_data(CS%id_h_preale, h,       CS%diag, mask = write_all_3dt)
-        if (CS%id_T_preale > 0) call post_data(CS%id_T_preale, CS%tv%T, CS%diag, mask = write_all_3dt)
-        if (CS%id_S_preale > 0) call post_data(CS%id_S_preale, CS%tv%S, CS%diag, mask = write_all_3dt)
+        if (CS%id_u_preale > 0) call post_data(CS%id_u_preale, u,       CS%diag)
+        if (CS%id_v_preale > 0) call post_data(CS%id_v_preale, v,       CS%diag)
+        if (CS%id_h_preale > 0) call post_data(CS%id_h_preale, h,       CS%diag)
+        if (CS%id_T_preale > 0) call post_data(CS%id_T_preale, CS%tv%T, CS%diag)
+        if (CS%id_S_preale > 0) call post_data(CS%id_S_preale, CS%tv%S, CS%diag)
         if (CS%id_e_preale > 0) then
             call find_eta(h, CS%tv, G%g_Earth, G, GV, eta_preale)
             call post_data(CS%id_e_preale, eta_preale, CS%diag)
@@ -1226,7 +1226,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     call enable_averaging(dt,Time_local, CS%diag)
     if (CS%id_u > 0) call post_data(CS%id_u, u, CS%diag)
     if (CS%id_v > 0) call post_data(CS%id_v, v, CS%diag)
-    if (CS%id_h > 0) call post_data(CS%id_h, h, CS%diag, mask=write_all_3dt)
+    if (CS%id_h > 0) call post_data(CS%id_h, h, CS%diag)
 
     ! compute ssh, which is either eta_av for Bouss, or
     ! diagnosed ssh for non-Bouss; call "find_eta" for this
@@ -1513,12 +1513,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         endif
         call cpu_clock_begin(id_clock_ALE)
         call ALE_main(G, GV, CS%offline_CSp%h_preale, CS%offline_CSp%u_preale, &
-<<<<<<< HEAD
-                        CS%offline_CSp%v_preale, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%offline_CSp%dt_offline)
-=======
                         CS%offline_CSp%v_preale, CS%tv, CS%tracer_Reg, &
                         CS%ALE_CSp, CS%offline_CSp%dt_offline)
->>>>>>> a2bbd6809fc6cf7d11c44bf96d26dba56c80b9bb
         call cpu_clock_end(id_clock_ALE)
 
         if (CS%debug) then
@@ -1536,7 +1532,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       ! for vertical remapping may need to be regenerated. This needs to
       ! happen after the H update and before the next post_data.
       call diag_update_target_grids(CS%diag)
-      call post_diags_TS_vardec(G, CS, CS%dt_trans)
+      call post_diags_TS_vardec(G, CS, CS%offline_CSp%dt_offline)
 
       h_pre = CS%offline_CSp%h_preale;
       call pass_var(h_pre,G%Domain)
@@ -1663,8 +1659,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
             abs(uhtr(I,j,k)) + abs(vhtr(i,J-1,k)) + abs(vhtr(i,J,k))
       enddo; enddo; enddo
 
-!      call sum_across_PEs(sum_abs_fluxes)
-!      if (is_root_pe()) print *, "Remaining fluxes", sum_abs_fluxes
+      call sum_across_PEs(sum_abs_fluxes)
+      if (is_root_pe()) print *, "Remaining fluxes", sum_abs_fluxes
 !      if ( sum_abs_fluxes == 0.0) then
 !        print *, "Advection converged early at ", iter, "iterations"
 !        exit
@@ -1732,8 +1728,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       call diag_update_target_grids(CS%diag)
       call post_diags_TS_vardec(G, CS, CS%offline_CSp%dt_offline)
 
-      h_new = CS%offline_CSp%h_preale
-      call pass_var(h_new,G%Domain)
+      h_end = CS%offline_CSp%h_preale
+      call pass_var(h_end,G%Domain)
 
     endif !Diabatic second and ALE
 

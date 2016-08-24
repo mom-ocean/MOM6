@@ -1374,8 +1374,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   if (CS%id_Kd_ePBL      > 0) call post_data(CS%id_Kd_ePBL,      Kd_ePBL, CS%diag)
 
   write_all_3dt(:,:,:) = 1.
-  if (CS%id_ea       > 0) call post_data(CS%id_ea,       ea, CS%diag, mask = write_all_3dt)
-  if (CS%id_eb       > 0) call post_data(CS%id_eb,       eb, CS%diag, mask = write_all_3dt)
+  if (CS%id_ea       > 0) call post_data(CS%id_ea,       eatr, CS%diag)
+  if (CS%id_eb       > 0) call post_data(CS%id_eb,       ebtr, CS%diag)
 
   if (CS%id_hloss_boundary > 0) call post_data(CS%id_hloss_boundary, hloss_boundary, CS%diag, mask = write_all_3dt)
 
