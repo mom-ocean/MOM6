@@ -1512,7 +1512,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         endif
         call cpu_clock_begin(id_clock_ALE)
         call ALE_main(G, GV, CS%offline_CSp%h_preale, CS%offline_CSp%u_preale, &
-                        CS%offline_CSp%v_preale, CS%tv, CS%tracer_Reg, CS%ALE_CSp, dt_iter)
+                        CS%offline_CSp%v_preale, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%offline_CSp%dt_offline)
         call cpu_clock_end(id_clock_ALE)
 
         if (CS%debug) then
@@ -1674,7 +1674,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         endif
         call cpu_clock_begin(id_clock_ALE)
         call ALE_main(G, GV, CS%offline_CSp%h_preale, CS%offline_CSp%u_preale, &
-                        CS%offline_CSp%v_preale, CS%tv, CS%tracer_Reg, CS%ALE_CSp, dt_iter)
+                        CS%offline_CSp%v_preale, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%offline_CSp%dt_offline)
         call cpu_clock_end(id_clock_ALE)
 
         if (CS%debug) then
@@ -1692,7 +1692,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       ! for vertical remapping may need to be regenerated. This needs to
       ! happen after the H update and before the next post_data.
       call diag_update_target_grids(CS%diag)
-      call post_diags_TS_vardec(G, CS, CS%dt_trans)
+      call post_diags_TS_vardec(G, CS, CS%offline_CSp%dt_offline)
 
     endif !Diabatic second and ALE
 

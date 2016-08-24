@@ -194,9 +194,9 @@ contains
       timelevel=CS%ridx_mean,position=CENTER)
 
     !! Time-averaged fields
-    call read_data(CS%mean_file, 'temp_preadv',   temp, domain=G%Domain%mpp_domain, &
+    call read_data(CS%snap_file, 'temp_preadv',   temp, domain=G%Domain%mpp_domain, &
       timelevel=CS%ridx_mean,position=CENTER)
-    call read_data(CS%mean_file, 'salt_preadv',   salt, domain=G%Domain%mpp_domain, &
+    call read_data(CS%snap_file, 'salt_preadv',   salt, domain=G%Domain%mpp_domain, &
       timelevel=CS%ridx_mean,position=CENTER)
 
     !! Read snapshot fields (end of time interval timestamp)

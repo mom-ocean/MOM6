@@ -945,7 +945,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
 
     ! ea is for passive tracers
     do i=is,ie
-      ea(i,j,1) = netMassInOut(i)
+!      ea(i,j,1) = netMassInOut(i)
       if (aggregate_FW_forcing) then
         netMassOut(i) = netMassInOut(i)
         netMassIn(i) = 0.
@@ -978,6 +978,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
           Temp_in = T2d(i,k)
           Salin_in = 0.0
           dTemp = dTemp + dThickness*Temp_in
+          ea(i,j,1) = dThickness
 
           ! Diagnostics of heat content associated with mass fluxes
           if (ASSOCIATED(fluxes%heat_content_massin))                             &
@@ -1045,6 +1046,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
 
           ! Change in state due to forcing
           dThickness = max( fractionOfForcing*netMassOut(i), -h2d(i,k) )
+          if (k.eq.1) ea(i,j,k) = ea(i,j,k) + dThickness
           dTemp      = fractionOfForcing*netHeat(i)
           !   ### The 0.9999 here should become a run-time parameter?
           dSalt = max( fractionOfForcing*netSalt(i), -0.9999*h2d(i,k)*tv%S(i,j,k))
