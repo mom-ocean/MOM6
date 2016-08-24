@@ -104,6 +104,7 @@ end type axes_grp
 type, private :: diag_type
   logical :: in_use
   integer :: fms_diag_id         ! underlying FMS diag id
+  character(16) :: debug_str
   type(axes_grp), pointer :: remap_axes => null()
   real, pointer, dimension(:,:)   :: mask2d => null()
   real, pointer, dimension(:,:,:) :: mask3d => null()
@@ -204,7 +205,7 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
   integer :: id_xq, id_yq, id_zl, id_zi, id_xh, id_yh, id_zzl, id_zzi
   integer :: k, nz
   integer :: nzi(4)
-  real :: zlev(G%ke), zinter(G%ke+1)
+  real :: zlev(GV%ke), zinter(GV%ke+1)
   logical :: set_vert
   character(len=200) :: inputdir, string, filename, varname, dimname
 
@@ -215,7 +216,7 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
   set_vert = .true. ; if (present(set_vertical)) set_vert = set_vertical
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version)
+  call log_version(param_file, mod, version, "")
 
   if(G%symmetric) then
     id_xq = diag_axis_init('xq', G%gridLonB(G%isgB:G%iegB), G%x_axis_units, 'x', &
@@ -234,7 +235,7 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
               'h point nominal latitude', Domain2=G%Domain%mpp_domain)
 
   if (set_vert) then
-    nz = G%ke
+    nz = GV%ke
     zinter(1:nz+1) = GV%sInterface(1:nz+1)
     zlev(1:nz) = GV%sLayer(1:nz)
     id_zl = diag_axis_init('zl', zlev, trim(GV%zAxisUnits), 'z', &
@@ -262,7 +263,7 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
   if (len_trim(string) > 0) then
     if (trim(string) == 'UNIFORM') then
       ! initialise a uniform coordinate with depth
-      nzi(1) = G%ke + 1
+      nzi(1) = GV%ke + 1
       allocate(diag_cs%zi_remap(nzi(1)))
       allocate(diag_cs%zl_remap(nzi(1) - 1))
 
@@ -628,11 +629,9 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
   endif
 
   if (present(mask)) then
-    if ((size(field,1) /= size(mask,1)) .or. &
-        (size(field,2) /= size(mask,2))) then
-      call MOM_error(FATAL, "post_data_2d_low: post_data called with a mask "//&
-                             "that does not match the size of field.")
-    endif
+    call check_field_and_mask_shape_2d(diag, field, mask)
+  elseif ((diag_cs%ave_enabled) .and. associated(diag%mask2d)) then
+    call check_field_and_mask_shape_2d(diag, field, diag%mask2d)
   endif
 
   if (is_stat) then
@@ -755,7 +754,8 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
         ! Check that H is up-to-date.
         do k=RANGE_K(diag_cs%h)
           if (diag_cs%h_old(i,j,k) /= diag_cs%h(i,j,k)) call MOM_error(FATAL, &
-            "remap_diag_to_z: H has changed since remapping grids were updated")
+            "remap_diag_to_z: H has changed since remapping grids were updated."//&
+            " diag debug hint: "//diag%debug_str)
         enddo
 #endif
         h_src(:) = 0.5 * (diag_cs%h(i,j,:) + diag_cs%h(i+1,j,:))
@@ -780,7 +780,8 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
         ! Check that H is up-to-date.
         do k=RANGE_K(diag_cs%h)
           if (diag_cs%h_old(i,j,k) /= diag_cs%h(i,j,k)) call MOM_error(FATAL, &
-            "remap_diag_to_z: H has changed since remapping grids were updated")
+            "remap_diag_to_z: H has changed since remapping grids were updated."//&
+            " diag debug hint: "//diag%debug_str)
         enddo
 #endif
         h_src(:) = 0.5 * (diag_cs%h(i,j,:) + diag_cs%h(i,j+1,:))
@@ -805,7 +806,8 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
         ! Check that H is up-to-date.
         do k=RANGE_K(diag_cs%h)
           if (diag_cs%h_old(i,j,k) /= diag_cs%h(i,j,k)) call MOM_error(FATAL, &
-            "remap_diag_to_z: H has changed since remapping grids were updated")
+            "remap_diag_to_z: H has changed since remapping grids were updated."//&
+            " diag debug hint: "//diag%debug_str)
         enddo
 #endif
         h_dest(:) = diag_cs%h_zoutput(i,j,:)
@@ -828,14 +830,14 @@ end subroutine remap_diag_to_z
 !! height changes.
 subroutine diag_update_target_grids(diag_cs)
   type(diag_ctrl), intent(inout) :: diag_cs !< Diagnostics control structure
+
   ! Local variables
-  real, dimension(size(diag_cs%h, 3)) :: h_src
   type(ocean_grid_type), pointer :: G
   real :: depth
   integer :: nz_src, nz_dest
   integer :: i, j, k
   logical :: force, h_changed
-  real, dimension(diag_cs%G%ke) :: h_src_1d
+  real, dimension(size(diag_cs%h, 3)) :: h_src_1d
   real, dimension(diag_cs%nz_remap) :: h_zout_1d
   real, dimension(diag_cs%nz_remap+1) :: z_out_1d
 
@@ -941,12 +943,9 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   endif
 
   if (present(mask)) then
-    if ((size(field,1) /= size(mask,1)) .or. &
-        (size(field,2) /= size(mask,2)) .or. &
-        (size(field,3) /= size(mask,3))) then
-      call MOM_error(FATAL, "post_data_3d_low: post_data called with a mask "//&
-                             "that does not match the size of field.")
-    endif
+    call check_field_and_mask_shape_3d(diag, field, mask)
+  elseif ((diag_cs%ave_enabled) .and. associated(diag%mask3d)) then
+    call check_field_and_mask_shape_3d(diag, field, diag%mask3d)
   endif
 
   if (is_stat) then
@@ -1103,6 +1102,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
     call alloc_diag_with_id(primary_id, diag_cs, diag)
     call assert(associated(diag), 'register_diag_field: diag allocation failed')
     diag%fms_diag_id = fms_id
+    diag%debug_str = trim(field_name)
     call set_diag_mask(diag, diag_cs, axes)
   endif
   if (is_root_pe() .and. diag_CS%doc_unit > 0) then
@@ -1148,6 +1148,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
       ! In the case where there is no primary, it will become the primary.
       call alloc_diag_with_id(primary_id, diag_cs, cmor_diag)
       cmor_diag%fms_diag_id = fms_id
+      cmor_diag%debug_str = trim(cmor_field_name)
       call set_diag_mask(cmor_diag, diag_cs, axes)
     endif
     if (is_root_pe() .and. diag_CS%doc_unit > 0) then
@@ -1182,7 +1183,8 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
       call attach_cell_methods(fms_id, z_remap_diag%remap_axes, cm_string, &
                                cell_methods, x_cell_method, y_cell_method, v_cell_method)
       z_remap_diag%fms_diag_id = fms_id
-  
+      z_remap_diag%debug_str = trim(field_name)
+
       if (is_u_axes(axes, diag_cs)) then
         diag_cs%do_z_remapping_on_u = .true.
       elseif (is_v_axes(axes, diag_cs)) then
@@ -1221,7 +1223,8 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
         call attach_cell_methods(fms_id, cmor_z_remap_diag%remap_axes, cm_string, &
                                  cell_methods, x_cell_method, y_cell_method, v_cell_method)
         cmor_z_remap_diag%fms_diag_id = fms_id
-    
+        cmor_z_remap_diag%debug_str = trim(cmor_field_name)
+
         if (is_u_axes(axes, diag_cs)) then
           diag_cs%do_z_remapping_on_u = .true.
         elseif (is_v_axes(axes, diag_cs)) then
@@ -1376,6 +1379,7 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
     call alloc_diag_with_id(primary_id, diag_cs, diag)
     call assert(associated(diag), 'register_scalar_field: diag allocation failed')
     diag%fms_diag_id = fms_id
+    diag%debug_str = trim(field_name)
   endif
 
   if (present(cmor_field_name)) then
@@ -1405,6 +1409,7 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
       endif
       call alloc_diag_with_id(primary_id, diag_cs, cmor_diag)
       cmor_diag%fms_diag_id = fms_id
+      cmor_diag%debug_str = trim(cmor_field_name)
     endif
   endif
 
@@ -1480,6 +1485,7 @@ function register_static_field(module_name, field_name, axes, &
     call alloc_diag_with_id(primary_id, diag_cs, diag)
     call assert(associated(diag), 'register_static_field: diag allocation failed')
     diag%fms_diag_id = fms_id
+    diag%debug_str = trim(field_name)
   endif
 
   if (present(cmor_field_name)) then
@@ -1510,6 +1516,7 @@ function register_static_field(module_name, field_name, axes, &
       endif
       call alloc_diag_with_id(primary_id, diag_cs, cmor_diag)
       cmor_diag%fms_diag_id = fms_id
+      cmor_diag%debug_str = trim(cmor_field_name)
     endif
   endif
 
@@ -1654,11 +1661,16 @@ subroutine diag_mediator_infrastructure_init(err_msg)
   call diag_manager_init(err_msg=err_msg)
 end subroutine diag_mediator_infrastructure_init
 
-subroutine diag_mediator_init(G, param_file, diag_cs, doc_file_dir)
-  type(ocean_grid_type), target, intent(inout) :: G
-  type(param_file_type),      intent(in)    :: param_file
-  type(diag_ctrl),            intent(inout) :: diag_cs
-  character(len=*), optional, intent(in)    :: doc_file_dir
+!> diag_mediator_init initializes the MOM diag_mediator and opens the available
+!! diagnostics file, if appropriate.
+subroutine diag_mediator_init(G, nz, param_file, diag_cs, doc_file_dir)
+  type(ocean_grid_type), target, intent(inout) :: G  !< The ocean grid type.
+  integer,                    intent(in)    :: nz    !< The number of layers in the model's native grid.
+  type(param_file_type),      intent(in)    :: param_file !< Parameter file structure
+  type(diag_ctrl),            intent(inout) :: diag_cs !< A pointer to a type with many variables
+                                                     !! used for diagnostics
+  character(len=*), optional, intent(in)    :: doc_file_dir !< A directory in which to create the
+                                                     !! file 
 
   ! This subroutine initializes the diag_mediator and the diag_manager.
   ! The grid type should have its dimensions set by this point, but it
@@ -1693,7 +1705,7 @@ subroutine diag_mediator_init(G, param_file, diag_cs, doc_file_dir)
   diag_cs%do_z_remapping_on_T = .false.
   diag_cs%remapping_initialized = .false.
 #if defined(DEBUG) || defined(__DO_SAFETY_CHECKS__)
-  allocate(diag_cs%h_old(G%isd:G%ied,G%jsd:G%jed,G%ke))
+  allocate(diag_cs%h_old(G%isd:G%ied,G%jsd:G%jed,nz))
   diag_cs%h_old(:,:,:) = 0.0
 #endif
 
@@ -1755,11 +1767,13 @@ subroutine diag_set_thickness_ptr(h, diag_cs)
 
 end subroutine
 
-subroutine diag_masks_set(G, missing_value, diag_cs)
-! Setup the 2d masks for diagnostics
-  type(ocean_grid_type), target, intent(in) :: G
-  real,                          intent(in) :: missing_value
-  type(diag_ctrl),          pointer    :: diag_cs
+!> diag_masks_set sets up the 2d and 3d masks for diagnostics
+subroutine diag_masks_set(G, nz, missing_value, diag_cs)
+  type(ocean_grid_type), target, intent(in) :: G  !< The ocean grid type.
+  integer,                       intent(in) :: nz !< The number of layers in the model's native grid.
+  real,                          intent(in) :: missing_value !< A value to use for masked points.
+  type(diag_ctrl),               pointer    :: diag_cs !< A pointer to a type with many variables
+                                                  !! used for diagnostics
   ! Local variables
   integer :: k
 
@@ -1767,21 +1781,21 @@ subroutine diag_masks_set(G, missing_value, diag_cs)
   diag_cs%mask2dBu=> G%mask2dBu
   diag_cs%mask2dCu=> G%mask2dCu
   diag_cs%mask2dCv=> G%mask2dCv
-  allocate(diag_cs%mask3dTL(G%isd:G%ied,G%jsd:G%jed,1:G%ke))
-  allocate(diag_cs%mask3dBuL(G%IsdB:G%IedB,G%JsdB:G%JedB,1:G%ke))
-  allocate(diag_cs%mask3dCuL(G%IsdB:G%IedB,G%jsd:G%jed,1:G%ke))
-  allocate(diag_cs%mask3dCvL(G%isd:G%ied,G%JsdB:G%JedB,1:G%ke))
-  do k = 1,G%ke
+  allocate(diag_cs%mask3dTL(G%isd:G%ied,G%jsd:G%jed,1:nz))
+  allocate(diag_cs%mask3dBuL(G%IsdB:G%IedB,G%JsdB:G%JedB,1:nz))
+  allocate(diag_cs%mask3dCuL(G%IsdB:G%IedB,G%jsd:G%jed,1:nz))
+  allocate(diag_cs%mask3dCvL(G%isd:G%ied,G%JsdB:G%JedB,1:nz))
+  do k=1,nz
     diag_cs%mask3dTL(:,:,k)  = diag_cs%mask2dT (:,:)
     diag_cs%mask3dBuL(:,:,k) = diag_cs%mask2dBu(:,:)
     diag_cs%mask3dCuL(:,:,k) = diag_cs%mask2dCu(:,:)
     diag_cs%mask3dCvL(:,:,k) = diag_cs%mask2dCv(:,:)
   enddo
-  allocate(diag_cs%mask3dTi(G%isd:G%ied,G%jsd:G%jed,1:G%ke+1))
-  allocate(diag_cs%mask3dBui(G%IsdB:G%IedB,G%JsdB:G%JedB,1:G%ke+1))
-  allocate(diag_cs%mask3dCui(G%IsdB:G%IedB,G%jsd:G%jed,1:G%ke+1))
-  allocate(diag_cs%mask3dCvi(G%isd:G%ied,G%JsdB:G%JedB,1:G%ke+1))
-  do k = 1,G%ke+1
+  allocate(diag_cs%mask3dTi(G%isd:G%ied,G%jsd:G%jed,1:nz+1))
+  allocate(diag_cs%mask3dBui(G%IsdB:G%IedB,G%JsdB:G%JedB,1:nz+1))
+  allocate(diag_cs%mask3dCui(G%IsdB:G%IedB,G%jsd:G%jed,1:nz+1))
+  allocate(diag_cs%mask3dCvi(G%isd:G%ied,G%JsdB:G%JedB,1:nz+1))
+  do k=1,nz+1
     diag_cs%mask3dTi(:,:,k)  = diag_cs%mask2dT (:,:)
     diag_cs%mask3dBui(:,:,k) = diag_cs%mask2dBu(:,:)
     diag_cs%mask3dCui(:,:,k) = diag_cs%mask2dCu(:,:)
@@ -2097,6 +2111,38 @@ subroutine log_available_diag(used, module_name, field_name, cell_methods_string
     call describe_option("cell_methods", trim(cell_methods_string), diag_CS)
 
 end subroutine log_available_diag
+
+subroutine check_field_and_mask_shape_2d(diag, field, mask)
+  type(diag_type),   intent(in) :: diag
+  real,              intent(in) :: field(:,:)
+  real,              intent(in) :: mask(:,:)
+
+  integer :: i
+
+  do i=1, size(shape(field))
+    if (size(field, i) /= size(mask, i)) then
+      call MOM_error(FATAL,"check_field_and_mask_2d: field and mask have "//&
+                           "different shape, diag debug hint: "//diag%debug_str)
+    endif
+  enddo
+
+end subroutine
+
+subroutine check_field_and_mask_shape_3d(diag, field, mask)
+  type(diag_type),   intent(in) :: diag
+  real,              intent(in) :: field(:, :, :)
+  real,              intent(in) :: mask(:, :, :)
+
+  integer :: i
+
+  do i=1, size(shape(field))
+    if (size(field, i) /= size(mask, i)) then
+      call MOM_error(FATAL,"check_field_and_mask_3d: field and mask have "//&
+                           "different shape, diag debug hint: "//diag%debug_str)
+    endif
+  enddo
+
+end subroutine
 
 subroutine assert(logical_arg, msg)
 

@@ -14,9 +14,9 @@ use MOM_checksums,       only : hchksum
 use MOM_error_handler,   only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser,     only : get_param, log_version, param_file_type
 use MOM_grid,            only : ocean_grid_type
+use MOM_open_boundary,   only : ocean_OBC_type, OBC_DIRECTION_E
+use MOM_open_boundary,   only : OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_tracer_registry, only : tracer_registry_type, tracer_type, MOM_tracer_chksum
-use MOM_variables,       only : ocean_OBC_type, OBC_FLATHER_E
-use MOM_variables,       only : OBC_FLATHER_W, OBC_FLATHER_N, OBC_FLATHER_S
 use MOM_verticalGrid,    only : verticalGrid_type
 implicit none ; private
 
@@ -44,7 +44,7 @@ contains
 
 !> This routine time steps the tracer concentration using a 
 !! monotonic, conservative, weakly diffusive scheme.
-subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, h_prev_opt, max_iter_in, x_first_in)
+subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, h_prev_opt, max_iter_in, x_first_in, skip_limiter_in)
   type(ocean_grid_type),                     intent(inout) :: G     !< ocean grid structure 
   type(verticalGrid_type),                   intent(in)    :: GV    !< ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h_end !< layer thickness after advection (m or kg m-2)
@@ -57,6 +57,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, h_prev_opt,
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional      :: h_prev_opt !< layer thickness before advection (m or kg m-2)
   integer,                                   optional      :: max_iter_in
   logical,                                   optional      :: x_first_in
+  logical,                                   optional      :: skip_limiter_in
 
 
   type(tracer_type) :: Tr(MAX_FIELDS_) ! The array of registered tracers
@@ -83,6 +84,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, h_prev_opt,
   integer :: i, j, k, m, is, ie, js, je, isd, ied, jsd, jed, nz, itt, ntr, do_any
   integer :: isv, iev, jsv, jev ! The valid range of the indices.
   integer :: IsdB, IedB, JsdB, JedB
+  logical :: skip_limiter
 
   domore_u(:,:) = .false.
   domore_v(:,:) = .false.
@@ -108,7 +110,8 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, h_prev_opt,
 
   if(present(max_iter_in)) max_iter = max_iter_in
   if(present(x_first_in))  x_first = x_first_in
-
+  skip_limiter = .false.
+  if(present(skip_limiter_in)) skip_limiter = skip_limiter_in
   call cpu_clock_begin(id_clock_pass)
   call create_group_pass(CS%pass_uhr_vhr_t_hprev, uhr, vhr, G%Domain)
   call create_group_pass(CS%pass_uhr_vhr_t_hprev, hprev, G%Domain)
@@ -248,11 +251,11 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, h_prev_opt,
 
         ! First, advect zonally.
         call advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
-                      isv, iev, jsv-stencil, jev+stencil, k, G, GV, CS%usePPM)
+                      isv, iev, jsv-stencil, jev+stencil, k, G, GV, CS%usePPM, skip_limiter)
 
         !  Next, advect meridionally.
         call advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
-                      isv, iev, jsv, jev, k, G, GV, CS%usePPM)
+                      isv, iev, jsv, jev, k, G, GV, CS%usePPM, skip_limiter)
 
         domore_k(k) = 0
         do j=jsv-stencil,jev+stencil ; if (domore_u(j,k)) domore_k(k) = 1 ; enddo
@@ -262,11 +265,11 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, h_prev_opt,
 
         ! First, advect meridionally.
         call advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
-                      isv-stencil, iev+stencil, jsv, jev, k, G, GV, CS%usePPM)
+                      isv-stencil, iev+stencil, jsv, jev, k, G, GV, CS%usePPM, skip_limiter)
 
         ! Next, advect zonally.
         call advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
-                      isv, iev, jsv, jev, k, G, GV, CS%usePPM)
+                      isv, iev, jsv, jev, k, G, GV, CS%usePPM, skip_limiter)
 
         domore_k(k) = 0
         do j=jsv,jev ; if (domore_u(j,k)) domore_k(k) = 1 ; enddo
@@ -300,7 +303,7 @@ end subroutine advect_tracer
 !> This subroutine does 1-d flux-form advection in the zonal direction using
 !! a monotonic piecewise linear scheme.
 subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
-                    is, ie, js, je, k, G, GV, usePPM)
+                    is, ie, js, je, k, G, GV, usePPM, skip_limiter_in)
   type(ocean_grid_type),                     intent(inout) :: G
   type(verticalGrid_type),                   intent(in)    :: GV
   type(tracer_type), dimension(ntr),         intent(inout) :: Tr
@@ -312,6 +315,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
   real,                                      intent(in)    :: Idt
   integer,                                   intent(in)    :: ntr, is, ie, js, je,k
   logical,                                   intent(in)    :: usePPM
+  logical,                                   optional      :: skip_limiter_in
 
   real, dimension(SZIB_(G),ntr) :: &
     slope_x, &          ! The concentration slope per grid point in units of
@@ -336,7 +340,10 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
   logical :: do_any_i
   integer :: i, j, m
   real :: aR, aL, dMx, dMn, Tp, Tc, Tm, dA, mA, a6
-  logical :: usePLMslope
+  logical :: usePLMslope, skip_limiter
+
+  skip_limiter = .false.
+  if(present(skip_limiter_in)) skip_limiter = skip_limiter_in
 
   usePLMslope = .not. usePPM
 
@@ -375,40 +382,60 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
         enddo ; enddo
     endif ! usePLMslope
 
-    ! Calculate the i-direction fluxes of each tracer, using as much
-    ! the minimum of the remaining mass flux (uhr) and the half the mass  
-    ! in the cell plus whatever part of its half of the mass flux that
-    ! the flux through the other side does not require.
-    do I=is-1,ie
-      if (uhr(I,j,k) == 0.0) then
-        uhh(I) = 0.0
-        CFL(I) = 0.0
-      elseif (uhr(I,j,k) < 0.0) then
-        hup = hprev(i+1,j,k) - G%areaT(i+1,j)*min_h
-        hlos = MAX(0.0,uhr(I+1,j,k))
-        if (((hup + uhr(I,j,k) - hlos) < 0.0) .and. &
-            ((0.5*hup + uhr(I,j,k)) < 0.0)) then !### Add parentheses.
-          uhh(I) = MIN(-0.5*hup,-hup+hlos,0.0)
-          domore_u(j,k) = .true.
+    if (.not. skip_limiter) then
+      ! Calculate the i-direction fluxes of each tracer, using as much
+      ! the minimum of the remaining mass flux (uhr) and the half the mass
+      ! in the cell plus whatever part of its half of the mass flux that
+      ! the flux through the other side does not require.
+      do I=is-1,ie
+        if (uhr(I,j,k) == 0.0) then
+          uhh(I) = 0.0
+          CFL(I) = 0.0
+        elseif (uhr(I,j,k) < 0.0) then
+          hup = hprev(i+1,j,k) - G%areaT(i+1,j)*min_h
+          hlos = MAX(0.0,uhr(I+1,j,k))
+          if (((hup + uhr(I,j,k) - hlos) < 0.0) .and. &
+              ((0.5*hup + uhr(I,j,k)) < 0.0)) then !### Add parentheses.
+            uhh(I) = MIN(-0.5*hup,-hup+hlos,0.0)
+            domore_u(j,k) = .true.
+          else
+            uhh(I) = uhr(I,j,k)
+          endif
+         !ts2(I) = 0.5*(1.0 + uhh(I)/(hprev(i+1,j,k)+h_neglect))
+          CFL(I) = - uhh(I)/(hprev(i+1,j,k)+h_neglect) ! CFL is positive
         else
-          uhh(I) = uhr(I,j,k)
+          hup = hprev(i,j,k) - G%areaT(i,j)*min_h
+          hlos = MAX(0.0,-uhr(I-1,j,k))
+          if (((hup - uhr(I,j,k) - hlos) < 0.0) .and. &
+              ((0.5*hup - uhr(I,j,k)) < 0.0)) then !### Add parentheses.
+            uhh(I) = MAX(0.5*hup,hup-hlos,0.0)
+            domore_u(j,k) = .true.
+          else
+            uhh(I) = uhr(I,j,k)
+          endif
+         !ts2(I) = 0.5*(1.0 - uhh(I)/(hprev(i,j,k)+h_neglect))
+          CFL(I) = uhh(I)/(hprev(i,j,k)+h_neglect) ! CFL is positive
         endif
-       !ts2(I) = 0.5*(1.0 + uhh(I)/(hprev(i+1,j,k)+h_neglect))
-        CFL(I) = - uhh(I)/(hprev(i+1,j,k)+h_neglect) ! CFL is positive
-      else
-        hup = hprev(i,j,k) - G%areaT(i,j)*min_h
-        hlos = MAX(0.0,-uhr(I-1,j,k))
-        if (((hup - uhr(I,j,k) - hlos) < 0.0) .and. &
-            ((0.5*hup - uhr(I,j,k)) < 0.0)) then !### Add parentheses.
-          uhh(I) = MAX(0.5*hup,hup-hlos,0.0)
-          domore_u(j,k) = .true.
-        else
-          uhh(I) = uhr(I,j,k)
+      enddo
+    else ! Skip the limiter but retain the necessary quantities
+      do I=is-1,ie
+        if (uhr(I,j,k) == 0.0) then
+            uhh(I) = 0.0
+            CFL(I) = 0.0
+          elseif (uhr(I,j,k) < 0.0) then
+            uhh(I) = uhr(I,j,k)
+           !ts2(I) = 0.5*(1.0 + uhh(I)/(hprev(i+1,j,k)+h_neglect))
+            CFL(I) = - uhh(I)/(hprev(i+1,j,k)+h_neglect) ! CFL is positive
+            domore_u(j,k) = .true.
+          else
+            uhh(I) = uhr(I,j,k)
+           !ts2(I) = 0.5*(1.0 - uhh(I)/(hprev(i,j,k)+h_neglect))
+            CFL(I) = uhh(I)/(hprev(i,j,k)+h_neglect) ! CFL is positive
+            domore_u(j,k) = .true.
         endif
-       !ts2(I) = 0.5*(1.0 - uhh(I)/(hprev(i,j,k)+h_neglect))
-        CFL(I) = uhh(I)/(hprev(i,j,k)+h_neglect) ! CFL is positive
-      endif
-    enddo
+      enddo
+    endif
+
     if (usePPM) then
       do m=1,ntr ; do I=is-1,ie
         if (uhh(I) >= 0.0) then
@@ -483,7 +510,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
       enddo ; enddo
     endif ! usePPM
 
-    if (associated(OBC)) then ; if (OBC%apply_OBC_u) then
+    if (associated(OBC)) then ; if (OBC%this_pe) then ; if (OBC%apply_OBC_u) then
       do_any_i = .false.
       do I=is-1,ie
         do_i(I) = .false.
@@ -491,9 +518,9 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
           ! Tracer fluxes are set to prescribed values only for inflows
           ! from masked areas.
           if (((uhr(I,j,k) > 0.0) .and. ((G%mask2dT(i,j) < 0.5) .or. &
-                  (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W))) .or. &
+                  (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_W))) .or. &
               ((uhr(I,j,k) < 0.0) .and. ((G%mask2dT(i+1,j) < 0.5) .or. &
-                  (OBC%OBC_kind_u(I,j) == OBC_FLATHER_E))) ) then
+                  (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_E))) ) then
             do_i(I) = .true. ; do_any_i = .true.
             uhh(I) = uhr(I,j,k)
           endif
@@ -504,7 +531,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
           flux_x(I,m) = uhh(I)*Tr(m)%OBC_in_u(I,j,k)
         else ; flux_x(I,m) = uhh(I)*Tr(m)%OBC_inflow_conc ; endif
       endif ; enddo ; enddo ; endif
-    endif ; endif
+    endif ; endif ; endif
 
     ! Calculate new tracer concentration in each cell after accounting
     ! for the i-direction fluxes.
@@ -561,7 +588,7 @@ end subroutine advect_x
 !> This subroutine does 1-d flux-form advection using a monotonic piecewise
 !! linear scheme.
 subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
-                    is, ie, js, je, k, G, GV, usePPM)
+                    is, ie, js, je, k, G, GV, usePPM, skip_limiter_in)
   type(ocean_grid_type),                     intent(inout) :: G
   type(verticalGrid_type),                   intent(in)    :: GV
   type(tracer_type), dimension(ntr),         intent(inout) :: Tr
@@ -573,6 +600,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   real,                                      intent(in)    :: Idt
   integer,                                   intent(in)    :: ntr, is, ie, js, je,k
   logical,                                   intent(in)    :: usePPM
+  logical,                                   optional      :: skip_limiter_in
 
   real, dimension(SZI_(G),ntr,SZJB_(G)) :: &
     slope_y, &                  ! The concentration slope per grid point in units of
@@ -598,7 +626,10 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   logical :: do_any_i
   integer :: i, j, m
   real :: aR, aL, dMx, dMn, Tp, Tc, Tm, dA, mA, a6
-  logical :: usePLMslope
+  logical :: usePLMslope, skip_limiter
+
+  skip_limiter = .false.
+  if(present(skip_limiter_in)) skip_limiter = skip_limiter_in
 
   usePLMslope = .not. usePPM
 
@@ -641,36 +672,51 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   ! the flux through the other side does not require.
   do J=js-1,je ; if (domore_v(J,k)) then
     domore_v(J,k) = .false.
-    do i=is,ie
-      if (vhr(i,J,k) == 0.0) then
-        vhh(i,J) = 0.0
-        CFL(i) = 0.0
-      elseif (vhr(i,J,k) < 0.0) then
-        hup = hprev(i,j+1,k) - G%areaT(i,j+1)*min_h
-        hlos = MAX(0.0,vhr(i,J+1,k))
-        if ((((hup - hlos) + vhr(i,J,k)) < 0.0) .and. &
-            ((0.5*hup + vhr(i,J,k)) < 0.0)) then
-          vhh(i,J) = MIN(-0.5*hup,-hup+hlos,0.0)
-          domore_v(J,k) = .true.
+    if(.not. skip_limiter) then
+      do i=is,ie
+        if (vhr(i,J,k) == 0.0) then
+          vhh(i,J) = 0.0
+          CFL(i) = 0.0
+        elseif (vhr(i,J,k) < 0.0) then
+          hup = hprev(i,j+1,k) - G%areaT(i,j+1)*min_h
+          hlos = MAX(0.0,vhr(i,J+1,k))
+          if ((((hup - hlos) + vhr(i,J,k)) < 0.0) .and. &
+              ((0.5*hup + vhr(i,J,k)) < 0.0)) then
+            vhh(i,J) = MIN(-0.5*hup,-hup+hlos,0.0)
+            domore_v(J,k) = .true.
+          else
+            vhh(i,J) = vhr(i,J,k)
+          endif
+         !ts2(i) = 0.5*(1.0 + vhh(i,J) / (hprev(i,j+1,k)+h_neglect))
+          CFL(i) = - vhh(i,J) / (hprev(i,j+1,k)+h_neglect) ! CFL is positive
+        else
+          hup = hprev(i,j,k) - G%areaT(i,j)*min_h
+          hlos = MAX(0.0,-vhr(i,J-1,k))
+          if ((((hup - hlos) - vhr(i,J,k)) < 0.0) .and. &
+              ((0.5*hup - vhr(i,J,k)) < 0.0)) then
+            vhh(i,J) = MAX(0.5*hup,hup-hlos,0.0)
+            domore_v(J,k) = .true.
+          else
+            vhh(i,J) = vhr(i,J,k)
+          endif
+         !ts2(i) = 0.5*(1.0 - vhh(i,J) / (hprev(i,j,k)+h_neglect))
+          CFL(i) = vhh(i,J) / (hprev(i,j,k)+h_neglect) ! CFL is positive
+        endif
+      enddo
+    else
+      do i=is,ie
+        if (vhr(i,J,k) == 0.0) then
+            vhh(i,J) = 0.0
+            CFL(i) = 0.0
+        elseif (vhr(i,J,k) < 0.0) then
+          vhh(i,J) = vhr(i,J,k)
+          CFL(i) = - vhh(i,J) / (hprev(i,j+1,k)+h_neglect) ! CFL is positive
         else
           vhh(i,J) = vhr(i,J,k)
+          CFL(i) = vhh(i,J) / (hprev(i,j,k)+h_neglect) ! CFL is positive
         endif
-       !ts2(i) = 0.5*(1.0 + vhh(i,J) / (hprev(i,j+1,k)+h_neglect))
-        CFL(i) = - vhh(i,J) / (hprev(i,j+1,k)+h_neglect) ! CFL is positive
-      else
-        hup = hprev(i,j,k) - G%areaT(i,j)*min_h
-        hlos = MAX(0.0,-vhr(i,J-1,k))
-        if ((((hup - hlos) - vhr(i,J,k)) < 0.0) .and. &
-            ((0.5*hup - vhr(i,J,k)) < 0.0)) then
-          vhh(i,J) = MAX(0.5*hup,hup-hlos,0.0)
-          domore_v(J,k) = .true.
-        else
-          vhh(i,J) = vhr(i,J,k)
-        endif
-       !ts2(i) = 0.5*(1.0 - vhh(i,J) / (hprev(i,j,k)+h_neglect))
-        CFL(i) = vhh(i,J) / (hprev(i,j,k)+h_neglect) ! CFL is positive
-      endif
-    enddo
+      enddo
+    endif
     if (usePPM) then
       do m=1,ntr ; do i=is,ie
         if (vhh(i,J) >= 0.0) then
@@ -743,7 +789,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
       enddo ; enddo
     endif ! usePPM
 
-    if (associated(OBC)) then ; if (OBC%apply_OBC_v) then
+    if (associated(OBC)) then ; if (OBC%this_pe) then ; if (OBC%apply_OBC_v) then
       do_any_i = .false.
       do i=is,ie
         do_i(i) = .false.
@@ -751,9 +797,9 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
         ! Tracer fluxes are set to prescribed values only for inflows
         ! from masked areas.
           if (((vhr(i,J,k) > 0.0) .and. ((G%mask2dT(i,j) < 0.5) .or. &
-                  (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S))) .or. &
+                  (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S))) .or. &
               ((vhr(i,J,k) < 0.0) .and. ((G%mask2dT(i,j+1) < 0.5) .or. &
-                  (OBC%OBC_kind_v(i,J) == OBC_FLATHER_N))) ) then
+                  (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N))) ) then
             do_i(i) = .true. ; do_any_i = .true.
             vhh(i,J) = vhr(i,J,k)
           endif
@@ -764,7 +810,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
           flux_y(i,m,J) = vhh(i,J)*Tr(m)%OBC_in_v(i,J,k)
         else ; flux_y(i,m,J) = vhh(i,J)*Tr(m)%OBC_inflow_conc ; endif
       endif ; enddo ; enddo ; endif
-    endif ; endif
+    endif ; endif ; endif
   else ! not domore_v.
     do i=is,ie ; vhh(i,J) = 0.0 ; enddo
     do m=1,ntr ; do i=is,ie ; flux_y(i,m,J) = 0.0 ; enddo ; enddo

@@ -65,6 +65,7 @@ type, public :: KPP_CS ; private
   logical :: KPPzeroDiffusivity        !< If True, will set diffusivity and viscosity from KPP to zero; for testing purposes.
   logical :: KPPisAdditive             !< If True, will add KPP diffusivity to initial diffusivity.
                                        !! If False, will replace initial diffusivity wherever KPP diffusivity is non-zero.
+  real    :: min_thickness             !< A minimum thickness used to avoid division by small numbers in the vicinity of vanished layers.
   ! smg: obsolete below
   logical :: correctSurfLayerAvg       !< If true, applies a correction to the averaging of surface layer properties
   real    :: surfLayerDepth            !< A guess at the depth of the surface layer (which should 0.1 of OBLdepth) (m)
@@ -256,6 +257,10 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
                  'If true, adds KPP diffusivity to diffusivity from other schemes.'//&
                  'If false, KPP is the only diffusivity wherever KPP is non-zero.',  &
                  default=.True.)
+  call get_param(paramFile, mod, 'CVMIX_ZERO_H_WORK_AROUND', CS%min_thickness,                           &
+                 'A minimum thickness used to avoid division by small numbers in the vicinity\n'//       &
+                 'of vanished layers. This is independent of MIN_THICKNESS used in other parts of MOM.', &
+                 units='m', default=0.)
 
   call closeParameterBlock(paramFile)
   call get_param(paramFile, mod, 'DEBUG', CS%debug, default=.False., do_not_log=.True.)
@@ -431,24 +436,26 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
   real :: surfHsalt, surfSalt  ! Integral and average of saln over the surface layer
   real :: surfHu, surfU        ! Integral and average of u over the surface layer
   real :: surfHv, surfV        ! Integral and average of v over the surface layer
+  real :: dh    ! The local thickness used for calculating interface positions (m)
+  real :: hcorr ! A cumulative correction arising from inflation of vanished layers (m)
   integer :: kk, ksfc, ktmp
 
 #ifdef __DO_SAFETY_CHECKS__
   if (CS%debug) then
-    call hchksum(h*GV%H_to_m, "KPP in: h",G,haloshift=0)
-    call hchksum(Temp, "KPP in: T",G,haloshift=0)
-    call hchksum(Salt, "KPP in: S",G,haloshift=0)
-    call hchksum(u, "KPP in: u",G,haloshift=0)
-    call hchksum(v, "KPP in: v",G,haloshift=0)
-    call hchksum(uStar, "KPP in: uStar",G,haloshift=0)
-    call hchksum(buoyFlux, "KPP in: buoyFlux",G,haloshift=0)
-    call hchksum(Kt, "KPP in: Kt",G,haloshift=0)
-    call hchksum(Ks, "KPP in: Ks",G,haloshift=0)
+    call hchksum(h*GV%H_to_m, "KPP in: h",G%HI,haloshift=0)
+    call hchksum(Temp, "KPP in: T",G%HI,haloshift=0)
+    call hchksum(Salt, "KPP in: S",G%HI,haloshift=0)
+    call hchksum(u, "KPP in: u",G%HI,haloshift=0)
+    call hchksum(v, "KPP in: v",G%HI,haloshift=0)
+    call hchksum(uStar, "KPP in: uStar",G%HI,haloshift=0)
+    call hchksum(buoyFlux, "KPP in: buoyFlux",G%HI,haloshift=0)
+    call hchksum(Kt, "KPP in: Kt",G%HI,haloshift=0)
+    call hchksum(Ks, "KPP in: Ks",G%HI,haloshift=0)
   endif
 #endif
 
   ! some constants
-  GoRho = G%g_Earth / GV%Rho0
+  GoRho = GV%g_Earth / GV%Rho0
   nonLocalTrans(:,:) = 0.0
 
   if (CS%id_Kd_in > 0) call post_data(CS%id_Kd_in, Kt, CS%diag)
@@ -465,7 +472,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
 !$OMP                                  surfBuoyFlux,Ws_1d,Vt2_1d,BulkRi_1d,           &
 !$OMP                                  OBLdepth_0d,zBottomMinusOffset,Kdiffusivity,   &
 !$OMP                                  Kviscosity,sigma,kOBL,kk,pres_1D,Temp_1D,      &
-!$OMP                                  Salt_1D,rho_1D,surfBuoyFlux2,ksfc)
+!$OMP                                  Salt_1D,rho_1D,surfBuoyFlux2,ksfc,dh,hcorr)
 
   ! loop over horizontal points on processor
   do j = G%jsc, G%jec
@@ -487,11 +494,16 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       ! and POP.
       iFaceHeight(1) = 0.0 ! BBL is all relative to the surface
       pRef = 0.
+      hcorr = 0.
       do k=1,G%ke
 
         ! cell center and cell bottom in meters (negative values in the ocean)
-        cellHeight(k)    = iFaceHeight(k) - 0.5 * h(i,j,k) * GV%H_to_m
-        iFaceHeight(k+1) = iFaceHeight(k) - h(i,j,k) * GV%H_to_m
+        dh = h(i,j,k) * GV%H_to_m ! Nominal thickness to use for increment
+        dh = dh + hcorr ! Take away the accumulated error (could temporarily make dh<0)
+        hcorr = min( dh - CS%min_thickness, 0. ) ! If inflating then hcorr<0
+        dh = max( dh, CS%min_thickness ) ! Limit increment dh>=min_thickness
+        cellHeight(k)    = iFaceHeight(k) - 0.5 * dh
+        iFaceHeight(k+1) = iFaceHeight(k) - dh
 
         ! find ksfc for cell where "surface layer" sits
         SLdepth_0d = CS%surf_layer_ext*max( max(-cellHeight(k),-iFaceHeight(2) ), CS%minOBLdepth )
@@ -849,8 +861,8 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
 
 #ifdef __DO_SAFETY_CHECKS__
   if (CS%debug) then
-    call hchksum(Kt, "KPP out: Kt",G,haloshift=0)
-    call hchksum(Ks, "KPP out: Ks",G,haloshift=0)
+    call hchksum(Kt, "KPP out: Kt",G%HI,haloshift=0)
+    call hchksum(Ks, "KPP out: Ks",G%HI,haloshift=0)
   endif
 #endif
 
