@@ -104,6 +104,7 @@ end type axes_grp
 type, private :: diag_type
   logical :: in_use
   integer :: fms_diag_id         ! underlying FMS diag id
+  character(16) :: debug_str
   type(axes_grp), pointer :: remap_axes => null()
   real, pointer, dimension(:,:)   :: mask2d => null()
   real, pointer, dimension(:,:,:) :: mask3d => null()
@@ -628,11 +629,9 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
   endif
 
   if (present(mask)) then
-    if ((size(field,1) /= size(mask,1)) .or. &
-        (size(field,2) /= size(mask,2))) then
-      call MOM_error(FATAL, "post_data_2d_low: post_data called with a mask "//&
-                             "that does not match the size of field.")
-    endif
+    call check_field_and_mask_shape_2d(diag, field, mask)
+  elseif ((diag_cs%ave_enabled) .and. associated(diag%mask2d)) then
+    call check_field_and_mask_shape_2d(diag, field, diag%mask2d)
   endif
 
   if (is_stat) then
@@ -755,7 +754,8 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
         ! Check that H is up-to-date.
         do k=RANGE_K(diag_cs%h)
           if (diag_cs%h_old(i,j,k) /= diag_cs%h(i,j,k)) call MOM_error(FATAL, &
-            "remap_diag_to_z: H has changed since remapping grids were updated")
+            "remap_diag_to_z: H has changed since remapping grids were updated."//&
+            " diag debug hint: "//diag%debug_str)
         enddo
 #endif
         h_src(:) = 0.5 * (diag_cs%h(i,j,:) + diag_cs%h(i+1,j,:))
@@ -780,7 +780,8 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
         ! Check that H is up-to-date.
         do k=RANGE_K(diag_cs%h)
           if (diag_cs%h_old(i,j,k) /= diag_cs%h(i,j,k)) call MOM_error(FATAL, &
-            "remap_diag_to_z: H has changed since remapping grids were updated")
+            "remap_diag_to_z: H has changed since remapping grids were updated."//&
+            " diag debug hint: "//diag%debug_str)
         enddo
 #endif
         h_src(:) = 0.5 * (diag_cs%h(i,j,:) + diag_cs%h(i,j+1,:))
@@ -805,7 +806,8 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
         ! Check that H is up-to-date.
         do k=RANGE_K(diag_cs%h)
           if (diag_cs%h_old(i,j,k) /= diag_cs%h(i,j,k)) call MOM_error(FATAL, &
-            "remap_diag_to_z: H has changed since remapping grids were updated")
+            "remap_diag_to_z: H has changed since remapping grids were updated."//&
+            " diag debug hint: "//diag%debug_str)
         enddo
 #endif
         h_dest(:) = diag_cs%h_zoutput(i,j,:)
@@ -941,12 +943,9 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   endif
 
   if (present(mask)) then
-    if ((size(field,1) /= size(mask,1)) .or. &
-        (size(field,2) /= size(mask,2)) .or. &
-        (size(field,3) /= size(mask,3))) then
-      call MOM_error(FATAL, "post_data_3d_low: post_data called with a mask "//&
-                             "that does not match the size of field.")
-    endif
+    call check_field_and_mask_shape_3d(diag, field, mask)
+  elseif ((diag_cs%ave_enabled) .and. associated(diag%mask3d)) then
+    call check_field_and_mask_shape_3d(diag, field, diag%mask3d)
   endif
 
   if (is_stat) then
@@ -1103,6 +1102,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
     call alloc_diag_with_id(primary_id, diag_cs, diag)
     call assert(associated(diag), 'register_diag_field: diag allocation failed')
     diag%fms_diag_id = fms_id
+    diag%debug_str = trim(field_name)
     call set_diag_mask(diag, diag_cs, axes)
   endif
   if (is_root_pe() .and. diag_CS%doc_unit > 0) then
@@ -1148,6 +1148,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
       ! In the case where there is no primary, it will become the primary.
       call alloc_diag_with_id(primary_id, diag_cs, cmor_diag)
       cmor_diag%fms_diag_id = fms_id
+      cmor_diag%debug_str = trim(cmor_field_name)
       call set_diag_mask(cmor_diag, diag_cs, axes)
     endif
     if (is_root_pe() .and. diag_CS%doc_unit > 0) then
@@ -1182,7 +1183,8 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
       call attach_cell_methods(fms_id, z_remap_diag%remap_axes, cm_string, &
                                cell_methods, x_cell_method, y_cell_method, v_cell_method)
       z_remap_diag%fms_diag_id = fms_id
-  
+      z_remap_diag%debug_str = trim(field_name)
+
       if (is_u_axes(axes, diag_cs)) then
         diag_cs%do_z_remapping_on_u = .true.
       elseif (is_v_axes(axes, diag_cs)) then
@@ -1221,7 +1223,8 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
         call attach_cell_methods(fms_id, cmor_z_remap_diag%remap_axes, cm_string, &
                                  cell_methods, x_cell_method, y_cell_method, v_cell_method)
         cmor_z_remap_diag%fms_diag_id = fms_id
-    
+        cmor_z_remap_diag%debug_str = trim(cmor_field_name)
+
         if (is_u_axes(axes, diag_cs)) then
           diag_cs%do_z_remapping_on_u = .true.
         elseif (is_v_axes(axes, diag_cs)) then
@@ -1376,6 +1379,7 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
     call alloc_diag_with_id(primary_id, diag_cs, diag)
     call assert(associated(diag), 'register_scalar_field: diag allocation failed')
     diag%fms_diag_id = fms_id
+    diag%debug_str = trim(field_name)
   endif
 
   if (present(cmor_field_name)) then
@@ -1405,6 +1409,7 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
       endif
       call alloc_diag_with_id(primary_id, diag_cs, cmor_diag)
       cmor_diag%fms_diag_id = fms_id
+      cmor_diag%debug_str = trim(cmor_field_name)
     endif
   endif
 
@@ -1480,6 +1485,7 @@ function register_static_field(module_name, field_name, axes, &
     call alloc_diag_with_id(primary_id, diag_cs, diag)
     call assert(associated(diag), 'register_static_field: diag allocation failed')
     diag%fms_diag_id = fms_id
+    diag%debug_str = trim(field_name)
   endif
 
   if (present(cmor_field_name)) then
@@ -1510,6 +1516,7 @@ function register_static_field(module_name, field_name, axes, &
       endif
       call alloc_diag_with_id(primary_id, diag_cs, cmor_diag)
       cmor_diag%fms_diag_id = fms_id
+      cmor_diag%debug_str = trim(cmor_field_name)
     endif
   endif
 
@@ -2104,6 +2111,38 @@ subroutine log_available_diag(used, module_name, field_name, cell_methods_string
     call describe_option("cell_methods", trim(cell_methods_string), diag_CS)
 
 end subroutine log_available_diag
+
+subroutine check_field_and_mask_shape_2d(diag, field, mask)
+  type(diag_type),   intent(in) :: diag
+  real,              intent(in) :: field(:,:)
+  real,              intent(in) :: mask(:,:)
+
+  integer :: i
+
+  do i=1, size(shape(field))
+    if (size(field, i) /= size(mask, i)) then
+      call MOM_error(FATAL,"check_field_and_mask_2d: field and mask have "//&
+                           "different shape, diag debug hint: "//diag%debug_str)
+    endif
+  enddo
+
+end subroutine
+
+subroutine check_field_and_mask_shape_3d(diag, field, mask)
+  type(diag_type),   intent(in) :: diag
+  real,              intent(in) :: field(:, :, :)
+  real,              intent(in) :: mask(:, :, :)
+
+  integer :: i
+
+  do i=1, size(shape(field))
+    if (size(field, i) /= size(mask, i)) then
+      call MOM_error(FATAL,"check_field_and_mask_3d: field and mask have "//&
+                           "different shape, diag debug hint: "//diag%debug_str)
+    endif
+  enddo
+
+end subroutine
 
 subroutine assert(logical_arg, msg)
 
