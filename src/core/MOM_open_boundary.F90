@@ -258,8 +258,8 @@ subroutine setup_u_point_obc(OBC, G, segment_str)
       OBC%OBC_mask_u(I_obc,j) = .true.
       OBC%OBC_kind_u(I_obc,j) = this_kind
       if (Je_obc>Js_obc) then ! East is outward
-        OBC%OBC_direction_u(I_obc,j) = OBC_DIRECTION_E ! We only use direction for Flather (maybe)
         if (this_kind == OBC_FLATHER) then
+          OBC%OBC_direction_u(I_obc,j) = OBC_DIRECTION_E ! We only use direction for Flather (maybe)
           ! Set v points outside segment
           OBC%OBC_mask_v(i_obc+1,J) = .true.
           if (OBC%OBC_direction_v(i_obc+1,J) == OBC_NONE) then
@@ -273,8 +273,8 @@ subroutine setup_u_point_obc(OBC, G, segment_str)
           endif
         endif
       else ! West is outward
-        OBC%OBC_direction_u(I_obc,j) = OBC_DIRECTION_W ! We only use direction for Flather
         if (this_kind == OBC_FLATHER) then
+          OBC%OBC_direction_u(I_obc,j) = OBC_DIRECTION_W ! We only use direction for Flather
           ! Set v points outside segment
           OBC%OBC_mask_v(i_obc,J) = .true.
           if (OBC%OBC_direction_v(i_obc,J) == OBC_NONE) then
@@ -327,18 +327,18 @@ subroutine setup_v_point_obc(OBC, G, segment_str)
   ! These four lines extend the open boundary into the halo region of tiles on the edge of the physical
   ! domain. They are used to reproduce the checksums of the circle_obcs test case and will be removed
   ! in the fullness of time. -AJA
-  if (Is_obc == G%HI%IscB) Is_obc = G%HI%isd-1
-  if (Is_obc == G%HI%IecB) Is_obc = G%HI%ied
-  if (Ie_obc == G%HI%IscB) Ie_obc = G%HI%isd-1
-  if (Ie_obc == G%HI%IecB) Ie_obc = G%HI%ied
+!  if (Is_obc == G%HI%IscB) Is_obc = G%HI%isd-1
+!  if (Is_obc == G%HI%IecB) Is_obc = G%HI%ied
+!  if (Ie_obc == G%HI%IscB) Ie_obc = G%HI%isd-1
+!  if (Ie_obc == G%HI%IecB) Ie_obc = G%HI%ied
 
   do i=G%HI%isd, G%HI%ied
     if (i>=min(Is_obc,Ie_obc) .and. i<=max(Is_obc,Ie_obc)) then
       OBC%OBC_mask_v(i,J_obc) = .true.
       OBC%OBC_kind_v(i,J_obc) = this_kind
       if (Is_obc>Ie_obc) then ! North is outward
-        OBC%OBC_direction_v(i,J_obc) = OBC_DIRECTION_N ! We only use direction for Flather
         if (this_kind == OBC_FLATHER) then
+          OBC%OBC_direction_v(i,J_obc) = OBC_DIRECTION_N ! We only use direction for Flather
 !          OBC%OBC_direction_v(i,J_obc) = OBC_DIRECTION_N ! We only use direction for Flather
           ! Set u points outside segment
           OBC%OBC_mask_u(I,j_obc+1) = .true.
@@ -353,8 +353,8 @@ subroutine setup_v_point_obc(OBC, G, segment_str)
           endif
         endif
       else ! South is outward
-        OBC%OBC_direction_v(i,J_obc) = OBC_DIRECTION_S ! We only use direction for Flather
         if (this_kind == OBC_FLATHER) then
+          OBC%OBC_direction_v(i,J_obc) = OBC_DIRECTION_S ! We only use direction for Flather
 !          OBC%OBC_direction_v(i,J_obc) = OBC_DIRECTION_S ! We only use direction for Flather
           ! Set u points outside segment
           OBC%OBC_mask_u(I,j_obc) = .true.
