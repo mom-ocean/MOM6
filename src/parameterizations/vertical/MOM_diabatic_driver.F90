@@ -149,7 +149,7 @@ type, public :: diabatic_CS ;
   integer :: id_Tdif_z   = -1, id_Tadv_z   = -1, id_Sdif_z       = -1, id_Sadv_z   = -1
   integer :: id_Tdif     = -1, id_Tadv     = -1, id_Sdif         = -1, id_Sadv     = -1
   integer :: id_MLD_003  = -1, id_MLD_0125  = -1, id_MLD_user     = -1, id_mlotstsq = -1
-  integer :: id_subMLN2  = -1, id_brine_lay = -1
+  integer :: id_subMLN2  = -1, id_brine_lay = -1, id_hloss_boundary
 
   integer :: id_diabatic_diff_temp_tend     = -1
   integer :: id_diabatic_diff_saln_tend     = -1
@@ -245,7 +245,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     dSV_dS, &    ! and salinity in m^3/(kg K) and m^3/(kg ppt).
     cTKE,   &    ! convective TKE requirements for each layer in J/m^2.
     u_h,    &    ! zonal and meridional velocities at thickness points after
-    v_h          ! entrainment (m/s)
+    v_h,    &    ! entrainment (m/s)
+    hloss_boundary ! Change in layer thickness because of freshwater fluxes at the surfac
 
   real, dimension(SZI_(G),SZJ_(G),CS%nMode) :: &
     cn       ! baroclinic gravity wave speeds (formerly cg1 - BDM)
@@ -672,8 +673,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
 
     do j=js,je ; do i=is,ie
       ea(i,j,1) = 0.
-      eb(i,j,1) = 0.
-
     enddo ; enddo
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,h_neglect,h,ea,GV,dt,Kd_int,eb) &
 !$OMP                          private(hval)
@@ -726,7 +725,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     if (CS%use_energetic_PBL) then
 
       call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, dt, fluxes, CS%optics, &
-                          ea, eb, h, tv, CS%aggregate_FW_forcing, cTKE, dSV_dT, dSV_dS)
+                          ea, h, hloss_boundary, tv, CS%aggregate_FW_forcing, cTKE, dSV_dT, dSV_dS)
 
       if (CS%debug) then
         call hchksum(ea, "after applyBoundaryFluxes ea",G%HI,haloshift=0)
@@ -760,6 +759,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
                     (0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect)
         eb(i,j,k-1) = eb(i,j,k-1) + Ent_int
         ea(i,j,k) = ea(i,j,k) + Ent_int
+!        eb(i,j,k-1) = ea(i,j,k)
         Kd_int(i,j,K)  = Kd_int(i,j,K) + Kd_add_here
 
         ! for diagnostics
@@ -777,7 +777,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     else
 
       call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, dt, fluxes, CS%optics, &
-                                    ea, eb, h, tv, CS%aggregate_FW_forcing)
+                                    ea, h, hloss_boundary, tv, CS%aggregate_FW_forcing)
 
     endif   ! endif for CS%use_energetic_PBL
 
@@ -1362,6 +1362,9 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   write_all_3dt(:,:,:) = 1.
   if (CS%id_ea       > 0) call post_data(CS%id_ea,       ea, CS%diag, mask = write_all_3dt)
   if (CS%id_eb       > 0) call post_data(CS%id_eb,       eb, CS%diag, mask = write_all_3dt)
+
+  if (CS%id_hloss_boundary > 0) call post_data(CS%id_hloss_boundary, hloss_boundary, CS%diag, mask = write_all_3dt)
+
   if (CS%id_dudt_dia > 0) call post_data(CS%id_dudt_dia, ADp%du_dt_dia,  CS%diag)
   if (CS%id_dvdt_dia > 0) call post_data(CS%id_dvdt_dia, ADp%dv_dt_dia,  CS%diag)
   if (CS%id_wd       > 0) call post_data(CS%id_wd,       CDp%diapyc_vel, CS%diag)
@@ -1873,6 +1876,8 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
       'Layer entrainment from above per timestep','meter')
   CS%id_eb = register_diag_field('ocean_model','eb',diag%axesTL,Time, &
       'Layer entrainment from below per timestep', 'meter')
+  CS%id_hloss_boundary = register_diag_field('ocean_model','hloss_boundary',diag%axesTL,Time, &
+      'Layer thickness lost/gained due to fluxes at the boundary', 'meter')
   CS%id_dudt_dia = register_diag_field('ocean_model','dudt_dia',diag%axesCuL,Time, &
       'Zonal Acceleration from Diapycnal Mixing', 'meter second-2')
   CS%id_dvdt_dia = register_diag_field('ocean_model','dvdt_dia',diag%axesCvL,Time, &
