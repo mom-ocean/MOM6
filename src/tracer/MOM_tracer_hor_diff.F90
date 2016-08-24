@@ -23,8 +23,7 @@ use MOM_neutral_diffusion,     only : neutral_diffusion_init, neutral_diffusion_
 use MOM_neutral_diffusion,     only : neutral_diffusion_CS
 use MOM_neutral_diffusion,     only : neutral_diffusion_calc_coeffs, neutral_diffusion
 use MOM_tracer_registry,       only : tracer_registry_type, tracer_type, MOM_tracer_chksum
-use MOM_variables,             only : ocean_OBC_type, thermo_var_ptrs, OBC_FLATHER_E
-use MOM_variables,             only : OBC_FLATHER_W, OBC_FLATHER_N, OBC_FLATHER_S
+use MOM_variables,             only : thermo_var_ptrs
 use MOM_verticalGrid,          only : verticalGrid_type
 
 implicit none ; private
@@ -476,10 +475,10 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
 
 
   if( CS%debug ) then
-    call uchksum(khdt_x,"After tracer diffusion khdt_x", G, haloshift=2)
-    call vchksum(khdt_y,"After tracer diffusion khdt_y", G, haloshift=2)
-    call uchksum(Coef_x,"After tracer diffusion Coef_x", G, haloshift=2)
-    call vchksum(Coef_y,"After tracer diffusion Coef_y", G, haloshift=2)
+    call uchksum(khdt_x,"After tracer diffusion khdt_x", G%HI, haloshift=2)
+    call vchksum(khdt_y,"After tracer diffusion khdt_y", G%HI, haloshift=2)
+    call uchksum(Coef_x,"After tracer diffusion Coef_x", G%HI, haloshift=2)
+    call vchksum(Coef_y,"After tracer diffusion Coef_y", G%HI, haloshift=2)
   endif
 
   write_all_2du = 1. ; write_all_2dv = 1.
@@ -1433,13 +1432,16 @@ subroutine tracer_hor_diff_init(Time, G, param_file, diag, CS, CSnd)
      cmor_field_name='diftrelo', cmor_units='m2 sec-1',                         &
      cmor_standard_name= 'ocean_tracer_epineutral_laplacian_diffusivity',       &
      cmor_long_name = 'Ocean Tracer Epineutral Laplacian Diffusivity') 
-  CS%id_CFL = register_diag_field('ocean_model', 'CFL_lateral_diff', diag%axesT1, Time,&
-     'Grid CFL number for lateral/neutral tracer diffusion', 'dimensionless')
 
   CS%id_khdt_x = register_diag_field('ocean_model', 'KHDT_x', diag%axesCu1, Time, &
      'Epipycnal tracer diffusivity operator at zonal faces of tracer cell', 'meter2')
   CS%id_khdt_y = register_diag_field('ocean_model', 'KHDT_y', diag%axesCv1, Time, &
      'Epipycnal tracer diffusivity operator at meridional faces of tracer cell', 'meter2')
+  if (CS%check_diffusive_CFL) then 
+    CS%id_CFL = register_diag_field('ocean_model', 'CFL_lateral_diff', diag%axesT1, Time,&
+       'Grid CFL number for lateral/neutral tracer diffusion', 'dimensionless') 
+  endif
+
 
 end subroutine tracer_hor_diff_init
 

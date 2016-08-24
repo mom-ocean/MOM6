@@ -6,7 +6,8 @@ module MOM_obsolete_diagnostics
 
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser,   only : param_file_type, log_version, get_param
-use MOM_diag_mediator, only : diag_ctrl, register_static_field
+use MOM_diag_mediator, only : diag_ctrl
+use diag_manager_mod, only  : register_static_field_fms=>register_static_field
 
 implicit none ; private
 
@@ -61,7 +62,7 @@ subroutine register_obsolete_diagnostics(param_file, diag)
 end subroutine register_obsolete_diagnostics
 
 !> Fakes a register of a diagnostic to find out if an obsolete
-!! parameter appears in the diag_table. 
+!! parameter appears in the diag_table.
 logical function found_in_diagtable(diag, varName, newVarName)
   type(diag_ctrl),            intent(in) :: diag
   character(len=*),            intent(in) :: varName
@@ -69,14 +70,11 @@ logical function found_in_diagtable(diag, varName, newVarName)
   ! Local
   integer :: handle ! Integer handle returned from diag_manager
 
-  ! Note that using register_static_field() means the diagnostic
-  ! does not appear in the available diagnostics list. If we change
-  ! register_static_field to record available diagnostics also then
-  ! we will have to call the FMS version of register_field instead.
-  ! IOW, this is a leveraging a "feature" that might go away. -AJA
-  handle = register_static_field('ocean_model', varName, diag%axesT1, &
-          'Obsolete parameter', 'N/A')
-          
+  ! We use register_static_field_fms() instead of register_static_field() so
+  ! that the diagnostic does not appear in the available diagnostics list.
+  handle = register_static_field_fms('ocean_model', varName, &
+            diag%axesT1%handles, 'Obsolete parameter', 'N/A')
+
   found_in_diagtable = (handle>0)
 
   if (handle>0 .and. is_root_pe()) then

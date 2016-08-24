@@ -100,7 +100,12 @@ module MOM_offline_transport
       id_uhtr_preadv = -1, &
       id_vhtr_preadv = -1, &
       id_temp_preadv = -1, &
-      id_salt_preadv = -1
+      id_salt_preadv = -1, &
+      id_uhr = -1, &
+      id_vhr = -1, &
+      id_ear = -1, &
+      id_ebr = -1, &
+      id_hr = -1
 
   end type offline_transport_CS
 
@@ -144,10 +149,10 @@ contains
 
   end subroutine post_advection_fields
 
-  !  subroutine transport_by_files(G, CS, h_old, h_new, h_adv, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, khdt_y, &
-  subroutine transport_by_files(G, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, khdt_y, &
+  subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, khdt_y, &
     temp, salt, do_ale_in)
     type(ocean_grid_type),                     intent(inout)    :: G
+    type(verticalGrid_type),                  intent(inout)    :: GV
     type(offline_transport_CS),                intent(inout)    :: CS
     logical, optional                                           :: do_ale_in
 
@@ -168,9 +173,12 @@ contains
       eatr, ebtr, &
       temp, salt
     logical                                                     :: do_ale
+    integer :: i, j, k, is, ie, js, je, nz
 
     do_ale = .false.;
     if (present(do_ale_in) ) do_ale = do_ale_in
+
+    is   = G%isc   ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = GV%ke
 
 
     call callTree_enter("transport_by_files, MOM_offline_control.F90")
@@ -203,6 +211,23 @@ contains
     call read_data(CS%snap_file, 'h_end', h_end, domain=G%Domain%mpp_domain, &
       timelevel=CS%ridx_snap,position=CENTER)
 
+!          ! Apply masks at T, U, and V points
+    do k=1,nz ; do j=js-1,je ; do i=is-1,ie
+      if (G%mask2dCu(i,j)<1.0) then
+        uhtr(I,j,k) = 0.0
+        khdt_x(I,j) = 0.0;
+      endif
+      if (G%mask2dCv(i,j)<1.0) then
+        vhtr(i,J,k) = 0.0
+        khdt_y(i,J) = 0.0;
+      endif
+      if (G%mask2dT(i,j)<1.0) then
+        h_end(i,j,k) = GV%Angstrom
+        eatr(i,j,k) = 0.0
+        ebtr(i,j,k) = 0.0
+      endif
+    enddo; enddo; enddo
+
     if (do_ale) then
       CS%h_preale = 1.0e-10
       CS%T_preale = 0.0
@@ -219,6 +244,18 @@ contains
         timelevel=CS%ridx_mean,position=EAST)
       call read_data(CS%preale_file, 'v_preale',   CS%v_preale, domain=G%Domain%mpp_domain, &
         timelevel=CS%ridx_mean,position=NORTH)
+
+      do k=1,nz ; do j=js-1,je ; do i=is-1,ie
+        if (G%mask2dCu(i,j)<1.0) then
+          CS%u_preale(I,j,k) = 0.0
+        endif
+        if (G%mask2dCv(i,j)<1.0) then
+          CS%v_preale(I,j,k) = 0.0
+        endif
+        if (G%mask2dT(i,j)<1.0) then
+          CS%h_preale(i,j,k) = GV%Angstrom
+        endif
+      enddo; enddo; enddo
 
     endif
 
@@ -263,16 +300,26 @@ contains
     ! U-cell fields
     CS%id_uhtr_preadv = register_diag_field('ocean_model', 'uhtr_preadv', diag%axesCuL, Time, &
       'Accumulated zonal thickness fluxes to advect tracers', 'kg')
+    CS%id_uhr = register_diag_field('ocean_model', 'uhr', diag%axesCuL, Time, &
+      'Zonal thickness fluxes remaining at end of timestep', 'kg')
 
     ! V-cell fields
     CS%id_vhtr_preadv = register_diag_field('ocean_model', 'vhtr_preadv', diag%axesCvL, Time, &
       'Accumulated meridional thickness fluxes to advect tracers', 'kg')
+    CS%id_vhr = register_diag_field('ocean_model', 'vhr', diag%axesCvL, Time, &
+      'Meridional thickness fluxes remaining at end of timestep', 'kg')
 
     ! T-cell fields
     CS%id_temp_preadv  = register_diag_field('ocean_model', 'temp_preadv', diag%axesTL, Time, &
       'Temperature prior to advection', 'C')
     CS%id_salt_preadv  = register_diag_field('ocean_model', 'salt_preadv', diag%axesTL, Time, &
       'Salinity prior to advection', 'S')
+    CS%id_hr  = register_diag_field('ocean_model', 'hdiff', diag%axesTL, Time, &
+      'Difference between the stored and calculated layer thickness', 'm')
+    CS%id_ear  = register_diag_field('ocean_model', 'ear', diag%axesTL, Time, &
+      'Remaining thickness entrained from above', 'm')
+    CS%id_ebr  = register_diag_field('ocean_model', 'ebr', diag%axesTL, Time, &
+      'Remaining thickness entrained from below', 'm')
 
   end subroutine register_diags_offline_transport
 
@@ -385,7 +432,7 @@ contains
     is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
 
     do k = 1, nz
-      do i=is,ie ; do j=js,je
+      do i=is-1,ie+1 ; do j=js-1,je+1
 
         h_new(i,j,k) = max(0.0, G%areaT(i,j)*h_pre(i,j,k) + &
           ((uhtr(I-1,j,k) - uhtr(I,j,k)) + (vhtr(i,J-1,k) - vhtr(i,J,k))))
@@ -417,8 +464,8 @@ contains
     is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
 
     ! Update h_new with convergence of vertical mass transports
-    do j=js,je
-      do i=is,ie
+    do j=js-1,je+1
+      do i=is-1,ie+1
 
         ! Top layer
         h_new(i,j,1) = max(0.0, h_pre(i,j,1) + (eb(i,j,1) - ea(i,j,2) + ea(i,j,1) ))
@@ -434,7 +481,7 @@ contains
       enddo
 
       ! Interior layers
-      do k=2,nz-1 ; do i=is,ie
+      do k=2,nz-1 ; do i=is-1,ie+1
 
         h_new(i,j,k) = max(0.0, h_pre(i,j,k) + ((ea(i,j,k) - eb(i,j,k-1)) + &
             (eb(i,j,k) - ea(i,j,k+1))))
@@ -459,8 +506,8 @@ contains
 
     ! Local variables
     integer :: i, j, k, m, is, ie, js, je, nz
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G))                    :: top_flux, bottom_flux, scale_factor
-    real                                                        :: pos_flux, hvol, h_neglect
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G))                    :: top_flux, bottom_flux
+    real                                                        :: pos_flux, hvol, h_neglect, scale_factor
 
     ! In this subroutine, fluxes out of the box are scaled away if they deplete
     ! the layer, note that we define the positive direction as flux out of the box.
@@ -472,18 +519,18 @@ contains
     ! Calculate top and bottom fluxes from ea and eb. Note the explicit negative signs
     ! to enforce the positive out convention
     k = 1
-    do j=js,je ; do i=is,ie
+    do j=js-1,je+1 ; do i=is-1,ie+1
       top_flux(i,j,k) = -ea(i,j,k)
       bottom_flux(i,j,k) = -(eb(i,j,k)-ea(i,j,k+1))
     enddo ; enddo
 
-    do k = 2, nz-1 ; do j=js,je ; do i=is,ie
+    do k=2, nz-1 ; do j=js-1,je+1 ; do i=is-1,ie+1
       top_flux(i,j,k) = -(ea(i,j,k)-eb(i,j,k-1))
       bottom_flux(i,j,k) = -(eb(i,j,k)-ea(i,j,k+1))
     enddo ; enddo ; enddo
 
     k=nz
-    do j=js,je ; do i=is,ie
+    do j=js-1,je+1 ; do i=is-1,ie+1
       top_flux(i,j,k) = -(ea(i,j,k)-eb(i,j,k-1))
       bottom_flux(i,j,k) = -eb(i,j,k)
     enddo ; enddo
@@ -491,7 +538,7 @@ contains
 
     ! Calculate sum of positive fluxes (negatives applied to enforce convention)
     ! in a given cell and scale it back if it would deplete a layer
-    do k = 1, nz ; do j=js,je ; do i=is,ie
+    do k = 1, nz ; do j=js-1,je+1 ; do i=is-1,ie+1
 
       hvol = h_pre(i,j,k)*G%areaT(i,j)
       pos_flux  = max(0.0,-uh(I-1,j,k)) + max(0.0, -vh(i,J-1,k)) + &
@@ -499,59 +546,42 @@ contains
         max(0.0, top_flux(i,j,k)*G%areaT(i,j)) + max(0.0, bottom_flux(i,j,k)*G%areaT(i,j))
 
       if (pos_flux>hvol .and. pos_flux>0.0) then
-        scale_factor(i,j,k) = ( hvol )/pos_flux*max_off_cfl
+        scale_factor = ( hvol )/pos_flux*max_off_cfl
       else ! Don't scale
-        scale_factor(i,j,k) = 1.0
+        scale_factor = 1.0
       endif
 
-    enddo ; enddo ; enddo
+      ! Scale horizontal fluxes
+      if (-uh(I-1,j,k)>0) uh(I-1,j,k) = uh(I-1,j,k)*scale_factor
+      if (uh(I,j,k)>0)    uh(I,j,k)   = uh(I,j,k)*scale_factor
+      if (-vh(i,J-1,k)>0) vh(i,J-1,k) = vh(i,J-1,k)*scale_factor
+      if (vh(i,J,k)>0)    vh(i,J,k)   = vh(i,J,k)*scale_factor
 
-    call pass_var(scale_factor,G%Domain)
-
-    ! Scale vertical fluxes based on the sign of top and bottom flux
-    k = 1
-    do j=js,je ; do i=is,ie
-      if (top_flux(i,j,k) > 0.0) then
-        ea(i,j,k) = ea(i,j,k)*scale_factor(i,j,k)
+      if (k>1 .and. k<nz) then
+      ! Scale interior layers
+        if(top_flux(i,j,k)>0.0) then
+          ea(i,j,k) = ea(i,j,k)*scale_factor
+          eb(i,j,k-1) = eb(i,j,k-1)*scale_factor
+        endif
+        if(bottom_flux(i,j,k)>0.0) then
+          eb(i,j,k) = eb(i,j,k)*scale_factor
+          ea(i,j,k+1) = ea(i,j,k+1)*scale_factor
+        endif
+      ! Scale top layer
+      elseif (k==1) then
+        if(top_flux(i,j,k)>0.0)    ea(i,j,k) = ea(i,j,k)*scale_factor
+        if(bottom_flux(i,j,k)>0.0) then
+          eb(i,j,k)   = eb(i,j,k)*scale_factor
+          ea(i,j,k+1) = ea(i,j,k+1)*scale_factor
+        endif
+      ! Scale bottom layer
+      elseif (k==nz) then
+        if(top_flux(i,j,k)>0.0) then
+          ea(i,j,k)   = ea(i,j,k)*scale_factor
+          eb(i,j,k-1) = eb(i,j,k-1)*scale_factor
+        endif
+        if (bottom_flux(i,j,k)>0.0) eb(i,j,k)=eb(i,j,k)*scale_factor
       endif
-      if (bottom_flux(i,j,k)>0.0) then
-        eb(i,j,k) = eb(i,j,k)*scale_factor(i,j,k)
-        ea(i,j,k+1) = ea(i,j,k+1)*scale_factor(i,j,k)
-      endif
-    enddo ; enddo
-
-    do k = 2, nz-1 ; do j=js,je ; do i=is,ie
-      if (top_flux(i,j,k) > 0.0) then
-        ea(i,j,k) = ea(i,j,k)*scale_factor(i,j,k)
-        eb(i,j,k-1) = eb(i,j,k-1)*scale_factor(i,j,k)
-      endif
-      if (bottom_flux(i,j,k) > 0.0) then
-        eb(i,j,k) = eb(i,j,k)*scale_factor(i,j,k)
-        ea(i,j,k+1) = ea(i,j,k+1)*scale_factor(i,j,k)
-      endif
-    enddo ; enddo ; enddo
-
-    k=nz
-    do j=js,je ; do i=is,ie
-      if (top_flux(i,j,k) > 0.0) then
-        ea(i,j,k) = ea(i,j,k)*scale_factor(i,j,k)
-        eb(i,j,k-1) = eb(i,j,k-1)*scale_factor(i,j,k)
-      endif
-      if (bottom_flux(i,j,k) > 0.0) then
-        eb(i,j,k) = eb(i,j,k)*scale_factor(i,j,k)
-      endif
-    enddo ; enddo
-
-    ! Scale horizontal fluxes
-    do k = 1, nz ; do j=js,je ; do i=is-1,ie+1
-
-      if (uh(I,j,k)>0.0)     uh(I,j,k) = uh(I,j,k)*scale_factor(i,j,k)
-      if (-uh(I-1,j,k)>0.0)  uh(I-1,j,k) = uh(I-1,j,k)*scale_factor(i,j,k)
-    enddo ; enddo ; enddo
-
-    do k = 1, nz ; do j=js-1,je+1 ; do i=is,ie
-      if (vh(i,J,k)>0.0)    vh(i,J,k) = vh(i,J,k)*scale_factor(i,j,k)
-      if (-vh(i,J-1,k)>0.0) vh(i,J-1,k) = vh(i,J-1,k)*scale_factor(i,j,k)
     enddo ; enddo ; enddo
 
   end subroutine limit_mass_flux_3d

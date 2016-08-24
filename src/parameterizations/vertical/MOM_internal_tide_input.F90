@@ -154,8 +154,8 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, CS)
   enddo ; enddo
 
   if (CS%debug) then
-    call hchksum(N2_bot,"N2_bot",G,haloshift=0)
-    call hchksum(itide%TKE_itidal_input,"TKE_itidal_input",G,haloshift=0)
+    call hchksum(N2_bot,"N2_bot",G%HI,haloshift=0)
+    call hchksum(itide%TKE_itidal_input,"TKE_itidal_input",G%HI,haloshift=0)
   endif
 
   if (CS%id_TKE_itidal > 0) call post_data(CS%id_TKE_itidal, itide%TKE_itidal_input, CS%diag)
@@ -194,7 +194,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, N2_bot)
   logical :: do_i(SZI_(G)), do_any
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  G_Rho0 = G%g_Earth / GV%Rho0
+  G_Rho0 = GV%g_Earth / GV%Rho0
 
   ! Find the (limited) density jump across each interface.
   do i=is,ie
@@ -325,7 +325,7 @@ subroutine int_tide_input_init(Time, G, GV, param_file, diag, CS, itide)
   CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version)
+  call log_version(param_file, mod, version, "")
 
   call get_param(param_file, mod, "INPUTDIR", CS%inputdir, default=".")
   CS%inputdir = slasher(CS%inputdir)
