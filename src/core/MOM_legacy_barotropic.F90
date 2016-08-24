@@ -353,8 +353,6 @@ type, private :: BT_OBC_type
     OBC_mask_u => NULL(), &
     OBC_mask_v => NULL()
   integer, dimension(:,:), pointer :: &
-    OBC_direction_u => NULL(), &
-    OBC_direction_v => NULL(), &
     OBC_kind_u => NULL(), &
     OBC_kind_v => NULL()
   real, dimension(:,:), pointer :: &
@@ -2240,7 +2238,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         ubt(I,j) = BT_OBC%ubt_outer(I,j)
         vel_trans = ubt(I,j)
       elseif (BT_OBC%OBC_kind_u(I,j) == OBC_FLATHER) then
-        if (BT_OBC%OBC_direction_u(I,j) == OBC_DIRECTION_E) then
+        if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) then
           cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j)            ! CFL
           u_inlet = cfl*ubt_old(I-1,j) + (1.0-cfl)*ubt_old(I,j)  ! Valid for cfl<1
         !  h_in = 2.0*cfl*eta(i,j) + (1.0-2.0*cfl)*eta(i+1,j)    ! external
@@ -2252,7 +2250,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
               (BT_OBC%Cg_u(I,j)/H_u) * (h_in-BT_OBC%eta_outer_u(I,j)))
 
           vel_trans = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
-        elseif (BT_OBC%OBC_direction_u(I,j) == OBC_DIRECTION_W) then
+        elseif (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W) then
           cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j)            ! CFL
           u_inlet = cfl*ubt_old(I+1,j) + (1.0-cfl)*ubt_old(I,j)  ! Valid for cfl<1
         !  h_in = 2.0*cfl*eta(i+1,j) + (1.0-2.0*cfl)*eta(i,j)    ! external
@@ -2264,14 +2262,14 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
               (BT_OBC%Cg_u(I,j)/H_u) * (BT_OBC%eta_outer_u(I,j)-h_in))
 
           vel_trans = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
-        elseif (BT_OBC%OBC_direction_u(I,j) == OBC_DIRECTION_N) then
+        elseif (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_N) then
           if ((vbt(i,J-1)+vbt(i+1,J-1)) > 0.0) then
             ubt(I,j) = 2.0*ubt(I,j-1)-ubt(I,j-2)
           else
             ubt(I,j) = BT_OBC%ubt_outer(I,j)
           endif
           vel_trans = ubt(I,j)
-        elseif (BT_OBC%OBC_direction_u(I,j) == OBC_DIRECTION_S) then
+        elseif (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_S) then
           if ((vbt(i,J)+vbt(i+1,J)) > 0.0) then
             ubt(I,j) = 2.0*ubt(I,j+1)-ubt(I,j+2)
           else
@@ -2300,7 +2298,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         vbt(i,J) = BT_OBC%vbt_outer(i,J)
         vel_trans = vbt(i,J)
       elseif (BT_OBC%OBC_kind_v(i,J) == OBC_FLATHER) then
-        if (BT_OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N) then
+        if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N) then
           cfl = dtbt * BT_OBC%Cg_v(i,J) * G%IdyCv(I,j)            ! CFL
           v_inlet = cfl*vbt_old(i,J-1) + (1.0-cfl)*vbt_old(i,J)  ! Valid for cfl<1
         !  h_in = 2.0*cfl*eta(i,j) + (1.0-2.0*cfl)*eta(i,j+1)    ! external
@@ -2312,7 +2310,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
               (BT_OBC%Cg_v(i,J)/H_v) * (h_in-BT_OBC%eta_outer_v(i,J)))
 
           vel_trans = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
-        elseif (BT_OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S) then
+        elseif (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_S) then
           cfl = dtbt * BT_OBC%Cg_v(i,J) * G%IdyCv(I,j)            ! CFL
           v_inlet = cfl*vbt_old(i,J+1) + (1.0-cfl)*vbt_old(i,J)  ! Valid for cfl <1
         !  h_in = 2.0*cfl*eta(i,j+1) + (1.0-2.0*cfl)*eta(i,j)    ! external
@@ -2324,7 +2322,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
               (BT_OBC%Cg_v(i,J)/H_v) * (BT_OBC%eta_outer_v(i,J)-h_in))
 
           vel_trans = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
-        elseif (BT_OBC%OBC_direction_v(i,J) == OBC_DIRECTION_E) then
+        elseif (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_E) then
           if ((ubt(I-1,j)+ubt(I-1,j+1)) > 0.0) then
             vbt(i,J) = 2.0*vbt(i-1,J)-vbt(i-2,J)
           else
@@ -2335,7 +2333,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
 !       cfl = dtbt * BT_OBC%Cg_v(i,J) * G%IdyCv(i,J)           !
 !       vbt(i,J) = (vbt(i-1,J) + CFL*vbt(i,J)) / (1.0 + CFL)  !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        elseif (BT_OBC%OBC_direction_v(i,J) == OBC_DIRECTION_W) then
+        elseif (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_W) then
           if ((ubt(I,j)+ubt(I,j+1)) < 0.0) then
             vbt(i,J) = 2.0*vbt(i+1,J)-vbt(i+2,J)
           else
@@ -2399,7 +2397,7 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
       associated(BT_OBC%OBC_mask_u)) then
     do j=js,je ; do I=is-1,ie ; if (BT_OBC%OBC_mask_u(I,j)) then
       if (BT_OBC%OBC_kind_u(I,j) == OBC_FLATHER) then
-        if (BT_OBC%OBC_direction_u(I,j) == OBC_DIRECTION_E) then
+        if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) then
           cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j)            ! CFL
           u_inlet = cfl*ubt(I-1,j) + (1.0-cfl)*ubt(I,j)          ! Valid for cfl <1
 !          h_in = 2.0*cfl*eta(i,j) + (1.0-2.0*cfl)*eta(i+1,j)    ! external
@@ -2408,7 +2406,7 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
           H_u = BT_OBC%H_u(I,j)
           eta(i+1,j) = 2.0 * 0.5*((BT_OBC%eta_outer_u(I,j)+h_in) + &
               (H_u/BT_OBC%Cg_u(I,j))*(u_inlet-BT_OBC%ubt_outer(I,j))) - eta(i,j)
-        elseif (BT_OBC%OBC_direction_u(I,j) == OBC_DIRECTION_W) then
+        elseif (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W) then
           cfl = dtbt*BT_OBC%Cg_u(I,j)*G%IdxCu(I,j)                ! CFL
           u_inlet = cfl*ubt(I+1,j) + (1.0-cfl)*ubt(I,j)          ! Valid for cfl <1
 !          h_in = 2.0*cfl*eta(i+1,j) + (1.0-2.0*cfl)*eta(i,j)    ! external
@@ -2426,7 +2424,7 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
     associated(BT_OBC%OBC_mask_v)) then
     do J=js-1,je ; do i=is,ie ; if (BT_OBC%OBC_mask_v(i,J)) then
       if (BT_OBC%OBC_kind_v(i,J) == OBC_FLATHER) then
-        if (BT_OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N) then
+        if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N) then
           cfl = dtbt*BT_OBC%Cg_v(i,J)*G%IdyCv(i,J)                ! CFL
           v_inlet = cfl*vbt(i,J-1) + (1.0-cfl)*vbt(i,J)          ! Valid for cfl <1
 !          h_in = 2.0*cfl*eta(i,j) + (1.0-2.0*cfl)*eta(i,j+1)    ! external
@@ -2435,7 +2433,7 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
           H_v = BT_OBC%H_v(i,J)
           eta(i,j+1) = 2.0 * 0.5*((BT_OBC%eta_outer_v(i,J)+h_in) + &
               (H_v/BT_OBC%Cg_v(i,J))*(v_inlet-BT_OBC%vbt_outer(i,J))) - eta(i,j)
-        elseif (BT_OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S) then
+        elseif (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_S) then
           cfl = dtbt*BT_OBC%Cg_v(i,J)*G%IdyCv(i,J)                ! CFL
           v_inlet = cfl*vbt(i,J+1) + (1.0-cfl)*vbt(i,J)          ! Valid for cfl <1
 !          h_in = 2.0*cfl*eta(i,j+1) + (1.0-2.0*cfl)*eta(i,j)    ! external
@@ -2504,7 +2502,6 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, halo, use_BT_cont, Datu, D
   allocate(BT_OBC%eta_outer_u(isdw-1:iedw,jsdw:jedw)) ; BT_OBC%eta_outer_u(:,:) = 0.0
   allocate(BT_OBC%OBC_mask_u(isdw-1:iedw,jsdw:jedw))  ; BT_OBC%OBC_mask_u(:,:)=.false.
   allocate(BT_OBC%OBC_kind_u(isdw-1:iedw,jsdw:jedw))  ; BT_OBC%OBC_kind_u(:,:)=OBC_NONE
-  allocate(BT_OBC%OBC_direction_u(isdw-1:iedw,jsdw:jedw)); BT_OBC%OBC_direction_u(:,:)=OBC_NONE
 
   allocate(BT_OBC%Cg_v(isdw:iedw,jsdw-1:jedw))        ; BT_OBC%Cg_v(:,:) = 0.0
   allocate(BT_OBC%H_v(isdw:iedw,jsdw-1:jedw))         ; BT_OBC%H_v(:,:) = 0.0
@@ -2513,13 +2510,11 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, halo, use_BT_cont, Datu, D
   allocate(BT_OBC%eta_outer_v(isdw:iedw,jsdw-1:jedw)) ; BT_OBC%eta_outer_v(:,:)=0.0
   allocate(BT_OBC%OBC_mask_v(isdw:iedw,jsdw-1:jedw))  ; BT_OBC%OBC_mask_v(:,:)=.false.
   allocate(BT_OBC%OBC_kind_v(isdw-1:iedw,jsdw:jedw))  ; BT_OBC%OBC_kind_v(:,:)=OBC_NONE
-  allocate(BT_OBC%OBC_direction_v(isdw-1:iedw,jsdw:jedw)); BT_OBC%OBC_direction_v(:,:)=OBC_NONE
 
   if (associated(OBC%OBC_mask_u)) then
     do j=js-1,je+1 ; do I=is-1,ie
       BT_OBC%OBC_mask_u(I,j) = OBC%OBC_mask_u(I,j)
       BT_OBC%OBC_kind_u(I,j) = OBC%OBC_kind_u(I,j)
-      BT_OBC%OBC_direction_u(I,j) = OBC%OBC_direction_u(I,j)
     enddo ; enddo
     if (OBC%apply_OBC_u) then
       do k=1,nz ; do j=js,je ; do I=is-1,ie
@@ -2555,7 +2550,6 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, halo, use_BT_cont, Datu, D
     do J=js-1,je ; do i=is-1,ie+1
       BT_OBC%OBC_mask_v(i,J) = OBC%OBC_mask_v(i,J)
       BT_OBC%OBC_kind_v(i,J) = OBC%OBC_kind_v(i,J)
-      BT_OBC%OBC_direction_v(i,J) = OBC%OBC_direction_v(i,J)
     enddo ; enddo
     if (OBC%apply_OBC_v) then
       do k=1,nz ; do J=js-1,je ; do i=is,ie
@@ -2605,7 +2599,6 @@ subroutine destroy_BT_OBC(BT_OBC)
 
   if (associated(BT_OBC%OBC_mask_u)) deallocate(BT_OBC%OBC_mask_u)
   if (associated(BT_OBC%OBC_kind_u)) deallocate(BT_OBC%OBC_kind_u)
-  if (associated(BT_OBC%OBC_direction_u)) deallocate(BT_OBC%OBC_direction_u)
   deallocate(BT_OBC%Cg_u)
   deallocate(BT_OBC%H_u)
   deallocate(BT_OBC%uhbt)
@@ -2614,7 +2607,6 @@ subroutine destroy_BT_OBC(BT_OBC)
 
   if (associated(BT_OBC%OBC_mask_v)) deallocate(BT_OBC%OBC_mask_v)
   if (associated(BT_OBC%OBC_kind_v)) deallocate(BT_OBC%OBC_kind_v)
-  if (associated(BT_OBC%OBC_direction_v)) deallocate(BT_OBC%OBC_direction_v)
   deallocate(BT_OBC%Cg_v)
   deallocate(BT_OBC%H_v)
   deallocate(BT_OBC%vhbt)
