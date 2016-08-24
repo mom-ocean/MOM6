@@ -1678,7 +1678,9 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     call tracer_hordiff(h_pre, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
         CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, CS%do_online, khdt_x*0.5, khdt_y*0.5)
 
-    if (.not.CS%diabatic_first .and. CS%use_ALE_algorithm) then
+    if(.not. CS%use_ALE_algorithm) h_temp = h_end-h_pre
+
+    if(.not.CS%diabatic_first .and. CS%use_ALE_algorithm) then
 
     h_temp = CS%offline_CSp%h_preale-h_pre
     ! Regridding/remapping is done here, at end of thermodynamics time step
