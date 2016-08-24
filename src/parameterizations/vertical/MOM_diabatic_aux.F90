@@ -1051,7 +1051,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, hloss_
           ! Change in state due to forcing
 
           dThickness = max( fractionOfForcing*netMassOut(i), -h2d(i,k) )
-          if (k.eq.1) ea(i,j,k) = ea(i,j,k) + dThickness
+          ea(i,j,k) = ea(i,j,k) + dThickness
           dTemp      = fractionOfForcing*netHeat(i)
           !   ### The 0.9999 here should become a run-time parameter?
           dSalt = max( fractionOfForcing*netSalt(i), -0.9999*h2d(i,k)*tv%S(i,j,k))

@@ -142,17 +142,22 @@ contains
     write_all_3dv = 1.
 
 
-    if (CS%id_uhtr_preadv>0)   call post_data(CS%id_uhtr_preadv,  uhtr, diag, mask = write_all_3du )
-    if (CS%id_vhtr_preadv>0)   call post_data(CS%id_vhtr_preadv,  vhtr, diag, mask = write_all_3dv )
-    if (CS%id_temp_preadv>0)   call post_data(CS%id_temp_preadv,  temp, diag, mask = write_all_3dt )
-    if (CS%id_salt_preadv>0)   call post_data(CS%id_salt_preadv,  salt, diag, mask = write_all_3dt )
+    if (CS%id_uhtr_preadv>0)   call post_data(CS%id_uhtr_preadv,  uhtr, diag )
+    if (CS%id_vhtr_preadv>0)   call post_data(CS%id_vhtr_preadv,  vhtr, diag )
+    if (CS%id_temp_preadv>0)   call post_data(CS%id_temp_preadv,  temp, diag )
+    if (CS%id_salt_preadv>0)   call post_data(CS%id_salt_preadv,  salt, diag )
+
+!    if (CS%id_uhtr_preadv>0)   call post_data(CS%id_uhtr_preadv,  uhtr, diag, mask = write_all_3du )
+!    if (CS%id_vhtr_preadv>0)   call post_data(CS%id_vhtr_preadv,  vhtr, diag, mask = write_all_3dv )
+!    if (CS%id_temp_preadv>0)   call post_data(CS%id_temp_preadv,  temp, diag, mask = write_all_3dt )
+!    if (CS%id_salt_preadv>0)   call post_data(CS%id_salt_preadv,  salt, diag, mask = write_all_3dt )
 
   end subroutine post_advection_fields
 
   subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, khdt_y, &
     temp, salt, do_ale_in)
     type(ocean_grid_type),                     intent(inout)    :: G
-    type(verticalGrid_type),                  intent(inout)    :: GV
+    type(verticalGrid_type),                   intent(inout)    :: GV
     type(offline_transport_CS),                intent(inout)    :: CS
     logical, optional                                           :: do_ale_in
 
@@ -229,7 +234,7 @@ contains
     enddo; enddo; enddo
 
     if (do_ale) then
-      CS%h_preale = 1.0e-10
+      CS%h_preale = GV%Angstrom
       CS%T_preale = 0.0
       CS%S_preale = 0.0
       CS%u_preale = 0.0
