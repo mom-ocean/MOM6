@@ -410,7 +410,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
         tr(i,j,nz) = b1(i) * ((h_tr * tr(i,j,nz) + btm_src(i,j)) + &
                               ea(i,j,nz) * tr(i,j,nz-1))
       endif ; enddo
-      do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do k=G%ke-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
         tr(i,j,k) = tr(i,j,k) + c1(i,k+1)*tr(i,j,k+1)
       endif ; enddo ; enddo
     enddo
