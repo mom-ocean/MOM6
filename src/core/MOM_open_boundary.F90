@@ -620,23 +620,27 @@ subroutine open_boundary_impose_normal_slope(OBC, G, depth)
 
   if (.not.associated(OBC)) return
 
-  if (associated(OBC%OBC_direction_u)) then
+  if (associated(OBC%OBC_segment_u)) then
     do j=G%jsd,G%jed ; do I=G%isd,G%ied-1
-!      if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%direction == &
+!      if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
+!        if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%direction == &
 !                           OBC_DIRECTION_E) depth(i+1,j) = depth(i,j)
-!      if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%direction == &
+!        if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%direction == &
 !                           OBC_DIRECTION_W) depth(i,j) = depth(i+1,j)
+!      endif
       if (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_E) depth(i+1,j) = depth(i,j)
       if (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_W) depth(i,j) = depth(i+1,j)
     enddo ; enddo
   endif
 
-  if (associated(OBC%OBC_direction_v)) then
+  if (associated(OBC%OBC_segment_v)) then
     do J=G%jsd,G%jed-1 ; do i=G%isd,G%ied
-!      if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%direction == &
+!      if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
+!        if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%direction == &
 !                           OBC_DIRECTION_N) depth(i,j+1) = depth(i,j)
-!      if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%direction == &
+!        if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%direction == &
 !                           OBC_DIRECTION_S) depth(i,j) = depth(i,j+1)
+!      endif
       if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N) depth(i,j+1) = depth(i,j)
       if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S) depth(i,j) = depth(i,j+1)
     enddo ; enddo
