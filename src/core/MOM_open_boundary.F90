@@ -364,15 +364,19 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
 
   if (trim(action_str) == 'FLATHER') then
     this_kind = OBC_FLATHER
+    if (Ie_obc>Is_obc) OBC%OBC_segment_list(l_seg)%direction = OBC_DIRECTION_S
+    if (Ie_obc<Is_obc) OBC%OBC_segment_list(l_seg)%direction = OBC_DIRECTION_N
     OBC%OBC_segment_list(l_seg)%radiation = .true.
-    if (Ie_obc>Is_obc) OBC%apply_OBC_v_flather_north = .true. ! This line will not be needed soon - AJA
-    if (Ie_obc<Is_obc) OBC%apply_OBC_v_flather_south = .true. ! This line will not be needed soon - AJA
+    if (Ie_obc>Is_obc) OBC%apply_OBC_v_flather_south = .true. ! This line will not be needed soon - AJA
+    if (Ie_obc<Is_obc) OBC%apply_OBC_v_flather_north = .true. ! This line will not be needed soon - AJA
   elseif (trim(action_str) == 'RADIATION2D') then
     this_kind = OBC_RADIATION2D
+    if (Ie_obc>Is_obc) OBC%OBC_segment_list(l_seg)%direction = OBC_DIRECTION_S
+    if (Ie_obc<Is_obc) OBC%OBC_segment_list(l_seg)%direction = OBC_DIRECTION_N
     OBC%OBC_segment_list(l_seg)%radiation = .true.
     OBC%OBC_segment_list(l_seg)%radiation2D = .true.
-    if (Ie_obc>Is_obc) OBC%apply_OBC_v_flather_north = .true. ! This line will not bee needed soon - AJA
-    if (Ie_obc<Is_obc) OBC%apply_OBC_v_flather_south = .true. ! This line will not bee needed soon - AJA
+    if (Ie_obc>Is_obc) OBC%apply_OBC_v_flather_south = .true. ! This line will not bee needed soon - AJA
+    if (Ie_obc<Is_obc) OBC%apply_OBC_v_flather_north = .true. ! This line will not bee needed soon - AJA
   elseif (trim(action_str) == 'SIMPLE') then
     this_kind = OBC_SIMPLE
     OBC%OBC_segment_list(l_seg)%specified = .true.
@@ -622,27 +626,27 @@ subroutine open_boundary_impose_normal_slope(OBC, G, depth)
 
   if (associated(OBC%OBC_segment_u)) then
     do j=G%jsd,G%jed ; do I=G%isd,G%ied-1
-!      if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
-!        if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%direction == &
-!                           OBC_DIRECTION_E) depth(i+1,j) = depth(i,j)
-!        if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%direction == &
-!                           OBC_DIRECTION_W) depth(i,j) = depth(i+1,j)
-!      endif
-      if (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_E) depth(i+1,j) = depth(i,j)
-      if (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_W) depth(i,j) = depth(i+1,j)
+      if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
+        if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%direction == &
+                           OBC_DIRECTION_E) depth(i+1,j) = depth(i,j)
+        if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%direction == &
+                           OBC_DIRECTION_W) depth(i,j) = depth(i+1,j)
+      endif
+!      if (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_E) depth(i+1,j) = depth(i,j)
+!      if (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_W) depth(i,j) = depth(i+1,j)
     enddo ; enddo
   endif
 
   if (associated(OBC%OBC_segment_v)) then
     do J=G%jsd,G%jed-1 ; do i=G%isd,G%ied
-!      if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
-!        if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%direction == &
-!                           OBC_DIRECTION_N) depth(i,j+1) = depth(i,j)
-!        if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%direction == &
-!                           OBC_DIRECTION_S) depth(i,j) = depth(i,j+1)
-!      endif
-      if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N) depth(i,j+1) = depth(i,j)
-      if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S) depth(i,j) = depth(i,j+1)
+      if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
+        if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%direction == &
+                           OBC_DIRECTION_N) depth(i,j+1) = depth(i,j)
+        if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%direction == &
+                           OBC_DIRECTION_S) depth(i,j) = depth(i,j+1)
+      endif
+!      if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N) depth(i,j+1) = depth(i,j)
+!      if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S) depth(i,j) = depth(i,j+1)
     enddo ; enddo
   endif
 
