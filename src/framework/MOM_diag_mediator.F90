@@ -109,6 +109,7 @@ type, private :: diag_type
   real, pointer, dimension(:,:)   :: mask2d => null()
   real, pointer, dimension(:,:,:) :: mask3d => null()
   type(diag_type), pointer :: next => null()  ! pointer to the next diag
+  real :: conversion_factor = 0. !< A factor to multiply data by before posting to FMS, if non-zero
 end type diag_type
 
 ! The following data type a list of diagnostic fields an their variants,
@@ -581,7 +582,7 @@ end subroutine post_data_2d
 
 subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
   type(diag_type),   intent(in) :: diag
-  real,              intent(in) :: field(:,:)
+  real,    target,   intent(in) :: field(:,:)
   type(diag_ctrl), intent(in) :: diag_cs
   logical, optional, intent(in) :: is_static
   real,    optional, intent(in) :: mask(:,:)
@@ -593,6 +594,7 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
 !  (in,opt) is_static - If true, this is a static field that is always offered.
 !  (in,opt)  mask     - If present, use this real array as the data mask.
 
+  real, dimension(:,:), pointer :: locfield => NULL()
   logical :: used, is_stat
   integer :: isv, iev, jsv, jev
 
@@ -634,32 +636,40 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
     call check_field_and_mask_shape_2d(diag, field, diag%mask2d)
   endif
 
+  if (diag%conversion_factor/=0.) then
+    allocate( locfield( lbound(field,1):ubound(field,1), lbound(field,2):ubound(field,2) ) )
+    locfield(isv:iev,jsv:jev) = field(isv:iev,jsv:jev) * diag%conversion_factor
+  else
+    locfield => field
+  endif
+
   if (is_stat) then
     if (present(mask)) then
-      used = send_data(diag%fms_diag_id, field, &
+      used = send_data(diag%fms_diag_id, locfield, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=mask)
    !elseif(associated(diag%mask2d)) then
-   !  used = send_data(diag%fms_diag_id, field, &
+   !  used = send_data(diag%fms_diag_id, locfield, &
    !                   is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%mask2d)
     else
-      used = send_data(diag%fms_diag_id, field, &
+      used = send_data(diag%fms_diag_id, locfield, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
     endif
   elseif (diag_cs%ave_enabled) then
     if (present(mask)) then
-      used = send_data(diag%fms_diag_id, field, diag_cs%time_end, &
+      used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
                        weight=diag_cs%time_int, rmask=mask)
     elseif(associated(diag%mask2d)) then
-      used = send_data(diag%fms_diag_id, field, diag_cs%time_end, &
+      used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
                        weight=diag_cs%time_int, rmask=diag%mask2d)
     else
-      used = send_data(diag%fms_diag_id, field, diag_cs%time_end, &
+      used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
                        weight=diag_cs%time_int)
     endif
   endif
+  if (diag%conversion_factor/=0.) deallocate( locfield )
 
 end subroutine post_data_2d_low
 
@@ -895,7 +905,7 @@ end subroutine diag_update_target_grids
 
 subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   type(diag_type),   intent(in) :: diag
-  real,              intent(in) :: field(:,:,:)
+  real,    target,   intent(in) :: field(:,:,:)
   type(diag_ctrl),   intent(in) :: diag_cs
   logical, optional, intent(in) :: is_static
   real,    optional, intent(in) :: mask(:,:,:)
@@ -907,9 +917,11 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
 !  (in)        static - If true, this is a static field that is always offered.
 !  (in,opt)      mask - If present, use this real array as the data mask.
 
+  real, dimension(:,:,:), pointer :: locfield => NULL()
   logical :: used  ! The return value of send_data is not used for anything.
   logical :: is_stat
   integer :: isv, iev, jsv, jev
+
   is_stat = .false. ; if (present(is_static)) is_stat = is_static
 
   ! Determine the proper array indices, noting that because of the (:,:)
@@ -948,32 +960,41 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
     call check_field_and_mask_shape_3d(diag, field, diag%mask3d)
   endif
 
+  if (diag%conversion_factor/=0.) then
+    allocate( locfield( lbound(field,1):ubound(field,1), lbound(field,2):ubound(field,2), &
+                        lbound(field,3):ubound(field,3) ) )
+    locfield(isv:iev,jsv:jev,:) = field(isv:iev,jsv:jev,:) * diag%conversion_factor
+  else
+    locfield => field
+  endif
+
   if (is_stat) then
     if (present(mask)) then
-      used = send_data(diag%fms_diag_id, field, &
+      used = send_data(diag%fms_diag_id, locfield, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=mask)
    !elseif(associated(diag%mask3d)) then
-   !  used = send_data(diag_field_id, field, &
+   !  used = send_data(diag_field_id, locfield, &
    !                   is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%mask3d)
     else
-      used = send_data(diag%fms_diag_id, field, &
+      used = send_data(diag%fms_diag_id, locfield, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
     endif
   elseif (diag_cs%ave_enabled) then
     if (present(mask)) then
-      used = send_data(diag%fms_diag_id, field, diag_cs%time_end, &
+      used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
                        weight=diag_cs%time_int, rmask=mask)
     elseif(associated(diag%mask3d)) then
-      used = send_data(diag%fms_diag_id, field, diag_cs%time_end, &
+      used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
                        weight=diag_cs%time_int, rmask=diag%mask3d)
     else
-      used = send_data(diag%fms_diag_id, field, diag_cs%time_end, &
+      used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
                        weight=diag_cs%time_int)
     endif
   endif
+  if (diag%conversion_factor/=0.) deallocate( locfield )
 
 end subroutine post_data_3d_low
 
@@ -1044,7 +1065,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
      long_name, units, missing_value, range, mask_variant, standard_name,      &
      verbose, do_not_log, err_msg, interp_method, tile_count, cmor_field_name, &
      cmor_long_name, cmor_units, cmor_standard_name, cell_methods, &
-     x_cell_method, y_cell_method, v_cell_method)
+     x_cell_method, y_cell_method, v_cell_method, conversion)
   integer :: register_diag_field !< An integer handle for a diagnostic array.
   character(len=*), intent(in) :: module_name !< Name of this module, usually "ocean_model" or "ice_shelf_model"
   character(len=*), intent(in) :: field_name !< Name of the diagnostic field
@@ -1071,6 +1092,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
   character(len=*), optional, intent(in) :: x_cell_method !< Specifies the cell method for the x-direction. Use '' have no method.
   character(len=*), optional, intent(in) :: y_cell_method !< Specifies the cell method for the y-direction. Use '' have no method.
   character(len=*), optional, intent(in) :: v_cell_method !< Specifies the cell method for the vertical direction. Use '' have no method.
+  real,             optional, intent(in) :: conversion !< A value to multiply data by before writing to file
   ! Local variables
   real :: MOM_missing_value
   type(diag_ctrl), pointer :: diag_cs
@@ -1104,6 +1126,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
     diag%fms_diag_id = fms_id
     diag%debug_str = trim(field_name)
     call set_diag_mask(diag, diag_cs, axes)
+    if (present(conversion)) diag%conversion_factor = conversion
   endif
   if (is_root_pe() .and. diag_CS%doc_unit > 0) then
     msg = ''
@@ -1150,6 +1173,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
       cmor_diag%fms_diag_id = fms_id
       cmor_diag%debug_str = trim(cmor_field_name)
       call set_diag_mask(cmor_diag, diag_cs, axes)
+      if (present(conversion)) cmor_diag%conversion_factor = conversion
     endif
     if (is_root_pe() .and. diag_CS%doc_unit > 0) then
       msg = 'native name is "'//trim(field_name)//'"'
@@ -1173,6 +1197,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
       call alloc_diag_with_id(primary_id, diag_cs, z_remap_diag)
       call set_diag_mask(z_remap_diag, diag_cs, axes)
       call set_diag_remap_axes(z_remap_diag, diag_cs, axes)
+      if (present(conversion)) z_remap_diag%conversion_factor = conversion
       call assert(associated(z_remap_diag%remap_axes), 'register_diag_field: remap axes not set')
       fms_id = register_diag_field_fms(module_name//trim(diag_cs%z_remap_suffix), field_name, &
            z_remap_diag%remap_axes%handles, &
@@ -1213,6 +1238,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
         call alloc_diag_with_id(primary_id, diag_cs, cmor_z_remap_diag)
         call set_diag_mask(cmor_z_remap_diag, diag_cs, axes)
         call set_diag_remap_axes(cmor_z_remap_diag, diag_cs, axes)
+        if (present(conversion)) cmor_z_remap_diag%conversion_factor = conversion
         call assert(associated(cmor_z_remap_diag%remap_axes), 'register_diag_field: remap axes not set')
         fms_id = register_diag_field_fms(module_name//trim(diag_cs%z_remap_suffix), cmor_field_name, &
              cmor_z_remap_diag%remap_axes%handles, &
