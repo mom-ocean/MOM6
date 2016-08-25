@@ -489,7 +489,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
 
   G => CS%grid
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; ied = G%ied ; jed = G%jed
-
+  Sbdry = 0.0 ! define Sbdry to avoid Run-Time Check Failure, when melt is not computed.
   I_ZETA_N = 1.0 / ZETA_N
   LF = CS%Lat_fusion
   I_RhoLF = 1.0/(CS%Rho0*LF)
@@ -699,7 +699,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
               Sbdry = Sbdry_it
             endif
 
-            Sbdry = Sbdry_it
+            Sbdry = Sbdry_it 
           enddo !it1
   ! Check for non-convergence and/or non-boundedness?
 
@@ -714,15 +714,26 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
           CS%t_flux(i,j) = RhoCp * CS%exch_vel_t(i,j) * (state%sst(i,j) - CS%tfreeze(i,j))
           CS%tflux_shelf(i,j) = 0.0
           CS%lprec(i,j) = I_LF * CS%t_flux(i,j)
+          Sbdry = 0.0
         endif
       else !not shelf
         CS%t_flux(i,j) = 0.0
       endif
 
-      ! GM: set lprec (therefore melting) to zero above a cutoff pressure
-      ! (CS%Rho0*CS%cutoff_depth*CS%g_Earth) this is needed for the isomip test case
-      if (p_int(i) < CS%Rho0*CS%cutoff_depth*CS%g_Earth) CS%lprec(i,j) = 0.0
+    enddo ! i-loop
+  enddo ! j-loop
 
+  do j=js,je
+    do i=is,ie
+    ! GM: set lprec (therefore melting) to zero above a cutoff pressure
+    ! (CS%Rho0*CS%cutoff_depth*CS%g_Earth) this is needed for the isomip 
+    ! test case.
+        
+      if ((CS%g_Earth * CS%mass_shelf(i,j)) < CS%Rho0*CS%cutoff_depth* &
+         CS%g_Earth) CS%lprec(i,j) = 0.0
+    ! avoid negative fluxes
+    !  CS%lprec(i,j) = MAX(CS%lprec(i,j),0.0)
+      
     enddo ! i-loop
   enddo ! j-loop
 
@@ -800,7 +811,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
    if (CS%id_melt > 0) call post_data(CS%id_melt, (CS%lprec) * (86400.0*365.0/rho_fw), CS%diag)
    !if (CS%id_melt > 0) call post_data(CS%id_melt, (CS%lprec) * (86400.0*365.0/CS%density_ice), CS%diag)
    if (CS%id_thermal_driving > 0) call post_data(CS%id_thermal_driving, (state%sst-CS%tfreeze), CS%diag)
-   if (CS%id_haline_driving > 0) call post_data(CS%id_haline_driving, (state%sss-Sbdry), CS%diag)
+   if (CS%id_haline_driving > 0) call post_data(CS%id_haline_driving, (state%sss - Sbdry), CS%diag)
    if (CS%id_mass_flux > 0) call post_data(CS%id_mass_flux, mass_flux, CS%diag)
    if (CS%id_u_ml > 0) call post_data(CS%id_u_ml,state%u,CS%diag)
    if (CS%id_v_ml > 0) call post_data(CS%id_v_ml,state%v,CS%diag)
@@ -1413,6 +1424,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
 
   allocate( CS%tflux_shelf(isd:ied,jsd:jed) ) ; CS%tflux_shelf(:,:) = 0.0
   allocate( CS%tfreeze(isd:ied,jsd:jed) )     ; CS%tfreeze(:,:) = 0.0
+!  allocate( CS%Sbdry(isd:ied,jsd:jed) )       ; CS%Sbdry(:,:) = 0.0
   allocate( CS%exch_vel_s(isd:ied,jsd:jed) )  ; CS%exch_vel_s(:,:) = 0.0
   allocate( CS%exch_vel_t(isd:ied,jsd:jed) )  ; CS%exch_vel_t(:,:) = 0.0
   
@@ -5614,7 +5626,7 @@ subroutine ice_shelf_end(CS)
   deallocate(CS%t_flux) ; deallocate(CS%lprec)
   deallocate(CS%salt_flux)
 
-  deallocate(CS%tflux_shelf) ; deallocate(CS%tfreeze)
+  deallocate(CS%tflux_shelf) ; deallocate(CS%tfreeze);! deallocate(CS%Sbdry);
   deallocate(CS%exch_vel_t) ; deallocate(CS%exch_vel_s)
 
   deallocate(CS%h_shelf) ; deallocate(CS%hmask)
