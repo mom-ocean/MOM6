@@ -70,6 +70,7 @@ use Rossby_front_2d_initialization, only : Rossby_front_initialize_thickness
 use Rossby_front_2d_initialization, only : Rossby_front_initialize_temperature_salinity
 use Rossby_front_2d_initialization, only : Rossby_front_initialize_velocity
 use SCM_idealized_hurricane, only : SCM_idealized_hurricane_TS_init
+use supercritical_initialization, only : supercritical_initialize_velocity
 use supercritical_initialization, only : supercritical_set_OBC_data
 use BFB_initialization, only : BFB_initialize_sponges_southonly
 
@@ -330,6 +331,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
        case ("circular"); call initialize_velocity_circular(u, v, G, PF)
        case ("phillips"); call Phillips_initialize_velocity(u, v, G, GV, PF)
        case ("rossby_front"); call Rossby_front_initialize_velocity(u, v, h, G, GV, PF)
+       case ("supercritical"); call supercritical_initialize_velocity(u, v, h, G)
        case ("USER"); call user_initialize_velocity(u, v, G, PF)
        case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
             "Unrecognized velocity configuration "//trim(config))

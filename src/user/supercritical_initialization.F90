@@ -33,6 +33,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public supercritical_initialize_topography
+public supercritical_initialize_velocity
 public supercritical_set_OBC_data
 
 contains
@@ -74,6 +75,29 @@ subroutine supercritical_initialize_topography(D, G, param_file, max_depth)
   enddo ; enddo
 
 end subroutine supercritical_initialize_topography
+! -----------------------------------------------------------------------------
+!> Initialization of u and v in the supercritical test
+subroutine supercritical_initialize_velocity(u, v, h, G)
+  type(ocean_grid_type),                  intent(in)     :: G  !< Grid structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: u  !< i-component of velocity [m/s]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: v  !< j-component of velocity [m/s]
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< Thickness [H]
+
+  real    :: y              ! Non-dimensional coordinate across channel, 0..pi
+  integer :: i, j, k, is, ie, js, je, nz
+  character(len=40) :: verticalCoordinate
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  v(:,:,:) = 0.0
+
+  do j = G%jsc,G%jec ; do I = G%isc-1,G%iec+1
+    do k = 1, nz
+      u(I,j,k) = 8.57 * G%mask2dCu(I,j)   ! Thermal wind starting at base of ML
+    enddo
+  enddo ; enddo
+
+end subroutine supercritical_initialize_velocity
 ! -----------------------------------------------------------------------------
 !> This subroutine sets the properties of flow at open boundary conditions.
 subroutine supercritical_set_OBC_data(OBC, G)
