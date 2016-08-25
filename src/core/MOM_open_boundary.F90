@@ -301,7 +301,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
 !  if (Je_obc == G%HI%JecB) Je_obc = G%HI%jed
 
   do j=G%HI%jsd, G%HI%jed
-    if (j>=min(Js_obc,Je_obc) .and. j<=max(Js_obc,Je_obc)) then
+    if (j>min(Js_obc,Je_obc) .and. j<=max(Js_obc,Je_obc)) then
       OBC%OBC_mask_u(I_obc,j) = .true.
       OBC%OBC_kind_u(I_obc,j) = this_kind
       OBC%OBC_segment_u(I_obc,j) = l_seg
@@ -395,14 +395,13 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
 !  if (Ie_obc == G%HI%IecB) Ie_obc = G%HI%ied
 
   do i=G%HI%isd, G%HI%ied
-    if (i>=min(Is_obc,Ie_obc) .and. i<=max(Is_obc,Ie_obc)) then
+    if (i>min(Is_obc,Ie_obc) .and. i<=max(Is_obc,Ie_obc)) then
       OBC%OBC_mask_v(i,J_obc) = .true.
       OBC%OBC_kind_v(i,J_obc) = this_kind
       OBC%OBC_segment_v(i,J_obc) = l_seg
       if (Is_obc>Ie_obc) then ! North is outward
         if (this_kind == OBC_FLATHER) then
           OBC%OBC_direction_v(i,J_obc) = OBC_DIRECTION_N ! We only use direction for Flather
-!          OBC%OBC_direction_v(i,J_obc) = OBC_DIRECTION_N ! We only use direction for Flather
           ! Set u points outside segment
           OBC%OBC_mask_u(I,j_obc+1) = .true.
           if (OBC%OBC_direction_u(I,j_obc+1) == OBC_NONE) then
@@ -420,7 +419,6 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
       else ! South is outward
         if (this_kind == OBC_FLATHER) then
           OBC%OBC_direction_v(i,J_obc) = OBC_DIRECTION_S ! We only use direction for Flather
-!          OBC%OBC_direction_v(i,J_obc) = OBC_DIRECTION_S ! We only use direction for Flather
           ! Set u points outside segment
           OBC%OBC_mask_u(I,j_obc) = .true.
           if (OBC%OBC_direction_u(I,j_obc) == OBC_NONE) then
@@ -483,7 +481,7 @@ subroutine parse_segment_str(ni_global, nj_global, segment_str, l, m, n, action_
   ! Read m
   m_word = extract_word(word2(3:24),':',1)
   m = interpret_int_expr( m_word, mn_max )
-  if (m<0 .or. m>mn_max) then
+  if (m<-1 .or. m>mn_max+1) then
     call MOM_error(FATAL, "MOM_open_boundary.F90, parse_segment_str: "//&
                    "Beginning of range in string '"//trim(segment_str)//"' is outside of the physical domain.")
   endif
@@ -491,7 +489,7 @@ subroutine parse_segment_str(ni_global, nj_global, segment_str, l, m, n, action_
   ! Read m
   n_word = extract_word(word2(3:24),':',2)
   n = interpret_int_expr( n_word, mn_max )
-  if (n<0 .or. n>mn_max) then
+  if (n<-1 .or. n>mn_max+1) then
     call MOM_error(FATAL, "MOM_open_boundary.F90, parse_segment_str: "//&
                    "End of range in string '"//trim(segment_str)//"' is outside of the physical domain.")
   endif
