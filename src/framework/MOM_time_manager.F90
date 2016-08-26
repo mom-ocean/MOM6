@@ -9,7 +9,8 @@ module MOM_time_manager
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use time_manager_mod, only : time_type, get_time, set_time, time_type_to_real
+use time_manager_mod, only : time_type, get_time, set_time
+use time_manager_mod, only : time_type_to_real, real_to_time_type
 use time_manager_mod, only : operator(+), operator(-), operator(*), operator(/)
 use time_manager_mod, only : operator(>), operator(<), operator(>=), operator(<=)
 use time_manager_mod, only : operator(==), operator(/=), operator(//)
@@ -21,7 +22,7 @@ use time_manager_mod, only : JULIAN, NOLEAP, THIRTY_DAY_MONTHS, NO_CALENDAR
 
 implicit none ; private
 
-public :: time_type, get_time, set_time, time_type_to_real
+public :: time_type, get_time, set_time, time_type_to_real, real_to_time_type
 public :: set_ticks_per_second , get_ticks_per_second
 public :: operator(+), operator(-), operator(*), operator(/)
 public :: operator(>), operator(<), operator(>=), operator(<=)
