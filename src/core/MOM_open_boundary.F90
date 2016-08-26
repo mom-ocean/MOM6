@@ -521,8 +521,14 @@ subroutine parse_segment_str(ni_global, nj_global, segment_str, l, m, n, action_
     if (len_trim(string)==1 .and. string(1:1)=='N') then
       interpret_int_expr = imax
     elseif (string(1:1)=='N') then
-      read(string(2:slen),*,err=911) interpret_int_expr
-      interpret_int_expr = imax - interpret_int_expr
+      read(string(3:slen),*,err=911) interpret_int_expr
+      if (string(2:2)=='-') then
+        interpret_int_expr = imax - interpret_int_expr
+      elseif (string(2:2)=='+') then
+        interpret_int_expr = imax + interpret_int_expr
+      else
+        goto 911
+      endif
     else
       read(string(1:slen),*,err=911) interpret_int_expr
     endif
