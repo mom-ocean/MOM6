@@ -78,6 +78,8 @@ public register_scalar_field
 public define_axes_group, diag_masks_set
 public diag_set_thickness_ptr
 public diag_update_target_grids
+public diag_register_area_ids
+public diag_register_volume_ids
 
 interface post_data
   module procedure post_data_3d, post_data_2d, post_data_0d
@@ -90,9 +92,13 @@ type, public :: axes_grp
   integer, dimension(:), allocatable :: handles !< Handles to 1D axes
   type(diag_ctrl), pointer :: diag_cs => null() !< Circular link back to the main diagnostics control structure
                                                 !! (Used to avoid passing said structure into every possible call)
+  ! ID's for cell_methods
   character(len=9) :: x_cell_method = '' !< Default nature of data representation, if axes group includes x-direction
   character(len=9) :: y_cell_method = '' !< Default nature of data representation, if axes group includes y-direction
   character(len=9) :: v_cell_method = '' !< Default nature of data representation, if axes group includes vertical direction
+  ! ID's for cell_measures
+  integer :: id_area = -1 !< The diag_manager id for area to be used for cell_measure of variables with this axes_grp.
+  integer :: id_volume = -1 !< The diag_manager id for volume to be used for cell_measure of variables with this axes_grp.
 end type axes_grp
 
 ! This type is used to represent a diagnostic at the diag_mediator level.
@@ -388,6 +394,41 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
        x_cell_method='mean', y_cell_method='point')
 
 end subroutine set_axes_info
+
+!> Attaches the id of cell areas to axes groupsfor use with cell_measures
+subroutine diag_register_area_ids(diag_cs, id_area_t, id_area_q)
+  type(diag_ctrl),   intent(inout) :: diag_cs   !< Diagnostics control structure
+  integer, optional, intent(in)    :: id_area_t !< Diag_mediator id for area of h-cells
+  integer, optional, intent(in)    :: id_area_q !< Diag_mediator id for area of q-cells
+  ! Local variables
+  integer :: fms_id
+  if (present(id_area_t)) then
+    fms_id = diag_cs%diags(id_area_t)%fms_diag_id
+    diag_cs%axesT1%id_area = fms_id
+    diag_cs%axesTi%id_area = fms_id
+    diag_cs%axesTL%id_area = fms_id
+    diag_cs%axesTZL%id_area = fms_id
+  endif
+  if (present(id_area_q)) then
+    fms_id = diag_cs%diags(id_area_q)%fms_diag_id
+    diag_cs%axesB1%id_area = fms_id
+    diag_cs%axesBi%id_area = fms_id
+    diag_cs%axesBL%id_area = fms_id
+    diag_cs%axesBZL%id_area = fms_id
+  endif
+end subroutine diag_register_area_ids
+
+!> Attaches the id of cell volumes to axes groupsfor use with cell_measures
+subroutine diag_register_volume_ids(diag_cs, id_vol_t)
+  type(diag_ctrl),   intent(inout) :: diag_cs   !< Diagnostics control structure
+  integer, optional, intent(in)    :: id_vol_t !< Diag_manager id for volume of h-cells
+  ! Local variables
+  integer :: fms_id
+  if (present(id_vol_t)) then
+    fms_id = diag_cs%diags(id_vol_t)%fms_diag_id
+    call MOM_error(FATAL,"diag_register_volume_ids: not implemented yet!")
+  endif
+end subroutine diag_register_volume_ids
 
 function check_grid_def(filename, varname)
   ! Do some basic checks on the vertical grid definition file, variable
@@ -1111,7 +1152,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
   cmor_z_remap_diag => null()
 
   ! Set up the 'primary' diagnostic, first get an underlying FMS id
-  fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+  fms_id = register_diag_field_low(module_name, field_name, axes, &
          init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
          range=range, mask_variant=mask_variant, standard_name=standard_name, &
          verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
@@ -1156,7 +1197,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
 
   ! Set up the CMOR variation of the native diagnostic
   if (present(cmor_field_name)) then
-    fms_id = register_diag_field_fms(module_name, cmor_field_name, axes%handles, init_time,    &
+    fms_id = register_diag_field_low(module_name, cmor_field_name, axes, init_time,    &
       long_name=trim(posted_cmor_long_name), units=trim(posted_cmor_units),                    &
       missing_value=MOM_missing_value, range=range, mask_variant=mask_variant,                 &
       standard_name=trim(posted_cmor_standard_name), verbose=verbose, do_not_log=do_not_log,   &
@@ -1199,8 +1240,8 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
       call set_diag_remap_axes(z_remap_diag, diag_cs, axes)
       if (present(conversion)) z_remap_diag%conversion_factor = conversion
       call assert(associated(z_remap_diag%remap_axes), 'register_diag_field: remap axes not set')
-      fms_id = register_diag_field_fms(module_name//trim(diag_cs%z_remap_suffix), field_name, &
-           z_remap_diag%remap_axes%handles, &
+      fms_id = register_diag_field_low(module_name//trim(diag_cs%z_remap_suffix), field_name, &
+           z_remap_diag%remap_axes, &
            init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
            range=range, mask_variant=mask_variant, standard_name=standard_name, &
            verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
@@ -1240,8 +1281,8 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
         call set_diag_remap_axes(cmor_z_remap_diag, diag_cs, axes)
         if (present(conversion)) cmor_z_remap_diag%conversion_factor = conversion
         call assert(associated(cmor_z_remap_diag%remap_axes), 'register_diag_field: remap axes not set')
-        fms_id = register_diag_field_fms(module_name//trim(diag_cs%z_remap_suffix), cmor_field_name, &
-             cmor_z_remap_diag%remap_axes%handles, &
+        fms_id = register_diag_field_low(module_name//trim(diag_cs%z_remap_suffix), cmor_field_name, &
+             cmor_z_remap_diag%remap_axes, &
              init_time, long_name=trim(posted_cmor_long_name), units=trim(posted_cmor_units), missing_value=MOM_missing_value, &
              range=range, mask_variant=mask_variant, standard_name=trim(posted_cmor_standard_name), &
              verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
@@ -1271,6 +1312,50 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
   register_diag_field = primary_id
 
 end function register_diag_field
+
+!> Returns ID from register_diag_field_fms (the diag_manager routine) but expands axes and adds an area_id for cell measures.
+integer function register_diag_field_low(module_name, field_name, axes, init_time, &
+     long_name, units, missing_value, range, mask_variant, standard_name,  &
+     verbose, do_not_log, err_msg, interp_method, tile_count)
+  character(len=*), intent(in) :: module_name !< Name of this module, usually "ocean_model" or "ice_shelf_model"
+  character(len=*), intent(in) :: field_name !< Name of the diagnostic field
+  type(axes_grp), target, intent(in) :: axes !< Container w/ up to 3 integer handles that indicates axes for this field
+  type(time_type),  intent(in) :: init_time !< Time at which a field is first available?
+  character(len=*), optional, intent(in) :: long_name !< Long name of a field.
+  character(len=*), optional, intent(in) :: units !< Units of a field.
+  character(len=*), optional, intent(in) :: standard_name !< Standardized name associated with a field
+  real,             optional, intent(in) :: missing_value !< A value that indicates missing values.
+  real,             optional, intent(in) :: range(2) !< Valid range of a variable (not used in MOM?)
+  logical,          optional, intent(in) :: mask_variant !< If true a logical mask must be provided with post_data calls (not used in MOM?)
+  logical,          optional, intent(in) :: verbose !< If true, FMS is verbose (not used in MOM?)
+  logical,          optional, intent(in) :: do_not_log !< If true, do not log something (not used in MOM?)
+  character(len=*), optional, intent(out):: err_msg !< String into which an error message might be placed (not used in MOM?)
+  character(len=*), optional, intent(in) :: interp_method !< no clue (not used in MOM?)
+  integer,          optional, intent(in) :: tile_count !< no clue (not used in MOM?)
+  ! Local variables
+  integer :: fms_id, area_id
+
+  ! This gets the cell area associated with the grid location of this variable
+  area_id = axes%id_area
+
+  ! Get the FMS diagnostic id
+  if (area_id>0) then
+    fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+               init_time, long_name=long_name, units=units, missing_value=missing_value, &
+               range=range, mask_variant=mask_variant, standard_name=standard_name, &
+               verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
+               interp_method=interp_method, tile_count=tile_count, area=area_id)
+  else
+    fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+               init_time, long_name=long_name, units=units, missing_value=missing_value, &
+               range=range, mask_variant=mask_variant, standard_name=standard_name, &
+               verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
+               interp_method=interp_method, tile_count=tile_count)
+  endif
+
+  register_diag_field_low = fms_id
+
+end function register_diag_field_low
 
 !> Attaches "cell_methods" attribute to a variable based on defaults for axes_grp or optional arguments.
 subroutine attach_cell_methods(id, axes, ostring, cell_methods, x_cell_method, y_cell_method, v_cell_method)
