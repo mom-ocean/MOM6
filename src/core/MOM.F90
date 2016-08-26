@@ -32,6 +32,7 @@ use MOM_coms,                 only : reproducing_sum
 use MOM_coord_initialization, only : MOM_initialize_coord
 use MOM_diag_mediator,        only : diag_mediator_init, enable_averaging
 use MOM_diag_mediator,        only : diag_mediator_infrastructure_init
+use MOM_diag_mediator,        only : diag_register_area_ids
 use MOM_diag_mediator,        only : diag_set_thickness_ptr, diag_update_target_grids
 use MOM_diag_mediator,        only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator,        only : register_diag_field, register_static_field
@@ -2685,8 +2686,8 @@ end subroutine post_diags_TS_vardec
 !> Offers the static fields in the ocean grid type
 !! for output via the diag_manager.
 subroutine write_static_fields(G, diag)
-  type(ocean_grid_type),   intent(in) :: G      !< ocean grid structure
-  type(diag_ctrl), target, intent(in) :: diag   !< regulates diagnostic output
+  type(ocean_grid_type),   intent(in)    :: G      !< ocean grid structure
+  type(diag_ctrl), target, intent(inout) :: diag   !< regulates diagnostic output
 
   ! The out_X arrays are needed because some of the elements of the grid
   ! type may be reduced rank macros.
@@ -2735,6 +2736,7 @@ subroutine write_static_fields(G, diag)
   if (id > 0) then
     do j=js,je ; do i=is,ie ; out_h(i,j) = G%areaT(i,j) ; enddo ; enddo
     call post_data(id, out_h, diag, .true.)
+    call diag_register_area_ids(diag, id_area_t=id)
   endif
 
   id = register_static_field('ocean_model', 'depth_ocean', diag%axesT1,  &
