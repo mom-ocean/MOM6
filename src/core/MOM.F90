@@ -1945,6 +1945,10 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   ! for vertical remapping may need to be regenerated.
   call diag_update_target_grids(diag)
 
+  ! Diagnose static fields AND associate areas/volumes with axes
+  call write_static_fields(G, CS%diag)
+  call callTree_waypoint("static fields written (initialize_MOM)")
+
   call cpu_clock_begin(id_clock_MOM_init)
   if (CS%use_ALE_algorithm) then
     call ALE_writeCoordinateFile( CS%ALE_CSp, GV, dirs%output_directory )
@@ -2068,9 +2072,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   call register_obsolete_diagnostics(param_file, CS%diag)
   call neutral_diffusion_diag_init(Time, G, diag, CS%tv%C_p, CS%tracer_Reg, CS%neutral_diffusion_CSp)
-
-  call write_static_fields(G, CS%diag)
-  call callTree_waypoint("static fields written (initialize_MOM)")
 
   if (CS%use_frazil) then
     if (.not.query_initialized(CS%tv%frazil,"frazil",CS%restart_CSp)) &
