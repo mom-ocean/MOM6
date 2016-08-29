@@ -96,6 +96,8 @@ type, public :: axes_grp
   character(len=9) :: x_cell_method = '' !< Default nature of data representation, if axes group includes x-direction
   character(len=9) :: y_cell_method = '' !< Default nature of data representation, if axes group includes y-direction
   character(len=9) :: v_cell_method = '' !< Default nature of data representation, if axes group includes vertical direction
+  ! For detecting position on the grid
+  logical :: is_h_point = .false. !< If true, indicates that this axes group is for an h-point located field.
   ! ID's for cell_measures
   integer :: id_area = -1 !< The diag_manager id for area to be used for cell_measure of variables with this axes_grp.
   integer :: id_volume = -1 !< The diag_manager id for volume to be used for cell_measure of variables with this axes_grp.
@@ -349,13 +351,13 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
 
   ! Axes for z remapping
   call define_axes_group(diag_cs, (/ id_xh, id_yh, id_zzl /), diag_cs%axesTZL, &
-       x_cell_method='mean', y_cell_method='mean', v_cell_method='mean')
+       x_cell_method='mean', y_cell_method='mean', v_cell_method='mean', is_h_point=.true.)
   call define_axes_group(diag_cs, (/ id_xq, id_yq, id_zzL /), diag_cs%axesBZL, &
-       x_cell_method='point', y_cell_method='point', v_cell_method='mean')
+       x_cell_method='point', y_cell_method='point', v_cell_method='mean', is_h_point=.false.)
   call define_axes_group(diag_cs, (/ id_xq, id_yh, id_zzL /), diag_cs%axesCuZL, &
-       x_cell_method='point', y_cell_method='mean', v_cell_method='mean')
+       x_cell_method='point', y_cell_method='mean', v_cell_method='mean', is_h_point=.false.)
   call define_axes_group(diag_cs, (/ id_xh, id_yq, id_zzL /), diag_cs%axesCvZL, &
-       x_cell_method='mean', y_cell_method='point', v_cell_method='mean')
+       x_cell_method='mean', y_cell_method='point', v_cell_method='mean', is_h_point=.false.)
 
   ! Vertical axes for the interfaces and layers
   call define_axes_group(diag_cs, (/ id_zi /), diag_cs%axesZi, &
@@ -365,33 +367,33 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
 
   ! Axis groupings for the model layers
   call define_axes_group(diag_cs, (/ id_xh, id_yh, id_zL /), diag_cs%axesTL, &
-       x_cell_method='mean', y_cell_method='mean', v_cell_method='mean')
+       x_cell_method='mean', y_cell_method='mean', v_cell_method='mean', is_h_point=.true.)
   call define_axes_group(diag_cs, (/ id_xq, id_yq, id_zL /), diag_cs%axesBL, &
-       x_cell_method='point', y_cell_method='point', v_cell_method='mean')
+       x_cell_method='point', y_cell_method='point', v_cell_method='mean', is_h_point=.false.)
   call define_axes_group(diag_cs, (/ id_xq, id_yh, id_zL /), diag_cs%axesCuL, &
-       x_cell_method='point', y_cell_method='mean', v_cell_method='mean')
+       x_cell_method='point', y_cell_method='mean', v_cell_method='mean', is_h_point=.false.)
   call define_axes_group(diag_cs, (/ id_xh, id_yq, id_zL /), diag_cs%axesCvL, &
-       x_cell_method='mean', y_cell_method='point', v_cell_method='mean')
+       x_cell_method='mean', y_cell_method='point', v_cell_method='mean', is_h_point=.false.)
 
   ! Axis groupings for the model interfaces
   call define_axes_group(diag_cs, (/ id_xh, id_yh, id_zi /), diag_cs%axesTi, &
-       x_cell_method='mean', y_cell_method='mean', v_cell_method='point')
+       x_cell_method='mean', y_cell_method='mean', v_cell_method='point', is_h_point=.true.)
   call define_axes_group(diag_cs, (/ id_xq, id_yh, id_zi /), diag_cs%axesCui, &
-       x_cell_method='point', y_cell_method='mean', v_cell_method='point')
+       x_cell_method='point', y_cell_method='mean', v_cell_method='point', is_h_point=.false.)
   call define_axes_group(diag_cs, (/ id_xh, id_yq, id_zi /), diag_cs%axesCvi, &
-       x_cell_method='mean', y_cell_method='point', v_cell_method='point')
+       x_cell_method='mean', y_cell_method='point', v_cell_method='point', is_h_point=.false.)
   call define_axes_group(diag_cs, (/ id_xq, id_yq, id_zi /), diag_cs%axesBi, &
-       x_cell_method='point', y_cell_method='point', v_cell_method='point')
+       x_cell_method='point', y_cell_method='point', v_cell_method='point', is_h_point=.false.)
 
   ! Axis groupings for 2-D arrays
   call define_axes_group(diag_cs, (/ id_xh, id_yh /), diag_cs%axesT1, &
-       x_cell_method='mean', y_cell_method='mean')
+       x_cell_method='mean', y_cell_method='mean', is_h_point=.true.)
   call define_axes_group(diag_cs, (/ id_xq, id_yq /), diag_cs%axesB1, &
-       x_cell_method='point', y_cell_method='point')
+       x_cell_method='point', y_cell_method='point', is_h_point=.false.)
   call define_axes_group(diag_cs, (/ id_xq, id_yh /), diag_cs%axesCu1, &
-       x_cell_method='point', y_cell_method='mean')
+       x_cell_method='point', y_cell_method='mean', is_h_point=.false.)
   call define_axes_group(diag_cs, (/ id_xh, id_yq /), diag_cs%axesCv1, &
-       x_cell_method='mean', y_cell_method='point')
+       x_cell_method='mean', y_cell_method='point', is_h_point=.false.)
 
 end subroutine set_axes_info
 
@@ -462,13 +464,14 @@ end function check_grid_def
 
 !> Defines a group of "axes" from list of handles
 subroutine define_axes_group(diag_cs, handles, axes, &
-                             x_cell_method, y_cell_method, v_cell_method)
+                             x_cell_method, y_cell_method, v_cell_method, is_h_point)
   type(diag_ctrl), target,    intent(in)  :: diag_cs !< Diagnostics control structure
   integer, dimension(:),      intent(in)  :: handles !< A list of 1D axis handles
   type(axes_grp),             intent(out) :: axes    !< The group of 1D axes
   character(len=*), optional, intent(in)  :: x_cell_method !< A x-direction cell method used to construct the "cell_methods" attribute in CF convention
   character(len=*), optional, intent(in)  :: y_cell_method !< A y-direction cell method used to construct the "cell_methods" attribute in CF convention
   character(len=*), optional, intent(in)  :: v_cell_method !< A vertical direction cell method used to construct the "cell_methods" attribute in CF convention
+  logical,          optional, intent(in)  :: is_h_point !< If true, indicates this axes group for h-point located fields
   ! Local variables
   integer :: n
   n = size(handles)
@@ -499,6 +502,7 @@ subroutine define_axes_group(diag_cs, handles, axes, &
   else
     axes%v_cell_method = ''
   endif
+  if (present(is_h_point)) axes%is_h_point = is_h_point
 end subroutine define_axes_group
 
 subroutine set_diag_mediator_grid(G, diag_cs)
@@ -1121,7 +1125,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
   logical,          optional, intent(in) :: verbose !< If true, FMS is verbose (not used in MOM?)
   logical,          optional, intent(in) :: do_not_log !< If true, do not log something (not used in MOM?)
   character(len=*), optional, intent(out):: err_msg !< String into which an error message might be placed (not used in MOM?)
-  character(len=*), optional, intent(in) :: interp_method !< no clue (not used in MOM?)
+  character(len=*), optional, intent(in) :: interp_method !< If 'none' indicates the field should not be interpolated as a scalar
   integer,          optional, intent(in) :: tile_count !< no clue (not used in MOM?)
   character(len=*), optional, intent(in) :: cmor_field_name !< CMOR name of a field
   character(len=*), optional, intent(in) :: cmor_long_name !< CMOR long name of a field
@@ -1330,7 +1334,7 @@ integer function register_diag_field_low(module_name, field_name, axes, init_tim
   logical,          optional, intent(in) :: verbose !< If true, FMS is verbose (not used in MOM?)
   logical,          optional, intent(in) :: do_not_log !< If true, do not log something (not used in MOM?)
   character(len=*), optional, intent(out):: err_msg !< String into which an error message might be placed (not used in MOM?)
-  character(len=*), optional, intent(in) :: interp_method !< no clue (not used in MOM?)
+  character(len=*), optional, intent(in) :: interp_method !< If 'none' indicates the field should not be interpolated as a scalar
   integer,          optional, intent(in) :: tile_count !< no clue (not used in MOM?)
   ! Local variables
   integer :: fms_id, area_id
@@ -1339,18 +1343,36 @@ integer function register_diag_field_low(module_name, field_name, axes, init_tim
   area_id = axes%id_area
 
   ! Get the FMS diagnostic id
-  if (area_id>0) then
-    fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
-               init_time, long_name=long_name, units=units, missing_value=missing_value, &
-               range=range, mask_variant=mask_variant, standard_name=standard_name, &
-               verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
-               interp_method=interp_method, tile_count=tile_count, area=area_id)
+  if (present(interp_method) .or. axes%is_h_point) then
+    ! If interp_method is provided we must use it
+    if (area_id>0) then
+      fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+                 init_time, long_name=long_name, units=units, missing_value=missing_value, &
+                 range=range, mask_variant=mask_variant, standard_name=standard_name, &
+                 verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
+                 interp_method=interp_method, tile_count=tile_count, area=area_id)
+    else
+      fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+                 init_time, long_name=long_name, units=units, missing_value=missing_value, &
+                 range=range, mask_variant=mask_variant, standard_name=standard_name, &
+                 verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
+                 interp_method=interp_method, tile_count=tile_count)
+    endif
   else
-    fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
-               init_time, long_name=long_name, units=units, missing_value=missing_value, &
-               range=range, mask_variant=mask_variant, standard_name=standard_name, &
-               verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
-               interp_method=interp_method, tile_count=tile_count)
+    ! If interp_method is not provided and the field is not at an h-point then interp_method='none'
+    if (area_id>0) then
+      fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+                 init_time, long_name=long_name, units=units, missing_value=missing_value, &
+                 range=range, mask_variant=mask_variant, standard_name=standard_name, &
+                 verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
+                 interp_method='none', tile_count=tile_count, area=area_id)
+    else
+      fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+                 init_time, long_name=long_name, units=units, missing_value=missing_value, &
+                 range=range, mask_variant=mask_variant, standard_name=standard_name, &
+                 verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
+                 interp_method='none', tile_count=tile_count)
+    endif
   endif
 
   register_diag_field_low = fms_id
@@ -1467,7 +1489,7 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
   !  (in,opt)  verbose       - If true, FMS is verbosed
   !  (in,opt)  do_not_log    - If true, do not log something
   !  (out,opt) err_msg       - character string into which an error message might be placed
-  !  (in,opt)  interp_method - no clue
+  !  (in,opt)  interp_method - If 'none' indicates the field should not be interpolated as a scalar
   !  (in,opt)  tile_count    - no clue
 
   real :: MOM_missing_value
@@ -1569,7 +1591,7 @@ function register_static_field(module_name, field_name, axes, &
   !  (in,opt)  range          - valid range of a variable
   !  (in,opt)  mask_variant   - If true a logical mask must be provided with post_data calls
   !  (in,opt)  do_not_log     - If true, do not log something
-  !  (in,opt)  interp_method  - no clue
+  !  (in,opt)  interp_method  - If 'none' indicates the field should not be interpolated as a scalar
   !  (in,opt)  tile_count     - no clue
 
   real :: MOM_missing_value

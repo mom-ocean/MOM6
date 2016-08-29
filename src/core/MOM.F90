@@ -2751,43 +2751,43 @@ subroutine write_static_fields(G, diag)
   if (id > 0) call post_data(id, G%mask2dT, diag, .true.)
 
   id = register_static_field('ocean_model', 'wet_c', diag%axesB1, &
-        '0 if land, 1 if ocean at corner (Bu) points', 'none')
+        '0 if land, 1 if ocean at corner (Bu) points', 'none', interp_method='none')
   if (id > 0) call post_data(id, G%mask2dBu, diag, .true.)
 
   id = register_static_field('ocean_model', 'wet_u', diag%axesCu1, &
-        '0 if land, 1 if ocean at zonal velocity (Cu) points', 'none')
+        '0 if land, 1 if ocean at zonal velocity (Cu) points', 'none', interp_method='none')
   if (id > 0) call post_data(id, G%mask2dCu, diag, .true.)
 
   id = register_static_field('ocean_model', 'wet_v', diag%axesCv1, &
-        '0 if land, 1 if ocean at meridional velocity (Cv) points', 'none')
+        '0 if land, 1 if ocean at meridional velocity (Cv) points', 'none', interp_method='none')
   if (id > 0) call post_data(id, G%mask2dCv, diag, .true.)
 
   id = register_static_field('ocean_model', 'Coriolis', diag%axesB1, &
-        'Coriolis parameter at corner (Bu) points', 's-1')
+        'Coriolis parameter at corner (Bu) points', 's-1', interp_method='none')
   if (id > 0) call post_data(id, G%CoriolisBu, diag, .true.)
 
   id = register_static_field('ocean_model', 'dxt', diag%axesT1, &
-        'Delta(x) at thickness/tracer points (meter)', 'm')
+        'Delta(x) at thickness/tracer points (meter)', 'm', interp_method='none')
   if (id > 0) call post_data(id, G%dxt, diag, .true.)
 
   id = register_static_field('ocean_model', 'dyt', diag%axesT1, &
-        'Delta(y) at thickness/tracer points (meter)', 'm')
+        'Delta(y) at thickness/tracer points (meter)', 'm', interp_method='none')
   if (id > 0) call post_data(id, G%dyt, diag, .true.)
 
   id = register_static_field('ocean_model', 'dxCu', diag%axesCu1, &
-        'Delta(x) at u points (meter)', 'm')
+        'Delta(x) at u points (meter)', 'm', interp_method='none')
   if (id > 0) call post_data(id, G%dxCu, diag, .true.)
 
   id = register_static_field('ocean_model', 'dyCu', diag%axesCu1, &
-        'Delta(y) at u points (meter)', 'm')
+        'Delta(y) at u points (meter)', 'm', interp_method='none')
   if (id > 0) call post_data(id, G%dyCu, diag, .true.)
 
   id = register_static_field('ocean_model', 'dxCv', diag%axesCv1, &
-        'Delta(x) at v points (meter)', 'm')
+        'Delta(x) at v points (meter)', 'm', interp_method='none')
   if (id > 0) call post_data(id, G%dxCv, diag, .true.)
 
   id = register_static_field('ocean_model', 'dyCv', diag%axesCv1, &
-        'Delta(y) at v points (meter)', 'm')
+        'Delta(y) at v points (meter)', 'm', interp_method='none')
   if (id > 0) call post_data(id, G%dyCv, diag, .true.)
 
 
