@@ -717,7 +717,7 @@ logical function mixedlayer_restrat_init(Time, G, GV, param_file, diag, CS)
       'Meridional Thickness Flux to Restratify Mixed Layer', flux_units)
   CS%id_urestrat_time = register_diag_field('ocean_model', 'MLu_restrat_time', diag%axesCu1, Time, &
       'Mixed Layer Zonal Restratification Timescale', 'second')
-  CS%id_vrestrat_time = register_diag_field('ocean_model', 'MLv_restrat_time', diag%axesCu1, Time, &
+  CS%id_vrestrat_time = register_diag_field('ocean_model', 'MLv_restrat_time', diag%axesCv1, Time, &
       'Mixed Layer Meridional Restratification Timescale', 'second')
   CS%id_MLD = register_diag_field('ocean_model', 'MLD_restrat', diag%axesT1, Time, &
       'Mixed Layer Depth as used in the mixed-layer restratification parameterization', 'meter')
