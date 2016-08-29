@@ -87,15 +87,15 @@ end interface post_data
 
 !> A group of 1D axes that comprise a 1D/2D/3D mesh
 type, public :: axes_grp
-  character(len=15) :: id   !< The id string for this particular combination of handles
-  integer           :: rank !< Number of dimensions in the list of axes
-  integer, dimension(:), allocatable :: handles !< Handles to 1D axes
+  character(len=15) :: id   !< The id string for this particular combination of handles.
+  integer           :: rank !< Number of dimensions in the list of axes.
+  integer, dimension(:), allocatable :: handles !< Handles to 1D axes.
   type(diag_ctrl), pointer :: diag_cs => null() !< Circular link back to the main diagnostics control structure
-                                                !! (Used to avoid passing said structure into every possible call)
+                                                !! (Used to avoid passing said structure into every possible call).
   ! ID's for cell_methods
-  character(len=9) :: x_cell_method = '' !< Default nature of data representation, if axes group includes x-direction
-  character(len=9) :: y_cell_method = '' !< Default nature of data representation, if axes group includes y-direction
-  character(len=9) :: v_cell_method = '' !< Default nature of data representation, if axes group includes vertical direction
+  character(len=9) :: x_cell_method = '' !< Default nature of data representation, if axes group includes x-direction.
+  character(len=9) :: y_cell_method = '' !< Default nature of data representation, if axes group includes y-direction.
+  character(len=9) :: v_cell_method = '' !< Default nature of data representation, if axes group includes vertical direction.
   ! For detecting position on the grid
   logical :: is_h_point = .false. !< If true, indicates that this axes group is for an h-point located field.
   ! ID's for cell_measures
@@ -103,37 +103,37 @@ type, public :: axes_grp
   integer :: id_volume = -1 !< The diag_manager id for volume to be used for cell_measure of variables with this axes_grp.
 end type axes_grp
 
-! This type is used to represent a diagnostic at the diag_mediator level.
-! There can be both 'primary' and 'seconday' diagnostics. The primaries
-! reside in the diag_cs%diags array. They have an id which is an index
-! into this array. The secondaries are 'variations' on the primary diagnostic.
-! For example the CMOR diagnostics are secondary. The secondary diagnostics
-! are kept in a list with the primary diagnostic as the head.
+!> This type is used to represent a diagnostic at the diag_mediator level.
+!! There can be both 'primary' and 'seconday' diagnostics. The primaries
+!! reside in the diag_cs%diags array. They have an id which is an index
+!! into this array. The secondaries are 'variations' on the primary diagnostic.
+!! For example the CMOR diagnostics are secondary. The secondary diagnostics
+!! are kept in a list with the primary diagnostic as the head.
 type, private :: diag_type
-  logical :: in_use
-  integer :: fms_diag_id         ! underlying FMS diag id
-  character(16) :: debug_str
+  logical :: in_use !< True if this entry is being used.
+  integer :: fms_diag_id !< Underlying FMS diag_manager id.
+  character(16) :: debug_str !< For FATAL errors and debugging.
   type(axes_grp), pointer :: remap_axes => null()
   real, pointer, dimension(:,:)   :: mask2d => null()
   real, pointer, dimension(:,:,:) :: mask3d => null()
-  type(diag_type), pointer :: next => null()  ! pointer to the next diag
-  real :: conversion_factor = 0. !< A factor to multiply data by before posting to FMS, if non-zero
+  type(diag_type), pointer :: next => null() !< Pointer to the next diag.
+  real :: conversion_factor = 0. !< A factor to multiply data by before posting to FMS, if non-zero.
 end type diag_type
 
-! The following data type a list of diagnostic fields an their variants,
-! as well as variables that control the handling of model output.
+!> The following data type a list of diagnostic fields an their variants,
+!! as well as variables that control the handling of model output.
 type, public :: diag_ctrl
-  integer :: doc_unit = -1 ! The unit number of a diagnostic documentation file.
-                           ! This file is open if doc_unit is > 0.
+  integer :: doc_unit = -1 !< The unit number of a diagnostic documentation file.
+                           !! This file is open if doc_unit is > 0.
 
 ! The following fields are used for the output of the data.
   integer :: is, ie, js, je
   integer :: isd, ied, jsd, jed
-  real :: time_int              ! The time interval in s for any fields
-                                ! that are offered for averaging.
-  type(time_type) :: time_end   ! The end time of the valid
-                                ! interval for any offered field.
-  logical :: ave_enabled = .false. ! .true. if averaging is enabled.
+  real :: time_int              !< The time interval in s for any fields
+                                !! that are offered for averaging.
+  type(time_type) :: time_end   !< The end time of the valid
+                                !! interval for any offered field.
+  logical :: ave_enabled = .false. !< True if averaging is enabled.
 
   ! The following are axis types defined for output.
   type(axes_grp) :: axesBL, axesTL, axesCuL, axesCvL
