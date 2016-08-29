@@ -69,7 +69,8 @@ module MOM_generic_tracer
   use MOM_tracer_registry, only : tracer_vertdiff
   use MOM_tracer_Z_init, only : tracer_Z_init
   use MOM_tracer_initialization_from_Z, only : MOM_initialize_tracer_from_Z
-  use MOM_variables, only : surface, ocean_OBC_type, thermo_var_ptrs
+  use MOM_variables, only : surface, thermo_var_ptrs
+  use MOM_open_boundary, only : ocean_OBC_type
   use MOM_verticalGrid, only : verticalGrid_type
 
 

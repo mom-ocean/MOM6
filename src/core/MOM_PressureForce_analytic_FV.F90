@@ -320,7 +320,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, e
   ! inty_dza to be 3-D arrays.
 
   ! Sum vertically to determine the surface geopotential anomaly.
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,za,alpha_ref,p,G,dza)
+!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,za,alpha_ref,p,G,GV,dza)
   do j=Jsq,Jeq+1
     do i=Isq,Ieq+1
       za(i,j) = alpha_ref*p(i,j,nz+1) - GV%g_Earth*G%bathyT(i,j)
@@ -337,7 +337,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, e
       SSH(i,j) = (za(i,j) - alpha_ref*p(i,j,1)) * I_gEarth
     enddo ; enddo
     call calc_tidal_forcing(CS%Time, SSH, e_tidal, G, CS%tides_CSp)
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,za,G,e_tidal)
+!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,za,G,GV,e_tidal)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       za(i,j) = za(i,j) - GV%g_Earth*e_tidal(i,j)
     enddo ; enddo
