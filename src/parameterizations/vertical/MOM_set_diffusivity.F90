@@ -58,6 +58,7 @@ use MOM_internal_tides,      only : int_tide_CS, get_lowmode_loss
 use MOM_intrinsic_functions, only : invcosh
 use MOM_io,                  only : slasher, vardesc, var_desc
 use MOM_kappa_shear,         only : calculate_kappa_shear, kappa_shear_init, Kappa_shear_CS
+use MOM_cvmix_shear,         only : calculate_cvmix_shear, cvmix_shear_init, cvmix_shear_CS
 use MOM_string_functions,    only : uppercase
 use MOM_thickness_diffuse,   only : vert_fill_TS
 use MOM_variables,           only : thermo_var_ptrs, vertvisc_type, p3d
@@ -262,6 +263,9 @@ type, public :: set_diffusivity_CS ; private
   logical :: useKappaShear    ! If true, use the kappa_shear module to find the
                               ! shear-driven diapycnal diffusivity.
 
+  logical :: useCVmix         ! If true, use one of the CVMix modules to find
+                              ! shear-driven diapycnal diffusivity.
+
   logical :: double_diffusion           ! If true, enable double-diffusive mixing.
   logical :: simple_TKE_to_Kd ! If true, uses a simple estimate of Kd/TKE that
                               ! does not rely on a layer-formulation.
@@ -280,6 +284,7 @@ type, public :: set_diffusivity_CS ; private
   type(user_change_diff_CS), pointer :: user_change_diff_CSp => NULL()
   type(diag_to_Z_CS),        pointer :: diag_to_Z_CSp        => NULL()
   type(Kappa_shear_CS),      pointer :: kappaShear_CSp       => NULL()
+  type(CVMix_shear_CS),      pointer :: CVMix_Shear_CSp      => NULL()
   type(int_tide_CS),         pointer :: int_tide_CSp         => NULL()
 
   integer :: id_TKE_itidal  = -1
@@ -579,6 +584,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
       call hchksum(visc%TKE_turb, "after calc_KS visc%TKE_turb",G%HI)
     endif
     if (showCallTree) call callTree_waypoint("done with calculate_kappa_shear (set_diffusivity)")
+ elseif (CS%useCVMix) then
+    call calculate_cvmix_shear(u_h, v_h, h, tv, visc%Kd_turb, visc%Kv_turb,G,GV,CS%CVMix_shear_CSp)
   elseif (associated(visc%Kv_turb)) then
     visc%Kv_turb(:,:,:) = 0. ! needed if calculate_kappa_shear is not enabled
   endif
@@ -3140,6 +3147,7 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
   CS%useKappaShear = kappa_shear_init(Time, G, GV, param_file, CS%diag, CS%kappaShear_CSp)
   if (CS%useKappaShear) &
     id_clock_kappaShear = cpu_clock_id('(Ocean kappa_shear)', grain=CLOCK_MODULE)
+  CS%useCVMix = CVMix_shear_init(Time, G, GV, param_file, CS%diag, CS%CVMix_shear_CSp)
 
 
 
