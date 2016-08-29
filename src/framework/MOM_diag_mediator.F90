@@ -1565,7 +1565,7 @@ end function register_scalar_field
 function register_static_field(module_name, field_name, axes, &
      long_name, units, missing_value, range, mask_variant, standard_name, &
      do_not_log, interp_method, tile_count, &
-     cmor_field_name, cmor_long_name, cmor_units, cmor_standard_name)
+     cmor_field_name, cmor_long_name, cmor_units, cmor_standard_name, area)
   integer :: register_static_field
   character(len=*), intent(in) :: module_name, field_name
   type(axes_grp),   intent(in) :: axes
@@ -1576,6 +1576,7 @@ function register_static_field(module_name, field_name, axes, &
   integer,          optional, intent(in) :: tile_count
   character(len=*), optional, intent(in) :: cmor_field_name, cmor_long_name
   character(len=*), optional, intent(in) :: cmor_units, cmor_standard_name
+  integer,          optional, intent(in) :: area !< fms_id for area_t
 
   ! Output:    An integer handle for a diagnostic array.
   ! Arguments:
@@ -1612,7 +1613,7 @@ function register_static_field(module_name, field_name, axes, &
          long_name=long_name, units=units, missing_value=MOM_missing_value, &
          range=range, mask_variant=mask_variant, standard_name=standard_name, &
          do_not_log=do_not_log, &
-         interp_method=interp_method, tile_count=tile_count)
+         interp_method=interp_method, tile_count=tile_count, area=area)
   if (fms_id /= DIAG_FIELD_NOT_FOUND) then
     primary_id = get_new_diag_id(diag_cs)
     call alloc_diag_with_id(primary_id, diag_cs, diag)
@@ -1642,7 +1643,7 @@ function register_static_field(module_name, field_name, axes, &
       axes%handles, long_name=trim(posted_cmor_long_name), units=trim(posted_cmor_units), &
       missing_value=MOM_missing_value, range=range, mask_variant=mask_variant,            &
       standard_name=trim(posted_cmor_standard_name), do_not_log=do_not_log,               &
-      interp_method=interp_method, tile_count=tile_count)
+      interp_method=interp_method, tile_count=tile_count, area=area)
     if (fms_id /= DIAG_FIELD_NOT_FOUND) then
       if (primary_id == -1) then
         primary_id = get_new_diag_id(diag_cs)
