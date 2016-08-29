@@ -2743,11 +2743,12 @@ subroutine write_static_fields(G, diag)
         'Depth of the ocean at tracer points', 'm',                      &
         standard_name='sea_floor_depth_below_geoid',                     &
         cmor_field_name='deptho', cmor_long_name='Sea Floor Depth',      &
-        cmor_units='m', cmor_standard_name='sea_floor_depth_below_geoid')
+        cmor_units='m', cmor_standard_name='sea_floor_depth_below_geoid',&
+        area=diag%axesT1%id_area)
   if (id > 0) call post_data(id, G%bathyT, diag, .true., mask=G%mask2dT)
 
   id = register_static_field('ocean_model', 'wet', diag%axesT1, &
-        '0 if land, 1 if ocean at tracer points', 'none')
+        '0 if land, 1 if ocean at tracer points', 'none', area=diag%axesT1%id_area)
   if (id > 0) call post_data(id, G%mask2dT, diag, .true.)
 
   id = register_static_field('ocean_model', 'wet_c', diag%axesB1, &
