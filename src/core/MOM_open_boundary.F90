@@ -47,6 +47,7 @@ type, public :: OBC_segment_type
   logical :: radiation2D    !< Oblique waves supported at radiation boundary.
   logical :: nudged         !< Optional supplement to radiation boundary.
   logical :: specified      !< Boundary fixed to external value.
+  logical :: no_gradient    !< Zero gradient at boundary.
   integer :: direction      !< Boundary faces one of the four directions.
   real :: Tnudge_in         !< Nudging timescale on inflow.
   real :: Tnudge_out        !< Nudging timescale on outflow.
@@ -310,13 +311,13 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
           OBC%OBC_direction_u(I_obc,j) = OBC_DIRECTION_E ! We only use direction for Flather (maybe)
           ! Set v points outside segment
           OBC%OBC_mask_v(i_obc+1,J) = .true.
-          if (OBC%OBC_direction_v(i_obc+1,J) == OBC_NONE) then
+          if (OBC%OBC_segment_v(i_obc+1,J) == OBC_NONE) then
             OBC%OBC_direction_v(i_obc+1,J) = OBC_DIRECTION_E
             OBC%OBC_kind_v(i_obc+1,J) = this_kind
             OBC%OBC_segment_v(i_obc+1,j) = l_seg
           endif
           OBC%OBC_mask_v(i_obc+1,J-1) = .true.
-          if (OBC%OBC_direction_v(i_obc+1,J-1) == OBC_NONE) then
+          if (OBC%OBC_segment_v(i_obc+1,J-1) == OBC_NONE) then
             OBC%OBC_direction_v(i_obc+1,J-1) = OBC_DIRECTION_E
             OBC%OBC_kind_v(i_obc+1,J-1) = this_kind
             OBC%OBC_segment_v(i_obc+1,J-1) = l_seg
@@ -327,13 +328,13 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
           OBC%OBC_direction_u(I_obc,j) = OBC_DIRECTION_W ! We only use direction for Flather
           ! Set v points outside segment
           OBC%OBC_mask_v(i_obc,J) = .true.
-          if (OBC%OBC_direction_v(i_obc,J) == OBC_NONE) then
+          if (OBC%OBC_segment_v(i_obc,J) == OBC_NONE) then
             OBC%OBC_direction_v(i_obc,J) = OBC_DIRECTION_W
             OBC%OBC_kind_v(i_obc,J) = this_kind
             OBC%OBC_segment_v(i_obc,J) = l_seg
           endif
           OBC%OBC_mask_v(i_obc,J-1) = .true.
-          if (OBC%OBC_direction_v(i_obc,J-1) == OBC_NONE) then
+          if (OBC%OBC_segment_v(i_obc,J-1) == OBC_NONE) then
             OBC%OBC_direction_v(i_obc,J-1) = OBC_DIRECTION_W
             OBC%OBC_kind_v(i_obc,J-1) = this_kind
             OBC%OBC_segment_v(i_obc,J-1) = l_seg
@@ -408,13 +409,13 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
           OBC%OBC_direction_v(i,J_obc) = OBC_DIRECTION_N ! We only use direction for Flather
           ! Set u points outside segment
           OBC%OBC_mask_u(I,j_obc+1) = .true.
-          if (OBC%OBC_direction_u(I,j_obc+1) == OBC_NONE) then
+          if (OBC%OBC_segment_u(I,j_obc+1) == OBC_NONE) then
             OBC%OBC_direction_u(I,j_obc+1) = OBC_DIRECTION_N
             OBC%OBC_kind_u(I,j_obc+1) = this_kind
             OBC%OBC_segment_u(I,j_obc+1) = l_seg
           endif
           OBC%OBC_mask_u(I-1,j_obc+1) = .true.
-          if (OBC%OBC_direction_u(I-1,j_obc+1) == OBC_NONE) then
+          if (OBC%OBC_segment_u(I-1,j_obc+1) == OBC_NONE) then
             OBC%OBC_direction_u(I-1,j_obc+1) = OBC_DIRECTION_N
             OBC%OBC_kind_u(I-1,j_obc+1) = this_kind
             OBC%OBC_segment_u(I-1,j_obc+1) = l_seg
@@ -425,13 +426,13 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
           OBC%OBC_direction_v(i,J_obc) = OBC_DIRECTION_S ! We only use direction for Flather
           ! Set u points outside segment
           OBC%OBC_mask_u(I,j_obc) = .true.
-          if (OBC%OBC_direction_u(I,j_obc) == OBC_NONE) then
+          if (OBC%OBC_segment_u(I,j_obc) == OBC_NONE) then
             OBC%OBC_direction_u(I,j_obc) = OBC_DIRECTION_S
             OBC%OBC_kind_u(I,j_obc) = this_kind
             OBC%OBC_segment_u(I,j_obc) = l_seg
           endif
           OBC%OBC_mask_u(I-1,j_obc) = .true.
-          if (OBC%OBC_direction_u(I-1,j_obc) == OBC_NONE) then
+          if (OBC%OBC_segment_u(I-1,j_obc) == OBC_NONE) then
             OBC%OBC_direction_u(I-1,j_obc) = OBC_DIRECTION_S
             OBC%OBC_kind_u(I-1,j_obc) = this_kind
             OBC%OBC_segment_u(I-1,j_obc) = l_seg
@@ -668,24 +669,26 @@ subroutine open_boundary_impose_land_mask(OBC, G)
 
   if (.not.associated(OBC)) return
 
-  if (associated(OBC%OBC_kind_u)) then
+  if (associated(OBC%OBC_segment_u)) then
     do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-!      if (G%mask2dCu(I,j) == 0 .and. (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%radiation)) then
-      if (G%mask2dCu(I,j) == 0 .and. OBC%OBC_kind_u(I,j) == OBC_FLATHER) then
-        OBC%OBC_kind_u(I,j) = OBC_NONE
-        OBC%OBC_direction_u(I,j) = OBC_NONE
-        OBC%OBC_mask_u(I,j) = .false.
+      if (G%mask2dCu(I,j) == 0 .and. (OBC%OBC_segment_u(I,j) /= OBC_NONE)) then
+        if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%radiation) then
+          OBC%OBC_kind_u(I,j) = OBC_NONE
+          OBC%OBC_direction_u(I,j) = OBC_NONE
+          OBC%OBC_mask_u(I,j) = .false.
+        endif
       endif
     enddo ; enddo
   endif
 
-  if (associated(OBC%OBC_kind_v)) then
+  if (associated(OBC%OBC_segment_v)) then
     do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-!      if (G%mask2dCv(i,J) == 0 .and. (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%radiation)) then
-      if (G%mask2dCv(i,J) == 0 .and. OBC%OBC_kind_v(i,J) == OBC_FLATHER) then
-        OBC%OBC_kind_v(i,J) = OBC_NONE
-        OBC%OBC_direction_v(i,J) = OBC_NONE
-        OBC%OBC_mask_v(i,J) = .false.
+      if (G%mask2dCv(i,J) == 0 .and. (OBC%OBC_segment_v(i,J) /= OBC_NONE)) then
+        if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%radiation) then
+          OBC%OBC_kind_v(i,J) = OBC_NONE
+          OBC%OBC_direction_v(i,J) = OBC_NONE
+          OBC%OBC_mask_v(i,J) = .false.
+        endif
       endif
     enddo ; enddo
   endif
