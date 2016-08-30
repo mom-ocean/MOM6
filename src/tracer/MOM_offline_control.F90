@@ -137,9 +137,9 @@ contains
     real, dimension(SZI_(G),SZJB_(G),SZK_(G))                   :: write_all_3dv
 
 
-    write_all_3dt = 1.
-    write_all_3du = 1.
-    write_all_3dv = 1.
+    write_all_3dt(:,:,:) = 1.
+    write_all_3du(:,:,:) = 1.
+    write_all_3dv(:,:,:) = 1.
 
 
     if (CS%id_uhtr_preadv>0)   call post_data(CS%id_uhtr_preadv,  uhtr, diag )
@@ -216,22 +216,29 @@ contains
     call read_data(CS%snap_file, 'h_end', h_end, domain=G%Domain%mpp_domain, &
       timelevel=CS%ridx_snap,position=CENTER)
 
-!          ! Apply masks at T, U, and V points
-    do k=1,nz ; do j=js-1,je ; do i=is-1,ie
-      if (G%mask2dCu(i,j)<1.0) then
-        uhtr(I,j,k) = 0.0
-        khdt_x(I,j) = 0.0;
-      endif
-      if (G%mask2dCv(i,j)<1.0) then
-        vhtr(i,J,k) = 0.0
-        khdt_y(i,J) = 0.0;
-      endif
-      if (G%mask2dT(i,j)<1.0) then
+          ! Apply masks at T, U, and V points
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      if(G%mask2dT(i,j)<1.0) then
         h_end(i,j,k) = GV%Angstrom
         eatr(i,j,k) = 0.0
         ebtr(i,j,k) = 0.0
       endif
-    enddo; enddo; enddo
+    enddo; enddo ; enddo
+
+    do k=1,nz ; do j=js-1,je ; do i=is,ie
+      if(G%mask2dCv(i,j)<1.0) then
+        khdt_y(i,j) = 0.0
+        vhtr(i,j,k) = 0.0
+      endif
+    enddo; enddo ; enddo
+
+    do k=1,nz ; do j=js,je ; do i=is-1,ie
+      if(G%mask2dCu(i,j)<1.0) then
+        khdt_x(i,j) = 0.0
+        uhtr(i,j,k) = 0.0
+      endif
+    enddo; enddo ; enddo
+
 
     if (do_ale) then
       CS%h_preale = GV%Angstrom
@@ -250,17 +257,17 @@ contains
       call read_data(CS%preale_file, 'v_preale',   CS%v_preale, domain=G%Domain%mpp_domain, &
         timelevel=CS%ridx_mean,position=NORTH)
 
-      do k=1,nz ; do j=js-1,je ; do i=is-1,ie
-        if (G%mask2dCu(i,j)<1.0) then
-          CS%u_preale(I,j,k) = 0.0
-        endif
-        if (G%mask2dCv(i,j)<1.0) then
-          CS%v_preale(I,j,k) = 0.0
-        endif
-        if (G%mask2dT(i,j)<1.0) then
-          CS%h_preale(i,j,k) = GV%Angstrom
-        endif
-      enddo; enddo; enddo
+!      do k=1,nz ; do j=js-1,je ; do i=is-1,ie
+!        if (G%mask2dCu(i,j)<1.0) then
+!          CS%u_preale(I,j,k) = 0.0
+!        endif
+!        if (G%mask2dCv(i,j)<1.0) then
+!          CS%v_preale(I,j,k) = 0.0
+!        endif
+!        if (G%mask2dT(i,j)<1.0) then
+!          CS%h_preale(i,j,k) = GV%Angstrom
+!        endif
+!      enddo; enddo; enddo
 
     endif
 

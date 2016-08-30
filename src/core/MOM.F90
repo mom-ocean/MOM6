@@ -496,9 +496,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   u => CS%u ; v => CS%v ; h => CS%h
 
-  write_all_3du = 1.
-  write_all_3dv = 1.
-  write_all_3dt = 1.
+  write_all_3du(:,:,:) = 1.
+  write_all_3dv(:,:,:) = 1.
+  write_all_3dt(:,:,:) = 1.
 
   call cpu_clock_begin(id_clock_ocean)
   call cpu_clock_begin(id_clock_other)
@@ -708,6 +708,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         fluxes%fluxes_used = .true.
         call cpu_clock_end(id_clock_diabatic)
 
+        write_all_3dt(:,:,:) = 1.
         if (CS%id_u_preale > 0) call post_data(CS%id_u_preale, u,       CS%diag)
         if (CS%id_v_preale > 0) call post_data(CS%id_v_preale, v,       CS%diag)
         if (CS%id_h_preale > 0) call post_data(CS%id_h_preale, h,       CS%diag)
@@ -1058,6 +1059,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         ! Regridding/remapping is done here, at the end of the thermodynamics time step
         ! (that may comprise several dynamical time steps)
         ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
+        write_all_3dt(:,:,:) = 1.
         if (CS%id_u_preale > 0) call post_data(CS%id_u_preale, u,       CS%diag)
         if (CS%id_v_preale > 0) call post_data(CS%id_v_preale, v,       CS%diag)
         if (CS%id_h_preale > 0) call post_data(CS%id_h_preale, h,       CS%diag)
@@ -1487,6 +1489,13 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     ! Read in all fields that might be used this timestep
     call transport_by_files(G, GV, CS%offline_CSp, h_end, eatr, ebtr, uhtr, vhtr, &
         khdt_x, khdt_y, temp_old, salt_old, CS%use_ALE_algorithm)
+    if (CS%offline_CSp%id_uhtr_preadv>0) call post_data(CS%offline_CSp%id_uhtr_preadv, uhtr, CS%diag)
+    if (CS%offline_CSp%id_vhtr_preadv>0) call post_data(CS%offline_CSp%id_vhtr_preadv, vhtr, CS%diag)
+    if (CS%id_h>0) call post_data(CS%id_h, h_end, CS%diag)
+
+    h_pre = CS%h
+    call pass_var(h_pre,G%Domain)
+    call hchksum(h_pre, "Before steps h", G%HI, haloshift=1)
 
     if (CS%diabatic_first .and. CS%use_ALE_algorithm) then
     ! Regridding/remapping is done here, at end of thermodynamics time step
@@ -1542,8 +1551,6 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       CS%S = salt_old
       call pass_var(CS%T,G%Domain)
       call pass_var(CS%S,G%Domain)
-      h_pre = CS%h
-      call pass_var(h_pre,G%Domain)
     endif !Diabatic first and ALE
 
     h_new(:,:,:) = GV%Angstrom
@@ -1708,7 +1715,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         call cpu_clock_begin(id_clock_ALE)
         call ALE_main(G, GV, CS%offline_CSp%h_preale, CS%offline_CSp%u_preale, &
                         CS%offline_CSp%v_preale, CS%tv, CS%tracer_Reg, &
-                        CS%ALE_CSp, CS%offline_CSp%dt_offline)
+                        CS%ALE_CSp, h_override = h_end)
         call cpu_clock_end(id_clock_ALE)
 
         if (CS%debug) then
@@ -2759,7 +2766,7 @@ subroutine register_diags(Time, G, GV, CS, ADp)
     CS%id_v_preale = register_diag_field('ocean_model', 'v_preale', diag%axesCvL, Time, &
         'Meridional velocity before remapping', 'meter second-1')
     CS%id_h_preale = register_diag_field('ocean_model', 'h_preale', diag%axesTL, Time, &
-        'Layer Thickness before remapping', thickness_units, v_cell_method='sum')
+        'Layer Thickness before remapping', thickness_units)
     CS%id_T_preale = register_diag_field('ocean_model', 'T_preale', diag%axesTL, Time, &
         'Temperature before remapping', 'degC')
     CS%id_S_preale = register_diag_field('ocean_model', 'S_preale', diag%axesTL, Time, &
