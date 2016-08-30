@@ -59,21 +59,21 @@ end type CVMix_shear_CS
 
 contains
 
-subroutine Calculate_cvmix_shear(u_in, v_in, h, tv, KH,  &
+subroutine Calculate_cvmix_shear(u_H, v_H, h, tv, KH,  &
                                  KM, G, GV, CS )
   type(ocean_grid_type),                      intent(in)    :: G
   type(verticalGrid_type),                    intent(in)    :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: u_in
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: v_in
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: u_H
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: v_H
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h
   type(thermo_var_ptrs),                      intent(in)    :: tv
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out)   :: KH
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out)   :: KM
   type(CVMix_shear_CS),                       pointer       :: CS
 !
-! ----------------------------------------------
-! Subroutine for calculating diffusivity (and TKE?)
-! ----------------------------------------------
+! -------------------------------------------------
+! Subroutine for calculating (internal) diffusivity
+! -------------------------------------------------
 ! Arguments: u_in - Initial zonal velocity, in m s-1. (Intent in)
 !  (in)      v_in - Initial meridional velocity, in m s-1.
 !  (in)      h - Layer thickness, in m or kg m-2.
@@ -108,6 +108,7 @@ subroutine Calculate_cvmix_shear(u_in, v_in, h, tv, KH,  &
 
       ! Richardson number computed for each cell in a column.
       pRef = 0.
+      Ri_Grad(:)=1.e8
       do k=1,G%ke
 
         ! pressure, temp, and saln for EOS
@@ -137,15 +138,15 @@ subroutine Calculate_cvmix_shear(u_in, v_in, h, tv, KH,  &
       do k = 1, G%ke
         km1 = max(1, k-1)
         kk = 2*(k-1)
-        DU = (u_in(i,j,k)+u_in(i-1,j,k))-(u_in(i,j,km1)+u_in(i-1,j,km1))
-        DV = (v_in(i,j,k)+v_in(i,j-1,k))-(v_in(i,j,km1)+v_in(i,j-1,km1))
+        DU = (u_h(i,j,k))-(u_h(i,j,km1))
+        DV = (v_h(i,j,k))-(v_h(i,j,km1))
         DRHO = (GoRho * (rho_1D(kk+1) - rho_1D(kk+2)) )
         DZ = ((0.5*(h(i,j,km1) + h(i,j,k))+GV%H_subroundoff)*GV%H_to_m)
         N2 = DRHO/DZ
         S2 = (DU*DU+DV*DV)/(DZ*DZ) 
-        Ri_Grad(G%ke) = N2/max(S2,1.e-8)
+        Ri_Grad(G%ke) = max(0.,N2)/max(S2,1.e-16)
       enddo
-      Ri_Grad(G%ke+1) = 1.e8
+
 
       call  cvmix_coeffs_shear(Mdiff_out=KM(i,j,:), &
                                    Tdiff_out=KH(i,j,:), & 
@@ -154,8 +155,8 @@ subroutine Calculate_cvmix_shear(u_in, v_in, h, tv, KH,  &
                                    max_nlev=G%ke)
 
 
-    ENDDO;
-  ENDDO;
+    enddo;
+  enddo;
 
   return
 
@@ -184,7 +185,7 @@ logical function cvmix_shear_init(Time, G, GV, param_file, diag, CS)
 !                 for this module
 !  (returns) cvmix_shear_init - True if module is to be used, False otherwise
 ! This include declares and sets the variable "version".
-  INTEGER :: NumberTrue
+  INTEGER :: NumberTrue=0
   LOGICAL :: use_JHL
 #include "version_variable.h"
 
@@ -220,14 +221,13 @@ logical function cvmix_shear_init(Time, G, GV, param_file, diag, CS)
            ' please disable all but one scheme to proceed.')
   endif
   cvmix_shear_init=(CS%use_PP81.or.CS%use_LMD94)
-  print*,CS%use_LMD94
-  stop
+
 ! Forego remainder of initialization if not using this scheme
   if (.not. cvmix_shear_init) return
   call get_param(param_file, mod, "NU_ZERO", CS%Nu_Zero, &
                  "Leading coefficient in KPP shear mixing.", &
                  units="nondim", default=5.e-3)
-  call get_param(param_file, mod, "RI_ZERO", CS%Nu_Zero, &
+  call get_param(param_file, mod, "RI_ZERO", CS%Ri_Zero, &
                  "Critical Richardson for KPP shear mixing,"// &
                  " NOTE this the internal mixing and this is"// &
                  " not for setting the boundary layer depth." &
