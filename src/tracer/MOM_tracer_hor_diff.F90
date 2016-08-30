@@ -482,8 +482,8 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
   endif
 
   write_all_2du = 1. ; write_all_2dv = 1.
-  if (CS%id_khdt_x > 0) call post_data(CS%id_khdt_x, khdt_x, CS%diag, mask=write_all_2du)
-  if (CS%id_khdt_y > 0) call post_data(CS%id_khdt_y, khdt_y, CS%diag, mask=write_all_2dv)
+  if (CS%id_khdt_x > 0) call post_data(CS%id_khdt_x, khdt_x, CS%diag)
+  if (CS%id_khdt_y > 0) call post_data(CS%id_khdt_y, khdt_y, CS%diag)
 
   if (CS%show_call_tree) call callTree_leave("tracer_hordiff()")
 
