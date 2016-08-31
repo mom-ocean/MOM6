@@ -2159,6 +2159,7 @@ subroutine unitTests
   use MOM_string_functions,  only : stringFunctionsUnitTests
   use MOM_remapping,         only : remappingUnitTests
   use MOM_neutral_diffusion, only : neutralDiffusionUnitTests
+  use MOM_diag_vkernels,     only : diag_vkernels_unit_tests
 
   if (is_root_pe()) then ! The following need only be tested on 1 PE
     if (stringFunctionsUnitTests()) call MOM_error(FATAL, &
@@ -2167,6 +2168,9 @@ subroutine unitTests
        "MOM/initialize_MOM/unitTests: remappingUnitTests FAILED")
     if (neutralDiffusionUnitTests()) call MOM_error(FATAL, &
        "MOM/initialize_MOM/unitTests: neutralDiffusionUnitTests FAILED")
+    if (diag_vkernels_unit_tests()) call MOM_error(FATAL, &
+       "MOM/initialize_MOM/unitTests: diag_vkernels_unit_tests FAILED")
+
   endif
 
 end subroutine unitTests
