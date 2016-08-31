@@ -217,6 +217,9 @@ type, public :: MOM_control_struct
 
   real :: Hmix                       !< diagnostic mixed layer thickness (meter) when
                                      !! bulk mixed layer is not used.
+  logical :: usehmix                 !< If true, surface properties (e.g., SST) are averaged
+                                     !! over a distance given by HMIX_SFC_PROP. This parameter
+                                     !! is valid just when BULKMIXLAYER is defined.
   real :: missing=-1.0e34            !< missing data value for masked fields
 
   ! Flags needed to reach between start and finish phases of initialization
@@ -1532,6 +1535,23 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                  "The actual thermodynamic timestep that is used in this \n"//&
                  "case is the largest integer multiple of the coupling \n"//&
                  "timestep that is less than or equal to DT_THERM.", default=.false.)
+
+  if (CS%bulkmixedlayer) then
+     call get_param(param_file, "MOM", "USE_HMIX_SFC_PROP", CS%usehmix, &
+                 "Applied only if BULKMIXLAYER is used. If TRUE, surface properties \n"//& 
+                 "like SST, SSS, density and velocities are averaged over \n"//&
+                 "a distance given by HMIX_SFC_PROP. These averaged fields are \n"//&
+                 "passed to the surface state structure, which is then used \n"//&
+                 "to, for example, compute melting under an ice shelf.", default=.false.)
+     if(CS%usehmix) then
+        call get_param(param_file, "MOM", "HMIX_SFC_PROP", CS%Hmix, &
+                 "If USE_HMIX_SFC_PROP is true, HMIX_SFC_PROP is the depth \n"//&
+                 "over which to average to find surface properties like \n"//&
+                 "SST, SSS,  density are surface velocities.", &
+                 units="m", default=1.0)
+     endif
+
+  endif
 
   if (.not.CS%bulkmixedlayer) then
     call get_param(param_file, "MOM", "HMIX_SFC_PROP", CS%Hmix, &
@@ -2890,7 +2910,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
     enddo ; enddo
   endif ; endif
 
-  if (CS%bulkmixedlayer) then
+  if (CS%bulkmixedlayer .and. .not. CS%usehmix) then
     state%SST => CS%tv%T(:,:,1)
     state%SSS => CS%tv%S(:,:,1)
     state%u => u(:,:,1)
