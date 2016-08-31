@@ -32,6 +32,7 @@ use MOM_coms,                 only : reproducing_sum
 use MOM_coord_initialization, only : MOM_initialize_coord
 use MOM_diag_mediator,        only : diag_mediator_init, enable_averaging
 use MOM_diag_mediator,        only : diag_mediator_infrastructure_init
+use MOM_diag_mediator,        only : diag_register_area_ids
 use MOM_diag_mediator,        only : diag_set_thickness_ptr, diag_update_target_grids
 use MOM_diag_mediator,        only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator,        only : register_diag_field, register_static_field
@@ -1945,6 +1946,10 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   ! for vertical remapping may need to be regenerated.
   call diag_update_target_grids(diag)
 
+  ! Diagnose static fields AND associate areas/volumes with axes
+  call write_static_fields(G, CS%diag)
+  call callTree_waypoint("static fields written (initialize_MOM)")
+
   call cpu_clock_begin(id_clock_MOM_init)
   if (CS%use_ALE_algorithm) then
     call ALE_writeCoordinateFile( CS%ALE_CSp, GV, dirs%output_directory )
@@ -2068,9 +2073,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
 
   call register_obsolete_diagnostics(param_file, CS%diag)
   call neutral_diffusion_diag_init(Time, G, diag, CS%tv%C_p, CS%tracer_Reg, CS%neutral_diffusion_CSp)
-
-  call write_static_fields(G, CS%diag)
-  call callTree_waypoint("static fields written (initialize_MOM)")
 
   if (CS%use_frazil) then
     if (.not.query_initialized(CS%tv%frazil,"frazil",CS%restart_CSp)) &
@@ -2684,8 +2686,8 @@ end subroutine post_diags_TS_vardec
 !> Offers the static fields in the ocean grid type
 !! for output via the diag_manager.
 subroutine write_static_fields(G, diag)
-  type(ocean_grid_type),   intent(in) :: G      !< ocean grid structure
-  type(diag_ctrl), target, intent(in) :: diag   !< regulates diagnostic output
+  type(ocean_grid_type),   intent(in)    :: G      !< ocean grid structure
+  type(diag_ctrl), target, intent(inout) :: diag   !< regulates diagnostic output
 
   ! The out_X arrays are needed because some of the elements of the grid
   ! type may be reduced rank macros.
@@ -2734,57 +2736,59 @@ subroutine write_static_fields(G, diag)
   if (id > 0) then
     do j=js,je ; do i=is,ie ; out_h(i,j) = G%areaT(i,j) ; enddo ; enddo
     call post_data(id, out_h, diag, .true.)
+    call diag_register_area_ids(diag, id_area_t=id)
   endif
 
   id = register_static_field('ocean_model', 'depth_ocean', diag%axesT1,  &
         'Depth of the ocean at tracer points', 'm',                      &
         standard_name='sea_floor_depth_below_geoid',                     &
         cmor_field_name='deptho', cmor_long_name='Sea Floor Depth',      &
-        cmor_units='m', cmor_standard_name='sea_floor_depth_below_geoid')
+        cmor_units='m', cmor_standard_name='sea_floor_depth_below_geoid',&
+        area=diag%axesT1%id_area)
   if (id > 0) call post_data(id, G%bathyT, diag, .true., mask=G%mask2dT)
 
   id = register_static_field('ocean_model', 'wet', diag%axesT1, &
-        '0 if land, 1 if ocean at tracer points', 'none')
+        '0 if land, 1 if ocean at tracer points', 'none', area=diag%axesT1%id_area)
   if (id > 0) call post_data(id, G%mask2dT, diag, .true.)
 
   id = register_static_field('ocean_model', 'wet_c', diag%axesB1, &
-        '0 if land, 1 if ocean at corner (Bu) points', 'none')
+        '0 if land, 1 if ocean at corner (Bu) points', 'none', interp_method='none')
   if (id > 0) call post_data(id, G%mask2dBu, diag, .true.)
 
   id = register_static_field('ocean_model', 'wet_u', diag%axesCu1, &
-        '0 if land, 1 if ocean at zonal velocity (Cu) points', 'none')
+        '0 if land, 1 if ocean at zonal velocity (Cu) points', 'none', interp_method='none')
   if (id > 0) call post_data(id, G%mask2dCu, diag, .true.)
 
   id = register_static_field('ocean_model', 'wet_v', diag%axesCv1, &
-        '0 if land, 1 if ocean at meridional velocity (Cv) points', 'none')
+        '0 if land, 1 if ocean at meridional velocity (Cv) points', 'none', interp_method='none')
   if (id > 0) call post_data(id, G%mask2dCv, diag, .true.)
 
   id = register_static_field('ocean_model', 'Coriolis', diag%axesB1, &
-        'Coriolis parameter at corner (Bu) points', 's-1')
+        'Coriolis parameter at corner (Bu) points', 's-1', interp_method='none')
   if (id > 0) call post_data(id, G%CoriolisBu, diag, .true.)
 
   id = register_static_field('ocean_model', 'dxt', diag%axesT1, &
-        'Delta(x) at thickness/tracer points (meter)', 'm')
+        'Delta(x) at thickness/tracer points (meter)', 'm', interp_method='none')
   if (id > 0) call post_data(id, G%dxt, diag, .true.)
 
   id = register_static_field('ocean_model', 'dyt', diag%axesT1, &
-        'Delta(y) at thickness/tracer points (meter)', 'm')
+        'Delta(y) at thickness/tracer points (meter)', 'm', interp_method='none')
   if (id > 0) call post_data(id, G%dyt, diag, .true.)
 
   id = register_static_field('ocean_model', 'dxCu', diag%axesCu1, &
-        'Delta(x) at u points (meter)', 'm')
+        'Delta(x) at u points (meter)', 'm', interp_method='none')
   if (id > 0) call post_data(id, G%dxCu, diag, .true.)
 
   id = register_static_field('ocean_model', 'dyCu', diag%axesCu1, &
-        'Delta(y) at u points (meter)', 'm')
+        'Delta(y) at u points (meter)', 'm', interp_method='none')
   if (id > 0) call post_data(id, G%dyCu, diag, .true.)
 
   id = register_static_field('ocean_model', 'dxCv', diag%axesCv1, &
-        'Delta(x) at v points (meter)', 'm')
+        'Delta(x) at v points (meter)', 'm', interp_method='none')
   if (id > 0) call post_data(id, G%dxCv, diag, .true.)
 
   id = register_static_field('ocean_model', 'dyCv', diag%axesCv1, &
-        'Delta(y) at v points (meter)', 'm')
+        'Delta(y) at v points (meter)', 'm', interp_method='none')
   if (id > 0) call post_data(id, G%dyCv, diag, .true.)
 
 
