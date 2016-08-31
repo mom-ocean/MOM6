@@ -336,8 +336,11 @@ type, public :: ice_shelf_CS ; private
   logical :: threeeq   ! If true, the 3 equation consistency equations are
                        ! used to calculate the flux at the ocean-ice interface.
   logical :: insulator ! If true, ice shelf is a perfect insulator
-  logical :: const_gamma ! If true, gamma_T is specified by the user.
+  logical :: const_gamma    ! If true, gamma_T is specified by the user.
+  logical :: find_salt_root ! If true, if true find Sbdry using a quadratic eq.
   real    :: cutoff_depth ! depth above which melt is set to zero (>= 0).
+  real    :: lambda1, lambda2, lambda3 ! liquidus coeffs. Needed if 
+                                       ! find_salt_root = true
   integer :: id_melt = -1, id_exch_vel_s = -1, id_exch_vel_t = -1, &
              id_tfreeze = -1, id_tfl_shelf = -1, &
              id_thermal_driving = -1, id_haline_driving = -1, &
@@ -449,8 +452,9 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
   real :: PR, SC    ! The Prandtl number and Schmidt number, nondim.
 
   ! 3 equation formulation variables
-  real :: Sbdry     !   Salinities in the ocean at the interface with the
-  real :: Sbdry_it  ! the ice shelf, in PSU.
+  real :: Sbdry           !   Salinities in the ocean at the interface with the
+  real :: Sbdry_it        ! the ice shelf, in PSU.
+  real :: Sbdry1, Sbdry2, S_a, S_b, S_c  ! use to find salt roots
   real :: dS_it     ! The interface salinity change during an iteration, in PSU.
   real :: hBL_neut  ! The neutral boundary layer thickness, in m.
   real :: hBL_neut_h_molec ! The ratio of the neutral boundary layer thickness
@@ -534,12 +538,12 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
           !   Iteratively determine a self-consistent set of fluxes, with the ocean
           ! salinity just below the ice-shelf as the variable that is being
           ! iterated for.
-! ### SHOULD I SET USTAR_SHELF YET?
+          ! ### SHOULD I SET USTAR_SHELF YET?
 
           u_at_h = state%u(i,j)
           v_at_h = state%v(i,j)
 
-          fluxes%ustar_shelf(i,j)= sqrt(CS%cdrag)*sqrt((u_at_h**2.0 + v_at_h**2.0)**2 +&
+          fluxes%ustar_shelf(i,j)= sqrt(CS%cdrag)*sqrt(sqrt(u_at_h**2.0 + v_at_h**2.0)**2 +&
                                                     CS%utide(i,j)**2)
           ustar_h = MAX(CS%ustar_bg, fluxes%ustar_shelf(i,j))
 
@@ -559,13 +563,34 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
           else ; hBL_neut = (VK*ustar_h) / absf ; endif
           hBL_neut_h_molec = ZETA_N * ((hBL_neut * ustar_h) / (5.0 * CS%Kv_molec))
 
-          ! Guess sss as the iteration starting point for the boundary salinity.
-          Sbdry = state%sss(i,j) ; Sb_max_set = .false. ; Sb_min_set = .false.
-
           ! Determine the mixed layer buoyancy flux, wB_flux.      
           dB_dS = (CS%g_Earth / Rhoml(i)) * dR0_dS(i)
           dB_dT = (CS%g_Earth / Rhoml(i)) * dR0_dT(i)
           ln_neut = 0.0 ; if (hBL_neut_h_molec > 1.0) ln_neut = log(hBL_neut_h_molec)
+
+          if (CS%find_salt_root) then
+            ! read liquidus parameters
+            
+            S_a = CS%lambda1 * CS%Gamma_T_3EQ * CS%Cp
+!            S_b = -CS%Gamma_T_3EQ*(CS%lambda2-CS%lambda3*p_int(i)-state%sst(i,j)) &
+!               -LF*CS%Gamma_T_3EQ/35.0
+
+            S_b = CS%Gamma_T_3EQ*CS%Cp*(CS%lambda2+CS%lambda3*p_int(i)-state%sst(i,j)) &
+               -LF*CS%Gamma_T_3EQ/35.0
+            S_c = LF*(CS%Gamma_T_3EQ/35.0)*state%sss(i,j)
+            !write(*,*)'a,b,c',S_a,S_b,S_c
+
+            Sbdry1 = (-S_b + SQRT(S_b*S_b-4*S_a*S_c))/(2*S_a)
+            Sbdry2 = (-S_b - SQRT(S_b*S_b-4*S_a*S_c))/(2*S_a)
+            Sbdry = MAX(Sbdry1, Sbdry2)
+            !write(*,*)'#### Sbdry ####',Sbdry, Sbdry1, Sbdry2
+            if (Sbdry < 0.) call MOM_error(FATAL, &
+                  "shelf_calc_flux: Negative salinity (Sbdry).")
+
+          else
+            ! Guess sss as the iteration starting point for the boundary salinity.
+            Sbdry = state%sss(i,j) ; Sb_max_set = .false. ; Sb_min_set = .false.
+          endif !find_salt_root
 
           do it1 = 1,20
             ! Determine the potential temperature at the ice-ocean interface.
@@ -644,7 +669,7 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
             CS%exch_vel_t(i,j) = ustar_h * I_Gam_T
             CS%exch_vel_s(i,j) = ustar_h * I_Gam_S
 
-  !Calculate the heat flux inside the ice shelf.
+    !Calculate the heat flux inside the ice shelf.
 
     !vertical adv/diff as in H+J 1999, eqns (26) & approx from (31).
     ! Q_ice = rho_ice * CS%CP_Ice * K_ice * dT/dz (at interface)
@@ -673,33 +698,39 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
               endif
  
             endif 
-  !other options: dTi/dz linear through shelf
-  !            dTi_dz = (CS%Temp_Ice - CS%tfreeze(i,j))/G%draft(i,j)
-  !            CS%tflux_shelf(i,j) = - Rho_Ice * CS%CP_Ice * KTI * dTi_dz
+            !other options: dTi/dz linear through shelf
+            !    dTi_dz = (CS%Temp_Ice - CS%tfreeze(i,j))/G%draft(i,j)
+            !    CS%tflux_shelf(i,j) = - Rho_Ice * CS%CP_Ice * KTI * dTi_dz
 
-            mass_exch = CS%exch_vel_s(i,j) * CS%Rho0
-            Sbdry_it = (state%sss(i,j) * mass_exch + CS%Salin_ice * CS%lprec(i,j)) / &
-                       (mass_exch + CS%lprec(i,j))
-            dS_it = Sbdry_it - Sbdry
-            if (abs(dS_it) < 1e-4*(0.5*(state%sss(i,j) + Sbdry + 1.e-10))) exit
 
-            if (dS_it < 0.0) then ! Sbdry is now the upper bound.
-              if (Sb_max_set .and. (Sbdry > Sb_max)) call MOM_error(FATAL, &
-                "shelf_calc_flux: Irregular iteration for Sbdry (max).")
-              Sb_max = Sbdry ; dS_max = dS_it ; Sb_max_set = .true.
-            else ! Sbdry is now the lower bound.
-              if (Sb_min_set .and. (Sbdry < Sb_min)) call MOM_error(FATAL, &
-                "shelf_calc_flux: Irregular iteration for Sbdry (min).")
-              Sb_min = Sbdry ; dS_min = dS_it ; Sb_min_set = .true.
+            if (CS%find_salt_root) then
+              exit ! no need to do interaction, so exit loop
+            else          
+
+	      mass_exch = CS%exch_vel_s(i,j) * CS%Rho0
+	      Sbdry_it = (state%sss(i,j) * mass_exch + CS%Salin_ice * CS%lprec(i,j)) / &
+			 (mass_exch + CS%lprec(i,j))
+	      dS_it = Sbdry_it - Sbdry
+	      if (abs(dS_it) < 1e-4*(0.5*(state%sss(i,j) + Sbdry + 1.e-10))) exit
+
+	      if (dS_it < 0.0) then ! Sbdry is now the upper bound.
+		if (Sb_max_set .and. (Sbdry > Sb_max)) call MOM_error(FATAL, &
+		  "shelf_calc_flux: Irregular iteration for Sbdry (max).")
+		Sb_max = Sbdry ; dS_max = dS_it ; Sb_max_set = .true.
+	      else ! Sbdry is now the lower bound.
+		if (Sb_min_set .and. (Sbdry < Sb_min)) call MOM_error(FATAL, &
+		  "shelf_calc_flux: Irregular iteration for Sbdry (min).")
+		Sb_min = Sbdry ; dS_min = dS_it ; Sb_min_set = .true.
+	      endif
+	      if (Sb_min_set .and. Sb_max_set) then
+		! Use the false position method for the next iteration.
+		Sbdry = Sb_min + (Sb_max-Sb_min) * (dS_min / (dS_min - dS_max))
+	      else
+		Sbdry = Sbdry_it
+	      endif
+
+	      Sbdry = Sbdry_it 
             endif
-            if (Sb_min_set .and. Sb_max_set) then
-              ! Use the false position method for the next iteration.
-              Sbdry = Sb_min + (Sb_max-Sb_min) * (dS_min / (dS_min - dS_max))
-            else
-              Sbdry = Sbdry_it
-            endif
-
-            Sbdry = Sbdry_it 
           enddo !it1
   ! Check for non-convergence and/or non-boundedness?
 
@@ -1240,6 +1271,25 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
   if (CS%const_gamma) call get_param(param_file, mod, "SHELF_3EQ_GAMMA_T", CS%Gamma_T_3EQ, &
                  "Nondimensional heat-transfer coefficient.",default=2.2E-2, &
                   units="nondim.", fail_if_missing=.true.)
+  if (CS%threeeq) &
+    call get_param(param_file, mod, "SHELF_S_ROOT", CS%find_salt_root, &
+                 "If SHELF_S_ROOT = True, salinity at the ice/ocean interface (Sbdry) \n "//&
+                 "is computed from a quadratic equation. Otherwise, the previous \n"//&
+                 "interactive method to estimate Sbdry is used.", default=.false.)
+  if (CS%find_salt_root) then ! read liquidus coeffs.
+     call get_param(param_file, mod, "TFREEZE_S0_P0",CS%lambda1, &
+                 "this is the freezing potential temperature at \n"//&
+                 "S=0, P=0.", units="deg C", default=0.0, do_not_log=.true.)
+    call get_param(param_file, mod, "DTFREEZE_DS",CS%lambda1, &
+                 "this is the derivative of the freezing potential \n"//&
+                 "temperature with salinity.", &
+                 units="deg C PSU-1", default=-0.054, do_not_log=.true.)
+    call get_param(param_file, mod, "DTFREEZE_DP",CS%lambda3, &
+                 "this is the derivative of the freezing potential \n"//&
+                 "temperature with pressure.", &
+                 units="deg C Pa-1", default=0.0, do_not_log=.true.)
+
+  endif
 
   if (.not.CS%threeeq) &
     call get_param(param_file, mod, "SHELF_2EQ_GAMMA_T", CS%gamma_t, &
@@ -1424,7 +1474,6 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
 
   allocate( CS%tflux_shelf(isd:ied,jsd:jed) ) ; CS%tflux_shelf(:,:) = 0.0
   allocate( CS%tfreeze(isd:ied,jsd:jed) )     ; CS%tfreeze(:,:) = 0.0
-!  allocate( CS%Sbdry(isd:ied,jsd:jed) )       ; CS%Sbdry(:,:) = 0.0
   allocate( CS%exch_vel_s(isd:ied,jsd:jed) )  ; CS%exch_vel_s(:,:) = 0.0
   allocate( CS%exch_vel_t(isd:ied,jsd:jed) )  ; CS%exch_vel_t(:,:) = 0.0
   
@@ -5626,7 +5675,7 @@ subroutine ice_shelf_end(CS)
   deallocate(CS%t_flux) ; deallocate(CS%lprec)
   deallocate(CS%salt_flux)
 
-  deallocate(CS%tflux_shelf) ; deallocate(CS%tfreeze);! deallocate(CS%Sbdry);
+  deallocate(CS%tflux_shelf) ; deallocate(CS%tfreeze);
   deallocate(CS%exch_vel_t) ; deallocate(CS%exch_vel_s)
 
   deallocate(CS%h_shelf) ; deallocate(CS%hmask)
