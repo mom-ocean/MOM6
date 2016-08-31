@@ -73,9 +73,6 @@ type, public :: ocean_OBC_type
   ! points, and can be OBC_NONE, OBC_SIMPLE, OBC_WALL, or OBC_FLATHER.  Generally these
   ! should be consistent with OBC_mask_[uv], with OBC_mask_[uv] .false. for OBC_kind_[uv] = NONE
   ! and true for all other values.
-  integer, pointer, dimension(:,:) :: &
-    OBC_kind_u => NULL(), & !< Type of OBC at u-points.
-    OBC_kind_v => NULL()    !< Type of OBC at v-points.
   ! These arrays indicate the outward-pointing orientation of the open boundary and will be set to
   ! one of OBC_DIRECTION_N, OBC_DIRECTION_S, OBC_DIRECTION_E or OBC_DIRECTION_W.
   integer, pointer, dimension(:,:) :: &
@@ -207,11 +204,9 @@ subroutine open_boundary_config(G, param_file, OBC)
     allocate(OBC%OBC_mask_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; OBC%OBC_mask_u(:,:) = .false.
     allocate(OBC%OBC_direction_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; OBC%OBC_direction_u(:,:) = OBC_NONE
     allocate(OBC%OBC_segment_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; OBC%OBC_segment_u(:,:) = OBC_NONE
-    allocate(OBC%OBC_kind_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; OBC%OBC_kind_u(:,:) = OBC_NONE
     allocate(OBC%OBC_mask_v(G%isd:G%ied,G%JsdB:G%JedB)) ; OBC%OBC_mask_v(:,:) = .false.
     allocate(OBC%OBC_direction_v(G%isd:G%ied,G%JsdB:G%JedB)) ; OBC%OBC_direction_v(:,:) = OBC_NONE
     allocate(OBC%OBC_segment_v(G%isd:G%ied,G%JsdB:G%JedB)) ; OBC%OBC_segment_v(:,:) = OBC_NONE
-    allocate(OBC%OBC_kind_v(G%isd:G%ied,G%JsdB:G%JedB)) ; OBC%OBC_kind_v(:,:) = OBC_NONE
 
     do l = 1, OBC%number_of_segments
       write(segment_param_str(1:15),"('OBC_SEGMENT_',i3.3)") l
@@ -304,7 +299,6 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
   do j=G%HI%jsd, G%HI%jed
     if (j>min(Js_obc,Je_obc) .and. j<=max(Js_obc,Je_obc)) then
       OBC%OBC_mask_u(I_obc,j) = .true.
-      OBC%OBC_kind_u(I_obc,j) = this_kind
       OBC%OBC_segment_u(I_obc,j) = l_seg
       if (Je_obc>Js_obc) then ! East is outward
         if (this_kind == OBC_FLATHER) then
@@ -313,13 +307,11 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
           OBC%OBC_mask_v(i_obc+1,J) = .true.
           if (OBC%OBC_segment_v(i_obc+1,J) == OBC_NONE) then
             OBC%OBC_direction_v(i_obc+1,J) = OBC_DIRECTION_E
-            OBC%OBC_kind_v(i_obc+1,J) = this_kind
             OBC%OBC_segment_v(i_obc+1,j) = l_seg
           endif
           OBC%OBC_mask_v(i_obc+1,J-1) = .true.
           if (OBC%OBC_segment_v(i_obc+1,J-1) == OBC_NONE) then
             OBC%OBC_direction_v(i_obc+1,J-1) = OBC_DIRECTION_E
-            OBC%OBC_kind_v(i_obc+1,J-1) = this_kind
             OBC%OBC_segment_v(i_obc+1,J-1) = l_seg
           endif
         endif
@@ -330,13 +322,11 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
           OBC%OBC_mask_v(i_obc,J) = .true.
           if (OBC%OBC_segment_v(i_obc,J) == OBC_NONE) then
             OBC%OBC_direction_v(i_obc,J) = OBC_DIRECTION_W
-            OBC%OBC_kind_v(i_obc,J) = this_kind
             OBC%OBC_segment_v(i_obc,J) = l_seg
           endif
           OBC%OBC_mask_v(i_obc,J-1) = .true.
           if (OBC%OBC_segment_v(i_obc,J-1) == OBC_NONE) then
             OBC%OBC_direction_v(i_obc,J-1) = OBC_DIRECTION_W
-            OBC%OBC_kind_v(i_obc,J-1) = this_kind
             OBC%OBC_segment_v(i_obc,J-1) = l_seg
           endif
         endif
@@ -402,7 +392,6 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
   do i=G%HI%isd, G%HI%ied
     if (i>min(Is_obc,Ie_obc) .and. i<=max(Is_obc,Ie_obc)) then
       OBC%OBC_mask_v(i,J_obc) = .true.
-      OBC%OBC_kind_v(i,J_obc) = this_kind
       OBC%OBC_segment_v(i,J_obc) = l_seg
       if (Is_obc>Ie_obc) then ! North is outward
         if (this_kind == OBC_FLATHER) then
@@ -411,13 +400,11 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
           OBC%OBC_mask_u(I,j_obc+1) = .true.
           if (OBC%OBC_segment_u(I,j_obc+1) == OBC_NONE) then
             OBC%OBC_direction_u(I,j_obc+1) = OBC_DIRECTION_N
-            OBC%OBC_kind_u(I,j_obc+1) = this_kind
             OBC%OBC_segment_u(I,j_obc+1) = l_seg
           endif
           OBC%OBC_mask_u(I-1,j_obc+1) = .true.
           if (OBC%OBC_segment_u(I-1,j_obc+1) == OBC_NONE) then
             OBC%OBC_direction_u(I-1,j_obc+1) = OBC_DIRECTION_N
-            OBC%OBC_kind_u(I-1,j_obc+1) = this_kind
             OBC%OBC_segment_u(I-1,j_obc+1) = l_seg
           endif
         endif
@@ -428,13 +415,11 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
           OBC%OBC_mask_u(I,j_obc) = .true.
           if (OBC%OBC_segment_u(I,j_obc) == OBC_NONE) then
             OBC%OBC_direction_u(I,j_obc) = OBC_DIRECTION_S
-            OBC%OBC_kind_u(I,j_obc) = this_kind
             OBC%OBC_segment_u(I,j_obc) = l_seg
           endif
           OBC%OBC_mask_u(I-1,j_obc) = .true.
           if (OBC%OBC_segment_u(I-1,j_obc) == OBC_NONE) then
             OBC%OBC_direction_u(I-1,j_obc) = OBC_DIRECTION_S
-            OBC%OBC_kind_u(I-1,j_obc) = this_kind
             OBC%OBC_segment_u(I-1,j_obc) = l_seg
           endif
         endif
@@ -595,8 +580,6 @@ subroutine open_boundary_dealloc(OBC)
   if (.not. associated(OBC)) return
   if (associated(OBC%OBC_mask_u)) deallocate(OBC%OBC_mask_u)
   if (associated(OBC%OBC_mask_v)) deallocate(OBC%OBC_mask_v)
-  if (associated(OBC%OBC_kind_u)) deallocate(OBC%OBC_kind_u)
-  if (associated(OBC%OBC_kind_v)) deallocate(OBC%OBC_kind_v)
   if (associated(OBC%OBC_segment_list)) deallocate(OBC%OBC_segment_list)
   if (associated(OBC%OBC_segment_u)) deallocate(OBC%OBC_segment_u)
   if (associated(OBC%OBC_segment_v)) deallocate(OBC%OBC_segment_v)
@@ -673,7 +656,6 @@ subroutine open_boundary_impose_land_mask(OBC, G)
     do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
       if (G%mask2dCu(I,j) == 0 .and. (OBC%OBC_segment_u(I,j) /= OBC_NONE)) then
         if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%radiation) then
-          OBC%OBC_kind_u(I,j) = OBC_NONE
           OBC%OBC_direction_u(I,j) = OBC_NONE
           OBC%OBC_mask_u(I,j) = .false.
         endif
@@ -685,7 +667,6 @@ subroutine open_boundary_impose_land_mask(OBC, G)
     do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
       if (G%mask2dCv(i,J) == 0 .and. (OBC%OBC_segment_v(i,J) /= OBC_NONE)) then
         if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%radiation) then
-          OBC%OBC_kind_v(i,J) = OBC_NONE
           OBC%OBC_direction_v(i,J) = OBC_NONE
           OBC%OBC_mask_v(i,J) = .false.
         endif

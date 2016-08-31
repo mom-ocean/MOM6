@@ -128,13 +128,15 @@ subroutine supercritical_set_OBC_data(OBC, G)
 
   do k=1,nz
     do j=jsd,jed ; do I=IsdB,IedB
-      if (OBC%OBC_mask_u(I,j) .and. (OBC%OBC_kind_u(I,j)==OBC_SIMPLE)) then
+      if (OBC%OBC_mask_u(I,j) .and. &
+          (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%specified)) then
         OBC%u(I,j,k) = 8.57
         OBC%uh(I,j,k) = 8.57
       endif
     enddo ; enddo
     do J=JsdB,JedB ; do i=isd,ied
-      if (OBC%OBC_mask_v(i,J) .and. (OBC%OBC_kind_v(i,J)==OBC_SIMPLE)) then
+      if (OBC%OBC_mask_v(i,J) .and. &
+          (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%specified)) then
         OBC%v(i,J,k) = 0.0
         OBC%vh(i,J,k) = 0.0
       endif
