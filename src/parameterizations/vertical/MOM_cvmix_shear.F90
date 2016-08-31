@@ -19,6 +19,14 @@ module MOM_cvmix_shear
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
 !***********************************************************************
 
+!---------------------------------------------------
+! module MOM_cvmix_shear
+! Author: Brandon Reichl
+! Date: Aug 31, 2016
+! Purpose: Interface to CVMix interior shear schemes
+! Further information to be added at a later time.
+!---------------------------------------------------
+
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
@@ -39,16 +47,17 @@ implicit none ; private
 #include <netcdf.inc>
 #endif
 
-public Calculate_cvmix_shear, cvmix_shear_init
+public Calculate_cvmix_shear, cvmix_shear_init, cvmix_shear_is_used
 
-type, public :: CVMix_shear_CS ! ; private
-  logical :: use_LMD94, use_PP81
-  real    :: Ri_zero
-  real    :: Nu_zero
-  real    :: KPP_exp
-  real, allocatable, dimension(:,:,:) :: N2        !< Squared Brunt-Vaisala frequency (1/s2)
-  real, allocatable, dimension(:,:,:) :: S2        !< Squared shear frequency (1/s2)
-  character(10) :: Mix_Scheme
+type, public :: CVMix_shear_CS
+! Control structure including parameters for CVMix interior shear schemes.
+  logical :: use_LMD94, use_PP81            !< Flags for various schemes
+  real    :: Ri_zero                        !< LMD94 critical Richardson number
+  real    :: Nu_zero                        !< LMD94 maximum interior diffusivity
+  real    :: KPP_exp                        !<
+  real, allocatable, dimension(:,:,:) :: N2 !< Squared Brunt-Vaisala frequency (1/s2)
+  real, allocatable, dimension(:,:,:) :: S2 !< Squared shear frequency (1/s2)
+  character(10) :: Mix_Scheme               !< Mixing scheme name (string)
 end type CVMix_shear_CS
 
 ! integer :: id_clock_project, id_clock_KQ, id_clock_avg, id_clock_setup
@@ -74,18 +83,16 @@ subroutine Calculate_cvmix_shear(u_H, v_H, h, tv, KH,  &
 ! -------------------------------------------------
 ! Subroutine for calculating (internal) diffusivity
 ! -------------------------------------------------
-! Arguments: u_in - Initial zonal velocity, in m s-1. (Intent in)
-!  (in)      v_in - Initial meridional velocity, in m s-1.
+! Arguments: 
+!  (in)      u_H - Initial zonal velocity on T points, in m s-1.
+!  (in)      v_H - Initial meridional velocity on T points, in m s-1.
 !  (in)      h - Layer thickness, in m or kg m-2.
 !  (in)      tv - A structure containing pointers to any available
 !                 thermodynamic fields. Absent fields have NULL ptrs.
 !  (in/out)  KH - The diapycnal diffusivity at each interface
-!                       (not layer!) in m2 s-1.  Initially this is the value
-!                       from the previous timestep, which may accelerate the
-!                       iteration toward convergence.
+!                       (not layer!) in m2 s-1.
 !  (in/out)  KM - The vertical viscosity at each interface
-!                    (not layer!) in m2 s-1. This discards any previous value
-!                    i.e. intent(out) and simply sets Kv = Prandtl * Kd_turb
+!                    (not layer!) in m2 s-1.
 !  (in)      G - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
@@ -107,10 +114,9 @@ subroutine Calculate_cvmix_shear(u_H, v_H, h, tv, KH,  &
       if (G%mask2dT(i,j)==0.) cycle
 
       ! Richardson number computed for each cell in a column.
-      pRef = 0.
-      Ri_Grad(:)=1.e8
+      pRef = 0. 
+      Ri_Grad(:)=1.e8 !Initialize w/ large Richardson value
       do k=1,G%ke
-
         ! pressure, temp, and saln for EOS
         ! kk+1 = k fields
         ! kk+2 = km1 fields
@@ -130,11 +136,9 @@ subroutine Calculate_cvmix_shear(u_H, v_H, h, tv, KH,  &
       enddo ! k-loop finishes
 
       ! compute in-situ density
-      call calculate_density(Temp_1D, Salt_1D, pres_1D, rho_1D, 1, 3*G%ke, TV%EQN_OF_STATE)
+      call calculate_density(Temp_1D, Salt_1D, pres_1D, rho_1D, 1, 2*G%ke, TV%EQN_OF_STATE)
 
-      ! N2 (can be negative) and N (non-negative) on interfaces.
-      ! deltaRho is non-local rho difference used for bulk Richardson number.
-      ! N_1d is local N (with floor) used for unresolved shear calculation.
+      ! N2 (can be negative) on interface
       do k = 1, G%ke
         km1 = max(1, k-1)
         kk = 2*(k-1)
@@ -144,17 +148,15 @@ subroutine Calculate_cvmix_shear(u_H, v_H, h, tv, KH,  &
         DZ = ((0.5*(h(i,j,km1) + h(i,j,k))+GV%H_subroundoff)*GV%H_to_m)
         N2 = DRHO/DZ
         S2 = (DU*DU+DV*DV)/(DZ*DZ) 
-        Ri_Grad(G%ke) = max(0.,N2)/max(S2,1.e-16)
+        Ri_Grad(k) = max(0.,N2)/max(S2,1.e-16)
       enddo
 
-
+      ! Call to CVMix wrapper for computing interior mixing coefficients.
       call  cvmix_coeffs_shear(Mdiff_out=KM(i,j,:), &
                                    Tdiff_out=KH(i,j,:), & 
                                    RICH=Ri_Grad, &
                                    nlev=G%ke,    &
                                    max_nlev=G%ke)
-
-
     enddo;
   enddo;
 
@@ -166,8 +168,8 @@ end subroutine Calculate_cvmix_shear
 logical function cvmix_shear_init(Time, G, GV, param_file, diag, CS)
   !
   ! Initialized the cvmix internal shear mixing routine.
-  !  *tests to make sure multiple internal shear mixing routines
-  !   are not enabled at the same time.
+  !  *This is where we test to make sure multiple internal shear 
+  !   mixing routines (including JHL) are not enabled at the same time.
   !
   type(time_type),         intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
@@ -215,6 +217,8 @@ logical function cvmix_shear_init(Time, G, GV, param_file, diag, CS)
   endif
   use_JHL=kappa_shear_is_used(param_file)
   if (use_JHL) NumberTrue = NumberTrue + 1
+  ! After testing for interior schemes, make sure only 0 or 1 are enabled.
+  ! Otherwise, warn user and kill job.
   if ((NumberTrue).gt.1) then
      call MOM_error(FATAL, 'MOM_cvmix_shear_init: '// &
            'Multiple shear driven internal mixing schemes selected,'//&
@@ -245,5 +249,18 @@ logical function cvmix_shear_init(Time, G, GV, param_file, diag, CS)
   allocate( CS%S2( SZI_(G), SZJ_(G), SZK_(G)+1 ) );CS%S2(:,:,:) = 0.
 
 end function cvmix_shear_init
+
+logical function cvmix_shear_is_used(param_file)
+  ! Reads the parameter "LMD94" and "PP81" and returns state.
+  !   This function allows other modules to know whether this parameterization wi
+  ! be used without needing to duplicate the log entry.
+  type(param_file_type), intent(in) :: param_file
+  logical :: LMD94, PP81
+  call get_param(param_file, mod, "USE_LMD94", LMD94, &
+       default=.false., do_not_log = .true.)
+  call get_param(param_file, mod, "Use_PP81", PP81, &
+       default=.false., do_not_log = .true.)
+  cvmix_shear_is_used = (LMD94 .or. PP81)
+end function cvmix_shear_is_used
 
 end module MOM_cvmix_shear

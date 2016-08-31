@@ -585,7 +585,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     endif
     if (showCallTree) call callTree_waypoint("done with calculate_kappa_shear (set_diffusivity)")
  elseif (CS%useCVMix) then
-    !visc%Kd_turb and visc%Kv_turb are on the faces, not the interfaces.
+    !NOTE{BGR}: this needs cleaned up.  Works in 1D case, not tested outside.
     call calculate_cvmix_shear(u_h, v_h, h, tv, visc%Kd_turb, visc%Kv_turb,G,GV,CS%CVMix_shear_CSp)
   elseif (associated(visc%Kv_turb)) then
     visc%Kv_turb(:,:,:) = 0. ! needed if calculate_kappa_shear is not enabled
@@ -712,7 +712,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     endif
 
   ! Add the input turbulent diffusivity.
-    if (CS%useKappaShear) then
+    if (CS%useKappaShear .or. CS%useCVMix) then
       if (present(Kd_int)) then
         do K=2,nz ; do i=is,ie
           Kd_int(i,j,K) = visc%Kd_turb(i,j,K) + 0.5*(Kd(i,j,k-1) + Kd(i,j,k))
