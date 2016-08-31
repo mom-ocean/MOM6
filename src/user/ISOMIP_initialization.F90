@@ -486,10 +486,10 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
   !  and mask2dT is 1.  
 
    do i=is,ie; do j=js,je
-      if (G%geoLatT(i,j) >= 790.0 .AND. G%geoLatT(i,j) <= 800.0) then
+      if (G%geoLonT(i,j) >= 790.0 .AND. G%geoLonT(i,j) <= 800.0) then
 
   ! 1 / day
-        dummy1=(G%geoLatT(i,j)-790.0)/(800.0-790.0)
+        dummy1=(G%geoLonT(i,j)-790.0)/(800.0-790.0)
         damp = 1.0/TNUDG * max(0.0,dummy1)
 
       else ; damp=0.0
