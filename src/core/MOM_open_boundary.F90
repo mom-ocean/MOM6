@@ -709,9 +709,12 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h_new
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h_old
   ! Local variables
-  real :: dhdt, dhdx, gamma_u, gamma_h, gamma_v
+  real, dimension(SZI_(G),SZJ_(G)) :: grad
+  real :: dhdt, dhdx, dhdy, gamma_u, gamma_h, gamma_v
+  real :: cff, Cx, Cy
   real :: rx_max, ry_max ! coefficients for radiation
   real :: rx_new, rx_avg ! coefficients for radiation
+  real, parameter :: eps = 1.0e-20
 
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -724,16 +727,16 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
   gamma_u = OBC%gamma_uv ; gamma_v = OBC%gamma_uv ; gamma_h = OBC%gamma_h
   rx_max = OBC%rx_max ; ry_max = OBC%rx_max
 
-  if (OBC%apply_OBC_u_flather_east .or. OBC%apply_OBC_u_flather_west) then
-    do k=1,nz ; do j=js,je ; do I=is-1,ie ; if (OBC%OBC_mask_u(I,j)) then
-      if (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_E) then
-        dhdt = u_old(I-1,j,k)-u_new(I-1,j,k) !old-new
-        dhdx = u_new(I-1,j,k)-u_new(I-2,j,k) !in new time backward sasha for I-1
-        rx_new = 0.0
-        if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max)
-        rx_avg = (1.0-gamma_u)*OBC%rx_old_u(I,j,k) + gamma_u*rx_new
-        OBC%rx_old_u(I,j,k) = rx_avg
-        u_new(I,j,k) = (u_old(I,j,k) + rx_avg*u_new(I-1,j,k)) / (1.0+rx_avg)
+  do k=1,nz ; do j=js,je ; do I=is-1,ie ; if (OBC%OBC_mask_u(I,j)) then
+    if ((OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%radiation) .and. &
+        (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_E)) then
+      dhdt = u_old(I-1,j,k)-u_new(I-1,j,k) !old-new
+      dhdx = u_new(I-1,j,k)-u_new(I-2,j,k) !in new time backward sasha for I-1
+      rx_new = 0.0
+      if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max)
+      rx_avg = (1.0-gamma_u)*OBC%rx_old_u(I,j,k) + gamma_u*rx_new
+      OBC%rx_old_u(I,j,k) = rx_avg
+      u_new(I,j,k) = (u_old(I,j,k) + rx_avg*u_new(I-1,j,k)) / (1.0+rx_avg)
 
     !   dhdt = h_old(I,j,k)-h_new(I,j,k) !old-new
     !   dhdx = h_new(I,j,k)-h_new(I-1,j,k) !in new time
@@ -742,15 +745,16 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
     !   rx_avg = (1.0-gamma_h)*OBC%rx_old_h(I,j,k) + gamma_h*rx_new
     !   OBC%rx_old_h(I,j,k) = rx_avg
     !    h_new(I+1,j,k) = (h_old(I+1,j,k) + rx_avg*h_new(I,j,k)) / (1.0+rx_avg) !original
-      endif
-      if (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_W) then
-        dhdt = u_old(I+1,j,k)-u_new(I+1,j,k) !old-new
-        dhdx = u_new(I+1,j,k)-u_new(I+2,j,k) !in new time backward sasha for I+1
-        rx_new = 0.0
-        if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max)
-        rx_avg = (1.0-gamma_u)*OBC%rx_old_u(I,j,k) + gamma_u*rx_new
-        OBC%rx_old_u(I,j,k) = rx_avg
-        u_new(I,j,k) = (u_old(I,j,k) + rx_avg*u_new(I+1,j,k)) / (1.0+rx_avg)
+    endif
+    if ((OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%radiation) .and. &
+        (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_W)) then
+      dhdt = u_old(I+1,j,k)-u_new(I+1,j,k) !old-new
+      dhdx = u_new(I+1,j,k)-u_new(I+2,j,k) !in new time backward sasha for I+1
+      rx_new = 0.0
+      if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max)
+      rx_avg = (1.0-gamma_u)*OBC%rx_old_u(I,j,k) + gamma_u*rx_new
+      OBC%rx_old_u(I,j,k) = rx_avg
+      u_new(I,j,k) = (u_old(I,j,k) + rx_avg*u_new(I+1,j,k)) / (1.0+rx_avg)
 
     !   dhdt = h_old(I+1,j,k)-h_new(I+1,j,k) !old-new
     !   dhdx = h_new(I+1,j,k)-h_new(I+2,j,k) !in new time
@@ -759,20 +763,73 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
     !   rx_avg = (1.0-gamma_h)*OBC%rx_old_h(I,j,k) + gamma_h*rx_new
     !   OBC%rx_old_h(I,j,k) = rx_avg
     !   h_new(I,j,k) = (h_old(I,j,k) + rx_avg*h_new(I+1,j,k)) / (1.0+rx_avg) !original
-      endif
-    endif ; enddo ; enddo ; enddo
-  endif
+    endif
 
-  if (OBC%apply_OBC_v_flather_north .or. OBC%apply_OBC_v_flather_south) then
-    do k=1,nz ; do J=js-1,je ; do i=is,ie ; if (OBC%OBC_mask_v(i,J)) then
-      if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N) then
-        dhdt = v_old(i,J-1,k)-v_new(i,J-1,k) !old-new
-        dhdx = v_new(i,J-1,k)-v_new(i,J-2,k) !in new time backward sasha for J-1
-        rx_new = 0.0
-        if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max)
-        rx_avg = (1.0-gamma_v)*OBC%ry_old_v(i,J,k) + gamma_v*rx_new
-        OBC%ry_old_v(i,J,k) = rx_avg
-        v_new(i,J,k) = (v_old(i,J,k) + rx_avg*v_new(i,J-1,k)) / (1.0+rx_avg)
+!    if ((OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%radiation) .and. &
+!        (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_S)) then
+!      grad(i,j) = u_old(I,j,k) - u_old(I-1,j,k)
+!      grad(i,j+1) = u_old(I,j+1,k) - u_old(I-1,j+1,k)
+!      grad(i+1,j) = u_old(I+1,j,k) - u_old(I,j,k)
+!      grad(i+1,j+1) = u_old(I+1,j+1,k) - u_old(I,j+1,k)
+!      dhdt = u_old(I,j+1,k)-u_new(I,j+1,k) !old-new
+!      dhdy = u_new(I,j+1,k)-u_new(I,j+2,k) !in new time backward sasha for I+1
+!      if (dhdt*dhdx < 0.0) dhdt = 0.0
+!      if (dhdt*(grad(i,j+1) + grad(i+1,j+1)) > 0.0) then
+!        dhdx = grad(i,j+1)
+!      else
+!        dhdx = grad(i+1,j+1)
+!      endif
+!      cff = max(dhdx*dhdx + dhdy*dhdy, eps)
+!      Cx = 0.0
+!      if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%radiation2D) &
+!                 Cx = min(cff, max(dhdt*dhdx, -cff))
+!      Cy = dhdt*dhdy
+!      u_new(I,j,k) = (cff*u_old(I,j,k) + Cy*u_new(I,j+1,k) - &
+!          max(Cx, 0.0)*grad(i,j) - min(Cx, 0.0)*grad(i+1,j))/(cff + Cy)
+!    endif
+
+!    if ((OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%radiation) .and. &
+!        (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_N)) then
+!      grad(i,j) = u_old(i,J,k) - u_old(i-1,J,k)
+!      grad(i,j-1) = u_old(i,J-1,k) - u_old(i-1,J-1,k)
+!      grad(i+1,j) = u_old(I+1,j,k) - u_old(I,j,k)
+!      grad(i+1,j-1) = u_old(I+1,j-1,k) - u_old(I,j-1,k)
+!      dhdt = u_old(I,j-1,k)-u_new(I,j-1,k) !old-new
+!      dhdy = u_new(I,j-1,k)-u_new(I,j-2,k) !in new time backward sasha for I+1
+!      if (dhdt*dhdx < 0.0) dhdt = 0.0
+!      if (dhdt*(grad(i,j-1) + grad(i+1,j-1)) > 0.0) then
+!        dhdx = grad(i,j-1)
+!      else
+!        dhdx = grad(i+1,j-1)
+!      endif
+!      cff = max(dhdx*dhdx + dhdy*dhdy, eps)
+!      Cx = 0.0
+!      if (OBC%OBC_segment_list(OBC%OBC_kind_u(I,j))%radiation2D) &
+!                 Cx = min(cff, max(dhdt*dhdx, -cff))
+!      Cy = dhdt*dhdy
+!      u_new(I,j,k) = (cff*u_old(I,j,k) + Cy*u_new(I,j-1,k) - &
+!          max(Cx, 0.0)*grad(i,j) - min(Cx, 0.0)*grad(i+1,j))/(cff + Cy)
+!    endif
+!    if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
+      if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%radiation &
+            .and. (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_N)) &
+        u_new(I,j,k) = u_new(I,j-1,k)
+      if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%radiation &
+            .and. (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_S)) &
+        u_new(I,j,k) = u_new(I,j+1,k)
+!    endif
+  endif ; enddo ; enddo ; enddo
+
+  do k=1,nz ; do J=js-1,je ; do i=is,ie ; if (OBC%OBC_mask_v(i,J)) then
+    if ((OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%radiation) .and. &
+       (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N)) then
+      dhdt = v_old(i,J-1,k)-v_new(i,J-1,k) !old-new
+      dhdx = v_new(i,J-1,k)-v_new(i,J-2,k) !in new time backward sasha for J-1
+      rx_new = 0.0
+      if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max)
+      rx_avg = (1.0-gamma_v)*OBC%ry_old_v(i,J,k) + gamma_v*rx_new
+      OBC%ry_old_v(i,J,k) = rx_avg
+      v_new(i,J,k) = (v_old(i,J,k) + rx_avg*v_new(i,J-1,k)) / (1.0+rx_avg)
 
     !   dhdt = h_old(i,J,k)-h_new(i,J,k) !old-new
     !   dhdx = h_new(i,J,k)-h_new(i,J-1,k) !in new time
@@ -781,16 +838,17 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
     !   rx_avg = (1.0-gamma_h)*OBC%ry_old_h(i,J,k) + gamma_h*rx_new
     !   OBC%ry_old_h(i,J,k) = rx_avg
     !   h_new(i,J+1,k) = (h_old(i,J+1,k) + rx_avg*h_new(i,J,k)) / (1.0+rx_avg) !original
-      endif
+    endif
 
-      if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S) then
-        dhdt = v_old(i,J+1,k)-v_new(i,J+1,k) !old-new
-        dhdx = v_new(i,J+1,k)-v_new(i,J+2,k) !in new time backward sasha for J+1
-        rx_new = 0.0
-        if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max)
-        rx_avg = (1.0-gamma_v)*OBC%ry_old_v(i,J,k) + gamma_v*rx_new
-        OBC%ry_old_v(i,J,k) = rx_avg
-        v_new(i,J,k) = (v_old(i,J,k) + rx_avg*v_new(i,J+1,k)) / (1.0+rx_avg)
+    if ((OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%radiation) .and. &
+        (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S)) then
+      dhdt = v_old(i,J+1,k)-v_new(i,J+1,k) !old-new
+      dhdx = v_new(i,J+1,k)-v_new(i,J+2,k) !in new time backward sasha for J+1
+      rx_new = 0.0
+      if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max)
+      rx_avg = (1.0-gamma_v)*OBC%ry_old_v(i,J,k) + gamma_v*rx_new
+      OBC%ry_old_v(i,J,k) = rx_avg
+      v_new(i,J,k) = (v_old(i,J,k) + rx_avg*v_new(i,J+1,k)) / (1.0+rx_avg)
 
     !   dhdt = h_old(i,J+1,k)-h_new(i,J+1,k) !old-new
     !   dhdx = h_new(i,J+1,k)-h_new(i,J+2,k) !in new time
@@ -799,10 +857,60 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
     !   rx_avg = (1.0-gamma_h)*OBC%ry_old_h(i,J,k) + gamma_h*rx_new
     !   OBC%ry_old_h(i,J,k) = rx_avg
     !   h_new(i,J,k) = (h_old(i,J,k) + rx_avg*h_new(i,J+1,k)) / (1.0+rx_avg) !original
-      endif
+   endif
 
-    endif ; enddo ; enddo ; enddo
-  endif
+!   if ((OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%radiation) .and. &
+!       (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_W)) then
+!      grad(i,j) = v_old(i,J,k) - v_old(i,J-1,k)
+!      grad(i+1,j) = v_old(i+1,J,k) - v_old(i+1,J-1,k)
+!      grad(i,j+1) = v_old(i,J+1,k) - v_old(i,J,k)
+!      grad(i+1,j+1) = v_old(i+1,J+1,k) - v_old(i+1,J,k)
+!      dhdt = v_old(i+1,J,k)-v_new(i+1,J,k) !old-new
+!      dhdx = v_new(i+1,J,k)-v_new(i+2,J,k) !in new time backward sasha for I+1
+!      if (dhdt*dhdx < 0.0) dhdt = 0.0
+!      if (dhdt*(grad(i+1,j) + grad(i+1,j+1)) > 0.0) then
+!        dhdy = grad(i+1,j)
+!      else
+!        dhdy = grad(i+1,j+1)
+!      endif
+!      cff = max(dhdx*dhdx + dhdy*dhdy, eps)
+!      Cx = dhdt*dhdx
+!      Cy = 0.0
+!      if (OBC%OBC_kind_v(I,j) == OBC_RADIATION2D) Cy = min(cff, max(dhdt*dhdy, -cff))
+!      v_new(i,J,k) = (cff*v_old(i,J,k) + Cx*v_new(i+1,J,k) - &
+!            max(Cy, 0.0)*grad(i,j) - min(Cy, 0.0)*grad(i+1,j))/(cff + Cx)
+!    endif
+!
+!    if ((OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%radiation) .and. &
+!        (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_E)) then
+!      grad(i,j) = v_old(i,J,k) - v_old(i,J-1,k)
+!      grad(i-1,j) = v_old(i-1,J,k) - v_old(i-1,J-1,k)
+!      grad(i,j+1) = v_old(i,J+1,k) - v_old(i,J,k)
+!      grad(i-1,j+1) = v_old(i-1,J+1,k) - v_old(i-1,J,k)
+!      dhdt = v_old(i-1,J,k)-v_new(i-1,J,k) !old-new
+!      dhdx = v_new(i-1,J,k)-v_new(i-2,J,k) !in new time backward sasha for I+1
+!      if (dhdt*dhdx < 0.0) dhdt = 0.0
+!      if (dhdt*(grad(i-1,j) + grad(i-1,j+1)) > 0.0) then
+!        dhdy = grad(i-1,j)
+!      else
+!        dhdy = grad(i-1,j+1)
+!      endif
+!      cff = max(dhdx*dhdx + dhdy*dhdy, eps)
+!      Cx = dhdt*dhdx
+!      Cy = 0.0
+!      if (OBC%OBC_kind_v(I,j) == OBC_RADIATION2D) Cy = min(cff, max(dhdt*dhdy, -cff))
+!      v_new(i,J,k) = (cff*v_old(i,J,k) + Cx*v_new(i-1,J,k) - &
+!            max(Cy, 0.0)*grad(i,j) - min(Cy, 0.0)*grad(i,j+1))/(cff + Cx)
+!    endif
+!          if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
+    if ((OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%radiation) &
+                .and. (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_E)) &
+      v_new(i,J,k) = v_new(i-1,J,k)
+    if ((OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%radiation) &
+                .and. (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_W)) &
+      v_new(i,J,k) = v_new(i+1,J,k)
+!          endif
+  endif ; enddo ; enddo ; enddo
 
   call cpu_clock_begin(id_clock_pass)
   call pass_vector(u_new, v_new, G%Domain)
