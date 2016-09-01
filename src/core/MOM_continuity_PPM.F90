@@ -206,19 +206,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
               h(i,j,k) = h_input(i+1,j,k)
           endif
         enddo
-      enddo
-!      do J=LB%jsh-1,LB%jeh
-!        do i=LB%ish-1,LB%ieh+1
-!          if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
-!            if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%radiation &
-!               .and. (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_E)) &
-!              v(i,J,k) = v(i-1,J,k)
-!            if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%radiation &
-!               .and. (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_W)) &
-!              v(i,J,k) = v(i+1,J,k)
-!          endif
-!        enddo ; enddo
-      enddo
+      enddo ; enddo
     endif
     LB%ish = G%isc ; LB%ieh = G%iec ; LB%jsh = G%jsc ; LB%jeh = G%jec
 
@@ -252,16 +240,6 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
               h(i,j,k) = h_input(i,j+1,k)
           endif
         enddo ; enddo
-!        do j=LB%jsh-1,LB%jeh+1 ; do I=LB%ish-1,LB%ieh
-!          if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
-!            if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%radiation &
-!                .and. (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_N)) &
-!              u(I,j,k) = u(I,j-1,k)
-!            if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%radiation &
-!                .and. (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_S)) &
-!              u(I,j,k) = u(I,j+1,k)
-!          endif
-!        enddo ; enddo
       enddo
     endif
   else  ! .not. x_first
@@ -295,16 +273,6 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
               h(i,j,k) = h_input(i,j+1,k)
           endif
         enddo ; enddo
-!        do j=LB%jsh-1,LB%jeh+1 ; do I=LB%ish-1,LB%ieh
-!          if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
-!            if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%radiation &
-!                .and. (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_N)) &
-!              u(I,j,k) = u(I,j-1,k)
-!            if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%radiation &
-!                .and. (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_S)) &
-!              u(I,j,k) = u(I,j+1,k)
-!          endif
-!        enddo ; enddo
       enddo
     endif
 
@@ -339,19 +307,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
               h(i,j,k) = h_input(i+1,j,k)
           endif
         enddo
-      enddo
-!      do J=LB%jsh-1,LB%jeh
-!        do i=LB%ish-1,LB%ieh+1
-!          if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
-!            if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%radiation &
-!                .and. (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_E)) &
-!              v(i,J,k) = v(i-1,J,k)
-!            if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%radiation &
-!                .and. (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_W)) &
-!              v(i,J,k) = v(i+1,J,k)
-!          endif
-!        enddo ; enddo
-      enddo
+      enddo ; enddo
     endif
   endif
 
