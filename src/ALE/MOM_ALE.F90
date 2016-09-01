@@ -97,7 +97,8 @@ type, public :: ALE_CS
   integer, dimension(:), allocatable :: id_tracer_remap_tendency      !< diagnostic id 
   integer, dimension(:), allocatable :: id_Htracer_remap_tendency     !< diagnostic id 
   integer, dimension(:), allocatable :: id_Htracer_remap_tendency_2d  !< diagnostic id 
-  logical, dimension(:), allocatable :: do_tendency_diag              !< flag for doing diagnostics 
+  logical, dimension(:), allocatable :: do_tendency_diag              !< flag for doing diagnostics
+  integer                            :: id_dzRegrid
 
 end type
 
@@ -282,6 +283,9 @@ subroutine ALE_register_diags(Time, G, diag, C_p, Reg, CS)
   CS%id_Htracer_remap_tendency(:)    = -1
   CS%id_Htracer_remap_tendency_2d(:) = -1
 
+  CS%id_dzRegrid = register_diag_field('ocean_model','dzRegrid',diag%axesTi,Time, &
+      'Change in interface height due to ALE regridding', 'meter')
+
   if(ntr > 0) then 
 
     do m=1,ntr
@@ -365,7 +369,7 @@ end subroutine ALE_end
 !! the old grid and the new grid. The creation of the new grid can be based
 !! on z coordinates, target interface densities, sigma coordinates or any
 !! arbitrary coordinate system.
-subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt, h_override)
+subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt)
   type(ocean_grid_type),                      intent(in)    :: G   !< Ocean grid informations
   type(verticalGrid_type),                    intent(in)    :: GV  !< Ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h   !< Current 3D grid obtained after last time step (m or Pa)
@@ -375,7 +379,6 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt, h_override)
   type(tracer_registry_type),                 pointer       :: Reg !< Tracer registry structure
   type(ALE_CS),                               pointer       :: CS  !< Regridding parameters and options
   real,                             optional, intent(in)    :: dt  !< Time step between calls to ALE_main()
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  optional, intent(in) :: h_override   !< Current 3D grid obtained after last time step (m or Pa)
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV)+1) :: dzRegrid ! The change in grid interface positions
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_new ! New 3D grid obtained after last time step (m or Pa)
@@ -399,13 +402,9 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt, h_override)
   if (CS%show_call_tree) call callTree_waypoint("new grid generated (ALE_main)")
 
   ! Remap all variables from old grid h onto new grid h_new
-  if (.not. present(h_override)) then
-    call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, -dzRegrid, Reg, &
+
+  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, -dzRegrid, Reg, &
                              u, v, CS%show_call_tree, dt )
-  else
-    call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_override, -dzRegrid, Reg, &
-                             u, v, CS%show_call_tree, dt )
-  endif
 
   if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_main)")
 
@@ -419,6 +418,10 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt, h_override)
   enddo
 
   if (CS%show_call_tree) call callTree_leave("ALE_main()")
+
+  if (present(dt)) call post_data(CS%id_dzRegrid, dzRegrid, CS%diag)
+
+
 end subroutine ALE_main
 
 !> Check grid for negative thicknesses

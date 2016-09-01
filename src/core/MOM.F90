@@ -1497,69 +1497,19 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     call pass_var(h_pre,G%Domain)
     call hchksum(h_pre, "Before steps h", G%HI, haloshift=1)
 
-    if (CS%diabatic_first .and. CS%use_ALE_algorithm) then
-    ! Regridding/remapping is done here, at end of thermodynamics time step
-    ! (that may comprise several dynamical time steps)
-    ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
+    CS%T = temp_old
+    CS%S = salt_old
+    call pass_var(CS%T,G%Domain)
+    call pass_var(CS%S,G%Domain)
 
-        CS%tv%T = CS%offline_CSp%T_preale
-        CS%tv%S = CS%offline_CSp%S_preale
-
-!            call do_group_pass(CS%pass_T_S_h, G%Domain)
-
-      ! update squared quantities
-        if (associated(CS%S_squared)) &
-            CS%S_squared(:,:,:) = CS%tv%S(:,:,:) ** 2
-        if (associated(CS%T_squared)) &
-            CS%T_squared(:,:,:) = CS%tv%T(:,:,:) ** 2
-
-        if (CS%debug) then
-            call uchksum(CS%offline_CSp%u_preale, "Pre-ALE 1 u", G%HI, haloshift=1)
-            call vchksum(CS%offline_CSp%v_preale, "Pre-ALE 1 v", G%HI, haloshift=1)
-            call hchksum(CS%offline_CSp%h_preale, "Pre-ALE 1 h", G%HI, haloshift=1)
-            call hchksum(CS%tv%T,"Pre-ALE 1 T", G%HI, haloshift=1)
-            call hchksum(CS%tv%S,"Pre-ALE 1 S", G%HI, haloshift=1)
-        endif
-        call cpu_clock_begin(id_clock_ALE)
-        call ALE_main(G, GV, CS%offline_CSp%h_preale, CS%offline_CSp%u_preale, &
-                        CS%offline_CSp%v_preale, CS%tv, CS%tracer_Reg, &
-                        CS%ALE_CSp, CS%offline_CSp%dt_offline)
-        call cpu_clock_end(id_clock_ALE)
-
-        if (CS%debug) then
-            call hchksum(CS%tv%T,"Post-ALE 1 T", G%HI, haloshift=1)
-            call hchksum(CS%tv%S,"Post-ALE 1 S", G%HI, haloshift=1)
-        endif
-
-        CS%tv%T = temp_old
-        CS%tv%S = salt_old
-
-        call pass_var(CS%T,G%Domain)
-        call pass_var(CS%S,G%Domain)
-
-      ! Whenever thickness changes let the diag manager know, target grids
-      ! for vertical remapping may need to be regenerated. This needs to
-      ! happen after the H update and before the next post_data.
-      call diag_update_target_grids(CS%diag)
-      call post_diags_TS_vardec(G, CS, CS%offline_CSp%dt_offline)
-
-      h_pre = CS%offline_CSp%h_preale;
-      call pass_var(h_pre,G%Domain)
-
-    else !Not diabatic first or not ale
-      CS%T = temp_old
-      CS%S = salt_old
-      call pass_var(CS%T,G%Domain)
-      call pass_var(CS%S,G%Domain)
-    endif !Diabatic first and ALE
 
     h_new(:,:,:) = GV%Angstrom
     ! Offline tracer advection is done by using a 3d flux-limited, Strang time-split method
     ! The flux limiting follows the routine specified by Skamarock (Monthly Weather Review, 2005)
     ! to make sure that offline advection is monotonic and positive-definite
 !
-    call tracer_hordiff(h_pre, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
-        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, CS%do_online, khdt_x*0.5, khdt_y*0.5)
+!    call tracer_hordiff(h_pre, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
+!        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, CS%do_online, khdt_x*0.5, khdt_y*0.5)
 
     x_before_y = (MOD(G%first_direction,2) == 0)
     z_first = CS%diabatic_first
@@ -1583,7 +1533,6 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       ! Calculate 3d mass transports to be used in this iteration
       call limit_mass_flux_3d(G, GV, uhtr_sub, vhtr_sub, eatr_sub, ebtr_sub, h_pre, &
           CS%offline_CSp%max_off_cfl)
-
 
       if (z_first) then
         ! First do vertical advection
@@ -1640,11 +1589,62 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
 
       endif
 
+
+      if (CS%use_ALE_algorithm) then
+
+        ! Regridding/remapping is done here, at end of thermodynamics time step
+        ! (that may comprise several dynamical time steps)
+        ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
+
+        CS%tv%T = CS%offline_CSp%T_preale
+        CS%tv%S = CS%offline_CSp%S_preale
+        call pass_var(h_pre,G%Domain)
+!            call do_group_pass(CS%pass_T_S_h, G%Domain)
+
+        ! update squared quantities
+        if (associated(CS%S_squared)) &
+            CS%S_squared(:,:,:) = CS%tv%S(:,:,:) ** 2
+        if (associated(CS%T_squared)) &
+            CS%T_squared(:,:,:) = CS%tv%T(:,:,:) ** 2
+
+        if (CS%debug) then
+            call uchksum(CS%offline_CSp%u_preale, "Pre-ALE 1 u", G%HI, haloshift=1)
+            call vchksum(CS%offline_CSp%v_preale, "Pre-ALE 1 v", G%HI, haloshift=1)
+            call hchksum(CS%offline_CSp%h_preale, "Pre-ALE 1 h", G%HI, haloshift=1)
+            call hchksum(CS%tv%T,"Pre-ALE 1 T", G%HI, haloshift=1)
+            call hchksum(CS%tv%S,"Pre-ALE 1 S", G%HI, haloshift=1)
+        endif
+        call cpu_clock_begin(id_clock_ALE)
+        call ALE_main(G, GV, h_pre, CS%offline_CSp%u_preale, &
+                        CS%offline_CSp%v_preale, CS%tv, CS%tracer_Reg, &
+                        CS%ALE_CSp, dt_iter)
+        call cpu_clock_end(id_clock_ALE)
+
+        if (CS%debug) then
+            call hchksum(CS%tv%T,"Post-ALE 1 T", G%HI, haloshift=1)
+            call hchksum(CS%tv%S,"Post-ALE 1 S", G%HI, haloshift=1)
+        endif
+
+        CS%tv%T = temp_old
+        CS%tv%S = salt_old
+
+        call pass_var(CS%T,G%Domain)
+        call pass_var(CS%S,G%Domain)
+
+        ! Whenever thickness changes let the diag manager know, target grids
+        ! for vertical remapping may need to be regenerated. This needs to
+        ! happen after the H update and before the next post_data.
+        call diag_update_target_grids(CS%diag)
+        call post_diags_TS_vardec(G, CS, dt_iter)
+
+      endif
+
       ! Update remaining transports
       do k = 1, nz ; do j=js-1,je+1 ; do i=is-1,ie+1
         eatr(i,j,k) = eatr(i,j,k) - eatr_sub(i,j,k)
         ebtr(i,j,k) = ebtr(i,j,k) - ebtr_sub(i,j,k)
       enddo; enddo ; enddo
+
 
       do k = 1, nz ; do j=js-1,je+1 ; do i=is-2,ie+1
         uhtr(I,j,k) = uhtr(I,j,k) - uhtr_sub(I,j,k)
@@ -1659,15 +1659,17 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       call pass_var(h_pre,G%Domain)
       call pass_vector(uhtr,vhtr,G%Domain)
 !
-      ! Stop if we've depleted all the mass transport by summing the remaining fluxes at each point
+      ! Calculate how close we are to converging by summing the remaining fluxes at each point
       sum_abs_fluxes = 0.0
       do k=1,nz; do j=js,je; do i=is,ie
         sum_abs_fluxes = sum_abs_fluxes + abs(eatr(i,j,k)) + abs(ebtr(i,j,k)) + abs(uhtr(I-1,j,k)) + &
             abs(uhtr(I,j,k)) + abs(vhtr(i,J-1,k)) + abs(vhtr(i,J,k))
       enddo; enddo; enddo
-
       call sum_across_PEs(sum_abs_fluxes)
-      if (is_root_pe()) print *, "Remaining fluxes", sum_abs_fluxes
+!
+!
+      if (is_root_pe()) print *, "Remaining fluxes: ", sum_abs_fluxes !, &
+!        "UH: ", sum(abs(uhtr)), "VH: ", sum(abs(vhtr)), "EA: ", sum(abs(eatr)), "EB: ", sum(abs(ebtr))
 !      if ( sum_abs_fluxes == 0.0) then
 !        print *, "Advection converged early at ", iter, "iterations"
 !        exit
@@ -1682,63 +1684,63 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     call pass_var(h_pre, G%Domain)
     ! Tracer diffusion Strang split between advection and diffusion
 
-    call tracer_hordiff(h_pre, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
-        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, CS%do_online, khdt_x*0.5, khdt_y*0.5)
+!    call tracer_hordiff(h_pre, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
+!        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, CS%do_online, khdt_x*0.5, khdt_y*0.5)
 
-    if(.not. CS%use_ALE_algorithm) h_temp = h_end-h_pre
+    h_temp = h_end-h_pre
+!
+!    if(.not.CS%diabatic_first .and. CS%use_ALE_algorithm) then
+!
+!    h_temp = CS%offline_CSp%h_preale-h_pre
+!    ! Regridding/remapping is done here, at end of thermodynamics time step
+!    ! (that may comprise several dynamical time steps)
+!    ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
+!
+!        CS%tv%T = CS%offline_CSp%T_preale
+!        CS%tv%S = CS%offline_CSp%S_preale
+!
+!!            call do_group_pass(CS%pass_T_S_h, G%Domain)
+!
+!      ! update squared quantities
+!        if (associated(CS%S_squared)) &
+!            CS%S_squared(:,:,:) = CS%tv%S(:,:,:) ** 2
+!        if (associated(CS%T_squared)) &
+!            CS%T_squared(:,:,:) = CS%tv%T(:,:,:) ** 2
+!
+!        if (CS%debug) then
+!            call uchksum(CS%offline_CSp%u_preale, "Pre-ALE 1 u", G%HI, haloshift=1)
+!            call vchksum(CS%offline_CSp%v_preale, "Pre-ALE 1 v", G%HI, haloshift=1)
+!            call hchksum(CS%offline_CSp%h_preale, "Pre-ALE 1 h", G%HI, haloshift=1)
+!            call hchksum(CS%tv%T,"Pre-ALE 1 T", G%HI, haloshift=1)
+!            call hchksum(CS%tv%S,"Pre-ALE 1 S", G%HI, haloshift=1)
+!        endif
+!        call cpu_clock_begin(id_clock_ALE)
+!        call ALE_main(G, GV, CS%offline_CSp%h_preale, CS%offline_CSp%u_preale, &
+!                        CS%offline_CSp%v_preale, CS%tv, CS%tracer_Reg, &
+!                        CS%ALE_CSp, h_override = h_end)
+!        call cpu_clock_end(id_clock_ALE)
+!
+!        if (CS%debug) then
+!            call hchksum(CS%tv%T,"Post-ALE 1 T", G%HI, haloshift=1)
+!            call hchksum(CS%tv%S,"Post-ALE 1 S", G%HI, haloshift=1)
+!        endif
+!
+!        CS%tv%T = temp_old
+!        CS%tv%S = salt_old
+!
+!        call pass_var(CS%T,G%Domain)
+!        call pass_var(CS%S,G%Domain)
+!
+!      ! Whenever thickness changes let the diag manager know, target grids
+!      ! for vertical remapping may need to be regenerated. This needs to
+!      ! happen after the H update and before the next post_data.
+!      call diag_update_target_grids(CS%diag)
+!      call post_diags_TS_vardec(G, CS, CS%offline_CSp%dt_offline)
+!
+!      h_end = CS%offline_CSp%h_preale
+!      call pass_var(h_end,G%Domain)
 
-    if(.not.CS%diabatic_first .and. CS%use_ALE_algorithm) then
-
-    h_temp = CS%offline_CSp%h_preale-h_pre
-    ! Regridding/remapping is done here, at end of thermodynamics time step
-    ! (that may comprise several dynamical time steps)
-    ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
-
-        CS%tv%T = CS%offline_CSp%T_preale
-        CS%tv%S = CS%offline_CSp%S_preale
-
-!            call do_group_pass(CS%pass_T_S_h, G%Domain)
-
-      ! update squared quantities
-        if (associated(CS%S_squared)) &
-            CS%S_squared(:,:,:) = CS%tv%S(:,:,:) ** 2
-        if (associated(CS%T_squared)) &
-            CS%T_squared(:,:,:) = CS%tv%T(:,:,:) ** 2
-
-        if (CS%debug) then
-            call uchksum(CS%offline_CSp%u_preale, "Pre-ALE 1 u", G%HI, haloshift=1)
-            call vchksum(CS%offline_CSp%v_preale, "Pre-ALE 1 v", G%HI, haloshift=1)
-            call hchksum(CS%offline_CSp%h_preale, "Pre-ALE 1 h", G%HI, haloshift=1)
-            call hchksum(CS%tv%T,"Pre-ALE 1 T", G%HI, haloshift=1)
-            call hchksum(CS%tv%S,"Pre-ALE 1 S", G%HI, haloshift=1)
-        endif
-        call cpu_clock_begin(id_clock_ALE)
-        call ALE_main(G, GV, CS%offline_CSp%h_preale, CS%offline_CSp%u_preale, &
-                        CS%offline_CSp%v_preale, CS%tv, CS%tracer_Reg, &
-                        CS%ALE_CSp, h_override = h_end)
-        call cpu_clock_end(id_clock_ALE)
-
-        if (CS%debug) then
-            call hchksum(CS%tv%T,"Post-ALE 1 T", G%HI, haloshift=1)
-            call hchksum(CS%tv%S,"Post-ALE 1 S", G%HI, haloshift=1)
-        endif
-
-        CS%tv%T = temp_old
-        CS%tv%S = salt_old
-
-        call pass_var(CS%T,G%Domain)
-        call pass_var(CS%S,G%Domain)
-
-      ! Whenever thickness changes let the diag manager know, target grids
-      ! for vertical remapping may need to be regenerated. This needs to
-      ! happen after the H update and before the next post_data.
-      call diag_update_target_grids(CS%diag)
-      call post_diags_TS_vardec(G, CS, CS%offline_CSp%dt_offline)
-
-      h_end = CS%offline_CSp%h_preale
-      call pass_var(h_end,G%Domain)
-
-    endif !Diabatic second and ALE
+!    endif !Diabatic second and ALE
 
 
 
