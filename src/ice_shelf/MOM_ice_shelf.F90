@@ -584,9 +584,14 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
             Sbdry2 = (-S_b - SQRT(S_b*S_b-4*S_a*S_c))/(2*S_a)
             Sbdry = MAX(Sbdry1, Sbdry2)
             !write(*,*)'#### Sbdry ####',Sbdry, Sbdry1, Sbdry2
-            if (Sbdry < 0.) call MOM_error(FATAL, &
+            if (Sbdry < 0.) then
+               ! this is for debuging!
+               write(*,*)'state%sss(i,j)',state%sss(i,j)
+               write(*,*)'S_a, S_b, S_c',S_a, S_b, S_c
+               write(*,*)'I,J,Sbdry1,Sbdry2',i,j,Sbdry1,Sbdry2
+               call MOM_error(FATAL, &
                   "shelf_calc_flux: Negative salinity (Sbdry).")
-
+            endif
           else
             ! Guess sss as the iteration starting point for the boundary salinity.
             Sbdry = state%sss(i,j) ; Sb_max_set = .false. ; Sb_min_set = .false.

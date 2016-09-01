@@ -2900,7 +2900,6 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
   iscB = G%iscB ; iecB = G%iecB; jscB = G%jscB ; jecB = G%jecB
   isdB = G%isdB ; iedB = G%iedB; jsdB = G%jsdB ; jedB = G%jedB
 
-  !write(*,*)'iscB,iecB,jscB,jecB', iscB,iecB,jscB,jecB
   state%sea_lev => ssh
 
   if (present(p_atm)) then ; if (ASSOCIATED(p_atm)) then
@@ -3042,7 +3041,6 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
     enddo ! end of j loop
   endif                                              ! end BULKMIXEDLAYER
 
-  !!!!
   !state%u => u(:,:,1)
   !state%v => v(:,:,1)
   state%frazil => CS%tv%frazil
