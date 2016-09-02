@@ -216,7 +216,10 @@ type, public :: MOM_control_struct
                                      !! a previous time-step or the ocean restart file.
                                      !! This is only valid when interp_p_surf is true.
 
-  real :: Hmix                       !< diagnostic mixed layer thickness (meter) when
+  real :: Hmix                       !< Diagnostic mixed layer thickness (meter) when
+                                     !! bulk mixed layer is not used.
+  real :: Hmix_UV                    !< Depth scale over which to average surface flow to
+                                     !! feedback to the coupler/driver (m).
                                      !! bulk mixed layer is not used.
   real :: missing=-1.0e34            !< missing data value for masked fields
 
@@ -1538,8 +1541,13 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     call get_param(param_file, "MOM", "HMIX_SFC_PROP", CS%Hmix, &
                  "If BULKMIXEDLAYER is false, HMIX_SFC_PROP is the depth \n"//&
                  "over which to average to find surface properties like \n"//&
-                 "SST, SSS,  density are surface velocities.", &
+                 "SST and SSS or density (but not surface velocities).", &
                  units="m", default=1.0)
+    call get_param(param_file, "MOM", "HMIX_UV_SFC_PROP", CS%Hmix_UV, &
+                 "If BULKMIXEDLAYER is false, HMIX_UV_SFC_PROP is the depth\n"//&
+                 "over which to average to find surface flow properties,\n"//&
+                 "SSU, SSV. A non-positive value indicates no averaging.", &
+                 units="m", default=0.)
   endif
   call get_param(param_file, "MOM", "MIN_Z_DIAG_INTERVAL", Z_diag_int, &
                  "The minimum amount of time in seconds between \n"//&
@@ -2867,15 +2875,13 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
   real, optional, pointer, dimension(:,:)                       :: p_atm  !< atmospheric pressure (Pascal)
 
   ! local
-  real :: hu(SZIB_(G),SZJ_(G),SZK_(G))! layer thickness (m or kg/m2) at u points 
-  real :: hv(SZI_(G),SZJB_(G),SZK_(G))! layer thickness (m or kg/m2) at v points 
   real :: depth(SZI_(G))              ! distance from the surface (meter)
   real :: depth_ml                    ! depth over which to average to
                                       ! determine mixed layer properties (meter)
   real :: dh                          ! thickness of a layer within mixed layer (meter)
   real :: mass                        ! mass per unit area of a layer (kg/m2)
 
-  real :: IgR0
+  real :: IgR0, hu, hv
   integer :: i, j, k, is, ie, js, je, nz, numberOfErrors
   integer :: isd, ied, jsd, jed 
   integer :: iscB, iecB, jscB, jecB, isdB, iedB, jsdB, jedB
@@ -2972,67 +2978,66 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
       enddo
     enddo ! end of j loop
 
- !   Determine the mean velocities in the uppermost depth_ml fluid.
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,CS,state,h,depth_ml,GV) private(depth,dh)
-    do j=js,je
-      
-      do i=is,ie
-        depth(i) = 0.0
-        state%v(i,j) = 0.0
-        hv(i,j,:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
-      enddo
+!   Determine the mean velocities in the uppermost depth_ml fluid.
+    if (CS%Hmix_UV>0.) then
+      depth_ml = CS%Hmix_UV
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,CS,state,h,depth_ml,GV) private(depth,dh,hv)
+      do J=jscB,jecB
+        do i=is,ie
+          depth(i) = 0.0
+          state%v(i,J) = 0.0
+        enddo
+        do k=1,nz ; do i=is,ie
+          hv = 0.5 * (h(i,j,k) + h(i,j+1,k)) * GV%H_to_m
+          if (depth(i) + hv < depth_ml) then
+            dh = hv
+          elseif (depth(i) < depth_ml) then
+            dh = depth_ml - depth(i)
+          else
+            dh = 0.0
+          endif
+          state%v(i,J) = state%v(i,J) + dh * v(i,J,k)
+          depth(i) = depth(i) + dh
+        enddo ; enddo
+        ! Calculate the average properties of the mixed layer depth.
+        do i=is,ie
+          if (depth(i) < GV%H_subroundoff*GV%H_to_m) &
+              depth(i) = GV%H_subroundoff*GV%H_to_m
+          state%v(i,j) = state%v(i,j) / depth(i)
+        enddo
+      enddo ! end of j loop
 
-      do k=1,nz ; do i=is,ie
-        if (depth(i) + hv(i,j,k)*GV%H_to_m < depth_ml) then
-          dh = hv(i,j,k)*GV%H_to_m
-        elseif (depth(i) < depth_ml) then
-          dh = depth_ml - depth(i)
-        else
-          dh = 0.0
-        endif
-        state%v(i,j) = state%v(i,j) + dh * v(i,j,k)
-        depth(i) = depth(i) + dh
-      enddo ; enddo
-  ! Calculate the average properties of the mixed layer depth.
-      do i=is,ie
-        if (depth(i) < GV%H_subroundoff*GV%H_to_m) &
-            depth(i) = GV%H_subroundoff*GV%H_to_m
-        state%v(i,j) = state%v(i,j) / depth(i)
-      enddo
-    enddo ! end of j loop
-
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,CS,state,h,depth_ml,GV) private(depth,dh)
-    do j=js,je
- 
-      do i=is,ie
-        depth(i) = 0.0
-        state%u(i,j) = 0.0
-        hu(i,j,:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
-      enddo
-
-      do k=1,nz ; do i=is,ie
-        if (depth(i) + hu(i,j,k)*GV%H_to_m < depth_ml) then
-          dh = hu(i,j,k)*GV%H_to_m
-        elseif (depth(i) < depth_ml) then
-          dh = depth_ml - depth(i)
-        else
-          dh = 0.0
-        endif
-        state%u(i,j) = state%u(i,j) + dh * u(i,j,k)
-        depth(i) = depth(i) + dh
-      enddo ; enddo
-  ! Calculate the average properties of the mixed layer depth.
-      do i=is,ie
-        if (depth(i) < GV%H_subroundoff*GV%H_to_m) &
-            depth(i) = GV%H_subroundoff*GV%H_to_m
-        state%u(i,j) = state%u(i,j) / depth(i)
-      enddo
-    enddo ! end of j loop
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,CS,state,h,depth_ml,GV) private(depth,dh,hu)
+      do j=js,je
+        do I=iscB,iecB
+          depth(I) = 0.0
+          state%u(I,j) = 0.0
+        enddo
+        do k=1,nz ; do I=iscB,iecB
+          hu = 0.5 * (h(i,j,k) + h(i+1,j,k)) * GV%H_to_m
+          if (depth(i) + hu < depth_ml) then
+            dh = hu
+          elseif (depth(I) < depth_ml) then
+            dh = depth_ml - depth(I)
+          else
+            dh = 0.0
+          endif
+          state%u(I,j) = state%u(I,j) + dh * u(I,j,k)
+          depth(I) = depth(I) + dh
+        enddo ; enddo
+        ! Calculate the average properties of the mixed layer depth.
+        do I=iscB,iecB
+          if (depth(I) < GV%H_subroundoff*GV%H_to_m) &
+              depth(I) = GV%H_subroundoff*GV%H_to_m
+          state%u(I,j) = state%u(I,j) / depth(I)
+        enddo
+      enddo ! end of j loop
+    else ! Hmix_UV<=0.
+      state%u => u(:,:,1)
+      state%v => v(:,:,1)
+    endif
   endif                                              ! end BULKMIXEDLAYER
 
-  !!!!
-  !state%u => u(:,:,1)
-  !state%v => v(:,:,1)
   state%frazil => CS%tv%frazil
   state%TempxPmE => CS%tv%TempxPmE
   state%internal_heat => CS%tv%internal_heat
