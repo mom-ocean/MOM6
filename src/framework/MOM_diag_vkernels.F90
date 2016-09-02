@@ -1,15 +1,14 @@
-!> Provides single-column interpolation, re-sampling and remapping in the vertical
+!> Provides kernels for single-column interpolation, re-integration (re-mapping of integrated quantities)
+!! and intensive-variable remapping in the vertical
 module MOM_diag_vkernels
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
-use MOM_cpu_clock,        only : CLOCK_MODULE, CLOCK_ROUTINE
 
 implicit none ; private
 
 public diag_vkernels_unit_tests
 public interpolate_column
+public reintegrate_column
 
 ! Module data used only for debugging
 logical :: verbose_diag_vkernels_unit_tests = .true. ! If true, always write out unit tests results
@@ -91,9 +90,67 @@ subroutine interpolate_column(nsrc, h_src, u_src, ndest, h_dest, missing_value, 
 
 end subroutine interpolate_column
 
-!> Re-sample integrated layer data to a new grid
-subroutine resample_column!(nsrc, h_src, u_src, ndest, h_dest, u_dest)
-end subroutine resample_column
+!> Conservatively calculate integrated data, uh_dest, on grid h_dest, from layer-integrated data, uh_src, on grid h_src
+subroutine reintegrate_column(nsrc, h_src, uh_src, ndest, h_dest, missing_value, uh_dest)
+  integer,                intent(in)    :: nsrc !< Number of source cells
+  real, dimension(nsrc),  intent(in)    :: h_src !< Thickness of source cells
+  real, dimension(nsrc),  intent(in)    :: uh_src !< Values at source cell interfaces
+  integer,                intent(in)    :: ndest !< Number of destination cells
+  real, dimension(ndest), intent(in)    :: h_dest !< Thickness of destination cells
+  real,                   intent(in)    :: missing_value !< Value to assign in vanished cells
+  real, dimension(ndest), intent(inout) :: uh_dest !< Interpolated value at destination cell interfaces
+  ! Local variables
+  real :: x_dest ! Relative position of target interface
+  real :: h_src_rem, h_dest_rem, dh ! Incremental thicknesses
+  real :: uh_src_rem, uh_dest_rem, duh ! Incremental amounts of stuff
+  integer :: k_src, k_dest ! Index of cell in src and dest columns
+  integer :: iter
+
+  k_src = 0
+  k_dest = 0
+  h_dest_rem = 0.
+  h_src_rem = 0.
+
+  do while(.true.)
+    if (h_src_rem==0. .and. k_src<nsrc) then
+      ! Supply is empty so move to the next source cell
+      k_src = k_src + 1
+      h_src_rem = h_src(k_src)
+      uh_src_rem = uh_src(k_src)
+    endif
+    if (h_dest_rem==0. .and. k_dest<ndest) then
+      ! Sink has no capacity so move to the next destination cell
+      k_dest = k_dest + 1
+      h_dest_rem = h_dest(k_dest)
+      uh_dest(k_dest) = 0.
+    endif
+    duh = 0.
+    if (h_src_rem<h_dest_rem) then
+      ! The source cell is fully within the destination cell
+      dh = h_src_rem
+      duh = uh_src_rem
+      h_src_rem = 0.
+      uh_src_rem = 0.
+      h_dest_rem = max(0., h_dest_rem - dh)
+    elseif (h_src_rem>h_dest_rem) then
+      ! Only part of the source cell can be used up
+      dh = h_dest_rem
+      duh = (dh / h_src_rem) * uh_src_rem
+      h_src_rem = max(0., h_src_rem - dh)
+      uh_src_rem = uh_src_rem - duh
+      h_dest_rem = 0.
+    else ! h_src_rem==h_dest_rem
+      ! The source cell exactly fits the destination cell
+      duh = uh_src_rem
+      h_src_rem = 0.
+      uh_src_rem = 0.
+      h_dest_rem = 0.
+    endif
+    uh_dest(k_dest) = uh_dest(k_dest) + duh
+    if (k_dest+k_src==nsrc+ndest) exit
+  enddo
+
+end subroutine reintegrate_column
 
 !> Returns true if any unit tests for module MOM_diag_vkernels fail
 logical function diag_vkernels_unit_tests()
@@ -102,6 +159,7 @@ logical function diag_vkernels_unit_tests()
   logical :: fail
 
   write(0,*) '============ MOM_diag_kernels: diag_vkernels_unit_tests =================='
+  write(0,*) '- - - - - - - - - - reintegration tests  - - - - - - - - - - - - - - - - -'
 
   fail = test_interp('Identity: 3 layer', &
                      3, (/1.,2.,3./), (/1.,2.,3.,4./), &
@@ -148,6 +206,38 @@ logical function diag_vkernels_unit_tests()
                      4, (/0.,2.,6.,0./), (/missing_value,1.,3.,8.,missing_value/) )
   diag_vkernels_unit_tests = diag_vkernels_unit_tests .or. fail
 
+  write(0,*) '- - - - - - - - - - reintegration tests  - - - - - - - - - - - - - - - - -'
+
+  fail = test_reintegrate('Identity: 3 layer', &
+                     3, (/1.,2.,3./), (/-5.,2.,1./), &
+                     3, (/1.,2.,3./), (/-5.,2.,1./) )
+  diag_vkernels_unit_tests = diag_vkernels_unit_tests .or. fail
+
+  fail = test_reintegrate('A: 3 layer to 2', &
+                     3, (/2.,2.,2./), (/-5.,2.,1./), &
+                     2, (/3.,3./), (/-4.,2./) )
+  diag_vkernels_unit_tests = diag_vkernels_unit_tests .or. fail
+
+  fail = test_reintegrate('A: 3 layer to 2 (deep)', &
+                     3, (/2.,2.,2./), (/-5.,2.,1./), &
+                     2, (/3.,4./), (/-4.,2./) )
+  diag_vkernels_unit_tests = diag_vkernels_unit_tests .or. fail
+
+  fail = test_reintegrate('A: 3 layer to 2 (shallow)', &
+                     3, (/2.,2.,2./), (/-5.,2.,1./), &
+                     2, (/3.,2./), (/-4.,1.5/) )
+  diag_vkernels_unit_tests = diag_vkernels_unit_tests .or. fail
+
+  fail = test_reintegrate('B: 3 layer to 4 with vanished top/bottom', &
+                     3, (/2.,2.,2./), (/-5.,2.,1./), &
+                     4, (/0.,3.,3.,0./), (/0.,-4.,2.,0./) )
+  diag_vkernels_unit_tests = diag_vkernels_unit_tests .or. fail
+
+  fail = test_reintegrate('C: 3 layer to 4 with vanished top//middle/bottom', &
+                     3, (/2.,2.,2./), (/-5.,2.,1./), &
+                     5, (/0.,3.,0.,3.,0./), (/0.,-4.,0.,2.,0./) )
+  diag_vkernels_unit_tests = diag_vkernels_unit_tests .or. fail
+
   write(0,*) '=========================================================================='
 
   contains
@@ -162,7 +252,7 @@ logical function diag_vkernels_unit_tests()
     real, dimension(ndest),   intent(in) :: h_dest !< Thickness of destination cells
     real, dimension(ndest+1), intent(in) :: u_true !< Correct value at destination cell interfaces
     ! Local variables
-    real, dimension(ndest+1) :: u_dest ! Interpolated alue at destination cell interfaces
+    real, dimension(ndest+1) :: u_dest ! Interpolated value at destination cell interfaces
     integer :: k
     real :: error
     logical :: print_results
@@ -187,6 +277,42 @@ logical function diag_vkernels_unit_tests()
       enddo
     endif
   end function test_interp
+
+  !> Returns true if a test of reintegrate_column() produces the wrong answer
+  logical function test_reintegrate(msg, nsrc, h_src, uh_src, ndest, h_dest, uh_true)
+    character(len=*),       intent(in) :: msg !< Message to label test
+    integer,                intent(in) :: nsrc !< Number of source cells
+    real, dimension(nsrc),  intent(in) :: h_src !< Thickness of source cells
+    real, dimension(nsrc),  intent(in) :: uh_src !< Values of source cell stuff
+    integer,                intent(in) :: ndest !< Number of destination cells
+    real, dimension(ndest), intent(in) :: h_dest !< Thickness of destination cells
+    real, dimension(ndest), intent(in) :: uh_true !< Correct value of destination cell stuff
+    ! Local variables
+    real, dimension(ndest) :: uh_dest ! Reintegrated value on destination cells
+    integer :: k
+    real :: error
+    logical :: print_results
+
+    ! Interpolate from src to dest
+    call reintegrate_column(nsrc, h_src, uh_src, ndest, h_dest, missing_value, uh_dest)
+
+    test_reintegrate = .false.
+    do k=1,ndest
+      if (uh_dest(k)/=uh_true(k)) test_reintegrate = .true.
+    enddo
+    if (verbose_diag_vkernels_unit_tests .or. test_reintegrate) then
+      write(0,'(2a)') ' Test: ',msg
+      write(0,'(a3,3(a24))') 'k','uh_result','uh_true','error'
+      do k=1,ndest
+        error = uh_dest(k)-uh_true(k)
+        if (error==0.) then
+          write(0,'(i3,3(1pe24.16))') k,uh_dest(k),uh_true(k),uh_dest(k)-uh_true(k)
+        else
+          write(0,'(i3,3(1pe24.16),x,a)') k,uh_dest(k),uh_true(k),uh_dest(k)-uh_true(k),'<--- WRONG!'
+        endif
+      enddo
+    endif
+  end function test_reintegrate
 
 end function diag_vkernels_unit_tests
 
