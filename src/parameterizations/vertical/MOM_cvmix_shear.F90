@@ -1,23 +1,7 @@
+!> Interface to CVMix interior shear schemes
 module MOM_cvmix_shear
-!***********************************************************************
-!*                   GNU General Public License                        *
-!* This file is a part of MOM.                                         *
-!*                                                                     *
-!* MOM is free software; you can redistribute it and/or modify it and  *
-!* are expected to follow the terms of the GNU General Public License  *
-!* as published by the Free Software Foundation; either version 2 of   *
-!* the License, or (at your option) any later version.                 *
-!*                                                                     *
-!* MOM is distributed in the hope that it will be useful, but WITHOUT  *
-!* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY  *
-!* or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public    *
-!* License for more details.                                           *
-!*                                                                     *
-!* For the full text of the GNU General Public License,                *
-!* write to: Free Software Foundation, Inc.,                           *
-!*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
-!* or see:   http://www.gnu.org/licenses/gpl.html                      *
-!***********************************************************************
+
+! This file is part of MOM6. See LICENSE.md for the license.
 
 !---------------------------------------------------
 ! module MOM_cvmix_shear
@@ -27,8 +11,6 @@ module MOM_cvmix_shear
 ! Further information to be added at a later time.
 !---------------------------------------------------
 
-use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
-use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_checksums, only : hchksum
@@ -43,14 +25,11 @@ use MOM_kappa_shear, only : kappa_shear_is_used
 implicit none ; private
 
 #include <MOM_memory.h>
-#ifdef use_netCDF
-#include <netcdf.inc>
-#endif
 
 public Calculate_cvmix_shear, cvmix_shear_init, cvmix_shear_is_used
 
+!> Control structure including parameters for CVMix interior shear schemes.
 type, public :: CVMix_shear_CS
-! Control structure including parameters for CVMix interior shear schemes.
   logical :: use_LMD94, use_PP81            !< Flags for various schemes
   real    :: Ri_zero                        !< LMD94 critical Richardson number
   real    :: Nu_zero                        !< LMD94 maximum interior diffusivity
@@ -60,48 +39,30 @@ type, public :: CVMix_shear_CS
   character(10) :: Mix_Scheme               !< Mixing scheme name (string)
 end type CVMix_shear_CS
 
-! integer :: id_clock_project, id_clock_KQ, id_clock_avg, id_clock_setup
-  character(len=40)  :: mod = "MOM_CVMix_shear"  ! This module's name.
-
-#undef  DEBUG
-#undef  ADD_DIAGNOSTICS
+character(len=40)  :: mod = "MOM_CVMix_shear"  !< This module's name.
 
 contains
 
+!> Subroutine for calculating (internal) diffusivity
 subroutine Calculate_cvmix_shear(u_H, v_H, h, tv, KH,  &
                                  KM, G, GV, CS )
-  type(ocean_grid_type),                      intent(in)    :: G
-  type(verticalGrid_type),                    intent(in)    :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: u_H
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: v_H
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h
-  type(thermo_var_ptrs),                      intent(in)    :: tv
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out)   :: KH
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out)   :: KM
-  type(CVMix_shear_CS),                       pointer       :: CS
-!
-! -------------------------------------------------
-! Subroutine for calculating (internal) diffusivity
-! -------------------------------------------------
-! Arguments: 
-!  (in)      u_H - Initial zonal velocity on T points, in m s-1.
-!  (in)      v_H - Initial meridional velocity on T points, in m s-1.
-!  (in)      h - Layer thickness, in m or kg m-2.
-!  (in)      tv - A structure containing pointers to any available
-!                 thermodynamic fields. Absent fields have NULL ptrs.
-!  (in/out)  KH - The diapycnal diffusivity at each interface
-!                       (not layer!) in m2 s-1.
-!  (in/out)  KM - The vertical viscosity at each interface
-!                    (not layer!) in m2 s-1.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 CVMix_shear_init.
-
+  type(ocean_grid_type),                      intent(in)  :: G !< Grid structure.
+  type(verticalGrid_type),                    intent(in)  :: GV !< Vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: u_H !< Initial zonal velocity on T points, in m s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: v_H !< Initial meridional velocity on T points, in m s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h !< Layer thickness, in m or kg m-2.
+  type(thermo_var_ptrs),                      intent(in)  :: tv !< Thermodynamics structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: KH !< The vertical viscosity at each interface
+                                                                !! (not layer!) in m2 s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: KM !< The vertical viscosity at each interface
+                                                                !! (not layer!) in m2 s-1.
+  type(CVMix_shear_CS),                       pointer     :: CS !< The control structure returned by a previous call to
+                                                                !! CVMix_shear_init.
+  ! Local variables
   integer :: i, j, k, kk, km1
   real :: gorho
   real :: pref, DU, DV, DRHO, DZ, N2, S2
-  real, dimension(2*(G%ke)) :: pres_1d, temp_1d, salt_1d, rho_1d 
+  real, dimension(2*(G%ke)) :: pres_1d, temp_1d, salt_1d, rho_1d
   real, dimension(G%ke+1) ::  Ri_Grad !< Gradient Richardson number
 
   ! some constants
@@ -114,7 +75,7 @@ subroutine Calculate_cvmix_shear(u_H, v_H, h, tv, KH,  &
       if (G%mask2dT(i,j)==0.) cycle
 
       ! Richardson number computed for each cell in a column.
-      pRef = 0. 
+      pRef = 0.
       Ri_Grad(:)=1.e8 !Initialize w/ large Richardson value
       do k=1,G%ke
         ! pressure, temp, and saln for EOS
@@ -147,48 +108,37 @@ subroutine Calculate_cvmix_shear(u_H, v_H, h, tv, KH,  &
         DRHO = (GoRho * (rho_1D(kk+1) - rho_1D(kk+2)) )
         DZ = ((0.5*(h(i,j,km1) + h(i,j,k))+GV%H_subroundoff)*GV%H_to_m)
         N2 = DRHO/DZ
-        S2 = (DU*DU+DV*DV)/(DZ*DZ) 
+        S2 = (DU*DU+DV*DV)/(DZ*DZ)
         Ri_Grad(k) = max(0.,N2)/max(S2,1.e-16)
       enddo
 
       ! Call to CVMix wrapper for computing interior mixing coefficients.
       call  cvmix_coeffs_shear(Mdiff_out=KM(i,j,:), &
-                                   Tdiff_out=KH(i,j,:), & 
+                                   Tdiff_out=KH(i,j,:), &
                                    RICH=Ri_Grad, &
                                    nlev=G%ke,    &
                                    max_nlev=G%ke)
-    enddo;
-  enddo;
-
-  return
+    enddo
+  enddo
 
 end subroutine Calculate_cvmix_shear
 
 
+!> Initialized the cvmix internal shear mixing routine.
+!! \note *This is where we test to make sure multiple internal shear
+!!       mixing routines (including JHL) are not enabled at the same time.
+!! (returns) cvmix_shear_init - True if module is to be used, False otherwise
 logical function cvmix_shear_init(Time, G, GV, param_file, diag, CS)
-  !
-  ! Initialized the cvmix internal shear mixing routine.
-  !  *This is where we test to make sure multiple internal shear 
-  !   mixing routines (including JHL) are not enabled at the same time.
-  !
-  type(time_type),         intent(in)    :: Time
-  type(ocean_grid_type),   intent(in)    :: G
-  type(verticalGrid_type), intent(in)    :: GV
-  type(param_file_type),   intent(in)    :: param_file
-  type(diag_ctrl), target, intent(inout) :: diag
-  type(CVMix_shear_CS),    pointer       :: CS
-! Arguments: Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
-!  (returns) cvmix_shear_init - True if module is to be used, False otherwise
+  type(time_type),         intent(in)    :: Time !< The current time.
+  type(ocean_grid_type),   intent(in)    :: G !< Grid structure.
+  type(verticalGrid_type), intent(in)    :: GV !< Vertical grid structure.
+  type(param_file_type),   intent(in)    :: param_file !< Run-time parameter file handle
+  type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure.
+  type(CVMix_shear_CS),    pointer       :: CS !< This module's control structure.
+  ! Local variables
+  integer :: NumberTrue=0
+  logical :: use_JHL
 ! This include declares and sets the variable "version".
-  INTEGER :: NumberTrue=0
-  LOGICAL :: use_JHL
 #include "version_variable.h"
 
   if (associated(CS)) then
@@ -244,17 +194,18 @@ logical function cvmix_shear_init(Time, G, GV, param_file, diag, CS)
                         KPP_nu_zero=CS%Nu_Zero,   &
                         KPP_Ri_zero=CS%Ri_zero,   &
                         KPP_exp=CS%KPP_exp)
-  !Allocation and initialization
+  ! Allocation and initialization
   allocate( CS%N2( SZI_(G), SZJ_(G), SZK_(G)+1 ) );CS%N2(:,:,:) = 0.
   allocate( CS%S2( SZI_(G), SZJ_(G), SZK_(G)+1 ) );CS%S2(:,:,:) = 0.
 
 end function cvmix_shear_init
 
+!> Reads the parameters "LMD94" and "PP81" and returns state.
+!!   This function allows other modules to know whether this parameterization will
+!! be used without needing to duplicate the log entry.
 logical function cvmix_shear_is_used(param_file)
-  ! Reads the parameter "LMD94" and "PP81" and returns state.
-  !   This function allows other modules to know whether this parameterization wi
-  ! be used without needing to duplicate the log entry.
-  type(param_file_type), intent(in) :: param_file
+  type(param_file_type), intent(in) :: param_file !< Run-time parameter files handle.
+  ! Local variables
   logical :: LMD94, PP81
   call get_param(param_file, mod, "USE_LMD94", LMD94, &
        default=.false., do_not_log = .true.)
