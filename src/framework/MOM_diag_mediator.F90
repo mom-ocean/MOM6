@@ -112,7 +112,7 @@ end type axes_grp
 type, private :: diag_type
   logical :: in_use !< True if this entry is being used.
   integer :: fms_diag_id !< Underlying FMS diag_manager id.
-  character(16) :: debug_str !< For FATAL errors and debugging.
+  character(16) :: debug_str = '' !< For FATAL errors and debugging.
   type(axes_grp), pointer :: remap_axes => null()
   real, pointer, dimension(:,:)   :: mask2d => null()
   real, pointer, dimension(:,:,:) :: mask3d => null()
@@ -1156,7 +1156,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
   cmor_z_remap_diag => null()
 
   ! Set up the 'primary' diagnostic, first get an underlying FMS id
-  fms_id = register_diag_field_low(module_name, field_name, axes, &
+  fms_id = register_diag_field_expand_axes(module_name, field_name, axes, &
          init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
          range=range, mask_variant=mask_variant, standard_name=standard_name, &
          verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
@@ -1201,7 +1201,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
 
   ! Set up the CMOR variation of the native diagnostic
   if (present(cmor_field_name)) then
-    fms_id = register_diag_field_low(module_name, cmor_field_name, axes, init_time,    &
+    fms_id = register_diag_field_expand_axes(module_name, cmor_field_name, axes, init_time,    &
       long_name=trim(posted_cmor_long_name), units=trim(posted_cmor_units),                    &
       missing_value=MOM_missing_value, range=range, mask_variant=mask_variant,                 &
       standard_name=trim(posted_cmor_standard_name), verbose=verbose, do_not_log=do_not_log,   &
@@ -1244,7 +1244,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
       call set_diag_remap_axes(z_remap_diag, diag_cs, axes)
       if (present(conversion)) z_remap_diag%conversion_factor = conversion
       call assert(associated(z_remap_diag%remap_axes), 'register_diag_field: remap axes not set')
-      fms_id = register_diag_field_low(module_name//trim(diag_cs%z_remap_suffix), field_name, &
+      fms_id = register_diag_field_expand_axes(module_name//trim(diag_cs%z_remap_suffix), field_name, &
            z_remap_diag%remap_axes, &
            init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
            range=range, mask_variant=mask_variant, standard_name=standard_name, &
@@ -1285,7 +1285,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
         call set_diag_remap_axes(cmor_z_remap_diag, diag_cs, axes)
         if (present(conversion)) cmor_z_remap_diag%conversion_factor = conversion
         call assert(associated(cmor_z_remap_diag%remap_axes), 'register_diag_field: remap axes not set')
-        fms_id = register_diag_field_low(module_name//trim(diag_cs%z_remap_suffix), cmor_field_name, &
+        fms_id = register_diag_field_expand_axes(module_name//trim(diag_cs%z_remap_suffix), cmor_field_name, &
              cmor_z_remap_diag%remap_axes, &
              init_time, long_name=trim(posted_cmor_long_name), units=trim(posted_cmor_units), missing_value=MOM_missing_value, &
              range=range, mask_variant=mask_variant, standard_name=trim(posted_cmor_standard_name), &
@@ -1317,8 +1317,9 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
 
 end function register_diag_field
 
-!> Returns ID from register_diag_field_fms (the diag_manager routine) but expands axes and adds an area_id for cell measures.
-integer function register_diag_field_low(module_name, field_name, axes, init_time, &
+!> Returns ID from register_diag_field_fms (the diag_manager routine) after expanding axes (axes-group) into handles
+!! and conditionally adding an FMS area_id for cell_measures.
+integer function register_diag_field_expand_axes(module_name, field_name, axes, init_time, &
      long_name, units, missing_value, range, mask_variant, standard_name,  &
      verbose, do_not_log, err_msg, interp_method, tile_count)
   character(len=*), intent(in) :: module_name !< Name of this module, usually "ocean_model" or "ice_shelf_model"
@@ -1375,9 +1376,9 @@ integer function register_diag_field_low(module_name, field_name, axes, init_tim
     endif
   endif
 
-  register_diag_field_low = fms_id
+  register_diag_field_expand_axes = fms_id
 
-end function register_diag_field_low
+end function register_diag_field_expand_axes
 
 !> Attaches "cell_methods" attribute to a variable based on defaults for axes_grp or optional arguments.
 subroutine attach_cell_methods(id, axes, ostring, cell_methods, x_cell_method, y_cell_method, v_cell_method)
@@ -1819,15 +1820,11 @@ subroutine diag_mediator_init(G, nz, param_file, diag_cs, doc_file_dir)
   id_clock_diag_z_remap = cpu_clock_id('(Ocean diagnostics remapping)', grain=CLOCK_ROUTINE)
   id_clock_diag_grid_updates = cpu_clock_id('(Ocean diagnostics grid updates)', grain=CLOCK_ROUTINE)
 
-  ! Allocate and initialise list of all diagnostics (and variants)
+  ! Allocate and initialize list of all diagnostics (and variants)
   allocate(diag_cs%diags(DIAG_ALLOC_CHUNK_SIZE))
   diag_cs%next_free_diag_id = 1
   do i=1, DIAG_ALLOC_CHUNK_SIZE
-    diag_cs%diags(i)%in_use = .false.
-    diag_cs%diags(i)%next => null()
-    diag_cs%diags(i)%remap_axes => null()
-    diag_cs%diags(i)%mask2d => null()
-    diag_cs%diags(i)%mask3d => null()
+    call initialize_diag_type(diag_cs%diags(i))
   enddo
 
   ! Keep a pointer to the grid, this is needed for regridding
@@ -2147,15 +2144,10 @@ function is_B_axes(axes, diag_cs)
 
 end function is_B_axes
 
-! Allocate a new diagnostic id, it may be necessary to expand the diagnostics
-! array.
-function get_new_diag_id(diag_cs)
-
-  integer :: get_new_diag_id
-  type(diag_ctrl), intent(inout) :: diag_cs
-  ! Arguments:
-  !  (inout)   diag_cs  - diagnostics control structure
-
+!> Returns a new diagnostic id, it may be necessary to expand the diagnostics array.
+integer function get_new_diag_id(diag_cs)
+  type(diag_ctrl), intent(inout) :: diag_cs !< Diagnostics control structure
+  ! Local variables
   type(diag_type), dimension(:), allocatable :: tmp
   integer :: i
 
@@ -2172,12 +2164,9 @@ function get_new_diag_id(diag_cs)
     diag_cs%diags(1:size(tmp)) = tmp(:)
     deallocate(tmp)
 
-    ! Initialise new part of the diag array.
+    ! Initialize new part of the diag array.
     do i=diag_cs%next_free_diag_id, size(diag_cs%diags)
-      diag_cs%diags(i)%in_use = .false.
-      diag_cs%diags(i)%next => null()
-      diag_cs%diags(i)%mask2d => null()
-      diag_cs%diags(i)%mask3d => null()
+      call initialize_diag_type(diag_cs%diags(i))
     enddo
   endif
 
@@ -2185,6 +2174,19 @@ function get_new_diag_id(diag_cs)
   diag_cs%next_free_diag_id = diag_cs%next_free_diag_id + 1
 
 end function get_new_diag_id
+
+!> Initializes a diag_type (used after allocating new memory)
+subroutine initialize_diag_type(diag)
+  type(diag_type), intent(inout) :: diag !< diag_type to be initialized
+
+  diag%in_use = .false.
+  diag%fms_diag_id = -1
+  diag%remap_axes => null()
+  diag%mask2d => null()
+  diag%mask3d => null()
+  diag%next => null()
+  diag%conversion_factor = 0.
+end subroutine initialize_diag_type
 
 ! Make a new diagnostic. Either use memory which is in the array of 'primary'
 ! diagnostics, or if that is in use, insert it to the list of secondary diags.
