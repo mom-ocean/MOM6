@@ -721,8 +721,15 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
 
       ! Unlike LMD94, we do not match to interior diffusivities. If using the original
       ! LMD94 shape function, not matching is equivalent to matching to a zero diffusivity.
-      Kdiffusivity(:,:) = 0. ! Diffusivities for heat and salt (m2/s)
-      Kviscosity(:)     = 0. ! Viscosity (m2/s)
+      ! If option "MatchBoth" is selected in CVMix, MOM should be capable of matching.
+      if (.not. (CS%MatchTechnique.eq.'MatchBoth')) then
+         Kdiffusivity(:,:) = 0. ! Diffusivities for heat and salt (m2/s)
+         Kviscosity(:)     = 0. ! Viscosity (m2/s)
+      else
+         Kdiffusivity(:,1) = Kt(i,j,:)
+         Kdiffusivity(:,2) = Ks(i,j,:)
+         Kviscosity(:)=Kv(i,j,:)
+      endif
       surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,int(kOBL)+1) ! We know the actual buoyancy flux into the OBL
       call cvmix_coeffs_kpp(Kviscosity,        & ! (inout) Total viscosity (m2/s)
                             Kdiffusivity(:,1), & ! (inout) Total heat diffusivity (m2/s)
