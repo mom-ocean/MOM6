@@ -1508,98 +1508,192 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     ! The flux limiting follows the routine specified by Skamarock (Monthly Weather Review, 2005)
     ! to make sure that offline advection is monotonic and positive-definite
 !
-!    call tracer_hordiff(h_pre, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
-!        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, CS%do_online, khdt_x*0.5, khdt_y*0.5)
+    call tracer_hordiff(h_pre, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
+        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, CS%do_online, khdt_x*0.5, khdt_y*0.5)
 
     x_before_y = (MOD(G%first_direction,2) == 0)
     z_first = CS%diabatic_first
 
-    do iter=1,CS%offline_CSp%num_off_iter
+    if (.not. CS%use_ALE_algorithm) then
+      do iter=1,CS%offline_CSp%num_off_iter
 
-      do k = 1, nz ; do j=js-1,je+1 ; do i=is-1,ie+1
-        eatr_sub(i,j,k) = eatr(i,j,k)
-        ebtr_sub(i,j,k) = ebtr(i,j,k)
-      enddo; enddo ; enddo
-
-      do k = 1, nz ; do j=js-1,je+1 ; do i=is-2,ie+1
-        uhtr_sub(I,j,k) = uhtr(I,j,k)
-      enddo; enddo ; enddo
-
-      do k = 1, nz ; do j=js-2,je+1 ; do i=is-1,ie+1
-        vhtr_sub(i,J,k) = vhtr(i,J,k)
-      enddo; enddo ; enddo
-
-
-      ! Calculate 3d mass transports to be used in this iteration
-      call limit_mass_flux_3d(G, GV, uhtr_sub, vhtr_sub, eatr_sub, ebtr_sub, h_pre, &
-          CS%offline_CSp%max_off_cfl)
-
-      if (z_first) then
-        ! First do vertical advection
-        call update_h_vertical_flux(G, GV, eatr_sub, ebtr_sub, h_pre, h_new)
-        call call_tracer_column_fns(h_pre, h_new, eatr_sub, ebtr_sub, &
-            fluxes, dt_iter, G, GV, CS%tv, CS%diabatic_CSp%optics, CS%tracer_flow_CSp)
-        ! We are now done with the vertical mass transports, so now h_new is h_sub
         do k = 1, nz ; do j=js-1,je+1 ; do i=is-1,ie+1
-          h_pre(i,j,k) = h_new(i,j,k)
-        enddo ; enddo ; enddo
+          eatr_sub(i,j,k) = eatr(i,j,k)
+          ebtr_sub(i,j,k) = ebtr(i,j,k)
+        enddo; enddo ; enddo
+
+        do k = 1, nz ; do j=js-1,je+1 ; do i=is-2,ie+1
+          uhtr_sub(I,j,k) = uhtr(I,j,k)
+        enddo; enddo ; enddo
+
+        do k = 1, nz ; do j=js-2,je+1 ; do i=is-1,ie+1
+          vhtr_sub(i,J,k) = vhtr(i,J,k)
+        enddo; enddo ; enddo
+
+
+        ! Calculate 3d mass transports to be used in this iteration
+        call limit_mass_flux_3d(G, GV, uhtr_sub, vhtr_sub, eatr_sub, ebtr_sub, h_pre, &
+            CS%offline_CSp%max_off_cfl)
+
+        if (z_first) then
+          ! First do vertical advection
+          call update_h_vertical_flux(G, GV, eatr_sub, ebtr_sub, h_pre, h_new)
+          call call_tracer_column_fns(h_pre, h_new, eatr_sub, ebtr_sub, &
+              fluxes, dt_iter, G, GV, CS%tv, CS%diabatic_CSp%optics, CS%tracer_flow_CSp)
+          ! We are now done with the vertical mass transports, so now h_new is h_sub
+          do k = 1, nz ; do j=js-1,je+1 ; do i=is-1,ie+1
+            h_pre(i,j,k) = h_new(i,j,k)
+          enddo ; enddo ; enddo
+          call pass_var(h_pre,G%Domain)
+
+          ! Second zonal and meridional advection
+          call update_h_horizontal_flux(G, GV, uhtr_sub, vhtr_sub, h_pre, h_new)
+          do k = 1, nz ; do i = is-1, ie+1 ; do j=js-1, je+1
+            h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
+          enddo; enddo; enddo
+          call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
+              CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=30, x_first_in=x_before_y)
+
+          ! Done with horizontal so now h_pre should be h_new
+          do k = 1, nz ; do i=is-1,ie+1 ; do j=js-1,je+1
+              h_pre(i,j,k) = h_new(i,j,k)
+          enddo ; enddo ; enddo
+
+        endif
+
+        if (.not. z_first) then
+
+          ! First zonal and meridional advection
+          call update_h_horizontal_flux(G, GV, uhtr_sub, vhtr_sub, h_pre, h_new)
+          do k = 1, nz ; do i = is-1, ie+1 ; do j=js-1, je+1
+            h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
+          enddo; enddo; enddo
+          call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
+              CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=30, x_first_in=x_before_y)
+
+          ! Done with horizontal so now h_pre should be h_new
+          do k = 1, nz ; do i=is-1,ie+1 ; do j=js-1,je+1
+              h_pre(i,j,k) = h_new(i,j,k)
+          enddo ; enddo ; enddo
+
+
+
+          ! Second vertical advection
+          call update_h_vertical_flux(G, GV, eatr_sub, ebtr_sub, h_pre, h_new)
+          call call_tracer_column_fns(h_pre, h_new, eatr_sub, ebtr_sub, &
+              fluxes, dt_iter, G, GV, CS%tv, CS%diabatic_CSp%optics, CS%tracer_flow_CSp)
+          ! We are now done with the vertical mass transports, so now h_new is h_sub
+          do k = 1, nz ; do i=is-1,ie+1 ; do j=js-1,je+1
+            h_pre(i,j,k) = h_new(i,j,k)
+          enddo ; enddo ; enddo
+
+
+        endif
+
+        ! Update remaining transports
+        do k = 1, nz ; do j=js-1,je+1 ; do i=is-1,ie+1
+          eatr(i,j,k) = eatr(i,j,k) - eatr_sub(i,j,k)
+          ebtr(i,j,k) = ebtr(i,j,k) - ebtr_sub(i,j,k)
+        enddo; enddo ; enddo
+
+
+        do k = 1, nz ; do j=js-1,je+1 ; do i=is-2,ie+1
+          uhtr(I,j,k) = uhtr(I,j,k) - uhtr_sub(I,j,k)
+        enddo; enddo ; enddo
+
+        do k = 1, nz ; do j=js-2,je+1 ; do i=is-1,ie+1
+          vhtr(i,J,k) = vhtr(i,J,k) - vhtr_sub(i,J,k)
+        enddo; enddo ; enddo
+
+        call pass_var(eatr,G%Domain)
+        call pass_var(ebtr,G%Domain)
         call pass_var(h_pre,G%Domain)
+        call pass_vector(uhtr,vhtr,G%Domain)
+  !
+        ! Calculate how close we are to converging by summing the remaining fluxes at each point
+        sum_abs_fluxes = 0.0
+        do k=1,nz; do j=js,je; do i=is,ie
+          sum_abs_fluxes = sum_abs_fluxes + abs(eatr(i,j,k)) + abs(ebtr(i,j,k)) + abs(uhtr(I-1,j,k)) + &
+              abs(uhtr(I,j,k)) + abs(vhtr(i,J-1,k)) + abs(vhtr(i,J,k))
+        enddo; enddo; enddo
+        call sum_across_PEs(sum_abs_fluxes)
+  !
+  !
+        if (is_root_pe()) print *, "Remaining fluxes: ", sum_abs_fluxes !, &
+  !        "UH: ", sum(abs(uhtr)), "VH: ", sum(abs(vhtr)), "EA: ", sum(abs(eatr)), "EB: ", sum(abs(ebtr))
+  !      if ( sum_abs_fluxes == 0.0) then
+  !        print *, "Advection converged early at ", iter, "iterations"
+  !        exit
+  !      endif
 
-        ! Second zonal and meridional advection
-        call update_h_horizontal_flux(G, GV, uhtr_sub, vhtr_sub, h_pre, h_new)
+        ! Switch order of Strang split every iteration
+        z_first = .not. z_first
+        x_before_y = .not. x_before_y
+
+      end do
+
+    elseif (CS%use_ALE_algorithm) then
+
+      ! When using ALE (or in z-mode), all mixing at interfaces results in no net change
+      ! in layer thickness. Therefore, half of the diagnosed mixing is applied before the
+      ! any horizontal advection occurs and half occurs after the horizontal advection has
+      ! converged.
+      call call_tracer_column_fns(h_pre, h_new, eatr*0.5, ebtr*0.5, fluxes, &
+           CS%offline_CSp%dt_offline*0.5, G, GV, CS%tv, CS%diabatic_CSp%optics, CS%tracer_flow_CSp)
+
+      do iter=1,CS%offline_CSp%num_off_iter
+        ! Perform zonal and meridional advection
         do k = 1, nz ; do i = is-1, ie+1 ; do j=js-1, je+1
           h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
         enddo; enddo; enddo
-        call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
-            CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=30, x_first_in=x_before_y)
-
-        ! Done with horizontal so now h_pre should be h_new
-        do k = 1, nz ; do i=is-1,ie+1 ; do j=js-1,je+1
-            h_pre(i,j,k) = h_new(i,j,k)
+        call advect_tracer(h_pre, uhtr, vhtr, CS%OBC, dt_iter, G, GV, &
+             CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=100, x_first_in=x_before_y, &
+             uhr_out=uhtr_sub, vhr_out=vhtr_sub)
+        x_before_y = .not. x_before_y
+        ! Advect tracer returns how much horizontal flux remains, thus the total amount of horizontal
+        ! actually done in this time step is uhtr-uhtr_sub and vhtr-vhtr_sub. This is needed to
+        ! calculate the cell thickness to be remapped in ALE
+        do k=1,nz ; do I=is-2,ie+1 ; do j=js-1,js+1
+          uhtr_sub(I,j,k) = uhtr(I,j,k) - uhtr_sub(I,j,k)
+        enddo ; enddo ; enddo
+        do k=1,nz ; do I=is-1,ie+1 ; do J=js-2,js+1
+          vhtr_sub(i,J,k) = vhtr(i,J,k) - vhtr_sub(i,J,k)
         enddo ; enddo ; enddo
 
-      endif
-
-      if (.not. z_first) then
-
-        ! First zonal and meridional advection
         call update_h_horizontal_flux(G, GV, uhtr_sub, vhtr_sub, h_pre, h_new)
-        do k = 1, nz ; do i = is-1, ie+1 ; do j=js-1, je+1
-          h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
-        enddo; enddo; enddo
-        call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
-            CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=30, x_first_in=x_before_y)
-
         ! Done with horizontal so now h_pre should be h_new
-        do k = 1, nz ; do i=is-1,ie+1 ; do j=js-1,je+1
-            h_pre(i,j,k) = h_new(i,j,k)
-        enddo ; enddo ; enddo
-
-
-
-        ! Second vertical advection
-        call update_h_vertical_flux(G, GV, eatr_sub, ebtr_sub, h_pre, h_new)
-        call call_tracer_column_fns(h_pre, h_new, eatr_sub, ebtr_sub, &
-            fluxes, dt_iter, G, GV, CS%tv, CS%diabatic_CSp%optics, CS%tracer_flow_CSp)
-        ! We are now done with the vertical mass transports, so now h_new is h_sub
         do k = 1, nz ; do i=is-1,ie+1 ; do j=js-1,je+1
           h_pre(i,j,k) = h_new(i,j,k)
         enddo ; enddo ; enddo
+        ! Calculate the remaining transport
+        do k = 1, nz ; do j=js-1,je+1 ; do i=is-2,ie+1
+          uhtr(I,j,k) = uhtr(I,j,k) - uhtr_sub(I,j,k)
+        enddo; enddo ; enddo
 
+        do k = 1, nz ; do j=js-2,je+1 ; do i=is-1,ie+1
+          vhtr(i,J,k) = vhtr(i,J,k) - vhtr_sub(i,J,k)
+        enddo; enddo ; enddo
 
-      endif
+        ! As a way of checking how close we are to converging, sum the absolute value of
+        ! the remaining horizontal fluxes
+        sum_abs_fluxes = 0.0
+        do k=1,nz; do j=js,je; do i=is,ie
+          sum_abs_fluxes = sum_abs_fluxes + abs(eatr(i,j,k)) + abs(ebtr(i,j,k)) + abs(uhtr(I-1,j,k)) + &
+              abs(uhtr(I,j,k)) + abs(vhtr(i,J-1,k)) + abs(vhtr(i,J,k))
+        enddo; enddo; enddo
+        call sum_across_PEs(sum_abs_fluxes)
+        if (is_root_pe()) print *, "Remaining fluxes: ", sum_abs_fluxes
 
-
-      if (CS%use_ALE_algorithm) then
-
-        ! Regridding/remapping is done here, at end of thermodynamics time step
-        ! (that may comprise several dynamical time steps)
+        ! Regridding/remapping is done here after each advection iteration so that
+        ! layers which no longer exist can get 'reinflated' by ALE
+        ! While this may call ALE many more times than is done in the online run, it should
+        ! never result in more changes in thickness due to remapping
         ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
 
         CS%tv%T = CS%offline_CSp%T_preale
         CS%tv%S = CS%offline_CSp%S_preale
         call pass_var(h_pre,G%Domain)
-!            call do_group_pass(CS%pass_T_S_h, G%Domain)
+  !            call do_group_pass(CS%pass_T_S_h, G%Domain)
 
         ! update squared quantities
         if (associated(CS%S_squared)) &
@@ -1608,11 +1702,11 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
             CS%T_squared(:,:,:) = CS%tv%T(:,:,:) ** 2
 
         if (CS%debug) then
-            call uchksum(CS%offline_CSp%u_preale, "Pre-ALE 1 u", G%HI, haloshift=1)
-            call vchksum(CS%offline_CSp%v_preale, "Pre-ALE 1 v", G%HI, haloshift=1)
-            call hchksum(CS%offline_CSp%h_preale, "Pre-ALE 1 h", G%HI, haloshift=1)
-            call hchksum(CS%tv%T,"Pre-ALE 1 T", G%HI, haloshift=1)
-            call hchksum(CS%tv%S,"Pre-ALE 1 S", G%HI, haloshift=1)
+          call uchksum(CS%offline_CSp%u_preale, "Pre-ALE 1 u", G%HI, haloshift=1)
+          call vchksum(CS%offline_CSp%v_preale, "Pre-ALE 1 v", G%HI, haloshift=1)
+          call hchksum(CS%offline_CSp%h_preale, "Pre-ALE 1 h", G%HI, haloshift=1)
+          call hchksum(CS%tv%T,"Pre-ALE 1 T", G%HI, haloshift=1)
+          call hchksum(CS%tv%S,"Pre-ALE 1 S", G%HI, haloshift=1)
         endif
         call cpu_clock_begin(id_clock_ALE)
         call ALE_main(G, GV, h_pre, CS%offline_CSp%u_preale, &
@@ -1636,56 +1730,18 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         ! happen after the H update and before the next post_data.
         call diag_update_target_grids(CS%diag)
         call post_diags_TS_vardec(G, CS, dt_iter)
+      enddo
 
-      endif
+      call call_tracer_column_fns(h_pre, h_new, eatr*0.5, ebtr*0.5, fluxes, &
+           CS%offline_CSp%dt_offline*0.5, G, GV, CS%tv, CS%diabatic_CSp%optics, CS%tracer_flow_CSp)
 
-      ! Update remaining transports
-      do k = 1, nz ; do j=js-1,je+1 ; do i=is-1,ie+1
-        eatr(i,j,k) = eatr(i,j,k) - eatr_sub(i,j,k)
-        ebtr(i,j,k) = ebtr(i,j,k) - ebtr_sub(i,j,k)
-      enddo; enddo ; enddo
-
-
-      do k = 1, nz ; do j=js-1,je+1 ; do i=is-2,ie+1
-        uhtr(I,j,k) = uhtr(I,j,k) - uhtr_sub(I,j,k)
-      enddo; enddo ; enddo
-
-      do k = 1, nz ; do j=js-2,je+1 ; do i=is-1,ie+1
-        vhtr(i,J,k) = vhtr(i,J,k) - vhtr_sub(i,J,k)
-      enddo; enddo ; enddo
-
-      call pass_var(eatr,G%Domain)
-      call pass_var(ebtr,G%Domain)
-      call pass_var(h_pre,G%Domain)
-      call pass_vector(uhtr,vhtr,G%Domain)
-!
-      ! Calculate how close we are to converging by summing the remaining fluxes at each point
-      sum_abs_fluxes = 0.0
-      do k=1,nz; do j=js,je; do i=is,ie
-        sum_abs_fluxes = sum_abs_fluxes + abs(eatr(i,j,k)) + abs(ebtr(i,j,k)) + abs(uhtr(I-1,j,k)) + &
-            abs(uhtr(I,j,k)) + abs(vhtr(i,J-1,k)) + abs(vhtr(i,J,k))
-      enddo; enddo; enddo
-      call sum_across_PEs(sum_abs_fluxes)
-!
-!
-      if (is_root_pe()) print *, "Remaining fluxes: ", sum_abs_fluxes !, &
-!        "UH: ", sum(abs(uhtr)), "VH: ", sum(abs(vhtr)), "EA: ", sum(abs(eatr)), "EB: ", sum(abs(ebtr))
-!      if ( sum_abs_fluxes == 0.0) then
-!        print *, "Advection converged early at ", iter, "iterations"
-!        exit
-!      endif
-
-      ! Switch order of Strang split every iteration
-      z_first = .not. z_first
-      x_before_y = .not. x_before_y
-
-    end do
+    endif
 
     call pass_var(h_pre, G%Domain)
     ! Tracer diffusion Strang split between advection and diffusion
 
-!    call tracer_hordiff(h_pre, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
-!        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, CS%do_online, khdt_x*0.5, khdt_y*0.5)
+    call tracer_hordiff(h_pre, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
+        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, CS%do_online, khdt_x*0.5, khdt_y*0.5)
 
     h_temp = h_end-h_pre
 !
