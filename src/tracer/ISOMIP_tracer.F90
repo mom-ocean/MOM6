@@ -33,7 +33,7 @@ use MOM_tracer_registry, only : tracer_vertdiff
 use MOM_variables, only : surface
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_verticalGrid, only : verticalGrid_type
-
+use MOM_coms, only : max_across_PEs
 use coupler_util, only : set_coupler_values, ind_csurf
 use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
 
@@ -333,19 +333,27 @@ subroutine ISOMIP_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, G
   real :: mmax
   real :: b1(SZI_(G))          ! b1 and c1 are variables used by the
   real :: c1(SZI_(G),SZK_(G))  ! tridiagonal solver.
+  real :: melt(SZI_(G),SZJ_(G))  ! melt water (positive for melting 
+                                 ! negative for freezing)
   integer :: i, j, k, is, ie, js, je, nz, m
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   if (.not.associated(CS)) return
 
+  melt(:,:) = fluxes%iceshelf_melt
 
   ! max. melt
-  mmax = MAXVAL(fluxes%iceshelf_melt)
+  mmax = MAXVAL(melt(is:ie,js:je))
+  call max_across_PEs(mmax)
+  !write(*,*)'max melt', mmax
   ! dye melt water (m=1), dye = 1 if melt=max(melt) 
   do m=1,NTR
      do j=js,je ; do i=is,ie
-      if (fluxes%iceshelf_melt(i,j) > 0.0) then
-         CS%tr(i,j,1,m) = fluxes%iceshelf_melt(i,j)/mmax
+      if (melt(i,j) > 0.0) then ! melting
+         !write(*,*)'i,j,melt,melt/mmax',i,j,melt(i,j),melt(i,j)/mmax
+         CS%tr(i,j,1:2,m) = melt(i,j)/mmax ! inject dye in the ML
+      else ! freezing
+         CS%tr(i,j,1:2,m) = 0.0 
       endif
     enddo ; enddo
   enddo
