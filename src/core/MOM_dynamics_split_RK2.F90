@@ -891,8 +891,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   if (CS%id_vav        > 0) call post_data(CS%id_vav, v_av,                 CS%diag)
   if (CS%id_u_BT_accel > 0) call post_data(CS%id_u_BT_accel, CS%u_accel_bt, CS%diag)
   if (CS%id_v_BT_accel > 0) call post_data(CS%id_v_BT_accel, CS%v_accel_bt, CS%diag)
-  if (CS%id_umo        > 0) call post_data(CS%id_umo, uh*GV%H_to_kg_m2,      CS%diag)
-  if (CS%id_vmo        > 0) call post_data(CS%id_vmo, vh*GV%H_to_kg_m2,      CS%diag)
+  if (CS%id_umo        > 0) call post_data(CS%id_umo, uh,      CS%diag)
+  if (CS%id_vmo        > 0) call post_data(CS%id_vmo, vh,      CS%diag)
 
   ! depth summed zonal mass transport
   if (CS%id_umo_2d > 0) then
@@ -1199,10 +1199,12 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
       'Meridional Thickness Flux', flux_units)
   CS%id_umo = register_diag_field('ocean_model', 'umo',                       &
       diag%axesCuL, Time,'Zonal Mass Transport (including SGS param)', 'kg/s',&
-      cmor_standard_name='ocean_mass_x_transport', cmor_long_name='Ocean Mass X Transport')
+      cmor_standard_name='ocean_mass_x_transport', cmor_long_name='Ocean Mass X Transport', &
+      conversion=GV%H_to_kg_m2)
   CS%id_vmo = register_diag_field('ocean_model', 'vmo',                            &
       diag%axesCvL, Time,'Meridional Mass Transport (including SGS param)', 'kg/s',&
-      cmor_standard_name='ocean_mass_y_transport', cmor_long_name='Ocean Mass Y Transport')
+      cmor_standard_name='ocean_mass_y_transport', cmor_long_name='Ocean Mass Y Transport', &
+      conversion=GV%H_to_kg_m2)
   CS%id_umo_2d = register_diag_field('ocean_model', 'umo_2d',                              &
       diag%axesCu1, Time,'Zonal Mass Transport (including SGS param) Vertical Sum', 'kg/s',&
       cmor_standard_name='ocean_mass_x_transport_vertical_sum',                            &
