@@ -98,8 +98,17 @@ type, public :: axes_grp
   character(len=9) :: v_cell_method = '' !< Default nature of data representation, if axes group includes vertical direction.
   ! For detecting position on the grid
   logical :: is_h_point = .false. !< If true, indicates that this axes group is for an h-point located field.
-  logical :: is_native = .true. !< If true, indicates that this axes group is for a native model grid. False for any other grid. Used for rank>2.
-  logical :: needs_remapping = .false. !< If true, indicates that this axes group is for a intensive layer-located fields that must be remapped to these axes. Used for rank>2.
+  logical :: is_q_point = .false. !< If true, indicates that this axes group is for a q-point located field.
+  logical :: is_u_point = .false. !< If true, indicates that this axes group is for a u-point located field.
+  logical :: is_v_point = .false. !< If true, indicates that this axes group is for a v-point located field.
+  logical :: is_layer = .false. !< If true, indicates that this axes group is for a layer vertically-located field.
+  logical :: is_interface = .false. !< If true, indicates that this axes group is for an interface vertically-located field.
+  logical :: is_native = .true. !< If true, indicates that this axes group is for a native model grid. False for any other
+                                !! grid. Used for rank>2.
+  logical :: needs_remapping = .false. !< If true, indicates that this axes group is for a intensive layer-located field
+                                       !! that must be remapped to these axes. Used for rank>2.
+  logical :: needs_interpolation = .false. !< If true, indicates that this axes group is for a sampled interface-located field
+                                           !! that must be interpolated to these axes. Used for rank>2.
   ! ID's for cell_measures
   integer :: id_area = -1 !< The diag_manager id for area to be used for cell_measure of variables with this axes_grp.
   integer :: id_volume = -1 !< The diag_manager id for volume to be used for cell_measure of variables with this axes_grp.
@@ -353,57 +362,64 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
                             'Depth of interfaces', direction=-1)
   endif
 
-  ! Axes for z remapping
+  ! Axes for z layers
   call define_axes_group(diag_cs, (/ id_xh, id_yh, id_zzl /), diag_cs%axesTZL, &
        x_cell_method='mean', y_cell_method='mean', v_cell_method='mean', &
-       is_h_point=.true., is_native=.false., needs_remapping=.true.)
+       is_h_point=.true., is_layer=.true., is_native=.false., needs_remapping=.true.)
   call define_axes_group(diag_cs, (/ id_xq, id_yq, id_zzL /), diag_cs%axesBZL, &
        x_cell_method='point', y_cell_method='point', v_cell_method='mean', &
-       is_native=.false.)
+       is_q_point=.true., is_layer=.true., is_native=.false.)
+       !! \note Remapping for B points is not yet implemented so needs_remapping is not provided for axesBZL
   call define_axes_group(diag_cs, (/ id_xq, id_yh, id_zzL /), diag_cs%axesCuZL, &
        x_cell_method='point', y_cell_method='mean', v_cell_method='mean', &
-       is_native=.false., needs_remapping=.true.)
+       is_u_point=.true., is_layer=.true., is_native=.false., needs_remapping=.true.)
   call define_axes_group(diag_cs, (/ id_xh, id_yq, id_zzL /), diag_cs%axesCvZL, &
        x_cell_method='mean', y_cell_method='point', v_cell_method='mean', &
-       is_native=.false., needs_remapping=.true.)
+       is_v_point=.true., is_layer=.true., is_native=.false., needs_remapping=.true.)
 
   ! Vertical axes for the interfaces and layers
   call define_axes_group(diag_cs, (/ id_zi /), diag_cs%axesZi, &
-       v_cell_method='point')
+       v_cell_method='point', is_interface=.true.)
   call define_axes_group(diag_cs, (/ id_zL /), diag_cs%axesZL, &
-       v_cell_method='mean')
+       v_cell_method='mean', is_layer=.true.)
 
   ! Axis groupings for the model layers
   call define_axes_group(diag_cs, (/ id_xh, id_yh, id_zL /), diag_cs%axesTL, &
        x_cell_method='mean', y_cell_method='mean', v_cell_method='mean', &
-       is_h_point=.true.)
+       is_h_point=.true., is_layer=.true.)
   call define_axes_group(diag_cs, (/ id_xq, id_yq, id_zL /), diag_cs%axesBL, &
-       x_cell_method='point', y_cell_method='point', v_cell_method='mean')
+       x_cell_method='point', y_cell_method='point', v_cell_method='mean', &
+       is_q_point=.true., is_layer=.true.)
   call define_axes_group(diag_cs, (/ id_xq, id_yh, id_zL /), diag_cs%axesCuL, &
-       x_cell_method='point', y_cell_method='mean', v_cell_method='mean')
+       x_cell_method='point', y_cell_method='mean', v_cell_method='mean', &
+       is_u_point=.true., is_layer=.true.)
   call define_axes_group(diag_cs, (/ id_xh, id_yq, id_zL /), diag_cs%axesCvL, &
-       x_cell_method='mean', y_cell_method='point', v_cell_method='mean')
+       x_cell_method='mean', y_cell_method='point', v_cell_method='mean', &
+       is_v_point=.true., is_layer=.true.)
 
   ! Axis groupings for the model interfaces
   call define_axes_group(diag_cs, (/ id_xh, id_yh, id_zi /), diag_cs%axesTi, &
        x_cell_method='mean', y_cell_method='mean', v_cell_method='point', &
-       is_h_point=.true.)
-  call define_axes_group(diag_cs, (/ id_xq, id_yh, id_zi /), diag_cs%axesCui, &
-       x_cell_method='point', y_cell_method='mean', v_cell_method='point')
-  call define_axes_group(diag_cs, (/ id_xh, id_yq, id_zi /), diag_cs%axesCvi, &
-       x_cell_method='mean', y_cell_method='point', v_cell_method='point')
+       is_h_point=.true., is_interface=.true.)
   call define_axes_group(diag_cs, (/ id_xq, id_yq, id_zi /), diag_cs%axesBi, &
-       x_cell_method='point', y_cell_method='point', v_cell_method='point')
+       x_cell_method='point', y_cell_method='point', v_cell_method='point', &
+       is_q_point=.true., is_interface=.true.)
+  call define_axes_group(diag_cs, (/ id_xq, id_yh, id_zi /), diag_cs%axesCui, &
+       x_cell_method='point', y_cell_method='mean', v_cell_method='point', &
+       is_u_point=.true., is_interface=.true.)
+  call define_axes_group(diag_cs, (/ id_xh, id_yq, id_zi /), diag_cs%axesCvi, &
+       x_cell_method='mean', y_cell_method='point', v_cell_method='point', &
+       is_v_point=.true., is_interface=.true.)
 
   ! Axis groupings for 2-D arrays
   call define_axes_group(diag_cs, (/ id_xh, id_yh /), diag_cs%axesT1, &
        x_cell_method='mean', y_cell_method='mean', is_h_point=.true.)
   call define_axes_group(diag_cs, (/ id_xq, id_yq /), diag_cs%axesB1, &
-       x_cell_method='point', y_cell_method='point')
+       x_cell_method='point', y_cell_method='point', is_q_point=.true.)
   call define_axes_group(diag_cs, (/ id_xq, id_yh /), diag_cs%axesCu1, &
-       x_cell_method='point', y_cell_method='mean')
+       x_cell_method='point', y_cell_method='mean', is_u_point=.true.)
   call define_axes_group(diag_cs, (/ id_xh, id_yq /), diag_cs%axesCv1, &
-       x_cell_method='mean', y_cell_method='point')
+       x_cell_method='mean', y_cell_method='point', is_v_point=.true.)
 
 end subroutine set_axes_info
 
@@ -474,7 +490,10 @@ end function check_grid_def
 
 !> Defines a group of "axes" from list of handles
 subroutine define_axes_group(diag_cs, handles, axes, &
-                             x_cell_method, y_cell_method, v_cell_method, is_h_point, is_native, needs_remapping)
+                             x_cell_method, y_cell_method, v_cell_method, &
+                             is_h_point, is_q_point, is_u_point, is_v_point, &
+                             is_layer, is_interface, &
+                             is_native, needs_remapping, needs_interpolation)
   type(diag_ctrl), target,    intent(in)  :: diag_cs !< Diagnostics control structure
   integer, dimension(:),      intent(in)  :: handles !< A list of 1D axis handles
   type(axes_grp),             intent(out) :: axes    !< The group of 1D axes
@@ -482,9 +501,16 @@ subroutine define_axes_group(diag_cs, handles, axes, &
   character(len=*), optional, intent(in)  :: y_cell_method !< A y-direction cell method used to construct the "cell_methods" attribute in CF convention
   character(len=*), optional, intent(in)  :: v_cell_method !< A vertical direction cell method used to construct the "cell_methods" attribute in CF convention
   logical,          optional, intent(in)  :: is_h_point !< If true, indicates this axes group for h-point located fields
+  logical,          optional, intent(in)  :: is_q_point !< If true, indicates this axes group for q-point located fields
+  logical,          optional, intent(in)  :: is_u_point !< If true, indicates this axes group for u-point located fields
+  logical,          optional, intent(in)  :: is_v_point !< If true, indicates this axes group for v-point located fields
+  logical,          optional, intent(in)  :: is_layer !< If true, indicates that this axes group is for a layer vertically-located field.
+  logical,          optional, intent(in)  :: is_interface !< If true, indicates that this axes group is for an interface vertically-located field.
   logical,          optional, intent(in)  :: is_native !< If true, indicates that this axes group is for a native model grid. False for any other grid.
-  logical,          optional, intent(in)  :: needs_remapping !< If true, indicates that this axes group is for a intensive layer-located fields
+  logical,          optional, intent(in)  :: needs_remapping !< If true, indicates that this axes group is for a intensive layer-located field
                                                              !! that must be remapped to these axes. Used for rank>2.
+  logical,          optional, intent(in)  :: needs_interpolation !< If true, indicates that this axes group is for a sampled interface-located field
+                                                                 !! that must be interpolated to these axes. Used for rank>2.
   ! Local variables
   integer :: n
   n = size(handles)
@@ -516,8 +542,14 @@ subroutine define_axes_group(diag_cs, handles, axes, &
     axes%v_cell_method = ''
   endif
   if (present(is_h_point)) axes%is_h_point = is_h_point
+  if (present(is_q_point)) axes%is_q_point = is_q_point
+  if (present(is_u_point)) axes%is_u_point = is_u_point
+  if (present(is_v_point)) axes%is_v_point = is_v_point
+  if (present(is_layer)) axes%is_layer = is_layer
+  if (present(is_interface)) axes%is_interface = is_interface
   if (present(is_native)) axes%is_native = is_native
   if (present(needs_remapping)) axes%needs_remapping = needs_remapping
+  if (present(needs_interpolation)) axes%needs_interpolation = needs_interpolation
 end subroutine define_axes_group
 
 subroutine set_diag_mediator_grid(G, diag_cs)
@@ -815,7 +847,7 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
   nz_src = size(field, 3)
   nz_dest = diag_cs%nz_remap
 
-  if (is_u_axes(diag%axes, diag_cs)) then
+  if (diag%axes%is_u_point) then
     do j=diag_cs%G%jsc, diag_cs%G%jec
       do I=diag_cs%G%iscB, diag_cs%G%iecB
         if (associated(diag%mask3d)) then
@@ -841,7 +873,7 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
         enddo
       enddo
     enddo
-  elseif (is_v_axes(diag%axes, diag_cs)) then
+  elseif (diag%axes%is_v_point) then
     do J=diag_cs%G%jscB, diag_cs%G%jecB
       do i=diag_cs%G%isc, diag_cs%G%iec
         if (associated(diag%mask3d)) then
@@ -867,7 +899,7 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
         enddo
       enddo
     enddo
-  else
+  elseif (diag%axes%is_h_point) then
     do j=diag_cs%G%jsc, diag_cs%G%jec
       do i=diag_cs%G%isc, diag_cs%G%iec
         if (associated(diag%mask3d)) then
@@ -892,6 +924,10 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
         enddo
       enddo
     enddo
+  else
+    call MOM_error(FATAL, &
+            "remap_diag_to_z: Q point remapping is not coded yet. "//&
+            " debug hint: "//diag%debug_str)
   endif
 
 end subroutine remap_diag_to_z
@@ -1180,23 +1216,22 @@ integer function register_diag_field(module_name, field_name, axes, init_time, &
              y_cell_method=y_cell_method, v_cell_method=v_cell_method, &
              conversion=conversion)
 
-  ! Register diagnostics remapped to z vertical coordinate, note that only diagnostics on layers
-  ! (not interfaces) are supported, also B axes are not supported yet
-  if (axes%rank == 3 .and. (.not. is_B_axes(axes, diag_cs))) then
-    if (is_layer_axes(axes, diag_cs)) then
-      remap_axes => null()
-      if (axes%rank .eq. 3) then
-        if ((axes%id .eq. diag_cs%axesTL%id)) then
-            remap_axes => diag_cs%axesTZL
-        elseif(axes%id .eq. diag_cs%axesBL%id) then
-            remap_axes => diag_cs%axesBZL
-        elseif(axes%id .eq. diag_cs%axesCuL%id ) then
-            remap_axes => diag_cs%axesCuZL
-        elseif(axes%id .eq. diag_cs%axesCvL%id) then
-            remap_axes => diag_cs%axesCvZL
-        endif
+  ! Register diagnostics remapped to z vertical coordinate
+  if (axes%rank == 3 .and. axes%is_layer) then
+    remap_axes => null()
+    if (axes%rank .eq. 3) then
+      if ((axes%id .eq. diag_cs%axesTL%id)) then
+          remap_axes => diag_cs%axesTZL
+      elseif(axes%id .eq. diag_cs%axesBL%id) then
+          remap_axes => diag_cs%axesBZL
+      elseif(axes%id .eq. diag_cs%axesCuL%id ) then
+          remap_axes => diag_cs%axesCuZL
+      elseif(axes%id .eq. diag_cs%axesCvL%id) then
+          remap_axes => diag_cs%axesCvZL
       endif
-      call assert(associated(remap_axes), 'register_diag_field: remap_axes not set')
+    endif
+    call assert(associated(remap_axes), 'register_diag_field: remap_axes not set')
+    if (remap_axes%needs_remapping) then
       active = register_diag_field_expand_cmor(dm_id, &
                  module_name//trim(diag_cs%z_remap_suffix), field_name, remap_axes, &
                  init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
@@ -1216,16 +1251,16 @@ integer function register_diag_field(module_name, field_name, axes, init_time, &
 
       ! Record whether any remapping is needed at all
       if (active) then
-        if (is_u_axes(axes, diag_cs)) then
+        if (remap_axes%is_u_point) then
           diag_cs%do_z_remapping_on_u = .true.
-        elseif (is_v_axes(axes, diag_cs)) then
+        elseif (remap_axes%is_v_point) then
           diag_cs%do_z_remapping_on_v = .true.
-        else
+        elseif (remap_axes%is_h_point) then
           diag_cs%do_z_remapping_on_T = .true.
         endif
       endif
-    endif ! is_layer_axes
-  endif
+    endif ! remap_axes%needs_remapping
+  endif ! axes%rank == 3
 
   register_diag_field = dm_id
 
@@ -2089,83 +2124,6 @@ subroutine set_diag_mask(diag, diag_cs, axes)
   endif
 
 end subroutine set_diag_mask
-
-function is_layer_axes(axes, diag_cs)
-
-  type(axes_grp),  intent(in) :: axes
-  type(diag_ctrl), intent(in) :: diag_cs
-
-  logical :: is_layer_axes
-
-  is_layer_axes = .false.
-
-  if (axes%id == diag_cs%axesTZL%id  .or. &
-      axes%id == diag_cs%axesBZL%id  .or. &
-      axes%id == diag_cs%axesCuZL%id .or. &
-      axes%id == diag_cs%axesCvZL%id .or. &
-      axes%id == diag_cs%axesZL%id   .or. &
-      axes%id == diag_cs%axesTL%id   .or. &
-      axes%id == diag_cs%axesBL%id   .or. &
-      axes%id == diag_cs%axesCuL%id  .or. &
-      axes%id == diag_cs%axesCvL%id) then
-    is_layer_axes = .true.
-  endif
-
-end function is_layer_axes
-
-function is_u_axes(axes, diag_cs)
-
-  type(axes_grp),  intent(in) :: axes
-  type(diag_ctrl), intent(in) :: diag_cs
-
-  logical :: is_u_axes
-
-  is_u_axes = .false.
-
-  if (axes%id == diag_cs%axesCuZL%id .or. &
-      axes%id == diag_cs%axesCuL%id  .or. &
-      axes%id == diag_cs%axesCui%id  .or. &
-      axes%id == diag_cs%axesCu1%id) then
-    is_u_axes = .true.
-  endif
-
-end function is_u_axes
-
-function is_v_axes(axes, diag_cs)
-
-  type(axes_grp),  intent(in) :: axes
-  type(diag_ctrl), intent(in) :: diag_cs
-
-  logical :: is_v_axes
-
-  is_v_axes = .false.
-
-  if (axes%id == diag_cs%axesCuZL%id .or. &
-      axes%id == diag_cs%axesCuL%id  .or. &
-      axes%id == diag_cs%axesCui%id  .or. &
-      axes%id == diag_cs%axesCu1%id) then
-    is_v_axes = .true.
-  endif
-
-end function is_v_axes
-
-function is_B_axes(axes, diag_cs)
-
-  type(axes_grp),  intent(in) :: axes
-  type(diag_ctrl), intent(in) :: diag_cs
-
-  logical :: is_B_axes
-
-  is_B_axes = .false.
-
-  if (axes%id == diag_cs%axesBZL%id .or. &
-      axes%id == diag_cs%axesBL%id  .or. &
-      axes%id == diag_cs%axesBi%id  .or. &
-      axes%id == diag_cs%axesB1%id) then
-    is_B_axes = .true.
-  endif
-
-end function is_B_axes
 
 !> Returns a new diagnostic id, it may be necessary to expand the diagnostics array.
 integer function get_new_diag_id(diag_cs)
