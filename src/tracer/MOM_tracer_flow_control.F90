@@ -82,6 +82,7 @@ implicit none ; private
 
 public call_tracer_register, tracer_flow_control_init, call_tracer_set_forcing
 public call_tracer_column_fns, call_tracer_surface_state, call_tracer_stocks
+public call_tracer_boundary_flux_ALE
 public get_chl_from_model
 
 type, public :: tracer_flow_control_CS ; private

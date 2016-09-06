@@ -724,6 +724,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, dt, fluxes, CS%optics, &
                           ea, h, tv, CS%aggregate_FW_forcing, cTKE, dSV_dT, dSV_dS)
 
+
       if (CS%debug) then
         call hchksum(ea, "after applyBoundaryFluxes ea",G%HI,haloshift=0)
         call hchksum(eb, "after applyBoundaryFluxes eb",G%HI,haloshift=0)
@@ -773,7 +774,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     else
 
       call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, dt, fluxes, CS%optics, &
-                                    ea, h, tv, CS%aggregate_FW_forcing)
+                                    ea, h, tv, CS%aggregate_FW_forcing, CS%evap_CFL_limit, &
+                                    CS%minimum_forcing_depth)
 
     endif   ! endif for CS%use_energetic_PBL
 
@@ -1059,14 +1061,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
                     0.5*(tv%S(i,j,k-1) + tv%S(i,j,k))
     enddo ; enddo ; enddo
   endif
-
-  ! Undo the effects of applyBoundaryFluxesInOut for passive tracers
-  if (CS%useALEalgorithm) then
-    k = 1
-    do j=js,je ; do i=is,ie
-      hold(i,j,k) = hold(i,j,k) - ea(i,j,k)
-    enddo ; enddo
-  endif  
 
   ! mixing of passive tracers from massless boundary layers to interior
   call cpu_clock_begin(id_clock_tracers)
