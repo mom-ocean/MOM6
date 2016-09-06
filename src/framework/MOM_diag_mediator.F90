@@ -31,6 +31,7 @@ use MOM_coms,             only : PE_here
 use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,        only : CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_error_handler,    only : MOM_error, FATAL, is_root_pe
+use MOM_diag_vkernels,    only : interpolate_column
 use MOM_file_parser,      only : get_param, log_param, log_version, param_file_type
 use MOM_grid,             only : ocean_grid_type
 use MOM_io,               only : file_exists, field_exists, field_size
@@ -39,7 +40,7 @@ use MOM_string_functions, only : extractWord
 use MOM_safe_alloc,       only : safe_alloc_ptr, safe_alloc_alloc
 use MOM_string_functions, only : lowercase
 use MOM_time_manager,     only : time_type
-use MOM_remapping,        only : remapping_CS, initialize_remapping, dzFromH1H2
+use MOM_remapping,        only : remapping_CS, initialize_remapping
 use MOM_remapping,        only : remapping_core_h
 use MOM_regridding,       only : regridding_CS, initialize_regridding, setCoordinateResolution
 use MOM_regridding,       only : build_zstar_column, set_regrid_params
@@ -107,7 +108,7 @@ type, public :: axes_grp
                                 !! grid. Used for rank>2.
   logical :: needs_remapping = .false. !< If true, indicates that this axes group is for a intensive layer-located field
                                        !! that must be remapped to these axes. Used for rank>2.
-  logical :: needs_interpolation = .false. !< If true, indicates that this axes group is for a sampled interface-located field
+  logical :: needs_interpolating = .false. !< If true, indicates that this axes group is for a sampled interface-located field
                                            !! that must be interpolated to these axes. Used for rank>2.
   ! ID's for cell_measures
   integer :: id_area = -1 !< The diag_manager id for area to be used for cell_measure of variables with this axes_grp.
@@ -151,7 +152,8 @@ type, public :: diag_ctrl
   type(axes_grp) :: axesBi, axesTi, axesCui, axesCvi
   type(axes_grp) :: axesB1, axesT1, axesCu1, axesCv1
   type(axes_grp) :: axesZi, axesZL
-  type(axes_grp) :: axesTzi, axesTZL, axesBZL, axesCuZL, axesCvZL
+  type(axes_grp) :: axesTZL, axesBZL, axesCuZL, axesCvZL
+  type(axes_grp) :: axesTzi, axesBZi, axesCuZi, axesCvZi
 
   ! Mask arrays for diagnostics
   real, dimension(:,:),   pointer :: mask2dT   => null()
@@ -362,21 +364,6 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
                             'Depth of interfaces', direction=-1)
   endif
 
-  ! Axes for z layers
-  call define_axes_group(diag_cs, (/ id_xh, id_yh, id_zzl /), diag_cs%axesTZL, &
-       x_cell_method='mean', y_cell_method='mean', v_cell_method='mean', &
-       is_h_point=.true., is_layer=.true., is_native=.false., needs_remapping=.true.)
-  call define_axes_group(diag_cs, (/ id_xq, id_yq, id_zzL /), diag_cs%axesBZL, &
-       x_cell_method='point', y_cell_method='point', v_cell_method='mean', &
-       is_q_point=.true., is_layer=.true., is_native=.false.)
-       !! \note Remapping for B points is not yet implemented so needs_remapping is not provided for axesBZL
-  call define_axes_group(diag_cs, (/ id_xq, id_yh, id_zzL /), diag_cs%axesCuZL, &
-       x_cell_method='point', y_cell_method='mean', v_cell_method='mean', &
-       is_u_point=.true., is_layer=.true., is_native=.false., needs_remapping=.true.)
-  call define_axes_group(diag_cs, (/ id_xh, id_yq, id_zzL /), diag_cs%axesCvZL, &
-       x_cell_method='mean', y_cell_method='point', v_cell_method='mean', &
-       is_v_point=.true., is_layer=.true., is_native=.false., needs_remapping=.true.)
-
   ! Vertical axes for the interfaces and layers
   call define_axes_group(diag_cs, (/ id_zi /), diag_cs%axesZi, &
        v_cell_method='point', is_interface=.true.)
@@ -420,6 +407,36 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
        x_cell_method='point', y_cell_method='mean', is_u_point=.true.)
   call define_axes_group(diag_cs, (/ id_xh, id_yq /), diag_cs%axesCv1, &
        x_cell_method='mean', y_cell_method='point', is_v_point=.true.)
+
+  ! Axes for z layers
+  call define_axes_group(diag_cs, (/ id_xh, id_yh, id_zzl /), diag_cs%axesTZL, &
+       x_cell_method='mean', y_cell_method='mean', v_cell_method='mean', &
+       is_h_point=.true., is_layer=.true., is_native=.false., needs_remapping=.true.)
+  call define_axes_group(diag_cs, (/ id_xq, id_yq, id_zzL /), diag_cs%axesBZL, &
+       x_cell_method='point', y_cell_method='point', v_cell_method='mean', &
+       is_q_point=.true., is_layer=.true., is_native=.false.)
+       !! \note Remapping for B points is not yet implemented so needs_remapping is not provided for axesBZL
+  call define_axes_group(diag_cs, (/ id_xq, id_yh, id_zzL /), diag_cs%axesCuZL, &
+       x_cell_method='point', y_cell_method='mean', v_cell_method='mean', &
+       is_u_point=.true., is_layer=.true., is_native=.false., needs_remapping=.true.)
+  call define_axes_group(diag_cs, (/ id_xh, id_yq, id_zzL /), diag_cs%axesCvZL, &
+       x_cell_method='mean', y_cell_method='point', v_cell_method='mean', &
+       is_v_point=.true., is_layer=.true., is_native=.false., needs_remapping=.true.)
+
+  ! Axes for z interfaces
+  call define_axes_group(diag_cs, (/ id_xh, id_yh, id_zzi /), diag_cs%axesTZi, &
+       x_cell_method='mean', y_cell_method='mean', v_cell_method='point', &
+       is_h_point=.true., is_layer=.true., is_native=.false., needs_interpolating=.true.)
+  call define_axes_group(diag_cs, (/ id_xq, id_yq, id_zzi /), diag_cs%axesBZi, &
+       x_cell_method='point', y_cell_method='point', v_cell_method='point', &
+       is_q_point=.true., is_layer=.true., is_native=.false.)
+       !! \note Remapping for B points is not yet implemented so needs_remapping is not provided for axesBZL
+  call define_axes_group(diag_cs, (/ id_xq, id_yh, id_zzi /), diag_cs%axesCuZi, &
+       x_cell_method='point', y_cell_method='mean', v_cell_method='point', &
+       is_u_point=.true., is_layer=.true., is_native=.false., needs_interpolating=.true.)
+  call define_axes_group(diag_cs, (/ id_xh, id_yq, id_zzi /), diag_cs%axesCvZi, &
+       x_cell_method='mean', y_cell_method='point', v_cell_method='point', &
+       is_v_point=.true., is_layer=.true., is_native=.false., needs_interpolating=.true.)
 
 end subroutine set_axes_info
 
@@ -493,7 +510,7 @@ subroutine define_axes_group(diag_cs, handles, axes, &
                              x_cell_method, y_cell_method, v_cell_method, &
                              is_h_point, is_q_point, is_u_point, is_v_point, &
                              is_layer, is_interface, &
-                             is_native, needs_remapping, needs_interpolation)
+                             is_native, needs_remapping, needs_interpolating)
   type(diag_ctrl), target,    intent(in)  :: diag_cs !< Diagnostics control structure
   integer, dimension(:),      intent(in)  :: handles !< A list of 1D axis handles
   type(axes_grp),             intent(out) :: axes    !< The group of 1D axes
@@ -509,7 +526,7 @@ subroutine define_axes_group(diag_cs, handles, axes, &
   logical,          optional, intent(in)  :: is_native !< If true, indicates that this axes group is for a native model grid. False for any other grid.
   logical,          optional, intent(in)  :: needs_remapping !< If true, indicates that this axes group is for a intensive layer-located field
                                                              !! that must be remapped to these axes. Used for rank>2.
-  logical,          optional, intent(in)  :: needs_interpolation !< If true, indicates that this axes group is for a sampled interface-located field
+  logical,          optional, intent(in)  :: needs_interpolating !< If true, indicates that this axes group is for a sampled interface-located field
                                                                  !! that must be interpolated to these axes. Used for rank>2.
   ! Local variables
   integer :: n
@@ -549,7 +566,7 @@ subroutine define_axes_group(diag_cs, handles, axes, &
   if (present(is_interface)) axes%is_interface = is_interface
   if (present(is_native)) axes%is_native = is_native
   if (present(needs_remapping)) axes%needs_remapping = needs_remapping
-  if (present(needs_interpolation)) axes%needs_interpolation = needs_interpolation
+  if (present(needs_interpolating)) axes%needs_interpolating = needs_interpolating
 end subroutine define_axes_group
 
 subroutine set_diag_mediator_grid(G, diag_cs)
@@ -795,7 +812,6 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask)
 
     if (diag%axes%needs_remapping) then
       ! Remap this field to another vertical coordinate.
-
       if (present(mask)) then
         call MOM_error(FATAL,"post_data_3d: no mask for regridded field.")
       endif
@@ -815,6 +831,26 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask)
       if (id_clock_diag_z_remap>0) call cpu_clock_begin(id_clock_diag_z_remap)
       deallocate(remapped_field)
       if (id_clock_diag_z_remap>0) call cpu_clock_end(id_clock_diag_z_remap)
+    elseif (diag%axes%needs_interpolating) then
+      ! Interpolate this field to another vertical coordinate.
+      if (present(mask)) then
+        call MOM_error(FATAL,"post_data_3d: no mask for regridded field.")
+      endif
+
+      if (id_clock_diag_z_remap>0) call cpu_clock_begin(id_clock_diag_z_remap)
+      allocate(remapped_field(DIM_I(field),DIM_J(field), diag_cs%nz_remap+1))
+      call vertically_interpolate_diag_field(diag_cs, diag, field, remapped_field)
+      if (id_clock_diag_z_remap>0) call cpu_clock_end(id_clock_diag_z_remap)
+      if (associated(diag%mask3d)) then
+        ! Since 3d masks do not vary in the vertical, just use as much as is
+        ! needed.
+        call post_data_3d_low(diag, remapped_field, diag_cs, is_static)
+      else
+        call post_data_3d_low(diag, remapped_field, diag_cs, is_static)
+      endif
+      if (id_clock_diag_z_remap>0) call cpu_clock_begin(id_clock_diag_z_remap)
+      deallocate(remapped_field)
+      if (id_clock_diag_z_remap>0) call cpu_clock_end(id_clock_diag_z_remap)
     else
       call post_data_3d_low(diag, field, diag_cs, is_static, mask)
     endif
@@ -824,15 +860,14 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask)
 
 end subroutine post_data_3d
 
-!> Remap diagnostic field to z-star vertical grid.
+!> Remap diagnostic field to alternative vertical grid.
 !! \note This uses grids generated by diag_update_target_grids()
 subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
   real, dimension(:,:,:), intent(in) :: field !<  The diagnostic field to be remapped
   type(diag_type), intent(in) :: diag !< Structure containing remapping/masking information
   type(diag_ctrl), intent(in) :: diag_cs !< Diagnostics control structure
-  real, dimension(:,:,:), intent(inout) :: remapped_field !< Field argument remapped to z star coordinate
+  real, dimension(:,:,:), intent(inout) :: remapped_field !< Field argument remapped to alternative coordinate
   ! Local variables
-  real, dimension(diag_cs%nz_remap+1) :: dz
   real, dimension(diag_cs%nz_remap) :: h_dest
   real, dimension(size(diag_cs%h, 3)) :: h_src
   integer :: nz_src, nz_dest
@@ -931,6 +966,96 @@ subroutine remap_diag_to_z(field, diag, diag_cs, remapped_field)
   endif
 
 end subroutine remap_diag_to_z
+
+!> Vertically interpolate diagnostic field to alternative vertical grid.
+!! \note This uses grids generated by diag_update_target_grids()
+subroutine vertically_interpolate_diag_field(diag_cs, diag, field, interpolated_field)
+  type(diag_ctrl), intent(in) :: diag_cs !< Diagnostics control structure
+  type(diag_type), intent(in) :: diag !< Structure containing remapping/masking information
+  real, dimension(:,:,:), intent(in) :: field !<  The diagnostic field to be remapped
+  real, dimension(:,:,:), intent(inout) :: interpolated_field !< Field argument remapped to alternative coordinate
+  ! Local variables
+  real, dimension(diag_cs%nz_remap) :: h_dest
+  real, dimension(size(diag_cs%h, 3)) :: h_src
+  integer :: nz_src, nz_dest
+  integer :: i, j, k
+
+  call assert(diag_cs%remapping_initialized, &
+              'vertically_interpolate_diag_field: Remmaping not initialized.')
+  call assert(size(field, 3) == size(diag_cs%h, 3)+1, &
+              'vertically_interpolate_diag_field: Remap field and thickness z-axes do not match.')
+
+  interpolated_field(:,:,:) = diag_cs%missing_value
+  nz_src = size(diag_cs%h, 3)
+  nz_dest = diag_cs%nz_remap
+
+  if (diag%axes%is_u_point) then
+    do j=diag_cs%G%jsc, diag_cs%G%jec
+      do I=diag_cs%G%iscB, diag_cs%G%iecB
+        if (associated(diag%mask3d)) then
+          if (diag%mask3d(i,j,1)+diag%mask3d(i+1,j,1) == 0.) cycle
+        endif
+#if defined(DEBUG) || defined(__DO_SAFETY_CHECKS__)
+        ! Check that H is up-to-date.
+        do k=RANGE_K(diag_cs%h)
+          if (diag_cs%h_old(i,j,k) /= diag_cs%h(i,j,k)) call MOM_error(FATAL, &
+            "vertically_interpolate_diag_field: H has changed since remapping grids were updated."//&
+            " diag debug hint: "//diag%debug_str)
+        enddo
+#endif
+        h_src(:) = 0.5 * (diag_cs%h(i,j,:) + diag_cs%h(i+1,j,:))
+        h_dest(:) = 0.5 * ( diag_cs%h_zoutput(i,j,:) + diag_cs%h_zoutput(i+1,j,:) )
+        call interpolate_column(nz_src, h_src, field(I,j,:), &
+                                nz_dest, h_dest, diag_cs%missing_value, interpolated_field(I,j,:))
+      enddo
+    enddo
+  elseif (diag%axes%is_v_point) then
+    do J=diag_cs%G%jscB, diag_cs%G%jecB
+      do i=diag_cs%G%isc, diag_cs%G%iec
+        if (associated(diag%mask3d)) then
+          if (diag%mask3d(i,j,1)+diag%mask3d(i,j+1,1) == 0.) cycle
+        endif
+#if defined(DEBUG) || defined(__DO_SAFETY_CHECKS__)
+        ! Check that H is up-to-date.
+        do k=RANGE_K(diag_cs%h)
+          if (diag_cs%h_old(i,j,k) /= diag_cs%h(i,j,k)) call MOM_error(FATAL, &
+            "vertically_interpolate_diag_field: H has changed since remapping grids were updated."//&
+            " diag debug hint: "//diag%debug_str)
+        enddo
+#endif
+        h_src(:) = 0.5 * (diag_cs%h(i,j,:) + diag_cs%h(i,j+1,:))
+        h_dest(:) = 0.5 * ( diag_cs%h_zoutput(i,j,:) + diag_cs%h_zoutput(i,j+1,:) )
+        call interpolate_column(nz_src, h_src, field(i,J,:), &
+                                nz_dest, h_dest, diag_cs%missing_value, interpolated_field(i,J,:))
+      enddo
+    enddo
+  elseif (diag%axes%is_h_point) then
+    do j=diag_cs%G%jsc, diag_cs%G%jec
+      do i=diag_cs%G%isc, diag_cs%G%iec
+        if (associated(diag%mask3d)) then
+          if (diag%mask3d(i,j, 1) == 0.) cycle
+        endif
+#if defined(DEBUG) || defined(__DO_SAFETY_CHECKS__)
+        ! Check that H is up-to-date.
+        do k=RANGE_K(diag_cs%h)
+          if (diag_cs%h_old(i,j,k) /= diag_cs%h(i,j,k)) call MOM_error(FATAL, &
+            "vertically_interpolate_diag_field: H has changed since remapping grids were updated."//&
+            " diag debug hint: "//diag%debug_str)
+        enddo
+#endif
+        h_src(:) = diag_cs%h(i,j,:)
+        h_dest(:) = diag_cs%h_zoutput(i,j,:)
+        call interpolate_column(nz_src, h_src, field(i,j,:), &
+                                nz_dest, h_dest, diag_cs%missing_value, interpolated_field(i,j,:))
+      enddo
+    enddo
+  else
+    call MOM_error(FATAL, &
+            "vertically_interpolate_diag_field: Q point remapping is not coded yet. "//&
+            " debug hint: "//diag%debug_str)
+  endif
+
+end subroutine vertically_interpolate_diag_field
 
 !> Build/update target vertical grids for diagnostic remapping.
 !! \note The target grids need to be updated whenever sea surface
@@ -1217,7 +1342,7 @@ integer function register_diag_field(module_name, field_name, axes, init_time, &
              conversion=conversion)
 
   ! Register diagnostics remapped to z vertical coordinate
-  if (axes%rank == 3 .and. axes%is_layer) then
+  if (axes%rank == 3) then ! .and. axes%is_layer) then
     remap_axes => null()
     if (axes%rank .eq. 3) then
       if ((axes%id .eq. diag_cs%axesTL%id)) then
@@ -1228,38 +1353,50 @@ integer function register_diag_field(module_name, field_name, axes, init_time, &
           remap_axes => diag_cs%axesCuZL
       elseif(axes%id .eq. diag_cs%axesCvL%id) then
           remap_axes => diag_cs%axesCvZL
+      elseif(axes%id .eq. diag_cs%axesTi%id) then
+          remap_axes => diag_cs%axesTZi
+      elseif(axes%id .eq. diag_cs%axesBi%id) then
+          remap_axes => diag_cs%axesBZi
+      elseif(axes%id .eq. diag_cs%axesCui%id ) then
+          remap_axes => diag_cs%axesCuZi
+      elseif(axes%id .eq. diag_cs%axesCvi%id) then
+          remap_axes => diag_cs%axesCvZi
       endif
     endif
-    call assert(associated(remap_axes), 'register_diag_field: remap_axes not set')
-    if (remap_axes%needs_remapping) then
-      active = register_diag_field_expand_cmor(dm_id, &
-                 module_name//trim(diag_cs%z_remap_suffix), field_name, remap_axes, &
-                 init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
-                 range=range, mask_variant=mask_variant, standard_name=standard_name, &
-                 verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
-                 interp_method=interp_method, tile_count=tile_count, &
-                 cmor_field_name=cmor_field_name, cmor_long_name=cmor_long_name, &
-                 cmor_units=cmor_units, cmor_standard_name=cmor_standard_name, &
-                 cell_methods=cell_methods, x_cell_method=x_cell_method, &
-                 y_cell_method=y_cell_method, v_cell_method=v_cell_method, &
-                 conversion=conversion)
+    ! When the MOM_diag_to_Z module has been obsoleted we can assume remap_axes will
+    ! always exist but in the mean-time we have to do this check:
+   !call assert(associated(remap_axes), 'register_diag_field: remap_axes not set')
+    if (associated(remap_axes)) then
+      if (remap_axes%needs_remapping .or. remap_axes%needs_interpolating) then
+        active = register_diag_field_expand_cmor(dm_id, &
+                   module_name//trim(diag_cs%z_remap_suffix), field_name, remap_axes, &
+                   init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
+                   range=range, mask_variant=mask_variant, standard_name=standard_name, &
+                   verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
+                   interp_method=interp_method, tile_count=tile_count, &
+                   cmor_field_name=cmor_field_name, cmor_long_name=cmor_long_name, &
+                   cmor_units=cmor_units, cmor_standard_name=cmor_standard_name, &
+                   cell_methods=cell_methods, x_cell_method=x_cell_method, &
+                   y_cell_method=y_cell_method, v_cell_method=v_cell_method, &
+                   conversion=conversion)
  
-      if (active .and. .not. allocated(diag_cs%zi_remap)) then
-        call MOM_error(FATAL, 'register_diag_field: Request to regrid but no '// &
-                       'destination grid spec provided, see param DIAG_REMAP_Z_GRID_DEF')
-      endif
-
-      ! Record whether any remapping is needed at all
-      if (active) then
-        if (remap_axes%is_u_point) then
-          diag_cs%do_z_remapping_on_u = .true.
-        elseif (remap_axes%is_v_point) then
-          diag_cs%do_z_remapping_on_v = .true.
-        elseif (remap_axes%is_h_point) then
-          diag_cs%do_z_remapping_on_T = .true.
+        if (active .and. .not. allocated(diag_cs%zi_remap)) then
+          call MOM_error(FATAL, 'register_diag_field: Request to regrid but no '// &
+                         'destination grid spec provided, see param DIAG_REMAP_Z_GRID_DEF')
         endif
-      endif
-    endif ! remap_axes%needs_remapping
+
+        ! Record whether any remapping is needed at all
+        if (active) then
+          if (remap_axes%is_u_point) then
+            diag_cs%do_z_remapping_on_u = .true.
+          elseif (remap_axes%is_v_point) then
+            diag_cs%do_z_remapping_on_v = .true.
+          elseif (remap_axes%is_h_point) then
+            diag_cs%do_z_remapping_on_T = .true.
+          endif
+        endif
+      endif ! remap_axes%needs_remapping
+    endif ! associated(remap_axes)
   endif ! axes%rank == 3
 
   register_diag_field = dm_id
