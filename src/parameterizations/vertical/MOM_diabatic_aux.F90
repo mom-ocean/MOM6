@@ -803,15 +803,14 @@ end subroutine diagnoseMLDbyDensityDifference
 !> Update the thickness, temperature, and salinity due to thermodynamic
 !! boundary forcing (contained in fluxes type) applied to h, tv%T and tv%S,
 !! and calculate the TKE implications of this heating.
-subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
+subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
                                     aggregate_FW_forcing, cTKE, dSV_dT, dSV_dS)
   type(diabatic_aux_CS),                 pointer       :: CS !< Control structure for diabatic_aux
   type(ocean_grid_type),                 intent(in)    :: G  !< Grid structure
-  type(verticalGrid_type),               intent(in) :: GV        !< ocean vertical grid structure
+  type(verticalGrid_type),               intent(in)    :: GV        !< ocean vertical grid structure
   real,                                  intent(in)    :: dt !< Time-step over which forcing is applied (s)
   type(forcing),                         intent(inout) :: fluxes !< Surface fluxes container
   type(optics_type),                     pointer       :: optics !< Optical properties container
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: ea !< The entrainment distance at interfaces (H units)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thickness in H units
   type(thermo_var_ptrs),                 intent(inout) :: tv !< Thermodynamics container
   !> If False, treat in/out fluxes separately.
@@ -952,6 +951,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
       else
         netMassIn(i) = netMassInOut(i) - netMassOut(i)
       endif
+      fluxes%netMassOut(i,j) = netMassOut(i)
+      fluxes%netMassIn(i,j) = netMassIn(i)
     enddo
 
     ! Apply the surface boundary fluxes in three steps:
@@ -973,7 +974,6 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
           ! Update the forcing by the part to be consumed within the present k-layer.
           ! If fractionOfForcing = 1, then updated netMassIn, netHeat, and netSalt vanish.
           netMassIn(i) = netMassIn(i) - dThickness
-          ea(i,j,k) = dThickness
           ! This line accounts for the temperature of the mass exchange
           Temp_in = T2d(i,k)
           Salin_in = 0.0
@@ -1049,8 +1049,6 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
           !   ### The 0.9999 here should become a run-time parameter?
           dSalt = max( fractionOfForcing*netSalt(i), -0.9999*h2d(i,k)*tv%S(i,j,k))
 
-          ! Update the top layer only if its thickness changes
-          if (k.eq.1) ea(i,j,k) = ea(i,j,k) + dThickness
           ! Update the forcing by the part to be consumed within the present k-layer.
           ! If fractionOfForcing = 1, then new netMassOut vanishes.
           netMassOut(i) = netMassOut(i) - dThickness
