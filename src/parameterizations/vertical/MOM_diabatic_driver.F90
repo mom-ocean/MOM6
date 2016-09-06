@@ -237,6 +237,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
                  ! one time step  (m for Bouss, kg/m^2 for non-Bouss)
     Kd,     &    ! diapycnal diffusivity of layers (m^2/sec)
     h_orig, &    ! initial layer thicknesses (m for Bouss, kg/m^2 for non-Bouss)
+    h_prebound, &    ! initial layer thicknesses (m for Bouss, kg/m^2 for non-Bouss)
     hold,   &    ! layer thickness before diapycnal entrainment, and later
                  ! the initial layer thicknesses (if a mixed layer is used),
                  ! (m for Bouss, kg/m^2 for non-Bouss)
@@ -720,11 +721,11 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       enddo ; enddo ; enddo
     endif
 
+    do k=1,nz ; do j=js,je ; do i=is,ie
+        h_prebound(i,j,k) = h(i,j,k)
+    enddo ; enddo ; enddo
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,h_orig,h,eaml,ebml)
     if (CS%use_energetic_PBL) then
-      do k=1,nz ; do j=js,je ; do i=is,ie
-        h_orig(i,j,k) = h(i,j,k)
-      enddo ; enddo ; enddo
       call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, dt, fluxes, CS%optics, &
                           h, tv, CS%aggregate_FW_forcing, cTKE, dSV_dT, dSV_dS)
 
@@ -776,9 +777,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       endif
 
     else
-      do k=1,nz ; do j=js,je ; do i=is,ie
-        h_orig(i,j,k) = h(i,j,k)
-      enddo ; enddo ; enddo
       call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, dt, fluxes, CS%optics, &
                                     h, tv, CS%aggregate_FW_forcing)
 
@@ -1121,7 +1119,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     if (CS%useALEalgorithm) then
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
     ! so hold should be h_orig
-      call call_tracer_column_fns(h_orig, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
+      call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
                                 CS%optics, CS%tracer_flow_CSp, &
                                 aggregate_FW_forcing=CS%aggregate_FW_forcing, &
                                 evap_CFL_limit = CS%diabatic_aux_CSp%evap_CFL_limit, &
@@ -1152,7 +1150,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     enddo ; enddo ; enddo
     if (CS%useALEalgorithm) then
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
-      call call_tracer_column_fns(h_orig, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
+      call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
                                   CS%optics, CS%tracer_flow_CSp, &
                                   aggregate_FW_forcing=CS%aggregate_FW_forcing, &
                                   evap_CFL_limit = CS%diabatic_aux_CSp%evap_CFL_limit, &
@@ -1165,7 +1163,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   else
     if (CS%useALEalgorithm) then
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
-      call call_tracer_column_fns(h_orig, h, ea, eb, fluxes, dt, G, GV, tv, &
+      call call_tracer_column_fns(h_prebound, h, ea, eb, fluxes, dt, G, GV, tv, &
                                   CS%optics, CS%tracer_flow_CSp, &
                                   aggregate_FW_forcing=CS%aggregate_FW_forcing, &
                                   evap_CFL_limit = CS%diabatic_aux_CSp%evap_CFL_limit, &
