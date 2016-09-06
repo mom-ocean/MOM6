@@ -7,6 +7,7 @@ module MOM_tracer_vertical
 use MOM_grid,             only : ocean_grid_type
 use MOM_verticalGrid,     only : verticalGrid_type
 use MOM_forcing_type,     only : forcing
+use MOM_error_handler,    only : MOM_error, FATAL, WARNING
 
 implicit none ; private
 
@@ -21,7 +22,8 @@ public applyTracerBoundaryFluxesInOut
 contains
 
 subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
-                           sfc_flux, btm_flux, btm_reservoir, sink_rate)
+                           sfc_flux, btm_flux, btm_reservoir, sink_rate, &
+                           aggregate_FW_forcing, evap_CFL_limit, minimum_forcing_depth, fluxes)
   type(ocean_grid_type),                     intent(in)    :: G             !< ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV            !< ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_old         !< layer thickness before entrainment (m or kg m-2)
@@ -34,7 +36,10 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
                                                                             !! in units of (CU * kg m-2 s-1)
   real, dimension(SZI_(G),SZJ_(G)), optional,intent(inout) :: btm_reservoir !< amount of tracer in a bottom reservoir (units of CU kg m-2; formerly CU m)
   real,                             optional,intent(in)    :: sink_rate     !< rate at which the tracer sinks, in m s-1
-
+  logical,                          optional,intent(in)  :: aggregate_FW_forcing
+  real,                             optional,intent(in)  :: evap_CFL_limit
+  real,                             optional,intent(in)  :: minimum_forcing_depth
+  type(forcing),                    optional,intent(in)  :: fluxes
 
   real :: sink_dist ! The distance the tracer sinks in a time step, in m or kg m-2.
   real, dimension(SZI_(G),SZJ_(G)) :: &
@@ -82,6 +87,17 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
         btm_src(i,j) = (btm_flux(i,j)*dt) * GV%kg_m2_to_H
      enddo; enddo
   endif
+
+  ! Before vertical transport, apply surface boundary fluxes when using ALE
+  ! Whether ALE is applied is determined by the presnce of the three optional arguments associated
+  ! with the applyBoundaryFluxesInOut that is only called during ALE
+  if (present(aggregate_FW_forcing) .and. present(evap_CFL_limit) .and. present(minimum_forcing_depth) )then
+      call applyTracerBoundaryFluxesInOut(G, GV, tr, dt, sfc_src, fluxes, h_old, &
+                                        aggregate_FW_forcing, evap_CFL_limit, minimum_forcing_depth)
+    ! Zero out surface fluxes because they were applied in the call to applyBoundaryFluxesInOut
+    do j=js,je; do i=is,ie ; sfc_src(i,j) = 0.0 ; enddo ; enddo
+  endif
+
 
 
   if (present(sink_rate)) then
@@ -188,7 +204,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
 
 end subroutine tracer_vertdiff
 
-subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, sfc_flux, fluxes, h, &
+subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, sfc_src, fluxes, h, &
                                     aggregate_FW_forcing, evap_CFL_limit, minimum_forcing_depth)
 ! This routine is modeled after applyBoundaryFluxesInOut in MOM_diabatic_aux.F90
 ! NOTE: Please note that in this routine sfc_flux gets set to zero to ensure that the surface
@@ -197,13 +213,14 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, sfc_flux, fluxes, h, &
   type(ocean_grid_type),                 intent(in)    :: G  !< Grid structure
   type(verticalGrid_type),               intent(in)    :: GV        !< ocean vertical grid structure
   real,                                  intent(in)    :: dt !< Time-step over which forcing is applied (s)
+  real, dimension(SZI_(G),SZJ_(G)),       optional, intent(in)    :: sfc_src ! The time-integrated surface source of the tracer
   type(forcing),                         intent(in) :: fluxes !< Surface fluxes container
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h  !< Layer thickness in H units
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: Tr  !< Tracer concentration on T-cell
   !> If False, treat in/out fluxes separately.
   logical,                                    intent(in)  :: aggregate_FW_forcing
-  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)  :: sfc_flux      !< surface flux of the tracer (in CU * kg m-2 s-1)
-  ! Local variables
+  real,                                       intent(in)  :: evap_CFL_limit
+  real,                                       intent(in)  :: minimum_forcing_depth
   integer, parameter :: maxGroundings = 5
   integer :: numberOfGroundings, iGround(maxGroundings), jGround(maxGroundings)
   real :: H_limit_fluxes, IforcingDepthScale, Idt
@@ -214,11 +231,12 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, sfc_flux, fluxes, h, &
     netMassInOut, &  ! surface water fluxes (H units) over time step
     netMassIn,    &  ! mass entering ocean surface (H units) over a time step
     netMassOut       ! mass leaving ocean surface (H units) over a time step
-  real, dimension(SZI_(G)) :: &
-    sfc_src          ! The time-integrated surface source of the tracer, in
+
   real, dimension(SZI_(G), SZK_(G))                     :: h2d, Tr2d
+  real, dimension(SZI_(G)) :: &
+    sfc_src_1d          ! The time-integrated surface source of the tracer
   real                                                  :: hGrounding(maxGroundings)
-  real    :: Tr_in
+  real    :: Tr_in, dTr
   integer :: i, j, is, ie, js, je, k, nz, n, nsw
   character(len=45) :: mesg
 
@@ -248,14 +266,12 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, sfc_flux, fluxes, h, &
       Tr2d(i,k) = Tr(i,j,k)
     enddo ; enddo
 
-    do i=is,ie ; sfc_src(i) = 0.0 ; enddo; enddo
-    if (present(sfc_flux)) then
-     do i = is,ie
-        sfc_src(i) = (sfc_flux(i,j)*dt) * GV%kg_m2_to_H
-     enddo
-    endif
+    do i = is,ie
+      sfc_src_1d(i) = sfc_src(i,j)
+    enddo
     ! The surface forcing is contained in the fluxes type.
     ! We aggregate the thermodynamic forcing for a time step into the following:
+    ! These should have been set and stored during a call to applyBoundaryFluxesInOut
     ! netMassInOut = surface water fluxes (H units) over time step
     !              = lprec + fprec + vprec + evap + lrunoff + frunoff
     !                note that lprec generally has sea ice melt/form included.
@@ -321,7 +337,7 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, sfc_flux, fluxes, h, &
 
           ! Change in state due to forcing
           dThickness = max( fractionOfForcing*netMassOut(i), -h2d(i,k) )
-          dTr      = fractionOfForcing*sfc_src(i)
+          dTr      = fractionOfForcing*sfc_src_1d(i)
 
           ! Update the forcing by the part to be consumed within the present k-layer.
           ! If fractionOfForcing = 1, then new netMassOut vanishes.
@@ -333,12 +349,10 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, sfc_flux, fluxes, h, &
           h2d(i,k) = h2d(i,k) + dThickness  ! New thickness
           if (h2d(i,k) > 0.) then
             Ithickness  = 1.0/h2d(i,k) ! Inverse of new thickness
-            Tr2d(i,k)    = (hOld*Tr2d(i,k) + dTemp)*Ithickness
+            Tr2d(i,k)    = (hOld*Tr2d(i,k) + dTr)*Ithickness
           elseif (h2d(i,k) < 0.0) then ! h2d==0 is a special limit that needs no extra handling
-            call forcing_SinglePointPrint(fluxes,G,i,j,'applyTracerBoundaryFluxesInOut (h<0)')
             write(0,*) 'applyTracerBoundaryFluxesInOut(): lon,lat=',G%geoLonT(i,j),G%geoLatT(i,j)
-            write(0,*) 'applyTracerBoundaryFluxesInOut(): netT,netS,netH=',netHeat(i),netSalt(i),netMassInOut(i)
-            write(0,*) 'applyTracerBoundaryFluxesInOut(): dT,dS,dH=',dTemp,dSalt,dThickness
+            write(0,*) 'applyTracerBoundaryFluxesInOut(): netTr,netH=',sfc_src_1d(i),netMassInOut(i)
             write(0,*) 'applyTracerBoundaryFluxesInOut(): h(n),h(n+1),k=',hOld,h2d(i,k),k
             call MOM_error(FATAL, "MOM_tracer_vertical.F90, applyTracerBoundaryFluxesInOut(): "//&
                            "Complete mass loss in column!")
@@ -347,11 +361,10 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, sfc_flux, fluxes, h, &
         enddo ! k
 
       ! Check if trying to apply fluxes over land points
-      elseif((abs(sfc_src(i))+abs(netMassIn(i))+abs(netMassOut(i)))>0.) then
-        call forcing_SinglePointPrint(fluxes,G,i,j,'applyBoundaryFluxesInOut (land)')
+      elseif((abs(sfc_src_1d(i))+abs(netMassIn(i))+abs(netMassOut(i)))>0.) then
         write(0,*) 'applyTracerBoundaryFluxesInOut(): lon,lat=',G%geoLonT(i,j),G%geoLatT(i,j)
-        write(0,*) 'applyTracerBoundaryFluxesInOut(): netHeat,netSalt,netMassIn,netMassOut=',&
-                   netHeat(i),netSalt(i),netMassIn(i),netMassOut(i)
+        write(0,*) 'applyTracerBoundaryFluxesInOut(): netSrc,netMassIn,netMassOut=',&
+                   sfc_src_1d(i),netMassIn(i),netMassOut(i)
         call MOM_error(FATAL, "MOM_tracer_vertical.F90, applyTracerBoundaryFluxesInOut(): "//&
                               "Mass loss over land?")
       endif
@@ -375,14 +388,10 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, sfc_flux, fluxes, h, &
       Tr(i,j,k) = Tr2d(i,k)
     enddo ; enddo
 
-    ! Step D/ Set the surface flux of the tracer to 0 because all of it should have been applied
-    sfc_flux(i,j) = 0.0
-
   enddo ! j-loop finish
 
   if (numberOfGroundings>0) then
     do i = 1, min(numberOfGroundings, maxGroundings)
-      call forcing_SinglePointPrint(fluxes,G,iGround(i),jGround(i),'applyTracerBoundaryFluxesInOut (grounding)')
       write(mesg(1:45),'(3es15.3)') G%geoLonT( iGround(i), jGround(i) ), &
                              G%geoLatT( iGround(i), jGround(i)) , hGrounding(i)
       call MOM_error(WARNING, "MOM_tracer_vertical.F90, applyTracerBoundaryFluxesInOut(): "//&
@@ -397,3 +406,4 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, sfc_flux, fluxes, h, &
   endif
 
 end subroutine applyTracerBoundaryFluxesInOut
+end module MOM_tracer_vertical

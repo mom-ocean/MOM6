@@ -100,9 +100,9 @@ type, public :: diabatic_aux_CS ; private
                                    !! at the river mouths to "rivermix_depth" meters
   real    :: rivermix_depth = 0.0  !< The depth to which rivers are mixed if
                                    !! do_rivermix = T, in m.
-  real    :: minimum_forcing_depth = 0.001 !< The smallest depth over which forcing is
+  real, public    :: minimum_forcing_depth = 0.001 !< The smallest depth over which forcing is
                                    !! applied, in m.
-  real    :: evap_CFL_limit = 0.8  !< The largest fraction of a layer that can be
+  real, public    :: evap_CFL_limit = 0.8  !< The largest fraction of a layer that can be
                                    !! evaporated in one time-step (non-dim).
 
   logical :: reclaim_frazil  !<   If true, try to use any frazil heat deficit to
