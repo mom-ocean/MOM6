@@ -521,6 +521,7 @@ contains
     real, dimension(SZI_(G),SZJ_(G),SZK_(G))                    :: top_flux, bottom_flux
     real                                                        :: pos_flux, hvol, h_neglect, scale_factor
 
+
     ! In this subroutine, fluxes out of the box are scaled away if they deplete
     ! the layer, note that we define the positive direction as flux out of the box.
     ! Hence, uh(I-1) is multipled by negative one, but uh(I) is not
@@ -597,5 +598,124 @@ contains
     enddo ; enddo ; enddo
 
   end subroutine limit_mass_flux_3d
+
+  subroutine limit_mass_flux_ordered_3d(G, GV, uh, vh, ea, eb, h_pre, max_off_cfl, z_first, x_before_y)
+    type(ocean_grid_type),    pointer                           :: G
+    type(verticalGrid_type),  pointer                           :: GV
+    real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: uh
+    real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout)    :: vh
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)    :: ea
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)    :: eb
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(in)       :: h_pre
+    real,                                      intent(in)       :: max_off_cfl
+    logical,                                   intent(in)       :: z_first, x_before_y
+
+    ! Local variables
+    integer :: i, j, k, m, is, ie, js, je, nz
+    real, dimension(SZIB_(G),SZJ_(G),SZK_(G)),                  :: u_out
+    real, dimension(SZI_(G),SZJB_(G),SZK_(G)),                  :: v_out
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G))                    :: top_flux, bottom_flux
+    real                                                        :: pos_flux, hvol, h_neglect, scale_factor
+    integer                                                     :: flux_order
+    ! In this subroutine, fluxes out of the box are scaled down if they deplete
+    ! the layer. Here the positive direction is defined as flux out of the box as opposed to the
+    ! typical, strictly upwind convention. Hence, uh(I-1) is multipled by negative one,
+    ! but uh(I) is not. This routine differs from limit_mass_flux_3d because in this case,
+    ! the ordering of direction matters. While this is more aggressive than the other routine which,
+    ! Scales fluxes if they would deplete the layer (independent of any convergence within an
+    ! iteration), this routine should still maintain a CFL less than 1
+    ! Because horizontal transport must always be together (i.e. cannot do x->z->y),
+    ! four cases are considered)
+    !   1: z -> x -> y
+    !   2: z -> y -> x
+    !   3: x -> y -> z
+    !   4: y -> x -> z
+
+    ! Set index-related variables for fields on T-grid
+    is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
+    ! Initialize working arrays
+    u_out(:,:,:) = 0.0
+    v_out(:,:,:) = 0.0
+    top_flux(:,:,:) = 0.0
+    bottom_flux(:,:,:) = 0.0
+
+    ! Set the flux order (corresponding to one of the four cases described previously)
+    if (z_first .and. x_before_y)                 flux_order = 1
+    if (z_first .and. (.not. x_before_y))         flux_order = 2
+    if ((.not. z_first) .and. x_before_y)         flux_order = 3
+    if ((.not. z_first) .and. (.not. x_before_y)) flux_order = 4
+
+
+    do k=1,nz ; do i=is-1,ie+1; do j=js-1,je+1
+
+      u_out(I,j,k) = uh(I,j,k) - uh(I-1,j,k)
+      v_out(i,J,k) = vh(i,J,k) - vh(i,J-1,k)
+
+    enddo ; enddo ; enddo
+
+    k = 1
+    do j=js-1,je+1 ; do i=is-1,ie+1
+      top_flux(i,j,k) = -ea(i,j,k)
+      bottom_flux(i,j,k) = -(eb(i,j,k)-ea(i,j,k+1))
+    enddo ; enddo
+
+    do k=2, nz-1 ; do j=js-1,je+1 ; do i=is-1,ie+1
+      top_flux(i,j,k) = -(ea(i,j,k)-eb(i,j,k-1))
+      bottom_flux(i,j,k) = -(eb(i,j,k)-ea(i,j,k+1))
+    enddo ; enddo ; enddo
+
+    k=nz
+    do j=js-1,je+1 ; do i=is-1,ie+1
+      top_flux(i,j,k) = -(ea(i,j,k)-eb(i,j,k-1))
+      bottom_flux(i,j,k) = -eb(i,j,k)
+    enddo ; enddo
+
+    select case (flux_order)
+      case (1) ! z -> x -> y
+        ! Check first to see if either the top or bottom flux would deplete the layer
+        do k = 1, nz ; do j=js-1,je+1 ; do i=is-1,ie+1
+
+          pos_flux = top_flux + bottom_flux
+          ! If the total vertical transport depletes a layer
+          if ( h_pre(i,j,k) <  pos_flux ) then
+            scale_factor = ( h_pre(i,j,k) )/pos_flux*max_off_cfl
+          if (k>1 .and. k<nz) then
+          ! Scale interior layers
+            if(top_flux(i,j,k)>0.0) then
+              ea(i,j,k) = ea(i,j,k)*scale_factor
+              eb(i,j,k-1) = eb(i,j,k-1)*scale_factor
+            endif
+            if(bottom_flux(i,j,k)>0.0) then
+              eb(i,j,k) = eb(i,j,k)*scale_factor
+              ea(i,j,k+1) = ea(i,j,k+1)*scale_factor
+            endif
+          ! Scale top layer
+          elseif (k==1) then
+            if(top_flux(i,j,k)>0.0)    ea(i,j,k) = ea(i,j,k)*scale_factor
+            if(bottom_flux(i,j,k)>0.0) then
+              eb(i,j,k)   = eb(i,j,k)*scale_factor
+              ea(i,j,k+1) = ea(i,j,k+1)*scale_factor
+            endif
+          ! Scale bottom layer
+          elseif (k==nz) then
+            if(top_flux(i,j,k)>0.0) then
+              ea(i,j,k)   = ea(i,j,k)*scale_factor
+              eb(i,j,k-1) = eb(i,j,k-1)*scale_factor
+            endif
+            if (bottom_flux(i,j,k)>0.0) eb(i,j,k)=eb(i,j,k)*scale_factor
+          endif
+
+
+          endif
+
+        enddo ; enddo ; enddo
+
+
+
+
+
+
+  end subroutine limit_mass_flux_3d
+
 
 end module MOM_offline_transport
