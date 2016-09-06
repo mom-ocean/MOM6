@@ -80,7 +80,9 @@ type, public :: forcing
   vprec         => NULL(), & !< virtual liquid precip associated w/ SSS restoring ( kg/(m^2 s) )
   lrunoff       => NULL(), & !< liquid river runoff entering ocean ( kg/(m^2 s) )
   frunoff       => NULL(), & !< frozen river runoff (calving) entering ocean ( kg/(m^2 s) )
-  seaice_melt   => NULL()    !< seaice melt (positive) or formation (negative) ( kg/(m^2 s) )
+  seaice_melt   => NULL(), & !< seaice melt (positive) or formation (negative) ( kg/(m^2 s) )
+  netMassIn    => NULL(), & !< Sum of water mass flux out of the ocean ( kg/(m^2 s) )
+  netMassOut  => NULL()    !< Net water mass flux into of the ocean ( kg/(m^2 s) )
 
   ! heat associated with water crossing ocean surface
   real, pointer, dimension(:,:) :: &
@@ -409,7 +411,6 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
     ! convert to H units (Bouss=meter or non-Bouss=kg/m^2)
     netMassInOut(i) = GV%kg_m2_to_H * netMassInOut(i)
     netMassOut(i)   = GV%kg_m2_to_H * netMassOut(i)
-
 
     ! surface heat fluxes from radiation and turbulent fluxes (K * H)
     ! (H=m for Bouss, H=kg/m2 for non-Bouss)
@@ -2186,6 +2187,8 @@ subroutine allocate_forcing_type(G, fluxes, stress, ustar, water, heat, shelf, p
   call myAlloc(fluxes%lrunoff,isd,ied,jsd,jed, water)
   call myAlloc(fluxes%frunoff,isd,ied,jsd,jed, water)
   call myAlloc(fluxes%seaice_melt,isd,ied,jsd,jed, water)
+  call myAlloc(fluxes%netMassOut,isd,ied,jsd,jed, water)
+  call myAlloc(fluxes%netMassIn,isd,ied,jsd,jed, water)
 
   call myAlloc(fluxes%sw,isd,ied,jsd,jed, heat)
   call myAlloc(fluxes%lw,isd,ied,jsd,jed, heat)

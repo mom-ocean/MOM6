@@ -403,6 +403,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     if (CS%debugConservation) call MOM_state_stats('geothermal', u, v, h, tv%T, tv%S, G)
   endif
 
+
   ! Whenever thickness changes let the diag manager know, target grids
   ! for vertical remapping may need to be regenerated.
   call diag_update_target_grids(CS%diag)
@@ -711,7 +712,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   if (CS%useALEalgorithm) then
     call cpu_clock_begin(id_clock_remap)
 
-    ! Changes made to following fields: ea(:,:,1), h, tv%T and tv%S.
+    ! Changes made to following fields:  h, tv%T and tv%S.
 
     ! save prior values for diagnostics
     if(CS%boundary_forcing_tendency_diag) then
@@ -722,10 +723,14 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       enddo ; enddo ; enddo
     endif
 
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,h_orig,h,eaml,ebml)
     if (CS%use_energetic_PBL) then
-
+      do k=1,nz ; do j=js,je ; do i=is,ie
+        h_orig(i,j,k) = h(i,j,k)
+      enddo ; enddo ; enddo
       call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, dt, fluxes, CS%optics, &
-                          ea, h, tv, CS%aggregate_FW_forcing, cTKE, dSV_dT, dSV_dS)
+                          h, tv, CS%aggregate_FW_forcing, cTKE, dSV_dT, dSV_dS)
+
 
       if (CS%debug) then
         call hchksum(ea, "after applyBoundaryFluxes ea",G%HI,haloshift=0)
@@ -774,9 +779,11 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       endif
 
     else
-
+      do k=1,nz ; do j=js,je ; do i=is,ie
+        h_orig(i,j,k) = h(i,j,k)
+      enddo ; enddo ; enddo
       call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, dt, fluxes, CS%optics, &
-                                    ea, h, tv, CS%aggregate_FW_forcing)
+                                    h, tv, CS%aggregate_FW_forcing)
 
     endif   ! endif for CS%use_energetic_PBL
 
@@ -795,7 +802,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     if (CS%debugConservation)  call MOM_state_stats('applyBoundaryFluxes', u, v, h, tv%T, tv%S, G)
 
   endif   ! endif for (CS%useALEalgorithm)
-
 
   ! Update h according to divergence of the difference between
   ! ea and eb. We keep a record of the original h in hold.
@@ -1063,7 +1069,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     enddo ; enddo ; enddo
   endif
 
-
   ! mixing of passive tracers from massless boundary layers to interior
   call cpu_clock_begin(id_clock_tracers)
   if (CS%mix_boundary_tracers) then
@@ -1114,8 +1119,20 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       enddo ; enddo
       do i=is,ie ; eatr(i,j,1) = ea(i,j,1) ; enddo
     enddo
-    call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
+
+
+    if (CS%useALEalgorithm) then
+    ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
+    ! so hold should be h_orig
+      call call_tracer_column_fns(h_orig, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
+                                CS%optics, CS%tracer_flow_CSp, &
+                                aggregate_FW_forcing=CS%aggregate_FW_forcing, &
+                                evap_CFL_limit = CS%diabatic_aux_CSp%evap_CFL_limit, &
+                                minimum_forcing_depth = CS%diabatic_aux_CSp%minimum_forcing_depth)
+    else
+      call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
                                 CS%optics, CS%tracer_flow_CSp)
+    endif
 
   elseif (associated(visc%Kd_extra_S)) then  ! extra diffusivity for passive tracers
 
@@ -1136,12 +1153,30 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       ebtr(i,j,k-1) = eb(i,j,k-1) + add_ent
       eatr(i,j,k) = ea(i,j,k) + add_ent
     enddo ; enddo ; enddo
-    call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
-                                CS%optics, CS%tracer_flow_CSp)
+    if (CS%useALEalgorithm) then
+    ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
+      call call_tracer_column_fns(h_orig, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
+                                  CS%optics, CS%tracer_flow_CSp, &
+                                  aggregate_FW_forcing=CS%aggregate_FW_forcing, &
+                                  evap_CFL_limit = CS%diabatic_aux_CSp%evap_CFL_limit, &
+                                  minimum_forcing_depth = CS%diabatic_aux_CSp%minimum_forcing_depth)
+    else
+      call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
+                                  CS%optics, CS%tracer_flow_CSp)
+    endif
 
   else
-    call call_tracer_column_fns(hold, h, ea, eb, fluxes, dt, G, GV, tv, &
-                                CS%optics, CS%tracer_flow_CSp)
+    if (CS%useALEalgorithm) then
+    ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
+      call call_tracer_column_fns(h_orig, h, ea, eb, fluxes, dt, G, GV, tv, &
+                                  CS%optics, CS%tracer_flow_CSp, &
+                                  aggregate_FW_forcing=CS%aggregate_FW_forcing, &
+                                  evap_CFL_limit = CS%diabatic_aux_CSp%evap_CFL_limit, &
+                                  minimum_forcing_depth = CS%diabatic_aux_CSp%minimum_forcing_depth)
+    else
+      call call_tracer_column_fns(hold, h, ea, eb, fluxes, dt, G, GV, tv, &
+                                  CS%optics, CS%tracer_flow_CSp)
+    endif
 
   endif  ! (CS%mix_boundary_tracers)
 

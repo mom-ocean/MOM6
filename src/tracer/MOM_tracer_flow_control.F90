@@ -70,7 +70,7 @@ use oil_tracer, only : oil_tracer_column_physics, oil_tracer_surface_state
 use oil_tracer, only : oil_stock, oil_tracer_end, oil_tracer_CS
 use advection_test_tracer, only : register_advection_test_tracer, initialize_advection_test_tracer
 use advection_test_tracer, only : advection_test_tracer_column_physics, advection_test_tracer_surface_state
-use advection_test_tracer, only : advection_test_tracer_end, advection_test_tracer_CS
+use advection_test_tracer, only : advection_test_stock, advection_test_tracer_end, advection_test_tracer_CS
 #ifdef _USE_GENERIC_TRACER
 use MOM_generic_tracer, only : register_MOM_generic_tracer, initialize_MOM_generic_tracer
 use MOM_generic_tracer, only : MOM_generic_tracer_column_physics, MOM_generic_tracer_surface_state
@@ -338,7 +338,8 @@ subroutine call_tracer_set_forcing(state, fluxes, day_start, day_interval, G, CS
 
 end subroutine call_tracer_set_forcing
 
-subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, dt, G, GV, tv, optics, CS)
+subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, dt, G, GV, tv, optics, CS, &
+                                  aggregate_FW_forcing, evap_CFL_limit, minimum_forcing_depth)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h_old, h_new, ea, eb
   type(forcing),                         intent(in) :: fluxes
   real,                                  intent(in) :: dt
@@ -347,6 +348,10 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, dt, G, GV, tv, o
   type(thermo_var_ptrs),                 intent(in) :: tv
   type(optics_type),                     pointer    :: optics
   type(tracer_flow_control_CS),          pointer    :: CS
+  logical,                          optional,intent(in)  :: aggregate_FW_forcing
+  real,                             optional,intent(in)  :: evap_CFL_limit
+  real,                             optional,intent(in)  :: minimum_forcing_depth
+
 !   This subroutine calls all registered tracer column physics
 ! subroutines.
 
@@ -371,36 +376,95 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, dt, G, GV, tv, o
 
   if (.not. associated(CS)) call MOM_error(FATAL, "call_tracer_column_fns: "// &
          "Module must be initialized via call_tracer_register before it is used.")
-! Add calls to tracer column functions here.
-  if (CS%use_USER_tracer_example) &
-    call tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                               G, GV, CS%USER_tracer_example_CSp)
-  if (CS%use_DOME_tracer) &
-    call DOME_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                    G, GV, CS%DOME_tracer_CSp)
-  if (CS%use_ISOMIP_tracer) &
-    call ISOMIP_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                    G, GV, CS%ISOMIP_tracer_CSp)
-  if (CS%use_ideal_age) &
-    call ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                         G, GV, CS%ideal_age_tracer_CSp)
-  if (CS%use_regional_dyes) &
-    call dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                         G, GV, CS%dye_tracer_CSp)
-  if (CS%use_oil) &
-    call oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                   G, GV, CS%oil_tracer_CSp, tv)
-  if (CS%use_advection_test_tracer) &
-    call advection_test_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                    G, GV, CS%advection_test_tracer_CSp)
-  if (CS%use_OCMIP2_CFC) &
-    call OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                   G, GV, CS%OCMIP2_CFC_CSp)
+
+  ! Use the applyTracerBoundaryFluxesInOut to handle surface fluxes
+  if (present(aggregate_FW_forcing) .and. present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
+    ! Add calls to tracer column functions here.
+    if (CS%use_USER_tracer_example) &
+      call tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                 G, GV, CS%USER_tracer_example_CSp)
+    if (CS%use_DOME_tracer) &
+      call DOME_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                      G, GV, CS%DOME_tracer_CSp, &
+                                      aggregate_FW_forcing=aggregate_FW_forcing,&
+                                      evap_CFL_limit=evap_CFL_limit, &
+                                      minimum_forcing_depth=minimum_forcing_depth)
+    if (CS%use_ISOMIP_tracer) &
+      call ISOMIP_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                        G, GV, CS%ISOMIP_tracer_CSp, &
+                                        aggregate_FW_forcing=aggregate_FW_forcing,&
+                                        evap_CFL_limit=evap_CFL_limit, &
+                                        minimum_forcing_depth=minimum_forcing_depth)
+    if (CS%use_ideal_age) &
+      call ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                           G, GV, CS%ideal_age_tracer_CSp, &
+                                           aggregate_FW_forcing=aggregate_FW_forcing,&
+                                           evap_CFL_limit=evap_CFL_limit, &
+                                           minimum_forcing_depth=minimum_forcing_depth)
+    if (CS%use_regional_dyes) &
+      call dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                     G, GV, CS%dye_tracer_CSp, &
+                                     aggregate_FW_forcing=aggregate_FW_forcing,&
+                                     evap_CFL_limit=evap_CFL_limit, &
+                                     minimum_forcing_depth=minimum_forcing_depth)
+    if (CS%use_oil) &
+      call oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                     G, GV, CS%oil_tracer_CSp, tv, &
+                                     aggregate_FW_forcing=aggregate_FW_forcing,&
+                                     evap_CFL_limit=evap_CFL_limit, &
+                                     minimum_forcing_depth=minimum_forcing_depth)
+
+    if (CS%use_advection_test_tracer) &
+      call advection_test_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                                G, GV, CS%advection_test_tracer_CSp, &
+                                                aggregate_FW_forcing=aggregate_FW_forcing,&
+                                                evap_CFL_limit=evap_CFL_limit, &
+                                                minimum_forcing_depth=minimum_forcing_depth)
+    if (CS%use_OCMIP2_CFC) &
+      call OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                     G, GV, CS%OCMIP2_CFC_CSp, &
+                                     aggregate_FW_forcing=aggregate_FW_forcing,&
+                                     evap_CFL_limit=evap_CFL_limit, &
+                                     minimum_forcing_depth=minimum_forcing_depth)
 #ifdef _USE_GENERIC_TRACER
-  if (CS%use_MOM_generic_tracer) &
-    call MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                   G, GV, CS%MOM_generic_tracer_CSp, tv, optics)
+    if (CS%use_MOM_generic_tracer) &
+      call MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                             G, GV, CS%MOM_generic_tracer_CSp, tv, optics, &
+                                             aggregate_FW_forcing=aggregate_FW_forcing,&
+                                             evap_CFL_limit=evap_CFL_limit, &
+                                             minimum_forcing_depth=minimum_forcing_depth)
 #endif
+  else ! Apply tracer surface fluxes using ea on the first layer
+    if (CS%use_USER_tracer_example) &
+      call tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                 G, GV, CS%USER_tracer_example_CSp)
+    if (CS%use_DOME_tracer) &
+      call DOME_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                      G, GV, CS%DOME_tracer_CSp)
+    if (CS%use_ISOMIP_tracer) &
+      call ISOMIP_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                      G, GV, CS%ISOMIP_tracer_CSp)
+    if (CS%use_ideal_age) &
+      call ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                           G, GV, CS%ideal_age_tracer_CSp)
+    if (CS%use_regional_dyes) &
+      call dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                           G, GV, CS%dye_tracer_CSp)
+    if (CS%use_oil) &
+      call oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                     G, GV, CS%oil_tracer_CSp, tv)
+    if (CS%use_advection_test_tracer) &
+      call advection_test_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                      G, GV, CS%advection_test_tracer_CSp)
+    if (CS%use_OCMIP2_CFC) &
+      call OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                     G, GV, CS%OCMIP2_CFC_CSp)
+#ifdef _USE_GENERIC_TRACER
+    if (CS%use_MOM_generic_tracer) &
+      call MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                     G, GV, CS%MOM_generic_tracer_CSp, tv, optics)
+#endif
+  endif
 
 
 end subroutine call_tracer_column_fns
@@ -486,6 +550,14 @@ subroutine call_tracer_stocks(h, stock_values, G, GV, CS, stock_names, stock_uni
     call store_stocks("MOM_OCMIP2_CFC", ns, names, units, values, index, stock_values, &
                        set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
   endif
+
+  if (CS%use_advection_test_tracer) then
+    ns = advection_test_stock( h, values, G, GV, CS%advection_test_tracer_CSp, &
+                         names, units, stock_index )
+    call store_stocks("advection_test_tracer", ns, names, units, values, index, &
+           stock_values, set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
+  endif
+
 #ifdef _USE_GENERIC_TRACER
   if (CS%use_MOM_generic_tracer) then
     ns = MOM_generic_tracer_stock(h, values, G, GV, CS%MOM_generic_tracer_CSp, &
