@@ -400,6 +400,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     if (CS%debugConservation) call MOM_state_stats('geothermal', u, v, h, tv%T, tv%S, G)
   endif
 
+
   ! Whenever thickness changes let the diag manager know, target grids
   ! for vertical remapping may need to be regenerated.
   call diag_update_target_grids(CS%diag)
@@ -708,7 +709,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   if (CS%useALEalgorithm) then
     call cpu_clock_begin(id_clock_remap)
 
-    ! Changes made to following fields: ea(:,:,1), h, tv%T and tv%S.
+    ! Changes made to following fields:  h, tv%T and tv%S.
 
     ! save prior values for diagnostics
     if(CS%boundary_forcing_tendency_diag) then
@@ -719,10 +720,13 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       enddo ; enddo ; enddo
     endif
 
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,h_orig,h,eaml,ebml)
     if (CS%use_energetic_PBL) then
-
+      do k=1,nz ; do j=js,je ; do i=is,ie
+        h_orig(i,j,k) = h(i,j,k)
+      enddo ; enddo ; enddo
       call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, dt, fluxes, CS%optics, &
-                          ea, h, tv, CS%aggregate_FW_forcing, cTKE, dSV_dT, dSV_dS)
+                          h, tv, CS%aggregate_FW_forcing, cTKE, dSV_dT, dSV_dS)
 
 
       if (CS%debug) then
@@ -772,9 +776,11 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       endif
 
     else
-
+      do k=1,nz ; do j=js,je ; do i=is,ie
+        h_orig(i,j,k) = h(i,j,k)
+      enddo ; enddo ; enddo
       call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, dt, fluxes, CS%optics, &
-                                    ea, h, tv, CS%aggregate_FW_forcing)
+                                    h, tv, CS%aggregate_FW_forcing)
 
     endif   ! endif for CS%use_energetic_PBL
 
@@ -1114,6 +1120,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
 
     if (CS%useALEalgorithm) then
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
+    ! so hold should be h_orig
       call call_tracer_column_fns(h_orig, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
                                 CS%optics, CS%tracer_flow_CSp, &
                                 aggregate_FW_forcing=CS%aggregate_FW_forcing, &

@@ -81,7 +81,7 @@ implicit none ; private
 
 public register_advection_test_tracer, initialize_advection_test_tracer
 public advection_test_tracer_surface_state, advection_test_tracer_end
-public advection_test_tracer_column_physics
+public advection_test_tracer_column_physics, advection_test_stock
 
 ! ntr is the number of tracers in this module.
 integer, parameter :: ntr = 11
@@ -116,6 +116,7 @@ type, public :: advection_test_tracer_CS ; private
   integer, dimension(NTR) :: ind_tr ! Indices returned by aof_set_coupler_flux
              ! if it is used and the surface tracer concentrations are to be
              ! provided to the coupler.
+  integer :: ntr = NTR
 
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
@@ -473,6 +474,59 @@ subroutine advection_test_tracer_surface_state(state, h, G, CS)
     enddo
   endif
 end subroutine advection_test_tracer_surface_state
+
+function advection_test_stock(h, stocks, G, GV, CS, names, units, stock_index)
+  type(ocean_grid_type),              intent(in)    :: G
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
+  real, dimension(:),                 intent(out)   :: stocks
+  type(verticalGrid_type),            intent(in)    :: GV
+  type(advection_test_tracer_CS),     pointer       :: CS
+  character(len=*), dimension(:),     intent(out)   :: names
+  character(len=*), dimension(:),     intent(out)   :: units
+  integer, optional,                  intent(in)    :: stock_index
+  integer                                           :: advection_test_stock
+! This function calculates the mass-weighted integral of all tracer stocks,
+! returning the number of stocks it has calculated.  If the stock_index
+! is present, only the stock corresponding to that coded index is returned.
+
+! Arguments: h - Layer thickness, in m or kg m-2.
+!  (out)     stocks - the mass-weighted integrated amount of each tracer,
+!                     in kg times concentration units.
+!  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
+!  (in)      CS - The control structure returned by a previous call to
+!                 register_ideal_age_tracer.
+!  (out)     names - the names of the stocks calculated.
+!  (out)     units - the units of the stocks calculated.
+!  (in,opt)  stock_index - the coded index of a specific stock being sought.
+! Return value: the number of stocks calculated here.
+
+  integer :: i, j, k, is, ie, js, je, nz, m
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
+
+  advection_test_stock = 0
+  if (.not.associated(CS)) return
+  if (CS%ntr < 1) return
+
+  if (present(stock_index)) then ; if (stock_index > 0) then
+    ! Check whether this stock is available from this routine.
+
+    ! No stocks from this routine are being checked yet.  Return 0.
+    return
+  endif ; endif
+
+  do m=1,CS%ntr
+    call query_vardesc(CS%tr_desc(m), name=names(m), units=units(m), caller="advection_test_stock")
+    stocks(m) = 0.0
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      stocks(m) = stocks(m) + CS%tr(i,j,k,m) * &
+                             (G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k))
+    enddo ; enddo ; enddo
+    stocks(m) = GV%H_to_kg_m2 * stocks(m)
+  enddo
+  advection_test_stock = CS%ntr
+
+end function advection_test_stock
 
 subroutine advection_test_tracer_end(CS)
   type(advection_test_tracer_CS), pointer :: CS

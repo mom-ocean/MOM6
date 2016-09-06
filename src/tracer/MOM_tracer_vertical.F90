@@ -94,11 +94,9 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
   if (present(aggregate_FW_forcing) .and. present(evap_CFL_limit) .and. present(minimum_forcing_depth) )then
       call applyTracerBoundaryFluxesInOut(G, GV, tr, dt, sfc_src, fluxes, h_old, &
                                         aggregate_FW_forcing, evap_CFL_limit, minimum_forcing_depth)
-    ! Zero out surface fluxes because they were applied in the call to applyBoundaryFluxesInOut
+    ! Zero out surface fluxes because they were applied in the call to applyTracerBoundaryFluxesInOut
     do j=js,je; do i=is,ie ; sfc_src(i,j) = 0.0 ; enddo ; enddo
   endif
-
-
 
   if (present(sink_rate)) then
 !$OMP do
@@ -272,19 +270,13 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, sfc_src, fluxes, h, &
     ! The surface forcing is contained in the fluxes type.
     ! We aggregate the thermodynamic forcing for a time step into the following:
     ! These should have been set and stored during a call to applyBoundaryFluxesInOut
-    ! netMassInOut = surface water fluxes (H units) over time step
-    !              = lprec + fprec + vprec + evap + lrunoff + frunoff
-    !                note that lprec generally has sea ice melt/form included.
+    ! netMassIn    = net mass entering at ocean surface over a timestep
     ! netMassOut   = net mass leaving ocean surface (H units) over a time step.
     !                netMassOut < 0 means mass leaves ocean.
 
     do i=is,ie
-      if (aggregate_FW_forcing) then
-        netMassOut(i) = fluxes%netMassInOut(i,j)
-        netMassIn(i) = 0.
-      else
-        netMassIn(i) = fluxes%netMassInOut(i,j) - fluxes%netMassOut(i,j)
-      endif
+        netMassOut(i) = fluxes%netMassOut(i,j)
+        netMassIn(i)  = fluxes%netMassIn(i,j)
     enddo
 
     ! Apply the surface boundary fluxes in three steps:
@@ -342,7 +334,7 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, sfc_src, fluxes, h, &
           ! Update the forcing by the part to be consumed within the present k-layer.
           ! If fractionOfForcing = 1, then new netMassOut vanishes.
           netMassOut(i) = netMassOut(i) - dThickness
-
+          sfc_src_1d(i) = sfc_src_1d(i) - dTr
 
           ! Update state by the appropriate increment.
           hOld     = h2d(i,k)               ! Keep original thickness in hand
