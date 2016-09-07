@@ -81,9 +81,9 @@ type, public :: forcing
   lrunoff       => NULL(), & !< liquid river runoff entering ocean ( kg/(m^2 s) )
   frunoff       => NULL(), & !< frozen river runoff (calving) entering ocean ( kg/(m^2 s) )
   seaice_melt   => NULL(), & !< seaice melt (positive) or formation (negative) ( kg/(m^2 s) )
-  netMassIn    => NULL(), & !< Sum of water mass flux out of the ocean ( kg/(m^2 s) )
-  netMassOut  => NULL()    !< Net water mass flux into of the ocean ( kg/(m^2 s) )
-  netSalt     => NULL()
+  netMassIn    => NULL(), &  !< Sum of water mass flux out of the ocean ( kg/(m^2 s) )
+  netMassOut  => NULL()      !< Net water mass flux into of the ocean ( kg/(m^2 s) )
+  netSalt     => NULL(),     !< Net salt entering the ocean
 
   ! heat associated with water crossing ocean surface
   real, pointer, dimension(:,:) :: &
