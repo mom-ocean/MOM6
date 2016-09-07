@@ -25,7 +25,7 @@ public neutral_diffusion_init
 public neutral_diffusion_diag_init
 public neutral_diffusion_end
 public neutral_diffusion_calc_coeffs
-public neutralDiffusionUnitTests
+public neutral_diffusion_unit_tests
 
 type, public :: neutral_diffusion_CS ; private
   integer :: nkp1   ! Number of interfaces for a column = nk + 1
@@ -1009,7 +1009,7 @@ subroutine neutral_surface_flux(nk, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Fl
 end subroutine neutral_surface_flux
 
 !> Returns true if unit tests of neutral_diffusion functions fail. Otherwise returns false.
-logical function neutralDiffusionUnitTests()
+logical function neutral_diffusion_unit_tests()
   integer, parameter         :: nk = 4
   real, dimension(nk+1)      :: TiL, TiR1, TiR2, TiR4, Tio ! Test interface temperatures
   real, dimension(nk)        :: TL                         ! Test layer temperatures
@@ -1024,44 +1024,44 @@ logical function neutralDiffusionUnitTests()
 
   verbosity = MOM_get_verbosity()
 
-  neutralDiffusionUnitTests = .false. ! Normally return false
-  write(*,'(a)') '===== MOM_neutral_diffusion: neutralDiffusionUnitTests =================='
+  neutral_diffusion_unit_tests = .false. ! Normally return false
+  write(*,'(a)') '===== MOM_neutral_diffusion: neutral_diffusion_unit_tests ==============='
 
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_diff(1.,1.,1., 0.,1.,2., 1., 'FV: Straight line on uniform grid')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_diff(1.,1.,0., 0.,4.,8., 7., 'FV: Vanished right cell')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_diff(0.,1.,1., 0.,4.,8., 7., 'FV: Vanished left cell')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_diff(1.,2.,4., 0.,3.,9., 4., 'FV: Stretched grid')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_diff(2.,0.,2., 0.,1.,2., 0., 'FV: Vanished middle cell')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_diff(0.,1.,0., 0.,1.,2., 2., 'FV: Vanished on both sides')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_diff(1.,0.,0., 0.,1.,2., 0., 'FV: Two vanished cell sides')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_diff(0.,0.,0., 0.,1.,2., 0., 'FV: All vanished cells')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fv_diff(1.,1.,1., 0.,1.,2., 1., 'FV: Straight line on uniform grid')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fv_diff(1.,1.,0., 0.,4.,8., 7., 'FV: Vanished right cell')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fv_diff(0.,1.,1., 0.,4.,8., 7., 'FV: Vanished left cell')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fv_diff(1.,2.,4., 0.,3.,9., 4., 'FV: Stretched grid')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fv_diff(2.,0.,2., 0.,1.,2., 0., 'FV: Vanished middle cell')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fv_diff(0.,1.,0., 0.,1.,2., 2., 'FV: Vanished on both sides')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fv_diff(1.,0.,0., 0.,1.,2., 0., 'FV: Two vanished cell sides')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fv_diff(0.,0.,0., 0.,1.,2., 0., 'FV: All vanished cells')
 
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fvlsq_slope(1.,1.,1., 0.,1.,2., 1., 'LSQ: Straight line on uniform grid')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fvlsq_slope(1.,1.,0., 0.,1.,2., 1., 'LSQ: Vanished right cell')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fvlsq_slope(0.,1.,1., 0.,1.,2., 1., 'LSQ: Vanished left cell')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fvlsq_slope(1.,2.,4., 0.,3.,9., 2., 'LSQ: Stretched grid')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fvlsq_slope(1.,0.,1., 0.,1.,2., 2., 'LSQ: Vanished middle cell')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fvlsq_slope(0.,1.,0., 0.,1.,2., 0., 'LSQ: Vanished on both sides')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fvlsq_slope(1.,0.,0., 0.,1.,2., 0., 'LSQ: Two vanished cell sides')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fvlsq_slope(0.,0.,0., 0.,1.,2., 0., 'LSQ: All vanished cells')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fvlsq_slope(1.,1.,1., 0.,1.,2., 1., 'LSQ: Straight line on uniform grid')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fvlsq_slope(1.,1.,0., 0.,1.,2., 1., 'LSQ: Vanished right cell')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fvlsq_slope(0.,1.,1., 0.,1.,2., 1., 'LSQ: Vanished left cell')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fvlsq_slope(1.,2.,4., 0.,3.,9., 2., 'LSQ: Stretched grid')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fvlsq_slope(1.,0.,1., 0.,1.,2., 2., 'LSQ: Vanished middle cell')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fvlsq_slope(0.,1.,0., 0.,1.,2., 0., 'LSQ: Vanished on both sides')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fvlsq_slope(1.,0.,0., 0.,1.,2., 0., 'LSQ: Two vanished cell sides')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fvlsq_slope(0.,0.,0., 0.,1.,2., 0., 'LSQ: All vanished cells')
 
   call interface_scalar(4, (/10.,10.,10.,10./), (/24.,18.,12.,6./), Tio, 1)
-  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(5, Tio, (/27.,21.,15.,9.,3./), 'Linear profile, interface temperatures')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(5, Tio, (/24.,22.5,15.,7.5,6./), 'Linear profile, linear interface temperatures')
+  !neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(5, Tio, (/27.,21.,15.,9.,3./), 'Linear profile, interface temperatures')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(5, Tio, (/24.,22.5,15.,7.5,6./), 'Linear profile, linear interface temperatures')
   call interface_scalar(4, (/10.,10.,10.,10./), (/24.,18.,12.,6./), Tio, 2)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(5, Tio, (/24.,22.,15.,8.,6./), 'Linear profile, PPM interface temperatures')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(5, Tio, (/24.,22.,15.,8.,6./), 'Linear profile, PPM interface temperatures')
 
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp(-1.0, 0.,  1.0, 1.0, 0.5, 'Check mid-point')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp( 0.0, 0.,  1.0, 1.0, 0.0, 'Check bottom')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp( 0.1, 0.,  1.1, 1.0, 0.0, 'Check below')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp(-1.0, 0.,  0.0, 1.0, 1.0, 'Check top')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp(-1.0, 0., -0.1, 1.0, 1.0, 'Check above')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp(-1.0, 0.,  3.0, 1.0, 0.25, 'Check 1/4')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp(-3.0, 0.,  1.0, 1.0, 0.75, 'Check 3/4')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp( 1.0, 0.,  1.0, 1.0, 0.0, 'Check dRho=0 below')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp(-1.0, 0., -1.0, 1.0, 1.0, 'Check dRho=0 above')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp( 0.0, 0.,  0.0, 1.0, 0.5, 'Check dRho=0 mid')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp(-2.0, .5,  5.0, 0.5, 0.5, 'Check dP=0')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp(-1.0, 0.,  1.0, 1.0, 0.5, 'Check mid-point')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp( 0.0, 0.,  1.0, 1.0, 0.0, 'Check bottom')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp( 0.1, 0.,  1.1, 1.0, 0.0, 'Check below')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp(-1.0, 0.,  0.0, 1.0, 1.0, 'Check top')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp(-1.0, 0., -0.1, 1.0, 1.0, 'Check above')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp(-1.0, 0.,  3.0, 1.0, 0.25, 'Check 1/4')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp(-3.0, 0.,  1.0, 1.0, 0.75, 'Check 3/4')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp( 1.0, 0.,  1.0, 1.0, 0.0, 'Check dRho=0 below')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp(-1.0, 0., -1.0, 1.0, 1.0, 'Check dRho=0 above')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp( 0.0, 0.,  0.0, 1.0, 0.5, 'Check dRho=0 mid')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp(-2.0, .5,  5.0, 0.5, 0.5, 'Check dP=0')
 
   ! Identical columns
   call find_neutral_surface_positions(3, &
@@ -1070,28 +1070,28 @@ logical function neutralDiffusionUnitTests()
              (/0.,10.,20.,30./), (/22.,18.,14.,10./), (/0.,0.,0.,0./), & ! Right positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
              PiLRo, PiRLo, KoL, KoR, hEff)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
                                    (/1,1,2,2,3,3,3,3/), & ! KoL
                                    (/1,1,2,2,3,3,3,3/), & ! KoR
                                    (/0.,0.,0.,0.,0.,0.,1.,1./), & ! pL
                                    (/0.,0.,0.,0.,0.,0.,1.,1./), & ! pR
                                    (/0.,10.,0.,10.,0.,10.,0./), & ! hEff
                                    'Identical columns')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(8, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(8, &
                                    absolute_positions(3, (/0.,10.,20.,30./), KoL, PiLRo), &
                                    (/0.,0.,10.,10.,20.,20.,30.,30./), '... left positions')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(8, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(8, &
                                    absolute_positions(3, (/0.,10.,20.,30./), KoR, PiRLo), &
                                    (/0.,0.,10.,10.,20.,20.,30.,30./), '... right positions')
   call neutral_surface_flux(3, (/10.,10.,10./), (/10.,10.,10./), & ! nk, hL, hR
                                (/20.,16.,12./), (/20.,16.,12./), & ! Tl, Tr
                                PiLRo, PiRLo, KoL, KoR, hEff, Flx)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(7, Flx, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(7, Flx, &
               (/0.,0.,0.,0.,0.,0.,0./), 'Identical columns, rho flux (=0)')
   call neutral_surface_flux(3, (/10.,10.,10./), (/10.,10.,10./), & ! nk, hL, hR
                                (/-1.,-1.,-1./), (/1.,1.,1./), & ! Sl, Sr
                                PiLRo, PiRLo, KoL, KoR, hEff, Flx)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(7, Flx, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(7, Flx, &
               (/0.,20.,0.,20.,0.,20.,0./), 'Identical columns, S flux')
 
   ! Right column slightly cooler than left
@@ -1101,17 +1101,17 @@ logical function neutralDiffusionUnitTests()
              (/0.,10.,20.,30./), (/20.,16.,12.,8./), (/0.,0.,0.,0./), & ! Right positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
              PiLRo, PiRLo, KoL, KoR, hEff)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
                                    (/1,1,2,2,3,3,3,3/), & ! kL
                                    (/1,1,1,2,2,3,3,3/), & ! kR
                                    (/0.,0.5,0.,0.5,0.,0.5,1.,1./), & ! pL
                                    (/0.,0.,0.5,0.,0.5,0.,0.5,1./), & ! pR
                                    (/0.,5.,5.,5.,5.,5.,0./), & ! hEff
                                    'Right column slightly cooler')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(8, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(8, &
                                    absolute_positions(3, (/0.,10.,20.,30./), KoL, PiLRo), &
                                    (/0.,5.,10.,15.,20.,25.,30.,30./), '... left positions')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(8, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(8, &
                                    absolute_positions(3, (/0.,10.,20.,30./), KoR, PiRLo), &
                                    (/0.,0.,5.,10.,15.,20.,25.,30./), '... right positions')
 
@@ -1122,7 +1122,7 @@ logical function neutralDiffusionUnitTests()
              (/0.,10.,20.,30./), (/24.,20.,16.,12./), (/0.,0.,0.,0./), & ! Right positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
              PiLRo, PiRLo, KoL, KoR, hEff)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
                                    (/1,1,1,2,2,3,3,3/), & ! kL
                                    (/1,1,2,2,3,3,3,3/), & ! kR
                                    (/0.,0.,0.5,0.,0.5,0.,0.5,1./), & ! pL
@@ -1137,7 +1137,7 @@ logical function neutralDiffusionUnitTests()
              (/0.,10.,20.,30./), (/16.,12.,8.,4./), (/0.,0.,0.,0./), & ! Right positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
              PiLRo, PiRLo, KoL, KoR, hEff)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
                                    (/1,2,2,3,3,3,3,3/), & ! kL
                                    (/1,1,1,1,2,2,3,3/), & ! kR
                                    (/0.,0.,0.5,0.,0.5,1.,1.,1./), & ! pL
@@ -1152,7 +1152,7 @@ logical function neutralDiffusionUnitTests()
              (/0.,10.,20.,30./), (/9.,7.,5.,3./), (/0.,0.,0.,0./), & ! Right positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
              PiLRo, PiRLo, KoL, KoR, hEff)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
                                    (/1,2,3,3,3,3,3,3/), & ! kL
                                    (/1,1,1,1,1,2,3,3/), & ! kR
                                    (/0.,0.,0.,1.,1.,1.,1.,1./), & ! pL
@@ -1167,7 +1167,7 @@ logical function neutralDiffusionUnitTests()
              (/0.,10.,20.,30./), (/14.,14.,10.,2./), (/0.,0.,0.,0./), & ! Right positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
              PiLRo, PiRLo, KoL, KoR, hEff)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
                                    (/1,2,3,3,3,3,3,3/), & ! kL
                                    (/1,1,1,1,2,3,3,3/), & ! kR
                                    (/0.,0.,0.,0.,0.,1.,1.,1./), & ! pL
@@ -1182,7 +1182,7 @@ logical function neutralDiffusionUnitTests()
              (/0.,10.,20.,30./), (/14.,14.,10.,2./), (/0.,0.,0.,0./), & ! Right positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
              PiLRo, PiRLo, KoL, KoR, hEff)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
                                    (/1,1,2,2,3,3,3,3/), & ! kL
                                    (/1,1,2,2,3,3,3,3/), & ! kR
                                    (/0.,0.,0.,0.,0.,0.,1.,1./), & ! pL
@@ -1197,7 +1197,7 @@ logical function neutralDiffusionUnitTests()
              (/0.,10.,20.,30./), (/10.,14.,12.,4./), (/0.,0.,0.,0./), & ! Right positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
              PiLRo, PiRLo, KoL, KoR, hEff)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
                                    (/1,2,3,3,3,3,3,3/), & ! kL
                                    (/1,1,1,2,3,3,3,3/), & ! kR
                                    (/0.,0.,0.,0.,0.,0.,.75,1./), & ! pL
@@ -1212,7 +1212,7 @@ logical function neutralDiffusionUnitTests()
              (/0.,10.,20.,30./), (/14.,14.,10.,2./), (/0.,0.,0.,0./), & ! Right positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
              PiLRo, PiRLo, KoL, KoR, hEff)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
                                    (/1,1,1,2,3,3,3,3/), & ! kL
                                    (/1,2,3,3,3,3,3,3/), & ! kR
                                    (/0.,0.,0.,0.,0.,0.25,1.,1./), & ! pL
@@ -1227,7 +1227,7 @@ logical function neutralDiffusionUnitTests()
              (/0.,10.,20.,30./), (/10.,14.,12.,4./), (/0.,0.,0.,0./), & ! Right positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
              PiLRo, PiRLo, KoL, KoR, hEff)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
                                    (/1,1,1,1,2,3,3,3/), & ! kL
                                    (/1,2,3,3,3,3,3,3/), & ! kR
                                    (/0.,0.,0.,0.,0.,0.,0.75,1./), & ! pL
@@ -1464,9 +1464,7 @@ logical function neutralDiffusionUnitTests()
     if (pR /= pR0) compare_nsp_row = .true.
   end function compare_nsp_row
 
-end function neutralDiffusionUnitTests
-
-
+end function neutral_diffusion_unit_tests
 
 !> Deallocates neutral_diffusion control structure
 subroutine neutral_diffusion_end(CS)
