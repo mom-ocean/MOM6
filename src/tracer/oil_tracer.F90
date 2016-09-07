@@ -421,7 +421,7 @@ subroutine initialize_oil_tracer(restart, day, G, GV, h, diag, OBC, CS, &
 end subroutine initialize_oil_tracer
 
 subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS, tv, &
-              aggregate_FW_forcing, evap_CFL_limit, minimum_forcing_depth)
+              evap_CFL_limit, minimum_forcing_depth)
   type(ocean_grid_type),              intent(in) :: G
   type(verticalGrid_type),            intent(in) :: GV
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
@@ -429,7 +429,6 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
   real,                               intent(in) :: dt
   type(oil_tracer_CS),                pointer    :: CS
   type(thermo_var_ptrs),              intent(in) :: tv
-  logical,                          optional,intent(in)  :: aggregate_FW_forcing
   real,                             optional,intent(in)  :: evap_CFL_limit
   real,                             optional,intent(in)  :: minimum_forcing_depth
 !   This subroutine applies diapycnal diffusion and any other column
@@ -465,10 +464,10 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
   if (.not.associated(CS)) return
   if (CS%ntr < 1) return
 
-  if (present(aggregate_FW_forcing) .and. present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
+  if (present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
     do m=1,CS%ntr
       call tracer_vertdiff(h_old, ea, eb, dt, CS%tr(:,:,:,m), G, GV, &
-          aggregate_FW_forcing=aggregate_FW_forcing, evap_CFL_limit=evap_CFL_limit,&
+          evap_CFL_limit=evap_CFL_limit,&
           minimum_forcing_depth=minimum_forcing_depth, fluxes=fluxes)
     enddo
   else

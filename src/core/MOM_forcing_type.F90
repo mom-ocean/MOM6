@@ -81,9 +81,9 @@ type, public :: forcing
   lrunoff       => NULL(), & !< liquid river runoff entering ocean ( kg/(m^2 s) )
   frunoff       => NULL(), & !< frozen river runoff (calving) entering ocean ( kg/(m^2 s) )
   seaice_melt   => NULL(), & !< seaice melt (positive) or formation (negative) ( kg/(m^2 s) )
-  netMassIn    => NULL(), &  !< Sum of water mass flux out of the ocean ( kg/(m^2 s) )
-  netMassOut  => NULL()      !< Net water mass flux into of the ocean ( kg/(m^2 s) )
-  netSalt     => NULL(),     !< Net salt entering the ocean
+  netMassIn     => NULL(), & !< Sum of water mass flux out of the ocean ( kg/(m^2 s) )
+  netMassOut    => NULL(), & !< Net water mass flux into of the ocean ( kg/(m^2 s) )
+  netSalt       => NULL()    !< Net salt entering the ocean
 
   ! heat associated with water crossing ocean surface
   real, pointer, dimension(:,:) :: &
@@ -490,9 +490,10 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
     ! Convert salt_flux from kg (salt)/(m^2 * s) to
     ! Boussinesq: (ppt * m)
     ! non-Bouss:  (g/m^2)
-    if (ASSOCIATED(fluxes%salt_flux)) &
+    if (ASSOCIATED(fluxes%salt_flux)) then
       Net_salt(i) = (scale * dt * (1000.0 * fluxes%salt_flux(i,j))) * GV%kg_m2_to_H
-
+      fluxes%netSalt(i,j) = Net_salt(i)
+    endif
     ! Diagnostics follow...
 
     ! Initialize heat_content_massin that is diagnosed in mixedlayer_convection or
@@ -2190,6 +2191,7 @@ subroutine allocate_forcing_type(G, fluxes, stress, ustar, water, heat, shelf, p
   call myAlloc(fluxes%seaice_melt,isd,ied,jsd,jed, water)
   call myAlloc(fluxes%netMassOut,isd,ied,jsd,jed, water)
   call myAlloc(fluxes%netMassIn,isd,ied,jsd,jed, water)
+  call myAlloc(fluxes%netSalt,isd,ied,jsd,jed, water)
 
   call myAlloc(fluxes%sw,isd,ied,jsd,jed, heat)
   call myAlloc(fluxes%lw,isd,ied,jsd,jed, heat)
