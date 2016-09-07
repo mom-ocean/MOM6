@@ -1194,25 +1194,25 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
 
   flux_units = get_flux_units(GV)
   CS%id_uh = register_diag_field('ocean_model', 'uh', diag%axesCuL, Time, &
-      'Zonal Thickness Flux', flux_units)
+      'Zonal Thickness Flux', flux_units, y_cell_method='sum', v_extrinsic=.true.)
   CS%id_vh = register_diag_field('ocean_model', 'vh', diag%axesCvL, Time, &
-      'Meridional Thickness Flux', flux_units)
+      'Meridional Thickness Flux', flux_units, x_cell_method='sum', v_extrinsic=.true.)
   CS%id_umo = register_diag_field('ocean_model', 'umo',                       &
       diag%axesCuL, Time,'Zonal Mass Transport (including SGS param)', 'kg/s',&
       cmor_standard_name='ocean_mass_x_transport', cmor_long_name='Ocean Mass X Transport', &
-      conversion=GV%H_to_kg_m2)
+      conversion=GV%H_to_kg_m2, y_cell_method='sum', v_extrinsic=.true.)
   CS%id_vmo = register_diag_field('ocean_model', 'vmo',                            &
       diag%axesCvL, Time,'Meridional Mass Transport (including SGS param)', 'kg/s',&
       cmor_standard_name='ocean_mass_y_transport', cmor_long_name='Ocean Mass Y Transport', &
-      conversion=GV%H_to_kg_m2)
+      conversion=GV%H_to_kg_m2, x_cell_method='sum', v_extrinsic=.true.)
   CS%id_umo_2d = register_diag_field('ocean_model', 'umo_2d',                              &
       diag%axesCu1, Time,'Zonal Mass Transport (including SGS param) Vertical Sum', 'kg/s',&
       cmor_standard_name='ocean_mass_x_transport_vertical_sum',                            &
-      cmor_long_name='Ocean Mass X Transport Vertical Sum')
+      cmor_long_name='Ocean Mass X Transport Vertical Sum', y_cell_method='sum')
   CS%id_vmo_2d = register_diag_field('ocean_model', 'vmo_2d',                                   &
       diag%axesCv1, Time,'Meridional Mass Transport (including SGS param) Vertical Sum', 'kg/s',&
       cmor_standard_name='ocean_mass_y_transport_vertical_sum',                                 &
-      cmor_long_name='Ocean Mass Y Transport Vertical Sum')
+      cmor_long_name='Ocean Mass Y Transport Vertical Sum', x_cell_method='sum')
 
   CS%id_CAu = register_diag_field('ocean_model', 'CAu', diag%axesCuL, Time, &
       'Zonal Coriolis and Advective Acceleration', 'meter second-2')
