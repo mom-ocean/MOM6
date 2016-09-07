@@ -83,6 +83,7 @@ type, public :: forcing
   seaice_melt   => NULL(), & !< seaice melt (positive) or formation (negative) ( kg/(m^2 s) )
   netMassIn    => NULL(), & !< Sum of water mass flux out of the ocean ( kg/(m^2 s) )
   netMassOut  => NULL()    !< Net water mass flux into of the ocean ( kg/(m^2 s) )
+  netSalt     => NULL()
 
   ! heat associated with water crossing ocean surface
   real, pointer, dimension(:,:) :: &
