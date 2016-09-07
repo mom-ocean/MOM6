@@ -301,8 +301,8 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, sfc_src, fluxes, h, &
           ! Update the forcing by the part to be consumed within the present k-layer.
           ! If fractionOfForcing = 1, then updated netMassIn, netHeat, and netSalt vanish.
           netMassIn(i) = netMassIn(i) - dThickness
-          ! This line accounts for the temperature of the mass exchange
-          Tr_in = Tr2d(i,k)
+
+          Tr_in = 0.0
           dTracer = dTracer + dThickness*Tr_in
 
           ! Update state
