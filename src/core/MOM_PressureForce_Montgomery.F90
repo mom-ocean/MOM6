@@ -261,12 +261,12 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, 
 !$OMP end parallel
 
     call calc_tidal_forcing(CS%Time, SSH, e_tidal, G, CS%tides_CSp)
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,geopot_bot,G,e_tidal)
+!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,geopot_bot,G,GV,e_tidal)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       geopot_bot(i,j) = -GV%g_Earth*(e_tidal(i,j) + G%bathyT(i,j))
     enddo ; enddo
   else
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,geopot_bot,G)
+!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,geopot_bot,G,GV)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       geopot_bot(i,j) = -GV%g_Earth*G%bathyT(i,j)
     enddo ; enddo
