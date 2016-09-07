@@ -23,7 +23,7 @@ contains
 
 subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
                            sfc_flux, btm_flux, btm_reservoir, sink_rate, &
-                           aggregate_FW_forcing, evap_CFL_limit, minimum_forcing_depth, fluxes)
+                           convert_flux_in, evap_CFL_limit, minimum_forcing_depth, fluxes)
   type(ocean_grid_type),                     intent(in)    :: G             !< ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV            !< ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_old         !< layer thickness before entrainment (m or kg m-2)
@@ -36,7 +36,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
                                                                             !! in units of (CU * kg m-2 s-1)
   real, dimension(SZI_(G),SZJ_(G)), optional,intent(inout) :: btm_reservoir !< amount of tracer in a bottom reservoir (units of CU kg m-2; formerly CU m)
   real,                             optional,intent(in)    :: sink_rate     !< rate at which the tracer sinks, in m s-1
-  logical,                          optional,intent(in)  :: aggregate_FW_forcing
+  logical,                          optional,intent(in)  :: convert_flux_in    !< True if the specified sfc_flux needs to be integrated in time
   real,                             optional,intent(in)  :: evap_CFL_limit
   real,                             optional,intent(in)  :: minimum_forcing_depth
   type(forcing),                    optional,intent(in)  :: fluxes
@@ -63,11 +63,13 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected, in m.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV))             :: h_work
+  logical :: convert_flux = .true.
 
 
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
+  if (present(convert_flux_in)) convert_flux = convert_flux_in
   h_neglect = GV%H_subroundoff
   sink_dist = 0.0
   if (present(sink_rate)) sink_dist = (dt*sink_rate) * GV%m_to_H
@@ -78,16 +80,28 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
 !$OMP do
   do j=js,je; do i=is,ie ; sfc_src(i,j) = 0.0 ; btm_src(i,j) = 0.0 ; enddo; enddo
   if (present(sfc_flux)) then
+    if(convert_flux) then
 !$OMP do
-     do j = js, je; do i = is,ie
+      do j = js, je; do i = is,ie
         sfc_src(i,j) = (sfc_flux(i,j)*dt) * GV%kg_m2_to_H
-     enddo; enddo
+      enddo; enddo
+    else
+      do j = js, je; do i = is,ie
+        sfc_src(i,j) = sfc_flux(i,j)
+      enddo; enddo
+    endif
   endif
   if (present(btm_flux)) then
 !$OMP do
-     do j = js, je; do i = is,ie
+    if(convert_flux) then
+      do j = js, je; do i = is,ie
         btm_src(i,j) = (btm_flux(i,j)*dt) * GV%kg_m2_to_H
-     enddo; enddo
+      enddo; enddo
+    else
+      do j = js, je; do i = is,ie
+        btm_src(i,j) = btm_flux(i,j)
+      enddo; enddo
+    endif
   endif
 
   do k=1,nz ; do j=js,je ; do i=is,ie
@@ -95,11 +109,11 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
   enddo ; enddo ; enddo
 
   ! Before vertical transport, apply surface boundary fluxes when using ALE
-  ! Whether ALE is applied is determined by the presence of the three optional arguments associated
+  ! Whether ALE is applied is determined by the presence of the two optional arguments associated
   ! with the applyBoundaryFluxesInOut that is only called during ALE
-  if (present(aggregate_FW_forcing) .and. present(evap_CFL_limit) .and. present(minimum_forcing_depth) )then
+  if (present(evap_CFL_limit) .and. present(minimum_forcing_depth) )then
       call applyTracerBoundaryFluxesInOut(G, GV, tr, dt, sfc_src, fluxes, h_work, &
-              aggregate_FW_forcing, evap_CFL_limit, minimum_forcing_depth)
+              evap_CFL_limit, minimum_forcing_depth)
     ! Zero out surface fluxes because they were applied in the call to applyTracerBoundaryFluxesInOut
     do j=js,je; do i=is,ie ; sfc_src(i,j) = 0.0 ; enddo ; enddo
   endif
@@ -209,7 +223,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
 end subroutine tracer_vertdiff
 
 subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, sfc_src, fluxes, h, &
-                                    aggregate_FW_forcing, evap_CFL_limit, minimum_forcing_depth)
+                                    evap_CFL_limit, minimum_forcing_depth)
 ! This routine is modeled after applyBoundaryFluxesInOut in MOM_diabatic_aux.F90
 ! NOTE: Please note that in this routine sfc_flux gets set to zero to ensure that the surface
 !       flux of the tracer does not get applied again during a subsequent call to tracer_vertdif
@@ -221,8 +235,6 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, sfc_src, fluxes, h, &
   type(forcing),                         intent(in) :: fluxes !< Surface fluxes container
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thickness in H units
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: Tr  !< Tracer concentration on T-cell
-  !> If False, treat in/out fluxes separately.
-  logical,                                    intent(in)  :: aggregate_FW_forcing
   real,                                       intent(in)  :: evap_CFL_limit
   real,                                       intent(in)  :: minimum_forcing_depth
   integer, parameter :: maxGroundings = 5
@@ -335,7 +347,9 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, sfc_src, fluxes, h, &
 
           ! Change in state due to forcing
           dThickness = max( fractionOfForcing*netMassOut(i), -h2d(i,k) )
-          dTracer    = fractionOfForcing*sfc_src_1d(i)
+          !   ### The 0.9999 here should become a run-time parameter?
+          dTracer = max( fractionOfForcing*sfc_src_1d(i), -0.9999*h2d(i,k)*Tr(i,j,k))
+!          dTracer    = fractionOfForcing*sfc_src_1d(i)
 
           ! Update the forcing by the part to be consumed within the present k-layer.
           ! If fractionOfForcing = 1, then new netMassOut vanishes.

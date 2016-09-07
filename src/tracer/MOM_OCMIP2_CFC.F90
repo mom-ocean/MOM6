@@ -526,14 +526,13 @@ subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, CS)
 end subroutine init_tracer_CFC
 
 subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS, &
-              aggregate_FW_forcing, evap_CFL_limit, minimum_forcing_depth)
+              evap_CFL_limit, minimum_forcing_depth)
   type(ocean_grid_type),              intent(in) :: G
   type(verticalGrid_type),            intent(in) :: GV
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
   type(forcing),                      intent(in) :: fluxes
   real,                               intent(in) :: dt
   type(OCMIP2_CFC_CS),                pointer    :: CS
-  logical,                          optional,intent(in)  :: aggregate_FW_forcing
   real,                             optional,intent(in)  :: evap_CFL_limit
   real,                             optional,intent(in)  :: minimum_forcing_depth
 !   This subroutine applies diapycnal diffusion and any other column
@@ -584,12 +583,12 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
 
   ! Use a tridiagonal solver to determine the concentrations after the
   ! surface source is applied and diapycnal advection and diffusion occurs.
-  if (present(aggregate_FW_forcing) .and. present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
+  if (present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
     call tracer_vertdiff(h_old, ea, eb, dt, CFC11, G, GV, sfc_flux=CFC11_flux, &
-      aggregate_FW_forcing=aggregate_FW_forcing, evap_CFL_limit=evap_CFL_limit,&
+      evap_CFL_limit=evap_CFL_limit,&
       minimum_forcing_depth=minimum_forcing_depth, fluxes=fluxes)
     call tracer_vertdiff(h_old, ea, eb, dt, CFC12, G, GV, sfc_flux=CFC12_flux, &
-      aggregate_FW_forcing=aggregate_FW_forcing, evap_CFL_limit=evap_CFL_limit,&
+      evap_CFL_limit=evap_CFL_limit,&
       minimum_forcing_depth=minimum_forcing_depth, fluxes=fluxes)
   else
     call tracer_vertdiff(h_old, ea, eb, dt, CFC11, G, GV, sfc_flux=CFC11_flux)

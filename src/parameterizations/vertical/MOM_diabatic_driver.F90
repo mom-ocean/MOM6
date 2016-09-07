@@ -1121,7 +1121,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     ! so hold should be h_orig
       call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
                                 CS%optics, CS%tracer_flow_CSp, &
-                                aggregate_FW_forcing=CS%aggregate_FW_forcing, &
                                 evap_CFL_limit = CS%diabatic_aux_CSp%evap_CFL_limit, &
                                 minimum_forcing_depth = CS%diabatic_aux_CSp%minimum_forcing_depth)
     else
@@ -1152,7 +1151,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
       call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
                                   CS%optics, CS%tracer_flow_CSp, &
-                                  aggregate_FW_forcing=CS%aggregate_FW_forcing, &
                                   evap_CFL_limit = CS%diabatic_aux_CSp%evap_CFL_limit, &
                                   minimum_forcing_depth = CS%diabatic_aux_CSp%minimum_forcing_depth)
     else
@@ -1165,7 +1163,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
       call call_tracer_column_fns(h_prebound, h, ea, eb, fluxes, dt, G, GV, tv, &
                                   CS%optics, CS%tracer_flow_CSp, &
-                                  aggregate_FW_forcing=CS%aggregate_FW_forcing, &
                                   evap_CFL_limit = CS%diabatic_aux_CSp%evap_CFL_limit, &
                                   minimum_forcing_depth = CS%diabatic_aux_CSp%minimum_forcing_depth)
     else
