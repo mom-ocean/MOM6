@@ -163,7 +163,7 @@ type, public :: diag_ctrl
   !default missing value to be sent to ALL diagnostics registrations
   real :: missing_value = 1.0e+20
 
-  type(diag_remap_ctrl), dimension(REGRIDDING_NUM_TYPES) :: diag_remaps
+  type(diag_remap_ctrl), dimension(REGRIDDING_NUM_TYPES) :: diag_remap_cs
 
   ! Pointer to H, G and T&S needed for remapping
   real, dimension(:,:,:), pointer :: h => null()
@@ -274,8 +274,8 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
   call define_axes_group(diag_cs, (/ id_xh, id_yq /), diag_cs%axesCv1, &
        x_cell_method='mean', y_cell_method='point', is_h_point=.false.)
 
-  do i=1, size(diag_cs%diag_remaps)
-    call diag_remap_set_vertical_axes(diag_cs%diag_remaps(i), G, GV, param_file)
+  do i=1, size(diag_cs%diag_remap_cs)
+    call diag_remap_set_vertical_axes(diag_cs%diag_remap_cs(i), G, GV, param_file)
   enddo
 
 end subroutine set_axes_info
@@ -612,7 +612,7 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask)
         call MOM_error(FATAL,"post_data_3d: no mask for regridded field.")
       endif
 
-      if (.not. diag_remap_axes_setup_done(diag_cs%diag_remaps(diag%vertical_coord))) then
+      if (.not. diag_remap_axes_setup_done(diag_cs%diag_remap_cs(diag%vertical_coord))) then
         call MOM_error(FATAL,"post_data_3d: attempt to do diagnostic vertical "// &
                              "remapping but vertical axes not configured. See option "// &
                              "DIAG_REMAP_"//vertical_coord_strings(diag%vertical_coord)//"_GRID_DEF")
@@ -620,7 +620,7 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask)
 
       if (id_clock_diag_remap>0) call cpu_clock_begin(id_clock_diag_remap)
 
-      nz = diag_remap_get_nz(diag_cs%diag_remaps(diag%vertical_coord))
+      nz = diag_remap_get_nz(diag_cs%diag_remap_cs(diag%vertical_coord))
       allocate(remapped_field(size(field, 1), size(field, 2), nz))
 
 #if defined(DEBUG) || defined(__DO_SAFETY_CHECKS__)
@@ -637,7 +637,7 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask)
   enddo
 #endif
 
-      call diag_remap_do_remap(diag_cs%diag_remaps(diag%vertical_coord), &
+      call diag_remap_do_remap(diag_cs%diag_remap_cs(diag%vertical_coord), &
               diag_cs%G, diag_cs%h, diag%axes, diag%mask3d, &
               diag_cs%missing_value, field, remapped_field)
 
@@ -897,7 +897,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
       ! Register for vertical remapping
       if (axes%rank == 3 .and. &
           vertical_coords(i) /= coordinateMode(DEFAULT_COORDINATE_MODE)) then
-        call diag_remap_set_diag_axes(diag_cs%diag_remaps(i), diag%axes)
+        call diag_remap_set_diag_axes(diag_cs%diag_remap_cs(i), diag%axes)
       endif
 
       fms_id = register_diag_field_expand_axes(new_module_name, field_name, diag%axes,     &
@@ -956,7 +956,7 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
       ! Register for vertical remapping
       if (axes%rank == 3 .and. &
           vertical_coords(i) /= coordinateMode(DEFAULT_COORDINATE_MODE)) then
-        call diag_remap_set_diag_axes(diag_cs%diag_remaps(i), diag%axes)
+        call diag_remap_set_diag_axes(diag_cs%diag_remap_cs(i), diag%axes)
       endif
 
       fms_id = register_diag_field_expand_axes(new_module_name, cmor_field_name, diag%axes,    &
@@ -1495,8 +1495,8 @@ subroutine diag_mediator_init(G, nz, param_file, diag_cs, doc_file_dir)
 
   ! Initialise vertical coordinates and test assumptions needed for diagnostic
   ! remapping.
-  do i=1, size(diag_cs%diag_remaps)
-    call diag_remap_init(diag_cs%diag_remaps(i), vertical_coords(i))
+  do i=1, size(diag_cs%diag_remap_cs)
+    call diag_remap_init(diag_cs%diag_remap_cs(i), vertical_coords(i))
   enddo
 
   ! Keep pointers grid, h, T, S needed diagnostic remapping 
@@ -1585,8 +1585,8 @@ subroutine diag_update_remap_grids(diag_cs)
 
   if (id_clock_diag_grid_updates>0) call cpu_clock_begin(id_clock_diag_grid_updates)
 
-  do i=1, size(diag_cs%diag_remaps)
-    call diag_remap_update(diag_cs%diag_remaps(i), &
+  do i=1, size(diag_cs%diag_remap_cs)
+    call diag_remap_update(diag_cs%diag_remap_cs(i), &
                            diag_cs%G, diag_cs%h, diag_cs%T, diag_cs%S, &
                            diag_cs%eqn_of_state)
   enddo
@@ -1663,8 +1663,8 @@ subroutine diag_mediator_end(time, diag_CS, end_diag_manager)
 
   deallocate(diag_cs%diags)
 
-  do i=1, size(diag_cs%diag_remaps)
-    call diag_remap_end(diag_cs%diag_remaps(i))
+  do i=1, size(diag_cs%diag_remap_cs)
+    call diag_remap_end(diag_cs%diag_remap_cs(i))
   enddo
 
   deallocate(diag_cs%mask3dTL)
