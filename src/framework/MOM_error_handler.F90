@@ -173,10 +173,10 @@ subroutine callTree_waypoint(mesg,n)
   endif
 end subroutine callTree_waypoint
 
+!> Issues a FATAL error if the assertion fails, i.e. the first argument is false.
 subroutine assert(logical_arg, msg)
-
-  logical, intent(in) :: logical_arg
-  character(len=*), intent(in) :: msg
+  logical, intent(in) :: logical_arg !< If false causes a FATAL error
+  character(len=*), intent(in) :: msg !< Message to issue in case of failed assertion
 
   if (.not. logical_arg) then
     call MOM_error(FATAL, msg)
