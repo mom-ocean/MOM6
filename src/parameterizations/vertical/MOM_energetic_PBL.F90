@@ -345,7 +345,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   !----------------------------------------------------------------------
   !/BGR added Aug24,2016 for adding iteration to get boundary layer depth
   !    - needed to compute new mixing length.
-  LOGICAL :: Use_MLD_ITERATION=.false.!False to use old ePBL method.
   real :: MLD_GUESS, MLD_FOUND ! Mixing Layer depth guessed/found for iteration
   real :: MAX_MLD, MIN_MLD ! Iteration bounds which are adjusted at each step
                            !  - These are initialized based on surface/bottom
@@ -356,7 +355,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                            !  3. Based on result adjusts the Max/Min
                            !     and searches through the water column.
                            !  - If using an accurate guess the iteration
-                           !    is very quick.  Otherwise it takes 5-10
+                           !    is very quick (e.g. if MLD doesn't change
+                           !    over timestep).  Otherwise it takes 5-10
                            !    passes, but has a high convergence rate.
                            !    Other iteration may be tried, but this 
                            !    method seems to rarely fail and the added
@@ -368,21 +368,26 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                            !    surface_disconnect, can improve this.
   logical :: FIRST_OBL     ! Flag for computing "found" Mixing layer depth
   logical :: OBL_CONVERGED ! Flag for convergence of MLD
-  INTEGER :: OBL_IT        !Iteration counter
+  INTEGER :: OBL_IT        ! Iteration counter
   REAL    :: MinMixLen=1.0 ! Minimum value for mixing length (must be non-zero
                            !  for iteration to converge when OBL shoals).
                            !  At present, this is the value used for convection
                            !  in the ocean interior.
-  INTEGER :: MAX_OBL_IT=50 ! Set maximum number of iterations.  Probably
-                           !  best as an input parameter, but will then need
-                           !  to create allocatable arrays if storing
+  INTEGER :: MAX_OBL_IT=20 ! Set maximum number of iterations.  Probably
+                           !  best as an input parameter, but then may want
+                           !  to use allocatable arrays if storing
                            !  guess/found (as diagnostic); skipping for now.
+                           !  In reality, the maximum number of guesses 
+                           !  needed is set by: 
+                           !    DEPTH/2^M < DZ
+                           !    where M is the number of guesses
+                           !    e.g. M=12 for DEPTH=4000m and DZ=1m
   real, dimension(SZK_(GV)+1) :: Vstar_Used, &      ! 1D arrays used to store
                                Mixing_Length_Used   ! Vstar and Mixing_Length
-  real, dimension(SZK_(GV)) :: TEMPdepth
   !/BGR - remaining variables are related to tracking iteration statistics.
-  logical :: OBL_IT_STATS=.true. ! Flag for computing OBL iteration statistics
-  REAL :: ITguess(50), ITresult(50),ITmax(50),ITmin(50) ! Flag for storing guess/result
+  logical :: OBL_IT_STATS=.false. ! Flag for computing OBL iteration statistics
+  REAL :: ITguess(20), ITresult(20),ITmax(20),ITmin(20) ! Flag for storing guess/result
+                                                        ! should have dim=MAX_OBL_IT
   integer, save :: MAXIT=0   ! Stores maximum number of iterations
   integer, save :: MINIT=1e8 ! Stokes minimum number of iterations
   integer, save :: SUMIT=0   ! Stores total iterations (summed over all)
@@ -508,7 +513,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       MAX_MLD = 0.0;!MAX_MLD will initialized as ocean bottom depth
       do k=1,nz ; 
          MAX_MLD = MAX_MLD + h(i,k)*GV%H_to_m; 
-         TEMPdepth(k)=max_MLD
       enddo
       MIN_MLD = 0.0 !MIN_MLD will initialize as 0.
 
@@ -531,8 +535,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
         sfc_connected(i) = .true. ;
       ! Store in 1D arrays cleared out each iteration.  Only write in 
       !  3D arrays after convergence.
-      VSTAR_USED=0.0
-      MIXING_LENGTH_USED=0.0
+      VSTAR_USED(:)=0.0
+      MIXING_LENGTH_USED(:)=0.0
       IF (.not.CS%Use_MLD_Iteration) OBL_CONVERGED=.true.
       !/This ends the new code for the iteration.
       !}
@@ -590,7 +594,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
         h_bot(i) = 0.0 ; hb_hs(i,nz+1) = 0.0
         do k=nz,1,-1
           h_bot(i) = h_bot(i) + h(i,k)
-          hb_hs(i,K) = GV%H_to_m * (h_bot(i)*I_hs)**2
+          hb_hs(i,K) = GV%H_to_m * (h_bot(i)*I_hs)
         enddo
      else
        !New method where mixing length is reduced based on MLD
@@ -1051,9 +1055,9 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       k = nz ! This is here to allow a breakpoint to be set.
 
     !/BGR: The following lines are used for the iteration
-      ITmax(obl_it)=max_MLD
-      ITmin(obl_it)=min_MLD
-      ITguess(obl_it) = MLD_GUESS
+      ITmax(obl_it)=max_MLD       ! Track max    }
+      ITmin(obl_it)=min_MLD       ! Track min    } For debug purpose
+      ITguess(obl_it) = MLD_GUESS ! Track guess  }
       MLD_FOUND=0.0;FIRST_OBL=.true.;
       !       MLD_FOUND=CS%ML_depth2(i,J)
       do k=2,nz
@@ -1117,11 +1121,10 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       !enddo
       !Activate to print out some output when not converged
       !{
-      !print*,'Depth: ',TEMPdepth(nz)
       !print*,'Min/Max: ',ITmin(50),ITmax(50)
       !print*,'Guess/result: ',ITguess(50),ITresult(50)
-      print*,'Stats on CPU: ',CONVERGED,NOTCONVERGED,&
-           real(NOTCONVERGED)/real(CONVERGED)
+      !print*,'Stats on CPU: ',CONVERGED,NOTCONVERGED,&
+      !     real(NOTCONVERGED)/real(CONVERGED)
       !}
       !stop !Kill if not converged during testing.
     else
@@ -1473,7 +1476,7 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   CS%id_Mixing_Length = register_diag_field('ocean_model', 'Mixing_Length', diag%axesTi, &
       Time, 'Mixing Length that is used', 'meter')
   CS%id_Velocity_Scale = register_diag_field('ocean_model', 'Velocity_Scale', diag%axesTi, &
-      Time, 'Velocity Scale that is used.', 'meter second-2')
+      Time, 'Velocity Scale that is used.', 'meter second')
 
   call get_param(param_file, mod, "ENABLE_THERMODYNAMICS", use_temperature, &
                  "If true, temperature and salinity are used as state \n"//&
