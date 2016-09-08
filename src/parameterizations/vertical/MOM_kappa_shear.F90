@@ -319,7 +319,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   new_kappa = .true. ; if (present(initialize_all)) new_kappa = initialize_all
 
   Ri_crit = CS%Rino_crit
-  gR0 = GV%Rho0*G%g_Earth ; g_R0 = G%g_Earth/GV%Rho0
+  gR0 = GV%Rho0*GV%g_Earth ; g_R0 = GV%g_Earth/GV%Rho0
 
   k0dt = dt*CS%kappa_0
   dz_massless = 0.1*sqrt(k0dt)
@@ -888,8 +888,8 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   enddo ! end of j-loop
 
   if (CS%debug) then
-    call hchksum(kappa_io,"kappa",G)
-    call hchksum(tke_io,"tke",G)
+    call hchksum(kappa_io,"kappa",G%HI)
+    call hchksum(tke_io,"tke",G%HI)
   endif
 
   if (CS%id_Kd_shear > 0) call post_data(CS%id_Kd_shear, kappa_io, CS%diag)
@@ -1749,7 +1749,7 @@ logical function kappa_shear_init(Time, G, GV, param_file, diag, CS)
                  default=13)
   call get_param(param_file, mod, "PRANDTL_TURB", CS%Prandtl_turb, &
                  "The turbulent Prandtl number applied to shear \n"//&
-                 "instability.", units="nondim", default=0.0, do_not_log=.true.)
+                 "instability.", units="nondim", default=1.0, do_not_log=.true.)
   call get_param(param_file, mod, "DEBUG_KAPPA_SHEAR", CS%debug, &
                  "If true, write debugging data for the kappa-shear code. \n"//&
                  "Caution: this option is _very_ verbose and should only \n"//&

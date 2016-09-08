@@ -19,31 +19,6 @@ module MOM_controlled_forcing
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
 !***********************************************************************
 !
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, July 2011                                      *
-!*                                                                     *
-!*    This program contains the subroutines that use control-theory    *
-!*  to adjust the surface heat flux and precipitation, based on the    *
-!*  time-mean or periodically (seasonally) varying anomalies from the  *
-!*  observed state.  The techniques behind this are described in       *
-!*  Hallberg and Adcroft (2011, in prep.).                             *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v, tauy                                  *
-!*    j    x ^ x ^ x   At >:  u, taux                                  *
-!*    j    > o > o >   At o:  h, fluxes.                               *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
 use MOM_diag_mediator, only : post_data, query_averaging_enabled
 use MOM_diag_mediator, only : register_diag_field, diag_ctrl, safe_alloc_ptr
 use MOM_domains, only : pass_var, pass_vector, AGRID, To_South, To_West, To_All
@@ -111,29 +86,31 @@ end type ctrl_forcing_CS
 
 contains
 
+!> This subroutine calls any of the other subroutines in this file
+!! that are needed to specify the current surface forcing fields.
 subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_precip, &
                               day_start, dt, G, CS)
-  type(ocean_grid_type), intent(inout) :: G
-  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: SST_anom, SSS_anom, SSS_mean
-  real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: virt_heat, virt_precip
-  type(time_type),       intent(in)    :: day_start
-  real,                  intent(in)    :: dt
-  type(ctrl_forcing_CS), pointer       :: CS
-! This subroutine calls any of the other subroutines in this file
-! that are needed to specify the current surface forcing fields.
+  type(ocean_grid_type), intent(inout) :: G                    !< The ocean's grid structure.
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: SST_anom  !< The sea surface temperature
+                                                               !! anomalies, in deg C.
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: SSS_anom  !< The sea surface salinity
+                                                               !! anomlies, in g kg-1.
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: SSS_mean  !< The mean sea surface
+                                                               !! salinity, in g kg-1.
+  real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: virt_heat !< Virtual (corrective) heat
+                                                               !! fluxes that are augmented
+                                                               !! in this subroutine, in W m-2.
+  real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: virt_precip !< Virtual (corrective)
+                                                               !! precipitation fluxes that
+                                                               !! are augmented in this
+                                                               !! subroutine, in kg m-2 s-1.
+  type(time_type),       intent(in)    :: day_start      !< Start time of the fluxes.
+  real,                  intent(in)    :: dt             !< Length of time over which these
+                                                         !! fluxes will be applied, in s.
+  type(ctrl_forcing_CS), pointer       :: CS             !< A pointer to the control structure
+                                                         !! returned by a previous call to
+                                                         !! ctrl_forcing_init.
 !
-! Arguments: SST_anom - The sea surface temperature anomalies, in deg C.
-!  (in)      SSS_anom - The sea surface salinity anomlies, in g kg-1.
-!  (in)      SSS_mean - The mean sea surface salinity, in g kg-1.
-!  (inout)   virt_heat - Virtual (corrective) heat fluxes that are augmented
-!                        in this subroutine, in W m-2.
-!  (inout)   virt_precip - Virtual (corrective) precipitation fluxes that are
-!                          augmented in this subroutine, in kg m-2 s-1.
-!  (in)      day_start - Start time of the fluxes.
-!  (in)      dt - Length of time over which these fluxes will be applied, in s.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - A pointer to the control structure returned by a previous
-!                 call to ctrl_forcing_init.
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     flux_heat_x, &
     flux_prec_x
@@ -404,11 +381,11 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
 
 end subroutine apply_ctrl_forcing
 
+!> This function maps rval into an integer in the range from 1 to num_period.
 function periodic_int(rval, num_period) result (m)
-  real,    intent(in) :: rval
-  integer, intent(in) :: num_period
-  integer             :: m
-  ! This function maps rval into an integer in the range from 1 to num_period.
+  real,    intent(in) :: rval       !< Input for mapping.
+  integer, intent(in) :: num_period !< Maximum output.
+  integer             :: m          !< Return value.
 
   m = floor(rval)
   if (m <= 0) then
@@ -418,12 +395,12 @@ function periodic_int(rval, num_period) result (m)
   endif
 end function
 
+!> This function shifts rval by an integer multiple of num_period so that
+!! 0 <= val_out < num_period.
 function periodic_real(rval, num_period) result(val_out)
-  real,    intent(in) :: rval
-  integer, intent(in) :: num_period
-  real                :: val_out
-  ! This function shifts rval by an integer multiple of num_period so that
-  ! 0 <= val_out < num_period.
+  real,    intent(in) :: rval       !< Input to be shifted into valid range.
+  integer, intent(in) :: num_period !< Maximum valid value.
+  real                :: val_out    !< Return value.
   integer :: nshft
 
   if (rval < 0) then ; nshft = floor(abs(rval) / num_period) + 1
@@ -434,19 +411,17 @@ function periodic_real(rval, num_period) result(val_out)
 end function
 
 
+!> This subroutine is used to allocate and register any fields in this module
+!! that should be written to or read from the restart file.
 subroutine register_ctrl_forcing_restarts(G, param_file, CS, restart_CS)
-  type(ocean_grid_type),       intent(in) :: G
-  type(param_file_type),       intent(in) :: param_file
-  type(ctrl_forcing_CS), pointer :: CS
-  type(MOM_restart_CS),       pointer :: restart_CS
-! Arguments: G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module.
-!  (in)      restart_CS - A pointer to the restart control structure.
-! This subroutine is used to allocate and register any fields in this module
-! that should be written to or read from the restart file.
+  type(ocean_grid_type), intent(in) :: G          !< The ocean's grid structure.
+  type(param_file_type), intent(in) :: param_file !< A structure indicating the
+                                                  !! open file to parse for model
+                                                  !! parameter values.
+  type(ctrl_forcing_CS), pointer :: CS            !< A pointer that is set to point to the
+                                                  !! control structure for this module.
+  type(MOM_restart_CS),  pointer :: restart_CS    !< A pointer to the restart control structure.
+
   logical :: controlled, use_temperature
   character (len=8) :: period_str
   type(vardesc) :: vd
@@ -514,19 +489,17 @@ subroutine register_ctrl_forcing_restarts(G, param_file, CS, restart_CS)
 
 end subroutine register_ctrl_forcing_restarts
 
+!> Set up this modules control structure.
 subroutine controlled_forcing_init(Time, G, param_file, diag, CS)
-  type(time_type),           intent(in) :: Time
-  type(ocean_grid_type),     intent(in) :: G
-  type(param_file_type),     intent(in) :: param_file
-  type(diag_ctrl), target,   intent(in) :: diag
-  type(ctrl_forcing_CS),     pointer    :: CS
-! Arguments: Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
+  type(time_type),           intent(in) :: Time       !< The current model time.
+  type(ocean_grid_type),     intent(in) :: G          !< The ocean's grid structure.
+  type(param_file_type),     intent(in) :: param_file !< A structure indicating the
+                                                      !! open file to parse for model
+                                                      !! parameter values.
+  type(diag_ctrl), target,   intent(in) :: diag       !< A structure that is used to regulate
+                                                      !! diagnostic output.
+  type(ctrl_forcing_CS),     pointer    :: CS         !< A pointer that is set to point to the
+                                                      !! control structure for this module.
   real :: smooth_len
   logical :: do_integrated
   integer :: num_cycle
@@ -596,10 +569,12 @@ subroutine controlled_forcing_init(Time, G, param_file, diag, CS)
 
 end subroutine controlled_forcing_init
 
+!> Clean up this modules control structure.
 subroutine controlled_forcing_end(CS)
-  type(ctrl_forcing_CS),    pointer       :: CS
-! Arguments:  CS - A pointer to the control structure returned by a previous
-!                  call to controlled_forcing_init, it will be deallocated here.
+  type(ctrl_forcing_CS),    pointer :: CS !< A pointer to the control structure
+                                          !! returned by a previous call to
+                                          !! controlled_forcing_init, it will be
+                                          !! deallocated here.
 
   if (associated(CS)) then
     if (associated(CS%heat_0))       deallocate(CS%heat_0)
@@ -616,4 +591,27 @@ subroutine controlled_forcing_end(CS)
 
 end subroutine controlled_forcing_end
 
+!> \class MOM_controlled_forcing
+!!                                                                     *
+!!  By Robert Hallberg, July 2011                                      *
+!!                                                                     *
+!!    This program contains the subroutines that use control-theory    *
+!!  to adjust the surface heat flux and precipitation, based on the    *
+!!  time-mean or periodically (seasonally) varying anomalies from the  *
+!!  observed state.  The techniques behind this are described in       *
+!!  Hallberg and Adcroft (2011, in prep.).                             *
+!!                                                                     *
+!!  Macros written all in capital letters are defined in MOM_memory.h. *
+!!                                                                     *
+!!     A small fragment of the grid is shown below:                    *
+!!                                                                     *
+!!    j+1  x ^ x ^ x   At x:  q                                        *
+!!    j+1  > o > o >   At ^:  v, tauy                                  *
+!!    j    x ^ x ^ x   At >:  u, taux                                  *
+!!    j    > o > o >   At o:  h, fluxes.                               *
+!!    j-1  x ^ x ^ x                                                   *
+!!        i-1  i  i+1  At x & ^:                                       *
+!!           i  i+1    At > & o:                                       *
+!!                                                                     *
+!!  The boundaries always run through q grid points (x).               *
 end module MOM_controlled_forcing

@@ -71,6 +71,7 @@ use MOM_cpu_clock,           only : CLOCK_MODULE
 use MOM_diag_mediator,       only : post_data, query_averaging_enabled
 use MOM_diag_mediator,       only : diag_ctrl, safe_alloc_ptr
 use MOM_domains,             only : pass_var, pass_vector, AGRID, To_South, To_West, To_All
+use MOM_domains,             only : fill_symmetric_edges, CGRID_NE
 use MOM_error_handler,       only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_error_handler,       only : callTree_enter, callTree_leave
 use MOM_file_parser,         only : get_param, log_version, param_file_type
@@ -100,6 +101,9 @@ use SCM_CVmix_tests, only : SCM_CVmix_tests_surface_forcing_init
 use SCM_CVmix_tests, only : SCM_CVmix_tests_wind_forcing
 use SCM_CVmix_tests, only : SCM_CVmix_tests_buoyancy_forcing
 use SCM_CVmix_tests, only : SCM_CVmix_tests_CS
+use BFB_surface_forcing,    only : BFB_buoyancy_forcing
+use BFB_surface_forcing,    only : BFB_surface_forcing_init, BFB_surface_forcing_CS
+
 use data_override_mod, only : data_override_init, data_override
 
 implicit none ; private
@@ -208,6 +212,7 @@ type, public :: surface_forcing_CS ; private
 
   type(user_revise_forcing_CS),  pointer :: urf_CS => NULL()
   type(user_surface_forcing_CS), pointer :: user_forcing_CSp => NULL()
+  type(BFB_surface_forcing_CS), pointer :: BFB_forcing_CSp => NULL()
   type(MESO_surface_forcing_CS), pointer :: MESO_forcing_CSp => NULL()
   type(SCM_idealized_hurricane_CS), pointer :: SCM_idealized_hurricane_CSp => NULL()  
   type(SCM_CVmix_tests_CS), pointer :: SCM_CVmix_tests_CSp => NULL()
@@ -327,6 +332,8 @@ subroutine set_forcing(state, fluxes, day_start, day_interval, G, CS)
       call SCM_CVmix_tests_buoyancy_forcing(state, fluxes, day_center, G, CS%SCM_CVmix_tests_CSp)
     elseif (trim(CS%buoy_config) == "USER") then
       call USER_buoyancy_forcing(state, fluxes, day_center, dt, G, CS%user_forcing_CSp)
+    elseif (trim(CS%buoy_config) == "BFB") then
+      call BFB_buoyancy_forcing(state, fluxes, day_center, dt, G, CS%BFB_forcing_CSp)
     elseif (trim(CS%buoy_config) == "NONE") then
       call MOM_mesg("MOM_surface_forcing: buoyancy forcing has been set to omitted.")
     elseif (CS%variable_buoyforce .and. .not.CS%first_call_set_forcing) then
@@ -385,7 +392,7 @@ subroutine buoyancy_forcing_allocate(fluxes, G, CS)
     ! surface restoring fields 
     if (CS%restorebuoy) then
       call safe_alloc_ptr(CS%T_Restore,isd,ied,jsd,jed)
-      call safe_alloc_ptr(fluxes%heat_restore,isd,ied,jsd,jed)
+      call safe_alloc_ptr(fluxes%heat_added,isd,ied,jsd,jed)
       call safe_alloc_ptr(CS%S_Restore,isd,ied,jsd,jed)
     endif
 
@@ -693,13 +700,11 @@ subroutine wind_forcing_from_file(state, fluxes, day, G, CS)
         call read_data(filename, CS%stress_y_var, temp_y(:,:), position=NORTH_FACE, &
                        domain=G%Domain_aux%mpp_domain, timelevel=time_lev)
 
-        call pass_vector(temp_x, temp_y, G%Domain_aux)
-        do j=js,je ; do I=Isq,Ieq
+        do j=js,je ; do i=is,ie
           fluxes%taux(I,j) = CS%wind_scale * temp_x(I,j)
-        enddo ; enddo
-        do J=Jsq,Jeq ; do i=is,ie
           fluxes%tauy(i,J) = CS%wind_scale * temp_y(i,J)
         enddo ; enddo
+        call fill_symmetric_edges(fluxes%taux, fluxes%tauy, G%Domain, stagger=CGRID_NE)
       else
         call read_data(filename, CS%stress_x_var, fluxes%taux(:,:), &
                        domain=G%Domain%mpp_domain, position=EAST_FACE, &
@@ -1067,13 +1072,13 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
     if (CS%use_temperature) then
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0) then
-          fluxes%heat_restore(i,j) = G%mask2dT(i,j) * &
+          fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
               ((CS%T_Restore(i,j) - state%SST(i,j)) * rhoXcp * CS%Flux_const)
           fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const) * &
               (CS%S_Restore(i,j) - state%SSS(i,j)) / &
               (0.5*(state%SSS(i,j) + CS%S_Restore(i,j)))
         else
-          fluxes%heat_restore(i,j) = 0.0
+          fluxes%heat_added(i,j) = 0.0
           fluxes%vprec(i,j)        = 0.0
         endif
       enddo ; enddo
@@ -1102,7 +1107,7 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
 !###     SSS_anom(i,j) = state%SSS(i,j) - CS%S_Restore(i,j)
 !###     SSS_mean(i,j) = 0.5*(state%SSS(i,j) + CS%S_Restore(i,j))
 !###   enddo ; enddo
-!###   call apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, fluxes%heat_restore, &
+!###   call apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, fluxes%heat_added, &
 !###                           fluxes%vprec, day, dt, G, CS%ctrl_forcing_CSp)
 !### endif
 
@@ -1221,13 +1226,13 @@ subroutine buoyancy_forcing_from_data_override(state, fluxes, day, dt, G, CS)
     if (CS%use_temperature) then
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0) then
-          fluxes%heat_restore(i,j) = G%mask2dT(i,j) * &
+          fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
               ((CS%T_Restore(i,j) - state%SST(i,j)) * rhoXcp * CS%Flux_const)
           fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const) * &
               (CS%S_Restore(i,j) - state%SSS(i,j)) / &
               (0.5*(state%SSS(i,j) + CS%S_Restore(i,j)))
         else
-          fluxes%heat_restore(i,j) = 0.0
+          fluxes%heat_added(i,j) = 0.0
           fluxes%vprec(i,j)        = 0.0
         endif
       enddo ; enddo
@@ -1278,7 +1283,7 @@ subroutine buoyancy_forcing_from_data_override(state, fluxes, day, dt, G, CS)
 !###     SSS_anom(i,j) = state%SSS(i,j) - CS%S_Restore(i,j)
 !###     SSS_mean(i,j) = 0.5*(state%SSS(i,j) + CS%S_Restore(i,j))
 !###   enddo ; enddo
-!###   call apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, fluxes%heat_restore, &
+!###   call apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, fluxes%heat_added, &
 !###                           fluxes%vprec, day, dt, G, CS%ctrl_forcing_CSp)
 !### endif
 
@@ -1445,13 +1450,13 @@ subroutine buoyancy_forcing_linear(state, fluxes, day, dt, G, CS)
         T_restore = CS%T_south + (CS%T_north-CS%T_south)*y
         S_restore = CS%S_south + (CS%S_north-CS%S_south)*y
         if (G%mask2dT(i,j) > 0) then
-          fluxes%heat_restore(i,j) = G%mask2dT(i,j) * &
+          fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
               ((T_Restore - state%SST(i,j)) * ((CS%Rho0 * fluxes%C_p) * CS%Flux_const))
           fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const) * &
               (S_Restore - state%SSS(i,j)) / &
               (0.5*(state%SSS(i,j) + S_Restore))
         else
-          fluxes%heat_restore(i,j) = 0.0
+          fluxes%heat_added(i,j) = 0.0
           fluxes%vprec(i,j)        = 0.0
         endif
       enddo ; enddo
@@ -1566,7 +1571,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
   call get_param(param_file, mod, "BUOY_CONFIG", CS%buoy_config, &
                  "The character string that indicates how buoyancy forcing \n"//&
                  "is specified. Valid options include (file), (zero), \n"//&
-                 "(linear), (USER), and (NONE).", fail_if_missing=.true.)
+                 "(linear), (USER), (BFB) and (NONE).", fail_if_missing=.true.)
   if (trim(CS%buoy_config) == "file") then
     call get_param(param_file, mod, "ARCHAIC_OMIP_FORCING_FILE", CS%archaic_OMIP_file, &
                  "If true, use the forcing variable decomposition from \n"//&
@@ -1826,6 +1831,8 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
 
   if (trim(CS%wind_config) == "USER" .or. trim(CS%buoy_config) == "USER" ) then
     call USER_surface_forcing_init(Time, G, param_file, diag, CS%user_forcing_CSp)
+  elseif (trim(CS%buoy_config) == "BFB" ) then
+    call BFB_surface_forcing_init(Time, G, param_file, diag, CS%BFB_forcing_CSp)
   elseif (trim(CS%wind_config) == "MESO" .or. trim(CS%buoy_config) == "MESO" ) then
     call MESO_surface_forcing_init(Time, G, param_file, diag, CS%MESO_forcing_CSp)
   elseif (trim(CS%wind_config) == "SCM_ideal_hurr") then
@@ -1846,7 +1853,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
   call register_forcing_type_diags(Time, diag, CS%use_temperature, CS%handles)
 
   ! Set up any restart fields associated with the forcing.
-  call restart_init(G, param_file, CS%restart_CSp, "MOM_forcing.res")
+  call restart_init(param_file, CS%restart_CSp, "MOM_forcing.res")
 !###  call register_ctrl_forcing_restarts(G, param_file, CS%ctrl_forcing_CSp, &
 !###                                      CS%restart_CSp)
   call restart_init_end(CS%restart_CSp)

@@ -35,7 +35,7 @@ module ocean_model_mod
 !</OVERVIEW>
 
 use MOM, only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
-use MOM, only : calculate_surface_state
+use MOM, only : calculate_surface_state, finish_MOM_initialization
 use MOM_constants, only : CELSIUS_KELVIN_OFFSET
 use MOM_diag_mediator, only : diag_ctrl, enable_averaging, disable_averaging
 use MOM_diag_mediator, only : diag_mediator_close_registration, diag_mediator_end
@@ -132,7 +132,6 @@ type, public ::  ocean_public_type
   integer                  :: avg_kount ! Used for accumulating averages of this type.
   integer, dimension(3)    :: axes = 0  ! Axis numbers that are available
                                         ! for I/O using this surface data.
-
 end type ocean_public_type
 
 
@@ -153,10 +152,12 @@ type, public :: ocean_state_type ; private
   type(time_type) :: write_energy_time ! The next time to write to the energy file.
 
   integer :: nstep = 0        ! The number of calls to update_ocean.
-  logical :: use_ice_shelf = .false. ! If true, the ice shelf model is enabled.
+  logical :: use_ice_shelf    ! If true, the ice shelf model is enabled.
   type(ice_shelf_CS), pointer :: Ice_shelf_CSp => NULL()
   logical :: restore_salinity ! If true, the coupled MOM driver adds a term to
                               ! restore salinity to a specified value.
+  logical :: restore_temp     ! If true, the coupled MOM driver adds a term to
+                              ! restore sst to a specified value.
   real :: press_to_z          ! A conversion factor between pressure and ocean
                               ! depth in m, usually 1/(rho_0*g), in m Pa-1.
   real :: C_p                 !   The heat capacity of seawater, in J K-1 kg-1.
@@ -262,6 +263,10 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
                  "If true, the coupled driver will add a globally-balanced \n"//&
                  "fresh-water flux that drives sea-surface salinity \n"//&
                  "toward specified values.", default=.false.)
+  call get_param(param_file, mod, "RESTORE_TEMPERATURE",OS%restore_temp, &
+                 "If true, the coupled driver will add a  \n"//&
+                 "heat flux that drives sea-surface temperauture \n"//&
+                 "toward specified values.", default=.false.)
   call get_param(param_file, mod, "RHO_0", Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to \n"//&
                  "calculate accelerations and the mass for conservation \n"//&
@@ -272,23 +277,25 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
                  "The gravitational acceleration of the Earth.", &
                  units="m s-2", default = 9.80)
 
-  call get_param(param_file,mod,"ICE_SHELF",OS%use_ice_shelf)
-
+  call get_param(param_file, mod, "ICE_SHELF",  OS%use_ice_shelf, &
+                 "If true, enables the ice shelf model.", default=.false.)
 
   OS%press_to_z = 1.0/(Rho0*G_Earth)
 
   call surface_forcing_init(Time_in, OS%grid, param_file, OS%MOM_CSp%diag, &
-                            OS%forcing_CSp, OS%restore_salinity)
+                            OS%forcing_CSp, OS%restore_salinity, OS%restore_temp)
 
   if (OS%use_ice_shelf)  then
-     call initialize_ice_shelf(OS%Time, OS%ice_shelf_CSp,OS%MOM_CSp%diag, OS%fluxes)
+     call initialize_ice_shelf(param_file, OS%grid, OS%Time, OS%ice_shelf_CSp, &
+                               OS%MOM_CSp%diag, OS%fluxes)
   endif
 
   call MOM_sum_output_init(OS%grid, param_file, OS%dirs%output_directory, &
                             OS%MOM_CSp%ntrunc, Time_init, OS%sum_output_CSp)
 
-  call write_energy(OS%MOM_CSp%u, OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%tv, &
-             OS%Time, 0, OS%grid, OS%GV, OS%sum_output_CSp, OS%MOM_CSp%tracer_flow_CSp)
+  ! This call has been moved into the first call to update_ocean_model.
+!  call write_energy(OS%MOM_CSp%u, OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%tv, &
+!             OS%Time, 0, OS%grid, OS%GV, OS%sum_output_CSp, OS%MOM_CSp%tracer_flow_CSp)
 
   ! write_energy_time is the next integral multiple of energysavedays.
   OS%write_energy_time = Time_init + OS%energysavedays * &
@@ -382,7 +389,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   if (OS%fluxes%fluxes_used) then
     call enable_averaging(time_step, OS%Time + Ocean_coupling_time_step, OS%MOM_CSp%diag) ! Needed to allow diagnostics in convert_IOB
     call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, &
-                               OS%grid, OS%forcing_CSp, OS%state, OS%restore_salinity)
+                               OS%grid, OS%forcing_CSp, OS%state, OS%restore_salinity,OS%restore_temp)
 #ifdef _USE_GENERIC_TRACER
     call MOM_generic_tracer_fluxes_accumulate(OS%fluxes, weight) !here weight=1, just saving the current fluxes
 #endif
@@ -399,7 +406,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   else
     OS%flux_tmp%C_p = OS%fluxes%C_p
     call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%flux_tmp, index_bnds, OS%Time, &
-                               OS%grid, OS%forcing_CSp, OS%state, OS%restore_salinity)
+                               OS%grid, OS%forcing_CSp, OS%state, OS%restore_salinity,OS%restore_temp)
   
     if (OS%use_ice_shelf) then
       call shelf_calc_flux(OS%State, OS%flux_tmp, OS%Time, time_step, OS%Ice_shelf_CSp)
@@ -409,6 +416,14 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 #ifdef _USE_GENERIC_TRACER
     call MOM_generic_tracer_fluxes_accumulate(OS%flux_tmp, weight) !weight of the current flux in the running average
 #endif
+  endif
+
+  if (OS%nstep==0) then
+    call finish_MOM_initialization(OS%Time, OS%dirs, OS%MOM_CSp, OS%fluxes)
+      
+    call write_energy(OS%MOM_CSp%u, OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%tv, &
+                      OS%Time, 0, OS%grid, OS%GV, OS%sum_output_CSp, &
+                      OS%MOM_CSp%tracer_flow_CSp)
   endif
 
   call disable_averaging(OS%MOM_CSp%diag)
@@ -631,7 +646,8 @@ subroutine convert_state_to_ocean_type(state, Ocean_sfc, G, patm, press_to_z)
     Ocean_sfc%sea_lev(i,j) = state%sea_lev(i+i0,j+j0)
     if (present(patm)) &
       Ocean_sfc%sea_lev(i,j) = Ocean_sfc%sea_lev(i,j) + patm(i,j) * press_to_z
-    Ocean_sfc%frazil(i,j) = state%frazil(i+i0,j+j0)
+      if (associated(state%frazil)) &
+      Ocean_sfc%frazil(i,j) = state%frazil(i+i0,j+j0)
     Ocean_sfc%area(i,j)   =  G%areaT(i+i0,j+j0)  
   enddo ; enddo
   

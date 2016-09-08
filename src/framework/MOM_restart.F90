@@ -121,8 +121,7 @@ type, public :: MOM_restart_CS ; private
                                     ! otherwise they are combined internally.
   logical :: large_file_support     ! If true, NetCDF 3.6 or later is being used
                                     ! and large-file-support is enabled.
-  character(len=120) :: restartfile ! The name or name root for MOM restart files.
-  type(ocean_grid_type), pointer :: G => NULL()
+  character(len=240) :: restartfile ! The name or name root for MOM restart files.
 
   type(field_restart), pointer :: restart_field(:) => NULL()
   type(p0d), pointer :: var_ptr0d(:) => NULL()
@@ -760,7 +759,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
 
   num_files = 0
   next_var = 0
-  nz = G%ke
+  nz = 1 ; if (present(GV)) nz = GV%ke
 
   call get_time(time,seconds,days)
   restart_time = real(days) + real(seconds)/86400.0
@@ -839,10 +838,10 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
 
     if (CS%parallel_restartfiles) then
       call create_file(unit, trim(restartpath), vars, (next_var-start_var), &
-                       G, fields, MULTIPLE, GV=GV)
+                       fields, MULTIPLE, G=G, GV=GV)
     else
       call create_file(unit, trim(restartpath), vars, (next_var-start_var), &
-                       G, fields, SINGLE_FILE, GV=GV)
+                       fields, SINGLE_FILE, G=G, GV=GV)
     endif
 
     do m=start_var,next_var-1
@@ -1216,8 +1215,7 @@ subroutine restore_state(filename, directory, day, G, CS)
 
 end subroutine restore_state
 
-subroutine restart_init(G, param_file, CS, restart_root)
-  type(ocean_grid_type), target     :: G
+subroutine restart_init(param_file, CS, restart_root)
   type(param_file_type), intent(in) :: param_file
   type(MOM_restart_CS),  pointer    :: CS
   character(len=*), optional, intent(in) :: restart_root
@@ -1239,7 +1237,7 @@ subroutine restart_init(G, param_file, CS, restart_root)
   allocate(CS)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version)
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "PARALLEL_RESTARTFILES", &
                                 CS%parallel_restartfiles, &
                  "If true, each processor writes its own restart file, \n"//&
@@ -1260,7 +1258,6 @@ subroutine restart_init(G, param_file, CS, restart_root)
   call get_param(param_file, mod, "MAX_FIELDS", CS%max_fields, &
                  "The maximum number of restart fields that can be used.", &
                  default=100)
-  CS%G => G
 
   allocate(CS%restart_field(CS%max_fields))
   allocate(CS%var_ptr0d(CS%max_fields))

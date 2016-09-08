@@ -9,6 +9,7 @@ use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only :  CLOCK_ROUTINE, CLOCK_LOOP
 use MOM_domains, only : pass_var, pass_vector, sum_across_PEs, broadcast
 use MOM_domains, only : root_PE, To_All, SCALAR_PAIR, CGRID_NE, AGRID
+use MOM_EOS, only : find_depth_of_pressure_in_cell
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
@@ -16,10 +17,13 @@ use MOM_file_parser, only : log_version
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type, isPointInCell
 use MOM_interface_heights, only : find_eta
-use MOM_io, only : close_file, create_file, fieldtype, file_exists
+use MOM_io, only : close_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE, MULTIPLE
 use MOM_io, only : slasher, vardesc, write_field
 use MOM_io, only : EAST_FACE, NORTH_FACE
+use MOM_open_boundary, only : ocean_OBC_type, open_boundary_init
+use MOM_open_boundary, only : OBC_NONE, OBC_SIMPLE
+use MOM_open_boundary, only : open_boundary_query, set_Flather_data, set_Flather_positions
 use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
 use MOM_restart, only : restore_state, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, set_up_sponge_ML_density
@@ -29,18 +33,21 @@ use MOM_ALE_sponge, only : ALE_sponge_CS
 use MOM_string_functions, only : uppercase
 use MOM_time_manager, only : time_type, set_time
 use MOM_tracer_registry, only : add_tracer_OBC_values, tracer_registry_type
-use MOM_variables, only : thermo_var_ptrs, ocean_OBC_type
-use MOM_variables, only : OBC_NONE, OBC_SIMPLE, OBC_FLATHER_E, OBC_FLATHER_W
-use MOM_variables, only : OBC_FLATHER_N, OBC_FLATHER_S
+use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : setVerticalGridAxes, verticalGrid_type
+use MOM_ALE, only : pressure_gradient_plm
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use MOM_EOS, only : int_specific_vol_dp
 use user_initialization, only : user_initialize_thickness, user_initialize_velocity
 use user_initialization, only : user_init_temperature_salinity
-use user_initialization, only : user_set_Open_Bdry_Conds, user_initialize_sponges
+use user_initialization, only : user_set_OBC_positions, user_set_OBC_data
+use user_initialization, only : user_initialize_sponges
 use DOME_initialization, only : DOME_initialize_thickness
-use DOME_initialization, only : DOME_set_Open_Bdry_Conds
+use DOME_initialization, only : DOME_set_OBC_positions, DOME_set_OBC_data
 use DOME_initialization, only : DOME_initialize_sponges
+use ISOMIP_initialization, only : ISOMIP_initialize_thickness
+use ISOMIP_initialization, only : ISOMIP_initialize_sponges
+use ISOMIP_initialization, only : ISOMIP_initialize_temperature_salinity
 use baroclinic_zone_initialization, only : baroclinic_zone_init_temperature_salinity
 use benchmark_initialization, only : benchmark_initialize_thickness
 use benchmark_initialization, only : benchmark_init_temperature_salinity
@@ -64,6 +71,7 @@ use Rossby_front_2d_initialization, only : Rossby_front_initialize_temperature_s
 use Rossby_front_2d_initialization, only : Rossby_front_initialize_velocity
 use SCM_idealized_hurricane, only : SCM_idealized_hurricane_TS_init
 use SCM_CVmix_tests, only: SCM_CVmix_tests_TS_init
+use BFB_initialization, only : BFB_initialize_sponges_southonly
 
 use midas_vertmap, only : find_interfaces, tracer_Z_init
 use midas_vertmap, only : determine_temperature
@@ -72,6 +80,7 @@ use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord
 use MOM_ALE, only : ALE_remap_scalar, ALE_build_grid
 use MOM_regridding, only : regridding_CS, set_regrid_params
 use MOM_remapping, only : remapping_CS, initialize_remapping
+use MOM_remapping, only : remapping_core_h
 use MOM_tracer_initialization_from_Z, only : horiz_interp_and_extrap_tracer
 
 implicit none ; private
@@ -80,21 +89,14 @@ implicit none ; private
 
 public MOM_initialize_state
 
-! This structure is to simplify communication with the calling code.
-type, public :: MOM_initialization_struct
-  type(tracer_registry_type), pointer :: tracer_Reg => NULL()
-  type(sponge_CS), pointer :: sponge_CSp => NULL()
-  type(ALE_sponge_CS), pointer :: ALE_sponge_CSp => NULL()
-  type(ocean_OBC_type), pointer :: OBC => NULL()
-end type MOM_initialization_struct
-
 character(len=40)  :: mod = "MOM_state_initialization" ! This module's name.
 
 contains
 
 ! -----------------------------------------------------------------------------
 subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
-                                restart_CS, ALE_CSp, CS, Time_in)
+                                restart_CS, ALE_CSp, tracer_Reg, sponge_CSp, &
+                                ALE_sponge_CSp, OBC, Time_in)
   type(ocean_grid_type),                     intent(inout) :: G
   type(verticalGrid_type),                   intent(in)    :: GV
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: u
@@ -106,7 +108,10 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   type(directories),                         intent(in)    :: dirs
   type(MOM_restart_CS),                      pointer       :: restart_CS
   type(ALE_CS),                              pointer       :: ALE_CSp
-  type(MOM_initialization_struct),           intent(inout) :: CS
+  type(tracer_registry_type),                pointer       :: tracer_Reg
+  type(sponge_CS),                           pointer       :: sponge_CSp
+  type(ALE_sponge_CS),                       pointer       :: ALE_sponge_CSp
+  type(ocean_OBC_type),                      pointer       :: OBC
   type(time_type), optional,                 intent(in)    :: Time_in
 ! Arguments: u  - Zonal velocity, in m s-1.
 !  (out)     v  - Meridional velocity, in m s-1.
@@ -127,7 +132,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
 
   character(len=200) :: filename   ! The name of an input file.
   character(len=200) :: filename2  ! The name of an input files.
-  character(len = 200) :: inputdir ! The directory where NetCDF input files are.
+  character(len=200) :: inputdir   ! The directory where NetCDF input files are.
   character(len=200) :: config
   logical :: from_Z_file, useALE
   logical :: new_sim
@@ -136,12 +141,10 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   logical :: use_EOS    ! If true, density is calculated from T & S using an
                         ! equation of state.
   logical :: depress_sfc ! If true, remove the mass that would be displaced
-                         ! by a large surface pressure, such as with an ice
-                         ! sheet.
+                         ! by a large surface pressure by squeezing the column.
+  logical :: trim_ic_for_p_surf ! If true, remove the mass that would be displaced
+                         ! by a large surface pressure, such as with an ice sheet.
   logical :: Analytic_FV_PGF, obsol_test
-  logical :: apply_OBC_u, apply_OBC_v
-  logical :: apply_OBC_u_flather_east, apply_OBC_u_flather_west
-  logical :: apply_OBC_v_flather_north, apply_OBC_v_flather_south
   logical :: convert
   type(EOS_type), pointer :: eos => NULL()
   logical :: debug    ! indicates whether to write debugging output
@@ -156,7 +159,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   call callTree_enter("MOM_initialize_state(), MOM_state_initialization.F90")
-  call log_version(PF, mod, version)
+  call log_version(PF, mod, version, "")
   call get_param(PF, mod, "DEBUG", debug, default=.false.)
 
   new_sim = .false.
@@ -168,8 +171,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   inputdir = slasher(inputdir)
 
   use_temperature = ASSOCIATED(tv%T)
-  use_EOS = associated(tv%eqn_of_state)
   useALE = associated(ALE_CSp)
+  use_EOS = associated(tv%eqn_of_state)
   if (use_EOS) eos => tv%eqn_of_state
 
 !====================================================================
@@ -212,6 +215,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                " \t\t between the surface and MAXIMUM_DEPTH. \n"//&
                " \t DOME - use a slope and channel configuration for the \n"//&
                " \t\t DOME sill-overflow test case. \n"//&
+               " \t ISOMIP - use a configuration for the \n"//&
+               " \t\t ISOMIP test case. \n"//&
                " \t benchmark - use the benchmark test case thicknesses. \n"//&
                " \t search - search a density profile for the interface \n"//&
                " \t\t densities. This is not yet implemented. \n"//&
@@ -226,9 +231,16 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
       select case (trim(config))
          case ("file"); call initialize_thickness_from_file(h, G, GV, PF, .false.)
          case ("thickness_file"); call initialize_thickness_from_file(h, G, GV, PF, .true.)
-         case ("coord"); call ALE_initThicknessToCoord( ALE_CSp, G, h )
+         case ("coord")
+           if (useALE) then
+             call ALE_initThicknessToCoord( ALE_CSp, G, GV, h )
+           else
+             call MOM_error(FATAL, "MOM_initialize_state: USE_REGRIDDING must be True "//&
+                                   "for THICKNESS_CONFIG of 'coord'")
+           endif
          case ("uniform"); call initialize_thickness_uniform(h, G, GV, PF)
          case ("DOME"); call DOME_initialize_thickness(h, G, GV, PF)
+         case ("ISOMIP"); call ISOMIP_initialize_thickness(h, G, GV, PF, tv)
          case ("benchmark"); call benchmark_initialize_thickness(h, G, GV, PF, &
                                  tv%eqn_of_state, tv%P_Ref)
          case ("search"); call initialize_thickness_search
@@ -261,6 +273,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                " \t benchmark - use the benchmark test case T & S. \n"//&
                " \t linear - linear in logical layer space. \n"//&
                " \t DOME2D - 2D DOME initialization. \n"//&
+               " \t ISOMIP - ISOMIP initialization. \n"//&
                " \t adjustment2d - TBD AJA. \n"//&
                " \t sloshing - TBD AJA. \n"//&
                " \t seamount - TBD AJA. \n"//&
@@ -279,6 +292,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
           case ("linear"); call initialize_temp_salt_linear(tv%T, tv%S, G, PF)
           case ("DOME2D"); call DOME2d_initialize_temperature_salinity ( tv%T, &
                                 tv%S, h, G, PF, eos)
+          case ("ISOMIP"); call ISOMIP_initialize_temperature_salinity ( tv%T, &
+                                tv%S, h, G, GV, PF, eos)
           case ("adjustment2d"); call adjustment_initialize_temperature_salinity ( tv%T, &
                                       tv%S, h, G, PF, eos)
           case ("baroclinic_zone"); call baroclinic_zone_init_temperature_salinity( tv%T, &
@@ -324,8 +339,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
     end select
 
     call pass_vector(u, v, G%Domain)
-    if (debug) call uchksum(u, "MOM_initialize_state: u ", G, haloshift=1)
-    if (debug) call vchksum(v, "MOM_initialize_state: v ", G, haloshift=1)
+    if (debug) call uchksum(u, "MOM_initialize_state: u ", G%HI, haloshift=1)
+    if (debug) call vchksum(v, "MOM_initialize_state: v ", G%HI, haloshift=1)
 
 !   Optionally convert the thicknesses from m to kg m-2.  This is particularly
 ! useful in a non-Boussinesq model.
@@ -344,18 +359,19 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
       h(:,:,:) = h(:,:,:)*GV%kg_m2_to_H
     endif
 
-    if (debug) then
-      call hchksum(h*GV%H_to_m, "MOM_initialize_state: h ", G, haloshift=1)
-      if ( use_temperature ) call hchksum(tv%T, "MOM_initialize_state: T ", G, haloshift=1)
-      if ( use_temperature ) call hchksum(tv%S, "MOM_initialize_state: S ", G, haloshift=1)
-    endif
-
 !  Remove the mass that would be displaced by an ice shelf or inverse barometer.
     call get_param(PF, mod, "DEPRESS_INITIAL_SURFACE", depress_sfc, &
                  "If true,  depress the initial surface to avoid huge \n"//&
                  "tsunamis when a large surface pressure is applied.", &
                  default=.false.)
+    call get_param(PF, mod, "TRIM_IC_FOR_P_SURF", trim_ic_for_p_surf, &
+                 "If true, cuts way the top of the column for initial conditions\n"//&
+                 "at the depth where the hydrostatic presure matches the imposed\n"//&
+                 "surface pressure which is read from file.", default=.false.)
+    if (depress_sfc .and. trim_ic_for_p_surf) call MOM_error(FATAL, "MOM_initialize_state: "//&
+             "DEPRESS_INITIAL_SURFACE and TRIM_IC_FOR_P_SURF are exclusive and cannot both be True")
     if (depress_sfc) call depress_surface(h, G, GV, PF, tv)
+    if (trim_ic_for_p_surf) call trim_for_ice(PF, G, GV, ALE_CSp, tv, h)
 
   else ! Previous block for new_sim=.T., this block restores state
 !    This line calls a subroutine that reads the initial conditions  !
@@ -363,6 +379,18 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
     call restore_state(dirs%input_filename, dirs%restart_input_dir, Time, &
                        G, restart_CS)
     if (present(Time_in)) Time = Time_in
+  endif
+
+  if ( use_temperature ) then
+    call pass_var(tv%T, G%Domain, complete=.false.)
+    call pass_var(tv%S, G%Domain, complete=.false.)
+  endif
+  call pass_var(h, G%Domain)
+
+  if (debug) then
+    call hchksum(h*GV%H_to_m, "MOM_initialize_state: h ", G%HI, haloshift=1)
+    if ( use_temperature ) call hchksum(tv%T, "MOM_initialize_state: T ", G%HI, haloshift=1)
+    if ( use_temperature ) call hchksum(tv%S, "MOM_initialize_state: S ", G%HI, haloshift=1)
   endif
 
   call get_param(PF, mod, "SPONGE", use_sponge, &
@@ -378,76 +406,53 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                  "A string that sets how the sponges are configured: \n"//&
                  " \t file - read sponge properties from the file \n"//&
                  " \t\t specified by (SPONGE_FILE).\n"//&
+                 " \t ISOMIP - apply ale sponge in the ISOMIP case \n"//&
                  " \t DOME - use a slope and channel configuration for the \n"//&
                  " \t\t DOME sill-overflow test case. \n"//&
+                 " \t BFB - Sponge at the southern boundary of the domain\n"//&
+                 " \t\t for buoyancy-forced basin case.\n"//&
                  " \t USER - call a user modified routine.", default="file")
-
-  ! if (useALE) then
-  !   select case (trim(config))
-  !     case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
-  !          "Unrecognized ALE sponge configuration "//trim(config))
-  !   end select
-
-  ! else
-
-      select case (trim(config))
-        case ("DOME"); call DOME_initialize_sponges(G, GV, tv, PF, CS%sponge_CSp)
-        case ("DOME2D"); call DOME2d_initialize_sponges(G, GV, tv, PF, useALE, &
-                                                        CS%sponge_CSp, CS%ALE_sponge_CSp)
-        case ("USER"); call user_initialize_sponges(G, use_temperature, tv, &
-                                                 PF, CS%sponge_CSp, h)
-        case ("phillips"); call Phillips_initialize_sponges(G, use_temperature, tv, &
-                                                 PF, CS%sponge_CSp, h)
-        case ("file"); call initialize_sponges_file(G, GV, use_temperature, tv, &
-                                                 PF, CS%sponge_CSp)
-        case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
-               "Unrecognized sponge configuration "//trim(config))
-      end select
-  ! endif
+    select case (trim(config))
+      case ("DOME"); call DOME_initialize_sponges(G, GV, tv, PF, sponge_CSp)
+      case ("DOME2D"); call DOME2d_initialize_sponges(G, GV, tv, PF, useALE, &
+                                                      sponge_CSp, ALE_sponge_CSp)
+      case ("ISOMIP"); call ISOMIP_initialize_sponges(G, GV, tv, PF, ALE_sponge_CSp)
+      case ("USER"); call user_initialize_sponges(G, use_temperature, tv, &
+                                               PF, sponge_CSp, h)
+      case ("BFB"); call BFB_initialize_sponges_southonly(G, use_temperature, tv, &
+                                               PF, sponge_CSp, h)
+      case ("phillips"); call Phillips_initialize_sponges(G, use_temperature, tv, &
+                                               PF, sponge_CSp, h)
+      case ("file"); call initialize_sponges_file(G, GV, use_temperature, tv, &
+                                               PF, sponge_CSp)
+      case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
+             "Unrecognized sponge configuration "//trim(config))
+    end select
   endif
 
-! This subroutine call sets optional open boundary conditions.
-  call get_param(PF, mod, "APPLY_OBC_U", apply_OBC_u, &
-                 "If true, open boundary conditions may be set at some \n"//&
-                 "u-points, with the configuration controlled by OBC_CONFIG", &
-                 default=.false.)
-  call get_param(PF, mod, "APPLY_OBC_V", apply_OBC_v, &
-                 "If true, open boundary conditions may be set at some \n"//&
-                 "v-points, with the configuration controlled by OBC_CONFIG", &
-                 default=.false.)
-  if (apply_OBC_u .or. apply_OBC_v) then 
-    call get_param(PF, mod, "OBC_CONFIG", config, &
-                 "A string that sets how the open boundary conditions are \n"//&
-                 " configured: \n"//&
-                 " \t DOME - use a slope and channel configuration for the \n"//&
-                 " \t\t DOME sill-overflow test case. \n"//&
-                 " \t USER - call a user modified routine.", default="file", &
-                 fail_if_missing=.true.)
+  ! Reads OBC parameters not pertaining to the location of the boundaries
+  call open_boundary_init(G, PF, OBC)
+
+  ! This is the legacy approach to turning on open boundaries
+  if (open_boundary_query(OBC, apply_orig_OBCs=.true.)) then
+    call get_param(PF, mod, "OBC_CONFIG", config, fail_if_missing=.true., do_not_log=.true.)
     if (trim(config) == "DOME") then
-      call DOME_set_Open_Bdry_Conds(CS%OBC, tv, G, GV, PF, CS%tracer_Reg)
+      call DOME_set_OBC_data(OBC, tv, G, GV, PF, tracer_Reg)
     elseif (trim(config) == "USER") then
-      call user_set_Open_Bdry_Conds(CS%OBC, tv, G, PF, CS%tracer_Reg)
+      call user_set_OBC_data(OBC, tv, G, PF, tracer_Reg)
     else
       call MOM_error(FATAL, "The open boundary conditions specified by "//&
               "OBC_CONFIG = "//trim(config)//" have not been fully implemented.")
-      call set_Open_Bdry_Conds(CS%OBC, tv, G, GV, PF, CS%tracer_Reg)
+      call set_Open_Bdry_Conds(OBC, tv, G, GV, PF, tracer_Reg)
     endif
+  elseif (open_boundary_query(OBC, apply_orig_Flather=.true.)) then
+    call set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
   endif
-
-  call get_param(PF, mod, "APPLY_OBC_U_FLATHER_EAST", apply_OBC_u_flather_east,&
-                 "Apply a Flather open boundary condition on the eastern \n"//&
-                 "side of the global domain", default=.false.)
-  call get_param(PF, mod, "APPLY_OBC_U_FLATHER_WEST", apply_OBC_u_flather_west,&
-                 "Apply a Flather open boundary condition on the western \n"//&
-                 "side of the global domain", default=.false.)
-  call get_param(PF, mod, "APPLY_OBC_V_FLATHER_NORTH", apply_OBC_v_flather_north,&
-                 "Apply a Flather open boundary condition on the northern \n"//&
-                 "side of the global domain", default=.false.)
-  call get_param(PF, mod, "APPLY_OBC_V_FLATHER_SOUTH", apply_OBC_v_flather_south,&
-                 "Apply a Flather open boundary condition on the southern \n"//&
-                 "side of the global domain", default=.false.)
-  if (apply_OBC_u_flather_east .or. apply_OBC_u_flather_west .or. apply_OBC_v_flather_north .or. apply_OBC_v_flather_south) then
-    call set_Flather_Bdry_Conds(CS%OBC, tv, h, G, PF, CS%tracer_Reg)
+  if (debug.and.associated(OBC)) then
+    call hchksum(G%mask2dT, 'MOM_initialize_state: mask2dT ', G%HI)
+    call uchksum(G%mask2dCu, 'MOM_initialize_state: mask2dCu ', G%HI)
+    call vchksum(G%mask2dCv, 'MOM_initialize_state: mask2dCv ', G%HI)
+    call qchksum(G%mask2dBu, 'MOM_initialize_state: mask2dBu ', G%HI)
   endif
 
   call callTree_leave('MOM_initialize_state()')
@@ -696,7 +701,7 @@ subroutine convert_thickness(h, G, GV, param_file, tv)
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   max_itt = 10
   Boussinesq = GV%Boussinesq
-  I_gEarth = 1.0 / G%g_Earth
+  I_gEarth = 1.0 / GV%g_Earth
 
   if (Boussinesq) then
     call MOM_error(FATAL,"Not yet converting thickness with Boussinesq approx.")
@@ -711,7 +716,7 @@ subroutine convert_thickness(h, G, GV, param_file, tv)
           call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_top(:,j), rho, &
                                  is, ie-is+1, tv%eqn_of_state)
           do i=is,ie
-            p_bot(i,j) = p_top(i,j) + G%g_Earth * h(i,j,k) * rho(i)
+            p_bot(i,j) = p_top(i,j) + GV%g_Earth * h(i,j,k) * rho(i)
           enddo
         enddo
 
@@ -725,7 +730,7 @@ subroutine convert_thickness(h, G, GV, param_file, tv)
             !   The hydrostatic equation is linear to such a
             ! high degree that no bounds-checking is needed.
             do i=is,ie
-              p_bot(i,j) = p_bot(i,j) + rho(i) * (G%g_Earth*h(i,j,k) - dz_geo(i,j))
+              p_bot(i,j) = p_bot(i,j) + rho(i) * (GV%g_Earth*h(i,j,k) - dz_geo(i,j))
             enddo
           enddo ; endif
         enddo
@@ -791,7 +796,7 @@ subroutine depress_surface(h, G, GV, param_file, tv)
   enddo ; enddo ; endif
 
   ! Convert thicknesses to interface heights.
-  call find_eta(h, tv, G%g_Earth, G, GV, eta)
+  call find_eta(h, tv, GV%g_Earth, G, GV, eta)
   
   do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
 !    if (eta_sfc(i,j) < eta(i,j,nz+1)) then
@@ -822,6 +827,157 @@ subroutine depress_surface(h, G, GV, param_file, tv)
   endif ; enddo ; enddo
 
 end subroutine depress_surface
+
+!> Adjust the layer thicknesses by cutting away the top of each model column at the depth
+!! where the hydrostatic pressure matches an imposed surface pressure read from file.
+subroutine trim_for_ice(PF, G, GV, ALE_CSp, tv, h)
+  type(param_file_type),                    intent(in)    :: PF !< Parameter file structure
+  type(ocean_grid_type),                    intent(in)    :: G !< Ocean grid structure
+  type(verticalGrid_type),                  intent(in)    :: GV !< Vertical grid structure
+  type(ALE_CS),                             pointer       :: ALE_CSp !< ALE control structure
+  type(thermo_var_ptrs),                    intent(inout) :: tv !< Thermodynamics structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h !< Layer thickness (H units, m or Pa)
+  ! Local variables
+  character(len=200) :: mod = "trim_for_ice"
+  real, dimension(SZI_(G),SZJ_(G)) :: p_surf ! Imposed pressure on ocean at surface (Pa)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: S_t, S_b, T_t, T_b ! Top and bottom edge values for reconstructions
+                                                                 ! of salinity and temperature within each layer.
+  character(len=200) :: inputdir, filename, p_surf_file, p_surf_var ! Strings for file/path
+  real :: scale_factor, min_thickness
+  integer :: i, j, k
+  logical :: use_remapping
+  type(remapping_CS), pointer :: remap_CS => NULL()
+
+  call get_param(PF, mod, "SURFACE_PRESSURE_FILE", p_surf_file, &
+                 "The initial condition file for the surface height.", &
+                 fail_if_missing=.true.)
+  call get_param(PF, mod, "SURFACE_PRESSURE_VAR", p_surf_var, &
+                 "The initial condition variable for the surface height.", &
+                 units="kg m-2", default="")
+  call get_param(PF, mod, "INPUTDIR", inputdir, default=".", do_not_log=.true.)
+  filename = trim(slasher(inputdir))//trim(p_surf_file)
+  call log_param(PF,  mod, "!INPUTDIR/SURFACE_HEIGHT_IC_FILE", filename)
+
+  call read_data(filename, p_surf_var, p_surf, domain=G%Domain%mpp_domain)
+  call get_param(PF, mod, "SURFACE_PRESSURE_SCALE", scale_factor, &
+                 "A scaling factor to convert SURFACE_PRESSURE_VAR from\n"//&
+                 "file SURFACE_PRESSURE_FILE into a surface pressure.", &
+                 units="file dependent", default=1.)
+  if (scale_factor /= 1.) p_surf(:,:) = scale_factor * p_surf(:,:)
+  call get_param(PF, mod, "MIN_THICKNESS", min_thickness, 'Minimum layer thickness', &
+                 units='m', default=1.e-3)
+  call get_param(PF, mod, "TRIMMING_USES_REMAPPING", use_remapping, &
+                 'When trimming the column, also remap T and S.', &
+                 default=.false.)
+  if (use_remapping) then
+    allocate(remap_CS)
+    call initialize_remapping(remap_CS, 'PLM', boundary_extrapolation=.true.)
+  endif
+
+  ! Find edge values of T and S used in reconstructions
+  if ( associated(ALE_CSp) ) then ! This should only be associated if we are in ALE mode
+!   if ( PRScheme == PRESSURE_RECONSTRUCTION_PLM ) then
+      call pressure_gradient_plm(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h)
+!   elseif ( PRScheme == PRESSURE_RECONSTRUCTION_PPM ) then
+!     call pressure_gradient_ppm(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h)
+!   endif
+  else
+!    call MOM_error(FATAL, "trim_for_ice: Does not work without ALE mode")
+    do k=1,G%ke ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
+      T_t(i,j,k) = tv%T(i,j,k) ; T_b(i,j,k) = tv%T(i,j,k)
+      S_t(i,j,k) = tv%S(i,j,k) ; S_b(i,j,k) = tv%S(i,j,k)
+    enddo ; enddo ; enddo
+  endif
+
+  do j=G%jsc,G%jec ; do i=G%isc,G%iec
+    call cut_off_column_top(GV%ke, tv, GV%Rho0, GV%g_Earth, G%bathyT(i,j), min_thickness, &
+               tv%T(i,j,:), T_t(i,j,:), T_b(i,j,:), tv%S(i,j,:), S_t(i,j,:), S_b(i,j,:), &
+               p_surf(i,j), h(i,j,:), remap_CS)
+  enddo ; enddo
+
+end subroutine trim_for_ice
+
+!> Adjust the layer thicknesses by cutting away the top at the depth where the hydrostatic
+!! pressure matches p_surf
+subroutine cut_off_column_top(nk, tv, Rho0, G_earth, depth, min_thickness, &
+                              T, T_t, T_b, S, S_t, S_b, p_surf, h, remap_CS)
+  integer,               intent(in)    :: nk !< Number of layers
+  type(thermo_var_ptrs), intent(in)    :: tv !< Thermodynamics structure
+  real,                  intent(in)    :: Rho0 !< Reference density (kg/m3)
+  real,                  intent(in)    :: G_earth !< Gravitational acceleration (m/s2)
+  real,                  intent(in)    :: depth !< Depth of ocean column (m)
+  real,                  intent(in)    :: min_thickness !< Smallest thickness allowed (m)
+  real, dimension(nk),   intent(inout) :: T !< Layer mean temperature
+  real, dimension(nk),   intent(in)    :: T_t !< Temperature at top of layer
+  real, dimension(nk),   intent(in)    :: T_b !< Temperature at bottom of layer
+  real, dimension(nk),   intent(inout) :: S !< Layer mean salinity
+  real, dimension(nk),   intent(in)    :: S_t !< Salinity at top of layer
+  real, dimension(nk),   intent(in)    :: S_b !< Salinity at bottom of layer
+  real,                  intent(in)    :: p_surf !< Imposed pressure on ocean at surface (Pa)
+  real, dimension(nk),   intent(inout) :: h !< Layer thickness (H units, m or Pa)
+  type(remapping_CS),    pointer       :: remap_CS ! Remapping structure for remapping T and S, if associated
+  ! Local variables
+  real, dimension(nk+1) :: e ! Top and bottom edge values for reconstructions
+  real, dimension(nk) :: h0, S0, T0, h1, S1, T1
+  real :: P_t, P_b, z_out, e_top
+  integer :: k
+
+  ! Calculate original interface positions
+  e(nk+1) = -depth
+  do k=nk,1,-1
+    e(K) = e(K+1) + h(k)
+    h0(k) = h(nk+1-k) ! Keep a copy to use in remapping
+  enddo
+
+  P_t = 0.
+  e_top = e(1)
+  do k=1,nk
+    call find_depth_of_pressure_in_cell(T_t(k), T_b(k), S_t(k), S_b(k), e(K), e(K+1), &
+                                        P_t, p_surf, Rho0, G_earth, tv%eqn_of_state, P_b, z_out)
+    if (z_out>=e(K)) then
+      ! Imposed pressure was less that pressure at top of cell
+      exit
+    elseif (z_out<=e(K+1)) then
+      ! Imposed pressure was greater than pressure at bottom of cell
+      e_top = e(K+1)
+    else
+      ! Imposed pressure was fell between pressures at top and bottom of cell
+      e_top = z_out
+      exit
+    endif
+    P_t = P_b
+  enddo
+  if (e_top<e(1)) then
+    ! Clip layers from the top down, if at all
+    do K=1,nk
+      if (e(K)>e_top) then
+        ! Original e(K) is too high
+        e(K) = e_top
+        e_top = e_top - min_thickness ! Next interface must be at least this deep
+      endif
+      ! This layer needs trimming
+      h(k) = max( min_thickness, e(K) - e(K+1) )
+      if (e(K)<e_top) exit ! No need to go further
+    enddo
+  endif
+
+  ! Now we need to remap but remapping assumes the surface is at the
+  ! same place in the two columns so we turn the column upside down.
+  if (associated(remap_CS)) then
+    do k=1,nk
+      S0(k) = S(nk+1-k)
+      T0(k) = T(nk+1-k)
+      h1(k) = h(nk+1-k)
+    enddo
+    call remapping_core_h(nk, h0, T0, nk, h1, T1, remap_CS )
+    call remapping_core_h(nk, h0, S0, nk, h1, S1, remap_CS )
+    do k=1,nk
+      S(k) = S1(nk+1-k)
+      T(k) = T1(nk+1-k)
+    enddo
+  endif
+
+end subroutine cut_off_column_top
 
 ! -----------------------------------------------------------------------------
 subroutine initialize_velocity_from_file(u, v, G, param_file)
@@ -1104,6 +1260,7 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, param_file, eqn_of_state, P_Ref
   real :: drho_dT(SZK_(G))   ! Derivative of density with temperature in kg m-3 K-1.                              !
   real :: drho_dS(SZK_(G))   ! Derivative of density with salinity in kg m-3 PSU-1.                             !
   real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 in kg m-3.
+  logical :: fit_salin       ! If true, accept the prescribed temperature and fit the salinity.
   character(len=40)  :: mod = "initialize_temp_salt_fit" ! This subroutine's name.
   integer :: i, j, k, itt, nz
   nz = G%ke
@@ -1116,27 +1273,44 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, param_file, eqn_of_state, P_Ref
   call get_param(param_file, mod, "S_REF", S_Ref, &
                  "A reference salinity used in initialization.", units="PSU", &
                  default=35.0)
+  call get_param(param_file, mod, "FIT_SALINITY", fit_salin, &
+                 "If true, accept the prescribed temperature and fit the \n"//&
+                 "salinity; otherwise take salinity and fit temperature.", &
+                 default=.false.)
   do k=1,nz
     pres(k) = P_Ref ; S0(k) = S_Ref
+    T0(k) = T_Ref
   enddo
-  T0(1) = T_Ref
 
   call calculate_density(T0(1),S0(1),pres(1),rho_guess(1),eqn_of_state)
   call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,1,eqn_of_state)
 
-! A first guess of the layers' temperatures.                         !
-  do k=nz,1,-1
-    T0(k) = T0(1) + (GV%Rlay(k) - rho_guess(1)) / drho_dT(1)
-  enddo
-
-! Refine the guesses for each layer.                                 !
-  do itt=1,6
-    call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
-    call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
-    do k=1,nz
-      T0(k) = T0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
+  if (fit_salin) then
+! A first guess of the layers' temperatures.
+    do k=nz,1,-1
+      S0(k) = max(0.0, S0(1) + (GV%Rlay(k) - rho_guess(1)) / drho_dS(1))
     enddo
-  enddo
+! Refine the guesses for each layer.
+    do itt=1,6
+      call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
+      call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
+      do k=1,nz
+        S0(k) = max(0.0, S0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dS(k))
+      enddo
+    enddo
+  else
+! A first guess of the layers' temperatures.
+    do k=nz,1,-1
+      T0(k) = T0(1) + (GV%Rlay(k) - rho_guess(1)) / drho_dT(1)
+    enddo
+    do itt=1,6
+      call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
+      call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
+      do k=1,nz
+        T0(k) = T0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
+      enddo
+    enddo
+  endif
 
   do k=1,nz ; do j=G%jsd,G%jed ; do i=G%isd,G%ied
     T(i,j,k) = T0(k) ; S(i,j,k) = S0(k)
@@ -1511,356 +1685,6 @@ end subroutine set_Open_Bdry_Conds
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
-  type(ocean_grid_type),                  intent(inout) :: G
-  type(ocean_OBC_type),                   pointer    :: OBC
-  type(thermo_var_ptrs),                  intent(inout) :: tv
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h
-  type(param_file_type),                  intent(in) :: PF
-  type(tracer_registry_type),             pointer    :: tracer_Reg
-!   This subroutine sets the initial definitions of the characteristic open boundary
-!   conditions. Written by Mehmet Ilicak
-
-! Arguments: OBC - This open boundary condition type specifies whether, where,
-!                  and what open boundary conditions are used.
-!  (out)     tv - A structure containing pointers to any available
-!                 thermodynamic fields, including potential temperature and
-!                 salinity or mixed layer density. Absent fields have NULL ptrs.
-!  (in)      G - The ocean's grid structure.
-!  (in)      PF - A structure indicating the open file to parse for
-!                         model parameter values.
-
-  logical :: any_OBC        ! Set to true if any points in this subdomain use
-                            ! open boundary conditions.
-
-  logical :: apply_OBC_u_flather_east = .false., apply_OBC_u_flather_west = .false.
-  logical :: apply_OBC_v_flather_north = .false., apply_OBC_v_flather_south = .false.  
-  logical :: read_OBC_eta = .false.
-  logical :: read_OBC_uv = .false.
-  logical :: read_OBC_TS = .false.
-
-  integer :: isd_global, jsd_global
-  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
-  integer :: isd_off, jsd_off
-  integer :: IsdB, IedB, JsdB, JedB
-  integer :: east_boundary, west_boundary, north_boundary, south_boundary
-  character(len=40)  :: mod = "set_Flather_Bdry_Conds" ! This subroutine's name.
-  character(len=200) :: filename, OBC_file, inputdir ! Strings for file/path
-
-  real :: temp_u(G%domain%niglobal+1,G%domain%njglobal)
-  real :: temp_v(G%domain%niglobal,G%domain%njglobal+1)
-
-  real, pointer, dimension(:,:,:) :: &
-    OBC_T_u => NULL(), &    ! These arrays should be allocated and set to
-    OBC_T_v => NULL(), &    ! specify the values of T and S that should come
-    OBC_S_u => NULL(), & 
-    OBC_S_v => NULL()     
-
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-  
-  isd_global = G%isd_global
-  jsd_global = G%jsd_global
-  call get_param(PF, mod, "APPLY_OBC_U_FLATHER_EAST", apply_OBC_u_flather_east,&
-                 "Apply a Flather open boundary condition on the eastern \n"//&
-                 "side of the global domain", default=.false.)
-  call get_param(PF, mod, "APPLY_OBC_U_FLATHER_WEST", apply_OBC_u_flather_west,&
-                 "Apply a Flather open boundary condition on the western \n"//&
-                 "side of the global domain", default=.false.)
-  call get_param(PF, mod, "APPLY_OBC_V_FLATHER_NORTH", apply_OBC_v_flather_north,&
-                 "Apply a Flather open boundary condition on the northern \n"//&
-                 "side of the global domain", default=.false.)
-  call get_param(PF, mod, "APPLY_OBC_V_FLATHER_SOUTH", apply_OBC_v_flather_south,&
-                 "Apply a Flather open boundary condition on the southern \n"//&
-                 "side of the global domain", default=.false.)
-
-  if (.not.(apply_OBC_u_flather_east  .or. apply_OBC_u_flather_west .or. &            
-            apply_OBC_v_flather_north .or. apply_OBC_v_flather_south)) return
-  
-  if (.not.associated(OBC)) allocate(OBC)
-       
-  OBC%apply_OBC_u_flather_east = apply_OBC_u_flather_east
-  OBC%apply_OBC_u_flather_west = apply_OBC_u_flather_west 
-  OBC%apply_OBC_v_flather_north = apply_OBC_v_flather_north 
-  OBC%apply_OBC_v_flather_south = apply_OBC_v_flather_south
-
-  call get_param(PF, mod, "READ_OBC_UV", read_OBC_uv, &
-                 "If true, read the values for the velocity open boundary \n"//&
-                 "conditions from the file specified by OBC_FILE.", &
-                 default=.false.)
-  call get_param(PF, mod, "READ_OBC_ETA", read_OBC_eta, &
-                 "If true, read the values for the sea surface height \n"//&
-                 "open boundary conditions from the file specified by \n"//&
-                 "OBC_FILE.", default=.false.)
-  call get_param(PF, mod, "READ_OBC_TS", read_OBC_TS, &
-                 "If true, read the values for the temperature and \n"//&
-                 "salinity open boundary conditions from the file \n"//&
-                 "specified by OBC_FILE.", default=.false.)
-  if (read_OBC_uv .or. read_OBC_eta .or. read_OBC_TS) then
-    call get_param(PF, mod, "OBC_FILE", OBC_file, &
-                 "The file from which the appropriate open boundary \n"//&
-                 "condition values are read.", default="MOM_OBC_FILE.nc")
-    call get_param(PF, mod, "INPUTDIR", inputdir, default=".")
-    inputdir = slasher(inputdir)
-    filename = trim(inputdir)//trim(OBC_file)
-    call log_param(PF, mod, "INPUTDIR/OBC_FILE", filename)
-  endif
-
-  if (G%symmetric) then
-    east_boundary = G%ieg
-    west_boundary = G%isg-1
-    north_boundary = G%jeg
-    south_boundary = G%jsg-1
-  else
-    ! I am not entirely sure that this works properly. -RWH
-    east_boundary = G%ieg-1
-    west_boundary = G%isg
-    north_boundary = G%jeg-1
-    south_boundary = G%jsg
-  endif
-
-  if (.not.associated(OBC%OBC_mask_u)) then
-    allocate(OBC%OBC_mask_u(IsdB:IedB,jsd:jed)) ; OBC%OBC_mask_u(:,:) = .false.
-  endif
-  if (.not.associated(OBC%OBC_kind_u)) then
-    allocate(OBC%OBC_kind_u(IsdB:IedB,jsd:jed)) ; OBC%OBC_kind_u(:,:) = OBC_NONE
-  endif
-  if (.not.associated(OBC%OBC_mask_v)) then
-    allocate(OBC%OBC_mask_v(isd:ied,JsdB:JedB)) ; OBC%OBC_mask_v(:,:) = .false.
-  endif
-  if (.not.associated(OBC%OBC_kind_v)) then
-    allocate(OBC%OBC_kind_v(isd:ied,JsdB:JedB)) ; OBC%OBC_kind_v(:,:) = OBC_NONE
-  endif
-
-  if (.not.associated(OBC%vbt_outer)) then
-    allocate(OBC%vbt_outer(isd:ied,JsdB:JedB)) ; OBC%vbt_outer(:,:) = 0.0
-  endif
-
-  if (.not.associated(OBC%ubt_outer)) then
-    allocate(OBC%ubt_outer(IsdB:IedB,jsd:jed)) ; OBC%ubt_outer(:,:) = 0.0
-  endif
-
-  if (.not.associated(OBC%eta_outer_u)) then
-    allocate(OBC%eta_outer_u(IsdB:IedB,jsd:jed)) ; OBC%eta_outer_u(:,:) = 0.0
-  endif
-
-  if (.not.associated(OBC%eta_outer_v)) then
-    allocate(OBC%eta_outer_v(isd:ied,JsdB:JedB)) ; OBC%eta_outer_v(:,:) = 0.0
-  endif
-  
-  if (read_OBC_uv) then
-    call read_data(filename, 'ubt', OBC%ubt_outer, &
-                   domain=G%Domain%mpp_domain, position=EAST_FACE)
-    call read_data(filename, 'vbt', OBC%vbt_outer, &
-                   domain=G%Domain%mpp_domain, position=NORTH_FACE)
-  endif
-
-  if (read_OBC_eta) then
-    call read_data(filename, 'eta_outer_u', OBC%eta_outer_u, &
-                   domain=G%Domain%mpp_domain, position=EAST_FACE)
-    call read_data(filename, 'eta_outer_v', OBC%eta_outer_v, &
-                   domain=G%Domain%mpp_domain, position=NORTH_FACE)
-  endif
-
-  call pass_vector(OBC%eta_outer_u,OBC%eta_outer_v,G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
-  call pass_vector(OBC%ubt_outer,OBC%vbt_outer,G%Domain)
-
-  ! This code should be modified to allow OBCs to be applied anywhere.
-
-  if (apply_OBC_u_flather_east) then
-    ! Determine where u points are applied at east side 
-    do j=jsd,jed ; do I=IsdB,IedB
-      if ((I+isd_global-isd) == east_boundary) then !eastern side
-        OBC%OBC_mask_u(I,j) = .true.
-        OBC%OBC_kind_u(I,j) = OBC_FLATHER_E
-        if ((i+1>isd) .and. (i+1<ied) .and. (J>JsdB) .and. (J<JedB)) then
-          OBC%OBC_mask_v(i+1,J) = .true.
-          if (OBC%OBC_kind_v(i+1,J) == OBC_NONE) OBC%OBC_kind_v(i+1,J) = OBC_FLATHER_E
-        endif
-        if ((i+1>isd) .and. (i+1<ied) .and. (J-1>JsdB) .and. (J-1<JedB)) then
-          OBC%OBC_mask_v(i+1,J-1) = .true.
-          if (OBC%OBC_kind_v(i+1,J-1) == OBC_NONE) OBC%OBC_kind_v(i+1,J-1) = OBC_FLATHER_E
-        endif
-      endif
-    enddo ; enddo
-  endif
-
-  if (apply_OBC_u_flather_west) then
-    ! Determine where u points are applied at west side 
-    do j=jsd,jed ; do I=IsdB,IedB
-      if ((I+isd_global-isd) == west_boundary) then !western side
-        OBC%OBC_mask_u(I,j) = .true.
-        OBC%OBC_kind_u(I,j) = OBC_FLATHER_W
-        if ((i>isd) .and. (i<ied) .and. (J>JsdB) .and. (J<JedB)) then
-          OBC%OBC_mask_v(i,J) = .true.
-          if (OBC%OBC_kind_v(i,J) == OBC_NONE) OBC%OBC_kind_v(i,J) = OBC_FLATHER_W
-        endif
-        if ((i>isd) .and. (i<ied) .and. (J-1>JsdB) .and. (J-1<JedB)) then
-          OBC%OBC_mask_v(i,J-1) = .true.
-          if (OBC%OBC_kind_v(i,J-1) == OBC_NONE) OBC%OBC_kind_v(i,J-1) = OBC_FLATHER_W
-        endif
-      endif
-    enddo ; enddo
-  endif
-
-
-  if (apply_OBC_v_flather_north) then
-    ! Determine where v points are applied at north side 
-    do J=JsdB,JedB ; do i=isd,ied
-      if ((J+jsd_global-jsd) == north_boundary) then         !northern side
-        OBC%OBC_mask_v(i,J) = .true.
-        OBC%OBC_kind_v(i,J) = OBC_FLATHER_N
-        if ((I>IsdB) .and. (I<IedB) .and. (j+1>jsd) .and. (j+1<jed)) then
-          OBC%OBC_mask_u(I,j+1) = .true.
-          if (OBC%OBC_kind_u(I,j+1) == OBC_NONE) OBC%OBC_kind_u(I,j+1) = OBC_FLATHER_N
-        endif
-        if ((I-1>IsdB) .and. (I-1<IedB) .and. (j+1>jsd) .and. (j+1<jed)) then
-          OBC%OBC_mask_u(I-1,j+1) = .true.
-          if (OBC%OBC_kind_u(I-1,j+1) == OBC_NONE) OBC%OBC_kind_u(I-1,j+1) = OBC_FLATHER_N
-        endif
-     endif
-    enddo ; enddo
-  endif
-  
-  if (apply_OBC_v_flather_south) then
-    ! Determine where v points are applied at south side 
-    do J=JsdB,JedB ; do i=isd,ied
-      if ((J+jsd_global-jsd) == south_boundary) then         !southern side
-        OBC%OBC_mask_v(i,J) = .true.
-        OBC%OBC_kind_v(i,J) = OBC_FLATHER_S
-        if ((I>IsdB) .and. (I<IedB) .and. (j>jsd) .and. (j<jed)) then
-          OBC%OBC_mask_u(I,j) = .true.
-          if (OBC%OBC_kind_u(I,j) == OBC_NONE) OBC%OBC_kind_u(I,j) = OBC_FLATHER_S
-        endif
-        if ((I-1>IsdB) .and. (I-1<IedB) .and. (j>jsd) .and. (j<jed)) then
-          OBC%OBC_mask_u(I-1,j) = .true.
-          if (OBC%OBC_kind_u(I-1,j) == OBC_NONE) OBC%OBC_kind_u(I-1,j) = OBC_FLATHER_S
-        endif
-      endif
-    enddo ; enddo
-  endif
-
-  !   If there are no OBC points on this PE, there is no reason to keep the OBC
-  ! type, and it could be deallocated.
-
-
-  ! Define radiation coefficients r[xy]_old_[uvh] as needed.  For now, there are
-  ! no radiation conditions applied to the thicknesses, since the thicknesses
-  ! might not be physically motivated.  Instead, sponges should be used to
-  ! enforce the near-boundary layer structure.
-  if (apply_OBC_u_flather_west .or. apply_OBC_u_flather_east) then
-    allocate(OBC%rx_old_u(IsdB:IedB,jsd:jed,nz)) ; OBC%rx_old_u(:,:,:) = 0.0
- !   allocate(OBC%rx_old_h(Isd:Ied,jsd:jed,nz))   ; OBC%rx_old_h(:,:,:) = 0.0
-  endif
-  if (apply_OBC_v_flather_south .or. apply_OBC_v_flather_north) then
-    allocate(OBC%ry_old_v(isd:ied,JsdB:JedB,nz)) ; OBC%ry_old_v(:,:,:) = 0.0
- !   allocate(OBC%ry_old_h(isd:ied,Jsd:Jed,nz))   ; OBC%ry_old_h(:,:,:) = 0.0
-  endif
-
-
-  if (associated(tv%T)) then
-    allocate(OBC_T_u(IsdB:IedB,jsd:jed,nz)) ; OBC_T_u(:,:,:) = 0.0
-    allocate(OBC_S_u(IsdB:IedB,jsd:jed,nz)) ; OBC_S_u(:,:,:) = 0.0
-    allocate(OBC_T_v(isd:ied,JsdB:JedB,nz)) ; OBC_T_v(:,:,:) = 0.0
-    allocate(OBC_S_v(isd:ied,JsdB:JedB,nz)) ; OBC_S_v(:,:,:) = 0.0
-
-    if (read_OBC_TS) then
-      call read_data(filename, 'OBC_T_u', OBC_T_u, &
-                     domain=G%Domain%mpp_domain, position=EAST_FACE)
-      call read_data(filename, 'OBC_S_u', OBC_S_u, &
-                     domain=G%Domain%mpp_domain, position=EAST_FACE)
-
-      call read_data(filename, 'OBC_T_v', OBC_T_v, &
-                     domain=G%Domain%mpp_domain, position=NORTH_FACE)
-      call read_data(filename, 'OBC_S_v', OBC_S_v, &
-                     domain=G%Domain%mpp_domain, position=NORTH_FACE)
-    else
-      call pass_var(tv%T, G%Domain)
-      call pass_var(tv%S, G%Domain)
-      do k=1,nz ; do j=js,je ; do I=is-1,ie
-        if (OBC%OBC_mask_u(I,j)) then
-          if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) then
-            OBC_T_u(I,j,k) = tv%T(i,j,k)
-            OBC_S_u(I,j,k) = tv%S(i,j,k)
-          elseif (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W) then
-            OBC_T_u(I,j,k) = tv%T(i+1,j,k)
-            OBC_S_u(I,j,k) = tv%S(i+1,j,k)
-          elseif (G%mask2dT(i,j) + G%mask2dT(i+1,j) > 0) then
-            OBC_T_u(I,j,k) = (G%mask2dT(i,j)*tv%T(i,j,k) + G%mask2dT(i+1,j)*tv%T(i+1,j,k)) / &
-                             (G%mask2dT(i,j) + G%mask2dT(i+1,j))
-            OBC_S_u(I,j,k) = (G%mask2dT(i,j)*tv%S(i,j,k) + G%mask2dT(i+1,j)*tv%S(i+1,j,k)) / &
-                             (G%mask2dT(i,j) + G%mask2dT(i+1,j))
-          else ! This probably shouldn't happen or maybe it doesn't matter?
-            OBC_T_u(I,j,k) = 0.5*(tv%T(i,j,k)+tv%T(i+1,j,k))
-            OBC_S_u(I,j,k) = 0.5*(tv%S(i,j,k)+tv%S(i+1,j,k))
-          endif
-        else
-          OBC_T_u(I,j,k) = 0.5*(tv%T(i,j,k)+tv%T(i+1,j,k))
-          OBC_S_u(I,j,k) = 0.5*(tv%S(i,j,k)+tv%S(i+1,j,k))
-        endif
-      enddo; enddo ; enddo
-
-      do k=1,nz ; do J=js-1,je ; do i=is,ie
-        if (OBC%OBC_mask_v(i,J)) then
-          if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) then
-            OBC_T_v(i,J,k) = tv%T(i,j,k)
-            OBC_S_v(i,J,k) = tv%S(i,j,k)
-          elseif (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S) then
-            OBC_T_v(i,J,k) = tv%T(i,j+1,k)
-            OBC_S_v(i,J,k) = tv%S(i,j+1,k)
-          elseif (G%mask2dT(i,j) + G%mask2dT(i,j+1) > 0) then
-            OBC_T_v(i,J,k) = (G%mask2dT(i,j)*tv%T(i,j,k) + G%mask2dT(i,j+1)*tv%T(i,j+1,k)) / &
-                             (G%mask2dT(i,j) + G%mask2dT(i,j+1))
-            OBC_S_v(i,J,k) = (G%mask2dT(i,j)*tv%S(i,j,k) + G%mask2dT(i,j+1)*tv%S(i,j+1,k)) / &
-                             (G%mask2dT(i,j) + G%mask2dT(i,j+1))
-          else ! This probably shouldn't happen or maybe it doesn't matter?
-            OBC_T_v(i,J,k) = 0.5*(tv%T(i,j,k)+tv%T(i,j+1,k))
-            OBC_S_v(i,J,k) = 0.5*(tv%S(i,j,k)+tv%S(i,j+1,k))
-          endif
-        else
-          OBC_T_v(i,J,k) = 0.5*(tv%T(i,j,k)+tv%T(i,j+1,k))
-          OBC_S_v(i,J,k) = 0.5*(tv%S(i,j,k)+tv%S(i,j+1,k))
-        endif
-      enddo; enddo ; enddo
-    endif
-
-    call pass_vector(OBC_T_u, OBC_T_v, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
-    call pass_vector(OBC_S_u, OBC_S_v, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
-
-    call add_tracer_OBC_values("T", tracer_Reg, OBC_in_u=OBC_T_u, &
-                                                OBC_in_v=OBC_T_v)
-    call add_tracer_OBC_values("S", tracer_Reg, OBC_in_u=OBC_S_u, &
-                                                OBC_in_v=OBC_S_v)
-    do k=1,nz ; do j=js,je ; do I=is-1,ie
-      if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) then
-        tv%T(i+1,j,k) = tv%T(i,j,k) ; tv%S(i+1,j,k) = tv%S(i,j,k)
-      elseif (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W) then
-        tv%T(i,j,k) = tv%T(i+1,j,k) ; tv%S(i,j,k) = tv%S(i+1,j,k)
-      endif
-    enddo ; enddo ; enddo
-    do k=1,nz ; do J=js-1,je ; do i=is,ie
-      if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) then
-        tv%T(i,j+1,k) = tv%T(i,j,k) ; tv%S(i,j+1,k) = tv%S(i,j,k)
-      elseif (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S) then
-        tv%T(i,j,k) = tv%T(i,j+1,k) ; tv%S(i,j,k) = tv%S(i,j+1,k)
-      endif
-    enddo ; enddo ; enddo
-  endif
-
-  do k=1,nz ; do j=js,je ; do I=is-1,ie
-    if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) h(i+1,j,k) = h(i,j,k)
-    if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W) h(i,j,k) = h(i+1,j,k)
-  enddo ; enddo ; enddo
-  do k=1,nz ; do J=js-1,je ; do i=is,ie
-    if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) h(i,j+1,k) = h(i,j,k)
-    if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S) h(i,j,k) = h(i,j+1,k)
-  enddo ; enddo ; enddo
-
-end subroutine set_Flather_Bdry_Conds   
-! -----------------------------------------------------------------------------
-
-! -----------------------------------------------------------------------------
 subroutine set_velocity_depth_max(G)
   type(ocean_grid_type), intent(inout) :: G
   ! This subroutine sets the 4 bottom depths at velocity points to be the
@@ -1932,7 +1756,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
 !                      model parameter values.
 !  (in)      dirs    - A structure containing several relevant directory paths.
 
-
   type(ocean_grid_type),                 intent(inout) :: G
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)   :: h    
   type(thermo_var_ptrs),                 intent(inout) :: tv
@@ -1949,11 +1772,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-
-
   character(len=40)  :: mod = "MOM_initialize_layers_from_Z" ! This module's name.
-
-
 
   integer :: is, ie, js, je, nz ! compute domain indices
   integer :: isc,iec,jsc,jec    ! global compute domain indices
@@ -1999,7 +1818,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
   type(regridding_CS) :: regridCS ! Regridding parameters and work arrays
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
 
-  logical :: homogenize, useALEremapping, remap_full_column, remap_general
+  logical :: homogenize, useALEremapping, remap_full_column, remap_general, remap_old_alg
   character(len=10) :: remappingScheme
   real :: tempAvg, saltAvg
   integer :: nPoints, ans
@@ -2017,7 +1836,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
   PI_180=atan(1.0)/45.
 
   call callTree_enter(trim(mod)//"(), MOM_state_initialization.F90")
-  call log_version(PF, mod, version)
+  call log_version(PF, mod, version, "")
 
   new_sim = .false.
   if ((dirs%input_filename(1:1) == 'n') .and. &
@@ -2060,11 +1879,15 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
   call get_param(PF, mod, "Z_INIT_REMAP_GENERAL", remap_general, &
                  "If false, only initializes to z* coordinates.\n"//&
                  "If true, allows initialization directly to general coordinates.",&
-                 default=.false., do_not_log=.true.)
+                 default=.false.)
   call get_param(PF, mod, "Z_INIT_REMAP_FULL_COLUMN", remap_full_column, &
-                 "If false, only reconstructsa for valid data points.\n"//&
+                 "If false, only reconstructs profiles for valid data points.\n"//&
                  "If true, inserts vanished layers below the valid data.",&
-                 default=remap_general, do_not_log=.true.)
+                 default=remap_general)
+  call get_param(PF, mod, "Z_INIT_REMAP_OLD_ALG", remap_old_alg, &
+                 "If false, uses the preferred remapping algorithm for initialization.\n"//&
+                 "If true, use an older, less robust algorithm for remapping.",&
+                 default=.true.)
 
 !   Read input grid coordinates for temperature and salinity field
 !   in z-coordinate dataset. The file is REQUIRED to contain the
@@ -2151,7 +1974,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
     ! Build the target grid (and set the model thickness to it)
     allocate( hTarget(nz) )
     ! This call can be more general but is hard-coded for z* coordinates...  ????
-    call ALE_initRegridding( G, GV, PF, mod, regridCS, hTarget ) ! sets regridCS and hTarget(1:nz)
+    call ALE_initRegridding( GV, G%max_depth, PF, mod, regridCS, hTarget ) ! sets regridCS and hTarget(1:nz)
 
     if (.not. remap_general) then
       ! This is the old way of initializing to z* coordinates only
@@ -2188,8 +2011,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
       call pass_var(tv%S, G%Domain) ! ALE_build_grid() only updates h on the computational domain.
       call ALE_build_grid( G, GV, regridCS, remapCS, h, tv, .true. )
     endif
-    call ALE_remap_scalar( remapCS, G, nz, h1, tmpT1dIn, h, tv%T, all_cells=remap_full_column )
-    call ALE_remap_scalar( remapCS, G, nz, h1, tmpS1dIn, h, tv%S, all_cells=remap_full_column )
+    call ALE_remap_scalar( remapCS, G, GV, nz, h1, tmpT1dIn, h, tv%T, all_cells=remap_full_column, old_remap=remap_old_alg )
+    call ALE_remap_scalar( remapCS, G, GV, nz, h1, tmpS1dIn, h, tv%S, all_cells=remap_full_column, old_remap=remap_old_alg )
     deallocate( h1 )
     deallocate( tmpT1dIn )
     deallocate( tmpS1dIn )
@@ -2310,5 +2133,57 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
   call cpu_clock_end(id_clock_routine)
 
 end subroutine MOM_temp_salt_initialize_from_Z
+
+!> Run simple unit tests
+subroutine MOM_state_init_tests(G, GV, tv)
+  type(ocean_grid_type),     intent(inout) :: G
+  type(verticalGrid_type),   intent(in)    :: GV
+  type(thermo_var_ptrs),     intent(in)    :: tv !< Thermodynamics structure
+  ! Local variables
+  integer, parameter :: nk=5
+  real, dimension(nk) :: T, T_t, T_b, S, S_t, S_b, rho, h, z
+  real, dimension(nk+1) :: e
+  integer :: k
+  real :: P_tot, P_t, P_b, z_out
+  type(remapping_CS), pointer :: remap_CS => NULL()
+
+  do k = 1, nk
+    h(k) = 100.
+  enddo
+  e(1) = 0.
+  do K = 1, nk
+    e(K+1) = e(K) - h(k)
+  enddo
+  P_tot = 0.
+  do k = 1, nk
+    z(k) = 0.5 * ( e(K) + e(K+1) )
+    T_t(k) = 20.+(0./500.)*e(k)
+    T(k)   = 20.+(0./500.)*z(k)
+    T_b(k) = 20.+(0./500.)*e(k+1)
+    S_t(k) = 35.-(0./500.)*e(k)
+    S(k)   = 35.+(0./500.)*z(k)
+    S_b(k) = 35.-(0./500.)*e(k+1)
+    call calculate_density(0.5*(T_t(k)+T_b(k)), 0.5*(S_t(k)+S_b(k)), -GV%Rho0*GV%g_Earth*z(k), rho(k), tv%eqn_of_state)
+    P_tot = P_tot + GV%g_Earth * rho(k) * h(k)
+  enddo
+
+  P_t = 0.
+  do k = 1, nk
+    call find_depth_of_pressure_in_cell(T_t(k), T_b(k), S_t(k), S_b(k), e(K), e(K+1), &
+                                        P_t, 0.5*P_tot, GV%Rho0, GV%g_Earth, tv%eqn_of_state, P_b, z_out)
+    write(0,*) k,P_t,P_b,0.5*P_tot,e(K),e(K+1),z_out
+    P_t = P_b
+  enddo
+  write(0,*) P_b,P_tot
+
+  write(0,*) ''
+  write(0,*) ' ==================================================================== '
+  write(0,*) ''
+  write(0,*) h
+  call cut_off_column_top(nk, tv, GV%Rho0, GV%g_Earth, -e(nk+1), GV%Angstrom, &
+               T, T_t, T_b, S, S_t, S_b, 0.5*P_tot, h, remap_CS)
+  write(0,*) h
+
+end subroutine MOM_state_init_tests
 
 end module MOM_state_initialization

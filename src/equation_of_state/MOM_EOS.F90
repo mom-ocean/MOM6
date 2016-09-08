@@ -24,6 +24,7 @@ public EOS_use_linear
 public int_density_dz, int_specific_vol_dp
 public int_density_dz_generic_plm, int_density_dz_generic_ppm
 public int_density_dz_generic_plm_analytic
+public find_depth_of_pressure_in_cell
 public calculate_TFreeze
 
 !> Calculates density of sea water from T, S and P
@@ -310,34 +311,34 @@ end subroutine calculate_2_densities
 subroutine int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
                                dza, intp_dza, intx_dza, inty_dza, halo_size)
   !> The horizontal index structure
-    type(hor_index_type),                  intent(in)  :: HI
+    type(hor_index_type),                          intent(in)  :: HI
   !> Potential temperature referenced to the surface (degC)
-    real, dimension(SZDI_(HI),SZDJ_(HI)),  intent(in)  :: T
+    real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed),  intent(in)  :: T
   !> Salinity (PSU)
-    real, dimension(SZDI_(HI),SZDJ_(HI)),  intent(in)  :: S
+    real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed),  intent(in)  :: S
   !> Pressure at the top of the layer in Pa.
-    real, dimension(SZDI_(HI),SZDJ_(HI)),  intent(in)  :: p_t
+    real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed),  intent(in)  :: p_t
   !> Pressure at the bottom of the layer in Pa.
-    real, dimension(SZDI_(HI),SZDJ_(HI)),  intent(in)  :: p_b
+    real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed),  intent(in)  :: p_b
   !> A mean specific volume that is subtracted out to reduce the magnitude of
   !! each of the integrals, m3 kg-1. The calculation is mathematically identical
   !! with different values of alpha_ref, but this reduces the effects of roundoff.
-    real,                            intent(in)  :: alpha_ref
+    real,                                          intent(in)  :: alpha_ref
   !> Equation of state structure
-    type(EOS_type),                  pointer     :: EOS
+    type(EOS_type),                                pointer     :: EOS
   !> The change in the geopotential anomaly across the layer, in m2 s-2.
-    real, dimension(SZDI_(HI),SZDJ_(HI)),  intent(out) :: dza
+    real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed),  intent(out) :: dza
   !> The integral in pressure through the layer of the geopotential anomaly
   !! relative to the anomaly at the bottom of the layer, in Pa m2 s-2.
-    real, dimension(SZDI_(HI),SZDJ_(HI)),  optional, intent(out) :: intp_dza
+    real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed),  optional, intent(out) :: intp_dza
   !> The integral in x of the difference between the geopotential anomaly at the
   !! top and bottom of the layer divided by the x grid spacing, in m2 s-2.
-    real, dimension(SZDIB_(HI),SZDJ_(HI)), optional, intent(out) :: intx_dza
+    real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), optional, intent(out) :: intx_dza
   !> The integral in y of the difference between the geopotential anomaly at the
   !! top and bottom of the layer divided by the y grid spacing, in m2 s-2.
-    real, dimension(SZDI_(HI),SZDJB_(HI)), optional, intent(out) :: inty_dza
+    real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), optional, intent(out) :: inty_dza
   !> The width of halo points on which to calculate dza.
-    integer,                         optional, intent(in)  :: halo_size
+    integer,                             optional, intent(in)  :: halo_size
 
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "int_specific_vol_dp called with an unassociated EOS_type EOS.")
@@ -373,13 +374,13 @@ subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, EOS, &
   !> Ocean horizontal index structures for the output arrays
     type(hor_index_type),            intent(in)  :: HIO
   !> Potential temperature referenced to the surface (degC)
-    real, dimension(SZDI_(HII),SZDJ_(HII)),  intent(in)  :: T
+    real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), intent(in)  :: T
   !> Salinity (PSU)
-    real, dimension(SZDI_(HII),SZDJ_(HII)),  intent(in)  :: S
+    real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), intent(in)  :: S
   !> Height at the top of the layer in m.
-    real, dimension(SZDI_(HII),SZDJ_(HII)),  intent(in)  :: z_t
+    real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), intent(in)  :: z_t
   !> Height at the bottom of the layer in m.
-    real, dimension(SZDI_(HII),SZDJ_(HII)),  intent(in)  :: z_b
+    real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), intent(in)  :: z_b
   !> A mean density, in kg m-3, that is subtracted out to reduce the magnitude
   !! of each of the integrals. (The pressure is calculated as p~=-z*rho_0*G_e.)
     real,                            intent(in)  :: rho_ref
@@ -391,16 +392,16 @@ subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, EOS, &
   !> Equation of state structure
     type(EOS_type),                  pointer     :: EOS
   !> The change in the pressure anomaly across the layer, in Pa.
-    real, dimension(SZDI_(HIO),SZDJ_(HIO)),            intent(out) :: dpa
+    real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), intent(out) :: dpa
   !> The integral through the thickness of the layer of the pressure anomaly
   !! relative to the anomaly at the top of the layer, in Pa m.
-    real, dimension(SZDI_(HIO),SZDJ_(HIO)),  optional, intent(out) :: intz_dpa
+    real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed),  optional, intent(out) :: intz_dpa
   !> The integral in x of the difference between the pressure anomaly at the
   !! top and bottom of the layer divided by the x grid spacing, in Pa.
-    real, dimension(SZDIB_(HIO),SZDJ_(HIO)), optional, intent(out) :: intx_dpa
+    real, dimension(HIO%IsdB:HIO%IedB,HIO%jsd:HIO%jed), optional, intent(out) :: intx_dpa
   !> The integral in y of the difference between the pressure anomaly at the
   !! top and bottom of the layer divided by the y grid spacing, in Pa.
-    real, dimension(SZDI_(HIO),SZDJB_(HIO)), optional, intent(out) :: inty_dpa
+    real, dimension(HIO%isd:HIO%ied,HIO%JsdB:HIO%JedB), optional, intent(out) :: inty_dpa
 
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "int_density_dz called with an unassociated EOS_type EOS.")
@@ -445,7 +446,7 @@ subroutine EOS_init(param_file, EOS)
   if (.not.associated(EOS)) call EOS_allocate(EOS)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version)
+  call log_version(param_file, mod, version, "")
 
   call get_param(param_file, mod, "EQN_OF_STATE", tmpstr, &
                  "EQN_OF_STATE determines which ocean equation of state \n"//&
@@ -560,14 +561,19 @@ end subroutine EOS_use_linear
 
 subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, &
                                   EOS, dpa, intz_dpa, intx_dpa, inty_dpa)
-  type(hor_index_type),                    intent(in)  :: HII, HIO
-  real, dimension(SZDI_(HII),SZDJ_(HII)),  intent(in)  :: T, S, z_t, z_b
-  real,                                    intent(in)  :: rho_ref, rho_0, G_e
-  type(EOS_type),                          pointer     :: EOS !< Equation of state structure
-  real, dimension(SZDI_(HIO),SZDJ_(HIO)),  intent(out) :: dpa
-  real, dimension(SZDI_(HIO),SZDJ_(HIO)),  optional, intent(out) :: intz_dpa
-  real, dimension(SZDIB_(HIO),SZDJ_(HIO)), optional, intent(out) :: intx_dpa
-  real, dimension(SZDI_(HIO),SZDJB_(HIO)), optional, intent(out) :: inty_dpa
+  type(hor_index_type), intent(in)  :: HII, HIO
+  real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
+                        intent(in)  :: T, S, z_t, z_b
+  real,                 intent(in)  :: rho_ref, rho_0, G_e
+  type(EOS_type),       pointer     :: EOS !< Equation of state structure
+  real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
+                        intent(out) :: dpa
+  real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
+              optional, intent(out) :: intz_dpa
+  real, dimension(HIO%IsdB:HIO%IedB,HIO%jsd:HIO%jed), &
+              optional, intent(out) :: intx_dpa
+  real, dimension(HIO%isd:HIO%ied,HIO%JsdB:HIO%JedB), &
+              optional, intent(out) :: inty_dpa
 !   This subroutine calculates (by numerical quadrature) integrals of
 ! pressure anomalies across layers, which are required for calculating the
 ! finite-volume form pressure accelerations in a Boussinesq model.  The one
@@ -896,16 +902,21 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
                                        rho_0, G_e, H_subroundoff, bathyT, HII, HIO, EOS, dpa, &
                                        intz_dpa, intx_dpa, inty_dpa, &
                                        useMassWghtInterp)
-  type(hor_index_type),                    intent(in)  :: HII, HIO
-  real, dimension(SZDI_(HII),SZDJ_(HII)),  intent(in)  :: T_t, T_b, S_t, S_b, z_t, z_b
-  real,                                    intent(in)  :: rho_ref, rho_0, G_e, H_subroundoff
-  real, dimension(SZDI_(HII),SZDJ_(HII)),  intent(in)  :: bathyT
-  type(EOS_type), pointer                              :: EOS !< Equation of state structure
-  real, dimension(SZDI_(HIO),SZDJ_(HIO)),  intent(out) :: dpa
-  real, dimension(SZDI_(HIO),SZDJ_(HIO)),  optional, intent(out) :: intz_dpa
-  real, dimension(SZDIB_(HIO),SZDJ_(HIO)), optional, intent(out) :: intx_dpa
-  real, dimension(SZDI_(HIO),SZDJB_(HIO)), optional, intent(out) :: inty_dpa
-  logical,                                 optional, intent(in)  :: useMassWghtInterp
+  type(hor_index_type),   intent(in)  :: HII, HIO
+  real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
+                          intent(in)  :: T_t, T_b, S_t, S_b, z_t, z_b
+  real,                   intent(in)  :: rho_ref, rho_0, G_e, H_subroundoff
+  real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed),  intent(in)  :: bathyT
+  type(EOS_type),         pointer     :: EOS !< Equation of state structure
+  real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
+                          intent(out) :: dpa
+  real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
+                optional, intent(out) :: intz_dpa
+  real, dimension(HIO%IsdB:HIO%IedB,HIO%jsd:HIO%jed), &
+                optional, intent(out) :: intx_dpa
+  real, dimension(HIO%isd:HIO%ied,HIO%JsdB:HIO%JedB), &
+                optional, intent(out) :: inty_dpa
+  logical,      optional, intent(in)  :: useMassWghtInterp
 ! This subroutine calculates (by numerical quadrature) integrals of
 ! pressure anomalies across layers, which are required for calculating the
 ! finite-volume form pressure accelerations in a Boussinesq model.  The one
@@ -1185,6 +1196,106 @@ end subroutine int_density_dz_generic_plm
 ! The real topography is still used
 ! ==========================================================================
 
+!> Find the depth at which the reconstructed pressure matches P_tgt
+subroutine find_depth_of_pressure_in_cell(T_t, T_b, S_t, S_b, z_t, z_b, P_t, P_tgt, &
+                       rho_ref, G_e, EOS, P_b, z_out)
+  real,           intent(in)  :: T_t !< Potential temperatue at the cell top (degC)
+  real,           intent(in)  :: T_b !< Potential temperatue at the cell bottom (degC)
+  real,           intent(in)  :: S_t !< Salinity at the cell top (ppt)
+  real,           intent(in)  :: S_b !< Salinity at the cell bottom (ppt)
+  real,           intent(in)  :: z_t !< Absolute height of top of cell (m)   (Boussinesq ????)
+  real,           intent(in)  :: z_b !< Absolute height of bottom of cell (m)
+  real,           intent(in)  :: P_t !< Anomalous pressure of top of cell, relative to g*rho_ref*z_t (Pa)
+  real,           intent(in)  :: P_tgt !< Target pressure at height z_out, relative to g*rho_ref*z_out (Pa)
+  real,           intent(in)  :: rho_ref !< Reference density with which calculation are anomalous to
+  real,           intent(in)  :: G_e !< Gravitational acceleration (m/s2)
+  type(EOS_type), pointer     :: EOS !< Equation of state structure
+  real,           intent(out) :: P_b !< Pressure at the bottom of the cell (Pa)
+  real,           intent(out) :: z_out !< Absolute depth at which anomalous pressure = p_tgt (m)
+  ! Local variables
+  real :: top_weight, bottom_weight, rho_anom, w_left, w_right, GxRho, dz, dp, F_guess, F_l, F_r
+  real :: Pa, Pa_left, Pa_right, Pa_tol ! Pressure anomalies, P = integral of g*(rho-rho_ref) dz
+
+  GxRho = G_e * rho_ref
+
+  ! Anomalous pressure difference across whole cell
+  dp = frac_dp_at_pos(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, G_e, 1.0, EOS)
+
+  P_b = P_t + dp ! Anomalous pressure at bottom of cell
+
+  if (P_tgt < P_t ) then
+    z_out = z_t
+    return
+  endif
+
+  if (P_tgt > P_b) then
+    z_out = z_b
+    return
+  endif
+
+  F_l = 0.
+  Pa_left = P_t - P_tgt ! Pa_left < 0
+  F_r = 1.
+  Pa_right = P_b - P_tgt ! Pa_right > 0
+  Pa_tol = GxRho * 1.e-5
+  F_guess = F_l - Pa_left / ( Pa_right -Pa_left ) * ( F_r - F_l )
+  Pa = Pa_right - Pa_left ! To get into iterative loop
+  do while ( abs(Pa) > Pa_tol )
+
+    z_out = z_t + ( z_b - z_t ) * F_guess
+    Pa = frac_dp_at_pos(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, G_e, F_guess, EOS) - ( P_tgt - P_t )
+
+    if (Pa<Pa_left) then
+      write(0,*) Pa_left,Pa,Pa_right,P_t-P_tgt,P_b-P_tgt
+      stop 'Blurgh! Too negative'
+    elseif (Pa<0.) then
+      Pa_left = Pa
+      F_l = F_guess
+    elseif (Pa>Pa_right) then
+      write(0,*) Pa_left,Pa,Pa_right,P_t-P_tgt,P_b-P_tgt
+      stop 'Blurgh! Too positive'
+    elseif (Pa>0.) then
+      Pa_right = Pa
+      F_r = F_guess
+    else ! Pa == 0
+      return
+    endif
+    F_guess = F_l - Pa_left / ( Pa_right -Pa_left ) * ( F_r - F_l )
+
+  enddo
+
+end subroutine find_depth_of_pressure_in_cell
+
+!> Returns change in anomalous pressure change from top to non-dimensional position pos between z_t and z_b
+real function frac_dp_at_pos(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, G_e, pos, EOS)
+  real,           intent(in) :: T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, G_e, pos
+  type(EOS_type), pointer    :: EOS !< Equation of state structure
+  ! Local variables
+  real, parameter :: C1_90 = 1.0/90.0  ! Rational constants.
+  real :: dz, top_weight, bottom_weight, rho_ave
+  real, dimension(5) :: T5, S5, p5, rho5
+  integer :: n
+
+  do n=1,5
+    ! Evalute density at five quadrature points
+    bottom_weight = 0.25*real(n-1) * pos
+    top_weight = 1.0 - bottom_weight
+    ! Salinity and temperature points are linearly interpolated
+    S5(n) = top_weight * S_t + bottom_weight * S_b
+    T5(n) = top_weight * T_t + bottom_weight * T_b
+    p5(n) = ( top_weight * z_t + bottom_weight * z_b ) * ( G_e * rho_ref )
+  enddo
+  call calculate_density_array(T5, S5, p5, rho5, 1, 5, EOS)
+  rho5(:) = rho5(:) !- rho_ref ! Work with anomalies relative to rho_ref
+
+  ! Use Boole's rule to estimate the average density
+  rho_ave = C1_90*(7.0*(rho5(1)+rho5(5)) + 32.0*(rho5(2)+rho5(4)) + 12.0*rho5(3))
+
+  dz = ( z_t - z_b ) * pos
+  frac_dp_at_pos = G_e * dz * rho_ave
+end function frac_dp_at_pos
+
+
 ! ==========================================================================
 ! Compute pressure gradient force integrals for the case where T and S
 ! are parabolic profiles
@@ -1193,16 +1304,19 @@ subroutine int_density_dz_generic_ppm (T, T_t, T_b, S, S_t, S_b, &
                                        z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, &
                                        EOS, dpa, intz_dpa, intx_dpa, inty_dpa)
   
-  type(hor_index_type),                    intent(in)  :: HII, HIO
-  real, dimension(SZDI_(HII),SZDJ_(HII)),  intent(in)  :: T, T_t, T_b, S, S_t, S_b, &
-                                                        z_t, z_b
+  type(hor_index_type), intent(in)  :: HII, HIO
+  real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
+                        intent(in)  :: T, T_t, T_b, S, S_t, S_b, z_t, z_b
   real,                                    intent(in)  :: rho_ref, rho_0, G_e
-  type(EOS_type), pointer                            :: EOS !< Equation of state structure
-  real, dimension(SZDI_(HIO),SZDJ_(HIO)),  intent(out) :: dpa
-  real, dimension(SZDI_(HIO),SZDJ_(HIO)),  optional, intent(out) :: intz_dpa
-
-  real, dimension(SZDIB_(HIO),SZDJB_(HIO)), optional, intent(out) :: intx_dpa
-  real, dimension(SZDI_(HIO),SZDJB_(HIO)), optional, intent(out) :: inty_dpa
+  type(EOS_type),       pointer     :: EOS !< Equation of state structure
+  real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
+                        intent(out) :: dpa
+  real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
+              optional, intent(out) :: intz_dpa
+  real, dimension(HIO%IsdB:HIO%IedB,HIO%JsdB:HIO%JedB), &
+              optional, intent(out) :: intx_dpa
+  real, dimension(HIO%isd:HIO%ied,HIO%JsdB:HIO%JedB), &
+              optional, intent(out) :: inty_dpa
 ! This subroutine calculates (by numerical quadrature) integrals of
 ! pressure anomalies across layers, which are required for calculating the
 ! finite-volume form pressure accelerations in a Boussinesq model.  The one
@@ -1442,14 +1556,19 @@ end subroutine int_density_dz_generic_ppm
 subroutine int_density_dz_generic_plm_analytic (T_t, T_b, S_t, S_b, z_t, &
             z_b, rho_ref, rho_0, G_e, HI, EOS, dpa, intz_dpa, intx_dpa, inty_dpa)
   
-  type(hor_index_type),                  intent(in)  :: HI
-  real, dimension(SZDI_(HI),SZDJ_(HI)),  intent(in)  :: T_t, T_b, S_t, S_b, z_t, z_b
-  real,                            intent(in)  :: rho_ref, rho_0, G_e
-  type(EOS_type), pointer                      :: EOS !< Equation of state structure
-  real, dimension(SZDI_(HI),SZDJ_(HI)),  intent(out) :: dpa
-  real, dimension(SZDI_(HI),SZDJ_(HI)),  optional, intent(out) :: intz_dpa
-  real, dimension(SZDIB_(HI),SZDJ_(HI)), optional, intent(out) :: intx_dpa
-  real, dimension(SZDI_(HI),SZDJB_(HI)), optional, intent(out) :: inty_dpa
+  type(hor_index_type), intent(in)  :: HI
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+                        intent(in)  :: T_t, T_b, S_t, S_b, z_t, z_b
+  real,                 intent(in)  :: rho_ref, rho_0, G_e
+  type(EOS_type),       pointer     :: EOS !< Equation of state structure
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+                        intent(out) :: dpa
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+              optional, intent(out) :: intz_dpa
+  real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), &
+              optional, intent(out) :: intx_dpa
+  real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), &
+              optional, intent(out) :: inty_dpa
 ! This subroutine calculates (by numerical quadrature) integrals of
 ! pressure anomalies across layers, which are required for calculating the
 ! finite-volume form pressure accelerations in a Boussinesq model.  The one
@@ -1848,15 +1967,20 @@ end subroutine evaluate_shape_quadratic
 
 subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, &
                                    dza, intp_dza, intx_dza, inty_dza, halo_size)
-  type(hor_index_type),                  intent(in)  :: HI
-  real, dimension(SZDI_(HI),SZDJ_(HI)),  intent(in)  :: T, S, p_t, p_b
-  real,                                  intent(in)  :: alpha_ref
-  type(EOS_type),                        pointer     :: EOS !< Equation of state structure
-  real, dimension(SZDI_(HI),SZDJ_(HI)),  intent(out) :: dza
-  real, dimension(SZDI_(HI),SZDJ_(HI)),  optional, intent(out) :: intp_dza
-  real, dimension(SZDIB_(HI),SZDJ_(HI)), optional, intent(out) :: intx_dza
-  real, dimension(SZDI_(HI),SZDJB_(HI)), optional, intent(out) :: inty_dza
-  integer,                               optional, intent(in)  :: halo_size
+  type(hor_index_type), intent(in)  :: HI
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+                        intent(in)  :: T, S, p_t, p_b
+  real,                 intent(in)  :: alpha_ref
+  type(EOS_type),       pointer     :: EOS !< Equation of state structure
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+                        intent(out) :: dza
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+              optional, intent(out) :: intp_dza
+  real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), &
+              optional, intent(out) :: intx_dza
+  real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), &
+              optional, intent(out) :: inty_dza
+  integer,    optional, intent(in)  :: halo_size
 !   This subroutine calculates analytical and nearly-analytical integrals in
 ! pressure across layers of geopotential anomalies, which are required for
 ! calculating the finite-volume form pressure accelerations in a non-Boussinesq

@@ -247,18 +247,13 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   real :: En_initial, Delta_E_check                  ! for debugging
   real :: TKE_Froude_loss_check, TKE_Froude_loss_tot ! for debugging
   integer :: a, m, fr, i, j, is, ie, js, je, isd, ied, jsd, jed, nAngle, nzm
-  integer :: isd_g, jsd_g         ! start indices on data domain but referenced
-                                  ! to global indexing (for debuggin)
-  integer :: id_g, jd_g           ! global (decomp-invar) indices
-                                  ! (for debugging)
+  integer :: id_g, jd_g         ! global (decomp-invar) indices (for debugging)
   type(group_pass_type), save :: pass_test, pass_En
 
   if (.not.associated(CS)) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nAngle = CS%NAngle
   I_rho0 = 1.0 / GV%Rho0
-
-  isd_g = G%isd_global ; jsd_g = G%jsd_global ! for debugging
 
   ! Set the wave speeds for the modes, using cg(n) ~ cg(1)/n.**********************
   ! This is wrong, of course, but it works reasonably in some cases.
@@ -308,9 +303,8 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   ! Check for En<0 - for debugging, delete later
   do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
     do j=js,je ; do i=is,ie
-      id_g = G%isd_global + i - 1.0
-      jd_g = G%jsd_global + j - 1.0
-      if(CS%En(i,j,a,fr,m)<0.0)then
+      if (CS%En(i,j,a,fr,m)<0.0) then
+        id_g = i + G%idg_offset ; jd_g = j + G%jdg_offset ! for debugging
         print *, 'After first refraction: En<0.0 at ig=', id_g, ', jg=', jd_g
         print *, 'En=',CS%En(i,j,a,fr,m)
         print *, 'Setting En to zero'; CS%En(i,j,a,fr,m) = 0.0
@@ -334,9 +328,8 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   ! Check for En<0 - for debugging, delete later
   do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
     do j=js,je ; do i=is,ie
-      id_g = G%isd_global + i - 1.0
-      jd_g = G%jsd_global + j - 1.0
-      if(CS%En(i,j,a,fr,m)<0.0)then
+      if (CS%En(i,j,a,fr,m)<0.0) then
+        id_g = i + G%idg_offset ; jd_g = j + G%jdg_offset
         CS%En(i,j,a,fr,m) = 0.0
         if(abs(CS%En(i,j,a,fr,m))>1.0)then! only print if large
           print *, 'After propagation: En<0.0 at ig=', id_g, ', jg=', jd_g
@@ -350,9 +343,8 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
 
   !! Test if energy has passed coast for debugging only; delete later
   !do j=js,je
-  !  jd_g = jsd_g + j - 1
   !  do i=is,ie
-  !    id_g = isd_g + i - 1
+  !    id_g = i + G%idg_offset ; jd_g = j + G%jdg_offset
   !    if (id_g == 106 .and. jd_g == 55 ) then
         !print *, 'After propagation:'
         !print *, 'En_O  =', CS%En(i,j,:,1,1), 'refl_angle=', CS%refl_angle(i,j)
@@ -373,9 +365,8 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   ! Check for En<0 - for debugging, delete later
   do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
     do j=js,je ; do i=is,ie
-      id_g = G%isd_global + i - 1.0
-     jd_g = G%jsd_global + j - 1.0
-      if(CS%En(i,j,a,fr,m)<0.0)then
+      if (CS%En(i,j,a,fr,m)<0.0) then
+        id_g = i + G%idg_offset ; jd_g = j + G%jdg_offset ! for debugging
         print *, 'After second refraction: En<0.0 at ig=', id_g, ', jg=', jd_g
         !stop
       endif
@@ -408,9 +399,8 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   ! Check for En<0 - for debugging, delete later
   do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
     do j=js,je ; do i=is,ie
-      id_g = G%isd_global + i - 1.0
-      jd_g = G%jsd_global + j - 1.0
-      if(CS%En(i,j,a,fr,m)<0.0)then
+      if (CS%En(i,j,a,fr,m)<0.0) then
+        id_g = i + G%idg_offset ; jd_g = j + G%jdg_offset ! for debugging
         print *, 'After leak loss: En<0.0 at ig=', id_g, ', jg=', jd_g
         !stop
       endif
@@ -434,9 +424,8 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   ! Check for En<0 - for debugging, delete later
   do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
     do j=js,je ; do i=is,ie
-      id_g = G%isd_global + i - 1.0
-      jd_g = G%jsd_global + j - 1.0
-      if(CS%En(i,j,a,fr,m)<0.0)then
+      if (CS%En(i,j,a,fr,m)<0.0) then
+        id_g = i + G%idg_offset ; jd_g = j + G%jdg_offset ! for debugging
         print *, 'After bottom loss: En<0.0 at ig=', id_g, ', jg=', jd_g
         !stop
       endif
@@ -453,8 +442,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
                           CS%wave_structure_CSp, tot_En_mode(:,:,fr,m), full_halos=.true.)
       ! Pick out near-bottom and max horizontal baroclinic velocity values at each point
       do j=jsd,jed ; do i=isd,ied
-        id_g = G%isd_global + i - 1.0
-        jd_g = G%jsd_global + j - 1.0
+        id_g = i + G%idg_offset ; jd_g = j + G%jdg_offset ! for debugging
         nzm = CS%wave_structure_CSp%num_intfaces(i,j)
         Ub(i,j,fr,m) = CS%wave_structure_CSp%Uavg_profile(i,j,nzm)
         Umax(i,j,fr,m) = maxval(CS%wave_structure_CSp%Uavg_profile(i,j,1:nzm))
@@ -487,9 +475,8 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   ! Check for En<0 - for debugging, delete later
   do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
     do j=js,je ; do i=is,ie
-      id_g = G%isd_global + i - 1.0
-      jd_g = G%jsd_global + j - 1.0
-      if(CS%En(i,j,a,fr,m)<0.0)then
+      if (CS%En(i,j,a,fr,m)<0.0) then
+        id_g = i + G%idg_offset ; jd_g = j + G%jdg_offset ! for debugging
         print *, 'After wave drag loss: En<0.0 at ig=', id_g, ', jg=', jd_g
         !stop
       endif
@@ -502,8 +489,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
     do m=1,CS%NMode ; do fr=1,CS%Nfreq
       freq2 = CS%frequency(fr)**2
       do j=jsd,jed ; do i=isd,ied
-        id_g = G%isd_global + i - 1.0 ! for debugging
-        jd_g = G%jsd_global + j - 1.0 ! for debugging
+        id_g = i + G%idg_offset ; jd_g = j + G%jdg_offset ! for debugging
         ! Calculate horizontal phase velocity magnitudes
         f2 = 0.25*(G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J)**2 + &
                  G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J-1)**2 )
@@ -551,9 +537,8 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   ! Check for En<0 - for debugging, delete later
   do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
     do j=js,je ; do i=is,ie
-      id_g = G%isd_global + i - 1.0
-      jd_g = G%jsd_global + j - 1.0
-      if(CS%En(i,j,a,fr,m)<0.0)then
+      if (CS%En(i,j,a,fr,m)<0.0) then
+        id_g = i + G%idg_offset ; jd_g = j + G%jdg_offset
         print *, 'After Froude loss: En<0.0 at ig=', id_g, ', jg=', jd_g
         !stop
       endif
@@ -1717,14 +1702,11 @@ subroutine reflect(En, NAngle, CS, G, LB)
                                   ! (values exclude halos)
   integer :: ish, ieh, jsh, jeh   ! start and end local indices on data domain
                                   ! leaving out outdated halo points (march in)
-  integer :: isd_g, jsd_g         ! start indices on data domain but referenced
-                                  ! to global indexing
   integer :: id_g, jd_g           ! global (decomp-invar) indices
 
   !isd = G%isd  ; ied = G%ied  ; jsd = G%jsd  ; jed = G%jed
   isc = G%isc  ; iec = G%iec  ; jsc = G%jsc  ; jec = G%jec
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh
-  isd_g = G%isd_global ;        jsd_g = G%jsd_global
 
   TwoPi = 8.0*atan(1.0);
   Angle_size = TwoPi / (real(NAngle))
@@ -1742,10 +1724,10 @@ subroutine reflect(En, NAngle, CS, G, LB)
 
   !do j=jsc-1,jec+1
   do j=jsh,jeh
-    jd_g = jsd_g + j - 1
+    jd_g = j + G%jdg_offset
     !do i=isc-1,iec+1
     do i=ish,ieh
-      id_g = isd_g + i - 1
+      id_g = i + G%idg_offset
       ! redistribute energy in angular space if ray will hit boundary
       ! i.e., if energy is in a reflecting cell
       if (angle_c(i,j) .ne. CS%nullangle) then
@@ -1791,9 +1773,9 @@ subroutine reflect(En, NAngle, CS, G, LB)
 
   ! Check to make sure no energy gets onto land (only run for debugging)
   !do j=jsc,jec
-  !  jd_g = jsd_g + j - 1
+  !  jd_g = j + G%jdg_offset
   !  do i=isc,iec
-  !    id_g = isd_g + i - 1
+  !    id_g = i + G%idg_offset
   !    do a=1,NAngle
   !      if (En(i,j,a) > 0.001 .and. G%mask2dT(i,j) == 0) then
   !        print *, 'En=', En(i,j,a), 'a=', a, 'ig_g=',id_g, 'jg_g=',jd_g
@@ -1836,8 +1818,6 @@ subroutine teleport(En, NAngle, CS, G, LB)
   !                                 ! (values exclude halos)
   integer :: ish, ieh, jsh, jeh     ! start and end local indices on data domain
                                     ! leaving out outdated halo points (march in)
-  integer :: isd_g, jsd_g           ! start indices on data domain but referenced
-                                    ! to global indexing
   integer :: id_g, jd_g             ! global (decomp-invar) indices
   integer :: jos, ios               ! offsets
   real    :: cos_normal, sin_normal, angle_wall
@@ -1846,7 +1826,6 @@ subroutine teleport(En, NAngle, CS, G, LB)
   !isd = G%isd  ; ied = G%ied  ; jsd = G%jsd  ; jed = G%jed
   !isc = G%isc  ; iec = G%iec  ; jsc = G%jsc  ; jec = G%jec
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh
-  isd_g = G%isd_global ;        jsd_g = G%jsd_global ! for debugging
 
   TwoPi = 8.0*atan(1.0)
   Angle_size = TwoPi / (real(NAngle))
@@ -1864,9 +1843,8 @@ subroutine teleport(En, NAngle, CS, G, LB)
   ridge     = CS%refl_dbl
 
   do j=jsh,jeh
-    jd_g = jsd_g + j - 1
     do i=ish,ieh
-      id_g = isd_g + i - 1
+      id_g = i + G%idg_offset ; jd_g = j + G%jdg_offset
       if (pref_cell(i,j)) then
         do a=1,Nangle
           if (En(i,j,a) > 0) then
