@@ -227,7 +227,7 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
     CS%max_Energy = 10.0 * maxvel**2
     call log_param (param_file, mod, "MAX_ENERGY as used", CS%max_Energy)
   endif
-                 
+
   call get_param(param_file, mod, "ENERGYFILE", energyfile, &
                  "The file to use to write the energies and globally \n"//&
                  "summed diagnostics.", default="ocean.stats")
@@ -268,7 +268,7 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
   else
     CS%list_size = 0
   endif
- 
+
   CS%Huge_time = set_time(INT(1e9),0)
   CS%Start_time = Input_start_time
   CS%ntrunc => ntrnc
@@ -286,7 +286,7 @@ subroutine MOM_sum_output_end(CS)
       DEALLOC_(CS%lH)
       deallocate(CS%DL)
     endif
-    
+
     deallocate(CS)
   endif
 end subroutine MOM_sum_output_end
@@ -394,7 +394,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
                                  ! limits for l in the search for lH.
   integer :: start_of_day, num_days
   real    :: reday, var
-  character(len=120) :: energypath_nc
+  character(len=240) :: energypath_nc
   character(len=200) :: mesg
   character(len=32)  :: mesg_intro, time_units, day_str, n_str, date_str
   logical :: date_stamped
@@ -474,7 +474,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
         enddo ; enddo ; enddo
         mass_tot = reproducing_sum(tmp1, sums=mass_lay, EFP_sum=mass_EFP)
 
-        call find_eta(h, tv, G%g_Earth, G, GV, eta)
+        call find_eta(h, tv, GV%g_Earth, G, GV, eta)
         do k=1,nz ; do j=js,je ; do i=is,ie
           tmp1(i,j,k) = (eta(i,j,K)-eta(i,j,K+1)) * areaTm(i,j)
         enddo ; enddo ; enddo
@@ -494,7 +494,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
         enddo ; enddo
       enddo
       if (CS%do_APE_calc) then
-        call find_eta(h, tv, G%g_Earth, G, GV, eta)
+        call find_eta(h, tv, GV%g_Earth, G, GV, eta)
 
         do k=1,nz
           vol_lay(k) = 0.0
@@ -571,7 +571,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
           else
             write(time_units,'(9x,"[",es8.2," s]    ")') CS%timeunit
           endif
-          
+
           if (CS%use_temperature) then
             write(CS%fileenergy_ascii,'("  Step,",7x,"Time, Truncs,      &
                 &Energy/Mass,      Maximum CFL,  Mean Sea Level,  Total Mass,  Mean Salin, &
@@ -592,10 +592,12 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
     energypath_nc = trim(CS%energyfile) // ".nc"
     if (day > CS%Start_time) then
       call reopen_file(CS%fileenergy_nc, trim(energypath_nc), vars, &
-                       num_nc_fields, G, CS%fields, SINGLE_FILE, CS%timeunit, GV=GV)
+                       num_nc_fields, CS%fields, SINGLE_FILE, CS%timeunit, &
+                       G=G, GV=GV)
     else
       call create_file(CS%fileenergy_nc, trim(energypath_nc), vars, &
-                       num_nc_fields, G, CS%fields, SINGLE_FILE, CS%timeunit, GV=GV)
+                       num_nc_fields, CS%fields, SINGLE_FILE, CS%timeunit, &
+                       G=G, GV=GV)
     endif
   endif
 
@@ -621,7 +623,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
     enddo
     H_0APE(nz+1) = CS%DL(2)%depth
   else
-    do k=1,nz+1 ; H_0APE(K) = 0.0 ; enddo 
+    do k=1,nz+1 ; H_0APE(K) = 0.0 ; enddo
   endif
 
 ! Calculate the Kinetic Energy integrated over each layer.
@@ -683,7 +685,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
     PE_tot = 0.0
     if (CS%do_APE_calc) &
       PE_tot = reproducing_sum(PE_pt, sums=PE)
-    toten = KE_tot + PE_tot    
+    toten = KE_tot + PE_tot
   else
     pe_num = pe_here()+1-root_pe()
     allocate(toten_PE(num_pes()))
@@ -888,7 +890,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
 
          write(*,'("      Total ",a,": ",ES24.16,X,a)') &
               trim(Tr_names(m)), Tr_stocks(m), trim(Tr_units(m))
-       
+
          if(Tr_minmax_got(m)) then
            write(*,'(64X,"Global Min:",ES24.16,X,"at: (", f7.2,","f7.2,","f8.2,")"  )') &
                 Tr_min(m),Tr_min_x(m),Tr_min_y(m),Tr_min_z(m)
@@ -949,7 +951,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
   CS%previous_calls = CS%previous_calls + 1
   CS%mass_prev = mass_tot ; CS%fresh_water_input = 0.0
   if (CS%use_temperature) then
-    CS%salt_prev = Salt ; CS%net_salt_input = 0.0 
+    CS%salt_prev = Salt ; CS%net_salt_input = 0.0
     CS%heat_prev = Heat ; CS%net_heat_input = 0.0
   endif
   if (CS%use_repro_sum) then
@@ -990,9 +992,9 @@ subroutine accumulate_net_input(fluxes, state, dt, G, CS)
   real :: C_p        ! The heat capacity of seawater, in J K-1 kg-1.
 
   type(EFP_type) :: &
-    FW_in_EFP,      &  ! Extended fixed point versions of FW_input, salt_input, and 
+    FW_in_EFP,      &  ! Extended fixed point versions of FW_input, salt_input, and
     salt_in_EFP,    &  ! heat_input, in kg, ppt*kg, and Joules.
-    heat_in_EFP     
+    heat_in_EFP
 
   real :: inputs(3)   ! A mixed array for combining the sums
   integer :: i, j, is, ie, js, je
@@ -1022,8 +1024,8 @@ subroutine accumulate_net_input(fluxes, state, dt, G, CS)
              (fluxes%lw(i,j) + (fluxes%latent(i,j) + fluxes%sens(i,j))))
     enddo ; enddo ; endif
 
-    ! smg: new code 
-    ! include heat content from water transport across ocean surface 
+    ! smg: new code
+    ! include heat content from water transport across ocean surface
 !    if (ASSOCIATED(fluxes%heat_content_lprec)) then ; do j=js,je ; do i=is,ie
 !      heat_in(i,j) = heat_in(i,j) + dt*G%areaT(i,j) *                          &
 !         (fluxes%heat_content_lprec(i,j)   + (fluxes%heat_content_fprec(i,j)   &
@@ -1032,7 +1034,7 @@ subroutine accumulate_net_input(fluxes, state, dt, G, CS)
 !       +  fluxes%heat_content_massout(i,j)))))))
 !    enddo ; enddo ; endif
 
-    ! smg: old code 
+    ! smg: old code
     if (ASSOCIATED(state%TempxPmE)) then
       do j=js,je ; do i=is,ie
         heat_in(i,j) = heat_in(i,j) + (C_p * G%areaT(i,j)) * state%TempxPmE(i,j)
@@ -1054,8 +1056,8 @@ subroutine accumulate_net_input(fluxes, state, dt, G, CS)
     if (ASSOCIATED(state%frazil)) then ; do j=js,je ; do i=is,ie
       heat_in(i,j) = heat_in(i,j) + G%areaT(i,j) * state%frazil(i,j)
     enddo ; enddo ; endif
-    if (ASSOCIATED(fluxes%heat_restore)) then ; do j=js,je ; do i=is,ie
-      heat_in(i,j) = heat_in(i,j) + dt*G%areaT(i,j)*fluxes%heat_restore(i,j)
+    if (ASSOCIATED(fluxes%heat_added)) then ; do j=js,je ; do i=is,ie
+      heat_in(i,j) = heat_in(i,j) + dt*G%areaT(i,j)*fluxes%heat_added(i,j)
     enddo ; enddo ; endif
 !    if (ASSOCIATED(state%sw_lost)) then ; do j=js,je ; do i=is,ie
 !      heat_in(i,j) = heat_in(i,j) - G%areaT(i,j) * state%sw_lost(i,j)
@@ -1106,22 +1108,20 @@ subroutine depth_list_setup(G, CS)
 ! than each depth.  This might be read from a previously created file
 ! or it might be created anew.  (For now only new creation occurs.
 
-  integer :: k, max_list_size
-  
+  integer :: k
+
   if (CS%read_depth_list) then
     if (file_exists(CS%depth_list_file)) then
       call read_depth_list(G, CS, CS%depth_list_file)
     else
       if (is_root_pe()) call MOM_error(WARNING, "depth_list_setup: "// &
         trim(CS%depth_list_file)//" does not exist.  Creating a new file.")
-      max_list_size = G%Domain%niglobal*G%Domain%njglobal
-      call create_depth_list(G, CS, max_list_size)
+      call create_depth_list(G, CS)
 
       call write_depth_list(G, CS, CS%depth_list_file, CS%list_size+1)
     endif
   else
-    max_list_size = G%Domain%niglobal*G%Domain%njglobal
-    call create_depth_list(G, CS, max_list_size)
+    call create_depth_list(G, CS)
   endif
 
   do k=1,G%ke
@@ -1130,72 +1130,54 @@ subroutine depth_list_setup(G, CS)
 
 end subroutine depth_list_setup
 
-subroutine create_depth_list(G, CS, max_list_size)
-  type(ocean_grid_type), intent(in) :: G
-  type(Sum_output_CS),   pointer    :: CS
-  integer,               intent(in) :: max_list_size
-!  This subroutine makes an ordered list of depths, along with the
-! cross sectional areas at each depth and the volume of fluid deeper
-! than each depth.
-! Arguments: G - The ocean's grid structure.
-!  (in)      CS - The control structure set up in MOM_sum_output_init, in
-!                 which the ordered depth list is stored.
+!>  create_depth_list makes an ordered list of depths, along with the cross 
+!! sectional areas at each depth and the volume of fluid deeper than each depth.
+subroutine create_depth_list(G, CS)
+  type(ocean_grid_type), intent(in) :: G  !< The ocean's grid structure
+  type(Sum_output_CS),   pointer    :: CS !< The control structure set up in MOM_sum_output_init,
+                                          !! in which the ordered depth list is stored.
 
-  real    :: Dprev, vol, area
-  real    :: Dlist((G%Domain%niglobal+1)*(G%Domain%njglobal+1))
-  real, dimension(max_list_size+1) :: AreaList
-  real    :: temp(SZI_(G),SZJ_(G))
-  real    :: Dnow, D_list_next
-  logical :: add_to_list
-  integer, dimension(max_list_size+1) :: indx2
-  integer, allocatable, dimension(:) :: xsize, ysize
+  real, dimension(G%Domain%niglobal*G%Domain%njglobal + 1) :: &
+    Dlist, &  !< The global list of bottom depths, in m.
+    AreaList  !< The global list of cell areas, in m2.
+  integer, dimension(G%Domain%niglobal*G%Domain%njglobal+1) :: &
+    indx2     !< The position of an element in the original unsorted list.
+  real    :: Dnow  !< The depth now being considered for sorting, in m.
+  real    :: Dprev !< The most recent depth that was considered, in m.
+  real    :: vol   !< The running sum of open volume below a deptn, in m3. 
+  real    :: area  !< The open area at the current depth, in m2.
+  real    :: D_list_prev !< The most recent depth added to the list, in m.
+  logical :: add_to_list !< This depth should be included as an entry on the list.
 
-  integer :: l, ir, indxt, M, n, list_size
-  integer :: i, j, k, kl, is, ie, js, je
-  integer :: this_pe, offset1D
+  integer :: ir, indxt
+  integer :: mls, list_size
+  integer :: list_pos, i_global, j_global
+  integer :: i, j, k, kl
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  mls = G%Domain%niglobal*G%Domain%njglobal
 
-  M=2 ; n=max_list_size
-
-  this_pe = pe_here()-root_pe()
-
-  do j=js,je ; do i=is,ie
-    temp(i,j) = G%mask2dT(i,j)*G%areaT(i,j)
-  enddo ; enddo
-
-! Need to transfer the compute domain to a 1D array for sorting.
-! This can be acheived by writing the local PE section to different
-! sections of the 1D array and then summing the array over all processors.
-! This section should be the same length as the product of the compute
-! domain dimensions. ie. data domain -2*halo_size
-  allocate(xsize(0:num_pes()))
-  allocate(ysize(0:num_pes()))
-  xsize(:) = 0 ; ysize(:) = 0
-  xsize(this_pe) = ie-is+1
-  ysize(this_pe) = je-js+1
-  call sum_across_PEs(xsize,num_pes())
-  call sum_across_PEs(ysize,num_pes())
-  offset1D = 0
-  do i=0,this_pe - 1
-    offset1D = offset1D + xsize(i) * ysize(i)
-  enddo
+! Need to collect the global data from compute domains to a 1D array for sorting.
   Dlist(:) = 0.0
   Arealist(:) = 0.0
-  do j=js,je ; do i=is,ie
-    Dlist(offset1D + (j-js)*xsize(this_pe)+(i-is)+1) = G%bathyT(i,j)
-    Arealist(offset1D + (j-js)*xsize(this_pe)+(i-is)+1) = temp(i,j)
+  do j=G%jsc,G%jec ; do i=G%isc,G%iec
+    ! Set global indices that start the global domain at 1 (Fortran convention).
+    j_global = j + G%jdg_offset - (G%jsg-1)
+    i_global = i + G%idg_offset - (G%isg-1)
+
+    list_pos = (j_global-1)*G%Domain%niglobal + i_global
+    Dlist(list_pos) = G%bathyT(i,j)
+    Arealist(list_pos) = G%mask2dT(i,j)*G%areaT(i,j)
   enddo ; enddo
 
-  call sum_across_PEs(Dlist, (G%Domain%niglobal+1)*(G%Domain%njglobal+1))
-  call sum_across_PEs(Arealist, max_list_size+1)
+  call sum_across_PEs(Dlist, mls+1)
+  call sum_across_PEs(Arealist, mls+1)
 
-  do j=1,n+1 ; indx2(j) = j ; enddo
-  l = n / 2  + 1 ; ir = n
+  do j=1,mls+1 ; indx2(j) = j ; enddo
+  k = mls / 2  + 1 ; ir = mls
   do
-    if (l > 1) then
-      l = l - 1
-      indxt = indx2(l)
+    if (k > 1) then
+      k = k - 1
+      indxt = indx2(k)
       Dnow = Dlist(indxt)
     else
       indxt = indx2(ir)
@@ -1204,7 +1186,7 @@ subroutine create_depth_list(G, CS, max_list_size)
       ir = ir - 1
       if (ir == 1) then ; indx2(1) = indxt ; exit ; endif
     endif
-    i=l ; j=l*2
+    i=k ; j=k*2
     do ; if (j > ir) exit
       if (j < ir .AND. Dlist(indx2(j)) < Dlist(indx2(j+1))) j = j + 1
       if (Dnow < Dlist(indx2(j))) then ; indx2(i) = indx2(j) ; i = j ; j = j + i
@@ -1216,50 +1198,49 @@ subroutine create_depth_list(G, CS, max_list_size)
 !  At this point, the lists should perhaps be culled to save memory.
 ! Culling: (1) identical depths (e.g. land) - take the last one.
 !          (2) the topmost and bottommost depths are always saved.
-!          (3) very close depths 
+!          (3) very close depths
 !          (4) equal volume changes.
 
   ! Count the unique elements in the list.
-  D_list_next = Dlist(indx2(max_list_size))
+  D_list_prev = Dlist(indx2(mls))
   list_size = 2
-  do k=max_list_size-1,1,-1
-    if (Dlist(indx2(k)) < D_list_next-CS%D_list_min_inc) then
+  do k=mls-1,1,-1
+    if (Dlist(indx2(k)) < D_list_prev-CS%D_list_min_inc) then
       list_size = list_size + 1
-      D_list_next = Dlist(indx2(k))
+      D_list_prev = Dlist(indx2(k))
     endif
   enddo
- 
-!   CS%list_size = G%Domain%niglobal*G%Domain%njglobal
+
   CS%list_size = list_size
   allocate(CS%DL(CS%list_size+1))
 
   vol = 0.0 ; area = 0.0
-  Dprev = Dlist(indx2(max_list_size))
-  D_list_next = Dprev
+  Dprev = Dlist(indx2(mls))
+  D_list_prev = Dprev
 
   kl = 0
-  do k=max_list_size,1,-1
+  do k=mls,1,-1
     i = indx2(k)
     vol = vol + area * (Dprev - Dlist(i))
     area = area + AreaList(i)
-    Dprev = Dlist(i)
 
     add_to_list = .false.
     if ((kl == 0) .or. (k==1)) then
-      add_to_list = .true.  
-    elseif (Dlist(indx2(k-1)) < D_list_next-CS%D_list_min_inc) then
       add_to_list = .true.
-      D_list_next = Dlist(indx2(k-1))
+    elseif (Dlist(indx2(k-1)) < D_list_prev-CS%D_list_min_inc) then
+      add_to_list = .true.
+      D_list_prev = Dlist(indx2(k-1))
     endif
 
     if (add_to_list) then
       kl = kl+1
-      CS%DL(kl)%depth = Dprev
+      CS%DL(kl)%depth = Dlist(i)
       CS%DL(kl)%area = area
       CS%DL(kl)%vol_below = vol
     endif
+    Dprev = Dlist(i)
   enddo
-  
+
   do while (kl < list_size)
     ! I don't understand why this is needed... RWH
     kl = kl+1
@@ -1286,7 +1267,7 @@ subroutine write_depth_list(G, CS, filename, list_size)
   integer :: ncid, dimid(1), Did, Aid, Vid, status, k
 
   if (.not.is_root_pe()) return
-  
+
   allocate(tmp(list_size)) ; tmp(:) = 0.0
 
   status = NF90_CREATE(filename, 0, ncid)
@@ -1294,11 +1275,11 @@ subroutine write_depth_list(G, CS, filename, list_size)
     call MOM_error(WARNING, filename//trim(NF90_STRERROR(status)))
     return
   endif
-  
+
   status = NF90_DEF_DIM(ncid, "list", list_size, dimid(1))
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
       filename//trim(NF90_STRERROR(status)))
-  
+
   status = NF90_DEF_VAR(ncid, "depth", NF90_DOUBLE, dimid, Did)
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
       filename//" depth "//trim(NF90_STRERROR(status)))
@@ -1332,7 +1313,7 @@ subroutine write_depth_list(G, CS, filename, list_size)
   status = NF90_ENDDEF(ncid)
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
       filename//trim(NF90_STRERROR(status)))
-  
+
   do k=1,list_size ; tmp(k) = CS%DL(k)%depth ; enddo
   status = NF90_PUT_VAR(ncid, Did, tmp)
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
@@ -1347,7 +1328,7 @@ subroutine write_depth_list(G, CS, filename, list_size)
   status = NF90_PUT_VAR(ncid, Vid, tmp)
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
       filename//" vol_below "//trim(NF90_STRERROR(status)))
- 
+
   status = NF90_CLOSE(ncid)
   if (status /= NF90_NOERR) call MOM_error(WARNING, &
       filename//trim(NF90_STRERROR(status)))
@@ -1362,7 +1343,7 @@ subroutine read_depth_list(G, CS, filename)
 ! This subroutine reads in the depth list to the specified file
 ! and allocates and sets up CS%DL and CS%list_size .
   character(len=32) :: mod
-  character(len=120) :: var_name, var_msg
+  character(len=240) :: var_name, var_msg
   real, allocatable :: tmp(:)
   integer :: ncid, status, varid, list_size, k
   integer :: ndim, len, var_dim_ids(NF90_MAX_VAR_DIMS)

@@ -516,14 +516,13 @@ end subroutine matrix_diagonal_triangle
                        !~ hmask
 
   !~ type(ocean_grid_type), pointer :: G
-  !~ integer :: 0, i, j, iscq, iecq, jscq, jecq, gjsd, gisd, isd, jsd, ied, jed, iegq, jegq, giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec, is, js
+  !~ integer :: 0, i, j, iscq, iecq, jscq, jecq, isd, jsd, ied, jed, iegq, jegq, giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec, is, js
   !~ real :: A, n, ux, uy, vx, vy, eps_min, umid, vmid, unorm, C_basal_friction, n_basal_friction, dxh, dyh, dxdyh
 
   !~ G => CS%grid
 
   !~ isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
   !~ iscq = G%iscq ; iecq = G%iecq ; jscq = G%jscq ; jecq = G%jecq
-  !~ gjsd = G%jsd_global ; gisd = G%isd_global
   !~ isd = G%isd ; jsd = G%jsd ; ied = G%isd ; jed = G%jsd
   !~ iegq = G%iegq ; jegq = G%jegq
   !~ gisc = G%domain%nx_halo+1 ; gjsc = G%domain%ny_halo+1

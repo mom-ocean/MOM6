@@ -13,6 +13,7 @@ use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_file_parser,   only : openParameterBlock, closeParameterBlock
 use MOM_grid,          only : ocean_grid_type, isPointInCell
 use MOM_verticalGrid,  only : verticalGrid_type
+use MOM_wave_interface, only: wave_parameters_CS
 
 use CVmix_kpp, only : CVmix_init_kpp, CVmix_put_kpp, CVmix_get_kpp_real
 use CVmix_kpp, only : CVmix_coeffs_kpp
@@ -22,7 +23,7 @@ use CVmix_kpp, only : CVmix_kpp_compute_bulk_Richardson
 use CVmix_kpp, only : CVmix_kpp_compute_unresolved_shear
 use CVmix_kpp, only : CVmix_kpp_params_type
 use CVmix_kpp, only : CVmix_kpp_compute_kOBL_depth
-use MOM_wave_interface, only : wave_parameters_CS
+
 implicit none ; private
 
 #include "MOM_memory.h"
@@ -51,6 +52,7 @@ type, public :: KPP_CS ; private
   real    :: Ri_crit                   !< Critical bulk Richardson number (defines OBL depth)
   real    :: vonKarman                 !< von Karman constant (dimensionless)
   real    :: cs                        !< Parameter for computing velocity scale function (dimensionless)
+  real    :: cs2
   logical :: enhance_diffusion         !< If True, add enhanced diffusivity at base of boundary layer.
   character(len=10) :: interpType      !< Type of interpolation in determining OBL depth
   logical :: computeEkman              !< If True, compute Ekman depth limit for OBLdepth
@@ -69,6 +71,7 @@ type, public :: KPP_CS ; private
   logical :: KPPzeroDiffusivity        !< If True, will set diffusivity and viscosity from KPP to zero; for testing purposes.
   logical :: KPPisAdditive             !< If True, will add KPP diffusivity to initial diffusivity.
                                        !! If False, will replace initial diffusivity wherever KPP diffusivity is non-zero.
+  real    :: min_thickness             !< A minimum thickness used to avoid division by small numbers in the vicinity of vanished layers.
   ! smg: obsolete below
   logical :: correctSurfLayerAvg       !< If true, applies a correction to the averaging of surface layer properties
   real    :: surfLayerDepth            !< A guess at the depth of the surface layer (which should 0.1 of OBLdepth) (m)
@@ -126,7 +129,7 @@ contains
 
 !> Initialize the CVmix KPP module and set up diagnostics
 !! Returns True if KPP is to be used, False otherwise.
-logical function KPP_init(paramFile, G, diag, Time, CS, passive,Waves)
+logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
 
   ! Arguments
   type(param_file_type),   intent(in)    :: paramFile !< File parser
@@ -136,11 +139,14 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive,Waves)
   type(KPP_CS),            pointer       :: CS        !< Control structure
   logical, optional,       intent(out)   :: passive   !< Copy of %passiveMode
   type(wave_parameters_CS), pointer, optional :: Waves !<Wave CS
+
   ! Local variables
 #include "version_variable.h"
   character(len=40) :: mod = 'MOM_KPP' ! name of this module
   character(len=20) :: string          ! local temporary string
+  character(len=20) :: LangEFMethod    ! string for passing Langmuir EF Method to CVMix
   logical :: LLangmuirEF
+  logical :: CS_IS_ONE=.false.
 
   if (associated(CS)) call MOM_error(FATAL, 'MOM_KPP, KPP_init: '// &
            'Control structure has already been initialized')
@@ -191,6 +197,9 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive,Waves)
   call get_param(paramFile, mod, 'CS', CS%cs,                        &
                  'Parameter for computing velocity scale function.', &
                  units='nondim', default=98.96)
+  call get_param(paramFile, mod, 'CS2', CS%cs2,                        &
+                 'Parameter for computing velocity scale function.', &
+                 units='nondim', default=6.32)
   call get_param(paramFile, mod, 'DEEP_OBL_OFFSET', CS%deepOBLoffset,                             &
                  'If non-zero, the distance above the bottom to which the OBL is clipped\n'//     &
                  'if it would otherwise reach the bottom. The smaller of this and 0.1D is used.', &
@@ -254,7 +263,9 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive,Waves)
                  '\t MatchBoth         = match gradient for both diffusivity and NLT\n'//                 &
                  '\t ParabolicNonLocal = sigma*(1-sigma)^2 for diffusivity; (1-sigma)^2 for NLT',         &
                  default='SimpleShapes')
-
+  if (CS%MatchTechnique.eq.'ParabolicNonLocal') then
+     Cs_is_one=.true.
+  endif
   call get_param(paramFile, mod, 'KPP_ZERO_DIFFUSIVITY', CS%KPPzeroDiffusivity,            &
                  'If True, zeroes the KPP diffusivity and viscosity; for testing purpose.',&
                  default=.False.)
@@ -276,25 +287,39 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive,Waves)
     case default ; call MOM_error(FATAL,"KPP_init: "// &
                    "Unrecognized KPP_SHORTWAVE_METHOD option"//trim(string))
   end select
+  call get_param(paramFile, mod, 'CVMIX_ZERO_H_WORK_AROUND', CS%min_thickness,                           &
+                 'A minimum thickness used to avoid division by small numbers in the vicinity\n'//       &
+                 'of vanished layers. This is independent of MIN_THICKNESS used in other parts of MOM.', &
+                 units='m', default=0.)
+
   call closeParameterBlock(paramFile)
   call get_param(paramFile, mod, 'DEBUG', CS%debug, default=.False., do_not_log=.True.)
 
-  call get_param(paramFile, mod, "WAVE_ENHANCED_MIXING", LLangmuirEF, &
-       "Flag to use wave enhancement in mixing", units="", &
-       Default=.false.) 
+  call get_param(paramFile, mod, "LANGMUIR_ENHANCE_W", LLangmuirEF, &
+       'Flag for Langmuir turbulence enhancement of turbulent'//&
+       'velocity scale.', units="", Default=.false.) 
 
+  call get_param(paramFile, mod, 'LANGMUIR_ENHANCEMENT_SHAPE', LangEFMethod,        &
+                 'CVMix method to for enhancement of diffusion due to \n'//         &
+                 'Langmuir turbulence, valid options are: \n'//                     &
+                 '\t Constant      = Constant value for full OBL\n'//               &
+                 '\t NormShapeFunc = Varies based on normalized shape function\n', &
+                 units="", default='Constant')
   call CVmix_init_kpp( Ri_crit=CS%Ri_crit,                 &
                        minOBLdepth=CS%minOBLdepth,         &
                        minVtsqr=CS%minVtsqr,               &
                        vonKarman=CS%vonKarman,             &
                        surf_layer_ext=CS%surf_layer_ext,   &
                        interp_type=CS%interpType,          &
+                       interp_type2=CS%interpType,        &
                        lEkman=CS%computeEkman,             &
                        lMonOb=CS%computeMoninObukhov,      &
                        MatchTechnique=CS%MatchTechnique,   &
                        lenhanced_diff=CS%enhance_diffusion,&
+                       lnonzero_surf_nonlocal=Cs_is_one   ,&
                        CVmix_kpp_params_user=CS%KPP_params,&
-                       llangmuirEF=LLangmuirEF)
+                       llangmuirEF=LLangmuirEF, &
+                       LangEFMethod=LangEFMethod)
 
   ! Register diagnostics
   CS%diag => diag
@@ -387,9 +412,9 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive,Waves)
   if (CS%id_Ssurf > 0)    allocate( CS%Ssurf( SZI_(G), SZJ_(G)) )
   if (CS%id_Ssurf > 0)    CS%Ssurf(:,:) = 0.
   if (CS%id_Usurf > 0)    allocate( CS%Usurf( SZIB_(G), SZJ_(G)) )
-  if (CS%id_Usurf > 0)    CS%Tsurf(:,:) = 0.
+  if (CS%id_Usurf > 0)    CS%Usurf(:,:) = 0.
   if (CS%id_Vsurf > 0)    allocate( CS%Vsurf( SZI_(G), SZJB_(G)) )
-  if (CS%id_Vsurf > 0)    CS%Ssurf(:,:) = 0.
+  if (CS%id_Vsurf > 0)    CS%Vsurf(:,:) = 0.
 
 end function KPP_init
 
@@ -398,13 +423,13 @@ end function KPP_init
 !> KPP vertical diffusivity/viscosity and non-local tracer transport
 subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
                          buoyFlux, Kt, Ks, Kv, nonLocalTransHeat,&
-                         nonLocalTransScalar,Waves)
+                         nonLocalTransScalar, Waves)
 
   ! Arguments
   type(KPP_CS),                           pointer       :: CS             !< Control structure
   type(ocean_grid_type),                  intent(in)    :: G              !< Ocean grid
   type(verticalGrid_type),                intent(in)    :: GV             !< Ocean vertical grid
-  type(wave_parameters_CS), pointer, optional         :: Waves !<Wave CS
+  type(wave_parameters_CS), pointer, optional           :: Waves          !<Wave CS
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h              !< Layer/level thicknesses (units of H)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: Temp           !< potential/cons temp (deg C)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: Salt           !< Salinity (ppt)
@@ -423,7 +448,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: nonLocalTransScalar !< scalar non-local transport (m/s)
 
   ! Local variables
-  integer :: i, j, k, km1                        ! Loop indices
+  integer :: i, j, k, km1,kp1                    ! Loop indices
   real, dimension( G%ke )     :: cellHeight      ! Cell center heights referenced to surface (m) (negative in ocean)
   real, dimension( G%ke+1 )   :: iFaceHeight     ! Interface heights referenced to surface (m) (negative in ocean)
   real, dimension( G%ke+1 )   :: N2_1d           ! Brunt-Vaisala frequency squared, at interfaces (1/s2)
@@ -456,27 +481,41 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
   real :: surfHsalt, surfSalt  ! Integral and average of saln over the surface layer
   real :: surfHu, surfU        ! Integral and average of u over the surface layer
   real :: surfHv, surfV        ! Integral and average of v over the surface layer
+  real :: dh    ! The local thickness used for calculating interface positions (m)
+  real :: hcorr ! A cumulative correction arising from inflation of vanished layers (m)
   integer :: kk, ksfc, ktmp
-!BGR Adding
-  REAL :: LEF
+
+!/BGR added
+  real :: LangEnhW     ! Langmuir enhancement for turbulent velocity scale
+  real :: LangEnhVt2   ! Langmuir enhancement for unresolved shear
+  real :: LangEnhK     ! Langmuir enhancement for mixing coefficient 
+  logical :: StokesShearInRIB  ! Use Stokes Shear in RIb calculation
+  logical :: SurfaceStokesinRIB ! Use Surface Stokes in RIb
+  logical :: StokesMixing
+  real, save :: KPPHPREV ! Previous mixing layer depth to get Stokes enhancement
+  real :: surfHuS, surfHvS, surfUs, surfVs, wavedir, currentdir
+  real :: VarUp, VarDn, M, VarLo, VarAvg
+  real :: H10pct, H20pct,CMNFACT, USx20pct, USy20pct
+  integer :: B 
+  real :: Tup, Hup, Tlo, Hlo, DPT
   
 
 #ifdef __DO_SAFETY_CHECKS__
   if (CS%debug) then
-    call hchksum(h*GV%H_to_m, "KPP in: h",G,haloshift=0)
-    call hchksum(Temp, "KPP in: T",G,haloshift=0)
-    call hchksum(Salt, "KPP in: S",G,haloshift=0)
-    call hchksum(u, "KPP in: u",G,haloshift=0)
-    call hchksum(v, "KPP in: v",G,haloshift=0)
-    call hchksum(uStar, "KPP in: uStar",G,haloshift=0)
-    call hchksum(buoyFlux, "KPP in: buoyFlux",G,haloshift=0)
-    call hchksum(Kt, "KPP in: Kt",G,haloshift=0)
-    call hchksum(Ks, "KPP in: Ks",G,haloshift=0)
+    call hchksum(h*GV%H_to_m, "KPP in: h",G%HI,haloshift=0)
+    call hchksum(Temp, "KPP in: T",G%HI,haloshift=0)
+    call hchksum(Salt, "KPP in: S",G%HI,haloshift=0)
+    call hchksum(u, "KPP in: u",G%HI,haloshift=0)
+    call hchksum(v, "KPP in: v",G%HI,haloshift=0)
+    call hchksum(uStar, "KPP in: uStar",G%HI,haloshift=0)
+    call hchksum(buoyFlux, "KPP in: buoyFlux",G%HI,haloshift=0)
+    call hchksum(Kt, "KPP in: Kt",G%HI,haloshift=0)
+    call hchksum(Ks, "KPP in: Ks",G%HI,haloshift=0)
   endif
 #endif
 
   ! some constants
-  GoRho = G%g_Earth / GV%Rho0
+  GoRho = GV%g_Earth / GV%Rho0
   nonLocalTrans(:,:) = 0.0
 
   if (CS%id_Kd_in > 0) call post_data(CS%id_Kd_in, Kt, CS%diag)
@@ -493,7 +532,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
 !$OMP                                  surfBuoyFlux,Ws_1d,Vt2_1d,BulkRi_1d,           &
 !$OMP                                  OBLdepth_0d,zBottomMinusOffset,Kdiffusivity,   &
 !$OMP                                  Kviscosity,sigma,kOBL,kk,pres_1D,Temp_1D,      &
-!$OMP                                  Salt_1D,rho_1D,surfBuoyFlux2,ksfc)
+!$OMP                                  Salt_1D,rho_1D,surfBuoyFlux2,ksfc,dh,hcorr)
 
   ! loop over horizontal points on processor
   do j = G%jsc, G%jec
@@ -507,12 +546,6 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
                        +(G%CoriolisBu(i-1,j) + G%CoriolisBu(i,j-1)) )
       surfFricVel = uStar(i,j)
 
-      if (present(Waves).and.associated(Waves)) then
-         LEF = WAVES%LangEF(i,j)
-      else
-         LEF = 1.0
-      endif
-
       ! Bullk Richardson number computed for each cell in a column,
       ! assuming OBLdepth = grid cell depth. After Rib(k) is
       ! known for the column, then CVMix interpolates to find
@@ -521,11 +554,16 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       ! and POP.
       iFaceHeight(1) = 0.0 ! BBL is all relative to the surface
       pRef = 0.
+      hcorr = 0.
       do k=1,G%ke
 
         ! cell center and cell bottom in meters (negative values in the ocean)
-        cellHeight(k)    = iFaceHeight(k) - 0.5 * h(i,j,k) * GV%H_to_m
-        iFaceHeight(k+1) = iFaceHeight(k) - h(i,j,k) * GV%H_to_m
+        dh = h(i,j,k) * GV%H_to_m ! Nominal thickness to use for increment
+        dh = dh + hcorr ! Take away the accumulated error (could temporarily make dh<0)
+        hcorr = min( dh - CS%min_thickness, 0. ) ! If inflating then hcorr<0
+        dh = max( dh, CS%min_thickness ) ! Limit increment dh>=min_thickness
+        cellHeight(k)    = iFaceHeight(k) - 0.5 * dh
+        iFaceHeight(k+1) = iFaceHeight(k) - dh
 
         ! find ksfc for cell where "surface layer" sits
         SLdepth_0d = CS%surf_layer_ext*max( max(-cellHeight(k),-iFaceHeight(2) ), CS%minOBLdepth )
@@ -543,6 +581,8 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
         surfHsalt=0.0
         surfHu   =0.0
         surfHv   =0.0
+        surfHuS  =0.0
+        surfHvS  =0.0
         hTot     =0.0
         do ktmp = 1,ksfc
 
@@ -552,13 +592,85 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
           ! surface layer thickness
           hTot = hTot + delH
 
-          ! surface averaged fields
-          surfHtemp = surfHtemp + Temp(i,j,ktmp) * delH
-          surfHsalt = surfHsalt + Salt(i,j,ktmp) * delH
-          surfHu    = surfHu + 0.5*(u(i,j,ktmp)+u(i-1,j,ktmp)) * delH
-          surfHv    = surfHv + 0.5*(v(i,j,ktmp)+v(i,j-1,ktmp)) * delH
+          ! BGR added code to make SL average use an interpolated
+          ! value for when SLdepth is within a layer that has large
+          ! dT/dz.  Does not seem to have impact so disabling for now.
+          ! if (.false.) then
+          !   if (ktmp.gt.1) then
+          !     VarUp = (Temp(i,j,ktmp-1)+Temp(i,j,ktmp))*.5
+          !     VarDn = ((Temp(i,j,ktmp)+Temp(i,j,ktmp+1))*.5)
+          !     M = (VarUp-VarDn ) / (h(i,j,ktmp)*GV%H_to_m)
+          !     VarLo = VarUp-delH*M
+          !     VarAvg = (VarUp+VarLo)*0.5
+          !   else
+          !     VarDn = (Temp(i,j,ktmp)+Temp(i,j,ktmp+1) )*.5
+          !     VarUp = 2.*Temp(i,j,ktmp) - VarDn
+          !     M = (VarUp-VarDn ) / (h(i,j,ktmp)*GV%H_to_m)
+          !     VarLo = VarUp-delH*M
+          !     VarAvg = (VarUp+VarLo)*0.5
+          !   endif
+          !   surfHtemp = surfHtemp + VarAvg * delH
 
+          !   if (ktmp.gt.1) then
+          !     VarUp = (Salt(i,j,ktmp-1)+Salt(i,j,ktmp))*.5
+          !     VarDn = (Salt(i,j,ktmp)+Salt(i,j,ktmp+1))*.5
+          !     M = (VarUp-VarDn ) / (h(i,j,ktmp)*GV%H_to_m)
+          !     VarLo = VarUp-delH*M
+          !     VarAvg = (VarUp+VarLo)*0.5
+          !   else
+          !     VarDn = (Salt(i,j,ktmp)+Salt(i,j,ktmp+1) )*.5
+          !     VarUp = 2.*Salt(i,j,ktmp) - VarDn
+          !     M = (VarUp-VarDn ) / (h(i,j,ktmp)*GV%H_to_m)
+          !     VarLo = VarUp-delH*M
+          !     VarAvg = (VarUp+VarLo)*0.5
+          !   endif
+          !   surfHsalt = surfHsalt + VarAvg * delH
+
+          !   if (ktmp.gt.1) then
+          !     VarUp = (u(i,j,ktmp)+u(i-1,j,ktmp) +&
+          !              u(i,j,ktmp-1)+u(i-1,j,ktmp-1) )*.25
+          !     VarDn = (u(i,j,ktmp)+u(i-1,j,ktmp) +&
+          !              u(i,j,ktmp+1)+u(i-1,j,ktmp+1) )*.25
+          !     M = (VarUp-VarDn ) / (h(i,j,ktmp)*GV%H_to_m)
+          !     VarLo = VarUp-delH*M
+          !     VarAvg = (VarUp+VarLo)*0.5
+          !   else
+          !     VarDn = (u(i,j,ktmp)+u(i-1,j,ktmp) +&
+          !              u(i,j,ktmp+1)+u(i-1,j,ktmp+1) )*.25
+          !     VarUp = 2.*(u(i,j,ktmp)+u(i-1,j,ktmp))*.5 - VarDn
+          !     M = (VarUp-VarDn ) / (h(i,j,ktmp)*GV%H_to_m)
+          !     VarLo = VarUp-delH*M
+          !     VarAvg = (VarUp+VarLo)*0.5
+          !   endif
+          !   surfHu = surfHu + VarAvg * delH
+
+          !   if (ktmp.gt.1) then
+          !     VarUp = (v(i,j,ktmp)+v(i,j-1,ktmp) +&
+          !              v(i,j,ktmp-1)+v(i,j-1,ktmp-1) )*.25
+          !     VarDn = (v(i,j,ktmp)+v(i,j-1,ktmp) +&
+          !              v(i,j,ktmp+1)+v(i,j-1,ktmp+1) )*.25
+          !     M = (VarUp-VarDn ) / (h(i,j,ktmp)*GV%H_to_m)
+          !     VarLo = VarUp-delH*M
+          !     VarAvg = (VarUp+VarLo)*0.5
+          !   else
+          !     VarDn = (v(i,j,ktmp)+v(i,j-1,ktmp) +&
+          !              v(i,j,ktmp+1)+v(i,j-1,ktmp+1) )*.25
+          !     VarUp = 2.*(v(i,j,ktmp)+v(i,j-1,ktmp))*.5 - VarDn
+          !     M = (VarUp-VarDn ) / (h(i,j,ktmp)*GV%H_to_m)
+          !     VarLo = VarUp-delH*M
+          !     VarAvg = (VarUp+VarLo)*0.5
+          !   endif
+          !   surfHv = surfHv + VarAvg * delH
+          
+          ! else
+            ! surface averaged fields
+            surfHtemp = surfHtemp + Temp(i,j,ktmp) * delH
+            surfHsalt = surfHsalt + Salt(i,j,ktmp) * delH
+            surfHu    = surfHu + 0.5*(u(i,j,ktmp)+u(i-1,j,ktmp)) * delH
+            surfHv    = surfHv + 0.5*(v(i,j,ktmp)+v(i,j-1,ktmp)) * delH
+          ! endif
         enddo
+
         surfTemp = surfHtemp / hTot
         surfSalt = surfHsalt / hTot
         surfU    = surfHu    / hTot
@@ -569,6 +681,85 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
         ! C-grid average to get Uk and Vk on T-points.
         Uk         = 0.5*(u(i,j,k)+u(i-1,j,k)) - surfU
         Vk         = 0.5*(v(i,j,k)+v(i,j-1,k)) - surfV
+        
+
+        if (present(Waves).and.associated(Waves)) then
+           StokesShearInRIb   = Waves%StokesShearInRIb
+           SurfaceStokesInRIb = Waves%SurfaceStokesinRIb
+           StokesMixing = Waves%StokesMixing
+           !/
+           ! If Stokes Shear in RIb, compute 10% of OBL Stokes average
+           !  rather than computing this from discritized, we can compute
+           !  more exactly through integration from spectrum
+           surfUS = 0.0 ;surfVS = 0.0;
+           H10pct=min(-0.1,-hTot);!hTot is 10% of OBL
+           if (StokesShearInRIb) then
+              do b=1,WAVES%NumBands
+                 CMNFACT= (1.0 - EXP(H10pct*WAVES%WaveNum_Cen(b))) / &
+                      (0.-H10pct)/ (2*WAVES%WaveNum_Cen(b))
+                 surfUS = surfUS + 0.5 * ( WAVES%STKx0(i,j,b) + &
+                      WAVES%STKx0(i-1,j,b) ) * CMNFACT
+                 surfVS = surfVS + 0.5 * ( WAVES%STKy0(i,j,b) + &
+                      WAVES%STKy0(i,j-1,b) ) * CMNFACT
+              enddo
+           endif
+           !/
+           ! Now compute Langmuir number at h points.
+           USy20pct = 0.0;USx20pct = 0.0;
+           H20pct=min(-0.1,-hTot*2.);
+           do b=1,WAVES%NumBands
+              CMNFACT = (1.0 - EXP(H20pct*2*WAVES%WaveNum_Cen(b))) &
+                   / (0.0-H20pct) / (2*WAVES%WaveNum_Cen(b))
+              
+              USy20pct = USy20pct + 0.5 * ( WAVES%STKy0(i,j,b) &
+                   + WAVES%STKy0(i,j-1,b) ) * CMNFACT
+              USx20pct = USx20pct + 0.5 * ( WAVES%STKx0(i,j,b) &
+                   + WAVES%STKx0(i-1,j,b) ) * CMNFACT
+           enddo
+           ! Stokes Shear
+!           wavedir=atan2(0.5*(waves%us_y(i,j,1)+waves%us_y(i,j-1,1) -     &
+!                waves%us_y(i,j,ksfc)-waves%us_y(i,j-1,ksfc)),             &
+!                0.5*(waves%us_x(i,j,1)+waves%us_x(i-1,j,1) -              &
+!                waves%us_x(i,j,ksfc)-waves%us_x(i-1,j,ksfc)))
+           wavedir=atan2(USy20pct,USx20pct)
+           ! Lagrangian current shear (Reynolds stress direction approx)
+           currentdir= atan2(0.5*(waves%us_y(i,j,1)+waves%us_y(i,j-1,1) - &
+                waves%us_y(i,j,ksfc)-waves%us_y(i,j-1,ksfc)               &
+                +v(i,j,1)+v(i,j-1,1)-v(i,j,ksfc)-v(i,j-1,ksfc)),          &
+                0.5*(waves%us_x(i,j,1)+waves%us_x(i-1,j,1) -              &
+                waves%us_x(i,j,ksfc)-waves%us_x(i-1,j,ksfc)               &
+                +u(i,j,1)+u(i-1,j,1)-u(i,j,ksfc)-u(i-1,j,ksfc)))
+           WAVES%LangNum(i,j) = sqrt(surfFricVel /      &
+                max(1.e-10,sqrt(USx20pct**2 + USy20pct**2))) &
+                *sqrt(1./max(0.000001,cos(wavedir-currentdir)))
+
+           if (WAVES%LangmuirEnhanceVt2) then
+              LangEnhVT2 = min(50.,1. + 2.3/sqrt(WAVES%LangNum(i,j)))
+           else
+              LangEnhVT2 = 1.0
+           endif
+        else
+           LangEnhW   = 1.0
+           LangEnhVT2 = 1.0
+           LangEnhK   = 1.0
+           StokesShearInRIb = .false.
+           SurfaceStokesInRIb = .false.
+           StokesMixing = .false.
+        endif
+
+        !BGR/ Adding Stokes drift
+        if (StokesShearInRIb) then
+           !Stokes drift is on grid centers for now
+          Uk =  Uk + (0.5*(Waves%Us_x(i,j,k)+Waves%US_x(i-1,j,k)) -surfUS )
+          Vk =  Vk + (0.5*(Waves%Us_y(i,j,k)+Waves%Us_y(i,j-1,k)) -surfVS )
+        endif
+        
+        if (SurfaceStokesInRIb) then
+          UK = Uk - WAVES%Us0_x(i,j)
+          VK = VK - WAVES%Us0_y(i,j)
+        endif
+
+        !/endBGR
         deltaU2(k) = Uk**2 + Vk**2
 
         ! pressure, temp, and saln for EOS
@@ -613,7 +804,12 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       N2_1d(G%ke+1 ) = 0.0
       N_1d(G%ke+1 )  = 0.0
 
-
+      !Apply N2 smoothing
+       !do k = 1, G%ke
+       ! kp1 = min(k+5, G%ke)
+       ! N2_1d(k)    = N2_1d(kp1)
+       ! N_1d(k)     = sqrt( max( N2_1d(k), 0.) )
+      !enddo
       ! turbulent velocity scales w_s and w_m computed at the cell centers.
       ! Note that if sigma > CS%surf_layer_ext, then CVmix_kpp_compute_turbulent_scales
       ! computes w_s and w_m velocity scale at sigma=CS%surf_layer_ext. So we only pass
@@ -624,16 +820,19 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
         surfBuoyFlux2,     & ! (in)  Buoyancy flux at surface (m2/s3)
         surfFricVel,       & ! (in)  Turbulent friction velocity at surface (m/s)
         w_s=Ws_1d,         & ! (out) Turbulent velocity scale profile (m/s)
-        CVmix_kpp_params_user=CS%KPP_params ,&
-        langmuir_efactor = LEF)
+        CVmix_kpp_params_user=CS%KPP_params, &
+        langmuir_efactor = LangEnhW & ! (in) Langmuir enhancement
+        )
 
       ! Calculate Bulk Richardson number from eq (21) of LMD94
+      !BGR pass EnhVT here
       BulkRi_1d = CVmix_kpp_compute_bulk_Richardson( &
                   cellHeight(1:G%ke),                & ! Depth of cell center (m)
                   GoRho*deltaRho,                    & ! Bulk buoyancy difference, Br-B(z) (1/s)
                   deltaU2,                           & ! Square of resolved velocity difference (m2/s2)
                   ws_cntr=Ws_1d,                     & ! Turbulent velocity scale profile (m/s)
-                  N_iface=N_1d)                        ! Buoyancy frequency (1/s)
+                  N_iface=N_1d,                      & ! Buoyancy frequency (1/s)
+                  LangmuirEnhance_Vt2=LangEnhVt2)! Langmuir Enhancement to Vt2
 
 
       surfBuoyFlux = buoyFlux(i,j,1) ! This is only used in kpp_compute_OBL_depth to limit
@@ -663,11 +862,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       OBLdepth_0d = min( OBLdepth_0d, -iFaceHeight(G%ke+1) ) ! no deeper than bottom
       kOBL        = CVmix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, OBLdepth_0d )
 
-      ! Passing OBL to waves for next time step Langmuir number
-      if (present(Waves).and.associated(Waves)) then
-         WAVES%OBLdepth(i,j)=OBLdepth_0d
-         print*,WAVES%OBLdepth(i,j)
-      endif
+
 
 !*************************************************************************
 ! smg: remove code below
@@ -675,7 +870,6 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
 ! Following "correction" step has been found to be unnecessary.
 ! Code should be removed after further testing.
       if (CS%correctSurfLayerAvg) then
-
         SLdepth_0d = CS%surf_layer_ext * OBLdepth_0d
         hTot      = h(i,j,1)
         surfTemp  = Temp(i,j,1) ; surfHtemp = surfTemp * hTot
@@ -745,16 +939,50 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
 ! smg: remove code above
 ! **********************************************************************
 
+      if (present(Waves).and.associated(Waves)) then
+         ! Stokes Shear
+         !wavedir=atan2(0.5*(waves%us_y(i,j,1)+waves%us_y(i,j-1,1) -     &
+         !     waves%us_y(i,j,int(kOBL))-waves%us_y(i,j-1,int(kOBL))),   &
+         !       0.5*(waves%us_x(i,j,1)+waves%us_x(i-1,j,1) -            &
+         !       waves%us_x(i,j,int(kOBL))-waves%us_x(i-1,j,int(kOBL))))
+         wavedir=atan2(USy20pct,USx20pct)
+         ! Lagrangian current shear (Reynolds stress direction approx)
+         currentdir= atan2(0.5*(waves%us_y(i,j,1)+waves%us_y(i,j-1,1) - &
+              waves%us_y(i,j,int(kOBL))-waves%us_y(i,j-1,int(kOBL))     &
+              +v(i,j,1)+v(i,j-1,1)-v(i,j,int(kOBL))-v(i,j-1,int(kOBL))),&
+              0.5*(waves%us_x(i,j,1)+waves%us_x(i-1,j,1) -              &
+              waves%us_x(i,j,int(kOBL))-waves%us_x(i-1,j,int(kOBL))     &
+              +u(i,j,1)+u(i-1,j,1)-u(i,j,int(kOBL))-u(i-1,j,int(kOBL))))
+         WAVES%LangNum(i,j) = sqrt(surfFricVel /      &
+              max(1.e-10,sqrt(USx20pct**2 + USy20pct**2))) &
+              *max(100.,sqrt(1./max(0.000001,cos(wavedir-currentdir))))
+         
+         !/Compute enhancement factors
+         if (WAVES%LangmuirEnhanceW) then
+            LangEnhW   = sqrt(1.+(1.5*WAVES%LangNum(i,j))**(-2) + &
+                 (5.4*WAVES%LangNum(i,j))**(-4))
+         else
+            LangEnhW = 1.0
+         endif
+         if (WAVES%LangmuirEnhanceK) then
+            LangEnhK   = min(2.25, 1. + 1./WAVES%LangNum(i,j))
+         else
+            LangEnhK = 1.0
+         endif
+      endif
 
       ! Call CVMix/KPP to obtain OBL diffusivities, viscosities and non-local transports
-
+      
       ! Unlike LMD94, we do not match to interior diffusivities. If using the original
       ! LMD94 shape function, not matching is equivalent to matching to a zero diffusivity.
-      !BGR/ Match technique is set in KPP input block, are these lines needed?
-      !{
-      Kdiffusivity(:,:) = 0. ! Diffusivities for heat and salt (m2/s)
-      Kviscosity(:)     = 0. ! Viscosity (m2/s)
-      !}
+      if (.not. (CS%MatchTechnique.eq.'MatchBoth')) then
+         Kdiffusivity(:,:) = 0. ! Diffusivities for heat and salt (m2/s)
+         Kviscosity(:)     = 0. ! Viscosity (m2/s)
+      else
+         Kdiffusivity(:,1) = Kt(i,j,:)
+         Kdiffusivity(:,2) = Ks(i,j,:)
+         Kviscosity(:)=Kv(i,j,:)
+      endif
       !BGR/ Add option for use of surface buoyancy flux with total sw flux.
       if (CS%SW_METHOD .eq. SW_METHOD_ALL_SW) then
          surfBuoyFlux = buoyFlux(i,j,1)
@@ -763,6 +991,8 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       elseif (CS%SW_METHOD .eq. SW_METHOD_LV1_SW) then
          surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,2) 
       endif
+
+      !BGR pass LTEnhancement here
       call cvmix_coeffs_kpp(Kviscosity,        & ! (inout) Total viscosity (m2/s)
                             Kdiffusivity(:,1), & ! (inout) Total heat diffusivity (m2/s)
                             Kdiffusivity(:,2), & ! (inout) Total salt diffusivity (m2/s)
@@ -779,8 +1009,10 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
                             surfBuoyFlux,      & ! (in) Buoyancy flux at surface (m2/s3)
                             G%ke,              & ! (in) Number of levels to compute coeffs for
                             G%ke,              & ! (in) Number of levels in array shape
-                            CVmix_kpp_params_user=CS%KPP_params,&
-                            langmuir_efactor = LEF)
+                            CVmix_kpp_params_user=CS%KPP_params, &
+                            langmuir_efactor = LangEnhW, & ! (in) Langmuir enhancement
+                            LangmuirEnhance_K = LangEnhK &
+                            )
 
 
       ! Over-write CVMix NLT shape function with one of the following choices.
@@ -793,29 +1025,49 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       ! MOM6 recommended shape is the parabolic; it gives deeper boundary layer
       ! and no spurious extrema.
       if (surfBuoyFlux < 0.0) then
+         Hup=h(i,j,1)*GV%H_to_m;
+         Tup=Temp(i,j,1)*Hup
+         Tlo=0.0;Hlo=0.0;
+         DPT=0.0;
+        !  do ktmp = 2,G%ke
+        !     DPT=DPT+ h(i,j,ktmp)*GV%H_to_m 
+        !     if (DPT.lt..2*OBLdepth_0d) then
+        !        delH = h(i,j,ktmp)*GV%H_to_m
+        !        Hup = Hup + delH              
+        !        Tup = Tup + Temp(i,j,ktmp) * delH
+        !     elseif (DPT.lt.OBLdepth_0d) then
+        !        delH = h(i,j,ktmp)*GV%H_to_m
+        !        Hlo = Hlo + delH
+        !        Tlo = Tlo + Temp(i,j,ktmp) * delH 
+        !        Tlo = max(Tlo,Temp(i,j,ktmp))
+        !     endif
+        ! enddo
+        ! Tup=Tup/Hup;!Tlo=Tlo/Hlo;
+        ! CS%CS2=6.32*max((Tlo-Tup)/0.01,0.0)
+        ! print*,DPT,OBLdepth_0d,CS%CS2
         if (CS%NLT_shape == NLT_SHAPE_CUBIC) then
           do k = 2, G%ke
             sigma = min(1.0,-iFaceHeight(k)/OBLdepth_0d)
-            nonLocalTrans(k,1) = (1.0 - sigma)**2 * (1.0 + 2.0*sigma)
+            nonLocalTrans(k,1) = CS%CS2 *(1.0 - sigma)**2 * (1.0 + 2.0*sigma)
             nonLocalTrans(k,2) = nonLocalTrans(k,1)
           enddo
         elseif (CS%NLT_shape == NLT_SHAPE_PARABOLIC) then
           do k = 2, G%ke
             sigma = min(1.0,-iFaceHeight(k)/OBLdepth_0d)
-            nonLocalTrans(k,1) = (1.0 - sigma)**2
+            nonLocalTrans(k,1) = CS%CS2 *(1.0 - sigma)**2
             nonLocalTrans(k,2) = nonLocalTrans(k,1)
           enddo
         elseif (CS%NLT_shape == NLT_SHAPE_LINEAR) then
           do k = 2, G%ke
             sigma = min(1.0,-iFaceHeight(k)/OBLdepth_0d)
-            nonLocalTrans(k,1) = (1.0 - sigma)
+            nonLocalTrans(k,1) = CS%CS2 *(1.0 - sigma)
             nonLocalTrans(k,2) = nonLocalTrans(k,1)
           enddo
         elseif (CS%NLT_shape == NLT_SHAPE_CUBIC_LMD) then
           ! Sanity check (should agree with CVMix result using simple matching)
           do k = 2, G%ke
             sigma = min(1.0,-iFaceHeight(k)/OBLdepth_0d)
-            nonLocalTrans(k,1) = 6.32739901508 * sigma*(1.0 -sigma)**2
+            nonLocalTrans(k,1) = CS%CS2 * sigma*(1.0 -sigma)**2
             nonLocalTrans(k,2) = nonLocalTrans(k,1)
           enddo
         endif
@@ -834,6 +1086,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       endif
 
       ! recompute wscale for diagnostics, now that we in fact know boundary layer depth
+      !BGR consider if LTEnhancement is needed for diagnostics
       if (CS%id_Ws > 0) then
           call CVmix_kpp_compute_turbulent_scales( &
             -CellHeight/OBLdepth_0d,               & ! (in)  Normalized boundary layer coordinate
@@ -841,13 +1094,14 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
             surfBuoyFlux,                          & ! (in)  Buoyancy flux at surface (m2/s3)
             surfFricVel,                           & ! (in)  Turbulent friction velocity at surface (m/s)
             w_s=Ws_1d,                             & ! (out) Turbulent velocity scale profile (m/s)
-            CVmix_kpp_params_user=CS%KPP_params,    & !       KPP parameters
-            langmuir_efactor = LEF&
-            )
+            CVmix_kpp_params_user=CS%KPP_params,   & !       KPP parameters
+            langmuir_efactor = LangEnhW                 & ! (in)  Langmuir enhancement
+          )
           CS%Ws(i,j,:) = Ws_1d(:)
       endif
 
       ! compute unresolved squared velocity for diagnostics
+      !BGR Definitely need VT2Enhancement for diagnostics
       if (CS%id_Vt2 > 0) then
         Vt2_1d(:) = CVmix_kpp_compute_unresolved_shear( &
                     cellHeight(1:G%ke),                 & ! Depth of cell center (m)
@@ -884,12 +1138,14 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
             Kt(i,j,k) = Kt(i,j,k) + Kdiffusivity(k,1)
             Ks(i,j,k) = Ks(i,j,k) + Kdiffusivity(k,2)
             Kv(i,j,k) = Kv(i,j,k) + Kviscosity(k)
+            if (StokesMixing) Waves%KvS(i,j,k)=Kv(i,j,k)
           enddo
         else ! KPP replaces prior diffusivity when former is non-zero
           do k=1, G%ke+1
             if (Kdiffusivity(k,1) /= 0.) Kt(i,j,k) = Kdiffusivity(k,1)
             if (Kdiffusivity(k,2) /= 0.) Ks(i,j,k) = Kdiffusivity(k,2)
             if (Kviscosity(k) /= 0.) Kv(i,j,k) = Kviscosity(k)
+            if (StokesMixing) Waves%KvS(i,j,k)=Kv(i,j,k)
           enddo
         endif
       endif
@@ -902,8 +1158,8 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
 
 #ifdef __DO_SAFETY_CHECKS__
   if (CS%debug) then
-    call hchksum(Kt, "KPP out: Kt",G,haloshift=0)
-    call hchksum(Ks, "KPP out: Ks",G,haloshift=0)
+    call hchksum(Kt, "KPP out: Kt",G%HI,haloshift=0)
+    call hchksum(Ks, "KPP out: Ks",G%HI,haloshift=0)
   endif
 #endif
 

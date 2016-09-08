@@ -115,7 +115,7 @@ subroutine diffConvection_calculate(CS, G, GV, h, Temp, Salt, EOS, Kd_int)
   real, dimension( G%ke+1 ) :: Kd_1d ! Vertical diffusivity at interfaces (m2/s)
   real :: GoRho, pRef, rhoK, rhoKm1
 
-  GoRho = G%g_Earth / GV%Rho0
+  GoRho = GV%g_Earth / GV%Rho0
 
   N2_1d( 1 ) = 0.
   N2_1d( G%ke+1 ) = 0.
@@ -127,7 +127,7 @@ subroutine diffConvection_calculate(CS, G, GV, h, Temp, Salt, EOS, Kd_int)
     pRef = 0. ! Ignore atmospheric pressure
     do K = 2, G%ke
       ! Pressure at interface K is incremented by mass of level above
-      pRef = pRef + G%g_Earth * GV%Rho0 * h(i,j,k-1) * GV%H_to_m ! Boussinesq approximation!!!! ?????
+      pRef = pRef + GV%g_Earth * GV%Rho0 * h(i,j,k-1) * GV%H_to_m ! Boussinesq approximation!!!! ?????
       ! Compute Brunt-Vaisala frequency (static stability) on interfaces
       call calculate_density(Temp(i,j,k),   Salt(i,j,k),   pRef, rhoK,   EOS)
       call calculate_density(Temp(i,j,k-1), Salt(i,j,k-1), pRef, rhoKm1, EOS)

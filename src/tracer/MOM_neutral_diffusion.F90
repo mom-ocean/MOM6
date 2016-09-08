@@ -14,7 +14,7 @@ use MOM_file_parser,    only : get_param, log_version, param_file_type
 use MOM_file_parser,    only : openParameterBlock, closeParameterBlock
 use MOM_grid,           only : ocean_grid_type
 use MOM_tracer_registry,only : tracer_registry_type
-use MOM_verticalGrid, only : verticalGrid_type
+use MOM_verticalGrid,   only : verticalGrid_type
 
 implicit none ; private
 
@@ -25,7 +25,7 @@ public neutral_diffusion_init
 public neutral_diffusion_diag_init
 public neutral_diffusion_end
 public neutral_diffusion_calc_coeffs
-public neutralDiffusionUnitTests
+public neutral_diffusion_unit_tests
 
 type, public :: neutral_diffusion_CS ; private
   integer :: nkp1   ! Number of interfaces for a column = nk + 1
@@ -46,6 +46,8 @@ type, public :: neutral_diffusion_CS ; private
   integer, allocatable, dimension(:) :: id_neutral_diff_tracer_conc_tend    ! tracer concentration tendency 
   integer, allocatable, dimension(:) :: id_neutral_diff_tracer_cont_tend    ! tracer content tendency
   integer, allocatable, dimension(:) :: id_neutral_diff_tracer_cont_tend_2d ! k-summed tracer content tendency
+  integer, allocatable, dimension(:) :: id_neutral_diff_tracer_trans_x_2d   ! k-summed ndiff zonal tracer transport
+  integer, allocatable, dimension(:) :: id_neutral_diff_tracer_trans_y_2d   ! k-summed ndiff merid tracer transport
 
   real    :: C_p ! heat capacity of seawater (J kg-1 K-1)  
 
@@ -98,16 +100,16 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, CS)
 ! call closeParameterBlock(param_file)
 
   ! U-points
-  allocate(CS%uPoL(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%uPoL(G%isc-1:G%iec,G%jsc:G%jec,:) = 0.
-  allocate(CS%uPoR(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%uPoR(G%isc-1:G%iec,G%jsc:G%jec,:) = 0.
-  allocate(CS%uKoL(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%uKoL(G%isc-1:G%iec,G%jsc:G%jec,:) = 0
-  allocate(CS%uKoR(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%uKoR(G%isc-1:G%iec,G%jsc:G%jec,:) = 0
+  allocate(CS%uPoL(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%uPoL(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0.
+  allocate(CS%uPoR(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%uPoR(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0.
+  allocate(CS%uKoL(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%uKoL(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0
+  allocate(CS%uKoR(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%uKoR(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0
   allocate(CS%uHeff(G%isd:G%ied,G%jsd:G%jed,2*G%ke+1)); CS%uHeff(G%isc-1:G%iec,G%jsc:G%jec,:) = 0
   ! V-points
-  allocate(CS%vPoL(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%vPoL(G%isc:G%iec,G%jsc-1:G%jec,:) = 0.
-  allocate(CS%vPoR(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%vPoR(G%isc:G%iec,G%jsc-1:G%jec,:) = 0.
-  allocate(CS%vKoL(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%vKoL(G%isc:G%iec,G%jsc-1:G%jec,:) = 0
-  allocate(CS%vKoR(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%vKoR(G%isc:G%iec,G%jsc-1:G%jec,:) = 0
+  allocate(CS%vPoL(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%vPoL(G%isc:G%iec,G%jsc-1:G%jec,:)   = 0.
+  allocate(CS%vPoR(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%vPoR(G%isc:G%iec,G%jsc-1:G%jec,:)   = 0.
+  allocate(CS%vKoL(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%vKoL(G%isc:G%iec,G%jsc-1:G%jec,:)   = 0
+  allocate(CS%vKoR(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%vKoR(G%isc:G%iec,G%jsc-1:G%jec,:)   = 0
   allocate(CS%vHeff(G%isd:G%ied,G%jsd:G%jed,2*G%ke+1)); CS%vHeff(G%isc:G%iec,G%jsc-1:G%jec,:) = 0
 
 end function neutral_diffusion_init
@@ -127,16 +129,19 @@ subroutine neutral_diffusion_diag_init(Time, G, diag, C_p, Reg, CS)
 
   if(.not. associated(CS)) return 
 
-  ntr          = Reg%ntr
-  CS%C_p       = C_p
+  ntr    = Reg%ntr
+  CS%C_p = C_p
 
   allocate(CS%id_neutral_diff_tracer_conc_tend(ntr)) 
   allocate(CS%id_neutral_diff_tracer_cont_tend(ntr)) 
   allocate(CS%id_neutral_diff_tracer_cont_tend_2d(ntr)) 
+  allocate(CS%id_neutral_diff_tracer_trans_x_2d(ntr)) 
+  allocate(CS%id_neutral_diff_tracer_trans_y_2d(ntr)) 
   CS%id_neutral_diff_tracer_conc_tend(:)    = -1
   CS%id_neutral_diff_tracer_cont_tend(:)    = -1
   CS%id_neutral_diff_tracer_cont_tend_2d(:) = -1
-
+  CS%id_neutral_diff_tracer_trans_x_2d(:)   = -1
+  CS%id_neutral_diff_tracer_trans_y_2d(:)   = -1
 
   do n=1,ntr
 
@@ -164,6 +169,16 @@ subroutine neutral_diffusion_diag_init(Time, G, diag, C_p, Reg, CS)
       'tendency_of_sea_water_potential_temperature_expressed_as_heat_content_due_to_parameterized_mesocale_diffusion_depth_integrated',&
       cmor_long_name =                                                                                                                 &
       'Tendency of sea water potential temperature expressed as heat content due to parameterized mesocale diffusion depth integrated') 
+
+      CS%id_neutral_diff_tracer_trans_x_2d(n) = register_diag_field('ocean_model',           &
+      'ndiff_tracer_trans_x_2d_'//trim(Reg%Tr(n)%name), diag%axesCu1, Time,                  &
+      'Depth integrated neutral diffusion zonal tracer transport for '//trim(Reg%Tr(n)%name),&
+      'Watts')
+  
+      CS%id_neutral_diff_tracer_trans_y_2d(n) = register_diag_field('ocean_model',           &
+      'ndiff_tracer_trans_y_2d_'//trim(Reg%Tr(n)%name), diag%axesCv1, Time,                  &
+      'Depth integrated neutral diffusion merid tracer transport for '//trim(Reg%Tr(n)%name),&
+      'Watts')
   
     elseif(trim(Reg%Tr(n)%name) == 'S') then 
 
@@ -190,6 +205,16 @@ subroutine neutral_diffusion_diag_init(Time, G, diag, C_p, Reg, CS)
       cmor_long_name =                                                                                                    &
       'Tendency of sea water salinity expressed as salt content due to parameterized mesocale diffusion depth integrated') 
 
+      CS%id_neutral_diff_tracer_trans_x_2d(n) = register_diag_field('ocean_model',           &
+      'ndiff_tracer_trans_x_2d_'//trim(Reg%Tr(n)%name), diag%axesCu1, Time,                  &
+      'Depth integrated neutral diffusion zonal tracer transport for '//trim(Reg%Tr(n)%name),&
+      'kg/s')
+
+      CS%id_neutral_diff_tracer_trans_y_2d(n) = register_diag_field('ocean_model',           &
+      'ndiff_tracer_trans_y_2d_'//trim(Reg%Tr(n)%name), diag%axesCv1, Time,                  &
+      'Depth integrated neutral diffusion merid tracer transport for '//trim(Reg%Tr(n)%name),&
+      'kg/s')
+
     else 
 
       CS%id_neutral_diff_tracer_conc_tend(n) = register_diag_field('ocean_model',  &
@@ -198,7 +223,7 @@ subroutine neutral_diffusion_diag_init(Time, G, diag, C_p, Reg, CS)
        'tracer concentration * m-2 s-1')
 
       CS%id_neutral_diff_tracer_cont_tend(n) = register_diag_field('ocean_model',&
-      'ndiff_tracer_cont_tendency_'//trim(Reg%Tr(n)%name), diag%axesTL, Time, &
+      'ndiff_tracer_cont_tendency_'//trim(Reg%Tr(n)%name), diag%axesTL, Time,    &
       'Neutral diffusion tracer content tendency for '//trim(Reg%Tr(n)%name),    &
       'tracer content * m-2 s-1')
 
@@ -206,6 +231,16 @@ subroutine neutral_diffusion_diag_init(Time, G, diag, C_p, Reg, CS)
       'ndiff_tracer_cont_tendency_2d_'//trim(Reg%Tr(n)%name), diag%axesTL, Time,              &
       'Depth integrated neutral diffusion tracer content tendency for '//trim(Reg%Tr(n)%name),&
       'tracer content * m-2 s-1')
+
+      CS%id_neutral_diff_tracer_trans_x_2d(n) = register_diag_field('ocean_model',           &
+      'ndiff_tracer_trans_x_2d_'//trim(Reg%Tr(n)%name), diag%axesCu1, Time,                  &
+      'Depth integrated neutral diffusion zonal tracer transport for '//trim(Reg%Tr(n)%name),&
+      'kg/s')
+
+      CS%id_neutral_diff_tracer_trans_y_2d(n) = register_diag_field('ocean_model',           &
+      'ndiff_tracer_trans_y_2d_'//trim(Reg%Tr(n)%name), diag%axesCv1, Time,                  &
+      'Depth integrated neutral diffusion merid tracer transport for '//trim(Reg%Tr(n)%name),&
+      'kg/s')
 
     endif 
 
@@ -217,13 +252,13 @@ end subroutine neutral_diffusion_diag_init
 !> Calculate remapping factors for u/v columns used to map adjoining columns to
 !! a shared coordinate space.
 subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, EOS, CS)
-  type(ocean_grid_type),                 intent(in) :: G   !< Ocean grid structure
-  type(verticalGrid_type),               intent(in) :: GV  !< ocean vertical grid structure
+  type(ocean_grid_type),                    intent(in) :: G   !< Ocean grid structure
+  type(verticalGrid_type),                  intent(in) :: GV  !< ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h   !< Layer thickness (H units)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: T   !< Potential temperature (degC)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: S   !< Salinity (ppt)
-  type(EOS_type),                        pointer    :: EOS !< Equation of state structure
-  type(neutral_diffusion_CS),            pointer    :: CS  !< Neutral diffusion control structure
+  type(EOS_type),                           pointer    :: EOS !< Equation of state structure
+  type(neutral_diffusion_CS),               pointer    :: CS  !< Neutral diffusion control structure
 
   ! Local variables
   integer :: i, j, k
@@ -252,9 +287,9 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, EOS, CS)
   ! Neutral surface factors at U points
   do j = G%jsc, G%jec
     do I = G%isc-1, G%iec
-      call find_neutral_surface_positions(G%ke, &
-               Pint(i,j,:), Tint(i,j,:), Sint(i,j,:), dRdT(i,j,:), dRdS(i,j,:), &
-               Pint(i+1,j,:), Tint(i+1,j,:), Sint(i+1,j,:), dRdT(i+1,j,:), dRdS(i+1,j,:), &
+      call find_neutral_surface_positions(G%ke,                                          &
+               Pint(i,j,:), Tint(i,j,:), Sint(i,j,:), dRdT(i,j,:), dRdS(i,j,:),          &
+               Pint(i+1,j,:), Tint(i+1,j,:), Sint(i+1,j,:), dRdT(i+1,j,:), dRdS(i+1,j,:),&
                CS%uPoL(I,j,:), CS%uPoR(I,j,:), CS%uKoL(I,j,:), CS%uKoR(I,j,:), CS%uhEff(I,j,:) )
     enddo
   enddo
@@ -262,9 +297,9 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, EOS, CS)
   ! Neutral surface factors at V points
   do J = G%jsc-1, G%jec
     do i = G%isc, G%iec
-      call find_neutral_surface_positions(G%ke, &
-               Pint(i,j,:), Tint(i,j,:), Sint(i,j,:), dRdT(i,j,:), dRdS(i,j,:), &
-               Pint(i,j+1,:), Tint(i,j+1,:), Sint(i,j+1,:), dRdT(i,j+1,:), dRdS(i,j+1,:), &
+      call find_neutral_surface_positions(G%ke,                                          &
+               Pint(i,j,:), Tint(i,j,:), Sint(i,j,:), dRdT(i,j,:), dRdS(i,j,:),          &
+               Pint(i,j+1,:), Tint(i,j+1,:), Sint(i,j+1,:), dRdT(i,j+1,:), dRdS(i,j+1,:),&
                CS%vPoL(i,J,:), CS%vPoR(i,J,:), CS%vKoL(i,J,:), CS%vKoR(i,J,:), CS%vhEff(i,J,:) )
     enddo
   enddo
@@ -274,47 +309,55 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, EOS, CS)
 
 end subroutine neutral_diffusion_calc_coeffs
 
+
 !> Update tracer concentration due to neutral diffusion; layer thickness unchanged by this update. 
 subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
-  type(ocean_grid_type),                  intent(in)    :: G      !< Ocean grid structure
-  type(verticalGrid_type),                intent(in)    :: GV     !< ocean vertical grid structure
+  type(ocean_grid_type),                     intent(in)    :: G      !< Ocean grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV     !< ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h      !< Layer thickness (H units)
   real, dimension(SZIB_(G),SZJ_(G)),         intent(in)    :: Coef_x !< dt * Kh * dy / dx at u-points (m^2)
   real, dimension(SZI_(G),SZJB_(G)),         intent(in)    :: Coef_y !< dt * Kh * dx / dy at u-points (m^2)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: Tracer !< Tracer concentration
-  integer,                                intent(in)    :: m      !< Tracer number 
-  real,                                   intent(in)    :: dt     !< Tracer time step 
-  character(len=32),                      intent(in)    :: name   !< Tracer name 
-  type(neutral_diffusion_CS),             pointer       :: CS     !< Neutral diffusion control structure
+  integer,                                   intent(in)    :: m      !< Tracer number 
+  real,                                      intent(in)    :: dt     !< Tracer time step * I_numitts (I_numitts in tracer_hordiff) 
+  character(len=32),                         intent(in)    :: name   !< Tracer name 
+  type(neutral_diffusion_CS),                pointer       :: CS     !< Neutral diffusion control structure
 
   ! Local variables
   real, dimension(SZIB_(G),SZJ_(G),2*G%ke+1) :: uFlx        ! Zonal flux of tracer      (concentration * H)
   real, dimension(SZI_(G),SZJB_(G),2*G%ke+1) :: vFlx        ! Meridional flux of tracer (concentration * H)
   real, dimension(SZI_(G),SZJ_(G),G%ke)      :: tendency    ! tendency array for diagn
   real, dimension(SZI_(G),SZJ_(G))           :: tendency_2d ! depth integrated content tendency for diagn 
-  real, dimension(G%ke)                      :: dTracer     ! Change in tracer concentration 
+  real, dimension(SZIB_(G),SZJ_(G))          :: trans_x_2d  ! depth integrated diffusive tracer x-transport diagn
+  real, dimension(SZI_(G),SZJB_(G))          :: trans_y_2d  ! depth integrated diffusive tracer y-transport diagn
+  real, dimension(G%ke)                      :: dTracer     ! change in tracer concentration due to ndiffusion 
   integer :: i, j, k, ks, nk
-  real :: Ihdxdy, ppt2mks, Idt, convert
+  real :: ppt2mks, Idt, convert
 
-  nk = G%ke
+  nk = GV%ke
 
+  ! for diagnostics 
   if(CS%id_neutral_diff_tracer_conc_tend(m)    > 0  .or.  &
      CS%id_neutral_diff_tracer_cont_tend(m)    > 0  .or.  &
-     CS%id_neutral_diff_tracer_cont_tend_2d(m) > 0 ) then 
-    ppt2mks          = 0.001
-    Idt              = 1.0/dt
-    tendency(:,:,:)  = 0.0
-    tendency_2d(:,:) = 0.0
-    convert          = 1.0 
-    if(trim(name) == 'T') convert = CS%C_p  * GV%H_to_kg_m2
-    if(trim(name) == 'S') convert = ppt2mks * GV%H_to_kg_m2
+     CS%id_neutral_diff_tracer_cont_tend_2d(m) > 0  .or.  &
+     CS%id_neutral_diff_tracer_trans_x_2d(m)   > 0  .or.  &
+     CS%id_neutral_diff_tracer_trans_y_2d(m)   > 0) then 
+     ppt2mks          = 0.001
+     Idt              = 1.0/dt
+     tendency(:,:,:)  = 0.0
+     tendency_2d(:,:) = 0.0
+     trans_x_2d(:,:)  = 0.0
+     trans_y_2d(:,:)  = 0.0
+     convert          = 1.0 
+     if(trim(name) == 'T') convert = CS%C_p  * GV%H_to_kg_m2
+     if(trim(name) == 'S') convert = ppt2mks * GV%H_to_kg_m2
   endif 
 
 
   ! x-flux 
   do j = G%jsc,G%jec ; do I = G%isc-1,G%iec
     if (G%mask2dCu(I,j)>0.) then
-      call neutral_surface_flux(nk, h(i,j,:), h(i+1,j,:), &
+      call neutral_surface_flux(nk, h(i,j,:), h(i+1,j,:),       &
                                 Tracer(i,j,:), Tracer(i+1,j,:), &
                                 CS%uPoL(I,j,:), CS%uPoR(I,j,:), &
                                 CS%uKoL(I,j,:), CS%uKoR(I,j,:), &
@@ -327,7 +370,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
   ! y-flux 
   do J = G%jsc-1,G%jec ; do i = G%isc,G%iec
     if (G%mask2dCv(i,J)>0.) then
-      call neutral_surface_flux(nk, h(i,j,:), h(i,j+1,:), &
+      call neutral_surface_flux(nk, h(i,j,:), h(i,j+1,:),       &
                                 Tracer(i,j,:), Tracer(i,j+1,:), &
                                 CS%vPoL(i,J,:), CS%vPoR(i,J,:), &
                                 CS%vKoL(i,J,:), CS%vKoR(i,J,:), &
@@ -337,22 +380,22 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
     endif
   enddo ; enddo
 
-  ! Update the tracer concentration from convergence of neutral diffusive flux components  
+  ! Update the tracer concentration from divergence of neutral diffusive flux components  
   do j = G%jsc,G%jec ; do i = G%isc,G%iec
     if (G%mask2dT(i,j)>0.) then
 
       dTracer(:) = 0.
       do ks = 1,2*nk+1 ;
         k = CS%uKoL(I,j,ks)
-        dTracer(k) = dTracer(k) + Coef_x(I,j) * uFlx(I,j,ks)
+        dTracer(k) = dTracer(k) + Coef_x(I,j)   * uFlx(I,j,ks)
         k = CS%uKoR(I-1,j,ks)
         dTracer(k) = dTracer(k) - Coef_x(I-1,j) * uFlx(I-1,j,ks)
         k = CS%vKoL(i,J,ks)
-        dTracer(k) = dTracer(k) + Coef_y(i,J) * vFlx(i,J,ks)
+        dTracer(k) = dTracer(k) + Coef_y(i,J)   * vFlx(i,J,ks)
         k = CS%vKoR(i,J-1,ks)
         dTracer(k) = dTracer(k) - Coef_y(i,J-1) * vFlx(i,J-1,ks)
       enddo
-      do k = 1, G%ke
+      do k = 1, GV%ke
         Tracer(i,j,k) = Tracer(i,j,k) + dTracer(k) * &
                         ( G%IareaT(i,j) / ( h(i,j,k) + GV%H_subroundoff ) )
       enddo
@@ -360,7 +403,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
       if(CS%id_neutral_diff_tracer_conc_tend(m)    > 0  .or.  &
          CS%id_neutral_diff_tracer_cont_tend(m)    > 0  .or.  &
          CS%id_neutral_diff_tracer_cont_tend_2d(m) > 0 ) then 
-        do k = 1, G%ke
+        do k = 1, GV%ke
           tendency(i,j,k) = dTracer(k) * G%IareaT(i,j) * Idt
         enddo
       endif 
@@ -368,6 +411,36 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
     endif
   enddo ; enddo
 
+
+  ! Diagnose vertically summed zonal flux, giving zonal tracer transport from ndiff.
+  ! Note sign corresponds to downgradient flux convention.
+  if(CS%id_neutral_diff_tracer_trans_x_2d(m) > 0) then 
+    do j = G%jsc,G%jec ; do I = G%isc-1,G%iec
+      trans_x_2d(I,j) = 0.
+      if (G%mask2dCu(I,j)>0.) then
+        do ks = 1,2*nk+1 ;
+          trans_x_2d(I,j) = trans_x_2d(I,j) - Coef_x(I,j) * uFlx(I,j,ks)
+        enddo
+        trans_x_2d(I,j) = trans_x_2d(I,j) * Idt * convert
+      endif
+    enddo ; enddo
+    call post_data(CS%id_neutral_diff_tracer_trans_x_2d(m), trans_x_2d(:,:), CS%diag)
+  endif   
+
+  ! Diagnose vertically summed merid flux, giving meridional tracer transport from ndiff.
+  ! Note sign corresponds to downgradient flux convention.
+  if(CS%id_neutral_diff_tracer_trans_y_2d(m) > 0) then 
+    do J = G%jsc-1,G%jec ; do i = G%isc,G%iec
+      trans_y_2d(i,J) = 0.
+      if (G%mask2dCv(i,J)>0.) then
+        do ks = 1,2*nk+1 ;
+          trans_y_2d(i,J) = trans_y_2d(i,J) - Coef_y(i,J) * vFlx(i,J,ks)
+        enddo
+        trans_y_2d(i,J) = trans_y_2d(i,J) * Idt * convert
+      endif
+    enddo ; enddo
+    call post_data(CS%id_neutral_diff_tracer_trans_y_2d(m), trans_y_2d(:,:), CS%diag)
+  endif 
 
   ! post tendency of tracer content 
   if(CS%id_neutral_diff_tracer_cont_tend(m) > 0) then 
@@ -377,7 +450,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
   ! post depth summed tendency for tracer content 
   if(CS%id_neutral_diff_tracer_cont_tend_2d(m) > 0) then 
     do j = G%jsc,G%jec ; do i = G%isc,G%iec
-      do k = 1, G%ke
+      do k = 1, GV%ke
         tendency_2d(i,j) = tendency_2d(i,j) + tendency(i,j,k)  
       enddo
     enddo ; enddo
@@ -388,7 +461,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
   ! done after posting tracer content tendency, since we alter 
   ! the tendency array.
   if(CS%id_neutral_diff_tracer_conc_tend(m) > 0) then 
-    do k = 1, G%ke ; do j = G%jsc,G%jec ; do i = G%isc,G%iec
+    do k = 1, GV%ke ; do j = G%jsc,G%jec ; do i = G%isc,G%iec
       tendency(i,j,k) =  tendency(i,j,k) / ( h(i,j,k) + GV%H_subroundoff )
     enddo ; enddo ; enddo
     call post_data(CS%id_neutral_diff_tracer_conc_tend(m), tendency, CS%diag)
@@ -647,17 +720,17 @@ subroutine find_neutral_surface_positions(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, 
   real, dimension(2*nk+1),    intent(inout) :: hEff  !< Effective thickness between two neutral surfaces (Pa)
 
   ! Local variables
-  integer :: k_surface ! Index of neutral surface
-  integer :: kl ! Index of left interface
-  integer :: kr ! Index of right interface
-  real :: dRdT, dRdS ! dRho/dT and dRho/dS for the neutral surface
-  logical :: searching_left_column ! True if searching for the position of a right interface in the left column
+  integer :: k_surface              ! Index of neutral surface
+  integer :: kl                     ! Index of left interface
+  integer :: kr                     ! Index of right interface
+  real    :: dRdT, dRdS             ! dRho/dT and dRho/dS for the neutral surface
+  logical :: searching_left_column  ! True if searching for the position of a right interface in the left column
   logical :: searching_right_column ! True if searching for the position of a left interface in the right column
-  logical :: reached_bottom ! True if one of the bottom-most interfaces has been used as the target
+  logical :: reached_bottom         ! True if one of the bottom-most interfaces has been used as the target
   integer :: krm1, klm1
-  real :: dRho, dRhoTop, dRhoBot, hL, hR
+  real    :: dRho, dRhoTop, dRhoBot, hL, hR
   integer :: lastK_left, lastK_right
-  real :: lastP_left, lastP_right
+  real    :: lastP_left, lastP_right
 
   ! Initialize variables for the search
   kr = 1 ; lastK_right = 1 ; lastP_right = 0.
@@ -837,7 +910,8 @@ function absolute_positions(n,Pint,Karr,NParr)
 
 end function absolute_positions
 
-!> Returns the non-dimensnional position between Pneg and Ppos where the interpolated density difference equals zero.
+!> Returns the non-dimensional position between Pneg and Ppos where the 
+!! interpolated density difference equals zero.
 !! The result is always bounded to be between 0 and 1.
 real function interpolate_for_nondim_position(dRhoNeg, Pneg, dRhoPos, Ppos)
   real, intent(in) :: dRhoNeg !< Negative density difference
@@ -935,59 +1009,59 @@ subroutine neutral_surface_flux(nk, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Fl
 end subroutine neutral_surface_flux
 
 !> Returns true if unit tests of neutral_diffusion functions fail. Otherwise returns false.
-logical function neutralDiffusionUnitTests()
+logical function neutral_diffusion_unit_tests()
   integer, parameter         :: nk = 4
   real, dimension(nk+1)      :: TiL, TiR1, TiR2, TiR4, Tio ! Test interface temperatures
-  real, dimension(nk)        :: TL           ! Test layer temperatures
-  real, dimension(nk+1)      :: SiL          ! Test interface salinities
-  real, dimension(nk+1)      :: PiL, PiR4    ! Test interface positions
-  real, dimension(2*nk+2)    :: PiLRo, PiRLo ! Test positions
-  integer, dimension(2*nk+2) :: KoL, KoR     ! Test indexes
-  real, dimension(2*nk+1)    :: hEff         ! Test positions
-  real, dimension(2*nk+1)    :: Flx          ! Test flux
+  real, dimension(nk)        :: TL                         ! Test layer temperatures
+  real, dimension(nk+1)      :: SiL                        ! Test interface salinities
+  real, dimension(nk+1)      :: PiL, PiR4                  ! Test interface positions
+  real, dimension(2*nk+2)    :: PiLRo, PiRLo               ! Test positions
+  integer, dimension(2*nk+2) :: KoL, KoR                   ! Test indexes
+  real, dimension(2*nk+1)    :: hEff                       ! Test positions
+  real, dimension(2*nk+1)    :: Flx                        ! Test flux
 
   integer :: k, verbosity
 
   verbosity = MOM_get_verbosity()
 
-  neutralDiffusionUnitTests = .false. ! Normally return false
-  write(*,'(a)') '===== MOM_neutral_diffusion: neutralDiffusionUnitTests =================='
+  neutral_diffusion_unit_tests = .false. ! Normally return false
+  write(*,'(a)') '===== MOM_neutral_diffusion: neutral_diffusion_unit_tests ==============='
 
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_diff(1.,1.,1., 0.,1.,2., 1., 'FV: Straight line on uniform grid')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_diff(1.,1.,0., 0.,4.,8., 7., 'FV: Vanished right cell')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_diff(0.,1.,1., 0.,4.,8., 7., 'FV: Vanished left cell')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_diff(1.,2.,4., 0.,3.,9., 4., 'FV: Stretched grid')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_diff(2.,0.,2., 0.,1.,2., 0., 'FV: Vanished middle cell')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_diff(0.,1.,0., 0.,1.,2., 2., 'FV: Vanished on both sides')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_diff(1.,0.,0., 0.,1.,2., 0., 'FV: Two vanished cell sides')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fv_diff(0.,0.,0., 0.,1.,2., 0., 'FV: All vanished cells')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fv_diff(1.,1.,1., 0.,1.,2., 1., 'FV: Straight line on uniform grid')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fv_diff(1.,1.,0., 0.,4.,8., 7., 'FV: Vanished right cell')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fv_diff(0.,1.,1., 0.,4.,8., 7., 'FV: Vanished left cell')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fv_diff(1.,2.,4., 0.,3.,9., 4., 'FV: Stretched grid')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fv_diff(2.,0.,2., 0.,1.,2., 0., 'FV: Vanished middle cell')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fv_diff(0.,1.,0., 0.,1.,2., 2., 'FV: Vanished on both sides')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fv_diff(1.,0.,0., 0.,1.,2., 0., 'FV: Two vanished cell sides')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fv_diff(0.,0.,0., 0.,1.,2., 0., 'FV: All vanished cells')
 
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fvlsq_slope(1.,1.,1., 0.,1.,2., 1., 'LSQ: Straight line on uniform grid')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fvlsq_slope(1.,1.,0., 0.,1.,2., 1., 'LSQ: Vanished right cell')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fvlsq_slope(0.,1.,1., 0.,1.,2., 1., 'LSQ: Vanished left cell')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fvlsq_slope(1.,2.,4., 0.,3.,9., 2., 'LSQ: Stretched grid')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fvlsq_slope(1.,0.,1., 0.,1.,2., 2., 'LSQ: Vanished middle cell')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fvlsq_slope(0.,1.,0., 0.,1.,2., 0., 'LSQ: Vanished on both sides')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fvlsq_slope(1.,0.,0., 0.,1.,2., 0., 'LSQ: Two vanished cell sides')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_fvlsq_slope(0.,0.,0., 0.,1.,2., 0., 'LSQ: All vanished cells')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fvlsq_slope(1.,1.,1., 0.,1.,2., 1., 'LSQ: Straight line on uniform grid')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fvlsq_slope(1.,1.,0., 0.,1.,2., 1., 'LSQ: Vanished right cell')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fvlsq_slope(0.,1.,1., 0.,1.,2., 1., 'LSQ: Vanished left cell')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fvlsq_slope(1.,2.,4., 0.,3.,9., 2., 'LSQ: Stretched grid')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fvlsq_slope(1.,0.,1., 0.,1.,2., 2., 'LSQ: Vanished middle cell')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fvlsq_slope(0.,1.,0., 0.,1.,2., 0., 'LSQ: Vanished on both sides')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fvlsq_slope(1.,0.,0., 0.,1.,2., 0., 'LSQ: Two vanished cell sides')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fvlsq_slope(0.,0.,0., 0.,1.,2., 0., 'LSQ: All vanished cells')
 
   call interface_scalar(4, (/10.,10.,10.,10./), (/24.,18.,12.,6./), Tio, 1)
-  !neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(5, Tio, (/27.,21.,15.,9.,3./), 'Linear profile, interface temperatures')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(5, Tio, (/24.,22.5,15.,7.5,6./), 'Linear profile, linear interface temperatures')
+  !neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(5, Tio, (/27.,21.,15.,9.,3./), 'Linear profile, interface temperatures')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(5, Tio, (/24.,22.5,15.,7.5,6./), 'Linear profile, linear interface temperatures')
   call interface_scalar(4, (/10.,10.,10.,10./), (/24.,18.,12.,6./), Tio, 2)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(5, Tio, (/24.,22.,15.,8.,6./), 'Linear profile, PPM interface temperatures')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(5, Tio, (/24.,22.,15.,8.,6./), 'Linear profile, PPM interface temperatures')
 
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp(-1.0, 0.,  1.0, 1.0, 0.5, 'Check mid-point')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp( 0.0, 0.,  1.0, 1.0, 0.0, 'Check bottom')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp( 0.1, 0.,  1.1, 1.0, 0.0, 'Check below')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp(-1.0, 0.,  0.0, 1.0, 1.0, 'Check top')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp(-1.0, 0., -0.1, 1.0, 1.0, 'Check above')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp(-1.0, 0.,  3.0, 1.0, 0.25, 'Check 1/4')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp(-3.0, 0.,  1.0, 1.0, 0.75, 'Check 3/4')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp( 1.0, 0.,  1.0, 1.0, 0.0, 'Check dRho=0 below')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp(-1.0, 0., -1.0, 1.0, 1.0, 'Check dRho=0 above')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp( 0.0, 0.,  0.0, 1.0, 0.5, 'Check dRho=0 mid')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_ifndp(-2.0, .5,  5.0, 0.5, 0.5, 'Check dP=0')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp(-1.0, 0.,  1.0, 1.0, 0.5, 'Check mid-point')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp( 0.0, 0.,  1.0, 1.0, 0.0, 'Check bottom')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp( 0.1, 0.,  1.1, 1.0, 0.0, 'Check below')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp(-1.0, 0.,  0.0, 1.0, 1.0, 'Check top')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp(-1.0, 0., -0.1, 1.0, 1.0, 'Check above')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp(-1.0, 0.,  3.0, 1.0, 0.25, 'Check 1/4')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp(-3.0, 0.,  1.0, 1.0, 0.75, 'Check 3/4')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp( 1.0, 0.,  1.0, 1.0, 0.0, 'Check dRho=0 below')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp(-1.0, 0., -1.0, 1.0, 1.0, 'Check dRho=0 above')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp( 0.0, 0.,  0.0, 1.0, 0.5, 'Check dRho=0 mid')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp(-2.0, .5,  5.0, 0.5, 0.5, 'Check dP=0')
 
   ! Identical columns
   call find_neutral_surface_positions(3, &
@@ -996,28 +1070,28 @@ logical function neutralDiffusionUnitTests()
              (/0.,10.,20.,30./), (/22.,18.,14.,10./), (/0.,0.,0.,0./), & ! Right positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
              PiLRo, PiRLo, KoL, KoR, hEff)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
                                    (/1,1,2,2,3,3,3,3/), & ! KoL
                                    (/1,1,2,2,3,3,3,3/), & ! KoR
                                    (/0.,0.,0.,0.,0.,0.,1.,1./), & ! pL
                                    (/0.,0.,0.,0.,0.,0.,1.,1./), & ! pR
                                    (/0.,10.,0.,10.,0.,10.,0./), & ! hEff
                                    'Identical columns')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(8, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(8, &
                                    absolute_positions(3, (/0.,10.,20.,30./), KoL, PiLRo), &
                                    (/0.,0.,10.,10.,20.,20.,30.,30./), '... left positions')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(8, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(8, &
                                    absolute_positions(3, (/0.,10.,20.,30./), KoR, PiRLo), &
                                    (/0.,0.,10.,10.,20.,20.,30.,30./), '... right positions')
   call neutral_surface_flux(3, (/10.,10.,10./), (/10.,10.,10./), & ! nk, hL, hR
                                (/20.,16.,12./), (/20.,16.,12./), & ! Tl, Tr
                                PiLRo, PiRLo, KoL, KoR, hEff, Flx)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(7, Flx, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(7, Flx, &
               (/0.,0.,0.,0.,0.,0.,0./), 'Identical columns, rho flux (=0)')
   call neutral_surface_flux(3, (/10.,10.,10./), (/10.,10.,10./), & ! nk, hL, hR
                                (/-1.,-1.,-1./), (/1.,1.,1./), & ! Sl, Sr
                                PiLRo, PiRLo, KoL, KoR, hEff, Flx)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(7, Flx, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(7, Flx, &
               (/0.,20.,0.,20.,0.,20.,0./), 'Identical columns, S flux')
 
   ! Right column slightly cooler than left
@@ -1027,17 +1101,17 @@ logical function neutralDiffusionUnitTests()
              (/0.,10.,20.,30./), (/20.,16.,12.,8./), (/0.,0.,0.,0./), & ! Right positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
              PiLRo, PiRLo, KoL, KoR, hEff)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
                                    (/1,1,2,2,3,3,3,3/), & ! kL
                                    (/1,1,1,2,2,3,3,3/), & ! kR
                                    (/0.,0.5,0.,0.5,0.,0.5,1.,1./), & ! pL
                                    (/0.,0.,0.5,0.,0.5,0.,0.5,1./), & ! pR
                                    (/0.,5.,5.,5.,5.,5.,0./), & ! hEff
                                    'Right column slightly cooler')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(8, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(8, &
                                    absolute_positions(3, (/0.,10.,20.,30./), KoL, PiLRo), &
                                    (/0.,5.,10.,15.,20.,25.,30.,30./), '... left positions')
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or. test_data1d(8, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(8, &
                                    absolute_positions(3, (/0.,10.,20.,30./), KoR, PiRLo), &
                                    (/0.,0.,5.,10.,15.,20.,25.,30./), '... right positions')
 
@@ -1048,7 +1122,7 @@ logical function neutralDiffusionUnitTests()
              (/0.,10.,20.,30./), (/24.,20.,16.,12./), (/0.,0.,0.,0./), & ! Right positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
              PiLRo, PiRLo, KoL, KoR, hEff)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
                                    (/1,1,1,2,2,3,3,3/), & ! kL
                                    (/1,1,2,2,3,3,3,3/), & ! kR
                                    (/0.,0.,0.5,0.,0.5,0.,0.5,1./), & ! pL
@@ -1063,7 +1137,7 @@ logical function neutralDiffusionUnitTests()
              (/0.,10.,20.,30./), (/16.,12.,8.,4./), (/0.,0.,0.,0./), & ! Right positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
              PiLRo, PiRLo, KoL, KoR, hEff)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
                                    (/1,2,2,3,3,3,3,3/), & ! kL
                                    (/1,1,1,1,2,2,3,3/), & ! kR
                                    (/0.,0.,0.5,0.,0.5,1.,1.,1./), & ! pL
@@ -1078,7 +1152,7 @@ logical function neutralDiffusionUnitTests()
              (/0.,10.,20.,30./), (/9.,7.,5.,3./), (/0.,0.,0.,0./), & ! Right positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
              PiLRo, PiRLo, KoL, KoR, hEff)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
                                    (/1,2,3,3,3,3,3,3/), & ! kL
                                    (/1,1,1,1,1,2,3,3/), & ! kR
                                    (/0.,0.,0.,1.,1.,1.,1.,1./), & ! pL
@@ -1093,7 +1167,7 @@ logical function neutralDiffusionUnitTests()
              (/0.,10.,20.,30./), (/14.,14.,10.,2./), (/0.,0.,0.,0./), & ! Right positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
              PiLRo, PiRLo, KoL, KoR, hEff)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
                                    (/1,2,3,3,3,3,3,3/), & ! kL
                                    (/1,1,1,1,2,3,3,3/), & ! kR
                                    (/0.,0.,0.,0.,0.,1.,1.,1./), & ! pL
@@ -1108,7 +1182,7 @@ logical function neutralDiffusionUnitTests()
              (/0.,10.,20.,30./), (/14.,14.,10.,2./), (/0.,0.,0.,0./), & ! Right positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
              PiLRo, PiRLo, KoL, KoR, hEff)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
                                    (/1,1,2,2,3,3,3,3/), & ! kL
                                    (/1,1,2,2,3,3,3,3/), & ! kR
                                    (/0.,0.,0.,0.,0.,0.,1.,1./), & ! pL
@@ -1123,7 +1197,7 @@ logical function neutralDiffusionUnitTests()
              (/0.,10.,20.,30./), (/10.,14.,12.,4./), (/0.,0.,0.,0./), & ! Right positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
              PiLRo, PiRLo, KoL, KoR, hEff)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
                                    (/1,2,3,3,3,3,3,3/), & ! kL
                                    (/1,1,1,2,3,3,3,3/), & ! kR
                                    (/0.,0.,0.,0.,0.,0.,.75,1./), & ! pL
@@ -1138,7 +1212,7 @@ logical function neutralDiffusionUnitTests()
              (/0.,10.,20.,30./), (/14.,14.,10.,2./), (/0.,0.,0.,0./), & ! Right positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
              PiLRo, PiRLo, KoL, KoR, hEff)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
                                    (/1,1,1,2,3,3,3,3/), & ! kL
                                    (/1,2,3,3,3,3,3,3/), & ! kR
                                    (/0.,0.,0.,0.,0.,0.25,1.,1./), & ! pL
@@ -1153,7 +1227,7 @@ logical function neutralDiffusionUnitTests()
              (/0.,10.,20.,30./), (/10.,14.,12.,4./), (/0.,0.,0.,0./), & ! Right positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
              PiLRo, PiRLo, KoL, KoR, hEff)
-  neutralDiffusionUnitTests = neutralDiffusionUnitTests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
                                    (/1,1,1,1,2,3,3,3/), & ! kL
                                    (/1,2,3,3,3,3,3,3/), & ! kR
                                    (/0.,0.,0.,0.,0.,0.,0.75,1./), & ! pL
@@ -1167,13 +1241,13 @@ logical function neutralDiffusionUnitTests()
 
   !> Returns true if a test of fv_diff() fails, and conditionally writes results to stream
   logical function test_fv_diff(hkm1, hk, hkp1, Skm1, Sk, Skp1, Ptrue, title)
-    real,             intent(in) :: hkm1 !< Left cell width
-    real,             intent(in) :: hk   !< Center cell width
-    real,             intent(in) :: hkp1 !< Right cell width
-    real,             intent(in) :: Skm1 !< Left cell average value
-    real,             intent(in) :: Sk   !< Center cell average value
-    real,             intent(in) :: Skp1 !< Right cell average value
-    real,             intent(in) :: Ptrue  !< True answer (Pa)
+    real,             intent(in) :: hkm1  !< Left cell width
+    real,             intent(in) :: hk    !< Center cell width
+    real,             intent(in) :: hkp1  !< Right cell width
+    real,             intent(in) :: Skm1  !< Left cell average value
+    real,             intent(in) :: Sk    !< Center cell average value
+    real,             intent(in) :: Skp1  !< Right cell average value
+    real,             intent(in) :: Ptrue !< True answer (Pa)
     character(len=*), intent(in) :: title !< Title for messages
 
     ! Local variables
@@ -1198,13 +1272,13 @@ logical function neutralDiffusionUnitTests()
 
   !> Returns true if a test of fvlsq_slope() fails, and conditionally writes results to stream
   logical function test_fvlsq_slope(hkm1, hk, hkp1, Skm1, Sk, Skp1, Ptrue, title)
-    real,             intent(in) :: hkm1 !< Left cell width
-    real,             intent(in) :: hk   !< Center cell width
-    real,             intent(in) :: hkp1 !< Right cell width
-    real,             intent(in) :: Skm1 !< Left cell average value
-    real,             intent(in) :: Sk   !< Center cell average value
-    real,             intent(in) :: Skp1 !< Right cell average value
-    real,             intent(in) :: Ptrue  !< True answer (Pa)
+    real,             intent(in) :: hkm1  !< Left cell width
+    real,             intent(in) :: hk    !< Center cell width
+    real,             intent(in) :: hkp1  !< Right cell width
+    real,             intent(in) :: Skm1  !< Left cell average value
+    real,             intent(in) :: Sk    !< Center cell average value
+    real,             intent(in) :: Skp1  !< Right cell average value
+    real,             intent(in) :: Ptrue !< True answer (Pa)
     character(len=*), intent(in) :: title !< Title for messages
 
     ! Local variables
@@ -1390,9 +1464,7 @@ logical function neutralDiffusionUnitTests()
     if (pR /= pR0) compare_nsp_row = .true.
   end function compare_nsp_row
 
-end function neutralDiffusionUnitTests
-
-
+end function neutral_diffusion_unit_tests
 
 !> Deallocates neutral_diffusion control structure
 subroutine neutral_diffusion_end(CS)

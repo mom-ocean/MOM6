@@ -19,27 +19,6 @@ module user_change_diffusivity
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
 !***********************************************************************
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, May 2012                                       *
-!*                                                                     *
-!*    This file contains a subroutine that increments the diapycnal    *
-!*  diffusivity in a specified band of latitudes and densities.        *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v                                        *
-!*    j    x ^ x ^ x   At >:  u                                        *
-!*    j    > o > o >   At o:  h, T, S, Kd, etc.                        *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
-
 use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_error_handler, only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser, only : get_param, log_version, param_file_type
@@ -70,32 +49,28 @@ end type user_change_diff_CS
 
 contains
 
+!> This subroutine provides an interface for a user to use to modify the
+!! main code to alter the diffusivities as needed.  The specific example
+!! implemented here augments the diffusivity for a specified range of latitude
+!! and coordinate potential density.
 subroutine user_change_diff(h, tv, G, CS, Kd, Kd_int, T_f, S_f, Kd_int_add)
-  type(ocean_grid_type),                    intent(in)    :: G
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
-  type(thermo_var_ptrs),                    intent(in)    :: tv
-  type(user_change_diff_CS),                pointer       :: CS
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   optional, intent(inout) :: Kd
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), optional, intent(inout) :: Kd_int
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   optional, intent(in)    :: T_f
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   optional, intent(in)    :: S_f
-  real, dimension(:,:,:),                     optional, pointer       :: Kd_int_add
-!   This subroutine provides an interface for a user to use to modify the
-! main code to alter the diffusivities as needed.  The specific example
-! implemented here augments the diffusivity for a specified range of latitude
-! and coordinate potential density.
-
-! Arguments: h - Layer thickness, in m or kg m-2.
-!  (in)      tv - A structure containing pointers to any available
-!                 thermodynamic fields. Absent fields have NULL ptrs.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - This module's control structure.
-!  (out)     Kd - The diapycnal diffusivity of each layer in m2 s-1.
-!  (out,opt) Kd_int - The diapycnal diffusivity at each interface in m2 s-1.
-!  (in,opt)  T_f - Temperature with massless layers filled in vertically.
-!  (in,opt)  S_f - Salinity with massless layers filled in vertically.
-!  (out,opt) Kd_int_add - The diapycnal diffusivity that is being added at
-!                         each interface in m2 s-1.
+  type(ocean_grid_type),                    intent(in)    :: G   !< The ocean's grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h   !< Layer thickness, in m or kg m-2.
+  type(thermo_var_ptrs),                    intent(in)    :: tv  !< A structure containing pointers
+                                                                 !! to any available thermodynamic
+                                                                 !! fields. Absent fields have NULL ptrs.
+  type(user_change_diff_CS),                pointer       :: CS  !< This module's control structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   optional, intent(inout) :: Kd !< The diapycnal diffusivity of
+                                                                  !! each layer in m2 s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), optional, intent(inout) :: Kd_int !< The diapycnal diffusivity
+                                                                  !! at each interface in m2 s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   optional, intent(in)    :: T_f !< Temperature with massless
+                                                                  !! layers filled in vertically.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   optional, intent(in)    :: S_f !< Salinity with massless
+                                                                  !! layers filled in vertically.
+  real, dimension(:,:,:),                     optional, pointer       :: Kd_int_add !< The diapycnal
+                                                                  !! diffusivity that is being added at
+                                                                  !! each interface in m2 s-1.
 
   real :: Rcv(SZI_(G),SZK_(G)) ! The coordinate density in layers in kg m-3.
   real :: p_ref(SZI_(G))       ! An array of tv%P_Ref pressures.
@@ -180,27 +155,27 @@ subroutine user_change_diff(h, tv, G, CS, Kd, Kd_int, T_f, S_f, Kd_int_add)
 
 end subroutine user_change_diff
 
+!> This subroutine checks whether the 4 values of range are in ascending order.
 function range_OK(range) result(OK)
-  real, dimension(4), intent(in) :: range
-  logical                        :: OK
+  real, dimension(4), intent(in) :: range  !< Four values to check.
+  logical                        :: OK     !< Return value.
   
-  ! This subroutine checks whether the 4 values of range are in ascending order.
   
   OK = ((range(1) <= range(2)) .and. (range(2) <= range(3)) .and. &
         (range(3) <= range(4)))
   
 end function range_OK
 
+!> This subroutine returns a value that goes smoothly from 0 to 1, stays
+!! at 1, and then goes smoothly back to 0 at the four values of range.  The
+!! transitions are cubic, and have zero first derivatives where the curves
+!! hit 0 and 1.  The values in range must be in ascending order, as can be
+!! checked by calling range_OK.
 function val_weights(val, range) result(ans)
-  real,               intent(in) :: val
-  real, dimension(4), intent(in) :: range
-  real                           :: ans
+  real,               intent(in) :: val    !< Value for which we need an answer.
+  real, dimension(4), intent(in) :: range  !< Range over which the answer is non-zero.
+  real                           :: ans    !< Return value.
 
-  !   This subroutine returns a value that goes smoothly from 0 to 1, stays
-  ! at 1, and then goes smoothly back to 0 at the four values of range.  The
-  ! transitions are cubic, and have zero first derivatives where the curves
-  ! hit 0 and 1.  The values in range must be in ascending order, as can be
-  ! checked by calling range_OK.
   real :: x   ! A nondimensional number between 0 and 1.
 
   ans = 0.0
@@ -220,19 +195,19 @@ function val_weights(val, range) result(ans)
 
 end function val_weights
 
+!> Set up the module control structure.
 subroutine user_change_diff_init(Time, G, param_file, diag, CS)
-  type(time_type),           intent(in)    :: Time
-  type(ocean_grid_type),     intent(in)    :: G
-  type(param_file_type),     intent(in)    :: param_file
-  type(diag_ctrl), target,   intent(inout) :: diag
-  type(user_change_diff_CS), pointer       :: CS
-! Arguments: Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
+  type(time_type),           intent(in)    :: Time       !< The current model time.
+  type(ocean_grid_type),     intent(in)    :: G          !< The ocean's grid structure.
+  type(param_file_type),     intent(in)    :: param_file !< A structure indicating the
+                                                         !! open file to parse for
+                                                         !! model parameter values.
+  type(diag_ctrl), target,   intent(inout) :: diag       !< A structure that is used to
+                                                         !! regulate diagnostic output.
+  type(user_change_diff_CS), pointer       :: CS         !< A pointer that is set to
+                                                         !! point to the control
+                                                         !! structure for this module.
+
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "user_set_diffusivity"  ! This module's name.
@@ -251,7 +226,7 @@ subroutine user_change_diff_init(Time, G, param_file, diag, CS)
   CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version)
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "USER_KD_ADD", CS%Kd_add, &
                  "A user-specified additional diffusivity over a range of \n"//&
                  "latitude and density.", units="m2 s-1", default=0.0)
@@ -289,11 +264,33 @@ subroutine user_change_diff_init(Time, G, param_file, diag, CS)
 
 end subroutine user_change_diff_init
 
+!> Clean up the module control structure.
 subroutine user_change_diff_end(CS)
-  type(user_change_diff_CS), pointer :: CS
+  type(user_change_diff_CS), pointer :: CS         !< A pointer that is set to
+                                                   !! point to the control
+                                                   !! structure for this module.
 
   if (associated(CS)) deallocate(CS)
 
 end subroutine user_change_diff_end
+
+!> \class user_change_diffusivity
+!!
+!!  By Robert Hallberg, May 2012
+!!
+!!    This file contains a subroutine that increments the diapycnal
+!!  diffusivity in a specified band of latitudes and densities.
+!!
+!!     A small fragment of the grid is shown below:
+!!
+!!    j+1  x ^ x ^ x   At x:  q
+!!    j+1  > o > o >   At ^:  v
+!!    j    x ^ x ^ x   At >:  u
+!!    j    > o > o >   At o:  h, T, S, Kd, etc.
+!!    j-1  x ^ x ^ x
+!!        i-1  i  i+1  At x & ^:
+!!           i  i+1    At > & o:
+!!
+!!  The boundaries always run through q grid points (x).
 
 end module user_change_diffusivity

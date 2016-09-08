@@ -52,7 +52,8 @@ use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,        only : CLOCK_SUBCOMPONENT
 use MOM_diag_mediator,    only : diag_ctrl
 use MOM_diag_mediator,    only : safe_alloc_ptr, time_type
-use MOM_domains,          only : pass_vector, pass_var, global_field_sum, BITWISE_EXACT_SUM
+use MOM_domains,          only : pass_vector, pass_var, fill_symmetric_edges
+use MOM_domains,          only : global_field_sum, BITWISE_EXACT_SUM
 use MOM_domains,          only : AGRID, BGRID_NE, CGRID_NE, To_All
 use MOM_error_handler,    only : MOM_error, WARNING, FATAL, is_root_pe, MOM_mesg
 use MOM_file_parser,      only : get_param, log_version, param_file_type
@@ -93,6 +94,7 @@ type, public :: surface_forcing_CS ; private
                                 ! the winds that are being provided in calls to
                                 ! update_ocean_model.
   logical :: use_temperature    ! If true, temp and saln used as state variables
+  real :: wind_stress_multiplier !< A multiplier applied to incoming wind stress (nondim).
 
   ! smg: remove when have A=B code reconciled
   logical :: bulkmixedlayer     ! If true, model based on bulk mixed layer code
@@ -152,14 +154,18 @@ type, public :: surface_forcing_CS ; private
   real    :: ice_salt_concentration         ! salt concentration for sea ice (kg/kg)
   logical :: mask_srestore_marginal_seas    ! if true, then mask SSS restoring in marginal seas
   real    :: max_delta_srestore             ! maximum delta salinity used for restoring
+  real    :: max_delta_trestore             ! maximum delta sst used for restoring
   real, pointer, dimension(:,:) :: basin_mask => NULL() ! mask for SSS restoring
 
   type(diag_ctrl), pointer :: diag                  ! structure to regulate diagnostic output timing
   character(len=200)       :: inputdir              ! directory where NetCDF input files are
   character(len=200)       :: salt_restore_file     ! filename for salt restoring data
   character(len=30)        :: salt_restore_var_name ! name of surface salinity in salt_restore_file
+  character(len=200)       :: temp_restore_file     ! filename for sst restoring data
+  character(len=30)        :: temp_restore_var_name ! name of surface temperature in temp_restore_file
 
   integer :: id_srestore = -1     ! id number for time_interp_external.
+  integer :: id_trestore = -1     ! id number for time_interp_external.
 
   ! Diagnostics handles
   type(forcing_diags), public :: handles
@@ -208,7 +214,7 @@ integer :: id_clock_forcing
 
 contains
 
-subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, restore_salt)
+subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, restore_salt, restore_temp)
   type(ice_ocean_boundary_type), intent(in), target :: IOB
   type(forcing),              intent(inout)         :: fluxes
   integer, dimension(4),      intent(in)            :: index_bounds
@@ -216,7 +222,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   type(ocean_grid_type),      intent(inout)         :: G
   type(surface_forcing_CS),   pointer               :: CS
   type(surface),              intent(in)            :: state
-  logical, optional,          intent(in)            :: restore_salt
+  logical, optional,          intent(in)            :: restore_salt, restore_temp
 
 ! This subroutine translates the Ice_ocean_boundary_type into a
 ! MOM forcing type, including changes of units, sign conventions,
@@ -235,6 +241,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
 !  (in)  state - A structure containing fields that describe the
 !                surface state of the ocean.
 !  (in)  restore_salt - if true, salinity is restored to a target value.
+!  (in)  restore_temp - if true, temperature is restored to a target value.
 
   real, dimension(SZIB_(G),SZJB_(G)) :: &
     taux_at_q, &     ! Zonal wind stresses at q points (Pa)
@@ -243,7 +250,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   real, dimension(SZI_(G),SZJ_(G)) :: &
     taux_at_h,     & ! Zonal wind stresses at h points (Pa)
     tauy_at_h,     & ! Meridional wind stresses at h points (Pa)
-    data_srestore, & ! The surface salinity toward which to restore (g/kg)
+    data_restore,  & ! The surface value toward which to restore (g/kg or degC)
     SST_anom,      & ! Instantaneous sea surface temperature anomalies from a target value (deg C)
     SSS_anom,      & ! Instantaneous sea surface salinity anomalies from a target value (g/kg)
     SSS_mean,      & ! A (mean?) salinity about which to normalize local salinity
@@ -272,7 +279,10 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
 
   logical :: restore_salinity ! local copy of the argument restore_salt, if it
                               ! is present, or false (no restoring) otherwise.
+  logical :: restore_sst      ! local copy of the argument restore_temp, if it
+                              ! is present, or false (no restoring) otherwise.
   real :: delta_sss           ! temporary storage for sss diff from restoring value
+  real :: delta_sst           ! temporary storage for sst diff from restoring value
 
   real :: C_p                 ! heat capacity of seawater ( J/(K kg) )
 
@@ -299,6 +309,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
 
   restore_salinity = .false.
   if (present(restore_salt)) restore_salinity = restore_salt
+  restore_sst = .false.
+  if (present(restore_temp)) restore_sst = restore_temp
 
   ! allocation and initialization if this is the first time that this
   ! flux type has been used.
@@ -316,7 +328,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
 
     call safe_alloc_ptr(fluxes%salt_flux,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%salt_flux_in,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%salt_flux_restore,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%salt_flux_added,isd,ied,jsd,jed)
 
     call safe_alloc_ptr(fluxes%TKE_tidal,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%ustar_tidal,isd,ied,jsd,jed)
@@ -330,6 +342,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
       call safe_alloc_ptr(fluxes%rigidity_ice_u,IsdB,IedB,jsd,jed)
       call safe_alloc_ptr(fluxes%rigidity_ice_v,isd,ied,JsdB,JedB)
     endif
+
+    if (restore_temp) call safe_alloc_ptr(fluxes%heat_added,isd,ied,jsd,jed)
 
     fluxes%dt_buoy_accum = 0.0
   endif   ! endif for allocation and initialization
@@ -349,7 +363,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
 
   ! Salinity restoring logic
   if (restore_salinity) then
-    call time_interp_external(CS%id_srestore,Time,data_srestore)
+    call time_interp_external(CS%id_srestore,Time,data_restore)
     ! open_ocn_mask indicates where to restore salinity (1 means restore, 0 does not)
     open_ocn_mask(:,:) = 1.0
     if (CS%mask_srestore_under_ice) then ! Do not restore under sea-ice
@@ -359,7 +373,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
     endif
     if (CS%salt_restore_as_sflux) then
       do j=js,je ; do i=is,ie
-        delta_sss = data_srestore(i,j)- state%SSS(i,j)
+        delta_sss = data_restore(i,j)- state%SSS(i,j)
         delta_sss = sign(1.0,delta_sss)*min(abs(delta_sss),CS%max_delta_srestore)
         fluxes%salt_flux(i,j) = 1.e-3*G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)* &
                   (CS%basin_mask(i,j)*open_ocn_mask(i,j)) *delta_sss  ! kg Salt m-2 s-1
@@ -374,15 +388,15 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
           fluxes%salt_flux(is:ie,js:je) = fluxes%salt_flux(is:ie,js:je) - fluxes%saltFluxGlobalAdj
         endif
       endif
-      fluxes%salt_flux_restore(is:ie,js:je) = fluxes%salt_flux(is:ie,js:je) ! Diagnostic
+      fluxes%salt_flux_added(is:ie,js:je) = fluxes%salt_flux(is:ie,js:je) ! Diagnostic
     else
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0.5) then
-          delta_sss = state%SSS(i,j) - data_srestore(i,j)
+          delta_sss = state%SSS(i,j) - data_restore(i,j)
           delta_sss = sign(1.0,delta_sss)*min(abs(delta_sss),CS%max_delta_srestore)
           fluxes%vprec(i,j) = (CS%basin_mask(i,j)*open_ocn_mask(i,j))* &
                       (CS%Rho0*CS%Flux_const) * &
-                      delta_sss / (0.5*(state%SSS(i,j) + data_srestore(i,j)))
+                      delta_sss / (0.5*(state%SSS(i,j) + data_restore(i,j)))
         endif
       enddo; enddo
       if (CS%adjust_net_srestore_to_zero) then
@@ -398,6 +412,18 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
         endif
       endif
     endif
+  endif
+
+
+
+  ! SST restoring logic
+  if (restore_sst) then
+    call time_interp_external(CS%id_trestore,Time,data_restore)
+    do j=js,je ; do i=is,ie
+       delta_sst = data_restore(i,j)- state%SST(i,j)
+       delta_sst = sign(1.0,delta_sst)*min(abs(delta_sst),CS%max_delta_trestore)
+       fluxes%heat_added(i,j) = G%mask2dT(i,j) * (CS%Rho0*fluxes%C_p) * delta_sst * CS%Flux_const   ! W m-2
+    enddo; enddo
   endif
 
   wind_stagger = CS%wind_stagger
@@ -418,14 +444,14 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   do j=js,je ; do i=is,ie
 
     if (wind_stagger == BGRID_NE) then
-      if (ASSOCIATED(IOB%u_flux)) taux_at_q(I,J) = IOB%u_flux(i-i0,j-j0)
-      if (ASSOCIATED(IOB%v_flux)) tauy_at_q(I,J) = IOB%v_flux(i-i0,j-j0)
+      if (ASSOCIATED(IOB%u_flux)) taux_at_q(I,J) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
+      if (ASSOCIATED(IOB%v_flux)) tauy_at_q(I,J) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
     elseif (wind_stagger == AGRID) then
-      if (ASSOCIATED(IOB%u_flux)) taux_at_h(i,j) = IOB%u_flux(i-i0,j-j0)
-      if (ASSOCIATED(IOB%v_flux)) tauy_at_h(i,j) = IOB%v_flux(i-i0,j-j0)
+      if (ASSOCIATED(IOB%u_flux)) taux_at_h(i,j) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
+      if (ASSOCIATED(IOB%v_flux)) tauy_at_h(i,j) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
     else ! C-grid wind stresses.
-      if (ASSOCIATED(IOB%u_flux)) fluxes%taux(I,j) = IOB%u_flux(i-i0,j-j0)
-      if (ASSOCIATED(IOB%v_flux)) fluxes%tauy(i,J) = IOB%v_flux(i-i0,j-j0)
+      if (ASSOCIATED(IOB%u_flux)) fluxes%taux(I,j) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
+      if (ASSOCIATED(IOB%v_flux)) fluxes%tauy(i,J) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
     endif
 
     if (ASSOCIATED(IOB%lprec)) &
@@ -556,7 +582,9 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
 
   ! surface momentum stress related fields as function of staggering
   if (wind_stagger == BGRID_NE) then
-    call pass_vector(taux_at_q,tauy_at_q,G%Domain,stagger=BGRID_NE)
+    if (G%symmetric) &
+      call fill_symmetric_edges(taux_at_q, tauy_at_q, G%Domain, stagger=BGRID_NE)
+    call pass_vector(taux_at_q, tauy_at_q, G%Domain, stagger=BGRID_NE)
 
     do j=js,je ; do I=Isq,Ieq
       fluxes%taux(I,j) = 0.0
@@ -619,6 +647,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
     enddo ; enddo
 
   else ! C-grid wind stresses.
+    if (G%symmetric) &
+      call fill_symmetric_edges(fluxes%taux, fluxes%tauy, G%Domain)
     call pass_vector(fluxes%taux, fluxes%tauy, G%Domain)
 
     do j=js,je ; do i=is,ie
@@ -701,15 +731,54 @@ subroutine apply_flux_adjustments(G, CS, Time, fluxes)
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: tempx_at_h ! Delta to zonal wind stress at h points (Pa)
   real, dimension(SZI_(G),SZJ_(G)) :: tempy_at_h ! Delta to meridional wind stress at h points (Pa)
+  real, dimension(SZI_(G),SZJ_(G)) :: temp_at_h ! Fluxes at h points (W m-2 or kg m-2 s-1)
+
   integer :: is_in, ie_in, js_in, je_in, i, j
   real :: dLonDx, dLonDy, rDlon, cosA, sinA, zonal_tau, merid_tau
-  logical :: overrode_x, overrode_y
+  logical :: overrode_x, overrode_y, overrode_h
 
   is_in = G%isc - G%isd + 1
   ie_in = G%iec - G%isd + 1
   js_in = G%jsc - G%jsd + 1
   je_in = G%jec - G%jsd + 1
 
+  overrode_h = .false.
+  call data_override('OCN', 'hflx_adj', temp_at_h, Time, override=overrode_h, &
+                      is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+ 
+  if (overrode_h) then 
+    do j=G%jsc,G%jec ; do i=G%isc,G%iec
+      fluxes%heat_added(i,j) = fluxes%heat_added(i,j) + temp_at_h(i,j)
+    enddo; enddo
+  endif
+ 
+  call pass_var(fluxes%heat_added, G%Domain)
+ 
+  overrode_h = .false.
+  call data_override('OCN', 'sflx_adj', temp_at_h, Time, override=overrode_h, &
+                     is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+ 
+  if (overrode_h) then 
+    do j=G%jsc,G%jec ; do i=G%isc,G%iec
+      fluxes%salt_flux_added(i,j) = fluxes%salt_flux_added(i,j) + temp_at_h(i,j)
+    enddo; enddo
+  endif
+
+  call pass_var(fluxes%salt_flux_added, G%Domain)
+  overrode_h = .false.
+
+  call data_override('OCN', 'prcme_adj', temp_at_h, Time, override=overrode_h, &
+                     is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+ 
+  if (overrode_h) then 
+    do j=G%jsc,G%jec ; do i=G%isc,G%iec
+      fluxes%vprec(i,j) = fluxes%vprec(i,j) + temp_at_h(i,j)
+    enddo; enddo
+  endif
+ 
+  call pass_var(fluxes%vprec, G%Domain)
+ 
+ 
   tempx_at_h(:,:) = 0.0 ; tempy_at_h(:,:) = 0.0
   ! Either reads data or leaves contents unchanged
   overrode_x = .false. ; overrode_y = .false.
@@ -773,13 +842,13 @@ subroutine forcing_save_restart(CS, G, Time, directory, time_stamped, &
 
 end subroutine forcing_save_restart
 
-subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
+subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, restore_temp)
   type(time_type),          intent(in)    :: Time
   type(ocean_grid_type),    intent(in)    :: G
   type(param_file_type),    intent(in)    :: param_file
   type(diag_ctrl), target,  intent(inout) :: diag
   type(surface_forcing_CS), pointer       :: CS
-  logical, optional,        intent(in)    :: restore_salt
+  logical, optional,        intent(in)    :: restore_salt, restore_temp
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
@@ -793,12 +862,12 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
   type(directories)  :: dirs
   logical            :: new_sim
   type(time_type)    :: Time_frc
-  character(len=200) :: TideAmp_file, gust_file, salt_file ! Input file names.
+  character(len=200) :: TideAmp_file, gust_file, salt_file, temp_file ! Input file names.
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_surface_forcing"  ! This module's name.
   character(len=48)  :: stagger
-  character(len=128) :: basin_file
+  character(len=240) :: basin_file
   integer :: i, j, isd, ied, jsd, jed
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -888,6 +957,10 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
   elseif (uppercase(stagger(1:1)) == 'C') then ; CS%wind_stagger = CGRID_NE
   else ; call MOM_error(FATAL,"surface_forcing_init: WIND_STAGGER = "// &
                         trim(stagger)//" is invalid.") ; endif
+  call get_param(param_file, mod, "WIND_STRESS_MULTIPLIER", CS%wind_stress_multiplier, &
+                 "A factor multiplying the wind-stress given to the ocean by the\n"//&
+                 "coupler. This is used for testing and should be =1.0 for any\n"//&
+                 "production runs.", default=1.0)
 
   if (restore_salt) then
     call get_param(param_file, mod, "FLUXCONST", CS%Flux_const, &
@@ -932,6 +1005,28 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
         else ; CS%basin_mask(i,j) = 1.0 ; endif
       enddo ; enddo
     endif
+  endif
+
+  if (restore_temp) then
+    call get_param(param_file, mod, "FLUXCONST", CS%Flux_const, &
+                 "The constant that relates the restoring surface fluxes \n"//&
+                 "to the relative surface anomalies (akin to a piston \n"//&
+                 "velocity).  Note the non-MKS units.", units="m day-1", &
+                 fail_if_missing=.true.)
+    call get_param(param_file, mod, "SST_RESTORE_FILE", CS%temp_restore_file, &
+                 "A file in which to find the surface temperature to use for restoring.", &
+                 default="temp_restore.nc")
+    call get_param(param_file, mod, "SST_RESTORE_VARIABLE", CS%temp_restore_var_name, &
+                 "The name of the surface temperature variable to read from "//&
+                 "SST_RESTORE_FILE for restoring sst.", &
+                 default="temp")
+! Convert CS%Flux_const from m day-1 to m s-1.
+    CS%Flux_const = CS%Flux_const / 86400.0
+
+    call get_param(param_file, mod, "MAX_DELTA_TRESTORE", CS%max_delta_trestore, &
+                 "The maximum sst difference used in restoring terms.", &
+                 units="degC ", default=999.0)
+
   endif
 
 ! Optionally read tidal amplitude from input file (m s-1) on model grid.
@@ -1030,8 +1125,13 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt)
     CS%id_srestore = init_external_field(salt_file, CS%salt_restore_var_name, domain=G%Domain%mpp_domain)
   endif ; endif
 
+  if (present(restore_temp)) then ; if (restore_temp) then
+    temp_file = trim(CS%inputdir) // trim(CS%temp_restore_file)
+    CS%id_trestore = init_external_field(temp_file, CS%temp_restore_var_name, domain=G%Domain%mpp_domain)
+  endif ; endif
+
   ! Set up any restart fields associated with the forcing.
-  call restart_init(G, param_file, CS%restart_CSp, "MOM_forcing.res")
+  call restart_init(param_file, CS%restart_CSp, "MOM_forcing.res")
 !###  call register_ctrl_forcing_restarts(G, param_file, CS%ctrl_forcing_CSp, &
 !###                                      CS%restart_CSp)
   call restart_init_end(CS%restart_CSp)

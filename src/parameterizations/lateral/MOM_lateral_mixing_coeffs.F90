@@ -371,7 +371,7 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, CS)
   if (.not. ASSOCIATED(CS)) call MOM_error(FATAL, "MOM_lateral_mixing_coeffs.F90, calc_slope_functions:"//&
          "Module must be initialized before it is used.")
 
-  call find_eta(h, tv, G%g_Earth, G, GV, e, halo_size=2)
+  call find_eta(h, tv, GV%g_Earth, G, GV, e, halo_size=2)
   if (CS%use_variable_mixing) then
     if (CS%use_stored_slopes) then
       call calc_isoneutral_slopes(G, GV, h, e, tv, dt*CS%kappa_smooth, &
@@ -439,9 +439,9 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
 
 !$OMP parallel default(none) shared(is,ie,js,je,CS,nz,e,G,GV,h, &
 !$OMP                               H_u,H_v,S2_u,S2_v,slope_x,slope_y,   &
-!$OMP                               SN_u_local,SN_v_local,N2_u,N2_v        )   &
+!$OMP                               SN_u_local,SN_v_local,N2_u,N2_v, S2max)   &
 !$OMP                       private(E_x,E_y,S2,Hdn,Hup,H_geom,N2, &
-!$OMP                       wNE, wSE, wSW, wNW, S2max)
+!$OMP                       wNE, wSE, wSW, wNW)
 !$OMP do
   do j=js-1,je+1 ; do i=is-1,ie+1
     CS%SN_u(i,j) = 0.0
