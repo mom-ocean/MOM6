@@ -52,6 +52,7 @@ use MOM_sponge,              only : apply_sponge, sponge_CS
 use MOM_ALE_sponge,          only : apply_ALE_sponge, ALE_sponge_CS
 use MOM_time_manager,        only : operator(<=), time_type ! for testing itides (BDM)
 use MOM_tracer_flow_control, only : call_tracer_column_fns, tracer_flow_control_CS
+use MOM_tracer_diabatic,     only : tracer_vertdiff
 use MOM_variables,           only : thermo_var_ptrs, vertvisc_type, accel_diag_ptrs
 use MOM_variables,           only : cont_diag_ptrs, MOM_thermovar_chksum, p3d
 use MOM_verticalGrid,        only : verticalGrid_type
@@ -920,6 +921,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
         ! between the buffer layers and the interior.
         ! Changes: T, S
         call triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, tv%T, tv%S)
+
       endif ! massless_match_targets
       call cpu_clock_end(id_clock_tridiag)
 

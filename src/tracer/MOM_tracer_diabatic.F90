@@ -1,7 +1,7 @@
 !> This module contains routines that implement physical fluxes of tracers (e.g. due
 !! to surface fluxes or mixing). These are intended to be called from call_tracer_column_fns
 !! in the MOM_tracer_flow_control module.
-module MOM_tracer_vertical
+module MOM_tracer_diabatic
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 use MOM_grid,             only : ocean_grid_type
@@ -419,4 +419,4 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, sfc_src, fluxes, h, &
   endif
 
 end subroutine applyTracerBoundaryFluxesInOut
-end module MOM_tracer_vertical
+end module MOM_tracer_diabatic
