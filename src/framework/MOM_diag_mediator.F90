@@ -43,7 +43,7 @@ use MOM_diag_remap,       only : diag_remap_ctrl
 use MOM_diag_remap,       only : diag_remap_update, diag_remap_set_diag_axes
 use MOM_diag_remap,       only : diag_remap_init, diag_remap_end, diag_remap_do_remap
 use MOM_diag_remap,       only : diag_remap_set_vertical_axes, diag_remap_get_nz
-use MOM_diag_remap,       only : diag_remap_axes_setup_done
+use MOM_diag_remap,       only : diag_remap_axes_setup_done, diag_remap_get_vertical_ids
 use regrid_consts,        only : coordinateMode, DEFAULT_COORDINATE_MODE, REGRIDDING_NUM_TYPES
 use regrid_consts,        only : vertical_coords, vertical_coord_strings
 
@@ -163,7 +163,12 @@ type, public :: diag_ctrl
   !default missing value to be sent to ALL diagnostics registrations
   real :: missing_value = 1.0e+20
 
+  !> Control structure for each possible coordinate
   type(diag_remap_ctrl), dimension(REGRIDDING_NUM_TYPES) :: diag_remap_cs
+
+  !> Axes groups for each possible coordinate (these will all be 3D groups)
+  type(axes_grp), dimension(REGRIDDING_NUM_TYPES) :: remap_axesTL, remap_axesBL, remap_axesCuL, remap_axesCvL
+  type(axes_grp), dimension(REGRIDDING_NUM_TYPES) :: remap_axesTi, remap_axesBi, remap_axesCui, remap_axesCvi
 
   ! Pointer to H, G and T&S needed for remapping
   real, dimension(:,:,:), pointer :: h => null()
@@ -275,35 +280,61 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
        x_cell_method='mean', y_cell_method='point', is_h_point=.false.)
 
   do i=1, size(diag_cs%diag_remap_cs)
+    ! For each possible diagnostic coordinate
     call diag_remap_set_vertical_axes(diag_cs%diag_remap_cs(i), G, GV, param_file)
+    ! This fetches the 1D-axis id for layers and interfaces and overwrite id_zl and id_zi from above
+    call diag_remap_get_vertical_ids(diag_cs%diag_remap_cs(i), id_zl, id_zi)
+    ! Axis groupings for the model layers
+    call define_axes_group(diag_cs, (/ id_xh, id_yh, id_zL /), diag_cs%remap_axesTL(i), &
+         x_cell_method='mean', y_cell_method='mean', v_cell_method='mean', is_h_point=.true.)
+    call define_axes_group(diag_cs, (/ id_xq, id_yq, id_zL /), diag_cs%remap_axesBL(i), &
+         x_cell_method='point', y_cell_method='point', v_cell_method='mean', is_h_point=.false.)
+    call define_axes_group(diag_cs, (/ id_xq, id_yh, id_zL /), diag_cs%remap_axesCuL(i), &
+         x_cell_method='point', y_cell_method='mean', v_cell_method='mean', is_h_point=.false.)
+    call define_axes_group(diag_cs, (/ id_xh, id_yq, id_zL /), diag_cs%remap_axesCvL(i), &
+         x_cell_method='mean', y_cell_method='point', v_cell_method='mean', is_h_point=.false.)
+    ! Axis groupings for the model interfaces
+    call define_axes_group(diag_cs, (/ id_xh, id_yh, id_zi /), diag_cs%remap_axesTi(i), &
+         x_cell_method='mean', y_cell_method='mean', v_cell_method='point', is_h_point=.true.)
+    call define_axes_group(diag_cs, (/ id_xq, id_yh, id_zi /), diag_cs%remap_axesCui(i), &
+         x_cell_method='point', y_cell_method='mean', v_cell_method='point', is_h_point=.false.)
+    call define_axes_group(diag_cs, (/ id_xh, id_yq, id_zi /), diag_cs%remap_axesCvi(i), &
+         x_cell_method='mean', y_cell_method='point', v_cell_method='point', is_h_point=.false.)
+    call define_axes_group(diag_cs, (/ id_xq, id_yq, id_zi /), diag_cs%remap_axesBi(i), &
+         x_cell_method='point', y_cell_method='point', v_cell_method='point', is_h_point=.false.)
   enddo
 
 end subroutine set_axes_info
 
-!> Attaches the id of cell areas to axes groupsfor use with cell_measures
+!> Attaches the id of cell areas to axes groups for use with cell_measures
 subroutine diag_register_area_ids(diag_cs, id_area_t, id_area_q)
   type(diag_ctrl),   intent(inout) :: diag_cs   !< Diagnostics control structure
   integer, optional, intent(in)    :: id_area_t !< Diag_mediator id for area of h-cells
   integer, optional, intent(in)    :: id_area_q !< Diag_mediator id for area of q-cells
   ! Local variables
-  integer :: fms_id
+  integer :: fms_id, i
   if (present(id_area_t)) then
     fms_id = diag_cs%diags(id_area_t)%fms_diag_id
     diag_cs%axesT1%id_area = fms_id
     diag_cs%axesTi%id_area = fms_id
     diag_cs%axesTL%id_area = fms_id
-    diag_cs%axesTZL%id_area = fms_id
+    do i=1, size(diag_cs%diag_remap_cs)
+      diag_cs%remap_axesTL(i)%id_area = fms_id
+      ! Note to AJA: why am I not doing TZi too?
+    enddo
   endif
   if (present(id_area_q)) then
     fms_id = diag_cs%diags(id_area_q)%fms_diag_id
     diag_cs%axesB1%id_area = fms_id
     diag_cs%axesBi%id_area = fms_id
     diag_cs%axesBL%id_area = fms_id
-    diag_cs%axesBZL%id_area = fms_id
+    do i=1, size(diag_cs%diag_remap_cs)
+      diag_cs%remap_axesBL(i)%id_area = fms_id
+    enddo
   endif
 end subroutine diag_register_area_ids
 
-!> Attaches the id of cell volumes to axes groupsfor use with cell_measures
+!> Attaches the id of cell volumes to axes groups for use with cell_measures
 subroutine diag_register_volume_ids(diag_cs, id_vol_t)
   type(diag_ctrl),   intent(inout) :: diag_cs   !< Diagnostics control structure
   integer, optional, intent(in)    :: id_vol_t !< Diag_manager id for volume of h-cells

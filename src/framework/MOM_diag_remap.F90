@@ -52,6 +52,7 @@ implicit none ; private
 public diag_remap_ctrl, diag_remap_set_diag_axes
 public diag_remap_init, diag_remap_end, diag_remap_update, diag_remap_do_remap
 public diag_remap_set_vertical_axes, diag_remap_axes_setup_done, diag_remap_get_nz
+public diag_remap_get_vertical_ids
 
 type :: diag_remap_ctrl
   ! Whether remappping initialized
@@ -318,6 +319,17 @@ subroutine diag_remap_set_diag_axes(remap_cs, axes)
   endif
 
 end subroutine
+
+!> Get layer and interface axes ids for this coordinate
+subroutine diag_remap_get_vertical_ids(remap_cs, id_layer, id_interface)
+  type(diag_remap_ctrl), intent(in) :: remap_cs !< Diagnostic coordinate control structure
+  integer, intent(out) :: id_layer !< 1D-axes id for layer points
+  integer, intent(out) :: id_interface !< 1D-axes id for interface points
+
+  id_layer = remap_cs%layer_axes_id
+  id_interface = remap_cs%interface_axes_id
+
+end subroutine diag_remap_get_vertical_ids
 
 function diag_remap_get_nz(remap_cs)
   type(diag_remap_ctrl), intent(in) :: remap_cs
