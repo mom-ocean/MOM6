@@ -111,8 +111,7 @@ type, private :: diag_type
   character(16) :: debug_str = '' !< For FATAL errors and debugging.
   type(axes_grp), pointer :: remap_axes => null()
   integer :: vertical_coord
-  integer, dimension(:), allocatable :: axes
-
+  integer, dimension(:), allocatable :: axes_ids !< 1D-axis ids
   real, pointer, dimension(:,:)   :: mask2d => null()
   real, pointer, dimension(:,:,:) :: mask3d => null()
   type(diag_type), pointer :: next => null() !< Pointer to the next diag.
@@ -669,7 +668,7 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask)
 #endif
 
       call diag_remap_do_remap(diag_cs%diag_remap_cs(diag%vertical_coord), &
-              diag_cs%G, diag_cs%h, diag%axes, diag%mask3d, &
+              diag_cs%G, diag_cs%h, diag%axes_ids, diag%mask3d, &
               diag_cs%missing_value, field, remapped_field)
 
       if (id_clock_diag_remap>0) call cpu_clock_end(id_clock_diag_remap)
@@ -928,10 +927,10 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
       ! Register for vertical remapping
       if (axes%rank == 3 .and. &
           vertical_coords(i) /= coordinateMode(DEFAULT_COORDINATE_MODE)) then
-        call diag_remap_set_diag_axes(diag_cs%diag_remap_cs(i), diag%axes)
+        call diag_remap_set_diag_axes(diag_cs%diag_remap_cs(i), diag%axes_ids)
       endif
 
-      fms_id = register_diag_field_expand_axes(new_module_name, field_name, diag%axes,     &
+      fms_id = register_diag_field_expand_axes(new_module_name, field_name, diag%axes_ids, &
              init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
              range=range, mask_variant=mask_variant, standard_name=standard_name,          &
              verbose=verbose, do_not_log=do_not_log, err_msg=err_msg,                      &
@@ -987,10 +986,10 @@ function register_diag_field(module_name, field_name, axes, init_time,         &
       ! Register for vertical remapping
       if (axes%rank == 3 .and. &
           vertical_coords(i) /= coordinateMode(DEFAULT_COORDINATE_MODE)) then
-        call diag_remap_set_diag_axes(diag_cs%diag_remap_cs(i), diag%axes)
+        call diag_remap_set_diag_axes(diag_cs%diag_remap_cs(i), diag%axes_ids)
       endif
 
-      fms_id = register_diag_field_expand_axes(new_module_name, cmor_field_name, diag%axes,    &
+      fms_id = register_diag_field_expand_axes(new_module_name, cmor_field_name, diag%axes_ids,&
          init_time, long_name=trim(posted_cmor_long_name), units=trim(posted_cmor_units),      &
          missing_value=MOM_missing_value, range=range, mask_variant=mask_variant,              &
          standard_name=trim(posted_cmor_standard_name), verbose=verbose, do_not_log=do_not_log,&
@@ -1749,8 +1748,8 @@ subroutine set_diag_mask_and_axes(diag, diag_cs, axes)
   ! Local variables
   integer :: i
 
-  allocate(diag%axes(size(axes%handles)))
-  diag%axes(:) = axes%handles(:)
+  allocate(diag%axes_ids(size(axes%handles)))
+  diag%axes_ids(:) = axes%handles(:)
 
   diag%mask2d => null()
   diag%mask3d => null()
