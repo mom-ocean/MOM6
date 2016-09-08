@@ -574,7 +574,6 @@ subroutine triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, T, S)
   real :: c1(SZIB_(G),SZK_(G))       ! tridiagonal solver.
   real :: h_tr, b_denom_1
   integer :: i, j, k
-
 !$OMP parallel do default(none) shared(is,ie,js,je,G,GV,hold,eb,T,S,ea) &
 !$OMP                          private(h_tr,b1,d1,c1,b_denom_1)
   do j=js,je
