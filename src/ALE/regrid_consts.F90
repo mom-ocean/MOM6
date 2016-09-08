@@ -21,6 +21,7 @@ integer, parameter :: REGRIDDING_HYCOM1    = 6      !< Simple HyCOM coordinates 
 integer, parameter :: REGRIDDING_SLIGHT    = REGRIDDING_NUM_TYPES !< Stretched coordinates in the
                                                     !! lightest water, isopycnal below
 character(len=6), parameter :: REGRIDDING_LAYER_STRING = "LAYER"   !< Layer string
+character(len=6), parameter :: REGRIDDING_ZSTAR_STRING_OLD = "Z*"  !< z* string (legacy name)
 character(len=6), parameter :: REGRIDDING_ZSTAR_STRING = "ZSTAR"   !< z* string
 character(len=6), parameter :: REGRIDDING_RHO_STRING   = "RHO"     !< Rho string
 character(len=6), parameter :: REGRIDDING_SIGMA_STRING = "SIGMA"   !< Sigma string
@@ -54,6 +55,7 @@ function coordinateMode(string)
   select case ( uppercase(trim(string)) )
     case (trim(REGRIDDING_LAYER_STRING)); coordinateMode = REGRIDDING_LAYER
     case (trim(REGRIDDING_ZSTAR_STRING)); coordinateMode = REGRIDDING_ZSTAR
+    case (trim(REGRIDDING_ZSTAR_STRING_OLD)); coordinateMode = REGRIDDING_ZSTAR
     case (trim(REGRIDDING_RHO_STRING));   coordinateMode = REGRIDDING_RHO
     case (trim(REGRIDDING_SIGMA_STRING)); coordinateMode = REGRIDDING_SIGMA
     case (trim(REGRIDDING_HYCOM1_STRING)); coordinateMode = REGRIDDING_HYCOM1
