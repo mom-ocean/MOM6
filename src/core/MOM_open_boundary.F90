@@ -266,6 +266,9 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
     if (Je_obc>Js_obc) OBC%OBC_segment_list(l_seg)%direction = OBC_DIRECTION_E
     if (Je_obc<Js_obc) OBC%OBC_segment_list(l_seg)%direction = OBC_DIRECTION_W
     OBC%OBC_segment_list(l_seg)%radiation = .true.
+    ! This is a total hack for the tangential flow! - KSH
+    ! But it wasn't on and I still get the right answer??
+    OBC%OBC_segment_list(l_seg)%gradient = .true.
     if  (Je_obc>Js_obc) OBC%apply_OBC_u_flather_east = .true. ! This line will not be needed soon - AJA
     if  (Je_obc<Js_obc) OBC%apply_OBC_u_flather_west = .true. ! This line will not be needed soon - AJA
   elseif (trim(action_str) == 'RADIATION2D') then
@@ -369,8 +372,8 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
     if (Ie_obc<Is_obc) OBC%OBC_segment_list(l_seg)%direction = OBC_DIRECTION_N
     OBC%OBC_segment_list(l_seg)%radiation = .true.
     OBC%OBC_segment_list(l_seg)%radiation2D = .true.
-    if (Ie_obc>Is_obc) OBC%apply_OBC_v_flather_south = .true. ! This line will not bee needed soon - AJA
-    if (Ie_obc<Is_obc) OBC%apply_OBC_v_flather_north = .true. ! This line will not bee needed soon - AJA
+    if (Ie_obc>Is_obc) OBC%apply_OBC_v_flather_south = .true. ! This line will not be needed soon - AJA
+    if (Ie_obc<Is_obc) OBC%apply_OBC_v_flather_north = .true. ! This line will not be needed soon - AJA
   elseif (trim(action_str) == 'SIMPLE') then
     this_kind = OBC_SIMPLE
     OBC%OBC_segment_list(l_seg)%specified = .true.
@@ -748,8 +751,10 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
         cff = max(dhdx*dhdx + dhdy*dhdy, eps)
         Cx = dhdt*dhdx
         Cy = min(cff,max(dhdt*dhdy,-cff))
-        u_new(I,j,k) = (cff*u_old(I,j,k) + Cx*u_new(I-1,j,k) - &
-          max(Cy,0.0)*grad(I,J-1) - min(Cy,0.0)*grad(I,J)) / (cff + Cx)
+        ! Turning off radiation2D part
+        Cy = 0
+        u_new(I,j,k) = ((cff*u_old(I,j,k) + Cx*u_new(I-1,j,k)) - &
+          (max(Cy,0.0)*grad(I,J-1) - min(Cy,0.0)*grad(I,J))) / (cff + Cx)
       elseif (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%radiation) then
         dhdt = u_old(I-1,j,k)-u_new(I-1,j,k) !old-new
         dhdx = u_new(I-1,j,k)-u_new(I-2,j,k) !in new time backward sasha for I-1
@@ -786,8 +791,10 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
         cff = max(dhdx*dhdx + dhdy*dhdy, eps)
         Cx = dhdt*dhdx
         Cy = min(cff,max(dhdt*dhdy,-cff))
-        u_new(I,j,k) = (cff*u_old(I,j,k) + Cx*u_new(I+1,j,k) - &
-          max(Cy,0.0)*grad(I,J-1) - min(Cy,0.0)*grad(I,J)) / (cff + Cx)
+        ! Turning off radiation2D part
+        Cy = 0
+        u_new(I,j,k) = ((cff*u_old(I,j,k) + Cx*u_new(I+1,j,k)) - &
+          (max(Cy,0.0)*grad(I,J-1) - min(Cy,0.0)*grad(I,J))) / (cff + Cx)
       elseif (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%radiation) then
         dhdt = u_old(I+1,j,k)-u_new(I+1,j,k) !old-new
         dhdx = u_new(I+1,j,k)-u_new(I+2,j,k) !in new time backward sasha for I+1
@@ -828,8 +835,8 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
         if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%radiation2D) &
                Cx = min(cff, max(dhdt*dhdx, -cff))
         Cy = dhdt*dhdy
-        u_new(I,j,k) = (cff*u_old(I,j,k) + Cy*u_new(I,j-1,k) - &
-               max(Cx, 0.0)*grad(i,j) - min(Cx, 0.0)*grad(i+1,j))/(cff + Cy)
+        u_new(I,j,k) = ((cff*u_old(I,j,k) + Cy*u_new(I,j-1,k)) - &
+               (max(Cx, 0.0)*grad(i,j) - min(Cx, 0.0)*grad(i+1,j)))/(cff + Cy)
       endif
     endif
 
@@ -854,8 +861,8 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
         if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%radiation2D) &
                Cx = min(cff, max(dhdt*dhdx, -cff))
         Cy = dhdt*dhdy
-        u_new(I,j,k) = (cff*u_old(I,j,k) + Cy*u_new(I,j+1,k) - &
-               max(Cx, 0.0)*grad(i,j) - min(Cx, 0.0)*grad(i+1,j))/(cff + Cy)
+        u_new(I,j,k) = ((cff*u_old(I,j,k) + Cy*u_new(I,j+1,k)) - &
+               (max(Cx, 0.0)*grad(i,j) - min(Cx, 0.0)*grad(i+1,j)))/(cff + Cy)
       endif
     endif
   endif ; enddo ; enddo ; enddo
@@ -878,8 +885,10 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
         cff = max(dhdx*dhdx + dhdy*dhdy, eps)
         Cy = dhdt*dhdy
         Cx = min(cff,max(dhdt*dhdx,-cff))
-        v_new(i,J,k) = (cff*v_old(i,J,k) + Cy*v_new(i,J-1,k) - &
-          max(Cx,0.0)*grad(I-1,J) - min(Cx,0.0)*grad(I,J)) / (cff + Cy)
+        ! Turning off radiation2D part
+        Cx = 0
+        v_new(i,J,k) = ((cff*v_old(i,J,k) + Cy*v_new(i,J-1,k)) - &
+          (max(Cx,0.0)*grad(I-1,J) - min(Cx,0.0)*grad(I,J))) / (cff + Cy)
       elseif (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%radiation) then
         dhdt = v_old(i,J-1,k)-v_new(i,J-1,k) !old-new
         dhdy = v_new(i,J-1,k)-v_new(i,J-2,k) !in new time backward sasha for J-1
@@ -916,8 +925,10 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
         cff = max(dhdx*dhdx + dhdy*dhdy, eps)
         Cy = dhdt*dhdy
         Cx = min(cff,max(dhdt*dhdx,-cff))
-        v_new(i,J,k) = (cff*v_old(i,J,k) + Cy*v_new(i,J+1,k) - &
-          max(Cx,0.0)*grad(I-1,J) - min(Cx,0.0)*grad(I,J)) / (cff + Cy)
+        ! Turning off radiation2D part
+        Cx = 0
+        v_new(i,J,k) = ((cff*v_old(i,J,k) + Cy*v_new(i,J+1,k)) - &
+          (max(Cx,0.0)*grad(I-1,J) - min(Cx,0.0)*grad(I,J))) / (cff + Cy)
       elseif (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%radiation) then
         dhdt = v_old(i,J+1,k)-v_new(i,J+1,k) !old-new
         dhdy = v_new(i,J+1,k)-v_new(i,J+2,k) !in new time backward sasha for J+1
@@ -958,8 +969,8 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
         Cy = 0.0
         if (OBC%OBC_segment_list(OBC%OBC_segment_v(I,j))%radiation2D) &
                Cy = min(cff, max(dhdt*dhdy, -cff))
-        v_new(i,J,k) = (cff*v_old(i,J,k) + Cx*v_new(i-1,J,k) - &
-               max(Cy, 0.0)*grad(i,j) - min(Cy, 0.0)*grad(i,j+1))/(cff + Cx)
+        v_new(i,J,k) = ((cff*v_old(i,J,k) + Cx*v_new(i-1,J,k)) - &
+               (max(Cy, 0.0)*grad(i,j) - min(Cy, 0.0)*grad(i,j+1)))/(cff + Cx)
       endif
     endif
     if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_W) then
@@ -983,8 +994,8 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
         Cy = 0.0
         if (OBC%OBC_segment_list(OBC%OBC_segment_v(I,j))%radiation2D) &
                Cy = min(cff, max(dhdt*dhdy, -cff))
-        v_new(i,J,k) = (cff*v_old(i,J,k) + Cx*v_new(i+1,J,k) - &
-               max(Cy, 0.0)*grad(i,j) - min(Cy, 0.0)*grad(i+1,j))/(cff + Cx)
+        v_new(i,J,k) = ((cff*v_old(i,J,k) + Cx*v_new(i+1,J,k)) - &
+               (max(Cy, 0.0)*grad(i,j) - min(Cy, 0.0)*grad(i+1,j)))/(cff + Cx)
       endif
     endif
   endif ; enddo ; enddo ; enddo
