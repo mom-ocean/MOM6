@@ -72,6 +72,8 @@ use Rossby_front_2d_initialization, only : Rossby_front_initialize_velocity
 use SCM_idealized_hurricane, only : SCM_idealized_hurricane_TS_init
 use supercritical_initialization, only : supercritical_initialize_velocity
 use supercritical_initialization, only : supercritical_set_OBC_data
+use soliton_initialization, only : soliton_initialize_velocity
+use soliton_initialization, only : soliton_initialize_thickness
 use BFB_initialization, only : BFB_initialize_sponges_southonly
 
 use midas_vertmap, only : find_interfaces, tracer_Z_init
@@ -226,6 +228,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                " \t adjustment2d - TBD AJA. \n"//&
                " \t sloshing - TBD AJA. \n"//&
                " \t seamount - TBD AJA. \n"//&
+               " \t soliton - Equatorial Rossby soliton. \n"//&
                " \t rossby_front - a mixed layer front in thermal wind balance.\n"//&
                " \t USER - call a user modified routine.", &
                fail_if_missing=.true.)
@@ -252,6 +255,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
          case ("adjustment2d"); call adjustment_initialize_thickness(h, G, GV, PF)
          case ("sloshing"); call sloshing_initialize_thickness(h, G, GV, PF)
          case ("seamount"); call seamount_initialize_thickness(h, G, GV, PF)
+         case ("soliton"); call soliton_initialize_thickness(h, G)
          case ("phillips"); call Phillips_initialize_thickness(h, G, GV, PF)
          case ("rossby_front"); call Rossby_front_initialize_thickness(h, G, GV, PF)
          case ("USER"); call user_initialize_thickness(h, G, PF, tv%T)
@@ -323,6 +327,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
          " \t uniform - the flow is uniform (determined by\n"//&
          " \t\t parameters INITIAL_U_CONST and INITIAL_V_CONST).\n"//&
          " \t rossby_front - a mixed layer front in thermal wind balance.\n"//&
+         " \t soliton - Equatorial Rossby soliton.\n"//&
          " \t USER - call a user modified routine.", default="zero")
     select case (trim(config))
        case ("file"); call initialize_velocity_from_file(u, v, G, PF)
@@ -331,6 +336,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
        case ("circular"); call initialize_velocity_circular(u, v, G, PF)
        case ("phillips"); call Phillips_initialize_velocity(u, v, G, GV, PF)
        case ("rossby_front"); call Rossby_front_initialize_velocity(u, v, h, G, GV, PF)
+       case ("soliton"); call soliton_initialize_velocity(u, v, h, G)
        case ("supercritical"); call supercritical_initialize_velocity(u, v, h, G)
        case ("USER"); call user_initialize_velocity(u, v, G, PF)
        case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
