@@ -29,16 +29,18 @@ module MOM_error_checking
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
+use MOM_coms, only : sum_across_PEs
 use MOM_domains, only : pe_here, BGRID_NE, To_All, Scalar_Pair
 use MOM_domains, only : create_group_pass, do_group_pass, group_pass_type
-use MOM_error_handler, only : MOM_error, FATAL, WARNING
+use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_grid, only : ocean_grid_type
+use MOM_hor_index, only : hor_index_type
 
 implicit none ; private
 
 #include <MOM_memory.h>
 
-public :: check_redundant
+public :: check_redundant, totalStuff, totalTandS
 
 interface check_redundant
   module procedure check_redundant_v3d, check_redundant_v2d
@@ -240,5 +242,73 @@ subroutine check_redundant_s2d(mesg, array, G, is, ie, js, je, stagger)
   enddo ; enddo
 
 end subroutine  check_redundant_s2d
+
+! =====================================================================
+
+!> This function returns the sum over computational domain of all
+!! processors of hThick*stuff, where stuff is a 3-d array at tracer points.
+function totalStuff(HI, hThick, areaT, stuff)
+  type(hor_index_type),               intent(in) :: HI     !< A horizontal index type
+  real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: hThick !< The array of thicknesses to use as weights
+  real, dimension(HI%isd:,HI%jsd:),   intent(in) :: areaT  !< The array of cell areas in m2
+  real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: stuff  !< The array of stuff to be summed 
+  real                                         :: totalStuff
+  integer :: i, j, k, nz
+
+  nz = size(hThick,3)
+  totalStuff = 0.
+  do k = 1, nz ; do j = HI%jsc, HI%jec ; do i = HI%isc, HI%iec
+    totalStuff = totalStuff + hThick(i,j,k) * stuff(i,j,k) * areaT(i,j)
+  enddo ; enddo ; enddo
+  call sum_across_PEs(totalStuff)
+
+end function totalStuff
+
+! =====================================================================
+
+!> This subroutine display the total thickness, temperature and salinity
+!! as well as the change since the last call.
+!! NOTE: This subroutine uses "save" data which is not thread safe and is purely
+!! for extreme debugging without a proper debugger.
+subroutine totalTandS(HI, hThick, areaT, temperature, salinity, mesg)
+  type(hor_index_type),               intent(in) :: HI     !< A horizontal index type
+  real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: hThick !< The array of thicknesses to use as weights
+  real, dimension(HI%isd:,HI%jsd:),   intent(in) :: areaT  !< The array of cell areas in m2
+  real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: temperature !< The temperature field to sum
+  real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: salinity    !< The salinity field to sum
+  character(len=*),                   intent(in) :: mesg        !< An identifying message
+
+  ! NOTE: This subroutine uses "save" data which is not thread safe and is purely for
+  ! extreme debugging without a proper debugger.
+  real, save :: totalH = 0., totalT = 0., totalS = 0.
+
+  logical, save :: firstCall = .true.
+  real :: thisH, thisT, thisS, delH, delT, delS
+  integer :: i, j, k, nz
+
+  nz = size(hThick,3)
+  thisH = 0.
+  do k = 1, nz ; do j = HI%jsc, HI%jec ; do i = HI%isc, HI%iec
+    thisH = thisH + hThick(i,j,k) * areaT(i,j)
+  enddo ; enddo ; enddo
+  call sum_across_PEs(thisH)
+  thisT = totalStuff(HI, hThick, areaT, temperature)
+  thisS = totalStuff(HI, hThick, areaT, salinity)
+
+  if (is_root_pe()) then
+    if (firstCall) then
+      totalH = thisH ; totalT = thisT ; totalS = thisS
+      write(0,*) 'Totals H,T,S:',thisH,thisT,thisS,' ',mesg
+      firstCall = .false.
+    else
+      delH = thisH - totalH
+      delT = thisT - totalT
+      delS = thisS - totalS
+      totalH = thisH ; totalT = thisT ; totalS = thisS
+      write(0,*) 'Tot/del H,T,S:',thisH,thisT,thisS,delH,delT,delS,' ',mesg
+    endif
+  endif
+
+end subroutine totalTandS
 
 end module MOM_error_checking

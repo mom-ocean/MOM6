@@ -394,7 +394,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
                                  ! limits for l in the search for lH.
   integer :: start_of_day, num_days
   real    :: reday, var
-  character(len=120) :: energypath_nc
+  character(len=240) :: energypath_nc
   character(len=200) :: mesg
   character(len=32)  :: mesg_intro, time_units, day_str, n_str, date_str
   logical :: date_stamped
@@ -474,7 +474,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
         enddo ; enddo ; enddo
         mass_tot = reproducing_sum(tmp1, sums=mass_lay, EFP_sum=mass_EFP)
 
-        call find_eta(h, tv, G%g_Earth, G, GV, eta)
+        call find_eta(h, tv, GV%g_Earth, G, GV, eta)
         do k=1,nz ; do j=js,je ; do i=is,ie
           tmp1(i,j,k) = (eta(i,j,K)-eta(i,j,K+1)) * areaTm(i,j)
         enddo ; enddo ; enddo
@@ -494,7 +494,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
         enddo ; enddo
       enddo
       if (CS%do_APE_calc) then
-        call find_eta(h, tv, G%g_Earth, G, GV, eta)
+        call find_eta(h, tv, GV%g_Earth, G, GV, eta)
 
         do k=1,nz
           vol_lay(k) = 0.0
@@ -592,10 +592,12 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
     energypath_nc = trim(CS%energyfile) // ".nc"
     if (day > CS%Start_time) then
       call reopen_file(CS%fileenergy_nc, trim(energypath_nc), vars, &
-                       num_nc_fields, G, CS%fields, SINGLE_FILE, CS%timeunit, GV=GV)
+                       num_nc_fields, CS%fields, SINGLE_FILE, CS%timeunit, &
+                       G=G, GV=GV)
     else
       call create_file(CS%fileenergy_nc, trim(energypath_nc), vars, &
-                       num_nc_fields, G, CS%fields, SINGLE_FILE, CS%timeunit, GV=GV)
+                       num_nc_fields, CS%fields, SINGLE_FILE, CS%timeunit, &
+                       G=G, GV=GV)
     endif
   endif
 
@@ -1054,8 +1056,8 @@ subroutine accumulate_net_input(fluxes, state, dt, G, CS)
     if (ASSOCIATED(state%frazil)) then ; do j=js,je ; do i=is,ie
       heat_in(i,j) = heat_in(i,j) + G%areaT(i,j) * state%frazil(i,j)
     enddo ; enddo ; endif
-    if (ASSOCIATED(fluxes%heat_restore)) then ; do j=js,je ; do i=is,ie
-      heat_in(i,j) = heat_in(i,j) + dt*G%areaT(i,j)*fluxes%heat_restore(i,j)
+    if (ASSOCIATED(fluxes%heat_added)) then ; do j=js,je ; do i=is,ie
+      heat_in(i,j) = heat_in(i,j) + dt*G%areaT(i,j)*fluxes%heat_added(i,j)
     enddo ; enddo ; endif
 !    if (ASSOCIATED(state%sw_lost)) then ; do j=js,je ; do i=is,ie
 !      heat_in(i,j) = heat_in(i,j) - G%areaT(i,j) * state%sw_lost(i,j)
@@ -1341,7 +1343,7 @@ subroutine read_depth_list(G, CS, filename)
 ! This subroutine reads in the depth list to the specified file
 ! and allocates and sets up CS%DL and CS%list_size .
   character(len=32) :: mod
-  character(len=120) :: var_name, var_msg
+  character(len=240) :: var_name, var_msg
   real, allocatable :: tmp(:)
   integer :: ncid, status, varid, list_size, k
   integer :: ndim, len, var_dim_ids(NF90_MAX_VAR_DIMS)

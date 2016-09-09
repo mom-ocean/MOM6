@@ -19,25 +19,18 @@ module seamount_initialization
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
 !***********************************************************************
 
-!***********************************************************************
-!*                                                                     *
-!*  The module configures the model for the idealized seamount         *
-!* test case.                                                          *
-!*                                                                     *
-!***********************************************************************
-
-
 use MOM_domains, only : sum_across_PEs
+use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : close_file, create_file, fieldtype, file_exists
+use MOM_io, only : close_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
 use MOM_io, only : write_field, slasher, vardesc
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
-use MOM_tracer_registry, only : tracer_registry_type, add_tracer_OBC_values
-use MOM_variables, only : thermo_var_ptrs, ocean_OBC_type
+use MOM_tracer_registry, only : tracer_registry_type
+use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
@@ -62,57 +55,57 @@ public seamount_initialize_temperature_salinity
 ! -----------------------------------------------------------------------------
 contains
 
-!------------------------------------------------------------------------------
-! Initialization of topography
-!------------------------------------------------------------------------------
+!> Initialization of topography.
 subroutine seamount_initialize_topography ( D, G, param_file, max_depth )
   ! Arguments 
-  type(ocean_grid_type), intent(in) :: G
-  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: D
-  type(param_file_type), intent(in) :: param_file
-  real,                  intent(in) :: max_depth
+  type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
+  real, dimension(G%isd:G%ied,G%jsd:G%jed), &
+                                      intent(out) :: D !< Ocean bottom depth in m
+  type(param_file_type),              intent(in)  :: param_file !< Parameter file structure
+  real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
   
   ! Local variables 
   integer   :: i, j
-  real      :: x, delta, L
+  real      :: x, y, delta, Lx, rLx, Ly, rLy
 
   call get_param(param_file,mod,"SEAMOUNT_DELTA",delta, &
                  "Non-dimensional height of seamount.", &
                  units="non-dim", default=0.5)
-  call get_param(param_file,mod,"SEAMOUNT_LENGTH_SCALE",L, &
-                 "Length scale of seamount.", &
+  call get_param(param_file,mod,"SEAMOUNT_X_LENGTH_SCALE",Lx, &
+                 "Length scale of seamount in x-direction.\n"//&
+                 "Set to zero make topography uniform in the x-direction.", &
                  units="Same as x,y", default=20.)
+  call get_param(param_file,mod,"SEAMOUNT_Y_LENGTH_SCALE",Ly, &
+                 "Length scale of seamount in y-direction.\n"//&
+                 "Set to zero make topography uniform in the y-direction.", &
+                 units="Same as x,y", default=0.)
   
-  ! Domain extent in kilometers
-  
-  L = L / G%len_lon
+  Lx = Lx / G%len_lon
+  Ly = Ly / G%len_lat
+  rLx = 0. ; if (Lx>0.) rLx = 1. / Lx
+  rLy = 0. ; if (Ly>0.) rLy = 1. / Ly
   do i=G%isc,G%iec 
     do j=G%jsc,G%jec 
-      ! Compute normalized zonal coordinate (x=0 at center of domain)
+      ! Compute normalized zonal coordinates (x,y=0 at center of domain)
       x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon - 0.5
-      D(i,j) = G%max_depth * ( 1.0 - delta * exp(-(x/L)**2) )
+      y = ( G%geoLatT(i,j) - G%south_lat ) / G%len_lat - 0.5
+      D(i,j) = G%max_depth * ( 1.0 - delta * exp(-(rLx*x)**2 -(rLy*y)**2) )
     enddo
   enddo
 
 end subroutine seamount_initialize_topography
 
-!------------------------------------------------------------------------------
-! Initialization of thicknesses
-!------------------------------------------------------------------------------
+!> Initialization of thicknesses.
+!! This subroutine initializes the layer thicknesses to be uniform.
 subroutine seamount_initialize_thickness ( h, G, GV, param_file )
+  type(ocean_grid_type), intent(in)           :: G          !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)         :: GV         !< The ocean's vertical grid structure.
+  real, intent(out), dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h !< The thicknesses being
+                                                            !! initialized.
+  type(param_file_type), intent(in)           :: param_file !< A structure indicating the
+                                                            !! open file to parse for model
+                                                            !! parameter values.
 
-  type(ocean_grid_type),   intent(in) :: G
-  type(verticalGrid_type), intent(in) :: GV
-  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h
-  type(param_file_type),   intent(in) :: param_file
-
-! Arguments: h - The thickness that is being initialized.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-
-!  This subroutine initializes the layer thicknesses to be uniform.
   real :: e0(SZK_(G)+1)   ! The resting interface heights, in m, usually !
                           ! negative because it is positive upward.      !
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
@@ -130,7 +123,6 @@ subroutine seamount_initialize_thickness ( h, G, GV, param_file )
   call get_param(param_file,mod,"MIN_THICKNESS",min_thickness,'Minimum thickness for layer',units='m',default=1.0e-3)
   call get_param(param_file,mod,"REGRIDDING_COORDINATE_MODE",verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE)
-
  
   ! WARNING: this routine specifies the interface heights so that the last layer
   !          is vanished, even at maximum depth. In order to have a uniform
@@ -280,4 +272,8 @@ subroutine seamount_initialize_temperature_salinity ( T, S, h, G, GV, param_file
   
 end subroutine seamount_initialize_temperature_salinity
 
+!> \class seamount_initialization
+!!
+!! The module configures the model for the idealized seamount
+!! test case.
 end module seamount_initialization

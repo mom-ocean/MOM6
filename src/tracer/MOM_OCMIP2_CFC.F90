@@ -70,8 +70,10 @@ use MOM_diag_to_Z, only : register_Z_tracer, diag_to_Z_CS
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
+use MOM_hor_index, only : hor_index_type
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc, query_vardesc
+use MOM_open_boundary, only : ocean_OBC_type
 use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
 use MOM_time_manager, only : time_type, get_time
@@ -79,7 +81,7 @@ use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_registry, only : add_tracer_diagnostics, add_tracer_OBC_values
 use MOM_tracer_registry, only : tracer_vertdiff
 use MOM_tracer_Z_init, only : tracer_Z_init
-use MOM_variables, only : surface, ocean_OBC_type
+use MOM_variables, only : surface
 use MOM_verticalGrid, only : verticalGrid_type
 
 use coupler_util, only : extract_coupler_values, set_coupler_values
@@ -103,7 +105,7 @@ type p3d
 end type p3d
 
 type, public :: OCMIP2_CFC_CS ; private
-  character(len = 200) :: IC_file ! The file in which the CFC initial values can
+  character(len=200) :: IC_file ! The file in which the CFC initial values can
                     ! be found, or an empty string for internal initilaization.
   logical :: Z_IC_file ! If true, the IC_file is in Z-space.  The default is false..
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
@@ -155,21 +157,20 @@ end type OCMIP2_CFC_CS
 
 contains
 
-function register_OCMIP2_CFC(G, param_file, CS, diag, tr_Reg, restart_CS)
-  type(ocean_grid_type),   intent(in) :: G
+function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
+  type(hor_index_type),    intent(in) :: HI
+  type(verticalGrid_type), intent(in) :: GV
   type(param_file_type),   intent(in) :: param_file
   type(OCMIP2_CFC_CS),     pointer    :: CS
-  type(diag_ctrl), target, intent(in) :: diag
-  type(tracer_registry_type),  pointer    :: tr_Reg
+  type(tracer_registry_type), pointer :: tr_Reg
   type(MOM_restart_CS),    pointer    :: restart_CS
 ! This subroutine is used to register tracer fields and subroutines
 ! to be used with MOM.
-! Arguments: G - The ocean's grid structure.
+! Arguments: HI - A horizontal index type structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
-!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in/out)  tr_Reg - A pointer to the tracer registry.
 !  (in)      restart_CS - A pointer to the restart control structure.
 
@@ -187,7 +188,7 @@ function register_OCMIP2_CFC(G, param_file, CS, diag, tr_Reg, restart_CS)
   logical :: register_OCMIP2_CFC
   integer :: isd, ied, jsd, jed, nz, m
 
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
+  isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
   if (associated(CS)) then
     call MOM_error(WARNING, "register_OCMIP2_CFC called with an "// &
@@ -218,8 +219,6 @@ function register_OCMIP2_CFC(G, param_file, CS, diag, tr_Reg, restart_CS)
     register_OCMIP2_CFC = .false.
     return
   endif
-
-  CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mod, version, "")
@@ -265,13 +264,13 @@ function register_OCMIP2_CFC(G, param_file, CS, diag, tr_Reg, restart_CS)
   call register_restart_field(tr_ptr, CS%CFC11_desc, &
                               .not.CS%tracers_may_reinit, restart_CS)
   ! Register CFC11 for horizontal advection & diffusion.
-  call register_tracer(tr_ptr, CS%CFC11_desc, param_file, G, tr_Reg, &
+  call register_tracer(tr_ptr, CS%CFC11_desc, param_file, HI, GV, tr_Reg, &
                        tr_desc_ptr=CS%CFC11_desc)
   ! Do the same for CFC12
   tr_ptr => CS%CFC12
   call register_restart_field(tr_ptr, CS%CFC12_desc, &
                               .not.CS%tracers_may_reinit, restart_CS)
-  call register_tracer(tr_ptr, CS%CFC12_desc, param_file, G, tr_Reg, &
+  call register_tracer(tr_ptr, CS%CFC12_desc, param_file, HI, GV, tr_Reg, &
                        tr_desc_ptr=CS%CFC12_desc)
 
   ! Set and read the various empirical coefficients.
@@ -367,13 +366,14 @@ function register_OCMIP2_CFC(G, param_file, CS, diag, tr_Reg, restart_CS)
   register_OCMIP2_CFC = .true.
 end function register_OCMIP2_CFC
 
-subroutine initialize_OCMIP2_CFC(restart, day, G, GV, h, OBC, CS, sponge_CSp, &
-                                       diag_to_Z_CSp)
+subroutine initialize_OCMIP2_CFC(restart, day, G, GV, h, diag, OBC, CS, &
+                                 sponge_CSp, diag_to_Z_CSp)
   logical,                               intent(in) :: restart
   type(time_type), target,               intent(in) :: day
   type(ocean_grid_type),                 intent(in) :: G
   type(verticalGrid_type),               intent(in) :: GV
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  type(diag_ctrl), target,               intent(in) :: diag
   type(ocean_OBC_type),                  pointer    :: OBC
   type(OCMIP2_CFC_CS),                   pointer    :: CS
   type(sponge_CS),                       pointer    :: sponge_CSp
@@ -387,6 +387,7 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, GV, h, OBC, CS, sponge_CSp, &
 !  (in)      G - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
 !  (in)      h - Layer thickness, in m or kg m-2.
+!  (in)      diag - A structure that is used to regulate diagnostic output.
 !  (in)      OBC - This open boundary condition type specifies whether, where,
 !                  and what open boundary conditions are used.
 !  (in/out)  CS - The control structure returned by a previous call to
@@ -404,11 +405,12 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, GV, h, OBC, CS, sponge_CSp, &
   integer :: IsdB, IedB, JsdB, JedB
 
   if (.not.associated(CS)) return
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   CS%Time => day
+  CS%diag => diag
 
   if (.not.restart .or. (CS%tracers_may_reinit .and. &
       .not.query_initialized(CS%CFC11, CS%CFC11_name, CS%restart_CSp))) &
@@ -562,7 +564,7 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
   real, pointer, dimension(:,:,:) :: CFC11, CFC12
   integer :: i, j, k, is, ie, js, je, nz, m
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not.associated(CS)) return
   
@@ -639,7 +641,7 @@ function OCMIP2_CFC_stock(h, stocks, G, GV, CS, names, units, stock_index)
 
   real :: mass
   integer :: i, j, k, is, ie, js, je, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   OCMIP2_CFC_stock = 0
   if (.not.associated(CS)) return
@@ -694,9 +696,9 @@ subroutine OCMIP2_CFC_surface_state(state, h, G, CS)
   real :: alpha_12  ! The solubility of CFC 12 in mol m-3 pptv-1.
   real :: sc_11, sc_12 ! The Schmidt numbers of CFC 11 and CFC 12.
   real :: sc_no_term   ! A term related to the Schmidt number.
-  integer :: i, j, k, is, ie, js, je, nz, m
+  integer :: i, j, k, is, ie, js, je, m
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
   if (.not.associated(CS)) return
 
