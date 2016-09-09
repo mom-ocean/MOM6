@@ -129,6 +129,7 @@ use MOM_offline_transport,         only : offline_transport_CS
 use MOM_offline_transport,         only : transport_by_files, next_modulo_time, post_advection_fields
 use MOM_offline_transport,         only : offline_transport_init, register_diags_offline_transport
 use MOM_offline_transport,         only : limit_mass_flux_3d, update_h_horizontal_flux, update_h_vertical_flux
+use MOM_offline_transport,         only : limit_mass_flux_ordered_3d
 use time_manager_mod,              only : print_date
 use MOM_sum_output,                only : write_energy
 
@@ -1440,7 +1441,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         h_vol, &
         h_pre, &
         h_temp, &
-        temp_old, salt_old     !
+        temp_old, salt_old, &
+        ea_zero, eb_zero     !
     integer                                        :: niter, iter
     real                                           :: Inum_iter, dt_iter
     integer :: i, j, k, m, is, ie, js, je, isd, ied, jsd, jed, nz
@@ -1641,14 +1643,20 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       call call_tracer_column_fns(h_pre, h_new, eatr*0.5, ebtr*0.5, fluxes, &
            CS%offline_CSp%dt_offline*0.5, G, GV, CS%tv, CS%diabatic_CSp%optics, CS%tracer_flow_CSp)
 
+      ea_zero(:,:,:) = 0.0 ; eb_zero(:,:,:) = 0.0
       do iter=1,CS%offline_CSp%num_off_iter
+
+        uhtr_sub(:,:,:) = uhtr(:,:,:)
+        vhtr_sub(:,:,:) = vhtr(:,:,:)
+        call limit_mass_flux_ordered_3d(G, GV, uhtr_sub, vhtr_sub, eatr, ebtr, h_pre, CS%offline_CSp%max_off_cfl, &
+            z_first, x_before_y)
+
         ! Perform zonal and meridional advection
         do k = 1, nz ; do i = is-1, ie+1 ; do j=js-1, je+1
           h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
         enddo; enddo; enddo
         call advect_tracer(h_pre, uhtr, vhtr, CS%OBC, dt_iter, G, GV, &
-             CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=100, x_first_in=x_before_y, &
-             uhr_out=uhtr_sub, vhr_out=vhtr_sub)
+             CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=100, x_first_in=x_before_y)
         x_before_y = .not. x_before_y
         ! Advect tracer returns how much horizontal flux remains, thus the total amount of horizontal
         ! actually done in this time step is uhtr-uhtr_sub and vhtr-vhtr_sub. This is needed to
