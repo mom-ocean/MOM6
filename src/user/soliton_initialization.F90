@@ -44,7 +44,7 @@ subroutine soliton_initialize_thickness(h, G)
   call MOM_mesg("soliton_initialization.F90, soliton_initialize_thickness: setting thickness")
 
   x0 = 2.0*G%len_lon/3.0
-  y0 = 0.5*G%len_lat
+  y0 = 0.0
   val1 = 0.395
   val2 = 0.771*(val1*val1)
 
@@ -76,7 +76,7 @@ subroutine soliton_initialize_velocity(u, v, h, G)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   x0 = 2.0*G%len_lon/3.0
-  y0 = 0.5*G%len_lat
+  y0 = 0.0
   val1 = 0.395
   val2 = 0.771*(val1*val1)
 
