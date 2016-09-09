@@ -543,8 +543,8 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
           u_at_h = state%u(i,j)
           v_at_h = state%v(i,j)
 
-          fluxes%ustar_shelf(i,j)= sqrt(CS%cdrag)*sqrt(sqrt(u_at_h**2.0 + v_at_h**2.0)**2 +&
-                                                    CS%utide(i,j)**2)
+          fluxes%ustar_shelf(i,j)= sqrt(CS%cdrag*(sqrt(u_at_h**2.0 + v_at_h**2.0)**2 +&
+                                                    CS%utide(i,j)**2))
           ustar_h = MAX(CS%ustar_bg, fluxes%ustar_shelf(i,j))
 
           fluxes%ustar_shelf(i,j) = ustar_h
