@@ -137,6 +137,7 @@ subroutine find_obsolete_params(param_file)
   call obsolete_real(param_file, "RLAY_REF")
 
   call obsolete_real(param_file, "HMIX")
+  call obsolete_real(param_file, "VSTAR_SCALE_COEF")
 
   test_int = -1 ; call read_param(param_file,"ML_RADIATION_CODING",test_int)
   if (test_int == 1) call MOM_ERROR(FATAL, "find_obsolete_params: "// &
@@ -160,6 +161,8 @@ subroutine find_obsolete_params(param_file)
     call obsolete_logical(param_file, "RESCALE_BE_FACE_AREAS", .false.)
     call obsolete_logical(param_file, "APPLY_BT_DRAG", .true.)
   endif
+
+  call obsolete_int(param_file, "SEAMOUNT_LENGTH_SCALE", hint="Use SEAMOUNT_X_LENGTH_SCALE instead.")
 
   ! Write the file version number to the model log.
   call log_version(param_file, mod, version)

@@ -7,10 +7,10 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : close_file, create_file, fieldtype, file_exists
+use MOM_io, only : close_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
 use MOM_io, only : write_field, slasher, vardesc
-use MOM_variables, only : thermo_var_ptrs, ocean_OBC_type
+use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
@@ -142,7 +142,9 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, param_file)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: u  !< i-component of velocity [m/s]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: v  !< j-component of velocity [m/s]
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< Thickness [H]
-  type(param_file_type),                  intent(in)     :: param_file !< Parameter file handle
+  type(param_file_type),                  intent(in)     :: param_file !< A structure indicating the
+                                                               !! open file to parse for model
+                                                               !! parameter values.
 
   real    :: y              ! Non-dimensional coordinate across channel, 0..pi
   real    :: T_range        ! Range of salinities and temperatures over the vertical
@@ -164,7 +166,7 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, param_file)
   do j = G%jsc,G%jec ; do I = G%isc-1,G%iec+1
     f = 0.5*( G%CoriolisBu(I,j) + G%CoriolisBu(I,j-1) )
     dUdT = 0.0 ; if (abs(f) > 0.0) &
-      dUdT = ( G%g_Earth * dRho_dT ) / ( f * GV%Rho0 )
+      dUdT = ( GV%g_Earth * dRho_dT ) / ( f * GV%Rho0 )
     Dml = Hml( G, G%geoLatT(i,j) )
     Ty = dTdy( G, T_range, G%geoLatT(i,j) )
     zi = 0.

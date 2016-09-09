@@ -72,18 +72,16 @@ use MOM_domains, only : AGRID, BGRID_NE, CGRID_NE, To_All, Scalar_Pair
 use MOM_domains, only : To_North, To_South, To_East, To_West
 use MOM_domains, only : MOM_define_domain, MOM_define_IO_domain
 use MOM_domains, only : MOM_domain_type
+use MOM_dyn_horgrid, only : dyn_horgrid_type, set_derived_dyn_horgrid
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_grid, only : ocean_grid_type, set_derived_metrics
 use MOM_io, only : read_data, slasher, file_exists
 use MOM_io, only : CORNER, NORTH_FACE, EAST_FACE
 
 use mpp_domains_mod, only : mpp_get_domain_extents, mpp_deallocate_domain
 
 implicit none ; private
-
-#include <MOM_memory.h>
 
 public set_grid_metrics, initialize_masks, Adcroft_reciprocal
 
@@ -105,9 +103,9 @@ contains
 
 !> set_grid_metrics is used to set the primary values in the model's horizontal
 !!   grid.  The bathymetry, land-sea mask and any restricted channel widths are
-!!   not know yet, so these are set later.
+!!   not known yet, so these are set later.
 subroutine set_grid_metrics(G, param_file)
-  type(ocean_grid_type), intent(inout) :: G           !< The horizontal grid structure
+  type(dyn_horgrid_type), intent(inout) :: G          !< The dynamic horizontal grid type
   type(param_file_type), intent(in)    :: param_file  !< Parameter file structure
 ! Arguments:
 !  (inout)   G - The ocean's grid structure.
@@ -155,7 +153,7 @@ subroutine set_grid_metrics(G, param_file)
 
 ! Calculate derived metrics (i.e. reciprocals and products)
   call callTree_enter("set_derived_metrics(), MOM_grid_initialize.F90")
-  call set_derived_metrics(G)
+  call set_derived_dyn_horgrid(G)
   call callTree_leave("set_derived_metrics()")
 
   if (debug) call grid_metrics_chksum('MOM_grid_init/set_grid_metrics',G)
@@ -169,7 +167,7 @@ end subroutine set_grid_metrics
 !!   debugging.
 subroutine grid_metrics_chksum(parent, G)
   character(len=*),      intent(in) :: parent  !< A string identifying the caller
-  type(ocean_grid_type), intent(in) :: G       !< The horizontal grid structure
+  type(dyn_horgrid_type), intent(in) :: G      !< The dynamic horizontal grid type
 
   real, dimension(G%isd :G%ied ,G%jsd :G%jed ) :: tempH
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB) :: tempQ
@@ -186,94 +184,95 @@ subroutine grid_metrics_chksum(parent, G)
 halo=1 ! AJA
 
   do i=isd,ied ; do j=jsd,jed ; tempH(i,j) = G%dxT(i,j) ; enddo ; enddo
-  call hchksum(tempH,trim(parent)//': dxT',G,haloshift=halo)
+  call hchksum(tempH,trim(parent)//': dxT',G%HI, haloshift=halo)
 
   do I=IsdB,IedB ; do j=jsd,jed ; tempE(I,j) = G%dxCu(I,j) ; enddo ; enddo
-  call uchksum(tempE,trim(parent)//': dxCu',G,haloshift=halo)
+  call uchksum(tempE,trim(parent)//': dxCu',G%HI, haloshift=halo)
 
   do i=isd,ied ; do J=JsdB,JedB ; tempN(i,J) = G%dxCv(i,J) ; enddo ; enddo
-  call vchksum(tempN,trim(parent)//': dxCv',G,haloshift=halo)
+  call vchksum(tempN,trim(parent)//': dxCv',G%HI, haloshift=halo)
  
   do I=IsdB,IedB ; do J=JsdB,JedB ; tempQ(I,J) = G%dxBu(I,J) ; enddo ; enddo
-  call qchksum(tempQ,trim(parent)//': dxBu',G,haloshift=halo)
+  call qchksum(tempQ,trim(parent)//': dxBu',G%HI, haloshift=halo)
  
   do i=isd,ied ; do j=jsd,jed ; tempH(i,j) = G%dyT(i,j) ; enddo ; enddo
-  call hchksum(tempH,trim(parent)//': dyT',G,haloshift=halo)
+  call hchksum(tempH,trim(parent)//': dyT',G%HI, haloshift=halo)
  
   do I=IsdB,IedB ; do j=jsd,jed ; tempE(I,j) = G%dyCu(I,j) ; enddo ; enddo
-  call uchksum(tempE,trim(parent)//': dyCu',G,haloshift=halo)
+  call uchksum(tempE,trim(parent)//': dyCu',G%HI, haloshift=halo)
  
   do i=isd,ied ; do J=JsdB,JedB ; tempN(i,J) = G%dyCv(i,J) ; enddo ; enddo
-  call vchksum(tempN,trim(parent)//': dyCv',G,haloshift=halo)
+  call vchksum(tempN,trim(parent)//': dyCv',G%HI, haloshift=halo)
  
   do I=IsdB,IedB ; do J=JsdB,JedB ; tempQ(I,J) = G%dyBu(I,J) ; enddo ; enddo
-  call qchksum(tempQ,trim(parent)//': dyBu',G,haloshift=halo)
+  call qchksum(tempQ,trim(parent)//': dyBu',G%HI, haloshift=halo)
 
   do i=isd,ied ; do j=jsd,jed ; tempH(i,j) = G%IdxT(i,j) ; enddo ; enddo
-  call hchksum(tempH,trim(parent)//': IdxT',G,haloshift=halo)
+  call hchksum(tempH,trim(parent)//': IdxT',G%HI, haloshift=halo)
 
   do I=IsdB,IedB ; do j=jsd,jed ; tempE(I,j) = G%IdxCu(I,j) ; enddo ; enddo
-  call uchksum(tempE,trim(parent)//': IdxCu',G,haloshift=halo)
+  call uchksum(tempE,trim(parent)//': IdxCu',G%HI, haloshift=halo)
  
   do i=isd,ied ; do J=JsdB,JedB ; tempN(i,J) = G%IdxCv(i,J) ; enddo ; enddo
-  call vchksum(tempN,trim(parent)//': IdxCv',G,haloshift=halo)
+  call vchksum(tempN,trim(parent)//': IdxCv',G%HI, haloshift=halo)
  
   do I=IsdB,IedB ; do J=JsdB,JedB ; tempQ(I,J) = G%IdxBu(I,J) ; enddo ; enddo
-  call qchksum(tempQ,trim(parent)//': IdxBu',G,haloshift=halo)
+  call qchksum(tempQ,trim(parent)//': IdxBu',G%HI, haloshift=halo)
 
   do i=isd,ied ; do j=jsd,jed ; tempH(i,j) = G%IdyT(i,j) ; enddo ; enddo
-  call hchksum(tempH,trim(parent)//': IdyT',G,haloshift=halo)
+  call hchksum(tempH,trim(parent)//': IdyT',G%HI, haloshift=halo)
  
   do I=IsdB,IedB ; do j=jsd,jed ; tempE(I,j) = G%IdyCu(I,j) ; enddo ; enddo
-  call uchksum(tempE,trim(parent)//': IdyCu',G,haloshift=halo)
+  call uchksum(tempE,trim(parent)//': IdyCu',G%HI, haloshift=halo)
  
   do i=isd,ied ; do J=JsdB,JedB ; tempN(i,J) = G%IdyCv(i,J) ; enddo ; enddo
-  call vchksum(tempN,trim(parent)//': IdyCv',G,haloshift=halo)
+  call vchksum(tempN,trim(parent)//': IdyCv',G%HI, haloshift=halo)
  
   do I=IsdB,IedB ; do J=JsdB,JedB ; tempQ(I,J) = G%IdyBu(I,J) ; enddo ; enddo
-  call qchksum(tempQ,trim(parent)//': IdyBu',G,haloshift=halo)
+  call qchksum(tempQ,trim(parent)//': IdyBu',G%HI, haloshift=halo)
 
   do i=isd,ied ; do j=jsd,jed ; tempH(i,j) = G%areaT(i,j) ; enddo ; enddo
-  call hchksum(tempH,trim(parent)//': areaT',G,haloshift=halo)
+  call hchksum(tempH,trim(parent)//': areaT',G%HI, haloshift=halo)
  
   do I=IsdB,IedB ; do J=JsdB,JedB ; tempQ(I,J) = G%areaBu(I,J) ; enddo ; enddo
-  call qchksum(tempQ,trim(parent)//': areaBu',G,haloshift=halo)
+  call qchksum(tempQ,trim(parent)//': areaBu',G%HI, haloshift=halo)
  
   do i=isd,ied ; do j=jsd,jed ; tempH(i,j) = G%IareaT(i,j) ; enddo ; enddo
-  call hchksum(tempH,trim(parent)//': IareaT',G,haloshift=halo)
+  call hchksum(tempH,trim(parent)//': IareaT',G%HI, haloshift=halo)
  
   do I=IsdB,IedB ; do J=JsdB,JedB ; tempQ(I,J) = G%IareaBu(I,J) ; enddo ; enddo
-  call qchksum(tempQ,trim(parent)//': IareaBu',G,haloshift=halo)
+  call qchksum(tempQ,trim(parent)//': IareaBu',G%HI, haloshift=halo)
 
-  call hchksum(G%geoLonT,trim(parent)//': geoLonT',G,haloshift=halo)
+  call hchksum(G%geoLonT,trim(parent)//': geoLonT',G%HI, haloshift=halo)
 
-  call hchksum(G%geoLatT,trim(parent)//': geoLatT',G,haloshift=halo)
+  call hchksum(G%geoLatT,trim(parent)//': geoLatT',G%HI, haloshift=halo)
 
   do I=IsdB,IedB ; do J=JsdB,JedB ; tempQ(I,J) = G%geoLonBu(I,J) ; enddo ; enddo
-  call qchksum(tempQ,trim(parent)//': geoLonBu',G,haloshift=halo)
+  call qchksum(tempQ,trim(parent)//': geoLonBu',G%HI, haloshift=halo)
 
   do I=IsdB,IedB ; do J=JsdB,JedB ; tempQ(I,J) = G%geoLatBu(I,J) ; enddo ; enddo
-  call qchksum(tempQ,trim(parent)//': geoLatBu',G,haloshift=halo)
+  call qchksum(tempQ,trim(parent)//': geoLatBu',G%HI, haloshift=halo)
 
   do I=IsdB,IedB ; do j=jsd,jed ; tempE(I,J) = G%geoLonCu(I,J) ; enddo ; enddo
-  call uchksum(tempE,trim(parent)//': geoLonCu',G,haloshift=halo)
+  call uchksum(tempE,trim(parent)//': geoLonCu',G%HI, haloshift=halo)
 
   do I=IsdB,IedB ; do j=jsd,jed ; tempE(I,J) = G%geoLatCu(I,J) ; enddo ; enddo
-  call uchksum(tempE,trim(parent)//': geoLatCu',G,haloshift=halo)
+  call uchksum(tempE,trim(parent)//': geoLatCu',G%HI, haloshift=halo)
 
   do i=isd,ied ; do J=JsdB,JedB ; tempN(I,J) = G%geoLonCv(I,J) ; enddo ; enddo
-  call vchksum(tempN,trim(parent)//': geoLonCv',G,haloshift=halo)
+  call vchksum(tempN,trim(parent)//': geoLonCv',G%HI, haloshift=halo)
 
   do i=isd,ied ; do J=JsdB,JedB ; tempN(I,J) = G%geoLatCv(I,J) ; enddo ; enddo
-  call vchksum(tempN,trim(parent)//': geoLatCv',G,haloshift=halo)
+  call vchksum(tempN,trim(parent)//': geoLatCv',G%HI, haloshift=halo)
 
 end subroutine grid_metrics_chksum
 
 ! ------------------------------------------------------------------------------
 
-subroutine set_grid_metrics_from_mosaic(G,param_file)
-  type(ocean_grid_type), intent(inout) :: G
-  type(param_file_type), intent(in)    :: param_file
+!>  set_grid_metrics_from_mosaic sets the grid metrics from a mosaic file.
+subroutine set_grid_metrics_from_mosaic(G, param_file)
+  type(dyn_horgrid_type), intent(inout) :: G           !< The dynamic horizontal grid type
+  type(param_file_type), intent(in)     :: param_file  !< Parameter file structure
 !   This subroutine sets the grid metrics from a mosaic file.
 !  
 ! Arguments:
@@ -511,8 +510,9 @@ end subroutine set_grid_metrics_from_mosaic
 ! ------------------------------------------------------------------------------
 
 subroutine set_grid_metrics_cartesian(G, param_file)
-  type(ocean_grid_type), intent(inout) :: G
-  type(param_file_type), intent(in)    :: param_file
+  type(dyn_horgrid_type), intent(inout) :: G           !< The dynamic horizontal grid type
+  type(param_file_type), intent(in)     :: param_file  !< Parameter file structure
+
 ! Arguments:
 !  (inout)   G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
@@ -646,8 +646,9 @@ end subroutine set_grid_metrics_cartesian
 ! ------------------------------------------------------------------------------
 
 subroutine set_grid_metrics_spherical(G, param_file)
-  type(ocean_grid_type), intent(inout) :: G
-  type(param_file_type), intent(in)    :: param_file
+  type(dyn_horgrid_type), intent(inout) :: G           !< The dynamic horizontal grid type
+  type(param_file_type), intent(in)     :: param_file  !< Parameter file structure
+
 ! Arguments:
 !  (inout)   G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
@@ -785,8 +786,9 @@ end subroutine set_grid_metrics_spherical
 ! ------------------------------------------------------------------------------
 
 subroutine set_grid_metrics_mercator(G, param_file)
-  type(ocean_grid_type), intent(inout) :: G
-  type(param_file_type), intent(in)    :: param_file
+  type(dyn_horgrid_type), intent(inout) :: G           !< The dynamic horizontal grid type
+  type(param_file_type), intent(in)     :: param_file  !< Parameter file structure
+
 ! Arguments:
 !  (inout)   G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
@@ -1087,7 +1089,7 @@ function find_root( fn, dy_df, GP, fnval, y1, ymin, ymax, ittmax)
 ! used to polish the root.
   real :: ybot, ytop, fnbot, fntop
   integer :: itt
-  character(len =256) :: warnmesg
+  character(len=256) :: warnmesg
 
   real :: dy_dfn, dy, fny
 
@@ -1327,12 +1329,8 @@ end function Adcroft_reciprocal
 !> initialize_masks initializes the grid masks and any metrics that come
 !!    with masks already applied.
 subroutine initialize_masks(G, PF)
-  type(ocean_grid_type), intent(inout) :: G  !< The ocean's grid structure
-  type(param_file_type), intent(in)    :: PF !< The param_file handle
-! Arguments:
-!  (inout)   G - The ocean's grid structure.
-!  (in)      PF - A structure indicating the open file to parse for
-!                 model parameter values.
+  type(dyn_horgrid_type), intent(inout) :: G   !< The dynamic horizontal grid type
+  type(param_file_type), intent(in)     :: PF  !< Parameter file structure
 
 !    Initialize_masks sets mask2dT, mask2dCu, mask2dCv, and mask2dBu to mask out
 ! flow over any points which are shallower than Dmin and permit an
@@ -1342,10 +1340,8 @@ subroutine initialize_masks(G, PF)
 ! mask2dCv, and mask2dBu are all 1.0.
 
   real :: Dmin, min_depth, mask_depth
-  integer :: i, j
-  logical :: apply_OBC_u_flather_east, apply_OBC_u_flather_west
-  logical :: apply_OBC_v_flather_north, apply_OBC_v_flather_south
   character(len=40)  :: mod = "MOM_grid_init initialize_masks"
+  integer :: i, j
 
   call callTree_enter("initialize_masks(), MOM_grid_initialize.F90")
   call get_param(PF, mod, "MINIMUM_DEPTH", min_depth, &
@@ -1358,65 +1354,13 @@ subroutine initialize_masks(G, PF)
                  "The depth below which to mask points as land points, for which all\n"//&
                  "fluxes are zeroed out. MASKING_DEPTH is ignored if negative.", &
                  units="m", default=-9999.0)
-  call get_param(PF, mod, "APPLY_OBC_U_FLATHER_EAST", apply_OBC_u_flather_east,&
-                 "Apply a Flather open boundary condition on the eastern \n"//&
-                 "side of the global domain", default=.false.)
-  call get_param(PF, mod, "APPLY_OBC_U_FLATHER_WEST", apply_OBC_u_flather_west,&
-                 "Apply a Flather open boundary condition on the western \n"//&
-                 "side of the global domain", default=.false.)
-  call get_param(PF, mod, "APPLY_OBC_V_FLATHER_NORTH", apply_OBC_v_flather_north,&
-                 "Apply a Flather open boundary condition on the northern \n"//&
-                 "side of the global domain", default=.false.)
-  call get_param(PF, mod, "APPLY_OBC_V_FLATHER_SOUTH", apply_OBC_v_flather_south,&
-                 "Apply a Flather open boundary condition on the southern \n"//&
-                 "side of the global domain", default=.false.)
-
-  if ((apply_OBC_u_flather_west .or. apply_OBC_v_flather_south) .and. &
-      .not.G%symmetric ) &
-    call MOM_error(FATAL, "Symmetric memory must be used when "//&
-      "APPLY_OBC_U_FLATHER_WEST or APPLY_OBC_V_FLATHER_SOUTH is true.")
 
   Dmin = min_depth
   if (mask_depth>=0.) Dmin = mask_depth
 
-  call pass_var(G%bathyT, G%Domain)
   G%mask2dCu(:,:) = 0.0 ; G%mask2dCv(:,:) = 0.0 ; G%mask2dBu(:,:) = 0.0
 
-  ! Extrapolate the bottom depths at any points that are subject to Flather
-  ! open boundary conditions.  This should be generalized for Flather OBCs
-  ! that are not necessarily at the edges of the domain.
-  if (apply_OBC_u_flather_west) then
-    do j=G%jsd,G%jed ; do I=G%isd+1,G%ied
-      if ((I+G%idg_offset) == G%isg) then
-        G%bathyT(i-1,j) = G%bathyT(i,j)
-      endif
-    enddo; enddo       
-  endif
-
-  if (apply_OBC_u_flather_east) then
-    do j=G%jsd,G%jed ; do I=G%isd,G%ied-1
-      if ((i+G%idg_offset) == G%ieg) then
-        G%bathyT(i+1,j) = G%bathyT(i,j)
-      endif
-    enddo; enddo    
-  endif
-
-  if (apply_OBC_v_flather_north) then
-    do J=G%jsd,G%jed-1 ; do i=G%isd,G%ied
-      if ((j+G%jdg_offset) == G%jeg) then
-        G%bathyT(i,j+1) = G%bathyT(i,j)
-      endif
-    enddo; enddo    
-  endif
-
-  if (apply_OBC_v_flather_south) then
-    do J=G%jsd+1,G%jed ; do i=G%isd,G%ied
-      if ((J+G%jdg_offset) == G%jsg) then
-        G%bathyT(i,j-1) = G%bathyT(i,j)
-      endif
-    enddo; enddo
-  endif
-
+  ! Construct the h-point or T-point mask
   do j=G%jsd,G%jed ; do i=G%isd,G%ied
     if (G%bathyT(i,j) <= Dmin) then
       G%mask2dT(i,j) = 0.0
@@ -1450,6 +1394,7 @@ subroutine initialize_masks(G, PF)
     endif
   enddo ; enddo
 
+  call pass_var(G%mask2dBu, G%Domain, position=CORNER)
   call pass_vector(G%mask2dCu, G%mask2dCv, G%Domain, To_All+Scalar_Pair, CGRID_NE)
 
   do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
