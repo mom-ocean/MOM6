@@ -45,7 +45,7 @@ module MOM_offline_transport
   use data_override_mod,  only : data_override_init, data_override
   use MOM_time_manager,   only : time_type
   use MOM_domains,        only : pass_var, pass_vector, To_All
-  use MOM_error_handler,  only : callTree_enter, callTree_leave, MOM_error, WARNING, is_root_pe
+  use MOM_error_handler,  only : callTree_enter, callTree_leave, MOM_error, FATAL, WARNING, is_root_pe
   use MOM_grid,           only : ocean_grid_type
   use MOM_verticalGrid,   only : verticalGrid_type
   use MOM_io,             only : read_data
@@ -614,7 +614,7 @@ contains
     integer :: i, j, k, m, is, ie, js, je, nz
     real, dimension(SZI_(G),SZJ_(G),SZK_(G))                    :: h_budget ! Tracks how much thickness
                                                                             ! remains for other fluxes
-    integer                                                     :: flux_order
+    integer                                                     :: flux_order = -1
     ! In this subroutine, fluxes out of the box are scaled down if they deplete
     ! the layer. Here the positive direction is defined as flux out of the box as opposed to the
     ! typical, strictly upwind convention. Hence, uh(I-1) is multipled by negative one,
@@ -630,9 +630,11 @@ contains
     !   4: y -> x -> z
 
     ! Set index-related variables for fields on T-grid
-    is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
+    is  = G%isd ; ie  = G%ied ; js  = G%jsd ; je  = G%jed ; nz = GV%ke
     ! Copy layer thicknesses into a working array for this subroutine
-    h_budget(:,:,:) = h_in(:,:,:)
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      h_budget(i,j,k) = h_in(i,j,k)*G%areaT(i,j)
+    enddo ; enddo ; enddo
 
     ! Set the flux order (corresponding to one of the four cases described previously)
     if (z_first .and. x_before_y)                 flux_order = 1
@@ -658,6 +660,8 @@ contains
         call flux_limiter_v(G, GV, h_budget, vh, max_off_cfl)
         call flux_limiter_u(G, GV, h_budget, uh, max_off_cfl)
         call flux_limiter_vertical(G, GV, h_budget, ea, eb, max_off_cfl)
+      case default
+        call MOM_error(FATAL, "Invalid choice of flux_order")
     end select
 
   end subroutine limit_mass_flux_ordered_3d
@@ -677,7 +681,7 @@ contains
     integer :: i, j, k, m, is, ie, js, je, nz
 
     ! Set index-related variables for fields on T-grid
-    is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
+    is  = G%isd ; ie  = G%ied ; js  = G%jsd ; je  = G%jed ; nz = GV%ke
 
     do j=js,je
       do k=1,nz ; do i=is,ie
@@ -704,12 +708,11 @@ contains
       enddo
 
       do k=1,nz ; do i=is,ie
-        if (G%mask2dT(i,j)>0.0) then
-          h_budget = h(i,j,k)*max_off_cfl ! How much the layer can be depleted in any given step
-                                          ! based on the specified max CFL
-          total_out_flux = max(0.0,top_flux(i,k)) + max(0.0, bottom_flux(i,k))
-          if (total_out_flux>h_budget) scale(i,k) = h_budget/total_out_flux
-        endif
+        h_budget = h2d(i,k)*max_off_cfl ! How much the layer can be depleted in any given step
+                                        ! based on the specified max CFL
+        total_out_flux = (max(0.0,top_flux(i,k)) + max(0.0, bottom_flux(i,k)))*G%areaT(i,j)
+        if (total_out_flux>h_budget) scale(i,k) = h_budget/total_out_flux
+        if (scale(j,k)>1.0) call MOM_error(FATAL, "scale(j,k) is larger than 1")
       enddo ; enddo
 
       k=1
@@ -749,23 +752,20 @@ contains
       do i=is,ie
         top_flux(i,k) = -ea2d(i,k)
         bottom_flux(i,k) = -(eb2d(i,k)-ea2d(i,k+1))
-        h2d(i,k) = -top_flux(i,k) - bottom_flux(i,k)
       enddo
       ! Interior layers
       do k=2, nz-1 ; do i=is,ie
         top_flux(i,k) = -(ea2d(i,k)-eb2d(i,k-1))
         bottom_flux(i,k) = -(eb2d(i,k)-ea2d(i,k+1))
-        h2d(i,k) = -top_flux(i,k) - bottom_flux(i,k)
       enddo ; enddo
       k=nz ! Bottom layer
       do i=is,ie
         top_flux(i,k) = -(ea2d(i,k)-eb2d(i,k-1))
         bottom_flux(i,k) = -eb2d(i,k)
-        h2d(i,k) = -top_flux(i,k) - bottom_flux(i,k)
       enddo
 
       do k=1,nz ; do i=is,ie
-        h(i,j,k)  = h2d(i,k)
+        h(i,j,k)  = h2d(i,k) - (top_flux(i,k)+bottom_flux(i,k))*G%areaT(i,j)
         ea(i,j,k) = ea2d(i,k)
         eb(i,j,k) = eb2d(i,k)
       enddo; enddo
@@ -781,38 +781,46 @@ contains
     real                                                        :: max_off_cfl
     ! Limits how much the a layer can be depleted in the vertical direction
     real, dimension(SZIB_(G),SZK_(G))                           :: uh2d
-    real, dimension(SZI_(G),SZK_(G))                            :: h2d, scale
-    real                                                        :: total_out_flux, h_budget
+    real, dimension(SZI_(G),SZK_(G))                            :: h_budget2d, uh_div
+    real                                                        :: scale_factor
     integer :: i, j, k, m, is, ie, js, je, nz
 
     ! Set index-related variables for fields on T-grid
-    is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
+    is  = G%IsdB ; ie  = G%IedB ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
 
     do j=js,je
-      do k=1,nz ; do i=is-1,ie
+      do k=1,nz ; do i=is,ie
         uh2d(i,k) = uh(i,j,k)
-        h2d(i,k) = h(i,j,k)
-        scale(i,k) = 1.0
+        h_budget2d(i,k) = h(i,j,k)*max_off_cfl
       enddo ; enddo;
 
-      do k=1,nz ; do i=is,ie
-        if (G%mask2dT(i,j)>0.0) then
-          h_budget = h(i,j,k)*max_off_cfl ! How much the layer can be depleted in any given step
-                                          ! based on the specified max CFL
-          total_out_flux = max(0.0,-uh2d(I-1,k)) + max(0.0, uh2d(I,k))
-                                          ! -1 on uh(I-1) because flow is positive into the cell
-          if (total_out_flux>h_budget) scale(i,k) = h_budget/total_out_flux
+      do k=1,nz ; do i=is+1,ie
+        uh_div(i,k) = uh2d(I-1,k) - uh2d(I,k)
+      enddo ; enddo
 
-          ! Scale back the outgoing flux(es)
-          if(-uh2d(I-1,k)>0.0) uh2d(I-1,k) = uh2d(I-1,k)*scale(i,k)
-          if( uh2d(I,k)>0.0)   uh2d(I,k)   = uh2d(I,k)*scale(i,k)
-          h2d(i,k) = h2d(i,k) + ( uh2d(I-1,k)-uh2d(I,k) )
+      do k=1,nz ; do i=is+1,ie
+        ! Check to see if the uh-divergence will deplete the layer
+        if(uh_div(i,k)>h_budget2d(i,k)) then
+          scale = h_budget2d(i,k)/uh_div(i,k)
+
+          ! Three divergent cases
+          ! <-- , -->
+          if( uh2d(I-1,k)<0.0 .and. uh2d(I,k)>0.0 ) then
+            uh2d(I-1,k) = uh2d(I-1,k)*scale
+            uh2d(I,k) = uh2d(I,k)*scale
+          ! <-- , <--
+          elseif( uh2d(I-1,k)<0.0 .and. uh2d(I,k)<0.0 )
+            uh2d(I-1,k) = uh2d(I-1,k)*scale
+          ! --> , -->
+          elseif( uh2d(I-1,k)>0.0 .and. uh2d(I,k)>0.0)
+            uh2d(I,k) = uh2d(I,k)*scale
+          endif
         endif
       enddo ; enddo
 
-      do k=1,nz ; do i=is-1,ie
+      do k=1,nz ; do i=is,ie
         uh(I,j,k) = uh2d(I,k)
-        h(i,j,k) = h2d(i,k)
+        h(i,j,k) = h2d(i,k) + ( uh2d(I-1,k)-uh2d(I,k) )
       enddo ; enddo
     enddo
 
@@ -831,32 +839,29 @@ contains
     integer :: i, j, k, m, is, ie, js, je, nz
 
     ! Set index-related variables for fields on T-grid
-    is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
+    is  = G%isd ; ie  = G%ied ; js  = G%jsdB ; je  = G%jedB ; nz = GV%ke
 
     do i=is,ie
-      do k=1,nz ; do j=js-1,je
-        vh2d(j,k) = vh(i,j,k)
-        h2d(j,k) = h(i,j,k)
+      do k=1,nz ; do j=js,je
+        vh2d(J,k) = vh(i,J,k)
+        h2d(j,k) = h(i,j,k)*G%areaT(i,j)
         scale(j,k) = 1.0
       enddo ; enddo;
 
-      do k=1,nz ; do j=js,je
-        if (G%mask2dT(i,j)>0.0) then
-          h_budget = h(i,j,k)*max_off_cfl ! How much the layer can be depleted in any given step
-                                          ! based on the specified max CFL
-          total_out_flux = max(0.0,-vh2d(J-1,k)) + max(0.0, vh2d(J,k))
-                                          ! -1 on uh(I-1) because flow is positive into the cell
-          if (total_out_flux>h_budget) scale(j,k) = h_budget/total_out_flux
-        endif
+      do k=1,nz ; do j=js+1,je
+        h_budget = h2d(j,k)*max_off_cfl ! How much the layer can be depleted in any given step
+                                        ! based on the specified max CFL
+        total_out_flux = vh2d(J-1,k) - vh2d(J,k)
+        if (total_out_flux>h_budget) scale(j,k) = h_budget/total_out_flux
         ! Scale back the outgoing flux(es)
         if(-vh2d(J-1,k)>0.0) vh2d(J-1,k) = vh2d(J-1,k)*scale(j,k)
         if( vh2d(J,k)>0.0)   vh2d(J,k)   = vh2d(J,k)*scale(j,k)
         h2d(j,k) = h2d(j,k) + ( vh2d(J-1,k)-vh2d(J,k) )
       enddo ; enddo
 
-      do k=1,nz ; do j=js-1,je
-        vh(I,j,k) = vh2d(J,k)
-        h(i,j,k)  = h2d(j,k)
+      do k=1,nz ; do j=js,je
+        vh(i,J,k) = vh2d(J,k)
+        h(i,j,k)  = h2d(j,k)*G%IareaT(i,j)
       enddo ; enddo
     enddo
   end subroutine flux_limiter_v

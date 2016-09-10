@@ -419,7 +419,7 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt)
 
   if (CS%show_call_tree) call callTree_leave("ALE_main()")
 
-  if (present(dt)) call post_data(CS%id_dzRegrid, dzRegrid, CS%diag)
+  !if (CS%id_dzRegrid>0) call post_data(CS%id_dzRegrid, dzRegrid, CS%diag)
 
 
 end subroutine ALE_main
