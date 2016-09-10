@@ -437,7 +437,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
                                     ! positive upward, in m.
   real :: min_depth, dummy1, z, delta_h
   real :: damp, rho_dummy, min_thickness, rho_tmp, xi0
-  character(len=40) :: verticalCoordinate, filename, state_file_t, state_file_s
+  character(len=40) :: verticalCoordinate, filename, state_file
   character(len=40) :: temp_var, salt_var, eta_var, inputdir
 
   character(len=40)  :: mod = "ISOMIP_initialize_sponges" ! This subroutine's name.
@@ -604,18 +604,14 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
        ! 1) Read eta, salt and temp from IC file
        call get_param(PF, mod, "INPUTDIR", inputdir, default=".")
        inputdir = slasher(inputdir)
-       ! GM: get twp different files, one with temp and one with salt values
+       ! GM: get two different files, one with temp and one with salt values
        ! this is work around to avoid having wrong values near the surface
        ! because of the FIT_SALINITY option. To get salt values right in the
        ! sponge, FIT_SALINITY=False. The oposite is true for temp. One can 
        ! combined the *correct* temp and salt values in one file instead.
-       call get_param(PF, mod, "ISOMIP_SPONGE_FILE_TEMP", state_file_t, &
-                 "The name of the file with temperatures and interfaces to \n"// &
+       call get_param(PF, mod, "ISOMIP_SPONGE_FILE", state_file, &
+                 "The name of the file with temps., salts. and interfaces to \n"// &
                  " damp toward.", fail_if_missing=.true.)
-       call get_param(PF, mod, "ISOMIP_SPONGE_FILE_SALT", state_file_s, &
-                 "The name of the file with salinities and interfaces to \n"// &
-                 " damp toward.", fail_if_missing=.true.)
-
        call get_param(PF, mod, "SPONGE_PTEMP_VAR", temp_var, &
                  "The name of the potential temperature variable in \n"//&
                  "SPONGE_STATE_FILE.", default="Temp")
@@ -627,16 +623,11 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
                  "SPONGE_STATE_FILE.", default="eta")
        
        !read temp and eta
-       filename = trim(inputdir)//trim(state_file_t)
+       filename = trim(inputdir)//trim(state_file)
        if (.not.file_exists(filename, G%Domain)) &
           call MOM_error(FATAL, " ISOMIP_initialize_sponges: Unable to open "//trim(filename))
        call read_data(filename,eta_var,eta(:,:,:), domain=G%Domain%mpp_domain)
        call read_data(filename,temp_var,T(:,:,:), domain=G%Domain%mpp_domain)
-      
-       ! read salt
-       filename = trim(inputdir)//trim(state_file_s)
-       if (.not.file_exists(filename, G%Domain)) &
-          call MOM_error(FATAL, " ISOMIP_initialize_sponges: Unable to open "//trim(filename))
        call read_data(filename,salt_var,S(:,:,:), domain=G%Domain%mpp_domain)
 
        ! for debugging
