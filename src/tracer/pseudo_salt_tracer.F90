@@ -92,7 +92,7 @@ type p3d
 end type p3d
 
 type, public :: pseudo_salt_tracer_CS ; private
-  integer :: ntr    ! The number of tracers that are actually used.
+  integer :: ntr=NTR_MAX    ! The number of tracers that are actually used.
   logical :: coupled_tracers = .false.  ! These tracers are not offered to the
                                         ! coupler.
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
@@ -170,7 +170,8 @@ function register_pseudo_salt_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   do m=1,CS%ntr
     ! This is needed to force the compiler not to do a copy in the registration
     ! calls.  Curses on the designers and implementers of Fortran90.
-    CS%tr_desc(m) = var_desc("pseudo_salt", "kg", "Pseudo salt passive tracer", caller=mod)
+    CS%tr_desc(m) = var_desc("pseudo_salt_diff", "kg", &
+        "Difference between pseudo salt passive tracer and salt tracer", caller=mod)
     tr_ptr => CS%tr(:,:,:,m)
     call query_vardesc(CS%tr_desc(m), name=var_name, caller="register_pseudo_salt_tracer")
     ! Register the tracer for the restart file.
@@ -253,7 +254,7 @@ subroutine initialize_pseudo_salt_tracer(restart, day, G, GV, h, diag, OBC, CS, 
       enddo ; enddo ; enddo
     endif
   enddo ! Tracer loop
-
+  
   if (associated(OBC)) then
   ! All tracers but the first have 0 concentration in their inflows. As this
   ! is the default value, the following calls are unnecessary.
@@ -354,42 +355,42 @@ subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G
   if (.not.associated(CS)) return
   if (CS%ntr < 1) return
 
+  if (debug) then
+    call hchksum(tv%S,"salt pre pseudo-salt vertdiff", G%HI) 
+    call hchksum(CS%tr(:,:,:,1),"pseudo_salt pre pseudo-salt vertdiff", G%HI) 
+  endif  
+  
   ! This uses applyTracerBoundaryFluxesInOut, usually in ALE mode
   if (present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
-
     ! The total time-integrated surface flux of salt should have been already
     ! in a previous call to extractFluxes1d calculated
-    do m=1,CS%ntr
-      call tracer_vertdiff(h_old, ea, eb, dt, CS%tr(:,:,:,m), G, GV, &
+    call tracer_vertdiff(h_old, ea, eb, dt, CS%tr(:,:,:,1), G, GV, &
           sfc_flux = fluxes%netSalt, evap_CFL_limit=evap_CFL_limit,&
           minimum_forcing_depth=minimum_forcing_depth, fluxes=fluxes, &
           convert_flux_in= .false.)
-    enddo
   else
-    do m=1,CS%ntr
-      call tracer_vertdiff(h_old, ea, eb, dt, CS%tr(:,:,:,m), G, GV)
-    enddo
+    call tracer_vertdiff(h_old, ea, eb, dt, CS%tr(:,:,:,1), G, GV)
   endif 
 
-!  if(debug) then
-    call hchksum(tv%S,"S post pseudo-salt vertdiff", G%HI) 
-    call hchksum(CS%tr(:,:,:,m),"pseudo_salt post pseudo-salt vertdiff", G%HI) 
-!  endif
+  if(debug) then
+    call hchksum(tv%S,"salt post pseudo-salt vertdiff", G%HI) 
+    call hchksum(CS%tr(:,:,:,1),"pseudo_salt post pseudo-salt vertdiff", G%HI) 
+  endif
     
   allocate(local_tr(G%isd:G%ied,G%jsd:G%jed,nz))
-  do m=1,CS%ntr
+  do m=1,1
     if (CS%id_tracer(m)>0) then
       if (CS%mask_tracers) then
         do k=1,nz ; do j=js,je ; do i=is,ie
           if (h_new(i,j,k) < 1.1*GV%Angstrom) then
             local_tr(i,j,k) = CS%land_val(m)
           else
-            local_tr(i,j,k) = CS%tr(i,j,k,m)
+            local_tr(i,j,k) = CS%tr(i,j,k,m)-tv%S(i,j,k)
           endif
         enddo ; enddo ; enddo
       else
         do k=1,nz ; do j=js,je ; do i=is,ie
-          local_tr(i,j,k) = CS%tr(i,j,k,m)
+          local_tr(i,j,k) = CS%tr(i,j,k,m)-tv%S(i,j,k)
         enddo ; enddo ; enddo
       endif ! CS%mask_tracers
       call post_data(CS%id_tracer(m),local_tr,CS%diag)
@@ -447,17 +448,18 @@ function pseudo_salt_stock(h, stocks, G, GV, CS, names, units, stock_index)
     return
   endif ; endif
 
-  do m=1,CS%ntr
+  do m=1,1
     call query_vardesc(CS%tr_desc(m), name=names(m), units=units(m), caller="pseudo_salt_stock")
     units(m) = trim(units(m))//" kg"
     stocks(m) = 0.0
     do k=1,nz ; do j=js,je ; do i=is,ie
       stocks(m) = stocks(m) + CS%tr(i,j,k,m) * &
-                             (G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k))
+                           (G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k))
     enddo ; enddo ; enddo
     stocks(m) = GV%H_to_kg_m2 * stocks(m)
-  enddo
-  pseudo_salt_stock = CS%ntr
+  enddo  
+  
+  pseudo_salt_stock = m
 
 end function pseudo_salt_stock
 
