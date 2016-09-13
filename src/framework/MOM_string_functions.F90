@@ -255,7 +255,7 @@ character(len=120) function extract_word(string, separators, n)
       endif
     endif
   enddo
-  if (b<=ns) extract_word = trim(string(b:ns))
+  if (b<=ns .and. nw==n-1) extract_word = trim(string(b:ns))
 end function extract_word
 
 !> Returns string with all spaces removed.
@@ -298,6 +298,8 @@ logical function string_functions_unit_tests()
   call localTest(extractWord("One Two,Three",3),"Three")
   call localTest(extractWord("One Two,  Three",3),"Three")
   call localTest(extractWord(" One Two,Three",1),"One")
+  call localTest(extract_word("One,Two,Three",",",3),"Three")
+  call localTest(extract_word("One,Two,Three",",",4),"")
   write(*,*) '=========================================================='
   contains
   subroutine localTest(str1,str2)
