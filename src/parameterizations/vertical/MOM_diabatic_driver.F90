@@ -2194,7 +2194,7 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
   call regularize_layers_init(Time, G, param_file, diag, CS%regularize_layers_CSp)
 
   if (CS%debug_energy_req) &
-    call diapyc_energy_req_init(G, param_file, CS%diapyc_en_rec_CSp)
+    call diapyc_energy_req_init(Time, G, param_file, diag, CS%diapyc_en_rec_CSp)
 
   ! obtain information about the number of bands for penetrative shortwave
   if (use_temperature) then
