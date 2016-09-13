@@ -934,7 +934,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
         ! between the buffer layers and the interior.
         ! Changes: T, S
         if (CS%tracer_tridiag) then
-          print *, "Using tracer_vertdiff for T/S"
           call tracer_vertdiff(hold, ea, eb, dt, tv%T, G, GV)
           call tracer_vertdiff(hold, ea, eb, dt, tv%S, G, GV) 
         else    
@@ -1019,7 +1018,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
 
       ! Changes T and S via the tridiagonal solver; no change to h
       if(CS%tracer_tridiag) then
-          print *, "Using tracer_vertdiff for T/S"
           call tracer_vertdiff(hold, ea, eb, dt, tv%T, G, GV)
           call tracer_vertdiff(hold, ea, eb, dt, tv%S, G, GV)
       else    
@@ -1175,7 +1173,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     enddo ; enddo ; enddo
     if (CS%useALEalgorithm) then
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
-      call call_tracer_column_fns(h_prebound, h, ea, eb, fluxes, dt, G, GV, tv, &
+      call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
                                   CS%optics, CS%tracer_flow_CSp, CS%debug,&
                                   evap_CFL_limit = CS%diabatic_aux_CSp%evap_CFL_limit, &
                                   minimum_forcing_depth = CS%diabatic_aux_CSp%minimum_forcing_depth)
@@ -1187,7 +1185,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   else
     if (CS%useALEalgorithm) then
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
-      call call_tracer_column_fns(h_prebound, h, ea, eb, fluxes, dt, G, GV, tv, &
+      call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
                                   CS%optics, CS%tracer_flow_CSp, CS%debug, &
                                   evap_CFL_limit = CS%diabatic_aux_CSp%evap_CFL_limit, &
                                   minimum_forcing_depth = CS%diabatic_aux_CSp%minimum_forcing_depth)
