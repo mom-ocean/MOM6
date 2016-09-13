@@ -137,6 +137,8 @@ type, public :: diabatic_CS ; private
                                      !! is statically unstable.
   logical :: debug                   !< If true, write verbose checksums for debugging purposes.
   logical :: debugConservation       !< If true, monitor conservation and extrema.
+  logical :: tracer_tridiag          !< If true, use tracer_vertdiff instead of tridiagTS for
+                                     !< vertical diffusion of T and S
   type(diag_ctrl), pointer :: diag   !< structure used to regulate timing of diagnostic output
   real :: MLDdensityDifference       !< Density difference used to determine MLD_user
   integer :: nsw                     !< SW_NBANDS
@@ -920,8 +922,13 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
         ! This simpler form allows T & S to be too dense for the layers
         ! between the buffer layers and the interior.
         ! Changes: T, S
-        call triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, tv%T, tv%S)
-
+        if (CS%tracer_tridiag) then
+          print *, "Using tracer_vertdiff for T/S"
+          call tracer_vertdiff(hold, ea, eb, dt, tv%T, G, GV)
+          call tracer_vertdiff(hold, ea, eb, dt, tv%S, G, GV) 
+        else    
+          call triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, tv%T, tv%S)
+        endif  
       endif ! massless_match_targets
       call cpu_clock_end(id_clock_tridiag)
 
@@ -1000,7 +1007,13 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       endif
 
       ! Changes T and S via the tridiagonal solver; no change to h
-      call triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, tv%T, tv%S)
+      if(CS%tracer_tridiag) then
+          print *, "Using tracer_vertdiff for T/S"
+          call tracer_vertdiff(hold, ea, eb, dt, tv%T, G, GV)
+          call tracer_vertdiff(hold, ea, eb, dt, tv%S, G, GV)
+      else    
+        call triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, tv%T, tv%S)
+      endif  
 
       ! diagnose temperature, salinity, heat, and salt tendencies
       if(CS%diabatic_diff_tendency_diag) then
@@ -1121,13 +1134,13 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     if (CS%useALEalgorithm) then
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
     ! so hold should be h_orig
-      call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
-                                CS%optics, CS%tracer_flow_CSp, &
+      call call_tracer_column_fns(h_prebound, h, ea, eb, fluxes, dt, G, GV, tv, &
+                                CS%optics, CS%tracer_flow_CSp, CS%debug, &
                                 evap_CFL_limit = CS%diabatic_aux_CSp%evap_CFL_limit, &
                                 minimum_forcing_depth = CS%diabatic_aux_CSp%minimum_forcing_depth)
     else
       call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
-                                CS%optics, CS%tracer_flow_CSp)
+                                CS%optics, CS%tracer_flow_CSp, CS%debug)
     endif
 
   elseif (associated(visc%Kd_extra_S)) then  ! extra diffusivity for passive tracers
@@ -1151,25 +1164,25 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     enddo ; enddo ; enddo
     if (CS%useALEalgorithm) then
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
-      call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
-                                  CS%optics, CS%tracer_flow_CSp, &
+      call call_tracer_column_fns(h_prebound, h, ea, eb, fluxes, dt, G, GV, tv, &
+                                  CS%optics, CS%tracer_flow_CSp, CS%debug,&
                                   evap_CFL_limit = CS%diabatic_aux_CSp%evap_CFL_limit, &
                                   minimum_forcing_depth = CS%diabatic_aux_CSp%minimum_forcing_depth)
     else
       call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
-                                  CS%optics, CS%tracer_flow_CSp)
+                                  CS%optics, CS%tracer_flow_CSp, CS%debug)
     endif
 
   else
     if (CS%useALEalgorithm) then
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
       call call_tracer_column_fns(h_prebound, h, ea, eb, fluxes, dt, G, GV, tv, &
-                                  CS%optics, CS%tracer_flow_CSp, &
+                                  CS%optics, CS%tracer_flow_CSp, CS%debug, &
                                   evap_CFL_limit = CS%diabatic_aux_CSp%evap_CFL_limit, &
                                   minimum_forcing_depth = CS%diabatic_aux_CSp%minimum_forcing_depth)
     else
       call call_tracer_column_fns(hold, h, ea, eb, fluxes, dt, G, GV, tv, &
-                                  CS%optics, CS%tracer_flow_CSp)
+                                  CS%optics, CS%tracer_flow_CSp, CS%debug)
     endif
 
   endif  ! (CS%mix_boundary_tracers)
@@ -1457,7 +1470,7 @@ subroutine adiabatic(h, tv, fluxes, dt, G, GV, CS)
   zeros(:,:,:) = 0.0
 
   call call_tracer_column_fns(h, h, zeros, zeros, fluxes, dt, G, GV, tv, &
-                              CS%optics, CS%tracer_flow_CSp)
+                              CS%optics, CS%tracer_flow_CSp, CS%debug)
 
 end subroutine adiabatic
 
@@ -1887,6 +1900,11 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
                  "entrainment at the bottom is at least sqrt(Kd_BBL_tr*dt) \n"//&
                  "over the same distance.", units="m2 s-1", default=0.)
   endif
+  
+  call get_param(param_file, mod, "TRACER_TRIDIAG", CS%tracer_tridiag, &
+                 "If true, use the passive tracer tridiagonal solver for T and S\n", &
+                 default=.false.)
+                 
 
   ! Register all available diagnostics for this module.
   if (GV%Boussinesq) then ; thickness_units = "meter"

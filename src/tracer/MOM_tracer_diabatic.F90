@@ -115,7 +115,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
       call applyTracerBoundaryFluxesInOut(G, GV, tr, dt, sfc_src, fluxes, h_work, &
               evap_CFL_limit, minimum_forcing_depth)
     ! Zero out surface fluxes because they were applied in the call to applyTracerBoundaryFluxesInOut
-    do j=js,je; do i=is,ie ; sfc_src(i,j) = 0.0 ; enddo ; enddo
+    do j=js,je; do i=is,ie ; sfc_src(i,j) = 0.0 ;  enddo ; enddo
   endif
 
   if (present(sink_rate)) then
@@ -156,7 +156,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
         b1(i) = 1.0 / (b_denom_1 + eb(i,j,1))
         d1(i) = b_denom_1 * b1(i)
         h_tr = h_work(i,j,1) + h_neglect
-        tr(i,j,1) = b1(i)*(h_tr*tr(i,j,1) + sfc_src(i,j))
+        tr(i,j,1) = (b1(i)*h_tr)*tr(i,j,1) + sfc_src(i,j)
       endif ; enddo
       do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
         c1(i,k) = eb(i,j,k-1) * b1(i)
@@ -189,15 +189,15 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
   else
 !$OMP do
     do j=js,je
-      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do i=is,ie ; if (G%mask2dT(i,j) > -0.5) then
         h_tr = h_work(i,j,1) + h_neglect
         b_denom_1 = h_tr + ea(i,j,1)
         b1(i) = 1.0 / (b_denom_1 + eb(i,j,1))
-        d1(i) = b_denom_1 * b1(i)
-        tr(i,j,1) = b1(i)*(h_tr*tr(i,j,1) + sfc_src(i,j))
+        d1(i) = h_tr * b1(i)
+        tr(i,j,1) = (b1(i)*h_tr)*tr(i,j,1) + sfc_src(i,j)
        endif
       enddo
-      do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > -0.5) then
         c1(i,k) = eb(i,j,k-1) * b1(i)
         h_tr = h_work(i,j,k) + h_neglect
         b_denom_1 = h_tr + d1(i) * ea(i,j,k)
@@ -205,14 +205,15 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
         d1(i) = b_denom_1 * b1(i)
         tr(i,j,k) = b1(i) * (h_tr * tr(i,j,k) + ea(i,j,k) * tr(i,j,k-1))
       endif ; enddo ; enddo
-      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do i=is,ie ; if (G%mask2dT(i,j) > -0.5) then
         c1(i,nz) = eb(i,j,nz-1) * b1(i)
         h_tr = h_work(i,j,nz) + h_neglect
-        b1(i) = 1.0 / (h_tr + d1(i) * ea(i,j,nz) + eb(i,j,nz))
-        tr(i,j,nz) = b1(i) * ((h_tr * tr(i,j,nz) + btm_src(i,j)) + &
+        b_denom_1 = h_tr + d1(i)*ea(i,j,nz)
+        b1(i) = 1.0 / ( b_denom_1 + eb(i,j,nz))
+        tr(i,j,nz) = b1(i) * (( h_tr * tr(i,j,nz) + btm_src(i,j)) + &
                               ea(i,j,nz) * tr(i,j,nz-1))
       endif ; enddo
-      do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > -0.5) then
         tr(i,j,k) = tr(i,j,k) + c1(i,k+1)*tr(i,j,k+1)
       endif ; enddo ; enddo
     enddo
@@ -292,6 +293,8 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, sfc_src, fluxes, h, &
     ! netMassOut   = net mass leaving ocean surface (H units) over a time step.
     !                netMassOut < 0 means mass leaves ocean.
 
+    ! Note here that the aggregateFW flag has already been taken care of in the call to
+    ! applyBoundaryFluxesInOut
     do i=is,ie
         netMassOut(i) = fluxes%netMassOut(i,j)
         netMassIn(i)  = fluxes%netMassIn(i,j)

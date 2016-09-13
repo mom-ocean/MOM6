@@ -52,6 +52,7 @@ module pseudo_salt_tracer
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
+use MOM_checksums,     only : hchksum
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl
 use MOM_diag_to_Z, only : register_Z_tracer, diag_to_Z_CS
@@ -247,7 +248,7 @@ subroutine initialize_pseudo_salt_tracer(restart, day, G, GV, h, diag, OBC, CS, 
     call query_vardesc(CS%tr_desc(m), name=name, caller="initialize_pseudo_salt_tracer")
     if ((.not.restart) .or. (.not. &
         query_initialized(CS%tr(:,:,:,m), name, CS%restart_CSp))) then
-      do k=1,nz ; do j=js,je ; do i=is,ie
+      do k=1,nz ; do j=jsd,jed ; do i=isd,ied
         CS%tr(i,j,k,m) = tv%S(i,j,k)
       enddo ; enddo ; enddo
     endif
@@ -300,7 +301,7 @@ subroutine initialize_pseudo_salt_tracer(restart, day, G, GV, h, diag, OBC, CS, 
 
 end subroutine initialize_pseudo_salt_tracer
 
-subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS, tv, &
+subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS, tv, debug, &
               evap_CFL_limit, minimum_forcing_depth)
   type(ocean_grid_type),              intent(in) :: G
   type(verticalGrid_type),            intent(in) :: GV
@@ -309,8 +310,10 @@ subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G
   real,                               intent(in) :: dt
   type(pseudo_salt_tracer_CS),                pointer    :: CS
   type(thermo_var_ptrs),              intent(in) :: tv
+  logical,                            intent(in) :: debug
   real,                             optional,intent(in)  :: evap_CFL_limit
   real,                             optional,intent(in)  :: minimum_forcing_depth
+  
 !   This subroutine applies diapycnal diffusion and any other column
 ! tracer physics or chemistry to the tracers from this file.
 ! This is a simple example of a set of advected passive tracers.
@@ -330,6 +333,12 @@ subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G
 !  (in)      GV - The ocean's vertical grid structure.
 !  (in)      CS - The control structure returned by a previous call to
 !                 register_pseudo_salt_tracer.
+!  (in)      tv - Thermodynamic structure with T and S
+!  (in)      evap_CFL_limit - Limits how much water can be fluxed out of the top layer
+!                             Stored previously in diabatic CS.  
+!  (in)      minimum_forcing_depth - The smallest depth over which fluxes can be applied
+!                             Stored previously in diabatic CS.  
+!  (in)      debug - Calculates checksums   
 !
 ! The arguments to this subroutine are redundant in that
 !     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
@@ -360,8 +369,13 @@ subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G
     do m=1,CS%ntr
       call tracer_vertdiff(h_old, ea, eb, dt, CS%tr(:,:,:,m), G, GV)
     enddo
-  endif
+  endif 
 
+!  if(debug) then
+    call hchksum(tv%S,"S post pseudo-salt vertdiff", G%HI) 
+    call hchksum(CS%tr(:,:,:,m),"pseudo_salt post pseudo-salt vertdiff", G%HI) 
+!  endif
+    
   allocate(local_tr(G%isd:G%ied,G%jsd:G%jed,nz))
   do m=1,CS%ntr
     if (CS%id_tracer(m)>0) then
