@@ -93,8 +93,16 @@ subroutine circle_obcs_initialize_thickness(h, G, GV, param_file)
     ! if (rad <= 6.*diskrad) h(i,j,k) = h(i,j,k)+10.0*exp( -0.5*( rad**2 ) )
     rad = min( rad, 1. ) ! Flatten outside radius of diskrad
     rad = rad*(2.*asin(1.)) ! Map 0-1 to 0-pi
-    h(i,j,k) = h(i,j,k) + 10.0*0.5*(1.+cos(rad)) ! cosine bell
-    h(i,j,k-1) = h(i,j,k-1) - 10.0*0.5*(1.+cos(rad)) ! cosine bell
+    if (Nz==1) then
+      ! The model is barotropic
+      h(i,j,k) = h(i,j,k) + 1.0*0.5*(1.+cos(rad)) ! cosine bell
+    else
+      ! The model is baroclinic
+      do k = 1, Nz
+        h(i,j,k) = h(i,j,k) - 0.5*(1.+cos(rad)) & ! cosine bell
+            * 5.0 * real( 2*k-Nz )
+      enddo
+    endif
   enddo ; enddo
 
 end subroutine circle_obcs_initialize_thickness
