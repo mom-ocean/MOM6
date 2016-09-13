@@ -355,7 +355,7 @@ subroutine call_tracer_set_forcing(state, fluxes, day_start, day_interval, G, CS
 end subroutine call_tracer_set_forcing
 
 subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, dt, G, GV, tv, optics, CS, &
-                                  evap_CFL_limit, minimum_forcing_depth)
+                                  debug, evap_CFL_limit, minimum_forcing_depth)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h_old, h_new, ea, eb
   type(forcing),                         intent(in) :: fluxes
   real,                                  intent(in) :: dt
@@ -364,9 +364,10 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, dt, G, GV, tv, o
   type(thermo_var_ptrs),                 intent(in) :: tv
   type(optics_type),                     pointer    :: optics
   type(tracer_flow_control_CS),          pointer    :: CS
+  logical,                               intent(in) :: debug
   real,                             optional,intent(in)  :: evap_CFL_limit
   real,                             optional,intent(in)  :: minimum_forcing_depth
-
+  
 !   This subroutine calls all registered tracer column physics
 ! subroutines.
 
@@ -388,6 +389,11 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, dt, G, GV, tv, o
 !  (in)      optics - The structure containing optical properties.
 !  (in)      CS - The control structure returned by a previous call to
 !                 call_tracer_register.
+!  (in)      evap_CFL_limit - Limits how much water can be fluxed out of the top layer
+!                             Stored previously in diabatic CS.  
+!  (in)      minimum_forcing_depth - The smallest depth over which fluxes can be applied
+!                             Stored previously in diabatic CS.  
+!  (in)      debug - Calculates checksums     
 
   if (.not. associated(CS)) call MOM_error(FATAL, "call_tracer_column_fns: "// &
          "Module must be initialized via call_tracer_register before it is used.")
@@ -443,7 +449,7 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, dt, G, GV, tv, o
 #endif
     if (CS%use_pseudo_salt_tracer) &
       call pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                     G, GV, CS%pseudo_salt_tracer_CSp, tv, &
+                                     G, GV, CS%pseudo_salt_tracer_CSp, tv, debug,&
                                      evap_CFL_limit=evap_CFL_limit, &
                                      minimum_forcing_depth=minimum_forcing_depth)
 
@@ -480,7 +486,7 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, dt, G, GV, tv, o
 #endif
     if (CS%use_pseudo_salt_tracer) &
       call pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                     G, GV, CS%pseudo_salt_tracer_CSp, tv)
+                                     G, GV, CS%pseudo_salt_tracer_CSp, tv, debug)
 
 
   endif
