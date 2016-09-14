@@ -1,4 +1,3 @@
-! This file is part of MOM6. See LICENSE.md for the license.
 !> Controls where open boundary conditions are applied
 module MOM_open_boundary
 
@@ -43,7 +42,9 @@ integer, parameter, public :: OBC_DIRECTION_W = 400 !< Indicates the boundary is
 !> Open boundary segment type - we'll have one for each open segment
 !! to describe that segment.
 type, public :: OBC_segment_type
-  logical :: radiation      !< Radiation boundary.
+  logical :: Flather        !< If true, applies Flather + Chapman radiation of barotropic gravity waves.
+  logical :: radiation      !< If true, 1D Orlanksi radiation boundary conditions are applied.
+                            !! If False, a gradient condition is applied.
   logical :: radiation2D    !< Oblique waves supported at radiation boundary.
   logical :: nudged         !< Optional supplement to radiation boundary.
   logical :: specified      !< Boundary fixed to external value.
@@ -193,6 +194,7 @@ subroutine open_boundary_config(G, param_file, OBC)
     ! Allocate everything
     allocate(OBC%OBC_segment_list(0:OBC%number_of_segments))
     do l=0,OBC%number_of_segments
+      OBC%OBC_segment_list(l)%Flather = .false.
       OBC%OBC_segment_list(l)%radiation = .false.
       OBC%OBC_segment_list(l)%radiation2D = .false.
       OBC%OBC_segment_list(l)%nudged = .false.
@@ -250,93 +252,102 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
   integer,                 intent(in) :: l_seg !< which segment is this?
   ! Local variables
   integer :: I_obc, Js_obc, Je_obc ! Position of segment in global index space
-  integer :: j, this_kind
-  character(len=32) :: action_str
+  integer :: j, this_kind, a_loop
+  character(len=32) :: action_str(5)
 
   ! This returns the global indices for the segment
   call parse_segment_str(G%ieg, G%jeg, segment_str, I_obc, Js_obc, Je_obc, action_str )
   I_obc = I_obc - G%idg_offset ! Convert to local tile indices on this tile
   Js_obc = Js_obc - G%jdg_offset ! Convert to local tile indices on this tile
   Je_obc = Je_obc - G%jdg_offset ! Convert to local tile indices on this tile
+  this_kind = OBC_NONE
 
-!  if (Je_obc>Js_obc) OBC%OBC_segment_list(l_seg)%direction = OBC_DIRECTION_E
-!  if (Je_obc<Js_obc) OBC%OBC_segment_list(l_seg)%direction = OBC_DIRECTION_W
-  if (trim(action_str) == 'FLATHER') then
-    this_kind = OBC_FLATHER
-    if (Je_obc>Js_obc) OBC%OBC_segment_list(l_seg)%direction = OBC_DIRECTION_E
-    if (Je_obc<Js_obc) OBC%OBC_segment_list(l_seg)%direction = OBC_DIRECTION_W
-    OBC%OBC_segment_list(l_seg)%radiation = .true.
-    ! This is a total hack for the tangential flow! - KSH
-    ! But it wasn't on and I still get the right answer??
-    OBC%OBC_segment_list(l_seg)%gradient = .true.
-    if  (Je_obc>Js_obc) OBC%apply_OBC_u_flather_east = .true. ! This line will not be needed soon - AJA
-    if  (Je_obc<Js_obc) OBC%apply_OBC_u_flather_west = .true. ! This line will not be needed soon - AJA
-  elseif (trim(action_str) == 'RADIATION2D') then
-    this_kind = OBC_FLATHER
-    if (Je_obc>Js_obc) OBC%OBC_segment_list(l_seg)%direction = OBC_DIRECTION_E
-    if (Je_obc<Js_obc) OBC%OBC_segment_list(l_seg)%direction = OBC_DIRECTION_W
-    OBC%OBC_segment_list(l_seg)%radiation = .true.
-    OBC%OBC_segment_list(l_seg)%radiation2D = .true.
-    if  (Je_obc>Js_obc) OBC%apply_OBC_u_flather_east = .true. ! This line will not be needed soon - AJA
-    if  (Je_obc<Js_obc) OBC%apply_OBC_u_flather_west = .true. ! This line will not be needed soon - AJA
-  elseif (trim(action_str) == 'SIMPLE') then
-    this_kind = OBC_SIMPLE
-    OBC%OBC_segment_list(l_seg)%specified = .true.
-    OBC%apply_OBC_u = .true. ! This avoids deallocation
+  ! Hack to extend segment by one point
+  if (Js_obc<Je_obc) then
+    Js_obc = Js_obc - 1 ; Je_obc = Je_obc + 1
   else
-    call MOM_error(FATAL, "MOM_open_boundary.F90, setup_u_point_obc: "//&
-                   "String '"//trim(action_str)//"' not understood.")
+    Js_obc = Js_obc + 1 ; Je_obc = Je_obc - 1
   endif
 
-  if (I_obc<G%HI%IsdB .or. I_obc>G%HI%IedB) return ! Boundary is not on tile
-  if (max(Js_obc,Je_obc)<G%HI%JsdB .or. min(Js_obc,Je_obc)>G%HI%JedB) return ! Segment is not on tile
+  if (Je_obc>Js_obc) OBC%OBC_segment_list(l_seg)%direction = OBC_DIRECTION_E
+  if (Je_obc<Js_obc) OBC%OBC_segment_list(l_seg)%direction = OBC_DIRECTION_W
+  do a_loop = 1,5
+    if (len_trim(action_str(a_loop)) == 0) then
+      cycle
+    elseif (trim(action_str(a_loop)) == 'FLATHER') then
+      this_kind = OBC_FLATHER
+      OBC%OBC_segment_list(l_seg)%Flather = .true.
+      ! This is a total hack for the tangential flow! - KSH
+      OBC%OBC_segment_list(l_seg)%gradient = .true.
+      if  (Je_obc>Js_obc) OBC%apply_OBC_u_flather_east = .true. ! This line will not be needed soon - AJA
+      if  (Je_obc<Js_obc) OBC%apply_OBC_u_flather_west = .true. ! This line will not be needed soon - AJA
+    elseif (trim(action_str(a_loop)) == 'ORLANSKI') then
+      OBC%OBC_segment_list(l_seg)%radiation = .true.
+      ! This is a total hack for the tangential flow! - KSH
+      OBC%OBC_segment_list(l_seg)%gradient = .true.
+      if  (Je_obc>Js_obc) OBC%apply_OBC_u_flather_east = .true. ! This line will not be needed soon - AJA
+      if  (Je_obc<Js_obc) OBC%apply_OBC_u_flather_west = .true. ! This line will not be needed soon - AJA
+    elseif (trim(action_str(a_loop)) == 'RADIATION2D') then
+      OBC%OBC_segment_list(l_seg)%radiation = .true.
+      OBC%OBC_segment_list(l_seg)%radiation2D = .true.
+      if  (Je_obc>Js_obc) OBC%apply_OBC_u_flather_east = .true. ! This line will not be needed soon - AJA
+      if  (Je_obc<Js_obc) OBC%apply_OBC_u_flather_west = .true. ! This line will not be needed soon - AJA
+    elseif (trim(action_str(a_loop)) == 'SIMPLE') then
+      OBC%OBC_segment_list(l_seg)%specified = .true.
+      OBC%OBC_segment_list(l_seg)%direction = OBC_NONE
+      OBC%apply_OBC_u = .true. ! This avoids deallocation
+      ! Hack to undo the hack above for SIMPLE BCs
+      if (Js_obc<Je_obc) then
+        Js_obc = Js_obc + 1 ; Je_obc = Je_obc - 1
+      else
+        Js_obc = Js_obc - 1 ; Je_obc = Je_obc + 1
+      endif
+    else
+      call MOM_error(FATAL, "MOM_open_boundary.F90, setup_u_point_obc: "//&
+                     "String '"//trim(action_str(a_loop))//"' not understood.")
+    endif
 
-  ! These four lines extend the open boundary into the halo region of tiles on the edge of the physical
-  ! domain. They are used to reproduce the checksums of the circle_obcs test case and will be removed
-  ! in the fullness of time. -AJA
-! These were causing grief in the supercritical problem. - KSH
-!  if (Js_obc == G%HI%JscB) Js_obc = G%HI%jsd-1
-!  if (Js_obc == G%HI%JecB) Js_obc = G%HI%jed
-!  if (Je_obc == G%HI%JscB) Je_obc = G%HI%jsd-1
-!  if (Je_obc == G%HI%JecB) Je_obc = G%HI%jed
+    if (I_obc<G%HI%IsdB .or. I_obc>G%HI%IedB) return ! Boundary is not on tile
+    if (max(Js_obc,Je_obc)<G%HI%JsdB .or. min(Js_obc,Je_obc)>G%HI%JedB) return ! Segment is not on tile
 
-  do j=G%HI%jsd, G%HI%jed
-    if (j>min(Js_obc,Je_obc) .and. j<=max(Js_obc,Je_obc)) then
-      OBC%OBC_mask_u(I_obc,j) = .true.
-      OBC%OBC_segment_u(I_obc,j) = l_seg
-      if (Je_obc>Js_obc) then ! East is outward
-        if (this_kind == OBC_FLATHER) then
-          OBC%OBC_direction_u(I_obc,j) = OBC_DIRECTION_E ! We only use direction for Flather (maybe)
-          ! Set v points outside segment
-          OBC%OBC_mask_v(i_obc+1,J) = .true.
-          if (OBC%OBC_segment_v(i_obc+1,J) == OBC_NONE) then
-            OBC%OBC_direction_v(i_obc+1,J) = OBC_DIRECTION_E
-            OBC%OBC_segment_v(i_obc+1,J) = l_seg
+    do j=G%HI%jsd, G%HI%jed
+      if (j>min(Js_obc,Je_obc) .and. j<=max(Js_obc,Je_obc)) then
+        OBC%OBC_mask_u(I_obc,j) = .true.
+        OBC%OBC_segment_u(I_obc,j) = l_seg
+        if (Je_obc>Js_obc) then ! East is outward
+          if (this_kind == OBC_FLATHER) then
+            OBC%OBC_direction_u(I_obc,j) = OBC_DIRECTION_E ! We only use direction for Flather (maybe)
+            ! Set v points outside segment
+            OBC%OBC_mask_v(i_obc+1,J) = .true.
+            if (OBC%OBC_segment_v(i_obc+1,J) == OBC_NONE) then
+              OBC%OBC_direction_v(i_obc+1,J) = OBC_DIRECTION_E
+              OBC%OBC_segment_v(i_obc+1,J) = l_seg
+            endif
+            OBC%OBC_mask_v(i_obc+1,J-1) = .true.
+            if (OBC%OBC_segment_v(i_obc+1,J-1) == OBC_NONE) then
+              OBC%OBC_direction_v(i_obc+1,J-1) = OBC_DIRECTION_E
+              OBC%OBC_segment_v(i_obc+1,J-1) = l_seg
+            endif
           endif
-          OBC%OBC_mask_v(i_obc+1,J-1) = .true.
-          if (OBC%OBC_segment_v(i_obc+1,J-1) == OBC_NONE) then
-            OBC%OBC_direction_v(i_obc+1,J-1) = OBC_DIRECTION_E
-            OBC%OBC_segment_v(i_obc+1,J-1) = l_seg
-          endif
-        endif
-      else ! West is outward
-        if (this_kind == OBC_FLATHER) then
-          OBC%OBC_direction_u(I_obc,j) = OBC_DIRECTION_W ! We only use direction for Flather
-          ! Set v points outside segment
-          OBC%OBC_mask_v(i_obc,J) = .true.
-          if (OBC%OBC_segment_v(i_obc,J) == OBC_NONE) then
-            OBC%OBC_direction_v(i_obc,J) = OBC_DIRECTION_W
-            OBC%OBC_segment_v(i_obc,J) = l_seg
-          endif
-          OBC%OBC_mask_v(i_obc,J-1) = .true.
-          if (OBC%OBC_segment_v(i_obc,J-1) == OBC_NONE) then
-            OBC%OBC_direction_v(i_obc,J-1) = OBC_DIRECTION_W
-            OBC%OBC_segment_v(i_obc,J-1) = l_seg
+        else ! West is outward
+          if (this_kind == OBC_FLATHER) then
+            OBC%OBC_direction_u(I_obc,j) = OBC_DIRECTION_W ! We only use direction for Flather
+            ! Set v points outside segment
+            OBC%OBC_mask_v(i_obc,J) = .true.
+            if (OBC%OBC_segment_v(i_obc,J) == OBC_NONE) then
+              OBC%OBC_direction_v(i_obc,J) = OBC_DIRECTION_W
+              OBC%OBC_segment_v(i_obc,J) = l_seg
+            endif
+            OBC%OBC_mask_v(i_obc,J-1) = .true.
+            if (OBC%OBC_segment_v(i_obc,J-1) == OBC_NONE) then
+              OBC%OBC_direction_v(i_obc,J-1) = OBC_DIRECTION_W
+              OBC%OBC_segment_v(i_obc,J-1) = l_seg
+            endif
           endif
         endif
       endif
-    endif
-  enddo
+    enddo
+  enddo ! a_loop
 
 end subroutine setup_u_point_obc
 
@@ -348,90 +359,102 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
   integer,                 intent(in) :: l_seg !< which segment is this?
   ! Local variables
   integer :: J_obc, Is_obc, Ie_obc ! Position of segment in global index space
-  integer :: i, this_kind
-  character(len=32) :: action_str
+  integer :: i, this_kind, a_loop
+  character(len=32) :: action_str(5)
 
   ! This returns the global indices for the segment
   call parse_segment_str(G%ieg, G%jeg, segment_str, J_obc, Is_obc, Ie_obc, action_str )
   J_obc = J_obc - G%jdg_offset ! Convert to local tile indices on this tile
   Is_obc = Is_obc - G%idg_offset ! Convert to local tile indices on this tile
   Ie_obc = Ie_obc - G%idg_offset ! Convert to local tile indices on this tile
+  this_kind = OBC_NONE
 
-  if (trim(action_str) == 'FLATHER') then
-    this_kind = OBC_FLATHER
-    if (Ie_obc>Is_obc) OBC%OBC_segment_list(l_seg)%direction = OBC_DIRECTION_S
-    if (Ie_obc<Is_obc) OBC%OBC_segment_list(l_seg)%direction = OBC_DIRECTION_N
-    OBC%OBC_segment_list(l_seg)%radiation = .true.
-    ! This is a total hack for the tangential flow! - KSH
-    OBC%OBC_segment_list(l_seg)%gradient = .true.
-    if (Ie_obc>Is_obc) OBC%apply_OBC_v_flather_south = .true. ! This line will not be needed soon - AJA
-    if (Ie_obc<Is_obc) OBC%apply_OBC_v_flather_north = .true. ! This line will not be needed soon - AJA
-  elseif (trim(action_str) == 'RADIATION2D') then
-    this_kind = OBC_FLATHER
-    if (Ie_obc>Is_obc) OBC%OBC_segment_list(l_seg)%direction = OBC_DIRECTION_S
-    if (Ie_obc<Is_obc) OBC%OBC_segment_list(l_seg)%direction = OBC_DIRECTION_N
-    OBC%OBC_segment_list(l_seg)%radiation = .true.
-    OBC%OBC_segment_list(l_seg)%radiation2D = .true.
-    if (Ie_obc>Is_obc) OBC%apply_OBC_v_flather_south = .true. ! This line will not be needed soon - AJA
-    if (Ie_obc<Is_obc) OBC%apply_OBC_v_flather_north = .true. ! This line will not be needed soon - AJA
-  elseif (trim(action_str) == 'SIMPLE') then
-    this_kind = OBC_SIMPLE
-    OBC%OBC_segment_list(l_seg)%specified = .true.
-    OBC%apply_OBC_v = .true. ! This avoids deallocation
+  ! Hack to extend segment by one point
+  if (Is_obc<Ie_obc) then
+    Is_obc = Is_obc - 1 ; Ie_obc = Ie_obc + 1
   else
-    call MOM_error(FATAL, "MOM_open_boundary.F90, setup_v_point_obc: "//&
-                   "String '"//trim(action_str)//"' not understood.")
+    Is_obc = Is_obc + 1 ; Ie_obc = Ie_obc - 1
   endif
 
-  if (J_obc<G%HI%JsdB .or. J_obc>G%HI%JedB) return ! Boundary is not on tile
-  if (max(Is_obc,Ie_obc)<G%HI%IsdB .or. min(Is_obc,Ie_obc)>G%HI%IedB) return ! Segment is not on tile
+  if (Ie_obc>Is_obc) OBC%OBC_segment_list(l_seg)%direction = OBC_DIRECTION_S
+  if (Ie_obc<Is_obc) OBC%OBC_segment_list(l_seg)%direction = OBC_DIRECTION_N
+  do a_loop = 1,5
+    if (len_trim(action_str(a_loop)) == 0) then
+      cycle
+    elseif (trim(action_str(a_loop)) == 'FLATHER') then
+      this_kind = OBC_FLATHER
+      OBC%OBC_segment_list(l_seg)%Flather = .true.
+      ! This is a total hack for the tangential flow! - KSH
+      OBC%OBC_segment_list(l_seg)%gradient = .true.
+      if (Ie_obc>Is_obc) OBC%apply_OBC_v_flather_south = .true. ! This line will not be needed soon - AJA
+      if (Ie_obc<Is_obc) OBC%apply_OBC_v_flather_north = .true. ! This line will not be needed soon - AJA
+    elseif (trim(action_str(a_loop)) == 'ORLANSKI') then
+      OBC%OBC_segment_list(l_seg)%radiation = .true.
+      ! This is a total hack for the tangential flow! - KSH
+      OBC%OBC_segment_list(l_seg)%gradient = .true.
+      if (Ie_obc>Is_obc) OBC%apply_OBC_v_flather_south = .true. ! This line will not be needed soon - AJA
+      if (Ie_obc<Is_obc) OBC%apply_OBC_v_flather_north = .true. ! This line will not be needed soon - AJA
+    elseif (trim(action_str(a_loop)) == 'RADIATION2D') then
+      OBC%OBC_segment_list(l_seg)%radiation = .true.
+      OBC%OBC_segment_list(l_seg)%radiation2D = .true.
+      if (Ie_obc>Is_obc) OBC%apply_OBC_v_flather_south = .true. ! This line will not be needed soon - AJA
+      if (Ie_obc<Is_obc) OBC%apply_OBC_v_flather_north = .true. ! This line will not be needed soon - AJA
+    elseif (trim(action_str(a_loop)) == 'SIMPLE') then
+      OBC%OBC_segment_list(l_seg)%specified = .true.
+      OBC%OBC_segment_list(l_seg)%direction = OBC_NONE
+      OBC%apply_OBC_v = .true. ! This avoids deallocation
+      ! Hack to undo the hack above for SIMPLE BCs
+      if (Is_obc<Ie_obc) then
+        Is_obc = Is_obc + 1 ; Ie_obc = Ie_obc - 1
+      else
+        Is_obc = Is_obc - 1 ; Ie_obc = Ie_obc + 1
+      endif
+    else
+      call MOM_error(FATAL, "MOM_open_boundary.F90, setup_v_point_obc: "//&
+                     "String '"//trim(action_str(a_loop))//"' not understood.")
+    endif
 
-  ! These four lines extend the open boundary into the halo region of tiles on the edge of the physical
-  ! domain. They are used to reproduce the checksums of the circle_obcs test case and will be removed
-  ! in the fullness of time. -AJA
-! These cause trouble with DOME
-!  if (Is_obc == G%HI%IscB) Is_obc = G%HI%isd-1
-!  if (Is_obc == G%HI%IecB) Is_obc = G%HI%ied
-!  if (Ie_obc == G%HI%IscB) Ie_obc = G%HI%isd-1
-!  if (Ie_obc == G%HI%IecB) Ie_obc = G%HI%ied
+    if (J_obc<G%HI%JsdB .or. J_obc>G%HI%JedB) return ! Boundary is not on tile
+    if (max(Is_obc,Ie_obc)<G%HI%IsdB .or. min(Is_obc,Ie_obc)>G%HI%IedB) return ! Segment is not on tile
 
-  do i=G%HI%isd, G%HI%ied
-    if (i>min(Is_obc,Ie_obc) .and. i<=max(Is_obc,Ie_obc)) then
-      OBC%OBC_mask_v(i,J_obc) = .true.
-      OBC%OBC_segment_v(i,J_obc) = l_seg
-      if (Is_obc>Ie_obc) then ! North is outward
-        if (this_kind == OBC_FLATHER) then
-          OBC%OBC_direction_v(i,J_obc) = OBC_DIRECTION_N ! We only use direction for Flather
-          ! Set u points outside segment
-          OBC%OBC_mask_u(I,j_obc+1) = .true.
-          if (OBC%OBC_segment_u(I,j_obc+1) == OBC_NONE) then
-            OBC%OBC_direction_u(I,j_obc+1) = OBC_DIRECTION_N
-            OBC%OBC_segment_u(I,j_obc+1) = l_seg
+    do i=G%HI%isd, G%HI%ied
+      if (i>min(Is_obc,Ie_obc) .and. i<=max(Is_obc,Ie_obc)) then
+        OBC%OBC_mask_v(i,J_obc) = .true.
+        OBC%OBC_segment_v(i,J_obc) = l_seg
+        if (Is_obc>Ie_obc) then ! North is outward
+          if (this_kind == OBC_FLATHER) then
+            OBC%OBC_direction_v(i,J_obc) = OBC_DIRECTION_N ! We only use direction for Flather
+            ! Set u points outside segment
+            OBC%OBC_mask_u(I,j_obc+1) = .true.
+            if (OBC%OBC_segment_u(I,j_obc+1) == OBC_NONE) then
+              OBC%OBC_direction_u(I,j_obc+1) = OBC_DIRECTION_N
+              OBC%OBC_segment_u(I,j_obc+1) = l_seg
+            endif
+            OBC%OBC_mask_u(I-1,j_obc+1) = .true.
+            if (OBC%OBC_segment_u(I-1,j_obc+1) == OBC_NONE) then
+              OBC%OBC_direction_u(I-1,j_obc+1) = OBC_DIRECTION_N
+              OBC%OBC_segment_u(I-1,j_obc+1) = l_seg
+            endif
           endif
-          OBC%OBC_mask_u(I-1,j_obc+1) = .true.
-          if (OBC%OBC_segment_u(I-1,j_obc+1) == OBC_NONE) then
-            OBC%OBC_direction_u(I-1,j_obc+1) = OBC_DIRECTION_N
-            OBC%OBC_segment_u(I-1,j_obc+1) = l_seg
-          endif
-        endif
-      else ! South is outward
-        if (this_kind == OBC_FLATHER) then
-          OBC%OBC_direction_v(i,J_obc) = OBC_DIRECTION_S ! We only use direction for Flather
-          ! Set u points outside segment
-          OBC%OBC_mask_u(I,j_obc) = .true.
-          if (OBC%OBC_segment_u(I,j_obc) == OBC_NONE) then
-            OBC%OBC_direction_u(I,j_obc) = OBC_DIRECTION_S
-            OBC%OBC_segment_u(I,j_obc) = l_seg
-          endif
-          OBC%OBC_mask_u(I-1,j_obc) = .true.
-          if (OBC%OBC_segment_u(I-1,j_obc) == OBC_NONE) then
-            OBC%OBC_direction_u(I-1,j_obc) = OBC_DIRECTION_S
-            OBC%OBC_segment_u(I-1,j_obc) = l_seg
+        else ! South is outward
+          if (this_kind == OBC_FLATHER) then
+            OBC%OBC_direction_v(i,J_obc) = OBC_DIRECTION_S ! We only use direction for Flather
+            ! Set u points outside segment
+            OBC%OBC_mask_u(I,j_obc) = .true.
+            if (OBC%OBC_segment_u(I,j_obc) == OBC_NONE) then
+              OBC%OBC_direction_u(I,j_obc) = OBC_DIRECTION_S
+              OBC%OBC_segment_u(I,j_obc) = l_seg
+            endif
+            OBC%OBC_mask_u(I-1,j_obc) = .true.
+            if (OBC%OBC_segment_u(I-1,j_obc) == OBC_NONE) then
+              OBC%OBC_direction_u(I-1,j_obc) = OBC_DIRECTION_S
+              OBC%OBC_segment_u(I-1,j_obc) = l_seg
+            endif
           endif
         endif
       endif
-    endif
-  enddo
+    enddo
+  enddo ! a_loop
 
 end subroutine setup_v_point_obc
 
@@ -443,11 +466,12 @@ subroutine parse_segment_str(ni_global, nj_global, segment_str, l, m, n, action_
   integer,          intent(out) :: l !< The value of I=l, if segment_str begins with I=l, or the value of J=l
   integer,          intent(out) :: m !< The value of J=m, if segment_str begins with I=, or the value of I=m
   integer,          intent(out) :: n !< The value of J=n, if segment_str begins with I=, or the value of I=n
-  character(len=*), intent(out) :: action_str !< The "string" part of segment_str
+  character(len=*), intent(out) :: action_str(:) !< The "string" part of segment_str
   ! Local variables
   character(len=24) :: word1, word2, m_word, n_word !< Words delineated by commas in a string in form of "I=%,J=%:%,string"
   integer :: l_max !< Either ni_global or nj_global, depending on whether segment_str begins with "I=" or "J="
   integer :: mn_max !< Either nj_global or ni_global, depending on whether segment_str begins with "I=" or "J="
+  integer :: j
 
   ! Process first word which will started with either 'I=' or 'J='
   word1 = extract_word(segment_str,',',1)
@@ -496,7 +520,9 @@ subroutine parse_segment_str(ni_global, nj_global, segment_str, l, m, n, action_
   endif
 
   ! Type of open boundary condition
-  action_str = extract_word(segment_str,',',3)
+  do j = 1, size(action_str)
+    action_str(j) = extract_word(segment_str,',',2+j)
+  enddo
 
   contains
 
@@ -513,14 +539,8 @@ subroutine parse_segment_str(ni_global, nj_global, segment_str, l, m, n, action_
     if (len_trim(string)==1 .and. string(1:1)=='N') then
       interpret_int_expr = imax
     elseif (string(1:1)=='N') then
-      read(string(3:slen),*,err=911) interpret_int_expr
-      if (string(2:2)=='-') then
-        interpret_int_expr = imax - interpret_int_expr
-      elseif (string(2:2)=='+') then
-        interpret_int_expr = imax + interpret_int_expr
-      else
-        goto 911
-      endif
+      read(string(2:slen),*,err=911) interpret_int_expr
+      interpret_int_expr = imax - interpret_int_expr
     else
       read(string(1:slen),*,err=911) interpret_int_expr
     endif
@@ -617,34 +637,30 @@ subroutine open_boundary_impose_normal_slope(OBC, G, depth)
   real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: depth !< Bathymetry at h-points
   ! Local variables
   integer :: i, j
+  logical :: bc_north, bc_south, bc_east, bc_west
 
   if (.not.associated(OBC)) return
 
-  if (associated(OBC%OBC_segment_u)) then
-    do j=G%jsd,G%jed ; do I=G%isd,G%ied-1
-      if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
-        if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%direction == &
-                           OBC_DIRECTION_E) depth(i+1,j) = depth(i,j)
-        if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%direction == &
-                           OBC_DIRECTION_W) depth(i,j) = depth(i+1,j)
-      endif
-!      if (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_E) depth(i+1,j) = depth(i,j)
-!      if (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_W) depth(i,j) = depth(i+1,j)
-    enddo ; enddo
-  endif
-
-  if (associated(OBC%OBC_segment_v)) then
-    do J=G%jsd,G%jed-1 ; do i=G%isd,G%ied
-      if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
-        if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%direction == &
-                           OBC_DIRECTION_N) depth(i,j+1) = depth(i,j)
-        if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%direction == &
-                           OBC_DIRECTION_S) depth(i,j) = depth(i,j+1)
-      endif
-!      if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N) depth(i,j+1) = depth(i,j)
-!      if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S) depth(i,j) = depth(i,j+1)
-    enddo ; enddo
-  endif
+  do J=G%jsd+1,G%jed-1 ; do i=G%isd+1,G%ied-1
+    bc_north = .false. ; bc_south = .false. ; bc_east = .false. ; bc_west = .false.
+    if (associated(OBC%OBC_segment_u)) then
+      if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) bc_east = .true.
+      if (OBC%OBC_segment_list(OBC%OBC_segment_u(I-1,j))%direction == OBC_DIRECTION_W) bc_west = .true.
+    endif
+    if (associated(OBC%OBC_segment_v)) then
+      if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N) bc_north = .true.
+      if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J-1))%direction == OBC_DIRECTION_S) bc_south = .true.
+    endif
+    if (bc_north) depth(i,j+1) = depth(i,j)
+    if (bc_south) depth(i,j-1) = depth(i,j)
+    if (bc_east) depth(i+1,j) = depth(i,j)
+    if (bc_west) depth(i-1,j) = depth(i,j)
+    ! Convex corner cases
+    if (bc_north.and.bc_east) depth(i+1,j+1) = depth(i,j)
+    if (bc_north.and.bc_west) depth(i-1,j+1) = depth(i,j)
+    if (bc_south.and.bc_east) depth(i+1,j-1) = depth(i,j)
+    if (bc_south.and.bc_west) depth(i-1,j-1) = depth(i,j)
+  enddo ; enddo
 
 end subroutine open_boundary_impose_normal_slope
 
@@ -703,7 +719,7 @@ subroutine open_boundary_impose_land_mask(OBC, G)
 
 end subroutine open_boundary_impose_land_mask
 
-!> Diagnose radiation conditions at open boundaries
+!> Apply radiation conditions to 3D  u,v (,h) at open boundaries
 subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
                                      h_new, h_old, G)
   type(ocean_grid_type),                     intent(inout) :: G !< Ocean grid structure
@@ -1205,6 +1221,36 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
     if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N) h(i,j+1,k) = h(i,j,k)
     if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S) h(i,j,k) = h(i,j+1,k)
   enddo ; enddo ; enddo
+! When we do not extend segments, this commented block was needed to
+! get the same'ish h's.
+! do k=1,nz ; do j=jsd,jed-1 ; do i=isd,ied
+!   if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N) h(i,j+1,k) = h(i,j,k)
+! enddo ; enddo ; enddo
+! do k=1,nz ; do j=jsd+1,jed ; do i=isd,ied
+!   if (OBC%OBC_direction_v(i,J-1) == OBC_DIRECTION_S) h(i,j-1,k) = h(i,j,k)
+! enddo ; enddo ; enddo
+! do k=1,nz ; do j=jsd,jed ; do i=isd,ied-1
+!   if (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_E) h(i+1,j,k) = h(i,j,k)
+! enddo ; enddo ; enddo
+! do k=1,nz ; do j=jsd,jed ; do i=isd+1,ied
+!   if (OBC%OBC_direction_u(I-1,j) == OBC_DIRECTION_W) h(i-1,j,k) = h(i,j,k)
+! enddo ; enddo ; enddo
+! do k=1,nz ; do j=jsd,jed-1 ; do i=isd,ied-1
+!   if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N .and. &
+!       OBC%OBC_direction_u(I,j) == OBC_DIRECTION_E) h(i+1,j+1,k) = h(i,j,k)
+! enddo ; enddo ; enddo
+! do k=1,nz ; do j=jsd,jed-1 ; do i=isd+1,ied
+!   if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N .and. &
+!       OBC%OBC_direction_u(I-1,j) == OBC_DIRECTION_W) h(i-1,j+1,k) = h(i,j,k)
+! enddo ; enddo ; enddo
+! do k=1,nz ; do j=jsd+1,jed ; do i=isd,ied-1
+!   if (OBC%OBC_direction_v(i,J-1) == OBC_DIRECTION_S .and. &
+!       OBC%OBC_direction_u(I,j) == OBC_DIRECTION_E) h(i+1,j-1,k) = h(i,j,k)
+! enddo ; enddo ; enddo
+! do k=1,nz ; do j=jsd+1,jed ; do i=isd+1,ied
+!   if (OBC%OBC_direction_v(i,J-1) == OBC_DIRECTION_S .and. &
+!       OBC%OBC_direction_u(I-1,j) == OBC_DIRECTION_W) h(i-1,j-1,k) = h(i,j,k)
+! enddo ; enddo ; enddo
 
 end subroutine set_Flather_data
 
