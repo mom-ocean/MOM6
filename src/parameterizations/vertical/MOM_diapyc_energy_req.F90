@@ -44,11 +44,15 @@ type, public :: diapyc_energy_req_CS ; private
   logical :: initialized = .false. ! A variable that is here because empty
                                ! structures are not permitted by some compilers.
   real :: test_Kh_scaling      ! A scaling factor for the diapycnal diffusivity.
+  real :: ColHt_scaling        ! A scaling factor for the column height change
+                               ! correction term.
   logical :: use_test_Kh_profile   ! If true, use the internal test diffusivity
                                ! profile in place of any that might be passed
                                ! in as an argument.
   type(diag_ctrl), pointer :: diag ! Structure used to regulate timing of diagnostic output
   integer :: id_ERt=-1, id_ERb=-1, id_ERc=-1, id_ERh=-1, id_Kddt=-1
+  integer :: id_CHCt=-1, id_CHCb=-1, id_CHCc=-1, id_CHCh=-1
+  integer :: id_T0=-1, id_Tf=-1, id_S0=-1, id_Sf=-1
   integer :: id_h=-1, id_zInt=-1
 end type diapyc_energy_req_CS
 
@@ -178,6 +182,22 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
                 !  including implicit mixing effects with other yet lower layers, in K H.
     dT_to_dPE, & ! Partial derivative of column potential energy with the temperature
     dS_to_dPE, & ! and salinity changes within a layer, in J m-2 K-1 and J m-2 / (g kg-1).
+    dT_to_dColHt, & ! Partial derivatives of the total column height with the temperature
+    dS_to_dColHt, & ! and salinity changes within a layer, in m K-1 and m ppt-1.
+    dT_to_dColHt_a, & ! Partial derivatives of the total column height with the temperature
+    dS_to_dColHt_a, & ! and salinity changes within a layer, including the implicit effects
+                    ! of mixing with layers higher in the water colun, in m K-1 and m ppt-1.
+    dT_to_dColHt_b, & ! Partial derivatives of the total column height with the temperature
+    dS_to_dColHt_b, & ! and salinity changes within a layer, including the implicit effects
+                    ! of mixing with layers lower in the water colun, in m K-1 and m ppt-1.
+    dT_to_dPE_a, &  ! Partial derivatives of column potential energy with the temperature
+    dS_to_dPE_a, &  ! and salinity changes within a layer, including the implicit effects
+                    ! of mixing with layers higher in the water column, in
+                    ! units of J m-2 K-1 and J m-2 ppt-1.
+    dT_to_dPE_b, &  ! Partial derivatives of column potential energy with the temperature
+    dS_to_dPE_b, &  ! and salinity changes within a layer, including the implicit effects
+                    ! of mixing with layers lower in the water column, in
+                    ! units of J m-2 K-1 and J m-2 ppt-1.
     hp_a, &     ! An effective pivot thickness of the layer including the effects
                 ! of coupling with layers above, in H.  This is the first term
                 ! in the denominator of b1 in a downward-oriented tridiagonal solver.
@@ -191,10 +211,6 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
   real, dimension(GV%ke+1) :: &
     pres, &     ! Interface pressures in Pa.
     z_Int, &    ! Interface heights relative to the surface, in m.
-    dT_to_dPE_a, &
-    dS_to_dPE_a, &
-    dT_to_dPE_b, &
-    dS_to_dPE_b, &
     Kddt_h_a, & !
     Kddt_h_b, & !
     Kddt_h, &   ! The diapycnal diffusivity times a timestep divided by the
@@ -202,9 +218,11 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
     Kd_so_far   ! The value of Kddt_h that has been applied already in
                 ! calculating the energy changes, in m or kg m-2.
   real, dimension(GV%ke+1,4) :: &
-    PE_chg_k        ! The integrated potential energy change within a timestep due
-                    ! to the diffusivity at interface K for 3 different orders of
+    PE_chg_k, &     ! The integrated potential energy change within a timestep due
+                    ! to the diffusivity at interface K for 4 different orders of
                     ! accumulating the diffusivities, in J m-2.
+    ColHt_cor_k     ! The correction to the potential energy change due to
+                    ! changes in the net column height, in J m-2.
   real :: &
     b1              ! b1 is used by the tridiagonal solver, in m-1 or m2 kg-1.
   real :: &
@@ -220,7 +238,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
                     ! converted to turbulent kinetic energy if the velocity in
                     ! the layer below an interface were homogenized with all of
                     ! the water above the interface, in J m-2 = kg s-2.
-  real :: PE_change
+  real :: PE_change, ColHt_cor
   real :: htot
   real :: dT_k, dT_km1, dS_k, dS_km1  ! Temporary arrays
   real :: b1Kd                        ! Temporary arrays
@@ -290,13 +308,13 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
     dPres = GV%g_Earth * dMass
     dT_to_dPE(k) = (dMass * (pres(K) + 0.5*dPres)) * dSV_dT(k)
     dS_to_dPE(k) = (dMass * (pres(K) + 0.5*dPres)) * dSV_dS(k)
-!    dT_to_dColHt(k) = dMass * dSV_dT(k)
-!    dS_to_dColHt(k) = dMass * dSV_dS(k)
+    dT_to_dColHt(k) = dMass * dSV_dT(k) * CS%ColHt_scaling
+    dS_to_dColHt(k) = dMass * dSV_dS(k) * CS%ColHt_scaling
   enddo
 
 !  PE_chg_k(1) = 0.0 ; PE_chg_k(nz+1) = 0.0
   ! PEchg(:) = 0.0
-  PE_chg_k(:,:) = 0.0
+  PE_chg_k(:,:) = 0.0 ; ColHt_cor_k(:,:) = 0.0
   dPEchg_dKd(:) = 0.0
 
   if (surface_BL) then  ! This version is appropriate for a surface boundary layer.
@@ -307,6 +325,8 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
       hp_a(k) = h_tr(k) ; hp_b(k) = h_tr(k)
       dT_to_dPE_a(k) = dT_to_dPE(k) ; dS_to_dPE_a(k) = dS_to_dPE(k)
       dT_to_dPE_b(k) = dT_to_dPE(k) ; dS_to_dPE_b(k) = dS_to_dPE(k)
+      dT_to_dColHt_a(k) = dT_to_dColHt(k) ; dS_to_dColHt_a(k) = dS_to_dColHt(k)
+      dT_to_dColHt_b(k) = dT_to_dColHt(k) ; dS_to_dColHt_b(k) = dS_to_dColHt(k)
     enddo
 
     do K=2,nz
@@ -347,14 +367,17 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
         call find_PE_chg_orig(Kddt_h_guess, h_tr(k), hp_a(k-1), &
                          dTe_term, dSe_term, dT_km1_t2, dS_km1_t2, &
                          dT_to_dPE(k), dS_to_dPE(k), dT_to_dPE_a(k-1), dS_to_dPE_a(k-1), &
-                         0.0, 0.0, 0.0, 0.0, 0.0, &
+                         pres(K), dT_to_dColHt(k), dS_to_dColHt(k), &
+                         dT_to_dColHt_a(k-1), dS_to_dColHt_a(k-1), &
                          PE_chg_k(k,1), dPEa_dKd(k))
       else
         call find_PE_chg(0.0, Kddt_h_guess, hp_a(k-1), hp_b(k), &
                          Th_a(k-1), Sh_a(k-1), Th_b(k), Sh_b(k), &
                          dT_to_dPE_a(k-1), dS_to_dPE_a(k-1), dT_to_dPE_b(k), dS_to_dPE_b(k), &
-                         0.0, 0.0, 0.0, 0.0, 0.0, &
-                         PE_chg=PE_chg_k(K,1), dPEc_dKd=dPEa_dKd(K))
+                         pres(K), dT_to_dColHt_a(k-1), dS_to_dColHt_a(k-1), &
+                         dT_to_dColHt_b(k), dS_to_dColHt_b(k), &
+                         PE_chg=PE_chg_k(K,1), dPEc_dKd=dPEa_dKd(K), &
+                         ColHt_cor=ColHt_cor_k(K,1))
       endif
 
       if (debug) then
@@ -365,13 +388,15 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
             call find_PE_chg_orig(Kddt_h_guess, h_tr(k), hp_a(k-1), &
                              dTe_term, dSe_term, dT_km1_t2, dS_km1_t2, &
                              dT_to_dPE(k), dS_to_dPE(k), dT_to_dPE_a(k-1), dS_to_dPE_a(k-1), &
-                             0.0, 0.0, 0.0, 0.0, 0.0, &
+                             pres(K), dT_to_dColHt(k), dS_to_dColHt(k), &
+                             dT_to_dColHt_a(k-1), dS_to_dColHt_a(k-1), &
                              PE_chg=PE_chg(itt))
           else
             call find_PE_chg(0.0, Kddt_h_guess, hp_a(k-1), hp_b(k), &
                              Th_a(k-1), Sh_a(k-1), Th_b(k), Sh_b(k), &
                              dT_to_dPE_a(k-1), dS_to_dPE_a(k-1), dT_to_dPE_b(k), dS_to_dPE_b(k), &
-                             0.0, 0.0, 0.0, 0.0, 0.0, &
+                             pres(K), dT_to_dColHt_a(k-1), dS_to_dColHt_a(k-1), &
+                             dT_to_dColHt_b(k), dS_to_dColHt_b(k), &
                              PE_chg=PE_chg(itt))
           endif
         enddo
@@ -405,6 +430,8 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
       hp_a(k) = h_tr(k) + (hp_a(k-1) * b1) * Kddt_h(K)
       dT_to_dPE_a(k) = dT_to_dPE(k) + c1_a(K)*dT_to_dPE_a(k-1)
       dS_to_dPE_a(k) = dS_to_dPE(k) + c1_a(K)*dS_to_dPE_a(k-1)
+      dT_to_dColHt_a(k) = dT_to_dColHt(k) + c1_a(K)*dT_to_dColHt_a(k-1)
+      dS_to_dColHt_a(k) = dS_to_dColHt(k) + c1_a(K)*dS_to_dColHt_a(k-1)
 
     enddo
 
@@ -430,7 +457,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
         T_chg_totA = T_chg_totA + h_tr(k) * (Tf(k) - T0(k))
       enddo
       do K=2,nz
-        PE_chg_tot2A = PE_chg_tot2A + PE_chg_k(K,1)
+        PE_chg_tot2A = PE_chg_tot2A + (PE_chg_k(K,1) - ColHt_cor_k(K,1))
       enddo
     endif
 
@@ -444,6 +471,8 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
       hp_a(k) = h_tr(k) ; hp_b(k) = h_tr(k)
       dT_to_dPE_a(k) = dT_to_dPE(k) ; dS_to_dPE_a(k) = dS_to_dPE(k)
       dT_to_dPE_b(k) = dT_to_dPE(k) ; dS_to_dPE_b(k) = dS_to_dPE(k)
+      dT_to_dColHt_a(k) = dT_to_dColHt(k) ; dS_to_dColHt_a(k) = dS_to_dColHt(k)
+      dT_to_dColHt_b(k) = dT_to_dColHt(k) ; dS_to_dColHt_b(k) = dS_to_dColHt(k)
     enddo
 
     do K=nz,2,-1  ! Loop over interior interfaces.
@@ -483,14 +512,17 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
         call find_PE_chg_orig(Kddt_h_guess, h_tr(k-1), hp_b(k), &
                          dTe_term, dSe_term, dT_k_t2, dS_k_t2, &
                          dT_to_dPE(k-1), dS_to_dPE(k-1), dT_to_dPE_b(k), dS_to_dPE_b(k), &
-                         0.0, 0.0, 0.0, 0.0, 0.0, &
+                         pres(K), dT_to_dColHt(k-1), dS_to_dColHt(k-1), &
+                         dT_to_dColHt_b(k), dS_to_dColHt_b(k), &
                          PE_chg=PE_chg_k(K,2), dPEc_dKd=dPEb_dKd(K))
       else
         call find_PE_chg(0.0, Kddt_h_guess, hp_a(k-1), hp_b(k), &
                          Th_a(k-1), Sh_a(k-1), Th_b(k), Sh_b(k), &
                          dT_to_dPE_a(k-1), dS_to_dPE_a(k-1), dT_to_dPE_b(k), dS_to_dPE_b(k), &
-                         0.0, 0.0, 0.0, 0.0, 0.0, &
-                         PE_chg=PE_chg_k(K,2), dPEc_dKd=dPEb_dKd(K))
+                         pres(K), dT_to_dColHt_a(k-1), dS_to_dColHt_a(k-1), &
+                         dT_to_dColHt_b(k), dS_to_dColHt_b(k), &
+                         PE_chg=PE_chg_k(K,2), dPEc_dKd=dPEb_dKd(K), &
+                         ColHt_cor=ColHt_cor_k(K,2))
       endif
 
       if (debug) then
@@ -502,13 +534,15 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
             call find_PE_chg_orig(Kddt_h_guess, h_tr(k-1), hp_b(k), &
                            dTe_term, dSe_term, dT_k_t2, dS_k_t2, &
                            dT_to_dPE(k-1), dS_to_dPE(k-1), dT_to_dPE_b(k), dS_to_dPE_b(k), &
-                           0.0, 0.0, 0.0, 0.0, 0.0, &
+                           pres(K), dT_to_dColHt(k-1), dS_to_dColHt(k-1), &
+                           dT_to_dColHt_b(k), dS_to_dColHt_b(k), &
                            PE_chg=PE_chg(itt))
           else
             call find_PE_chg(0.0, Kddt_h_guess, hp_a(k-1), hp_b(k), &
                              Th_a(k-1), Sh_a(k-1), Th_b(k), Sh_b(k), &
                              dT_to_dPE_a(k-1), dS_to_dPE_a(k-1), dT_to_dPE_b(k), dS_to_dPE_b(k), &
-                             0.0, 0.0, 0.0, 0.0, 0.0, &
+                             pres(K), dT_to_dColHt_a(k-1), dS_to_dColHt_a(k-1), &
+                             dT_to_dColHt_b(k), dS_to_dColHt_b(k), &
                              PE_chg=PE_chg(itt))
           endif
         enddo
@@ -542,6 +576,8 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
       hp_b(k-1) = h_tr(k-1) + (hp_b(k) * b1) * Kddt_h(K)
       dT_to_dPE_b(k-1) = dT_to_dPE(k-1) + c1_b(K)*dT_to_dPE_b(k)
       dS_to_dPE_b(k-1) = dS_to_dPE(k-1) + c1_b(K)*dS_to_dPE_b(k)
+      dT_to_dColHt_b(k-1) = dT_to_dColHt(k-1) + c1_b(K)*dT_to_dColHt_b(k)
+      dS_to_dColHt_b(k-1) = dS_to_dColHt(k-1) + c1_b(K)*dS_to_dColHt_b(k)
 
     enddo
 
@@ -567,7 +603,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
         T_chg_totB = T_chg_totB + h_tr(k) * (Tf(k) - T0(k))
       enddo
       do K=2,nz
-        PE_chg_tot2B = PE_chg_tot2B + PE_chg_k(K,2)
+        PE_chg_tot2B = PE_chg_tot2B + (PE_chg_k(K,2) - ColHt_cor_k(K,2))
       enddo
     endif
 
@@ -580,6 +616,8 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
       hp_a(k) = h_tr(k) ; hp_b(k) = h_tr(k)
       dT_to_dPE_a(k) = dT_to_dPE(k) ; dS_to_dPE_a(k) = dS_to_dPE(k)
       dT_to_dPE_b(k) = dT_to_dPE(k) ; dS_to_dPE_b(k) = dS_to_dPE(k)
+      dT_to_dColHt_a(k) = dT_to_dColHt(k) ; dS_to_dColHt_a(k) = dS_to_dColHt(k)
+      dT_to_dColHt_b(k) = dT_to_dColHt(k) ; dS_to_dColHt_b(k) = dS_to_dColHt(k)
     enddo
 
     ! Calculate the dependencies on layers above.
@@ -603,9 +641,11 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
       call find_PE_chg(Kd0, dKd, hp_a(k-1), hp_b(k), &
                        Th_a(k-1), Sh_a(k-1), Th_b(k), Sh_b(k), &
                        dT_to_dPE_a(k-1), dS_to_dPE_a(k-1), dT_to_dPE_b(k), dS_to_dPE_b(k), &
-                       0.0, 0.0, 0.0, 0.0, 0.0, &
-                       PE_chg=PE_change)
+                       pres(K), dT_to_dColHt_a(k-1), dS_to_dColHt_a(k-1), &
+                       dT_to_dColHt_b(k), dS_to_dColHt_b(k), &
+                       PE_chg=PE_change, ColHt_cor=ColHt_cor)
       PE_chg_k(K,3) = PE_change
+      ColHt_cor_k(K,3) = ColHt_cor
 
       b1 = 1.0 / (hp_a(k-1) + Kddt_h_a(K))
       c1_a(K) = Kddt_h_a(K) * b1
@@ -620,6 +660,8 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
       hp_a(k) = h_tr(k) + (hp_a(k-1) * b1) * Kddt_h_a(K)
       dT_to_dPE_a(k) = dT_to_dPE(k) + c1_a(K)*dT_to_dPE_a(k-1)
       dS_to_dPE_a(k) = dS_to_dPE(k) + c1_a(K)*dS_to_dPE_a(k-1)
+      dT_to_dColHt_a(k) = dT_to_dColHt(k) + c1_a(K)*dT_to_dColHt_a(k-1)
+      dS_to_dColHt_a(k) = dS_to_dColHt(k) + c1_a(K)*dS_to_dColHt_a(k-1)
     enddo
 
     ! Calculate the dependencies on layers below.
@@ -646,9 +688,11 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
       call find_PE_chg(Kd0, dKd, hp_a(k-1), hp_b(k), &
                        Th_a(k-1), Sh_a(k-1), Th_b(k), Sh_b(k), &
                        dT_to_dPE_a(k-1), dS_to_dPE_a(k-1), dT_to_dPE_b(k), dS_to_dPE_b(k), &
-                       0.0, 0.0, 0.0, 0.0, 0.0, &
-                       PE_chg=PE_change)
+                       pres(K), dT_to_dColHt_a(k-1), dS_to_dColHt_a(k-1), &
+                       dT_to_dColHt_b(k), dS_to_dColHt_b(k), &
+                       PE_chg=PE_change, ColHt_cor=ColHt_cor)
       PE_chg_k(K,3) = PE_chg_k(K,3) + PE_change
+      ColHt_cor_k(K,3) = ColHt_cor_k(K,3) + ColHt_cor
 
       b1 = 1.0 / (hp_b(k) + Kddt_h_b(K))
       c1_b(K) = Kddt_h_b(K) * b1
@@ -663,6 +707,8 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
       hp_b(k-1) = h_tr(k-1) + (hp_b(k) * b1) * Kddt_h_b(K)
       dT_to_dPE_b(k-1) = dT_to_dPE(k-1) + c1_b(K)*dT_to_dPE_b(k)
       dS_to_dPE_b(k-1) = dS_to_dPE(k-1) + c1_b(K)*dS_to_dPE_b(k)
+      dT_to_dColHt_b(k-1) = dT_to_dColHt(k-1) + c1_b(K)*dT_to_dColHt_b(k)
+      dS_to_dColHt_b(k-1) = dS_to_dColHt(k-1) + c1_b(K)*dS_to_dColHt_b(k)
 
     enddo
 
@@ -689,9 +735,11 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
     call find_PE_chg(Kd0, dKd, hp_a(k-1), hp_b(k), &
                      Th_a(k-1), Sh_a(k-1), Th_b(k), Sh_b(k), &
                      dT_to_dPE_a(k-1), dS_to_dPE_a(k-1), dT_to_dPE_b(k), dS_to_dPE_b(k), &
-                     0.0, 0.0, 0.0, 0.0, 0.0, &
-                     PE_chg=PE_change)
+                     pres(K), dT_to_dColHt_a(k-1), dS_to_dColHt_a(k-1), &
+                     dT_to_dColHt_b(k), dS_to_dColHt_b(k), &
+                     PE_chg=PE_change, ColHt_cor=ColHt_cor)
     PE_chg_k(K,3) = PE_chg_k(K,3) + PE_change
+    ColHt_cor_k(K,3) = ColHt_cor_k(K,3) + ColHt_cor
 
 
     !   To derive the following, first to a partial update for the estimated
@@ -734,7 +782,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
         T_chg_totC = T_chg_totC + h_tr(k) * (Tf(k) - T0(k))
       enddo
       do K=2,nz
-        PE_chg_tot2C = PE_chg_tot2C + PE_chg_k(K,3)
+        PE_chg_tot2C = PE_chg_tot2C + (PE_chg_k(K,3) - ColHt_cor_k(K,3))
       enddo
     endif
 
@@ -747,6 +795,8 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
       hp_a(k) = h_tr(k) ; hp_b(k) = h_tr(k)
       dT_to_dPE_a(k) = dT_to_dPE(k) ; dS_to_dPE_a(k) = dS_to_dPE(k)
       dT_to_dPE_b(k) = dT_to_dPE(k) ; dS_to_dPE_b(k) = dS_to_dPE(k)
+      dT_to_dColHt_a(k) = dT_to_dColHt(k) ; dS_to_dColHt_a(k) = dS_to_dColHt(k)
+      dT_to_dColHt_b(k) = dT_to_dColHt(k) ; dS_to_dColHt_b(k) = dS_to_dColHt(k)
     enddo
     do K=1,nz+1
       Kd_so_far(K) = 0.0
@@ -770,10 +820,12 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
       call find_PE_chg(Kd0, dKd, hp_a(k-1), hp_b(k), &
                        Th_a(k-1), Sh_a(k-1), Th_b(k), Sh_b(k), &
                        dT_to_dPE_a(k-1), dS_to_dPE_a(k-1), dT_to_dPE_b(k), dS_to_dPE_b(k), &
-                       0.0, 0.0, 0.0, 0.0, 0.0, &
-                       PE_chg=PE_change)
+                       pres(K), dT_to_dColHt_a(k-1), dS_to_dColHt_a(k-1), &
+                       dT_to_dColHt_b(k), dS_to_dColHt_b(k), &
+                       PE_chg=PE_change, ColHt_cor=ColHt_cor)
 
       PE_chg_k(K,4) = PE_change
+      ColHt_cor_k(K,4) = ColHt_cor
 
       Kd_so_far(K) = Kd_so_far(K) + dKd
 
@@ -790,6 +842,8 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
       hp_a(k) = h_tr(k) + (hp_a(k-1) * b1) * Kd_so_far(K)
       dT_to_dPE_a(k) = dT_to_dPE(k) + c1_a(K)*dT_to_dPE_a(k-1)
       dS_to_dPE_a(k) = dS_to_dPE(k) + c1_a(K)*dS_to_dPE_a(k-1)
+      dT_to_dColHt_a(k) = dT_to_dColHt(k) + c1_a(K)*dT_to_dColHt_a(k-1)
+      dS_to_dColHt_a(k) = dS_to_dColHt(k) + c1_a(K)*dS_to_dColHt_a(k-1)
     enddo
 
     ! Calculate the dependencies on layers below.
@@ -814,10 +868,13 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
       call find_PE_chg(Kd0, dKd, hp_a(k-1), hp_b(k), &
                        Th_a(k-1), Sh_a(k-1), Th_b(k), Sh_b(k), &
                        dT_to_dPE_a(k-1), dS_to_dPE_a(k-1), dT_to_dPE_b(k), dS_to_dPE_b(k), &
-                       0.0, 0.0, 0.0, 0.0, 0.0, &
-                       PE_chg=PE_change)
+                       pres(K), dT_to_dColHt_a(k-1), dS_to_dColHt_a(k-1), &
+                       dT_to_dColHt_b(k), dS_to_dColHt_b(k), &
+                       PE_chg=PE_change, ColHt_cor=ColHt_cor)
 
       PE_chg_k(K,4) = PE_chg_k(K,4) + PE_change
+      ColHt_cor_k(K,4) = ColHt_cor_k(K,4) + ColHt_cor
+
 
       Kd_so_far(K) = Kd_so_far(K) + dKd
 
@@ -834,6 +891,8 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
       hp_b(k-1) = h_tr(k-1) + (hp_b(k) * b1) * Kd_so_far(K)
       dT_to_dPE_b(k-1) = dT_to_dPE(k-1) + c1_b(K)*dT_to_dPE_b(k)
       dS_to_dPE_b(k-1) = dS_to_dPE(k-1) + c1_b(K)*dS_to_dPE_b(k)
+      dT_to_dColHt_b(k-1) = dT_to_dColHt(k-1) + c1_b(K)*dT_to_dColHt_b(k)
+      dS_to_dColHt_b(k-1) = dS_to_dColHt(k-1) + c1_b(K)*dS_to_dColHt_b(k)
 
     enddo
 
@@ -855,7 +914,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
         T_chg_totD = T_chg_totD + h_tr(k) * (Tf(k) - T0(k))
       enddo
       do K=2,nz
-        PE_chg_tot2D = PE_chg_tot2D + PE_chg_k(K,4)
+        PE_chg_tot2D = PE_chg_tot2D + (PE_chg_k(K,4) - ColHt_cor_k(K,4))
       enddo
     endif
 
@@ -873,6 +932,14 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
     if (CS%id_Kddt>0) call post_data_1d_k(CS%id_Kddt, GV%H_to_m*Kddt_h, CS%diag)
     if (CS%id_h>0)    call post_data_1d_k(CS%id_h, GV%H_to_m*h_tr, CS%diag)
     if (CS%id_zInt>0) call post_data_1d_k(CS%id_zInt, Z_int, CS%diag)
+    if (CS%id_CHCt>0) call post_data_1d_k(CS%id_CHCt, ColHt_cor_k(:,1), CS%diag)
+    if (CS%id_CHCb>0) call post_data_1d_k(CS%id_CHCb, ColHt_cor_k(:,2), CS%diag)
+    if (CS%id_CHCc>0) call post_data_1d_k(CS%id_CHCc, ColHt_cor_k(:,3), CS%diag)
+    if (CS%id_CHCh>0) call post_data_1d_k(CS%id_CHCh, ColHt_cor_k(:,4), CS%diag)
+    if (CS%id_T0>0) call post_data_1d_k(CS%id_T0, T0, CS%diag)
+    if (CS%id_Tf>0) call post_data_1d_k(CS%id_Tf, Tf, CS%diag)
+    if (CS%id_S0>0) call post_data_1d_k(CS%id_S0, S0, CS%diag)
+    if (CS%id_Sf>0) call post_data_1d_k(CS%id_Sf, Sf, CS%diag)
   endif
 
 end subroutine diapyc_energy_req_calc
@@ -882,7 +949,7 @@ end subroutine diapyc_energy_req_calc
 subroutine find_PE_chg(Kddt_h0, dKddt_h, hp_a, hp_b, Th_a, Sh_a, Th_b, Sh_b, &
                        dT_to_dPE_a, dS_to_dPE_a, dT_to_dPE_b, dS_to_dPE_b, &
                        pres, dT_to_dColHt_a, dS_to_dColHt_a, dT_to_dColHt_b, dS_to_dColHt_b, &
-                       PE_chg, dPEc_dKd, dPE_max, dPEc_dKd_0)
+                       PE_chg, dPEc_dKd, dPE_max, dPEc_dKd_0, ColHt_cor)
   real, intent(in)  :: Kddt_h0  !< The previously used diffusivity at an interface times
                                 !! the time step and  divided by the average of the
                                 !! thicknesses around the interface, in units of H (m or kg-2).
@@ -954,6 +1021,8 @@ subroutine find_PE_chg(Kddt_h0, dKddt_h, hp_a, hp_b, Th_a, Sh_a, Th_b, Sh_b, &
                                           !! present interface, in J m-2.
   real, optional, intent(out) :: dPEc_dKd_0 !< The partial derivative of PE_chg with Kddt_h in the
                                             !! limit where Kddt_h = 0, in J m-2 H-1.
+  real, optional, intent(out) :: ColHt_cor  !< The correction to PE_chg that is made due to a net
+                                            !! change in the column height, in J m-2.
 
   real :: hps ! The sum of the two effective pivot thicknesses, in H.
   real :: bdt1 ! A product of the two pivot thicknesses plus a diffusive term, in H2.
@@ -990,6 +1059,10 @@ subroutine find_PE_chg(Kddt_h0, dKddt_h, hp_a, hp_b, Th_a, Sh_a, Th_b, Sh_b, &
     PE_chg = PEc_core * y1
     ColHt_chg = ColHt_core * y1
     if (ColHt_chg < 0.0) PE_chg = PE_chg - pres * ColHt_chg
+    if (present(ColHt_cor)) ColHt_cor = -pres * min(ColHt_chg, 0.0)
+  else if (present(ColHt_cor)) then
+    y1 = dKddt_h / (bdt1 * (bdt1 + dKddt_h * hps))
+    ColHt_cor = -pres * min(ColHt_core * y1, 0.0)
   endif
 
   if (present(dPEc_dKd)) then
@@ -1254,6 +1327,9 @@ subroutine diapyc_energy_req_init(Time, G, param_file, diag, CS)
   call get_param(param_file, mod, "ENERGY_REQ_KH_SCALING", CS%test_Kh_scaling, &
                  "A scaling factor for the diapycnal diffusivity used in \n"//&
                  "testing the energy requirements.", default=1.0, units="nondim")
+  call get_param(param_file, mod, "ENERGY_REQ_COL_HT_SCALING", CS%ColHt_scaling, &
+                 "A scaling factor for the column height change correction \n"//&
+                 "used in testing the energy requirements.", default=1.0, units="nondim")
   call get_param(param_file, mod, "ENERGY_REQ_USE_TEST_PROFILE", &
                  CS%use_test_Kh_profile, &
                  "If true, use the internal test diffusivity profile in \n"//&
@@ -1273,6 +1349,22 @@ subroutine diapyc_energy_req_init(Time, G, param_file, diag, CS)
                  "Test column layer thicknesses", "m")
   CS%id_zInt   = register_diag_field('ocean_model', 'EnReqTest_z_int', diag%axesZi, Time, &
                  "Test column layer interface heights", "m")
+  CS%id_CHCt = register_diag_field('ocean_model', 'EnReqTest_CHCt', diag%axesZi, Time, &
+                 "Column Height Correction to Energy Requirements, top-down", "J m-2")
+  CS%id_CHCb = register_diag_field('ocean_model', 'EnReqTest_CHCb', diag%axesZi, Time, &
+                 "Column Height Correction to Energy Requirements, bottom-up", "J m-2")
+  CS%id_CHCc = register_diag_field('ocean_model', 'EnReqTest_CHCc', diag%axesZi, Time, &
+                 "Column Height Correction to Energy Requirements, center-last", "J m-2")
+  CS%id_CHCh = register_diag_field('ocean_model', 'EnReqTest_CHCh', diag%axesZi, Time, &
+                 "Column Height Correction to Energy Requirements, halves", "J m-2")
+  CS%id_T0 = register_diag_field('ocean_model', 'EnReqTest_T0', diag%axesZL, Time, &
+                 "Temperature before mixing", "deg C")
+  CS%id_Tf = register_diag_field('ocean_model', 'EnReqTest_Tf', diag%axesZL, Time, &
+                 "Temperature after mixing", "deg C")
+  CS%id_S0 = register_diag_field('ocean_model', 'EnReqTest_S0', diag%axesZL, Time, &
+                 "Salinity before mixing", "g kg-1")
+  CS%id_Sf = register_diag_field('ocean_model', 'EnReqTest_Sf', diag%axesZL, Time, &
+                 "Salinity after mixing", "g kg-1")
 
 end subroutine diapyc_energy_req_init
 
