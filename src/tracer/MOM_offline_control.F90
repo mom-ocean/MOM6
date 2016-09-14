@@ -645,19 +645,19 @@ contains
     select case (flux_order)
       case (1) ! z -> x -> y
         ! Check first to see if either the top or bottom flux would deplete the layer
-        call flux_limiter_vertical(G, GV, h_budget, ea, eb, max_off_cfl)
+        !call flux_limiter_vertical(G, GV, h_budget, ea, eb, max_off_cfl)
         call flux_limiter_u(G, GV, h_budget, uh, max_off_cfl)
         call flux_limiter_v(G, GV, h_budget, vh, max_off_cfl)
       case (2) ! z -> y -> x
-        call flux_limiter_vertical(G, GV, h_budget, ea, eb, max_off_cfl)
+        !call flux_limiter_vertical(G, GV, h_budget, ea, eb, max_off_cfl)
         call flux_limiter_v(G, GV, h_budget, vh, max_off_cfl)
         call flux_limiter_u(G, GV, h_budget, uh, max_off_cfl)
       case (3) ! x -> y -> z
-        call flux_limiter_u(G, GV, h_budget, uh, max_off_cfl)
+        !call flux_limiter_u(G, GV, h_budget, uh, max_off_cfl)
         call flux_limiter_v(G, GV, h_budget, vh, max_off_cfl)
         call flux_limiter_vertical(G, GV, h_budget, ea, eb, max_off_cfl)
       case (4) ! y -> x -> z
-        call flux_limiter_v(G, GV, h_budget, vh, max_off_cfl)
+        !call flux_limiter_v(G, GV, h_budget, vh, max_off_cfl)
         call flux_limiter_u(G, GV, h_budget, uh, max_off_cfl)
         call flux_limiter_vertical(G, GV, h_budget, ea, eb, max_off_cfl)
       case default
@@ -781,48 +781,45 @@ contains
     real                                                        :: max_off_cfl
     ! Limits how much the a layer can be depleted in the vertical direction
     real, dimension(SZIB_(G),SZK_(G))                           :: uh2d
-    real, dimension(SZI_(G),SZK_(G))                            :: h_budget2d, uh_div
-    real                                                        :: scale_factor
+    real                                                        :: hup, hlos, min_h
     integer :: i, j, k, m, is, ie, js, je, nz
 
+    min_h= 0.1*GV%Angstrom
     ! Set index-related variables for fields on T-grid
-    is  = G%IsdB ; ie  = G%IedB ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
+    is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
 
     do j=js,je
-      do k=1,nz ; do i=is,ie
-        uh2d(i,k) = uh(i,j,k)
-        h_budget2d(i,k) = h(i,j,k)*max_off_cfl
+      do k=1,nz ; do i=is-1,ie
+        uh2d(I,k) = uh(I,j,k)        
       enddo ; enddo;
 
-      do k=1,nz ; do i=is+1,ie
-        uh_div(i,k) = uh2d(I-1,k) - uh2d(I,k)
+      do k=1,nz ; do i=is-1,ie
+        if(uh2d(I,k)<0.0) then
+          hup = h(i+1,j,k) - G%areaT(i+1,j)*min_h
+          hlos = MAX(0.0,uh2d(I+1,k))
+          if (((hup + uh2d(I,k) - hlos) < 0.0) .and. ((0.5*hup + uh2d(I,k)) < 0.0)) &
+            uh2d(I,k) = MIN(-0.5*hup,-hup+hlos,0.0)
+            
+        elseif(uh2d(I,k)>0.0) then
+          hup = h(i,j,k) - G%areaT(i,j)*min_h
+          hlos = MAX(0.0,-uh2d(I-1,k))
+          if (((hup - uh2d(I,k) - hlos) < 0.0) .and. ((0.5*hup - uh2d(I,k)) < 0.0)) &
+            uh2d(I,k) = MAX(0.5*hup,hup-hlos,0.0)                                          
+        endif    
       enddo ; enddo
 
-      do k=1,nz ; do i=is+1,ie
-        ! Check to see if the uh-divergence will deplete the layer
-        if(uh_div(i,k)>h_budget2d(i,k)) then
-          scale = h_budget2d(i,k)/uh_div(i,k)
-
-          ! Three divergent cases
-          ! <-- , -->
-          if( uh2d(I-1,k)<0.0 .and. uh2d(I,k)>0.0 ) then
-            uh2d(I-1,k) = uh2d(I-1,k)*scale
-            uh2d(I,k) = uh2d(I,k)*scale
-          ! <-- , <--
-          elseif( uh2d(I-1,k)<0.0 .and. uh2d(I,k)<0.0 )
-            uh2d(I-1,k) = uh2d(I-1,k)*scale
-          ! --> , -->
-          elseif( uh2d(I-1,k)>0.0 .and. uh2d(I,k)>0.0)
-            uh2d(I,k) = uh2d(I,k)*scale
+      do k=1,nz
+        do i=is-1,ie
+          uh(I,j,k) = uh2d(I,k)        
+        enddo
+        do i=is,ie 
+          h(i,j,k) = h(i,j,k) + (uh2d(I-1,k)-uh2d(I,k))
+          if( h(i,j,k)<0.0 ) then
+            print *, i, j, k, h(i,j,k)
           endif
-        endif
-      enddo ; enddo
-
-      do k=1,nz ; do i=is,ie
-        uh(I,j,k) = uh2d(I,k)
-        h(i,j,k) = h2d(i,k) + ( uh2d(I-1,k)-uh2d(I,k) )
-      enddo ; enddo
-    enddo
+        enddo
+      enddo
+    enddo  
 
   end subroutine flux_limiter_u
 
@@ -834,35 +831,46 @@ contains
     real,                                      intent(in)       :: max_off_cfl
     ! Limits how much the a layer can be depleted in the vertical direction
     real, dimension(SZJB_(G),SZK_(G))                           :: vh2d
-    real, dimension(SZJ_(G),SZK_(G))                            :: h2d, scale
-    real                                                        :: total_out_flux, h_budget
+    real, dimension(SZJ_(G),SZK_(G))                            :: h2d
+    real                                                        :: hup, hlos, min_h
     integer :: i, j, k, m, is, ie, js, je, nz
 
     ! Set index-related variables for fields on T-grid
-    is  = G%isd ; ie  = G%ied ; js  = G%jsdB ; je  = G%jedB ; nz = GV%ke
-
+    is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
+    min_h= 0.1*GV%Angstrom
     do i=is,ie
-      do k=1,nz ; do j=js,je
-        vh2d(J,k) = vh(i,J,k)
-        h2d(j,k) = h(i,j,k)*G%areaT(i,j)
-        scale(j,k) = 1.0
+      do k=1,nz ; do j=js-1,je
+        vh2d(J,k) = vh(i,J,k)        
       enddo ; enddo;
-
-      do k=1,nz ; do j=js+1,je
-        h_budget = h2d(j,k)*max_off_cfl ! How much the layer can be depleted in any given step
-                                        ! based on the specified max CFL
-        total_out_flux = vh2d(J-1,k) - vh2d(J,k)
-        if (total_out_flux>h_budget) scale(j,k) = h_budget/total_out_flux
-        ! Scale back the outgoing flux(es)
-        if(-vh2d(J-1,k)>0.0) vh2d(J-1,k) = vh2d(J-1,k)*scale(j,k)
-        if( vh2d(J,k)>0.0)   vh2d(J,k)   = vh2d(J,k)*scale(j,k)
-        h2d(j,k) = h2d(j,k) + ( vh2d(J-1,k)-vh2d(J,k) )
+      
+      do k=1,nz ; do j=js-1,je
+        if(vh2d(J,k)<0.0) then
+          hup = h(i,j+1,k) - G%areaT(i,j+1)*min_h
+          hlos = MAX(0.0,vh2d(J+1,k))
+          if (((hup + vh2d(J,k) - hlos) < 0.0) .and. ((0.5*hup + vh2d(J,k)) < 0.0)) &
+            vh2d(J,k) = MIN(-0.5*hup,-hup+hlos,0.0)
+            
+        elseif(vh2d(J,k)>0.0) then
+          hup = h(i,j,k) - G%areaT(i,j)*min_h
+          hlos = MAX(0.0,-vh2d(J-1,k))
+          if (((hup - vh2d(J,k) - hlos) < 0.0) .and. ((0.5*hup - vh2d(J,k)) < 0.0)) &
+            vh2d(J,k) = MAX(0.5*hup,hup-hlos,0.0)                                          
+        endif    
       enddo ; enddo
 
-      do k=1,nz ; do j=js,je
-        vh(i,J,k) = vh2d(J,k)
-        h(i,j,k)  = h2d(j,k)*G%IareaT(i,j)
-      enddo ; enddo
+      do k=1,nz 
+        do j=js-1,je
+          vh(i,J,k) = vh2d(J,k)
+        enddo
+        
+        do j=js,je
+          h(i,j,k)  = h(i,j,k) + (vh2d(J-1,k)-vh2d(J,k))
+          if( h(i,j,k)<0.0 ) then
+            print *, i, j, k, h(i,j,k)
+          endif
+        enddo  
+      enddo
+      
     enddo
   end subroutine flux_limiter_v
 
