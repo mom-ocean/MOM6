@@ -1513,8 +1513,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     ! The flux limiting follows the routine specified by Skamarock (Monthly Weather Review, 2005)
     ! to make sure that offline advection is monotonic and positive-definite
 !
-    call tracer_hordiff(h_pre, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
-        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, CS%do_online, khdt_x*0.5, khdt_y*0.5)
+!    call tracer_hordiff(h_pre, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
+!        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, CS%do_online, khdt_x*0.5, khdt_y*0.5)
 
     x_before_y = (MOD(G%first_direction,2) == 0)
     z_first = CS%diabatic_first
