@@ -24,7 +24,7 @@ use MOM_diag_mediator, only : time_type, diag_ctrl
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
-use MOM_open_boundary, only : ocean_OBC_type, OBC_SIMPLE, OBC_FLATHER
+use MOM_open_boundary, only : ocean_OBC_type, OBC_NONE
 use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_variables, only : BT_cont_type
 use MOM_verticalGrid, only : verticalGrid_type
@@ -156,7 +156,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
 
   apply_OBC_u_flather_east = .false. ; apply_OBC_u_flather_west = .false.
   apply_OBC_v_flather_north = .false. ; apply_OBC_v_flather_south = .false.
-  if (present(OBC)) then ; if (associated(OBC)) then ; if (OBC%this_pe) then
+  if (present(OBC)) then ; if (associated(OBC)) then ; if (OBC%OBC_pe) then
     apply_OBC_u_flather_east = OBC%apply_OBC_u_flather_east
     apply_OBC_u_flather_west = OBC%apply_OBC_u_flather_west
     apply_OBC_v_flather_north = OBC%apply_OBC_v_flather_north
@@ -193,20 +193,18 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
     if (apply_OBC_u_flather_east .or. apply_OBC_u_flather_west) then
       do k=1,nz ; do j=LB%jsh,LB%jeh
         do I=LB%ish,LB%ieh+1
-          if (OBC%OBC_kind_u(I-1,j) == OBC_FLATHER .and. (OBC%OBC_direction_u(I-1,j) == OBC_DIRECTION_E)) &
-            h(i,j,k) = h_input(i-1,j,k)
+          if (OBC%OBC_segment_u(I-1,j) /= OBC_NONE) then
+            if (OBC%OBC_segment_list(OBC%OBC_segment_u(I-1,j))%radiation &
+               .and. (OBC%OBC_direction_u(I-1,j) == OBC_DIRECTION_E)) &
+              h(i,j,k) = h_input(i-1,j,k)
+          endif
         enddo
         do i=LB%ish-1,LB%ieh
-          if (OBC%OBC_kind_u(I,j) == OBC_FLATHER .and. (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_W)) &
-            h(i,j,k) = h_input(i+1,j,k)
-        enddo
-      enddo
-      do J=LB%jsh-1,LB%jeh
-        do i=LB%ish-1,LB%ieh+1
-          if (OBC%OBC_kind_v(i,J) == OBC_FLATHER .and. (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_E)) &
-            v(i,J,k) = v(i-1,J,k)
-          if (OBC%OBC_kind_v(i,J) == OBC_FLATHER .and. (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_W)) &
-            v(i,J,k) = v(i+1,J,k)
+          if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
+            if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%radiation &
+               .and. (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_W)) &
+              h(i,j,k) = h_input(i+1,j,k)
+          endif
         enddo
       enddo ; enddo
     endif
@@ -229,18 +227,18 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
     if (apply_OBC_v_flather_north .or. apply_OBC_v_flather_south) then
       do k=1,nz
         do J=LB%jsh,LB%jeh+1 ; do i=LB%ish-1,LB%ieh+1
-          if (OBC%OBC_kind_v(i,J-1) == OBC_FLATHER .and. (OBC%OBC_direction_v(i,J-1) == OBC_DIRECTION_N)) &
-            h(i,j,k) = h_input(i,j-1,k)
+          if (OBC%OBC_segment_v(i,J-1) /= OBC_NONE) then
+            if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J-1))%radiation &
+                .and. (OBC%OBC_direction_v(i,J-1) == OBC_DIRECTION_N)) &
+              h(i,j,k) = h_input(i,j-1,k)
+          endif
         enddo ; enddo
         do J=LB%jsh-1,LB%jeh ; do i=LB%ish-1,LB%ieh+1
-          if (OBC%OBC_kind_v(i,J) == OBC_FLATHER .and. (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S)) &
-            h(i,j,k) = h_input(i,j+1,k)
-        enddo ; enddo
-        do j=LB%jsh-1,LB%jeh+1 ; do I=LB%ish-1,LB%ieh
-          if (OBC%OBC_kind_u(I,j) == OBC_FLATHER .and. (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_N)) &
-            u(I,j,k) = u(I,j-1,k)
-          if (OBC%OBC_kind_u(I,j) == OBC_FLATHER .and. (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_S)) &
-            u(I,j,k) = u(I,j+1,k)
+          if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
+            if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%radiation &
+                .and. (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S)) &
+              h(i,j,k) = h_input(i,j+1,k)
+          endif
         enddo ; enddo
       enddo
     endif
@@ -262,18 +260,18 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
     if (apply_OBC_v_flather_north .or. apply_OBC_v_flather_south) then
       do k=1,nz
         do J=LB%jsh,LB%jeh+1 ; do i=LB%ish-1,LB%ieh+1
-          if (OBC%OBC_kind_v(i,J-1) == OBC_FLATHER .and. (OBC%OBC_direction_v(i,J-1) == OBC_DIRECTION_N)) &
-            h(i,j,k) = h_input(i,j-1,k)
+          if (OBC%OBC_segment_v(i,J-1) /= OBC_NONE) then
+            if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J-1))%radiation &
+                .and. (OBC%OBC_direction_v(i,J-1) == OBC_DIRECTION_N)) &
+              h(i,j,k) = h_input(i,j-1,k)
+          endif
         enddo ; enddo
         do J=LB%jsh-1,LB%jeh ; do i=LB%ish-1,LB%ieh+1
-          if (OBC%OBC_kind_v(i,J) == OBC_FLATHER .and. (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S)) &
-            h(i,j,k) = h_input(i,j+1,k)
-        enddo ; enddo
-        do j=LB%jsh-1,LB%jeh+1 ; do I=LB%ish-1,LB%ieh
-          if (OBC%OBC_kind_u(I,j) == OBC_FLATHER .and. (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_N)) &
-            u(I,j,k) = u(I,j-1,k)
-          if (OBC%OBC_kind_u(I,j) == OBC_FLATHER .and. (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_S)) &
-            u(I,j,k) = u(I,j+1,k)
+          if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
+            if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%radiation &
+                .and. (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S)) &
+              h(i,j,k) = h_input(i,j+1,k)
+          endif
         enddo ; enddo
       enddo
     endif
@@ -296,20 +294,18 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
     if (apply_OBC_u_flather_east .or. apply_OBC_u_flather_west) then
       do k=1,nz ; do j=LB%jsh,LB%jeh
         do I=LB%ish,LB%ieh+1
-          if (OBC%OBC_kind_u(I-1,j) == OBC_FLATHER .and. (OBC%OBC_direction_u(I-1,j) == OBC_DIRECTION_E)) &
-            h(i,j,k) = h_input(i-1,j,k)
+          if (OBC%OBC_segment_u(I-1,j) /= OBC_NONE) then
+            if (OBC%OBC_segment_list(OBC%OBC_segment_u(I-1,j))%radiation &
+                .and. (OBC%OBC_direction_u(I-1,j) == OBC_DIRECTION_E)) &
+              h(i,j,k) = h_input(i-1,j,k)
+          endif
         enddo
         do i=LB%ish-1,LB%ieh
-          if (OBC%OBC_kind_u(I,j) == OBC_FLATHER .and. (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_W)) &
-            h(i,j,k) = h_input(i+1,j,k)
-        enddo
-      enddo
-      do J=LB%jsh-1,LB%jeh
-        do i=LB%ish-1,LB%ieh+1
-          if (OBC%OBC_kind_v(i,J) == OBC_FLATHER .and. (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_E)) &
-            v(i,J,k) = v(i-1,J,k)
-          if (OBC%OBC_kind_v(i,J) == OBC_FLATHER .and. (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_W)) &
-            v(i,J,k) = v(i+1,J,k)
+          if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
+            if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%radiation &
+                .and. (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_W)) &
+              h(i,j,k) = h_input(i+1,j,k)
+          endif
         enddo
       enddo ; enddo
     endif
@@ -432,7 +428,8 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
                             uh(:,j,k), duhdu(:,k), visc_rem(:,k), &
                             dt, G, j, ish, ieh, do_i, CS%vol_CFL)
       if (apply_OBC_u) then ; do I=ish-1,ieh
-        if (OBC%OBC_mask_u(I,j) .and. (OBC%OBC_kind_u(I,j) == OBC_SIMPLE)) &
+        if (OBC%OBC_mask_u(I,j) .and. &
+           (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%specified)) &
           uh(I,j,k) = OBC%uh(I,j,k)
       enddo ; endif
     enddo
@@ -524,11 +521,11 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
       if (present(uhbt) .or. do_aux .or. set_BT_cont) then
         if (apply_OBC_u) then ; do I=ish-1,ieh
           do_i(I) = .not.(OBC%OBC_mask_u(I,j) .and. &
-                          (OBC%OBC_kind_u(I,j) == OBC_SIMPLE))
+                 (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%specified))
           if (.not.do_i(I)) any_simple_OBC = .true.
         enddo ; else if (apply_OBC_flather) then ; do I=ish-1,ieh
           do_i(I) = .not.(OBC%OBC_mask_u(I,j) .and. &
-                 (OBC%OBC_kind_u(I,j) == OBC_FLATHER) .and. &
+                 (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%radiation) .and. &
                 ((OBC%OBC_direction_u(I,j) == OBC_DIRECTION_N) .or. &
                  (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_S)))
         enddo ; else ; do I=ish-1,ieh
@@ -544,7 +541,8 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
         if (present(u_cor)) then ; do k=1,nz
           do I=ish-1,ieh ; u_cor(I,j,k) = u(I,j,k) + du(I) * visc_rem(I,k) ; enddo
           if (apply_OBC_u) then ; do I=ish-1,ieh
-            if (OBC%OBC_mask_u(I,j) .and. (OBC%OBC_kind_u(I,j) == OBC_SIMPLE)) &
+            if (OBC%OBC_mask_u(I,j) .and. &
+                 (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%specified)) &
               u_cor(I,j,k) = OBC%u(I,j,k)
           enddo ; endif
         enddo ; endif ! u-corrected
@@ -559,7 +557,8 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
         do k=1,nz
           do I=ish-1,ieh ; u_cor_aux(I,j,k) = u(I,j,k) + du(I) * visc_rem(I,k) ; enddo
           if (apply_OBC_u) then ; do I=ish-1,ieh
-            if (OBC%OBC_mask_u(I,j) .and. (OBC%OBC_kind_u(I,j) == OBC_SIMPLE)) &
+            if (OBC%OBC_mask_u(I,j) .and. &
+                (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%specified)) &
               u_cor_aux(I,j,k) = OBC%u(I,j,k)
           enddo ; endif
         enddo
@@ -572,7 +571,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
         if (any_simple_OBC) then
           do I=ish-1,ieh
             do_i(I) = (OBC%OBC_mask_u(I,j) .and. &
-                       (OBC%OBC_kind_u(I,j) == OBC_SIMPLE))
+                       (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%specified))
             if (do_i(I)) BT_cont%Fa_u_W0(I,j) = GV%H_subroundoff*G%dy_Cu(I,j)
           enddo
           do k=1,nz ; do I=ish-1,ieh ; if (do_i(I)) then
@@ -1149,7 +1148,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
   use_visc_rem = present(visc_rem_v)
   apply_OBC_v = .false. ; set_BT_cont = .false. ; apply_OBC_flather = .false.
   if (present(BT_cont)) set_BT_cont = (associated(BT_cont))
-  if (present(OBC)) then ; if (associated(OBC)) then ; if (OBC%this_pe) then
+  if (present(OBC)) then ; if (associated(OBC)) then ; if (OBC%OBC_pe) then
     apply_OBC_v = OBC%apply_OBC_v
     apply_OBC_flather = OBC%apply_OBC_u_flather_east .or. &
                         OBC%apply_OBC_u_flather_west .or. &
@@ -1199,7 +1198,8 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
                             vh(:,J,k), dvhdv(:,k), visc_rem(:,k), &
                             dt, G, J, ish, ieh, do_i, CS%vol_CFL)
       if (apply_OBC_v) then ; do i=ish,ieh
-        if (OBC%OBC_mask_v(i,J) .and. (OBC%OBC_kind_v(i,J) == OBC_SIMPLE)) &
+        if (OBC%OBC_mask_v(i,J) .and. &
+             (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%specified)) &
           vh(i,J,k) = OBC%vh(i,J,k)
       enddo ; endif
     enddo ! k-loop
@@ -1287,11 +1287,11 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
       if (present(vhbt) .or. do_aux .or. set_BT_cont) then
         if (apply_OBC_v) then ; do i=ish,ieh
           do_i(i) = .not.(OBC%OBC_mask_v(i,J) .and. &
-                          (OBC%OBC_kind_v(i,J) == OBC_SIMPLE))
+                 (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%specified))
           if (.not.do_i(i)) any_simple_OBC = .true.
         enddo ; else if (apply_OBC_flather) then ; do i=ish,ieh
           do_i(i) = .not.(OBC%OBC_mask_v(i,J) .and. &
-                 (OBC%OBC_kind_v(i,J) == OBC_FLATHER) .and. &
+                 (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%radiation) .and. &
                 ((OBC%OBC_direction_v(i,J) == OBC_DIRECTION_E) .or. &
                  (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_W)))
         enddo ; else ; do i=ish,ieh
@@ -1307,7 +1307,8 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
         if (present(v_cor)) then ; do k=1,nz
           do i=ish,ieh ; v_cor(i,J,k) = v(i,J,k) + dv(i) * visc_rem(i,k) ; enddo
           if (apply_OBC_v) then ; do i=ish,ieh
-            if (OBC%OBC_mask_v(i,J) .and. (OBC%OBC_kind_v(i,J) == OBC_SIMPLE)) &
+            if (OBC%OBC_mask_v(i,J) .and. &
+               (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%specified)) &
               v_cor(i,J,k) = OBC%v(i,J,k)
           enddo ; endif
         enddo ; endif ! v-corrected
@@ -1321,7 +1322,8 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
         do k=1,nz
           do i=ish,ieh ; v_cor_aux(i,J,k) = v(i,J,k) + dv(i) * visc_rem(i,k) ; enddo
           if (apply_OBC_v) then ; do i=ish,ieh
-            if (OBC%OBC_mask_v(i,J) .and. (OBC%OBC_kind_v(i,J) == OBC_SIMPLE)) &
+            if (OBC%OBC_mask_v(i,J) .and. &
+                (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%specified)) &
               v_cor_aux(i,J,k) = OBC%v(i,J,k)
           enddo ; endif
         enddo
@@ -1334,7 +1336,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
         if (any_simple_OBC) then
           do i=ish,ieh
             do_i(i) = (OBC%OBC_mask_v(i,J) .and. &
-                       (OBC%OBC_kind_v(i,J) == OBC_SIMPLE))
+                       (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%specified))
             if (do_i(i)) BT_cont%Fa_v_S0(i,J) = GV%H_subroundoff*G%dx_Cv(I,j)
           enddo
           do k=1,nz ; do i=ish,ieh ; if (do_i(i)) then
