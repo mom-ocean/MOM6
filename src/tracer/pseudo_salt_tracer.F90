@@ -68,7 +68,7 @@ use MOM_sponge, only : set_up_sponge_field, sponge_CS
 use MOM_time_manager, only : time_type, get_time
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_registry, only : add_tracer_diagnostics, add_tracer_OBC_values
-use MOM_tracer_diabatic, only : tracer_vertdiff
+use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_tracer_Z_init, only : tracer_Z_init
 use MOM_variables, only : surface
 use MOM_variables, only : thermo_var_ptrs
@@ -352,9 +352,12 @@ subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G
   integer :: secs, days
   integer :: i, j, k, is, ie, js, je, nz, m, k_max
   real, allocatable :: local_tr(:,:,:)
-  real, dimension(SZI_(G),SZJ_(G)) :: salt_sfc_src
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
+  real, dimension(:,:), pointer :: net_salt
+  
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke  
+  net_salt=>fluxes%netSalt
+  
   if (.not.associated(CS)) return
   if (CS%ntr < 1) return
 
@@ -365,20 +368,16 @@ subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G
   
   ! This uses applyTracerBoundaryFluxesInOut, usually in ALE mode
   if (present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
-    ! The total time-integrated surface flux of salt should have been already
-    ! in a previous call to extractFluxes1d calculated
-!    call tracer_vertdiff(h_old, ea, eb, dt, CS%tr(:,:,:,1), G, GV, &
-!          evap_CFL_limit=evap_CFL_limit,&
-!          minimum_forcing_depth=minimum_forcing_depth, fluxes=fluxes, &
-!          convert_flux_in= .false.)
-    call tracer_vertdiff(h_old, ea, eb, dt, CS%tr(:,:,:,1), G, GV, &
-          sfc_flux = fluxes%netSalt, evap_CFL_limit=evap_CFL_limit,&
-          minimum_forcing_depth=minimum_forcing_depth, fluxes=fluxes, &
-          convert_flux_in= .false.)
+    do k=1,nz ;do j=js,je ; do i=is,ie
+      h_work(i,j,k) = h_old(i,j,k)
+    enddo ; enddo ; enddo;
+    call applyTracerBoundaryFluxesInOut(G, GV, CS%tr(:,:,:,1), dt, fluxes, h_work, &
+      evap_CFL_limit, minimum_forcing_depth, out_flux_optional=net_salt)
+    call tracer_vertdiff(h_work, ea, eb, dt, CS%tr(:,:,:,1), G, GV)
   else
-    call tracer_vertdiff(h_old, ea, eb, dt, CS%tr(:,:,:,1), G, GV)
-  endif 
-
+    call tracer_vertdiff(h_work, ea, eb, dt, CS%tr(:,:,:,1), G, GV)
+  endif  
+          
   do k=1,nz ; do j=js,je ; do i=is,ie
     CS%diff(i,j,k,1) = CS%tr(i,j,k,1)-tv%S(i,j,k)
   enddo ; enddo ; enddo
@@ -509,6 +508,7 @@ subroutine pseudo_salt_tracer_end(CS)
 
   if (associated(CS)) then
     if (associated(CS%tr)) deallocate(CS%tr)
+    if (associated(CS%tr)) deallocate(CS%diff)
     do m=1,CS%ntr
       if (associated(CS%tr_adx(m)%p)) deallocate(CS%tr_adx(m)%p)
       if (associated(CS%tr_ady(m)%p)) deallocate(CS%tr_ady(m)%p)
