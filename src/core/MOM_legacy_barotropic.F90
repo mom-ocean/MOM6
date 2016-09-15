@@ -2236,7 +2236,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         uhbt(I,j) = BT_OBC%uhbt(I,j)
         ubt(I,j) = BT_OBC%ubt_outer(I,j)
         vel_trans = ubt(I,j)
-      elseif (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%radiation) then
+      elseif (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%Flather) then
         if (BT_OBC%OBC_direction_u(I,j) == OBC_DIRECTION_E) then
           cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j)            ! CFL
           u_inlet = cfl*ubt_old(I-1,j) + (1.0-cfl)*ubt_old(I,j)  ! Valid for cfl<1
@@ -2269,7 +2269,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
           endif
           vel_trans = ubt(I,j)
         elseif (BT_OBC%OBC_direction_u(I,j) == OBC_DIRECTION_S) then
-          if ((vbt(i,J)+vbt(i+1,J)) > 0.0) then
+          if ((vbt(i,J)+vbt(i+1,J)) < 0.0) then
             ubt(I,j) = 2.0*ubt(I,j+1)-ubt(I,j+2)
           else
             ubt(I,j) = BT_OBC%ubt_outer(I,j)
@@ -2296,7 +2296,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         vhbt(i,J) = BT_OBC%vhbt(i,J)
         vbt(i,J) = BT_OBC%vbt_outer(i,J)
         vel_trans = vbt(i,J)
-      elseif (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%radiation) then
+      elseif (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%Flather) then
         if (BT_OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N) then
           cfl = dtbt * BT_OBC%Cg_v(i,J) * G%IdyCv(I,j)            ! CFL
           v_inlet = cfl*vbt_old(i,J-1) + (1.0-cfl)*vbt_old(i,J)  ! Valid for cfl<1
@@ -2395,7 +2395,7 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
   if ((OBC%apply_OBC_u_flather_east .or. OBC%apply_OBC_u_flather_west) .and. &
       associated(BT_OBC%OBC_mask_u)) then
     do j=js,je ; do I=is-1,ie ; if (BT_OBC%OBC_mask_u(I,j)) then
-      if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%radiation) then
+      if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%Flather) then
         if (BT_OBC%OBC_direction_u(I,j) == OBC_DIRECTION_E) then
           cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j)            ! CFL
           u_inlet = cfl*ubt(I-1,j) + (1.0-cfl)*ubt(I,j)          ! Valid for cfl <1
@@ -2422,7 +2422,7 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
   if ((OBC%apply_OBC_v_flather_north .or. OBC%apply_OBC_v_flather_south) .and. &
     associated(BT_OBC%OBC_mask_v)) then
     do J=js-1,je ; do i=is,ie ; if (BT_OBC%OBC_mask_v(i,J)) then
-      if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%radiation) then
+      if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%Flather) then
         if (BT_OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N) then
           cfl = dtbt*BT_OBC%Cg_v(i,J)*G%IdyCv(i,J)                ! CFL
           v_inlet = cfl*vbt(i,J-1) + (1.0-cfl)*vbt(i,J)          ! Valid for cfl <1
