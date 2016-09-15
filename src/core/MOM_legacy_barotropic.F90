@@ -735,7 +735,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
     apply_OBC_flather = OBC%apply_OBC_u_flather_east .or. &
         OBC%apply_OBC_u_flather_west .or. OBC%apply_OBC_v_flather_north .or. &
         OBC%apply_OBC_v_flather_south
-    apply_OBCs = OBC%apply_OBC_u .or. OBC%apply_OBC_v .or. apply_OBC_flather
+    apply_OBCs = OBC%specified_u_BCs_exist_globally .or. OBC%specified_v_BCs_exist_globally .or. apply_OBC_flather
 
     if (apply_OBC_flather .and. .not.GV%Boussinesq) call MOM_error(FATAL, &
       "legacy_btstep: Flather open boundary conditions have not yet been "// &
@@ -2515,7 +2515,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, halo, use_BT_cont, Datu, D
       BT_OBC%OBC_mask_u(I,j) = OBC%OBC_mask_u(I,j)
       BT_OBC%OBC_direction_u(I,j) = OBC%OBC_direction_u(I,j)
     enddo ; enddo
-    if (OBC%apply_OBC_u) then
+    if (OBC%specified_u_BCs_exist_globally) then
       do k=1,nz ; do j=js,je ; do I=is-1,ie
         BT_OBC%uhbt(I,j) = BT_OBC%uhbt(I,j) + OBC%uh(I,j,k)
       enddo ; enddo ; enddo
@@ -2550,7 +2550,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, halo, use_BT_cont, Datu, D
       BT_OBC%OBC_mask_v(i,J) = OBC%OBC_mask_v(i,J)
       BT_OBC%OBC_direction_v(i,J) = OBC%OBC_direction_v(i,J)
     enddo ; enddo
-    if (OBC%apply_OBC_v) then
+    if (OBC%specified_v_BCs_exist_globally) then
       do k=1,nz ; do J=js-1,je ; do i=is,ie
         BT_OBC%vhbt(i,J) = BT_OBC%vhbt(i,J) + OBC%vh(i,J,k)
       enddo ; enddo ; enddo

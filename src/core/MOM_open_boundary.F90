@@ -65,8 +65,8 @@ type, public :: ocean_OBC_type
                                                  !! local domain use north-facing Flather OBCs.
   logical :: apply_OBC_v_flather_south = .false. !< True if any zonal velocity points in the
                                                  !! local domain use south-facing Flather OBCs.
-  logical :: apply_OBC_u = .false.  !< True if any zonal velocity points in to local domain use OBCs.
-  logical :: apply_OBC_v = .false.  !< True if any meridional velocity points in to local domain use OBCs.
+  logical :: specified_u_BCs_exist_globally = .false. !< True if any zonal velocity points in the global domain use specified BCs.
+  logical :: specified_v_BCs_exist_globally = .false. !< True if any meridional velocity points in the global domain use specified BCs.
   logical, pointer, dimension(:,:) :: &
     OBC_mask_u => NULL(), & !< True at zonal velocity points that have prescribed OBCs.
     OBC_mask_v => NULL()    !< True at meridional velocity points that have prescribed OBCs.
@@ -197,7 +197,7 @@ subroutine open_boundary_config(G, param_file, OBC)
                  "Symmetric memory must be used when APPLY_OBC_U_FLATHER_WEST "//&
                  "or APPLY_OBC_V_FLATHER_SOUTH is true.")
 
-  if (.not.(OBC%apply_OBC_u .or. OBC%apply_OBC_v .or. &
+  if (.not.(OBC%specified_u_BCs_exist_globally .or. OBC%specified_v_BCs_exist_globally .or. &
             OBC%apply_OBC_v_flather_north .or. OBC%apply_OBC_v_flather_south .or. &
             OBC%apply_OBC_u_flather_east .or. OBC%apply_OBC_u_flather_west)) then
     ! No open boundaries have been requested
@@ -257,7 +257,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%OBC_segment_list(l_seg)%specified = .true.
       OBC%OBC_segment_list(l_seg)%direction = OBC_NONE
-      OBC%apply_OBC_u = .true. ! This avoids deallocation
+      OBC%specified_u_BCs_exist_globally = .true. ! This avoids deallocation
       ! Hack to undo the hack above for SIMPLE BCs
       if (Js_obc<Je_obc) then
         Js_obc = Js_obc + 1 ; Je_obc = Je_obc - 1
@@ -364,7 +364,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%OBC_segment_list(l_seg)%specified = .true.
       OBC%OBC_segment_list(l_seg)%direction = OBC_NONE
-      OBC%apply_OBC_v = .true. ! This avoids deallocation
+      OBC%specified_v_BCs_exist_globally = .true. ! This avoids deallocation
       ! Hack to undo the hack above for SIMPLE BCs
       if (Is_obc<Ie_obc) then
         Is_obc = Is_obc + 1 ; Ie_obc = Ie_obc - 1
@@ -555,7 +555,7 @@ logical function open_boundary_query(OBC, apply_orig_OBCs, apply_orig_Flather)
   logical, optional,    intent(in)  :: apply_orig_Flather !< If present, returns True if APPLY_OBC_*_FLATHER_* was set
   open_boundary_query = .false.
   if (.not. associated(OBC)) return
-  if (present(apply_orig_OBCs)) open_boundary_query = OBC%apply_OBC_u .or. OBC%apply_OBC_v
+  if (present(apply_orig_OBCs)) open_boundary_query = OBC%specified_u_BCs_exist_globally .or. OBC%specified_v_BCs_exist_globally
   if (present(apply_orig_Flather)) open_boundary_query = OBC%apply_OBC_v_flather_north .or. &
                                                          OBC%apply_OBC_v_flather_south .or. &
                                                          OBC%apply_OBC_u_flather_east .or. &

@@ -140,7 +140,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
   integer :: is, ie, js, je, nz, stensil
   integer :: i, j, k
 
-  logical :: apply_OBC_u, apply_OBC_v, x_first
+  logical :: x_first
   logical :: apply_OBC_u_flather_east, apply_OBC_u_flather_west
   logical :: apply_OBC_v_flather_north, apply_OBC_v_flather_south
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -150,9 +150,6 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "MOM_continuity_PPM: Module must be initialized before it is used.")
   x_first = (MOD(G%first_direction,2) == 0)
-  if (present(OBC)) then ; if (associated(OBC)) then
-    apply_OBC_u = OBC%apply_OBC_u ; apply_OBC_v = OBC%apply_OBC_v
-  endif ; endif
 
   apply_OBC_u_flather_east = .false. ; apply_OBC_u_flather_west = .false.
   apply_OBC_v_flather_north = .false. ; apply_OBC_v_flather_south = .false.
@@ -389,15 +386,15 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
   real :: du_lim  ! The velocity change that give a relative CFL of 1, in m s-1.
   real :: dx_E, dx_W ! Effective x-grid spacings to the east and west, in m.
   integer :: i, j, k, ish, ieh, jsh, jeh, nz
-  logical :: do_aux, apply_OBC_u, use_visc_rem, set_BT_cont, any_simple_OBC
+  logical :: do_aux, local_specified_BC, use_visc_rem, set_BT_cont, any_simple_OBC
   logical :: apply_OBC_flather
 
   do_aux = (present(uhbt_aux) .and. present(u_cor_aux))
   use_visc_rem = present(visc_rem_u)
-  apply_OBC_u = .false. ; set_BT_cont = .false. ; apply_OBC_flather = .false.
+  local_specified_BC = .false. ; set_BT_cont = .false. ; apply_OBC_flather = .false.
   if (present(BT_cont)) set_BT_cont = (associated(BT_cont))
   if (present(OBC)) then ; if (associated(OBC)) then
-    apply_OBC_u = OBC%apply_OBC_u
+    local_specified_BC = OBC%specified_u_BCs_exist_globally
     apply_OBC_flather = OBC%apply_OBC_u_flather_east .or. &
                         OBC%apply_OBC_u_flather_west .or. &
                         OBC%apply_OBC_v_flather_north .or. &
@@ -427,7 +424,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
 
   call cpu_clock_begin(id_clock_correct)
 !$OMP parallel do default(none) shared(ish,ieh,jsh,jeh,nz,u,h_in,hL,hR,use_visc_rem,visc_rem_u,  &
-!$OMP                                  uh,dt,G,GV,CS,apply_OBC_u,OBC,uhbt,do_aux,set_BT_cont,    &
+!$OMP                                  uh,dt,G,GV,CS,local_specified_BC,OBC,uhbt,do_aux,set_BT_cont,    &
 !$OMP                                  CFL_dt,I_dt,u_cor,uhbt_aux,u_cor_aux,BT_cont, apply_OBC_flather) &
 !$OMP                          private(do_i,duhdu,du,du_max_CFL,du_min_CFL,uh_tot_0,duhdu_tot_0, &
 !$OMP                                  visc_rem_max, I_vrm, du_lim, dx_E, dx_W, any_simple_OBC ) &
@@ -443,7 +440,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
       call zonal_flux_layer(u(:,j,k), h_in(:,j,k), hL(:,j,k), hR(:,j,k), &
                             uh(:,j,k), duhdu(:,k), visc_rem(:,k), &
                             dt, G, j, ish, ieh, do_i, CS%vol_CFL)
-      if (apply_OBC_u) then ; do I=ish-1,ieh
+      if (local_specified_BC) then ; do I=ish-1,ieh
         if (OBC%OBC_mask_u(I,j) .and. &
            (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%specified)) &
           uh(I,j,k) = OBC%uh(I,j,k)
@@ -535,7 +532,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
 
       any_simple_OBC = .false.
       if (present(uhbt) .or. do_aux .or. set_BT_cont) then
-        if (apply_OBC_u) then ; do I=ish-1,ieh
+        if (local_specified_BC) then ; do I=ish-1,ieh
           do_i(I) = .not.(OBC%OBC_mask_u(I,j) .and. &
                  (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%specified))
           if (.not.do_i(I)) any_simple_OBC = .true.
@@ -558,7 +555,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
 
         if (present(u_cor)) then ; do k=1,nz
           do I=ish-1,ieh ; u_cor(I,j,k) = u(I,j,k) + du(I) * visc_rem(I,k) ; enddo
-          if (apply_OBC_u) then ; do I=ish-1,ieh
+          if (local_specified_BC) then ; do I=ish-1,ieh
             if (OBC%OBC_mask_u(I,j) .and. &
                  (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%specified)) &
               u_cor(I,j,k) = OBC%u(I,j,k)
@@ -574,7 +571,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
 
         do k=1,nz
           do I=ish-1,ieh ; u_cor_aux(I,j,k) = u(I,j,k) + du(I) * visc_rem(I,k) ; enddo
-          if (apply_OBC_u) then ; do I=ish-1,ieh
+          if (local_specified_BC) then ; do I=ish-1,ieh
             if (OBC%OBC_mask_u(I,j) .and. &
                 (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%specified)) &
               u_cor_aux(I,j,k) = OBC%u(I,j,k)
@@ -1159,15 +1156,15 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
   real :: dv_lim  ! The velocity change that give a relative CFL of 1, in m s-1.
   real :: dy_N, dy_S ! Effective y-grid spacings to the north and south, in m.
   integer :: i, j, k, ish, ieh, jsh, jeh, nz
-  logical :: do_aux, apply_OBC_v, use_visc_rem, set_BT_cont, any_simple_OBC
+  logical :: do_aux, local_specified_BC, use_visc_rem, set_BT_cont, any_simple_OBC
   logical :: apply_OBC_flather
 
   do_aux = (present(vhbt_aux) .and. present(v_cor_aux))
   use_visc_rem = present(visc_rem_v)
-  apply_OBC_v = .false. ; set_BT_cont = .false. ; apply_OBC_flather = .false.
+  local_specified_BC = .false. ; set_BT_cont = .false. ; apply_OBC_flather = .false.
   if (present(BT_cont)) set_BT_cont = (associated(BT_cont))
   if (present(OBC)) then ; if (associated(OBC)) then ; if (OBC%OBC_pe) then
-    apply_OBC_v = OBC%apply_OBC_v
+    local_specified_BC = OBC%specified_v_BCs_exist_globally
     apply_OBC_flather = OBC%apply_OBC_u_flather_east .or. &
                         OBC%apply_OBC_u_flather_west .or. &
                         OBC%apply_OBC_v_flather_north .or. &
@@ -1197,7 +1194,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
 
   call cpu_clock_begin(id_clock_correct)
 !$OMP parallel do default(none) shared(ish,ieh,jsh,jeh,nz,v,h_in,hL,hR,vh,use_visc_rem, &
-!$OMP                                  visc_rem_v,dt,G,GV,CS,apply_OBC_v,OBC,vhbt,do_aux, &
+!$OMP                                  visc_rem_v,dt,G,GV,CS,local_specified_BC,OBC,vhbt,do_aux, &
 !$OMP                                  set_BT_cont,CFL_dt,I_dt,v_cor,vhbt_aux,          &
 !$OMP                                  v_cor_aux,BT_cont, apply_OBC_flather )           &
 !$OMP                          private(do_i,dvhdv,dv,dv_max_CFL,dv_min_CFL,vh_tot_0,    &
@@ -1215,7 +1212,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
       call merid_flux_layer(v(:,J,k), h_in(:,:,k), hL(:,:,k), hR(:,:,k), &
                             vh(:,J,k), dvhdv(:,k), visc_rem(:,k), &
                             dt, G, J, ish, ieh, do_i, CS%vol_CFL)
-      if (apply_OBC_v) then ; do i=ish,ieh
+      if (local_specified_BC) then ; do i=ish,ieh
         if (OBC%OBC_mask_v(i,J) .and. &
              (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%specified)) &
           vh(i,J,k) = OBC%vh(i,J,k)
@@ -1303,7 +1300,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
 
       any_simple_OBC = .false.
       if (present(vhbt) .or. do_aux .or. set_BT_cont) then
-        if (apply_OBC_v) then ; do i=ish,ieh
+        if (local_specified_BC) then ; do i=ish,ieh
           do_i(i) = .not.(OBC%OBC_mask_v(i,J) .and. &
                  (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%specified))
           if (.not.do_i(i)) any_simple_OBC = .true.
@@ -1326,7 +1323,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
 
         if (present(v_cor)) then ; do k=1,nz
           do i=ish,ieh ; v_cor(i,J,k) = v(i,J,k) + dv(i) * visc_rem(i,k) ; enddo
-          if (apply_OBC_v) then ; do i=ish,ieh
+          if (local_specified_BC) then ; do i=ish,ieh
             if (OBC%OBC_mask_v(i,J) .and. &
                (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%specified)) &
               v_cor(i,J,k) = OBC%v(i,J,k)
@@ -1341,7 +1338,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
 
         do k=1,nz
           do i=ish,ieh ; v_cor_aux(i,J,k) = v(i,J,k) + dv(i) * visc_rem(i,k) ; enddo
-          if (apply_OBC_v) then ; do i=ish,ieh
+          if (local_specified_BC) then ; do i=ish,ieh
             if (OBC%OBC_mask_v(i,J) .and. &
                 (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%specified)) &
               v_cor_aux(i,J,k) = OBC%v(i,J,k)

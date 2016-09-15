@@ -45,7 +45,6 @@ subroutine tidal_bay_set_OBC_data(OBC, G, h, Time)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h !< layer thickness.
   type(time_type),        intent(in) :: Time !< model time.
 
-  logical :: apply_OBC_u, apply_OBC_v
   ! The following variables are used to set up the transport in the tidal_bay example.
   real :: time_sec, cff, cff2, tide_flow
   real :: my_area, my_flux
