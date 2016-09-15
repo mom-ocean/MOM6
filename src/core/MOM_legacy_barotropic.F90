@@ -732,9 +732,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
   apply_OBCs = .false. ; apply_u_OBCs = .false. ; apply_v_OBCs = .false.
   apply_OBC_flather = .false.
   if (present(OBC)) then ; if (associated(OBC)) then
-    apply_OBC_flather = OBC%apply_OBC_u_flather_east .or. &
-        OBC%apply_OBC_u_flather_west .or. OBC%apply_OBC_v_flather_north .or. &
-        OBC%apply_OBC_v_flather_south
+    apply_OBC_flather = OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally
     apply_OBCs = OBC%specified_u_BCs_exist_globally .or. OBC%specified_v_BCs_exist_globally .or. apply_OBC_flather
 
     if (apply_OBC_flather .and. .not.GV%Boussinesq) call MOM_error(FATAL, &
@@ -2392,7 +2390,7 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
   integer :: i, j, is, ie, js, je
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
 
-  if ((OBC%apply_OBC_u_flather_east .or. OBC%apply_OBC_u_flather_west) .and. &
+  if ((OBC%Flather_u_BCs_exist_globally) .and. &
       associated(BT_OBC%OBC_mask_u)) then
     do j=js,je ; do I=is-1,ie ; if (BT_OBC%OBC_mask_u(I,j)) then
       if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%Flather) then
@@ -2419,7 +2417,7 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
     endif ; enddo ; enddo
   endif
 
-  if ((OBC%apply_OBC_v_flather_north .or. OBC%apply_OBC_v_flather_south) .and. &
+  if ((OBC%Flather_v_BCs_exist_globally) .and. &
     associated(BT_OBC%OBC_mask_v)) then
     do J=js-1,je ; do i=is,ie ; if (BT_OBC%OBC_mask_v(i,J)) then
       if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%Flather) then
