@@ -117,14 +117,8 @@ subroutine supercritical_set_OBC_data(OBC, G)
 
   if (.not.associated(OBC)) return
 
-  if (OBC%apply_OBC_u) then
-    allocate(OBC%u(IsdB:IedB,jsd:jed,nz)) ; OBC%u(:,:,:) = 0.0
-    allocate(OBC%uh(IsdB:IedB,jsd:jed,nz)) ; OBC%uh(:,:,:) = 0.0
-  endif
-  if (OBC%apply_OBC_v) then
-    allocate(OBC%v(isd:ied,JsdB:JedB,nz)) ; OBC%v(:,:,:) = 0.0
-    allocate(OBC%vh(isd:ied,JsdB:JedB,nz)) ; OBC%vh(:,:,:) = 0.0
-  endif
+  allocate(OBC%u(IsdB:IedB,jsd:jed,nz)) ; OBC%u(:,:,:) = 0.0
+  allocate(OBC%uh(IsdB:IedB,jsd:jed,nz)) ; OBC%uh(:,:,:) = 0.0
 
   do k=1,nz
     do j=jsd,jed ; do I=IsdB,IedB
@@ -132,13 +126,6 @@ subroutine supercritical_set_OBC_data(OBC, G)
           (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%specified)) then
         OBC%u(I,j,k) = 8.57
         OBC%uh(I,j,k) = 8.57
-      endif
-    enddo ; enddo
-    do J=JsdB,JedB ; do i=isd,ied
-      if (OBC%OBC_mask_v(i,J) .and. &
-          (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%specified)) then
-        OBC%v(i,J,k) = 0.0
-        OBC%vh(i,J,k) = 0.0
       endif
     enddo ; enddo
   enddo
