@@ -22,8 +22,7 @@ public applyTracerBoundaryFluxesInOut
 contains
 
 subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
-                           sfc_flux, btm_flux, btm_reservoir, sink_rate, &
-                           convert_flux_in, evap_CFL_limit, minimum_forcing_depth, fluxes)
+                           sfc_flux, btm_flux, btm_reservoir, sink_rate, convert_flux_in)
   type(ocean_grid_type),                     intent(in)    :: G             !< ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV            !< ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_old         !< layer thickness before entrainment (m or kg m-2)
@@ -37,9 +36,6 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
   real, dimension(SZI_(G),SZJ_(G)), optional,intent(inout) :: btm_reservoir !< amount of tracer in a bottom reservoir (units of CU kg m-2; formerly CU m)
   real,                             optional,intent(in)    :: sink_rate     !< rate at which the tracer sinks, in m s-1
   logical,                          optional,intent(in)  :: convert_flux_in    !< True if the specified sfc_flux needs to be integrated in time
-  real,                             optional,intent(in)  :: evap_CFL_limit
-  real,                             optional,intent(in)  :: minimum_forcing_depth
-  type(forcing),                    optional,intent(in)  :: fluxes
 
   real :: sink_dist ! The distance the tracer sinks in a time step, in m or kg m-2.
   real, dimension(SZI_(G),SZJ_(G)) :: &
@@ -62,7 +58,6 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
                     ! ensure positive definiteness, in m or kg m-2.
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected, in m.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV))             :: h_work
   logical :: convert_flux = .true.
 
 
@@ -104,20 +99,6 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
     endif
   endif
 
-  do k=1,nz ; do j=js,je ; do i=is,ie
-    h_work(i,j,k) = h_old(i,j,k)
-  enddo ; enddo ; enddo
-
-  ! Before vertical transport, apply surface boundary fluxes when using ALE
-  ! Whether ALE is applied is determined by the presence of the two optional arguments associated
-  ! with the applyBoundaryFluxesInOut that is only called during ALE
-  if (present(evap_CFL_limit) .and. present(minimum_forcing_depth) )then
-      call applyTracerBoundaryFluxesInOut(G, GV, tr, dt, sfc_src, fluxes, h_work, &
-              evap_CFL_limit, minimum_forcing_depth)
-    ! Zero out surface fluxes because they were applied in the call to applyTracerBoundaryFluxesInOut
-    do j=js,je; do i=is,ie ; sfc_src(i,j) = 0.0 ;  enddo ; enddo
-  endif
-
   if (present(sink_rate)) then
 !$OMP do
     do j=js,je
@@ -128,7 +109,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
       if (present(btm_reservoir)) then
         do i=is,ie ; sink(i,nz+1) = sink_dist ; enddo
         do k=2,nz ; do i=is,ie
-          sink(i,K) = sink_dist ; h_minus_dsink(i,k) = h_work(i,j,k)
+          sink(i,K) = sink_dist ; h_minus_dsink(i,k) = h_old(i,j,k)
         enddo ; enddo
       else
         do i=is,ie ; sink(i,nz+1) = 0.0 ; enddo
@@ -136,18 +117,18 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
         do k=nz,2,-1 ; do i=is,ie
           if (sink(i,K+1) >= sink_dist) then
             sink(i,K) = sink_dist
-            h_minus_dsink(i,k) = h_work(i,j,k) + (sink(i,K+1) - sink(i,K))
-          elseif (sink(i,K+1) + h_work(i,j,k) < sink_dist) then
-            sink(i,K) = sink(i,K+1) + h_work(i,j,k)
+            h_minus_dsink(i,k) = h_old(i,j,k) + (sink(i,K+1) - sink(i,K))
+          elseif (sink(i,K+1) + h_old(i,j,k) < sink_dist) then
+            sink(i,K) = sink(i,K+1) + h_old(i,j,k)
             h_minus_dsink(i,k) = 0.0
           else
             sink(i,K) = sink_dist
-            h_minus_dsink(i,k) = (h_work(i,j,k) + sink(i,K+1)) - sink(i,K)
+            h_minus_dsink(i,k) = (h_old(i,j,k) + sink(i,K+1)) - sink(i,K)
           endif
         enddo ; enddo
       endif
       do i=is,ie
-        sink(i,1) = 0.0 ; h_minus_dsink(i,1) = (h_work(i,j,1) + sink(i,2))
+        sink(i,1) = 0.0 ; h_minus_dsink(i,1) = (h_old(i,j,1) + sink(i,2))
       enddo
 
       ! Now solve the tridiagonal equation for the tracer concentrations.
@@ -155,7 +136,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
         b_denom_1 = h_minus_dsink(i,1) + ea(i,j,1) + h_neglect
         b1(i) = 1.0 / (b_denom_1 + eb(i,j,1))
         d1(i) = b_denom_1 * b1(i)
-        h_tr = h_work(i,j,1) + h_neglect
+        h_tr = h_old(i,j,1) + h_neglect
         tr(i,j,1) = (b1(i)*h_tr)*tr(i,j,1) + sfc_src(i,j)
       endif ; enddo
       do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
@@ -164,7 +145,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
                     h_neglect
         b1(i) = 1.0 / (b_denom_1 + eb(i,j,k))
         d1(i) = b_denom_1 * b1(i)
-        h_tr = h_work(i,j,k) + h_neglect
+        h_tr = h_old(i,j,k) + h_neglect
         tr(i,j,k) = b1(i) * (h_tr * tr(i,j,k) + &
                              (ea(i,j,k) + sink(i,K)) * tr(i,j,k-1))
       endif ; enddo ; enddo
@@ -173,7 +154,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
         b_denom_1 = h_minus_dsink(i,nz) + d1(i) * (ea(i,j,nz) + sink(i,nz)) + &
                     h_neglect
         b1(i) = 1.0 / (b_denom_1 + eb(i,j,nz))
-        h_tr = h_work(i,j,nz) + h_neglect
+        h_tr = h_old(i,j,nz) + h_neglect
         tr(i,j,nz) = b1(i) * ((h_tr * tr(i,j,nz) + btm_src(i,j)) + &
                               (ea(i,j,nz) + sink(i,nz)) * tr(i,j,nz-1))
       endif ; enddo
@@ -190,7 +171,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
 !$OMP do
     do j=js,je
       do i=is,ie ; if (G%mask2dT(i,j) > -0.5) then
-        h_tr = h_work(i,j,1) + h_neglect
+        h_tr = h_old(i,j,1) + h_neglect
         b_denom_1 = h_tr + ea(i,j,1)
         b1(i) = 1.0 / (b_denom_1 + eb(i,j,1))
         d1(i) = h_tr * b1(i)
@@ -199,7 +180,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
       enddo
       do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > -0.5) then
         c1(i,k) = eb(i,j,k-1) * b1(i)
-        h_tr = h_work(i,j,k) + h_neglect
+        h_tr = h_old(i,j,k) + h_neglect
         b_denom_1 = h_tr + d1(i) * ea(i,j,k)
         b1(i) = 1.0 / (b_denom_1 + eb(i,j,k))
         d1(i) = b_denom_1 * b1(i)
@@ -207,7 +188,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
       endif ; enddo ; enddo
       do i=is,ie ; if (G%mask2dT(i,j) > -0.5) then
         c1(i,nz) = eb(i,j,nz-1) * b1(i)
-        h_tr = h_work(i,j,nz) + h_neglect
+        h_tr = h_old(i,j,nz) + h_neglect
         b_denom_1 = h_tr + d1(i)*ea(i,j,nz)
         b1(i) = 1.0 / ( b_denom_1 + eb(i,j,nz))
         tr(i,j,nz) = b1(i) * (( h_tr * tr(i,j,nz) + btm_src(i,j)) + &
@@ -223,21 +204,24 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
 
 end subroutine tracer_vertdiff
 
-subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, sfc_src, fluxes, h, &
-                                    evap_CFL_limit, minimum_forcing_depth)
+subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, &
+                                    evap_CFL_limit, minimum_forcing_depth, in_flux_optional, out_flux_optional)
 ! This routine is modeled after applyBoundaryFluxesInOut in MOM_diabatic_aux.F90
 ! NOTE: Please note that in this routine sfc_flux gets set to zero to ensure that the surface
 !       flux of the tracer does not get applied again during a subsequent call to tracer_vertdif
 
   type(ocean_grid_type),                 intent(in)    :: G  !< Grid structure
-  type(verticalGrid_type),               intent(in)    :: GV        !< ocean vertical grid structure
-  real,                                  intent(in)    :: dt !< Time-step over which forcing is applied (s)
-  real, dimension(SZI_(G),SZJ_(G)),       optional, intent(in)    :: sfc_src ! The time-integrated surface source of the tracer
-  type(forcing),                         intent(in) :: fluxes !< Surface fluxes container
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thickness in H units
+  type(verticalGrid_type),               intent(in)    :: GV        !< ocean vertical grid structure  
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: Tr  !< Tracer concentration on T-cell
+  real,                                  intent(in)    :: dt !< Time-step over which forcing is applied (s)  
+  type(forcing),                         intent(in) :: fluxes !< Surface fluxes container
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thickness in H units 
   real,                                       intent(in)  :: evap_CFL_limit
   real,                                       intent(in)  :: minimum_forcing_depth
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: in_flux_optional ! The total time-integrated amount of tracer!
+                                                                             ! that enters with freshwater
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: out_flux_optional ! The total time-integrated amount of tracer!
+                                                                              ! that leaves with freshwater
   integer, parameter :: maxGroundings = 5
   integer :: numberOfGroundings, iGround(maxGroundings), jGround(maxGroundings)
   real :: H_limit_fluxes, IforcingDepthScale, Idt
@@ -250,8 +234,11 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, sfc_src, fluxes, h, &
     netMassOut       ! mass leaving ocean surface (H units) over a time step
 
   real, dimension(SZI_(G), SZK_(G))                     :: h2d, Tr2d
-  real, dimension(SZI_(G)) :: &
-    sfc_src_1d          ! The time-integrated surface source of the tracer
+  real, dimension(SZI_(G),SZJ_(G))                      :: in_flux  ! The total time-integrated amount of tracer!
+                                                                       ! that enters with freshwater
+  real, dimension(SZI_(G),SZJ_(G))                      :: out_flux ! The total time-integrated amount of tracer!
+                                                                        ! that leaves with freshwater
+  real, dimension(SZI_(G))                              :: in_flux_1d, out_flux_1d
   real                                                  :: hGrounding(maxGroundings)
   real    :: Tr_in
   integer :: i, j, is, ie, js, je, k, nz, n, nsw
@@ -262,6 +249,18 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, sfc_src, fluxes, h, &
   ! Only apply forcing if fluxes%sw is associated.
   if (.not.ASSOCIATED(fluxes%sw)) return
 
+  in_flux(:,:) = 0.0 ; out_flux(:,:) = 0.0
+  if(present(in_flux_optional)) then
+    do j=js,je ; do i=is,ie
+      in_flux(i,j) = in_flux_optional(i,j)
+    enddo; enddo
+  endif    
+  if(present(out_flux_optional)) then
+    do j=js,je ; do i=is,ie 
+      out_flux(i,j) = out_flux_optional(i,j)
+    enddo ; enddo
+  endif    
+  
   Idt = 1.0/dt
   numberOfGroundings = 0
 
@@ -284,7 +283,8 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, sfc_src, fluxes, h, &
     enddo ; enddo
 
     do i = is,ie
-      sfc_src_1d(i) = sfc_src(i,j)
+      in_flux_1d(i) = in_flux(i,j)
+      out_flux_1d(i) = out_flux(i,j)
     enddo
     ! The surface forcing is contained in the fluxes type.
     ! We aggregate the thermodynamic forcing for a time step into the following:
@@ -315,10 +315,9 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, sfc_src, fluxes, h, &
 
           ! Update the forcing by the part to be consumed within the present k-layer.
           ! If fractionOfForcing = 1, then updated netMassIn, netHeat, and netSalt vanish.
-          netMassIn(i) = netMassIn(i) - dThickness
-
-          Tr_in = 0.0
-          dTracer = dTracer + dThickness*Tr_in
+          netMassIn(i) = netMassIn(i) - dThickness          
+          dTracer = dTracer + in_flux_1d(i)
+          in_flux_1d(i) = 0.0
 
           ! Update state
           hOld     = h2d(i,k)               ! Keep original thickness in hand
@@ -351,13 +350,12 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, sfc_src, fluxes, h, &
           ! Change in state due to forcing
           dThickness = max( fractionOfForcing*netMassOut(i), -h2d(i,k) )
           !   ### The 0.9999 here should become a run-time parameter?
-          dTracer = max( fractionOfForcing*sfc_src_1d(i), -0.9999*h2d(i,k)*Tr(i,j,k))
-!          dTracer    = fractionOfForcing*sfc_src_1d(i)
+          dTracer = max( fractionOfForcing*out_flux_1d(i), -0.9999*h2d(i,k)*Tr(i,j,k))
 
           ! Update the forcing by the part to be consumed within the present k-layer.
           ! If fractionOfForcing = 1, then new netMassOut vanishes.
           netMassOut(i) = netMassOut(i) - dThickness
-          sfc_src_1d(i) = sfc_src_1d(i) - dTracer
+          out_flux_1d(i) = out_flux_1d(i) - dTracer
 
           ! Update state by the appropriate increment.
           hOld     = h2d(i,k)               ! Keep original thickness in hand
@@ -367,7 +365,7 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, sfc_src, fluxes, h, &
             Tr2d(i,k)    = (hOld*Tr2d(i,k) + dTracer)*Ithickness
           elseif (h2d(i,k) < 0.0) then ! h2d==0 is a special limit that needs no extra handling
             write(0,*) 'applyTracerBoundaryFluxesInOut(): lon,lat=',G%geoLonT(i,j),G%geoLatT(i,j)
-            write(0,*) 'applyTracerBoundaryFluxesInOut(): netTr,netH=',sfc_src_1d(i),netMassInOut(i)
+            write(0,*) 'applyTracerBoundaryFluxesInOut(): netTr,netH=',in_flux_1d(i)-out_flux_1d(i),netMassInOut(i)
             write(0,*) 'applyTracerBoundaryFluxesInOut(): h(n),h(n+1),k=',hOld,h2d(i,k),k
             call MOM_error(FATAL, "MOM_tracer_vertical.F90, applyTracerBoundaryFluxesInOut(): "//&
                            "Complete mass loss in column!")
@@ -376,22 +374,22 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, sfc_src, fluxes, h, &
         enddo ! k
 
       ! Check if trying to apply fluxes over land points
-      elseif((abs(sfc_src_1d(i))+abs(netMassIn(i))+abs(netMassOut(i)))>0.) then
+      elseif((abs(in_flux_1d(i))+abs(out_flux_1d(i))+abs(netMassIn(i))+abs(netMassOut(i)))>0.) then
         write(0,*) 'applyTracerBoundaryFluxesInOut(): lon,lat=',G%geoLonT(i,j),G%geoLatT(i,j)
-        write(0,*) 'applyTracerBoundaryFluxesInOut(): netSrc,netMassIn,netMassOut=',&
-                   sfc_src_1d(i),netMassIn(i),netMassOut(i)
+        write(0,*) 'applyTracerBoundaryFluxesInOut(): in_flux, out_flux, netMassIn,netMassOut=',&
+                   in_flux_1d(i), out_flux_1d(i),netMassIn(i),netMassOut(i)
         call MOM_error(FATAL, "MOM_tracer_vertical.F90, applyTracerBoundaryFluxesInOut(): "//&
                               "Mass loss over land?")
       endif
 
       ! If anything remains after the k-loop, then we have grounded out, which is a problem.
-      if (netMassIn(i)+netMassOut(i) /= 0.0) then
+      if (abs(in_flux_1d(i))+abs(out_flux_1d(i)) /= 0.0) then
 !$OMP critical
         numberOfGroundings = numberOfGroundings +1
         if (numberOfGroundings<=maxGroundings) then
           iGround(numberOfGroundings) = i ! Record i,j location of event for
           jGround(numberOfGroundings) = j ! warning message
-          hGrounding(numberOfGroundings) = netMassIn(i)+netMassOut(i)
+          hGrounding(numberOfGroundings) = abs(in_flux_1d(i))+abs(out_flux_1d(i))
         endif
 !$OMP end critical
       endif
