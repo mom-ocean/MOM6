@@ -23,7 +23,7 @@ use MOM_io, only : slasher, vardesc, write_field
 use MOM_io, only : EAST_FACE, NORTH_FACE
 use MOM_open_boundary, only : ocean_OBC_type, open_boundary_init
 use MOM_open_boundary, only : OBC_NONE, OBC_SIMPLE
-use MOM_open_boundary, only : open_boundary_query, set_Flather_data, set_Flather_positions
+use MOM_open_boundary, only : open_boundary_query, set_Flather_data
 use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
 use MOM_restart, only : restore_state, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, set_up_sponge_ML_density
@@ -40,10 +40,10 @@ use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use MOM_EOS, only : int_specific_vol_dp
 use user_initialization, only : user_initialize_thickness, user_initialize_velocity
 use user_initialization, only : user_init_temperature_salinity
-use user_initialization, only : user_set_OBC_positions, user_set_OBC_data
+use user_initialization, only : user_set_OBC_data
 use user_initialization, only : user_initialize_sponges
 use DOME_initialization, only : DOME_initialize_thickness
-use DOME_initialization, only : DOME_set_OBC_positions, DOME_set_OBC_data
+use DOME_initialization, only : DOME_set_OBC_data
 use DOME_initialization, only : DOME_initialize_sponges
 use ISOMIP_initialization, only : ISOMIP_initialize_thickness
 use ISOMIP_initialization, only : ISOMIP_initialize_sponges
@@ -70,6 +70,10 @@ use Rossby_front_2d_initialization, only : Rossby_front_initialize_thickness
 use Rossby_front_2d_initialization, only : Rossby_front_initialize_temperature_salinity
 use Rossby_front_2d_initialization, only : Rossby_front_initialize_velocity
 use SCM_idealized_hurricane, only : SCM_idealized_hurricane_TS_init
+use supercritical_initialization, only : supercritical_initialize_velocity
+use supercritical_initialization, only : supercritical_set_OBC_data
+use soliton_initialization, only : soliton_initialize_velocity
+use soliton_initialization, only : soliton_initialize_thickness
 use BFB_initialization, only : BFB_initialize_sponges_southonly
 
 use midas_vertmap, only : find_interfaces, tracer_Z_init
@@ -224,6 +228,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                " \t adjustment2d - TBD AJA. \n"//&
                " \t sloshing - TBD AJA. \n"//&
                " \t seamount - TBD AJA. \n"//&
+               " \t soliton - Equatorial Rossby soliton. \n"//&
                " \t rossby_front - a mixed layer front in thermal wind balance.\n"//&
                " \t USER - call a user modified routine.", &
                fail_if_missing=.true.)
@@ -250,6 +255,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
          case ("adjustment2d"); call adjustment_initialize_thickness(h, G, GV, PF)
          case ("sloshing"); call sloshing_initialize_thickness(h, G, GV, PF)
          case ("seamount"); call seamount_initialize_thickness(h, G, GV, PF)
+         case ("soliton"); call soliton_initialize_thickness(h, G)
          case ("phillips"); call Phillips_initialize_thickness(h, G, GV, PF)
          case ("rossby_front"); call Rossby_front_initialize_thickness(h, G, GV, PF)
          case ("USER"); call user_initialize_thickness(h, G, PF, tv%T)
@@ -321,6 +327,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
          " \t uniform - the flow is uniform (determined by\n"//&
          " \t\t parameters INITIAL_U_CONST and INITIAL_V_CONST).\n"//&
          " \t rossby_front - a mixed layer front in thermal wind balance.\n"//&
+         " \t soliton - Equatorial Rossby soliton.\n"//&
          " \t USER - call a user modified routine.", default="zero")
     select case (trim(config))
        case ("file"); call initialize_velocity_from_file(u, v, G, PF)
@@ -329,6 +336,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
        case ("circular"); call initialize_velocity_circular(u, v, G, PF)
        case ("phillips"); call Phillips_initialize_velocity(u, v, G, GV, PF)
        case ("rossby_front"); call Rossby_front_initialize_velocity(u, v, h, G, GV, PF)
+       case ("soliton"); call soliton_initialize_velocity(u, v, h, G)
+       case ("supercritical"); call supercritical_initialize_velocity(u, v, h, G)
        case ("USER"); call user_initialize_velocity(u, v, G, PF)
        case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
             "Unrecognized velocity configuration "//trim(config))
@@ -430,19 +439,28 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   call open_boundary_init(G, PF, OBC)
 
   ! This is the legacy approach to turning on open boundaries
+  call get_param(PF, mod, "OBC_CONFIG", config, default="none", do_not_log=.true.)
   if (open_boundary_query(OBC, apply_orig_OBCs=.true.)) then
-    call get_param(PF, mod, "OBC_CONFIG", config, fail_if_missing=.true., do_not_log=.true.)
     if (trim(config) == "DOME") then
       call DOME_set_OBC_data(OBC, tv, G, GV, PF, tracer_Reg)
     elseif (trim(config) == "USER") then
       call user_set_OBC_data(OBC, tv, G, PF, tracer_Reg)
-    else
+    elseif (.not. trim(config) == "none") then
       call MOM_error(FATAL, "The open boundary conditions specified by "//&
               "OBC_CONFIG = "//trim(config)//" have not been fully implemented.")
       call set_Open_Bdry_Conds(OBC, tv, G, GV, PF, tracer_Reg)
     endif
-  elseif (open_boundary_query(OBC, apply_orig_Flather=.true.)) then
+  endif
+  if (open_boundary_query(OBC, apply_orig_Flather=.true.)) then
     call set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
+  endif
+  ! Still need a way to specify the boundary values
+  call get_param(PF, mod, "OBC_VALUES_CONFIG", config, default="none", do_not_log=.true.)
+  if (trim(config) == "tidal_bay") then
+    OBC%update_OBC = .true.
+    OBC%OBC_values_config = "tidal_bay"
+  elseif (trim(config) == "supercritical") then
+    call supercritical_set_OBC_data(OBC, G)
   endif
   if (debug.and.associated(OBC)) then
     call hchksum(G%mask2dT, 'MOM_initialize_state: mask2dT ', G%HI)
@@ -1593,26 +1611,27 @@ subroutine set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tracer_Reg)
 
   if (.not.associated(OBC)) allocate(OBC)
 
-  if (apply_OBC_u) then
-    OBC%apply_OBC_u = .true.
-    OBC%OBC_mask_u => OBC_mask_u
-    allocate(OBC%u(IsdB:IedB,jsd:jed,nz)) ; OBC%u(:,:,:) = 0.0
-    allocate(OBC%uh(IsdB:IedB,jsd:jed,nz)) ; OBC%uh(:,:,:) = 0.0
-    allocate(OBC%OBC_kind_u(IsdB:IedB,jsd:jed)) ; OBC%OBC_kind_u(:,:) = OBC_NONE
-    do j=jsd,jed ; do I=IsdB,IedB
-      if (OBC%OBC_mask_u(I,j)) OBC%OBC_kind_u(I,j) = OBC_SIMPLE
-    enddo ; enddo
-  endif
-  if (apply_OBC_v) then
-    OBC%apply_OBC_v = .true.
-    OBC%OBC_mask_v => OBC_mask_v
-    allocate(OBC%v(isd:ied,JsdB:JedB,nz)) ; OBC%v(:,:,:) = 0.0
-    allocate(OBC%vh(isd:ied,JsdB:JedB,nz)) ; OBC%vh(:,:,:) = 0.0
-    allocate(OBC%OBC_kind_v(isd:ied,JsdB:JedB)) ; OBC%OBC_kind_v(:,:) = OBC_NONE
-    do J=JsdB,JedB ; do i=isd,ied
-      if (OBC%OBC_mask_v(i,J)) OBC%OBC_kind_v(i,J) = OBC_SIMPLE
-    enddo ; enddo
-  endif
+! Shouldn't be needed now, right??? -ksh
+!  if (apply_OBC_u) then
+!    OBC%apply_OBC_u = .true.
+!    OBC%OBC_mask_u => OBC_mask_u
+!    allocate(OBC%u(IsdB:IedB,jsd:jed,nz)) ; OBC%u(:,:,:) = 0.0
+!    allocate(OBC%uh(IsdB:IedB,jsd:jed,nz)) ; OBC%uh(:,:,:) = 0.0
+!    allocate(OBC%OBC_kind_u(IsdB:IedB,jsd:jed)) ; OBC%OBC_kind_u(:,:) = OBC_NONE
+!    do j=jsd,jed ; do I=IsdB,IedB
+!      if (OBC%OBC_mask_u(I,j)) OBC%OBC_kind_u(I,j) = OBC_SIMPLE
+!    enddo ; enddo
+!  endif
+!  if (apply_OBC_v) then
+!    OBC%apply_OBC_v = .true.
+!    OBC%OBC_mask_v => OBC_mask_v
+!    allocate(OBC%v(isd:ied,JsdB:JedB,nz)) ; OBC%v(:,:,:) = 0.0
+!    allocate(OBC%vh(isd:ied,JsdB:JedB,nz)) ; OBC%vh(:,:,:) = 0.0
+!    allocate(OBC%OBC_kind_v(isd:ied,JsdB:JedB)) ; OBC%OBC_kind_v(:,:) = OBC_NONE
+!    do J=JsdB,JedB ; do i=isd,ied
+!      if (OBC%OBC_mask_v(i,J)) OBC%OBC_kind_v(i,J) = OBC_SIMPLE
+!    enddo ; enddo
+!  endif
 
   if (apply_OBC_v) then
     do k=1,nz ; do J=Jsd,Jed ; do i=isd,ied
