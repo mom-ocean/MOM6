@@ -141,8 +141,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
   integer :: i, j, k
 
   logical :: x_first
-  logical :: apply_OBC_u_flather_east, apply_OBC_u_flather_west
-  logical :: apply_OBC_v_flather_north, apply_OBC_v_flather_south
+  logical :: local_Flather_EW, local_Flather_NS
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   h_min = GV%Angstrom
@@ -151,17 +150,13 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
          "MOM_continuity_PPM: Module must be initialized before it is used.")
   x_first = (MOD(G%first_direction,2) == 0)
 
-  apply_OBC_u_flather_east = .false. ; apply_OBC_u_flather_west = .false.
-  apply_OBC_v_flather_north = .false. ; apply_OBC_v_flather_south = .false.
+  local_Flather_EW = .false. ; local_Flather_NS = .false.
   if (present(OBC)) then ; if (associated(OBC)) then ; if (OBC%OBC_pe) then
-    apply_OBC_u_flather_east = OBC%apply_OBC_u_flather_east
-    apply_OBC_u_flather_west = OBC%apply_OBC_u_flather_west
-    apply_OBC_v_flather_north = OBC%apply_OBC_v_flather_north
-    apply_OBC_v_flather_south = OBC%apply_OBC_v_flather_south
+    local_Flather_EW = OBC%apply_OBC_u_flather_east .or. OBC%apply_OBC_u_flather_west
+    local_Flather_NS = OBC%apply_OBC_v_flather_north .or. OBC%apply_OBC_v_flather_south
     !   If an OBC is being applied, copy the input thicknesses so that the
     ! OBC code works even if hin == h.
-    if (apply_OBC_u_flather_east .or. apply_OBC_u_flather_west .or. &
-        apply_OBC_v_flather_north .or. apply_OBC_v_flather_south) &
+    if (local_Flather_EW .or.  local_Flather_NS) &
       h_input(:,:,:) = hin(:,:,:)
   endif ; endif ; endif
 
@@ -187,7 +182,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
     enddo ; enddo ; enddo
     call cpu_clock_end(id_clock_update)
 
-    if (apply_OBC_u_flather_east .or. apply_OBC_u_flather_west) then
+    if (local_Flather_EW) then
       do k=1,nz
         do j=LB%jsh,LB%jeh ; do I=LB%ish,LB%ieh+1
           if (OBC%OBC_segment_u(I-1,j) /= OBC_NONE) then
@@ -225,7 +220,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
     enddo ; enddo ; enddo
     call cpu_clock_end(id_clock_update)
 
-    if (apply_OBC_v_flather_north .or. apply_OBC_v_flather_south) then
+    if (local_Flather_NS) then
       do k=1,nz
         do J=LB%jsh,LB%jeh+1 ; do i=LB%ish-1,LB%ieh+1
           if (OBC%OBC_segment_v(i,J-1) /= OBC_NONE) then
@@ -262,7 +257,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
     enddo ; enddo ; enddo
     call cpu_clock_end(id_clock_update)
 
-    if (apply_OBC_v_flather_north .or. apply_OBC_v_flather_south) then
+    if (local_Flather_NS) then
       do k=1,nz
         do J=LB%jsh,LB%jeh+1 ; do i=LB%ish-1,LB%ieh+1
           if (OBC%OBC_segment_v(i,J-1) /= OBC_NONE) then
@@ -300,7 +295,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
     enddo ; enddo ; enddo
     call cpu_clock_end(id_clock_update)
 
-    if (apply_OBC_u_flather_east .or. apply_OBC_u_flather_west) then
+    if (local_Flather_EW) then
       do k=1,nz
         do j=LB%jsh,LB%jeh ; do I=LB%ish,LB%ieh+1
           if (OBC%OBC_segment_u(I-1,j) /= OBC_NONE) then
@@ -387,15 +382,15 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
   real :: dx_E, dx_W ! Effective x-grid spacings to the east and west, in m.
   integer :: i, j, k, ish, ieh, jsh, jeh, nz
   logical :: do_aux, local_specified_BC, use_visc_rem, set_BT_cont, any_simple_OBC
-  logical :: apply_OBC_flather
+  logical :: local_Flather_OBC, is_simple
 
   do_aux = (present(uhbt_aux) .and. present(u_cor_aux))
   use_visc_rem = present(visc_rem_u)
-  local_specified_BC = .false. ; set_BT_cont = .false. ; apply_OBC_flather = .false.
+  local_specified_BC = .false. ; set_BT_cont = .false. ; local_Flather_OBC = .false.
   if (present(BT_cont)) set_BT_cont = (associated(BT_cont))
   if (present(OBC)) then ; if (associated(OBC)) then
     local_specified_BC = OBC%specified_u_BCs_exist_globally
-    apply_OBC_flather = OBC%apply_OBC_u_flather_east .or. &
+    local_Flather_OBC = OBC%apply_OBC_u_flather_east .or. &
                         OBC%apply_OBC_u_flather_west .or. &
                         OBC%apply_OBC_v_flather_north .or. &
                         OBC%apply_OBC_v_flather_south
@@ -425,7 +420,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
   call cpu_clock_begin(id_clock_correct)
 !$OMP parallel do default(none) shared(ish,ieh,jsh,jeh,nz,u,h_in,hL,hR,use_visc_rem,visc_rem_u,  &
 !$OMP                                  uh,dt,G,GV,CS,local_specified_BC,OBC,uhbt,do_aux,set_BT_cont,    &
-!$OMP                                  CFL_dt,I_dt,u_cor,uhbt_aux,u_cor_aux,BT_cont, apply_OBC_flather) &
+!$OMP                                  CFL_dt,I_dt,u_cor,uhbt_aux,u_cor_aux,BT_cont, local_Flather_OBC) &
 !$OMP                          private(do_i,duhdu,du,du_max_CFL,du_min_CFL,uh_tot_0,duhdu_tot_0, &
 !$OMP                                  visc_rem_max, I_vrm, du_lim, dx_E, dx_W, any_simple_OBC ) &
 !$OMP      firstprivate(visc_rem)
@@ -533,16 +528,17 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
       any_simple_OBC = .false.
       if (present(uhbt) .or. do_aux .or. set_BT_cont) then
         if (local_specified_BC) then ; do I=ish-1,ieh
-          do_i(I) = .not.(OBC%OBC_mask_u(I,j) .and. &
-                 (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%specified))
-          if (.not.do_i(I)) any_simple_OBC = .true.
-        enddo ; else if (apply_OBC_flather) then ; do I=ish-1,ieh
+          ! Avoid reconciling barotropic/baroclinic transports if transport is specified
+          is_simple = OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%specified
+          do_i(I) = .not.(OBC%OBC_mask_u(I,j) .and. is_simple)
+          any_simple_OBC = any_simple_OBC .or. is_simple
+        enddo ; else if (local_Flather_OBC) then ; do I=ish-1,ieh
           ! This is a tangential condition and is needed for unknown reasons and
           ! probably implies that we made a calculation elsewhere that we should not have.
           do_i(I) = .not.(OBC%OBC_mask_u(I,j) .and. &
-                 (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%Flather) .and. &
-                ((OBC%OBC_direction_u(I,j) == OBC_DIRECTION_N) .or. &
-                 (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_S)))
+                 (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%Flather .and. &
+                   ((OBC%OBC_direction_u(I,j) == OBC_DIRECTION_N) .or. &
+                    (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_S))))
         enddo ; else ; do I=ish-1,ieh
           do_i(I) = .true.
         enddo ; endif
@@ -1157,15 +1153,15 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
   real :: dy_N, dy_S ! Effective y-grid spacings to the north and south, in m.
   integer :: i, j, k, ish, ieh, jsh, jeh, nz
   logical :: do_aux, local_specified_BC, use_visc_rem, set_BT_cont, any_simple_OBC
-  logical :: apply_OBC_flather
+  logical :: local_Flather_OBC, is_simple
 
   do_aux = (present(vhbt_aux) .and. present(v_cor_aux))
   use_visc_rem = present(visc_rem_v)
-  local_specified_BC = .false. ; set_BT_cont = .false. ; apply_OBC_flather = .false.
+  local_specified_BC = .false. ; set_BT_cont = .false. ; local_Flather_OBC = .false.
   if (present(BT_cont)) set_BT_cont = (associated(BT_cont))
   if (present(OBC)) then ; if (associated(OBC)) then ; if (OBC%OBC_pe) then
     local_specified_BC = OBC%specified_v_BCs_exist_globally
-    apply_OBC_flather = OBC%apply_OBC_u_flather_east .or. &
+    local_Flather_OBC = OBC%apply_OBC_u_flather_east .or. &
                         OBC%apply_OBC_u_flather_west .or. &
                         OBC%apply_OBC_v_flather_north .or. &
                         OBC%apply_OBC_v_flather_south
@@ -1196,7 +1192,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
 !$OMP parallel do default(none) shared(ish,ieh,jsh,jeh,nz,v,h_in,hL,hR,vh,use_visc_rem, &
 !$OMP                                  visc_rem_v,dt,G,GV,CS,local_specified_BC,OBC,vhbt,do_aux, &
 !$OMP                                  set_BT_cont,CFL_dt,I_dt,v_cor,vhbt_aux,          &
-!$OMP                                  v_cor_aux,BT_cont, apply_OBC_flather )           &
+!$OMP                                  v_cor_aux,BT_cont, local_Flather_OBC )           &
 !$OMP                          private(do_i,dvhdv,dv,dv_max_CFL,dv_min_CFL,vh_tot_0,    &
 !$OMP                                  dvhdv_tot_0,visc_rem_max,I_vrm,dv_lim,dy_N,      &
 !$OMP                                  dy_S,any_simple_OBC ) &
@@ -1301,10 +1297,11 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
       any_simple_OBC = .false.
       if (present(vhbt) .or. do_aux .or. set_BT_cont) then
         if (local_specified_BC) then ; do i=ish,ieh
-          do_i(i) = .not.(OBC%OBC_mask_v(i,J) .and. &
-                 (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%specified))
-          if (.not.do_i(i)) any_simple_OBC = .true.
-        enddo ; else if (apply_OBC_flather) then ; do i=ish,ieh
+          ! Avoid reconciling barotropic/baroclinic transports if transport is specified
+          is_simple = OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%specified
+          do_i(i) = .not.(OBC%OBC_mask_v(i,J) .and. is_simple)
+          any_simple_OBC = any_simple_OBC .or. is_simple
+        enddo ; else if (local_Flather_OBC) then ; do i=ish,ieh
           ! This is a tangential condition and is needed for unknown reasons and
           ! probably implies that we made a calculation elsewhere that we should not have.
           do_i(i) = .not.(OBC%OBC_mask_v(i,J) .and. &
