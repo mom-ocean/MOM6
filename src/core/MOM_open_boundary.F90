@@ -152,45 +152,7 @@ subroutine open_boundary_config(G, param_file, OBC)
   call get_param(param_file, mod, "OBC_NUMBER_OF_SEGMENTS", OBC%number_of_segments, &
                  "The number of open boundary segments.", &
                  default=0)
-  if (OBC%number_of_segments == 0) then
-    ! For the interim, if segments are not set we'll interpret the old-style run-time OBC parameters as before
-    call get_param(param_file, mod, "APPLY_OBC_U", OBC%apply_OBC_u, &
-                   "If true, open boundary conditions may be set at some \n"//&
-                   "u-points, with the configuration controlled by OBC_CONFIG", &
-                   default=.false.)
-    call get_param(param_file, mod, "APPLY_OBC_V", OBC%apply_OBC_v, &
-                   "If true, open boundary conditions may be set at some \n"//&
-                   "v-points, with the configuration controlled by OBC_CONFIG", &
-                   default=.false.)
-    call get_param(param_file, mod, "OBC_CONFIG", OBC%OBC_values_config, &
-                   "If set, open boundary configuration string", &
-                   default="file")
-    call get_param(param_file, mod, "APPLY_OBC_U_FLATHER_EAST", OBC%apply_OBC_u_flather_east, &
-                   "Apply a Flather open boundary condition on the eastern\n"//&
-                   "side of the global domain", &
-                   default=.false.)
-    call get_param(param_file, mod, "APPLY_OBC_U_FLATHER_WEST", OBC%apply_OBC_u_flather_west, &
-                   "Apply a Flather open boundary condition on the western\n"//&
-                   "side of the global domain", &
-                   default=.false.)
-    call get_param(param_file, mod, "APPLY_OBC_V_FLATHER_NORTH", OBC%apply_OBC_v_flather_north, &
-                   "Apply a Flather open boundary condition on the northern\n"//&
-                   "side of the global domain", &
-                   default=.false.)
-    call get_param(param_file, mod, "APPLY_OBC_V_FLATHER_SOUTH", OBC%apply_OBC_v_flather_south, &
-                   "Apply a Flather open boundary condition on the southern\n"//&
-                   "side of the global domain", &
-                   default=.false.)
-  else
-    ! When specifying segments, we will consider the old-style run-time OBC parameters obsolete
-    ! Note: once we have finished transitioning to segments we can permanently obsolete these parameters
-    ! rather than conditionally.
-    call obsolete_logical(param_file, "APPLY_OBC_U", hint="APPLY_OBC_U cannot be used when using OBC_SEGMENTS")
-    call obsolete_logical(param_file, "APPLY_OBC_V", hint="APPLY_OBC_V cannot be used when using OBC_SEGMENTS")
-    call obsolete_logical(param_file, "APPLY_OBC_U_FLATHER_EAST", hint="APPLY_OBC_U_FLATHER_EAST cannot be used when using OBC_SEGMENTS")
-    call obsolete_logical(param_file, "APPLY_OBC_U_FLATHER_WEST", hint="APPLY_OBC_U_FLATHER_WEST cannot be used when using OBC_SEGMENTS")
-    call obsolete_logical(param_file, "APPLY_OBC_V_FLATHER_NORTH", hint="APPLY_OBC_V_FLATHER_NORTH cannot be used when using OBC_SEGMENTS")
-    call obsolete_logical(param_file, "APPLY_OBC_V_FLATHER_SOUTH", hint="APPLY_OBC_V_FLATHER_SOUTH cannot be used when using OBC_SEGMENTS")
+  if (OBC%number_of_segments > 0) then
     ! Allocate everything
     allocate(OBC%OBC_segment_list(0:OBC%number_of_segments))
     do l=0,OBC%number_of_segments
