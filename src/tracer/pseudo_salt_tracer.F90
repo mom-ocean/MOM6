@@ -99,6 +99,8 @@ type, public :: pseudo_salt_tracer_CS ; private
   type(tracer_registry_type), pointer :: tr_Reg => NULL()
   real, pointer :: tr(:,:,:,:) => NULL()   ! The array of tracers used in this
                                            ! subroutine, in g m-3?
+  real, pointer :: diff(:,:,:,:) => NULL()   ! The array of tracers used in this
+                                           ! subroutine, in g m-3?
   type(p3d), dimension(NTR_MAX) :: &
     tr_adx, &! Tracer zonal advective fluxes in g m-3 m3 s-1.An Error Has Occurred
 
@@ -166,11 +168,12 @@ function register_pseudo_salt_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
 
   CS%ntr = NTR_MAX
   allocate(CS%tr(isd:ied,jsd:jed,nz,CS%ntr)) ; CS%tr(:,:,:,:) = 0.0
+  allocate(CS%diff(isd:ied,jsd:jed,nz,CS%ntr)) ; CS%diff(:,:,:,:) = 0.0
 
   do m=1,CS%ntr
     ! This is needed to force the compiler not to do a copy in the registration
     ! calls.  Curses on the designers and implementers of Fortran90.
-    CS%tr_desc(m) = var_desc("pseudo_salt_diff", "kg", &
+    CS%tr_desc(m) = var_desc(trim("pseudo_salt_diff"), "kg", &
         "Difference between pseudo salt passive tracer and salt tracer", caller=mod)
     tr_ptr => CS%tr(:,:,:,m)
     call query_vardesc(CS%tr_desc(m), name=var_name, caller="register_pseudo_salt_tracer")
@@ -264,8 +267,8 @@ subroutine initialize_pseudo_salt_tracer(restart, day, G, GV, h, diag, OBC, CS, 
   endif
 
   ! This needs to be changed if the units of tracer are changed above.
-  if (GV%Boussinesq) then ; flux_units = "kg salt/(m^2 s)"
-  else ; flux_units = "kg salt/(m^2 s)" ; endif
+  if (GV%Boussinesq) then ; flux_units = "g salt/(m^2 s)"
+  else ; flux_units = "g salt/(m^2 s)" ; endif
 
   do m=1,CS%ntr
     ! Register the tracer for the restart file.
@@ -364,6 +367,10 @@ subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G
   if (present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
     ! The total time-integrated surface flux of salt should have been already
     ! in a previous call to extractFluxes1d calculated
+!    call tracer_vertdiff(h_old, ea, eb, dt, CS%tr(:,:,:,1), G, GV, &
+!          evap_CFL_limit=evap_CFL_limit,&
+!          minimum_forcing_depth=minimum_forcing_depth, fluxes=fluxes, &
+!          convert_flux_in= .false.)
     call tracer_vertdiff(h_old, ea, eb, dt, CS%tr(:,:,:,1), G, GV, &
           sfc_flux = fluxes%netSalt, evap_CFL_limit=evap_CFL_limit,&
           minimum_forcing_depth=minimum_forcing_depth, fluxes=fluxes, &
@@ -372,6 +379,10 @@ subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G
     call tracer_vertdiff(h_old, ea, eb, dt, CS%tr(:,:,:,1), G, GV)
   endif 
 
+  do k=1,nz ; do j=js,je ; do i=is,ie
+    CS%diff(i,j,k,1) = CS%tr(i,j,k,1)-tv%S(i,j,k)
+  enddo ; enddo ; enddo
+  
   if(debug) then
     call hchksum(tv%S,"salt post pseudo-salt vertdiff", G%HI) 
     call hchksum(CS%tr(:,:,:,1),"pseudo_salt post pseudo-salt vertdiff", G%HI) 
@@ -385,7 +396,7 @@ subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G
           if (h_new(i,j,k) < 1.1*GV%Angstrom) then
             local_tr(i,j,k) = CS%land_val(m)
           else
-            local_tr(i,j,k) = CS%tr(i,j,k,m)-tv%S(i,j,k)
+            local_tr(i,j,k) = CS%diff(i,j,k,m)
           endif
         enddo ; enddo ; enddo
       else
@@ -453,13 +464,13 @@ function pseudo_salt_stock(h, stocks, G, GV, CS, names, units, stock_index)
     units(m) = trim(units(m))//" kg"
     stocks(m) = 0.0
     do k=1,nz ; do j=js,je ; do i=is,ie
-      stocks(m) = stocks(m) + CS%tr(i,j,k,m) * &
+      stocks(m) = stocks(m) + CS%diff(i,j,k,m) * &
                            (G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k))
     enddo ; enddo ; enddo
     stocks(m) = GV%H_to_kg_m2 * stocks(m)
   enddo  
   
-  pseudo_salt_stock = m
+  pseudo_salt_stock = CS%ntr
 
 end function pseudo_salt_stock
 
