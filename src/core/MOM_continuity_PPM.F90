@@ -152,8 +152,8 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
 
   local_Flather_EW = .false. ; local_Flather_NS = .false.
   if (present(OBC)) then ; if (associated(OBC)) then ; if (OBC%OBC_pe) then
-    local_Flather_EW = OBC%apply_OBC_u_flather_east .or. OBC%apply_OBC_u_flather_west
-    local_Flather_NS = OBC%apply_OBC_v_flather_north .or. OBC%apply_OBC_v_flather_south
+    local_Flather_EW = OBC%Flather_u_BCs_exist_globally
+    local_Flather_NS = OBC%Flather_v_BCs_exist_globally
     !   If an OBC is being applied, copy the input thicknesses so that the
     ! OBC code works even if hin == h.
     if (local_Flather_EW .or.  local_Flather_NS) &
@@ -390,10 +390,8 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
   if (present(BT_cont)) set_BT_cont = (associated(BT_cont))
   if (present(OBC)) then ; if (associated(OBC)) then
     local_specified_BC = OBC%specified_u_BCs_exist_globally
-    local_Flather_OBC = OBC%apply_OBC_u_flather_east .or. &
-                        OBC%apply_OBC_u_flather_west .or. &
-                        OBC%apply_OBC_v_flather_north .or. &
-                        OBC%apply_OBC_v_flather_south
+    local_Flather_OBC = OBC%Flather_u_BCs_exist_globally .or. &
+                        OBC%Flather_v_BCs_exist_globally
   endif ; endif
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = G%ke
 
@@ -1161,10 +1159,8 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
   if (present(BT_cont)) set_BT_cont = (associated(BT_cont))
   if (present(OBC)) then ; if (associated(OBC)) then ; if (OBC%OBC_pe) then
     local_specified_BC = OBC%specified_v_BCs_exist_globally
-    local_Flather_OBC = OBC%apply_OBC_u_flather_east .or. &
-                        OBC%apply_OBC_u_flather_west .or. &
-                        OBC%apply_OBC_v_flather_north .or. &
-                        OBC%apply_OBC_v_flather_south
+    local_Flather_OBC = OBC%Flather_u_BCs_exist_globally .or. &
+                        OBC%Flather_v_BCs_exist_globally
   endif ; endif ; endif
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = G%ke
 

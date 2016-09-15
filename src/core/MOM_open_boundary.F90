@@ -57,14 +57,8 @@ end type OBC_segment_type
 !> Open-boundary data
 type, public :: ocean_OBC_type
   integer :: number_of_segments = 0 !< The number of open-boundary segments.
-  logical :: apply_OBC_u_flather_east = .false.  !< True if any zonal velocity points in the
-                                                 !! local domain use east-facing Flather OBCs.
-  logical :: apply_OBC_u_flather_west = .false.  !< True if any zonal velocity points in the
-                                                 !! local domain use west-facing Flather OBCs.
-  logical :: apply_OBC_v_flather_north = .false. !< True if any zonal velocity points in the
-                                                 !! local domain use north-facing Flather OBCs.
-  logical :: apply_OBC_v_flather_south = .false. !< True if any zonal velocity points in the
-                                                 !! local domain use south-facing Flather OBCs.
+  logical :: Flather_u_BCs_exist_globally = .false. !< True if any zonal velocity points in the global domain use Flather BCs.
+  logical :: Flather_v_BCs_exist_globally = .false. !< True if any meridional velocity points in the global domain use Flather BCs.
   logical :: specified_u_BCs_exist_globally = .false. !< True if any zonal velocity points in the global domain use specified BCs.
   logical :: specified_v_BCs_exist_globally = .false. !< True if any meridional velocity points in the global domain use specified BCs.
   logical, pointer, dimension(:,:) :: &
@@ -191,15 +185,13 @@ subroutine open_boundary_config(G, param_file, OBC)
   endif
 
   ! Safety check
-  if ((OBC%apply_OBC_u_flather_west .or. OBC%apply_OBC_v_flather_south) .and. &
+  if ((OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally) .and. &
       .not.G%symmetric ) call MOM_error(FATAL, &
                  "MOM_open_boundary, open_boundary_config: "//&
-                 "Symmetric memory must be used when APPLY_OBC_U_FLATHER_WEST "//&
-                 "or APPLY_OBC_V_FLATHER_SOUTH is true.")
+                 "Symmetric memory must be used when using Flather OBCs.")
 
   if (.not.(OBC%specified_u_BCs_exist_globally .or. OBC%specified_v_BCs_exist_globally .or. &
-            OBC%apply_OBC_v_flather_north .or. OBC%apply_OBC_v_flather_south .or. &
-            OBC%apply_OBC_u_flather_east .or. OBC%apply_OBC_u_flather_west)) then
+            OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally)) then
     ! No open boundaries have been requested
     call open_boundary_dealloc(OBC)
   endif
@@ -241,19 +233,16 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
       OBC%OBC_segment_list(l_seg)%Flather = .true.
       ! This is a total hack for the tangential flow! - KSH
       OBC%OBC_segment_list(l_seg)%gradient = .true.
-      if  (Je_obc>Js_obc) OBC%apply_OBC_u_flather_east = .true. ! This line will not be needed soon - AJA
-      if  (Je_obc<Js_obc) OBC%apply_OBC_u_flather_west = .true. ! This line will not be needed soon - AJA
+      OBC%Flather_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'ORLANSKI') then
       OBC%OBC_segment_list(l_seg)%radiation = .true.
       ! This is a total hack for the tangential flow! - KSH
       OBC%OBC_segment_list(l_seg)%gradient = .true.
-      if  (Je_obc>Js_obc) OBC%apply_OBC_u_flather_east = .true. ! This line will not be needed soon - AJA
-      if  (Je_obc<Js_obc) OBC%apply_OBC_u_flather_west = .true. ! This line will not be needed soon - AJA
+      OBC%Flather_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'RADIATION2D') then
       OBC%OBC_segment_list(l_seg)%radiation = .true.
       OBC%OBC_segment_list(l_seg)%radiation2D = .true.
-      if  (Je_obc>Js_obc) OBC%apply_OBC_u_flather_east = .true. ! This line will not be needed soon - AJA
-      if  (Je_obc<Js_obc) OBC%apply_OBC_u_flather_west = .true. ! This line will not be needed soon - AJA
+      OBC%Flather_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%OBC_segment_list(l_seg)%specified = .true.
       OBC%OBC_segment_list(l_seg)%direction = OBC_NONE
@@ -348,19 +337,16 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
       OBC%OBC_segment_list(l_seg)%Flather = .true.
       ! This is a total hack for the tangential flow! - KSH
       OBC%OBC_segment_list(l_seg)%gradient = .true.
-      if (Ie_obc>Is_obc) OBC%apply_OBC_v_flather_south = .true. ! This line will not be needed soon - AJA
-      if (Ie_obc<Is_obc) OBC%apply_OBC_v_flather_north = .true. ! This line will not be needed soon - AJA
+      OBC%Flather_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'ORLANSKI') then
       OBC%OBC_segment_list(l_seg)%radiation = .true.
       ! This is a total hack for the tangential flow! - KSH
       OBC%OBC_segment_list(l_seg)%gradient = .true.
-      if (Ie_obc>Is_obc) OBC%apply_OBC_v_flather_south = .true. ! This line will not be needed soon - AJA
-      if (Ie_obc<Is_obc) OBC%apply_OBC_v_flather_north = .true. ! This line will not be needed soon - AJA
+      OBC%Flather_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'RADIATION2D') then
       OBC%OBC_segment_list(l_seg)%radiation = .true.
       OBC%OBC_segment_list(l_seg)%radiation2D = .true.
-      if (Ie_obc>Is_obc) OBC%apply_OBC_v_flather_south = .true. ! This line will not be needed soon - AJA
-      if (Ie_obc<Is_obc) OBC%apply_OBC_v_flather_north = .true. ! This line will not be needed soon - AJA
+      OBC%Flather_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%OBC_segment_list(l_seg)%specified = .true.
       OBC%OBC_segment_list(l_seg)%direction = OBC_NONE
@@ -521,26 +507,25 @@ subroutine open_boundary_init(G, param_file, OBC)
 
   if (.not.associated(OBC)) return
 
-  if ( OBC%apply_OBC_v_flather_north .or. OBC%apply_OBC_v_flather_south .or. &
-       OBC%apply_OBC_u_flather_east .or. OBC%apply_OBC_u_flather_west ) then
+  if ( OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally ) then
     call get_param(param_file, mod, "OBC_RADIATION_MAX", OBC%rx_max, &
                    "The maximum magnitude of the baroclinic radiation \n"//&
                    "velocity (or speed of characteristics).  This is only \n"//&
-                   "used if one of the APPLY_OBC_[UV]_FLATHER_... is true.", &
+                   "used if one of the open boundary segments is using Orlanski.", &
                    units="m s-1", default=10.0)
     call get_param(param_file, mod, "OBC_RAD_VEL_WT", OBC%gamma_uv, &
                    "The relative weighting for the baroclinic radiation \n"//&
                    "velocities (or speed of characteristics) at the new \n"//&
                    "time level (1) or the running mean (0) for velocities. \n"//&
                    "Valid values range from 0 to 1. This is only used if \n"//&
-                   "one of the APPLY_OBC_[UV]_FLATHER_...  is true.", &
+                   "one of the open boundary segments is using Orlanski.", &
                    units="nondim",  default=0.3)
     call get_param(param_file, mod, "OBC_RAD_THICK_WT", OBC%gamma_h, &
                    "The relative weighting for the baroclinic radiation \n"//&
                    "velocities (or speed of characteristics) at the new \n"//&
                    "time level (1) or the running mean (0) for thicknesses. \n"//&
                    "Valid values range from 0 to 1. This is only used if \n"//&
-                   "one of the APPLY_OBC_[UV]_FLATHER_...  is true.", &
+                   "one of the open boundary segments is using Orlanski.", &
                    units="nondim",  default=0.2)
   endif
 
@@ -556,10 +541,8 @@ logical function open_boundary_query(OBC, apply_orig_OBCs, apply_orig_Flather)
   open_boundary_query = .false.
   if (.not. associated(OBC)) return
   if (present(apply_orig_OBCs)) open_boundary_query = OBC%specified_u_BCs_exist_globally .or. OBC%specified_v_BCs_exist_globally
-  if (present(apply_orig_Flather)) open_boundary_query = OBC%apply_OBC_v_flather_north .or. &
-                                                         OBC%apply_OBC_v_flather_south .or. &
-                                                         OBC%apply_OBC_u_flather_east .or. &
-                                                         OBC%apply_OBC_u_flather_west
+  if (present(apply_orig_Flather)) open_boundary_query = OBC%Flather_u_BCs_exist_globally .or. &
+                                                         OBC%Flather_v_BCs_exist_globally
 end function open_boundary_query
 
 !> Deallocate open boundary data
@@ -704,8 +687,7 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   if (.not.associated(OBC)) return
-  if (.not.(OBC%apply_OBC_u_flather_east .or. OBC%apply_OBC_u_flather_west .or. &
-            OBC%apply_OBC_v_flather_north .or. OBC%apply_OBC_v_flather_south)) &
+  if (.not.(OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally)) &
     return
 
   gamma_u = OBC%gamma_uv ; gamma_v = OBC%gamma_uv ; gamma_h = OBC%gamma_h
@@ -1076,11 +1058,11 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
   ! no radiation conditions applied to the thicknesses, since the thicknesses
   ! might not be physically motivated.  Instead, sponges should be used to
   ! enforce the near-boundary layer structure.
-  if (OBC%apply_OBC_u_flather_west .or. OBC%apply_OBC_u_flather_east) then
+  if (OBC%Flather_u_BCs_exist_globally) then
     allocate(OBC%rx_old_u(IsdB:IedB,jsd:jed,nz)) ; OBC%rx_old_u(:,:,:) = 0.0
  !   allocate(OBC%rx_old_h(Isd:Ied,jsd:jed,nz))   ; OBC%rx_old_h(:,:,:) = 0.0
   endif
-  if (OBC%apply_OBC_v_flather_south .or. OBC%apply_OBC_v_flather_north) then
+  if (OBC%Flather_v_BCs_exist_globally) then
     allocate(OBC%ry_old_v(isd:ied,JsdB:JedB,nz)) ; OBC%ry_old_v(:,:,:) = 0.0
  !   allocate(OBC%ry_old_h(isd:ied,Jsd:Jed,nz))   ; OBC%ry_old_h(:,:,:) = 0.0
   endif
