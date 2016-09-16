@@ -382,7 +382,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
   real :: dx_E, dx_W ! Effective x-grid spacings to the east and west, in m.
   integer :: i, j, k, ish, ieh, jsh, jeh, nz
   logical :: do_aux, local_specified_BC, use_visc_rem, set_BT_cont, any_simple_OBC
-  logical :: local_Flather_OBC, is_simple
+  logical :: local_Flather_OBC, is_simple, is_tangential
 
   do_aux = (present(uhbt_aux) .and. present(u_cor_aux))
   use_visc_rem = present(visc_rem_u)
@@ -528,15 +528,13 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
         if (local_specified_BC) then ; do I=ish-1,ieh
           ! Avoid reconciling barotropic/baroclinic transports if transport is specified
           is_simple = OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%specified
-          do_i(I) = .not.(OBC%OBC_mask_u(I,j) .and. is_simple)
-          any_simple_OBC = any_simple_OBC .or. is_simple
-        enddo ; else if (local_Flather_OBC) then ; do I=ish-1,ieh
           ! This is a tangential condition and is needed for unknown reasons and
           ! probably implies that we made a calculation elsewhere that we should not have.
-          do_i(I) = .not.(OBC%OBC_mask_u(I,j) .and. &
-                 (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%Flather .and. &
-                   ((OBC%OBC_direction_u(I,j) == OBC_DIRECTION_N) .or. &
-                    (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_S))))
+          is_tangential = OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%Flather .and. &
+                          ((OBC%OBC_direction_u(I,j) == OBC_DIRECTION_N) .or. &
+                           (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_S))
+          do_i(I) = .not.(OBC%OBC_mask_u(I,j) .and. (is_simple .or. is_tangential))
+          any_simple_OBC = any_simple_OBC .or. is_simple
         enddo ; else ; do I=ish-1,ieh
           do_i(I) = .true.
         enddo ; endif
@@ -1151,7 +1149,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
   real :: dy_N, dy_S ! Effective y-grid spacings to the north and south, in m.
   integer :: i, j, k, ish, ieh, jsh, jeh, nz
   logical :: do_aux, local_specified_BC, use_visc_rem, set_BT_cont, any_simple_OBC
-  logical :: local_Flather_OBC, is_simple
+  logical :: local_Flather_OBC, is_simple, is_tangential
 
   do_aux = (present(vhbt_aux) .and. present(v_cor_aux))
   use_visc_rem = present(visc_rem_v)
@@ -1292,18 +1290,16 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
 
       any_simple_OBC = .false.
       if (present(vhbt) .or. do_aux .or. set_BT_cont) then
-        if (local_specified_BC) then ; do i=ish,ieh
+        if (local_specified_BC .or. local_Flather_OBC) then ; do i=ish,ieh
           ! Avoid reconciling barotropic/baroclinic transports if transport is specified
           is_simple = OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%specified
-          do_i(i) = .not.(OBC%OBC_mask_v(i,J) .and. is_simple)
-          any_simple_OBC = any_simple_OBC .or. is_simple
-        enddo ; else if (local_Flather_OBC) then ; do i=ish,ieh
           ! This is a tangential condition and is needed for unknown reasons and
           ! probably implies that we made a calculation elsewhere that we should not have.
-          do_i(i) = .not.(OBC%OBC_mask_v(i,J) .and. &
-                 (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%Flather) .and. &
-                ((OBC%OBC_direction_v(i,J) == OBC_DIRECTION_E) .or. &
-                 (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_W)))
+          is_tangential = OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%Flather .and. &
+                          ((OBC%OBC_direction_v(i,J) == OBC_DIRECTION_E) .or. &
+                           (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_W))
+          do_i(i) = .not.(OBC%OBC_mask_v(i,J) .and. (is_simple .or. is_tangential))
+          any_simple_OBC = any_simple_OBC .or. is_simple
         enddo ; else ; do i=ish,ieh
           do_i(i) = .true.
         enddo ; endif
