@@ -510,7 +510,8 @@ contains
   !  </TEMPLATE>
   ! </SUBROUTINE>
 
-  subroutine MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS, tv, optics)
+  subroutine MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS, tv, optics, &
+        evap_CFL_limit, minimum_forcing_depth))
     type(ocean_grid_type),                 intent(in) :: G
     type(verticalGrid_type),               intent(in) :: GV
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
@@ -519,6 +520,8 @@ contains
     type(MOM_generic_tracer_CS),           pointer    :: CS
     type(thermo_var_ptrs),                 intent(in) :: tv
     type(optics_type),                     intent(in) :: optics
+    real,                        optional,intent(in)  :: evap_CFL_limit
+    real,                        optional,intent(in)  :: minimum_forcing_depth
     !   This subroutine applies diapycnal diffusion and any other column
     ! tracer physics or chemistry to the tracers from this file.
     ! CFCs are relatively simple, as they are passive tracers. with only a surface
@@ -539,6 +542,11 @@ contains
     !  (in)      GV - The ocean's vertical grid structure.
     !  (in)      CS - The control structure returned by a previous call to
     !                 register_MOM_generic_tracer.
+    !  (in)      tv - Thermodynamic structure with T and S
+    !  (in)      evap_CFL_limit - Limits how much water can be fluxed out of the top layer
+    !                             Stored previously in diabatic CS.  
+    !  (in)      minimum_forcing_depth - The smallest depth over which fluxes can be applied
+    !                             Stored previously in diabatic CS.      
     !
     ! The arguments to this subroutine are redundant in that
     !     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
@@ -628,7 +636,6 @@ contains
     !
     !Calculate tendencies (i.e., field changes at dt) from the sources / sinks
     !
-
     call generic_tracer_source(tv%T,tv%S,sosga,rho_dzt,dzt,hblt_depth,G%isd,G%jsd,1,dt,&
          G%areaT,get_diag_time_end(CS%diag),&
          optics%nbands, optics%max_wavelength_band, optics%sw_pen_band, optics%opacity_band)
@@ -636,11 +643,34 @@ contains
     !
     !Update Tr(n)%field from explicit vertical diffusion
     !
+   
+    ! This uses applyTracerBoundaryFluxesInOut to handle the change in tracer due to freshwater fluxes
+    ! usually in ALE mode
+    if (present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
+      g_tracer=>CS%g_tracer_list
+      do
+        if (g_tracer_is_prog(g_tracer)) then
+          do k=1,nz ;do j=js,je ; do i=is,ie
+            h_work(i,j,k) = h_old(i,j,k)
+          enddo ; enddo ; enddo;
+          call applyTracerBoundaryFluxesInOut(G, GV, g_tracer%field(:,:,:,1), dt, fluxes, h_work, &
+              evap_CFL_limit, minimum_forcing_depth)
+        endif  
+
+         !traverse the linked list till hit NULL
+         call g_tracer_get_next(g_tracer, g_tracer_next)
+        if(.NOT. associated(g_tracer_next)) exit
+        g_tracer=>g_tracer_next
+      enddo             
+    endif
 
     ! Use a tridiagonal solver to determine the concentrations after the
     ! surface source is applied and diapycnal advection and diffusion occurs.
-
-    call generic_tracer_vertdiff_G(h_old, ea, eb, dt, GV%kg_m2_to_H, GV%m_to_H, 1) !Last arg is tau which is always 1 for MOM
+    if (present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
+      call generic_tracer_vertdiff_G(h_work, ea, eb, dt, GV%kg_m2_to_H, GV%m_to_H, 1) !Last arg is tau which is always 1 for MOM
+    else
+      call generic_tracer_vertdiff_G(h_old, ea, eb, dt, GV%kg_m2_to_H, GV%m_to_H, 1) !Last arg is tau which is always 1 for MOM
+    endif
 
     ! Update bottom fields after vertical processes
 
