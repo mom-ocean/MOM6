@@ -106,7 +106,7 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
   call initialize_masks(G, PF)
 
   ! Make OBC mask consistent with land mask
-  call open_boundary_impose_land_mask(OBC, G)
+  call open_boundary_impose_land_mask(OBC, G, G%areaCu, G%areaCv)
 
   if (debug) then
     call hchksum(G%bathyT, 'MOM_initialize_fixed: depth ', G%HI, haloshift=1)
