@@ -611,10 +611,13 @@ subroutine open_boundary_impose_normal_slope(OBC, G, depth)
 
 end subroutine open_boundary_impose_normal_slope
 
-!> Reconcile masks and open boundaries, deallocate OBC on PEs where it is not needed
-subroutine open_boundary_impose_land_mask(OBC, G)
+!> Reconcile masks and open boundaries, deallocate OBC on PEs where it is not needed.
+!! Also adjust u- and v-point cell area on specified open boundaries.
+subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv)
   type(ocean_OBC_type),              pointer       :: OBC !< Open boundary control structure
-  type(dyn_horgrid_type),            intent(in) :: G !< Ocean grid structure
+  type(dyn_horgrid_type),            intent(in)    :: G !< Ocean grid structure
+  real, dimension(SZIB_(G),SZJ_(G)), intent(inout) :: areaCu !< Area of a u-cell (m2)
+  real, dimension(SZI_(G),SZJB_(G)), intent(inout) :: areaCv !< Area of a u-cell (m2)
   ! Local variables
   integer :: i, j
   logical :: any_U, any_V
@@ -642,6 +645,40 @@ subroutine open_boundary_impose_land_mask(OBC, G)
           OBC%OBC_direction_v(i,J) = OBC_NONE
           OBC%OBC_mask_v(i,J) = .false.
           OBC%OBC_segment_v(I,j) = OBC_NONE
+        endif
+      endif
+    enddo ; enddo
+  endif
+
+  ! Sweep along u-segments and for %specified BC points reset the u-point area which was masked out
+  if (associated(OBC%OBC_segment_u)) then
+    do j=G%jsd,G%jed ; do I=G%isd,G%ied-1
+      if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
+        if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%specified) then
+          if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W) then
+            areaCu(I,j) = G%areaT(i+1,j)
+           !G%IareaCu(I,j) = G%IareaT(i+1,j) ?
+          elseif (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) then
+            areaCu(I,j) = G%areaT(i,j)
+           !G%IareaCu(I,j) = G%IareaT(i,j) ?
+          endif
+        endif
+      endif
+    enddo ; enddo
+  endif
+
+  ! Sweep along v-segments and for %specified BC points reset the v-point area which was masked out
+  if (associated(OBC%OBC_segment_v)) then
+    do J=G%jsd,G%jed-1 ; do i=G%isd,G%ied
+      if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
+        if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%specified) then
+          if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_S) then
+            areaCv(i,J) = G%areaT(i,j+1)
+           !G%IareaCv(i,J) = G%IareaT(i,j+1) ?
+          elseif (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N) then
+            areaCu(i,J) = G%areaT(i,j)
+           !G%IareaCu(i,J) = G%IareaT(i,j) ?
+          endif
         endif
       endif
     enddo ; enddo
