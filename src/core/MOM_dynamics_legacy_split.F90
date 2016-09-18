@@ -502,7 +502,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
 
 ! CAu = -(f+zeta_av)/h_av vh + d/dx KE_av
   call cpu_clock_begin(id_clock_Cor)
-  call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%ADp, G, GV, &
+  call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, G, GV, &
                  CS%CoriolisAdv_CSp)
   call cpu_clock_end(id_clock_Cor)
 
@@ -819,7 +819,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
 
 ! CAu = -(f+zeta_av)/h_av vh + d/dx KE_av
   call cpu_clock_begin(id_clock_Cor)
-  call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%ADp, G, GV, &
+  call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, G, GV, &
                  CS%CoriolisAdv_CSp)
   call cpu_clock_end(id_clock_Cor)
 
