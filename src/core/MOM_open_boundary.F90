@@ -245,7 +245,6 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
       OBC%Flather_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%OBC_segment_list(l_seg)%specified = .true.
-      OBC%OBC_segment_list(l_seg)%direction = OBC_NONE
       OBC%specified_u_BCs_exist_globally = .true. ! This avoids deallocation
       ! Hack to undo the hack above for SIMPLE BCs
       if (Js_obc<Je_obc) then
@@ -349,7 +348,6 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
       OBC%Flather_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%OBC_segment_list(l_seg)%specified = .true.
-      OBC%OBC_segment_list(l_seg)%direction = OBC_NONE
       OBC%specified_v_BCs_exist_globally = .true. ! This avoids deallocation
       ! Hack to undo the hack above for SIMPLE BCs
       if (Is_obc<Ie_obc) then
@@ -589,12 +587,16 @@ subroutine open_boundary_impose_normal_slope(OBC, G, depth)
   do J=G%jsd+1,G%jed-1 ; do i=G%isd+1,G%ied-1
     bc_north = .false. ; bc_south = .false. ; bc_east = .false. ; bc_west = .false.
     if (associated(OBC%OBC_segment_u)) then
-      if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) bc_east = .true.
-      if (OBC%OBC_segment_list(OBC%OBC_segment_u(I-1,j))%direction == OBC_DIRECTION_W) bc_west = .true.
+      if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E &
+          .and. .not. OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%specified) bc_east = .true.
+      if (OBC%OBC_segment_list(OBC%OBC_segment_u(I-1,j))%direction == OBC_DIRECTION_W &
+          .and. .not. OBC%OBC_segment_list(OBC%OBC_segment_u(I-1,j))%specified) bc_west = .true.
     endif
     if (associated(OBC%OBC_segment_v)) then
-      if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N) bc_north = .true.
-      if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J-1))%direction == OBC_DIRECTION_S) bc_south = .true.
+      if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N &
+          .and. .not. OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%specified) bc_north = .true.
+      if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J-1))%direction == OBC_DIRECTION_S &
+          .and. .not. OBC%OBC_segment_list(OBC%OBC_segment_v(i,J-1))%specified) bc_south = .true.
     endif
     if (bc_north) depth(i,j+1) = depth(i,j)
     if (bc_south) depth(i,j-1) = depth(i,j)
@@ -619,6 +621,7 @@ subroutine open_boundary_impose_land_mask(OBC, G)
 
   if (.not.associated(OBC)) return
 
+  ! Sweep along u-segments and delete the OBC for blocked points.
   if (associated(OBC%OBC_segment_u)) then
     do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
       if (G%mask2dCu(I,j) == 0 .and. (OBC%OBC_segment_u(I,j) /= OBC_NONE)) then
@@ -631,6 +634,7 @@ subroutine open_boundary_impose_land_mask(OBC, G)
     enddo ; enddo
   endif
 
+  ! Sweep along v-segments and delete the OBC for blocked points.
   if (associated(OBC%OBC_segment_v)) then
     do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
       if (G%mask2dCv(i,J) == 0 .and. (OBC%OBC_segment_v(i,J) /= OBC_NONE)) then
