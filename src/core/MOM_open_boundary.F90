@@ -622,9 +622,10 @@ subroutine open_boundary_impose_land_mask(OBC, G)
   if (associated(OBC%OBC_segment_u)) then
     do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
       if (G%mask2dCu(I,j) == 0 .and. (OBC%OBC_segment_u(I,j) /= OBC_NONE)) then
-        if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%radiation) then
+        if (.not. OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%specified) then
           OBC%OBC_direction_u(I,j) = OBC_NONE
           OBC%OBC_mask_u(I,j) = .false.
+          OBC%OBC_segment_u(I,j) = OBC_NONE
         endif
       endif
     enddo ; enddo
@@ -633,9 +634,10 @@ subroutine open_boundary_impose_land_mask(OBC, G)
   if (associated(OBC%OBC_segment_v)) then
     do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
       if (G%mask2dCv(i,J) == 0 .and. (OBC%OBC_segment_v(i,J) /= OBC_NONE)) then
-        if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%radiation) then
+        if (.not. OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%specified) then
           OBC%OBC_direction_v(i,J) = OBC_NONE
           OBC%OBC_mask_v(i,J) = .false.
+          OBC%OBC_segment_v(I,j) = OBC_NONE
         endif
       endif
     enddo ; enddo
