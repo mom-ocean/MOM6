@@ -337,7 +337,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
        case ("phillips"); call Phillips_initialize_velocity(u, v, G, GV, PF)
        case ("rossby_front"); call Rossby_front_initialize_velocity(u, v, h, G, GV, PF)
        case ("soliton"); call soliton_initialize_velocity(u, v, h, G)
-       case ("supercritical"); call supercritical_initialize_velocity(u, v, h, G)
+       case ("supercritical"); call supercritical_initialize_velocity(u, v, h, G, PF)
        case ("USER"); call user_initialize_velocity(u, v, G, PF)
        case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
             "Unrecognized velocity configuration "//trim(config))
@@ -459,7 +459,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
     OBC%update_OBC = .true.
     OBC%OBC_values_config = "tidal_bay"
   elseif (trim(config) == "supercritical") then
-    call supercritical_set_OBC_data(OBC, G)
+    call supercritical_set_OBC_data(OBC, G, PF)
   endif
   if (debug.and.associated(OBC)) then
     call hchksum(G%mask2dT, 'MOM_initialize_state: mask2dT ', G%HI)
