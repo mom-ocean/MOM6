@@ -2857,6 +2857,12 @@ subroutine set_restart_fields(GV, param_file, CS)
   vd = var_desc("ave_ssh","meter","Time average sea surface height",'h','1')
   call register_restart_field(CS%ave_ssh, vd, .false., CS%restart_CSp)
 
+  ! GM, hML is needed when using the ice shelf module 
+  if (associated(CS%tv%Hml)) then
+     vd = var_desc("hML","meter","Mixed layer thickness",'h','1')
+     call register_restart_field(CS%tv%Hml, vd, .false., CS%restart_CSp)
+  endif
+
 end subroutine set_restart_fields
 
 
