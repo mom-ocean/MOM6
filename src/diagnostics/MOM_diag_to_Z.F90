@@ -983,14 +983,14 @@ subroutine register_Z_tracer_low(tr_ptr, name, long_name, units, standard_name, 
 
   CS%missing_tr(m) = CS%missing_value ! This could be changed later, if desired.
   if (CS%nk_zspace > 0) then
-    CS%id_tr(m) = register_diag_field('ocean_model_z', name, CS%axesTz, Time,           &
+    CS%id_tr(m) = register_diag_field('ocean_model_zold', name, CS%axesTz, Time,           &
                                       long_name, units, missing_value=CS%missing_tr(m), &
                                       standard_name=standard_name)
-    CS%id_tr_xyave(m) = register_diag_field('ocean_model_z', name//'_xyave', CS%axesZ, Time,           &
+    CS%id_tr_xyave(m) = register_diag_field('ocean_model_zold', name//'_xyave', CS%axesZ, Time,           &
                                       long_name, units, missing_value=CS%missing_tr(m), &
                                       standard_name=standard_name)
   else
-    id_test = register_diag_field('ocean_model_z', name, CS%diag%axesT1, Time,      &
+    id_test = register_diag_field('ocean_model_zold', name, CS%diag%axesT1, Time,      &
                                   long_name, units, missing_value=CS%missing_tr(m), &
                                   standard_name=standard_name)
     if (id_test>0) call MOM_error(WARNING, &
@@ -1095,24 +1095,24 @@ subroutine MOM_diag_to_Z_init(Time, G, GV, param_file, diag, CS)
     call define_axes_group(diag, (/ diag%axesCv1%handles(1), diag%axesCv1%handles(2), zint_axis /), CS%axesCvzi)
     call define_axes_group(diag, (/ z_axis /),    CS%axesZ)
 
-    CS%id_u_z = register_diag_field('ocean_model_z', 'u', CS%axesCuz, Time,    &
+    CS%id_u_z = register_diag_field('ocean_model_zold', 'u', CS%axesCuz, Time,    &
         'Zonal Velocity in Depth Space', 'meter second-1',                     &
         missing_value=CS%missing_vel, cmor_field_name='uo', cmor_units='m s-1',&
         cmor_standard_name='sea_water_x_velocity', cmor_long_name='Sea Water X Velocity')
     if (CS%id_u_z>0) call safe_alloc_ptr(CS%u_z,IsdB,IedB,jsd,jed,CS%nk_zspace)
 
-    CS%id_v_z = register_diag_field('ocean_model_z', 'v', CS%axesCvz, Time,    &
+    CS%id_v_z = register_diag_field('ocean_model_zold', 'v', CS%axesCvz, Time,    &
         'Meridional Velocity in Depth Space', 'meter second-1',                &
         missing_value=CS%missing_vel, cmor_field_name='vo', cmor_units='m s-1',&
         cmor_standard_name='sea_water_y_velocity', cmor_long_name='Sea Water Y Velocity')
     if (CS%id_v_z>0) call safe_alloc_ptr(CS%v_z,isd,ied,JsdB,JedB,CS%nk_zspace)
 
-    CS%id_uh_z = register_diag_field('ocean_model_z', 'uh', CS%axesCuz, Time,    &
+    CS%id_uh_z = register_diag_field('ocean_model_zold', 'uh', CS%axesCuz, Time,    &
         'Zonal Mass Transport (including SGS param) in Depth Space', flux_units, &
         missing_value=CS%missing_trans)
     if (CS%id_uh_z>0) call safe_alloc_ptr(CS%uh_z,IsdB,IedB,jsd,jed,CS%nk_zspace)
 
-    CS%id_vh_z = register_diag_field('ocean_model_z', 'vh', CS%axesCvz, Time,        &
+    CS%id_vh_z = register_diag_field('ocean_model_zold', 'vh', CS%axesCvz, Time,        &
         'Meridional Mass Transport (including SGS param) in Depth Space', flux_units,&
         missing_value=CS%missing_trans)
     if (CS%id_vh_z>0) call safe_alloc_ptr(CS%vh_z,isd,ied,JsdB,JedB,CS%nk_zspace)
@@ -1121,25 +1121,25 @@ subroutine MOM_diag_to_Z_init(Time, G, GV, param_file, diag, CS)
 
     ! Check whether diag-table is requesting any z-space files; issue a warning if it is.
 
-    id_test = register_diag_field('ocean_model_z', 'u', diag%axesCu1, Time, &
+    id_test = register_diag_field('ocean_model_zold', 'u', diag%axesCu1, Time, &
         'Zonal Velocity in Depth Space', 'meter second-1', cmor_field_name='uo')
     if (id_test>0) call MOM_error(WARNING, &
         "MOM_diag_to_Z_init: u cannot be output without "//&
         "an appropriate depth-space target file.")
 
-    id_test = register_diag_field('ocean_model_z', 'v', diag%axesCv1, Time, &
+    id_test = register_diag_field('ocean_model_zold', 'v', diag%axesCv1, Time, &
         'Meridional Velocity in Depth Space', 'meter second-1', cmor_field_name='vo')
     if (id_test>0) call MOM_error(WARNING,                 &
         "MOM_diag_to_Z_init: v cannot be output without "//&
         "an appropriate depth-space target file.")
 
-    id_test = register_diag_field('ocean_model_z', 'uh', diag%axesCu1, Time, &
+    id_test = register_diag_field('ocean_model_zold', 'uh', diag%axesCu1, Time, &
         'Meridional Volume Transport in Depth Space', flux_units)
     if (id_test>0) call MOM_error(WARNING,                  &
         "MOM_diag_to_Z_init: uh cannot be output without "//&
         "an appropriate depth-space target file.")
 
-    id_test = register_diag_field('ocean_model_z', 'vh', diag%axesCv1, Time, &
+    id_test = register_diag_field('ocean_model_zold', 'vh', diag%axesCv1, Time, &
         'Meridional Volume Transport in Depth Space', flux_units)
     if (id_test>0) call MOM_error(WARNING,                  &
         "MOM_diag_to_Z_init: vh cannot be output without "//&
@@ -1394,7 +1394,7 @@ function register_Z_diag(var_desc, CS, day, missing)
           "register_Z_diag: unknown z_grid component "//trim(z_grid))
   end select
 
-  register_Z_diag = register_diag_field("ocean_model_z", trim(var_name), axes, &
+  register_Z_diag = register_diag_field("ocean_model_zold", trim(var_name), axes, &
         day, trim(longname), trim(units), missing_value=missing)
 
 end function register_Z_diag
@@ -1434,7 +1434,7 @@ function register_Zint_diag(var_desc, CS, day)
         "register_Z_diag: unknown hor_grid component "//trim(hor_grid))
   end select
 
-  register_Zint_diag = register_diag_field("ocean_model_z", trim(var_name),&
+  register_Zint_diag = register_diag_field("ocean_model_zold", trim(var_name),&
         axes, day, trim(longname), trim(units), missing_value=CS%missing_value)
 
 end function register_Zint_diag

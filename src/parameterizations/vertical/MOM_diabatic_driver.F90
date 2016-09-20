@@ -14,7 +14,7 @@ use MOM_diabatic_aux,        only : diabatic_aux_init, diabatic_aux_end, diabati
 use MOM_diabatic_aux,        only : make_frazil, adjust_salt, insert_brine, differential_diffuse_T_S, triDiagTS
 use MOM_diabatic_aux,        only : find_uv_at_h, diagnoseMLDbyDensityDifference, applyBoundaryFluxesInOut
 use MOM_diag_mediator,       only : post_data, register_diag_field, safe_alloc_ptr
-use MOM_diag_mediator,       only : diag_ctrl, time_type, diag_update_target_grids
+use MOM_diag_mediator,       only : diag_ctrl, time_type, diag_update_remap_grids
 use MOM_diag_mediator,       only : diag_ctrl, query_averaging_enabled
 use MOM_diag_to_Z,           only : diag_to_Z_CS, register_Zint_diag, calc_Zint_diags
 use MOM_diapyc_energy_req,   only : diapyc_energy_req_init, diapyc_energy_req_end
@@ -413,7 +413,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
 
   ! Whenever thickness changes let the diag manager know, target grids
   ! for vertical remapping may need to be regenerated.
-  call diag_update_target_grids(CS%diag)
+  call diag_update_remap_grids(CS%diag)
 
   ! Set_opacity estimates the optical properties of the water column.
   ! It will need to be modified later to include information about the
@@ -1039,7 +1039,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
 
   ! Whenever thickness changes let the diag manager know, as the
   ! target grids for vertical remapping may need to be regenerated.
-  call diag_update_target_grids(CS%diag)
+  call diag_update_remap_grids(CS%diag)
 
   ! diagnostics
   if ((CS%id_Tdif > 0) .or. (CS%id_Tdif_z > 0) .or. &

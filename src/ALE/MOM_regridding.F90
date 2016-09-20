@@ -863,9 +863,8 @@ subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
       ! Local depth (G%bathyT is positive)
       nominalDepth = G%bathyT(i,j)*GV%m_to_H
 
-      call build_rho_column(CS, remapCS, tv%eqn_of_state, nz, nominalDepth, &
-                            h(i, j, :)*GV%H_to_m, &
-                            tv%T(i, j, :), tv%S(i, j, :), zNew)
+      call build_rho_column(CS, remapCS, nz, nominalDepth, h(i, j, :)*GV%H_to_m, &
+                            tv%T(i, j, :), tv%S(i, j, :), tv%eqn_of_state, zNew)
 
       if (CS%integrate_downward_for_e) then
         zOld(1) = 0.
@@ -926,7 +925,7 @@ subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
 end subroutine build_rho_grid
 
 
-subroutine build_rho_column(CS, remapCS, eqn_of_state, nz, depth, h, T, S, zInterface)
+subroutine build_rho_column(CS, remapCS, nz, depth, h, T, S, eqn_of_state, zInterface)
 ! The algorithn operates as follows within each
 ! column:
 ! 1. Given T & S within each layer, the layer densities are computed.
@@ -941,11 +940,11 @@ subroutine build_rho_column(CS, remapCS, eqn_of_state, nz, depth, h, T, S, zInte
 
   type(regridding_CS),   intent(in)    :: CS !< Regridding control structure
   type(remapping_CS),    intent(in)    :: remapCS !< Remapping parameters and options
-  type(EOS_type),        pointer       :: eqn_of_state !< Equation of state structure
   integer,               intent(in)    :: nz !< Number of levels
   real,                  intent(in)    :: depth !< Depth of ocean bottom (positive in m)
   real, dimension(nz),   intent(in)    :: h  !< Layer thicknesses, in m
   real, dimension(nz),   intent(in)    :: T, S !< T and S for column
+  type(EOS_type),        pointer       :: eqn_of_state !< Equation of state structure
   real, dimension(nz+1), intent(inout) :: zInterface !< Absolute positions of interfaces
 
   ! Local variables
