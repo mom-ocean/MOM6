@@ -195,7 +195,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
                  'Parameter for computing velocity scale function.', &
                  units='nondim', default=98.96)
   call get_param(paramFile, mod, 'CS2', CS%cs2,                        &
-                 'Parameter for computing velocity scale function.', &
+                 'Parameter for computing non-local term.', &
                  units='nondim', default=6.32739901508)
   call get_param(paramFile, mod, 'DEEP_OBL_OFFSET', CS%deepOBLoffset,                             &
                  'If non-zero, the distance above the bottom to which the OBL is clipped\n'//     &
