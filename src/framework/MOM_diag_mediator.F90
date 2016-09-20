@@ -40,7 +40,7 @@ use MOM_time_manager,     only : time_type
 use MOM_verticalGrid,     only : verticalGrid_type
 use MOM_EOS,              only : EOS_type
 use MOM_diag_remap,       only : diag_remap_ctrl
-use MOM_diag_remap,       only : diag_remap_update, diag_remap_set_diag_axes
+use MOM_diag_remap,       only : diag_remap_update
 use MOM_diag_remap,       only : diag_remap_init, diag_remap_end, diag_remap_do_remap
 use MOM_diag_remap,       only : vertically_reintegrate_diag_field, vertically_interpolate_diag_field
 use MOM_diag_remap,       only : diag_remap_set_vertical_axes, diag_remap_get_nz
@@ -124,8 +124,6 @@ type, private :: diag_type
   integer :: fms_diag_id !< Underlying FMS diag_manager id.
   character(16) :: debug_str = '' !< For FATAL errors and debugging.
   type(axes_grp), pointer :: axes => null()
-  integer :: vertical_coord
-  integer, dimension(:), allocatable :: axes_ids !< 1D-axis ids
   real, pointer, dimension(:,:)   :: mask2d => null()
   real, pointer, dimension(:,:,:) :: mask3d => null()
   type(diag_type), pointer :: next => null() !< Pointer to the next diag.
