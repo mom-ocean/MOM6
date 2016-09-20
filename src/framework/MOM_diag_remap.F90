@@ -51,55 +51,62 @@ use netcdf
 
 implicit none ; private
 
-public diag_remap_ctrl, diag_remap_set_diag_axes
+public diag_remap_ctrl
 public diag_remap_init, diag_remap_end, diag_remap_update, diag_remap_do_remap
 public diag_remap_set_vertical_axes, diag_remap_axes_setup_done, diag_remap_get_nz
 public diag_remap_get_vertical_ids
 public vertically_reintegrate_diag_field
 public vertically_interpolate_diag_field
 
+!> This type represents a remapping of a diagnostic to a particular vertical
+!! coordinate.
+!! There is one of these types for each vertical coordinate. The vertical axes
+!! of a diagnostic will reference an instance of this type indicating how (or
+!! if) the diagnostic should be vertically remapped when being posted.
 type :: diag_remap_ctrl
   logical :: defined = .false. !< Whether a coordinate has been defined
-  ! Whether remappping initialized
-  logical :: initialized = .false.
-  ! The vertical coordinate that we remap to
-  integer :: vertical_coord = 0
-  ! Remap and regrid types needed for remaping using ALE
-  type(remapping_CS), pointer :: remap_cs => null()
-  type(regridding_CS), pointer :: regrid_cs => null()
-  ! Number of vertical levels used for remapping
-  integer :: nz = 0
-  ! Remap grid thicknesses
-  real, dimension(:,:,:), allocatable :: h
-  ! Nominal layer thicknesses
-  real, dimension(:), allocatable :: dz
-  ! Axes id's for the above
-  integer :: interface_axes_id = 0
-  integer :: layer_axes_id = 0
+  logical :: initialized = .false.  !< Whether remappping initialized
+  integer :: vertical_coord = 0 !< The vertical coordinate that we remap to
+  type(remapping_CS), pointer :: remap_cs => null() !< type for remapping using ALE module
+  type(regridding_CS), pointer :: regrid_cs => null() !< type for regridding using ALE module
+  integer :: nz = 0 !< Number of vertical levels used for remapping
+  real, dimension(:,:,:), allocatable :: h !< Remap grid thicknesses
+  real, dimension(:), allocatable :: dz !< Nominal layer thicknesses
+  integer :: interface_axes_id = 0 !< Vertical axes id for remapping at interfaces
+  integer :: layer_axes_id = 0 !< Vertical axes id for remapping on layers
 end type diag_remap_ctrl
 
 contains
 
+!> Initialize a diagnostic remapping type with the given vertical coordinate.
+!! The possible coordinates are defined in module regrid_consts
 subroutine diag_remap_init(remap_cs, vertical_coord)
-  type(diag_remap_ctrl), intent(inout) :: remap_cs
-  integer, intent(in) :: vertical_coord
+  type(diag_remap_ctrl), intent(inout) :: remap_cs !< Diag remapping control structure
+  integer, intent(in) :: vertical_coord !< The vertical coordinate it represents
 
   remap_cs%vertical_coord = vertical_coord
   remap_cs%initialized = .false.
   remap_cs%defined = .false.
+  remap_cs%nz = 0
 
 end subroutine diag_remap_init
 
+!> De-init a diagnostic remapping type.
+!! Free allocated memory.
 subroutine diag_remap_end(remap_cs)
-  type(diag_remap_ctrl), intent(inout) :: remap_cs
+  type(diag_remap_ctrl), intent(inout) :: remap_cs !< Diag remapping control structure
 
   if (allocated(remap_cs%h)) deallocate(remap_cs%h)
   if (allocated(remap_cs%dz)) deallocate(remap_cs%dz)
+  remap_cs%nz = 0
 
 end subroutine diag_remap_end
 
+!> Configure the vertical axes for a diagnostic remapping control structure.
+!! Reads a configuration file to determine nominal location of vertical
+!! layers/interfaces.
 subroutine diag_remap_set_vertical_axes(remap_cs, G, GV, param_file)
-  type(diag_remap_ctrl), intent(inout) :: remap_cs
+  type(diag_remap_ctrl), intent(inout) :: remap_cs !< Diag remap control structure
   type(ocean_grid_type), intent(inout) :: G !< Ocean grid structure
   type(verticalGrid_type), intent(in)  :: GV !< ocean vertical grid structure
   type(param_file_type), intent(in)    :: param_file !< Parameter file structure
@@ -110,6 +117,7 @@ subroutine diag_remap_set_vertical_axes(remap_cs, G, GV, param_file)
 
 end subroutine diag_remap_set_vertical_axes
 
+!> Read grid definition spec to configure axes.
 subroutine setup_axes(remap_cs, G, GV, param_file)
   type(diag_remap_ctrl),  intent(inout) :: remap_cs !< Diag remap control structure
   type(ocean_grid_type), intent(inout) :: G !< Ocean grid structure
@@ -282,7 +290,6 @@ function check_grid_def(filename, varname, expected_units)
   character (len=200) :: units, long_name
   integer :: ncid, status, intid, vid
 
-  check_units = .false. ! FIXME: remove this.
   check_grid_def = .true.
   status = NF90_OPEN(filename, NF90_NOWRITE, ncid);
   if (status /= NF90_NOERR) then
@@ -294,46 +301,21 @@ function check_grid_def(filename, varname, expected_units)
     check_grid_def = .false.
   endif
 
-  if (check_units) then
-    status = NF90_GET_ATT(ncid, vid, "units", units)
-    if (status /= NF90_NOERR) then
-      check_grid_def = .false.
-    endif
-    if (trim(units) /= trim(expected_units)) then
-      if (trim(expected_units) == "meters") then
-        if (trim(units) /= "m") then
-          check_grid_def = .false.
-        endif
-      else
+  status = NF90_GET_ATT(ncid, vid, "units", units)
+  if (status /= NF90_NOERR) then
+    check_grid_def = .false.
+  endif
+  if (trim(units) /= trim(expected_units)) then
+    if (trim(expected_units) == "meters") then
+      if (trim(units) /= "m") then
         check_grid_def = .false.
       endif
+    else
+      check_grid_def = .false.
     endif
   endif
 
 end function check_grid_def
-
-subroutine diag_remap_set_diag_axes(remap_cs, axes)
-  type(diag_remap_ctrl), intent(inout) :: remap_cs
-  integer, dimension(:), intent(inout) :: axes
-
-  character(len=2) :: axis_name
-  integer :: vertical_axis
-
-  call assert(size(axes) == 3, &
-              'diag_remap_set_diag_axes: Unexpected number of axes')
-
-  call get_diag_axis_name(axes(3), axis_name)
-
-  if (axis_name == 'zl') then
-    axes(3) = remap_cs%layer_axes_id
-  elseif (axis_name == 'zi') then
-    axes(3) = remap_cs%interface_axes_id
-  else
-    call assert(.false., &
-                'diag_remap_set_diag_axes: Unexpected vertical axis name')
-  endif
-
-end subroutine
 
 !> Get layer and interface axes ids for this coordinate
 subroutine diag_remap_get_vertical_ids(remap_cs, id_layer, id_interface)
@@ -346,6 +328,8 @@ subroutine diag_remap_get_vertical_ids(remap_cs, id_layer, id_interface)
 
 end subroutine diag_remap_get_vertical_ids
 
+!> Get the number of vertical levels for this coordinate.
+!! This is needed when defining axes groups.
 function diag_remap_get_nz(remap_cs)
   type(diag_remap_ctrl), intent(in) :: remap_cs
   integer :: diag_remap_get_nz
@@ -372,10 +356,10 @@ end function
 !! coordinates then technically we should also regenerate the
 !! target grid whenever T/S change.
 subroutine diag_remap_update(remap_cs, G, h, T, S, eqn_of_state)
-  type(diag_remap_ctrl), intent(inout) :: remap_cs
-  type(ocean_grid_type), pointer :: G
-  real, dimension(:, :, :), intent(in) :: h, T, S
-  type(EOS_type), pointer, intent(in) :: eqn_of_state
+  type(diag_remap_ctrl), intent(inout) :: remap_cs !< Diagnostic coordinate control structure
+  type(ocean_grid_type), pointer :: G !< The ocean's grid type
+  real, dimension(:, :, :), intent(in) :: h, T, S !< New thickness, T and S
+  type(EOS_type), pointer, intent(in) :: eqn_of_state !< A pointer to the equation of state
 
   ! Local variables
   integer :: i, j, k, nz
