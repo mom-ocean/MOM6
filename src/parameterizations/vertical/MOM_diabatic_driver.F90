@@ -9,6 +9,7 @@ use MOM_checksums,           only : hchksum, uchksum, vchksum
 use MOM_checksum_packages,   only : MOM_state_chksum, MOM_state_stats
 use MOM_cpu_clock,           only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,           only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
+use MOM_CVMix_shear,         only : CVMix_shear_is_used
 use MOM_diabatic_aux,        only : diabatic_aux_init, diabatic_aux_end, diabatic_aux_CS
 use MOM_diabatic_aux,        only : make_frazil, adjust_salt, insert_brine, differential_diffuse_T_S, triDiagTS
 use MOM_diabatic_aux,        only : find_uv_at_h, diagnoseMLDbyDensityDifference, applyBoundaryFluxesInOut
@@ -16,6 +17,8 @@ use MOM_diag_mediator,       only : post_data, register_diag_field, safe_alloc_p
 use MOM_diag_mediator,       only : diag_ctrl, time_type, diag_update_target_grids
 use MOM_diag_mediator,       only : diag_ctrl, query_averaging_enabled
 use MOM_diag_to_Z,           only : diag_to_Z_CS, register_Zint_diag, calc_Zint_diags
+use MOM_diapyc_energy_req,   only : diapyc_energy_req_init, diapyc_energy_req_end
+use MOM_diapyc_energy_req,   only : diapyc_energy_req_calc, diapyc_energy_req_test, diapyc_energy_req_CS
 use MOM_diffConvection,      only : diffConvection_CS, diffConvection_init
 use MOM_diffConvection,      only : diffConvection_calculate, diffConvection_end
 use MOM_domains,             only : pass_var, To_West, To_South
@@ -77,6 +80,8 @@ type, public :: diabatic_CS ; private
                                      !! in the surface boundary layer.
   logical :: use_kappa_shear         !< If true, use the kappa_shear module to find the
                                      !! shear-driven diapycnal diffusivity.
+  logical :: use_cvmix_shear         !< If true, use the CVMix module to find the
+                                     !! shear-driven diapycnal diffusivity.
   logical :: use_sponge              !< If true, sponges may be applied anywhere in the
                                      !! domain.  The exact location and properties of
                                      !! those sponges are set by calls to
@@ -136,6 +141,7 @@ type, public :: diabatic_CS ; private
                                      !! is statically unstable.
   logical :: debug                   !< If true, write verbose checksums for debugging purposes.
   logical :: debugConservation       !< If true, monitor conservation and extrema.
+  logical :: debug_energy_req        !  If true, test the mixing energy requirement code.
   type(diag_ctrl), pointer :: diag   !< structure used to regulate timing of diagnostic output
   real :: MLDdensityDifference       !< Density difference used to determine MLD_user
   integer :: nsw                     !< SW_NBANDS
@@ -193,6 +199,7 @@ type, public :: diabatic_CS ; private
   type(diag_to_Z_CS),           pointer :: diag_to_Z_CSp         => NULL()
   type(KPP_CS),                 pointer :: KPP_CSp               => NULL()
   type(diffConvection_CS),      pointer :: Conv_CSp              => NULL()
+  type(diapyc_energy_req_CS),   pointer :: diapyc_en_rec_CSp     => NULL() 
 
   type(group_pass_type) :: pass_hold_eb_ea !< For group halo pass
 
@@ -355,6 +362,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   endif
   if (CS%debugConservation) call MOM_state_stats('Start of diabatic', u, v, h, tv%T, tv%S, G)
 
+  if (CS%debug_energy_req) &
+    call diapyc_energy_req_test(h, dt, tv, G, GV, CS%diapyc_en_rec_CSp)
+
+
   call cpu_clock_begin(id_clock_set_diffusivity)
   call set_BBL_TKE(u, v, h, fluxes, visc, G, GV, CS%set_diff_CSp)
   call cpu_clock_end(id_clock_set_diffusivity)
@@ -462,7 +473,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   if (CS%debug) then
     call MOM_state_chksum("before find_uv_at_h", u, v, h, G, GV, haloshift=0)
   endif
-  if (CS%use_kappa_shear) then
+  if (CS%use_kappa_shear .or. CS%use_CVMix_shear) then
     if ((CS%ML_mix_first > 0.0) .or. CS%use_geothermal) then
       call find_uv_at_h(u, v, h_orig, u_h, v_h, G, GV, eaml, ebml)
       if (CS%debug) then
@@ -1769,6 +1780,7 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
                  "If true, apply parameterization of double-diffusion.", &
                  default=.false. )
   CS%use_kappa_shear = kappa_shear_is_used(param_file)
+  CS%use_CVMix_shear = cvmix_shear_is_used(param_file)
   if (CS%bulkmixedlayer) then
     call get_param(param_file, mod, "ML_MIX_FIRST", CS%ML_mix_first, &
                  "The fraction of the mixed layer mixing that is applied \n"//&
@@ -1838,6 +1850,9 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
                  "If true, write out verbose debugging data.", default=.false.)
   call get_param(param_file, mod, "DEBUG_CONSERVATION", CS%debugConservation, &
                  "If true, monitor conservation and extrema.", default=.false.)
+
+  call get_param(param_file, mod, "DEBUG_ENERGY_REQ", CS%debug_energy_req, &
+                 "If true, debug the energy requirements.", default=.false., do_not_log=.true.)
   call get_param(param_file, mod, "MIX_BOUNDARY_TRACERS", CS%mix_boundary_tracers, &
                  "If true, mix the passive tracers in massless layers at \n"//&
                  "the bottom into the interior as though a diffusivity of \n"//&
@@ -2178,6 +2193,8 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
 
   call regularize_layers_init(Time, G, param_file, diag, CS%regularize_layers_CSp)
 
+  if (CS%debug_energy_req) &
+    call diapyc_energy_req_init(Time, G, param_file, diag, CS%diapyc_en_rec_CSp)
 
   ! obtain information about the number of bands for penetrative shortwave
   if (use_temperature) then
@@ -2215,6 +2232,8 @@ subroutine diabatic_driver_end(CS)
   if (CS%useConvection) call diffConvection_end(CS%Conv_CSp)
   if (CS%use_energetic_PBL) &
     call energetic_PBL_end(CS%energetic_PBL_CSp)
+  if (CS%debug_energy_req) &
+    call diapyc_energy_req_end(CS%diapyc_en_rec_CSp)
 
   if (associated(CS%optics)) then
     call opacity_end(CS%opacity_CSp, CS%optics)
