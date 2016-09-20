@@ -288,7 +288,7 @@ subroutine copy_MOM_grid_to_dyngrid(oG, dG)
   dG%areaT_global = oG%areaT_global ; dG%IareaT_global = oG%IareaT_global
   dG%south_lat = oG%south_lat ; dG%west_lon  = oG%west_lon
   dG%len_lat = oG%len_lat ; dG%len_lon = oG%len_lon
-  dG%Rad_Earth = oG%Rad_Earth ; dG%max_depth = oG%max_depth 
+  dG%Rad_Earth = oG%Rad_Earth ; dG%max_depth = oG%max_depth
 
 ! Update the halos in case the dynamic grid has smaller halos than the ocean grid.
   call pass_var(dG%areaT, dG%Domain)

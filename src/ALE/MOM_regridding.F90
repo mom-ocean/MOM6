@@ -6,7 +6,7 @@ module MOM_regridding
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
-use MOM_EOS,           only : calculate_density, calculate_density_derivs
+use MOM_EOS,           only : EOS_type, calculate_density, calculate_density_derivs
 use MOM_EOS,           only : calculate_compress
 use MOM_string_functions,only : uppercase
 
@@ -147,7 +147,8 @@ public initialize_regridding, end_regridding, regridding_main
 public inflate_vanished_layers_old, check_remapping_grid, check_grid_column
 public adjust_interface_motion
 public set_regrid_params
-public uniformResolution, setCoordinateResolution, build_zstar_column
+public uniformResolution, setCoordinateResolution
+public build_zstar_column, build_rho_column, build_sigma_column
 public set_target_densities_from_GV, set_target_densities
 public set_regrid_max_depths, set_regrid_max_thickness
 public getCoordinateResolution, getCoordinateInterfaces
@@ -742,7 +743,7 @@ subroutine build_sigma_grid( CS, G, GV, h, dzInterface )
 
   ! Local variables
   integer :: i, j, k
-  integer :: nz
+  integer :: nz 
   real    :: nominalDepth, totalThickness, dh
   real, dimension(SZK_(GV)+1) :: zOld, zNew
 
@@ -751,27 +752,23 @@ subroutine build_sigma_grid( CS, G, GV, h, dzInterface )
   do i = G%isc-1,G%iec+1
     do j = G%jsc-1,G%jec+1
 
+      ! The rest of the model defines grids integrating up from the bottom
+      nominalDepth = G%bathyT(i,j)*GV%m_to_H
+
       ! Determine water column height
       totalThickness = 0.0
       do k = 1,nz
         totalThickness = totalThickness + h(i,j,k)
       end do
 
-      ! The rest of the model defines grids integrating up from the bottom
-      nominalDepth = G%bathyT(i,j)*GV%m_to_H
-      zOld(nz+1) = - nominalDepth
-      zNew(nz+1) = - nominalDepth
-      do k = nz,1,-1
-        zNew(k) = zNew(k+1) + ( totalThickness * CS%coordinateResolution(k) )
-        ! Adjust interface position to accomodate inflating layers
-        ! without disturbing the interface above
-        if ( zNew(k) < (zNew(k+1) + CS%min_thickness) ) then
-          zNew(k) = zNew(k+1) + CS%min_thickness
-        endif
-        zOld(k) = zOld(k+1) + h(i,j,k)
-      enddo
+      call build_sigma_column(CS, nz, nominalDepth, totalThickness, zNew)
 
       ! Calculate the final change in grid position after blending new and old grids
+      zOld(nz+1) =  -nominalDepth
+      do k = nz,1,-1
+        zOld(k) = zOld(k+1) + h(i, j, k)
+      end do
+
       call filtered_grid_motion( CS, nz, zOld, zNew, dzInterface(i,j,:) )
 
 #ifdef __DO_SAFETY_CHECKS__
@@ -798,6 +795,27 @@ subroutine build_sigma_grid( CS, G, GV, h, dzInterface )
 
 end subroutine build_sigma_grid
 
+subroutine build_sigma_column(CS, nz, depth, totalThickness, zInterface)
+  type(regridding_CS),   intent(in)    :: CS !< Regridding control structure
+  integer,               intent(in)    :: nz !< Number of levels
+  real,                  intent(in)    :: depth !< Depth of ocean bottom (positive in m)
+  real,                  intent(in)    :: totalThickness !< Column thickness (positive in m)
+  real, dimension(nz+1), intent(inout) :: zInterface !< Absolute positions of interfaces
+
+  ! Local variables
+  integer :: k
+
+  zInterface(nz+1) = -depth
+  do k = nz,1,-1
+    zInterface(k) = zInterface(k+1) + (totalThickness * CS%coordinateResolution(k))
+    ! Adjust interface position to accomodate inflating layers
+    ! without disturbing the interface above
+    if (zInterface(k) < (zInterface(k+1) + CS%min_thickness)) then
+      zInterface(k) = zInterface(k+1) + CS%min_thickness
+    endif
+  enddo
+
+end subroutine build_sigma_column
 
 !------------------------------------------------------------------------------
 ! Build grid based on target interface densities
@@ -828,31 +846,13 @@ subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
   type(regridding_CS),                          intent(in)    :: CS !< Regridding control structure
 
   ! Local variables
-  integer   :: i, j, k, m
-  integer   :: map_index
-  integer   :: nz
-  integer   :: k_found
-  integer   :: count_nonzero_layers
-  real      :: deviation            ! When iterating to determine the final
-                                    ! grid, this is the deviation between two
-                                    ! successive grids.
-  real      :: threshold
-  real      :: max_thickness
-  real      :: correction
-  real, dimension(CS%nk,2) :: ppoly_i_E            !Edge value of polynomial
-  real, dimension(CS%nk,2) :: ppoly_i_S            !Edge slope of polynomial
-  real, dimension(CS%nk,CS%degree_i+1) :: ppoly_i_coefficients !Coefficients of polynomial
-  integer   :: ppoly_degree         ! The actual degree of the polynomials.
-  real, dimension(SZK_(GV)) :: p_col, densities, T_col, S_col, Tmp_col
-  integer, dimension(SZK_(GV)) :: mapping
-  real    :: nominalDepth, totalThickness, dh
+  integer :: nz
+  integer :: i, j, k
+  real    :: nominalDepth, totalThickness
   real, dimension(SZK_(GV)+1) :: zOld, zNew
-  real, dimension(SZK_(GV)) :: h0, h1, hTmp
-  real, dimension(SZK_(GV)+1) :: x0, x1, xTmp
 
   nz = GV%ke
-  threshold = CS%min_thickness
-  p_col(:) = CS%ref_pressure
+
   if (.not.CS%target_density_set) call MOM_error(FATAL, "build_rho_grid: "//&
         "Target densities must be set before build_rho_grid is called.")
 
@@ -860,141 +860,29 @@ subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
 
-      ! Copy T and S onto new variables so as to not alter the original values
-      ! of T and S (these are remapped at the end of the regridding iterations
-      ! once the final grid has been determined).
-      T_col = tv%T(i,j,:)
-      S_col = tv%S(i,j,:)
-
-      ! Copy original grid
-      h0(1:nz) = h(i,j,1:nz)
-
-      ! Start iterations to build grid
-      m = 1
-      deviation = 1e10
-      do while ( ( m <= NB_REGRIDDING_ITERATIONS ) .and. &
-                 ( deviation > DEVIATION_TOLERANCE ) )
-
-        ! Count number of nonzero layers within current water column
-        count_nonzero_layers = 0
-        do k = 1,nz
-          if ( h0(k) > threshold ) then
-            count_nonzero_layers = count_nonzero_layers + 1
-          end if
-        end do
-
-        ! If there is at most one nonzero layer, stop here (no regridding)
-        if ( count_nonzero_layers <= 1 ) then
-          h1(1:nz) = h0(1:nz)
-          exit  ! stop iterations here
-        end if
-
-        ! Build new grid containing only nonzero layers
-        map_index = 1
-        correction = 0.0
-        do k = 1,nz
-          if ( h0(k) > threshold ) then
-            mapping(map_index) = k
-            hTmp(map_index) = h0(k)
-            map_index = map_index + 1
-          else
-            correction = correction + h0(k)
-          end if
-        end do
-
-        max_thickness = hTmp(1)
-        k_found = 1
-        do k = 1,count_nonzero_layers
-          if ( hTmp(k) > max_thickness ) then
-            max_thickness = hTmp(k)
-            k_found = k
-          end if
-        end do
-
-        hTmp(k_found) = hTmp(k_found) + correction
-
-        xTmp(1) = 0.0
-        do k = 1,count_nonzero_layers
-          xTmp(k+1) = xTmp(k) + hTmp(k)
-        end do
-
-
-        ! Compute densities within current water column
-        call calculate_density( T_col, S_col, p_col, densities,&
-                                 1, nz, tv%eqn_of_state )
-
-        do k = 1,count_nonzero_layers
-          densities(k) = densities(mapping(k))
-        end do
-
-        ! One regridding iteration
-        call regridding_set_ppolys(densities, CS, count_nonzero_layers, hTmp, &
-                                   ppoly_i_E, ppoly_i_S, ppoly_i_coefficients, ppoly_degree)
-        ! Based on global density profile, interpolate to generate a new grid
-        call interpolate_grid(count_nonzero_layers, hTmp, xTmp, ppoly_i_E, ppoly_i_coefficients, &
-                              CS%target_density, ppoly_degree, nz, h1, x1 )
-
-        call old_inflate_layers_1d( CS%min_thickness, nz, h1 )
-        x1(1) = 0.0 ; do k = 1,nz ; x1(k+1) = x1(k) + h1(k) ; end do
-
-        ! Remap T and S from previous grid to new grid
-        do k = 1,nz
-          h1(k) = x1(k+1) - x1(k)
-        end do
-
-        call remapping_core_h(nz, h0, S_col, nz, h1, Tmp_col, remapCS)
-        S_col(:) = Tmp_col(:)
-
-        call remapping_core_h(nz, h0, T_col, nz, h1, Tmp_col, remapCS)
-        T_col(:) = Tmp_col(:)
-
-        ! Compute the deviation between two successive grids
-        deviation = 0.0
-        x0(1) = 0.0
-        x1(1) = 0.0
-        do k = 2,nz
-          x0(k) = x0(k-1) + h0(k-1)
-          x1(k) = x1(k-1) + h1(k-1)
-          deviation = deviation + (x0(k)-x1(k))**2
-        end do
-        deviation = sqrt( deviation / (nz-1) )
-
-        m = m + 1
-
-        ! Copy final grid onto start grid for next iteration
-        h0(:) = h1(:)
-
-      end do ! end regridding iterations
-
       ! Local depth (G%bathyT is positive)
       nominalDepth = G%bathyT(i,j)*GV%m_to_H
 
-      totalThickness = 0.0
+      call build_rho_column(CS, remapCS, tv%eqn_of_state, nz, nominalDepth, &
+                            h(i, j, :)*GV%H_to_m, &
+                            tv%T(i, j, :), tv%S(i, j, :), zNew)
+
       if (CS%integrate_downward_for_e) then
         zOld(1) = 0.
-        zNew(1) = 0.
         do k = 1,nz
-          totalThickness = totalThickness + h(i,j,k)
-          zNew(k+1) = zNew(k) - h1(k)
-          ! Adjust interface position to accomodate inflating layers
-          ! without disturbing the interface above
           zOld(k+1) = zOld(k) - h(i,j,k)
         enddo
       else
         ! The rest of the model defines grids integrating up from the bottom
         zOld(nz+1) = - nominalDepth
-        zNew(nz+1) = - nominalDepth
         do k = nz,1,-1
-          totalThickness = totalThickness + h(i,j,k)
-          zNew(k) = zNew(k+1) + h1(k)
-          ! Adjust interface position to accomodate inflating layers
-          ! without disturbing the interface above
           zOld(k) = zOld(k+1) + h(i,j,k)
         enddo
       endif
 
       ! Calculate the final change in grid position after blending new and old grids
       call filtered_grid_motion( CS, nz, zOld, zNew, dzInterface(i,j,:) )
+
 #ifdef __DO_SAFETY_CHECKS__
       do k = 2,nz
         if (zNew(k) > zOld(1)) then
@@ -1010,9 +898,12 @@ subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
                'interior interfaces cross!' )
         endif
       enddo
-#endif
 
-#ifdef __DO_SAFETY_CHECKS__
+      totalThickness = 0.0
+      do k = 1,nz
+        totalThickness = totalThickness + h(i,j,k)
+      enddo
+
       dh=max(nominalDepth,totalThickness)
       if (abs(zNew(1)-zOld(1))>(nz-1)*0.5*epsilon(dh)*dh) then
         write(0,*) 'min_thickness=',CS%min_thickness
@@ -1034,6 +925,172 @@ subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
 
 end subroutine build_rho_grid
 
+
+subroutine build_rho_column(CS, remapCS, eqn_of_state, nz, depth, h, T, S, zInterface)
+! The algorithn operates as follows within each
+! column:
+! 1. Given T & S within each layer, the layer densities are computed.
+! 2. Based on these layer densities, a global density profile is reconstructed
+!    (this profile is monotonically increasing and may be discontinuous)
+! 3. The new grid interfaces are determined based on the target interface
+!    densities.
+! 4. T & S are remapped onto the new grid.
+! 5. Return to step 1 until convergence or until the maximum number of
+!    iterations is reached, whichever comes first.
+!------------------------------------------------------------------------------
+
+  type(regridding_CS),   intent(in)    :: CS !< Regridding control structure
+  type(remapping_CS),    intent(in)    :: remapCS !< Remapping parameters and options
+  type(EOS_type),        pointer       :: eqn_of_state !< Equation of state structure
+  integer,               intent(in)    :: nz !< Number of levels
+  real,                  intent(in)    :: depth !< Depth of ocean bottom (positive in m)
+  real, dimension(nz),   intent(in)    :: h  !< Layer thicknesses, in m
+  real, dimension(nz),   intent(in)    :: T, S !< T and S for column
+  real, dimension(nz+1), intent(inout) :: zInterface !< Absolute positions of interfaces
+
+  ! Local variables
+  integer   :: k, m
+  integer   :: map_index
+  integer   :: k_found
+  integer   :: count_nonzero_layers
+  real      :: deviation            ! When iterating to determine the final
+                                    ! grid, this is the deviation between two
+                                    ! successive grids.
+  real      :: threshold
+  real      :: max_thickness
+  real      :: correction
+  real, dimension(CS%nk,2) :: ppoly_i_E            !Edge value of polynomial
+  real, dimension(CS%nk,2) :: ppoly_i_S            !Edge slope of polynomial
+  real, dimension(CS%nk,CS%degree_i+1) :: ppoly_i_coefficients !Coefficients of polynomial
+  integer   :: ppoly_degree         ! The actual degree of the polynomials.
+  real, dimension(nz) :: p, densities, T_tmp, S_tmp, Tmp
+  integer, dimension(nz) :: mapping
+  real :: dh
+  real, dimension(nz) :: h0, h1, hTmp
+  real, dimension(nz+1) :: x0, x1, xTmp
+
+  threshold = CS%min_thickness
+  p(:) = CS%ref_pressure
+  T_tmp(:) = T(:)
+  S_tmp(:) = S(:)
+  h0(:) = h(:)
+
+  ! Start iterations to build grid
+  m = 1
+  deviation = 1e10
+  do while ( ( m <= NB_REGRIDDING_ITERATIONS ) .and. &
+             ( deviation > DEVIATION_TOLERANCE ) )
+
+    ! Count number of nonzero layers within current water column
+    count_nonzero_layers = 0
+    do k = 1,nz
+      if ( h0(k) > threshold ) then
+        count_nonzero_layers = count_nonzero_layers + 1
+      end if
+    end do
+
+    ! If there is at most one nonzero layer, stop here (no regridding)
+    if ( count_nonzero_layers <= 1 ) then
+      h1(:) = h0(:)
+      exit  ! stop iterations here
+    end if
+
+    ! Build new grid containing only nonzero layers
+    map_index = 1
+    correction = 0.0
+    do k = 1,nz
+      if ( h0(k) > threshold ) then
+        mapping(map_index) = k
+        hTmp(map_index) = h0(k)
+        map_index = map_index + 1
+      else
+        correction = correction + h0(k)
+      end if
+    end do
+
+    max_thickness = hTmp(1)
+    k_found = 1
+    do k = 1,count_nonzero_layers
+      if ( hTmp(k) > max_thickness ) then
+        max_thickness = hTmp(k)
+        k_found = k
+      end if
+    end do
+
+    hTmp(k_found) = hTmp(k_found) + correction
+
+    xTmp(1) = 0.0
+    do k = 1,count_nonzero_layers
+      xTmp(k+1) = xTmp(k) + hTmp(k)
+    end do
+
+    ! Compute densities within current water column
+    call calculate_density( T_tmp, S_tmp, p, densities,&
+                             1, nz, eqn_of_state )
+
+    do k = 1,count_nonzero_layers
+      densities(k) = densities(mapping(k))
+    end do
+
+    ! One regridding iteration
+    call regridding_set_ppolys(densities, CS, count_nonzero_layers, hTmp, &
+                               ppoly_i_E, ppoly_i_S, ppoly_i_coefficients, ppoly_degree)
+    ! Based on global density profile, interpolate to generate a new grid
+    call interpolate_grid(count_nonzero_layers, hTmp, xTmp, ppoly_i_E, ppoly_i_coefficients, &
+                          CS%target_density, ppoly_degree, nz, h1, x1 )
+
+    call old_inflate_layers_1d( CS%min_thickness, nz, h1 )
+    x1(1) = 0.0 ; do k = 1,nz ; x1(k+1) = x1(k) + h1(k) ; end do
+
+    ! Remap T and S from previous grid to new grid
+    do k = 1,nz
+      h1(k) = x1(k+1) - x1(k)
+    end do
+
+    call remapping_core_h(nz, h0, S, nz, h1, Tmp, remapCS)
+    S_tmp(:) = Tmp(:)
+
+    call remapping_core_h(nz, h0, T, nz, h1, Tmp, remapCS)
+    T_tmp(:) = Tmp(:)
+
+    ! Compute the deviation between two successive grids
+    deviation = 0.0
+    x0(1) = 0.0
+    x1(1) = 0.0
+    do k = 2,nz
+      x0(k) = x0(k-1) + h0(k-1)
+      x1(k) = x1(k-1) + h1(k-1)
+      deviation = deviation + (x0(k)-x1(k))**2
+    end do
+    deviation = sqrt( deviation / (nz-1) )
+
+    m = m + 1
+
+    ! Copy final grid onto start grid for next iteration
+    h0(:) = h1(:)
+
+  end do ! end regridding iterations
+
+  if (CS%integrate_downward_for_e) then
+    zInterface(1) = 0.
+    do k = 1,nz
+      zInterface(k+1) = zInterface(k) - h1(k)
+      ! Adjust interface position to accomodate inflating layers
+      ! without disturbing the interface above
+    enddo
+  else
+    ! The rest of the model defines grids integrating up from the bottom
+    zInterface(nz+1) = -depth
+    do k = nz,1,-1
+      zInterface(k) = zInterface(k+1) + h1(k)
+      ! Adjust interface position to accomodate inflating layers
+      ! without disturbing the interface above
+    enddo
+  endif
+
+end subroutine build_rho_column
+
+
 !> Builds a simple HyCOM-like grid with the deepest location of potential
 !! density interpolated from the column profile and a clipping of depth for
 !! each interface to a fixed z* or p* grid.  This should probably be (optionally?)
@@ -1049,24 +1106,15 @@ subroutine build_grid_HyCOM1( G, GV, h, tv, dzInterface, remapCS, CS )
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: dzInterface !< Changes in interface position
   type(remapping_CS),                          intent(in)    :: remapCS !< Remapping control structure
   type(regridding_CS),                         intent(in)    :: CS !< Regridding control structure
+
   ! Local variables
-  integer   :: i, j, k, nz
-  real, dimension(SZK_(GV)) :: T_col, S_col, p_col, rho_col, h_col_new ! Layer quantities
   real, dimension(SZK_(GV)+1) :: z_col, z_col_new ! Interface positions relative to the surface in H units (m or kg m-2)
   real, dimension(SZK_(GV)+1) :: dz_col  ! The realized change in z_col in H units (m or kg m-2)
-  real, dimension(CS%nk,2) :: ppoly_i_E ! Edge value of polynomial
-  real, dimension(CS%nk,2) :: ppoly_i_S ! Edge slope of polynomial
-  real, dimension(CS%nk,CS%degree_i+1) :: ppoly_i_coefficients ! Coefficients of polynomial
-  real :: nominal_z ! Nominal depth of interface is using z* (m or Pa)
-  real :: stretching ! z* stretching, converts z* to z.
-  real :: hNew
-  logical :: maximum_depths_set ! If true, the maximum depths of interface have been set.
-  logical :: maximum_h_set      ! If true, the maximum layer thicknesses have been set.
-  integer :: ppoly_degree
+  real, dimension(SZK_(GV))   :: p_col   ! Layer pressure in Pa
+  integer   :: i, j, k, nz
+  real :: depth
 
   nz = GV%ke
-  maximum_depths_set = allocated(CS%max_interface_depths)
-  maximum_h_set = allocated(CS%max_layer_thickness)
 
   if (.not.CS%target_density_set) call MOM_error(FATAL, "build_grid_HyCOM1 : "//&
         "Target densities must be set before build_grid_HyCOM1 is called.")
@@ -1075,11 +1123,8 @@ subroutine build_grid_HyCOM1( G, GV, h, tv, dzInterface, remapCS, CS )
   do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
     if (G%mask2dT(i,j)>0.) then
 
-      ! Copy T and S onto new variables so as to not alter the original values
-      ! of T and S (these are remapped at the end of the regridding iterations
-      ! once the final grid has been determined).
-      T_col(:) = tv%T(i,j,:)
-      S_col(:) = tv%S(i,j,:)
+      depth = G%bathyT(i,j) * GV%m_to_H
+
       z_col(1) = 0. ! Work downward rather than bottom up
       do K = 1, nz
         z_col(K+1) = z_col(K) + h(i,j,k) ! Work in units of h (m or Pa)
@@ -1087,42 +1132,8 @@ subroutine build_grid_HyCOM1( G, GV, h, tv, dzInterface, remapCS, CS )
              ( 0.5 * ( z_col(K) + z_col(K+1) ) * GV%H_to_Pa - CS%ref_pressure )
       enddo
 
-      ! Work bottom recording potential density
-      call calculate_density(T_col, S_col, p_col, &
-                             rho_col, 1, nz, tv%eqn_of_state )
-      ! This ensures the potential density profile is monotonic
-      ! although not necessarily single valued.
-      do k = nz-1, 1, -1
-        rho_col(k) = min( rho_col(k), rho_col(k+1) )
-      enddo
-
-      ! Interpolates for the target interface position with the rho_col profile
-      call regridding_set_ppolys(rho_col, CS, nz, h(i,j,:), ppoly_i_E, ppoly_i_S, &
-                                 ppoly_i_coefficients, ppoly_degree)
-      ! Based on global density profile, interpolate to generate a new grid
-      call interpolate_grid(nz, h(i,j,:), z_col, ppoly_i_E, ppoly_i_coefficients, &
-                            CS%target_density, ppoly_degree, nz, h_col_new, z_col_new)
-
-      ! Sweep down the interfaces and make sure that the interface is at least
-      ! as deep as a nominal target z* grid
-      nominal_z = 0.
-      stretching = z_col(nz+1) / G%bathyT(i,j) * GV%m_to_H ! Stretches z* to z
-      do k = 2, nz+1
-        nominal_z = nominal_z + CS%coordinateResolution(k-1) * stretching
-        z_col_new(k) = max( z_col_new(k), nominal_z )
-        z_col_new(k) = min( z_col_new(k), z_col(nz+1) )
-      enddo
-
-      if (maximum_depths_set .and. maximum_h_set) then ; do k=2,nz
-        ! The loop bounds are 2 & nz so the top and bottom interfaces do not move.
-        ! Recall that z_col_new is positive downward.
-        z_col_new(K) = min(z_col_new(K), CS%max_interface_depths(K), &
-                           z_col_new(K-1) + CS%max_layer_thickness(k-1))
-      enddo ; elseif (maximum_depths_set) then ; do K=2,nz
-        z_col_new(K) = min(z_col_new(K), CS%max_interface_depths(K))
-      enddo ; elseif (maximum_h_set) then ; do k=2,nz
-        z_col_new(K) = min(z_col_new(K), z_col_new(K-1) + CS%max_layer_thickness(k-1))
-      enddo ; endif
+      call build_hycom1_column(CS, remapCS, tv%eqn_of_state, nz, depth, &
+                               h(i, j, :), tv%T(i, j, :), tv%S(i, j, :), p_col, z_col, z_col_new)
 
       ! Calculate the final change in grid position after blending new and old grids
       call filtered_grid_motion( CS, nz, z_col, z_col_new, dz_col )
@@ -1137,6 +1148,73 @@ subroutine build_grid_HyCOM1( G, GV, h, tv, dzInterface, remapCS, CS )
   enddo; enddo ! i,j
 
 end subroutine build_grid_HyCOM1
+
+subroutine build_hycom1_column(CS, remapCS, eqn_of_state, nz, depth, h, T, S, p_col, z_col, z_col_new)
+  type(regridding_CS),   intent(in)    :: CS !< Regridding control structure
+  type(remapping_CS),    intent(in)    :: remapCS !< Remapping parameters and options
+  type(EOS_type),        pointer       :: eqn_of_state !< Equation of state structure
+  integer,               intent(in)    :: nz !< Number of levels
+  real,                  intent(in)    :: depth !< Depth of ocean bottom (positive in H)
+  real, dimension(nz),   intent(in)    :: T, S !< T and S for column
+  real, dimension(nz),   intent(in)    :: h  !< Layer thicknesses, in m
+  real, dimension(nz),   intent(in)    :: p_col !< Layer pressure in Pa
+  real, dimension(nz+1), intent(in)    :: z_col ! Interface positions relative to the surface in H units (m or kg m-2)
+  real, dimension(nz+1), intent(inout) :: z_col_new !< Absolute positions of interfaces
+
+  ! Local variables
+  integer   :: k
+  real, dimension(nz) :: rho_col, h_col_new ! Layer quantities
+  real, dimension(CS%nk,2) :: ppoly_i_E ! Edge value of polynomial
+  real, dimension(CS%nk,2) :: ppoly_i_S ! Edge slope of polynomial
+  real, dimension(CS%nk,CS%degree_i+1) :: ppoly_i_coefficients ! Coefficients of polynomial
+  real :: stretching ! z* stretching, converts z* to z.
+  real :: nominal_z ! Nominal depth of interface is using z* (m or Pa)
+  real :: hNew
+  logical :: maximum_depths_set ! If true, the maximum depths of interface have been set.
+  logical :: maximum_h_set      ! If true, the maximum layer thicknesses have been set.
+  integer :: ppoly_degree
+
+  maximum_depths_set = allocated(CS%max_interface_depths)
+  maximum_h_set = allocated(CS%max_layer_thickness)
+
+  ! Work bottom recording potential density
+  call calculate_density(T, S, p_col, rho_col, 1, nz, eqn_of_state)
+  ! This ensures the potential density profile is monotonic
+  ! although not necessarily single valued.
+  do k = nz-1, 1, -1
+    rho_col(k) = min( rho_col(k), rho_col(k+1) )
+  enddo
+
+  ! Interpolates for the target interface position with the rho_col profile
+  call regridding_set_ppolys(rho_col, CS, nz, h(:), ppoly_i_E, ppoly_i_S, &
+                             ppoly_i_coefficients, ppoly_degree)
+  ! Based on global density profile, interpolate to generate a new grid
+  call interpolate_grid(nz, h(:), z_col, ppoly_i_E, ppoly_i_coefficients, &
+                        CS%target_density, ppoly_degree, nz, h_col_new, z_col_new)
+
+  ! Sweep down the interfaces and make sure that the interface is at least
+  ! as deep as a nominal target z* grid
+  nominal_z = 0.
+  stretching = z_col(nz+1) / depth ! Stretches z* to z
+  do k = 2, nz+1
+    nominal_z = nominal_z + CS%coordinateResolution(k-1) * stretching
+    z_col_new(k) = max( z_col_new(k), nominal_z )
+    z_col_new(k) = min( z_col_new(k), z_col(nz+1) )
+  enddo
+
+  if (maximum_depths_set .and. maximum_h_set) then ; do k=2,nz
+    ! The loop bounds are 2 & nz so the top and bottom interfaces do not move.
+    ! Recall that z_col_new is positive downward.
+    z_col_new(K) = min(z_col_new(K), CS%max_interface_depths(K), &
+                       z_col_new(K-1) + CS%max_layer_thickness(k-1))
+  enddo ; elseif (maximum_depths_set) then ; do K=2,nz
+    z_col_new(K) = min(z_col_new(K), CS%max_interface_depths(K))
+  enddo ; elseif (maximum_h_set) then ; do k=2,nz
+    z_col_new(K) = min(z_col_new(K), z_col_new(K-1) + CS%max_layer_thickness(k-1))
+  enddo ; endif
+
+end subroutine build_hycom1_column
+
 
 !> Builds a grid that tracks density interfaces for water that is denser than
 !! the surface density plus an increment of some number of layers, and uses all
@@ -1155,18 +1233,77 @@ subroutine build_grid_SLight( G, GV, h, tv, dzInterface, remapCS, CS )
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: dzInterface !< Changes in interface position
   type(remapping_CS),                          intent(in)    :: remapCS !< Remapping control structure
   type(regridding_CS),                         intent(in)    :: CS !< Regridding control structure
-  ! Local variables
-  real, dimension(SZK_(GV)) :: T_col, S_col, p_col, rho_col ! Layer quantities
-  real, dimension(SZK_(GV)) :: h_col     ! A column of layer thicknesses on the original grid in H units.
-  real, dimension(SZK_(GV)) :: T_f, S_f  ! Filtered ayer quantities
+
   real, dimension(SZK_(GV)+1) :: z_col, z_col_new ! Interface positions relative to the surface in H units (m or kg m-2)
   real, dimension(SZK_(GV)+1) :: dz_col  ! The realized change in z_col in H units (m or kg m-2)
-  logical, dimension(SZK_(GV)+1) :: reliable  ! If true, this interface is in a reliable position.
-  real, dimension(SZK_(GV)+1) :: T_int, S_int ! Temperature and salinity interpolated to interfaces.
-  real, dimension(SZK_(GV)+1) :: rho_tmp, drho_dp, p_IS, p_R
-  real, dimension(SZK_(GV)+1) :: drhoIS_dT, drhoIS_dS
-  real, dimension(SZK_(GV)+1) :: drhoR_dT, drhoR_dS
-  real, dimension(SZK_(GV)+1) :: strat_rat
+  real, dimension(SZK_(GV))   :: p_col   ! Layer pressure in Pa
+  real :: depth
+  integer :: i, j, k, nz
+
+  nz = GV%ke
+
+  if (.not.CS%target_density_set) call MOM_error(FATAL, "build_grid_SLight : "//&
+        "Target densities must be set before build_grid_SLight is called.")
+
+  ! Build grid based on target interface densities
+  do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
+    if (G%mask2dT(i,j)>0.) then
+
+      depth = G%bathyT(i,j) * GV%m_to_H
+      z_col(1) = 0. ! Work downward rather than bottom up
+      do K=1,nz
+        z_col(K+1) = z_col(K) + h(i, j, k) ! Work in units of h (m or Pa)
+        p_col(k) = CS%ref_pressure + CS%compressibility_fraction * &
+                    ( 0.5 * ( z_col(K) + z_col(K+1) ) * GV%H_to_Pa - CS%ref_pressure )
+      enddo
+
+      call build_slight_column(CS, remapCS, tv%eqn_of_state, GV%H_to_Pa, GV%m_to_H, &
+                          GV%H_subroundoff, nz, depth, &
+                          h(i, j, :), tv%T(i, j, :), tv%S(i, j, :), p_col, z_col, z_col_new)
+
+      ! Calculate the final change in grid position after blending new and old grids
+      call filtered_grid_motion( CS, nz, z_col, z_col_new, dz_col )
+      do K=1,nz+1 ; dzInterface(i,j,K) = -dz_col(K) ; enddo
+#ifdef __DO_SAFETY_CHECKS__
+      if (dzInterface(i,j,1) /= 0.) stop 'build_grid_SLight: Surface moved?!'
+      if (dzInterface(i,j,nz+1) /= 0.) stop 'build_grid_SLight: Bottom moved?!'
+#endif
+
+      ! This adjusts things robust to round-off errors
+      call adjust_interface_motion( nz, CS%min_thickness, h(i,j,:), dzInterface(i,j,:) )
+
+    else ! on land
+      dzInterface(i,j,:) = 0.
+    endif ! mask2dT
+  enddo; enddo ! i,j
+
+end subroutine build_grid_SLight
+
+subroutine build_slight_column(CS, remapCS, eqn_of_state, H_to_Pa, m_to_H, H_subroundoff, &
+                                nz, depth, h_col, T_col, S_col, p_col, z_col, z_col_new)
+  type(regridding_CS),   intent(in)    :: CS !< Regridding control structure
+  type(remapping_CS),    intent(in)    :: remapCS !< Remapping parameters and options
+  type(EOS_type),        pointer       :: eqn_of_state !< Equation of state structure
+  real,                  intent(in)    :: H_to_Pa !< GV%H_to_Pa
+  real,                  intent(in)    :: m_to_H  !< GV%m_to_H
+  real,                  intent(in)    :: H_subroundoff !< GV%H_subroundoff
+  integer,               intent(in)    :: nz !< Number of levels
+  real,                  intent(in)    :: depth !< Depth of ocean bottom (positive in m)
+  real, dimension(nz),   intent(in)    :: T_col, S_col !< T and S for column
+  real, dimension(nz),   intent(in)    :: h_col !< Layer thicknesses, in m
+  real, dimension(nz),   intent(in)    :: p_col !< Layer quantities
+  real, dimension(nz+1), intent(in)    :: z_col !< Interface positions relative to the surface in H units (m or kg m-2)
+  real, dimension(nz+1), intent(inout) :: z_col_new !< Absolute positions of interfaces
+
+  ! Local variables
+  real, dimension(nz) :: rho_col ! Layer quantities
+  real, dimension(nz) :: T_f, S_f  ! Filtered ayer quantities
+  logical, dimension(nz+1) :: reliable  ! If true, this interface is in a reliable position.
+  real, dimension(nz+1) :: T_int, S_int ! Temperature and salinity interpolated to interfaces.
+  real, dimension(nz+1) :: rho_tmp, drho_dp, p_IS, p_R
+  real, dimension(nz+1) :: drhoIS_dT, drhoIS_dS
+  real, dimension(nz+1) :: drhoR_dT, drhoR_dS
+  real, dimension(nz+1) :: strat_rat
   real :: H_to_cPa
   real :: drIS, drR, Fn_now, I_HStol, Fn_zero_val
   real :: z_int_unst
@@ -1189,293 +1326,250 @@ subroutine build_grid_SLight( G, GV, h, tv, dzInterface, remapCS, CS )
   real :: k2_used, k2here, dz_sum, z_max
   integer :: k2
   real :: h_tr, b_denom_1, b1, d1 ! Temporary variables used by the tridiagonal solver.
-  real, dimension(SZK_(GV)) :: c1  ! Temporary variables used by the tridiagonal solver.
+  real, dimension(nz) :: c1  ! Temporary variables used by the tridiagonal solver.
   integer :: kur1, kur2  ! The indicies at the top and bottom of an unreliable region.
   integer :: kur_ss      ! The index to start with in the search for the next unstable region.
-  integer :: i, j, k, nz, nkml
+  integer :: i, j, k, nkml
 
-  nz = GV%ke
   maximum_depths_set = allocated(CS%max_interface_depths)
   maximum_h_set = allocated(CS%max_layer_thickness)
 
-  if (.not.CS%target_density_set) call MOM_error(FATAL, "build_grid_SLight : "//&
-        "Target densities must be set before build_grid_SLight is called.")
+  if (z_col(nz+1) - z_col(1) < nz*CS%min_thickness) then
+    ! This is a nearly massless total depth, so distribute the water evenly.
+    dz = (z_col(nz+1) - z_col(1)) / real(nz)
+    do K=2,nz ; z_col_new(K) = z_col(1) + dz*real(K-1) ; enddo
+  else
+    call calculate_density(T_col, S_col, p_col, rho_col, 1, nz, &
+                           eqn_of_state)
 
-  ! Build grid based on target interface densities
-  do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
-    if (G%mask2dT(i,j)>0.) then
+    ! Find the locations of the target potential densities, flagging
+    ! locations in apparently unstable regions as not reliable.
+    call rho_interfaces_col(rho_col, h_col, z_col, CS%target_density, nz, &
+                            z_col_new, CS, reliable, debug=.true.)
 
-      ! Copy T and S onto new variables so as to not alter the original values
-      ! of T and S (these are remapped at the end of the regridding iterations
-      ! once the final grid has been determined).
-
-      do k=1,nz
-        T_col(k) = tv%T(i,j,k) ; S_col(k) = tv%S(i,j,k)
-        h_col(k) = h(i,j,k)
-      enddo
-
-      z_col(1) = 0. ! Work downward rather than bottom up
-      do K=1,nz
-        z_col(K+1) = z_col(K) + h_col(k) ! Work in units of h (m or Pa)
-        p_col(k) = CS%ref_pressure + CS%compressibility_fraction * &
-             ( 0.5 * ( z_col(K) + z_col(K+1) ) * GV%H_to_Pa - CS%ref_pressure )
-      enddo
-
-      if (z_col(nz+1) - z_col(1) < nz*CS%min_thickness) then
-        ! This is a nearly massless total depth, so distribute the water evenly.
-        dz = (z_col(nz+1) - z_col(1)) / real(nz)
-        do K=2,nz ; z_col_new(K) = z_col(1) + dz*real(K-1) ; enddo
+    ! Ensure that the interfaces are at least CS%min_thickness apart.
+    if (CS%min_thickness > 0.0) then
+      ! Move down interfaces below overly thin layers.
+      do K=2,nz ; if (z_col_new(K) < z_col_new(K-1) + CS%min_thickness) then
+        z_col_new(K) = z_col_new(K-1) + CS%min_thickness
+      endif ; enddo
+      ! Now move up any interfaces that are too close to the bottom.
+      do K=nz,2,-1 ; if (z_col_new(K) > z_col_new(K+1) - CS%min_thickness) then
+        z_col_new(K) = z_col_new(K+1) - CS%min_thickness
       else
+        exit ! No more interfaces can be too close to the bottom.
+      endif ; enddo
+    endif
 
-        call calculate_density(T_col, S_col, p_col, rho_col, 1, nz, &
-                               tv%eqn_of_state)
+    ! Fix up the unreliable regions.
+    kur_ss = 2 ! reliable(1) and reliable(nz+1) must always be true.
+    do
+      ! Search for the uppermost unreliable interface postion.
+      kur1 = nz+2
+      do K=kur_ss,nz ; if (.not.reliable(K)) then
+        kur1 = K ; exit
+      endif ; enddo
+      if (kur1 > nz) exit ! Everything is now reliable.
 
-        ! Find the locations of the target potential densities, flagging
-        ! locations in apparently unstable regions as not reliable.
-        call rho_interfaces_col(rho_col, h_col, z_col, CS%target_density, nz, &
-                                z_col_new, CS, reliable, debug=.true.)
+      kur2 = kur1-1 ! For error checking.
+      do K=kur1+1,nz+1 ; if (reliable(K)) then
+        kur2 = K-1 ; kur_ss = K ; exit
+      endif ; enddo
+      if (kur2 < kur1) call MOM_error(FATAL, "Bad unreliable range.")
 
-        ! Ensure that the interfaces are at least CS%min_thickness apart.
-        if (CS%min_thickness > 0.0) then
-          ! Move down interfaces below overly thin layers.
-          do K=2,nz ; if (z_col_new(K) < z_col_new(K-1) + CS%min_thickness) then
-            z_col_new(K) = z_col_new(K-1) + CS%min_thickness
-          endif ; enddo
-          ! Now move up any interfaces that are too close to the bottom.
-          do K=nz,2,-1 ; if (z_col_new(K) > z_col_new(K+1) - CS%min_thickness) then
-            z_col_new(K) = z_col_new(K+1) - CS%min_thickness
-          else
-            exit ! No more interfaces can be too close to the bottom.
-          endif ; enddo
-        endif
-
-        ! Fix up the unreliable regions.
-        kur_ss = 2 ! reliable(1) and reliable(nz+1) must always be true.
-        do
-          ! Search for the uppermost unreliable interface postion.
-          kur1 = nz+2
-          do K=kur_ss,nz ; if (.not.reliable(K)) then
-            kur1 = K ; exit
-          endif ; enddo
-          if (kur1 > nz) exit ! Everything is now reliable.
-
-          kur2 = kur1-1 ! For error checking.
-          do K=kur1+1,nz+1 ; if (reliable(K)) then
-            kur2 = K-1 ; kur_ss = K ; exit
-          endif ; enddo
-          if (kur2 < kur1) call MOM_error(FATAL, "Bad unreliable range.")
-
-          dz_ur = z_col_new(kur2+1) - z_col_new(kur1-1)
+      dz_ur = z_col_new(kur2+1) - z_col_new(kur1-1)
   !        drho = CS%target_density(kur2+1) - CS%target_density(kur1-1)
-          ! Perhaps reset the wgt and cowgt depending on how bad the old interface
-          ! locations were.
-          wgt = 1.0 ; cowgt = 0.0 ! = 1.0-wgt
-          do K=kur1,kur2
-            z_col_new(K) = cowgt*z_col_new(K) + &
-                  wgt * (z_col_new(kur1-1) + dz_ur*(K - (kur1-1)) / ((kur2 - kur1) + 2))
-          enddo
+      ! Perhaps reset the wgt and cowgt depending on how bad the old interface
+      ! locations were.
+      wgt = 1.0 ; cowgt = 0.0 ! = 1.0-wgt
+      do K=kur1,kur2
+        z_col_new(K) = cowgt*z_col_new(K) + &
+              wgt * (z_col_new(kur1-1) + dz_ur*(K - (kur1-1)) / ((kur2 - kur1) + 2))
+      enddo
+    enddo
+
+    ! Determine which interfaces are in the s-space region and the depth extent
+    ! of this region.
+    z_wt = 0.0 ; rho_x_z = 0.0
+    H_ml_av = m_to_H*CS%Rho_ml_avg_depth
+    do k=1,nz
+      if (z_wt + h_col(k) >= H_ml_av) then
+        rho_x_z = rho_x_z + rho_col(k) * (H_ml_av - z_wt)
+        z_wt = H_ml_av
+        exit
+      else
+        rho_x_z =  rho_x_z + rho_col(k) * h_col(k)
+        z_wt = z_wt + h_col(k)
+      endif
+    enddo
+    if (z_wt > 0.0) rho_ml_av = rho_x_z / z_wt
+
+    nkml = CS%nz_fixed_surface
+    ! Find the interface that matches rho_ml_av.
+    if (rho_ml_av <= CS%target_density(nkml)) then
+      k_interior = CS%nlay_ml_offset + real(nkml)
+    elseif (rho_ml_av > CS%target_density(nz+1)) then
+      k_interior = real(nz+1)
+    else ; do K=nkml,nz
+      if ((rho_ml_av >= CS%target_density(K)) .and. &
+          (rho_ml_av <  CS%target_density(K+1))) then
+        k_interior = (CS%nlay_ml_offset + K) + &
+                (rho_ml_av - CS%target_density(K)) / &
+                (CS%target_density(K+1) - CS%target_density(K))
+        exit
+      endif
+    enddo ; endif
+    if (k_interior > real(nz+1)) k_interior = real(nz+1)
+
+    ! Linearly interpolate to find z_interior.  This could be made more sophisticated.
+    K = int(ceiling(k_interior))
+    z_interior = (K-k_interior)*z_col_new(K-1) + (1.0+(k_interior-K))*z_col_new(K)
+
+    if (CS%fix_haloclines) then
+  !       ! Identify regions above the reference pressure where the chosen
+  !       ! potential density significantly underestimates the actual
+  !       ! stratification, and use these to find a second estimate of
+  !       ! z_int_unst and k_interior.
+
+      if (CS%halocline_filter_length > 0.0) then
+        Lfilt = CS%halocline_filter_length*m_to_H
+
+        ! Filter the temperature and salnity with a fixed lengthscale.
+        h_tr = h_col(1) + H_subroundoff
+        b1 = 1.0 / (h_tr + Lfilt) ; d1 = h_tr * b1
+        T_f(1) = (b1*h_tr)*T_col(1) ;  S_f(1) = (b1*h_tr)*S_col(1)
+        do k=2,nz
+          c1(k) = Lfilt * b1
+          h_tr = h_col(k) + H_subroundoff ; b_denom_1 = h_tr + d1*Lfilt
+          b1 = 1.0 / (b_denom_1 + Lfilt) ; d1 = b_denom_1 * b1
+          T_f(k) = b1 * (h_tr*T_col(k) + Lfilt*T_f(k-1))
+          S_f(k) = b1 * (h_tr*S_col(k) + Lfilt*S_f(k-1))
         enddo
-
-        ! Determine which interfaces are in the s-space region and the depth extent
-        ! of this region.
-        z_wt = 0.0 ; rho_x_z = 0.0
-        H_ml_av = GV%m_to_H*CS%Rho_ml_avg_depth
-        do k=1,nz
-          if (z_wt + h_col(k) >= H_ml_av) then
-            rho_x_z = rho_x_z + rho_col(k) * (H_ml_av - z_wt)
-            z_wt = H_ml_av
-            exit
-          else
-            rho_x_z =  rho_x_z + rho_col(k) * h_col(k)
-            z_wt = z_wt + h_col(k)
-          endif
+        do k=nz-1,1,-1
+          T_f(k) = T_f(k) + c1(k+1)*T_f(k+1) ; S_f(k) = S_f(k) + c1(k+1)*S_f(k+1)
         enddo
-        if (z_wt > 0.0) rho_ml_av = rho_x_z / z_wt
+      else
+        do k=1,nz ; T_f(k) = T_col(k) ; S_f(k) = S_col(k) ; enddo
+      endif
 
-        nkml = CS%nz_fixed_surface
-        ! Find the interface that matches rho_ml_av.
-        if (rho_ml_av <= CS%target_density(nkml)) then
-          k_interior = CS%nlay_ml_offset + real(nkml)
-        elseif (rho_ml_av > CS%target_density(nz+1)) then
-          k_interior = real(nz+1)
-        else ; do K=nkml,nz
-          if ((rho_ml_av >= CS%target_density(K)) .and. &
-              (rho_ml_av <  CS%target_density(K+1))) then
-            k_interior = (CS%nlay_ml_offset + K) + &
-                    (rho_ml_av - CS%target_density(K)) / &
-                    (CS%target_density(K+1) - CS%target_density(K))
-            exit
-          endif
-        enddo ; endif
-        if (k_interior > real(nz+1)) k_interior = real(nz+1)
+      T_int(1) = T_f(1) ; S_int(1) = S_f(1)
+      do K=2,nz 
+        T_int(K) = 0.5*(T_f(k-1) + T_f(k)) ; S_int(K) = 0.5*(S_f(k-1) + S_f(k))
+        p_IS(K) = z_col(K) * H_to_Pa
+        p_R(K) = CS%ref_pressure + CS%compressibility_fraction * ( p_IS(K) - CS%ref_pressure )
+      enddo
+      T_int(nz+1) = T_f(nz) ; S_int(nz+1) = S_f(nz)
+      p_IS(nz+1) = z_col(nz+1) * H_to_Pa
+      call calculate_density_derivs(T_int, S_int, p_IS, drhoIS_dT, drhoIS_dS, 2, nz-1, &
+                                    eqn_of_state)
+      call calculate_density_derivs(T_int, S_int, p_R, drhoR_dT, drhoR_dS, 2, nz-1, &
+                                    eqn_of_state)
+      if (CS%compressibility_fraction > 0.0) then
+        call calculate_compress(T_int, S_int, p_R, rho_tmp, drho_dp, 2, nz-1, &
+                                      eqn_of_state)
+      else
+        do K=2,nz ; drho_dp(K) = 0.0 ; enddo
+      endif
 
-        ! Linearly interpolate to find z_interior.  This could be made more sophisticated.
-        K = int(ceiling(k_interior))
-        z_interior = (K-k_interior)*z_col_new(K-1) + (1.0+(k_interior-K))*z_col_new(K)
+      H_to_cPa = CS%compressibility_fraction*H_to_Pa
+      strat_rat(1) = 1.0
+      do K=2,nz
+        drIS = drhoIS_dT(K) * (T_f(k) - T_f(k-1)) + &
+               drhoIS_dS(K) * (S_f(k) - S_f(k-1))
+        drR = (drhoR_dT(K) * (T_f(k) - T_f(k-1)) + &
+               drhoR_dS(K) * (S_f(k) - S_f(k-1))) + &
+              drho_dp(K) * (H_to_cPa*0.5*(h_col(k) + h_col(k-1)))
 
-        if (CS%fix_haloclines) then
-!       ! Identify regions above the reference pressure where the chosen
-!       ! potential density significantly underestimates the actual
-!       ! stratification, and use these to find a second estimate of
-!       ! z_int_unst and k_interior.
-
-          if (CS%halocline_filter_length > 0.0) then
-            Lfilt = CS%halocline_filter_length*GV%m_to_H
-
-            ! Filter the temperature and salnity with a fixed lengthscale.
-            h_tr = h_col(1) + GV%H_subroundoff
-            b1 = 1.0 / (h_tr + Lfilt) ; d1 = h_tr * b1
-            T_f(1) = (b1*h_tr)*T_col(1) ;  S_f(1) = (b1*h_tr)*S_col(1)
-            do k=2,nz
-              c1(k) = Lfilt * b1
-              h_tr = h_col(k) + GV%H_subroundoff ; b_denom_1 = h_tr + d1*Lfilt
-              b1 = 1.0 / (b_denom_1 + Lfilt) ; d1 = b_denom_1 * b1
-              T_f(k) = b1 * (h_tr*T_col(k) + Lfilt*T_f(k-1))
-              S_f(k) = b1 * (h_tr*S_col(k) + Lfilt*S_f(k-1))
-            enddo
-            do k=nz-1,1,-1
-              T_f(k) = T_f(k) + c1(k+1)*T_f(k+1) ; S_f(k) = S_f(k) + c1(k+1)*S_f(k+1)
-            enddo
-          else
-            do k=1,nz ; T_f(k) = T_col(k) ; S_f(k) = S_col(k) ; enddo
-          endif
-
-          T_int(1) = T_f(1) ; S_int(1) = S_f(1)
-          do K=2,nz 
-            T_int(K) = 0.5*(T_f(k-1) + T_f(k)) ; S_int(K) = 0.5*(S_f(k-1) + S_f(k))
-            p_IS(K) = z_col(K) * GV%H_to_Pa
-            p_R(K) = CS%ref_pressure + CS%compressibility_fraction * ( p_IS(K) - CS%ref_pressure )
-          enddo
-          T_int(nz+1) = T_f(nz) ; S_int(nz+1) = S_f(nz)
-          p_IS(nz+1) = z_col(nz+1) * GV%H_to_Pa
-          call calculate_density_derivs(T_int, S_int, p_IS, drhoIS_dT, drhoIS_dS, 2, nz-1, &
-                                        tv%eqn_of_state)
-          call calculate_density_derivs(T_int, S_int, p_R, drhoR_dT, drhoR_dS, 2, nz-1, &
-                                        tv%eqn_of_state)
-          if (CS%compressibility_fraction > 0.0) then
-            call calculate_compress(T_int, S_int, p_R, rho_tmp, drho_dp, 2, nz-1, &
-                                          tv%eqn_of_state)
-          else
-            do K=2,nz ; drho_dp(K) = 0.0 ; enddo
-          endif
-          
-          H_to_cPa = CS%compressibility_fraction*GV%H_to_Pa
-          strat_rat(1) = 1.0
-          do K=2,nz
-            drIS = drhoIS_dT(K) * (T_f(k) - T_f(k-1)) + &
-                   drhoIS_dS(K) * (S_f(k) - S_f(k-1))
-            drR = (drhoR_dT(K) * (T_f(k) - T_f(k-1)) + &
-                   drhoR_dS(K) * (S_f(k) - S_f(k-1))) + &
-                  drho_dp(K) * (H_to_cPa*0.5*(h_col(k) + h_col(k-1)))
-
-            if (drIS <= 0.0) then
-              strat_rat(K) = 2.0 ! Maybe do this? => ; if (drR < 0.0) strat_rat(K) = -2.0
-            else
-              strat_rat(K) = 2.0*max(drR,0.0) / (drIS + abs(drR))
-            endif
-          enddo
-          strat_rat(nz+1) = 1.0
-
-          z_int_unst = 0.0 ; Fn_now = 0.0
-          Fn_zero_val = min(2.0*CS%halocline_strat_tol, &
-                            0.5*(1.0 + CS%halocline_strat_tol))
-          if (CS%halocline_strat_tol > 0.0) then
-            ! Use Adcroft's reciprocal rule.
-            I_HStol = 0.0 ; if (Fn_zero_val - CS%halocline_strat_tol > 0.0) &
-              I_HStol = 1.0 / (Fn_zero_val - CS%halocline_strat_tol)
-            do k=nz,1,-1 ; if (CS%ref_pressure > p_IS(k+1)) then
-              z_int_unst = z_int_unst + Fn_now * h_col(k)
-              if (strat_rat(K) <= Fn_zero_val) then
-                if (strat_rat(K) <= CS%halocline_strat_tol) then ; Fn_now = 1.0
-                else
-                  Fn_now = max(Fn_now, (Fn_zero_val - strat_rat(K)) * I_HStol)
-                endif
-              endif
-            endif ; enddo
-          else
-            do k=nz,1,-1 ; if (CS%ref_pressure > p_IS(k+1)) then
-              z_int_unst = z_int_unst + Fn_now * h_col(k)
-              if (strat_rat(K) <= CS%halocline_strat_tol) Fn_now = 1.0
-            endif ; enddo
-          endif
-
-          if (z_interior < z_int_unst) then
-            ! Find a second estimate of the extent of the s-coordinate region.
-            kur1 = max(int(ceiling(k_interior)),2)
-            if (z_col_new(kur1-1) < z_interior) then
-              k_int2 = kur1
-              do K = kur1,nz+1 ; if (z_col_new(K) >= z_int_unst) then
-                ! This is linear interpolation again.
-                if (z_col_new(K-1) >= z_int_unst) &
-                  call MOM_error(FATAL,"build_grid_SLight, bad halocline structure.")
-                k_int2 = real(K-1) + (z_int_unst - z_col_new(K-1)) / &
-                                         (z_col_new(K) - z_col_new(K-1))
-                exit
-              endif ; enddo
-              if (z_col_new(nz+1) < z_int_unst) then
-                ! This should be unnecessary.
-                z_int_unst = z_col_new(nz+1) ; k_int2 = real(nz+1)
-              endif
-              
-              ! Now take the larger values.
-              if (k_int2 > k_interior) then
-                k_interior = k_int2 ; z_interior = z_int_unst
-              endif
-            endif
-          endif
-
-        endif  ! fix_haloclines
-
-        z_col_new(1) = 0.0
-        do K=2,nkml+1
-          z_col_new(K) = min((K-1)*CS%dz_ml_min, &
-                             z_col_new(nz+1) - CS%min_thickness*(nz+1-K))
-        enddo
-        z_ml_fix = z_col_new(nkml+1)
-        if (z_interior > z_ml_fix) then
-          dz_dk = (z_interior - z_ml_fix) / (k_interior - (nkml+1))
-          do K=nkml+2,int(floor(k_interior))
-            z_col_new(K) = z_ml_fix + dz_dk * (K - (nkml+1))
-          enddo
-        else ! The fixed-thickness z-region penetrates into the interior.
-          do K=nkml+2,nz
-            if (z_col_new(K) <= z_col_new(CS%nz_fixed_surface+1)) then
-              z_col_new(K) = z_col_new(CS%nz_fixed_surface+1)
-            else ; exit ; endif
-          enddo
+        if (drIS <= 0.0) then
+          strat_rat(K) = 2.0 ! Maybe do this? => ; if (drR < 0.0) strat_rat(K) = -2.0
+        else
+          strat_rat(K) = 2.0*max(drR,0.0) / (drIS + abs(drR))
         endif
+      enddo
+      strat_rat(nz+1) = 1.0
 
-        if (maximum_depths_set .and. maximum_h_set) then ; do k=2,nz
-          ! The loop bounds are 2 & nz so the top and bottom interfaces do not move.
-          ! Recall that z_col_new is positive downward.
-          z_col_new(K) = min(z_col_new(K), CS%max_interface_depths(K), &
-                                z_col_new(K-1) + CS%max_layer_thickness(k-1))
-        enddo ; elseif (maximum_depths_set) then ; do K=2,nz
-          z_col_new(K) = min(z_col_new(K), CS%max_interface_depths(K))
-        enddo ; elseif (maximum_h_set) then ; do k=2,nz
-          z_col_new(K) = min(z_col_new(K), z_col_new(K-1) + CS%max_layer_thickness(k-1))
-        enddo ; endif
+      z_int_unst = 0.0 ; Fn_now = 0.0
+      Fn_zero_val = min(2.0*CS%halocline_strat_tol, &
+                        0.5*(1.0 + CS%halocline_strat_tol))
+      if (CS%halocline_strat_tol > 0.0) then
+        ! Use Adcroft's reciprocal rule.
+        I_HStol = 0.0 ; if (Fn_zero_val - CS%halocline_strat_tol > 0.0) &
+          I_HStol = 1.0 / (Fn_zero_val - CS%halocline_strat_tol)
+        do k=nz,1,-1 ; if (CS%ref_pressure > p_IS(k+1)) then
+          z_int_unst = z_int_unst + Fn_now * h_col(k)
+          if (strat_rat(K) <= Fn_zero_val) then
+            if (strat_rat(K) <= CS%halocline_strat_tol) then ; Fn_now = 1.0
+            else
+              Fn_now = max(Fn_now, (Fn_zero_val - strat_rat(K)) * I_HStol)
+            endif
+          endif
+        endif ; enddo
+      else
+        do k=nz,1,-1 ; if (CS%ref_pressure > p_IS(k+1)) then
+          z_int_unst = z_int_unst + Fn_now * h_col(k)
+          if (strat_rat(K) <= CS%halocline_strat_tol) Fn_now = 1.0
+        endif ; enddo
+      endif
 
-      endif ! Total thickness exceeds nz*CS%min_thickness.
+      if (z_interior < z_int_unst) then
+        ! Find a second estimate of the extent of the s-coordinate region.
+        kur1 = max(int(ceiling(k_interior)),2)
+        if (z_col_new(kur1-1) < z_interior) then
+          k_int2 = kur1
+          do K = kur1,nz+1 ; if (z_col_new(K) >= z_int_unst) then
+            ! This is linear interpolation again.
+            if (z_col_new(K-1) >= z_int_unst) &
+              call MOM_error(FATAL,"build_grid_SLight, bad halocline structure.")
+            k_int2 = real(K-1) + (z_int_unst - z_col_new(K-1)) / &
+                                     (z_col_new(K) - z_col_new(K-1))
+            exit
+          endif ; enddo
+          if (z_col_new(nz+1) < z_int_unst) then
+            ! This should be unnecessary.
+            z_int_unst = z_col_new(nz+1) ; k_int2 = real(nz+1)
+          endif
 
+          ! Now take the larger values.
+          if (k_int2 > k_interior) then
+            k_interior = k_int2 ; z_interior = z_int_unst
+          endif
+        endif
+      endif
+    endif  ! fix_haloclines
 
-      ! Calculate the final change in grid position after blending new and old grids
-      call filtered_grid_motion( CS, nz, z_col, z_col_new, dz_col )
-      do K=1,nz+1 ; dzInterface(i,j,K) = -dz_col(K) ; enddo
-#ifdef __DO_SAFETY_CHECKS__
-      if (dzInterface(i,j,1) /= 0.) stop 'build_grid_SLight: Surface moved?!'
-      if (dzInterface(i,j,nz+1) /= 0.) stop 'build_grid_SLight: Bottom moved?!'
-#endif
+    z_col_new(1) = 0.0
+    do K=2,nkml+1
+      z_col_new(K) = min((K-1)*CS%dz_ml_min, &
+                         z_col_new(nz+1) - CS%min_thickness*(nz+1-K))
+    enddo
+    z_ml_fix = z_col_new(nkml+1)
+    if (z_interior > z_ml_fix) then
+      dz_dk = (z_interior - z_ml_fix) / (k_interior - (nkml+1))
+      do K=nkml+2,int(floor(k_interior))
+        z_col_new(K) = z_ml_fix + dz_dk * (K - (nkml+1))
+      enddo
+    else ! The fixed-thickness z-region penetrates into the interior.
+      do K=nkml+2,nz
+        if (z_col_new(K) <= z_col_new(CS%nz_fixed_surface+1)) then
+          z_col_new(K) = z_col_new(CS%nz_fixed_surface+1)
+        else ; exit ; endif
+      enddo
+    endif
 
-      ! This adjusts things robust to round-off errors
-      call adjust_interface_motion( nz, CS%min_thickness, h(i,j,:), dzInterface(i,j,:) )
+    if (maximum_depths_set .and. maximum_h_set) then ; do k=2,nz
+      ! The loop bounds are 2 & nz so the top and bottom interfaces do not move.
+      ! Recall that z_col_new is positive downward.
+      z_col_new(K) = min(z_col_new(K), CS%max_interface_depths(K), &
+                            z_col_new(K-1) + CS%max_layer_thickness(k-1))
+    enddo ; elseif (maximum_depths_set) then ; do K=2,nz
+      z_col_new(K) = min(z_col_new(K), CS%max_interface_depths(K))
+    enddo ; elseif (maximum_h_set) then ; do k=2,nz
+      z_col_new(K) = min(z_col_new(K), z_col_new(K-1) + CS%max_layer_thickness(k-1))
+    enddo ; endif
 
-    else ! on land
-      dzInterface(i,j,:) = 0.
-    endif ! mask2dT
-  enddo; enddo ! i,j
+  endif ! Total thickness exceeds nz*CS%min_thickness.
 
-end subroutine build_grid_SLight
+end subroutine build_slight_column
 
 !> Finds the new interface locations in a column of water that match the
 !! prescribed target densities.

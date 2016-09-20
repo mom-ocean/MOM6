@@ -7,8 +7,9 @@ module MOM_io
 use MOM_error_handler,    only : MOM_error, NOTE, FATAL, WARNING
 use MOM_domains,          only : MOM_domain_type
 use MOM_file_parser,      only : log_version, param_file_type
-use MOM_string_functions, only : lowercase
 use MOM_grid,             only : ocean_grid_type
+use MOM_dyn_horgrid,      only : dyn_horgrid_type
+use MOM_string_functions, only : lowercase, slasher
 use MOM_verticalGrid,     only : verticalGrid_type
 
 use ensemble_manager_mod, only : get_ensemble_id
@@ -76,7 +77,7 @@ contains
 !> Routine creates a new NetCDF file.  It also sets up
 !! structures that describe this file and variables that will
 !! later be written to this file. Type for describing a variable, typically a tracer
-subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit, G, GV)
+subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit, G, dG, GV)
   integer,               intent(out)   :: unit       !< unit id of an open file or -1 on a
                                                      !! nonwriting PE with single file output
   character(len=*),      intent(in)    :: filename   !< full path to the file to create
@@ -86,8 +87,11 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
   integer, optional,     intent(in)    :: threading  !< SINGLE_FILE or MULTIPLE
   real, optional,        intent(in)    :: timeunit   !< length, in seconds, of the units for time. The
                                                      !! default value is 86400.0, for 1 day.
-  type(ocean_grid_type),   optional, intent(in) :: G  !< ocean grid structure structure, which is
-                                                     !! required if the new file uses any
+  type(ocean_grid_type),   optional, intent(in) :: G !< ocean horizontal grid structure; G or dG
+                                                     !! is required if the new file uses any
+                                                     !! horizontal grid axes.
+  type(dyn_horgrid_type),  optional, intent(in) :: dG !< dynamic horizontal grid structure; G or dG
+                                                     !! is required if the new file uses any
                                                      !! horizontal grid axes.
   type(verticalGrid_type), optional, intent(in) :: GV !< ocean vertical grid structure, which is
                                                      !! required if the new file uses any
@@ -95,15 +99,21 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
 
   logical        :: use_lath, use_lonh, use_latq, use_lonq, use_time
   logical        :: use_layer, use_int, use_periodic
-  logical        :: one_file
+  logical        :: one_file, domain_set
   type(axistype) :: axis_lath, axis_latq, axis_lonh, axis_lonq
   type(axistype) :: axis_layer, axis_int, axis_time, axis_periodic
   type(axistype) :: axes(4)
+  type(MOM_domain_type), pointer :: Domain => NULL()
   type(domain1d) :: x_domain, y_domain
   integer        :: numaxes, pack, thread, k
+  integer        :: isg, ieg, jsg, jeg, IsgB, IegB, JsgB, JegB
   integer        :: var_periods, num_periods=0
   real, dimension(:), allocatable :: period_val
-  character(len=40) :: time_units
+  real, pointer, dimension(:) :: &
+    gridLatT => NULL(), & ! The latitude or longitude of T or B points for
+    gridLatB => NULL(), & ! the purpose of labeling the output axes.
+    gridLonT => NULL(), gridLonB => NULL()
+  character(len=40) :: time_units, x_axis_units, y_axis_units
   character(len=8)  :: t_grid, t_grid_read
 
   use_lath  = .false. ; use_lonh     = .false.
@@ -114,15 +124,32 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
   thread = SINGLE_FILE
   if (PRESENT(threading)) thread = threading
 
-  one_file = .true.
+  domain_set = .false.
   if (present(G)) then
-    one_file = ((thread == SINGLE_FILE) .or. .not.G%Domain%use_io_layout)
+    domain_set = .true. ; Domain => G%Domain
+    gridLatT => G%gridLatT ; gridLatB => G%gridLatB
+    gridLonT => G%gridLonT ; gridLonB => G%gridLonB
+    x_axis_units = G%x_axis_units ; y_axis_units = G%y_axis_units
+    isg = G%isg ; ieg = G%ieg ; jsg = G%jsg ; jeg = G%jeg
+    IsgB = G%IsgB ; IegB = G%IegB ; JsgB = G%JsgB ; JegB = G%JegB
+  elseif (present(dG)) then
+    domain_set = .true. ; Domain => dG%Domain
+    gridLatT => dG%gridLatT ; gridLatB => dG%gridLatB
+    gridLonT => dG%gridLonT ; gridLonB => dG%gridLonB
+    x_axis_units = dG%x_axis_units ; y_axis_units = dG%y_axis_units
+    isg = dG%isg ; ieg = dG%ieg ; jsg = dG%jsg ; jeg = dG%jeg
+    IsgB = dG%IsgB ; IegB = dG%IegB ; JsgB = dG%JsgB ; JegB = dG%JegB
+  endif
+
+  one_file = .true.
+  if (domain_set) then
+    one_file = ((thread == SINGLE_FILE) .or. .not.Domain%use_io_layout)
   endif
 
   if (one_file) then
     call open_file(unit, filename, MPP_OVERWR, MPP_NETCDF, threading=thread)
   else
-    call open_file(unit, filename, MPP_OVERWR, MPP_NETCDF, domain=G%Domain%mpp_domain)
+    call open_file(unit, filename, MPP_OVERWR, MPP_NETCDF, domain=Domain%mpp_domain)
   endif
 
 ! Define the coordinates.
@@ -183,10 +210,10 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
   end do
 
   if ((use_lath .or. use_lonh .or. use_latq .or. use_lonq)) then
-    if (.not.present(G)) call MOM_error(FATAL, "create_file: "//&
-      "An ocean_grid_type is required to create a file with a vertical coordinate.")
+    if (.not.domain_set) call MOM_error(FATAL, "create_file: "//&
+      "An ocean_grid_type or dyn_horgrid_type is required to create a file with a horizontal coordinate.")
 
-    call mpp_get_domain_components(G%Domain%mpp_domain, x_domain, y_domain)
+    call mpp_get_domain_components(Domain%mpp_domain, x_domain, y_domain)
   endif
   if ((use_layer .or. use_int) .and. .not.present(GV)) call MOM_error(FATAL, &
     "create_file: A vertical grid type is required to create a file with a vertical coordinate.")
@@ -194,20 +221,20 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
 ! Specify all optional arguments to mpp_write_meta: name, units, longname, cartesian, calendar, sense, domain, data, min)
 ! Otherwise if optional arguments are added to mpp_write_meta the compiler may (and in case of GNU is) get confused and crash.
   if (use_lath) &
-    call mpp_write_meta(unit, axis_lath, name="lath", units=G%y_axis_units, longname="Latitude", &
-                   cartesian='Y', domain = y_domain, data=G%gridLatT(G%jsg:G%jeg))
+    call mpp_write_meta(unit, axis_lath, name="lath", units=y_axis_units, longname="Latitude", &
+                   cartesian='Y', domain = y_domain, data=gridLatT(jsg:jeg))
 
   if (use_lonh) &
-    call mpp_write_meta(unit, axis_lonh, name="lonh", units=G%x_axis_units, longname="Longitude", &
-                   cartesian='X', domain = x_domain, data=G%gridLonT(G%isg:G%ieg))
+    call mpp_write_meta(unit, axis_lonh, name="lonh", units=x_axis_units, longname="Longitude", &
+                   cartesian='X', domain = x_domain, data=gridLonT(isg:ieg))
 
   if (use_latq) &
-    call mpp_write_meta(unit, axis_latq, name="latq", units=G%y_axis_units, longname="Latitude", &
-                   cartesian='Y', domain = y_domain, data=G%gridLatB(G%JsgB:G%JegB))
+    call mpp_write_meta(unit, axis_latq, name="latq", units=y_axis_units, longname="Latitude", &
+                   cartesian='Y', domain = y_domain, data=gridLatB(JsgB:JegB))
 
   if (use_lonq) &
-    call mpp_write_meta(unit, axis_lonq, name="lonq", units=G%x_axis_units, longname="Longitude", &
-                   cartesian='X', domain = x_domain, data=G%gridLonB(G%IsgB:G%IegB))
+    call mpp_write_meta(unit, axis_lonq, name="lonq", units=x_axis_units, longname="Longitude", &
+                   cartesian='X', domain = x_domain, data=gridLonB(IsgB:IegB))
 
   if (use_layer) &
     call mpp_write_meta(unit, axis_layer, name="Layer", units=trim(GV%zAxisUnits), &
@@ -305,24 +332,30 @@ end subroutine create_file
 !! does not find the file, a new file is created.  It also sets up
 !! structures that describe this file and the variables that will
 !! later be written to this file.
-subroutine reopen_file(unit, filename, vars, novars, G, fields, threading, timeunit, GV)
+subroutine reopen_file(unit, filename, vars, novars, fields, threading, timeunit, G, dG, GV)
   integer,               intent(out)   :: unit       !< unit id of an open file or -1 on a
                                                      !! nonwriting PE with single file output
   character(len=*),      intent(in)    :: filename   !< full path to the file to create
   type(vardesc),         intent(in)    :: vars(:)    !< structures describing fields written to filename
   integer,               intent(in)    :: novars     !< number of fields written to filename
-  type(ocean_grid_type), intent(in)    :: G          !< ocean grid structure
   type(fieldtype),       intent(inout) :: fields(:)  !< array of fieldtypes for each variable
   integer, optional,     intent(in)    :: threading  !< SINGLE_FILE or MULTIPLE
   real, optional,        intent(in)    :: timeunit   !< length, in seconds, of the units for time. The
                                                      !! default value is 86400.0, for 1 day.
+  type(ocean_grid_type),   optional, intent(in) :: G !< ocean horizontal grid structure; G or dG
+                                                     !! is required if a new file uses any
+                                                     !! horizontal grid axes.
+  type(dyn_horgrid_type),  optional, intent(in) :: dG !< dynamic horizontal grid structure; G or dG
+                                                     !! is required if a new file uses any
+                                                     !! horizontal grid axes.
   type(verticalGrid_type), optional, intent(in) :: GV !< ocean vertical grid structure, which is
-                                                     !! required if the new file uses any
+                                                     !! required if a new file uses any
                                                      !! vertical grid axes.
 
+  type(MOM_domain_type), pointer :: Domain => NULL()
   character(len=200) :: check_name, mesg
   integer :: length, ndim, nvar, natt, ntime, thread
-  logical :: exists
+  logical :: exists, one_file, domain_set
 
   thread = SINGLE_FILE
   if (PRESENT(threading)) thread = threading
@@ -335,12 +368,26 @@ subroutine reopen_file(unit, filename, vars, novars, G, fields, threading, timeu
   inquire(file=check_name,EXIST=exists)
 
   if (.not.exists) then
-    call create_file(unit, filename, vars, novars, fields, threading, timeunit, G=G, GV=GV)
+    call create_file(unit, filename, vars, novars, fields, threading, timeunit, &
+                     G=G, dG=dG, GV=GV)
   else
-    if ((thread == SINGLE_FILE) .or. .not.G%Domain%use_io_layout) then
+
+    domain_set = .false.
+    if (present(G)) then
+      domain_set = .true. ; Domain => G%Domain
+    elseif (present(dG)) then
+      domain_set = .true. ; Domain => dG%Domain
+    endif
+
+    one_file = .true.
+    if (domain_set) then
+      one_file = ((thread == SINGLE_FILE) .or. .not.Domain%use_io_layout)
+    endif
+
+    if (one_file) then
       call open_file(unit, filename, MPP_APPEND, MPP_NETCDF, threading=thread)
     else
-      call open_file(unit, filename, MPP_APPEND, MPP_NETCDF, domain=G%Domain%mpp_domain)
+      call open_file(unit, filename, MPP_APPEND, MPP_NETCDF, domain=Domain%mpp_domain)
     endif
     if (unit < 0) return
 
@@ -669,28 +716,6 @@ subroutine safe_string_copy(str1, str2, fieldnm, caller)
   endif
   str2 = trim(str1)
 end subroutine safe_string_copy
-
-
-!> Returns a directory name that is terminated with a "/" or "./" if the
-!! argument is an empty string.
-function slasher(dir)
-  character(len=*), intent(in) :: dir
-  character(len=len(dir)) :: slasher
-
-  ! This function makes sure that dir is terminated with a "/" or if dir is
-  ! empty, sets dir to "./" .
-  if (len_trim(dir) == 0) then
-    if (len(dir) < 2) call MOM_error(FATAL, &
-        "Argument to MOM_io slasher must be at least two characters long.")
-    slasher = "./"
-  elseif (dir(len_trim(dir):len_trim(dir)) == '/') then
-    slasher = trim(dir)
-  else
-    if (len_trim(dir) == len(dir)) call MOM_error(FATAL, &
-        "Argument too short for MOM_io slasher to add needed slash to "//dir)
-    slasher = trim(dir)//"/"
-  endif
-end function slasher
 
 
 !> Returns a name with "%#E" or "%E" replaced with the ensemble member number.

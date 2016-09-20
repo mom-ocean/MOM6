@@ -36,11 +36,12 @@ use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing, optics_type
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
+use MOM_open_boundary, only : ocean_OBC_type
 use MOM_restart, only : MOM_restart_CS
 use MOM_sponge, only : sponge_CS
 use MOM_ALE_sponge, only : ALE_sponge_CS
 use MOM_tracer_registry, only : tracer_registry_type
-use MOM_variables, only : surface, ocean_OBC_type, thermo_var_ptrs
+use MOM_variables, only : surface, thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 
 #include <MOM_memory.h>
@@ -256,7 +257,7 @@ subroutine tracer_flow_control_init(restart, day, G, GV, h, param_file, diag, OB
     call initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS%DOME_tracer_CSp, &
                                 sponge_CSp, diag_to_Z_CSp)
   if (CS%use_ISOMIP_tracer) &
-    call initialize_ISOMIP_tracer(restart, day, G, GV, h, OBC, CS%ISOMIP_tracer_CSp, &
+    call initialize_ISOMIP_tracer(restart, day, G, GV, h, diag, OBC, CS%ISOMIP_tracer_CSp, &
                                 ALE_sponge_CSp, diag_to_Z_CSp)
   if (CS%use_ideal_age) &
     call initialize_ideal_age_tracer(restart, day, G, GV, h, diag, OBC, CS%ideal_age_tracer_CSp, &

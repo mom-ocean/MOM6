@@ -20,6 +20,7 @@ module ISOMIP_initialization
 !***********************************************************************
 
 use MOM_ALE_sponge, only : ALE_sponge_CS, set_up_ALE_sponge_field, initialize_ALE_sponge
+use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
@@ -27,7 +28,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_io, only : close_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
 use MOM_io, only : write_field, slasher, vardesc
-use MOM_variables, only : thermo_var_ptrs, ocean_OBC_type
+use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
@@ -58,12 +59,11 @@ contains
 
 !> Initialization of topography
 subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth)
-  type(ocean_grid_type), intent(in)           :: G          !< The ocean's grid structure.
-  real, intent(out), dimension(SZI_(G),SZJ_(G)) :: D        !< The bottom depth in m.
-  type(param_file_type), intent(in)           :: param_file !< A structure indicating the
-                                                            !! open file to parse for model
-                                                            !! parameter values.
-  real,                  intent(in)           :: max_depth  !< Maximum depth.
+  type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
+  real, dimension(G%isd:G%ied,G%jsd:G%jed), &
+                                      intent(out) :: D !< Ocean bottom depth in m
+  type(param_file_type),              intent(in)  :: param_file !< Parameter file structure
+  real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
 
 ! This subroutine sets up the ISOMIP topography
   real :: min_depth ! The minimum and maximum depths in m.
@@ -146,7 +146,7 @@ end subroutine ISOMIP_initialize_topography
 subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv )
   type(ocean_grid_type), intent(in) :: G                !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV             !< The ocean's vertical grid structure.
-  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h !< The thickness that is being
+  real, intent(out), dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h !< The thickness that is being
                                                         !! initialized.
   type(param_file_type), intent(in) :: param_file       !< A structure indicating the
                                                         !! open file to parse for model

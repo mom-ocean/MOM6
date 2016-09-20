@@ -20,6 +20,7 @@ module Phillips_initialization
 !***********************************************************************
 
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
+use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
@@ -27,10 +28,8 @@ use MOM_io, only : close_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
 use MOM_io, only : write_field, slasher
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
-use MOM_tracer_registry, only : tracer_registry_type, add_tracer_OBC_values
+use MOM_tracer_registry, only : tracer_registry_type
 use MOM_variables, only : thermo_var_ptrs
-use MOM_variables, only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE
-use MOM_variables, only : OBC_FLATHER_E, OBC_FLATHER_W, OBC_FLATHER_N, OBC_FLATHER_S
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 
@@ -51,9 +50,9 @@ contains
 !> Initialize thickness field.
 subroutine Phillips_initialize_thickness(h, G, GV, param_file)
   type(ocean_grid_type),   intent(in) :: G          !< The ocean's grid structure.
-  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h !< The thickness that is
-                                                    !! being initialized.
   type(verticalGrid_type), intent(in) :: GV         !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(out) :: h         !< The thickness that is being initialized.
   type(param_file_type),   intent(in) :: param_file !< A structure indicating the
                                                     !! open file to parse for model
                                                     !! parameter values.
@@ -275,12 +274,12 @@ function sech(x)
 end function sech
 
 !> Initialize topography.
-subroutine Phillips_initialize_topography(D, G, param_file)
-  type(ocean_grid_type), intent(in)           :: G          !< The ocean's grid structure.
-  real, intent(out), dimension(SZI_(G),SZJ_(G)) :: D        !< The bottom depth in m.
-  type(param_file_type), intent(in)           :: param_file !< A structure indicating the
-                                                            !! open file to parse for model
-                                                            !! parameter values.
+subroutine Phillips_initialize_topography(D, G, param_file, max_depth)
+  type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
+  real, dimension(G%isd:G%ied,G%jsd:G%jed), &
+                                      intent(out) :: D !< Ocean bottom depth in m
+  type(param_file_type),              intent(in)  :: param_file !< Parameter file structure
+  real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
 
   real :: PI, Htop, Wtop, Ltop, offset, dist, &
           x1, x2, x3, x4, y1, y2
@@ -316,7 +315,7 @@ subroutine Phillips_initialize_topography(D, G, param_file)
        D(i,j) = 2.0/3.0*Htop*sin(PI*(G%geoLonT(i,j)-x3)/(x4-x3))**2 &
                     *sin(PI*(G%geoLatT(i,j)-y1)/(y2-y1))**2
      end if
-     D(i,j)=G%max_depth-D(i,j)
+     D(i,j)=max_depth-D(i,j)
   enddo; enddo
 
 end subroutine Phillips_initialize_topography

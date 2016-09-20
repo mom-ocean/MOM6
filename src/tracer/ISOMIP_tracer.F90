@@ -30,7 +30,8 @@ use MOM_time_manager, only : time_type, get_time
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_registry, only : add_tracer_diagnostics, add_tracer_OBC_values
 use MOM_tracer_registry, only : tracer_vertdiff
-use MOM_variables, only : surface, ocean_OBC_type
+use MOM_variables, only : surface
+use MOM_open_boundary, only : ocean_OBC_type
 use MOM_verticalGrid, only : verticalGrid_type
 
 use coupler_util, only : set_coupler_values, ind_csurf
@@ -166,13 +167,15 @@ end function register_ISOMIP_tracer
 
 !> Initializes the NTR tracer fields in tr(:,:,:,:)
 ! and it sets up the tracer output. 
-subroutine initialize_ISOMIP_tracer(restart, day, G, GV, h, OBC, CS, ALE_sponge_CSp, &
-                                  diag_to_Z_CSp)
+subroutine initialize_ISOMIP_tracer(restart, day, G, GV, h, diag, OBC, CS, &
+                                    ALE_sponge_CSp, diag_to_Z_CSp)
+
   type(ocean_grid_type),                 intent(in) :: G !< Grid structure.
   type(verticalGrid_type),               intent(in) :: GV !< The ocean's vertical grid structure.
   logical,                               intent(in) :: restart !< .true. if the fields have already been read from a restart file.
   type(time_type), target,               intent(in) :: day !< Time of the start of the run.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h !< Layer thickness, in m or kg m-2.
+  type(diag_ctrl), target,               intent(in) :: diag
   type(ocean_OBC_type),                  pointer    :: OBC !< This open boundary condition type specifies whether, where, and what open boundary conditions are used. This is not being used for now.
   type(ISOMIP_tracer_CS),                pointer    :: CS !< The control structure returned by a previous call to ISOMIP_register_tracer.
   type(ALE_sponge_CS),                   pointer    :: ALE_sponge_CSp !< A pointer to the control structure for the sponges, if they are in use.  Otherwise this may be unassociated.
@@ -206,6 +209,7 @@ subroutine initialize_ISOMIP_tracer(restart, day, G, GV, h, OBC, CS, ALE_sponge_
   h_neglect = GV%H_subroundoff
 
   CS%Time => day
+  CS%diag => diag
 
   if (.not.restart) then
     if (len_trim(CS%tracer_IC_file) >= 1) then
@@ -340,7 +344,7 @@ subroutine ISOMIP_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, G
       if (fluxes%iceshelf_melt(i,j) > 0.0) then
 !        CS%tr(i,j,1,m) = (dt*fluxes%iceshelf_melt(i,j)/(365.0 * 86400.0)  &
 !                       + h_old(i,j,1)*CS%tr(i,j,1,m))/h_new(i,j,1)
-         CS%tr(i,j,1,m) = 1.0
+         CS%tr(i,j,1:3,m) = 1.0
       endif
     enddo ; enddo
   enddo
