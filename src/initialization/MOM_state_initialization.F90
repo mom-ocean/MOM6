@@ -21,6 +21,9 @@ use MOM_io, only : close_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE, MULTIPLE
 use MOM_io, only : slasher, vardesc, write_field
 use MOM_io, only : EAST_FACE, NORTH_FACE
+use MOM_open_boundary, only : ocean_OBC_type, open_boundary_init
+use MOM_open_boundary, only : OBC_NONE, OBC_SIMPLE
+use MOM_open_boundary, only : open_boundary_query, set_Flather_data
 use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
 use MOM_restart, only : restore_state, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, set_up_sponge_ML_density
@@ -30,18 +33,17 @@ use MOM_ALE_sponge, only : ALE_sponge_CS
 use MOM_string_functions, only : uppercase
 use MOM_time_manager, only : time_type, set_time
 use MOM_tracer_registry, only : add_tracer_OBC_values, tracer_registry_type
-use MOM_variables, only : thermo_var_ptrs, ocean_OBC_type
-use MOM_variables, only : OBC_NONE, OBC_SIMPLE, OBC_FLATHER_E, OBC_FLATHER_W
-use MOM_variables, only : OBC_FLATHER_N, OBC_FLATHER_S
+use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : setVerticalGridAxes, verticalGrid_type
 use MOM_ALE, only : pressure_gradient_plm
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use MOM_EOS, only : int_specific_vol_dp
 use user_initialization, only : user_initialize_thickness, user_initialize_velocity
 use user_initialization, only : user_init_temperature_salinity
-use user_initialization, only : user_set_Open_Bdry_Conds, user_initialize_sponges
+use user_initialization, only : user_set_OBC_data
+use user_initialization, only : user_initialize_sponges
 use DOME_initialization, only : DOME_initialize_thickness
-use DOME_initialization, only : DOME_set_Open_Bdry_Conds
+use DOME_initialization, only : DOME_set_OBC_data
 use DOME_initialization, only : DOME_initialize_sponges
 use ISOMIP_initialization, only : ISOMIP_initialize_thickness
 use ISOMIP_initialization, only : ISOMIP_initialize_sponges
@@ -69,6 +71,11 @@ use Rossby_front_2d_initialization, only : Rossby_front_initialize_temperature_s
 use Rossby_front_2d_initialization, only : Rossby_front_initialize_velocity
 use SCM_idealized_hurricane, only : SCM_idealized_hurricane_TS_init
 use SCM_CVmix_tests, only: SCM_CVmix_tests_TS_init
+use supercritical_initialization, only : supercritical_initialize_velocity
+use supercritical_initialization, only : supercritical_set_OBC_data
+use soliton_initialization, only : soliton_initialize_velocity
+use soliton_initialization, only : soliton_initialize_thickness
+use BFB_initialization, only : BFB_initialize_sponges_southonly
 
 use midas_vertmap, only : find_interfaces, tracer_Z_init
 use midas_vertmap, only : determine_temperature
@@ -142,9 +149,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   logical :: trim_ic_for_p_surf ! If true, remove the mass that would be displaced
                          ! by a large surface pressure, such as with an ice sheet.
   logical :: Analytic_FV_PGF, obsol_test
-  logical :: apply_OBC_u, apply_OBC_v
-  logical :: apply_OBC_u_flather_east, apply_OBC_u_flather_west
-  logical :: apply_OBC_v_flather_north, apply_OBC_v_flather_south
   logical :: convert
   type(EOS_type), pointer :: eos => NULL()
   logical :: debug    ! indicates whether to write debugging output
@@ -159,7 +163,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   call callTree_enter("MOM_initialize_state(), MOM_state_initialization.F90")
-  call log_version(PF, mod, version)
+  call log_version(PF, mod, version, "")
   call get_param(PF, mod, "DEBUG", debug, default=.false.)
 
   new_sim = .false.
@@ -225,6 +229,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                " \t adjustment2d - TBD AJA. \n"//&
                " \t sloshing - TBD AJA. \n"//&
                " \t seamount - TBD AJA. \n"//&
+               " \t soliton - Equatorial Rossby soliton. \n"//&
                " \t rossby_front - a mixed layer front in thermal wind balance.\n"//&
                " \t USER - call a user modified routine.", &
                fail_if_missing=.true.)
@@ -251,6 +256,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
          case ("adjustment2d"); call adjustment_initialize_thickness(h, G, GV, PF)
          case ("sloshing"); call sloshing_initialize_thickness(h, G, GV, PF)
          case ("seamount"); call seamount_initialize_thickness(h, G, GV, PF)
+         case ("soliton"); call soliton_initialize_thickness(h, G)
          case ("phillips"); call Phillips_initialize_thickness(h, G, GV, PF)
          case ("rossby_front"); call Rossby_front_initialize_thickness(h, G, GV, PF)
          case ("USER"); call user_initialize_thickness(h, G, PF, tv%T)
@@ -325,6 +331,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
          " \t uniform - the flow is uniform (determined by\n"//&
          " \t\t parameters INITIAL_U_CONST and INITIAL_V_CONST).\n"//&
          " \t rossby_front - a mixed layer front in thermal wind balance.\n"//&
+         " \t soliton - Equatorial Rossby soliton.\n"//&
          " \t USER - call a user modified routine.", default="zero")
     select case (trim(config))
        case ("file"); call initialize_velocity_from_file(u, v, G, PF)
@@ -333,14 +340,16 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
        case ("circular"); call initialize_velocity_circular(u, v, G, PF)
        case ("phillips"); call Phillips_initialize_velocity(u, v, G, GV, PF)
        case ("rossby_front"); call Rossby_front_initialize_velocity(u, v, h, G, GV, PF)
+       case ("soliton"); call soliton_initialize_velocity(u, v, h, G)
+       case ("supercritical"); call supercritical_initialize_velocity(u, v, h, G, PF)
        case ("USER"); call user_initialize_velocity(u, v, G, PF)
        case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
             "Unrecognized velocity configuration "//trim(config))
     end select
 
     call pass_vector(u, v, G%Domain)
-    if (debug) call uchksum(u, "MOM_initialize_state: u ", G, haloshift=1)
-    if (debug) call vchksum(v, "MOM_initialize_state: v ", G, haloshift=1)
+    if (debug) call uchksum(u, "MOM_initialize_state: u ", G%HI, haloshift=1)
+    if (debug) call vchksum(v, "MOM_initialize_state: v ", G%HI, haloshift=1)
 
 !   Optionally convert the thicknesses from m to kg m-2.  This is particularly
 ! useful in a non-Boussinesq model.
@@ -388,9 +397,9 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   call pass_var(h, G%Domain)
 
   if (debug) then
-    call hchksum(h*GV%H_to_m, "MOM_initialize_state: h ", G, haloshift=1)
-    if ( use_temperature ) call hchksum(tv%T, "MOM_initialize_state: T ", G, haloshift=1)
-    if ( use_temperature ) call hchksum(tv%S, "MOM_initialize_state: S ", G, haloshift=1)
+    call hchksum(h*GV%H_to_m, "MOM_initialize_state: h ", G%HI, haloshift=1)
+    if ( use_temperature ) call hchksum(tv%T, "MOM_initialize_state: T ", G%HI, haloshift=1)
+    if ( use_temperature ) call hchksum(tv%S, "MOM_initialize_state: S ", G%HI, haloshift=1)
   endif
 
   call get_param(PF, mod, "SPONGE", use_sponge, &
@@ -409,6 +418,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                  " \t ISOMIP - apply ale sponge in the ISOMIP case \n"//&
                  " \t DOME - use a slope and channel configuration for the \n"//&
                  " \t\t DOME sill-overflow test case. \n"//&
+                 " \t BFB - Sponge at the southern boundary of the domain\n"//&
+                 " \t\t for buoyancy-forced basin case.\n"//&
                  " \t USER - call a user modified routine.", default="file")
     select case (trim(config))
       case ("DOME"); call DOME_initialize_sponges(G, GV, tv, PF, sponge_CSp)
@@ -416,6 +427,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                                                       sponge_CSp, ALE_sponge_CSp)
       case ("ISOMIP"); call ISOMIP_initialize_sponges(G, GV, tv, PF, ALE_sponge_CSp)
       case ("USER"); call user_initialize_sponges(G, use_temperature, tv, &
+                                               PF, sponge_CSp, h)
+      case ("BFB"); call BFB_initialize_sponges_southonly(G, use_temperature, tv, &
                                                PF, sponge_CSp, h)
       case ("phillips"); call Phillips_initialize_sponges(G, use_temperature, tv, &
                                                PF, sponge_CSp, h)
@@ -426,48 +439,37 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
     end select
   endif
 
-! This subroutine call sets optional open boundary conditions.
-  call get_param(PF, mod, "APPLY_OBC_U", apply_OBC_u, &
-                 "If true, open boundary conditions may be set at some \n"//&
-                 "u-points, with the configuration controlled by OBC_CONFIG", &
-                 default=.false.)
-  call get_param(PF, mod, "APPLY_OBC_V", apply_OBC_v, &
-                 "If true, open boundary conditions may be set at some \n"//&
-                 "v-points, with the configuration controlled by OBC_CONFIG", &
-                 default=.false.)
-  if (apply_OBC_u .or. apply_OBC_v) then 
-    call get_param(PF, mod, "OBC_CONFIG", config, &
-                 "A string that sets how the open boundary conditions are \n"//&
-                 " configured: \n"//&
-                 " \t DOME - use a slope and channel configuration for the \n"//&
-                 " \t\t DOME sill-overflow test case. \n"//&
-                 " \t USER - call a user modified routine.", default="file", &
-                 fail_if_missing=.true.)
+  ! Reads OBC parameters not pertaining to the location of the boundaries
+  call open_boundary_init(G, PF, OBC)
+
+  ! This is the legacy approach to turning on open boundaries
+  call get_param(PF, mod, "OBC_CONFIG", config, default="none", do_not_log=.true.)
+  if (open_boundary_query(OBC, apply_orig_OBCs=.true.)) then
     if (trim(config) == "DOME") then
-      call DOME_set_Open_Bdry_Conds(OBC, tv, G, GV, PF, tracer_Reg)
+      call DOME_set_OBC_data(OBC, tv, G, GV, PF, tracer_Reg)
     elseif (trim(config) == "USER") then
-      call user_set_Open_Bdry_Conds(OBC, tv, G, PF, tracer_Reg)
-    else
+      call user_set_OBC_data(OBC, tv, G, PF, tracer_Reg)
+    elseif (.not. trim(config) == "none") then
       call MOM_error(FATAL, "The open boundary conditions specified by "//&
               "OBC_CONFIG = "//trim(config)//" have not been fully implemented.")
-      call set_Open_Bdry_Conds(OBC, tv, G, GV, PF, tracer_Reg)
     endif
   endif
-
-  call get_param(PF, mod, "APPLY_OBC_U_FLATHER_EAST", apply_OBC_u_flather_east,&
-                 "Apply a Flather open boundary condition on the eastern \n"//&
-                 "side of the global domain", default=.false.)
-  call get_param(PF, mod, "APPLY_OBC_U_FLATHER_WEST", apply_OBC_u_flather_west,&
-                 "Apply a Flather open boundary condition on the western \n"//&
-                 "side of the global domain", default=.false.)
-  call get_param(PF, mod, "APPLY_OBC_V_FLATHER_NORTH", apply_OBC_v_flather_north,&
-                 "Apply a Flather open boundary condition on the northern \n"//&
-                 "side of the global domain", default=.false.)
-  call get_param(PF, mod, "APPLY_OBC_V_FLATHER_SOUTH", apply_OBC_v_flather_south,&
-                 "Apply a Flather open boundary condition on the southern \n"//&
-                 "side of the global domain", default=.false.)
-  if (apply_OBC_u_flather_east .or. apply_OBC_u_flather_west .or. apply_OBC_v_flather_north .or. apply_OBC_v_flather_south) then
-    call set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
+  if (open_boundary_query(OBC, apply_orig_Flather=.true.)) then
+    call set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
+  endif
+  ! Still need a way to specify the boundary values
+  call get_param(PF, mod, "OBC_VALUES_CONFIG", config, default="none", do_not_log=.true.)
+  if (trim(config) == "tidal_bay") then
+    OBC%update_OBC = .true.
+    OBC%OBC_values_config = "tidal_bay"
+  elseif (trim(config) == "supercritical") then
+    call supercritical_set_OBC_data(OBC, G, PF)
+  endif
+  if (debug.and.associated(OBC)) then
+    call hchksum(G%mask2dT, 'MOM_initialize_state: mask2dT ', G%HI)
+    call uchksum(G%mask2dCu, 'MOM_initialize_state: mask2dCu ', G%HI)
+    call vchksum(G%mask2dCv, 'MOM_initialize_state: mask2dCv ', G%HI)
+    call qchksum(G%mask2dBu, 'MOM_initialize_state: mask2dBu ', G%HI)
   endif
 
   call callTree_leave('MOM_initialize_state()')
@@ -716,7 +718,7 @@ subroutine convert_thickness(h, G, GV, param_file, tv)
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   max_itt = 10
   Boussinesq = GV%Boussinesq
-  I_gEarth = 1.0 / G%g_Earth
+  I_gEarth = 1.0 / GV%g_Earth
 
   if (Boussinesq) then
     call MOM_error(FATAL,"Not yet converting thickness with Boussinesq approx.")
@@ -731,7 +733,7 @@ subroutine convert_thickness(h, G, GV, param_file, tv)
           call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_top(:,j), rho, &
                                  is, ie-is+1, tv%eqn_of_state)
           do i=is,ie
-            p_bot(i,j) = p_top(i,j) + G%g_Earth * h(i,j,k) * rho(i)
+            p_bot(i,j) = p_top(i,j) + GV%g_Earth * h(i,j,k) * rho(i)
           enddo
         enddo
 
@@ -745,7 +747,7 @@ subroutine convert_thickness(h, G, GV, param_file, tv)
             !   The hydrostatic equation is linear to such a
             ! high degree that no bounds-checking is needed.
             do i=is,ie
-              p_bot(i,j) = p_bot(i,j) + rho(i) * (G%g_Earth*h(i,j,k) - dz_geo(i,j))
+              p_bot(i,j) = p_bot(i,j) + rho(i) * (GV%g_Earth*h(i,j,k) - dz_geo(i,j))
             enddo
           enddo ; endif
         enddo
@@ -811,7 +813,7 @@ subroutine depress_surface(h, G, GV, param_file, tv)
   enddo ; enddo ; endif
 
   ! Convert thicknesses to interface heights.
-  call find_eta(h, tv, G%g_Earth, G, GV, eta)
+  call find_eta(h, tv, GV%g_Earth, G, GV, eta)
   
   do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
 !    if (eta_sfc(i,j) < eta(i,j,nz+1)) then
@@ -905,7 +907,7 @@ subroutine trim_for_ice(PF, G, GV, ALE_CSp, tv, h)
   endif
 
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    call cut_off_column_top(GV%ke, tv, GV%Rho0, G%G_earth, G%bathyT(i,j), min_thickness, &
+    call cut_off_column_top(GV%ke, tv, GV%Rho0, GV%g_Earth, G%bathyT(i,j), min_thickness, &
                tv%T(i,j,:), T_t(i,j,:), T_b(i,j,:), tv%S(i,j,:), S_t(i,j,:), S_b(i,j,:), &
                p_surf(i,j), h(i,j,:), remap_CS)
   enddo ; enddo
@@ -1526,535 +1528,6 @@ end subroutine initialize_sponges_file
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine set_Open_Bdry_Conds(OBC, tv, G, GV, param_file, tracer_Reg)
-  type(ocean_OBC_type),       pointer    :: OBC
-  type(thermo_var_ptrs),      intent(in) :: tv
-  type(ocean_grid_type),      intent(in) :: G
-  type(verticalGrid_type),    intent(in) :: GV
-  type(param_file_type),      intent(in) :: param_file
-  type(tracer_registry_type), pointer    :: tracer_Reg
-!   This subroutine sets the properties of flow at open boundary conditions.
-! This particular example is for the DOME inflow describe in Legg et al. 2006.
-
-! Arguments: OBC - This open boundary condition type specifies whether, where,
-!                  and what open boundary conditions are used.
-!  (out)     tv - A structure containing pointers to any available
-!                 thermodynamic fields, including potential temperature and
-!                 salinity or mixed layer density. Absent fields have NULL ptrs.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-
-  logical :: any_OBC        ! Set to true if any points in this subdomain use
-                            ! open boundary conditions.
-  logical, pointer, dimension(:,:) :: &
-    OBC_mask_u => NULL(), & ! These arrays are true at zonal or meridional
-    OBC_mask_v => NULL()    ! velocity points that have prescribed open boundary
-                            ! conditions.
-  real, pointer, dimension(:,:,:) :: &
-    OBC_T_u => NULL(), &    ! These arrays should be allocated and set to
-    OBC_T_v => NULL(), &    ! specify the values of T and S that should come
-    OBC_S_u => NULL(), &    ! in through u- and v- points through the open
-    OBC_S_v => NULL()       ! boundary conditions, in C and psu.
-  logical :: apply_OBC_u = .false., apply_OBC_v = .false.
-  ! The following variables are used to set the target temperature and salinity.
-  real :: T0(SZK_(G)), S0(SZK_(G))
-  real :: pres(SZK_(G))      ! An array of the reference pressure in Pa.
-  real :: drho_dT(SZK_(G))   ! Derivative of density with temperature in kg m-3 K-1.                              !
-  real :: drho_dS(SZK_(G))   ! Derivative of density with salinity in kg m-3 PSU-1.                             !
-  real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 in kg m-3.
-  character(len=40) :: mod = "set_Open_Bdry_Conds"
-  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
-  integer :: IsdB, IedB, JsdB, JedB
-
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-
-  call get_param(param_file, mod, "APPLY_OBC_U", apply_OBC_u, default=.false.)
-  call get_param(param_file, mod, "APPLY_OBC_V", apply_OBC_v, default=.false.)
-
-  if (apply_OBC_u) then
-    ! Determine where u points are applied.
-    allocate(OBC_mask_u(IsdB:IedB,jsd:jed)) ; OBC_mask_u(:,:) = .false.
-    any_OBC = .false.
-    do j=jsd,jed ; do I=IsdB,IedB
-    ! if (SOME_TEST_FOR_U_OPEN_BCS) then
-    !   OBC_mask_u(I,j) = .true. ; any_OBC = .true.
-    ! endif
-    enddo ; enddo
-    if (.not.any_OBC) then
-      ! This processor has no u points at which open boundary conditions are
-      ! to be applied.
-      apply_OBC_u = .false.
-      deallocate(OBC_mask_u)
-    endif
-  endif
-  if (apply_OBC_v) then
-    ! Determine where v points are applied.
-    allocate(OBC_mask_v(isd:ied,JsdB:JedB)) ; OBC_mask_v(:,:) = .false.
-    any_OBC = .false.
-    do J=JsdB,JedB ; do i=isd,ied
-    ! if (SOME_TEST_FOR_V_OPEN_BCS) then
-    !   OBC_mask_v(i,J) = .true. ; any_OBC = .true.
-    ! endif
-    enddo ; enddo
-    if (.not.any_OBC) then
-      ! This processor has no v points at which open boundary conditions are
-      ! to be applied.
-      apply_OBC_v = .false.
-      deallocate(OBC_mask_v)
-    endif
-  endif
-
-  if (.not.(apply_OBC_u .or. apply_OBC_v)) return
-
-  if (.not.associated(OBC)) allocate(OBC)
-
-  if (apply_OBC_u) then
-    OBC%apply_OBC_u = .true.
-    OBC%OBC_mask_u => OBC_mask_u
-    allocate(OBC%u(IsdB:IedB,jsd:jed,nz)) ; OBC%u(:,:,:) = 0.0
-    allocate(OBC%uh(IsdB:IedB,jsd:jed,nz)) ; OBC%uh(:,:,:) = 0.0
-    allocate(OBC%OBC_kind_u(IsdB:IedB,jsd:jed)) ; OBC%OBC_kind_u(:,:) = OBC_NONE
-    do j=jsd,jed ; do I=IsdB,IedB
-      if (OBC%OBC_mask_u(I,j)) OBC%OBC_kind_u(I,j) = OBC_SIMPLE
-    enddo ; enddo
-  endif
-  if (apply_OBC_v) then
-    OBC%apply_OBC_v = .true.
-    OBC%OBC_mask_v => OBC_mask_v
-    allocate(OBC%v(isd:ied,JsdB:JedB,nz)) ; OBC%v(:,:,:) = 0.0
-    allocate(OBC%vh(isd:ied,JsdB:JedB,nz)) ; OBC%vh(:,:,:) = 0.0
-    allocate(OBC%OBC_kind_v(isd:ied,JsdB:JedB)) ; OBC%OBC_kind_v(:,:) = OBC_NONE
-    do J=JsdB,JedB ; do i=isd,ied
-      if (OBC%OBC_mask_v(i,J)) OBC%OBC_kind_v(i,J) = OBC_SIMPLE
-    enddo ; enddo
-  endif
-
-  if (apply_OBC_v) then
-    do k=1,nz ; do J=Jsd,Jed ; do i=isd,ied
-      if (OBC_mask_v(i,J)) then
-        ! An appropriate expression for the meridional inflow velocities and
-        ! transports should go here.
-        OBC%vh(i,J,k) = 0.0 * GV%m_to_H ; OBC%v(i,J,k) = 0.0
-      else
-        OBC%vh(i,J,k) = 0.0 ; OBC%v(i,J,k) = 0.0
-      endif
-    enddo ; enddo ; enddo
-  endif
-
-  if (apply_OBC_u) then
-    do k=1,nz ; do j=jsd,jed ; do I=IsdB,IedB
-      if (OBC_mask_u(I,j)) then
-        ! An appropriate expression for the zonal inflow velocities and
-        ! transports should go here.
-        OBC%uh(I,j,k) = 0.0 * GV%m_to_H ; OBC%u(I,j,k) = 0.0
-      else
-        OBC%uh(I,j,k) = 0.0 ; OBC%u(I,j,k) = 0.0
-      endif
-    enddo ; enddo ; enddo
-  endif
-
-  !   The inflow values of temperature and salinity also need to be set here if
-  ! these variables are used.  The following code is just a naive example.
-  if (apply_OBC_u .or. apply_OBC_v) then
-    if (associated(tv%S)) then
-      ! In this example, all S inflows have values of 35 psu.
-      call add_tracer_OBC_values("S", tracer_Reg, OBC_inflow=35.0)
-    endif
-    if (associated(tv%T)) then
-      ! In this example, the T values are set to be consistent with the layer
-      ! target density and a salinity of 35 psu.  This code is taken from
-      !  initialize_temp_sal.
-      pres(:) = tv%P_Ref ; S0(:) = 35.0 ; T0(1) = 25.0
-      call calculate_density(T0(1),S0(1),pres(1),rho_guess(1),tv%eqn_of_state)
-      call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,1,tv%eqn_of_state)
-
-      do k=1,nz ; T0(k) = T0(1) + (GV%Rlay(k)-rho_guess(1)) / drho_dT(1) ; enddo
-      do itt=1,6
-        call calculate_density(T0,S0,pres,rho_guess,1,nz,tv%eqn_of_state)
-        call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,tv%eqn_of_state)
-        do k=1,nz ; T0(k) = T0(k) + (GV%Rlay(k)-rho_guess(k)) / drho_dT(k) ; enddo
-      enddo
-
-      if (apply_OBC_u) then
-        allocate(OBC_T_u(IsdB:IedB,jsd:jed,nz))
-        do k=1,nz ; do j=jsd,jed ; do I=IsdB,IedB
-          OBC_T_u(I,j,k) = T0(k)
-        enddo ; enddo ; enddo
-      endif
-      if (apply_OBC_v) then
-        allocate(OBC_T_v(isd:ied,JsdB:JedB,nz))
-        do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied
-          OBC_T_v(i,J,k) = T0(k)
-        enddo ; enddo ; enddo
-      endif
-      call add_tracer_OBC_values("T", tracer_Reg, OBC_in_u=OBC_T_u, &
-                                                  OBC_in_v=OBC_T_v)
-    endif
-  endif
-
-end subroutine set_Open_Bdry_Conds
-! -----------------------------------------------------------------------------
-
-! -----------------------------------------------------------------------------
-subroutine set_Flather_Bdry_Conds(OBC, tv, h, G, PF, tracer_Reg)
-  type(ocean_grid_type),                  intent(inout) :: G
-  type(ocean_OBC_type),                   pointer    :: OBC
-  type(thermo_var_ptrs),                  intent(inout) :: tv
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h
-  type(param_file_type),                  intent(in) :: PF
-  type(tracer_registry_type),             pointer    :: tracer_Reg
-!   This subroutine sets the initial definitions of the characteristic open boundary
-!   conditions. Written by Mehmet Ilicak
-
-! Arguments: OBC - This open boundary condition type specifies whether, where,
-!                  and what open boundary conditions are used.
-!  (out)     tv - A structure containing pointers to any available
-!                 thermodynamic fields, including potential temperature and
-!                 salinity or mixed layer density. Absent fields have NULL ptrs.
-!  (in)      G - The ocean's grid structure.
-!  (in)      PF - A structure indicating the open file to parse for
-!                         model parameter values.
-
-  logical :: any_OBC        ! Set to true if any points in this subdomain use
-                            ! open boundary conditions.
-
-  logical :: apply_OBC_u_flather_east = .false., apply_OBC_u_flather_west = .false.
-  logical :: apply_OBC_v_flather_north = .false., apply_OBC_v_flather_south = .false.  
-  logical :: read_OBC_eta = .false.
-  logical :: read_OBC_uv = .false.
-  logical :: read_OBC_TS = .false.
-
-  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
-  integer :: isd_off, jsd_off
-  integer :: IsdB, IedB, JsdB, JedB
-  integer :: east_boundary, west_boundary, north_boundary, south_boundary
-  character(len=40)  :: mod = "set_Flather_Bdry_Conds" ! This subroutine's name.
-  character(len=200) :: filename, OBC_file, inputdir ! Strings for file/path
-
-  real :: temp_u(G%domain%niglobal+1,G%domain%njglobal)
-  real :: temp_v(G%domain%niglobal,G%domain%njglobal+1)
-
-  real, pointer, dimension(:,:,:) :: &
-    OBC_T_u => NULL(), &    ! These arrays should be allocated and set to
-    OBC_T_v => NULL(), &    ! specify the values of T and S that should come
-    OBC_S_u => NULL(), & 
-    OBC_S_v => NULL()     
-
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-  
-  call get_param(PF, mod, "APPLY_OBC_U_FLATHER_EAST", apply_OBC_u_flather_east,&
-                 "Apply a Flather open boundary condition on the eastern \n"//&
-                 "side of the global domain", default=.false.)
-  call get_param(PF, mod, "APPLY_OBC_U_FLATHER_WEST", apply_OBC_u_flather_west,&
-                 "Apply a Flather open boundary condition on the western \n"//&
-                 "side of the global domain", default=.false.)
-  call get_param(PF, mod, "APPLY_OBC_V_FLATHER_NORTH", apply_OBC_v_flather_north,&
-                 "Apply a Flather open boundary condition on the northern \n"//&
-                 "side of the global domain", default=.false.)
-  call get_param(PF, mod, "APPLY_OBC_V_FLATHER_SOUTH", apply_OBC_v_flather_south,&
-                 "Apply a Flather open boundary condition on the southern \n"//&
-                 "side of the global domain", default=.false.)
-
-  if (.not.(apply_OBC_u_flather_east  .or. apply_OBC_u_flather_west .or. &            
-            apply_OBC_v_flather_north .or. apply_OBC_v_flather_south)) return
-  
-  if (.not.associated(OBC)) allocate(OBC)
-       
-  OBC%apply_OBC_u_flather_east = apply_OBC_u_flather_east
-  OBC%apply_OBC_u_flather_west = apply_OBC_u_flather_west 
-  OBC%apply_OBC_v_flather_north = apply_OBC_v_flather_north 
-  OBC%apply_OBC_v_flather_south = apply_OBC_v_flather_south
-
-  call get_param(PF, mod, "READ_OBC_UV", read_OBC_uv, &
-                 "If true, read the values for the velocity open boundary \n"//&
-                 "conditions from the file specified by OBC_FILE.", &
-                 default=.false.)
-  call get_param(PF, mod, "READ_OBC_ETA", read_OBC_eta, &
-                 "If true, read the values for the sea surface height \n"//&
-                 "open boundary conditions from the file specified by \n"//&
-                 "OBC_FILE.", default=.false.)
-  call get_param(PF, mod, "READ_OBC_TS", read_OBC_TS, &
-                 "If true, read the values for the temperature and \n"//&
-                 "salinity open boundary conditions from the file \n"//&
-                 "specified by OBC_FILE.", default=.false.)
-  if (read_OBC_uv .or. read_OBC_eta .or. read_OBC_TS) then
-    call get_param(PF, mod, "OBC_FILE", OBC_file, &
-                 "The file from which the appropriate open boundary \n"//&
-                 "condition values are read.", default="MOM_OBC_FILE.nc")
-    call get_param(PF, mod, "INPUTDIR", inputdir, default=".")
-    inputdir = slasher(inputdir)
-    filename = trim(inputdir)//trim(OBC_file)
-    call log_param(PF, mod, "INPUTDIR/OBC_FILE", filename)
-  endif
-
-  if (G%symmetric) then
-    east_boundary = G%ieg
-    west_boundary = G%isg-1
-    north_boundary = G%jeg
-    south_boundary = G%jsg-1
-  else
-    ! I am not entirely sure that this works properly. -RWH
-    east_boundary = G%ieg-1
-    west_boundary = G%isg
-    north_boundary = G%jeg-1
-    south_boundary = G%jsg
-  endif
-
-  if (.not.associated(OBC%OBC_mask_u)) then
-    allocate(OBC%OBC_mask_u(IsdB:IedB,jsd:jed)) ; OBC%OBC_mask_u(:,:) = .false.
-  endif
-  if (.not.associated(OBC%OBC_kind_u)) then
-    allocate(OBC%OBC_kind_u(IsdB:IedB,jsd:jed)) ; OBC%OBC_kind_u(:,:) = OBC_NONE
-  endif
-  if (.not.associated(OBC%OBC_mask_v)) then
-    allocate(OBC%OBC_mask_v(isd:ied,JsdB:JedB)) ; OBC%OBC_mask_v(:,:) = .false.
-  endif
-  if (.not.associated(OBC%OBC_kind_v)) then
-    allocate(OBC%OBC_kind_v(isd:ied,JsdB:JedB)) ; OBC%OBC_kind_v(:,:) = OBC_NONE
-  endif
-
-  if (.not.associated(OBC%vbt_outer)) then
-    allocate(OBC%vbt_outer(isd:ied,JsdB:JedB)) ; OBC%vbt_outer(:,:) = 0.0
-  endif
-
-  if (.not.associated(OBC%ubt_outer)) then
-    allocate(OBC%ubt_outer(IsdB:IedB,jsd:jed)) ; OBC%ubt_outer(:,:) = 0.0
-  endif
-
-  if (.not.associated(OBC%eta_outer_u)) then
-    allocate(OBC%eta_outer_u(IsdB:IedB,jsd:jed)) ; OBC%eta_outer_u(:,:) = 0.0
-  endif
-
-  if (.not.associated(OBC%eta_outer_v)) then
-    allocate(OBC%eta_outer_v(isd:ied,JsdB:JedB)) ; OBC%eta_outer_v(:,:) = 0.0
-  endif
-  
-  if (read_OBC_uv) then
-    call read_data(filename, 'ubt', OBC%ubt_outer, &
-                   domain=G%Domain%mpp_domain, position=EAST_FACE)
-    call read_data(filename, 'vbt', OBC%vbt_outer, &
-                   domain=G%Domain%mpp_domain, position=NORTH_FACE)
-  endif
-
-  if (read_OBC_eta) then
-    call read_data(filename, 'eta_outer_u', OBC%eta_outer_u, &
-                   domain=G%Domain%mpp_domain, position=EAST_FACE)
-    call read_data(filename, 'eta_outer_v', OBC%eta_outer_v, &
-                   domain=G%Domain%mpp_domain, position=NORTH_FACE)
-  endif
-
-  call pass_vector(OBC%eta_outer_u,OBC%eta_outer_v,G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
-  call pass_vector(OBC%ubt_outer,OBC%vbt_outer,G%Domain)
-
-  ! This code should be modified to allow OBCs to be applied anywhere.
-
-  if (apply_OBC_u_flather_east) then
-    ! Determine where u points are applied at east side 
-    do j=jsd,jed ; do I=IsdB,IedB
-      if ((I+G%idg_offset) == east_boundary) then !eastern side
-        if (G%mask2dCu(I,j) > 0.50) then
-          OBC%OBC_mask_u(I,j) = .true.
-          OBC%OBC_kind_u(I,j) = OBC_FLATHER_E
-          if (G%mask2dCv(i+1,J) > 0.50) then
-            OBC%OBC_mask_v(i+1,J) = .true.
-            if (OBC%OBC_kind_v(i+1,J) == OBC_NONE) OBC%OBC_kind_v(i+1,J) = OBC_FLATHER_E
-          endif
-          if (G%mask2dCv(i+1,J-1) > 0.50) then
-            OBC%OBC_mask_v(i+1,J-1) = .true.
-            if (OBC%OBC_kind_v(i+1,J-1) == OBC_NONE) OBC%OBC_kind_v(i+1,J-1) = OBC_FLATHER_E
-          endif
-        endif
-      endif
-    enddo ; enddo
-  endif
-
-  if (apply_OBC_u_flather_west) then
-    ! Determine where u points are applied at west side 
-    do j=jsd,jed ; do I=IsdB,IedB
-      if ((I+G%idg_offset) == west_boundary) then !western side
-        if (G%mask2dCu(I,j) > 0.50) then
-          OBC%OBC_mask_u(I,j) = .true.
-          OBC%OBC_kind_u(I,j) = OBC_FLATHER_W
-          if (G%mask2dCv(i,J) > 0.50) then
-            OBC%OBC_mask_v(i,J) = .true.
-            if (OBC%OBC_kind_v(i,J) == OBC_NONE) OBC%OBC_kind_v(i,J) = OBC_FLATHER_W
-          endif
-          if (G%mask2dCv(i,J-1) > 0.50) then
-            OBC%OBC_mask_v(i,J-1) = .true.
-            if (OBC%OBC_kind_v(i,J-1) == OBC_NONE) OBC%OBC_kind_v(i,J-1) = OBC_FLATHER_W
-          endif
-        endif
-      endif
-    enddo ; enddo
-  endif
-
-
-  if (apply_OBC_v_flather_north) then
-    ! Determine where v points are applied at north side 
-    do J=JsdB,JedB ; do i=isd,ied
-      if ((J+G%jdg_offset) == north_boundary) then         !northern side
-        if (G%mask2dCv(i,J) > 0.50) then
-          OBC%OBC_mask_v(i,J) = .true.
-          OBC%OBC_kind_v(i,J) = OBC_FLATHER_N
-          if (G%mask2dCu(I,j+1) > 0.50) then
-            OBC%OBC_mask_u(I,j+1) = .true.
-            if (OBC%OBC_kind_u(I,j+1) == OBC_NONE) OBC%OBC_kind_u(I,j+1) = OBC_FLATHER_N
-          endif
-          if (G%mask2dCu(I-1,j+1) > 0.50) then
-            OBC%OBC_mask_u(I-1,j+1) = .true.
-            if (OBC%OBC_kind_u(I-1,j+1) == OBC_NONE) OBC%OBC_kind_u(I-1,j+1) = OBC_FLATHER_N
-          endif
-        endif
-      endif
-    enddo ; enddo
-  endif
-  
-  if (apply_OBC_v_flather_south) then
-    ! Determine where v points are applied at south side 
-    do J=JsdB,JedB ; do i=isd,ied
-      if ((J+G%jdg_offset) == south_boundary) then         !southern side
-        if (G%mask2dCv(i,J) > 0.50) then
-          OBC%OBC_mask_v(i,J) = .true.
-          OBC%OBC_kind_v(i,J) = OBC_FLATHER_S
-          if (G%mask2dCu(I,j) > 0.50) then
-            OBC%OBC_mask_u(I,j) = .true.
-            if (OBC%OBC_kind_u(I,j) == OBC_NONE) OBC%OBC_kind_u(I,j) = OBC_FLATHER_S
-          endif
-          if (G%mask2dCu(I-1,j) > 0.50) then
-            OBC%OBC_mask_u(I-1,j) = .true.
-            if (OBC%OBC_kind_u(I-1,j) == OBC_NONE) OBC%OBC_kind_u(I-1,j) = OBC_FLATHER_S
-          endif
-        endif
-      endif
-    enddo ; enddo
-  endif
-
-  !   If there are no OBC points on this PE, there is no reason to keep the OBC
-  ! type, and it could be deallocated.
-
-
-  ! Define radiation coefficients r[xy]_old_[uvh] as needed.  For now, there are
-  ! no radiation conditions applied to the thicknesses, since the thicknesses
-  ! might not be physically motivated.  Instead, sponges should be used to
-  ! enforce the near-boundary layer structure.
-  if (apply_OBC_u_flather_west .or. apply_OBC_u_flather_east) then
-    allocate(OBC%rx_old_u(IsdB:IedB,jsd:jed,nz)) ; OBC%rx_old_u(:,:,:) = 0.0
- !   allocate(OBC%rx_old_h(Isd:Ied,jsd:jed,nz))   ; OBC%rx_old_h(:,:,:) = 0.0
-  endif
-  if (apply_OBC_v_flather_south .or. apply_OBC_v_flather_north) then
-    allocate(OBC%ry_old_v(isd:ied,JsdB:JedB,nz)) ; OBC%ry_old_v(:,:,:) = 0.0
- !   allocate(OBC%ry_old_h(isd:ied,Jsd:Jed,nz))   ; OBC%ry_old_h(:,:,:) = 0.0
-  endif
-
-
-  if (associated(tv%T)) then
-    allocate(OBC_T_u(IsdB:IedB,jsd:jed,nz)) ; OBC_T_u(:,:,:) = 0.0
-    allocate(OBC_S_u(IsdB:IedB,jsd:jed,nz)) ; OBC_S_u(:,:,:) = 0.0
-    allocate(OBC_T_v(isd:ied,JsdB:JedB,nz)) ; OBC_T_v(:,:,:) = 0.0
-    allocate(OBC_S_v(isd:ied,JsdB:JedB,nz)) ; OBC_S_v(:,:,:) = 0.0
-
-    if (read_OBC_TS) then
-      call read_data(filename, 'OBC_T_u', OBC_T_u, &
-                     domain=G%Domain%mpp_domain, position=EAST_FACE)
-      call read_data(filename, 'OBC_S_u', OBC_S_u, &
-                     domain=G%Domain%mpp_domain, position=EAST_FACE)
-
-      call read_data(filename, 'OBC_T_v', OBC_T_v, &
-                     domain=G%Domain%mpp_domain, position=NORTH_FACE)
-      call read_data(filename, 'OBC_S_v', OBC_S_v, &
-                     domain=G%Domain%mpp_domain, position=NORTH_FACE)
-    else
-      call pass_var(tv%T, G%Domain)
-      call pass_var(tv%S, G%Domain)
-      do k=1,nz ; do j=js,je ; do I=is-1,ie
-        if (OBC%OBC_mask_u(I,j)) then
-          if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) then
-            OBC_T_u(I,j,k) = tv%T(i,j,k)
-            OBC_S_u(I,j,k) = tv%S(i,j,k)
-          elseif (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W) then
-            OBC_T_u(I,j,k) = tv%T(i+1,j,k)
-            OBC_S_u(I,j,k) = tv%S(i+1,j,k)
-          elseif (G%mask2dT(i,j) + G%mask2dT(i+1,j) > 0) then
-            OBC_T_u(I,j,k) = (G%mask2dT(i,j)*tv%T(i,j,k) + G%mask2dT(i+1,j)*tv%T(i+1,j,k)) / &
-                             (G%mask2dT(i,j) + G%mask2dT(i+1,j))
-            OBC_S_u(I,j,k) = (G%mask2dT(i,j)*tv%S(i,j,k) + G%mask2dT(i+1,j)*tv%S(i+1,j,k)) / &
-                             (G%mask2dT(i,j) + G%mask2dT(i+1,j))
-          else ! This probably shouldn't happen or maybe it doesn't matter?
-            OBC_T_u(I,j,k) = 0.5*(tv%T(i,j,k)+tv%T(i+1,j,k))
-            OBC_S_u(I,j,k) = 0.5*(tv%S(i,j,k)+tv%S(i+1,j,k))
-          endif
-        else
-          OBC_T_u(I,j,k) = 0.5*(tv%T(i,j,k)+tv%T(i+1,j,k))
-          OBC_S_u(I,j,k) = 0.5*(tv%S(i,j,k)+tv%S(i+1,j,k))
-        endif
-      enddo; enddo ; enddo
-
-      do k=1,nz ; do J=js-1,je ; do i=is,ie
-        if (OBC%OBC_mask_v(i,J)) then
-          if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) then
-            OBC_T_v(i,J,k) = tv%T(i,j,k)
-            OBC_S_v(i,J,k) = tv%S(i,j,k)
-          elseif (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S) then
-            OBC_T_v(i,J,k) = tv%T(i,j+1,k)
-            OBC_S_v(i,J,k) = tv%S(i,j+1,k)
-          elseif (G%mask2dT(i,j) + G%mask2dT(i,j+1) > 0) then
-            OBC_T_v(i,J,k) = (G%mask2dT(i,j)*tv%T(i,j,k) + G%mask2dT(i,j+1)*tv%T(i,j+1,k)) / &
-                             (G%mask2dT(i,j) + G%mask2dT(i,j+1))
-            OBC_S_v(i,J,k) = (G%mask2dT(i,j)*tv%S(i,j,k) + G%mask2dT(i,j+1)*tv%S(i,j+1,k)) / &
-                             (G%mask2dT(i,j) + G%mask2dT(i,j+1))
-          else ! This probably shouldn't happen or maybe it doesn't matter?
-            OBC_T_v(i,J,k) = 0.5*(tv%T(i,j,k)+tv%T(i,j+1,k))
-            OBC_S_v(i,J,k) = 0.5*(tv%S(i,j,k)+tv%S(i,j+1,k))
-          endif
-        else
-          OBC_T_v(i,J,k) = 0.5*(tv%T(i,j,k)+tv%T(i,j+1,k))
-          OBC_S_v(i,J,k) = 0.5*(tv%S(i,j,k)+tv%S(i,j+1,k))
-        endif
-      enddo; enddo ; enddo
-    endif
-
-    call pass_vector(OBC_T_u, OBC_T_v, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
-    call pass_vector(OBC_S_u, OBC_S_v, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
-
-    call add_tracer_OBC_values("T", tracer_Reg, OBC_in_u=OBC_T_u, &
-                                                OBC_in_v=OBC_T_v)
-    call add_tracer_OBC_values("S", tracer_Reg, OBC_in_u=OBC_S_u, &
-                                                OBC_in_v=OBC_S_v)
-    do k=1,nz ; do j=js,je ; do I=is-1,ie
-      if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) then
-        tv%T(i+1,j,k) = tv%T(i,j,k) ; tv%S(i+1,j,k) = tv%S(i,j,k)
-      elseif (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W) then
-        tv%T(i,j,k) = tv%T(i+1,j,k) ; tv%S(i,j,k) = tv%S(i+1,j,k)
-      endif
-    enddo ; enddo ; enddo
-    do k=1,nz ; do J=js-1,je ; do i=is,ie
-      if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) then
-        tv%T(i,j+1,k) = tv%T(i,j,k) ; tv%S(i,j+1,k) = tv%S(i,j,k)
-      elseif (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S) then
-        tv%T(i,j,k) = tv%T(i,j+1,k) ; tv%S(i,j,k) = tv%S(i,j+1,k)
-      endif
-    enddo ; enddo ; enddo
-  endif
-
-  do k=1,nz ; do j=js-1,je+1 ; do I=is-1,ie+1
-    if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_E) h(i+1,j,k) = h(i,j,k)
-    if (OBC%OBC_kind_u(I,j) == OBC_FLATHER_W) h(i,j,k) = h(i+1,j,k)
-  enddo ; enddo ; enddo
-  do k=1,nz ; do J=js-1,je+1 ; do i=is-1,ie+1
-    if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_N) h(i,j+1,k) = h(i,j,k)
-    if (OBC%OBC_kind_v(i,J) == OBC_FLATHER_S) h(i,j,k) = h(i,j+1,k)
-  enddo ; enddo ; enddo
-
-end subroutine set_Flather_Bdry_Conds   
-! -----------------------------------------------------------------------------
-
-! -----------------------------------------------------------------------------
 subroutine set_velocity_depth_max(G)
   type(ocean_grid_type), intent(inout) :: G
   ! This subroutine sets the 4 bottom depths at velocity points to be the
@@ -2126,7 +1599,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
 !                      model parameter values.
 !  (in)      dirs    - A structure containing several relevant directory paths.
 
-
   type(ocean_grid_type),                 intent(inout) :: G
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)   :: h    
   type(thermo_var_ptrs),                 intent(inout) :: tv
@@ -2143,11 +1615,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-
-
   character(len=40)  :: mod = "MOM_initialize_layers_from_Z" ! This module's name.
-
-
 
   integer :: is, ie, js, je, nz ! compute domain indices
   integer :: isc,iec,jsc,jec    ! global compute domain indices
@@ -2211,7 +1679,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
   PI_180=atan(1.0)/45.
 
   call callTree_enter(trim(mod)//"(), MOM_state_initialization.F90")
-  call log_version(PF, mod, version)
+  call log_version(PF, mod, version, "")
 
   new_sim = .false.
   if ((dirs%input_filename(1:1) == 'n') .and. &
@@ -2538,14 +2006,14 @@ subroutine MOM_state_init_tests(G, GV, tv)
     S_t(k) = 35.-(0./500.)*e(k)
     S(k)   = 35.+(0./500.)*z(k)
     S_b(k) = 35.-(0./500.)*e(k+1)
-    call calculate_density(0.5*(T_t(k)+T_b(k)), 0.5*(S_t(k)+S_b(k)), -GV%Rho0*G%G_earth*z(k), rho(k), tv%eqn_of_state)
-    P_tot = P_tot + G%G_earth * rho(k) * h(k)
+    call calculate_density(0.5*(T_t(k)+T_b(k)), 0.5*(S_t(k)+S_b(k)), -GV%Rho0*GV%g_Earth*z(k), rho(k), tv%eqn_of_state)
+    P_tot = P_tot + GV%g_Earth * rho(k) * h(k)
   enddo
 
   P_t = 0.
   do k = 1, nk
     call find_depth_of_pressure_in_cell(T_t(k), T_b(k), S_t(k), S_b(k), e(K), e(K+1), &
-                                        P_t, 0.5*P_tot, GV%Rho0, G%G_earth, tv%eqn_of_state, P_b, z_out)
+                                        P_t, 0.5*P_tot, GV%Rho0, GV%g_Earth, tv%eqn_of_state, P_b, z_out)
     write(0,*) k,P_t,P_b,0.5*P_tot,e(K),e(K+1),z_out
     P_t = P_b
   enddo
@@ -2555,7 +2023,7 @@ subroutine MOM_state_init_tests(G, GV, tv)
   write(0,*) ' ==================================================================== '
   write(0,*) ''
   write(0,*) h
-  call cut_off_column_top(nk, tv, GV%Rho0, G%G_earth, -e(nk+1), GV%Angstrom, &
+  call cut_off_column_top(nk, tv, GV%Rho0, GV%g_Earth, -e(nk+1), GV%Angstrom, &
                T, T_t, T_b, S, S_t, S_b, 0.5*P_tot, h, remap_CS)
   write(0,*) h
 

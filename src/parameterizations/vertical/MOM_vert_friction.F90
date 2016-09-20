@@ -11,12 +11,13 @@ use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
+use MOM_open_boundary, only : ocean_OBC_type, OBC_SIMPLE
 use MOM_PointAccel, only : write_u_accel, write_v_accel, PointAccel_init
 use MOM_PointAccel, only : PointAccel_CS
 use MOM_time_manager, only : time_type, time_type_to_real, operator(-)
 use MOM_variables, only : thermo_var_ptrs, vertvisc_type
 use MOM_variables, only : cont_diag_ptrs, accel_diag_ptrs
-use MOM_variables, only : ocean_internal_state, ocean_OBC_type, OBC_SIMPLE
+use MOM_variables, only : ocean_internal_state
 use MOM_verticalGrid, only : verticalGrid_type
 
 implicit none ; private
@@ -387,20 +388,22 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, GV, CS, &
   call vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, GV, CS)
 
   ! Here the velocities associated with open boundary conditions are applied.
-  if (associated(OBC)) then
-    if (OBC%apply_OBC_u) then
+  if (associated(OBC)) then ; if (OBC%OBC_pe) then
+    if (OBC%specified_u_BCs_exist_globally) then
       do k=1,nz ; do j=G%jsc,G%jec ; do I=Isq,Ieq
-        if (OBC%OBC_mask_u(I,j) .and. (OBC%OBC_kind_u(I,j) == OBC_SIMPLE)) &
+        if (OBC%OBC_mask_u(I,j) .and. &
+            (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%specified)) &
           u(I,j,k) = OBC%u(I,j,k)
       enddo ; enddo ; enddo
     endif
-    if (OBC%apply_OBC_v) then
+    if (OBC%specified_v_BCs_exist_globally) then
       do k=1,nz ; do J=Jsq,Jeq ; do i=G%isc,G%iec
-        if (OBC%OBC_mask_v(i,J) .and. (OBC%OBC_kind_v(i,J) == OBC_SIMPLE)) &
+        if (OBC%OBC_mask_v(i,J) .and. &
+            (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%specified)) &
           v(i,J,k) = OBC%v(i,J,k)
       enddo ; enddo ; enddo
     endif
-  endif
+  endif ; endif
 ! Offer diagnostic fields for averaging.
   if (CS%id_du_dt_visc > 0) &
     call post_data(CS%id_du_dt_visc, ADp%du_dt_visc, CS%diag)
@@ -515,8 +518,8 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, CS)
   enddo ! end of v-component J loop
 
   if (CS%debug) then
-    call uchksum(visc_rem_u,"visc_rem_u",G,haloshift=0)
-    call vchksum(visc_rem_v,"visc_rem_v",G,haloshift=0)
+    call uchksum(visc_rem_u,"visc_rem_u",G%HI,haloshift=0)
+    call vchksum(visc_rem_v,"visc_rem_v",G%HI,haloshift=0)
   endif
 
 end subroutine vertvisc_remnant
@@ -900,12 +903,12 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS)
 
 
   if (CS%debug) then
-    call uchksum(CS%h_u*H_to_m,"vertvisc_coef h_u",G,haloshift=0)
-    call vchksum(CS%h_v*H_to_m,"vertvisc_coef h_v",G,haloshift=0)
-    call uchksum(CS%a_u,"vertvisc_coef a_u",G,haloshift=0)
-    call vchksum(CS%a_v,"vertvisc_coef a_v",G,haloshift=0)
-    if (allocated(hML_u)) call uchksum(hML_u*H_to_m,"vertvisc_coef hML_u",G,haloshift=0)
-    if (allocated(hML_v)) call vchksum(hML_v*H_to_m,"vertvisc_coef hML_v",G,haloshift=0)
+    call uchksum(CS%h_u*H_to_m,"vertvisc_coef h_u",G%HI,haloshift=0)
+    call vchksum(CS%h_v*H_to_m,"vertvisc_coef h_v",G%HI,haloshift=0)
+    call uchksum(CS%a_u,"vertvisc_coef a_u",G%HI,haloshift=0)
+    call vchksum(CS%a_v,"vertvisc_coef a_v",G%HI,haloshift=0)
+    if (allocated(hML_u)) call uchksum(hML_u*H_to_m,"vertvisc_coef hML_u",G%HI,haloshift=0)
+    if (allocated(hML_v)) call vchksum(hML_v*H_to_m,"vertvisc_coef hML_v",G%HI,haloshift=0)
   endif
 
 ! Offer diagnostic fields for averaging.

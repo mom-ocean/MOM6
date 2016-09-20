@@ -759,7 +759,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
 
   num_files = 0
   next_var = 0
-  nz = G%ke
+  nz = 1 ; if (present(GV)) nz = GV%ke
 
   call get_time(time,seconds,days)
   restart_time = real(days) + real(seconds)/86400.0
@@ -1237,7 +1237,7 @@ subroutine restart_init(param_file, CS, restart_root)
   allocate(CS)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version)
+  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "PARALLEL_RESTARTFILES", &
                                 CS%parallel_restartfiles, &
                  "If true, each processor writes its own restart file, \n"//&

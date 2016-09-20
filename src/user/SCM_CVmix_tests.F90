@@ -257,6 +257,7 @@ subroutine SCM_CVmix_tests_buoyancy_forcing(state, fluxes, day, G, CS)
     ! Note CVmix test inputs give max sw rad in [m K/s]
     ! therefore must convert to W/m2 by multiplying
     ! by Rho0*Cp
+    ! Note diurnal cycle peaks at Noon.
       fluxes%sw(i,J) = CS%Max_sw * max(0.0,cos(2*PI*     &
            (time_type_to_real(DAY)/86400.-0.5))) * CS%RHO0 * fluxes%C_p
     enddo; enddo

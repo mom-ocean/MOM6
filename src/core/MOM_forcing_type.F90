@@ -64,7 +64,7 @@ type, public :: forcing
   real, pointer, dimension(:,:) :: &
   latent         => NULL(), & !< latent (W/m^2)   (typically < 0)
   sens           => NULL(), & !< sensible (W/m^2) (typically negative)
-  heat_restore   => NULL()    !< heat flux from SST restoring (W/m^2) in idealized simulations
+  heat_added     => NULL()    !< additional heat flux from SST restoring or flux adjustments (W/m^2)
 
   ! components of latent heat fluxes used for diagnostic purposes
   real, pointer, dimension(:,:) :: &
@@ -98,7 +98,7 @@ type, public :: forcing
   real, pointer, dimension(:,:) :: &
   salt_flux         => NULL(), & !< net salt flux into the ocean ( kg salt/(m^2 s) )
   salt_flux_in      => NULL(), & !< salt flux provided to the ocean from coupler ( kg salt/(m^2 s) )
-  salt_flux_restore => NULL()    !< restoring piece of salt flux before adjustment
+  salt_flux_added => NULL()    !< additional salt flux from restoring or flux adjustment before adjustment
                                  !! to net zero ( kg salt/(m^2 s) )
 
   ! applied surface pressure from other component models (e.g., atmos, sea ice, land ice)
@@ -191,8 +191,9 @@ type, public :: forcing_diags
   integer :: id_heat_content_lprec  = -1, id_heat_content_fprec    = -1
   integer :: id_heat_content_cond   = -1, id_heat_content_surfwater= -1
   integer :: id_heat_content_vprec  = -1, id_heat_content_massout  = -1
-  integer :: id_heat_restore        = -1, id_heat_content_massin   = -1
+  integer :: id_heat_added          = -1, id_heat_content_massin   = -1
   integer :: id_hfrainds            = -1, id_hfrunoffds            = -1 
+
 
   ! global area integrated heat flux diagnostic handles
   integer :: id_total_net_heat_coupler    = -1, id_total_net_heat_surface      = -1
@@ -204,7 +205,7 @@ type, public :: forcing_diags
   integer :: id_total_heat_content_lprec  = -1, id_total_heat_content_fprec    = -1
   integer :: id_total_heat_content_cond   = -1, id_total_heat_content_surfwater= -1
   integer :: id_total_heat_content_vprec  = -1, id_total_heat_content_massout  = -1
-  integer :: id_total_heat_restore        = -1, id_total_heat_content_massin   = -1
+  integer :: id_total_heat_added          = -1, id_total_heat_content_massin   = -1
 
   ! global area averaged heat flux diagnostic handles
   integer :: id_net_heat_coupler_ga = -1, id_net_heat_surface_ga = -1
@@ -215,11 +216,11 @@ type, public :: forcing_diags
   ! salt flux diagnostic handles
   integer :: id_saltflux          = -1
   integer :: id_saltFluxIn        = -1
-  integer :: id_saltFluxRestore   = -1
+  integer :: id_saltFluxAdded     = -1
 
   integer :: id_total_saltflux        = -1
   integer :: id_total_saltFluxIn      = -1
-  integer :: id_total_saltFluxRestore = -1
+  integer :: id_total_saltFluxAdded   = -1
 
   integer :: id_vPrecGlobalAdj    = -1
   integer :: id_vPrecGlobalScl    = -1
@@ -415,9 +416,9 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
     net_heat(i) = scale * dt * J_m2_to_H * &
                   ( fluxes%sw(i,j) +  ((fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j)) )
 
-    ! Add heat flux from surface damping (restoring) (K * H).
-    if (ASSOCIATED(fluxes%heat_restore)) then
-       net_heat(i) = net_heat(i) + (scale * (dt * J_m2_to_H)) * fluxes%heat_restore(i,j)
+    ! Add heat flux from surface damping (restoring) (K * H) or flux adjustments.
+    if (ASSOCIATED(fluxes%heat_added)) then
+       net_heat(i) = net_heat(i) + (scale * (dt * J_m2_to_H)) * fluxes%heat_added(i,j)
     endif
 
     ! Add explicit heat flux for runoff (which is part of the ice-ocean boundary
@@ -696,7 +697,7 @@ subroutine calculateBuoyancyFlux1d(G, GV, fluxes, optics, h, Temp, Salt, tv, j, 
 
   depthBeforeScalingFluxes = max( GV%Angstrom, 1.e-30*GV%m_to_H )
   pressure(:) = 0. ! Ignore atmospheric pressure
-  GoRho       = G%g_Earth / GV%Rho0
+  GoRho       = GV%g_Earth / GV%Rho0
   start       = 1 + G%isc - G%isd
   npts        = 1 + G%iec - G%isc
 
@@ -793,69 +794,69 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, haloshift)
   ! counts, there must be no redundant points, so all variables use is..ie
   ! and js...je as their extent.
   if (associated(fluxes%taux)) &
-    call uchksum(fluxes%taux, mesg//" fluxes%taux",G,haloshift=1)
+    call uchksum(fluxes%taux, mesg//" fluxes%taux",G%HI,haloshift=1)
   if (associated(fluxes%tauy)) &
-    call vchksum(fluxes%tauy, mesg//" fluxes%tauy",G,haloshift=1)
+    call vchksum(fluxes%tauy, mesg//" fluxes%tauy",G%HI,haloshift=1)
   if (associated(fluxes%ustar)) &
-    call hchksum(fluxes%ustar, mesg//" fluxes%ustar",G,haloshift=hshift)
+    call hchksum(fluxes%ustar, mesg//" fluxes%ustar",G%HI,haloshift=hshift)
   if (associated(fluxes%buoy)) &
-    call hchksum(fluxes%buoy, mesg//" fluxes%buoy ",G,haloshift=hshift)
+    call hchksum(fluxes%buoy, mesg//" fluxes%buoy ",G%HI,haloshift=hshift)
   if (associated(fluxes%sw)) &
-    call hchksum(fluxes%sw, mesg//" fluxes%sw",G,haloshift=hshift)
+    call hchksum(fluxes%sw, mesg//" fluxes%sw",G%HI,haloshift=hshift)
   if (associated(fluxes%sw_vis_dir)) &
-    call hchksum(fluxes%sw_vis_dir, mesg//" fluxes%sw_vis_dir",G,haloshift=hshift)
+    call hchksum(fluxes%sw_vis_dir, mesg//" fluxes%sw_vis_dir",G%HI,haloshift=hshift)
   if (associated(fluxes%sw_vis_dif)) &
-    call hchksum(fluxes%sw_vis_dif, mesg//" fluxes%sw_vis_dif",G,haloshift=hshift)
+    call hchksum(fluxes%sw_vis_dif, mesg//" fluxes%sw_vis_dif",G%HI,haloshift=hshift)
   if (associated(fluxes%sw_nir_dir)) &
-    call hchksum(fluxes%sw_nir_dir, mesg//" fluxes%sw_nir_dir",G,haloshift=hshift)
+    call hchksum(fluxes%sw_nir_dir, mesg//" fluxes%sw_nir_dir",G%HI,haloshift=hshift)
   if (associated(fluxes%sw_nir_dif)) &
-    call hchksum(fluxes%sw_nir_dif, mesg//" fluxes%sw_nir_dif",G,haloshift=hshift)
+    call hchksum(fluxes%sw_nir_dif, mesg//" fluxes%sw_nir_dif",G%HI,haloshift=hshift)
   if (associated(fluxes%lw)) &
-    call hchksum(fluxes%lw, mesg//" fluxes%lw",G,haloshift=hshift)
+    call hchksum(fluxes%lw, mesg//" fluxes%lw",G%HI,haloshift=hshift)
   if (associated(fluxes%latent)) &
-    call hchksum(fluxes%latent, mesg//" fluxes%latent",G,haloshift=hshift)
+    call hchksum(fluxes%latent, mesg//" fluxes%latent",G%HI,haloshift=hshift)
   if (associated(fluxes%latent_evap_diag)) &
-    call hchksum(fluxes%latent_evap_diag, mesg//" fluxes%latent_evap_diag",G,haloshift=hshift)
+    call hchksum(fluxes%latent_evap_diag, mesg//" fluxes%latent_evap_diag",G%HI,haloshift=hshift)
   if (associated(fluxes%latent_fprec_diag)) &
-    call hchksum(fluxes%latent_fprec_diag, mesg//" fluxes%latent_fprec_diag",G,haloshift=hshift)
+    call hchksum(fluxes%latent_fprec_diag, mesg//" fluxes%latent_fprec_diag",G%HI,haloshift=hshift)
   if (associated(fluxes%latent_frunoff_diag)) &
-    call hchksum(fluxes%latent_frunoff_diag, mesg//" fluxes%latent_frunoff_diag",G,haloshift=hshift)
+    call hchksum(fluxes%latent_frunoff_diag, mesg//" fluxes%latent_frunoff_diag",G%HI,haloshift=hshift)
   if (associated(fluxes%sens)) &
-    call hchksum(fluxes%sens, mesg//" fluxes%sens",G,haloshift=hshift)
+    call hchksum(fluxes%sens, mesg//" fluxes%sens",G%HI,haloshift=hshift)
   if (associated(fluxes%evap)) &
-    call hchksum(fluxes%evap, mesg//" fluxes%evap",G,haloshift=hshift)
+    call hchksum(fluxes%evap, mesg//" fluxes%evap",G%HI,haloshift=hshift)
   if (associated(fluxes%lprec)) &
-    call hchksum(fluxes%lprec, mesg//" fluxes%lprec",G,haloshift=hshift)
+    call hchksum(fluxes%lprec, mesg//" fluxes%lprec",G%HI,haloshift=hshift)
   if (associated(fluxes%fprec)) &
-    call hchksum(fluxes%fprec, mesg//" fluxes%fprec",G,haloshift=hshift)
+    call hchksum(fluxes%fprec, mesg//" fluxes%fprec",G%HI,haloshift=hshift)
   if (associated(fluxes%vprec)) &
-    call hchksum(fluxes%vprec, mesg//" fluxes%vprec",G,haloshift=hshift)
+    call hchksum(fluxes%vprec, mesg//" fluxes%vprec",G%HI,haloshift=hshift)
   if (associated(fluxes%seaice_melt)) &
-    call hchksum(fluxes%seaice_melt, mesg//" fluxes%seaice_melt",G,haloshift=hshift)
+    call hchksum(fluxes%seaice_melt, mesg//" fluxes%seaice_melt",G%HI,haloshift=hshift)
   if (associated(fluxes%p_surf)) &
-    call hchksum(fluxes%p_surf, mesg//" fluxes%p_surf",G,haloshift=hshift)
+    call hchksum(fluxes%p_surf, mesg//" fluxes%p_surf",G%HI,haloshift=hshift)
   if (associated(fluxes%salt_flux)) &
-    call hchksum(fluxes%salt_flux, mesg//" fluxes%salt_flux",G,haloshift=hshift)
+    call hchksum(fluxes%salt_flux, mesg//" fluxes%salt_flux",G%HI,haloshift=hshift)
   if (associated(fluxes%TKE_tidal)) &
-    call hchksum(fluxes%TKE_tidal, mesg//" fluxes%TKE_tidal",G,haloshift=hshift)
+    call hchksum(fluxes%TKE_tidal, mesg//" fluxes%TKE_tidal",G%HI,haloshift=hshift)
   if (associated(fluxes%ustar_tidal)) &
-    call hchksum(fluxes%ustar_tidal, mesg//" fluxes%ustar_tidal",G,haloshift=hshift)
+    call hchksum(fluxes%ustar_tidal, mesg//" fluxes%ustar_tidal",G%HI,haloshift=hshift)
   if (associated(fluxes%lrunoff)) &
-    call hchksum(fluxes%lrunoff, mesg//" fluxes%lrunoff",G,haloshift=hshift)
+    call hchksum(fluxes%lrunoff, mesg//" fluxes%lrunoff",G%HI,haloshift=hshift)
   if (associated(fluxes%frunoff)) &
-    call hchksum(fluxes%frunoff, mesg//" fluxes%frunoff",G,haloshift=hshift)
+    call hchksum(fluxes%frunoff, mesg//" fluxes%frunoff",G%HI,haloshift=hshift)
   if (associated(fluxes%heat_content_lrunoff)) &
-    call hchksum(fluxes%heat_content_lrunoff, mesg//" fluxes%heat_content_lrunoff",G,haloshift=hshift)
+    call hchksum(fluxes%heat_content_lrunoff, mesg//" fluxes%heat_content_lrunoff",G%HI,haloshift=hshift)
   if (associated(fluxes%heat_content_frunoff)) &
-    call hchksum(fluxes%heat_content_frunoff, mesg//" fluxes%heat_content_frunoff",G,haloshift=hshift)
+    call hchksum(fluxes%heat_content_frunoff, mesg//" fluxes%heat_content_frunoff",G%HI,haloshift=hshift)
   if (associated(fluxes%heat_content_lprec)) &
-    call hchksum(fluxes%heat_content_lprec, mesg//" fluxes%heat_content_lprec",G,haloshift=hshift)
+    call hchksum(fluxes%heat_content_lprec, mesg//" fluxes%heat_content_lprec",G%HI,haloshift=hshift)
   if (associated(fluxes%heat_content_fprec)) &
-    call hchksum(fluxes%heat_content_fprec, mesg//" fluxes%heat_content_fprec",G,haloshift=hshift)
+    call hchksum(fluxes%heat_content_fprec, mesg//" fluxes%heat_content_fprec",G%HI,haloshift=hshift)
   if (associated(fluxes%heat_content_cond)) &
-    call hchksum(fluxes%heat_content_cond, mesg//" fluxes%heat_content_cond",G,haloshift=hshift)
+    call hchksum(fluxes%heat_content_cond, mesg//" fluxes%heat_content_cond",G%HI,haloshift=hshift)
   if (associated(fluxes%heat_content_massout)) &
-    call hchksum(fluxes%heat_content_massout, mesg//" fluxes%heat_content_massout",G,haloshift=hshift)
+    call hchksum(fluxes%heat_content_massout, mesg//" fluxes%heat_content_massout",G%HI,haloshift=hshift)
 end subroutine MOM_forcing_chksum
 
 
@@ -977,13 +978,13 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
        cmor_long_name='Water Evaporation Flux Where Ice Free Ocean over Sea')
 
   ! smg: seaice_melt field requires updates to the sea ice model
-  handles%id_seaice_melt = register_diag_field('ocean_model', 'seaice_melt',       &
-     diag%axesT1, Time, 'water flux to ocean from sea ice melt(> 0) or form(< 0)', &
-     'kilogram/(meter^2 * second)',                                                &
-      standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics',     &
-      cmor_field_name='fsitherm', cmor_units='kg m-2 s-1',                         &
-      cmor_standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics',&
-      cmor_long_name='water flux to ocean from sea ice melt(> 0) or form(< 0)')
+  !handles%id_seaice_melt = register_diag_field('ocean_model', 'seaice_melt',       &
+  !   diag%axesT1, Time, 'water flux to ocean from sea ice melt(> 0) or form(< 0)', &
+  !   'kilogram/(meter^2 * second)',                                                &
+  !    standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics',     &
+  !    cmor_field_name='fsitherm', cmor_units='kg m-2 s-1',                         &
+  !    cmor_standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics',&
+  !    cmor_long_name='water flux to ocean from sea ice melt(> 0) or form(< 0)')
 
   handles%id_precip = register_diag_field('ocean_model', 'precip', diag%axesT1, Time, &
         'Liquid + frozen precipitation into ocean', 'kilogram/(meter^2 * second)')
@@ -1039,12 +1040,13 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
       cmor_standard_name='water_evaporation_flux_area_integrated',                      &
       cmor_long_name='Evaporation Where Ice Free Ocean over Sea Area Integrated')
 
-  handles%id_total_seaice_melt = register_scalar_field('ocean_model', 'total_seaice_melt', Time, diag, &
-      long_name='Area integrated sea ice melt (>0) or form (<0)', units='kg/s',                        &
-      standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics_area_integrated',         &
-      cmor_field_name='total_fsitherm', cmor_units='kg s-1',                                           &
-      cmor_standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics_area_integrated',    &
-      cmor_long_name='Water Melt/Form from Sea Ice Area Integrated')
+  ! seaice_melt field requires updates to the sea ice model
+  !handles%id_total_seaice_melt = register_scalar_field('ocean_model', 'total_seaice_melt', Time, diag, &
+  !    long_name='Area integrated sea ice melt (>0) or form (<0)', units='kg/s',                        &
+  !    standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics_area_integrated',         &
+  !    cmor_field_name='total_fsitherm', cmor_units='kg s-1',                                           &
+  !    cmor_standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics_area_integrated',    &
+  !    cmor_long_name='Water Melt/Form from Sea Ice Area Integrated')
 
   handles%id_total_precip = register_scalar_field('ocean_model', 'total_precip', Time, diag, &
       long_name='Area integrated liquid+frozen precip into ocean', units='kg/s')
@@ -1178,7 +1180,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
         'Watt/m^2')
 
   handles%id_net_heat_surface = register_diag_field('ocean_model', 'net_heat_surface',diag%axesT1,  &
-        Time,'Surface ocean heat flux from SW+LW+lat+sens+mass transfer+frazil+restore', 'Watt/m^2',&
+        Time,'Surface ocean heat flux from SW+LW+lat+sens+mass transfer+frazil+restore or flux adjustments', 'Watt/m^2',&
         standard_name='surface_downward_heat_flux_in_sea_water', cmor_field_name='hfds',            &
         cmor_units='W m-2', cmor_standard_name='surface_downward_heat_flux_in_sea_water',           &
         cmor_long_name='Surface ocean heat flux from SW+LW+latent+sensible+masstransfer+frazil')
@@ -1228,8 +1230,8 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
         cmor_standard_name='surface_downward_sensible_heat_flux',                    &
         cmor_long_name='Surface Downward Sensible Heat Flux')
 
-  handles%id_heat_restore = register_diag_field('ocean_model', 'heat_restore', diag%axesT1, Time, &
-        'Restoring surface heat flux into ocean', 'Watt/m^2')
+  handles%id_heat_added = register_diag_field('ocean_model', 'heat_added', diag%axesT1, Time, &
+        'Flux Adjustment or restoring surface heat flux into ocean', 'Watt/m^2')
 
 
   !===============================================================
@@ -1303,7 +1305,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
 
   handles%id_total_net_heat_surface = register_scalar_field('ocean_model',                      &
       'total_net_heat_surface', Time, diag,                                                     &
-      long_name='Area integrated surface heat flux from SW+LW+lat+sens+mass+frazil+restore',    &
+      long_name='Area integrated surface heat flux from SW+LW+lat+sens+mass+frazil+restore or flux adjustments',    &
       units='Watt',                                                                             &
       cmor_field_name='total_hfds', cmor_units='W',                                             &
       cmor_standard_name='surface_downward_heat_flux_in_sea_water_area_integrated',             &
@@ -1374,10 +1376,11 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
       cmor_long_name=                                                          &
       'Surface Downward Sensible Heat Flux Area Integrated')
 
-  handles%id_total_heat_restore = register_scalar_field('ocean_model',&
-      'total_heat_restore', Time, diag,                               &
-      long_name='Area integrated surface heat flux from restoring',   &
+  handles%id_total_heat_added = register_scalar_field('ocean_model',&
+      'total_heat_adjustment', Time, diag,                               &
+      long_name='Area integrated surface heat flux from restoring and/or flux adjustment',   &
       units='Watt')
+
 
   !===============================================================
   ! area averaged surface heat fluxes
@@ -1389,7 +1392,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
 
   handles%id_net_heat_surface_ga = register_scalar_field('ocean_model',                       &
       'net_heat_surface_ga', Time, diag,                                                      &
-      long_name='Area averaged surface heat flux from SW+LW+lat+sens+mass+frazil+restore',    &
+      long_name='Area averaged surface heat flux from SW+LW+lat+sens+mass+frazil+restore or flux adjustments',    &
       units='W m-2',                                                                          &
       cmor_field_name='ave_hfds', cmor_units='W m-2',                                         &
       cmor_standard_name='surface_downward_heat_flux_in_sea_water_area_averaged',             &
@@ -1450,8 +1453,8 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
   handles%id_saltFluxIn = register_diag_field('ocean_model', 'salt_flux_in', diag%axesT1, Time, &
         'Salt flux into ocean at surface from coupler', 'kilogram/(meter^2 * second)')
 
-  handles%id_saltFluxRestore = register_diag_field('ocean_model', 'salt_flux_restore', &
-        diag%axesT1,Time,'Salt flux into ocean at surface due to restoring',           &
+  handles%id_saltFluxAdded = register_diag_field('ocean_model', 'salt_flux_added', &
+        diag%axesT1,Time,'Salt flux into ocean at surface due to restoring or flux adjustment',           &
         'kilogram/(meter^2 * second)')
 
   handles%id_saltFluxGlobalAdj = register_scalar_field('ocean_model',              &
@@ -1498,8 +1501,8 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
   handles%id_total_saltFluxIn = register_scalar_field('ocean_model', 'total_salt_Flux_In', &
       Time, diag, long_name='Area integrated surface salt flux at surface from coupler', units='kg')
 
-  handles%id_total_saltFluxRestore = register_scalar_field('ocean_model', 'total_salt_Flux_Restore', &
-      Time, diag, long_name='Area integrated surface salt flux due to restoring', units='kg')
+  handles%id_total_saltFluxAdded = register_scalar_field('ocean_model', 'total_salt_Flux_Added', &
+      Time, diag, long_name='Area integrated surface salt flux due to restoring or flux adjustment', units='kg')
 
 
 end subroutine register_forcing_type_diags
@@ -1569,9 +1572,9 @@ subroutine forcing_accumulate(flux_tmp, fluxes, dt, G, wt2)
 
     fluxes%salt_flux(i,j) = wt1*fluxes%salt_flux(i,j) + wt2*flux_tmp%salt_flux(i,j)
   enddo ; enddo
-  if (associated(fluxes%heat_restore) .and. associated(flux_tmp%heat_restore)) then
+  if (associated(fluxes%heat_added) .and. associated(flux_tmp%heat_added)) then
     do j=js,je ; do i=is,ie
-      fluxes%heat_restore(i,j) = wt1*fluxes%heat_restore(i,j) + wt2*flux_tmp%heat_restore(i,j)
+      fluxes%heat_added(i,j) = wt1*fluxes%heat_added(i,j) + wt2*flux_tmp%heat_added(i,j)
     enddo ; enddo
   endif
   ! These might always be associated, in which case they can be combined?
@@ -1937,7 +1940,7 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
       if (ASSOCIATED(fluxes%heat_content_cond))    sum(:,:) = sum(:,:) + fluxes%heat_content_cond(:,:)
       if (ASSOCIATED(fluxes%heat_content_massout)) sum(:,:) = sum(:,:) + fluxes%heat_content_massout(:,:)
     ! endif
-      if (ASSOCIATED(fluxes%heat_restore))         sum(:,:) = sum(:,:) + fluxes%heat_restore(:,:)
+      if (ASSOCIATED(fluxes%heat_added))         sum(:,:) = sum(:,:) + fluxes%heat_added(:,:)
       call post_data(handles%id_net_heat_surface, sum, diag)
 
       if(handles%id_total_net_heat_surface > 0) then
@@ -2089,12 +2092,13 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
       call post_data(handles%id_sens_ga, ave_flux, diag)
     endif
 
-    if ((handles%id_heat_restore > 0) .and. ASSOCIATED(fluxes%heat_restore)) then
-      call post_data(handles%id_heat_restore, fluxes%heat_restore, diag)
+    if ((handles%id_heat_added > 0) .and. ASSOCIATED(fluxes%heat_added)) then
+      call post_data(handles%id_heat_added, fluxes%heat_added, diag)
     endif
-    if ((handles%id_total_heat_restore > 0) .and. ASSOCIATED(fluxes%heat_restore)) then
-      total_transport = global_area_integral(fluxes%heat_restore,G)
-      call post_data(handles%id_total_heat_restore, total_transport, diag)
+
+    if ((handles%id_total_heat_added > 0) .and. ASSOCIATED(fluxes%heat_added)) then
+      total_transport = global_area_integral(fluxes%heat_added,G)
+      call post_data(handles%id_total_heat_added, total_transport, diag)
     endif
 
 
@@ -2107,11 +2111,11 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
       call post_data(handles%id_total_saltflux, total_transport, diag)
     endif
 
-    if ((handles%id_saltFluxRestore > 0) .and. ASSOCIATED(fluxes%salt_flux_restore)) &
-      call post_data(handles%id_saltFluxRestore, fluxes%salt_flux_restore, diag)
-    if ((handles%id_total_saltFluxRestore > 0) .and. ASSOCIATED(fluxes%salt_flux_restore)) then
-      total_transport = ppt2mks*global_area_integral(fluxes%salt_flux_restore,G)
-      call post_data(handles%id_total_saltFluxRestore, total_transport, diag)
+    if ((handles%id_saltFluxAdded > 0) .and. ASSOCIATED(fluxes%salt_flux_added)) &
+      call post_data(handles%id_saltFluxAdded, fluxes%salt_flux_added, diag)
+    if ((handles%id_total_saltFluxAdded > 0) .and. ASSOCIATED(fluxes%salt_flux_added)) then
+      total_transport = ppt2mks*global_area_integral(fluxes%salt_flux_added,G)
+      call post_data(handles%id_total_saltFluxAdded, total_transport, diag)
     endif
 
     if (handles%id_saltFluxIn > 0 .and. ASSOCIATED(fluxes%salt_flux_in)) &
@@ -2251,7 +2255,7 @@ subroutine deallocate_forcing_type(fluxes)
   if (associated(fluxes%latent_fprec_diag))    deallocate(fluxes%latent_fprec_diag)
   if (associated(fluxes%latent_frunoff_diag))  deallocate(fluxes%latent_frunoff_diag)
   if (associated(fluxes%sens))                 deallocate(fluxes%sens)
-  if (associated(fluxes%heat_restore))         deallocate(fluxes%heat_restore)
+  if (associated(fluxes%heat_added))           deallocate(fluxes%heat_added)
   if (associated(fluxes%heat_content_lrunoff)) deallocate(fluxes%heat_content_lrunoff)
   if (associated(fluxes%heat_content_frunoff)) deallocate(fluxes%heat_content_frunoff)
   if (associated(fluxes%heat_content_lprec))   deallocate(fluxes%heat_content_lprec)
@@ -2355,7 +2359,7 @@ end subroutine deallocate_forcing_type
 !!  The net flux of heat crossing ocean surface is stored in the diagnostic
 !!  array "hfds".  This array is computed as
 !! \f[
-!!  \mbox{hfds = shortwave + longwave + latent + sensible + mass transfer + frazil + restore}
+!!  \mbox{hfds = shortwave + longwave + latent + sensible + mass transfer + frazil + restore + flux adjustments}
 !! \f]
 !!
 !!  * shortwave (SW)  = shortwave radiation (always warms ocean)
@@ -2371,7 +2375,8 @@ end subroutine deallocate_forcing_type
 !!  * frazil (FRAZ)   = heat transferred to form frazil sea ice
 !!                      (positive heating of liquid ocean)
 !!  * restore (RES)   = heat from surface damping sometimes imposed
-!!                      in non-coupled model simulations.
+!!                      in non-coupled model simulations .
+!!  * restore (flux adjustments)   = heat from surface flux adjustment.
 !!
 !!  \subsubsection subsubsection_SW Treatment of shortwave
 !!

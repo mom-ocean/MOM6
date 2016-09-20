@@ -68,7 +68,7 @@ module MOM_dynamics_unsplit
 !********+*********+*********+*********+*********+*********+*********+**
 
 
-use MOM_variables, only : vertvisc_type, ocean_OBC_type, thermo_var_ptrs
+use MOM_variables, only : vertvisc_type, thermo_var_ptrs
 use MOM_variables, only : accel_diag_ptrs, ocean_internal_state, cont_diag_ptrs
 use MOM_forcing_type, only : forcing
 use MOM_checksum_packages, only : MOM_thermo_chksum, MOM_state_chksum, MOM_accel_chksum
@@ -102,8 +102,9 @@ use MOM_hor_visc, only : horizontal_viscosity, hor_visc_init, hor_visc_CS
 use MOM_interface_heights, only : find_eta
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types, only : MEKE_type
-use MOM_open_boundary, only : Radiation_Open_Bdry_Conds, open_boundary_init
-use MOM_open_boundary, only : open_boundary_CS
+use MOM_open_boundary, only : ocean_OBC_type
+use MOM_open_boundary, only : Radiation_Open_Bdry_Conds
+use MOM_boundary_update, only : update_OBC_data
 use MOM_PressureForce, only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc, only : set_viscous_BBL, set_viscous_ML, set_visc_CS
 use MOM_tidal_forcing, only : tidal_forcing_init, tidal_forcing_CS
@@ -155,7 +156,6 @@ type, public :: MOM_dyn_unsplit_CS ; private
   type(PressureForce_CS), pointer :: PressureForce_CSp => NULL()
   type(vertvisc_CS), pointer :: vertvisc_CSp => NULL()
   type(set_visc_CS), pointer :: set_visc_CSp => NULL()
-  type(open_boundary_CS), pointer :: open_boundary_CSp => NULL()
   type(ocean_OBC_type), pointer :: OBC => NULL() ! A pointer to an open boundary
      ! condition type that specifies whether, where, and  what open boundary
      ! conditions are used.  If no open BCs are used, this pointer stays
@@ -313,8 +313,8 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
 
 ! CAu = -(f+zeta)/h_av vh + d/dx KE
   call cpu_clock_begin(id_clock_Cor)
-  call CorAdCalc(u, v, h_av, uh, vh, CS%CAu, CS%CAv, CS%ADp, G, GV, &
-                 CS%CoriolisAdv_CSp)
+  call CorAdCalc(u, v, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, &
+                 G, GV, CS%CoriolisAdv_CSp)
   call cpu_clock_end(id_clock_Cor)
 
 ! PFu = d/dx M(h_av,T,S)
@@ -325,6 +325,10 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   call PressureForce(h_av, tv, CS%PFu, CS%PFv, G, GV, &
                      CS%PressureForce_CSp, CS%ALE_CSp, p_surf)
   call cpu_clock_end(id_clock_pres)
+
+  if (associated(CS%OBC)) then; if (CS%OBC%update_OBC) then
+    call update_OBC_data(CS%OBC, G, h, Time_local)
+  endif; endif
 
 ! up = u + dt_pred * (PFu + CAu)
   call cpu_clock_begin(id_clock_mom_update)
@@ -396,7 +400,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
 
 ! CAu = -(f+zeta(up))/h_av vh + d/dx KE(up)
   call cpu_clock_begin(id_clock_Cor)
-  call CorAdCalc(up, vp, h_av, uh, vh, CS%CAu, CS%CAv, CS%ADp, &
+  call CorAdCalc(up, vp, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, &
                  G, GV, CS%CoriolisAdv_CSp)
   call cpu_clock_end(id_clock_Cor)
 
@@ -408,6 +412,10 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   call PressureForce(h_av, tv, CS%PFu, CS%PFv, G, GV, &
                      CS%PressureForce_CSp, CS%ALE_CSp, p_surf)
   call cpu_clock_end(id_clock_pres)
+
+  if (associated(CS%OBC)) then; if (CS%OBC%update_OBC) then
+    call update_OBC_data(CS%OBC, G, h, Time_local)
+  endif; endif
 
 ! upp = u + dt/2 * ( PFu + CAu )
   call cpu_clock_begin(id_clock_mom_update)
@@ -473,7 +481,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
 
 ! CAu = -(f+zeta(upp))/h_av vh + d/dx KE(upp)
   call cpu_clock_begin(id_clock_Cor)
-  call CorAdCalc(upp, vpp, h_av, uh, vh, CS%CAu, CS%CAv, CS%ADp, &
+  call CorAdCalc(upp, vpp, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, &
                  G, GV, CS%CoriolisAdv_CSp)
   call cpu_clock_end(id_clock_Cor)
 
@@ -482,6 +490,10 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   call PressureForce(h_av, tv, CS%PFu, CS%PFv, G, GV, &
                      CS%PressureForce_CSp, CS%ALE_CSp, p_surf)
   call cpu_clock_end(id_clock_pres)
+
+  if (associated(CS%OBC)) then; if (CS%OBC%update_OBC) then
+    call update_OBC_data(CS%OBC, G, h, Time_local)
+  endif; endif
 
 ! u = u + dt * ( PFu + CAu )
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
@@ -679,10 +691,7 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, param_file, diag, CS, &
   CS%set_visc_CSp => setVisc_CSp
 
   if (associated(ALE_CSp)) CS%ALE_CSp => ALE_CSp
-  if (associated(OBC)) then
-    CS%OBC => OBC
-    call open_boundary_init(Time, G, param_file, diag, CS%open_boundary_CSp)
-  endif
+  if (associated(OBC)) CS%OBC => OBC
 
   flux_units = get_flux_units(GV)
   CS%id_uh = register_diag_field('ocean_model', 'uh', diag%axesCuL, Time, &
