@@ -34,8 +34,10 @@ implicit none ; private
 public lowercase, uppercase
 public left_int, left_ints
 public left_real, left_reals
-public stringFunctionsUnitTests
+public string_functions_unit_tests
 public extractWord
+public extract_word
+public remove_spaces
 public slasher
 
 contains
@@ -206,52 +208,85 @@ function isFormattedFloatEqualTo(str, val)
  987 return
 end function isFormattedFloatEqualTo
 
-function extractWord(string,n)
-! Returns string corresponding to the nth word in the argument
-! or "" if the string is not long enough. Both spaces and commas
-! are interpretted as separators.
-  character(len=*), intent(in) :: string
-  integer,          intent(in) :: n
-  character(len=120) :: extractWord
+!> Returns the string corresponding to the nth word in the argument
+!! or "" if the string is not long enough. Both spaces and commas
+!! are interpreted as separators.
+character(len=120) function extractWord(string, n)
+  character(len=*),   intent(in) :: string
+  integer,            intent(in) :: n
+
+  extractWord = extract_word(string, ' ,', n)
+
+end function extractWord
+
+!> Returns the string corresponding to the nth word in the argument
+!! or "" if the string is not long enough. Words are delineated
+!! by the mandatory separators argument.
+character(len=120) function extract_word(string, separators, n)
+  character(len=*),   intent(in) :: string     !< String to scan
+  character(len=*),   intent(in) :: separators !< Characters to use for delineation
+  integer,            intent(in) :: n          !< Number of word to extract
   ! Local variables
   integer :: ns, i, b, e, nw
   logical :: lastCharIsSeperator
-  extractWord = ''
+  extract_word = ''
   lastCharIsSeperator = .true.
   ns = len_trim(string)
   i = 0; b=0; e=0; nw=0;
   do while (i<ns)
     i = i+1
     if (lastCharIsSeperator) then ! search for end of word
-      if (string(i:i)==' ' .or. string(i:i)==',') then
-        continue ! Multiple separators, .e.g '  ' or ', '
+      if (verify(string(i:i),separators)==0) then
+        continue ! Multiple separators
       else
         lastCharIsSeperator = .false. ! character is beginning of word
         b = i
         continue
       endif
     else ! continue search for end of word
-      if (string(i:i)==' ' .or. string(i:i)==',') then
+      if (verify(string(i:i),separators)==0) then
         lastCharIsSeperator = .true.
         e = i-1 ! Previous character is end of word
         nw = nw+1
         if (nw==n) then
-          extractWord = trim(string(b:e))
+          extract_word = trim(string(b:e))
           return
         endif
       endif
     endif
   enddo
-  if (b<=ns) extractWord = trim(string(b:ns))
-end function extractWord
+  if (b<=ns .and. nw==n-1) extract_word = trim(string(b:ns))
+end function extract_word
 
-logical function stringFunctionsUnitTests()
+!> Returns string with all spaces removed.
+character(len=120) function remove_spaces(string)
+  character(len=*),   intent(in) :: string     !< String to scan
+  ! Local variables
+  integer :: ns, i, o
+  logical :: lastCharIsSeperator
+  lastCharIsSeperator = .true.
+  ns = len_trim(string)
+  i = 0; o = 0
+  do while (i<ns)
+    i = i+1
+    if (string(i:i) /= ' ') then ! Copy character to output string
+      o = o + 1
+      remove_spaces(o:o) = string(i:i)
+    endif
+  enddo
+  do i = o+1, 120
+    remove_spaces(i:i) = ' ' ! Wipe any non-empty characters
+  enddo
+  remove_spaces = trim(remove_spaces)
+end function remove_spaces
+
+logical function string_functions_unit_tests()
   ! Should only be called from a single/root thread
   ! Returns True is a test fails, otherwise False
   integer :: i(5) = (/ -1, 1, 3, 3, 0 /)
   real :: r(8) = (/ 0., 1., -2., 1.3, 3.E-11, 3.E-11, 3.E-11, -5.1E12 /)
-  stringFunctionsUnitTests = .false.
-  write(*,*) '===== MOM_string_functions: stringFunctionsUnitTests ====='
+  string_functions_unit_tests = .false.
+  write(*,*) '==== MOM_string_functions: string_functions_unit_tests ==='
   call localTest(left_int(i(1)),'-1')
   call localTest(left_ints(i(:)),'-1, 1, 3, 3, 0')
   call localTest(left_real(r(1)),'0.0')
@@ -263,15 +298,17 @@ logical function stringFunctionsUnitTests()
   call localTest(extractWord("One Two,Three",3),"Three")
   call localTest(extractWord("One Two,  Three",3),"Three")
   call localTest(extractWord(" One Two,Three",1),"One")
+  call localTest(extract_word("One,Two,Three",",",3),"Three")
+  call localTest(extract_word("One,Two,Three",",",4),"")
   write(*,*) '=========================================================='
   contains
   subroutine localTest(str1,str2)
     character(len=*) :: str1, str2
     write(*,*) '>'//trim(str1)//'<'
     if (trim(str1)/=trim(str2)) write(*,*) 'FAIL:',trim(str1),':',trim(str2)
-    if (trim(str1)/=trim(str2)) stringFunctionsUnitTests=.true.
+    if (trim(str1)/=trim(str2)) string_functions_unit_tests=.true.
   end subroutine localTest
-end function stringFunctionsUnitTests
+end function string_functions_unit_tests
 
 !> Returns a directory name that is terminated with a "/" or "./" if the
 !! argument is an empty string.

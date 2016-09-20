@@ -32,6 +32,7 @@ use MOM_coms,                 only : reproducing_sum
 use MOM_coord_initialization, only : MOM_initialize_coord
 use MOM_diag_mediator,        only : diag_mediator_init, enable_averaging
 use MOM_diag_mediator,        only : diag_mediator_infrastructure_init
+use MOM_diag_mediator,        only : diag_register_area_ids
 use MOM_diag_mediator,        only : diag_set_thickness_ptr, diag_update_target_grids
 use MOM_diag_mediator,        only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator,        only : register_diag_field, register_static_field
@@ -215,7 +216,10 @@ type, public :: MOM_control_struct
                                      !! a previous time-step or the ocean restart file.
                                      !! This is only valid when interp_p_surf is true.
 
-  real :: Hmix                       !< diagnostic mixed layer thickness (meter) when
+  real :: Hmix                       !< Diagnostic mixed layer thickness (meter) when
+                                     !! bulk mixed layer is not used.
+  real :: Hmix_UV                    !< Depth scale over which to average surface flow to
+                                     !! feedback to the coupler/driver (m).
                                      !! bulk mixed layer is not used.
   logical :: usehmix                 !< If true, surface properties (e.g., SST) are averaged
                                      !! over a distance given by HMIX_SFC_PROP. This parameter
@@ -1161,7 +1165,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       if (Time_local + set_time(int(0.5*dt_therm)) > CS%Z_diag_time) then
         call enable_averaging(real(time_type_to_real(CS%Z_diag_interval)), &
                               CS%Z_diag_time, CS%diag)
-        call calculate_Z_diag_fields(u, v, h, ssh,CS%dt_trans, &
+        call calculate_Z_diag_fields(u, v, h, ssh, CS%dt_trans, &
                                      G, GV, CS%diag_to_Z_CSp)
         CS%Z_diag_time = CS%Z_diag_time + CS%Z_diag_interval
         call disable_averaging(CS%diag)
@@ -1557,8 +1561,13 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
     call get_param(param_file, "MOM", "HMIX_SFC_PROP", CS%Hmix, &
                  "If BULKMIXEDLAYER is false, HMIX_SFC_PROP is the depth \n"//&
                  "over which to average to find surface properties like \n"//&
-                 "SST, SSS,  density are surface velocities.", &
+                 "SST and SSS or density (but not surface velocities).", &
                  units="m", default=1.0)
+    call get_param(param_file, "MOM", "HMIX_UV_SFC_PROP", CS%Hmix_UV, &
+                 "If BULKMIXEDLAYER is false, HMIX_UV_SFC_PROP is the depth\n"//&
+                 "over which to average to find surface flow properties,\n"//&
+                 "SSU, SSV. A non-positive value indicates no averaging.", &
+                 units="m", default=0.)
   endif
   call get_param(param_file, "MOM", "MIN_Z_DIAG_INTERVAL", Z_diag_int, &
                  "The minimum amount of time in seconds between \n"//&
@@ -1965,6 +1974,10 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   ! for vertical remapping may need to be regenerated. 
   call diag_update_target_grids(diag)
 
+  ! Diagnose static fields AND associate areas/volumes with axes
+  call write_static_fields(G, CS%diag)
+  call callTree_waypoint("static fields written (initialize_MOM)")
+
   call cpu_clock_begin(id_clock_MOM_init)
   if (CS%use_ALE_algorithm) then
     call ALE_writeCoordinateFile( CS%ALE_CSp, GV, dirs%output_directory )
@@ -2089,9 +2102,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call register_obsolete_diagnostics(param_file, CS%diag)
   call neutral_diffusion_diag_init(Time, G, diag, CS%tv%C_p, CS%tracer_Reg, CS%neutral_diffusion_CSp)
 
-  call write_static_fields(G, CS%diag)
-  call callTree_waypoint("static fields written (initialize_MOM)")
-
   if (CS%use_frazil) then
     if (.not.query_initialized(CS%tv%frazil,"frazil",CS%restart_CSp)) &
       CS%tv%frazil(:,:) = 0.0
@@ -2118,10 +2128,10 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                 .not.((dirs%input_filename(1:1) == 'r') .and. &
                       (LEN_TRIM(dirs%input_filename) == 1))
 
-  ! Undocumented parameter: set DO_UNIT_TESTS=True to invoke unitTests s/r
+  ! Undocumented parameter: set DO_UNIT_TESTS=True to invoke unit_tests s/r
   ! which calls unit tests provided by some modules.
   call get_param(param_file, "MOM", "DO_UNIT_TESTS", do_unit_tests, default=.false.)
-  if (do_unit_tests) call unitTests
+  if (do_unit_tests) call unit_tests
 
   call callTree_leave("initialize_MOM()")
   call cpu_clock_end(id_clock_init)
@@ -2169,25 +2179,29 @@ subroutine finish_MOM_initialization(Time, dirs, CS, fluxes)
 end subroutine finish_MOM_initialization
 
 
-!> This s/r calls unit tests for other modules. These are NOT normally invoked
-!! and so we provide the module use statments here rather than in the module
+!> Calls unit tests for other modules. These are NOT normally invoked
+!! and so we provide the module use statements here rather than in the module
 !! header. This is an exception to our usual coding standards.
 !! Note that if a unit test returns true, a FATAL error is triggered.
-subroutine unitTests
-  use MOM_string_functions,  only : stringFunctionsUnitTests
-  use MOM_remapping,         only : remappingUnitTests
-  use MOM_neutral_diffusion, only : neutralDiffusionUnitTests
+subroutine unit_tests
+  use MOM_string_functions,  only : string_functions_unit_tests
+  use MOM_remapping,         only : remapping_unit_tests
+  use MOM_neutral_diffusion, only : neutral_diffusion_unit_tests
+  use MOM_diag_vkernels,     only : diag_vkernels_unit_tests
 
   if (is_root_pe()) then ! The following need only be tested on 1 PE
-    if (stringFunctionsUnitTests()) call MOM_error(FATAL, &
-       "MOM/initialize_MOM/unitTests: stringFunctionsUnitTests FAILED")
-    if (remappingUnitTests()) call MOM_error(FATAL, &
-       "MOM/initialize_MOM/unitTests: remappingUnitTests FAILED")
-    if (neutralDiffusionUnitTests()) call MOM_error(FATAL, &
-       "MOM/initialize_MOM/unitTests: neutralDiffusionUnitTests FAILED")
+    if (string_functions_unit_tests()) call MOM_error(FATAL, &
+       "MOM/initialize_MOM/unit_tests: string_functions_unit_tests FAILED")
+    if (remapping_unit_tests()) call MOM_error(FATAL, &
+       "MOM/initialize_MOM/unit_tests: remapping_unit_tests FAILED")
+    if (neutral_diffusion_unit_tests()) call MOM_error(FATAL, &
+       "MOM/initialize_MOM/unit_tests: neutralDiffusionUnitTests FAILED")
+    if (diag_vkernels_unit_tests()) call MOM_error(FATAL, &
+       "MOM/initialize_MOM/unit_tests: diag_vkernels_unit_tests FAILED")
+
   endif
 
-end subroutine unitTests
+end subroutine unit_tests
 
 
 !> Register the diagnostics
@@ -2704,8 +2718,8 @@ end subroutine post_diags_TS_vardec
 !> Offers the static fields in the ocean grid type
 !! for output via the diag_manager.
 subroutine write_static_fields(G, diag)
-  type(ocean_grid_type),   intent(in) :: G      !< ocean grid structure
-  type(diag_ctrl), target, intent(in) :: diag   !< regulates diagnostic output
+  type(ocean_grid_type),   intent(in)    :: G      !< ocean grid structure
+  type(diag_ctrl), target, intent(inout) :: diag   !< regulates diagnostic output
 
   ! The out_X arrays are needed because some of the elements of the grid
   ! type may be reduced rank macros.
@@ -2754,57 +2768,59 @@ subroutine write_static_fields(G, diag)
   if (id > 0) then
     do j=js,je ; do i=is,ie ; out_h(i,j) = G%areaT(i,j) ; enddo ; enddo
     call post_data(id, out_h, diag, .true.)
+    call diag_register_area_ids(diag, id_area_t=id)
   endif
 
   id = register_static_field('ocean_model', 'depth_ocean', diag%axesT1,  &
         'Depth of the ocean at tracer points', 'm',                      &
         standard_name='sea_floor_depth_below_geoid',                     &
         cmor_field_name='deptho', cmor_long_name='Sea Floor Depth',      &
-        cmor_units='m', cmor_standard_name='sea_floor_depth_below_geoid')
+        cmor_units='m', cmor_standard_name='sea_floor_depth_below_geoid',&
+        area=diag%axesT1%id_area)
   if (id > 0) call post_data(id, G%bathyT, diag, .true., mask=G%mask2dT)
 
   id = register_static_field('ocean_model', 'wet', diag%axesT1, &
-        '0 if land, 1 if ocean at tracer points', 'none')
+        '0 if land, 1 if ocean at tracer points', 'none', area=diag%axesT1%id_area)
   if (id > 0) call post_data(id, G%mask2dT, diag, .true.)
 
   id = register_static_field('ocean_model', 'wet_c', diag%axesB1, &
-        '0 if land, 1 if ocean at corner (Bu) points', 'none')
+        '0 if land, 1 if ocean at corner (Bu) points', 'none', interp_method='none')
   if (id > 0) call post_data(id, G%mask2dBu, diag, .true.)
 
   id = register_static_field('ocean_model', 'wet_u', diag%axesCu1, &
-        '0 if land, 1 if ocean at zonal velocity (Cu) points', 'none')
+        '0 if land, 1 if ocean at zonal velocity (Cu) points', 'none', interp_method='none')
   if (id > 0) call post_data(id, G%mask2dCu, diag, .true.)
 
   id = register_static_field('ocean_model', 'wet_v', diag%axesCv1, &
-        '0 if land, 1 if ocean at meridional velocity (Cv) points', 'none')
+        '0 if land, 1 if ocean at meridional velocity (Cv) points', 'none', interp_method='none')
   if (id > 0) call post_data(id, G%mask2dCv, diag, .true.)
 
   id = register_static_field('ocean_model', 'Coriolis', diag%axesB1, &
-        'Coriolis parameter at corner (Bu) points', 's-1')
+        'Coriolis parameter at corner (Bu) points', 's-1', interp_method='none')
   if (id > 0) call post_data(id, G%CoriolisBu, diag, .true.)
 
   id = register_static_field('ocean_model', 'dxt', diag%axesT1, &
-        'Delta(x) at thickness/tracer points (meter)', 'm')
+        'Delta(x) at thickness/tracer points (meter)', 'm', interp_method='none')
   if (id > 0) call post_data(id, G%dxt, diag, .true.)
 
   id = register_static_field('ocean_model', 'dyt', diag%axesT1, &
-        'Delta(y) at thickness/tracer points (meter)', 'm')
+        'Delta(y) at thickness/tracer points (meter)', 'm', interp_method='none')
   if (id > 0) call post_data(id, G%dyt, diag, .true.)
 
   id = register_static_field('ocean_model', 'dxCu', diag%axesCu1, &
-        'Delta(x) at u points (meter)', 'm')
+        'Delta(x) at u points (meter)', 'm', interp_method='none')
   if (id > 0) call post_data(id, G%dxCu, diag, .true.)
 
   id = register_static_field('ocean_model', 'dyCu', diag%axesCu1, &
-        'Delta(y) at u points (meter)', 'm')
+        'Delta(y) at u points (meter)', 'm', interp_method='none')
   if (id > 0) call post_data(id, G%dyCu, diag, .true.)
 
   id = register_static_field('ocean_model', 'dxCv', diag%axesCv1, &
-        'Delta(x) at v points (meter)', 'm')
+        'Delta(x) at v points (meter)', 'm', interp_method='none')
   if (id > 0) call post_data(id, G%dxCv, diag, .true.)
 
   id = register_static_field('ocean_model', 'dyCv', diag%axesCv1, &
-        'Delta(y) at v points (meter)', 'm')
+        'Delta(y) at v points (meter)', 'm', interp_method='none')
   if (id > 0) call post_data(id, G%dyCv, diag, .true.)
 
 
@@ -2885,15 +2901,13 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
   real, optional, pointer, dimension(:,:)                       :: p_atm  !< atmospheric pressure (Pascal)
 
   ! local
-  real :: hu(SZIB_(G),SZJ_(G),SZK_(G))! layer thickness (m or kg/m2) at u points 
-  real :: hv(SZI_(G),SZJB_(G),SZK_(G))! layer thickness (m or kg/m2) at v points 
   real :: depth(SZI_(G))              ! distance from the surface (meter)
   real :: depth_ml                    ! depth over which to average to
                                       ! determine mixed layer properties (meter)
   real :: dh                          ! thickness of a layer within mixed layer (meter)
   real :: mass                        ! mass per unit area of a layer (kg/m2)
 
-  real :: IgR0
+  real :: IgR0, hu, hv
   integer :: i, j, k, is, ie, js, je, nz, numberOfErrors
   integer :: isd, ied, jsd, jed 
   integer :: iscB, iecB, jscB, jecB, isdB, iedB, jsdB, jedB
@@ -2989,66 +3003,66 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
       enddo
     enddo ! end of j loop
 
- !   Determine the mean velocities in the uppermost depth_ml fluid.
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,CS,state,h,depth_ml,GV) private(depth,dh)
-    do j=js,je
-      
-      do i=is,ie
-        depth(i) = 0.0
-        state%v(i,j) = 0.0
-        hv(i,j,:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
-      enddo
+!   Determine the mean velocities in the uppermost depth_ml fluid.
+    if (CS%Hmix_UV>0.) then
+      depth_ml = CS%Hmix_UV
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,iscB,iecB,jscB,jecB,CS,state,h,v,depth_ml,GV) private(depth,dh,hv)
+      do J=jscB,jecB
+        do i=is,ie
+          depth(i) = 0.0
+          state%v(i,J) = 0.0
+        enddo
+        do k=1,nz ; do i=is,ie
+          hv = 0.5 * (h(i,j,k) + h(i,j+1,k)) * GV%H_to_m
+          if (depth(i) + hv < depth_ml) then
+            dh = hv
+          elseif (depth(i) < depth_ml) then
+            dh = depth_ml - depth(i)
+          else
+            dh = 0.0
+          endif
+          state%v(i,J) = state%v(i,J) + dh * v(i,J,k)
+          depth(i) = depth(i) + dh
+        enddo ; enddo
+        ! Calculate the average properties of the mixed layer depth.
+        do i=is,ie
+          if (depth(i) < GV%H_subroundoff*GV%H_to_m) &
+              depth(i) = GV%H_subroundoff*GV%H_to_m
+          state%v(i,j) = state%v(i,j) / depth(i)
+        enddo
+      enddo ! end of j loop
 
-      do k=1,nz ; do i=is,ie
-        if (depth(i) + hv(i,j,k)*GV%H_to_m < depth_ml) then
-          dh = hv(i,j,k)*GV%H_to_m
-        elseif (depth(i) < depth_ml) then
-          dh = depth_ml - depth(i)
-        else
-          dh = 0.0
-        endif
-        state%v(i,j) = state%v(i,j) + dh * v(i,j,k)
-        depth(i) = depth(i) + dh
-      enddo ; enddo
-  ! Calculate the average properties of the mixed layer depth.
-      do i=is,ie
-        if (depth(i) < GV%H_subroundoff*GV%H_to_m) &
-            depth(i) = GV%H_subroundoff*GV%H_to_m
-        state%v(i,j) = state%v(i,j) / depth(i)
-      enddo
-    enddo ! end of j loop
-
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,CS,state,h,depth_ml,GV) private(depth,dh)
-    do j=js,je
- 
-      do i=is,ie
-        depth(i) = 0.0
-        state%u(i,j) = 0.0
-        hu(i,j,:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
-      enddo
-
-      do k=1,nz ; do i=is,ie
-        if (depth(i) + hu(i,j,k)*GV%H_to_m < depth_ml) then
-          dh = hu(i,j,k)*GV%H_to_m
-        elseif (depth(i) < depth_ml) then
-          dh = depth_ml - depth(i)
-        else
-          dh = 0.0
-        endif
-        state%u(i,j) = state%u(i,j) + dh * u(i,j,k)
-        depth(i) = depth(i) + dh
-      enddo ; enddo
-  ! Calculate the average properties of the mixed layer depth.
-      do i=is,ie
-        if (depth(i) < GV%H_subroundoff*GV%H_to_m) &
-            depth(i) = GV%H_subroundoff*GV%H_to_m
-        state%u(i,j) = state%u(i,j) / depth(i)
-      enddo
-    enddo ! end of j loop
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,iscB,iecB,jscB,jecB,CS,state,h,u,depth_ml,GV) private(depth,dh,hu)
+      do j=js,je
+        do I=iscB,iecB
+          depth(I) = 0.0
+          state%u(I,j) = 0.0
+        enddo
+        do k=1,nz ; do I=iscB,iecB
+          hu = 0.5 * (h(i,j,k) + h(i+1,j,k)) * GV%H_to_m
+          if (depth(i) + hu < depth_ml) then
+            dh = hu
+          elseif (depth(I) < depth_ml) then
+            dh = depth_ml - depth(I)
+          else
+            dh = 0.0
+          endif
+          state%u(I,j) = state%u(I,j) + dh * u(I,j,k)
+          depth(I) = depth(I) + dh
+        enddo ; enddo
+        ! Calculate the average properties of the mixed layer depth.
+        do I=iscB,iecB
+          if (depth(I) < GV%H_subroundoff*GV%H_to_m) &
+              depth(I) = GV%H_subroundoff*GV%H_to_m
+          state%u(I,j) = state%u(I,j) / depth(I)
+        enddo
+      enddo ! end of j loop
+    else ! Hmix_UV<=0.
+      state%u => u(:,:,1)
+      state%v => v(:,:,1)
+    endif
   endif                                              ! end BULKMIXEDLAYER
 
-  !state%u => u(:,:,1)
-  !state%v => v(:,:,1)
   state%frazil => CS%tv%frazil
   state%TempxPmE => CS%tv%TempxPmE
   state%internal_heat => CS%tv%internal_heat

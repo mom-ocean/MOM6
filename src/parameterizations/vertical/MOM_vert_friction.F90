@@ -388,16 +388,18 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, GV, CS, &
   call vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, GV, CS)
 
   ! Here the velocities associated with open boundary conditions are applied.
-  if (associated(OBC)) then ; if (OBC%this_pe) then
-    if (OBC%apply_OBC_u) then
+  if (associated(OBC)) then ; if (OBC%OBC_pe) then
+    if (OBC%specified_u_BCs_exist_globally) then
       do k=1,nz ; do j=G%jsc,G%jec ; do I=Isq,Ieq
-        if (OBC%OBC_mask_u(I,j) .and. (OBC%OBC_kind_u(I,j) == OBC_SIMPLE)) &
+        if (OBC%OBC_mask_u(I,j) .and. &
+            (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%specified)) &
           u(I,j,k) = OBC%u(I,j,k)
       enddo ; enddo ; enddo
     endif
-    if (OBC%apply_OBC_v) then
+    if (OBC%specified_v_BCs_exist_globally) then
       do k=1,nz ; do J=Jsq,Jeq ; do i=G%isc,G%iec
-        if (OBC%OBC_mask_v(i,J) .and. (OBC%OBC_kind_v(i,J) == OBC_SIMPLE)) &
+        if (OBC%OBC_mask_v(i,J) .and. &
+            (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%specified)) &
           v(i,J,k) = OBC%v(i,J,k)
       enddo ; enddo ; enddo
     endif

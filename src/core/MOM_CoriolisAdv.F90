@@ -67,6 +67,7 @@ use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
+use MOM_open_boundary, only : ocean_OBC_type
 use MOM_string_functions, only : uppercase
 use MOM_variables,     only : accel_diag_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
@@ -163,7 +164,7 @@ character*(20), parameter :: PV_ADV_UPWIND1_STRING = "PV_ADV_UPWIND1"
 
 contains
 
-subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, AD, G, GV, CS)
+subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
   type(ocean_grid_type),                     intent(in)    :: G
   type(verticalGrid_type),                   intent(in)    :: GV
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
@@ -173,6 +174,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, AD, G, GV, CS)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vh
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: CAu
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: CAv
+  type(ocean_OBC_type),                      pointer       :: OBC
   type(accel_diag_ptrs),                     intent(inout) :: AD
   type(CoriolisAdv_CS),                      pointer       :: CS
 !    This subroutine calculates the Coriolis and momentum advection
@@ -289,7 +291,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, AD, G, GV, CS)
   h_tiny = GV%Angstrom  ! Perhaps this should be set to h_neglect instead.
 
 !$OMP parallel default(none) shared(u,v,h,uh,vh,CAu,CAv,G,CS,AD,Area_h,Area_q,nz,RV,PV, &
-!$OMP                               is,ie,js,je,Isq,Ieq,Jsq,Jeq,h_neglect,h_tiny)       &
+!$OMP                               is,ie,js,je,Isq,Ieq,Jsq,Jeq,h_neglect,h_tiny,OBC)   &
 !$OMP                       private(relative_vorticity,absolute_vorticity,Ih,hArea_q,q, &
 !$OMP                               abs_vort,Ih_q,fv1,fv2,fu1,fu2,max_fvq,max_fuq,      &
 !$OMP                               min_fvq,min_fuq,q2,a,b,c,d,ep_u,ep_v,Fe_m2,rat_lin, &
@@ -479,7 +481,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, AD, G, GV, CS)
     endif
 
 ! Calculate KE and the gradient of KE
-    call gradKE(u, v, h, uh, vh, KE, KEx, KEy, k, G, CS)
+    call gradKE(u, v, h, uh, vh, KE, KEx, KEy, k, OBC, G, CS)
 
 !    Calculate the tendencies of zonal velocity due to the Coriolis
 !  force and momentum advection.  On a Cartesian grid, this is
@@ -754,7 +756,7 @@ end subroutine CorAdCalc
 
 ! =========================================================================================
 
-subroutine gradKE(u, v, h, uh, vh, KE, KEx, KEy, k, G, CS)
+subroutine gradKE(u, v, h, uh, vh, KE, KEx, KEy, k, OBC, G, CS)
   type(ocean_grid_type),                      intent(in)  :: G
   real, dimension(SZIB_(G),SZJ_(G) ,SZK_(G)), intent(in)  :: u
   real, dimension(SZI_(G) ,SZJB_(G),SZK_(G)), intent(in)  :: v
@@ -765,6 +767,7 @@ subroutine gradKE(u, v, h, uh, vh, KE, KEx, KEy, k, G, CS)
   real, dimension(SZIB_(G),SZJ_(G) ),         intent(out) :: KEx
   real, dimension(SZI_(G) ,SZJB_(G)),         intent(out) :: KEy
   integer,                                    intent(in)  :: k
+  type(ocean_OBC_type),                       pointer     :: OBC
   type(CoriolisAdv_CS),                       pointer     :: CS
 !    This subroutine calculates the acceleration due to the gradient of kinetic energy.
 !
@@ -835,6 +838,15 @@ subroutine gradKE(u, v, h, uh, vh, KE, KEx, KEy, k, G, CS)
   do J=Jsq,Jeq ; do i=is,ie
     KEy(i,J) = (KE(i,j+1) - KE(i,j)) * G%IdyCv(i,J)
   enddo ; enddo
+
+  if (associated(OBC)) then
+    do j=js,je ; do I=Isq,Ieq
+      if (OBC%OBC_segment_u(I,j)>0) KEx(I,j) = 0.
+    enddo ; enddo
+    do J=Jsq,Jeq ; do i=is,ie
+      if (OBC%OBC_segment_v(i,J)>0) KEy(i,J) = 0.
+    enddo ; enddo
+  endif
 
 end subroutine gradKE
 

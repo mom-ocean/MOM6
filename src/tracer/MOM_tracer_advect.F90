@@ -470,7 +470,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
       enddo ; enddo
     endif ! usePPM
 
-    if (associated(OBC)) then ; if (OBC%this_pe) then ; if (OBC%apply_OBC_u) then
+    if (associated(OBC)) then ; if (OBC%OBC_pe) then ; if (OBC%specified_u_BCs_exist_globally) then
       do_any_i = .false.
       do I=is-1,ie
         do_i(I) = .false.
@@ -730,7 +730,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
       enddo ; enddo
     endif ! usePPM
 
-    if (associated(OBC)) then ; if (OBC%this_pe) then ; if (OBC%apply_OBC_v) then
+    if (associated(OBC)) then ; if (OBC%OBC_pe) then ; if (OBC%specified_v_BCs_exist_globally) then
       do_any_i = .false.
       do i=is,ie
         do_i(i) = .false.

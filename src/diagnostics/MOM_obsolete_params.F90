@@ -46,6 +46,19 @@ subroutine find_obsolete_params(param_file)
   call obsolete_logical(param_file, "BT_CONT_BT_THICK", &
        hint="Instead use BT_THICK_SCHEME='FROM_BT_CONT'.")
 
+  call obsolete_logical(param_file, "APPLY_OBC_U", &
+       hint="Instead use OBC_NUMBER_SEGMENTS>0 and use the new segments protocol.")
+  call obsolete_logical(param_file, "APPLY_OBC_V", &
+       hint="Instead use OBC_NUMBER_SEGMENTS>0 and use the new segments protocol.")
+  call obsolete_logical(param_file, "APPLY_OBC_V_FLATHER_NORTH", &
+       hint="Instead use OBC_NUMBER_SEGMENTS>0 and use the new segments protocol.")
+  call obsolete_logical(param_file, "APPLY_OBC_V_FLATHER_SOUTH", &
+       hint="Instead use OBC_NUMBER_SEGMENTS>0 and use the new segments protocol.")
+  call obsolete_logical(param_file, "APPLY_OBC_U_FLATHER_EAST", &
+       hint="Instead use OBC_NUMBER_SEGMENTS>0 and use the new segments protocol.")
+  call obsolete_logical(param_file, "APPLY_OBC_U_FLATHER_WEST", &
+       hint="Instead use OBC_NUMBER_SEGMENTS>0 and use the new segments protocol.")
+
   test_logic3 = .true. ; call read_param(param_file,"ENABLE_THERMODYNAMICS",test_logic3)
   test_logic = .true. ; call read_param(param_file,"TEMPERATURE",test_logic)
   test_logic2 = .false. ; call read_param(param_file,"TEMPERATURE",test_logic2)
