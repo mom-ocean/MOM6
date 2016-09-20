@@ -291,7 +291,7 @@ program MOM_main
 
   use_waves=.false. ; call read_param(param_file,"USE_WAVES",Use_Waves)
   if (use_waves) then
-     call MOM_wave_interface_init(grid,GV,param_file,MOM_CSp%Wave_Parameter_CSp)
+     call MOM_wave_interface_init(Time,grid,GV,param_file,MOM_CSp%Wave_Parameter_CSp,MOM_CSp%diag)
   endif
 
   call MOM_sum_output_init(grid, param_file, dirs%output_directory, &

@@ -100,6 +100,8 @@ type, public :: KPP_CS ; private
   integer :: id_NLT_dTdt = -1
   integer :: id_NLT_temp_budget = -1
   integer :: id_NLT_saln_budget = -1
+  integer :: id_us20pct = -1, id_vs20pct = -1
+  integer :: id_ussurf = -1, id_vssurf = -1
 
   ! Diagnostics arrays
   real, allocatable, dimension(:,:)   :: OBLdepth  !< Depth (positive) of OBL (m)
@@ -118,6 +120,11 @@ type, public :: KPP_CS ; private
   real, allocatable, dimension(:,:)   :: Ssurf     !< Salinity of surface layer (ppt)
   real, allocatable, dimension(:,:)   :: Usurf     !< i-velocity of surface layer (m/s)
   real, allocatable, dimension(:,:)   :: Vsurf     !< j-velocity of surface layer (m/s)
+  real, allocatable, dimension(:,:)   :: Us20pct   !< i-velocity of surface layer Stokes (m/s)
+  real, allocatable, dimension(:,:)   :: Vs20pct   !< j-velocity of surface layer Stokes (m/s)
+  real, allocatable, dimension(:,:)   :: Ussurf    !< i-velocity of surface Stokes (m/s)
+  real, allocatable, dimension(:,:)   :: Vssurf    !< j-velocity of surface Stokes (m/s)
+
 
 end type KPP_CS
 
@@ -382,7 +389,18 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
       'i-component flow of surface layer (10% of OBL depth) as passed to [CVmix] KPP', 'm/s')
   CS%id_Vsurf = register_diag_field('ocean_model', 'KPP_Vsurf', diag%axesCv1, Time, &
       'j-component flow of surface layer (10% of OBL depth) as passed to [CVmix] KPP', 'm/s')
-
+  CS%id_us20pct = register_diag_field('ocean_model', 'Us_20pct', diag%axesT1, Time, &
+      'x-component Stokes drift of surface layer (20% of OBL depth) as passed to [CVmix] KPP',&
+      'm/s')
+  CS%id_vs20pct = register_diag_field('ocean_model', 'Vs_20pct', diag%axesT1, Time, &
+      'y-component Stokes drift of surface layer (20% of OBL depth) as passed to [CVmix] KPP',&
+      'm/s')
+  CS%id_ussurf = register_diag_field('ocean_model', 'Us_surf', diag%axesCu1, Time, &
+      'x-component Stokes drift at surface as passed to [CVmix] KPP',&
+      'm/s')
+  CS%id_vssurf = register_diag_field('ocean_model', 'Vs_surf', diag%axesCv1, Time, &
+      'y-component Stokes drift at surface as passed to [CVmix] KPP',&
+      'm/s')
   if (CS%id_OBLdepth > 0) allocate( CS%OBLdepth( SZI_(G), SZJ_(G) ) )
   if (CS%id_OBLdepth > 0) CS%OBLdepth(:,:) = 0.
   if (CS%id_BulkDrho > 0) allocate( CS%dRho( SZI_(G), SZJ_(G), SZK_(G) ) )
@@ -415,7 +433,14 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
   if (CS%id_Usurf > 0)    CS%Usurf(:,:) = 0.
   if (CS%id_Vsurf > 0)    allocate( CS%Vsurf( SZI_(G), SZJB_(G)) )
   if (CS%id_Vsurf > 0)    CS%Vsurf(:,:) = 0.
-
+  if (CS%id_us20pct > 0)    allocate( CS%Us20pct( SZI_(G), SZJ_(G)) )
+  if (CS%id_us20pct > 0)    CS%Us20pct(:,:) = 0.
+  if (CS%id_vs20pct > 0)    allocate( CS%Vs20pct( SZI_(G), SZJ_(G)) )
+  if (CS%id_vs20pct > 0)    CS%Vs20pct(:,:) = 0.
+  if (CS%id_ussurf > 0)    allocate( CS%ussurf( SZI_(G), SZJ_(G)) )
+  if (CS%id_ussurf > 0)    CS%ussurf(:,:) = 0.
+  if (CS%id_vssurf > 0)    allocate( CS%vssurf( SZI_(G), SZJ_(G)) )
+  if (CS%id_vssurf > 0)    CS%vssurf(:,:) = 0.
 end function KPP_init
 
 
@@ -592,83 +617,12 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
           ! surface layer thickness
           hTot = hTot + delH
 
-          ! BGR added code to make SL average use an interpolated
-          ! value for when SLdepth is within a layer that has large
-          ! dT/dz.  Does not seem to have impact so disabling for now.
-          ! if (.false.) then
-          !   if (ktmp.gt.1) then
-          !     VarUp = (Temp(i,j,ktmp-1)+Temp(i,j,ktmp))*.5
-          !     VarDn = ((Temp(i,j,ktmp)+Temp(i,j,ktmp+1))*.5)
-          !     M = (VarUp-VarDn ) / (h(i,j,ktmp)*GV%H_to_m)
-          !     VarLo = VarUp-delH*M
-          !     VarAvg = (VarUp+VarLo)*0.5
-          !   else
-          !     VarDn = (Temp(i,j,ktmp)+Temp(i,j,ktmp+1) )*.5
-          !     VarUp = 2.*Temp(i,j,ktmp) - VarDn
-          !     M = (VarUp-VarDn ) / (h(i,j,ktmp)*GV%H_to_m)
-          !     VarLo = VarUp-delH*M
-          !     VarAvg = (VarUp+VarLo)*0.5
-          !   endif
-          !   surfHtemp = surfHtemp + VarAvg * delH
+          ! surface averaged fields
+          surfHtemp = surfHtemp + Temp(i,j,ktmp) * delH
+          surfHsalt = surfHsalt + Salt(i,j,ktmp) * delH
+          surfHu    = surfHu + 0.5*(u(i,j,ktmp)+u(i-1,j,ktmp)) * delH
+          surfHv    = surfHv + 0.5*(v(i,j,ktmp)+v(i,j-1,ktmp)) * delH
 
-          !   if (ktmp.gt.1) then
-          !     VarUp = (Salt(i,j,ktmp-1)+Salt(i,j,ktmp))*.5
-          !     VarDn = (Salt(i,j,ktmp)+Salt(i,j,ktmp+1))*.5
-          !     M = (VarUp-VarDn ) / (h(i,j,ktmp)*GV%H_to_m)
-          !     VarLo = VarUp-delH*M
-          !     VarAvg = (VarUp+VarLo)*0.5
-          !   else
-          !     VarDn = (Salt(i,j,ktmp)+Salt(i,j,ktmp+1) )*.5
-          !     VarUp = 2.*Salt(i,j,ktmp) - VarDn
-          !     M = (VarUp-VarDn ) / (h(i,j,ktmp)*GV%H_to_m)
-          !     VarLo = VarUp-delH*M
-          !     VarAvg = (VarUp+VarLo)*0.5
-          !   endif
-          !   surfHsalt = surfHsalt + VarAvg * delH
-
-          !   if (ktmp.gt.1) then
-          !     VarUp = (u(i,j,ktmp)+u(i-1,j,ktmp) +&
-          !              u(i,j,ktmp-1)+u(i-1,j,ktmp-1) )*.25
-          !     VarDn = (u(i,j,ktmp)+u(i-1,j,ktmp) +&
-          !              u(i,j,ktmp+1)+u(i-1,j,ktmp+1) )*.25
-          !     M = (VarUp-VarDn ) / (h(i,j,ktmp)*GV%H_to_m)
-          !     VarLo = VarUp-delH*M
-          !     VarAvg = (VarUp+VarLo)*0.5
-          !   else
-          !     VarDn = (u(i,j,ktmp)+u(i-1,j,ktmp) +&
-          !              u(i,j,ktmp+1)+u(i-1,j,ktmp+1) )*.25
-          !     VarUp = 2.*(u(i,j,ktmp)+u(i-1,j,ktmp))*.5 - VarDn
-          !     M = (VarUp-VarDn ) / (h(i,j,ktmp)*GV%H_to_m)
-          !     VarLo = VarUp-delH*M
-          !     VarAvg = (VarUp+VarLo)*0.5
-          !   endif
-          !   surfHu = surfHu + VarAvg * delH
-
-          !   if (ktmp.gt.1) then
-          !     VarUp = (v(i,j,ktmp)+v(i,j-1,ktmp) +&
-          !              v(i,j,ktmp-1)+v(i,j-1,ktmp-1) )*.25
-          !     VarDn = (v(i,j,ktmp)+v(i,j-1,ktmp) +&
-          !              v(i,j,ktmp+1)+v(i,j-1,ktmp+1) )*.25
-          !     M = (VarUp-VarDn ) / (h(i,j,ktmp)*GV%H_to_m)
-          !     VarLo = VarUp-delH*M
-          !     VarAvg = (VarUp+VarLo)*0.5
-          !   else
-          !     VarDn = (v(i,j,ktmp)+v(i,j-1,ktmp) +&
-          !              v(i,j,ktmp+1)+v(i,j-1,ktmp+1) )*.25
-          !     VarUp = 2.*(v(i,j,ktmp)+v(i,j-1,ktmp))*.5 - VarDn
-          !     M = (VarUp-VarDn ) / (h(i,j,ktmp)*GV%H_to_m)
-          !     VarLo = VarUp-delH*M
-          !     VarAvg = (VarUp+VarLo)*0.5
-          !   endif
-          !   surfHv = surfHv + VarAvg * delH
-          
-          ! else
-            ! surface averaged fields
-            surfHtemp = surfHtemp + Temp(i,j,ktmp) * delH
-            surfHsalt = surfHsalt + Salt(i,j,ktmp) * delH
-            surfHu    = surfHu + 0.5*(u(i,j,ktmp)+u(i-1,j,ktmp)) * delH
-            surfHv    = surfHv + 0.5*(v(i,j,ktmp)+v(i,j-1,ktmp)) * delH
-          ! endif
         enddo
 
         surfTemp = surfHtemp / hTot
@@ -695,8 +649,15 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
            H10pct=min(-0.1,-hTot);!hTot is 10% of OBL
            if (StokesShearInRIb) then
               do b=1,WAVES%NumBands
-                 CMNFACT= (1.0 - EXP(H10pct*WAVES%WaveNum_Cen(b))) / &
-                      (0.-H10pct)/ (2*WAVES%WaveNum_Cen(b))
+                 if (WAVES%PartitionMode==0) then
+                    CMNFACT= (1.0 - EXP(H10pct*WAVES%WaveNum_Cen(b))) / &
+                         (0.-H10pct)/ (2*WAVES%WaveNum_Cen(b))
+                 elseif (WAVES%PartitionMode==1) then
+                    !Note in frequency mode we are TEMPORARILY
+                    ! using midpoint instead of integral/H to get average
+                    CMNFACT = EXP(H10pct/2.*2.*(2.*3.1415*WAVES%Freq_Cen(b))**2/ &
+                         GV%g_Earth)
+                 endif
                  surfUS = surfUS + 0.5 * ( WAVES%STKx0(i,j,b) + &
                       WAVES%STKx0(i-1,j,b) ) * CMNFACT
                  surfVS = surfVS + 0.5 * ( WAVES%STKy0(i,j,b) + &
@@ -706,11 +667,17 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
            !/
            ! Now compute Langmuir number at h points.
            USy20pct = 0.0;USx20pct = 0.0;
-           H20pct=min(-0.1,-hTot*2.);
+           H20pct=min(-0.1,-hTot*2.0);!hTot is 10% of OBL, hence 2x
            do b=1,WAVES%NumBands
-              CMNFACT = (1.0 - EXP(H20pct*2*WAVES%WaveNum_Cen(b))) &
-                   / (0.0-H20pct) / (2*WAVES%WaveNum_Cen(b))
-              
+              if (WAVES%PartitionMode==0) then
+                 CMNFACT = (1.0 - EXP(H20pct*2*WAVES%WaveNum_Cen(b))) &
+                      / (0.0-H20pct) / (2*WAVES%WaveNum_Cen(b))
+              elseif (WAVES%PartitionMode==1) then
+                 !Note in frequency mode we are TEMPORARILY                  
+                 ! using midpoint instead of integral/H to get average 
+                 CMNFACT = EXP(H20pct/2.*2.*(2.*3.1415*WAVES%Freq_Cen(b))**2/ &
+                         GV%g_Earth)
+              endif
               USy20pct = USy20pct + 0.5 * ( WAVES%STKy0(i,j,b) &
                    + WAVES%STKy0(i,j-1,b) ) * CMNFACT
               USx20pct = USx20pct + 0.5 * ( WAVES%STKx0(i,j,b) &
@@ -1129,7 +1096,10 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       if (CS%id_Ssurf  > 0)   CS%Ssurf(i,j)    = surfSalt
       if (CS%id_Usurf  > 0)   CS%Usurf(i,j)    = surfU
       if (CS%id_Vsurf  > 0)   CS%Vsurf(i,j)    = surfv
-
+      if (CS%id_us20pct  > 0)   CS%us20pct(i,j)    = usx20pct
+      if (CS%id_vs20pct  > 0)   CS%vs20pct(i,j)    = usy20pct
+      if (CS%id_ussurf  > 0)   CS%ussurf(i,j)    = WAVES%Us0_x(i,j)
+      if (CS%id_vssurf  > 0)   CS%vssurf(i,j)    = WAVES%Us0_y(i,j)
 
        ! Update output of routine
       if (.not. CS%passiveMode) then
@@ -1184,6 +1154,10 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
   if (CS%id_Ssurf    > 0) call post_data(CS%id_Ssurf,    CS%Ssurf,           CS%diag)
   if (CS%id_Usurf    > 0) call post_data(CS%id_Usurf,    CS%Usurf,           CS%diag)
   if (CS%id_Vsurf    > 0) call post_data(CS%id_Vsurf,    CS%Vsurf,           CS%diag)
+  if (CS%id_us20pct  > 0) call post_data(CS%id_us20pct,  CS%us20pct,         CS%diag)
+  if (CS%id_vs20pct  > 0) call post_data(CS%id_vs20pct,  CS%vs20pct,         CS%diag)
+  if (CS%id_ussurf   > 0) call post_data(CS%id_ussurf,   CS%ussurf,          CS%diag)
+  if (CS%id_vssurf   > 0) call post_data(CS%id_vssurf,   CS%vssurf,          CS%diag)
 
 end subroutine KPP_calculate
 
