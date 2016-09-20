@@ -132,9 +132,9 @@ CONTAINS
 !> Initializes parameters related to MOM_wave_interface
 subroutine MOM_wave_interface_init(time,G,GV,param_file, CS, diag )
   type(time_type), target, intent(in)    :: Time
-  type(ocean_grid_type),                  intent(in)  :: G !< Grid structure
-  type(verticalGrid_type),                intent(in)  :: GV!< Vertical grid structure
-  type(param_file_type),                  intent(in)  :: param_file !< Input parameter structure
+  type(ocean_grid_type),                  intent(inout):: G !< Grid structure
+  type(verticalGrid_type),                intent(in)   :: GV!< Vertical grid structure
+  type(param_file_type),                  intent(in)   :: param_file !< Input parameter structure
   type(wave_parameters_CS),              pointer     :: CS !< Wave parameter control structure
   type(diag_ctrl), target, intent(inout) :: diag
   ! Local variables
@@ -280,7 +280,7 @@ end subroutine MOM_wave_interface_init
 ! desired coupling options
 subroutine Import_Stokes_Drift(G,GV,Day,DT,CS,h,FLUXES)
   type(wave_parameters_CS),              pointer        :: CS
-  type(ocean_grid_type),                  intent(in)    :: G !< Grid structure
+  type(ocean_grid_type),                  intent(inout) :: G !< Grid structure
   type(verticalGrid_type),                intent(in)    :: GV!< Vertical grid structure
   type(time_type), intent(in)                           :: Day
   type(time_type), intent(in)                           :: DT
@@ -451,7 +451,7 @@ subroutine Stokes_Drift_by_data_override(day_center,G,GV,CS)
   use NETCDF
   type(time_type),             intent(in)  :: day_center
   type(wave_parameters_CS),    pointer     :: CS
-  type(ocean_grid_type),       intent(in)  :: G !< Grid structure
+  type(ocean_grid_type),       intent(inout)  :: G !< Grid structure
   type(verticalGrid_type),     intent(in)  :: GV!< Vertical grid structure
   ! local variables
   real    :: temp_x(SZI_(G),SZJ_(G)) ! Pseudo-zonal and psuedo-meridional
