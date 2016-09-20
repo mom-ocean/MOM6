@@ -123,7 +123,7 @@ use MOM_vert_friction,         only : vertvisc_limit_vel, vertvisc_init
 use MOM_verticalGrid,          only : verticalGrid_type, verticalGridInit, verticalGridEnd
 use MOM_verticalGrid,          only : get_thickness_units, get_flux_units, get_tr_flux_units
 use MOM_wave_speed,            only : wave_speed_init, wave_speed_CS
-use MOM_wave_interface,        only : wave_parameters_CS
+use MOM_wave_interface,        only : wave_parameters_CS, waves_end
 
 implicit none ; private
 
@@ -272,6 +272,9 @@ type, public :: MOM_control_struct
   integer :: id_h  = -1
   integer :: id_T  = -1
   integer :: id_S  = -1
+
+  ! 3-d waves fields
+  integer :: id_StokesDrift_x, id_StokesDrift_y
 
   ! 2-d surface and bottom fields
   integer :: id_zos      = -1
@@ -1194,6 +1197,18 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     if (CS%id_v > 0) call post_data(CS%id_v, v, CS%diag)
     if (CS%id_h > 0) call post_data(CS%id_h, h, CS%diag)
 
+    !Output Waves Here?
+    if (associated(CS%Wave_Parameter_CSp)) then
+       if (CS%id_StokesDrift_x > 0) then
+          call post_data(CS%id_StokesDrift_x,CS%Wave_Parameter_CSp%US_x,CS%\
+          diag)
+       endif
+       if (CS%id_StokesDrift_y > 0) then
+          call post_data(CS%id_StokesDrift_y,CS%Wave_Parameter_CSp%US_y,CS%\
+          diag)
+       endif
+    endif
+
     ! compute ssh, which is either eta_av for Bouss, or
     ! diagnosed ssh for non-Bouss; call "find_eta" for this
     ! purpose.
@@ -2046,7 +2061,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call callTree_waypoint("tracer registry now locked (initialize_MOM)")
 
   ! now register some diagnostics since tracer registry is locked
-  call register_diags(Time, G, GV, CS, CS%ADp)
+  call register_diags(Time, G, GV, CS, CS%ADp,WAVES=CS%Wave_Parameter_CSp)
   call register_diags_TS_tendency(Time, G, CS)
   if (CS%use_ALE_algorithm) then
     call ALE_register_diags(Time, G, diag, CS%tv%C_p, CS%tracer_Reg, CS%ALE_CSp)
@@ -2189,13 +2204,13 @@ end subroutine unit_tests
 
 
 !> Register the diagnostics
-subroutine register_diags(Time, G, GV, CS, ADp)
+subroutine register_diags(Time, G, GV, CS, ADp,waves)
   type(time_type),           intent(in)    :: Time  !< current model time
   type(ocean_grid_type),     intent(inout) :: G     !< ocean grid structu
   type(verticalGrid_type),   intent(inout) :: GV    !< ocean vertical grid structure
   type(MOM_control_struct),  pointer       :: CS    !< control structure set up by initialize_MOM
   type(accel_diag_ptrs),     intent(inout) :: ADp   !< structure pointing to accelerations in momentum equation
-
+  type(wave_parameters_CS), pointer, optional       :: WAVES !< structure pointing to wave data
   character(len=48) :: thickness_units, flux_units, T_flux_units, S_flux_units
   type(diag_ctrl), pointer :: diag
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
@@ -2394,6 +2409,11 @@ subroutine register_diags(Time, G, GV, CS, ADp)
     CS%id_S_predia = register_diag_field('ocean_model', 'salt_predia', diag%axesTL, Time, &
         'Salinity', 'PPT')
   endif
+  
+  CS%id_StokesDrift_x = register_diag_field('ocean_model', 'Stokes_Drift_x', diag%axesCuL, &
+       Time, 'Stokes Drift in x-direction', 'meter second-1')                   
+  CS%id_StokesDrift_y = register_diag_field('ocean_model', 'Stokes_Drift_y', diag%axesCvL, &
+       Time, 'Stokes Drift in y-direction', 'meter second-1')
 
 end subroutine register_diags
 
@@ -3191,6 +3211,10 @@ subroutine MOM_end(CS)
 
   DEALLOC_(CS%u) ; DEALLOC_(CS%v) ; DEALLOC_(CS%h)
   DEALLOC_(CS%uh) ; DEALLOC_(CS%vh)
+
+  if (associated(CS%Wave_Parameter_CSp)) then
+     call waves_end(CS%Wave_Parameter_CSp)
+  endif
 
   if (CS%use_temperature) then
     DEALLOC_(CS%T) ; CS%tv%T => NULL() ; DEALLOC_(CS%S) ; CS%tv%S => NULL()

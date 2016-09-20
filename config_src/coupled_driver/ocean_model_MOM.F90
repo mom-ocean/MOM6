@@ -58,6 +58,7 @@ use MOM_surface_forcing, only : forcing_save_restart
 use MOM_time_manager, only : time_type, get_time, set_time, operator(>)
 use MOM_time_manager, only : operator(+), operator(-), operator(*), operator(/)
 use MOM_time_manager, only : operator(/=)
+use MOM_time_manager, only : time_type_to_real
 use MOM_tracer_flow_control, only : call_tracer_register, tracer_flow_control_init
 use MOM_variables, only : surface
 use MOM_verticalGrid, only : verticalGrid_type
@@ -69,6 +70,10 @@ use mpp_domains_mod, only : mpp_define_domains, mpp_get_compute_domain, mpp_get_
 use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
 use fms_mod, only : stdout
 use mpp_mod, only : mpp_chksum
+
+use MOM_wave_interface, only: wave_parameters_CS, MOM_wave_interface_init
+use MOM_wave_interface, only: Import_Stokes_Drift
+
 
 #include <MOM_memory.h>
 
@@ -152,6 +157,7 @@ type, public :: ocean_state_type ; private
   type(time_type) :: write_energy_time ! The next time to write to the energy file.
 
   integer :: nstep = 0        ! The number of calls to update_ocean.
+  logical :: use_waves = .false.! If true use wave coupling.
   logical :: use_ice_shelf    ! If true, the ice shelf model is enabled.
   type(ice_shelf_CS), pointer :: Ice_shelf_CSp => NULL()
   logical :: restore_salinity ! If true, the coupled MOM driver adds a term to
@@ -289,6 +295,13 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
      call initialize_ice_shelf(param_file, OS%grid, OS%Time, OS%ice_shelf_CSp, &
                                OS%MOM_CSp%diag, OS%fluxes)
   endif
+  OS%use_waves=.false. ; 
+  call get_param(param_file,mod,"USE_WAVES",OS%Use_Waves,&
+       "If true, uses waves.",default=.false.)
+  if (OS%use_waves) then
+     call MOM_wave_interface_init(OS%Time,OS%grid,OS%GV,param_file,OS%MOM_CSp%Wave_Parameter_CSp,OS%MOM_CSp%diag)
+  endif
+
 
   call MOM_sum_output_init(OS%grid, param_file, OS%dirs%output_directory, &
                             OS%MOM_CSp%ntrunc, Time_init, OS%sum_output_CSp)
@@ -417,6 +430,11 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     call MOM_generic_tracer_fluxes_accumulate(OS%flux_tmp, weight) !weight of the current flux in the running average
 #endif
   endif
+
+  if (OS%use_waves) then
+     call Import_Stokes_Drift(OS%grid,OS%GV,OS%time,ocean_coupling_time_step,OS%MOM_CSp%wave_parameter_csp, OS%MOM_CSp%h,OS%FLUXES)
+  endif
+
 
   if (OS%nstep==0) then
     call finish_MOM_initialization(OS%Time, OS%dirs, OS%MOM_CSp, OS%fluxes)

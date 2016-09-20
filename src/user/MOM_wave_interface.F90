@@ -4,6 +4,10 @@ module MOM_wave_interface
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_alloc
+use MOM_diag_mediator, only : diag_ctrl
+use MOM_domains,       only : pass_var, pass_vector, AGRID
+use MOM_domains,       only : To_South, To_West, To_All
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing, allocate_forcing_type
@@ -11,7 +15,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_verticalgrid, only: verticalGrid_type
 use MOM_safe_alloc, only : safe_alloc_ptr
 use MOM_time_manager, only : time_type, operator(+), operator(/), get_time,&
-                             time_type_to_real
+                             time_type_to_real,real_to_time_type
 use MOM_variables, only : thermo_var_ptrs, surface
 use data_override_mod, only : data_override_init, data_override
 implicit none ; private
@@ -22,6 +26,7 @@ public MOM_wave_interface_init
 public Import_Stokes_Drift
 public StokesMixing
 public CoriolisStokes
+public Waves_end
 
 !> Container for wave related parameters
 type, public:: wave_parameters_CS ;
@@ -70,13 +75,20 @@ private
   !^ Options for various Parametric wave spectra
   !     IN PREP
   integer, public :: NumBands    
-  !^ Number of wavenumber bands to receive
+  !^ Number of wavenumber/frequency partitions to receive
   !   - This needs to match the number of bands provided
   !     via the either coupling or file.
   !   - A check will be added to be sure it is correct 
   !     as this module nears completion.
+  integer, public :: PartitionMode
+  ! = 0 if partitions are described by wavenumber
+  ! = 1 if partitions are described by frequency
+  integer, public :: StkLevelMode=1
+  ! = 0 if mid-point value of Stokes drift is used
+  ! = 1 if average value of Stokes drift over level is used.
   real ALLOCABLE_, dimension(:), public :: &
-   WaveNum_Cen   !< Wavenumber bands for read/coupled
+   WaveNum_Cen,&   !< Wavenumber bands for read/coupled
+   Freq_Cen        !< Frequency bands for read/coupled
   real ALLOCABLE_, dimension( NIMEMB_, NJMEM_,NKMEM_), public :: &
        Us_x !< Stokes drift profile (zonal) 
   real ALLOCABLE_, dimension( NIMEM_, NJMEMB_,NKMEM_), public :: &
@@ -92,6 +104,13 @@ private
   real ALLOCABLE_, dimension( NIMEM_, NJMEM_,NKMEM_), public :: &
        KvS !< Viscosity for Stokes Drift shear 
   logical :: dataoverrideisinitialized
+
+  type(time_type), pointer, public :: Time ! A pointer to the ocean model's clock.
+  type(diag_ctrl), pointer, public :: diag ! A structure that is used to regulate the
+                             ! timing of diagnostic output.
+
+  integer, public :: id_StokesDrift_x, id_StokesDrift_y
+
 end type wave_parameters_CS
 
 ! This include declares and sets the variable "version".
@@ -111,11 +130,13 @@ Real :: TP_STKX0, TP_STKY0, TP_WVL
 CONTAINS
 !
 !> Initializes parameters related to MOM_wave_interface
-subroutine MOM_wave_interface_init(G,GV,param_file, CS)
+subroutine MOM_wave_interface_init(time,G,GV,param_file, CS, diag )
+  type(time_type), target, intent(in)    :: Time
   type(ocean_grid_type),                  intent(in)  :: G !< Grid structure
   type(verticalGrid_type),                intent(in)  :: GV!< Vertical grid structure
   type(param_file_type),                  intent(in)  :: param_file !< Input parameter structure
   type(wave_parameters_CS),              pointer     :: CS !< Wave parameter control structure
+  type(diag_ctrl), target, intent(inout) :: diag
   ! Local variables
 
   ! I/O
@@ -134,6 +155,9 @@ subroutine MOM_wave_interface_init(G,GV,param_file, CS)
   endif
   
   allocate(CS)
+
+  CS%diag => diag
+  CS%Time => Time
 
   ! Add any initializations needed here
   CS%dataOverrideIsInitialized = .false.
@@ -246,6 +270,8 @@ subroutine MOM_wave_interface_init(G,GV,param_file, CS)
   print*,' '
   !\BGRTEMP}
 
+  return
+
 end subroutine MOM_wave_interface_init
 !/
 !/
@@ -264,6 +290,8 @@ subroutine Import_Stokes_Drift(G,GV,Day,DT,CS,h,FLUXES)
   real    :: USy20pct, USx20pct, H20pct
   real    :: Top, MidPoint, Bottom
   real    :: DecayScale
+  real    :: CMN_FAC, WN
+  real, parameter :: PI=3.14159265359
   type(time_type) :: Day_Center
   integer :: ii, jj, kk, b, iim1, jjm1
 
@@ -271,9 +299,9 @@ subroutine Import_Stokes_Drift(G,GV,Day,DT,CS,h,FLUXES)
 
   !print*,' '
   !print*,'Into Import_Stokes_Drift'
-
+  !print*,time_type_to_real(Day),time_type_to_real(Day_center)
   if (CS%WaveMethod==TESTPROF) then
-     DecayScale = 12.5663706/TP_WVL !4pi
+     DecayScale = 4.*PI/TP_WVL !4pi
      do ii=G%isdB,G%iedB
         do jj=G%jsd,G%jed
            iim1=max(1,ii-1)
@@ -301,23 +329,25 @@ subroutine Import_Stokes_Drift(G,GV,Day,DT,CS,h,FLUXES)
         enddo
      enddo
   elseif (CS%WaveMethod==DATAOVERRIDE) then
-       call Stokes_Drift_by_data_override(day_center,G,GV,CS)
-       CS%Us_x(:,:,:) = 0.0
-       CS%Us_y(:,:,:) = 0.0
-       CS%Us0_x(:,:) = 0.0
-       CS%Us0_y(:,:) = 0.0
-     ! ---------------------------------------------------------|
-     ! This computes the average Stokes drift based on the      |
-     !  analytical integral over the layer divided by the layer |
-     !  thickness.                                              |
-     ! ---------------------------------------------------------|
+     call Stokes_Drift_by_data_override(day_center,G,GV,CS)
+     CS%Us_x(:,:,:) = 0.0
+     CS%Us_y(:,:,:) = 0.0
+     CS%Us0_x(:,:) = 0.0
+     CS%Us0_y(:,:) = 0.0
      do ii=G%isdB,G%iedB
         do jj=G%jsd,G%jed
            do b=1,CS%NumBands
-              CS%US0_x(ii,jj)=CS%US0_x(ii,jj) + CS%STKx0(ii,jj,b) *&
-                   (1.0 - EXP(-0.01*2*CS%WaveNum_Cen(b))) / (0.01)/&
-                   (2*CS%WaveNum_Cen(b))
+              if (CS%PartitionMode==0) then
+                 !In wavenumber we are averaging over (small) level
+                 CMN_FAC = (1.0 - EXP(-0.01*2*CS%WaveNum_Cen(b))) / (0.01)/&
+                      (2*CS%WaveNum_Cen(b))
+              elseif (CS%PartitionMode==1) then
+                 !In frequency we are not averaging over level and taking top
+                 CMN_FAC = 1.0
+              endif
+              CS%US0_x(ii,jj)=CS%US0_x(ii,jj) + CS%STKx0(ii,jj,b) * CMN_FAC
            enddo
+
            bottom = 0.0
            do kk=1, G%ke
               Top = Bottom
@@ -325,10 +355,26 @@ subroutine Import_Stokes_Drift(G,GV,Day,DT,CS,h,FLUXES)
               MidPoint = Bottom - GV%H_to_m * (h(ii,jj,kk)+h(iim1,jj,kk))/4.
               Bottom = Bottom - GV%H_to_m *  (h(ii,jj,kk)+h(iim1,jj,kk))/2.
               do b=1,CS%NumBands
+                 if (CS%PartitionMode==0) then
+                    !In wavenumber we are averaging over level
+                    CMN_FAC =  (EXP(TOP*2.*CS%WaveNum_Cen(b))- &
+                         EXP(BOTTOM*2.*CS%WaveNum_Cen(b))) / (Top-Bottom)/&
+                         (2.*CS%WaveNum_Cen(b))
+                 elseif (CS%PartitionMode==1) then
+                    if (CS%StkLevelMode==0) then
+                       !! Take the value at the midpoint
+                       CMN_FAC = EXP(MidPoint*2.*(2.*PI*CS%Freq_Cen(b))**2/ &
+                            GV%g_Earth)
+                    elseif (CS%StkLevelMode==1) then
+                       !! Use a numerical integration and then
+                       !! divide by layer thickness
+                       WN=(2.*PI*CS%Freq_Cen(b))**2
+                       CMN_FAC = (exp(2.*WN*Top)-exp(2.*WN*Bottom)) &
+                            /(2.*WN)/(Top-Bottom)
+                    endif
+                 endif
                  CS%US_x(ii,jj,kk)=CS%US_x(ii,jj,kk) + CS%STKx0(ii,jj,b) *&
-                      (EXP(TOP*2*CS%WaveNum_Cen(b))- &
-                      EXP(BOTTOM*2*CS%WaveNum_Cen(b))) / (Top-Bottom)/&
-                       (2*CS%WaveNum_Cen(b))
+                      CMN_FAC
               enddo
            enddo
         enddo
@@ -337,10 +383,17 @@ subroutine Import_Stokes_Drift(G,GV,Day,DT,CS,h,FLUXES)
      do ii=G%isd,G%ied
         do jj=G%jsdB,G%jedB
            do b=1,CS%NumBands
-              CS%US0_y(ii,jj)=CS%US0_y(ii,jj) + CS%STKy0(ii,jj,b) *&
-                   (1.0 - EXP(-0.01*2*CS%WaveNum_Cen(b))) / (0.01)/&
-                   (2*CS%WaveNum_Cen(b))
+               if (CS%PartitionMode==0) then
+                 !In wavenumber we are averaging over (small) level
+                 CMN_FAC = (1.0 - EXP(-0.01*2*CS%WaveNum_Cen(b))) / (0.01)/&
+                      (2*CS%WaveNum_Cen(b))
+              elseif (CS%PartitionMode==1) then
+                 !In frequency we are not averaging over level and taking top
+                 CMN_FAC = 1.0
+              endif
+              CS%US0_y(ii,jj)=CS%US0_y(ii,jj) + CS%STKy0(ii,jj,b) * CMN_FAC
            enddo
+
            bottom = 0.0
            do kk=1, G%ke
               Top = Bottom
@@ -348,10 +401,26 @@ subroutine Import_Stokes_Drift(G,GV,Day,DT,CS,h,FLUXES)
               MidPoint = Bottom - GV%H_to_m * (h(ii,jj,kk)+h(ii,jjm1,kk))/4.
               Bottom = Bottom - GV%H_to_m *  (h(ii,jj,kk)+h(ii,jjm1,kk))/2.
               do b=1,CS%NumBands
+                 if (CS%PartitionMode==0) then
+                    !In wavenumber we are averaging over level
+                    CMN_FAC =  (EXP(TOP*2.*CS%WaveNum_Cen(b))- &
+                         EXP(BOTTOM*2.*CS%WaveNum_Cen(b))) / (Top-Bottom)/&
+                         (2.*CS%WaveNum_Cen(b))
+                 elseif (CS%PartitionMode==1) then
+                    if (CS%StkLevelMode==0) then
+                       !! Take the value at the midpoint
+                       CMN_FAC = EXP(MidPoint*2.*(2.*PI*CS%Freq_Cen(b))**2/ &
+                            GV%g_Earth)
+                    elseif (CS%StkLevelMode==1) then
+                       !! Use a numerical integration and then
+                       !! divide by layer thickness
+                       WN=(2.*PI*CS%Freq_Cen(b))**2
+                       CMN_FAC = (exp(2.*WN*Top)-exp(2.*WN*Bottom)) &
+                            /(2.*WN)/(Top-Bottom)
+                    endif
+                 endif
                  CS%US_y(ii,jj,kk)=CS%US_y(ii,jj,kk) + CS%STKy0(ii,jj,b) *&
-                      (EXP(TOP*2*CS%WaveNum_Cen(b))- &
-                      EXP(BOTTOM*2*CS%WaveNum_Cen(b))) / (Top-Bottom)/&
-                       (2*CS%WaveNum_Cen(b))
+                      CMN_FAC
               enddo
            enddo
         enddo
@@ -370,6 +439,12 @@ subroutine Import_Stokes_Drift(G,GV,Day,DT,CS,h,FLUXES)
         enddo
   endif
 
+!  print*,'USx'
+!  print*,CS%US0_x(3,3),CS%Us_x(3,3,1)
+!  print*,'USyx'
+!  print*,CS%US0_x(3,3),CS%Us_x(3,3,1)
+
+
 end subroutine Import_Stokes_Drift
 !
 subroutine Stokes_Drift_by_data_override(day_center,G,GV,CS)
@@ -379,6 +454,8 @@ subroutine Stokes_Drift_by_data_override(day_center,G,GV,CS)
   type(ocean_grid_type),       intent(in)  :: G !< Grid structure
   type(verticalGrid_type),     intent(in)  :: GV!< Vertical grid structure
   ! local variables
+  real    :: temp_x(SZI_(G),SZJ_(G)) ! Pseudo-zonal and psuedo-meridional
+  real    :: temp_y(SZI_(G),SZJ_(G)) ! Stokex drift of band at h-points, in m/s
   real    :: Top, MidPoint, Bottom
   real    :: DecayScale
   integer :: b
@@ -386,83 +463,141 @@ subroutine Stokes_Drift_by_data_override(day_center,G,GV,CS)
 
   integer, dimension(4) :: start, count, dims, dim_id 
   character(len=12)  :: dim_name(4)
-  character(20) :: varname, filename, varread
-  integer :: rcode, ncid, varid, id, ndims
+  character(20) :: varname, filename, varread1, varread2
+  integer :: rcode_fr, rcode_wn, ncid, varid_fr, varid_wn, id, ndims
 
   if (.not.CS%dataOverrideIsInitialized) then
-    print*,'into init'
     call data_override_init(Ocean_domain_in=G%Domain%mpp_domain)
-    print*,'out of init'
     CS%dataOverrideIsInitialized = .true.
-    
+
     ! Read in number of wavenumber bands in file to set number to be read in
     ! Hardcoded filename/variables
-    filename = 'StkSpec.nc'
-    varread = 'wavenumber'
+    filename = 'TMP.nc'
+    varread1 = 'wavenumber' !Old method gives wavenumber
+    varread2 = 'frequency'  !New method gives frequency
+    rcode_wn = NF90_OPEN(trim(filename), NF90_NOWRITE, ncid)
+    if (rcode_wn .ne. 0) then
+       call MOM_error(FATAL,"error opening file "//trim(filename)//&
+            " in MOM_wave_interface.")
+    endif
 
-    rcode = NF90_OPEN(trim(filename), NF90_NOWRITE, ncid)
-    if (rcode .ne. 0) call MOM_error(FATAL,"error opening file "//trim(filename)//&
-         " in MOM_wave_interface.")
+    rcode_wn = NF90_INQ_VARID(ncid, varread1, varid_wn)
+    rcode_fr = NF90_INQ_VARID(ncid, varread2, varid_fr)
 
-    rcode = NF90_INQ_VARID(ncid, varread, varid)
-    if (rcode .ne. 0) call MOM_error(FATAL,"error finding variable "//trim(varread)//&
-         " in file "//trim(filename)//" in MOM_wave_interface.")
+    if (rcode_wn .ne. 0 .and. rcode_fr .ne. 0) then
+       call MOM_error(FATAL,"error finding variable "//trim(varread1)//&
+         " or "//trim(varread2)//" in file "//trim(filename)//" in MOM_wave_interface.")
+    
+    elseif (rcode_wn.eq.0) then
+       ! wavenumbers found:
+       CS%PartitionMode=0
+       rcode_wn = NF90_INQUIRE_VARIABLE(ncid, varid_wn, ndims=ndims, &
+            dimids=dims)
+       if (rcode_wn .ne. 0) then
+          call MOM_error(FATAL, &
+               'error inquiring dimensions MOM_wave_interface.')
+       endif
+       rcode_wn = NF90_INQUIRE_DIMENSION(ncid, dims(1), dim_name(1), len=id)
+       if (rcode_wn .ne. 0) then
+          call MOM_error(FATAL,"error reading dimension 1 data for "// &
+               trim(varread1)//" in file "// trim(filename)//          &
+               " in MOM_wave_interface.")
+       endif
+       rcode_wn = NF90_INQ_VARID(ncid, dim_name(1), dim_id(1))
+       if (rcode_wn .ne. 0) then
+          call MOM_error(FATAL,"error finding variable "//trim(dim_name(1))//&
+            " in file "//trim(filename)//" in MOM_wave_interace.")
+       endif
+       ! Allocating size of wavenumber bins
+       ALLOC_ ( CS%WaveNum_Cen(1:id) ) ; CS%WaveNum_Cen(:)=0.0
+    elseif (rcode_fr.eq.0) then
+       ! frequencies found:
+       CS%PartitionMode=1
+       rcode_fr = NF90_INQUIRE_VARIABLE(ncid, varid_fr, ndims=ndims, &
+            dimids=dims)
+       if (rcode_fr .ne. 0) then
+          call MOM_error(FATAL,&
+               'error inquiring dimensions MOM_wave_interface.')
+       endif
+       rcode_fr = NF90_INQUIRE_DIMENSION(ncid, dims(1), dim_name(1), len=id)
+       if (rcode_fr .ne. 0) then
+          call MOM_error(FATAL,"error reading dimension 1 data for "// &
+               trim(varread2)//" in file "// trim(filename)// &
+               " in MOM_wave_interface.")
+       endif
+       rcode_fr = NF90_INQ_VARID(ncid, dim_name(1), dim_id(1))
+       if (rcode_fr .ne. 0) then
+          call MOM_error(FATAL,"error finding variable "//trim(dim_name(1))//&
+               " in file "//trim(filename)//" in MOM_wave_interace.")
+       endif
+       ! Allocating size of frequency bins
+       ALLOC_ ( CS%Freq_Cen(1:id) ) ; CS%Freq_Cen(:)=0.0
+    endif
 
-    rcode = NF90_INQUIRE_VARIABLE(ncid, varid, ndims=ndims, dimids=dims)
-    if (rcode .ne. 0) call MOM_error(FATAL,'error inquiring dimensions MOM_wave_interface.')
-
-    rcode = NF90_INQUIRE_DIMENSION(ncid, dims(1), dim_name(1), len=id)
-    if (rcode .ne. 0) call MOM_error(FATAL,"error reading dimension 1 data for "// &
-         trim(varread)//" in file "// trim(filename)//" in MOM_wave_interface.")
-
-    rcode = NF90_INQ_VARID(ncid, dim_name(1), dim_id(1))
-    if (rcode .ne. 0) call MOM_error(FATAL,"error finding variable "//trim(dim_name(1))//&
-         " in file "//trim(filename)//" in MOM_wave_interace.")
 
     ! Allocating size of wavenumber bins
-    ALLOC_ ( CS%WaveNum_Cen(1:id) ) ; CS%WaveNum_Cen(:)=0.0
+    
     ALLOC_ ( CS%STKx0(G%isdB:G%iedB,G%jsd:G%jed,1:id)) ; CS%STKx0(:,:,:) = 0.0
     ALLOC_ ( CS%STKy0(G%isd:G%ied,G%jsdB:G%jedB,1:id)) ; CS%STKy0(:,:,:) = 0.0
     
 
-    ! Reading wavenumber bins
+    ! Reading wavenumber bins/Frequencies
     start = 1; count = 1; count(1) = id
-    rcode = NF90_GET_VAR(ncid, dim_id(1), CS%WaveNum_Cen, start, count)
-    if (rcode .ne. 0) call MOM_error(FATAL,"error reading dimension 1 values for var_name "// &
-         trim(varread)//",dim_name "//trim(dim_name(1))//" in file "// trim(filename)//" in MOM_wave_interface")
+    if (CS%PartitionMode==0) then
+       rcode_wn = NF90_GET_VAR(ncid, dim_id(1), CS%WaveNum_Cen, start, count)
+       if (rcode_wn .ne. 0) then
+          call MOM_error(FATAL,&
+               "error reading dimension 1 values for var_name "// &
+               trim(varread1)//",dim_name "//trim(dim_name(1))//  &
+               " in file "// trim(filename)//" in MOM_wave_interface")
+       endif
+       CS%NUMBANDS = ID
+    elseif (CS%PartitionMode==1) then
+       rcode_fr = NF90_GET_VAR(ncid, dim_id(1), CS%Freq_Cen, start, count)
+       if (rcode_fr .ne. 0) then
+          call MOM_error(FATAL,&
+               "error reading dimension 1 values for var_name "// &
+               trim(varread2)//",dim_name "//trim(dim_name(1))//  &
+               " in file "// trim(filename)//" in MOM_wave_interface")
+       endif
+       CS%NUMBANDS = ID
+    endif
 
-    CS%NUMBANDS = ID
   endif
-  
+
   do b=1,CS%NumBands
-     varname = '                    '
-     write(varname,"(A3,I0)")'Usx',b
-     call data_override('OCN',trim(varname), CS%STKx0(:,:,b), day_center)
-     varname = '                    '
-     write(varname,'(A3,I0)')'Usy',b
-     call data_override('OCN',trim(varname), CS%STKy0(:,:,b), day_center)     
+    temp_x(:,:)=0.0;temp_y(:,:)=0.0;
+    varname = '                    '
+    write(varname,"(A3,I0)")'Usx',b
+    call data_override('OCN',trim(varname), temp_x, day_center)
+    varname = '                    '
+    write(varname,'(A3,I0)')'Usy',b
+    call data_override('OCN',trim(varname), temp_y, day_center)
+    ! Disperse into halo on h-grid
+    call pass_vector(temp_x, temp_y, G%Domain, To_All, AGRID)
+    !Filter land values
+    do j = G%jsd,G%jed ; do I = G%Isd,G%Ied
+       if (abs(temp_x(i,j)).gt.10. .or. abs(temp_y(i,j)).gt.10. ) then
+          ! Assume land-mask and zero out
+          temp_x(i,j)=0.0
+          temp_y(i,j)=0.0
+       endif
+    enddo; enddo
+    ! Interpolate to u/v grids
+    do j = G%jsc,G%jec ; do I = G%IscB,G%IecB
+       CS%STKx0(I,j,b) = 0.5 * (temp_x(i,j) + temp_x(i+1,j))
+    enddo; enddo
+    do j = G%JscB,G%JecB ; do i = G%isc,G%iec
+       CS%STKy0(i,J,b) = 0.5 * (temp_y(i,j) + temp_y(i,j+1))
+    enddo; enddo
+    ! Disperse into halo on u/v grids
+    call pass_vector(CS%STKx0(:,:,b),CS%STKy0(:,:,b), G%Domain, To_ALL)
+    !print*,'maxXandY: ',maxval(abs(temp_x)),maxval(abs(temp_y))
+    !print*,'maxXandY: ',maxval(abs(CS%STKx0(:,:,b))),maxval(abs(CS%STKy0(:,:,b)))
   enddo
-  
-  !Brandon: Hacking to update HALO until properly resolved
-  do i=G%isdB,G%iedB
-     do j=G%isd,G%ied
-        if (i.lt.G%iscB) then
-           CS%STKX0(i,j,:)=CS%STKX0(G%iscB,j,:)
-        elseif (i.gt.G%iecB) then
-           CS%STKX0(i,j,:)=CS%STKX0(G%iecB,j,:)
-        endif
-     enddo
-  enddo
-  do i=G%isd,G%ied
-     do j=G%isdB,G%iedB
-        if (j.lt.G%jscB) then
-           CS%STKY0(i,j,:)=CS%STKY0(i,G%iscB,:)
-        elseif (j.gt.G%jecB) then
-           CS%STKY0(i,j,:)=CS%STKY0(i,G%jecB,:)
-        endif
-     enddo
-  enddo
-  
+
+return
+
 end subroutine Stokes_Drift_by_Data_Override
 !/
 !/
@@ -580,4 +715,25 @@ subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES)
      enddo
   enddo
 end subroutine CoriolisStokes
+
+!> Clear pointers, deallocate memory
+subroutine Waves_end(CS)
+!/
+  type(wave_parameters_CS), pointer :: CS !< Control structure
+!/
+  if (allocated(CS%WaveNum_Cen)) then; DEALLOC_( CS%WaveNum_Cen ); endif
+  if (allocated(CS%Freq_Cen))    DEALLOC_( CS%Freq_Cen )
+  if (allocated(CS%Us_x))        DEALLOC_( CS%Us_x )
+  if (allocated(CS%Us_y))        DEALLOC_( CS%Us_y )
+  if (allocated(CS%LangNum))     DEALLOC_( CS%LangNum )
+  if (allocated(CS%STKx0))       DEALLOC_( CS%STKx0 )
+  if (allocated(CS%STKy0))       DEALLOC_( CS%STKy0 )
+  if (allocated(CS%KvS))         DEALLOC_( CS%KvS )
+  if (allocated(CS%Us0_y))       DEALLOC_( CS%Us0_y )
+  if (allocated(CS%Us0_x))       DEALLOC_( CS%Us0_x )
+!/
+  DEALLOC_( CS )
+!/
+  return
+end subroutine Waves_end
 end module MOM_wave_interface
