@@ -952,7 +952,7 @@ subroutine ALE_initRegridding(GV, max_depth, param_file, mod, regridCS, dz )
   call initialize_regridding( GV%ke, coordMode, interpScheme, regridCS, &
                               compressibility_fraction=compress_fraction )
 
-  if (coordMode(1:2) == 'Z*') then
+  if (coordinateMode(coordMode) == REGRIDDING_ZSTAR) then
     call get_param(param_file, mod, "ZSTAR_RIGID_SURFACE_THRESHOLD", height_of_rigid_surface, &
                  "A threshold height used to detect the presence of a rigid-surface\n"//&
                  "depressing the upper-surface of the model, such as an ice-shelf.\n"//&

@@ -33,7 +33,7 @@ use MOM_coord_initialization, only : MOM_initialize_coord
 use MOM_diag_mediator,        only : diag_mediator_init, enable_averaging
 use MOM_diag_mediator,        only : diag_mediator_infrastructure_init
 use MOM_diag_mediator,        only : diag_register_area_ids
-use MOM_diag_mediator,        only : diag_set_thickness_ptr, diag_update_target_grids
+use MOM_diag_mediator,        only : diag_set_state_ptrs, diag_update_remap_grids
 use MOM_diag_mediator,        only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator,        only : register_diag_field, register_static_field
 use MOM_diag_mediator,        only : register_scalar_field
@@ -737,7 +737,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
         ! Whenever thickness changes let the diag manager know, target grids
         ! for vertical remapping may need to be regenerated.
-        call diag_update_target_grids(CS%diag)
+        call diag_update_remap_grids(CS%diag)
 
         call post_diags_TS_vardec(G, CS, dtdia)
 
@@ -819,7 +819,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
         ! Whenever thickness changes let the diag manager know, target grids
         ! for vertical remapping may need to be regenerated.
-        call diag_update_target_grids(CS%diag)
+        call diag_update_remap_grids(CS%diag)
 
       endif
     endif
@@ -933,7 +933,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
  
     ! Whenever thickness changes let the diag manager know, target grids
     ! for vertical remapping may need to be regenerated.
-    call diag_update_target_grids(CS%diag)
+    call diag_update_remap_grids(CS%diag)
 
     if (CS%useMEKE) call step_forward_MEKE(CS%MEKE, h, CS%VarMix%SN_u, CS%VarMix%SN_v, &
                                            CS%visc, dt, G, GV, CS%MEKE_CSp, CS%uhtr, CS%vhtr)
@@ -1064,7 +1064,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         ! Whenever thickness changes let the diag manager know, target grids
         ! for vertical remapping may need to be regenerated. This needs to
         ! happen after the H update and before the next post_data.
-        call diag_update_target_grids(CS%diag)
+        call diag_update_remap_grids(CS%diag)
 
         call post_diags_TS_vardec(G, CS, CS%dt_trans)
 
@@ -1942,17 +1942,18 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   ! and before MOM_diagnostics_init
   call diag_masks_set(G, GV%ke, CS%missing, diag)
 
-  ! Set up a pointers h within diag mediator control structure,
-  ! this needs to occur _after_ CS%h has been allocated.
-  call diag_set_thickness_ptr(CS%h, diag)
+  ! Set up pointers within diag mediator control structure,
+  ! this needs to occur _after_ CS%h etc. have been allocated.
+  call diag_set_state_ptrs(CS%h, CS%T, CS%S, CS%tv%eqn_of_state, diag)
 
   ! This call sets up the diagnostic axes. These are needed,
   ! e.g. to generate the target grids below.
   call set_axes_info(G, GV, param_file, diag)
 
-  ! Whenever thickness changes let the diag manager know, target grids
-  ! for vertical remapping may need to be regenerated. 
-  call diag_update_target_grids(diag)
+  ! Whenever thickness/T/S changes let the diag manager know, target grids
+  ! for vertical remapping may need to be regenerated.
+  ! FIXME: are h, T, S updated at the same time? Review these for T, S updates.
+  call diag_update_remap_grids(diag)
 
   ! Diagnose static fields AND associate areas/volumes with axes
   call write_static_fields(G, CS%diag)
@@ -2216,7 +2217,7 @@ subroutine register_diags(Time, G, GV, CS, ADp)
       'Meridional velocity', 'meter second-1', cmor_field_name='vo', cmor_units='m s-1', &
       cmor_standard_name='sea_water_y_velocity', cmor_long_name='Sea Water Y Velocity')
   CS%id_h = register_diag_field('ocean_model', 'h', diag%axesTL, Time, &
-      'Layer Thickness', thickness_units, v_cell_method='sum')
+      'Layer Thickness', thickness_units, v_extrinsic=.true.)
 
   CS%id_volo = register_scalar_field('ocean_model', 'volo', Time, diag,&
       long_name='Total volume of liquid ocean', units='m3',            &
@@ -2366,7 +2367,7 @@ subroutine register_diags(Time, G, GV, CS, ADp)
   CS%id_v_predia = register_diag_field('ocean_model', 'v_predia', diag%axesCvL, Time, &
       'Meridional velocity before diabatic forcing', 'meter second-1')
   CS%id_h_predia = register_diag_field('ocean_model', 'h_predia', diag%axesTL, Time, &
-      'Layer Thickness before diabatic forcing', thickness_units, v_cell_method='sum')
+      'Layer Thickness before diabatic forcing', thickness_units, v_extrinsic=.true.)
   CS%id_e_predia = register_diag_field('ocean_model', 'e_predia', diag%axesTi, Time, &
       'Interface Heights before diabatic forcing', 'meter')
   if (CS%diabatic_first .and. (.not. CS%adiabatic)) then
@@ -2375,7 +2376,7 @@ subroutine register_diags(Time, G, GV, CS, ADp)
     CS%id_v_preale = register_diag_field('ocean_model', 'v_preale', diag%axesCvL, Time, &
         'Meridional velocity before remapping', 'meter second-1')
     CS%id_h_preale = register_diag_field('ocean_model', 'h_preale', diag%axesTL, Time, &
-        'Layer Thickness before remapping', thickness_units, v_cell_method='sum')
+        'Layer Thickness before remapping', thickness_units, v_extrinsic=.true.)
     CS%id_T_preale = register_diag_field('ocean_model', 'T_preale', diag%axesTL, Time, &
         'Temperature before remapping', 'degC')
     CS%id_S_preale = register_diag_field('ocean_model', 'S_preale', diag%axesTL, Time, &
@@ -2428,7 +2429,7 @@ subroutine register_diags_TS_tendency(Time, G, CS)
       cmor_field_name="opottemptend", cmor_units="W m-2",                                         &
       cmor_standard_name="tendency_of_sea_water_potential_temperature_expressed_as_heat_content", &
       cmor_long_name ="Tendency of Sea Water Potential Temperature Expressed as Heat Content",    &
-      v_cell_method='sum')
+      v_extrinsic=.true.)
   CS%id_Th_tendency_2d = register_diag_field('ocean_model', 'Th_tendency_2d', diag%axesT1, Time,              &
       'Vertical sum of net time tendency for heat', 'W/m2',                                                   &
       cmor_field_name="opottemptend_2d", cmor_units="W m-2",                                                   &
@@ -2468,7 +2469,7 @@ subroutine register_diags_TS_tendency(Time, G, CS)
       cmor_field_name="osalttend", cmor_units="kg m-2 s-1",                               &
       cmor_standard_name="tendency_of_sea_water_salinity_expressed_as_salt_content",      &
       cmor_long_name ="Tendency of Sea Water Salinity Expressed as Salt Content",         &
-      v_cell_method='sum')
+      v_extrinsic=.true.)
   CS%id_Sh_tendency_2d = register_diag_field('ocean_model', 'Sh_tendency_2d', diag%axesT1, Time, &
       'Vertical sum of net time tendency for salt', 'kg/(m2 * s)',                               &
       cmor_field_name="osalttend_2d", cmor_units="kg m-2 s-1",                                   &
