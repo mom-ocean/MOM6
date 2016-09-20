@@ -976,11 +976,11 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
       if ((asv1 + asv2 > 0.0) .and. associated(state%tauy_shelf)) &
         tauy2 = (asv1 * state%tauy_shelf(i,j-1)**2 + &
                  asv2 * state%tauy_shelf(i,j)**2  ) / (asv1 + asv2)
-      ! GM, ustar must be the same as ustar_shelf, otherwise the results will
-      ! be different when starting from a RESTART file.
+      
+      ! GM: melting is computed using ustar_shelf (and not ustar), which has already
+      ! been passed, so believe we do not need to update fluxes%ustar.
       !fluxes%ustar(i,j) = MAX(CS%ustar_bg, sqrt(Irho0 * sqrt(taux2 + tauy2)))
 
-      fluxes%ustar(i,j) = fluxes%ustar_shelf(i,j)
 
       if (associated(fluxes%sw)) fluxes%sw(i,j) = 0.0
       if (associated(fluxes%lw)) fluxes%lw(i,j) = 0.0
@@ -1015,9 +1015,6 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
 
     endif
   enddo ; enddo
-  if (CS%debug) then
-    call hchksum(fluxes%ustar_shelf, "ustar_shelf", G%HI, haloshift=0)
-  endif
   
   ! If the shelf mass is changing, the fluxes%rigidity_ice_[uv] needs to be
   ! updated here.
