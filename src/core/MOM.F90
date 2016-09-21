@@ -2820,9 +2820,12 @@ subroutine set_restart_fields(GV, param_file, CS)
   type(verticalGrid_type),  intent(inout) :: GV         !< ocean vertical grid structure
   type(param_file_type),    intent(in) :: param_file    !< opened file for parsing to get parameters
   type(MOM_control_struct), intent(in) :: CS            !< control structure set up by inialize_MOM
-
+  ! Local variables
+  logical :: use_ice_shelf ! Needed to determine whether to add tv%Hml to restarts
   type(vardesc) :: vd
   character(len=48) :: thickness_units, flux_units
+
+  call get_param(param_file, '', "ICE_SHELF", use_ice_shelf, default=.false., do_not_log=.true.)
 
   thickness_units = get_thickness_units(GV)
   flux_units = get_flux_units(GV)
@@ -2857,8 +2860,8 @@ subroutine set_restart_fields(GV, param_file, CS)
   vd = var_desc("ave_ssh","meter","Time average sea surface height",'h','1')
   call register_restart_field(CS%ave_ssh, vd, .false., CS%restart_CSp)
 
-  ! GM, hML is needed when using the ice shelf module 
-  if (associated(CS%tv%Hml)) then
+  ! hML is needed when using the ice shelf module
+  if (use_ice_shelf .and. associated(CS%tv%Hml)) then
      vd = var_desc("hML","meter","Mixed layer thickness",'h','1')
      call register_restart_field(CS%tv%Hml, vd, .false., CS%restart_CSp)
   endif
