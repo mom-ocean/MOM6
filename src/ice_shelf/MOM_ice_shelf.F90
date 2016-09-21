@@ -510,6 +510,14 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
 
   iDens = 1.0/CS%density_ocean_avg
 
+  ! GM, zero some fields of the ice shelf structure (ice_shelf_CS)
+  ! these fields are already set to zero during initialization
+  ! However, they seem to be changed somewhere and, for diagnostic 
+  ! reasons, it is better to set them to zero again.
+  CS%tflux_shelf(:,:) = 0.0; CS%exch_vel_t(:,:) = 0.0
+  CS%lprec(:,:) = 0.0; CS%exch_vel_s(:,:) = 0.0
+  CS%salt_flux(:,:) = 0.0; CS%t_flux(:,:) = 0.0
+  CS%tfreeze(:,:) = 0.0
 
   if (CS%shelf_mass_is_dynamic .and. CS%override_shelf_movement) & 
                                   call update_shelf_mass(CS, Time)
@@ -761,30 +769,38 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
     enddo ! i-loop
   enddo ! j-loop
 
-  do j=js,je
-    do i=is,ie
-    ! GM: set lprec (therefore melting) to zero above a cutoff pressure
-    ! (CS%Rho0*CS%cutoff_depth*CS%g_Earth) this is needed for the isomip 
-    ! test case.
-        
-      if ((CS%g_Earth * CS%mass_shelf(i,j)) < CS%Rho0*CS%cutoff_depth* &
-         CS%g_Earth) CS%lprec(i,j) = 0.0
-    ! avoid negative fluxes
-    !  CS%lprec(i,j) = MAX(CS%lprec(i,j),0.0)
-      
-    enddo ! i-loop
-  enddo ! j-loop
-
   ! CS%lprec = precipitating liquid water into the ocean ( kg/(m^2 s) )
   ! melt in m/year 
   !fluxes%iceshelf_melt = CS%lprec  * (86400.0*365.0/CS%density_ice)
-  ! Use rho_fw for ISOMIP experiments
-  fluxes%iceshelf_melt = CS%lprec  * (86400.0*365.0/rho_fw) 
+  ! Use rhoefw for ISOMIP experiments
+  fluxes%iceshelf_melt = CS%lprec  * (86400.0*365.0/rho_fw)
+
+  do j=js,je
+    do i=is,ie
+      ! GM: set melt to zero above a cutoff pressure
+      ! (CS%Rho0*CS%cutoff_depth*CS%g_Earth) this is needed for the isomip 
+      ! test case.
+        
+      if ((CS%g_Earth * CS%mass_shelf(i,j)) < CS%Rho0*CS%cutoff_depth* &
+         CS%g_Earth) fluxes%iceshelf_melt(i,j) = 0.0
+     
+      !GM, safety check
+      if (abs(fluxes%iceshelf_melt(i,j))>0.0) then
+          if (fluxes%ustar_shelf(i,j) == 0.0) then
+             write(*,*)'Something is wrong at i,j',i,j
+             call MOM_error(FATAL, &
+                  "shelf_calc_flux: |melt| > 0 and star_shelf = 0.")
+          endif
+      endif 
+    enddo ! i-loop
+  enddo ! j-loop
+
   ! mass flux (kg/s), part of ISOMIP diags.
   ! first, allocate mass_flux. This is probably not the best way to do this.
   !im,jm=SHAPE(CS%lprec) 
-  ALLOCATE ( mass_flux(G%ied,G%jed) )
-  mass_flux = (CS%lprec) * CS%area_shelf_h  
+  ALLOCATE ( mass_flux(G%ied,G%jed) ); mass_flux(:,:) = 0.0
+  mass_flux = (CS%lprec) * CS%area_shelf_h 
+ 
   if (CS%DEBUG) then
    call hchksum (fluxes%iceshelf_melt, "melt rate", G%HI, haloshift=0)
    call hchksum (fluxes%ustar_shelf, "ustar_shelf calc", G%HI, haloshift=0)
@@ -848,7 +864,8 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
    if (CS%id_area_shelf_h > 0) call post_data(CS%id_area_shelf_h, CS%area_shelf_h, CS%diag)
    if (CS%id_ustar_shelf > 0) call post_data(CS%id_ustar_shelf, fluxes%ustar_shelf, CS%diag)
    ! Use freshwater density fotr ISOMIP exps.
-   if (CS%id_melt > 0) call post_data(CS%id_melt, (CS%lprec) * (86400.0*365.0/rho_fw), CS%diag)
+   !if (CS%id_melt > 0) call post_data(CS%id_melt, (CS%lprec) * (86400.0*365.0/rho_fw), CS%diag)
+   if (CS%id_melt > 0) call post_data(CS%id_melt, fluxes%iceshelf_melt, CS%diag)
    !if (CS%id_melt > 0) call post_data(CS%id_melt, (CS%lprec) * (86400.0*365.0/CS%density_ice), CS%diag)
    if (CS%id_thermal_driving > 0) call post_data(CS%id_thermal_driving, (state%sst-CS%tfreeze), CS%diag)
    if (CS%id_haline_driving > 0) call post_data(CS%id_haline_driving, (state%sss - Sbdry), CS%diag)
