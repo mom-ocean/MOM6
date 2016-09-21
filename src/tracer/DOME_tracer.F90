@@ -356,7 +356,7 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
 
   if (associated(OBC)) then
     call query_vardesc(CS%tr_desc(1), name, caller="initialize_DOME_tracer")
-    if (OBC%apply_OBC_v) then
+    if (OBC%specified_v_BCs_exist_globally) then
       allocate(OBC_tr1_v(G%isd:G%ied,G%jsd:G%jed,nz))
       do k=1,nz ; do j=G%jsd,G%jed ; do i=G%isd,G%ied
         if (k < nz/2) then ; OBC_tr1_v(i,j,k) = 0.0

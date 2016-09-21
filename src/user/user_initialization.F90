@@ -41,7 +41,7 @@ implicit none ; private
 public USER_set_coord, USER_initialize_topography, USER_initialize_thickness
 public USER_initialize_velocity, USER_init_temperature_salinity
 public USER_init_mixed_layer_density, USER_initialize_sponges
-public USER_set_OBC_positions, USER_set_OBC_data, USER_set_rotation
+public USER_set_OBC_data, USER_set_rotation
 
 logical :: first_call = .true.
 
@@ -198,23 +198,6 @@ subroutine USER_initialize_sponges(G, use_temperature, tv, param_file, CSp, h)
   if (first_call) call write_user_log(param_file)
 
 end subroutine USER_initialize_sponges
-
-!> This subroutine sets the location of open boundaries.
-subroutine USER_set_OBC_positions(G, param_file, OBC)
-  type(dyn_horgrid_type),     intent(in) :: G     !< The ocean's grid structure.
-  type(param_file_type),      intent(in) :: param_file !< A structure indicating the
-                                                  !! open file to parse for model
-                                                  !! parameter values.
-  type(ocean_OBC_type),       pointer    :: OBC   !< This open boundary condition type specifies
-                                                  !! whether, where, and what open boundary
-                                                  !! conditions are used.
-!  call MOM_error(FATAL, &
-!   "USER_initialization.F90, USER_set_OBC_positions: " // &
-!   "Unmodified user routine called - you must edit the routine to use it")
-
-  if (first_call) call write_user_log(param_file)
-
-end subroutine USER_set_OBC_positions
 
 !> This subroutine sets the properties of flow at open boundary conditions.
 subroutine USER_set_OBC_data(OBC, tv, G, param_file, tr_Reg)
