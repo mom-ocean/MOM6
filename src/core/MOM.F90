@@ -2073,7 +2073,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
              (LEN_TRIM(dirs%input_filename) == 1))
   call tracer_flow_control_init(.not.new_sim, Time, G, GV, CS%h, param_file, &
              CS%diag, CS%OBC, CS%tracer_flow_CSp, CS%sponge_CSp, &
-             CS%ALE_sponge_CSp, CS%diag_to_Z_CSp)
+             CS%ALE_sponge_CSp, CS%diag_to_Z_CSp, CS%tv)
 
   call cpu_clock_begin(id_clock_pass_init)
   call do_group_pass(CS%pass_uv_T_S_h, G%Domain)
