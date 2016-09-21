@@ -472,7 +472,7 @@ subroutine Stokes_Drift_by_data_override(day_center,G,GV,CS)
 
     ! Read in number of wavenumber bands in file to set number to be read in
     ! Hardcoded filename/variables
-    filename = 'TMP.nc'
+    filename = 'StkSpec.nc'
     varread1 = 'wavenumber' !Old method gives wavenumber
     varread2 = 'frequency'  !New method gives frequency
     rcode_wn = NF90_OPEN(trim(filename), NF90_NOWRITE, ncid)

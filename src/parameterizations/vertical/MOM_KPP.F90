@@ -401,6 +401,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
   CS%id_vssurf = register_diag_field('ocean_model', 'Vs_surf', diag%axesCv1, Time, &
       'y-component Stokes drift at surface as passed to [CVmix] KPP',&
       'm/s')
+  
   if (CS%id_OBLdepth > 0) allocate( CS%OBLdepth( SZI_(G), SZJ_(G) ) )
   if (CS%id_OBLdepth > 0) CS%OBLdepth(:,:) = 0.
   if (CS%id_BulkDrho > 0) allocate( CS%dRho( SZI_(G), SZJ_(G), SZK_(G) ) )
@@ -1096,12 +1097,13 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       if (CS%id_Ssurf  > 0)   CS%Ssurf(i,j)    = surfSalt
       if (CS%id_Usurf  > 0)   CS%Usurf(i,j)    = surfU
       if (CS%id_Vsurf  > 0)   CS%Vsurf(i,j)    = surfv
-      if (CS%id_us20pct  > 0)   CS%us20pct(i,j)    = usx20pct
-      if (CS%id_vs20pct  > 0)   CS%vs20pct(i,j)    = usy20pct
-      if (CS%id_ussurf  > 0)   CS%ussurf(i,j)    = WAVES%Us0_x(i,j)
-      if (CS%id_vssurf  > 0)   CS%vssurf(i,j)    = WAVES%Us0_y(i,j)
-
-       ! Update output of routine
+      if (present(waves)) then
+         if (CS%id_us20pct  > 0)   CS%us20pct(i,j)    = usx20pct
+         if (CS%id_vs20pct  > 0)   CS%vs20pct(i,j)    = usy20pct
+         if (CS%id_ussurf  > 0)   CS%ussurf(i,j)    = WAVES%Us0_x(i,j)
+         if (CS%id_vssurf  > 0)   CS%vssurf(i,j)    = WAVES%Us0_y(i,j)
+      endif
+      ! Update output of routine
       if (.not. CS%passiveMode) then
         if (CS%KPPisAdditive) then
           do k=1, G%ke+1
