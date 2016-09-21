@@ -38,7 +38,6 @@ implicit none ; private
 public DOME_initialize_topography
 public DOME_initialize_thickness
 public DOME_initialize_sponges
-public DOME_set_OBC_positions
 public DOME_set_OBC_data
 
 contains
@@ -233,36 +232,6 @@ subroutine DOME_initialize_sponges(G, GV, tv, PF, CSp)
 
 end subroutine DOME_initialize_sponges
 
-!> Set the positions of the open boundary needed for the DOME experiment.
-subroutine DOME_set_OBC_positions(G, param_file, OBC)
-  type(dyn_horgrid_type),     intent(in) :: G   !< Grid structure.
-  type(param_file_type),      intent(in) :: param_file !< Parameter file handle.
-  type(ocean_OBC_type),       pointer    :: OBC !< Open boundary control structure.
-  ! Local variables
-  character(len=40)  :: mod = "DOME_set_OBC_positions" ! This subroutine's name.
-  integer :: i, j
-
-  if (.not.associated(OBC)) call MOM_error(FATAL, &
-           "DOME_initialization, DOME_set_OBC_positions: OBC type was not allocated!")
-
-  if (OBC%apply_OBC_u) then
-    ! Set where u points are determined by OBCs.
-    !allocate(OBC_mask_u(IsdB:IedB,jsd:jed)) ; OBC_mask_u(:,:) = .false.
-    call MOM_error(FATAL,"DOME_initialization, DOME_set_OBC_positions: "//&
-                   "APPLY_OBC_U=True is not coded for the DOME experiment")
-  endif
-  if (OBC%apply_OBC_v) then
-    ! Set where v points are determined by OBCs.
-    allocate(OBC%OBC_mask_v(G%isd:G%ied,G%JsdB:G%JedB)) ; OBC%OBC_mask_v(:,:) = .false.
-    do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-      if ((G%geoLonCv(i,J) > 1000.0) .and. (G%geoLonCv(i,J)  < 1100.0) .and. &
-          (abs(G%geoLatCv(i,J) - G%gridLatB(G%JegB)) < 0.1)) then
-        OBC%OBC_mask_v(i,J) = .true.
-      endif
-    enddo ; enddo
-  endif
-end subroutine DOME_set_OBC_positions
-
 !> This subroutine sets the properties of flow at open boundary conditions.
 !! This particular example is for the DOME inflow describe in Legg et al. 2006.
 subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
@@ -280,11 +249,8 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
   type(tracer_registry_type), pointer    :: tr_Reg !< Tracer registry.
 
   real, pointer, dimension(:,:,:) :: &
-    OBC_T_u => NULL(), &    ! These arrays should be allocated and set to
     OBC_T_v => NULL(), &    ! specify the values of T and S that should come
-    OBC_S_u => NULL(), &    ! in through u- and v- points through the open
     OBC_S_v => NULL()       ! boundary conditions, in C and psu.
-  logical :: apply_OBC_u, apply_OBC_v
   ! The following variables are used to set the target temperature and salinity.
   real :: T0(SZK_(G)), S0(SZK_(G))
   real :: pres(SZK_(G))      ! An array of the reference pressure in Pa.
@@ -314,113 +280,71 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
                      ! region of the specified shear profile.
 
   if (.not.associated(OBC)) return
-  if (.not.(OBC%apply_OBC_u .or. OBC%apply_OBC_v)) return
 
-  if (OBC%apply_OBC_u) then
-    allocate(OBC%u(IsdB:IedB,jsd:jed,nz)) ; OBC%u(:,:,:) = 0.0
-    allocate(OBC%uh(IsdB:IedB,jsd:jed,nz)) ; OBC%uh(:,:,:) = 0.0
-    allocate(OBC%OBC_kind_u(IsdB:IedB,jsd:jed)) ; OBC%OBC_kind_u(:,:) = OBC_NONE
-    allocate(OBC%OBC_direction_u(IsdB:IedB,jsd:jed)) ; OBC%OBC_direction_u(:,:) = OBC_NONE
-    do j=jsd,jed ; do I=IsdB,IedB
-      if (OBC%OBC_mask_u(I,j)) OBC%OBC_kind_u(I,j) = OBC_SIMPLE
-    enddo ; enddo
-  endif
-  if (OBC%apply_OBC_v) then
-    allocate(OBC%v(isd:ied,JsdB:JedB,nz)) ; OBC%v(:,:,:) = 0.0
-    allocate(OBC%vh(isd:ied,JsdB:JedB,nz)) ; OBC%vh(:,:,:) = 0.0
-    allocate(OBC%OBC_kind_v(isd:ied,JsdB:JedB)) ; OBC%OBC_kind_v(:,:) = OBC_NONE
-    allocate(OBC%OBC_direction_v(isd:ied,JsdB:JedB)) ; OBC%OBC_direction_v(:,:) = OBC_NONE
+  allocate(OBC%v(isd:ied,JsdB:JedB,nz)) ; OBC%v(:,:,:) = 0.0
+  allocate(OBC%vh(isd:ied,JsdB:JedB,nz)) ; OBC%vh(:,:,:) = 0.0
+
+  g_prime_tot = (GV%g_Earth/GV%Rho0)*2.0
+  Def_Rad = sqrt(D_edge*g_prime_tot) / (1.0e-4*1000.0)
+  tr_0 = (-D_edge*sqrt(D_edge*g_prime_tot)*0.5e3*Def_Rad) * GV%m_to_H
+
+  do k=1,nz
+    rst = -1.0
+    if (k>1) rst = -1.0 + (real(k-1)-0.5)/real(nz-1)
+
+    rsb = 0.0
+    if (k<nz) rsb = -1.0 + (real(k-1)+0.5)/real(nz-1)
+    rc = -1.0 + real(k-1)/real(nz-1)
+
+    ! These come from assuming geostrophy and a constant Ri profile.
+    y1 = (2.0*Ri_trans*rst + Ri_trans + 2.0)/(2.0 - Ri_trans)
+    y2 = (2.0*Ri_trans*rsb + Ri_trans + 2.0)/(2.0 - Ri_trans)
+    tr_k = tr_0 * (2.0/(Ri_trans*(2.0-Ri_trans))) * &
+           ((log(y1)+1.0)/y1 - (log(y2)+1.0)/y2)
+    v_k = -sqrt(D_edge*g_prime_tot)*log((2.0 + Ri_trans*(1.0 + 2.0*rc)) / &
+                                        (2.0 - Ri_trans))
+    if (k == nz)  tr_k = tr_k + tr_0 * (2.0/(Ri_trans*(2.0+Ri_trans))) * &
+                                       log((2.0+Ri_trans)/(2.0-Ri_trans))
     do J=JsdB,JedB ; do i=isd,ied
-      if (OBC%OBC_mask_v(i,J)) OBC%OBC_kind_v(i,J) = OBC_SIMPLE
-    enddo ; enddo
-  endif
-
-  if (OBC%apply_OBC_v) then
-    g_prime_tot = (GV%g_Earth/GV%Rho0)*2.0
-    Def_Rad = sqrt(D_edge*g_prime_tot) / (1.0e-4*1000.0)
-    tr_0 = (-D_edge*sqrt(D_edge*g_prime_tot)*0.5e3*Def_Rad) * GV%m_to_H
-
-    do k=1,nz
-      rst = -1.0
-      if (k>1) rst = -1.0 + (real(k-1)-0.5)/real(nz-1)
-
-      rsb = 0.0
-      if (k<nz) rsb = -1.0 + (real(k-1)+0.5)/real(nz-1)
-      rc = -1.0 + real(k-1)/real(nz-1)
-
-  ! These come from assuming geostrophy and a constant Ri profile.
-      y1 = (2.0*Ri_trans*rst + Ri_trans + 2.0)/(2.0 - Ri_trans)
-      y2 = (2.0*Ri_trans*rsb + Ri_trans + 2.0)/(2.0 - Ri_trans)
-      tr_k = tr_0 * (2.0/(Ri_trans*(2.0-Ri_trans))) * &
-             ((log(y1)+1.0)/y1 - (log(y2)+1.0)/y2)
-      v_k = -sqrt(D_edge*g_prime_tot)*log((2.0 + Ri_trans*(1.0 + 2.0*rc)) / &
-                                          (2.0 - Ri_trans))
-      if (k == nz)  tr_k = tr_k + tr_0 * (2.0/(Ri_trans*(2.0+Ri_trans))) * &
-                                         log((2.0+Ri_trans)/(2.0-Ri_trans))
-      do J=JsdB,JedB ; do i=isd,ied
-        if (OBC%OBC_mask_v(i,J)) then
-          ! This needs to be unneccesarily complicated without symmetric memory.
-          lon_im1 = 2.0*G%geoLonCv(i,J) - G%geoLonBu(I,J)
-          ! if (isd > IsdB) lon_im1 = G%geoLonBu(I-1,J)
-          OBC%vh(i,J,k) = tr_k * (exp(-2.0*(lon_im1 - 1000.0)/Def_Rad) -&
-                                exp(-2.0*(G%geoLonBu(I,J) - 1000.0)/Def_Rad))
-          OBC%v(i,J,k) = v_k * exp(-2.0*(G%geoLonCv(i,J) - 1000.0)/Def_Rad)
-        else
-          OBC%vh(i,J,k) = 0.0 ; OBC%v(i,J,k) = 0.0
-        endif
-      enddo ; enddo
-    enddo
-  endif
-
-  if (OBC%apply_OBC_u) then
-    do k=1,nz ; do j=jsd,jed ; do I=IsdB,IedB
-      if (OBC%OBC_mask_u(I,j)) then
-        ! An appropriate expression for the zonal inflow velocities and
-        ! transports should go here.
-        OBC%uh(I,j,k) = 0.0 * GV%m_to_H ; OBC%u(I,j,k) = 0.0
+      if (OBC%OBC_mask_v(i,J)) then
+        ! This needs to be unneccesarily complicated without symmetric memory.
+        lon_im1 = 2.0*G%geoLonCv(i,J) - G%geoLonBu(I,J)
+        ! if (isd > IsdB) lon_im1 = G%geoLonBu(I-1,J)
+        OBC%vh(i,J,k) = tr_k * (exp(-2.0*(lon_im1 - 1000.0)/Def_Rad) -&
+                              exp(-2.0*(G%geoLonBu(I,J) - 1000.0)/Def_Rad))
+        OBC%v(i,J,k) = v_k * exp(-2.0*(G%geoLonCv(i,J) - 1000.0)/Def_Rad)
       else
-        OBC%uh(I,j,k) = 0.0 ; OBC%u(I,j,k) = 0.0
+        OBC%vh(i,J,k) = 0.0 ; OBC%v(i,J,k) = 0.0
       endif
-    enddo ; enddo ; enddo
-  endif
+    enddo ; enddo
+  enddo
 
   !   The inflow values of temperature and salinity also need to be set here if
   ! these variables are used.  The following code is just a naive example.
-  if (OBC%apply_OBC_u .or. OBC%apply_OBC_v) then
-    if (associated(tv%S)) then
-      ! In this example, all S inflows have values of 35 psu.
-      call add_tracer_OBC_values("S", tr_Reg, OBC_inflow=35.0)
-    endif
-    if (associated(tv%T)) then
-      ! In this example, the T values are set to be consistent with the layer
-      ! target density and a salinity of 35 psu.  This code is taken from
-      ! USER_initialize_temp_sal.
-      pres(:) = tv%P_Ref ; S0(:) = 35.0 ; T0(1) = 25.0
-      call calculate_density(T0(1),S0(1),pres(1),rho_guess(1),tv%eqn_of_state)
-      call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,1,tv%eqn_of_state)
+  if (associated(tv%S)) then
+    ! In this example, all S inflows have values of 35 psu.
+    call add_tracer_OBC_values("S", tr_Reg, OBC_inflow=35.0)
+  endif
+  if (associated(tv%T)) then
+    ! In this example, the T values are set to be consistent with the layer
+    ! target density and a salinity of 35 psu.  This code is taken from
+    ! USER_initialize_temp_sal.
+    pres(:) = tv%P_Ref ; S0(:) = 35.0 ; T0(1) = 25.0
+    call calculate_density(T0(1),S0(1),pres(1),rho_guess(1),tv%eqn_of_state)
+    call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,1,tv%eqn_of_state)
 
-      do k=1,nz ; T0(k) = T0(1) + (GV%Rlay(k)-rho_guess(1)) / drho_dT(1) ; enddo
-      do itt=1,6
-        call calculate_density(T0,S0,pres,rho_guess,1,nz,tv%eqn_of_state)
-        call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,tv%eqn_of_state)
-        do k=1,nz ; T0(k) = T0(k) + (GV%Rlay(k)-rho_guess(k)) / drho_dT(k) ; enddo
-      enddo
+    do k=1,nz ; T0(k) = T0(1) + (GV%Rlay(k)-rho_guess(1)) / drho_dT(1) ; enddo
+    do itt=1,6
+      call calculate_density(T0,S0,pres,rho_guess,1,nz,tv%eqn_of_state)
+      call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,tv%eqn_of_state)
+      do k=1,nz ; T0(k) = T0(k) + (GV%Rlay(k)-rho_guess(k)) / drho_dT(k) ; enddo
+    enddo
 
-      if (OBC%apply_OBC_u) then
-        allocate(OBC_T_u(IsdB:IedB,jsd:jed,nz))
-        do k=1,nz ; do j=jsd,jed ; do I=IsdB,IedB
-          OBC_T_u(I,j,k) = T0(k)
-        enddo ; enddo ; enddo
-      endif
-      if (OBC%apply_OBC_v) then
-        allocate(OBC_T_v(isd:ied,JsdB:JedB,nz))
-        do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied
-          OBC_T_v(i,J,k) = T0(k)
-        enddo ; enddo ; enddo
-      endif
-      call add_tracer_OBC_values("T", tr_Reg, OBC_in_u=OBC_T_u, &
-                                              OBC_in_v=OBC_T_v)
-    endif
+    allocate(OBC_T_v(isd:ied,JsdB:JedB,nz))
+    do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied
+      OBC_T_v(i,J,k) = T0(k)
+    enddo ; enddo ; enddo
+    call add_tracer_OBC_values("T", tr_Reg, OBC_in_v=OBC_T_v)
   endif
 
 end subroutine DOME_set_OBC_data
