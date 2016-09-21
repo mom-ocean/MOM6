@@ -79,7 +79,7 @@ use MOM_sponge, only : set_up_sponge_field, sponge_CS
 use MOM_time_manager, only : time_type, get_time
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_registry, only : add_tracer_diagnostics, add_tracer_OBC_values
-use MOM_tracer_registry, only : tracer_vertdiff
+use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_tracer_Z_init, only : tracer_Z_init
 use MOM_variables, only : surface
 use MOM_verticalGrid, only : verticalGrid_type
@@ -525,13 +525,16 @@ subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, CS)
 
 end subroutine init_tracer_CFC
 
-subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS)
+subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS, &
+              evap_CFL_limit, minimum_forcing_depth)
   type(ocean_grid_type),              intent(in) :: G
   type(verticalGrid_type),            intent(in) :: GV
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
   type(forcing),                      intent(in) :: fluxes
   real,                               intent(in) :: dt
   type(OCMIP2_CFC_CS),                pointer    :: CS
+  real,                             optional,intent(in)  :: evap_CFL_limit
+  real,                             optional,intent(in)  :: minimum_forcing_depth
 !   This subroutine applies diapycnal diffusion and any other column
 ! tracer physics or chemistry to the tracers from this file.
 ! CFCs are relatively simple, as they are passive tracers. with only a surface
@@ -562,6 +565,7 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
     CFC11_flux, &    ! The fluxes of CFC11 and CFC12 into the ocean, in the
     CFC12_flux       ! units of CFC concentrations times meters per second.
   real, pointer, dimension(:,:,:) :: CFC11, CFC12
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
   integer :: i, j, k, is, ie, js, je, nz, m
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -580,8 +584,24 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
 
   ! Use a tridiagonal solver to determine the concentrations after the
   ! surface source is applied and diapycnal advection and diffusion occurs.
-  call tracer_vertdiff(h_old, ea, eb, dt, CFC11, G, GV, sfc_flux=CFC11_flux)
-  call tracer_vertdiff(h_old, ea, eb, dt, CFC12, G, GV, sfc_flux=CFC12_flux)
+  if (present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
+    do k=1,nz ;do j=js,je ; do i=is,ie
+      h_work(i,j,k) = h_old(i,j,k)
+    enddo ; enddo ; enddo;    
+    call applyTracerBoundaryFluxesInOut(G, GV, CFC11, dt, fluxes, h_work, &
+        evap_CFL_limit, minimum_forcing_depth)
+    call tracer_vertdiff(h_work, ea, eb, dt, CFC11, G, GV, sfc_flux=CFC11_flux)
+    
+    do k=1,nz ;do j=js,je ; do i=is,ie
+      h_work(i,j,k) = h_old(i,j,k)
+    enddo ; enddo ; enddo;    
+    call applyTracerBoundaryFluxesInOut(G, GV, CFC12, dt, fluxes, h_work, &
+        evap_CFL_limit, minimum_forcing_depth)
+    call tracer_vertdiff(h_work, ea, eb, dt, CFC12, G, GV, sfc_flux=CFC12_flux)
+  else
+    call tracer_vertdiff(h_old, ea, eb, dt, CFC11, G, GV, sfc_flux=CFC11_flux)
+    call tracer_vertdiff(h_old, ea, eb, dt, CFC12, G, GV, sfc_flux=CFC12_flux)
+  endif
 
   ! Write out any desired diagnostics.
   if (CS%mask_tracers) then
