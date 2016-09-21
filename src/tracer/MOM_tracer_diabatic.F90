@@ -349,8 +349,8 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, &
 
           ! Change in state due to forcing
           dThickness = max( fractionOfForcing*netMassOut(i), -h2d(i,k) )
-          !   ### The 0.9999 here should become a run-time parameter?
-          dTracer = max( fractionOfForcing*out_flux_1d(i), -0.9999*h2d(i,k)*Tr(i,j,k))
+          ! Note this is slightly different to how salt is currently treated
+	  dTracer =  fractionOfForcing*out_flux_1d(i)
 
           ! Update the forcing by the part to be consumed within the present k-layer.
           ! If fractionOfForcing = 1, then new netMassOut vanishes.
