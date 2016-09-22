@@ -66,7 +66,6 @@ module MOM_dynamics_legacy_split
 !********+*********+*********+*********+*********+*********+*********+**
 
 
-use MOM_open_boundary, only : ocean_OBC_type
 use MOM_variables, only : vertvisc_type, thermo_var_ptrs
 use MOM_variables, only : BT_cont_type, alloc_bt_cont_type, dealloc_bt_cont_type
 use MOM_variables, only : accel_diag_ptrs, ocean_internal_state, cont_diag_ptrs
@@ -110,7 +109,9 @@ use MOM_hor_visc, only : horizontal_viscosity, hor_visc_init, hor_visc_CS
 use MOM_interface_heights, only : find_eta
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types, only : MEKE_type
+use MOM_open_boundary, only : ocean_OBC_type
 use MOM_open_boundary, only : Radiation_Open_Bdry_Conds
+use MOM_boundary_update, only : update_OBC_data
 use MOM_PressureForce, only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_tidal_forcing, only : tidal_forcing_init, tidal_forcing_CS
 use MOM_vert_friction, only : vertvisc, vertvisc_coef, vertvisc_remnant
@@ -495,9 +496,13 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
     call cpu_clock_end(id_clock_pass)
   endif
 
+  if (associated(CS%OBC)) then; if (CS%OBC%update_OBC) then
+    call update_OBC_data(CS%OBC, G, h, Time_local)
+  endif; endif
+
 ! CAu = -(f+zeta_av)/h_av vh + d/dx KE_av
   call cpu_clock_begin(id_clock_Cor)
-  call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%ADp, G, GV, &
+  call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, G, GV, &
                  CS%CoriolisAdv_CSp)
   call cpu_clock_end(id_clock_Cor)
 
@@ -784,6 +789,10 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
     call cpu_clock_end(id_clock_pass)
   endif
 
+  if (associated(CS%OBC)) then; if (CS%OBC%update_OBC) then
+    call update_OBC_data(CS%OBC, G, h, Time_local)
+  endif; endif
+
   if (BT_cont_BT_thick) then
     call cpu_clock_begin(id_clock_pass)
     call pass_vector(CS%BT_cont%h_u, CS%BT_cont%h_v, G%Domain, &
@@ -810,7 +819,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
 
 ! CAu = -(f+zeta_av)/h_av vh + d/dx KE_av
   call cpu_clock_begin(id_clock_Cor)
-  call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%ADp, G, GV, &
+  call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, G, GV, &
                  CS%CoriolisAdv_CSp)
   call cpu_clock_end(id_clock_Cor)
 
