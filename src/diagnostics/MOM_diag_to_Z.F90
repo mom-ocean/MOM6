@@ -162,13 +162,14 @@ function global_z_mean(var,G,CS,tracer)
 
 end function global_z_mean
 
-subroutine calculate_Z_diag_fields(u, v, h, ssh_in, dt, G, GV, CS)
+subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, dt, G, GV, CS)
   type(ocean_grid_type),                     intent(inout) :: G
   type(verticalGrid_type),                   intent(in)    :: GV
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
   real, dimension(SZI_(G),SZJ_(G)),          intent(in)    :: ssh_in
+  real, dimension(:,:),                      pointer       :: frac_shelf_h
   real,                                      intent(in)    :: dt
   type(diag_to_Z_CS),                        pointer       :: CS
 
@@ -212,7 +213,7 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, dt, G, GV, CS)
 
   real :: layer_ave(CS%nk_zspace)
 
-  logical :: linear_velocity_profiles = .true.
+  logical :: linear_velocity_profiles, ice_shelf
 
   integer :: k_top, k_bot, k_bot_prev
   integer :: i, j, k, k2, kz, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nk, m, nkml
@@ -223,11 +224,14 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, dt, G, GV, CS)
   nkml = max(GV%nkml, 1)
   Angstrom = GV%Angstrom
   ssh(:,:) = ssh_in
+  linear_velocity_profiles = .true.
   ! Update the halos
   call pass_var(ssh, G%Domain)
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "diagnostic_fields_zstar: Module must be initialized before it is used.")
+
+  ice_shelf = associated(frac_shelf_h)
 
   ! If no fields are needed, return
   if ((CS%id_u_z <= 0) .and. (CS%id_v_z <= 0) .and. (CS%num_tr_used < 1)) return
@@ -241,18 +245,15 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, dt, G, GV, CS)
 
     
     do j=js,je
+      shelf_depth(:) = 0. ! initially all is open ocean
       ! Remove all massless layers.
       do I=Isq,Ieq
         nk_valid(I) = 0
         D_pt(I) = 0.5*(G%bathyT(i+1,j)+G%bathyT(i,j))
-        ! GM: The following is workaround to make this subroutine works under an ice shelf
-        ! Zero ssh in the open ocean and get the depth of ice shelf (hence the abs below) 
-        ! I am not sure if -0.1 is the best choice
-        shelf_depth(I) = 0.5*(ssh(i+1,j)+ssh(i,j))
-        if (shelf_depth(I) > -0.1) then ! open ocean
-           shelf_depth(I) = 0.0
-        else ! ice shelf
-           shelf_depth(I) = abs(shelf_depth(I))
+        if (ice_shelf) then
+          if (frac_shelf_h(i,j)+frac_shelf_h(i+1,j) > 0.) then ! under shelf
+            shelf_depth(I) = abs(0.5*(ssh(i+1,j)+ssh(i,j)))
+          endif
         endif
       enddo
       do k=1,nk ; do I=Isq,Ieq
@@ -269,7 +270,7 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, dt, G, GV, CS)
         ! GM: D_pt is always slightly larger (by 1E-6 or so) than shelf_depth, so 
         ! I consider that the ice shelf is grounded when 
         ! shelf_depth(I) + 1.0E-3 > D_pt(i)
-        if (shelf_depth(I) + 1.0E-3 > D_pt(i)) nk_valid(I)=0
+        if (ice_shelf .and. shelf_depth(I) + 1.0E-3 > D_pt(i)) nk_valid(I)=0
       endif ; enddo
 
 
@@ -279,8 +280,6 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, dt, G, GV, CS)
         dilate = 0.0  
         if (htot*GV%H_to_m > 2.0*Angstrom) then
            dilate = MAX((D_pt(i) - shelf_depth(i)),Angstrom)/htot
-           !dilate = (D_pt(i) - 0.0)/htot
-           !write(*,*)MAX((D_pt(i) - shelf_depth(i)),Angstrom)/htot
         endif
         e(nk_valid(i)+1) = -D_pt(i)
         do k=nk_valid(i),1,-1 ; e(K) = e(K+1) + h_f(k,i)*dilate ; enddo
@@ -292,43 +291,43 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, dt, G, GV, CS)
                             k_bot, k_top, k_bot, wt, z1, z2)
           if (k_top>nk_valid(I)) exit
 
-	  !GM if top range that is being map is below the shelf, interpolate
+          !GM if top range that is being map is below the shelf, interpolate
           ! otherwise keep missing_vel
-	  if (CS%Z_int(kz)<=-shelf_depth(I)) then
+          if (CS%Z_int(kz)<=-shelf_depth(I)) then
 
-	    if (linear_velocity_profiles) then
-	      k = k_top
-	      if (k /= k_bot_prev) then
-		! Calculate the intra-cell profile.
-		slope = 0.0 ! ; curv = 0.0
-		if ((k < nk_valid(I)) .and. (k > nkml)) call &
-		  find_limited_slope(u_f(:,I), e, slope, k)
-	      endif
-	      ! This is the piecewise linear form.
-	      CS%u_z(I,j,kz) = wt(k) * (u_f(k,I) + 0.5*slope*(z2(k) + z1(k)))
-	      ! For the piecewise parabolic form add the following...
-	      !     + C1_3*curv*(z2(k)**2 + z2(k)*z1(k) + z1(k)**2))
-	      do k=k_top+1,k_bot-1
-		CS%u_z(I,j,kz) = CS%u_z(I,j,kz) + wt(k)*u_f(k,I)
-	      enddo
-	      if (k_bot > k_top) then ; k = k_bot
-		! Calculate the intra-cell profile.
-		slope = 0.0 ! ; curv = 0.0
-		if ((k < nk_valid(I)) .and. (k > nkml)) call &
-		  find_limited_slope(u_f(:,I), e, slope, k)
-		 ! This is the piecewise linear form.
-		CS%u_z(I,j,kz) = CS%u_z(I,j,kz) + wt(k) * &
-		    (u_f(k,I) + 0.5*slope*(z2(k) + z1(k)))
-		! For the piecewise parabolic form add the following...
-		!     + C1_3*curv*(z2(k)**2 + z2(k)*z1(k) + z1(k)**2))
-	      endif
-	      k_bot_prev = k_bot
-	    else ! Use piecewise constant profiles.
-	      CS%u_z(I,j,kz) = wt(k_top)*u_f(k_top,I)
-	      do k=k_top+1,k_bot
-		CS%u_z(I,j,kz) = CS%u_z(I,j,kz) + wt(k)*u_f(k,I)
-	      enddo
-	    endif ! linear profiles
+            if (linear_velocity_profiles) then
+              k = k_top
+              if (k /= k_bot_prev) then
+                ! Calculate the intra-cell profile.
+                slope = 0.0 ! ; curv = 0.0
+                if ((k < nk_valid(I)) .and. (k > nkml)) call &
+                  find_limited_slope(u_f(:,I), e, slope, k)
+              endif
+              ! This is the piecewise linear form.
+              CS%u_z(I,j,kz) = wt(k) * (u_f(k,I) + 0.5*slope*(z2(k) + z1(k)))
+              ! For the piecewise parabolic form add the following...
+              !     + C1_3*curv*(z2(k)**2 + z2(k)*z1(k) + z1(k)**2))
+              do k=k_top+1,k_bot-1
+                CS%u_z(I,j,kz) = CS%u_z(I,j,kz) + wt(k)*u_f(k,I)
+              enddo
+              if (k_bot > k_top) then ; k = k_bot
+                ! Calculate the intra-cell profile.
+                slope = 0.0 ! ; curv = 0.0
+                if ((k < nk_valid(I)) .and. (k > nkml)) call &
+                  find_limited_slope(u_f(:,I), e, slope, k)
+                 ! This is the piecewise linear form.
+                CS%u_z(I,j,kz) = CS%u_z(I,j,kz) + wt(k) * &
+                    (u_f(k,I) + 0.5*slope*(z2(k) + z1(k)))
+                ! For the piecewise parabolic form add the following...
+                !     + C1_3*curv*(z2(k)**2 + z2(k)*z1(k) + z1(k)**2))
+              endif
+              k_bot_prev = k_bot
+            else ! Use piecewise constant profiles.
+              CS%u_z(I,j,kz) = wt(k_top)*u_f(k_top,I)
+              do k=k_top+1,k_bot
+                CS%u_z(I,j,kz) = CS%u_z(I,j,kz) + wt(k)*u_f(k,I)
+              enddo
+            endif ! linear profiles
           endif ! below shelf
         enddo ! kz-loop
       endif ; enddo ! I-loop and mask
@@ -344,14 +343,14 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, dt, G, GV, CS)
     enddo ; enddo ; enddo
 
     do J=Jsq,Jeq
+      shelf_depth(:) = 0.0 ! initially all is open ocean
       ! Remove all massless layers.
       do i=is,ie
         nk_valid(i) = 0 ; D_pt(i) = 0.5*(G%bathyT(i,j)+G%bathyT(i,j+1))
-        shelf_depth(I) = 0.5*(ssh(i,j)+ssh(i,j+1))
-        if (shelf_depth(I) > -0.1) then ! open ocean
-           shelf_depth(I) = 0.0
-        else ! ice shelf
-           shelf_depth(I) = abs(shelf_depth(I))
+        if (ice_shelf) then
+          if (frac_shelf_h(i,j)+frac_shelf_h(i,j+1) > 0.) then ! under shelf
+            shelf_depth(i) = abs(0.5*(ssh(i,j)+ssh(i,j+1)))
+          endif
         endif
       enddo
       do k=1,nk ; do i=is,ie
@@ -365,7 +364,7 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, dt, G, GV, CS)
         ! no-slip BBC in the output, if anything but piecewise constant is used.
         nk_valid(i) = nk_valid(i) + 1 ; k2 = nk_valid(i)
         h_f(k2,i) = Angstrom ; v_f(k2,i) = 0.0
-        if (shelf_depth(I) + 1.0E-3 > D_pt(i)) nk_valid(I)=0
+        if (ice_shelf .and. shelf_depth(i) + 1.0E-3 > D_pt(i)) nk_valid(I)=0
       endif ; enddo
 
       do i=is,ie ; if (nk_valid(i) > 0) then
@@ -386,42 +385,42 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, dt, G, GV, CS)
           if (k_top>nk_valid(i)) exit
           !GM if top range that is being map is below the shelf, interpolate
           ! otherwise keep missing_vel
-	  if (CS%Z_int(kz)<=-shelf_depth(I)) then
-	    if (linear_velocity_profiles) then
-	      k = k_top
-	      if (k /= k_bot_prev) then
-		! Calculate the intra-cell profile.
-		slope = 0.0 ! ; curv = 0.0
-		if ((k < nk_valid(i)) .and. (k > nkml)) call &
-		  find_limited_slope(v_f(:,i), e, slope, k)
-	      endif
-	      ! This is the piecewise linear form.
-	      CS%v_z(i,J,kz) = wt(k) * (v_f(k,i) + 0.5*slope*(z2(k) + z1(k)))
-	      ! For the piecewise parabolic form add the following...
-	      !     + C1_3*curv*(z2(k)**2 + z2(k)*z1(k) + z1(k)**2))
-	      do k=k_top+1,k_bot-1
-		CS%v_z(i,J,kz) = CS%v_z(i,J,kz) + wt(k)*v_f(k,i)
-	      enddo
-	      if (k_bot > k_top) then ; k = k_bot
-		! Calculate the intra-cell profile.
-		slope = 0.0 ! ; curv = 0.0
-		if ((k < nk_valid(i)) .and. (k > nkml)) call &
-		  find_limited_slope(v_f(:,i), e, slope, k)
-		 ! This is the piecewise linear form.
-		CS%v_z(i,J,kz) = CS%v_z(i,J,kz) + wt(k) * &
-		    (v_f(k,i) + 0.5*slope*(z2(k) + z1(k)))
-		! For the piecewise parabolic form add the following...
-		!     + C1_3*curv*(z2(k)**2 + z2(k)*z1(k) + z1(k)**2))
-	      endif
-	      k_bot_prev = k_bot
-	    else ! Use piecewise constant profiles.
-	      CS%v_z(i,J,kz) = wt(k_top)*v_f(k_top,i)
-	      do k=k_top+1,k_bot
-		CS%v_z(i,J,kz) = CS%v_z(i,J,kz) + wt(k)*v_f(k,i)
-	      enddo
-	    endif ! linear profiles
+          if (CS%Z_int(kz)<=-shelf_depth(I)) then
+            if (linear_velocity_profiles) then
+              k = k_top
+              if (k /= k_bot_prev) then
+                ! Calculate the intra-cell profile.
+                slope = 0.0 ! ; curv = 0.0
+                if ((k < nk_valid(i)) .and. (k > nkml)) call &
+                  find_limited_slope(v_f(:,i), e, slope, k)
+              endif
+              ! This is the piecewise linear form.
+              CS%v_z(i,J,kz) = wt(k) * (v_f(k,i) + 0.5*slope*(z2(k) + z1(k)))
+              ! For the piecewise parabolic form add the following...
+              !     + C1_3*curv*(z2(k)**2 + z2(k)*z1(k) + z1(k)**2))
+              do k=k_top+1,k_bot-1
+                CS%v_z(i,J,kz) = CS%v_z(i,J,kz) + wt(k)*v_f(k,i)
+              enddo
+              if (k_bot > k_top) then ; k = k_bot
+                ! Calculate the intra-cell profile.
+                slope = 0.0 ! ; curv = 0.0
+                if ((k < nk_valid(i)) .and. (k > nkml)) call &
+                  find_limited_slope(v_f(:,i), e, slope, k)
+                 ! This is the piecewise linear form.
+                CS%v_z(i,J,kz) = CS%v_z(i,J,kz) + wt(k) * &
+                    (v_f(k,i) + 0.5*slope*(z2(k) + z1(k)))
+                ! For the piecewise parabolic form add the following...
+                !     + C1_3*curv*(z2(k)**2 + z2(k)*z1(k) + z1(k)**2))
+              endif
+              k_bot_prev = k_bot
+            else ! Use piecewise constant profiles.
+              CS%v_z(i,J,kz) = wt(k_top)*v_f(k_top,i)
+              do k=k_top+1,k_bot
+                CS%v_z(i,J,kz) = CS%v_z(i,J,kz) + wt(k)*v_f(k,i)
+              enddo
+            endif ! linear profiles
           endif ! below shelf
-	  enddo ! kz-loop
+          enddo ! kz-loop
       endif ; enddo ! i-loop and mask
     enddo ! J-loop
     
@@ -436,21 +435,21 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, dt, G, GV, CS)
     enddo ; enddo ; enddo ; enddo
 
     do j=js,je
+      shelf_depth(:) = 0.0 ! initially all is open ocean
       ! Remove all massless layers.
       do i=is,ie  
         nk_valid(i) = 0 ; D_pt(i) = G%bathyT(i,j) 
-        shelf_depth(I) = ssh(i,j)
-        if (shelf_depth(I) > -0.1) then ! open ocean
-           shelf_depth(I) = 0.0
-        else ! ice shelf
-           shelf_depth(I) = abs(shelf_depth(I))
+        if (ice_shelf) then
+          if (frac_shelf_h(i,j) > 0.) then ! under shelf
+            shelf_depth(i) = abs(ssh(i,j))
+          endif
         endif
       enddo
       do k=1,nk ; do i=is,ie
         if ((G%mask2dT(i,j) > 0.5) .and. (h(i,j,k) > 2.0*Angstrom)) then
           nk_valid(i) = nk_valid(i) + 1 ; k2 = nk_valid(i)
           h_f(k2,i) = h(i,j,k)
-          if (shelf_depth(I) + 1.0E-3 > D_pt(i)) nk_valid(I)=0
+          if (ice_shelf .and. shelf_depth(I) + 1.0E-3 > D_pt(i)) nk_valid(I)=0
           do m=1,CS%num_tr_used ; tr_f(k2,m,i) = CS%tr_model(m)%p(i,j,k) ; enddo
         endif
       enddo ; enddo
@@ -471,39 +470,39 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, dt, G, GV, CS)
           call find_overlap(e, CS%Z_int(kz), CS%Z_int(kz+1), nk_valid(i), &
                             k_bot, k_top, k_bot, wt, z1, z2)
           if (k_top>nk_valid(i)) exit
-          if (CS%Z_int(kz)<=-shelf_depth(I)) then
-	    do m=1,CS%num_tr_used
-	      k = k_top
-	      if (k /= k_bot_prev) then
-		! Calculate the intra-cell profile.
-		sl_tr(m) = 0.0 ! ; cur_tr(m) = 0.0
-		if ((k < nk_valid(i)) .and. (k > nkml)) call &
-		  find_limited_slope(tr_f(:,m,i), e, sl_tr(m), k)
-	      endif
-	      ! This is the piecewise linear form.
-	      CS%tr_z(m)%p(i,j,kz) = wt(k) * &
-		  (tr_f(k,m,i) + 0.5*sl_tr(m)*(z2(k) + z1(k)))
-	      ! For the piecewise parabolic form add the following...
-	      !     + C1_3*cur_tr(m)*(z2(k)**2 + z2(k)*z1(k) + z1(k)**2))
-	      do k=k_top+1,k_bot-1
-		CS%tr_z(m)%p(i,j,kz) = CS%tr_z(m)%p(i,j,kz) + wt(k)*tr_f(k,m,i)
-	      enddo
-	      if (k_bot > k_top) then
-		k = k_bot
-		! Calculate the intra-cell profile.
-		sl_tr(m) = 0.0 ! ; cur_tr(m) = 0.0
-		if ((k < nk_valid(i)) .and. (k > nkml)) call &
-		  find_limited_slope(tr_f(:,m,i), e, sl_tr(m), k)
-		! This is the piecewise linear form.
-		CS%tr_z(m)%p(i,j,kz) = CS%tr_z(m)%p(i,j,kz) + wt(k) * &
-		    (tr_f(k,m,i) + 0.5*sl_tr(m)*(z2(k) + z1(k)))
-		! For the piecewise parabolic form add the following...
-		!     + C1_3*cur_tr(m)*(z2(k)**2 + z2(k)*z1(k) + z1(k)**2))
-	      endif
-	    enddo
-	    k_bot_prev = k_bot
+          if (CS%Z_int(kz)<=-shelf_depth(i)) then
+            do m=1,CS%num_tr_used
+              k = k_top
+              if (k /= k_bot_prev) then
+                ! Calculate the intra-cell profile.
+                sl_tr(m) = 0.0 ! ; cur_tr(m) = 0.0
+                if ((k < nk_valid(i)) .and. (k > nkml)) call &
+                  find_limited_slope(tr_f(:,m,i), e, sl_tr(m), k)
+              endif
+              ! This is the piecewise linear form.
+              CS%tr_z(m)%p(i,j,kz) = wt(k) * &
+                  (tr_f(k,m,i) + 0.5*sl_tr(m)*(z2(k) + z1(k)))
+              ! For the piecewise parabolic form add the following...
+              !     + C1_3*cur_tr(m)*(z2(k)**2 + z2(k)*z1(k) + z1(k)**2))
+              do k=k_top+1,k_bot-1
+                CS%tr_z(m)%p(i,j,kz) = CS%tr_z(m)%p(i,j,kz) + wt(k)*tr_f(k,m,i)
+              enddo
+              if (k_bot > k_top) then
+                k = k_bot
+                ! Calculate the intra-cell profile.
+                sl_tr(m) = 0.0 ! ; cur_tr(m) = 0.0
+                if ((k < nk_valid(i)) .and. (k > nkml)) call &
+                  find_limited_slope(tr_f(:,m,i), e, sl_tr(m), k)
+                ! This is the piecewise linear form.
+                CS%tr_z(m)%p(i,j,kz) = CS%tr_z(m)%p(i,j,kz) + wt(k) * &
+                    (tr_f(k,m,i) + 0.5*sl_tr(m)*(z2(k) + z1(k)))
+                ! For the piecewise parabolic form add the following...
+                !     + C1_3*cur_tr(m)*(z2(k)**2 + z2(k)*z1(k) + z1(k)**2))
+              endif
+            enddo
+            k_bot_prev = k_bot
           endif ! below shelf
-	  enddo ! kz-loop
+        enddo ! kz-loop
       endif ; enddo ! i-loop and mask
 
     enddo ! j-loop

@@ -52,7 +52,8 @@ type, public :: KPP_CS ; private
   real    :: Ri_crit                   !< Critical bulk Richardson number (defines OBL depth)
   real    :: vonKarman                 !< von Karman constant (dimensionless)
   real    :: cs                        !< Parameter for computing velocity scale function (dimensionless)
-  real    :: cs2
+  real    :: cs2                       !< Parameter for multiplying by non-local term
+                                       !   This is active for NLT_SHAPE_CUBIC_LMD only
   logical :: enhance_diffusion         !< If True, add enhanced diffusivity at base of boundary layer.
   character(len=10) :: interpType      !< Type of interpolation in determining OBL depth
   logical :: computeEkman              !< If True, compute Ekman depth limit for OBLdepth
@@ -216,8 +217,8 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
                  'Parameter for computing velocity scale function.', &
                  units='nondim', default=98.96)
   call get_param(paramFile, mod, 'CS2', CS%cs2,                        &
-                 'Parameter for computing velocity scale function.', &
-                 units='nondim', default=6.32)
+                 'Parameter for computing non-local term.', &
+                 units='nondim', default=6.32739901508)
   call get_param(paramFile, mod, 'DEEP_OBL_OFFSET', CS%deepOBLoffset,                             &
                  'If non-zero, the distance above the bottom to which the OBL is clipped\n'//     &
                  'if it would otherwise reach the bottom. The smaller of this and 0.1D is used.', &
@@ -282,6 +283,8 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
                  '\t ParabolicNonLocal = sigma*(1-sigma)^2 for diffusivity; (1-sigma)^2 for NLT',         &
                  default='SimpleShapes')
   if (CS%MatchTechnique.eq.'ParabolicNonLocal') then
+     ! This forces Cs2 (Cs in non-local computation) to equal 1 for parabolic non-local option.
+     !  May be used during CVmix initialization.
      Cs_is_one=.true.
   endif
   call get_param(paramFile, mod, 'KPP_ZERO_DIFFUSIVITY', CS%KPPzeroDiffusivity,            &
@@ -830,12 +833,6 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       N2_1d(G%ke+1 ) = 0.0
       N_1d(G%ke+1 )  = 0.0
 
-      !Apply N2 smoothing
-       !do k = 1, G%ke
-       ! kp1 = min(k+5, G%ke)
-       ! N2_1d(k)    = N2_1d(kp1)
-       ! N_1d(k)     = sqrt( max( N2_1d(k), 0.) )
-      !enddo
       ! turbulent velocity scales w_s and w_m computed at the cell centers.
       ! Note that if sigma > CS%surf_layer_ext, then CVmix_kpp_compute_turbulent_scales
       ! computes w_s and w_m velocity scale at sigma=CS%surf_layer_ext. So we only pass
@@ -967,14 +964,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       
       ! Unlike LMD94, we do not match to interior diffusivities. If using the original
       ! LMD94 shape function, not matching is equivalent to matching to a zero diffusivity.
-      if (.not. (CS%MatchTechnique.eq.'MatchBoth')) then
-         Kdiffusivity(:,:) = 0. ! Diffusivities for heat and salt (m2/s)
-         Kviscosity(:)     = 0. ! Viscosity (m2/s)
-      else
-         Kdiffusivity(:,1) = Kt(i,j,:)
-         Kdiffusivity(:,2) = Ks(i,j,:)
-         Kviscosity(:)=Kv(i,j,:)
-      endif
+
       !BGR/ Add option for use of surface buoyancy flux with total sw flux.
       if (CS%SW_METHOD .eq. SW_METHOD_ALL_SW) then
          surfBuoyFlux = buoyFlux(i,j,1)
@@ -984,7 +974,16 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
          surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,2) 
       endif
 
-      !BGR pass LTEnhancement here
+      ! If option "MatchBoth" is selected in CVMix, MOM should be capable of matching.
+      if (.not. (CS%MatchTechnique.eq.'MatchBoth')) then
+         Kdiffusivity(:,:) = 0. ! Diffusivities for heat and salt (m2/s)
+         Kviscosity(:)     = 0. ! Viscosity (m2/s)
+      else
+         Kdiffusivity(:,1) = Kt(i,j,:)
+         Kdiffusivity(:,2) = Ks(i,j,:)
+         Kviscosity(:)=Kv(i,j,:)
+      endif
+
       call cvmix_coeffs_kpp(Kviscosity,        & ! (inout) Total viscosity (m2/s)
                             Kdiffusivity(:,1), & ! (inout) Total heat diffusivity (m2/s)
                             Kdiffusivity(:,2), & ! (inout) Total salt diffusivity (m2/s)
@@ -1040,19 +1039,19 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
         if (CS%NLT_shape == NLT_SHAPE_CUBIC) then
           do k = 2, G%ke
             sigma = min(1.0,-iFaceHeight(k)/OBLdepth_0d)
-            nonLocalTrans(k,1) = CS%CS2 *(1.0 - sigma)**2 * (1.0 + 2.0*sigma)
+            nonLocalTrans(k,1) = (1.0 - sigma)**2 * (1.0 + 2.0*sigma) !*
             nonLocalTrans(k,2) = nonLocalTrans(k,1)
           enddo
         elseif (CS%NLT_shape == NLT_SHAPE_PARABOLIC) then
           do k = 2, G%ke
             sigma = min(1.0,-iFaceHeight(k)/OBLdepth_0d)
-            nonLocalTrans(k,1) = CS%CS2 *(1.0 - sigma)**2
+            nonLocalTrans(k,1) = (1.0 - sigma)**2 !*CS%CS2
             nonLocalTrans(k,2) = nonLocalTrans(k,1)
           enddo
         elseif (CS%NLT_shape == NLT_SHAPE_LINEAR) then
           do k = 2, G%ke
             sigma = min(1.0,-iFaceHeight(k)/OBLdepth_0d)
-            nonLocalTrans(k,1) = CS%CS2 *(1.0 - sigma)
+            nonLocalTrans(k,1) = (1.0 - sigma)!*CS%CS2
             nonLocalTrans(k,2) = nonLocalTrans(k,1)
           enddo
         elseif (CS%NLT_shape == NLT_SHAPE_CUBIC_LMD) then
