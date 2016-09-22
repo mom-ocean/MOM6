@@ -668,7 +668,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   type(memory_size_type) :: MS
   character(len=200) :: mesg
   integer :: isv, iev, jsv, jev ! The valid array size at the end of a step.
-  integer :: stensil  ! The stensil size of the algorithm, often 1 or 2.
+  integer :: stencil  ! The stencil size of the algorithm, often 1 or 2.
   integer :: isvf, ievf, jsvf, jevf, num_cycles
   integer :: i, j, k, n
   integer :: is, ie, js, je, nz, Isq, Ieq, Jsq, Jeq
@@ -694,15 +694,15 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   project_velocity = CS%BT_project_velocity
 
   ! Figure out the fullest arrays that could be updated.
-  stensil = 1
+  stencil = 1
   if ((.not.use_BT_cont) .and. CS%Nonlinear_continuity .and. &
-      (CS%Nonlin_cont_update_period > 0)) stensil = 2
+      (CS%Nonlin_cont_update_period > 0)) stencil = 2
 
   num_cycles = 1
   if (CS%use_wide_halos) &
-    num_cycles = min((is-CS%isdw) / stensil, (js-CS%jsdw) / stensil)
-  isvf = is - (num_cycles-1)*stensil ; ievf = ie + (num_cycles-1)*stensil
-  jsvf = js - (num_cycles-1)*stensil ; jevf = je + (num_cycles-1)*stensil
+    num_cycles = min((is-CS%isdw) / stencil, (js-CS%jsdw) / stencil)
+  isvf = is - (num_cycles-1)*stencil ; ievf = ie + (num_cycles-1)*stencil
+  jsvf = js - (num_cycles-1)*stencil ; jevf = je + (num_cycles-1)*stencil
 
   do_ave = query_averaging_enabled(CS%diag)
   find_etaav = present(etaav)
@@ -1587,7 +1587,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       enddo ; enddo
     endif
 
-    if ((iev - stensil < ie) .or. (jev - stensil < je)) then
+    if ((iev - stencil < ie) .or. (jev - stencil < je)) then
       if (id_clock_calc > 0) call cpu_clock_end(id_clock_calc)
       if (id_clock_pass_step > 0) call cpu_clock_begin(id_clock_pass_step)
       call do_group_pass(CS%pass_eta_ubt, CS%BT_Domain)
@@ -1595,8 +1595,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       if (id_clock_pass_step > 0) call cpu_clock_end(id_clock_pass_step)
       if (id_clock_calc > 0) call cpu_clock_begin(id_clock_calc)
     else
-      isv = isv+stensil ; iev = iev-stensil
-      jsv = jsv+stensil ; jev = jev-stensil
+      isv = isv+stencil ; iev = iev-stencil
+      jsv = jsv+stencil ; jev = jev-stencil
     endif
 
     if ((.not.use_BT_cont) .and. CS%Nonlinear_continuity .and. &
