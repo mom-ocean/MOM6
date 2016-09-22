@@ -738,7 +738,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     do k=1,nz ; do j=js,je ; do i=is,ie
         h_prebound(i,j,k) = h(i,j,k)
     enddo ; enddo ; enddo
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,h_orig,h,eaml,ebml)
     if (CS%use_energetic_PBL) then
       call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, dt, fluxes, CS%optics, &
                           h, tv, CS%aggregate_FW_forcing, cTKE, dSV_dT, dSV_dS)

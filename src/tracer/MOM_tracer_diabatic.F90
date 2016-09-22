@@ -69,8 +69,8 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
   sink_dist = 0.0
   if (present(sink_rate)) sink_dist = (dt*sink_rate) * GV%m_to_H
 !$OMP parallel default(none) shared(is,ie,js,je,sfc_src,btm_src,sfc_flux,dt,G,GV,btm_flux, &
-!$OMP                               sink_rate,btm_reservoir,nz,sink_dist,h_work,ea,      &
-!$OMP                               h_neglect,eb,tr) &
+!$OMP                               sink_rate,btm_reservoir,nz,sink_dist,ea,      &
+!$OMP                               h_old,convert_flux,h_neglect,eb,tr) &
 !$OMP                       private(sink,h_minus_dsink,b_denom_1,b1,d1,h_tr,c1)
 !$OMP do
   do j=js,je; do i=is,ie ; sfc_src(i,j) = 0.0 ; btm_src(i,j) = 0.0 ; enddo; enddo
@@ -81,18 +81,20 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
         sfc_src(i,j) = (sfc_flux(i,j)*dt) * GV%kg_m2_to_H
       enddo; enddo
     else
+!$OMP do
       do j = js, je; do i = is,ie
         sfc_src(i,j) = sfc_flux(i,j)
       enddo; enddo
     endif
   endif
   if (present(btm_flux)) then
-!$OMP do
     if(convert_flux) then
+!$OMP do
       do j = js, je; do i = is,ie
         btm_src(i,j) = (btm_flux(i,j)*dt) * GV%kg_m2_to_H
       enddo; enddo
     else
+!$OMP do
       do j = js, je; do i = is,ie
         btm_src(i,j) = btm_flux(i,j)
       enddo; enddo
@@ -265,13 +267,13 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, &
   numberOfGroundings = 0
 
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,h,Tr,G,GV,fluxes,dt,    &
-!$OMP                                  IforcingDepthScale,             &
+!$OMP                                  IforcingDepthScale,minimum_forcing_depth, &
 !$OMP                                  numberOfGroundings,iGround,jGround,      &
-!$OMP                                  hGrounding,CS,Idt,aggregate_FW_forcing)           &
+!$OMP                                  in_flux,out_flux,hGrounding,Idt,evap_CFL_limit) &
 !$OMP                          private(h2d,Tr2d,netMassInOut,netMassOut,      &
-!$OMP                                  sfc_src,fractionOfForcing,     &
+!$OMP                                  in_flux_1d,out_flux_1d,fractionOfForcing,     &
 !$OMP                                  dThickness,dTracer,hOld,Ithickness,           &
-!$OMP                                  netMassIn, Tr_in, Salin_in)
+!$OMP                                  netMassIn, Tr_in)
 
   ! Work in vertical slices for efficiency
   do j=js,je
@@ -350,7 +352,7 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, &
           ! Change in state due to forcing
           dThickness = max( fractionOfForcing*netMassOut(i), -h2d(i,k) )
           ! Note this is slightly different to how salt is currently treated
-	  dTracer =  fractionOfForcing*out_flux_1d(i)
+          dTracer =  fractionOfForcing*out_flux_1d(i)
 
           ! Update the forcing by the part to be consumed within the present k-layer.
           ! If fractionOfForcing = 1, then new netMassOut vanishes.
