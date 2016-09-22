@@ -162,9 +162,9 @@ subroutine set_opacity(optics, fluxes, G, GV, CS)
     ! Make sure there is no division by 0.
     inv_sw_pen_scale = 1.0 / max(CS%pen_sw_scale, 0.1*GV%Angstrom_z, &
                                  GV%H_to_m*GV%H_subroundoff)
-!$OMP parallel default(none) shared(is,ie,js,je,nz,optics,inv_sw_pen_scale,fluxes,CS,Inv_nbands)
-!$OMP do
+!$OMP parallel default(none) shared(is,ie,js,je,nz,optics,inv_sw_pen_scale,fluxes,CS,Inv_nbands,GV)
     if ( CS%Opacity_scheme == DOUBLE_EXP ) then
+!$OMP do
       do k=1,nz ; do j=js,je ; do i=is,ie
         optics%opacity_band(1,i,j,k) = inv_sw_pen_scale
         optics%opacity_band(2,i,j,k) = 1.0 / max(CS%pen_sw_scale_2nd, &
@@ -182,7 +182,6 @@ subroutine set_opacity(optics, fluxes, G, GV, CS)
           optics%sw_pen_band(2,i,j) = (1.-CS%SW_1st_EXP_RATIO) * fluxes%sw(i,j)
         enddo ; enddo ;
       endif
-!$OMP end parallel
     else
       do k=1,nz ; do j=js,je ; do i=is,ie  ; do n=1,optics%nbands
         optics%opacity_band(n,i,j,k) = inv_sw_pen_scale
@@ -198,8 +197,8 @@ subroutine set_opacity(optics, fluxes, G, GV, CS)
           optics%sw_pen_band(n,i,j) = CS%pen_SW_frac * Inv_nbands * fluxes%sw(i,j)
         enddo ; enddo ; enddo
       endif
-!$OMP end parallel
     endif
+!$OMP end parallel
   endif
   if (query_averaging_enabled(CS%diag)) then
     if (CS%id_sw_pen > 0) then
