@@ -61,6 +61,7 @@ module MOM_generic_tracer
   use MOM_hor_index, only : hor_index_type
   use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc
   use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
+  use MOM_spatial_means, only : global_area_mean
   use MOM_sponge, only : set_up_sponge_field, sponge_CS
   use MOM_ALE_sponge, only : set_up_ALE_sponge_field, ALE_sponge_CS
   use MOM_time_manager, only : time_type, get_time, set_time
@@ -553,6 +554,9 @@ contains
     character(len=fm_string_len)  :: g_tracer_name
     real, dimension(:,:), pointer :: stf_array,trunoff_array,runoff_tracer_flux_array
 
+    real :: surface_field(SZI_(G),SZJ_(G))
+    real :: sosga
+
     real, dimension(G%isd:G%ied,G%jsd:G%jed,G%ke) :: rho_dzt, dzt
     real, dimension(G%isd:G%ied,G%jsd:G%jed)      :: hblt_depth
     real, dimension(SZI_(G),SZJ_(G),SZK_(G))      :: h_work
@@ -623,11 +627,16 @@ contains
     enddo; enddo ; enddo
 
 
+    do j=jsc,jec ; do i=isc,iec 
+       surface_field(i,j) = tv%S(i,j,1)
+    enddo ; enddo 
+    sosga = global_area_mean(surface_field, G)
+
     !
     !Calculate tendencies (i.e., field changes at dt) from the sources / sinks
     !
 
-    call generic_tracer_source(tv%T,tv%S,rho_dzt,dzt,hblt_depth,G%isd,G%jsd,1,dt,&
+    call generic_tracer_source(tv%T,tv%S,sosga,rho_dzt,dzt,hblt_depth,G%isd,G%jsd,1,dt,&
          G%areaT,get_diag_time_end(CS%diag),&
          optics%nbands, optics%max_wavelength_band, optics%sw_pen_band, optics%opacity_band)
 
@@ -886,6 +895,8 @@ contains
     !  (in)      CS - The control structure returned by a previous call to
     !                 register_MOM_generic_tracer.
 
+    real :: sosga
+
     character(len=fm_string_len), parameter :: sub_name = 'MOM_generic_tracer_surface_state'
     real, dimension(G%isd:G%ied,G%jsd:G%jed,1:G%ke,1) :: rho0
     type(g_tracer_type), pointer :: g_tracer
@@ -894,12 +905,15 @@ contains
     !nnz: fake rho0
     rho0=1.0
 
+    sosga = global_area_mean(state%SSS, G)
+
     call generic_tracer_coupler_set(state%tr_fields,&
          ST=state%SST,&
          SS=state%SSS,&
-         rho=rho0,& !nnz: required for MOM
+         sosga=sosga, &
+         rho=rho0,& !nnz: required for MOM5 and previous versions.
          ilb=G%isd, jlb=G%jsd,&
-         tau=1)
+         tau=1,model_time=get_diag_time_end(CS%diag))
 
     !Output diagnostics via diag_manager for all tracers in this module
 !    if(.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
