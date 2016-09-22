@@ -232,7 +232,6 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, dt, G, GV, CS)
          "diagnostic_fields_zstar: Module must be initialized before it is used.")
 
   ice_shelf = associated(frac_shelf_h)
-  shelf_depth(:) = 0.
 
   ! If no fields are needed, return
   if ((CS%id_u_z <= 0) .and. (CS%id_v_z <= 0) .and. (CS%num_tr_used < 1)) return
@@ -246,15 +245,14 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, dt, G, GV, CS)
 
     
     do j=js,je
+      shelf_depth(:) = 0. ! initially all is open ocean
       ! Remove all massless layers.
       do I=Isq,Ieq
         nk_valid(I) = 0
         D_pt(I) = 0.5*(G%bathyT(i+1,j)+G%bathyT(i,j))
         if (ice_shelf) then
           if (frac_shelf_h(i,j)+frac_shelf_h(i+1,j) > 0.) then ! under shelf
-            shelf_depth(I) = 0.5*(ssh(i+1,j)+ssh(i,j))
-          else ! open ocean
-            shelf_depth(I) = 0.0
+            shelf_depth(I) = abs(0.5*(ssh(i+1,j)+ssh(i,j)))
           endif
         endif
       enddo
@@ -345,14 +343,13 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, dt, G, GV, CS)
     enddo ; enddo ; enddo
 
     do J=Jsq,Jeq
+      shelf_depth(:) = 0.0 ! initially all is open ocean
       ! Remove all massless layers.
       do i=is,ie
         nk_valid(i) = 0 ; D_pt(i) = 0.5*(G%bathyT(i,j)+G%bathyT(i,j+1))
         if (ice_shelf) then
           if (frac_shelf_h(i,j)+frac_shelf_h(i,j+1) > 0.) then ! under shelf
-            shelf_depth(i) = 0.5*(ssh(i,j)+ssh(i,j+1))
-          else ! open ocean
-            shelf_depth(i) = 0.0
+            shelf_depth(i) = abs(0.5*(ssh(i,j)+ssh(i,j+1)))
           endif
         endif
       enddo
@@ -438,14 +435,13 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, dt, G, GV, CS)
     enddo ; enddo ; enddo ; enddo
 
     do j=js,je
+      shelf_depth(:) = 0.0 ! initially all is open ocean
       ! Remove all massless layers.
       do i=is,ie  
         nk_valid(i) = 0 ; D_pt(i) = G%bathyT(i,j) 
         if (ice_shelf) then
           if (frac_shelf_h(i,j) > 0.) then ! under shelf
-            shelf_depth(i) = ssh(i,j)
-          else ! open ocean
-            shelf_depth(i) = 0.0
+            shelf_depth(i) = abs(ssh(i,j))
           endif
         endif
       enddo
