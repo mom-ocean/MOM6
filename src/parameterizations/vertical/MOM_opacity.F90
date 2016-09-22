@@ -84,6 +84,9 @@ type, public :: opacity_CS ; private
                              ! radiation to use.
   real :: pen_sw_scale       !   The vertical absorption e-folding depth of the
                              ! penetrating shortwave radiation, in m.
+  real :: pen_sw_scale_2nd   !   The vertical absorption e-folding depth of the
+                             ! (2nd) penetrating shortwave radiation, in m.
+  real :: SW_1ST_EXP_RATIO   ! Ratio for 1st exp decay in Two Exp decay opacity
   real :: pen_sw_frac        !   The fraction of shortwave radiation that is
                              ! penetrating with a constant e-folding approach.
   real :: blue_frac          !   The fraction of the penetrating shortwave
@@ -105,10 +108,13 @@ type, public :: opacity_CS ; private
   integer, pointer :: id_opacity(:) => NULL()
 end type opacity_CS
 
-integer, parameter :: NO_SCHEME = 0, MANIZZA_05 = 1, MOREL_88 = 2
+integer, parameter :: NO_SCHEME = 0, MANIZZA_05 = 1, MOREL_88 = 2, &
+                      SINGLE_EXP = 3, DOUBLE_EXP = 4
 
 character*(10), parameter :: MANIZZA_05_STRING = "MANIZZA_05"
 character*(10), parameter :: MOREL_88_STRING = "MOREL_88"
+character*(10), parameter :: SINGLE_EXP_STRING = "SINGLE_EXP"
+character*(10), parameter :: DOUBLE_EXP_STRING = "DOUBLE_EXP"
 
 contains
 
@@ -156,25 +162,44 @@ subroutine set_opacity(optics, fluxes, G, GV, CS)
     ! Make sure there is no division by 0.
     inv_sw_pen_scale = 1.0 / max(CS%pen_sw_scale, 0.1*GV%Angstrom_z, &
                                  GV%H_to_m*GV%H_subroundoff)
-!$OMP parallel default(none) shared(is,ie,js,je,nz,optics,inv_sw_pen_scale,fluxes,CS,Inv_nbands)
+!$OMP parallel default(none) shared(is,ie,js,je,nz,optics,inv_sw_pen_scale,fluxes,CS,Inv_nbands,GV)
+    if ( CS%Opacity_scheme == DOUBLE_EXP ) then
 !$OMP do
-    do k=1,nz ; do j=js,je ; do i=is,ie  ; do n=1,optics%nbands
-      optics%opacity_band(n,i,j,k) = inv_sw_pen_scale
-    enddo ; enddo ; enddo ; enddo
-    if (.not.associated(fluxes%sw) .or. (CS%pen_SW_scale <= 0.0)) then
-!$OMP do
-      do j=js,je ; do i=is,ie ; do n=1,optics%nbands
-        optics%sw_pen_band(n,i,j) = 0.0
+      do k=1,nz ; do j=js,je ; do i=is,ie
+        optics%opacity_band(1,i,j,k) = inv_sw_pen_scale
+        optics%opacity_band(2,i,j,k) = 1.0 / max(CS%pen_sw_scale_2nd, &
+             0.1*GV%Angstrom_z,GV%H_to_m*GV%H_subroundoff)
       enddo ; enddo ; enddo
+      if (.not.associated(fluxes%sw) .or. (CS%pen_SW_scale <= 0.0)) then
+!$OMP do
+        do j=js,je ; do i=is,ie ; do n=1,optics%nbands
+          optics%sw_pen_band(n,i,j) = 0.0
+        enddo ; enddo ; enddo
+      else
+!$OMP do
+        do j=js,je ; do i=is,ie ;
+          optics%sw_pen_band(1,i,j) = (CS%SW_1st_EXP_RATIO) * fluxes%sw(i,j)
+          optics%sw_pen_band(2,i,j) = (1.-CS%SW_1st_EXP_RATIO) * fluxes%sw(i,j)
+        enddo ; enddo ;
+      endif
     else
+      do k=1,nz ; do j=js,je ; do i=is,ie  ; do n=1,optics%nbands
+        optics%opacity_band(n,i,j,k) = inv_sw_pen_scale
+      enddo ; enddo ; enddo ; enddo
+      if (.not.associated(fluxes%sw) .or. (CS%pen_SW_scale <= 0.0)) then
 !$OMP do
-      do j=js,je ; do i=is,ie ; do n=1,optics%nbands
-        optics%sw_pen_band(n,i,j) = CS%pen_SW_frac * Inv_nbands * fluxes%sw(i,j)
-      enddo ; enddo ; enddo
+        do j=js,je ; do i=is,ie ; do n=1,optics%nbands
+          optics%sw_pen_band(n,i,j) = 0.0
+        enddo ; enddo ; enddo
+      else
+!$OMP do
+        do j=js,je ; do i=is,ie ; do n=1,optics%nbands
+          optics%sw_pen_band(n,i,j) = CS%pen_SW_frac * Inv_nbands * fluxes%sw(i,j)
+        enddo ; enddo ; enddo
+      endif
     endif
 !$OMP end parallel
   endif
-
   if (query_averaging_enabled(CS%diag)) then
     if (CS%id_sw_pen > 0) then
 !$OMP parallel do default(none) shared(is,ie,js,je,Pen_SW_tot,optics)
@@ -547,17 +572,61 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
                  "The fraction of the penetrating shortwave radiation \n"//&
                  "that is in the blue band.", default=0.5, units="nondim")
   else
+    call get_param(param_file, mod, "EXP_OPACITY_SCHEME", tmpstr, &
+                 "This character string specifies which exponential \n"//&
+                 "opacity scheme to utilize. Currently \n"//&
+                 "valid options include:\n"//&
+                 " \t\t  SINGLE_EXP - Single Exponent decay. \n"//&
+                 " \t\t  DOUBLE_EXP - Double Exponent decay.", &
+                 default=Single_Exp_String)!New default for "else" above (non-Chl scheme)
+    if (len_trim(tmpstr) > 0) then
+      tmpstr = uppercase(tmpstr)
+      select case (tmpstr)
+        case (SINGLE_EXP_STRING)
+          CS%opacity_scheme = SINGLE_EXP ; scheme_string = SINGLE_EXP_STRING
+        case (DOUBLE_EXP_STRING)
+          CS%opacity_scheme = DOUBLE_EXP ; scheme_string = DOUBLE_EXP_STRING
+      end select
+      call MOM_mesg('opacity_init: opacity scheme set to "'//trim(tmpstr)//'".', 5)
+    endif
     call get_param(param_file, mod, "PEN_SW_SCALE", CS%pen_sw_scale, &
                  "The vertical absorption e-folding depth of the \n"//&
                  "penetrating shortwave radiation.", units="m", default=0.0)
+    !BGR/ Added for opacity_scheme==double_exp read in 2nd exp-decay and fraction
+    if (CS%Opacity_scheme == DOUBLE_EXP ) then
+      call get_param(param_file, mod, "PEN_SW_SCALE_2ND", CS%pen_sw_scale_2nd, &
+                 "The (2nd) vertical absorption e-folding depth of the \n"//&
+                 "penetrating shortwave radiation \n"//&
+                 "(use if SW_EXP_MODE==double.)",&
+                 units="m", default=0.0)
+      call get_param(param_file, mod, "SW_1ST_EXP_RATIO", CS%sw_1st_exp_ratio, &
+                 "The fraction of 1st vertical absorption e-folding depth \n"//&
+                 "penetrating shortwave radiation if SW_EXP_MODE==double.",&
+                  units="m", default=0.0)
+    elseif (CS%OPACITY_SCHEME == Single_Exp) then
+      !/Else disable 2nd_exp scheme
+      CS%pen_sw_scale_2nd = 0.0
+      CS%sw_1st_exp_ratio = 1.0
+    endif
     call get_param(param_file, mod, "PEN_SW_FRAC", CS%pen_sw_frac, &
                  "The fraction of the shortwave radiation that penetrates \n"//&
                  "below the surface.", units="nondim", default=0.0)
+
   endif
   call get_param(param_file, mod, "PEN_SW_NBANDS", optics%nbands, &
                  "The number of bands of penetrating shortwave radiation.", &
                  default=1)
-
+  if (CS%Opacity_scheme == DOUBLE_EXP ) then
+    if (optics%nbands.ne.2) then
+      call MOM_error(FATAL, "set_opacity: "// &
+         "Cannot use a double_exp opacity scheme with nbands!=2.")
+    endif
+  elseif (CS%Opacity_scheme == SINGLE_EXP ) then
+    if (optics%nbands.ne.1) then
+      call MOM_error(FATAL, "set_opacity: "// &
+         "Cannot use a single_exp opacity scheme with nbands!=1.")
+    endif 
+  endif
   if (.not.ASSOCIATED(optics%min_wavelength_band)) &
     allocate(optics%min_wavelength_band(optics%nbands))
   if (.not.ASSOCIATED(optics%max_wavelength_band)) &

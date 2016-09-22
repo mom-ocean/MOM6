@@ -298,9 +298,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   h_neglect  = GV%H_subroundoff
   h_neglect3 = h_neglect**3
 
-  if (present(OBC)) then ; if (associated(OBC)) then ; if (OBC%this_pe) then
-    apply_OBC = OBC%apply_OBC_u_flather_east .or. OBC%apply_OBC_u_flather_west .or. &
-                OBC%apply_OBC_v_flather_north .or. OBC%apply_OBC_v_flather_south
+  if (present(OBC)) then ; if (associated(OBC)) then ; if (OBC%OBC_pe) then
+    apply_OBC = OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally
   endif ; endif ; endif
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
@@ -586,7 +585,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                      G%IareaCu(I,j)) / (0.5*(h(i+1,j,k) + h(i,j,k)) + h_neglect)
 
       if (apply_OBC) then ; if (OBC%OBC_mask_u(I,j)) then
-        if ((OBC%OBC_kind_u(I,j) == OBC_FLATHER)) diffu(I,j,k) = 0.0
+        if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%radiation) diffu(I,j,k) = 0.0
       endif ; endif
     enddo ; enddo
 
@@ -598,7 +597,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                                     CS%DX2h(i,j+1)*str_xx(i,j+1))) * &
                      G%IareaCv(i,J)) / (0.5*(h(i,j+1,k) + h(i,j,k)) + h_neglect)
       if (apply_OBC) then ; if (OBC%OBC_mask_v(i,J)) then
-        if ((OBC%OBC_kind_v(i,J) == OBC_FLATHER)) diffv(I,j,k) = 0.0
+        if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%radiation) diffv(I,j,k) = 0.0
       endif ; endif
     enddo ; enddo
 
