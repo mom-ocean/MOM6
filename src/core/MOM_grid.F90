@@ -147,7 +147,7 @@ type, public :: ocean_grid_type
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
     CoriolisBu    !< The Coriolis parameter at corner points, in s-1.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    dF_dx,        !< Derivative d/dx f (Coriolis parameter) at h-points, in s-1 m-1.
+    dF_dx, &      !< Derivative d/dx f (Coriolis parameter) at h-points, in s-1 m-1.
     dF_dy         !< Derivative d/dy f (Coriolis parameter) at h-points, in s-1 m-1.
   real :: g_Earth !< The gravitational acceleration in m s-2.
 
