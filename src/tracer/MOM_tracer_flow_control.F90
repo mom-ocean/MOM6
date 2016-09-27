@@ -70,7 +70,6 @@ use oil_tracer, only : oil_stock, oil_tracer_end, oil_tracer_CS
 use advection_test_tracer, only : register_advection_test_tracer, initialize_advection_test_tracer
 use advection_test_tracer, only : advection_test_tracer_column_physics, advection_test_tracer_surface_state
 use advection_test_tracer, only : advection_test_stock, advection_test_tracer_end, advection_test_tracer_CS
->>>>>>> dfd2ea314137f383c9fb94d9adac22bb43f1778b
 #ifdef _USE_GENERIC_TRACER
 use MOM_generic_tracer, only : register_MOM_generic_tracer, initialize_MOM_generic_tracer
 use MOM_generic_tracer, only : MOM_generic_tracer_column_physics, MOM_generic_tracer_surface_state
@@ -398,33 +397,6 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, dt, G, GV, tv, o
   if (.not. associated(CS)) call MOM_error(FATAL, "call_tracer_column_fns: "// &
          "Module must be initialized via call_tracer_register before it is used.")
 
-<<<<<<< HEAD
-! Add calls to tracer column functions here.
-  if (CS%use_USER_tracer_example) &
-    call tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                               G, GV, CS%USER_tracer_example_CSp)
-  if (CS%use_DOME_tracer) &
-    call DOME_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                    G, GV, CS%DOME_tracer_CSp)
-  if (CS%use_ISOMIP_tracer) &
-    call ISOMIP_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                    G, GV, CS%ISOMIP_tracer_CSp)
-  if (CS%use_ideal_age) &
-    call ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                         G, GV, CS%ideal_age_tracer_CSp)
-  if (CS%use_regional_dyes) &
-    call dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                         G, GV, CS%dye_tracer_CSp)
-  if (CS%use_oil) &
-    call oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                   G, GV, CS%oil_tracer_CSp, tv)
-  if (CS%use_advection_test_tracer) &
-    call advection_test_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                    G, GV, CS%advection_test_tracer_CSp)
-  if (CS%use_OCMIP2_CFC) &
-    call OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                   G, GV, CS%OCMIP2_CFC_CSp)
-=======
   ! Use the applyTracerBoundaryFluxesInOut to handle surface fluxes
   if (present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
     ! Add calls to tracer column functions here.
@@ -467,7 +439,6 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, dt, G, GV, tv, o
                                      G, GV, CS%OCMIP2_CFC_CSp, &
                                      evap_CFL_limit=evap_CFL_limit, &
                                      minimum_forcing_depth=minimum_forcing_depth)
->>>>>>> dfd2ea314137f383c9fb94d9adac22bb43f1778b
 #ifdef _USE_GENERIC_TRACER
     if (CS%use_MOM_generic_tracer) &
       call MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
@@ -627,13 +598,6 @@ subroutine call_tracer_stocks(h, stock_values, G, GV, CS, stock_names, stock_uni
     ns = pseudo_salt_stock(h, values, G, GV, CS%pseudo_salt_tracer_CSp, &
                          names, units, stock_index)
     call store_stocks("pseudo_salt_tracer", ns, names, units, values, index, &
-           stock_values, set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
-  endif
-
-  if (CS%use_advection_test_tracer) then
-    ns = advection_test_stock( h, values, G, GV, CS%advection_test_tracer_CSp, &
-                         names, units, stock_index )
-    call store_stocks("advection_test_tracer", ns, names, units, values, index, &
            stock_values, set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
   endif
 

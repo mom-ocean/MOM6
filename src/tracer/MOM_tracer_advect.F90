@@ -281,6 +281,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, h_prev_opt,
     if (itt >= max_iter) then
       if(present(uhr_out)) uhr_out(:,:,:) = uhr(:,:,:)
       if(present(vhr_out)) vhr_out(:,:,:) = vhr(:,:,:)
+      call MOM_error(WARNING,"Tracer advection failed to converge")
       exit
     endif
 
