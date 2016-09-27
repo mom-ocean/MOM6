@@ -1063,7 +1063,7 @@ subroutine find_PE_chg(Kddt_h0, dKddt_h, hp_a, hp_b, Th_a, Sh_a, Th_b, Sh_b, &
   !   The expression for the change in potential energy used here is derived
   ! from the expression for the final estimates of the changes in temperature
   ! and salinities, and then extensively manipulated to get it into its most
-  ! succint form.  The derivation is not necessarily obvious, but it demonstably
+  ! succint form. The derivation is not necessarily obvious, but it demonstrably
   ! works by comparison with separate calculations of the energy changes after
   ! the tridiagonal solver for the final changes in temperature and salinity are
   ! applied.
@@ -1117,11 +1117,14 @@ subroutine find_PE_chg(Kddt_h0, dKddt_h, hp_a, hp_b, Th_a, Sh_a, Th_b, Sh_b, &
 end subroutine find_PE_chg
 
 
+!> This subroutine calculates the change in potential energy and or derivatives
+!! for several changes in an interfaces's diapycnal diffusivity times a timestep
+!! using the original form used in the first version of ePBL.
 subroutine find_PE_chg_orig(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
-                       dT_km1_t2, dS_km1_t2, dT_to_dPE_k, dS_to_dPE_k, &
-                       dT_to_dPEa, dS_to_dPEa, pres, dT_to_dColHt_k, &
-                       dS_to_dColHt_k, dT_to_dColHta, dS_to_dColHta, &
-                       PE_chg, dPEc_dKd, dPE_max, dPEc_dKd_0)
+                            dT_km1_t2, dS_km1_t2, dT_to_dPE_k, dS_to_dPE_k, &
+                            dT_to_dPEa, dS_to_dPEa, pres, dT_to_dColHt_k, &
+                            dS_to_dColHt_k, dT_to_dColHta, dS_to_dColHta, &
+                            PE_chg, dPEc_dKd, dPE_max, dPEc_dKd_0)
   real, intent(in)  :: Kddt_h   !< The diffusivity at an interface times the time step and
                                 !! divided by the average of the thicknesses around the
                                 !! interface, in units of H (m or kg-2).
@@ -1192,64 +1195,7 @@ subroutine find_PE_chg_orig(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
 !   The comments describing these arguments are for a downward mixing pass, but
 ! this routine can also be used for an upward pass with the sense of direction
 ! reversed.
-!
-! Arguments: Kddt_h - The diffusivity at an interface times the time step and
-!                     divided by the average of the thicknesses around the
-!                     interface, in units of H (m or kg-2).
-!  (in)      h_k - The thickness of the layer below the interface, in H.
-!  (in)      b_den_1 - The first first term in the denominator of the pivot
-!                  for the tridiagonal solver, given by h_k plus a term that
-!                  is a fraction (determined from the tridiagonal solver) of
-!                  Kddt_h for the interface above, in H.
-!  (in)      dTe_term - A diffusivity-independent term related to the
-!                  temperature change in the layer below the interface, in K H.
-!  (in)      dSe_term - A diffusivity-independent term related to the
-!                  salinity change in the layer below the interface, in ppt H.
-!  (in)      dT_km1_t2 - A diffusivity-independent term related to the
-!                  temperature change in the layer above the interface, in K.
-!  (in)      dS_km1_t2 - A diffusivity-independent term related to the
-!                  salinity change in the layer above the interface, in ppt.
-!  (in)      dT_to_dPE_k - A factor (pres_lay*mass_lay*dSpec_vol/dT) relating
-!                  a layer's temperature change to the change in column
-!                  potential energy, in J m-2 K-1.
-!  (in)      dS_to_dPE_k - A factor (pres_lay*mass_lay*dSpec_vol/dS) relating
-!                  a layer's salinity change to the change in column
-!                  potential energy, in J m-2 ppt-1.
-!  (in)      dT_to_dPEa - A factor (pres_lay*mass_lay*dSpec_vol/dT) relating
-!                  a layer's temperature change to the change in column
-!                  potential energy, including all implicit diffusive changes
-!                  in the temperatures of all the layers above, in J m-2 K-1.
-!  (in)      dS_to_dPEa - A factor (pres_lay*mass_lay*dSpec_vol/dS) relating
-!                  a layer's salinity change to the change in column
-!                  potential energy, including all implicit diffusive changes
-!                  in the salinities of all the layers above, in J m-2 ppt-1.
-!  (in)      pres - The hydrostatic interface pressure, which is used to relate
-!                  the changes in column thickness to the energy that is radiated
-!                  as gravity waves and unavailable to drive mixing, in Pa.
-!  (in)      dT_to_dColHt_k - A factor (mass_lay*dSColHtc_vol/dT) relating
-!                  a layer's temperature change to the change in column
-!                  height, in m K-1.
-!  (in)      dS_to_dColHt_k - A factor (mass_lay*dSColHtc_vol/dS) relating
-!                  a layer's salinity change to the change in column
-!                  height, in m ppt-1.
-!  (in)      dT_to_dColHta - A factor (mass_lay*dSColHtc_vol/dT) relating
-!                  a layer's temperature change to the change in column
-!                  height, including all implicit diffusive changes
-!                  in the temperatures of all the layers above, in m K-1.
-!  (in)      dS_to_dColHta - A factor (mass_lay*dSColHtc_vol/dS) relating
-!                  a layer's salinity change to the change in column
-!                  height, including all implicit diffusive changes
-!                  in the salinities of all the layers above, in m ppt-1.
-!  (out,opt) PE_chg - The change in column potential energy from applying
-!                     Kddt_h at the present interface, in J m-2.
-!  (out,opt) dPE_chg_dKd - The partial derivative of PE_chg with Kddt_h,
-!                          in units of J m-2 H-1.
-!  (out,opt) PE_max - The maximum change in column potential energy that could
-!                     be realizedd by applying a huge value of Kddt_h at the
-!                     present interface, in J m-2.
-!  (out,opt) dPEc_dKc0  - The partial derivative of PE_chg with Kddt_h in the
-!                         limit where Kddt_h = 0, in J m-2 H-1.
-  ! b_den_1 - The first term in the denominator of b1, in m or kg m-2.
+
   real :: b1            ! b1 is used by the tridiagonal solver, in H-1.
   real :: b1Kd          ! Temporary array (nondim.)
   real :: ColHt_chg     ! The change in column thickness in m.
