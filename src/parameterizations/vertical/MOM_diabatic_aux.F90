@@ -811,8 +811,6 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
   type(forcing),                         intent(inout) :: fluxes !< Surface fluxes container
   type(optics_type),                     pointer       :: optics !< Optical properties container
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thickness in H units
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: hloss_boundary  !< Layer thickness lost in this
-                                                                             !< routine (H units)
   type(thermo_var_ptrs),                 intent(inout) :: tv !< Thermodynamics container
   !> If False, treat in/out fluxes separately.
   logical,                               intent(in)    :: aggregate_FW_forcing
@@ -980,7 +978,6 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
           Temp_in = T2d(i,k)
           Salin_in = 0.0
           dTemp = dTemp + dThickness*Temp_in
-          ea(i,j,1) = dThickness
 
           ! Diagnostics of heat content associated with mass fluxes
           if (ASSOCIATED(fluxes%heat_content_massin))                             &
@@ -1050,7 +1047,6 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
           ! Change in state due to forcing
 
           dThickness = max( fractionOfForcing*netMassOut(i), -h2d(i,k) )
-          ea(i,j,k) = ea(i,j,k) + dThickness
           dTemp      = fractionOfForcing*netHeat(i)
           !   ### The 0.9999 here should become a run-time parameter?
           dSalt = max( fractionOfForcing*netSalt(i), -0.9999*h2d(i,k)*tv%S(i,j,k))
@@ -1078,7 +1074,6 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
           ! Update state by the appropriate increment.
           hOld     = h2d(i,k)               ! Keep original thickness in hand
           h2d(i,k) = h2d(i,k) + dThickness  ! New thickness
-          hloss(i,k) = hloss(i,k) + dThickness
 
           if (h2d(i,k) > 0.) then
             if (calculate_energetics) then
@@ -1165,7 +1160,6 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
     do k=1,nz ; do i=is,ie
       h(i,j,k)    = h2d(i,k)
       tv%T(i,j,k) = T2d(i,k)
-      hloss_boundary(i,j,k) = hloss(i,k)
     enddo ; enddo
 
     ! Diagnose heating (W/m2) applied to a grid cell from SW penetration

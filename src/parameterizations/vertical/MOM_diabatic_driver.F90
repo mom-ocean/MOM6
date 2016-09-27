@@ -1090,19 +1090,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     enddo ; enddo ; enddo
   endif
 
-<<<<<<< HEAD
-  ! Undo the effects of applyBoundaryFluxesInOut for passive tracers
-  if (CS%useALEalgorithm) then
-    k = 1
-    do j=js,je ; do i=is,ie
-      hold(i,j,k) = hold(i,j,k) - ea(i,j,k)
-    enddo ; enddo
-  endif
-
-
-
-=======
->>>>>>> dfd2ea314137f383c9fb94d9adac22bb43f1778b
   ! mixing of passive tracers from massless boundary layers to interior
   call cpu_clock_begin(id_clock_tracers)
   if (CS%mix_boundary_tracers) then

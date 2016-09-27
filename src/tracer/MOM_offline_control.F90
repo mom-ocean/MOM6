@@ -599,7 +599,7 @@ contains
 
   end subroutine limit_mass_flux_3d
 
-  subroutine limit_mass_flux_ordered_3d(G, GV, uh, vh, ea, eb, h_in, max_off_cfl, z_first, x_before_y)
+  subroutine limit_mass_flux_ordered_3d(G, GV, uh, vh, ea, eb, h_in, h_end, max_off_cfl, z_first, x_before_y)
     type(ocean_grid_type),    pointer                           :: G
     type(verticalGrid_type),  pointer                           :: GV
     real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: uh
@@ -607,6 +607,7 @@ contains
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)    :: ea
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)    :: eb
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(in)       :: h_in
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)       :: h_end
     real,                                      intent(in)       :: max_off_cfl
     logical,                                   intent(in)       :: z_first, x_before_y
 
@@ -653,16 +654,23 @@ contains
         call flux_limiter_v(G, GV, h_budget, vh, max_off_cfl)
         call flux_limiter_u(G, GV, h_budget, uh, max_off_cfl)
       case (3) ! x -> y -> z
-        !call flux_limiter_u(G, GV, h_budget, uh, max_off_cfl)
-        call flux_limiter_v(G, GV, h_budget, vh, max_off_cfl)
-        call flux_limiter_vertical(G, GV, h_budget, ea, eb, max_off_cfl)
-      case (4) ! y -> x -> z
-        !call flux_limiter_v(G, GV, h_budget, vh, max_off_cfl)
         call flux_limiter_u(G, GV, h_budget, uh, max_off_cfl)
-        call flux_limiter_vertical(G, GV, h_budget, ea, eb, max_off_cfl)
+        call flux_limiter_v(G, GV, h_budget, vh, max_off_cfl)
+!        call flux_limiter_vertical(G, GV, h_budget, ea, eb, max_off_cfl)
+      case (4) ! y -> x -> z
+        call flux_limiter_v(G, GV, h_budget, vh, max_off_cfl)
+        call flux_limiter_u(G, GV, h_budget, uh, max_off_cfl)
+!        call flux_limiter_vertical(G, GV, h_budget, ea, eb, max_off_cfl)
       case default
         call MOM_error(FATAL, "Invalid choice of flux_order")
     end select
+    
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      h_end(i,j,k) = h_budget(i,j,k)/G%areaT(i,j)
+      if (h_end(i,j,k)<0.0 ) then
+        print *, "i,j,k,h,",i,j,k,h_end(i,j,k)
+      endif
+    enddo ; enddo ; enddo
 
   end subroutine limit_mass_flux_ordered_3d
 
@@ -781,7 +789,7 @@ contains
     real                                                        :: max_off_cfl
     ! Limits how much the a layer can be depleted in the vertical direction
     real, dimension(SZIB_(G),SZK_(G))                           :: uh2d
-    real                                                        :: hup, hlos, min_h
+    real                                                        :: hup, hlos, min_h, h_remain
     integer :: i, j, k, m, is, ie, js, je, nz
 
     min_h= 0.1*GV%Angstrom
@@ -789,36 +797,37 @@ contains
     is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
 
     do j=js,je
-      do k=1,nz ; do i=is-1,ie
+      do k=1,nz ; do i=is-2,ie
         uh2d(I,k) = uh(I,j,k)        
       enddo ; enddo;
-
+      
       do k=1,nz ; do i=is-1,ie
         if(uh2d(I,k)<0.0) then
-          hup = h(i+1,j,k) - G%areaT(i+1,j)*min_h
-          hlos = MAX(0.0,uh2d(I+1,k))
-          if (((hup + uh2d(I,k) - hlos) < 0.0) .and. ((0.5*hup + uh2d(I,k)) < 0.0)) &
-            uh2d(I,k) = MIN(-0.5*hup,-hup+hlos,0.0)
-            
-        elseif(uh2d(I,k)>0.0) then
+          hup = h(i+1,j,k) - min_h*G%areaT(i+1,j)
+          hlos = max(0.0, uh2d(I+1,k))
+          if (( ((hup-hlos)+uh2d(I,k))<0.0) .and. &
+              ((0.5*hup + uh2d(I,k))<0.0)) then
+                uh2d(I,k) = min(-0.5*hup,-hup+hlos,0.0)
+          endif
+        else
           hup = h(i,j,k) - G%areaT(i,j)*min_h
-          hlos = MAX(0.0,-uh2d(I-1,k))
-          if (((hup - uh2d(I,k) - hlos) < 0.0) .and. ((0.5*hup - uh2d(I,k)) < 0.0)) &
-            uh2d(I,k) = MAX(0.5*hup,hup-hlos,0.0)                                          
-        endif    
+          hlos = max(0.0,-uh2d(I-1,k))
+          if ((((hup-hlos)-uh2d(I,k))<0.0) .and. &
+              ((0.5*hup-uh2d(I,k))<0.0))  then
+                uh2d(I,k) = max(0.5*hup,hup-hlos,0.0)
+          endif
+        endif  
       enddo ; enddo
 
       do k=1,nz
-        do i=is-1,ie
-          uh(I,j,k) = uh2d(I,k)        
+        do i=is-1,ie 
+          uh(I,j,k) = uh2d(I,k)
         enddo
         do i=is,ie 
-          h(i,j,k) = h(i,j,k) + (uh2d(I-1,k)-uh2d(I,k))
-          if( h(i,j,k)<0.0 ) then
-            print *, i, j, k, h(i,j,k)
-          endif
+          h(i,j,k) = h(i,j,k) - (uh2d(I,k) - uh2d(I-1,k))
         enddo
       enddo
+      
     enddo  
 
   end subroutine flux_limiter_u
@@ -832,45 +841,42 @@ contains
     ! Limits how much the a layer can be depleted in the vertical direction
     real, dimension(SZJB_(G),SZK_(G))                           :: vh2d
     real, dimension(SZJ_(G),SZK_(G))                            :: h2d
-    real                                                        :: hup, hlos, min_h
+    real                                                        :: hup, hlos, min_h, h_remain
     integer :: i, j, k, m, is, ie, js, je, nz
 
     ! Set index-related variables for fields on T-grid
     is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
     min_h= 0.1*GV%Angstrom
     do i=is,ie
-      do k=1,nz ; do j=js-1,je
+      do k=1,nz ; do j=js-2,je
         vh2d(J,k) = vh(i,J,k)        
       enddo ; enddo;
-      
       do k=1,nz ; do j=js-1,je
         if(vh2d(J,k)<0.0) then
-          hup = h(i,j+1,k) - G%areaT(i,j+1)*min_h
-          hlos = MAX(0.0,vh2d(J+1,k))
-          if (((hup + vh2d(J,k) - hlos) < 0.0) .and. ((0.5*hup + vh2d(J,k)) < 0.0)) &
-            vh2d(J,k) = MIN(-0.5*hup,-hup+hlos,0.0)
-            
-        elseif(vh2d(J,k)>0.0) then
-          hup = h(i,j,k) - G%areaT(i,j)*min_h
-          hlos = MAX(0.0,-vh2d(J-1,k))
-          if (((hup - vh2d(J,k) - hlos) < 0.0) .and. ((0.5*hup - vh2d(J,k)) < 0.0)) &
-            vh2d(J,k) = MAX(0.5*hup,hup-hlos,0.0)                                          
-        endif    
+          hup = h(i,j+1,k)-G%areaT(i,j+1)*min_h
+          hlos = max(0.0,vh2d(J+1,k))
+          if ((((hup-hlos)+vh2d(J,k))<0.0) .and. &
+              ((0.5*hup+vh2d(J,k))<0.0)) then
+              vh2d(J,k) = min(-0.5*hup,-hup+hlos,0.0)
+          endif
+        else
+          hup = h(i,j,k) -G%areaT(i,j)*min_h
+          hlos = max(0.0,-vh2d(J-1,k))
+          if ((((hup-hlos)-vh2d(J,k))<0.0) .and. &
+              ((0.5*hup - vh2d(J,k))<0.0)) then
+              vh2d(J,k) = max(0.5*hup,hup-hlos,0.0)
+          endif
+        endif
       enddo ; enddo
-
-      do k=1,nz 
-        do j=js-1,je
+      
+      do k=1,nz
+        do j=js-1,je 
           vh(i,J,k) = vh2d(J,k)
         enddo
-        
-        do j=js,je
-          h(i,j,k)  = h(i,j,k) + (vh2d(J-1,k)-vh2d(J,k))
-          if( h(i,j,k)<0.0 ) then
-            print *, i, j, k, h(i,j,k)
-          endif
-        enddo  
+        do j=js,je 
+          h(i,j,k) = h(i,j,k) - (vh2d(J,k) - vh2d(J-1,k))
+        enddo
       enddo
-      
     enddo
   end subroutine flux_limiter_v
 
