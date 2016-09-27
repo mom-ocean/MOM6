@@ -34,7 +34,7 @@ use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
-use MOM_EOS, only : calculate_specific_vol_derivs
+use MOM_EOS, only : calculate_specific_vol_derivs, calculate_density
 
 implicit none ; private
 
@@ -50,9 +50,9 @@ type, public :: diapyc_energy_req_CS ; private
                                ! profile in place of any that might be passed
                                ! in as an argument.
   type(diag_ctrl), pointer :: diag ! Structure used to regulate timing of diagnostic output
-  integer :: id_ERt=-1, id_ERb=-1, id_ERc=-1, id_ERh=-1, id_Kddt=-1
+  integer :: id_ERt=-1, id_ERb=-1, id_ERc=-1, id_ERh=-1, id_Kddt=-1, id_Kd=-1
   integer :: id_CHCt=-1, id_CHCb=-1, id_CHCc=-1, id_CHCh=-1
-  integer :: id_T0=-1, id_Tf=-1, id_S0=-1, id_Sf=-1
+  integer :: id_T0=-1, id_Tf=-1, id_S0=-1, id_Sf=-1, id_N2_0=-1, id_N2_f=-1
   integer :: id_h=-1, id_zInt=-1
 end type diapyc_energy_req_CS
 
@@ -211,6 +211,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
   real, dimension(GV%ke+1) :: &
     pres, &     ! Interface pressures in Pa.
     z_Int, &    ! Interface heights relative to the surface, in m.
+    N2, &       ! An estimate of the buoyancy frequency in s-2.
     Kddt_h_a, & !
     Kddt_h_b, & !
     Kddt_h, &   ! The diapycnal diffusivity times a timestep divided by the
@@ -238,6 +239,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
                     ! converted to turbulent kinetic energy if the velocity in
                     ! the layer below an interface were homogenized with all of
                     ! the water above the interface, in J m-2 = kg s-2.
+  real :: rho_here  ! The in-situ density, in kg m-3.
   real :: PE_change, ColHt_cor
   real :: htot
   real :: dT_k, dT_km1, dS_k, dS_km1  ! Temporary arrays
@@ -930,6 +932,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
     if (CS%id_ERc>0) call post_data_1d_k(CS%id_ERc, PE_chg_k(:,3), CS%diag)
     if (CS%id_ERh>0) call post_data_1d_k(CS%id_ERh, PE_chg_k(:,4), CS%diag)
     if (CS%id_Kddt>0) call post_data_1d_k(CS%id_Kddt, GV%H_to_m*Kddt_h, CS%diag)
+    if (CS%id_Kd>0)   call post_data_1d_k(CS%id_Kd, Kd, CS%diag)
     if (CS%id_h>0)    call post_data_1d_k(CS%id_h, GV%H_to_m*h_tr, CS%diag)
     if (CS%id_zInt>0) call post_data_1d_k(CS%id_zInt, Z_int, CS%diag)
     if (CS%id_CHCt>0) call post_data_1d_k(CS%id_CHCt, ColHt_cor_k(:,1), CS%diag)
@@ -940,6 +943,28 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
     if (CS%id_Tf>0) call post_data_1d_k(CS%id_Tf, Tf, CS%diag)
     if (CS%id_S0>0) call post_data_1d_k(CS%id_S0, S0, CS%diag)
     if (CS%id_Sf>0) call post_data_1d_k(CS%id_Sf, Sf, CS%diag)
+    if (CS%id_N2_0>0) then
+      N2(1) = 0.0 ; N2(nz+1) = 0.0
+      do K=2,nz
+        call calculate_density(0.5*(T0(k-1) + T0(k)), 0.5*(S0(k-1) + S0(k)), &
+                               pres(K), rho_here, tv%eqn_of_state)
+        N2(K) = (GV%g_Earth * rho_here / (0.5*GV%H_to_m*(h_tr(k-1) + h_tr(k)))) * &
+                ( 0.5*(dSV_dT(k-1) + dSV_dT(k)) * (T0(k-1) - T0(k)) + &
+                  0.5*(dSV_dS(k-1) + dSV_dS(k)) * (S0(k-1) - S0(k)) )
+      enddo
+      call post_data_1d_k(CS%id_N2_0, N2, CS%diag)
+    endif
+    if (CS%id_N2_f>0) then
+      N2(1) = 0.0 ; N2(nz+1) = 0.0
+      do K=2,nz
+        call calculate_density(0.5*(Tf(k-1) + Tf(k)), 0.5*(Sf(k-1) + Sf(k)), &
+                               pres(K), rho_here, tv%eqn_of_state)
+        N2(K) = (GV%g_Earth * rho_here / (0.5*GV%H_to_m*(h_tr(k-1) + h_tr(k)))) * &
+                ( 0.5*(dSV_dT(k-1) + dSV_dT(k)) * (Tf(k-1) - Tf(k)) + &
+                  0.5*(dSV_dS(k-1) + dSV_dS(k)) * (Sf(k-1) - Sf(k)) )
+      enddo
+      call post_data_1d_k(CS%id_N2_f, N2, CS%diag)
+    endif
   endif
 
 end subroutine diapyc_energy_req_calc
@@ -1345,6 +1370,8 @@ subroutine diapyc_energy_req_init(Time, G, param_file, diag, CS)
                  "Diffusivity Energy Requirements, halves", "J m-2")
   CS%id_Kddt = register_diag_field('ocean_model', 'EnReqTest_Kddt', diag%axesZi, Time, &
                  "Implicit diffusive coupling coefficient", "m")
+  CS%id_Kd = register_diag_field('ocean_model', 'EnReqTest_Kd', diag%axesZi, Time, &
+                 "Diffusivity in test", "m2 s-1")
   CS%id_h   = register_diag_field('ocean_model', 'EnReqTest_h_lay', diag%axesZL, Time, &
                  "Test column layer thicknesses", "m")
   CS%id_zInt   = register_diag_field('ocean_model', 'EnReqTest_z_int', diag%axesZi, Time, &
@@ -1365,6 +1392,10 @@ subroutine diapyc_energy_req_init(Time, G, param_file, diag, CS)
                  "Salinity before mixing", "g kg-1")
   CS%id_Sf = register_diag_field('ocean_model', 'EnReqTest_Sf', diag%axesZL, Time, &
                  "Salinity after mixing", "g kg-1")
+  CS%id_N2_0 = register_diag_field('ocean_model', 'EnReqTest_N2_0', diag%axesZi, Time, &
+                 "Squared buoyancy frequency before mixing", "second-2")
+  CS%id_N2_f = register_diag_field('ocean_model', 'EnReqTest_N2_f', diag%axesZi, Time, &
+                 "Squared buoyancy frequency after mixing", "second-2")
 
 end subroutine diapyc_energy_req_init
 
