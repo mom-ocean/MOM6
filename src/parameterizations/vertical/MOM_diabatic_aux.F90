@@ -81,7 +81,7 @@ use MOM_forcing_type,      only : forcing, MOM_forcing_chksum
 use MOM_forcing_type,      only : extractFluxes1d, forcing_SinglePointPrint
 use MOM_grid,              only : ocean_grid_type
 use MOM_io,                only : vardesc
-use MOM_shortwave_abs,     only : absorbRemainingSW, absorbRemainingSw2exp, optics_type
+use MOM_shortwave_abs,     only : absorbRemainingSW, optics_type
 use MOM_variables,         only : thermo_var_ptrs, vertvisc_type! , accel_diag_ptrs
 use MOM_verticalGrid,      only : verticalGrid_type
 ! use MOM_variables,         only : cont_diag_ptrs, MOM_thermovar_chksum, p3d
@@ -100,9 +100,9 @@ type, public :: diabatic_aux_CS ; private
                                    !! at the river mouths to "rivermix_depth" meters
   real    :: rivermix_depth = 0.0  !< The depth to which rivers are mixed if
                                    !! do_rivermix = T, in m.
-  real    :: minimum_forcing_depth = 0.001 !< The smallest depth over which forcing is
+  real, public    :: minimum_forcing_depth = 0.001 !< The smallest depth over which forcing is
                                    !! applied, in m.
-  real    :: evap_CFL_limit = 0.8  !< The largest fraction of a layer that can be
+  real, public    :: evap_CFL_limit = 0.8  !< The largest fraction of a layer that can be
                                    !! evaporated in one time-step (non-dim).
 
   logical :: reclaim_frazil  !<   If true, try to use any frazil heat deficit to
@@ -574,7 +574,6 @@ subroutine triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, T, S)
   real :: c1(SZIB_(G),SZK_(G))       ! tridiagonal solver.
   real :: h_tr, b_denom_1
   integer :: i, j, k
-
 !$OMP parallel do default(none) shared(is,ie,js,je,G,GV,hold,eb,T,S,ea) &
 !$OMP                          private(h_tr,b1,d1,c1,b_denom_1)
   do j=js,je
@@ -803,15 +802,14 @@ end subroutine diagnoseMLDbyDensityDifference
 !> Update the thickness, temperature, and salinity due to thermodynamic
 !! boundary forcing (contained in fluxes type) applied to h, tv%T and tv%S,
 !! and calculate the TKE implications of this heating.
-subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
+subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
                                     aggregate_FW_forcing, cTKE, dSV_dT, dSV_dS)
   type(diabatic_aux_CS),                 pointer       :: CS !< Control structure for diabatic_aux
   type(ocean_grid_type),                 intent(in)    :: G  !< Grid structure
-  type(verticalGrid_type),               intent(in) :: GV        !< ocean vertical grid structure
+  type(verticalGrid_type),               intent(in)    :: GV        !< ocean vertical grid structure
   real,                                  intent(in)    :: dt !< Time-step over which forcing is applied (s)
   type(forcing),                         intent(inout) :: fluxes !< Surface fluxes container
   type(optics_type),                     pointer       :: optics !< Optical properties container
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: ea !< The entrainment distance at interfaces (H units)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thickness in H units
   type(thermo_var_ptrs),                 intent(inout) :: tv !< Thermodynamics container
   !> If False, treat in/out fluxes separately.
@@ -845,7 +843,6 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
   real, dimension(SZI_(G), SZK_(G))                     :: pen_TKE_2d, dSV_dT_2d
   real, dimension(max(optics%nbands,1),SZI_(G))         :: Pen_SW_bnd
   real, dimension(max(optics%nbands,1),SZI_(G),SZK_(G)) :: opacityBand
-  real, dimension(max(optics%nbands,1),SZI_(G),SZK_(G)) :: opacityBand2nd
   real                                                  :: hGrounding(maxGroundings)
   real    :: Temp_in, Salin_in
   real    :: I_G_Earth, g_Hconv2
@@ -880,7 +877,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
   numberOfGroundings = 0
 
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,h,tv,nsw,G,GV,optics,fluxes,dt,    &
-!$OMP                                  H_limit_fluxes,ea,IforcingDepthScale,             &
+!$OMP                                  H_limit_fluxes,IforcingDepthScale,                &
 !$OMP                                  numberOfGroundings,iGround,jGround,nonPenSW,      &
 !$OMP                                  hGrounding,CS,Idt,aggregate_FW_forcing,           &
 !$OMP                                  calculate_energetics,dSV_dT,dSV_dS,cTKE,g_Hconv2) &
@@ -899,7 +896,6 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
       T2d(i,k) = tv%T(i,j,k)
       do n=1,nsw
         opacityBand(n,i,k) = (1.0 / GV%m_to_H)*optics%opacity_band(n,i,j,k)
-        opacityBand2nd(n,i,k) = (1.0 / GV%m_to_H)*optics%opacity_band_2nd(n,i,j,k)
       enddo
     enddo ; enddo
 
@@ -947,13 +943,15 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
 
     ! ea is for passive tracers
     do i=is,ie
-      ea(i,j,1) = netMassInOut(i)
+    !  ea(i,j,1) = netMassInOut(i)
       if (aggregate_FW_forcing) then
         netMassOut(i) = netMassInOut(i)
         netMassIn(i) = 0.
       else
         netMassIn(i) = netMassInOut(i) - netMassOut(i)
       endif
+      fluxes%netMassOut(i,j) = netMassOut(i)
+      fluxes%netMassIn(i,j) = netMassIn(i)
     enddo
 
     ! Apply the surface boundary fluxes in three steps:
@@ -975,7 +973,6 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
           ! Update the forcing by the part to be consumed within the present k-layer.
           ! If fractionOfForcing = 1, then updated netMassIn, netHeat, and netSalt vanish.
           netMassIn(i) = netMassIn(i) - dThickness
-
           ! This line accounts for the temperature of the mass exchange
           Temp_in = T2d(i,k)
           Salin_in = 0.0
@@ -1142,33 +1139,15 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
     endif
 
     if (calculate_energetics) then
-       if (optics%two_exp_form) then
-          call absorbRemainingSW2exp(G, GV, h2d, opacityBand, opacityBand2nd,&
-                             nsw, j, dt, H_limit_fluxes, &
-                             .false., .true., T2d, Pen_SW_bnd, &
-                             optics%two_exp_form, optics%sw_1st_exp_ratio, &
-                             TKE=pen_TKE_2d,dSV_dT=dSV_dT_2d)
-       else
-          call absorbRemainingSW(G, GV, h2d, opacityBand, nsw, j, dt, H_limit_fluxes, &
-                             .false., .true., T2d, Pen_SW_bnd, &
-                             TKE=pen_TKE_2d,dSV_dT=dSV_dT_2d)
-       endif
+      call absorbRemainingSW(G, GV, h2d, opacityBand, nsw, j, dt, H_limit_fluxes, &
+                             .false., .true., T2d, Pen_SW_bnd, TKE=pen_TKE_2d, dSV_dT=dSV_dT_2d)
       k = 1 ! For setting break-points.
       do k=1,nz ; do i=is,ie
         cTKE(i,j,k) = cTKE(i,j,k) + pen_TKE_2d(i,k)
       enddo ; enddo
     else
-       if (optics%two_exp_form) then
-          call absorbRemainingSW2exp(G, GV, h2d, opacityBand, opacityBand2nd,&
-                             nsw, j, dt, H_limit_fluxes, &
-                             .false., .true., T2d, Pen_SW_bnd, &
-                             optics%two_exp_form, optics%sw_1st_exp_ratio, &
-                             TKE=pen_TKE_2d,dSV_dT=dSV_dT_2d)
-       else
-          call absorbRemainingSW(G, GV, h2d, opacityBand, nsw, j, dt, H_limit_fluxes, &
-                             .false., .true., T2d, Pen_SW_bnd, &
-                             TKE=pen_TKE_2d,dSV_dT=dSV_dT_2d)
-       endif
+      call absorbRemainingSW(G, GV, h2d, opacityBand, nsw, j, dt, H_limit_fluxes, &
+                             .false., .true., T2d, Pen_SW_bnd)
     endif
 
 

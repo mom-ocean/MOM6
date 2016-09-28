@@ -97,10 +97,10 @@ use user_revise_forcing,     only : user_revise_forcing_CS
 use SCM_idealized_hurricane, only : SCM_idealized_hurricane_wind_init
 use SCM_idealized_hurricane, only : SCM_idealized_hurricane_wind_forcing
 use SCM_idealized_hurricane, only : SCM_idealized_hurricane_CS
-use SCM_CVmix_tests, only : SCM_CVmix_tests_surface_forcing_init
-use SCM_CVmix_tests, only : SCM_CVmix_tests_wind_forcing
-use SCM_CVmix_tests, only : SCM_CVmix_tests_buoyancy_forcing
-use SCM_CVmix_tests, only : SCM_CVmix_tests_CS
+use SCM_CVmix_tests,         only : SCM_CVmix_tests_surface_forcing_init
+use SCM_CVmix_tests,         only : SCM_CVmix_tests_wind_forcing
+use SCM_CVmix_tests,         only : SCM_CVmix_tests_buoyancy_forcing
+use SCM_CVmix_tests,         only : SCM_CVmix_tests_CS
 use BFB_surface_forcing,    only : BFB_buoyancy_forcing
 use BFB_surface_forcing,    only : BFB_surface_forcing_init, BFB_surface_forcing_CS
 
@@ -214,8 +214,8 @@ type, public :: surface_forcing_CS ; private
   type(user_surface_forcing_CS), pointer :: user_forcing_CSp => NULL()
   type(BFB_surface_forcing_CS), pointer :: BFB_forcing_CSp => NULL()
   type(MESO_surface_forcing_CS), pointer :: MESO_forcing_CSp => NULL()
-  type(SCM_idealized_hurricane_CS), pointer :: SCM_idealized_hurricane_CSp => NULL()  
-  type(SCM_CVmix_tests_CS), pointer :: SCM_CVmix_tests_CSp => NULL()
+  type(SCM_idealized_hurricane_CS), pointer :: SCM_idealized_hurricane_CSp => NULL()
+  type(SCM_CVmix_tests_CS),      pointer :: SCM_CVmix_tests_CSp => NULL()
 
 end type surface_forcing_CS
 
@@ -1847,7 +1847,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
   elseif (trim(CS%wind_config) == "SCM_CVmix_tests" .or. &
           trim(CS%buoy_config) == "SCM_CVmix_tests") then
     call SCM_CVmix_tests_surface_forcing_init(Time, G, param_file, CS%SCM_CVmix_tests_CSp)
-    CS%SCM_CVmix_tests_CSp%Rho0 = CS%Rho0 !copy reference density for easy pass
+    CS%SCM_CVmix_tests_CSp%Rho0 = CS%Rho0 !copy reference density for pass
   endif
 
   call register_forcing_type_diags(Time, diag, CS%use_temperature, CS%handles)
