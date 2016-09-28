@@ -1663,6 +1663,13 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         ea_zero(i,j,k) = 0.0
         eb_zero(i,j,k) = 0.0
       enddo ; enddo; enddo
+      
+      call cpu_clock_begin(id_clock_ALE)
+      call ALE_main(G, GV, h_pre, CS%offline_CSp%u_preale, &
+                      CS%offline_CSp%v_preale, CS%tv, CS%tracer_Reg, &
+                      CS%ALE_CSp, dt_iter)
+      call cpu_clock_end(id_clock_ALE)
+      
       do iter=1,CS%offline_CSp%num_off_iter
          
         do k = 1, nz ; do j=jsd,jed ; do i=IsdB,IedB
@@ -1678,7 +1685,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         ! Perform zonal and meridional advection
         call advect_tracer(h_end, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
              CS%tracer_adv_CSp, CS%tracer_Reg, max_iter_in=10, x_first_in=x_before_y)
-        x_before_y = .not. x_before_y
+!        x_before_y = .not. x_before_y
 
         ! Done with horizontal so now h_pre should be h_new
         do k = 1, nz ; do i=is-2,ie ; do j=js-2,je
@@ -1723,12 +1730,13 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
           call hchksum(CS%tv%T,"Pre-ALE 1 T", G%HI, haloshift=1)
           call hchksum(CS%tv%S,"Pre-ALE 1 S", G%HI, haloshift=1)
         endif
+        if (mod(iter,2)==0) then
         call cpu_clock_begin(id_clock_ALE)
         call ALE_main(G, GV, h_pre, CS%offline_CSp%u_preale, &
                         CS%offline_CSp%v_preale, CS%tv, CS%tracer_Reg, &
                         CS%ALE_CSp, dt_iter)
         call cpu_clock_end(id_clock_ALE)
-
+        endif
         if (CS%debug) then
             call hchksum(CS%tv%T,"Post-ALE 1 T", G%HI, haloshift=1)
             call hchksum(CS%tv%S,"Post-ALE 1 S", G%HI, haloshift=1)
