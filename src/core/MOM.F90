@@ -1169,7 +1169,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       if (Time_local + set_time(int(0.5*dt_therm)) > CS%Z_diag_time) then
         call enable_averaging(real(time_type_to_real(CS%Z_diag_interval)), &
                               CS%Z_diag_time, CS%diag)
-        call calculate_Z_diag_fields(u, v, h, ssh, CS%dt_trans, &
+        call calculate_Z_diag_fields(u, v, h, ssh, fluxes%frac_shelf_h, CS%dt_trans, &
                                      G, GV, CS%diag_to_Z_CSp)
         CS%Z_diag_time = CS%Z_diag_time + CS%Z_diag_interval
         call disable_averaging(CS%diag)
@@ -2092,7 +2092,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
              (LEN_TRIM(dirs%input_filename) == 1))
   call tracer_flow_control_init(.not.new_sim, Time, G, GV, CS%h, param_file, &
              CS%diag, CS%OBC, CS%tracer_flow_CSp, CS%sponge_CSp, &
-             CS%ALE_sponge_CSp, CS%diag_to_Z_CSp)
+             CS%ALE_sponge_CSp, CS%diag_to_Z_CSp, CS%tv)
 
   call cpu_clock_begin(id_clock_pass_init)
   call do_group_pass(CS%pass_uv_T_S_h, G%Domain)
@@ -2844,9 +2844,12 @@ subroutine set_restart_fields(GV, param_file, CS)
   type(verticalGrid_type),  intent(inout) :: GV         !< ocean vertical grid structure
   type(param_file_type),    intent(in) :: param_file    !< opened file for parsing to get parameters
   type(MOM_control_struct), intent(in) :: CS            !< control structure set up by inialize_MOM
-
+  ! Local variables
+  logical :: use_ice_shelf ! Needed to determine whether to add tv%Hml to restarts
   type(vardesc) :: vd
   character(len=48) :: thickness_units, flux_units
+
+  call get_param(param_file, '', "ICE_SHELF", use_ice_shelf, default=.false., do_not_log=.true.)
 
   thickness_units = get_thickness_units(GV)
   flux_units = get_flux_units(GV)
@@ -2880,6 +2883,12 @@ subroutine set_restart_fields(GV, param_file, CS)
 
   vd = var_desc("ave_ssh","meter","Time average sea surface height",'h','1')
   call register_restart_field(CS%ave_ssh, vd, .false., CS%restart_CSp)
+
+  ! hML is needed when using the ice shelf module
+  if (use_ice_shelf .and. associated(CS%tv%Hml)) then
+     vd = var_desc("hML","meter","Mixed layer thickness",'h','1')
+     call register_restart_field(CS%tv%Hml, vd, .false., CS%restart_CSp)
+  endif
 
 end subroutine set_restart_fields
 

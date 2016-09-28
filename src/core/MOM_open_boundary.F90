@@ -59,6 +59,7 @@ type, public :: ocean_OBC_type
   integer :: number_of_segments = 0 !< The number of open-boundary segments.
   logical :: Flather_u_BCs_exist_globally = .false. !< True if any zonal velocity points in the global domain use Flather BCs.
   logical :: Flather_v_BCs_exist_globally = .false. !< True if any meridional velocity points in the global domain use Flather BCs.
+  logical :: nudged_uv_BCs_exist_globally = .false. !< True if any velocity points in the global domain use nudged BCs.
   logical :: specified_u_BCs_exist_globally = .false. !< True if any zonal velocity points in the global domain use specified BCs.
   logical :: specified_v_BCs_exist_globally = .false. !< True if any meridional velocity points in the global domain use specified BCs.
   logical, pointer, dimension(:,:) :: &
@@ -97,7 +98,8 @@ type, public :: ocean_OBC_type
     eta_outer_u => NULL(), &  !< The SSH anomaly in the outer domain, in m or kg m-2.
     eta_outer_v => NULL()     !< The SSH anomaly in the outer domain, in m or kg m-2.
 
-  ! The following apply at points with OBC_kind_[uv] = OBC_SIMPLE.
+  ! The following apply at points with OBC_kind_[uv] = OBC_SIMPLE and/or
+  ! if nudging is turned on.
   real, pointer, dimension(:,:,:) :: &
     u => NULL(), &  !< The prescribed values of the zonal velocity (u) at OBC points.
     v => NULL(), &  !< The prescribed values of the meridional velocity (v) at OBC points.
@@ -239,10 +241,13 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
       ! This is a total hack for the tangential flow! - KSH
       OBC%OBC_segment_list(l_seg)%gradient = .true.
       OBC%Flather_u_BCs_exist_globally = .true.
-    elseif (trim(action_str(a_loop)) == 'RADIATION2D') then
+    elseif (trim(action_str(a_loop)) == 'OBLIQUE') then
       OBC%OBC_segment_list(l_seg)%radiation = .true.
       OBC%OBC_segment_list(l_seg)%radiation2D = .true.
       OBC%Flather_u_BCs_exist_globally = .true.
+    elseif (trim(action_str(a_loop)) == 'NUDGED') then
+      OBC%OBC_segment_list(l_seg)%nudged = .true.
+      OBC%nudged_uv_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%OBC_segment_list(l_seg)%specified = .true.
       OBC%specified_u_BCs_exist_globally = .true. ! This avoids deallocation
@@ -342,10 +347,13 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
       ! This is a total hack for the tangential flow! - KSH
       OBC%OBC_segment_list(l_seg)%gradient = .true.
       OBC%Flather_v_BCs_exist_globally = .true.
-    elseif (trim(action_str(a_loop)) == 'RADIATION2D') then
+    elseif (trim(action_str(a_loop)) == 'OBLIQUE') then
       OBC%OBC_segment_list(l_seg)%radiation = .true.
       OBC%OBC_segment_list(l_seg)%radiation2D = .true.
       OBC%Flather_v_BCs_exist_globally = .true.
+    elseif (trim(action_str(a_loop)) == 'NUDGED') then
+      OBC%OBC_segment_list(l_seg)%nudged = .true.
+      OBC%nudged_uv_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%OBC_segment_list(l_seg)%specified = .true.
       OBC%specified_v_BCs_exist_globally = .true. ! This avoids deallocation
