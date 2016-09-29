@@ -1421,11 +1421,11 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     type(verticalGrid_type),    pointer :: GV => NULL() ! Pointer to structure containing information
                                                         ! about the vertical grid
     ! U-3D
-    real, dimension(SZIB_(CS%G),SZJ_(CS%G),SZK_(CS%G))   :: uhtr, uhtr_sub
+    real, dimension(SZIB_(CS%G),SZJ_(CS%G),SZK_(CS%G))   :: uhtr, uhtr_sub, uh_max
     ! U-2D
     real, dimension(SZIB_(CS%G),SZJ_(CS%G))              :: khdt_x, khdt_x_sub
     ! V-3D
-    real, dimension(SZI_(CS%G),SZJB_(CS%G),SZK_(CS%G))   :: vhtr, vhtr_sub
+    real, dimension(SZI_(CS%G),SZJB_(CS%G),SZK_(CS%G))   :: vhtr, vhtr_sub, vh_max
     ! V-2D
     real, dimension(SZI_(CS%G),SZJB_(CS%G))              :: khdt_y, khdt_y_sub
 
@@ -1656,8 +1656,9 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       ! in layer thickness. Therefore, half of the diagnosed mixing is applied before the
       ! any horizontal advection occurs and half occurs after the horizontal advection has
       ! converged.
-!      call call_tracer_column_fns(h_pre, h_new, eatr*0.5, ebtr*0.5, fluxes, &
-!           CS%offline_CSp%dt_offline*0.5, G, GV, CS%tv, CS%diabatic_CSp%optics, CS%tracer_flow_CSp)
+      call call_tracer_column_fns(h_pre, h_new, eatr*0.5, ebtr*0.5, fluxes, &
+           CS%offline_CSp%dt_offline*0.5, G, GV, CS%tv, CS%diabatic_CSp%optics,&
+           CS%tracer_flow_CSp, CS%debug)
       
       do k=1,nz ; do j=jsd,jed ; do i = isd,ied 
         ea_zero(i,j,k) = 0.0
@@ -1671,34 +1672,33 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       call cpu_clock_end(id_clock_ALE)
       
       do iter=1,CS%offline_CSp%num_off_iter
-         
         do k = 1, nz ; do j=jsd,jed ; do i=IsdB,IedB
           uhtr_sub(i,j,k) = uhtr(i,j,k)
-        enddo ; enddo; enddo
-        do k = 1, nz ; do j=JsdB,JedB ; do i=isd,ied
+        enddo ; enddo ; enddo
+        do k = 1, nz ; do j=jsdB,jedB ; do i=isd,ied
           vhtr_sub(i,j,k) = vhtr(i,j,k)
-        enddo ; enddo; enddo
+        enddo ; enddo ; enddo       
 
-        call limit_mass_flux_ordered_3d(G, GV, uhtr_sub, vhtr_sub, ea_zero, eb_zero, h_pre, h_new, CS%offline_CSp%max_off_cfl, &
-            z_first, x_before_y)
+        call limit_mass_flux_ordered_3d(G, GV, uhtr_sub, vhtr_sub, ea_zero, eb_zero, &
+            h_pre, h_new, CS%offline_CSp%max_off_cfl, z_first, x_before_y)
 
         ! Perform zonal and meridional advection
-        call advect_tracer(h_end, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
+        call advect_tracer(h_new, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
              CS%tracer_adv_CSp, CS%tracer_Reg, max_iter_in=10, x_first_in=x_before_y)
 !        x_before_y = .not. x_before_y
 
         ! Done with horizontal so now h_pre should be h_new
-        do k = 1, nz ; do i=is-2,ie ; do j=js-2,je
+        do k = 1, nz ; do i=isd,ied ; do j=jsd,jed
           h_pre(i,j,k) = h_new(i,j,k)
         enddo ; enddo ; enddo
         ! Calculate the remaining transport
-        do k = 1, nz ; do j=js,je ; do i=is-1,ie
+        do k = 1, nz ; do j=jsd,jed ; do i=isdB,iedB
           uhtr(I,j,k) = uhtr(I,j,k) - uhtr_sub(I,j,k)
         enddo; enddo ; enddo
-
-        do k = 1, nz ; do j=js-1,je ; do i=is,ie
+        do k = 1, nz ; do j=jsdB,jedB ; do i=isd,ied
           vhtr(i,J,k) = vhtr(i,J,k) - vhtr_sub(i,J,k)
         enddo; enddo ; enddo
+
         if (CS%debug) then
           call uchksum(uhtr, "Post sub-advection uh", G%HI, haloshift=1)
           call vchksum(vhtr, "Post sub-advection vh", G%HI, haloshift=1)
@@ -1712,38 +1712,35 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         ! never result in more changes in thickness due to remapping
         ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
 
-        CS%tv%T = CS%offline_CSp%T_preale
-        CS%tv%S = CS%offline_CSp%S_preale
+!        CS%tv%T = CS%offline_CSp%T_preale
+!        CS%tv%S = CS%offline_CSp%S_preale
         call pass_var(h_pre,G%Domain)
   !            call do_group_pass(CS%pass_T_S_h, G%Domain)
 
         ! update squared quantities
-        if (associated(CS%S_squared)) &
-            CS%S_squared(:,:,:) = CS%tv%S(:,:,:) ** 2
-        if (associated(CS%T_squared)) &
-            CS%T_squared(:,:,:) = CS%tv%T(:,:,:) ** 2
-
-        if (CS%debug) then
-          call uchksum(CS%offline_CSp%u_preale, "Pre-ALE 1 u", G%HI, haloshift=1)
-          call vchksum(CS%offline_CSp%v_preale, "Pre-ALE 1 v", G%HI, haloshift=1)
-          call hchksum(CS%offline_CSp%h_preale, "Pre-ALE 1 h", G%HI, haloshift=1)
-          call hchksum(CS%tv%T,"Pre-ALE 1 T", G%HI, haloshift=1)
-          call hchksum(CS%tv%S,"Pre-ALE 1 S", G%HI, haloshift=1)
-        endif
+!        if (associated(CS%S_squared)) &
+!            CS%S_squared(:,:,:) = CS%tv%S(:,:,:) ** 2
+!        if (associated(CS%T_squared)) &
+!            CS%T_squared(:,:,:) = CS%tv%T(:,:,:) ** 2
+!
+!        if (CS%debug) then
+!          call uchksum(CS%offline_CSp%u_preale, "Pre-ALE 1 u", G%HI, haloshift=1)
+!          call vchksum(CS%offline_CSp%v_preale, "Pre-ALE 1 v", G%HI, haloshift=1)
+!          call hchksum(CS%offline_CSp%h_preale, "Pre-ALE 1 h", G%HI, haloshift=1)
+!          call hchksum(CS%tv%T,"Pre-ALE 1 T", G%HI, haloshift=1)
+!          call hchksum(CS%tv%S,"Pre-ALE 1 S", G%HI, haloshift=1)
+!        endif
         if (mod(iter,2)==0) then
-        call cpu_clock_begin(id_clock_ALE)
-        call ALE_main(G, GV, h_pre, CS%offline_CSp%u_preale, &
+          call cpu_clock_begin(id_clock_ALE)
+          call ALE_main(G, GV, h_pre, CS%offline_CSp%u_preale, &
                         CS%offline_CSp%v_preale, CS%tv, CS%tracer_Reg, &
                         CS%ALE_CSp, dt_iter)
-        call cpu_clock_end(id_clock_ALE)
+          call cpu_clock_end(id_clock_ALE)
         endif
         if (CS%debug) then
             call hchksum(CS%tv%T,"Post-ALE 1 T", G%HI, haloshift=1)
             call hchksum(CS%tv%S,"Post-ALE 1 S", G%HI, haloshift=1)
         endif
-
-!        CS%tv%T = temp_old
-!        CS%tv%S = salt_old
 
         call pass_var(CS%T,G%Domain)
         call pass_var(CS%S,G%Domain)
@@ -1772,22 +1769,29 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
 !        if (is_root_pe()) print *, "Remaining fluxes: ", sum_abs_fluxes
 
         if (sum_abs_fluxes==0) then
+          call cpu_clock_begin(id_clock_ALE)
+          call ALE_main(G, GV, h_pre, CS%offline_CSp%u_preale, &
+                        CS%offline_CSp%v_preale, CS%tv, CS%tracer_Reg, &
+                        CS%ALE_CSp, dt_iter)
+          call cpu_clock_end(id_clock_ALE)
+          
           print *, 'Converged after iteration', iter
           exit
         endif
         
       enddo
 
-!      call call_tracer_column_fns(h_pre, h_new, eatr*0.5, ebtr*0.5, fluxes, &
-!           CS%offline_CSp%dt_offline*0.5, G, GV, CS%tv, CS%diabatic_CSp%optics, CS%tracer_flow_CSp)
+      call call_tracer_column_fns(h_pre, h_new, eatr*0.5, ebtr*0.5, fluxes, &
+           CS%offline_CSp%dt_offline*0.5, G, GV, CS%tv, CS%diabatic_CSp%optics, &
+           CS%tracer_flow_CSp, CS%debug)
 
     endif
 
     call pass_var(h_pre, G%Domain)
     ! Tracer diffusion Strang split between advection and diffusion
 
-!    call tracer_hordiff(h_pre, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
-!        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, CS%do_online, khdt_x*0.5, khdt_y*0.5)
+    call tracer_hordiff(h_pre, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
+        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, CS%do_online, khdt_x*0.5, khdt_y*0.5)
 
     h_temp = h_end-h_pre
 
@@ -1802,7 +1806,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     call disable_averaging(CS%diag)
 
     do i = is, ie ; do j = js, je ; do k=1,nz
-      CS%h(i,j,k) = h_end(i,j,k)
+      CS%h(i,j,k) = h_pre(i,j,k)
     enddo ;  enddo; enddo
 
     call pass_var(CS%h,G%Domain)

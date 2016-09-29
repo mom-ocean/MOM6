@@ -860,7 +860,7 @@ contains
               vh2d(J,k) = min(-0.5*hup,-hup+hlos,0.0)
           endif
         else
-          hup = h(i,j,k) -G%areaT(i,j)*min_h
+          hup = h(i,j,k) - G%areaT(i,j)*min_h
           hlos = max(0.0,-vh2d(J-1,k))
           if ((((hup-hlos)-vh2d(J,k))<0.0) .and. &
               ((0.5*hup - vh2d(J,k))<0.0)) then
