@@ -44,7 +44,7 @@ contains
 
 !> This routine time steps the tracer concentration using a 
 !! monotonic, conservative, weakly diffusive scheme.
-subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, h_prev_opt, max_iter_in, x_first_in, uhr_out, vhr_out)
+subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, h_prev_opt, max_iter_in, x_first_in, uhr_out, vhr_out, h_out)
   type(ocean_grid_type),                     intent(inout) :: G     !< ocean grid structure 
   type(verticalGrid_type),                   intent(in)    :: GV    !< ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h_end !< layer thickness after advection (m or kg m-2)
@@ -59,6 +59,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, h_prev_opt,
   logical,                                   optional      :: x_first_in
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), optional, intent(out)    :: uhr_out  !< accumulated volume/mass flux through zonal face (m3 or kg)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), optional, intent(out)    :: vhr_out  !< accumulated volume/mass flux through merid face (m3 or kg)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional      :: h_out !< layer thickness before advection (m or kg m-2)
 
   type(tracer_type) :: Tr(MAX_FIELDS_) ! The array of registered tracers
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
@@ -279,9 +280,6 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, h_prev_opt,
 
     ! If the advection just isn't finishing after max_iter, move on.
     if (itt >= max_iter) then
-      if(present(uhr_out)) uhr_out(:,:,:) = uhr(:,:,:)
-      if(present(vhr_out)) vhr_out(:,:,:) = vhr(:,:,:)
-      call MOM_error(WARNING,"Tracer advection failed to converge")
       exit
     endif
 
@@ -293,8 +291,6 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, h_prev_opt,
       call cpu_clock_end(id_clock_sync)
       do k=1,nz ; do_any = do_any + domore_k(k) ; enddo
       if (do_any == 0) then
-        if(present(uhr_out)) uhr_out(:,:,:) = uhr(:,:,:)
-        if(present(vhr_out)) vhr_out(:,:,:) = vhr(:,:,:)
         exit
       endif
 
@@ -304,6 +300,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, h_prev_opt,
 
   if(present(uhr_out)) uhr_out(:,:,:) = uhr(:,:,:)
   if(present(vhr_out)) vhr_out(:,:,:) = vhr(:,:,:)
+  if(present(h_out)) h_out(:,:,:) = hprev(:,:,:)
 
   call cpu_clock_end(id_clock_advect)
 
