@@ -257,18 +257,6 @@ contains
       call read_data(CS%preale_file, 'v_preale',   CS%v_preale, domain=G%Domain%mpp_domain, &
         timelevel=CS%ridx_mean,position=NORTH)
 
-!      do k=1,nz ; do j=js-1,je ; do i=is-1,ie
-!        if (G%mask2dCu(i,j)<1.0) then
-!          CS%u_preale(I,j,k) = 0.0
-!        endif
-!        if (G%mask2dCv(i,j)<1.0) then
-!          CS%v_preale(I,j,k) = 0.0
-!        endif
-!        if (G%mask2dT(i,j)<1.0) then
-!          CS%h_preale(i,j,k) = GV%Angstrom
-!        endif
-!      enddo; enddo; enddo
-
     endif
 
     !! Make sure all halos have been updated
