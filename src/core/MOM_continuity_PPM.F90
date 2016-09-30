@@ -1,23 +1,7 @@
+!> Solve the layer continuity equation using the PPM method for layer fluxes.
 module MOM_continuity_PPM
-!***********************************************************************
-!*                   GNU General Public License                        *
-!* This file is a part of MOM.                                         *
-!*                                                                     *
-!* MOM is free software; you can redistribute it and/or modify it and  *
-!* are expected to follow the terms of the GNU General Public License  *
-!* as published by the Free Software Foundation; either version 2 of   *
-!* the License, or (at your option) any later version.                 *
-!*                                                                     *
-!* MOM is distributed in the hope that it will be useful, but WITHOUT  *
-!* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY  *
-!* or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public    *
-!* License for more details.                                           *
-!*                                                                     *
-!* For the full text of the GNU General Public License,                *
-!* write to: Free Software Foundation, Inc.,                           *
-!*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
-!* or see:   http://www.gnu.org/licenses/gpl.html                      *
-!***********************************************************************
+
+! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : time_type, diag_ctrl
@@ -37,56 +21,60 @@ public continuity_PPM, continuity_PPM_init, continuity_PPM_end
 
 integer :: id_clock_update, id_clock_correct
 
+!> Control structure for mom_continuity_ppm
 type, public :: continuity_PPM_CS ; private
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
-  logical :: upwind_1st      ! If true, use a first-order upwind scheme.
-  logical :: monotonic       ! If true, use the Colella & Woodward monotonic
-                             ! limiter; otherwise use a simple positive
-                             ! definite limiter.
-  logical :: simple_2nd      ! If true, use a simple second order (arithmetic
-                             ! mean) interpolation of the edge values instead
-                             ! of the higher order interpolation.
-  real :: tol_eta            ! The tolerance for free-surface height
-                             ! discrepancies between the barotropic solution and
-                             ! the sum of the layer thicknesses, in m.
-  real :: tol_vel            ! The tolerance for barotropic velocity
-                             ! discrepancies between the barotropic solution and
-                             ! the sum of the layer thicknesses, in m s-1.
-  real :: tol_eta_aux        ! The tolerance for free-surface height
-                             ! discrepancies between the barotropic solution and
-                             ! the sum of the layer thicknesses when calculating
-                             ! the auxiliary corrected velocities, in m.
-  real :: CFL_limit_adjust   ! The maximum CFL of the adjusted velocities, ND.
-  logical :: aggress_adjust  ! If true, allow the adjusted velocities to have a
-                             ! relative CFL change up to 0.5.  False by default.
-  logical :: vol_CFL         ! If true, use the ratio of the open face lengths
-                             ! to the tracer cell areas when estimating CFL
-                             ! numbers.  Without aggress_adjust, the default is
-                             ! false; it is always true with.
-  logical :: better_iter     ! If true, stop corrective iterations using a
-                             ! velocity-based criterion and only stop if the
-                             ! iteration is better than all predecessors.
-  logical :: use_visc_rem_max ! If true, use more appropriate limiting bounds
-                             ! for corrections in strongly viscous columns.
-  logical :: marginal_faces  ! If true, use the marginal face areas from the
-                             ! continuity solver for use as the weights in the
-                             ! barotropic solver.  Otherwise use the transport
-                             ! averaged areas.
+  type(diag_ctrl), pointer :: diag !< Diagnostics control structure.
+  logical :: upwind_1st      !< If true, use a first-order upwind scheme.
+  logical :: monotonic       !< If true, use the Colella & Woodward monotonic
+                             !! limiter; otherwise use a simple positive
+                             !! definite limiter.
+  logical :: simple_2nd      !< If true, use a simple second order (arithmetic
+                             !! mean) interpolation of the edge values instead
+                             !! of the higher order interpolation.
+  real :: tol_eta            !< The tolerance for free-surface height
+                             !! discrepancies between the barotropic solution and
+                             !! the sum of the layer thicknesses, in m.
+  real :: tol_vel            !< The tolerance for barotropic velocity
+                             !! discrepancies between the barotropic solution and
+                             !! the sum of the layer thicknesses, in m s-1.
+  real :: tol_eta_aux        !< The tolerance for free-surface height
+                             !! discrepancies between the barotropic solution and
+                             !! the sum of the layer thicknesses when calculating
+                             !! the auxiliary corrected velocities, in m.
+  real :: CFL_limit_adjust   !< The maximum CFL of the adjusted velocities, ND.
+  logical :: aggress_adjust  !< If true, allow the adjusted velocities to have a
+                             !! relative CFL change up to 0.5.  False by default.
+  logical :: vol_CFL         !< If true, use the ratio of the open face lengths
+                             !! to the tracer cell areas when estimating CFL
+                             !! numbers.  Without aggress_adjust, the default is
+                             !! false; it is always true with.
+  logical :: better_iter     !< If true, stop corrective iterations using a
+                             !! velocity-based criterion and only stop if the
+                             !! iteration is better than all predecessors.
+  logical :: use_visc_rem_max !< If true, use more appropriate limiting bounds
+                             !! for corrections in strongly viscous columns.
+  logical :: marginal_faces  !< If true, use the marginal face areas from the
+                             !! continuity solver for use as the weights in the
+                             !! barotropic solver.  Otherwise use the transport
+                             !! averaged areas.
 end type continuity_PPM_CS
 
+!> A container for loop bounds
 type :: loop_bounds_type ; private
+  !>@{
+  !! Loop bounds
   integer :: ish, ieh, jsh, jeh
+  !>@}
 end type loop_bounds_type
 
 contains
 
-!> This subroutine time steps the layer thicknesses, using a monotonically
-!! limit, directionally split PPM scheme, based on Lin (1994).  In the following
-!! documentation, H is used for the units of thickness (usually m or kg m-2.)
+!> Time steps the layer thicknesses, using a monotonically limit, directionally split PPM scheme,
+!! based on Lin (1994).
 subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, &
                           visc_rem_u, visc_rem_v, u_cor, v_cor, &
                           uhbt_aux, vhbt_aux, u_cor_aux, v_cor_aux, BT_cont)
+  ! In the following documentation, H is used for the units of thickness (usually m or kg m-2.)
   type(ocean_grid_type),                     intent(inout) :: G   !< The ocean's grid structure.
   type(continuity_PPM_CS),                   pointer       :: CS  !< Module's control structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u   !< Zonal velocity, in m s-1.
@@ -99,42 +87,37 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
                                                                   !! v*h*dx, H m2 s-1.
   real,                                      intent(in)    :: dt  !< Time increment in s.
   type(verticalGrid_type),                   intent(in)    :: GV  !< Vertical grid structure.
-  real, dimension(SZIB_(G),SZJ_(G)),         intent(in),  optional :: uhbt       !<
-      !! The summed volume flux through zonal faces, H m2 s-1.
-  real, dimension(SZI_(G),SZJB_(G)),         intent(in),  optional :: vhbt       !<
-      !! The summed volume flux through meridional faces, H m2 s-1.
-  type(ocean_OBC_type),                      pointer,     optional :: OBC        !<
-      !! This open boundary condition type specifies whether, where,
-      !! and what open boundary conditions are used.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in),  optional :: visc_rem_u !<
-      !! Both the fraction of the momentum originally in a layer that remains after a time-step
-      !! of viscosity, and the fraction of a time-step's worth of a barotropic acceleration that
-      !! a layer experiences after viscosity is applied, in the zonal (_u)
-      !! direction.  Nondimensional between 0 (at the bottom) and 1 (far above the bottom).
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in),  optional :: visc_rem_v !<
-      !! Same as above for meridional direction.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out), optional :: u_cor      !<
-      !! The zonal velocities that give uhbt as the depth-
-      !! integrated transport, in m s-1.
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out), optional :: v_cor      !<
-      !! The meridional velocities that give vhbt as the
-      !! depth-integrated transport, in m s-1.
-  real, dimension(SZIB_(G),SZJ_(G)),         intent(in),  optional :: uhbt_aux   !<
-      !! A second set of summed volume fluxes through zonal faces, in H m2 s-1.
-  real, dimension(SZI_(G),SZJB_(G)),         intent(in),  optional :: vhbt_aux   !<
-      !! A second set of summed volume fluxes through meridional faces, in H m2 s-1.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out), optional :: u_cor_aux  !<
-      !! The zonal velocities that give uhbt_aux as the
-      !! depth-integrated transports, in m s-1.
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out), optional :: v_cor_aux  !<
-      !! The meridional velocities that give vhbt_aux as the
-      !! depth-integrated transports, in m s-1.
-  type(BT_cont_type),                        pointer,     optional :: BT_cont    !<
-      !! A structure with elements that describe the effective
-      !! open face areas as a function of barotropic flow.
-
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
-    h_input      ! Left and right face thicknesses, in H.
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(in),  optional :: uhbt
+         !< The summed volume flux through zonal faces, H m2 s-1.
+  real, dimension(SZI_(G),SZJB_(G)),         intent(in),  optional :: vhbt
+         !< The summed volume flux through meridional faces, H m2 s-1.
+  type(ocean_OBC_type),                      pointer,     optional :: OBC !< Open boundaries control structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in),  optional :: visc_rem_u
+         !< The fraction of zonal momentum originally in a layer that remains after a time-step
+         !! of viscosity, and the fraction of a time-step's worth of a barotropic acceleration that
+         !! a layer experiences after viscosity is applied. 
+         !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in),  optional :: visc_rem_v
+         !< The fraction of meridional momentum originally in a layer that remains after a time-step
+         !! of viscosity, and the fraction of a time-step's worth of a barotropic acceleration that
+         !! a layer experiences after viscosity is applied. 
+         !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out), optional :: u_cor
+         !< The zonal velocities that give uhbt as the depth-integrated transport, in m s-1.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out), optional :: v_cor
+         !< The meridional velocities that give vhbt as the depth-integrated transport, in m s-1.
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(in),  optional :: uhbt_aux
+         !< A second set of summed volume fluxes through zonal faces, in H m2 s-1.
+  real, dimension(SZI_(G),SZJB_(G)),         intent(in),  optional :: vhbt_aux
+         !< A second set of summed volume fluxes through meridional faces, in H m2 s-1.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out), optional :: u_cor_aux
+         !< The zonal velocities that give uhbt_aux as the depth-integrated transports, in m s-1.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out), optional :: v_cor_aux
+         !< The meridional velocities that give vhbt_aux as the depth-integrated transports, in m s-1.
+  type(BT_cont_type),                        pointer,     optional :: BT_cont !< A structure with
+         !! elements that describe the effective open face areas as a function of barotropic flow.
+  ! Local variables
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_input ! Left and right face thicknesses, in H.
   real :: h_min
   type(loop_bounds_type) :: LB
   integer :: is, ie, js, je, nz, stencil
@@ -321,8 +304,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
 
 end subroutine continuity_PPM
 
-!> This subroutine calculates the mass or volume fluxes through the zonal
-!! faces, and other related quantities.
+!> Calculates the mass or volume fluxes through the zonal faces, and other related quantities.
 subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
                            visc_rem_u, u_cor, uhbt_aux, u_cor_aux, BT_cont)
   type(ocean_grid_type),                     intent(inout) :: G    !< Ocean's grid structure.
@@ -335,35 +317,28 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
   real,                                      intent(in)    :: dt   !< Time increment in s.
   type(continuity_PPM_CS),                   pointer       :: CS   !< This module's control structure.
   type(loop_bounds_type),                    intent(in)    :: LB   !< Loop bounds structure.
-  type(ocean_OBC_type),                      pointer,     optional :: OBC !<
-         !! This open boundary condition type specifies whether, where,
-         !! and what open boundary conditions are used.
+  type(ocean_OBC_type),                      pointer,     optional :: OBC !< Open boundaries control structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in),  optional :: visc_rem_u !<
-         !! Both the fraction of the momentum originally in a
-         !! layer that remains after a time-step of viscosity,
-         !! and the fraction of a time-step's worth of a
-         !! barotropic acceleration that a layer experiences
-         !! after viscosity is applied.  Nondimensional between
-         !! 0 (at the bottom) and 1 (far above the bottom).
-  real, dimension(SZIB_(G),SZJ_(G)),         intent(in),  optional :: uhbt !<
-         !! The summed volume flux through zonal faces, H m2 s-1.
-  real, dimension(SZIB_(G),SZJ_(G)),         intent(in),  optional :: uhbt_aux !<
-         !! A second set of summed volume fluxes through zonal
-         !! faces, in H m2 s-1.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out), optional :: u_cor !<
-         !! The zonal velocitiess (u with a barotropic correction)
+         !< The fraction of zonal momentum originally in a layer that remains after a time-step
+         !! of viscosity, and the fraction of a time-step's worth of a barotropic acceleration that
+         !! a layer experiences after viscosity is applied. 
+         !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(in),  optional :: uhbt
+         !< The summed volume flux through zonal faces, H m2 s-1.
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(in),  optional :: uhbt_aux
+         !< A second set of summed volume fluxes through zonal faces, in H m2 s-1.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out), optional :: u_cor
+         !< The zonal velocitiess (u with a barotropic correction)
          !! that give uhbt as the depth-integrated transport, m s-1.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out), optional :: u_cor_aux !<
-         !! The zonal velocities (u with a barotropic correction)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out), optional :: u_cor_aux
+         !< The zonal velocities (u with a barotropic correction)
          !! that give uhbt_aux as the depth-integrated transports, in m s-1.
   type(BT_cont_type),                        pointer,     optional :: BT_cont !<
-         !! A structure with elements that describe the effective
+         !< A structure with elements that describe the effective
          !! open face areas as a function of barotropic flow.
-
-  real, dimension(SZIB_(G),SZK_(G)) :: &
-    duhdu      ! Partial derivative of uh with u, in H m.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
-    h_L, h_R   ! Left and right face thicknesses, in H.
+  ! Local variables
+  real, dimension(SZIB_(G),SZK_(G)) :: duhdu ! Partial derivative of uh with u, in H m.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_L, h_R ! Left and right face thicknesses, in H.
   real, dimension(SZIB_(G)) :: &
     du, &      ! Corrective barotropic change in the velocity, in m s-1.
     du_min_CFL, & ! Min/max limits on du correction
@@ -611,16 +586,16 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
 
 end subroutine zonal_mass_flux
 
-!> This subroutines evaluates the zonal mass or volume fluxes in a layer.
+!> Evaluates the zonal mass or volume fluxes in a layer.
 subroutine zonal_flux_layer(u, h, h_L, h_R, uh, duhdu, visc_rem, dt, G, j, &
                             ish, ieh, do_I, vol_CFL)
   type(ocean_grid_type),        intent(inout) :: G        !< Ocean's grid structure.
   real, dimension(SZIB_(G)),    intent(in)    :: u        !< Zonal velocity, in m s-1.
   real, dimension(SZIB_(G)),    intent(in)    :: visc_rem !< Both the fraction of the
-      !! momentum originally in a layer that remains after a time-step
-      !! of viscosity, and the fraction of a time-step's worth of a barotropic
-      !! acceleration that a layer experiences after viscosity is applied.
-      !! Nondimensional between 0 (at the bottom) and 1 (far above the bottom).
+         !! momentum originally in a layer that remains after a time-step
+         !! of viscosity, and the fraction of a time-step's worth of a barotropic
+         !! acceleration that a layer experiences after viscosity is applied.
+         !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZI_(G)),     intent(in)    :: h        !< Layer thickness, in H.
   real, dimension(SZI_(G)),     intent(in)    :: h_L      !< Left thickness, in H.
   real, dimension(SZI_(G)),     intent(in)    :: h_R      !< Right thickness, in H.
@@ -634,8 +609,8 @@ subroutine zonal_flux_layer(u, h, h_L, h_R, uh, duhdu, visc_rem, dt, G, j, &
   integer,                      intent(in)    :: ieh      !< End of index range.
   logical, dimension(SZIB_(G)), intent(in)    :: do_I     !< Which i values to work on.
   logical,                      intent(in)    :: vol_CFL  !< If true, rescale the
-       !! ratio of face areas to the cell areas when estimating the CFL number.
-
+          !! ratio of face areas to the cell areas when estimating the CFL number.
+  ! Local variables
   real :: CFL  ! The CFL number based on the local velocity and grid spacing, ND.
   real :: curv_3 ! A measure of the thickness curvature over a grid length,
                  ! with the same units as h_in.
@@ -667,8 +642,7 @@ subroutine zonal_flux_layer(u, h, h_L, h_R, uh, duhdu, visc_rem, dt, G, j, &
 
 end subroutine zonal_flux_layer
 
-!> This subroutines sets the effective interface thickness at each zonal
-!! velocity point.
+!> Sets the effective interface thickness at each zonal velocity point.
 subroutine zonal_face_thickness(u, h, h_L, h_R, h_u, dt, G, LB, vol_CFL, &
                                 marginal, visc_rem_u)
   type(ocean_grid_type),                     intent(inout) :: G    !< Ocean's grid structure.
@@ -694,9 +668,9 @@ subroutine zonal_face_thickness(u, h, h_L, h_R, h_u, dt, G, LB, vol_CFL, &
                           !! layer that remains after a time-step of viscosity,
                           !! and the fraction of a time-step's worth of a
                           !! barotropic acceleration that a layer experiences
-                          !! after viscosity is applied.  Nondimensional between
+                          !! after viscosity is applied. Non-dimensional between
                           !! 0 (at the bottom) and 1 (far above the bottom).
-
+  ! Local variables
   real :: CFL  ! The CFL number based on the local velocity and grid spacing, ND.
   real :: curv_3 ! A measure of the thickness curvature over a grid length,
                  ! with the same units as h_in.
@@ -745,7 +719,7 @@ subroutine zonal_face_thickness(u, h, h_L, h_R, h_u, dt, G, LB, vol_CFL, &
 
 end subroutine zonal_face_thickness
 
-!> This subroutine returns the barotropic velocity adjustment that gives the
+!> Returns the barotropic velocity adjustment that gives the
 !! desired barotropic (layer-summed) transport.
 subroutine zonal_flux_adjust(u, h_in, h_L, h_R, uhbt, uh_tot_0, duhdu_tot_0, &
                              du, du_max_CFL, du_min_CFL, dt, G, CS, visc_rem, &
@@ -763,7 +737,7 @@ subroutine zonal_flux_adjust(u, h_in, h_L, h_R, uhbt, uh_tot_0, duhdu_tot_0, &
                        !! layer that remains after a time-step of viscosity,
                        !! and the fraction of a time-step's worth of a
                        !! barotropic acceleration that a layer experiences
-                       !! after viscosity is applied.  Nondimensional between
+                       !! after viscosity is applied. Non-dimensional between
                        !! 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZIB_(G)),                 intent(in),  optional :: uhbt !<
                        !! The summed volume flux through zonal faces, H m2 s-1.
@@ -783,13 +757,13 @@ subroutine zonal_flux_adjust(u, h_in, h_L, h_R, uhbt, uh_tot_0, duhdu_tot_0, &
   integer,                                   intent(in)    :: ish  !< Start of index range.
   integer,                                   intent(in)    :: ieh  !< End of index range.
   logical, dimension(SZIB_(G)),              intent(in)    :: do_I_in     !<
-                       !! A logical flag indiciating which I values to work on.
+                       !! A logical flag indicating which I values to work on.
   logical,                                   intent(in), optional :: full_precision !<
                        !! A flag indicating how carefully to iterate.  The
                        !! default is .true. (more accurate).
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout), optional :: uh_3d !<
                        !! Volume flux through zonal faces = u*h*dy, H m2 s-1.
-
+  ! Local variables
   real, dimension(SZIB_(G),SZK_(G)) :: &
     uh_aux, &  ! An auxiliary zonal volume flux, in H m s-1.
     duhdu      ! Partial derivative of uh with u, in H m.
@@ -908,9 +882,8 @@ subroutine zonal_flux_adjust(u, h_in, h_L, h_R, uhbt, uh_tot_0, duhdu_tot_0, &
 
 end subroutine zonal_flux_adjust
 
-!> This subroutine sets of a structure that describes the zonal barotropic
-!! volume or mass fluxes as a function of barotropic flow to agree closely with
-!! the sum of the layer's transports.
+!> Sets a structure that describes the zonal barotropic volume or mass fluxes as a
+!! function of barotropic flow to agree closely with the sum of the layer's transports.
 subroutine set_zonal_BT_cont(u, h_in, h_L, h_R, BT_cont, uh_tot_0, duhdu_tot_0, &
                              du_max_CFL, du_min_CFL, dt, G, CS, visc_rem, &
                              visc_rem_max, j, ish, ieh, do_I)
@@ -940,15 +913,15 @@ subroutine set_zonal_BT_cont(u, h_in, h_L, h_R, BT_cont, uh_tot_0, duhdu_tot_0, 
                        !! layer that remains after a time-step of viscosity,
                        !! and the fraction of a time-step's worth of a
                        !! barotropic acceleration that a layer experiences
-                       !! after viscosity is applied.  Nondimensional between
+                       !! after viscosity is applied. Non-dimensional between
                        !! 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZIB_(G)),                 intent(in)    :: visc_rem_max !< Maximum allowable visc_rem.
   integer,                                   intent(in)    :: j        !< Spatial index.
   integer,                                   intent(in)    :: ish      !< Start of index range.
   integer,                                   intent(in)    :: ieh      !< End of index range.
   logical, dimension(SZIB_(G)),              intent(in)    :: do_I     !<
-                       !! A logical flag indiciating which I values to work on.
-
+                       !! A logical flag indicating which I values to work on.
+  ! Local variables
   real, dimension(SZIB_(G)) :: &
     du0, &        ! The barotropic velocity increment that gives 0 transport, m s-1.
     duL, duR, &   ! The barotropic velocity increments that give the westerly
@@ -1080,8 +1053,7 @@ subroutine set_zonal_BT_cont(u, h_in, h_L, h_R, BT_cont, uh_tot_0, duhdu_tot_0, 
 
 end subroutine set_zonal_BT_cont
 
-!> This subroutine calculates the mass or volume fluxes through the meridional
-!! faces, and other related quantities.
+!> Calculates the mass or volume fluxes through the meridional faces, and other related quantities.
 subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
                                 visc_rem_v, v_cor, vhbt_aux, v_cor_aux, BT_cont)
   type(ocean_grid_type),                     intent(inout) :: G    !< Ocean's grid structure.
@@ -1117,7 +1089,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
          !! that give vhbt_aux as the depth-integrated transports, in m s-1.
   type(BT_cont_type),                        pointer,     optional :: BT_cont !<
          !! A structure with elements that describe the effective
-
+  ! Local variables
   real, dimension(SZI_(G),SZK_(G)) :: &
     dvhdv      ! Partial derivative of vh with v, in m2.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
@@ -1366,16 +1338,16 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
 
 end subroutine meridional_mass_flux
 
-!> This subroutines evaluates the meridional mass or volume fluxes in a layer.
+!> Evaluates the meridional mass or volume fluxes in a layer.
 subroutine merid_flux_layer(v, h, h_L, h_R, vh, dvhdv, visc_rem, dt, G, J, &
                             ish, ieh, do_I, vol_CFL)
   type(ocean_grid_type),        intent(inout) :: G        !< Ocean's grid structure.
   real, dimension(SZI_(G)),     intent(in)    :: v        !< Meridional velocity, in m s-1.
   real, dimension(SZI_(G)),     intent(in)    :: visc_rem !< Both the fraction of the
-      !! momentum originally in a layer that remains after a time-step
-      !! of viscosity, and the fraction of a time-step's worth of a barotropic
-      !! acceleration that a layer experiences after viscosity is applied.
-      !! Nondimensional between 0 (at the bottom) and 1 (far above the bottom).
+         !! momentum originally in a layer that remains after a time-step
+         !! of viscosity, and the fraction of a time-step's worth of a barotropic
+         !! acceleration that a layer experiences after viscosity is applied.
+         !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZI_(G),SZJ_(G)),  intent(in) :: h      !< Layer thickness used to
                                                           !! calculate fluxes, in H.
   real, dimension(SZI_(G),SZJ_(G)),  intent(in) :: h_L    !< Left thickness in the
@@ -1392,8 +1364,8 @@ subroutine merid_flux_layer(v, h, h_L, h_R, vh, dvhdv, visc_rem, dt, G, J, &
   integer,                      intent(in)    :: ieh      !< End of index range.
   logical, dimension(SZI_(G)),  intent(in)    :: do_I     !< Which i values to work on.
   logical,                      intent(in)    :: vol_CFL  !< If true, rescale the
-      !! ratio of face areas to the cell areas when estimating the CFL number.
-
+         !! ratio of face areas to the cell areas when estimating the CFL number.
+  ! Local variables
   real :: CFL ! The CFL number based on the local velocity and grid spacing, ND.
   real :: curv_3 ! A measure of the thickness curvature over a grid length,
                  ! with the same units as h_in.
@@ -1426,8 +1398,7 @@ subroutine merid_flux_layer(v, h, h_L, h_R, vh, dvhdv, visc_rem, dt, G, J, &
 
 end subroutine merid_flux_layer
 
-!> This subroutines sets the effective interface thickness at each meridional
-!! velocity point.
+!> Sets the effective interface thickness at each meridional velocity point.
 subroutine merid_face_thickness(v, h, h_L, h_R, h_v, dt, G, LB, vol_CFL, &
                                 marginal, visc_rem_v)
   type(ocean_grid_type),                     intent(inout) :: G    !< Ocean's grid structure.
@@ -1453,9 +1424,9 @@ subroutine merid_face_thickness(v, h, h_L, h_R, h_v, dt, G, LB, vol_CFL, &
                           !! layer that remains after a time-step of viscosity,
                           !! and the fraction of a time-step's worth of a
                           !! barotropic acceleration that a layer experiences
-                          !! after viscosity is applied.  Nondimensional between
+                          !! after viscosity is applied. Non-dimensional between
                           !! 0 (at the bottom) and 1 (far above the bottom).
-
+  ! Local variables
   real :: CFL ! The CFL number based on the local velocity and grid spacing, ND.
   real :: curv_3 ! A measure of the thickness curvature over a grid length,
                  ! with the same units as h_in.
@@ -1506,8 +1477,7 @@ subroutine merid_face_thickness(v, h, h_L, h_R, h_v, dt, G, LB, vol_CFL, &
 
 end subroutine merid_face_thickness
 
-!> This subroutine returns the barotropic velocity adjustment that gives the
-!! desired barotropic (layer-summed) transport.
+!> Returns the barotropic velocity adjustment that gives the desired barotropic (layer-summed) transport.
 subroutine meridional_flux_adjust(v, h_in, h_L, h_R, vhbt, vh_tot_0, dvhdv_tot_0, &
                              dv, dv_max_CFL, dv_min_CFL, dt, G, CS, visc_rem, &
                              j, ish, ieh, do_I_in, full_precision, vh_3d)
@@ -1524,7 +1494,7 @@ subroutine meridional_flux_adjust(v, h_in, h_L, h_R, vhbt, vh_tot_0, dvhdv_tot_0
                        !! layer that remains after a time-step of viscosity,
                        !! and the fraction of a time-step's worth of a
                        !! barotropic acceleration that a layer experiences
-                       !! after viscosity is applied.  Nondimensional between
+                       !! after viscosity is applied. Non-dimensional between
                        !! 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZI_(G)),                  intent(in),  optional :: vhbt !<
                        !! The summed volume flux through meridional faces, H m2 s-1.
@@ -1544,15 +1514,15 @@ subroutine meridional_flux_adjust(v, h_in, h_L, h_R, vhbt, vh_tot_0, dvhdv_tot_0
   integer,                                   intent(in)    :: ish      !< Start of index range.
   integer,                                   intent(in)    :: ieh      !< End of index range.
   logical, dimension(SZI_(G)),               intent(in)    :: do_I_in  !<
-                       !! A logical flag indiciating which I values to work on.
+                       !! A logical flag indicating which I values to work on.
   logical,                                   intent(in),    optional :: full_precision !<
                        !! full_precision - A flag indicating how carefully to iterate.  The
                        !! default is .true. (more accurate).
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout), optional :: vh_3d !<
                        !! Volume flux through meridional faces = v*h*dx, H m2 s-1.
-
+  ! Local variables
   real, dimension(SZI_(G),SZK_(G)) :: &
-    vh_aux, &  ! An auxiliary meridonal volume flux, in H m s-1.
+    vh_aux, &  ! An auxiliary meridional volume flux, in H m s-1.
     dvhdv      ! Partial derivative of vh with v, in H m.
   real, dimension(SZI_(G)) :: &
     vh_err, &  ! Difference between vhbt and the summed vh, in H m2 s-1.
@@ -1669,9 +1639,8 @@ subroutine meridional_flux_adjust(v, h_in, h_L, h_R, vhbt, vh_tot_0, dvhdv_tot_0
 
 end subroutine meridional_flux_adjust
 
-!> This subroutine sets of a structure that describes the meridional
-!! barotropic volume or mass fluxes as a function of barotropic flow to agree
-!! closely with the sum of the layer's transports.
+!> Sets of a structure that describes the meridional barotropic volume or mass fluxes as a
+!! function of barotropic flow to agree closely with the sum of the layer's transports.
 subroutine set_merid_BT_cont(v, h_in, h_L, h_R, BT_cont, vh_tot_0, dvhdv_tot_0, &
                              dv_max_CFL, dv_min_CFL, dt, G, CS, visc_rem, &
                              visc_rem_max, j, ish, ieh, do_I)
@@ -1701,15 +1670,15 @@ subroutine set_merid_BT_cont(v, h_in, h_L, h_R, BT_cont, vh_tot_0, dvhdv_tot_0, 
                        !! layer that remains after a time-step of viscosity,
                        !! and the fraction of a time-step's worth of a
                        !! barotropic acceleration that a layer experiences
-                       !! after viscosity is applied.  Nondimensional between
+                       !! after viscosity is applied. Non-dimensional between
                        !! 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZI_(G)),                  intent(in)    :: visc_rem_max !< Maximum allowable visc_rem.
   integer,                                   intent(in)    :: j        !< Spatial index.
   integer,                                   intent(in)    :: ish      !< Start of index range.
   integer,                                   intent(in)    :: ieh      !< End of index range.
   logical, dimension(SZI_(G)),               intent(in)    :: do_I     !<
-                       !! A logical flag indiciating which I values to work on.
-
+                       !! A logical flag indicating which I values to work on.
+  ! Local variables
   real, dimension(SZI_(G)) :: &
     dv0, &        ! The barotropic velocity increment that gives 0 transport, m s-1.
     dvL, dvR, &   ! The barotropic velocity increments that give the southerly
@@ -1838,7 +1807,7 @@ subroutine set_merid_BT_cont(v, h_in, h_L, h_R, BT_cont, vh_tot_0, dvhdv_tot_0, 
 
 end subroutine set_merid_BT_cont
 
-!> This subroutine calculates left/right edge values for PPM reconstruction.
+!> Calculates left/right edge values for PPM reconstruction.
 subroutine PPM_reconstruction_x(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_2nd)
   type(ocean_grid_type),             intent(in)  :: G    !< Ocean's grid structure.
   real, dimension(SZI_(G),SZJ_(G)),  intent(in)  :: h_in !< Layer thickness, in H.
@@ -1856,7 +1825,7 @@ subroutine PPM_reconstruction_x(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
                     !! arithmetic mean thicknesses as the default edge values
                     !! for a simple 2nd order scheme.
 
-! Local variables with useful mnemonic names.
+  ! Local variables with useful mnemonic names.
   real, dimension(SZI_(G),SZJ_(G))  :: slp ! The slopes.
   real, parameter :: oneSixth = 1./6.
   real :: h_ip1, h_im1
@@ -1929,7 +1898,7 @@ subroutine PPM_reconstruction_x(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
   return
 end subroutine PPM_reconstruction_x
 
-!> This subroutine calculates left/right edge valus for PPM reconstruction.
+!> Calculates left/right edge values for PPM reconstruction.
 subroutine PPM_reconstruction_y(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_2nd)
   type(ocean_grid_type),             intent(in)  :: G    !< Ocean's grid structure.
   real, dimension(SZI_(G),SZJ_(G)),  intent(in)  :: h_in !< Layer thickness, in H.
@@ -1947,7 +1916,7 @@ subroutine PPM_reconstruction_y(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
                     !! arithmetic mean thicknesses as the default edge values
                     !! for a simple 2nd order scheme.
 
-! Local variables with useful mnemonic names.
+  ! Local variables with useful mnemonic names.
   real, dimension(SZI_(G),SZJ_(G))  :: slp ! The slopes.
   real, parameter :: oneSixth = 1./6.
   real :: h_jp1, h_jm1
@@ -2077,7 +2046,7 @@ subroutine PPM_limit_CW84(h_in, h_L, h_R, G, iis, iie, jis, jie)
   integer,                           intent(in)  :: jis   !< Start of j index range.
   integer,                           intent(in)  :: jie   !< End of j index range.
 
-! Local variables
+  ! Local variables
   real    :: h_i, RLdiff, RLdiff2, RLmean, FunFac
   character(len=256) :: mesg
   integer :: i,j
@@ -2101,7 +2070,7 @@ subroutine PPM_limit_CW84(h_in, h_L, h_R, G, iis, iie, jis, jie)
   return
 end subroutine PPM_limit_CW84
 
-!> Return the maxiumum ratio of a/b or maxrat.
+!> Return the maximum ratio of a/b or maxrat.
 function ratio_max(a, b, maxrat) result(ratio)
   real, intent(in) :: a       !< Numerator
   real, intent(in) :: b       !< Denominator
@@ -2115,7 +2084,7 @@ function ratio_max(a, b, maxrat) result(ratio)
   endif
 end function ratio_max
 
-!> This include declares and sets the variable "version".
+!> Initializes continuity_ppm_cs
 subroutine continuity_PPM_init(Time, G, GV, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time !< Time increment in s.
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
@@ -2125,7 +2094,7 @@ subroutine continuity_PPM_init(Time, G, GV, param_file, diag, CS)
   type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to
                   !! regulate diagnostic output.
   type(continuity_PPM_CS), pointer       :: CS   !< Module's control structure.
-
+!> This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_continuity_PPM" ! This module's name.
 
@@ -2210,35 +2179,16 @@ subroutine continuity_PPM_init(Time, G, GV, param_file, diag, CS)
 
 end subroutine continuity_PPM_init
 
-!> Deconstructor for CS object.
+!> Destructor for continuity_ppm_cs
 subroutine continuity_PPM_end(CS)
   type(continuity_PPM_CS), pointer :: CS   !< Module's control structure.
   deallocate(CS)
 end subroutine continuity_PPM_end
 
-!> \class MOM_continuity_PPM
-!!*******+*********+*********+*********+*********+*********+*********+**
-!!                                                                     *
-!!  By Robert Hallberg and Alistair Adcroft, September 2006 - .        *
-!!                                                                     *
-!!    This program contains the subroutine that advects layer          *
-!!  thickness.  The scheme here uses a Piecewise-Parabolic method with *
-!!  a positive definite limiter.                                       *
-!!                                                                     *
-!!  Macros written all in capital letters are defined in MOM_memory.h. *
-!!                                                                     *
-!!     A small fragment of the grid is shown below:                    *
-!!                                                                     *
-!!    j+1  x ^ x ^ x   At x:  q                                        *
-!!    j+1  > o > o >   At ^:  v, vh                                    *
-!!    j    x ^ x ^ x   At >:  u, uh                                    *
-!!    j    > o > o >   At o:  h, hin                                   *
-!!    j-1  x ^ x ^ x                                                   *
-!!        i-1  i  i+1  At x & ^:                                       *
-!!           i  i+1    At > & o:                                       *
-!!                                                                     *
-!!  The boundaries always run through q grid points (x).               *
-!!                                                                     *
-!!*******+*********+*********+*********+*********+*********+*********+**
+!> \namespace mom_continuity_ppm
+!!
+!! This module contains the subroutines that advect layer
+!! thickness.  The scheme here uses a Piecewise-Parabolic method with
+!! a positive definite limiter.
 
 end module MOM_continuity_PPM

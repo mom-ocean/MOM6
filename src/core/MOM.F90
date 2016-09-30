@@ -3614,9 +3614,9 @@ end subroutine MOM_end
 !! * FRAZIL_HEAT_TENDENCY generally has 3d structure, since MOM6 frazil calculation checks the
 !!   full ocean column.
 !!
-!! * FRAZIL_HEAT_TENDENCY[k=@sum] = HFSIFRAZIL = column integrated frazil heating.
+!! * FRAZIL_HEAT_TENDENCY[k=\@sum] = HFSIFRAZIL = column integrated frazil heating.
 !!
-!! * HFDS = FRAZIL_HEAT_TENDENCY[k=@sum] + BOUNDARY_FORCING_HEAT_TENDENCY[k=@sum]
+!! * HFDS = FRAZIL_HEAT_TENDENCY[k=\@sum] + BOUNDARY_FORCING_HEAT_TENDENCY[k=\@sum]
 !!
 !!  Here is an example 2d heat budget (depth summed) diagnostic for MOM.
 !!
@@ -3642,7 +3642,7 @@ end subroutine MOM_end
 !! * BOUNDARY_FORCING_SALT_TENDENCY generally has 3d structure, with k > 1 contributions from
 !!   the case when layers are tiny, in which case MOM6 partitions tendencies into k > 1 layers.
 !!
-!! * SFDSI = BOUNDARY_FORCING_SALT_TENDENCY[k=@sum] 
+!! * SFDSI = BOUNDARY_FORCING_SALT_TENDENCY[k=\@sum] 
 !!
 !!  Here is an example 2d salt budget (depth summed) diagnostic for MOM.
 !!

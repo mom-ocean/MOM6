@@ -80,15 +80,17 @@ The file MOM_memory_macros.h provides the macros `SZI_`, `SZJ_`, `SZIB_` and `SZ
 
 \section Global_index Calculating a global index
 
-For the most part we MOM6 code should be independent of an equivalent absolute global index.
-There are exceptions are when the equivalent global index of a cell `i,j` is needed is can be calculated as follows:
+For the most part MOM6 code should be independent of an equivalent absolute global index.
+There are exceptions and when the global index of a cell `i,j` is needed is can be calculated as follows:
 
-  `i_global = i + HI%%idg_offset`, or
+  `i_global = i + HI%%idg_offset`
 
 Before the mom_hor_index::hor_index_type was introduced, this conversion was done use variables in the mom_grid::ocean_grid_type:
 
-  `i_gloval = (i-G%%isd) + G%%isd_global`
+  `i_global = (i-G%%isd) + G%%isd_global`
 
 which is no longer preferred.
+
+Note that a global index only makes sense for a rectangular global domain. If the domain is a Mosaic of connected tiles (e.g. size tiles of a cube) the global indices (i,j) become meaningless.
 
 */
