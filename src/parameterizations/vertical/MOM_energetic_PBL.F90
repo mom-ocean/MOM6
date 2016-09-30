@@ -114,6 +114,10 @@ type, public :: energetic_PBL_CS ; private
                              ! the inhibition of the diffusive length scale by
                              ! rotation.  Making this larger decreases the
                              ! diffusivity in the planetary boundary layer.
+  real    :: transLay_scale  ! A scale for the mixing length in the transition layer
+                             ! at the edge of the boundary layer as a fraction of the
+                             ! boundary layer thickness.  The default is 0, but a
+                             ! value of 0.1 might be better justified by observations.
   real    :: MLD_tol         ! A tolerance for determining the boundary layer
                              ! thickness when Use_MLD_iteration is true, in m.
   real    :: min_mix_len     ! The minimum mixing length scale that will be
@@ -230,8 +234,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   real, dimension(SZI_(G),SZK_(GV)+1) :: &
     Kd, &           ! The diapycnal diffusivity, in m2 s-1.
     pres, &         ! Interface pressures in Pa.
-    hb_hs           ! The distance from the bottom over the thickness of the water,
-                    ! times a conversion factor from H to m, in m H-1.
+    hb_hs           ! The distance from the bottom over the thickness of the
+                    ! water column, nondim.
   real, dimension(SZI_(G)) :: &
     mech_TKE, &     !   The mechanically generated turbulent kinetic energy
                     ! available for mixing over a time step, in J m-2 = kg s-2.
@@ -279,6 +283,9 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                     ! of coupling with layers above, in H.  This is the first term
                     ! in the denominator of b1 in a downward-oriented tridiagonal solver.
   real, dimension(SZK_(GV)+1) :: &
+    MixLen_shape, & ! A nondimensional shape factor for the mixing length that
+                    ! gives it an appropriate assymptotic value at the bottom of
+                    ! the boundary layer.
     Kddt_h          ! The diapycnal diffusivity times a timestep divided by the
                     ! average thicknesses around a layer, in H (m or kg m-2).
   real :: b1        ! b1 is inverse of the pivot used by the tridiagonal solver, in H-1.
@@ -309,6 +316,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                     ! used convert TKE back into ustar^3.
   real :: U_star    ! The surface friction velocity, in m s-1.
   real :: vstar     ! An in-situ turbulent velocity, in m s-1.
+  real :: hbs_here  ! The local minimum of hb_hs and MixLen_shape, times a
+                    ! conversion factor from H to M, in m H-1.
   real :: nstar_FC  ! The fraction of conv_PErel that can be converted to mixing, nondim.
   real :: TKE_reduc ! The fraction by which TKE and other energy fields are
                     ! reduced to support mixing, nondim. between 0 and 1.
@@ -605,28 +614,35 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           nstar_k(:) = 0.0 ; nstar_k(1) = CS%nstar
         endif
 
-        if (.not.CS%Use_MLD_Iteration) then
-          h_sum(i) = H_neglect
-          do k=1,nz ; h_sum(i) = h_sum(i) + h(i,k) ; enddo
-             I_hs = 0.0 ; if (h_sum(i) > 0.0) I_hs = 1.0 / h_sum(i)
+        h_sum(i) = H_neglect
+        do k=1,nz ; h_sum(i) = h_sum(i) + h(i,k) ; enddo
+           I_hs = 0.0 ; if (h_sum(i) > 0.0) I_hs = 1.0 / h_sum(i)
 
-          h_bot(i) = 0.0 ; hb_hs(i,nz+1) = 0.0
-          do k=nz,1,-1
-            h_bot(i) = h_bot(i) + h(i,k)
-            hb_hs(i,K) = GV%H_to_m * (h_bot(i)*I_hs)
-          enddo
+        h_bot(i) = 0.0 ; hb_hs(i,nz+1) = 0.0
+        do k=nz,1,-1
+          h_bot(i) = h_bot(i) + h(i,k)
+          hb_hs(i,K) = h_bot(i) * I_hs
+        enddo
+
+        if ((.not.CS%Use_MLD_Iteration) .or. &
+            (CS%transLay_scale >= 1.0) .or. (CS%transLay_scale < 0.0) ) then
+          do K=1,nz+1 ; MixLen_shape(K) = 1.0 ; enddo
+        elseif (MLD_guess <= 0.0) then
+          if (CS%transLay_scale > 0.0) then
+            do K=1,nz+1 ; MixLen_shape(K) = CS%transLay_scale ; enddo
+          else
+            do K=1,nz+1 ; MixLen_shape(K) = 1.0 ; enddo
+          endif
         else
           ! Reduce the mixing length based on MLD, with a quadratic
           ! expression that follows KPP.
-          I_MLD=1.0/MLD_guess
+          I_MLD = 1.0 / MLD_guess
           h_sum(i) = 0.0
-          h_bot(i) = 0.0 ; hb_hs(i,1:nz+1) = 0.0
-          do k=2,nz
-            h_sum(i) = h_sum(i)+h(i,k)
-            h_bot(i) = max(0.0,MLD_guess - h_sum(i))
-            ! ### USE A DIFFERENT ARRAY HERE....
-            hb_hs(i,K) = GV%H_to_m * (h_bot(i)*I_hs)**2!Notice the square
-                                                       ! makes KPP-like.
+          MixLen_shape(1) = 1.0
+          do K=2,nz+1
+            h_sum(i) = h_sum(i)+h(i,k-1)
+            MixLen_shape(K) = CS%transLay_scale + (1.0 - CS%transLay_scale) * &
+                              (max(0.0, (MLD_guess - h_sum(i))*I_MLD) )**2
           enddo
         endif
   !    endif ; enddo
@@ -830,13 +846,14 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
             TKE_here = mech_TKE(i) + CS%wstar_ustar_coef*conv_PErel(i)
             if (TKE_here > 0.0) then
               vstar = CS%vstar_scale_fac * (I_dtrho*TKE_here)**C1_3
-              Mixing_Length_Used(k) = MAX(CS%min_mix_len,((h_tt*hb_hs(i,K))*vstar) / &
-                  ((CS%Ekman_scale_coef * absf(i)) * (h_tt*hb_hs(i,K)) + vstar))
+              hbs_here = GV%H_to_m * min(hb_hs(i,K), MixLen_shape(K))
+              Mixing_Length_Used(k) = MAX(CS%min_mix_len,((h_tt*hbs_here)*vstar) / &
+                  ((CS%Ekman_scale_coef * absf(i)) * (h_tt*hbs_here) + vstar))
               !Note setting Kd_guess0 to Mixing_Length_Used(K) here will
               ! change the answers.  Therefore, skipping that.
               if (.not.CS%Use_MLD_Iteration) then
-                 Kd_guess0 = vstar * vonKar *  ((h_tt*hb_hs(i,K))*vstar) / &
-                  ((CS%Ekman_scale_coef * absf(i)) * (h_tt*hb_hs(i,K)) + vstar)
+                 Kd_guess0 = vstar * vonKar *  ((h_tt*hbs_here)*vstar) / &
+                  ((CS%Ekman_scale_coef * absf(i)) * (h_tt*hbs_here) + vstar)
               else
                  Kd_guess0 = vstar * vonKar * Mixing_Length_Used(k)
               endif
@@ -873,13 +890,14 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                 TKE_here = mech_TKE(i) + CS%wstar_ustar_coef*(conv_PErel(i)-PE_chg_max)
                 if (TKE_here > 0.0) then
                   vstar = CS%vstar_scale_fac * (I_dtrho*TKE_here)**C1_3
-                  Mixing_Length_Used(k) = max(CS%min_mix_len,((h_tt*hb_hs(i,K))*vstar) / &
-                      ((CS%Ekman_scale_coef * absf(i)) * (h_tt*hb_hs(i,K)) + vstar))
+                  hbs_here = GV%H_to_m * min(hb_hs(i,K), MixLen_shape(K))
+                  Mixing_Length_Used(k) = max(CS%min_mix_len,((h_tt*hbs_here)*vstar) / &
+                      ((CS%Ekman_scale_coef * absf(i)) * (h_tt*hbs_here) + vstar))
                   if (.not.CS%Use_MLD_Iteration) then
                   ! Note again (as prev) that using Mixing_Length_Used here
                   !  instead of redoing the computation will change answers...
-                     Kd(i,k) = vstar * vonKar *  ((h_tt*hb_hs(i,K))*vstar) / &
-                          ((CS%Ekman_scale_coef * absf(i)) * (h_tt*hb_hs(i,K)) + vstar)
+                     Kd(i,k) = vstar * vonKar *  ((h_tt*hbs_here)*vstar) / &
+                          ((CS%Ekman_scale_coef * absf(i)) * (h_tt*hbs_here) + vstar)
                   else
                      Kd(i,k) = vstar * vonKar * Mixing_Length_Used(k)
                   endif
@@ -1673,12 +1691,12 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
                  "potential energy change code.  Otherwise, the newer \n"//&
                  "version that can work with successive increments to the \n"//&
                  "diffusivity in upward or downward passes is used.", default=.true.)
-! call get_param(param_file, mod, "EPBL_TRANSITION_SCALE", CS%transition_scale, &
-!                "A scale for the mixing length in the transition layer \n"//&
-!                "at the edge of the boundary layer as a fraction of the \n"//&
-!                "boundary layer thickness.  The default is 0, but a \n"//&
-!                "value of 0.1 might be better justified by observations.", &
-!                units="nondim", default=0.0)
+  call get_param(param_file, mod, "EPBL_TRANSITION_SCALE", CS%transLay_scale, &
+                 "A scale for the mixing length in the transition layer \n"//&
+                 "at the edge of the boundary layer as a fraction of the \n"//&
+                 "boundary layer thickness.  The default is 0, but a \n"//&
+                 "value of 0.1 might be better justified by observations.", &
+                 units="nondim", default=0.0)
 
   ! This gives a minimum decay scale that is typically much less than Angstrom.
   CS%ustar_min = 2e-4*CS%omega*(GV%Angstrom_z + GV%H_to_m*GV%H_subroundoff)
