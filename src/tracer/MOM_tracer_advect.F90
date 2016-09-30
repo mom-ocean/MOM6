@@ -150,7 +150,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, h_prev_opt,
       do i=is,ie ; do j=js,je
         hprev(i,j,k) = h_prev_opt(i,j,k);
       enddo ; enddo
-  endif
+    endif
   enddo
 
 

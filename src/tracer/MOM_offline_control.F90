@@ -684,7 +684,7 @@ contains
     ! Limits how much the a layer can be depleted in the vertical direction
     real, dimension(SZI_(G),SZK_(G))                            :: ea2d, eb2d
     real, dimension(SZI_(G),SZK_(G))                            :: h2d, scale
-    real, dimension(SZI_(G),SZK_(G))                            :: top_flux, bottom_flux
+    real, dimension(SZI_(G),SZK_(G)+1)                          :: flux_interface, top_flux, bottom_flux
     real                                                        :: total_out_flux, h_budget
     integer :: i, j, k, m, is, ie, js, je, nz
 
@@ -696,88 +696,34 @@ contains
         ea2d(i,k) = ea(i,j,k)
         eb2d(i,k) = eb(i,j,k)
         h2d(i,k) = h(i,j,k)
-        scale(i,k) = 1.0
       enddo ; enddo;
 
+      ! Calculate the fluxes through top and bottom faces of the cell
       k=1 ! Top layer
       do i=is,ie
-        top_flux(i,k) = -ea2d(i,k)
-        bottom_flux(i,k) = -(eb2d(i,k)-ea2d(i,k+1))
+        flux_interface(i,k) = 0.0
       enddo
-      ! Interior layers
+
       do k=2, nz-1 ; do i=is,ie
-        top_flux(i,k) = -(ea2d(i,k)-eb2d(i,k-1))
-        bottom_flux(i,k) = -(eb2d(i,k)-ea2d(i,k+1))
+        top_flux(i,k) = ea2d(i,k)-eb2d(i,k-1)
+        bottom_flux(i,k) = ea2d(i,k+1)-eb2d(i,k)
       enddo ; enddo
       k=nz ! Bottom layer
       do i=is,ie
-        top_flux(i,k) = -(ea2d(i,k)-eb2d(i,k-1))
+        top_flux(i,k) = ea2d(i,k)-eb2d(i,k-1)
         bottom_flux(i,k) = -eb2d(i,k)
       enddo
-
+      
+      ! Convert fluxes which are in units of thickness to units of volume
       do k=1,nz ; do i=is,ie
-        h_budget = h2d(i,k)*max_off_cfl ! How much the layer can be depleted in any given step
-                                        ! based on the specified max CFL
-        total_out_flux = (max(0.0,top_flux(i,k)) + max(0.0, bottom_flux(i,k)))*G%areaT(i,j)
-        if (total_out_flux>h_budget) scale(i,k) = h_budget/total_out_flux
-        if (scale(j,k)>1.0) call MOM_error(FATAL, "scale(j,k) is larger than 1")
-      enddo ; enddo
-
-      k=1
-      do i=is,ie
-        if(top_flux(i,k)>0.0) then
-          ea2d(i,k) = ea2d(i,k)*scale(i,k)
-        endif
-        if(bottom_flux(i,k)>0.0) then
-          ea2d(i,k+1) = ea2d(i,k+1)*scale(i,k)
-          eb2d(i,k)  = eb2d(i,k)*scale(i,k)
-        endif
-      enddo
-      ! Interior layers
-      do k=2, nz-1 ; do i=is,ie
-        if(top_flux(i,k)>0.0) then
-          ea2d(i,k)   = ea2d(i,k)*scale(i,k)
-          eb2d(i,k-1) = eb2d(i,k-1)*scale(i,k)
-        endif
-        if(bottom_flux(i,k)>0.0) then
-          ea2d(i,k+1) = ea2d(i,k+1)*scale(i,k)
-          eb2d(i,k)   = eb2d(i,k)*scale(i,k)
-        endif
-      enddo; enddo;
-      k=nz
-      do i=is,ie
-        if(top_flux(i,k)>0.0) then
-          ea2d(i,k)   = ea2d(i,k)*scale(i,k)
-          eb2d(i,k-1) = eb2d(i,k-1)*scale(i,k)
-        endif
-        if(bottom_flux(i,k)>0.0) then
-          eb2d(i,k)   = eb2d(i,k)*scale(i,k)
-        endif
-      enddo
-
-      ! Update h with new scaled fluxes
-      k=1 ! Top layer
-      do i=is,ie
-        top_flux(i,k) = -ea2d(i,k)
-        bottom_flux(i,k) = -(eb2d(i,k)-ea2d(i,k+1))
-      enddo
-      ! Interior layers
-      do k=2, nz-1 ; do i=is,ie
-        top_flux(i,k) = -(ea2d(i,k)-eb2d(i,k-1))
-        bottom_flux(i,k) = -(eb2d(i,k)-ea2d(i,k+1))
-      enddo ; enddo
-      k=nz ! Bottom layer
-      do i=is,ie
-        top_flux(i,k) = -(ea2d(i,k)-eb2d(i,k-1))
-        bottom_flux(i,k) = -eb2d(i,k)
-      enddo
-
-      do k=1,nz ; do i=is,ie
-        h(i,j,k)  = h2d(i,k) - (top_flux(i,k)+bottom_flux(i,k))*G%areaT(i,j)
-        ea(i,j,k) = ea2d(i,k)
-        eb(i,j,k) = eb2d(i,k)
+        top_flux(i,k) = top_flux(i,k)*G%areaT(i,j)
+        bottom_flux(i,k) = bottom_flux(i,k)*G%areaT(i,j)
       enddo; enddo
-
+      
+      do k=1,nz ; do i=is,ie
+        
+      enddo; enddo
+      
     enddo
   end subroutine flux_limiter_vertical
 
@@ -796,7 +742,7 @@ contains
     ! Set index-related variables for fields on T-grid
     is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
 
-    do j=js,je
+    do j=js-1,je
       do k=1,nz ; do i=is-2,ie
         uh2d(I,k) = uh(I,j,k)        
       enddo ; enddo;
@@ -847,7 +793,7 @@ contains
     ! Set index-related variables for fields on T-grid
     is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
     min_h= 0.1*GV%Angstrom
-    do i=is,ie
+    do i=is-1,ie
       do k=1,nz ; do j=js-2,je
         vh2d(J,k) = vh(i,J,k)        
       enddo ; enddo;
