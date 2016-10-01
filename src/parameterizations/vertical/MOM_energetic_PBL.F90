@@ -239,15 +239,16 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   real, dimension(SZI_(G)) :: &
     mech_TKE, &     !   The mechanically generated turbulent kinetic energy
                     ! available for mixing over a time step, in J m-2 = kg s-2.
-    conv_PErel, & ! The potential energy that has been convectively released
+    conv_PErel, &   ! The potential energy that has been convectively released
                     ! during this timestep, in J m-2 = kg s-2. A portion nstar_FC
                     ! of conv_PErel is available to drive mixing.
     htot, &         !   The total depth of the layers above an interface, in H.
     uhtot, &        !   The depth integrated zonal and meridional velocities in the
     vhtot, &        ! layers above, in H m s-1.
+    mech_TKE_top, & !    The value of mech_TKE at the top of the column, in J m-2.
+    conv_PErel_top, & !  The value of conv_PErel at the top of the column, in J m-2.
 
     Idecay_len_TKE, &  ! The inverse of a turbulence decay length scale, in H-1.
-    h_bot, &        ! The distance from the bottom, in H.
     h_sum, &        ! The total thickness of the water column, in H.
     absf            ! The absolute value of f, in s-1.
 
@@ -303,6 +304,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
 
   real :: dt_h      ! The timestep divided by the averages of the thicknesses around
                     ! a layer, times a thickness conversion factor, in H s m-2.
+  real :: h_bot     ! The distance from the bottom, in H.
+  real :: h_rsum    ! The running sum of h from the top, in H.
   real :: I_hs      ! The inverse of h_sum, in H-1.
   real :: I_mld     ! The inverse of the current value of MLD, in H-1.
   real :: h_tt      ! The distance from the surface or up to the next interface
@@ -369,6 +372,9 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   logical :: write_diags  ! If true, write out diagnostics with this step.
   logical :: reset_diags  ! If true, zero out the accumulated diagnostics.
                 ! detrainment, in units of m.
+  ! Local column copies of energy change diagnostics, all in J m-2.
+  real :: dTKE_conv, dTKE_forcing, dTKE_mixing
+  real :: dTKE_MKE, dTKE_mech_decay, dTKE_conv_decay
   !----------------------------------------------------------------------
   !/BGR added Aug24,2016 for adding iteration to get boundary layer depth
   !    - needed to compute new mixing length.
@@ -498,10 +504,12 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
 !!OMP                                   TKE_reduc,dTe_t2,dSe_t2,dTe,dSe,dt_h,    &
 !!OMP                                   Convectively_stable,sfc_disconnect,b1,   &
 !!OMP                                   c1,dT_km1_t2,dS_km1_t2,dTe_term,         &
-!!OMP                                   dSe_term,MKE2_Hharm,vstar,h_tt,          &
+!!OMP                                   dSe_term,MKE2_Hharm,vstar,h_tt,h_rsum,   &
 !!OMP                                   Kd_guess0,Kddt_h_g0,dPEc_dKd_Kd0,        &
 !!OMP                                   PE_chg_max,dPEa_dKd_g0,PE_chg_g0,        &
 !!OMP                                   MKE_src,dPE_conv,Kddt_h_max,Kddt_h_min,  &
+!!OMP                                   dTKE_conv, dTKE_forcing, dTKE_mixing,    &
+!!OMP                                   dTKE_MKE,dTKE_mech_decay,dTKE_conv_decay,&
 !!OMP                                   TKE_left_max,TKE_left_min,Kddt_h_guess,  &
 !!OMP                                   TKE_left_itt,dPEa_dKd_itt,PE_chg_itt,    &
 !!OMP                                   MKE_src_itt,Kddt_h_itt,dPEc_dKd,PE_chg,  &
@@ -533,13 +541,87 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
     ! and ustar and wstar available to drive mixing at the first interior
     ! interface.
     do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+
+
+      U_Star = fluxes%ustar(i,j)
+      if (associated(fluxes%ustar_shelf) .and. associated(fluxes%frac_shelf_h)) then
+        if (fluxes%frac_shelf_h(i,j) > 0.0) &
+          U_Star = (1.0 - fluxes%frac_shelf_h(i,j)) * U_star + &
+                    fluxes%frac_shelf_h(i,j) * fluxes%ustar_shelf(i,j)
+      endif
+      if (U_Star < CS%ustar_min) U_Star = CS%ustar_min
+
+      if (CS%omega_frac >= 1.0) then ; absf(i) = 2.0*CS%omega
+      else
+        absf(i) = 0.25*((abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I-1,J-1))) + &
+                     (abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I-1,J))))
+        if (CS%omega_frac > 0.0) &
+          absf = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf**2)
+      endif
+
+      mech_TKE(i) = (dt*CS%mstar*GV%Rho0)*((U_Star**3))
+      conv_PErel(i) = 0.0
+
+      if (CS%TKE_diagnostics) then
+        CS%diag_TKE_wind(i,j) = CS%diag_TKE_wind(i,j) + mech_TKE(i) * IdtdR0
+        if (TKE_forced(i,j,1) <= 0.0) then
+          CS%diag_TKE_forcing(i,j) = CS%diag_TKE_forcing(i,j) + &
+                                     max(-mech_TKE(i), TKE_forced(i,j,1)) * IdtdR0
+          ! CS%diag_TKE_unbalanced_forcing(i,j) = CS%diag_TKE_unbalanced_forcing(i,j) + &
+          !     min(0.0, TKE_forced(i,j,1) + mech_TKE(i)) * IdtdR0
+        else
+          CS%diag_TKE_forcing(i,j) = CS%diag_TKE_forcing(i,j) + CS%nstar*TKE_forced(i,j,1) * IdtdR0
+        endif
+      endif
+
+      if (TKE_forced(i,j,1) <= 0.0) then
+        mech_TKE(i) = mech_TKE(i) + TKE_forced(i,j,1)
+        if (mech_TKE(i) < 0.0) mech_TKE(i) = 0.0
+      else
+        conv_PErel(i) = conv_PErel(i) + TKE_forced(i,j,1)
+      endif
+
+!    endif ; enddo
+
+!    do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+
+      h_sum(i) = H_neglect ; do k=1,nz ; h_sum(i) = h_sum(i) + h(i,k) ; enddo
+      I_hs = 0.0 ; if (h_sum(i) > 0.0) I_hs = 1.0 / h_sum(i)
+
+      h_bot = 0.0 ; hb_hs(i,nz+1) = 0.0
+      do k=nz,1,-1
+        h_bot = h_bot + h(i,k)
+        hb_hs(i,K) = h_bot * I_hs
+      enddo
+
+      pres(i,1) = 0.0
+      do k=1,nz
+        dMass = GV%H_to_kg_m2 * h(i,k)
+        dPres = GV%g_Earth * dMass
+        dT_to_dPE(i,k) = (dMass * (pres(i,K) + 0.5*dPres)) * dSV_dT(i,j,k)
+        dS_to_dPE(i,k) = (dMass * (pres(i,K) + 0.5*dPres)) * dSV_dS(i,j,k)
+        dT_to_dColHt(i,k) = dMass * dSV_dT(i,j,k)
+        dS_to_dColHt(i,k) = dMass * dSV_dS(i,j,k)
+
+        pres(i,K+1) = pres(i,K) + dPres
+      enddo
+
+!    endif ; enddo
+
+    ! Note the outer i-loop and inner k-loop loop order!!!
+!    do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do k=1,nz ; T0(k) = T(i,k) ; S0(k) = S(i,k) ; enddo
+
+      ! Store the initial mechanical TKE and convectively released PE to
+      ! enable multiple iterations.
+      mech_TKE_top(i) = mech_TKE(i) ; conv_PErel_top(i) = conv_PErel(i)
+
       !/The following lines are for the iteration over MLD
       !{
-      max_MLD = 0.0 ! max_MLD will initialized as ocean bottom depth
-      do k=1,nz
-        max_MLD = max_MLD + h(i,k)*GV%H_to_m
-      enddo
+      ! max_MLD will initialized as ocean bottom depth
+      max_MLD = 0.0 ; do k=1,nz ; max_MLD = max_MLD + h(i,k)*GV%H_to_m ; enddo
       min_MLD = 0.0 !min_MLD will initialize as 0.
+      !/BGR: May add user-input bounds for max/min MLD
 
       !/BGR: Add MLD_guess based on stored previous value.
       !      note that this is different from ML_Depth already
@@ -551,14 +633,21 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
         !Otherwise guess middle of water column.
         MLD_guess = 0.5 * (min_MLD+max_MLD)
       endif
-      !/BGR: May add user-input bounds for max/min MLD
 
       ! Iterate up to MAX_OBL_IT times to determine a converged EPBL depth.
       OBL_CONVERGED = .false.
       do OBL_IT=1,MAX_OBL_IT ; if (.not. OBL_CONVERGED) then
         CS%ML_depth(i,j) = h(i,1)*GV%H_to_m
         !CS%ML_depth2(i,j) = h(i,1)*GV%H_to_m
+
         sfc_connected(i) = .true.
+        mech_TKE(i) = mech_TKE_top(i) ; conv_PErel(i) = conv_PErel_top(i)
+
+
+        if (CS%TKE_diagnostics) then
+          dTKE_conv = 0.0 ; dTKE_forcing = 0.0 ; dTKE_mixing = 0.0
+          dTKE_MKE = 0.0 ; dTKE_mech_decay = 0.0 ; dTKE_conv_decay = 0.0
+        endif
 
         ! Store in 1D arrays cleared out each iteration.  Only write in
         !  3D arrays after convergence.
@@ -566,63 +655,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           Vstar_Used(k) = 0.0 ; Mixing_Length_Used(k) = 0.0
         enddo
         if (.not.CS%Use_MLD_Iteration) OBL_CONVERGED = .true.
-        !/This ends the new code for the iteration.
-        !}
-        U_Star = fluxes%ustar(i,j)
-        if (associated(fluxes%ustar_shelf) .and. associated(fluxes%frac_shelf_h)) then
-          if (fluxes%frac_shelf_h(i,j) > 0.0) &
-            U_Star = (1.0 - fluxes%frac_shelf_h(i,j)) * U_star + &
-                      fluxes%frac_shelf_h(i,j) * fluxes%ustar_shelf(i,j)
-        endif
-        if (U_Star < CS%ustar_min) U_Star = CS%ustar_min
-
-        if (CS%omega_frac >= 1.0) then ; absf(i) = 2.0*CS%omega
-        else
-          absf(i) = 0.25*((abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I-1,J-1))) + &
-                       (abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I-1,J))))
-          if (CS%omega_frac > 0.0) &
-            absf = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf**2)
-        endif
-
-        mech_TKE(i) = (dt*CS%mstar*GV%Rho0)*((U_Star**3))
-        conv_PErel(i) = 0.0
-
-        if (CS%TKE_diagnostics) then
-          CS%diag_TKE_wind(i,j) = CS%diag_TKE_wind(i,j) + mech_TKE(i) * IdtdR0
-          if (TKE_forced(i,j,1) <= 0.0) then
-            CS%diag_TKE_forcing(i,j) = CS%diag_TKE_forcing(i,j) + &
-                                       max(-mech_TKE(i), TKE_forced(i,j,1)) * IdtdR0
-            ! CS%diag_TKE_unbalanced_forcing(i,j) = CS%diag_TKE_unbalanced_forcing(i,j) + &
-            !     min(0.0, TKE_forced(i,j,1) + mech_TKE(i)) * IdtdR0
-          else
-            CS%diag_TKE_forcing(i,j) = CS%diag_TKE_forcing(i,j) + CS%nstar*TKE_forced(i,j,1) * IdtdR0
-          endif
-        endif
-
-        if (TKE_forced(i,j,1) <= 0.0) then
-          mech_TKE(i) = mech_TKE(i) + TKE_forced(i,j,1)
-          if (mech_TKE(i) < 0.0) mech_TKE(i) = 0.0
-        else
-          conv_PErel(i) = conv_PErel(i) + TKE_forced(i,j,1)
-        endif
-
-  !    endif ; enddo
-
-  !    do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
-        if (debug) then
-          mech_TKE_k(i,1) = mech_TKE(i) ; conv_PErel_k(i,1) = conv_PErel(i)
-          nstar_k(:) = 0.0 ; nstar_k(1) = CS%nstar
-        endif
-
-        h_sum(i) = H_neglect
-        do k=1,nz ; h_sum(i) = h_sum(i) + h(i,k) ; enddo
-           I_hs = 0.0 ; if (h_sum(i) > 0.0) I_hs = 1.0 / h_sum(i)
-
-        h_bot(i) = 0.0 ; hb_hs(i,nz+1) = 0.0
-        do k=nz,1,-1
-          h_bot(i) = h_bot(i) + h(i,k)
-          hb_hs(i,K) = h_bot(i) * I_hs
-        enddo
 
         if ((.not.CS%Use_MLD_Iteration) .or. &
             (CS%transLay_scale >= 1.0) .or. (CS%transLay_scale < 0.0) ) then
@@ -636,45 +668,27 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
         else
           ! Reduce the mixing length based on MLD, with a quadratic
           ! expression that follows KPP.
-          I_MLD = 1.0 / MLD_guess
-          h_sum(i) = 0.0
+          I_MLD = 1.0 / MLD_guess ; h_rsum = 0.0
           MixLen_shape(1) = 1.0
           do K=2,nz+1
-            h_sum(i) = h_sum(i)+h(i,k-1)
+            h_rsum = h_rsum + h(i,k-1)
             MixLen_shape(K) = CS%transLay_scale + (1.0 - CS%transLay_scale) * &
-                              (max(0.0, (MLD_guess - h_sum(i))*I_MLD) )**2
+                              (max(0.0, (MLD_guess - h_rsum)*I_MLD) )**2
           enddo
         endif
-  !    endif ; enddo
 
-      ! Note the outer i-loop and inner k-loop loop order!!!
-  !    do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
-        do k=1,nz ; T0(k) = T(i,k) ; S0(k) = S(i,k) ; enddo
-
-        num_itts(:) = -1
-
-        pres(i,1) = 0.0
-        do k=1,nz
-          dMass = GV%H_to_kg_m2 * h(i,k)
-          dPres = GV%g_Earth * dMass
-          dT_to_dPE(i,k) = (dMass * (pres(i,K) + 0.5*dPres)) * dSV_dT(i,j,k)
-          dS_to_dPE(i,k) = (dMass * (pres(i,K) + 0.5*dPres)) * dSV_dS(i,j,k)
-          dT_to_dColHt(i,k) = dMass * dSV_dT(i,j,k)
-          dS_to_dColHt(i,k) = dMass * dSV_dS(i,j,k)
-
-          pres(i,K+1) = pres(i,K) + dPres
-        enddo
 
         Kd(i,1) = 0.0 ; Kddt_h(1) = 0.0
         hp_a(i) = h(i,1)
-        dT_to_dPE_a(i,1) = dT_to_dPE(i,1)
-        dS_to_dPE_a(i,1) = dS_to_dPE(i,1)
-        dT_to_dColHt_a(i,1) = dT_to_dColHt(i,1)
-        dS_to_dColHt_a(i,1) = dS_to_dColHt(i,1)
+        dT_to_dPE_a(i,1) = dT_to_dPE(i,1) ; dT_to_dColHt_a(i,1) = dT_to_dColHt(i,1)
+        dS_to_dPE_a(i,1) = dS_to_dPE(i,1) ; dS_to_dColHt_a(i,1) = dS_to_dColHt(i,1)
 
-        htot(i) = h(i,1)
-        uhtot(i) = u(i,1)*h(i,1)
-        vhtot(i) = v(i,1)*h(i,1)
+        htot(i) = h(i,1) ; uhtot(i) = u(i,1)*h(i,1) ; vhtot(i) = v(i,1)*h(i,1)
+
+        if (debug) then
+          mech_TKE_k(i,1) = mech_TKE(i) ; conv_PErel_k(i,1) = conv_PErel(i)
+          nstar_k(:) = 0.0 ; nstar_k(1) = CS%nstar ; num_itts(:) = -1
+        endif
 
         do K=2,nz
           ! Apply dissipation to the TKE, here applied as an exponential decay
@@ -687,8 +701,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           Idecay_len_TKE(i) = (CS%TKE_decay * absf(i) / U_Star) * GV%H_to_m
           exp_kh = 1.0
           if (Idecay_len_TKE(i) > 0.0) exp_kh = exp(-h(i,k-1)*Idecay_len_TKE(i))
-          if (CS%TKE_diagnostics) CS%diag_TKE_mech_decay(i,j) = &
-            CS%diag_TKE_mech_decay(i,j) + (exp_kh-1.0) * mech_TKE(i) * IdtdR0
+          if (CS%TKE_diagnostics) &
+            dTKE_mech_decay = dTKE_mech_decay + (exp_kh-1.0) * mech_TKE(i) * IdtdR0
           mech_TKE(i) = mech_TKE(i) * exp_kh
 
 
@@ -696,9 +710,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           ! to wstar and to drive penetrating convection.
           if (TKE_forced(i,j,k) > 0.0) then
             conv_PErel(i) = conv_PErel(i) + TKE_forced(i,j,k)
-            if (CS%TKE_diagnostics) then
-              CS%diag_TKE_forcing(i,j) = CS%diag_TKE_forcing(i,j) + CS%nstar*TKE_forced(i,j,k) * IdtdR0
-            endif
+            if (CS%TKE_diagnostics) &
+              dTKE_forcing = dTKE_forcing + CS%nstar*TKE_forced(i,j,k) * IdtdR0
           endif
 
           if (debug) then
@@ -724,11 +737,11 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
             if (TKE_forced(i,j,k) + tot_TKE < 0.0) then
               ! The shortwave requirements deplete all the energy in this layer.
               if (CS%TKE_diagnostics) then
-                CS%diag_TKE_mixing(i,j) = CS%diag_TKE_mixing(i,j) + tot_TKE * IdtdR0
-                CS%diag_TKE_forcing(i,j) = CS%diag_TKE_forcing(i,j) - tot_TKE * IdtdR0
-                ! CS%diag_TKE_unbalanced_forcing(i,j) = CS%diag_TKE_unbalanced_forcing(i,j) + &
+                dTKE_mixing = dTKE_mixing + tot_TKE * IdtdR0
+                dTKE_forcing = dTKE_forcing - tot_TKE * IdtdR0
+                ! dTKE_unbalanced_forcing = dTKE_unbalanced_forcing + &
                 !     (TKE_forced(i,j,k) + tot_TKE) * IdtdR0
-                CS%diag_TKE_conv_decay(i,j) = CS%diag_TKE_conv_decay(i,j) + &
+                dTKE_conv_decay = dTKE_conv_decay + &
                         (CS%nstar-nstar_FC) * conv_PErel(i) * IdtdR0
               endif
               tot_TKE = 0.0 ; mech_TKE(i) = 0.0 ; conv_PErel(i) = 0.0
@@ -736,9 +749,9 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
               ! Reduce the mechanical and convective TKE proportionately.
               TKE_reduc = (tot_TKE + TKE_forced(i,j,k)) / tot_TKE
               if (CS%TKE_diagnostics) then
-                CS%diag_TKE_mixing(i,j) = CS%diag_TKE_mixing(i,j) - TKE_forced(i,j,k) * IdtdR0
-                CS%diag_TKE_forcing(i,j) = CS%diag_TKE_forcing(i,j) + TKE_forced(i,j,k) * IdtdR0
-                CS%diag_TKE_conv_decay(i,j) = CS%diag_TKE_conv_decay(i,j) + &
+                dTKE_mixing = dTKE_mixing - TKE_forced(i,j,k) * IdtdR0
+                dTKE_forcing = dTKE_forcing + TKE_forced(i,j,k) * IdtdR0
+                dTKE_conv_decay = dTKE_conv_decay + &
                     (1.0-TKE_reduc)*(CS%nstar-nstar_FC) * conv_PErel(i) * IdtdR0
               endif
               tot_TKE = TKE_reduc*tot_TKE   ! = tot_TKE + TKE_forced(i,j,k)
@@ -934,12 +947,12 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
               conv_PErel(i) = conv_PErel(i) - dPE_conv
               mech_TKE(i) = mech_TKE(i) + MKE_src
               if (CS%TKE_diagnostics) then
-                CS%diag_TKE_conv(i,j) = CS%diag_TKE_conv(i,j) - CS%nstar*dPE_conv * IdtdR0
-                CS%diag_TKE_MKE(i,j) = CS%diag_TKE_MKE(i,j) + MKE_src * IdtdR0
+                dTKE_conv = dTKE_conv - CS%nstar*dPE_conv * IdtdR0
+                dTKE_MKE = dTKE_MKE + MKE_src * IdtdR0
               endif
               if (sfc_connected(i)) then
-                 CS%ML_depth(i,J) = CS%ML_depth(i,J) + GV%H_to_m * h(i,k)
-                 !CS%ML_depth2(i,j) = CS%ML_depth2(i,J) + GV%H_to_m * h(i,k)
+                CS%ML_depth(i,J) = CS%ML_depth(i,J) + GV%H_to_m * h(i,k)
+                !CS%ML_depth2(i,j) = CS%ML_depth2(i,J) + GV%H_to_m * h(i,k)
               endif
 
               Kddt_h(K) = Kd(i,k)*dt_h
@@ -954,17 +967,17 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
               if (tot_TKE > 0.0) TKE_reduc = (tot_TKE - PE_chg_g0) / tot_TKE
 
               if (CS%TKE_diagnostics) then
-                CS%diag_TKE_mixing(i,j) = CS%diag_TKE_mixing(i,j) - PE_chg_g0 * IdtdR0
-                CS%diag_TKE_MKE(i,j) = CS%diag_TKE_MKE(i,j) + MKE_src * IdtdR0
-                CS%diag_TKE_conv_decay(i,j) = CS%diag_TKE_conv_decay(i,j) + &
+                dTKE_mixing = dTKE_mixing - PE_chg_g0 * IdtdR0
+                dTKE_MKE = dTKE_MKE + MKE_src * IdtdR0
+                dTKE_conv_decay = dTKE_conv_decay + &
                     (1.0-TKE_reduc)*(CS%nstar-nstar_FC) * conv_PErel(i) * IdtdR0
               endif
               tot_TKE = TKE_reduc*tot_TKE
               mech_TKE(i) = TKE_reduc*(mech_TKE(i) + MKE_src)
               conv_PErel(i) = TKE_reduc*conv_PErel(i)
               if (sfc_connected(i)) then
-                 CS%ML_depth(i,J) = CS%ML_depth(i,J) + GV%H_to_m * h(i,k)
-                 !CS%ML_depth2(i,J) = CS%ML_depth2(i,J) + GV%H_to_m * h(i,k)
+                CS%ML_depth(i,J) = CS%ML_depth(i,J) + GV%H_to_m * h(i,k)
+                !CS%ML_depth2(i,J) = CS%ML_depth2(i,J) + GV%H_to_m * h(i,k)
               endif
             elseif (tot_TKE == 0.0) then
               ! This can arise if nstar_FC = 0.
@@ -1056,9 +1069,9 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
 
               ! All TKE should have been consumed.
               if (CS%TKE_diagnostics) then
-                CS%diag_TKE_mixing(i,j) = CS%diag_TKE_mixing(i,j) - (tot_TKE + MKE_src) * IdtdR0
-                CS%diag_TKE_MKE(i,j) = CS%diag_TKE_MKE(i,j) + MKE_src * IdtdR0
-                CS%diag_TKE_conv_decay(i,j) = CS%diag_TKE_conv_decay(i,j) + &
+                dTKE_mixing = dTKE_mixing - (tot_TKE + MKE_src) * IdtdR0
+                dTKE_MKE = dTKE_MKE + MKE_src * IdtdR0
+                dTKE_conv_decay = dTKE_conv_decay + &
                     (CS%nstar-nstar_FC) * conv_PErel(i) * IdtdR0
               endif
 
@@ -1212,6 +1225,16 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
         !stop !Kill if not converged during testing.
       else
         CONVERGED=CONVERGED+1
+      endif
+
+      if (CS%TKE_diagnostics) then
+        CS%diag_TKE_MKE(i,j) = CS%diag_TKE_MKE(i,j) + dTKE_MKE
+        CS%diag_TKE_conv(i,j) = CS%diag_TKE_conv(i,j) + dTKE_conv
+        CS%diag_TKE_forcing(i,j) = CS%diag_TKE_forcing(i,j) + dTKE_forcing
+        CS%diag_TKE_mixing(i,j) = CS%diag_TKE_mixing(i,j) + dTKE_mixing
+        CS%diag_TKE_mech_decay(i,j) = CS%diag_TKE_mech_decay(i,j) + dTKE_mech_decay
+        CS%diag_TKE_conv_decay(i,j) = CS%diag_TKE_conv_decay(i,j) + dTKE_conv_decay
+       ! CS%diag_TKE_unbalanced_forcing(i,j) = CS%diag_TKE_unbalanced_forcing(i,j) + dTKE_unbalanced
       endif
       if (CS%Mixing_Diagnostics) then
         !Write to 3-D for outputing Mixing length and
