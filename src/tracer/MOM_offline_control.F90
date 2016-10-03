@@ -216,7 +216,7 @@ contains
     call read_data(CS%snap_file, 'h_end', h_end, domain=G%Domain%mpp_domain, &
       timelevel=CS%ridx_snap,position=CENTER)
 
-          ! Apply masks at T, U, and V points
+    ! Apply masks at T, U, and V points
     do k=1,nz ; do j=js,je ; do i=is,ie
       if(G%mask2dT(i,j)<1.0) then
         h_end(i,j,k) = GV%Angstrom
@@ -240,24 +240,24 @@ contains
     enddo; enddo ; enddo
 
 
-    if (do_ale) then
-      CS%h_preale = GV%Angstrom
-      CS%T_preale = 0.0
-      CS%S_preale = 0.0
-      CS%u_preale = 0.0
-      CS%v_preale = 0.0
-      call read_data(CS%preale_file, 'h_preale',   CS%h_preale, domain=G%Domain%mpp_domain, &
-        timelevel=CS%ridx_snap,position=CENTER)
-      call read_data(CS%preale_file, 'T_preale',   CS%T_preale, domain=G%Domain%mpp_domain, &
-        timelevel=CS%ridx_mean,position=CENTER)
-      call read_data(CS%preale_file, 'S_preale',   CS%S_preale, domain=G%Domain%mpp_domain, &
-        timelevel=CS%ridx_mean,position=CENTER)
-      call read_data(CS%preale_file, 'u_preale',   CS%u_preale, domain=G%Domain%mpp_domain, &
-        timelevel=CS%ridx_mean,position=EAST)
-      call read_data(CS%preale_file, 'v_preale',   CS%v_preale, domain=G%Domain%mpp_domain, &
-        timelevel=CS%ridx_mean,position=NORTH)
-
-    endif
+!    if (do_ale) then
+!      CS%h_preale = GV%Angstrom
+!      CS%T_preale = 0.0
+!      CS%S_preale = 0.0
+!      CS%u_preale = 0.0
+!      CS%v_preale = 0.0
+!      call read_data(CS%preale_file, 'h_preale',   CS%h_preale, domain=G%Domain%mpp_domain, &
+!        timelevel=CS%ridx_snap,position=CENTER)
+!      call read_data(CS%preale_file, 'T_preale',   CS%T_preale, domain=G%Domain%mpp_domain, &
+!        timelevel=CS%ridx_mean,position=CENTER)
+!      call read_data(CS%preale_file, 'S_preale',   CS%S_preale, domain=G%Domain%mpp_domain, &
+!        timelevel=CS%ridx_mean,position=CENTER)
+!      call read_data(CS%preale_file, 'u_preale',   CS%u_preale, domain=G%Domain%mpp_domain, &
+!        timelevel=CS%ridx_mean,position=EAST)
+!      call read_data(CS%preale_file, 'v_preale',   CS%v_preale, domain=G%Domain%mpp_domain, &
+!        timelevel=CS%ridx_mean,position=NORTH)
+!
+!    endif
 
     !! Make sure all halos have been updated
     ! Vector fields
@@ -271,15 +271,15 @@ contains
     call pass_var(temp, G%Domain)
     call pass_var(salt, G%Domain)
 
-    if (do_ale) then
-
-      call pass_vector(CS%u_preale,CS%v_preale,G%Domain)
-      call pass_var(CS%h_preale, G%Domain)
-      call pass_var(CS%T_preale, G%Domain)
-      call pass_var(CS%S_preale, G%Domain)
-
-
-    endif
+!    if (do_ale) then
+!
+!      call pass_vector(CS%u_preale,CS%v_preale,G%Domain)
+!      call pass_var(CS%h_preale, G%Domain)
+!      call pass_var(CS%T_preale, G%Domain)
+!      call pass_var(CS%S_preale, G%Domain)
+!
+!
+!    endif
 
     ! Update the read indices
     CS%ridx_snap = next_modulo_time(CS%ridx_snap,CS%numtime)

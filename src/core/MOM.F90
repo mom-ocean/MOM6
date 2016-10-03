@@ -1693,8 +1693,20 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
           vhtr_sub(i,j,k) = vhtr(i,j,k)
         enddo ; enddo ; enddo
         
-        if( sum(abs(uhtr))+sum(abs(vhtr))==0.0) exit
+        call pass_vector(uhtr_sub,vhtr_sub,G%Domain)
+        call pass_var(h_pre, G%Domain)
+        
+        sum_u=sum(abs(uhtr))
+        sum_v=sum(abs(vhtr))
+        
+        call sum_across_PEs(sum_u)
+        call sum_across_PEs(sum_v)
+        
+        if(sum_u+sum_v==0.0) then
+          if(is_root_pe()) print *, "Converged after iteration", iter
+          exit
 !        print *, "Remaining uflux, vflux:", sum(abs(uhtr)), sum(abs(vhtr))
+        endif
             
       enddo
       
