@@ -105,7 +105,8 @@ end type
 ! Publicly available functions
 public ALE_init
 public ALE_end
-public ALE_main 
+public ALE_main
+public ALE_offline_tracer_final
 public ALE_build_grid
 public ALE_remap_scalar
 public pressure_gradient_plm
@@ -423,6 +424,53 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt)
 
 
 end subroutine ALE_main
+
+!> Remaps all tracers from h onto h_target. This is intended to be called when tracers
+!! are done offline. In the case where transports don't quite conserve, we still want to
+!! make sure that layer thicknesses offline do not drift too far away from the online model
+subroutine ALE_offline_tracer_final( G, GV, h, h_target, Reg, CS)
+  type(ocean_grid_type),                      intent(in)    :: G   !< Ocean grid informations
+  type(verticalGrid_type),                    intent(in)    :: GV  !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h   !< Current 3D grid obtained after last time step (m or Pa)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h_target   !< Current 3D grid obtained after last time step (m or Pa)
+  type(tracer_registry_type),                 pointer       :: Reg !< Tracer registry structure
+  type(ALE_CS),                               pointer       :: CS  !< Regridding parameters and options
+  ! Local variables
+
+  real, dimension(SZI_(G), SZJ_(G), SZK_(GV)+1) :: dzRegrid ! The change in grid interface positions
+  integer :: nk, i, j, k, isc, iec, jsc, jec
+
+  nk = GV%ke; isc = G%isc; iec = G%iec; jsc = G%jsc; jec = G%jec
+
+  if (CS%show_call_tree) call callTree_enter("ALE_offline_tracer_final(), MOM_ALE.F90")
+  
+  ! It does not seem that remap_all_state_vars uses dzRegrid for tracers, only for u, v
+  dzRegrid(:,:,:) = 0.0
+
+  call check_grid( G, GV, h, 0. )
+  call check_grid( G, GV, h_target, 0. )
+
+  if (CS%show_call_tree) call callTree_waypoint("Source and target grids checked (ALE_offline_tracer)")
+
+  ! Remap all variables from old grid h onto new grid h_new
+
+  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_target, -dzRegrid, Reg, &
+                             debug=CS%show_call_tree )
+
+  if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_offline_tracer)")
+
+  ! Override old grid with new one. The new grid 'h_new' is built in
+  ! one of the 'build_...' routines above.
+!$OMP parallel do default(none) shared(isc,iec,jsc,jec,nk,h,h_target,CS)
+  do k = 1,nk
+    do j = jsc-1,jec+1 ; do i = isc-1,iec+1
+      h(i,j,k) = h_target(i,j,k)
+    enddo ; enddo
+  enddo
+
+  if (CS%show_call_tree) call callTree_leave("ALE_offline_tracer()")
+
+end subroutine ALE_offline_tracer_final
 
 !> Check grid for negative thicknesses
 subroutine check_grid( G, GV, h, threshold )
