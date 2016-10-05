@@ -56,6 +56,7 @@ module MOM_offline_transport
   use MOM_forcing_type,   only : forcing
   use MOM_shortwave_abs,  only : optics_type
   use MOM_diag_mediator,  only : post_data
+  use MOM_forcing_type,   only : forcing
 
   implicit none
 
@@ -155,7 +156,7 @@ contains
   end subroutine post_advection_fields
 
   subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, khdt_y, &
-    temp, salt, do_ale_in)
+    temp, salt, fluxes, do_ale_in)
     type(ocean_grid_type),                     intent(inout)    :: G
     type(verticalGrid_type),                   intent(inout)    :: GV
     type(offline_transport_CS),                intent(inout)    :: CS
@@ -177,6 +178,7 @@ contains
       h_end, &
       eatr, ebtr, &
       temp, salt
+    type(forcing)                                               :: fluxes
     logical                                                     :: do_ale
     integer :: i, j, k, is, ie, js, je, nz
 
@@ -239,6 +241,21 @@ contains
       endif
     enddo; enddo ; enddo
 
+    if (do_ale) then
+      if (.not. ASSOCIATED(fluxes%netMassOut)) then
+        ALLOCATE(fluxes%netMassOut(G%isd:G%ied,G%jsd:G%jed))
+        fluxes%netMassOut(:,:) = 0.0
+      endif
+      if (.not. ASSOCIATED(fluxes%netMassIn)) then
+        ALLOCATE(fluxes%netMassIn(G%isd:G%ied,G%jsd:G%jed))
+        fluxes%netMassIn(:,:) = 0.0
+      endif
+      
+      call read_data(CS%sum_file,'net_massout_sum',fluxes%netMassOut, domain=G%Domain%mpp_domain, &
+          timelevel=CS%ridx_snap,position=center)
+      call read_data(CS%sum_file,'net_massin_sum', fluxes%netMassIn,  domain=G%Domain%mpp_domain, &
+          timelevel=CS%ridx_snap,position=center)
+    endif
 
 !    if (do_ale) then
 !      CS%h_preale = GV%Angstrom
@@ -271,7 +288,9 @@ contains
     call pass_var(temp, G%Domain)
     call pass_var(salt, G%Domain)
 
-!    if (do_ale) then
+    if (do_ale) then
+      call pass_var(fluxes%netMassOut,G%Domain)
+      call pass_var(fluxes%netMassIn,G%Domain)
 !
 !      call pass_vector(CS%u_preale,CS%v_preale,G%Domain)
 !      call pass_var(CS%h_preale, G%Domain)
@@ -279,7 +298,7 @@ contains
 !      call pass_var(CS%S_preale, G%Domain)
 !
 !
-!    endif
+    endif
 
     ! Update the read indices
     CS%ridx_snap = next_modulo_time(CS%ridx_snap,CS%numtime)

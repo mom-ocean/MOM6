@@ -63,6 +63,7 @@ use MOM_time_manager,         only : operator(-), operator(>), operator(*), oper
 use MOM_ALE,                   only : ALE_init, ALE_end, ALE_main, ALE_CS, adjustGridForIntegrity
 use MOM_ALE,                   only : ALE_getCoordinate, ALE_getCoordinateUnits, ALE_writeCoordinateFile
 use MOM_ALE,                   only : ALE_updateVerticalGridType, ALE_remap_init_conds, ALE_register_diags
+use MOM_ALE,                   only : ALE_offline_tracer_final
 use MOM_continuity,            only : continuity, continuity_init, continuity_CS
 use MOM_CoriolisAdv,           only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
 use MOM_diabatic_driver,       only : diabatic, diabatic_driver_init, diabatic_CS
@@ -131,6 +132,8 @@ use MOM_offline_transport,         only : transport_by_files, next_modulo_time, 
 use MOM_offline_transport,         only : offline_transport_init, register_diags_offline_transport
 use MOM_offline_transport,         only : limit_mass_flux_3d, update_h_horizontal_flux, update_h_vertical_flux
 use MOM_offline_transport,         only : limit_mass_flux_ordered_3d
+use MOM_tracer_diabatic,           only : applyTracerBoundaryFluxesInOut
+
 use time_manager_mod,              only : print_date
 use MOM_sum_output,                only : write_energy
 
@@ -1430,6 +1433,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     real, dimension(SZI_(CS%G),SZJB_(CS%G))              :: khdt_y, khdt_y_sub
 
     real                                                 :: sum_abs_fluxes, sum_u, sum_v
+    real                                                 :: dt_offline
 
     ! Local variables
     real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: &
@@ -1446,7 +1450,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         h_pre, &
         h_temp, &
         temp_old, salt_old, &
-        ea_zero, eb_zero     !
+        zero_3dh     !
     integer                                        :: niter, iter, big_iter
     real                                           :: Inum_iter, dt_iter
     integer :: i, j, k, m, is, ie, js, je, isd, ied, jsd, jed, nz
@@ -1462,10 +1466,11 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
     IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
+    dt_offline = CS%offline_CSp%dt_offline
 
     niter = CS%offline_CSp%num_off_iter
     Inum_iter = 1./real(niter)
-    dt_iter = CS%offline_CSp%dt_offline*Inum_iter
+    dt_iter = dt_offline*Inum_iter
 
     ! T-cell pointer assignments
 
@@ -1496,7 +1501,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
 
     ! Read in all fields that might be used this timestep
     call transport_by_files(G, GV, CS%offline_CSp, h_end, eatr, ebtr, uhtr, vhtr, &
-        khdt_x, khdt_y, temp_old, salt_old, CS%use_ALE_algorithm)
+        khdt_x, khdt_y, temp_old, salt_old, fluxes, CS%use_ALE_algorithm)
     if (CS%offline_CSp%id_uhtr_preadv>0) call post_data(CS%offline_CSp%id_uhtr_preadv, uhtr, CS%diag)
     if (CS%offline_CSp%id_vhtr_preadv>0) call post_data(CS%offline_CSp%id_vhtr_preadv, vhtr, CS%diag)
     if (CS%id_h>0) call post_data(CS%id_h, h_end, CS%diag)
@@ -1505,12 +1510,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       h_pre(i,j,k) = CS%h(i,j,k)
     enddo ; enddo; enddo
     
-    call pass_var(h_pre,G%Domain)
-
-    CS%T = temp_old
-    CS%S = salt_old
-    call pass_var(CS%T,G%Domain)
-    call pass_var(CS%S,G%Domain)
+    call pass_var(h_pre,G%Domain)    
 
 
     h_new(:,:,:) = GV%Angstrom
@@ -1518,8 +1518,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     ! The flux limiting follows the routine specified by Skamarock (Monthly Weather Review, 2005)
     ! to make sure that offline advection is monotonic and positive-definite
 !
-!    call tracer_hordiff(h_pre, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
-!        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, CS%do_online, khdt_x*0.5, khdt_y*0.5)
+    call tracer_hordiff(h_pre, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
+        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, CS%do_online, khdt_x*0.5, khdt_y*0.5)
 
     x_before_y = (MOD(G%first_direction,2) == 0)
     z_first = CS%diabatic_first
@@ -1654,6 +1654,15 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
 
     elseif (CS%use_ALE_algorithm) then
 
+      ! Convert flux rates into explicit mass/height of freshwater flux. Also note, that
+      ! fluxes are halved because diabatic processes are split before and after advection
+      do j=jsd,jed ; do i=isd,ied
+          fluxes%netMassOut(i,j) = 0.5*fluxes%netMassOut(i,j)
+          fluxes%netMassIn(i,j) =  0.5*fluxes%netMassIn(i,j)
+      enddo ; enddo
+      
+      zero_3dh(:,:,:)=0.0
+      
       do k=1,nz ; do j=jsd,jed ; do i=isdB,iedB
         uhtr_sub(i,j,k) = uhtr(i,j,k)
       enddo ; enddo ; enddo
@@ -1663,8 +1672,12 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       
       call call_tracer_column_fns(h_pre, h_new, eatr*0.5, ebtr*0.5, &
               fluxes, CS%offline_CSp%dt_offline*0.5, G, GV, CS%tv, &
-              CS%diabatic_CSp%optics, CS%tracer_flow_CSp, CS%debug)
-      
+              CS%diabatic_CSp%optics, CS%tracer_flow_CSp, CS%debug, &
+              evap_CFL_limit=0.8, &
+              minimum_forcing_depth=0.001)
+      call applyTracerBoundaryFluxesInOut(G, GV, zero_3dh, 0.5*dt_offline, fluxes, h_pre, &
+                                    0.8, 0.001)
+              
       
       do iter=1,CS%offline_CSp%num_off_iter
         
@@ -1677,8 +1690,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
             uhr_out=uhtr, vhr_out=vhtr, h_out=h_new)
             
         do k=1,nz ; do j=jsd,jed ; do i=isd,ied
-          h_pre(i,j,k) = h_new(i,j,k)/G%areaT(i,j) + &
-                         max(0.0, 1.0e-13*h_vol(i,j,k) - G%areaT(i,j)*h_new(i,j,k))/G%areaT(i,j)
+          h_pre(i,j,k) = h_new(i,j,k)/G%areaT(i,j) !+ &
+!                         max(0.0, 1.0e-13*h_vol(i,j,k) - G%areaT(i,j)*h_new(i,j,k))/G%areaT(i,j)
         enddo ; enddo ; enddo
             
         call cpu_clock_begin(id_clock_ALE)
@@ -1708,16 +1721,29 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
 !        print *, "Remaining uflux, vflux:", sum(abs(uhtr)), sum(abs(vhtr))
         endif
             
-      enddo
+      enddo                  
+      ! Note here T/S are reset to the stored snap shot to ensure that the offline model
+      ! densities, used in the neutral diffusion code don't drift too far from the online
+      ! model
+      CS%T = temp_old
+      CS%S = salt_old
+      call pass_var(CS%T,G%Domain)
+      call pass_var(CS%S,G%Domain)
       
       call call_tracer_column_fns(h_pre, h_new, eatr*0.5, ebtr*0.5, &
               fluxes, CS%offline_CSp%dt_offline*0.5, G, GV, CS%tv, &
-              CS%diabatic_CSp%optics, CS%tracer_flow_CSp, CS%debug)
+              CS%diabatic_CSp%optics, CS%tracer_flow_CSp, CS%debug, &
+              evap_CFL_limit=0.8, &
+              minimum_forcing_depth=0.001)
+      call applyTracerBoundaryFluxesInOut(G, GV, zero_3dh, 0.5*dt_offline, fluxes, h_pre, &
+          0.8, 0.001)
+              
+      call ALE_offline_tracer_final( G, GV, h_pre, h_end, CS%tracer_Reg, CS%ALE_CSp)
       
     endif
-    call pass_var(h_pre, G%Domain)
+    call pass_var(h_end, G%Domain)
     ! Tracer diffusion Strang split between advection and diffusion
-    call tracer_hordiff(h_pre, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
+    call tracer_hordiff(h_end, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
         CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, CS%do_online, khdt_x*0.5, khdt_y*0.5)
 
     h_temp = h_end-h_pre
@@ -1733,7 +1759,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     call disable_averaging(CS%diag)
 
     do i = is, ie ; do j = js, je ; do k=1,nz
-      CS%h(i,j,k) = h_pre(i,j,k)
+      CS%h(i,j,k) = h_end(i,j,k)
     enddo ;  enddo; enddo
 
     call pass_var(CS%h,G%Domain)

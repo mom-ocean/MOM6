@@ -1750,7 +1750,8 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
         if(fluxes%vprec(i,j) < 0.0) sum(i,j) = sum(i,j) + fluxes%vprec(i,j)
         if(fluxes%evap(i,j)  < 0.0) sum(i,j) = sum(i,j) + fluxes%evap(i,j)
       enddo ; enddo
-      call post_data(handles%id_net_massout, sum, diag)
+!      call post_data(handles%id_net_massout, sum, diag)
+      call post_data(handles%id_net_massout,fluxes%netMassOut,diag)
       if(handles%id_total_net_massout > 0) then
         total_transport = global_area_integral(sum,G)
         call post_data(handles%id_total_net_massout, total_transport, diag)
@@ -1766,7 +1767,8 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
         ! fluxes%cond is not needed because it is derived from %evap > 0
         if(fluxes%evap(i,j)  > 0.0) sum(i,j) = sum(i,j) + fluxes%evap(i,j)
       enddo ; enddo
-      call post_data(handles%id_net_massin, sum, diag)
+!      call post_data(handles%id_net_massin, sum, diag)
+      call post_data(handles%id_net_massin, fluxes%netMassIn, diag)
       if(handles%id_total_net_massin > 0) then
         total_transport = global_area_integral(sum,G)
         call post_data(handles%id_total_net_massin, total_transport, diag)
