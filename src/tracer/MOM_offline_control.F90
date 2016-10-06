@@ -209,9 +209,9 @@ contains
       timelevel=CS%ridx_mean,position=CENTER)
 
     !! Time-averaged fields
-    call read_data(CS%snap_file, 'temp_preadv',   temp, domain=G%Domain%mpp_domain, &
+    call read_data(CS%snap_file, 'temp',   temp, domain=G%Domain%mpp_domain, &
       timelevel=CS%ridx_mean,position=CENTER)
-    call read_data(CS%snap_file, 'salt_preadv',   salt, domain=G%Domain%mpp_domain, &
+    call read_data(CS%snap_file, 'salt',   salt, domain=G%Domain%mpp_domain, &
       timelevel=CS%ridx_mean,position=CENTER)
 
     !! Read snapshot fields (end of time interval timestamp)
@@ -257,25 +257,6 @@ contains
           timelevel=CS%ridx_snap,position=center)
     endif
 
-!    if (do_ale) then
-!      CS%h_preale = GV%Angstrom
-!      CS%T_preale = 0.0
-!      CS%S_preale = 0.0
-!      CS%u_preale = 0.0
-!      CS%v_preale = 0.0
-!      call read_data(CS%preale_file, 'h_preale',   CS%h_preale, domain=G%Domain%mpp_domain, &
-!        timelevel=CS%ridx_snap,position=CENTER)
-!      call read_data(CS%preale_file, 'T_preale',   CS%T_preale, domain=G%Domain%mpp_domain, &
-!        timelevel=CS%ridx_mean,position=CENTER)
-!      call read_data(CS%preale_file, 'S_preale',   CS%S_preale, domain=G%Domain%mpp_domain, &
-!        timelevel=CS%ridx_mean,position=CENTER)
-!      call read_data(CS%preale_file, 'u_preale',   CS%u_preale, domain=G%Domain%mpp_domain, &
-!        timelevel=CS%ridx_mean,position=EAST)
-!      call read_data(CS%preale_file, 'v_preale',   CS%v_preale, domain=G%Domain%mpp_domain, &
-!        timelevel=CS%ridx_mean,position=NORTH)
-!
-!    endif
-
     !! Make sure all halos have been updated
     ! Vector fields
     call pass_vector(uhtr, vhtr, G%Domain)
@@ -291,13 +272,6 @@ contains
     if (do_ale) then
       call pass_var(fluxes%netMassOut,G%Domain)
       call pass_var(fluxes%netMassIn,G%Domain)
-!
-!      call pass_vector(CS%u_preale,CS%v_preale,G%Domain)
-!      call pass_var(CS%h_preale, G%Domain)
-!      call pass_var(CS%T_preale, G%Domain)
-!      call pass_var(CS%S_preale, G%Domain)
-!
-!
     endif
 
     ! Update the read indices
@@ -329,10 +303,6 @@ contains
       'Meridional thickness fluxes remaining at end of timestep', 'kg')
 
     ! T-cell fields
-    CS%id_temp_preadv  = register_diag_field('ocean_model', 'temp_preadv', diag%axesTL, Time, &
-      'Temperature prior to advection', 'C')
-    CS%id_salt_preadv  = register_diag_field('ocean_model', 'salt_preadv', diag%axesTL, Time, &
-      'Salinity prior to advection', 'S')
     CS%id_hr  = register_diag_field('ocean_model', 'hdiff', diag%axesTL, Time, &
       'Difference between the stored and calculated layer thickness', 'm')
     CS%id_ear  = register_diag_field('ocean_model', 'ear', diag%axesTL, Time, &
@@ -605,233 +575,5 @@ contains
     enddo ; enddo ; enddo
 
   end subroutine limit_mass_flux_3d
-
-  subroutine limit_mass_flux_ordered_3d(G, GV, uh, vh, ea, eb, h_in, h_end, max_off_cfl, z_first, x_before_y)
-    type(ocean_grid_type),    pointer                           :: G
-    type(verticalGrid_type),  pointer                           :: GV
-    real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: uh
-    real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout)    :: vh
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)    :: ea
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)    :: eb
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(in)       :: h_in
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)       :: h_end
-    real,                                      intent(in)       :: max_off_cfl
-    logical,                                   intent(in)       :: z_first, x_before_y
-
-    ! Local variables
-    integer :: i, j, k, m, is, ie, js, je, nz
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G))                    :: h_budget ! Tracks how much thickness
-                                                                            ! remains for other fluxes
-    integer                                                     :: flux_order = -1
-    ! In this subroutine, fluxes out of the box are scaled down if they deplete
-    ! the layer. Here the positive direction is defined as flux out of the box as opposed to the
-    ! typical, strictly upwind convention. Hence, uh(I-1) is multipled by negative one,
-    ! but uh(I) is not. This routine differs from limit_mass_flux_3d because in this case,
-    ! the ordering of direction matters. While this is more aggressive than the other routine which,
-    ! Scales fluxes if they would deplete the layer (independent of any convergence within an
-    ! iteration), this routine should still maintain a CFL less than 1
-    ! Because horizontal transport must always be together (i.e. cannot do x->z->y),
-    ! four cases are considered)
-    !   1: z -> x -> y
-    !   2: z -> y -> x
-    !   3: x -> y -> z
-    !   4: y -> x -> z
-
-    ! Set index-related variables for fields on T-grid
-    is  = G%isd ; ie  = G%ied ; js  = G%jsd ; je  = G%jed ; nz = GV%ke
-    ! Copy layer thicknesses into a working array for this subroutine
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      h_budget(i,j,k) = h_in(i,j,k)*G%areaT(i,j)
-    enddo ; enddo ; enddo
-
-    ! Set the flux order (corresponding to one of the four cases described previously)
-    if (z_first .and. x_before_y)                 flux_order = 1
-    if (z_first .and. (.not. x_before_y))         flux_order = 2
-    if ((.not. z_first) .and. x_before_y)         flux_order = 3
-    if ((.not. z_first) .and. (.not. x_before_y)) flux_order = 4
-
-    select case (flux_order)
-      case (1) ! z -> x -> y
-        ! Check first to see if either the top or bottom flux would deplete the layer
-        !call flux_limiter_vertical(G, GV, h_budget, ea, eb, max_off_cfl)
-        call flux_limiter_u(G, GV, h_budget, uh, max_off_cfl)
-        call flux_limiter_v(G, GV, h_budget, vh, max_off_cfl)
-      case (2) ! z -> y -> x
-        !call flux_limiter_vertical(G, GV, h_budget, ea, eb, max_off_cfl)
-        call flux_limiter_v(G, GV, h_budget, vh, max_off_cfl)
-        call flux_limiter_u(G, GV, h_budget, uh, max_off_cfl)
-      case (3) ! x -> y -> z
-        call flux_limiter_u(G, GV, h_budget, uh, max_off_cfl)
-        call flux_limiter_v(G, GV, h_budget, vh, max_off_cfl)
-!        call flux_limiter_vertical(G, GV, h_budget, ea, eb, max_off_cfl)
-      case (4) ! y -> x -> z
-        call flux_limiter_v(G, GV, h_budget, vh, max_off_cfl)
-        call flux_limiter_u(G, GV, h_budget, uh, max_off_cfl)
-!        call flux_limiter_vertical(G, GV, h_budget, ea, eb, max_off_cfl)
-      case default
-        call MOM_error(FATAL, "Invalid choice of flux_order")
-    end select
-    
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      h_end(i,j,k) = h_budget(i,j,k)/G%areaT(i,j)
-      if (h_end(i,j,k)<0.0 ) then
-        print *, "i,j,k,h,",i,j,k,h_end(i,j,k)
-      endif
-    enddo ; enddo ; enddo
-
-  end subroutine limit_mass_flux_ordered_3d
-
-  subroutine flux_limiter_vertical(G, GV, h, ea, eb, max_off_cfl)
-    type(ocean_grid_type),    pointer                           :: G
-    type(verticalGrid_type),  pointer                           :: GV
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)    :: ea
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)    :: eb
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)       :: h
-    real                                                        :: max_off_cfl
-    ! Limits how much the a layer can be depleted in the vertical direction
-    real, dimension(SZI_(G),SZK_(G))                            :: ea2d, eb2d
-    real, dimension(SZI_(G),SZK_(G))                            :: h2d, scale
-    real, dimension(SZI_(G),SZK_(G)+1)                          :: flux_interface, top_flux, bottom_flux
-    real                                                        :: total_out_flux, h_budget
-    integer :: i, j, k, m, is, ie, js, je, nz
-
-    ! Set index-related variables for fields on T-grid
-    is  = G%isd ; ie  = G%ied ; js  = G%jsd ; je  = G%jed ; nz = GV%ke
-
-    do j=js,je
-      do k=1,nz ; do i=is,ie
-        ea2d(i,k) = ea(i,j,k)
-        eb2d(i,k) = eb(i,j,k)
-        h2d(i,k) = h(i,j,k)
-      enddo ; enddo;
-
-      ! Calculate the fluxes through top and bottom faces of the cell
-      k=1 ! Top layer
-      do i=is,ie
-        flux_interface(i,k) = 0.0
-      enddo
-
-      do k=2, nz-1 ; do i=is,ie
-        top_flux(i,k) = ea2d(i,k)-eb2d(i,k-1)
-        bottom_flux(i,k) = ea2d(i,k+1)-eb2d(i,k)
-      enddo ; enddo
-      k=nz ! Bottom layer
-      do i=is,ie
-        top_flux(i,k) = ea2d(i,k)-eb2d(i,k-1)
-        bottom_flux(i,k) = -eb2d(i,k)
-      enddo
-      
-      ! Convert fluxes which are in units of thickness to units of volume
-      do k=1,nz ; do i=is,ie
-        top_flux(i,k) = top_flux(i,k)*G%areaT(i,j)
-        bottom_flux(i,k) = bottom_flux(i,k)*G%areaT(i,j)
-      enddo; enddo
-      
-      do k=1,nz ; do i=is,ie
-        
-      enddo; enddo
-      
-    enddo
-  end subroutine flux_limiter_vertical
-
-  subroutine flux_limiter_u(G, GV, h, uh, max_off_cfl)
-    type(ocean_grid_type),    pointer                           :: G
-    type(verticalGrid_type),  pointer                           :: GV
-    real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: uh
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)    :: h
-    real                                                        :: max_off_cfl
-    ! Limits how much the a layer can be depleted in the vertical direction
-    real, dimension(SZIB_(G),SZK_(G))                           :: uh2d
-    real                                                        :: hup, hlos, min_h, h_remain
-    integer :: i, j, k, m, is, ie, js, je, nz
-
-    min_h= 0.1*GV%Angstrom
-    ! Set index-related variables for fields on T-grid
-    is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
-
-    do j=js-1,je
-      do k=1,nz ; do i=is-2,ie
-        uh2d(I,k) = uh(I,j,k)        
-      enddo ; enddo;
-      
-      do k=1,nz ; do i=is-1,ie
-        if(uh2d(I,k)<0.0) then
-          hup = h(i+1,j,k) - min_h*G%areaT(i+1,j)
-          hlos = max(0.0, uh2d(I+1,k))
-          if (( ((hup-hlos)+uh2d(I,k))<0.0) .and. &
-              ((0.5*hup + uh2d(I,k))<0.0)) then
-                uh2d(I,k) = min(-0.5*hup,-hup+hlos,0.0)
-          endif
-        else
-          hup = h(i,j,k) - G%areaT(i,j)*min_h
-          hlos = max(0.0,-uh2d(I-1,k))
-          if ((((hup-hlos)-uh2d(I,k))<0.0) .and. &
-              ((0.5*hup-uh2d(I,k))<0.0))  then
-                uh2d(I,k) = max(0.5*hup,hup-hlos,0.0)
-          endif
-        endif  
-      enddo ; enddo
-
-      do k=1,nz
-        do i=is-1,ie 
-          uh(I,j,k) = uh2d(I,k)
-        enddo
-        do i=is,ie 
-          h(i,j,k) = h(i,j,k) - (uh2d(I,k) - uh2d(I-1,k))
-        enddo
-      enddo
-      
-    enddo  
-
-  end subroutine flux_limiter_u
-
-  subroutine flux_limiter_v(G, GV, h, vh, max_off_cfl)
-    type(ocean_grid_type),    pointer                           :: G
-    type(verticalGrid_type),  pointer                           :: GV
-    real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout)    :: vh
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)    :: h
-    real,                                      intent(in)       :: max_off_cfl
-    ! Limits how much the a layer can be depleted in the vertical direction
-    real, dimension(SZJB_(G),SZK_(G))                           :: vh2d
-    real, dimension(SZJ_(G),SZK_(G))                            :: h2d
-    real                                                        :: hup, hlos, min_h, h_remain
-    integer :: i, j, k, m, is, ie, js, je, nz
-
-    ! Set index-related variables for fields on T-grid
-    is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
-    min_h= 0.1*GV%Angstrom
-    do i=is-1,ie
-      do k=1,nz ; do j=js-2,je
-        vh2d(J,k) = vh(i,J,k)        
-      enddo ; enddo;
-      do k=1,nz ; do j=js-1,je
-        if(vh2d(J,k)<0.0) then
-          hup = h(i,j+1,k)-G%areaT(i,j+1)*min_h
-          hlos = max(0.0,vh2d(J+1,k))
-          if ((((hup-hlos)+vh2d(J,k))<0.0) .and. &
-              ((0.5*hup+vh2d(J,k))<0.0)) then
-              vh2d(J,k) = min(-0.5*hup,-hup+hlos,0.0)
-          endif
-        else
-          hup = h(i,j,k) - G%areaT(i,j)*min_h
-          hlos = max(0.0,-vh2d(J-1,k))
-          if ((((hup-hlos)-vh2d(J,k))<0.0) .and. &
-              ((0.5*hup - vh2d(J,k))<0.0)) then
-              vh2d(J,k) = max(0.5*hup,hup-hlos,0.0)
-          endif
-        endif
-      enddo ; enddo
-      
-      do k=1,nz
-        do j=js-1,je 
-          vh(i,J,k) = vh2d(J,k)
-        enddo
-        do j=js,je 
-          h(i,j,k) = h(i,j,k) - (vh2d(J,k) - vh2d(J-1,k))
-        enddo
-      enddo
-    enddo
-  end subroutine flux_limiter_v
-
 
 end module MOM_offline_transport
