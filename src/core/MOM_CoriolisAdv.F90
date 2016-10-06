@@ -1,66 +1,9 @@
+!> Accelerations due to the Coriolis force and momentum advection
 module MOM_CoriolisAdv
-!***********************************************************************
-!*                   GNU General Public License                        *
-!* This file is a part of MOM.                                         *
-!*                                                                     *
-!* MOM is free software; you can redistribute it and/or modify it and  *
-!* are expected to follow the terms of the GNU General Public License  *
-!* as published by the Free Software Foundation; either version 2 of   *
-!* the License, or (at your option) any later version.                 *
-!*                                                                     *
-!* MOM is distributed in the hope that it will be useful, but WITHOUT  *
-!* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY  *
-!* or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public    *
-!* License for more details.                                           *
-!*                                                                     *
-!* For the full text of the GNU General Public License,                *
-!* write to: Free Software Foundation, Inc.,                           *
-!*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
-!* or see:   http://www.gnu.org/licenses/gpl.html                      *
-!***********************************************************************
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, April 1994 - June 2002                         *
-!*                                                                     *
-!*    This file contains the subroutine that calculates the time       *
-!*  derivatives of the velocities due to Coriolis acceleration and     *
-!*  momentum advection.  This subroutine uses either a vorticity       *
-!*  advection scheme from Arakawa and Hsu, Mon. Wea. Rev. 1990, or     *
-!*  Sadourny's (JAS 1975) energy conserving scheme.  Both have been    *
-!*  modified to use general orthogonal coordinates as described in     *
-!*  Arakawa and Lamb, Mon. Wea. Rev. 1981.  Both schemes are second    *
-!*  order accurate, and allow for vanishingly small layer thicknesses. *
-!*  The Arakawa and Hsu scheme globally conserves both total energy    *
-!*  and potential enstrophy in the limit of nondivergent flow.         *
-!*  Sadourny's energy conserving scheme conserves energy if the flow   *
-!*  is nondivergent or centered difference thickness fluxes are used.  *
-!*                                                                     *
-!*    Two sets of boundary conditions have been coded in the           *
-!*  definition of relative vorticity.  These are written as:           *
-!*  NOSLIP defined (in spherical coordinates):                         *
-!*    relvort = dv/dx (east & west), with v = 0.                       *
-!*    relvort = -sec(Q) * d(u cos(Q))/dy (north & south), with u = 0.  *
-!*  NOSLIP not defined (free slip):                                    *
-!*    relvort = 0 (all boundaries)                                     *
-!*  with Q temporarily defined as latitude.  The free slip boundary    *
-!*  condition is much more natural on a C-grid.                        *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, CoriolisBu                            *
-!*    j+1  > o > o >   At ^:  v, CAv, vh                               *
-!*    j    x ^ x ^ x   At >:  u, CAu, uh, a, b, c, d                   *
-!*    j    > o > o >   At o:  h, KE                                    *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
+! This file is part of MOM6. See LICENSE.md for the license.
+
+!> \author Robert Hallberg, April 1994 - June 2002
 
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
@@ -78,60 +21,54 @@ public CorAdCalc, CoriolisAdv_init, CoriolisAdv_end
 
 #include <MOM_memory.h>
 
+!> Control structure for mom_coriolisadv
 type, public :: CoriolisAdv_CS ; private
-  integer :: Coriolis_Scheme ! CORIOLIS_SCHEME selects the discretization for
-                             ! the Coriolis terms. Valid values are:
-                             !  SADOURNY75_ENERGY - Sadourny, 1975
-                             !  ARAKAWA_HSU90     - Arakawa & Hsu, 1990
-                             !                      Energy & non-div. Enstrophy
-                             !  ROBUST_ENSTRO     - Pseudo-enstrophy scheme
-                             !  SADOURNY75_ENSTRO - Sadourny, JAS 1975
-                             !                      Enstrophy
-                             !  ARAKAWA_LAMB81    - Arakawa & Lamb, MWR 1981
-                             !                      Energy & Enstrophy
-                             !  ARAKAWA_LAMB_BLEND - A blend of Arakawa & Lamb
-                             !                      with Arakawa & Hsu and
-                             !                      Sadourny energy.
-                             ! The default, SADOURNY75_ENERGY, is the safest
-                             ! choice when the deformation radius is poorly
-                             ! resolved.
-  integer :: KE_Scheme       ! KE_SCHEME selects the discretization for
-                             ! the kinetic energy. Valid values are:
-                             !  KE_ARAKAWA, KE_SIMPLE_GUDONOV, KE_GUDONOV
-  integer :: PV_Adv_Scheme   ! PV_ADV_SCHEME selects the discretization for
-                             ! PV advection. Valid values are:
-                             !  PV_ADV_CENTERED - centered (aka Sadourny, 75)
-                             !  PV_ADV_UPWIND1  - upwind, first order
-  real    :: F_eff_max_blend ! The factor by which the maximum effective Coriolis
-                             ! acceleration from any point can be increased when
-                             ! blending different discretizations with the
-                             ! ARAKAWA_LAMB_BLEND Coriolis scheme.  This must be
-                             ! greater than 2.0, and is 4.0 by default.
-  real    :: wt_lin_blend    ! A weighting value beyond which the blending between
-                             ! Sadourny and Arakawa & Hsu goes linearly to 0.
-                             ! This must be between 1 and 1e-15, often 1/8.
-  logical :: no_slip         ! If true, no slip boundary conditions are used.
-                             ! Otherwise free slip boundary conditions are assumed.
-                             ! The implementation of the free slip boundary
-                             ! conditions on a C-grid is much cleaner than the
-                             ! no slip boundary conditions. The use of free slip
-                             ! b.c.s is strongly encouraged. The no slip b.c.s
-                             ! are not implemented with the biharmonic viscosity.
-  logical :: bound_Coriolis  ! If true, the Coriolis terms at u points are
-                             ! bounded by the four estimates of (f+rv)v from the
-                             ! four neighboring v points, and similarly at v
-                             ! points.  This option would have no effect on the
-                             ! SADOURNY75_ENERGY scheme if it were possible to
-                             ! use centered difference thickness fluxes.
-  logical :: Coriolis_En_Dis ! If CORIOLIS_EN_DIS is defined, two estimates of
-                             ! the thickness fluxes are used to estimate the
-                             ! Coriolis term, and the one that dissipates energy
-                             ! relative to the other one is used.  This is only
-                             ! available at present if Coriolis scheme is
-                             ! SADOURNY75_ENERGY.
-  type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+  integer :: Coriolis_Scheme !< Selects the discretization for the Coriolis terms.
+                             !! Valid values are:
+                             !! - SADOURNY75_ENERGY - Sadourny, 1975
+                             !! - ARAKAWA_HSU90     - Arakawa & Hsu, 1990, Energy & non-div. Enstrophy
+                             !! - ROBUST_ENSTRO     - Pseudo-enstrophy scheme
+                             !! - SADOURNY75_ENSTRO - Sadourny, JAS 1975, Enstrophy
+                             !! - ARAKAWA_LAMB81    - Arakawa & Lamb, MWR 1981, Energy & Enstrophy
+                             !! - ARAKAWA_LAMB_BLEND - A blend of Arakawa & Lamb with Arakawa & Hsu and Sadourny energy.
+                             !! The default, SADOURNY75_ENERGY, is the safest choice then the
+                             !! deformation radius is poorly resolved.
+  integer :: KE_Scheme       !< KE_SCHEME selects the discretization for
+                             !! the kinetic energy. Valid values are:
+                             !!  KE_ARAKAWA, KE_SIMPLE_GUDONOV, KE_GUDONOV
+  integer :: PV_Adv_Scheme   !< PV_ADV_SCHEME selects the discretization for PV advection
+                             !! Valid values are:
+                             !! - PV_ADV_CENTERED - centered (aka Sadourny, 75)
+                             !! - PV_ADV_UPWIND1  - upwind, first order
+  real    :: F_eff_max_blend !< The factor by which the maximum effective Coriolis
+                             !! acceleration from any point can be increased when
+                             !! blending different discretizations with the
+                             !! ARAKAWA_LAMB_BLEND Coriolis scheme.  This must be
+                             !! greater than 2.0, and is 4.0 by default.
+  real    :: wt_lin_blend    !< A weighting value beyond which the blending between
+                             !! Sadourny and Arakawa & Hsu goes linearly to 0.
+                             !! This must be between 1 and 1e-15, often 1/8.
+  logical :: no_slip         !< If true, no slip boundary conditions are used.
+                             !! Otherwise free slip boundary conditions are assumed.
+                             !! The implementation of the free slip boundary
+                             !! conditions on a C-grid is much cleaner than the
+                             !! no slip boundary conditions. The use of free slip
+                             !! b.c.s is strongly encouraged. The no slip b.c.s
+                             !! are not implemented with the biharmonic viscosity.
+  logical :: bound_Coriolis  !< If true, the Coriolis terms at u points are
+                             !! bounded by the four estimates of (f+rv)v from the
+                             !! four neighboring v points, and similarly at v
+                             !! points.  This option would have no effect on the
+                             !! SADOURNY75_ENERGY scheme if it were possible to
+                             !! use centered difference thickness fluxes.
+  logical :: Coriolis_En_Dis !< If CORIOLIS_EN_DIS is defined, two estimates of
+                             !! the thickness fluxes are used to estimate the
+                             !! Coriolis term, and the one that dissipates energy
+                             !! relative to the other one is used.  This is only
+                             !! available at present if Coriolis scheme is
+                             !! SADOURNY75_ENERGY.
+  type(time_type), pointer :: Time !< A pointer to the ocean model's clock.
+  type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the timing of diagnostic output.
   integer :: id_rv = -1, id_PV = -1, id_gKEu = -1, id_gKEv = -1
   integer :: id_rvxu = -1, id_rvxv = -1
 end type CoriolisAdv_CS
@@ -164,46 +101,23 @@ character*(20), parameter :: PV_ADV_UPWIND1_STRING = "PV_ADV_UPWIND1"
 
 contains
 
+!> Calculates the Coriolis and momentum advection contributions to the acceleration.
 subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
-  type(ocean_grid_type),                     intent(in)    :: G
-  type(verticalGrid_type),                   intent(in)    :: GV
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uh
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vh
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: CAu
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: CAv
-  type(ocean_OBC_type),                      pointer       :: OBC
-  type(accel_diag_ptrs),                     intent(inout) :: AD
-  type(CoriolisAdv_CS),                      pointer       :: CS
-!    This subroutine calculates the Coriolis and momentum advection
-!  contributions to the acceleration.
-!
-! Arguments: u - Zonal velocity, in m s-1.
-!  (in)      v - Meridional velocity, in m s-1.
-!  (in)      h - Layer thickness, in m or kg m-2.
-!  (in)      uh - Volume flux through zonal faces = u*h*dy, m3 s-1 or kg s-1.
-!  (in)      vh - Volume flux through meridional faces = v*h*dx, in units of
-!                  m3 s-1 or kg s-1.
-!  (out)     CAu - Zonal acceleration due to Coriolis and momentum
-!                  advection terms, in m s-2.
-!  (out)     CAv - Meridional acceleration due to Coriolis and
-!                  momentum advection terms, in m s-2.
-!  (in)      AD - A structure pointing to the various accelerations in
-!                 the momentum equations.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 CoriolisAdv_init.
-!
-!    To work, the following fields must be set outside of the usual
-!  is to ie range before this subroutine is called:
-!   v[is-1,ie+1,ie+2], u[is-1,ie+1], vh[ie+1], uh[is-1], and
-!   h[is-1,ie+1,ie+2].
-!  In the y-direction, the following fields must be set:
-!   v[js-1,je+1], u[js-1,je+1,je+2], vh[js-1], uh[je+1], and
-!   h[js-1,je+1,je+2].
+  type(ocean_grid_type),                     intent(in)    :: G !< Ocen grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV !< Vertical grid structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u !< Zonal velocity (m/s)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v !< Meridional velocity (m/s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h !< Layer thickness (m or kg/m2)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uh !< Zonal transport u*h*dy (m3/s or kg/s)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vh !< Meridional transport v*h*dx (m3/s or kg/s)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: CAu !< Zonal acceleration due to Coriolis
+                                                                  !! and momentum advection, in m/s2.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: CAv !< Meridional acceleration due to Coriolis
+                                                                  !! and momentum advection, in m/s2.
+  type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary control structure
+  type(accel_diag_ptrs),                     intent(inout) :: AD !< Storage for acceleration diagnostics
+  type(CoriolisAdv_CS),                      pointer       :: CS !< Control structure for MOM_CoriolisAdv
+  ! Local variables
 
   real, dimension(SZIB_(G),SZJB_(G)) :: &
     q, &        ! Layer potential vorticity, in m-1 s-1.
@@ -283,6 +197,14 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
   real :: QUHeff,QVHeff ! More temporary variables, in m3 s-2 or kg s-2.
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
 
+! To work, the following fields must be set outside of the usual
+! is to ie range before this subroutine is called:
+!  v[is-1,ie+1,ie+2], u[is-1,ie+1], vh[ie+1], uh[is-1], and
+!  h[is-1,ie+1,ie+2].
+! In the y-direction, the following fields must be set:
+!  v[js-1,je+1], u[js-1,je+1,je+2], vh[js-1], uh[je+1], and
+!  h[js-1,je+1,je+2].
+
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "MOM_CoriolisAdv: Module must be initialized before it is used.")
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -311,10 +233,10 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
 
 !$OMP do
   do k=1,nz
-!    Here the second order accurate layer potential vorticities, q,
-! are calculated.  hq is  second order accurate in space.  Relative
-! vorticity is second order accurate everywhere with free slip b.c.s,
-! but only first order accurate at boundaries with no slip b.c.s.
+    ! Here the second order accurate layer potential vorticities, q,
+    ! are calculated.  hq is  second order accurate in space.  Relative
+    ! vorticity is second order accurate everywhere with free slip b.c.s,
+    ! but only first order accurate at boundaries with no slip b.c.s.
     do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
       if (CS%no_slip ) then
         relative_vorticity = (2.0-G%mask2dBu(I,J)) * &
@@ -361,9 +283,9 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
         q2(I,J) = relative_vorticity * Ih
     enddo ; enddo
 
-!    a, b, c, and d are combinations of neighboring potential
-!  vorticities which form the Arakawa and Hsu vorticity advection
-!  scheme.  All are defined at u grid points.
+    !   a, b, c, and d are combinations of neighboring potential
+    ! vorticities which form the Arakawa and Hsu vorticity advection
+    ! scheme.  All are defined at u grid points.
 
     if (CS%Coriolis_Scheme == ARAKAWA_HSU90) then
       do j=Jsq,Jeq+1
@@ -480,12 +402,12 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
       enddo ; enddo
     endif
 
-! Calculate KE and the gradient of KE
+    ! Calculate KE and the gradient of KE
     call gradKE(u, v, h, uh, vh, KE, KEx, KEy, k, OBC, G, CS)
 
-!    Calculate the tendencies of zonal velocity due to the Coriolis
-!  force and momentum advection.  On a Cartesian grid, this is
-!      CAu =  q * vh - d(KE)/dx.
+    ! Calculate the tendencies of zonal velocity due to the Coriolis
+    ! force and momentum advection.  On a Cartesian grid, this is
+    !     CAu =  q * vh - d(KE)/dx.
     if (CS%Coriolis_Scheme == SADOURNY75_ENERGY) then
       if (CS%Coriolis_En_Dis) then
         ! Energy dissipating biased scheme, Hallberg 200x
@@ -592,9 +514,9 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
     enddo ; enddo
 
 
-!    Calculate the tendencies of meridional velocity due to the Coriolis
-!  force and momentum advection.  On a Cartesian grid, this is
-!      CAv = - q * uh - d(KE)/dy.
+    ! Calculate the tendencies of meridional velocity due to the Coriolis
+    ! force and momentum advection.  On a Cartesian grid, this is
+    !     CAv = - q * uh - d(KE)/dy.
     if (CS%Coriolis_Scheme == SADOURNY75_ENERGY) then
       if (CS%Coriolis_En_Dis) then
         ! Energy dissipating biased scheme, Hallberg 200x
@@ -698,7 +620,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
     enddo ; enddo
 
     if (ASSOCIATED(AD%rv_x_u) .or. ASSOCIATED(AD%rv_x_v)) then
-! Calculate the Coriolis-like acceleration due to relative vorticity.
+      ! Calculate the Coriolis-like acceleration due to relative vorticity.
       if (CS%Coriolis_Scheme == SADOURNY75_ENERGY) then
         if (ASSOCIATED(AD%rv_x_u)) then
           do J=Jsq,Jeq ; do i=is,ie
@@ -741,8 +663,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
   enddo ! k-loop.
 !$OMP end parallel
 
-!   Here the various Coriolis-related derived quantities are offered
-! for averaging.
+  ! Here the various Coriolis-related derived quantities are offered for averaging.
   if (query_averaging_enabled(CS%diag)) then
     if (CS%id_rv > 0) call post_data(CS%id_rv, RV, CS%diag)
     if (CS%id_PV > 0) call post_data(CS%id_PV, PV, CS%diag)
@@ -754,38 +675,24 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
 
 end subroutine CorAdCalc
 
-! =========================================================================================
 
+!> Calculates the acceleration due to the gradient of kinetic energy.
 subroutine gradKE(u, v, h, uh, vh, KE, KEx, KEy, k, OBC, G, CS)
-  type(ocean_grid_type),                      intent(in)  :: G
-  real, dimension(SZIB_(G),SZJ_(G) ,SZK_(G)), intent(in)  :: u
-  real, dimension(SZI_(G) ,SZJB_(G),SZK_(G)), intent(in)  :: v
-  real, dimension(SZI_(G) ,SZJ_(G) ,SZK_(G)), intent(in)  :: h
-  real, dimension(SZIB_(G),SZJ_(G) ,SZK_(G)), intent(in)  :: uh
-  real, dimension(SZI_(G),SZJB_(G) ,SZK_(G)), intent(in)  :: vh
-  real, dimension(SZI_(G) ,SZJ_(G) ),         intent(out) :: KE
-  real, dimension(SZIB_(G),SZJ_(G) ),         intent(out) :: KEx
-  real, dimension(SZI_(G) ,SZJB_(G)),         intent(out) :: KEy
-  integer,                                    intent(in)  :: k
-  type(ocean_OBC_type),                       pointer     :: OBC
-  type(CoriolisAdv_CS),                       pointer     :: CS
-!    This subroutine calculates the acceleration due to the gradient of kinetic energy.
-!
-! Arguments: u   - Zonal velocity, in m s-1.
-!  (in)      v   - Meridional velocity, in m s-1.
-!  (in)      h   - Layer thickness, in m.
-!  (in)      uh  - Volume flux through zonal faces = u*h*dy, m3 s-1.
-!  (in)      vh  - Volume flux through meridional faces = v*h*dx, in m3 s-1.
-!  (out)     KE  - Kinetic energy used by s/r, in m2 s-2.
-!  (out)     KEx - Zonal acceleration due to Coriolis and momentum
-!                  advection terms, in m s-2.
-!  (out)     KEy - Meridional acceleration due to Coriolis and
-!                  momentum advection terms, in m s-2.
-!  (in)      k   - layer number
-!  (in)      G   - The ocean's grid structure.
-!  (in)      CS  - The control structure returned by a previous call to
-!                 CoriolisAdv_init.
-
+  type(ocean_grid_type),                      intent(in)  :: G !< Ocen grid structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)),  intent(in)  :: u !< Zonal velocity (m/s)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)),  intent(in)  :: v !< Meridional velocity (m/s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h !< Layer thickness (m or kg/m2)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)),  intent(in)  :: uh !< Zonal transport u*h*dy (m3/s or kg/s)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)),  intent(in)  :: vh !< Meridional transport v*h*dx (m3/s or kg/s)
+  real, dimension(SZI_(G) ,SZJ_(G) ),         intent(out) :: KE !< Kinetic energy (m2/s2)
+  real, dimension(SZIB_(G),SZJ_(G) ),         intent(out) :: KEx !< Zonal acceleration due to kinetic
+                                                                 !! energy gradient (m/s2)
+  real, dimension(SZI_(G) ,SZJB_(G)),         intent(out) :: KEy !< Meridional acceleration due to kinetic
+                                                                 !! energy gradient (m/s2)
+  integer,                                    intent(in)  :: k !< Layer number to calculate for
+  type(ocean_OBC_type),                       pointer     :: OBC !< Open boundary control structure
+  type(CoriolisAdv_CS),                       pointer     :: CS !< Control structure for MOM_CoriolisAdv
+  ! Local variables
   real :: um, up, vm, vp         ! Temporary variables with units of m s-1.
   real :: um2, up2, vm2, vp2     ! Temporary variables with units of m2 s-2.
   real :: um2a, up2a, vm2a, vp2a ! Temporary variables with units of m4 s-2.
@@ -795,11 +702,11 @@ subroutine gradKE(u, v, h, uh, vh, KE, KEx, KEy, k, OBC, G, CS)
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
 
-! Calculate KE (Kinetic energy for use in the -grad(KE) acceleration term).
+  ! Calculate KE (Kinetic energy for use in the -grad(KE) acceleration term).
   if (CS%KE_Scheme.eq.KE_ARAKAWA) then
-!   The following calculation of Kinetic energy includes the metric terms
-! identified in Arakawa & Lamb 1982 as important for KE conservation.  It
-! also includes the possibility of partially-blocked tracer cell faces.
+    ! The following calculation of Kinetic energy includes the metric terms
+    ! identified in Arakawa & Lamb 1982 as important for KE conservation.  It
+    ! also includes the possibility of partially-blocked tracer cell faces.
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       KE(i,j) = ( ( G%areaCu( I ,j)*(u( I ,j,k)*u( I ,j,k))   &
                    +G%areaCu(I-1,j)*(u(I-1,j,k)*u(I-1,j,k)) ) &
@@ -808,8 +715,8 @@ subroutine gradKE(u, v, h, uh, vh, KE, KEx, KEy, k, OBC, G, CS)
                 )*0.25*G%IareaT(i,j)
     enddo ; enddo
   elseif (CS%KE_Scheme.eq.KE_SIMPLE_GUDONOV) then
-! The following discretization of KE is based on the one-dimensinal Gudonov
-! scheme which does not take into account any geometric factors
+    ! The following discretization of KE is based on the one-dimensinal Gudonov
+    ! scheme which does not take into account any geometric factors
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       up = 0.5*( u(I-1,j,k) + ABS( u(I-1,j,k) ) ) ; up2 = up*up
       um = 0.5*( u( I ,j,k) - ABS( u( I ,j,k) ) ) ; um2 = um*um
@@ -818,8 +725,8 @@ subroutine gradKE(u, v, h, uh, vh, KE, KEx, KEy, k, OBC, G, CS)
       KE(i,j) = ( max(up2,um2) + max(vp2,vm2) ) *0.5
     enddo ; enddo
   elseif (CS%KE_Scheme.eq.KE_GUDONOV) then
-! The following discretization of KE is based on the one-dimensinal Gudonov
-! scheme but has been adapted to take horizontal grid factors into account
+    ! The following discretization of KE is based on the one-dimensinal Gudonov
+    ! scheme but has been adapted to take horizontal grid factors into account
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       up = 0.5*( u(I-1,j,k) + ABS( u(I-1,j,k) ) ) ; up2a = up*up*G%areaCu(I-1,j)
       um = 0.5*( u( I ,j,k) - ABS( u( I ,j,k) ) ) ; um2a = um*um*G%areaCu( I ,j)
@@ -829,12 +736,12 @@ subroutine gradKE(u, v, h, uh, vh, KE, KEx, KEy, k, OBC, G, CS)
     enddo ; enddo
   endif
 
-! Term - d(KE)/dx.
+  ! Term - d(KE)/dx.
   do j=js,je ; do I=Isq,Ieq
     KEx(I,j) = (KE(i+1,j) - KE(i,j)) * G%IdxCu(i,j)
   enddo ; enddo
 
-! Term - d(KE)/dy.
+  ! Term - d(KE)/dy.
   do J=Jsq,Jeq ; do i=is,ie
     KEy(i,J) = (KE(i,j+1) - KE(i,j)) * G%IdyCv(i,J)
   enddo ; enddo
@@ -850,31 +757,22 @@ subroutine gradKE(u, v, h, uh, vh, KE, KEx, KEy, k, OBC, G, CS)
 
 end subroutine gradKE
 
-! =========================================================================================
-
+!> Initializes the control structure for coriolisadv_cs
 subroutine CoriolisAdv_init(Time, G, param_file, diag, AD, CS)
-  type(time_type), target, intent(in)    :: Time
-  type(ocean_grid_type),   intent(in)    :: G
-  type(param_file_type),   intent(in)    :: param_file
-  type(diag_ctrl), target, intent(inout) :: diag
-  type(accel_diag_ptrs),   target, intent(inout) :: AD
-  type(CoriolisAdv_CS),    pointer       :: CS
-! Arguments: Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (inout)   AD - A structure pointing to the various accelerations in
-!                 the momentum equations.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
-
+  type(time_type), target, intent(in)    :: Time !< Current model time
+  type(ocean_grid_type),   intent(in)    :: G !< Ocean grid structure
+  type(param_file_type),   intent(in)    :: param_file !< Runtime parameter handles
+  type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
+  type(accel_diag_ptrs),   target, intent(inout) :: AD !< Strorage for acceleration diagnostics
+  type(CoriolisAdv_CS),    pointer       :: CS !< Control structure fro MOM_CoriolisAdv
+  ! Local variables
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_CoriolisAdv" ! This module's name.
   character(len=20)  :: tmpstr
   character(len=400) :: mesg
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
+
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
@@ -1029,9 +927,51 @@ subroutine CoriolisAdv_init(Time, G, param_file, diag, AD, CS)
 
 end subroutine CoriolisAdv_init
 
+!> Destructor for coriolisadv_cs
 subroutine CoriolisAdv_end(CS)
-  type(CoriolisAdv_CS), pointer :: CS
+  type(CoriolisAdv_CS), pointer :: CS !< Control structure fro MOM_CoriolisAdv
   deallocate(CS)
 end subroutine CoriolisAdv_end
+
+!> \namespace mom_coriolisadv
+!!
+!! This file contains the subroutine that calculates the time
+!! derivatives of the velocities due to Coriolis acceleration and
+!! momentum advection.  This subroutine uses either a vorticity
+!! advection scheme from Arakawa and Hsu, Mon. Wea. Rev. 1990, or
+!! Sadourny's (JAS 1975) energy conserving scheme.  Both have been
+!! modified to use general orthogonal coordinates as described in
+!! Arakawa and Lamb, Mon. Wea. Rev. 1981.  Both schemes are second
+!! order accurate, and allow for vanishingly small layer thicknesses.
+!! The Arakawa and Hsu scheme globally conserves both total energy
+!! and potential enstrophy in the limit of nondivergent flow.
+!! Sadourny's energy conserving scheme conserves energy if the flow
+!! is nondivergent or centered difference thickness fluxes are used.
+!!
+!! Two sets of boundary conditions have been coded in the
+!! definition of relative vorticity.  These are written as:
+!! NOSLIP defined (in spherical coordinates):
+!!   relvort = dv/dx (east & west), with v = 0.
+!!   relvort = -sec(Q) * d(u cos(Q))/dy (north & south), with u = 0.
+!!
+!! NOSLIP not defined (free slip):
+!!   relvort = 0 (all boundaries)
+!!
+!! with Q temporarily defined as latitude.  The free slip boundary
+!! condition is much more natural on a C-grid.
+!!
+!! A small fragment of the grid is shown below:
+!! \verbatim
+!!
+!!    j+1  x ^ x ^ x   At x:  q, CoriolisBu
+!!    j+1  > o > o >   At ^:  v, CAv, vh
+!!    j    x ^ x ^ x   At >:  u, CAu, uh, a, b, c, d
+!!    j    > o > o >   At o:  h, KE
+!!    j-1  x ^ x ^ x
+!!        i-1  i  i+1  At x & ^:
+!!           i  i+1    At > & o:
+!! \endverbatim
+!!
+!! The boundaries always run through q grid points (x).
 
 end module MOM_CoriolisAdv

@@ -628,7 +628,7 @@ subroutine extractFluxes2d(G, GV, fluxes, optics, nsw, dt,                      
                                                                                    !! Units of net_heat are (K * H).
   real, dimension(SZI_(G),SZJ_(G)),        intent(out) :: net_salt                 !< surface salt flux into the ocean accumulated
                                                                                    !! over a time step (ppt * H)
-  real, dimension(:,:,:),                intent(out)   :: pen_SW_bnd               !! penetrating shortwave flux, split into bands.
+  real, dimension(:,:,:),                intent(out)   :: pen_SW_bnd               !< penetrating shortwave flux, split into bands.
                                                                                    !! Units (deg K * H) & array size nsw x SZI_(G),
                                                                                    !! where nsw=number of SW bands in pen_SW_bnd.
                                                                                    !! This heat flux is not in net_heat.
@@ -863,14 +863,13 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, haloshift)
 end subroutine MOM_forcing_chksum
 
 
-!> Write out values of the fluxes arrays at the i,j location
+!> Write out values of the fluxes arrays at the i,j location. This is a debugging tool.
 subroutine forcing_SinglePointPrint(fluxes, G, i, j, mesg)
-
-  type(forcing),         intent(in) :: fluxes   !< fluxes type
-  type(ocean_grid_type), intent(in) :: G        !< grid type
-  character(len=*),      intent(in) :: mesg     !< message
-  integer,               intent(in) :: i, j     !< horizontal indices
-
+  type(forcing),         intent(in) :: fluxes !< Fluxes type
+  type(ocean_grid_type), intent(in) :: G      !< Grid type
+  character(len=*),      intent(in) :: mesg   !< Message
+  integer,               intent(in) :: i      !< i-index
+  integer,               intent(in) :: j      !< j-index
 
   write(0,'(2a)') 'MOM_forcing_type, forcing_SinglePointPrint: Called from ',mesg
   write(0,'(a,2es15.3)') 'MOM_forcing_type, forcing_SinglePointPrint: lon,lat = ',G%geoLonT(i,j),G%geoLatT(i,j)
@@ -909,9 +908,10 @@ subroutine forcing_SinglePointPrint(fluxes, G, i, j, mesg)
   call locMsg(fluxes%heat_content_cond,'heat_content_massout')
   contains
 
+  !> Format and write a message depending on associated state of array
   subroutine locMsg(array,aname)
-  real, dimension(:,:), pointer :: array
-  character(len=*)              :: aname
+  real, dimension(:,:), pointer :: array !< Array to write element from
+  character(len=*)              :: aname !< Name of array
 
   if (associated(array)) then
     write(0,'(3a,es15.3)') 'MOM_forcing_type, forcing_SinglePointPrint: ',trim(aname),' = ',array(i,j)
@@ -2142,7 +2142,7 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
       call post_data(handles%id_netFWGlobalScl, fluxes%netFWGlobalScl, diag)
 
 
-    ! remamining boundary terms ==================================================
+    ! remaining boundary terms ==================================================
 
     if ((handles%id_psurf > 0) .and. ASSOCIATED(fluxes%p_surf))                      &
       call post_data(handles%id_psurf, fluxes%p_surf, diag)
@@ -2224,9 +2224,13 @@ subroutine allocate_forcing_type(G, fluxes, stress, ustar, water, heat, shelf, p
 
   contains
 
+  !> Allocates and zeroes-out array.
   subroutine myAlloc(array, is, ie, js, je, flag)
-    real, dimension(:,:), pointer :: array
-    integer,           intent(in) :: is, ie, js, je !< Bounds
+    real, dimension(:,:), pointer :: array !< Array to be allocated
+    integer,           intent(in) :: is !< Start i-index
+    integer,           intent(in) :: ie !< End i-index
+    integer,           intent(in) :: js !< Start j-index
+    integer,           intent(in) :: je !< End j-index
     logical, optional, intent(in) :: flag !< Flag to indicate to allocate
 
     if (present(flag)) then
