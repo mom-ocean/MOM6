@@ -813,16 +813,16 @@ subroutine refract(En, cn, freq, dt, G, NAngle, use_PPMang)
   ! (in)    dt - time step, in s
   ! (in)    use_PPMang - if true, use PPM for advection rather than upwind
 
-  integer, parameter :: stensil = 2
-  real, dimension(SZI_(G),1-stensil:NAngle+stensil) :: &
+  integer, parameter :: stencil = 2
+  real, dimension(SZI_(G),1-stencil:NAngle+stencil) :: &
     En2d
-  real, dimension(1-stensil:NAngle+stensil) :: &
+  real, dimension(1-stencil:NAngle+stencil) :: &
     cos_angle, sin_angle
   real, dimension(SZI_(G)) :: &
     Dk_Dt_Kmag, Dl_Dt_Kmag
   real, dimension(SZI_(G),0:nAngle) :: &
     Flux_E
-  real, dimension(SZI_(G),SZJ_(G),1-stensil:NAngle+stensil) :: &
+  real, dimension(SZI_(G),SZJ_(G),1-stencil:NAngle+stencil) :: &
     CFL_ang
   real :: f2              ! The squared Coriolis parameter, in s-2.
   real :: favg            ! The average Coriolis parameter at a point, in s-1.
@@ -837,7 +837,7 @@ subroutine refract(En, cn, freq, dt, G, NAngle, use_PPMang)
   integer :: i, j, a
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; na = size(En,3)
-  asd = 1-stensil ; aed = NAngle+stensil
+  asd = 1-stencil ; aed = NAngle+stencil
 
   Ifreq = 1.0 / freq
 
@@ -858,7 +858,7 @@ subroutine refract(En, cn, freq, dt, G, NAngle, use_PPMang)
     enddo ; enddo
     do a=asd,0 ; do i=is,ie
       En2d(i,a) = En2d(i,a+NAngle)
-      En2d(i,NAngle+stensil+a) = En2d(i,stensil+a)
+      En2d(i,NAngle+stencil+a) = En2d(i,stencil+a)
     enddo ; enddo
 
   ! Do the refraction.
@@ -921,7 +921,7 @@ subroutine refract(En, cn, freq, dt, G, NAngle, use_PPMang)
     else
       ! Use PPM
       do i=is,ie
-        call PPM_angular_advect(En2d(i,:),CFL_ang(i,j,:),Flux_E(i,:),NAngle,dt,stensil)
+        call PPM_angular_advect(En2d(i,:),CFL_ang(i,j,:),Flux_E(i,:),NAngle,dt,stencil)
       enddo
     endif
 
@@ -1034,7 +1034,7 @@ subroutine propagate(En, cn, freq, dt, G, CS, NAngle)
 
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB) :: &
     speed  ! The magnitude of the group velocity at the q points for corner adv, in m s-1.
-  integer, parameter :: stensil = 2
+  integer, parameter :: stencil = 2
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     speed_x  ! The magnitude of the group velocity at the Cu points, in m s-1.
   real, dimension(SZI_(G),SZJB_(G)) :: &
@@ -1053,7 +1053,7 @@ subroutine propagate(En, cn, freq, dt, G, CS, NAngle)
   integer :: i, j, a
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; na = size(En,3)
-  asd = 1-stensil ; aed = NAngle+stensil
+  asd = 1-stencil ; aed = NAngle+stencil
 
   Ifreq = 1.0 / freq
   freq2 = freq**2
@@ -1958,18 +1958,18 @@ subroutine PPM_reconstruction_x(h_in, h_l, h_r, G, LB, simple_2nd)
   real :: dMx, dMn
   logical :: use_CW84, use_2nd
   character(len=256) :: mesg
-  integer :: i, j, isl, iel, jsl, jel, stensil
+  integer :: i, j, isl, iel, jsl, jel, stencil
 
   use_2nd = .false. ; if (present(simple_2nd)) use_2nd = simple_2nd
   isl = LB%ish-1 ; iel = LB%ieh+1 ; jsl = LB%jsh ; jel = LB%jeh
 
-  ! This is the stensil of the reconstruction, not the scheme overall.
-  stensil = 2 ; if (use_2nd) stensil = 1
+  ! This is the stencil of the reconstruction, not the scheme overall.
+  stencil = 2 ; if (use_2nd) stencil = 1
 
-  if ((isl-stensil < G%isd) .or. (iel+stensil > G%ied)) then
+  if ((isl-stencil < G%isd) .or. (iel+stencil > G%ied)) then
     write(mesg,'("In MOM_internal_tides, PPM_reconstruction_x called with a ", &
                & "x-halo that needs to be increased by ",i2,".")') &
-               stensil + max(G%isd-isl,iel-G%ied)
+               stencil + max(G%isd-isl,iel-G%ied)
     call MOM_error(FATAL,mesg)
   endif
   if ((jsl < G%jsd) .or. (jel > G%jed)) then
@@ -2039,13 +2039,13 @@ subroutine PPM_reconstruction_y(h_in, h_l, h_r, G, LB, simple_2nd)
   real :: dMx, dMn
   logical :: use_2nd
   character(len=256) :: mesg
-  integer :: i, j, isl, iel, jsl, jel, stensil
+  integer :: i, j, isl, iel, jsl, jel, stencil
 
   use_2nd = .false. ; if (present(simple_2nd)) use_2nd = simple_2nd
   isl = LB%ish ; iel = LB%ieh ; jsl = LB%jsh-1 ; jel = LB%jeh+1
 
-  ! This is the stensil of the reconstruction, not the scheme overall.
-  stensil = 2 ; if (use_2nd) stensil = 1
+  ! This is the stencil of the reconstruction, not the scheme overall.
+  stencil = 2 ; if (use_2nd) stencil = 1
 
   if ((isl < G%isd) .or. (iel > G%ied)) then
     write(mesg,'("In MOM_internal_tides, PPM_reconstruction_y called with a ", &
@@ -2053,10 +2053,10 @@ subroutine PPM_reconstruction_y(h_in, h_l, h_r, G, LB, simple_2nd)
                max(G%isd-isl,iel-G%ied)
     call MOM_error(FATAL,mesg)
   endif
-  if ((jsl-stensil < G%jsd) .or. (jel+stensil > G%jed)) then
+  if ((jsl-stencil < G%jsd) .or. (jel+stencil > G%jed)) then
     write(mesg,'("In MOM_internal_tides, PPM_reconstruction_y called with a ", &
                  & "y-halo that needs to be increased by ",i2,".")') &
-                 stensil + max(G%jsd-jsl,jel-G%jed)
+                 stencil + max(G%jsd-jsl,jel-G%jed)
     call MOM_error(FATAL,mesg)
   endif
 

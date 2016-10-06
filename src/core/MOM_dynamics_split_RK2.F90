@@ -3,7 +3,7 @@ module MOM_dynamics_split_RK2
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_variables,    only : vertvisc_type, ocean_OBC_type, thermo_var_ptrs
+use MOM_variables,    only : vertvisc_type, thermo_var_ptrs
 use MOM_variables,    only : BT_cont_type, alloc_bt_cont_type, dealloc_bt_cont_type
 use MOM_variables,    only : accel_diag_ptrs, ocean_internal_state, cont_diag_ptrs
 use MOM_forcing_type, only : forcing
@@ -45,8 +45,9 @@ use MOM_hor_visc,              only : horizontal_viscosity, hor_visc_init, hor_v
 use MOM_interface_heights,     only : find_eta
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types,            only : MEKE_type
-use MOM_open_boundary,         only : Radiation_Open_Bdry_Conds, open_boundary_init
-use MOM_open_boundary,         only : open_boundary_CS
+use MOM_open_boundary,         only : ocean_OBC_type
+use MOM_open_boundary,         only : Radiation_Open_Bdry_Conds
+use MOM_boundary_update,       only : update_OBC_data
 use MOM_PressureForce,         only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc,              only : set_viscous_BBL, set_viscous_ML, set_visc_CS
 use MOM_tidal_forcing,         only : tidal_forcing_init, tidal_forcing_CS
@@ -160,7 +161,6 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   type(barotropic_CS),    pointer :: barotropic_CSp    => NULL()
   type(vertvisc_CS),      pointer :: vertvisc_CSp      => NULL()
   type(set_visc_CS),      pointer :: set_visc_CSp      => NULL()
-  type(open_boundary_CS), pointer :: open_boundary_CSp => NULL()
   type(tidal_forcing_CS), pointer :: tides_CSp         => NULL()
 
   type(ocean_OBC_type),   pointer :: OBC => NULL() !< A pointer to an open boundary
@@ -416,8 +416,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call PressureForce(h, tv, CS%PFu, CS%PFv, G, GV, CS%PressureForce_CSp, &
                      CS%ALE_CSp, p_surf, CS%pbce, CS%eta_PF)
   if (CS%debug) then
-    call uchksum(CS%PFu,"After PressureForce CS%PFu",G,haloshift=0)
-    call vchksum(CS%PFv,"After PressureForce CS%PFv",G,haloshift=0)
+    call uchksum(CS%PFu,"After PressureForce CS%PFu",G%HI,haloshift=0)
+    call vchksum(CS%PFv,"After PressureForce CS%PFv",G%HI,haloshift=0)
   endif
 
   if (dyn_p_surf) then
@@ -432,6 +432,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call disable_averaging(CS%diag)
   if (showCallTree) call callTree_wayPoint("done with PressureForce (step_MOM_dyn_split_RK2)")
 
+  if (associated(CS%OBC)) then; if (CS%OBC%update_OBC) then
+    call update_OBC_data(CS%OBC, G, h, Time_local)
+  endif; endif
+
   if (G%nonblocking_updates) then
     call cpu_clock_begin(id_clock_pass)
     call start_group_pass(CS%pass_eta_PF_eta, G%Domain)
@@ -440,8 +444,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
 ! CAu = -(f+zeta_av)/h_av vh + d/dx KE_av
   call cpu_clock_begin(id_clock_Cor)
-  call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%ADp, G, GV, &
-                 CS%CoriolisAdv_CSp)
+  call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, &
+                 G, Gv, CS%CoriolisAdv_CSp)
   call cpu_clock_end(id_clock_Cor)
   if (showCallTree) call callTree_wayPoint("done with CorAdCalc (step_MOM_dyn_split_RK2)")
 
@@ -495,8 +499,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call disable_averaging(CS%diag)
 
   if (CS%debug) then
-    call uchksum(up,"before vertvisc: up",G,haloshift=0)
-    call vchksum(vp,"before vertvisc: vp",G,haloshift=0)
+    call uchksum(up,"before vertvisc: up",G%HI,haloshift=0)
+    call vchksum(vp,"before vertvisc: vp",G%HI,haloshift=0)
   endif
   call vertvisc_coef(up, vp, h, fluxes, visc, dt, G, GV, CS%vertvisc_CSp)
   call vertvisc_remnant(visc, CS%visc_rem_u, CS%visc_rem_v, dt, G, GV, CS%vertvisc_CSp)
@@ -580,11 +584,11 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call cpu_clock_end(id_clock_mom_update)
 
   if (CS%debug) then
-    call uchksum(up,"Predictor 1 u",G,haloshift=0)
-    call vchksum(vp,"Predictor 1 v",G,haloshift=0)
-    call hchksum(GV%H_to_kg_m2*h,"Predictor 1 h",G,haloshift=1)
-    call uchksum(GV%H_to_kg_m2*uh,"Predictor 1 uh",G,haloshift=2)
-    call vchksum(GV%H_to_kg_m2*vh,"Predictor 1 vh",G,haloshift=2)
+    call uchksum(up,"Predictor 1 u",G%HI,haloshift=0)
+    call vchksum(vp,"Predictor 1 v",G%HI,haloshift=0)
+    call hchksum(GV%H_to_kg_m2*h,"Predictor 1 h",G%HI,haloshift=1)
+    call uchksum(GV%H_to_kg_m2*uh,"Predictor 1 uh",G%HI,haloshift=2)
+    call vchksum(GV%H_to_kg_m2*vh,"Predictor 1 vh",G%HI,haloshift=2)
 !   call MOM_state_chksum("Predictor 1", up, vp, h, uh, vh, G, GV, haloshift=1)
     call MOM_accel_chksum("Predictor accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
              CS%diffu, CS%diffv, G, GV, CS%pbce, CS%u_accel_bt, CS%v_accel_bt)
@@ -597,8 +601,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 ! u_av  <- u_av  + dt_pred d/dz visc d/dz u_av
   call cpu_clock_begin(id_clock_vertvisc)
   if (CS%debug) then
-    call uchksum(up,"0 before vertvisc: up",G,haloshift=0)
-    call vchksum(vp,"0 before vertvisc: vp",G,haloshift=0)
+    call uchksum(up,"0 before vertvisc: up",G%HI,haloshift=0)
+    call vchksum(vp,"0 before vertvisc: vp",G%HI,haloshift=0)
   endif
   call vertvisc_coef(up, vp, h, fluxes, visc, dt_pred, G, GV, CS%vertvisc_CSp)
   call vertvisc(up, vp, h, fluxes, visc, dt_pred, CS%OBC, CS%ADp, CS%CDp, G, &
@@ -639,7 +643,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (associated(CS%OBC)) then
     call Radiation_Open_Bdry_Conds(CS%OBC, u_av, u_old_rad_OBC, v_av, &
-             v_old_rad_OBC, hp, h_old_rad_OBC, G, CS%open_boundary_CSp)
+             v_old_rad_OBC, hp, h_old_rad_OBC, G)
   endif
 
   ! h_av = (h + hp)/2
@@ -682,6 +686,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     if (showCallTree) call callTree_wayPoint("done with PressureForce[hp=(1-b).h+b.h] (step_MOM_dyn_split_RK2)")
   endif
 
+  if (associated(CS%OBC)) then; if (CS%OBC%update_OBC) then
+    call update_OBC_data(CS%OBC, G, h, Time_local)
+  endif; endif
+
   if (G%nonblocking_updates) then
     call cpu_clock_begin(id_clock_pass)
     call complete_group_pass(CS%pass_av_uvh, G%Domain)
@@ -698,9 +706,9 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (CS%debug) then
     call MOM_state_chksum("Predictor ", up, vp, hp, uh, vh, G, GV)
-    call uchksum(u_av,"Predictor avg u",G,haloshift=1)
-    call vchksum(v_av,"Predictor avg v",G,haloshift=1)
-    call hchksum(GV%H_to_kg_m2*h_av,"Predictor avg h",G,haloshift=0)
+    call uchksum(u_av,"Predictor avg u",G%HI,haloshift=1)
+    call vchksum(v_av,"Predictor avg v",G%HI,haloshift=1)
+    call hchksum(GV%H_to_kg_m2*h_av,"Predictor avg h",G%HI,haloshift=0)
   ! call MOM_state_chksum("Predictor avg ", u_av, v_av,  h_av,uh, vh, G, GV)
     call check_redundant("Predictor up ", up, vp, G)
     call check_redundant("Predictor uh ", uh, vh, G)
@@ -715,8 +723,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
 ! CAu = -(f+zeta_av)/h_av vh + d/dx KE_av
   call cpu_clock_begin(id_clock_Cor)
-  call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%ADp, G, GV, &
-                 CS%CoriolisAdv_CSp)
+  call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, &
+                 G, GV, CS%CoriolisAdv_CSp)
   call cpu_clock_end(id_clock_Cor)
   if (showCallTree) call callTree_wayPoint("done with CorAdCalc (step_MOM_dyn_split_RK2)")
 
@@ -785,11 +793,11 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call cpu_clock_end(id_clock_mom_update)
 
   if (CS%debug) then
-    call uchksum(u,"Corrector 1 u",G,haloshift=0)
-    call vchksum(v,"Corrector 1 v",G,haloshift=0)
-    call hchksum(GV%H_to_kg_m2*h,"Corrector 1 h",G,haloshift=2)
-    call uchksum(GV%H_to_kg_m2*uh,"Corrector 1 uh",G,haloshift=2)
-    call vchksum(GV%H_to_kg_m2*vh,"Corrector 1 vh",G,haloshift=2)
+    call uchksum(u,"Corrector 1 u",G%HI,haloshift=0)
+    call vchksum(v,"Corrector 1 v",G%HI,haloshift=0)
+    call hchksum(GV%H_to_kg_m2*h,"Corrector 1 h",G%HI,haloshift=2)
+    call uchksum(GV%H_to_kg_m2*uh,"Corrector 1 uh",G%HI,haloshift=2)
+    call vchksum(GV%H_to_kg_m2*vh,"Corrector 1 vh",G%HI,haloshift=2)
   ! call MOM_state_chksum("Corrector 1", u, v, h, uh, vh, G, GV, haloshift=1)
     call MOM_accel_chksum("Corrector accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
              CS%diffu, CS%diffv, G, GV, CS%pbce, CS%u_accel_bt, CS%v_accel_bt)
@@ -851,7 +859,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (associated(CS%OBC)) then
     call Radiation_Open_Bdry_Conds(CS%OBC, u, u_old_rad_OBC, v, &
-             v_old_rad_OBC, h, h_old_rad_OBC, G, CS%open_boundary_CSp)
+             v_old_rad_OBC, h, h_old_rad_OBC, G)
   endif
 
 ! h_av = (h_in + h_out)/2 . Going in to this line, h_av = h_in.
@@ -918,9 +926,9 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (CS%debug) then
     call MOM_state_chksum("Corrector ", u, v, h, uh, vh, G, GV)
-    call uchksum(u_av,"Corrector avg u",G,haloshift=1)
-    call vchksum(v_av,"Corrector avg v",G,haloshift=1)
-    call hchksum(GV%H_to_kg_m2*h_av,"Corrector avg h",G,haloshift=1)
+    call uchksum(u_av,"Corrector avg u",G%HI,haloshift=1)
+    call vchksum(v_av,"Corrector avg v",G%HI,haloshift=1)
+    call hchksum(GV%H_to_kg_m2*h_av,"Corrector avg h",G%HI,haloshift=1)
  !  call MOM_state_chksum("Corrector avg ", u_av, v_av, h_av, uh, vh, G, GV)
   endif
 
@@ -1140,10 +1148,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
              (LEN_TRIM(dirs%input_filename) == 1))   )
 
   if (associated(ALE_CSp)) CS%ALE_CSp => ALE_CSp
-  if (associated(OBC)) then
-    CS%OBC => OBC
-    call open_boundary_init(Time, G, param_file, diag, CS%open_boundary_CSp)
-  endif
+  if (associated(OBC)) CS%OBC => OBC
 
   if (.not. query_initialized(CS%eta,"sfc",restart_CS))  then
     ! Estimate eta based on the layer thicknesses - h.  With the Boussinesq

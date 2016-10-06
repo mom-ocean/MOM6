@@ -9,6 +9,7 @@ use MOM_checksums,           only : hchksum, uchksum, vchksum
 use MOM_checksum_packages,   only : MOM_state_chksum, MOM_state_stats
 use MOM_cpu_clock,           only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,           only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
+use MOM_CVMix_shear,         only : CVMix_shear_is_used
 use MOM_diabatic_aux,        only : diabatic_aux_init, diabatic_aux_end, diabatic_aux_CS
 use MOM_diabatic_aux,        only : make_frazil, adjust_salt, insert_brine, differential_diffuse_T_S, triDiagTS
 use MOM_diabatic_aux,        only : find_uv_at_h, diagnoseMLDbyDensityDifference, applyBoundaryFluxesInOut
@@ -16,6 +17,8 @@ use MOM_diag_mediator,       only : post_data, register_diag_field, safe_alloc_p
 use MOM_diag_mediator,       only : diag_ctrl, time_type, diag_update_target_grids
 use MOM_diag_mediator,       only : diag_ctrl, query_averaging_enabled
 use MOM_diag_to_Z,           only : diag_to_Z_CS, register_Zint_diag, calc_Zint_diags
+use MOM_diapyc_energy_req,   only : diapyc_energy_req_init, diapyc_energy_req_end
+use MOM_diapyc_energy_req,   only : diapyc_energy_req_calc, diapyc_energy_req_test, diapyc_energy_req_CS
 use MOM_diffConvection,      only : diffConvection_CS, diffConvection_init
 use MOM_diffConvection,      only : diffConvection_calculate, diffConvection_end
 use MOM_domains,             only : pass_var, To_West, To_South
@@ -52,6 +55,7 @@ use MOM_sponge,              only : apply_sponge, sponge_CS
 use MOM_ALE_sponge,          only : apply_ALE_sponge, ALE_sponge_CS
 use MOM_time_manager,        only : operator(<=), time_type ! for testing itides (BDM)
 use MOM_tracer_flow_control, only : call_tracer_column_fns, tracer_flow_control_CS
+use MOM_tracer_diabatic,     only : tracer_vertdiff
 use MOM_variables,           only : thermo_var_ptrs, vertvisc_type, accel_diag_ptrs
 use MOM_variables,           only : cont_diag_ptrs, MOM_thermovar_chksum, p3d
 use MOM_verticalGrid,        only : verticalGrid_type
@@ -76,6 +80,8 @@ type, public :: diabatic_CS ; private
                                      !! boundary layer scheme to determine the diffusivity
                                      !! in the surface boundary layer.
   logical :: use_kappa_shear         !< If true, use the kappa_shear module to find the
+                                     !! shear-driven diapycnal diffusivity.
+  logical :: use_cvmix_shear         !< If true, use the CVMix module to find the
                                      !! shear-driven diapycnal diffusivity.
   logical :: use_sponge              !< If true, sponges may be applied anywhere in the
                                      !! domain.  The exact location and properties of
@@ -136,6 +142,9 @@ type, public :: diabatic_CS ; private
                                      !! is statically unstable.
   logical :: debug                   !< If true, write verbose checksums for debugging purposes.
   logical :: debugConservation       !< If true, monitor conservation and extrema.
+  logical :: tracer_tridiag          !< If true, use tracer_vertdiff instead of tridiagTS for
+                                     !< vertical diffusion of T and S
+  logical :: debug_energy_req        !  If true, test the mixing energy requirement code.
   type(diag_ctrl), pointer :: diag   !< structure used to regulate timing of diagnostic output
   real :: MLDdensityDifference       !< Density difference used to determine MLD_user
   integer :: nsw                     !< SW_NBANDS
@@ -193,6 +202,7 @@ type, public :: diabatic_CS ; private
   type(diag_to_Z_CS),           pointer :: diag_to_Z_CSp         => NULL()
   type(KPP_CS),                 pointer :: KPP_CSp               => NULL()
   type(diffConvection_CS),      pointer :: Conv_CSp              => NULL()
+  type(diapyc_energy_req_CS),   pointer :: diapyc_en_rec_CSp     => NULL() 
 
   type(group_pass_type) :: pass_hold_eb_ea !< For group halo pass
 
@@ -237,6 +247,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
                  ! one time step  (m for Bouss, kg/m^2 for non-Bouss)
     Kd,     &    ! diapycnal diffusivity of layers (m^2/sec)
     h_orig, &    ! initial layer thicknesses (m for Bouss, kg/m^2 for non-Bouss)
+    h_prebound, &    ! initial layer thicknesses (m for Bouss, kg/m^2 for non-Bouss)
     hold,   &    ! layer thickness before diapycnal entrainment, and later
                  ! the initial layer thicknesses (if a mixed layer is used),
                  ! (m for Bouss, kg/m^2 for non-Bouss)
@@ -355,6 +366,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   endif
   if (CS%debugConservation) call MOM_state_stats('Start of diabatic', u, v, h, tv%T, tv%S, G)
 
+  if (CS%debug_energy_req) &
+    call diapyc_energy_req_test(h, dt, tv, G, GV, CS%diapyc_en_rec_CSp)
+
+
   call cpu_clock_begin(id_clock_set_diffusivity)
   call set_BBL_TKE(u, v, h, fluxes, visc, G, GV, CS%set_diff_CSp)
   call cpu_clock_end(id_clock_set_diffusivity)
@@ -399,6 +414,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     if (showCallTree) call callTree_waypoint("geothermal (diabatic)")
     if (CS%debugConservation) call MOM_state_stats('geothermal', u, v, h, tv%T, tv%S, G)
   endif
+
 
   ! Whenever thickness changes let the diag manager know, target grids
   ! for vertical remapping may need to be regenerated.
@@ -462,12 +478,12 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   if (CS%debug) then
     call MOM_state_chksum("before find_uv_at_h", u, v, h, G, GV, haloshift=0)
   endif
-  if (CS%use_kappa_shear) then
+  if (CS%use_kappa_shear .or. CS%use_CVMix_shear) then
     if ((CS%ML_mix_first > 0.0) .or. CS%use_geothermal) then
       call find_uv_at_h(u, v, h_orig, u_h, v_h, G, GV, eaml, ebml)
       if (CS%debug) then
-        call hchksum(eaml, "after find_uv_at_h eaml",G)
-        call hchksum(ebml, "after find_uv_at_h ebml",G)
+        call hchksum(eaml, "after find_uv_at_h eaml",G%HI)
+        call hchksum(ebml, "after find_uv_at_h ebml",G%HI)
       endif
     else
       call find_uv_at_h(u, v, h, u_h, v_h, G, GV)
@@ -532,8 +548,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     call MOM_state_chksum("after set_diffusivity ", u, v, h, G, GV, haloshift=0)
     call MOM_forcing_chksum("after set_diffusivity ", fluxes, G, haloshift=0)
     call MOM_thermovar_chksum("after set_diffusivity ", tv, G)
-    call hchksum(Kd, "after set_diffusivity Kd",G,haloshift=0)
-    call hchksum(Kd_Int, "after set_diffusivity Kd_Int",G,haloshift=0)
+    call hchksum(Kd, "after set_diffusivity Kd",G%HI,haloshift=0)
+    call hchksum(Kd_Int, "after set_diffusivity Kd_Int",G%HI,haloshift=0)
   endif
 
 
@@ -600,8 +616,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       call MOM_state_chksum("after KPP", u, v, h, G, GV, haloshift=0)
       call MOM_forcing_chksum("after KPP", fluxes, G, haloshift=0)
       call MOM_thermovar_chksum("after KPP", tv, G)
-      call hchksum(Kd, "after KPP Kd",G,haloshift=0)
-      call hchksum(Kd_Int, "after KPP Kd_Int",G,haloshift=0)
+      call hchksum(Kd, "after KPP Kd",G%HI,haloshift=0)
+      call hchksum(Kd_Int, "after KPP Kd_Int",G%HI,haloshift=0)
     endif
 
   endif  ! endif for KPP
@@ -614,10 +630,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
 
     call cpu_clock_begin(id_clock_kpp)
     if (CS%debug) then
-      call hchksum(CS%KPP_temp_flux*GV%H_to_m, "before KPP_applyNLT netHeat",G,haloshift=0)
-      call hchksum(CS%KPP_salt_flux*GV%H_to_m, "before KPP_applyNLT netSalt",G,haloshift=0)
-      call hchksum(CS%KPP_NLTheat, "before KPP_applyNLT NLTheat",G,haloshift=0)
-      call hchksum(CS%KPP_NLTscalar, "before KPP_applyNLT NLTscalar",G,haloshift=0)
+      call hchksum(CS%KPP_temp_flux*GV%H_to_m, "before KPP_applyNLT netHeat",G%HI,haloshift=0)
+      call hchksum(CS%KPP_salt_flux*GV%H_to_m, "before KPP_applyNLT netSalt",G%HI,haloshift=0)
+      call hchksum(CS%KPP_NLTheat, "before KPP_applyNLT NLTheat",G%HI,haloshift=0)
+      call hchksum(CS%KPP_NLTscalar, "before KPP_applyNLT NLTscalar",G%HI,haloshift=0)
     endif
     ! Apply non-local transport of heat and salt
     ! Changes: tv%T, tv%S
@@ -700,15 +716,15 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     call MOM_forcing_chksum("after calc_entrain ", fluxes, G, haloshift=0)
     call MOM_thermovar_chksum("after calc_entrain ", tv, G)
     call MOM_state_chksum("after calc_entrain ", u, v, h, G, GV, haloshift=0)
-    call hchksum(GV%H_to_m*ea, "after calc_entrain ea",G,haloshift=0)
-    call hchksum(GV%H_to_m*eb, "after calc_entrain eb",G,haloshift=0)
+    call hchksum(GV%H_to_m*ea, "after calc_entrain ea",G%HI,haloshift=0)
+    call hchksum(GV%H_to_m*eb, "after calc_entrain eb",G%HI,haloshift=0)
   endif
 
   ! Apply forcing when using the ALE algorithm
   if (CS%useALEalgorithm) then
     call cpu_clock_begin(id_clock_remap)
 
-    ! Changes made to following fields: ea(:,:,1), h, tv%T and tv%S.
+    ! Changes made to following fields:  h, tv%T and tv%S.
 
     ! save prior values for diagnostics
     if(CS%boundary_forcing_tendency_diag) then
@@ -719,17 +735,20 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       enddo ; enddo ; enddo
     endif
 
+    do k=1,nz ; do j=js,je ; do i=is,ie
+        h_prebound(i,j,k) = h(i,j,k)
+    enddo ; enddo ; enddo
     if (CS%use_energetic_PBL) then
-
       call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, dt, fluxes, CS%optics, &
-                          ea, h, tv, CS%aggregate_FW_forcing, cTKE, dSV_dT, dSV_dS)
+                          h, tv, CS%aggregate_FW_forcing, cTKE, dSV_dT, dSV_dS)
+
 
       if (CS%debug) then
-        call hchksum(ea, "after applyBoundaryFluxes ea",G,haloshift=0)
-        call hchksum(eb, "after applyBoundaryFluxes eb",G,haloshift=0)
-        call hchksum(cTKE, "after applyBoundaryFluxes cTKE",G,haloshift=0)
-        call hchksum(dSV_dT, "after applyBoundaryFluxes dSV_dT",G,haloshift=0)
-        call hchksum(dSV_dS, "after applyBoundaryFluxes dSV_dS",G,haloshift=0)
+        call hchksum(ea, "after applyBoundaryFluxes ea",G%HI,haloshift=0)
+        call hchksum(eb, "after applyBoundaryFluxes eb",G%HI,haloshift=0)
+        call hchksum(cTKE, "after applyBoundaryFluxes cTKE",G%HI,haloshift=0)
+        call hchksum(dSV_dT, "after applyBoundaryFluxes dSV_dT",G%HI,haloshift=0)
+        call hchksum(dSV_dS, "after applyBoundaryFluxes dSV_dS",G%HI,haloshift=0)
       endif
 
       call find_uv_at_h(u, v, h, u_h, v_h, G, GV)
@@ -765,15 +784,14 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       enddo ; enddo ; enddo
 
       if (CS%debug) then
-        call hchksum(ea, "after ePBL ea",G,haloshift=0)
-        call hchksum(eb, "after ePBL eb",G,haloshift=0)
-        call hchksum(Kd_ePBL, "after ePBL Kd_ePBL",G,haloshift=0)
+        call hchksum(ea, "after ePBL ea",G%HI,haloshift=0)
+        call hchksum(eb, "after ePBL eb",G%HI,haloshift=0)
+        call hchksum(Kd_ePBL, "after ePBL Kd_ePBL",G%HI,haloshift=0)
       endif
 
     else
-
       call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, dt, fluxes, CS%optics, &
-                                    ea, h, tv, CS%aggregate_FW_forcing)
+                                    h, tv, CS%aggregate_FW_forcing)
 
     endif   ! endif for CS%use_energetic_PBL
 
@@ -792,7 +810,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     if (CS%debugConservation)  call MOM_state_stats('applyBoundaryFluxes', u, v, h, tv%T, tv%S, G)
 
   endif   ! endif for (CS%useALEalgorithm)
-
 
   ! Update h according to divergence of the difference between
   ! ea and eb. We keep a record of the original h in hold.
@@ -915,7 +932,12 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
         ! This simpler form allows T & S to be too dense for the layers
         ! between the buffer layers and the interior.
         ! Changes: T, S
-        call triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, tv%T, tv%S)
+        if (CS%tracer_tridiag) then
+          call tracer_vertdiff(hold, ea, eb, dt, tv%T, G, GV)
+          call tracer_vertdiff(hold, ea, eb, dt, tv%S, G, GV) 
+        else    
+          call triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, tv%T, tv%S)
+        endif  
       endif ! massless_match_targets
       call cpu_clock_end(id_clock_tridiag)
 
@@ -932,8 +954,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
         eb(i,j,k) = eb(i,j,k) + ebml(i,j,k)
       enddo ; enddo ; enddo
       if (CS%debug) then
-        call hchksum(GV%H_to_m*ea, "after ea = ea + eaml",G,haloshift=0)
-        call hchksum(GV%H_to_m*eb, "after eb = eb + ebml",G,haloshift=0)
+        call hchksum(GV%H_to_m*ea, "after ea = ea + eaml",G%HI,haloshift=0)
+        call hchksum(GV%H_to_m*eb, "after eb = eb + ebml",G%HI,haloshift=0)
       endif
     endif
 
@@ -981,8 +1003,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     if (ASSOCIATED(tv%T)) then
 
       if (CS%debug) then
-        call hchksum(GV%H_to_m*ea, "before triDiagTS ea ",G,haloshift=0)
-        call hchksum(GV%H_to_m*eb, "before triDiagTS eb ",G,haloshift=0)
+        call hchksum(GV%H_to_m*ea, "before triDiagTS ea ",G%HI,haloshift=0)
+        call hchksum(GV%H_to_m*eb, "before triDiagTS eb ",G%HI,haloshift=0)
       endif
       call cpu_clock_begin(id_clock_tridiag)
 
@@ -994,7 +1016,12 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       endif
 
       ! Changes T and S via the tridiagonal solver; no change to h
-      call triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, tv%T, tv%S)
+      if(CS%tracer_tridiag) then
+          call tracer_vertdiff(hold, ea, eb, dt, tv%T, G, GV)
+          call tracer_vertdiff(hold, ea, eb, dt, tv%S, G, GV)
+      else    
+        call triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, tv%T, tv%S)
+      endif  
 
       ! diagnose temperature, salinity, heat, and salt tendencies
       if(CS%diabatic_diff_tendency_diag) then
@@ -1014,8 +1041,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   if (CS%debug) then
     call MOM_state_chksum("after mixed layer ", u, v, h, G, GV, haloshift=0)
     call MOM_thermovar_chksum("after mixed layer ", tv, G)
-    call hchksum(ea, "after mixed layer ea", G)
-    call hchksum(eb, "after mixed layer eb", G)
+    call hchksum(ea, "after mixed layer ea", G%HI)
+    call hchksum(eb, "after mixed layer eb", G%HI)
   endif
 
   if (.not. CS%useALEalgorithm) then
@@ -1059,7 +1086,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
                     0.5*(tv%S(i,j,k-1) + tv%S(i,j,k))
     enddo ; enddo ; enddo
   endif
-
 
   ! mixing of passive tracers from massless boundary layers to interior
   call cpu_clock_begin(id_clock_tracers)
@@ -1111,8 +1137,19 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       enddo ; enddo
       do i=is,ie ; eatr(i,j,1) = ea(i,j,1) ; enddo
     enddo
-    call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
-                                CS%optics, CS%tracer_flow_CSp)
+
+
+    if (CS%useALEalgorithm) then
+    ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
+    ! so hold should be h_orig
+      call call_tracer_column_fns(h_prebound, h, ea, eb, fluxes, dt, G, GV, tv, &
+                                CS%optics, CS%tracer_flow_CSp, CS%debug, &
+                                evap_CFL_limit = CS%diabatic_aux_CSp%evap_CFL_limit, &
+                                minimum_forcing_depth = CS%diabatic_aux_CSp%minimum_forcing_depth)
+    else
+      call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
+                                CS%optics, CS%tracer_flow_CSp, CS%debug)
+    endif
 
   elseif (associated(visc%Kd_extra_S)) then  ! extra diffusivity for passive tracers
 
@@ -1133,12 +1170,28 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       ebtr(i,j,k-1) = eb(i,j,k-1) + add_ent
       eatr(i,j,k) = ea(i,j,k) + add_ent
     enddo ; enddo ; enddo
-    call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
-                                CS%optics, CS%tracer_flow_CSp)
+    if (CS%useALEalgorithm) then
+    ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
+      call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
+                                  CS%optics, CS%tracer_flow_CSp, CS%debug,&
+                                  evap_CFL_limit = CS%diabatic_aux_CSp%evap_CFL_limit, &
+                                  minimum_forcing_depth = CS%diabatic_aux_CSp%minimum_forcing_depth)
+    else
+      call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
+                                  CS%optics, CS%tracer_flow_CSp, CS%debug)
+    endif
 
   else
-    call call_tracer_column_fns(hold, h, ea, eb, fluxes, dt, G, GV, tv, &
-                                CS%optics, CS%tracer_flow_CSp)
+    if (CS%useALEalgorithm) then
+    ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
+      call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
+                                  CS%optics, CS%tracer_flow_CSp, CS%debug, &
+                                  evap_CFL_limit = CS%diabatic_aux_CSp%evap_CFL_limit, &
+                                  minimum_forcing_depth = CS%diabatic_aux_CSp%minimum_forcing_depth)
+    else
+      call call_tracer_column_fns(hold, h, ea, eb, fluxes, dt, G, GV, tv, &
+                                  CS%optics, CS%tracer_flow_CSp, CS%debug)
+    endif
 
   endif  ! (CS%mix_boundary_tracers)
 
@@ -1193,8 +1246,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
 ! mixed layer turbulence is applied elsewhere.
   if (CS%bulkmixedlayer) then
     if (CS%debug) then
-      call hchksum(ea, "before net flux rearrangement ea",G)
-      call hchksum(eb, "before net flux rearrangement eb",G)
+      call hchksum(ea, "before net flux rearrangement ea",G%HI)
+      call hchksum(eb, "before net flux rearrangement eb",G%HI)
     endif
 !$OMP do
     do j=js,je
@@ -1205,8 +1258,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       enddo ; enddo
     enddo
     if (CS%debug) then
-      call hchksum(ea, "after net flux rearrangement ea",G)
-      call hchksum(eb, "after net flux rearrangement eb",G)
+      call hchksum(ea, "after net flux rearrangement ea",G%HI)
+      call hchksum(eb, "after net flux rearrangement eb",G%HI)
     endif
   endif
 
@@ -1244,9 +1297,9 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     !  or enters the ocean with the surface velocity.
     if (CS%debug) then
       call MOM_state_chksum("before u/v tridiag ", u, v, h, G, GV, haloshift=0)
-      call hchksum(ea, "before u/v tridiag ea",G)
-      call hchksum(eb, "before u/v tridiag eb",G)
-      call hchksum(hold, "before u/v tridiag hold",G)
+      call hchksum(ea, "before u/v tridiag ea",G%HI)
+      call hchksum(eb, "before u/v tridiag eb",G%HI)
+      call hchksum(hold, "before u/v tridiag hold",G%HI)
     endif
     call cpu_clock_begin(id_clock_tridiag)
 !$OMP parallel do default(none) shared(js,je,Isq,Ieq,ADp,u,hold,ea,h_neglect,eb,nz,Idt) &
@@ -1425,7 +1478,7 @@ subroutine adiabatic(h, tv, fluxes, dt, G, GV, CS)
   zeros(:,:,:) = 0.0
 
   call call_tracer_column_fns(h, h, zeros, zeros, fluxes, dt, G, GV, tv, &
-                              CS%optics, CS%tracer_flow_CSp)
+                              CS%optics, CS%tracer_flow_CSp, CS%debug)
 
 end subroutine adiabatic
 
@@ -1769,6 +1822,7 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
                  "If true, apply parameterization of double-diffusion.", &
                  default=.false. )
   CS%use_kappa_shear = kappa_shear_is_used(param_file)
+  CS%use_CVMix_shear = cvmix_shear_is_used(param_file)
   if (CS%bulkmixedlayer) then
     call get_param(param_file, mod, "ML_MIX_FIRST", CS%ML_mix_first, &
                  "The fraction of the mixed layer mixing that is applied \n"//&
@@ -1838,6 +1892,9 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
                  "If true, write out verbose debugging data.", default=.false.)
   call get_param(param_file, mod, "DEBUG_CONSERVATION", CS%debugConservation, &
                  "If true, monitor conservation and extrema.", default=.false.)
+
+  call get_param(param_file, mod, "DEBUG_ENERGY_REQ", CS%debug_energy_req, &
+                 "If true, debug the energy requirements.", default=.false., do_not_log=.true.)
   call get_param(param_file, mod, "MIX_BOUNDARY_TRACERS", CS%mix_boundary_tracers, &
                  "If true, mix the passive tracers in massless layers at \n"//&
                  "the bottom into the interior as though a diffusivity of \n"//&
@@ -1855,6 +1912,11 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
                  "entrainment at the bottom is at least sqrt(Kd_BBL_tr*dt) \n"//&
                  "over the same distance.", units="m2 s-1", default=0.)
   endif
+  
+  call get_param(param_file, mod, "TRACER_TRIDIAG", CS%tracer_tridiag, &
+                 "If true, use the passive tracer tridiagonal solver for T and S\n", &
+                 default=.false.)
+                 
 
   ! Register all available diagnostics for this module.
   if (GV%Boussinesq) then ; thickness_units = "meter"
@@ -1944,8 +2006,11 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
   !call set_diffusivity_init(Time, G, param_file, diag, CS%set_diff_CSp, diag_to_Z_CSp, CS%int_tide_CSp)
   CS%id_Kd_interface = register_diag_field('ocean_model', 'Kd_interface', diag%axesTi, Time, &
       'Total diapycnal diffusivity at interfaces', 'meter2 second-1')
-  CS%id_Kd_ePBL = register_diag_field('ocean_model', 'Kd_ePBL', diag%axesTi, Time, &
-      'ePBL diapycnal diffusivity at interfaces', 'meter2 second-1')
+  if (CS%use_energetic_PBL) then
+      CS%id_Kd_ePBL = register_diag_field('ocean_model', 'Kd_ePBL', diag%axesTi, Time, &
+          'ePBL diapycnal diffusivity at interfaces', 'meter2 second-1')
+  endif
+
   CS%id_Kd_heat = register_diag_field('ocean_model', 'Kd_heat', diag%axesTi, Time, &
       'Total diapycnal diffusivity for heat at interfaces', 'meter2 second-1',     &
        cmor_field_name='difvho', cmor_units='m2 s-1',                              &
@@ -1981,119 +2046,117 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
 
   ! diagnostics for tendencies of temp and saln due to diabatic processes;
   ! available only for ALE algorithm.
+  if (CS%useALEalgorithm) then
+    CS%id_diabatic_diff_temp_tend = register_diag_field('ocean_model', &
+        'diabatic_diff_temp_tendency', diag%axesTL, Time,              &
+        'Diabatic diffusion temperature tendency', 'Degree C per second')
+    if(CS%id_diabatic_diff_temp_tend > 0) then
+      CS%diabatic_diff_tendency_diag = .true.
+    endif
 
-  CS%id_diabatic_diff_temp_tend = register_diag_field('ocean_model', &
-      'diabatic_diff_temp_tendency', diag%axesTL, Time,              &
-      'Diabatic diffusion temperature tendency', 'Degree C per second')
-  if(CS%id_diabatic_diff_temp_tend > 0) then
-    CS%diabatic_diff_tendency_diag = .true.
+    CS%id_diabatic_diff_saln_tend = register_diag_field('ocean_model',&
+        'diabatic_diff_saln_tendency', diag%axesTL, Time,             &
+        'Diabatic diffusion salinity tendency', 'PPT per second')
+    if(CS%id_diabatic_diff_saln_tend > 0) then
+      CS%diabatic_diff_tendency_diag = .true.
+    endif
+
+    CS%id_diabatic_diff_heat_tend = register_diag_field('ocean_model',                                                 &
+        'diabatic_heat_tendency', diag%axesTL, Time,                                                                   &
+        'Diabatic diffusion heat tendency',                                                                            &
+        'Watts/m2',cmor_field_name='opottempdiff', cmor_units='W m-2',                                                 &
+        cmor_standard_name=                                                                                            &
+        'tendency_of_sea_water_potential_temperature_expressed_as_heat_content_due_to_parameterized_dianeutral_mixing',&
+        cmor_long_name =                                                                                               &
+        'Tendency of sea water potential temperature expressed as heat content due to parameterized dianeutral mixing')
+    if(CS%id_diabatic_diff_heat_tend > 0) then
+      CS%diabatic_diff_tendency_diag = .true.
+    endif
+
+    CS%id_diabatic_diff_salt_tend = register_diag_field('ocean_model',                                     &
+        'diabatic_salt_tendency', diag%axesTL, Time,                                                       &
+        'Diabatic diffusion of salt tendency',                                                             &
+        'kg/(m2 * s)',cmor_field_name='osaltdiff', cmor_units='kg m-2 s-1',                                &
+        cmor_standard_name=                                                                                &
+        'tendency_of_sea_water_salinity_expressed_as_salt_content_due_to_parameterized_dianeutral_mixing', &
+        cmor_long_name =                                                                                   &
+        'Tendency of sea water salinity expressed as salt content due to parameterized dianeutral mixing')
+    if(CS%id_diabatic_diff_salt_tend > 0) then
+      CS%diabatic_diff_tendency_diag = .true.
+    endif
+
+    ! This diagnostic should equal to roundoff if all is working well.
+    CS%id_diabatic_diff_heat_tend_2d = register_diag_field('ocean_model',                                                               &
+        'diabatic_heat_tendency_2d', diag%axesT1, Time,                                                                                 &
+        'Depth integrated diabatic diffusion heat tendency',                                                                            &
+        'Watts/m2',cmor_field_name='opottempdiff_2d', cmor_units='W m-2',                                                               &
+        cmor_standard_name=                                                                                                             &
+        'tendency_of_sea_water_potential_temperature_expressed_as_heat_content_due_to_parameterized_dianeutral_mixing_depth_integrated',&
+        cmor_long_name =                                                                                                                &
+        'Tendency of sea water potential temperature expressed as heat content due to parameterized dianeutral mixing depth integrated')
+    if(CS%id_diabatic_diff_heat_tend_2d > 0) then
+      CS%diabatic_diff_tendency_diag = .true.
+    endif
+
+    ! This diagnostic should equal to roundoff if all is working well.
+    CS%id_diabatic_diff_salt_tend_2d = register_diag_field('ocean_model',                                                  &
+        'diabatic_salt_tendency_2d', diag%axesT1, Time,                                                                    &
+        'Depth integrated diabatic diffusion salt tendency',                                                               &
+        'kg/(m2 * s)',cmor_field_name='osaltdiff_2d', cmor_units='kg m-2 s-1',                                             &
+        cmor_standard_name=                                                                                                &
+        'tendency_of_sea_water_salinity_expressed_as_salt_content_due_to_parameterized_dianeutral_mixing_depth_integrated',&
+        cmor_long_name =                                                                                                   &
+        'Tendency of sea water salinity expressed as salt content due to parameterized dianeutral mixing depth integrated')
+    if(CS%id_diabatic_diff_salt_tend_2d > 0) then
+      CS%diabatic_diff_tendency_diag = .true.
+    endif
+
+    ! diagnostics for tendencies of temp and saln due to boundary forcing;
+    ! available only for ALE algorithm.
+    CS%id_boundary_forcing_temp_tend = register_diag_field('ocean_model',&
+        'boundary_forcing_temp_tendency', diag%axesTL, Time,             &
+        'Boundary forcing temperature tendency', 'Degree C per second')
+    if(CS%id_boundary_forcing_temp_tend > 0) then
+      CS%boundary_forcing_tendency_diag = .true.
+    endif
+
+    CS%id_boundary_forcing_saln_tend = register_diag_field('ocean_model',&
+        'boundary_forcing_saln_tendency', diag%axesTL, Time,             &
+        'Boundary forcing saln tendency', 'PPT per second')
+    if(CS%id_boundary_forcing_saln_tend > 0) then
+      CS%boundary_forcing_tendency_diag = .true.
+    endif
+
+    CS%id_boundary_forcing_heat_tend = register_diag_field('ocean_model',&
+        'boundary_forcing_heat_tendency', diag%axesTL, Time,             &
+        'Boundary forcing heat tendency','Watts/m2')
+    if(CS%id_boundary_forcing_heat_tend > 0) then
+      CS%boundary_forcing_tendency_diag = .true.
+    endif
+
+    CS%id_boundary_forcing_salt_tend = register_diag_field('ocean_model',&
+        'boundary_forcing_salt_tendency', diag%axesTL, Time,             &
+        'Boundary forcing salt tendency','kg m-2 s-1')
+    if(CS%id_boundary_forcing_salt_tend > 0) then
+      CS%boundary_forcing_tendency_diag = .true.
+    endif
+
+    ! This diagnostic should equal to surface heat flux if all is working well.
+    CS%id_boundary_forcing_heat_tend_2d = register_diag_field('ocean_model',&
+        'boundary_forcing_heat_tendency_2d', diag%axesT1, Time,             &
+        'Depth integrated boundary forcing of ocean heat','Watts/m2')
+    if(CS%id_boundary_forcing_heat_tend_2d > 0) then
+      CS%boundary_forcing_tendency_diag = .true.
+    endif
+
+    ! This diagnostic should equal to surface salt flux if all is working well.
+    CS%id_boundary_forcing_salt_tend_2d = register_diag_field('ocean_model',&
+        'boundary_forcing_salt_tendency_2d', diag%axesT1, Time,             &
+        'Depth integrated boundary forcing of ocean salt','kg m-2 s-1')
+    if(CS%id_boundary_forcing_salt_tend_2d > 0) then
+      CS%boundary_forcing_tendency_diag = .true.
+    endif
   endif
-
-  CS%id_diabatic_diff_saln_tend = register_diag_field('ocean_model',&
-      'diabatic_diff_saln_tendency', diag%axesTL, Time,             &
-      'Diabatic diffusion salinity tendency', 'PPT per second')
-  if(CS%id_diabatic_diff_saln_tend > 0) then
-    CS%diabatic_diff_tendency_diag = .true.
-  endif
-
-  CS%id_diabatic_diff_heat_tend = register_diag_field('ocean_model',                                                 &
-      'diabatic_heat_tendency', diag%axesTL, Time,                                                                   &
-      'Diabatic diffusion heat tendency',                                                                            &
-      'Watts/m2',cmor_field_name='opottempdiff', cmor_units='W m-2',                                                 &
-      cmor_standard_name=                                                                                            &
-      'tendency_of_sea_water_potential_temperature_expressed_as_heat_content_due_to_parameterized_dianeutral_mixing',&
-      cmor_long_name =                                                                                               &
-      'Tendency of sea water potential temperature expressed as heat content due to parameterized dianeutral mixing')
-  if(CS%id_diabatic_diff_heat_tend > 0) then
-    CS%diabatic_diff_tendency_diag = .true.
-  endif
-
-  CS%id_diabatic_diff_salt_tend = register_diag_field('ocean_model',                                     &
-      'diabatic_salt_tendency', diag%axesTL, Time,                                                       &
-      'Diabatic diffusion of salt tendency',                                                             &
-      'kg/(m2 * s)',cmor_field_name='osaltdiff', cmor_units='kg m-2 s-1',                                &
-      cmor_standard_name=                                                                                &
-      'tendency_of_sea_water_salinity_expressed_as_salt_content_due_to_parameterized_dianeutral_mixing', &
-      cmor_long_name =                                                                                   &
-      'Tendency of sea water salinity expressed as salt content due to parameterized dianeutral mixing')
-  if(CS%id_diabatic_diff_salt_tend > 0) then
-    CS%diabatic_diff_tendency_diag = .true.
-  endif
-
-  ! This diagnostic should equal to roundoff if all is working well.
-  CS%id_diabatic_diff_heat_tend_2d = register_diag_field('ocean_model',                                                               &
-      'diabatic_heat_tendency_2d', diag%axesT1, Time,                                                                                 &
-      'Depth integrated diabatic diffusion heat tendency',                                                                            &
-      'Watts/m2',cmor_field_name='opottempdiff_2d', cmor_units='W m-2',                                                               &
-      cmor_standard_name=                                                                                                             &
-      'tendency_of_sea_water_potential_temperature_expressed_as_heat_content_due_to_parameterized_dianeutral_mixing_depth_integrated',&
-      cmor_long_name =                                                                                                                &
-      'Tendency of sea water potential temperature expressed as heat content due to parameterized dianeutral mixing depth integrated')
-  if(CS%id_diabatic_diff_heat_tend_2d > 0) then
-    CS%diabatic_diff_tendency_diag = .true.
-  endif
-
-  ! This diagnostic should equal to roundoff if all is working well.
-  CS%id_diabatic_diff_salt_tend_2d = register_diag_field('ocean_model',                                                  &
-      'diabatic_salt_tendency_2d', diag%axesT1, Time,                                                                    &
-      'Depth integrated diabatic diffusion salt tendency',                                                               &
-      'kg/(m2 * s)',cmor_field_name='osaltdiff_2d', cmor_units='kg m-2 s-1',                                             &
-      cmor_standard_name=                                                                                                &
-      'tendency_of_sea_water_salinity_expressed_as_salt_content_due_to_parameterized_dianeutral_mixing_depth_integrated',&
-      cmor_long_name =                                                                                                   &
-      'Tendency of sea water salinity expressed as salt content due to parameterized dianeutral mixing depth integrated')
-  if(CS%id_diabatic_diff_salt_tend_2d > 0) then
-    CS%diabatic_diff_tendency_diag = .true.
-  endif
-
-
-  ! diagnostics for tendencies of temp and saln due to boundary forcing;
-  ! available only for ALE algorithm.
-
-  CS%id_boundary_forcing_temp_tend = register_diag_field('ocean_model',&
-      'boundary_forcing_temp_tendency', diag%axesTL, Time,             &
-      'Boundary forcing temperature tendency', 'Degree C per second')
-  if(CS%id_boundary_forcing_temp_tend > 0) then
-    CS%boundary_forcing_tendency_diag = .true.
-  endif
-
-  CS%id_boundary_forcing_saln_tend = register_diag_field('ocean_model',&
-      'boundary_forcing_saln_tendency', diag%axesTL, Time,             &
-      'Boundary forcing saln tendency', 'PPT per second')
-  if(CS%id_boundary_forcing_saln_tend > 0) then
-    CS%boundary_forcing_tendency_diag = .true.
-  endif
-
-  CS%id_boundary_forcing_heat_tend = register_diag_field('ocean_model',&
-      'boundary_forcing_heat_tendency', diag%axesTL, Time,             &
-      'Boundary forcing heat tendency','Watts/m2')
-  if(CS%id_boundary_forcing_heat_tend > 0) then
-    CS%boundary_forcing_tendency_diag = .true.
-  endif
-
-  CS%id_boundary_forcing_salt_tend = register_diag_field('ocean_model',&
-      'boundary_forcing_salt_tendency', diag%axesTL, Time,             &
-      'Boundary forcing salt tendency','kg m-2 s-1')
-  if(CS%id_boundary_forcing_salt_tend > 0) then
-    CS%boundary_forcing_tendency_diag = .true.
-  endif
-
-  ! This diagnostic should equal to surface heat flux if all is working well.
-  CS%id_boundary_forcing_heat_tend_2d = register_diag_field('ocean_model',&
-      'boundary_forcing_heat_tendency_2d', diag%axesT1, Time,             &
-      'Depth integrated boundary forcing of ocean heat','Watts/m2')
-  if(CS%id_boundary_forcing_heat_tend_2d > 0) then
-    CS%boundary_forcing_tendency_diag = .true.
-  endif
-
-  ! This diagnostic should equal to surface salt flux if all is working well.
-  CS%id_boundary_forcing_salt_tend_2d = register_diag_field('ocean_model',&
-      'boundary_forcing_salt_tendency_2d', diag%axesT1, Time,             &
-      'Depth integrated boundary forcing of ocean salt','kg m-2 s-1')
-  if(CS%id_boundary_forcing_salt_tend_2d > 0) then
-    CS%boundary_forcing_tendency_diag = .true.
-  endif
-
 
   ! diagnostics for tendencies of temp and heat due to frazil
 
@@ -2167,7 +2230,7 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
 
   ! initialize the auxiliary diabatic driver module
   call diabatic_aux_init(Time, G, GV, param_file, diag, CS%diabatic_aux_CSp, &
-                         CS%use_energetic_PBL)
+                         CS%useALEalgorithm, CS%use_energetic_PBL)
 
   ! initialize the boundary layer modules
   if (CS%bulkmixedlayer) &
@@ -2177,6 +2240,8 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
 
   call regularize_layers_init(Time, G, param_file, diag, CS%regularize_layers_CSp)
 
+  if (CS%debug_energy_req) &
+    call diapyc_energy_req_init(Time, G, param_file, diag, CS%diapyc_en_rec_CSp)
 
   ! obtain information about the number of bands for penetrative shortwave
   if (use_temperature) then
@@ -2214,6 +2279,8 @@ subroutine diabatic_driver_end(CS)
   if (CS%useConvection) call diffConvection_end(CS%Conv_CSp)
   if (CS%use_energetic_PBL) &
     call energetic_PBL_end(CS%energetic_PBL_CSp)
+  if (CS%debug_energy_req) &
+    call diapyc_energy_req_end(CS%diapyc_en_rec_CSp)
 
   if (associated(CS%optics)) then
     call opacity_end(CS%opacity_CSp, CS%optics)

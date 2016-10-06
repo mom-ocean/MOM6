@@ -27,10 +27,11 @@ use MOM_grid, only : ocean_grid_type
 use MOM_io, only : close_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
 use MOM_io, only : write_field, slasher
+use MOM_open_boundary, only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE, OBC_FLATHER
+use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
 use MOM_tracer_registry, only : tracer_registry_type, add_tracer_OBC_values
-use MOM_variables, only : thermo_var_ptrs, ocean_OBC_type, OBC_NONE, OBC_SIMPLE
-use MOM_variables, only : OBC_FLATHER_E, OBC_FLATHER_W, OBC_FLATHER_N, OBC_FLATHER_S
+use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 implicit none ; private
@@ -40,7 +41,7 @@ implicit none ; private
 public USER_set_coord, USER_initialize_topography, USER_initialize_thickness
 public USER_initialize_velocity, USER_init_temperature_salinity
 public USER_init_mixed_layer_density, USER_initialize_sponges
-public USER_set_Open_Bdry_Conds, USER_set_rotation
+public USER_set_OBC_data, USER_set_rotation
 
 logical :: first_call = .true.
 
@@ -199,7 +200,7 @@ subroutine USER_initialize_sponges(G, use_temperature, tv, param_file, CSp, h)
 end subroutine USER_initialize_sponges
 
 !> This subroutine sets the properties of flow at open boundary conditions.
-subroutine USER_set_Open_Bdry_Conds(OBC, tv, G, param_file, tr_Reg)
+subroutine USER_set_OBC_data(OBC, tv, G, param_file, tr_Reg)
   type(ocean_OBC_type),       pointer    :: OBC   !< This open boundary condition type specifies
                                                   !! whether, where, and what open boundary
                                                   !! conditions are used.
@@ -213,12 +214,12 @@ subroutine USER_set_Open_Bdry_Conds(OBC, tv, G, param_file, tr_Reg)
                                                   !! parameter values.
   type(tracer_registry_type), pointer    :: tr_Reg !< Tracer registry.
 !  call MOM_error(FATAL, &
-!   "USER_initialization.F90, USER_set_Open_Bdry_Conds: " // &
+!   "USER_initialization.F90, USER_set_OBC_data: " // &
 !   "Unmodified user routine called - you must edit the routine to use it")
 
   if (first_call) call write_user_log(param_file)
 
-end subroutine USER_set_Open_Bdry_Conds
+end subroutine USER_set_OBC_data
 
 subroutine USER_set_rotation(G, param_file)
   type(ocean_grid_type), intent(inout) :: G
