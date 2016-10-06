@@ -122,6 +122,12 @@ type, public :: forcing
   TKE_tidal     => NULL(), & !< tidal energy source driving mixing in bottom boundary layer (W/m^2)
   ustar_tidal   => NULL()    !< tidal contribution to bottom ustar (m/s)
 
+  ! iceberg related inputs
+  real, pointer, dimension(:,:) :: &
+  ustar_berg   => NULL(),&    !< iceberg contribution to top ustar (m/s)
+  area_berg   => NULL(),&     !< area of ocean surface covered by icebergs (m2/m2)
+  mass_berg   => NULL()     !< mass of icebergs (kg/m2)
+
   ! land ice-shelf related inputs
   real, pointer, dimension(:,:) :: &
   ustar_shelf   => NULL(), &   !< friction velocity under ice-shelves (m/s)
@@ -243,6 +249,15 @@ type, public :: forcing_diags
 
   ! clock id handle
   integer :: id_clock_forcing
+
+  ! iceberg id handle
+  integer :: id_ustar_berg
+  integer :: id_area_berg
+  integer :: id_mass_berg
+
+  !Iceberg + Ice shelf
+  integer :: id_ustar_ice_cover
+  integer :: id_frac_ice_cover
 
 end type forcing_diags
 
@@ -950,6 +965,21 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
 
   handles%id_ustar = register_diag_field('ocean_model', 'ustar', diag%axesT1, Time, &
       'Surface friction velocity = [(gustiness + tau_magnitude)/rho0]^(1/2)', 'meter second-1')
+
+  handles%id_ustar_berg = register_diag_field('ocean_model', 'ustar_berg', diag%axesT1, Time, &
+      'Friction velocity below iceberg ', 'meter second-1')
+
+  handles%id_area_berg = register_diag_field('ocean_model', 'area_berg', diag%axesT1, Time, &
+      'Area of grid cell covered by iceberg ', 'm2/m2')
+
+  handles%id_mass_berg = register_diag_field('ocean_model', 'mass_berg', diag%axesT1, Time, &
+      'Mass of icebergs ', 'kg/m2')
+
+  handles%id_ustar_ice_cover = register_diag_field('ocean_model', 'ustar_ice_cover', diag%axesT1, Time, &
+      'Friction velocity below iceberg and ice shelf together', 'meter second-1')
+
+  handles%id_frac_ice_cover = register_diag_field('ocean_model', 'frac_ice_cover', diag%axesT1, Time, &
+      'Area of grid cell below iceberg and ice shelf together ', 'm2/m2')
 
   handles%id_psurf = register_diag_field('ocean_model', 'p_surf', diag%axesT1, Time,           &
         'Pressure at ice-ocean or atmosphere-ocean interface', 'Pascal', cmor_field_name='pso',&
@@ -1684,6 +1714,16 @@ subroutine mech_forcing_diags(fluxes, dt, G, diag, handles)
       call post_data(handles%id_tauy, fluxes%tauy, diag)
     if ((handles%id_ustar > 0) .and. ASSOCIATED(fluxes%ustar)) &
       call post_data(handles%id_ustar, fluxes%ustar, diag)
+    if ((handles%id_ustar_berg > 0) .and. ASSOCIATED(fluxes%ustar_berg)) &
+      call post_data(handles%id_ustar_berg, fluxes%ustar_berg, diag)
+    if ((handles%id_area_berg > 0) .and. ASSOCIATED(fluxes%area_berg)) &
+      call post_data(handles%id_area_berg, fluxes%area_berg, diag)
+    if ((handles%id_mass_berg > 0) .and. ASSOCIATED(fluxes%mass_berg)) &
+      call post_data(handles%id_mass_berg, fluxes%mass_berg, diag)
+    if ((handles%id_frac_ice_cover > 0) .and. ASSOCIATED(fluxes%frac_shelf_h)) &
+      call post_data(handles%id_frac_ice_cover, fluxes%frac_shelf_h, diag)
+    if ((handles%id_ustar_ice_cover > 0) .and. ASSOCIATED(fluxes%ustar_shelf)) &
+      call post_data(handles%id_ustar_ice_cover, fluxes%ustar_shelf, diag)
 
   endif
 
@@ -2161,7 +2201,7 @@ end subroutine forcing_diagnostics
 
 
 !> Conditionally allocate fields within the forcing type
-subroutine allocate_forcing_type(G, fluxes, stress, ustar, water, heat, shelf, press)
+subroutine allocate_forcing_type(G, fluxes, stress, ustar, water, heat, shelf, press,iceberg)
   type(ocean_grid_type), intent(in) :: G       !< Ocean grid structure
   type(forcing),      intent(inout) :: fluxes  !< Forcing fields structure
   logical, optional,     intent(in) :: stress  !< If present and true, allocate taux, tauy
@@ -2170,6 +2210,7 @@ subroutine allocate_forcing_type(G, fluxes, stress, ustar, water, heat, shelf, p
   logical, optional,     intent(in) :: heat    !< If present and true, allocate heat fluxes
   logical, optional,     intent(in) :: shelf   !< If present and true, allocate fluxes for ice-shelf
   logical, optional,     intent(in) :: press   !< If present and true, allocate p_surf
+  logical, optional,     intent(in) :: iceberg !< If present and true, allocate fluxes for icebergs
 
   ! Local variables
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -2221,7 +2262,11 @@ subroutine allocate_forcing_type(G, fluxes, stress, ustar, water, heat, shelf, p
   call myAlloc(fluxes%rigidity_ice_v,isd,ied,JsdB,JedB, shelf)
 
   call myAlloc(fluxes%p_surf,isd,ied,jsd,jed, press)
-
+  
+  !These fields should only on allocated when iceberg area is being passed through the coupler.
+  call myAlloc(fluxes%ustar_berg,isd,ied,jsd,jed, iceberg) 
+  call myAlloc(fluxes%area_berg,isd,ied,jsd,jed, iceberg)   
+  call myAlloc(fluxes%mass_berg,isd,ied,jsd,jed, iceberg)   
   contains
 
   !> Allocates and zeroes-out array.
@@ -2293,6 +2338,9 @@ subroutine deallocate_forcing_type(fluxes)
   if (associated(fluxes%rigidity_ice_u))       deallocate(fluxes%rigidity_ice_u)
   if (associated(fluxes%rigidity_ice_v))       deallocate(fluxes%rigidity_ice_v)
   if (associated(fluxes%tr_fluxes))            deallocate(fluxes%tr_fluxes)
+  if (associated(fluxes%ustar_berg))            deallocate(fluxes%ustar_berg)
+  if (associated(fluxes%area_berg))            deallocate(fluxes%area_berg)
+  if (associated(fluxes%mass_berg))            deallocate(fluxes%mass_berg)
 end subroutine deallocate_forcing_type
 
 
