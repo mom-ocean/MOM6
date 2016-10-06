@@ -2870,7 +2870,7 @@ end subroutine regridding_memory_deallocation
 !! Most calculations in this module start with the coordinate at the bottom
 !! of the column set to -depth, and use a increasing value of coordinate with
 !! decreasing k. This is consistent with the rest of MOM6 that uses position,
-!!  f$z\f$ which is a negative quantity for most of the ocean.
+!! \f$z\f$ which is a negative quantity for most of the ocean.
 !!
 !! A change in grid is define through a change in position of the interfaces:
 !! \f[

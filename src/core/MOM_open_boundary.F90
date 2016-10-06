@@ -720,12 +720,12 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
                                      h_new, h_old, G)
   type(ocean_grid_type),                     intent(inout) :: G !< Ocean grid structure
   type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary control structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u_new
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u_old
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v_new
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v_old
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h_new
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h_old
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u_new !< New u values on open boundaries 
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u_old !< Original unadjusted u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v_new !< New v values on open boundaries
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v_old !< Original unadjusted v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h_new !< New h values on open boundaries
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h_old !< Original h values
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: grad
   real :: dhdt, dhdx, dhdy, gamma_u, gamma_h, gamma_v
