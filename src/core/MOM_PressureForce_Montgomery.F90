@@ -195,7 +195,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, 
       "can no longer be used with a compressible EOS. Use #define ANALYTIC_FV_PGF.")
   endif
 
-  I_gEarth = 1.0 / G%g_Earth
+  I_gEarth = 1.0 / GV%g_Earth
   dp_neglect = GV%H_to_Pa * GV%H_subroundoff
 !$OMP parallel default(none) shared(nz,alpha_Lay,GV,dalpha_int)
 !$OMP do
@@ -261,14 +261,14 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, 
 !$OMP end parallel
 
     call calc_tidal_forcing(CS%Time, SSH, e_tidal, G, CS%tides_CSp)
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,geopot_bot,G,e_tidal)
+!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,geopot_bot,G,GV,e_tidal)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      geopot_bot(i,j) = -G%g_Earth*(e_tidal(i,j) + G%bathyT(i,j))
+      geopot_bot(i,j) = -GV%g_Earth*(e_tidal(i,j) + G%bathyT(i,j))
     enddo ; enddo
   else
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,geopot_bot,G)
+!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,geopot_bot,G,GV)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      geopot_bot(i,j) = -G%g_Earth*G%bathyT(i,j)
+      geopot_bot(i,j) = -GV%g_Earth*G%bathyT(i,j)
     enddo ; enddo
   endif
 
@@ -366,7 +366,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, 
 
   ! Note that ddM/dPb = alpha_star(i,j,1)
   if (present(pbce)) then
-    call Set_pbce_nonBouss(p, tv_tmp, G, GV, G%g_Earth, CS%GFS_scale, pbce, &
+    call Set_pbce_nonBouss(p, tv_tmp, G, GV, GV%g_Earth, CS%GFS_scale, pbce, &
                            alpha_star)
   endif
 
@@ -510,7 +510,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta
 
   h_neglect = GV%H_subroundoff * GV%H_to_m
   I_Rho0 = 1.0/CS%Rho0
-  G_Rho0 = G%g_Earth/GV%Rho0
+  G_Rho0 = GV%g_Earth/GV%Rho0
 
   if (CS%tides) then
     !   Determine the surface height anomaly for calculating self attraction
@@ -619,7 +619,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta
   endif ! use_EOS
 
   if (present(pbce)) then
-    call Set_pbce_Bouss(e, tv_tmp, G, GV, G%g_Earth, CS%Rho0, CS%GFS_scale, pbce, &
+    call Set_pbce_Bouss(e, tv_tmp, G, GV, GV%g_Earth, CS%Rho0, CS%GFS_scale, pbce, &
                         rho_star)
   endif
 
@@ -1000,7 +1000,7 @@ subroutine PressureForce_Mont_init(Time, G, GV, param_file, diag, CS, tides_CSp)
   endif
 
   CS%GFS_scale = 1.0
-  if (GV%g_prime(1) /= G%g_Earth) CS%GFS_scale = GV%g_prime(1) / G%g_Earth
+  if (GV%g_prime(1) /= GV%g_Earth) CS%GFS_scale = GV%g_prime(1) / GV%g_Earth
 
   call log_param(param_file, mod, "GFS / G_EARTH", CS%GFS_scale)
 

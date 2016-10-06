@@ -61,10 +61,11 @@ use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
 use MOM_kappa_shear, only : kappa_shear_is_used
+use MOM_CVMix_shear, only : CVMix_shear_is_used
 use MOM_io, only : vardesc, var_desc
 use MOM_restart, only : register_restart_field, MOM_restart_CS
 use MOM_variables, only : thermo_var_ptrs
-use MOM_variables, only : vertvisc_type, ocean_OBC_type
+use MOM_variables, only : vertvisc_type
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs
 
@@ -287,7 +288,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nkmb = GV%nk_rho_varies ; nkml = GV%nkml
   h_neglect = GV%H_subroundoff
-  Rho0x400_G = 400.0*(GV%Rho0/G%g_Earth)*GV%m_to_H
+  Rho0x400_G = 400.0*(GV%Rho0/GV%g_Earth)*GV%m_to_H
   Vol_quit = 0.9*GV%Angstrom + h_neglect
   H_to_m = GV%H_to_m ; m_to_H = GV%m_to_H
   C2pi_3 = 8.0*atan(1.0)/3.0
@@ -809,12 +810,12 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
     call post_data(CS%id_Ray_v, visc%Ray_v, CS%diag)
 
   if (CS%debug) then
-    if (associated(visc%Ray_u)) call uchksum(visc%Ray_u,"Ray u",G,haloshift=0)
-    if (associated(visc%Ray_v)) call vchksum(visc%Ray_v,"Ray v",G,haloshift=0)
-    if (associated(visc%kv_bbl_u)) call uchksum(visc%kv_bbl_u,"kv_bbl_u",G,haloshift=0)
-    if (associated(visc%kv_bbl_v)) call vchksum(visc%kv_bbl_v,"kv_bbl_v",G,haloshift=0)
-    if (associated(visc%bbl_thick_u)) call uchksum(visc%bbl_thick_u,"bbl_thick_u",G,haloshift=0)
-    if (associated(visc%bbl_thick_v)) call vchksum(visc%bbl_thick_v,"bbl_thick_v",G,haloshift=0)
+    if (associated(visc%Ray_u)) call uchksum(visc%Ray_u,"Ray u",G%HI,haloshift=0)
+    if (associated(visc%Ray_v)) call vchksum(visc%Ray_v,"Ray v",G%HI,haloshift=0)
+    if (associated(visc%kv_bbl_u)) call uchksum(visc%kv_bbl_u,"kv_bbl_u",G%HI,haloshift=0)
+    if (associated(visc%kv_bbl_v)) call vchksum(visc%kv_bbl_v,"kv_bbl_v",G%HI,haloshift=0)
+    if (associated(visc%bbl_thick_u)) call uchksum(visc%bbl_thick_u,"bbl_thick_u",G%HI,haloshift=0)
+    if (associated(visc%bbl_thick_v)) call vchksum(visc%bbl_thick_v,"bbl_thick_v",G%HI,haloshift=0)
   endif
 
 end subroutine set_viscous_BBL
@@ -990,7 +991,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
          "Module must be initialized before it is used.")
   if (.not.(CS%dynamic_viscous_ML .or. associated(fluxes%frac_shelf_h))) return
 
-  Rho0x400_G = 400.0*(GV%Rho0/G%g_Earth)*GV%m_to_H
+  Rho0x400_G = 400.0*(GV%Rho0/GV%g_Earth)*GV%m_to_H
   U_bg_sq = CS%drag_bg_vel * CS%drag_bg_vel
   cdrag_sqrt=sqrt(CS%cdrag)
 
@@ -998,7 +999,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
   dt_Rho0 = dt/GV%H_to_kg_m2
   h_neglect = GV%H_subroundoff
   h_tiny = 2.0*GV%Angstrom + h_neglect
-  g_H_Rho0 = (G%g_Earth * GV%H_to_m) / GV%Rho0
+  g_H_Rho0 = (GV%g_Earth * GV%H_to_m) / GV%Rho0
   H_to_m = GV%H_to_m ; m_to_H = GV%m_to_H
 
   if (associated(fluxes%frac_shelf_h)) then
@@ -1528,9 +1529,9 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
 
   if (CS%debug) then
     if (associated(visc%nkml_visc_u)) &
-      call uchksum(visc%nkml_visc_u,"nkml_visc_u",G,haloshift=0)
+      call uchksum(visc%nkml_visc_u,"nkml_visc_u",G%HI,haloshift=0)
     if (associated(visc%nkml_visc_v)) &
-      call vchksum(visc%nkml_visc_v,"nkml_visc_v",G,haloshift=0)
+      call vchksum(visc%nkml_visc_v,"nkml_visc_v",G%HI,haloshift=0)
   endif
   if (CS%id_nkml_visc_u > 0) &
     call post_data(CS%id_nkml_visc_u, visc%nkml_visc_u, CS%diag)
@@ -1555,16 +1556,19 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
 !                   fields.  Allocated here.
 !  (in)      restart_CS - A pointer to the restart control structure.
   type(vardesc) :: vd
-  logical :: use_kappa_shear, adiabatic, useKPP, useEPBL, MLE_use_PBL_MLD
+  logical :: use_kappa_shear, adiabatic, useKPP, useEPBL
+  logical :: use_CVMix, MLE_use_PBL_MLD
   integer :: isd, ied, jsd, jed, nz
   character(len=40)  :: mod = "MOM_set_visc"  ! This module's name.
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
   call get_param(param_file, mod, "ADIABATIC", adiabatic, default=.false., &
                  do_not_log=.true.)
-  use_kappa_shear = .false. ; useKPP = .false. ; useEPBL = .false.
+  use_kappa_shear = .false. ; use_CVMix = .false. ; 
+  useKPP = .false. ; useEPBL = .false.
   if (.not.adiabatic) then
     use_kappa_shear = kappa_shear_is_used(param_file)
+    use_CVMix = CVMix_shear_is_used(param_file)
     call get_param(param_file, mod, "USE_KPP", useKPP, &
                  "If true, turns on the [CVmix] KPP scheme of Large et al., 1984,\n"// &
                  "to calculate diffusivities and non-local transport in the OBL.", &
@@ -1575,7 +1579,7 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
                  "in the surface boundary layer.", default=.false., do_not_log=.true.)
   endif
 
-  if (use_kappa_shear .or. useKPP .or. useEPBL) then
+  if (use_kappa_shear .or. useKPP .or. useEPBL .or. use_CVMix) then
     allocate(visc%Kd_turb(isd:ied,jsd:jed,nz+1)) ; visc%Kd_turb(:,:,:) = 0.0
     allocate(visc%TKE_turb(isd:ied,jsd:jed,nz+1)) ; visc%TKE_turb(:,:,:) = 0.0
     allocate(visc%Kv_turb(isd:ied,jsd:jed,nz+1)) ; visc%Kv_turb(:,:,:) = 0.0

@@ -100,7 +100,7 @@ subroutine verticalGridInit( param_file, GV )
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mod, version, &
                    "Parameters providing information about the vertical grid.")
-  call get_param(param_file, "MOM", "G_EARTH", GV%g_Earth, &
+  call get_param(param_file, mod, "G_EARTH", GV%g_Earth, &
                  "The gravitational acceleration of the Earth.", &
                  units="m s-2", default = 9.80)
   call get_param(param_file, mod, "RHO_0", GV%Rho0, &
@@ -262,16 +262,20 @@ subroutine setVerticalGridAxes( Rlay, GV )
   type(verticalGrid_type), intent(inout) :: GV   !< The container for vertical grid data
   real, dimension(GV%ke),  intent(in)    :: Rlay !< The layer target density
   ! Local variables
-  integer :: nk
+  integer :: k, nk
 
   nk = GV%ke
 
   GV%zAxisLongName = 'Target Potential Density'
   GV%zAxisUnits = 'kg m-3'
-  GV%sLayer(:) = Rlay(:)
-  GV%sInterface(1) = 1.5*Rlay(1) - 0.5*Rlay(2)
-  GV%sInterface(2:nk) = 0.5*( Rlay(1:nk-1) + Rlay(2:nk) )
-  GV%sInterface(nk+1) = 1.5*Rlay(nk) - 0.5*Rlay(nk-1)
+  do k=1,nk ; GV%sLayer(k) = Rlay(k) ; enddo
+  if (nk > 1) then
+    GV%sInterface(1) = 1.5*Rlay(1) - 0.5*Rlay(2)
+    do K=2,nk ; GV%sInterface(K) = 0.5*( Rlay(k-1) + Rlay(k) ) ; enddo
+    GV%sInterface(nk+1) = 1.5*Rlay(nk) - 0.5*Rlay(nk-1)
+  else
+    GV%sInterface(1) = 0.0 ; GV%sInterface(nk+1) = 2.0*Rlay(nk)
+  endif
 
 end subroutine setVerticalGridAxes
 
