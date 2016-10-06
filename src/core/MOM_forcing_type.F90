@@ -109,7 +109,7 @@ type, public :: forcing
   p_surf_full   => NULL(), & !< Pressure at the top ocean interface (Pa).
                              !! if there is sea-ice, then p_surf_flux is at ice-ocean interface
   p_surf        => NULL(), & !< Pressure at the top ocean interface (Pa) as used
-                             !! to drive the ocean model. If p_surf is limited, 
+                             !! to drive the ocean model. If p_surf is limited,
                              !! p_surf may be smaller than p_surf_full,
                              !! otherwise they are the same.
   p_surf_SSH    => NULL()    !< Pressure at the top ocean interface that is used
@@ -201,7 +201,7 @@ type, public :: forcing_diags
   integer :: id_heat_content_cond   = -1, id_heat_content_surfwater= -1
   integer :: id_heat_content_vprec  = -1, id_heat_content_massout  = -1
   integer :: id_heat_added          = -1, id_heat_content_massin   = -1
-  integer :: id_hfrainds            = -1, id_hfrunoffds            = -1 
+  integer :: id_hfrainds            = -1, id_hfrunoffds            = -1
 
 
   ! global area integrated heat flux diagnostic handles
@@ -1170,7 +1170,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
   handles%id_hfrunoffds = register_diag_field('ocean_model', 'hfrunoffds',                            &
         diag%axesT1, Time, 'Heat content (relative to 0C) of liquid+solid runoff into ocean', 'W m-2',&
         standard_name='temperature_flux_due_to_runoff_expressed_as_heat_flux_into_sea_water')
- 
+
   handles%id_heat_content_lprec = register_diag_field('ocean_model', 'heat_content_lprec',             &
         diag%axesT1,Time,'Heat content (relative to 0degC) of liquid precip entering ocean',           &
         'W/m^2')
@@ -1652,7 +1652,7 @@ subroutine forcing_accumulate(flux_tmp, fluxes, dt, G, wt2)
       fluxes%ustar_shelf(i,j)  = flux_tmp%ustar_shelf(i,j)
     enddo ; enddo
   endif
-  
+
   if (associated(fluxes%iceshelf_melt) .and. associated(flux_tmp%iceshelf_melt)) then
     do i=isd,ied ; do j=jsd,jed
       fluxes%iceshelf_melt(i,j)  = flux_tmp%iceshelf_melt(i,j)
@@ -2017,31 +2017,31 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
     endif
 
     ! for OMIP, hfrunoffds = heat content of liquid plus frozen runoff
-    if (handles%id_hfrunoffds > 0) then 
-      sum(:,:) = 0.0       
-      if(ASSOCIATED(fluxes%heat_content_lrunoff)) then 
+    if (handles%id_hfrunoffds > 0) then
+      sum(:,:) = 0.0
+      if(ASSOCIATED(fluxes%heat_content_lrunoff)) then
         sum(:,:) = sum(:,:) + fluxes%heat_content_lrunoff(:,:)
-      endif 
-      if(ASSOCIATED(fluxes%heat_content_frunoff)) then 
+      endif
+      if(ASSOCIATED(fluxes%heat_content_frunoff)) then
         sum(:,:) = sum(:,:) + fluxes%heat_content_frunoff(:,:)
-      endif 
+      endif
       call post_data(handles%id_hfrunoffds, sum, diag)
-    endif 
+    endif
 
-    ! for OMIP, hfrainds = heat content of lprec + fprec + cond 
-    if (handles%id_hfrainds > 0) then 
-      sum(:,:) = 0.0       
-      if(ASSOCIATED(fluxes%heat_content_lprec)) then 
+    ! for OMIP, hfrainds = heat content of lprec + fprec + cond
+    if (handles%id_hfrainds > 0) then
+      sum(:,:) = 0.0
+      if(ASSOCIATED(fluxes%heat_content_lprec)) then
         sum(:,:) = sum(:,:) + fluxes%heat_content_lprec(:,:)
-      endif 
-      if(ASSOCIATED(fluxes%heat_content_fprec)) then 
+      endif
+      if(ASSOCIATED(fluxes%heat_content_fprec)) then
         sum(:,:) = sum(:,:) + fluxes%heat_content_fprec(:,:)
-      endif 
-      if(ASSOCIATED(fluxes%heat_content_cond)) then 
+      endif
+      if(ASSOCIATED(fluxes%heat_content_cond)) then
         sum(:,:) = sum(:,:) + fluxes%heat_content_cond(:,:)
-      endif 
+      endif
       call post_data(handles%id_hfrainds, sum, diag)
-    endif 
+    endif
 
     if ((handles%id_LwLatSens > 0) .and. ASSOCIATED(fluxes%lw) .and. &
          ASSOCIATED(fluxes%latent) .and. ASSOCIATED(fluxes%sens)) then
@@ -2201,7 +2201,7 @@ end subroutine forcing_diagnostics
 
 
 !> Conditionally allocate fields within the forcing type
-subroutine allocate_forcing_type(G, fluxes, stress, ustar, water, heat, shelf, press,iceberg)
+subroutine allocate_forcing_type(G, fluxes, stress, ustar, water, heat, shelf, press, iceberg)
   type(ocean_grid_type), intent(in) :: G       !< Ocean grid structure
   type(forcing),      intent(inout) :: fluxes  !< Forcing fields structure
   logical, optional,     intent(in) :: stress  !< If present and true, allocate taux, tauy
@@ -2262,11 +2262,11 @@ subroutine allocate_forcing_type(G, fluxes, stress, ustar, water, heat, shelf, p
   call myAlloc(fluxes%rigidity_ice_v,isd,ied,JsdB,JedB, shelf)
 
   call myAlloc(fluxes%p_surf,isd,ied,jsd,jed, press)
-  
+
   !These fields should only on allocated when iceberg area is being passed through the coupler.
-  call myAlloc(fluxes%ustar_berg,isd,ied,jsd,jed, iceberg) 
-  call myAlloc(fluxes%area_berg,isd,ied,jsd,jed, iceberg)   
-  call myAlloc(fluxes%mass_berg,isd,ied,jsd,jed, iceberg)   
+  call myAlloc(fluxes%ustar_berg,isd,ied,jsd,jed, iceberg)
+  call myAlloc(fluxes%area_berg,isd,ied,jsd,jed, iceberg)
+  call myAlloc(fluxes%mass_berg,isd,ied,jsd,jed, iceberg)
   contains
 
   !> Allocates and zeroes-out array.
@@ -2338,7 +2338,7 @@ subroutine deallocate_forcing_type(fluxes)
   if (associated(fluxes%rigidity_ice_u))       deallocate(fluxes%rigidity_ice_u)
   if (associated(fluxes%rigidity_ice_v))       deallocate(fluxes%rigidity_ice_v)
   if (associated(fluxes%tr_fluxes))            deallocate(fluxes%tr_fluxes)
-  if (associated(fluxes%ustar_berg))            deallocate(fluxes%ustar_berg)
+  if (associated(fluxes%ustar_berg))           deallocate(fluxes%ustar_berg)
   if (associated(fluxes%area_berg))            deallocate(fluxes%area_berg)
   if (associated(fluxes%mass_berg))            deallocate(fluxes%mass_berg)
 end subroutine deallocate_forcing_type
