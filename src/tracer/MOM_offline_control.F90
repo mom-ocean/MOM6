@@ -327,6 +327,10 @@ contains
     CS%ridx_sum = CS%start_index
     if(CS%fields_are_offset) CS%ridx_snap = next_modulo_time(CS%start_index,CS%numtime)
     if(.not. CS%fields_are_offset) CS%ridx_snap = CS%start_index
+    
+    ! Copy over parameters from other control structures
+    CS%evap_CFL_limit = diabatic_CSp%diabatic_aux_CSp%evap_CFL_limit
+    CS%minimum_forcing_depth = diabatic_CSp%diabatic_aux_CSp%minimum_forcing_depth
 
     call callTree_leave("offline_transport_init")
 

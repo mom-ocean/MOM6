@@ -1435,8 +1435,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     ! Meridional diffusive transports
     real, dimension(SZI_(CS%G),SZJB_(CS%G))              :: khdt_y
 
-    real :: sum_abs_fluxes, sum_u, sum_v ! Used to keep track of how close to convergence we are
-    real :: dt_offline  ! Shorthand variable 
+    real :: sum_abs_fluxes, sum_u, sum_v  ! Used to keep track of how close to convergence we are
+    real :: dt_offline, minimum_forcing_depth, evap_CFL_limit ! Shorthand variables from offline CS
 
     ! Local variables
     ! Vertical diffusion related variables
@@ -1468,17 +1468,21 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     ! Grid-related pointer assignments
     G => CS%G
     GV => CS%GV
-
+    
+    ! Initialize some shorthand variables from other structures
     is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
     isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
     IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
     dt_offline = CS%offline_CSp%dt_offline
+    evap_CFL_limit = CS%offline_CSp%evap_CFL_limit
+    minimum_forcing_depth = CS%offline_CSp%minimum_forcing_depth
 
     niter = CS%offline_CSp%num_off_iter
     Inum_iter = 1./real(niter)
     dt_iter = dt_offline*Inum_iter
 
+    ! Initialize working arrays
     uhtr(:,:,:) = 0.0
     vhtr(:,:,:) = 0.0
     khdt_x(:,:) = 0.0
@@ -1496,19 +1500,18 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     ebtr_sub(:,:,:) = 0.0
 
     call cpu_clock_begin(id_clock_tracer)
-    call enable_averaging(time_interval, Time_start+set_time(int(time_interval)), &
-                          CS%diag)
+    call enable_averaging(time_interval, Time_start+set_time(int(time_interval)), CS%diag)
 
     ! Read in all fields that might be used this timestep
     call transport_by_files(G, GV, CS%offline_CSp, h_end, eatr, ebtr, uhtr, vhtr, &
         khdt_x, khdt_y, temp_old, salt_old, fluxes, CS%use_ALE_algorithm)
 
+    ! Set the starting layer thicknesses to those from the previous timestep    
     do k=1,nz ; do j=jsd,jed ; do i=isd,ied
       h_pre(i,j,k) = CS%h(i,j,k)
     enddo ; enddo; enddo
     call pass_var(h_pre,G%Domain)    
 
-    h_new(:,:,:) = GV%Angstrom
     x_before_y = (MOD(G%first_direction,2) == 0)
     z_first = CS%diabatic_first
 
@@ -1519,7 +1522,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       ! 1)  Using the layer thicknesses and tracer concentrations from the previous timestep, 
       !     half of the accumulated vertical mixing (eatr and ebtr) is applied in the call to tracer_column_fns.
       !     For tracers whose source/sink terms need dt, this value is set to 1/2 dt_offline
-      ! 2)  Next half of the accumulated surface freshwater fluxes are applied
+      ! 2)  Half of the accumulated surface freshwater fluxes are applied
       !! START ITERATION
       ! 3)  Accumulated mass fluxes are used to do horizontal transport. The number of iterations used in
       !     advect_tracer is limited to 2 (e.g x->y->x->y). The remaining mass fluxes are stored for later use
@@ -1566,10 +1569,11 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       call call_tracer_column_fns(h_pre, h_new, eatr*0.5, ebtr*0.5, &
               fluxes, CS%offline_CSp%dt_offline*0.5, G, GV, CS%tv, &
               CS%diabatic_CSp%optics, CS%tracer_flow_CSp, CS%debug, &
-              evap_CFL_limit=0.8, &
-              minimum_forcing_depth=0.001)
+              evap_CFL_limit=evap_CFL_limit, &
+              minimum_forcing_depth=minimum_forcing_depth)
+      ! Add half of the total freshwater fluxes 
       call applyTracerBoundaryFluxesInOut(G, GV, zero_3dh, 0.5*dt_offline, fluxes, h_pre, &
-                                    0.8, 0.001)
+                                    evap_CFL_limit, minimum_forcing_depth)
                                     
       if(CS%debug) then
         call hchksum(h_pre,"h_pre after 1st diabatic",G%HI)
@@ -1647,10 +1651,10 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       call call_tracer_column_fns(h_pre, h_new, eatr*0.5, ebtr*0.5, &
               fluxes, CS%offline_CSp%dt_offline*0.5, G, GV, CS%tv, &
               CS%diabatic_CSp%optics, CS%tracer_flow_CSp, CS%debug, &
-              evap_CFL_limit=0.8, &
-              minimum_forcing_depth=0.001)
+              evap_CFL_limit=evap_CFL_limit, &
+              minimum_forcing_depth=minimum_forcing_depth)
       call applyTracerBoundaryFluxesInOut(G, GV, zero_3dh, 0.5*dt_offline, fluxes, h_pre, &
-          0.8, 0.001)
+          evap_CFL_limit, minimum_forcing_depth)
           
       if(CS%debug) then
         call hchksum(h_pre,"h_pre after 2nd diabatic",G%HI)
@@ -1782,12 +1786,10 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         x_before_y = .not. x_before_y
 
       end do
+      call tracer_hordiff(h_end, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
+        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, CS%do_online, khdt_x*0.5, khdt_y*0.5)
     endif
     
-    ! Tracer diffusion Strang split between advection and diffusion
-    call tracer_hordiff(h_end, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
-        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, CS%do_online, khdt_x*0.5, khdt_y*0.5)
-
     h_temp = h_end-h_pre
 
     if (CS%offline_CSp%id_hr>0) call post_data(CS%offline_CSp%id_hr, h_temp, CS%diag)
