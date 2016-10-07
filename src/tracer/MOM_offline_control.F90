@@ -24,17 +24,21 @@
 !*                                                                     *
 !*  The subroutines here allow MOM6 to be run in a so-called 'offline' *
 !*  mode ostensibly for the purpose of modeling tracers. Instead of    *
-!*  calculating u, v, and h prognostically, these fields are read in   *
+!*  calculating mass transports prognostically, these fields are read  *
 !*  at regular intervals which have been saved from a previous         *
 !*  integration of MOM6.                                               *
 !*                                                                     *
-!*  Users are warned that the usual diagnostics (i.e. conservation of  *
-!*  mass) cannot be expected to be replicated to the same accuracy as  *
-!*  the online model because some information is loss due to the       *
-!*  averaging and snapshotting involved with saving offline files. The *
-!*  responsibility lies on the user that the loss of accuracy is       *
-!*  acceptable for their application.
+!*  Users should note that by accumulating fluxes over a range dt,     *
+!*  homogeneity over that time period is implictly assumed. For        *
+!*  example, this means that for fluxes accumulated over a day, the    *
+!*  diurnal cycling of the surface boundary layer is not resolved, but *
+!*  total transport should be conserved. It is the user's              *
+!*  responsibility to determine what the appropriate offline time      *
+!*  scale should be. As a general guidance for global configurations   *
+!*  5 days seems to be a reasonable choice.                            *
 !*                                                                     *
+!*  The actual driver for offline tracer transport is in the           *
+!*  subroutine step_tracers in MOM.F90                                 *
 !*  Macros written all in capital letters are defined in MOM_memory.h  *
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
@@ -42,21 +46,22 @@
 module MOM_offline_transport
 
 
-  use data_override_mod,  only : data_override_init, data_override
-  use MOM_time_manager,   only : time_type
-  use MOM_domains,        only : pass_var, pass_vector, To_All
-  use MOM_error_handler,  only : callTree_enter, callTree_leave, MOM_error, FATAL, WARNING, is_root_pe
-  use MOM_grid,           only : ocean_grid_type
-  use MOM_verticalGrid,   only : verticalGrid_type
-  use MOM_io,             only : read_data
-  use MOM_file_parser,    only : get_param, log_version, param_file_type
-  use MOM_diag_mediator,  only : diag_ctrl, register_diag_field
-  use mpp_domains_mod,    only : CENTER, CORNER, NORTH, EAST
-  use MOM_variables,      only : vertvisc_type
-  use MOM_forcing_type,   only : forcing
-  use MOM_shortwave_abs,  only : optics_type
-  use MOM_diag_mediator,  only : post_data
-  use MOM_forcing_type,   only : forcing
+  use data_override_mod,    only : data_override_init, data_override
+  use MOM_time_manager,     only : time_type
+  use MOM_domains,          only : pass_var, pass_vector, To_All
+  use MOM_error_handler,    only : callTree_enter, callTree_leave, MOM_error, FATAL, WARNING, is_root_pe
+  use MOM_grid,             only : ocean_grid_type
+  use MOM_verticalGrid,     only : verticalGrid_type
+  use MOM_io,               only : read_data
+  use MOM_file_parser,      only : get_param, log_version, param_file_type
+  use MOM_diag_mediator,    only : diag_ctrl, register_diag_field
+  use mpp_domains_mod,      only : CENTER, CORNER, NORTH, EAST
+  use MOM_variables,        only : vertvisc_type
+  use MOM_forcing_type,     only : forcing
+  use MOM_shortwave_abs,    only : optics_type
+  use MOM_diag_mediator,    only : post_data
+  use MOM_forcing_type,     only : forcing
+  use MOM_diabatic_driver,  only : diabatic_CS
 
   implicit none
 
@@ -64,44 +69,31 @@ module MOM_offline_transport
 
   type, public :: offline_transport_CS
 
+    !> Variables related to reading in fields from online run
     integer :: start_index  ! Timelevel to start
-    integer :: numtime     ! How many timelevels in the input fields
-
+    integer :: numtime      ! How many timelevels in the input fields
     integer :: &            ! Index of each of the variables to be read in
-      ridx_mean = -1, &     ! Separate indices for each variabile if they are
-      ridx_snap = -1      ! setoff from each other in time
-
-
+      ridx_sum = -1, &      ! Separate indices for each variabile if they are
+      ridx_snap = -1        ! setoff from each other in time
     character(len=200) :: offlinedir  ! Directory where offline fields are stored
-    character(len=200) :: & ! Names
-      mean_file,  &
+    character(len=200) :: & !         ! Names of input files
       snap_file,  &
-      sum_file,   &
-      preale_file
-
+      sum_file
     logical :: fields_are_offset ! True if the time-averaged fields and snapshot fields are
                                  ! offset by one time level
-
-    real :: max_off_cfl
-    ! These fields for preale are allocatable because they are not necessary for all runs
-    real, allocatable, dimension(NIMEM_,NJMEM_,NKMEM_)      :: &
-      T_preale, &
-      S_preale, &
-      h_preale
-    real, allocatable, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
-      u_preale
-    real, allocatable, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
-      v_preale
-
-    real              ::  dt_offline ! Timestep used for offline tracers
-
+    
+    !> Variables controlling some of the numerical considerations of offline transport
     integer           ::  num_off_iter
+    real              ::  dt_offline ! Timestep used for offline tracers
+    real              ::  max_off_cfl=0.5 ! Hardcoded for now, only used in non-ALE mode
+    real              ::  evap_CFL_limit, minimum_forcing_depth
 
+    !> Diagnostic manager IDs for use in the online model of additional fields necessary
+    !> for offline tracer modeling
     integer :: &
       id_uhtr_preadv = -1, &
       id_vhtr_preadv = -1, &
-      id_temp_preadv = -1, &
-      id_salt_preadv = -1, &
+    !> Diagnostic manager IDs for some fields that may be of interest when doing offline transport  
       id_uhr = -1, &
       id_vhr = -1, &
       id_ear = -1, &
@@ -113,7 +105,6 @@ module MOM_offline_transport
 #include "MOM_memory.h"
 #include "version_variable.h"
   public offline_transport_init
-  public post_advection_fields
   public transport_by_files
   public register_diags_offline_transport
   public update_h_horizontal_flux
@@ -122,41 +113,10 @@ module MOM_offline_transport
 
 contains
 
-    ! Called right before tracer_advect call in MOM.F90 to ensure that all terms
-    ! in the tracer advection routine are the same online and offline
-  subroutine post_advection_fields( G, CS, diag, h_adv, uhtr, vhtr, temp, salt )
-
-    type(ocean_grid_type),                     intent(in)       :: G
-    type(offline_transport_CS),                intent(in)       :: CS
-    type(diag_ctrl),                           intent(inout)    :: diag
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)       :: h_adv, temp, salt
-    real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)       :: uhtr   !< accumulated volume/mass flux through zonal face (m3 or kg)
-    real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)       :: vhtr   !< accumulated volume/mass flux through merid face (m3 or kg)
-
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G))                    :: write_all_3dt
-    real, dimension(SZIB_(G),SZJ_(G),SZK_(G))                   :: write_all_3du
-    real, dimension(SZI_(G),SZJB_(G),SZK_(G))                   :: write_all_3dv
-
-
-    write_all_3dt(:,:,:) = 1.
-    write_all_3du(:,:,:) = 1.
-    write_all_3dv(:,:,:) = 1.
-
-
-    if (CS%id_uhtr_preadv>0)   call post_data(CS%id_uhtr_preadv,  uhtr, diag )
-    if (CS%id_vhtr_preadv>0)   call post_data(CS%id_vhtr_preadv,  vhtr, diag )
-    if (CS%id_temp_preadv>0)   call post_data(CS%id_temp_preadv,  temp, diag )
-    if (CS%id_salt_preadv>0)   call post_data(CS%id_salt_preadv,  salt, diag )
-
-!    if (CS%id_uhtr_preadv>0)   call post_data(CS%id_uhtr_preadv,  uhtr, diag, mask = write_all_3du )
-!    if (CS%id_vhtr_preadv>0)   call post_data(CS%id_vhtr_preadv,  vhtr, diag, mask = write_all_3dv )
-!    if (CS%id_temp_preadv>0)   call post_data(CS%id_temp_preadv,  temp, diag, mask = write_all_3dt )
-!    if (CS%id_salt_preadv>0)   call post_data(CS%id_salt_preadv,  salt, diag, mask = write_all_3dt )
-
-  end subroutine post_advection_fields
-
   subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, khdt_y, &
-    temp, salt, fluxes, do_ale_in)
+      temp, salt, fluxes, do_ale_in)
+  !> Controls the reading in 3d mass fluxes, diffusive fluxes, and other fields stored
+  !! in a previous integration of the online model
     type(ocean_grid_type),                     intent(inout)    :: G
     type(verticalGrid_type),                   intent(inout)    :: GV
     type(offline_transport_CS),                intent(inout)    :: CS
@@ -193,26 +153,26 @@ contains
 
     !! Time-summed fields
     ! U-grid
-    call read_data(CS%sum_file, 'uhtr_preadv_sum',     uhtr,domain=G%Domain%mpp_domain, &
-      timelevel=CS%ridx_mean,position=EAST)
+    call read_data(CS%sum_file, 'uhtr_sum',     uhtr,domain=G%Domain%mpp_domain, &
+      timelevel=CS%ridx_sum,position=EAST)
     call read_data(CS%sum_file, 'khdt_x_sum', khdt_x,domain=G%Domain%mpp_domain, &
-      timelevel=CS%ridx_mean,position=EAST)
+      timelevel=CS%ridx_sum,position=EAST)
     ! V-grid
-    call read_data(CS%sum_file, 'vhtr_preadv_sum',     vhtr, domain=G%Domain%mpp_domain, &
-      timelevel=CS%ridx_mean,position=NORTH)
+    call read_data(CS%sum_file, 'vhtr_sum',     vhtr, domain=G%Domain%mpp_domain, &
+      timelevel=CS%ridx_sum,position=NORTH)
     call read_data(CS%sum_file, 'khdt_y_sum', khdt_y, domain=G%Domain%mpp_domain, &
-      timelevel=CS%ridx_mean,position=NORTH)
+      timelevel=CS%ridx_sum,position=NORTH)
     ! T-grid
     call read_data(CS%sum_file, 'ea_sum',   eatr, domain=G%Domain%mpp_domain, &
-      timelevel=CS%ridx_mean,position=CENTER)
+      timelevel=CS%ridx_sum,position=CENTER)
     call read_data(CS%sum_file, 'eb_sum',   ebtr, domain=G%Domain%mpp_domain, &
-      timelevel=CS%ridx_mean,position=CENTER)
+      timelevel=CS%ridx_sum,position=CENTER)
 
     !! Time-averaged fields
     call read_data(CS%snap_file, 'temp',   temp, domain=G%Domain%mpp_domain, &
-      timelevel=CS%ridx_mean,position=CENTER)
+      timelevel=CS%ridx_sum,position=CENTER)
     call read_data(CS%snap_file, 'salt',   salt, domain=G%Domain%mpp_domain, &
-      timelevel=CS%ridx_mean,position=CENTER)
+      timelevel=CS%ridx_sum,position=CENTER)
 
     !! Read snapshot fields (end of time interval timestamp)
     call read_data(CS%snap_file, 'h_end', h_end, domain=G%Domain%mpp_domain, &
@@ -241,6 +201,8 @@ contains
       endif
     enddo; enddo ; enddo
 
+    ! This block makes sure that the fluxes control structure, which may not be used in the solo_driver,
+    ! contains netMassIn and netMassOut which is necessary for the applyTracerBoundaryFluxesInOut routine
     if (do_ale) then
       if (.not. ASSOCIATED(fluxes%netMassOut)) then
         ALLOCATE(fluxes%netMassOut(G%isd:G%ied,G%jsd:G%jed))
@@ -251,9 +213,9 @@ contains
         fluxes%netMassIn(:,:) = 0.0
       endif
       
-      call read_data(CS%sum_file,'net_massout_sum',fluxes%netMassOut, domain=G%Domain%mpp_domain, &
+      call read_data(CS%sum_file,'massout_flux_sum',fluxes%netMassOut, domain=G%Domain%mpp_domain, &
           timelevel=CS%ridx_snap,position=center)
-      call read_data(CS%sum_file,'net_massin_sum', fluxes%netMassIn,  domain=G%Domain%mpp_domain, &
+      call read_data(CS%sum_file,'massin_flux_sum', fluxes%netMassIn,  domain=G%Domain%mpp_domain, &
           timelevel=CS%ridx_snap,position=center)
     endif
 
@@ -276,7 +238,7 @@ contains
 
     ! Update the read indices
     CS%ridx_snap = next_modulo_time(CS%ridx_snap,CS%numtime)
-    CS%ridx_mean = next_modulo_time(CS%ridx_mean,CS%numtime)
+    CS%ridx_sum = next_modulo_time(CS%ridx_sum,CS%numtime)
 
     call callTree_leave("transport_by_file")
 
@@ -291,14 +253,10 @@ contains
 
 
     ! U-cell fields
-    CS%id_uhtr_preadv = register_diag_field('ocean_model', 'uhtr_preadv', diag%axesCuL, Time, &
-      'Accumulated zonal thickness fluxes to advect tracers', 'kg')
     CS%id_uhr = register_diag_field('ocean_model', 'uhr', diag%axesCuL, Time, &
       'Zonal thickness fluxes remaining at end of timestep', 'kg')
 
     ! V-cell fields
-    CS%id_vhtr_preadv = register_diag_field('ocean_model', 'vhtr_preadv', diag%axesCvL, Time, &
-      'Accumulated meridional thickness fluxes to advect tracers', 'kg')
     CS%id_vhr = register_diag_field('ocean_model', 'vhr', diag%axesCvL, Time, &
       'Meridional thickness fluxes remaining at end of timestep', 'kg')
 
@@ -312,13 +270,15 @@ contains
 
   end subroutine register_diags_offline_transport
 
-  subroutine offline_transport_init(param_file, CS, do_ale, G, GV)
+  ! Initializes the control structure for offline transport and reads in some of the
+  ! run time parameters from MOM_input
+  subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV)
 
-    type(param_file_type)              , intent(in) :: param_file
-    type(offline_transport_CS), pointer, intent(inout) :: CS
-    logical                            , intent(in) :: do_ale
-    type(ocean_grid_type),               intent(in) :: G
-    type(verticalGrid_type),             intent(in) :: GV
+    type(param_file_type),               intent(in)     :: param_file
+    type(offline_transport_CS), pointer, intent(inout)  :: CS
+    type(diabatic_CS),          pointer, intent(in)     :: diabatic_CSp
+    type(ocean_grid_type),               intent(in)     :: G
+    type(verticalGrid_type),             intent(in)     :: GV
 
     character(len=40)                               :: mod = "offline_transport"
 
@@ -343,14 +303,10 @@ contains
     ! Parse MOM_input for offline control
     call get_param(param_file, mod, "OFFLINEDIR", CS%offlinedir, &
       "Input directory where the offline fields can be found", default=" ")
-    call get_param(param_file, mod, "OFF_MEAN_FILE", CS%mean_file, &
-      "Filename where time-averaged fields are fund can be found", default=" ")
     call get_param(param_file, mod, "OFF_SUM_FILE", CS%sum_file, &
       "Filename where the accumulated fields can be found", default = " ")
     call get_param(param_file, mod, "OFF_SNAP_FILE", CS%snap_file, &
       "Filename where snapshot fields can be found",default=" ")
-    call get_param(param_file, mod, "OFF_PREALE_FILE", CS%preale_file, &
-      "Filename where the preale T, S, u, v, and h fields are found",default=" ")
     call get_param(param_file, mod, "START_INDEX", CS%start_index, &
       "Which time index to start from", default=1)
     call get_param(param_file, mod, "NUMTIME", CS%numtime, &
@@ -362,33 +318,22 @@ contains
       "Number of iterations to subdivide the offline tracer advection and diffusion" )
     call get_param(param_file, mod, "DT_OFFLINE", CS%dt_offline, &
       "Length of the offline timestep")
-    call get_param(param_file, "MOM_mixed_layer", "MAX_OFF_CFL", CS%max_off_cfl, &
-      "Maximum CFL when advection is done offline. This should be less than 1 \n", &
-      units="nondim", default=0.9)
 
     ! Concatenate offline directory and file names
-    CS%mean_file = trim(CS%offlinedir)//trim(CS%mean_file)
     CS%snap_file = trim(CS%offlinedir)//trim(CS%snap_file)
     CS%sum_file = trim(CS%offlinedir)//trim(CS%sum_file)
-    CS%preale_file = trim(CS%offlinedir)//trim(CS%preale_file)
 
     ! Set the starting read index for time-averaged and snapshotted fields
-    CS%ridx_mean = CS%start_index
+    CS%ridx_sum = CS%start_index
     if(CS%fields_are_offset) CS%ridx_snap = next_modulo_time(CS%start_index,CS%numtime)
     if(.not. CS%fields_are_offset) CS%ridx_snap = CS%start_index
-
-    if (do_ale) then
-      ALLOC_(CS%u_preale(IsdB:IedB,jsd:jed,nz))   ; CS%u_preale(:,:,:) = 0.0
-      ALLOC_(CS%v_preale(isd:ied,JsdB:JedB,nz))   ; CS%v_preale(:,:,:) = 0.0
-      ALLOC_(CS%h_preale(isd:ied,jsd:jed,nz))     ; CS%h_preale(:,:,:) = GV%Angstrom
-      ALLOC_(CS%T_preale(isd:ied,jsd:jed,nz))     ; CS%T_preale(:,:,:) = 0.0
-      ALLOC_(CS%S_preale(isd:ied,jsd:jed,nz))     ; CS%S_preale(:,:,:) = 0.0
-    endif
 
     call callTree_leave("offline_transport_init")
 
   end subroutine offline_transport_init
-
+  
+  !> Calculates the next timelevel to read from the input fields. This allows the 'looping'
+  !! of the fields
   function next_modulo_time(inidx, numtime)
     ! Returns the next time interval to be read
     integer                 :: numtime              ! Number of time levels in input fields
@@ -407,6 +352,8 @@ contains
 
   end function next_modulo_time
 
+  !> This updates thickness based on the convergence of horizontal mass fluxes
+  !! NOTE: Only used in non-ALE mode
   subroutine update_h_horizontal_flux(G, GV, uhtr, vhtr, h_pre, h_new)
     type(ocean_grid_type),    pointer                           :: G
     type(verticalGrid_type),  pointer                           :: GV
@@ -439,6 +386,8 @@ contains
     enddo
   end subroutine update_h_horizontal_flux
 
+  !> Updates layer thicknesses due to vertical mass transports
+  !! NOTE: Only used in non-ALE configuration
   subroutine update_h_vertical_flux(G, GV, ea, eb, h_pre, h_new)
     type(ocean_grid_type),    pointer                           :: G
     type(verticalGrid_type),  pointer                           :: GV
@@ -483,6 +432,8 @@ contains
 
   end subroutine update_h_vertical_flux
 
+  !> This routine limits the mass fluxes so that the a layer cannot be completely depleted.
+  !! NOTE: Only used in non-ALE mode
   subroutine limit_mass_flux_3d(G, GV, uh, vh, ea, eb, h_pre, max_off_cfl)
     type(ocean_grid_type),    pointer                           :: G
     type(verticalGrid_type),  pointer                           :: GV
