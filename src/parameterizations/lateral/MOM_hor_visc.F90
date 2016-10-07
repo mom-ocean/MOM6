@@ -585,7 +585,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                      G%IareaCu(I,j)) / (0.5*(h(i+1,j,k) + h(i,j,k)) + h_neglect)
 
       if (apply_OBC) then ; if (OBC%OBC_mask_u(I,j)) then
-        if (OBC%OBC_segment_list(OBC%OBC_segment_u(I,j))%radiation) diffu(I,j,k) = 0.0
+        if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%radiation) diffu(I,j,k) = 0.0
       endif ; endif
     enddo ; enddo
 
@@ -597,7 +597,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                                     CS%DX2h(i,j+1)*str_xx(i,j+1))) * &
                      G%IareaCv(i,J)) / (0.5*(h(i,j+1,k) + h(i,j,k)) + h_neglect)
       if (apply_OBC) then ; if (OBC%OBC_mask_v(i,J)) then
-        if (OBC%OBC_segment_list(OBC%OBC_segment_v(i,J))%radiation) diffv(I,j,k) = 0.0
+        if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%radiation) diffv(I,j,k) = 0.0
       endif ; endif
     enddo ; enddo
 
