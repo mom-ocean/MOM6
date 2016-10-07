@@ -38,7 +38,11 @@
 !*  5 days seems to be a reasonable choice.                            *
 !*                                                                     *
 !*  The actual driver for offline tracer transport is in the           *
-!*  subroutine step_tracers in MOM.F90                                 *
+!*  subroutine step_tracers in MOM.F90.                                *
+!*                                                                     *
+!*  Brief instructions for how to use this capability are detailed     *
+!*  at the end of this file. Also, see the Baltic_ALE_z test case.     *
+!*                                                                     *
 !*  Macros written all in capital letters are defined in MOM_memory.h  *
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
@@ -532,3 +536,84 @@ contains
   end subroutine limit_mass_flux_3d
 
 end module MOM_offline_transport
+
+!  Instructions for running passive tracers offline in MOM6
+!  Contact: Andrew Shao (andrew.shao@noaa.gov)
+!  Last modified: 7 October 2016
+!
+!  ----
+!  QUICK-START
+!  ----
+!  1) Follow instructions to compile MOM6 executables using ice_ocean_SIS2 and ocean_only drivers
+!  2) Link executables to Baltic_ALE_z directory (replace 'intel' and 'repro' as necessary)
+!    ln -s ../../build/intel/ice_ocean_SIS2/repro/MOM6 ./MOM6_coupled
+!    ln -s ../../build/intel/ice_ocean_SIS2/repro/MOM6 ./MOM6_ocean_only
+!  3) Run model forward using the provided script to generate necessary fields
+!    source run_online.sh
+!  4) Run model offline
+!    source run_offline.sh 
+!
+!  ----
+!  OVERVIEW
+!  ----
+!  'Offline tracer modeling' uses physical fields (e.g. mass transports and layer thicknesses) saved
+!  from a previous integration of the physical model to transport passive tracers. These fields are
+!  accumulated or averaged over a period of time (in this test case, 1 day) and used to integrate 
+!  portions of the MOM6 code base that handle the 3d advection and diffusion of passive tracers.
+!  This capability has currently targeted the Baltic_ALE_z test case, though some work has also been
+!  done with the OM4 1/2 degree configuration. Work is ongoing to develop recommendations and best
+!  practices for investigators seeking to use MOM6 for offline tracer modeling.
+!
+!  The subroutine step_tracers that coordinates this can be found in MOM.F90 and is only called
+!  using the solo ocean driver. This is to avoid issues with coupling to other climate components
+!  that may be relying on fluxes from the ocean to be coupled more often than the offline time step.
+!  Other routines related to offline tracer modeling can be found in tracers/MOM_offline_control.F90
+!
+!  As can also be seen in the comments for the step_tracers subroutine, an offline time step 
+!  comprises the following steps
+!        1)  Using the layer thicknesses and tracer concentrations from the previous timestep, 
+!            half of the accumulated vertical mixing (eatr and ebtr) is applied in the call to 
+!            tracer_column_fns.
+!            For tracers whose source/sink terms need dt, this value is set to 1/2 dt_offline
+!        2)  Half of the accumulated surface freshwater fluxes are applied
+!        START ITERATION
+!        3)  Accumulated mass fluxes are used to do horizontal transport. The number of iterations 
+!            used in advect_tracer is limited to 2 (e.g x->y->x->y). The remaining mass fluxes are
+!            stored for later use and resulting layer thicknesses fed into the next step
+!        4)  Tracers and the h-grid are regridded and remapped in a call to ALE. This allows for
+!            layers which might 'vanish' because of horizontal mass transport to be 'reinflated'
+!            and essentially allows for the vertical transport of tracers
+!        5)  Check that transport is done if the remaining mass fluxes equals 0 or if the max 
+!            number of iterations has been reached
+!        END ITERATION
+!        6)  Repeat steps 1 and 2
+!        7)  Force a remapping to the stored layer thicknesses that correspond to the snapshot of
+!            the online model at the end of an accumulation interval
+!        8)  Reset T/S and h to their stored snapshotted values to prevent model drift
+!
+!  ----
+!  EVALUATING
+!  ----
+!  A framework for formally regression testing the offline capability still needs to be developed.
+!  However, as a simple way of testing whether the offline model is nominally behaving as expected,
+!  the total inventory of the advection test tracers (tr1, tr2, etc.) should be conserved between
+!  time steps except for the last 4 decimal places.
+!
+!  ----
+!  MOM_input parameters
+!  ----
+!  OFFLINEDIR    ! default = ""
+!                ! Input directory where the offline fields can be found
+!  OFF_SUM_FILE  ! default = ""
+!                ! Filename where the accumulated fields can be found
+!  OFF_SNAP_FILE ! default = ""
+!                ! Filename where snapshot fields can be found
+!  START_INDEX = ! default = 1
+!                ! Which time index to start from
+!  NUMTIME =     ! default = 0
+!                ! Number of timelevels in offline input files
+!  FIELDS_ARE_OFFSET !   [Boolean] default = False
+!                    ! True if the time-averaged fields and snapshot fields are offset by one time level
+!  NUM_OFF_ITER   !
+!                 ! Number of iterations to subdivide the offline tracer advection and diffusion
+!  DT_OFFLINE     ! Length of the offline timestep
