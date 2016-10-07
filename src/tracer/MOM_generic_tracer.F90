@@ -636,9 +636,9 @@ contains
     !Calculate tendencies (i.e., field changes at dt) from the sources / sinks
     !
 
-    call generic_tracer_source(tv%T,tv%S,sosga,rho_dzt,dzt,hblt_depth,G%isd,G%jsd,1,dt,&
+    call generic_tracer_source(tv%T,tv%S,rho_dzt,dzt,hblt_depth,G%isd,G%jsd,1,dt,&
          G%areaT,get_diag_time_end(CS%diag),&
-         optics%nbands, optics%max_wavelength_band, optics%sw_pen_band, optics%opacity_band)
+         optics%nbands, optics%max_wavelength_band, optics%sw_pen_band, optics%opacity_band, sosga=sosga)
 
     ! This uses applyTracerBoundaryFluxesInOut to handle the change in tracer due to freshwater fluxes
     ! usually in ALE mode
@@ -910,10 +910,9 @@ contains
     call generic_tracer_coupler_set(state%tr_fields,&
          ST=state%SST,&
          SS=state%SSS,&
-         sosga=sosga, &
          rho=rho0,& !nnz: required for MOM5 and previous versions.
          ilb=G%isd, jlb=G%jsd,&
-         tau=1,model_time=get_diag_time_end(CS%diag))
+         tau=1,sosga=sosga,model_time=get_diag_time_end(CS%diag))
 
     !Output diagnostics via diag_manager for all tracers in this module
 !    if(.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
