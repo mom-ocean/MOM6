@@ -194,6 +194,9 @@ type, public :: ice_ocean_boundary_type
   real, pointer, dimension(:,:) :: fprec                =>NULL() ! mass flux of frozen precip (kg/m2/s)
   real, pointer, dimension(:,:) :: runoff               =>NULL() ! mass flux of liquid runoff (kg/m2/s)
   real, pointer, dimension(:,:) :: calving              =>NULL() ! mass flux of frozen runoff (kg/m2/s)
+  real, pointer, dimension(:,:) :: ustar_berg           =>NULL() ! frictional velocity beneath icebergs (m/s)
+  real, pointer, dimension(:,:) :: area_berg            =>NULL() ! area covered by icebergs(m2/m2)
+  real, pointer, dimension(:,:) :: mass_berg            =>NULL() ! mass of icebergs(kg/m2)
   real, pointer, dimension(:,:) :: runoff_hflx          =>NULL() ! heat content of liquid runoff (W/m2)
   real, pointer, dimension(:,:) :: calving_hflx         =>NULL() ! heat content of frozen runoff (W/m2)
   real, pointer, dimension(:,:) :: p                    =>NULL() ! pressure of overlying ice and atmosphere
@@ -468,6 +471,20 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
 
     if (ASSOCIATED(IOB%calving)) &
       fluxes%frunoff(i,j) = IOB%calving(i-i0,j-j0) * G%mask2dT(i,j)
+
+    if (((ASSOCIATED(IOB%ustar_berg) .and. (.not. ASSOCIATED(fluxes%ustar_berg)))   &
+      .or. (ASSOCIATED(IOB%area_berg) .and. (.not. ASSOCIATED(fluxes%area_berg)))) &
+      .or. (ASSOCIATED(IOB%mass_berg) .and. (.not. ASSOCIATED(fluxes%mass_berg)))) &
+      call allocate_forcing_type(G, fluxes, iceberg=.true.)
+
+    if (ASSOCIATED(IOB%ustar_berg)) &
+      fluxes%ustar_berg(i,j) = IOB%ustar_berg(i-i0,j-j0) * G%mask2dT(i,j)
+
+    if (ASSOCIATED(IOB%area_berg)) &
+      fluxes%area_berg(i,j) = IOB%area_berg(i-i0,j-j0) * G%mask2dT(i,j)
+
+    if (ASSOCIATED(IOB%mass_berg)) &
+      fluxes%mass_berg(i,j) = IOB%mass_berg(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (ASSOCIATED(IOB%runoff_hflx)) &
       fluxes%heat_content_lrunoff(i,j) = IOB%runoff_hflx(i-i0,j-j0) * G%mask2dT(i,j)
@@ -1197,6 +1214,12 @@ subroutine ice_ocn_bnd_type_chksum(id, timestep, iobt)
     write(outunit,100) 'iobt%runoff         ', mpp_chksum( iobt%runoff         )
     write(outunit,100) 'iobt%calving        ', mpp_chksum( iobt%calving        )
     write(outunit,100) 'iobt%p              ', mpp_chksum( iobt%p              )
+    if (ASSOCIATED(iobt%ustar_berg)) &
+      write(outunit,100) 'iobt%ustar_berg     ', mpp_chksum( iobt%ustar_berg     )
+    if (ASSOCIATED(iobt%area_berg)) &
+      write(outunit,100) 'iobt%area_berg      ', mpp_chksum( iobt%area_berg      )
+    if (ASSOCIATED(iobt%mass_berg)) &
+      write(outunit,100) 'iobt%mass_berg      ', mpp_chksum( iobt%mass_berg      )
 
 100 FORMAT("   CHECKSUM::",A20," = ",Z20)
     do n = 1, iobt%fluxes%num_bcs  !{
