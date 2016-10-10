@@ -1540,7 +1540,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       
       ! Do horizontal diffusion first (but only half of it), remainder will be applied after advection
       call tracer_hordiff(h_pre, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
-        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, CS%do_online, khdt_x*0.5, khdt_y*0.5)
+        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, do_online_flag=.false., read_khdt_x=khdt_x*0.5, &
+        read_khdt_y=khdt_y*0.5)
 
       do j=jsd,jed ; do i=isd,ied
           fluxes%netMassOut(i,j) = 0.5*fluxes%netMassOut(i,j)
@@ -1667,7 +1668,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       
       ! Finish with the other half of the tracer horizontal diffusion
       call tracer_hordiff(h_pre, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
-        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, CS%do_online, khdt_x*0.5, khdt_y*0.5)
+        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, do_online_flag=.false., read_khdt_x=khdt_x*0.5, &
+        read_khdt_y=khdt_y*0.5)
     
     elseif (.not. CS%use_ALE_algorithm) then
       do iter=1,CS%offline_CSp%num_off_iter
@@ -1786,7 +1788,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
 
       end do
       call tracer_hordiff(h_end, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
-        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, CS%do_online, khdt_x*0.5, khdt_y*0.5)
+        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, do_online_flag=.false., read_khdt_x=khdt_x*0.5, &
+        read_khdt_y=khdt_y*0.5)
     endif
     
     h_temp = h_end-h_pre
