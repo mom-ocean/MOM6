@@ -200,8 +200,6 @@ type, public :: MOM_control_struct
                                      !! set by calling the function useRegridding() from the
                                      !! MOM_regridding module.
   logical :: do_dynamics             !< If false, does not call step_MOM_dyn_*. This is an
-  logical :: do_online               !< If false, does not call step_MOM_dyn_*. This is an
-                                     !! undocumented run-time flag that is fragile.                                     !! undocumented run-time flag that is fragile.
 
   real    :: dt                      !< (baroclinic) dynamics time step (seconds)
   real    :: dt_therm                !< thermodynamics time step (seconds)
