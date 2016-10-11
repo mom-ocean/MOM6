@@ -200,7 +200,9 @@ type, public :: MOM_control_struct
                                      !! set by calling the function useRegridding() from the
                                      !! MOM_regridding module.
   logical :: do_dynamics             !< If false, does not call step_MOM_dyn_*. This is an
-
+                                     !! undocumented run-time flag that is fragile.
+  logical :: do_online               !< If false, step_tracers is called instead of step_MOM.
+                                     !! This is intended for running MOM6 in offline tracer mode
   real    :: dt                      !< (baroclinic) dynamics time step (seconds)
   real    :: dt_therm                !< thermodynamics time step (seconds)
   logical :: thermo_spans_coupling   !< If true, thermodynamic and tracer time
@@ -211,7 +213,7 @@ type, public :: MOM_control_struct
   type(time_type) :: Z_diag_interval !< amount of time between calculating Z-space diagnostics
   type(time_type) :: Z_diag_time     !< next time to compute Z-space diagnostics
   type(time_type), pointer :: Time   !< pointer to ocean clock
-  real :: rel_time = 0.0             !< relative time (sec) since start of current execution
+  real :: rel_time = 0.0             !< relative time (sec) sinc.e start of current execution
   real :: dtbt_reset_period          !< The time interval in seconds between dynamic
                                      !! recalculation of the barotropic time step.  If
                                      !! this is negative, it is never calculated, and
@@ -463,10 +465,6 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     eta_av, &   ! average sea surface height or column mass over a timestep (meter or kg/m2)
     ssh         ! sea surface height based on eta_av (meter or kg/m2)
 
-  real, dimension(SZIB_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: write_all_3du
-  real, dimension(SZI_(CS%G),SZJB_(CS%G),SZK_(CS%G)) :: write_all_3dv
-  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G))  :: write_all_3dt
-
   real, allocatable, dimension(:,:) :: &
     tmp,              & ! temporary 2d field
     zos,              & ! dynamic sea lev (zero area mean) from inverse-barometer adjusted ssh (meter)
@@ -710,7 +708,6 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         fluxes%fluxes_used = .true.
         call cpu_clock_end(id_clock_diabatic)
 
-        write_all_3dt(:,:,:) = 1.
         if (CS%id_u_preale > 0) call post_data(CS%id_u_preale, u,       CS%diag)
         if (CS%id_v_preale > 0) call post_data(CS%id_v_preale, v,       CS%diag)
         if (CS%id_h_preale > 0) call post_data(CS%id_h_preale, h,       CS%diag)
@@ -1059,7 +1056,6 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         ! Regridding/remapping is done here, at the end of the thermodynamics time step
         ! (that may comprise several dynamical time steps)
         ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
-        write_all_3dt(:,:,:) = 1.
         if (CS%id_u_preale > 0) call post_data(CS%id_u_preale, u,       CS%diag)
         if (CS%id_v_preale > 0) call post_data(CS%id_v_preale, v,       CS%diag)
         if (CS%id_h_preale > 0) call post_data(CS%id_h_preale, h,       CS%diag)
@@ -1464,6 +1460,9 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     integer :: IsdB, IedB, JsdB, JedB
     logical :: z_first, x_before_y
 
+    ! Fail out if do_online is true
+    if(CS%do_online) call MOM_error(FATAL,"DO_ONLINE=True when calling step_tracers")
+    
     ! Grid-related pointer assignments
     G => CS%G
     GV => CS%GV
@@ -1540,7 +1539,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       
       ! Do horizontal diffusion first (but only half of it), remainder will be applied after advection
       call tracer_hordiff(h_pre, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
-        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, do_online_flag=.false., read_khdt_x=khdt_x*0.5, &
+        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, do_online_flag=CS%do_online, read_khdt_x=khdt_x*0.5, &
         read_khdt_y=khdt_y*0.5)
 
       do j=jsd,jed ; do i=isd,ied
@@ -1823,13 +1822,14 @@ end subroutine step_tracers
 
 
 !> This subroutine initializes MOM.
-subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
+subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, do_online)
   type(time_type), target,   intent(inout) :: Time        !< model time, set in this routine
   type(param_file_type),     intent(out)   :: param_file  !< structure indicating paramater file to parse
   type(directories),         intent(out)   :: dirs        !< structure with directory paths
   type(MOM_control_struct),  pointer       :: CS          !< pointer set in this routine to MOM control structure
   type(time_type), optional, intent(in)    :: Time_in     !< time passed to MOM_initialize_state when
                                                           !! model is not being started from a restart file
+  logical,         optional, intent(in)    :: do_online   !< .false. if tracers are being run offline
 
   ! local
   type(ocean_grid_type),  pointer :: G => NULL() ! A pointer to a structure with metrics and related
@@ -1957,8 +1957,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
   call get_param(param_file, "MOM", "THICKNESSDIFFUSE", CS%thickness_diffuse, &
                  "If true, interface heights are diffused with a \n"//&
                  "coefficient of KHTH.", default=.false.)
-  call get_param(param_file, "MOM", "`_FIRST", &
-                                     CS%thickness_diffuse_first, &
+  call get_param(param_file, "MOM",  "THICKNESSDIFFUSE_FIRST", &
+                                      CS%thickness_diffuse_first, &
                  "If true, do thickness diffusion before dynamics.\n"//&
                  "This is only used if THICKNESSDIFFUSE is true.", &
                  default=.false.)
@@ -2525,8 +2525,17 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                       cmor_long_name ="Sea Water Salinity")
   endif
 
-  call offline_transport_init(param_file, CS%offline_CSp, CS%diabatic_CSp, G, GV)
-  call register_diags_offline_transport(Time, CS%diag, CS%offline_CSp)
+  ! If running in offline tracer mode, initialize the necessary control structure and
+  ! parameters
+!  if(present(do_online)) then
+!    CS%do_online = do_online
+!    if(.not. CS%do_online) then
+      call offline_transport_init(param_file, CS%offline_CSp, CS%diabatic_CSp, G, GV)
+      call register_diags_offline_transport(Time, CS%diag, CS%offline_CSp)
+!    endif
+!  else
+!    CS%do_online = .true.
+!  endif
 
 
   ! This subroutine initializes any tracer packages.
