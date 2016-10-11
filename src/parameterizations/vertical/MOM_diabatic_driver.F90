@@ -331,7 +331,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
                   ! (H units = m for Bouss, kg/m^2 for non-Bouss).
   real :: dt_mix  ! amount of time over which to apply mixing (seconds)
   real :: Idt     ! inverse time step (1/s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: write_all_3dt
 
   type(p3d) :: z_ptrs(7)  ! pointers to diagnostics to be interpolated to depth
   integer :: num_z_diags  ! number of diagnostics to be interpolated to depth
@@ -1414,7 +1413,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   if (CS%id_Kd_salt      > 0) call post_data(CS%id_Kd_salt,      Kd_salt, CS%diag)
   if (CS%id_Kd_ePBL      > 0) call post_data(CS%id_Kd_ePBL,      Kd_ePBL, CS%diag)
 
-  write_all_3dt(:,:,:) = 1.
   if (CS%id_ea       > 0) call post_data(CS%id_ea,       ea, CS%diag)
   if (CS%id_eb       > 0) call post_data(CS%id_eb,       eb, CS%diag)
 
