@@ -1822,14 +1822,14 @@ end subroutine step_tracers
 
 
 !> This subroutine initializes MOM.
-subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, do_online)
+subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, do_online_out)
   type(time_type), target,   intent(inout) :: Time        !< model time, set in this routine
   type(param_file_type),     intent(out)   :: param_file  !< structure indicating paramater file to parse
   type(directories),         intent(out)   :: dirs        !< structure with directory paths
   type(MOM_control_struct),  pointer       :: CS          !< pointer set in this routine to MOM control structure
   type(time_type), optional, intent(in)    :: Time_in     !< time passed to MOM_initialize_state when
                                                           !! model is not being started from a restart file
-  logical,         optional, intent(in)    :: do_online   !< .false. if tracers are being run offline
+  logical,         optional, intent(out) :: do_online_out !< .false. if tracers are being run offline
 
   ! local
   type(ocean_grid_type),  pointer :: G => NULL() ! A pointer to a structure with metrics and related
@@ -1942,7 +1942,15 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, do_online)
                  "If False, skips the dynamics calls that update u & v, as well as\n"//&
                  "the gravity wave adjustment to h. This is a fragile feature and\n"//&
                  "thus undocumented.", default=.true., do_not_log=.true. )
-
+  call get_param(param_file, "MOM", "DO_ONLINE", CS%do_online, &
+               "If false, use the model in prognostic mode where\n"//&
+               "the barotropic and baroclinic dynamics, thermodynamics,\n"//&
+               "etc. are stepped forward integrated in time.\n"//&
+               "If true, the all of the above are bypassed with all\n"//&
+               "fields necessary to integrate only the tracer advection\n"//&
+               "and diffusion equation are read in from files stored from\n"//&
+               "a previous integration of the prognostic model\n"//&
+               "NOTE: This option only used in the ocean_solo_driver.", default=.true.)   
   call get_param(param_file, "MOM", "USE_REGRIDDING", CS%use_ALE_algorithm , &
                  "If True, use the ALE algorithm (regridding/remapping).\n"//&
                  "If False, use the layered isopycnal algorithm.", default=.false. )
@@ -2527,16 +2535,12 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, do_online)
 
   ! If running in offline tracer mode, initialize the necessary control structure and
   ! parameters
-!  if(present(do_online)) then
-!    CS%do_online = do_online
-!    if(.not. CS%do_online) then
-      call offline_transport_init(param_file, CS%offline_CSp, CS%diabatic_CSp, G, GV)
-      call register_diags_offline_transport(Time, CS%diag, CS%offline_CSp)
-!    endif
-!  else
-!    CS%do_online = .true.
-!  endif
-
+  if(present(do_online_out)) do_online_out=CS%do_online
+  
+  if(.not. CS%do_online) then
+    call offline_transport_init(param_file, CS%offline_CSp, CS%diabatic_CSp, G, GV)
+    call register_diags_offline_transport(Time, CS%diag, CS%offline_CSp)
+  endif
 
   ! This subroutine initializes any tracer packages.
   new_sim = ((dirs%input_filename(1:1) == 'n') .and. &

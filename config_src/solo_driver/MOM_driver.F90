@@ -266,12 +266,12 @@ program MOM_main
     segment_start_time = set_date(date(1),date(2),date(3),date(4),date(5),date(6))
     Time = segment_start_time
     ! Note the not before CS%d
-    call initialize_MOM(Time, param_file, dirs, MOM_CSp, segment_start_time, do_online = do_online)
+    call initialize_MOM(Time, param_file, dirs, MOM_CSp, segment_start_time, do_online_out = do_online)
   else
     ! In this case, the segment starts at a time read from the MOM restart file
     ! or left as Start_time by MOM_initialize.
     Time = Start_time
-    call initialize_MOM(Time, param_file, dirs, MOM_CSp, do_online=do_online)
+    call initialize_MOM(Time, param_file, dirs, MOM_CSp, do_online_out=do_online)
   endif
   fluxes%C_p = MOM_CSp%tv%C_p  ! Copy the heat capacity for consistency.
 
@@ -309,15 +309,7 @@ program MOM_main
   call get_param(param_file, mod, "DT_FORCING", time_step, &
                  "The time step for changing forcing, coupling with other \n"//&
                  "components, or potentially writing certain diagnostics. \n"//&
-                 "The default value is given by DT.", units="s", default=dt) 
-  call get_param(param_file, mod, "DO_ONLINE", do_online, &
-               "If false, use the model in prognostic mode where\n"//&
-               "the barotropic and baroclinic dynamics, thermodynamics,\n"//&
-               "etc. are stepped forward integrated in time.\n"//&
-               "If true, the all of the above are bypassed with all\n"//&
-               "fields necessary to integrate only the tracer advection\n"//&
-               "and diffusion equation are read in from files stored from\n"//&
-               "a previous integration of the prognostic model", default=.true.)               
+                 "The default value is given by DT.", units="s", default=dt)             
   if (.not. do_online) then
     call get_param(param_file, mod, "DT_OFFLINE", time_step, &
                    "Time step for the offline time step")
