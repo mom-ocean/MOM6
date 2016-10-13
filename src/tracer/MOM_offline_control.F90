@@ -204,7 +204,7 @@ contains
   subroutine register_diags_offline_transport(Time, diag, CS)
 
     type(offline_transport_CS), pointer :: CS         !< control structure for MOM
-    type(time_type), intent(in) :: Time             !< current model time
+    type(time_type), intent(in) :: Time               !< current model time
     type(diag_ctrl)             :: diag
 
 
@@ -226,7 +226,7 @@ contains
 
   end subroutine register_diags_offline_transport
 
-  ! Initializes the control structure for offline transport and reads in some of the
+  !> Initializes the control structure for offline transport and reads in some of the
   ! run time parameters from MOM_input
   subroutine offline_transport_init(param_file, CS, diabatic_aux_CSp, G, GV)
 
@@ -285,8 +285,10 @@ contains
     if(.not. CS%fields_are_offset) CS%ridx_snap = CS%start_index
     
     ! Copy over parameters from other control structures
-    CS%evap_CFL_limit = diabatic_aux_CSp%evap_CFL_limit
-    CS%minimum_forcing_depth = diabatic_aux_CSp%minimum_forcing_depth
+    if(associated(diabatic_CSp%diabatic_aux_CSp)) then
+      CS%evap_CFL_limit = diabatic_aux_CSp%evap_CFL_limit
+      CS%minimum_forcing_depth = diabatic_aux_CSp%minimum_forcing_depth
+    endif
 
     call callTree_leave("offline_transport_init")
 
@@ -536,7 +538,7 @@ contains
 !!        -#  Repeat steps 1 and 2
 !!        -#  Force a remapping to the stored layer thicknesses that correspond to the snapshot of
 !!            the online model at the end of an accumulation interval
-!!        -3  Reset T/S and h to their stored snapshotted values to prevent model drift
+!!        -#  Reset T/S and h to their stored snapshotted values to prevent model drift
 !!
 !!  \section  offline_evaluation Evaluating the utility of an offline tracer model
 !!  How well an offline tracer model can be used as an alternative to integrating tracers online
