@@ -103,8 +103,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
   logical,                           optional             :: do_online_flag
   real, dimension(SZIB_(G),SZJ_(G)), optional, intent(in) :: read_khdt_x
   real, dimension(SZI_(G),SZJB_(G)), optional, intent(in) :: read_khdt_y
-
-  logical                                                 :: do_online = .true.
+  
 
   real, dimension(SZI_(G),SZJ_(G)) :: &
     Ihdxdy, &     ! The inverse of the volume or mass of fluid in a layer in a
@@ -128,7 +127,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
     Kh_v          ! Tracer mixing coefficient at u-points, in m2 s-1.
 
   real :: max_CFL ! The global maximum of the diffusive CFL number.
-  logical :: use_VarMix, Resoln_scaled
+  logical :: use_VarMix, Resoln_scaled, do_online
   integer :: i, j, k, m, is, ie, js, je, nz, ntr, itt, num_itts
   real :: I_numitts  ! The inverse of the number of iterations, num_itts.
   real :: scale      ! The fraction of khdt_x or khdt_y that is applied in this
@@ -143,6 +142,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
+  do_online = .true.
   if (present(do_online_flag)) do_online = do_online_flag
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
