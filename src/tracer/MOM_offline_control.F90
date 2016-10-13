@@ -17,7 +17,7 @@ module MOM_offline_transport
   use MOM_shortwave_abs,    only : optics_type
   use MOM_diag_mediator,    only : post_data
   use MOM_forcing_type,     only : forcing
-  use MOM_diabatic_driver,  only : diabatic_CS
+  use MOM_diabatic_aux,     only : diabatic_aux_CS
 
   implicit none
 
@@ -228,11 +228,11 @@ contains
 
   ! Initializes the control structure for offline transport and reads in some of the
   ! run time parameters from MOM_input
-  subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV)
+  subroutine offline_transport_init(param_file, CS, diabatic_aux_CSp, G, GV)
 
     type(param_file_type),               intent(in)     :: param_file
     type(offline_transport_CS), pointer, intent(inout)  :: CS
-    type(diabatic_CS),          pointer, intent(in)     :: diabatic_CSp
+    type(diabatic_aux_CS),          pointer, intent(in) :: diabatic_aux_CSp
     type(ocean_grid_type),               intent(in)     :: G
     type(verticalGrid_type),             intent(in)     :: GV
 
@@ -285,8 +285,8 @@ contains
     if(.not. CS%fields_are_offset) CS%ridx_snap = CS%start_index
     
     ! Copy over parameters from other control structures
-    CS%evap_CFL_limit = diabatic_CSp%diabatic_aux_CSp%evap_CFL_limit
-    CS%minimum_forcing_depth = diabatic_CSp%diabatic_aux_CSp%minimum_forcing_depth
+    CS%evap_CFL_limit = diabatic_aux_CSp%evap_CFL_limit
+    CS%minimum_forcing_depth = diabatic_aux_CSp%minimum_forcing_depth
 
     call callTree_leave("offline_transport_init")
 

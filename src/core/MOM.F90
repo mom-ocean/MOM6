@@ -2525,7 +2525,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
                       cmor_long_name ="Sea Water Salinity")
   endif
 
-  call offline_transport_init(param_file, CS%offline_CSp, CS%diabatic_CSp, G, GV)
+  call offline_transport_init(param_file, CS%offline_CSp, &
+      CS%diabatic_CSp%diabatic_aux_CSp, G, GV)
   call register_diags_offline_transport(Time, CS%diag, CS%offline_CSp)
 
 
@@ -2830,7 +2831,7 @@ subroutine register_diags(Time, G, GV, CS, ADp)
       'Layer Thickness before diabatic forcing', thickness_units, v_cell_method='sum')
   CS%id_e_predia = register_diag_field('ocean_model', 'e_predia', diag%axesTi, Time, &
       'Interface Heights before diabatic forcing', 'meter')
-!  if (CS%diabatic_first .and. (.not. CS%adiabatic)) then
+  if (CS%diabatic_first .and. (.not. CS%adiabatic)) then
     CS%id_u_preale = register_diag_field('ocean_model', 'u_preale', diag%axesCuL, Time, &
         'Zonal velocity before remapping', 'meter second-1')
     CS%id_v_preale = register_diag_field('ocean_model', 'v_preale', diag%axesCvL, Time, &
@@ -2843,7 +2844,7 @@ subroutine register_diags(Time, G, GV, CS, ADp)
         'Salinity before remapping', 'ppt')
     CS%id_e_preale = register_diag_field('ocean_model', 'e_preale', diag%axesTi, Time, &
         'Interface Heights before remapping', 'meter')
-!  endif
+  endif
 
   if (CS%use_temperature) then
     CS%id_T_predia = register_diag_field('ocean_model', 'temp_predia', diag%axesTL, Time, &
