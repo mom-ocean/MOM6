@@ -213,7 +213,7 @@ type, public :: MOM_control_struct
   type(time_type) :: Z_diag_interval !< amount of time between calculating Z-space diagnostics
   type(time_type) :: Z_diag_time     !< next time to compute Z-space diagnostics
   type(time_type), pointer :: Time   !< pointer to ocean clock
-  real :: rel_time = 0.0             !< relative time (sec) sinc.e start of current execution
+  real :: rel_time = 0.0             !< relative time (sec) since start of current execution
   real :: dtbt_reset_period          !< The time interval in seconds between dynamic
                                      !! recalculation of the barotropic time step.  If
                                      !! this is negative, it is never calculated, and
@@ -1002,7 +1002,6 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
       call cpu_clock_begin(id_clock_tracer)
 
-      ! Post fields used for offline tracer model
       call advect_tracer(h, CS%uhtr, CS%vhtr, CS%OBC, CS%dt_trans, G, GV, &
                          CS%tracer_adv_CSp, CS%tracer_Reg)
       call tracer_hordiff(h, CS%dt_trans, CS%MEKE, CS%VarMix, G, GV, &

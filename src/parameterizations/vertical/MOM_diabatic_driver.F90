@@ -256,8 +256,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     dSV_dS, &    ! and salinity in m^3/(kg K) and m^3/(kg ppt).
     cTKE,   &    ! convective TKE requirements for each layer in J/m^2.
     u_h,    &    ! zonal and meridional velocities at thickness points after
-    v_h,    &    ! entrainment (m/s)
-    hloss_boundary ! Change in layer thickness because of freshwater fluxes at the surfac
+    v_h          ! entrainment (m/s)
 
   real, dimension(SZI_(G),SZJ_(G),CS%nMode) :: &
     cn       ! baroclinic gravity wave speeds (formerly cg1 - BDM)
@@ -1143,7 +1142,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     if (CS%useALEalgorithm) then
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
     ! so hold should be h_orig
-      call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
+      call call_tracer_column_fns(h_prebound, h, ea, eb, fluxes, dt, G, GV, tv, &
                                 CS%optics, CS%tracer_flow_CSp, CS%debug, &
                                 evap_CFL_limit = CS%diabatic_aux_CSp%evap_CFL_limit, &
                                 minimum_forcing_depth = CS%diabatic_aux_CSp%minimum_forcing_depth)
@@ -1186,7 +1185,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   else
     if (CS%useALEalgorithm) then
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
-      call call_tracer_column_fns(h_prebound, h, ea, eb, fluxes, dt, G, GV, tv, &
+      call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
                                   CS%optics, CS%tracer_flow_CSp, CS%debug, &
                                   evap_CFL_limit = CS%diabatic_aux_CSp%evap_CFL_limit, &
                                   minimum_forcing_depth = CS%diabatic_aux_CSp%minimum_forcing_depth)
