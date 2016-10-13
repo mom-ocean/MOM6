@@ -668,7 +668,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
   integer :: pid_bt_rem_u, pid_Datu, pid_BT_force_u, pid_Cor_ref
   integer :: pid_eta_PF_1, pid_d_eta_PF, pid_uhbt0
   integer :: isv, iev, jsv, jev ! The valid array size at the end of a step.
-  integer :: stensil  ! The stensil size of the algorithm, often 1 or 2.
+  integer :: stencil  ! The stencil size of the algorithm, often 1 or 2.
   integer :: isvf, ievf, jsvf, jevf, num_cycles
   integer :: i, j, k, n
   integer :: is, ie, js, je, nz, Isq, Ieq, Jsq, Jeq
@@ -693,15 +693,15 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
   project_velocity = CS%BT_project_velocity
 
   ! Figure out the fullest arrays that could be updated.
-  stensil = 1
+  stencil = 1
   if ((.not.use_BT_cont) .and. CS%Nonlinear_continuity .and. &
-      (CS%Nonlin_cont_update_period > 0)) stensil = 2
+      (CS%Nonlin_cont_update_period > 0)) stencil = 2
 
   num_cycles = 1
   if (CS%use_wide_halos) &
-    num_cycles = min((is-CS%isdw) / stensil, (js-CS%jsdw) / stensil)
-  isvf = is - (num_cycles-1)*stensil ; ievf = ie + (num_cycles-1)*stensil
-  jsvf = js - (num_cycles-1)*stensil ; jevf = je + (num_cycles-1)*stensil
+    num_cycles = min((is-CS%isdw) / stencil, (js-CS%jsdw) / stencil)
+  isvf = is - (num_cycles-1)*stencil ; ievf = ie + (num_cycles-1)*stencil
+  jsvf = js - (num_cycles-1)*stencil ; jevf = je + (num_cycles-1)*stencil
 
   do_ave = query_averaging_enabled(CS%diag)
   find_etaav = present(etaav)
@@ -1563,7 +1563,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
       enddo ; enddo
     endif
 
-    if ((iev - stensil < ie) .or. (jev - stensil < je)) then
+    if ((iev - stencil < ie) .or. (jev - stencil < je)) then
       if (id_clock_calc > 0) call cpu_clock_end(id_clock_calc)
       if (id_clock_pass_step > 0) call cpu_clock_begin(id_clock_pass_step)
       if (G%nonblocking_updates) then
@@ -1579,8 +1579,8 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
       if (id_clock_pass_step > 0) call cpu_clock_end(id_clock_pass_step)
       if (id_clock_calc > 0) call cpu_clock_begin(id_clock_calc)
     else
-      isv = isv+stensil ; iev = iev-stensil
-      jsv = jsv+stensil ; jev = jev-stensil
+      isv = isv+stencil ; iev = iev-stencil
+      jsv = jsv+stencil ; jev = jev-stencil
     endif
 
     if ((.not.use_BT_cont) .and. CS%Nonlinear_continuity .and. &

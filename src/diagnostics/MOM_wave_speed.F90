@@ -1,46 +1,7 @@
+!> Routines for calculating baroclinic wave speeds
 module MOM_wave_speed
-!***********************************************************************
-!*                   GNU General Public License                        *
-!* This file is a part of MOM.                                         *
-!*                                                                     *
-!* MOM is free software; you can redistribute it and/or modify it and  *
-!* are expected to follow the terms of the GNU General Public License  *
-!* as published by the Free Software Foundation; either version 2 of   *
-!* the License, or (at your option) any later version.                 *
-!*                                                                     *
-!* MOM is distributed in the hope that it will be useful, but WITHOUT  *
-!* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY  *
-!* or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public    *
-!* License for more details.                                           *
-!*                                                                     *
-!* For the full text of the GNU General Public License,                *
-!* write to: Free Software Foundation, Inc.,                           *
-!*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
-!* or see:   http://www.gnu.org/licenses/gpl.html                      *
-!***********************************************************************
-!
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg and Ben Mater, May 2008 - December 2015         *
-!*                                                                     *
-!*    The subroutines in this module calculates the first baroclinic   *
-!*  mode internal wave speed, or a set of N wave speeds.               *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v, vh, vav                               *
-!*    j    x ^ x ^ x   At >:  u, uh, uav                               *
-!*    j    > o > o >   At o:  h                                        *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
+
+! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
@@ -57,64 +18,24 @@ implicit none ; private
 
 public wave_speed, wave_speeds, wave_speed_init
 
+!> Control structure for MOM_wave_speed
 type, public :: wave_speed_CS ; private
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
+  type(diag_ctrl), pointer :: diag ! Diagnostics control structure
 end type wave_speed_CS
 
 contains
 
+!> Calculates the wave speed of the first baroclinic mode.
 subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos)
-  type(ocean_grid_type),                    intent(in)  :: G
-  type(verticalGrid_type),                  intent(in)  :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h
-  type(thermo_var_ptrs),                    intent(in)  :: tv
-  real, dimension(SZI_(G),SZJ_(G)),         intent(out) :: cg1
-  type(wave_speed_CS),            optional, pointer     :: CS
-  logical,                        optional, intent(in)  :: full_halos
-!    This subroutine determines the first mode internal wave speed.
-! Arguments: h - Layer thickness, in m or kg m-2.
-!  (in)      tv - A structure containing the thermobaric variables.
-!  (out)     cg1 - The first mode internal gravity wave speed, in m s-1.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 wave_speed_init.
-!  (in,opt)  full_halos - If true, do the calculation over the entire
-!                         computational domain.
-
-!   This subroutine solves for the first baroclinic mode wave speed.  (It could
-! solve for all the wave speeds, but the iterative approach taken here means
-! that this is not particularly efficient.)
-
-!   If e(k) is the perturbation interface height, this means solving for the
-! smallest eigenvalue (lam = 1/c^2) of the system
-!
-!   -Igu(k)*e(k-1) + (Igu(k)+Igl(k)-lam)*e(k) - Igl(k)*e(k+1) = 0.0
-!
-! with rigid lid boundary conditions e(1) = e(nz+1) = 0.0 giving
-!
-!   (Igu(2)+Igl(2)-lam)*e(2) - Igl(2)*e(3) = 0.0
-!   -Igu(nz)*e(nz-1) + (Igu(nz)+Igl(nz)-lam)*e(nz) = 0.0
-!
-! Here
-!   Igl(k) = 1.0/(gprime(k)*H(k)) ; Igu(k) = 1.0/(gprime(k)*H(k-1))
-!
-!   Alternately, these same eigenvalues can be found from the second smallest
-! eigenvalue of the Montgomery potential (M(k)) calculation:
-!
-!   -Igl(k)*M(k-1) + (Igl(k)+Igu(k+1)-lam)*M(k) - Igu(k+1)*M(k+1) = 0.0
-!
-! with rigid lid and flat bottom boundary conditions
-!
-!   (Igu(2)-lam)*M(1) - Igu(2)*M(2) = 0.0
-!   -Igl(nz)*M(nz-1) + (Igl(nz)-lam)*M(nz) = 0.0
-!
-! Note that the barotropic mode has been eliminated from the rigid lid
-! interface height equations, hence the matrix is one row smaller.  Without
-! the rigid lid, the top boundary condition is simpler to implement with
-! the M equations.
-
+  type(ocean_grid_type),                    intent(in)  :: G !< Ocean grid structure
+  type(verticalGrid_type),                  intent(in)  :: GV !< Vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h !< Layer thickness (m or kg/m2)
+  type(thermo_var_ptrs),                    intent(in)  :: tv !< Thermodynamic variables
+  real, dimension(SZI_(G),SZJ_(G)),         intent(out) :: cg1 !< First mode internal wave speed (m/s)
+  type(wave_speed_CS),            optional, pointer     :: CS !< Control structure for MOM_wave_speed
+  logical,                        optional, intent(in)  :: full_halos !< If true, do the calculation
+                                                              !! over the entire computational domain.
+  ! Local variables
   real, dimension(SZK_(G)+1) :: &
     dRho_dT, dRho_dS, &
     pres, T_int, S_int, &
@@ -388,57 +309,18 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos)
 
 end subroutine wave_speed
 
+!> Calculates the wave speeds for the first few barolinic modes.
 subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
-  type(ocean_grid_type),                    intent(in)  :: G
-  type(verticalGrid_type),                  intent(in)  :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h
-  type(thermo_var_ptrs),                    intent(in)  :: tv
-  integer,                                  intent(in)  :: nmodes
-  real, dimension(G%isd:G%ied,G%jsd:G%jed,nmodes), intent(out) :: cn
-  type(wave_speed_CS), optional,            pointer     :: CS  
-  logical,             optional,            intent(in)  :: full_halos
-!    This subroutine determines the first mode internal wave speed.
-! Arguments: h - Layer thickness, in m or kg m-2.
-!  (in)      tv - A structure containing the thermobaric variables.
-!  (out)     cn - The internal gravity wave mode speeds, in m s-1.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 wave_speed_init.
-!  (in,opt)  full_halos - If true, do the calculation over the entire
-!                         computational domain.
-!
-!   This subroutine solves for the baroclinic mode wave speed for the first
-! few modes.  (It is an iterative approach so is not particularly efficient.)
-
-!   If e(k) is the perturbation interface height, this means solving for the
-! eigenvalues (lam = 1/c^2) of the system
-!
-!   -Igu(k)*e(k-1) + (Igu(k)+Igl(k)-lam)*e(k) - Igl(k)*e(k+1) = 0.0
-!
-! with rigid lid boundary conditions e(1) = e(nz+1) = 0.0 giving
-!
-!   (Igu(2)+Igl(2)-lam)*e(2) - Igl(2)*e(3) = 0.0
-!   -Igu(nz)*e(nz-1) + (Igu(nz)+Igl(nz)-lam)*e(nz) = 0.0
-!
-! Here
-!   Igl(k) = 1.0/(gprime(k)*H(k)) ; Igu(k) = 1.0/(gprime(k)*H(k-1))
-!
-!   Alternately, these same eigenvalues can be found from the second smallest
-! eigenvalue of the Montgomery potential (M(k)) calculation:
-!
-!   -Igl(k)*M(k-1) + (Igl(k)+Igu(k+1)-lam)*M(k) - Igu(k+1)*M(k+1) = 0.0
-!
-! with rigid lid and flat bottom boundary conditions
-!
-!   (Igu(2)-lam)*M(1) - Igu(2)*M(2) = 0.0
-!   -Igl(nz)*M(nz-1) + (Igl(nz)-lam)*M(nz) = 0.0
-!
-! Note that the barotropic mode has been eliminated from the rigid lid
-! interface height equations, hence the matrix is one row smaller.  Without
-! the rigid lid, the top boundary condition is simpler to implement with
-! the M equations.
-
+  type(ocean_grid_type),                    intent(in)  :: G !< Ocean grid structure
+  type(verticalGrid_type),                  intent(in)  :: GV !< Vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h !< Layer thickness (m or kg/m2)
+  type(thermo_var_ptrs),                    intent(in)  :: tv !< Thermodynamic variables
+  integer,                                  intent(in)  :: nmodes !< Number of modes
+  real, dimension(G%isd:G%ied,G%jsd:G%jed,nmodes), intent(out) :: cn !< Waves speeds (m/s)
+  type(wave_speed_CS), optional,            pointer     :: CS !< Control structure for MOM_wave_speed
+  logical,             optional,            intent(in)  :: full_halos !< If true, do the calculation
+                                                                      !! over the entire computational domain.
+  ! Local variables
   real, dimension(SZK_(G)+1) :: &
     dRho_dT, dRho_dS, &
     pres, T_int, S_int, &
@@ -969,31 +851,21 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
 
 end subroutine wave_speeds
 
+!> Calculate the determinant of a tridiagonal matrix with diagonals a,b-lam,c where lam is constant across rows.
 subroutine tridiag_det(a,b,c,nrows,lam,det_out,ddet_out)
-  real, dimension(:), intent(in) :: a
-  real, dimension(:), intent(in) :: b
-  real, dimension(:), intent(in) :: c
-  integer,            intent(in) :: nrows
-  real,               intent(in) :: lam
-  real,               intent(out):: det_out
-  real,               intent(out):: ddet_out
-  ! Arguments:
-  !  (in)      a - lower diagonal with first entry equal to zero
-  !  (in)      b - middle diagonal
-  !  (in)      c - upper diagonal with last entry equal to zero
-  !  (in)      nrows - number of rows
-  !  (in)      lam  - value to subtract from middle diagonal
-  !  (out)     det_out  - determinate evaluated for given lam value
-  !  (out)     ddet_out - derivative of determinate with respect to lam 
-  !                   evaluated for given lam value
-  real, dimension(nrows) :: &
-    det                  ! value of recursion function 
-  real, dimension(nrows) :: &
-    ddet                 ! value of recursion function for derivative
-  real, parameter:: &
-    rescale = 1024.0**4  ! max value of determinant allowed before rescaling
-  real    :: I_rescale   ! inverse of rescale
-  integer :: n           ! row (layer interface) index
+  real, dimension(:), intent(in) :: a !< Lower diagonal of matrix (first entry = 0)
+  real, dimension(:), intent(in) :: b !< Leading diagonal of matrix (excluding lam)
+  real, dimension(:), intent(in) :: c !< Upper diagonal of matrix (last entry = 0)
+  integer,            intent(in) :: nrows !< Size of matrix
+  real,               intent(in) :: lam !< Value subtracted from b
+  real,               intent(out):: det_out !< Determinant
+  real,               intent(out):: ddet_out !< Derivative of determinant w.r.t. lam
+  ! Local variables
+  real, dimension(nrows) :: det ! value of recursion function 
+  real, dimension(nrows) :: ddet ! value of recursion function for derivative
+  real, parameter:: rescale = 1024.0**4 ! max value of determinant allowed before rescaling
+  real :: I_rescale ! inverse of rescale
+  integer :: n      ! row (layer interface) index
   
   if (size(b) .ne. nrows) call MOM_error(WARNING, "Diagonal b must be same length as nrows.")
   if (size(a) .ne. nrows) call MOM_error(WARNING, "Diagonal a must be same length as nrows.")
@@ -1017,19 +889,13 @@ subroutine tridiag_det(a,b,c,nrows,lam,det_out,ddet_out)
 
 end subroutine tridiag_det
 
+!> Initialize control structure for MOM_wave_speed
 subroutine wave_speed_init(Time, G, param_file, diag, CS)
-  type(time_type),             intent(in)    :: Time
-  type(ocean_grid_type),       intent(in)    :: G
-  type(param_file_type),       intent(in)    :: param_file
-  type(diag_ctrl), target,     intent(inout) :: diag
-  type(wave_speed_CS),         pointer       :: CS
-! Arguments: Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                  for this module
+  type(time_type),             intent(in)    :: Time !< Current model time
+  type(ocean_grid_type),       intent(in)    :: G !< Ocean grid structure
+  type(param_file_type),       intent(in)    :: param_file !< Parameter file handles
+  type(diag_ctrl), target,     intent(inout) :: diag !< Diagnostics control structure
+  type(wave_speed_CS),         pointer       :: CS !< Control structure for MOM_wave_speed
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_wave_speed"  ! This module's name.
@@ -1046,5 +912,49 @@ subroutine wave_speed_init(Time, G, param_file, diag, CS)
   call log_version(param_file, mod, version, "")
 
 end subroutine wave_speed_init
+
+!> \namespace mom_wave_speed
+!!
+!! Subroutine wave_speed() solves for the first baroclinic mode wave speed.  (It could
+!! solve for all the wave speeds, but the iterative approach taken here means
+!! that this is not particularly efficient.)
+!!
+!! If `e(k)` is the perturbation interface height, this means solving for the
+!! smallest eigenvalue (`lam` = 1/c^2) of the system
+!!
+!! \verbatim
+!!   -Igu(k)*e(k-1) + (Igu(k)+Igl(k)-lam)*e(k) - Igl(k)*e(k+1) = 0.0
+!! \endverbatim
+!!
+!! with rigid lid boundary conditions e(1) = e(nz+1) = 0.0 giving
+!!
+!! \verbatim
+!!   (Igu(2)+Igl(2)-lam)*e(2) - Igl(2)*e(3) = 0.0
+!!   -Igu(nz)*e(nz-1) + (Igu(nz)+Igl(nz)-lam)*e(nz) = 0.0
+!! \endverbatim
+!!
+!! Here
+!! \verbatim
+!!   Igl(k) = 1.0/(gprime(k)*h(k)) ; Igu(k) = 1.0/(gprime(k)*h(k-1))
+!! \endverbatim
+!!
+!! Alternately, these same eigenvalues can be found from the second smallest
+!! eigenvalue of the Montgomery potential (M(k)) calculation:
+!!
+!! \verbatim
+!!   -Igl(k)*M(k-1) + (Igl(k)+Igu(k+1)-lam)*M(k) - Igu(k+1)*M(k+1) = 0.0
+!! \endverbatim
+!!
+!! with rigid lid and flat bottom boundary conditions
+!!
+!! \verbatim
+!!   (Igu(2)-lam)*M(1) - Igu(2)*M(2) = 0.0
+!!   -Igl(nz)*M(nz-1) + (Igl(nz)-lam)*M(nz) = 0.0
+!! \endverbatim
+!!
+!! Note that the barotropic mode has been eliminated from the rigid lid
+!! interface height equations, hence the matrix is one row smaller.  Without
+!! the rigid lid, the top boundary condition is simpler to implement with
+!! the M equations.
 
 end module MOM_wave_speed
