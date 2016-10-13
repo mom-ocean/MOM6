@@ -487,6 +487,17 @@ contains
 
   end subroutine limit_mass_flux_3d
   
+  !> In the case where offline advection has failed to converge. Redistribute the flux
+  !! into remainder of the water column
+  subroutine redistribute_residual(G, GV, h, uhtr, vhtr)
+    type(ocean_grid_type),    pointer                           :: G
+    type(verticalGrid_type),  pointer                           :: GV
+    real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: uh
+    real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout)    :: vh
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)    :: ea
+    
+  end subroutine distribute_residual_upwards
+  
 !> \namespace mom_offline_transport
 !! \section offline_overview Offline Tracer Transport in MOM6
 !!  'Offline tracer modeling' uses physical fields (e.g. mass transports and layer thicknesses) saved

@@ -1667,9 +1667,9 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       call cpu_clock_end(id_clock_ALE)        
       
       ! Finish with the other half of the tracer horizontal diffusion
-      call tracer_hordiff(h_pre, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
-        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, do_online_flag=.false., read_khdt_x=khdt_x*0.5, &
-        read_khdt_y=khdt_y*0.5)
+!      call tracer_hordiff(h_pre, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
+!        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, do_online_flag=.false., read_khdt_x=khdt_x*0.5, &
+!        read_khdt_y=khdt_y*0.5)
     
     elseif (.not. CS%use_ALE_algorithm) then
       do iter=1,CS%offline_CSp%num_off_iter
