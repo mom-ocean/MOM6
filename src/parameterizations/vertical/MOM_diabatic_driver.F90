@@ -158,7 +158,7 @@ type, public :: diabatic_CS ;
   integer :: id_Tdif_z   = -1, id_Tadv_z   = -1, id_Sdif_z       = -1, id_Sadv_z   = -1
   integer :: id_Tdif     = -1, id_Tadv     = -1, id_Sdif         = -1, id_Sadv     = -1
   integer :: id_MLD_003  = -1, id_MLD_0125  = -1, id_MLD_user     = -1, id_mlotstsq = -1
-  integer :: id_subMLN2  = -1, id_brine_lay = -1, id_hloss_boundary
+  integer :: id_subMLN2  = -1, id_brine_lay = -1
 
   integer :: id_diabatic_diff_temp_tend     = -1
   integer :: id_diabatic_diff_saln_tend     = -1
@@ -777,7 +777,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
                     (0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect)
         eb(i,j,k-1) = eb(i,j,k-1) + Ent_int
         ea(i,j,k) = ea(i,j,k) + Ent_int
-!        eb(i,j,k-1) = ea(i,j,k)
         Kd_int(i,j,K)  = Kd_int(i,j,K) + Kd_add_here
 
         ! for diagnostics
@@ -1138,12 +1137,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
           eatr(i,j,k) = eatr(i,j,k) + add_ent
         endif ; endif
       enddo ; enddo
-
-      if (CS%useALEalgorithm) then
-        do i=is,ie ; eatr(i,j,1) = ea(i,j,1) ; enddo
-      else
-        do i=is,ie ; eatr(i,j,1) = ea(i,j,1) ; enddo
-      endif
+      do i=is,ie ; eatr(i,j,1) = ea(i,j,1) ; enddo
+        
     enddo
 
     if (CS%useALEalgorithm) then
@@ -1938,8 +1933,6 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
       'Layer entrainment from above per timestep','meter')
   CS%id_eb = register_diag_field('ocean_model','eb',diag%axesTL,Time, &
       'Layer entrainment from below per timestep', 'meter')
-  CS%id_hloss_boundary = register_diag_field('ocean_model','hloss_boundary',diag%axesTL,Time, &
-      'Layer thickness lost/gained due to fluxes at the boundary', 'meter')
   CS%id_dudt_dia = register_diag_field('ocean_model','dudt_dia',diag%axesCuL,Time, &
       'Zonal Acceleration from Diapycnal Mixing', 'meter second-2')
   CS%id_dvdt_dia = register_diag_field('ocean_model','dvdt_dia',diag%axesCvL,Time, &
