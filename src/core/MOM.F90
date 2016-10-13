@@ -526,8 +526,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     call create_group_pass(CS%pass_tau_ustar_psurf, fluxes%ustar(:,:), G%Domain)
   if (ASSOCIATED(fluxes%p_surf)) &
     call create_group_pass(CS%pass_tau_ustar_psurf, fluxes%p_surf(:,:), G%Domain)
-  if (CS%thickness_diffuse .OR. CS%mixedlayer_restrat) &
+  if ((CS%thickness_diffuse  .and. (.not.CS%thickness_diffuse_first .or. CS%dt_trans == 0) )  .OR. CS%mixedlayer_restrat) &
     call create_group_pass(CS%pass_h, h, G%Domain)
+
   if (CS%diabatic_first) then
     if (associated(CS%visc%Ray_u) .and. associated(CS%visc%Ray_v)) &
       call create_group_pass(CS%pass_ray, CS%visc%Ray_u, CS%visc%Ray_v, G%Domain, &
@@ -2093,7 +2094,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in)
              (LEN_TRIM(dirs%input_filename) == 1))
   call tracer_flow_control_init(.not.new_sim, Time, G, GV, CS%h, param_file, &
              CS%diag, CS%OBC, CS%tracer_flow_CSp, CS%sponge_CSp, &
-             CS%ALE_sponge_CSp, CS%diag_to_Z_CSp)
+             CS%ALE_sponge_CSp, CS%diag_to_Z_CSp, CS%tv)
 
   call cpu_clock_begin(id_clock_pass_init)
   call do_group_pass(CS%pass_uv_T_S_h, G%Domain)
@@ -3633,9 +3634,9 @@ end subroutine MOM_end
 !! * FRAZIL_HEAT_TENDENCY generally has 3d structure, since MOM6 frazil calculation checks the
 !!   full ocean column.
 !!
-!! * FRAZIL_HEAT_TENDENCY[k=@sum] = HFSIFRAZIL = column integrated frazil heating.
+!! * FRAZIL_HEAT_TENDENCY[k=\@sum] = HFSIFRAZIL = column integrated frazil heating.
 !!
-!! * HFDS = FRAZIL_HEAT_TENDENCY[k=@sum] + BOUNDARY_FORCING_HEAT_TENDENCY[k=@sum]
+!! * HFDS = FRAZIL_HEAT_TENDENCY[k=\@sum] + BOUNDARY_FORCING_HEAT_TENDENCY[k=\@sum]
 !!
 !!  Here is an example 2d heat budget (depth summed) diagnostic for MOM.
 !!
@@ -3661,7 +3662,7 @@ end subroutine MOM_end
 !! * BOUNDARY_FORCING_SALT_TENDENCY generally has 3d structure, with k > 1 contributions from
 !!   the case when layers are tiny, in which case MOM6 partitions tendencies into k > 1 layers.
 !!
-!! * SFDSI = BOUNDARY_FORCING_SALT_TENDENCY[k=@sum] 
+!! * SFDSI = BOUNDARY_FORCING_SALT_TENDENCY[k=\@sum] 
 !!
 !!  Here is an example 2d salt budget (depth summed) diagnostic for MOM.
 !!

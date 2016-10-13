@@ -70,13 +70,17 @@ use oil_tracer, only : oil_tracer_column_physics, oil_tracer_surface_state
 use oil_tracer, only : oil_stock, oil_tracer_end, oil_tracer_CS
 use advection_test_tracer, only : register_advection_test_tracer, initialize_advection_test_tracer
 use advection_test_tracer, only : advection_test_tracer_column_physics, advection_test_tracer_surface_state
-use advection_test_tracer, only : advection_test_tracer_end, advection_test_tracer_CS
+use advection_test_tracer, only : advection_test_stock, advection_test_tracer_end, advection_test_tracer_CS
 #ifdef _USE_GENERIC_TRACER
 use MOM_generic_tracer, only : register_MOM_generic_tracer, initialize_MOM_generic_tracer
 use MOM_generic_tracer, only : MOM_generic_tracer_column_physics, MOM_generic_tracer_surface_state
 use MOM_generic_tracer, only : end_MOM_generic_tracer, MOM_generic_tracer_get
 use MOM_generic_tracer, only : MOM_generic_tracer_stock, MOM_generic_tracer_min_max, MOM_generic_tracer_CS
 #endif
+use pseudo_salt_tracer, only : register_pseudo_salt_tracer, initialize_pseudo_salt_tracer
+use pseudo_salt_tracer, only : pseudo_salt_tracer_column_physics, pseudo_salt_tracer_surface_state
+use pseudo_salt_tracer, only : pseudo_salt_stock, pseudo_salt_tracer_end, pseudo_salt_tracer_CS
+
 
 implicit none ; private
 
@@ -94,6 +98,7 @@ type, public :: tracer_flow_control_CS ; private
   logical :: use_advection_test_tracer = .false.
   logical :: use_OCMIP2_CFC = .false.
   logical :: use_MOM_generic_tracer = .false.
+  logical :: use_pseudo_salt_tracer = .false.
   type(USER_tracer_example_CS), pointer :: USER_tracer_example_CSp => NULL()
   type(DOME_tracer_CS), pointer :: DOME_tracer_CSp => NULL()
   type(ISOMIP_tracer_CS), pointer :: ISOMIP_tracer_CSp => NULL()
@@ -105,6 +110,7 @@ type, public :: tracer_flow_control_CS ; private
 #ifdef _USE_GENERIC_TRACER
   type(MOM_generic_tracer_CS), pointer :: MOM_generic_tracer_CSp => NULL()
 #endif
+  type(pseudo_salt_tracer_CS), pointer :: pseudo_salt_tracer_CSp => NULL()
 end type tracer_flow_control_CS
 
 contains
@@ -172,6 +178,9 @@ subroutine call_tracer_register(HI, GV, param_file, CS, tr_Reg, restart_CS)
                  "If true and _USE_GENERIC_TRACER is defined as a \n"//&
                  "preprocessor macro, use the MOM_generic_tracer packages.", &
                  default=.false.)
+  call get_param(param_file, mod, "USE_PSEUDO_SALT_TRACER", CS%use_pseudo_salt_tracer, &
+                 "If true, use the pseudo salt tracer, typically run as a diagnostic.", &
+                 default=.false.)
 
 #ifndef _USE_GENERIC_TRACER
   if (CS%use_MOM_generic_tracer) call MOM_error(FATAL, &
@@ -210,11 +219,14 @@ subroutine call_tracer_register(HI, GV, param_file, CS, tr_Reg, restart_CS)
     register_MOM_generic_tracer(HI, GV, param_file,  CS%MOM_generic_tracer_CSp, &
                                 tr_Reg, restart_CS)
 #endif
+  if (CS%use_pseudo_salt_tracer) CS%use_pseudo_salt_tracer = &
+    register_pseudo_salt_tracer(HI, GV, param_file,  CS%pseudo_salt_tracer_CSp, &
+                        tr_Reg, restart_CS)
 
 end subroutine call_tracer_register
 
 subroutine tracer_flow_control_init(restart, day, G, GV, h, param_file, diag, OBC, &
-                                CS, sponge_CSp, ALE_sponge_CSp, diag_to_Z_CSp)
+                                CS, sponge_CSp, ALE_sponge_CSp, diag_to_Z_CSp, tv)
   logical,                               intent(in) :: restart
   type(time_type), target,               intent(in) :: day
   type(ocean_grid_type),                 intent(inout) :: G
@@ -227,6 +239,7 @@ subroutine tracer_flow_control_init(restart, day, G, GV, h, param_file, diag, OB
   type(sponge_CS),                       pointer    :: sponge_CSp
   type(ALE_sponge_CS),                   pointer    :: ALE_sponge_CSp
   type(diag_to_Z_CS),                    pointer    :: diag_to_Z_CSp
+  type(thermo_var_ptrs),                 intent(in) :: tv
 !   This subroutine calls all registered tracer initialization
 ! subroutines.
 
@@ -279,6 +292,9 @@ subroutine tracer_flow_control_init(restart, day, G, GV, h, param_file, diag, OB
     call initialize_MOM_generic_tracer(restart, day, G, GV, h, param_file, diag, OBC, &
         CS%MOM_generic_tracer_CSp, sponge_CSp, ALE_sponge_CSp, diag_to_Z_CSp)
 #endif
+  if (CS%use_pseudo_salt_tracer) &
+    call initialize_pseudo_salt_tracer(restart, day, G, GV, h, diag, OBC, CS%pseudo_salt_tracer_CSp, &
+                                sponge_CSp, diag_to_Z_CSp, tv)
 
 end subroutine tracer_flow_control_init
 
@@ -338,7 +354,8 @@ subroutine call_tracer_set_forcing(state, fluxes, day_start, day_interval, G, CS
 
 end subroutine call_tracer_set_forcing
 
-subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, dt, G, GV, tv, optics, CS)
+subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, dt, G, GV, tv, optics, CS, &
+                                  debug, evap_CFL_limit, minimum_forcing_depth)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h_old, h_new, ea, eb
   type(forcing),                         intent(in) :: fluxes
   real,                                  intent(in) :: dt
@@ -347,6 +364,10 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, dt, G, GV, tv, o
   type(thermo_var_ptrs),                 intent(in) :: tv
   type(optics_type),                     pointer    :: optics
   type(tracer_flow_control_CS),          pointer    :: CS
+  logical,                               intent(in) :: debug
+  real,                             optional,intent(in)  :: evap_CFL_limit
+  real,                             optional,intent(in)  :: minimum_forcing_depth
+  
 !   This subroutine calls all registered tracer column physics
 ! subroutines.
 
@@ -368,39 +389,107 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, dt, G, GV, tv, o
 !  (in)      optics - The structure containing optical properties.
 !  (in)      CS - The control structure returned by a previous call to
 !                 call_tracer_register.
+!  (in)      evap_CFL_limit - Limits how much water can be fluxed out of the top layer
+!                             Stored previously in diabatic CS.  
+!  (in)      minimum_forcing_depth - The smallest depth over which fluxes can be applied
+!                             Stored previously in diabatic CS.  
+!  (in)      debug - Calculates checksums     
 
   if (.not. associated(CS)) call MOM_error(FATAL, "call_tracer_column_fns: "// &
          "Module must be initialized via call_tracer_register before it is used.")
-! Add calls to tracer column functions here.
-  if (CS%use_USER_tracer_example) &
-    call tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                               G, GV, CS%USER_tracer_example_CSp)
-  if (CS%use_DOME_tracer) &
-    call DOME_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                    G, GV, CS%DOME_tracer_CSp)
-  if (CS%use_ISOMIP_tracer) &
-    call ISOMIP_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                    G, GV, CS%ISOMIP_tracer_CSp)
-  if (CS%use_ideal_age) &
-    call ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                         G, GV, CS%ideal_age_tracer_CSp)
-  if (CS%use_regional_dyes) &
-    call dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                         G, GV, CS%dye_tracer_CSp)
-  if (CS%use_oil) &
-    call oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                   G, GV, CS%oil_tracer_CSp, tv)
-  if (CS%use_advection_test_tracer) &
-    call advection_test_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                    G, GV, CS%advection_test_tracer_CSp)
-  if (CS%use_OCMIP2_CFC) &
-    call OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                   G, GV, CS%OCMIP2_CFC_CSp)
+
+  ! Use the applyTracerBoundaryFluxesInOut to handle surface fluxes
+  if (present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
+    ! Add calls to tracer column functions here.
+    if (CS%use_USER_tracer_example) &
+      call tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                 G, GV, CS%USER_tracer_example_CSp)
+    if (CS%use_DOME_tracer) &
+      call DOME_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                      G, GV, CS%DOME_tracer_CSp, &
+                                      evap_CFL_limit=evap_CFL_limit, &
+                                      minimum_forcing_depth=minimum_forcing_depth)
+    if (CS%use_ISOMIP_tracer) &
+      call ISOMIP_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                        G, GV, CS%ISOMIP_tracer_CSp, &
+                                        evap_CFL_limit=evap_CFL_limit, &
+                                        minimum_forcing_depth=minimum_forcing_depth)
+    if (CS%use_ideal_age) &
+      call ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                           G, GV, CS%ideal_age_tracer_CSp, &
+                                           evap_CFL_limit=evap_CFL_limit, &
+                                           minimum_forcing_depth=minimum_forcing_depth)
+    if (CS%use_regional_dyes) &
+      call dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                     G, GV, CS%dye_tracer_CSp, &
+                                     evap_CFL_limit=evap_CFL_limit, &
+                                     minimum_forcing_depth=minimum_forcing_depth)
+    if (CS%use_oil) &
+      call oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                     G, GV, CS%oil_tracer_CSp, tv, &
+                                     evap_CFL_limit=evap_CFL_limit, &
+                                     minimum_forcing_depth=minimum_forcing_depth)
+
+    if (CS%use_advection_test_tracer) &
+      call advection_test_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                                G, GV, CS%advection_test_tracer_CSp, &
+                                                evap_CFL_limit=evap_CFL_limit, &
+                                                minimum_forcing_depth=minimum_forcing_depth)
+    if (CS%use_OCMIP2_CFC) &
+      call OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                     G, GV, CS%OCMIP2_CFC_CSp, &
+                                     evap_CFL_limit=evap_CFL_limit, &
+                                     minimum_forcing_depth=minimum_forcing_depth)
 #ifdef _USE_GENERIC_TRACER
-  if (CS%use_MOM_generic_tracer) &
-    call MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                   G, GV, CS%MOM_generic_tracer_CSp, tv, optics)
+    if (CS%use_MOM_generic_tracer) &
+      call MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                             G, GV, CS%MOM_generic_tracer_CSp, tv, optics, &
+                                             evap_CFL_limit=evap_CFL_limit, &
+                                             minimum_forcing_depth=minimum_forcing_depth)
 #endif
+    if (CS%use_pseudo_salt_tracer) &
+      call pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                     G, GV, CS%pseudo_salt_tracer_CSp, tv, debug,&
+                                     evap_CFL_limit=evap_CFL_limit, &
+                                     minimum_forcing_depth=minimum_forcing_depth)
+
+
+  else ! Apply tracer surface fluxes using ea on the first layer
+    if (CS%use_USER_tracer_example) &
+      call tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                 G, GV, CS%USER_tracer_example_CSp)
+    if (CS%use_DOME_tracer) &
+      call DOME_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                      G, GV, CS%DOME_tracer_CSp)
+    if (CS%use_ISOMIP_tracer) &
+      call ISOMIP_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                      G, GV, CS%ISOMIP_tracer_CSp)
+    if (CS%use_ideal_age) &
+      call ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                           G, GV, CS%ideal_age_tracer_CSp)
+    if (CS%use_regional_dyes) &
+      call dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                           G, GV, CS%dye_tracer_CSp)
+    if (CS%use_oil) &
+      call oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                     G, GV, CS%oil_tracer_CSp, tv)
+    if (CS%use_advection_test_tracer) &
+      call advection_test_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                      G, GV, CS%advection_test_tracer_CSp)
+    if (CS%use_OCMIP2_CFC) &
+      call OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                     G, GV, CS%OCMIP2_CFC_CSp)
+#ifdef _USE_GENERIC_TRACER
+    if (CS%use_MOM_generic_tracer) &
+      call MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                     G, GV, CS%MOM_generic_tracer_CSp, tv, optics)
+#endif
+    if (CS%use_pseudo_salt_tracer) &
+      call pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                     G, GV, CS%pseudo_salt_tracer_CSp, tv, debug)
+
+
+  endif
 
 
 end subroutine call_tracer_column_fns
@@ -486,6 +575,14 @@ subroutine call_tracer_stocks(h, stock_values, G, GV, CS, stock_names, stock_uni
     call store_stocks("MOM_OCMIP2_CFC", ns, names, units, values, index, stock_values, &
                        set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
   endif
+
+  if (CS%use_advection_test_tracer) then
+    ns = advection_test_stock( h, values, G, GV, CS%advection_test_tracer_CSp, &
+                         names, units, stock_index )
+    call store_stocks("advection_test_tracer", ns, names, units, values, index, &
+           stock_values, set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
+  endif
+
 #ifdef _USE_GENERIC_TRACER
   if (CS%use_MOM_generic_tracer) then
     ns = MOM_generic_tracer_stock(h, values, G, GV, CS%MOM_generic_tracer_CSp, &
@@ -498,6 +595,12 @@ subroutine call_tracer_stocks(h, stock_values, G, GV, CS, stock_names, stock_uni
 
   endif
 #endif
+  if (CS%use_pseudo_salt_tracer) then
+    ns = pseudo_salt_stock(h, values, G, GV, CS%pseudo_salt_tracer_CSp, &
+                         names, units, stock_index)
+    call store_stocks("pseudo_salt_tracer", ns, names, units, values, index, &
+           stock_values, set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
+  endif
 
   if (ns_tot == 0) stock_values(1) = 0.0
 
@@ -610,6 +713,7 @@ subroutine tracer_flow_control_end(CS)
 #ifdef _USE_GENERIC_TRACER
   if (CS%use_MOM_generic_tracer) call end_MOM_generic_tracer(CS%MOM_generic_tracer_CSp)
 #endif
+  if (CS%use_pseudo_salt_tracer) call pseudo_salt_tracer_end(CS%pseudo_salt_tracer_CSp)
 
   if (associated(CS)) deallocate(CS)
 end subroutine tracer_flow_control_end

@@ -70,6 +70,7 @@ use Rossby_front_2d_initialization, only : Rossby_front_initialize_thickness
 use Rossby_front_2d_initialization, only : Rossby_front_initialize_temperature_salinity
 use Rossby_front_2d_initialization, only : Rossby_front_initialize_velocity
 use SCM_idealized_hurricane, only : SCM_idealized_hurricane_TS_init
+use SCM_CVmix_tests, only: SCM_CVmix_tests_TS_init
 use supercritical_initialization, only : supercritical_initialize_velocity
 use supercritical_initialization, only : supercritical_set_OBC_data
 use soliton_initialization, only : soliton_initialize_velocity
@@ -284,6 +285,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                " \t seamount - TBD AJA. \n"//&
                " \t rossby_front - a mixed layer front in thermal wind balance.\n"//&
                " \t SCM_ideal_hurr - used in the SCM idealized hurricane test.\n"//&
+               " \t SCM_CVmix_tests - used in the SCM CVmix tests.\n"//&
                " \t USER - call a user modified routine.", &
                fail_if_missing=.true.)
 !              " \t baroclinic_zone - an analytic baroclinic zone. \n"//&
@@ -309,6 +311,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
           case ("rossby_front"); call Rossby_front_initialize_temperature_salinity ( tv%T, &
                                 tv%S, h, G, PF, eos)
           case ("SCM_ideal_hurr"); call SCM_idealized_hurricane_TS_init ( tv%T, &
+                                tv%S, h, G, GV, PF)
+          case ("SCM_CVmix_tests"); call SCM_CVmix_tests_TS_init (tv%T, &
                                 tv%S, h, G, GV, PF)
           case ("USER"); call user_init_temperature_salinity(tv%T, tv%S, G, PF, eos)
           case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
