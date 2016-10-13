@@ -2538,7 +2538,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, do_online_out)
   if(present(do_online_out)) do_online_out=CS%do_online
   
   if(.not. CS%do_online) then
-    call offline_transport_init(param_file, CS%offline_CSp, CS%diabatic_CSp, G, GV)
+    call offline_transport_init(param_file, CS%offline_CSp, CS%diabatic_CSp%diabatic_aux_CSp, G, GV)
     call register_diags_offline_transport(Time, CS%diag, CS%offline_CSp)
   endif
 

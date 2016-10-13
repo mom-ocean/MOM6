@@ -285,7 +285,7 @@ contains
     if(.not. CS%fields_are_offset) CS%ridx_snap = CS%start_index
     
     ! Copy over parameters from other control structures
-    if(associated(diabatic_CSp%diabatic_aux_CSp)) then
+    if(associated(diabatic_aux_CSp)) then
       CS%evap_CFL_limit = diabatic_aux_CSp%evap_CFL_limit
       CS%minimum_forcing_depth = diabatic_aux_CSp%minimum_forcing_depth
     endif
