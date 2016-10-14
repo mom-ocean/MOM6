@@ -37,6 +37,7 @@ module MOM_offline_transport
       sum_file
     logical :: fields_are_offset ! True if the time-averaged fields and snapshot fields are
                                  ! offset by one time level
+    logical :: redistribute_residual
     
     !> Variables controlling some of the numerical considerations of offline transport
     integer           ::  num_off_iter
@@ -270,6 +271,9 @@ contains
     call get_param(param_file, mod, "FIELDS_ARE_OFFSET", CS%fields_are_offset, &
       "True if the time-averaged fields and snapshot fields are offset by one time level", &
       default=.false.)
+    call get_param(param_file, mod, "REDISTRIBUTE_RESIDUAL", CS%redistribute_residual, &
+      "Redistributes any remaining horizontal fluxes throughout the rest of water column", &
+      default=.true.)  
     call get_param(param_file, mod, "NUM_OFF_ITER", CS%num_off_iter, &
       "Number of iterations to subdivide the offline tracer advection and diffusion" )
     call get_param(param_file, mod, "DT_OFFLINE", CS%dt_offline, &
@@ -488,15 +492,133 @@ contains
   end subroutine limit_mass_flux_3d
   
   !> In the case where offline advection has failed to converge. Redistribute the flux
-  !! into remainder of the water column
-  subroutine redistribute_residual(G, GV, h, uhtr, vhtr)
+  !! into remainder of the water column in a barotropic sense
+  subroutine distribute_residual_uh(G, GV, h, uh)
     type(ocean_grid_type),    pointer                           :: G
     type(verticalGrid_type),  pointer                           :: GV
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout)    :: h
     real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: uh
-    real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout)    :: vh
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)    :: ea
     
-  end subroutine distribute_residual_upwards
+    real, dimension(SZIB_(G),SZK_(G))   :: uh2d
+    real, dimension(SZIB_(G))           :: uh2d_sum
+    real, dimension(SZI_(G),SZK_(G))     :: h2d
+    real, dimension(SZI_(G))            :: h2d_sum
+    
+    integer :: i, j, k, m, is, ie, js, je, nz
+    
+    ! Set index-related variables for fields on T-grid
+    is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
+    
+    do j=js,je
+      uh2d_sum(:) = 0.0
+      ! Copy over uh to a working array and sum up the remaining fluxes in a column
+      do k=1,nz ; do i=is-1,ie
+        uh2d(I,k) = uh(I,j,k)
+        uh2d_sum(I) = uh2d_sum(I) + uh2d(I,k)
+      enddo ; enddo
+      
+      ! Copy over h to a working array and calculate column volume
+      h2d_sum(:) = 0.0
+      do k=1,nz ; do i=is-2,ie
+        h2d(i,k) = h(i,j,k)*G%areaT(i,j)
+        if(h2d(i,k)>GV%Angstrom) then
+          h2d_sum(i) = h2d_sum(i) + h2d(i,k)
+        else
+          h2d_sum(i) = 0.0
+        endif
+      enddo; enddo;
+      
+    
+      ! Distribute flux 
+      do i=is-1,ie
+        if( uh2d_sum(I)>0.0 ) then
+          do k=1,nz
+            uh2d(I,k) = uh2d_sum(I)*(h2d(i,k)/h2d_sum(i))
+          enddo
+        elseif (uh2d_sum(I)<0.0) then
+          do k=1,nz
+            uh2d(I,k) = uh2d_sum(I)*(h2d(i-1,k)/h2d_sum(i))
+          enddo
+        else
+          uh2d(I,k) = 0.0
+        endif
+      enddo
+      
+      ! Update layer thicknesses at the end 
+      do k=1,nz ; do i=is-2,ie
+        h(i,j,k) = (h(i,j,k) + (uh2d(i-1,k) - uh2d(i,k)))/G%areaT(i,j)
+      enddo ; enddo
+      do k=1,nz ; do i=is-1,ie
+        uh(I,j,k) = uh2d(I,k)
+      enddo ; enddo
+    enddo
+    
+  end subroutine distribute_residual_uh
+  
+  !> In the case where offline advection has failed to converge. Redistribute the flux
+  !! into remainder of the water column in a barotropic sense
+  subroutine distribute_residual_vh(G, GV, h, vh)
+    type(ocean_grid_type),    pointer                           :: G
+    type(verticalGrid_type),  pointer                           :: GV
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout)    :: h
+    real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout)    :: vh
+    
+    real, dimension(SZJB_(G),SZK_(G))   :: vh2d
+    real, dimension(SZJB_(G))           :: vh2d_sum
+    real, dimension(SZJ_(G),SZK_(G))    :: h2d
+    real, dimension(SZJ_(G))            :: h2d_sum
+    
+    integer :: i, j, k, m, is, ie, js, je, nz
+    
+    ! Set index-related variables for fields on T-grid
+    is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
+    
+    do i=is,ie
+      vh2d_sum(:) = 0.0
+      ! Copy over uh to a working array and sum up the remaining fluxes in a column
+      do k=1,nz ; do j=js-1,je
+        vh2d(J,k) = vh(i,J,k)
+        vh2d_sum(J) = vh2d_sum(J) + vh2d(J,k)
+      enddo ; enddo
+      
+      ! Copy over h to a working array and calculate column volume
+      h2d_sum(:) = 0.0
+      do k=1,nz ; do j=js-2,je
+        h2d(j,k) = h(i,j,k)*G%areaT(i,j)
+        if(h2d(j,k)>GV%Angstrom) then
+          h2d_sum(j) = h2d_sum(j) + h2d(j,k)
+        else
+          h2d_sum(j) = 0.0
+        endif
+      enddo; enddo;
+      
+    
+      ! Distribute flux 
+      do j=js-1,je
+        if( vh2d_sum(J)>0.0 ) then
+          do k=1,nz
+            vh2d(J,k) = vh2d_sum(J)*(h2d(j,k)/h2d_sum(j))
+          enddo
+        elseif (vh2d_sum(J)<0.0) then
+          do k=1,nz
+            vh2d(J,k) = vh2d_sum(J)*(h2d(j-1,k)/h2d_sum(j-1))
+          enddo
+        else
+          vh2d(J,k) = 0.0
+        endif
+      enddo
+      
+      ! Update layer thicknesses at the end 
+      do k=1,nz ; do j=js-2,je
+        h(i,j,k) = (h(i,j,k) + (vh2d(J-1,k) - vh2d(J,k)))/G%areaT(i,j)
+      enddo ; enddo
+      do k=1,nz ; do j=js-1,je
+        vh(i,J,k) = vh2d(J,k)
+      enddo ; enddo
+    enddo
+    
+  end subroutine distribute_residual_vh
+  
   
 !> \namespace mom_offline_transport
 !! \section offline_overview Offline Tracer Transport in MOM6
