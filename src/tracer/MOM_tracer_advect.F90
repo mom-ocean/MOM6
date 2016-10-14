@@ -44,7 +44,8 @@ contains
 
 !> This routine time steps the tracer concentration using a 
 !! monotonic, conservative, weakly diffusive scheme.
-subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, h_prev_opt, max_iter_in, x_first_in, uhr_out, vhr_out, h_out)
+subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, &
+      h_prev_opt, max_iter_in, x_first_in, uhr_out, vhr_out, h_out)
   type(ocean_grid_type),                     intent(inout) :: G     !< ocean grid structure 
   type(verticalGrid_type),                   intent(in)    :: GV    !< ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h_end !< layer thickness after advection (m or kg m-2)
