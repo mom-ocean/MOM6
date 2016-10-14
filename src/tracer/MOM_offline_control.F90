@@ -55,7 +55,8 @@ module MOM_offline_transport
       id_vhr = -1, &
       id_ear = -1, &
       id_ebr = -1, &
-      id_hr = -1
+      id_hr = -1,  &
+      id_eta_diff = -1
 
   end type offline_transport_CS
 
@@ -224,6 +225,8 @@ contains
       'Remaining thickness entrained from above', 'm')
     CS%id_ebr  = register_diag_field('ocean_model', 'ebr', diag%axesTL, Time, &
       'Remaining thickness entrained from below', 'm')
+    CS%id_eta_diff = register_diag_field('ocean_model','eta_diff', diag%axesT1, Time, &
+      'Difference in total water column height from online and offline','m')
 
   end subroutine register_diags_offline_transport
 
@@ -493,8 +496,8 @@ contains
 
   end subroutine limit_mass_flux_3d
   
-  !> In the case where offline advection has failed to converge. Redistribute the flux
-  !! into remainder of the water column in a barotropic sense
+  !> In the case where offline advection has failed to converge, redistribute the u-flux
+  !! into remainder of the water column as a barotropic equivalent
   subroutine distribute_residual_uh(G, GV, h, uh)
     type(ocean_grid_type),    pointer                           :: G
     type(verticalGrid_type),  pointer                           :: GV
@@ -503,7 +506,7 @@ contains
     
     real, dimension(SZIB_(G),SZK_(G))   :: uh2d
     real, dimension(SZIB_(G))           :: uh2d_sum
-    real, dimension(SZI_(G),SZK_(G))     :: h2d
+    real, dimension(SZI_(G),SZK_(G))    :: h2d
     real, dimension(SZI_(G))            :: h2d_sum
     
     integer :: i, j, k, m, is, ie, js, je, nz
@@ -519,36 +522,39 @@ contains
         uh2d_sum(I) = uh2d_sum(I) + uh2d(I,k)
       enddo ; enddo
       
-      ! Copy over h to a working array and calculate column volume
+      ! Copy over h to a working array and calculate column height
       h2d_sum(:) = 0.0
-      do k=1,nz ; do i=is-2,ie
+      do k=1,nz ; do i=is-2,ie+1
         h2d(i,k) = h(i,j,k)*G%areaT(i,j)
-        if(h2d(i,k)>GV%Angstrom) then
+        if(h(i,j,k)>GV%Angstrom) then
           h2d_sum(i) = h2d_sum(i) + h2d(i,k)
         else
-          h2d_sum(i) = 0.0
+          h2d(i,k) = 0.0
         endif
       enddo; enddo;
       
     
-      ! Distribute flux 
+      ! Distribute flux. Note min/max is intended to make sure that the mass transport
+      ! does not deplete a cell
       do i=is-1,ie
         if( uh2d_sum(I)>0.0 ) then
           do k=1,nz
-            uh2d(I,k) = uh2d_sum(I)*(h2d(i,k)/h2d_sum(i))
+            uh2d(I,k) = min(uh2d_sum(I)*(h2d(i,k)/h2d_sum(i)),h2d(i,k))
           enddo
         elseif (uh2d_sum(I)<0.0) then
           do k=1,nz
-            uh2d(I,k) = uh2d_sum(I)*(h2d(i-1,k)/h2d_sum(i))
+            uh2d(I,k) = max(uh2d_sum(I)*(h2d(i+1,k)/h2d_sum(i+1)),-h2d(i+1,k))
           enddo
         else
-          uh2d(I,k) = 0.0
+          do k=1,nz
+            uh2d(I,k) = 0.0
+          enddo
         endif
       enddo
       
       ! Update layer thicknesses at the end 
-      do k=1,nz ; do i=is-2,ie
-        h(i,j,k) = (h(i,j,k) + (uh2d(i-1,k) - uh2d(i,k)))/G%areaT(i,j)
+      do k=1,nz ; do i=is-2,ie+1
+        h(i,j,k) = h(i,j,k) + (uh2d(I-1,k) - uh2d(I,k))/G%areaT(i,j)
       enddo ; enddo
       do k=1,nz ; do i=is-1,ie
         uh(I,j,k) = uh2d(I,k)
@@ -557,8 +563,7 @@ contains
     
   end subroutine distribute_residual_uh
   
-  !> In the case where offline advection has failed to converge. Redistribute the flux
-  !! into remainder of the water column in a barotropic sense
+  !> Redistribute the v-flux as a barotropic equivalent
   subroutine distribute_residual_vh(G, GV, h, vh)
     type(ocean_grid_type),    pointer                           :: G
     type(verticalGrid_type),  pointer                           :: GV
@@ -585,34 +590,38 @@ contains
       
       ! Copy over h to a working array and calculate column volume
       h2d_sum(:) = 0.0
-      do k=1,nz ; do j=js-2,je
+      do k=1,nz ; do j=js-2,je+1
         h2d(j,k) = h(i,j,k)*G%areaT(i,j)
-        if(h2d(j,k)>GV%Angstrom) then
+        if(h(i,j,k)>GV%Angstrom) then
           h2d_sum(j) = h2d_sum(j) + h2d(j,k)
         else
-          h2d_sum(j) = 0.0
+          h2d(j,k) = 0.0
         endif
       enddo; enddo;
       
     
-      ! Distribute flux 
+      ! Distribute flux. Note min/max is intended to make sure that the mass transport
+      ! does not deplete a cell
       do j=js-1,je
         if( vh2d_sum(J)>0.0 ) then
           do k=1,nz
-            vh2d(J,k) = vh2d_sum(J)*(h2d(j,k)/h2d_sum(j))
+            vh2d(J,k) = min(vh2d_sum(J)*(h2d(j,k)/h2d_sum(j)),h2d(j,k))
           enddo
         elseif (vh2d_sum(J)<0.0) then
           do k=1,nz
-            vh2d(J,k) = vh2d_sum(J)*(h2d(j-1,k)/h2d_sum(j-1))
+            vh2d(J,k) = max(vh2d_sum(J)*(h2d(j+1,k)/h2d_sum(j+1)),-h2d(j+1,k))
           enddo
         else
-          vh2d(J,k) = 0.0
+          do k=1,nz
+            vh2d(J,k) = 0.0
+          enddo
         endif
       enddo
+            
       
       ! Update layer thicknesses at the end 
-      do k=1,nz ; do j=js-2,je
-        h(i,j,k) = (h(i,j,k) + (vh2d(J-1,k) - vh2d(J,k)))/G%areaT(i,j)
+      do k=1,nz ; do j=js-2,je+1
+        h(i,j,k) = h(i,j,k) + (vh2d(J-1,k) - vh2d(J,k))/G%areaT(i,j)
       enddo ; enddo
       do k=1,nz ; do j=js-1,je
         vh(i,J,k) = vh2d(J,k)
