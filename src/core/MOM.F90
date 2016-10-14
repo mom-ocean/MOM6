@@ -131,6 +131,7 @@ use MOM_offline_transport,         only : offline_transport_CS
 use MOM_offline_transport,         only : transport_by_files, next_modulo_time
 use MOM_offline_transport,         only : offline_transport_init, register_diags_offline_transport
 use MOM_offline_transport,         only : limit_mass_flux_3d, update_h_horizontal_flux, update_h_vertical_flux
+use MOM_offline_transport,         only : distribute_residual_uh, distribute_residual_vh
 use MOM_tracer_diabatic,           only : applyTracerBoundaryFluxesInOut
 
 implicit none ; private
@@ -1659,6 +1660,25 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       if(CS%debug) then
         call hchksum(h_pre,"h_pre after 2nd diabatic",G%HI)
       endif    
+      
+      if (CS%offline_CSp%redistribute_residual) then
+        
+        do k=1,nz ; do j=jsd,jed ; do i=isd,ied
+          h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
+        enddo ; enddo ; enddo
+        
+        if (x_before_y) then
+          call distribute_residual_uh(G, GV, h_pre, uhtr)
+          call distribute_residual_vh(G, GV, h_pre, vhtr)
+        else
+          call distribute_residual_vh(G, GV, h_pre, vhtr)
+          call distribute_residual_uh(G, GV, h_pre, uhtr)
+        endif 
+        
+        call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
+            CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=2, &
+            uhr_out=uhtr, vhr_out=vhtr, h_out=h_new, x_first_in=x_before_y)
+      endif
       
       ! Call ALE one last time to make sure that tracers are remapped onto the layer thicknesses
       ! stored from the forward run
