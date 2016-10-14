@@ -103,8 +103,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
   logical,                           optional             :: do_online_flag
   real, dimension(SZIB_(G),SZJ_(G)), optional, intent(in) :: read_khdt_x
   real, dimension(SZI_(G),SZJB_(G)), optional, intent(in) :: read_khdt_y
-
-  logical                                                 :: do_online = .true.
+  
 
   real, dimension(SZI_(G),SZJ_(G)) :: &
     Ihdxdy, &     ! The inverse of the volume or mass of fluid in a layer in a
@@ -119,18 +118,16 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
                   ! the distance between adjacent tracer points, in m2.
     Coef_x, &     ! The coefficients relating zonal tracer differences
                   ! to time-integrated fluxes, in m3 or kg.
-    Kh_u, &       ! Tracer mixing coefficient at u-points, in m2 s-1.
-    write_all_2du ! Make sure that all the data gets written
+    Kh_u          ! Tracer mixing coefficient at u-points, in m2 s-1.
   real, dimension(SZI_(G),SZJB_(G)) :: &
     khdt_y, &     ! The value of Khtr*dt times the open face width divided by
                   ! the distance between adjacent tracer points, in m2.
     Coef_y, &     ! The coefficients relating meridional tracer differences
                   ! to time-integrated fluxes, in m3 or kg.
-    Kh_v, &       ! Tracer mixing coefficient at u-points, in m2 s-1.
-    write_all_2dv ! Make sure that all the data gets written
+    Kh_v          ! Tracer mixing coefficient at u-points, in m2 s-1.
 
   real :: max_CFL ! The global maximum of the diffusive CFL number.
-  logical :: use_VarMix, Resoln_scaled
+  logical :: use_VarMix, Resoln_scaled, do_online
   integer :: i, j, k, m, is, ie, js, je, nz, ntr, itt, num_itts
   real :: I_numitts  ! The inverse of the number of iterations, num_itts.
   real :: scale      ! The fraction of khdt_x or khdt_y that is applied in this
@@ -145,6 +142,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
+  do_online = .true.
   if (present(do_online_flag)) do_online = do_online_flag
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
@@ -481,7 +479,6 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
     call vchksum(Coef_y,"After tracer diffusion Coef_y", G%HI, haloshift=2)
   endif
 
-  write_all_2du = 1. ; write_all_2dv = 1.
   if (CS%id_khdt_x > 0) call post_data(CS%id_khdt_x, khdt_x, CS%diag)
   if (CS%id_khdt_y > 0) call post_data(CS%id_khdt_y, khdt_y, CS%diag)
 

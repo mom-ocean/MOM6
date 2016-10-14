@@ -839,7 +839,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
                      ! Pen_SW_bnd and netMassOut
     netSalt,      &  ! surface salt flux ( g(salt)/m2 for non-Bouss and ppt*H for Bouss )
     nonpenSW         ! non-downwelling SW, which is absorbed at ocean surface
-  real, dimension(SZI_(G), SZK_(G))                     :: h2d, T2d, hloss
+  real, dimension(SZI_(G), SZK_(G))                     :: h2d, T2d
   real, dimension(SZI_(G), SZK_(G))                     :: pen_TKE_2d, dSV_dT_2d
   real, dimension(max(optics%nbands,1),SZI_(G))         :: Pen_SW_bnd
   real, dimension(max(optics%nbands,1),SZI_(G),SZK_(G)) :: opacityBand
@@ -894,7 +894,6 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
     do k=1,nz ; do i=is,ie
       h2d(i,k) = h(i,j,k)
       T2d(i,k) = tv%T(i,j,k)
-      hloss(i,k) = 0.0
       do n=1,nsw
         opacityBand(n,i,k) = (1.0 / GV%m_to_H)*optics%opacity_band(n,i,j,k)
       enddo
@@ -1010,7 +1009,6 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
           ! Update state
           hOld     = h2d(i,k)               ! Keep original thickness in hand
           h2d(i,k) = h2d(i,k) + dThickness  ! New thickness
-          hloss(i,k) = dThickness
           if (h2d(i,k) > 0.0) then
             if (calculate_energetics .and. (dThickness > 0.)) then
               ! Calculate the energy required to mix the newly added water over
