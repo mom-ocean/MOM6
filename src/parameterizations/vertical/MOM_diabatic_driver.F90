@@ -158,7 +158,7 @@ type, public :: diabatic_CS ;
   integer :: id_Tdif_z   = -1, id_Tadv_z   = -1, id_Sdif_z       = -1, id_Sadv_z   = -1
   integer :: id_Tdif     = -1, id_Tadv     = -1, id_Sdif         = -1, id_Sadv     = -1
   integer :: id_MLD_003  = -1, id_MLD_0125  = -1, id_MLD_user     = -1, id_mlotstsq = -1
-  integer :: id_subMLN2  = -1, id_brine_lay = -1, id_hloss_boundary
+  integer :: id_subMLN2  = -1, id_brine_lay = -1
 
   integer :: id_diabatic_diff_temp_tend     = -1
   integer :: id_diabatic_diff_saln_tend     = -1
@@ -256,8 +256,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     dSV_dS, &    ! and salinity in m^3/(kg K) and m^3/(kg ppt).
     cTKE,   &    ! convective TKE requirements for each layer in J/m^2.
     u_h,    &    ! zonal and meridional velocities at thickness points after
-    v_h,    &    ! entrainment (m/s)
-    hloss_boundary ! Change in layer thickness because of freshwater fluxes at the surfac
+    v_h          ! entrainment (m/s)
 
   real, dimension(SZI_(G),SZJ_(G),CS%nMode) :: &
     cn       ! baroclinic gravity wave speeds (formerly cg1 - BDM)
@@ -331,7 +330,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
                   ! (H units = m for Bouss, kg/m^2 for non-Bouss).
   real :: dt_mix  ! amount of time over which to apply mixing (seconds)
   real :: Idt     ! inverse time step (1/s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: write_all_3dt
 
   type(p3d) :: z_ptrs(7)  ! pointers to diagnostics to be interpolated to depth
   integer :: num_z_diags  ! number of diagnostics to be interpolated to depth
@@ -777,7 +775,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
                     (0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect)
         eb(i,j,k-1) = eb(i,j,k-1) + Ent_int
         ea(i,j,k) = ea(i,j,k) + Ent_int
-!        eb(i,j,k-1) = ea(i,j,k)
         Kd_int(i,j,K)  = Kd_int(i,j,K) + Kd_add_here
 
         ! for diagnostics
@@ -1138,18 +1135,14 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
           eatr(i,j,k) = eatr(i,j,k) + add_ent
         endif ; endif
       enddo ; enddo
-
-      if (CS%useALEalgorithm) then
-        do i=is,ie ; eatr(i,j,1) = ea(i,j,1) ; enddo
-      else
-        do i=is,ie ; eatr(i,j,1) = ea(i,j,1) ; enddo
-      endif
+      do i=is,ie ; eatr(i,j,1) = ea(i,j,1) ; enddo
+        
     enddo
 
     if (CS%useALEalgorithm) then
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
     ! so hold should be h_orig
-      call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
+      call call_tracer_column_fns(h_prebound, h, ea, eb, fluxes, dt, G, GV, tv, &
                                 CS%optics, CS%tracer_flow_CSp, CS%debug, &
                                 evap_CFL_limit = CS%diabatic_aux_CSp%evap_CFL_limit, &
                                 minimum_forcing_depth = CS%diabatic_aux_CSp%minimum_forcing_depth)
@@ -1192,7 +1185,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   else
     if (CS%useALEalgorithm) then
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
-      call call_tracer_column_fns(h_prebound, h, ea, eb, fluxes, dt, G, GV, tv, &
+      call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
                                   CS%optics, CS%tracer_flow_CSp, CS%debug, &
                                   evap_CFL_limit = CS%diabatic_aux_CSp%evap_CFL_limit, &
                                   minimum_forcing_depth = CS%diabatic_aux_CSp%minimum_forcing_depth)
@@ -1414,7 +1407,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   if (CS%id_Kd_salt      > 0) call post_data(CS%id_Kd_salt,      Kd_salt, CS%diag)
   if (CS%id_Kd_ePBL      > 0) call post_data(CS%id_Kd_ePBL,      Kd_ePBL, CS%diag)
 
-  write_all_3dt(:,:,:) = 1.
   if (CS%id_ea       > 0) call post_data(CS%id_ea,       ea, CS%diag)
   if (CS%id_eb       > 0) call post_data(CS%id_eb,       eb, CS%diag)
 
@@ -1938,8 +1930,6 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
       'Layer entrainment from above per timestep','meter')
   CS%id_eb = register_diag_field('ocean_model','eb',diag%axesTL,Time, &
       'Layer entrainment from below per timestep', 'meter')
-  CS%id_hloss_boundary = register_diag_field('ocean_model','hloss_boundary',diag%axesTL,Time, &
-      'Layer thickness lost/gained due to fluxes at the boundary', 'meter')
   CS%id_dudt_dia = register_diag_field('ocean_model','dudt_dia',diag%axesCuL,Time, &
       'Zonal Acceleration from Diapycnal Mixing', 'meter second-2')
   CS%id_dvdt_dia = register_diag_field('ocean_model','dvdt_dia',diag%axesCvL,Time, &
