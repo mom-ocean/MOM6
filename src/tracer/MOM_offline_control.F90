@@ -498,7 +498,7 @@ contains
   
   !> In the case where offline advection has failed to converge, redistribute the u-flux
   !! into remainder of the water column as a barotropic equivalent
-  subroutine distribute_residual_uh(G, GV, h, uh)
+  subroutine distribute_residual_uh_barotropic(G, GV, h, uh)
     type(ocean_grid_type),    pointer                           :: G
     type(verticalGrid_type),  pointer                           :: GV
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout)    :: h
@@ -558,13 +558,14 @@ contains
       enddo ; enddo
       do k=1,nz ; do i=is-1,ie
         uh(I,j,k) = uh2d(I,k)
+        uh2d_sum(I) = uh2d_sum(I)-uh2d(I,k)
       enddo ; enddo
     enddo
     
-  end subroutine distribute_residual_uh
+  end subroutine distribute_residual_uh_barotropic
   
   !> Redistribute the v-flux as a barotropic equivalent
-  subroutine distribute_residual_vh(G, GV, h, vh)
+  subroutine distribute_residual_vh_barotropic(G, GV, h, vh)
     type(ocean_grid_type),    pointer                           :: G
     type(verticalGrid_type),  pointer                           :: GV
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout)    :: h
@@ -628,7 +629,91 @@ contains
       enddo ; enddo
     enddo
     
-  end subroutine distribute_residual_vh
+  end subroutine distribute_residual_vh_barotropic
+  
+  !> In the case where offline advection has failed to converge, redistribute the u-flux
+  !! into layers above
+  subroutine distribute_residual_uh_upwards(G, GV, h, uh)
+    type(ocean_grid_type),    pointer                           :: G
+    type(verticalGrid_type),  pointer                           :: GV
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout)    :: h
+    real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: uh
+    
+    real, dimension(SZIB_(G),SZK_(G))   :: uh2d
+    real, dimension(SZIB_(G))           :: uh2d_sum
+    real, dimension(SZI_(G),SZK_(G))    :: h2d
+    real, dimension(SZI_(G))            :: h2d_sum
+    
+    real  :: uh_neglect, uh_remain, uh_add, hup, hlos
+    integer :: i, j, k, m, is, ie, js, je, nz, k_rev
+    
+    ! Set index-related variables for fields on T-grid
+    is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
+    
+    do j=js,je
+      uh2d_sum(:) = 0.0
+      ! Copy over uh and cell volume to working arrays
+      do k=1,nz ; do i=is-1,ie
+        uh2d(I,k) = uh(I,j,k)
+      enddo ; enddo
+      do k=1,nz ; do i=is-2,ie+1
+        h2d(j,k) = h(i,j,k)*G%areaT(i,j)
+      enddo ; enddo
+      
+      do i=is-1,ie ; do k=1,nz
+          uh_remain = uh2d(I,k) 
+          
+          if (uh_remain>0.0) then
+            uh_neglect = G%areaT(i,j)*GV%H_subroundoff
+            ! Set the amount in the layer with remaining fluxes to zero
+            ! This will get reset in the first iteration of the redistribution loop            
+            uh2d(I,k) = 0.0 
+            ! Loop to distribute remaining flux in layers above
+            do k_rev=k,1,-1
+              hup = h2d(i,k_rev) - G%areaT(i,j)*GV%H_subroundoff
+              ! How much lost on the other side
+              hlos = min(uh2d(I-1,k_rev),0.0) - max(uh2d(I,k_rev),0.0)
+              
+              ! Check to see if the cell can accommodate more flux  
+              if(0.5*hup+hlos>0.0) then
+                uh_add = min(0.5*hup+hlos,uh_remain)
+                uh2d(I,k_rev) = uh2d(I,k_rev) + uh_add
+                uh_remain = uh_remain - uh_add
+                if(uh_remain<uh_neglect) exit
+              endif
+            enddo
+          elseif(uh_remain<0.0) then
+            uh_neglect = G%areaT(i+1,j)*GV%H_subroundoff
+            ! Set the amount in the layer with remaining fluxes to zero
+            ! This will get reset in the first iteration of the redistribution loop            
+            uh2d(I,k) = 0.0 
+            ! Loop to distribute remaining flux in layers above
+            do k_rev=k,1,-1
+              hup = h2d(i+1,k_rev) - G%areaT(i+1,j)*GV%H_subroundoff
+              ! Total depletion in a cell is the sum of outgoing fluxes
+              hlos = -max(uh2d(I+1,k_rev),0.0) + min(uh2d(I,k_rev),0.0)
+              
+              ! Check to see if the cell can accommodate more flux  
+              if(0.5*hup+hlos>0.0) then
+                uh_add = max( -(0.5*hup+hlos),uh_remain )
+                uh2d(I,k_rev) = uh2d(I,k_rev) + uh_add
+                uh_remain = uh_remain - uh_add
+                if(uh_remain>-uh_neglect) exit
+              endif
+            enddo
+          endif
+      enddo ; enddo
+      
+      ! Update layer thicknesses at the end 
+      do k=1,nz ; do i=is-2,ie+1
+        h(i,j,k) = h(i,j,k) + (uh2d(I-1,k) - uh2d(I,k))/G%areaT(i,j)
+      enddo ; enddo
+      do k=1,nz ; do i=is-1,ie
+        uh(I,j,k) = uh2d(I,k)
+      enddo ; enddo
+    enddo
+    
+  end subroutine distribute_residual_uh_upwards
   
   
 !> \namespace mom_offline_transport
