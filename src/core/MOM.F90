@@ -1696,9 +1696,17 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         
         if (x_before_y) then
           call distribute_residual_uh_upwards(G, GV, h_pre, uhtr_sub)
+!          call cpu_clock_begin(id_clock_ALE)
+!          call ALE_main_offline(G, GV, h_pre, CS%tv, &
+!              CS%tracer_Reg, CS%ALE_CSp, CS%offline_CSp%dt_offline)
+!          call cpu_clock_end(id_clock_ALE)
           call distribute_residual_vh_barotropic(G, GV, h_pre, vhtr_sub)
         else
           call distribute_residual_vh_barotropic(G, GV, h_pre, vhtr_sub)
+!          call cpu_clock_begin(id_clock_ALE)
+!          call ALE_main_offline(G, GV, h_pre, CS%tv, &
+!              CS%tracer_Reg, CS%ALE_CSp, CS%offline_CSp%dt_offline)
+!          call cpu_clock_end(id_clock_ALE)
           call distribute_residual_uh_upwards(G, GV, h_pre, uhtr_sub)
         endif 
         
