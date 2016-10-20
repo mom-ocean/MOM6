@@ -636,7 +636,7 @@ contains
   subroutine distribute_residual_uh_upwards(G, GV, h, uh)
     type(ocean_grid_type),    pointer                           :: G
     type(verticalGrid_type),  pointer                           :: GV
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout)    :: h
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout)     :: h
     real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: uh
     
     real, dimension(SZIB_(G),SZK_(G))   :: uh2d
@@ -644,7 +644,7 @@ contains
     real, dimension(SZI_(G),SZK_(G))    :: h2d
     real, dimension(SZI_(G))            :: h2d_sum
     
-    real  :: uh_neglect, uh_remain, uh_add, hup, hlos
+    real  :: uh_neglect, uh_remain, uh_max, uh_add, hup, hlos, hdown
     integer :: i, j, k, m, is, ie, js, je, nz, k_rev
     
     ! Set index-related variables for fields on T-grid
@@ -657,51 +657,68 @@ contains
         uh2d(I,k) = uh(I,j,k)
       enddo ; enddo
       do k=1,nz ; do i=is-2,ie+1
-        h2d(j,k) = h(i,j,k)*G%areaT(i,j)
+        h2d(i,k) = h(i,j,k)*G%areaT(i,j)
       enddo ; enddo
       
       do i=is-1,ie ; do k=1,nz
           uh_remain = uh2d(I,k) 
           
-          if (uh_remain>0.0) then
-            uh_neglect = G%areaT(i,j)*GV%H_subroundoff
-            ! Set the amount in the layer with remaining fluxes to zero
-            ! This will get reset in the first iteration of the redistribution loop            
-            uh2d(I,k) = 0.0 
-            ! Loop to distribute remaining flux in layers above
-            do k_rev=k,1,-1
-              hup = h2d(i,k_rev) - G%areaT(i,j)*GV%H_subroundoff
-              ! How much lost on the other side
-              hlos = min(uh2d(I-1,k_rev),0.0) - max(uh2d(I,k_rev),0.0)
-              
-              ! Check to see if the cell can accommodate more flux  
-              if(0.5*hup+hlos>0.0) then
-                uh_add = min(0.5*hup+hlos,uh_remain)
-                uh2d(I,k_rev) = uh2d(I,k_rev) + uh_add
-                uh_remain = uh_remain - uh_add
-                if(uh_remain<uh_neglect) exit
-              endif
-            enddo
-          elseif(uh_remain<0.0) then
-            uh_neglect = G%areaT(i+1,j)*GV%H_subroundoff
+          if(uh_remain<0.0) then
+            uh_neglect = G%areaT(i+1,j)*GV%Angstrom
+!            print *, "i, j, k, uh_remain, uh_neglect", i,j,k,uh_remain,uh_neglect
             ! Set the amount in the layer with remaining fluxes to zero
             ! This will get reset in the first iteration of the redistribution loop            
             uh2d(I,k) = 0.0 
             ! Loop to distribute remaining flux in layers above
             do k_rev=k,1,-1
               hup = h2d(i+1,k_rev) - G%areaT(i+1,j)*GV%H_subroundoff
-              ! Total depletion in a cell is the sum of outgoing fluxes
-              hlos = -max(uh2d(I+1,k_rev),0.0) + min(uh2d(I,k_rev),0.0)
+              hlos = max(uh2d(I+1,k_rev),0.0)
               
-              ! Check to see if the cell can accommodate more flux  
-              if(0.5*hup+hlos>0.0) then
-                uh_add = max( -(0.5*hup+hlos),uh_remain )
-                uh2d(I,k_rev) = uh2d(I,k_rev) + uh_add
-                uh_remain = uh_remain - uh_add
-                if(uh_remain>-uh_neglect) exit
+              uh_add = min(-0.5*hup,-hup+hlos,0.0)
+              uh_add = max(uh_add,uh_remain)
+              if(uh2d(I,k_rev)>0.0) call MOM_error(WARNING,"UH will switch signs because of redistribution")
+              if(uh_add<uh2d(I,k_rev)) then
+                uh_remain = uh_remain - (uh_add-uh2d(I,k_rev))
+                uh2d(I,k_rev) = uh_add
+              else
+                uh_add = 0.0
               endif
+!              print *, "k_rev, uh2d, h, uh_add, uh_remain", k_rev, h2d(I,k_rev), uh2d(I,k_rev), uh_add, uh_remain
+              if(abs(uh_remain)<uh_neglect) exit
             enddo
+            if(abs(uh_remain)>uh_neglect) then
+              call MOM_error(WARNING,"Residual UH remains after redistribution. Tracer will not be conserved. Increase NUM_OFF_ITER")
+              uh2d(I,k) = uh2d(I,k) + uh_remain
+            endif
+          elseif (uh_remain>0.0) then
+            
+            uh_neglect = G%areaT(i,j)*GV%Angstrom
+!            print *, "i, j, k, uh_remain, uh_neglect", i,j,k,uh_remain,uh_neglect
+            ! Set the amount in the layer with remaining fluxes to zero
+            ! This will get reset in the first iteration of the redistribution loop            
+            uh2d(I,k) = 0.0 
+            ! Loop to distribute remaining flux in layers above
+            do k_rev=k,1,-1
+              hup = h2d(i,k_rev) - G%areaT(i,j)*GV%H_subroundoff
+              hlos = max(0.0,-uh2d(I-1,k_rev))
+              uh_add = max(0.5*hup,hup-hlos,0.0)
+              uh_add = min(uh_add,uh_remain)
+              if(uh2d(I,k_rev)<0.0) call MOM_error(WARNING,"UH will switch signs because of redistribution")
+              if(uh_add>uh2d(I,k_rev)) then
+                uh_remain = uh_remain - (uh_add-uh2d(I,k_rev))
+                uh2d(I,k_rev) = uh_add
+              else
+                uh_add = 0.0
+              endif
+!              print *, "k_rev, uh2d, h, uh_add, uh_remain", k_rev, h2d(I,k_rev), uh2d(I,k_rev), uh_add, uh_remain
+              if(abs(uh_remain)<uh_neglect) exit
+            enddo
+            if(abs(uh_remain)>uh_neglect) then
+              call MOM_error(WARNING,"Residual UH remains after redistribution. Tracer will not be conserved. Increase NUM_OFF_ITER")
+              uh2d(I,k) = uh2d(I,k) + uh_remain
+            endif
           endif
+          
       enddo ; enddo
       
       ! Update layer thicknesses at the end 
