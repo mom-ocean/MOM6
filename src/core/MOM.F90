@@ -2848,7 +2848,7 @@ subroutine register_diags(Time, G, GV, CS, ADp)
     CS%id_v_preale = register_diag_field('ocean_model', 'v_preale', diag%axesCvL, Time, &
         'Meridional velocity before remapping', 'meter second-1')
     CS%id_h_preale = register_diag_field('ocean_model', 'h_preale', diag%axesTL, Time, &
-        'Layer Thickness before remapping', thickness_units)
+        'Layer Thickness before remapping', thickness_units, v_cell_method='sum')
     CS%id_T_preale = register_diag_field('ocean_model', 'T_preale', diag%axesTL, Time, &
         'Temperature before remapping', 'degC')
     CS%id_S_preale = register_diag_field('ocean_model', 'S_preale', diag%axesTL, Time, &
