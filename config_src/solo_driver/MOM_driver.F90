@@ -171,13 +171,13 @@ program MOM_main
   logical :: unit_in_use
   integer :: initClock, mainClock, termClock
 
-  logical :: do_online          ! If true, use the model in prognostic mode where
-                                ! the barotropic and baroclinic dynamics, thermodynamics,
-                                ! etc. are stepped forward integrated in time.
-                                ! If false, then all of the above are bypassed with all
-                                ! fields necessary to integrate only the tracer advection
-                                ! and diffusion equation are read in from files stored from
-                                ! a previous integration of the prognostic model
+  logical :: offline_tracer_mode ! If false, use the model in prognostic mode where
+                                 ! the barotropic and baroclinic dynamics, thermodynamics,
+                                 ! etc. are stepped forward integrated in time.
+                                 ! If true, then all of the above are bypassed with all
+                                 ! fields necessary to integrate only the tracer advection
+                                 ! and diffusion equation are read in from files stored from
+                                 ! a previous integration of the prognostic model
 
   type(MOM_control_struct),  pointer :: MOM_CSp => NULL()
   type(surface_forcing_CS),  pointer :: surface_forcing_CSp => NULL()
@@ -266,12 +266,12 @@ program MOM_main
     segment_start_time = set_date(date(1),date(2),date(3),date(4),date(5),date(6))
     Time = segment_start_time
     ! Note the not before CS%d
-    call initialize_MOM(Time, param_file, dirs, MOM_CSp, segment_start_time, do_online_out = do_online)
+    call initialize_MOM(Time, param_file, dirs, MOM_CSp, segment_start_time, offline_tracer_mode = offline_tracer_mode)
   else
     ! In this case, the segment starts at a time read from the MOM restart file
     ! or left as Start_time by MOM_initialize.
     Time = Start_time
-    call initialize_MOM(Time, param_file, dirs, MOM_CSp, do_online_out=do_online)
+    call initialize_MOM(Time, param_file, dirs, MOM_CSp, offline_tracer_mode=offline_tracer_mode)
   endif
   fluxes%C_p = MOM_CSp%tv%C_p  ! Copy the heat capacity for consistency.
 
@@ -310,7 +310,7 @@ program MOM_main
                  "The time step for changing forcing, coupling with other \n"//&
                  "components, or potentially writing certain diagnostics. \n"//&
                  "The default value is given by DT.", units="s", default=dt)             
-  if (.not. do_online) then
+  if (offline_tracer_mode) then
     call get_param(param_file, mod, "DT_OFFLINE", time_step, &
                    "Time step for the offline time step")
     dt = time_step
@@ -415,7 +415,7 @@ program MOM_main
     call callTree_enter("Main loop, MOM_driver.F90",n)
 
     ! Set the forcing for the next steps.
-    if (do_online) then
+    if (.not. offline_tracer_mode) then
         call set_forcing(state, fluxes, Time, Time_step_ocean, grid, &
                      surface_forcing_CSp)
     endif
@@ -441,11 +441,14 @@ program MOM_main
 
     ! This call steps the model over a time time_step.
     Time1 = Master_Time ; Time = Master_Time
-    if (do_online)        call step_MOM(fluxes, state, Time1, time_step, MOM_CSp)
-    if (.not. do_online)  call step_tracers(fluxes, state, Time1, time_step, MOM_CSp)
+    if (offline_tracer_mode) then
+      call step_tracers(fluxes, state, Time1, time_step, MOM_CSp)
+    else
+      call step_MOM(fluxes, state, Time1, time_step, MOM_CSp)
+    endif
 
-!    Time = Time + Time_step_ocean
-!  This is here to enable fractional-second time steps.
+!   Time = Time + Time_step_ocean
+!   This is here to enable fractional-second time steps.
     elapsed_time = elapsed_time + time_step
     if (elapsed_time > 2e9) then
       ! This is here to ensure that the conversion from a real to an integer
@@ -469,7 +472,7 @@ program MOM_main
                             surface_forcing_CSp%handles)
     call disable_averaging(MOM_CSp%diag)
 
-    if (do_online) then
+    if (.not. offline_tracer_mode) then
       if (fluxes%fluxes_used) then
         call enable_averaging(fluxes%dt_buoy_accum, Time, MOM_CSp%diag)
         call forcing_diagnostics(fluxes, state, fluxes%dt_buoy_accum, grid, &
@@ -481,8 +484,6 @@ program MOM_main
                "thermodynamic time steps that are longer than the coupling timestep.")
       endif
     endif
-
-
 
 !  See if it is time to write out the energy.
     if ((Time + (Time_step_ocean/2) > write_energy_time) .and. &
@@ -525,7 +526,8 @@ program MOM_main
   if (Restart_control>=0) then
     if (MOM_CSp%dt_trans > 0.0) call MOM_error(WARNING, "End of MOM_main reached "//&
          "with a non-zero dt_trans.  Additional restart fields are required.")
-     if (.not.fluxes%fluxes_used .and. do_online) call MOM_error(FATAL, "End of MOM_main reached "//&
+     if (.not.fluxes%fluxes_used .and. .not. offline_tracer_mode) call MOM_error(FATAL, &
+         "End of MOM_main reached "//&
          "with unused buoyancy fluxes.  For conservation, the ocean restart "//&
          "files can only be created after the buoyancy forcing is applied.")
 
