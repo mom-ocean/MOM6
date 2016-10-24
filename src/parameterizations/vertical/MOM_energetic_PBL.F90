@@ -127,6 +127,8 @@ type, public :: energetic_PBL_CS ; private
   logical :: TKE_diagnostics = .false.
   logical :: orig_PE_calc = .true.
   logical :: Use_MLD_iteration=.false. ! False to use old ePBL method.
+  logical :: MLD_iteration_guess=.false. ! False to default to guessing half the
+                                         ! ocean depth for the iteration.
   logical :: Mixing_Diagnostics = .false. ! Will be true when outputing mixing
                                           !  length and velocity scale
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
@@ -626,7 +628,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       !/BGR: Add MLD_guess based on stored previous value.
       !      note that this is different from ML_Depth already
       !      computed by EPBL, need to figure out why.
-      if (CS%ML_Depth2(i,j) > 1.) then
+      if (CS%MLD_iteration_guess .and. CS%ML_Depth2(i,j) > 1.) then
         !If prev value is present use for guess.
         MLD_guess=CS%ML_Depth2(i,j)
       else
@@ -1701,6 +1703,10 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
                  "A logical that specifies whether or not to use the \n"//&
                  "distance to the bottom of the actively turblent boundary \n"//&
                  "layer to help set the EPBL length scale.", default=.false.)
+  call get_param(param_file, mod, "MLD_ITERATION_GUESS", CS%MLD_ITERATION_GUESS, &
+                 "A logical that specifies whether or not to use the \n"//&
+                 "previous timestep MLD as a first guess in the MLD iteration.\n"//&
+                 "The default is false to facilitate reproducibility.", default=.false.)
   call get_param(param_file, mod, "EPBL_MLD_TOLERANCE", CS%MLD_tol, &
                  "The tolerance for the iteratively determined mixed \n"//&
                  "layer depth.  This is only used with USE_MLD_ITERATION.", &
@@ -1717,9 +1723,12 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   call get_param(param_file, mod, "EPBL_TRANSITION_SCALE", CS%transLay_scale, &
                  "A scale for the mixing length in the transition layer \n"//&
                  "at the edge of the boundary layer as a fraction of the \n"//&
-                 "boundary layer thickness.  The default is 0, but a \n"//&
-                 "value of 0.1 might be better justified by observations.", &
-                 units="nondim", default=0.0)
+                 "boundary layer thickness.  The default is 0.1.", &
+                 units="nondim", default=0.1)
+  if ( CS%USE_MLD_ITERATION .and. abs(CS%transLay_scale-0.5).ge.0.5) then
+    call MOM_error(FATAL, "If flag USE_MLD_ITERATION is true, then "//&
+                 "EPBL_TRANSITION should be greater than 0 and less than 1.")
+  endif
 
   ! This gives a minimum decay scale that is typically much less than Angstrom.
   CS%ustar_min = 2e-4*CS%omega*(GV%Angstrom_z + GV%H_to_m*GV%H_subroundoff)
