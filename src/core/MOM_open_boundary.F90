@@ -64,9 +64,6 @@ type, public :: ocean_OBC_type
   logical :: specified_u_BCs_exist_globally = .false. !< True if any zonal velocity points in the global domain use specified BCs.
   logical :: specified_v_BCs_exist_globally = .false. !< True if any meridional velocity points in the global domain use specified BCs.
   real :: g_Earth
-  logical, pointer, dimension(:,:) :: &
-    OBC_mask_u => NULL(), & !< True at zonal velocity points that have prescribed OBCs.
-    OBC_mask_v => NULL()    !< True at meridional velocity points that have prescribed OBCs.
   ! Properties of the segments used.
   type(OBC_segment_type), pointer, dimension(:) :: &
     OBC_segment_number => NULL()   !< List of segment objects.
@@ -159,9 +156,7 @@ subroutine open_boundary_config(G, param_file, OBC)
       OBC%OBC_segment_number(l)%Tnudge_in = 0.0
       OBC%OBC_segment_number(l)%Tnudge_out = 0.0
     enddo
-    allocate(OBC%OBC_mask_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; OBC%OBC_mask_u(:,:) = .false.
     allocate(OBC%OBC_segment_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; OBC%OBC_segment_u(:,:) = OBC_NONE
-    allocate(OBC%OBC_mask_v(G%isd:G%ied,G%JsdB:G%JedB)) ; OBC%OBC_mask_v(:,:) = .false.
     allocate(OBC%OBC_segment_v(G%isd:G%ied,G%JsdB:G%JedB)) ; OBC%OBC_segment_v(:,:) = OBC_NONE
 
     do l = 1, OBC%number_of_segments
@@ -264,16 +259,13 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
 
     do j=G%HI%jsd, G%HI%jed
       if (j>min(Js_obc,Je_obc) .and. j<=max(Js_obc,Je_obc)) then
-        OBC%OBC_mask_u(I_obc,j) = .true.
         OBC%OBC_segment_u(I_obc,j) = l_seg
         if (Je_obc>Js_obc) then ! East is outward
           if (this_kind == OBC_FLATHER) then
             ! Set v points outside segment
-            OBC%OBC_mask_v(i_obc+1,J) = .true.
             if (OBC%OBC_segment_v(i_obc+1,J) == OBC_NONE) then
               OBC%OBC_segment_v(i_obc+1,J) = l_seg
             endif
-            OBC%OBC_mask_v(i_obc+1,J-1) = .true.
             if (OBC%OBC_segment_v(i_obc+1,J-1) == OBC_NONE) then
               OBC%OBC_segment_v(i_obc+1,J-1) = l_seg
             endif
@@ -281,11 +273,9 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
         else ! West is outward
           if (this_kind == OBC_FLATHER) then
             ! Set v points outside segment
-            OBC%OBC_mask_v(i_obc,J) = .true.
             if (OBC%OBC_segment_v(i_obc,J) == OBC_NONE) then
               OBC%OBC_segment_v(i_obc,J) = l_seg
             endif
-            OBC%OBC_mask_v(i_obc,J-1) = .true.
             if (OBC%OBC_segment_v(i_obc,J-1) == OBC_NONE) then
               OBC%OBC_segment_v(i_obc,J-1) = l_seg
             endif
@@ -366,16 +356,13 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
 
     do i=G%HI%isd, G%HI%ied
       if (i>min(Is_obc,Ie_obc) .and. i<=max(Is_obc,Ie_obc)) then
-        OBC%OBC_mask_v(i,J_obc) = .true.
         OBC%OBC_segment_v(i,J_obc) = l_seg
         if (Is_obc>Ie_obc) then ! North is outward
           if (this_kind == OBC_FLATHER) then
             ! Set u points outside segment
-            OBC%OBC_mask_u(I,j_obc+1) = .true.
             if (OBC%OBC_segment_u(I,j_obc+1) == OBC_NONE) then
               OBC%OBC_segment_u(I,j_obc+1) = l_seg
             endif
-            OBC%OBC_mask_u(I-1,j_obc+1) = .true.
             if (OBC%OBC_segment_u(I-1,j_obc+1) == OBC_NONE) then
               OBC%OBC_segment_u(I-1,j_obc+1) = l_seg
             endif
@@ -383,11 +370,9 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
         else ! South is outward
           if (this_kind == OBC_FLATHER) then
             ! Set u points outside segment
-            OBC%OBC_mask_u(I,j_obc) = .true.
             if (OBC%OBC_segment_u(I,j_obc) == OBC_NONE) then
               OBC%OBC_segment_u(I,j_obc) = l_seg
             endif
-            OBC%OBC_mask_u(I-1,j_obc) = .true.
             if (OBC%OBC_segment_u(I-1,j_obc) == OBC_NONE) then
               OBC%OBC_segment_u(I-1,j_obc) = l_seg
             endif
@@ -542,8 +527,6 @@ end function open_boundary_query
 subroutine open_boundary_dealloc(OBC)
   type(ocean_OBC_type), pointer :: OBC !< Open boundary control structure
   if (.not. associated(OBC)) return
-  if (associated(OBC%OBC_mask_u)) deallocate(OBC%OBC_mask_u)
-  if (associated(OBC%OBC_mask_v)) deallocate(OBC%OBC_mask_v)
   if (associated(OBC%OBC_segment_number)) deallocate(OBC%OBC_segment_number)
   if (associated(OBC%OBC_segment_u)) deallocate(OBC%OBC_segment_u)
   if (associated(OBC%OBC_segment_v)) deallocate(OBC%OBC_segment_v)
@@ -624,7 +607,6 @@ subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv)
     do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
       if (G%mask2dCu(I,j) == 0 .and. (OBC%OBC_segment_u(I,j) /= OBC_NONE)) then
         if (.not. OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%specified) then
-          OBC%OBC_mask_u(I,j) = .false.
           OBC%OBC_segment_u(I,j) = OBC_NONE
         endif
       endif
@@ -636,7 +618,6 @@ subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv)
     do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
       if (G%mask2dCv(i,J) == 0 .and. (OBC%OBC_segment_v(i,J) /= OBC_NONE)) then
         if (.not. OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%specified) then
-          OBC%OBC_mask_v(i,J) = .false.
           OBC%OBC_segment_v(I,j) = OBC_NONE
         endif
       endif

@@ -306,7 +306,7 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
     if (k == nz)  tr_k = tr_k + tr_0 * (2.0/(Ri_trans*(2.0+Ri_trans))) * &
                                        log((2.0+Ri_trans)/(2.0-Ri_trans))
     do J=JsdB,JedB ; do i=isd,ied
-      if (OBC%OBC_mask_v(i,J)) then
+      if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
         ! This needs to be unneccesarily complicated without symmetric memory.
         lon_im1 = 2.0*G%geoLonCv(i,J) - G%geoLonBu(I,J)
         ! if (isd > IsdB) lon_im1 = G%geoLonBu(I-1,J)
