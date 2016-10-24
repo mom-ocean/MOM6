@@ -132,7 +132,7 @@ use MOM_offline_transport,         only : transport_by_files, next_modulo_time
 use MOM_offline_transport,         only : offline_transport_init, register_diags_offline_transport
 use MOM_offline_transport,         only : limit_mass_flux_3d, update_h_horizontal_flux, update_h_vertical_flux
 use MOM_offline_transport,         only : distribute_residual_uh_barotropic, distribute_residual_vh_barotropic
-use MOM_offline_transport,         only : distribute_residual_uh_upwards
+use MOM_offline_transport,         only : distribute_residual_uh_upwards, distribute_residual_vh_upwards
 use MOM_tracer_diabatic,           only : applyTracerBoundaryFluxesInOut
 
 implicit none ; private
@@ -1676,12 +1676,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
           
       endif
       
-      if (CS%offline_CSp%redistribute_residual .and. (.not. converged)) then
-        
-        call cpu_clock_begin(id_clock_ALE)
-        call ALE_main_offline(G, GV, h_pre, CS%tv, &
-            CS%tracer_Reg, CS%ALE_CSp, CS%offline_CSp%dt_offline)
-        call cpu_clock_end(id_clock_ALE)
+      if (.not. converged) then
         
         do k=1,nz ; do j=jsd,jed ; do i=isd,ied
           h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
@@ -1693,22 +1688,40 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
           call vchksum(vhtr_sub,"vhtr_sub before redistribute",G%HI)
         endif
         
+        if (CS%offline_CSp%id_h_redist>0) call post_data(CS%offline_CSp%id_h_redist, h_pre, CS%diag)
+        if (CS%offline_CSp%id_uhr_redist>0) call post_data(CS%offline_CSp%id_uhr_redist, uhtr, CS%diag)
+        if (CS%offline_CSp%id_vhr_redist>0) call post_data(CS%offline_CSp%id_vhr_redist, vhtr, CS%diag)
+
+        select case (CS%offline_CSp%redistribute_method)
+          case ('barotropic')
+            if (x_before_y) then
+              call distribute_residual_uh_barotropic(G, GV, h_pre, uhtr_sub)
+              call distribute_residual_vh_barotropic(G, GV, h_pre, vhtr_sub)
+            else
+              call distribute_residual_vh_barotropic(G, GV, h_pre, vhtr_sub)
+              call distribute_residual_uh_barotropic(G, GV, h_pre, uhtr_sub)
+            endif 
+            call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
+                CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=1, &
+                uhr_out=uhtr, vhr_out=vhtr, h_out=h_new, x_first_in=x_before_y)
         
-        if (x_before_y) then
-          call distribute_residual_uh_upwards(G, GV, h_pre, uhtr_sub)
-!          call cpu_clock_begin(id_clock_ALE)
-!          call ALE_main_offline(G, GV, h_pre, CS%tv, &
-!              CS%tracer_Reg, CS%ALE_CSp, CS%offline_CSp%dt_offline)
-!          call cpu_clock_end(id_clock_ALE)
-          call distribute_residual_vh_barotropic(G, GV, h_pre, vhtr_sub)
-        else
-          call distribute_residual_vh_barotropic(G, GV, h_pre, vhtr_sub)
-!          call cpu_clock_begin(id_clock_ALE)
-!          call ALE_main_offline(G, GV, h_pre, CS%tv, &
-!              CS%tracer_Reg, CS%ALE_CSp, CS%offline_CSp%dt_offline)
-!          call cpu_clock_end(id_clock_ALE)
-          call distribute_residual_uh_upwards(G, GV, h_pre, uhtr_sub)
-        endif 
+          case ('upwards')
+            if (x_before_y) then
+              call distribute_residual_uh_upwards(G, GV, h_pre, uhtr_sub)
+              call distribute_residual_vh_upwards(G, GV, h_pre, vhtr_sub)
+            else
+              call distribute_residual_vh_upwards(G, GV, h_pre, vhtr_sub)
+              call distribute_residual_uh_upwards(G, GV, h_pre, uhtr_sub)
+            endif
+            call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
+                  CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=1, &
+                  uhr_out=uhtr, vhr_out=vhtr, h_out=h_new, x_first_in=x_before_y)
+          case ('none')
+            call MOM_error(WARNING,"Offline advection did not converge")
+          
+          case default
+            call MOM_error(FATAL,"Unrecognized REDISTRIBUTE_METHOD")
+        end select
         
         if (CS%debug) then
           call hchksum(h_pre,"h_pre after after redistribute",G%HI)
@@ -1716,10 +1729,6 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
           call vchksum(vhtr_sub,"vhtr_sub after redistribute",G%HI)
         endif
         
-        call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
-            CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=5, &
-            uhr_out=uhtr, vhr_out=vhtr, h_out=h_new, x_first_in=x_before_y)
-            
         do k=1,nz ; do j=jsd,jed ; do i=isd,ied
           h_pre(i,j,k) = h_new(i,j,k)/G%areaT(i,j)
         enddo ; enddo ; enddo
