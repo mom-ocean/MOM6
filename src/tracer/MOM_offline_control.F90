@@ -35,9 +35,9 @@ module MOM_offline_transport
     character(len=200) :: & !         ! Names of input files
       snap_file,  &
       sum_file
+    character(len=20)  :: redistribute_method  
     logical :: fields_are_offset ! True if the time-averaged fields and snapshot fields are
                                  ! offset by one time level
-    
     !> Variables controlling some of the numerical considerations of offline transport
     integer           ::  num_off_iter
     real              ::  dt_offline ! Timestep used for offline tracers
@@ -54,7 +54,11 @@ module MOM_offline_transport
       id_vhr = -1, &
       id_ear = -1, &
       id_ebr = -1, &
-      id_hr = -1
+      id_hr = -1,  &
+      id_uhr_redist = -1, &
+      id_vhr_redist = -1, &
+      id_h_redist = -1, &
+      id_eta_diff = -1
 
   end type offline_transport_CS
 
@@ -66,6 +70,10 @@ module MOM_offline_transport
   public update_h_horizontal_flux
   public update_h_vertical_flux
   public limit_mass_flux_3d
+  public distribute_residual_uh_barotropic
+  public distribute_residual_vh_barotropic
+  public distribute_residual_uh_upwards
+  public distribute_residual_vh_upwards
 
 contains
   !> Controls the reading in 3d mass fluxes, diffusive fluxes, and other fields stored
@@ -211,10 +219,14 @@ contains
     ! U-cell fields
     CS%id_uhr = register_diag_field('ocean_model', 'uhr', diag%axesCuL, Time, &
       'Zonal thickness fluxes remaining at end of timestep', 'kg')
+    CS%id_uhr_redist = register_diag_field('ocean_model', 'uhr_redist', diag%axesCuL, Time, &
+      'Zonal thickness fluxes to be redistributed vertically', 'kg')  
 
     ! V-cell fields
     CS%id_vhr = register_diag_field('ocean_model', 'vhr', diag%axesCvL, Time, &
       'Meridional thickness fluxes remaining at end of timestep', 'kg')
+    CS%id_vhr_redist = register_diag_field('ocean_model', 'vhr_redist', diag%axesCvL, Time, &
+      'Meridional thickness to be redistributed vertically', 'kg')
 
     ! T-cell fields
     CS%id_hr  = register_diag_field('ocean_model', 'hdiff', diag%axesTL, Time, &
@@ -223,6 +235,10 @@ contains
       'Remaining thickness entrained from above', 'm')
     CS%id_ebr  = register_diag_field('ocean_model', 'ebr', diag%axesTL, Time, &
       'Remaining thickness entrained from below', 'm')
+    CS%id_eta_diff = register_diag_field('ocean_model','eta_diff', diag%axesT1, Time, &
+      'Difference in total water column height from online and offline','m')
+    CS%id_h_redist = register_diag_field('ocean_model','h_redist', diag%axesTL, Time, &
+      'Layer thicknesses before redistribution of mass fluxes','m')  
 
   end subroutine register_diags_offline_transport
 
@@ -268,8 +284,15 @@ contains
     call get_param(param_file, mod, "NUMTIME", CS%numtime, &
       "Number of timelevels in offline input files", default=0)
     call get_param(param_file, mod, "FIELDS_ARE_OFFSET", CS%fields_are_offset, &
-      "True if the time-averaged fields and snapshot fields are offset by one time level", &
-      default=.false.)
+      "True if the time-averaged fields and snapshot fields\n"//&
+      "are offset by one time level", default=.false.)
+    call get_param(param_file, mod, "REDISTRIBUTE_METHOD", CS%redistribute_method, &
+      "Redistributes any remaining horizontal fluxes throughout\n"//&
+      "the rest of water column. Options are 'barotropic' which\n"//&
+      "evenly distributes flux throughout the entire water column,\n"//&
+      "'upwards' which adds the maximum of the remaining flux in\n"//&
+      "each layer above, and 'none' which does no redistribution", &
+      default='barotropic')  
     call get_param(param_file, mod, "NUM_OFF_ITER", CS%num_off_iter, &
       "Number of iterations to subdivide the offline tracer advection and diffusion" )
     call get_param(param_file, mod, "DT_OFFLINE", CS%dt_offline, &
@@ -489,6 +512,336 @@ contains
 
   end subroutine limit_mass_flux_3d
   
+  !> In the case where offline advection has failed to converge, redistribute the u-flux
+  !! into remainder of the water column as a barotropic equivalent
+  subroutine distribute_residual_uh_barotropic(G, GV, h, uh)
+    type(ocean_grid_type),    pointer                           :: G
+    type(verticalGrid_type),  pointer                           :: GV
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout)    :: h
+    real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: uh
+    
+    real, dimension(SZIB_(G),SZK_(G))   :: uh2d
+    real, dimension(SZIB_(G))           :: uh2d_sum
+    real, dimension(SZI_(G),SZK_(G))    :: h2d
+    real, dimension(SZI_(G))            :: h2d_sum
+    
+    integer :: i, j, k, m, is, ie, js, je, nz
+    
+    ! Set index-related variables for fields on T-grid
+    is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
+    
+    do j=js,je
+      uh2d_sum(:) = 0.0
+      ! Copy over uh to a working array and sum up the remaining fluxes in a column
+      do k=1,nz ; do i=is-1,ie
+        uh2d(I,k) = uh(I,j,k)
+        uh2d_sum(I) = uh2d_sum(I) + uh2d(I,k)
+      enddo ; enddo
+      
+      ! Copy over h to a working array and calculate column height
+      h2d_sum(:) = 0.0
+      do k=1,nz ; do i=is-2,ie+1
+        h2d(i,k) = h(i,j,k)*G%areaT(i,j)
+        if(h(i,j,k)>GV%Angstrom) then
+          h2d_sum(i) = h2d_sum(i) + h2d(i,k)
+        else
+          h2d(i,k) = 0.0
+        endif
+      enddo; enddo;
+      
+    
+      ! Distribute flux. Note min/max is intended to make sure that the mass transport
+      ! does not deplete a cell
+      do i=is-1,ie
+        if( uh2d_sum(I)>0.0 ) then
+          do k=1,nz
+            uh2d(I,k) = min(uh2d_sum(I)*(h2d(i,k)/h2d_sum(i)),h2d(i,k))
+          enddo
+        elseif (uh2d_sum(I)<0.0) then
+          do k=1,nz
+            uh2d(I,k) = max(uh2d_sum(I)*(h2d(i+1,k)/h2d_sum(i+1)),-h2d(i+1,k))
+          enddo
+        else
+          do k=1,nz
+            uh2d(I,k) = 0.0
+          enddo
+        endif
+      enddo
+      
+      ! Update layer thicknesses at the end 
+      do k=1,nz ; do i=is-2,ie+1
+        h(i,j,k) = h(i,j,k) + (uh2d(I-1,k) - uh2d(I,k))/G%areaT(i,j)
+      enddo ; enddo
+      do k=1,nz ; do i=is-1,ie
+        uh(I,j,k) = uh2d(I,k)
+        uh2d_sum(I) = uh2d_sum(I)-uh2d(I,k)
+      enddo ; enddo
+    enddo
+    
+  end subroutine distribute_residual_uh_barotropic
+  
+  !> Redistribute the v-flux as a barotropic equivalent
+  subroutine distribute_residual_vh_barotropic(G, GV, h, vh)
+    type(ocean_grid_type),    pointer                           :: G
+    type(verticalGrid_type),  pointer                           :: GV
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout)    :: h
+    real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout)    :: vh
+    
+    real, dimension(SZJB_(G),SZK_(G))   :: vh2d
+    real, dimension(SZJB_(G))           :: vh2d_sum
+    real, dimension(SZJ_(G),SZK_(G))    :: h2d
+    real, dimension(SZJ_(G))            :: h2d_sum
+    
+    integer :: i, j, k, m, is, ie, js, je, nz
+    
+    ! Set index-related variables for fields on T-grid
+    is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
+    
+    do i=is,ie
+      vh2d_sum(:) = 0.0
+      ! Copy over uh to a working array and sum up the remaining fluxes in a column
+      do k=1,nz ; do j=js-1,je
+        vh2d(J,k) = vh(i,J,k)
+        vh2d_sum(J) = vh2d_sum(J) + vh2d(J,k)
+      enddo ; enddo
+      
+      ! Copy over h to a working array and calculate column volume
+      h2d_sum(:) = 0.0
+      do k=1,nz ; do j=js-2,je+1
+        h2d(j,k) = h(i,j,k)*G%areaT(i,j)
+        if(h(i,j,k)>GV%Angstrom) then
+          h2d_sum(j) = h2d_sum(j) + h2d(j,k)
+        else
+          h2d(j,k) = 0.0
+        endif
+      enddo; enddo;
+      
+    
+      ! Distribute flux. Note min/max is intended to make sure that the mass transport
+      ! does not deplete a cell
+      do j=js-1,je
+        if( vh2d_sum(J)>0.0 ) then
+          do k=1,nz
+            vh2d(J,k) = min(vh2d_sum(J)*(h2d(j,k)/h2d_sum(j)),0.5*h2d(j,k))
+          enddo
+        elseif (vh2d_sum(J)<0.0) then
+          do k=1,nz
+            vh2d(J,k) = max(vh2d_sum(J)*(h2d(j+1,k)/h2d_sum(j+1)),-0.5*h2d(j+1,k))
+          enddo
+        else
+          do k=1,nz
+            vh2d(J,k) = 0.0
+          enddo
+        endif
+      enddo
+            
+      
+      ! Update layer thicknesses at the end 
+      do k=1,nz ; do j=js-2,je+1
+        h(i,j,k) = h(i,j,k) + (vh2d(J-1,k) - vh2d(J,k))/G%areaT(i,j)
+      enddo ; enddo
+      do k=1,nz ; do j=js-1,je
+        vh(i,J,k) = vh2d(J,k)
+      enddo ; enddo
+    enddo
+    
+  end subroutine distribute_residual_vh_barotropic
+  
+  !> In the case where offline advection has failed to converge, redistribute the u-flux
+  !! into layers above
+  subroutine distribute_residual_uh_upwards(G, GV, h, uh)
+    type(ocean_grid_type),    pointer                           :: G
+    type(verticalGrid_type),  pointer                           :: GV
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout)     :: h
+    real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: uh
+    
+    real, dimension(SZIB_(G),SZK_(G))   :: uh2d
+    real, dimension(SZI_(G),SZK_(G))    :: h2d
+    logical, dimension(SZK_(G))            :: filled
+    
+    real  :: uh_neglect, uh_remain, uh_LB, uh_UB, uh_add, uh_max, uh_sum
+    real  :: hup, hdown, hlos, min_h
+    integer :: i, j, k, m, is, ie, js, je, nz, k_rev
+    
+    ! Set index-related variables for fields on T-grid
+    is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
+    
+    min_h = 0.1*GV%Angstrom
+    
+    do j=js,je
+      ! Copy over uh and cell volume to working arrays
+      do k=1,nz ; do i=is-1,ie
+        uh2d(I,k) = uh(I,j,k)
+      enddo ; enddo
+      do k=1,nz ; do i=is-2,ie+1
+        ! Subtract just a little bit of thickness to avoid roundoff errors
+        h2d(i,k) = max(h(i,j,k)*G%areaT(i,j)-min_h*G%areaT(i,j),min_h*G%areaT(i,j))
+      enddo ; enddo
+      
+      do i=is-1,ie 
+        uh_sum = sum(uh2d(I,:))
+        do k=1,nz
+          uh_remain = uh2d(I,k) 
+          uh_neglect = GV%H_subroundoff*min(G%areaT(i,j),G%areaT(i+1,j))
+
+          if(uh_remain<-uh_neglect) then
+            ! Set the mass flux to zero. This will be refilled in the first iteration 
+            uh2d(I,k) = 0.0
+
+            do k_rev=k,1,-1
+              ! Calculate the lower bound of uh(I)
+              hlos = max(uh2d(I+1,k_rev),0.0)
+              ! This lower bound is deliberately conservative to ensure that nothing will be left after 
+              uh_LB = min(-0.5*h2d(i+1,k_rev), -0.5*hlos, 0.0)
+                ! Calculate the maximum amount that could be added
+                uh_max = uh_LB-uh2d(I,k_rev)
+                ! Calculate how much will actually be added to uh(I)
+                uh_add = max(uh_max,uh_remain)
+                ! Reduce the remaining flux 
+                uh_remain = uh_remain - uh_add
+                uh2d(I,k_rev) = uh2d(I,k_rev) + uh_add
+                if(uh2d(I,k_rev)==uh_LB) filled(k_rev)=.true.
+                if(uh_remain>-uh_neglect) exit
+            enddo
+            
+          elseif (uh_remain>uh_neglect) then
+            ! Set the amount in the layer with remaining fluxes to zero. This will be reset 
+            ! in the first iteration of the redistribution loop
+            uh2d(I,k) = 0.0
+            ! Loop to distribute remaining flux in layers above
+            do k_rev=k,1,-1
+              hlos = max(0.0,-uh2d(I-1,k_rev))
+              ! Calculate the upper bound of uh(I)
+              uh_UB = max(0.5*h2d(i,k_rev), 0.5*h2d(i,k_rev)-hlos, 0.0)
+              ! Calculate the maximum amount that could be added
+              uh_max = uh_UB-uh2d(I,k_rev)
+              ! Calculate how much will actually be added to uh(I)
+              uh_add = min(uh_max,uh_remain)
+              ! Reduce the remaining flux 
+              uh_remain = uh_remain - uh_add
+              uh2d(I,k_rev) = uh2d(I,k_rev) + uh_add
+              if(uh_remain<uh_neglect) exit
+            enddo
+            ! Check to see if there's any mass flux left. If so, put it in the layer beneath, unless we've bottomed out
+          endif
+          if(abs(uh_remain)>uh_neglect) then
+            if(k<nz) then
+              uh2d(I,k+1) = uh2d(I,k+1) + uh_remain
+            else
+              call MOM_error(WARNING,"Water column cannot accommodate UH redistribution. Tracer will not be conserved")
+            endif
+          endif
+
+        enddo
+        
+      enddo
+      
+      ! Update layer thicknesses at the end 
+      do k=1,nz ; do i=is,ie
+        h(i,j,k) = (h(i,j,k)*G%areaT(i,j) + (uh2d(I-1,k) - uh2d(I,k)))/G%areaT(i,j)
+      enddo ; enddo
+      do k=1,nz ; do i=is-1,ie
+        uh(I,j,k) = uh2d(I,k)
+      enddo ; enddo
+    enddo
+    
+  end subroutine distribute_residual_uh_upwards
+  
+    !> In the case where offline advection has failed to converge, redistribute the u-flux
+  !! into layers above
+  subroutine distribute_residual_vh_upwards(G, GV, h, vh)
+    type(ocean_grid_type),    pointer                           :: G
+    type(verticalGrid_type),  pointer                           :: GV
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout)     :: h
+    real, dimension(SZIB_(G),SZJB_(G),SZK_(G)), intent(inout)    :: vh
+    
+    real, dimension(SZJB_(G),SZK_(G))   :: vh2d
+    real, dimension(SZJB_(G))           :: vh2d_sum
+    real, dimension(SZJ_(G),SZK_(G))    :: h2d
+    real, dimension(SZJ_(G))            :: h2d_sum
+    
+    real  :: vh_neglect, vh_remain, vh_max, vh_add, vh_UB, vh_LB, vh_sum
+    real  :: hup, hlos, min_h
+    integer :: i, j, k, m, is, ie, js, je, nz, k_rev
+    
+    ! Set index-related variables for fields on T-grid
+    is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
+    
+    min_h = 0.1*GV%Angstrom
+    
+    do i=is,ie
+      ! Copy over uh and cell volume to working arrays
+      do k=1,nz ; do j=js-1,je
+        vh2d(J,k) = vh(i,J,k)
+      enddo ; enddo
+      do k=1,nz ; do j=js-2,je+1
+        h2d(j,k) = (h(i,j,k)-min_h)*G%areaT(i,j)
+      enddo ; enddo
+      
+      do j=js,je
+        vh_sum=sum(vh2d(J,:))
+        do k=1,nz
+          vh_remain = vh2d(J,k) 
+          vh_neglect = GV%H_subroundoff*min(G%areaT(i,j),G%areaT(i,j+1))
+          if(vh_remain<0.0) then
+            ! Set the amount in the layer with remaining fluxes to zero. This will be reset 
+            ! in the first iteration of the redistribution loop
+            vh2d(J,k) = 0.0
+            do k_rev=k,1,-1
+              ! Calculate the lower bound of uh(I)
+              hlos = max(vh2d(J+1,k_rev),0.0)
+              vh_LB = min(-0.5*h2d(j+1,k_rev), -0.5*h2d(j+1,k_rev)+hlos, 0.0)
+              ! Calculate the maximum amount that could be added
+              vh_max = vh_LB-vh2d(J,k_rev)
+              ! Calculate how much will actually be added to uh(I)
+              vh_add = max(vh_max,vh_remain)
+              ! Reduce the remaining flux 
+              vh_remain = vh_remain - vh_add
+              vh2d(J,k_rev) = vh2d(J,k_rev) + vh_add
+              if(vh_remain>-vh_neglect) exit
+              
+            enddo
+          elseif (vh_remain>0.0) then
+            ! Set the amount in the layer with remaining fluxes to zero. This will be reset 
+            ! in the first iteration of the redistribution loop
+            vh2d(J,k) = 0
+            ! Loop to distribute remaining flux in layers above
+            do k_rev=k,1,-1
+              hlos = max(-vh2d(J-1,k_rev),0.0)
+              ! Calculate the upper bound of uh(I)
+              vh_UB = max(0.5*h2d(j,k_rev), 0.5*h2d(j,k_rev)-hlos, 0.0)
+              ! Calculate the maximum amount that could be added
+              vh_max = vh_UB-vh2d(J,k_rev)
+              ! Calculate how much will actually be added to uh(I)
+              vh_add = min(vh_max,vh_remain)
+              ! Reduce the remaining flux 
+              vh_remain = vh_remain - vh_add
+              vh2d(J,k_rev) = vh2d(J,k_rev) + vh_add
+              if(vh_remain<vh_neglect) exit
+            enddo
+          endif
+          if(abs(vh_remain)>vh_neglect) then
+            if(k<nz) then
+              vh2d(J,k+1) = vh2d(J,k+1) + vh_remain
+            else
+              call MOM_error(WARNING,"Water column cannot accommodate UH redistribution. Tracer will not be conserved")
+            endif
+          endif
+        enddo 
+
+      enddo
+      
+      ! Update layer thicknesses at the end 
+      do k=1,nz ; do j=js,je
+        h(i,j,k) = (h(i,j,k)*G%areaT(i,j) + (vh2d(J-1,k) - vh2d(J,k)))/G%areaT(i,j)
+      enddo ; enddo
+      do k=1,nz ; do j=js-1,je
+        vh(i,J,k) = vh2d(J,k)
+      enddo ; enddo
+    enddo
+    
+  end subroutine distribute_residual_vh_upwards
+  
 !> \namespace mom_offline_transport
 !! \section offline_overview Offline Tracer Transport in MOM6
 !!  'Offline tracer modeling' uses physical fields (e.g. mass transports and layer thicknesses) saved
@@ -536,6 +889,8 @@ contains
 !!            number of iterations has been reached
 !!        END ITERATION
 !!        -#  Repeat steps 1 and 2
+!!        -#  Redistribute any residual mass fluxes that remain after the advection iterations
+!!            in a barotropic manner, progressively upward through the water column.  
 !!        -#  Force a remapping to the stored layer thicknesses that correspond to the snapshot of
 !!            the online model at the end of an accumulation interval
 !!        -#  Reset T/S and h to their stored snapshotted values to prevent model drift
@@ -561,6 +916,10 @@ contains
 !!    - FIELDS_ARE_OFFSET: True if the time-averaged fields and snapshot fields are offset by one
 !!                        time level, probably not needed
 !!    -NUM_OFF_ITER:  Maximum number of iterations to do for the nonlinear advection scheme
+!!    -REDISTRIBUTE_METHOD: Redistributes any remaining horizontal fluxes throughout the rest of water column.
+!!                          Options are 'barotropic' which "evenly distributes flux throughout the entire water
+!!                          column,'upwards' which adds the maximum of the remaining flux in each layer above,
+!!                          and 'none' which does no redistribution"
   
 end module MOM_offline_transport
 
