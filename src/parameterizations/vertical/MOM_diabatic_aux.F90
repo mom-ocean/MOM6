@@ -1043,6 +1043,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
           endif
 
           ! Change in state due to forcing
+
           dThickness = max( fractionOfForcing*netMassOut(i), -h2d(i,k) )
           dTemp      = fractionOfForcing*netHeat(i)
           !   ### The 0.9999 here should become a run-time parameter?
@@ -1071,6 +1072,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
           ! Update state by the appropriate increment.
           hOld     = h2d(i,k)               ! Keep original thickness in hand
           h2d(i,k) = h2d(i,k) + dThickness  ! New thickness
+
           if (h2d(i,k) > 0.) then
             if (calculate_energetics) then
               ! Calculate the energy required to mix the newly added water over
