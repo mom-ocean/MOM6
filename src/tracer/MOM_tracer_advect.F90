@@ -504,9 +504,9 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
           ! Tracer fluxes are set to prescribed values only for inflows
           ! from masked areas.
           if (((uhr(I,j,k) > 0.0) .and. ((G%mask2dT(i,j) < 0.5) .or. &
-                  (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_W))) .or. &
+                  (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W))) .or. &
               ((uhr(I,j,k) < 0.0) .and. ((G%mask2dT(i+1,j) < 0.5) .or. &
-                  (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_E))) ) then
+                  (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E))) ) then
             do_i(I) = .true. ; do_any_i = .true.
             uhh(I) = uhr(I,j,k)
           endif
@@ -766,9 +766,9 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
         ! Tracer fluxes are set to prescribed values only for inflows
         ! from masked areas.
           if (((vhr(i,J,k) > 0.0) .and. ((G%mask2dT(i,j) < 0.5) .or. &
-                  (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S))) .or. &
+                  (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_S))) .or. &
               ((vhr(i,J,k) < 0.0) .and. ((G%mask2dT(i,j+1) < 0.5) .or. &
-                  (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N))) ) then
+                  (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N))) ) then
             do_i(i) = .true. ; do_any_i = .true.
             vhh(i,J) = vhr(i,J,k)
           endif
