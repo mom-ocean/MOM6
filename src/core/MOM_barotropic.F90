@@ -2362,6 +2362,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
   real :: u_inlet
   real :: v_inlet
   real :: h_in
+  real :: cff, Cx, Cy
   integer :: i, j, is, ie, js, je
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
 
@@ -2373,7 +2374,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         vel_trans = ubt(I,j)
       elseif (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%Flather) then
         if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) then
-          cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j)            ! CFL
+          cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j)           ! CFL
           u_inlet = cfl*ubt_old(I-1,j) + (1.0-cfl)*ubt_old(I,j)  ! Valid for cfl<1
         !  h_in = 2.0*cfl*eta(i,j) + (1.0-2.0*cfl)*eta(i+1,j)    ! external
           h_in = eta(i,j) + (0.5-cfl)*(eta(i,j)-eta(i-1,j))      ! internal
@@ -2385,7 +2386,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
 
           vel_trans = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
         elseif (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W) then
-          cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j)            ! CFL
+          cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j)           ! CFL
           u_inlet = cfl*ubt_old(I+1,j) + (1.0-cfl)*ubt_old(I,j)  ! Valid for cfl<1
         !  h_in = 2.0*cfl*eta(i+1,j) + (1.0-2.0*cfl)*eta(i,j)    ! external
           h_in = eta(i+1,j) + (0.5-cfl)*(eta(i+1,j)-eta(i+2,j))  ! internal
@@ -2397,17 +2398,31 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
 
           vel_trans = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
         elseif (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_N) then
-          if ((vbt(i,J-1)+vbt(i+1,J-1)) > 0.0) then
-            ubt(I,j) = 2.0*ubt(I,j-1)-ubt(I,j-2)
+          if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%legacy_bt) then
+            if ((vbt(i,J-1)+vbt(i+1,J-1)) > 0.0) then
+              ubt(I,j) = 2.0*ubt(I,j-1)-ubt(I,j-2)
+            else
+              ubt(I,j) = BT_OBC%ubt_outer(I,j)
+            endif
           else
-            ubt(I,j) = BT_OBC%ubt_outer(I,j)
+            Cy = dtbt * G%dyCu(I,j) * sqrt(OBC%g_Earth * 0.5 * &
+                   (G%bathyT(i,j) + eta(i,j) + G%bathyT(i+1,j) + eta(i+1,j)))
+            cff = 1.0 / (1.0 + Cy)
+            ubt(I,j) = cff * (ubt(I,j) + Cy * ubt(I,j-1))
           endif
           vel_trans = ubt(I,j)
         elseif (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_S) then
-          if ((vbt(i,J)+vbt(i+1,J)) < 0.0) then
-            ubt(I,j) = 2.0*ubt(I,j+1)-ubt(I,j+2)
+          if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%legacy_bt) then
+            if ((vbt(i,J)+vbt(i+1,J)) < 0.0) then
+              ubt(I,j) = 2.0*ubt(I,j+1)-ubt(I,j+2)
+            else
+              ubt(I,j) = BT_OBC%ubt_outer(I,j)
+            endif
           else
-            ubt(I,j) = BT_OBC%ubt_outer(I,j)
+            Cy = dtbt * G%dyCu(I,j) * sqrt(OBC%g_Earth * 0.5 * &
+                   (G%bathyT(i,j) + eta(i,j) + G%bathyT(i+1,j) + eta(i+1,j)))
+            cff = 1.0 / (1.0 + Cy)
+            ubt(I,j) = cff * (ubt(I,j) + Cy * ubt(I,j+1))
           endif
           vel_trans = ubt(I,j)
         endif
@@ -2457,10 +2472,17 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
 
           vel_trans = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
         elseif (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_E) then
-          if ((ubt(I-1,j)+ubt(I-1,j+1)) > 0.0) then
-            vbt(i,J) = 2.0*vbt(i-1,J)-vbt(i-2,J)
+          if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%legacy_bt) then
+            if ((ubt(I-1,j)+ubt(I-1,j+1)) > 0.0) then
+              vbt(i,J) = 2.0*vbt(i-1,J)-vbt(i-2,J)
+            else
+              vbt(i,J) = BT_OBC%vbt_outer(i,J)
+            endif
           else
-            vbt(i,J) = BT_OBC%vbt_outer(i,J)
+            Cx = dtbt * G%dxCv(I,j) * sqrt(OBC%g_Earth * 0.5 * &
+                   (G%bathyT(i,j) + eta(i,j) + G%bathyT(i,j+1) + eta(i,j+1)))
+            cff = 1.0 / (1.0 + Cx)
+            vbt(i,J) = cff * (vbt(i,J) + Cx * vbt(i+1,J))
           endif
           vel_trans = vbt(i,J)
 !!!!!!!!!!!!!!!!!!! CLAMPED !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -2468,10 +2490,17 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
 !       vbt(i,J) = (vbt(i-1,J) + CFL*vbt(i,J)) / (1.0 + CFL)  !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         elseif (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_W) then
-          if ((ubt(I,j)+ubt(I,j+1)) < 0.0) then
-            vbt(i,J) = 2.0*vbt(i+1,J)-vbt(i+2,J)
+          if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%legacy_bt) then
+            if ((ubt(I,j)+ubt(I,j+1)) < 0.0) then
+              vbt(i,J) = 2.0*vbt(i+1,J)-vbt(i+2,J)
+            else
+              vbt(i,J) = BT_OBC%vbt_outer(i,J)
+            endif
           else
-            vbt(i,J) = BT_OBC%vbt_outer(i,J)
+            Cx = dtbt * G%dxCv(I,j) * sqrt(OBC%g_Earth * 0.5 * &
+                   (G%bathyT(i,j) + eta(i,j) + G%bathyT(i,j+1) + eta(i,j+1)))
+            cff = 1.0 / (1.0 + Cx)
+            vbt(i,J) = cff * (vbt(i,J) + Cx * vbt(i-1,J))
           endif
           vel_trans = vbt(i,J)
 !!!!!!!!!!!!!!!!!! CLAMPED !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

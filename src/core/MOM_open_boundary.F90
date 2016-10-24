@@ -49,6 +49,7 @@ type, public :: OBC_segment_type
   logical :: nudged         !< Optional supplement to radiation boundary.
   logical :: specified      !< Boundary fixed to external value.
   logical :: gradient       !< Zero gradient at boundary.
+  logical :: legacy_bt      !< Old code for tangential BT velocities.
   integer :: direction      !< Boundary faces one of the four directions.
   real :: Tnudge_in         !< Nudging timescale on inflow.
   real :: Tnudge_out        !< Nudging timescale on outflow.
@@ -62,6 +63,7 @@ type, public :: ocean_OBC_type
   logical :: nudged_uv_BCs_exist_globally = .false. !< True if any velocity points in the global domain use nudged BCs.
   logical :: specified_u_BCs_exist_globally = .false. !< True if any zonal velocity points in the global domain use specified BCs.
   logical :: specified_v_BCs_exist_globally = .false. !< True if any meridional velocity points in the global domain use specified BCs.
+  real :: g_Earth
   logical, pointer, dimension(:,:) :: &
     OBC_mask_u => NULL(), & !< True at zonal velocity points that have prescribed OBCs.
     OBC_mask_v => NULL()    !< True at meridional velocity points that have prescribed OBCs.
@@ -139,6 +141,9 @@ subroutine open_boundary_config(G, param_file, OBC)
   call get_param(param_file, mod, "OBC_NUMBER_OF_SEGMENTS", OBC%number_of_segments, &
                  "The number of open boundary segments.", &
                  default=0)
+  call get_param(param_file, mod, "G_EARTH", OBC%g_Earth, &
+                 "The gravitational acceleration of the Earth.", &
+                 units="m s-2", default = 9.80)
   if (OBC%number_of_segments > 0) then
     ! Allocate everything
     allocate(OBC%OBC_segment_number(0:OBC%number_of_segments))
@@ -149,6 +154,7 @@ subroutine open_boundary_config(G, param_file, OBC)
       OBC%OBC_segment_number(l)%nudged = .false.
       OBC%OBC_segment_number(l)%specified = .false.
       OBC%OBC_segment_number(l)%gradient = .false.
+      OBC%OBC_segment_number(l)%legacy_bt = .false.
       OBC%OBC_segment_number(l)%direction = OBC_NONE
       OBC%OBC_segment_number(l)%Tnudge_in = 0.0
       OBC%OBC_segment_number(l)%Tnudge_out = 0.0
@@ -237,6 +243,8 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
     elseif (trim(action_str(a_loop)) == 'NUDGED') then
       OBC%OBC_segment_number(l_seg)%nudged = .true.
       OBC%nudged_uv_BCs_exist_globally = .true.
+    elseif (trim(action_str(a_loop)) == 'LEGACY') then
+      OBC%OBC_segment_number(l_seg)%legacy_bt = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%OBC_segment_number(l_seg)%specified = .true.
       OBC%specified_u_BCs_exist_globally = .true. ! This avoids deallocation
@@ -337,6 +345,8 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
     elseif (trim(action_str(a_loop)) == 'NUDGED') then
       OBC%OBC_segment_number(l_seg)%nudged = .true.
       OBC%nudged_uv_BCs_exist_globally = .true.
+    elseif (trim(action_str(a_loop)) == 'LEGACY') then
+      OBC%OBC_segment_number(l_seg)%legacy_bt = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%OBC_segment_number(l_seg)%specified = .true.
       OBC%specified_v_BCs_exist_globally = .true. ! This avoids deallocation
