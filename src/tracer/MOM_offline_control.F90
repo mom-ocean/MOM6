@@ -284,10 +284,14 @@ contains
     call get_param(param_file, mod, "NUMTIME", CS%numtime, &
       "Number of timelevels in offline input files", default=0)
     call get_param(param_file, mod, "FIELDS_ARE_OFFSET", CS%fields_are_offset, &
-      "True if the time-averaged fields and snapshot fields are offset by one time level", &
-      default=.false.)
+      "True if the time-averaged fields and snapshot fields\n"//&
+      "are offset by one time level", default=.false.)
     call get_param(param_file, mod, "REDISTRIBUTE_METHOD", CS%redistribute_method, &
-      "Redistributes any remaining horizontal fluxes throughout the rest of water column", &
+      "Redistributes any remaining horizontal fluxes throughout\n"//&
+      "the rest of water column. Options are 'barotropic' which\n"//&
+      "evenly distributes flux throughout the entire water column,\n"//&
+      "'upwards' which adds the maximum of the remaining flux in\n"//&
+      "each layer above, and 'none' which does no redistribution", &
       default='barotropic')  
     call get_param(param_file, mod, "NUM_OFF_ITER", CS%num_off_iter, &
       "Number of iterations to subdivide the offline tracer advection and diffusion" )
@@ -700,12 +704,6 @@ contains
                 if(uh_remain>-uh_neglect) exit
             enddo
             
-            if(uh_remain<-uh_neglect) then
-              call MOM_error(WARNING,"Residual UH remains after redistribution. Tracer will not be conserved. Increase NUM_OFF_ITER")
-              uh2d(I,k) = uh2d(I,k) + uh_remain
-            endif
-            
-            
           elseif (uh_remain>uh_neglect) then
             ! Set the amount in the layer with remaining fluxes to zero. This will be reset 
             ! in the first iteration of the redistribution loop
@@ -725,20 +723,16 @@ contains
               if(uh_remain<uh_neglect) exit
             enddo
             ! Check to see if there's any mass flux left. If so, put it in the layer beneath, unless we've bottomed out
-            if(uh_remain>uh_neglect) then
-              if(k<nz) then
-                uh2d(I,k+1) = uh2d(I,k+1) + uh_remain
-              else
-                call MOM_error(WARNING,"Water column cannot accommodate UH redistribution. Tracer will not be conserved")
-              endif
-              
+          endif
+          if(abs(uh_remain)>uh_neglect) then
+            if(k<nz) then
+              uh2d(I,k+1) = uh2d(I,k+1) + uh_remain
+            else
+              call MOM_error(WARNING,"Water column cannot accommodate UH redistribution. Tracer will not be conserved")
             endif
           endif
+
         enddo
-        if(abs(uh_sum-sum(uh2d(I,:)))>uh_neglect) then
-          print *, i,j,uh_sum,sum(uh2d(I,:))
-          call MOM_error(WARNING,"Difference in column integrated UH")
-        endif
         
       enddo
       
@@ -807,10 +801,6 @@ contains
               if(vh_remain>-vh_neglect) exit
               
             enddo
-            if(vh_remain<-vh_neglect) then
-              call MOM_error(WARNING,"Residual VH remains after redistribution. Tracer will not be conserved. Increase NUM_OFF_ITER")
-              vh2d(J,k) = vh2d(J,k) + vh_remain
-            endif
           elseif (vh_remain>0.0) then
             ! Set the amount in the layer with remaining fluxes to zero. This will be reset 
             ! in the first iteration of the redistribution loop
@@ -829,9 +819,12 @@ contains
               vh2d(J,k_rev) = vh2d(J,k_rev) + vh_add
               if(vh_remain<vh_neglect) exit
             enddo
-            if(vh_remain>vh_neglect) then
-              call MOM_error(WARNING,"Residual VH remains after redistribution. Tracer will not be conserved. Increase NUM_OFF_ITER")
-              vh2d(J,k) = vh2d(J,k) + vh_remain
+          endif
+          if(abs(vh_remain)>vh_neglect) then
+            if(k<nz) then
+              vh2d(J,k+1) = vh2d(J,k+1) + vh_remain
+            else
+              call MOM_error(WARNING,"Water column cannot accommodate UH redistribution. Tracer will not be conserved")
             endif
           endif
         enddo 
