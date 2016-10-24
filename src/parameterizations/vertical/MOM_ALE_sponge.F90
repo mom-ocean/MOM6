@@ -84,8 +84,9 @@ subroutine initialize_ALE_sponge(Iresttime, data_h, nz_data, G, param_file, CS)
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_sponge"  ! This module's name.
   logical :: use_sponge
+  logical :: bndExtrapolation = .true. ! If true, extrapolate boundaries
   integer :: i, j, k, col, total_sponge_cols
-
+  character(len=10)  :: remapScheme 
   if (associated(CS)) then
     call MOM_error(WARNING, "initialize_sponge called with an associated "// &
                             "control structure.")
@@ -102,6 +103,18 @@ subroutine initialize_ALE_sponge(Iresttime, data_h, nz_data, G, param_file, CS)
   if (.not.use_sponge) return
 
   allocate(CS)
+
+  call get_param(param_file, mod, "REMAPPING_SCHEME", remapScheme, &
+                 "This sets the reconstruction scheme used \n"//&
+                 " for vertical remapping for all variables.", &
+                 default="PLM", do_not_log=.true.)
+
+  call get_param(param_file, mod, "BOUNDARY_EXTRAPOLATION", bndExtrapolation, &
+                 "When defined, a proper high-order reconstruction \n"//&
+                 "scheme is used within boundary cells rather \n"// &
+                 "than PCM. E.g., if PPM is used for remapping, a \n" //&
+                 "PPM reconstruction will also be used within boundary cells.", &
+                 default=.false., do_not_log=.true.)
 
   CS%nz = G%ke
   CS%isc = G%isc ; CS%iec = G%iec ; CS%jsc = G%jsc ; CS%jec = G%jec
@@ -144,7 +157,7 @@ subroutine initialize_ALE_sponge(Iresttime, data_h, nz_data, G, param_file, CS)
   call sum_across_PEs(total_sponge_cols)
 
 ! Call the constructor for remapping control structure
-  call initialize_remapping(CS%remap_cs, 'PPM_H4', boundary_extrapolation=.false.)
+  call initialize_remapping(CS%remap_cs, remapScheme, boundary_extrapolation=bndExtrapolation)
 
   call log_param(param_file, mod, "!Total sponge columns", total_sponge_cols, &
                  "The total number of columns where sponges are applied.")
@@ -236,9 +249,13 @@ subroutine apply_ALE_sponge(h, dt, G, CS)
 !            CS%var(m)%p(i,j,k) = I1pdamp * &
 !                                 (CS%var(m)%p(i,j,k) + tmp_val1 * damp)
         enddo
-
+        
   enddo ! end of c loop
-
+  ! for debugging
+  !c=CS%num_col
+  !do m=1,CS%fldno
+  !   write(*,*)'APPLY SPONGE,m,CS%Ref_h(:,c),h(i,j,:),tmp_val2,tmp_val1',m,CS%Ref_h(:,c),h(i,j,:),tmp_val2,tmp_val1
+  !enddo
 end subroutine apply_ALE_sponge
 
 !> GMM: I could not find where sponge_end is being called, but I am keeping
