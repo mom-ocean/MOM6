@@ -1458,7 +1458,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         zero_3dh     !
     integer                                        :: niter, iter
     real                                           :: Inum_iter, dt_iter
-    logical                                        :: converged = .false.
+    logical                                        :: converged
     integer :: i, j, k, m, is, ie, js, je, isd, ied, jsd, jed, nz
     integer :: isv, iev, jsv, jev ! The valid range of the indices.
     integer :: IsdB, IedB, JsdB, JedB
@@ -1501,6 +1501,9 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     eatr_sub(:,:,:) = 0.0
     ebtr_sub(:,:,:) = 0.0
 
+    ! Initialize logicals
+    converged = .false.
+    
     call cpu_clock_begin(id_clock_tracer)
     call enable_averaging(time_interval, Time_start+set_time(int(time_interval)), CS%diag)
 
