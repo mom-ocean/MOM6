@@ -889,6 +889,8 @@ contains
 !!            number of iterations has been reached
 !!        END ITERATION
 !!        -#  Repeat steps 1 and 2
+!!        -#  Redistribute any residual mass fluxes that remain after the advection iterations
+!!            in a barotropic manner, progressively upward through the water column.  
 !!        -#  Force a remapping to the stored layer thicknesses that correspond to the snapshot of
 !!            the online model at the end of an accumulation interval
 !!        -#  Reset T/S and h to their stored snapshotted values to prevent model drift
@@ -914,6 +916,10 @@ contains
 !!    - FIELDS_ARE_OFFSET: True if the time-averaged fields and snapshot fields are offset by one
 !!                        time level, probably not needed
 !!    -NUM_OFF_ITER:  Maximum number of iterations to do for the nonlinear advection scheme
+!!    -REDISTRIBUTE_METHOD: Redistributes any remaining horizontal fluxes throughout the rest of water column.
+!!                          Options are 'barotropic' which "evenly distributes flux throughout the entire water
+!!                          column,'upwards' which adds the maximum of the remaining flux in each layer above,
+!!                          and 'none' which does no redistribution"
   
 end module MOM_offline_transport
 
