@@ -131,6 +131,8 @@ use MOM_offline_transport,         only : offline_transport_CS
 use MOM_offline_transport,         only : transport_by_files, next_modulo_time
 use MOM_offline_transport,         only : offline_transport_init, register_diags_offline_transport
 use MOM_offline_transport,         only : limit_mass_flux_3d, update_h_horizontal_flux, update_h_vertical_flux
+use MOM_offline_transport,         only : distribute_residual_uh_barotropic, distribute_residual_vh_barotropic
+use MOM_offline_transport,         only : distribute_residual_uh_upwards, distribute_residual_vh_upwards
 use MOM_tracer_diabatic,           only : applyTracerBoundaryFluxesInOut
 
 implicit none ; private
@@ -1429,6 +1431,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     real, dimension(SZI_(CS%G),SZJB_(CS%G),SZK_(CS%G))   :: vhtr, vhtr_sub
     ! Meridional diffusive transports
     real, dimension(SZI_(CS%G),SZJB_(CS%G))              :: khdt_y
+    
+    real, dimension(SZI_(CS%G),SZJ_(CS%G))               :: eta_pre, eta_end
 
     real :: sum_abs_fluxes, sum_u, sum_v  ! Used to keep track of how close to convergence we are
     real :: dt_offline, minimum_forcing_depth, evap_CFL_limit ! Shorthand variables from offline CS
@@ -1455,6 +1459,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         zero_3dh     !
     integer                                        :: niter, iter
     real                                           :: Inum_iter, dt_iter
+    logical                                        :: converged = .false.
     integer :: i, j, k, m, is, ie, js, je, isd, ied, jsd, jed, nz
     integer :: isv, iev, jsv, jev ! The valid range of the indices.
     integer :: IsdB, IedB, JsdB, JedB
@@ -1587,7 +1592,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         enddo ; enddo ; enddo
         
         call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
-            CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=2, &
+            CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=1, &
             uhr_out=uhtr, vhr_out=vhtr, h_out=h_new, x_first_in=x_before_y)
         ! Switch the direction every iteration? Maybe not useful
         ! x_before_y = .not. x_before_y
@@ -1596,7 +1601,6 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
           h_pre(i,j,k) = h_new(i,j,k)/G%areaT(i,j)
         enddo ; enddo ; enddo
 
-        
         if(CS%debug) then
           call hchksum(h_pre,"h_pre after advect_tracer",G%HI)
         endif
@@ -1640,10 +1644,12 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         
         if(sum_u+sum_v==0.0) then
           if(is_root_pe()) print *, "Converged after iteration", iter
+          converged = .true.
           exit
 !        print *, "Remaining uflux, vflux:", sum(abs(uhtr)), sum(abs(vhtr))
+        else
+          converged=.false.
         endif
-            
       enddo                  
       
       ! Now do the other half of the vertical mixing and tracer source/sink functions
@@ -1658,6 +1664,77 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       if(CS%debug) then
         call hchksum(h_pre,"h_pre after 2nd diabatic",G%HI)
       endif    
+      
+      if(CS%offline_CSp%id_eta_diff>0) then
+        eta_pre(:,:) = 0.0
+        eta_end(:,:) = 0.0
+        do k=1,nz ; do j=jsd,jed ; do i=isd,ied
+          if(h_pre(i,j,k)>GV%Angstrom) eta_pre(i,j) = eta_pre(i,j)+h_pre(i,j,k)
+          if(h_end(i,j,k)>GV%Angstrom) eta_end(i,j) = eta_end(i,j)+h_end(i,j,k)
+        enddo ; enddo; enddo
+          
+        call post_data(CS%offline_CSp%id_eta_diff,eta_pre-eta_end,CS%diag)
+          
+      endif
+      
+      if (.not. converged) then
+        
+        do k=1,nz ; do j=jsd,jed ; do i=isd,ied
+          h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
+        enddo ; enddo ; enddo
+       
+        if (CS%debug) then
+          call hchksum(h_pre,"h_pre after before redistribute",G%HI)
+          call uchksum(uhtr_sub,"uhtr_sub before redistribute",G%HI)
+          call vchksum(vhtr_sub,"vhtr_sub before redistribute",G%HI)
+        endif
+        
+        if (CS%offline_CSp%id_h_redist>0) call post_data(CS%offline_CSp%id_h_redist, h_pre, CS%diag)
+        if (CS%offline_CSp%id_uhr_redist>0) call post_data(CS%offline_CSp%id_uhr_redist, uhtr, CS%diag)
+        if (CS%offline_CSp%id_vhr_redist>0) call post_data(CS%offline_CSp%id_vhr_redist, vhtr, CS%diag)
+
+        select case (CS%offline_CSp%redistribute_method)
+          case ('barotropic')
+            if (x_before_y) then
+              call distribute_residual_uh_barotropic(G, GV, h_pre, uhtr_sub)
+              call distribute_residual_vh_barotropic(G, GV, h_pre, vhtr_sub)
+            else
+              call distribute_residual_vh_barotropic(G, GV, h_pre, vhtr_sub)
+              call distribute_residual_uh_barotropic(G, GV, h_pre, uhtr_sub)
+            endif 
+            call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
+                CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=1, &
+                uhr_out=uhtr, vhr_out=vhtr, h_out=h_new, x_first_in=x_before_y)
+        
+          case ('upwards')
+            if (x_before_y) then
+              call distribute_residual_uh_upwards(G, GV, h_pre, uhtr_sub)
+              call distribute_residual_vh_upwards(G, GV, h_pre, vhtr_sub)
+            else
+              call distribute_residual_vh_upwards(G, GV, h_pre, vhtr_sub)
+              call distribute_residual_uh_upwards(G, GV, h_pre, uhtr_sub)
+            endif
+            call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
+                  CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=1, &
+                  uhr_out=uhtr, vhr_out=vhtr, h_out=h_new, x_first_in=x_before_y)
+          case ('none')
+            call MOM_error(WARNING,"Offline advection did not converge")
+          
+          case default
+            call MOM_error(FATAL,"Unrecognized REDISTRIBUTE_METHOD")
+        end select
+        
+        if (CS%debug) then
+          call hchksum(h_pre,"h_pre after after redistribute",G%HI)
+          call uchksum(uhtr_sub,"uhtr_sub after redistribute",G%HI)
+          call vchksum(vhtr_sub,"vhtr_sub after redistribute",G%HI)
+        endif
+        
+        do k=1,nz ; do j=jsd,jed ; do i=isd,ied
+          h_pre(i,j,k) = h_new(i,j,k)/G%areaT(i,j)
+        enddo ; enddo ; enddo
+            
+      endif
       
       ! Call ALE one last time to make sure that tracers are remapped onto the layer thicknesses
       ! stored from the forward run
