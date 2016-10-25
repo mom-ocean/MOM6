@@ -750,10 +750,10 @@ contains
     !> In the case where offline advection has failed to converge, redistribute the u-flux
   !! into layers above
   subroutine distribute_residual_vh_upwards(G, GV, h, vh)
-    type(ocean_grid_type),    pointer                           :: G
-    type(verticalGrid_type),  pointer                           :: GV
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout)     :: h
-    real, dimension(SZIB_(G),SZJB_(G),SZK_(G)), intent(inout)    :: vh
+    type(ocean_grid_type),    pointer                          :: G
+    type(verticalGrid_type),  pointer                          :: GV
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout)   :: h
+    real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout)   :: vh
     
     real, dimension(SZJB_(G),SZK_(G))   :: vh2d
     real, dimension(SZJB_(G))           :: vh2d_sum

@@ -1646,7 +1646,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
 !$OMP                               Cor_ref_v,find_PF,find_Cor,apply_v_OBCs,dtbt,        &
 !$OMP                               project_velocity,be_proj,bebt,use_BT_cont,BTCL_v,    &
 !$OMP                               vhbt0,Datv,vbt_sum,wt_trans,vhbt_sum,vbt_wtd,wt_vel, &
-!$OMP                               azon,bzon,czon,dzon,Cor_ref_u,gtot_E,gtot_W,         &
+!$OMP                               azon,bzon,czon,dzon,Cor_ref_u,gtot_E,gtot_W,OBC,     &
 !$OMP                               u_accel_bt,PFu_bt_sum,Coru_bt_sum,apply_u_OBCs,      &
 !$OMP                               bt_rem_u,BT_force_u,uhbt,BTCL_u,uhbt0,Datu,ubt_sum,  &
 !$OMP                               uhbt_sum,ubt_wtd)                                    &
