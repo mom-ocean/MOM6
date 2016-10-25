@@ -1752,13 +1752,13 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   endif
   call get_param(param_file, mod, "N2_DISSIPATION_POS", CS%N2_Dissipation_Scale_Pos, &
                  "A scale for the dissipation of TKE due to stratification \n"//&
-                 "in the boundary layer, applied when surface forcing is \n"//&
-                 "positive.  The default is 0, but should probably be ~0.4.", &
+                 "in the boundary layer, applied when local stratification \n"//&
+                 "is positive.  The default is 0, but should probably be ~0.4.", &
                  units="nondim", default=0.0)
   call get_param(param_file, mod, "N2_DISSIPATION_NEG", CS%N2_Dissipation_Scale_Neg, &
                  "A scale for the dissipation of TKE due to stratification \n"//&
-                 "in the boundary layer, applied when surface forcing is \n"//&
-                 "positive.  The default is 0, but should probably be ~1.", &
+                 "in the boundary layer, applied when local stratification \n"//&
+                 "is negative.  The default is 0, but should probably be ~1.", &
                  units="nondim", default=0.0)
 
   ! This gives a minimum decay scale that is typically much less than Angstrom.
