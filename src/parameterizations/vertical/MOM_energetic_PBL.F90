@@ -123,6 +123,17 @@ type, public :: energetic_PBL_CS ; private
   real    :: min_mix_len     ! The minimum mixing length scale that will be
                              ! used by ePBL, in m.  The default (0) does not
                              ! set a minimum.
+  real    :: N2_Dissipation_Scale_Neg 
+  real    :: N2_Dissipation_Scale_Pos
+                             ! A nondimensional scaling factor controlling the
+                             ! loss of TKE due to enhanced dissipation in the presence 
+                             ! of stratification.  This dissipation is applied to the 
+                             ! available TKE which includes both that generated at the 
+                             ! surface and that generated at depth.  It may be important
+                             ! to distinguish which TKE flavor that this dissipation
+                             ! applies to in subsequent revisions of this code.
+                             ! "_Neg" and "_Pos" refer to which scale is applied as a 
+                             ! function of negative or positive local buoyancy.
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
   logical :: TKE_diagnostics = .false.
   logical :: orig_PE_calc = .true.
@@ -429,7 +440,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   integer, save :: CONVERGED!
   integer, save :: NOTCONVERGED!
   !-End BGR iteration parameters-----------------------------------------
-
+  real :: N2_dissipation
   logical :: debug=.false.  ! Change this hard-coded value for debugging.
 !  The following arrays are used only for debugging purposes.
   real :: dPE_debug, mixing_debug
@@ -707,7 +718,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
             dTKE_mech_decay = dTKE_mech_decay + (exp_kh-1.0) * mech_TKE(i) * IdtdR0
           mech_TKE(i) = mech_TKE(i) * exp_kh
 
-
           !   Accumulate any convectively released potential energy to contribute
           ! to wstar and to drive penetrating convection.
           if (TKE_forced(i,j,k) > 0.0) then
@@ -898,6 +908,14 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
 
             MKE_src = dMKE_max*(1.0 - exp(-Kddt_h_g0 * MKE2_Hharm))
 
+            if (pe_chg_g0 .gt. 0.0) then
+              !Negative buoyancy (increases PE)
+              N2_dissipation = 1.+CS%N2_DISSIPATION_SCALE_NEG
+            else
+              !Positive buoyancy (decreases PE) 
+              N2_dissipation = 1.+CS%N2_DISSIPATION_SCALE_POS
+            endif
+
             if ((PE_chg_g0 < 0.0) .or. ((vstar == 0.0) .and. (dPEc_dKd_Kd0 < 0.0))) then
               ! This column is convectively unstable.
               if (PE_chg_max <= 0.0) then
@@ -958,7 +976,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
               endif
 
               Kddt_h(K) = Kd(i,k)*dt_h
-            elseif (tot_TKE + (MKE_src - PE_chg_g0) >= 0.0) then
+            elseif (tot_TKE + (MKE_src - N2_DISSIPATION*PE_chg_g0) >= 0.0) then
               ! There is energy to support the suggested mixing.  Keep that estimate.
               Kd(i,k) = Kd_guess0
               Kddt_h(K) = Kddt_h_g0
@@ -966,8 +984,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
               ! Reduce the mechanical and convective TKE proportionately.
               tot_TKE = tot_TKE + MKE_src
               TKE_reduc = 0.0   ! tot_TKE could be 0 if Convectively_stable is false.
-              if (tot_TKE > 0.0) TKE_reduc = (tot_TKE - PE_chg_g0) / tot_TKE
-
+              if (tot_TKE > 0.0) TKE_reduc = (tot_TKE - N2_DISSIPATION*PE_chg_g0) &
+                                             / tot_TKE
               if (CS%TKE_diagnostics) then
                 dTKE_mixing = dTKE_mixing - PE_chg_g0 * IdtdR0
                 dTKE_MKE = dTKE_MKE + MKE_src * IdtdR0
@@ -990,12 +1008,14 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
               ! There is not enough energy to support the mixing, so reduce the
               ! diffusivity to what can be supported.
               Kddt_h_max = Kddt_h_g0 ; Kddt_h_min = 0.0
-              TKE_left_max = tot_TKE + (MKE_src - PE_chg_g0) ; TKE_left_min = tot_TKE
+              TKE_left_max = tot_TKE + (MKE_src - N2_DISSIPATION*PE_chg_g0) ; 
+              TKE_left_min = tot_TKE
 
               ! As a starting guess, take the minimum of a false position estimate
               ! and a Newton's method estimate starting from Kddt_h = 0.0.
-              Kddt_h_guess = tot_TKE * Kddt_h_max / max( PE_chg_g0 - MKE_src, &
-                                 Kddt_h_max * (dPEc_dKd_Kd0 - dMKE_max * MKE2_Hharm) )
+              Kddt_h_guess = tot_TKE * Kddt_h_max / max( N2_DISSIPATION*PE_chg_g0 &
+                                 - MKE_src, Kddt_h_max * (dPEc_dKd_Kd0 - dMKE_max *        &
+                                 MKE2_Hharm) )
               ! The above expression is mathematically the same as the following
               ! except it is not susceptible to division by zero when
               !   dPEc_dKd_Kd0 = dMKE_max = 0 .
@@ -1024,10 +1044,11 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                 MKE_src = dMKE_max * (1.0 - exp(-MKE2_Hharm * Kddt_h_guess))
                 dMKE_src_dK = dMKE_max * MKE2_Hharm * exp(-MKE2_Hharm * Kddt_h_guess)
 
-                TKE_left = tot_TKE + (MKE_src - PE_chg)
+                TKE_left = tot_TKE + (MKE_src - N2_DISSIPATION*PE_chg)
                 if (debug) then
                   Kddt_h_itt(itt) = Kddt_h_guess ; MKE_src_itt(itt) = MKE_src
-                  PE_chg_itt(itt) = PE_chg ; TKE_left_itt(itt) = TKE_left
+                  PE_chg_itt(itt) = N2_DISSIPATION*PE_chg
+                  TKE_left_itt(itt) = TKE_left
                   dPEa_dKd_itt(itt) = dPEc_dKd
                 endif
                 ! Store the new bounding values, bearing in mind that min and max
@@ -1041,10 +1062,10 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                 ! Try to use Newton's method, but if it would go outside the bracketed
                 ! values use the false-position method instead.
                 use_Newt = .true.
-                if (dPEc_dKd - dMKE_src_dK <= 0.0) then
+                if (dPEc_dKd*N2_DISSIPATION - dMKE_src_dK <= 0.0) then
                   use_Newt = .false.
                 else
-                  dKddt_h_Newt = TKE_left / (dPEc_dKd - dMKE_src_dK)
+                  dKddt_h_Newt = TKE_left / (dPEc_dKd*N2_DISSIPATION - dMKE_src_dK)
                   Kddt_h_Newt = Kddt_h_guess + dKddt_h_Newt
                   if ((Kddt_h_Newt > Kddt_h_max) .or. (Kddt_h_Newt < Kddt_h_min)) &
                     use_Newt = .false.
@@ -1729,6 +1750,16 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
     call MOM_error(FATAL, "If flag USE_MLD_ITERATION is true, then "//&
                  "EPBL_TRANSITION should be greater than 0 and less than 1.")
   endif
+  call get_param(param_file, mod, "N2_DISSIPATION_POS", CS%N2_Dissipation_Scale_Pos, &
+                 "A scale for the dissipation of TKE due to stratification \n"//&
+                 "in the boundary layer, applied when local stratification \n"//&
+                 "is positive.  The default is 0, but should probably be ~0.4.", &
+                 units="nondim", default=0.0)
+  call get_param(param_file, mod, "N2_DISSIPATION_NEG", CS%N2_Dissipation_Scale_Neg, &
+                 "A scale for the dissipation of TKE due to stratification \n"//&
+                 "in the boundary layer, applied when local stratification \n"//&
+                 "is negative.  The default is 0, but should probably be ~1.", &
+                 units="nondim", default=0.0)
 
   ! This gives a minimum decay scale that is typically much less than Angstrom.
   CS%ustar_min = 2e-4*CS%omega*(GV%Angstrom_z + GV%H_to_m*GV%H_subroundoff)
