@@ -121,7 +121,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, &
 
 !$OMP parallel default(none) shared(nz,jsd,jed,IsdB,IedB,uhr,jsdB,jedB,Isd,Ied,vhr, &
 !$OMP                               hprev,domore_k,js,je,is,ie,uhtr,vhtr,G,GV,h_end,&
-!$OMP                               uh_neglect,vh_neglect,ntr,Tr)
+!$OMP                               uh_neglect,vh_neglect,ntr,Tr,h_prev_opt)
 
 ! This initializes the halos of uhr and vhr because pass_vector might do
 ! calculations on them, even though they are never used.
