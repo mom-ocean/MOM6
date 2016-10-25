@@ -1,56 +1,6 @@
+!> Implements a boundary impulse response tracer to calculate Green's functions
 module boundary_impulse_tracer
-!***********************************************************************
-!*                   GNU General Public License                        *
-!* This file is a part of MOM.                                         *
-!*                                                                     *
-!* MOM is free software; you can redistribute it and/or modify it and  *
-!* are expected to follow the terms of the GNU General Public License  *
-!* as published by the Free Software Foundation; either version 2 of   *
-!* the License, or (at your option) any later version.                 *
-!*                                                                     *
-!* MOM is distributed in the hope that it will be useful, but WITHOUT  *
-!* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY  *
-!* or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public    *
-!* License for more details.                                           *
-!*                                                                     *
-!* For the full text of the GNU General Public License,                *
-!* write to: Free Software Foundation, Inc.,                           *
-!*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
-!* or see:   http://www.gnu.org/licenses/gpl.html                      *
-!***********************************************************************
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Andrew Shao, 2016                                               *
-!*                                                                     *
-!*    This file contains the routines necessary to model a passive     *
-!*  tracer that uses the same boundary fluxes as salinity. At the      *
-!*  beginning of the run, salt is set to the same as tv%S. Any         *
-!*  deviations between this salt-like tracer and tv%S signifies a      *
-!*  difference between how active and passive tracers are treated.     *
-!*    A single subroutine is called from within each file to register  *
-!*  each of the tracers for reinitialization and advection and to      *
-!*  register the subroutine that initializes the tracers and set up    *
-!*  their output and the subroutine that does any tracer physics or    *
-!*  chemistry along with diapycnal mixing (included here because some  *
-!*  tracers may float or swim vertically or dye diapycnal processes).  *
-!*                                                                     *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v                                        *
-!*    j    x ^ x ^ x   At >:  u                                        *
-!*    j    > o > o >   At o:  h, tr                                    *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
+! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_checksums,     only : hchksum
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
@@ -107,7 +57,8 @@ type, public :: boundary_impulse_tracer_CS ; private
     tr_dfx, &! Tracer zonal diffusive fluxes in g m-3 m3 s-1.
     tr_dfy   ! Tracer meridional diffusive fluxes in g m-3 m3 s-1.
   logical :: mask_tracers  ! If true, boundary_impulse is masked out in massless layers.
-  logical :: tracers_may_reinit  ! If true, boundary_impulse is masked out in massless layers.
+  logical :: tracers_may_reinit  ! If true, boundary_impulse can be initialized if 
+                                 ! not found in restart file
   integer, dimension(NTR_MAX) :: &
     ind_tr, &  ! Indices returned by aof_set_coupler_flux if it is used and the
                ! surface tracer concentrations are to be provided to the coupler.
@@ -127,6 +78,7 @@ end type boundary_impulse_tracer_CS
 
 contains
 
+!> Read in runtime options and add boundary impulse tracer to tracer registry
 function register_boundary_impulse_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   type(hor_index_type),       intent(in) :: HI
   type(verticalGrid_type),    intent(in) :: GV
@@ -166,7 +118,7 @@ function register_boundary_impulse_tracer(HI, GV, param_file, CS, tr_Reg, restar
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "SOURCE_TIME", CS%remaining_source_time, &
+  call get_param(param_file, mod, "IMPULSE_SOURCE_TIME", CS%remaining_source_time, &
                  "Length of time for the boundary tracer to be injected\n"//&
                  "into the mixed layer. After this time has elapsed, the\n"//&
                  "surface becomes a sink for the boundary impulse tracer.", &
@@ -174,18 +126,19 @@ function register_boundary_impulse_tracer(HI, GV, param_file, CS, tr_Reg, restar
   
   CS%ntr = NTR_MAX
   allocate(CS%tr(isd:ied,jsd:jed,nz,CS%ntr)) ; CS%tr(:,:,:,:) = 0.0
-  allocate(CS%diff(isd:ied,jsd:jed,nz,CS%ntr)) ; CS%diff(:,:,:,:) = 0.0
+  
+  CS%nkml = max(GV%nkml,1)
 
   do m=1,CS%ntr
     ! This is needed to force the compiler not to do a copy in the registration
     ! calls.  Curses on the designers and implementers of Fortran90.
-    CS%tr_desc(m) = var_desc(trim("boundary_impulse_diff"), "kg", &
-        "Difference between pseudo salt passive tracer and salt tracer", caller=mod)
+    CS%tr_desc(m) = var_desc(trim("boundary_impulse"), "kg", &
+        "Boundary impulse tracer", caller=mod)
     tr_ptr => CS%tr(:,:,:,m)
     call query_vardesc(CS%tr_desc(m), name=var_name, caller="register_boundary_impulse_tracer")
     ! Register the tracer for the restart file.
     call register_restart_field(tr_ptr, CS%tr_desc(m), &
-                                .not. CS%boundary_impulse_may_reinit, restart_CS)
+                                .not. CS%tracers_may_reinit, restart_CS)
     ! Register the tracer for horizontal advection & diffusion.
     call register_tracer(tr_ptr, CS%tr_desc(m), param_file, HI, GV, tr_Reg, &
                          tr_desc_ptr=CS%tr_desc(m))
@@ -204,6 +157,7 @@ function register_boundary_impulse_tracer(HI, GV, param_file, CS, tr_Reg, restar
 
 end function register_boundary_impulse_tracer
 
+!> Initialize tracer from restart or set to 1 at surface to initialize
 subroutine initialize_boundary_impulse_tracer(restart, day, G, GV, h, diag, OBC, CS, &
                                   sponge_CSp, diag_to_Z_CSp, tv)
   logical,                            intent(in) :: restart
@@ -258,8 +212,8 @@ subroutine initialize_boundary_impulse_tracer(restart, day, G, GV, h, diag, OBC,
     call query_vardesc(CS%tr_desc(m), name=name, caller="initialize_boundary_impulse_tracer")
     if ((.not.restart) .or. (.not. &
         query_initialized(CS%tr(:,:,:,m), name, CS%restart_CSp))) then
-      do k=1,nz ; do j=jsd,jed ; do i=isd,ied
-        CS%tr(i,j,k,m) = tv%S(i,j,k)
+      do k=1,CS%nkml ; do j=jsd,jed ; do i=isd,ied
+        CS%tr(i,j,k,m) = 1.0
       enddo ; enddo ; enddo
     endif
   enddo ! Tracer loop
@@ -311,6 +265,7 @@ subroutine initialize_boundary_impulse_tracer(restart, day, G, GV, h, diag, OBC,
 
 end subroutine initialize_boundary_impulse_tracer
 
+! Apply source or sink at boundary and do vertical diffusion
 subroutine boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS, tv, debug, &
               evap_CFL_limit, minimum_forcing_depth)
   type(ocean_grid_type),              intent(in) :: G
@@ -359,7 +314,6 @@ subroutine boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, 
   integer :: i, j, k, is, ie, js, je, nz, m, k_max
   real, allocatable :: local_tr(:,:,:)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
-  real, dimension(:,:), pointer :: net_salt
   
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke  
   
@@ -381,11 +335,12 @@ subroutine boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, 
   ! Set surface conditions
   do m=1,1
     if(CS%remaining_source_time>0.0) then
-      do k=1,1 ; do j=js,je ; do i=is,ie
+      do k=1,CS%nkml ; do j=js,je ; do i=is,ie
         CS%tr(i,j,k,m) = 1.0
       enddo ; enddo ; enddo
+      CS%remaining_source_time = CS%remaining_source_time-dt
     else
-      do k=1,1 ; do j=js,je ; do i=is,ie
+      do k=1,CS%nkml ; do j=js,je ; do i=is,ie
         CS%tr(i,j,k,m) = 0.0
       enddo ; enddo ; enddo
     endif
@@ -423,6 +378,7 @@ subroutine boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, 
 
 end subroutine boundary_impulse_tracer_column_physics
 
+!> Calculate total inventory of tracer
 function boundary_impulse_stock(h, stocks, G, GV, CS, names, units, stock_index)
   type(ocean_grid_type),              intent(in)    :: G
   type(verticalGrid_type),            intent(in)    :: GV
@@ -468,7 +424,7 @@ function boundary_impulse_stock(h, stocks, G, GV, CS, names, units, stock_index)
     units(m) = trim(units(m))//" kg"
     stocks(m) = 0.0
     do k=1,nz ; do j=js,je ; do i=is,ie
-      stocks(m) = stocks(m) + CS%diff(i,j,k,m) * &
+      stocks(m) = stocks(m) + CS%tr(i,j,k,m) * &
                            (G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k))
     enddo ; enddo ; enddo
     stocks(m) = GV%H_to_kg_m2 * stocks(m)
@@ -478,11 +434,12 @@ function boundary_impulse_stock(h, stocks, G, GV, CS, names, units, stock_index)
 
 end function boundary_impulse_stock
 
+!> Called if returned if coupler needs to know about tracer, currently unused
 subroutine boundary_impulse_tracer_surface_state(state, h, G, CS)
   type(ocean_grid_type),                 intent(in)    :: G
   type(surface),                         intent(inout) :: state
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
-  type(boundary_impulse_tracer_CS),                   pointer       :: CS
+  type(boundary_impulse_tracer_CS),         pointer       :: CS
 !   This particular tracer package does not report anything back to the coupler.
 ! The code that is here is just a rough guide for packages that would.
 ! Arguments: state - A structure containing fields that describe the
@@ -507,13 +464,13 @@ subroutine boundary_impulse_tracer_surface_state(state, h, G, CS)
 
 end subroutine boundary_impulse_tracer_surface_state
 
+! Performs finalization of boundary impulse tracer
 subroutine boundary_impulse_tracer_end(CS)
   type(boundary_impulse_tracer_CS), pointer :: CS
   integer :: m
 
   if (associated(CS)) then
     if (associated(CS%tr)) deallocate(CS%tr)
-    if (associated(CS%tr)) deallocate(CS%diff)
     do m=1,CS%ntr
       if (associated(CS%tr_adx(m)%p)) deallocate(CS%tr_adx(m)%p)
       if (associated(CS%tr_ady(m)%p)) deallocate(CS%tr_ady(m)%p)
@@ -525,4 +482,39 @@ subroutine boundary_impulse_tracer_end(CS)
   endif
 end subroutine boundary_impulse_tracer_end
 
+!> \namespace boundary_impulse_tracer
+!! \section Boundary Impulse Response Tracer and Transit Time Distributions
+!! Transit time distributions (TTD) are the Green's function solution of the passive tracer equation between
+!! the oceanic surface and interior. The name derives from the idea that the 'age' (e.g. time since last
+!! contact with the atmosphere) of a water parcel is best characterized as a distribution of ages
+!! because water parcels leaving the surface arrive at a particular interior point at different times.
+!! The more commonly used ideal age tracer is the first moment of the TTD, equivalently referred to as the
+!! mean age. 
+!!
+!! A boundary impulse response (BIR) is a passive tracer whose surface boundary condition is a rectangle
+!! function with width $\Delta t$. In the case of unsteady flow, multiple BIRs, initiated at different 
+!! times in the model can be used to infer the transit time distribution or Green's function between
+!! the oceanic surface and interior. In the case of steady or cyclostationary flow, a single BIR is
+!! sufficient.
+!!
+!! In the References section, both the theoretical discussion of TTDs and BIRs are listed along with
+!! modeling studies which have this used framework in scientific investigations
+!! 
+!! \section Run-time parameters
+!! -DO_BOUNDARY_IMPULSE_TRACER: Enables the boundary impulse tracer model
+!! -IMPULSE_SOURCE_TIME: Length of time that the surface layer acts as a source of the BIR tracer
+!!
+!! \section References
+!! \subsection TTD and BIR Theory
+!!  -Holzer, M., and T.M. Hall, 2000: Transit-time and tracer-age distributions in geophysical flows. 
+!!    J. Atmos. Sci., 57, 3539-3558, doi:10.1175/1520-0469(2000)057<3539:TTATAD>2.0.CO;2.
+!!  -T.W.N. Haine, H. Zhang, D.W. Waugh, M. Holzer, On transit-time distributions in unsteady circulation
+!!    models, Ocean Modelling, Volume 21, Issues 1–2, 2008, Pages 35-45, ISSN 1463-5003
+!!    http://dx.doi.org/10.1016/j.ocemod.2007.11.004.
+!! \subsection BIR Modelling applications
+!!  -Peacock, S., and M. Maltrud (2006), Transit-time distributions in a global ocean model, 
+!!    J. Phys. Oceanogr., 36(3), 474–495, doi:10.1175/JPO2860.1.
+!!  -Maltrud, M., Bryan, F. & Peacock, Boundary impulse response functions in a century-long eddying global
+!!  ocean simulation, S. Environ Fluid Mech (2010) 10: 275. doi:10.1007/s10652-009-9154-3
+!!
 end module boundary_impulse_tracer
