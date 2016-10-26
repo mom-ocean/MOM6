@@ -175,6 +175,7 @@ type, public :: forcing_diags
   integer :: id_lprec        = -1, id_fprec       = -1
   integer :: id_lrunoff      = -1, id_frunoff     = -1
   integer :: id_net_massout  = -1, id_net_massin  = -1
+  integer :: id_massout_flux = -1, id_massin_flux = -1
   integer :: id_seaice_melt  = -1
 
   ! global area integrated mass flux diagnostic handles
@@ -1055,7 +1056,12 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
   handles%id_net_massin  = register_diag_field('ocean_model', 'net_massin', diag%axesT1, Time, &
         'Net mass entering ocean due to precip, runoff, ice melt', 'kilogram meter-2 second-1')
 
+  handles%id_massout_flux = register_diag_field('ocean_model', 'massout_flux', diag%axesT1, Time, &
+        'Net mass flux of freshwater out of the ocean (used in the boundary flux calculation)', &
+         'kilogram meter-2')
 
+  handles%id_massin_flux  = register_diag_field('ocean_model', 'massin_flux', diag%axesT1, Time, &
+        'Net mass mass flux of freshwater into the ocean (used in boundary flux calculation)', 'kilogram meter-2')
   !=========================================================================
   ! area integrated surface mass transport
 
@@ -1796,6 +1802,8 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
         call post_data(handles%id_total_net_massout, total_transport, diag)
       endif
     endif
+    
+    if(handles%id_massout_flux > 0) call post_data(handles%id_massout_flux,fluxes%netMassOut,diag)
 
     if(handles%id_net_massin > 0 .or. handles%id_total_net_massin > 0) then
       sum(:,:) = 0.0
@@ -1812,6 +1820,8 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
         call post_data(handles%id_total_net_massin, total_transport, diag)
       endif
     endif
+    
+    if(handles%id_massin_flux > 0) call post_data(handles%id_massin_flux,fluxes%netMassIn,diag)
 
     if ((handles%id_evap > 0) .and. ASSOCIATED(fluxes%evap)) &
       call post_data(handles%id_evap, fluxes%evap, diag)
