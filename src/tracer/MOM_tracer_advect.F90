@@ -9,7 +9,7 @@ use MOM_cpu_clock,       only : CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator,   only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator,   only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_domains,         only : sum_across_PEs, max_across_PEs
-use MOM_domains,         only : create_group_pass, do_group_pass, group_pass_type
+use MOM_domains,         only : create_group_pass, do_group_pass, group_pass_type, pass_var
 use MOM_checksums,       only : hchksum
 use MOM_error_handler,   only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser,     only : get_param, log_version, param_file_type
@@ -18,7 +18,6 @@ use MOM_open_boundary,   only : ocean_OBC_type, OBC_DIRECTION_E
 use MOM_open_boundary,   only : OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_tracer_registry, only : tracer_registry_type, tracer_type, MOM_tracer_chksum
 use MOM_verticalGrid,    only : verticalGrid_type
-
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -45,7 +44,8 @@ contains
 
 !> This routine time steps the tracer concentration using a 
 !! monotonic, conservative, weakly diffusive scheme.
-subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg)
+subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, &
+      h_prev_opt, max_iter_in, x_first_in, uhr_out, vhr_out, h_out)
   type(ocean_grid_type),                     intent(inout) :: G     !< ocean grid structure 
   type(verticalGrid_type),                   intent(in)    :: GV    !< ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h_end !< layer thickness after advection (m or kg m-2)
@@ -54,8 +54,13 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg)
   type(ocean_OBC_type),                      pointer       :: OBC   !< specifies whether, where, and what OBCs are used
   real,                                      intent(in)    :: dt    !< time increment (seconds)
   type(tracer_advect_CS),                    pointer       :: CS    !< control structure for module 
-  type(tracer_registry_type),                pointer       :: Reg   !< pointer to tracer registry 
-
+  type(tracer_registry_type),                pointer       :: Reg   !< pointer to tracer registry
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional      :: h_prev_opt !< layer thickness before advection (m or kg m-2)
+  integer,                                   optional      :: max_iter_in
+  logical,                                   optional      :: x_first_in
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), optional, intent(out)    :: uhr_out  !< accumulated volume/mass flux through zonal face (m3 or kg)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), optional, intent(out)    :: vhr_out  !< accumulated volume/mass flux through merid face (m3 or kg)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional      :: h_out !< layer thickness before advection (m or kg m-2)
 
   type(tracer_type) :: Tr(MAX_FIELDS_) ! The array of registered tracers
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
@@ -104,6 +109,8 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg)
 
   max_iter = 2*INT(CEILING(dt/CS%dt)) + 1
 
+  if(present(max_iter_in)) max_iter = max_iter_in
+  if(present(x_first_in))  x_first = x_first_in
   call cpu_clock_begin(id_clock_pass)
   call create_group_pass(CS%pass_uhr_vhr_t_hprev, uhr, vhr, G%Domain)
   call create_group_pass(CS%pass_uhr_vhr_t_hprev, hprev, G%Domain)
@@ -114,11 +121,12 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg)
 
 !$OMP parallel default(none) shared(nz,jsd,jed,IsdB,IedB,uhr,jsdB,jedB,Isd,Ied,vhr, &
 !$OMP                               hprev,domore_k,js,je,is,ie,uhtr,vhtr,G,GV,h_end,&
-!$OMP                               uh_neglect,vh_neglect,ntr,Tr)
+!$OMP                               uh_neglect,vh_neglect,ntr,Tr,h_prev_opt)
 
 ! This initializes the halos of uhr and vhr because pass_vector might do
 ! calculations on them, even though they are never used.
 !$OMP do
+
   do k = 1, nz
     do j = jsd,  jed;  do i = IsdB, IedB; uhr(i,j,k) = 0.0; enddo ; enddo
     do j = jsdB, jedB; do i = Isd,  Ied;  vhr(i,j,k) = 0.0; enddo ; enddo
@@ -127,19 +135,26 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg)
 !  Put the remaining (total) thickness fluxes into uhr and vhr.
     do j=js,je ; do I=is-1,ie ; uhr(I,j,k) = uhtr(I,j,k) ; enddo ; enddo
     do J=js-1,je ; do i=is,ie ; vhr(i,J,k) = vhtr(i,J,k) ; enddo ; enddo
-!   This loop reconstructs the thickness field the last time that the
-! tracers were updated, probably just after the diabatic forcing.  A useful
-! diagnostic could be to compare this reconstruction with that older value.
-    do i=is,ie ; do j=js,je
-      hprev(i,j,k) = max(0.0, G%areaT(i,j)*h_end(i,j,k) + &
-           ((uhr(I,j,k) - uhr(I-1,j,k)) + (vhr(i,J,k) - vhr(i,J-1,k))))
-! In the case that the layer is now dramatically thinner than it was previously,
-! add a bit of mass to avoid truncation errors.  This will lead to
-! non-conservation of tracers 
-      hprev(i,j,k) = hprev(i,j,k) + &
-                     max(0.0, 1.0e-13*hprev(i,j,k) - G%areaT(i,j)*h_end(i,j,k))
-    enddo ; enddo
+    if (.not. present(h_prev_opt)) then
+    !   This loop reconstructs the thickness field the last time that the
+    ! tracers were updated, probably just after the diabatic forcing.  A useful
+    ! diagnostic could be to compare this reconstruction with that older value.
+        do i=is,ie ; do j=js,je
+          hprev(i,j,k) = max(0.0, G%areaT(i,j)*h_end(i,j,k) + &
+               ((uhr(I,j,k) - uhr(I-1,j,k)) + (vhr(i,J,k) - vhr(i,J-1,k))))
+    ! In the case that the layer is now dramatically thinner than it was previously,
+    ! add a bit of mass to avoid truncation errors.  This will lead to
+    ! non-conservation of tracers
+          hprev(i,j,k) = hprev(i,j,k) + &
+                         max(0.0, 1.0e-13*hprev(i,j,k) - G%areaT(i,j)*h_end(i,j,k))
+        enddo ; enddo
+    else
+      do i=is,ie ; do j=js,je
+        hprev(i,j,k) = h_prev_opt(i,j,k);
+      enddo ; enddo
+    endif
   enddo
+
 
 !$OMP do
   do j=jsd,jed ; do I=isd,ied-1
@@ -265,7 +280,9 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg)
     endif ; enddo ! End of k-loop
 
     ! If the advection just isn't finishing after max_iter, move on.
-    if (itt >= max_iter) exit
+    if (itt >= max_iter) then
+      exit
+    endif
 
     ! Exit if there are no layers that need more iterations.
     if (isv > is-stencil) then
@@ -274,10 +291,17 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg)
       call sum_across_PEs(domore_k(:), nz)
       call cpu_clock_end(id_clock_sync)
       do k=1,nz ; do_any = do_any + domore_k(k) ; enddo
-      if (do_any == 0) exit
+      if (do_any == 0) then
+        exit
+      endif
+
     endif
 
   enddo ! Iterations loop
+
+  if(present(uhr_out)) uhr_out(:,:,:) = uhr(:,:,:)
+  if(present(vhr_out)) vhr_out(:,:,:) = vhr(:,:,:)
+  if(present(h_out)) h_out(:,:,:) = hprev(:,:,:)
 
   call cpu_clock_end(id_clock_advect)
 
@@ -363,7 +387,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
     endif ! usePLMslope
 
     ! Calculate the i-direction fluxes of each tracer, using as much
-    ! the minimum of the remaining mass flux (uhr) and the half the mass  
+    ! the minimum of the remaining mass flux (uhr) and the half the mass
     ! in the cell plus whatever part of its half of the mass flux that
     ! the flux through the other side does not require.
     do I=is-1,ie
@@ -396,6 +420,8 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
         CFL(I) = uhh(I)/(hprev(i,j,k)+h_neglect) ! CFL is positive
       endif
     enddo
+
+
     if (usePPM) then
       do m=1,ntr ; do I=is-1,ie
         if (uhh(I) >= 0.0) then
@@ -478,9 +504,9 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
           ! Tracer fluxes are set to prescribed values only for inflows
           ! from masked areas.
           if (((uhr(I,j,k) > 0.0) .and. ((G%mask2dT(i,j) < 0.5) .or. &
-                  (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_W))) .or. &
+                  (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W))) .or. &
               ((uhr(I,j,k) < 0.0) .and. ((G%mask2dT(i+1,j) < 0.5) .or. &
-                  (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_E))) ) then
+                  (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E))) ) then
             do_i(I) = .true. ; do_any_i = .true.
             uhh(I) = uhr(I,j,k)
           endif
@@ -628,6 +654,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   ! the flux through the other side does not require.
   do J=js-1,je ; if (domore_v(J,k)) then
     domore_v(J,k) = .false.
+
     do i=is,ie
       if (vhr(i,J,k) == 0.0) then
         vhh(i,J) = 0.0
@@ -658,6 +685,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
         CFL(i) = vhh(i,J) / (hprev(i,j,k)+h_neglect) ! CFL is positive
       endif
     enddo
+
     if (usePPM) then
       do m=1,ntr ; do i=is,ie
         if (vhh(i,J) >= 0.0) then
@@ -738,9 +766,9 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
         ! Tracer fluxes are set to prescribed values only for inflows
         ! from masked areas.
           if (((vhr(i,J,k) > 0.0) .and. ((G%mask2dT(i,j) < 0.5) .or. &
-                  (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S))) .or. &
+                  (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_S))) .or. &
               ((vhr(i,J,k) < 0.0) .and. ((G%mask2dT(i,j+1) < 0.5) .or. &
-                  (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N))) ) then
+                  (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N))) ) then
             do_i(i) = .true. ; do_any_i = .true.
             vhh(i,J) = vhr(i,J,k)
           endif
