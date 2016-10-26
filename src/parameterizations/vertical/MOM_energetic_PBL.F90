@@ -74,6 +74,8 @@ use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
+use CVmix_kpp, only : cvmix_kpp_efactor_model
+use CVmix_kinds_and_types, only : cvmix_global_params_type
 ! use MOM_EOS, only : calculate_density, calculate_density_derivs
 ! use MOM_EOS, only : calculate_2_densities
 
@@ -136,6 +138,7 @@ type, public :: energetic_PBL_CS ; private
                              ! function of negative or positive local buoyancy.
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
   logical :: TKE_diagnostics = .false.
+  logical :: Use_LT_LiFunction = .false.
   logical :: orig_PE_calc = .true.
   logical :: Use_MLD_iteration=.false. ! False to use old ePBL method.
   logical :: MLD_iteration_guess=.false. ! False to default to guessing half the
@@ -149,6 +152,7 @@ type, public :: energetic_PBL_CS ; private
   real, allocatable, dimension(:,:) :: &
     ML_depth, &        ! The mixed layer depth in m.
     ML_depth2, &       ! The mixed layer depth in m.
+    Enhance_V, &       ! The enhanced velocity scale (non-dim)
     diag_TKE_wind, &   ! The wind source of TKE.
     diag_TKE_MKE, &    ! The resolved KE source of TKE.
     diag_TKE_conv, &   ! The convective source of TKE.
@@ -166,6 +170,7 @@ type, public :: energetic_PBL_CS ; private
   integer :: id_TKE_mech_decay = -1, id_TKE_conv_decay = -1
   integer :: id_Hsfc_used = -1
   integer :: id_Mixing_Length = -1, id_Velocity_Scale = -1
+  integer :: id_OSBL = -1, id_LT_Enhancement = -1 
 end type energetic_PBL_CS
 
 integer :: num_msg = 0, max_msg = 2
@@ -331,7 +336,9 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   real :: I_dtrho   ! 1.0 / (dt * Rho0) in m3 kg-1 s-1.  This is
                     ! used convert TKE back into ustar^3.
   real :: U_star    ! The surface friction velocity, in m s-1.
+  real :: U_10      ! An approximate (neutral) wind speed backed out of the surface velocity
   real :: vstar     ! An in-situ turbulent velocity, in m s-1.
+  real :: Enhance_V ! An enhancement factor for vstar, based here on Langmuir impact. 
   real :: hbs_here  ! The local minimum of hb_hs and MixLen_shape, times a
                     ! conversion factor from H to M, in m H-1.
   real :: nstar_FC  ! The fraction of conv_PErel that can be converted to mixing, nondim.
@@ -441,6 +448,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   integer, save :: NOTCONVERGED!
   !-End BGR iteration parameters-----------------------------------------
   real :: N2_dissipation
+  type(cvmix_global_params_type) :: CVMIX_gravity 
   logical :: debug=.false.  ! Change this hard-coded value for debugging.
 !  The following arrays are used only for debugging purposes.
   real :: dPE_debug, mixing_debug
@@ -563,6 +571,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                     fluxes%frac_shelf_h(i,j) * fluxes%ustar_shelf(i,j)
       endif
       if (U_Star < CS%ustar_min) U_Star = CS%ustar_min
+      call ust_2_u10_coare3p5(U_STAR*sqrt(1025./1.25),U_10)
 
       if (CS%omega_frac >= 1.0) then ; absf(i) = 2.0*CS%omega
       else
@@ -649,12 +658,17 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
 
       ! Iterate up to MAX_OBL_IT times to determine a converged EPBL depth.
       OBL_CONVERGED = .false.
+      ! Initialize ENHANCE_V to 1
+      ENHANCE_V=1.e0
       do OBL_IT=1,MAX_OBL_IT ; if (.not. OBL_CONVERGED) then
+        if (CS%Use_LT_LiFunction) then
+          ENHANCE_V = cvmix_kpp_efactor_model ( u_10, u_star, MLD_guess, cvmix_gravity)
+        endif
         CS%ML_depth(i,j) = h(i,1)*GV%H_to_m
         !CS%ML_depth2(i,j) = h(i,1)*GV%H_to_m
 
         sfc_connected(i) = .true.
-        mech_TKE(i) = mech_TKE_top(i) ; conv_PErel(i) = conv_PErel_top(i)
+        mech_TKE(i) = mech_TKE_top(i)*ENHANCE_V**(3.) ; conv_PErel(i) = conv_PErel_top(i)
 
 
         if (CS%TKE_diagnostics) then
@@ -686,7 +700,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           do K=2,nz+1
             h_rsum = h_rsum + h(i,k-1)
             MixLen_shape(K) = CS%transLay_scale + (1.0 - CS%transLay_scale) * &
-                              (max(0.0, (MLD_guess - h_rsum)*I_MLD) )**2
+                              (max(0.0, (MLD_guess - h_rsum)*I_MLD) )**2 !BR prefer 1 or 2 for exponent?
           enddo
         endif
 
@@ -1268,6 +1282,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
         enddo
       endif
 
+      CS%Enhance_V(i,j) = Enhance_V
+
     else
       ! For masked points, Kd_int must still be set (to 0) because it has intent(out).
       do K=1,nz+1
@@ -1317,6 +1333,11 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       call post_data(CS%id_Mixing_Length, CS%Mixing_Length, CS%diag)
     if (CS%id_Velocity_Scale >0) &
       call post_data(CS%id_Velocity_Scale, CS%Velocity_Scale, CS%diag)
+    if (CS%id_OSBL >0) &
+      call post_data(CS%id_OSBL, CS%ML_Depth2, CS%diag)
+    if (CS%id_LT_Enhancement >0) &
+      call post_data(CS%id_LT_Enhancement, CS%Enhance_V, CS%diag)
+
   endif
 
 end subroutine energetic_PBL
@@ -1634,6 +1655,49 @@ subroutine energetic_PBL_get_MLD(CS, MLD, G)
   enddo ; enddo
 end subroutine energetic_PBL_get_MLD
 
+!> Computes wind speed from ustar based on COARE 3.5 Cd relationship
+subroutine ust_2_u10_coare3p5(UST,U10)
+  real, intent(in)  :: UST
+  real, intent(out) :: U10
+
+  real, parameter :: vonkar = 0.4
+  real, parameter :: nu=1e-6
+  real, parameter :: grav = 9.81
+
+  real :: z0sm, z0, z0rough, u10a, alpha, CD
+  integer :: CT
+  !alpha=m*U10+b
+  !Note in Edson et al. 2013, eq. 13 m is given as 0.017.  However,
+  ! m=0.0017 reproduces the curve in their figure 6.
+
+  z0sm = 0.11 * nu / ust; !Compute z0smooth from ustar guess
+  u10 = ust/sqrt(0.001);  !Guess for u10
+  u10a = 1000;
+
+  CT=0
+  do while (abs(u10a/u10-1.)>0.001)
+    CT=CT+1
+    u10a = u10
+    alpha = min(0.028,0.0017 * u10 - 0.005)
+    z0rough = alpha * ust**2/grav ! Compute z0rough from ustar guess
+    z0=z0sm+z0rough
+    CD = ( vonkar / log(10/z0) )**2 ! Compute CD from derived roughness
+    u10 = ust/sqrt(CD);!Compute new u10 from derived CD, while loop
+                       ! ends and checks for convergence...CT counter
+                       ! makes sure loop doesn't run away if function
+                       ! doesn't converge.  This code was produced in
+                       ! MATLAB and converged rapidly (e.g. 2 cycles)
+                       ! for ustar=0.0001:0.0001:10.
+    if (CT>20) then
+       write(*,*)'COARE Cd calculation not converging...'
+       exit
+    endif
+  enddo
+
+  return
+end subroutine ust_2_u10_coare3p5
+
+
 subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
@@ -1760,7 +1824,10 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
                  "in the boundary layer, applied when local stratification \n"//&
                  "is negative.  The default is 0, but should probably be ~1.", &
                  units="nondim", default=0.0)
-
+   call get_param(param_file, mod, "USE_LT_LI2016", CS%USE_LT_LiFunction, &
+                 "A logical to use the Li et al. 2016 (submitted) formula to \n"//&
+                 " determine the enhancement of velocity due to Langmuir \n"//&
+                 " turbulence.", units="nondim", default=.false.)
   ! This gives a minimum decay scale that is typically much less than Angstrom.
   CS%ustar_min = 2e-4*CS%omega*(GV%Angstrom_z + GV%H_to_m*GV%H_subroundoff)
   call log_param(param_file, mod, "EPBL_USTAR_MIN", CS%ustar_min, &
@@ -1789,7 +1856,12 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   CS%id_Mixing_Length = register_diag_field('ocean_model', 'Mixing_Length', diag%axesTi, &
       Time, 'Mixing Length that is used', 'meter')
   CS%id_Velocity_Scale = register_diag_field('ocean_model', 'Velocity_Scale', diag%axesTi, &
-      Time, 'Velocity Scale that is used.', 'meter second')
+      Time, 'Velocity Scale that is used.', 'meter second-1')
+  CS%id_LT_enhancement = register_diag_field('ocean_model', 'LT_Enhancement', diag%axesT1, &
+      Time, 'LT enhancement that is used.', 'non-dim')
+  CS%id_OSBL = register_diag_field('ocean_model', 'ePBL_OSBL', diag%axesT1, &
+      Time, 'Boundary layer depth from the iteration.', 'meter')
+
 
   call get_param(param_file, mod, "ENABLE_THERMODYNAMICS", use_temperature, &
                  "If true, temperature and salinity are used as state \n"//&
@@ -1817,6 +1889,7 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   endif
   call safe_alloc_alloc(CS%ML_depth, isd, ied, jsd, jed)
   call safe_alloc_alloc(CS%ML_depth2, isd, ied, jsd, jed)
+  call safe_alloc_alloc(CS%Enhance_V, isd, ied, jsd, jed)
 
 end subroutine energetic_PBL_init
 
@@ -1827,6 +1900,7 @@ subroutine energetic_PBL_end(CS)
 
   if (allocated(CS%ML_depth))            deallocate(CS%ML_depth)
   if (allocated(CS%ML_depth2))           deallocate(CS%ML_depth2)
+  if (allocated(CS%Enhance_V))           deallocate(CS%Enhance_V)
   if (allocated(CS%diag_TKE_wind))       deallocate(CS%diag_TKE_wind)
   if (allocated(CS%diag_TKE_MKE))        deallocate(CS%diag_TKE_MKE)
   if (allocated(CS%diag_TKE_conv))       deallocate(CS%diag_TKE_conv)
