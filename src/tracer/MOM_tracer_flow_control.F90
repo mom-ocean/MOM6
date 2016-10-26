@@ -43,7 +43,6 @@ use MOM_ALE_sponge, only : ALE_sponge_CS
 use MOM_tracer_registry, only : tracer_registry_type
 use MOM_variables, only : surface, thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
-
 #include <MOM_memory.h>
 
 ! Add references to other user-provide tracer modules here.

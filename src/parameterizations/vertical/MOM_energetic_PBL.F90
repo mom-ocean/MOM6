@@ -74,6 +74,8 @@ use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
+use CVmix_kpp, only : cvmix_kpp_efactor_model
+use CVmix_kinds_and_types, only : cvmix_global_params_type
 ! use MOM_EOS, only : calculate_density, calculate_density_derivs
 ! use MOM_EOS, only : calculate_2_densities
 
@@ -123,10 +125,24 @@ type, public :: energetic_PBL_CS ; private
   real    :: min_mix_len     ! The minimum mixing length scale that will be
                              ! used by ePBL, in m.  The default (0) does not
                              ! set a minimum.
+  real    :: N2_Dissipation_Scale_Neg 
+  real    :: N2_Dissipation_Scale_Pos
+                             ! A nondimensional scaling factor controlling the
+                             ! loss of TKE due to enhanced dissipation in the presence 
+                             ! of stratification.  This dissipation is applied to the 
+                             ! available TKE which includes both that generated at the 
+                             ! surface and that generated at depth.  It may be important
+                             ! to distinguish which TKE flavor that this dissipation
+                             ! applies to in subsequent revisions of this code.
+                             ! "_Neg" and "_Pos" refer to which scale is applied as a 
+                             ! function of negative or positive local buoyancy.
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
   logical :: TKE_diagnostics = .false.
+  logical :: Use_LT_LiFunction = .false.
   logical :: orig_PE_calc = .true.
   logical :: Use_MLD_iteration=.false. ! False to use old ePBL method.
+  logical :: MLD_iteration_guess=.false. ! False to default to guessing half the
+                                         ! ocean depth for the iteration.
   logical :: Mixing_Diagnostics = .false. ! Will be true when outputing mixing
                                           !  length and velocity scale
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
@@ -136,6 +152,7 @@ type, public :: energetic_PBL_CS ; private
   real, allocatable, dimension(:,:) :: &
     ML_depth, &        ! The mixed layer depth in m.
     ML_depth2, &       ! The mixed layer depth in m.
+    Enhance_V, &       ! The enhancement to the turbulent velocity scale (non-dim)
     diag_TKE_wind, &   ! The wind source of TKE.
     diag_TKE_MKE, &    ! The resolved KE source of TKE.
     diag_TKE_conv, &   ! The convective source of TKE.
@@ -153,6 +170,7 @@ type, public :: energetic_PBL_CS ; private
   integer :: id_TKE_mech_decay = -1, id_TKE_conv_decay = -1
   integer :: id_Hsfc_used = -1
   integer :: id_Mixing_Length = -1, id_Velocity_Scale = -1
+  integer :: id_OSBL = -1, id_LT_Enhancement = -1 
 end type energetic_PBL_CS
 
 integer :: num_msg = 0, max_msg = 2
@@ -318,7 +336,9 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   real :: I_dtrho   ! 1.0 / (dt * Rho0) in m3 kg-1 s-1.  This is
                     ! used convert TKE back into ustar^3.
   real :: U_star    ! The surface friction velocity, in m s-1.
+  real :: U_10      ! An approximate (neutral) wind speed backed out of the friction velocity
   real :: vstar     ! An in-situ turbulent velocity, in m s-1.
+  real :: Enhance_V ! An enhancement factor for vstar, based here on Langmuir impact. 
   real :: hbs_here  ! The local minimum of hb_hs and MixLen_shape, times a
                     ! conversion factor from H to M, in m H-1.
   real :: nstar_FC  ! The fraction of conv_PErel that can be converted to mixing, nondim.
@@ -427,7 +447,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   integer, save :: CONVERGED!
   integer, save :: NOTCONVERGED!
   !-End BGR iteration parameters-----------------------------------------
-
+  real :: N2_dissipation
+  type(cvmix_global_params_type) :: CVMIX_gravity 
   logical :: debug=.false.  ! Change this hard-coded value for debugging.
 !  The following arrays are used only for debugging purposes.
   real :: dPE_debug, mixing_debug
@@ -550,6 +571,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                     fluxes%frac_shelf_h(i,j) * fluxes%ustar_shelf(i,j)
       endif
       if (U_Star < CS%ustar_min) U_Star = CS%ustar_min
+      call ust_2_u10_coare3p5(U_STAR*sqrt(GV%Rho0/1.225),U_10)
 
       if (CS%omega_frac >= 1.0) then ; absf(i) = 2.0*CS%omega
       else
@@ -626,7 +648,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       !/BGR: Add MLD_guess based on stored previous value.
       !      note that this is different from ML_Depth already
       !      computed by EPBL, need to figure out why.
-      if (CS%ML_Depth2(i,j) > 1.) then
+      if (CS%MLD_iteration_guess .and. CS%ML_Depth2(i,j) > 1.) then
         !If prev value is present use for guess.
         MLD_guess=CS%ML_Depth2(i,j)
       else
@@ -636,12 +658,22 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
 
       ! Iterate up to MAX_OBL_IT times to determine a converged EPBL depth.
       OBL_CONVERGED = .false.
+      ! Initialize ENHANCE_V to 1
+      ENHANCE_V=1.e0
       do OBL_IT=1,MAX_OBL_IT ; if (.not. OBL_CONVERGED) then
+        if (CS%Use_LT_LiFunction) then
+          ENHANCE_V = cvmix_kpp_efactor_model ( u_10, u_star, MLD_guess, cvmix_gravity)
+        endif
         CS%ML_depth(i,j) = h(i,1)*GV%H_to_m
         !CS%ML_depth2(i,j) = h(i,1)*GV%H_to_m
 
         sfc_connected(i) = .true.
-        mech_TKE(i) = mech_TKE_top(i) ; conv_PErel(i) = conv_PErel_top(i)
+        ! Multiply mech TKE at surface by enhancement (w'/ust) cubed.
+        ! This has not been confirmed to reproduce LES Langmuir simulations,
+        ! but is consistent if we assume we are trying to capture the enhancement
+        ! of the TKE flux/ (turbulent velocity scale cubed) knowing that the
+        ! enhancement factor is that of the turbulent velocity scale.
+        mech_TKE(i) = mech_TKE_top(i)*ENHANCE_V**(3.) ; conv_PErel(i) = conv_PErel_top(i)
 
 
         if (CS%TKE_diagnostics) then
@@ -673,7 +705,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           do K=2,nz+1
             h_rsum = h_rsum + h(i,k-1)
             MixLen_shape(K) = CS%transLay_scale + (1.0 - CS%transLay_scale) * &
-                              (max(0.0, (MLD_guess - h_rsum)*I_MLD) )**2
+                              (max(0.0, (MLD_guess - h_rsum)*I_MLD) )**2 !BR prefer 1 or 2 for exponent?
           enddo
         endif
 
@@ -704,7 +736,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           if (CS%TKE_diagnostics) &
             dTKE_mech_decay = dTKE_mech_decay + (exp_kh-1.0) * mech_TKE(i) * IdtdR0
           mech_TKE(i) = mech_TKE(i) * exp_kh
-
 
           !   Accumulate any convectively released potential energy to contribute
           ! to wstar and to drive penetrating convection.
@@ -896,6 +927,14 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
 
             MKE_src = dMKE_max*(1.0 - exp(-Kddt_h_g0 * MKE2_Hharm))
 
+            if (pe_chg_g0 .gt. 0.0) then
+              !Negative buoyancy (increases PE)
+              N2_dissipation = 1.+CS%N2_DISSIPATION_SCALE_NEG
+            else
+              !Positive buoyancy (decreases PE) 
+              N2_dissipation = 1.+CS%N2_DISSIPATION_SCALE_POS
+            endif
+
             if ((PE_chg_g0 < 0.0) .or. ((vstar == 0.0) .and. (dPEc_dKd_Kd0 < 0.0))) then
               ! This column is convectively unstable.
               if (PE_chg_max <= 0.0) then
@@ -956,7 +995,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
               endif
 
               Kddt_h(K) = Kd(i,k)*dt_h
-            elseif (tot_TKE + (MKE_src - PE_chg_g0) >= 0.0) then
+            elseif (tot_TKE + (MKE_src - N2_DISSIPATION*PE_chg_g0) >= 0.0) then
               ! There is energy to support the suggested mixing.  Keep that estimate.
               Kd(i,k) = Kd_guess0
               Kddt_h(K) = Kddt_h_g0
@@ -964,8 +1003,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
               ! Reduce the mechanical and convective TKE proportionately.
               tot_TKE = tot_TKE + MKE_src
               TKE_reduc = 0.0   ! tot_TKE could be 0 if Convectively_stable is false.
-              if (tot_TKE > 0.0) TKE_reduc = (tot_TKE - PE_chg_g0) / tot_TKE
-
+              if (tot_TKE > 0.0) TKE_reduc = (tot_TKE - N2_DISSIPATION*PE_chg_g0) &
+                                             / tot_TKE
               if (CS%TKE_diagnostics) then
                 dTKE_mixing = dTKE_mixing - PE_chg_g0 * IdtdR0
                 dTKE_MKE = dTKE_MKE + MKE_src * IdtdR0
@@ -988,12 +1027,14 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
               ! There is not enough energy to support the mixing, so reduce the
               ! diffusivity to what can be supported.
               Kddt_h_max = Kddt_h_g0 ; Kddt_h_min = 0.0
-              TKE_left_max = tot_TKE + (MKE_src - PE_chg_g0) ; TKE_left_min = tot_TKE
+              TKE_left_max = tot_TKE + (MKE_src - N2_DISSIPATION*PE_chg_g0) ; 
+              TKE_left_min = tot_TKE
 
               ! As a starting guess, take the minimum of a false position estimate
               ! and a Newton's method estimate starting from Kddt_h = 0.0.
-              Kddt_h_guess = tot_TKE * Kddt_h_max / max( PE_chg_g0 - MKE_src, &
-                                 Kddt_h_max * (dPEc_dKd_Kd0 - dMKE_max * MKE2_Hharm) )
+              Kddt_h_guess = tot_TKE * Kddt_h_max / max( N2_DISSIPATION*PE_chg_g0 &
+                                 - MKE_src, Kddt_h_max * (dPEc_dKd_Kd0 - dMKE_max *        &
+                                 MKE2_Hharm) )
               ! The above expression is mathematically the same as the following
               ! except it is not susceptible to division by zero when
               !   dPEc_dKd_Kd0 = dMKE_max = 0 .
@@ -1022,10 +1063,11 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                 MKE_src = dMKE_max * (1.0 - exp(-MKE2_Hharm * Kddt_h_guess))
                 dMKE_src_dK = dMKE_max * MKE2_Hharm * exp(-MKE2_Hharm * Kddt_h_guess)
 
-                TKE_left = tot_TKE + (MKE_src - PE_chg)
+                TKE_left = tot_TKE + (MKE_src - N2_DISSIPATION*PE_chg)
                 if (debug) then
                   Kddt_h_itt(itt) = Kddt_h_guess ; MKE_src_itt(itt) = MKE_src
-                  PE_chg_itt(itt) = PE_chg ; TKE_left_itt(itt) = TKE_left
+                  PE_chg_itt(itt) = N2_DISSIPATION*PE_chg
+                  TKE_left_itt(itt) = TKE_left
                   dPEa_dKd_itt(itt) = dPEc_dKd
                 endif
                 ! Store the new bounding values, bearing in mind that min and max
@@ -1039,10 +1081,10 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                 ! Try to use Newton's method, but if it would go outside the bracketed
                 ! values use the false-position method instead.
                 use_Newt = .true.
-                if (dPEc_dKd - dMKE_src_dK <= 0.0) then
+                if (dPEc_dKd*N2_DISSIPATION - dMKE_src_dK <= 0.0) then
                   use_Newt = .false.
                 else
-                  dKddt_h_Newt = TKE_left / (dPEc_dKd - dMKE_src_dK)
+                  dKddt_h_Newt = TKE_left / (dPEc_dKd*N2_DISSIPATION - dMKE_src_dK)
                   Kddt_h_Newt = Kddt_h_guess + dKddt_h_Newt
                   if ((Kddt_h_Newt > Kddt_h_max) .or. (Kddt_h_Newt < Kddt_h_min)) &
                     use_Newt = .false.
@@ -1244,6 +1286,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           CS%Velocity_Scale(i,j,k) = Vstar_Used(k)
         enddo
       endif
+      CS%Enhance_V(i,j) = Enhance_V
 
     else
       ! For masked points, Kd_int must still be set (to 0) because it has intent(out).
@@ -1294,6 +1337,10 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       call post_data(CS%id_Mixing_Length, CS%Mixing_Length, CS%diag)
     if (CS%id_Velocity_Scale >0) &
       call post_data(CS%id_Velocity_Scale, CS%Velocity_Scale, CS%diag)
+    if (CS%id_OSBL >0) &
+      call post_data(CS%id_OSBL, CS%ML_Depth2, CS%diag)
+    if (CS%id_LT_Enhancement >0) &
+      call post_data(CS%id_LT_Enhancement, CS%Enhance_V, CS%diag)
   endif
 
 end subroutine energetic_PBL
@@ -1611,6 +1658,49 @@ subroutine energetic_PBL_get_MLD(CS, MLD, G)
   enddo ; enddo
 end subroutine energetic_PBL_get_MLD
 
+!> Computes wind speed from ustar_air based on COARE 3.5 Cd relationship
+subroutine ust_2_u10_coare3p5(USTair,U10)
+  real, intent(in)  :: USTair
+  real, intent(out) :: U10
+  real, parameter :: vonkar = 0.4
+  real, parameter :: nu=1e-6
+  real, parameter :: grav = 9.81
+  real :: z0sm, z0, z0rough, u10a, alpha, CD
+  integer :: CT
+
+  ! Uses empirical formula for z0 to convert ustar_air to u10 based on the 
+  !  COARE 3.5 paper (Edson et al., 2013)
+  !alpha=m*U10+b
+  !Note in Edson et al. 2013, eq. 13 m is given as 0.017.  However,
+  ! m=0.0017 reproduces the curve in their figure 6.
+
+  z0sm = 0.11 * nu / USTair; !Compute z0smooth from ustar guess
+  u10 = USTair/sqrt(0.001);  !Guess for u10
+  u10a = 1000;
+
+  CT=0
+  do while (abs(u10a/u10-1.)>0.001)
+    CT=CT+1
+    u10a = u10
+    alpha = min(0.028,0.0017 * u10 - 0.005)
+    z0rough = alpha * USTair**2/grav ! Compute z0rough from ustar guess
+    z0=z0sm+z0rough
+    CD = ( vonkar / log(10/z0) )**2 ! Compute CD from derived roughness
+    u10 = USTair/sqrt(CD);!Compute new u10 from derived CD, while loop
+                       ! ends and checks for convergence...CT counter
+                       ! makes sure loop doesn't run away if function
+                       ! doesn't converge.  This code was produced offline
+                       ! and converged rapidly (e.g. 2 cycles)
+                       ! for ustar=0.0001:0.0001:10.
+    if (CT>20) then
+      u10 = USTair/sqrt(0.0015) ! I don't expect to get here, but just 
+                              !  in case it will output a reasonable value. 
+      exit
+    endif
+  enddo
+  return
+end subroutine ust_2_u10_coare3p5
+
 subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
@@ -1701,6 +1791,10 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
                  "A logical that specifies whether or not to use the \n"//&
                  "distance to the bottom of the actively turblent boundary \n"//&
                  "layer to help set the EPBL length scale.", default=.false.)
+  call get_param(param_file, mod, "MLD_ITERATION_GUESS", CS%MLD_ITERATION_GUESS, &
+                 "A logical that specifies whether or not to use the \n"//&
+                 "previous timestep MLD as a first guess in the MLD iteration.\n"//&
+                 "The default is false to facilitate reproducibility.", default=.false.)
   call get_param(param_file, mod, "EPBL_MLD_TOLERANCE", CS%MLD_tol, &
                  "The tolerance for the iteratively determined mixed \n"//&
                  "layer depth.  This is only used with USE_MLD_ITERATION.", &
@@ -1717,10 +1811,26 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   call get_param(param_file, mod, "EPBL_TRANSITION_SCALE", CS%transLay_scale, &
                  "A scale for the mixing length in the transition layer \n"//&
                  "at the edge of the boundary layer as a fraction of the \n"//&
-                 "boundary layer thickness.  The default is 0, but a \n"//&
-                 "value of 0.1 might be better justified by observations.", &
+                 "boundary layer thickness.  The default is 0.1.", &
+                 units="nondim", default=0.1)
+  if ( CS%USE_MLD_ITERATION .and. abs(CS%transLay_scale-0.5).ge.0.5) then
+    call MOM_error(FATAL, "If flag USE_MLD_ITERATION is true, then "//&
+                 "EPBL_TRANSITION should be greater than 0 and less than 1.")
+  endif
+  call get_param(param_file, mod, "N2_DISSIPATION_POS", CS%N2_Dissipation_Scale_Pos, &
+                 "A scale for the dissipation of TKE due to stratification \n"//&
+                 "in the boundary layer, applied when local stratification \n"//&
+                 "is positive.  The default is 0, but should probably be ~0.4.", &
                  units="nondim", default=0.0)
-
+  call get_param(param_file, mod, "N2_DISSIPATION_NEG", CS%N2_Dissipation_Scale_Neg, &
+                 "A scale for the dissipation of TKE due to stratification \n"//&
+                 "in the boundary layer, applied when local stratification \n"//&
+                 "is negative.  The default is 0, but should probably be ~1.", &
+                 units="nondim", default=0.0)
+   call get_param(param_file, mod, "USE_LT_LI2016", CS%USE_LT_LiFunction, &
+                 "A logical to use the Li et al. 2016 (submitted) formula to \n"//&
+                 " determine the enhancement of velocity due to Langmuir \n"//&
+                 " turbulence.", units="nondim", default=.false.)
   ! This gives a minimum decay scale that is typically much less than Angstrom.
   CS%ustar_min = 2e-4*CS%omega*(GV%Angstrom_z + GV%H_to_m*GV%H_subroundoff)
   call log_param(param_file, mod, "EPBL_USTAR_MIN", CS%ustar_min, &
@@ -1749,7 +1859,12 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   CS%id_Mixing_Length = register_diag_field('ocean_model', 'Mixing_Length', diag%axesTi, &
       Time, 'Mixing Length that is used', 'meter')
   CS%id_Velocity_Scale = register_diag_field('ocean_model', 'Velocity_Scale', diag%axesTi, &
-      Time, 'Velocity Scale that is used.', 'meter second')
+      Time, 'Velocity Scale that is used.', 'meter second-1')
+  CS%id_LT_enhancement = register_diag_field('ocean_model', 'LT_Enhancement', diag%axesT1, &
+      Time, 'LT enhancement that is used.', 'non-dim')
+  CS%id_OSBL = register_diag_field('ocean_model', 'ePBL_OSBL', diag%axesT1, &
+      Time, 'Boundary layer depth from the iteration.', 'meter')
+
 
   call get_param(param_file, mod, "ENABLE_THERMODYNAMICS", use_temperature, &
                  "If true, temperature and salinity are used as state \n"//&
@@ -1777,6 +1892,7 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   endif
   call safe_alloc_alloc(CS%ML_depth, isd, ied, jsd, jed)
   call safe_alloc_alloc(CS%ML_depth2, isd, ied, jsd, jed)
+  call safe_alloc_alloc(CS%Enhance_V, isd, ied, jsd, jed)
 
 end subroutine energetic_PBL_init
 
@@ -1787,6 +1903,7 @@ subroutine energetic_PBL_end(CS)
 
   if (allocated(CS%ML_depth))            deallocate(CS%ML_depth)
   if (allocated(CS%ML_depth2))           deallocate(CS%ML_depth2)
+  if (allocated(CS%Enhance_V))           deallocate(CS%Enhance_V)
   if (allocated(CS%diag_TKE_wind))       deallocate(CS%diag_TKE_wind)
   if (allocated(CS%diag_TKE_MKE))        deallocate(CS%diag_TKE_MKE)
   if (allocated(CS%diag_TKE_conv))       deallocate(CS%diag_TKE_conv)

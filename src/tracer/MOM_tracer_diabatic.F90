@@ -248,8 +248,8 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, &
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  ! Only apply forcing if fluxes%sw is associated.
-  if (.not.ASSOCIATED(fluxes%sw)) return
+!  ! Only apply forcing if fluxes%sw is associated.
+!  if (.not.ASSOCIATED(fluxes%sw)) return
 
   in_flux(:,:) = 0.0 ; out_flux(:,:) = 0.0
   if(present(in_flux_optional)) then

@@ -62,6 +62,7 @@ use MOM_verticalGrid,        only : verticalGrid_type
 use MOM_wave_speed,          only : wave_speeds
 use time_manager_mod,        only : increment_time ! for testing itides (BDM)
 
+
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -73,7 +74,7 @@ public adiabatic
 public adiabatic_driver_init
 
 !> Control structure for this module
-type, public :: diabatic_CS ; private
+type, public :: diabatic_CS ;
   logical :: bulkmixedlayer          !< If true, a refined bulk mixed layer is used with
                                      !! nkml sublayers (and additional buffer layers).
   logical :: use_energetic_PBL       !< If true, use the implicit energetics planetary
@@ -742,7 +743,6 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, dt, fluxes, CS%optics, &
                           h, tv, CS%aggregate_FW_forcing, cTKE, dSV_dT, dSV_dS)
 
-
       if (CS%debug) then
         call hchksum(ea, "after applyBoundaryFluxes ea",G%HI,haloshift=0)
         call hchksum(eb, "after applyBoundaryFluxes eb",G%HI,haloshift=0)
@@ -1136,8 +1136,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
         endif ; endif
       enddo ; enddo
       do i=is,ie ; eatr(i,j,1) = ea(i,j,1) ; enddo
+        
     enddo
-
 
     if (CS%useALEalgorithm) then
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
@@ -1170,6 +1170,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       ebtr(i,j,k-1) = eb(i,j,k-1) + add_ent
       eatr(i,j,k) = ea(i,j,k) + add_ent
     enddo ; enddo ; enddo
+
     if (CS%useALEalgorithm) then
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
       call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
@@ -1194,6 +1195,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     endif
 
   endif  ! (CS%mix_boundary_tracers)
+
+
 
   call cpu_clock_end(id_clock_tracers)
 
@@ -1404,8 +1407,9 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   if (CS%id_Kd_salt      > 0) call post_data(CS%id_Kd_salt,      Kd_salt, CS%diag)
   if (CS%id_Kd_ePBL      > 0) call post_data(CS%id_Kd_ePBL,      Kd_ePBL, CS%diag)
 
-  if (CS%id_ea       > 0) call post_data(CS%id_ea,       ea,             CS%diag)
-  if (CS%id_eb       > 0) call post_data(CS%id_eb,       eb,             CS%diag)
+  if (CS%id_ea       > 0) call post_data(CS%id_ea,       ea, CS%diag)
+  if (CS%id_eb       > 0) call post_data(CS%id_eb,       eb, CS%diag)
+
   if (CS%id_dudt_dia > 0) call post_data(CS%id_dudt_dia, ADp%du_dt_dia,  CS%diag)
   if (CS%id_dvdt_dia > 0) call post_data(CS%id_dvdt_dia, ADp%dv_dt_dia,  CS%diag)
   if (CS%id_wd       > 0) call post_data(CS%id_wd,       CDp%diapyc_vel, CS%diag)

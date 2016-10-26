@@ -9,7 +9,8 @@ use MOM_diag_mediator,         only : post_data, diag_ctrl
 use MOM_diag_mediator,         only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_domains,               only : sum_across_PEs, max_across_PEs
 use MOM_domains,               only : create_group_pass, do_group_pass, group_pass_type
-use MOM_checksums,             only : hchksum
+use MOM_domains,               only : pass_vector
+use MOM_checksums,             only : hchksum, uchksum, vchksum
 use MOM_EOS,                   only : calculate_density
 use MOM_error_handler,         only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_error_handler,         only : MOM_set_verbosity, callTree_showQuery
@@ -61,6 +62,8 @@ type, public :: tracer_hor_diff_CS ; private
   integer :: id_KhTr_v  = -1
   integer :: id_KhTr_h  = -1
   integer :: id_CFL     = -1
+  integer :: id_khdt_x  = -1
+  integer :: id_khdt_y  = -1
 
   type(group_pass_type) :: pass_t !For group halo pass, used in both 
                                   !tracer_hordiff and tracer_epipycnal_ML_diff
@@ -81,7 +84,7 @@ contains
 !! using the diffusivity in CS%KhTr, or using space-dependent diffusivity.  
 !! Multiple iterations are used (if necessary) so that there is no limit 
 !! on the acceptable time increment.
-subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv)
+subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_flag, read_khdt_x, read_khdt_y)
   type(ocean_grid_type),                 intent(inout) :: G       !< Grid type 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h       !< Layer thickness (m or kg m-2)
   real,                                  intent(in)    :: dt      !< time step (seconds)
@@ -96,6 +99,12 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv)
                                                                   !! NULL ptrs, and these may (probably will) point to 
                                                                   !! some of the same arrays as Tr does.  tv is required
                                                                   !! for epipycnal mixing between mixed layer and the interior.
+  ! Optional inputs for offline tracer transport
+  logical,                           optional             :: do_online_flag
+  real, dimension(SZIB_(G),SZJ_(G)), optional, intent(in) :: read_khdt_x
+  real, dimension(SZI_(G),SZJB_(G)), optional, intent(in) :: read_khdt_y
+  
+
   real, dimension(SZI_(G),SZJ_(G)) :: &
     Ihdxdy, &     ! The inverse of the volume or mass of fluid in a layer in a
                   ! grid cell, in m-3 or kg-1.
@@ -103,6 +112,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv)
     CFL, &        ! A diffusive CFL number for each cell, nondim.
     dTr           ! The change in a tracer's concentration, in units of
                   ! concentration.
+
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     khdt_x, &     ! The value of Khtr*dt times the open face width divided by
                   ! the distance between adjacent tracer points, in m2.
@@ -117,7 +127,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv)
     Kh_v          ! Tracer mixing coefficient at u-points, in m2 s-1.
 
   real :: max_CFL ! The global maximum of the diffusive CFL number.
-  logical :: use_VarMix, Resoln_scaled
+  logical :: use_VarMix, Resoln_scaled, do_online
   integer :: i, j, k, m, is, ie, js, je, nz, ntr, itt, num_itts
   real :: I_numitts  ! The inverse of the number of iterations, num_itts.
   real :: scale      ! The fraction of khdt_x or khdt_y that is applied in this
@@ -131,6 +141,10 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv)
   real :: normalize  ! normalization used for diagnostic Kh_h; diffusivity averaged to h-points. 
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
+
+  do_online = .true.
+  if (present(do_online_flag)) do_online = do_online_flag
+
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
        "register_tracer must be called before tracer_hordiff.")
   if (LOC(Reg)==0) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
@@ -170,95 +184,105 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv)
   call cpu_clock_end(id_clock_pass)
 
   if (CS%show_call_tree) call callTree_waypoint("Calculating diffusivity (tracer_hordiff)")
-  if (use_VarMix) then
-!$OMP parallel default(none) shared(is,ie,js,je,CS,VarMix,MEKE,Resoln_scaled, &
-!$OMP                               Kh_u,Kh_v,khdt_x,dt,G,khdt_y)                        &
-!$OMP                       private(Kh_loc,Rd_dx) 
-!$OMP do
-    do j=js,je ; do I=is-1,ie
-      Kh_loc = CS%KhTr + CS%KhTr_Slope_Cff*VarMix%L2u(I,j)*VarMix%SN_u(I,j)
-      if (associated(MEKE%Kh)) &
-        Kh_Loc = Kh_Loc + MEKE%KhTr_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i+1,j))
-      if (CS%KhTr_max > 0.) Kh_loc = min(Kh_loc, CS%KhTr_max)
-      if (Resoln_scaled) &
-        Kh_Loc = Kh_Loc * 0.5*(VarMix%Res_fn_h(i,j) + VarMix%Res_fn_h(i+1,j))
-      Kh_u(I,j) = max(Kh_loc, CS%KhTr_min)
-      if (CS%KhTr_passivity_coeff>0.) then ! Apply passivity
-        Rd_dx=0.5*( VarMix%Rd_dx_h(i,j)+VarMix%Rd_dx_h(i+1,j) ) ! Rd/dx at u-points
-        Kh_loc=Kh_u(I,j)*max( CS%KhTr_passivity_min, CS%KhTr_passivity_coeff*Rd_dx )
-        if (CS%KhTr_max > 0.) Kh_loc = min(Kh_loc, CS%KhTr_max) ! Re-apply max
-        Kh_u(I,j) = max(Kh_loc, CS%KhTr_min) ! Re-apply min
-      endif
-    enddo ; enddo
-!$OMP do
-    do J=js-1,je ;  do i=is,ie
-      Kh_loc = CS%KhTr + CS%KhTr_Slope_Cff*VarMix%L2v(i,J)*VarMix%SN_v(i,J)
-      if (associated(MEKE%Kh)) &
-        Kh_Loc = Kh_Loc + MEKE%KhTr_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i,j+1))
-      if (CS%KhTr_max > 0.) Kh_loc = min(Kh_loc, CS%KhTr_max)
-      if (Resoln_scaled) &
-        Kh_Loc = Kh_Loc * 0.5*(VarMix%Res_fn_h(i,j) + VarMix%Res_fn_h(i,j+1))
-      Kh_v(i,J) = max(Kh_loc, CS%KhTr_min)
-      if (CS%KhTr_passivity_coeff>0.) then ! Apply passivity
-        Rd_dx=0.5*( VarMix%Rd_dx_h(i,j)+VarMix%Rd_dx_h(i,j+1) ) ! Rd/dx at v-points
-        Kh_loc=Kh_v(I,j)*max( CS%KhTr_passivity_min, CS%KhTr_passivity_coeff*Rd_dx )
-        if (CS%KhTr_max > 0.) Kh_loc = min(Kh_loc, CS%KhTr_max) ! Re-apply max
-        Kh_v(i,J) = max(Kh_loc, CS%KhTr_min) ! Re-apply min
-      endif
-    enddo ; enddo
-!$OMP do
-    do j=js,je ; do I=is-1,ie
-      khdt_x(I,j) = dt*(Kh_u(I,j)*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
-    enddo ; enddo
-!$OMP do
-    do J=js-1,je ; do i=is,ie
-      khdt_y(i,J) = dt*(Kh_v(i,J)*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
-    enddo ; enddo
-!$OMP end parallel
-  elseif (Resoln_scaled) then
-!$OMP parallel default(none) shared(is,ie,js,je,VarMix,Kh_u,Kh_v,khdt_x,khdt_y,CS,dt,G) &
-!$OMP                       private(Res_fn)
-!$OMP do
-    do j=js,je ; do I=is-1,ie
-      Res_fn = 0.5 * (VarMix%Res_fn_h(i,j) + VarMix%Res_fn_h(i+1,j))
-      Kh_u(I,j) = max(CS%KhTr * Res_fn, CS%KhTr_min)
-      khdt_x(I,j) = dt*(CS%KhTr*(G%dy_Cu(I,j)*G%IdxCu(I,j))) * Res_fn
-    enddo ; enddo
-!$OMP do
-    do J=js-1,je ;  do i=is,ie
-      Res_fn = 0.5*(VarMix%Res_fn_h(i,j) + VarMix%Res_fn_h(i,j+1))
-      Kh_v(i,J) = max(CS%KhTr * Res_fn, CS%KhTr_min)
-      khdt_y(i,J) = dt*(CS%KhTr*(G%dx_Cv(i,J)*G%IdyCv(i,J))) * Res_fn
-    enddo ; enddo
-!$OMP end parallel
-  else
-!$OMP parallel default(none) shared(is,ie,js,je,Kh_u,Kh_v,khdt_x,khdt_y,CS,G,dt)
-    if (CS%id_KhTr_u > 0) then 
-!$OMP do
-      do j=js,je ; do I=is-1,ie
-        Kh_u(I,j) = CS%KhTr
-        khdt_x(I,j) = dt*(CS%KhTr*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
-      enddo ; enddo 
-    else
-!$OMP do 
-      do j=js,je ; do I=is-1,ie
-        khdt_x(I,j) = dt*(CS%KhTr*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
-      enddo ; enddo 
-    endif
-    if (CS%id_KhTr_v > 0) then 
-!$OMP do
-      do J=js-1,je ;  do i=is,ie
-        Kh_v(i,J) = CS%KhTr
-        khdt_y(i,J) = dt*(CS%KhTr*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
-      enddo ; enddo 
-    else 
-!$OMP do
-      do J=js-1,je ;  do i=is,ie
-        khdt_y(i,J) = dt*(CS%KhTr*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
-      enddo ; enddo 
-    endif
-!$OMP end parallel
-  endif
+
+  if (do_online) then
+      if (use_VarMix) then
+    !$OMP parallel default(none) shared(is,ie,js,je,CS,VarMix,MEKE,Resoln_scaled, &
+    !$OMP                               Kh_u,Kh_v,khdt_x,dt,G,khdt_y)                        &
+    !$OMP                       private(Kh_loc,Rd_dx)
+    !$OMP do
+        do j=js,je ; do I=is-1,ie
+          Kh_loc = CS%KhTr + CS%KhTr_Slope_Cff*VarMix%L2u(I,j)*VarMix%SN_u(I,j)
+          if (associated(MEKE%Kh)) &
+            Kh_Loc = Kh_Loc + MEKE%KhTr_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i+1,j))
+          if (CS%KhTr_max > 0.) Kh_loc = min(Kh_loc, CS%KhTr_max)
+          if (Resoln_scaled) &
+            Kh_Loc = Kh_Loc * 0.5*(VarMix%Res_fn_h(i,j) + VarMix%Res_fn_h(i+1,j))
+          Kh_u(I,j) = max(Kh_loc, CS%KhTr_min)
+          if (CS%KhTr_passivity_coeff>0.) then ! Apply passivity
+            Rd_dx=0.5*( VarMix%Rd_dx_h(i,j)+VarMix%Rd_dx_h(i+1,j) ) ! Rd/dx at u-points
+            Kh_loc=Kh_u(I,j)*max( CS%KhTr_passivity_min, CS%KhTr_passivity_coeff*Rd_dx )
+            if (CS%KhTr_max > 0.) Kh_loc = min(Kh_loc, CS%KhTr_max) ! Re-apply max
+            Kh_u(I,j) = max(Kh_loc, CS%KhTr_min) ! Re-apply min
+          endif
+        enddo ; enddo
+    !$OMP do
+        do J=js-1,je ;  do i=is,ie
+          Kh_loc = CS%KhTr + CS%KhTr_Slope_Cff*VarMix%L2v(i,J)*VarMix%SN_v(i,J)
+          if (associated(MEKE%Kh)) &
+            Kh_Loc = Kh_Loc + MEKE%KhTr_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i,j+1))
+          if (CS%KhTr_max > 0.) Kh_loc = min(Kh_loc, CS%KhTr_max)
+          if (Resoln_scaled) &
+            Kh_Loc = Kh_Loc * 0.5*(VarMix%Res_fn_h(i,j) + VarMix%Res_fn_h(i,j+1))
+          Kh_v(i,J) = max(Kh_loc, CS%KhTr_min)
+          if (CS%KhTr_passivity_coeff>0.) then ! Apply passivity
+            Rd_dx=0.5*( VarMix%Rd_dx_h(i,j)+VarMix%Rd_dx_h(i,j+1) ) ! Rd/dx at v-points
+            Kh_loc=Kh_v(I,j)*max( CS%KhTr_passivity_min, CS%KhTr_passivity_coeff*Rd_dx )
+            if (CS%KhTr_max > 0.) Kh_loc = min(Kh_loc, CS%KhTr_max) ! Re-apply max
+            Kh_v(i,J) = max(Kh_loc, CS%KhTr_min) ! Re-apply min
+          endif
+        enddo ; enddo
+
+    !$OMP do
+        do j=js,je ; do I=is-1,ie
+          khdt_x(I,j) = dt*(Kh_u(I,j)*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
+        enddo ; enddo
+    !$OMP do
+        do J=js-1,je ; do i=is,ie
+          khdt_y(i,J) = dt*(Kh_v(i,J)*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
+        enddo ; enddo
+    !$OMP end parallel
+      elseif (Resoln_scaled) then
+    !$OMP parallel default(none) shared(is,ie,js,je,VarMix,Kh_u,Kh_v,khdt_x,khdt_y,CS,dt,G) &
+    !$OMP                       private(Res_fn)
+    !$OMP do
+        do j=js,je ; do I=is-1,ie
+          Res_fn = 0.5 * (VarMix%Res_fn_h(i,j) + VarMix%Res_fn_h(i+1,j))
+          Kh_u(I,j) = max(CS%KhTr * Res_fn, CS%KhTr_min)
+          khdt_x(I,j) = dt*(CS%KhTr*(G%dy_Cu(I,j)*G%IdxCu(I,j))) * Res_fn
+        enddo ; enddo
+    !$OMP do
+        do J=js-1,je ;  do i=is,ie
+          Res_fn = 0.5*(VarMix%Res_fn_h(i,j) + VarMix%Res_fn_h(i,j+1))
+          Kh_v(i,J) = max(CS%KhTr * Res_fn, CS%KhTr_min)
+          khdt_y(i,J) = dt*(CS%KhTr*(G%dx_Cv(i,J)*G%IdyCv(i,J))) * Res_fn
+        enddo ; enddo
+    !$OMP end parallel
+      else
+    !$OMP parallel default(none) shared(is,ie,js,je,Kh_u,Kh_v,khdt_x,khdt_y,CS,G,dt)
+        if (CS%id_KhTr_u > 0) then
+    !$OMP do
+          do j=js,je ; do I=is-1,ie
+            Kh_u(I,j) = CS%KhTr
+            khdt_x(I,j) = dt*(CS%KhTr*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
+          enddo ; enddo
+        else
+    !$OMP do
+          do j=js,je ; do I=is-1,ie
+            khdt_x(I,j) = dt*(CS%KhTr*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
+          enddo ; enddo
+        endif
+        if (CS%id_KhTr_v > 0) then
+    !$OMP do
+          do J=js-1,je ;  do i=is,ie
+            Kh_v(i,J) = CS%KhTr
+            khdt_y(i,J) = dt*(CS%KhTr*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
+          enddo ; enddo
+        else
+    !$OMP do
+          do J=js-1,je ;  do i=is,ie
+            khdt_y(i,J) = dt*(CS%KhTr*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
+          enddo ; enddo
+        endif
+    !$OMP end parallel
+      endif ! VarMix
+  else ! .not. do_online
+    khdt_x = read_khdt_x
+    khdt_y = read_khdt_y
+    call pass_vector(khdt_x,khdt_y,G%Domain)
+  endif ! do_online
+
+
 
   if (CS%check_diffusive_CFL) then
     if (CS%show_call_tree) call callTree_waypoint("Checking diffusive CFL (tracer_hordiff)")
@@ -447,6 +471,16 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv)
     call post_data(CS%id_KhTr_h, Kh_h, CS%diag, mask=G%mask2dT)
   endif 
 
+
+  if( CS%debug ) then
+    call uchksum(khdt_x,"After tracer diffusion khdt_x", G%HI, haloshift=2)
+    call vchksum(khdt_y,"After tracer diffusion khdt_y", G%HI, haloshift=2)
+    call uchksum(Coef_x,"After tracer diffusion Coef_x", G%HI, haloshift=2)
+    call vchksum(Coef_y,"After tracer diffusion Coef_y", G%HI, haloshift=2)
+  endif
+
+  if (CS%id_khdt_x > 0) call post_data(CS%id_khdt_x, khdt_x, CS%diag)
+  if (CS%id_khdt_y > 0) call post_data(CS%id_khdt_y, khdt_y, CS%diag)
 
   if (CS%show_call_tree) call callTree_leave("tracer_hordiff()")
 
@@ -1395,10 +1429,16 @@ subroutine tracer_hor_diff_init(Time, G, param_file, diag, CS, CSnd)
      cmor_field_name='diftrelo', cmor_units='m2 sec-1',                         &
      cmor_standard_name= 'ocean_tracer_epineutral_laplacian_diffusivity',       &
      cmor_long_name = 'Ocean Tracer Epineutral Laplacian Diffusivity') 
+
+  CS%id_khdt_x = register_diag_field('ocean_model', 'KHDT_x', diag%axesCu1, Time, &
+     'Epipycnal tracer diffusivity operator at zonal faces of tracer cell', 'meter2')
+  CS%id_khdt_y = register_diag_field('ocean_model', 'KHDT_y', diag%axesCv1, Time, &
+     'Epipycnal tracer diffusivity operator at meridional faces of tracer cell', 'meter2')
   if (CS%check_diffusive_CFL) then 
     CS%id_CFL = register_diag_field('ocean_model', 'CFL_lateral_diff', diag%axesT1, Time,&
        'Grid CFL number for lateral/neutral tracer diffusion', 'dimensionless') 
   endif
+
 
 end subroutine tracer_hor_diff_init
 
