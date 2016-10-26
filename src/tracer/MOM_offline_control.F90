@@ -21,8 +21,6 @@ use MOM_diabatic_aux,     only : diabatic_aux_CS
 
 implicit none
 
-#include <MOM_memory.h>
-
 type, public :: offline_transport_CS
 
   !> Variables related to reading in fields from online run
@@ -62,8 +60,6 @@ type, public :: offline_transport_CS
 
 end type offline_transport_CS
 
-#include "MOM_memory.h"
-#include "version_variable.h"
 public offline_transport_init
 public transport_by_files
 public register_diags_offline_transport
@@ -75,7 +71,11 @@ public distribute_residual_vh_barotropic
 public distribute_residual_uh_upwards
 public distribute_residual_vh_upwards
 
+#include "MOM_memory.h"
+#include "version_variable.h"
+
 contains
+
 !> Controls the reading in 3d mass fluxes, diffusive fluxes, and other fields stored
 !! in a previous integration of the online model
 subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, khdt_y, &
