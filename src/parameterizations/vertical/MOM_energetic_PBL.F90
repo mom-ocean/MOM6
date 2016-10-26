@@ -152,7 +152,7 @@ type, public :: energetic_PBL_CS ; private
   real, allocatable, dimension(:,:) :: &
     ML_depth, &        ! The mixed layer depth in m.
     ML_depth2, &       ! The mixed layer depth in m.
-    Enhance_V, &       ! The enhanced velocity scale (non-dim)
+    Enhance_V, &       ! The enhancement to the turbulent velocity scale (non-dim)
     diag_TKE_wind, &   ! The wind source of TKE.
     diag_TKE_MKE, &    ! The resolved KE source of TKE.
     diag_TKE_conv, &   ! The convective source of TKE.
@@ -336,7 +336,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   real :: I_dtrho   ! 1.0 / (dt * Rho0) in m3 kg-1 s-1.  This is
                     ! used convert TKE back into ustar^3.
   real :: U_star    ! The surface friction velocity, in m s-1.
-  real :: U_10      ! An approximate (neutral) wind speed backed out of the surface velocity
+  real :: U_10      ! An approximate (neutral) wind speed backed out of the friction velocity
   real :: vstar     ! An in-situ turbulent velocity, in m s-1.
   real :: Enhance_V ! An enhancement factor for vstar, based here on Langmuir impact. 
   real :: hbs_here  ! The local minimum of hb_hs and MixLen_shape, times a
@@ -571,7 +571,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                     fluxes%frac_shelf_h(i,j) * fluxes%ustar_shelf(i,j)
       endif
       if (U_Star < CS%ustar_min) U_Star = CS%ustar_min
-      call ust_2_u10_coare3p5(U_STAR*sqrt(1025./1.25),U_10)
+      call ust_2_u10_coare3p5(U_STAR*sqrt(GV%Rho0/1.225),U_10)
 
       if (CS%omega_frac >= 1.0) then ; absf(i) = 2.0*CS%omega
       else
@@ -668,6 +668,11 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
         !CS%ML_depth2(i,j) = h(i,1)*GV%H_to_m
 
         sfc_connected(i) = .true.
+        ! Multiply mech TKE at surface by enhancement (w'/ust) cubed.
+        ! This has not been confirmed to reproduce LES Langmuir simulations,
+        ! but is consistent if we assume we are trying to capture the enhancement
+        ! of the TKE flux/ (turbulent velocity scale cubed) knowing that the
+        ! enhancement factor is that of the turbulent velocity scale.
         mech_TKE(i) = mech_TKE_top(i)*ENHANCE_V**(3.) ; conv_PErel(i) = conv_PErel_top(i)
 
 
@@ -1281,7 +1286,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           CS%Velocity_Scale(i,j,k) = Vstar_Used(k)
         enddo
       endif
-
       CS%Enhance_V(i,j) = Enhance_V
 
     else
@@ -1337,7 +1341,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       call post_data(CS%id_OSBL, CS%ML_Depth2, CS%diag)
     if (CS%id_LT_Enhancement >0) &
       call post_data(CS%id_LT_Enhancement, CS%Enhance_V, CS%diag)
-
   endif
 
 end subroutine energetic_PBL
@@ -1655,23 +1658,24 @@ subroutine energetic_PBL_get_MLD(CS, MLD, G)
   enddo ; enddo
 end subroutine energetic_PBL_get_MLD
 
-!> Computes wind speed from ustar based on COARE 3.5 Cd relationship
-subroutine ust_2_u10_coare3p5(UST,U10)
-  real, intent(in)  :: UST
+!> Computes wind speed from ustar_air based on COARE 3.5 Cd relationship
+subroutine ust_2_u10_coare3p5(USTair,U10)
+  real, intent(in)  :: USTair
   real, intent(out) :: U10
-
   real, parameter :: vonkar = 0.4
   real, parameter :: nu=1e-6
   real, parameter :: grav = 9.81
-
   real :: z0sm, z0, z0rough, u10a, alpha, CD
   integer :: CT
+
+  ! Uses empirical formula for z0 to convert ustar_air to u10 based on the 
+  !  COARE 3.5 paper (Edson et al., 2013)
   !alpha=m*U10+b
   !Note in Edson et al. 2013, eq. 13 m is given as 0.017.  However,
   ! m=0.0017 reproduces the curve in their figure 6.
 
-  z0sm = 0.11 * nu / ust; !Compute z0smooth from ustar guess
-  u10 = ust/sqrt(0.001);  !Guess for u10
+  z0sm = 0.11 * nu / USTair; !Compute z0smooth from ustar guess
+  u10 = USTair/sqrt(0.001);  !Guess for u10
   u10a = 1000;
 
   CT=0
@@ -1679,24 +1683,23 @@ subroutine ust_2_u10_coare3p5(UST,U10)
     CT=CT+1
     u10a = u10
     alpha = min(0.028,0.0017 * u10 - 0.005)
-    z0rough = alpha * ust**2/grav ! Compute z0rough from ustar guess
+    z0rough = alpha * USTair**2/grav ! Compute z0rough from ustar guess
     z0=z0sm+z0rough
     CD = ( vonkar / log(10/z0) )**2 ! Compute CD from derived roughness
-    u10 = ust/sqrt(CD);!Compute new u10 from derived CD, while loop
+    u10 = USTair/sqrt(CD);!Compute new u10 from derived CD, while loop
                        ! ends and checks for convergence...CT counter
                        ! makes sure loop doesn't run away if function
-                       ! doesn't converge.  This code was produced in
-                       ! MATLAB and converged rapidly (e.g. 2 cycles)
+                       ! doesn't converge.  This code was produced offline
+                       ! and converged rapidly (e.g. 2 cycles)
                        ! for ustar=0.0001:0.0001:10.
     if (CT>20) then
-       write(*,*)'COARE Cd calculation not converging...'
-       exit
+      u10 = USTair/sqrt(0.0015) ! I don't expect to get here, but just 
+                              !  in case it will output a reasonable value. 
+      exit
     endif
   enddo
-
   return
 end subroutine ust_2_u10_coare3p5
-
 
 subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time
