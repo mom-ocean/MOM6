@@ -983,7 +983,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, GV, MEK
         Work_v(i,J) = Work_v(i,J) + G_scale * &
           ( vhtot(i,J) * (drdkR * e(i,j+1,K) - drdkL * e(i,j,K)) - &
            (vhD(i,J,K) * drdjB) * 0.25 * &
-           ((e(i,j,K) + e(i,j,K+1)) + (e(i,j+1,K) + e(i+1,j,K+1))) )
+           ((e(i,j,K) + e(i,j,K+1)) + (e(i,j+1,K) + e(i,j+1,K+1))) )
       endif
     enddo
   enddo ; enddo! j-loop

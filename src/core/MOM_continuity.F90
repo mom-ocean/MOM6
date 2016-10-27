@@ -1,44 +1,7 @@
+!> Solve the layer continuity equation.
 module MOM_continuity
-!***********************************************************************
-!*                   GNU General Public License                        *
-!* This file is a part of MOM.                                         *
-!*                                                                     *
-!* MOM is free software; you can redistribute it and/or modify it and  *
-!* are expected to follow the terms of the GNU General Public License  *
-!* as published by the Free Software Foundation; either version 2 of   *
-!* the License, or (at your option) any later version.                 *
-!*                                                                     *
-!* MOM is distributed in the hope that it will be useful, but WITHOUT  *
-!* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY  *
-!* or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public    *
-!* License for more details.                                           *
-!*                                                                     *
-!* For the full text of the GNU General Public License,                *
-!* write to: Free Software Foundation, Inc.,                           *
-!*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
-!* or see:   http://www.gnu.org/licenses/gpl.html                      *
-!***********************************************************************
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg and Alistair Adcroft, September 2006.           *
-!*                                                                     *
-!*    This file contains the driver routine which selects which        *
-!*  continuity solver will be called, based on run-time input.         *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v, vh                                    *
-!*    j    x ^ x ^ x   At >:  u, uh                                    *
-!*    j    > o > o >   At o:  h, hin                                   *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
+! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_continuity_PPM, only : continuity_PPM, continuity_PPM_init
 use MOM_continuity_PPM, only : continuity_PPM_end, continuity_PPM_CS
@@ -57,85 +20,66 @@ implicit none ; private
 
 public continuity, continuity_init, continuity_end
 
-integer :: id_clock_pass, id_clock_vertvisc
-
+!> Control structure for mom_continuity
 type, public :: continuity_CS ; private
-  integer :: continuity_scheme ! CONTINUITY_SCHEME selects the discretization
-                               ! for the continuity solver. Valid values are:
-                               !  PPM - A directionally split peicewise
-                               !        parabolic reconstruction solver.
-                               ! The default, PPM, seems most appropriate for
-                               ! use with our current time-splitting strategies.
-  type(continuity_PPM_CS), pointer :: PPM_CSp => NULL()
+  integer :: continuity_scheme !< Selects the discretization for the continuity solver.
+                               !! Valid values are:
+                               !! - PPM - A directionally split piecewise parabolic reconstruction solver.
+                               !! The default, PPM, seems most appropriate for use with our current
+                               !! time-splitting strategies.
+  type(continuity_PPM_CS), pointer :: PPM_CSp => NULL() !< Control structure for mom_continuity_ppm
 end type continuity_CS
 
-integer, parameter :: PPM_SCHEME = 1
-character(len=20), parameter :: PPM_STRING = "PPM"
+integer, parameter :: PPM_SCHEME = 1 !< Enumerated constant to select PPM
+character(len=20), parameter :: PPM_STRING = "PPM" !< String to select PPM
 
 contains
 
+!> Time steps the layer thicknesses, using a monotonically limited, directionally split PPM scheme,
+!! based on Lin (1994).
 subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, &
                       visc_rem_u, visc_rem_v, u_cor, v_cor, &
                       uhbt_aux, vhbt_aux, u_cor_aux, v_cor_aux, BT_cont)
-  type(ocean_grid_type), intent(inout)                     :: G
-  type(verticalGrid_type), intent(in)                      :: GV
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: hin
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: uh
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: vh
-  real,                                      intent(in)    :: dt
-  type(continuity_CS),                       pointer       :: CS
-  real, dimension(SZIB_(G),SZJ_(G)),         intent(in), optional :: uhbt
-  real, dimension(SZI_(G),SZJB_(G)),         intent(in), optional :: vhbt
-  type(ocean_OBC_type),                      pointer,    optional :: OBC
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in), optional :: visc_rem_u
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in), optional :: visc_rem_v
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out), optional :: u_cor
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out), optional :: v_cor
-  real, dimension(SZIB_(G),SZJ_(G)),         intent(in), optional :: uhbt_aux
-  real, dimension(SZI_(G),SZJB_(G)),         intent(in), optional :: vhbt_aux
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout), optional :: u_cor_aux
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout), optional :: v_cor_aux
-  type(BT_cont_type),                        pointer,      optional :: BT_cont
-!    This subroutine time steps the layer thicknesses, using a monotonically
-!  limit, directionally split PPM scheme, based on Lin (1994).
+  type(ocean_grid_type), intent(inout)                     :: G   !< Ocean grid structure.
+  type(verticalGrid_type), intent(in)                      :: GV  !< Vertical grid structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u   !< Zonal velocity, in m/s.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v   !< Meridional velocity, in m/s.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: hin !< Initial layer thickness, in m or kg/m2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h   !< Final layer thickness, in m or kg/m2.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: uh  !< Volume flux through zonal faces =
+                                                                  !! u*h*dy, in m3/s.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: vh  !< Volume flux through meridional faces =
+                                                                  !! v*h*dx, in m3/s.
+  real,                                      intent(in)    :: dt  !< Time increment, in s.
+  type(continuity_CS),                       pointer       :: CS  !< Control structure for mom_continuity.
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(in), optional :: uhbt !< The vertically summed volume
+                                                                  !! flux through zonal faces, in m3/s.
+  real, dimension(SZI_(G),SZJB_(G)),         intent(in), optional :: vhbt !< The vertically summed volume
+                                                                  !! flux through meridional faces, in m3/s.
+  type(ocean_OBC_type),                      pointer,    optional :: OBC !< Open boundaries control structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in), optional :: visc_rem_u !< Both the fraction of
+          !! zonal momentum that remains after a time-step of viscosity, and the fraction of a time-step's
+          !! worth of a barotropic acceleration that a layer experiences after viscosity is applied.
+          !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in), optional :: visc_rem_v !< Both the fraction of
+          !! meridional momentum that remains after a time-step of viscosity, and the fraction of a time-step's
+          !! worth of a barotropic acceleration that a layer experiences after viscosity is applied.
+          !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out), optional :: u_cor !< The zonal velocities that
+          !! give uhbt as the depth-integrated transport, in m/s.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out), optional :: v_cor !< The meridional velocities that
+          !! give vhbt as the depth-integrated transport, in m/s.
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(in),  optional :: uhbt_aux !< A second summed zonal
+          !! volume flux in m3/s.
+  real, dimension(SZI_(G),SZJB_(G)),         intent(in),  optional :: vhbt_aux !< A second summed meridional
+          !! volume flux in m3/s.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout), optional :: u_cor_aux !< The zonal velocities
+          !! that give uhbt_aux as the depth-integrated transport, in m/s.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout), optional :: v_cor_aux !< The meridional velocities
+          !! that give vhbt_aux as the depth-integrated transport, in m/s.
+  type(BT_cont_type),                        pointer,     optional :: BT_cont !< A structure with elements
+          !! that describe the effective open face areas as a function of barotropic flow.
 
-! Arguments: u - Zonal velocity, in m s-1.
-!  (in)      v - Meridional velocity, in m s-1.
-!  (in)      hin - Initial layer thickness, in m.
-!  (out)     h - Final layer thickness, in m.
-!  (out)     uh - Volume flux through zonal faces = u*h*dy, m3 s-1.
-!  (out)     vh - Volume flux through meridional faces = v*h*dx,
-!                  in m3 s-1.
-!  (in)      dt - Time increment in s.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 continuity_init.
-!  (in, opt) uhbt - The summed volume flux through zonal faces, m3 s-1.
-!  (in, opt) vhbt - The summed volume flux through meridional faces, m3 s-1.
-!  (in, opt) OBC - This open boundary condition type specifies whether, where,
-!                  and what open boundary conditions are used.
-!  (in, opt) visc_rem_u - Both the fraction of the momentum originally in a
-!  (in, opt) visc_rem_v - layer that remains after a time-step of viscosity,
-!                         and the fraction of a time-step's worth of a
-!                         barotropic acceleration that a layer experiences
-!                         after viscosity is applied, in the zonal (_u) and
-!                         meridional (_v) directions.  Nondimensional between
-!                         0 (at the bottom) and 1 (far above the bottom).
-!  (out, opt) u_cor - The zonal velocities that give uhbt as the depth-
-!                     integrated transport, in m s-1.
-!  (out, opt) v_cor - The meridional velocities that give vhbt as the
-!                     depth-integrated transport, in m s-1.
-!  (in, opt) uhbt_aux - A second set of summed volume fluxes through zonal
-!  (in, opt) vhbt_aux - and meridional faces, both in m3 s-1.
-!  (out, opt) u_cor_aux - The zonal and meridional velocities that give uhbt_aux
-!  (out, opt) v_cor_aux - and vhbt_aux as the depth-integrated transports,
-!                         both in m s-1.
-!  (out, opt) BT_cont - A structure with elements that describe the effective
-!                       open face areas as a function of barotropic flow.
   if (present(visc_rem_u) .neqv. present(visc_rem_v)) call MOM_error(FATAL, &
       "MOM_continuity: Either both visc_rem_u and visc_rem_v or neither"// &
        " one must be present in call to continuity.")
@@ -163,21 +107,14 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, &
 
 end subroutine continuity
 
+!> Initializes continuity_cs
 subroutine continuity_init(Time, G, GV, param_file, diag, CS)
-  type(time_type), target, intent(in)    :: Time
-  type(ocean_grid_type),   intent(in)    :: G
-  type(verticalGrid_type), intent(in)    :: GV
-  type(param_file_type),   intent(in)    :: param_file
-  type(diag_ctrl), target, intent(inout) :: diag
-  type(continuity_CS),     pointer       :: CS
-! Arguments: Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
+  type(time_type), target, intent(in)    :: Time       !< Current model time.
+  type(ocean_grid_type),   intent(in)    :: G          !< Ocean grid structure.
+  type(verticalGrid_type), intent(in)    :: GV         !< Vertical grid structure.
+  type(param_file_type),   intent(in)    :: param_file !< Parameter file handles.
+  type(diag_ctrl), target, intent(inout) :: diag       !< Diagnostics control structure.
+  type(continuity_CS),     pointer       :: CS         !< Control structure for mom_continuity.
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_continuity" ! This module's name.
@@ -215,8 +152,9 @@ subroutine continuity_init(Time, G, GV, param_file, diag, CS)
 
 end subroutine continuity_init
 
+!> Destructor for continuity_cs.
 subroutine continuity_end(CS)
-  type(continuity_CS),     pointer       :: CS
+  type(continuity_CS), pointer :: CS !< Control structure for mom_continuity.
 
   if (CS%continuity_scheme == PPM_SCHEME) then
     call continuity_PPM_end(CS%PPM_CSp)
