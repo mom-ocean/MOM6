@@ -29,11 +29,11 @@ use MOM_ALE_sponge, only : set_up_ALE_sponge_field, ALE_sponge_CS
 use MOM_time_manager, only : time_type, get_time
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_registry, only : add_tracer_diagnostics, add_tracer_OBC_values
-use MOM_tracer_registry, only : tracer_vertdiff
+use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_variables, only : surface
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_verticalGrid, only : verticalGrid_type
-
+use MOM_coms, only : max_across_PEs
 use coupler_util, only : set_coupler_values, ind_csurf
 use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
 
@@ -46,7 +46,7 @@ public register_ISOMIP_tracer, initialize_ISOMIP_tracer
 public ISOMIP_tracer_column_physics, ISOMIP_tracer_surface_state, ISOMIP_tracer_end
 
 !< ntr is the number of tracers in this module.
-integer, parameter :: ntr = 2
+integer, parameter :: ntr = 1
 
 type p3d
   real, dimension(:,:,:), pointer :: p => NULL()
@@ -225,40 +225,41 @@ subroutine initialize_ISOMIP_tracer(restart, day, G, GV, h, diag, OBC, CS, &
     else
       do m=1,NTR
         do k=1,nz ; do j=js,je ; do i=is,ie
-          CS%tr(i,j,k,m) = 1.0e-20 ! This could just as well be 0.
+          CS%tr(i,j,k,m) = 0.0 
         enddo ; enddo ; enddo
       enddo
     endif
   endif ! restart
 
-  if ( CS%use_sponge ) then
-!   If sponges are used, this example damps tracers in sponges in the
-! northern half of the domain to 1 and tracers in the southern half
-! to 0.  For any tracers that are not damped in the sponge, the call
-! to set_up_sponge_field can simply be omitted.
-    if (.not.associated(ALE_sponge_CSp)) &
-      call MOM_error(FATAL, "ISOMIP_initialize_tracer: "// &
-        "The pointer to ALEsponge_CSp must be associated if SPONGE is defined.")
+! the following does not work in layer mode yet
+!!  if ( CS%use_sponge ) then
+  !   If sponges are used, this example damps tracers in sponges in the
+  ! northern half of the domain to 1 and tracers in the southern half
+  ! to 0.  For any tracers that are not damped in the sponge, the call
+  ! to set_up_sponge_field can simply be omitted.
+!    if (.not.associated(ALE_sponge_CSp)) &
+!      call MOM_error(FATAL, "ISOMIP_initialize_tracer: "// &
+!        "The pointer to ALEsponge_CSp must be associated if SPONGE is defined.")
 
-    allocate(temp(G%isd:G%ied,G%jsd:G%jed,nz))
+!    allocate(temp(G%isd:G%ied,G%jsd:G%jed,nz))
     
-    do j=js,je ; do i=is,ie
-      if (G%geoLonT(i,j) >= 790.0 .AND. G%geoLonT(i,j) <= 800.0) then      
-        temp(i,j,:) = 1.0
-      else
-        temp(i,j,:) = 0.0
-      endif
-    enddo ; enddo 
+!    do j=js,je ; do i=is,ie
+!      if (G%geoLonT(i,j) >= 790.0 .AND. G%geoLonT(i,j) <= 800.0) then      
+!        temp(i,j,:) = 1.0
+!      else
+!        temp(i,j,:) = 0.0
+!      endif
+!    enddo ; enddo 
 
-!   do m=1,NTR
-    do m=1,1
+      !   do m=1,NTR
+!    do m=1,1
       ! This is needed to force the compiler not to do a copy in the sponge
       ! calls.  Curses on the designers and implementers of Fortran90.
-      tr_ptr => CS%tr(:,:,:,m)
-      call set_up_ALE_sponge_field(temp, G, tr_ptr, ALE_sponge_CSp)
-    enddo
-    deallocate(temp)
-  endif
+!      tr_ptr => CS%tr(:,:,:,m)
+!      call set_up_ALE_sponge_field(temp, G, tr_ptr, ALE_sponge_CSp)
+!    enddo
+!    deallocate(temp)
+!  endif
 
   ! This needs to be changed if the units of tracer are changed above.
   if (GV%Boussinesq) then ; flux_units = "kg kg-1 m3 s-1"
@@ -302,13 +303,16 @@ end subroutine initialize_ISOMIP_tracer
 !> This subroutine applies diapycnal diffusion and any other column
 ! tracer physics or chemistry to the tracers from this file.
 ! This is a simple example of a set of advected passive tracers.
-subroutine ISOMIP_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS)
+subroutine ISOMIP_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS, &
+              evap_CFL_limit, minimum_forcing_depth)
   type(ocean_grid_type),                 intent(in) :: G
   type(verticalGrid_type),               intent(in) :: GV
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
   type(forcing),                         intent(in) :: fluxes
   real,                                  intent(in) :: dt
   type(ISOMIP_tracer_CS),                  pointer    :: CS
+  real,                             optional,intent(in)  :: evap_CFL_limit
+  real,                             optional,intent(in)  :: minimum_forcing_depth
 
 ! Arguments: h_old -  Layer thickness before entrainment, in m or kg m-2.
 !  (in)      h_new -  Layer thickness after entrainment, in m or kg m-2.
@@ -329,29 +333,49 @@ subroutine ISOMIP_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, G
 ! The arguments to this subroutine are redundant in that
 !     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
 
+  real :: mmax
   real :: b1(SZI_(G))          ! b1 and c1 are variables used by the
   real :: c1(SZI_(G),SZK_(G))  ! tridiagonal solver.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
+  real :: melt(SZI_(G),SZJ_(G))  ! melt water (positive for melting 
+                                 ! negative for freezing)
   integer :: i, j, k, is, ie, js, je, nz, m
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   if (.not.associated(CS)) return
 
+  melt(:,:) = fluxes%iceshelf_melt
 
-  ! dye melt water (m=2)
-  ! converting melt (m/year) to (m/s)
-  do m=2,NTR
+  ! max. melt
+  mmax = MAXVAL(melt(is:ie,js:je))
+  call max_across_PEs(mmax)
+  !write(*,*)'max melt', mmax
+  ! dye melt water (m=1), dye = 1 if melt=max(melt) 
+  do m=1,NTR
      do j=js,je ; do i=is,ie
-      if (fluxes%iceshelf_melt(i,j) > 0.0) then
-!        CS%tr(i,j,1,m) = (dt*fluxes%iceshelf_melt(i,j)/(365.0 * 86400.0)  &
-!                       + h_old(i,j,1)*CS%tr(i,j,1,m))/h_new(i,j,1)
-         CS%tr(i,j,1:3,m) = 1.0
+      if (melt(i,j) > 0.0) then ! melting
+         !write(*,*)'i,j,melt,melt/mmax',i,j,melt(i,j),melt(i,j)/mmax
+         CS%tr(i,j,1:2,m) = melt(i,j)/mmax ! inject dye in the ML
+      else ! freezing
+         CS%tr(i,j,1:2,m) = 0.0 
       endif
     enddo ; enddo
   enddo
 
-  do m=1,NTR
-    call tracer_vertdiff(h_old, ea, eb, dt, CS%tr(:,:,:,m), G, GV)
-  enddo
+  if (present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
+    do m=1,NTR
+      do k=1,nz ;do j=js,je ; do i=is,ie
+          h_work(i,j,k) = h_old(i,j,k)
+      enddo ; enddo ; enddo;    
+      call applyTracerBoundaryFluxesInOut(G, GV, CS%tr(:,:,:,m) , dt, fluxes, h_work, &
+          evap_CFL_limit, minimum_forcing_depth)
+      call tracer_vertdiff(h_work, ea, eb, dt, CS%tr(:,:,:,m), G, GV)
+    enddo
+  else
+    do m=1,NTR
+      call tracer_vertdiff(h_old, ea, eb, dt, CS%tr(:,:,:,m), G, GV)
+    enddo
+  endif
 
   if (CS%mask_tracers) then
     do m = 1,NTR ; if (CS%id_tracer(m) > 0) then

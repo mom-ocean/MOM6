@@ -68,7 +68,7 @@ use MOM_sponge, only : set_up_sponge_field, sponge_CS
 use MOM_time_manager, only : time_type, get_time
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_registry, only : add_tracer_diagnostics, add_tracer_OBC_values
-use MOM_tracer_registry, only : tracer_vertdiff
+use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_variables, only : surface
 use MOM_verticalGrid, only : verticalGrid_type
 
@@ -81,16 +81,17 @@ implicit none ; private
 
 public register_advection_test_tracer, initialize_advection_test_tracer
 public advection_test_tracer_surface_state, advection_test_tracer_end
-public advection_test_tracer_column_physics
+public advection_test_tracer_column_physics, advection_test_stock
 
 ! ntr is the number of tracers in this module.
-integer, parameter :: ntr = 11
+integer, parameter :: NTR = 11
 
 type p3d
   real, dimension(:,:,:), pointer :: p => NULL()
 end type p3d
 
 type, public :: advection_test_tracer_CS ; private
+  integer :: ntr = NTR                     ! Number of tracers in this module
   logical :: coupled_tracers = .false.  ! These tracers are not offered to the
                                         ! coupler.
   character(len=200) :: tracer_IC_file ! The full path to the IC file, or " "
@@ -283,7 +284,7 @@ subroutine initialize_advection_test_tracer(restart, day, G, GV, h,diag, OBC, CS
   h_neglect = GV%H_subroundoff
 
   CS%diag => diag
-
+  CS%ntr = NTR
   if (.not.restart) then
     do m=1,NTR
       do k=1,nz ; do j=js,je ; do i=is,ie
@@ -362,13 +363,16 @@ subroutine initialize_advection_test_tracer(restart, day, G, GV, h,diag, OBC, CS
 end subroutine initialize_advection_test_tracer
 
 
-subroutine advection_test_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS)
+subroutine advection_test_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS, &
+              evap_CFL_limit, minimum_forcing_depth)
   type(ocean_grid_type),                 intent(in) :: G
   type(verticalGrid_type),               intent(in) :: GV
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
   type(forcing),                         intent(in) :: fluxes
   real,                                  intent(in) :: dt
   type(advection_test_tracer_CS),        pointer    :: CS
+  real,                             optional,intent(in)  :: evap_CFL_limit
+  real,                             optional,intent(in)  :: minimum_forcing_depth
 !   This subroutine applies diapycnal diffusion and any other column
 ! tracer physics or chemistry to the tracers from this file.
 ! This is a simple example of a set of advected passive tracers.
@@ -391,7 +395,7 @@ subroutine advection_test_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, 
 !
 ! The arguments to this subroutine are redundant in that
 !     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
-
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
   real :: b1(SZI_(G))          ! b1 and c1 are variables used by the
   real :: c1(SZI_(G),SZK_(G))  ! tridiagonal solver.
   integer :: i, j, k, is, ie, js, je, nz, m
@@ -399,9 +403,20 @@ subroutine advection_test_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, 
 
   if (.not.associated(CS)) return
 
-! do m=1,NTR
-!   call tracer_vertdiff(h_old, ea, eb, dt, CS%tr(:,:,:,m), G, GV)
-! enddo
+  if (present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
+    do m=1,CS%ntr
+      do k=1,nz ;do j=js,je ; do i=is,ie
+        h_work(i,j,k) = h_old(i,j,k)
+      enddo ; enddo ; enddo;    
+      call applyTracerBoundaryFluxesInOut(G, GV, CS%tr(:,:,:,m) , dt, fluxes, h_work, &
+          evap_CFL_limit, minimum_forcing_depth)
+      call tracer_vertdiff(h_work, ea, eb, dt, CS%tr(:,:,:,m), G, GV)
+    enddo
+  else
+    do m=1,NTR
+      call tracer_vertdiff(h_old, ea, eb, dt, CS%tr(:,:,:,m), G, GV)
+    enddo
+  endif
 
   if (CS%mask_tracers) then
     do m = 1,NTR ; if (CS%id_tracer(m) > 0) then
@@ -461,6 +476,59 @@ subroutine advection_test_tracer_surface_state(state, h, G, CS)
     enddo
   endif
 end subroutine advection_test_tracer_surface_state
+
+function advection_test_stock(h, stocks, G, GV, CS, names, units, stock_index)
+  type(ocean_grid_type),              intent(in)    :: G
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
+  real, dimension(:),                 intent(out)   :: stocks
+  type(verticalGrid_type),            intent(in)    :: GV
+  type(advection_test_tracer_CS),     pointer       :: CS
+  character(len=*), dimension(:),     intent(out)   :: names
+  character(len=*), dimension(:),     intent(out)   :: units
+  integer, optional,                  intent(in)    :: stock_index
+  integer                                           :: advection_test_stock
+! This function calculates the mass-weighted integral of all tracer stocks,
+! returning the number of stocks it has calculated.  If the stock_index
+! is present, only the stock corresponding to that coded index is returned.
+
+! Arguments: h - Layer thickness, in m or kg m-2.
+!  (out)     stocks - the mass-weighted integrated amount of each tracer,
+!                     in kg times concentration units.
+!  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
+!  (in)      CS - The control structure returned by a previous call to
+!                 register_ideal_age_tracer.
+!  (out)     names - the names of the stocks calculated.
+!  (out)     units - the units of the stocks calculated.
+!  (in,opt)  stock_index - the coded index of a specific stock being sought.
+! Return value: the number of stocks calculated here.
+
+  integer :: i, j, k, is, ie, js, je, nz, m
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
+
+  advection_test_stock = 0
+  if (.not.associated(CS)) return
+  if (CS%ntr < 1) return
+
+  if (present(stock_index)) then ; if (stock_index > 0) then
+    ! Check whether this stock is available from this routine.
+
+    ! No stocks from this routine are being checked yet.  Return 0.
+    return
+  endif ; endif
+
+  do m=1,CS%ntr
+    call query_vardesc(CS%tr_desc(m), name=names(m), units=units(m), caller="advection_test_stock")
+    stocks(m) = 0.0
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      stocks(m) = stocks(m) + CS%tr(i,j,k,m) * &
+                             (G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k))
+    enddo ; enddo ; enddo
+    stocks(m) = GV%H_to_kg_m2 * stocks(m)
+  enddo
+  advection_test_stock = CS%ntr
+
+end function advection_test_stock
 
 subroutine advection_test_tracer_end(CS)
   type(advection_test_tracer_CS), pointer :: CS

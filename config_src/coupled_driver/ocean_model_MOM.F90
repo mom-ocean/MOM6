@@ -67,8 +67,10 @@ use coupler_types_mod, only : coupler_2d_bc_type
 use mpp_domains_mod, only : domain2d, mpp_get_layout, mpp_get_global_domain
 use mpp_domains_mod, only : mpp_define_domains, mpp_get_compute_domain, mpp_get_data_domain
 use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
+use MOM_forcing_type, only : allocate_forcing_type
 use fms_mod, only : stdout
 use mpp_mod, only : mpp_chksum
+use MOM_domains, only : pass_var, pass_vector, TO_ALL, CGRID_NE, BGRID_NE
 
 #include <MOM_memory.h>
 
@@ -153,6 +155,9 @@ type, public :: ocean_state_type ; private
 
   integer :: nstep = 0        ! The number of calls to update_ocean.
   logical :: use_ice_shelf    ! If true, the ice shelf model is enabled.
+  logical :: icebergs_apply_rigid_boundary  ! If true, the icebergs can change ocean bd condition.
+  real :: kv_iceberg          ! The viscosity of the icebergs in m2/s (for ice rigidity)
+  real :: density_iceberg     ! A typical density of icebergs in kg/m3 (for ice rigidity) 
   type(ice_shelf_CS), pointer :: Ice_shelf_CSp => NULL()
   logical :: restore_salinity ! If true, the coupled MOM driver adds a term to
                               ! restore salinity to a specified value.
@@ -160,7 +165,7 @@ type, public :: ocean_state_type ; private
                               ! restore sst to a specified value.
   real :: press_to_z          ! A conversion factor between pressure and ocean
                               ! depth in m, usually 1/(rho_0*g), in m Pa-1.
-  real :: C_p                 !   The heat capacity of seawater, in J K-1 kg-1.
+  real :: C_p                 ! The heat capacity of seawater, in J K-1 kg-1.
 
   type(directories) :: dirs   ! A structure containing several relevant directory paths.
   type(forcing)   :: fluxes   ! A structure containing pointers to
@@ -280,6 +285,16 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   call get_param(param_file, mod, "ICE_SHELF",  OS%use_ice_shelf, &
                  "If true, enables the ice shelf model.", default=.false.)
 
+  call get_param(param_file, mod, "ICEBERGS_APPLY_RIGID_BOUNDARY",  OS%icebergs_apply_rigid_boundary, &
+                 "If true, allows icebergs to change boundary condition felt by ocean", default=.false.)
+  
+  if (OS%icebergs_apply_rigid_boundary) then
+    call get_param(param_file, mod, "KV_ICEBERG",  OS%kv_iceberg, &
+                 "The viscosity of the icebergs",  units="m2 s-1",default=1.0e10)
+    call get_param(param_file, mod, "DENSITY_ICEBERGS",  OS%density_iceberg, &
+                  "A typical density of icebergs.", units="kg m-3", default=917.0)
+  endif
+
   OS%press_to_z = 1.0/(Rho0*G_Earth)
 
   call surface_forcing_init(Time_in, OS%grid, param_file, OS%MOM_CSp%diag, &
@@ -288,6 +303,11 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   if (OS%use_ice_shelf)  then
      call initialize_ice_shelf(param_file, OS%grid, OS%Time, OS%ice_shelf_CSp, &
                                OS%MOM_CSp%diag, OS%fluxes)
+  endif
+  if (OS%icebergs_apply_rigid_boundary)  then      
+    !call allocate_forcing_type(OS%grid, OS%fluxes, iceberg=.true.)
+    !This assumes that the iceshelf and ocean are on the same grid. I hope this is true
+    if (.not. OS%use_ice_shelf) call allocate_forcing_type(OS%grid, OS%fluxes, ustar=.true., shelf=.true.)
   endif
 
   call MOM_sum_output_init(OS%grid, param_file, OS%dirs%output_directory, &
@@ -394,12 +414,14 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     call MOM_generic_tracer_fluxes_accumulate(OS%fluxes, weight) !here weight=1, just saving the current fluxes
 #endif
 
-  ! Add ice shelf fluxes
-
+    ! Add ice shelf fluxes
     if (OS%use_ice_shelf) then
       call shelf_calc_flux(OS%State, OS%fluxes, OS%Time, time_step, OS%Ice_shelf_CSp)
     endif
-
+    if (OS%icebergs_apply_rigid_boundary)  then
+      !This assumes that the iceshelf and ocean are on the same grid. I hope this is true
+      call add_berg_flux_to_shelf(OS%grid, OS%fluxes,OS%use_ice_shelf,OS%density_iceberg,OS%kv_iceberg)
+    endif
     ! Indicate that there are new unused fluxes.
     OS%fluxes%fluxes_used = .false.
     OS%fluxes%dt_buoy_accum = time_step
@@ -407,9 +429,12 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     OS%flux_tmp%C_p = OS%fluxes%C_p
     call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%flux_tmp, index_bnds, OS%Time, &
                                OS%grid, OS%forcing_CSp, OS%state, OS%restore_salinity,OS%restore_temp)
-  
     if (OS%use_ice_shelf) then
       call shelf_calc_flux(OS%State, OS%flux_tmp, OS%Time, time_step, OS%Ice_shelf_CSp)
+    endif
+    if (OS%icebergs_apply_rigid_boundary)  then
+     !This assumes that the iceshelf and ocean are on the same grid. I hope this is true
+     call add_berg_flux_to_shelf(OS%grid, OS%flux_tmp, OS%use_ice_shelf,OS%density_iceberg,OS%kv_iceberg)
     endif
   
     call forcing_accumulate(OS%flux_tmp, OS%fluxes, time_step, OS%grid, weight)
@@ -477,6 +502,66 @@ end subroutine update_ocean_model
 !                                      the any restart file name as a prefix. 
 ! </DESCRIPTION>
 !
+
+subroutine add_berg_flux_to_shelf(G, fluxes, use_ice_shelf, density_ice, kv_ice)
+  type(ocean_grid_type),              intent(inout)    :: G
+  type(forcing),                      intent(inout) :: fluxes
+  logical,                            intent(in) :: use_ice_shelf
+  real, intent(in) :: kv_ice       ! The viscosity of ice, in m2 s-1.
+  real, intent(in) :: density_ice  ! A typical density of ice, in kg m-3.
+! Arguments:
+!  (in)      fluxes - A structure of surface fluxes that may be used.
+!  (in)      G - The ocean's grid structure.
+  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
+  !This routine adds iceberg data to the ice shelf data (if ice shelf is used)
+  !which can then be used to change the top of ocean boundary condition used in
+  !the ocean model. This routine is taken from the add_shelf_flux subroutine
+  !within the ice shelf model.
+
+  if (.not. (((associated(fluxes%frac_shelf_h) .and. associated(fluxes%frac_shelf_u)) &
+    .and.(associated(fluxes%frac_shelf_v) .and. associated(fluxes%ustar_shelf)))&
+    .and.(associated(fluxes%rigidity_ice_u) .and. associated(fluxes%rigidity_ice_v)))) return
+
+  if (.not. ((associated(fluxes%area_berg) .and.  associated(fluxes%ustar_berg)) .and. associated(fluxes%mass_berg)  ) )  return
+
+  if (.not. use_ice_shelf) then
+    fluxes%frac_shelf_h(:,:)=0.
+    fluxes%frac_shelf_u(:,:)=0.
+    fluxes%frac_shelf_v(:,:)=0.
+    fluxes%ustar_shelf(:,:)=0.
+    fluxes%rigidity_ice_u(:,:)=0.
+    fluxes%rigidity_ice_v(:,:)=0.
+  endif
+
+    do j=jsd,jed ; do i=isd,ied
+      if (G%areaT(i,j) > 0.0) &
+        fluxes%frac_shelf_h(i,j) = fluxes%frac_shelf_h(i,j) +  fluxes%area_berg(i,j) 
+        fluxes%ustar_shelf(i,j)  = fluxes%ustar_shelf(i,j)  +  fluxes%ustar_berg(i,j)
+    enddo ; enddo
+    !do I=isd,ied-1 ; do j=isd,jed
+    do j=jsd,jed ; do i=isd,ied-1 ! ### changed stride order; i->ied-1?
+      fluxes%frac_shelf_u(I,j) = 0.0
+      if ((G%areaT(i,j) + G%areaT(i+1,j) > 0.0)) & ! .and. (G%dxdy_u(I,j) > 0.0)) &
+        fluxes%frac_shelf_u(I,j) = fluxes%frac_shelf_u(I,j) + (((fluxes%area_berg(i,j)*G%areaT(i,j)) + (fluxes%area_berg(i+1,j)*G%areaT(i+1,j))) / &
+                                    (G%areaT(i,j) + G%areaT(i+1,j)))
+        fluxes%rigidity_ice_u(I,j) = fluxes%rigidity_ice_u(I,j) +((kv_ice / density_ice) * &
+                                    min(fluxes%mass_berg(i,j), fluxes%mass_berg(i+1,j)))
+    enddo ; enddo
+    do j=jsd,jed-1 ; do i=isd,ied ! ### change stride order; j->jed-1?
+    !do i=isd,ied ; do J=isd,jed-1 
+      fluxes%frac_shelf_v(i,J) = 0.0
+      if ((G%areaT(i,j) + G%areaT(i,j+1) > 0.0)) & ! .and. (G%dxdy_v(i,J) > 0.0)) &
+        fluxes%frac_shelf_v(i,J) = fluxes%frac_shelf_v(i,J) + (((fluxes%area_berg(i,j)*G%areaT(i,j)) + (fluxes%area_berg(i,j+1)*G%areaT(i,j+1))) / &
+                                    (G%areaT(i,j) + G%areaT(i,j+1) ))
+      fluxes%rigidity_ice_v(i,J) = fluxes%rigidity_ice_v(i,J) +((kv_ice / density_ice) * &
+                                   max(fluxes%mass_berg(i,j), fluxes%mass_berg(i,j+1)))
+    enddo ; enddo
+    call pass_vector(fluxes%frac_shelf_u, fluxes%frac_shelf_v, G%domain, TO_ALL, CGRID_NE)
+
+end subroutine add_berg_flux_to_shelf
+
 subroutine ocean_model_restart(OS, timestamp)
    type(ocean_state_type),        pointer :: OS
    character(len=*), intent(in), optional :: timestamp
