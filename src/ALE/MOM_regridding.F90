@@ -266,7 +266,7 @@ end subroutine end_regridding
 !------------------------------------------------------------------------------
 ! Dispatching regridding routine: regridding & remapping
 !------------------------------------------------------------------------------
-subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface )
+subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_shelf_h)
 !------------------------------------------------------------------------------
 ! This routine takes care of (1) building a new grid and (2) remapping between
 ! the old grid and the new grid. The creation of the new grid can be based
@@ -293,14 +293,22 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface )
   type(thermo_var_ptrs),                      intent(inout) :: tv     !< Thermodynamical variables (T, S, ...)
   real, dimension(SZI_(G),SZJ_(G), SZK_(GV)), intent(inout) :: h_new  !< New 3D grid consistent with target coordinate
   real, dimension(SZI_(G),SZJ_(G), SZK_(GV)+1), intent(inout) :: dzInterface !< The change in position of each interface
+  real, dimension(:,:),                   optional, pointer :: frac_shelf_h !< Fractional ice shelf coverage 
   ! Local variables
   real :: trickGnuCompiler
+  logical :: use_ice_shelf
 
+  if (present(frac_shelf_h)) use_ice_shelf = .true.
+ 
   select case ( CS%regridding_scheme )
 
     case ( REGRIDDING_ZSTAR )
-      call build_zstar_grid( CS, G, GV, h, dzInterface )
-      call calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
+      if (use_ice_shelf) then
+         call build_zstar_grid( CS, G, GV, h, dzInterface, frac_shelf_h )
+      else
+         call build_zstar_grid( CS, G, GV, h, dzInterface )
+      endif
+         call calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
 
     case ( REGRIDDING_SIGMA )
       call build_sigma_grid( CS, G, GV, h, dzInterface )
@@ -571,7 +579,7 @@ end subroutine filtered_grid_motion
 !> Builds a z*-ccordinate grid with partial steps (Adcroft and Campin, 2004).
 !! z* is defined as
 !!   z* = (z-eta)/(H+eta)*H  s.t. z*=0 when z=eta and z*=-H when z=-H .
-subroutine build_zstar_grid( CS, G, GV, h, dzInterface )
+subroutine build_zstar_grid( CS, G, GV, h, dzInterface, frac_shelf_h)
 
   ! Arguments
   type(regridding_CS),                          intent(in)    :: CS !< Regridding control structure
@@ -579,16 +587,18 @@ subroutine build_zstar_grid( CS, G, GV, h, dzInterface )
   type(verticalGrid_type),                      intent(in)    :: GV !< ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    intent(in)    :: h  !< Layer thicknesses, in H
   real, dimension(SZI_(G),SZJ_(G), SZK_(GV)+1), intent(inout) :: dzInterface !< The change in interface depth in H.
-
+  real, dimension(:,:),               optional, pointer       :: frac_shelf_h !< Fractional ice shelf coverage.
   ! Local variables
   integer :: i, j, k
   integer :: nz
   real    :: nominalDepth, totalThickness, dh
   real, dimension(SZK_(GV)+1) :: zOld, zNew
   real :: minThickness
+  logical :: ice_shelf
 
   nz = GV%ke
   minThickness = CS%min_thickness
+  ice_shelf = associated(frac_shelf_h)
 
 !$OMP parallel do default(none) shared(G,GV,dzInterface,CS,nz,h)                 &
 !$OMP                          private(nominalDepth,totalThickness,minThickness, &
@@ -615,10 +625,14 @@ subroutine build_zstar_grid( CS, G, GV, h, dzInterface )
         zOld(k) = zOld(k+1) + h(i,j,k)
       enddo
 
-      if (totalThickness-nominalDepth<CS%height_of_rigid_surface) then
-        call build_zstar_column(CS, nz, nominalDepth, totalThickness, zNew, &
+      if (ice_shelf) then
+        if (frac_shelf_h(i,j) > 0.) then ! under ice shelf
+           call build_zstar_column(CS, nz, nominalDepth, totalThickness, zNew, &
                                 z_rigid_top = totalThickness-nominalDepth, &
                                 eta_orig = zOld(1))
+        else
+           call build_zstar_column(CS, nz, nominalDepth, totalThickness, zNew)
+        endif
       else
         call build_zstar_column(CS, nz, nominalDepth, totalThickness, zNew)
       endif
@@ -2782,7 +2796,6 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
     CS%halocline_strat_tol = halocline_strat_tol
   endif
   if (present(integrate_downward_for_e)) CS%integrate_downward_for_e = integrate_downward_for_e
-  if (present(height_of_rigid_surface)) CS%height_of_rigid_surface = height_of_rigid_surface
 
 end subroutine set_regrid_params
 
