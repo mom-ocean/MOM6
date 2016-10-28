@@ -594,15 +594,15 @@ subroutine build_zstar_grid( CS, G, GV, h, dzInterface, frac_shelf_h)
   real    :: nominalDepth, totalThickness, dh
   real, dimension(SZK_(GV)+1) :: zOld, zNew
   real :: minThickness
-  logical :: ice_shelf
+  logical :: ice_shelf = .false.
 
   nz = GV%ke
   minThickness = CS%min_thickness
-  ice_shelf = associated(frac_shelf_h)
+  if (present(frac_shelf_h)) ice_shelf = .true.
 
-!$OMP parallel do default(none) shared(G,GV,dzInterface,CS,nz,h)                 &
+!$OMP parallel do default(none) shared(G,GV,dzInterface,CS,nz,h,frac_shelf_h)                 &
 !$OMP                          private(nominalDepth,totalThickness,minThickness, &
-!$OMP                                  zNew,dh,zOld)
+!$OMP                                  zNew,dh,zOld,ice_shelf)
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
 

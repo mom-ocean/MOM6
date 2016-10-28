@@ -386,11 +386,12 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt, frac_shelf_h)
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV)+1) :: dzRegrid ! The change in grid interface positions
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_new ! New 3D grid obtained after last time step (m or Pa)
   integer :: nk, i, j, k, isc, iec, jsc, jec
-  logical :: ice_shelf
+  logical :: ice_shelf = .false.
 
   nk = GV%ke; isc = G%isc; iec = G%iec; jsc = G%jsc; jec = G%jec
 
-  ice_shelf = associated(frac_shelf_h)
+  if (present(frac_shelf_h)) ice_shelf = .true.
+  !ice_shelf = associated(frac_shelf_h)
 
   if (CS%show_call_tree) call callTree_enter("ALE_main(), MOM_ALE.F90")
 
