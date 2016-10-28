@@ -30,6 +30,7 @@ public open_boundary_impose_normal_slope
 public open_boundary_impose_land_mask
 public Radiation_Open_Bdry_Conds
 public set_Flather_data
+public set_3D_OBC_data
 
 integer, parameter, public :: OBC_NONE = 0, OBC_SIMPLE = 1, OBC_WALL = 2
 integer, parameter, public :: OBC_FLATHER = 3
@@ -49,8 +50,13 @@ type, public :: OBC_segment_type
   logical :: nudged         !< Optional supplement to radiation boundary.
   logical :: specified      !< Boundary fixed to external value.
   logical :: gradient       !< Zero gradient at boundary.
+  logical :: values_needed  !< Whether or not baroclinic OBC fields are needed.
   logical :: legacy_bt      !< Old code for tangential BT velocities.
   integer :: direction      !< Boundary faces one of the four directions.
+  integer :: Is_obc         !< i-indices of boundary segment.
+  integer :: Ie_obc         !< i-indices of boundary segment.
+  integer :: Js_obc         !< j-indices of boundary segment.
+  integer :: Je_obc         !< j-indices of boundary segment.
   real :: Tnudge_in         !< Nudging timescale on inflow.
   real :: Tnudge_out        !< Nudging timescale on outflow.
 end type OBC_segment_type
@@ -60,7 +66,8 @@ type, public :: ocean_OBC_type
   integer :: number_of_segments = 0 !< The number of open-boundary segments.
   logical :: Flather_u_BCs_exist_globally = .false. !< True if any zonal velocity points in the global domain use Flather BCs.
   logical :: Flather_v_BCs_exist_globally = .false. !< True if any meridional velocity points in the global domain use Flather BCs.
-  logical :: nudged_uv_BCs_exist_globally = .false. !< True if any velocity points in the global domain use nudged BCs.
+  logical :: nudged_u_BCs_exist_globally = .false. !< True if any velocity points in the global domain use nudged BCs.
+  logical :: nudged_v_BCs_exist_globally = .false. !< True if any velocity points in the global domain use nudged BCs.
   logical :: specified_u_BCs_exist_globally = .false. !< True if any zonal velocity points in the global domain use specified BCs.
   logical :: specified_v_BCs_exist_globally = .false. !< True if any meridional velocity points in the global domain use specified BCs.
   real :: g_Earth
@@ -151,6 +158,7 @@ subroutine open_boundary_config(G, param_file, OBC)
       OBC%OBC_segment_number(l)%nudged = .false.
       OBC%OBC_segment_number(l)%specified = .false.
       OBC%OBC_segment_number(l)%gradient = .false.
+      OBC%OBC_segment_number(l)%values_needed = .false.
       OBC%OBC_segment_number(l)%legacy_bt = .false.
       OBC%OBC_segment_number(l)%direction = OBC_NONE
       OBC%OBC_segment_number(l)%Tnudge_in = 0.0
@@ -234,14 +242,17 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
     elseif (trim(action_str(a_loop)) == 'OBLIQUE') then
       OBC%OBC_segment_number(l_seg)%radiation = .true.
       OBC%OBC_segment_number(l_seg)%radiation2D = .true.
+      OBC%OBC_segment_number(l_seg)%gradient = .false.
       OBC%Flather_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'NUDGED') then
       OBC%OBC_segment_number(l_seg)%nudged = .true.
-      OBC%nudged_uv_BCs_exist_globally = .true.
+      OBC%OBC_segment_number(l_seg)%values_needed = .true.
+      OBC%nudged_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'LEGACY') then
       OBC%OBC_segment_number(l_seg)%legacy_bt = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%OBC_segment_number(l_seg)%specified = .true.
+      OBC%OBC_segment_number(l_seg)%values_needed = .true.
       OBC%specified_u_BCs_exist_globally = .true. ! This avoids deallocation
       ! Hack to undo the hack above for SIMPLE BCs
       if (Js_obc<Je_obc) then
@@ -284,6 +295,10 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
       endif
     enddo
   enddo ! a_loop
+  OBC%OBC_segment_number(l_seg)%Is_obc = I_obc
+  OBC%OBC_segment_number(l_seg)%Ie_obc = I_obc
+  OBC%OBC_segment_number(l_seg)%Js_obc = Js_obc
+  OBC%OBC_segment_number(l_seg)%Je_obc = Je_obc
 
 end subroutine setup_u_point_obc
 
@@ -331,14 +346,17 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
     elseif (trim(action_str(a_loop)) == 'OBLIQUE') then
       OBC%OBC_segment_number(l_seg)%radiation = .true.
       OBC%OBC_segment_number(l_seg)%radiation2D = .true.
+      OBC%OBC_segment_number(l_seg)%gradient = .false.
       OBC%Flather_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'NUDGED') then
       OBC%OBC_segment_number(l_seg)%nudged = .true.
-      OBC%nudged_uv_BCs_exist_globally = .true.
+      OBC%OBC_segment_number(l_seg)%values_needed = .true.
+      OBC%nudged_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'LEGACY') then
       OBC%OBC_segment_number(l_seg)%legacy_bt = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%OBC_segment_number(l_seg)%specified = .true.
+      OBC%OBC_segment_number(l_seg)%values_needed = .true.
       OBC%specified_v_BCs_exist_globally = .true. ! This avoids deallocation
       ! Hack to undo the hack above for SIMPLE BCs
       if (Is_obc<Ie_obc) then
@@ -381,6 +399,10 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
       endif
     enddo
   enddo ! a_loop
+  OBC%OBC_segment_number(l_seg)%Is_obc = Is_obc
+  OBC%OBC_segment_number(l_seg)%Ie_obc = Ie_obc
+  OBC%OBC_segment_number(l_seg)%Js_obc = J_obc
+  OBC%OBC_segment_number(l_seg)%Je_obc = J_obc
 
 end subroutine setup_v_point_obc
 
@@ -512,15 +534,19 @@ subroutine open_boundary_init(G, param_file, OBC)
 end subroutine open_boundary_init
 
 !> Query the state of open boundary module configuration
-logical function open_boundary_query(OBC, apply_orig_OBCs, apply_orig_Flather)
+logical function open_boundary_query(OBC, apply_specified_OBC, apply_Flather_OBC, apply_nudged_OBC)
   type(ocean_OBC_type), pointer     :: OBC !< Open boundary control structure
-  logical, optional,    intent(in)  :: apply_orig_OBCs !< If present, returns True if APPLY_OBC_U/V was set
-  logical, optional,    intent(in)  :: apply_orig_Flather !< If present, returns True if APPLY_OBC_*_FLATHER_* was set
+  logical, optional,    intent(in)  :: apply_specified_OBC !< If present, returns True if specified_*_BCs_exist_globally is true
+  logical, optional,    intent(in)  :: apply_Flather_OBC   !< If present, returns True if Flather_*_BCs_exist_globally is true
+  logical, optional,    intent(in)  :: apply_nudged_OBC    !< If present, returns True if nudged_*_BCs_exist_globally is true
   open_boundary_query = .false.
   if (.not. associated(OBC)) return
-  if (present(apply_orig_OBCs)) open_boundary_query = OBC%specified_u_BCs_exist_globally .or. OBC%specified_v_BCs_exist_globally
-  if (present(apply_orig_Flather)) open_boundary_query = OBC%Flather_u_BCs_exist_globally .or. &
-                                                         OBC%Flather_v_BCs_exist_globally
+  if (present(apply_specified_OBC)) open_boundary_query = OBC%specified_u_BCs_exist_globally .or. &
+                                                          OBC%specified_v_BCs_exist_globally
+  if (present(apply_Flather_OBC)) open_boundary_query = OBC%Flather_u_BCs_exist_globally .or. &
+                                                        OBC%Flather_v_BCs_exist_globally
+  if (present(apply_nudged_OBC)) open_boundary_query = OBC%nudged_u_BCs_exist_globally .or. &
+                                                       OBC%nudged_v_BCs_exist_globally
 end function open_boundary_query
 
 !> Deallocate open boundary data
@@ -1000,7 +1026,7 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
   integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: isd_off, jsd_off
   integer :: IsdB, IedB, JsdB, JedB
-  character(len=40)  :: mod = "set_Flather_Bdry_Conds" ! This subroutine's name.
+  character(len=40)  :: mod = "set_Flather_data" ! This subroutine's name.
   character(len=200) :: filename, OBC_file, inputdir ! Strings for file/path
 
   real :: temp_u(G%domain%niglobal+1,G%domain%njglobal)
@@ -1218,6 +1244,52 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
 ! enddo ; enddo ; enddo
 
 end subroutine set_Flather_data
+
+!> Sets the initial definitions of the characteristic open boundary conditions.
+subroutine set_3D_OBC_data(OBC, tv, h, G, PF, tracer_Reg)
+  type(ocean_grid_type),                     intent(inout) :: G !< Ocean grid structure
+  type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary structure
+  type(thermo_var_ptrs),                     intent(inout) :: tv !< Thermodynamics structure
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h !< Thickness
+  type(param_file_type),                     intent(in)    :: PF !< Parameter file handle
+  type(tracer_registry_type),                pointer       :: tracer_Reg !< Tracer registry
+  ! Local variables
+  logical :: read_OBC_uv = .false.
+  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
+  integer :: isd_off, jsd_off
+  integer :: IsdB, IedB, JsdB, JedB
+  character(len=40)  :: mod = "set_3D_OBC_data" ! This subroutine's name.
+  character(len=200) :: filename, OBC_file, inputdir ! Strings for file/path
+
+  real :: temp_u(G%domain%niglobal+1,G%domain%njglobal)
+  real :: temp_v(G%domain%niglobal,G%domain%njglobal+1)
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+
+  if (OBC%nudged_u_BCs_exist_globally) then
+    if (.not.associated(OBC%u)) then
+      allocate(OBC%u(IsdB:IedB,jsd:jed,nz)) ; OBC%u(:,:,:) = 0.0
+    endif
+    if (.not.associated(OBC%uh)) then
+      allocate(OBC%uh(IsdB:IedB,jsd:jed,nz)) ; OBC%uh(:,:,:) = 0.0
+    endif
+  endif
+
+  if (OBC%nudged_v_BCs_exist_globally) then
+    if (.not.associated(OBC%v)) then
+      allocate(OBC%v(isd:ied,JsdB:JedB,nz)) ; OBC%v(:,:,:) = 0.0
+    endif
+    if (.not.associated(OBC%vh)) then
+      allocate(OBC%vh(isd:ied,JsdB:JedB,nz)) ; OBC%vh(:,:,:) = 0.0
+    endif
+  endif
+
+! call pass_vector(OBC%eta_outer_u,OBC%eta_outer_v,G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
+! call pass_vector(OBC%ubt_outer,OBC%vbt_outer,G%Domain)
+
+end subroutine set_3D_OBC_data
 
 !> \namespace mom_open_boundary
 !! This module implements some aspects of internal open boundary
