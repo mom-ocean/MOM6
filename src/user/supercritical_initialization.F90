@@ -7,7 +7,6 @@ use MOM_error_handler,  only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser,    only : get_param, log_version, param_file_type
 use MOM_grid,           only : ocean_grid_type
 use MOM_open_boundary,  only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE
-use MOM_open_boundary,  only : open_boundary_query
 use MOM_verticalGrid,   only : verticalGrid_type
 use MOM_time_manager,   only : time_type, set_time, time_type_to_real
 
