@@ -28,7 +28,7 @@ public open_boundary_query
 public open_boundary_end
 public open_boundary_impose_normal_slope
 public open_boundary_impose_land_mask
-public Radiation_Open_Bdry_Conds
+public radiation_open_bdry_conds
 public set_Flather_data
 public set_3D_OBC_data
 
@@ -57,8 +57,8 @@ type, public :: OBC_segment_type
   integer :: Ie_obc         !< i-indices of boundary segment.
   integer :: Js_obc         !< j-indices of boundary segment.
   integer :: Je_obc         !< j-indices of boundary segment.
-  real :: Tnudge_in         !< Nudging timescale on inflow.
-  real :: Tnudge_out        !< Nudging timescale on outflow.
+  real :: Tnudge_in         !< Inverse nudging timescale on inflow (1/s).
+  real :: Tnudge_out        !< Inverse nudging timescale on outflow (1/s).
 end type OBC_segment_type
 
 !> Open-boundary data
@@ -247,6 +247,8 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
     elseif (trim(action_str(a_loop)) == 'NUDGED') then
       OBC%OBC_segment_number(l_seg)%nudged = .true.
       OBC%OBC_segment_number(l_seg)%values_needed = .true.
+      OBC%OBC_segment_number(l_seg)%Tnudge_in = 1.0/(3*86400)
+      OBC%OBC_segment_number(l_seg)%Tnudge_out = 1.0/(360*86400)
       OBC%nudged_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'LEGACY') then
       OBC%OBC_segment_number(l_seg)%legacy_bt = .true.
@@ -351,6 +353,8 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
     elseif (trim(action_str(a_loop)) == 'NUDGED') then
       OBC%OBC_segment_number(l_seg)%nudged = .true.
       OBC%OBC_segment_number(l_seg)%values_needed = .true.
+      OBC%OBC_segment_number(l_seg)%Tnudge_in = 1.0/(3*86400)
+      OBC%OBC_segment_number(l_seg)%Tnudge_out = 1.0/(360*86400)
       OBC%nudged_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'LEGACY') then
       OBC%OBC_segment_number(l_seg)%legacy_bt = .true.
@@ -708,7 +712,7 @@ subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv)
 end subroutine open_boundary_impose_land_mask
 
 !> Apply radiation conditions to 3D  u,v (,h) at open boundaries
-subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
+subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
                                      h_new, h_old, G)
   type(ocean_grid_type),                     intent(inout) :: G !< Ocean grid structure
   type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary control structure
@@ -721,7 +725,7 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: grad
   real :: dhdt, dhdx, dhdy, gamma_u, gamma_h, gamma_v
-  real :: cff, Cx, Cy
+  real :: cff, Cx, Cy, tau
   real :: rx_max, ry_max ! coefficients for radiation
   real :: rx_new, rx_avg ! coefficients for radiation
   real, parameter :: eps = 1.0e-20
@@ -775,6 +779,15 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
     !   OBC%rx_old_h(I,j,k) = rx_avg
     !    h_new(I+1,j,k) = (h_old(I+1,j,k) + rx_avg*h_new(I,j,k)) / (1.0+rx_avg) !original
       endif
+      if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%radiation .and. &
+          OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%nudged) then
+        if (dhdt*dhdx < 0.0) then
+          tau = OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%Tnudge_in
+        else
+          tau = OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%Tnudge_out
+        endif
+        u_new(I,j,k) = u_new(I,j,k) + tau*(OBC%u(I,j,k) - u_old(I,j,k))
+      endif
     endif
 
     if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W) then
@@ -814,6 +827,15 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
     !   rx_avg = (1.0-gamma_h)*OBC%rx_old_h(I,j,k) + gamma_h*rx_new
     !   OBC%rx_old_h(I,j,k) = rx_avg
     !   h_new(I,j,k) = (h_old(I,j,k) + rx_avg*h_new(I+1,j,k)) / (1.0+rx_avg) !original
+      endif
+      if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%radiation .and. &
+          OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%nudged) then
+        if (dhdt*dhdx < 0.0) then
+          tau = OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%Tnudge_in
+        else
+          tau = OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%Tnudge_out
+        endif
+        u_new(I,j,k) = u_new(I,j,k) + tau*(OBC%u(I,j,k) - u_old(I,j,k))
       endif
     endif
 
@@ -909,6 +931,15 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
     !   OBC%ry_old_h(i,J,k) = rx_avg
     !   h_new(i,J+1,k) = (h_old(i,J+1,k) + rx_avg*h_new(i,J,k)) / (1.0+rx_avg) !original
       endif
+      if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%radiation .and. &
+          OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%nudged) then
+        if (dhdt*dhdy < 0.0) then
+          tau = OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%Tnudge_in
+        else
+          tau = OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%Tnudge_out
+        endif
+        v_new(i,J,k) = v_new(i,J,k) + tau*(OBC%v(i,J,k) - v_old(i,J,k))
+      endif
     endif
 
     if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_S) then
@@ -948,6 +979,15 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
     !   rx_avg = (1.0-gamma_h)*OBC%ry_old_h(i,J,k) + gamma_h*rx_new
     !   OBC%ry_old_h(i,J,k) = rx_avg
     !   h_new(i,J,k) = (h_old(i,J,k) + rx_avg*h_new(i,J+1,k)) / (1.0+rx_avg) !original
+      endif
+      if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%radiation .and. &
+          OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%nudged) then
+        if (dhdt*dhdy < 0.0) then
+          tau = OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%Tnudge_in
+        else
+          tau = OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%Tnudge_out
+        endif
+        v_new(i,J,k) = v_new(i,J,k) + tau*(OBC%v(i,J,k) - v_old(i,J,k))
       endif
     endif
 
@@ -1008,7 +1048,7 @@ subroutine Radiation_Open_Bdry_Conds(OBC, u_new, u_old, v_new, v_old, &
   call pass_var(h_new, G%Domain)
   call cpu_clock_end(id_clock_pass)
 
-end subroutine Radiation_Open_Bdry_Conds
+end subroutine radiation_open_bdry_conds
 
 !> Sets the initial definitions of the characteristic open boundary conditions.
 !! \author Mehmet Ilicak
