@@ -64,6 +64,8 @@ type, public :: boundary_impulse_tracer_CS ; private
                ! surface tracer concentrations are to be provided to the coupler.
     id_tracer = -1, id_tr_adx = -1, id_tr_ady = -1, &
     id_tr_dfx = -1, id_tr_dfy = -1
+    
+  integer :: nkml ! Number of layers in mixed layer
   real, dimension(NTR_MAX)  :: land_val = -1.0
   real :: kw_eff ! An effective piston velocity used to flux tracer out at the surface
   real :: remaining_source_time ! How much longer (same units as the timestep) to 
