@@ -386,12 +386,14 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt, frac_shelf_h)
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV)+1) :: dzRegrid ! The change in grid interface positions
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_new ! New 3D grid obtained after last time step (m or Pa)
   integer :: nk, i, j, k, isc, iec, jsc, jec
-  logical :: ice_shelf = .false.
+  logical :: ice_shelf
 
   nk = GV%ke; isc = G%isc; iec = G%iec; jsc = G%jsc; jec = G%jec
 
-  if (present(frac_shelf_h)) ice_shelf = .true.
-  !ice_shelf = associated(frac_shelf_h)
+  ice_shelf = .false.
+  if (present(frac_shelf_h)) then
+    if (associated(frac_shelf_h)) ice_shelf = .true.
+  endif
 
   if (CS%show_call_tree) call callTree_enter("ALE_main(), MOM_ALE.F90")
 
@@ -579,9 +581,12 @@ subroutine ALE_build_grid( G, GV, regridCS, remapCS, h, tv, debug, frac_shelf_h 
   logical :: show_call_tree, use_ice_shelf
 
   show_call_tree = .false.
-  if (present(frac_shelf_h)) use_ice_shelf = .true.
   if (present(debug)) show_call_tree = debug
   if (show_call_tree) call callTree_enter("ALE_build_grid(), MOM_ALE.F90")
+  use_ice_shelf = .false.
+  if (present(frac_shelf_h)) then
+    if (associated(frac_shelf_h)) use_ice_shelf = .true.
+  endif
 
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
