@@ -1576,7 +1576,7 @@ function ocean_register_diag(var_desc, G, diag_CS, day)
   character(len=48) :: units            ! A variable's units.
   character(len=240) :: longname        ! A variable's longname.
   character(len=8) :: hor_grid, z_grid  ! Variable grid info.
-  type(axes_grp) :: axes
+  type(axes_grp), pointer :: axes
 
   call query_vardesc(var_desc, units=units, longname=longname, hor_grid=hor_grid, &
                      z_grid=z_grid, caller="ocean_register_diag")
@@ -1588,23 +1588,23 @@ function ocean_register_diag(var_desc, G, diag_CS, day)
     case ("L")
       select case (hor_grid)
         case ("q")
-          axes = diag_cs%axesBL
+          axes => diag_cs%axesBL
         case ("h")
-          axes = diag_cs%axesTL
+          axes => diag_cs%axesTL
         case ("u")
-          axes = diag_cs%axesCuL
+          axes => diag_cs%axesCuL
         case ("v")
-          axes = diag_cs%axesCvL
+          axes => diag_cs%axesCvL
         case ("Bu")
-          axes = diag_cs%axesBL
+          axes => diag_cs%axesBL
         case ("T")
-          axes = diag_cs%axesTL
+          axes => diag_cs%axesTL
         case ("Cu")
-          axes = diag_cs%axesCuL
+          axes => diag_cs%axesCuL
         case ("Cv")
-          axes = diag_cs%axesCvL
+          axes => diag_cs%axesCvL
         case ("z")
-          axes = diag_cs%axeszL
+          axes => diag_cs%axeszL
         case default
           call MOM_error(FATAL, "ocean_register_diag: " // &
               "unknown hor_grid component "//trim(hor_grid))
@@ -1613,23 +1613,23 @@ function ocean_register_diag(var_desc, G, diag_CS, day)
     case ("i")
       select case (hor_grid)
         case ("q")
-          axes = diag_cs%axesBi
+          axes => diag_cs%axesBi
         case ("h")
-          axes = diag_cs%axesTi
+          axes => diag_cs%axesTi
         case ("u")
-          axes = diag_cs%axesCui
+          axes => diag_cs%axesCui
         case ("v")
-          axes = diag_cs%axesCvi
+          axes => diag_cs%axesCvi
         case ("Bu")
-          axes = diag_cs%axesBi
+          axes => diag_cs%axesBi
         case ("T")
-          axes = diag_cs%axesTi
+          axes => diag_cs%axesTi
         case ("Cu")
-          axes = diag_cs%axesCui
+          axes => diag_cs%axesCui
         case ("Cv")
-          axes = diag_cs%axesCvi
+          axes => diag_cs%axesCvi
         case ("z")
-          axes = diag_cs%axeszi
+          axes => diag_cs%axeszi
         case default
           call MOM_error(FATAL, "ocean_register_diag: " // &
             "unknown hor_grid component "//trim(hor_grid))
@@ -1638,21 +1638,21 @@ function ocean_register_diag(var_desc, G, diag_CS, day)
     case ("1")
       select case (hor_grid)
         case ("q")
-          axes = diag_cs%axesB1
+          axes => diag_cs%axesB1
         case ("h")
-          axes = diag_cs%axesT1
+          axes => diag_cs%axesT1
         case ("u")
-          axes = diag_cs%axesCu1
+          axes => diag_cs%axesCu1
         case ("v")
-          axes = diag_cs%axesCv1
+          axes => diag_cs%axesCv1
         case ("Bu")
-          axes = diag_cs%axesB1
+          axes => diag_cs%axesB1
         case ("T")
-          axes = diag_cs%axesT1
+          axes => diag_cs%axesT1
         case ("Cu")
-          axes = diag_cs%axesCu1
+          axes => diag_cs%axesCu1
         case ("Cv")
-          axes = diag_cs%axesCv1
+          axes => diag_cs%axesCv1
         case default
           call MOM_error(FATAL, "ocean_register_diag: " // &
             "unknown hor_grid component "//trim(hor_grid))
