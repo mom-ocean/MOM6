@@ -1569,7 +1569,7 @@ function ocean_register_diag(var_desc, G, diag_CS, day)
   integer :: ocean_register_diag  !< An integer handle to this diagnostic.
   type(vardesc),         intent(in) :: var_desc !< The vardesc type describing the diagnostic
   type(ocean_grid_type), intent(in) :: G        !< The ocean's grid type
-  type(diag_ctrl),       intent(in) :: diag_CS  !< The diagnotic control structure
+  type(diag_ctrl), intent(in), target :: diag_CS  !< The diagnotic control structure
   type(time_type),       intent(in) :: day      !< The current model time
 
   character(len=64) :: var_name         ! A variable's name.
