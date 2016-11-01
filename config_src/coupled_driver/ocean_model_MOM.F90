@@ -460,13 +460,13 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   OS%nstep = OS%nstep + 1
 
   call enable_averaging(time_step, OS%Time, OS%MOM_CSp%diag)
-  call mech_forcing_diags(OS%fluxes, time_step, OS%grid, &
+  call mech_forcing_diags(OS%Time, OS%fluxes, time_step, OS%grid, &
                           OS%MOM_CSp%diag, OS%forcing_CSp%handles)
   call disable_averaging(OS%MOM_CSp%diag)
 
   if (OS%fluxes%fluxes_used) then
     call enable_averaging(OS%fluxes%dt_buoy_accum, OS%Time, OS%MOM_CSp%diag)
-    call forcing_diagnostics(OS%fluxes, OS%state, OS%fluxes%dt_buoy_accum, &
+    call forcing_diagnostics(OS%Time, OS%fluxes, OS%state, OS%fluxes%dt_buoy_accum, &
                              OS%grid, OS%MOM_CSp%diag, OS%forcing_CSp%handles)
     call accumulate_net_input(OS%fluxes, OS%state, OS%fluxes%dt_buoy_accum, &
                               OS%grid, OS%sum_output_CSp)

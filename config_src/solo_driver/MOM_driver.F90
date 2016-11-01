@@ -468,14 +468,14 @@ program MOM_main
     Time = Master_Time
 
     call enable_averaging(time_step, Time, MOM_CSp%diag)
-    call mech_forcing_diags(fluxes, time_step, grid, MOM_CSp%diag, &
+    call mech_forcing_diags(Time, fluxes, time_step, grid, MOM_CSp%diag, &
                             surface_forcing_CSp%handles)
     call disable_averaging(MOM_CSp%diag)
 
     if (.not. offline_tracer_mode) then
       if (fluxes%fluxes_used) then
         call enable_averaging(fluxes%dt_buoy_accum, Time, MOM_CSp%diag)
-        call forcing_diagnostics(fluxes, state, fluxes%dt_buoy_accum, grid, &
+        call forcing_diagnostics(Time, fluxes, state, fluxes%dt_buoy_accum, grid, &
                                  MOM_CSp%diag, surface_forcing_CSp%handles)
         call accumulate_net_input(fluxes, state, fluxes%dt_buoy_accum, grid, sum_output_CSp)
         call disable_averaging(MOM_CSp%diag)
