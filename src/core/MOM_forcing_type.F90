@@ -22,13 +22,16 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
+public forcing_type_init
 public extractFluxes1d, extractFluxes2d, MOM_forcing_chksum, optics_type
 public calculateBuoyancyFlux1d, calculateBuoyancyFlux2d, forcing_accumulate
 public forcing_SinglePointPrint, mech_forcing_diags, forcing_diagnostics
-public register_forcing_type_diags, allocate_forcing_type, deallocate_forcing_type
+public allocate_forcing_type, deallocate_forcing_type
 
 integer :: num_msg = 0
 integer :: max_msg = 2
+logical :: diags_registered = .false.
+logical :: use_temperature = .false.
 
 !> Structure that contains pointers to the boundary forcing
 !! used to drive the liquid ocean simulated by MOM.
@@ -252,17 +255,26 @@ type, public :: forcing_diags
   integer :: id_clock_forcing
 
   ! iceberg id handle
-  integer :: id_ustar_berg
-  integer :: id_area_berg
-  integer :: id_mass_berg
+  integer :: id_ustar_berg = -1
+  integer :: id_area_berg = -1
+  integer :: id_mass_berg = -1
 
   !Iceberg + Ice shelf
-  integer :: id_ustar_ice_cover
-  integer :: id_frac_ice_cover
+  integer :: id_ustar_ice_cover = -1
+  integer :: id_frac_ice_cover = -1
 
 end type forcing_diags
 
 contains
+
+!> Initialises this module
+subroutine forcing_type_init(use_temp)
+  logical,             intent(in) :: use_temp !< True if T/S are in use
+
+  use_temperature = use_temp
+  diags_registered = .false.
+
+end subroutine forcing_type_init
 
 !> This subroutine extracts fluxes from the surface fluxes type. It works on a j-row
 !! for optimization purposes. The 2d (i,j) wrapper is the next subroutine below.
@@ -941,10 +953,11 @@ end subroutine forcing_SinglePointPrint
 
 
 !> Register members of the forcing type for diagnostics
-subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
+subroutine register_forcing_type_diags(Time, diag, use_temperature, fluxes, handles)
   type(time_type),     intent(in)    :: Time            !< time type
   type(diag_ctrl),     intent(inout) :: diag            !< diagnostic control type
   logical,             intent(in)    :: use_temperature !< True if T/S are in use
+  type(forcing),       intent(in)    :: fluxes          !< fluxes type
   type(forcing_diags), intent(inout) :: handles         !< handles for diagnostics
 
 
@@ -967,20 +980,30 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
   handles%id_ustar = register_diag_field('ocean_model', 'ustar', diag%axesT1, Time, &
       'Surface friction velocity = [(gustiness + tau_magnitude)/rho0]^(1/2)', 'meter second-1')
 
-  handles%id_ustar_berg = register_diag_field('ocean_model', 'ustar_berg', diag%axesT1, Time, &
-      'Friction velocity below iceberg ', 'meter second-1')
+ if (ASSOCIATED(fluxes%ustar_berg)) then
+    handles%id_ustar_berg = register_diag_field('ocean_model', 'ustar_berg', diag%axesT1, Time, &
+        'Friction velocity below iceberg ', 'meter second-1')
+  endif
 
-  handles%id_area_berg = register_diag_field('ocean_model', 'area_berg', diag%axesT1, Time, &
-      'Area of grid cell covered by iceberg ', 'm2/m2')
+  if (ASSOCIATED(fluxes%area_berg)) then
+    handles%id_area_berg = register_diag_field('ocean_model', 'area_berg', diag%axesT1, Time, &
+        'Area of grid cell covered by iceberg ', 'm2/m2')
+  endif
 
-  handles%id_mass_berg = register_diag_field('ocean_model', 'mass_berg', diag%axesT1, Time, &
+  if (ASSOCIATED(fluxes%mass_berg)) then
+    handles%id_mass_berg = register_diag_field('ocean_model', 'mass_berg', diag%axesT1, Time, &
       'Mass of icebergs ', 'kg/m2')
+  endif
 
-  handles%id_ustar_ice_cover = register_diag_field('ocean_model', 'ustar_ice_cover', diag%axesT1, Time, &
+  if (ASSOCIATED(fluxes%ustar_shelf)) then
+    handles%id_ustar_ice_cover = register_diag_field('ocean_model', 'ustar_ice_cover', diag%axesT1, Time, &
       'Friction velocity below iceberg and ice shelf together', 'meter second-1')
+  endif
 
-  handles%id_frac_ice_cover = register_diag_field('ocean_model', 'frac_ice_cover', diag%axesT1, Time, &
+  if (ASSOCIATED(fluxes%frac_shelf_h)) then
+    handles%id_frac_ice_cover = register_diag_field('ocean_model', 'frac_ice_cover', diag%axesT1, Time, &
       'Area of grid cell below iceberg and ice shelf together ', 'm2/m2')
+  endif
 
   handles%id_psurf = register_diag_field('ocean_model', 'p_surf', diag%axesT1, Time,           &
         'Pressure at ice-ocean or atmosphere-ocean interface', 'Pascal', cmor_field_name='pso',&
@@ -1543,6 +1566,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
   handles%id_total_saltFluxAdded = register_scalar_field('ocean_model', 'total_salt_Flux_Added', &
       Time, diag, long_name='Area integrated surface salt flux due to restoring or flux adjustment', units='kg')
 
+  diags_registered = .true.
 
 end subroutine register_forcing_type_diags
 
@@ -1698,16 +1722,21 @@ end subroutine forcing_accumulate
 
 
 !> Offer mechanical forcing fields for diagnostics for those
-!! fields registered as part of register_forcing_type_diags.
-subroutine mech_forcing_diags(fluxes, dt, G, diag, handles)
+!! fields registered on the first call via register_forcing_type_diags.
+subroutine mech_forcing_diags(Time, fluxes, dt, G, diag, handles)
+  type(time_type),       intent(in)    :: Time     !< time type
   type(forcing),         intent(in)    :: fluxes   !< fluxes type
   real,                  intent(in)    :: dt       !< time step
   type(ocean_grid_type), intent(in)    :: G        !< grid type
-  type(diag_ctrl),       intent(in)    :: diag     !< diagnostic type
+  type(diag_ctrl),       intent(inout) :: diag     !< diagnostic type
   type(forcing_diags),   intent(inout) :: handles  !< diagnostic id for diag_manager
 
   real, dimension(SZI_(G),SZJ_(G)) :: sum
   integer :: i,j,is,ie,js,je
+
+  if (.not. diags_registered) then
+    call register_forcing_type_diags(Time, diag, use_temperature, fluxes, handles)
+  endif
 
   call cpu_clock_begin(handles%id_clock_forcing)
 
@@ -1720,15 +1749,15 @@ subroutine mech_forcing_diags(fluxes, dt, G, diag, handles)
       call post_data(handles%id_tauy, fluxes%tauy, diag)
     if ((handles%id_ustar > 0) .and. ASSOCIATED(fluxes%ustar)) &
       call post_data(handles%id_ustar, fluxes%ustar, diag)
-    if ((handles%id_ustar_berg > 0) .and. ASSOCIATED(fluxes%ustar_berg)) &
+    if (handles%id_ustar_berg > 0) &
       call post_data(handles%id_ustar_berg, fluxes%ustar_berg, diag)
-    if ((handles%id_area_berg > 0) .and. ASSOCIATED(fluxes%area_berg)) &
+    if (handles%id_area_berg > 0) &
       call post_data(handles%id_area_berg, fluxes%area_berg, diag)
-    if ((handles%id_mass_berg > 0) .and. ASSOCIATED(fluxes%mass_berg)) &
+    if (handles%id_mass_berg > 0) &
       call post_data(handles%id_mass_berg, fluxes%mass_berg, diag)
-    if ((handles%id_frac_ice_cover > 0) .and. ASSOCIATED(fluxes%frac_shelf_h)) &
+    if (handles%id_frac_ice_cover > 0) &
       call post_data(handles%id_frac_ice_cover, fluxes%frac_shelf_h, diag)
-    if ((handles%id_ustar_ice_cover > 0) .and. ASSOCIATED(fluxes%ustar_shelf)) &
+    if (handles%id_ustar_ice_cover > 0) &
       call post_data(handles%id_ustar_ice_cover, fluxes%ustar_shelf, diag)
 
   endif
@@ -1738,13 +1767,14 @@ end subroutine mech_forcing_diags
 
 
 !> Offer buoyancy forcing fields for diagnostics for those
-!! fields registered as part of register_forcing_type_diags.
-subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
+!! fields registered on the first call via register_forcing_type_diags.
+subroutine forcing_diagnostics(Time, fluxes, state, dt, G, diag, handles)
+  type(time_type),       intent(in)    :: Time      !< time type
   type(forcing),         intent(in)    :: fluxes    !< flux type
   type(surface),         intent(in)    :: state     !< ocean state
   real,                  intent(in)    :: dt        !< time step
   type(ocean_grid_type), intent(in)    :: G         !< grid type
-  type(diag_ctrl),       intent(in)    :: diag      !< diagnostic regulator
+  type(diag_ctrl),       intent(inout) :: diag      !< diagnostic regulator
   type(forcing_diags),   intent(inout) :: handles   !< diagnostic ids
 
   ! local
@@ -1755,6 +1785,10 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
   real :: I_dt            ! inverse time step
   real :: ppt2mks         ! conversion between ppt and mks
   integer :: i,j,is,ie,js,je
+
+  if (.not. diags_registered) then
+    call register_forcing_type_diags(Time, diag, use_temperature, fluxes, handles)
+  endif
 
   call cpu_clock_begin(handles%id_clock_forcing)
 
