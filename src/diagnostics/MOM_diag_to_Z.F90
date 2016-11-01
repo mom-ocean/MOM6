@@ -1356,7 +1356,7 @@ function register_Z_diag(var_desc, CS, day, missing)
   character(len=48) :: units            ! A variable's units.
   character(len=240) :: longname        ! A variable's longname.
   character(len=8) :: hor_grid, z_grid  ! Variable grid info.
-  type(axes_grp) :: axes
+  type(axes_grp), pointer :: axes
 
   call query_vardesc(var_desc, name=var_name, units=units, longname=longname, &
                      hor_grid=hor_grid, z_grid=z_grid, caller="register_Zint_diag")
@@ -1368,21 +1368,21 @@ function register_Z_diag(var_desc, CS, day, missing)
     case ("z")
       select case (hor_grid)
         case ("q")
-          axes = CS%axesBz
+          axes => CS%axesBz
         case ("h")
-          axes = CS%axesTz
+          axes => CS%axesTz
         case ("u")
-          axes = CS%axesCuz
+          axes => CS%axesCuz
         case ("v")
-          axes = CS%axesCvz
+          axes => CS%axesCvz
         case ("Bu")
-          axes = CS%axesBz
+          axes => CS%axesBz
         case ("T")
-          axes = CS%axesTz
+          axes => CS%axesTz
         case ("Cu")
-          axes = CS%axesCuz
+          axes => CS%axesCuz
         case ("Cv")
-          axes = CS%axesCvz
+          axes => CS%axesCvz
         case default
           call MOM_error(FATAL,&
             "register_Z_diag: unknown hor_grid component "//trim(hor_grid))
@@ -1408,7 +1408,7 @@ function register_Zint_diag(var_desc, CS, day)
   character(len=48) :: units            ! A variable's units.
   character(len=240) :: longname        ! A variable's longname.
   character(len=8) :: hor_grid          ! Variable grid info.
-  type(axes_grp) :: axes
+  type(axes_grp), pointer :: axes
 
   call query_vardesc(var_desc, name=var_name, units=units, longname=longname, &
                      hor_grid=hor_grid, caller="register_Zint_diag")
@@ -1421,13 +1421,13 @@ function register_Zint_diag(var_desc, CS, day)
   ! desired axes to register the diagnostic field for.
   select case (hor_grid)
     case ("h")
-      axes = CS%axesTzi
+      axes => CS%axesTzi
     case ("q")
-      axes = CS%axesBzi
+      axes => CS%axesBzi
     case ("u")
-      axes = CS%axesCuzi
+      axes => CS%axesCuzi
     case ("v")
-      axes = CS%axesCvzi
+      axes => CS%axesCvzi
     case default
       call MOM_error(FATAL,&
         "register_Z_diag: unknown hor_grid component "//trim(hor_grid))
