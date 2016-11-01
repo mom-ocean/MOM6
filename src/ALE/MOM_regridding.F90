@@ -291,7 +291,10 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_
   real :: trickGnuCompiler
   logical :: use_ice_shelf
 
-  if (present(frac_shelf_h)) use_ice_shelf = .true.
+  use_ice_shelf = .false.
+  if (present(frac_shelf_h)) then
+    if (associated(frac_shelf_h)) use_ice_shelf = .true.
+  endif
  
   select case ( CS%regridding_scheme )
 
@@ -587,11 +590,14 @@ subroutine build_zstar_grid( CS, G, GV, h, dzInterface, frac_shelf_h)
   real    :: nominalDepth, totalThickness, dh
   real, dimension(SZK_(GV)+1) :: zOld, zNew
   real :: minThickness
-  logical :: ice_shelf = .false.
+  logical :: ice_shelf
 
   nz = GV%ke
   minThickness = CS%min_thickness
-  if (present(frac_shelf_h)) ice_shelf = .true.
+  ice_shelf = .false.
+  if (present(frac_shelf_h)) then
+    if (associated(frac_shelf_h)) ice_shelf = .true.
+  endif
 
 !$OMP parallel do default(none) shared(G,GV,dzInterface,CS,nz,h,frac_shelf_h)                 &
 !$OMP                          private(nominalDepth,totalThickness,minThickness, &
