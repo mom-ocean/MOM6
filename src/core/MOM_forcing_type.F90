@@ -27,9 +27,6 @@ public calculateBuoyancyFlux1d, calculateBuoyancyFlux2d, forcing_accumulate
 public forcing_SinglePointPrint, mech_forcing_diags, forcing_diagnostics
 public register_forcing_type_diags, allocate_forcing_type, deallocate_forcing_type
 
-integer :: num_msg = 0
-integer :: max_msg = 2
-
 !> Structure that contains pointers to the boundary forcing
 !! used to drive the liquid ocean simulated by MOM.
 !! Data in this type is allocated in the module
@@ -163,6 +160,10 @@ type, public :: forcing
      !! may contain an array of named fields used for passive tracer fluxes.
      !! All arrays in tr_fluxes use the coupler indexing, which has no halos.
      !! This is not a convenient convention, but imposed on MOM6 by the coupler.
+
+  ! For internal error tracking
+  integer :: num_msg = 0 !< Number of messages issues about excessive SW penetration
+  integer :: max_msg = 2 !< Maximum number of messages to issue about excessive SW penetration
 
 end type forcing
 
@@ -480,9 +481,9 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
 !     (fluxes%heat_content_cond(i,j)     +  fluxes%heat_content_vprec(i,j))))))
 !    endif
 
-    if (num_msg < max_msg) then
+    if (fluxes%num_msg < fluxes%max_msg) then
       if (Pen_SW_tot(i) > 1.000001*J_m2_to_H*scale*dt*fluxes%sw(i,j)) then
-        num_msg = num_msg + 1
+        fluxes%num_msg = fluxes%num_msg + 1
         write(mesg,'("Penetrating shortwave of ",1pe17.10, &
                     &" exceeds total shortwave of ",1pe17.10,&
                     &" at ",1pg11.4,"E, "1pg11.4,"N.")') &
