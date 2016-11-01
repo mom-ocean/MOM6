@@ -124,7 +124,7 @@ end type axes_grp
 type, private :: diag_type
   logical :: in_use !< True if this entry is being used.
   integer :: fms_diag_id !< Underlying FMS diag_manager id.
-  character(16) :: debug_str = '' !< For FATAL errors and debugging.
+  character(32) :: debug_str = '' !< For FATAL errors and debugging.
   type(axes_grp), pointer :: axes => null()
   real, pointer, dimension(:,:)   :: mask2d => null()
   real, pointer, dimension(:,:,:) :: mask3d => null()
@@ -1113,9 +1113,10 @@ logical function register_diag_field_expand_cmor(primary_id, module_name, field_
     call assert(associated(this_diag), 'register_diag_field_expand_cmor: diag allocation failed')
     ! Record FMS id, masks and conversion factor, in diag_type
     this_diag%fms_diag_id = fms_id
-    this_diag%debug_str = trim(field_name)
-    call set_diag_mask_and_axes(this_diag, diag_cs, axes)
+    this_diag%debug_str = trim(module_name)//"-"//trim(field_name)
+    call set_diag_mask(this_diag, diag_cs, axes)
     this_diag%axes => axes
+
     if (present(v_extrinsic)) this_diag%v_extrinsic = v_extrinsic
     if (present(conversion)) this_diag%conversion_factor = conversion
     register_diag_field_expand_cmor = .true.
@@ -1165,9 +1166,10 @@ logical function register_diag_field_expand_cmor(primary_id, module_name, field_
       call assert(associated(this_diag), 'register_diag_field_expand_cmor: cmor_diag allocation failed')
       ! Record FMS id, masks and conversion factor, in diag_type
       this_diag%fms_diag_id = fms_id
-      this_diag%debug_str = trim(cmor_field_name)
-      call set_diag_mask_and_axes(this_diag, diag_cs, axes)
+      this_diag%debug_str = trim(module_name)//"-"//trim(cmor_field_name)
+      call set_diag_mask(this_diag, diag_cs, axes)
       this_diag%axes => axes
+
       if (present(v_extrinsic)) this_diag%v_extrinsic = v_extrinsic
       if (present(conversion)) this_diag%conversion_factor = conversion
       register_diag_field_expand_cmor = .true.
@@ -1389,7 +1391,7 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
     call alloc_diag_with_id(primary_id, diag_cs, diag)
     call assert(associated(diag), 'register_scalar_field: diag allocation failed')
     diag%fms_diag_id = fms_id
-    diag%debug_str = trim(field_name)
+    diag%debug_str = trim(module_name)//"-"//trim(field_name)
   endif
 
   if (present(cmor_field_name)) then
@@ -1419,7 +1421,7 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
       endif
       call alloc_diag_with_id(primary_id, diag_cs, cmor_diag)
       cmor_diag%fms_diag_id = fms_id
-      cmor_diag%debug_str = trim(cmor_field_name)
+      cmor_diag%debug_str = trim(module_name)//"-"//trim(cmor_field_name)
     endif
   endif
 
@@ -1496,7 +1498,7 @@ function register_static_field(module_name, field_name, axes, &
     call alloc_diag_with_id(primary_id, diag_cs, diag)
     call assert(associated(diag), 'register_static_field: diag allocation failed')
     diag%fms_diag_id = fms_id
-    diag%debug_str = trim(field_name)
+    diag%debug_str = trim(module_name)//"-"//trim(field_name)
   endif
 
   if (present(cmor_field_name)) then
@@ -1527,7 +1529,7 @@ function register_static_field(module_name, field_name, axes, &
       endif
       call alloc_diag_with_id(primary_id, diag_cs, cmor_diag)
       cmor_diag%fms_diag_id = fms_id
-      cmor_diag%debug_str = trim(cmor_field_name)
+      cmor_diag%debug_str = trim(module_name)//"-"//trim(cmor_field_name)
     endif
   endif
 
@@ -1917,7 +1919,7 @@ function i2s(a,n_in)
 end function i2s
 
 !> Associates the mask pointers within diag with the appropriate mask based on the axes group.
-subroutine set_diag_mask_and_axes(diag, diag_cs, axes)
+subroutine set_diag_mask(diag, diag_cs, axes)
   type(diag_ctrl), target, intent(in) :: diag_cs !< Diag_mediator control structure
   type(diag_type), pointer, intent(inout) :: diag !< This diag type
   type(axes_grp),  intent(in) :: axes !< Axes group
@@ -1959,7 +1961,7 @@ subroutine set_diag_mask_and_axes(diag, diag_cs, axes)
     !call assert(associated(diag%mask2d), "MOM_diag_mediator.F90: Invalid 2d axes id")
   endif
 
-end subroutine set_diag_mask_and_axes
+end subroutine set_diag_mask
 
 !> Returns a new diagnostic id, it may be necessary to expand the diagnostics array.
 integer function get_new_diag_id(diag_cs)
