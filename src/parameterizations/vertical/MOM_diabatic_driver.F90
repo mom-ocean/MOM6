@@ -1982,10 +1982,10 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
 
   ! diagnostics making use of the z-gridding code
   if (associated(diag_to_Z_CSp)) then
-    vd = var_desc("Kd", "meter2 second-1", &
+    vd = var_desc("Kd_interface", "meter2 second-1", &
                   "Diapycnal diffusivity at interfaces, interpolated to z", z_grid='z')
     CS%id_Kd_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
-    vd = var_desc("Tflx_dia_dif", "degC meter second-1", &
+    vd = var_desc("Tflx_dia_diff", "degC meter second-1", &
                   "Diffusive diapycnal temperature flux across interfaces, interpolated to z", &
                   z_grid='z')
     CS%id_Tdif_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
@@ -1993,7 +1993,7 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
                   "Advective diapycnal temperature flux across interfaces, interpolated to z",&
                   z_grid='z')
     CS%id_Tadv_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
-    vd = var_desc("Sflx_dia_dif", "PSU meter second-1", &
+    vd = var_desc("Sflx_dia_diff", "PSU meter second-1", &
                   "Diffusive diapycnal salinity flux across interfaces, interpolated to z",&
                   z_grid='z')
     CS%id_Sdif_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
