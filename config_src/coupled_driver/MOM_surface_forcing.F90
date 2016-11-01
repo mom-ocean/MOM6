@@ -57,7 +57,7 @@ use MOM_domains,          only : global_field_sum, BITWISE_EXACT_SUM
 use MOM_domains,          only : AGRID, BGRID_NE, CGRID_NE, To_All
 use MOM_error_handler,    only : MOM_error, WARNING, FATAL, is_root_pe, MOM_mesg
 use MOM_file_parser,      only : get_param, log_version, param_file_type
-use MOM_forcing_type,     only : forcing, forcing_diags, register_forcing_type_diags
+use MOM_forcing_type,     only : forcing, forcing_diags, forcing_type_init
 use MOM_forcing_type,     only : allocate_forcing_type, deallocate_forcing_type
 use MOM_get_input,        only : Get_MOM_Input, directories
 use MOM_grid,             only : ocean_grid_type
@@ -1128,7 +1128,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
                  "starts to exhibit rigidity", units="kg m-2", default=1000.0)
   endif
 
-  call register_forcing_type_diags(Time, diag, CS%use_temperature, CS%handles)
+  call forcing_type_init(CS%use_temperature)
 
   call get_param(param_file, mod, "ALLOW_FLUX_ADJUSTMENTS", CS%allow_flux_adjustments, &
                  "If true, allows flux adjustments to specified via the \n"//&

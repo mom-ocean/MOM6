@@ -76,7 +76,7 @@ use MOM_error_handler,       only : MOM_error, FATAL, WARNING, MOM_mesg, is_root
 use MOM_error_handler,       only : callTree_enter, callTree_leave
 use MOM_file_parser,         only : get_param, log_version, param_file_type
 use MOM_string_functions,    only : uppercase
-use MOM_forcing_type,        only : forcing, forcing_diags, register_forcing_type_diags, deallocate_forcing_type
+use MOM_forcing_type,        only : forcing, forcing_diags, forcing_type_init, deallocate_forcing_type
 use MOM_forcing_type,        only : allocate_forcing_type, deallocate_forcing_type
 use MOM_grid,                only : ocean_grid_type
 use MOM_get_input,           only : Get_MOM_Input, directories
@@ -1850,7 +1850,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
     CS%SCM_CVmix_tests_CSp%Rho0 = CS%Rho0 !copy reference density for pass
   endif
 
-  call register_forcing_type_diags(Time, diag, CS%use_temperature, CS%handles)
+  call forcing_type_init(CS%use_temperature)
 
   ! Set up any restart fields associated with the forcing.
   call restart_init(param_file, CS%restart_CSp, "MOM_forcing.res")
