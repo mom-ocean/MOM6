@@ -306,7 +306,9 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
     call diag_remap_set_vertical_axes(diag_cs%diag_remap_cs(i), G, GV, param_file)
     ! This fetches the 1D-axis id for layers and interfaces and overwrite id_zl and id_zi from above
     nz = diag_remap_get_nz(diag_cs%diag_remap_cs(i))
-    if (nz>0) then ! This coordinate was defined
+
+    ! If nz > 0 this vertical coordinate has been configured so can be used.
+    if (nz>0) then 
       call diag_remap_get_vertical_ids(diag_cs%diag_remap_cs(i), id_zL, id_zi)
       ! Axes for z layers
       call define_axes_group(diag_cs, (/ id_xh, id_yh, id_zL /), diag_cs%remap_axesTL(i), &
