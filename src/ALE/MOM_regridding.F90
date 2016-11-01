@@ -133,13 +133,6 @@ type, public :: regridding_CS
   !! If false, integrate from the bottom upward, as does the rest of the model.
   logical :: integrate_downward_for_e = .true.
 
-
-  !> The height to use as a threshold for detection of a "rigid lid" such as an ice shelf
-  !! base. If the free-surface is depressed below this height the z* coordinate generator
-  !! assumes the depression is due to a rigid surface. This is a kludge until we provide
-  !! the position of such a surface to the ALE code.
-  real :: height_of_rigid_surface = -1.E30
-
 end type
 
 ! The following routines are visible to the outside world
@@ -2752,7 +2745,7 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
              depth_of_time_filter_shallow, depth_of_time_filter_deep, &
              compress_fraction, dz_min_surface, nz_fixed_surface, Rho_ML_avg_depth, &
              nlay_ML_to_interior, fix_haloclines, halocline_filt_len, &
-             halocline_strat_tol, integrate_downward_for_e, height_of_rigid_surface)
+             halocline_strat_tol, integrate_downward_for_e)
   type(regridding_CS), intent(inout) :: CS !< Regridding control structure
   logical, optional, intent(in) :: boundary_extrapolation !< Extrapolate in boundary cells
   real,    optional, intent(in) :: min_thickness !< Minimum thickness allowed when building the new grid (m)
@@ -2768,7 +2761,6 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
   real,    optional, intent(in) :: halocline_filt_len !< Length scale over which to filter T & S when looking for spuriously unstable water mass profiles (m)
   real,    optional, intent(in) :: halocline_strat_tol !< Value of the stratification ratio that defines a problematic halocline region.
   logical, optional, intent(in) :: integrate_downward_for_e !< If true, integrate for interface positions downward from the top.
-  real,    optional, intent(in) :: height_of_rigid_surface !< Threshold height for detection of a rigid upper surface.
 
   if (present(boundary_extrapolation)) CS%boundary_extrapolation = boundary_extrapolation
   if (present(min_thickness)) CS%min_thickness = min_Thickness
