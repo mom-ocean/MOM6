@@ -313,33 +313,40 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
            nz=nz, vertical_coordinate_number=i, &
            x_cell_method='mean', y_cell_method='mean', v_cell_method='mean', &
            is_h_point=.true., is_layer=.true., is_native=.false., needs_remapping=.true.)
+
+       !! \note Remapping for B points is not yet implemented so needs_remapping is not provided for remap_axesBL
       call define_axes_group(diag_cs, (/ id_xq, id_yq, id_zL /), diag_cs%remap_axesBL(i), &
            nz=nz, vertical_coordinate_number=i, &
            x_cell_method='point', y_cell_method='point', v_cell_method='mean', &
            is_q_point=.true., is_layer=.true., is_native=.false.)
-           !! \note Remapping for B points is not yet implemented so needs_remapping is not provided for remap_axesBL
+
       call define_axes_group(diag_cs, (/ id_xq, id_yh, id_zL /), diag_cs%remap_axesCuL(i), &
            nz=nz, vertical_coordinate_number=i, &
            x_cell_method='point', y_cell_method='mean', v_cell_method='mean', &
            is_u_point=.true., is_layer=.true., is_native=.false., needs_remapping=.true.)
+
       call define_axes_group(diag_cs, (/ id_xh, id_yq, id_zL /), diag_cs%remap_axesCvL(i), &
            nz=nz, vertical_coordinate_number=i, &
            x_cell_method='mean', y_cell_method='point', v_cell_method='mean', &
            is_v_point=.true., is_layer=.true., is_native=.false., needs_remapping=.true.)
+
       ! Axes for z interfaces
       call define_axes_group(diag_cs, (/ id_xh, id_yh, id_zi /), diag_cs%remap_axesTi(i), &
            nz=nz, vertical_coordinate_number=i, &
            x_cell_method='mean', y_cell_method='mean', v_cell_method='point', &
            is_h_point=.true., is_layer=.true., is_native=.false., needs_interpolating=.true.)
+
+      !! \note Remapping for B points is not yet implemented so needs_remapping is not provided for remap_axesBi
       call define_axes_group(diag_cs, (/ id_xq, id_yq, id_zi /), diag_cs%remap_axesBi(i), &
            nz=nz, vertical_coordinate_number=i, &
            x_cell_method='point', y_cell_method='point', v_cell_method='point', &
            is_q_point=.true., is_layer=.true., is_native=.false.)
-           !! \note Remapping for B points is not yet implemented so needs_remapping is not provided for remap_axesBi
+
       call define_axes_group(diag_cs, (/ id_xq, id_yh, id_zi /), diag_cs%remap_axesCui(i), &
            nz=nz, vertical_coordinate_number=i, &
            x_cell_method='point', y_cell_method='mean', v_cell_method='point', &
            is_u_point=.true., is_layer=.true., is_native=.false., needs_interpolating=.true.)
+
       call define_axes_group(diag_cs, (/ id_xh, id_yq, id_zi /), diag_cs%remap_axesCvi(i), &
            nz=nz, vertical_coordinate_number=i, &
            x_cell_method='mean', y_cell_method='point', v_cell_method='point', &
@@ -1002,30 +1009,28 @@ integer function register_diag_field(module_name, field_name, axes, init_time, &
     endif
 
     ! Register diagnostics remapped to z vertical coordinate
-    if (axes%rank == 3) then ! .and. axes%is_layer) then
+    if (axes%rank == 3) then
       remap_axes => null()
-      if (axes%rank .eq. 3) then
-        if ((axes%id .eq. diag_cs%axesTL%id)) then
-            remap_axes => diag_cs%remap_axesTL(i)
-        elseif(axes%id .eq. diag_cs%axesBL%id) then
-            remap_axes => diag_cs%remap_axesBL(i)
-        elseif(axes%id .eq. diag_cs%axesCuL%id ) then
-            remap_axes => diag_cs%remap_axesCuL(i)
-        elseif(axes%id .eq. diag_cs%axesCvL%id) then
-            remap_axes => diag_cs%remap_axesCvL(i)
-        elseif(axes%id .eq. diag_cs%axesTi%id) then
-            remap_axes => diag_cs%remap_axesTi(i)
-        elseif(axes%id .eq. diag_cs%axesBi%id) then
-            remap_axes => diag_cs%remap_axesBi(i)
-        elseif(axes%id .eq. diag_cs%axesCui%id ) then
-            remap_axes => diag_cs%remap_axesCui(i)
-        elseif(axes%id .eq. diag_cs%axesCvi%id) then
-            remap_axes => diag_cs%remap_axesCvi(i)
-        endif
+      if ((axes%id .eq. diag_cs%axesTL%id)) then
+          remap_axes => diag_cs%remap_axesTL(i)
+      elseif(axes%id .eq. diag_cs%axesBL%id) then
+          remap_axes => diag_cs%remap_axesBL(i)
+      elseif(axes%id .eq. diag_cs%axesCuL%id ) then
+          remap_axes => diag_cs%remap_axesCuL(i)
+      elseif(axes%id .eq. diag_cs%axesCvL%id) then
+          remap_axes => diag_cs%remap_axesCvL(i)
+      elseif(axes%id .eq. diag_cs%axesTi%id) then
+          remap_axes => diag_cs%remap_axesTi(i)
+      elseif(axes%id .eq. diag_cs%axesBi%id) then
+          remap_axes => diag_cs%remap_axesBi(i)
+      elseif(axes%id .eq. diag_cs%axesCui%id ) then
+          remap_axes => diag_cs%remap_axesCui(i)
+      elseif(axes%id .eq. diag_cs%axesCvi%id) then
+          remap_axes => diag_cs%remap_axesCvi(i)
       endif
       ! When the MOM_diag_to_Z module has been obsoleted we can assume remap_axes will
       ! always exist but in the mean-time we have to do this check:
-     !call assert(associated(remap_axes), 'register_diag_field: remap_axes not set')
+      ! call assert(associated(remap_axes), 'register_diag_field: remap_axes not set')
       if (associated(remap_axes)) then
         if (remap_axes%needs_remapping .or. remap_axes%needs_interpolating) then
           active = register_diag_field_expand_cmor(dm_id, &
