@@ -130,6 +130,9 @@ subroutine setup_axes(remap_cs, G, GV, param_file)
   character(len=8)   :: units, expected_units
   character(len=34)  :: longname, coord_string
 
+  character(len=256) :: err_msg
+  logical :: ierr
+
   real, allocatable, dimension(:) :: interfaces, layers
 
   ! Read info needed for z-space remapping
@@ -143,12 +146,14 @@ subroutine setup_axes(remap_cs, G, GV, param_file)
                  "This sets the file and variable names that define the\n"//&
                  "vertical grid used for diagnostic output remapping. \n"//&
                  " It should look like:\n"//&
-                 " FILE:<file>,<variable> - where <file> is a file within\n"//&
-                 "                          the INPUTDIR, <variable> is\n"//&
-                 "                          the name of the variable that\n"//&
-                 "                          contains interface positions.\n"//&
-                 " UNIFORM                - vertical grid is uniform\n"//&
-                 "                          between surface and max depth.\n",&
+                 " FILE:<file>,<varI>,<varL> - where <file> is a file within\n"//&
+                 "                             the INPUTDIR, <varI> is\n"//&
+                 "                             the name of the variable that\n"//&
+                 "                             contains interface positions,\n"//&
+                 "                             <varL> is the name of the variable\n"//&
+                 "                             that contains layer positions,\n"//&
+                 "UNIFORM                    - vertical grid is uniform\n"//&
+                 "                             between surface and max depth.\n",&
                  default="")
   if (len_trim(string) > 0) then
 
@@ -202,23 +207,26 @@ subroutine setup_axes(remap_cs, G, GV, param_file)
       endif
 
       ! Check that the vars have expected format, units etc.
-      if (.not. check_grid_def(trim(filename), trim(int_varname), &
-                                trim(expected_units))) then
-        call MOM_error(FATAL,"set_axes_info: Bad grid definition in "//&
-                             "'"//trim(filename)//"'")
+      call check_grid_def(filename, int_varname, expected_units, err_msg, ierr)
+      if (ierr) then
+           call MOM_error(FATAL,"set_axes_info: Unsupported format in grid "//&
+                                 "definition '"//trim(filename)//"'"//&
+                                 ". Error message "//err_msg)
       endif
-      if (.not. check_grid_def(trim(filename), trim(layer_varname), &
-                                trim(expected_units))) then
-        call MOM_error(FATAL,"set_axes_info: Bad grid definition in "//&
-                             "'"//trim(filename)//"'")
+
+      call check_grid_def(filename, layer_varname, expected_units, err_msg, ierr)
+      if (ierr) then
+           call MOM_error(FATAL,"set_axes_info: Unsupported format in grid "//&
+                                 "definition '"//trim(filename)//"'"//&
+                                 ". Error message "//err_msg)
       endif
 
       ! Log the expanded result as a comment since it cannot be read back in
       call log_param(param_file, mod, "! Remapping diagnostics", &
-                     trim(inputdir)//"/"//trim(filename)//","//trim(int_varname)//","//trim(layer_varname))
+                     trim(filename)//","//trim(int_varname)//","//trim(layer_varname))
 
       ! Get interfaces
-      call field_size(filename, int_varname, nzi)
+      call field_size(trim(filename), trim(int_varname), nzi)
       call assert(nzi(1) /= 0, 'set_axes_info: bad interface dimension size')
       allocate(interfaces(nzi(1)))
       call MOM_read_data(filename, int_varname, interfaces)
@@ -227,10 +235,10 @@ subroutine setup_axes(remap_cs, G, GV, param_file)
 
       ! Get layer dimensions
       allocate(layers(nzi(1)-1))
-      call field_size(filename, layer_varname, nzl)
-      if (layer_varname /= int_varname) then
+      call field_size(trim(filename), trim(layer_varname), nzl)
+      if (trim(layer_varname) /= trim(int_varname)) then
         call assert(nzl(1) /= 0 .and. nzl(1) == nzi(1) - 1, 'set_axes_info: bad layer dimension size')
-        call MOM_read_data(filename, layer_varname, layers)
+        call MOM_read_data(filename, trim(layer_varname), layers)
         ! Always convert heights into depths
         layers(:) = abs(layers(:))
       else
@@ -280,42 +288,55 @@ subroutine setup_axes(remap_cs, G, GV, param_file)
 
 end subroutine setup_axes
 
-function check_grid_def(filename, varname, expected_units)
+subroutine check_grid_def(filename, varname, expected_units, msg, ierr)
   ! Do some basic checks on the vertical grid definition file, variable
   character(len=*),   intent(in)  :: filename
   character(len=*),   intent(in)  :: varname
   character(len=*),   intent(in)  :: expected_units
-  logical :: check_grid_def, check_units
+
+  logical, intent(out) :: ierr
+  character(len=*), intent(inout) :: msg
 
   character (len=200) :: units, long_name
   integer :: ncid, status, intid, vid
 
-  check_grid_def = .true.
-  status = NF90_OPEN(filename, NF90_NOWRITE, ncid);
+  ierr = .false.
+  status = NF90_OPEN(trim(filename), NF90_NOWRITE, ncid);
   if (status /= NF90_NOERR) then
-    check_grid_def = .false.
+    ierr = .true.
+    msg = 'File not found: '//trim(filename)
+    return
   endif
 
-  status = NF90_INQ_VARID(ncid, varname, vid)
+  status = NF90_INQ_VARID(ncid, trim(varname), vid)
   if (status /= NF90_NOERR) then
-    check_grid_def = .false.
+    ierr = .true.
+    msg = 'Var not found: '//trim(varname)
+    return
   endif
 
   status = NF90_GET_ATT(ncid, vid, "units", units)
   if (status /= NF90_NOERR) then
-    check_grid_def = .false.
+    ierr = .true.
+    msg = 'Attribute not found: units'
+    return
   endif
+
   if (trim(units) /= trim(expected_units)) then
     if (trim(expected_units) == "meters") then
       if (trim(units) /= "m") then
-        check_grid_def = .false.
+        ierr = .true.
       endif
     else
-      check_grid_def = .false.
+      ierr = .true.
     endif
   endif
 
-end function check_grid_def
+  if (ierr) then
+    msg = 'Units incorrect: '//trim(units)//' /= '//trim(expected_units)
+  endif
+
+end subroutine check_grid_def
 
 !> Get layer and interface axes ids for this coordinate
 subroutine diag_remap_get_vertical_ids(remap_cs, id_layer, id_interface)

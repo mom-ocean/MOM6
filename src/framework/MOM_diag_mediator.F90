@@ -455,6 +455,7 @@ subroutine define_axes_group(diag_cs, handles, axes, nz, vertical_coordinate_num
   if (present(is_native)) axes%is_native = is_native
   if (present(needs_remapping)) axes%needs_remapping = needs_remapping
   if (present(needs_interpolating)) axes%needs_interpolating = needs_interpolating
+
 end subroutine define_axes_group
 
 subroutine set_diag_mediator_grid(G, diag_cs)
