@@ -877,7 +877,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
 !                           applied in this model.
   real :: utide  ! The RMS tidal velocity, in m s-1.
   type(directories)  :: dirs
-  logical            :: new_sim
+  logical            :: new_sim, iceberg_flux_diags
   type(time_type)    :: Time_frc
   character(len=200) :: TideAmp_file, gust_file, salt_file, temp_file ! Input file names.
 ! This include declares and sets the variable "version".
@@ -1128,7 +1128,11 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
                  "starts to exhibit rigidity", units="kg m-2", default=1000.0)
   endif
 
-  call register_forcing_type_diags(Time, diag, CS%use_temperature, CS%handles)
+  call get_param(param_file, mod, "ALLOW_ICEBERG_FLUX_DIAGNOSTICS", iceberg_flux_diags, &
+                 "If true, makes available diagnostics of fluxes from icebergs\n"//&
+                 "as seen by MOM6.", default=.false.)
+  call register_forcing_type_diags(Time, diag, CS%use_temperature, CS%handles, &
+                                   use_berg_fluxes=iceberg_flux_diags)
 
   call get_param(param_file, mod, "ALLOW_FLUX_ADJUSTMENTS", CS%allow_flux_adjustments, &
                  "If true, allows flux adjustments to specified via the \n"//&

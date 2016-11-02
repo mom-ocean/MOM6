@@ -508,7 +508,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
 
       any_simple_OBC = .false.
       if (present(uhbt) .or. do_aux .or. set_BT_cont) then
-        if (local_specified_BC) then ; do I=ish-1,ieh
+        if (local_specified_BC .or. local_Flather_OBC) then ; do I=ish-1,ieh
           ! Avoid reconciling barotropic/baroclinic transports if transport is specified
           is_simple = OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%specified
           ! This is a tangential condition and is needed for unknown reasons and
