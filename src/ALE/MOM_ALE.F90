@@ -371,7 +371,7 @@ end subroutine ALE_end
 !! the old grid and the new grid. The creation of the new grid can be based
 !! on z coordinates, target interface densities, sigma coordinates or any
 !! arbitrary coordinate system.
-subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt)
+subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt, frac_shelf_h)
   type(ocean_grid_type),                      intent(in)    :: G   !< Ocean grid informations
   type(verticalGrid_type),                    intent(in)    :: GV  !< Ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h   !< Current 3D grid obtained after last time step (m or Pa)
@@ -381,12 +381,19 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt)
   type(tracer_registry_type),                 pointer       :: Reg !< Tracer registry structure
   type(ALE_CS),                               pointer       :: CS  !< Regridding parameters and options
   real,                             optional, intent(in)    :: dt  !< Time step between calls to ALE_main()
+  real, dimension(:,:),             optional, pointer       :: frac_shelf_h !< Fractional ice shelf coverage
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV)+1) :: dzRegrid ! The change in grid interface positions
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_new ! New 3D grid obtained after last time step (m or Pa)
   integer :: nk, i, j, k, isc, iec, jsc, jec
+  logical :: ice_shelf
 
   nk = GV%ke; isc = G%isc; iec = G%iec; jsc = G%jsc; jec = G%jec
+
+  ice_shelf = .false.
+  if (present(frac_shelf_h)) then
+    if (associated(frac_shelf_h)) ice_shelf = .true.
+  endif
 
   if (CS%show_call_tree) call callTree_enter("ALE_main(), MOM_ALE.F90")
 
@@ -397,7 +404,11 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt)
 
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
-  call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, h_new, dzRegrid )
+  if (ice_shelf) then
+     call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, h_new, dzRegrid, frac_shelf_h)
+  else
+     call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, h_new, dzRegrid)
+  endif
 
   call check_grid( G, GV, h, 0. )
 
@@ -554,7 +565,7 @@ subroutine check_grid( G, GV, h, threshold )
 end subroutine check_grid
 
 !> Generates new grid
-subroutine ALE_build_grid( G, GV, regridCS, remapCS, h, tv, debug )
+subroutine ALE_build_grid( G, GV, regridCS, remapCS, h, tv, debug, frac_shelf_h )
   type(ocean_grid_type),                   intent(in)    :: G        !< Ocean grid structure 
   type(verticalGrid_type),                 intent(in)    :: GV       !< Ocean vertical grid structure
   type(regridding_CS),                     intent(in)    :: regridCS !< Regridding parameters and options
@@ -562,20 +573,28 @@ subroutine ALE_build_grid( G, GV, regridCS, remapCS, h, tv, debug )
   type(thermo_var_ptrs),                   intent(inout) :: tv       !< Thermodynamical variable structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(GV)), intent(inout) :: h      !< Current 3D grid obtained after the last time step (m or Pa)
   logical,                       optional, intent(in)    :: debug    !< If true, show the call tree
-
+  real, dimension(:,:),          optional, pointer       :: frac_shelf_h !< Fractional ice shelf coverage
   ! Local variables
   integer :: nk, i, j, k
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV)+1) :: dzRegrid ! The change in grid interface positions
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV)) :: h_new ! The new grid thicknesses
-  logical :: show_call_tree
+  logical :: show_call_tree, use_ice_shelf
 
   show_call_tree = .false.
   if (present(debug)) show_call_tree = debug
   if (show_call_tree) call callTree_enter("ALE_build_grid(), MOM_ALE.F90")
+  use_ice_shelf = .false.
+  if (present(frac_shelf_h)) then
+    if (associated(frac_shelf_h)) use_ice_shelf = .true.
+  endif
 
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
-  call regridding_main( remapCS, regridCS, G, GV, h, tv, h_new, dzRegrid )
+  if (use_ice_shelf) then
+     call regridding_main( remapCS, regridCS, G, GV, h, tv, h_new, dzRegrid, frac_shelf_h )
+  else
+     call regridding_main( remapCS, regridCS, G, GV, h, tv, h_new, dzRegrid )  
+  endif
 
   ! Override old grid with new one. The new grid 'h_new' is built in
   ! one of the 'build_...' routines above.
@@ -1029,7 +1048,6 @@ subroutine ALE_initRegridding(GV, max_depth, param_file, mod, regridCS, dz )
   real :: filt_len, strat_tol, index_scale
   real :: tmpReal, compress_fraction
   real :: dz_fixed_sfc, Rho_avg_depth, nlay_sfc_int
-  real :: height_of_rigid_surface
   integer :: nz_fixed_sfc
   real :: rho_target(GV%ke+1) ! Target density used in HYBRID mode
   real, dimension(size(dz))   :: h_max  ! Maximum layer thicknesses, in m.
