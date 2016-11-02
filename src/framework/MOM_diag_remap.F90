@@ -467,6 +467,7 @@ subroutine diag_remap_do_remap(remap_cs, G, h, staggered_in_x, staggered_in_y, &
   logical :: mask_vanished_layers
   integer :: nz_src, nz_dest
   integer :: i, j, k
+  real    :: depth, bathy
 
 
   call assert(remap_cs%defined, 'diag_remap_do_remap: remap_cs is for an undefined coordinate!')
@@ -492,10 +493,14 @@ subroutine diag_remap_do_remap(remap_cs, G, h, staggered_in_x, staggered_in_y, &
                               nz_dest, h_dest(:), remapped_field(I,j,:), &
                               remap_cs%remap_cs)
         if (mask_vanished_layers) then
+          ! This only works for z-like output
+          depth = 0.
+          bathy = 0.5 * (G%bathyT(i, j) + G%bathyT(i+1, j))
           do k=1, nz_dest
-            if (h_dest(k) == 0.) then ! This only works for z-like output
-              remapped_field(i,j,k:nz_dest) = missing_value
-              exit
+            depth = depth+h_dest(k)
+            if (depth > bathy .or. h_dest(k) == 0.) then
+                remapped_field(i, j, k:nz_dest) = missing_value
+                exit
             endif
           enddo
         endif
@@ -514,8 +519,12 @@ subroutine diag_remap_do_remap(remap_cs, G, h, staggered_in_x, staggered_in_y, &
                               nz_dest, h_dest(:), remapped_field(i,J,:), &
                               remap_cs%remap_cs)
         if (mask_vanished_layers) then
+          ! This only works for z-like output
+          depth = 0.
+          bathy = 0.5 * (G%bathyT(i, j) + G%bathyT(i, j+1))
           do k=1, nz_dest
-            if (h_dest(k) == 0.) then ! This only works for z-like output
+            depth = depth+h_dest(k)
+            if (depth > bathy .or. h_dest(k) == 0.) then
               remapped_field(i,j,k:nz_dest) = missing_value
               exit
             endif
@@ -535,8 +544,12 @@ subroutine diag_remap_do_remap(remap_cs, G, h, staggered_in_x, staggered_in_y, &
                               nz_dest, h_dest(:), remapped_field(i,j,:), &
                               remap_cs%remap_cs)
         if (mask_vanished_layers) then
+          ! This only works for z-like output
+          depth = 0.
+          bathy = G%bathyT(i, j)
           do k=1, nz_dest
-            if (h_dest(k) == 0.) then ! This only works for z-like output
+            depth = depth+h_dest(k)
+            if (depth > bathy .or. h_dest(k) == 0.) then
               remapped_field(i,j,k:nz_dest) = missing_value
               exit
             endif
