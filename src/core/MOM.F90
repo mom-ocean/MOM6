@@ -600,7 +600,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   CS%rel_time = 0.0
 
   tot_wt_ssh = 0.0
-  do j=js,je ; do i=is,ie ; CS%ave_ssh(i,j) = 0.0 ; enddo ; enddo
+  do j=js,je ; do i=is,ie ; CS%ave_ssh(i,j) = 0.0 ; ssh(i,j) = CS%missing; enddo ; enddo
 
   if (associated(CS%VarMix)) then
     call enable_averaging(time_interval, Time_start+set_time(int(time_interval)), &
@@ -1215,24 +1215,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
       call disable_averaging(CS%diag)
 
-      call cpu_clock_begin(id_clock_Z_diag)
-      if (Time_local + set_time(int(0.5*dt_therm)) > CS%Z_diag_time) then
-        call enable_averaging(real(time_type_to_real(CS%Z_diag_interval)), &
-                              CS%Z_diag_time, CS%diag)
-        call calculate_Z_diag_fields(u, v, h, ssh, fluxes%frac_shelf_h, CS%dt_trans, &
-                                     G, GV, CS%diag_to_Z_CSp)
-        CS%Z_diag_time = CS%Z_diag_time + CS%Z_diag_interval
-        call disable_averaging(CS%diag)
-        if (showCallTree) call callTree_waypoint("finished calculate_Z_diag_fields (step_MOM)")
-      endif
-      call cpu_clock_end(id_clock_Z_diag)
-
       call cpu_clock_end(id_clock_other)
 
       call cpu_clock_begin(id_clock_thermo)
-      
-      
-      
       ! Reset the accumulated transports to 0.
       CS%uhtr(:,:,:) = 0.0
       CS%vhtr(:,:,:) = 0.0
@@ -1241,7 +1226,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
       CS%visc%calc_bbl = .true.
 
-    endif  ! enddo for advection and thermo
+    endif  ! endif for advection and thermo
 
     call cpu_clock_begin(id_clock_other)
 
@@ -1260,6 +1245,20 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     enddo ; enddo
     if (CS%id_ssh_inst > 0) call post_data(CS%id_ssh_inst, ssh, CS%diag)
     call disable_averaging(CS%diag)
+
+    if (do_advection) then
+      call cpu_clock_begin(id_clock_Z_diag)
+      if (Time_local + set_time(int(0.5*dt_therm)) > CS%Z_diag_time) then
+        call enable_averaging(real(time_type_to_real(CS%Z_diag_interval)), &
+                              CS%Z_diag_time, CS%diag)
+        call calculate_Z_diag_fields(u, v, h, ssh, fluxes%frac_shelf_h, CS%dt_trans, &
+                                     G, GV, CS%diag_to_Z_CSp)
+        CS%Z_diag_time = CS%Z_diag_time + CS%Z_diag_interval
+        call disable_averaging(CS%diag)
+        if (showCallTree) call callTree_waypoint("finished calculate_Z_diag_fields (step_MOM)")
+      endif
+      call cpu_clock_end(id_clock_Z_diag)
+    endif
 
     if (showCallTree) call callTree_leave("DT cycles (step_MOM)")
 
