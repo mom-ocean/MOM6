@@ -509,6 +509,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   showCallTree = callTree_showQuery()
   if (showCallTree) call callTree_enter("step_MOM(), MOM.F90")
 
+  use_ice_shelf = .false.
   if (associated(fluxes%frac_shelf_h)) use_ice_shelf = .true.
  
   ! First determine the time step that is consistent with this call.
