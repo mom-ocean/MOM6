@@ -454,7 +454,11 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   call disable_averaging(OS%MOM_CSp%diag)
   Master_time = OS%Time ; Time1 = OS%Time
 
-  call step_MOM(OS%fluxes, OS%state, Time1, time_step, OS%MOM_CSp)
+  if(OS%MOM_Csp%offline_tracer_mode) then
+    call step_tracers(OS%fluxes, OS%state, Time1, time_step, OS%MOM_CSp)
+  else
+    call step_MOM(OS%fluxes, OS%state, Time1, time_step, OS%MOM_CSp)
+  endif
 
   OS%Time = Master_time + Ocean_coupling_time_step
   OS%nstep = OS%nstep + 1
