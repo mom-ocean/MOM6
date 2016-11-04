@@ -1,31 +1,20 @@
+!> This module is used for runtime remapping of diagnostics to z star, sigma and
+!! rho vertical coordinates. It defines the diag_remap_ctrl type which
+!! represents a remapping of diagnostics to a particular vertical coordinate.
+!! The module is It is used by the diag mediator module in the following way:
+!! 1) _init() is called to initialise a diag_remap_ctrl instance.
+!! 2) _configure_axes() is called to read the configuration file and set up the
+!!    vertical coordinate / axes definitions.
+!! 3) _get_axes_info() returns information needed for the diag mediator to
+!!    define new axes for the remapped diagnostics.
+!! 4) _update() is called periodically (whenever h, T or S change) to either
+!!    create or update the target remapping grids.
+!! 5) _do_remap() is called from within a diag post() to do the remapping before
+!!    the diagnostic is written out.
+
 module MOM_diag_remap
 
-!***********************************************************************
-!*                   GNU General Public License                        *
-!* This file is a part of MOM.                                         *
-!*                                                                     *
-!* MOM is free software; you can redistribute it and/or modify it and  *
-!* are expected to follow the terms of the GNU General Public License  *
-!* as published by the Free Software Foundation; either version 2 of   *
-!* the License, or (at your option) any later version.                 *
-!*                                                                     *
-!* MOM is distributed in the hope that it will be useful, but WITHOUT  *
-!* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY  *
-!* or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public    *
-!* License for more details.                                           *
-!*                                                                     *
-!* For the full text of the GNU General Public License,                *
-!* write to: Free Software Foundation, Inc.,                           *
-!*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
-!* or see:   http://www.gnu.org/licenses/gpl.html                      *
-!***********************************************************************
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*    The subroutines here are used for runtime remapping of           *
-!*    diagnostics.                                                     *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
+! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_error_handler,    only : MOM_error, FATAL, assert
 use MOM_diag_vkernels,    only : interpolate_column, reintegrate_column
@@ -53,18 +42,18 @@ implicit none ; private
 
 public diag_remap_ctrl
 public diag_remap_init, diag_remap_end, diag_remap_update, diag_remap_do_remap
-public diag_remap_set_vertical_axes, diag_remap_axes_setup_done, diag_remap_get_nz
-public diag_remap_get_vertical_ids
+public diag_remap_configure_axes, diag_remap_axes_configured
+public diag_remap_get_axes_info
 public vertically_reintegrate_diag_field
 public vertically_interpolate_diag_field
 
-!> This type represents a remapping of a diagnostic to a particular vertical
+!> This type represents remapping of diagnostics to a particular vertical
 !! coordinate.
 !! There is one of these types for each vertical coordinate. The vertical axes
 !! of a diagnostic will reference an instance of this type indicating how (or
 !! if) the diagnostic should be vertically remapped when being posted.
 type :: diag_remap_ctrl
-  logical :: defined = .false. !< Whether a coordinate has been defined
+  logical :: configured = .false. !< Whether vertical coordinate has been configured
   logical :: initialized = .false.  !< Whether remappping initialized
   integer :: vertical_coord = 0 !< The vertical coordinate that we remap to
   type(remapping_CS), pointer :: remap_cs => null() !< type for remapping using ALE module
@@ -85,8 +74,8 @@ subroutine diag_remap_init(remap_cs, vertical_coord)
   integer, intent(in) :: vertical_coord !< The vertical coordinate it represents
 
   remap_cs%vertical_coord = vertical_coord
+  remap_cs%configured = .false.
   remap_cs%initialized = .false.
-  remap_cs%defined = .false.
   remap_cs%nz = 0
 
 end subroutine diag_remap_init
@@ -98,6 +87,8 @@ subroutine diag_remap_end(remap_cs)
 
   if (allocated(remap_cs%h)) deallocate(remap_cs%h)
   if (allocated(remap_cs%dz)) deallocate(remap_cs%dz)
+  remap_cs%configured = .false.
+  remap_cs%initialized = .false.
   remap_cs%nz = 0
 
 end subroutine diag_remap_end
@@ -105,20 +96,20 @@ end subroutine diag_remap_end
 !> Configure the vertical axes for a diagnostic remapping control structure.
 !! Reads a configuration file to determine nominal location of vertical
 !! layers/interfaces.
-subroutine diag_remap_set_vertical_axes(remap_cs, G, GV, param_file)
+subroutine diag_remap_configure_axes(remap_cs, G, GV, param_file)
   type(diag_remap_ctrl), intent(inout) :: remap_cs !< Diag remap control structure
   type(ocean_grid_type), intent(inout) :: G !< Ocean grid structure
   type(verticalGrid_type), intent(in)  :: GV !< ocean vertical grid structure
   type(param_file_type), intent(in)    :: param_file !< Parameter file structure
 
   if (remap_cs%vertical_coord /= coordinateMode('LAYER')) then
-    call setup_axes(remap_cs, G, GV, param_file)
+    call configure_axes(remap_cs, G, GV, param_file)
   endif
 
-end subroutine diag_remap_set_vertical_axes
+end subroutine diag_remap_configure_axes
 
 !> Read grid definition spec to configure axes.
-subroutine setup_axes(remap_cs, G, GV, param_file)
+subroutine configure_axes(remap_cs, G, GV, param_file)
   type(diag_remap_ctrl),  intent(inout) :: remap_cs !< Diag remap control structure
   type(ocean_grid_type), intent(inout) :: G !< Ocean grid structure
   type(verticalGrid_type), intent(in)  :: GV !< ocean vertical grid structure
@@ -271,13 +262,18 @@ subroutine setup_axes(remap_cs, G, GV, param_file)
     endif
 
     ! Make axes objects
-    remap_cs%defined = .true.
-    remap_cs%layer_axes_id = diag_axis_init(lowercase(trim(vertical_coord_strings(remap_cs%vertical_coord)))//'_l', &
-                                            layers, trim(units), 'z', &
-                                            trim(longname)//' at cell center', direction=-1)
-    remap_cs%interface_axes_id = diag_axis_init(lowercase(trim(vertical_coord_strings(remap_cs%vertical_coord)))//'_i', &
-                                                interfaces, trim(units), 'z', &
-                                                trim(longname)//' Depth at interface', direction=-1)
+    remap_cs%layer_axes_id = &
+        diag_axis_init(lowercase(trim(vertical_coord_strings(remap_cs%vertical_coord)))//'_l', &
+                       layers, trim(units), 'z', &
+                       trim(longname)//' at cell center', direction=-1)
+    remap_cs%interface_axes_id = &
+        diag_axis_init(lowercase(trim(vertical_coord_strings(remap_cs%vertical_coord)))//'_i', &
+                                 interfaces, trim(units), 'z', &
+                                 trim(longname)//' Depth at interface', direction=-1)
+
+    ! Axes have now been configured.
+    remap_cs%configured = .true.
+
     deallocate(interfaces)
     deallocate(layers)
   else
@@ -286,7 +282,7 @@ subroutine setup_axes(remap_cs, G, GV, param_file)
     remap_cs%interface_axes_id = -1
   endif
 
-end subroutine setup_axes
+end subroutine configure_axes
 
 subroutine check_grid_def(filename, varname, expected_units, msg, ierr)
   ! Do some basic checks on the vertical grid definition file, variable
@@ -339,35 +335,28 @@ subroutine check_grid_def(filename, varname, expected_units, msg, ierr)
 end subroutine check_grid_def
 
 !> Get layer and interface axes ids for this coordinate
-subroutine diag_remap_get_vertical_ids(remap_cs, id_layer, id_interface)
+!! Needed when defining axes groups.
+subroutine diag_remap_get_axes_info(remap_cs, nz, id_layer, id_interface)
   type(diag_remap_ctrl), intent(in) :: remap_cs !< Diagnostic coordinate control structure
+  integer, intent(out) :: nz !< Number of vertical levels for the coordinate
   integer, intent(out) :: id_layer !< 1D-axes id for layer points
   integer, intent(out) :: id_interface !< 1D-axes id for interface points
 
+  nz = remap_cs%nz
   id_layer = remap_cs%layer_axes_id
   id_interface = remap_cs%interface_axes_id
 
-end subroutine diag_remap_get_vertical_ids
+end subroutine diag_remap_get_axes_info
 
-!> Get the number of vertical levels for this coordinate.
-!! This is needed when defining axes groups.
-function diag_remap_get_nz(remap_cs)
+
+!> Whether or not the axes for this vertical coordinated has been configured.
+!! Configuration is complete when diag_remap_configure_axes() has been
+!! successfully called.
+function diag_remap_axes_configured(remap_cs)
   type(diag_remap_ctrl), intent(in) :: remap_cs
-  integer :: diag_remap_get_nz
+  logical :: diag_remap_axes_configured
 
-  diag_remap_get_nz = remap_cs%nz
-
-end function
-
-function diag_remap_axes_setup_done(remap_cs)
-  type(diag_remap_ctrl), intent(in) :: remap_cs
-  logical :: diag_remap_axes_setup_done
-
-  if (allocated(remap_cs%dz)) then
-    diag_remap_axes_setup_done = .true.
-  else
-    diag_remap_axes_setup_done = .false.
-  endif
+  diag_remap_axes_configured = remap_cs%configured
 
 end function
 
@@ -384,18 +373,14 @@ subroutine diag_remap_update(remap_cs, G, h, T, S, eqn_of_state)
 
   ! Local variables
   integer :: i, j, k, nz
-  logical :: checked
   real, dimension(remap_cs%nz + 1) :: zInterfaces
   real, dimension(remap_cs%nz) :: resolution
 
   if (remap_cs%vertical_coord == coordinateMode('LAYER') .or. &
-      .not. diag_remap_axes_setup_done(remap_cs)) then
+      .not. diag_remap_axes_configured(remap_cs)) then
     return
   endif
 
-  call assert(remap_cs%defined, 'diag_remap_update: Attempting to update an undefined coordinate!')
-
-  checked = .false.
   nz = remap_cs%nz
 
   if (.not. remap_cs%initialized) then
@@ -404,12 +389,12 @@ subroutine diag_remap_update(remap_cs, G, h, T, S, eqn_of_state)
     call initialize_remapping(remap_cs%remap_cs, 'PPM_IH4', boundary_extrapolation=.false.)
 
     allocate(remap_cs%regrid_cs)
-    call initialize_regridding(remap_cs%nz, &
+    call initialize_regridding(nz, &
           vertical_coord_strings(remap_cs%vertical_coord), 'PPM_IH4', remap_cs%regrid_cs)
     call set_regrid_params(remap_cs%regrid_cs, min_thickness=0., integrate_downward_for_e=.false.)
     call setCoordinateResolution(remap_cs%dz, remap_cs%regrid_cs)
 
-    allocate(remap_cs%h(G%isd:G%ied,G%jsd:G%jed,remap_cs%nz))
+    allocate(remap_cs%h(G%isd:G%ied,G%jsd:G%jed, nz))
   endif
 
   ! Calculate remapping thicknesses for different target grids based on
@@ -470,7 +455,6 @@ subroutine diag_remap_do_remap(remap_cs, G, h, staggered_in_x, staggered_in_y, &
   real    :: depth, bathy
 
 
-  call assert(remap_cs%defined, 'diag_remap_do_remap: remap_cs is for an undefined coordinate!')
   call assert(remap_cs%initialized, 'diag_remap_do_remap: remap_cs not initialized.')
   call assert(size(field, 3) == size(h, 3), &
               'diag_remap_do_remap: Remap field and thickness z-axes do not match.')

@@ -43,8 +43,8 @@ use MOM_diag_remap,       only : diag_remap_ctrl
 use MOM_diag_remap,       only : diag_remap_update
 use MOM_diag_remap,       only : diag_remap_init, diag_remap_end, diag_remap_do_remap
 use MOM_diag_remap,       only : vertically_reintegrate_diag_field, vertically_interpolate_diag_field
-use MOM_diag_remap,       only : diag_remap_set_vertical_axes, diag_remap_get_nz
-use MOM_diag_remap,       only : diag_remap_axes_setup_done, diag_remap_get_vertical_ids
+use MOM_diag_remap,       only : diag_remap_configure_axes, diag_remap_axes_configured
+use MOM_diag_remap,       only : diag_remap_get_axes_info
 use regrid_consts,        only : coordinateMode, DEFAULT_COORDINATE_MODE, REGRIDDING_NUM_TYPES
 use regrid_consts,        only : vertical_coords, vertical_coord_strings
 
@@ -303,13 +303,15 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
 
   do i=1, size(diag_cs%diag_remap_cs)
     ! For each possible diagnostic coordinate
-    call diag_remap_set_vertical_axes(diag_cs%diag_remap_cs(i), G, GV, param_file)
-    ! This fetches the 1D-axis id for layers and interfaces and overwrite id_zl and id_zi from above
-    nz = diag_remap_get_nz(diag_cs%diag_remap_cs(i))
+    call diag_remap_configure_axes(diag_cs%diag_remap_cs(i), G, GV, param_file)
 
-    ! If nz > 0 this vertical coordinate has been configured so can be used.
-    if (nz>0) then 
-      call diag_remap_get_vertical_ids(diag_cs%diag_remap_cs(i), id_zL, id_zi)
+    ! This vertical coordinate has been configured so can be used.
+    if (diag_remap_axes_configured(diag_cs%diag_remap_cs(i))) then 
+
+      ! This fetches the 1D-axis id for layers and interfaces and overwrite
+      ! id_zl and id_zi from above. It also returns the number of layers.
+      call diag_remap_get_axes_info(diag_cs%diag_remap_cs(i), nz, id_zL, id_zi)
+
       ! Axes for z layers
       call define_axes_group(diag_cs, (/ id_xh, id_yh, id_zL /), diag_cs%remap_axesTL(i), &
            nz=nz, vertical_coordinate_number=i, &
