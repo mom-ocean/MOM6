@@ -1660,6 +1660,10 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         
         call sum_across_PEs(sum_u)
         call sum_across_PEs(sum_v)
+
+        if(CS%offline_CSp%print_adv_offline .and. is_root_pe()) then
+          print *, "Remaining transport: u", sum_u, "v", sum_v
+        endif
         
         if(sum_u+sum_v==0.0) then
           if(is_root_pe()) print *, "Converged after iteration", iter
