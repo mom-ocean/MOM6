@@ -36,6 +36,7 @@ module ocean_model_mod
 
 use MOM, only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
 use MOM, only : calculate_surface_state, finish_MOM_initialization
+use MOM, only : step_tracers
 use MOM_constants, only : CELSIUS_KELVIN_OFFSET
 use MOM_diag_mediator, only : diag_ctrl, enable_averaging, disable_averaging
 use MOM_diag_mediator, only : diag_mediator_close_registration, diag_mediator_end

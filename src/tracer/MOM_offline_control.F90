@@ -36,6 +36,7 @@ type, public :: offline_transport_CS
   character(len=20)  :: redistribute_method  
   logical :: fields_are_offset ! True if the time-averaged fields and snapshot fields are
                                ! offset by one time level
+  logical :: print_adv_offline ! Prints out some updates each advection sub interation
   !> Variables controlling some of the numerical considerations of offline transport
   integer           ::  num_off_iter
   real              ::  dt_offline ! Timestep used for offline tracers
@@ -297,6 +298,8 @@ subroutine offline_transport_init(param_file, CS, diabatic_aux_CSp, G, GV)
     "Number of iterations to subdivide the offline tracer advection and diffusion" )
   call get_param(param_file, mod, "DT_OFFLINE", CS%dt_offline, &
     "Length of the offline timestep")
+  call get_param(param_file, mod, "PRINT_ADV_OFFLINE", CS%print_adv_offline, &
+    "Print diagnostic output every advection subiteration")
 
   ! Concatenate offline directory and file names
   CS%snap_file = trim(CS%offlinedir)//trim(CS%snap_file)
