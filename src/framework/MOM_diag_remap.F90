@@ -43,7 +43,8 @@ implicit none ; private
 public diag_remap_ctrl
 public diag_remap_init, diag_remap_end, diag_remap_update, diag_remap_do_remap
 public diag_remap_configure_axes, diag_remap_axes_configured
-public diag_remap_get_axes_info
+public diag_remap_get_axes_info, diag_remap_set_active
+public diag_remap_diag_registration_closed
 public vertically_reintegrate_diag_field
 public vertically_interpolate_diag_field
 
@@ -55,6 +56,7 @@ public vertically_interpolate_diag_field
 type :: diag_remap_ctrl
   logical :: configured = .false. !< Whether vertical coordinate has been configured
   logical :: initialized = .false.  !< Whether remappping initialized
+  logical :: used = .false.  !< Whether this coordinate actually gets used.
   integer :: vertical_coord = 0 !< The vertical coordinate that we remap to
   type(remapping_CS), pointer :: remap_cs => null() !< type for remapping using ALE module
   type(regridding_CS), pointer :: regrid_cs => null() !< type for regridding using ALE module
@@ -76,6 +78,7 @@ subroutine diag_remap_init(remap_cs, vertical_coord)
   remap_cs%vertical_coord = vertical_coord
   remap_cs%configured = .false.
   remap_cs%initialized = .false.
+  remap_cs%used = .false.
   remap_cs%nz = 0
 
 end subroutine diag_remap_init
@@ -89,9 +92,36 @@ subroutine diag_remap_end(remap_cs)
   if (allocated(remap_cs%dz)) deallocate(remap_cs%dz)
   remap_cs%configured = .false.
   remap_cs%initialized = .false.
+  remap_cs%used = .false.
   remap_cs%nz = 0
 
 end subroutine diag_remap_end
+
+!> Inform that all diagnostics have been registered.
+!! If _set_active() has not been called on the remapping control structure
+!! will be disabled. This saves time in the case that a vertical coordinate was
+!! configured but no diagnostics which use the coordinate appeared in the
+!! diag_table.
+subroutine diag_remap_diag_registration_closed(remap_cs)
+  type(diag_remap_ctrl), intent(inout) :: remap_cs !< Diag remapping control structure
+
+  if (.not. remap_cs%used) then
+    call diag_remap_end(remap_cs)
+  endif
+
+end subroutine diag_remap_diag_registration_closed
+
+!> Indicate that this remapping type is actually used by the diag manager.
+!! If this is never called then the type will be disabled to save time.
+!! See further explanation with diag_remap_registration_closed.
+subroutine diag_remap_set_active(remap_cs)
+  type(diag_remap_ctrl), intent(inout) :: remap_cs !< Diag remapping control structure
+
+  if (remap_cs%vertical_coord /= coordinateMode('LAYER')) then
+    remap_cs%used = .true.
+  endif
+
+end subroutine diag_remap_set_active
 
 !> Configure the vertical axes for a diagnostic remapping control structure.
 !! Reads a configuration file to determine nominal location of vertical
@@ -376,8 +406,9 @@ subroutine diag_remap_update(remap_cs, G, h, T, S, eqn_of_state)
   real, dimension(remap_cs%nz + 1) :: zInterfaces
   real, dimension(remap_cs%nz) :: resolution
 
-  if (remap_cs%vertical_coord == coordinateMode('LAYER') .or. &
-      .not. diag_remap_axes_configured(remap_cs)) then
+  ! Note that coordinateMode('LAYER') is never 'configured' so will
+  ! always return here.
+  if (.not. remap_cs%configured) then
     return
   endif
 
@@ -395,6 +426,7 @@ subroutine diag_remap_update(remap_cs, G, h, T, S, eqn_of_state)
     call setCoordinateResolution(remap_cs%dz, remap_cs%regrid_cs)
 
     allocate(remap_cs%h(G%isd:G%ied,G%jsd:G%jed, nz))
+    remap_cs%initialized = .true.
   endif
 
   ! Calculate remapping thicknesses for different target grids based on
@@ -429,8 +461,6 @@ subroutine diag_remap_update(remap_cs, G, h, T, S, eqn_of_state)
       remap_cs%h(i,j,:) = zInterfaces(1:nz) - zInterfaces(2:nz+1)
     enddo
   enddo
-
-  remap_cs%initialized = .true.
 
 end subroutine diag_remap_update
 
