@@ -44,7 +44,8 @@ use MOM_diag_remap,       only : diag_remap_update
 use MOM_diag_remap,       only : diag_remap_init, diag_remap_end, diag_remap_do_remap
 use MOM_diag_remap,       only : vertically_reintegrate_diag_field, vertically_interpolate_diag_field
 use MOM_diag_remap,       only : diag_remap_configure_axes, diag_remap_axes_configured
-use MOM_diag_remap,       only : diag_remap_get_axes_info
+use MOM_diag_remap,       only : diag_remap_get_axes_info, diag_remap_set_active
+use MOM_diag_remap,       only : diag_remap_diag_registration_closed
 use regrid_consts,        only : coordinateMode, DEFAULT_COORDINATE_MODE, REGRIDDING_NUM_TYPES
 use regrid_consts,        only : vertical_coords, vertical_coord_strings
 
@@ -1048,6 +1049,9 @@ integer function register_diag_field(module_name, field_name, axes, init_time, &
                      cell_methods=cell_methods, x_cell_method=x_cell_method, &
                      y_cell_method=y_cell_method, v_cell_method=v_cell_method, &
                      conversion=conversion, v_extrinsic=v_extrinsic)
+          if (active) then
+            call diag_remap_set_active(diag_cs%diag_remap_cs(i))
+          endif
         endif ! remap_axes%needs_remapping
       endif ! associated(remap_axes)
     endif ! axes%rank == 3
@@ -1865,9 +1869,15 @@ end subroutine diag_masks_set
 subroutine diag_mediator_close_registration(diag_CS)
   type(diag_ctrl), intent(inout) :: diag_CS
 
+  integer :: i
+
   if (diag_CS%doc_unit > -1) then
     close(diag_CS%doc_unit) ; diag_CS%doc_unit = -2
   endif
+
+  do i=1, size(diag_cs%diag_remap_cs)
+    call diag_remap_diag_registration_closed(diag_cs%diag_remap_cs(i))
+  enddo
 
 end subroutine diag_mediator_close_registration
 
