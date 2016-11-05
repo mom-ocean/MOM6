@@ -27,9 +27,6 @@ public calculateBuoyancyFlux1d, calculateBuoyancyFlux2d, forcing_accumulate
 public forcing_SinglePointPrint, mech_forcing_diags, forcing_diagnostics
 public register_forcing_type_diags, allocate_forcing_type, deallocate_forcing_type
 
-integer :: num_msg = 0
-integer :: max_msg = 2
-
 !> Structure that contains pointers to the boundary forcing
 !! used to drive the liquid ocean simulated by MOM.
 !! Data in this type is allocated in the module
@@ -164,6 +161,10 @@ type, public :: forcing
      !! All arrays in tr_fluxes use the coupler indexing, which has no halos.
      !! This is not a convenient convention, but imposed on MOM6 by the coupler.
 
+  ! For internal error tracking
+  integer :: num_msg = 0 !< Number of messages issues about excessive SW penetration
+  integer :: max_msg = 2 !< Maximum number of messages to issue about excessive SW penetration
+
 end type forcing
 
 !> Structure that defines the id handles for the forcing type
@@ -252,13 +253,13 @@ type, public :: forcing_diags
   integer :: id_clock_forcing
 
   ! iceberg id handle
-  integer :: id_ustar_berg
-  integer :: id_area_berg
-  integer :: id_mass_berg
+  integer :: id_ustar_berg = -1
+  integer :: id_area_berg = -1
+  integer :: id_mass_berg = -1
 
   !Iceberg + Ice shelf
-  integer :: id_ustar_ice_cover
-  integer :: id_frac_ice_cover
+  integer :: id_ustar_ice_cover = -1
+  integer :: id_frac_ice_cover = -1
 
 end type forcing_diags
 
@@ -480,9 +481,9 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
 !     (fluxes%heat_content_cond(i,j)     +  fluxes%heat_content_vprec(i,j))))))
 !    endif
 
-    if (num_msg < max_msg) then
+    if (fluxes%num_msg < fluxes%max_msg) then
       if (Pen_SW_tot(i) > 1.000001*J_m2_to_H*scale*dt*fluxes%sw(i,j)) then
-        num_msg = num_msg + 1
+        fluxes%num_msg = fluxes%num_msg + 1
         write(mesg,'("Penetrating shortwave of ",1pe17.10, &
                     &" exceeds total shortwave of ",1pe17.10,&
                     &" at ",1pg11.4,"E, "1pg11.4,"N.")') &
@@ -941,12 +942,12 @@ end subroutine forcing_SinglePointPrint
 
 
 !> Register members of the forcing type for diagnostics
-subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
+subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use_berg_fluxes)
   type(time_type),     intent(in)    :: Time            !< time type
   type(diag_ctrl),     intent(inout) :: diag            !< diagnostic control type
   logical,             intent(in)    :: use_temperature !< True if T/S are in use
   type(forcing_diags), intent(inout) :: handles         !< handles for diagnostics
-
+  logical, optional,   intent(in)    :: use_berg_fluxes !< If true, allow iceberg flux diagnostics
 
   ! Clock for forcing diagnostics
   handles%id_clock_forcing=cpu_clock_id('(Ocean forcing diagnostics)', grain=CLOCK_ROUTINE)
@@ -967,20 +968,24 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
   handles%id_ustar = register_diag_field('ocean_model', 'ustar', diag%axesT1, Time, &
       'Surface friction velocity = [(gustiness + tau_magnitude)/rho0]^(1/2)', 'meter second-1')
 
-  handles%id_ustar_berg = register_diag_field('ocean_model', 'ustar_berg', diag%axesT1, Time, &
-      'Friction velocity below iceberg ', 'meter second-1')
+  if (present(use_berg_fluxes)) then
+    if (use_berg_fluxes) then
+      handles%id_ustar_berg = register_diag_field('ocean_model', 'ustar_berg', diag%axesT1, Time, &
+          'Friction velocity below iceberg ', 'meter second-1')
 
-  handles%id_area_berg = register_diag_field('ocean_model', 'area_berg', diag%axesT1, Time, &
-      'Area of grid cell covered by iceberg ', 'm2/m2')
+      handles%id_area_berg = register_diag_field('ocean_model', 'area_berg', diag%axesT1, Time, &
+          'Area of grid cell covered by iceberg ', 'm2/m2')
 
-  handles%id_mass_berg = register_diag_field('ocean_model', 'mass_berg', diag%axesT1, Time, &
-      'Mass of icebergs ', 'kg/m2')
+      handles%id_mass_berg = register_diag_field('ocean_model', 'mass_berg', diag%axesT1, Time, &
+          'Mass of icebergs ', 'kg/m2')
 
-  handles%id_ustar_ice_cover = register_diag_field('ocean_model', 'ustar_ice_cover', diag%axesT1, Time, &
-      'Friction velocity below iceberg and ice shelf together', 'meter second-1')
+      handles%id_ustar_ice_cover = register_diag_field('ocean_model', 'ustar_ice_cover', diag%axesT1, Time, &
+          'Friction velocity below iceberg and ice shelf together', 'meter second-1')
 
-  handles%id_frac_ice_cover = register_diag_field('ocean_model', 'frac_ice_cover', diag%axesT1, Time, &
-      'Area of grid cell below iceberg and ice shelf together ', 'm2/m2')
+      handles%id_frac_ice_cover = register_diag_field('ocean_model', 'frac_ice_cover', diag%axesT1, Time, &
+          'Area of grid cell below iceberg and ice shelf together ', 'm2/m2')
+    endif
+  endif
 
   handles%id_psurf = register_diag_field('ocean_model', 'p_surf', diag%axesT1, Time,           &
         'Pressure at ice-ocean or atmosphere-ocean interface', 'Pascal', cmor_field_name='pso',&
@@ -1720,15 +1725,15 @@ subroutine mech_forcing_diags(fluxes, dt, G, diag, handles)
       call post_data(handles%id_tauy, fluxes%tauy, diag)
     if ((handles%id_ustar > 0) .and. ASSOCIATED(fluxes%ustar)) &
       call post_data(handles%id_ustar, fluxes%ustar, diag)
-    if ((handles%id_ustar_berg > 0) .and. ASSOCIATED(fluxes%ustar_berg)) &
+    if (handles%id_ustar_berg > 0) &
       call post_data(handles%id_ustar_berg, fluxes%ustar_berg, diag)
-    if ((handles%id_area_berg > 0) .and. ASSOCIATED(fluxes%area_berg)) &
+    if (handles%id_area_berg > 0) &
       call post_data(handles%id_area_berg, fluxes%area_berg, diag)
-    if ((handles%id_mass_berg > 0) .and. ASSOCIATED(fluxes%mass_berg)) &
+    if (handles%id_mass_berg > 0) &
       call post_data(handles%id_mass_berg, fluxes%mass_berg, diag)
-    if ((handles%id_frac_ice_cover > 0) .and. ASSOCIATED(fluxes%frac_shelf_h)) &
+    if (handles%id_frac_ice_cover > 0) &
       call post_data(handles%id_frac_ice_cover, fluxes%frac_shelf_h, diag)
-    if ((handles%id_ustar_ice_cover > 0) .and. ASSOCIATED(fluxes%ustar_shelf)) &
+    if (handles%id_ustar_ice_cover > 0) &
       call post_data(handles%id_ustar_ice_cover, fluxes%ustar_shelf, diag)
 
   endif

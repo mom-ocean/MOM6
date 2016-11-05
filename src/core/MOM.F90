@@ -51,6 +51,7 @@ use MOM_fixed_initialization, only : MOM_initialize_fixed
 use MOM_forcing_type,         only : MOM_forcing_chksum
 use MOM_get_input,            only : Get_MOM_Input, directories
 use MOM_io,                   only : MOM_io_init, vardesc, var_desc
+use MOM_io,                   only : slasher, file_exists, read_data
 use MOM_obsolete_params,      only : find_obsolete_params
 use MOM_restart,              only : register_restart_field, query_initialized, save_restart
 use MOM_restart,              only : restart_init, MOM_restart_CS
@@ -493,7 +494,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   type(time_type) :: Time_local
   logical :: showCallTree
   logical :: do_pass_kd_kv_turb ! This is used for a group halo pass.
-
+  logical :: use_ice_shelf ! Needed for ALE
   G => CS%G ; GV => CS%GV
   is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = G%ke
   Isq  = G%IscB ; Ieq  = G%IecB ; Jsq  = G%JscB ; Jeq  = G%JecB
@@ -507,6 +508,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   showCallTree = callTree_showQuery()
   if (showCallTree) call callTree_enter("step_MOM(), MOM.F90")
 
+  use_ice_shelf = .false.
+  if (associated(fluxes%frac_shelf_h)) use_ice_shelf = .true.
+ 
   ! First determine the time step that is consistent with this call.
   ! It is anticipated that the time step will almost always coincide
   ! with dt. In addition, ntstep is determined, subject to the constraint
@@ -596,7 +600,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   CS%rel_time = 0.0
 
   tot_wt_ssh = 0.0
-  do j=js,je ; do i=is,ie ; CS%ave_ssh(i,j) = 0.0 ; enddo ; enddo
+  do j=js,je ; do i=is,ie ; CS%ave_ssh(i,j) = 0.0 ; ssh(i,j) = CS%missing; enddo ; enddo
 
   if (associated(CS%VarMix)) then
     call enable_averaging(time_interval, Time_start+set_time(int(time_interval)), &
@@ -740,7 +744,14 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
             call check_redundant("Pre-ALE 1 ", u, v, G)
           endif
           call cpu_clock_begin(id_clock_ALE)
-          call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, dtdia)
+          if (use_ice_shelf) then
+                   
+             call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, dtdia, &
+                          fluxes%frac_shelf_h)    
+          else
+             call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, dtdia)
+          endif
+
           call cpu_clock_end(id_clock_ALE)
         endif   ! endif for the block "if ( CS%use_ALE_algorithm )"
 
@@ -1083,7 +1094,13 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
             call check_redundant("Pre-ALE ", u, v, G)
           endif
           call cpu_clock_begin(id_clock_ALE)
-          call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%dt_trans)
+          if (use_ice_shelf) then
+
+             call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%dt_trans, &
+                           fluxes%frac_shelf_h)
+          else
+             call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%dt_trans)
+          endif
           call cpu_clock_end(id_clock_ALE)
         endif
 
@@ -1198,24 +1215,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
       call disable_averaging(CS%diag)
 
-      call cpu_clock_begin(id_clock_Z_diag)
-      if (Time_local + set_time(int(0.5*dt_therm)) > CS%Z_diag_time) then
-        call enable_averaging(real(time_type_to_real(CS%Z_diag_interval)), &
-                              CS%Z_diag_time, CS%diag)
-        call calculate_Z_diag_fields(u, v, h, ssh, fluxes%frac_shelf_h, CS%dt_trans, &
-                                     G, GV, CS%diag_to_Z_CSp)
-        CS%Z_diag_time = CS%Z_diag_time + CS%Z_diag_interval
-        call disable_averaging(CS%diag)
-        if (showCallTree) call callTree_waypoint("finished calculate_Z_diag_fields (step_MOM)")
-      endif
-      call cpu_clock_end(id_clock_Z_diag)
-
       call cpu_clock_end(id_clock_other)
 
       call cpu_clock_begin(id_clock_thermo)
-      
-      
-      
       ! Reset the accumulated transports to 0.
       CS%uhtr(:,:,:) = 0.0
       CS%vhtr(:,:,:) = 0.0
@@ -1224,7 +1226,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
       CS%visc%calc_bbl = .true.
 
-    endif  ! enddo for advection and thermo
+    endif  ! endif for advection and thermo
 
     call cpu_clock_begin(id_clock_other)
 
@@ -1243,6 +1245,20 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     enddo ; enddo
     if (CS%id_ssh_inst > 0) call post_data(CS%id_ssh_inst, ssh, CS%diag)
     call disable_averaging(CS%diag)
+
+    if (do_advection) then
+      call cpu_clock_begin(id_clock_Z_diag)
+      if (Time_local + set_time(int(0.5*dt_therm)) > CS%Z_diag_time) then
+        call enable_averaging(real(time_type_to_real(CS%Z_diag_interval)), &
+                              CS%Z_diag_time, CS%diag)
+        call calculate_Z_diag_fields(u, v, h, ssh, fluxes%frac_shelf_h, CS%dt_trans, &
+                                     G, GV, CS%diag_to_Z_CSp)
+        CS%Z_diag_time = CS%Z_diag_time + CS%Z_diag_interval
+        call disable_averaging(CS%diag)
+        if (showCallTree) call callTree_waypoint("finished calculate_Z_diag_fields (step_MOM)")
+      endif
+      call cpu_clock_end(id_clock_Z_diag)
+    endif
 
     if (showCallTree) call callTree_leave("DT cycles (step_MOM)")
 
@@ -1929,6 +1945,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
 
   real, allocatable, dimension(:,:,:) :: e   ! interface heights (meter)
   real, allocatable, dimension(:,:)   :: eta ! free surface height (m) or bottom press (Pa)
+  real, allocatable, dimension(:,:)   :: area_shelf_h ! area occupied by ice shelf
+  real, dimension(:,:), allocatable, target  :: frac_shelf_h ! fraction of total area occupied by ice shelf
+  real, dimension(:,:), pointer :: shelf_area 
   type(MOM_restart_CS),  pointer      :: restart_CSp_tmp => NULL()
 
   real    :: default_val       ! default value for a parameter
@@ -1940,6 +1959,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   logical :: save_IC           ! If true, save the initial conditions.
   logical :: do_unit_tests     ! If true, call unit tests.
   logical :: test_grid_copy = .false.
+  logical :: use_ice_shelf     ! Needed for ALE
   logical :: global_indexing   ! If true use global horizontal index values instead
                                ! of having the data domain on each processor start at 1.
   logical :: bathy_at_vel      ! If true, also define bathymetric fields at the
@@ -1952,6 +1972,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
 
   type(time_type)                 :: Start_time
   type(ocean_internal_state)      :: MOM_internal_state
+  character(len=200) :: area_varname, ice_shelf_file, inputdir, filename
 
   if (associated(CS)) then
     call MOM_error(WARNING, "initialize_MOM called with an associated "// &
@@ -2222,6 +2243,19 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
       "initialize_MOM: A bulk mixed layer can only be used with T & S as "//&
       "state variables. Add USE_EOS = True to MOM_input.")
 
+  call get_param(param_file, 'MOM', "ICE_SHELF", use_ice_shelf, default=.false., do_not_log=.true.)
+  if (use_ice_shelf) then
+     inputdir = "." ;  call get_param(param_file, 'MOM', "INPUTDIR", inputdir)
+     inputdir = slasher(inputdir)
+     call get_param(param_file, 'MOM', "ICE_THICKNESS_FILE", ice_shelf_file, &
+                    "The file from which the ice bathymetry and area are read.", &
+                    fail_if_missing=.true.)
+     call get_param(param_file, 'MOM', "ICE_AREA_VARNAME", area_varname, &
+                    "The name of the area variable in ICE_THICKNESS_FILE.", &
+                    fail_if_missing=.true.)
+  endif
+
+
   call callTree_waypoint("MOM parameters read (initialize_MOM)")
 
   ! Set up the model domain and grids.
@@ -2463,7 +2497,28 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
     call callTree_waypoint("Calling adjustGridForIntegrity() to remap initial conditions (initialize_MOM)")
     call adjustGridForIntegrity(CS%ALE_CSp, G, GV, CS%h )
     call callTree_waypoint("Calling ALE_main() to remap initial conditions (initialize_MOM)")
-    call ALE_main( G, GV, CS%h, CS%u, CS%v, CS%tv, CS%tracer_Reg, CS%ALE_CSp )
+    if (use_ice_shelf) then
+        filename = trim(inputdir)//trim(ice_shelf_file)
+        if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
+          "MOM: Unable to open "//trim(filename))
+
+        allocate(area_shelf_h(isd:ied,jsd:jed))
+        allocate(frac_shelf_h(isd:ied,jsd:jed))
+        call read_data(filename,trim(area_varname),area_shelf_h,domain=G%Domain%mpp_domain)
+        ! initialize frac_shelf_h with zeros (open water everywhere)
+        frac_shelf_h(:,:) = 0.0
+        ! compute fractional ice shelf coverage of h
+        do j=jsd,jed ; do i=isd,ied
+            if (G%areaT(i,j) > 0.0) &
+              frac_shelf_h(i,j) = area_shelf_h(i,j) / G%areaT(i,j)
+        enddo ; enddo
+        ! pass to the pointer
+        shelf_area => frac_shelf_h
+        call ALE_main(G, GV, CS%h, CS%u, CS%v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, &
+                      frac_shelf_h = shelf_area)
+    else
+        call ALE_main( G, GV, CS%h, CS%u, CS%v, CS%tv, CS%tracer_Reg, CS%ALE_CSp )
+    endif
     call cpu_clock_begin(id_clock_pass_init)
     call do_group_pass(CS%pass_uv_T_S_h, G%Domain)
     call cpu_clock_end(id_clock_pass_init)
