@@ -720,7 +720,8 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask)
 
       if (id_clock_diag_remap>0) call cpu_clock_begin(id_clock_diag_remap)
       allocate(remapped_field(size(field,1), size(field,2), diag%axes%nz))
-      call vertically_reintegrate_diag_field(diag_cs%diag_remap_cs(diag%axes%vertical_coordinate_number), &
+      call vertically_reintegrate_diag_field( &
+              diag_cs%diag_remap_cs(diag%axes%vertical_coordinate_number), &
               diag_cs%G, diag_cs%h, staggered_in_x, staggered_in_y, &
               diag%mask3d, diag_cs%missing_value, field, remapped_field)
       if (id_clock_diag_remap>0) call cpu_clock_end(id_clock_diag_remap)
@@ -742,7 +743,8 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask)
 
       if (id_clock_diag_remap>0) call cpu_clock_begin(id_clock_diag_remap)
       allocate(remapped_field(size(field,1), size(field,2), diag%axes%nz))
-      call diag_remap_do_remap(diag_cs%diag_remap_cs(diag%axes%vertical_coordinate_number), &
+      call diag_remap_do_remap(diag_cs%diag_remap_cs( &
+              diag%axes%vertical_coordinate_number), &
               diag_cs%G, diag_cs%h, staggered_in_x, staggered_in_y, &
               diag%mask3d, diag_cs%missing_value, field, remapped_field)
       if (id_clock_diag_remap>0) call cpu_clock_end(id_clock_diag_remap)
@@ -765,7 +767,8 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask)
 
       if (id_clock_diag_remap>0) call cpu_clock_begin(id_clock_diag_remap)
       allocate(remapped_field(size(field,1), size(field,2), diag%axes%nz+1))
-      call vertically_interpolate_diag_field(diag_cs%diag_remap_cs(diag%axes%vertical_coordinate_number), &
+      call vertically_interpolate_diag_field(diag_cs%diag_remap_cs( &
+              diag%axes%vertical_coordinate_number), &
               diag_cs%G, diag_cs%h, staggered_in_x, staggered_in_y, &
               diag%mask3d, diag_cs%missing_value, field, remapped_field)
       if (id_clock_diag_remap>0) call cpu_clock_end(id_clock_diag_remap)
