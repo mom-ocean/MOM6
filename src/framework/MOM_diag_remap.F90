@@ -499,7 +499,7 @@ subroutine diag_remap_do_remap(remap_cs, G, h, staggered_in_x, staggered_in_y, &
     do j=G%jsc, G%jec
       do I=G%iscB, G%iecB
         if (associated(mask)) then
-          if (mask(i,j,1)+mask(i+1,j,1) == 0.) cycle
+          if (mask(i,j,1) == 0.) cycle
         endif
         h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
         h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:))
@@ -525,7 +525,7 @@ subroutine diag_remap_do_remap(remap_cs, G, h, staggered_in_x, staggered_in_y, &
     do J=G%jscB, G%jecB
       do i=G%isc, G%iec
         if (associated(mask)) then
-          if (mask(i,j,1)+mask(i,j+1,1) == 0.) cycle
+          if (mask(i,j,1) == 0.) cycle
         endif
         h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
         h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:) )
@@ -608,7 +608,7 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, sta
     do j=G%jsc, G%jec
       do I=G%iscB, G%iecB
         if (associated(mask)) then
-          if (mask(i,j,1)+mask(i+1,j,1) == 0.) cycle
+          if (mask(i,j,1) == 0.) cycle
         endif
         h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
         h_dest(:) = 0.5 * ( remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:) )
@@ -621,7 +621,7 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, sta
     do J=G%jscB, G%jecB
       do i=G%isc, G%iec
         if (associated(mask)) then
-          if (mask(i,j,1)+mask(i,j+1,1) == 0.) cycle
+          if (mask(i,j,1) == 0.) cycle
         endif
         h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
         h_dest(:) = 0.5 * ( remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:) )
@@ -671,6 +671,7 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
               'vertically_interpolate_diag_field: Remap field and thickness z-axes do not match.')
 
   interpolated_field(:,:,:) = missing_value
+
   nz_src = size(h,3)
   nz_dest = remap_cs%nz
 
@@ -679,7 +680,7 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
     do j=G%jsc, G%jec
       do I=G%iscB, G%iecB
         if (associated(mask)) then
-          if (mask(i,j,1)+mask(i+1,j,1) == 0.) cycle
+          if (mask(i,j,1) == 0.) cycle
         endif
         h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
         h_dest(:) = 0.5 * ( remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:) )
@@ -692,7 +693,7 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
     do J=G%jscB, G%jecB
       do i=G%isc, G%iec
         if (associated(mask)) then
-          if (mask(i,j,1)+mask(i,j+1,1) == 0.) cycle
+          if (mask(i,j,1) == 0.) cycle
         endif
         h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
         h_dest(:) = 0.5 * ( remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:) )
