@@ -403,10 +403,12 @@ end function Adcroft_reciprocal
 
 !> Returns true if the coordinates (x,y) are within the h-cell (i,j)
 logical function isPointInCell(G, i, j, x, y)
-  type(ocean_grid_type), intent(in) :: G    !< Grid type
-  integer,               intent(in) :: i, j !< i,j indices of cell to test
-  real,                  intent(in) :: x, y !< x,y coordinates of point
-! This is a crude calculation that assume a geographic coordinate system
+  type(ocean_grid_type), intent(in) :: G !< Grid type
+  integer,               intent(in) :: i !< i index of cell to test
+  integer,               intent(in) :: j !< j index of cell to test
+  real,                  intent(in) :: x !< x coordinate of point
+  real,                  intent(in) :: y !< y coordinate of point
+  ! Local variables
   real :: xNE, xNW, xSE, xSW, yNE, yNW, ySE, ySW
   real :: p0, p1, p2, p3, l0, l1, l2, l3
   isPointInCell = .false.
@@ -414,6 +416,7 @@ logical function isPointInCell(G, i, j, x, y)
   xNW = G%geoLonBu(i-1,j  ) ; yNW = G%geoLatBu(i-1,j  )
   xSE = G%geoLonBu(i  ,j-1) ; ySE = G%geoLatBu(i  ,j-1)
   xSW = G%geoLonBu(i-1,j-1) ; ySW = G%geoLatBu(i-1,j-1)
+  ! This is a crude calculation that assume a geographic coordinate system
   if (x<min(xNE,xNW,xSE,xSW) .or. x>max(xNE,xNW,xSE,xSW) .or. &
       y<min(yNE,yNW,ySE,ySW) .or. y>max(yNE,yNW,ySE,ySW) ) then
     return ! Avoid the more complicated calculation

@@ -84,13 +84,14 @@ public advection_test_tracer_surface_state, advection_test_tracer_end
 public advection_test_tracer_column_physics, advection_test_stock
 
 ! ntr is the number of tracers in this module.
-integer, parameter :: ntr = 11
+integer, parameter :: NTR = 11
 
 type p3d
   real, dimension(:,:,:), pointer :: p => NULL()
 end type p3d
 
 type, public :: advection_test_tracer_CS ; private
+  integer :: ntr = NTR                     ! Number of tracers in this module
   logical :: coupled_tracers = .false.  ! These tracers are not offered to the
                                         ! coupler.
   character(len=200) :: tracer_IC_file ! The full path to the IC file, or " "
@@ -116,7 +117,6 @@ type, public :: advection_test_tracer_CS ; private
   integer, dimension(NTR) :: ind_tr ! Indices returned by aof_set_coupler_flux
              ! if it is used and the surface tracer concentrations are to be
              ! provided to the coupler.
-  integer :: ntr = NTR
 
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
@@ -284,7 +284,7 @@ subroutine initialize_advection_test_tracer(restart, day, G, GV, h,diag, OBC, CS
   h_neglect = GV%H_subroundoff
 
   CS%diag => diag
-
+  CS%ntr = NTR
   if (.not.restart) then
     do m=1,NTR
       do k=1,nz ; do j=js,je ; do i=is,ie
