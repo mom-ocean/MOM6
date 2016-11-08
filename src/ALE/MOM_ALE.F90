@@ -97,14 +97,17 @@ type, public :: ALE_CS
   integer, dimension(:), allocatable :: id_tracer_remap_tendency      !< diagnostic id 
   integer, dimension(:), allocatable :: id_Htracer_remap_tendency     !< diagnostic id 
   integer, dimension(:), allocatable :: id_Htracer_remap_tendency_2d  !< diagnostic id 
-  logical, dimension(:), allocatable :: do_tendency_diag              !< flag for doing diagnostics 
+  logical, dimension(:), allocatable :: do_tendency_diag              !< flag for doing diagnostics
+  integer                            :: id_dzRegrid
 
 end type
 
 ! Publicly available functions
 public ALE_init
 public ALE_end
-public ALE_main 
+public ALE_main
+public ALE_main_offline
+public ALE_offline_tracer_final
 public ALE_build_grid
 public ALE_remap_scalar
 public pressure_gradient_plm
@@ -282,6 +285,9 @@ subroutine ALE_register_diags(Time, G, diag, C_p, Reg, CS)
   CS%id_Htracer_remap_tendency(:)    = -1
   CS%id_Htracer_remap_tendency_2d(:) = -1
 
+  CS%id_dzRegrid = register_diag_field('ocean_model','dzRegrid',diag%axesTi,Time, &
+      'Change in interface height due to ALE regridding', 'meter')
+
   if(ntr > 0) then 
 
     do m=1,ntr
@@ -365,7 +371,7 @@ end subroutine ALE_end
 !! the old grid and the new grid. The creation of the new grid can be based
 !! on z coordinates, target interface densities, sigma coordinates or any
 !! arbitrary coordinate system.
-subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt)
+subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt, frac_shelf_h)
   type(ocean_grid_type),                      intent(in)    :: G   !< Ocean grid informations
   type(verticalGrid_type),                    intent(in)    :: GV  !< Ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h   !< Current 3D grid obtained after last time step (m or Pa)
@@ -375,13 +381,19 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt)
   type(tracer_registry_type),                 pointer       :: Reg !< Tracer registry structure
   type(ALE_CS),                               pointer       :: CS  !< Regridding parameters and options
   real,                             optional, intent(in)    :: dt  !< Time step between calls to ALE_main()
-
+  real, dimension(:,:),             optional, pointer       :: frac_shelf_h !< Fractional ice shelf coverage
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV)+1) :: dzRegrid ! The change in grid interface positions
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_new ! New 3D grid obtained after last time step (m or Pa)
   integer :: nk, i, j, k, isc, iec, jsc, jec
+  logical :: ice_shelf
 
   nk = GV%ke; isc = G%isc; iec = G%iec; jsc = G%jsc; jec = G%jec
+
+  ice_shelf = .false.
+  if (present(frac_shelf_h)) then
+    if (associated(frac_shelf_h)) ice_shelf = .true.
+  endif
 
   if (CS%show_call_tree) call callTree_enter("ALE_main(), MOM_ALE.F90")
 
@@ -392,13 +404,18 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt)
 
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
-  call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, h_new, dzRegrid )
+  if (ice_shelf) then
+     call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, h_new, dzRegrid, frac_shelf_h)
+  else
+     call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, h_new, dzRegrid)
+  endif
 
   call check_grid( G, GV, h, 0. )
 
   if (CS%show_call_tree) call callTree_waypoint("new grid generated (ALE_main)")
 
   ! Remap all variables from old grid h onto new grid h_new
+
   call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, -dzRegrid, Reg, &
                              u, v, CS%show_call_tree, dt )
 
@@ -414,7 +431,113 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt)
   enddo
 
   if (CS%show_call_tree) call callTree_leave("ALE_main()")
+
+  if (CS%id_dzRegrid>0 .and. present(dt)) call post_data(CS%id_dzRegrid, dzRegrid, CS%diag)
+
+
 end subroutine ALE_main
+
+!> Takes care of (1) building a new grid and (2) remapping all variables between
+!! the old grid and the new grid. The creation of the new grid can be based
+!! on z coordinates, target interface densities, sigma coordinates or any
+!! arbitrary coordinate system.
+subroutine ALE_main_offline( G, GV, h, tv, Reg, CS, dt)
+  type(ocean_grid_type),                      intent(in)    :: G   !< Ocean grid informations
+  type(verticalGrid_type),                    intent(in)    :: GV  !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h   !< Current 3D grid obtained after last time step (m or Pa)
+  type(thermo_var_ptrs),                      intent(inout) :: tv  !< Thermodynamic variable structure
+  type(tracer_registry_type),                 pointer       :: Reg !< Tracer registry structure
+  type(ALE_CS),                               pointer       :: CS  !< Regridding parameters and options
+  real,                             optional, intent(in)    :: dt  !< Time step between calls to ALE_main()
+  ! Local variables
+  real, dimension(SZI_(G), SZJ_(G), SZK_(GV)+1) :: dzRegrid ! The change in grid interface positions
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_new ! New 3D grid obtained after last time step (m or Pa)
+  integer :: nk, i, j, k, isc, iec, jsc, jec
+
+  nk = GV%ke; isc = G%isc; iec = G%iec; jsc = G%jsc; jec = G%jec
+
+  if (CS%show_call_tree) call callTree_enter("ALE_main_offline(), MOM_ALE.F90")
+
+  if (present(dt)) then
+    call ALE_update_regrid_weights( dt, CS )
+  endif
+  dzRegrid(:,:,:) = 0.0
+
+  ! Build new grid. The new grid is stored in h_new. The old grid is h.
+  ! Both are needed for the subsequent remapping of variables.
+  call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, h_new, dzRegrid )
+
+  call check_grid( G, GV, h, 0. )
+
+  if (CS%show_call_tree) call callTree_waypoint("new grid generated (ALE_main)")
+
+  ! Remap all variables from old grid h onto new grid h_new
+
+  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, -dzRegrid, Reg, &
+                             debug=CS%show_call_tree, dt=dt )
+
+  if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_main)")
+
+  ! Override old grid with new one. The new grid 'h_new' is built in
+  ! one of the 'build_...' routines above.
+!$OMP parallel do default(none) shared(isc,iec,jsc,jec,nk,h,h_new,CS)
+  do k = 1,nk
+    do j = jsc-1,jec+1 ; do i = isc-1,iec+1
+      h(i,j,k) = h_new(i,j,k)
+    enddo ; enddo
+  enddo
+
+  if (CS%show_call_tree) call callTree_leave("ALE_main()")
+  if (CS%id_dzRegrid>0 .and. present(dt)) call post_data(CS%id_dzRegrid, dzRegrid, CS%diag)
+
+end subroutine ALE_main_offline
+
+!> Remaps all tracers from h onto h_target. This is intended to be called when tracers
+!! are done offline. In the case where transports don't quite conserve, we still want to
+!! make sure that layer thicknesses offline do not drift too far away from the online model
+subroutine ALE_offline_tracer_final( G, GV, h, h_target, Reg, CS)
+  type(ocean_grid_type),                      intent(in)    :: G   !< Ocean grid informations
+  type(verticalGrid_type),                    intent(in)    :: GV  !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h   !< Current 3D grid obtained after last time step (m or Pa)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h_target   !< Current 3D grid obtained after last time step (m or Pa)
+  type(tracer_registry_type),                 pointer       :: Reg !< Tracer registry structure
+  type(ALE_CS),                               pointer       :: CS  !< Regridding parameters and options
+  ! Local variables
+
+  real, dimension(SZI_(G), SZJ_(G), SZK_(GV)+1) :: dzRegrid ! The change in grid interface positions
+  integer :: nk, i, j, k, isc, iec, jsc, jec
+
+  nk = GV%ke; isc = G%isc; iec = G%iec; jsc = G%jsc; jec = G%jec
+
+  if (CS%show_call_tree) call callTree_enter("ALE_offline_tracer_final(), MOM_ALE.F90")
+  
+  ! It does not seem that remap_all_state_vars uses dzRegrid for tracers, only for u, v
+  dzRegrid(:,:,:) = 0.0
+
+  call check_grid( G, GV, h, 0. )
+  call check_grid( G, GV, h_target, 0. )
+
+  if (CS%show_call_tree) call callTree_waypoint("Source and target grids checked (ALE_offline_tracer)")
+
+  ! Remap all variables from old grid h onto new grid h_new
+
+  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_target, -dzRegrid, Reg, &
+                             debug=CS%show_call_tree )
+
+  if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_offline_tracer)")
+
+  ! Override old grid with new one. The new grid 'h_new' is built in
+  ! one of the 'build_...' routines above.
+!$OMP parallel do default(none) shared(isc,iec,jsc,jec,nk,h,h_target,CS)
+  do k = 1,nk
+    do j = jsc-1,jec+1 ; do i = isc-1,iec+1
+      h(i,j,k) = h_target(i,j,k)
+    enddo ; enddo
+  enddo
+
+  if (CS%show_call_tree) call callTree_leave("ALE_offline_tracer()")
+
+end subroutine ALE_offline_tracer_final
 
 !> Check grid for negative thicknesses
 subroutine check_grid( G, GV, h, threshold )
@@ -442,7 +565,7 @@ subroutine check_grid( G, GV, h, threshold )
 end subroutine check_grid
 
 !> Generates new grid
-subroutine ALE_build_grid( G, GV, regridCS, remapCS, h, tv, debug )
+subroutine ALE_build_grid( G, GV, regridCS, remapCS, h, tv, debug, frac_shelf_h )
   type(ocean_grid_type),                   intent(in)    :: G        !< Ocean grid structure 
   type(verticalGrid_type),                 intent(in)    :: GV       !< Ocean vertical grid structure
   type(regridding_CS),                     intent(in)    :: regridCS !< Regridding parameters and options
@@ -450,20 +573,28 @@ subroutine ALE_build_grid( G, GV, regridCS, remapCS, h, tv, debug )
   type(thermo_var_ptrs),                   intent(inout) :: tv       !< Thermodynamical variable structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(GV)), intent(inout) :: h      !< Current 3D grid obtained after the last time step (m or Pa)
   logical,                       optional, intent(in)    :: debug    !< If true, show the call tree
-
+  real, dimension(:,:),          optional, pointer       :: frac_shelf_h !< Fractional ice shelf coverage
   ! Local variables
   integer :: nk, i, j, k
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV)+1) :: dzRegrid ! The change in grid interface positions
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV)) :: h_new ! The new grid thicknesses
-  logical :: show_call_tree
+  logical :: show_call_tree, use_ice_shelf
 
   show_call_tree = .false.
   if (present(debug)) show_call_tree = debug
   if (show_call_tree) call callTree_enter("ALE_build_grid(), MOM_ALE.F90")
+  use_ice_shelf = .false.
+  if (present(frac_shelf_h)) then
+    if (associated(frac_shelf_h)) use_ice_shelf = .true.
+  endif
 
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
-  call regridding_main( remapCS, regridCS, G, GV, h, tv, h_new, dzRegrid )
+  if (use_ice_shelf) then
+     call regridding_main( remapCS, regridCS, G, GV, h, tv, h_new, dzRegrid, frac_shelf_h )
+  else
+     call regridding_main( remapCS, regridCS, G, GV, h, tv, h_new, dzRegrid )  
+  endif
 
   ! Override old grid with new one. The new grid 'h_new' is built in
   ! one of the 'build_...' routines above.
@@ -917,7 +1048,6 @@ subroutine ALE_initRegridding(GV, max_depth, param_file, mod, regridCS, dz )
   real :: filt_len, strat_tol, index_scale
   real :: tmpReal, compress_fraction
   real :: dz_fixed_sfc, Rho_avg_depth, nlay_sfc_int
-  real :: height_of_rigid_surface
   integer :: nz_fixed_sfc
   real :: rho_target(GV%ke+1) ! Target density used in HYBRID mode
   real, dimension(size(dz))   :: h_max  ! Maximum layer thicknesses, in m.
@@ -951,15 +1081,6 @@ subroutine ALE_initRegridding(GV, max_depth, param_file, mod, regridCS, dz )
 
   call initialize_regridding( GV%ke, coordMode, interpScheme, regridCS, &
                               compressibility_fraction=compress_fraction )
-
-  if (coordMode(1:2) == 'Z*') then
-    call get_param(param_file, mod, "ZSTAR_RIGID_SURFACE_THRESHOLD", height_of_rigid_surface, &
-                 "A threshold height used to detect the presence of a rigid-surface\n"//&
-                 "depressing the upper-surface of the model, such as an ice-shelf.\n"//&
-                 "This is a temporary work around for initialization under an ice-shelf.", &
-                 units='m', default=-1.E30)
-    call set_regrid_params( regridCS, height_of_rigid_surface=height_of_rigid_surface*GV%m_to_H)
-  endif
 
   call get_param(param_file, mod, "ALE_COORDINATE_CONFIG", string, &
                  "Determines how to specify the coordinate\n"//&

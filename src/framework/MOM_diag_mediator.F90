@@ -48,7 +48,9 @@ use MOM_verticalGrid,     only : verticalGrid_type
 use diag_axis_mod, only : get_diag_axis_name
 use diag_manager_mod, only : diag_manager_init, diag_manager_end
 use diag_manager_mod, only : send_data, diag_axis_init, diag_field_add_attribute
-use diag_manager_mod, only : register_diag_field_fms=>register_diag_field
+! The following module is needed for PGI since the following line does not compile with PGI 6.5.0
+! was: use diag_manager_mod, only : register_diag_field_fms=>register_diag_field
+use MOM_diag_manager_wrapper, only : register_diag_field_fms
 use diag_manager_mod, only : register_static_field_fms=>register_static_field
 use diag_manager_mod, only : get_diag_field_id_fms=>get_diag_field_id
 use diag_manager_mod, only : DIAG_FIELD_NOT_FOUND
