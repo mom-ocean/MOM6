@@ -136,6 +136,11 @@ type, public :: energetic_PBL_CS ; private
                              ! applies to in subsequent revisions of this code.
                              ! "_Neg" and "_Pos" refer to which scale is applied as a 
                              ! function of negative or positive local buoyancy.
+  real    :: S2_Dissipation_Scale
+                             ! Similar to above but due to the presence of shear.
+  real    :: ML_EXPONENT     ! An exponent to multipy the shape function by for the
+                             ! length scale.  2 is KPP like, 1 is law-of-the-wall
+                             ! at both the top and bottom.
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
   logical :: TKE_diagnostics = .false.
   logical :: Use_LT_LiFunction = .false.
@@ -336,6 +341,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   real :: I_dtrho   ! 1.0 / (dt * Rho0) in m3 kg-1 s-1.  This is
                     ! used convert TKE back into ustar^3.
   real :: U_star    ! The surface friction velocity, in m s-1.
+  real :: B_0
   real :: U_10      ! An approximate (neutral) wind speed backed out of the surface velocity
   real :: vstar     ! An in-situ turbulent velocity, in m s-1.
   real :: Enhance_V ! An enhancement factor for vstar, based here on Langmuir impact. 
@@ -448,6 +454,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   integer, save :: NOTCONVERGED!
   !-End BGR iteration parameters-----------------------------------------
   real :: N2_dissipation
+  real :: SS, Zthck 
   type(cvmix_global_params_type) :: CVMIX_gravity 
   logical :: debug=.false.  ! Change this hard-coded value for debugging.
 !  The following arrays are used only for debugging purposes.
@@ -563,7 +570,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
     ! interface.
     do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
 
-
+      B_0    = ( fluxes%lw(i,j) + fluxes%latent(i,j) + fluxes%sens(i,j))*9.81*2.5e-4/1025./3985.
       U_Star = fluxes%ustar(i,j)
       if (associated(fluxes%ustar_shelf) .and. associated(fluxes%frac_shelf_h)) then
         if (fluxes%frac_shelf_h(i,j) > 0.0) &
@@ -578,8 +585,9 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
         absf(i) = 0.25*((abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I-1,J-1))) + &
                      (abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I-1,J))))
         if (CS%omega_frac > 0.0) &
-          absf = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf**2)
+          absf(i) = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf(i)**2)
       endif
+
 
       mech_TKE(i) = (dt*CS%mstar*GV%Rho0)*((U_Star**3))
       conv_PErel(i) = 0.0
@@ -600,7 +608,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
         mech_TKE(i) = mech_TKE(i) + TKE_forced(i,j,1)
         if (mech_TKE(i) < 0.0) mech_TKE(i) = 0.0
       else
-        conv_PErel(i) = conv_PErel(i) + TKE_forced(i,j,1)
+        conv_PErel(i) = conv_PErel(i) + CS%NSTAR*TKE_forced(i,j,1)
       endif
 
 !    endif ; enddo
@@ -700,7 +708,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           do K=2,nz+1
             h_rsum = h_rsum + h(i,k-1)
             MixLen_shape(K) = CS%transLay_scale + (1.0 - CS%transLay_scale) * &
-                              (max(0.0, (MLD_guess - h_rsum)*I_MLD) )**2 !BR prefer 1 or 2 for exponent?
+                              (max(0.0, (MLD_guess - h_rsum)*I_MLD) )**CS%ML_EXPONENT
           enddo
         endif
 
@@ -753,10 +761,14 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
             nstar_FC = CS%nstar * conv_PErel(i) / (conv_PErel(i) + 0.2 * &
                             sqrt(0.5 * dt * GV%Rho0 * (absf(i)*(htot(i)*GV%H_to_m))**3 * conv_PErel(i)))
           endif
+          N2_dissipation = 1. + CS%N2_DISSIPATION_SCALE_NEG! * &
+          !                 max(0.,min(1.,(mech_tke(i)/TKE_forced(i,j,k))))
+
+
+
           if (debug) nstar_k(K) = nstar_FC
-
+          
           tot_TKE = mech_TKE(i) + nstar_FC * conv_PErel(i)
-
           !   For each interior interface, first discard the TKE to account for
           ! mixing of shortwave radiation through the next denser cell.
           if (TKE_forced(i,j,k) < 0.0) then
@@ -881,7 +893,11 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
             ! At this point, Kddt_h(K) will be unknown because its value may depend
             ! on how much energy is available.  mech_TKE might be negative due to
             ! contributions from TKE_forced.
+
             h_tt = htot(i) + h_tt_min
+            !if (B_0.gt.0.) then
+            !   h_tt = h_tt*(max(0.5,min(1.0,1.-B_0/(absf(i)*u_star**2+1.e-16))))
+            !endif
             TKE_here = mech_TKE(i) + CS%wstar_ustar_coef*conv_PErel(i)
             if (TKE_here > 0.0) then
               vstar = CS%vstar_scale_fac * (I_dtrho*TKE_here)**C1_3
@@ -921,15 +937,16 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
             endif
 
             MKE_src = dMKE_max*(1.0 - exp(-Kddt_h_g0 * MKE2_Hharm))
-
-            if (pe_chg_g0 .gt. 0.0) then
-              !Negative buoyancy (increases PE)
-              N2_dissipation = 1.+CS%N2_DISSIPATION_SCALE_NEG
-            else
-              !Positive buoyancy (decreases PE) 
-              N2_dissipation = 1.+CS%N2_DISSIPATION_SCALE_POS
-            endif
-
+!            if (pe_chg_g0 .gt. 0.0) then
+!            if (TKE_forced(i,j,1).ge.0.0) then
+!              !Negative buoyancy (increases PE)
+!              N2_dissipation = 1.+CS%N2_DISSIPATION_SCALE_NEG
+!            else
+!              !Positive buoyancy (decreases PE) 
+!              N2_dissipation = 1.+CS%N2_DISSIPATION_SCALE_POS
+!            endif
+!           N2_dissipation = 1. + CS%N2_DISSIPATION_SCALE_NEG * &
+!           max(0.4,min(1.,(mech_tke(i)/PE_CHG_G0)))
             if ((PE_chg_g0 < 0.0) .or. ((vstar == 0.0) .and. (dPEc_dKd_Kd0 < 0.0))) then
               ! This column is convectively unstable.
               if (PE_chg_max <= 0.0) then
@@ -978,8 +995,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                 ! The energy change does not vary monotonically with Kddt_h.  Find the maximum?
                 Kd(i,k) = Kd_guess0 ; dPE_conv = PE_chg_g0
               endif
-              conv_PErel(i) = conv_PErel(i) - dPE_conv
-              mech_TKE(i) = mech_TKE(i) + MKE_src
+              conv_PErel(i) = conv_PErel(i) - dPE_conv + CS%N2_dissipation_scale_pos*dpe_conv
+              mech_TKE(i) = mech_TKE(i) + MKE_src 
               if (CS%TKE_diagnostics) then
                 dTKE_conv = dTKE_conv - CS%nstar*dPE_conv * IdtdR0
                 dTKE_MKE = dTKE_MKE + MKE_src * IdtdR0
@@ -1158,6 +1175,15 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
               Se(k-1) = b1 * (h(i,k-1) * S0(k-1) + Kddt_h(K-1) * Se(k-2))
             endif
           endif
+          ! Apply additional dissipation before next level due to that
+          !  driven by the vertical current shear
+          Zthck = .5*GV%H_to_m*(h(i,k-1)+h(i,k))
+          SS = ((u(i,k-1)-u(i,k))/Zthck)**2 +&
+               ((v(i,k-1)-v(i,k))/Zthck)**2
+          ! Check vertical grid
+          Zthck=mech_tke(i)
+          mech_TKE(i)= max( 0. , mech_TKE(i) - (dt*GV%Rho0) * &
+               Kd(i,k)*SS*h(i,k)* GV%H_to_m * CS%S2_DISSIPATION_SCALE )
         enddo
         Kd(i,nz+1) = 0.0
 
@@ -1824,7 +1850,11 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
                  "in the boundary layer, applied when local stratification \n"//&
                  "is negative.  The default is 0, but should probably be ~1.", &
                  units="nondim", default=0.0)
-   call get_param(param_file, mod, "USE_LT_LI2016", CS%USE_LT_LiFunction, &
+  call get_param(param_file, mod, "S2_DISSIPATION", CS%S2_Dissipation_Scale, &
+                 "A scale for the dissipation of TKE due to shear \n"//&
+                 "in the boundary layer.  The default is 0.", &
+                 units="nondim", default=0.0)
+  call get_param(param_file, mod, "USE_LT_LI2016", CS%USE_LT_LiFunction, &
                  "A logical to use the Li et al. 2016 (submitted) formula to \n"//&
                  " determine the enhancement of velocity due to Langmuir \n"//&
                  " turbulence.", units="nondim", default=.false.)
@@ -1833,6 +1863,9 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   call log_param(param_file, mod, "EPBL_USTAR_MIN", CS%ustar_min, &
                  "The (tiny) minimum friction velocity used within the \n"//&
                  "ePBL code, derived from OMEGA and ANGSTROM.", units="meter second-1")
+  call get_param(param_file, mod, "ML_EXPONENT", CS%ML_EXPONENT, &
+                 "The exponent used in the EPBL length scale shape function." &
+                 , units="nondim",default=1.0)
 
   CS%id_ML_depth = register_diag_field('ocean_model', 'ePBL_h_ML', diag%axesT1, &
       Time, 'Surface mixed layer depth', 'meter')
