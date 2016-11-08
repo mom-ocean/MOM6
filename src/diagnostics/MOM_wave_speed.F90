@@ -4,9 +4,8 @@ module MOM_wave_speed
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
-use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
-use MOM_file_parser, only : log_version, param_file_type
+use MOM_file_parser, only : log_version
 use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
@@ -32,7 +31,7 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h !< Layer thickness (m or kg/m2)
   type(thermo_var_ptrs),                    intent(in)  :: tv !< Thermodynamic variables
   real, dimension(SZI_(G),SZJ_(G)),         intent(out) :: cg1 !< First mode internal wave speed (m/s)
-  type(wave_speed_CS),            optional, pointer     :: CS !< Control structure for MOM_wave_speed
+  type(wave_speed_CS),                      pointer     :: CS !< Control structure for MOM_wave_speed
   logical,                        optional, intent(in)  :: full_halos !< If true, do the calculation
                                                               !! over the entire computational domain.
   ! Local variables
@@ -72,10 +71,8 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  if (present(CS)) then
-    if (.not. associated(CS)) call MOM_error(FATAL, "MOM_wave_speed: "// &
+  if (.not. associated(CS)) call MOM_error(FATAL, "MOM_wave_speed: "// &
            "Module must be initialized before it is used.")
-  endif
   if (present(full_halos)) then ; if (full_halos) then
     is = G%isd ; ie = G%ied ; js = G%jsd ; je = G%jed
   endif ; endif
@@ -890,12 +887,8 @@ subroutine tridiag_det(a,b,c,nrows,lam,det_out,ddet_out)
 end subroutine tridiag_det
 
 !> Initialize control structure for MOM_wave_speed
-subroutine wave_speed_init(Time, G, param_file, diag, CS)
-  type(time_type),             intent(in)    :: Time !< Current model time
-  type(ocean_grid_type),       intent(in)    :: G !< Ocean grid structure
-  type(param_file_type),       intent(in)    :: param_file !< Parameter file handles
-  type(diag_ctrl), target,     intent(inout) :: diag !< Diagnostics control structure
-  type(wave_speed_CS),         pointer       :: CS !< Control structure for MOM_wave_speed
+subroutine wave_speed_init(CS)
+  type(wave_speed_CS), pointer :: CS !< Control structure for MOM_wave_speed
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_wave_speed"  ! This module's name.
@@ -906,10 +899,8 @@ subroutine wave_speed_init(Time, G, param_file, diag, CS)
     return
   else ; allocate(CS) ; endif
 
-  CS%diag => diag
-
   ! Write all relevant parameters to the model log.
-  call log_version(param_file, mod, version, "")
+  call log_version(mod, version)
 
 end subroutine wave_speed_init
 

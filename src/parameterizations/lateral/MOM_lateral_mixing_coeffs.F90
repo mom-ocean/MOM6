@@ -39,7 +39,7 @@ use MOM_isopycnal_slopes, only : calc_isoneutral_slopes
 use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
-use MOM_wave_speed, only : wave_speed, wave_speed_CS
+use MOM_wave_speed, only : wave_speed, wave_speed_CS, wave_speed_init
 
 implicit none ; private
 
@@ -701,13 +701,12 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
 
 end subroutine calc_slope_functions_using_just_e
 
-subroutine VarMix_init(Time, G, param_file, diag, CS, wave_speed_CSp)
+subroutine VarMix_init(Time, G, param_file, diag, CS)
   type(time_type),            intent(in) :: Time
   type(ocean_grid_type),      intent(in) :: G
   type(param_file_type),      intent(in) :: param_file
   type(diag_ctrl), target, intent(inout) :: diag
   type(VarMix_CS),               pointer :: CS
-  type(wave_speed_CS),           pointer :: wave_speed_CSp
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
@@ -842,8 +841,8 @@ subroutine VarMix_init(Time, G, param_file, diag, CS, wave_speed_CSp)
     endif
   endif
 
-  CS%wave_speed_CSp => wave_speed_CSp
   if (CS%Resoln_scaled_Kh .or. Resoln_scaled_KhTh .or. Resoln_scaled_KhTr) then
+    call wave_speed_init(CS%wave_speed_CSp)
 
     ! Allocate and initialize various arrays.
     allocate(CS%Res_fn_h(isd:ied,jsd:jed))       ; CS%Res_fn_h(:,:) = 0.0
