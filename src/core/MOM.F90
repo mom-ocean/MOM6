@@ -135,6 +135,7 @@ use MOM_offline_transport,         only : limit_mass_flux_3d, update_h_horizonta
 use MOM_offline_transport,         only : distribute_residual_uh_barotropic, distribute_residual_vh_barotropic
 use MOM_offline_transport,         only : distribute_residual_uh_upwards, distribute_residual_vh_upwards
 use MOM_tracer_diabatic,           only : applyTracerBoundaryFluxesInOut
+use MOM_opacity,                   only : set_opacity
 
 implicit none ; private
 
@@ -1562,9 +1563,11 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       ! fluxes are halved because diabatic processes are split before and after advection
       
       ! Do horizontal diffusion first (but only half of it), remainder will be applied after advection
-      call tracer_hordiff(h_pre, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
-        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, do_online_flag=.not.CS%offline_tracer_mode, &
-        read_khdt_x=khdt_x*0.5, read_khdt_y=khdt_y*0.5)
+      if(.not.CS%offline_csp%skip_diffusion) then
+        call tracer_hordiff(h_pre, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
+          CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, do_online_flag=.not.CS%offline_tracer_mode, &
+          read_khdt_x=khdt_x*0.5, read_khdt_y=khdt_y*0.5)
+      endif
 
       do j=jsd,jed ; do i=isd,ied
           fluxes%netMassOut(i,j) = 0.5*fluxes%netMassOut(i,j)
@@ -1589,6 +1592,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       
       ! Note that here, h_new does nto represent any physical, should double check that any individual
       ! tracer does not use h_new
+      if (associated(CS%diabatic_CSp%optics)) &
+          call set_opacity(CS%diabatic_CSp%optics, fluxes, G, GV, CS%diabatic_CSp%opacity_CSp)
       call call_tracer_column_fns(h_pre, h_new, eatr*0.5, ebtr*0.5, &
               fluxes, CS%offline_CSp%dt_offline*0.5, G, GV, CS%tv, &
               CS%diabatic_CSp%optics, CS%tracer_flow_CSp, CS%debug, &
@@ -1660,10 +1665,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         
         call sum_across_PEs(sum_u)
         call sum_across_PEs(sum_v)
-
-        if(CS%offline_CSp%print_adv_offline .and. is_root_pe()) then
-          print *, "Remaining transport: u", sum_u, "v", sum_v
-        endif
+        if(CS%offline_CSp%print_adv_offline .and. is_root_pe()) &
+            print *, "Remaining transport: u", sum_u, "v", sum_v
         
         if(sum_u+sum_v==0.0) then
           if(is_root_pe()) print *, "Converged after iteration", iter
@@ -1676,6 +1679,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       enddo                  
       
       ! Now do the other half of the vertical mixing and tracer source/sink functions
+      if (associated(CS%diabatic_CSp%optics)) &
+          call set_opacity(CS%diabatic_CSp%optics, fluxes, G, GV, CS%diabatic_CSp%opacity_CSp)
       call call_tracer_column_fns(h_pre, h_new, eatr*0.5, ebtr*0.5, &
               fluxes, CS%offline_CSp%dt_offline*0.5, G, GV, CS%tv, &
               CS%diabatic_CSp%optics, CS%tracer_flow_CSp, CS%debug, &
@@ -1766,9 +1771,12 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       call cpu_clock_end(id_clock_ALE)        
       
       ! Finish with the other half of the tracer horizontal diffusion
-      call tracer_hordiff(h_pre, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
-        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, do_online_flag=.false., read_khdt_x=khdt_x*0.5, &
-        read_khdt_y=khdt_y*0.5)
+
+      if(.not.CS%offline_csp%skip_diffusion) then
+        call tracer_hordiff(h_pre, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
+          CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, do_online_flag=.false., read_khdt_x=khdt_x*0.5, &
+          read_khdt_y=khdt_y*0.5)
+      endif
     
     elseif (.not. CS%use_ALE_algorithm) then
       do iter=1,CS%offline_CSp%num_off_iter
@@ -1915,7 +1923,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     call pass_var(CS%h,G%Domain)
     call pass_var(CS%T,G%Domain)
     call pass_var(CS%S,G%Domain)
-
+    
+    fluxes%fluxes_used = .true.
 
 
 end subroutine step_tracers
