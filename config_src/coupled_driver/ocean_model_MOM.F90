@@ -219,6 +219,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   character(len=48)  :: stagger
   integer :: secs, days
   type(param_file_type) :: param_file
+  logical :: offline_tracer_mode
 
   call callTree_enter("ocean_model_init(), ocean_model_MOM.F90")
   if (associated(OS)) then
@@ -233,7 +234,8 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
 
   OS%state%tr_fields => Ocean_sfc%fields
   OS%Time = Time_in
-  call initialize_MOM(OS%Time, param_file, OS%dirs, OS%MOM_CSp, Time_in)
+  call initialize_MOM(OS%Time, param_file, OS%dirs, OS%MOM_CSp, Time_in, &
+      offline_tracer_mode=offline_tracer_mode)
   OS%grid => OS%MOM_CSp%G ; OS%GV => OS%MOM_CSp%GV
   OS%C_p = OS%MOM_CSp%tv%C_p
   OS%fluxes%C_p = OS%MOM_CSp%tv%C_p
