@@ -754,7 +754,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS, WAVES)
 
       call find_uv_at_h(u, v, h, u_h, v_h, G, GV)
       call energetic_PBL(h, u_h, v_h, tv, fluxes, dt, Kd_ePBL, G, GV, &
-                         CS%energetic_PBL_CSp, dSV_dT, dSV_dS, cTKE)
+                         CS%energetic_PBL_CSp, dSV_dT, dSV_dS, cTKE, waves=waves)
 
       ! If visc%MLD exists, copy the ePBL's MLD into it
       if (associated(visc%MLD)) then

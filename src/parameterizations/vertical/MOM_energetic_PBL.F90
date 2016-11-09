@@ -76,6 +76,7 @@ use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use CVmix_kpp, only : cvmix_kpp_efactor_model
 use CVmix_kinds_and_types, only : cvmix_global_params_type
+use MOM_wave_interface, only: wave_parameters_CS
 ! use MOM_EOS, only : calculate_density, calculate_density_derivs
 ! use MOM_EOS, only : calculate_2_densities
 
@@ -139,6 +140,7 @@ type, public :: energetic_PBL_CS ; private
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
   logical :: TKE_diagnostics = .false.
   logical :: Use_LT_LiFunction = .false.
+  logical :: Use_LT_Stokes = .false.
   logical :: orig_PE_calc = .true.
   logical :: Use_MLD_iteration=.false. ! False to use old ePBL method.
   logical :: MLD_iteration_guess=.false. ! False to default to guessing half the
@@ -179,7 +181,7 @@ contains
 
 subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                          dSV_dT, dSV_dS, TKE_forced, dt_diag, last_call, &
-                         dT_expected, dS_expected)
+                         dT_expected, dS_expected, waves)
   type(ocean_grid_type),                     intent(inout) :: G
   type(verticalGrid_type),                   intent(in)    :: GV
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: h_3d
@@ -194,6 +196,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   logical,                         optional, intent(in)    :: last_call
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                    optional, intent(out)   :: dT_expected, dS_expected
+  type(wave_parameters_CS), pointer, optional :: Waves !<Wave CS
 
 !    This subroutine determines the diffusivities from the integrated energetics
 !  mixed layer model.  It assumes that heating, cooling and freshwater fluxes
@@ -339,6 +342,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   real :: U_10      ! An approximate (neutral) wind speed backed out of the friction velocity
   real :: vstar     ! An in-situ turbulent velocity, in m s-1.
   real :: Enhance_V ! An enhancement factor for vstar, based here on Langmuir impact. 
+  real :: Enhance_Vb
   real :: hbs_here  ! The local minimum of hb_hs and MixLen_shape, times a
                     ! conversion factor from H to M, in m H-1.
   real :: nstar_FC  ! The fraction of conv_PErel that can be converted to mixing, nondim.
@@ -448,6 +452,9 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   integer, save :: NOTCONVERGED!
   !-End BGR iteration parameters-----------------------------------------
   real :: N2_dissipation
+  real :: H10pct, H20pct,CMNFACT, USx20pct, USy20pct
+  real :: wavedir, currentdir 
+  integer :: b
   type(cvmix_global_params_type) :: CVMIX_gravity 
   logical :: debug=.false.  ! Change this hard-coded value for debugging.
 !  The following arrays are used only for debugging purposes.
@@ -663,6 +670,37 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       do OBL_IT=1,MAX_OBL_IT ; if (.not. OBL_CONVERGED) then
         if (CS%Use_LT_LiFunction) then
           ENHANCE_V = cvmix_kpp_efactor_model ( u_10, u_star, MLD_guess, cvmix_gravity)
+          ENHANCE_V=1.+(ENHANCE_V-1.)*0.5
+        elseif (CS%Use_LT_Stokes) then
+           if (present(Waves).and.associated(Waves)) then
+              ! Now compute Langmuir number at h points.
+              USy20pct = 0.0;USx20pct = 0.0;
+              H20pct=min(-0.1,-.20*MLD_guess);
+              do b=1,WAVES%NumBands
+                 if (WAVES%PartitionMode==0) then
+                    CMNFACT = (1.0 - EXP(H20pct*2*WAVES%WaveNum_Cen(b))) &
+                         / (0.0-H20pct) / (2*WAVES%WaveNum_Cen(b))
+                 elseif (WAVES%PartitionMode==1) then
+                    !Note in frequency mode we are TEMPORARILY
+                    ! using midpoint instead of integral/H to get average
+                    CMNFACT = EXP(H20pct/2.*2.*(2.*3.1415*WAVES%Freq_Cen(b))**2/ &
+                         GV%g_Earth)
+                 endif
+                 USy20pct = USy20pct + 0.5 * ( WAVES%STKy0(i,j,b) &
+                      + WAVES%STKy0(i,j-1,b) ) * CMNFACT
+                 USx20pct = USx20pct + 0.5 * ( WAVES%STKx0(i,j,b) &
+                      + WAVES%STKx0(i-1,j,b) ) * CMNFACT
+              enddo
+              wavedir=atan2(USy20pct,USx20pct)
+              currentdir= atan2(v(i,1),u(i,1))
+              WAVES%LangNum(i,j) = max(1.e-6,sqrt(u_star /      &
+                   max(1.e-10,sqrt(USx20pct**2 + USy20pct**2))) &
+                   *sqrt(1./max(0.000001,cos(wavedir-currentdir))))
+           endif
+           ENHANCE_Vb=cvmix_kpp_efactor_model ( u_10, u_star, MLD_guess, cvmix_gravity)
+           ENHANCE_V=max(1.,min(10.,sqrt(1.+(1.5*WAVES%LangNum(i,j))**(-2) + &
+                 (5.4*WAVES%LangNum(i,j))**(-4))))
+           ENHANCE_V=1.+(ENHANCE_V-1.)*0.5
         endif
         CS%ML_depth(i,j) = h(i,1)*GV%H_to_m
         !CS%ML_depth2(i,j) = h(i,1)*GV%H_to_m
@@ -1830,6 +1868,9 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
    call get_param(param_file, mod, "USE_LT_LI2016", CS%USE_LT_LiFunction, &
                  "A logical to use the Li et al. 2016 (submitted) formula to \n"//&
                  " determine the enhancement of velocity due to Langmuir \n"//&
+                 " turbulence.", units="nondim", default=.false.)
+   call get_param(param_file, mod, "USE_LT_STOKES", CS%USE_LT_Stokes, &
+                 "A logical to use the velocity enhancement due to Langmuir \n"//&
                  " turbulence.", units="nondim", default=.false.)
   ! This gives a minimum decay scale that is typically much less than Angstrom.
   CS%ustar_min = 2e-4*CS%omega*(GV%Angstrom_z + GV%H_to_m*GV%H_subroundoff)
