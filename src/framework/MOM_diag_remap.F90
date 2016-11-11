@@ -235,11 +235,13 @@ subroutine configure_axes(remap_cs, G, GV, param_file)
                                  ". Error message "//err_msg)
       endif
 
-      call check_grid_def(filename, layer_varname, expected_units, err_msg, ierr)
-      if (ierr) then
-           call MOM_error(FATAL,"set_axes_info: Unsupported format in grid "//&
-                                 "definition '"//trim(filename)//"'"//&
-                                 ". Error message "//err_msg)
+      if (len(trim(layer_varname))>0) then
+        call check_grid_def(filename, layer_varname, expected_units, err_msg, ierr)
+        if (ierr) then
+          call MOM_error(FATAL,"set_axes_info: Unsupported format in grid "//&
+                               "definition '"//trim(filename)//"'"//&
+                               ". Error message "//err_msg)
+        endif
       endif
 
       ! Log the expanded result as a comment since it cannot be read back in
@@ -256,8 +258,8 @@ subroutine configure_axes(remap_cs, G, GV, param_file)
 
       ! Get layer dimensions
       allocate(layers(nzi(1)-1))
-      call field_size(trim(filename), trim(layer_varname), nzl)
-      if (trim(layer_varname) /= trim(int_varname)) then
+      if (len(trim(layer_varname))>0) then
+        call field_size(trim(filename), trim(layer_varname), nzl)
         call assert(nzl(1) /= 0 .and. nzl(1) == nzi(1) - 1, 'set_axes_info: bad layer dimension size')
         call MOM_read_data(filename, trim(layer_varname), layers)
         ! Always convert heights into depths
