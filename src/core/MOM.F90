@@ -1698,7 +1698,6 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
             evap_CFL_limit, minimum_forcing_depth)
       enddo
 
-          
       if(CS%debug) then
         call hchksum(h_pre,"h_pre after 2nd diabatic",G%HI)
       endif    
@@ -1925,14 +1924,14 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     ! densities, used in the neutral diffusion code don't drift too far from the online
     ! model      
     do i = is, ie ; do j = js, je ; do k=1,nz
-      CS%T(i,j,k) = temp_old(i,j,k)
-      CS%S(i,j,k) = salt_old(i,j,k)
+      CS%tv%T(i,j,k) = temp_old(i,j,k)
+      CS%tv%S(i,j,k) = salt_old(i,j,k)
       CS%h(i,j,k) = h_end(i,j,k)
     enddo ;  enddo; enddo
 
     call pass_var(CS%h,G%Domain)
-    call pass_var(CS%T,G%Domain)
-    call pass_var(CS%S,G%Domain)
+    call pass_var(CS%tv%T,G%Domain)
+    call pass_var(CS%tv%S,G%Domain)
     
     fluxes%fluxes_used = .true.
 
