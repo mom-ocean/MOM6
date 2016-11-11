@@ -7,7 +7,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, post_data
 use MOM_diag_mediator, only : diag_ctrl, time_type, query_averaging_enabled
 use MOM_domains,       only : create_group_pass, do_group_pass
-use MOM_domains,       only : group_pass_type
+use MOM_domains,       only : group_pass_type, pass_var
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_interface_heights, only : find_eta
 use MOM_isopycnal_slopes, only : calc_isoneutral_slopes
@@ -35,6 +35,10 @@ type, public :: VarMix_CS ;
                                   !! speed and calculate the resolution function
                                   !! independently at each point.
   logical :: use_stored_slopes    !< If true, stores isopycnal slopes in this structure.
+  logical :: Resoln_use_ebt       !< If true, uses the equivalent barotropic wave speed instead
+                                  !! of first baroclinic wave for calculating the resolution fn.
+  logical :: khth_use_ebt_struct  !< If true, uses the equivalent barotropic structure
+                                  !! as the vertical structure of thickness diffusivity.
   real, dimension(:,:), pointer :: &
     SN_u => NULL(), &   !< S*N at u-points (s^-1)
     SN_v => NULL(), &  !< S*N at v-points (s^-1)
@@ -69,7 +73,8 @@ type, public :: VarMix_CS ;
 
   real, dimension(:,:,:), pointer :: &
     slope_x => NULL(), &  !< Zonal isopycnal slope (non-dimensional)
-    slope_y => NULL()     !< Meridional isopycnal slope (non-dimensional)
+    slope_y => NULL(), &  !< Meridional isopycnal slope (non-dimensional)
+    ebt_struct => NULL()  !< Vertical structure function to scale diffusivities with (non-dim)
 
   ! Parameters
   integer :: VarMix_Ktop  !< Top layer to start downward integrals
@@ -157,7 +162,19 @@ subroutine calc_resoln_function(h, tv, G, GV, CS)
   if (.not. ASSOCIATED(CS%beta_dx2_v)) call MOM_error(FATAL, &
     "calc_resoln_function: %beta_dx2_v is not associated with Resoln_scaled_Kh.")
 
-  call wave_speed(h, tv, G, GV, CS%cg1, CS%wave_speed_CSp)
+  if (CS%khth_use_ebt_struct) then
+    if (CS%Resoln_use_ebt) then
+      ! Both resolution fn and vertical structure are using EBT
+      call wave_speed(h, tv, G, GV, CS%cg1, CS%wave_speed_CSp, modal_structure=CS%ebt_struct)
+    else
+      ! Use EBT to get vertical structure first and then re-calculate cg1 using first baroclinic mode
+      call wave_speed(h, tv, G, GV, CS%cg1, CS%wave_speed_CSp, modal_structure=CS%ebt_struct, use_ebt_mode=.true.)
+      call wave_speed(h, tv, G, GV, CS%cg1, CS%wave_speed_CSp)
+    endif
+    call pass_var(CS%ebt_struct, G%Domain)
+  else
+    call wave_speed(h, tv, G, GV, CS%cg1, CS%wave_speed_CSp)
+  endif
 
   call create_group_pass(CS%pass_cg1, CS%cg1, G%Domain)
   call do_group_pass(CS%pass_cg1, G%Domain)
@@ -679,12 +696,13 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
   type(VarMix_CS),               pointer :: CS   !< Variable mixing coefficients
   ! Local variables
-  real :: KhTr_Slope_Cff, KhTh_Slope_Cff, oneOrTwo
+  real :: KhTr_Slope_Cff, KhTh_Slope_Cff, oneOrTwo, N2_filter_depth
   real, parameter :: absurdly_small_freq2 = 1e-34  ! A miniscule frequency
              ! squared that is used to avoid division by 0, in s-2.  This
              ! value is roughly (pi / (the age of the universe) )^2.
   logical :: use_variable_mixing, Gill_equatorial_Ld, use_stored_slopes
   logical :: Resoln_scaled_Kh, Resoln_scaled_KhTh, Resoln_scaled_KhTr
+  logical :: Resoln_use_ebt, khth_use_ebt_struct
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_lateral_mixing_coeffs" ! This module's name.
@@ -723,6 +741,14 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
                  "If true, the epipycnal tracer diffusivity is scaled \n"//&
                  "away when the first baroclinic deformation radius is \n"//&
                  "well resolved.", default=.false.)
+  call get_param(param_file, mod, "RESOLN_USE_EBT", Resoln_use_ebt, &
+                 "If true, uses the equivalent barotropic wave speed instead\n"//&
+                 "of first baroclinic wave for calculating the resolution fn.",&
+                 default=.false.)
+  call get_param(param_file, mod, "KHTH_USE_EBT_STRUCT", khth_use_ebt_struct, &
+                 "If true, uses the equivalent barotropic structure\n"//&
+                 "as the vertical structure of thickness diffusivity.",&
+                 default=.false.)
   call get_param(param_file, mod, "KHTH_SLOPE_CFF", KhTh_Slope_Cff, &
                  "The nondimensional coefficient in the Visbeck formula \n"//&
                  "for the interface depth diffusivity", units="nondim", &
@@ -739,16 +765,27 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
   if (KhTr_Slope_Cff>0. .or. KhTh_Slope_Cff>0.) use_variable_mixing = .true.
 
   if (use_variable_mixing .or. Resoln_scaled_Kh .or. Resoln_scaled_KhTh .or. &
-      Resoln_scaled_KhTr .or. use_stored_slopes) then
+      Resoln_scaled_KhTr .or. use_stored_slopes .or. khth_use_ebt_struct) then
     allocate(CS)
     CS%diag => diag ! Diagnostics pointer
     CS%Resoln_scaled_Kh = Resoln_scaled_Kh
     CS%Resoln_scaled_KhTh = Resoln_scaled_KhTh
     CS%Resoln_scaled_KhTr = Resoln_scaled_KhTr
+    CS%Resoln_use_ebt = Resoln_use_ebt
+    CS%khth_use_ebt_struct = khth_use_ebt_struct
     CS%use_variable_mixing = use_variable_mixing
     CS%use_stored_slopes = use_stored_slopes
   else
     return
+  endif
+  if (Resoln_use_ebt .or. khth_use_ebt_struct) then
+    call get_param(param_file, mod, "RESOLN_N2_FILTER_DEPTH", N2_filter_depth, &
+                 "The depth below which N2 is monotonized to avoid stratification\n"//&
+                 "artifacts from altering the equivalent barotropic mode structure.",&
+                 units='m', default=2000.)
+  endif
+  if (khth_use_ebt_struct) then
+    allocate(CS%ebt_struct(isd:ied,JsdB:JedB,G%ke)) ; CS%ebt_struct(:,:,:) = 0.0
   endif
   if (use_variable_mixing) then
     call get_param(param_file, mod, "VISBECK_MAX_SLOPE", CS%Visbeck_S_max, &
@@ -807,7 +844,7 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
   endif
 
   if (CS%Resoln_scaled_Kh .or. Resoln_scaled_KhTh .or. Resoln_scaled_KhTr) then
-    call wave_speed_init(CS%wave_speed_CSp)
+    call wave_speed_init(CS%wave_speed_CSp, use_ebt_mode=Resoln_use_ebt, mono_N2_depth=N2_filter_depth)
 
     ! Allocate and initialize various arrays.
     allocate(CS%Res_fn_h(isd:ied,jsd:jed))       ; CS%Res_fn_h(:,:) = 0.0

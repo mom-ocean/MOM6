@@ -105,7 +105,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
   real :: H_to_m, m_to_H   ! Local copies of unit conversion factors.
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected, in H.
-  logical :: use_VarMix, Resoln_scaled, use_stored_slopes
+  logical :: use_VarMix, Resoln_scaled, use_stored_slopes, khth_use_ebt_struct
   integer :: i, j, k, is, ie, js, je, nz
   logical :: MEKE_not_null
   real :: hu(SZI_(G), SZJ_(G))       ! u-thickness (H)
@@ -131,10 +131,12 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
   endif
 
   use_VarMix = .false. ; Resoln_scaled = .false. ; use_stored_slopes = .false.
+  khth_use_ebt_struct = .false.
   if (Associated(VarMix)) then
     use_VarMix = VarMix%use_variable_mixing
     Resoln_scaled = VarMix%Resoln_scaled_KhTh
     use_stored_slopes = VarMix%use_stored_slopes
+    khth_use_ebt_struct = VarMix%khth_use_ebt_struct
   endif
 
 !$OMP parallel do default(none) shared(is,ie,js,je,KH_u_CFL,dt,G,CS)
@@ -197,10 +199,17 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
     KH_u(I,j,1) = min(KH_u_CFL(I,j), Khth_Loc_u(i,j))
   enddo ; enddo
 
+  if (khth_use_ebt_struct) then
 !$OMP do
-  do K=2,nz+1 ; do j=js,je ; do I=is-1,ie
-    KH_u(I,j,K) = KH_u(I,j,1)
-  enddo ; enddo ; enddo
+    do K=2,nz+1 ; do j=js,je ; do I=is-1,ie
+      KH_u(I,j,K) = KH_u(I,j,1) * 0.5 * ( VarMix%ebt_struct(i,j,k-1) + VarMix%ebt_struct(i+1,j,k-1) )
+    enddo ; enddo ; enddo
+  else
+!$OMP do
+    do K=2,nz+1 ; do j=js,je ; do I=is-1,ie
+      KH_u(I,j,K) = KH_u(I,j,1)
+    enddo ; enddo ; enddo
+  endif
 
 !$OMP do
   do J=js-1,je ; do i=is,ie
@@ -245,10 +254,17 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
       KH_v(i,J,1) = min(KH_v_CFL(i,J), Khth_Loc(i,j))
     enddo ; enddo
   endif
+  if (khth_use_ebt_struct) then
 !$OMP do
-  do K=2,nz+1 ; do J=js-1,je ; do i=is,ie
-    KH_v(i,J,K) = KH_v(i,J,1)
-  enddo ; enddo ; enddo
+    do K=2,nz+1 ; do J=js-1,je ; do i=is,ie
+      KH_v(i,J,K) = KH_v(i,J,1) * 0.5 * ( VarMix%ebt_struct(i,j,k-1) + VarMix%ebt_struct(i,j+1,k-1) )
+    enddo ; enddo ; enddo
+  else
+!$OMP do
+    do K=2,nz+1 ; do J=js-1,je ; do i=is,ie
+      KH_v(i,J,K) = KH_v(i,J,1)
+    enddo ; enddo ; enddo
+  endif
 !$OMP do
   do K=1,nz+1 ; do j=js,je ; do I=is-1,ie ; int_slope_u(I,j,K) = 0.0 ; enddo ; enddo ; enddo
 !$OMP do
@@ -1609,5 +1625,64 @@ subroutine thickness_diffuse_end(CS)
   type(thickness_diffuse_CS), pointer :: CS   !< Control structure for thickness diffusion
   if(associated(CS)) deallocate(CS)
 end subroutine thickness_diffuse_end
+
+!> \namespace mom_thickness_diffuse
+!!
+!! Thickness diffusion is implemented via along-layer mass fluxes
+!!
+!! \f[
+!! h^\dagger \leftarrow h^n - \nabla \cdot ( \vec{vh}^* )
+!! \f]
+!!
+!! where the mass fluxes are cast as the difference in stream-functions proportional to the isoneutral slope
+!!
+!! \f[
+!! \vec{vh}^* = \delta_k \vec{\psi} = \delta_k \left( \frac{g\kappa_h}{\rho_o} \frac{\nabla \rho}{N^2} \right)
+!! \f]
+!!
+!! \todo Check signs of stream function in documentation.
+!!
+!! Thickness diffusivities are calculated independently at u- and v-points using the following expression
+!!
+!! \f[
+!! \kappa_h = \left( \kappa_o + \alpha_{s} L_{s}^2 S N + \alpha_{M} \kappa_{M} \right) r(\Delta x,L_d)
+!! \f]
+!!
+!! where \f$ S \f$ is the isoneutral slope magnitude, \f$ N \f$ is the square root of Brunt-Vaisala frequency,
+!! \f$\kappa_{M}\f$ is the diffusivity calculated by the MEKE parameterization (mom_meke module) and \f$ r(\Delta x,L_d) \f$ is
+!! a function of the local resolution (ratio of grid-spacing, \f$\Delta x\f$, to deformation radius, \f$L_d\f$).
+!! The length \f$L_s\f$ is provided by the mom_lateral_mixing_coeffs module (enabled with
+!! <code>USE_VARIABLE_MIXING=True</code>.
+!!
+!! The result of the above expression is subsequently bounded by minimum and maximum values, including an upper
+!! diffusivity consistent with numerical stability (\f$ \kappa_{cfl} \f$ is calculated internally).
+!!
+!! \f[
+!! \kappa_h \leftarrow \min{\left( \kappa_{max}, \kappa_{cfl}, \max{\left( \kappa_{min}, \kappa_h \right)} \right)} f(c_g,z)
+!! \f]
+!!
+!! where \f$f(c_g,z)\f$ is a vertical structure function which can be set to look like the equivalent barotropic modal structure with
+!!
+!! In order to calculate meaningful slopes in vanished layers, temporary copies of the thermodynamic variables
+!! are passed through a vertical smoother, function vert_fill_ts():
+!! \f{eqnarray*}{
+!! \left[ 1 + \Delta t \kappa_{smth} \frac{\partial^2}{\partial_z^2} \right] \theta & \leftarrow & \theta \\
+!! \left[ 1 + \Delta t \kappa_{smth} \frac{\partial^2}{\partial_z^2} \right] s & \leftarrow & s
+!! \f}
+!!
+!! \subsection section_khth_module_parameters Module mom_thickness_diffuse parameters
+!!
+!! | Symbol                | Module parameter |
+!! | ------                | --------------- |
+!! | -                     | <code>THICKNESSDIFFUSE</code> |
+!! | \f$ \kappa_o \f$      | <code>KHTH</code> |
+!! | \f$ \alpha_{s} \f$    | <code>KHTH_SLOPE_CFF</code> |
+!! | \f$ \kappa_{min} \f$  | <code>KHTH_MIN</code> |
+!! | \f$ \kappa_{max} \f$  | <code>KHTH_MAX</code> |
+!! | -                     | <code>KHTH_MAX_CFL</code> |
+!! | \f$ \kappa_{smth} \f$ | <code>KD_SMOOTH</code> |
+!! | \f$ \alpha_{M} \f$    | <code>MEKE_KHTH_FAC</code> (from mom_meke module) |
+!! | -                     | <code>KHTH_USE_EBT_STRUCT</code> |
+
 
 end module MOM_thickness_diffuse
