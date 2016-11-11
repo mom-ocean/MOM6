@@ -1677,6 +1677,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       enddo                  
       
       ! Now do the other half of the vertical mixing and tracer source/sink functions
+      call pass_var(CS%tv%T,G%Domain)
+      call pass_var(CS%tv%S,G%Domain)
       if (associated(CS%diabatic_CSp%optics)) &
           call set_opacity(CS%diabatic_CSp%optics, fluxes, G, GV, CS%diabatic_CSp%opacity_CSp)
       call call_tracer_column_fns(h_pre, h_new, eatr*0.5, ebtr*0.5, &
@@ -1913,14 +1915,14 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     ! densities, used in the neutral diffusion code don't drift too far from the online
     ! model      
     do i = is, ie ; do j = js, je ; do k=1,nz
-      CS%T(i,j,k) = temp_old(i,j,k)
-      CS%S(i,j,k) = salt_old(i,j,k)
+      CS%tv%T(i,j,k) = temp_old(i,j,k)
+      CS%tv%S(i,j,k) = salt_old(i,j,k)
       CS%h(i,j,k) = h_end(i,j,k)
     enddo ;  enddo; enddo
 
     call pass_var(CS%h,G%Domain)
-    call pass_var(CS%T,G%Domain)
-    call pass_var(CS%S,G%Domain)
+    call pass_var(CS%tv%T,G%Domain)
+    call pass_var(CS%tv%S,G%Domain)
     
     fluxes%fluxes_used = .true.
 
