@@ -1568,8 +1568,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       endif
 
       do j=jsd,jed ; do i=isd,ied
-          fluxes%netMassOut(i,j) = 0.5*fluxes%netMassOut(i,j)
-          fluxes%netMassIn(i,j) =  0.5*fluxes%netMassIn(i,j)
+          fluxes%netMassOut(i,j) = 0.1*fluxes%netMassOut(i,j)
+          fluxes%netMassIn(i,j) =  0.1*fluxes%netMassIn(i,j)
       enddo ; enddo
       
       zero_3dh(:,:,:)=0.0
@@ -1590,16 +1590,16 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       
       ! Note that here, h_new does nto represent any physical, should double check that any individual
       ! tracer does not use h_new
-      if (associated(CS%diabatic_CSp%optics)) &
-          call set_opacity(CS%diabatic_CSp%optics, fluxes, G, GV, CS%diabatic_CSp%opacity_CSp)
-      call call_tracer_column_fns(h_pre, h_new, eatr*0.5, ebtr*0.5, &
-              fluxes, CS%offline_CSp%dt_offline*0.5, G, GV, CS%tv, &
-              CS%diabatic_CSp%optics, CS%tracer_flow_CSp, CS%debug, &
-              evap_CFL_limit=evap_CFL_limit, &
-              minimum_forcing_depth=minimum_forcing_depth)
+!      if (associated(CS%diabatic_CSp%optics)) &
+!          call set_opacity(CS%diabatic_CSp%optics, fluxes, G, GV, CS%diabatic_CSp%opacity_CSp)
+!      call call_tracer_column_fns(h_pre, h_new, eatr*0.5, ebtr*0.5, &
+!              fluxes, CS%offline_CSp%dt_offline*0.5, G, GV, CS%tv, &
+!              CS%diabatic_CSp%optics, CS%tracer_flow_CSp, CS%debug, &
+!              evap_CFL_limit=evap_CFL_limit, &
+!              minimum_forcing_depth=minimum_forcing_depth)
       ! Add half of the total freshwater fluxes 
-      call applyTracerBoundaryFluxesInOut(G, GV, zero_3dh, 0.5*dt_offline, fluxes, h_pre, &
-                                    evap_CFL_limit, minimum_forcing_depth)
+!      call applyTracerBoundaryFluxesInOut(G, GV, zero_3dh, 0.5*dt_offline, fluxes, h_pre, &
+!                                    evap_CFL_limit, minimum_forcing_depth)
                                     
       if(CS%debug) then
         call hchksum(h_pre,"h_pre after 1st diabatic",G%HI)
@@ -1614,7 +1614,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         enddo ; enddo ; enddo
         
         call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
-            CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=1, &
+            CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=2, &
             uhr_out=uhtr, vhr_out=vhtr, h_out=h_new, x_first_in=x_before_y)
         ! Switch the direction every iteration? Maybe not useful
         ! x_before_y = .not. x_before_y
@@ -1677,15 +1677,27 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       enddo                  
       
       ! Now do the other half of the vertical mixing and tracer source/sink functions
-      if (associated(CS%diabatic_CSp%optics)) &
-          call set_opacity(CS%diabatic_CSp%optics, fluxes, G, GV, CS%diabatic_CSp%opacity_CSp)
-      call call_tracer_column_fns(h_pre, h_new, eatr*0.5, ebtr*0.5, &
-              fluxes, CS%offline_CSp%dt_offline*0.5, G, GV, CS%tv, &
-              CS%diabatic_CSp%optics, CS%tracer_flow_CSp, CS%debug, &
-              evap_CFL_limit=evap_CFL_limit, &
-              minimum_forcing_depth=minimum_forcing_depth)
-      call applyTracerBoundaryFluxesInOut(G, GV, zero_3dh, 0.5*dt_offline, fluxes, h_pre, &
-          evap_CFL_limit, minimum_forcing_depth)
+!      if (associated(CS%diabatic_CSp%optics)) &
+!          call set_opacity(CS%diabatic_CSp%optics, fluxes, G, GV, CS%diabatic_CSp%opacity_CSp)
+!      call call_tracer_column_fns(h_pre, h_new, eatr*0.5, ebtr*0.5, &
+!              fluxes, CS%offline_CSp%dt_offline*0.5, G, GV, CS%tv, &
+!              CS%diabatic_CSp%optics, CS%tracer_flow_CSp, CS%debug, &
+!              evap_CFL_limit=evap_CFL_limit, &
+!              minimum_forcing_depth=minimum_forcing_depth)
+!      call applyTracerBoundaryFluxesInOut(G, GV, zero_3dh, 0.5*dt_offline, fluxes, h_pre, &
+!          evap_CFL_limit, minimum_forcing_depth)
+      do k=1,10
+        if (associated(CS%diabatic_CSp%optics)) &
+            call set_opacity(CS%diabatic_CSp%optics, fluxes, G, GV, CS%diabatic_CSp%opacity_CSp)
+        call call_tracer_column_fns(h_pre, h_new, eatr*0.1, ebtr*0.1, &
+                fluxes, CS%offline_CSp%dt_offline*0.1, G, GV, CS%tv, &
+                CS%diabatic_CSp%optics, CS%tracer_flow_CSp, CS%debug, &
+                evap_CFL_limit=evap_CFL_limit, &
+                minimum_forcing_depth=minimum_forcing_depth)
+        call applyTracerBoundaryFluxesInOut(G, GV, zero_3dh, dt_offline*0.1, fluxes, h_pre, &
+            evap_CFL_limit, minimum_forcing_depth)
+      enddo
+
           
       if(CS%debug) then
         call hchksum(h_pre,"h_pre after 2nd diabatic",G%HI)
