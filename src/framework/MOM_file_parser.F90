@@ -1214,7 +1214,6 @@ subroutine log_version_plain(modulename, version)
   mesg = trim(modulename)//": "//trim(version)
   if (is_root_pe()) then
     write(stdlog(),'(a)') trim(mesg)
-    write(stdout(),'(a)') trim(mesg)
   endif
 
 end subroutine log_version_plain
