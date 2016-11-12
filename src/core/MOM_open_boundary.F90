@@ -34,7 +34,7 @@ public set_3D_OBC_data
 
 integer, parameter, public :: OBC_NONE = 0, OBC_SIMPLE = 1, OBC_WALL = 2
 integer, parameter, public :: OBC_FLATHER = 3
-integer, parameter, public :: OBC_RADIATION2D = 4
+integer, parameter, public :: OBC_RADIATION = 4
 integer, parameter, public :: OBC_DIRECTION_N = 100 !< Indicates the boundary is an effective northern boundary
 integer, parameter, public :: OBC_DIRECTION_S = 200 !< Indicates the boundary is an effective southern boundary
 integer, parameter, public :: OBC_DIRECTION_E = 300 !< Indicates the boundary is an effective eastern boundary
@@ -64,12 +64,18 @@ end type OBC_segment_type
 !> Open-boundary data
 type, public :: ocean_OBC_type
   integer :: number_of_segments = 0 !< The number of open-boundary segments.
-  logical :: Flather_u_BCs_exist_globally = .false. !< True if any zonal velocity points in the global domain use Flather BCs.
-  logical :: Flather_v_BCs_exist_globally = .false. !< True if any meridional velocity points in the global domain use Flather BCs.
-  logical :: nudged_u_BCs_exist_globally = .false. !< True if any velocity points in the global domain use nudged BCs.
-  logical :: nudged_v_BCs_exist_globally = .false. !< True if any velocity points in the global domain use nudged BCs.
-  logical :: specified_u_BCs_exist_globally = .false. !< True if any zonal velocity points in the global domain use specified BCs.
-  logical :: specified_v_BCs_exist_globally = .false. !< True if any meridional velocity points in the global domain use specified BCs.
+  logical :: Flather_u_BCs_exist_globally = .false.   !< True if any zonal velocity points
+                                                      !! in the global domain use Flather BCs.
+  logical :: Flather_v_BCs_exist_globally = .false.   !< True if any meridional velocity points
+                                                      !! in the global domain use Flather BCs.
+  logical :: nudged_u_BCs_exist_globally = .false.    !< True if any velocity points in the
+                                                      !! global domain use nudged BCs.
+  logical :: nudged_v_BCs_exist_globally = .false.    !< True if any velocity points in the
+                                                      !! global domain use nudged BCs.
+  logical :: specified_u_BCs_exist_globally = .false. !< True if any zonal velocity points
+                                                      !! in the global domain use specified BCs.
+  logical :: specified_v_BCs_exist_globally = .false. !< True if any meridional velocity points
+                                                      !! in the global domain use specified BCs.
   real :: g_Earth
   ! Properties of the segments used.
   type(OBC_segment_type), pointer, dimension(:) :: &
@@ -746,27 +752,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
 
   do k=1,nz ; do j=js,je ; do I=is-1,ie ; if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
     if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) then
-      if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%oblique) then
-        grad(I,J) = u_old(I,j+1,k) - u_old(I,j,k)
-        grad(I,J-1) = u_old(I,j,k) - u_old(I,j-1,k)
-        grad(I-1,J) = u_old(I-1,j+1,k) - u_old(I-1,j,k)
-        grad(I-1,J-1) = u_old(I-1,j,k) - u_old(I-1,j-1,k)
-        dhdt = u_old(I-1,j,k)-u_new(I-1,j,k) !old-new
-        dhdx = u_new(I-1,j,k)-u_new(I-2,j,k) !in new time backward sasha for I-1
-        if (dhdt*dhdx < 0.0) dhdt = 0.0
-        if (dhdt*(grad(I-1,J) + grad(I-1,J-1)) > 0.0) then
-          dhdy = grad(I-1,J-1)
-        else
-          dhdy = grad(I-1,J)
-        endif
-        cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-        Cx = dhdt*dhdx
-        Cy = min(cff,max(dhdt*dhdy,-cff))
-        ! Turning off oblique part
-        Cy = 0
-        u_new(I,j,k) = ((cff*u_old(I,j,k) + Cx*u_new(I-1,j,k)) - &
-          (max(Cy,0.0)*grad(I,J-1) - min(Cy,0.0)*grad(I,J))) / (cff + Cx)
-      elseif (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%radiation) then
+      if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%legacy) then
         dhdt = u_old(I-1,j,k)-u_new(I-1,j,k) !old-new
         dhdx = u_new(I-1,j,k)-u_new(I-2,j,k) !in new time backward sasha for I-1
         rx_new = 0.0
@@ -782,6 +768,26 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
     !   rx_avg = (1.0-gamma_h)*OBC%rx_old_h(I,j,k) + gamma_h*rx_new
     !   OBC%rx_old_h(I,j,k) = rx_avg
     !    h_new(I+1,j,k) = (h_old(I+1,j,k) + rx_avg*h_new(I,j,k)) / (1.0+rx_avg) !original
+      elseif (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%radiation) then
+        grad(I,J) = u_old(I,j+1,k) - u_old(I,j,k)
+        grad(I,J-1) = u_old(I,j,k) - u_old(I,j-1,k)
+        grad(I-1,J) = u_old(I-1,j+1,k) - u_old(I-1,j,k)
+        grad(I-1,J-1) = u_old(I-1,j,k) - u_old(I-1,j-1,k)
+        dhdt = u_old(I-1,j,k)-u_new(I-1,j,k) !old-new
+        dhdx = u_new(I-1,j,k)-u_new(I-2,j,k) !in new time backward sasha for I-1
+        if (dhdt*dhdx < 0.0) dhdt = 0.0
+        if (dhdt*(grad(I-1,J) + grad(I-1,J-1)) > 0.0) then
+          dhdy = grad(I-1,J-1)
+        else
+          dhdy = grad(I-1,J)
+        endif
+        cff = max(dhdx*dhdx + dhdy*dhdy, eps)
+        Cx = dhdt*dhdx
+        Cy = 0
+        if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%oblique) &
+             Cy = min(cff,max(dhdt*dhdy,-cff))
+        u_new(I,j,k) = ((cff*u_old(I,j,k) + Cx*u_new(I-1,j,k)) - &
+          (max(Cy,0.0)*grad(I,J-1) - min(Cy,0.0)*grad(I,J))) / (cff + Cx)
       endif
       if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%radiation .and. &
           OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%nudged) then
@@ -795,27 +801,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
     endif
 
     if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W) then
-      if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%oblique) then
-        grad(I,J) = u_old(I,j+1,k) - u_old(I,j,k)
-        grad(I,J-1) = u_old(I,j,k) - u_old(I,j-1,k)
-        grad(I+1,J) = u_old(I+1,j+1,k) - u_old(I+1,j,k)
-        grad(I+1,J-1) = u_old(I+1,j,k) - u_old(I+1,j-1,k)
-        dhdt = u_old(I+1,j,k)-u_new(I+1,j,k) !old-new
-        dhdx = u_new(I+1,j,k)-u_new(I+2,j,k) !in new time backward sasha for I+1
-        if (dhdt*dhdx < 0.0) dhdt = 0.0
-        if (dhdt*(grad(I+1,J) + grad(I+1,J-1)) > 0.0) then
-          dhdy = grad(I+1,J-1)
-        else
-          dhdy = grad(I+1,J)
-        endif
-        cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-        Cx = dhdt*dhdx
-        Cy = min(cff,max(dhdt*dhdy,-cff))
-        ! Turning off oblique part
-        Cy = 0
-        u_new(I,j,k) = ((cff*u_old(I,j,k) + Cx*u_new(I+1,j,k)) - &
-          (max(Cy,0.0)*grad(I,J-1) - min(Cy,0.0)*grad(I,J))) / (cff + Cx)
-      elseif (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%radiation) then
+      if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%radiation) then
         dhdt = u_old(I+1,j,k)-u_new(I+1,j,k) !old-new
         dhdx = u_new(I+1,j,k)-u_new(I+2,j,k) !in new time backward sasha for I+1
         rx_new = 0.0
@@ -831,6 +817,26 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
     !   rx_avg = (1.0-gamma_h)*OBC%rx_old_h(I,j,k) + gamma_h*rx_new
     !   OBC%rx_old_h(I,j,k) = rx_avg
     !   h_new(I,j,k) = (h_old(I,j,k) + rx_avg*h_new(I+1,j,k)) / (1.0+rx_avg) !original
+      elseif (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%radiation) then
+        grad(I,J) = u_old(I,j+1,k) - u_old(I,j,k)
+        grad(I,J-1) = u_old(I,j,k) - u_old(I,j-1,k)
+        grad(I+1,J) = u_old(I+1,j+1,k) - u_old(I+1,j,k)
+        grad(I+1,J-1) = u_old(I+1,j,k) - u_old(I+1,j-1,k)
+        dhdt = u_old(I+1,j,k)-u_new(I+1,j,k) !old-new
+        dhdx = u_new(I+1,j,k)-u_new(I+2,j,k) !in new time backward sasha for I+1
+        if (dhdt*dhdx < 0.0) dhdt = 0.0
+        if (dhdt*(grad(I+1,J) + grad(I+1,J-1)) > 0.0) then
+          dhdy = grad(I+1,J-1)
+        else
+          dhdy = grad(I+1,J)
+        endif
+        cff = max(dhdx*dhdx + dhdy*dhdy, eps)
+        Cx = dhdt*dhdx
+        Cy = 0
+        if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%oblique) &
+             Cy = min(cff,max(dhdt*dhdy,-cff))
+        u_new(I,j,k) = ((cff*u_old(I,j,k) + Cx*u_new(I+1,j,k)) - &
+          (max(Cy,0.0)*grad(I,J-1) - min(Cy,0.0)*grad(I,J))) / (cff + Cx)
       endif
       if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%radiation .and. &
           OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%nudged) then
@@ -844,7 +850,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
     endif
 
     if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_N) then
-      if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%gradient) then
+      if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%gradient .or. &
+          OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%legacy) then
         u_new(I,j,k) = u_new(I,j-1,k)
       elseif (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%radiation) then
         grad(i,j) = u_old(I,j,k) - u_old(I-1,j,k)
@@ -870,7 +877,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
     endif
 
     if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_S) then
-      if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%gradient) then
+      if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%gradient .or. &
+          OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%legacy) then
         u_new(I,j,k) = u_new(I,j+1,k)
       elseif (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%radiation) then
         grad(i,j) = u_old(I,j,k) - u_old(I-1,j,k)
@@ -898,27 +906,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
 
   do k=1,nz ; do J=js-1,je ; do i=is,ie ; if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
     if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N) then
-      if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%oblique) then
-        grad(I,J) = v_old(i+1,J,k) - v_old(i,J,k)
-        grad(I-1,J) = v_old(i,J,k) - v_old(i-1,J,k)
-        grad(I,J-1) = v_old(i+1,J-1,k) - v_old(i,J-1,k)
-        grad(I-1,J-1) = v_old(i,J-1,k) - v_old(i-1,J-1,k)
-        dhdt = v_old(i,J-1,k)-v_new(i,J-1,k) !old-new
-        dhdy = v_new(i,J-1,k)-v_new(i,J-2,k) !in new time backward sasha for J-1
-        if (dhdt*dhdy < 0.0) dhdt = 0.0
-        if (dhdt*(grad(I,J-1) + grad(I-1,J-1)) > 0.0) then
-          dhdx = grad(I-1,J-1)
-        else
-          dhdx = grad(I,J-1)
-        endif
-        cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-        Cy = dhdt*dhdy
-        Cx = min(cff,max(dhdt*dhdx,-cff))
-        ! Turning off oblique part
-        Cx = 0
-        v_new(i,J,k) = ((cff*v_old(i,J,k) + Cy*v_new(i,J-1,k)) - &
-          (max(Cx,0.0)*grad(I-1,J) - min(Cx,0.0)*grad(I,J))) / (cff + Cy)
-      elseif (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%radiation) then
+      if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%legacy) then
         dhdt = v_old(i,J-1,k)-v_new(i,J-1,k) !old-new
         dhdy = v_new(i,J-1,k)-v_new(i,J-2,k) !in new time backward sasha for J-1
         rx_new = 0.0
@@ -934,6 +922,26 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
     !   rx_avg = (1.0-gamma_h)*OBC%ry_old_h(i,J,k) + gamma_h*rx_new
     !   OBC%ry_old_h(i,J,k) = rx_avg
     !   h_new(i,J+1,k) = (h_old(i,J+1,k) + rx_avg*h_new(i,J,k)) / (1.0+rx_avg) !original
+      elseif (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%radiation) then
+        grad(I,J) = v_old(i+1,J,k) - v_old(i,J,k)
+        grad(I-1,J) = v_old(i,J,k) - v_old(i-1,J,k)
+        grad(I,J-1) = v_old(i+1,J-1,k) - v_old(i,J-1,k)
+        grad(I-1,J-1) = v_old(i,J-1,k) - v_old(i-1,J-1,k)
+        dhdt = v_old(i,J-1,k)-v_new(i,J-1,k) !old-new
+        dhdy = v_new(i,J-1,k)-v_new(i,J-2,k) !in new time backward sasha for J-1
+        if (dhdt*dhdy < 0.0) dhdt = 0.0
+        if (dhdt*(grad(I,J-1) + grad(I-1,J-1)) > 0.0) then
+          dhdx = grad(I-1,J-1)
+        else
+          dhdx = grad(I,J-1)
+        endif
+        cff = max(dhdx*dhdx + dhdy*dhdy, eps)
+        Cy = dhdt*dhdy
+        Cx = 0
+        if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%oblique) &
+             Cx = min(cff,max(dhdt*dhdx,-cff))
+        v_new(i,J,k) = ((cff*v_old(i,J,k) + Cy*v_new(i,J-1,k)) - &
+          (max(Cx,0.0)*grad(I-1,J) - min(Cx,0.0)*grad(I,J))) / (cff + Cy)
       endif
       if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%radiation .and. &
           OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%nudged) then
@@ -947,27 +955,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
     endif
 
     if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_S) then
-      if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%oblique) then
-        grad(I,J) = v_old(i+1,J,k) - v_old(i,J,k)
-        grad(I-1,J) = v_old(i,J,k) - v_old(i-1,J,k)
-        grad(I,J+1) = v_old(i+1,J+1,k) - v_old(i,J+1,k)
-        grad(I-1,J+1) = v_old(i,J+1,k) - v_old(i-1,J+1,k)
-        dhdt = v_old(i,J+1,k)-v_new(i,J+1,k) !old-new
-        dhdy = v_new(i,J+1,k)-v_new(i,J+2,k) !in new time backward sasha for J+1
-        if (dhdt*dhdy < 0.0) dhdt = 0.0
-        if (dhdt*(grad(I,J+1) + grad(I-1,J+1)) > 0.0) then
-          dhdx = grad(I-1,J+1)
-        else
-          dhdx = grad(I,J+1)
-        endif
-        cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-        Cy = dhdt*dhdy
-        Cx = min(cff,max(dhdt*dhdx,-cff))
-        ! Turning off oblique part
-        Cx = 0
-        v_new(i,J,k) = ((cff*v_old(i,J,k) + Cy*v_new(i,J+1,k)) - &
-          (max(Cx,0.0)*grad(I-1,J) - min(Cx,0.0)*grad(I,J))) / (cff + Cy)
-      elseif (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%radiation) then
+      if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%legacy) then
         dhdt = v_old(i,J+1,k)-v_new(i,J+1,k) !old-new
         dhdy = v_new(i,J+1,k)-v_new(i,J+2,k) !in new time backward sasha for J+1
         rx_new = 0.0
@@ -983,6 +971,26 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
     !   rx_avg = (1.0-gamma_h)*OBC%ry_old_h(i,J,k) + gamma_h*rx_new
     !   OBC%ry_old_h(i,J,k) = rx_avg
     !   h_new(i,J,k) = (h_old(i,J,k) + rx_avg*h_new(i,J+1,k)) / (1.0+rx_avg) !original
+      elseif (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%radiation) then
+        grad(I,J) = v_old(i+1,J,k) - v_old(i,J,k)
+        grad(I-1,J) = v_old(i,J,k) - v_old(i-1,J,k)
+        grad(I,J+1) = v_old(i+1,J+1,k) - v_old(i,J+1,k)
+        grad(I-1,J+1) = v_old(i,J+1,k) - v_old(i-1,J+1,k)
+        dhdt = v_old(i,J+1,k)-v_new(i,J+1,k) !old-new
+        dhdy = v_new(i,J+1,k)-v_new(i,J+2,k) !in new time backward sasha for J+1
+        if (dhdt*dhdy < 0.0) dhdt = 0.0
+        if (dhdt*(grad(I,J+1) + grad(I-1,J+1)) > 0.0) then
+          dhdx = grad(I-1,J+1)
+        else
+          dhdx = grad(I,J+1)
+        endif
+        cff = max(dhdx*dhdx + dhdy*dhdy, eps)
+        Cy = dhdt*dhdy
+        Cx = 0
+        if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%oblique) &
+             Cx = min(cff,max(dhdt*dhdx,-cff))
+        v_new(i,J,k) = ((cff*v_old(i,J,k) + Cy*v_new(i,J+1,k)) - &
+          (max(Cx,0.0)*grad(I-1,J) - min(Cx,0.0)*grad(I,J))) / (cff + Cy)
       endif
       if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%radiation .and. &
           OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%nudged) then
@@ -996,7 +1004,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
     endif
 
     if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_E) then
-      if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%gradient) then
+      if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%gradient .or. &
+          OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%legacy) then
         v_new(i,J,k) = v_new(i-1,J,k)
       elseif (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%radiation) then
         grad(i,j) = v_old(i,J,k) - v_old(i,J-1,k)
@@ -1021,7 +1030,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
       endif
     endif
     if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_W) then
-      if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%gradient) then
+      if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%gradient .or. &
+          OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%legacy) then
         v_new(i,J,k) = v_new(i+1,J,k)
       elseif (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%radiation) then
         grad(i,j) = v_old(i,J,k) - v_old(i,J-1,k)
