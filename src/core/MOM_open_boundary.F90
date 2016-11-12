@@ -46,7 +46,7 @@ type, public :: OBC_segment_type
   logical :: Flather        !< If true, applies Flather + Chapman radiation of barotropic gravity waves.
   logical :: radiation      !< If true, 1D Orlanksi radiation boundary conditions are applied.
                             !! If False, a gradient condition is applied.
-  logical :: radiation2D    !< Oblique waves supported at radiation boundary.
+  logical :: oblique        !< Oblique waves supported at radiation boundary.
   logical :: nudged         !< Optional supplement to radiation boundary.
   logical :: specified      !< Boundary fixed to external value.
   logical :: gradient       !< Zero gradient at boundary.
@@ -154,7 +154,7 @@ subroutine open_boundary_config(G, param_file, OBC)
     do l=0,OBC%number_of_segments
       OBC%OBC_segment_number(l)%Flather = .false.
       OBC%OBC_segment_number(l)%radiation = .false.
-      OBC%OBC_segment_number(l)%radiation2D = .false.
+      OBC%OBC_segment_number(l)%oblique = .false.
       OBC%OBC_segment_number(l)%nudged = .false.
       OBC%OBC_segment_number(l)%specified = .false.
       OBC%OBC_segment_number(l)%gradient = .false.
@@ -241,7 +241,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
       OBC%Flather_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'OBLIQUE') then
       OBC%OBC_segment_number(l_seg)%radiation = .true.
-      OBC%OBC_segment_number(l_seg)%radiation2D = .true.
+      OBC%OBC_segment_number(l_seg)%oblique = .true.
       OBC%OBC_segment_number(l_seg)%gradient = .false.
       OBC%Flather_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'NUDGED') then
@@ -347,7 +347,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
       OBC%Flather_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'OBLIQUE') then
       OBC%OBC_segment_number(l_seg)%radiation = .true.
-      OBC%OBC_segment_number(l_seg)%radiation2D = .true.
+      OBC%OBC_segment_number(l_seg)%oblique = .true.
       OBC%OBC_segment_number(l_seg)%gradient = .false.
       OBC%Flather_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'NUDGED') then
@@ -742,7 +742,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
 
   do k=1,nz ; do j=js,je ; do I=is-1,ie ; if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
     if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) then
-      if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%radiation2D) then
+      if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%oblique) then
         grad(I,J) = u_old(I,j+1,k) - u_old(I,j,k)
         grad(I,J-1) = u_old(I,j,k) - u_old(I,j-1,k)
         grad(I-1,J) = u_old(I-1,j+1,k) - u_old(I-1,j,k)
@@ -758,7 +758,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
         cff = max(dhdx*dhdx + dhdy*dhdy, eps)
         Cx = dhdt*dhdx
         Cy = min(cff,max(dhdt*dhdy,-cff))
-        ! Turning off radiation2D part
+        ! Turning off oblique part
         Cy = 0
         u_new(I,j,k) = ((cff*u_old(I,j,k) + Cx*u_new(I-1,j,k)) - &
           (max(Cy,0.0)*grad(I,J-1) - min(Cy,0.0)*grad(I,J))) / (cff + Cx)
@@ -791,7 +791,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
     endif
 
     if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W) then
-      if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%radiation2D) then
+      if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%oblique) then
         grad(I,J) = u_old(I,j+1,k) - u_old(I,j,k)
         grad(I,J-1) = u_old(I,j,k) - u_old(I,j-1,k)
         grad(I+1,J) = u_old(I+1,j+1,k) - u_old(I+1,j,k)
@@ -807,7 +807,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
         cff = max(dhdx*dhdx + dhdy*dhdy, eps)
         Cx = dhdt*dhdx
         Cy = min(cff,max(dhdt*dhdy,-cff))
-        ! Turning off radiation2D part
+        ! Turning off oblique part
         Cy = 0
         u_new(I,j,k) = ((cff*u_old(I,j,k) + Cx*u_new(I+1,j,k)) - &
           (max(Cy,0.0)*grad(I,J-1) - min(Cy,0.0)*grad(I,J))) / (cff + Cx)
@@ -857,7 +857,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
         endif
         cff = max(dhdx*dhdx + dhdy*dhdy, eps)
         Cx = 0.0
-        if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%radiation2D) &
+        if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%oblique) &
                Cx = min(cff, max(dhdt*dhdx, -cff))
         Cy = dhdt*dhdy
         u_new(I,j,k) = ((cff*u_old(I,j,k) + Cy*u_new(I,j-1,k)) - &
@@ -883,7 +883,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
         endif
         cff = max(dhdx*dhdx + dhdy*dhdy, eps)
         Cx = 0.0
-        if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%radiation2D) &
+        if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%oblique) &
                Cx = min(cff, max(dhdt*dhdx, -cff))
         Cy = dhdt*dhdy
         u_new(I,j,k) = ((cff*u_old(I,j,k) + Cy*u_new(I,j+1,k)) - &
@@ -894,7 +894,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
 
   do k=1,nz ; do J=js-1,je ; do i=is,ie ; if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
     if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N) then
-      if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%radiation2D) then
+      if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%oblique) then
         grad(I,J) = v_old(i+1,J,k) - v_old(i,J,k)
         grad(I-1,J) = v_old(i,J,k) - v_old(i-1,J,k)
         grad(I,J-1) = v_old(i+1,J-1,k) - v_old(i,J-1,k)
@@ -910,7 +910,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
         cff = max(dhdx*dhdx + dhdy*dhdy, eps)
         Cy = dhdt*dhdy
         Cx = min(cff,max(dhdt*dhdx,-cff))
-        ! Turning off radiation2D part
+        ! Turning off oblique part
         Cx = 0
         v_new(i,J,k) = ((cff*v_old(i,J,k) + Cy*v_new(i,J-1,k)) - &
           (max(Cx,0.0)*grad(I-1,J) - min(Cx,0.0)*grad(I,J))) / (cff + Cy)
@@ -943,7 +943,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
     endif
 
     if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_S) then
-      if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%radiation2D) then
+      if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%oblique) then
         grad(I,J) = v_old(i+1,J,k) - v_old(i,J,k)
         grad(I-1,J) = v_old(i,J,k) - v_old(i-1,J,k)
         grad(I,J+1) = v_old(i+1,J+1,k) - v_old(i,J+1,k)
@@ -959,7 +959,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
         cff = max(dhdx*dhdx + dhdy*dhdy, eps)
         Cy = dhdt*dhdy
         Cx = min(cff,max(dhdt*dhdx,-cff))
-        ! Turning off radiation2D part
+        ! Turning off oblique part
         Cx = 0
         v_new(i,J,k) = ((cff*v_old(i,J,k) + Cy*v_new(i,J+1,k)) - &
           (max(Cx,0.0)*grad(I-1,J) - min(Cx,0.0)*grad(I,J))) / (cff + Cy)
@@ -1010,7 +1010,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
         cff = max(dhdx*dhdx + dhdy*dhdy, eps)
         Cx = dhdt*dhdx
         Cy = 0.0
-        if (OBC%OBC_segment_number(OBC%OBC_segment_v(I,j))%radiation2D) &
+        if (OBC%OBC_segment_number(OBC%OBC_segment_v(I,j))%oblique) &
                Cy = min(cff, max(dhdt*dhdy, -cff))
         v_new(i,J,k) = ((cff*v_old(i,J,k) + Cx*v_new(i-1,J,k)) - &
                (max(Cy, 0.0)*grad(i,j) - min(Cy, 0.0)*grad(i,j+1)))/(cff + Cx)
@@ -1035,7 +1035,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
         cff = max(dhdx*dhdx + dhdy*dhdy, eps)
         Cx = dhdt*dhdx
         Cy = 0.0
-        if (OBC%OBC_segment_number(OBC%OBC_segment_v(I,j))%radiation2D) &
+        if (OBC%OBC_segment_number(OBC%OBC_segment_v(I,j))%oblique) &
                Cy = min(cff, max(dhdt*dhdy, -cff))
         v_new(i,J,k) = ((cff*v_old(i,J,k) + Cx*v_new(i+1,J,k)) - &
                (max(Cy, 0.0)*grad(i,j) - min(Cy, 0.0)*grad(i+1,j)))/(cff + Cx)
