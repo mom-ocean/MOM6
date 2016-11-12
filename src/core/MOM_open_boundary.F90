@@ -232,7 +232,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
       this_kind = OBC_FLATHER
       OBC%OBC_segment_number(l_seg)%Flather = .true.
       ! This is a total hack for the tangential flow! - KSH
-      OBC%OBC_segment_number(l_seg)%gradient = .true.
+      OBC%OBC_segment_number(l_seg)%legacy = .true.
       OBC%Flather_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'ORLANSKI') then
       OBC%OBC_segment_number(l_seg)%radiation = .true.
@@ -338,7 +338,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
       this_kind = OBC_FLATHER
       OBC%OBC_segment_number(l_seg)%Flather = .true.
       ! This is a total hack for the tangential flow! - KSH
-      OBC%OBC_segment_number(l_seg)%gradient = .true.
+      OBC%OBC_segment_number(l_seg)%legacy = .true.
       OBC%Flather_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'ORLANSKI') then
       OBC%OBC_segment_number(l_seg)%radiation = .true.
