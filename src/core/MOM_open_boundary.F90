@@ -231,18 +231,13 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
     elseif (trim(action_str(a_loop)) == 'FLATHER') then
       this_kind = OBC_FLATHER
       OBC%OBC_segment_number(l_seg)%Flather = .true.
-      ! This is a total hack for the tangential flow! - KSH
-      OBC%OBC_segment_number(l_seg)%legacy = .true.
       OBC%Flather_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'ORLANSKI') then
       OBC%OBC_segment_number(l_seg)%radiation = .true.
-      ! This is a total hack for the tangential flow! - KSH
-      OBC%OBC_segment_number(l_seg)%gradient = .true.
       OBC%Flather_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'OBLIQUE') then
       OBC%OBC_segment_number(l_seg)%radiation = .true.
       OBC%OBC_segment_number(l_seg)%oblique = .true.
-      OBC%OBC_segment_number(l_seg)%gradient = .false.
       OBC%Flather_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'NUDGED') then
       OBC%OBC_segment_number(l_seg)%nudged = .true.
@@ -250,8 +245,15 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
       OBC%OBC_segment_number(l_seg)%Tnudge_in = 1.0/(3*86400)
       OBC%OBC_segment_number(l_seg)%Tnudge_out = 1.0/(360*86400)
       OBC%nudged_u_BCs_exist_globally = .true.
+    elseif (trim(action_str(a_loop)) == 'GRADIENT') then
+      OBC%OBC_segment_number(l_seg)%gradient = .true.
     elseif (trim(action_str(a_loop)) == 'LEGACY') then
+      this_kind = OBC_FLATHER
       OBC%OBC_segment_number(l_seg)%legacy = .true.
+      OBC%OBC_segment_number(l_seg)%Flather = .true.
+      OBC%OBC_segment_number(l_seg)%radiation = .true.
+      OBC%OBC_segment_number(l_seg)%gradient = .true.
+      OBC%Flather_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%OBC_segment_number(l_seg)%specified = .true.
       OBC%OBC_segment_number(l_seg)%values_needed = .true.
@@ -337,18 +339,13 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
     elseif (trim(action_str(a_loop)) == 'FLATHER') then
       this_kind = OBC_FLATHER
       OBC%OBC_segment_number(l_seg)%Flather = .true.
-      ! This is a total hack for the tangential flow! - KSH
-      OBC%OBC_segment_number(l_seg)%legacy = .true.
       OBC%Flather_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'ORLANSKI') then
       OBC%OBC_segment_number(l_seg)%radiation = .true.
-      ! This is a total hack for the tangential flow! - KSH
-      OBC%OBC_segment_number(l_seg)%gradient = .true.
       OBC%Flather_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'OBLIQUE') then
       OBC%OBC_segment_number(l_seg)%radiation = .true.
       OBC%OBC_segment_number(l_seg)%oblique = .true.
-      OBC%OBC_segment_number(l_seg)%gradient = .false.
       OBC%Flather_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'NUDGED') then
       OBC%OBC_segment_number(l_seg)%nudged = .true.
@@ -356,8 +353,15 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
       OBC%OBC_segment_number(l_seg)%Tnudge_in = 1.0/(3*86400)
       OBC%OBC_segment_number(l_seg)%Tnudge_out = 1.0/(360*86400)
       OBC%nudged_v_BCs_exist_globally = .true.
+    elseif (trim(action_str(a_loop)) == 'GRADIENT') then
+      OBC%OBC_segment_number(l_seg)%gradient = .true.
     elseif (trim(action_str(a_loop)) == 'LEGACY') then
+      this_kind = OBC_FLATHER
       OBC%OBC_segment_number(l_seg)%legacy = .true.
+      OBC%OBC_segment_number(l_seg)%gradient = .true.
+      OBC%OBC_segment_number(l_seg)%radiation = .true.
+      OBC%OBC_segment_number(l_seg)%Flather = .true.
+      OBC%Flather_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%OBC_segment_number(l_seg)%specified = .true.
       OBC%OBC_segment_number(l_seg)%values_needed = .true.
