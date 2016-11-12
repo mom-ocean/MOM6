@@ -150,6 +150,8 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
       h_end(i,j,k) = GV%Angstrom
       eatr(i,j,k) = 0.0
       ebtr(i,j,k) = 0.0
+      temp(i,j,k) = 0.0
+      salt(i,j,k) = 0.0
     endif
   enddo; enddo ; enddo
 
