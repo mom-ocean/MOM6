@@ -30,7 +30,6 @@ public open_boundary_impose_normal_slope
 public open_boundary_impose_land_mask
 public radiation_open_bdry_conds
 public set_Flather_data
-public set_3D_OBC_data
 
 integer, parameter, public :: OBC_NONE = 0, OBC_SIMPLE = 1, OBC_WALL = 2
 integer, parameter, public :: OBC_FLATHER = 3
@@ -1298,52 +1297,6 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
 ! enddo ; enddo ; enddo
 
 end subroutine set_Flather_data
-
-!> Sets the initial definitions of the characteristic open boundary conditions.
-subroutine set_3D_OBC_data(OBC, tv, h, G, PF, tracer_Reg)
-  type(ocean_grid_type),                     intent(inout) :: G !< Ocean grid structure
-  type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary structure
-  type(thermo_var_ptrs),                     intent(inout) :: tv !< Thermodynamics structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h !< Thickness
-  type(param_file_type),                     intent(in)    :: PF !< Parameter file handle
-  type(tracer_registry_type),                pointer       :: tracer_Reg !< Tracer registry
-  ! Local variables
-  logical :: read_OBC_uv = .false.
-  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
-  integer :: isd_off, jsd_off
-  integer :: IsdB, IedB, JsdB, JedB
-  character(len=40)  :: mod = "set_3D_OBC_data" ! This subroutine's name.
-  character(len=200) :: filename, OBC_file, inputdir ! Strings for file/path
-
-  real :: temp_u(G%domain%niglobal+1,G%domain%njglobal)
-  real :: temp_v(G%domain%niglobal,G%domain%njglobal+1)
-
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-
-  if (OBC%nudged_u_BCs_exist_globally) then
-    if (.not.associated(OBC%u)) then
-      allocate(OBC%u(IsdB:IedB,jsd:jed,nz)) ; OBC%u(:,:,:) = 0.0
-    endif
-    if (.not.associated(OBC%uh)) then
-      allocate(OBC%uh(IsdB:IedB,jsd:jed,nz)) ; OBC%uh(:,:,:) = 0.0
-    endif
-  endif
-
-  if (OBC%nudged_v_BCs_exist_globally) then
-    if (.not.associated(OBC%v)) then
-      allocate(OBC%v(isd:ied,JsdB:JedB,nz)) ; OBC%v(:,:,:) = 0.0
-    endif
-    if (.not.associated(OBC%vh)) then
-      allocate(OBC%vh(isd:ied,JsdB:JedB,nz)) ; OBC%vh(:,:,:) = 0.0
-    endif
-  endif
-
-! call pass_vector(OBC%eta_outer_u,OBC%eta_outer_v,G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
-! call pass_vector(OBC%ubt_outer,OBC%vbt_outer,G%Domain)
-
-end subroutine set_3D_OBC_data
 
 !> \namespace mom_open_boundary
 !! This module implements some aspects of internal open boundary
