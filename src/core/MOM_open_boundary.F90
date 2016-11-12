@@ -51,7 +51,7 @@ type, public :: OBC_segment_type
   logical :: specified      !< Boundary fixed to external value.
   logical :: gradient       !< Zero gradient at boundary.
   logical :: values_needed  !< Whether or not baroclinic OBC fields are needed.
-  logical :: legacy_bt      !< Old code for tangential BT velocities.
+  logical :: legacy         !< Old code for tangential BT velocities.
   integer :: direction      !< Boundary faces one of the four directions.
   integer :: Is_obc         !< i-indices of boundary segment.
   integer :: Ie_obc         !< i-indices of boundary segment.
@@ -159,7 +159,7 @@ subroutine open_boundary_config(G, param_file, OBC)
       OBC%OBC_segment_number(l)%specified = .false.
       OBC%OBC_segment_number(l)%gradient = .false.
       OBC%OBC_segment_number(l)%values_needed = .false.
-      OBC%OBC_segment_number(l)%legacy_bt = .false.
+      OBC%OBC_segment_number(l)%legacy = .false.
       OBC%OBC_segment_number(l)%direction = OBC_NONE
       OBC%OBC_segment_number(l)%Tnudge_in = 0.0
       OBC%OBC_segment_number(l)%Tnudge_out = 0.0
@@ -251,7 +251,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
       OBC%OBC_segment_number(l_seg)%Tnudge_out = 1.0/(360*86400)
       OBC%nudged_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'LEGACY') then
-      OBC%OBC_segment_number(l_seg)%legacy_bt = .true.
+      OBC%OBC_segment_number(l_seg)%legacy = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%OBC_segment_number(l_seg)%specified = .true.
       OBC%OBC_segment_number(l_seg)%values_needed = .true.
@@ -357,7 +357,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
       OBC%OBC_segment_number(l_seg)%Tnudge_out = 1.0/(360*86400)
       OBC%nudged_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'LEGACY') then
-      OBC%OBC_segment_number(l_seg)%legacy_bt = .true.
+      OBC%OBC_segment_number(l_seg)%legacy = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%OBC_segment_number(l_seg)%specified = .true.
       OBC%OBC_segment_number(l_seg)%values_needed = .true.
