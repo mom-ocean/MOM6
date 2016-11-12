@@ -1,4 +1,4 @@
-!> A simple (very thin) wrapper forregister_diag_field to avoid a compiler bug with PGI
+!> A simple (very thin) wrapper for register_diag_field to avoid a compiler bug with PGI
 module MOM_diag_manager_wrapper
 
 ! This file is part of MOM6. See LICENSE.md for the license.
