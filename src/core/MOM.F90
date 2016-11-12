@@ -124,7 +124,6 @@ use MOM_vert_friction,         only : vertvisc, vertvisc_remnant
 use MOM_vert_friction,         only : vertvisc_limit_vel, vertvisc_init
 use MOM_verticalGrid,          only : verticalGrid_type, verticalGridInit, verticalGridEnd
 use MOM_verticalGrid,          only : get_thickness_units, get_flux_units, get_tr_flux_units
-use MOM_wave_speed,            only : wave_speed_init, wave_speed_CS
 
 ! Offline modules
 use MOM_offline_transport,         only : offline_transport_CS
@@ -372,7 +371,6 @@ type, public :: MOM_control_struct
   type(mixedlayer_restrat_CS),   pointer :: mixedlayer_restrat_CSp => NULL()
   type(MEKE_CS),                 pointer :: MEKE_CSp               => NULL()
   type(VarMix_CS),               pointer :: VarMix                 => NULL()
-  type(wave_speed_CS),           pointer :: wave_speed_CSp         => NULL()
   type(tracer_registry_type),    pointer :: tracer_Reg             => NULL()
   type(tracer_advect_CS),        pointer :: tracer_adv_CSp         => NULL()
   type(tracer_hor_diff_CS),      pointer :: tracer_diff_CSp        => NULL()
@@ -2565,8 +2563,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
 
   CS%useMEKE = MEKE_init(Time, G, param_file, diag, CS%MEKE_CSp, CS%MEKE, CS%restart_CSp)
 
-  call wave_speed_init(Time, G, param_file, diag, CS%wave_speed_CSp)
-  call VarMix_init(Time, G, param_file, diag, CS%VarMix, CS%wave_speed_CSp)
+  call VarMix_init(Time, G, param_file, diag, CS%VarMix)
   call set_visc_init(Time, G, GV, param_file, diag, CS%visc, CS%set_visc_CSp)
   if (CS%split) then
     allocate(eta(SZI_(G),SZJ_(G))) ; eta(:,:) = 0.0
@@ -2607,7 +2604,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   endif
 
   call MOM_diagnostics_init(MOM_internal_state, CS%ADp, CS%CDp, Time, G, GV, &
-              param_file, diag, CS%diagnostics_CSp, CS%wave_speed_CSp)
+                            param_file, diag, CS%diagnostics_CSp)
 
   CS%Z_diag_interval = set_time(int((CS%dt_therm) * &
        max(1,floor(0.01 + Z_diag_int/(CS%dt_therm)))))
