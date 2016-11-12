@@ -1313,7 +1313,7 @@ subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, GV, param_
                  "BE is also applicable if SPLIT is false and USE_RK2 \n"//&
                  "is true.", units="nondim", default=0.6)
   call get_param(param_file, mod, "BEGW", CS%begw, &
-                 "If SPILT is true, BEGW is a number from 0 to 1 that \n"//&
+                 "If SPLIT is true, BEGW is a number from 0 to 1 that \n"//&
                  "controls the extent to which the treatment of gravity \n"//&
                  "waves is forward-backward (0) or simulated backward \n"//&
                  "Euler (1).  0 is almost always used.\n"//&

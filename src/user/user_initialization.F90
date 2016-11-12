@@ -27,7 +27,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_io, only : close_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
 use MOM_io, only : write_field, slasher
-use MOM_open_boundary, only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE, OBC_FLATHER
+use MOM_open_boundary, only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE
 use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
 use MOM_tracer_registry, only : tracer_registry_type, add_tracer_OBC_values
