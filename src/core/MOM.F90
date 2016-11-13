@@ -1479,6 +1479,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     integer :: isv, iev, jsv, jev ! The valid range of the indices.
     integer :: IsdB, IedB, JsdB, JedB
     logical :: z_first, x_before_y
+    integer :: niter_vert
 
     ! Fail out if offline_tracer_mode is not true
     if (.not.CS%offline_tracer_mode) call MOM_error(FATAL,"OFFLINE_TRACER_MODE=False when calling step_tracers")
@@ -1495,6 +1496,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     dt_offline = CS%offline_CSp%dt_offline
     evap_CFL_limit = CS%offline_CSp%evap_CFL_limit
     minimum_forcing_depth = CS%offline_CSp%minimum_forcing_depth
+    niter_vert = CEILING(dt_offline/CS%offline_CSp%dt_offline_vertical)
 
     niter = CS%offline_CSp%num_off_iter
     Inum_iter = 1./real(niter)
@@ -1694,15 +1696,19 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       call pass_var(CS%tv%T,G%Domain)
       call pass_var(CS%tv%S,G%Domain)
 
-      if (associated(CS%diabatic_CSp%optics)) &
+      do k=1,niter_vert
+        if (associated(CS%diabatic_CSp%optics)) &
           call set_opacity(CS%diabatic_CSp%optics, fluxes, G, GV, CS%diabatic_CSp%opacity_CSp)
-      call call_tracer_column_fns(h_pre, h_new, eatr, ebtr, &
-              fluxes, CS%offline_CSp%dt_offline, G, GV, CS%tv, &
-              CS%diabatic_CSp%optics, CS%tracer_flow_CSp, CS%debug, &
-              evap_CFL_limit=evap_CFL_limit, &
-              minimum_forcing_depth=minimum_forcing_depth)
-      call applyTracerBoundaryFluxesInOut(G, GV, zero_3dh, dt_offline, fluxes, h_pre, &
-          evap_CFL_limit, minimum_forcing_depth)
+
+        call call_tracer_column_fns(h_pre, h_new, eatr/niter_vert, ebtr/niter_vert, &
+                fluxes, CS%offline_CSp%dt_offline_vertical, G, GV, CS%tv, &
+                CS%diabatic_CSp%optics, CS%tracer_flow_CSp, CS%debug, &
+                evap_CFL_limit=evap_CFL_limit, &
+                minimum_forcing_depth=minimum_forcing_depth)
+        call applyTracerBoundaryFluxesInOut(G, GV, zero_3dh, CS%offline_CSp%dt_offline_vertical, fluxes, h_pre, &
+            evap_CFL_limit, minimum_forcing_depth)
+
+      enddo
 
       if(CS%debug) then
         call hchksum(h_pre,"h_pre after 2nd diabatic",G%HI)

@@ -41,6 +41,7 @@ type, public :: offline_transport_CS
   !> Variables controlling some of the numerical considerations of offline transport
   integer           ::  num_off_iter
   real              ::  dt_offline ! Timestep used for offline tracers
+  real              ::  dt_offline_vertical ! Timestep used for calls to tracer vertical physics  
   real              ::  max_off_cfl=0.5 ! Hardcoded for now, only used in non-ALE mode
   real              ::  evap_CFL_limit, minimum_forcing_depth
 
@@ -301,6 +302,8 @@ subroutine offline_transport_init(param_file, CS, diabatic_aux_CSp, G, GV)
     "Number of iterations to subdivide the offline tracer advection and diffusion" )
   call get_param(param_file, mod, "DT_OFFLINE", CS%dt_offline, &
     "Length of the offline timestep")
+  call get_param(param_file, mod, "DT_OFFLINE_VERTICAL", CS%dt_offline_vertical, &
+    "Length of the offline timestep for tracer column sources/sinks")
   call get_param(param_file, mod, "PRINT_ADV_OFFLINE", CS%print_adv_offline, &
     "Print diagnostic output every advection subiteration",default=.false.)
   call get_param(param_file, mod, "SKIP_DIFFUSION_OFFLINE", CS%skip_diffusion, &
