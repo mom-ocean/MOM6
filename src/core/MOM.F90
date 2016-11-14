@@ -59,6 +59,7 @@ use MOM_spatial_means,        only : global_area_mean, global_area_integral
 use MOM_state_initialization, only : MOM_initialize_state
 use MOM_time_manager,         only : time_type, set_time, time_type_to_real, operator(+)
 use MOM_time_manager,         only : operator(-), operator(>), operator(*), operator(/)
+use MOM_time_manager,         only : increment_date
 
 ! MOM core modules
 use MOM_ALE,                   only : ALE_init, ALE_end, ALE_main, ALE_CS, adjustGridForIntegrity
@@ -128,7 +129,7 @@ use MOM_verticalGrid,          only : get_thickness_units, get_flux_units, get_t
 
 ! Offline modules
 use MOM_offline_transport,         only : offline_transport_CS
-use MOM_offline_transport,         only : transport_by_files, next_modulo_time
+use MOM_offline_transport,         only : transport_by_files, next_modulo_time, offline_add_diurnal_sw
 use MOM_offline_transport,         only : offline_transport_init, register_diags_offline_transport
 use MOM_offline_transport,         only : limit_mass_flux_3d, update_h_horizontal_flux, update_h_vertical_flux
 use MOM_offline_transport,         only : distribute_residual_uh_barotropic, distribute_residual_vh_barotropic
@@ -1448,6 +1449,9 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     real, dimension(SZI_(CS%G),SZJB_(CS%G))              :: khdt_y
     
     real, dimension(SZI_(CS%G),SZJ_(CS%G))               :: eta_pre, eta_end
+    
+    ! Keep track of the time in vertical subiterations
+    type(time_type)                                      :: sub_Time_start, sub_Time_end
 
     real :: sum_abs_fluxes, sum_u, sum_v  ! Used to keep track of how close to convergence we are
     real :: dt_offline, minimum_forcing_depth, evap_CFL_limit ! Shorthand variables from offline CS
@@ -1471,6 +1475,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     ! Work arrays for temperature and salinity    
     real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: &        
         temp_old, salt_old, &
+        temp_mean, salt_mean, &
         zero_3dh     !
     integer                                        :: niter, iter
     real                                           :: Inum_iter, dt_iter
@@ -1522,12 +1527,15 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     ! Initialize logicals
     converged = .false.
     
+    ! Initialize time types
+    sub_Time_start = Time_start
+    
     call cpu_clock_begin(id_clock_tracer)
     call enable_averaging(time_interval, Time_start+set_time(int(time_interval)), CS%diag)
 
     ! Read in all fields that might be used this timestep
     call transport_by_files(G, GV, CS%offline_CSp, h_end, eatr, ebtr, uhtr, vhtr, &
-        khdt_x, khdt_y, temp_old, salt_old, fluxes, CS%use_ALE_algorithm)
+        khdt_x, khdt_y, temp_old, salt_old, temp_mean, salt_mean, fluxes, CS%use_ALE_algorithm)
 
     ! Set the starting layer thicknesses to those from the previous timestep    
     do k=1,nz ; do j=jsd,jed ; do i=isd,ied
@@ -1689,25 +1697,32 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
 !      call applyTracerBoundaryFluxesInOut(G, GV, zero_3dh, 0.5*dt_offline, fluxes, h_pre, &
 !          evap_CFL_limit, minimum_forcing_depth)
       do i = is, ie ; do j = js, je ; do k=1,nz
-        CS%tv%T(i,j,k) = temp_old(i,j,k)
-        CS%tv%S(i,j,k) = salt_old(i,j,k)
+        CS%tv%T(i,j,k) = temp_mean(i,j,k)
+        CS%tv%S(i,j,k) = salt_mean(i,j,k)
       enddo ;  enddo; enddo
 
       call pass_var(CS%tv%T,G%Domain)
       call pass_var(CS%tv%S,G%Domain)
 
       do k=1,niter_vert
+        
+        sub_Time_end = increment_date(sub_Time_start,&
+            seconds=floor(CS%offline_CSp%dt_offline_vertical+0.000))
+        
         if (associated(CS%diabatic_CSp%optics)) &
           call set_opacity(CS%diabatic_CSp%optics, fluxes, G, GV, CS%diabatic_CSp%opacity_CSp)
-
+        
+        call offline_add_diurnal_SW(fluxes, G, sub_Time_start, sub_Time_end)
         call call_tracer_column_fns(h_pre, h_new, eatr/niter_vert, ebtr/niter_vert, &
-                fluxes, CS%offline_CSp%dt_offline_vertical, G, GV, CS%tv, &
-                CS%diabatic_CSp%optics, CS%tracer_flow_CSp, CS%debug, &
-                evap_CFL_limit=evap_CFL_limit, &
-                minimum_forcing_depth=minimum_forcing_depth)
+            fluxes, CS%offline_CSp%dt_offline_vertical, G, GV, CS%tv, &
+            CS%diabatic_CSp%optics, CS%tracer_flow_CSp, CS%debug, &
+            evap_CFL_limit=evap_CFL_limit, &
+            minimum_forcing_depth=minimum_forcing_depth)
         call applyTracerBoundaryFluxesInOut(G, GV, zero_3dh, CS%offline_CSp%dt_offline_vertical, fluxes, h_pre, &
-            evap_CFL_limit, minimum_forcing_depth)
-
+              evap_CFL_limit, minimum_forcing_depth)
+            
+        sub_Time_start = sub_Time_end
+        
       enddo
 
       if(CS%debug) then

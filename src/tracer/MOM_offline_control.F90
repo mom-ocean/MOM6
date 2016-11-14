@@ -3,7 +3,7 @@ module MOM_offline_transport
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use data_override_mod,    only : data_override_init, data_override
-use MOM_time_manager,     only : time_type
+use MOM_time_manager,     only : time_type, operator(-)
 use MOM_domains,          only : pass_var, pass_vector, To_All
 use MOM_error_handler,    only : callTree_enter, callTree_leave, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_grid,             only : ocean_grid_type
@@ -12,6 +12,7 @@ use MOM_io,               only : read_data
 use MOM_file_parser,      only : get_param, log_version, param_file_type
 use MOM_diag_mediator,    only : diag_ctrl, register_diag_field
 use mpp_domains_mod,      only : CENTER, CORNER, NORTH, EAST
+use astronomy_mod,        only : orbital_time, diurnal_solar, daily_mean_solar
 use MOM_variables,        only : vertvisc_type
 use MOM_forcing_type,     only : forcing
 use MOM_shortwave_abs,    only : optics_type
@@ -32,7 +33,8 @@ type, public :: offline_transport_CS
   character(len=200) :: offlinedir  ! Directory where offline fields are stored
   character(len=200) :: & !         ! Names of input files
     snap_file,  &
-    sum_file
+    sum_file,   &
+    mean_file
   character(len=20)  :: redistribute_method  
   logical :: fields_are_offset ! True if the time-averaged fields and snapshot fields are
                                ! offset by one time level
@@ -73,6 +75,7 @@ public distribute_residual_uh_barotropic
 public distribute_residual_vh_barotropic
 public distribute_residual_uh_upwards
 public distribute_residual_vh_upwards
+public offline_add_diurnal_sw
 
 #include "MOM_memory.h"
 #include "version_variable.h"
@@ -82,7 +85,7 @@ contains
 !> Controls the reading in 3d mass fluxes, diffusive fluxes, and other fields stored
 !! in a previous integration of the online model
 subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, khdt_y, &
-    temp, salt, fluxes, do_ale_in)
+    temp, salt, temp_mean, salt_mean, fluxes, do_ale_in)
 
   type(ocean_grid_type),                     intent(inout)    :: G
   type(verticalGrid_type),                   intent(inout)    :: GV
@@ -104,7 +107,8 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     h_end, &
     eatr, ebtr, &
-    temp, salt
+    temp, salt, &
+    temp_mean, salt_mean
   type(forcing)                                               :: fluxes
   logical                                                     :: do_ale
   integer :: i, j, k, is, ie, js, je, nz
@@ -136,14 +140,18 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
     timelevel=CS%ridx_sum,position=CENTER)
 
   !! Time-averaged fields
-  call read_data(CS%snap_file, 'temp',   temp, domain=G%Domain%mpp_domain, &
+  call read_data(CS%mean_file, 'temp',   temp_mean, domain=G%Domain%mpp_domain, &
     timelevel=CS%ridx_sum,position=CENTER)
-  call read_data(CS%snap_file, 'salt',   salt, domain=G%Domain%mpp_domain, &
+  call read_data(CS%mean_file, 'salt',   salt_mean, domain=G%Domain%mpp_domain, &
     timelevel=CS%ridx_sum,position=CENTER)
 
   !! Read snapshot fields (end of time interval timestamp)
   call read_data(CS%snap_file, 'h_end', h_end, domain=G%Domain%mpp_domain, &
     timelevel=CS%ridx_snap,position=CENTER)
+  call read_data(CS%snap_file, 'temp',   temp, domain=G%Domain%mpp_domain, &
+    timelevel=CS%ridx_sum,position=CENTER)
+  call read_data(CS%snap_file, 'salt',   salt, domain=G%Domain%mpp_domain, &
+    timelevel=CS%ridx_sum,position=CENTER)  
 
   ! Apply masks at T, U, and V points
   do k=1,nz ; do j=js,je ; do i=is,ie
@@ -153,6 +161,8 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
       ebtr(i,j,k) = 0.0
       temp(i,j,k) = 0.0
       salt(i,j,k) = 0.0
+      temp_mean(i,j,k) = 0.0
+      salt_mean(i,j,k) = 0.0
     endif
   enddo; enddo ; enddo
 
@@ -199,6 +209,8 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
   call pass_var(ebtr, G%Domain)
   call pass_var(temp, G%Domain)
   call pass_var(salt, G%Domain)
+  call pass_var(temp_mean, G%Domain)
+  call pass_var(salt_mean, G%Domain)
 
   if (do_ale) then
     call pass_var(fluxes%netMassOut,G%Domain)
@@ -284,6 +296,8 @@ subroutine offline_transport_init(param_file, CS, diabatic_aux_CSp, G, GV)
     "Filename where the accumulated fields can be found", default = " ")
   call get_param(param_file, mod, "OFF_SNAP_FILE", CS%snap_file, &
     "Filename where snapshot fields can be found",default=" ")
+  call get_param(param_file, mod, "OFF_MEAN_FILE", CS%mean_file, &
+    "Filename where averaged fields can be found",default=" ")
   call get_param(param_file, mod, "START_INDEX", CS%start_index, &
     "Which time index to start from", default=1)
   call get_param(param_file, mod, "NUMTIME", CS%numtime, &
@@ -853,7 +867,57 @@ subroutine distribute_residual_vh_upwards(G, GV, h, vh)
   enddo
 
 end subroutine distribute_residual_vh_upwards
-  
+
+!> add_diurnal_SW adjusts the shortwave fluxes in an forcying_type variable
+!! to add a synthetic diurnal cycle. Adapted from SIS2 
+subroutine offline_add_diurnal_SW(fluxes, G, Time_start, Time_end)
+  type(forcing),                 intent(inout) :: fluxes !< The type with atmospheric fluxes to be adjusted.
+  type(ocean_grid_type),         intent(in)    :: G   !< The sea-ice lateral grid type.
+  type(time_type),               intent(in)    :: Time_start !< The start time for this step.
+  type(time_type),               intent(in)    :: Time_end   !< The ending time for this step.
+
+  real :: diurnal_factor, time_since_ae, rad
+  real :: fracday_dt, fracday_day
+  real :: cosz_day, cosz_dt, rrsun_day, rrsun_dt
+  type(time_type) :: dt_here
+
+  integer :: i, j, k, i2, j2, isc, iec, jsc, jec, i_off, j_off
+
+  isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec
+  i_off = LBOUND(fluxes%sens,1) - G%isc ; j_off = LBOUND(fluxes%sens,2) - G%jsc
+
+  !   Orbital_time extracts the time of year relative to the northern
+  ! hemisphere autumnal equinox from a time_type variable.
+  time_since_ae = orbital_time(Time_start)
+  dt_here = Time_end - Time_start
+  rad = acos(-1.)/180.
+
+!$OMP parallel do default(none) shared(isc,iec,jsc,jec,G,rad,Time_start,dt_here,time_since_ae, &
+!$OMP                                  ncat,fluxes,i_off,j_off) &
+!$OMP                          private(i,j,i2,j2,k,cosz_dt,fracday_dt,rrsun_dt, &
+!$OMP                                  fracday_day,cosz_day,rrsun_day,diurnal_factor)
+  do j=jsc,jec ; do i=isc,iec
+!    Per Rick Hemler:
+!      Call diurnal_solar with dtime=dt_here to get cosz averaged over dt_here.
+!      Call daily_mean_solar to get cosz averaged over a day.  Then
+!      diurnal_factor = cosz_dt_ice*fracday_dt_ice*rrsun_dt_ice / 
+!                       cosz_day*fracday_day*rrsun_day
+
+    call diurnal_solar(G%geoLatT(i,j)*rad, G%geoLonT(i,j)*rad, Time_start, cosz=cosz_dt, &
+                       fracday=fracday_dt, rrsun=rrsun_dt, dt_time=dt_here)
+    call daily_mean_solar (G%geoLatT(i,j)*rad, time_since_ae, cosz_day, fracday_day, rrsun_day)
+    diurnal_factor = cosz_dt*fracday_dt*rrsun_dt / &
+                     max(1e-30, cosz_day*fracday_day*rrsun_day)
+
+    i2 = i+i_off ; j2 = j+j_off
+    fluxes%sw_nir_dir(i2,j2) = fluxes%sw_nir_dir(i2,j2) * diurnal_factor
+    fluxes%sw_nir_dif(i2,j2) = fluxes%sw_nir_dif(i2,j2) * diurnal_factor
+    fluxes%sw_vis_dir(i2,j2) = fluxes%sw_vis_dir(i2,j2) * diurnal_factor
+    fluxes%sw_vis_dif(i2,j2) = fluxes%sw_vis_dif(i2,j2) * diurnal_factor
+  enddo ; enddo
+
+end subroutine offline_add_diurnal_sw
+
 !> \namespace mom_offline_transport
 !! \section offline_overview Offline Tracer Transport in MOM6
 !!  'Offline tracer modeling' uses physical fields (e.g. mass transports and layer thicknesses) saved
@@ -932,6 +996,6 @@ end subroutine distribute_residual_vh_upwards
 !!                          Options are 'barotropic' which "evenly distributes flux throughout the entire water
 !!                          column,'upwards' which adds the maximum of the remaining flux in each layer above,
 !!                          and 'none' which does no redistribution"
-  
+
 end module MOM_offline_transport
 
