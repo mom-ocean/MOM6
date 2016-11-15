@@ -66,7 +66,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_string_functions, only : lowercase
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : create_file, fieldtype, file_exists, open_file, close_file
-use MOM_io, only : read_field, write_field, read_data
+use MOM_io, only : read_field, write_field, read_data, get_filename_appendix
 use MOM_io, only : get_file_info, get_file_atts, get_file_fields, get_file_times
 use MOM_io, only : vardesc, query_vardesc, modify_vardesc
 use MOM_io, only : MULTIPLE, NETCDF_FILE, READONLY_FILE, SINGLE_FILE
@@ -747,6 +747,8 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   character(len=8) :: t_grid_read
   character(len=64) :: var_name         ! A variable's name.
   real :: restart_time
+  character(len=32) :: filename_appendix = '' !fms appendix to filename for ensemble runs 
+  integer :: length
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "save_restart: Module must be initialized before it is used.")
@@ -818,6 +820,17 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
     enddo
     next_var = m
 
+    !query fms_io if there is a filename_appendix (for ensemble runs)
+    call get_filename_appendix(filename_appendix)
+    if(len_trim(filename_appendix) > 0) then
+      length = len_trim(restartname)
+      if(restartname(length-2:length) == '.nc') then
+        restartname = restartname(1:length-3)//'.'//trim(filename_appendix)//'.nc'
+      else
+        restartname = restartname(1:length)  //'.'//trim(filename_appendix)
+      end if
+    end if
+    
     restartpath = trim(directory)// trim(restartname)
 
     if (num_files < 10) then
@@ -918,6 +931,9 @@ subroutine restore_state(filename, directory, day, G, CS)
   integer :: i, missing_fields
   real    :: t1, t2
   integer :: err
+  character(len=32) :: filename_appendix = '' !fms appendix to filename for ensemble runs 
+  character(len=80) :: restartname
+  integer :: length
 
   num_restart = 0 ; n = 1 ; start_char = 1
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
@@ -939,7 +955,20 @@ subroutine restore_state(filename, directory, day, G, CS)
       err = 0
       if (num_restart > 0) err = 1 ! Avoid going through the file list twice.
       do while (err == 0)
-        filepath = trim(directory) // trim(CS%restartfile)
+        restartname = trim(CS%restartfile)
+
+       !query fms_io if there is a filename_appendix (for ensemble runs)
+       call get_filename_appendix(filename_appendix)
+       if(len_trim(filename_appendix) > 0) then
+         length = len_trim(restartname)
+         if(restartname(length-2:length) == '.nc') then
+           restartname = restartname(1:length-3)//'.'//trim(filename_appendix)//'.nc'
+         else
+           restartname = restartname(1:length)  //'.'//trim(filename_appendix)
+         end if
+        end if
+        filepath = trim(directory) // trim(restartname)
+
         if (num_restart < 10) then
           write(suffix,'("_",I1)') num_restart
         else
