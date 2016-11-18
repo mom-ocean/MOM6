@@ -58,6 +58,7 @@ type :: diag_remap_ctrl
   logical :: initialized = .false.  !< Whether remappping initialized
   logical :: used = .false.  !< Whether this coordinate actually gets used.
   integer :: vertical_coord = 0 !< The vertical coordinate that we remap to
+  character(len=10) :: vertical_coord_name ='' !< The coordinate name as understood by ALE
   type(remapping_CS), pointer :: remap_cs => null() !< type for remapping using ALE module
   type(regridding_CS), pointer :: regrid_cs => null() !< type for regridding using ALE module
   integer :: nz = 0 !< Number of vertical levels used for remapping
@@ -158,6 +159,7 @@ subroutine configure_axes(remap_cs, G, GV, param_file)
 
   ! Read info needed for z-space remapping
   coord_string = trim(vertical_coord_strings(remap_cs%vertical_coord))
+  remap_cs%vertical_coord_name = coord_string
   if (coordinateMode(coord_string) == REGRIDDING_ZSTAR) then
     coord_string = 'Z' ! Special case to carry forward original use of _z and _Z for z*-coordinates
   endif
@@ -185,7 +187,7 @@ subroutine configure_axes(remap_cs, G, GV, param_file)
       allocate(interfaces(nzi(1)))
       allocate(layers(nzl(1)))
 
-      remap_cs%dz(:) = uniformResolution(GV%ke, vertical_coord_strings(remap_cs%vertical_coord), &
+      remap_cs%dz(:) = uniformResolution(GV%ke, remap_cs%vertical_coord_name, &
                                       G%max_depth, GV%Rlay(1)+0.5*(GV%Rlay(1)-GV%Rlay(2)), &
                                       GV%Rlay(GV%ke)+0.5*(GV%Rlay(GV%ke)-GV%Rlay(GV%ke-1)))
 
@@ -295,11 +297,11 @@ subroutine configure_axes(remap_cs, G, GV, param_file)
 
     ! Make axes objects
     remap_cs%layer_axes_id = &
-        diag_axis_init(lowercase(trim(vertical_coord_strings(remap_cs%vertical_coord)))//'_l', &
+        diag_axis_init(lowercase(trim(remap_cs%vertical_coord_name))//'_l', &
                        layers, trim(units), 'z', &
                        trim(longname)//' at cell center', direction=-1)
     remap_cs%interface_axes_id = &
-        diag_axis_init(lowercase(trim(vertical_coord_strings(remap_cs%vertical_coord)))//'_i', &
+        diag_axis_init(lowercase(trim(remap_cs%vertical_coord_name))//'_i', &
                                  interfaces, trim(units), 'z', &
                                  trim(longname)//' Depth at interface', direction=-1)
 
@@ -422,8 +424,7 @@ subroutine diag_remap_update(remap_cs, G, h, T, S, eqn_of_state)
     call initialize_remapping(remap_cs%remap_cs, 'PPM_IH4', boundary_extrapolation=.false.)
 
     allocate(remap_cs%regrid_cs)
-    call initialize_regridding(nz, &
-          vertical_coord_strings(remap_cs%vertical_coord), 'PPM_IH4', remap_cs%regrid_cs)
+    call initialize_regridding(nz, remap_cs%vertical_coord_name, 'PPM_IH4', remap_cs%regrid_cs)
     call set_regrid_params(remap_cs%regrid_cs, min_thickness=0., integrate_downward_for_e=.false.)
     call setCoordinateResolution(remap_cs%dz, remap_cs%regrid_cs)
 
