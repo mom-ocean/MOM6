@@ -8,7 +8,7 @@ use MOM_string_functions, only : uppercase
 
 implicit none ; public
 
-integer, parameter :: REGRIDDING_NUM_TYPES  = 7
+integer, parameter :: REGRIDDING_NUM_TYPES  = 2
 
 ! List of regridding types. These should be consecutive and starting at 1.
 ! This allows them to be used as array indices.
@@ -18,7 +18,7 @@ integer, parameter :: REGRIDDING_RHO       = 3      !< Target interface densitie
 integer, parameter :: REGRIDDING_SIGMA     = 4      !< Sigma coordinates
 integer, parameter :: REGRIDDING_ARBITRARY = 5      !< Arbitrary coordinates
 integer, parameter :: REGRIDDING_HYCOM1    = 6      !< Simple HyCOM coordinates without BBL
-integer, parameter :: REGRIDDING_SLIGHT    = REGRIDDING_NUM_TYPES !< Stretched coordinates in the
+integer, parameter :: REGRIDDING_SLIGHT    = 7      !< Stretched coordinates in the
                                                     !! lightest water, isopycnal below
 character(len=6), parameter :: REGRIDDING_LAYER_STRING = "LAYER"   !< Layer string
 character(len=6), parameter :: REGRIDDING_ZSTAR_STRING_OLD = "Z*"  !< z* string (legacy name)
@@ -31,14 +31,16 @@ character(len=6), parameter :: REGRIDDING_SLIGHT_STRING = "SLIGHT" !< Hybrid S-r
 character(len=6), parameter :: DEFAULT_COORDINATE_MODE = REGRIDDING_LAYER_STRING !< Default coordinate mode
 
 integer, dimension(REGRIDDING_NUM_TYPES), parameter :: vertical_coords = &
-  (/ REGRIDDING_LAYER, REGRIDDING_ZSTAR, REGRIDDING_RHO, &
-    REGRIDDING_SIGMA, REGRIDDING_ARBITRARY, &
-    REGRIDDING_HYCOM1, REGRIDDING_SLIGHT /)
+  (/ REGRIDDING_LAYER, REGRIDDING_ZSTAR /)
+ !(/ REGRIDDING_LAYER, REGRIDDING_ZSTAR, REGRIDDING_RHO, &
+ !  REGRIDDING_SIGMA, REGRIDDING_ARBITRARY, &
+ !  REGRIDDING_HYCOM1, REGRIDDING_SLIGHT /)
 
 character(len=*), dimension(REGRIDDING_NUM_TYPES), parameter :: vertical_coord_strings = &
-  (/ REGRIDDING_LAYER_STRING, REGRIDDING_ZSTAR_STRING, REGRIDDING_RHO_STRING, &
-    REGRIDDING_SIGMA_STRING, REGRIDDING_ARBITRARY_STRING, &
-    REGRIDDING_HYCOM1_STRING, REGRIDDING_SLIGHT_STRING /)
+  (/ REGRIDDING_LAYER_STRING, REGRIDDING_ZSTAR_STRING /)
+ !(/ REGRIDDING_LAYER_STRING, REGRIDDING_ZSTAR_STRING, REGRIDDING_RHO_STRING, &
+ !  REGRIDDING_SIGMA_STRING, REGRIDDING_ARBITRARY_STRING, &
+ !  REGRIDDING_HYCOM1_STRING, REGRIDDING_SLIGHT_STRING /)
 
 interface coordinateUnits
   module procedure coordinateUnitsI
