@@ -1031,7 +1031,6 @@ subroutine MOM_diag_to_Z_init(Time, G, GV, param_file, diag, CS)
   character(len=48)  :: flux_units, string
   integer :: z_axis, zint_axis
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nk, id_test
-  logical :: diag_mediator_is_using_z
   isd  = G%isd   ; ied = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nk = G%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
@@ -1055,18 +1054,7 @@ subroutine MOM_diag_to_Z_init(Time, G, GV, param_file, diag, CS)
                  "depth-space diagnostics, or blank to disable \n"//&
                  "depth-space output.", default="")
 
-  ! Check that the diag_mediator z-sapce remapping is not using the same module name
-  string = ''
-  call get_param(param_file, mod, "DIAG_REMAP_Z_MODULE_SUFFIX", string, &
-                 default='_z_new', do_not_log=.true.)
-  diag_mediator_is_using_z = .false.
-  if (trim(string) == '_z') diag_mediator_is_using_z = .true.
-
   if (len_trim(zgrid_file) > 0) then
-    if (diag_mediator_is_using_z) call MOM_error(FATAL, "MOM_diag_to_Z_init:"// &
-           "Z_OUTPUT_GRID_FILE can not be used when DIAG_REMAP_Z_MODULE_SUFFIX='_z'." // &
-           " Z_OUTPUT_GRID_FILE='"//trim(zgrid_file)//"'")
-
     call get_param(param_file, mod, "INPUTDIR", in_dir, &
                  "The directory in which input files are found.", default=".")
     in_dir = slasher(in_dir)  
@@ -1116,33 +1104,6 @@ subroutine MOM_diag_to_Z_init(Time, G, GV, param_file, diag, CS)
         missing_value=CS%missing_trans)
     if (CS%id_vh_z>0) call safe_alloc_ptr(CS%vh_z,isd,ied,JsdB,JedB,CS%nk_zspace)
 
-  elseif (.not. diag_mediator_is_using_z) then
-
-    ! Check whether diag-table is requesting any z-space files; issue a warning if it is.
-
-    id_test = register_diag_field('ocean_model_zold', 'u', diag%axesCu1, Time, &
-        'Zonal Velocity in Depth Space', 'meter second-1', cmor_field_name='uo')
-    if (id_test>0) call MOM_error(WARNING, &
-        "MOM_diag_to_Z_init: u cannot be output without "//&
-        "an appropriate depth-space target file.")
-
-    id_test = register_diag_field('ocean_model_zold', 'v', diag%axesCv1, Time, &
-        'Meridional Velocity in Depth Space', 'meter second-1', cmor_field_name='vo')
-    if (id_test>0) call MOM_error(WARNING,                 &
-        "MOM_diag_to_Z_init: v cannot be output without "//&
-        "an appropriate depth-space target file.")
-
-    id_test = register_diag_field('ocean_model_zold', 'uh', diag%axesCu1, Time, &
-        'Meridional Volume Transport in Depth Space', flux_units)
-    if (id_test>0) call MOM_error(WARNING,                  &
-        "MOM_diag_to_Z_init: uh cannot be output without "//&
-        "an appropriate depth-space target file.")
-
-    id_test = register_diag_field('ocean_model_zold', 'vh', diag%axesCv1, Time, &
-        'Meridional Volume Transport in Depth Space', flux_units)
-    if (id_test>0) call MOM_error(WARNING,                  &
-        "MOM_diag_to_Z_init: vh cannot be output without "//&
-        "an appropriate depth-space target file.")
   endif
 
 end subroutine MOM_diag_to_Z_init
