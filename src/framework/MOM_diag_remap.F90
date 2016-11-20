@@ -30,8 +30,7 @@ use MOM_remapping,        only : remapping_core_h
 use MOM_regridding,       only : regridding_CS, initialize_regridding, setCoordinateResolution
 use MOM_regridding,       only : build_zstar_column, build_rho_column, build_sigma_column
 use MOM_regridding,       only : set_regrid_params, uniformResolution
-use regrid_consts,        only : coordinateMode, DEFAULT_COORDINATE_MODE, vertical_coord_strings
-use regrid_consts,        only : REGRIDDING_ZSTAR
+use regrid_consts,        only : coordinateMode
 
 use diag_axis_mod,     only : get_diag_axis_name
 use diag_manager_mod,  only : diag_axis_init
@@ -59,6 +58,8 @@ type :: diag_remap_ctrl
   logical :: used = .false.  !< Whether this coordinate actually gets used.
   integer :: vertical_coord = 0 !< The vertical coordinate that we remap to
   character(len=10) :: vertical_coord_name ='' !< The coordinate name as understood by ALE
+  character(len=16) :: diag_coord_name = '' !< A name for the purposs of run-time parameters
+  character(len=8) :: diag_module_suffix = '' !< The suffiz for the module to appear in diag_table
   type(remapping_CS), pointer :: remap_cs => null() !< type for remapping using ALE module
   type(regridding_CS), pointer :: regrid_cs => null() !< type for regridding using ALE module
   integer :: nz = 0 !< Number of vertical levels used for remapping
@@ -71,12 +72,15 @@ end type diag_remap_ctrl
 contains
 
 !> Initialize a diagnostic remapping type with the given vertical coordinate.
-!! The possible coordinates are defined in module regrid_consts
-subroutine diag_remap_init(remap_cs, vertical_coord)
+subroutine diag_remap_init(remap_cs, coord_tuple)
   type(diag_remap_ctrl), intent(inout) :: remap_cs !< Diag remapping control structure
-  integer, intent(in) :: vertical_coord !< The vertical coordinate it represents
+  character(len=*),      intent(in)    :: coord_tuple !< A string in form of
+                                                      !! MODULE_SUFFIX PARAMETER_SUFFIX COORDINATE_NAME
 
-  remap_cs%vertical_coord = vertical_coord
+  remap_cs%diag_module_suffix = trim(extractWord(coord_tuple, 1))
+  remap_cs%diag_coord_name = trim(extractWord(coord_tuple, 2))
+  remap_cs%vertical_coord_name = trim(extractWord(coord_tuple, 3))
+  remap_cs%vertical_coord = coordinateMode(remap_cs%vertical_coord_name)
   remap_cs%configured = .false.
   remap_cs%initialized = .false.
   remap_cs%used = .false.
@@ -127,30 +131,32 @@ end subroutine diag_remap_set_active
 !> Configure the vertical axes for a diagnostic remapping control structure.
 !! Reads a configuration file to determine nominal location of vertical
 !! layers/interfaces.
-subroutine diag_remap_configure_axes(remap_cs, G, GV, param_file)
-  type(diag_remap_ctrl), intent(inout) :: remap_cs !< Diag remap control structure
-  type(ocean_grid_type), intent(inout) :: G !< Ocean grid structure
-  type(verticalGrid_type), intent(in)  :: GV !< ocean vertical grid structure
-  type(param_file_type), intent(in)    :: param_file !< Parameter file structure
+subroutine diag_remap_configure_axes(remap_cs, G, GV, param_file, default_def)
+  type(diag_remap_ctrl),   intent(inout) :: remap_cs !< Diag remap control structure
+  type(ocean_grid_type),   intent(inout) :: G !< Ocean grid structure
+  type(verticalGrid_type),    intent(in) :: GV !< ocean vertical grid structure
+  type(param_file_type),      intent(in) :: param_file !< Parameter file structure
+  character(len=*), optional, intent(in) :: default_def !< String to use as default for DIAG_REMAP_*_GRID_DEF
 
   if (remap_cs%vertical_coord /= coordinateMode('LAYER')) then
-    call configure_axes(remap_cs, G, GV, param_file)
+    call configure_axes(remap_cs, G, GV, param_file, default_def=default_def)
   endif
 
 end subroutine diag_remap_configure_axes
 
 !> Read grid definition spec to configure axes.
-subroutine configure_axes(remap_cs, G, GV, param_file)
-  type(diag_remap_ctrl),  intent(inout) :: remap_cs !< Diag remap control structure
-  type(ocean_grid_type), intent(inout) :: G !< Ocean grid structure
-  type(verticalGrid_type), intent(in)  :: GV !< ocean vertical grid structure
-  type(param_file_type), intent(in)    :: param_file !< Parameter file structure
-
+subroutine configure_axes(remap_cs, G, GV, param_file, default_def)
+  type(diag_remap_ctrl),   intent(inout) :: remap_cs !< Diag remap control structure
+  type(ocean_grid_type),   intent(inout) :: G !< Ocean grid structure
+  type(verticalGrid_type),    intent(in) :: GV !< ocean vertical grid structure
+  type(param_file_type),      intent(in) :: param_file !< Parameter file structure
+  character(len=*), optional, intent(in) :: default_def !< String to use as default for DIAG_REMAP_*_GRID_DEF
+  ! Local variables
   integer :: nzi(4), nzl(4), k
   character(len=200) :: inputdir, string, filename, int_varname, layer_varname
   character(len=40)  :: mod  = "MOM_diag_mediator" ! This module's name.
   character(len=8)   :: units, expected_units
-  character(len=34)  :: longname, coord_string
+  character(len=34)  :: longname
 
   character(len=256) :: err_msg
   logical :: ierr
@@ -158,13 +164,10 @@ subroutine configure_axes(remap_cs, G, GV, param_file)
   real, allocatable, dimension(:) :: interfaces, layers
 
   ! Read info needed for z-space remapping
-  coord_string = trim(vertical_coord_strings(remap_cs%vertical_coord))
-  remap_cs%vertical_coord_name = coord_string
-  if (coordinateMode(coord_string) == REGRIDDING_ZSTAR) then
-    coord_string = 'Z' ! Special case to carry forward original use of _z and _Z for z*-coordinates
-  endif
+  longname=''
+  if (present(default_def)) longname=trim(default_def)
   call get_param(param_file, mod, &
-                 'DIAG_REMAP_'//trim(coord_string)//'_GRID_DEF', &
+                 'DIAG_COORD_DEF_'//trim(remap_cs%diag_coord_name), &
                  string, &
                  "This sets the file and variable names that define the\n"//&
                  "vertical grid used for diagnostic output remapping. \n"//&
@@ -177,7 +180,7 @@ subroutine configure_axes(remap_cs, G, GV, param_file)
                  "                             that contains layer positions,\n"//&
                  "UNIFORM                    - vertical grid is uniform\n"//&
                  "                             between surface and max depth.\n",&
-                 default="")
+                 default=trim(longname))
   if (len_trim(string) > 0) then
 
     if (trim(string) == 'UNIFORM') then

@@ -46,8 +46,6 @@ use MOM_diag_remap,       only : vertically_reintegrate_diag_field, vertically_i
 use MOM_diag_remap,       only : diag_remap_configure_axes, diag_remap_axes_configured
 use MOM_diag_remap,       only : diag_remap_get_axes_info, diag_remap_set_active
 use MOM_diag_remap,       only : diag_remap_diag_registration_closed
-use regrid_consts,        only : coordinateMode, DEFAULT_COORDINATE_MODE, REGRIDDING_NUM_TYPES
-use regrid_consts,        only : vertical_coords, vertical_coord_strings
 
 use diag_axis_mod, only : get_diag_axis_name
 use diag_manager_mod, only : diag_manager_init, diag_manager_end
@@ -178,12 +176,14 @@ type, public :: diag_ctrl
   !default missing value to be sent to ALL diagnostics registrations
   real :: missing_value = -1.0e+34
 
+  !> Number of diagnostic vertical coordinates (remapped)
+  integer :: num_diag_coords
   !> Control structure for each possible coordinate
-  type(diag_remap_ctrl), dimension(REGRIDDING_NUM_TYPES) :: diag_remap_cs
+  type(diag_remap_ctrl), dimension(:), allocatable :: diag_remap_cs
 
   !> Axes groups for each possible coordinate (these will all be 3D groups)
-  type(axes_grp), dimension(REGRIDDING_NUM_TYPES) :: remap_axesTL, remap_axesBL, remap_axesCuL, remap_axesCvL
-  type(axes_grp), dimension(REGRIDDING_NUM_TYPES) :: remap_axesTi, remap_axesBi, remap_axesCui, remap_axesCvi
+  type(axes_grp), dimension(:), allocatable :: remap_axesTL, remap_axesBL, remap_axesCuL, remap_axesCvL
+  type(axes_grp), dimension(:), allocatable :: remap_axesTi, remap_axesBi, remap_axesCui, remap_axesCvi
 
   ! Pointer to H, G and T&S needed for remapping
   real, dimension(:,:,:), pointer :: h => null()
@@ -219,14 +219,7 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
   real :: zlev(GV%ke), zinter(GV%ke+1)
   logical :: set_vert
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
-  character(len=40)  :: mod  = "MOM_diag_mediator" ! This module's name.
-
   set_vert = .true. ; if (present(set_vertical)) set_vert = set_vertical
-
-  ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
 
   if(G%symmetric) then
     id_xq = diag_axis_init('xq', G%gridLonB(G%isgB:G%iegB), G%x_axis_units, 'x', &
@@ -302,12 +295,27 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
   call define_axes_group(diag_cs, (/ id_xh, id_yq /), diag_cs%axesCv1, &
        x_cell_method='mean', y_cell_method='point', is_v_point=.true.)
 
-  do i=1, size(diag_cs%diag_remap_cs)
+  if (diag_cs%num_diag_coords>0) then
+    allocate(diag_cs%remap_axesTL(diag_cs%num_diag_coords))
+    allocate(diag_cs%remap_axesBL(diag_cs%num_diag_coords))
+    allocate(diag_cs%remap_axesCuL(diag_cs%num_diag_coords))
+    allocate(diag_cs%remap_axesCvL(diag_cs%num_diag_coords))
+    allocate(diag_cs%remap_axesTi(diag_cs%num_diag_coords))
+    allocate(diag_cs%remap_axesBi(diag_cs%num_diag_coords))
+    allocate(diag_cs%remap_axesCui(diag_cs%num_diag_coords))
+    allocate(diag_cs%remap_axesCvi(diag_cs%num_diag_coords))
+  endif
+
+  do i=1, diag_cs%num_diag_coords
     ! For each possible diagnostic coordinate
-    call diag_remap_configure_axes(diag_cs%diag_remap_cs(i), G, GV, param_file)
+    if (i==1) then
+      call diag_remap_configure_axes(diag_cs%diag_remap_cs(i), G, GV, param_file, default_def='UNIFORM')
+    else
+      call diag_remap_configure_axes(diag_cs%diag_remap_cs(i), G, GV, param_file)
+    endif
 
     ! This vertical coordinate has been configured so can be used.
-    if (diag_remap_axes_configured(diag_cs%diag_remap_cs(i))) then 
+    if (diag_remap_axes_configured(diag_cs%diag_remap_cs(i))) then
 
       ! This fetches the 1D-axis id for layers and interfaces and overwrite
       ! id_zl and id_zi from above. It also returns the number of layers.
@@ -373,7 +381,7 @@ subroutine diag_register_area_ids(diag_cs, id_area_t, id_area_q)
     diag_cs%axesT1%id_area = fms_id
     diag_cs%axesTi%id_area = fms_id
     diag_cs%axesTL%id_area = fms_id
-    do i=1, size(diag_cs%diag_remap_cs)
+    do i=1, diag_cs%num_diag_coords
       diag_cs%remap_axesTL(i)%id_area = fms_id
       ! Note to AJA: why am I not doing TZi too?
     enddo
@@ -383,7 +391,7 @@ subroutine diag_register_area_ids(diag_cs, id_area_t, id_area_q)
     diag_cs%axesB1%id_area = fms_id
     diag_cs%axesBi%id_area = fms_id
     diag_cs%axesBL%id_area = fms_id
-    do i=1, size(diag_cs%diag_remap_cs)
+    do i=1, diag_cs%num_diag_coords
       diag_cs%remap_axesBL(i)%id_area = fms_id
     enddo
   endif
@@ -1015,18 +1023,8 @@ integer function register_diag_field(module_name, field_name, axes, init_time, &
              conversion=conversion, v_extrinsic=v_extrinsic)
 
   ! For each diagnostic coordinate register the diagnostic again under a different module name
-  do i=1,size(vertical_coords)
-    if (vertical_coord_strings(i) == 'ZSTAR') then
-        new_module_name = trim(module_name)//'_z' ! Work around to carry forward legacy usage of _z
-    elseif (vertical_coord_strings(i) /= 'LAYER') then
-        ! For now we don't support remapping to 'ARB'
-        if (vertical_coord_strings(i) == 'ARB') then
-          cycle
-        endif
-        new_module_name = trim(module_name//'_'//lowercase(trim(vertical_coord_strings(i))))
-    else
-        new_module_name = module_name
-    endif
+  do i=1,diag_cs%num_diag_coords
+    new_module_name = trim(module_name)//'_'//trim(diag_cs%diag_remap_cs(i)%diag_module_suffix)
 
     ! Register diagnostics remapped to z vertical coordinate
     if (axes%rank == 3) then
@@ -1712,7 +1710,7 @@ subroutine diag_mediator_init(G, nz, param_file, diag_cs, doc_file_dir)
   type(diag_ctrl),            intent(inout) :: diag_cs !< A pointer to a type with many variables
                                                      !! used for diagnostics
   character(len=*), optional, intent(in)    :: doc_file_dir !< A directory in which to create the
-                                                     !! file 
+                                                     !! file
 
   ! This subroutine initializes the diag_mediator and the diag_manager.
   ! The grid type should have its dimensions set by this point, but it
@@ -1721,6 +1719,9 @@ subroutine diag_mediator_init(G, nz, param_file, diag_cs, doc_file_dir)
   logical :: opened, new_file
   character(len=8)   :: this_pe
   character(len=240) :: doc_file, doc_file_dflt, doc_path
+  character(len=240), allocatable :: diag_coords(:)
+! This include declares and sets the variable "version".
+#include "version_variable.h"
   character(len=40)  :: mod  = "MOM_diag_mediator" ! This module's name.
 
   id_clock_diag_mediator = cpu_clock_id('(Ocean diagnostics framework)', grain=CLOCK_MODULE)
@@ -1734,13 +1735,37 @@ subroutine diag_mediator_init(G, nz, param_file, diag_cs, doc_file_dir)
     call initialize_diag_type(diag_cs%diags(i))
   enddo
 
-  ! Initialise vertical coordinates and test assumptions needed for diagnostic
-  ! remapping.
-  do i=1, size(diag_cs%diag_remap_cs)
-    call diag_remap_init(diag_cs%diag_remap_cs(i), vertical_coords(i))
-  enddo
+  ! Read all relevant parameters and write them to the model log.
+  call log_version(param_file, mod, version, "")
 
-  ! Keep pointers grid, h, T, S needed diagnostic remapping 
+  call get_param(param_file, mod, 'NUM_DIAG_COORDS', diag_cs%num_diag_coords, &
+                 'The number of diagnostic vertical coordinates to use.\n'//&
+                 'For each coordinate, an entry in DIAG_COORDS must be provided.', &
+                 default=1)
+  if (diag_cs%num_diag_coords>0) then
+    allocate(diag_coords(diag_cs%num_diag_coords))
+    if (diag_cs%num_diag_coords==1) then ! The default is to provide just one instance of Z*
+      call get_param(param_file, mod, 'DIAG_COORDS', diag_coords, &
+                 'A list of string tuples associating diag_table modules to\n'//&
+                 'a coordinate definition used for diagnostics. Each string\n'//&
+                 'is of the form "MODULE_SUFFIX PARAMETER_SUFFIX COORDINATE_NAME".', &
+                 default='z Z ZSTAR')
+    else ! If using more than 1 diagnostic coordinate, all must be explicitly defined
+      call get_param(param_file, mod, 'DIAG_COORDS', diag_coords, &
+                 'A list of string tuples associating diag_table modules to\n'//&
+                 'a coordinate definition used for diagnostics. Each string\n'//&
+                 'is of the form "MODULE_SUFFIX,PARAMETER_SUFFIX,COORDINATE_NAME".', &
+                 fail_if_missing=.true.)
+    endif
+    allocate(diag_cs%diag_remap_cs(diag_cs%num_diag_coords))
+    ! Initialize each diagnostic vertical coordinate
+    do i=1, diag_cs%num_diag_coords
+      call diag_remap_init(diag_cs%diag_remap_cs(i), diag_coords(i))
+    enddo
+    deallocate(diag_coords)
+  endif
+
+  ! Keep pointers grid, h, T, S needed diagnostic remapping
   diag_cs%G => G
   diag_cs%h => null()
   diag_cs%T => null()
@@ -1826,7 +1851,7 @@ subroutine diag_update_remap_grids(diag_cs)
 
   if (id_clock_diag_grid_updates>0) call cpu_clock_begin(id_clock_diag_grid_updates)
 
-  do i=1, size(diag_cs%diag_remap_cs)
+  do i=1, diag_cs%num_diag_coords
     call diag_remap_update(diag_cs%diag_remap_cs(i), &
                            diag_cs%G, diag_cs%h, diag_cs%T, diag_cs%S, &
                            diag_cs%eqn_of_state)
@@ -1890,7 +1915,7 @@ subroutine diag_mediator_close_registration(diag_CS)
     close(diag_CS%doc_unit) ; diag_CS%doc_unit = -2
   endif
 
-  do i=1, size(diag_cs%diag_remap_cs)
+  do i=1, diag_cs%num_diag_coords
     call diag_remap_diag_registration_closed(diag_cs%diag_remap_cs(i))
   enddo
 
@@ -1910,7 +1935,7 @@ subroutine diag_mediator_end(time, diag_CS, end_diag_manager)
 
   deallocate(diag_cs%diags)
 
-  do i=1, size(diag_cs%diag_remap_cs)
+  do i=1, diag_cs%num_diag_coords
     call diag_remap_end(diag_cs%diag_remap_cs(i))
   enddo
 
