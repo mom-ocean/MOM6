@@ -89,6 +89,14 @@ subroutine MOM_calculate_grad_Coriolis(dF_dx, dF_dy, G)
   ! Local variables
   integer :: i,j
   real :: f1, f2
+  
+  if ((LBOUND(G%CoriolisBu,1) > G%isc-1) .or. &
+      (LBOUND(G%CoriolisBu,2) > G%isc-1)) then
+    ! The gradient of the Coriolis parameter can not be calculated with this grid.
+    dF_dx(:,:) = 0.0 ; dF_dy(:,:) = 0.0
+    return
+  endif
+  
   do j=G%jsc, G%jec ; do i=G%isc, G%iec
     f1 = 0.5*( G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1) )
     f2 = 0.5*( G%CoriolisBu(I-1,J) + G%CoriolisBu(I-1,J-1) )
