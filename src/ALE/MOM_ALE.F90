@@ -1026,7 +1026,6 @@ integer function pressureReconstructionScheme(CS)
 
 end function pressureReconstructionScheme
 
-
 !> Initializes regridding for the overall ALE algorithm
 subroutine ALE_initRegridding(GV, max_depth, param_file, mod, regridCS)
   type(verticalGrid_type), intent(in)  :: GV         !< Ocean vertical grid structure
@@ -1035,12 +1034,43 @@ subroutine ALE_initRegridding(GV, max_depth, param_file, mod, regridCS)
   character(len=*),        intent(in)  :: mod        !< Name of calling module
   type(regridding_CS),     intent(out) :: regridCS   !< Regridding parameters and work arrays
   ! Local variables
+  character(len=40) :: coord_mode ! Temporary strings
+  integer :: ke
+  ke = GV%ke
+
+  call get_param(param_file, mod, "REGRIDDING_COORDINATE_MODE", coord_mode, &
+                 "Coordinate mode for vertical regridding.\n"//&
+                 "Choose among the following possibilities:\n"//&
+                 trim(regriddingCoordinateModeDoc),&
+                 default=DEFAULT_COORDINATE_MODE, fail_if_missing=.true.)
+  call interpret_coord_config(GV, ke, max_depth, param_file, mod, regridCS, coord_mode, &
+          "ALE_COORDINATE_CONFIG", "ALE_RESOLUTION", "REGRIDDING_COORDINATE_UNITS", &
+          main_model_params=.true.)
+
+end subroutine ALE_initRegridding
+
+!> Configures a regridding control structure based on customizable run-time parameters
+subroutine interpret_coord_config(GV, ke, max_depth, param_file, mod, regridCS, coord_mode, &
+              coord_config_param, coord_res_param, coord_units_param, &
+              main_model_params)
+  type(verticalGrid_type), intent(in)  :: GV         !< Ocean vertical grid structure
+  integer,                 intent(in)  :: ke         !< Number of levels
+  real,                    intent(in)  :: max_depth  !< The maximum depth of the ocean, in m.
+  type(param_file_type),   intent(in)  :: param_file !< parameter file 
+  character(len=*),        intent(in)  :: mod        !< Name of calling module
+  type(regridding_CS),     intent(out) :: regridCS   !< Regridding parameters and work arrays
+  character(len=*),        intent(in)  :: coord_mode !< Coordinate mode
+  character(len=*),        intent(in)  :: coord_config_param !< Name of coordinate configuration parameter
+  character(len=*),        intent(in)  :: coord_res_param !< Name of coordinate resolution parameter
+  character(len=*),        intent(in)  :: coord_units_param !< Coordinate units parameter
+  logical, optional,       intent(in)  :: main_model_params !< If true, reads parameters that control the main ALE configuration
+  ! Local variables
   character(len=80)  :: string, varName ! Temporary strings
-  character(len=40)  :: coordMode, interpScheme, coordUnits ! Temporary strings
+  character(len=40)  :: interpScheme, coord_units ! Temporary strings
   character(len=200) :: inputdir, fileName
   character(len=320) :: message ! Temporary strings
-  integer :: K, ke
-  logical :: tmpLogical, fix_haloclines, set_max, do_sum
+  integer :: K
+  logical :: tmpLogical, fix_haloclines, set_max, do_sum, main_parameters
   real :: filt_len, strat_tol, index_scale
   real :: tmpReal, compress_fraction
   real :: dz_fixed_sfc, Rho_avg_depth, nlay_sfc_int
@@ -1051,23 +1081,20 @@ subroutine ALE_initRegridding(GV, max_depth, param_file, mod, regridCS)
   real, dimension(:), allocatable :: z_max  ! Maximum tinterface depths, in m.
   real, dimension(:), allocatable :: rho_target ! Target density used in HYBRID mode
 
-  ke = GV%ke
+  main_parameters=.false.
+  if (present(main_model_params)) main_parameters=main_model_params
+
   allocate(dz(ke))
   allocate(h_max(ke))
   allocate(dz_max(ke))
   allocate(z_max(ke+1))
   allocate(rho_target(ke+1))
 
-  call get_param(param_file, mod, "REGRIDDING_COORDINATE_MODE", coordMode, &
-                 "Coordinate mode for vertical regridding.\n"//&
-                 "Choose among the following possibilities:\n"//&
-                 trim(regriddingCoordinateModeDoc),&
-                 default=DEFAULT_COORDINATE_MODE, fail_if_missing=.true.)
-  call get_param(param_file, mod, "REGRIDDING_COORDINATE_UNITS", coordUnits, &
+  if (main_parameters) then
+    call get_param(param_file, mod, coord_units_param, coord_units, &
                  "Units of the regridding coordinuate.",&
-                 default=coordinateUnits(coordMode))
-
-  call get_param(param_file, mod, "INTERPOLATION_SCHEME", interpScheme, &
+                 default=coordinateUnits(coord_mode))
+    call get_param(param_file, mod, "INTERPOLATION_SCHEME", interpScheme, &
                  "This sets the interpolation scheme to use to\n"//&
                  "determine the new grid. These parameters are\n"//&
                  "only relevant when REGRIDDING_COORDINATE_MODE is\n"//&
@@ -1075,19 +1102,23 @@ subroutine ALE_initRegridding(GV, max_depth, param_file, mod, regridCS)
                  "used. It can be one of the following schemes:\n"//&
                  trim(regriddingInterpSchemeDoc),&
                  default=regriddingDefaultInterpScheme)
-
-  call get_param(param_file, mod, "REGRID_COMPRESSIBILITY_FRACTION", compress_fraction, &
+    call get_param(param_file, mod, "REGRID_COMPRESSIBILITY_FRACTION", compress_fraction, &
                  "When interpolating potential density profiles we can add\n"//&
                  "some artificial compressibility solely to make homogenous\n"//&
                  "regions appear stratified.", default=0.)
+  else
+    interpScheme = regriddingDefaultInterpScheme
+    compress_fraction = 0.
+    coord_units=coordinateUnits(coord_mode)
+  endif
 
-  call initialize_regridding( GV%ke, coordMode, interpScheme, regridCS, &
+  call initialize_regridding( ke, coord_mode, interpScheme, regridCS, &
                               compressibility_fraction=compress_fraction )
 
-  call get_param(param_file, mod, "ALE_COORDINATE_CONFIG", string, &
+  call get_param(param_file, mod, coord_config_param, string, &
                  "Determines how to specify the coordinate\n"//&
                  "resolution. Valid options are:\n"//&
-                 " PARAM       - use the vector-parameter ALE_RESOLUTION\n"//&
+                 " PARAM       - use the vector-parameter "//trim(coord_res_param)//"\n"//&
                  " UNIFORM     - uniformly distributed\n"//&
                  " FILE:string - read from a file. The string specifies\n"//&
                  "               the filename and variable name, separated\n"//&
@@ -1105,14 +1136,14 @@ subroutine ALE_initRegridding(GV, max_depth, param_file, mod, regridCS)
             "is of non-dimensional fractions of the water column."
   select case ( trim(string) )
     case ("UNIFORM")
-      dz(:) = uniformResolution(GV%ke, coordMode, max_depth, &
+      dz(:) = uniformResolution(ke, coord_mode, max_depth, &
                  GV%Rlay(1)+0.5*(GV%Rlay(1)-GV%Rlay(2)), &
-                 GV%Rlay(GV%ke)+0.5*(GV%Rlay(GV%ke)-GV%Rlay(GV%ke-1)) )
-      call log_param(param_file, mod, "!ALE_RESOLUTION", dz, &
-                   trim(message), units=trim(coordUnits))
+                 GV%Rlay(ke)+0.5*(GV%Rlay(ke)-GV%Rlay(ke-1)) )
+      call log_param(param_file, mod, "!"//coord_res_param, dz, &
+                   trim(message), units=trim(coord_units))
     case ("PARAM")
-      call get_param(param_file, mod, "ALE_RESOLUTION", dz, &
-                   trim(message), units=trim(coordUnits), fail_if_missing=.true.)
+      call get_param(param_file, mod, coord_res_param, dz, &
+                   trim(message), units=trim(coord_units), fail_if_missing=.true.)
     case default 
       if (index(trim(string),'FILE:')==1) then
         call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
@@ -1140,12 +1171,12 @@ subroutine ALE_initRegridding(GV, max_depth, param_file, mod, regridCS)
           endif
         endif
         call MOM_read_data(trim(fileName), trim(varName), dz)
-        call log_param(param_file, mod, "!ALE_RESOLUTION", dz, &
-                   trim(message), units=coordinateUnits(coordMode))
+        call log_param(param_file, mod, "!"//coord_res_param, dz, &
+                   trim(message), units=coordinateUnits(coord_mode))
       elseif (index(trim(string),'FNC1:')==1) then
         call dz_function1( trim(string(6:)), dz )
-        call log_param(param_file, mod, "!ALE_RESOLUTION", dz, &
-                   trim(message), units=coordinateUnits(coordMode))
+        call log_param(param_file, mod, "!"//coord_res_param, dz, &
+                   trim(message), units=coordinateUnits(coord_mode))
       elseif (index(trim(string),'HYBRID:')==1) then
         call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
         inputdir = slasher(inputdir)
@@ -1168,19 +1199,19 @@ subroutine ALE_initRegridding(GV, max_depth, param_file, mod, regridCS)
             "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
           call MOM_read_data(trim(fileName), trim(varName), dz)
         endif
-        call log_param(param_file, mod, "!ALE_RESOLUTION", dz, &
-                   trim(message), units=coordinateUnits(coordMode))
+        call log_param(param_file, mod, "!"//coord_res_param, dz, &
+                   trim(message), units=coordinateUnits(coord_mode))
         call log_param(param_file, mod, "!TARGET_DENSITIES", rho_target, &
-                   'HYBRID target densities for itnerfaces', units=coordinateUnits(coordMode))
+                   'HYBRID target densities for itnerfaces', units=coordinateUnits(coord_mode))
 
       else
         call MOM_error(FATAL,"ALE_initRegridding: "// &
           "Unrecognized coordinate configuraiton"//trim(string))
       endif
   end select
-  if (coordinateMode(coordMode) == REGRIDDING_ZSTAR .or. &
-      coordinateMode(coordMode) == REGRIDDING_HYCOM1 .or. &
-      coordinateMode(coordMode) == REGRIDDING_SLIGHT) then
+  if (coordinateMode(coord_mode) == REGRIDDING_ZSTAR .or. &
+      coordinateMode(coord_mode) == REGRIDDING_HYCOM1 .or. &
+      coordinateMode(coord_mode) == REGRIDDING_SLIGHT) then
     ! Adjust target grid to be consistent with max_depth
     ! This is a work around to the from_Z initialization...  ???
     tmpReal = sum( dz(:) )
@@ -1196,7 +1227,7 @@ subroutine ALE_initRegridding(GV, max_depth, param_file, mod, regridCS)
     endif
   endif
   call setCoordinateResolution( dz, regridCS )
-  if (coordinateMode(coordMode) == REGRIDDING_RHO) call set_target_densities_from_GV( GV, regridCS )
+  if (coordinateMode(coord_mode) == REGRIDDING_RHO) call set_target_densities_from_GV( GV, regridCS )
 
   call get_param(param_file, mod, "MIN_THICKNESS", tmpReal, &
                  "When regridding, this is the minimum layer\n"//&
@@ -1211,7 +1242,7 @@ subroutine ALE_initRegridding(GV, max_depth, param_file, mod, regridCS)
                  "boundary cells.", default=regriddingDefaultBoundaryExtrapolation)
   call set_regrid_params( regridCS, min_thickness=tmpReal, boundary_extrapolation=tmpLogical )
 
-  if (coordinateMode(coordMode) == REGRIDDING_SLIGHT) then
+  if (coordinateMode(coord_mode) == REGRIDDING_SLIGHT) then
     ! Set SLight-specific regridding parameters.
     call get_param(param_file, mod, "SLIGHT_DZ_SURFACE", dz_fixed_sfc, &
                  "The nominal thickness of fixed thickness near-surface\n"//&
@@ -1304,17 +1335,17 @@ subroutine ALE_initRegridding(GV, max_depth, param_file, mod, regridCS)
       call MOM_read_data(trim(fileName), trim(varName), z_max)
     endif
     call log_param(param_file, mod, "!MAXIMUM_INT_DEPTHS", z_max, &
-               trim(message), units=coordinateUnits(coordMode))
+               trim(message), units=coordinateUnits(coord_mode))
     call set_regrid_max_depths( regridCS, z_max, GV%m_to_H )
   elseif (index(trim(string),'FNC1:')==1) then
     call dz_function1( trim(string(6:)), dz_max )
-    if ((coordinateMode(coordMode) == REGRIDDING_SLIGHT) .and. &
+    if ((coordinateMode(coord_mode) == REGRIDDING_SLIGHT) .and. &
         (dz_fixed_sfc > 0.0)) then
       do k=1,nz_fixed_sfc ; dz_max(k) = dz_fixed_sfc ; enddo
     endif
     z_max(1) = 0.0 ; do K=1,ke ; z_max(K+1) = z_max(K) + dz_max(K) ; enddo
     call log_param(param_file, mod, "!MAXIMUM_INT_DEPTHS", z_max, &
-               trim(message), units=coordinateUnits(coordMode))
+               trim(message), units=coordinateUnits(coord_mode))
     call set_regrid_max_depths( regridCS, z_max, GV%m_to_H )
   else
     call MOM_error(FATAL,"ALE_initRegridding: "// &
@@ -1366,12 +1397,12 @@ subroutine ALE_initRegridding(GV, max_depth, param_file, mod, regridCS)
     endif
     call MOM_read_data(trim(fileName), trim(varName), h_max)
     call log_param(param_file, mod, "!MAX_LAYER_THICKNESS", h_max, &
-               trim(message), units=coordinateUnits(coordMode))
+               trim(message), units=coordinateUnits(coord_mode))
     call set_regrid_max_thickness( regridCS, h_max, GV%m_to_H )
   elseif (index(trim(string),'FNC1:')==1) then
     call dz_function1( trim(string(6:)), h_max )
     call log_param(param_file, mod, "!MAX_LAYER_THICKNESS", h_max, &
-               trim(message), units=coordinateUnits(coordMode))
+               trim(message), units=coordinateUnits(coord_mode))
     call set_regrid_max_thickness( regridCS, h_max, GV%m_to_H )
   else
     call MOM_error(FATAL,"ALE_initRegridding: "// &
@@ -1383,8 +1414,7 @@ subroutine ALE_initRegridding(GV, max_depth, param_file, mod, regridCS)
   deallocate(dz_max)
   deallocate(z_max)
   deallocate(rho_target)
-end subroutine ALE_initRegridding
-
+end subroutine interpret_coord_config
 
 !> Parses a string and generates a dz(:) profile
 subroutine dz_function1( string, dz )
