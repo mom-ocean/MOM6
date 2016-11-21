@@ -216,6 +216,11 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
                             max(0.0,Rf(k,i)-Rf(k-1,i))
         enddo
       endif
+
+      if (calc_modal_structure) then
+        mode_struct(:) = 0.
+      endif
+
   !   Find gprime across each internal interface, taking care of convective
   ! instabilities by merging layers.
       if (drxh_sum <= 0.0) then
@@ -292,11 +297,6 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
           enddo
         endif  ! use_EOS
 
-        if (calc_modal_structure) then
-          mode_struct(:) = 0.
-          mode_struct(1:kc) = 1. ! Uniform flow, first guess
-        endif
-
         ! Sum the contributions from all of the interfaces to give an over-estimate
         ! of the first-mode wave speed.  Also populate Igl and Igu which are the
         ! non-leading diagonals of the tridiagonal matrix.
@@ -332,6 +332,10 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
               Igl(K) = 1.0/(gprime(K)*Hc(k)) ; Igu(K) = 1.0/(gprime(K)*Hc(k-1))
               speed2_tot = speed2_tot + gprime(k)*(Hc(k-1)+Hc(k))
             enddo
+          endif
+
+          if (calc_modal_structure) then
+            mode_struct(1:kc) = 1. ! Uniform flow, first guess
           endif
 
           ! Overestimate the speed to start with.
@@ -408,18 +412,18 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
 
           cg1(i,j) = 0.0
           if (lam > 0.0) cg1(i,j) = 1.0 / sqrt(lam)
+
+          if (calc_modal_structure) then
+            if (mode_struct(1)/=0.) then
+              mode_struct(1:kc) = mode_struct(1:kc) / mode_struct(1)
+            endif
+            modal_structure(i,j,:) = mode_struct(:) ! NOTE THIS IS WRONG FOR VANISHED LAYERS _AJA
+            call remapping_core_h(kc, Hc, mode_struct, nz, h(i,j,:), modal_structure(i,j,:), CS%remapping_CS)
+          endif
         else
           cg1(i,j) = 0.0
         endif
-
       endif ! cg1 /= 0.0
-      if (calc_modal_structure) then
-        if (mode_struct(1)/=0.) then
-          mode_struct(1:kc) = mode_struct(1:kc) / mode_struct(1)
-        endif
-        modal_structure(i,j,:) = mode_struct(:) ! NOTE THIS IS WRONG FOR VANISHED LAYERS _AJA
-        call remapping_core_h(kc, Hc, mode_struct, nz, h(i,j,:), modal_structure(i,j,:), CS%remapping_CS)
-      endif
     else
       cg1(i,j) = 0.0 ! This is a land point.
       if (calc_modal_structure) modal_structure(i,j,:) = 0.

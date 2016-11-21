@@ -1,57 +1,7 @@
+!> Analytically integrated finite volume pressure gradient
 module MOM_PressureForce_AFV
-!***********************************************************************
-!*                   GNU General Public License                        *
-!* This file is a part of MOM.                                         *
-!*                                                                     *
-!* MOM is free software; you can redistribute it and/or modify it and  *
-!* are expected to follow the terms of the GNU General Public License  *
-!* as published by the Free Software Foundation; either version 2 of   *
-!* the License, or (at your option) any later version.                 *
-!*                                                                     *
-!* MOM is distributed in the hope that it will be useful, but WITHOUT  *
-!* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY  *
-!* or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public    *
-!* License for more details.                                           *
-!*                                                                     *
-!* For the full text of the GNU General Public License,                *
-!* write to: Free Software Foundation, Inc.,                           *
-!*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
-!* or see:   http://www.gnu.org/licenses/gpl.html                      *
-!***********************************************************************
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg and Alistair Adcroft, 2006                      *
-!*                                                                     *
-!*    This file contains the subroutine that calculates the hori-      *
-!*  zontal accelerations due to pressure gradients using a 2nd-order   *
-!*  analitically vertically integrated finite volume form, as          *
-!*  described by Adcroft, A., R. Hallberg, and M. Harrison, 2008: A    *
-!*  finite volume discretization of the pressure gradient force using  *
-!*  analytic integration. Ocean Modelling, 22, 106-113.  This form     *
-!*  eliminates the thermobaric instabilities that had been a problem   *
-!*  with previous forms of the pressure gradient force calculation,    *
-!*  as described by Hallberg (2005), Ocean Modelling, 8, 279-300.      *
-!*                                                                     *
-!*    PressureForce takes 8 arguments, which are described below. If   *
-!*  a non-split time stepping scheme is used, the last three arguments *
-!*  are ignored.                                                       *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, CoriolisBu                            *
-!*    j+1  > o > o >   At ^:  v, PFv                                   *
-!*    j    x ^ x ^ x   At >:  u, PFu                                   *
-!*    j    > o > o >   At o:  h, bathyT, M, e, p, pbce, T, S           *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1                                                  *
-!*           i  i+1                                                    *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
+! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_diag_mediator, only : post_data, register_diag_field
 use MOM_diag_mediator, only : safe_alloc_ptr, diag_ctrl, time_type
@@ -78,39 +28,42 @@ implicit none ; private
 public PressureForce_AFV, PressureForce_AFV_init, PressureForce_AFV_end
 public PressureForce_AFV_Bouss, PressureForce_AFV_nonBouss
 
+!> Finite volume pressure gradient control structure
 type, public :: PressureForce_AFV_CS ; private
-  logical :: tides          ! If true, apply tidal momentum forcing.
-  real    :: Rho0           !   The density used in the Boussinesq
-                            ! approximation, in kg m-3.
-  real    :: GFS_scale      !   A scaling of the surface pressure gradients to
-                            ! allow the use of a reduced gravity model.
-  type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
-  type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
-                             ! timing of diagnostic output.
-  logical :: useMassWghtInterp ! Use mass weighting in T/S interpolation
-  integer :: id_e_tidal = -1
-  type(tidal_forcing_CS), pointer :: tides_CSp => NULL()
+  logical :: tides          !< If true, apply tidal momentum forcing.
+  real    :: Rho0           !< The density used in the Boussinesq
+                            !! approximation, in kg m-3.
+  real    :: GFS_scale      !< A scaling of the surface pressure gradients to
+                            !! allow the use of a reduced gravity model.
+  type(time_type), pointer :: Time !< A pointer to the ocean model's clock.
+  type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
+                            !! timing of diagnostic output.
+  logical :: useMassWghtInterp !< Use mass weighting in T/S interpolation
+  integer :: id_e_tidal = -1 !< Diagnostic identifier
+  type(tidal_forcing_CS), pointer :: tides_CSp => NULL() !< Tides control structure
 end type PressureForce_AFV_CS
 
 contains
 
+!> Thin interface between the model and the Boussinesq and non-Boussinesq
+!! pressure force routines.
 subroutine PressureForce_AFV(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, pbce, eta)
-  type(ocean_grid_type),                     intent(in)  :: G
-  type(verticalGrid_type),                   intent(in)  :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h
-  type(thermo_var_ptrs),                   intent(inout) :: tv
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: PFu
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: PFv
-  type(PressureForce_AFV_CS),                pointer     :: CS
-  type(ALE_CS),                              pointer     :: ALE_CSp
-  real, dimension(:,:),                     optional, pointer     :: p_atm
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(out) :: pbce
-  real, dimension(SZI_(G),SZJ_(G)),         optional, intent(out) :: eta
-
-!    This subroutine works as a temporary interface between the model and the
-! Boussinesq and non-Boussinesq pressure force routines.
-! Descriptions of the variables are in each of the routines called in the
-! following conditional block.
+  type(ocean_grid_type),                     intent(in)    :: G   !< Ocean grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV  !< Vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h   !< Layer thickness (m or kg/m2)
+  type(thermo_var_ptrs),                     intent(inout) :: tv  !< Thermodynamic variables
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: PFu !< Zonal acceleration (m/s2)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: PFv !< Meridional acceleration (m/s2)
+  type(PressureForce_AFV_CS),                pointer       :: CS  !< Finite volume PGF control structure
+  type(ALE_CS),                              pointer       :: ALE_CSp !< ALE control structure
+  real, dimension(:,:),                      optional, pointer :: p_atm !< The pressure at the ice-ocean
+                                                           !! or atmosphere-ocean interface in Pa.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional, intent(out) :: pbce !< The baroclinic pressure
+                                                           !! anomaly in each layer due to eta anomalies,
+                                                           !! in m2 s-2 H-1.
+  real, dimension(SZI_(G),SZJ_(G)),          optional, intent(out) :: eta !< The bottom mass used to
+                                                           !! calculate PFu and PFv, in H, with any tidal
+                                                           !! contributions or compressibility compensation.
 
   if (GV%Boussinesq) then
     call PressureForce_AFV_bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, pbce, eta)
@@ -120,46 +73,33 @@ subroutine PressureForce_AFV(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, pbce, e
 
 end subroutine PressureForce_AFV
 
+!> \brief Non-Boussinesq analytically-integrated finite volume form of pressure gradient
+!!
+!! Determines the acceleration due to hydrostatic pressure forces, using
+!! the analytic finite volume form of the Pressure gradient, and does not
+!! make the Boussinesq approximation.
+!!
+!! To work, the following fields must be set outside of the usual
+!! ie to ie, je to je range before this subroutine is called:
+!!  h[ie+1] and h[je+1] and (if tv%eqn_of_state is set) T[ie+1], S[ie+1],
+!!  T[je+1], and S[je+1].
 subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta)
-  type(ocean_grid_type),                     intent(in)   :: G
-  type(verticalGrid_type),                   intent(in)   :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)   :: h
-  type(thermo_var_ptrs),                     intent(in)   :: tv
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)  :: PFu
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)  :: PFv
-  type(PressureForce_AFV_CS),                pointer      :: CS
-  real, dimension(:,:),                     optional, pointer     :: p_atm
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(out) :: pbce
-  real, dimension(SZI_(G),SZJ_(G)),         optional, intent(out) :: eta
-
-!    This subroutine determines the acceleration due to hydrostatic pressure
-!  forces, using the analytic finite volume form of the Pressure gradient, and
-!  does not make the Boussinesq approximation. It follows the approach described
-!  in Adcroft, Hallberg, and Harrison, 2008, Ocean Modelling.
-!    To work, the following fields must be set outside of the usual
-!  ie to ie, je to je range before this subroutine is called:
-!   h[ie+1] and h[je+1] and (if tv%eqn_of_state is set) T[ie+1], S[ie+1],
-!   T[je+1], and S[je+1].
-! Arguments: h - Layer thickness, in H (probably kg m-2).
-!  (in)      tv - A structure containing pointers to any available
-!                 thermodynamic fields, including potential temperature and
-!                 salinity or mixed layer density. Absent fields have NULL ptrs.
-!  (out)     PFu - Zonal acceleration due to pressure gradients
-!                  (equal to -dM/dx) in m s-2.
-!  (out)     PFv - Meridional acceleration due to pressure
-!                  gradients (equal to -dM/dy) in m s-2.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 PressureForce_init.
-!  (in)      p_atm - The pressure at the ice-ocean or atmosphere-ocean
-!                    interface in Pa.
-!  (out)     pbce - The baroclinic pressure anomaly in each layer
-!                   due to eta anomalies, in m2 s-2 H-1.
-!                   pbce points to a space with nz layers or NULL.
-!  (out)     eta - The bottom mass used to calculate PFu and PFv, in H,
-!                  with any tidal contributions or compressibility compensation.
-
+  type(ocean_grid_type),                     intent(in)    :: G   !< Ocean grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV  !< Vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h   !< Layer thickness (kg/m2)
+  type(thermo_var_ptrs),                     intent(in)    :: tv  !< Thermodynamic variables
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: PFu !< Zonal acceleration (m/s2)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: PFv !< Meridional acceleration (m/s2)
+  type(PressureForce_AFV_CS),                pointer       :: CS  !< Finite volume PGF control structure
+  real, dimension(:,:),                      optional, pointer :: p_atm !< The pressure at the ice-ocean
+                                                           !! or atmosphere-ocean interface in Pa.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional, intent(out) :: pbce !< The baroclinic pressure
+                                                           !! anomaly in each layer due to eta anomalies,
+                                                           !! in m2 s-2 H-1.
+  real, dimension(SZI_(G),SZJ_(G)),          optional, intent(out) :: eta !< The bottom mass used to
+                                                           !! calculate PFu and PFv, in H, with any tidal
+                                                           !! contributions or compressibility compensation.
+  ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: p ! Interface pressure in Pa.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target :: &
     T_tmp, &    ! Temporary array of temperatures where layers that are lighter
@@ -461,46 +401,33 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, e
 
 end subroutine PressureForce_AFV_nonBouss
 
+!> \brief Boussinesq analytically-integrated finite volume form of pressure gradient
+!!
+!! Determines the acceleration due to hydrostatic pressure forces, using
+!! the finite volume form of the terms and analytic integrals in depth.
+!!
+!! To work, the following fields must be set outside of the usual
+!! ie to ie, je to je range before this subroutine is called:
+!!  h[ie+1] and h[je+1] and (if tv%eqn_of_state is set) T[ie+1], S[ie+1],
+!!  T[je+1], and S[je+1].
 subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, pbce, eta)
-  type(ocean_grid_type),                     intent(in)    :: G
-  type(verticalGrid_type),                   intent(in)    :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
-  type(thermo_var_ptrs),                     intent(in)    :: tv
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: PFu
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: PFv
-  type(PressureForce_AFV_CS),                pointer       :: CS
-  type(ALE_CS),                              pointer       :: ALE_CSp
-  real, dimension(:,:),                     optional, pointer     :: p_atm
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(out) :: pbce
-  real, dimension(SZI_(G),SZJ_(G)),         optional, intent(out) :: eta
-
-!    This subroutine determines the acceleration due to pressure forces, using
-!  a finite volume form of the terms and analytic integrals in depth to avoid
-!  the possibility of a thermobaric instability, as described by Adcroft et al.,
-!  2008.
-!    To work, the following fields must be set outside of the usual
-!  ie to ie, je to je range before this subroutine is called:
-!   h[ie+1] and h[je+1] and (if tv%eqn_of_state is set) T[ie+1], S[ie+1],
-!   T[je+1], and S[je+1].
-! Arguments: h - Layer thickness, in H (probably m).
-!  (in)      tv - A structure containing pointers to any available
-!                 thermodynamic fields, including potential temperature and
-!                 salinity or mixed layer density. Absent fields have NULL ptrs.
-!  (out)     PFu - Zonal acceleration due to pressure gradients
-!                  (equal to -dM/dx) in m s-2.
-!  (out)     PFv - Meridional acceleration due to pressure
-!                  gradients (equal to -dM/dy) in m s-2.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 PressureForce_init.
-!  (in)      p_atm - the pressure at the ice-ocean or atmosphere-ocean
-!                    interface in Pa.
-!  (out)     pbce - the baroclinic pressure anomaly in each layer
-!                   due to free surface height anomalies, in m2 H-1 s-2.
-!  (out)     eta - the free surface height used to calculate PFu and PFv, in m,
-!                  with any tidal contributions or compressibility compensation.
-
+  type(ocean_grid_type),                     intent(in)  :: G   !< Ocean grid structure
+  type(verticalGrid_type),                   intent(in)  :: GV  !< Vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h   !< Layer thickness (kg/m2)
+  type(thermo_var_ptrs),                     intent(in)  :: tv  !< Thermodynamic variables
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: PFu !< Zonal acceleration (m/s2)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: PFv !< Meridional acceleration (m/s2)
+  type(PressureForce_AFV_CS),                pointer     :: CS  !< Finite volume PGF control structure
+  type(ALE_CS),                              pointer     :: ALE_CSp !< ALE control structure
+  real, dimension(:,:),                      optional, pointer :: p_atm !< The pressure at the ice-ocean
+                                                         !! or atmosphere-ocean interface in Pa.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional, intent(out) :: pbce !< The baroclinic pressure
+                                                         !! anomaly in each layer due to eta anomalies,
+                                                         !! in m2 s-2 H-1.
+  real, dimension(SZI_(G),SZJ_(G)),          optional, intent(out) :: eta !< The bottom mass used to
+                                                         !! calculate PFu and PFv, in H, with any tidal
+                                                         !! contributions or compressibility compensation.
+  ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: e ! Interface height in m.
   real, dimension(SZI_(G),SZJ_(G))  :: &
     e_tidal, &  ! The bottom geopotential anomaly due to tidal forces from
@@ -837,24 +764,15 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
 
 end subroutine PressureForce_AFV_Bouss
 
-
+!> Initializes the finite volume pressure gradient control structure
 subroutine PressureForce_AFV_init(Time, G, GV, param_file, diag, CS, tides_CSp)
-  type(time_type), target,    intent(in)    :: Time
-  type(ocean_grid_type),      intent(in)    :: G
-  type(verticalGrid_type),    intent(in)    :: GV
-  type(param_file_type),      intent(in)    :: param_file
-  type(diag_ctrl), target,    intent(inout) :: diag
-  type(PressureForce_AFV_CS), pointer       :: CS
-  type(tidal_forcing_CS), optional, pointer :: tides_CSp
-! Arguments: Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module.
-!  (in)      tides_CSp - a pointer to the control structure of the tide module.
+  type(time_type), target,    intent(in)    :: Time !< Current model time
+  type(ocean_grid_type),      intent(in)    :: G  !< Ocean grid structure
+  type(verticalGrid_type),    intent(in)    :: GV !< Vertical grid structure
+  type(param_file_type),      intent(in)    :: param_file !< Parameter file handles
+  type(diag_ctrl), target,    intent(inout) :: diag !< Diagnostics control structure
+  type(PressureForce_AFV_CS), pointer       :: CS !< Finite volume PGF control structure
+  type(tidal_forcing_CS), optional, pointer :: tides_CSp !< Tides control structure
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod  ! This module's name.
@@ -896,10 +814,28 @@ subroutine PressureForce_AFV_init(Time, G, GV, param_file, diag, CS, tides_CSp)
 
 end subroutine PressureForce_AFV_init
 
-
+!> Deallocates the finite volume pressure gradient control structure
 subroutine PressureForce_AFV_end(CS)
   type(PressureForce_AFV_CS), pointer :: CS
   if (associated(CS)) deallocate(CS)
 end subroutine PressureForce_AFV_end
+
+!> \namespace mom_pressureforce_afv
+!!
+!! Provides the Boussinesq and non-Boussinesq forms of horizontal accelerations
+!! due to pressure gradients using a 2nd-order analytically vertically integrated
+!! finite volume form, as described by Adcroft et al., 2008.
+!!
+!! This form eliminates the thermobaric instabilities that had been a problem with
+!! previous forms of the pressure gradient force calculation, as described by
+!! Hallberg, 2005.
+!!
+!! Adcroft, A., R. Hallberg, and M. Harrison, 2008: A finite volume discretization
+!! of the pressure gradient force using analytic integration. Ocean Modelling, 22,
+!! 106-113. http://doi.org/10.1016/j.ocemod.2008.02.001
+!!
+!! Hallberg, 2005: A thermobaric instability of Lagrangian vertical coordinate
+!! ocean models. Ocean Modelling, 8, 279-300.
+!! http://dx.doi.org/10.1016/j.ocemod.2004.01.001
 
 end module MOM_PressureForce_AFV
