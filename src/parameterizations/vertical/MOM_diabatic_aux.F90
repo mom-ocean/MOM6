@@ -950,8 +950,13 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
       else
         netMassIn(i) = netMassInOut(i) - netMassOut(i)
       endif
-      fluxes%netMassOut(i,j) = netMassOut(i)
-      fluxes%netMassIn(i,j) = netMassIn(i)
+      if (G%mask2dT(i,j)>0.0) then
+        fluxes%netMassOut(i,j) = netMassOut(i)
+        fluxes%netMassIn(i,j) = netMassIn(i)
+      else
+        fluxes%netMassOut(i,j) = 0.0
+        fluxes%netMassIn(i,j) = 0.0
+      endif
     enddo
 
     ! Apply the surface boundary fluxes in three steps:

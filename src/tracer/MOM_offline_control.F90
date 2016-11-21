@@ -153,6 +153,32 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
   call read_data(CS%snap_file, 'salt',   salt, domain=G%Domain%mpp_domain, &
     timelevel=CS%ridx_sum,position=CENTER)  
 
+  ! This block makes sure that the fluxes control structure, which may not be used in the solo_driver,
+  ! contains netMassIn and netMassOut which is necessary for the applyTracerBoundaryFluxesInOut routine
+  if (do_ale) then
+    if (.not. ASSOCIATED(fluxes%netMassOut)) then
+      ALLOCATE(fluxes%netMassOut(G%isd:G%ied,G%jsd:G%jed))
+    endif
+    if (.not. ASSOCIATED(fluxes%netMassIn)) then
+      ALLOCATE(fluxes%netMassIn(G%isd:G%ied,G%jsd:G%jed))
+    endif
+
+    fluxes%netMassOut(:,:) = 0.0
+    fluxes%netMassIn(:,:) = 0.0
+    call read_data(CS%sum_file,'massout_flux_sum',fluxes%netMassOut, domain=G%Domain%mpp_domain, &
+        timelevel=CS%ridx_snap)
+    call read_data(CS%sum_file,'massin_flux_sum', fluxes%netMassIn,  domain=G%Domain%mpp_domain, &
+        timelevel=CS%ridx_snap)
+    
+    do j=js,je ; do i=is,ie
+      if(G%mask2dT(i,j)<1.0) then    
+        fluxes%netMassOut(i,j) = 0.0
+        fluxes%netMassIn(i,j) = 0.0
+      endif
+    enddo ; enddo
+    
+  endif
+    
   ! Apply masks at T, U, and V points
   do k=1,nz ; do j=js,je ; do i=is,ie
     if(G%mask2dT(i,j)<1.0) then
@@ -164,6 +190,7 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
       temp_mean(i,j,k) = 0.0
       salt_mean(i,j,k) = 0.0
     endif
+    
   enddo; enddo ; enddo
 
   do k=1,nz ; do j=js-1,je ; do i=is,ie
@@ -185,17 +212,17 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
   if (do_ale) then
     if (.not. ASSOCIATED(fluxes%netMassOut)) then
       ALLOCATE(fluxes%netMassOut(G%isd:G%ied,G%jsd:G%jed))
-      fluxes%netMassOut(:,:) = 0.0
     endif
     if (.not. ASSOCIATED(fluxes%netMassIn)) then
       ALLOCATE(fluxes%netMassIn(G%isd:G%ied,G%jsd:G%jed))
-      fluxes%netMassIn(:,:) = 0.0
     endif
 
+    fluxes%netMassOut(:,:) = 0.0
+    fluxes%netMassIn(:,:) = 0.0
     call read_data(CS%sum_file,'massout_flux_sum',fluxes%netMassOut, domain=G%Domain%mpp_domain, &
-        timelevel=CS%ridx_snap,position=center)
+        timelevel=CS%ridx_snap)
     call read_data(CS%sum_file,'massin_flux_sum', fluxes%netMassIn,  domain=G%Domain%mpp_domain, &
-        timelevel=CS%ridx_snap,position=center)
+        timelevel=CS%ridx_snap)
   endif
 
   !! Make sure all halos have been updated
