@@ -945,7 +945,7 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
     ! This is needed because rigidity is potentially modified in the coupler. Reset
     ! in the ice shelf cavity: MJH
 
-    do j=isd,jed ; do i=isd,ied-1 ! changed stride
+    do j=jsd,jed ; do i=isd,ied-1 ! changed stride
       fluxes%rigidity_ice_u(I,j) = (CS%kv_ice / CS%density_ice) * &
                     min(CS%mass_shelf(i,j), CS%mass_shelf(i+1,j))
     enddo ; enddo
@@ -1751,7 +1751,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
   enddo ; enddo
 
   if (.not. solo_ice_sheet) then
-    do j=isd,jed ; do i=isd,ied-1 ! changed stride
+    do j=jsd,jed ; do i=isd,ied-1 ! changed stride
     !do I=isd,ied-1 ; do j=isd,jed 
     fluxes%frac_shelf_u(I,j) = 0.0
     if ((G%areaT(i,j) + G%areaT(i+1,j) > 0.0)) & ! .and. (G%dxdy_u(I,j) > 0.0)) &
