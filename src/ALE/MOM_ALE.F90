@@ -192,9 +192,7 @@ subroutine ALE_init( param_file, GV, max_depth, CS)
                  default=.true.)
 
   ! Initialize and configure regridding
-  allocate( dz(GV%ke) )
-  call ALE_initRegridding( GV, max_depth, param_file, mod, CS%regridCS, dz )
-  deallocate( dz )
+  call ALE_initRegridding( GV, max_depth, param_file, mod, CS%regridCS)
 
   ! Initialize and configure remapping
   call get_param(param_file, mod, "REMAPPING_SCHEME", string, &
@@ -1029,15 +1027,13 @@ integer function pressureReconstructionScheme(CS)
 end function pressureReconstructionScheme
 
 
-!> Initialize regridding module 
-subroutine ALE_initRegridding(GV, max_depth, param_file, mod, regridCS, dz )
+!> Initializes regridding for the overall ALE algorithm
+subroutine ALE_initRegridding(GV, max_depth, param_file, mod, regridCS)
   type(verticalGrid_type), intent(in)  :: GV         !< Ocean vertical grid structure
   real,                    intent(in)  :: max_depth  !< The maximum depth of the ocean, in m.
   type(param_file_type),   intent(in)  :: param_file !< parameter file 
   character(len=*),        intent(in)  :: mod        !< Name of calling module
   type(regridding_CS),     intent(out) :: regridCS   !< Regridding parameters and work arrays
-  real, dimension(:),      intent(out) :: dz         !< Resolution (thickness) in units of coordinate
-
   ! Local variables
   character(len=80)  :: string, varName ! Temporary strings
   character(len=40)  :: coordMode, interpScheme, coordUnits ! Temporary strings
@@ -1049,12 +1045,18 @@ subroutine ALE_initRegridding(GV, max_depth, param_file, mod, regridCS, dz )
   real :: tmpReal, compress_fraction
   real :: dz_fixed_sfc, Rho_avg_depth, nlay_sfc_int
   integer :: nz_fixed_sfc
-  real :: rho_target(GV%ke+1) ! Target density used in HYBRID mode
-  real, dimension(size(dz))   :: h_max  ! Maximum layer thicknesses, in m.
-  real, dimension(size(dz))   :: dz_max ! Thicknesses used to find maximum interface depths, in m.
-  real, dimension(size(dz)+1) :: z_max  ! Maximum tinterface depths, in m.
+  real, dimension(:), allocatable :: dz     ! Resolution (thickness) in units of coordinate
+  real, dimension(:), allocatable :: h_max  ! Maximum layer thicknesses, in m.
+  real, dimension(:), allocatable :: dz_max ! Thicknesses used to find maximum interface depths, in m.
+  real, dimension(:), allocatable :: z_max  ! Maximum tinterface depths, in m.
+  real, dimension(:), allocatable :: rho_target ! Target density used in HYBRID mode
 
-  ke = size(dz) ! Number of levels in resolution vector
+  ke = GV%ke
+  allocate(dz(ke))
+  allocate(h_max(ke))
+  allocate(dz_max(ke))
+  allocate(z_max(ke+1))
+  allocate(rho_target(ke+1))
 
   call get_param(param_file, mod, "REGRIDDING_COORDINATE_MODE", coordMode, &
                  "Coordinate mode for vertical regridding.\n"//&
@@ -1376,6 +1378,11 @@ subroutine ALE_initRegridding(GV, max_depth, param_file, mod, regridCS, dz )
       "Unrecognized MAX_LAYER_THICKNESS_CONFIG "//trim(string))
   endif
 
+  deallocate(dz)
+  deallocate(h_max)
+  deallocate(dz_max)
+  deallocate(z_max)
+  deallocate(rho_target)
 end subroutine ALE_initRegridding
 
 

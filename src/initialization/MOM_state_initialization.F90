@@ -82,7 +82,7 @@ use midas_vertmap, only : determine_temperature
 
 use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord
 use MOM_ALE, only : ALE_remap_scalar, ALE_build_grid
-use MOM_regridding, only : regridding_CS, set_regrid_params
+use MOM_regridding, only : regridding_CS, set_regrid_params, getCoordinateResolution
 use MOM_remapping, only : remapping_CS, initialize_remapping
 use MOM_remapping, only : remapping_core_h
 use MOM_tracer_initialization_from_Z, only : horiz_interp_and_extrap_tracer
@@ -1849,12 +1849,13 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
     call pass_var(tmpS1dIn, G%Domain)
 
     ! Build the target grid (and set the model thickness to it)
-    allocate( hTarget(nz) )
     ! This call can be more general but is hard-coded for z* coordinates...  ????
-    call ALE_initRegridding( GV, G%max_depth, PF, mod, regridCS, hTarget ) ! sets regridCS and hTarget(1:nz)
+    call ALE_initRegridding( GV, G%max_depth, PF, mod, regridCS ) ! sets regridCS
 
     if (.not. remap_general) then
       ! This is the old way of initializing to z* coordinates only
+      allocate( hTarget(nz) )
+      hTarget = getCoordinateResolution( regridCS )
       do j = js, je ; do i = is, ie
         h(i,j,:) = 0.
         if (G%mask2dT(i,j)>0.) then
