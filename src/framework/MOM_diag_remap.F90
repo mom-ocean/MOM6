@@ -427,7 +427,7 @@ subroutine diag_remap_update(remap_cs, G, h, T, S, eqn_of_state)
     call initialize_remapping(remap_cs%remap_cs, 'PPM_IH4', boundary_extrapolation=.false.)
 
     allocate(remap_cs%regrid_cs)
-    call initialize_regridding(nz, remap_cs%vertical_coord_name, 'PPM_IH4', remap_cs%regrid_cs)
+    call initialize_regridding(nz, remap_cs%vertical_coord_name, remap_cs%regrid_cs, interp_scheme='PPM_H4')
     call set_regrid_params(remap_cs%regrid_cs, min_thickness=0., integrate_downward_for_e=.false.)
     call setCoordinateResolution(remap_cs%dz, remap_cs%regrid_cs)
 

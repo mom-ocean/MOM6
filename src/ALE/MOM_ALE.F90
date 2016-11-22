@@ -1066,7 +1066,7 @@ subroutine interpret_coord_config(GV, ke, max_depth, param_file, mod, regridCS, 
   logical, optional,       intent(in)  :: main_model_params !< If true, reads parameters that control the main ALE configuration
   ! Local variables
   character(len=80)  :: string, varName ! Temporary strings
-  character(len=40)  :: interpScheme, coord_units ! Temporary strings
+  character(len=40)  :: coord_units ! Temporary strings
   character(len=200) :: inputdir, fileName
   character(len=320) :: message ! Temporary strings
   integer :: K
@@ -1087,12 +1087,20 @@ subroutine interpret_coord_config(GV, ke, max_depth, param_file, mod, regridCS, 
 
   allocate(dz(ke))
 
+  call initialize_regridding( ke, coord_mode, regridCS)
+
+  coord_is_state_dependent = state_dependent(coord_mode)
+
   if (main_parameters) then
     ! Read coordinate units parameter (main model = REGRIDDING_COORDINATE_UNITS)
     call get_param(param_file, mod, coord_units_param, coord_units, &
                  "Units of the regridding coordinuate.",&
                  default=coordinateUnits(coord_mode))
-    call get_param(param_file, mod, "INTERPOLATION_SCHEME", interpScheme, &
+    coord_units=coordinateUnits(coord_mode)
+  endif
+
+  if (main_parameters .and. coord_is_state_dependent) then
+    call get_param(param_file, mod, "INTERPOLATION_SCHEME", string, &
                  "This sets the interpolation scheme to use to\n"//&
                  "determine the new grid. These parameters are\n"//&
                  "only relevant when REGRIDDING_COORDINATE_MODE is\n"//&
@@ -1100,21 +1108,15 @@ subroutine interpret_coord_config(GV, ke, max_depth, param_file, mod, regridCS, 
                  "used. It can be one of the following schemes:\n"//&
                  trim(regriddingInterpSchemeDoc),&
                  default=regriddingDefaultInterpScheme)
-  else
-    interpScheme = regriddingDefaultInterpScheme
-    coord_units=coordinateUnits(coord_mode)
+    call set_regrid_params(regridCS, interp_scheme=string)
   endif
-
-  call initialize_regridding( ke, coord_mode, interpScheme, regridCS)
-
-  coord_is_state_dependent = state_dependent(coord_mode)
 
   if (main_parameters .and. coord_is_state_dependent) then
     call get_param(param_file, mod, "REGRID_COMPRESSIBILITY_FRACTION", tmpReal, &
                  "When interpolating potential density profiles we can add\n"//&
                  "some artificial compressibility solely to make homogenous\n"//&
                  "regions appear stratified.", default=0.)
-    call set_regrid_params( regridCS, compress_fraction=tmpReal )
+    call set_regrid_params(regridCS, compress_fraction=tmpReal)
   endif
 
   ! Read coordinate configuration parameter (main model = ALE_COORDINATE_CONFIG)
@@ -1238,7 +1240,7 @@ subroutine interpret_coord_config(GV, ke, max_depth, param_file, mod, regridCS, 
                  "When regridding, this is the minimum layer\n"//&
                  "thickness allowed.", units="m",&
                  default=regriddingDefaultMinThickness )
-  call set_regrid_params( regridCS, min_thickness=tmpReal)
+  call set_regrid_params(regridCS, min_thickness=tmpReal)
 
   if (main_parameters .and. coord_is_state_dependent) then
     call get_param(param_file, mod, "BOUNDARY_EXTRAPOLATION", tmpLogical, &
@@ -1247,7 +1249,7 @@ subroutine interpret_coord_config(GV, ke, max_depth, param_file, mod, regridCS, 
                  "than PCM. E.g., if PPM is used for remapping, a\n"//&
                  "PPM reconstruction will also be used within\n"//&
                  "boundary cells.", default=regriddingDefaultBoundaryExtrapolation)
-    call set_regrid_params( regridCS, boundary_extrapolation=tmpLogical )
+    call set_regrid_params(regridCS, boundary_extrapolation=tmpLogical)
   endif
 
   if (coordinateMode(coord_mode) == REGRIDDING_SLIGHT) then
@@ -1272,7 +1274,7 @@ subroutine interpret_coord_config(GV, ke, max_depth, param_file, mod, regridCS, 
                  "the stratification and use this in the definition of the\n"//&
                  "interior with the SLight coordinate.", default=.false.)
                  
-    call set_regrid_params( regridCS, dz_min_surface=dz_fixed_sfc, &
+    call set_regrid_params(regridCS, dz_min_surface=dz_fixed_sfc, &
                 nz_fixed_surface=nz_fixed_sfc, Rho_ML_avg_depth=Rho_avg_depth, &
                 nlay_ML_to_interior=nlay_sfc_int, fix_haloclines=fix_haloclines)
     if (fix_haloclines) then
@@ -1498,7 +1500,7 @@ subroutine ALE_update_regrid_weights( dt, CS )
     if (CS%regrid_time_scale > 0.0) then
       w = CS%regrid_time_scale / (CS%regrid_time_scale + dt)
     endif
-    call set_regrid_params( CS%regridCS, old_grid_weight=w )
+    call set_regrid_params(CS%regridCS, old_grid_weight=w)
   endif
 
 end subroutine ALE_update_regrid_weights
