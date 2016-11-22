@@ -22,6 +22,7 @@ use P1M_functions, only : P1M_interpolation, P1M_boundary_extrapolation
 use P3M_functions, only : P3M_interpolation, P3M_boundary_extrapolation
 use MOM_remapping, only : remapping_core_h
 use MOM_remapping, only : remapping_CS
+use regrid_consts, only : state_dependent
 use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
 use regrid_consts, only : REGRIDDING_RHO, REGRIDDING_SIGMA
@@ -214,7 +215,7 @@ contains
 subroutine initialize_regridding( nk, coordMode, interpScheme, CS, compressibility_fraction )
   integer,               intent(in)    :: nk !< Number of levels
   character(len=*),      intent(in)    :: coordMode !< Coordinate mode to use
-  character(len=*),      intent(in)    :: interpScheme !< Interpolation mode to use
+  character(len=*),      intent(in)    :: interpScheme !< Interpolation mode to use (if needed)
   type(regridding_CS),   intent(inout) :: CS !< Regridding control structure
   real,        optional, intent(in)    :: compressibility_fraction !< Fraction of compressibility
                                           !! to add to potential density profiles (nondim)
@@ -223,20 +224,24 @@ subroutine initialize_regridding( nk, coordMode, interpScheme, CS, compressibili
 
   CS%regridding_scheme = coordinateMode(coordMode)
 
-  select case ( uppercase(trim(interpScheme)) )
-    case ("P1M_H2");     CS%interpolation_scheme = INTERPOLATION_P1M_H2
-    case ("P1M_H4");     CS%interpolation_scheme = INTERPOLATION_P1M_H4
-    case ("P1M_IH2");    CS%interpolation_scheme = INTERPOLATION_P1M_IH4
-    case ("PLM");        CS%interpolation_scheme = INTERPOLATION_PLM
-    case ("PPM_H4");     CS%interpolation_scheme = INTERPOLATION_PPM_H4
-    case ("PPM_IH4");    CS%interpolation_scheme = INTERPOLATION_PPM_IH4
-    case ("P3M_IH4IH3"); CS%interpolation_scheme = INTERPOLATION_P3M_IH4IH3
-    case ("P3M_IH6IH5"); CS%interpolation_scheme = INTERPOLATION_P3M_IH6IH5
-    case ("PQM_IH4IH3"); CS%interpolation_scheme = INTERPOLATION_PQM_IH4IH3
-    case ("PQM_IH6IH5"); CS%interpolation_scheme = INTERPOLATION_PQM_IH6IH5
-    case default ; call MOM_error(FATAL, "read_regridding_options: "//&
-     "Unrecognized choice for INTERPOLATION_SCHEME ("//trim(interpScheme)//").")
-  end select
+  if (state_dependent(coordMode)) then
+    select case ( uppercase(trim(interpScheme)) )
+      case ("P1M_H2");     CS%interpolation_scheme = INTERPOLATION_P1M_H2
+      case ("P1M_H4");     CS%interpolation_scheme = INTERPOLATION_P1M_H4
+      case ("P1M_IH2");    CS%interpolation_scheme = INTERPOLATION_P1M_IH4
+      case ("PLM");        CS%interpolation_scheme = INTERPOLATION_PLM
+      case ("PPM_H4");     CS%interpolation_scheme = INTERPOLATION_PPM_H4
+      case ("PPM_IH4");    CS%interpolation_scheme = INTERPOLATION_PPM_IH4
+      case ("P3M_IH4IH3"); CS%interpolation_scheme = INTERPOLATION_P3M_IH4IH3
+      case ("P3M_IH6IH5"); CS%interpolation_scheme = INTERPOLATION_P3M_IH6IH5
+      case ("PQM_IH4IH3"); CS%interpolation_scheme = INTERPOLATION_PQM_IH4IH3
+      case ("PQM_IH6IH5"); CS%interpolation_scheme = INTERPOLATION_PQM_IH6IH5
+      case default ; call MOM_error(FATAL, "read_regridding_options: "//&
+       "Unrecognized choice for INTERPOLATION_SCHEME ("//trim(interpScheme)//").")
+    end select
+  else
+    CS%interpolation_scheme = -1 ! Cause error if ever used
+  endif
 
   CS%boundary_extrapolation = regriddingDefaultBoundaryExtrapolation
 

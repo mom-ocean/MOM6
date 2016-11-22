@@ -42,7 +42,7 @@ use MOM_verticalGrid,     only : verticalGrid_type
 
 use regrid_defs,          only : PRESSURE_RECONSTRUCTION_PLM
 !use regrid_consts,       only : coordinateMode, DEFAULT_COORDINATE_MODE
-use regrid_consts,        only : coordinateUnits, coordinateMode
+use regrid_consts,        only : coordinateUnits, coordinateMode, state_dependent
 use regrid_consts,        only : REGRIDDING_ZSTAR, REGRIDDING_RHO
 use regrid_consts,        only : REGRIDDING_HYCOM1, REGRIDDING_SLIGHT
 use regrid_edge_values,   only : edge_values_implicit_h4
@@ -1071,8 +1071,9 @@ subroutine interpret_coord_config(GV, ke, max_depth, param_file, mod, regridCS, 
   character(len=320) :: message ! Temporary strings
   integer :: K
   logical :: tmpLogical, fix_haloclines, set_max, do_sum, main_parameters
+  logical :: coord_is_state_dependent
   real :: filt_len, strat_tol, index_scale
-  real :: tmpReal, compress_fraction
+  real :: tmpReal
   real :: dz_fixed_sfc, Rho_avg_depth, nlay_sfc_int
   integer :: nz_fixed_sfc
   real, dimension(:), allocatable :: dz     ! Resolution (thickness) in units of coordinate
@@ -1085,12 +1086,9 @@ subroutine interpret_coord_config(GV, ke, max_depth, param_file, mod, regridCS, 
   if (present(main_model_params)) main_parameters=main_model_params
 
   allocate(dz(ke))
-  allocate(h_max(ke))
-  allocate(dz_max(ke))
-  allocate(z_max(ke+1))
-  allocate(rho_target(ke+1))
 
   if (main_parameters) then
+    ! Read coordinate units parameter (main model = REGRIDDING_COORDINATE_UNITS)
     call get_param(param_file, mod, coord_units_param, coord_units, &
                  "Units of the regridding coordinuate.",&
                  default=coordinateUnits(coord_mode))
@@ -1102,19 +1100,24 @@ subroutine interpret_coord_config(GV, ke, max_depth, param_file, mod, regridCS, 
                  "used. It can be one of the following schemes:\n"//&
                  trim(regriddingInterpSchemeDoc),&
                  default=regriddingDefaultInterpScheme)
-    call get_param(param_file, mod, "REGRID_COMPRESSIBILITY_FRACTION", compress_fraction, &
-                 "When interpolating potential density profiles we can add\n"//&
-                 "some artificial compressibility solely to make homogenous\n"//&
-                 "regions appear stratified.", default=0.)
   else
     interpScheme = regriddingDefaultInterpScheme
-    compress_fraction = 0.
     coord_units=coordinateUnits(coord_mode)
   endif
 
-  call initialize_regridding( ke, coord_mode, interpScheme, regridCS, &
-                              compressibility_fraction=compress_fraction )
+  call initialize_regridding( ke, coord_mode, interpScheme, regridCS)
 
+  coord_is_state_dependent = state_dependent(coord_mode)
+
+  if (main_parameters .and. coord_is_state_dependent) then
+    call get_param(param_file, mod, "REGRID_COMPRESSIBILITY_FRACTION", tmpReal, &
+                 "When interpolating potential density profiles we can add\n"//&
+                 "some artificial compressibility solely to make homogenous\n"//&
+                 "regions appear stratified.", default=0.)
+    call set_regrid_params( regridCS, compress_fraction=tmpReal )
+  endif
+
+  ! Read coordinate configuration parameter (main model = ALE_COORDINATE_CONFIG)
   call get_param(param_file, mod, coord_config_param, string, &
                  "Determines how to specify the coordinate\n"//&
                  "resolution. Valid options are:\n"//&
@@ -1142,6 +1145,7 @@ subroutine interpret_coord_config(GV, ke, max_depth, param_file, mod, regridCS, 
       call log_param(param_file, mod, "!"//coord_res_param, dz, &
                    trim(message), units=trim(coord_units))
     case ("PARAM")
+      ! Read coordinate resolution (main model = ALE_RESOLUTION)
       call get_param(param_file, mod, coord_res_param, dz, &
                    trim(message), units=trim(coord_units), fail_if_missing=.true.)
     case default 
@@ -1182,6 +1186,7 @@ subroutine interpret_coord_config(GV, ke, max_depth, param_file, mod, regridCS, 
         inputdir = slasher(inputdir)
 
         ! The following assumes the FILE: syntax of above but without "FILE:" in the string
+        allocate(rho_target(ke+1))
         fileName = trim( extractWord(trim(string(8:)), 1) )
         if (fileName(1:1)/='.' .and. filename(1:1)/='/') fileName = trim(inputdir) // trim( fileName )
         if (.not. file_exists(fileName)) call MOM_error(FATAL,"ALE_initRegridding: HYBRID "// &
@@ -1203,7 +1208,7 @@ subroutine interpret_coord_config(GV, ke, max_depth, param_file, mod, regridCS, 
                    trim(message), units=coordinateUnits(coord_mode))
         call log_param(param_file, mod, "!TARGET_DENSITIES", rho_target, &
                    'HYBRID target densities for itnerfaces', units=coordinateUnits(coord_mode))
-
+        deallocate(rho_target)
       else
         call MOM_error(FATAL,"ALE_initRegridding: "// &
           "Unrecognized coordinate configuraiton"//trim(string))
@@ -1233,14 +1238,17 @@ subroutine interpret_coord_config(GV, ke, max_depth, param_file, mod, regridCS, 
                  "When regridding, this is the minimum layer\n"//&
                  "thickness allowed.", units="m",&
                  default=regriddingDefaultMinThickness )
+  call set_regrid_params( regridCS, min_thickness=tmpReal)
 
-  call get_param(param_file, mod, "BOUNDARY_EXTRAPOLATION", tmpLogical, &
+  if (main_parameters .and. coord_is_state_dependent) then
+    call get_param(param_file, mod, "BOUNDARY_EXTRAPOLATION", tmpLogical, &
                  "When defined, a proper high-order reconstruction\n"//&
                  "scheme is used within boundary cells rather\n"//&
                  "than PCM. E.g., if PPM is used for remapping, a\n"//&
                  "PPM reconstruction will also be used within\n"//&
                  "boundary cells.", default=regriddingDefaultBoundaryExtrapolation)
-  call set_regrid_params( regridCS, min_thickness=tmpReal, boundary_extrapolation=tmpLogical )
+    call set_regrid_params( regridCS, boundary_extrapolation=tmpLogical )
+  endif
 
   if (coordinateMode(coord_mode) == REGRIDDING_SLIGHT) then
     ! Set SLight-specific regridding parameters.
@@ -1285,7 +1293,8 @@ subroutine interpret_coord_config(GV, ke, max_depth, param_file, mod, regridCS, 
 
   endif
 
-  call get_param(param_file, mod, "MAXIMUM_INT_DEPTH_CONFIG", string, &
+  if (main_parameters .and. coord_is_state_dependent) then
+    call get_param(param_file, mod, "MAXIMUM_INT_DEPTH_CONFIG", string, &
                  "Determines how to specify the maximum interface depths.\n"//&
                  "Valid options are:\n"//&
                  " NONE        - there are no maximum interface depths\n"//&
@@ -1295,125 +1304,128 @@ subroutine interpret_coord_config(GV, ke, max_depth, param_file, mod, regridCS, 
                  "               by a comma or space, e.g. FILE:lev.nc,Z\n"//&
                  " FNC1:string - FNC1:dz_min,H_total,power,precision",&
                  default='NONE')
-  message = "The list of maximum depths for each interface."
-  if ( trim(string) == "NONE") then
-    ! Do nothing.
-  elseif ( trim(string) ==  "PARAM") then
-    call get_param(param_file, mod, "MAXIMUM_INTERFACE_DEPTHS", z_max, &
-                 trim(message), units="m", fail_if_missing=.true.)
-    call set_regrid_max_depths( regridCS, z_max, GV%m_to_H )
-  elseif (index(trim(string),'FILE:')==1) then
-    call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
-    inputdir = slasher(inputdir)
+    message = "The list of maximum depths for each interface."
+    allocate(z_max(ke+1))
+    allocate(dz_max(ke))
+    if ( trim(string) == "NONE") then
+      ! Do nothing.
+    elseif ( trim(string) ==  "PARAM") then
+      call get_param(param_file, mod, "MAXIMUM_INTERFACE_DEPTHS", z_max, &
+                   trim(message), units="m", fail_if_missing=.true.)
+      call set_regrid_max_depths( regridCS, z_max, GV%m_to_H )
+    elseif (index(trim(string),'FILE:')==1) then
+      call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
+      inputdir = slasher(inputdir)
 
-    if (string(6:6)=='.' .or. string(6:6)=='/') then
-      ! If we specified "FILE:./xyz" or "FILE:/xyz" then we have a relative or absolute path
-      fileName = trim( extractWord(trim(string(6:80)), 1) )
-    else
-      ! Otherwise assume we should look for the file in INPUTDIR
-      fileName = trim(inputdir) // trim( extractWord(trim(string(6:80)), 1) )
-    endif
-    if (.not. file_exists(fileName)) call MOM_error(FATAL,"ALE_initRegridding: "// &
-      "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
-
-    do_sum = .false.
-    varName = trim( extractWord(trim(string(6:)), 2) )
-    if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,"ALE_initRegridding: "// &
-      "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
-    if (len_trim(varName)==0) then
-      if (field_exists(fileName,'z_max')) then; varName = 'z_max'
-      elseif (field_exists(fileName,'dz')) then; varName = 'dz' ; do_sum = .true.
-      elseif (field_exists(fileName,'dz_max')) then; varName = 'dz_max' ; do_sum = .true.
-      else ; call MOM_error(FATAL,"ALE_initRegridding: "// &
-        "MAXIMUM_INT_DEPTHS variable not specified and none could be guessed.")
+      if (string(6:6)=='.' .or. string(6:6)=='/') then
+        ! If we specified "FILE:./xyz" or "FILE:/xyz" then we have a relative or absolute path
+        fileName = trim( extractWord(trim(string(6:80)), 1) )
+      else
+        ! Otherwise assume we should look for the file in INPUTDIR
+        fileName = trim(inputdir) // trim( extractWord(trim(string(6:80)), 1) )
       endif
-    endif
-    if (do_sum) then
-      call MOM_read_data(trim(fileName), trim(varName), dz_max)
-      z_max(1) = 0.0 ; do K=1,ke ; z_max(K+1) = z_max(K) + dz_max(k) ; enddo
-    else
-      call MOM_read_data(trim(fileName), trim(varName), z_max)
-    endif
-    call log_param(param_file, mod, "!MAXIMUM_INT_DEPTHS", z_max, &
-               trim(message), units=coordinateUnits(coord_mode))
-    call set_regrid_max_depths( regridCS, z_max, GV%m_to_H )
-  elseif (index(trim(string),'FNC1:')==1) then
-    call dz_function1( trim(string(6:)), dz_max )
-    if ((coordinateMode(coord_mode) == REGRIDDING_SLIGHT) .and. &
-        (dz_fixed_sfc > 0.0)) then
-      do k=1,nz_fixed_sfc ; dz_max(k) = dz_fixed_sfc ; enddo
-    endif
-    z_max(1) = 0.0 ; do K=1,ke ; z_max(K+1) = z_max(K) + dz_max(K) ; enddo
-    call log_param(param_file, mod, "!MAXIMUM_INT_DEPTHS", z_max, &
-               trim(message), units=coordinateUnits(coord_mode))
-    call set_regrid_max_depths( regridCS, z_max, GV%m_to_H )
-  else
-    call MOM_error(FATAL,"ALE_initRegridding: "// &
-      "Unrecognized MAXIMUM_INT_DEPTH_CONFIG "//trim(string))
-  endif
+      if (.not. file_exists(fileName)) call MOM_error(FATAL,"ALE_initRegridding: "// &
+        "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
 
-  ! Optionally specify maximum thicknesses for each layer, enforced by moving
-  ! the interface below a layer downward.
-  call get_param(param_file, mod, "MAX_LAYER_THICKNESS_CONFIG", string, &
-                 "Determines how to specify the maximum layer thicknesses.\n"//&
-                 "Valid options are:\n"//&
-                 " NONE        - there are no maximum layer thicknesses\n"//&
-                 " PARAM       - use the vector-parameter MAX_LAYER_THICKNESS\n"//&
-                 " FILE:string - read from a file. The string specifies\n"//&
-                 "               the filename and variable name, separated\n"//&
-                 "               by a comma or space, e.g. FILE:lev.nc,Z\n"//&
-                 " FNC1:string - FNC1:dz_min,H_total,power,precision",&
-                 default='NONE')
-  message = "The list of maximum thickness for each layer."
-  if ( trim(string) == "NONE") then
-    ! Do nothing.
-  elseif ( trim(string) ==  "PARAM") then
-    call get_param(param_file, mod, "MAX_LAYER_THICKNESS", h_max, &
-                 trim(message), units="m", fail_if_missing=.true.)
-    call set_regrid_max_thickness( regridCS, h_max, GV%m_to_H )
-  elseif (index(trim(string),'FILE:')==1) then
-    call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
-    inputdir = slasher(inputdir)
-
-    if (string(6:6)=='.' .or. string(6:6)=='/') then
-      ! If we specified "FILE:./xyz" or "FILE:/xyz" then we have a relative or absolute path
-      fileName = trim( extractWord(trim(string(6:80)), 1) )
-    else
-      ! Otherwise assume we should look for the file in INPUTDIR
-      fileName = trim(inputdir) // trim( extractWord(trim(string(6:80)), 1) )
-    endif
-    if (.not. file_exists(fileName)) call MOM_error(FATAL,"ALE_initRegridding: "// &
-      "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
-
-    varName = trim( extractWord(trim(string(6:)), 2) )
-    if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,"ALE_initRegridding: "// &
-      "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
-    if (len_trim(varName)==0) then
-      if (field_exists(fileName,'h_max')) then; varName = 'h_max'
-      elseif (field_exists(fileName,'dz_max')) then; varName = 'dz_max'
-      else ; call MOM_error(FATAL,"ALE_initRegridding: "// &
-        "MAXIMUM_INT_DEPTHS variable not specified and none could be guessed.")
+      do_sum = .false.
+      varName = trim( extractWord(trim(string(6:)), 2) )
+      if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,"ALE_initRegridding: "// &
+        "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
+      if (len_trim(varName)==0) then
+        if (field_exists(fileName,'z_max')) then; varName = 'z_max'
+        elseif (field_exists(fileName,'dz')) then; varName = 'dz' ; do_sum = .true.
+        elseif (field_exists(fileName,'dz_max')) then; varName = 'dz_max' ; do_sum = .true.
+        else ; call MOM_error(FATAL,"ALE_initRegridding: "// &
+          "MAXIMUM_INT_DEPTHS variable not specified and none could be guessed.")
+        endif
       endif
+      if (do_sum) then
+        call MOM_read_data(trim(fileName), trim(varName), dz_max)
+        z_max(1) = 0.0 ; do K=1,ke ; z_max(K+1) = z_max(K) + dz_max(k) ; enddo
+      else
+        call MOM_read_data(trim(fileName), trim(varName), z_max)
+      endif
+      call log_param(param_file, mod, "!MAXIMUM_INT_DEPTHS", z_max, &
+                 trim(message), units=coordinateUnits(coord_mode))
+      call set_regrid_max_depths( regridCS, z_max, GV%m_to_H )
+    elseif (index(trim(string),'FNC1:')==1) then
+      call dz_function1( trim(string(6:)), dz_max )
+      if ((coordinateMode(coord_mode) == REGRIDDING_SLIGHT) .and. &
+          (dz_fixed_sfc > 0.0)) then
+        do k=1,nz_fixed_sfc ; dz_max(k) = dz_fixed_sfc ; enddo
+      endif
+      z_max(1) = 0.0 ; do K=1,ke ; z_max(K+1) = z_max(K) + dz_max(K) ; enddo
+      call log_param(param_file, mod, "!MAXIMUM_INT_DEPTHS", z_max, &
+                 trim(message), units=coordinateUnits(coord_mode))
+      call set_regrid_max_depths( regridCS, z_max, GV%m_to_H )
+    else
+      call MOM_error(FATAL,"ALE_initRegridding: "// &
+        "Unrecognized MAXIMUM_INT_DEPTH_CONFIG "//trim(string))
     endif
-    call MOM_read_data(trim(fileName), trim(varName), h_max)
-    call log_param(param_file, mod, "!MAX_LAYER_THICKNESS", h_max, &
-               trim(message), units=coordinateUnits(coord_mode))
-    call set_regrid_max_thickness( regridCS, h_max, GV%m_to_H )
-  elseif (index(trim(string),'FNC1:')==1) then
-    call dz_function1( trim(string(6:)), h_max )
-    call log_param(param_file, mod, "!MAX_LAYER_THICKNESS", h_max, &
-               trim(message), units=coordinateUnits(coord_mode))
-    call set_regrid_max_thickness( regridCS, h_max, GV%m_to_H )
-  else
-    call MOM_error(FATAL,"ALE_initRegridding: "// &
-      "Unrecognized MAX_LAYER_THICKNESS_CONFIG "//trim(string))
+    deallocate(z_max)
+    deallocate(dz_max)
+
+    ! Optionally specify maximum thicknesses for each layer, enforced by moving
+    ! the interface below a layer downward.
+    call get_param(param_file, mod, "MAX_LAYER_THICKNESS_CONFIG", string, &
+                   "Determines how to specify the maximum layer thicknesses.\n"//&
+                   "Valid options are:\n"//&
+                   " NONE        - there are no maximum layer thicknesses\n"//&
+                   " PARAM       - use the vector-parameter MAX_LAYER_THICKNESS\n"//&
+                   " FILE:string - read from a file. The string specifies\n"//&
+                   "               the filename and variable name, separated\n"//&
+                   "               by a comma or space, e.g. FILE:lev.nc,Z\n"//&
+                   " FNC1:string - FNC1:dz_min,H_total,power,precision",&
+                   default='NONE')
+    message = "The list of maximum thickness for each layer."
+    allocate(h_max(ke))
+    if ( trim(string) == "NONE") then
+      ! Do nothing.
+    elseif ( trim(string) ==  "PARAM") then
+      call get_param(param_file, mod, "MAX_LAYER_THICKNESS", h_max, &
+                   trim(message), units="m", fail_if_missing=.true.)
+      call set_regrid_max_thickness( regridCS, h_max, GV%m_to_H )
+    elseif (index(trim(string),'FILE:')==1) then
+      call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
+      inputdir = slasher(inputdir)
+
+      if (string(6:6)=='.' .or. string(6:6)=='/') then
+        ! If we specified "FILE:./xyz" or "FILE:/xyz" then we have a relative or absolute path
+        fileName = trim( extractWord(trim(string(6:80)), 1) )
+      else
+        ! Otherwise assume we should look for the file in INPUTDIR
+        fileName = trim(inputdir) // trim( extractWord(trim(string(6:80)), 1) )
+      endif
+      if (.not. file_exists(fileName)) call MOM_error(FATAL,"ALE_initRegridding: "// &
+        "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
+
+      varName = trim( extractWord(trim(string(6:)), 2) )
+      if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,"ALE_initRegridding: "// &
+        "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
+      if (len_trim(varName)==0) then
+        if (field_exists(fileName,'h_max')) then; varName = 'h_max'
+        elseif (field_exists(fileName,'dz_max')) then; varName = 'dz_max'
+        else ; call MOM_error(FATAL,"ALE_initRegridding: "// &
+          "MAXIMUM_INT_DEPTHS variable not specified and none could be guessed.")
+        endif
+      endif
+      call MOM_read_data(trim(fileName), trim(varName), h_max)
+      call log_param(param_file, mod, "!MAX_LAYER_THICKNESS", h_max, &
+                 trim(message), units=coordinateUnits(coord_mode))
+      call set_regrid_max_thickness( regridCS, h_max, GV%m_to_H )
+    elseif (index(trim(string),'FNC1:')==1) then
+      call dz_function1( trim(string(6:)), h_max )
+      call log_param(param_file, mod, "!MAX_LAYER_THICKNESS", h_max, &
+                 trim(message), units=coordinateUnits(coord_mode))
+      call set_regrid_max_thickness( regridCS, h_max, GV%m_to_H )
+    else
+      call MOM_error(FATAL,"ALE_initRegridding: "// &
+        "Unrecognized MAX_LAYER_THICKNESS_CONFIG "//trim(string))
+    endif
+    deallocate(h_max)
   endif
 
   deallocate(dz)
-  deallocate(h_max)
-  deallocate(dz_max)
-  deallocate(z_max)
-  deallocate(rho_target)
 end subroutine interpret_coord_config
 
 !> Parses a string and generates a dz(:) profile
