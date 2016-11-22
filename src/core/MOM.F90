@@ -65,7 +65,6 @@ use MOM_time_manager,         only : increment_date
 use MOM_ALE,                   only : ALE_init, ALE_end, ALE_main, ALE_CS, adjustGridForIntegrity
 use MOM_ALE,                   only : ALE_getCoordinate, ALE_getCoordinateUnits, ALE_writeCoordinateFile
 use MOM_ALE,                   only : ALE_updateVerticalGridType, ALE_remap_init_conds, ALE_register_diags
-use MOM_ALE,                   only : ALE_main_offline, ALE_offline_tracer_final
 use MOM_continuity,            only : continuity, continuity_init, continuity_CS
 use MOM_CoriolisAdv,           only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
 use MOM_diabatic_driver,       only : diabatic, diabatic_driver_init, diabatic_CS
@@ -128,14 +127,10 @@ use MOM_verticalGrid,          only : verticalGrid_type, verticalGridInit, verti
 use MOM_verticalGrid,          only : get_thickness_units, get_flux_units, get_tr_flux_units
 
 ! Offline modules
-use MOM_offline_transport,         only : offline_transport_CS
-use MOM_offline_transport,         only : transport_by_files, next_modulo_time, offline_add_diurnal_sw
-use MOM_offline_transport,         only : offline_transport_init, register_diags_offline_transport
-use MOM_offline_transport,         only : limit_mass_flux_3d, update_h_horizontal_flux, update_h_vertical_flux
-use MOM_offline_transport,         only : distribute_residual_uh_barotropic, distribute_residual_vh_barotropic
-use MOM_offline_transport,         only : distribute_residual_uh_upwards, distribute_residual_vh_upwards
-use MOM_tracer_diabatic,           only : applyTracerBoundaryFluxesInOut
-use MOM_opacity,                   only : set_opacity
+use MOM_offline_main,          only : offline_transport_CS, 
+use MOM_offline_main,          only : offline_transport_init, register_diags_offline_transport
+use MOM_offline_main,          only : offline_advection_ale, offline_diabatic_ale, offline_advection_layer
+
 
 implicit none ; private
 
@@ -1467,6 +1462,17 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
   ! Grid-related pointer assignments
   G => CS%G
   GV => CS%GV
+  ! Pointer assignments to necessary fields from main MOM CS
+  CS%offline_CSp%ALE_CSp          => CS%ALE_CSp
+  CS%offline_CSp%diabatic_CSp     => CS%diabatic_CSp
+  CS%offline_CSp%diag             => CS%diag
+  CS%offline_CSp%OBC              => CS%OBC
+  CS%offline_CSp%tracer_adv_CSp   => CS%tracer_adv_CSp
+  CS%offline_CSp%tracer_flow_CSp  => CS%tracer_flow_CSp
+  CS%offline_CSp%tracer_Reg       => CS%tracer_Reg
+  CS%offline_CSp%tv               => CS%tv
+  CS%offline_CSp%G                => CS%G
+  CS%offline_CSp%GV               => CS%GV
   
   call cpu_clock_begin(id_clock_tracer)
   Time_end = increment_date(sub_Time_start, seconds=floor(time_interval+0.001))
@@ -1495,12 +1501,12 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
   
     ! Check to see if offline advection needs to be done     
     if(CS%use_ALE_algorithm) then
-      call offline_advection_ale(fluxes, state, Time_start, time_interval, CS, h_pre, h_end, uhtr, vhtr)
+      call offline_advection_ale(fluxes, state, Time_start, time_interval, CS%offline_CSp, h_pre, h_end, uhtr, vhtr)
     elseif (.not. CS%use_ALE_algorithm) then
     ! Note that for the layer mode case, the calls to tracer sources and sinks is embedded in 
     ! main_offline_advection_layer. Warning: this may not be appropriate for tracers that
     ! exchange with the atmosphere
-      call offline_advection_layer(fluxes, state, Time_start, time_interval, CS)
+      call offline_advection_layer(fluxes, state, Time_start, time_interval, CS%offline_CSp)
     endif
 
     ! Perform offline diffusion if necessary
