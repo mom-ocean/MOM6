@@ -23,7 +23,8 @@ use MOM_variables, only : surface
 use MOM_variables, only: thermo_var_ptrs
 
 ! Infrastructure modules
-use MOM_debugging,            only : MOM_debugging_init, hchksum, uvchksum
+use MOM_checksums,            only : MOM_checksums_init, hchksum, uvchksum
+use MOM_transform_test,       only : MOM_transform_test_init, do_transform_on_this_pe
 use MOM_checksum_packages,    only : MOM_thermo_chksum, MOM_state_chksum, MOM_accel_chksum
 use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,            only : CLOCK_COMPONENT, CLOCK_SUBCOMPONENT
@@ -90,13 +91,16 @@ use MOM_dynamics_legacy_split, only : step_MOM_dyn_legacy_split, register_restar
 use MOM_dynamics_legacy_split, only : initialize_dyn_legacy_split, end_dyn_legacy_split
 use MOM_dynamics_legacy_split, only : adjustments_dyn_legacy_split, MOM_dyn_legacy_split_CS
 use MOM_dyn_horgrid,           only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
+use MOM_dyn_horgrid,           only : create_dyn_horgrid_untrans, transform_init_dyn_horgrid
 use MOM_EOS,                   only : EOS_init
 use MOM_EOS,                   only : gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_EOS,                   only : calculate_density
 use MOM_debugging,             only : check_redundant
 use MOM_grid,                  only : ocean_grid_type, set_first_direction
+use MOM_grid,                  only : grid_metrics_chksum
+use MOM_grid_initialize,       only : dyn_grid_metrics_chksum
 use MOM_grid,                  only : MOM_grid_init, MOM_grid_end
-use MOM_hor_index,             only : hor_index_type, hor_index_init
+use MOM_hor_index,             only : hor_index_type, hor_index_init, transform_hor_index
 use MOM_hor_visc,              only : horizontal_viscosity, hor_visc_init
 use MOM_interface_heights,     only : find_eta
 use MOM_lateral_mixing_coeffs, only : calc_slope_functions, VarMix_init
@@ -1492,6 +1496,13 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   type(dyn_horgrid_type), pointer :: dG => NULL()
   type(diag_ctrl),        pointer :: diag
 
+  ! These are used by the transform test. This test transforms (either transpose or rotate) all model arrays and compares the
+  ! tranformed run to a vanilla run. To minimize impact on the model code the test takes two approaches to transforming models
+  ! arrays 1) change the horizontal grid specification so that arrays are created in the modified shape and, 2) transform the arrays
+  ! after they have been created.
+  type(hor_index_type)            :: HI_untrans  !  A hor_index_type for array extents
+  type(dyn_horgrid_type), pointer :: dG_untrans => NULL()
+
   character(len=4), parameter :: vers_num = 'v2.0'
 
 ! This include declares and sets the variable "version".
@@ -1855,6 +1866,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
 
   call callTree_waypoint("MOM parameters read (initialize_MOM)")
 
+  call MOM_transform_test_init(param_file)
+
   ! Set up the model domain and grids.
 #ifdef SYMMETRIC_MEMORY_
   symmetric = .true.
@@ -1871,7 +1884,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
 #endif
   call callTree_waypoint("domains initialized (initialize_MOM)")
 
-  call MOM_debugging_init(param_file)
+  call MOM_checksums_init(param_file)
   call diag_mediator_infrastructure_init()
   call MOM_io_init(param_file)
 
@@ -1896,9 +1909,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
 
   call tracer_registry_init(param_file, CS%tracer_Reg)
 
-  is   = dG%isc   ; ie   = dG%iec  ; js   = dG%jsc  ; je   = dG%jec ; nz = GV%ke
-  isd  = dG%isd   ; ied  = dG%ied  ; jsd  = dG%jsd  ; jed  = dG%jed
-  IsdB = dG%IsdB  ; IedB = dG%IedB ; JsdB = dG%JsdB ; JedB = dG%JedB
+  is   = HI%isc   ; ie   = HI%iec  ; js   = HI%jsc  ; je   = HI%jec ; nz = GV%ke
+  isd  = HI%isd   ; ied  = HI%ied  ; jsd  = HI%jsd  ; jed  = HI%jed
+  IsdB = HI%IsdB  ; IedB = HI%IedB ; JsdB = HI%JsdB ; JedB = HI%JedB
 
   ! Allocate and initialize space for primary MOM variables.
   ALLOC_(CS%u(IsdB:IedB,jsd:jed,nz))   ; CS%u(:,:,:) = 0.0
@@ -2014,7 +2027,20 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   call callTree_waypoint("restart registration complete (initialize_MOM)")
 
   call cpu_clock_begin(id_clock_MOM_init)
-  call MOM_initialize_fixed(dG, CS%OBC, param_file, write_geom_files, dirs%output_directory)
+
+  if (do_transform_on_this_pe()) then
+    call create_dyn_horgrid_untrans(dG_untrans, HI_untrans, param_file)
+    call MOM_initialize_fixed(dG_untrans, CS%OBC, param_file, &
+                              write_geom_files, dirs%output_directory)
+    call transform_init_dyn_horgrid(dG_untrans, dG)
+  else
+    call MOM_initialize_fixed(dG, CS%OBC, param_file, write_geom_files, dirs%output_directory)
+  endif
+
+  if (CS%debug) then
+    call dyn_grid_metrics_chksum('MOM_initialize', dG)
+  endif
+
   call callTree_waypoint("returned from MOM_initialize_fixed() (initialize_MOM)")
 
   if (associated(CS%OBC)) call call_OBC_register(param_file, CS%update_OBC_CSp, CS%OBC)
@@ -2034,6 +2060,17 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   !     call clone_MOM_domain(dG%Domain, G%Domain)
   call MOM_grid_init(G, param_file, HI, bathymetry_at_vel=bathy_at_vel)
   call copy_dyngrid_to_MOM_grid(dG, G)
+  call grid_metrics_chksum("initialize_MOM", G)
+
+  ! Keep a copy of the untransformed G. This is used to initialize state.
+  if (do_transform_on_this_pe()) then
+    allocate(G%self_untrans)
+    call clone_MOM_domain(dG_untrans%Domain, G%self_untrans%Domain)
+    call MOM_grid_init(G%self_untrans, param_file, HI_untrans, bathymetry_at_vel=bathy_at_vel)
+    call copy_dyngrid_to_MOM_grid(dG_untrans, G%self_untrans)
+    call destroy_dyn_horgrid(dG_untrans)
+  endif
+
   call destroy_dyn_horgrid(dG)
 
   ! Set a few remaining fields that are specific to the ocean grid type.

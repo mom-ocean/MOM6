@@ -3,8 +3,9 @@ module MOM_state_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_debugging, only : hchksum, qchksum, uvchksum
+use MOM_checksums, only : hchksum, Bchksum, chksum, uvchksum
 use MOM_coms, only : max_across_PEs, min_across_PEs, reproducing_sum
+use MOM_transform_test, only : do_transform_on_this_pe, transform_allocatable
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only :  CLOCK_ROUTINE, CLOCK_LOOP
 use MOM_domains, only : pass_var, pass_vector, sum_across_PEs, broadcast
@@ -305,6 +306,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
             "Unrecognized layer thickness configuration "//trim(config))
     end select
 
+
 !     Initialize temperature and salinity (T and S).
     if ( use_temperature ) then
       call get_param(PF, mdl, "TS_CONFIG", config, &
@@ -407,6 +409,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   if (new_sim) call pass_vector(u, v, G%Domain)
   if (debug .and. new_sim) then
     call uvchksum("MOM_initialize_state [uv]", u, v, G%HI, haloshift=1)
+    call hchksum(G%bathyT, "MOM_initialize_state: bathyT ", G%HI, haloshift=1)
+    call hchksum(h*GV%H_to_m, "MOM_initialize_state: h ", G%HI, haloshift=1)
   endif
 
 !   Optionally convert the thicknesses from m to kg m-2.  This is particularly
@@ -566,7 +570,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
     call hchksum(G%mask2dT, 'MOM_initialize_state: mask2dT ', G%HI)
     call uvchksum('MOM_initialize_state: mask2dC[uv]', G%mask2dCu,  &
                   G%mask2dCv, G%HI)
-    call qchksum(G%mask2dBu, 'MOM_initialize_state: mask2dBu ', G%HI)
+    call Bchksum(G%mask2dBu, 'MOM_initialize_state: mask2dBu ', G%HI)
   endif
 
   call callTree_leave('MOM_initialize_state()')
@@ -1873,7 +1877,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
   real, parameter    :: missing_value = -1.e20
   real, parameter    :: temp_land_fill = 0.0, salt_land_fill = 35.0
   logical :: reentrant_x, tripolar_n,dbg
-  logical :: debug = .false.  ! manually set this to true for verbose output
+  logical :: debug = .false.
 
   !data arrays
   real, dimension(:), allocatable :: z_edges_in, z_in, Rb
@@ -1916,7 +1920,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
   if (.not.just_read) call callTree_enter(trim(mdl)//"(), MOM_state_initialization.F90")
   if (.not.just_read) call log_version(PF, mdl, version, "")
 
+  call get_param(PF, mod, "DEBUG", debug, default=.false.)
   inputdir = "." ;  call get_param(PF, mdl, "INPUTDIR", inputdir)
+
   inputdir = slasher(inputdir)
 
   eos => tv%eqn_of_state
@@ -2005,11 +2011,30 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
 !   to the North/South Pole past the limits of the input data, they are extrapolated using the average
 !   value at the northernmost/southernmost latitude.
 
-  call horiz_interp_and_extrap_tracer(filename, potemp_var,1.0,1, &
-       G, temp_z, mask_z, z_in, z_edges_in, missing_value_temp, reentrant_x, tripolar_n, homogenize)
+  if (do_transform_on_this_pe()) then
+    call horiz_interp_and_extrap_tracer(filename, potemp_var,1.0,1, &
+         G%self_untrans, temp_z, mask_z, z_in, z_edges_in, &
+         missing_value_temp, reentrant_x, tripolar_n, homogenize)
+    call horiz_interp_and_extrap_tracer(filename, salin_var,1.0,1, &
+         G%self_untrans, salt_z, mask_z, z_in, z_edges_in, &
+         missing_value_salt, reentrant_x, tripolar_n, homogenize)
 
-  call horiz_interp_and_extrap_tracer(filename, salin_var,1.0,1, &
-       G, salt_z, mask_z, z_in, z_edges_in, missing_value_salt, reentrant_x, tripolar_n, homogenize)
+    call transform_allocatable(temp_z)
+    call transform_allocatable(salt_z)
+    call transform_allocatable(mask_z)
+  else
+    call horiz_interp_and_extrap_tracer(filename, potemp_var,1.0,1, &
+         G, temp_z, mask_z, z_in, z_edges_in, missing_value_temp, reentrant_x, tripolar_n, homogenize)
+
+    call horiz_interp_and_extrap_tracer(filename, salin_var,1.0,1, &
+         G, salt_z, mask_z, z_in, z_edges_in, missing_value_salt, reentrant_x, tripolar_n, homogenize)
+  endif
+
+  if (debug) then
+    call hchksum(temp_z, "MOM_temp_salt_initialize_from_Z: temp_z ", G%HI)
+    call hchksum(salt_z, "MOM_temp_salt_initialize_from_Z: salt_z ", G%HI)
+    call hchksum(mask_z, "MOM_temp_salt_initialize_from_Z: mask_z ", G%HI)
+  endif
 
   kd = size(z_in,1)
 

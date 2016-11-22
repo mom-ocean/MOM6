@@ -56,6 +56,8 @@ use MOM_surface_forcing, only : surface_forcing_init, convert_IOB_to_fluxes
 use MOM_surface_forcing, only : ice_ocn_bnd_type_chksum
 use MOM_surface_forcing, only : ice_ocean_boundary_type, surface_forcing_CS
 use MOM_surface_forcing, only : forcing_save_restart
+use MOM_surface_forcing, only : transform_ice_ocean_boundary, undo_transform_ice_ocean_boundary
+use MOM_surface_forcing, only : transform_surface_forcing
 use MOM_time_manager, only : time_type, get_time, set_time, operator(>)
 use MOM_time_manager, only : operator(+), operator(-), operator(*), operator(/)
 use MOM_time_manager, only : operator(/=)
@@ -73,6 +75,8 @@ use fms_mod, only : stdout
 use mpp_mod, only : mpp_chksum
 use MOM_domains, only : pass_var, pass_vector, TO_ALL, CGRID_NE, BGRID_NE
 use MOM_EOS, only : gsw_sp_from_sr, gsw_pt_from_ct
+use MOM_transform_test, only : do_transform_on_this_pe, undo_transform_pointer
+use MOM_transform_test, only : transform_pointer, transform_domain, swap_pointer
 
 #include <MOM_memory.h>
 
@@ -89,7 +93,7 @@ public ocean_model_init_sfc, ocean_model_flux_init
 public ocean_model_restart
 public ice_ocn_bnd_type_chksum
 public ocean_public_type_chksum
-public    ocean_model_data_get
+public ocean_model_data_get
 interface ocean_model_data_get
   module procedure ocean_model_data1D_get
   module procedure ocean_model_data2D_get
@@ -121,7 +125,7 @@ type, public ::  ocean_public_type
                     ! is initialized, but here it is set to -999 so that a
                     ! global max across ocean and non-ocean processors  can be
                     ! used to determine its value.
-  real, pointer, dimension(:,:)  :: &
+  real, pointer, contiguous, dimension(:,:)  :: &
     t_surf => NULL(), & ! SST on t-cell (degrees Kelvin)
     s_surf => NULL(), & ! SSS on t-cell (psu)
     u_surf => NULL(), & ! i-velocity at the locations indicated by stagger, m/s.
@@ -311,8 +315,14 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
 
   OS%press_to_z = 1.0/(Rho0*G_Earth)
 
-  call surface_forcing_init(Time_in, OS%grid, param_file, OS%MOM_CSp%diag, &
+  if (do_transform_on_this_pe()) then
+    call surface_forcing_init(Time_in, OS%grid%self_untrans, param_file, OS%MOM_CSp%diag, &
                             OS%forcing_CSp, OS%restore_salinity, OS%restore_temp)
+    call transform_surface_forcing(OS%forcing_CSp)
+  else
+    call surface_forcing_init(Time_in, OS%grid, param_file, OS%MOM_CSp%diag, &
+                            OS%forcing_CSp, OS%restore_salinity, OS%restore_temp)
+  endif
 
   if (OS%use_ice_shelf)  then
      call initialize_ice_shelf(param_file, OS%grid, OS%Time, OS%ice_shelf_CSp, &
@@ -335,12 +345,24 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   OS%write_energy_time = Time_init + OS%energysavedays * &
       (1 + (OS%Time - Time_init) / OS%energysavedays)
 
-  if(ASSOCIATED(OS%grid%Domain%maskmap)) then
-     call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &
-                                       OS%MOM_CSp%diag, maskmap=OS%grid%Domain%maskmap)
+  if (do_transform_on_this_pe()) then
+    ! In the case of the transform test the ocean_public_type needs to be untransformed because it is used to communicate the
+    ! coupler and coupled models which are not included in the test.
+    if(ASSOCIATED(OS%grid%Domain%maskmap)) then
+       call initialize_ocean_public_type(OS%grid%self_untrans%Domain%mpp_domain, Ocean_sfc, &
+                                         OS%MOM_CSp%diag, maskmap=OS%grid%self_untrans%Domain%maskmap)
+    else
+       call initialize_ocean_public_type(OS%grid%self_untrans%Domain%mpp_domain, Ocean_sfc, &
+                                         OS%MOM_CSp%diag)
+    endif
   else
-     call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &
-                                       OS%MOM_CSp%diag)
+    if(ASSOCIATED(OS%grid%Domain%maskmap)) then
+       call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &
+                                         OS%MOM_CSp%diag, maskmap=OS%grid%Domain%maskmap)
+    else
+       call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &
+                                         OS%MOM_CSp%diag)
+    endif
   endif
 !  call convert_state_to_ocean_type(state, Ocean_sfc, OS%grid)
 
@@ -413,6 +435,11 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
                     "ocean_state_type structure. ocean_model_init must be "//  &
                     "called first to allocate this structure.")
     return
+  endif
+
+  if (do_transform_on_this_pe()) then
+    call transform_ocean_public(Ocean_sfc)
+    call transform_ice_ocean_boundary(Ice_ocean_boundary)
   endif
 
 !  Translate Ice_ocean_boundary into fluxes.
@@ -506,7 +533,12 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 !                                   Ice_ocean_boundary%p, OS%press_to_z)
   call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid, OS%MOM_CSp%use_conT_absS)
 
+  if (do_transform_on_this_pe()) then
+    call undo_transform_ocean_public(Ocean_sfc)
+    call undo_transform_ice_ocean_boundary(Ice_ocean_boundary)
+  endif
   call callTree_leave("update_ocean_model()")
+
 end subroutine update_ocean_model
 ! </SUBROUTINE> NAME="update_ocean_model"
 
@@ -849,11 +881,20 @@ subroutine ocean_model_init_sfc(OS, Ocean_sfc)
   type(ocean_state_type),  pointer       :: OS
   type(ocean_public_type), intent(inout) :: Ocean_sfc
 
+  ! Transform ocean state
+  if (do_transform_on_this_pe()) then
+    call transform_ocean_public(Ocean_sfc)
+  endif
+
   call calculate_surface_state(OS%state, OS%MOM_CSp%u, &
            OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%ave_ssh,&
            OS%grid, OS%GV, OS%MOM_CSp)
 
   call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid, OS%MOM_CSp%use_conT_absS)
+
+  if (do_transform_on_this_pe()) then
+    call undo_transform_ocean_public(Ocean_sfc)
+  endif
 
 end subroutine ocean_model_init_sfc
 ! </SUBROUTINE NAME="ocean_model_init_sfc">
@@ -1005,17 +1046,30 @@ subroutine ocean_model_data2D_get(OS,Ocean, name, array2D,isc,jsc)
 ! The problem is %areaT is on MOM domain but Ice_Ocean_Boundary%... is on mpp domain.
 ! We want to return the MOM data on the mpp (compute) domain
 ! Get MOM domain extents
-  call mpp_get_compute_domain(OS%grid%Domain%mpp_domain, g_isc, g_iec, g_jsc, g_jec)
-  call mpp_get_data_domain   (OS%grid%Domain%mpp_domain, g_isd, g_ied, g_jsd, g_jed)
+
+  if (do_transform_on_this_pe()) then
+    call mpp_get_compute_domain(OS%grid%self_untrans%Domain%mpp_domain, g_isc, g_iec, g_jsc, g_jec)
+    call mpp_get_data_domain   (OS%grid%self_untrans%Domain%mpp_domain, g_isd, g_ied, g_jsd, g_jed)
+  else
+    call mpp_get_compute_domain(OS%grid%Domain%mpp_domain, g_isc, g_iec, g_jsc, g_jec)
+    call mpp_get_data_domain   (OS%grid%Domain%mpp_domain, g_isd, g_ied, g_jsd, g_jed)
+  endif
 
   g_isc = g_isc-g_isd+1 ; g_iec = g_iec-g_isd+1 ; g_jsc = g_jsc-g_jsd+1 ; g_jec = g_jec-g_jsd+1
 
-
   select case(name)
   case('area')
-     array2D(isc:,jsc:) = OS%grid%areaT(g_isc:g_iec,g_jsc:g_jec)
+    if (do_transform_on_this_pe()) then
+      array2D(isc:,jsc:) = OS%grid%self_untrans%areaT(g_isc:g_iec,g_jsc:g_jec)
+    else
+      array2D(isc:,jsc:) = OS%grid%areaT(g_isc:g_iec,g_jsc:g_jec)
+    endif
   case('mask')
-     array2D(isc:,jsc:) = OS%grid%mask2dT(g_isc:g_iec,g_jsc:g_jec)
+    if (do_transform_on_this_pe()) then
+      array2D(isc:,jsc:) = OS%grid%self_untrans%mask2dT(g_isc:g_iec,g_jsc:g_jec)
+    else
+      array2D(isc:,jsc:) = OS%grid%mask2dT(g_isc:g_iec,g_jsc:g_jec)
+    endif
 !OR same result
 !     do j=g_jsc,g_jec; do i=g_isc,g_iec
 !        array2D(isc+i-g_isc,jsc+j-g_jsc) = OS%grid%mask2dT(i,j)
@@ -1085,5 +1139,57 @@ subroutine ocean_public_type_chksum(id, timestep, ocn)
 
 100 FORMAT("   CHECKSUM::",A20," = ",Z20)
 end subroutine ocean_public_type_chksum
+
+subroutine transform_ocean_public(OP)
+  type(ocean_public_type), intent(inout) :: OP
+
+  integer :: m, n, index
+
+  call transform_pointer(OP%u_surf)
+  call transform_pointer(OP%v_surf)
+  call swap_pointer(OP%u_surf, OP%v_surf)
+
+  call transform_pointer(OP%t_surf)
+  call transform_pointer(OP%s_surf)
+  call transform_pointer(OP%sea_lev)
+  call transform_pointer(OP%frazil)
+  call transform_pointer(OP%area)
+
+  call transform_domain(OP%Domain)
+
+  index = 0
+  do n=1,OP%fields%num_bcs
+    do m=1,OP%fields%bc(n)%num_fields
+      call transform_pointer(OP%fields%bc(n)%field(m)%values)
+    enddo
+  enddo
+
+end subroutine transform_ocean_public
+
+subroutine undo_transform_ocean_public(OP)
+  type(ocean_public_type), intent(inout) :: OP
+
+  integer :: m, n, index
+
+  call undo_transform_pointer(OP%u_surf)
+  call undo_transform_pointer(OP%v_surf)
+  call swap_pointer(OP%u_surf, OP%v_surf)
+
+  call undo_transform_pointer(OP%t_surf)
+  call undo_transform_pointer(OP%s_surf)
+  call undo_transform_pointer(OP%sea_lev)
+  call undo_transform_pointer(OP%frazil)
+  call undo_transform_pointer(OP%area)
+
+  call transform_domain(OP%Domain)
+
+  index = 0
+  do n=1,OP%fields%num_bcs
+    do m=1,OP%fields%bc(n)%num_fields
+      call undo_transform_pointer(OP%fields%bc(n)%field(m)%values)
+    enddo
+  enddo
+
+end subroutine undo_transform_ocean_public
 
 end module ocean_model_mod

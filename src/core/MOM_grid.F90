@@ -3,9 +3,13 @@ module MOM_grid
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_hor_index, only : hor_index_type, hor_index_init
+use MOM_checksums, only : hchksum, bchksum
+use MOM_checksums, only : hchksum_pair, uvchksum, bchksum_pair
+use MOM_transform_test, only : do_transform_on_this_pe
+use MOM_hor_index, only : hor_index_type, hor_index_init, transform_hor_index
 use MOM_domains, only : MOM_domain_type, get_domain_extent, compute_block_extent
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL
+use MOM_error_handler, only : callTree_enter, callTree_leave
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 
 implicit none ; private
@@ -13,6 +17,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public MOM_grid_init, MOM_grid_end, set_derived_metrics, set_first_direction
+public grid_metrics_chksum
 public isPointInCell, hor_index_type
 
 !> Ocean grid type. See mom_grid for details.
@@ -20,6 +25,8 @@ type, public :: ocean_grid_type
   type(MOM_domain_type), pointer :: Domain => NULL() !< Ocean model domain
   type(MOM_domain_type), pointer :: Domain_aux => NULL() !< A non-symmetric auxiliary domain type.
   type(hor_index_type) :: HI !< Horizontal index ranges
+
+  type(ocean_grid_type), pointer :: self_untrans
 
   integer :: isc !< The start i-index of cell centers within the computational domain
   integer :: iec !< The end i-index of cell centers within the computational domain
@@ -440,7 +447,12 @@ subroutine set_first_direction(G, y_first)
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
   integer,               intent(in) :: y_first
 
-  G%first_direction = y_first
+  if (do_transform_on_this_pe()) then
+    G%first_direction = y_first + 1
+  else
+    G%first_direction = y_first
+  endif
+
 end subroutine set_first_direction
 
 !> Allocate memory used by the ocean_grid_type and related structures.
@@ -515,6 +527,61 @@ subroutine allocate_metrics(G)
   allocate(G%gridLatB(G%JsgB:G%JegB)) ; G%gridLatB(:) = 0.0
 
 end subroutine allocate_metrics
+
+!> grid_metrics_chksum performs a set of checksums on metrics on the grid for
+!!   debugging.
+subroutine grid_metrics_chksum(parent, G)
+  character(len=*),      intent(in) :: parent  !< A string identifying the caller
+  type(ocean_grid_type), intent(in) :: G !< The horizontal grid type
+
+  integer :: halo
+
+  halo = min(G%ied-G%isd, G%jed-G%jsd, 1)
+
+  call hchksum_pair(trim(parent)//': d[xy]T', G%dxT, G%dyT, G%HI, haloshift=halo)
+
+  call hchksum_pair(trim(parent)//': IdxT', G%IdxT, G%IdyT, G%HI, haloshift=halo)
+
+  call uvchksum(trim(parent)//': dxC[uv]', G%dxCu, G%dyCv, G%HI, haloshift=halo)
+
+  call uvchksum(trim(parent)//': Id[xy]C[uv]', &
+                G%IdxCu, G%IdyCv, G%HI, haloshift=halo)
+
+  call uvchksum(trim(parent)//': d[xy]C[uv]', G%dxCu, G%dyCv, G%HI, haloshift=halo)
+
+  call uvchksum(trim(parent)//': Id[xy]C[uv]', &
+                G%IdxCv, G%IdyCu, G%HI, haloshift=halo)
+
+  call Bchksum_pair(trim(parent)//': d[xy]Bu', &
+                    G%dxBu, G%dyBu, G%HI, haloshift=halo)
+
+  call Bchksum_pair(trim(parent)//': Id[xy]Bu', &
+                    G%IdxBu, G%IdyBu, G%HI, haloshift=halo)
+
+  call hchksum(G%areaT, trim(parent)//': areaT',G%HI, haloshift=halo)
+
+  call Bchksum(G%areaBu ,trim(parent)//': areaBu',G%HI, haloshift=halo)
+
+  call hchksum(G%IareaT, trim(parent)//': IareaT',G%HI, haloshift=halo)
+
+  call Bchksum(G%IareaBu, trim(parent)//': IareaBu',G%HI, haloshift=halo)
+
+  call hchksum(G%geoLonT, trim(parent)//': geoLonT',G%HI, haloshift=halo)
+
+  call hchksum(G%geoLatT, trim(parent)//': geoLatT',G%HI, haloshift=halo)
+
+  call Bchksum(G%geoLonBu, trim(parent)//': geoLonBu',G%HI, haloshift=halo)
+
+  call Bchksum(G%geoLatBu, trim(parent)//': geoLatBu',G%HI, haloshift=halo)
+
+  call uvchksum(trim(parent)//': geoLonC[uv]', G%geoLonCu, G%geoLonCv, G%HI, haloshift=halo)
+
+  call uvchksum(trim(parent)//': geoLatCu', &
+                G%geoLatCu, G%geoLatCv, G%HI, haloshift=halo)
+
+  call hchksum(G%mask2dT, trim(parent)//': mask2dT',G%HI, haloshift=halo)
+
+end subroutine grid_metrics_chksum
 
 !> Release memory used by the ocean_grid_type and related structures.
 subroutine MOM_grid_end(G)

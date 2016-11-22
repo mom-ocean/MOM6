@@ -50,6 +50,8 @@ module MOM_geothermal
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
+use MOM_checksums, only : hchksum
+use MOM_transform_test, only : do_transform_on_this_pe, transform
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : register_static_field, time_type, diag_ctrl
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
@@ -379,12 +381,13 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS)
 
 end subroutine geothermal
 
-subroutine geothermal_init(Time, G, param_file, diag, CS)
+subroutine geothermal_init(Time, G, param_file, diag, debug, CS)
   type(time_type), target, intent(in)    :: Time !< Current model time.
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time
                                                  !! parameters.
   type(diag_ctrl), target, intent(inout) :: diag !< Structure used to regulate diagnostic output.
+  logical,                  intent(in)   :: debug
   type(geothermal_CS),     pointer       :: CS   !< Pointer pointing to the module control
                                                  !! structure.
 
@@ -401,6 +404,7 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
 
   character(len=40)  :: mdl = "MOM_geothermal"  ! module name
   character(len=200) :: inputdir, geo_file, filename, geotherm_var
+  real, dimension(:, :), allocatable :: tmp
   real :: scale
   integer :: i, j, isd, ied, jsd, jed, id
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -448,8 +452,17 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
     call get_param(param_file, mdl, "GEOTHERMAL_VARNAME", geotherm_var, &
                  "The name of the geothermal heating variable in \n"//&
                  "GEOTHERMAL_FILE.", default="geo_heat")
-    call read_data(filename, trim(geotherm_var), CS%geo_heat, &
-                   domain=G%Domain%mpp_domain)
+    if (do_transform_on_this_pe()) then
+      allocate(tmp(jsd:jed, isd:ied))
+      tmp(:, :) = 0.0
+      call read_data(filename, trim(geotherm_var), tmp, &
+                     domain=G%self_untrans%Domain%mpp_domain)
+      call transform(tmp, CS%geo_heat)
+      deallocate(tmp)
+    else
+      call read_data(filename, trim(geotherm_var), CS%geo_heat, &
+                     domain=G%Domain%mpp_domain)
+    endif
     do j=jsd,jed ; do i=isd,ied
       CS%geo_heat(i,j) = (G%mask2dT(i,j) * scale) * CS%geo_heat(i,j)
     enddo ; enddo
@@ -466,6 +479,10 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
         cmor_standard_name='upward_geothermal_heat_flux_at_sea_floor', &
         cmor_long_name='Upward geothermal heat flux at sea floor')
   if (id > 0) call post_data(id, CS%geo_heat, diag, .true.)
+
+  if (debug) then
+    call hchksum(CS%geo_heat,"geo_heat geothermal_init", G%HI)
+  endif
 
 end subroutine geothermal_init
 

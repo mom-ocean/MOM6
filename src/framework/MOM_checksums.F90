@@ -26,10 +26,11 @@ use MOM_coms, only : reproducing_sum
 use MOM_error_handler, only : MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : log_version, param_file_type
 use MOM_hor_index, only : hor_index_type
+use MOM_transform_test, only : transform_compare, transform_test_started
 
 implicit none ; private
 
-public :: hchksum, Bchksum, uchksum, vchksum, qchksum, is_NaN, chksum
+public :: hchksum, Bchksum, uchksum, vchksum, is_NaN, chksum
 public :: hchksum_pair, uvchksum, Bchksum_pair
 public :: MOM_checksums_init
 
@@ -58,11 +59,6 @@ interface hchksum
 end interface
 
 interface Bchksum
-  module procedure chksum_B_2d, chksum_B_3d
-end interface
-
-! This is an older interface that has been renamed Bchksum
-interface qchksum
   module procedure chksum_B_2d, chksum_B_3d
 end interface
 
@@ -96,12 +92,36 @@ subroutine chksum_pair_h_2d(mesg, arrayA, arrayB, HI, haloshift, omit_corners, s
   logical,                optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                   optional, intent(in) :: scale     !< A scaling factor for this array.
 
-  if (present(haloshift)) then
-    call chksum_h_2d(arrayA, 'x '//mesg, HI, haloshift, omit_corners, scale=scale)
-    call chksum_h_2d(arrayB, 'y '//mesg, HI, haloshift, omit_corners, scale=scale)
-  else
-    call chksum_h_2d(arrayA, 'x '//mesg, HI, scale=scale)
-    call chksum_h_2d(arrayB, 'y '//mesg, HI, scale=scale)
+  integer :: hshift, ret
+  logical :: o_corners
+  real :: scaling
+
+  hshift = default_shift
+  if (present(haloshift)) hshift = haloshift
+  if (hshift<0) hshift = HI%ied-HI%iec
+
+  o_corners = .false.
+  if (present(omit_corners)) o_corners = omit_corners
+
+  scaling = 1.0 ; if (present(scale)) scaling = scale
+
+  call chksum_h_2d(arrayA, 'x '//mesg, HI, haloshift=hshift, &
+                   compare=.false., omit_corners=o_corners, scale=scaling)
+  call chksum_h_2d(arrayB, 'y '//mesg, HI, haloshift=hshift, &
+                   compare=.false., omit_corners=o_corners, scale=scaling)
+
+  ret = 0
+  if (transform_test_started()) then
+    call transform_compare(arrayA(HI%isc-hshift:HI%iec+hshift, &
+                                  HI%jsc-hshift:HI%jec+hshift), &
+                           arrayB(HI%isc-hshift:HI%iec+hshift, &
+                                  HI%jsc-hshift:HI%jec+hshift), ret)
+    if (ret /= 0) then
+      call chksum_error(FATAL, &
+                        'Transfrom test fail in chksum_pair_h_2d '//trim(mesg))
+    else
+      print*, 'TRANSFORM TEST PASSED: '//trim(mesg)
+    endif
   endif
 
 end subroutine chksum_pair_h_2d
@@ -114,29 +134,54 @@ subroutine chksum_pair_h_3d(mesg, arrayA, arrayB, HI, haloshift, omit_corners, s
   logical,                   optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                      optional, intent(in) :: scale     !< A scaling factor for this array.
 
-  if (present(haloshift)) then
-    call chksum_h_3d(arrayA, 'x '//mesg, HI, haloshift, omit_corners, scale=scale)
-    call chksum_h_3d(arrayB, 'y '//mesg, HI, haloshift, omit_corners, scale=scale)
-  else
-    call chksum_h_3d(arrayA, 'x '//mesg, HI, scale=scale)
-    call chksum_h_3d(arrayB, 'y '//mesg, HI, scale=scale)
+  integer :: hshift, ret
+  logical :: o_corners
+  real :: scaling
+
+  hshift = default_shift
+  if (present(haloshift)) hshift = haloshift
+  if (hshift<0) hshift = HI%ied-HI%iec
+
+  o_corners = .false. 
+  if (present(omit_corners)) o_corners = omit_corners
+
+  scaling = 1.0 ; if (present(scale)) scaling = scale
+
+  call chksum_h_3d(arrayA, 'x '//mesg, HI, haloshift=hshift, &
+                   compare=.false., omit_corners=o_corners, scale=scaling)
+  call chksum_h_3d(arrayB, 'y '//mesg, HI, haloshift=hshift, &
+                   compare=.false., omit_corners=o_corners, scale=scaling)
+
+  ret = 0
+  if (transform_test_started()) then
+    call transform_compare(arrayA(HI%isc-hshift:HI%iec+hshift, &
+                                  HI%jsc-hshift:HI%jec+hshift, :), &
+                           arrayB(HI%isc-hshift:HI%iec+hshift, &
+                                  HI%jsc-hshift:HI%jec+hshift, :), ret)
+    if (ret /= 0) then
+      call chksum_error(FATAL, &
+                        'Transfrom test fail in chksum_pair_h_3d '//trim(mesg))
+    else
+      print*, 'TRANSFORM TEST PASSED'
+    endif
   endif
 
 end subroutine chksum_pair_h_3d
 
 !> chksum_h_2d performs checksums on a 2d array staggered at tracer points.
-subroutine chksum_h_2d(array, mesg, HI, haloshift, omit_corners, scale)
+subroutine chksum_h_2d(array, mesg, HI, haloshift, compare, omit_corners, scale)
   type(hor_index_type),            intent(in) :: HI     !< A horizontal index type
   real, dimension(HI%isd:,HI%jsd:), intent(in) :: array !< The array to be checksummed
   character(len=*),                intent(in) :: mesg  !< An identifying message
   integer,               optional, intent(in) :: haloshift !< The width of halos to check (default 0)
+  logical,               optional, intent(in) :: compare  !< Compare if in the transform input test
   logical,               optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                  optional, intent(in) :: scale     !< A scaling factor for this array.
 
   real :: scaling
   integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
-  integer :: bcN, bcS, bcE, bcW
-  logical :: do_corners
+  integer :: bcN, bcS, bcE, bcW, ret
+  logical :: do_corners, do_compare
 
   if (checkForNaNs) then
     if (is_NaN(array(HI%isc:HI%iec,HI%jsc:HI%jec))) &
@@ -144,11 +189,6 @@ subroutine chksum_h_2d(array, mesg, HI, haloshift, omit_corners, scale)
 !   if (is_NaN(array)) &
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
-  scaling = 1.0 ; if (present(scale)) scaling = scale
-
-  if (calculateStatistics) call subStats(HI, array, mesg, scaling)
-
-  if (.not.writeChksums) return
 
   hshift = default_shift
   if (present(haloshift)) hshift = haloshift
@@ -161,6 +201,27 @@ subroutine chksum_h_2d(array, mesg, HI, haloshift, omit_corners, scale)
     write(0,*) 'chksum_h_2d: jsd,jsc,jec,jed=',HI%jsd,HI%jsc,HI%jec,HI%jed
     call chksum_error(FATAL,'Error in chksum_h_2d '//trim(mesg))
   endif
+
+  do_compare = .true.
+  if (present(compare)) do_compare = compare
+  ret = 0
+  if (do_compare .and. transform_test_started()) then
+    call transform_compare(array(HI%isc-hshift:HI%iec+hshift,  &
+                                 HI%jsc-hshift:HI%jec+hshift), &
+                           array(HI%isc-hshift:HI%iec+hshift,  &
+                                 HI%jsc-hshift:HI%jec+hshift), ret)
+    if (ret /= 0) then
+      call chksum_error(FATAL, &
+                        'Transfrom test fail in chksum_h_2d '//trim(mesg))
+    else
+      print*, 'TRANSFORM TEST PASSED: '//trim(mesg)
+    endif
+  endif
+
+  scaling = 1.0 ; if (present(scale)) scaling = scale
+  if (calculateStatistics) call subStats(HI, array, mesg, scaling)
+
+  if (.not.writeChksums) return
 
   bc0 = subchk(array, HI, 0, 0, scaling)
 
@@ -241,18 +302,38 @@ subroutine chksum_pair_B_2d(mesg, arrayA, arrayB, HI, haloshift, symmetric, omit
   logical,                optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                   optional, intent(in) :: scale     !< A scaling factor for this array.
 
-  logical :: sym
+  logical :: sym,  o_corners
+  real :: scaling
+  integer :: hshift, ret
+
+  hshift=default_shift
+  if (present(haloshift)) hshift=haloshift
+  if (hshift<0) hshift=HI%ied-HI%iec
+
+  o_corners = .false. 
+  if (present(omit_corners)) o_corners = omit_corners
+
+  scaling = 1.0 ; if (present(scale)) scaling = scale
 
   sym = .false. ; if (present(symmetric)) sym = symmetric
 
-  if (present(haloshift)) then
-    call chksum_B_2d(arrayA, 'x '//mesg, HI, haloshift, symmetric=sym, &
-                     omit_corners=omit_corners, scale=scale)
-    call chksum_B_2d(arrayB, 'y '//mesg, HI, haloshift, symmetric=sym, &
-                     omit_corners=omit_corners, scale=scale)
-  else
-    call chksum_B_2d(arrayA, 'x '//mesg, HI, symmetric=sym, scale=scale)
-    call chksum_B_2d(arrayB, 'y '//mesg, HI, symmetric=sym, scale=scale)
+  call chksum_B_2d(arrayA, 'x '//mesg, HI, haloshift=hshift, symmetric=sym, &
+                   compare=.false., omit_corners=o_corners, scale=scaling)
+  call chksum_B_2d(arrayB, 'y '//mesg, HI, haloshift=hshift, symmetric=sym, &
+                   compare=.false., omit_corners=o_corners, scale=scaling)
+
+  ret = 0
+  if (transform_test_started()) then
+    call transform_compare(arrayA(HI%IscB-hshift:HI%IecB+hshift,  &
+                                  HI%JscB-hshift:HI%JecB+hshift), &
+                           arrayB(HI%IscB-hshift:HI%IecB+hshift,  &
+                                  HI%JscB-hshift:HI%JecB+hshift), ret)
+    if (ret /= 0) then
+      call chksum_error(FATAL, &
+                        'Transfrom test fail in chksum_pair_B_2d '//trim(mesg))
+    else
+      print*, 'TRANSFORM TEST PASSED'
+    endif
   endif
 
 end subroutine chksum_pair_B_2d
@@ -266,22 +347,44 @@ subroutine chksum_pair_B_3d(mesg, arrayA, arrayB, HI, haloshift, symmetric, omit
   logical,                   optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                      optional, intent(in) :: scale     !< A scaling factor for this array.
 
-  logical :: sym
+  logical :: sym,  o_corners
+  real :: scaling
+  integer :: hshift, ret
 
-  if (present(haloshift)) then
-    call chksum_B_3d(arrayA, 'x '//mesg, HI, haloshift, symmetric, &
-                     omit_corners, scale=scale)
-    call chksum_B_3d(arrayB, 'y '//mesg, HI, haloshift, symmetric, &
-                     omit_corners, scale=scale)
-  else
-    call chksum_B_3d(arrayA, 'x '//mesg, HI, symmetric=symmetric, scale=scale)
-    call chksum_B_3d(arrayB, 'y '//mesg, HI, symmetric=symmetric, scale=scale)
+  hshift=default_shift
+  if (present(haloshift)) hshift=haloshift
+  if (hshift<0) hshift=HI%ied-HI%iec
+
+  o_corners = .false. 
+  if (present(omit_corners)) o_corners = omit_corners
+
+  scaling = 1.0 ; if (present(scale)) scaling = scale
+
+  sym = .false. ; if (present(symmetric)) sym = symmetric
+
+  call chksum_B_3d(arrayA, 'x '//mesg, HI, haloshift=hshift, symmetric=sym, &
+                   compare=.false., omit_corners=o_corners, scale=scaling)
+  call chksum_B_3d(arrayB, 'y '//mesg, HI, haloshift=hshift, symmetric=sym, &
+                   compare=.false., omit_corners=o_corners, scale=scaling)
+
+  ret = 0
+  if (transform_test_started()) then
+    call transform_compare(arrayA(HI%IscB-hshift:HI%IecB+hshift,  &
+                                  HI%JscB-hshift:HI%JecB+hshift, :), &
+                           arrayB(HI%IscB-hshift:HI%IecB+hshift,  &
+                                  HI%JscB-hshift:HI%JecB+hshift, :), ret)
+    if (ret /= 0) then
+      call chksum_error(FATAL, &
+                        'Transfrom test fail in chksum_pair_B_3d '//trim(mesg))
+    else
+      print*, 'TRANSFORM TEST PASSED'
+    endif
   endif
 
 end subroutine chksum_pair_B_3d
 
 !> chksum_B_2d performs checksums on a 2d array staggered at corner points.
-subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scale)
+subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric, compare, omit_corners, scale)
   type(hor_index_type), intent(in) :: HI     !< A horizontal index type
   real, dimension(HI%IsdB:,HI%JsdB:), &
                         intent(in) :: array !< The array to be checksummed
@@ -289,6 +392,7 @@ subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
   integer,    optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,    optional, intent(in) :: symmetric !< If true, do the checksums on the
                                                 !! full symmetric computational domain.
+  logical,    optional, intent(in) :: compare  !< Compare if in the transform input test
   logical,    optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,       optional, intent(in) :: scale     !< A scaling factor for this array.
 
@@ -297,19 +401,15 @@ subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
   integer :: bcN, bcS, bcE, bcW
   logical :: do_corners, sym, sym_stats
 
+  logical :: do_compare
+  integer :: ret
+
   if (checkForNaNs) then
     if (is_NaN(array(HI%IscB:HI%IecB,HI%JscB:HI%JecB))) &
       call chksum_error(FATAL, 'NaN detected: '//trim(mesg))
 !   if (is_NaN(array)) &
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
-  scaling = 1.0 ; if (present(scale)) scaling = scale
-
-  sym_stats = .false. ; if (present(symmetric)) sym_stats = symmetric
-  if (present(haloshift)) then ; if (haloshift > 0) sym_stats = .true. ; endif
-  if (calculateStatistics) call subStats(HI, array, mesg, sym_stats, scaling)
-
-  if (.not.writeChksums) return
 
   hshift = default_shift
   if (present(haloshift)) hshift = haloshift
@@ -322,6 +422,29 @@ subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
     write(0,*) 'chksum_B_2d: jsd,jsc,jec,jed=',HI%jsdB,HI%jscB,HI%jecB,HI%jedB
     call chksum_error(FATAL,'Error in chksum_B_2d '//trim(mesg))
   endif
+
+  do_compare = .true.
+  if (present(compare)) do_compare = compare
+  if (do_compare .and. transform_test_started()) then
+    call transform_compare(array(HI%IscB-hshift:HI%IecB+hshift,  &
+                                 HI%JscB-hshift:HI%JecB+hshift), &
+                           array(HI%IscB-hshift:HI%IecB+hshift,  &
+                                 HI%JscB-hshift:HI%JecB+hshift), ret)
+    if (ret /= 0) then
+      call chksum_error(FATAL, &
+                        'Transfrom test fail in chksum_B_2d '//trim(mesg))
+    else
+      print*, 'TRANSFORM TEST PASSED for '//trim(mesg)
+    endif
+  endif
+
+  scaling = 1.0 ; if (present(scale)) scaling = scale
+
+  sym_stats = .false. ; if (present(symmetric)) sym_stats = symmetric
+  if (present(haloshift)) then ; if (haloshift > 0) sym_stats = .true. ; endif
+  if (calculateStatistics) call subStats(HI, array, mesg, sym_stats, scaling)
+
+  if (.not.writeChksums) return
 
   bc0 = subchk(array, HI, 0, 0, scaling)
 
@@ -415,12 +538,38 @@ subroutine chksum_uv_2d(mesg, arrayU, arrayV, HI, haloshift, symmetric, omit_cor
   logical,                 optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                    optional, intent(in) :: scale     !< A scaling factor for these arrays.
 
-  if (present(haloshift)) then
-    call chksum_u_2d(arrayU, 'u '//mesg, HI, haloshift, symmetric, omit_corners, scale)
-    call chksum_v_2d(arrayV, 'v '//mesg, HI, haloshift, symmetric, omit_corners, scale)
-  else
-    call chksum_u_2d(arrayU, 'u '//mesg, HI, symmetric=symmetric)
-    call chksum_v_2d(arrayV, 'v '//mesg, HI, symmetric=symmetric)
+  integer :: ret, hshift
+  logical :: sym,  o_corners
+  real :: scaling
+
+  hshift = default_shift
+  if (present(haloshift)) hshift = haloshift
+  if (hshift<0) hshift=HI%iedB-HI%iecB
+
+  o_corners = .false. 
+  if (present(omit_corners)) o_corners = omit_corners
+
+  scaling = 1.0 ; if (present(scale)) scaling = scale
+
+  sym = .false. ; if (present(symmetric)) sym = symmetric
+
+  call chksum_u_2d(arrayU, 'u '//mesg, HI, haloshift=hshift,  &
+                   symmetric=sym, omit_corners=o_corners, scale=scaling)
+  call chksum_v_2d(arrayU, 'v '//mesg, HI, haloshift=hshift,  &
+                   symmetric=sym, omit_corners=o_corners, scale=scaling)
+
+  ret = 1
+  if (transform_test_started()) then
+    call transform_compare(arrayU(HI%iscB-hshift:HI%iecB+hshift, &
+                                  HI%jsc-hshift:HI%jec+hshift), &
+                           arrayV(HI%isc-hshift:HI%iec+hshift, &
+                                  HI%jscB-hshift:HI%jecB+hshift), ret)
+    if (ret /= 0) then
+      call chksum_error(FATAL, &
+                        'Transfrom test fail in chksum_uv_2d '//trim(mesg))
+    else
+      print*, 'TRANSFORM TEST PASSED'
+    endif
   endif
 
 end subroutine chksum_uv_2d
@@ -435,12 +584,37 @@ subroutine chksum_uv_3d(mesg, arrayU, arrayV, HI, haloshift, symmetric, omit_cor
   logical,                   optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                      optional, intent(in) :: scale     !< A scaling factor for these arrays.
 
-  if (present(haloshift)) then
-    call chksum_u_3d(arrayU, 'u '//mesg, HI, haloshift, symmetric, omit_corners, scale)
-    call chksum_v_3d(arrayV, 'v '//mesg, HI, haloshift, symmetric, omit_corners, scale)
-  else
-    call chksum_u_3d(arrayU, 'u '//mesg, HI, symmetric=symmetric)
-    call chksum_v_3d(arrayV, 'v '//mesg, HI, symmetric=symmetric)
+  integer :: ret, hshift
+  logical :: sym,  o_corners
+  real :: scaling
+
+  hshift = default_shift
+  if (present(haloshift)) hshift = haloshift
+  if (hshift<0) hshift=HI%iedB-HI%iecB
+
+  o_corners = .false. 
+  if (present(omit_corners)) o_corners = omit_corners
+
+  scaling = 1.0 ; if (present(scale)) scaling = scale
+
+  sym = .false. ; if (present(symmetric)) sym = symmetric
+
+  call chksum_u_3d(arrayU, 'u '//mesg, HI, haloshift=hshift,  &
+                   symmetric=sym, omit_corners=o_corners, scale=scaling)
+  call chksum_v_3d(arrayU, 'v '//mesg, HI, haloshift=hshift,  &
+                   symmetric=sym, omit_corners=o_corners, scale=scaling)
+
+  if (transform_test_started()) then
+    call transform_compare(arrayU(HI%iscB-hshift:HI%iecB+hshift, &
+                                  HI%jsc-hshift:HI%jec+hshift, :), &
+                           arrayV(HI%isc-hshift:HI%iec+hshift, &
+                                  HI%jscB-hshift:HI%jecB+hshift, :), ret)
+    if (ret /= 0) then
+      call chksum_error(FATAL, &
+                        'Transfrom test fail in chksum_uv_3d '//trim(mesg))
+    else
+      print*, 'TRANSFORM TEST PASSED'
+    endif
   endif
 
 end subroutine chksum_uv_3d
@@ -702,18 +876,19 @@ end subroutine chksum_v_2d
 ! =====================================================================
 
 !> chksum_h_3d performs checksums on a 3d array staggered at tracer points.
-subroutine chksum_h_3d(array, mesg, HI, haloshift, omit_corners, scale)
+subroutine chksum_h_3d(array, mesg, HI, haloshift, compare, omit_corners, scale)
   type(hor_index_type),             intent(in) :: HI !< A horizontal index type
   real, dimension(HI%isd:,HI%jsd:,:),  intent(in) :: array !< The array to be checksummed
   character(len=*),                  intent(in) :: mesg  !< An identifying message
   integer,                 optional, intent(in) :: haloshift !< The width of halos to check (default 0)
+  logical,                 optional, intent(in) :: compare  !< Compare if in the transform input test
   logical,                 optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                    optional, intent(in) :: scale     !< A scaling factor for this array.
 
   real :: scaling
   integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
-  integer :: bcN, bcS, bcE, bcW
-  logical :: do_corners
+  integer :: bcN, bcS, bcE, bcW, ret
+  logical :: do_corners, do_compare
 
   if (checkForNaNs) then
     if (is_NaN(array(HI%isc:HI%iec,HI%jsc:HI%jec,:))) &
@@ -737,6 +912,21 @@ subroutine chksum_h_3d(array, mesg, HI, haloshift, omit_corners, scale)
     write(0,*) 'chksum_h_3d: isd,isc,iec,ied=',HI%isd,HI%isc,HI%iec,HI%ied
     write(0,*) 'chksum_h_3d: jsd,jsc,jec,jed=',HI%jsd,HI%jsc,HI%jec,HI%jed
     call chksum_error(FATAL,'Error in chksum_h_3d '//trim(mesg))
+  endif
+
+  do_compare = .true.
+  if (present(compare)) do_compare = compare
+  if (do_compare .and. transform_test_started()) then
+    call transform_compare(array(HI%isc-hshift:HI%iec+hshift,  &
+                                 HI%jsc-hshift:HI%jec+hshift, :), &
+                           array(HI%isc-hshift:HI%iec+hshift,  &
+                                 HI%jsc-hshift:HI%jec+hshift, :), ret)
+    if (ret /= 0) then
+      call chksum_error(FATAL, &
+                        'Transfrom test fail in chksum_h_3d '//trim(mesg))
+    else
+      print*, 'TRANSFORM TEST PASSED'
+    endif
   endif
 
   bc0 = subchk(array, HI, 0, 0, scaling)
@@ -810,19 +1000,20 @@ end subroutine chksum_h_3d
 ! =====================================================================
 
 !> chksum_B_3d performs checksums on a 3d array staggered at corner points.
-subroutine chksum_B_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scale)
+subroutine chksum_B_3d(array, mesg, HI, haloshift, symmetric, compare, omit_corners, scale)
   type(hor_index_type),              intent(in) :: HI !< A horizontal index type
   real, dimension(HI%IsdB:,HI%JsdB:,:), intent(in) :: array !< The array to be checksummed
   character(len=*),                   intent(in) :: mesg  !< An identifying message
   integer,                  optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,                  optional, intent(in) :: symmetric !< If true, do the checksums on the full symmetric computational domain.
+  logical,                  optional, intent(in) :: compare  !< Compare if in the transform input test
   logical,                  optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
   real,                     optional, intent(in) :: scale     !< A scaling factor for this array.
 
   real :: scaling
   integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
-  integer :: bcN, bcS, bcE, bcW
-  logical :: do_corners, sym, sym_stats
+  integer :: bcN, bcS, bcE, bcW, ret
+  logical :: do_corners, do_compare, sym, sym_stats
 
   if (checkForNaNs) then
     if (is_NaN(array(HI%IscB:HI%IecB,HI%JscB:HI%JecB,:))) &
@@ -848,6 +1039,21 @@ subroutine chksum_B_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
     write(0,*) 'chksum_B_3d: isd,isc,iec,ied=',HI%isd,HI%isc,HI%iec,HI%ied
     write(0,*) 'chksum_B_3d: jsd,jsc,jec,jed=',HI%jsd,HI%jsc,HI%jec,HI%jed
     call chksum_error(FATAL,'Error in chksum_B_3d '//trim(mesg))
+  endif
+
+  do_compare = .true.
+  if (present(compare)) do_compare = compare
+  if (do_compare .and. transform_test_started()) then
+    call transform_compare(array(HI%IscB-hshift:HI%IecB+hshift,  &
+                                 HI%JscB-hshift:HI%JecB+hshift, :), &
+                           array(HI%IscB-hshift:HI%IecB+hshift,  &
+                                 HI%JscB-hshift:HI%JecB+hshift, :), ret)
+    if (ret /= 0) then
+      call chksum_error(FATAL, &
+                        'Transfrom test fail in chksum_B_3d '//trim(mesg))
+    else
+      print*, 'TRANSFORM TEST PASSED'
+    endif
   endif
 
   bc0 = subchk(array, HI, 0, 0, scaling)
@@ -1206,12 +1412,23 @@ subroutine chksum1d(array, mesg, start_i, end_i, compare_PEs)
                                                 !! and list the root_PE value (default true)
 
   integer :: is, ie, i, bc, sum1, sum_bc
-  integer :: bitcount
+  integer :: bitcount, ret
   real :: sum
   real, allocatable :: sum_here(:)
   logical :: compare
   integer :: pe_num   ! pe number of the data
   integer :: nPEs     ! Total number of processsors
+
+  ret = 0
+  if (transform_test_started()) then
+    call transform_compare(array, array, ret)
+    if (ret /= 0) then
+      call chksum_error(FATAL, &
+                        'Transfrom test fail in chksum1d'//trim(mesg))
+    else
+      print*, 'TRANSFORM TEST PASSED'
+    endif
+  endif
 
   is = LBOUND(array,1) ; ie = UBOUND(array,1)
   if (present(start_i)) is = start_i

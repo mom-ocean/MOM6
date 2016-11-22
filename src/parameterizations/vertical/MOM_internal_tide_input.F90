@@ -45,7 +45,8 @@ use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_diag_mediator, only : safe_alloc_ptr, post_data, register_diag_field
 use MOM_diag_to_Z, only : diag_to_Z_CS, register_Zint_diag, calc_Zint_diags
-use MOM_debugging, only : hchksum
+use MOM_checksums, only : hchksum
+use MOM_error_handler, only : callTree_enter, callTree_leave
 use MOM_error_handler, only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
@@ -306,6 +307,8 @@ subroutine int_tide_input_init(Time, G, GV, param_file, diag, CS, itide)
                              ! in m.
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
 
+  call callTree_enter(trim(mod)//'(), MOM_internal_tide_input.F90')
+
   if (associated(CS)) then
     call MOM_error(WARNING, "int_tide_input_init called with an associated "// &
                             "control structure.")
@@ -404,6 +407,8 @@ subroutine int_tide_input_init(Time, G, GV, param_file, diag, CS, itide)
 
   CS%id_N2_bot = register_diag_field('ocean_model','N2_b_itide',diag%axesT1,Time, &
        'Bottom Buoyancy frequency squared', 's-2')
+
+  call callTree_leave(trim(mod)//'(), MOM_internal_tide_input.F90')
 
 end subroutine int_tide_input_init
 

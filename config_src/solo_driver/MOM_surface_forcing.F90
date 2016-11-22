@@ -103,6 +103,7 @@ use SCM_CVmix_tests,         only : SCM_CVmix_tests_buoyancy_forcing
 use SCM_CVmix_tests,         only : SCM_CVmix_tests_CS
 use BFB_surface_forcing,    only : BFB_buoyancy_forcing
 use BFB_surface_forcing,    only : BFB_surface_forcing_init, BFB_surface_forcing_CS
+use MOM_transform_test,     only : transform_pointer, swap_pointer
 
 use data_override_mod, only : data_override_init, data_override
 
@@ -110,7 +111,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public set_forcing
+public set_forcing, transform_forcing
 public surface_forcing_init
 public forcing_save_restart
 
@@ -359,6 +360,15 @@ subroutine set_forcing(state, fluxes, day_start, day_interval, G, CS)
   call callTree_leave("set_forcing")
 
 end subroutine set_forcing
+
+subroutine transform_forcing(fluxes)
+  type(forcing),         intent(inout) :: fluxes
+
+  call transform_pointer(fluxes%taux)
+  call transform_pointer(fluxes%tauy)
+  call swap_pointer(fluxes%taux, fluxes%tauy)
+
+end subroutine transform_forcing
 
 subroutine buoyancy_forcing_allocate(fluxes, G, CS)
   type(forcing),         intent(inout) :: fluxes

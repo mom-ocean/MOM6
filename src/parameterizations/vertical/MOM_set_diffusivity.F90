@@ -46,7 +46,8 @@ use MOM_cpu_clock,           only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROU
 use MOM_diag_mediator,       only : diag_ctrl, time_type
 use MOM_diag_mediator,       only : safe_alloc_ptr, post_data, register_diag_field
 use MOM_diag_to_Z,           only : diag_to_Z_CS, register_Zint_diag, calc_Zint_diags
-use MOM_debugging,           only : hchksum, uvchksum
+use MOM_checksums,           only : hchksum, uvchksum, hchksum_pair
+use MOM_transform_test,      only : do_transform_on_this_pe, transform
 use MOM_EOS,                 only : calculate_density, calculate_density_derivs
 use MOM_error_handler,       only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_error_handler,       only : callTree_showQuery
@@ -583,8 +584,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
   if (CS%useKappaShear) then
     if (CS%debug) then
-      call hchksum(u_h, "before calc_KS u_h",G%HI)
-      call hchksum(v_h, "before calc_KS v_h",G%HI)
+      call hchksum_pair("before calc_KS [uv]_h", u_h, v_h, G%HI)
     endif
     call cpu_clock_begin(id_clock_kappaShear)
     ! Changes: visc%Kd_turb, visc%TKE_turb (not clear that TKE_turb is used as input ????)
@@ -2587,6 +2587,9 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
   real :: omega_frac_dflt
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
+  real, dimension(:, :), allocatable :: tmp
+
+  call callTree_enter(trim(mod)//'(), MOM_set_diffusivity.F90')
 
   if (associated(CS)) then
     call MOM_error(WARNING, "diabatic_entrain_init called with an associated "// &
@@ -3001,8 +3004,18 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
                  "tidal amplitudes with INT_TIDE_DISSIPATION.", default="tideamp.nc")
       filename = trim(CS%inputdir) // trim(tideamp_file)
       call log_param(param_file, mdl, "INPUTDIR/TIDEAMP_FILE", filename)
-      call read_data(filename, 'tideamp', CS%tideamp, &
-                     domain=G%domain%mpp_domain, timelevel=1)
+      if (do_transform_on_this_pe()) then
+        allocate(tmp(size(CS%tideamp, 2), size(CS%tideamp, 1)))
+        tmp(:, :) = 0.0
+        call read_data(filename, 'tideamp', tmp, &
+                       domain=G%self_untrans%domain%mpp_domain, &
+                       timelevel=1)
+        call transform(tmp, CS%tideamp)
+        deallocate(tmp)
+      else
+        call read_data(filename, 'tideamp', CS%tideamp, &
+                       domain=G%domain%mpp_domain, timelevel=1)
+      endif
     endif
 
     call get_param(param_file, mdl, "H2_FILE", h2_file, &
@@ -3011,8 +3024,19 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
                  fail_if_missing=.true.)
     filename = trim(CS%inputdir) // trim(h2_file)
     call log_param(param_file, mdl, "INPUTDIR/H2_FILE", filename)
-    call read_data(filename, 'h2', CS%h2, domain=G%domain%mpp_domain, &
-                   timelevel=1)
+
+    if (do_transform_on_this_pe()) then
+      allocate(tmp(size(CS%h2, 2), size(CS%h2, 1)))
+      tmp(:, :) = 0.0
+      call read_data(filename, 'h2', tmp, &
+                     domain=G%self_untrans%domain%mpp_domain, &
+                     timelevel=1)
+      call transform(tmp, CS%h2)
+      deallocate(tmp)
+    else
+      call read_data(filename, 'h2', CS%h2, &
+                     domain=G%domain%mpp_domain, timelevel=1)
+    endif
 
     do j=js,je ; do i=is,ie
       if (G%bathyT(i,j) < CS%min_zbot_itides) CS%mask_itidal(i,j) = 0.0
@@ -3051,7 +3075,8 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
                    filename)
     call safe_alloc_ptr(CS%TKE_Niku,is,ie,js,je); CS%TKE_Niku(:,:) = 0.0
     call read_data(filename, 'TKE_input', CS%TKE_Niku, &
-                   domain=G%domain%mpp_domain, timelevel=1 ) ! ??? timelevel -aja
+                   domain=G%domain%mpp_domain, timelevel=1) ! ??? timelevel -aja
+
     CS%TKE_Niku(:,:) = Niku_scale * CS%TKE_Niku(:,:)
 
     call get_param(param_file, mdl, "GAMMA_NIKURASHIN",CS%Gamma_lee, &
@@ -3204,7 +3229,7 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
     id_clock_kappaShear = cpu_clock_id('(Ocean kappa_shear)', grain=CLOCK_MODULE)
   CS%useCVMix = CVMix_shear_init(Time, G, GV, param_file, CS%diag, CS%CVMix_shear_CSp)
 
-
+  call callTree_leave(trim(mod)//'(), MOM_set_diffusivity.F90')
 
 end subroutine set_diffusivity_init
 

@@ -3,6 +3,7 @@ module MOM_PressureForce_AFV
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_checksums, only : hchksum
 use MOM_diag_mediator, only : post_data, register_diag_field
 use MOM_diag_mediator, only : safe_alloc_ptr, diag_ctrl, time_type
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe

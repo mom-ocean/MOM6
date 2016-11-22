@@ -91,7 +91,9 @@ module MOM_barotropic
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_debugging, only : hchksum, uvchksum
+use MOM_checksums, only : hchksum, bchksum, chksum
+use MOM_checksums, only : uvchksum
+use MOM_transform_test, only : do_transform_on_this_pe
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, register_diag_field
 use MOM_diag_mediator, only : safe_alloc_ptr, diag_ctrl, enable_averaging
@@ -543,6 +545,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     vhbt_sum, &   ! The sum of vhbt over the time steps, in H m2 s-1.
     vbt_wtd, &    ! A weighted sum used to find the filtered final vbt, in m s-1.
     vbt_trans, &  ! The latest value of vbt used for a transport, in m s-1.
+
     Cor_v, &      ! The meridional Coriolis acceleration, in m s-2.
     Cor_ref_v, &  ! The meridional barotropic Coriolis acceleration due
                   ! to the reference velocities, in m s-2.
@@ -652,6 +655,18 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   integer :: is, ie, js, je, nz, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   integer :: ioff, joff
+
+  ! The sign of the Coriolis acceleration. Allow this to be swapped to show
+  ! symmetry between i and j-directed calculations.
+  real :: pos_sign, neg_sign
+
+  pos_sign = 1.0
+  neg_sign = -1.0
+
+  if (do_transform_on_this_pe()) then
+    pos_sign = -1.0
+    neg_sign = 1.0
+  endif
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
       "btstep: Module MOM_barotropic must be initialized before it is used.")
@@ -868,13 +883,13 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   ! Otherwise a halo update later on fills in the correct values.
   !$OMP parallel do default(shared)
   do j=CS%jsdw,CS%jedw ; do I=CS%isdw-1,CS%iedw
-    Cor_ref_u(I,j) = 0.0 ; BT_force_u(I,j) = 0.0 ; ubt(I,j) = 0.0
-    Datu(I,j) = 0.0 ; bt_rem_u(I,j) = 0.0 ; uhbt0(I,j) = 0.0
+    Cor_ref_u(I,j) = 0.0 ; Cor_u(I, j) = 0.0; BT_force_u(I,j) = 0.0
+    ubt(I,j) = 0.0 ; Datu(I,j) = 0.0 ; bt_rem_u(I,j) = 0.0 ; uhbt0(I,j) = 0.0
   enddo ; enddo
   !$OMP parallel do default(shared)
   do J=CS%jsdw-1,CS%jedw ; do i=CS%isdw,CS%iedw
-    Cor_ref_v(i,J) = 0.0 ; BT_force_v(i,J) = 0.0 ; vbt(i,J) = 0.0
-    Datv(i,J) = 0.0 ; bt_rem_v(i,J) = 0.0 ; vhbt0(I,j) = 0.0
+    Cor_ref_v(i,J) = 0.0 ; Cor_v(i, J) = 0.0; BT_force_v(i,J) = 0.0
+    vbt(i,J) = 0.0 ; Datv(i,J) = 0.0 ; bt_rem_v(i,J) = 0.0 ; vhbt0(I,j) = 0.0
   enddo ; enddo
 
   ! Copy input arrays into their wide-halo counterparts.
@@ -1194,7 +1209,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     endif
   enddo ; enddo
 
-! Complete the previously initiated message passing.
+  ! Complete the previously initiated message passing.
   if (id_clock_calc_pre > 0) call cpu_clock_end(id_clock_calc_pre)
   if (id_clock_pass_pre > 0) call cpu_clock_begin(id_clock_pass_pre)
   if (nonblock_setup) then
@@ -1218,13 +1233,13 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 
   !$OMP parallel do default(shared)
   do j=js,je ; do I=is-1,ie
-    Cor_ref_u(I,j) =  &
+    Cor_ref_u(I,j) =  pos_sign * &
         ((azon(I,j) * vbt_Cor(i+1,j) + czon(I,j) * vbt_Cor(i  ,j-1)) + &
          (bzon(I,j) * vbt_Cor(i  ,j) + dzon(I,j) * vbt_Cor(i+1,j-1)))
   enddo ; enddo
   !$OMP parallel do default(shared)
   do J=js-1,je ; do i=is,ie
-    Cor_ref_v(i,J) = -1.0 * &
+    Cor_ref_v(i,J) = neg_sign * &
         ((amer(I-1,j) * ubt_Cor(I-1,j) + cmer(I  ,j+1) * ubt_Cor(I  ,j+1)) + &
          (bmer(I  ,j) * ubt_Cor(I  ,j) + dmer(I-1,j+1) * ubt_Cor(I-1,j+1)))
   enddo ; enddo
@@ -1422,6 +1437,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     call hchksum(eta, "BT Initial eta", CS%debug_BT_HI, haloshift=0, scale=GV%H_to_m)
     call uvchksum("BT BT_force_[uv]", BT_force_u, BT_force_v, &
                   CS%debug_BT_HI, haloshift=0)
+
     if (interp_eta_PF) then
       call hchksum(eta_PF_1, "BT eta_PF_1",CS%debug_BT_HI,haloshift=0, scale=GV%H_to_m)
       call hchksum(d_eta_PF, "BT d_eta_PF",CS%debug_BT_HI,haloshift=0, scale=GV%H_to_m)
@@ -1667,8 +1683,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       ! On odd-steps, update v first.
 !GOMP do
       do J=jsv-1,jev ; do i=isv-1,iev+1
-        Cor_v(i,J) = -1.0*((amer(I-1,j) * ubt(I-1,j) + cmer(I,j+1) * ubt(I,j+1)) + &
-               (bmer(I,j) * ubt(I,j) + dmer(I-1,j+1) * ubt(I-1,j+1))) - Cor_ref_v(i,J)
+        Cor_v(i,J) = neg_sign * &
+                     ((amer(I-1,j) * ubt(I-1,j) + cmer(I,j+1) * ubt(I,j+1)) + &
+                      (bmer(I,j) * ubt(I,j) + dmer(I-1,j+1) * ubt(I-1,j+1))) - Cor_ref_v(i,J)
         PFv(i,J) = ((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_N(i,j) - &
                      (eta_PF_BT(i,j+1)-eta_PF(i,j+1))*gtot_S(i,j+1)) * &
                    dgeo_de * CS%IdyCv(i,J)
@@ -1715,7 +1732,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       ! Now update the zonal velocity.
 !GOMP do
       do j=jsv,jev ; do I=isv-1,iev
-        Cor_u(I,j) = ((azon(I,j) * vbt(i+1,J) + czon(I,j) * vbt(i,J-1)) + &
+        Cor_u(I,j) = pos_sign * &
+                     ((azon(I,j) * vbt(i+1,J) + czon(I,j) * vbt(i,J-1)) + &
                       (bzon(I,j) * vbt(i,J) + dzon(I,j) * vbt(i+1,J-1))) - &
                      Cor_ref_u(I,j)
         PFu(I,j) = ((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_E(i,j) - &
@@ -1766,7 +1784,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       ! On even steps, update u first.
 !GOMP do
       do j=jsv-1,jev+1 ; do I=isv-1,iev
-        Cor_u(I,j) = ((azon(I,j) * vbt(i+1,J) + czon(I,j) * vbt(i,J-1)) + &
+        Cor_u(I,j) = pos_sign * &
+                     ((azon(I,j) * vbt(i+1,J) + czon(I,j) * vbt(i,J-1)) + &
                       (bzon(I,j) * vbt(i,J) +  dzon(I,j) * vbt(i+1,J-1))) - &
                      Cor_ref_u(I,j)
         PFu(I,j) = ((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_E(i,j) - &
@@ -1818,8 +1837,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       ! Now update the meridional velocity.
 !GOMP do
       do J=jsv-1,jev ; do i=isv,iev
-        Cor_v(i,J) = -1.0*((amer(I-1,j) * ubt(I-1,j) + cmer(I,j+1) * ubt(I,j+1)) + &
-                (bmer(I,j) * ubt(I,j) + dmer(I-1,j+1) * ubt(I-1,j+1))) - Cor_ref_v(i,J)
+        Cor_v(i,J) = neg_sign * &
+                ((amer(I-1,j) * ubt(I-1,j) + cmer(I,j+1) * ubt(I,j+1)) + &
+                 (bmer(I,j) * ubt(I,j) + dmer(I-1,j+1) * ubt(I-1,j+1))) - Cor_ref_v(i,J)
         PFv(i,J) = ((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_N(i,j) - &
                      (eta_PF_BT(i,j+1)-eta_PF(i,j+1))*gtot_S(i,j+1)) * &
                     dgeo_de * CS%IdyCv(i,J)

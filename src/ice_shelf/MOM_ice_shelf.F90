@@ -39,10 +39,11 @@ use user_shelf_init, only : user_ice_shelf_CS
 use constants_mod,      only: GRAV
 use mpp_mod, only : mpp_sum, mpp_max, mpp_min, mpp_pe, mpp_npes, mpp_sync
 use MOM_coms, only : reproducing_sum
-use MOM_checksums, only : hchksum, qchksum, chksum, uchksum, vchksum
+use MOM_debugging, only : hchksum, Bchksum, chksum, uvchksum
 use time_interp_external_mod, only : init_external_field, time_interp_external
 use time_interp_external_mod, only : time_interp_external_init
 use time_manager_mod, only : print_time, time_type_to_real, real_to_time_type
+
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -998,15 +999,13 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
   endif
 
   if (CS%debug) then
-    if (associated(state%taux_shelf)) then
-      call uchksum(state%taux_shelf, "taux_shelf", G%HI, haloshift=0)
-    endif
-    if (associated(state%tauy_shelf)) then
-      call vchksum(state%tauy_shelf, "tauy_shelf", G%HI, haloshift=0)
-      call vchksum(fluxes%rigidity_ice_u, "rigidity_ice_u", G%HI, haloshift=0)
-      call vchksum(fluxes%rigidity_ice_v, "rigidity_ice_v", G%HI, haloshift=0)
-      call vchksum(fluxes%frac_shelf_u, "frac_shelf_u", G%HI, haloshift=0)
-      call vchksum(fluxes%frac_shelf_v, "frac_shelf_v", G%HI, haloshift=0)
+    if (associated(state%taux_shelf) .and. associated(state%tauy_shelf)) then
+      call uvchksum("tau[xy]_shelf", state%taux_shelf, state%tauy_shelf, &
+                    G%HI, haloshift=0)
+      call uvchksum("rigidity_ice_[uv]", fluxes%rigidity_ice_u, &
+                    fluxes%rigidity_ice_v, G%HI, haloshift=0)
+      call uvchksum("frac_shelf_[uv]", fluxes%frac_shelf_u, &
+                    fluxes%frac_shelf_v, G%HI, haloshift=0)
     endif
   endif
 
@@ -1184,7 +1183,6 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
   endif
 
 end subroutine add_shelf_flux
-
 
 !> Initializes shelf model data, parameters and diagnostics
 subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Time_in, solo_ice_sheet_in)
@@ -2534,8 +2532,8 @@ subroutine ice_shelf_solve_outer (CS, u, v, FE, iters, time)
 
 
     if (CS%DEBUG) then
-      call qchksum (u, "u shelf", G%HI, haloshift=2)
-      call qchksum (v, "v shelf", G%HI, haloshift=2)
+      call Bchksum (u, "u shelf", G%HI, haloshift=2)
+      call Bchksum (v, "v shelf", G%HI, haloshift=2)
     endif
 
     if (is_root_pe()) print *,"linear solve done",iters," iterations"

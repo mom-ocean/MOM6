@@ -1318,6 +1318,10 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     call cpu_clock_begin(id_clock_tridiag)
 !$OMP parallel do default(none) shared(js,je,Isq,Ieq,ADp,u,hold,ea,h_neglect,eb,nz,Idt) &
 !$OMP                          private(hval,b1,d1,c1,eaval)
+    if (CS%debug) then
+      call MOM_state_chksum("before 1st loop tridiag ", u, v, h, G, GV, haloshift=0)
+    endif
+
     do j=js,je
       do I=Isq,Ieq
         if (ASSOCIATED(ADp%du_dt_dia)) ADp%du_dt_dia(I,j,1) = u(I,j,1)
@@ -1346,9 +1350,6 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
         enddo
       endif
     enddo
-    if (CS%debug) then
-      call MOM_state_chksum("aft 1st loop tridiag ", u, v, h, G, GV, haloshift=0)
-    endif
 !$OMP parallel do default(none) shared(Jsq,Jeq,is,ie,ADp,v,hold,ea,h_neglect,eb,nz,Idt) &
 !$OMP                          private(hval,b1,d1,c1,eaval)
     do J=Jsq,Jeq
@@ -2248,8 +2249,9 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
   call entrain_diffusive_init(Time, G, GV, param_file, diag, CS%entrain_diffusive_CSp)
 
   ! initialize the geothermal heating module
-  if (CS%use_geothermal) &
-    call geothermal_init(Time, G, param_file, diag, CS%geothermal_CSp)
+  if (CS%use_geothermal) then
+    call geothermal_init(Time, G, param_file, diag, CS%debug, CS%geothermal_CSp)
+  endif
 
   ! initialize module for internal tide induced mixing
   if (CS%use_int_tides) then

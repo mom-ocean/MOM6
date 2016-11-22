@@ -26,6 +26,7 @@ use MOM_error_handler, only : MOM_error, MOM_mesg, NOTE, WARNING, FATAL, is_root
 use MOM_file_parser, only : get_param, log_param, log_version
 use MOM_file_parser, only : param_file_type
 use MOM_string_functions, only : slasher
+use MOM_transform_test, only : do_transform_on_this_pe
 
 use mpp_domains_mod, only : mpp_define_layout, mpp_get_boundary
 use mpp_domains_mod, only : MOM_define_io_domain => mpp_define_io_domain
@@ -1256,7 +1257,8 @@ end subroutine complete_group_pass
 ! #@# This subroutine needs a doxygen description.
 subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                             NIHALO, NJHALO, NIGLOBAL, NJGLOBAL, NIPROC, NJPROC, &
-                            min_halo, domain_name, include_name, param_suffix)
+                            min_halo, domain_name, include_name, param_suffix, &
+                            transform)
   type(MOM_domain_type),           pointer       :: MOM_dom      !< A pointer to the MOM_domain_type
                                                                  !! being defined here.
   type(param_file_type),           intent(in)    :: param_file   !< A structure to parse for
@@ -1270,6 +1272,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   integer, optional,               intent(in)    :: NIHALO       !< Default halo sizes, required
                                                                  !! with static memory.
   integer, optional,               intent(in)    :: NJHALO       !< Default halo sizes, required
+  logical, optional,               intent(in)    :: transform
                                                                  !! with static memory.
   integer, optional,               intent(in)    :: NIGLOBAL     !< Total domain sizes, required
                                                                  !! with static memory.
@@ -1308,6 +1311,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
 !  (in,opt)  domain_name - A name for this domain, "MOM" if missing.
 !  (in,opt)  include_name - A name for model's include file, "MOM_memory.h" if missing.
 !  (in,opt)  param_suffix - A suffix to apply to layout-specific parameters.
+!  (in,opt)  transform - whether or not to transform the domain: see framework/MOM_transform_test.F90
 
   integer, dimension(2) :: layout = (/ 1, 1 /)
   integer, dimension(2) :: io_layout = (/ 0, 0 /)
@@ -1321,11 +1325,12 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   integer :: X_FLAGS, Y_FLAGS
   logical :: reentrant_x, reentrant_y, tripolar_N, is_static
   logical            :: mask_table_exists
+  logical :: do_transform
   character(len=128) :: mask_table, inputdir
   character(len=64)  :: dom_name, inc_nm
   character(len=200) :: mesg
 
-  integer :: xsiz, ysiz, nip_parsed, njp_parsed
+  integer :: xsiz, ysiz, nip_parsed, njp_parsed, tmp
   integer :: isc,iec,jsc,jec ! The bounding indices of the computational domain.
   character(len=8) :: char_xsiz, char_ysiz, char_niglobal, char_njglobal
   character(len=40) :: nihalo_nm, njhalo_nm, layout_nm, io_layout_nm, masktable_nm
@@ -1505,6 +1510,18 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  "y-direction in the physical domain. With STATIC_MEMORY_ \n"//&
                  "this is set in "//trim(inc_nm)//" at compile time.", &
                  fail_if_missing=.true.)
+  endif
+
+  if (present(transform)) then
+    do_transform = transform
+  else
+    do_transform = do_transform_on_this_pe()
+  endif
+
+  if (do_transform) then
+    tmp = MOM_dom%niglobal
+    MOM_dom%niglobal = MOM_dom%njglobal
+    MOM_dom%njglobal = tmp
   endif
 
   global_indices(1) = 1 ; global_indices(2) = MOM_dom%niglobal

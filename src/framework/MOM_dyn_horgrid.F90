@@ -20,13 +20,16 @@ module MOM_dyn_horgrid
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
 !***********************************************************************
 
-use MOM_hor_index, only : hor_index_type
-use MOM_domains, only : MOM_domain_type
+use MOM_hor_index, only : hor_index_type, hor_index_init
+use MOM_domains, only : MOM_domain_type, MOM_domains_init, clone_MOM_domain
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
+use MOM_transform_test, only : transform
+use MOM_file_parser, only : get_param, param_file_type
 
 implicit none ; private
 
 public create_dyn_horgrid, destroy_dyn_horgrid, set_derived_dyn_horgrid
+public create_dyn_horgrid_untrans, transform_init_dyn_horgrid
 
 type, public :: dyn_horgrid_type
   type(MOM_domain_type), pointer :: Domain => NULL()
@@ -253,6 +256,128 @@ subroutine create_dyn_horgrid(G, HI, bathymetry_at_vel)
   allocate(G%gridLatB(jsg-1:jeg)) ; G%gridLatB(:) = 0.0
 
 end subroutine create_dyn_horgrid
+
+subroutine create_dyn_horgrid_untrans(dG_untrans, HI_untrans, param_file, domain_untrans)
+
+  type(dyn_horgrid_type), pointer :: dG_untrans  !< A pointer to the dynamic horizontal grid type
+  type(hor_index_type), intent(inout) :: HI_untrans  !  A hor_index_type for array extents
+  type(param_file_type), intent(in) :: param_file  !< structure indicating paramater file to parse
+  type(MOM_domain_type), optional, pointer, intent(in) :: domain_untrans
+
+  logical :: symmetric, global_indexing, bathy_at_vel
+  type(MOM_domain_type), pointer :: Domain => NULL()
+
+#ifdef SYMMETRIC_MEMORY_
+  symmetric = .true.
+#else
+  symmetric = .false.
+#endif
+
+  call get_param(param_file, "MOM", "GLOBAL_INDEXING", global_indexing, &
+                 "If true, use a global lateral indexing convention, so \n"//&
+                 "that corresponding points on different processors have \n"//&
+                 "the same index. This does not work with static memory.", &
+                 default=.false., layoutParam=.true.)
+
+  call get_param(param_file, "MOM", "BATHYMETRY_AT_VEL", bathy_at_vel, &
+                 "If true, there are separate values for the basin depths \n"//&
+                 "at velocity points.  Otherwise the effects of topography \n"//&
+                 "are entirely determined from thickness points.", &
+                 default=.false.)
+
+  if (present(domain_untrans)) then
+    domain => domain_untrans
+  else
+    call MOM_domains_init(Domain, param_file, &
+                          symmetric=symmetric, transform=.false.)
+  endif
+  call hor_index_init(domain, HI_untrans, param_file, &
+                      local_indexing=.not.global_indexing)
+  call create_dyn_horgrid(dG_untrans, HI_untrans, bathymetry_at_vel=bathy_at_vel)
+  call clone_MOM_domain(domain, dG_untrans%Domain)
+
+end subroutine create_dyn_horgrid_untrans
+
+!> Initialise G_trans using G
+subroutine transform_init_dyn_horgrid(G, G_trans)
+
+  type(dyn_horgrid_type), intent(in) :: G !< Original grid
+  type(dyn_horgrid_type), intent(inout) :: G_trans !< Transformed grid
+
+  call transform(G%dyT, G_trans%dxT)
+  call transform(G%dxT, G_trans%dyT)
+  call transform(G%IdyT, G_trans%IdxT)
+  call transform(G%IdxT, G_trans%IdyT)
+
+  call transform(G%dyBu, G_trans%dxBu)
+  call transform(G%dxBu, G_trans%dyBu)
+  call transform(G%IdyBu, G_trans%IdxBu)
+  call transform(G%IdxBu, G_trans%IdyBu)
+
+  call transform(G%dyCu, G_trans%dxCv)
+  call transform(G%dxCu, G_trans%dyCv)
+  call transform(G%IdyCu, G_trans%IdxCv)
+  call transform(G%IdxCu, G_trans%IdyCv)
+
+  call transform(G%dyCv, G_trans%dxCu)
+  call transform(G%dxCv, G_trans%dyCu)
+  call transform(G%IdyCv, G_trans%IdxCu)
+  call transform(G%IdxCv, G_trans%IdyCu)
+
+  call transform(G%dy_Cu, G_trans%dx_Cv)
+  call transform(G%dy_Cu_obc, G_trans%dx_Cv_obc)
+
+  call transform(G%dx_Cv, G_trans%dy_Cu)
+  call transform(G%dx_Cv_obc, G_trans%dy_Cu_obc)
+
+  call transform(G%mask2dT, G_trans%mask2dT)
+  call transform(G%mask2dBu, G_trans%mask2dBu)
+
+  call transform(G%mask2dCu, G_trans%mask2dCv)
+  call transform(G%mask2dCv, G_trans%mask2dCu)
+
+  call transform(G%geoLatT, G_trans%geoLatT)
+  call transform(G%geoLonT, G_trans%geoLonT)
+  call transform(G%geoLatBu, G_trans%geoLatBu)
+  call transform(G%geoLonBu, G_trans%geoLonBu)
+
+  call transform(G%geoLatCu, G_trans%geoLatCv)
+  call transform(G%geoLonCu, G_trans%geoLonCv)
+  call transform(G%geoLatCv, G_trans%geoLatCu)
+  call transform(G%geoLonCv, G_trans%geoLonCu)
+
+  call transform(G%areaT, G_trans%areaT)
+  call transform(G%IareaT, G_trans%IareaT)
+  call transform(G%areaBu, G_trans%areaBu)
+  call transform(G%IareaBu, G_trans%IareaBu)
+  call transform(G%areaCu, G_trans%areaCv)
+  call transform(G%IareaCu, G_trans%IareaCv)
+  call transform(G%areaCv, G_trans%areaCu)
+  call transform(G%IareaCv, G_trans%IareaCu)
+
+  call transform(G%sin_rot, G_trans%sin_rot)
+  call transform(G%cos_rot, G_trans%cos_rot)
+  call transform(G%bathyT, G_trans%bathyT)
+
+  if (allocated(G%Dblock_u)) call transform(G%Dblock_u, G_trans%Dblock_u)
+  if (allocated(G%Dopen_u)) call transform(G%Dopen_u, G_trans%Dopen_u)
+  if (allocated(G%Dblock_v)) call transform(G%Dblock_v, G_trans%Dblock_v)
+  if (allocated(G%Dopen_v)) call transform(G%Dopen_v, G_trans%Dopen_v)
+
+  call transform(G%CoriolisBu, G_trans%CoriolisBu)
+  call transform(G%dF_dx, G_trans%dF_dy)
+  call transform(G%dF_dy, G_trans%dF_dx)
+
+  G_trans%max_depth = G%max_depth
+  G_trans%areaT_global = G%areaT_global
+  G_trans%IareaT_global = G%IareaT_global
+
+  G_trans%south_lat = G%south_lat
+  G_trans%west_lon = G%west_lon
+  G_trans%len_lat = G%len_lat
+  G_trans%len_lon = G%len_lon
+
+end subroutine transform_init_dyn_horgrid
 
 !> set_derived_dyn_horgrid calculates metric terms that are derived from other metrics.
 subroutine set_derived_dyn_horgrid(G)

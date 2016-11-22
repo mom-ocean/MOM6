@@ -39,7 +39,7 @@ type, public :: forcing
   ! Pointers in this module should be initialized to NULL.
 
   ! surface stress components and turbulent velocity scale
-  real, pointer, dimension(:,:) :: &
+  real, pointer, contiguous, dimension(:,:) :: &
   taux          => NULL(), & !< zonal wind stress (Pa)
   tauy          => NULL(), & !< meridional wind stress (Pa)
   ustar         => NULL()    !< surface friction velocity scale (m/s)

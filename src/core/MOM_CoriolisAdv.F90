@@ -15,6 +15,8 @@ use MOM_open_boundary, only : OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_string_functions, only : uppercase
 use MOM_variables,     only : accel_diag_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
+use MOM_checksums,     only : uvchksum, bchksum, hchksum
+use MOM_transform_test, only : do_transform_on_this_pe
 
 implicit none ; private
 
@@ -205,6 +207,8 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
   real :: QUHeff,QVHeff ! More temporary variables, in m3 s-2 or kg s-2.
   integer :: i, j, k, n, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
 
+  real :: neg_sign, pos_sign ! The sign of the Coriolis acceleration
+
 ! To work, the following fields must be set outside of the usual
 ! is to ie range before this subroutine is called:
 !  v[is-1,ie+1,ie+2], u[is-1,ie+1], vh[ie+1], uh[is-1], and
@@ -219,6 +223,14 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
   h_neglect = GV%H_subroundoff
   h_tiny = GV%Angstrom  ! Perhaps this should be set to h_neglect instead.
+
+  pos_sign = 1.0
+  neg_sign = -1.0
+
+  if (do_transform_on_this_pe()) then
+    pos_sign = -1.0
+    neg_sign = 1.0
+  endif
 
   !$OMP parallel do default(private) shared(Isq,Ieq,Jsq,Jeq,G,Area_h)
   do j=Jsq-1,Jeq+2 ; do I=Isq-1,Ieq+2
@@ -355,10 +367,10 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
 
     do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
       if (CS%no_slip ) then
-        relative_vorticity = (2.0-G%mask2dBu(I,J)) * (dvdx(I,J) - dudy(I,J)) * &
+        relative_vorticity = (2.0-G%mask2dBu(I,J)) * (pos_sign*(dvdx(I,J) - dudy(I,J))) * &
                              G%IareaBu(I,J)
       else
-        relative_vorticity = G%mask2dBu(I,J) * (dvdx(I,J) - dudy(I,J)) * &
+        relative_vorticity = G%mask2dBu(I,J) * (pos_sign*(dvdx(I,J) - dudy(I,J))) * &
                              G%IareaBu(I,J)
       endif
       absolute_vorticity = G%CoriolisBu(I,J) + relative_vorticity
@@ -372,10 +384,10 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
       Ih_q(I,J) = Ih
 
       if (CS%bound_Coriolis) then
-        fv1 = absolute_vorticity*v(i+1,J,k)
-        fv2 = absolute_vorticity*v(i,J,k)
-        fu1 = -absolute_vorticity*u(I,j+1,k)
-        fu2 = -absolute_vorticity*u(I,j,k)
+        fv1 = pos_sign*absolute_vorticity*v(i+1,J,k)
+        fv2 = pos_sign*absolute_vorticity*v(i,J,k)
+        fu1 = neg_sign*absolute_vorticity*u(I,j+1,k)
+        fu2 = neg_sign*absolute_vorticity*u(I,j,k)
         if (fv1 > fv2) then
           max_fvq(I,J) = fv1 ; min_fvq(I,J) = fv2
         else
@@ -523,28 +535,29 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
       if (CS%Coriolis_En_Dis) then
         ! Energy dissipating biased scheme, Hallberg 200x
         do j=js,je ; do I=Isq,Ieq
-          if (q(I,J)*u(I,j,k) == 0.0) then
-            temp1 = q(I,J) * ( (vh_max(i,j)+vh_max(i+1,j)) &
-                             + (vh_min(i,j)+vh_min(i+1,j)) )*0.5
-          elseif (q(I,J)*u(I,j,k) < 0.0) then
-            temp1 = q(I,J) * (vh_max(i,j)+vh_max(i+1,j))
-          else
-            temp1 = q(I,J) * (vh_min(i,j)+vh_min(i+1,j))
-          endif
           if (q(I,J-1)*u(I,j,k) == 0.0) then
-            temp2 = q(I,J-1) * ( (vh_max(i,j-1)+vh_max(i+1,j-1)) &
+            temp1 = q(I,J-1) * ( (vh_max(i,j-1)+vh_max(i+1,j-1)) &
                                + (vh_min(i,j-1)+vh_min(i+1,j-1)) )*0.5
-          elseif (q(I,J-1)*u(I,j,k) < 0.0) then
-            temp2 = q(I,J-1) * (vh_max(i,j-1)+vh_max(i+1,j-1))
+          elseif (pos_sign*q(I,J-1)*u(I,j,k) < 0.0) then
+            temp1 = q(I,J-1) * (vh_max(i,j-1)+vh_max(i+1,j-1))
           else
-            temp2 = q(I,J-1) * (vh_min(i,j-1)+vh_min(i+1,j-1))
+            temp1 = q(I,J-1) * (vh_min(i,j-1)+vh_min(i+1,j-1))
           endif
-          CAu(I,j,k) = 0.25 * G%IdxCu(I,j) * (temp1 + temp2)
+
+          if (q(I,J)*u(I,j,k) == 0.0) then
+            temp2 = q(I,J) * ( (vh_max(i,j)+vh_max(i+1,j)) &
+                             + (vh_min(i,j)+vh_min(i+1,j)) )*0.5
+          elseif (pos_sign*q(I,J)*u(I,j,k) < 0.0) then
+            temp2 = q(I,J) * (vh_max(i,j)+vh_max(i+1,j))
+          else
+            temp2 = q(I,J) * (vh_min(i,j)+vh_min(i+1,j))
+          endif
+          CAu(I,j,k) = pos_sign * 0.25 * G%IdxCu(I,j) * (temp1 + temp2)
         enddo ; enddo
       else
         ! Energy conserving scheme, Sadourny 1975
         do j=js,je ; do I=Isq,Ieq
-          CAu(I,j,k) = 0.25 * &
+          CAu(I,j,k) = pos_sign * 0.25 * &
             (q(I,J) * (vh(i+1,J,k) + vh(i,J,k)) + &
              q(I,J-1) * (vh(i,J-1,k) + vh(i+1,J-1,k))) * G%IdxCu(I,j)
         enddo ; enddo
@@ -635,27 +648,28 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
           if (q(I-1,J)*v(i,J,k) == 0.0) then
             temp1 = q(I-1,J) * ( (uh_max(i-1,j)+uh_max(i-1,j+1)) &
                                + (uh_min(i-1,j)+uh_min(i-1,j+1)) )*0.5
-          elseif (q(I-1,J)*v(i,J,k) > 0.0) then
+          elseif (pos_sign*q(I-1,J)*v(i,J,k) > 0.0) then
             temp1 = q(I-1,J) * (uh_max(i-1,j)+uh_max(i-1,j+1))
           else
             temp1 = q(I-1,J) * (uh_min(i-1,j)+uh_min(i-1,j+1))
           endif
+
           if (q(I,J)*v(i,J,k) == 0.0) then
             temp2 = q(I,J) * ( (uh_max(i,j)+uh_max(i,j+1)) &
                              + (uh_min(i,j)+uh_min(i,j+1)) )*0.5
-          elseif (q(I,J)*v(i,J,k) > 0.0) then
+          elseif (pos_sign*q(I,J)*v(i,J,k) > 0.0) then
             temp2 = q(I,J) * (uh_max(i,j)+uh_max(i,j+1))
           else
             temp2 = q(I,J) * (uh_min(i,j)+uh_min(i,j+1))
           endif
-          CAv(i,J,k) = - 0.25 * G%IdyCv(i,J) * (temp1 + temp2)
+          CAv(i,J,k) = neg_sign * 0.25 * G%IdyCv(i,J) * (temp1 + temp2)
         enddo ; enddo
       else
         ! Energy conserving scheme, Sadourny 1975
         do J=Jsq,Jeq ; do i=is,ie
-          CAv(i,J,k) = - 0.25* &
-              (q(I-1,J)*(uh(I-1,j,k) + uh(I-1,j+1,k)) + &
-               q(I,J)*(uh(I,j,k) + uh(I,j+1,k))) * G%IdyCv(i,J)
+          CAv(i,J,k) = neg_sign * 0.25* &
+              (q(I,J)*(uh(I,j+1,k) + uh(I,j,k)) + &
+               q(I-1,J)*(uh(I-1,j,k) + uh(I-1,j+1,k))) * G%IdyCv(i,J)
         enddo ; enddo
       endif
     elseif (CS%Coriolis_Scheme == SADOURNY75_ENSTRO) then
@@ -735,7 +749,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
       if (CS%Coriolis_Scheme == SADOURNY75_ENERGY) then
         if (ASSOCIATED(AD%rv_x_u)) then
           do J=Jsq,Jeq ; do i=is,ie
-            AD%rv_x_u(i,J,k) = - 0.25* &
+            AD%rv_x_u(i,J,k) = neg_sign * 0.25* &
               (q2(I-1,j)*(uh(I-1,j,k) + uh(I-1,j+1,k)) + &
                q2(I,j)*(uh(I,j,k) + uh(I,j+1,k))) * G%IdyCv(i,J)
           enddo ; enddo
@@ -743,7 +757,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
 
         if (ASSOCIATED(AD%rv_x_v)) then
           do j=js,je ; do I=Isq,Ieq
-            AD%rv_x_v(I,j,k) = 0.25 * &
+            AD%rv_x_v(I,j,k) = pos_sign * 0.25 * &
               (q2(I,j) * (vh(i+1,J,k) + vh(i,J,k)) + &
                q2(I,j-1) * (vh(i,J-1,k) + vh(i+1,J-1,k))) * G%IdxCu(I,j)
           enddo ; enddo

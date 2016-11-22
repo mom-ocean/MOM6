@@ -67,7 +67,7 @@ module MOM_grid_initialize
 !********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_checksums, only : hchksum, Bchksum
-use MOM_checksums, only : uvchksum, hchksum_pair, Bchksum_pair
+use MOM_checksums, only : hchksum_pair, uvchksum, Bchksum_pair
 use MOM_domains, only : pass_var, pass_vector, pe_here, root_PE, broadcast
 use MOM_domains, only : AGRID, BGRID_NE, CGRID_NE, To_All, Scalar_Pair
 use MOM_domains, only : To_North, To_South, To_East, To_West
@@ -85,6 +85,7 @@ use mpp_domains_mod, only : mpp_get_domain_extents, mpp_deallocate_domain
 implicit none ; private
 
 public set_grid_metrics, initialize_masks, Adcroft_reciprocal
+public dyn_grid_metrics_chksum
 
 type, public :: GPS ; private
   real :: len_lon
@@ -108,6 +109,7 @@ contains
 subroutine set_grid_metrics(G, param_file)
   type(dyn_horgrid_type), intent(inout) :: G          !< The dynamic horizontal grid type
   type(param_file_type), intent(in)    :: param_file  !< Parameter file structure
+
 ! Arguments:
 !  (inout)   G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
@@ -157,16 +159,15 @@ subroutine set_grid_metrics(G, param_file)
   call set_derived_dyn_horgrid(G)
   call callTree_leave("set_derived_metrics()")
 
-  if (debug) call grid_metrics_chksum('MOM_grid_init/set_grid_metrics',G)
-
   call callTree_leave("set_grid_metrics()")
+
 end subroutine set_grid_metrics
 
 ! ------------------------------------------------------------------------------
 
 !> grid_metrics_chksum performs a set of checksums on metrics on the grid for
 !!   debugging.
-subroutine grid_metrics_chksum(parent, G)
+subroutine dyn_grid_metrics_chksum(parent, G)
   character(len=*),      intent(in) :: parent  !< A string identifying the caller
   type(dyn_horgrid_type), intent(in) :: G      !< The dynamic horizontal grid type
 
@@ -180,9 +181,9 @@ subroutine grid_metrics_chksum(parent, G)
   call uvchksum(trim(parent)//': dxC[uv]', G%dxCu, G%dyCv, G%HI, haloshift=halo)
 
   call uvchksum(trim(parent)//': dxC[uv]', &
-                G%dyCu, G%dxCv, G%HI, haloshift=halo)
+                G%dxCv, G%dyCu, G%HI, haloshift=halo)
 
-  call Bchksum_pair(trim(parent)//': dxB[uv]', &
+  call Bchksum_pair(trim(parent)//': d[xy]Bu', &
                     G%dxBu, G%dyBu, G%HI, haloshift=halo)
 
   call hchksum_pair(trim(parent)//': Id[xy]T', &
@@ -192,9 +193,9 @@ subroutine grid_metrics_chksum(parent, G)
                 G%IdxCu, G%IdyCv, G%HI, haloshift=halo)
 
   call uvchksum(trim(parent)//': Id[xy]C[uv]', &
-                G%IdyCu, G%IdxCv, G%HI, haloshift=halo)
+                G%IdxCv, G%IdyCu, G%HI, haloshift=halo)
 
-  call Bchksum_pair(trim(parent)//': Id[xy]B[uv]', &
+  call Bchksum_pair(trim(parent)//': Id[xy]Bu', &
                     G%IdxBu, G%IdyBu, G%HI, haloshift=halo)
 
   call hchksum(G%areaT, trim(parent)//': areaT',G%HI, haloshift=halo)
@@ -206,6 +207,15 @@ subroutine grid_metrics_chksum(parent, G)
   call hchksum(G%geoLonT,trim(parent)//': geoLonT',G%HI, haloshift=halo)
   call hchksum(G%geoLatT,trim(parent)//': geoLatT',G%HI, haloshift=halo)
 
+  call hchksum(G%bathyT, trim(parent)//': depth', G%HI, haloshift=halo)
+  call hchksum(G%mask2dT, trim(parent)//': mask2dT ', G%HI)
+  call uvchksum(trim(parent)//': mask2dCu ', G%mask2dCu, G%mask2dCv, G%HI)
+  call Bchksum(G%mask2dBu, trim(parent)//': mask2dBu ', G%HI)
+
+  call Bchksum(G%CoriolisBu, trim(parent)//': f ', G%HI)
+  call hchksum_pair(trim(parent)//': dF_d[xy] ', &
+                    G%dF_dx, G%dF_dy, G%HI)
+
   call Bchksum(G%geoLonBu, trim(parent)//': geoLonBu',G%HI, haloshift=halo)
   call Bchksum(G%geoLatBu, trim(parent)//': geoLatBu',G%HI, haloshift=halo)
 
@@ -215,7 +225,7 @@ subroutine grid_metrics_chksum(parent, G)
   call uvchksum(trim(parent)//': geoLatC[uv]', &
                 G%geoLatCu, G%geoLatCv, G%HI, haloshift=halo)
 
-end subroutine grid_metrics_chksum
+end subroutine dyn_grid_metrics_chksum
 
 ! ------------------------------------------------------------------------------
 

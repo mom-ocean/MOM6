@@ -4,7 +4,7 @@ module MOM_fixed_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_debugging, only : hchksum, qchksum, uvchksum
+use MOM_checksums, only : hchksum, Bchksum, uvchksum
 use MOM_domains, only : pass_var
 use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
@@ -74,13 +74,14 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
          "The directory in which input files are found.", default=".")
   inputdir = slasher(inputdir)
 
-! Set up the parameters of the physical domain (i.e. the grid), G
+  ! Set up the parameters of the physical domain (i.e. the grid), G
   call set_grid_metrics(G, PF)
 
-! Set up the bottom depth, G%bathyT either analytically or from file
-! This also sets G%max_depth based on the input parameter MAXIMUM_DEPTH,
-! or, if absent, is diagnosed as G%max_depth = max( G%D(:,:) )
+  ! Set up the bottom depth, G%bathyT either analytically or from file
+  ! This also sets G%max_depth based on the input parameter MAXIMUM_DEPTH,
+  ! or, if absent, is diagnosed as G%max_depth = max( G%D(:,:) )
   call MOM_initialize_topography(G%bathyT, G%max_depth, G, PF)
+
 
   ! To initialize masks, the bathymetry in halo regions must be filled in
   call pass_var(G%bathyT, G%Domain)
@@ -97,15 +98,7 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
   ! Make OBC mask consistent with land mask
   call open_boundary_impose_land_mask(OBC, G, G%areaCu, G%areaCv)
 
-  if (debug) then
-    call hchksum(G%bathyT, 'MOM_initialize_fixed: depth ', G%HI, haloshift=1)
-    call hchksum(G%mask2dT, 'MOM_initialize_fixed: mask2dT ', G%HI)
-    call uvchksum('MOM_initialize_fixed: mask2dC[uv]', G%mask2dCu, &
-                  G%mask2dCv, G%HI)
-    call qchksum(G%mask2dBu, 'MOM_initialize_fixed: mask2dBu ', G%HI)
-  endif
-
-! Modulate geometric scales according to geography.
+  ! Modulate geometric scales according to geography.
   call get_param(PF, mdl, "CHANNEL_CONFIG", config, &
                  "A parameter that determines which set of channels are \n"//&
                  "restricted to specific  widths.  Options are:\n"//&
@@ -146,11 +139,6 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
   call MOM_initialize_rotation(G%CoriolisBu, G, PF)
 !   Calculate the components of grad f (beta)
   call MOM_calculate_grad_Coriolis(G%dF_dx, G%dF_dy, G)
-  if (debug) then
-    call qchksum(G%CoriolisBu, "MOM_initialize_fixed: f ", G%HI)
-    call hchksum(G%dF_dx, "MOM_initialize_fixed: dF_dx ", G%HI)
-    call hchksum(G%dF_dy, "MOM_initialize_fixed: dF_dy ", G%HI)
-  endif
 
   call initialize_grid_rotation_angle(G, PF)
 

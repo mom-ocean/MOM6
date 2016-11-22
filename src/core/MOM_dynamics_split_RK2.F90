@@ -21,7 +21,7 @@ use MOM_domains,           only : To_South, To_West, To_All, CGRID_NE, SCALAR_PA
 use MOM_domains,           only : To_North, To_East, Omit_Corners
 use MOM_domains,           only : create_group_pass, do_group_pass, group_pass_type
 use MOM_domains,           only : start_group_pass, complete_group_pass
-use MOM_debugging,         only : hchksum, uvchksum
+use MOM_checksums,         only : hchksum, uvchksum
 use MOM_error_handler,     only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_error_handler,     only : MOM_set_verbosity, callTree_showQuery
 use MOM_error_handler,     only : callTree_enter, callTree_leave, callTree_waypoint

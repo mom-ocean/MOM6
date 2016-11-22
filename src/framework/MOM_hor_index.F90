@@ -10,6 +10,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 implicit none ; private
 
 public :: hor_index_init, assignment(=)
+public :: transform_hor_index
 
 !> Container for horizontal index ranges for data, computational and global domains
 type, public :: hor_index_type
@@ -109,6 +110,47 @@ subroutine HIT_assign(HI1, HI2)
   HI1%symmetric = HI2%symmetric
 
 end subroutine HIT_assign
+
+subroutine swap_int(a, b)
+  integer, intent(inout) :: a, b
+
+  integer tmp
+
+  tmp = a
+  a = b
+  b = tmp
+
+end subroutine
+
+!> Make a copy of the horizonal index type and transform.
+subroutine transform_hor_index(HI, HI_trans)
+  type(hor_index_type),   intent(in) :: HI         !< Input horizontal index
+  type(hor_index_type),   intent(out) :: HI_trans  !< Transformed horizontal index
+
+  HI_trans = HI
+
+  ! Now fix up the dimensions.
+  call swap_int(HI_trans%isc, HI_trans%jsc)
+  call swap_int(HI_trans%iec, HI_trans%jec)
+
+  call swap_int(HI_trans%isd, HI_trans%jsd)
+  call swap_int(HI_trans%ied, HI_trans%jed)
+
+  call swap_int(HI_trans%isg, HI_trans%jsg)
+  call swap_int(HI_trans%ieg, HI_trans%jeg)
+
+  call swap_int(HI_trans%IscB, HI_trans%JscB)
+  call swap_int(HI_trans%IecB, HI_trans%JecB)
+
+  call swap_int(HI_trans%IsdB, HI_trans%JsdB)
+  call swap_int(HI_trans%IedB, HI_trans%JedB)
+
+  call swap_int(HI_trans%IsgB, HI_trans%JsgB)
+  call swap_int(HI_trans%IegB, HI_trans%JegB)
+
+  call swap_int(HI_trans%idg_offset, HI_trans%jdg_offset)
+
+end subroutine transform_hor_index
 
 !> \namespace mom_hor_index
 !!

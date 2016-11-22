@@ -50,6 +50,7 @@ use MOM_domains, only       : AGRID, To_South, To_West, To_All
 use MOM_domains, only       : create_group_pass, do_group_pass, pass_var
 use MOM_domains, only       : group_pass_type, start_group_pass, complete_group_pass
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
+use MOM_error_handler, only : callTree_enter, callTree_leave
 use MOM_file_parser, only   : read_param, get_param, log_param, log_version, param_file_type
 use MOM_grid, only          : ocean_grid_type
 use MOM_io, only            : slasher, vardesc
@@ -2342,6 +2343,8 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
+  call callTree_enter(trim(mod)//'(), MOM_internal_tide_input.F90')
+
   if (associated(CS)) then
     call MOM_error(WARNING, "internal_tides_init called "//&
                              "with an associated control structure.")
@@ -2736,6 +2739,8 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
 
   ! Initialize wave_structure (not sure if this should be here - BDM)
   call wave_structure_init(Time, G, param_file, diag, CS%wave_structure_CSp)
+
+  call callTree_leave(trim(mod)//'(), MOM_internal_tide_input.F90')
 
 end subroutine internal_tides_init
 
