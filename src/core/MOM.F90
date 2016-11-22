@@ -1428,539 +1428,123 @@ end subroutine step_MOM
 !! the work is very preliminary. Some more detail about this capability along with some of the subroutines
 !! called here can be found in tracers/MOM_offline_control.F90
 subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
-    type(forcing),    intent(inout)    :: fluxes        !< pointers to forcing fields
-    type(surface),    intent(inout)    :: state         !< surface ocean state
-    type(time_type),  intent(in)       :: Time_start    !< starting time of a segment, as a time type
-    real,             intent(in)       :: time_interval !< time interval
-    type(MOM_control_struct), pointer  :: CS            !< control structure from initialize_MOM
+  type(forcing),    intent(inout)    :: fluxes        !< pointers to forcing fields
+  type(surface),    intent(inout)    :: state         !< surface ocean state
+  type(time_type),  intent(in)       :: Time_start    !< starting time of a segment, as a time type
+  real,             intent(in)       :: time_interval !< time interval
+  type(MOM_control_struct), pointer  :: CS            !< control structure from initialize_MOM
+  
+  ! Local pointers
+  type(ocean_grid_type),      pointer :: G  => NULL() ! Pointer to a structure containing
+                                                      ! metrics and related information
+  type(verticalGrid_type),    pointer :: GV => NULL() ! Pointer to structure containing information
+                                                      ! about the vertical grid
+  
+  real    :: accumulated_time = 0.0 ! Keeps track of how long it has been since the previous offline interval
+  logical :: first_iter ! True if this is the first time step_tracers has been called in a given interval
+  
+  ! Zonal mass transports 
+  real, dimension(SZIB_(CS%G),SZJ_(CS%G),SZK_(CS%G))   :: uhtr
+  ! Zonal diffusive transport
+  real, dimension(SZIB_(CS%G),SZJ_(CS%G))              :: khdt_x
+  ! Meridional mass transports
+  real, dimension(SZI_(CS%G),SZJB_(CS%G),SZK_(CS%G))   :: vhtr
+  ! Meridional diffusive transports
+  real, dimension(SZI_(CS%G),SZJB_(CS%G))              :: khdt_y
 
-    ! Local pointers
-    type(ocean_grid_type),      pointer :: G  => NULL() ! Pointer to a structure containing
-                                                        ! metrics and related information
-    type(verticalGrid_type),    pointer :: GV => NULL() ! Pointer to structure containing information
-                                                        ! about the vertical grid
-    ! Zonal mass transports 
-    real, dimension(SZIB_(CS%G),SZJ_(CS%G),SZK_(CS%G))   :: uhtr, uhtr_sub
-    ! Zonal diffusive transport
-    real, dimension(SZIB_(CS%G),SZJ_(CS%G))              :: khdt_x
-    ! Meridional mass transports
-    real, dimension(SZI_(CS%G),SZJB_(CS%G),SZK_(CS%G))   :: vhtr, vhtr_sub
-    ! Meridional diffusive transports
-    real, dimension(SZI_(CS%G),SZJB_(CS%G))              :: khdt_y
-    
-    real, dimension(SZI_(CS%G),SZJ_(CS%G))               :: eta_pre, eta_end
-    
-    ! Keep track of the time in vertical subiterations
-    type(time_type)                                      :: sub_Time_start, sub_Time_end
-
-    real :: sum_abs_fluxes, sum_u, sum_v  ! Used to keep track of how close to convergence we are
-    real :: dt_offline, minimum_forcing_depth, evap_CFL_limit ! Shorthand variables from offline CS
-
-    ! Local variables
     ! Vertical diffusion related variables
-    real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: &
-        eatr,     &  ! Amount of fluid entrained from the layer above within
-                     ! one time step  (m for Bouss, kg/m^2 for non-Bouss)
-        ebtr,     &  ! Amount of fluid entrained from the layer below within
-                     ! one time step  (m for Bouss, kg/m^2 for non-Bouss)
-        eatr_sub, &
-        ebtr_sub
-    ! Variables used to keep track of layer thicknesses at various points in the code    
-    real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: &    
-        h_new, &        
-        h_end, &
-        h_vol, &
-        h_pre, &
-        h_temp
-    ! Work arrays for temperature and salinity    
-    real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: &        
-        temp_old, salt_old, &
-        temp_mean, salt_mean, &
-        zero_3dh     !
-    integer                                        :: niter, iter
-    real                                           :: Inum_iter, dt_iter
-    logical                                        :: converged
-    integer :: i, j, k, m, is, ie, js, je, isd, ied, jsd, jed, nz
-    integer :: isv, iev, jsv, jev ! The valid range of the indices.
-    integer :: IsdB, IedB, JsdB, JedB
-    logical :: z_first, x_before_y
-    integer :: niter_vert
+  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: &
+      eatr,     &  ! Amount of fluid entrained from the layer above within
+                   ! one time step  (m for Bouss, kg/m^2 for non-Bouss)
+      ebtr         ! Amount of fluid entrained from the layer below within
+                   ! one time step  (m for Bouss, kg/m^2 for non-Bouss)
+  ! Work arrays for temperature and salinity    
+  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: &        
+      temp_snap, salt_snap, &
+      temp_mean, salt_mean
+  type(time_type) :: Time_end    ! End time of a segment, as a time type    
+  
+  ! Grid-related pointer assignments
+  G => CS%G
+  GV => CS%GV
+  
+  call cpu_clock_begin(id_clock_tracer)
+  Time_end = increment_date(sub_Time_start, seconds=floor(time_interval+0.001))
+  call enable_averaging(time_interval, Time_end, CS%diag)
+      
+  if(accumulated_time==0.0) then
+    first_iter = .true.
+  else ! This is probably unnecessary but is used to guard against unwanted behavior
+    first_iter = .false.
+  endif 
+  ! Increment the amount of time elapsed since last read and check if it's time to roll around
+  accumulated_time = mod(accumulated_time + time_interval, CS%offline_CSp%dt_offline)
 
-    ! Fail out if offline_tracer_mode is not true
-    if (.not.CS%offline_tracer_mode) call MOM_error(FATAL,"OFFLINE_TRACER_MODE=False when calling step_tracers")
-
-    ! Grid-related pointer assignments
-    G => CS%G
-    GV => CS%GV
-    
-    ! Initialize some shorthand variables from other structures
-    is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
-    isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-    IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-
-    dt_offline = CS%offline_CSp%dt_offline
-    evap_CFL_limit = CS%offline_CSp%evap_CFL_limit
-    minimum_forcing_depth = CS%offline_CSp%minimum_forcing_depth
-    niter_vert = CEILING(dt_offline/CS%offline_CSp%dt_offline_vertical)
-
-    niter = CS%offline_CSp%num_off_iter
-    Inum_iter = 1./real(niter)
-    dt_iter = dt_offline*Inum_iter
-
-    ! Initialize working arrays
-    uhtr(:,:,:) = 0.0
-    vhtr(:,:,:) = 0.0
-    khdt_x(:,:) = 0.0
-    khdt_y(:,:) = 0.0
-    eatr(:,:,:) = 0.0
-    ebtr(:,:,:) = 0.0
-    h_pre(:,:,:) = GV%Angstrom
-    h_new(:,:,:) = GV%Angstrom
-    h_end(:,:,:) = GV%Angstrom
-    temp_old(:,:,:) = 0.0
-    salt_old(:,:,:) = 0.0
-    uhtr_sub(:,:,:) = 0.0
-    vhtr_sub(:,:,:) = 0.0
-    eatr_sub(:,:,:) = 0.0
-    ebtr_sub(:,:,:) = 0.0
-
-    ! Initialize logicals
-    converged = .false.
-    
-    ! Initialize time types
-    sub_Time_start = Time_start
-    
-    call cpu_clock_begin(id_clock_tracer)
-    call enable_averaging(time_interval, Time_start+set_time(int(time_interval)), CS%diag)
-
-    ! Read in all fields that might be used this timestep
-    call transport_by_files(G, GV, CS%offline_CSp, h_end, eatr, ebtr, uhtr, vhtr, &
-        khdt_x, khdt_y, temp_old, salt_old, temp_mean, salt_mean, fluxes, CS%use_ALE_algorithm)
-
-    ! Set the starting layer thicknesses to those from the previous timestep    
+  ! If this is the first iteration in the offline timestep, then we need to read in fields and
+  ! perform the main advection.
+  if (first_iter) then
+    ! Store the layer thicknesses from the end of the previous timestep
     do k=1,nz ; do j=jsd,jed ; do i=isd,ied
       h_pre(i,j,k) = CS%h(i,j,k)
     enddo ; enddo; enddo
-    call pass_var(h_pre,G%Domain)    
-
-    x_before_y = (MOD(G%first_direction,2) == 0)
-    z_first = CS%diabatic_first
-
+    call pass_var(h_pre,G%Domain)   
+    
+    ! Read in new transport and other fields
+    call transport_by_files(G, GV, CS%offline_CSp, h_end, eatr, ebtr, uhtr, vhtr, &
+        khdt_x, khdt_y, temp_snap, salt_snap, temp_mean, salt_mean, fluxes, CS%use_ALE_algorithm)
+  
+    ! Check to see if offline advection needs to be done     
     if(CS%use_ALE_algorithm) then
-
-      ! Tracers are transported using the stored mass fluxes. Where possible, operators are Strang-split around
-      ! the call to 
-      ! 1)  Using the layer thicknesses and tracer concentrations from the previous timestep, 
-      !     half of the accumulated vertical mixing (eatr and ebtr) is applied in the call to tracer_column_fns.
-      !     For tracers whose source/sink terms need dt, this value is set to 1/2 dt_offline
-      ! 2)  Half of the accumulated surface freshwater fluxes are applied
-      !! START ITERATION
-      ! 3)  Accumulated mass fluxes are used to do horizontal transport. The number of iterations used in
-      !     advect_tracer is limited to 2 (e.g x->y->x->y). The remaining mass fluxes are stored for later use
-      !     and resulting layer thicknesses fed into the next step
-      ! 4)  Tracers and the h-grid are regridded and remapped in a call to ALE. This allows for layers which might
-      !     'vanish' because of horizontal mass transport to be 'reinflated'
-      ! 5)  Check that transport is done if the remaining mass fluxes equals 0 or if the max number of iterations
-      !     has been reached
-      !! END ITERATION
-      ! 6)  Repeat steps 1 and 2
-      ! 7)  Force a remapping to the stored layer thicknesses that correspond to the snapshot of the online model
-      ! 8)  Reset T/S and h to their stored snapshotted values to prevent model drift
-      
-      ! Convert flux rates into explicit mass/height of freshwater flux. Also note, that
-      ! fluxes are halved because diabatic processes are split before and after advection
-      
-      ! Do horizontal diffusion first (but only half of it), remainder will be applied after advection
-      if(.not.CS%offline_csp%skip_diffusion) then
-        call tracer_hordiff(h_pre, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
-          CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, do_online_flag=.not.CS%offline_tracer_mode, &
-          read_khdt_x=khdt_x*0.5, read_khdt_y=khdt_y*0.5)
-      endif
-
-      do j=jsd,jed ; do i=isd,ied
-          fluxes%netMassOut(i,j) = fluxes%netMassOut(i,j)/niter_vert
-          fluxes%netMassIn(i,j) =  fluxes%netMassIn(i,j)/niter_vert
-      enddo ; enddo
-      
-      zero_3dh(:,:,:)=0.0
-
-      ! Copy over the horizontal mass fluxes from the remaining total mass fluxes
-      do k=1,nz ; do j=jsd,jed ; do i=isdB,iedB
-        uhtr_sub(i,j,k) = uhtr(i,j,k)
-      enddo ; enddo ; enddo
-      do k=1,nz ; do j=jsdB,jedB ; do i=isd,ied
-        vhtr_sub(i,j,k) = vhtr(i,j,k)
-      enddo ; enddo ; enddo
-      
-      if(CS%debug) then
-        call uchksum(uhtr_sub,"uhtr_sub before transport",G%HI)
-        call vchksum(vhtr_sub,"vhtr_sub before transport",G%HI)
-        call hchksum(h_pre,"h_pre before transport",G%HI)
-      endif
-      
-      ! Note that here, h_new does nto represent any physical, should double check that any individual
-      ! tracer does not use h_new
-!      if (associated(CS%diabatic_CSp%optics)) &
-!          call set_opacity(CS%diabatic_CSp%optics, fluxes, G, GV, CS%diabatic_CSp%opacity_CSp)
-!      call call_tracer_column_fns(h_pre, h_new, eatr*0.5, ebtr*0.5, &
-!              fluxes, CS%offline_CSp%dt_offline*0.5, G, GV, CS%tv, &
-!              CS%diabatic_CSp%optics, CS%tracer_flow_CSp, CS%debug, &
-!              evap_CFL_limit=evap_CFL_limit, &
-!              minimum_forcing_depth=minimum_forcing_depth)
-      ! Add half of the total freshwater fluxes 
-!      call applyTracerBoundaryFluxesInOut(G, GV, zero_3dh, 0.5*dt_offline, fluxes, h_pre, &
-!                                    evap_CFL_limit, minimum_forcing_depth)
-                                    
-      if(CS%debug) then
-        call hchksum(h_pre,"h_pre after 1st diabatic",G%HI)
-      endif
-      
-      ! This loop does essentially a flux-limited, nonlinear advection scheme until all mass fluxes
-      ! are used. ALE is done after the horizontal advection.
-      do iter=1,CS%offline_CSp%num_off_iter
-        
-        do k=1,nz ; do j=jsd,jed ; do i=isd,ied
-          h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
-        enddo ; enddo ; enddo
-        
-        call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
-            CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=2, &
-            uhr_out=uhtr, vhr_out=vhtr, h_out=h_new, x_first_in=x_before_y)
-        ! Switch the direction every iteration? Maybe not useful
-        x_before_y = .not. x_before_y
-        
-        do k=1,nz ; do j=jsd,jed ; do i=isd,ied
-          h_pre(i,j,k) = h_new(i,j,k)/G%areaT(i,j)
-        enddo ; enddo ; enddo
-
-        if(CS%debug) then
-          call hchksum(h_pre,"h_pre after advect_tracer",G%HI)
-        endif
-        
-        call cpu_clock_begin(id_clock_ALE)
-        call ALE_main_offline(G, GV, h_pre, CS%tv, &
-            CS%tracer_Reg, CS%ALE_CSp, CS%offline_CSp%dt_offline)
-        call cpu_clock_end(id_clock_ALE)
-        
-        if(CS%debug) then
-          call hchksum(h_pre,"h_pre after ALE",G%HI)
-        endif
-        
-        do k=1,nz ; do j=jsd,jed ; do i=isdB,iedB
-          uhtr_sub(i,j,k) = uhtr(i,j,k)
-        enddo ; enddo ; enddo
-        do k=1,nz ; do j=jsdB,jedB ; do i=isd,ied
-          vhtr_sub(i,j,k) = vhtr(i,j,k)
-        enddo ; enddo ; enddo
-        
-        call pass_vector(uhtr_sub,vhtr_sub,G%Domain)
-        call pass_var(h_pre, G%Domain)
-      
-        if(CS%debug) then
-          call uchksum(uhtr_sub,"uhtr_sub after adv iteration",G%HI)
-          call vchksum(vhtr_sub,"vhtr_sub after adv iteration",G%HI)
-          call hchksum(h_pre,"h_pre after adv iteration",G%HI)
-        endif
-        
-        sum_u = 0.0
-        do k=1,nz; do j=js,je ; do i=is-1,ie
-          sum_u = sum_u + abs(uhtr_sub(i,j,k))
-        enddo; enddo; enddo
-        sum_v = 0.0
-        do k=1,nz; do j=js-1,je; do i=is,ie
-          sum_v = sum_v + abs(vhtr_sub(i,j,k))
-        enddo; enddo ; enddo
-        
-        call sum_across_PEs(sum_u)
-        call sum_across_PEs(sum_v)
-        if(CS%offline_CSp%print_adv_offline .and. is_root_pe()) &
-            print *, "Remaining transport: u", sum_u, "v", sum_v
-        
-        if(sum_u+sum_v==0.0) then
-          if(is_root_pe()) print *, "Converged after iteration", iter
-          converged = .true.
-          exit
-!        print *, "Remaining uflux, vflux:", sum(abs(uhtr)), sum(abs(vhtr))
-        else
-          converged=.false.
-        endif
-      enddo                  
-      
-      ! Now do the other half of the vertical mixing and tracer source/sink functions
-!      if (associated(CS%diabatic_CSp%optics)) &
-!          call set_opacity(CS%diabatic_CSp%optics, fluxes, G, GV, CS%diabatic_CSp%opacity_CSp)
-!      call call_tracer_column_fns(h_pre, h_new, eatr*0.5, ebtr*0.5, &
-!              fluxes, CS%offline_CSp%dt_offline*0.5, G, GV, CS%tv, &
-!              CS%diabatic_CSp%optics, CS%tracer_flow_CSp, CS%debug, &
-!              evap_CFL_limit=evap_CFL_limit, &
-!              minimum_forcing_depth=minimum_forcing_depth)
-!      call applyTracerBoundaryFluxesInOut(G, GV, zero_3dh, 0.5*dt_offline, fluxes, h_pre, &
-!          evap_CFL_limit, minimum_forcing_depth)
-      do i = is, ie ; do j = js, je ; do k=1,nz
-        CS%tv%T(i,j,k) = temp_mean(i,j,k)
-        CS%tv%S(i,j,k) = salt_mean(i,j,k)
-      enddo ;  enddo; enddo
-
-      call pass_var(CS%tv%T,G%Domain)
-      call pass_var(CS%tv%S,G%Domain)
-
-      do k=1,niter_vert
-        
-        sub_Time_end = increment_date(sub_Time_start,&
-            seconds=floor(CS%offline_CSp%dt_offline_vertical+0.001))
-        
-        if (associated(CS%diabatic_CSp%optics)) &
-          call set_opacity(CS%diabatic_CSp%optics, fluxes, G, GV, CS%diabatic_CSp%opacity_CSp)
-        
-        call offline_add_diurnal_SW(fluxes, G, sub_Time_start, sub_Time_end)
-        call call_tracer_column_fns(h_pre, h_new, eatr/niter_vert, ebtr/niter_vert, &
-            fluxes, CS%offline_CSp%dt_offline_vertical, G, GV, CS%tv, &
-            CS%diabatic_CSp%optics, CS%tracer_flow_CSp, CS%debug, &
-            evap_CFL_limit=evap_CFL_limit, &
-            minimum_forcing_depth=minimum_forcing_depth)
-        call applyTracerBoundaryFluxesInOut(G, GV, zero_3dh, CS%offline_CSp%dt_offline_vertical, fluxes, h_pre, &
-              evap_CFL_limit, minimum_forcing_depth)
-            
-        sub_Time_start = sub_Time_end
-        
-      enddo
-
-      if(CS%debug) then
-        call hchksum(h_pre,"h_pre after 2nd diabatic",G%HI)
-      endif    
-      
-      if(CS%offline_CSp%id_eta_diff>0) then
-        eta_pre(:,:) = 0.0
-        eta_end(:,:) = 0.0
-        do k=1,nz ; do j=jsd,jed ; do i=isd,ied
-          if(h_pre(i,j,k)>GV%Angstrom) eta_pre(i,j) = eta_pre(i,j)+h_pre(i,j,k)
-          if(h_end(i,j,k)>GV%Angstrom) eta_end(i,j) = eta_end(i,j)+h_end(i,j,k)
-        enddo ; enddo; enddo
-          
-        call post_data(CS%offline_CSp%id_eta_diff,eta_pre-eta_end,CS%diag)
-          
-      endif
-      
-      if (.not. converged) then
-        
-        do k=1,nz ; do j=jsd,jed ; do i=isd,ied
-          h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
-        enddo ; enddo ; enddo
-       
-        if (CS%debug) then
-          call hchksum(h_pre,"h_pre after before redistribute",G%HI)
-          call uchksum(uhtr_sub,"uhtr_sub before redistribute",G%HI)
-          call vchksum(vhtr_sub,"vhtr_sub before redistribute",G%HI)
-        endif
-        
-        if (CS%offline_CSp%id_h_redist>0) call post_data(CS%offline_CSp%id_h_redist, h_pre, CS%diag)
-        if (CS%offline_CSp%id_uhr_redist>0) call post_data(CS%offline_CSp%id_uhr_redist, uhtr, CS%diag)
-        if (CS%offline_CSp%id_vhr_redist>0) call post_data(CS%offline_CSp%id_vhr_redist, vhtr, CS%diag)
-
-        select case (CS%offline_CSp%redistribute_method)
-          case ('barotropic')
-            if (x_before_y) then
-              call distribute_residual_uh_barotropic(G, GV, h_pre, uhtr_sub)
-              call distribute_residual_vh_barotropic(G, GV, h_pre, vhtr_sub)
-            else
-              call distribute_residual_vh_barotropic(G, GV, h_pre, vhtr_sub)
-              call distribute_residual_uh_barotropic(G, GV, h_pre, uhtr_sub)
-            endif 
-            call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
-                CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=1, &
-                uhr_out=uhtr, vhr_out=vhtr, h_out=h_new, x_first_in=x_before_y)
-        
-          case ('upwards')
-            if (x_before_y) then
-              call distribute_residual_uh_upwards(G, GV, h_pre, uhtr_sub)
-              call distribute_residual_vh_upwards(G, GV, h_pre, vhtr_sub)
-            else
-              call distribute_residual_vh_upwards(G, GV, h_pre, vhtr_sub)
-              call distribute_residual_uh_upwards(G, GV, h_pre, uhtr_sub)
-            endif
-            call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
-                  CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=1, &
-                  uhr_out=uhtr, vhr_out=vhtr, h_out=h_new, x_first_in=x_before_y)
-          case ('none')
-            call MOM_error(WARNING,"Offline advection did not converge")
-          
-          case default
-            call MOM_error(FATAL,"Unrecognized REDISTRIBUTE_METHOD")
-        end select
-        
-        if (CS%debug) then
-          call hchksum(h_pre,"h_pre after after redistribute",G%HI)
-          call uchksum(uhtr_sub,"uhtr_sub after redistribute",G%HI)
-          call vchksum(vhtr_sub,"vhtr_sub after redistribute",G%HI)
-        endif
-        
-        do k=1,nz ; do j=jsd,jed ; do i=isd,ied
-          h_pre(i,j,k) = h_new(i,j,k)/G%areaT(i,j)
-        enddo ; enddo ; enddo
-            
-      endif
-      
-      ! Call ALE one last time to make sure that tracers are remapped onto the layer thicknesses
-      ! stored from the forward run
-      call cpu_clock_begin(id_clock_ALE)
-      call ALE_offline_tracer_final( G, GV, h_pre, h_end, CS%tracer_Reg, CS%ALE_CSp)
-      call cpu_clock_end(id_clock_ALE)        
-      
-      ! Finish with the other half of the tracer horizontal diffusion
-
-      if(.not.CS%offline_csp%skip_diffusion) then
-        call tracer_hordiff(h_pre, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
-          CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, do_online_flag=.false., read_khdt_x=khdt_x*0.5, &
-          read_khdt_y=khdt_y*0.5)
-      endif
-    
+      call offline_advection_ale(fluxes, state, Time_start, time_interval, CS, h_pre, h_end, uhtr, vhtr)
     elseif (.not. CS%use_ALE_algorithm) then
-      do iter=1,CS%offline_CSp%num_off_iter
-
-        do k = 1, nz ; do j=js-1,je+1 ; do i=is-1,ie+1
-          eatr_sub(i,j,k) = eatr(i,j,k)
-          ebtr_sub(i,j,k) = ebtr(i,j,k)
-        enddo; enddo ; enddo
-
-        do k = 1, nz ; do j=js-1,je+1 ; do i=is-2,ie+1
-          uhtr_sub(I,j,k) = uhtr(I,j,k)
-        enddo; enddo ; enddo
-
-        do k = 1, nz ; do j=js-2,je+1 ; do i=is-1,ie+1
-          vhtr_sub(i,J,k) = vhtr(i,J,k)
-        enddo; enddo ; enddo
-
-
-        ! Calculate 3d mass transports to be used in this iteration
-        call limit_mass_flux_3d(G, GV, uhtr_sub, vhtr_sub, eatr_sub, ebtr_sub, h_pre, &
-            CS%offline_CSp%max_off_cfl)
-
-        if (z_first) then
-          ! First do vertical advection
-          call update_h_vertical_flux(G, GV, eatr_sub, ebtr_sub, h_pre, h_new)
-          call call_tracer_column_fns(h_pre, h_new, eatr_sub, ebtr_sub, &
-              fluxes, dt_iter, G, GV, CS%tv, CS%diabatic_CSp%optics, CS%tracer_flow_CSp, CS%debug)
-          ! We are now done with the vertical mass transports, so now h_new is h_sub
-          do k = 1, nz ; do j=js-1,je+1 ; do i=is-1,ie+1
-            h_pre(i,j,k) = h_new(i,j,k)
-          enddo ; enddo ; enddo
-          call pass_var(h_pre,G%Domain)
-
-          ! Second zonal and meridional advection
-          call update_h_horizontal_flux(G, GV, uhtr_sub, vhtr_sub, h_pre, h_new)
-          do k = 1, nz ; do i = is-1, ie+1 ; do j=js-1, je+1
-            h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
-          enddo; enddo; enddo
-          call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
-              CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=30, x_first_in=x_before_y)
-
-          ! Done with horizontal so now h_pre should be h_new
-          do k = 1, nz ; do i=is-1,ie+1 ; do j=js-1,je+1
-              h_pre(i,j,k) = h_new(i,j,k)
-          enddo ; enddo ; enddo
-
-        endif
-
-        if (.not. z_first) then
-
-          ! First zonal and meridional advection
-          call update_h_horizontal_flux(G, GV, uhtr_sub, vhtr_sub, h_pre, h_new)
-          do k = 1, nz ; do i = is-1, ie+1 ; do j=js-1, je+1
-            h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
-          enddo; enddo; enddo
-          call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
-              CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=30, x_first_in=x_before_y)
-
-          ! Done with horizontal so now h_pre should be h_new
-          do k = 1, nz ; do i=is-1,ie+1 ; do j=js-1,je+1
-              h_pre(i,j,k) = h_new(i,j,k)
-          enddo ; enddo ; enddo
-
-          ! Second vertical advection
-          call update_h_vertical_flux(G, GV, eatr_sub, ebtr_sub, h_pre, h_new)
-          call call_tracer_column_fns(h_pre, h_new, eatr_sub, ebtr_sub, &
-              fluxes, dt_iter, G, GV, CS%tv, CS%diabatic_CSp%optics, CS%tracer_flow_CSp, CS%debug)
-          ! We are now done with the vertical mass transports, so now h_new is h_sub
-          do k = 1, nz ; do i=is-1,ie+1 ; do j=js-1,je+1
-            h_pre(i,j,k) = h_new(i,j,k)
-          enddo ; enddo ; enddo
-
-
-        endif
-
-        ! Update remaining transports
-        do k = 1, nz ; do j=js-1,je+1 ; do i=is-1,ie+1
-          eatr(i,j,k) = eatr(i,j,k) - eatr_sub(i,j,k)
-          ebtr(i,j,k) = ebtr(i,j,k) - ebtr_sub(i,j,k)
-        enddo; enddo ; enddo
-
-        do k = 1, nz ; do j=js-1,je+1 ; do i=is-2,ie+1
-          uhtr(I,j,k) = uhtr(I,j,k) - uhtr_sub(I,j,k)
-        enddo; enddo ; enddo
-
-        do k = 1, nz ; do j=js-2,je+1 ; do i=is-1,ie+1
-          vhtr(i,J,k) = vhtr(i,J,k) - vhtr_sub(i,J,k)
-        enddo; enddo ; enddo
-
-        call pass_var(eatr,G%Domain)
-        call pass_var(ebtr,G%Domain)
-        call pass_var(h_pre,G%Domain)
-        call pass_vector(uhtr,vhtr,G%Domain)
-  !
-        ! Calculate how close we are to converging by summing the remaining fluxes at each point
-        sum_abs_fluxes = 0.0
-        sum_u = 0.0
-        sum_v = 0.0
-        do k=1,nz; do j=js,je; do i=is,ie
-          sum_u = sum_u + abs(uhtr(I-1,j,k))+abs(uhtr(I,j,k))
-          sum_v = sum_v + abs(vhtr(i,J-1,k))+abs(vhtr(I,J,k))
-          sum_abs_fluxes = sum_abs_fluxes + abs(eatr(i,j,k)) + abs(ebtr(i,j,k)) + abs(uhtr(I-1,j,k)) + &
-              abs(uhtr(I,j,k)) + abs(vhtr(i,J-1,k)) + abs(vhtr(i,J,k))
-        enddo; enddo; enddo
-        call sum_across_PEs(sum_abs_fluxes)
-        
-        print *, "Remaining u-flux, v-flux:", sum_u, sum_v
-        if (sum_abs_fluxes==0) then
-          print *, 'Converged after iteration', iter
-          exit
-        endif
-
-        ! Switch order of Strang split every iteration
-        z_first = .not. z_first
-        x_before_y = .not. x_before_y
-
-      end do
-      call tracer_hordiff(h_end, CS%offline_CSp%dt_offline*0.5, CS%MEKE, CS%VarMix, G, GV, &
-        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, do_online_flag=.false., read_khdt_x=khdt_x*0.5, &
-        read_khdt_y=khdt_y*0.5)
+    ! Note that for the layer mode case, the calls to tracer sources and sinks is embedded in 
+    ! main_offline_advection_layer. Warning: this may not be appropriate for tracers that
+    ! exchange with the atmosphere
+      call offline_advection_layer(fluxes, state, Time_start, time_interval, CS)
     endif
-    
-    h_temp = h_end-h_pre
 
-    if (CS%offline_CSp%id_hr>0) call post_data(CS%offline_CSp%id_hr, h_temp, CS%diag)
-    if (CS%offline_CSp%id_uhr>0) call post_data(CS%offline_CSp%id_uhr, uhtr, CS%diag)
-    if (CS%offline_CSp%id_vhr>0) call post_data(CS%offline_CSp%id_vhr, vhtr, CS%diag)
-    if (CS%offline_CSp%id_ear>0) call post_data(CS%offline_CSp%id_ear, eatr, CS%diag)
-    if (CS%offline_CSp%id_ebr>0) call post_data(CS%offline_CSp%id_ebr, ebtr, CS%diag)
+    ! Perform offline diffusion if necessary
+    if (.not. CS%offline_CSp%skip_offline_diffusion) then
+      CS%tv%T(:,:,:) = temp_snap
+      CS%tv%S(:,:,:) = salt_snap
+      call tracer_hordiff(h_end, CS%offline_CSp%dt_offline, CS%MEKE, CS%VarMix, G, GV, &
+        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, do_online_flag=.false., read_khdt_x=khdt_x, &
+        read_khdt_y=khdt_y)
+    endif
+      
+  endif
 
-    call cpu_clock_end(id_clock_tracer)
+  h_temp = h_end-h_pre
 
-    call disable_averaging(CS%diag)
+  ! The functions related to column physics of tracers is performed separately in ALE mode 
+  if (CS%use_ALE_algorithm) then
+    CS%tv%T(:,:,:) = temp_mean
+    CS%tv%S(:,:,:) = salt_mean
+    call offline_diabatic_ale(fluxes, state, Time_start, time_interval, CS, h_pre, eatr, ebtr)
+  endif
+  
+  if (CS%offline_CSp%id_hr>0) call post_data(CS%offline_CSp%id_hr, h_temp, CS%diag)
+  if (CS%offline_CSp%id_uhr>0) call post_data(CS%offline_CSp%id_uhr, uhtr, CS%diag)
+  if (CS%offline_CSp%id_vhr>0) call post_data(CS%offline_CSp%id_vhr, vhtr, CS%diag)
+  if (CS%offline_CSp%id_ear>0) call post_data(CS%offline_CSp%id_ear, eatr, CS%diag)
+  if (CS%offline_CSp%id_ebr>0) call post_data(CS%offline_CSp%id_ebr, ebtr, CS%diag)
 
-    ! Note here T/S are reset to the stored snap shot to ensure that the offline model
-    ! densities, used in the neutral diffusion code don't drift too far from the online
-    ! model      
-    do i = is, ie ; do j = js, je ; do k=1,nz
-!      CS%tv%T(i,j,k) = temp_old(i,j,k)
-!      CS%tv%S(i,j,k) = salt_old(i,j,k)
-      CS%h(i,j,k) = h_end(i,j,k)
-    enddo ;  enddo; enddo
+  call cpu_clock_end(id_clock_tracer)
 
-    call pass_var(CS%h,G%Domain)
-!    call pass_var(CS%tv%T,G%Domain)
-!    call pass_var(CS%tv%S,G%Domain)
-    
-    fluxes%fluxes_used = .true.
+  call disable_averaging(CS%diag)
+
+  ! Note here T/S are reset to the stored snap shot to ensure that the offline model
+  ! densities, used in the neutral diffusion code don't drift too far from the online
+  ! model      
+  CS%tv%T(:,:,:) = temp_snap
+  CS%tv%S(:,:,:) = salt_snap
+  CS%h(:,:,:) = h_end
+  enddo ;  enddo; enddo
+  call pass_var(CS%tv%T,G%Domain)
+  call pass_var(CS%tv%S,G%Domain)
+  call pass_var(CS%h,G%Domain)
+
+  fluxes%fluxes_used = .true.
 
 
 end subroutine step_tracers
