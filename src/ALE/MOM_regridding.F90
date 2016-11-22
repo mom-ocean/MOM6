@@ -212,33 +212,22 @@ real, parameter    :: NR_OFFSET = 1e-6
 contains
 
 !> Initialization of regridding
-subroutine initialize_regridding( nk, coordMode, interpScheme, CS, compressibility_fraction )
-  integer,               intent(in)    :: nk !< Number of levels
-  character(len=*),      intent(in)    :: coordMode !< Coordinate mode to use
-  character(len=*),      intent(in)    :: interpScheme !< Interpolation mode to use (if needed)
-  type(regridding_CS),   intent(inout) :: CS !< Regridding control structure
-  real,        optional, intent(in)    :: compressibility_fraction !< Fraction of compressibility
-                                          !! to add to potential density profiles (nondim)
+subroutine initialize_regridding( nk, coordMode, CS, interp_scheme, compressibility_fraction )
+  integer,               intent(in)      :: nk !< Number of levels
+  character(len=*),      intent(in)      :: coordMode !< Coordinate mode to use
+  type(regridding_CS),   intent(inout)   :: CS !< Regridding control structure
+  character(len=*), optional, intent(in) :: interp_scheme !< Interpolation mode to use (if needed)
+  real, optional,        intent(in)      :: compressibility_fraction !< Fraction of compressibility
+                                            !! to add to potential density profiles (nondim)
 
   CS%nk = nk
 
   CS%regridding_scheme = coordinateMode(coordMode)
 
-  if (state_dependent(coordMode)) then
-    select case ( uppercase(trim(interpScheme)) )
-      case ("P1M_H2");     CS%interpolation_scheme = INTERPOLATION_P1M_H2
-      case ("P1M_H4");     CS%interpolation_scheme = INTERPOLATION_P1M_H4
-      case ("P1M_IH2");    CS%interpolation_scheme = INTERPOLATION_P1M_IH4
-      case ("PLM");        CS%interpolation_scheme = INTERPOLATION_PLM
-      case ("PPM_H4");     CS%interpolation_scheme = INTERPOLATION_PPM_H4
-      case ("PPM_IH4");    CS%interpolation_scheme = INTERPOLATION_PPM_IH4
-      case ("P3M_IH4IH3"); CS%interpolation_scheme = INTERPOLATION_P3M_IH4IH3
-      case ("P3M_IH6IH5"); CS%interpolation_scheme = INTERPOLATION_P3M_IH6IH5
-      case ("PQM_IH4IH3"); CS%interpolation_scheme = INTERPOLATION_PQM_IH4IH3
-      case ("PQM_IH6IH5"); CS%interpolation_scheme = INTERPOLATION_PQM_IH6IH5
-      case default ; call MOM_error(FATAL, "read_regridding_options: "//&
-       "Unrecognized choice for INTERPOLATION_SCHEME ("//trim(interpScheme)//").")
-    end select
+  if (state_dependent(coordMode).and.present(interp_scheme)) then
+    CS%interpolation_scheme = interpolation_scheme(interp_scheme)
+  elseif (state_dependent(coordMode)) then
+    CS%interpolation_scheme = interpolation_scheme(regriddingDefaultInterpScheme)
   else
     CS%interpolation_scheme = -1 ! Cause error if ever used
   endif
@@ -260,6 +249,27 @@ subroutine end_regridding(CS)
   call regridding_memory_deallocation( CS )
 
 end subroutine end_regridding
+
+!> Numeric value of interpolation_scheme corresponding to scheme name
+integer function interpolation_scheme(interp_scheme)
+  character(len=*), intent(in) :: interp_scheme !< Name of interpolation scheme
+
+  select case ( uppercase(trim(interp_scheme)) )
+    case ("P1M_H2");     interpolation_scheme = INTERPOLATION_P1M_H2
+    case ("P1M_H4");     interpolation_scheme = INTERPOLATION_P1M_H4
+    case ("P1M_IH2");    interpolation_scheme = INTERPOLATION_P1M_IH4
+    case ("PLM");        interpolation_scheme = INTERPOLATION_PLM
+    case ("PPM_H4");     interpolation_scheme = INTERPOLATION_PPM_H4
+    case ("PPM_IH4");    interpolation_scheme = INTERPOLATION_PPM_IH4
+    case ("P3M_IH4IH3"); interpolation_scheme = INTERPOLATION_P3M_IH4IH3
+    case ("P3M_IH6IH5"); interpolation_scheme = INTERPOLATION_P3M_IH6IH5
+    case ("PQM_IH4IH3"); interpolation_scheme = INTERPOLATION_PQM_IH4IH3
+    case ("PQM_IH6IH5"); interpolation_scheme = INTERPOLATION_PQM_IH6IH5
+    case default ; call MOM_error(FATAL, "MOM_regridding: "//&
+     "Unrecognized choice for INTERPOLATION_SCHEME ("//trim(interp_scheme)//").")
+  end select
+
+end function interpolation_scheme
 
 !------------------------------------------------------------------------------
 ! Dispatching regridding routine: regridding & remapping
@@ -2752,7 +2762,7 @@ end function getCoordinateShortName
 
 !> This subroutine can be used to set many of the parameters for MOM_regridding.
 subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_grid_weight, &
-             depth_of_time_filter_shallow, depth_of_time_filter_deep, &
+             interp_scheme, depth_of_time_filter_shallow, depth_of_time_filter_deep, &
              compress_fraction, dz_min_surface, nz_fixed_surface, Rho_ML_avg_depth, &
              nlay_ML_to_interior, fix_haloclines, halocline_filt_len, &
              halocline_strat_tol, integrate_downward_for_e)
@@ -2760,6 +2770,7 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
   logical, optional, intent(in) :: boundary_extrapolation !< Extrapolate in boundary cells
   real,    optional, intent(in) :: min_thickness !< Minimum thickness allowed when building the new grid (m)
   real,    optional, intent(in) :: old_grid_weight !< Weight given to old coordinate when time-filtering grid
+  character(len=*), optional, intent(in) :: interp_scheme !< Interpolation method for state-dependent coordinates
   real,    optional, intent(in) :: depth_of_time_filter_shallow !< Depth to start cubic (H units)
   real,    optional, intent(in) :: depth_of_time_filter_deep !< Depth to end cubic (H units)
   real,    optional, intent(in) :: compress_fraction !< Fraction of compressibility to add to potential density
@@ -2779,6 +2790,7 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
       call MOM_error(FATAL,'MOM_regridding, set_regrid_params: Weight is out side the range 0..1!')
     CS%old_grid_weight = old_grid_weight
   endif
+  if (present(interp_scheme)) CS%interpolation_scheme = interpolation_scheme(interp_scheme)
   if (present(depth_of_time_filter_shallow)) CS%depth_of_time_filter_shallow = depth_of_time_filter_shallow
   if (present(depth_of_time_filter_deep)) CS%depth_of_time_filter_deep = depth_of_time_filter_deep
   if (present(depth_of_time_filter_shallow) .or. present(depth_of_time_filter_deep)) then
