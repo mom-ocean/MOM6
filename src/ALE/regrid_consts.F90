@@ -47,6 +47,11 @@ interface coordinateUnits
   module procedure coordinateUnitsS
 end interface
 
+interface state_dependent
+  module procedure state_dependent_char
+  module procedure state_dependent_int
+end interface
+
 contains
 
 !> Parse a string parameter specifying the coordinate mode and
@@ -96,19 +101,26 @@ function coordinateUnitsS(string)
 end function coordinateUnitsS
 
 !> Returns true if the coordinate is dependent on the state density, returns false otherwise.
-logical function state_dependent(string)
+logical function state_dependent_char(string)
   character(len=*), intent(in) :: string !< String to indicate coordinate mode
-  select case ( uppercase(trim(string)) )
-    case (trim(REGRIDDING_LAYER_STRING)); state_dependent = .true.
-    case (trim(REGRIDDING_ZSTAR_STRING)); state_dependent = .false.
-    case (trim(REGRIDDING_ZSTAR_STRING_OLD)); state_dependent = .false.
-    case (trim(REGRIDDING_RHO_STRING));   state_dependent = .true.
-    case (trim(REGRIDDING_SIGMA_STRING)); state_dependent = .false.
-    case (trim(REGRIDDING_HYCOM1_STRING)); state_dependent = .true.
-    case (trim(REGRIDDING_SLIGHT_STRING)); state_dependent = .true.
+
+  state_dependent_char = state_dependent_int( coordinateMode(string) )
+
+end function state_dependent_char
+
+!> Returns true if the coordinate is dependent on the state density, returns false otherwise.
+logical function state_dependent_int(mode)
+  integer, intent(in) :: mode !< Coordinate mode
+  select case ( mode )
+    case (REGRIDDING_LAYER); state_dependent_int = .true.
+    case (REGRIDDING_ZSTAR); state_dependent_int = .false.
+    case (REGRIDDING_RHO);   state_dependent_int = .true.
+    case (REGRIDDING_SIGMA); state_dependent_int = .false.
+    case (REGRIDDING_HYCOM1); state_dependent_int = .true.
+    case (REGRIDDING_SLIGHT); state_dependent_int = .true.
     case default ; call MOM_error(FATAL, "state_dependent: "//&
-       "Unrecognized choice of coordinate ("//trim(string)//").")
+       "Unrecognized choice of coordinate.")
   end select
-end function state_dependent
+end function state_dependent_int
 
 end module regrid_consts
