@@ -95,4 +95,20 @@ function coordinateUnitsS(string)
   coordinateUnitsS = coordinateUnitsI(coordMode)
 end function coordinateUnitsS
 
+!> Returns true if the coordinate is dependent on the state density, returns false otherwise.
+logical function state_dependent(string)
+  character(len=*), intent(in) :: string !< String to indicate coordinate mode
+  select case ( uppercase(trim(string)) )
+    case (trim(REGRIDDING_LAYER_STRING)); state_dependent = .true.
+    case (trim(REGRIDDING_ZSTAR_STRING)); state_dependent = .false.
+    case (trim(REGRIDDING_ZSTAR_STRING_OLD)); state_dependent = .false.
+    case (trim(REGRIDDING_RHO_STRING));   state_dependent = .true.
+    case (trim(REGRIDDING_SIGMA_STRING)); state_dependent = .false.
+    case (trim(REGRIDDING_HYCOM1_STRING)); state_dependent = .true.
+    case (trim(REGRIDDING_SLIGHT_STRING)); state_dependent = .true.
+    case default ; call MOM_error(FATAL, "state_dependent: "//&
+       "Unrecognized choice of coordinate ("//trim(string)//").")
+  end select
+end function state_dependent
+
 end module regrid_consts
