@@ -22,49 +22,6 @@ use MOM_diabatic_aux,     only : diabatic_aux_CS
 
 implicit none
 
-type, public :: offline_transport_CS
-
-  !> Variables related to reading in fields from online run
-  integer :: start_index  ! Timelevel to start
-  integer :: numtime      ! How many timelevels in the input fields
-  integer :: &            ! Index of each of the variables to be read in
-    ridx_sum = -1, &      ! Separate indices for each variabile if they are
-    ridx_snap = -1        ! setoff from each other in time
-  character(len=200) :: offlinedir  ! Directory where offline fields are stored
-  character(len=200) :: & !         ! Names of input files
-    snap_file,  &
-    sum_file,   &
-    mean_file
-  character(len=20)  :: redistribute_method  
-  logical :: fields_are_offset ! True if the time-averaged fields and snapshot fields are
-                               ! offset by one time level
-  logical :: print_adv_offline ! Prints out some updates each advection sub interation
-  logical :: skip_diffusion    ! Skips horizontal diffusion of tracers
-  !> Variables controlling some of the numerical considerations of offline transport
-  integer           ::  num_off_iter
-  real              ::  dt_offline ! Timestep used for offline tracers
-  real              ::  dt_offline_vertical ! Timestep used for calls to tracer vertical physics  
-  real              ::  max_off_cfl=0.5 ! Hardcoded for now, only used in non-ALE mode
-  real              ::  evap_CFL_limit, minimum_forcing_depth
-
-  !> Diagnostic manager IDs for use in the online model of additional fields necessary
-  !> for offline tracer modeling
-  integer :: &
-    id_uhtr_preadv = -1, &
-    id_vhtr_preadv = -1, &
-  !> Diagnostic manager IDs for some fields that may be of interest when doing offline transport  
-    id_uhr = -1, &
-    id_vhr = -1, &
-    id_ear = -1, &
-    id_ebr = -1, &
-    id_hr = -1,  &
-    id_uhr_redist = -1, &
-    id_vhr_redist = -1, &
-    id_h_redist = -1, &
-    id_eta_diff = -1
-
-end type offline_transport_CS
-
 public offline_transport_init
 public transport_by_files
 public register_diags_offline_transport
@@ -121,6 +78,17 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
 
   call callTree_enter("transport_by_files, MOM_offline_control.F90")
 
+  uhtr(:,:,:) = 0.0
+  vhtr(:,:,:) = 0.0
+  khdt_x(:,:) = 0.0
+  khdt_y(:,:) = 0.0
+  eatr(:,:,:) = 0.0
+  ebtr(:,:,:) = 0.0
+  h_end(:,:,:) = GV%Angstrom
+  temp(:,:,:) = 0.0
+  temp_mean(:,:,:) = 0.0
+  salt(:,:,:) = 0.0
+  salt_mean(:,:,:) = 0.0
 
   !! Time-summed fields
   ! U-grid
