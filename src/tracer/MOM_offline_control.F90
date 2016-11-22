@@ -223,6 +223,13 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
         timelevel=CS%ridx_snap)
     call read_data(CS%sum_file,'massin_flux_sum', fluxes%netMassIn,  domain=G%Domain%mpp_domain, &
         timelevel=CS%ridx_snap)
+    do j=js,je ; do i=is,ie
+      if(G%mask2dT(i,j)<1.0) then
+        fluxes%netMassOut(i,j) = 0.0
+        fluxes%netMassIn(i,j) = 0.0
+      endif
+    enddo ; enddo
+
   endif
 
   !! Make sure all halos have been updated
@@ -354,6 +361,7 @@ subroutine offline_transport_init(param_file, CS, diabatic_aux_CSp, G, GV)
   ! Concatenate offline directory and file names
   CS%snap_file = trim(CS%offlinedir)//trim(CS%snap_file)
   CS%sum_file = trim(CS%offlinedir)//trim(CS%sum_file)
+  CS%mean_file = trim(CS%offlinedir)//trim(CS%mean_file)
 
   ! Set the starting read index for time-averaged and snapshotted fields
   CS%ridx_sum = CS%start_index

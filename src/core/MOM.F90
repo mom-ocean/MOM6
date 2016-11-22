@@ -1578,8 +1578,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       endif
 
       do j=jsd,jed ; do i=isd,ied
-          fluxes%netMassOut(i,j) = fluxes%netMassOut(i,j)
-          fluxes%netMassIn(i,j) =  fluxes%netMassIn(i,j)
+          fluxes%netMassOut(i,j) = fluxes%netMassOut(i,j)/niter_vert
+          fluxes%netMassIn(i,j) =  fluxes%netMassIn(i,j)/niter_vert
       enddo ; enddo
       
       zero_3dh(:,:,:)=0.0
@@ -1627,7 +1627,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
             CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=2, &
             uhr_out=uhtr, vhr_out=vhtr, h_out=h_new, x_first_in=x_before_y)
         ! Switch the direction every iteration? Maybe not useful
-        ! x_before_y = .not. x_before_y
+        x_before_y = .not. x_before_y
         
         do k=1,nz ; do j=jsd,jed ; do i=isd,ied
           h_pre(i,j,k) = h_new(i,j,k)/G%areaT(i,j)
@@ -1707,7 +1707,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       do k=1,niter_vert
         
         sub_Time_end = increment_date(sub_Time_start,&
-            seconds=floor(CS%offline_CSp%dt_offline_vertical+0.000))
+            seconds=floor(CS%offline_CSp%dt_offline_vertical+0.001))
         
         if (associated(CS%diabatic_CSp%optics)) &
           call set_opacity(CS%diabatic_CSp%optics, fluxes, G, GV, CS%diabatic_CSp%opacity_CSp)
@@ -1951,14 +1951,14 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     ! densities, used in the neutral diffusion code don't drift too far from the online
     ! model      
     do i = is, ie ; do j = js, je ; do k=1,nz
-      CS%tv%T(i,j,k) = temp_old(i,j,k)
-      CS%tv%S(i,j,k) = salt_old(i,j,k)
+!      CS%tv%T(i,j,k) = temp_old(i,j,k)
+!      CS%tv%S(i,j,k) = salt_old(i,j,k)
       CS%h(i,j,k) = h_end(i,j,k)
     enddo ;  enddo; enddo
 
     call pass_var(CS%h,G%Domain)
-    call pass_var(CS%tv%T,G%Domain)
-    call pass_var(CS%tv%S,G%Domain)
+!    call pass_var(CS%tv%T,G%Domain)
+!    call pass_var(CS%tv%S,G%Domain)
     
     fluxes%fluxes_used = .true.
 
