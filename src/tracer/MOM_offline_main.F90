@@ -605,13 +605,12 @@ end subroutine offline_advection_layer
 !> Controls the reading in 3d mass fluxes, diffusive fluxes, and other fields stored
 !! in a previous integration of the online model
 subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, khdt_y, &
-    temp, salt, temp_mean, salt_mean, fluxes, do_ale_in, niter_vert)
+    temp, salt, temp_mean, salt_mean, fluxes, do_ale_in)
 
   type(ocean_grid_type),                     intent(inout)    :: G
   type(verticalGrid_type),                   intent(inout)    :: GV
   type(offline_transport_CS),                intent(inout)    :: CS
   logical, optional                                           :: do_ale_in
-  integer, optional                                           :: niter_vert
 
   !! Mandatory variables
   ! Fields at U-points
@@ -639,16 +638,6 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
   if (present(do_ale_in) ) do_ale = do_ale_in
 
   is   = G%isc   ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = GV%ke
-
-  if(present(niter_vert)) then
-    if(niter_vert>0) then
-      Initer_vert = 1./niter_vert
-    else
-      Initer_vert = 0.0
-    endif
-  else
-    Initer_vert = 0.0
-  endif
 
   call callTree_enter("transport_by_files, MOM_offline_control.F90")
 
@@ -772,13 +761,6 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
       endif
     enddo ; enddo
     
-    if(Initer_vert>0.0) then
-      fluxes%netMassOut(:,:) = fluxes%netMassOut(:,:)*Initer_vert
-      fluxes%netMassIn(:,:) = fluxes%netMassIn(:,:)*Initer_vert
-      eatr(:,:,:) = eatr(:,:,:)*Initer_vert
-      ebtr(:,:,:) = ebtr(:,:,:)*Initer_vert
-    endif
-
   endif
   
 

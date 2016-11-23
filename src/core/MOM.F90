@@ -1458,8 +1458,10 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     
   type(time_type) :: Time_end    ! End time of a segment, as a time type
   integer :: num_iter_vert
+  real    :: Initer_vert
   
   num_iter_vert = floor((CS%offline_CSp%dt_offline+0.0001)/time_interval)
+  Initer_vert = 1./num_iter_vert
   
   ! Grid-related pointer assignments
   G => CS%G
@@ -1484,6 +1486,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
   temp_mean => CS%offline_CSp%temp_mean
   salt_snap => CS%offline_CSp%salt_snap
   salt_mean => CS%offline_CSp%salt_mean
+  khdt_x => CS%offline_CSp%khdt_x
+  khdt_y => CS%offline_CSp%khdt_y
   h_end => CS%offline_CSp%h_end
   
   call cpu_clock_begin(id_clock_tracer)
@@ -1517,7 +1521,9 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       ! Read in new transport and other fields
       call transport_by_files(G, GV, CS%offline_CSp, h_end, eatr, ebtr, uhtr, vhtr, &
           khdt_x, khdt_y, temp_snap, salt_snap, temp_mean, salt_mean, fluxes, &
-          CS%use_ALE_algorithm, niter_vert=num_iter_vert)
+          CS%use_ALE_algorithm)
+      fluxes%netMassIn = fluxes%netMassIn*Initer_vert
+      fluxes%netMassOut = fluxes%netMassOut*Initer_vert
           
       if(CS%debug)  call hchksum(h_end, "h_end after transport_by_files", G%HI)   
 
@@ -1532,7 +1538,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     CS%tv%T(:,:,:) = temp_mean(:,:,:)
     CS%tv%S(:,:,:) = salt_mean(:,:,:)
     call offline_diabatic_ale(fluxes, Time_start, Time_end, time_interval, CS%offline_CSp, &
-        CS%h, eatr, ebtr)
+        CS%h, eatr*Initer_vert, ebtr*Initer_vert)
     call pass_var(CS%h,G%Domain)    
     if(CS%debug)  call hchksum(h_end,"h_end after offline_diabatic_ALE",G%HI)    
         
