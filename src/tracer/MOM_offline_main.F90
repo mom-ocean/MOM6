@@ -99,8 +99,8 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
   real,             intent(in)       :: time_interval !< time interval
   type(offline_transport_CS), pointer  :: CS            !< control structure from initialize_MOM
   integer :: id_clock_ALE !< ID for the ALE clock
-  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)),  intent(inout)     :: h_pre !< layer thicknesses before advection
-  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)),  intent(in)     :: h_end!< target layer thicknesses
+  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)),  intent(inout)  :: h_pre !< layer thicknesses before advection
+  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)),  intent(in)     :: h_end !< target layer thicknesses
   real, dimension(SZIB_(CS%G),SZJ_(CS%G),SZK_(CS%G)), intent(inout)  :: uhtr  !< Zonal mass transport
   real, dimension(SZI_(CS%G),SZJB_(CS%G),SZK_(CS%G)), intent(inout)  :: vhtr  !< Meridional mass transport
   
@@ -343,14 +343,16 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
   call cpu_clock_begin(id_clock_ALE)
   call ALE_offline_tracer_final( G, GV, h_pre, h_end, CS%tracer_Reg, CS%ALE_CSp)
   call cpu_clock_end(id_clock_ALE)        
+  h_pre(:,:,:) = h_end
     
 end subroutine offline_advection_ale
 
-subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, CS, h_pre, eatr, ebtr)
+subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, dt, CS, h_pre, eatr, ebtr)
 
   type(forcing),    intent(inout)      :: fluxes        !< pointers to forcing fields
   type(time_type),  intent(in)         :: Time_start    !< starting time of a segment, as a time type
   type(time_type),  intent(in)         :: Time_end      !< time interval
+  real,             intent(in)         :: dt            !< Time step to be used for column functions
   type(offline_transport_CS), pointer  :: CS            !< control structure from initialize_MOM
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)), intent(inout) :: h_pre
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)), intent(inout) :: eatr !< Entrainment from layer above
@@ -366,7 +368,7 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, CS, h_pre, eatr, e
   ! Note that first two arguments are identical, because in ALE mode, there is no change in layer thickness
   ! because of eatr and ebtr
   call call_tracer_column_fns(h_pre, h_pre, eatr, ebtr, &
-      fluxes, CS%dt_offline_vertical, CS%G, CS%GV, CS%tv, &
+      fluxes, dt, CS%G, CS%GV, CS%tv, &
       CS%diabatic_CSp%optics, CS%tracer_flow_CSp, CS%debug, &
       evap_CFL_limit=CS%evap_CFL_limit, &
       minimum_forcing_depth=CS%minimum_forcing_depth)
