@@ -31,6 +31,11 @@ use MOM_verticalGrid,         only : verticalGrid_type
 
 implicit none
 
+
+#include "MOM_memory.h"
+#include "version_variable.h"
+  
+
 type, public :: offline_transport_CS
 
   !> Pointers to relevant fields from the main MOM control structure
@@ -41,7 +46,7 @@ type, public :: offline_transport_CS
   type(tracer_advect_CS),        pointer :: tracer_adv_CSp         => NULL()
   type(tracer_flow_control_CS),  pointer :: tracer_flow_CSp        => NULL()
   type(tracer_registry_type),    pointer :: tracer_Reg             => NULL()
-  type(thermo_var_ptrs),          pointer :: tv                     => NULL()
+  type(thermo_var_ptrs),         pointer :: tv                     => NULL()
   type(ocean_grid_type),         pointer :: G                      => NULL() 
   type(verticalGrid_type),       pointer :: GV                     => NULL() 
   
@@ -59,6 +64,7 @@ type, public :: offline_transport_CS
   character(len=20)  :: redistribute_method  
   logical :: fields_are_offset ! True if the time-averaged fields and snapshot fields are
                                ! offset by one time level
+  logical :: x_before_y        ! Which horizontal direction is advected first
   logical :: print_adv_offline ! Prints out some updates each advection sub interation
   logical :: skip_diffusion    ! Skips horizontal diffusion of tracers
   logical :: debug
@@ -80,29 +86,51 @@ type, public :: offline_transport_CS
     id_vhr_redist = -1, &
     id_h_redist = -1, &
     id_eta_diff = -1
+    
+  !> Variables that may need to be stored between calls to step_MOM
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_)       :: uhtr
+  !  2D
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_)              :: khdt_x
+  ! Fields at V-points
+  !  3D
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_)       :: vhtr
+  !  2D
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_)              :: khdt_y
+  ! Fields at T-point
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_) :: &
+      eatr,     &  ! Amount of fluid entrained from the layer above within
+                   ! one time step  (m for Bouss, kg/m^2 for non-Bouss)
+      ebtr         ! Amount of fluid entrained from the layer below within
+                   ! one time step  (m for Bouss, kg/m^2 for non-Bouss)
+  ! Work arrays for temperature and salinity
+  ! Arrays for temperature and salinity    
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_) :: &        
+      temp_snap, salt_snap, &
+      temp_mean, salt_mean, &
+      h_end    
+  
 
 end type offline_transport_CS
 
 public offline_advection_ale
+public offline_redistribute_residual
 public offline_diabatic_ale
 public offline_advection_layer
 public transport_by_files
 
-#include "MOM_memory.h"
-#include "version_variable.h"
-
 contains
 
-subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock_ALE, h_pre, h_end, uhtr, vhtr)
+subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock_ALE,&
+      h_pre, uhtr, vhtr, converged)
   type(forcing),    intent(inout)    :: fluxes        !< pointers to forcing fields
   type(time_type),  intent(in)       :: Time_start    !< starting time of a segment, as a time type
   real,             intent(in)       :: time_interval !< time interval
   type(offline_transport_CS), pointer  :: CS            !< control structure from initialize_MOM
   integer :: id_clock_ALE !< ID for the ALE clock
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)),  intent(inout)  :: h_pre !< layer thicknesses before advection
-  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)),  intent(in)     :: h_end !< target layer thicknesses
   real, dimension(SZIB_(CS%G),SZJ_(CS%G),SZK_(CS%G)), intent(inout)  :: uhtr  !< Zonal mass transport
   real, dimension(SZI_(CS%G),SZJB_(CS%G),SZK_(CS%G)), intent(inout)  :: vhtr  !< Meridional mass transport
+  logical,                                            intent(  out)  :: converged
   
   ! Local pointers
   type(ocean_grid_type),      pointer :: G  => NULL() ! Pointer to a structure containing
@@ -124,7 +152,6 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
   real, dimension(SZI_(CS%G),SZJ_(CS%G))         :: eta_pre, eta_end    
   integer                                        :: niter, iter
   real                                           :: Inum_iter
-  logical                                        :: converged
   integer :: i, j, k, m, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: isv, iev, jsv, jev ! The valid range of the indices.
   integer :: IsdB, IedB, JsdB, JedB
@@ -135,6 +162,8 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
   G => CS%G
   GV => CS%GV
 
+  x_before_y = CS%x_before_y
+  
   ! Initialize some shorthand variables from other structures
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -176,9 +205,6 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
   ! 7)  Force a remapping to the stored layer thicknesses that correspond to the snapshot of the online model
   ! 8)  Reset T/S and h to their stored snapshotted values to prevent model drift
 
-  ! Convert flux rates into explicit mass/height of freshwater flux. Also note, that
-  ! fluxes are halved because diabatic processes are split before and after advection
-
   ! Copy over the horizontal mass fluxes from the total mass fluxes
   do k=1,nz ; do j=jsd,jed ; do i=isdB,iedB
     uhtr_sub(i,j,k) = uhtr(i,j,k)
@@ -202,8 +228,8 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
       h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
     enddo ; enddo ; enddo
 
-    call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
-        CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=1, &
+    call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, CS%dt_offline, G, GV, &
+        CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=2, &
         uhr_out=uhtr, vhr_out=vhtr, h_out=h_new, x_first_in=x_before_y)
         
     ! Switch the direction every iteration
@@ -213,7 +239,6 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
     do k=1,nz ; do j=jsd,jed ; do i=isd,ied
       h_pre(i,j,k) = h_new(i,j,k)/G%areaT(i,j)
     enddo ; enddo ; enddo
-    call pass_var(h_pre, G%Domain)
 
     if(CS%debug) then
       call hchksum(h_pre,"h_pre before ALE",G%HI)
@@ -228,6 +253,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
     if(CS%debug) then
       call hchksum(h_pre,"h_pre after ALE",G%HI)
     endif
+    call pass_var(h_pre, G%Domain)
 
     ! Copy over remaining mass transports
     do k=1,nz ; do j=jsd,jed ; do i=isdB,iedB
@@ -261,6 +287,42 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
     endif
   enddo               
 
+end subroutine offline_advection_ale
+
+subroutine offline_redistribute_residual(CS, h_pre, h_end, uhtr, vhtr, converged)
+  type(offline_transport_CS), pointer  :: CS            !< control structure from initialize_MOM
+  
+  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)),  intent(inout)  :: h_pre !< layer thicknesses before advection
+  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)),  intent(in)     :: h_end !< target layer thicknesses
+  real, dimension(SZIB_(CS%G),SZJ_(CS%G),SZK_(CS%G)), intent(inout)  :: uhtr  !< Zonal mass transport
+  real, dimension(SZI_(CS%G),SZJB_(CS%G),SZK_(CS%G)), intent(inout)  :: vhtr  !< Meridional mass transport  
+  logical,                                            intent(in)     :: converged
+  
+  type(ocean_grid_type),      pointer :: G  => NULL() ! Pointer to a structure containing
+                                                      ! metrics and related information
+  type(verticalGrid_type),    pointer :: GV => NULL() ! Pointer to structure containing information
+                                                      ! about the vertical grid
+  logical :: x_before_y
+  ! Variables used to keep track of layer thicknesses at various points in the code    
+  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: &    
+      h_new, &        
+      h_vol
+      
+  ! Used to calculate the eta_diff diagnostic
+  real, dimension(SZI_(CS%G),SZJ_(CS%G)) :: & 
+      eta_pre, &
+      eta_end
+  integer :: i, j, k, m, is, ie, js, je, isd, ied, jsd, jed, nz
+      
+  ! Assign grid pointers
+  G  => CS%G
+  GV => CS%GV
+  
+  is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+
+  x_before_y = CS%x_before_y
+  
   ! This diagnostic can be used to identify which grid points did not converge within
   ! the specified number of advection sub iterations
   if(CS%id_eta_diff>0) then
@@ -284,8 +346,8 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
 
     if (CS%debug) then
       call hchksum(h_pre,"h_pre after before redistribute",G%HI)
-      call uchksum(uhtr_sub,"uhtr_sub before redistribute",G%HI)
-      call vchksum(vhtr_sub,"vhtr_sub before redistribute",G%HI)
+      call uchksum(uhtr,"uhtr before redistribute",G%HI)
+      call vchksum(vhtr,"vhtr before redistribute",G%HI)
     endif
 
     ! These are used to find out how much will be redistributed in this routine
@@ -297,27 +359,27 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
     select case (CS%redistribute_method)
       case ('barotropic')
         if (x_before_y) then
-          call distribute_residual_uh_barotropic(G, GV, h_pre, uhtr_sub)
-          call distribute_residual_vh_barotropic(G, GV, h_pre, vhtr_sub)
+          call distribute_residual_uh_barotropic(G, GV, h_pre, uhtr)
+          call distribute_residual_vh_barotropic(G, GV, h_pre, vhtr)
         else
-          call distribute_residual_vh_barotropic(G, GV, h_pre, vhtr_sub)
-          call distribute_residual_uh_barotropic(G, GV, h_pre, uhtr_sub)
+          call distribute_residual_vh_barotropic(G, GV, h_pre, vhtr)
+          call distribute_residual_uh_barotropic(G, GV, h_pre, uhtr)
         endif 
-        call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
-            CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=1, &
-            uhr_out=uhtr, vhr_out=vhtr, h_out=h_new, x_first_in=x_before_y)
+        call advect_tracer(h_pre, uhtr, vhtr, CS%OBC, CS%dt_offline, G, GV, &
+            CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=2, &
+            h_out=h_new, x_first_in=x_before_y)
 
       case ('upwards')
         if (x_before_y) then
-          call distribute_residual_uh_upwards(G, GV, h_pre, uhtr_sub)
-          call distribute_residual_vh_upwards(G, GV, h_pre, vhtr_sub)
+          call distribute_residual_uh_upwards(G, GV, h_pre, uhtr)
+          call distribute_residual_vh_upwards(G, GV, h_pre, vhtr)
         else
-          call distribute_residual_vh_upwards(G, GV, h_pre, vhtr_sub)
-          call distribute_residual_uh_upwards(G, GV, h_pre, uhtr_sub)
+          call distribute_residual_vh_upwards(G, GV, h_pre, vhtr)
+          call distribute_residual_uh_upwards(G, GV, h_pre, uhtr)
         endif
-        call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, &
-              CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=1, &
-              uhr_out=uhtr, vhr_out=vhtr, h_out=h_new, x_first_in=x_before_y)
+        call advect_tracer(h_pre, uhtr, vhtr, CS%OBC, CS%dt_offline, G, GV, &
+              CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=2, &
+              h_out=h_new, x_first_in=x_before_y)
       case ('none')
         call MOM_error(WARNING,"Offline advection did not converge")
 
@@ -327,8 +389,8 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
 
     if (CS%debug) then
       call hchksum(h_pre,"h_pre after after redistribute",G%HI)
-      call uchksum(uhtr_sub,"uhtr_sub after redistribute",G%HI)
-      call vchksum(vhtr_sub,"vhtr_sub after redistribute",G%HI)
+      call uchksum(uhtr,"uhtr after redistribute",G%HI)
+      call vchksum(vhtr,"vhtr after redistribute",G%HI)
     endif
 
     do k=1,nz ; do j=jsd,jed ; do i=isd,ied
@@ -336,16 +398,10 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
     enddo ; enddo ; enddo
     call pass_var(h_pre,G%Domain)
 
-  endif
-
-  ! Call ALE one last time to make sure that tracers are remapped onto the layer thicknesses
-  ! stored from the forward run
-  call cpu_clock_begin(id_clock_ALE)
-  call ALE_offline_tracer_final( G, GV, h_pre, h_end, CS%tracer_Reg, CS%ALE_CSp)
-  call cpu_clock_end(id_clock_ALE)        
-  h_pre(:,:,:) = h_end
+  endif    
     
-end subroutine offline_advection_ale
+  
+end subroutine offline_redistribute_residual
 
 subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, dt, CS, h_pre, eatr, ebtr)
 
@@ -355,8 +411,8 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, dt, CS, h_pre, eat
   real,             intent(in)         :: dt            !< Time step to be used for column functions
   type(offline_transport_CS), pointer  :: CS            !< control structure from initialize_MOM
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)), intent(inout) :: h_pre
-  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)), intent(inout) :: eatr !< Entrainment from layer above
-  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)), intent(inout) :: ebtr !< Entrainment from layer below
+  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)), intent(in)    :: eatr !< Entrainment from layer above
+  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)), intent(in)    :: ebtr !< Entrainment from layer below
   
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: zero_3dh
   zero_3dh(:,:,:) = 0.0
@@ -364,7 +420,7 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, dt, CS, h_pre, eat
   if (associated(CS%diabatic_CSp%optics)) &
     call set_opacity(CS%diabatic_CSp%optics, fluxes, CS%G, CS%GV, CS%diabatic_CSp%opacity_CSp)
 
-  call offline_add_diurnal_SW(fluxes, CS%G, Time_start, Time_end)
+!  call offline_add_diurnal_SW(fluxes, CS%G, Time_start, Time_end)
   ! Note that first two arguments are identical, because in ALE mode, there is no change in layer thickness
   ! because of eatr and ebtr
   call call_tracer_column_fns(h_pre, h_pre, eatr, ebtr, &
@@ -372,7 +428,7 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, dt, CS, h_pre, eat
       CS%diabatic_CSp%optics, CS%tracer_flow_CSp, CS%debug, &
       evap_CFL_limit=CS%evap_CFL_limit, &
       minimum_forcing_depth=CS%minimum_forcing_depth)
-  call applyTracerBoundaryFluxesInOut(CS%G, CS%GV, zero_3dh, CS%dt_offline_vertical, fluxes, h_pre, &
+  call applyTracerBoundaryFluxesInOut(CS%G, CS%GV, zero_3dh, dt, fluxes, h_pre, &
       CS%evap_CFL_limit, CS%minimum_forcing_depth)
 
 end subroutine offline_diabatic_ale
@@ -549,26 +605,28 @@ end subroutine offline_advection_layer
 !> Controls the reading in 3d mass fluxes, diffusive fluxes, and other fields stored
 !! in a previous integration of the online model
 subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, khdt_y, &
-    temp, salt, temp_mean, salt_mean, fluxes, do_ale_in)
+    temp, salt, temp_mean, salt_mean, fluxes, do_ale_in, niter_vert)
 
   type(ocean_grid_type),                     intent(inout)    :: G
   type(verticalGrid_type),                   intent(inout)    :: GV
   type(offline_transport_CS),                intent(inout)    :: CS
   logical, optional                                           :: do_ale_in
+  integer, optional                                           :: niter_vert
 
   !! Mandatory variables
   ! Fields at U-points
   !  3D
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G))                   :: uhtr
-  !  2D
-  real, dimension(SZIB_(G),SZJ_(G))                           :: khdt_x
-  ! Fields at V-points
-  !  3D
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G))                   :: vhtr
-  !  2D
-  real, dimension(SZI_(G),SZJB_(G))                           :: khdt_y
-  ! Fields at T-point
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
+  ! Zonal mass transports 
+  real, dimension(SZIB_(CS%G),SZJ_(CS%G),SZK_(CS%G))   :: uhtr
+  ! Zonal diffusive transport
+  real, dimension(SZIB_(G),SZJ_(G))                    :: khdt_x
+  ! Meridional mass transports
+  real, dimension(SZI_(CS%G),SZJB_(CS%G),SZK_(CS%G))   :: vhtr
+  ! Meridional diffusive transports
+  real, dimension(SZI_(G),SZJB_(G))                    :: khdt_y
+  
+  ! Vertical diffusion related variables
+  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: &
     h_end, &
     eatr, ebtr, &
     temp, salt, &
@@ -576,19 +634,26 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
   type(forcing)                                               :: fluxes
   logical                                                     :: do_ale
   integer :: i, j, k, is, ie, js, je, nz
-
+  real                                                        :: Initer_vert
   do_ale = .false.;
   if (present(do_ale_in) ) do_ale = do_ale_in
 
   is   = G%isc   ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = GV%ke
 
+  if(present(niter_vert)) then
+    if(niter_vert>0) then
+      Initer_vert = 1./niter_vert
+    else
+      Initer_vert = 0.0
+    endif
+  else
+    Initer_vert = 0.0
+  endif
 
   call callTree_enter("transport_by_files, MOM_offline_control.F90")
 
   uhtr(:,:,:) = 0.0
   vhtr(:,:,:) = 0.0
-  khdt_x(:,:) = 0.0
-  khdt_y(:,:) = 0.0
   eatr(:,:,:) = 0.0
   ebtr(:,:,:) = 0.0
   h_end(:,:,:) = GV%Angstrom
@@ -596,6 +661,8 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
   temp_mean(:,:,:) = 0.0
   salt(:,:,:) = 0.0
   salt_mean(:,:,:) = 0.0
+  khdt_x(:,:) = 0.0
+  khdt_y(:,:) = 0.0
 
   !! Time-summed fields
   ! U-grid
@@ -704,8 +771,16 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
         fluxes%netMassIn(i,j) = 0.0
       endif
     enddo ; enddo
+    
+    if(Initer_vert>0.0) then
+      fluxes%netMassOut(:,:) = fluxes%netMassOut(:,:)*Initer_vert
+      fluxes%netMassIn(:,:) = fluxes%netMassIn(:,:)*Initer_vert
+      eatr(:,:,:) = eatr(:,:,:)*Initer_vert
+      ebtr(:,:,:) = ebtr(:,:,:)*Initer_vert
+    endif
 
   endif
+  
 
   !! Make sure all halos have been updated
   ! Vector fields
@@ -795,8 +870,8 @@ subroutine offline_transport_init(param_file, CS, diabatic_aux_CSp, G, GV)
   type(param_file_type),               intent(in)     :: param_file
   type(offline_transport_CS), pointer, intent(inout)  :: CS
   type(diabatic_aux_CS),      pointer, intent(in)     :: diabatic_aux_CSp
-  type(ocean_grid_type),               intent(in)     :: G
-  type(verticalGrid_type),             intent(in)     :: GV
+  type(ocean_grid_type),      pointer, intent(in)     :: G
+  type(verticalGrid_type),    pointer, intent(in)     :: GV
 
   character(len=40)                               :: mod = "offline_transport"
 
@@ -868,8 +943,26 @@ subroutine offline_transport_init(param_file, CS, diabatic_aux_CSp, G, GV)
     CS%evap_CFL_limit = diabatic_aux_CSp%evap_CFL_limit
     CS%minimum_forcing_depth = diabatic_aux_CSp%minimum_forcing_depth
   endif
+  
+  ! Grid pointer assignments
+  CS%G  => G
+  CS%GV => GV
+  
+  ! Allocate arrays
+  ALLOC_(CS%uhtr(IsdB:IedB,jsd:jed,nz))   ; CS%uhtr(:,:,:) = 0.0
+  ALLOC_(CS%vhtr(isd:ied,JsdB:JedB,nz))   ; CS%vhtr(:,:,:) = 0.0
+  ALLOC_(CS%khdt_x(IsdB:IedB,jsd:jed))    ; CS%khdt_x(:,:)         = 0.0
+  ALLOC_(CS%khdt_y(isd:ied,JsdB:JedB))    ; CS%khdt_y(:,:)         = 0.0
+  ALLOC_(CS%eatr(isd:ied,jsd:jed,nz))          ; CS%eatr(:,:,:) = 0.0
+  ALLOC_(CS%ebtr(isd:ied,jsd:jed,nz))          ; CS%ebtr(:,:,:) = 0.0
+  ALLOC_(CS%temp_snap(isd:ied,jsd:jed,nz))     ; CS%temp_snap(:,:,:) = 0.0
+  ALLOC_(CS%temp_mean(isd:ied,jsd:jed,nz))     ; CS%temp_mean(:,:,:) = 0.0
+  ALLOC_(CS%salt_snap(isd:ied,jsd:jed,nz))     ; CS%salt_snap(:,:,:) = 0.0
+  ALLOC_(CS%salt_mean(isd:ied,jsd:jed,nz))     ; CS%salt_mean(:,:,:) = 0.0
+  ALLOC_(CS%h_end(isd:ied,jsd:jed,nz))         ; CS%h_end(:,:,:) = GV%Angstrom
 
   call callTree_leave("offline_transport_init")
+  
 
 end subroutine offline_transport_init
 

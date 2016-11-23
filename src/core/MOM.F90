@@ -126,9 +126,11 @@ use MOM_verticalGrid,          only : verticalGrid_type, verticalGridInit, verti
 use MOM_verticalGrid,          only : get_thickness_units, get_flux_units, get_tr_flux_units
 
 ! Offline modules
-use MOM_offline_main,          only : offline_transport_CS, offline_transport_init
-use MOM_offline_main,          only : register_diags_offline_transport, transport_by_files
-use MOM_offline_main,          only : offline_advection_ale, offline_diabatic_ale, offline_advection_layer
+use MOM_offline_main,          only : offline_transport_CS, offline_transport_init, transport_by_files
+use MOM_offline_main,          only : register_diags_offline_transport, offline_advection_ale
+use MOM_offline_main,          only : offline_redistribute_residual, offline_diabatic_ale
+use MOM_offline_main,          only : offline_advection_layer
+use MOM_ALE,                   only : ale_offline_tracer_final
 
 
 implicit none ; private
@@ -1434,37 +1436,35 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
   type(verticalGrid_type),    pointer :: GV => NULL() ! Pointer to structure containing information
                                                       ! about the vertical grid
   
-  real    :: accumulated_time = 0.0 ! Keeps track of how long it has been since the previous offline interval
+  integer :: accumulated_time = 0.0 ! Keeps track of how long it has been since the previous offline interval
   logical :: first_iter ! True if this is the first time step_tracers has been called in a given interval
+  logical :: last_iter  ! True if this is the last time step_tracer is to be called in an offline interval
+  logical :: adv_converged ! True if all the horizontal fluxes have been used
+  integer :: iter_no
   
-  ! Zonal mass transports 
-  real, dimension(SZIB_(CS%G),SZJ_(CS%G),SZK_(CS%G))   :: uhtr
-  ! Zonal diffusive transport
-  real, dimension(SZIB_(CS%G),SZJ_(CS%G))              :: khdt_x
-  ! Meridional mass transports
-  real, dimension(SZI_(CS%G),SZJB_(CS%G),SZK_(CS%G))   :: vhtr
-  ! Meridional diffusive transports
-  real, dimension(SZI_(CS%G),SZJB_(CS%G))              :: khdt_y
-
-    ! Vertical diffusion related variables
-  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: &
-      eatr,     &  ! Amount of fluid entrained from the layer above within
-                   ! one time step  (m for Bouss, kg/m^2 for non-Bouss)
-      ebtr         ! Amount of fluid entrained from the layer below within
-                   ! one time step  (m for Bouss, kg/m^2 for non-Bouss)
-  ! Work arrays for temperature and salinity    
-  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: &        
-      temp_snap, salt_snap, &
-      temp_mean, salt_mean, &
-      h_pre, h_end
+  ! 3D pointers
+  real, dimension(:,:,:), pointer   :: &
+    uhtr, vhtr, &
+    eatr, ebtr, &
+    temp_snap, temp_mean, &
+    salt_snap, salt_mean, &
+    h_end
+    
+  ! 2D Pointers
+  real, dimension(:,:), pointer   :: &  
+    khdt_x, khdt_y
+    
+    
+    
   type(time_type) :: Time_end    ! End time of a segment, as a time type
   integer :: num_iter_vert
   
-  num_iter_vert = floor(CS%offline_CSp%dt_offline/time_interval)
+  num_iter_vert = floor((CS%offline_CSp%dt_offline+0.0001)/time_interval)
   
   ! Grid-related pointer assignments
   G => CS%G
   GV => CS%GV
+  
   ! Pointer assignments to necessary fields from main MOM CS
   CS%offline_CSp%ALE_CSp          => CS%ALE_CSp
   CS%offline_CSp%diabatic_CSp     => CS%diabatic_CSp
@@ -1474,44 +1474,111 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
   CS%offline_CSp%tracer_flow_CSp  => CS%tracer_flow_CSp
   CS%offline_CSp%tracer_Reg       => CS%tracer_Reg
   CS%offline_CSp%tv               => CS%tv
-  CS%offline_CSp%G                => CS%G
-  CS%offline_CSp%GV               => CS%GV
+  
+  ! Assignments for fields stored in offline CS
+  uhtr => CS%offline_CSp%uhtr
+  vhtr => CS%offline_CSp%vhtr
+  eatr => CS%offline_CSp%eatr
+  ebtr => CS%offline_CSp%ebtr
+  temp_snap => CS%offline_CSp%temp_snap
+  temp_mean => CS%offline_CSp%temp_mean
+  salt_snap => CS%offline_CSp%salt_snap
+  salt_mean => CS%offline_CSp%salt_mean
+  h_end => CS%offline_CSp%h_end
   
   call cpu_clock_begin(id_clock_tracer)
   Time_end = increment_date(Time_start, seconds=floor(time_interval+0.001))
   call enable_averaging(time_interval, Time_end, CS%diag)
       
-  if(accumulated_time==0.0) then
+  if(accumulated_time==0) then
     first_iter = .true.
+    iter_no = 1
   else ! This is probably unnecessary but is used to guard against unwanted behavior
     first_iter = .false.
   endif 
-  ! Increment the amount of time elapsed since last read and check if it's time to roll around
-  accumulated_time = mod(accumulated_time + time_interval, CS%offline_CSp%dt_offline)
-
-  ! If this is the first iteration in the offline timestep, then we need to read in fields and
-  ! perform the main advection.
-  if (first_iter) then
-    ! Store the layer thicknesses from the end of the previous timestep
-    h_pre(:,:,:) = CS%h
-    call pass_var(h_pre,G%Domain)   
-    
-    ! Read in new transport and other fields
-    call transport_by_files(G, GV, CS%offline_CSp, h_end, eatr, ebtr, uhtr, vhtr, &
-        khdt_x, khdt_y, temp_snap, salt_snap, temp_mean, salt_mean, fluxes, CS%use_ALE_algorithm)
   
-    ! Check to see if offline advection needs to be done     
-    if(CS%use_ALE_algorithm) then
-      call offline_advection_ale(fluxes, Time_start, time_interval, CS%offline_CSp, id_clock_ALE, &
-          h_pre, h_end, uhtr, vhtr)
-    elseif (.not. CS%use_ALE_algorithm) then
-      ! Note that for the layer mode case, the calls to tracer sources and sinks is embedded in 
-      ! main_offline_advection_layer. Warning: this may not be appropriate for tracers that
-      ! exchange with the atmosphere
-      call offline_advection_layer(fluxes, Time_start, time_interval, CS%offline_CSp, &
-          h_pre, eatr, ebtr, uhtr, vhtr)
-    endif
+  if(is_root_pe()) print *, "Offline iteration", iter_no, "of", num_iter_vert
+  
+  iter_no = iter_no + 1
+  
+  ! Increment the amount of time elapsed since last read and check if it's time to roll around
+  accumulated_time = mod(accumulated_time + int(time_interval), int(CS%offline_CSp%dt_offline))
+  if(accumulated_time==0) then
+    last_iter = .true.
+    iter_no = 0
+  else
+    last_iter = .false.
+  endif
 
+  if(CS%use_ALE_algorithm) then
+    ! If this is the first iteration in the offline timestep, then we need to read in fields and
+    ! perform the main advection.
+    if (first_iter) then
+      ! Read in new transport and other fields
+      call transport_by_files(G, GV, CS%offline_CSp, h_end, eatr, ebtr, uhtr, vhtr, &
+          khdt_x, khdt_y, temp_snap, salt_snap, temp_mean, salt_mean, fluxes, &
+          CS%use_ALE_algorithm, niter_vert=num_iter_vert)
+          
+      if(CS%debug)  call hchksum(h_end, "h_end after transport_by_files", G%HI)   
+
+      ! Check to see if ALE or layer is being used
+      call offline_advection_ale(fluxes, Time_start, time_interval, CS%offline_CSp, id_clock_ALE, &
+          CS%h, uhtr, vhtr, converged=adv_converged)
+      call pass_var(CS%h,G%Domain)
+      
+    endif
+    
+    ! The functions related to column physics of tracers is performed separately in ALE mode 
+    CS%tv%T(:,:,:) = temp_mean(:,:,:)
+    CS%tv%S(:,:,:) = salt_mean(:,:,:)
+    call offline_diabatic_ale(fluxes, Time_start, Time_end, time_interval, CS%offline_CSp, &
+        CS%h, eatr, ebtr)
+    call pass_var(CS%h,G%Domain)    
+    if(CS%debug)  call hchksum(h_end,"h_end after offline_diabatic_ALE",G%HI)    
+        
+    ! Do any residual transport, the final ALE remappings,  horizontal diffusion if it is
+    ! the last iteration
+    if(last_iter) then
+      if(is_root_pe()) print *, "Last iteration of offline interval"
+      call offline_redistribute_residual(CS%offline_CSp, CS%h, h_end, uhtr, vhtr, adv_converged)
+      ! Call ALE one last time to make sure that tracers are remapped onto the layer thicknesses
+      ! stored from the forward run
+      call hchksum(h_end, "h_end after offline_redistribute_residual",G%HI)
+      CS%tv%T(:,:,:) = temp_snap(:,:,:)
+      CS%tv%S(:,:,:) = salt_snap(:,:,:)
+      call cpu_clock_begin(id_clock_ALE)
+      call ALE_offline_tracer_final( G, GV, CS%h, h_end, CS%tracer_Reg, CS%ALE_CSp)
+      call cpu_clock_end(id_clock_ALE)        
+      if(CS%debug)  call hchksum(h_end, "h_end after ALE_offline_tracer_final",G%HI)
+      
+      ! Perform offline diffusion if requested
+      if (.not. CS%offline_CSp%skip_diffusion) then
+        call tracer_hordiff(h_end, CS%offline_CSp%dt_offline, CS%MEKE, CS%VarMix, G, GV, &
+          CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, do_online_flag=.false., read_khdt_x=khdt_x, &
+          read_khdt_y=khdt_y)
+        if(CS%debug)  call hchksum(h_end, "h_end after tracer_hordiff",G%HI)  
+      endif    
+      
+      CS%h = h_end
+      call pass_var(CS%h,G%Domain)
+      
+    endif
+    
+  else ! NON-ALE MODE...NOT WELL TESTED
+    
+    call MOM_error(WARNING, &
+        "Offline tracer mode in non-ALE configuration has not been thoroughly tested")
+    ! Note that for the layer mode case, the calls to tracer sources and sinks is embedded in 
+    ! main_offline_advection_layer. Warning: this may not be appropriate for tracers that
+    ! exchange with the atmosphere
+    if(time_interval .NE. CS%offline_CSp%dt_offline) then
+      call MOM_error(FATAL, &
+          "For offline tracer mode in a non-ALE configuration, dt_offline must equal time_interval")
+    endif
+    call transport_by_files(G, GV, CS%offline_CSp, h_end, eatr, ebtr, uhtr, vhtr, &
+        khdt_x, khdt_y, temp_snap, salt_snap, temp_mean, salt_mean, fluxes)
+    call offline_advection_layer(fluxes, Time_start, time_interval, CS%offline_CSp, &
+        CS%h, eatr, ebtr, uhtr, vhtr)
     ! Perform offline diffusion if requested
     if (.not. CS%offline_CSp%skip_diffusion) then
       CS%tv%T(:,:,:) = temp_snap
@@ -1519,19 +1586,20 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       call tracer_hordiff(h_end, CS%offline_CSp%dt_offline, CS%MEKE, CS%VarMix, G, GV, &
         CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, do_online_flag=.false., read_khdt_x=khdt_x, &
         read_khdt_y=khdt_y)
-    endif
-      
-  endif
+    endif    
+    
+    CS%tv%T = temp_snap
+    CS%tv%S = salt_snap
+    CS%h = h_end
+    
+    call pass_var(CS%tv%T,G%Domain)
+    call pass_var(CS%tv%S,G%Domain)
+    call pass_var(CS%h,G%Domain)
 
-  ! The functions related to column physics of tracers is performed separately in ALE mode 
-  if (CS%use_ALE_algorithm) then
-    CS%tv%T(:,:,:) = temp_mean
-    CS%tv%S(:,:,:) = salt_mean
-    call offline_diabatic_ale(fluxes, Time_start, Time_end, time_interval, CS%offline_CSp, &
-        h_pre, eatr, ebtr)
+        
   endif
   
-  if (CS%offline_CSp%id_hr>0) call post_data(CS%offline_CSp%id_hr, h_end-h_pre, CS%diag)
+  if (CS%offline_CSp%id_hr>0) call post_data(CS%offline_CSp%id_hr, h_end-CS%h, CS%diag)
   if (CS%offline_CSp%id_uhr>0) call post_data(CS%offline_CSp%id_uhr, uhtr, CS%diag)
   if (CS%offline_CSp%id_vhr>0) call post_data(CS%offline_CSp%id_vhr, vhtr, CS%diag)
   if (CS%offline_CSp%id_ear>0) call post_data(CS%offline_CSp%id_ear, eatr, CS%diag)
@@ -1540,13 +1608,6 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
   call cpu_clock_end(id_clock_tracer)
 
   call disable_averaging(CS%diag)
-
-  ! Note here T/S are reset to the stored snap shot to ensure that the offline model
-  ! densities, used in the neutral diffusion code don't drift too far from the online
-  ! model      
-  CS%tv%T(:,:,:) = temp_snap
-  CS%tv%S(:,:,:) = salt_snap
-  CS%h(:,:,:) = h_end
 
   call pass_var(CS%tv%T,G%Domain)
   call pass_var(CS%tv%S,G%Domain)
@@ -2313,6 +2374,11 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   if(CS%offline_tracer_mode) then
     call offline_transport_init(param_file, CS%offline_CSp, CS%diabatic_CSp%diabatic_aux_CSp, G, GV)
     CS%offline_CSp%debug = CS%debug
+    if (mod(first_direction,2)==0) then
+      CS%offline_CSp%x_before_y = .true.
+    else
+      CS%offline_CSp%x_before_y = .false.
+    endif
     call register_diags_offline_transport(Time, CS%diag, CS%offline_CSp)
   endif
 
