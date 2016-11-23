@@ -1,54 +1,7 @@
+!> A thin wrapper for Boussinesq/non-Boussinesq forms of the pressure force calculation.
 module MOM_PressureForce
-!***********************************************************************
-!*                   GNU General Public License                        *
-!* This file is a part of MOM.                                         *
-!*                                                                     *
-!* MOM is free software; you can redistribute it and/or modify it and  *
-!* are expected to follow the terms of the GNU General Public License  *
-!* as published by the Free Software Foundation; either version 2 of   *
-!* the License, or (at your option) any later version.                 *
-!*                                                                     *
-!* MOM is distributed in the hope that it will be useful, but WITHOUT  *
-!* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY  *
-!* or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public    *
-!* License for more details.                                           *
-!*                                                                     *
-!* For the full text of the GNU General Public License,                *
-!* write to: Free Software Foundation, Inc.,                           *
-!*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
-!* or see:   http://www.gnu.org/licenses/gpl.html                      *
-!***********************************************************************
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, April 1994 - June 2008                         *
-!*                                                                     *
-!*    This file contains the subroutine that directs the model to use  *
-!*  the code that determines the horizontal accelerations due to       *
-!*  pressure gradients.  The two options currently available are a     *
-!*  traditional Montgomery potential form, and the analytic finite     *
-!*  volume form described in Adcroft, Hallberg and Harrison, 2008,     *
-!*  Ocean Modelling, 22, 106-113.                                      *
-!*                                                                     *
-!*    PressureForce takes 9 arguments, which are described below. If   *
-!*  a non-split time stepping scheme is used, the last three arguments *
-!*  are ignored.                                                       *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, CoriolisBu                            *
-!*    j+1  > o > o >   At ^:  v, PFv                                   *
-!*    j    x ^ x ^ x   At >:  u, PFu                                   *
-!*    j    > o > o >   At o:  h, bathyT, M, e, p, pbce, T, S           *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1                                                  *
-!*           i  i+1                                                    *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
+! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
@@ -68,15 +21,19 @@ implicit none ; private
 
 public PressureForce, PressureForce_init, PressureForce_end
 
+! Pressure force control structure
 type, public :: PressureForce_CS ; private
-  logical :: Analytic_FV_PGF ! If true, use the analytic finite volume form
-                            ! (Adcroft et al., Ocean Mod. 2008) of the PGF.
+  logical :: Analytic_FV_PGF !< If true, use the analytic finite volume form
+                             !! (Adcroft et al., Ocean Mod. 2008) of the PGF.
+  !> Control structure for the analytically integrated finite volume pressure force
   type(PressureForce_AFV_CS), pointer :: PressureForce_AFV_CSp => NULL()
+  !> Control structure for the Montgomery potential form of pressure force
   type(PressureForce_Mont_CS), pointer :: PressureForce_Mont_CSp => NULL()
 end type PressureForce_CS
 
 contains
 
+!> A thin layer between the model and the Boussinesq and non-Boussinesq pressure force routines.
 subroutine PressureForce(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, pbce, eta)
   type(ocean_grid_type),                     intent(in)  :: G
   type(verticalGrid_type),                   intent(in)  :: GV
@@ -90,10 +47,6 @@ subroutine PressureForce(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, pbce, eta)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(out) :: pbce
   real, dimension(SZI_(G),SZJ_(G)),         optional, intent(out) :: eta
 
-!    This subroutine works as a temporary interface between the model and the
-! Boussinesq and non-Boussinesq pressure force routines.
-! Descriptions of the variables are in each of the routines called in the
-! following conditional block.
 
   if (CS%Analytic_FV_PGF) then
     if (GV%Boussinesq) then
@@ -115,25 +68,15 @@ subroutine PressureForce(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, pbce, eta)
 
 end subroutine Pressureforce
 
+!> Initialize the pressure force control structure
 subroutine PressureForce_init(Time, G, GV, param_file, diag, CS, tides_CSp)
-  type(time_type), target, intent(in)    :: Time
-  type(ocean_grid_type),   intent(in)    :: G
-  type(verticalGrid_type), intent(in)    :: GV
-  type(param_file_type),   intent(in)    :: param_file
-  type(diag_ctrl), target, intent(inout) :: diag
-  type(PressureForce_CS),  pointer       :: CS
-  type(tidal_forcing_CS), optional, pointer :: tides_CSp
-! Arguments: Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module.
-!  (in)      tides_CSp - a pointer to the control structure of the tide module.
-
-! This include declares and sets the variable "version".
+  type(time_type), target, intent(in)    :: Time !< Current model time
+  type(ocean_grid_type),   intent(in)    :: G    !< Ocean grid structure
+  type(verticalGrid_type), intent(in)    :: GV   !< Vertical grid structure
+  type(param_file_type),   intent(in)    :: param_file !< Parameter file handles
+  type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
+  type(PressureForce_CS),  pointer       :: CS   !< Pressure force control structure
+  type(tidal_forcing_CS), optional, pointer :: tides_CSp !< Tide control structure
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_PressureForce" ! This module's name.
 
@@ -162,10 +105,17 @@ subroutine PressureForce_init(Time, G, GV, param_file, diag, CS, tides_CSp)
 
 end subroutine PressureForce_init
 
-
+!> Deallocate the pressure force control structure
 subroutine PressureForce_end(CS)
-  type(PressureForce_CS), pointer :: CS
+  type(PressureForce_CS), pointer :: CS !< Pressure force control structure
   if (associated(CS)) deallocate(CS)
 end subroutine PressureForce_end
+
+!> \namespace mom_pressureforce
+!!
+!! This thin module provides a branch to two forms of the horizontal accelerations
+!! due to pressure gradients. The two options currently available are a
+!! Montgomery potential form (used in traditional isopycnal layer models), and the
+!! analytic finite volume form.
 
 end module MOM_PressureForce

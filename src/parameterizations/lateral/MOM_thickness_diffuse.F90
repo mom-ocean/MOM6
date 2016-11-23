@@ -156,7 +156,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
 !$OMP parallel default(none) shared(is,ie,js,je,Khth_Loc_u,CS,use_VarMix,VarMix,    &
 !$OMP                               MEKE_not_null,MEKE,Resoln_scaled,KH_u,          &
 !$OMP                               KH_u_CFL,nz,Khth_Loc,KH_v,KH_v_CFL,int_slope_u, &
-!$OMP                               int_slope_v )
+!$OMP                               int_slope_v,khth_use_ebt_struct)
 !$OMP do
   do j=js,je; do I=is-1,ie
     Khth_Loc_u(i,j) = CS%Khth
