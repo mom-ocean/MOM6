@@ -138,6 +138,7 @@ end type
 
 ! The following routines are visible to the outside world
 public initialize_regridding, end_regridding, regridding_main
+public allocate_regridding
 public inflate_vanished_layers_old, check_remapping_grid, check_grid_column
 public adjust_interface_motion
 public set_regrid_params
@@ -212,15 +213,12 @@ real, parameter    :: NR_OFFSET = 1e-6
 contains
 
 !> Initialization of regridding
-subroutine initialize_regridding( nk, coordMode, CS, interp_scheme, compressibility_fraction )
-  integer,               intent(in)      :: nk !< Number of levels
-  character(len=*),      intent(in)      :: coordMode !< Coordinate mode to use
+subroutine initialize_regridding( CS, coordMode, interp_scheme )
   type(regridding_CS),   intent(inout)   :: CS !< Regridding control structure
+  character(len=*),      intent(in)      :: coordMode !< Coordinate mode to use
   character(len=*), optional, intent(in) :: interp_scheme !< Interpolation mode to use (if needed)
-  real, optional,        intent(in)      :: compressibility_fraction !< Fraction of compressibility
-                                            !! to add to potential density profiles (nondim)
 
-  CS%nk = nk
+  CS%nk = 0
 
   CS%regridding_scheme = coordinateMode(coordMode)
 
@@ -235,10 +233,6 @@ subroutine initialize_regridding( nk, coordMode, CS, interp_scheme, compressibil
   CS%boundary_extrapolation = regriddingDefaultBoundaryExtrapolation
 
   CS%min_thickness = regriddingDefaultMinThickness
-
-  if (present(compressibility_fraction)) CS%compressibility_fraction = compressibility_fraction
-
-  call allocate_regridding( CS )
 
 end subroutine initialize_regridding
 
@@ -2852,40 +2846,30 @@ function getStaticThickness( CS, SSH, depth )
 
 end function getStaticThickness
 
-!------------------------------------------------------------------------------
-! Allocate memory for regridding
-!------------------------------------------------------------------------------
-subroutine allocate_regridding( CS )
-!------------------------------------------------------------------------------
-! In this routine, we allocate the memory needed to carry out regridding
-! steps in the course of the simulation.
+!> Allocate memory for regridding
+subroutine allocate_regridding(CS, nk)
+  type(regridding_CS), intent(inout) :: CS !< Regridding control structure
+  integer,             intent(in)    :: nk !< Number of levels
 
-! For example, to compute implicit edge-value estimates, a tridiagonal system
-! must be solved. We allocate the needed memory at the beginning of the
-! simulation because the number of layers never changes.
-!------------------------------------------------------------------------------
-
-  ! Arguments
-  type(regridding_CS), intent(inout) :: CS
-
-  ! Local variables
-
-  ! Target values
-  allocate( CS%target_density(CS%nk+1) )
+  CS%nk = nk
 
   ! Target resolution (for fixed coordinates)
   allocate( CS%coordinateResolution(CS%nk) ); CS%coordinateResolution(:) = -1.E30
 
-end subroutine allocate_regridding
+  if (state_dependent(CS%regridding_scheme)) then
+    ! Target values
+    allocate( CS%target_density(CS%nk+1) ); CS%target_density(:) = -1.E30
+  endif
 
+end subroutine allocate_regridding
 
 !> Deallocate memory for regridding
 subroutine regridding_memory_deallocation( CS )
   type(regridding_CS), intent(inout) :: CS !< Regridding control structure
 
   ! Target values
-  deallocate( CS%target_density )
   deallocate( CS%coordinateResolution )
+  if (allocated(CS%target_density)) deallocate( CS%target_density )
   if (allocated(CS%max_interface_depths) ) deallocate( CS%max_interface_depths )
   if (allocated(CS%max_layer_thickness) ) deallocate( CS%max_layer_thickness )
 

@@ -27,7 +27,8 @@ use MOM_verticalGrid,     only : verticalGrid_type
 use MOM_EOS,              only : EOS_type
 use MOM_remapping,        only : remapping_CS, initialize_remapping
 use MOM_remapping,        only : remapping_core_h
-use MOM_regridding,       only : regridding_CS, initialize_regridding, setCoordinateResolution
+use MOM_regridding,       only : regridding_CS, initialize_regridding, allocate_regridding
+use MOM_regridding,       only : setCoordinateResolution
 use MOM_regridding,       only : build_zstar_column, build_rho_column, build_sigma_column
 use MOM_regridding,       only : set_regrid_params, uniformResolution
 use regrid_consts,        only : coordinateMode
@@ -150,13 +151,13 @@ subroutine configure_axes(remap_cs, G, GV, param_file, default_def)
   type(ocean_grid_type),   intent(inout) :: G !< Ocean grid structure
   type(verticalGrid_type),    intent(in) :: GV !< ocean vertical grid structure
   type(param_file_type),      intent(in) :: param_file !< Parameter file structure
-  character(len=*), optional, intent(in) :: default_def !< String to use as default for DIAG_REMAP_*_GRID_DEF
+  character(len=*), optional, intent(in) :: default_def !< String to use as default for DIAG_COORD_DEF_*
   ! Local variables
   integer :: nzi(4), nzl(4), k
   character(len=200) :: inputdir, string, filename, int_varname, layer_varname
   character(len=40)  :: mod  = "MOM_diag_mediator" ! This module's name.
   character(len=8)   :: units, expected_units
-  character(len=34)  :: longname
+  character(len=34)  :: longname, string2
 
   character(len=256) :: err_msg
   logical :: ierr
@@ -164,8 +165,8 @@ subroutine configure_axes(remap_cs, G, GV, param_file, default_def)
   real, allocatable, dimension(:) :: interfaces, layers
 
   ! Read info needed for z-space remapping
-  longname=''
-  if (present(default_def)) longname=trim(default_def)
+  string2=''
+  if (present(default_def)) string2=trim(default_def)
   call get_param(param_file, mod, &
                  'DIAG_COORD_DEF_'//trim(remap_cs%diag_coord_name), &
                  string, &
@@ -180,7 +181,7 @@ subroutine configure_axes(remap_cs, G, GV, param_file, default_def)
                  "                             that contains layer positions,\n"//&
                  "UNIFORM                    - vertical grid is uniform\n"//&
                  "                             between surface and max depth.\n",&
-                 default=trim(longname))
+                 default=trim(string2))
   if (len_trim(string) > 0) then
 
     if (trim(string) == 'UNIFORM') then
@@ -427,8 +428,9 @@ subroutine diag_remap_update(remap_cs, G, h, T, S, eqn_of_state)
     call initialize_remapping(remap_cs%remap_cs, 'PPM_IH4', boundary_extrapolation=.false.)
 
     allocate(remap_cs%regrid_cs)
-    call initialize_regridding(nz, remap_cs%vertical_coord_name, remap_cs%regrid_cs, interp_scheme='PPM_H4')
+    call initialize_regridding(remap_cs%regrid_cs, remap_cs%vertical_coord_name, interp_scheme='PPM_H4')
     call set_regrid_params(remap_cs%regrid_cs, min_thickness=0., integrate_downward_for_e=.false.)
+    call allocate_regridding(remap_cs%regrid_cs, nz)
     call setCoordinateResolution(remap_cs%dz, remap_cs%regrid_cs)
 
     allocate(remap_cs%h(G%isd:G%ied,G%jsd:G%jed, nz))

@@ -14,11 +14,11 @@ use MOM_error_handler,    only : MOM_error, FATAL, WARNING
 use MOM_error_handler,    only : callTree_showQuery
 use MOM_error_handler,    only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,      only : get_param, param_file_type, log_param
-use MOM_io,               only : file_exists, field_exists, MOM_read_data
+use MOM_io,               only : file_exists, field_exists, field_size, MOM_read_data
 use MOM_io,               only : vardesc, var_desc, fieldtype, SINGLE_FILE
 use MOM_io,               only : create_file, write_field, close_file, slasher
 use MOM_regridding,       only : initialize_regridding, regridding_main, end_regridding
-use MOM_regridding,       only : uniformResolution
+use MOM_regridding,       only : uniformResolution, allocate_regridding
 use MOM_regridding,       only : inflate_vanished_layers_old, setCoordinateResolution
 use MOM_regridding,       only : set_target_densities_from_GV, set_target_densities
 use MOM_regridding,       only : regriddingCoordinateModeDoc, DEFAULT_COORDINATE_MODE
@@ -35,7 +35,7 @@ use MOM_remapping,        only : initialize_remapping, end_remapping
 use MOM_remapping,        only : remapping_core_h, remapping_core_w
 use MOM_remapping,        only : remappingSchemesDoc, remappingDefaultScheme
 use MOM_remapping,        only : remapping_CS, dzFromH1H2
-use MOM_string_functions, only : uppercase, extractWord
+use MOM_string_functions, only : uppercase, extractWord, extract_integer
 use MOM_tracer_registry,  only : tracer_registry_type
 use MOM_variables,        only : ocean_grid_type, thermo_var_ptrs
 use MOM_verticalGrid,     only : verticalGrid_type
@@ -124,6 +124,7 @@ public ALE_initThicknessToCoord
 public ALE_update_regrid_weights
 public ALE_remap_init_conds
 public ALE_register_diags
+public configure_coordinate
 
 contains
 
@@ -1035,59 +1036,59 @@ subroutine ALE_initRegridding(GV, max_depth, param_file, mod, regridCS)
   type(regridding_CS),     intent(out) :: regridCS   !< Regridding parameters and work arrays
   ! Local variables
   character(len=40) :: coord_mode ! Temporary strings
-  integer :: ke
-  ke = GV%ke
 
   call get_param(param_file, mod, "REGRIDDING_COORDINATE_MODE", coord_mode, &
                  "Coordinate mode for vertical regridding.\n"//&
                  "Choose among the following possibilities:\n"//&
                  trim(regriddingCoordinateModeDoc),&
                  default=DEFAULT_COORDINATE_MODE, fail_if_missing=.true.)
-  call interpret_coord_config(GV, ke, max_depth, param_file, mod, regridCS, coord_mode, &
+  call configure_coordinate(regridCS, coord_mode, GV, max_depth, param_file, mod, &
           "ALE_COORDINATE_CONFIG", "ALE_RESOLUTION", "REGRIDDING_COORDINATE_UNITS", &
           main_model_params=.true.)
 
 end subroutine ALE_initRegridding
 
 !> Configures a regridding control structure based on customizable run-time parameters
-subroutine interpret_coord_config(GV, ke, max_depth, param_file, mod, regridCS, coord_mode, &
+subroutine configure_coordinate(regridCS, coord_mode, GV, max_depth, param_file, mod, &
               coord_config_param, coord_res_param, coord_units_param, &
               main_model_params)
+  type(regridding_CS),     intent(out) :: regridCS   !< Regridding parameters and work arrays
+  character(len=*),        intent(in)  :: coord_mode !< Coordinate mode
   type(verticalGrid_type), intent(in)  :: GV         !< Ocean vertical grid structure
-  integer,                 intent(in)  :: ke         !< Number of levels
   real,                    intent(in)  :: max_depth  !< The maximum depth of the ocean, in m.
   type(param_file_type),   intent(in)  :: param_file !< parameter file 
   character(len=*),        intent(in)  :: mod        !< Name of calling module
-  type(regridding_CS),     intent(out) :: regridCS   !< Regridding parameters and work arrays
-  character(len=*),        intent(in)  :: coord_mode !< Coordinate mode
   character(len=*),        intent(in)  :: coord_config_param !< Name of coordinate configuration parameter
   character(len=*),        intent(in)  :: coord_res_param !< Name of coordinate resolution parameter
   character(len=*),        intent(in)  :: coord_units_param !< Coordinate units parameter
   logical, optional,       intent(in)  :: main_model_params !< If true, reads parameters that control the main ALE configuration
   ! Local variables
+  integer :: ke ! Number of levels
   character(len=80)  :: string, varName ! Temporary strings
   character(len=40)  :: coord_units ! Temporary strings
   character(len=200) :: inputdir, fileName
   character(len=320) :: message ! Temporary strings
-  integer :: K
   logical :: tmpLogical, fix_haloclines, set_max, do_sum, main_parameters
   logical :: coord_is_state_dependent
-  real :: filt_len, strat_tol, index_scale
-  real :: tmpReal
+  real :: filt_len, strat_tol, index_scale, tmpReal
   real :: dz_fixed_sfc, Rho_avg_depth, nlay_sfc_int
-  integer :: nz_fixed_sfc
+  integer :: nz_fixed_sfc, k, nzf(4)
   real, dimension(:), allocatable :: dz     ! Resolution (thickness) in units of coordinate
   real, dimension(:), allocatable :: h_max  ! Maximum layer thicknesses, in m.
   real, dimension(:), allocatable :: dz_max ! Thicknesses used to find maximum interface depths, in m.
   real, dimension(:), allocatable :: z_max  ! Maximum tinterface depths, in m.
   real, dimension(:), allocatable :: rho_target ! Target density used in HYBRID mode
+  ! Thicknesses that give level centers corresponding to table 2 of WOA09
+  real, dimension(40) :: woa09_dz = (/ 5.,  10.,  10.,  15.,  22.5, 25., 25.,  25.,  &
+                                      37.5, 50.,  50.,  75., 100., 100., 100., 100., &
+                                     100., 100., 100., 100., 100., 100., 100., 175., &
+                                     250., 375., 500., 500., 500., 500., 500., 500., &
+                                     500., 500., 500., 500., 500., 500., 500., 500. /)
 
   main_parameters=.false.
   if (present(main_model_params)) main_parameters=main_model_params
 
-  allocate(dz(ke))
-
-  call initialize_regridding( ke, coord_mode, regridCS)
+  call initialize_regridding(regridCS, coord_mode)
 
   coord_is_state_dependent = state_dependent(coord_mode)
 
@@ -1096,6 +1097,7 @@ subroutine interpret_coord_config(GV, ke, max_depth, param_file, mod, regridCS, 
     call get_param(param_file, mod, coord_units_param, coord_units, &
                  "Units of the regridding coordinuate.",&
                  default=coordinateUnits(coord_mode))
+  else
     coord_units=coordinateUnits(coord_mode)
   endif
 
@@ -1139,83 +1141,117 @@ subroutine interpret_coord_config(GV, ke, max_depth, param_file, mod, regridCS, 
             "in z-coordinate mode, the parameter is a list of level\n"//&
             "thicknesses (in m). In sigma-coordinate mode, the list\n"//&
             "is of non-dimensional fractions of the water column."
-  select case ( trim(string) )
-    case ("UNIFORM")
-      dz(:) = uniformResolution(ke, coord_mode, max_depth, &
-                 GV%Rlay(1)+0.5*(GV%Rlay(1)-GV%Rlay(2)), &
-                 GV%Rlay(ke)+0.5*(GV%Rlay(ke)-GV%Rlay(ke-1)) )
-      call log_param(param_file, mod, "!"//coord_res_param, dz, &
+  if (index(trim(string),'UNIFORM')==1) then
+    if (len_trim(string)==7) then
+      ke = GV%ke ! Use model nk by default
+    elseif (index(trim(string),'UNIFORM:')==1 .and. len_trim(string)>8) then
+      ! Format is "UNIFORM:N"
+      ke = extract_integer(string(9:len_trim(string)),'',1)
+      allocate(dz(ke))
+    else
+      call MOM_error(FATAL,trim(mod)//', configure_coordinate: '// &
+          'Unable to interpret "'//trim(string)//'".')
+    endif
+    allocate(dz(ke))
+    dz(:) = uniformResolution(ke, coord_mode, max_depth, &
+                   GV%Rlay(1)+0.5*(GV%Rlay(1)-GV%Rlay(2)), &
+                   GV%Rlay(ke)+0.5*(GV%Rlay(ke)-GV%Rlay(ke-1)) )
+    call log_param(param_file, mod, "!"//coord_res_param, dz, &
                    trim(message), units=trim(coord_units))
-    case ("PARAM")
-      ! Read coordinate resolution (main model = ALE_RESOLUTION)
-      call get_param(param_file, mod, coord_res_param, dz, &
+  elseif (trim(string)=='PARAM') then
+    ! Read coordinate resolution (main model = ALE_RESOLUTION)
+    ke = GV%ke ! Use model nk by default
+    allocate(dz(ke))
+    call get_param(param_file, mod, coord_res_param, dz, &
                    trim(message), units=trim(coord_units), fail_if_missing=.true.)
-    case default 
-      if (index(trim(string),'FILE:')==1) then
-        call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
-        inputdir = slasher(inputdir)
+  elseif (index(trim(string),'FILE:')==1) then
+    call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
+    inputdir = slasher(inputdir)
 
-        if (string(6:6)=='.' .or. string(6:6)=='/') then
-          ! If we specified "FILE:./xyz" or "FILE:/xyz" then we have a relative or absolute path
-          fileName = trim( extractWord(trim(string(6:80)), 1) )
-        else
-          ! Otherwise assume we should look for the file in INPUTDIR
-          fileName = trim(inputdir) // trim( extractWord(trim(string(6:80)), 1) )
-        endif
-        if (.not. file_exists(fileName)) call MOM_error(FATAL,"ALE_initRegridding: "// &
-          "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
+    if (string(6:6)=='.' .or. string(6:6)=='/') then
+      ! If we specified "FILE:./xyz" or "FILE:/xyz" then we have a relative or absolute path
+      fileName = trim( extractWord(trim(string(6:80)), 1) )
+    else
+      ! Otherwise assume we should look for the file in INPUTDIR
+      fileName = trim(inputdir) // trim( extractWord(trim(string(6:80)), 1) )
+    endif
+    if (.not. file_exists(fileName)) call MOM_error(FATAL,trim(mod)//", configure_coordinate: "// &
+            "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
 
-        varName = trim( extractWord(trim(string(6:)), 2) )
-        if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,"ALE_initRegridding: "// &
-          "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
-        if (len_trim(varName)==0) then
-          if (field_exists(fileName,'dz')) then; varName = 'dz'
-          elseif (field_exists(fileName,'dsigma')) then; varName = 'dsigma'
-          elseif (field_exists(fileName,'ztest')) then; varName = 'ztest'
-          else ;  call MOM_error(FATAL,"ALE_initRegridding: "// &
-            "Coordinate variable not specified and none could be guessed.")
-          endif
-        endif
-        call MOM_read_data(trim(fileName), trim(varName), dz)
-        call log_param(param_file, mod, "!"//coord_res_param, dz, &
-                   trim(message), units=coordinateUnits(coord_mode))
-      elseif (index(trim(string),'FNC1:')==1) then
-        call dz_function1( trim(string(6:)), dz )
-        call log_param(param_file, mod, "!"//coord_res_param, dz, &
-                   trim(message), units=coordinateUnits(coord_mode))
-      elseif (index(trim(string),'HYBRID:')==1) then
-        call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
-        inputdir = slasher(inputdir)
-
-        ! The following assumes the FILE: syntax of above but without "FILE:" in the string
-        allocate(rho_target(ke+1))
-        fileName = trim( extractWord(trim(string(8:)), 1) )
-        if (fileName(1:1)/='.' .and. filename(1:1)/='/') fileName = trim(inputdir) // trim( fileName )
-        if (.not. file_exists(fileName)) call MOM_error(FATAL,"ALE_initRegridding: HYBRID "// &
-          "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
-        varName = trim( extractWord(trim(string(8:)), 2) )
-        if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,"ALE_initRegridding: HYBRID "// &
-          "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
-        call MOM_read_data(trim(fileName), trim(varName), rho_target)
-        call set_target_densities( regridCS, rho_target )
-        varName = trim( extractWord(trim(string(8:)), 3) )
-        if (varName(1:5) == 'FNC1:') then ! Use FNC1 to calculate dz
-          call dz_function1( trim(string((index(trim(string),'FNC1:')+5):)), dz )
-        else ! Read dz from file
-          if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,"ALE_initRegridding: HYBRID "// &
-            "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
-          call MOM_read_data(trim(fileName), trim(varName), dz)
-        endif
-        call log_param(param_file, mod, "!"//coord_res_param, dz, &
-                   trim(message), units=coordinateUnits(coord_mode))
-        call log_param(param_file, mod, "!TARGET_DENSITIES", rho_target, &
-                   'HYBRID target densities for itnerfaces', units=coordinateUnits(coord_mode))
-        deallocate(rho_target)
-      else
-        call MOM_error(FATAL,"ALE_initRegridding: "// &
-          "Unrecognized coordinate configuraiton"//trim(string))
+    varName = trim( extractWord(trim(string(6:)), 2) )
+    if (len_trim(varName)==0) then
+      if (field_exists(fileName,'dz')) then; varName = 'dz'
+      elseif (field_exists(fileName,'dsigma')) then; varName = 'dsigma'
+      elseif (field_exists(fileName,'ztest')) then; varName = 'ztest'
+      else ;  call MOM_error(FATAL,trim(mod)//", configure_coordinate: "// &
+                    "Coordinate variable not specified and none could be guessed.")
       endif
-  end select
+    endif
+    if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,trim(mod)//", configure_coordinate: "// &
+                 "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
+    call field_size(trim(fileName), trim(varName), nzf)
+    ke = nzf(1)
+    if (main_parameters .and. ke/=GV%ke) then
+      call MOM_error(FATAL,trim(mod)//', configure_coordinate: '// &
+                 'Mismatch in number of model levels and "'//trim(string)//'".')
+    endif
+    allocate(dz(ke))
+    call MOM_read_data(trim(fileName), trim(varName), dz)
+    call log_param(param_file, mod, "!"//coord_res_param, dz, &
+               trim(message), units=coordinateUnits(coord_mode))
+  elseif (index(trim(string),'FNC1:')==1) then
+    ke = GV%ke; allocate(dz(ke))
+    call dz_function1( trim(string(6:)), dz )
+    call log_param(param_file, mod, "!"//coord_res_param, dz, &
+               trim(message), units=coordinateUnits(coord_mode))
+  elseif (index(trim(string),'HYBRID:')==1) then
+    ke = GV%ke; allocate(dz(ke))
+    call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
+    inputdir = slasher(inputdir)
+
+    ! The following assumes the FILE: syntax of above but without "FILE:" in the string
+    allocate(rho_target(ke+1))
+    fileName = trim( extractWord(trim(string(8:)), 1) )
+    if (fileName(1:1)/='.' .and. filename(1:1)/='/') fileName = trim(inputdir) // trim( fileName )
+    if (.not. file_exists(fileName)) call MOM_error(FATAL,trim(mod)//", configure_coordinate: HYBRID "// &
+      "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
+    varName = trim( extractWord(trim(string(8:)), 2) )
+    if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,trim(mod)//", configure_coordinate: HYBRID "// &
+      "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
+    call MOM_read_data(trim(fileName), trim(varName), rho_target)
+    varName = trim( extractWord(trim(string(8:)), 3) )
+    if (varName(1:5) == 'FNC1:') then ! Use FNC1 to calculate dz
+      call dz_function1( trim(string((index(trim(string),'FNC1:')+5):)), dz )
+    else ! Read dz from file
+      if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,trim(mod)//", configure_coordinate: HYBRID "// &
+        "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
+      call MOM_read_data(trim(fileName), trim(varName), dz)
+    endif
+    call log_param(param_file, mod, "!"//coord_res_param, dz, &
+               trim(message), units=coordinateUnits(coord_mode))
+    call log_param(param_file, mod, "!TARGET_DENSITIES", rho_target, &
+               'HYBRID target densities for itnerfaces', units=coordinateUnits(coord_mode))
+  elseif (index(trim(string),'WOA09')==1) then
+    if (len_trim(string)==5) then
+      tmpReal = 0. ; ke = 0
+      do while (tmpReal<max_depth)
+        ke = ke + 1
+        tmpReal = tmpReal + woa09_dz(ke)
+      enddo
+    elseif (index(trim(string),'WOA09:')==1) then
+      if (len_trim(string)==6) call MOM_error(FATAL,trim(mod)//', configure_coordinate: '// &
+                 'Expected string of form "WOA09:N" but got "'//trim(string)//'".')
+      ke = extract_integer(string(7:len_trim(string)),'',1)
+    endif
+    if (ke>40 .or. ke<1) call MOM_error(FATAL,trim(mod)//', configure_coordinate: '// &
+                 'For "WOA05:N" N must 0<N<41 but got "'//trim(string)//'".')
+    allocate(dz(ke))
+    dz(1:ke) = woa09_dz(1:ke)
+  else
+    call MOM_error(FATAL,trim(mod)//", configure_coordinate: "// &
+      "Unrecognized coordinate configuraiton"//trim(string))
+  endif
+
   if (coordinateMode(coord_mode) == REGRIDDING_ZSTAR .or. &
       coordinateMode(coord_mode) == REGRIDDING_HYCOM1 .or. &
       coordinateMode(coord_mode) == REGRIDDING_SLIGHT) then
@@ -1228,12 +1264,17 @@ subroutine interpret_coord_config(GV, ke, max_depth, param_file, mod, regridCS, 
       if ( dz(ke) + ( max_depth - tmpReal ) > 0. ) then
         dz(ke) = dz(ke) + ( max_depth - tmpReal )
       else
-        call MOM_error(FATAL,"ALE_initRegridding: "// &
+        call MOM_error(FATAL,trim(mod)//", configure_coordinate: "// &
           "MAXIMUM_DEPTH was too shallow to adjust bottom layer of DZ!"//trim(string))
       endif
     endif
   endif
+  call allocate_regridding(regridCS, ke)
   call setCoordinateResolution( dz, regridCS )
+  if (allocated(rho_target)) then
+    call set_target_densities( regridCS, rho_target )
+    deallocate(rho_target)
+  endif
   if (coordinateMode(coord_mode) == REGRIDDING_RHO) call set_target_densities_from_GV( GV, regridCS )
 
   call get_param(param_file, mod, "MIN_THICKNESS", tmpReal, &
@@ -1326,18 +1367,18 @@ subroutine interpret_coord_config(GV, ke, max_depth, param_file, mod, regridCS, 
         ! Otherwise assume we should look for the file in INPUTDIR
         fileName = trim(inputdir) // trim( extractWord(trim(string(6:80)), 1) )
       endif
-      if (.not. file_exists(fileName)) call MOM_error(FATAL,"ALE_initRegridding: "// &
+      if (.not. file_exists(fileName)) call MOM_error(FATAL,trim(mod)//", configure_coordinate: "// &
         "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
 
       do_sum = .false.
       varName = trim( extractWord(trim(string(6:)), 2) )
-      if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,"ALE_initRegridding: "// &
+      if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,trim(mod)//", configure_coordinate: "// &
         "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
       if (len_trim(varName)==0) then
         if (field_exists(fileName,'z_max')) then; varName = 'z_max'
         elseif (field_exists(fileName,'dz')) then; varName = 'dz' ; do_sum = .true.
         elseif (field_exists(fileName,'dz_max')) then; varName = 'dz_max' ; do_sum = .true.
-        else ; call MOM_error(FATAL,"ALE_initRegridding: "// &
+        else ; call MOM_error(FATAL,trim(mod)//", configure_coordinate: "// &
           "MAXIMUM_INT_DEPTHS variable not specified and none could be guessed.")
         endif
       endif
@@ -1361,7 +1402,7 @@ subroutine interpret_coord_config(GV, ke, max_depth, param_file, mod, regridCS, 
                  trim(message), units=coordinateUnits(coord_mode))
       call set_regrid_max_depths( regridCS, z_max, GV%m_to_H )
     else
-      call MOM_error(FATAL,"ALE_initRegridding: "// &
+      call MOM_error(FATAL,trim(mod)//", configure_coordinate: "// &
         "Unrecognized MAXIMUM_INT_DEPTH_CONFIG "//trim(string))
     endif
     deallocate(z_max)
@@ -1398,16 +1439,16 @@ subroutine interpret_coord_config(GV, ke, max_depth, param_file, mod, regridCS, 
         ! Otherwise assume we should look for the file in INPUTDIR
         fileName = trim(inputdir) // trim( extractWord(trim(string(6:80)), 1) )
       endif
-      if (.not. file_exists(fileName)) call MOM_error(FATAL,"ALE_initRegridding: "// &
+      if (.not. file_exists(fileName)) call MOM_error(FATAL,trim(mod)//", configure_coordinate: "// &
         "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
 
       varName = trim( extractWord(trim(string(6:)), 2) )
-      if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,"ALE_initRegridding: "// &
+      if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,trim(mod)//", configure_coordinate: "// &
         "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
       if (len_trim(varName)==0) then
         if (field_exists(fileName,'h_max')) then; varName = 'h_max'
         elseif (field_exists(fileName,'dz_max')) then; varName = 'dz_max'
-        else ; call MOM_error(FATAL,"ALE_initRegridding: "// &
+        else ; call MOM_error(FATAL,trim(mod)//", configure_coordinate: "// &
           "MAXIMUM_INT_DEPTHS variable not specified and none could be guessed.")
         endif
       endif
@@ -1421,14 +1462,14 @@ subroutine interpret_coord_config(GV, ke, max_depth, param_file, mod, regridCS, 
                  trim(message), units=coordinateUnits(coord_mode))
       call set_regrid_max_thickness( regridCS, h_max, GV%m_to_H )
     else
-      call MOM_error(FATAL,"ALE_initRegridding: "// &
+      call MOM_error(FATAL,trim(mod)//", configure_coordinate: "// &
         "Unrecognized MAX_LAYER_THICKNESS_CONFIG "//trim(string))
     endif
     deallocate(h_max)
   endif
 
   deallocate(dz)
-end subroutine interpret_coord_config
+end subroutine configure_coordinate
 
 !> Parses a string and generates a dz(:) profile
 subroutine dz_function1( string, dz )
