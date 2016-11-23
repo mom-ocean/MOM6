@@ -420,7 +420,6 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, dt, CS, h_pre, eat
   if (associated(CS%diabatic_CSp%optics)) &
     call set_opacity(CS%diabatic_CSp%optics, fluxes, CS%G, CS%GV, CS%diabatic_CSp%opacity_CSp)
 
-!  call offline_add_diurnal_SW(fluxes, CS%G, Time_start, Time_end)
   ! Note that first two arguments are identical, because in ALE mode, there is no change in layer thickness
   ! because of eatr and ebtr
   call call_tracer_column_fns(h_pre, h_pre, eatr, ebtr, &
