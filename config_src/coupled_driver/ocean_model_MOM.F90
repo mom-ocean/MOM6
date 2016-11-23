@@ -394,7 +394,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   
   if (time_start_update /= OS%Time) then
     call MOM_error(WARNING, "update_ocean_model: internal clock does not "//&
-                             "with time_start_update argument.")
+                            "agree with time_start_update argument.")
   endif
   if (.not.associated(OS)) then
     call MOM_error(FATAL, "update_ocean_model called with an unassociated "// &

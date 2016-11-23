@@ -1457,7 +1457,10 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       temp_snap, salt_snap, &
       temp_mean, salt_mean, &
       h_pre, h_end
-  type(time_type) :: Time_end    ! End time of a segment, as a time type    
+  type(time_type) :: Time_end    ! End time of a segment, as a time type
+  integer :: num_iter_vert
+  
+  num_iter_vert = floor(CS%offline_CSp%dt_offline/time_interval)
   
   ! Grid-related pointer assignments
   G => CS%G
@@ -1524,7 +1527,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
   if (CS%use_ALE_algorithm) then
     CS%tv%T(:,:,:) = temp_mean
     CS%tv%S(:,:,:) = salt_mean
-    call offline_diabatic_ale(fluxes, Time_start, Time_end, CS%offline_CSp, h_pre, eatr, ebtr)
+    call offline_diabatic_ale(fluxes, Time_start, Time_end, time_interval, CS%offline_CSp, &
+        h_pre, eatr, ebtr)
   endif
   
   if (CS%offline_CSp%id_hr>0) call post_data(CS%offline_CSp%id_hr, h_end-h_pre, CS%diag)
