@@ -119,7 +119,6 @@ use MOM_tracer_registry,       only : add_tracer_diagnostics, tracer_registry_ty
 use MOM_tracer_registry,       only : lock_tracer_registry, tracer_registry_end
 use MOM_tracer_flow_control,   only : call_tracer_register, tracer_flow_control_CS
 use MOM_tracer_flow_control,   only : tracer_flow_control_init, call_tracer_surface_state
-use MOM_tracer_flow_control,   only : call_tracer_column_fns
 use MOM_transcribe_grid,       only : copy_dyngrid_to_MOM_grid, copy_MOM_grid_to_dyngrid
 use MOM_vert_friction,         only : vertvisc, vertvisc_remnant
 use MOM_vert_friction,         only : vertvisc_limit_vel, vertvisc_init
@@ -127,8 +126,8 @@ use MOM_verticalGrid,          only : verticalGrid_type, verticalGridInit, verti
 use MOM_verticalGrid,          only : get_thickness_units, get_flux_units, get_tr_flux_units
 
 ! Offline modules
-use MOM_offline_main,          only : offline_transport_CS, 
-use MOM_offline_main,          only : offline_transport_init, register_diags_offline_transport
+use MOM_offline_main,          only : offline_transport_CS, offline_transport_init
+use MOM_offline_main,          only : register_diags_offline_transport, transport_by_files
 use MOM_offline_main,          only : offline_advection_ale, offline_diabatic_ale, offline_advection_layer
 
 
@@ -1456,7 +1455,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
   ! Work arrays for temperature and salinity    
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: &        
       temp_snap, salt_snap, &
-      temp_mean, salt_mean
+      temp_mean, salt_mean, &
+      h_pre, h_end
   type(time_type) :: Time_end    ! End time of a segment, as a time type    
   
   ! Grid-related pointer assignments
@@ -1475,7 +1475,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
   CS%offline_CSp%GV               => CS%GV
   
   call cpu_clock_begin(id_clock_tracer)
-  Time_end = increment_date(sub_Time_start, seconds=floor(time_interval+0.001))
+  Time_end = increment_date(Time_start, seconds=floor(time_interval+0.001))
   call enable_averaging(time_interval, Time_end, CS%diag)
       
   if(accumulated_time==0.0) then
@@ -1490,9 +1490,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
   ! perform the main advection.
   if (first_iter) then
     ! Store the layer thicknesses from the end of the previous timestep
-    do k=1,nz ; do j=jsd,jed ; do i=isd,ied
-      h_pre(i,j,k) = CS%h(i,j,k)
-    enddo ; enddo; enddo
+    h_pre(:,:,:) = CS%h
     call pass_var(h_pre,G%Domain)   
     
     ! Read in new transport and other fields
@@ -1501,16 +1499,18 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
   
     ! Check to see if offline advection needs to be done     
     if(CS%use_ALE_algorithm) then
-      call offline_advection_ale(fluxes, state, Time_start, time_interval, CS%offline_CSp, h_pre, h_end, uhtr, vhtr)
+      call offline_advection_ale(fluxes, Time_start, time_interval, CS%offline_CSp, id_clock_ALE, &
+          h_pre, h_end, uhtr, vhtr)
     elseif (.not. CS%use_ALE_algorithm) then
     ! Note that for the layer mode case, the calls to tracer sources and sinks is embedded in 
     ! main_offline_advection_layer. Warning: this may not be appropriate for tracers that
     ! exchange with the atmosphere
-      call offline_advection_layer(fluxes, state, Time_start, time_interval, CS%offline_CSp)
+      call offline_advection_layer(fluxes, Time_start, time_interval, CS%offline_CSp, &
+          h_pre, eatr, ebtr, uhtr, vhtr)
     endif
 
-    ! Perform offline diffusion if necessary
-    if (.not. CS%offline_CSp%skip_offline_diffusion) then
+    ! Perform offline diffusion if requested
+    if (.not. CS%offline_CSp%skip_diffusion) then
       CS%tv%T(:,:,:) = temp_snap
       CS%tv%S(:,:,:) = salt_snap
       call tracer_hordiff(h_end, CS%offline_CSp%dt_offline, CS%MEKE, CS%VarMix, G, GV, &
@@ -1520,16 +1520,14 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       
   endif
 
-  h_temp = h_end-h_pre
-
   ! The functions related to column physics of tracers is performed separately in ALE mode 
   if (CS%use_ALE_algorithm) then
     CS%tv%T(:,:,:) = temp_mean
     CS%tv%S(:,:,:) = salt_mean
-    call offline_diabatic_ale(fluxes, state, Time_start, time_interval, CS, h_pre, eatr, ebtr)
+    call offline_diabatic_ale(fluxes, Time_start, Time_end, CS%offline_CSp, h_pre, eatr, ebtr)
   endif
   
-  if (CS%offline_CSp%id_hr>0) call post_data(CS%offline_CSp%id_hr, h_temp, CS%diag)
+  if (CS%offline_CSp%id_hr>0) call post_data(CS%offline_CSp%id_hr, h_end-h_pre, CS%diag)
   if (CS%offline_CSp%id_uhr>0) call post_data(CS%offline_CSp%id_uhr, uhtr, CS%diag)
   if (CS%offline_CSp%id_vhr>0) call post_data(CS%offline_CSp%id_vhr, vhtr, CS%diag)
   if (CS%offline_CSp%id_ear>0) call post_data(CS%offline_CSp%id_ear, eatr, CS%diag)
@@ -1545,7 +1543,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
   CS%tv%T(:,:,:) = temp_snap
   CS%tv%S(:,:,:) = salt_snap
   CS%h(:,:,:) = h_end
-  enddo ;  enddo; enddo
+
   call pass_var(CS%tv%T,G%Domain)
   call pass_var(CS%tv%S,G%Domain)
   call pass_var(CS%h,G%Domain)

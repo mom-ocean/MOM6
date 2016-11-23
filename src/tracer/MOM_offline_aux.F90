@@ -8,23 +8,16 @@ use MOM_domains,          only : pass_var, pass_vector, To_All
 use MOM_error_handler,    only : callTree_enter, callTree_leave, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_grid,             only : ocean_grid_type
 use MOM_verticalGrid,     only : verticalGrid_type
-use MOM_io,               only : read_data
 use MOM_file_parser,      only : get_param, log_version, param_file_type
-use MOM_diag_mediator,    only : diag_ctrl, register_diag_field
-use mpp_domains_mod,      only : CENTER, CORNER, NORTH, EAST
 use astronomy_mod,        only : orbital_time, diurnal_solar, daily_mean_solar
 use MOM_variables,        only : vertvisc_type
 use MOM_forcing_type,     only : forcing
 use MOM_shortwave_abs,    only : optics_type
 use MOM_diag_mediator,    only : post_data
 use MOM_forcing_type,     only : forcing
-use MOM_diabatic_aux,     only : diabatic_aux_CS
 
 implicit none
 
-public offline_transport_init
-public transport_by_files
-public register_diags_offline_transport
 public update_h_horizontal_flux
 public update_h_vertical_flux
 public limit_mass_flux_3d
@@ -38,26 +31,6 @@ public offline_add_diurnal_sw
 #include "version_variable.h"
 
 contains
-
-!> Calculates the next timelevel to read from the input fields. This allows the 'looping'
-!! of the fields
-function next_modulo_time(inidx, numtime)
-  ! Returns the next time interval to be read
-  integer                 :: numtime              ! Number of time levels in input fields
-  integer                 :: inidx                ! The current time index
-
-  integer                 :: read_index           ! The index in the input files that corresponds
-                                                  ! to the current timestep
-
-  integer                 :: next_modulo_time
-
-  read_index = mod(inidx+1,numtime)
-  if (read_index < 0)  read_index = inidx-read_index
-  if (read_index == 0) read_index = numtime
-
-  next_modulo_time = read_index
-
-end function next_modulo_time
 
 !> This updates thickness based on the convergence of horizontal mass fluxes
 !! NOTE: Only used in non-ALE mode
