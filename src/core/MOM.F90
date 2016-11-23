@@ -1502,9 +1502,9 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       call offline_advection_ale(fluxes, Time_start, time_interval, CS%offline_CSp, id_clock_ALE, &
           h_pre, h_end, uhtr, vhtr)
     elseif (.not. CS%use_ALE_algorithm) then
-    ! Note that for the layer mode case, the calls to tracer sources and sinks is embedded in 
-    ! main_offline_advection_layer. Warning: this may not be appropriate for tracers that
-    ! exchange with the atmosphere
+      ! Note that for the layer mode case, the calls to tracer sources and sinks is embedded in 
+      ! main_offline_advection_layer. Warning: this may not be appropriate for tracers that
+      ! exchange with the atmosphere
       call offline_advection_layer(fluxes, Time_start, time_interval, CS%offline_CSp, &
           h_pre, eatr, ebtr, uhtr, vhtr)
     endif
@@ -1549,7 +1549,6 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
   call pass_var(CS%h,G%Domain)
 
   fluxes%fluxes_used = .true.
-
 
 end subroutine step_tracers
 
@@ -2309,6 +2308,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   
   if(CS%offline_tracer_mode) then
     call offline_transport_init(param_file, CS%offline_CSp, CS%diabatic_CSp%diabatic_aux_CSp, G, GV)
+    CS%offline_CSp%debug = CS%debug
     call register_diags_offline_transport(Time, CS%diag, CS%offline_CSp)
   endif
 

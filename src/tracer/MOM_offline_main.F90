@@ -129,7 +129,6 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
   integer :: isv, iev, jsv, jev ! The valid range of the indices.
   integer :: IsdB, IedB, JsdB, JedB
   logical :: z_first, x_before_y
-  integer :: niter_vert
   real :: evap_CFL_limit, minimum_forcing_depth, dt_iter, dt_offline
 
   ! Grid-related pointer assignments
@@ -144,7 +143,6 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
   dt_offline = CS%dt_offline
   evap_CFL_limit = CS%evap_CFL_limit
   minimum_forcing_depth = CS%minimum_forcing_depth
-  niter_vert = CEILING(dt_offline/CS%dt_offline_vertical)
 
   niter = CS%num_off_iter
   Inum_iter = 1./real(niter)
@@ -425,7 +423,6 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, CS, h_pre,
   integer :: isv, iev, jsv, jev ! The valid range of the indices.
   integer :: IsdB, IedB, JsdB, JedB
   logical :: z_first, x_before_y
-  integer :: niter_vert
   
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
