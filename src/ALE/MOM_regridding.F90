@@ -305,9 +305,12 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mod, coord_mode,
   if (main_parameters) then
     param_name = "ALE_COORDINATE_CONFIG"
     coord_res_param = "ALE_RESOLUTION"
+    string2 = 'UNIFORM'
   else
     param_name = trim(param_prefix)//"_DEF_"//trim(param_suffix)
     coord_res_param = trim(param_prefix)//"_RES_"//trim(param_suffix)
+    string2 = 'UNIFORM'
+    if (max_depth>3000.) string2='WOA09' ! For convenience
   endif
   call get_param(param_file, mod, param_name, string, &
                  "Determines how to specify the coordinate\n"//&
@@ -324,7 +327,7 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mod, coord_mode,
                  "               the filename and two variable names, separated\n"//&
                  "               by a comma or space, for sigma-2 and dz. e.g.\n"//&
                  "               HYBRID:vgrid.nc,sigma2,dz",&
-                 default='UNIFORM')
+                 default=trim(string2))
   message = "The distribution of vertical resolution for the target\n"//&
             "grid used for Eulerian-like coordinates. For example,\n"//&
             "in z-coordinate mode, the parameter is a list of level\n"//&
