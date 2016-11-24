@@ -38,6 +38,7 @@ public string_functions_unit_tests
 public extractWord
 public extract_word
 public extract_integer
+public extract_real
 public remove_spaces
 public slasher
 
@@ -283,6 +284,30 @@ integer function extract_integer(string, separators, n, missing_value)
 
 end function extract_integer
 
+!> Returns the real corresponding to the nth word in the argument.
+real function extract_real(string, separators, n, missing_value)
+  character(len=*), intent(in) :: string     !< String to scan
+  character(len=*), intent(in) :: separators !< Characters to use for delineation
+  integer,          intent(in) :: n          !< Number of word to extract
+  real, optional,   intent(in) :: missing_value !< Value to assign if word is missing
+  ! Local variables
+  integer :: ns, i, b, e, nw
+  character(len=20) :: word
+
+  word = extract_word(string, separators, n)
+
+  if (len_trim(word)>0) then
+    read(word(1:len_trim(word)),*) extract_real
+  else
+    if (present(missing_value)) then
+      extract_real = missing_value
+    else
+      extract_real = 0
+    endif
+  endif
+
+end function extract_real
+
 !> Returns string with all spaces removed.
 character(len=120) function remove_spaces(string)
   character(len=*),   intent(in) :: string     !< String to scan
@@ -337,6 +362,11 @@ logical function string_functions_unit_tests()
   fail = fail .or. localTestI(extract_integer("1,2",",",2),2)
   fail = fail .or. localTestI(extract_integer("1,2",",",3),0)
   fail = fail .or. localTestI(extract_integer("1,2",",",4,4),4)
+  fail = fail .or. localTestR(extract_real("1.","",1),1.)
+  fail = fail .or. localTestR(extract_real("1.,2.,3.",",",1),1.)
+  fail = fail .or. localTestR(extract_real("1.,2.",",",2),2.)
+  fail = fail .or. localTestR(extract_real("1.,2.",",",3),0.)
+  fail = fail .or. localTestR(extract_real("1.,2.",",",4,4.),4.)
   if (.not. fail) write(*,*) 'Pass'
   write(*,*) '=========================================================='
   string_functions_unit_tests = fail
@@ -359,6 +389,15 @@ logical function string_functions_unit_tests()
       if (localTestI) write(*,*) i1,'!=',i2, '<-- FAIL'
     endif
   end function localTestI
+  logical function localTestR(r1,r2)
+    real :: r1,r2
+    localTestR=.false.
+    if (r1/=r2) localTestR=.true.
+    if (localTestR .or. verbose) then
+      write(*,*) r1,r2
+      if (localTestR) write(*,*) r1,'!=',r2, '<-- FAIL'
+    endif
+  end function localTestR
 end function string_functions_unit_tests
 
 !> Returns a directory name that is terminated with a "/" or "./" if the
