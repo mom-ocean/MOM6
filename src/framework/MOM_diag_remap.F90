@@ -121,35 +121,17 @@ end subroutine diag_remap_diag_registration_closed
 subroutine diag_remap_set_active(remap_cs)
   type(diag_remap_ctrl), intent(inout) :: remap_cs !< Diag remapping control structure
 
-  if (remap_cs%vertical_coord /= coordinateMode('LAYER')) then
-    remap_cs%used = .true.
-  endif
+  remap_cs%used = .true.
 
 end subroutine diag_remap_set_active
 
 !> Configure the vertical axes for a diagnostic remapping control structure.
-!! Reads a configuration file to determine nominal location of vertical
-!! layers/interfaces.
-subroutine diag_remap_configure_axes(remap_cs, G, GV, param_file, default_def)
+!! Reads a configuration parameters to determine coordinate generation.
+subroutine diag_remap_configure_axes(remap_cs, G, GV, param_file)
   type(diag_remap_ctrl),   intent(inout) :: remap_cs !< Diag remap control structure
   type(ocean_grid_type),   intent(inout) :: G !< Ocean grid structure
   type(verticalGrid_type),    intent(in) :: GV !< ocean vertical grid structure
   type(param_file_type),      intent(in) :: param_file !< Parameter file structure
-  character(len=*), optional, intent(in) :: default_def !< String to use as default for DIAG_REMAP_*_GRID_DEF
-
-  if (remap_cs%vertical_coord /= coordinateMode('LAYER')) then
-    call configure_axes(remap_cs, G, GV, param_file, default_def=default_def)
-  endif
-
-end subroutine diag_remap_configure_axes
-
-!> Read grid definition spec to configure axes.
-subroutine configure_axes(remap_cs, G, GV, param_file, default_def)
-  type(diag_remap_ctrl),   intent(inout) :: remap_cs !< Diag remap control structure
-  type(ocean_grid_type),   intent(inout) :: G !< Ocean grid structure
-  type(verticalGrid_type),    intent(in) :: GV !< ocean vertical grid structure
-  type(param_file_type),      intent(in) :: param_file !< Parameter file structure
-  character(len=*), optional, intent(in) :: default_def !< String to use as default for DIAG_COORD_DEF_*
   ! Local variables
   integer :: nzi(4), nzl(4), k
   character(len=200) :: inputdir, string, filename, int_varname, layer_varname
@@ -199,8 +181,7 @@ subroutine configure_axes(remap_cs, G, GV, param_file, default_def)
   deallocate(interfaces)
   deallocate(layers)
 
-end subroutine configure_axes
-
+end subroutine diag_remap_configure_axes
 
 !> Get layer and interface axes ids for this coordinate
 !! Needed when defining axes groups.
