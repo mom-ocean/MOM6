@@ -27,16 +27,14 @@ use MOM_verticalGrid,     only : verticalGrid_type
 use MOM_EOS,              only : EOS_type
 use MOM_remapping,        only : remapping_CS, initialize_remapping
 use MOM_remapping,        only : remapping_core_h
-use MOM_regridding,       only : regridding_CS, initialize_regridding, allocate_regridding
-use MOM_regridding,       only : setCoordinateResolution
+use MOM_regridding,       only : regridding_CS, initialize_regridding
 use MOM_regridding,       only : build_zstar_column, build_rho_column, build_sigma_column
-use MOM_regridding,       only : set_regrid_params, uniformResolution
+use MOM_regridding,       only : set_regrid_params, get_regrid_size, uniformResolution
+use MOM_regridding,       only : getCoordinateInterfaces
 use regrid_consts,        only : coordinateMode
 
 use diag_axis_mod,     only : get_diag_axis_name
 use diag_manager_mod,  only : diag_axis_init
-
-use netcdf
 
 implicit none ; private
 
@@ -59,10 +57,10 @@ type :: diag_remap_ctrl
   logical :: used = .false.  !< Whether this coordinate actually gets used.
   integer :: vertical_coord = 0 !< The vertical coordinate that we remap to
   character(len=10) :: vertical_coord_name ='' !< The coordinate name as understood by ALE
-  character(len=16) :: diag_coord_name = '' !< A name for the purposs of run-time parameters
-  character(len=8) :: diag_module_suffix = '' !< The suffiz for the module to appear in diag_table
-  type(remapping_CS), pointer :: remap_cs => null() !< type for remapping using ALE module
-  type(regridding_CS), pointer :: regrid_cs => null() !< type for regridding using ALE module
+  character(len=16) :: diag_coord_name = '' !< A name for the purpose of run-time parameters
+  character(len=8) :: diag_module_suffix = '' !< The suffix for the module to appear in diag_table
+  type(remapping_CS) :: remap_cs !< Remapping control structure use for this axes
+  type(regridding_CS) :: regrid_cs !< Regridding control structure that defines the coordiantes for this axes
   integer :: nz = 0 !< Number of vertical levels used for remapping
   real, dimension(:,:,:), allocatable :: h !< Remap grid thicknesses
   real, dimension(:), allocatable :: dz !< Nominal layer thicknesses
@@ -155,7 +153,7 @@ subroutine configure_axes(remap_cs, G, GV, param_file, default_def)
   ! Local variables
   integer :: nzi(4), nzl(4), k
   character(len=200) :: inputdir, string, filename, int_varname, layer_varname
-  character(len=40)  :: mod  = "MOM_diag_mediator" ! This module's name.
+  character(len=40)  :: mod  = "MOM_diag_remap" ! This module's name.
   character(len=8)   :: units, expected_units
   character(len=34)  :: longname, string2
 
@@ -164,213 +162,47 @@ subroutine configure_axes(remap_cs, G, GV, param_file, default_def)
 
   real, allocatable, dimension(:) :: interfaces, layers
 
-  ! Read info needed for z-space remapping
-  string2=''
-  if (present(default_def)) string2=trim(default_def)
-  call get_param(param_file, mod, &
-                 'DIAG_COORD_DEF_'//trim(remap_cs%diag_coord_name), &
-                 string, &
-                 "This sets the file and variable names that define the\n"//&
-                 "vertical grid used for diagnostic output remapping. \n"//&
-                 " It should look like:\n"//&
-                 " FILE:<file>,<varI>,<varL> - where <file> is a file within\n"//&
-                 "                             the INPUTDIR, <varI> is\n"//&
-                 "                             the name of the variable that\n"//&
-                 "                             contains interface positions,\n"//&
-                 "                             <varL> is the name of the variable\n"//&
-                 "                             that contains layer positions,\n"//&
-                 "UNIFORM                    - vertical grid is uniform\n"//&
-                 "                             between surface and max depth.\n",&
-                 default=trim(string2))
-  if (len_trim(string) > 0) then
+  call initialize_regridding(remap_cs%regrid_cs, GV, GV%max_depth, param_file, mod, &
+           trim(remap_cs%vertical_coord_name), "DIAG_COORD", trim(remap_cs%diag_coord_name))
+  call set_regrid_params(remap_cs%regrid_cs, min_thickness=0., integrate_downward_for_e=.false.)
 
-    if (trim(string) == 'UNIFORM') then
-      nzi(1) = GV%ke + 1
-      nzl(1) = GV%ke
-      allocate(remap_cs%dz(nzl(1)))
-      allocate(interfaces(nzi(1)))
-      allocate(layers(nzl(1)))
+  remap_cs%nz = get_regrid_size(remap_cs%regrid_cs)
 
-      remap_cs%dz(:) = uniformResolution(GV%ke, remap_cs%vertical_coord_name, &
-                                      G%max_depth, GV%Rlay(1)+0.5*(GV%Rlay(1)-GV%Rlay(2)), &
-                                      GV%Rlay(GV%ke)+0.5*(GV%Rlay(GV%ke)-GV%Rlay(GV%ke-1)))
-
-      if (remap_cs%vertical_coord == coordinateMode('RHO')) then
-        interfaces(1) = GV%Rlay(1)
-      else
-        interfaces(1) = 0
-      endif
-
-      ! Calculate interface and layer positions
-      do k=2,nzi(1)
-        interfaces(k) = interfaces(k - 1) + remap_cs%dz(k - 1)
-      enddo
-      layers(:) = interfaces(1:nzl(1)) + remap_cs%dz(:) / 2
-
-    elseif (index(trim(string), 'FILE:') == 1) then
-      ! read coordinate information from a file
-      if (string(6:6)=='.' .or. string(6:6)=='/') then
-        inputdir = "."
-        filename = trim(extractWord(trim(string(6:200)), 1))
-      else
-        call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
-        inputdir = slasher(inputdir)
-        filename = trim(inputdir) // trim(extractWord(trim(string(6:200)), 1))
-      endif
-      int_varname = trim(extractWord(trim(string(1:200)), 2))
-      layer_varname = trim(extractWord(trim(string(1:200)), 3))
-
-      if (.not. file_exists(trim(filename))) then
-        call MOM_error(FATAL,"set_axes_info: Specified file not found: "//&
-                             "Looking for '"//trim(filename)//"'")
-      endif
-
-      if (remap_cs%vertical_coord == coordinateMode('SIGMA')) then
-        expected_units = 'nondim'
-      elseif (remap_cs%vertical_coord == coordinateMode('RHO')) then
-        expected_units = 'kg m-3'
-      else
-        expected_units = 'meters'
-      endif
-
-      ! Check that the vars have expected format, units etc.
-      call check_grid_def(filename, int_varname, expected_units, err_msg, ierr)
-      if (ierr) then
-           call MOM_error(FATAL,"set_axes_info: Unsupported format in grid "//&
-                                 "definition '"//trim(filename)//"'"//&
-                                 ". Error message "//err_msg)
-      endif
-
-      if (len(trim(layer_varname))>0) then
-        call check_grid_def(filename, layer_varname, expected_units, err_msg, ierr)
-        if (ierr) then
-          call MOM_error(FATAL,"set_axes_info: Unsupported format in grid "//&
-                               "definition '"//trim(filename)//"'"//&
-                               ". Error message "//err_msg)
-        endif
-      endif
-
-      ! Log the expanded result as a comment since it cannot be read back in
-      call log_param(param_file, mod, "! Remapping diagnostics", &
-                     trim(filename)//","//trim(int_varname)//","//trim(layer_varname))
-
-      ! Get interfaces
-      call field_size(trim(filename), trim(int_varname), nzi)
-      call assert(nzi(1) /= 0, 'set_axes_info: bad interface dimension size')
-      allocate(interfaces(nzi(1)))
-      call MOM_read_data(filename, int_varname, interfaces)
-      ! Always convert heights into depths
-      interfaces(:) = abs(interfaces(:))
-
-      ! Get layer dimensions
-      allocate(layers(nzi(1)-1))
-      if (len(trim(layer_varname))>0) then
-        call field_size(trim(filename), trim(layer_varname), nzl)
-        call assert(nzl(1) /= 0 .and. nzl(1) == nzi(1) - 1, 'set_axes_info: bad layer dimension size')
-        call MOM_read_data(filename, trim(layer_varname), layers)
-        ! Always convert heights into depths
-        layers(:) = abs(layers(:))
-      else
-        nzl(1) = nzi(1)-1
-        layers(:) = 0.5*( interfaces(1:nzi(1)-1) + interfaces(2:nzi(1)) )
-      endif
-
-      allocate(remap_cs%dz(nzl(1)))
-      remap_cs%dz(:) = interfaces(2:) - interfaces(1:nzi(1)-1)
-
-    else
-      ! unsupported method
-      call MOM_error(FATAL,"set_axes_info: "//&
-         "Incorrect remapping grid specification. Only 'FILE:file,var' and"//&
-         "'UNIFORM' are currently supported."//&
-         "Found '"//trim(string)//"'")
-    endif
-
-    remap_cs%nz = nzl(1)
-
-    if (remap_cs%vertical_coord == coordinateMode('SIGMA')) then
-      units = 'nondim'
-      longname = 'Fraction'
-    elseif (remap_cs%vertical_coord == coordinateMode('RHO')) then
-      units = 'kg m-3'
-      longname = 'Target Potential Density'
-    else
-      units = 'meters'
-      longname = 'Depth'
-    endif
-
-    ! Make axes objects
-    remap_cs%layer_axes_id = &
-        diag_axis_init(lowercase(trim(remap_cs%vertical_coord_name))//'_l', &
-                       layers, trim(units), 'z', &
-                       trim(longname)//' at cell center', direction=-1)
-    remap_cs%interface_axes_id = &
-        diag_axis_init(lowercase(trim(remap_cs%vertical_coord_name))//'_i', &
-                                 interfaces, trim(units), 'z', &
-                                 trim(longname)//' Depth at interface', direction=-1)
-
-    ! Axes have now been configured.
-    remap_cs%configured = .true.
-
-    deallocate(interfaces)
-    deallocate(layers)
+  if (remap_cs%vertical_coord == coordinateMode('SIGMA')) then
+    units = 'nondim'
+    longname = 'Fraction'
+  elseif (remap_cs%vertical_coord == coordinateMode('RHO')) then
+    units = 'kg m-3'
+    longname = 'Target Potential Density'
   else
-    ! This coordinate is not in use
-    remap_cs%layer_axes_id = -1
-    remap_cs%interface_axes_id = -1
+    units = 'meters'
+    longname = 'Depth'
   endif
+
+  ! Make axes objects
+  allocate(interfaces(remap_cs%nz+1))
+  allocate(layers(remap_cs%nz))
+
+  interfaces(:) = getCoordinateInterfaces(remap_cs%regrid_cs)
+  layers(:) = 0.5 * ( interfaces(1:remap_cs%nz) + interfaces(2:remap_cs%nz+1) )
+
+  remap_cs%layer_axes_id = &
+      diag_axis_init(lowercase(trim(remap_cs%vertical_coord_name))//'_l', &
+                     layers, trim(units), 'z', &
+                     trim(longname)//' at cell center', direction=-1)
+  remap_cs%interface_axes_id = &
+      diag_axis_init(lowercase(trim(remap_cs%vertical_coord_name))//'_i', &
+                               interfaces, trim(units), 'z', &
+                               trim(longname)//' Depth at interface', direction=-1)
+
+  ! Axes have now been configured.
+  remap_cs%configured = .true.
+
+  deallocate(interfaces)
+  deallocate(layers)
 
 end subroutine configure_axes
 
-subroutine check_grid_def(filename, varname, expected_units, msg, ierr)
-  ! Do some basic checks on the vertical grid definition file, variable
-  character(len=*),   intent(in)  :: filename
-  character(len=*),   intent(in)  :: varname
-  character(len=*),   intent(in)  :: expected_units
-
-  logical, intent(out) :: ierr
-  character(len=*), intent(inout) :: msg
-
-  character (len=200) :: units, long_name
-  integer :: ncid, status, intid, vid
-
-  ierr = .false.
-  status = NF90_OPEN(trim(filename), NF90_NOWRITE, ncid);
-  if (status /= NF90_NOERR) then
-    ierr = .true.
-    msg = 'File not found: '//trim(filename)
-    return
-  endif
-
-  status = NF90_INQ_VARID(ncid, trim(varname), vid)
-  if (status /= NF90_NOERR) then
-    ierr = .true.
-    msg = 'Var not found: '//trim(varname)
-    return
-  endif
-
-  status = NF90_GET_ATT(ncid, vid, "units", units)
-  if (status /= NF90_NOERR) then
-    ierr = .true.
-    msg = 'Attribute not found: units'
-    return
-  endif
-
-  if (trim(units) /= trim(expected_units)) then
-    if (trim(expected_units) == "meters") then
-      if (trim(units) /= "m") then
-        ierr = .true.
-      endif
-    else
-      ierr = .true.
-    endif
-  endif
-
-  if (ierr) then
-    msg = 'Units incorrect: '//trim(units)//' /= '//trim(expected_units)
-  endif
-
-end subroutine check_grid_def
 
 !> Get layer and interface axes ids for this coordinate
 !! Needed when defining axes groups.
@@ -424,15 +256,7 @@ subroutine diag_remap_update(remap_cs, G, h, T, S, eqn_of_state)
 
   if (.not. remap_cs%initialized) then
     ! Initialize remapping and regridding on the first call
-    allocate(remap_cs%remap_cs)
     call initialize_remapping(remap_cs%remap_cs, 'PPM_IH4', boundary_extrapolation=.false.)
-
-    allocate(remap_cs%regrid_cs)
-    call initialize_regridding(remap_cs%regrid_cs, remap_cs%vertical_coord_name, interp_scheme='PPM_H4')
-    call set_regrid_params(remap_cs%regrid_cs, min_thickness=0., integrate_downward_for_e=.false.)
-    call allocate_regridding(remap_cs%regrid_cs, nz)
-    call setCoordinateResolution(remap_cs%dz, remap_cs%regrid_cs)
-
     allocate(remap_cs%h(G%isd:G%ied,G%jsd:G%jed, nz))
     remap_cs%initialized = .true.
   endif
