@@ -1007,7 +1007,7 @@ integer function register_diag_field(module_name, field_name, axes, init_time, &
   dm_id = -1
 
   ! Register the native diagnostic
-  active = register_diag_field_expand_cmor(dm_id, module_name, field_name, axes, &
+  active = register_diag_field_3d_and_1d(dm_id, module_name, field_name, axes, &
              init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
              range=range, mask_variant=mask_variant, standard_name=standard_name, &
              verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
@@ -1047,8 +1047,7 @@ integer function register_diag_field(module_name, field_name, axes, init_time, &
       ! call assert(associated(remap_axes), 'register_diag_field: remap_axes not set')
       if (associated(remap_axes)) then
         if (remap_axes%needs_remapping .or. remap_axes%needs_interpolating) then
-          active = register_diag_field_expand_cmor(dm_id, &
-                     new_module_name, field_name, remap_axes, &
+          active = register_diag_field_3d_and_1d(dm_id, new_module_name, field_name, remap_axes, &
                      init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
                      range=range, mask_variant=mask_variant, standard_name=standard_name, &
                      verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
@@ -1070,14 +1069,71 @@ integer function register_diag_field(module_name, field_name, axes, init_time, &
 
 end function register_diag_field
 
-!> Returns True if either the native of CMOr version of the diagnostic were registered. Updates 'primary_id'
-!! after calling register_diag_field_expand_axes() for both native and CMOR variants of the field.
-logical function register_diag_field_expand_cmor(primary_id, module_name, field_name, axes, init_time, &
+!> Returns True if any variant of this diagnostic is asked for.
+!! For 3d diagnostics this level also registers a horizontally area-averaged diagnostic.
+logical function register_diag_field_3d_and_1d(dm_id, module_name, field_name, axes, init_time, &
      long_name, units, missing_value, range, mask_variant, standard_name,      &
      verbose, do_not_log, err_msg, interp_method, tile_count, cmor_field_name, &
      cmor_long_name, cmor_units, cmor_standard_name, cell_methods, &
      x_cell_method, y_cell_method, v_cell_method, conversion, v_extrinsic)
-  integer,          intent(inout) :: primary_id !< The diag_mediator ID for this diagnostic group
+  integer,          intent(inout) :: dm_id !< The diag_mediator ID for this diagnostic group
+  character(len=*), intent(in) :: module_name !< Name of this module, usually "ocean_model" or "ice_shelf_model"
+  character(len=*), intent(in) :: field_name !< Name of the diagnostic field
+  type(axes_grp), target, intent(in) :: axes !< Container w/ up to 3 integer handles that indicates axes for this field
+  type(time_type),  intent(in) :: init_time !< Time at which a field is first available?
+  character(len=*), optional, intent(in) :: long_name !< Long name of a field.
+  character(len=*), optional, intent(in) :: units !< Units of a field.
+  character(len=*), optional, intent(in) :: standard_name !< Standardized name associated with a field
+  real,             optional, intent(in) :: missing_value !< A value that indicates missing values.
+  real,             optional, intent(in) :: range(2) !< Valid range of a variable (not used in MOM?)
+  logical,          optional, intent(in) :: mask_variant !< If true a logical mask must be provided with post_data calls (not used in MOM?)
+  logical,          optional, intent(in) :: verbose !< If true, FMS is verbose (not used in MOM?)
+  logical,          optional, intent(in) :: do_not_log !< If true, do not log something (not used in MOM?)
+  character(len=*), optional, intent(out):: err_msg !< String into which an error message might be placed (not used in MOM?)
+  character(len=*), optional, intent(in) :: interp_method !< If 'none' indicates the field should not be interpolated as a scalar
+  integer,          optional, intent(in) :: tile_count !< no clue (not used in MOM?)
+  character(len=*), optional, intent(in) :: cmor_field_name !< CMOR name of a field
+  character(len=*), optional, intent(in) :: cmor_long_name !< CMOR long name of a field
+  character(len=*), optional, intent(in) :: cmor_units !< CMOR units of a field
+  character(len=*), optional, intent(in) :: cmor_standard_name !< CMOR standardized name associated with a field
+  character(len=*), optional, intent(in) :: cell_methods !< String to append as cell_methods attribute. Use '' to have no attribute.
+                                                         !! If present, this overrides the default constructed from the default for
+                                                         !! each individual axis direction.
+  character(len=*), optional, intent(in) :: x_cell_method !< Specifies the cell method for the x-direction. Use '' have no method.
+  character(len=*), optional, intent(in) :: y_cell_method !< Specifies the cell method for the y-direction. Use '' have no method.
+  character(len=*), optional, intent(in) :: v_cell_method !< Specifies the cell method for the vertical direction. Use '' have no method.
+  real,             optional, intent(in) :: conversion !< A value to multiply data by before writing to file
+  logical,          optional, intent(in) :: v_extrinsic !< True for vertically extrinsic fields (vertically integrated). Default/absent for intrinsic.
+  ! Local variables
+  logical :: active
+
+  active = register_diag_field_expand_cmor(dm_id, module_name, field_name, axes, &
+             init_time, long_name=long_name, units=units, missing_value=missing_value, &
+             range=range, mask_variant=mask_variant, standard_name=standard_name, &
+             verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
+             interp_method=interp_method, tile_count=tile_count, &
+             cmor_field_name=cmor_field_name, cmor_long_name=cmor_long_name, &
+             cmor_units=cmor_units, cmor_standard_name=cmor_standard_name, &
+             cell_methods=cell_methods, x_cell_method=x_cell_method, &
+             y_cell_method=y_cell_method, v_cell_method=v_cell_method, &
+             conversion=conversion, v_extrinsic=v_extrinsic)
+  register_diag_field_3d_and_1d = active
+
+  ! Register 1d version here
+ !if (size(axes%handles)==3) then
+    register_diag_field_3d_and_1d = register_diag_field_3d_and_1d .or. active
+ !endif
+
+end function register_diag_field_3d_and_1d
+
+!> Returns True if either the native of CMOr version of the diagnostic were registered. Updates 'dm_id'
+!! after calling register_diag_field_expand_axes() for both native and CMOR variants of the field.
+logical function register_diag_field_expand_cmor(dm_id, module_name, field_name, axes, init_time, &
+     long_name, units, missing_value, range, mask_variant, standard_name,      &
+     verbose, do_not_log, err_msg, interp_method, tile_count, cmor_field_name, &
+     cmor_long_name, cmor_units, cmor_standard_name, cell_methods, &
+     x_cell_method, y_cell_method, v_cell_method, conversion, v_extrinsic)
+  integer,          intent(inout) :: dm_id !< The diag_mediator ID for this diagnostic group
   character(len=*), intent(in) :: module_name !< Name of this module, usually "ocean_model" or "ice_shelf_model"
   character(len=*), intent(in) :: field_name !< Name of the diagnostic field
   type(axes_grp), target, intent(in) :: axes !< Container w/ up to 3 integer handles that indicates axes for this field
@@ -1129,16 +1185,7 @@ logical function register_diag_field_expand_cmor(primary_id, module_name, field_
                            v_extrinsic=v_extrinsic)
   this_diag => null()
   if (fms_id /= DIAG_FIELD_NOT_FOUND) then
-    ! If the diagnostic is needed obtain a diag_mediator ID (if needed)
-    if (primary_id == -1) primary_id = get_new_diag_id(diag_cs)
-    ! Create a new diag_type to store links in
-    call alloc_diag_with_id(primary_id, diag_cs, this_diag)
-    call assert(associated(this_diag), 'register_diag_field_expand_cmor: diag allocation failed')
-    ! Record FMS id, masks and conversion factor, in diag_type
-    this_diag%fms_diag_id = fms_id
-    this_diag%debug_str = trim(module_name)//"-"//trim(field_name)
-    call set_diag_mask(this_diag, diag_cs, axes)
-    this_diag%axes => axes
+    call add_diag_to_list(diag_cs, dm_id, fms_id, this_diag, axes, module_name, field_name, msg)
 
     if (present(v_extrinsic)) this_diag%v_extrinsic = v_extrinsic
     if (present(conversion)) this_diag%conversion_factor = conversion
@@ -1182,16 +1229,7 @@ logical function register_diag_field_expand_cmor(primary_id, module_name, field_
                              v_extrinsic=v_extrinsic)
     this_diag => null()
     if (fms_id /= DIAG_FIELD_NOT_FOUND) then
-      ! If the diagnostic is needed obtain a diag_mediator ID (if needed)
-      if (primary_id == -1) primary_id = get_new_diag_id(diag_cs)
-      ! Create a new diag_type to store links in
-      call alloc_diag_with_id(primary_id, diag_cs, this_diag)
-      call assert(associated(this_diag), 'register_diag_field_expand_cmor: cmor_diag allocation failed')
-      ! Record FMS id, masks and conversion factor, in diag_type
-      this_diag%fms_diag_id = fms_id
-      this_diag%debug_str = trim(module_name)//"-"//trim(cmor_field_name)
-      call set_diag_mask(this_diag, diag_cs, axes)
-      this_diag%axes => axes
+      call add_diag_to_list(diag_cs, dm_id, fms_id, this_diag, axes, module_name, field_name, msg)
 
       if (present(v_extrinsic)) this_diag%v_extrinsic = v_extrinsic
       if (present(conversion)) this_diag%conversion_factor = conversion
@@ -1269,6 +1307,30 @@ integer function register_diag_field_expand_axes(module_name, field_name, axes, 
   register_diag_field_expand_axes = fms_id
 
 end function register_diag_field_expand_axes
+
+!> Create a diagnostic type and attached to list
+subroutine add_diag_to_list(diag_cs, dm_id, fms_id, this_diag, axes, module_name, field_name, msg)
+  type(diag_ctrl),        pointer       :: diag_cs !< Diagnostics mediator control structure
+  integer,                intent(inout) :: dm_id !< The diag_mediator ID for this diagnostic group
+  integer,                intent(in)    :: fms_id !< The FMS diag_manager ID for this diagnostic
+  type(diag_type),        pointer       :: this_diag !< This diagnostic
+  type(axes_grp), target, intent(in)    :: axes !< Container w/ up to 3 integer handles that indicates axes for this field
+  character(len=*),       intent(in)    :: module_name !< Name of this module, usually "ocean_model" or "ice_shelf_model"
+  character(len=*),       intent(in)    :: field_name !< Name of diagnostic
+  character(len=*),       intent(in)    :: msg !< Message for errors
+
+  ! If the diagnostic is needed obtain a diag_mediator ID (if needed)
+  if (dm_id == -1) dm_id = get_new_diag_id(diag_cs)
+  ! Create a new diag_type to store links in
+  call alloc_diag_with_id(dm_id, diag_cs, this_diag)
+  call assert(associated(this_diag), trim(msg)//': diag_type allocation failed')
+  ! Record FMS id, masks and conversion factor, in diag_type
+  this_diag%fms_diag_id = fms_id
+  this_diag%debug_str = trim(module_name)//"-"//trim(field_name)
+  call set_diag_mask(this_diag, diag_cs, axes)
+  this_diag%axes => axes
+
+end subroutine add_diag_to_list
 
 !> Attaches "cell_methods" attribute to a variable based on defaults for axes_grp or optional arguments.
 subroutine attach_cell_methods(id, axes, ostring, cell_methods, &
@@ -1395,14 +1457,14 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
   !  (in,opt)  tile_count    - no clue
 
   real :: MOM_missing_value
-  integer :: primary_id, fms_id
+  integer :: dm_id, fms_id
   type(diag_type), pointer :: diag => null(), cmor_diag => null()
   character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name
 
   MOM_missing_value = diag_cs%missing_value
   if(present(missing_value)) MOM_missing_value = missing_value
 
-  primary_id = -1
+  dm_id = -1
   diag => null()
   cmor_diag => null()
 
@@ -1410,8 +1472,8 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
       long_name=long_name, units=units, missing_value=MOM_missing_value, &
       range=range, standard_name=standard_name, do_not_log=do_not_log, err_msg=err_msg)
   if (fms_id /= DIAG_FIELD_NOT_FOUND) then
-    primary_id = get_new_diag_id(diag_cs)
-    call alloc_diag_with_id(primary_id, diag_cs, diag)
+    dm_id = get_new_diag_id(diag_cs)
+    call alloc_diag_with_id(dm_id, diag_cs, diag)
     call assert(associated(diag), 'register_scalar_field: diag allocation failed')
     diag%fms_diag_id = fms_id
     diag%debug_str = trim(module_name)//"-"//trim(field_name)
@@ -1439,10 +1501,10 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
        missing_value=MOM_missing_value, range=range, &
        standard_name=trim(posted_cmor_standard_name), do_not_log=do_not_log, err_msg=err_msg)
     if (fms_id /= DIAG_FIELD_NOT_FOUND) then
-      if (primary_id == -1) then
-        primary_id = get_new_diag_id(diag_cs)
+      if (dm_id == -1) then
+        dm_id = get_new_diag_id(diag_cs)
       endif
-      call alloc_diag_with_id(primary_id, diag_cs, cmor_diag)
+      call alloc_diag_with_id(dm_id, diag_cs, cmor_diag)
       cmor_diag%fms_diag_id = fms_id
       cmor_diag%debug_str = trim(module_name)//"-"//trim(cmor_field_name)
     endif
@@ -1459,7 +1521,7 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
     endif
   endif
 
-  register_scalar_field = primary_id
+  register_scalar_field = dm_id
 
 end function register_scalar_field
 
@@ -1500,14 +1562,14 @@ function register_static_field(module_name, field_name, axes, &
   real :: MOM_missing_value
   type(diag_ctrl), pointer :: diag_cs
   type(diag_type), pointer :: diag => null(), cmor_diag => null()
-  integer :: primary_id, fms_id, cmor_id
+  integer :: dm_id, fms_id, cmor_id
   character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name
 
   MOM_missing_value = axes%diag_cs%missing_value
   if(present(missing_value)) MOM_missing_value = missing_value
 
   diag_cs => axes%diag_cs
-  primary_id = -1
+  dm_id = -1
   diag => null()
   cmor_diag => null()
 
@@ -1517,8 +1579,8 @@ function register_static_field(module_name, field_name, axes, &
          do_not_log=do_not_log, &
          interp_method=interp_method, tile_count=tile_count, area=area)
   if (fms_id /= DIAG_FIELD_NOT_FOUND) then
-    primary_id = get_new_diag_id(diag_cs)
-    call alloc_diag_with_id(primary_id, diag_cs, diag)
+    dm_id = get_new_diag_id(diag_cs)
+    call alloc_diag_with_id(dm_id, diag_cs, diag)
     call assert(associated(diag), 'register_static_field: diag allocation failed')
     diag%fms_diag_id = fms_id
     diag%debug_str = trim(module_name)//"-"//trim(field_name)
@@ -1547,10 +1609,10 @@ function register_static_field(module_name, field_name, axes, &
       standard_name=trim(posted_cmor_standard_name), do_not_log=do_not_log,               &
       interp_method=interp_method, tile_count=tile_count, area=area)
     if (fms_id /= DIAG_FIELD_NOT_FOUND) then
-      if (primary_id == -1) then
-        primary_id = get_new_diag_id(diag_cs)
+      if (dm_id == -1) then
+        dm_id = get_new_diag_id(diag_cs)
       endif
-      call alloc_diag_with_id(primary_id, diag_cs, cmor_diag)
+      call alloc_diag_with_id(dm_id, diag_cs, cmor_diag)
       cmor_diag%fms_diag_id = fms_id
       cmor_diag%debug_str = trim(module_name)//"-"//trim(cmor_field_name)
     endif
@@ -1567,7 +1629,7 @@ function register_static_field(module_name, field_name, axes, &
     endif
   endif
 
-  register_static_field = primary_id
+  register_static_field = dm_id
 
 end function register_static_field
 
