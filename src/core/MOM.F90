@@ -1496,20 +1496,14 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       
   if(accumulated_time==0) then
     first_iter = .true.
-    iter_no = 1
   else ! This is probably unnecessary but is used to guard against unwanted behavior
     first_iter = .false.
   endif 
-  
-  if(is_root_pe()) print *, "Offline iteration", iter_no, "of", num_iter_vert
-  
-  iter_no = iter_no + 1
   
   ! Increment the amount of time elapsed since last read and check if it's time to roll around
   accumulated_time = mod(accumulated_time + int(time_interval), int(CS%offline_CSp%dt_offline))
   if(accumulated_time==0) then
     last_iter = .true.
-    iter_no = 0
   else
     last_iter = .false.
   endif
