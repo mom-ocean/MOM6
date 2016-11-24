@@ -7,6 +7,7 @@ use MOM_checksums,            only : hchksum, uchksum, vchksum
 use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_diabatic_aux,         only : diabatic_aux_CS
 use MOM_diabatic_driver,      only : diabatic_CS
+use MOM_diabatic_aux,         only : tridiagTS
 use MOM_diag_mediator,        only : diag_ctrl, post_data, register_diag_field
 use MOM_domains,              only : sum_across_PEs, pass_var, pass_vector
 use MOM_error_handler,        only : MOM_error, FATAL, WARNING, is_root_pe
@@ -429,6 +430,7 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, dt, CS, h_pre, eat
       minimum_forcing_depth=CS%minimum_forcing_depth)
   call applyTracerBoundaryFluxesInOut(CS%G, CS%GV, zero_3dh, dt, fluxes, h_pre, &
       CS%evap_CFL_limit, CS%minimum_forcing_depth)
+  call triDiagTS(CS%G, CS%GV, CS%G%isc, CS%G%iec, CS%G%jsc, CS%G%jec, h_pre, eatr, ebtr, CS%tv%T, CS%tv%S)    
 
 end subroutine offline_diabatic_ale
 
