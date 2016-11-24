@@ -12,7 +12,7 @@ use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
 use MOM_EOS,           only : EOS_type, calculate_density, calculate_density_derivs
 use MOM_EOS,           only : calculate_compress
-use MOM_string_functions,only : uppercase, extractWord, extract_integer
+use MOM_string_functions,only : uppercase, extractWord, extract_integer, extract_real
 
 use regrid_edge_values, only : edge_values_explicit_h2, edge_values_explicit_h4
 use regrid_edge_values, only : edge_values_implicit_h4, edge_values_implicit_h6
@@ -336,16 +336,17 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mod, coord_mode,
   if (index(trim(string),'UNIFORM')==1) then
     if (len_trim(string)==7) then
       ke = GV%ke ! Use model nk by default
+      tmpReal = max_depth
     elseif (index(trim(string),'UNIFORM:')==1 .and. len_trim(string)>8) then
-      ! Format is "UNIFORM:N"
+      ! Format is "UNIFORM:N" or "UNIFORM:N,dz"
       ke = extract_integer(string(9:len_trim(string)),'',1)
-      allocate(dz(ke))
+      tmpReal = extract_real(string(9:len_trim(string)),',',2,missing_value=max_depth)
     else
       call MOM_error(FATAL,trim(mod)//', initialize_regridding: '// &
           'Unable to interpret "'//trim(string)//'".')
     endif
     allocate(dz(ke))
-    dz(:) = uniformResolution(ke, coord_mode, max_depth, &
+    dz(:) = uniformResolution(ke, coord_mode, tmpReal, &
                    GV%Rlay(1)+0.5*(GV%Rlay(1)-GV%Rlay(2)), &
                    GV%Rlay(ke)+0.5*(GV%Rlay(ke)-GV%Rlay(ke-1)) )
     if (main_parameters) call log_param(param_file, mod, "!"//coord_res_param, dz, &
