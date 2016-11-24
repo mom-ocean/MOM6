@@ -308,11 +308,7 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
 
   do i=1, diag_cs%num_diag_coords
     ! For each possible diagnostic coordinate
-    if (i==1) then
-      call diag_remap_configure_axes(diag_cs%diag_remap_cs(i), G, GV, param_file, default_def='UNIFORM')
-    else
-      call diag_remap_configure_axes(diag_cs%diag_remap_cs(i), G, GV, param_file)
-    endif
+    call diag_remap_configure_axes(diag_cs%diag_remap_cs(i), G, GV, param_file)
 
     ! This vertical coordinate has been configured so can be used.
     if (diag_remap_axes_configured(diag_cs%diag_remap_cs(i))) then
