@@ -16,6 +16,7 @@ module MOM_diag_remap
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_coms,             only : sum_across_PEs
 use MOM_error_handler,    only : MOM_error, FATAL, assert
 use MOM_diag_vkernels,    only : interpolate_column, reintegrate_column
 use MOM_file_parser,      only : get_param, log_param, param_file_type
@@ -45,6 +46,7 @@ public diag_remap_get_axes_info, diag_remap_set_active
 public diag_remap_diag_registration_closed
 public vertically_reintegrate_diag_field
 public vertically_interpolate_diag_field
+public horizontally_average_diag_field
 
 !> This type represents remapping of diagnostics to a particular vertical
 !! coordinate.
@@ -127,9 +129,8 @@ end subroutine diag_remap_set_active
 
 !> Configure the vertical axes for a diagnostic remapping control structure.
 !! Reads a configuration parameters to determine coordinate generation.
-subroutine diag_remap_configure_axes(remap_cs, G, GV, param_file)
+subroutine diag_remap_configure_axes(remap_cs, GV, param_file)
   type(diag_remap_ctrl),   intent(inout) :: remap_cs !< Diag remap control structure
-  type(ocean_grid_type),   intent(inout) :: G !< Ocean grid structure
   type(verticalGrid_type),    intent(in) :: GV !< ocean vertical grid structure
   type(param_file_type),      intent(in) :: param_file !< Parameter file structure
   ! Local variables
@@ -507,5 +508,83 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
   endif
 
 end subroutine vertically_interpolate_diag_field
+
+!> Horizontally average field
+subroutine horizontally_average_diag_field(remap_cs, G, staggered_in_x, staggered_in_y, &
+                                           missing_value, field, averaged_field)
+  type(diag_remap_ctrl),  intent(in) :: remap_cs !< Diagnostic coodinate control structure
+  type(ocean_grid_type),  intent(in) :: G !< Ocean grid structure
+  logical,                intent(in) :: staggered_in_x !< True is the x-axis location is at u or q points
+  logical,                intent(in) :: staggered_in_y !< True is the y-axis location is at v or q points
+  real,                   intent(in) :: missing_value !< A missing_value to assign land/vanished points
+  real, dimension(:,:,:), intent(in) :: field !<  The diagnostic field to be remapped
+  real, dimension(:),  intent(inout) :: averaged_field !< Field argument horizontally averaged
+  ! Local variables
+  real, dimension(remap_cs%nz) :: vol_sum, stuff_sum
+  real :: v1, v2, total_volume, total_stuff
+  integer :: i, j, k
+
+  call assert(remap_cs%initialized, 'vertically_interpolate_diag_field: remap_cs not initialized.')
+  call assert(size(field, 3) == remap_cs%nz, &
+              'horizontally_average_diag_field: Field vertical dimension does not match diag remap type.')
+  call assert(size(averaged_field, 1) == remap_cs%nz, &
+              'horizontally_average_diag_field: Averaged field dimension does not match diag remap type.')
+
+  if (staggered_in_x .and. .not. staggered_in_y) then
+    ! U-points
+    do k=1,remap_cs%nz
+      vol_sum(k) = 0.
+      stuff_sum(k) = 0.
+      do j=G%jsc, G%jec ; do i=G%isc, G%iec
+        v1 = G%areaCu(I,j) * 0.5 * ( remap_cs%h(i,j,k) + remap_cs%h(i+1,j,k) )
+        v2 = G%areaCu(I-1,j) * 0.5 * ( remap_cs%h(i,j,k) + remap_cs%h(i-1,j,k) )
+        vol_sum(k) = vol_sum(k) + 0.5 * ( v1 + v2 ) * G%mask2dT(i,j)
+        stuff_sum(k) = stuff_sum(k) + 0.5 * ( v1 * field(I,j,k) + v2 * field(I-1,j,k) ) * G%mask2dT(i,j)
+      enddo ; enddo
+    enddo
+  elseif (staggered_in_y .and. .not. staggered_in_x) then
+    ! V-points
+    do k=1,remap_cs%nz
+      vol_sum(k) = 0.
+      stuff_sum(k) = 0.
+      do j=G%jsc, G%jec ; do i=G%isc, G%iec
+        v1 = G%areaCv(i,J) * 0.5 * ( remap_cs%h(i,j,k) + remap_cs%h(i,j+1,k) )
+        v2 = G%areaCv(i,J-1) * 0.5 * ( remap_cs%h(i,j,k) + remap_cs%h(i,j-1,k) )
+        vol_sum(k) = vol_sum(k) + 0.5 * ( v1 + v2 ) * G%mask2dT(i,j)
+        stuff_sum(k) = stuff_sum(k) + 0.5 * ( v1 * field(i,J,k) + v2 * field(i,J-1,k) ) * G%mask2dT(i,j)
+      enddo ; enddo
+    enddo
+  elseif ((.not. staggered_in_x) .and. (.not. staggered_in_y)) then
+    ! H-points
+    do k=1,remap_cs%nz
+      vol_sum(k) = 0.
+      stuff_sum(k) = 0.
+      do j=G%jsc, G%jec ; do i=G%isc, G%iec
+        if (G%mask2dT(i,j)>0. .and. remap_cs%h(i,j,k)>0.) then
+          v1 = G%areaT(i,j) * remap_cs%h(i,j,k)
+          vol_sum(k) = vol_sum(k) + v1
+          stuff_sum(k) = stuff_sum(k) + v1 * field(i,j,k)
+ if (abs(field(i,j,k))>1.e20) then
+  stop 'xxx'
+endif
+        endif
+      enddo ; enddo
+    enddo
+  else
+    call assert(.false., 'vertically_interpolate_diag_field: Q point averaging is not coded yet.')
+  endif
+
+  call sum_across_PEs(vol_sum, remap_cs%nz)
+  call sum_across_PEs(stuff_sum, remap_cs%nz)
+
+  do k=1,remap_cs%nz
+    if (vol_sum(k)>0.) then
+      averaged_field(k) = stuff_sum(k) / vol_sum(k)
+    else
+      averaged_field(k) = missing_value
+    endif
+  enddo
+
+end subroutine horizontally_average_diag_field
 
 end module MOM_diag_remap
