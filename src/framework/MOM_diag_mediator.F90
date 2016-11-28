@@ -359,8 +359,7 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
       call define_axes_group(diag_cs, (/ id_xh, id_yh, id_zi /), diag_cs%remap_axesTi(i), &
            nz=nz, vertical_coordinate_number=i, &
            x_cell_method='mean', y_cell_method='mean', v_cell_method='point', &
-           is_h_point=.true., is_interface=.true., is_native=.false., needs_interpolating=.true., &
-           xyave_axes=diag_cs%remap_axesZi(i))
+           is_h_point=.true., is_interface=.true., is_native=.false., needs_interpolating=.true.)
 
       !! \note Remapping for B points is not yet implemented so needs_remapping is not provided for remap_axesBi
       call define_axes_group(diag_cs, (/ id_xq, id_yq, id_zi /), diag_cs%remap_axesBi(i), &
