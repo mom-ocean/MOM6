@@ -524,7 +524,7 @@ subroutine horizontally_average_diag_field(remap_cs, G, staggered_in_x, staggere
   real :: v1, v2, total_volume, total_stuff
   integer :: i, j, k
 
-  call assert(remap_cs%initialized, 'vertically_interpolate_diag_field: remap_cs not initialized.')
+  call assert(remap_cs%initialized, 'horizontally_average_diag_field: remap_cs not initialized.')
   call assert(size(field, 3) == remap_cs%nz, &
               'horizontally_average_diag_field: Field vertical dimension does not match diag remap type.')
   call assert(size(averaged_field, 1) == remap_cs%nz, &
