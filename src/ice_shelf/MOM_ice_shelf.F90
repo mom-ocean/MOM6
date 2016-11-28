@@ -781,43 +781,48 @@ subroutine shelf_calc_flux(state, fluxes, Time, time_step, CS)
 
   do j=js,je
     do i=is,ie
-      ! Set melt to zero above a cutoff pressure
-      ! (CS%Rho0*CS%cutoff_depth*CS%g_Earth) this is needed for the isomip 
-      ! test case.
-      if ((CS%g_Earth * CS%mass_shelf(i,j)) < CS%Rho0*CS%cutoff_depth* &
-         CS%g_Earth) then
-           CS%lprec(i,j) = 0.0
-           fluxes%iceshelf_melt(i,j) = 0.0
-      endif
-      ! Compute haline driving, which is one of the diags. used in ISOMIP
-      haline_driving(i,j) = (CS%lprec(i,j) * Sbdry(i,j)) / &
-                            (CS%Rho0 * CS%exch_vel_s(i,j))
+      if ((iDens*state%ocean_mass(i,j) > CS%col_thick_melt_threshold) .and. &
+          (CS%area_shelf_h(i,j) > 0.0) .and. &
+          (CS%isthermo) .and. (state%Hml(i,j) > 0.0) ) then
 
-      !!!!!!!!!!!!!!!!!!!!!!!!!!!!Safety checks !!!!!!!!!!!!!!!!!!!!!!!!!
-      !1)Check if haline_driving computed above is consistent with
-      ! haline_driving = state%sss - Sbdry 
-      !if (fluxes%iceshelf_melt(i,j) /= 0.0) then
-      !   if (haline_driving(i,j) /= (state%sss(i,j) - Sbdry(i,j))) then
-      !      write(*,*)'Something is wrong at i,j',i,j
-      !      write(*,*)'haline_driving, sss-Sbdry',haline_driving(i,j), &
-      !                (state%sss(i,j) - Sbdry(i,j))
-      !     call MOM_error(FATAL, &
-      !            "shelf_calc_flux: Inconsistency in melt and haline_driving")
-      !   endif
-      !endif
+         ! Set melt to zero above a cutoff pressure
+         ! (CS%Rho0*CS%cutoff_depth*CS%g_Earth) this is needed for the isomip 
+         ! test case.
+         if ((CS%g_Earth * CS%mass_shelf(i,j)) < CS%Rho0*CS%cutoff_depth* &
+            CS%g_Earth) then
+              CS%lprec(i,j) = 0.0
+              fluxes%iceshelf_melt(i,j) = 0.0
+         endif
+         ! Compute haline driving, which is one of the diags. used in ISOMIP
+         haline_driving(i,j) = (CS%lprec(i,j) * Sbdry(i,j)) / &
+                               (CS%Rho0 * CS%exch_vel_s(i,j))
 
-      ! 2) check if |melt| > 0 when star_shelf = 0.
-      ! this should never happen
-      if (abs(fluxes%iceshelf_melt(i,j))>0.0) then
-          if (fluxes%ustar_shelf(i,j) == 0.0) then
-             write(*,*)'Something is wrong at i,j',i,j
-             call MOM_error(FATAL, &
-                  "shelf_calc_flux: |melt| > 0 and star_shelf = 0.")
+         !!!!!!!!!!!!!!!!!!!!!!!!!!!!Safety checks !!!!!!!!!!!!!!!!!!!!!!!!!
+         !1)Check if haline_driving computed above is consistent with
+         ! haline_driving = state%sss - Sbdry 
+         !if (fluxes%iceshelf_melt(i,j) /= 0.0) then
+         !   if (haline_driving(i,j) /= (state%sss(i,j) - Sbdry(i,j))) then
+         !      write(*,*)'Something is wrong at i,j',i,j
+         !      write(*,*)'haline_driving, sss-Sbdry',haline_driving(i,j), &
+         !                (state%sss(i,j) - Sbdry(i,j))
+         !     call MOM_error(FATAL, &
+         !            "shelf_calc_flux: Inconsistency in melt and haline_driving")
+         !   endif
+         !endif
+
+         ! 2) check if |melt| > 0 when star_shelf = 0.
+         ! this should never happen
+         if (abs(fluxes%iceshelf_melt(i,j))>0.0) then
+             if (fluxes%ustar_shelf(i,j) == 0.0) then
+                write(*,*)'Something is wrong at i,j',i,j
+                call MOM_error(FATAL, &
+                     "shelf_calc_flux: |melt| > 0 and star_shelf = 0.")
+             endif
           endif
-      endif
-      !!!!!!!!!!!!!!!!!!!!!!!!!!!!End of safety checks !!!!!!!!!!!!!!!!!!! 
-    enddo ! i-loop
-  enddo ! j-loop
+      endif ! area_shelf_h
+         !!!!!!!!!!!!!!!!!!!!!!!!!!!!End of safety checks !!!!!!!!!!!!!!!!!!! 
+     enddo ! i-loop
+   enddo ! j-loop
 
   ! mass flux (kg/s), part of ISOMIP diags.
   ALLOCATE ( mass_flux(G%ied,G%jed) ); mass_flux(:,:) = 0.0
@@ -1790,7 +1795,9 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
     enddo ; enddo
   endif
   
-  write (procnum,'(I2)') mpp_pe()
+  !GM, is this needed?
+  !write (procnum,'(I2)') mpp_pe()
+
   if (.not. solo_ice_sheet) then
   call pass_vector(fluxes%frac_shelf_u, fluxes%frac_shelf_v, G%domain, TO_ALL, CGRID_NE)
   endif
