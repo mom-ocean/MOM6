@@ -169,12 +169,13 @@ subroutine diag_remap_configure_axes(remap_cs, GV, param_file)
   interfaces(:) = getCoordinateInterfaces(remap_cs%regrid_cs)
   layers(:) = 0.5 * ( interfaces(1:remap_cs%nz) + interfaces(2:remap_cs%nz+1) )
 
-  remap_cs%layer_axes_id = diag_axis_init(lowercase(trim(remap_cs%diag_coord_name))//'_l', &
-                                          layers, trim(units), 'z', &
-                                          trim(longname)//' at cell center', direction=-1)
   remap_cs%interface_axes_id = diag_axis_init(lowercase(trim(remap_cs%diag_coord_name))//'_i', &
                                               interfaces, trim(units), 'z', &
                                               trim(longname)//' at interface', direction=-1)
+  remap_cs%layer_axes_id = diag_axis_init(lowercase(trim(remap_cs%diag_coord_name))//'_l', &
+                                          layers, trim(units), 'z', &
+                                          trim(longname)//' at cell center', direction=-1, &
+                                          edges=remap_cs%interface_axes_id)
 
   ! Axes have now been configured.
   remap_cs%configured = .true.
