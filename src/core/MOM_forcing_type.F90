@@ -2163,25 +2163,32 @@ subroutine allocate_forcing_type(G, fluxes, stress, ustar, water, heat, shelf, p
   isd  = G%isd   ; ied  = G%ied    ; jsd  = G%jsd   ; jed  = G%jed
   IsdB = G%IsdB  ; IedB = G%IedB   ; JsdB = G%JsdB  ; JedB = G%JedB
 
-  call myAlloc(fluxes%taux,IsdB,IedB,jsd,jed, stress)
-  call myAlloc(fluxes%tauy,isd,ied,JsdB,JedB, stress)
-  call myAlloc(fluxes%ustar,isd,ied,jsd,jed, ustar)
+  if ( present(stress) ) then 
+    call myAlloc(fluxes%taux,IsdB,IedB,jsd,jed, stress)
+    call myAlloc(fluxes%tauy,isd,ied,JsdB,JedB, stress)
+  endif
+  if ( present(ustar) ) &
+     call myAlloc(fluxes%ustar,isd,ied,jsd,jed, ustar)
 
-  call myAlloc(fluxes%evap,isd,ied,jsd,jed, water)
-  call myAlloc(fluxes%lprec,isd,ied,jsd,jed, water)
-  call myAlloc(fluxes%fprec,isd,ied,jsd,jed, water)
-  call myAlloc(fluxes%vprec,isd,ied,jsd,jed, water)
-  call myAlloc(fluxes%lrunoff,isd,ied,jsd,jed, water)
-  call myAlloc(fluxes%frunoff,isd,ied,jsd,jed, water)
-  call myAlloc(fluxes%seaice_melt,isd,ied,jsd,jed, water)
+  if ( present(water) ) then 
+    call myAlloc(fluxes%evap,isd,ied,jsd,jed, water)
+    call myAlloc(fluxes%lprec,isd,ied,jsd,jed, water)
+    call myAlloc(fluxes%fprec,isd,ied,jsd,jed, water)
+    call myAlloc(fluxes%vprec,isd,ied,jsd,jed, water)
+    call myAlloc(fluxes%lrunoff,isd,ied,jsd,jed, water)
+    call myAlloc(fluxes%frunoff,isd,ied,jsd,jed, water)
+    call myAlloc(fluxes%seaice_melt,isd,ied,jsd,jed, water)
+  endif
 
-  call myAlloc(fluxes%sw,isd,ied,jsd,jed, heat)
-  call myAlloc(fluxes%lw,isd,ied,jsd,jed, heat)
-  call myAlloc(fluxes%latent,isd,ied,jsd,jed, heat)
-  call myAlloc(fluxes%sens,isd,ied,jsd,jed, heat)
-  call myAlloc(fluxes%latent_evap_diag,isd,ied,jsd,jed, heat)
-  call myAlloc(fluxes%latent_fprec_diag,isd,ied,jsd,jed, heat)
-  call myAlloc(fluxes%latent_frunoff_diag,isd,ied,jsd,jed, heat)
+  if ( present(heat) ) then 
+    call myAlloc(fluxes%sw,isd,ied,jsd,jed, heat)
+    call myAlloc(fluxes%lw,isd,ied,jsd,jed, heat)
+    call myAlloc(fluxes%latent,isd,ied,jsd,jed, heat)
+    call myAlloc(fluxes%sens,isd,ied,jsd,jed, heat)
+    call myAlloc(fluxes%latent_evap_diag,isd,ied,jsd,jed, heat)
+    call myAlloc(fluxes%latent_fprec_diag,isd,ied,jsd,jed, heat)
+    call myAlloc(fluxes%latent_frunoff_diag,isd,ied,jsd,jed, heat)
+  endif
 
   if (present(heat) .and. present(water)) then ; if (heat .and. water) then
     call myAlloc(fluxes%heat_content_cond,isd,ied,jsd,jed, .true.)
@@ -2194,14 +2201,17 @@ subroutine allocate_forcing_type(G, fluxes, stress, ustar, water, heat, shelf, p
     call myAlloc(fluxes%heat_content_massin,isd,ied,jsd,jed, .true.)
   endif ; endif
 
-  call myAlloc(fluxes%frac_shelf_h,isd,ied,jsd,jed, shelf)
-  call myAlloc(fluxes%frac_shelf_u,IsdB,IedB,jsd,jed, shelf)
-  call myAlloc(fluxes%frac_shelf_v,isd,ied,JsdB,JedB, shelf)
-  call myAlloc(fluxes%ustar_shelf,isd,ied,jsd,jed, shelf)
-  call myAlloc(fluxes%rigidity_ice_u,IsdB,IedB,jsd,jed, shelf)
-  call myAlloc(fluxes%rigidity_ice_v,isd,ied,JsdB,JedB, shelf)
+  if ( present(shelf) ) then 
+    call myAlloc(fluxes%frac_shelf_h,isd,ied,jsd,jed, shelf)
+    call myAlloc(fluxes%frac_shelf_u,IsdB,IedB,jsd,jed, shelf)
+    call myAlloc(fluxes%frac_shelf_v,isd,ied,JsdB,JedB, shelf)
+    call myAlloc(fluxes%ustar_shelf,isd,ied,jsd,jed, shelf)
+    call myAlloc(fluxes%rigidity_ice_u,IsdB,IedB,jsd,jed, shelf)
+    call myAlloc(fluxes%rigidity_ice_v,isd,ied,JsdB,JedB, shelf)
+  endif
 
-  call myAlloc(fluxes%p_surf,isd,ied,jsd,jed, press)
+  if ( present(press) ) &
+    call myAlloc(fluxes%p_surf,isd,ied,jsd,jed, press)
 
   contains
 

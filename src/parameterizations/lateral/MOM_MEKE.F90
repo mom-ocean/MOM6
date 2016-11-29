@@ -927,7 +927,11 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
   call get_param(param_file, mod, "CDRAG", CS%cdrag, &
                  "CDRAG is the drag coefficient relating the magnitude of \n"//&
                  "the velocity field to the bottom stress.", units="nondim", &
-                 default=0.003)
+                 default=0.003,do_not_log=.true.)
+  call get_param(param_file, mod, "CDRAG_MEKE", CS%cdrag, &
+                 "CDRAG_MEKE is the drag coefficient relating the magnitude of \n"//&
+                 "the velocity field to the bottom stress.", units="nondim", &
+                 default=CS%cdrag)
   call get_param(param_file, mod, "LAPLACIAN", laplacian, default=.false., do_not_log=.true.)
   if (CS%viscosity_coeff/=0. .and. .not. laplacian) call MOM_error(FATAL, &
                  "LAPLACIAN must be true if MEKE_VISCOSITY_COEFF is true.")

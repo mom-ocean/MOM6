@@ -513,7 +513,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     call create_group_pass(CS%pass_tau_ustar_psurf, fluxes%ustar(:,:), G%Domain)
   if (ASSOCIATED(fluxes%p_surf)) &
     call create_group_pass(CS%pass_tau_ustar_psurf, fluxes%p_surf(:,:), G%Domain)
-  if (CS%thickness_diffuse .OR. CS%mixedlayer_restrat) &
+  if ((CS%thickness_diffuse  .and. (.not.CS%thickness_diffuse_first .or. CS%dt_trans == 0)) .OR. CS%mixedlayer_restrat) &
     call create_group_pass(CS%pass_h, h, G%Domain)
   if (CS%diabatic_first) then
     if (associated(CS%visc%Ray_u) .and. associated(CS%visc%Ray_v)) &
