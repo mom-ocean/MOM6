@@ -133,7 +133,7 @@ type, private :: diag_type
   real, pointer, dimension(:,:,:) :: mask3d => null()
   type(diag_type), pointer :: next => null() !< Pointer to the next diag.
   real :: conversion_factor = 0. !< A factor to multiply data by before posting to FMS, if non-zero.
-  logical :: v_extrinsic = .false. !< True for vertically extrinsic fields (vertically integrated). False for intrinsic (concentrations).
+  logical :: v_extensive = .false. !< True for vertically extensive fields (vertically integrated). False for intensive (concentrations).
 end type diag_type
 
 !> The following data type a list of diagnostic fields an their variants,
@@ -739,7 +739,7 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask)
     staggered_in_x = diag%axes%is_u_point .or. diag%axes%is_q_point
     staggered_in_y = diag%axes%is_v_point .or. diag%axes%is_q_point
 
-    if (diag%v_extrinsic .and. .not.diag%axes%is_native) then
+    if (diag%v_extensive .and. .not.diag%axes%is_native) then
       ! The field is vertically integrated and needs to be re-gridded
       if (present(mask)) then
         call MOM_error(FATAL,"post_data_3d: no mask for regridded field.")
@@ -1013,7 +1013,7 @@ integer function register_diag_field(module_name, field_name, axes, init_time, &
      long_name, units, missing_value, range, mask_variant, standard_name,      &
      verbose, do_not_log, err_msg, interp_method, tile_count, cmor_field_name, &
      cmor_long_name, cmor_units, cmor_standard_name, cell_methods, &
-     x_cell_method, y_cell_method, v_cell_method, conversion, v_extrinsic)
+     x_cell_method, y_cell_method, v_cell_method, conversion, v_extensive)
   character(len=*), intent(in) :: module_name !< Name of this module, usually "ocean_model" or "ice_shelf_model"
   character(len=*), intent(in) :: field_name !< Name of the diagnostic field
   type(axes_grp), target, intent(in) :: axes !< Container w/ up to 3 integer handles that indicates axes for this field
@@ -1040,7 +1040,7 @@ integer function register_diag_field(module_name, field_name, axes, init_time, &
   character(len=*), optional, intent(in) :: y_cell_method !< Specifies the cell method for the y-direction. Use '' have no method.
   character(len=*), optional, intent(in) :: v_cell_method !< Specifies the cell method for the vertical direction. Use '' have no method.
   real,             optional, intent(in) :: conversion !< A value to multiply data by before writing to file
-  logical,          optional, intent(in) :: v_extrinsic !< True for vertically extrinsic fields (vertically integrated). Default/absent for intrinsic.
+  logical,          optional, intent(in) :: v_extensive !< True for vertically extensive fields (vertically integrated). Default/absent for intensive.
   ! Local variables
   real :: MOM_missing_value
   type(diag_ctrl), pointer :: diag_cs
@@ -1065,7 +1065,7 @@ integer function register_diag_field(module_name, field_name, axes, init_time, &
              cmor_units=cmor_units, cmor_standard_name=cmor_standard_name, &
              cell_methods=cell_methods, x_cell_method=x_cell_method, &
              y_cell_method=y_cell_method, v_cell_method=v_cell_method, &
-             conversion=conversion, v_extrinsic=v_extrinsic)
+             conversion=conversion, v_extensive=v_extensive)
 
   ! For each diagnostic coordinate register the diagnostic again under a different module name
   do i=1,diag_cs%num_diag_coords
@@ -1105,7 +1105,7 @@ integer function register_diag_field(module_name, field_name, axes, init_time, &
                      cmor_units=cmor_units, cmor_standard_name=cmor_standard_name, &
                      cell_methods=cell_methods, x_cell_method=x_cell_method, &
                      y_cell_method=y_cell_method, v_cell_method=v_cell_method, &
-                     conversion=conversion, v_extrinsic=v_extrinsic)
+                     conversion=conversion, v_extensive=v_extensive)
           if (active) then
             call diag_remap_set_active(diag_cs%diag_remap_cs(i))
           endif
@@ -1124,7 +1124,7 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
      long_name, units, missing_value, range, mask_variant, standard_name,      &
      verbose, do_not_log, err_msg, interp_method, tile_count, cmor_field_name, &
      cmor_long_name, cmor_units, cmor_standard_name, cell_methods, &
-     x_cell_method, y_cell_method, v_cell_method, conversion, v_extrinsic)
+     x_cell_method, y_cell_method, v_cell_method, conversion, v_extensive)
   integer,          intent(inout) :: dm_id !< The diag_mediator ID for this diagnostic group
   character(len=*), intent(in) :: module_name !< Name of this module, usually "ocean_model" or "ice_shelf_model"
   character(len=*), intent(in) :: field_name !< Name of the diagnostic field
@@ -1152,7 +1152,7 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
   character(len=*), optional, intent(in) :: y_cell_method !< Specifies the cell method for the y-direction. Use '' have no method.
   character(len=*), optional, intent(in) :: v_cell_method !< Specifies the cell method for the vertical direction. Use '' have no method.
   real,             optional, intent(in) :: conversion !< A value to multiply data by before writing to file
-  logical,          optional, intent(in) :: v_extrinsic !< True for vertically extrinsic fields (vertically integrated). Default/absent for intrinsic.
+  logical,          optional, intent(in) :: v_extensive !< True for vertically extensive fields (vertically integrated). Default/absent for intensive.
   ! Local variables
   real :: MOM_missing_value
   type(diag_ctrl), pointer :: diag_cs
@@ -1174,7 +1174,7 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
              interp_method=interp_method, tile_count=tile_count)
   call attach_cell_methods(fms_id, axes, cm_string, &
                            cell_methods, x_cell_method, y_cell_method, v_cell_method, &
-                           v_extrinsic=v_extrinsic)
+                           v_extensive=v_extensive)
   if (is_root_pe() .and. diag_CS%doc_unit > 0) then
     msg = ''
     if (present(cmor_field_name)) msg = 'CMOR equivalent is "'//trim(cmor_field_name)//'"'
@@ -1191,7 +1191,7 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
              verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
              interp_method=interp_method, tile_count=tile_count)
     call attach_cell_methods(fms_xyave_id, axes%xyave_axes, cm_string, &
-                             cell_methods, v_cell_method, v_extrinsic=v_extrinsic)
+                             cell_methods, v_cell_method, v_extensive=v_extensive)
   endif
   if (is_root_pe() .and. diag_CS%doc_unit > 0) then
     if (associated(axes%xyave_axes)) then
@@ -1206,7 +1206,7 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
     call add_diag_to_list(diag_cs, dm_id, fms_id, this_diag, axes, module_name, field_name, msg)
     this_diag%fms_xyave_diag_id = fms_xyave_id
 
-    if (present(v_extrinsic)) this_diag%v_extrinsic = v_extrinsic
+    if (present(v_extensive)) this_diag%v_extensive = v_extensive
     if (present(conversion)) this_diag%conversion_factor = conversion
     register_diag_field_expand_cmor = .true.
   endif
@@ -1236,7 +1236,7 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
                err_msg=err_msg, interp_method=interp_method, tile_count=tile_count)
     call attach_cell_methods(fms_id, axes, cm_string, &
                              cell_methods, x_cell_method, y_cell_method, v_cell_method, &
-                             v_extrinsic=v_extrinsic)
+                             v_extensive=v_extensive)
     if (is_root_pe() .and. diag_CS%doc_unit > 0) then
       msg = 'native name is "'//trim(field_name)//'"'
       call log_available_diag(fms_id>0, module_name, cmor_field_name, cm_string, &
@@ -1253,7 +1253,7 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
                standard_name=trim(posted_cmor_standard_name), verbose=verbose, do_not_log=do_not_log,   &
                err_msg=err_msg, interp_method=interp_method, tile_count=tile_count)
       call attach_cell_methods(fms_xyave_id, axes%xyave_axes, cm_string, &
-                               cell_methods, v_cell_method, v_extrinsic=v_extrinsic)
+                               cell_methods, v_cell_method, v_extensive=v_extensive)
     endif
     if (is_root_pe() .and. diag_CS%doc_unit > 0) then
       if (associated(axes%xyave_axes)) then
@@ -1268,7 +1268,7 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
       call add_diag_to_list(diag_cs, dm_id, fms_id, this_diag, axes, module_name, field_name, msg)
       this_diag%fms_xyave_diag_id = fms_xyave_id
 
-      if (present(v_extrinsic)) this_diag%v_extrinsic = v_extrinsic
+      if (present(v_extensive)) this_diag%v_extensive = v_extensive
       if (present(conversion)) this_diag%conversion_factor = conversion
       register_diag_field_expand_cmor = .true.
     endif
@@ -1365,7 +1365,7 @@ end subroutine add_diag_to_list
 
 !> Attaches "cell_methods" attribute to a variable based on defaults for axes_grp or optional arguments.
 subroutine attach_cell_methods(id, axes, ostring, cell_methods, &
-                               x_cell_method, y_cell_method, v_cell_method, v_extrinsic)
+                               x_cell_method, y_cell_method, v_cell_method, v_extensive)
   integer,                    intent(in)  :: id !< Handle to diagnostic
   type(axes_grp),             intent(in)  :: axes !< Container w/ up to 3 integer handles that indicates axes for this field
   character(len=*),           intent(out) :: ostring !< The cell_methods strings that would appear in the file
@@ -1375,14 +1375,14 @@ subroutine attach_cell_methods(id, axes, ostring, cell_methods, &
   character(len=*), optional, intent(in)  :: x_cell_method !< Specifies the cell method for the x-direction. Use '' have no method.
   character(len=*), optional, intent(in)  :: y_cell_method !< Specifies the cell method for the y-direction. Use '' have no method.
   character(len=*), optional, intent(in)  :: v_cell_method !< Specifies the cell method for the vertical direction. Use '' have no method.
-  logical,          optional, intent(in)  :: v_extrinsic !< True for vertically extrinsic fields (vertically integrated). Default/absent for intrinsic.
+  logical,          optional, intent(in)  :: v_extensive !< True for vertically extensive fields (vertically integrated). Default/absent for intensive.
   ! Local variables
   character(len=9) :: axis_name
 
   ostring = ''
   if (present(cell_methods)) then
     if (present(x_cell_method) .or. present(y_cell_method) .or. present(v_cell_method) &
-        .or. present(v_extrinsic)) then
+        .or. present(v_extensive)) then
       call MOM_error(FATAL, "attach_cell_methods: " // &
            'Individual direction cell method was specified along with a "cell_methods" string.')
     endif
@@ -1418,8 +1418,8 @@ subroutine attach_cell_methods(id, axes, ostring, cell_methods, &
       endif
     endif
     if (present(v_cell_method)) then
-      if (present(v_extrinsic)) call MOM_error(FATAL, "attach_cell_methods: " // &
-           'Vertical cell method was specified along with the vertically extrinsic flag.')
+      if (present(v_extensive)) call MOM_error(FATAL, "attach_cell_methods: " // &
+           'Vertical cell method was specified along with the vertically extensive flag.')
       if (len(trim(v_cell_method))>0) then
         if (axes%rank==1) then
           call get_diag_axis_name(axes%handles(1), axis_name)
@@ -1429,7 +1429,7 @@ subroutine attach_cell_methods(id, axes, ostring, cell_methods, &
         call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(v_cell_method))
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(v_cell_method)
       endif
-    elseif (present(v_extrinsic)) then
+    elseif (present(v_extensive)) then
       if (axes%rank==1) then
         call get_diag_axis_name(axes%handles(1), axis_name)
       elseif (axes%rank==3) then

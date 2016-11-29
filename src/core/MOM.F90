@@ -2822,7 +2822,7 @@ subroutine register_diags(Time, G, GV, CS, ADp)
       'Meridional velocity', 'meter second-1', cmor_field_name='vo', cmor_units='m s-1', &
       cmor_standard_name='sea_water_y_velocity', cmor_long_name='Sea Water Y Velocity')
   CS%id_h = register_diag_field('ocean_model', 'h', diag%axesTL, Time, &
-      'Layer Thickness', thickness_units, v_extrinsic=.true.)
+      'Layer Thickness', thickness_units, v_extensive=.true.)
 
   CS%id_volo = register_scalar_field('ocean_model', 'volo', Time, diag,&
       long_name='Total volume of liquid ocean', units='m3',            &
@@ -2972,7 +2972,7 @@ subroutine register_diags(Time, G, GV, CS, ADp)
   CS%id_v_predia = register_diag_field('ocean_model', 'v_predia', diag%axesCvL, Time, &
       'Meridional velocity before diabatic forcing', 'meter second-1')
   CS%id_h_predia = register_diag_field('ocean_model', 'h_predia', diag%axesTL, Time, &
-      'Layer Thickness before diabatic forcing', thickness_units, v_extrinsic=.true.)
+      'Layer Thickness before diabatic forcing', thickness_units, v_extensive=.true.)
   CS%id_e_predia = register_diag_field('ocean_model', 'e_predia', diag%axesTi, Time, &
       'Interface Heights before diabatic forcing', 'meter')
   if (CS%diabatic_first .and. (.not. CS%adiabatic)) then
@@ -2981,7 +2981,7 @@ subroutine register_diags(Time, G, GV, CS, ADp)
     CS%id_v_preale = register_diag_field('ocean_model', 'v_preale', diag%axesCvL, Time, &
         'Meridional velocity before remapping', 'meter second-1')
     CS%id_h_preale = register_diag_field('ocean_model', 'h_preale', diag%axesTL, Time, &
-        'Layer Thickness before remapping', thickness_units, v_extrinsic=.true.)
+        'Layer Thickness before remapping', thickness_units, v_extensive=.true.)
     CS%id_T_preale = register_diag_field('ocean_model', 'T_preale', diag%axesTL, Time, &
         'Temperature before remapping', 'degC')
     CS%id_S_preale = register_diag_field('ocean_model', 'S_preale', diag%axesTL, Time, &
@@ -3040,7 +3040,7 @@ subroutine register_diags_TS_tendency(Time, G, CS)
       cmor_field_name="opottemptend", cmor_units="W m-2",                                         &
       cmor_standard_name="tendency_of_sea_water_potential_temperature_expressed_as_heat_content", &
       cmor_long_name ="Tendency of Sea Water Potential Temperature Expressed as Heat Content",    &
-      v_extrinsic=.true.)
+      v_extensive=.true.)
   CS%id_Th_tendency_2d = register_diag_field('ocean_model', 'Th_tendency_2d', diag%axesT1, Time,              &
       'Vertical sum of net time tendency for heat', 'W/m2',                                                   &
       cmor_field_name="opottemptend_2d", cmor_units="W m-2",                                                   &
@@ -3080,7 +3080,7 @@ subroutine register_diags_TS_tendency(Time, G, CS)
       cmor_field_name="osalttend", cmor_units="kg m-2 s-1",                               &
       cmor_standard_name="tendency_of_sea_water_salinity_expressed_as_salt_content",      &
       cmor_long_name ="Tendency of Sea Water Salinity Expressed as Salt Content",         &
-      v_extrinsic=.true.)
+      v_extensive=.true.)
   CS%id_Sh_tendency_2d = register_diag_field('ocean_model', 'Sh_tendency_2d', diag%axesT1, Time, &
       'Vertical sum of net time tendency for salt', 'kg/(m2 * s)',                               &
       cmor_field_name="osalttend_2d", cmor_units="kg m-2 s-1",                                   &
