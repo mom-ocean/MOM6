@@ -1521,7 +1521,6 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
           
       if(CS%debug)  call hchksum(h_end, "h_end after transport_by_files", G%HI)   
 
-      ! Check to see if ALE or layer is being used
       call offline_advection_ale(fluxes, Time_start, time_interval, CS%offline_CSp, id_clock_ALE, &
           CS%h, uhtr, vhtr, converged=adv_converged)
       call pass_var(CS%h,G%Domain)
@@ -1544,8 +1543,6 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       ! Call ALE one last time to make sure that tracers are remapped onto the layer thicknesses
       ! stored from the forward run
       call hchksum(h_end, "h_end after offline_redistribute_residual",G%HI)
-      CS%tv%T(:,:,:) = temp_snap(:,:,:)
-      CS%tv%S(:,:,:) = salt_snap(:,:,:)
       call cpu_clock_begin(id_clock_ALE)
       call ALE_offline_tracer_final( G, GV, CS%h, h_end, CS%tracer_Reg, CS%ALE_CSp)
       call cpu_clock_end(id_clock_ALE)        
@@ -1559,8 +1556,9 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         if(CS%debug)  call hchksum(h_end, "h_end after tracer_hordiff",G%HI)  
       endif    
       
+      CS%tv%T(:,:,:) = temp_snap(:,:,:)
+      CS%tv%S(:,:,:) = salt_snap(:,:,:)
       CS%h = h_end
-      call pass_var(CS%h,G%Domain)
       
     endif
     
@@ -1598,6 +1596,9 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
 
         
   endif
+  
+  call calculate_surface_state(state, u, v, h, CS%ave_ssh, G, GV, CS, &
+                               fluxes%p_surf_SSH)
   
   if (CS%offline_CSp%id_hr>0) call post_data(CS%offline_CSp%id_hr, h_end-CS%h, CS%diag)
   if (CS%offline_CSp%id_uhr>0) call post_data(CS%offline_CSp%id_uhr, uhtr, CS%diag)
