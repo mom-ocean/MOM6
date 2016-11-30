@@ -1597,7 +1597,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         
   endif
   
-  call calculate_surface_state(state, u, v, h, CS%ave_ssh, G, GV, CS, &
+  call calculate_surface_state(state, CS%u, CS%v, CS%h, CS%ave_ssh, G, GV, CS, &
                                fluxes%p_surf_SSH)
   
   if (CS%offline_CSp%id_hr>0) call post_data(CS%offline_CSp%id_hr, h_end-CS%h, CS%diag)
