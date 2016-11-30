@@ -359,7 +359,8 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
       call define_axes_group(diag_cs, (/ id_xh, id_yh, id_zi /), diag_cs%remap_axesTi(i), &
            nz=nz, vertical_coordinate_number=i, &
            x_cell_method='mean', y_cell_method='mean', v_cell_method='point', &
-           is_h_point=.true., is_interface=.true., is_native=.false., needs_interpolating=.true.)
+           is_h_point=.true., is_interface=.true., is_native=.false., needs_interpolating=.true., &
+           xyave_axes=diag_cs%remap_axesZi(i))
 
       !! \note Remapping for B points is not yet implemented so needs_remapping is not provided for remap_axesBi
       call define_axes_group(diag_cs, (/ id_xq, id_yq, id_zi /), diag_cs%remap_axesBi(i), &
@@ -939,6 +940,7 @@ subroutine post_xy_average(diag_cs, diag, field)
   if (diag_cs%ave_enabled) then
     call horizontally_average_diag_field(diag_cs%diag_remap_cs(diag%axes%vertical_coordinate_number), &
                                          diag_cs%G, staggered_in_x, staggered_in_y, &
+                                         diag%axes%is_layer, diag%v_extensive, &
                                          diag_cs%missing_value, field, averaged_field)
     used = send_data(diag%fms_xyave_diag_id, averaged_field, diag_cs%time_end, weight=diag_cs%time_int)
   endif
@@ -1192,9 +1194,7 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
              interp_method=interp_method, tile_count=tile_count)
     call attach_cell_methods(fms_xyave_id, axes%xyave_axes, cm_string, &
                              cell_methods, v_cell_method, v_extensive=v_extensive)
-  endif
-  if (is_root_pe() .and. diag_CS%doc_unit > 0) then
-    if (associated(axes%xyave_axes)) then
+    if (is_root_pe() .and. diag_CS%doc_unit > 0) then
       msg = ''
       if (present(cmor_field_name)) msg = 'CMOR equivalent is "'//trim(cmor_field_name)//'_xyave"'
       call log_available_diag(fms_xyave_id>0, module_name, trim(field_name)//'_xyave', cm_string, &
@@ -1254,9 +1254,7 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
                err_msg=err_msg, interp_method=interp_method, tile_count=tile_count)
       call attach_cell_methods(fms_xyave_id, axes%xyave_axes, cm_string, &
                                cell_methods, v_cell_method, v_extensive=v_extensive)
-    endif
-    if (is_root_pe() .and. diag_CS%doc_unit > 0) then
-      if (associated(axes%xyave_axes)) then
+      if (is_root_pe() .and. diag_CS%doc_unit > 0) then
         msg = 'native name is "'//trim(field_name)//'_xyave"'
         call log_available_diag(fms_xyave_id>0, module_name, trim(cmor_field_name)//'_xyave', cm_string, &
                                 msg, diag_CS, posted_cmor_long_name, posted_cmor_units, &

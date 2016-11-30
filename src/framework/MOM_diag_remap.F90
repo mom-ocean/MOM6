@@ -512,67 +512,143 @@ end subroutine vertically_interpolate_diag_field
 
 !> Horizontally average field
 subroutine horizontally_average_diag_field(remap_cs, G, staggered_in_x, staggered_in_y, &
+                                           is_layer, is_extensive, &
                                            missing_value, field, averaged_field)
   type(diag_remap_ctrl),  intent(in) :: remap_cs !< Diagnostic coodinate control structure
   type(ocean_grid_type),  intent(in) :: G !< Ocean grid structure
-  logical,                intent(in) :: staggered_in_x !< True is the x-axis location is at u or q points
-  logical,                intent(in) :: staggered_in_y !< True is the y-axis location is at v or q points
+  logical,                intent(in) :: staggered_in_x !< True if the x-axis location is at u or q points
+  logical,                intent(in) :: staggered_in_y !< True if the y-axis location is at v or q points
+  logical,                intent(in) :: is_layer !< True if the z-axis location is at h points
+  logical,                intent(in) :: is_extensive !< True if the z-direction is spatially integrated (over layers)
   real,                   intent(in) :: missing_value !< A missing_value to assign land/vanished points
   real, dimension(:,:,:), intent(in) :: field !<  The diagnostic field to be remapped
   real, dimension(:),  intent(inout) :: averaged_field !< Field argument horizontally averaged
   ! Local variables
-  real, dimension(remap_cs%nz) :: vol_sum, stuff_sum
-  real :: v1, v2, total_volume, total_stuff
+  real, dimension(remap_cs%nz+1) :: vol_sum, stuff_sum ! nz+1 is needed for interface averages
+  real :: v1, v2, total_volume, total_stuff, val
   integer :: i, j, k
 
   call assert(remap_cs%initialized, 'horizontally_average_diag_field: remap_cs not initialized.')
-  call assert(size(field, 3) == remap_cs%nz, &
+  if (is_layer) then
+    call assert(size(field, 3) == remap_cs%nz, &
               'horizontally_average_diag_field: Field vertical dimension does not match diag remap type.')
-  call assert(size(averaged_field, 1) == remap_cs%nz, &
+    call assert(size(averaged_field, 1) == remap_cs%nz, &
               'horizontally_average_diag_field: Averaged field dimension does not match diag remap type.')
+  else
+    call assert(size(field, 3) == remap_cs%nz+1, &
+              'horizontally_average_diag_field: Field vertical dimension does not match diag remap type.')
+    call assert(size(averaged_field, 1) == remap_cs%nz+1, &
+              'horizontally_average_diag_field: Averaged field dimension does not match diag remap type.')
+  endif
 
   if (staggered_in_x .and. .not. staggered_in_y) then
-    ! U-points
-    do k=1,remap_cs%nz
-      vol_sum(k) = 0.
-      stuff_sum(k) = 0.
-      do j=G%jsc, G%jec ; do i=G%isc, G%iec
-        v1 = G%areaCu(I,j) * 0.5 * ( remap_cs%h(i,j,k) + remap_cs%h(i+1,j,k) )
-        v2 = G%areaCu(I-1,j) * 0.5 * ( remap_cs%h(i,j,k) + remap_cs%h(i-1,j,k) )
-        vol_sum(k) = vol_sum(k) + 0.5 * ( v1 + v2 ) * G%mask2dT(i,j)
-        stuff_sum(k) = stuff_sum(k) + 0.5 * ( v1 * field(I,j,k) + v2 * field(I-1,j,k) ) * G%mask2dT(i,j)
-      enddo ; enddo
-    enddo
-  elseif (staggered_in_y .and. .not. staggered_in_x) then
-    ! V-points
-    do k=1,remap_cs%nz
-      vol_sum(k) = 0.
-      stuff_sum(k) = 0.
-      do j=G%jsc, G%jec ; do i=G%isc, G%iec
-        v1 = G%areaCv(i,J) * 0.5 * ( remap_cs%h(i,j,k) + remap_cs%h(i,j+1,k) )
-        v2 = G%areaCv(i,J-1) * 0.5 * ( remap_cs%h(i,j,k) + remap_cs%h(i,j-1,k) )
-        vol_sum(k) = vol_sum(k) + 0.5 * ( v1 + v2 ) * G%mask2dT(i,j)
-        stuff_sum(k) = stuff_sum(k) + 0.5 * ( v1 * field(i,J,k) + v2 * field(i,J-1,k) ) * G%mask2dT(i,j)
-      enddo ; enddo
-    enddo
-  elseif ((.not. staggered_in_x) .and. (.not. staggered_in_y)) then
-    ! H-points
-    do k=1,remap_cs%nz
-      vol_sum(k) = 0.
-      stuff_sum(k) = 0.
-      do j=G%jsc, G%jec ; do i=G%isc, G%iec
-        if (G%mask2dT(i,j)>0. .and. remap_cs%h(i,j,k)>0.) then
-          v1 = G%areaT(i,j) * remap_cs%h(i,j,k)
-          vol_sum(k) = vol_sum(k) + v1
-          stuff_sum(k) = stuff_sum(k) + v1 * field(i,j,k)
- if (abs(field(i,j,k))>1.e20) then
-  stop 'xxx'
-endif
+    if (is_layer) then
+      ! U-points
+      do k=1,remap_cs%nz
+        vol_sum(k) = 0.
+        stuff_sum(k) = 0.
+        if (is_extensive) then
+          do j=G%jsc, G%jec ; do i=G%isc, G%iec
+            v1 = G%areaCu(I,j)
+            v2 = G%areaCu(I-1,j)
+            vol_sum(k) = vol_sum(k) + 0.5 * ( v1 + v2 ) * G%mask2dT(i,j)
+            stuff_sum(k) = stuff_sum(k) + 0.5 * ( v1 * field(I,j,k) + v2 * field(I-1,j,k) ) * G%mask2dT(i,j)
+          enddo ; enddo
+        else ! Intensive
+          do j=G%jsc, G%jec ; do i=G%isc, G%iec
+            v1 = G%areaCu(I,j) * 0.5 * ( remap_cs%h(i,j,k) + remap_cs%h(i+1,j,k) )
+            v2 = G%areaCu(I-1,j) * 0.5 * ( remap_cs%h(i,j,k) + remap_cs%h(i-1,j,k) )
+            vol_sum(k) = vol_sum(k) + 0.5 * ( v1 + v2 ) * G%mask2dT(i,j)
+            stuff_sum(k) = stuff_sum(k) + 0.5 * ( v1 * field(I,j,k) + v2 * field(I-1,j,k) ) * G%mask2dT(i,j)
+          enddo ; enddo
         endif
-      enddo ; enddo
-    enddo
+      enddo
+    else ! Interface
+      do k=1,remap_cs%nz+1
+        vol_sum(k) = 0.
+        stuff_sum(k) = 0.
+        do j=G%jsc, G%jec ; do i=G%isc, G%iec
+          v1 = G%areaCu(I,j)
+          v2 = G%areaCu(I-1,j)
+          vol_sum(k) = vol_sum(k) + 0.5 * ( v1 + v2 ) * G%mask2dT(i,j)
+          stuff_sum(k) = stuff_sum(k) + 0.5 * ( v1 * field(I,j,k) + v2 * field(I-1,j,k) ) * G%mask2dT(i,j)
+        enddo ; enddo
+      enddo
+    endif
+  elseif (staggered_in_y .and. .not. staggered_in_x) then
+    if (is_layer) then
+      ! V-points
+      do k=1,remap_cs%nz
+        vol_sum(k) = 0.
+        stuff_sum(k) = 0.
+        if (is_extensive) then
+          do j=G%jsc, G%jec ; do i=G%isc, G%iec
+            v1 = G%areaCv(i,J)
+            v2 = G%areaCv(i,J-1)
+            vol_sum(k) = vol_sum(k) + 0.5 * ( v1 + v2 ) * G%mask2dT(i,j)
+            stuff_sum(k) = stuff_sum(k) + 0.5 * ( v1 * field(i,J,k) + v2 * field(i,J-1,k) ) * G%mask2dT(i,j)
+          enddo ; enddo
+        else ! Intensive
+          do j=G%jsc, G%jec ; do i=G%isc, G%iec
+            v1 = G%areaCv(i,J) * 0.5 * ( remap_cs%h(i,j,k) + remap_cs%h(i,j+1,k) )
+            v2 = G%areaCv(i,J-1) * 0.5 * ( remap_cs%h(i,j,k) + remap_cs%h(i,j-1,k) )
+            vol_sum(k) = vol_sum(k) + 0.5 * ( v1 + v2 ) * G%mask2dT(i,j)
+            stuff_sum(k) = stuff_sum(k) + 0.5 * ( v1 * field(i,J,k) + v2 * field(i,J-1,k) ) * G%mask2dT(i,j)
+          enddo ; enddo
+        endif
+      enddo
+    else ! Interface
+      do k=1,remap_cs%nz+1
+        vol_sum(k) = 0.
+        stuff_sum(k) = 0.
+        do j=G%jsc, G%jec ; do i=G%isc, G%iec
+          v1 = G%areaCv(i,J)
+          v2 = G%areaCv(i,J-1)
+          vol_sum(k) = vol_sum(k) + 0.5 * ( v1 + v2 ) * G%mask2dT(i,j)
+          stuff_sum(k) = stuff_sum(k) + 0.5 * ( v1 * field(i,J,k) + v2 * field(i,J-1,k) ) * G%mask2dT(i,j)
+        enddo ; enddo
+      enddo
+    endif
+  elseif ((.not. staggered_in_x) .and. (.not. staggered_in_y)) then
+    if (is_layer) then
+      ! H-points
+      do k=1,remap_cs%nz
+        vol_sum(k) = 0.
+        stuff_sum(k) = 0.
+        if (is_extensive) then
+          do j=G%jsc, G%jec ; do i=G%isc, G%iec
+            if (G%mask2dT(i,j)>0. .and. remap_cs%h(i,j,k)>0.) then
+              v1 = G%areaT(i,j)
+              vol_sum(k) = vol_sum(k) + v1
+              stuff_sum(k) = stuff_sum(k) + v1 * field(i,j,k)
+            endif
+          enddo ; enddo
+        else ! Intensive
+          do j=G%jsc, G%jec ; do i=G%isc, G%iec
+            if (G%mask2dT(i,j)>0. .and. remap_cs%h(i,j,k)>0.) then
+              v1 = G%areaT(i,j) * remap_cs%h(i,j,k)
+              vol_sum(k) = vol_sum(k) + v1
+              stuff_sum(k) = stuff_sum(k) + v1 * field(i,j,k)
+            endif
+          enddo ; enddo
+        endif
+      enddo
+    else ! Interface
+      do k=1,remap_cs%nz+1
+        vol_sum(k) = 0.
+        stuff_sum(k) = 0.
+        do j=G%jsc, G%jec ; do i=G%isc, G%iec
+          val = field(i,j,k)
+          if (G%mask2dT(i,j)>0. .and. val/=missing_value) then
+            v1 = G%areaT(i,j)
+            vol_sum(k) = vol_sum(k) + v1
+            stuff_sum(k) = stuff_sum(k) + v1 * field(i,j,k)
+          endif
+        enddo ; enddo
+      enddo
+    endif
   else
-    call assert(.false., 'vertically_interpolate_diag_field: Q point averaging is not coded yet.')
+    call assert(.false., 'horizontally_average_diag_field: Q point averaging is not coded yet.')
   endif
 
   call sum_across_PEs(vol_sum, remap_cs%nz)
