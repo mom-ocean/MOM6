@@ -579,10 +579,7 @@ subroutine offline_add_diurnal_SW(fluxes, G, Time_start, Time_end)
                      max(1e-30, cosz_day*fracday_day*rrsun_day)
 
     i2 = i+i_off ; j2 = j+j_off
-    fluxes%sw_nir_dir(i2,j2) = fluxes%sw_nir_dir(i2,j2) * diurnal_factor
-    fluxes%sw_nir_dif(i2,j2) = fluxes%sw_nir_dif(i2,j2) * diurnal_factor
-    fluxes%sw_vis_dir(i2,j2) = fluxes%sw_vis_dir(i2,j2) * diurnal_factor
-    fluxes%sw_vis_dif(i2,j2) = fluxes%sw_vis_dif(i2,j2) * diurnal_factor
+    fluxes%sw(i2,j2) = fluxes%sw(i2,j2) * diurnal_factor
   enddo ; enddo
 
 end subroutine offline_add_diurnal_sw
