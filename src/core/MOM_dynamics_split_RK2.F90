@@ -46,7 +46,7 @@ use MOM_interface_heights,     only : find_eta
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types,            only : MEKE_type
 use MOM_open_boundary,         only : ocean_OBC_type
-use MOM_open_boundary,         only : Radiation_Open_Bdry_Conds
+use MOM_open_boundary,         only : radiation_open_bdry_conds
 use MOM_boundary_update,       only : update_OBC_data
 use MOM_PressureForce,         only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc,              only : set_viscous_BBL, set_viscous_ML, set_visc_CS
@@ -642,7 +642,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call cpu_clock_end(id_clock_pass)
 
   if (associated(CS%OBC)) then
-    call Radiation_Open_Bdry_Conds(CS%OBC, u_av, u_old_rad_OBC, v_av, &
+    call radiation_open_bdry_conds(CS%OBC, u_av, u_old_rad_OBC, v_av, &
              v_old_rad_OBC, hp, h_old_rad_OBC, G)
   endif
 
@@ -858,7 +858,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call cpu_clock_end(id_clock_pass)
 
   if (associated(CS%OBC)) then
-    call Radiation_Open_Bdry_Conds(CS%OBC, u, u_old_rad_OBC, v, &
+    call radiation_open_bdry_conds(CS%OBC, u, u_old_rad_OBC, v, &
              v_old_rad_OBC, h, h_old_rad_OBC, G)
   endif
 
@@ -1074,7 +1074,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
                  "BE is also applicable if SPLIT is false and USE_RK2 \n"//&
                  "is true.", units="nondim", default=0.6)
   call get_param(param_file, mod, "BEGW", CS%begw, &
-                 "If SPILT is true, BEGW is a number from 0 to 1 that \n"//&
+                 "If SPLIT is true, BEGW is a number from 0 to 1 that \n"//&
                  "controls the extent to which the treatment of gravity \n"//&
                  "waves is forward-backward (0) or simulated backward \n"//&
                  "Euler (1).  0 is almost always used.\n"//&
