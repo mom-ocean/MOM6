@@ -96,7 +96,7 @@ use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types,            only : MEKE_type
 use MOM_open_boundary,         only : ocean_OBC_type, OBC_NONE
 use MOM_verticalGrid,          only : verticalGrid_type
-use fms_mod,                   only : read_data
+use MOM_io,                    only : read_data, slasher
 
 implicit none ; private
 
@@ -751,7 +751,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   logical :: get_all       ! If true, read and log all parameters, regardless of
                            ! whether they are used, to enable spell-checking of
                            ! valid parameters.
-
+  character(len=64) :: inputdir, filename
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   integer :: i, j
@@ -936,8 +936,13 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
 
   if (CS%use_Kh_bg_2d) then
     ALLOC_(CS%Kh_bg_2d(isd:ied,jsd:jed))     ; CS%Kh_bg_2d(:,:) = 0.0
-    call read_data('INPUT/KH_background_2d.nc', 'Kh', CS%Kh_bg_2d, &
-                    domain=G%domain%mpp_domain, timelevel=1)
+    call get_param(param_file, mod, "KH_BG_2D_FILENAME", filename, &
+                 'The filename containing a 2d map of "Kh".', &
+                 default='KH_background_2d.nc')
+    call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
+    inputdir = slasher(inputdir)
+    call read_data(trim(inputdir)//trim(filename), 'Kh', CS%Kh_bg_2d, &
+                   domain=G%domain%mpp_domain, timelevel=1)
     call pass_var(CS%Kh_bg_2d, G%domain)
   endif
 
