@@ -1783,11 +1783,12 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
   call pass_var(rho_z,G%Domain)
 
   ! This is needed for building an ALE grid under ice shelves
-  call get_param(PF, mod, "ICE_SHELF", use_ice_shelf, default=.false., do_not_log=.true.)
+  call get_param(PF, mod, "ICE_SHELF", use_ice_shelf, default=.false.)
   if (use_ice_shelf) then
      call get_param(PF, mod, "ICE_THICKNESS_FILE", ice_shelf_file, &
                     "The file from which the ice bathymetry and area are read.", &
                     fail_if_missing=.true.)
+     filename = trim(inputdir)//trim(ice_shelf_file)
      call log_param(PF, mod, "INPUTDIR/THICKNESS_FILE", filename)
      call get_param(PF, mod, "ICE_AREA_VARNAME", area_varname, &
                     "The name of the area variable in ICE_THICKNESS_FILE.", &
