@@ -68,6 +68,8 @@ type, public :: offline_transport_CS
   logical :: x_before_y        ! Which horizontal direction is advected first
   logical :: print_adv_offline ! Prints out some updates each advection sub interation
   logical :: skip_diffusion    ! Skips horizontal diffusion of tracers
+  logical :: read_sw           ! Read in averaged values for shortwave radiation
+  logical :: diurnal_sw        ! Adds a synthetic diurnal cycle on shortwave radiation
   logical :: debug
   !> Variables controlling some of the numerical considerations of offline transport
   integer           ::  num_off_iter
@@ -418,11 +420,14 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, dt, CS, h_pre, eat
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: zero_3dh
   zero_3dh(:,:,:) = 0.0
   
+  if(CS%diurnal_SW) &
+    call offline_add_diurnal_SW(fluxes, CS%G, Time_start, Time_end)
   if (associated(CS%diabatic_CSp%optics)) &
     call set_opacity(CS%diabatic_CSp%optics, fluxes, CS%G, CS%GV, CS%diabatic_CSp%opacity_CSp)
 
   ! Note that first two arguments are identical, because in ALE mode, there is no change in layer thickness
   ! because of eatr and ebtr
+
   call call_tracer_column_fns(h_pre, h_pre, eatr, ebtr, &
       fluxes, dt, CS%G, CS%GV, CS%tv, &
       CS%diabatic_CSp%optics, CS%tracer_flow_CSp, CS%debug, &
@@ -710,6 +715,16 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
     enddo ; enddo
     
   endif
+
+  if(CS%read_sw) then
+    call read_data(CS%mean_file,'SW',fluxes%sw, domain=G%Domain%mpp_domain, &
+        timelevel=CS%ridx_sum)
+    do j=js,je ; do i=is,ie
+      if(G%mask2dT(i,j)<1.0) then    
+        fluxes%sw(i,j) = 0.0
+      endif
+    enddo ; enddo 
+  endif
     
   ! Apply masks at T, U, and V points
   do k=1,nz ; do j=js,je ; do i=is,ie
@@ -909,6 +924,12 @@ subroutine offline_transport_init(param_file, CS, diabatic_aux_CSp, G, GV)
     "Print diagnostic output every advection subiteration",default=.false.)
   call get_param(param_file, mod, "SKIP_DIFFUSION_OFFLINE", CS%skip_diffusion, &
     "Do not do horizontal diffusion",default=.false.)
+  call get_param(param_file, mod, "READ_SW", CS%read_sw, &
+    "Read in shortwave radiation field instead of using values from the coupler"//&
+    "when in offline tracer mode",default=.false.)
+  call get_param(param_file, mod, "OFFLINE_ADD_DIURNAL_SW", CS%diurnal_sw, &
+    "Adds a synthetic diurnal cycle in the same way that the ice model would have"//&
+    "when time-averaged fields of shortwave radiation are read in", default=.true.)
 
   ! Concatenate offline directory and file names
   CS%snap_file = trim(CS%offlinedir)//trim(CS%snap_file)
