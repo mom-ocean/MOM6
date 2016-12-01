@@ -79,7 +79,10 @@ use MOM_generic_tracer, only : MOM_generic_tracer_stock, MOM_generic_tracer_min_
 use pseudo_salt_tracer, only : register_pseudo_salt_tracer, initialize_pseudo_salt_tracer
 use pseudo_salt_tracer, only : pseudo_salt_tracer_column_physics, pseudo_salt_tracer_surface_state
 use pseudo_salt_tracer, only : pseudo_salt_stock, pseudo_salt_tracer_end, pseudo_salt_tracer_CS
-
+use boundary_impulse_tracer, only : register_boundary_impulse_tracer, initialize_boundary_impulse_tracer
+use boundary_impulse_tracer, only : boundary_impulse_tracer_column_physics, boundary_impulse_tracer_surface_state
+use boundary_impulse_tracer, only : boundary_impulse_stock, boundary_impulse_tracer_end
+use boundary_impulse_tracer, only : boundary_impulse_tracer_CS
 
 implicit none ; private
 
@@ -98,6 +101,7 @@ type, public :: tracer_flow_control_CS ; private
   logical :: use_OCMIP2_CFC = .false.
   logical :: use_MOM_generic_tracer = .false.
   logical :: use_pseudo_salt_tracer = .false.
+  logical :: use_boundary_impulse_tracer = .false.
   type(USER_tracer_example_CS), pointer :: USER_tracer_example_CSp => NULL()
   type(DOME_tracer_CS), pointer :: DOME_tracer_CSp => NULL()
   type(ISOMIP_tracer_CS), pointer :: ISOMIP_tracer_CSp => NULL()
@@ -110,6 +114,7 @@ type, public :: tracer_flow_control_CS ; private
   type(MOM_generic_tracer_CS), pointer :: MOM_generic_tracer_CSp => NULL()
 #endif
   type(pseudo_salt_tracer_CS), pointer :: pseudo_salt_tracer_CSp => NULL()
+  type(boundary_impulse_tracer_CS), pointer :: boundary_impulse_tracer_CSp => NULL()
 end type tracer_flow_control_CS
 
 contains
@@ -180,6 +185,9 @@ subroutine call_tracer_register(HI, GV, param_file, CS, tr_Reg, restart_CS)
   call get_param(param_file, mod, "USE_PSEUDO_SALT_TRACER", CS%use_pseudo_salt_tracer, &
                  "If true, use the pseudo salt tracer, typically run as a diagnostic.", &
                  default=.false.)
+  call get_param(param_file, mod, "USE_BOUNDARY_IMPULSE_TRACER", CS%use_boundary_impulse_tracer, &
+                 "If true, use the boundary impulse tracer.", &
+                 default=.false.)
 
 #ifndef _USE_GENERIC_TRACER
   if (CS%use_MOM_generic_tracer) call MOM_error(FATAL, &
@@ -221,6 +229,10 @@ subroutine call_tracer_register(HI, GV, param_file, CS, tr_Reg, restart_CS)
   if (CS%use_pseudo_salt_tracer) CS%use_pseudo_salt_tracer = &
     register_pseudo_salt_tracer(HI, GV, param_file,  CS%pseudo_salt_tracer_CSp, &
                         tr_Reg, restart_CS)
+  if (CS%use_boundary_impulse_tracer) CS%use_boundary_impulse_tracer = &
+    register_boundary_impulse_tracer(HI, GV, param_file,  CS%boundary_impulse_tracer_CSp, &
+                        tr_Reg, restart_CS)
+                        
 
 end subroutine call_tracer_register
 
@@ -294,6 +306,9 @@ subroutine tracer_flow_control_init(restart, day, G, GV, h, param_file, diag, OB
   if (CS%use_pseudo_salt_tracer) &
     call initialize_pseudo_salt_tracer(restart, day, G, GV, h, diag, OBC, CS%pseudo_salt_tracer_CSp, &
                                 sponge_CSp, diag_to_Z_CSp, tv)
+  if (CS%use_boundary_impulse_tracer) &
+    call initialize_boundary_impulse_tracer(restart, day, G, GV, h, diag, OBC, CS%boundary_impulse_tracer_CSp, &
+                                sponge_CSp, diag_to_Z_CSp, tv)                                
 
 end subroutine tracer_flow_control_init
 
@@ -451,6 +466,11 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, dt, G, GV, tv, o
                                      G, GV, CS%pseudo_salt_tracer_CSp, tv, debug,&
                                      evap_CFL_limit=evap_CFL_limit, &
                                      minimum_forcing_depth=minimum_forcing_depth)
+    if (CS%use_boundary_impulse_tracer) &
+      call boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                     G, GV, CS%boundary_impulse_tracer_CSp, tv, debug,&
+                                     evap_CFL_limit=evap_CFL_limit, &
+                                     minimum_forcing_depth=minimum_forcing_depth)
 
 
   else ! Apply tracer surface fluxes using ea on the first layer
@@ -486,6 +506,9 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, dt, G, GV, tv, o
     if (CS%use_pseudo_salt_tracer) &
       call pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
                                      G, GV, CS%pseudo_salt_tracer_CSp, tv, debug)
+    if (CS%use_boundary_impulse_tracer) &
+      call boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                     G, GV, CS%boundary_impulse_tracer_CSp, tv, debug)                                     
 
 
   endif
@@ -601,6 +624,13 @@ subroutine call_tracer_stocks(h, stock_values, G, GV, CS, stock_names, stock_uni
            stock_values, set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
   endif
 
+  if (CS%use_boundary_impulse_tracer) then
+    ns = boundary_impulse_stock(h, values, G, GV, CS%boundary_impulse_tracer_CSp, &
+                         names, units, stock_index)
+    call store_stocks("boundary_impulse_tracer", ns, names, units, values, index, &
+           stock_values, set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
+  endif  
+  
   if (ns_tot == 0) stock_values(1) = 0.0
 
   if (present(num_stocks)) num_stocks = ns_tot
@@ -713,6 +743,7 @@ subroutine tracer_flow_control_end(CS)
   if (CS%use_MOM_generic_tracer) call end_MOM_generic_tracer(CS%MOM_generic_tracer_CSp)
 #endif
   if (CS%use_pseudo_salt_tracer) call pseudo_salt_tracer_end(CS%pseudo_salt_tracer_CSp)
+  if (CS%use_boundary_impulse_tracer) call boundary_impulse_tracer_end(CS%boundary_impulse_tracer_CSp)
 
   if (associated(CS)) deallocate(CS)
 end subroutine tracer_flow_control_end

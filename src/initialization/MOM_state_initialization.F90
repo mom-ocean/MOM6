@@ -24,6 +24,7 @@ use MOM_io, only : EAST_FACE, NORTH_FACE
 use MOM_open_boundary, only : ocean_OBC_type, open_boundary_init
 use MOM_open_boundary, only : OBC_NONE, OBC_SIMPLE
 use MOM_open_boundary, only : open_boundary_query, set_Flather_data
+!use MOM_open_boundary, only : set_3D_OBC_data
 use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
 use MOM_restart, only : restore_state, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, set_up_sponge_ML_density
@@ -445,7 +446,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
 
   ! This is the legacy approach to turning on open boundaries
   call get_param(PF, mod, "OBC_CONFIG", config, default="none", do_not_log=.true.)
-  if (open_boundary_query(OBC, apply_orig_OBCs=.true.)) then
+  if (open_boundary_query(OBC, apply_specified_OBC=.true.)) then
     if (trim(config) == "DOME") then
       call DOME_set_OBC_data(OBC, tv, G, GV, PF, tracer_Reg)
     elseif (trim(config) == "USER") then
@@ -455,9 +456,12 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
               "OBC_CONFIG = "//trim(config)//" have not been fully implemented.")
     endif
   endif
-  if (open_boundary_query(OBC, apply_orig_Flather=.true.)) then
+  if (open_boundary_query(OBC, apply_Flather_OBC=.true.)) then
     call set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
   endif
+! if (open_boundary_query(OBC, apply_nudged_OBC=.true.)) then
+!   call set_3D_OBC_data(OBC, tv, h, G, PF, tracer_Reg)
+! endif
   ! Still need a way to specify the boundary values
   call get_param(PF, mod, "OBC_VALUES_CONFIG", config, default="none", do_not_log=.true.)
   if (trim(config) == "tidal_bay") then
@@ -1608,9 +1612,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
   type(directories),                     intent(in)    :: dirs
 
   character(len=200) :: filename   ! The name of an input file containing temperature
-                                   ! and salinity in z-space.
+                                   ! and salinity in z-space; also used for  ice shelf area.
   character(len=200) :: inputdir ! The directory where NetCDF input files are.
-  character(len=200) :: mesg
+  character(len=200) :: mesg, area_varname, ice_shelf_file
 
   type(EOS_type), pointer :: eos => NULL()
 
@@ -1630,6 +1634,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
   integer :: kd, inconsistent
   real    :: PI_180             ! for conversion from degrees to radians
 
+  real, dimension(:,:), pointer :: shelf_area
   real    :: min_depth
   real    :: dilate
   real    :: missing_value_temp, missing_value_salt    
@@ -1657,12 +1662,15 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
 
   ! Local variables for ALE remapping
   real, dimension(:), allocatable :: hTarget
+  real, dimension(:,:), allocatable :: area_shelf_h
+  real, dimension(:,:), allocatable, target  :: frac_shelf_h  
   real, dimension(:,:,:), allocatable :: tmpT1dIn, tmpS1dIn, h1, tmp_mask_in
   real :: zTopOfCell, zBottomOfCell
   type(regridding_CS) :: regridCS ! Regridding parameters and work arrays
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
 
   logical :: homogenize, useALEremapping, remap_full_column, remap_general, remap_old_alg
+  logical :: use_ice_shelf
   character(len=10) :: remappingScheme
   real :: tempAvg, saltAvg
   integer :: nPoints, ans
@@ -1758,6 +1766,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
   kd = size(z_in,1)
 
   allocate(rho_z(isd:ied,jsd:jed,kd))
+  allocate(area_shelf_h(isd:ied,jsd:jed))
+  allocate(frac_shelf_h(isd:ied,jsd:jed))
 
   press(:)=tv%p_ref
 
@@ -1771,6 +1781,33 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
   call pass_var(salt_z,G%Domain)
   call pass_var(mask_z,G%Domain)
   call pass_var(rho_z,G%Domain)
+
+  ! This is needed for building an ALE grid under ice shelves
+  call get_param(PF, mod, "ICE_SHELF", use_ice_shelf, default=.false., do_not_log=.true.)
+  if (use_ice_shelf) then
+     call get_param(PF, mod, "ICE_THICKNESS_FILE", ice_shelf_file, &
+                    "The file from which the ice bathymetry and area are read.", &
+                    fail_if_missing=.true.)
+     call log_param(PF, mod, "INPUTDIR/THICKNESS_FILE", filename)
+     call get_param(PF, mod, "ICE_AREA_VARNAME", area_varname, &
+                    "The name of the area variable in ICE_THICKNESS_FILE.", &
+                    fail_if_missing=.true.)
+     if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
+       "MOM_temp_salt_initialize_from_Z: Unable to open "//trim(filename))
+
+     call read_data(filename,trim(area_varname),area_shelf_h,domain=G%Domain%mpp_domain)
+
+     ! initialize frac_shelf_h with zeros (open water everywhere)
+     frac_shelf_h(:,:) = 0.0 
+     ! compute fractional ice shelf coverage of h
+     do j=jsd,jed ; do i=isd,ied
+         if (G%areaT(i,j) > 0.0) &
+           frac_shelf_h(i,j) = area_shelf_h(i,j) / G%areaT(i,j)
+     enddo ; enddo
+     ! pass to the pointer
+     shelf_area => frac_shelf_h
+
+  endif
 
 ! Done with horizontal interpolation.    
 ! Now remap to model coordinates
@@ -1853,7 +1890,12 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
       call pass_var(h, G%Domain)    ! Regridding might eventually use spatial information and
       call pass_var(tv%T, G%Domain) ! thus needs to be up to date in the halo regions even though
       call pass_var(tv%S, G%Domain) ! ALE_build_grid() only updates h on the computational domain.
-      call ALE_build_grid( G, GV, regridCS, remapCS, h, tv, .true. )
+
+      if (use_ice_shelf) then
+         call ALE_build_grid( G, GV, regridCS, remapCS, h, tv, .true., shelf_area)
+      else
+         call ALE_build_grid( G, GV, regridCS, remapCS, h, tv, .true. )
+      endif
     endif
     call ALE_remap_scalar( remapCS, G, GV, nz, h1, tmpT1dIn, h, tv%T, all_cells=remap_full_column, old_remap=remap_old_alg )
     call ALE_remap_scalar( remapCS, G, GV, nz, h1, tmpS1dIn, h, tv%S, all_cells=remap_full_column, old_remap=remap_old_alg )
