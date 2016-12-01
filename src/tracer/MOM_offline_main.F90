@@ -416,10 +416,15 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, dt, CS, h_pre, eat
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)), intent(inout) :: h_pre
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)), intent(in)    :: eatr !< Entrainment from layer above
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)), intent(in)    :: ebtr !< Entrainment from layer below
+  real, dimension(SZI_(CS%G),SZJ_(CS%G))    :: sw, sw_vis, sw_nir !< Save old value of shortwave radiation 
   
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: zero_3dh
   zero_3dh(:,:,:) = 0.0
   
+  sw(:,:) = fluxes%sw
+  sw_vis(:,:) = fluxes%sw_vis_dir
+  sw_nir(:,:) = fluxes%sw_nir_dir
+
   if(CS%diurnal_SW) &
     call offline_add_diurnal_SW(fluxes, CS%G, Time_start, Time_end)
   if (associated(CS%diabatic_CSp%optics)) &
@@ -436,6 +441,10 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, dt, CS, h_pre, eat
   call applyTracerBoundaryFluxesInOut(CS%G, CS%GV, zero_3dh, dt, fluxes, h_pre, &
       CS%evap_CFL_limit, CS%minimum_forcing_depth)
   call triDiagTS(CS%G, CS%GV, CS%G%isc, CS%G%iec, CS%G%jsc, CS%G%jec, h_pre, eatr, ebtr, CS%tv%T, CS%tv%S)    
+  fluxes%sw(:,:) = sw
+  fluxes%sw_vis_dir(:,:) = sw_vis
+  fluxes%sw_nir_dir(:,:) = sw_nir
+  
 
 end subroutine offline_diabatic_ale
 
@@ -717,13 +726,26 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
   endif
 
   if(CS%read_sw) then
-    call read_data(CS%mean_file,'SW',fluxes%sw, domain=G%Domain%mpp_domain, &
+
+    ! Shortwave radiation is only needed for offline mode with biogeochemistry.
+    ! Need to double check, but set_opacity seems to only need the sum of the diffuse and
+    ! direct fluxes in the visible and near-infrared bands. For convenience, we store the
+    ! sum of the direct and diffuse fluxes in the 'dir' field and set the 'dif' fields to zero
+    call read_data(CS%mean_file,'sw_vis',fluxes%sw_vis_dir, domain=G%Domain%mpp_domain, &
         timelevel=CS%ridx_sum)
+    call read_data(CS%mean_file,'sw_nir',fluxes%sw_nir_dir, domain=G%Domain%mpp_domain, &
+        timelevel=CS%ridx_sum)
+    fluxes%sw_vis_dif = 0.0
+    fluxes%sw_nir_dif = 0.0
+    fluxes%sw = fluxes%sw_vis_dir+fluxes%sw_nir_dir
     do j=js,je ; do i=is,ie
       if(G%mask2dT(i,j)<1.0) then    
         fluxes%sw(i,j) = 0.0
+        fluxes%sw_vis_dir(i,j) = 0.0
+        fluxes%sw_nir_dir(i,j) = 0.0
       endif
     enddo ; enddo 
+    call pass_var(fluxes%sw,G%Domain)
   endif
     
   ! Apply masks at T, U, and V points
