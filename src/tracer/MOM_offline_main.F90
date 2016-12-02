@@ -425,7 +425,7 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, dt, CS, h_pre, eat
   sw_vis(:,:) = fluxes%sw_vis_dir
   sw_nir(:,:) = fluxes%sw_nir_dir
 
-  if(CS%diurnal_SW) &
+  if(CS%diurnal_SW .and. CS%read_sw) &
     call offline_add_diurnal_SW(fluxes, CS%G, Time_start, Time_end)
   if (associated(CS%diabatic_CSp%optics)) &
     call set_opacity(CS%diabatic_CSp%optics, fluxes, CS%G, CS%GV, CS%diabatic_CSp%opacity_CSp)
@@ -735,17 +735,25 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
         timelevel=CS%ridx_sum)
     call read_data(CS%mean_file,'sw_nir',fluxes%sw_nir_dir, domain=G%Domain%mpp_domain, &
         timelevel=CS%ridx_sum)
-    fluxes%sw_vis_dif = 0.0
-    fluxes%sw_nir_dif = 0.0
-    fluxes%sw = fluxes%sw_vis_dir+fluxes%sw_nir_dir
+    fluxes%sw_vis_dir(:,:) = fluxes%sw_vis_dir(:,:)*0.5
+    fluxes%sw_vis_dif(:,:) = fluxes%sw_vis_dir
+    fluxes%sw_nir_dir(:,:) = fluxes%sw_nir_dir(:,:)*0.5
+    fluxes%sw_nir_dif(:,:) = fluxes%sw_nir_dir
+    fluxes%sw = fluxes%sw_vis_dir + fluxes%sw_vis_dif + fluxes%sw_nir_dir + fluxes%sw_nir_dif
     do j=js,je ; do i=is,ie
       if(G%mask2dT(i,j)<1.0) then    
         fluxes%sw(i,j) = 0.0
         fluxes%sw_vis_dir(i,j) = 0.0
         fluxes%sw_nir_dir(i,j) = 0.0
+        fluxes%sw_vis_dif(i,j) = 0.0
+        fluxes%sw_nir_dif(i,j) = 0.0
       endif
     enddo ; enddo 
     call pass_var(fluxes%sw,G%Domain)
+    call pass_var(fluxes%sw_vis_dir,G%Domain)
+    call pass_var(fluxes%sw_vis_dif,G%Domain)
+    call pass_var(fluxes%sw_nir_dir,G%Domain)
+    call pass_var(fluxes%sw_nir_dif,G%Domain)
   endif
     
   ! Apply masks at T, U, and V points
