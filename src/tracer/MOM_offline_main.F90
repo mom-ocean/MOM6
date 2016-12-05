@@ -290,6 +290,8 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
     endif
   enddo               
 
+  ! Make sure that uhtr and vhtr halos are updated
+  call pass_vector(uhtr,vhtr,G%Domain)
 end subroutine offline_advection_ale
 
 subroutine offline_redistribute_residual(CS, h_pre, h_end, uhtr, vhtr, converged)
@@ -315,6 +317,9 @@ subroutine offline_redistribute_residual(CS, h_pre, h_end, uhtr, vhtr, converged
   real, dimension(SZI_(CS%G),SZJ_(CS%G)) :: & 
       eta_pre, &
       eta_end
+  real, dimension(SZIB_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: uhr  !< Zonal mass transport
+  real, dimension(SZI_(CS%G),SZJB_(CS%G),SZK_(CS%G)) :: vhr  !< Meridional mass transport    
+      
   integer :: i, j, k, m, is, ie, js, je, isd, ied, jsd, jed, nz
       
   ! Assign grid pointers
@@ -325,20 +330,6 @@ subroutine offline_redistribute_residual(CS, h_pre, h_end, uhtr, vhtr, converged
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   x_before_y = CS%x_before_y
-  
-  ! This diagnostic can be used to identify which grid points did not converge within
-  ! the specified number of advection sub iterations
-  if(CS%id_eta_diff>0) then
-    eta_pre(:,:) = 0.0
-    eta_end(:,:) = 0.0
-    do k=1,nz ; do j=jsd,jed ; do i=isd,ied
-      if(h_pre(i,j,k)>GV%Angstrom) eta_pre(i,j) = eta_pre(i,j)+h_pre(i,j,k)
-      if(h_end(i,j,k)>GV%Angstrom) eta_end(i,j) = eta_end(i,j)+h_end(i,j,k)
-    enddo ; enddo; enddo
-
-    call post_data(CS%id_eta_diff,eta_pre-eta_end,CS%diag)
-
-  endif
 
   if (.not. converged) then
 
@@ -370,7 +361,7 @@ subroutine offline_redistribute_residual(CS, h_pre, h_end, uhtr, vhtr, converged
         endif 
         call advect_tracer(h_pre, uhtr, vhtr, CS%OBC, CS%dt_offline, G, GV, &
             CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=2, &
-            h_out=h_new, x_first_in=x_before_y)
+            h_out=h_new, uhr_out=uhr, vhr_out=vhr, x_first_in=x_before_y)
 
       case ('upwards')
         if (x_before_y) then
@@ -382,7 +373,7 @@ subroutine offline_redistribute_residual(CS, h_pre, h_end, uhtr, vhtr, converged
         endif
         call advect_tracer(h_pre, uhtr, vhtr, CS%OBC, CS%dt_offline, G, GV, &
               CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=2, &
-              h_out=h_new, x_first_in=x_before_y)
+              h_out=h_new, uhr_out=uhr, vhr_out=vhr, x_first_in=x_before_y)
       case ('none')
         call MOM_error(WARNING,"Offline advection did not converge")
 
@@ -390,15 +381,45 @@ subroutine offline_redistribute_residual(CS, h_pre, h_end, uhtr, vhtr, converged
         call MOM_error(FATAL,"Unrecognized REDISTRIBUTE_METHOD")
     end select
 
+    call pass_vector(uhr,vhr,G%Domain)
     if (CS%debug) then
       call hchksum(h_pre,"h_pre after after redistribute",G%HI)
       call uchksum(uhtr,"uhtr after redistribute",G%HI)
       call vchksum(vhtr,"vhtr after redistribute",G%HI)
+      call uchksum(uhr,"uhr after redistribute",G%HI)
+      call vchksum(vhr,"vhr after redistribute",G%HI)
+      
+      do k=1,nz ; do j=js,je ; do i=is-1,ie
+        if( abs(uhr(i,j,k))>0.0 ) print *, "Remaining uhr i, j, k: ", uhr(i,j,k), i, j, k
+      enddo ; enddo ; enddo
+      
+      do k=1,nz ; do j=js-1,je ; do i=is,ie
+        if( abs(vhr(i,j,k))>0.0 ) print *, "Remaining vhr i, j, k: ", vhr(i,j,k), i, j, k
+      enddo ; enddo ; enddo
+      
     endif
-
+    
+    call post_data(CS%id_uhr, uhr, CS%diag)
+    call post_data(CS%id_vhr, vhr, CS%diag)
+   
     do k=1,nz ; do j=jsd,jed ; do i=isd,ied
       h_pre(i,j,k) = h_new(i,j,k)/G%areaT(i,j)
     enddo ; enddo ; enddo
+    
+    ! This diagnostic can be used to identify which grid points did not converge within
+    ! the specified number of advection sub iterations
+    if(CS%id_eta_diff>0) then
+      eta_pre(:,:) = 0.0
+      eta_end(:,:) = 0.0
+      do k=1,nz ; do j=jsd,jed ; do i=isd,ied
+        if(h_pre(i,j,k)>GV%Angstrom) eta_pre(i,j) = eta_pre(i,j)+h_pre(i,j,k)
+        if(h_end(i,j,k)>GV%Angstrom) eta_end(i,j) = eta_end(i,j)+h_end(i,j,k)
+      enddo ; enddo; enddo
+
+      call post_data(CS%id_eta_diff,eta_pre-eta_end,CS%diag)
+
+    endif
+    
     call pass_var(h_pre,G%Domain)
 
   endif    
@@ -421,12 +442,14 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, dt, CS, h_pre, eat
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: zero_3dh
   zero_3dh(:,:,:) = 0.0
   
-  sw(:,:) = fluxes%sw
-  sw_vis(:,:) = fluxes%sw_vis_dir
-  sw_nir(:,:) = fluxes%sw_nir_dir
 
-  if(CS%diurnal_SW .and. CS%read_sw) &
+  if(CS%diurnal_SW .and. CS%read_sw) then
+    sw(:,:) = fluxes%sw
+    sw_vis(:,:) = fluxes%sw_vis_dir
+    sw_nir(:,:) = fluxes%sw_nir_dir
     call offline_add_diurnal_SW(fluxes, CS%G, Time_start, Time_end)
+  endif
+  
   if (associated(CS%diabatic_CSp%optics)) &
     call set_opacity(CS%diabatic_CSp%optics, fluxes, CS%G, CS%GV, CS%diabatic_CSp%opacity_CSp)
 
@@ -438,12 +461,18 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, dt, CS, h_pre, eat
       CS%diabatic_CSp%optics, CS%tracer_flow_CSp, CS%debug, &
       evap_CFL_limit=CS%evap_CFL_limit, &
       minimum_forcing_depth=CS%minimum_forcing_depth)
+  ! This next line is called to calculate new layer thicknesses based on the freshwater fluxes
   call applyTracerBoundaryFluxesInOut(CS%G, CS%GV, zero_3dh, dt, fluxes, h_pre, &
       CS%evap_CFL_limit, CS%minimum_forcing_depth)
-  call triDiagTS(CS%G, CS%GV, CS%G%isc, CS%G%iec, CS%G%jsc, CS%G%jec, h_pre, eatr, ebtr, CS%tv%T, CS%tv%S)    
-  fluxes%sw(:,:) = sw
-  fluxes%sw_vis_dir(:,:) = sw_vis
-  fluxes%sw_nir_dir(:,:) = sw_nir
+  
+  ! The mixing of T/S is probably not appropriate because time averages are being used    
+  ! call triDiagTS(CS%G, CS%GV, CS%G%isc, CS%G%iec, CS%G%jsc, CS%G%jec, h_pre, eatr, ebtr, CS%tv%T, CS%tv%S)
+  
+  if(CS%diurnal_SW .and. CS%read_sw) then
+    fluxes%sw(:,:) = sw
+    fluxes%sw_vis_dir(:,:) = sw_vis
+    fluxes%sw_nir_dir(:,:) = sw_nir
+  endif
   
 
 end subroutine offline_diabatic_ale
@@ -783,31 +812,6 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
       uhtr(i,j,k) = 0.0
     endif
   enddo; enddo ; enddo
-
-  ! This block makes sure that the fluxes control structure, which may not be used in the solo_driver,
-  ! contains netMassIn and netMassOut which is necessary for the applyTracerBoundaryFluxesInOut routine
-  if (do_ale) then
-    if (.not. ASSOCIATED(fluxes%netMassOut)) then
-      ALLOCATE(fluxes%netMassOut(G%isd:G%ied,G%jsd:G%jed))
-    endif
-    if (.not. ASSOCIATED(fluxes%netMassIn)) then
-      ALLOCATE(fluxes%netMassIn(G%isd:G%ied,G%jsd:G%jed))
-    endif
-
-    fluxes%netMassOut(:,:) = 0.0
-    fluxes%netMassIn(:,:) = 0.0
-    call read_data(CS%sum_file,'massout_flux_sum',fluxes%netMassOut, domain=G%Domain%mpp_domain, &
-        timelevel=CS%ridx_snap)
-    call read_data(CS%sum_file,'massin_flux_sum', fluxes%netMassIn,  domain=G%Domain%mpp_domain, &
-        timelevel=CS%ridx_snap)
-    do j=js,je ; do i=is,ie
-      if(G%mask2dT(i,j)<1.0) then
-        fluxes%netMassOut(i,j) = 0.0
-        fluxes%netMassIn(i,j) = 0.0
-      endif
-    enddo ; enddo
-    
-  endif
   
 
   !! Make sure all halos have been updated

@@ -1533,16 +1533,22 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     call offline_diabatic_ale(fluxes, Time_start, Time_end, time_interval, CS%offline_CSp, &
         CS%h, eatr*Initer_vert, ebtr*Initer_vert)
     call pass_var(CS%h,G%Domain)    
-    if(CS%debug)  call hchksum(h_end,"h_end after offline_diabatic_ALE",G%HI)    
+    if(CS%debug)  call hchksum(CS%h, "h after offline_diabatic_ALE",G%HI)    
         
     ! Do any residual transport, the final ALE remappings,  horizontal diffusion if it is
     ! the last iteration
     if(last_iter) then
       if(is_root_pe()) print *, "Last iteration of offline interval"
+      
+      CS%tv%T(:,:,:) = temp_mean(:,:,:)
+      CS%tv%S(:,:,:) = salt_mean(:,:,:)
+      
+      ! Redistribute any remaining transport
       call offline_redistribute_residual(CS%offline_CSp, CS%h, h_end, uhtr, vhtr, adv_converged)
+      
       ! Call ALE one last time to make sure that tracers are remapped onto the layer thicknesses
       ! stored from the forward run
-      call hchksum(h_end, "h_end after offline_redistribute_residual",G%HI)
+      call hchksum(CS%h, "h after offline_redistribute_residual",G%HI)
       call cpu_clock_begin(id_clock_ALE)
       call ALE_offline_tracer_final( G, GV, CS%h, h_end, CS%tracer_Reg, CS%ALE_CSp)
       call cpu_clock_end(id_clock_ALE)        
@@ -1558,7 +1564,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       
       CS%tv%T(:,:,:) = temp_snap(:,:,:)
       CS%tv%S(:,:,:) = salt_snap(:,:,:)
-      CS%h = h_end
+      CS%h(:,:,:) = h_end
       
     endif
     
@@ -1600,12 +1606,6 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
   call calculate_surface_state(state, CS%u, CS%v, CS%h, CS%ave_ssh, G, GV, CS, &
                                fluxes%p_surf_SSH)
   
-  if (CS%offline_CSp%id_hr>0) call post_data(CS%offline_CSp%id_hr, h_end-CS%h, CS%diag)
-  if (CS%offline_CSp%id_uhr>0) call post_data(CS%offline_CSp%id_uhr, uhtr, CS%diag)
-  if (CS%offline_CSp%id_vhr>0) call post_data(CS%offline_CSp%id_vhr, vhtr, CS%diag)
-  if (CS%offline_CSp%id_ear>0) call post_data(CS%offline_CSp%id_ear, eatr, CS%diag)
-  if (CS%offline_CSp%id_ebr>0) call post_data(CS%offline_CSp%id_ebr, ebtr, CS%diag)
-
   call cpu_clock_end(id_clock_tracer)
 
   call disable_averaging(CS%diag)
@@ -1635,7 +1635,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   type(verticalGrid_type), pointer :: GV => NULL()
   type(dyn_horgrid_type), pointer :: dG => NULL()
   type(diag_ctrl),        pointer :: diag
-
+  
   character(len=4), parameter :: vers_num = 'v2.0'
 
 ! This include declares and sets the variable "version".
