@@ -53,7 +53,9 @@ type, public :: offline_transport_CS
   
   !> Variables related to reading in fields from online run
   integer :: start_index  ! Timelevel to start
+  integer :: iter_no      ! Timelevel to start
   integer :: numtime      ! How many timelevels in the input fields
+  integer :: accumulated_time ! Length of time accumulatedi n the current offline interval
   integer :: &            ! Index of each of the variables to be read in
     ridx_sum = -1, &      ! Separate indices for each variabile if they are
     ridx_snap = -1        ! setoff from each other in time
@@ -111,6 +113,8 @@ type, public :: offline_transport_CS
       temp_snap, salt_snap, &
       temp_mean, salt_mean, &
       h_end    
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
+      netMassIn, netMassOut        
   
 
 end type offline_transport_CS
@@ -181,7 +185,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
   dt_iter = dt_offline*Inum_iter
 
   ! Initialize working arrays
-  h_new(:,:,:) = GV%Angstrom
+  h_new(:,:,:) = 0.0
   h_vol(:,:,:) = 0.0
   uhtr_sub(:,:,:) = 0.0
   vhtr_sub(:,:,:) = 0.0
@@ -331,6 +335,9 @@ subroutine offline_redistribute_residual(CS, h_pre, h_end, uhtr, vhtr, converged
 
   x_before_y = CS%x_before_y
 
+  uhr(:,:,:) = 0.0
+  vhr(:,:,:) = 0.0
+
   if (.not. converged) then
 
     do k=1,nz ; do j=jsd,jed ; do i=isd,ied
@@ -399,31 +406,30 @@ subroutine offline_redistribute_residual(CS, h_pre, h_end, uhtr, vhtr, converged
       
     endif
     
-    call post_data(CS%id_uhr, uhr, CS%diag)
-    call post_data(CS%id_vhr, vhr, CS%diag)
-   
     do k=1,nz ; do j=jsd,jed ; do i=isd,ied
       h_pre(i,j,k) = h_new(i,j,k)/G%areaT(i,j)
     enddo ; enddo ; enddo
     
-    ! This diagnostic can be used to identify which grid points did not converge within
-    ! the specified number of advection sub iterations
-    if(CS%id_eta_diff>0) then
-      eta_pre(:,:) = 0.0
-      eta_end(:,:) = 0.0
-      do k=1,nz ; do j=jsd,jed ; do i=isd,ied
-        if(h_pre(i,j,k)>GV%Angstrom) eta_pre(i,j) = eta_pre(i,j)+h_pre(i,j,k)
-        if(h_end(i,j,k)>GV%Angstrom) eta_end(i,j) = eta_end(i,j)+h_end(i,j,k)
-      enddo ; enddo; enddo
-
-      call post_data(CS%id_eta_diff,eta_pre-eta_end,CS%diag)
-
-    endif
     
     call pass_var(h_pre,G%Domain)
 
   endif    
+  ! This diagnostic can be used to identify which grid points did not converge within
+  ! the specified number of advection sub iterations
+  if(CS%id_eta_diff>0) then
+    eta_pre(:,:) = 0.0
+    eta_end(:,:) = 0.0
+    do k=1,nz ; do j=jsd,jed ; do i=isd,ied
+      if(h_pre(i,j,k)>GV%Angstrom) eta_pre(i,j) = eta_pre(i,j)+h_pre(i,j,k)
+      if(h_end(i,j,k)>GV%Angstrom) eta_end(i,j) = eta_end(i,j)+h_end(i,j,k)
+    enddo ; enddo; enddo
+
+    call post_data(CS%id_eta_diff,eta_pre-eta_end,CS%diag)
+
+  endif
     
+  if(CS%id_uhr>0) call post_data(CS%id_uhr,uhr,CS%diag)
+  if(CS%id_vhr>0) call post_data(CS%id_vhr,vhr,CS%diag)
   
 end subroutine offline_redistribute_residual
 
@@ -732,23 +738,23 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
   ! contains netMassIn and netMassOut which is necessary for the applyTracerBoundaryFluxesInOut routine
   if (do_ale) then
     if (.not. ASSOCIATED(fluxes%netMassOut)) then
-      ALLOCATE(fluxes%netMassOut(G%isd:G%ied,G%jsd:G%jed))
+      ALLOC_(fluxes%netMassOut(G%isd:G%ied,G%jsd:G%jed))
     endif
     if (.not. ASSOCIATED(fluxes%netMassIn)) then
-      ALLOCATE(fluxes%netMassIn(G%isd:G%ied,G%jsd:G%jed))
+      ALLOC_(fluxes%netMassIn(G%isd:G%ied,G%jsd:G%jed))
     endif
 
-    fluxes%netMassOut(:,:) = 0.0
-    fluxes%netMassIn(:,:) = 0.0
-    call read_data(CS%sum_file,'massout_flux_sum',fluxes%netMassOut, domain=G%Domain%mpp_domain, &
-        timelevel=CS%ridx_snap)
-    call read_data(CS%sum_file,'massin_flux_sum', fluxes%netMassIn,  domain=G%Domain%mpp_domain, &
-        timelevel=CS%ridx_snap)
+    CS%netMassOut(:,:) = 0.0
+    CS%netMassIn(:,:) = 0.0
+    call read_data(CS%sum_file,'massout_flux_sum',CS%netMassOut, domain=G%Domain%mpp_domain, &
+        timelevel=CS%ridx_sum)
+    call read_data(CS%sum_file,'massin_flux_sum', CS%netMassIn,  domain=G%Domain%mpp_domain, &
+        timelevel=CS%ridx_sum)
     
     do j=js,je ; do i=is,ie
       if(G%mask2dT(i,j)<1.0) then    
-        fluxes%netMassOut(i,j) = 0.0
-        fluxes%netMassIn(i,j) = 0.0
+        CS%netMassOut(i,j) = 0.0
+        CS%netMassIn(i,j) = 0.0
       endif
     enddo ; enddo
     
@@ -788,7 +794,7 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
   ! Apply masks at T, U, and V points
   do k=1,nz ; do j=js,je ; do i=is,ie
     if(G%mask2dT(i,j)<1.0) then
-      h_end(i,j,k) = GV%Angstrom
+      h_end(i,j,k) = 0.0
       eatr(i,j,k) = 0.0
       ebtr(i,j,k) = 0.0
       temp(i,j,k) = 0.0
@@ -829,8 +835,8 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
   call pass_var(salt_mean, G%Domain)
 
   if (do_ale) then
-    call pass_var(fluxes%netMassOut,G%Domain)
-    call pass_var(fluxes%netMassIn,G%Domain)
+    call pass_var(CS%netMassOut,G%Domain)
+    call pass_var(CS%netMassIn,G%Domain)
   endif
 
   ! Update the read indices
@@ -970,7 +976,8 @@ subroutine offline_transport_init(param_file, CS, diabatic_aux_CSp, G, GV)
   CS%mean_file = trim(CS%offlinedir)//trim(CS%mean_file)
   CS%sum_file = trim(CS%offlinedir)//trim(CS%sum_file)
   
-
+  ! Set the accumulated time to zero
+  CS%accumulated_time = 0
   ! Set the starting read index for time-averaged and snapshotted fields
   CS%ridx_sum = CS%start_index
   if(CS%fields_are_offset) CS%ridx_snap = next_modulo_time(CS%start_index,CS%numtime)
@@ -997,7 +1004,9 @@ subroutine offline_transport_init(param_file, CS, diabatic_aux_CSp, G, GV)
   ALLOC_(CS%temp_mean(isd:ied,jsd:jed,nz))     ; CS%temp_mean(:,:,:) = 0.0
   ALLOC_(CS%salt_snap(isd:ied,jsd:jed,nz))     ; CS%salt_snap(:,:,:) = 0.0
   ALLOC_(CS%salt_mean(isd:ied,jsd:jed,nz))     ; CS%salt_mean(:,:,:) = 0.0
-  ALLOC_(CS%h_end(isd:ied,jsd:jed,nz))         ; CS%h_end(:,:,:) = GV%Angstrom
+  ALLOC_(CS%h_end(isd:ied,jsd:jed,nz))         ; CS%h_end(:,:,:) = 0.0
+  ALLOC_(CS%netMassOut(G%isd:G%ied,G%jsd:G%jed)) ; CS%netMassOut(:,:) = 0.0
+  ALLOC_(CS%netMassIn(G%isd:G%ied,G%jsd:G%jed))  ; CS%netMassIn(:,:) = 0.0
 
   call callTree_leave("offline_transport_init")
   
