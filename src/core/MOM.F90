@@ -356,8 +356,8 @@ type, public :: MOM_control_struct
   integer :: id_e_preale = -1
 
   ! Diagnostics for tracer horizontal transport
-  integer :: id_uhtr = -1
-  integer :: id_vhtr = -1
+  integer :: id_uhtr = -1, id_umo = -1, id_umo_2d = 1
+  integer :: id_vhtr = -1, id_vmo = -1, id_vmo_2d = 1
   
   ! The remainder provides pointers to child module control structures.
   type(MOM_dyn_unsplit_CS),      pointer :: dyn_unsplit_CSp      => NULL()
@@ -485,7 +485,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     h    ! h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
 
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)+1) :: eta_predia, eta_preale
-
+  real, dimension(SZIB_(CS%G), SZJ_(CS%G)) :: umo2d ! Diagnostics
+  real, dimension(SZI_(CS%G), SZJB_(CS%G)) :: vmo2d ! Diagnostics
 
   real :: tot_wt_ssh, Itot_wt_ssh, I_time_int
   real :: zos_area_mean, volo, ssh_ga
@@ -1208,6 +1209,32 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
       if (CS%id_uhtr > 0) call post_data(CS%id_uhtr, CS%uhtr, CS%diag)
       if (CS%id_vhtr > 0) call post_data(CS%id_vhtr, CS%vhtr, CS%diag)
+      if (CS%id_umo_2d > 0) then
+        umo2d(:,:) = CS%uhtr(:,:,1)
+        do k = 2, nz
+          umo2d(:,:) = umo2d(:,:) + CS%uhtr(:,:,k)
+        enddo
+        umo2d(:,:) = umo2d(:,:) * ( GV%H_to_kg_m2 / CS%dt_trans )
+        call post_data(CS%id_umo, umo2d, CS%diag)
+      endif
+      if (CS%id_umo > 0) then
+        ! Convert to kg/s. Modifying the array for diagnostics is allowed here since it is set to zero immediately below
+        CS%uhtr(:,:,:) =  CS%uhtr(:,:,:) * ( GV%H_to_kg_m2 / CS%dt_trans )
+        call post_data(CS%id_umo, CS%uhtr, CS%diag)
+      endif
+      if (CS%id_vmo_2d > 0) then
+        vmo2d(:,:) = CS%vhtr(:,:,1)
+        do k = 2, nz
+          vmo2d(:,:) = vmo2d(:,:) + CS%vhtr(:,:,k)
+        enddo
+        vmo2d(:,:) = vmo2d(:,:) * ( GV%H_to_kg_m2 / CS%dt_trans )
+        call post_data(CS%id_vmo, vmo2d, CS%diag)
+      endif
+      if (CS%id_vmo > 0) then
+        ! Convert to kg/s. Modifying the array for diagnostics is allowed here since it is set to zero immediately below
+        CS%uhtr(:,:,:) =  CS%uhtr(:,:,:) * ( GV%H_to_kg_m2 / CS%dt_trans )
+        call post_data(CS%id_vmo, CS%vhtr, CS%diag)
+      endif
       
       call post_diags_TS_tendency(G,GV,CS,dtdia)
 
@@ -2998,10 +3025,24 @@ subroutine register_diags(Time, G, GV, CS, ADp)
   
   ! Diagnostics related to tracer transport
   CS%id_uhtr = register_diag_field('ocean_model', 'uhtr', diag%axesCuL, Time, &
-      'Accumulated zonal thickness fluxes to advect tracers', 'kg')
+      'Accumulated zonal thickness fluxes to advect tracers', 'kg', &
+      y_cell_method='sum', v_extensive=.true.)
   CS%id_vhtr = register_diag_field('ocean_model', 'vhtr', diag%axesCvL, Time, &
-      'Accumulated meridional thickness fluxes to advect tracers', 'kg')
-    
+      'Accumulated meridional thickness fluxes to advect tracers', 'kg', &
+      x_cell_method='sum', v_extensive=.true.)
+  CS%id_umo = register_diag_field('ocean_model', 'umo', &
+      diag%axesCuL, Time, 'Ocean Mass X Transport', 'kg/s', &
+      standard_name='ocean_mass_x_transport', y_cell_method='sum', v_extensive=.true.)
+  CS%id_vmo = register_diag_field('ocean_model', 'vmo', &
+      diag%axesCvL, Time, 'Ocean Mass Y Transport', 'kg/s', &
+      standard_name='ocean_mass_y_transport', x_cell_method='sum', v_extensive=.true.)
+  CS%id_umo_2d = register_diag_field('ocean_model', 'umo_2d', &
+      diag%axesCu1, Time, 'Ocean Mass X Transport Vertical Sum', 'kg/s', &
+      standard_name='ocean_mass_x_transport_vertical_sum', y_cell_method='sum')
+  CS%id_vmo_2d = register_diag_field('ocean_model', 'vmo_2d', &
+      diag%axesCv1, Time, 'Ocean Mass Y Transport Vertical Sum', 'kg/s', &
+      standard_name='ocean_mass_y_transport_vertical_sum', x_cell_method='sum')
+
 end subroutine register_diags
 
 
