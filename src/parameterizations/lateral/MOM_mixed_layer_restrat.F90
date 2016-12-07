@@ -11,7 +11,7 @@ module MOM_mixed_layer_restrat
 use MOM_checksums,     only : hchksum
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
-use MOM_diag_mediator, only : diag_update_target_grids
+use MOM_diag_mediator, only : diag_update_remap_grids
 use MOM_domains,       only : pass_var
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_version, param_file_type
@@ -372,7 +372,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV,
   ! Whenever thickness changes let the diag manager know, target grids
   ! for vertical remapping may need to be regenerated.
   ! This needs to happen after the H update and before the next post_data.
-  call diag_update_target_grids(CS%diag)
+  call diag_update_remap_grids(CS%diag)
 
   ! Offer diagnostic fields for averaging.
   if (query_averaging_enabled(CS%diag)) then
@@ -612,7 +612,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, GV, CS)
 
   ! Whenever thickness changes let the diag manager know, target grids
   ! for vertical remapping may need to be regenerated.
-  call diag_update_target_grids(CS%diag)
+  call diag_update_remap_grids(CS%diag)
 
   ! Offer diagnostic fields for averaging.
   if (query_averaging_enabled(CS%diag) .and. &
