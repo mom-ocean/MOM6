@@ -112,6 +112,7 @@ type, public :: offline_transport_CS
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_) :: &        
       temp_snap, salt_snap, &
       temp_mean, salt_mean, &
+      temp_old, salt_old, &
       h_end    
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
       netMassIn, netMassOut        
@@ -1002,8 +1003,10 @@ subroutine offline_transport_init(param_file, CS, diabatic_aux_CSp, G, GV)
   ALLOC_(CS%ebtr(isd:ied,jsd:jed,nz))          ; CS%ebtr(:,:,:) = 0.0
   ALLOC_(CS%temp_snap(isd:ied,jsd:jed,nz))     ; CS%temp_snap(:,:,:) = 0.0
   ALLOC_(CS%temp_mean(isd:ied,jsd:jed,nz))     ; CS%temp_mean(:,:,:) = 0.0
+  ALLOC_(CS%temp_old(isd:ied,jsd:jed,nz))      ; CS%temp_old(:,:,:) = 0.0
   ALLOC_(CS%salt_snap(isd:ied,jsd:jed,nz))     ; CS%salt_snap(:,:,:) = 0.0
   ALLOC_(CS%salt_mean(isd:ied,jsd:jed,nz))     ; CS%salt_mean(:,:,:) = 0.0
+  ALLOC_(CS%salt_old(isd:ied,jsd:jed,nz))      ; CS%salt_old(:,:,:) = 0.0
   ALLOC_(CS%h_end(isd:ied,jsd:jed,nz))         ; CS%h_end(:,:,:) = 0.0
   ALLOC_(CS%netMassOut(G%isd:G%ied,G%jsd:G%jed)) ; CS%netMassOut(:,:) = 0.0
   ALLOC_(CS%netMassIn(G%isd:G%ied,G%jsd:G%jed))  ; CS%netMassIn(:,:) = 0.0

@@ -1446,15 +1446,13 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
   real, dimension(:,:,:), pointer   :: &
     uhtr, vhtr, &
     eatr, ebtr, &
-    temp_snap, temp_mean, &
-    salt_snap, salt_mean, &
+    temp_snap, temp_mean, temp_old, &
+    salt_snap, salt_mean, salt_old, &
     h_end
     
   ! 2D Pointers
   real, dimension(:,:), pointer   :: &  
     khdt_x, khdt_y
-    
-    
     
   type(time_type) :: Time_end    ! End time of a segment, as a time type
   integer :: num_iter_vert
@@ -1484,8 +1482,10 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
   ebtr => CS%offline_CSp%ebtr
   temp_snap => CS%offline_CSp%temp_snap
   temp_mean => CS%offline_CSp%temp_mean
+  temp_old => CS%offline_CSp%temp_old
   salt_snap => CS%offline_CSp%salt_snap
   salt_mean => CS%offline_CSp%salt_mean
+  salt_old => CS%offline_CSp%salt_old
   khdt_x => CS%offline_CSp%khdt_x
   khdt_y => CS%offline_CSp%khdt_y
   h_end => CS%offline_CSp%h_end
@@ -1513,6 +1513,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     ! If this is the first iteration in the offline timestep, then we need to read in fields and
     ! perform the main advection.
     if (first_iter) then
+      temp_old(:,:,:) = CS%tv%T
+      salt_old(:,:,:) = CS%tv%S
       if(is_root_pe()) print *, "Reading in new offline fields"
       ! Read in new transport and other fields
       call transport_by_files(G, GV, CS%offline_CSp, h_end, eatr, ebtr, uhtr, vhtr, &
@@ -1542,15 +1544,14 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     if(last_iter) then
       if(is_root_pe()) print *, "Last iteration of offline interval"
 
+      CS%tv%T(:,:,:) = temp_old(:,:,:)
+      CS%tv%S(:,:,:) = salt_old(:,:,:)
       call ALE_main_offline(G, GV, CS%h, CS%tv,  CS%tracer_Reg, CS%ALE_CSp, CS%offline_CSp%dt_offline)
 
       call pass_var(CS%h,G%Domain)
       call offline_advection_ale(fluxes, Time_start, time_interval, CS%offline_CSp, id_clock_ALE, &
           CS%h, uhtr, vhtr, converged=adv_converged)
       call pass_var(CS%h,G%Domain)
-      
-      CS%tv%T(:,:,:) = temp_mean(:,:,:)
-      CS%tv%S(:,:,:) = salt_mean(:,:,:)
       
       ! Redistribute any remaining transport
       call offline_redistribute_residual(CS%offline_CSp, CS%h, h_end, uhtr, vhtr, adv_converged)
@@ -1573,7 +1574,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       
       CS%tv%T(:,:,:) = temp_snap(:,:,:)
       CS%tv%S(:,:,:) = salt_snap(:,:,:)
-!      CS%h(:,:,:) = h_end
+      CS%h(:,:,:) = h_end
       
     endif
     
