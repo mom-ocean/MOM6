@@ -1544,8 +1544,6 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     if(last_iter) then
       if(is_root_pe()) print *, "Last iteration of offline interval"
 
-      CS%tv%T(:,:,:) = temp_old(:,:,:)
-      CS%tv%S(:,:,:) = salt_old(:,:,:)
       call ALE_main_offline(G, GV, CS%h, CS%tv,  CS%tracer_Reg, CS%ALE_CSp, CS%offline_CSp%dt_offline)
 
       call pass_var(CS%h,G%Domain)
