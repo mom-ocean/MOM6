@@ -374,7 +374,7 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
            nz=nz, vertical_coordinate_number=i, &
            x_cell_method='point', y_cell_method='mean', v_cell_method='point', &
            is_u_point=.true., is_interface=.true., is_native=.false., &
-           needs_interpolating=.true., & xyave_axes=diag_cs%remap_axesZi(i))
+           needs_interpolating=.true., xyave_axes=diag_cs%remap_axesZi(i))
 
       call define_axes_group(diag_cs, (/ id_xh, id_yq, id_zi /), diag_cs%remap_axesCvi(i), &
            nz=nz, vertical_coordinate_number=i, &
