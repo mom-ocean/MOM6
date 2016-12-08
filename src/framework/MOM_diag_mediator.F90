@@ -265,30 +265,30 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
   ! Axis groupings for the model layers
   call define_axes_group(diag_cs, (/ id_xh, id_yh, id_zL /), diag_cs%axesTL, &
        x_cell_method='mean', y_cell_method='mean', v_cell_method='mean', &
-       is_h_point=.true., is_layer=.true.)!, xyave_axes=diag_cs%axesZL)
+       is_h_point=.true., is_layer=.true., xyave_axes=diag_cs%axesZL)
   call define_axes_group(diag_cs, (/ id_xq, id_yq, id_zL /), diag_cs%axesBL, &
        x_cell_method='point', y_cell_method='point', v_cell_method='mean', &
        is_q_point=.true., is_layer=.true.)
   call define_axes_group(diag_cs, (/ id_xq, id_yh, id_zL /), diag_cs%axesCuL, &
        x_cell_method='point', y_cell_method='mean', v_cell_method='mean', &
-       is_u_point=.true., is_layer=.true.)
+       is_u_point=.true., is_layer=.true., xyave_axes=diag_cs%axesZL)
   call define_axes_group(diag_cs, (/ id_xh, id_yq, id_zL /), diag_cs%axesCvL, &
        x_cell_method='mean', y_cell_method='point', v_cell_method='mean', &
-       is_v_point=.true., is_layer=.true.)
+       is_v_point=.true., is_layer=.true., xyave_axes=diag_cs%axesZL)
 
   ! Axis groupings for the model interfaces
   call define_axes_group(diag_cs, (/ id_xh, id_yh, id_zi /), diag_cs%axesTi, &
        x_cell_method='mean', y_cell_method='mean', v_cell_method='point', &
-       is_h_point=.true., is_interface=.true.)!, xyave_axes=diag_cs%axesZi)
+       is_h_point=.true., is_interface=.true., xyave_axes=diag_cs%axesZi)
   call define_axes_group(diag_cs, (/ id_xq, id_yq, id_zi /), diag_cs%axesBi, &
        x_cell_method='point', y_cell_method='point', v_cell_method='point', &
        is_q_point=.true., is_interface=.true.)
   call define_axes_group(diag_cs, (/ id_xq, id_yh, id_zi /), diag_cs%axesCui, &
        x_cell_method='point', y_cell_method='mean', v_cell_method='point', &
-       is_u_point=.true., is_interface=.true.)
+       is_u_point=.true., is_interface=.true., xyave_axes=diag_cs%axesZi)
   call define_axes_group(diag_cs, (/ id_xh, id_yq, id_zi /), diag_cs%axesCvi, &
        x_cell_method='mean', y_cell_method='point', v_cell_method='point', &
-       is_v_point=.true., is_interface=.true.)
+       is_v_point=.true., is_interface=.true., xyave_axes=diag_cs%axesZi)
 
   ! Axis groupings for 2-D arrays
   call define_axes_group(diag_cs, (/ id_xh, id_yh /), diag_cs%axesT1, &
@@ -344,12 +344,14 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
       call define_axes_group(diag_cs, (/ id_xq, id_yh, id_zL /), diag_cs%remap_axesCuL(i), &
            nz=nz, vertical_coordinate_number=i, &
            x_cell_method='point', y_cell_method='mean', v_cell_method='mean', &
-           is_u_point=.true., is_layer=.true., is_native=.false., needs_remapping=.true.)
+           is_u_point=.true., is_layer=.true., is_native=.false., needs_remapping=.true., &
+           xyave_axes=diag_cs%remap_axesZL(i))
 
       call define_axes_group(diag_cs, (/ id_xh, id_yq, id_zL /), diag_cs%remap_axesCvL(i), &
            nz=nz, vertical_coordinate_number=i, &
            x_cell_method='mean', y_cell_method='point', v_cell_method='mean', &
-           is_v_point=.true., is_layer=.true., is_native=.false., needs_remapping=.true.)
+           is_v_point=.true., is_layer=.true., is_native=.false., needs_remapping=.true., &
+           xyave_axes=diag_cs%remap_axesZL(i))
 
       ! Axes for z interfaces
       call define_axes_group(diag_cs, (/ id_zi /), diag_cs%remap_axesZi(i), &
@@ -371,12 +373,14 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
       call define_axes_group(diag_cs, (/ id_xq, id_yh, id_zi /), diag_cs%remap_axesCui(i), &
            nz=nz, vertical_coordinate_number=i, &
            x_cell_method='point', y_cell_method='mean', v_cell_method='point', &
-           is_u_point=.true., is_interface=.true., is_native=.false., needs_interpolating=.true.)
+           is_u_point=.true., is_interface=.true., is_native=.false., &
+           needs_interpolating=.true., & xyave_axes=diag_cs%remap_axesZi(i))
 
       call define_axes_group(diag_cs, (/ id_xh, id_yq, id_zi /), diag_cs%remap_axesCvi(i), &
            nz=nz, vertical_coordinate_number=i, &
            x_cell_method='mean', y_cell_method='point', v_cell_method='point', &
-           is_v_point=.true., is_interface=.true., is_native=.false., needs_interpolating=.true.)
+           is_v_point=.true., is_interface=.true., is_native=.false., &
+           needs_interpolating=.true., xyave_axes=diag_cs%remap_axesZi(i))
     endif
   enddo
 
