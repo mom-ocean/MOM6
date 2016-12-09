@@ -712,9 +712,11 @@ logical function mixedlayer_restrat_init(Time, G, GV, param_file, diag, CS)
   else ; flux_units = "kilogram second-1" ; endif
 
   CS%id_uhml = register_diag_field('ocean_model', 'uhml', diag%axesCuL, Time, &
-      'Zonal Thickness Flux to Restratify Mixed Layer', flux_units)
+      'Zonal Thickness Flux to Restratify Mixed Layer', flux_units, &
+      y_cell_method='sum', v_extensive=.true.)
   CS%id_vhml = register_diag_field('ocean_model', 'vhml', diag%axesCvL, Time, &
-      'Meridional Thickness Flux to Restratify Mixed Layer', flux_units)
+      'Meridional Thickness Flux to Restratify Mixed Layer', flux_units, &
+      x_cell_method='sum', v_extensive=.true.)
   CS%id_urestrat_time = register_diag_field('ocean_model', 'MLu_restrat_time', diag%axesCu1, Time, &
       'Mixed Layer Zonal Restratification Timescale', 'second')
   CS%id_vrestrat_time = register_diag_field('ocean_model', 'MLv_restrat_time', diag%axesCv1, Time, &
