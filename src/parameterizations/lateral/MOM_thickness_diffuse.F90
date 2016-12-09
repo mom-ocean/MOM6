@@ -1571,10 +1571,12 @@ subroutine thickness_diffuse_init(Time, G, GV, param_file, diag, CDp, CS)
   else ; flux_units = "kilogram second-1" ; endif
 
   CS%id_uhGM = register_diag_field('ocean_model', 'uhGM', diag%axesCuL, Time, &
-           'Time Mean Diffusive Zonal Thickness Flux', flux_units)
+           'Time Mean Diffusive Zonal Thickness Flux', flux_units, &
+           y_cell_method='sum', v_extensive=.true.)
   if (CS%id_uhGM > 0) call safe_alloc_ptr(CDp%uhGM,G%IsdB,G%IedB,G%jsd,G%jed,G%ke)
   CS%id_vhGM = register_diag_field('ocean_model', 'vhGM', diag%axesCvL, Time, &
-           'Time Mean Diffusive Meridional Thickness Flux', flux_units)
+           'Time Mean Diffusive Meridional Thickness Flux', flux_units, &
+           x_cell_method='sum', v_extensive=.true.)
   if (CS%id_vhGM > 0) call safe_alloc_ptr(CDp%vhGM,G%isd,G%ied,G%JsdB,G%JedB,G%ke)
 
   CS%id_GMwork = register_diag_field('ocean_model', 'GMwork', diag%axesT1, Time,                     &
