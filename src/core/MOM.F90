@@ -204,6 +204,8 @@ type, public :: MOM_control_struct
   logical :: offline_tracer_mode = .false.
                                      !< If true, step_tracers() is called instead of step_MOM().
                                      !! This is intended for running MOM6 in offline tracer mode
+  logical :: advect_TS               !< If false, then no horizontal advection of temperature
+                                     !! and salnity is performed
   real    :: dt                      !< (baroclinic) dynamics time step (seconds)
   real    :: dt_therm                !< thermodynamics time step (seconds)
   logical :: thermo_spans_coupling   !< If true, thermodynamic and tracer time
@@ -1526,11 +1528,12 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       eatr = eatr*Initer_vert
       ebtr = ebtr*Initer_vert
       CS%offline_CSp%iter_no = 0    
+      
+      CS%tv%T(:,:,:) = temp_mean(:,:,:)
+      CS%tv%S(:,:,:) = salt_mean(:,:,:)
     endif
     CS%offline_CSp%iter_no = CS%offline_CSp%iter_no + 1
     ! The functions related to column physics of tracers is performed separately in ALE mode 
-    CS%tv%T(:,:,:) = temp_mean(:,:,:)
-    CS%tv%S(:,:,:) = salt_mean(:,:,:)
     fluxes%netMassIn = CS%offline_CSp%netMassIn
     fluxes%netMassOut = CS%offline_CSp%netMassOut
     if(CS%debug)  call hchksum(CS%h, "h before offline_diabatic_ALE",G%HI)       
@@ -1543,9 +1546,6 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     ! the last iteration
     if(last_iter) then
       if(is_root_pe()) print *, "Last iteration of offline interval"
-
-      CS%tv%T(:,:,:) = temp_old(:,:,:)
-      CS%tv%S(:,:,:) = salt_old(:,:,:)
       call ALE_main_offline(G, GV, CS%h, CS%tv,  CS%tracer_Reg, CS%ALE_CSp, CS%offline_CSp%dt_offline)
 
       call pass_var(CS%h,G%Domain)
@@ -1571,10 +1571,12 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
           read_khdt_y=khdt_y)
         if(CS%debug)  call hchksum(h_end, "h_end after tracer_hordiff",G%HI)  
       endif    
-      
-      CS%tv%T(:,:,:) = temp_snap(:,:,:)
-      CS%tv%S(:,:,:) = salt_snap(:,:,:)
-      CS%h(:,:,:) = h_end
+
+      ! These are no longer needed since h was changed in the call to ALE_offline_tracer_final and
+      ! T/S should never change unless ADVECT_TS = True
+!      CS%tv%T(:,:,:) = temp_snap(:,:,:)
+!      CS%tv%S(:,:,:) = salt_snap(:,:,:)
+!      CS%h(:,:,:) = h_end
       
     endif
     
@@ -1755,6 +1757,12 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
                  "If False, skips the dynamics calls that update u & v, as well as\n"//&
                  "the gravity wave adjustment to h. This is a fragile feature and\n"//&
                  "thus undocumented.", default=.true., do_not_log=.true. )
+  call get_param(param_file, "MOM", "ADVECT_TS", CS%advect_TS , &
+                 "If True, advect temperature and salinity horizontally\n"//&
+                 "If False, T/S are registered for advection.\n"//&
+                 "This is intended only to be used in offline tracer mode.", & 
+                 "and is by default false in that case", &
+                 do_not_log = .true., default=.true. )               
   if (present(offline_tracer_mode)) then ! Only read this parameter in solo mode
     call get_param(param_file, "MOM", "OFFLINE_TRACER_MODE", CS%offline_tracer_mode, &
                  "If true, barotropic and baroclinic dynamics, thermodynamics\n"//&
@@ -1762,6 +1770,12 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
                  "the tracer advection and diffusion equation are read in from\n"//&
                  "files stored from a previous integration of the prognostic model.\n"//&
                  "NOTE: This option only used in the ocean_solo_driver.", default=.false.)
+    call get_param(param_file, "MOM", "ADVECT_TS", CS%advect_TS , &
+                 "If True, advect temperature and salinity horizontally\n"//&
+                 "If False, T/S are registered for advection.\n"//&
+                 "This is intended only to be used in offline tracer mode."//&
+                 "and is by default false in that case", & 
+                 default=.false. )             
   endif
   call get_param(param_file, "MOM", "USE_REGRIDDING", CS%use_ALE_algorithm , &
                  "If True, use the ALE algorithm (regridding/remapping).\n"//&
@@ -2032,8 +2046,10 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
     CS%vd_S = var_desc(name="S",units="PPT",longname="Salinity",&
                        cmor_field_name="so",cmor_units="ppt",   &
                        conversion=0.001)
-    call register_tracer(CS%tv%T, CS%vd_T, param_file, dG%HI, GV, CS%tracer_Reg, CS%vd_T)
-    call register_tracer(CS%tv%S, CS%vd_S, param_file, dG%HI, GV, CS%tracer_Reg, CS%vd_S)
+    if(CS%advect_TS) then
+      call register_tracer(CS%tv%T, CS%vd_T, param_file, dG%HI, GV, CS%tracer_Reg, CS%vd_T)
+      call register_tracer(CS%tv%S, CS%vd_S, param_file, dG%HI, GV, CS%tracer_Reg, CS%vd_S)
+    endif
   endif
   if (CS%use_frazil) then
     allocate(CS%tv%frazil(isd:ied,jsd:jed)) ; CS%tv%frazil(:,:) = 0.0
