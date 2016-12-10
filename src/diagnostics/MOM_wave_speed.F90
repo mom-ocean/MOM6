@@ -97,7 +97,7 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
   real :: hw, gp, sum_hc, N2min
   logical :: l_use_ebt_mode, calc_modal_structure
   real :: l_mono_N2_column_fraction, l_mono_N2_depth
-  real :: mode_struct(SZK_(G))
+  real :: mode_struct(SZK_(G)), ms_min, ms_max, ms_sq
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
@@ -339,7 +339,11 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
           endif
 
           ! Overestimate the speed to start with.
-          lam0 = 1.0 / speed2_tot ; lam = lam0
+          if (calc_modal_structure) then
+            lam0 = 0.5 / speed2_tot ; lam = lam0
+          else
+            lam0 = 1.0 / speed2_tot ; lam = lam0
+          endif
           ! Find the determinant and its derivative with lam.
           do itt=1,max_itt
             lam_it(itt) = lam
@@ -396,7 +400,7 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
               ! may not be reliable; lam must be reduced, but not by more
               ! than half.
               lam = 0.5 * lam
-              dlam = lam
+              dlam = -lam
             else  ! Newton's method is OK.
               dlam = - det / ddet
               lam = lam + dlam
@@ -404,7 +408,21 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
 
             if (calc_modal_structure) then
               call tdma6(kc, -igu, igu+igl, -igl, lam, mode_struct)
-              mode_struct(1:kc) = mode_struct(1:kc) / sqrt( sum( mode_struct(1:kc)**2 ) )
+              ms_min = mode_struct(1)
+              ms_max = mode_struct(1)
+              ms_sq = mode_struct(1)**2
+              do k = 2,kc
+                ms_min = min(ms_min, mode_struct(k))
+                ms_max = max(ms_max, mode_struct(k))
+                ms_sq = ms_sq + mode_struct(k)**2
+              enddo
+              if (ms_min<0. .and. ms_max>0.) then
+                lam = 0.5 * ( lam - dlam )
+                dlam = -lam
+                mode_struct(1:kc) = abs(mode_struct(1:kc)) / sqrt( ms_sq )
+              else
+                mode_struct(1:kc) = mode_struct(1:kc) / sqrt( ms_sq )
+              endif
             endif
 
             if (abs(dlam) < tol2*lam) exit
@@ -416,8 +434,10 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
           if (calc_modal_structure) then
             if (mode_struct(1)/=0.) then
               mode_struct(1:kc) = mode_struct(1:kc) / mode_struct(1)
+            else
+              mode_struct(1:kc)=0.
             endif
-            modal_structure(i,j,:) = mode_struct(:) ! NOTE THIS IS WRONG FOR VANISHED LAYERS _AJA
+           !modal_structure(i,j,:) = mode_struct(:) ! NOTE THIS IS WRONG FOR VANISHED LAYERS _AJA
             call remapping_core_h(kc, Hc, mode_struct, nz, h(i,j,:), modal_structure(i,j,:), CS%remapping_CS)
           endif
         else
