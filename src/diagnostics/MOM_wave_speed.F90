@@ -134,6 +134,7 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
 !$OMP                                  drho_dS,drxh_sum,kc,Hc,Tc,Sc,I_Hnew,gprime,     &
 !$OMP                                  Rc,speed2_tot,Igl,Igu,lam0,lam,lam_it,dlam,     &
 !$OMP                                  mode_struct,sum_hc,N2min,gp,hw,                 &
+!$OMP                                  ms_min,ms_max,ms_sq,                            &
 !$OMP                                  det,ddet,detKm1,ddetKm1,detKm2,ddetKm2,det_it,ddet_it)
   do j=js,je
     !   First merge very thin layers with the one above (or below if they are
@@ -416,7 +417,7 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
                 ms_max = max(ms_max, mode_struct(k))
                 ms_sq = ms_sq + mode_struct(k)**2
               enddo
-              if (ms_min<0. .and. ms_max>0.) then
+              if (ms_min<0. .and. ms_max>0.) then ! Any zero crossings => lam is too high
                 lam = 0.5 * ( lam - dlam )
                 dlam = -lam
                 mode_struct(1:kc) = abs(mode_struct(1:kc)) / sqrt( ms_sq )
@@ -432,16 +433,16 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
           if (lam > 0.0) cg1(i,j) = 1.0 / sqrt(lam)
 
           if (calc_modal_structure) then
-            if (mode_struct(1)/=0.) then
+            if (mode_struct(1)/=0.) then ! Normalize
               mode_struct(1:kc) = mode_struct(1:kc) / mode_struct(1)
             else
               mode_struct(1:kc)=0.
             endif
-           !modal_structure(i,j,:) = mode_struct(:) ! NOTE THIS IS WRONG FOR VANISHED LAYERS _AJA
             call remapping_core_h(kc, Hc, mode_struct, nz, h(i,j,:), modal_structure(i,j,:), CS%remapping_CS)
           endif
         else
           cg1(i,j) = 0.0
+          if (calc_modal_structure) modal_structure(i,j,:) = 0.
         endif
       endif ! cg1 /= 0.0
     else
@@ -1098,7 +1099,7 @@ subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_de
 
   call wave_speed_set_param(CS, use_ebt_mode=use_ebt_mode, mono_N2_column_fraction=mono_N2_column_fraction)
 
-  call initialize_remapping(CS%remapping_CS, 'PLM')
+  call initialize_remapping(CS%remapping_CS, 'PLM', boundary_extrapolation=.false.)
 
 end subroutine wave_speed_init
 
