@@ -1149,10 +1149,10 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
 
   !   Set up the I/O lay-out, and check that it uses an even multiple of the
   ! number of PEs in each direction.
-  io_layout(:) = (/ 0, 0 /)
+  io_layout(:) = (/ 1, 1 /)
   call get_param(param_file, mod, trim(io_layout_nm), io_layout, &
                  "The processor layout to be used, or 0,0 to automatically \n"//&
-                 "set the io_layout to be the same as the layout.", default=0, &
+                 "set the io_layout to be the same as the layout.", default=1, &
                  layoutParam=.true.)
 
   if (io_layout(1) < 0) then
