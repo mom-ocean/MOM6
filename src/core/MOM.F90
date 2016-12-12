@@ -1232,7 +1232,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       endif
       if (CS%id_vmo > 0) then
         ! Convert to kg/s. Modifying the array for diagnostics is allowed here since it is set to zero immediately below
-        CS%uhtr(:,:,:) =  CS%uhtr(:,:,:) * ( GV%H_to_kg_m2 / CS%dt_trans )
+        CS%vhtr(:,:,:) =  CS%vhtr(:,:,:) * ( GV%H_to_kg_m2 / CS%dt_trans )
         call post_data(CS%id_vmo, CS%vhtr, CS%diag)
       endif
       
