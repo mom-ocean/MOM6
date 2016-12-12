@@ -110,9 +110,7 @@ type, public :: offline_transport_CS
   ! Work arrays for temperature and salinity
   ! Arrays for temperature and salinity    
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_) :: &        
-      temp_snap, salt_snap, &
       temp_mean, salt_mean, &
-      temp_old, salt_old, &
       h_end    
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
       netMassIn, netMassOut        
@@ -656,7 +654,7 @@ end subroutine offline_advection_layer
 !> Controls the reading in 3d mass fluxes, diffusive fluxes, and other fields stored
 !! in a previous integration of the online model
 subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, khdt_y, &
-    temp, salt, temp_mean, salt_mean, fluxes, do_ale_in)
+    temp_mean, salt_mean, fluxes, do_ale_in)
 
   type(ocean_grid_type),                     intent(inout)    :: G
   type(verticalGrid_type),                   intent(inout)    :: GV
@@ -679,7 +677,6 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: &
     h_end, &
     eatr, ebtr, &
-    temp, salt, &
     temp_mean, salt_mean
   type(forcing)                                               :: fluxes
   logical                                                     :: do_ale
@@ -697,9 +694,7 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
   eatr(:,:,:) = 0.0
   ebtr(:,:,:) = 0.0
   h_end(:,:,:) = GV%Angstrom
-  temp(:,:,:) = 0.0
   temp_mean(:,:,:) = 0.0
-  salt(:,:,:) = 0.0
   salt_mean(:,:,:) = 0.0
   khdt_x(:,:) = 0.0
   khdt_y(:,:) = 0.0
@@ -730,10 +725,6 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
   !! Read snapshot fields (end of time interval timestamp)
   call read_data(CS%snap_file, 'h_end', h_end, domain=G%Domain%mpp_domain, &
     timelevel=CS%ridx_snap,position=CENTER)
-  call read_data(CS%snap_file, 'temp',   temp, domain=G%Domain%mpp_domain, &
-    timelevel=CS%ridx_sum,position=CENTER)
-  call read_data(CS%snap_file, 'salt',   salt, domain=G%Domain%mpp_domain, &
-    timelevel=CS%ridx_sum,position=CENTER)  
 
   ! This block makes sure that the fluxes control structure, which may not be used in the solo_driver,
   ! contains netMassIn and netMassOut which is necessary for the applyTracerBoundaryFluxesInOut routine
@@ -798,8 +789,6 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
       h_end(i,j,k) = 0.0
       eatr(i,j,k) = 0.0
       ebtr(i,j,k) = 0.0
-      temp(i,j,k) = 0.0
-      salt(i,j,k) = 0.0
       temp_mean(i,j,k) = 0.0
       salt_mean(i,j,k) = 0.0
     endif
@@ -830,8 +819,6 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
   call pass_var(h_end, G%Domain)
   call pass_var(eatr, G%Domain)
   call pass_var(ebtr, G%Domain)
-  call pass_var(temp, G%Domain)
-  call pass_var(salt, G%Domain)
   call pass_var(temp_mean, G%Domain)
   call pass_var(salt_mean, G%Domain)
 
@@ -1001,12 +988,8 @@ subroutine offline_transport_init(param_file, CS, diabatic_aux_CSp, G, GV)
   ALLOC_(CS%khdt_y(isd:ied,JsdB:JedB))    ; CS%khdt_y(:,:)         = 0.0
   ALLOC_(CS%eatr(isd:ied,jsd:jed,nz))          ; CS%eatr(:,:,:) = 0.0
   ALLOC_(CS%ebtr(isd:ied,jsd:jed,nz))          ; CS%ebtr(:,:,:) = 0.0
-  ALLOC_(CS%temp_snap(isd:ied,jsd:jed,nz))     ; CS%temp_snap(:,:,:) = 0.0
   ALLOC_(CS%temp_mean(isd:ied,jsd:jed,nz))     ; CS%temp_mean(:,:,:) = 0.0
-  ALLOC_(CS%temp_old(isd:ied,jsd:jed,nz))      ; CS%temp_old(:,:,:) = 0.0
-  ALLOC_(CS%salt_snap(isd:ied,jsd:jed,nz))     ; CS%salt_snap(:,:,:) = 0.0
   ALLOC_(CS%salt_mean(isd:ied,jsd:jed,nz))     ; CS%salt_mean(:,:,:) = 0.0
-  ALLOC_(CS%salt_old(isd:ied,jsd:jed,nz))      ; CS%salt_old(:,:,:) = 0.0
   ALLOC_(CS%h_end(isd:ied,jsd:jed,nz))         ; CS%h_end(:,:,:) = 0.0
   ALLOC_(CS%netMassOut(G%isd:G%ied,G%jsd:G%jed)) ; CS%netMassOut(:,:) = 0.0
   ALLOC_(CS%netMassIn(G%isd:G%ied,G%jsd:G%jed))  ; CS%netMassIn(:,:) = 0.0
