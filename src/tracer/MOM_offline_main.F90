@@ -365,10 +365,14 @@ subroutine offline_redistribute_residual(CS, h_pre, h_end, uhtr, vhtr, converged
   ! First try to distribute the residual upwards and advect
   if(x_before_y) then    
     call distribute_residual_uh_upwards(G, GV, h_pre, uhtr)
+    call pass_var(h_pre,G%Domain)
     call distribute_residual_vh_upwards(G, GV, h_pre, vhtr)
+    call pass_var(h_pre,G%Domain)
   else
     call distribute_residual_vh_upwards(G, GV, h_pre, vhtr)
+    call pass_var(h_pre,G%Domain)
     call distribute_residual_uh_upwards(G, GV, h_pre, uhtr)
+    call pass_var(h_pre,G%Domain)
   endif
   call pass_vector(uhtr,vhtr,G%Domain)      
   
