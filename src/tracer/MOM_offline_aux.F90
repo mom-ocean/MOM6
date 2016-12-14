@@ -212,7 +212,7 @@ end subroutine limit_mass_flux_3d
 subroutine distribute_residual_uh_barotropic(G, GV, h, uh)
   type(ocean_grid_type),    pointer                           :: G
   type(verticalGrid_type),  pointer                           :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout)    :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout)    :: h
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: uh
 
   real, dimension(SZIB_(G),SZK_(G))   :: uh2d
@@ -221,6 +221,7 @@ subroutine distribute_residual_uh_barotropic(G, GV, h, uh)
   real, dimension(SZI_(G))            :: h2d_sum
 
   integer :: i, j, k, m, is, ie, js, je, nz
+  real :: uh_neglect
 
   ! Set index-related variables for fields on T-grid
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
@@ -260,16 +261,21 @@ subroutine distribute_residual_uh_barotropic(G, GV, h, uh)
         do k=1,nz
           uh2d(I,k) = 0.0
         enddo
-      endif
+      endif      
+      ! Calculate and check that column integrated transports match the original to
+      ! within the tolerance limit
+      uh_neglect = nz*GV%Angstrom*min(G%areaT(i,j),G%areaT(i+1,j))
+      if( abs(sum(uh2d(I,:))-uh2d_sum(I)) > uh_neglect) &
+        call MOM_error(WARNING,"Column integral of uh does not match after "//&
+        "barotropic redistribution")
     enddo
 
-    ! Update layer thicknesses at the end 
-    do k=1,nz ; do i=is-2,ie+1
+!    ! Update layer thicknesses at the end 
+    do k=1,nz ; do i=is,ie
       h(i,j,k) = h(i,j,k) + (uh2d(I-1,k) - uh2d(I,k))/G%areaT(i,j)
     enddo ; enddo
-    do k=1,nz ; do i=is-1,ie
+    do k=1,nz ; do i=is-1,ie 
       uh(I,j,k) = uh2d(I,k)
-      uh2d_sum(I) = uh2d_sum(I)-uh2d(I,k)
     enddo ; enddo
   enddo
 
@@ -279,7 +285,7 @@ end subroutine distribute_residual_uh_barotropic
 subroutine distribute_residual_vh_barotropic(G, GV, h, vh)
   type(ocean_grid_type),    pointer                           :: G
   type(verticalGrid_type),  pointer                           :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout)    :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout)    :: h
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout)    :: vh
 
   real, dimension(SZJB_(G),SZK_(G))   :: vh2d
@@ -288,6 +294,7 @@ subroutine distribute_residual_vh_barotropic(G, GV, h, vh)
   real, dimension(SZJ_(G))            :: h2d_sum
 
   integer :: i, j, k, m, is, ie, js, je, nz
+  real :: vh_neglect
 
   ! Set index-related variables for fields on T-grid
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
@@ -311,9 +318,10 @@ subroutine distribute_residual_vh_barotropic(G, GV, h, vh)
       endif
     enddo; enddo;
 
-
+    
     ! Distribute flux. Note min/max is intended to make sure that the mass transport
-    ! does not deplete a cell
+    ! does not deplete a cell. If this limit is hit for some reason, tracer will
+    ! not be conserved
     do j=js-1,je
       if( vh2d_sum(J)>0.0 ) then
         do k=1,nz
@@ -328,11 +336,19 @@ subroutine distribute_residual_vh_barotropic(G, GV, h, vh)
           vh2d(J,k) = 0.0
         enddo
       endif
+      ! Calculate and check that column integrated transports match the original to
+      ! within the tolerance limit
+      vh_neglect = nz*GV%Angstrom*min(G%areaT(i,j),G%areaT(i,j+1))
+      if( abs(sum(vh2d(J,:))-vh2d_sum(J)) > vh_neglect) &
+          call MOM_error(WARNING,"Column integral of vh does not match after "//&
+          "barotropic redistribution")
+      
     enddo
 
 
-    ! Update layer thicknesses at the end 
-    do k=1,nz ; do j=js-2,je+1
+    ! Update layer thicknesses at the end.
+    ! This may not be needed since the limits on the flux are half of the original thickness
+    do k=1,nz ; do j=js,je
       h(i,j,k) = h(i,j,k) + (vh2d(J-1,k) - vh2d(J,k))/G%areaT(i,j)
     enddo ; enddo
     do k=1,nz ; do j=js-1,je
@@ -347,14 +363,13 @@ end subroutine distribute_residual_vh_barotropic
 subroutine distribute_residual_uh_upwards(G, GV, h, uh)
   type(ocean_grid_type),    pointer                           :: G
   type(verticalGrid_type),  pointer                           :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout)     :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout)    :: h
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: uh
 
   real, dimension(SZIB_(G),SZK_(G))   :: uh2d
   real, dimension(SZI_(G),SZK_(G))    :: h2d
-  logical, dimension(SZK_(G))            :: filled
 
-  real  :: uh_neglect, uh_remain, uh_LB, uh_UB, uh_add, uh_max, uh_sum
+  real  :: uh_neglect, uh_remain, uh_LB, uh_UB, uh_add
   real  :: hup, hdown, hlos, min_h
   integer :: i, j, k, m, is, ie, js, je, nz, k_rev
 
@@ -374,50 +389,40 @@ subroutine distribute_residual_uh_upwards(G, GV, h, uh)
     enddo ; enddo
 
     do i=is-1,ie 
-      uh_sum = sum(uh2d(I,:))
       do k=1,nz
         uh_remain = uh2d(I,k) 
         uh_neglect = GV%H_subroundoff*min(G%areaT(i,j),G%areaT(i+1,j))
-
         if(uh_remain<-uh_neglect) then
           ! Set the mass flux to zero. This will be refilled in the first iteration 
           uh2d(I,k) = 0.0
-
           do k_rev=k,1,-1
-            ! Calculate the lower bound of uh(I)
-            hlos = max(uh2d(I+1,k_rev),0.0)
-            ! This lower bound is deliberately conservative to ensure that nothing will be left after 
-            uh_LB = min(-0.5*h2d(i+1,k_rev), -0.5*hlos, 0.0)
-              ! Calculate the maximum amount that could be added
-              uh_max = uh_LB-uh2d(I,k_rev)
-              ! Calculate how much will actually be added to uh(I)
-              uh_add = max(uh_max,uh_remain)
-              ! Reduce the remaining flux 
-              uh_remain = uh_remain - uh_add
-              uh2d(I,k_rev) = uh2d(I,k_rev) + uh_add
-              if(uh2d(I,k_rev)==uh_LB) filled(k_rev)=.true.
-              if(uh_remain>-uh_neglect) exit
+            ! This lower bound only allows half of the layer to be depleted
+            uh_LB = -0.5*h2d(i+1,k_rev)
+            ! You can either add the difference between the lower bound and the
+            ! current uh, or the remaining mass transport to be distributed.
+            ! The max is there because it represents the minimum of these two with respect
+            ! to magnitude. The minimum is to guard against the case where uh2d>uh_LB
+            ! not quite the same potentially because of roundoff error
+            uh_add = min(max(uh_LB-uh2d(I,k_rev), uh_remain),0.0)
+            uh_remain = uh_remain - uh_add
+            uh2d(I,k_rev) = uh2d(I,k_rev) + uh_add
+            if(uh_remain>-uh_neglect) exit
           enddo
-
         elseif (uh_remain>uh_neglect) then
           ! Set the amount in the layer with remaining fluxes to zero. This will be reset 
           ! in the first iteration of the redistribution loop
           uh2d(I,k) = 0.0
           ! Loop to distribute remaining flux in layers above
           do k_rev=k,1,-1
-            hlos = max(0.0,-uh2d(I-1,k_rev))
-            ! Calculate the upper bound of uh(I)
-            uh_UB = max(0.5*h2d(i,k_rev), 0.5*h2d(i,k_rev)-hlos, 0.0)
-            ! Calculate the maximum amount that could be added
-            uh_max = uh_UB-uh2d(I,k_rev)
-            ! Calculate how much will actually be added to uh(I)
-            uh_add = min(uh_max,uh_remain)
-            ! Reduce the remaining flux 
+            ! This lower bound only allows half of the layer to be depleted
+            uh_UB = 0.5*h2d(i,k_rev)
+            uh_add = max(min(uh_UB-uh2d(I,k_rev), uh_remain), 0.0)
             uh_remain = uh_remain - uh_add
             uh2d(I,k_rev) = uh2d(I,k_rev) + uh_add
             if(uh_remain<uh_neglect) exit
           enddo
-          ! Check to see if there's any mass flux left. If so, put it in the layer beneath, unless we've bottomed out
+          ! Check to see if there's any mass flux left. If so, put it in the layer beneath,
+          ! unless we've bottomed out
         endif
         if(abs(uh_remain)>uh_neglect) then
           if(k<nz) then
@@ -431,7 +436,7 @@ subroutine distribute_residual_uh_upwards(G, GV, h, uh)
 
     enddo
 
-    ! Update layer thicknesses at the end 
+!    ! Update layer thicknesses at the end 
     do k=1,nz ; do i=is,ie
       h(i,j,k) = (h(i,j,k)*G%areaT(i,j) + (uh2d(I-1,k) - uh2d(I,k)))/G%areaT(i,j)
     enddo ; enddo
@@ -440,6 +445,8 @@ subroutine distribute_residual_uh_upwards(G, GV, h, uh)
     enddo ; enddo
   enddo
 
+
+  
 end subroutine distribute_residual_uh_upwards
 
 !> In the case where offline advection has failed to converge, redistribute the u-flux
@@ -473,47 +480,41 @@ subroutine distribute_residual_vh_upwards(G, GV, h, vh)
       h2d(j,k) = (h(i,j,k)-min_h)*G%areaT(i,j)
     enddo ; enddo
 
-    do j=js,je
-      vh_sum=sum(vh2d(J,:))
+    do j=js-1,je
       do k=1,nz
         vh_remain = vh2d(J,k) 
         vh_neglect = GV%H_subroundoff*min(G%areaT(i,j),G%areaT(i,j+1))
-        if(vh_remain<0.0) then
-          ! Set the amount in the layer with remaining fluxes to zero. This will be reset 
-          ! in the first iteration of the redistribution loop
+        if(vh_remain<-vh_neglect) then
+          ! Set the mass flux to zero. This will be refilled in the first iteration 
           vh2d(J,k) = 0.0
           do k_rev=k,1,-1
-            ! Calculate the lower bound of uh(I)
-            hlos = max(vh2d(J+1,k_rev),0.0)
-            vh_LB = min(-0.5*h2d(j+1,k_rev), -0.5*h2d(j+1,k_rev)+hlos, 0.0)
-            ! Calculate the maximum amount that could be added
-            vh_max = vh_LB-vh2d(J,k_rev)
-            ! Calculate how much will actually be added to uh(I)
-            vh_add = max(vh_max,vh_remain)
-            ! Reduce the remaining flux 
+            ! This lower bound only allows half of the layer to be depleted
+            vh_LB = -0.5*h2d(j+1,k_rev)
+            ! You can either add the difference between the lower bound and the
+            ! current uh, or the remaining mass transport to be distributed.
+            ! The max is there because it represents the minimum of these two with respect
+            ! to magnitude. The minimum is to guard against the case where uh2d>uh_LB
+            ! not quite the same potentially because of roundoff error
+            vh_add = min(max(vh_LB-vh2d(J,k_rev), vh_remain),0.0)
             vh_remain = vh_remain - vh_add
             vh2d(J,k_rev) = vh2d(J,k_rev) + vh_add
             if(vh_remain>-vh_neglect) exit
-
           enddo
-        elseif (vh_remain>0.0) then
+        elseif (vh_remain>vh_neglect) then
           ! Set the amount in the layer with remaining fluxes to zero. This will be reset 
           ! in the first iteration of the redistribution loop
-          vh2d(J,k) = 0
+          vh2d(J,k) = 0.0
           ! Loop to distribute remaining flux in layers above
           do k_rev=k,1,-1
-            hlos = max(-vh2d(J-1,k_rev),0.0)
-            ! Calculate the upper bound of uh(I)
-            vh_UB = max(0.5*h2d(j,k_rev), 0.5*h2d(j,k_rev)-hlos, 0.0)
-            ! Calculate the maximum amount that could be added
-            vh_max = vh_UB-vh2d(J,k_rev)
-            ! Calculate how much will actually be added to uh(I)
-            vh_add = min(vh_max,vh_remain)
-            ! Reduce the remaining flux 
+            ! This lower bound only allows half of the layer to be depleted
+            vh_UB = 0.5*h2d(j,k_rev)
+            vh_add = max(min(vh_UB-vh2d(J,k_rev), vh_remain), 0.0)
             vh_remain = vh_remain - vh_add
             vh2d(J,k_rev) = vh2d(J,k_rev) + vh_add
             if(vh_remain<vh_neglect) exit
           enddo
+          ! Check to see if there's any mass flux left. If so, put it in the layer beneath,
+          ! unless we've bottomed out
         endif
         if(abs(vh_remain)>vh_neglect) then
           if(k<nz) then
@@ -526,7 +527,7 @@ subroutine distribute_residual_vh_upwards(G, GV, h, vh)
 
     enddo
 
-    ! Update layer thicknesses at the end 
+!    ! Update layer thicknesses at the end 
     do k=1,nz ; do j=js,je
       h(i,j,k) = (h(i,j,k)*G%areaT(i,j) + (vh2d(J-1,k) - vh2d(J,k)))/G%areaT(i,j)
     enddo ; enddo
@@ -534,6 +535,7 @@ subroutine distribute_residual_vh_upwards(G, GV, h, vh)
       vh(i,J,k) = vh2d(J,k)
     enddo ; enddo
   enddo
+  
 
 end subroutine distribute_residual_vh_upwards
 
