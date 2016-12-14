@@ -221,9 +221,9 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
   call pass_vector(uhtr_sub,vhtr_sub,G%Domain)
   
   if(CS%debug) then
+    call hchksum(h_pre,"h_pre before transport",G%HI)
     call uchksum(uhtr_sub,"uhtr_sub before transport",G%HI)
     call vchksum(vhtr_sub,"vhtr_sub before transport",G%HI)
-    call hchksum(h_pre,"h_pre before transport",G%HI)
   endif
 
   ! This loop does essentially a flux-limited, nonlinear advection scheme until all mass fluxes
@@ -256,10 +256,10 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
         CS%tracer_Reg, CS%ALE_CSp, CS%dt_offline)
     call cpu_clock_end(id_clock_ALE)
 
+    call pass_var(h_pre, G%Domain)
     if(CS%debug) then
       call hchksum(h_pre,"h_pre after ALE",G%HI)
     endif
-    call pass_var(h_pre, G%Domain)
 
     ! Copy over remaining mass transports
     do k=1,nz ; do j=jsd,jed ; do i=isdB,iedB
@@ -295,6 +295,13 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
 
   ! Make sure that uhtr and vhtr halos are updated
   call pass_vector(uhtr,vhtr,G%Domain)
+  
+  if(CS%debug) then
+    call hchksum(h_pre,"h after offline_advection_ale",G%HI)
+    call uchksum(uhtr,"uhtr after offline_advection_ale",G%HI)
+    call vchksum(vhtr,"vhtr after offline_advection_ale",G%HI)
+  endif
+  
 end subroutine offline_advection_ale
 
 subroutine offline_redistribute_residual(CS, h_pre, h_end, uhtr, vhtr, converged)
@@ -334,85 +341,97 @@ subroutine offline_redistribute_residual(CS, h_pre, h_end, uhtr, vhtr, converged
 
   x_before_y = CS%x_before_y
 
-  uhr(:,:,:) = 0.0
-  vhr(:,:,:) = 0.0
+  uhr(:,:,:) = uhtr
+  vhr(:,:,:) = vhtr
 
-  if (.not. converged) then
+  do k=1,nz ; do j=jsd,jed ; do i=isd,ied
+    h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
+  enddo ; enddo ; enddo
+  call pass_var(h_vol,G%Domain)
+  call pass_vector(uhtr,vhtr,G%Domain)
 
-    do k=1,nz ; do j=jsd,jed ; do i=isd,ied
-      h_vol(i,j,k) = h_pre(i,j,k)*G%areaT(i,j)
+  if (CS%debug) then
+    call hchksum(h_pre,"h_pre before upwards redistribute",G%HI, haloshift = 1)
+    call hchksum(h_vol,"h_vol before upwards redistribute",G%HI)
+    call uchksum(uhtr,"uhtr before upwards redistribute",G%HI)
+    call vchksum(vhtr,"vhtr before upwards redistribute",G%HI)
+  endif
+
+  ! These are used to find out how much will be redistributed in this routine
+  if (CS%id_h_redist>0) call post_data(CS%id_h_redist, h_pre, CS%diag)
+  if (CS%id_uhr_redist>0) call post_data(CS%id_uhr_redist, uhtr, CS%diag)
+  if (CS%id_vhr_redist>0) call post_data(CS%id_vhr_redist, vhtr, CS%diag)
+
+  ! First try to distribute the residual upwards and advect
+  if(x_before_y) then    
+    call distribute_residual_uh_upwards(G, GV, h_pre, uhtr)
+    call distribute_residual_vh_upwards(G, GV, h_pre, vhtr)
+  else
+    call distribute_residual_vh_upwards(G, GV, h_pre, vhtr)
+    call distribute_residual_uh_upwards(G, GV, h_pre, uhtr)
+  endif
+  call pass_vector(uhtr,vhtr,G%Domain)      
+  
+  if (CS%debug) then 
+    call hchksum(h_vol,"h_vol after upwards redistribute",G%HI,haloshift = 1)
+    call uchksum(uhtr,"uh after upwards redistribute",G%HI)
+    call vchksum(vhtr,"vh after upwards redistribute",G%HI)
+  endif
+  call advect_tracer(h_pre, uhtr, vhtr, CS%OBC, CS%dt_offline, G, GV, &
+        CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=2, &
+        h_out=h_new, uhr_out=uhr, vhr_out=vhr, x_first_in=x_before_y)
+        
+  do k=1,nz ; do j=jsd,jed ; do i=isd,ied
+    h_vol(i,j,k) = h_new(i,j,k)
+    h_new(i,j,k) = h_vol(i,j,k)/G%areaT(i,j)
+  enddo ; enddo ; enddo      
+  
+  call pass_var(h_vol,G%Domain)
+  call pass_var(h_new,G%Domain)
+  call pass_vector(uhr,vhr,G%Domain)
+  
+  if (CS%debug) then
+    call hchksum(h_vol,"h_vol before barotropic redistribute",G%HI)
+    call hchksum(h_new,"h_new before barotropic redistribute",G%HI)
+    call uchksum(uhr,"uhr before barotropic redistribute",G%HI)
+    call vchksum(vhr,"vhr before barotropic redistribute",G%HI)
+  endif
+  
+  ! Then check if there's any transport left and if so, distribute it equally
+  ! throughout the rest of the water column
+  call distribute_residual_uh_barotropic(G, GV, h_new, uhr)
+  call distribute_residual_vh_barotropic(G, GV, h_new, vhr)
+!  call pass_vector(uhr,vhr,G%Domain)
+  if (CS%debug) then
+    call hchksum(h_vol,"h_vol after barotropic redistribute",G%HI)
+    call uchksum(uhr,"uhr after barotropic redistribute",G%HI)
+    call vchksum(vhr,"vhr after barotropic redistribute",G%HI)
+  endif
+  
+  call advect_tracer(h_new, uhr, vhr, CS%OBC, CS%dt_offline, G, GV, &
+      CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=2, &
+      h_out=h_pre, uhr_out=uhtr, vhr_out=vhtr, x_first_in=x_before_y)        
+  
+  if (CS%debug) then
+    call hchksum(h_pre,"h_pre after advection barotropic redistribute",G%HI)
+    call uchksum(uhtr,"uhtr after advection barotropic redistribute",G%HI)
+    call vchksum(vhtr,"vhtr after advection barotropic redistribute",G%HI)
+
+    do k=1,nz ; do j=js,je ; do i=is-1,ie
+      if( abs(uhtr(i,j,k))>0.0 ) print *, "Remaining uhtr i, j, k: ", uhr(i,j,k), i, j, k
     enddo ; enddo ; enddo
-    call pass_var(h_vol,G%Domain)
 
-    if (CS%debug) then
-      call hchksum(h_pre,"h_pre after before redistribute",G%HI)
-      call uchksum(uhtr,"uhtr before redistribute",G%HI)
-      call vchksum(vhtr,"vhtr before redistribute",G%HI)
-    endif
-
-    ! These are used to find out how much will be redistributed in this routine
-    if (CS%id_h_redist>0) call post_data(CS%id_h_redist, h_pre, CS%diag)
-    if (CS%id_uhr_redist>0) call post_data(CS%id_uhr_redist, uhtr, CS%diag)
-    if (CS%id_vhr_redist>0) call post_data(CS%id_vhr_redist, vhtr, CS%diag)
-
-    ! Determine how to actually redistribute the remaining fluxes
-    select case (CS%redistribute_method)
-      case ('barotropic')
-        if (x_before_y) then
-          call distribute_residual_uh_barotropic(G, GV, h_pre, uhtr)
-          call distribute_residual_vh_barotropic(G, GV, h_pre, vhtr)
-        else
-          call distribute_residual_vh_barotropic(G, GV, h_pre, vhtr)
-          call distribute_residual_uh_barotropic(G, GV, h_pre, uhtr)
-        endif 
-        call advect_tracer(h_pre, uhtr, vhtr, CS%OBC, CS%dt_offline, G, GV, &
-            CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=2, &
-            h_out=h_new, uhr_out=uhr, vhr_out=vhr, x_first_in=x_before_y)
-
-      case ('upwards')
-        if (x_before_y) then
-          call distribute_residual_uh_upwards(G, GV, h_pre, uhtr)
-          call distribute_residual_vh_upwards(G, GV, h_pre, vhtr)
-        else
-          call distribute_residual_vh_upwards(G, GV, h_pre, vhtr)
-          call distribute_residual_uh_upwards(G, GV, h_pre, uhtr)
-        endif
-        call advect_tracer(h_pre, uhtr, vhtr, CS%OBC, CS%dt_offline, G, GV, &
-              CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=2, &
-              h_out=h_new, uhr_out=uhr, vhr_out=vhr, x_first_in=x_before_y)
-      case ('none')
-        call MOM_error(WARNING,"Offline advection did not converge")
-
-      case default
-        call MOM_error(FATAL,"Unrecognized REDISTRIBUTE_METHOD")
-    end select
-
-    call pass_vector(uhr,vhr,G%Domain)
-    if (CS%debug) then
-      call hchksum(h_pre,"h_pre after after redistribute",G%HI)
-      call uchksum(uhtr,"uhtr after redistribute",G%HI)
-      call vchksum(vhtr,"vhtr after redistribute",G%HI)
-      call uchksum(uhr,"uhr after redistribute",G%HI)
-      call vchksum(vhr,"vhr after redistribute",G%HI)
-      
-      do k=1,nz ; do j=js,je ; do i=is-1,ie
-        if( abs(uhr(i,j,k))>0.0 ) print *, "Remaining uhr i, j, k: ", uhr(i,j,k), i, j, k
-      enddo ; enddo ; enddo
-      
-      do k=1,nz ; do j=js-1,je ; do i=is,ie
-        if( abs(vhr(i,j,k))>0.0 ) print *, "Remaining vhr i, j, k: ", vhr(i,j,k), i, j, k
-      enddo ; enddo ; enddo
-      
-    endif
-    
-    do k=1,nz ; do j=jsd,jed ; do i=isd,ied
-      h_pre(i,j,k) = h_new(i,j,k)/G%areaT(i,j)
+    do k=1,nz ; do j=js-1,je ; do i=is,ie
+      if( abs(vhtr(i,j,k))>0.0 ) print *, "Remaining vhtr i, j, k: ", vhr(i,j,k), i, j, k
     enddo ; enddo ; enddo
-    
-    
-    call pass_var(h_pre,G%Domain)
 
-  endif    
+  endif
+
+  do k=1,nz ; do j=jsd,jed ; do i=isd,ied
+    h_pre(i,j,k) = h_pre(i,j,k)/G%areaT(i,j)
+  enddo ; enddo ; enddo
+  call pass_var(h_pre,G%Domain)
+
   ! This diagnostic can be used to identify which grid points did not converge within
   ! the specified number of advection sub iterations
   if(CS%id_eta_diff>0) then
@@ -427,8 +446,8 @@ subroutine offline_redistribute_residual(CS, h_pre, h_end, uhtr, vhtr, converged
 
   endif
     
-  if(CS%id_uhr>0) call post_data(CS%id_uhr,uhr,CS%diag)
-  if(CS%id_vhr>0) call post_data(CS%id_vhr,vhr,CS%diag)
+  if(CS%id_uhr>0) call post_data(CS%id_uhr,uhtr,CS%diag)
+  if(CS%id_vhr>0) call post_data(CS%id_vhr,vhtr,CS%diag)
   
 end subroutine offline_redistribute_residual
 
@@ -447,6 +466,11 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, dt, CS, h_pre, eat
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: zero_3dh
   zero_3dh(:,:,:) = 0.0
   
+  if(CS%debug) then
+    call hchksum(h_pre,"h_pre before offline_diabatic_ale",CS%G%HI)
+    call hchksum(eatr,"eatr before offline_diabatic_ale",CS%G%HI)
+    call hchksum(ebtr,"ebtr before offline_diabatic_ale",CS%G%HI)
+  endif
 
   if(CS%diurnal_SW .and. CS%read_sw) then
     sw(:,:) = fluxes%sw
@@ -478,7 +502,12 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, dt, CS, h_pre, eat
     fluxes%sw_vis_dir(:,:) = sw_vis
     fluxes%sw_nir_dir(:,:) = sw_nir
   endif
-  
+
+  if(CS%debug) then
+    call hchksum(h_pre,"h_pre after offline_diabatic_ale",CS%G%HI)
+    call hchksum(eatr,"eatr after offline_diabatic_ale",CS%G%HI)
+    call hchksum(ebtr,"ebtr after offline_diabatic_ale",CS%G%HI)
+  endif
 
 end subroutine offline_diabatic_ale
 
@@ -831,6 +860,14 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
   CS%ridx_snap = next_modulo_time(CS%ridx_snap,CS%numtime)
   CS%ridx_sum = next_modulo_time(CS%ridx_sum,CS%numtime)
 
+  if(CS%debug) then
+    call hchksum(h_end,"h_end after transport_by_file",G%HI)
+    call hchksum(eatr,"eatr after transport_by_file",G%HI)
+    call hchksum(ebtr,"ebtr after transport_by_file",G%HI)
+    call uchksum(uhtr,"uhtr after transport_by_file",G%HI)
+    call vchksum(vhtr,"vhtr after transport_by_file",G%HI)
+  endif
+  
   call callTree_leave("transport_by_file")
 
 end subroutine transport_by_files

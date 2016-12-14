@@ -1512,6 +1512,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     ! perform the main advection.
     if (first_iter) then
       if(is_root_pe()) print *, "Reading in new offline fields"
+      if(CS%debug) call hchksum(CS%h,"h at the start of new offline interval",G%HI)
       ! Read in new transport and other fields
       call transport_by_files(G, GV, CS%offline_CSp, h_end, eatr, ebtr, uhtr, vhtr, &
           khdt_x, khdt_y, temp_mean, salt_mean, fluxes, &
@@ -1530,11 +1531,9 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     ! The functions related to column physics of tracers is performed separately in ALE mode 
     fluxes%netMassIn = CS%offline_CSp%netMassIn
     fluxes%netMassOut = CS%offline_CSp%netMassOut
-    if(CS%debug)  call hchksum(CS%h, "h before offline_diabatic_ALE",G%HI)       
     call offline_diabatic_ale(fluxes, Time_start, Time_end, time_interval, CS%offline_CSp, &
         CS%h, eatr, ebtr)
     call pass_var(CS%h,G%Domain)    
-    if(CS%debug)  call hchksum(CS%h, "h after offline_diabatic_ALE",G%HI)    
         
     ! Do the transport, the final ALE remappings,  horizontal diffusion if it is
     ! the last iteration
@@ -1542,28 +1541,23 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       if(is_root_pe()) print *, "Last iteration of offline interval"
       call ALE_main_offline(G, GV, CS%h, CS%tv,  CS%tracer_Reg, CS%ALE_CSp, CS%offline_CSp%dt_offline)
 
-      call pass_var(CS%h,G%Domain)
       call offline_advection_ale(fluxes, Time_start, time_interval, CS%offline_CSp, id_clock_ALE, &
           CS%h, uhtr, vhtr, converged=adv_converged)
-      call pass_var(CS%h,G%Domain)
       
       ! Redistribute any remaining transport
       call offline_redistribute_residual(CS%offline_CSp, CS%h, h_end, uhtr, vhtr, adv_converged)
       
       ! Call ALE one last time to make sure that tracers are remapped onto the layer thicknesses
       ! stored from the forward run
-      if(CS%debug) call hchksum(CS%h, "h after offline_redistribute_residual",G%HI)
       call cpu_clock_begin(id_clock_ALE)
       call ALE_offline_tracer_final( G, GV, CS%h, h_end, CS%tracer_Reg, CS%ALE_CSp)
       call cpu_clock_end(id_clock_ALE)        
-      if(CS%debug)  call hchksum(h_end, "h_end after ALE_offline_tracer_final",G%HI)
       
       ! Perform offline diffusion if requested
       if (.not. CS%offline_CSp%skip_diffusion) then
         call tracer_hordiff(h_end, CS%offline_CSp%dt_offline, CS%MEKE, CS%VarMix, G, GV, &
           CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, do_online_flag=.false., read_khdt_x=khdt_x, &
           read_khdt_y=khdt_y)
-        if(CS%debug)  call hchksum(h_end, "h_end after tracer_hordiff",G%HI)  
       endif    
 
     endif
