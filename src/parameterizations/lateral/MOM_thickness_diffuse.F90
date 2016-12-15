@@ -6,7 +6,7 @@ module MOM_thickness_diffuse
 use MOM_checksums,             only : hchksum, uchksum, vchksum
 use MOM_diag_mediator,         only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator,         only : register_diag_field, safe_alloc_ptr, time_type
-use MOM_diag_mediator,         only : diag_update_target_grids
+use MOM_diag_mediator,         only : diag_update_remap_grids
 use MOM_error_handler,         only : MOM_error, FATAL, WARNING
 use MOM_EOS,                   only : calculate_density, calculate_density_derivs
 use MOM_file_parser,           only : get_param, log_version, param_file_type
@@ -321,7 +321,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
   ! Whenever thickness changes let the diag manager know, target grids
   ! for vertical remapping may need to be regenerated.
   ! This needs to happen after the H update and before the next post_data.
-  call diag_update_target_grids(CS%diag)
+  call diag_update_remap_grids(CS%diag)
 
   if (MEKE_not_null .AND. ASSOCIATED(VarMix)) then
     if (ASSOCIATED(MEKE%Rd_dx_h) .and. ASSOCIATED(VarMix%Rd_dx_h)) then
@@ -1571,10 +1571,12 @@ subroutine thickness_diffuse_init(Time, G, GV, param_file, diag, CDp, CS)
   else ; flux_units = "kilogram second-1" ; endif
 
   CS%id_uhGM = register_diag_field('ocean_model', 'uhGM', diag%axesCuL, Time, &
-           'Time Mean Diffusive Zonal Thickness Flux', flux_units)
+           'Time Mean Diffusive Zonal Thickness Flux', flux_units, &
+           y_cell_method='sum', v_extensive=.true.)
   if (CS%id_uhGM > 0) call safe_alloc_ptr(CDp%uhGM,G%IsdB,G%IedB,G%jsd,G%jed,G%ke)
   CS%id_vhGM = register_diag_field('ocean_model', 'vhGM', diag%axesCvL, Time, &
-           'Time Mean Diffusive Meridional Thickness Flux', flux_units)
+           'Time Mean Diffusive Meridional Thickness Flux', flux_units, &
+           x_cell_method='sum', v_extensive=.true.)
   if (CS%id_vhGM > 0) call safe_alloc_ptr(CDp%vhGM,G%isd,G%ied,G%JsdB,G%JedB,G%ke)
 
   CS%id_GMwork = register_diag_field('ocean_model', 'GMwork', diag%axesT1, Time,                     &
