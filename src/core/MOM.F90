@@ -88,6 +88,7 @@ use MOM_dynamics_legacy_split, only : initialize_dyn_legacy_split, end_dyn_legac
 use MOM_dynamics_legacy_split, only : adjustments_dyn_legacy_split, MOM_dyn_legacy_split_CS
 use MOM_dyn_horgrid,           only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
 use MOM_EOS,                   only : EOS_init
+use MOM_EOS,                   only : calculate_density
 use MOM_error_checking,        only : check_redundant
 use MOM_grid,                  only : ocean_grid_type, set_first_direction
 use MOM_grid,                  only : MOM_grid_init, MOM_grid_end
@@ -3566,7 +3567,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
   if (present(p_atm)) then ; if (ASSOCIATED(p_atm)) then
 
     if ((ASSOCIATED(CS%tv%eqn_of_state))  .and.  (CS%calc_rho_for_sea_lev)) then
-      call calculate_density_scalar(CS%tv%T(i,j,1),CS%tv%S(i,j,1) , (p_atm/2.0) , Rho_conv, CS%tv%eqn_of_state)
+      call calculate_density(CS%tv%T(i,j,1),CS%tv%S(i,j,1) , p_atm(i,j)/2.0 , Rho_conv, CS%tv%eqn_of_state)
     else
       Rho_conv=GV%Rho0
     endif
