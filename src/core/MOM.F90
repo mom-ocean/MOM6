@@ -1756,12 +1756,14 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
                  "the tracer advection and diffusion equation are read in from\n"//&
                  "files stored from a previous integration of the prognostic model.\n"//&
                  "NOTE: This option only used in the ocean_solo_driver.", default=.false.)
-    call get_param(param_file, "MOM", "ADVECT_TS", CS%advect_TS , &
-                 "If True, advect temperature and salinity horizontally\n"//&
-                 "If False, T/S are registered for advection.\n"//&
-                 "This is intended only to be used in offline tracer mode."//&
-                 "and is by default false in that case", & 
-                 default=.false. )             
+    if(CS%offline_tracer_mode) then
+      call get_param(param_file, "MOM", "ADVECT_TS", CS%advect_TS , &
+                   "If True, advect temperature and salinity horizontally\n"//&
+                   "If False, T/S are registered for advection.\n"//&
+                   "This is intended only to be used in offline tracer mode."//&
+                   "and is by default false in that case", & 
+                   default=.false. )
+    endif
   endif
   call get_param(param_file, "MOM", "USE_REGRIDDING", CS%use_ALE_algorithm , &
                  "If True, use the ALE algorithm (regridding/remapping).\n"//&
