@@ -182,6 +182,7 @@ type, public :: MOM_control_struct
   logical :: adiabatic               !< If true, then no diapycnal mass fluxes, with no calls
                                      !! to routines to calculate or apply diapycnal fluxes.
   logical :: use_temperature         !< If true, temp and saln used as state variables.
+  logical :: calc_rho_for_sea_lev   !< If true, calculate rho to convert pressure to sea level
   logical :: use_frazil              !< If true, liquid seawater freezes if temp below freezing,
                                      !! with accumulated heat deficit returned to surface ocean.
   logical :: bound_salinity          !< If true, salt is added to keep salinity above
@@ -2046,6 +2047,10 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
     CS%legacy_split = .false.
   endif
 
+  call get_param(param_file, "MOM", "CALC_RHO_FOR_SEA_LEVEL", CS%calc_rho_for_sea_lev, &
+                 "If true, the locally calculated density is \n"//&
+                 "used to convert surface pressure to effective n"//&
+                 "sea level.", default=.false.)
   call get_param(param_file, "MOM", "ENABLE_THERMODYNAMICS", CS%use_temperature, &
                  "If true, Temperature and salinity are used as state \n"//&
                  "variables.", default=.true.)
@@ -3541,6 +3546,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
                                       ! determine mixed layer properties (meter)
   real :: dh                          ! thickness of a layer within mixed layer (meter)
   real :: mass                        ! mass per unit area of a layer (kg/m2)
+  real :: Rho_conv                    ! density used to convert surface pressure to effectic SSH (Pa)
 
   real :: IgR0, hu, hv
   integer :: i, j, k, is, ie, js, je, nz, numberOfErrors
@@ -3558,7 +3564,15 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
   state%sea_lev => ssh
 
   if (present(p_atm)) then ; if (ASSOCIATED(p_atm)) then
-    IgR0 = 1.0 / (GV%Rho0 * GV%g_Earth)
+
+    if ((ASSOCIATED(CS%tv%eqn_of_state))  .and.  (CS%calc_rho_for_sea_lev)) then
+      call calculate_density_scalar(CS%tv%T(i,j,1),CS%tv%S(i,j,1) , (p_atm/2.0) , Rho_conv, CS%tv%eqn_of_state)
+    else
+      Rho_conv=GV%Rho0
+    endif
+    IgR0 = 1.0 / (Rho_conv * GV%g_Earth)
+
+
     do j=js,je ; do i=is,ie
       ssh(i,j) = ssh(i,j) + p_atm(i,j) * IgR0
     enddo ; enddo
