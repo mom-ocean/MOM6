@@ -378,7 +378,7 @@ subroutine distribute_residual_uh_upwards(G, GV, h, uh)
 
   min_h = 0.1*GV%Angstrom
 
-  do j=js,je
+  do j=js-1,je
     ! Copy over uh and cell volume to working arrays
     do k=1,nz ; do i=is-1,ie
       uh2d(I,k) = uh(I,j,k)
@@ -444,8 +444,6 @@ subroutine distribute_residual_uh_upwards(G, GV, h, uh)
       uh(I,j,k) = uh2d(I,k)
     enddo ; enddo
   enddo
-
-
   
 end subroutine distribute_residual_uh_upwards
 
@@ -471,7 +469,7 @@ subroutine distribute_residual_vh_upwards(G, GV, h, vh)
 
   min_h = 0.1*GV%Angstrom
 
-  do i=is,ie
+  do i=is-1,ie
     ! Copy over uh and cell volume to working arrays
     do k=1,nz ; do j=js-1,je
       vh2d(J,k) = vh(i,J,k)
