@@ -88,13 +88,15 @@ module MOM_hor_visc
 
 use MOM_diag_mediator,         only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator,         only : diag_ctrl, time_type
+use MOM_domains,               only : pass_var
 use MOM_error_handler,         only : MOM_error, FATAL, WARNING
 use MOM_file_parser,           only : get_param, log_version, param_file_type
 use MOM_grid,                  only : ocean_grid_type
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types,            only : MEKE_type
-use MOM_open_boundary,         only : ocean_OBC_type, OBC_FLATHER
+use MOM_open_boundary,         only : ocean_OBC_type, OBC_NONE
 use MOM_verticalGrid,          only : verticalGrid_type
+use MOM_io,                    only : read_data, slasher
 
 implicit none ; private
 
@@ -131,9 +133,15 @@ type, public :: hor_visc_CS ; private
   logical :: bound_Coriolis  ! If true & SMAGORINSKY_AH is used, the biharmonic
                              ! viscosity is modified to include a term that
                              ! scales quadratically with the velocity shears.
+  logical :: use_Kh_bg_2d    ! Read 2d background viscosity from a file. 
+  real    :: Kh_bg_min       ! The minimum value allowed for Laplacian horizontal
+                             ! viscosity. The default is 0.0
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
     Kh_bg_xx,        &! The background Laplacian viscosity at h points, in units
+                      ! of m2 s-1. The actual viscosity may be the larger of this
+                      ! viscosity and the Smagorinsky viscosity.
+    Kh_bg_2d,        &! The background Laplacian viscosity at h points, in units
                       ! of m2 s-1. The actual viscosity may be the larger of this
                       ! viscosity and the Smagorinsky viscosity.
     Ah_bg_xx,        &! The background biharmonic viscosity at h points, in units
@@ -518,6 +526,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
           Kh = Kh + 0.25*( (MEKE%Ku(I,J)+MEKE%Ku(I+1,J+1))    &
                           +(MEKE%Ku(I+1,J)+MEKE%Ku(I,J+1)) )
         endif
+        ! Place a floor on the viscosity, if desired.
+        Kh = MAX(Kh,CS%Kh_bg_min)
+        
         if (CS%better_bound_Kh) then
           if (Kh >= hrat_min*CS%Kh_Max_xy(I,J)) then
             visc_bound_rem = 0.0
@@ -584,7 +595,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                                     CS%DX2q(I,J) *str_xy(I,J))) * &
                      G%IareaCu(I,j)) / (0.5*(h(i+1,j,k) + h(i,j,k)) + h_neglect)
 
-      if (apply_OBC) then ; if (OBC%OBC_mask_u(I,j)) then
+      if (apply_OBC) then ; if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
         if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%radiation) diffu(I,j,k) = 0.0
       endif ; endif
     enddo ; enddo
@@ -596,7 +607,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                        G%IdxCv(i,J)*(CS%DX2h(i,j) *str_xx(i,j) - &
                                     CS%DX2h(i,j+1)*str_xx(i,j+1))) * &
                      G%IareaCv(i,J)) / (0.5*(h(i,j+1,k) + h(i,j,k)) + h_neglect)
-      if (apply_OBC) then ; if (OBC%OBC_mask_v(i,J)) then
+      if (apply_OBC) then ; if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
         if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%radiation) diffv(I,j,k) = 0.0
       endif ; endif
     enddo ; enddo
@@ -692,7 +703,7 @@ end subroutine horizontal_viscosity
 
 subroutine hor_visc_init(Time, G, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time
-  type(ocean_grid_type),   intent(in)    :: G
+  type(ocean_grid_type),   intent(inout) :: G
   type(param_file_type),   intent(in)    :: param_file
   type(diag_ctrl), target, intent(inout) :: diag
   type(hor_visc_CS), pointer             :: CS
@@ -740,7 +751,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   logical :: get_all       ! If true, read and log all parameters, regardless of
                            ! whether they are used, to enable spell-checking of
                            ! valid parameters.
-
+  character(len=64) :: inputdir, filename
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   integer :: i, j
@@ -785,6 +796,9 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
     call get_param(param_file, mod, "KH", Kh,                      &
                  "The background Laplacian horizontal viscosity.", &
                  units = "m2 s-1", default=0.0)
+    call get_param(param_file, mod, "KH_BG_MIN", CS%Kh_bg_min, &
+                 "The minimum value allowed for Laplacian horizontal viscosity, KH.", &
+                 units = "m2 s-1",  default=0.0)
     call get_param(param_file, mod, "KH_VEL_SCALE", Kh_vel_scale, &
                  "The velocity scale which is multiplied by the grid \n"//&
                  "spacing to calculate the Laplacian viscosity. \n"//&
@@ -877,6 +891,12 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
                  "is strongly encouraged, and no slip BCs are not used with \n"//&
                  "the biharmonic viscosity.", default=.false.)
 
+  call get_param(param_file, mod, "USE_KH_BG_2D", CS%use_Kh_bg_2d, &
+                 "If true, read a file containing 2-d background harmonic  \n"//&
+                 "viscosities. The final viscosity is the maximum of the other "//&
+                 "terms and this background value.", default=.false.)
+
+
   if (CS%bound_Kh .or. CS%bound_Ah .or. CS%better_bound_Kh .or. CS%better_bound_Ah) &
     call get_param(param_file, mod, "DT", dt, &
                  "The (baroclinic) dynamics time step.", units = "s", &
@@ -913,6 +933,18 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   endif
   ALLOC_(CS%reduction_xx(isd:ied,jsd:jed))     ; CS%reduction_xx(:,:) = 0.0
   ALLOC_(CS%reduction_xy(IsdB:IedB,JsdB:JedB)) ; CS%reduction_xy(:,:) = 0.0
+
+  if (CS%use_Kh_bg_2d) then
+    ALLOC_(CS%Kh_bg_2d(isd:ied,jsd:jed))     ; CS%Kh_bg_2d(:,:) = 0.0
+    call get_param(param_file, mod, "KH_BG_2D_FILENAME", filename, &
+                 'The filename containing a 2d map of "Kh".', &
+                 default='KH_background_2d.nc')
+    call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
+    inputdir = slasher(inputdir)
+    call read_data(trim(inputdir)//trim(filename), 'Kh', CS%Kh_bg_2d, &
+                   domain=G%domain%mpp_domain, timelevel=1)
+    call pass_var(CS%Kh_bg_2d, G%domain)
+  endif
 
   if (CS%biharmonic) then
     ALLOC_(CS%Idx2dyCu(IsdB:IedB,jsd:jed)) ; CS%Idx2dyCu(:,:) = 0.0
@@ -986,6 +1018,9 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
       if (CS%Smagorinsky_Kh) CS%LAPLAC_CONST_xx(i,j) = Smag_Lap_const * grid_sp_h2
 
       CS%Kh_bg_xx(i,j) = MAX(Kh, Kh_vel_scale * sqrt(grid_sp_h2))
+
+      if (CS%use_Kh_bg_2d) CS%Kh_bg_xx(i,j) = MAX(CS%Kh_bg_2d(i,j), CS%Kh_bg_xx(i,j))
+         
       if (CS%bound_Kh .and. .not.CS%better_bound_Kh) then
         CS%Kh_Max_xx(i,j) = Kh_Limit * grid_sp_h2
         CS%Kh_bg_xx(i,j) = MIN(CS%Kh_bg_xx(i,j), CS%Kh_Max_xx(i,j))
@@ -996,6 +1031,9 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
       if (CS%Smagorinsky_Kh) CS%LAPLAC_CONST_xy(I,J) = Smag_Lap_const * grid_sp_q2
 
       CS%Kh_bg_xy(I,J) = MAX(Kh, Kh_vel_scale * sqrt(grid_sp_q2))
+
+      if (CS%use_Kh_bg_2d) CS%Kh_bg_xy(i,j) = MAX(CS%Kh_bg_2d(i,j), CS%Kh_bg_xy(i,j))
+         
       if (CS%bound_Kh .and. .not.CS%better_bound_Kh) then
         CS%Kh_Max_xy(I,J) = Kh_Limit * grid_sp_q2
         CS%Kh_bg_xy(I,J) = MIN(CS%Kh_bg_xy(I,J), CS%Kh_Max_xy(I,J))

@@ -14,7 +14,7 @@ use MOM_checksums,       only : hchksum
 use MOM_error_handler,   only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser,     only : get_param, log_version, param_file_type
 use MOM_grid,            only : ocean_grid_type
-use MOM_open_boundary,   only : ocean_OBC_type, OBC_DIRECTION_E
+use MOM_open_boundary,   only : ocean_OBC_type, OBC_NONE, OBC_DIRECTION_E
 use MOM_open_boundary,   only : OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_tracer_registry, only : tracer_registry_type, tracer_type, MOM_tracer_chksum
 use MOM_verticalGrid,    only : verticalGrid_type
@@ -500,7 +500,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
       do_any_i = .false.
       do I=is-1,ie
         do_i(I) = .false.
-        if (OBC%OBC_mask_u(I,j) .and. uhr(I,j,k) /= 0.0) then
+        if (OBC%OBC_segment_u(I,j) /= OBC_NONE .and. uhr(I,j,k) /= 0.0) then
           ! Tracer fluxes are set to prescribed values only for inflows
           ! from masked areas.
           if (((uhr(I,j,k) > 0.0) .and. ((G%mask2dT(i,j) < 0.5) .or. &
@@ -762,7 +762,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
       do_any_i = .false.
       do i=is,ie
         do_i(i) = .false.
-        if (OBC%OBC_mask_v(i,J) .and. vhr(i,J,k) /= 0.0) then
+        if (OBC%OBC_segment_v(i,J) /= OBC_NONE .and. vhr(i,J,k) /= 0.0) then
         ! Tracer fluxes are set to prescribed values only for inflows
         ! from masked areas.
           if (((vhr(i,J,k) > 0.0) .and. ((G%mask2dT(i,j) < 0.5) .or. &
