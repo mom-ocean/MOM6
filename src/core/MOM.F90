@@ -504,6 +504,11 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   call cpu_clock_begin(id_clock_ocean)
   call cpu_clock_begin(id_clock_other)
 
+  if (CS%debug) then
+    call MOM_state_chksum("Beginning of step_MOM ", u, v, h, CS%uh, CS%vh, G, GV)
+    call hchksum(CS%h,"CS%h beginning of step_MOM",G%HI)
+  endif
+  
   showCallTree = callTree_showQuery()
   if (showCallTree) call callTree_enter("step_MOM(), MOM.F90")
 
@@ -1206,7 +1211,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       if (CS%id_Sady_2d   > 0) call post_data(CS%id_Sady_2d,   CS%S_ady_2d,   CS%diag)
       if (CS%id_Sdiffx_2d > 0) call post_data(CS%id_Sdiffx_2d, CS%S_diffx_2d, CS%diag)
       if (CS%id_Sdiffy_2d > 0) call post_data(CS%id_Sdiffy_2d, CS%S_diffy_2d, CS%diag)
-
+      
       if (CS%id_uhtr > 0) call post_data(CS%id_uhtr, CS%uhtr, CS%diag)
       if (CS%id_vhtr > 0) call post_data(CS%id_vhtr, CS%vhtr, CS%diag)
       
@@ -1507,12 +1512,13 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     last_iter = .false.
   endif
 
+  if(CS%debug) call hchksum(CS%h,"h at the start of new offline interval",G%HI)
+  
   if(CS%use_ALE_algorithm) then
     ! If this is the first iteration in the offline timestep, then we need to read in fields and
     ! perform the main advection.
     if (first_iter) then
-      if(is_root_pe()) print *, "Reading in new offline fields"
-      if(CS%debug) call hchksum(CS%h,"h at the start of new offline interval",G%HI)
+      if(is_root_pe()) print *, "Reading in new offline fields"      
       ! Read in new transport and other fields
       call transport_by_files(G, GV, CS%offline_CSp, h_end, eatr, ebtr, uhtr, vhtr, &
           khdt_x, khdt_y, temp_mean, salt_mean, fluxes, &

@@ -403,9 +403,18 @@ subroutine offline_redistribute_residual(CS, h_pre, h_end, uhtr, vhtr, converged
   
   ! Then check if there's any transport left and if so, distribute it equally
   ! throughout the rest of the water column
-  call distribute_residual_uh_barotropic(G, GV, h_new, uhr)
-  call distribute_residual_vh_barotropic(G, GV, h_new, vhr)
-!  call pass_vector(uhr,vhr,G%Domain)
+  if(x_before_y) then
+    call distribute_residual_uh_barotropic(G, GV, h_new, uhr)
+    call pass_var(h_new,G%Domain)
+    call distribute_residual_vh_barotropic(G, GV, h_new, vhr)
+    call pass_var(h_new,G%Domain)
+  else
+    call distribute_residual_vh_barotropic(G, GV, h_new, vhr)
+    call pass_var(h_new,G%Domain)
+    call distribute_residual_uh_barotropic(G, GV, h_new, uhr)
+    call pass_var(h_new,G%Domain)
+  endif
+  call pass_vector(uhr,vhr,G%Domain)
   if (CS%debug) then
     call hchksum(h_vol,"h_vol after barotropic redistribute",G%HI)
     call uchksum(uhr,"uhr after barotropic redistribute",G%HI)
@@ -726,7 +735,7 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
   vhtr(:,:,:) = 0.0
   eatr(:,:,:) = 0.0
   ebtr(:,:,:) = 0.0
-  h_end(:,:,:) = GV%Angstrom
+  h_end(:,:,:) = 0.0
   temp_mean(:,:,:) = 0.0
   salt_mean(:,:,:) = 0.0
   khdt_x(:,:) = 0.0
@@ -819,7 +828,7 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
   ! Apply masks at T, U, and V points
   do k=1,nz ; do j=js,je ; do i=is,ie
     if(G%mask2dT(i,j)<1.0) then
-      h_end(i,j,k) = 0.0
+      h_end(i,j,k) = GV%Angstrom
       eatr(i,j,k) = 0.0
       ebtr(i,j,k) = 0.0
       temp_mean(i,j,k) = 0.0
