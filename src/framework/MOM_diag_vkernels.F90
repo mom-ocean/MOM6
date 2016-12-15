@@ -105,11 +105,16 @@ subroutine reintegrate_column(nsrc, h_src, uh_src, ndest, h_dest, missing_value,
   real :: uh_src_rem, uh_dest_rem, duh ! Incremental amounts of stuff
   integer :: k_src, k_dest ! Index of cell in src and dest columns
   integer :: iter
+  logical :: src_ran_out, src_exists
+
+  uh_dest(:) = missing_value
 
   k_src = 0
   k_dest = 0
   h_dest_rem = 0.
   h_src_rem = 0.
+  src_ran_out = .false.
+  src_exists = .false.
 
   do while(.true.)
     if (h_src_rem==0. .and. k_src<nsrc) then
@@ -117,18 +122,26 @@ subroutine reintegrate_column(nsrc, h_src, uh_src, ndest, h_dest, missing_value,
       k_src = k_src + 1
       h_src_rem = h_src(k_src)
       uh_src_rem = uh_src(k_src)
+      if (h_src_rem==0.) cycle
+      src_exists = .true. ! This stops us masking out the entire column
     endif
     if (h_dest_rem==0. .and. k_dest<ndest) then
       ! Sink has no capacity so move to the next destination cell
       k_dest = k_dest + 1
       h_dest_rem = h_dest(k_dest)
       uh_dest(k_dest) = 0.
+      if (h_dest_rem==0.) cycle
+    endif
+    if (k_src==nsrc .and. h_src_rem==0.) then
+      if (src_ran_out) exit ! This is the second time implying there is no more src
+      src_ran_out = .true.
+      cycle
     endif
     duh = 0.
     if (h_src_rem<h_dest_rem) then
       ! The source cell is fully within the destination cell
       dh = h_src_rem
-      duh = uh_src_rem
+      if (dh>0.) duh = uh_src_rem
       h_src_rem = 0.
       uh_src_rem = 0.
       h_dest_rem = max(0., h_dest_rem - dh)
@@ -147,8 +160,10 @@ subroutine reintegrate_column(nsrc, h_src, uh_src, ndest, h_dest, missing_value,
       h_dest_rem = 0.
     endif
     uh_dest(k_dest) = uh_dest(k_dest) + duh
-    if (k_dest+k_src==nsrc+ndest) exit
+    if (k_dest==ndest .and. (k_src==nsrc .or. h_dest_rem==0.)) exit
   enddo
+
+  if (.not. src_exists) uh_dest(1:ndest) = missing_value
 
 end subroutine reintegrate_column
 
@@ -159,7 +174,7 @@ logical function diag_vkernels_unit_tests()
   logical :: fail
 
   write(0,*) '============ MOM_diag_kernels: diag_vkernels_unit_tests =================='
-  write(0,*) '- - - - - - - - - - reintegration tests  - - - - - - - - - - - - - - - - -'
+  write(0,*) '- - - - - - - - - - interpolation tests  - - - - - - - - - - - - - - - - -'
 
   fail = test_interp('Identity: 3 layer', &
                      3, (/1.,2.,3./), (/1.,2.,3.,4./), &
@@ -236,6 +251,26 @@ logical function diag_vkernels_unit_tests()
   fail = test_reintegrate('C: 3 layer to 4 with vanished top//middle/bottom', &
                      3, (/2.,2.,2./), (/-5.,2.,1./), &
                      5, (/0.,3.,0.,3.,0./), (/0.,-4.,0.,2.,0./) )
+  diag_vkernels_unit_tests = diag_vkernels_unit_tests .or. fail
+
+  fail = test_reintegrate('D: 3 layer to 3 (vanished)', &
+                     3, (/2.,2.,2./), (/-5.,2.,1./), &
+                     3, (/0.,0.,0./), (/0.,0.,0./) )
+  diag_vkernels_unit_tests = diag_vkernels_unit_tests .or. fail
+
+  fail = test_reintegrate('D: 3 layer (vanished) to 3', &
+                     3, (/0.,0.,0./), (/-5.,2.,1./), &
+                     3, (/2.,2.,2./), (/missing_value, missing_value, missing_value/) )
+  diag_vkernels_unit_tests = diag_vkernels_unit_tests .or. fail
+
+  fail = test_reintegrate('D: 3 layer (vanished) to 3 (vanished)', &
+                     3, (/0.,0.,0./), (/-5.,2.,1./), &
+                     3, (/0.,0.,0./), (/missing_value, missing_value, missing_value/) )
+  diag_vkernels_unit_tests = diag_vkernels_unit_tests .or. fail
+
+  fail = test_reintegrate('D: 3 layer (vanished) to 3 (vanished)', &
+                     3, (/0.,0.,0./), (/0.,0.,0./), &
+                     3, (/0.,0.,0./), (/missing_value, missing_value, missing_value/) )
   diag_vkernels_unit_tests = diag_vkernels_unit_tests .or. fail
 
   write(0,*) '=========================================================================='
