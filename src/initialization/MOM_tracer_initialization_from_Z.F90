@@ -23,7 +23,7 @@ use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : setVerticalGridAxes
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use MOM_EOS, only : int_specific_vol_dp
-use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord, ALE_remap_scalar
+use MOM_ALE, only : ALE_remap_scalar
 use MOM_regridding, only : regridding_CS
 use MOM_remapping, only : remapping_CS, initialize_remapping
 use MOM_remapping, only : remapping_core_h

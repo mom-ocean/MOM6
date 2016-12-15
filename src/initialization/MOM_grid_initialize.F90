@@ -180,8 +180,8 @@ subroutine grid_metrics_chksum(parent, G)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-  halo = min(ied-ie, jed-je)
-halo=1 ! AJA
+  halo = min(ied-ie, jed-je, 1)
+! halo=1 ! AJA
 
   do i=isd,ied ; do j=jsd,jed ; tempH(i,j) = G%dxT(i,j) ; enddo ; enddo
   call hchksum(tempH,trim(parent)//': dxT',G%HI, haloshift=halo)

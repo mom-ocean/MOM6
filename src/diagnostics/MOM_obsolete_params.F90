@@ -124,6 +124,7 @@ subroutine find_obsolete_params(param_file)
   call obsolete_char(param_file, "REF_COMPRESS_FILE_TEMP")
   call obsolete_char(param_file, "REF_COMPRESS_FILE_SALT")
   call obsolete_char(param_file, "REF_COMPRESS_FILE_DEPTH")
+  call obsolete_char(param_file, "DIAG_REMAP_Z_GRID_DEF", "Use NUM_DIAG_COORDS, DIAG_COORDS and DIAG_COORD_DEF_Z")
 
   call obsolete_logical(param_file, "OLD_RESTRAT_PARAM", .false.)
   call obsolete_real(param_file, "ML_RESTRAT_COEF", 0.0)

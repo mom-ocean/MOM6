@@ -63,7 +63,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_interface_heights, only : find_eta
-use MOM_io, only : create_file, fieldtype, flush_file, open_file, reopen_file
+use MOM_io, only : create_file, fieldtype, flush_file, open_file, reopen_file, get_filename_appendix
 use MOM_io, only : file_exists, slasher, vardesc, var_desc, write_field
 use MOM_io, only : APPEND_FILE, ASCII_FILE, SINGLE_FILE, WRITEONLY_FILE
 use MOM_time_manager, only : time_type, get_time, get_date, set_time, operator(>), operator(-)
@@ -181,6 +181,7 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_sum_output" ! This module's name.
   character(len=200) :: energyfile  ! The name of the energy file.
+  character(len=32) :: filename_appendix = '' !fms appendix to filename for ensemble runs 
 
   if (associated(CS)) then
     call MOM_error(WARNING, "MOM_sum_output_init called with associated control structure.")
@@ -231,6 +232,12 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
   call get_param(param_file, mod, "ENERGYFILE", energyfile, &
                  "The file to use to write the energies and globally \n"//&
                  "summed diagnostics.", default="ocean.stats")
+
+  !query fms_io if there is a filename_appendix (for ensemble runs)
+  call get_filename_appendix(filename_appendix)
+  if(len_trim(filename_appendix) > 0) then
+     energyfile = trim(energyfile) //'.'//trim(filename_appendix)
+  end if
 
   CS%energyfile = trim(slasher(directory))//trim(energyfile)
   call log_param(param_file, mod, "output_path/ENERGYFILE", CS%energyfile)
