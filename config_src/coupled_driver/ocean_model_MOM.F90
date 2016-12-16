@@ -71,6 +71,7 @@ use MOM_forcing_type, only : allocate_forcing_type
 use fms_mod, only : stdout
 use mpp_mod, only : mpp_chksum
 use MOM_domains, only : pass_var, pass_vector, TO_ALL, CGRID_NE, BGRID_NE
+use MOM_EOS, only : gsw_sp_from_sr, gsw_pt_from_ct
 
 #include <MOM_memory.h>
 
@@ -732,7 +733,6 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, maskmap)
 end subroutine initialize_ocean_public_type
 
 subroutine convert_state_to_ocean_type(state, Ocean_sfc, G, use_conT_absS, patm, press_to_z)
-  use gsw_mod_toolbox, only : gsw_sp_from_sr, gsw_pt_from_ct
   type(surface),           intent(inout) :: state
   type(ocean_public_type), target, intent(inout) :: Ocean_sfc
   type(ocean_grid_type),   intent(inout) :: G
