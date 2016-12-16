@@ -25,8 +25,9 @@ module MOM_EOS_TEOS10
 !*  sea water using the TEOS10 functions                               *
 !***********************************************************************
 
-!use gsw_mod_toolbox, only : gsw_sr_from_sp, gsw_ct_from_pt
+use gsw_mod_toolbox, only : gsw_sp_from_sr, gsw_pt_from_ct
 use gsw_mod_toolbox, only : gsw_rho, gsw_rho_first_derivatives, gsw_specvol_first_derivatives
+!use gsw_mod_toolbox, only : gsw_sr_from_sp, gsw_ct_from_pt
 
 implicit none ; private
 
@@ -34,6 +35,7 @@ public calculate_compress_teos10, calculate_density_teos10
 public calculate_density_derivs_teos10, calculate_2_densities_teos10
 public calculate_specvol_derivs_teos10
 public calculate_density_scalar_teos10, calculate_density_array_teos10
+public gsw_sp_from_sr, gsw_pt_from_ct
 
 interface calculate_density_teos10
   module procedure calculate_density_scalar_teos10, calculate_density_array_teos10
