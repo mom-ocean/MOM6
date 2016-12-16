@@ -9,13 +9,14 @@ use MOM_domains,          only : MOM_domain_type
 use MOM_file_parser,      only : log_version, param_file_type
 use MOM_grid,             only : ocean_grid_type
 use MOM_dyn_horgrid,      only : dyn_horgrid_type
-use MOM_string_functions, only : lowercase
+use MOM_string_functions, only : lowercase, slasher
 use MOM_verticalGrid,     only : verticalGrid_type
 
 use ensemble_manager_mod, only : get_ensemble_id
 use fms_mod,              only : write_version_number, open_namelist_file, check_nml_error
 use fms_io_mod,           only : file_exist, field_size, read_data
 use fms_io_mod,           only : field_exists => field_exist, io_infra_end=>fms_io_exit
+use fms_io_mod,           only : get_filename_appendix => get_filename_appendix
 use mpp_domains_mod,      only : domain1d, mpp_get_domain_components
 use mpp_domains_mod,      only : CENTER, CORNER, NORTH_FACE=>NORTH, EAST_FACE=>EAST
 use mpp_io_mod,           only : open_file => mpp_open, close_file => mpp_close
@@ -35,7 +36,7 @@ use netcdf
 
 implicit none ; private
 
-public :: close_file, create_file, field_exists, field_size, fieldtype
+public :: close_file, create_file, field_exists, field_size, fieldtype, get_filename_appendix
 public :: file_exists, flush_file, get_file_info, get_file_atts, get_file_fields
 public :: get_file_times, open_file, read_axis_data, read_data, read_field
 public :: num_timelevels, MOM_read_data, ensembler
@@ -716,28 +717,6 @@ subroutine safe_string_copy(str1, str2, fieldnm, caller)
   endif
   str2 = trim(str1)
 end subroutine safe_string_copy
-
-
-!> Returns a directory name that is terminated with a "/" or "./" if the
-!! argument is an empty string.
-function slasher(dir)
-  character(len=*), intent(in) :: dir
-  character(len=len(dir)) :: slasher
-
-  ! This function makes sure that dir is terminated with a "/" or if dir is
-  ! empty, sets dir to "./" .
-  if (len_trim(dir) == 0) then
-    if (len(dir) < 2) call MOM_error(FATAL, &
-        "Argument to MOM_io slasher must be at least two characters long.")
-    slasher = "./"
-  elseif (dir(len_trim(dir):len_trim(dir)) == '/') then
-    slasher = trim(dir)
-  else
-    if (len_trim(dir) == len(dir)) call MOM_error(FATAL, &
-        "Argument too short for MOM_io slasher to add needed slash to "//dir)
-    slasher = trim(dir)//"/"
-  endif
-end function slasher
 
 
 !> Returns a name with "%#E" or "%E" replaced with the ensemble member number.

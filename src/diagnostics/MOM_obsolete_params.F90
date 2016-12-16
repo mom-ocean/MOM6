@@ -46,6 +46,19 @@ subroutine find_obsolete_params(param_file)
   call obsolete_logical(param_file, "BT_CONT_BT_THICK", &
        hint="Instead use BT_THICK_SCHEME='FROM_BT_CONT'.")
 
+  call obsolete_logical(param_file, "APPLY_OBC_U", &
+       hint="Instead use OBC_NUMBER_SEGMENTS>0 and use the new segments protocol.")
+  call obsolete_logical(param_file, "APPLY_OBC_V", &
+       hint="Instead use OBC_NUMBER_SEGMENTS>0 and use the new segments protocol.")
+  call obsolete_logical(param_file, "APPLY_OBC_V_FLATHER_NORTH", &
+       hint="Instead use OBC_NUMBER_SEGMENTS>0 and use the new segments protocol.")
+  call obsolete_logical(param_file, "APPLY_OBC_V_FLATHER_SOUTH", &
+       hint="Instead use OBC_NUMBER_SEGMENTS>0 and use the new segments protocol.")
+  call obsolete_logical(param_file, "APPLY_OBC_U_FLATHER_EAST", &
+       hint="Instead use OBC_NUMBER_SEGMENTS>0 and use the new segments protocol.")
+  call obsolete_logical(param_file, "APPLY_OBC_U_FLATHER_WEST", &
+       hint="Instead use OBC_NUMBER_SEGMENTS>0 and use the new segments protocol.")
+
   test_logic3 = .true. ; call read_param(param_file,"ENABLE_THERMODYNAMICS",test_logic3)
   test_logic = .true. ; call read_param(param_file,"TEMPERATURE",test_logic)
   test_logic2 = .false. ; call read_param(param_file,"TEMPERATURE",test_logic2)
@@ -111,6 +124,7 @@ subroutine find_obsolete_params(param_file)
   call obsolete_char(param_file, "REF_COMPRESS_FILE_TEMP")
   call obsolete_char(param_file, "REF_COMPRESS_FILE_SALT")
   call obsolete_char(param_file, "REF_COMPRESS_FILE_DEPTH")
+  call obsolete_char(param_file, "DIAG_REMAP_Z_GRID_DEF", "Use NUM_DIAG_COORDS, DIAG_COORDS and DIAG_COORD_DEF_Z")
 
   call obsolete_logical(param_file, "OLD_RESTRAT_PARAM", .false.)
   call obsolete_real(param_file, "ML_RESTRAT_COEF", 0.0)
@@ -137,6 +151,8 @@ subroutine find_obsolete_params(param_file)
   call obsolete_real(param_file, "RLAY_REF")
 
   call obsolete_real(param_file, "HMIX")
+  call obsolete_real(param_file, "VSTAR_SCALE_COEF")
+  call obsolete_real(param_file, "ZSTAR_RIGID_SURFACE_THRESHOLD")
 
   test_int = -1 ; call read_param(param_file,"ML_RADIATION_CODING",test_int)
   if (test_int == 1) call MOM_ERROR(FATAL, "find_obsolete_params: "// &

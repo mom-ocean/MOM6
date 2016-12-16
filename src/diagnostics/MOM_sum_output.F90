@@ -63,7 +63,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_interface_heights, only : find_eta
-use MOM_io, only : create_file, fieldtype, flush_file, open_file, reopen_file
+use MOM_io, only : create_file, fieldtype, flush_file, open_file, reopen_file, get_filename_appendix
 use MOM_io, only : file_exists, slasher, vardesc, var_desc, write_field
 use MOM_io, only : APPEND_FILE, ASCII_FILE, SINGLE_FILE, WRITEONLY_FILE
 use MOM_time_manager, only : time_type, get_time, get_date, set_time, operator(>), operator(-)
@@ -181,6 +181,7 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_sum_output" ! This module's name.
   character(len=200) :: energyfile  ! The name of the energy file.
+  character(len=32) :: filename_appendix = '' !fms appendix to filename for ensemble runs 
 
   if (associated(CS)) then
     call MOM_error(WARNING, "MOM_sum_output_init called with associated control structure.")
@@ -231,6 +232,12 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
   call get_param(param_file, mod, "ENERGYFILE", energyfile, &
                  "The file to use to write the energies and globally \n"//&
                  "summed diagnostics.", default="ocean.stats")
+
+  !query fms_io if there is a filename_appendix (for ensemble runs)
+  call get_filename_appendix(filename_appendix)
+  if(len_trim(filename_appendix) > 0) then
+     energyfile = trim(energyfile) //'.'//trim(filename_appendix)
+  end if
 
   CS%energyfile = trim(slasher(directory))//trim(energyfile)
   call log_param(param_file, mod, "output_path/ENERGYFILE", CS%energyfile)
@@ -474,7 +481,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
         enddo ; enddo ; enddo
         mass_tot = reproducing_sum(tmp1, sums=mass_lay, EFP_sum=mass_EFP)
 
-        call find_eta(h, tv, G%g_Earth, G, GV, eta)
+        call find_eta(h, tv, GV%g_Earth, G, GV, eta)
         do k=1,nz ; do j=js,je ; do i=is,ie
           tmp1(i,j,k) = (eta(i,j,K)-eta(i,j,K+1)) * areaTm(i,j)
         enddo ; enddo ; enddo
@@ -494,7 +501,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
         enddo ; enddo
       enddo
       if (CS%do_APE_calc) then
-        call find_eta(h, tv, G%g_Earth, G, GV, eta)
+        call find_eta(h, tv, GV%g_Earth, G, GV, eta)
 
         do k=1,nz
           vol_lay(k) = 0.0
@@ -1056,8 +1063,8 @@ subroutine accumulate_net_input(fluxes, state, dt, G, CS)
     if (ASSOCIATED(state%frazil)) then ; do j=js,je ; do i=is,ie
       heat_in(i,j) = heat_in(i,j) + G%areaT(i,j) * state%frazil(i,j)
     enddo ; enddo ; endif
-    if (ASSOCIATED(fluxes%heat_restore)) then ; do j=js,je ; do i=is,ie
-      heat_in(i,j) = heat_in(i,j) + dt*G%areaT(i,j)*fluxes%heat_restore(i,j)
+    if (ASSOCIATED(fluxes%heat_added)) then ; do j=js,je ; do i=is,ie
+      heat_in(i,j) = heat_in(i,j) + dt*G%areaT(i,j)*fluxes%heat_added(i,j)
     enddo ; enddo ; endif
 !    if (ASSOCIATED(state%sw_lost)) then ; do j=js,je ; do i=is,ie
 !      heat_in(i,j) = heat_in(i,j) - G%areaT(i,j) * state%sw_lost(i,j)

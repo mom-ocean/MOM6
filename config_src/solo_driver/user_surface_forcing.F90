@@ -263,7 +263,7 @@ subroutine USER_buoyancy_forcing(state, fluxes, day, dt, G, CS)
 
   if (CS%restorebuoy) then
     if (CS%use_temperature) then
-      call alloc_if_needed(fluxes%heat_restore, isd, ied, jsd, jed)
+      call alloc_if_needed(fluxes%heat_added, isd, ied, jsd, jed)
       !   When modifying the code, comment out this error message.  It is here
       ! so that the original (unmodified) version is not accidentally used.
       call MOM_error(FATAL, "User_buoyancy_surface_forcing: " // &
@@ -276,7 +276,7 @@ subroutine USER_buoyancy_forcing(state, fluxes, day, dt, G, CS)
         Temp_restore = 0.0
         Salin_restore = 0.0
 
-        fluxes%heat_restore(i,j) = (G%mask2dT(i,j) * (rhoXcp * CS%Flux_const)) * &
+        fluxes%heat_added(i,j) = (G%mask2dT(i,j) * (rhoXcp * CS%Flux_const)) * &
             (Temp_restore - state%SST(i,j)) 
         fluxes%vprec(i,j) = - (G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)) * &
             ((Salin_restore - state%SSS(i,j)) / &

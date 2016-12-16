@@ -11,7 +11,7 @@ module MOM_mixed_layer_restrat
 use MOM_checksums,     only : hchksum
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
-use MOM_diag_mediator, only : diag_update_target_grids
+use MOM_diag_mediator, only : diag_update_remap_grids
 use MOM_domains,       only : pass_var
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_version, param_file_type
@@ -204,8 +204,8 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV,
     if (.not. associated(MLD)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "Argument MLD was not associated!")
     if (CS%debug) then
-      call hchksum(CS%MLD_filtered,'mixed_layer_restrat: MLD_filtered',G,haloshift=1)
-      call hchksum(MLD,'mixed_layer_restrat: MLD in',G,haloshift=1)
+      call hchksum(CS%MLD_filtered,'mixed_layer_restrat: MLD_filtered',G%HI,haloshift=1)
+      call hchksum(MLD,'mixed_layer_restrat: MLD in',G%HI,haloshift=1)
     endif
     aFac = CS%MLE_MLD_decay_time / ( dt + CS%MLE_MLD_decay_time )
     bFac = dt / ( dt + CS%MLE_MLD_decay_time )
@@ -223,7 +223,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV,
 
   uDml(:) = 0.0 ; vDml(:) = 0.0
   I4dt = 0.25 / dt
-  g_Rho0 = G%g_Earth/GV%Rho0
+  g_Rho0 = GV%g_Earth/GV%Rho0
   h_neglect = GV%H_subroundoff
   dz_neglect = GV%H_subroundoff*GV%H_to_m
 
@@ -256,10 +256,10 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV,
   enddo
 
   if (CS%debug) then
-    call hchksum(h,'mixed_layer_restrat: h',G,haloshift=1)
-    call hchksum(fluxes%ustar,'mixed_layer_restrat: u*',G,haloshift=1)
-    call hchksum(CS%MLD,'mixed_layer_restrat: MLD',G,haloshift=1)
-    call hchksum(Rml_av,'mixed_layer_restrat: rml',G,haloshift=1)
+    call hchksum(h,'mixed_layer_restrat: h',G%HI,haloshift=1)
+    call hchksum(fluxes%ustar,'mixed_layer_restrat: u*',G%HI,haloshift=1)
+    call hchksum(CS%MLD,'mixed_layer_restrat: MLD',G%HI,haloshift=1)
+    call hchksum(Rml_av,'mixed_layer_restrat: rml',G%HI,haloshift=1)
   endif
 
 ! TO DO:
@@ -372,7 +372,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV,
   ! Whenever thickness changes let the diag manager know, target grids
   ! for vertical remapping may need to be regenerated.
   ! This needs to happen after the H update and before the next post_data.
-  call diag_update_target_grids(CS%diag)
+  call diag_update_remap_grids(CS%diag)
 
   ! Offer diagnostic fields for averaging.
   if (query_averaging_enabled(CS%diag)) then
@@ -465,7 +465,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, GV, CS)
 
   uDml(:)    = 0.0 ; vDml(:) = 0.0
   I4dt       = 0.25 / dt
-  g_Rho0     = G%g_Earth/GV%Rho0
+  g_Rho0     = GV%g_Earth/GV%Rho0
   use_EOS    = associated(tv%eqn_of_state)
   h_neglect  = GV%H_subroundoff
   dz_neglect = GV%H_subroundoff*GV%H_to_m
@@ -612,7 +612,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, GV, CS)
 
   ! Whenever thickness changes let the diag manager know, target grids
   ! for vertical remapping may need to be regenerated.
-  call diag_update_target_grids(CS%diag)
+  call diag_update_remap_grids(CS%diag)
 
   ! Offer diagnostic fields for averaging.
   if (query_averaging_enabled(CS%diag) .and. &
@@ -712,12 +712,14 @@ logical function mixedlayer_restrat_init(Time, G, GV, param_file, diag, CS)
   else ; flux_units = "kilogram second-1" ; endif
 
   CS%id_uhml = register_diag_field('ocean_model', 'uhml', diag%axesCuL, Time, &
-      'Zonal Thickness Flux to Restratify Mixed Layer', flux_units)
+      'Zonal Thickness Flux to Restratify Mixed Layer', flux_units, &
+      y_cell_method='sum', v_extensive=.true.)
   CS%id_vhml = register_diag_field('ocean_model', 'vhml', diag%axesCvL, Time, &
-      'Meridional Thickness Flux to Restratify Mixed Layer', flux_units)
+      'Meridional Thickness Flux to Restratify Mixed Layer', flux_units, &
+      x_cell_method='sum', v_extensive=.true.)
   CS%id_urestrat_time = register_diag_field('ocean_model', 'MLu_restrat_time', diag%axesCu1, Time, &
       'Mixed Layer Zonal Restratification Timescale', 'second')
-  CS%id_vrestrat_time = register_diag_field('ocean_model', 'MLv_restrat_time', diag%axesCu1, Time, &
+  CS%id_vrestrat_time = register_diag_field('ocean_model', 'MLv_restrat_time', diag%axesCv1, Time, &
       'Mixed Layer Meridional Restratification Timescale', 'second')
   CS%id_MLD = register_diag_field('ocean_model', 'MLD_restrat', diag%axesT1, Time, &
       'Mixed Layer Depth as used in the mixed-layer restratification parameterization', 'meter')

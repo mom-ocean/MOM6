@@ -71,7 +71,7 @@ use MOM_checksum_packages, only : MOM_state_chksum, MOM_state_stats
 use MOM_cpu_clock,         only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,         only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator,     only : post_data, register_diag_field, safe_alloc_ptr
-use MOM_diag_mediator,     only : diag_ctrl, time_type! , diag_update_target_grids
+use MOM_diag_mediator,     only : diag_ctrl, time_type
 use MOM_EOS,               only : calculate_density, calculate_TFreeze
 use MOM_EOS,               only : calculate_specific_vol_derivs
 use MOM_error_handler,     only : MOM_error, FATAL, WARNING, callTree_showQuery
@@ -100,9 +100,9 @@ type, public :: diabatic_aux_CS ; private
                                    !! at the river mouths to "rivermix_depth" meters
   real    :: rivermix_depth = 0.0  !< The depth to which rivers are mixed if
                                    !! do_rivermix = T, in m.
-  real    :: minimum_forcing_depth = 0.001 !< The smallest depth over which forcing is
+  real, public    :: minimum_forcing_depth = 0.001 !< The smallest depth over which forcing is
                                    !! applied, in m.
-  real    :: evap_CFL_limit = 0.8  !< The largest fraction of a layer that can be
+  real, public    :: evap_CFL_limit = 0.8  !< The largest fraction of a layer that can be
                                    !! evaporated in one time-step (non-dim).
 
   logical :: reclaim_frazil  !<   If true, try to use any frazil heat deficit to
@@ -574,7 +574,6 @@ subroutine triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, T, S)
   real :: c1(SZIB_(G),SZK_(G))       ! tridiagonal solver.
   real :: h_tr, b_denom_1
   integer :: i, j, k
-
 !$OMP parallel do default(none) shared(is,ie,js,je,G,GV,hold,eb,T,S,ea) &
 !$OMP                          private(h_tr,b1,d1,c1,b_denom_1)
   do j=js,je
@@ -746,7 +745,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, dia
       subMLN2(:,j) = 0.
       rho1(:) = 0.
       d1(:) = 0.
-      pRef_N2(:) = G%g_Earth * GV%Rho0 * h(:,j,1) * GV%H_to_m ! Boussinesq approximation!!!! ?????
+      pRef_N2(:) = GV%g_Earth * GV%Rho0 * h(:,j,1) * GV%H_to_m ! Boussinesq approximation!!!! ?????
     endif
     do k = 2, nz
       dKm1(:) = dK(:) ! Depth of center of layer K-1
@@ -754,7 +753,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, dia
 
       ! Stratification, N2, immediately below the mixed layer, averaged over at least 50 m.
       if (id_N2>0) then
-        pRef_N2(:) = pRef_N2(:) + G%g_Earth * GV%Rho0 * h(:,j,k) * GV%H_to_m ! Boussinesq approximation!!!! ?????
+        pRef_N2(:) = pRef_N2(:) + GV%g_Earth * GV%Rho0 * h(:,j,k) * GV%H_to_m ! Boussinesq approximation!!!! ?????
         call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_N2, rhoAtK, is, ie-is+1, tv%eqn_of_state)
         do i = is, ie
           if (MLD(i,j)>0. .and. subMLN2(i,j)==0.) then ! This block is below the mixed layer
@@ -762,10 +761,10 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, dia
               rho1(i) = rhoAtK(i)
               d1(i) = dK(i)
               ! Use pressure at the bottom of the upper layer used in calculating d/dz rho
-              pRef_N2(i) = pRef_N2(i) + G%g_Earth * GV%Rho0 * h(i,j,k) * GV%H_to_m ! Boussinesq approximation!!!! ?????
+              pRef_N2(i) = pRef_N2(i) + GV%g_Earth * GV%Rho0 * h(i,j,k) * GV%H_to_m ! Boussinesq approximation!!!! ?????
             endif
             if (d1(i)>0. .and. dK(i)-d1(i)>=dz_subML) then
-              subMLN2(i,j) = G%g_Earth/ GV%Rho0 * (rho1(i)-rhoAtK(i)) / (d1(i) - dK(i))
+              subMLN2(i,j) = GV%g_Earth/ GV%Rho0 * (rho1(i)-rhoAtK(i)) / (d1(i) - dK(i))
             endif
           endif
         enddo ! i-loop
@@ -789,7 +788,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, dia
       if ((MLD(i,j)==0.) .and. (deltaRhoAtK(i)<densityDiff)) MLD(i,j) = dK(i) ! Assume mixing to the bottom
    !  if (id_N2>0 .and. subMLN2(i,j)==0. .and. d1(i)>0. .and. dK(i)-d1(i)>0.) then
    !    ! Use what ever stratification we can, measured over what ever distance is available
-   !    subMLN2(i,j) = G%g_Earth/ GV%Rho0 * (rho1(i)-rhoAtK(i)) / (d1(i) - dK(i))
+   !    subMLN2(i,j) = GV%g_Earth/ GV%Rho0 * (rho1(i)-rhoAtK(i)) / (d1(i) - dK(i))
    !  endif
     enddo
   enddo ! j-loop
@@ -803,15 +802,14 @@ end subroutine diagnoseMLDbyDensityDifference
 !> Update the thickness, temperature, and salinity due to thermodynamic
 !! boundary forcing (contained in fluxes type) applied to h, tv%T and tv%S,
 !! and calculate the TKE implications of this heating.
-subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
+subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
                                     aggregate_FW_forcing, cTKE, dSV_dT, dSV_dS)
   type(diabatic_aux_CS),                 pointer       :: CS !< Control structure for diabatic_aux
   type(ocean_grid_type),                 intent(in)    :: G  !< Grid structure
-  type(verticalGrid_type),               intent(in) :: GV        !< ocean vertical grid structure
+  type(verticalGrid_type),               intent(in)    :: GV        !< ocean vertical grid structure
   real,                                  intent(in)    :: dt !< Time-step over which forcing is applied (s)
   type(forcing),                         intent(inout) :: fluxes !< Surface fluxes container
   type(optics_type),                     pointer       :: optics !< Optical properties container
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: ea !< The entrainment distance at interfaces (H units)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thickness in H units
   type(thermo_var_ptrs),                 intent(inout) :: tv !< Thermodynamics container
   !> If False, treat in/out fluxes separately.
@@ -862,8 +860,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
   Idt = 1.0/dt
 
   calculate_energetics = (present(cTKE) .and. present(dSV_dT) .and. present(dSV_dS))
-  I_G_Earth = 1.0 / G%G_earth
-  g_Hconv2 = G%G_earth * GV%H_to_kg_m2**2
+  I_G_Earth = 1.0 / GV%g_Earth
+  g_Hconv2 = GV%g_Earth * GV%H_to_kg_m2**2
 
   if (present(cTKE)) cTKE(:,:,:) = 0.0
 
@@ -879,7 +877,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
   numberOfGroundings = 0
 
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,h,tv,nsw,G,GV,optics,fluxes,dt,    &
-!$OMP                                  H_limit_fluxes,ea,IforcingDepthScale,             &
+!$OMP                                  H_limit_fluxes,IforcingDepthScale,                &
 !$OMP                                  numberOfGroundings,iGround,jGround,nonPenSW,      &
 !$OMP                                  hGrounding,CS,Idt,aggregate_FW_forcing,           &
 !$OMP                                  calculate_energetics,dSV_dT,dSV_dS,cTKE,g_Hconv2) &
@@ -908,7 +906,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
       do i=is,ie ; pres(i) = 0.0 ; enddo ! Add surface pressure?
       do k=1,nz
         do i=is,ie
-          d_pres(i) = G%g_Earth * GV%H_to_kg_m2 * h2d(i,k)
+          d_pres(i) = GV%g_Earth * GV%H_to_kg_m2 * h2d(i,k)
           p_lay(i) = pres(i) + 0.5*d_pres(i)
           pres(i) = pres(i) + d_pres(i)
         enddo
@@ -945,13 +943,15 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
 
     ! ea is for passive tracers
     do i=is,ie
-      ea(i,j,1) = netMassInOut(i)
+    !  ea(i,j,1) = netMassInOut(i)
       if (aggregate_FW_forcing) then
         netMassOut(i) = netMassInOut(i)
         netMassIn(i) = 0.
       else
         netMassIn(i) = netMassInOut(i) - netMassOut(i)
       endif
+      fluxes%netMassOut(i,j) = netMassOut(i)
+      fluxes%netMassIn(i,j) = netMassIn(i)
     enddo
 
     ! Apply the surface boundary fluxes in three steps:
@@ -973,7 +973,6 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
           ! Update the forcing by the part to be consumed within the present k-layer.
           ! If fractionOfForcing = 1, then updated netMassIn, netHeat, and netSalt vanish.
           netMassIn(i) = netMassIn(i) - dThickness
-
           ! This line accounts for the temperature of the mass exchange
           Temp_in = T2d(i,k)
           Salin_in = 0.0
@@ -1044,6 +1043,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
           endif
 
           ! Change in state due to forcing
+
           dThickness = max( fractionOfForcing*netMassOut(i), -h2d(i,k) )
           dTemp      = fractionOfForcing*netHeat(i)
           !   ### The 0.9999 here should become a run-time parameter?
@@ -1072,6 +1072,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
           ! Update state by the appropriate increment.
           hOld     = h2d(i,k)               ! Keep original thickness in hand
           h2d(i,k) = h2d(i,k) + dThickness  ! New thickness
+
           if (h2d(i,k) > 0.) then
             if (calculate_energetics) then
               ! Calculate the energy required to mix the newly added water over
@@ -1216,13 +1217,14 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, ea, h, tv, &
 end subroutine applyBoundaryFluxesInOut
 
 
-subroutine diabatic_aux_init(Time, G, GV, param_file, diag, CS, use_ePBL)
+subroutine diabatic_aux_init(Time, G, GV, param_file, diag, CS, useALEalgorithm, use_ePBL)
   type(time_type),         intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
   type(verticalGrid_type),               intent(in)    :: GV
   type(param_file_type),   intent(in)    :: param_file
   type(diag_ctrl), target, intent(inout) :: diag
   type(diabatic_aux_CS),   pointer       :: CS
+  logical,                 intent(in)    :: useALEalgorithm
   logical,                 intent(in)    :: use_ePBL
 
 ! Arguments:
@@ -1306,40 +1308,40 @@ subroutine diabatic_aux_init(Time, G, GV, param_file, diag, CS, use_ePBL)
     CS%use_calving_heat_content = .false.
   endif
 
-  CS%id_createdH = register_diag_field('ocean_model',"created_H",diag%axesT1, &
-      Time, "The volume flux added to stop the ocean from drying out and becoming negative in depth", &
-      "meter second-1")
-  if (CS%id_createdH>0) allocate(CS%createdH(isd:ied,jsd:jed))
+  if (useALEalgorithm) then
+    CS%id_createdH = register_diag_field('ocean_model',"created_H",diag%axesT1, &
+        Time, "The volume flux added to stop the ocean from drying out and becoming negative in depth", &
+        "meter second-1")
+    if (CS%id_createdH>0) allocate(CS%createdH(isd:ied,jsd:jed))
 
+    ! diagnostic for heating of a grid cell from convergence of SW heat into the cell
+    CS%id_penSW_diag = register_diag_field('ocean_model', 'rsdoabsorb',                     &
+          diag%axesTL, Time, 'Convergence of Penetrative Shortwave Flux in Sea Water Layer',&
+          'Watt meter-2', standard_name='net_rate_of_absorption_of_shortwave_energy_in_ocean_layer')
 
-  ! diagnostic for heating of a grid cell from convergence of SW heat into the cell
-  CS%id_penSW_diag = register_diag_field('ocean_model', 'rsdoabsorb',                     &
-        diag%axesTL, Time, 'Convergence of Penetrative Shortwave Flux in Sea Water Layer',&
-        'Watt meter-2', standard_name='net_rate_of_absorption_of_shortwave_energy_in_ocean_layer')
+    ! diagnostic for penetrative SW heat flux at top interface of tracer cell (nz+1 interfaces)
+    ! k=1 gives penetrative SW at surface; SW(k=nz+1)=0 (no penetration through rock).
+    CS%id_penSWflux_diag = register_diag_field('ocean_model', 'rsdo',                               &
+          diag%axesTi, Time, 'Downwelling Shortwave Flux in Sea Water at Grid Cell Upper Interface',&
+          'Watt meter-2', standard_name='downwelling_shortwave_flux_in_sea_water')
 
-  ! diagnostic for penetrative SW heat flux at top interface of tracer cell (nz+1 interfaces)
-  ! k=1 gives penetrative SW at surface; SW(k=nz+1)=0 (no penetration through rock).
-  CS%id_penSWflux_diag = register_diag_field('ocean_model', 'rsdo',                               &
-        diag%axesTi, Time, 'Downwelling Shortwave Flux in Sea Water at Grid Cell Upper Interface',&
-        'Watt meter-2', standard_name='downwelling_shortwave_flux_in_sea_water')
+    ! need both arrays for the SW diagnostics (one for flux, one for convergence)
+    if (CS%id_penSW_diag>0 .or. CS%id_penSWflux_diag>0) then
+       allocate(CS%penSW_diag(isd:ied,jsd:jed,nz))
+       CS%penSW_diag(:,:,:) = 0.0
+       allocate(CS%penSWflux_diag(isd:ied,jsd:jed,nz+1))
+       CS%penSWflux_diag(:,:,:) = 0.0
+    endif
 
-  ! need both arrays for the SW diagnostics (one for flux, one for convergence)
-  if (CS%id_penSW_diag>0 .or. CS%id_penSWflux_diag>0) then
-     allocate(CS%penSW_diag(isd:ied,jsd:jed,nz))
-     CS%penSW_diag(:,:,:) = 0.0
-     allocate(CS%penSWflux_diag(isd:ied,jsd:jed,nz+1))
-     CS%penSWflux_diag(:,:,:) = 0.0
-  endif
-
-
-  ! diagnostic for non-downwelling SW radiation (i.e., SW absorbed at ocean surface)
-  CS%id_nonpenSW_diag = register_diag_field('ocean_model', 'nonpenSW',                       &
-        diag%axesT1, Time,                                                                   &
-        'Non-downwelling SW radiation (i.e., SW absorbed in ocean surface with LW,SENS,LAT)',&
-        'Watt meter-2', standard_name='nondownwelling_shortwave_flux_in_sea_water')
-  if (CS%id_nonpenSW_diag > 0) then
-     allocate(CS%nonpenSW_diag(isd:ied,jsd:jed))
-     CS%nonpenSW_diag(:,:) = 0.0
+    ! diagnostic for non-downwelling SW radiation (i.e., SW absorbed at ocean surface)
+    CS%id_nonpenSW_diag = register_diag_field('ocean_model', 'nonpenSW',                       &
+          diag%axesT1, Time,                                                                   &
+          'Non-downwelling SW radiation (i.e., SW absorbed in ocean surface with LW,SENS,LAT)',&
+          'Watt meter-2', standard_name='nondownwelling_shortwave_flux_in_sea_water')
+    if (CS%id_nonpenSW_diag > 0) then
+       allocate(CS%nonpenSW_diag(isd:ied,jsd:jed))
+       CS%nonpenSW_diag(:,:) = 0.0
+    endif
   endif
 
   id_clock_uv_at_h = cpu_clock_id('(Ocean find_uv_at_h)', grain=CLOCK_ROUTINE)
