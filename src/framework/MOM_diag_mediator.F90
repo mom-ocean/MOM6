@@ -461,7 +461,6 @@ subroutine define_axes_group(diag_cs, handles, axes, nz, vertical_coordinate_num
   axes%rank = n
   axes%handles(:) = handles(:)
   axes%diag_cs => diag_cs ! A [circular] link back to the diag_cs structure
-
   if (present(x_cell_method)) then
     if (axes%rank<2) call MOM_error(FATAL, 'define_axes_group: ' // &
                                            'Can not set x_cell_method for rank<2.')
@@ -929,7 +928,6 @@ subroutine post_xy_average(diag_cs, diag, field)
   type(diag_type),   intent(in) :: diag !< This diagnostic
   real,    target,   intent(in) :: field(:,:,:) !< Diagnostic field
   type(diag_ctrl),   intent(in) :: diag_cs !< Diagnostics mediator control structure
-
   ! Local variable
   real, dimension(size(field,3)) :: averaged_field
   logical :: staggered_in_x, staggered_in_y, used
@@ -968,7 +966,6 @@ subroutine post_xy_average(diag_cs, diag, field)
 
   used = send_data(diag%fms_xyave_diag_id, averaged_field, diag_cs%time_end, &
                    weight=diag_cs%time_int)
-
 end subroutine post_xy_average
 
 subroutine enable_averaging(time_int_in, time_end_in, diag_cs)
