@@ -42,7 +42,7 @@ module MOM_diag_to_Z
 !*  The boundaries always run through q grid points (x).               *
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
-
+use MOM_domains,       only : pass_var
 use MOM_coms,          only : reproducing_sum
 use MOM_diag_mediator, only : post_data, post_data_1d_k, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl, time_type, diag_axis_init
@@ -153,32 +153,40 @@ function global_z_mean(var,G,CS,tracer)
   global_weight_scalar = reproducing_sum(weight,sums=weightij)
 
   do k=1, nz
-    global_z_mean(k) = scalarij(k) / weightij(k)
+    if (scalarij(k) == 0) then
+        global_z_mean(k) = 0.0
+    else
+        global_z_mean(k) = scalarij(k) / weightij(k)
+    endif
   enddo
 
 end function global_z_mean
 
-subroutine calculate_Z_diag_fields(u, v, h, dt, G, GV, CS)
+subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, dt, G, GV, CS)
   type(ocean_grid_type),                     intent(inout) :: G
   type(verticalGrid_type),                   intent(in)    :: GV
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
+  real, dimension(SZI_(G),SZJ_(G)),          intent(in)    :: ssh_in
+  real, dimension(:,:),                      pointer       :: frac_shelf_h
   real,                                      intent(in)    :: dt
   type(diag_to_Z_CS),                        pointer       :: CS
 
 ! This subroutine maps tracers and velocities into depth space for diagnostics. 
 
 ! Arguments: 
-!  (in)  u  - zonal velocity component (m/s)
-!  (in)  v  - meridional velocity component (m/s)
-!  (in)  h  - layer thickness (meter or kg/m2)
-!  (in)  dt - time difference in sec since last call to this subroutine
-!  (in)  G  - ocean grid structure
-!  (in)  GV - The ocean's vertical grid structure.
-!  (in)  CS - control structure returned by previous call to diagnostics_init
+!  (in)  u   - zonal velocity component (m/s)
+!  (in)  v   - meridional velocity component (m/s)
+!  (in)  h   - layer thickness (meter or kg/m2)
+!  (in)  ssh_in - sea surface height (meter or kg/m2) 
+!  (in)  dt  - time difference in sec since last call to this subroutine
+!  (in)  G   - ocean grid structure
+!  (in)  GV  - The ocean's vertical grid structure.
+!  (in)  CS  - control structure returned by previous call to diagnostics_init
 
   ! Note the deliberately reversed axes in h_f, u_f, v_f, and tr_f.
+  real :: ssh(SZI_(G),SZJ_(G))   ! copy of ssh_in (meter or kg/m2)
   real :: e(SZK_(G)+2)           ! z-star interface heights (meter or kg/m2)
   real :: h_f(SZK_(G)+1,SZI_(G)) ! thicknesses of massive layers (meter or kg/m2)
   real :: u_f(SZK_(G)+1,SZIB_(G))! zonal velocity component in any massive layer
@@ -187,7 +195,8 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, GV, CS)
   real :: tr_f(SZK_(G),max(CS%num_tr_used,1),SZI_(G)) ! tracer concentration in massive layers
   integer :: nk_valid(SZIB_(G))  ! number of massive layers in a column
 
-  real :: D_pt(SZIB_(G)) ! bottom depth (meter or kg/m2)
+  real :: D_pt(SZIB_(G))        ! bottom depth (meter or kg/m2)
+  real :: shelf_depth(SZIB_(G)) ! ice shelf depth (meter or kg/m2)
   real :: htot           ! summed layer thicknesses (meter or kg/m2)
   real :: dilate         ! proportion by which to dilate every layer
   real :: wt(SZK_(G)+1)  ! fractional weight for each layer in the
@@ -204,18 +213,25 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, GV, CS)
 
   real :: layer_ave(CS%nk_zspace)
 
-  logical :: linear_velocity_profiles = .true.
+  logical :: linear_velocity_profiles, ice_shelf
 
   integer :: k_top, k_bot, k_bot_prev
   integer :: i, j, k, k2, kz, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nk, m, nkml
-
+  integer :: IsgB, IegB, JsgB, JegB
   is   = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nk = G%ke
   Isq  = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
+  IsgB = G%IsgB ; IegB = G%IegB ; JsgB = G%JsgB ; JegB = G%JegB
   nkml = max(GV%nkml, 1)
   Angstrom = GV%Angstrom
+  ssh(:,:) = ssh_in
+  linear_velocity_profiles = .true.
+  ! Update the halos
+  call pass_var(ssh, G%Domain)
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "diagnostic_fields_zstar: Module must be initialized before it is used.")
+
+  ice_shelf = associated(frac_shelf_h)
 
   ! If no fields are needed, return
   if ((CS%id_u_z <= 0) .and. (CS%id_v_z <= 0) .and. (CS%num_tr_used < 1)) return
@@ -227,10 +243,18 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, GV, CS)
       CS%u_z(I,j,kz) = CS%missing_vel
     enddo ; enddo ; enddo
 
+    
     do j=js,je
+      shelf_depth(:) = 0. ! initially all is open ocean
       ! Remove all massless layers.
       do I=Isq,Ieq
-        nk_valid(I) = 0 ; D_pt(I) = 0.5*(G%bathyT(i+1,j)+G%bathyT(i,j))
+        nk_valid(I) = 0
+        D_pt(I) = 0.5*(G%bathyT(i+1,j)+G%bathyT(i,j))
+        if (ice_shelf) then
+          if (frac_shelf_h(i,j)+frac_shelf_h(i+1,j) > 0.) then ! under shelf
+            shelf_depth(I) = abs(0.5*(ssh(i+1,j)+ssh(i,j)))
+          endif
+        endif
       enddo
       do k=1,nk ; do I=Isq,Ieq
         if ((G%mask2dCu(I,j) > 0.5) .and. (h(i,j,k)+h(i+1,j,k) > 4.0*Angstrom)) then
@@ -243,13 +267,20 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, GV, CS)
         ! no-slip BBC in the output, if anything but piecewise constant is used.
         nk_valid(I) = nk_valid(I) + 1 ; k2 = nk_valid(I)
         h_f(k2,I) = Angstrom ; u_f(k2,I) = 0.0
+        ! GM: D_pt is always slightly larger (by 1E-6 or so) than shelf_depth, so 
+        ! I consider that the ice shelf is grounded when 
+        ! shelf_depth(I) + 1.0E-3 > D_pt(i)
+        if (ice_shelf .and. shelf_depth(I) + 1.0E-3 > D_pt(i)) nk_valid(I)=0
       endif ; enddo
+
 
       do I=Isq,Ieq ; if (nk_valid(I) > 0) then
       ! Calculate the z* interface heights for tracers.
         htot = 0.0 ; do k=1,nk_valid(i) ; htot = htot + h_f(k,i) ; enddo
-        dilate = 0.0 ; if (htot*GV%H_to_m > 2.0*Angstrom) dilate = (D_pt(i) - 0.0) / htot
-
+        dilate = 0.0  
+        if (htot*GV%H_to_m > 2.0*Angstrom) then
+           dilate = MAX((D_pt(i) - shelf_depth(i)),Angstrom)/htot
+        endif
         e(nk_valid(i)+1) = -D_pt(i)
         do k=nk_valid(i),1,-1 ; e(K) = e(K+1) + h_f(k,i)*dilate ; enddo
 
@@ -260,39 +291,44 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, GV, CS)
                             k_bot, k_top, k_bot, wt, z1, z2)
           if (k_top>nk_valid(I)) exit
 
-          if (linear_velocity_profiles) then
-            k = k_top
-            if (k /= k_bot_prev) then
-              ! Calculate the intra-cell profile.
-              slope = 0.0 ! ; curv = 0.0
-              if ((k < nk_valid(I)) .and. (k > nkml)) call &
-                find_limited_slope(u_f(:,I), e, slope, k)
-            endif
-            ! This is the piecewise linear form.
-            CS%u_z(I,j,kz) = wt(k) * (u_f(k,I) + 0.5*slope*(z2(k) + z1(k)))
-            ! For the piecewise parabolic form add the following...
-            !     + C1_3*curv*(z2(k)**2 + z2(k)*z1(k) + z1(k)**2))
-            do k=k_top+1,k_bot-1
-              CS%u_z(I,j,kz) = CS%u_z(I,j,kz) + wt(k)*u_f(k,I)
-            enddo
-            if (k_bot > k_top) then ; k = k_bot
-              ! Calculate the intra-cell profile.
-              slope = 0.0 ! ; curv = 0.0
-              if ((k < nk_valid(I)) .and. (k > nkml)) call &
-                find_limited_slope(u_f(:,I), e, slope, k)
-               ! This is the piecewise linear form.
-              CS%u_z(I,j,kz) = CS%u_z(I,j,kz) + wt(k) * &
-                  (u_f(k,I) + 0.5*slope*(z2(k) + z1(k)))
+          !GM if top range that is being map is below the shelf, interpolate
+          ! otherwise keep missing_vel
+          if (CS%Z_int(kz)<=-shelf_depth(I)) then
+
+            if (linear_velocity_profiles) then
+              k = k_top
+              if (k /= k_bot_prev) then
+                ! Calculate the intra-cell profile.
+                slope = 0.0 ! ; curv = 0.0
+                if ((k < nk_valid(I)) .and. (k > nkml)) call &
+                  find_limited_slope(u_f(:,I), e, slope, k)
+              endif
+              ! This is the piecewise linear form.
+              CS%u_z(I,j,kz) = wt(k) * (u_f(k,I) + 0.5*slope*(z2(k) + z1(k)))
               ! For the piecewise parabolic form add the following...
               !     + C1_3*curv*(z2(k)**2 + z2(k)*z1(k) + z1(k)**2))
-            endif
-            k_bot_prev = k_bot
-          else ! Use piecewise constant profiles.
-            CS%u_z(I,j,kz) = wt(k_top)*u_f(k_top,I)
-            do k=k_top+1,k_bot
-              CS%u_z(I,j,kz) = CS%u_z(I,j,kz) + wt(k)*u_f(k,I)
-            enddo
-          endif ! linear profiles
+              do k=k_top+1,k_bot-1
+                CS%u_z(I,j,kz) = CS%u_z(I,j,kz) + wt(k)*u_f(k,I)
+              enddo
+              if (k_bot > k_top) then ; k = k_bot
+                ! Calculate the intra-cell profile.
+                slope = 0.0 ! ; curv = 0.0
+                if ((k < nk_valid(I)) .and. (k > nkml)) call &
+                  find_limited_slope(u_f(:,I), e, slope, k)
+                 ! This is the piecewise linear form.
+                CS%u_z(I,j,kz) = CS%u_z(I,j,kz) + wt(k) * &
+                    (u_f(k,I) + 0.5*slope*(z2(k) + z1(k)))
+                ! For the piecewise parabolic form add the following...
+                !     + C1_3*curv*(z2(k)**2 + z2(k)*z1(k) + z1(k)**2))
+              endif
+              k_bot_prev = k_bot
+            else ! Use piecewise constant profiles.
+              CS%u_z(I,j,kz) = wt(k_top)*u_f(k_top,I)
+              do k=k_top+1,k_bot
+                CS%u_z(I,j,kz) = CS%u_z(I,j,kz) + wt(k)*u_f(k,I)
+              enddo
+            endif ! linear profiles
+          endif ! below shelf
         enddo ! kz-loop
       endif ; enddo ! I-loop and mask
     enddo ! j-loop
@@ -307,9 +343,15 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, GV, CS)
     enddo ; enddo ; enddo
 
     do J=Jsq,Jeq
+      shelf_depth(:) = 0.0 ! initially all is open ocean
       ! Remove all massless layers.
       do i=is,ie
         nk_valid(i) = 0 ; D_pt(i) = 0.5*(G%bathyT(i,j)+G%bathyT(i,j+1))
+        if (ice_shelf) then
+          if (frac_shelf_h(i,j)+frac_shelf_h(i,j+1) > 0.) then ! under shelf
+            shelf_depth(i) = abs(0.5*(ssh(i,j)+ssh(i,j+1)))
+          endif
+        endif
       enddo
       do k=1,nk ; do i=is,ie
         if ((G%mask2dCv(i,j) > 0.5) .and. (h(i,j,k)+h(i,j+1,k) > 4.0*Angstrom)) then
@@ -322,13 +364,16 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, GV, CS)
         ! no-slip BBC in the output, if anything but piecewise constant is used.
         nk_valid(i) = nk_valid(i) + 1 ; k2 = nk_valid(i)
         h_f(k2,i) = Angstrom ; v_f(k2,i) = 0.0
+        if (ice_shelf .and. shelf_depth(i) + 1.0E-3 > D_pt(i)) nk_valid(I)=0
       endif ; enddo
 
       do i=is,ie ; if (nk_valid(i) > 0) then
       ! Calculate the z* interface heights for tracers.
         htot = 0.0 ; do k=1,nk_valid(i) ; htot = htot + h_f(k,i) ; enddo
-        dilate = 0.0 ; if (htot > 2.0*Angstrom) dilate = (D_pt(i) - 0.0) / htot
-
+        dilate = 0.0 
+        if (htot > 2.0*Angstrom) then
+           dilate = MAX((D_pt(i) - shelf_depth(i)),Angstrom)/htot 
+        endif
         e(nk_valid(i)+1) = -D_pt(i)
         do k=nk_valid(i),1,-1 ; e(K) = e(K+1) + h_f(k,i)*dilate ; enddo
 
@@ -338,41 +383,44 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, GV, CS)
           call find_overlap(e, CS%Z_int(kz), CS%Z_int(kz+1), nk_valid(i), &
                             k_bot, k_top, k_bot, wt, z1, z2)
           if (k_top>nk_valid(i)) exit
-
-          if (linear_velocity_profiles) then
-            k = k_top
-            if (k /= k_bot_prev) then
-              ! Calculate the intra-cell profile.
-              slope = 0.0 ! ; curv = 0.0
-              if ((k < nk_valid(i)) .and. (k > nkml)) call &
-                find_limited_slope(v_f(:,i), e, slope, k)
-            endif
-            ! This is the piecewise linear form.
-            CS%v_z(i,J,kz) = wt(k) * (v_f(k,i) + 0.5*slope*(z2(k) + z1(k)))
-            ! For the piecewise parabolic form add the following...
-            !     + C1_3*curv*(z2(k)**2 + z2(k)*z1(k) + z1(k)**2))
-            do k=k_top+1,k_bot-1
-              CS%v_z(i,J,kz) = CS%v_z(i,J,kz) + wt(k)*v_f(k,i)
-            enddo
-            if (k_bot > k_top) then ; k = k_bot
-              ! Calculate the intra-cell profile.
-              slope = 0.0 ! ; curv = 0.0
-              if ((k < nk_valid(i)) .and. (k > nkml)) call &
-                find_limited_slope(v_f(:,i), e, slope, k)
-               ! This is the piecewise linear form.
-              CS%v_z(i,J,kz) = CS%v_z(i,J,kz) + wt(k) * &
-                  (v_f(k,i) + 0.5*slope*(z2(k) + z1(k)))
+          !GM if top range that is being map is below the shelf, interpolate
+          ! otherwise keep missing_vel
+          if (CS%Z_int(kz)<=-shelf_depth(I)) then
+            if (linear_velocity_profiles) then
+              k = k_top
+              if (k /= k_bot_prev) then
+                ! Calculate the intra-cell profile.
+                slope = 0.0 ! ; curv = 0.0
+                if ((k < nk_valid(i)) .and. (k > nkml)) call &
+                  find_limited_slope(v_f(:,i), e, slope, k)
+              endif
+              ! This is the piecewise linear form.
+              CS%v_z(i,J,kz) = wt(k) * (v_f(k,i) + 0.5*slope*(z2(k) + z1(k)))
               ! For the piecewise parabolic form add the following...
               !     + C1_3*curv*(z2(k)**2 + z2(k)*z1(k) + z1(k)**2))
-            endif
-            k_bot_prev = k_bot
-          else ! Use piecewise constant profiles.
-            CS%v_z(i,J,kz) = wt(k_top)*v_f(k_top,i)
-            do k=k_top+1,k_bot
-              CS%v_z(i,J,kz) = CS%v_z(i,J,kz) + wt(k)*v_f(k,i)
-            enddo
-          endif ! linear profiles
-        enddo ! kz-loop
+              do k=k_top+1,k_bot-1
+                CS%v_z(i,J,kz) = CS%v_z(i,J,kz) + wt(k)*v_f(k,i)
+              enddo
+              if (k_bot > k_top) then ; k = k_bot
+                ! Calculate the intra-cell profile.
+                slope = 0.0 ! ; curv = 0.0
+                if ((k < nk_valid(i)) .and. (k > nkml)) call &
+                  find_limited_slope(v_f(:,i), e, slope, k)
+                 ! This is the piecewise linear form.
+                CS%v_z(i,J,kz) = CS%v_z(i,J,kz) + wt(k) * &
+                    (v_f(k,i) + 0.5*slope*(z2(k) + z1(k)))
+                ! For the piecewise parabolic form add the following...
+                !     + C1_3*curv*(z2(k)**2 + z2(k)*z1(k) + z1(k)**2))
+              endif
+              k_bot_prev = k_bot
+            else ! Use piecewise constant profiles.
+              CS%v_z(i,J,kz) = wt(k_top)*v_f(k_top,i)
+              do k=k_top+1,k_bot
+                CS%v_z(i,J,kz) = CS%v_z(i,J,kz) + wt(k)*v_f(k,i)
+              enddo
+            endif ! linear profiles
+          endif ! below shelf
+          enddo ! kz-loop
       endif ; enddo ! i-loop and mask
     enddo ! J-loop
     
@@ -387,12 +435,21 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, GV, CS)
     enddo ; enddo ; enddo ; enddo
 
     do j=js,je
+      shelf_depth(:) = 0.0 ! initially all is open ocean
       ! Remove all massless layers.
-      do i=is,ie ; nk_valid(i) = 0 ; D_pt(i) = G%bathyT(i,j) ; enddo
+      do i=is,ie  
+        nk_valid(i) = 0 ; D_pt(i) = G%bathyT(i,j) 
+        if (ice_shelf) then
+          if (frac_shelf_h(i,j) > 0.) then ! under shelf
+            shelf_depth(i) = abs(ssh(i,j))
+          endif
+        endif
+      enddo
       do k=1,nk ; do i=is,ie
         if ((G%mask2dT(i,j) > 0.5) .and. (h(i,j,k) > 2.0*Angstrom)) then
           nk_valid(i) = nk_valid(i) + 1 ; k2 = nk_valid(i)
           h_f(k2,i) = h(i,j,k)
+          if (ice_shelf .and. shelf_depth(I) + 1.0E-3 > D_pt(i)) nk_valid(I)=0
           do m=1,CS%num_tr_used ; tr_f(k2,m,i) = CS%tr_model(m)%p(i,j,k) ; enddo
         endif
       enddo ; enddo
@@ -400,8 +457,10 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, GV, CS)
       do i=is,ie ; if (nk_valid(i) > 0) then
       ! Calculate the z* interface heights for tracers.
         htot = 0.0 ;  do k=1,nk_valid(i) ; htot = htot + h_f(k,i) ; enddo
-        dilate = 0.0 ; if (htot > 2.0*Angstrom) dilate = (D_pt(i) - 0.0) / htot
-
+        dilate = 0.0 
+        if (htot > 2.0*Angstrom) then
+           dilate = MAX((D_pt(i) - shelf_depth(i)),Angstrom)/htot   
+        endif
         e(nk_valid(i)+1) = -D_pt(i)
         do k=nk_valid(i),1,-1 ; e(K) = e(K+1) + h_f(k,i)*dilate ; enddo
 
@@ -411,37 +470,38 @@ subroutine calculate_Z_diag_fields(u, v, h, dt, G, GV, CS)
           call find_overlap(e, CS%Z_int(kz), CS%Z_int(kz+1), nk_valid(i), &
                             k_bot, k_top, k_bot, wt, z1, z2)
           if (k_top>nk_valid(i)) exit
-
-          do m=1,CS%num_tr_used
-            k = k_top
-            if (k /= k_bot_prev) then
-              ! Calculate the intra-cell profile.
-              sl_tr(m) = 0.0 ! ; cur_tr(m) = 0.0
-              if ((k < nk_valid(i)) .and. (k > nkml)) call &
-                find_limited_slope(tr_f(:,m,i), e, sl_tr(m), k)
-            endif
-            ! This is the piecewise linear form.
-            CS%tr_z(m)%p(i,j,kz) = wt(k) * &
-                (tr_f(k,m,i) + 0.5*sl_tr(m)*(z2(k) + z1(k)))
-            ! For the piecewise parabolic form add the following...
-            !     + C1_3*cur_tr(m)*(z2(k)**2 + z2(k)*z1(k) + z1(k)**2))
-            do k=k_top+1,k_bot-1
-              CS%tr_z(m)%p(i,j,kz) = CS%tr_z(m)%p(i,j,kz) + wt(k)*tr_f(k,m,i)
-            enddo
-            if (k_bot > k_top) then
-              k = k_bot
-              ! Calculate the intra-cell profile.
-              sl_tr(m) = 0.0 ! ; cur_tr(m) = 0.0
-              if ((k < nk_valid(i)) .and. (k > nkml)) call &
-                find_limited_slope(tr_f(:,m,i), e, sl_tr(m), k)
+          if (CS%Z_int(kz)<=-shelf_depth(i)) then
+            do m=1,CS%num_tr_used
+              k = k_top
+              if (k /= k_bot_prev) then
+                ! Calculate the intra-cell profile.
+                sl_tr(m) = 0.0 ! ; cur_tr(m) = 0.0
+                if ((k < nk_valid(i)) .and. (k > nkml)) call &
+                  find_limited_slope(tr_f(:,m,i), e, sl_tr(m), k)
+              endif
               ! This is the piecewise linear form.
-              CS%tr_z(m)%p(i,j,kz) = CS%tr_z(m)%p(i,j,kz) + wt(k) * &
+              CS%tr_z(m)%p(i,j,kz) = wt(k) * &
                   (tr_f(k,m,i) + 0.5*sl_tr(m)*(z2(k) + z1(k)))
               ! For the piecewise parabolic form add the following...
               !     + C1_3*cur_tr(m)*(z2(k)**2 + z2(k)*z1(k) + z1(k)**2))
-            endif
-          enddo
-          k_bot_prev = k_bot
+              do k=k_top+1,k_bot-1
+                CS%tr_z(m)%p(i,j,kz) = CS%tr_z(m)%p(i,j,kz) + wt(k)*tr_f(k,m,i)
+              enddo
+              if (k_bot > k_top) then
+                k = k_bot
+                ! Calculate the intra-cell profile.
+                sl_tr(m) = 0.0 ! ; cur_tr(m) = 0.0
+                if ((k < nk_valid(i)) .and. (k > nkml)) call &
+                  find_limited_slope(tr_f(:,m,i), e, sl_tr(m), k)
+                ! This is the piecewise linear form.
+                CS%tr_z(m)%p(i,j,kz) = CS%tr_z(m)%p(i,j,kz) + wt(k) * &
+                    (tr_f(k,m,i) + 0.5*sl_tr(m)*(z2(k) + z1(k)))
+                ! For the piecewise parabolic form add the following...
+                !     + C1_3*cur_tr(m)*(z2(k)**2 + z2(k)*z1(k) + z1(k)**2))
+              endif
+            enddo
+            k_bot_prev = k_bot
+          endif ! below shelf
         enddo ! kz-loop
       endif ; enddo ! i-loop and mask
 
@@ -922,14 +982,14 @@ subroutine register_Z_tracer_low(tr_ptr, name, long_name, units, standard_name, 
 
   CS%missing_tr(m) = CS%missing_value ! This could be changed later, if desired.
   if (CS%nk_zspace > 0) then
-    CS%id_tr(m) = register_diag_field('ocean_model_z', name, CS%axesTz, Time,           &
+    CS%id_tr(m) = register_diag_field('ocean_model_zold', name, CS%axesTz, Time,           &
                                       long_name, units, missing_value=CS%missing_tr(m), &
                                       standard_name=standard_name)
-    CS%id_tr_xyave(m) = register_diag_field('ocean_model_z', name//'_xyave', CS%axesZ, Time,           &
+    CS%id_tr_xyave(m) = register_diag_field('ocean_model_zold', name//'_xyave', CS%axesZ, Time,           &
                                       long_name, units, missing_value=CS%missing_tr(m), &
                                       standard_name=standard_name)
   else
-    id_test = register_diag_field('ocean_model_z', name, CS%diag%axesT1, Time,      &
+    id_test = register_diag_field('ocean_model_zold', name, CS%diag%axesT1, Time,      &
                                   long_name, units, missing_value=CS%missing_tr(m), &
                                   standard_name=standard_name)
     if (id_test>0) call MOM_error(WARNING, &
@@ -971,7 +1031,6 @@ subroutine MOM_diag_to_Z_init(Time, G, GV, param_file, diag, CS)
   character(len=48)  :: flux_units, string
   integer :: z_axis, zint_axis
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nk, id_test
-  logical :: diag_mediator_is_using_z
   isd  = G%isd   ; ied = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nk = G%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
@@ -995,18 +1054,7 @@ subroutine MOM_diag_to_Z_init(Time, G, GV, param_file, diag, CS)
                  "depth-space diagnostics, or blank to disable \n"//&
                  "depth-space output.", default="")
 
-  ! Check that the diag_mediator z-sapce remapping is not using the same module name
-  string = ''
-  call get_param(param_file, mod, "DIAG_REMAP_Z_MODULE_SUFFIX", string, &
-                 default='_z_new', do_not_log=.true.)
-  diag_mediator_is_using_z = .false.
-  if (trim(string) == '_z') diag_mediator_is_using_z = .true.
-
   if (len_trim(zgrid_file) > 0) then
-    if (diag_mediator_is_using_z) call MOM_error(FATAL, "MOM_diag_to_Z_init:"// &
-           "Z_OUTPUT_GRID_FILE can not be used when DIAG_REMAP_Z_MODULE_SUFFIX='_z'." // &
-           " Z_OUTPUT_GRID_FILE='"//trim(zgrid_file)//"'")
-
     call get_param(param_file, mod, "INPUTDIR", in_dir, &
                  "The directory in which input files are found.", default=".")
     in_dir = slasher(in_dir)  
@@ -1034,55 +1082,28 @@ subroutine MOM_diag_to_Z_init(Time, G, GV, param_file, diag, CS)
     call define_axes_group(diag, (/ diag%axesCv1%handles(1), diag%axesCv1%handles(2), zint_axis /), CS%axesCvzi)
     call define_axes_group(diag, (/ z_axis /),    CS%axesZ)
 
-    CS%id_u_z = register_diag_field('ocean_model_z', 'u', CS%axesCuz, Time,    &
+    CS%id_u_z = register_diag_field('ocean_model_zold', 'u', CS%axesCuz, Time,    &
         'Zonal Velocity in Depth Space', 'meter second-1',                     &
         missing_value=CS%missing_vel, cmor_field_name='uo', cmor_units='m s-1',&
         cmor_standard_name='sea_water_x_velocity', cmor_long_name='Sea Water X Velocity')
     if (CS%id_u_z>0) call safe_alloc_ptr(CS%u_z,IsdB,IedB,jsd,jed,CS%nk_zspace)
 
-    CS%id_v_z = register_diag_field('ocean_model_z', 'v', CS%axesCvz, Time,    &
+    CS%id_v_z = register_diag_field('ocean_model_zold', 'v', CS%axesCvz, Time,    &
         'Meridional Velocity in Depth Space', 'meter second-1',                &
         missing_value=CS%missing_vel, cmor_field_name='vo', cmor_units='m s-1',&
         cmor_standard_name='sea_water_y_velocity', cmor_long_name='Sea Water Y Velocity')
     if (CS%id_v_z>0) call safe_alloc_ptr(CS%v_z,isd,ied,JsdB,JedB,CS%nk_zspace)
 
-    CS%id_uh_z = register_diag_field('ocean_model_z', 'uh', CS%axesCuz, Time,    &
+    CS%id_uh_z = register_diag_field('ocean_model_zold', 'uh', CS%axesCuz, Time,    &
         'Zonal Mass Transport (including SGS param) in Depth Space', flux_units, &
         missing_value=CS%missing_trans)
     if (CS%id_uh_z>0) call safe_alloc_ptr(CS%uh_z,IsdB,IedB,jsd,jed,CS%nk_zspace)
 
-    CS%id_vh_z = register_diag_field('ocean_model_z', 'vh', CS%axesCvz, Time,        &
+    CS%id_vh_z = register_diag_field('ocean_model_zold', 'vh', CS%axesCvz, Time,        &
         'Meridional Mass Transport (including SGS param) in Depth Space', flux_units,&
         missing_value=CS%missing_trans)
     if (CS%id_vh_z>0) call safe_alloc_ptr(CS%vh_z,isd,ied,JsdB,JedB,CS%nk_zspace)
 
-  elseif (.not. diag_mediator_is_using_z) then
-
-    ! Check whether diag-table is requesting any z-space files; issue a warning if it is.
-
-    id_test = register_diag_field('ocean_model_z', 'u', diag%axesCu1, Time, &
-        'Zonal Velocity in Depth Space', 'meter second-1', cmor_field_name='uo')
-    if (id_test>0) call MOM_error(WARNING, &
-        "MOM_diag_to_Z_init: u cannot be output without "//&
-        "an appropriate depth-space target file.")
-
-    id_test = register_diag_field('ocean_model_z', 'v', diag%axesCv1, Time, &
-        'Meridional Velocity in Depth Space', 'meter second-1', cmor_field_name='vo')
-    if (id_test>0) call MOM_error(WARNING,                 &
-        "MOM_diag_to_Z_init: v cannot be output without "//&
-        "an appropriate depth-space target file.")
-
-    id_test = register_diag_field('ocean_model_z', 'uh', diag%axesCu1, Time, &
-        'Meridional Volume Transport in Depth Space', flux_units)
-    if (id_test>0) call MOM_error(WARNING,                  &
-        "MOM_diag_to_Z_init: uh cannot be output without "//&
-        "an appropriate depth-space target file.")
-
-    id_test = register_diag_field('ocean_model_z', 'vh', diag%axesCv1, Time, &
-        'Meridional Volume Transport in Depth Space', flux_units)
-    if (id_test>0) call MOM_error(WARNING,                  &
-        "MOM_diag_to_Z_init: vh cannot be output without "//&
-        "an appropriate depth-space target file.")
   endif
 
 end subroutine MOM_diag_to_Z_init
@@ -1296,7 +1317,7 @@ function register_Z_diag(var_desc, CS, day, missing)
   character(len=48) :: units            ! A variable's units.
   character(len=240) :: longname        ! A variable's longname.
   character(len=8) :: hor_grid, z_grid  ! Variable grid info.
-  type(axes_grp) :: axes
+  type(axes_grp), pointer :: axes
 
   call query_vardesc(var_desc, name=var_name, units=units, longname=longname, &
                      hor_grid=hor_grid, z_grid=z_grid, caller="register_Zint_diag")
@@ -1308,21 +1329,21 @@ function register_Z_diag(var_desc, CS, day, missing)
     case ("z")
       select case (hor_grid)
         case ("q")
-          axes = CS%axesBz
+          axes => CS%axesBz
         case ("h")
-          axes = CS%axesTz
+          axes => CS%axesTz
         case ("u")
-          axes = CS%axesCuz
+          axes => CS%axesCuz
         case ("v")
-          axes = CS%axesCvz
+          axes => CS%axesCvz
         case ("Bu")
-          axes = CS%axesBz
+          axes => CS%axesBz
         case ("T")
-          axes = CS%axesTz
+          axes => CS%axesTz
         case ("Cu")
-          axes = CS%axesCuz
+          axes => CS%axesCuz
         case ("Cv")
-          axes = CS%axesCvz
+          axes => CS%axesCvz
         case default
           call MOM_error(FATAL,&
             "register_Z_diag: unknown hor_grid component "//trim(hor_grid))
@@ -1333,7 +1354,7 @@ function register_Z_diag(var_desc, CS, day, missing)
           "register_Z_diag: unknown z_grid component "//trim(z_grid))
   end select
 
-  register_Z_diag = register_diag_field("ocean_model_z", trim(var_name), axes, &
+  register_Z_diag = register_diag_field("ocean_model_zold", trim(var_name), axes, &
         day, trim(longname), trim(units), missing_value=missing)
 
 end function register_Z_diag
@@ -1348,7 +1369,7 @@ function register_Zint_diag(var_desc, CS, day)
   character(len=48) :: units            ! A variable's units.
   character(len=240) :: longname        ! A variable's longname.
   character(len=8) :: hor_grid          ! Variable grid info.
-  type(axes_grp) :: axes
+  type(axes_grp), pointer :: axes
 
   call query_vardesc(var_desc, name=var_name, units=units, longname=longname, &
                      hor_grid=hor_grid, caller="register_Zint_diag")
@@ -1361,19 +1382,19 @@ function register_Zint_diag(var_desc, CS, day)
   ! desired axes to register the diagnostic field for.
   select case (hor_grid)
     case ("h")
-      axes = CS%axesTzi
+      axes => CS%axesTzi
     case ("q")
-      axes = CS%axesBzi
+      axes => CS%axesBzi
     case ("u")
-      axes = CS%axesCuzi
+      axes => CS%axesCuzi
     case ("v")
-      axes = CS%axesCvzi
+      axes => CS%axesCvzi
     case default
       call MOM_error(FATAL,&
         "register_Z_diag: unknown hor_grid component "//trim(hor_grid))
   end select
 
-  register_Zint_diag = register_diag_field("ocean_model_z", trim(var_name),&
+  register_Zint_diag = register_diag_field("ocean_model_zold", trim(var_name),&
         axes, day, trim(longname), trim(units), missing_value=CS%missing_value)
 
 end function register_Zint_diag

@@ -24,8 +24,8 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_tracer_registry, only : tracer_registry_type, add_tracer_OBC_values
-use MOM_variables, only : thermo_var_ptrs, ocean_OBC_type
+use MOM_tracer_registry, only : tracer_registry_type
+use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 
@@ -93,8 +93,16 @@ subroutine circle_obcs_initialize_thickness(h, G, GV, param_file)
     ! if (rad <= 6.*diskrad) h(i,j,k) = h(i,j,k)+10.0*exp( -0.5*( rad**2 ) )
     rad = min( rad, 1. ) ! Flatten outside radius of diskrad
     rad = rad*(2.*asin(1.)) ! Map 0-1 to 0-pi
-    h(i,j,k) = h(i,j,k) + 10.0*0.5*(1.+cos(rad)) ! cosine bell
-    h(i,j,k-1) = h(i,j,k-1) - 10.0*0.5*(1.+cos(rad)) ! cosine bell
+    if (Nz==1) then
+      ! The model is barotropic
+      h(i,j,k) = h(i,j,k) + 1.0*0.5*(1.+cos(rad)) ! cosine bell
+    else
+      ! The model is baroclinic
+      do k = 1, Nz
+        h(i,j,k) = h(i,j,k) - 0.5*(1.+cos(rad)) & ! cosine bell
+            * 5.0 * real( 2*k-Nz )
+      enddo
+    endif
   enddo ; enddo
 
 end subroutine circle_obcs_initialize_thickness

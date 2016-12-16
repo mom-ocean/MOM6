@@ -23,7 +23,7 @@ use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : setVerticalGridAxes
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use MOM_EOS, only : int_specific_vol_dp
-use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord, ALE_remap_scalar
+use MOM_ALE, only : ALE_remap_scalar
 use MOM_regridding, only : regridding_CS
 use MOM_remapping, only : remapping_CS, initialize_remapping
 use MOM_remapping, only : remapping_core_h
@@ -727,17 +727,14 @@ subroutine horiz_interp_and_extrap_tracer(filename, varnam,  conversion, recnum,
     call fill_miss_2d(tr_outf,good2,fill2,tr_prev,G,smooth=.true.)
     call myStats(tr_outf,missing_value,is,ie,js,je,k,'field from fill_miss_2d()')
 
-
     tr_z(:,:,k) = tr_outf(:,:)*G%mask2dT(:,:)
     mask_z(:,:,k) = good2(:,:)+fill2(:,:)
 
     tr_prev(:,:)=tr_z(:,:,k)
 
-
     if (debug) then
-      call hchksum(tr_prev,'field after fill ',G)
+      call hchksum(tr_prev,'field after fill ',G%HI)
     endif
-
 
   enddo ! kd
 

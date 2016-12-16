@@ -193,7 +193,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
     def_rat_u   ! The ratio of the thickness deficit to the minimum depth, ND.
   real, dimension(SZI_(G),SZJB_(G)) :: &
     def_rat_v   ! The ratio of the thickness deficit to the minimum depth, ND.
-  real, dimension(SZI_(G),SZJB_(G)) :: &
+  real, dimension(SZI_(G),SZJ_(G)) :: &
     def_rat_h   ! The ratio of the thickness deficit to the minimum depth, ND.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
     e           ! The interface depths, in H, positive upward.
