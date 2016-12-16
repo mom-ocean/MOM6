@@ -190,8 +190,8 @@ type, public :: MOM_control_struct
                                      !! with nkml sublayers and nkbl buffer layer.
   logical :: diabatic_first          !< If true, apply diabatic and thermodynamic
                                      !! processes before time stepping the dynamics.
-  logical :: use_conT_refS           !< If true, , the prognostics T&S are the conservative temperature 
-                                     !! and reference salinity. Care should be taken to convert them
+  logical :: use_conT_absS           !< If true, , the prognostics T&S are the conservative temperature 
+                                     !! and absolute salinity. Care should be taken to convert them
                                      !! to potential temperature and practical salinity before 
                                      !! exchanging them with the coupler and/or reporting T&S diagnostics.
   logical :: thickness_diffuse       !< If true, diffuse interface height w/ a diffusivity KHTH.
@@ -288,7 +288,7 @@ type, public :: MOM_control_struct
   integer :: id_T  = -1
   integer :: id_S  = -1
   integer :: id_Tcon  = -1
-  integer :: id_Sref  = -1
+  integer :: id_Sabs  = -1
 
   ! 2-d surface and bottom fields
   integer :: id_zos      = -1
@@ -307,7 +307,7 @@ type, public :: MOM_control_struct
   integer :: id_tob      = -1
   integer :: id_sob      = -1
   integer :: id_consst   = -1
-  integer :: id_refsss   = -1
+  integer :: id_abssss   = -1
 
   ! heat and salt flux fields
   integer :: id_fraz         = -1
@@ -1191,14 +1191,14 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
       ! post some diagnostics
       !
-      !In case the internal representation of the model is conservative temperature and reference salinity 
+      !In case the internal representation of the model is conservative temperature and absolute salinity 
       !convert, for diagnostics
       !from conservative temp to potential temp and 
-      !from reference salinity to practical salinity
+      !from absolute salinity to practical salinity
       !
-      if(CS%use_conT_refS) then
+      if(CS%use_conT_absS) then
          if (CS%id_Tcon > 0) call post_data(CS%id_Tcon, CS%tv%T, CS%diag)
-         if (CS%id_Sref > 0) call post_data(CS%id_Sref, CS%tv%S, CS%diag)
+         if (CS%id_Sabs > 0) call post_data(CS%id_Sabs, CS%tv%S, CS%diag)
          !Conversions
          do k=1,nz ; do j=js,je ; do i=is,ie
             pracSal(i,j,k) = gsw_sp_from_sr(CS%tv%S(i,j,k))
@@ -2087,9 +2087,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
                  "If true, apply diabatic and thermodynamic processes, \n"//&
                  "including buoyancy forcing and mass gain or loss, \n"//&
                  "before stepping the dynamics forward.", default=.false.)
-  call get_param(param_file, "MOM", "USE_CONTEMP_REFSAL", CS%use_conT_refS, &
+  call get_param(param_file, "MOM", "USE_CONTEMP_ABSSAL", CS%use_conT_absS, &
                  "If true, , the prognostics T&S are the conservative temperature \n"//&
-                 "and reference salinity. Care should be taken to convert them \n"//&
+                 "and absolute salinity. Care should be taken to convert them \n"//&
                  "to potential temperature and practical salinity before  \n"//&
                  "exchanging them with the coupler and/or reporting T&S diagnostics. \n"&
                  , default=.false.)
@@ -2944,12 +2944,12 @@ subroutine register_diags(Time, G, GV, CS, ADp)
     if (CS%id_sss_sq > 0) call safe_alloc_ptr(CS%SSS_sq,isd,ied,jsd,jed)
     CS%id_Tcon = register_diag_field('ocean_model', 'contemp', diag%axesTL, Time, &
         'Conservative Temperature', 'Celsius')
-    CS%id_Sref = register_diag_field('ocean_model', 'refsalt', diag%axesTL, Time, &
-        long_name='Reference Salinity', units='g/Kg')
+    CS%id_Sabs = register_diag_field('ocean_model', 'abssalt', diag%axesTL, Time, &
+        long_name='Absolute Salinity', units='g/Kg')
     CS%id_consst = register_diag_field('ocean_model', 'conSST', diag%axesT1, Time,     &
         'Sea Surface Conservative Temperature', 'Celsius', CS%missing)
-    CS%id_refsss = register_diag_field('ocean_model', 'refSSS', diag%axesT1, Time,     &
-        'Sea Surface Reference Salinity', 'g/Kg', CS%missing)
+    CS%id_abssss = register_diag_field('ocean_model', 'absSSS', diag%axesT1, Time,     &
+        'Sea Surface Absolute Salinity', 'g/Kg', CS%missing)
 
   endif
 
