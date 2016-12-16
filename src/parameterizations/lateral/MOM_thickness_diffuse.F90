@@ -139,12 +139,12 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
     khth_use_ebt_struct = VarMix%khth_use_ebt_struct
   endif
 
-!$OMP parallel do default(none) shared(is,ie,js,je,KH_u_CFL,dt,G,CS)
+!$OPP parallel do default(none) shared(is,ie,js,je,KH_u_CFL,dt,G,CS)
   do j=js,je ; do I=is-1,ie
     KH_u_CFL(I,j) = (0.25*CS%max_Khth_CFL) /  &
       (dt*(G%IdxCu(I,j)*G%IdxCu(I,j) + G%IdyCu(I,j)*G%IdyCu(I,j)))
   enddo ; enddo
-!$OMP parallel do default(none) shared(is,ie,js,je,KH_v_CFL,dt,G,CS)
+!$OPP parallel do default(none) shared(is,ie,js,je,KH_v_CFL,dt,G,CS)
   do j=js-1,je ; do I=is,ie
     KH_v_CFL(i,J) = (0.25*CS%max_Khth_CFL) / &
       (dt*(G%IdxCv(i,J)*G%IdxCv(i,J) + G%IdyCv(i,J)*G%IdyCv(i,J)))
@@ -153,123 +153,123 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
   call find_eta(h, tv, GV%g_Earth, G, GV, e, halo_size=1)
 
   ! Set the diffusivities.
-!$OMP parallel default(none) shared(is,ie,js,je,Khth_Loc_u,CS,use_VarMix,VarMix,    &
-!$OMP                               MEKE_not_null,MEKE,Resoln_scaled,KH_u,          &
-!$OMP                               KH_u_CFL,nz,Khth_Loc,KH_v,KH_v_CFL,int_slope_u, &
-!$OMP                               int_slope_v,khth_use_ebt_struct)
-!$OMP do
+!$OPP parallel default(none) shared(is,ie,js,je,Khth_Loc_u,CS,use_VarMix,VarMix,    &
+!$OPP                               MEKE_not_null,MEKE,Resoln_scaled,KH_u,          &
+!$OPP                               KH_u_CFL,nz,Khth_Loc,KH_v,KH_v_CFL,int_slope_u, &
+!$OPP                               int_slope_v,khth_use_ebt_struct)
+!$OPP do
   do j=js,je; do I=is-1,ie
     Khth_Loc_u(i,j) = CS%Khth
   enddo ; enddo
 
   if (use_VarMix) then
-!$OMP do
+!$OPP do
     do j=js,je ; do I=is-1,ie
       Khth_Loc_u(i,j) = Khth_Loc_u(i,j) + CS%KHTH_Slope_Cff*VarMix%L2u(I,j)*VarMix%SN_u(I,j)
     enddo ; enddo
   endif
 
   if (MEKE_not_null) then ; if (associated(MEKE%Kh)) then
-!$OMP do
+!$OPP do
     do j=js,je ; do I=is-1,ie
       Khth_Loc_u(i,j) = Khth_Loc_u(i,j) + MEKE%KhTh_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i+1,j))
     enddo ; enddo
   endif ; endif
 
   if (Resoln_scaled) then
-!$OMP do
+!$OPP do
     do j=js,je; do I=is-1,ie
       Khth_Loc_u(i,j) = Khth_Loc_u(i,j) * VarMix%Res_fn_u(i,j)
     enddo ; enddo
   endif
 
   if (CS%Khth_Max > 0) then
-!$OMP do
+!$OPP do
     do j=js,je; do I=is-1,ie
       Khth_Loc_u(i,j) = max(CS%Khth_min, min(Khth_Loc_u(i,j),CS%Khth_Max))
     enddo ; enddo
   else
-!$OMP do
+!$OPP do
     do j=js,je; do I=is-1,ie
       Khth_Loc_u(i,j) = max(CS%Khth_min, Khth_Loc_u(i,j))
     enddo ; enddo
   endif
-!$OMP do
+!$OPP do
   do j=js,je; do I=is-1,ie
     KH_u(I,j,1) = min(KH_u_CFL(I,j), Khth_Loc_u(i,j))
   enddo ; enddo
 
   if (khth_use_ebt_struct) then
-!$OMP do
+!$OPP do
     do K=2,nz+1 ; do j=js,je ; do I=is-1,ie
       KH_u(I,j,K) = KH_u(I,j,1) * 0.5 * ( VarMix%ebt_struct(i,j,k-1) + VarMix%ebt_struct(i+1,j,k-1) )
     enddo ; enddo ; enddo
   else
-!$OMP do
+!$OPP do
     do K=2,nz+1 ; do j=js,je ; do I=is-1,ie
       KH_u(I,j,K) = KH_u(I,j,1)
     enddo ; enddo ; enddo
   endif
 
-!$OMP do
+!$OPP do
   do J=js-1,je ; do i=is,ie
     Khth_Loc(i,j) = CS%Khth
   enddo ; enddo
 
   if (use_VarMix) then
-!$OMP do
+!$OPP do
     do J=js-1,je ; do i=is,ie
       Khth_Loc(i,j) = Khth_Loc(i,j) + CS%KHTH_Slope_Cff*VarMix%L2v(i,J)*VarMix%SN_v(i,J)
     enddo ; enddo
   endif
   if (MEKE_not_null) then ; if (associated(MEKE%Kh)) then
-!$OMP do
+!$OPP do
     do J=js-1,je ; do i=is,ie
       Khth_Loc(i,j) = Khth_Loc(i,j) + MEKE%KhTh_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i,j+1))
     enddo ; enddo
   endif ; endif
 
   if (Resoln_scaled) then
-!$OMP do
+!$OPP do
     do J=js-1,je ; do i=is,ie
       Khth_Loc(i,j) = Khth_Loc(i,j) * VarMix%Res_fn_v(i,J)
     enddo ; enddo
   endif
 
   if (CS%Khth_Max > 0) then
-!$OMP do
+!$OPP do
     do J=js-1,je ; do i=is,ie
       Khth_Loc(i,j) = max(CS%Khth_min, min(Khth_Loc(i,j),CS%Khth_Max))
     enddo ; enddo
   else
-!$OMP do
+!$OPP do
     do J=js-1,je ; do i=is,ie
       Khth_Loc(i,j) = max(CS%Khth_min, Khth_Loc(i,j))
     enddo ; enddo
   endif
 
   if (CS%max_Khth_CFL > 0.0) then
-!$OMP do
+!$OPP do
     do J=js-1,je ; do i=is,ie
       KH_v(i,J,1) = min(KH_v_CFL(i,J), Khth_Loc(i,j))
     enddo ; enddo
   endif
   if (khth_use_ebt_struct) then
-!$OMP do
+!$OPP do
     do K=2,nz+1 ; do J=js-1,je ; do i=is,ie
       KH_v(i,J,K) = KH_v(i,J,1) * 0.5 * ( VarMix%ebt_struct(i,j,k-1) + VarMix%ebt_struct(i,j+1,k-1) )
     enddo ; enddo ; enddo
   else
-!$OMP do
+!$OPP do
     do K=2,nz+1 ; do J=js-1,je ; do i=is,ie
       KH_v(i,J,K) = KH_v(i,J,1)
     enddo ; enddo ; enddo
   endif
-!$OMP do
+!$OPP do
   do K=1,nz+1 ; do j=js,je ; do I=is-1,ie ; int_slope_u(I,j,K) = 0.0 ; enddo ; enddo ; enddo
-!$OMP do
+!$OPP do
   do K=1,nz+1 ; do J=js-1,je ; do i=is,ie ; int_slope_v(i,J,K) = 0.0 ; enddo ; enddo ; enddo
-!$OMP end parallel
+!$OPP end parallel
 
   if (CS%detangle_interfaces) then
     call add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV, &
@@ -301,7 +301,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
     call thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, GV, MEKE, CS, &
                                 int_slope_u, int_slope_v)
   endif
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,uhtr,uhD,dt,vhtr,CDp,vhD,h,G,GV)
+!$OPP parallel do default(none) shared(is,ie,js,je,nz,uhtr,uhD,dt,vhtr,CDp,vhD,h,G,GV)
   do k=1,nz
     do j=js,je ; do I=is-1,ie
       uhtr(I,j,k) = uhtr(I,j,k) + uhD(I,j,k)*dt
@@ -325,7 +325,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
 
   if (MEKE_not_null .AND. ASSOCIATED(VarMix)) then
     if (ASSOCIATED(MEKE%Rd_dx_h) .and. ASSOCIATED(VarMix%Rd_dx_h)) then
-!$OMP parallel do default(none) shared(is,ie,js,je,MEKE,VarMix)
+!$OPP parallel do default(none) shared(is,ie,js,je,MEKE,VarMix)
       do j=js,je ; do i=is,ie
         MEKE%Rd_dx_h(i,j) = VarMix%Rd_dx_h(i,j)
       enddo ; enddo
@@ -511,10 +511,10 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, GV, MEK
     call vert_fill_TS(h, tv%T, tv%S, CS%kappa_smooth, dt, T, S, G, GV, 1)
   endif
 
-!$OMP parallel default(none) shared(is,ie,js,je,h_avail_rsum,pres,h_avail,I4dt, &
-!$OMP                               G,GV,h,h_frac,nz,uhtot,Work_u,vhtot,Work_v )
+!$OPP parallel default(none) shared(is,ie,js,je,h_avail_rsum,pres,h_avail,I4dt, &
+!$OPP                               G,GV,h,h_frac,nz,uhtot,Work_u,vhtot,Work_v )
   ! Find the maximum and minimum permitted streamfunction.
-!$OMP do
+!$OPP do
   do j=js-1,je+1 ; do i=is-1,ie+1
     h_avail_rsum(i,j,1) = 0.0
     pres(i,j,1) = 0.0  ! ### This should be atmospheric pressure.
@@ -524,7 +524,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, GV, MEK
     h_frac(i,j,1) = 1.0
     pres(i,j,2) = pres(i,j,1) + GV%H_to_Pa*h(i,j,1)
   enddo ; enddo
-!$OMP do
+!$OPP do
   do j=js-1,je+1
     do k=2,nz ; do i=is-1,ie+1
       h_avail(i,j,k) = max(I4dt*G%areaT(i,j)*(h(i,j,k)-GV%Angstrom),0.0)
@@ -534,31 +534,31 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, GV, MEK
       pres(i,j,K+1) = pres(i,j,K) + GV%H_to_Pa*h(i,j,k)
     enddo ; enddo
   enddo
-!$OMP do
+!$OPP do
   do j=js,je ; do I=is-1,ie
     uhtot(I,j) = 0.0 ; Work_u(I,j) = 0.0
     ! sfn_x(I,j,1) = 0.0 ; sfn_slope_x(I,j,1) = 0.0
     ! sfn_x(I,j,nz+1) = 0.0 ; sfn_slope_x(I,j,nz+1) = 0.0
   enddo ; enddo
-!$OMP do
+!$OPP do
   do J=js-1,je ; do i=is,ie
     vhtot(i,J) = 0.0 ; Work_v(i,J) = 0.0
     ! sfn_y(i,J,1) = 0.0 ; sfn_slope_y(i,J,1) = 0.0
     ! sfn_y(i,J,nz+1) = 0.0 ; sfn_slope_y(i,J,nz+1) = 0.0
   enddo ; enddo
-!$OMP end parallel
+!$OPP end parallel
 
-!$OMP parallel do default(none) shared(nz,is,ie,js,je,find_work,use_EOS,G,GV,pres,T,S, &
-!$OMP                                  nk_linear,IsdB,tv,h,h_neglect,e,dz_neglect,  &
-!$OMP                                  I_slope_max2,h_neglect2,present_int_slope_u, &
-!$OMP                                  int_slope_u,KH_u,uhtot,h_frac,h_avail_rsum,  &
-!$OMP                                  uhD,h_avail,G_scale,work_u,CS,slope_x,       &
-!$OMP                                  slope_y,present_slope_x,H_to_m,m_to_H) &
-!$OMP                          private(drdiA,drdiB,drdkL,drdkR,pres_u,T_u,S_u,      &
-!$OMP                                  drho_dT_u,drho_dS_u,hg2A,hg2B,hg2L,hg2R,haA, &
-!$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
-!$OMP                                  drdx,mag_grad2,Slope,slope2_Ratio,Sfn_unlim, &
-!$OMP                                  Sfn_safe,Sfn_est,Sfn,calc_derivatives)
+!$OPP parallel do default(none) shared(nz,is,ie,js,je,find_work,use_EOS,G,GV,pres,T,S, &
+!$OPP                                  nk_linear,IsdB,tv,h,h_neglect,e,dz_neglect,  &
+!$OPP                                  I_slope_max2,h_neglect2,present_int_slope_u, &
+!$OPP                                  int_slope_u,KH_u,uhtot,h_frac,h_avail_rsum,  &
+!$OPP                                  uhD,h_avail,G_scale,work_u,CS,slope_x,       &
+!$OPP                                  slope_y,present_slope_x,H_to_m,m_to_H) &
+!$OPP                          private(drdiA,drdiB,drdkL,drdkR,pres_u,T_u,S_u,      &
+!$OPP                                  drho_dT_u,drho_dS_u,hg2A,hg2B,hg2L,hg2R,haA, &
+!$OPP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
+!$OPP                                  drdx,mag_grad2,Slope,slope2_Ratio,Sfn_unlim, &
+!$OPP                                  Sfn_safe,Sfn_est,Sfn,calc_derivatives)
   do j=js,je ; do K=nz,2,-1
     if (find_work .and. .not.(use_EOS)) then
       drdiA = 0.0 ; drdiB = 0.0
@@ -743,17 +743,17 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, GV, MEK
   enddo ; enddo ! end of j-loop
 
     ! Calculate the meridional fluxes and gradients.
-!$OMP parallel do default(none) shared(nz,is,ie,js,je,find_work,use_EOS,G,GV,pres,T,S, &
-!$OMP                                  nk_linear,IsdB,tv,h,h_neglect,e,dz_neglect,  &
-!$OMP                                  I_slope_max2,h_neglect2,present_int_slope_v, &
-!$OMP                                  int_slope_v,KH_v,vhtot,h_frac,h_avail_rsum,  &
-!$OMP                                  vhD,h_avail,G_scale,Work_v,CS,slope_y,       &
-!$OMP                                  present_slope_y,present_slope_x,m_to_H,H_to_m) &
-!$OMP                          private(drdjA,drdjB,drdkL,drdkR,pres_v,T_v,S_v,      &
-!$OMP                                  drho_dT_v,drho_dS_v,hg2A,hg2B,hg2L,hg2R,haA, &
-!$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
-!$OMP                                  drdy,mag_grad2,Slope,slope2_Ratio,Sfn_unlim, &
-!$OMP                                  Sfn_safe,Sfn_est,Sfn,calc_derivatives)
+!$OPP parallel do default(none) shared(nz,is,ie,js,je,find_work,use_EOS,G,GV,pres,T,S, &
+!$OPP                                  nk_linear,IsdB,tv,h,h_neglect,e,dz_neglect,  &
+!$OPP                                  I_slope_max2,h_neglect2,present_int_slope_v, &
+!$OPP                                  int_slope_v,KH_v,vhtot,h_frac,h_avail_rsum,  &
+!$OPP                                  vhD,h_avail,G_scale,Work_v,CS,slope_y,       &
+!$OPP                                  present_slope_y,present_slope_x,m_to_H,H_to_m) &
+!$OPP                          private(drdjA,drdjB,drdkL,drdkR,pres_v,T_v,S_v,      &
+!$OPP                                  drho_dT_v,drho_dS_v,hg2A,hg2B,hg2L,hg2R,haA, &
+!$OPP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
+!$OPP                                  drdy,mag_grad2,Slope,slope2_Ratio,Sfn_unlim, &
+!$OPP                                  Sfn_safe,Sfn_est,Sfn,calc_derivatives)
   do J=js-1,je ; do K=nz,2,-1
     if (find_work .and. .not.(use_EOS)) then
       drdjA = 0.0 ; drdjB = 0.0
@@ -937,9 +937,9 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, GV, MEK
     do j=js,je ; do I=is-1,ie ; uhD(I,j,1) = -uhtot(I,j) ; enddo ; enddo
     do J=js-1,je ; do i=is,ie ; vhD(i,J,1) = -vhtot(i,J) ; enddo ; enddo
   else
-!$OMP parallel do default(none) shared(is,ie,js,je,pres,T,S,IsdB,tv,uhD,uhtot, &
-!$OMP                                  Work_u,G_scale,use_EOS,e)   &
-!$OMP                          private(pres_u,T_u,S_u,drho_dT_u,drho_dS_u,drdiB)
+!$OPP parallel do default(none) shared(is,ie,js,je,pres,T,S,IsdB,tv,uhD,uhtot, &
+!$OPP                                  Work_u,G_scale,use_EOS,e)   &
+!$OPP                          private(pres_u,T_u,S_u,drho_dT_u,drho_dS_u,drdiB)
     do j=js,je
       if (use_EOS) then
         do I=is-1,ie
@@ -1457,13 +1457,13 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, GV, halo_here)
   h0 = 1.0e-16*sqrt(kappa*dt)*GV%m_to_H
 
   if (kap_dt_x2 <= 0.0) then
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,T_f,T_in,S_f,S_in)
+!$OPP parallel do default(none) shared(is,ie,js,je,nz,T_f,T_in,S_f,S_in)
     do k=1,nz ; do j=js,je ; do i=is,ie
       T_f(i,j,k) = T_in(i,j,k) ; S_f(i,j,k) = S_in(i,j,k)
     enddo ; enddo ; enddo
   else
-!$OMP parallel do default(none) private(ent,b1,d1,c1,h_tr)   &
-!$OMP             shared(is,ie,js,je,nz,kap_dt_x2,h,h0,h_neglect,T_f,S_f,T_in,S_in)
+!$OPP parallel do default(none) private(ent,b1,d1,c1,h_tr)   &
+!$OPP             shared(is,ie,js,je,nz,kap_dt_x2,h,h0,h_neglect,T_f,S_f,T_in,S_in)
     do j=js,je
       do i=is,ie
         ent(i,2) = kap_dt_x2 / ((h(i,j,1)+h(i,j,2)) + h0)

@@ -870,7 +870,7 @@ subroutine calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
   ! Local variables
   integer :: i, j, k
 
-!$OMP parallel do default(none) shared(G,GV,h,dzInterface,h_new)
+!$OPP parallel do default(none) shared(G,GV,h,dzInterface,h_new)
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
       if (G%mask2dT(i,j)>0.) then
@@ -895,7 +895,7 @@ subroutine check_remapping_grid( G, GV, h, dzInterface, msg )
   ! Local variables
   integer :: i, j
 
-!$OMP parallel do default(none) shared(G,GV,h,dzInterface,msg)
+!$OPP parallel do default(none) shared(G,GV,h,dzInterface,msg)
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
       if (G%mask2dT(i,j)>0.) call check_grid_column( GV%ke, G%bathyT(i,j), h(i,j,:), dzInterface(i,j,:), msg )
@@ -1120,9 +1120,9 @@ subroutine build_zstar_grid( CS, G, GV, h, dzInterface, frac_shelf_h)
     if (associated(frac_shelf_h)) ice_shelf = .true.
   endif
 
-!$OMP parallel do default(none) shared(G,GV,dzInterface,CS,nz,h,frac_shelf_h)                 &
-!$OMP                          private(nominalDepth,totalThickness,minThickness, &
-!$OMP                                  zNew,dh,zOld,ice_shelf)
+!$OPP parallel do default(none) shared(G,GV,dzInterface,CS,nz,h,frac_shelf_h)                 &
+!$OPP                          private(nominalDepth,totalThickness,minThickness, &
+!$OPP                                  zNew,dh,zOld,ice_shelf)
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
 
