@@ -3,11 +3,22 @@ module MOM_EOS
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_EOS_linear
-use MOM_EOS_Wright
-use MOM_EOS_UNESCO
-use MOM_EOS_TEOS10
-use MOM_EOS_NEMO
+use MOM_EOS_linear, only : calculate_density_scalar_linear, calculate_density_array_linear
+use MOM_EOS_linear, only : calculate_density_derivs_linear, calculate_specvol_derivs_linear, int_density_dz_linear 
+use MOM_EOS_linear, only : calculate_compress_linear, calculate_2_densities_linear, int_spec_vol_dp_linear
+use MOM_EOS_Wright, only : calculate_density_scalar_wright, calculate_density_array_wright 
+use MOM_EOS_Wright, only : calculate_density_derivs_wright, calculate_specvol_derivs_wright, int_density_dz_wright
+use MOM_EOS_Wright, only : calculate_compress_wright, calculate_2_densities_wright, int_spec_vol_dp_wright
+use MOM_EOS_UNESCO, only : calculate_density_scalar_unesco, calculate_density_array_unesco
+use MOM_EOS_UNESCO, only : calculate_density_derivs_unesco, calculate_density_unesco
+use MOM_EOS_UNESCO, only : calculate_compress_unesco, calculate_2_densities_unesco
+use MOM_EOS_NEMO,   only : calculate_density_scalar_nemo, calculate_density_array_nemo
+use MOM_EOS_NEMO,   only : calculate_density_derivs_nemo, calculate_density_nemo
+use MOM_EOS_NEMO,   only : calculate_compress_nemo, calculate_2_densities_nemo
+use MOM_EOS_TEOS10, only : calculate_density_scalar_teos10, calculate_density_array_teos10
+use MOM_EOS_TEOS10, only : calculate_density_derivs_teos10, calculate_specvol_derivs_teos10
+use MOM_EOS_TEOS10, only : calculate_compress_teos10, calculate_2_densities_teos10 
+use MOM_EOS_TEOS10, only : gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_TFreeze, only : calculate_TFreeze_linear, calculate_TFreeze_Millero
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg
 use MOM_file_parser, only : get_param, log_version, param_file_type
@@ -29,6 +40,7 @@ public int_density_dz_generic_plm_analytic
 public find_depth_of_pressure_in_cell
 public calculate_TFreeze
 public convert_temp_salt_for_TEOS10
+public gsw_sp_from_sr, gsw_pt_from_ct
 
 !> Calculates density of sea water from T, S and P
 interface calculate_density
@@ -202,22 +214,6 @@ subroutine calculate_density_derivs(T, S, pressure, drho_dT, drho_dS, start, npt
   integer,            intent(in)  :: start !< Starting index within the array
   integer,            intent(in)  :: npts !< The number of values to calculate
   type(EOS_type),     pointer     :: EOS !< Equation of state structure
-  !!
-  !!Testing section
-  !!NEMO         Check value: rho = 1027.45140 kg/m^3 for p=1000 dbar, ct=10 Celcius, sa=30 g/kg
-  !real :: T0(1),S0(1),pressure0(1)
-  !T0(1) = 10.
-  !S0(1) = 30.
-  !pressure0(1) = 1000. * 1e4 !pa
-  !call calculate_density_derivs_nemo(T0, S0, pressure0, drho_dT, drho_dS, 1,1)
-  !print*, 'NEMO   drho: ', drho_dT(1), drho_dS(1)
-  !call calculate_density_derivs_teos10(T0, S0, pressure0, drho_dT, drho_dS, 1,1)
-  !print*, 'TEOS10 drho: ', drho_dT(1), drho_dS(1)
-  !call calculate_density_derivs_wright(T0, S0, pressure0, drho_dT, drho_dS, 1,1)
-  !print*, 'WRIGHT drho: ', drho_dT(1), drho_dS(1)
-  !call calculate_density_derivs_unesco(T0, S0, pressure0, drho_dT, drho_dS, 1,1)
-  !print*, 'UNESCO drho: ', drho_dT(1), drho_dS(1)
-  !stop
   !!
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "calculate_density_derivs called with an unassociated EOS_type EOS.")

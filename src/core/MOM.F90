@@ -88,6 +88,7 @@ use MOM_dynamics_legacy_split, only : initialize_dyn_legacy_split, end_dyn_legac
 use MOM_dynamics_legacy_split, only : adjustments_dyn_legacy_split, MOM_dyn_legacy_split_CS
 use MOM_dyn_horgrid,           only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
 use MOM_EOS,                   only : EOS_init
+use MOM_EOS,                   only : gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_error_checking,        only : check_redundant
 use MOM_grid,                  only : ocean_grid_type, set_first_direction
 use MOM_grid,                  only : MOM_grid_init, MOM_grid_end
@@ -124,7 +125,6 @@ use MOM_vert_friction,         only : vertvisc, vertvisc_remnant
 use MOM_vert_friction,         only : vertvisc_limit_vel, vertvisc_init
 use MOM_verticalGrid,          only : verticalGrid_type, verticalGridInit, verticalGridEnd
 use MOM_verticalGrid,          only : get_thickness_units, get_flux_units, get_tr_flux_units
-use gsw_mod_toolbox,           only : gsw_sp_from_sr, gsw_pt_from_ct
 ! Offline modules
 use MOM_offline_transport,         only : offline_transport_CS
 use MOM_offline_transport,         only : transport_by_files, next_modulo_time
@@ -306,8 +306,8 @@ type, public :: MOM_control_struct
   integer :: id_ssh_inst = -1
   integer :: id_tob      = -1
   integer :: id_sob      = -1
-  integer :: id_consst   = -1
-  integer :: id_abssss   = -1
+  integer :: id_sstcon   = -1
+  integer :: id_sssabs   = -1
 
   ! heat and salt flux fields
   integer :: id_fraz         = -1
@@ -493,7 +493,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     h    ! h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
 
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)+1) :: eta_predia, eta_preale
-  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: potTemp, pracSal
+  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: potTemp, pracSal !TEOS10 Diagnostics
   real, dimension(SZIB_(CS%G), SZJ_(CS%G)) :: umo2d ! Diagnostics
   real, dimension(SZI_(CS%G), SZJB_(CS%G)) :: vmo2d ! Diagnostics
 
@@ -1430,24 +1430,35 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
   call enable_averaging(dt*n_max,Time_local, CS%diag)
 
-  if (CS%id_sst > 0) &
-    call post_data(CS%id_sst, state%SST, CS%diag, mask=G%mask2dT)
+  !We may need to convert surface T&S diagnostics from conservative&absolute to potential&practical 
+  if(.NOT. CS%use_conT_absS) then
+    if (CS%id_sst > 0) call post_data(CS%id_sst, state%SST, CS%diag, mask=G%mask2dT)
+    if (CS%id_sss > 0) call post_data(CS%id_sss, state%SSS, CS%diag, mask=G%mask2dT)
+  else
+    if (CS%id_sstcon > 0) call post_data(CS%id_sstcon, state%SST, CS%diag, mask=G%mask2dT) 
+    if (CS%id_sssabs > 0) call post_data(CS%id_sssabs, state%SSS, CS%diag, mask=G%mask2dT)
+    !Conversions
+    do j=js,je ; do i=is,ie
+       pracSal(i,j,1) = gsw_sp_from_sr(state%SSS(i,j))
+       potTemp(i,j,1) = gsw_pt_from_ct(state%SSS(i,j),state%SST(i,j))
+    enddo ; enddo
+    if (CS%id_sst > 0) call post_data(CS%id_sst, potTemp(:,:,1), CS%diag, mask=G%mask2dT)
+    if (CS%id_sss > 0) call post_data(CS%id_sss, pracSal(:,:,1), CS%diag, mask=G%mask2dT)
+  endif
+
   if (CS%id_sst_sq > 0) then
     do j=js,je ; do i=is,ie
       CS%SST_sq(i,j) = state%SST(i,j)*state%SST(i,j)
     enddo ; enddo
     call post_data(CS%id_sst_sq, CS%SST_sq, CS%diag, mask=G%mask2dT)
   endif
-
-  if (CS%id_sss > 0) &
-    call post_data(CS%id_sss, state%SSS, CS%diag, mask=G%mask2dT)
   if (CS%id_sss_sq > 0) then
     do j=js,je ; do i=is,ie
       CS%SSS_sq(i,j) = state%SSS(i,j)*state%SSS(i,j)
     enddo ; enddo
     call post_data(CS%id_sss_sq, CS%SSS_sq, CS%diag, mask=G%mask2dT)
   endif 
-
+  
   if (CS%id_ssu > 0) &
     call post_data(CS%id_ssu, state%u, CS%diag, mask=G%mask2dCu)
   if (CS%id_ssv > 0) &
@@ -2946,9 +2957,9 @@ subroutine register_diags(Time, G, GV, CS, ADp)
         'Conservative Temperature', 'Celsius')
     CS%id_Sabs = register_diag_field('ocean_model', 'abssalt', diag%axesTL, Time, &
         long_name='Absolute Salinity', units='g/Kg')
-    CS%id_consst = register_diag_field('ocean_model', 'conSST', diag%axesT1, Time,     &
+    CS%id_sstcon = register_diag_field('ocean_model', 'conSST', diag%axesT1, Time,     &
         'Sea Surface Conservative Temperature', 'Celsius', CS%missing)
-    CS%id_abssss = register_diag_field('ocean_model', 'absSSS', diag%axesT1, Time,     &
+    CS%id_sssabs = register_diag_field('ocean_model', 'absSSS', diag%axesT1, Time,     &
         'Sea Surface Absolute Salinity', 'g/Kg', CS%missing)
 
   endif
