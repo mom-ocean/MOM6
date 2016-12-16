@@ -1215,7 +1215,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
           umo2d(:,:) = umo2d(:,:) + CS%uhtr(:,:,k)
         enddo
         umo2d(:,:) = umo2d(:,:) * ( GV%H_to_kg_m2 / CS%dt_trans )
-        call post_data(CS%id_umo, umo2d, CS%diag)
+        call post_data(CS%id_umo_2d, umo2d, CS%diag)
       endif
       if (CS%id_umo > 0) then
         ! Convert to kg/s. Modifying the array for diagnostics is allowed here since it is set to zero immediately below
@@ -1228,7 +1228,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
           vmo2d(:,:) = vmo2d(:,:) + CS%vhtr(:,:,k)
         enddo
         vmo2d(:,:) = vmo2d(:,:) * ( GV%H_to_kg_m2 / CS%dt_trans )
-        call post_data(CS%id_vmo, vmo2d, CS%diag)
+        call post_data(CS%id_vmo_2d, vmo2d, CS%diag)
       endif
       if (CS%id_vmo > 0) then
         ! Convert to kg/s. Modifying the array for diagnostics is allowed here since it is set to zero immediately below
