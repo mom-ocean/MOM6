@@ -1190,16 +1190,20 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
 
       ! post some diagnostics
-      !
-      !In case the internal representation of the model is conservative temperature and absolute salinity 
-      !convert, for diagnostics
-      !from conservative temp to potential temp and 
-      !from absolute salinity to practical salinity
-      !
-      if(CS%use_conT_absS) then
+      if(.NOT. CS%use_conT_absS) then
+         !Internal T&S variables are assumed to be potential&practical
+         if (CS%id_T > 0) call post_data(CS%id_T, CS%tv%T, CS%diag)
+         if (CS%id_S > 0) call post_data(CS%id_S, CS%tv%S, CS%diag)
+
+         if (CS%id_tob > 0) call post_data(CS%id_tob, CS%tv%T(:,:,G%ke), CS%diag, mask=G%mask2dT)
+         if (CS%id_sob > 0) call post_data(CS%id_sob, CS%tv%S(:,:,G%ke), CS%diag, mask=G%mask2dT)
+      else
+         !Internal T&S variables are assumed to be conservative&absolute
          if (CS%id_Tcon > 0) call post_data(CS%id_Tcon, CS%tv%T, CS%diag)
          if (CS%id_Sabs > 0) call post_data(CS%id_Sabs, CS%tv%S, CS%diag)
-         !Conversions
+         !Using TEOS-10 function calls convert T&S diagnostics
+         !from conservative temp to potential temp and 
+         !from absolute salinity to practical salinity
          do k=1,nz ; do j=js,je ; do i=is,ie
             pracSal(i,j,k) = gsw_sp_from_sr(CS%tv%S(i,j,k))
             potTemp(i,j,k) = gsw_pt_from_ct(CS%tv%S(i,j,k),CS%tv%T(i,j,k))
@@ -1208,12 +1212,6 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
          if (CS%id_S > 0) call post_data(CS%id_S, pracSal, CS%diag)
          if (CS%id_tob > 0) call post_data(CS%id_tob, potTemp(:,:,G%ke), CS%diag, mask=G%mask2dT)
          if (CS%id_sob > 0) call post_data(CS%id_sob, pracSal(:,:,G%ke), CS%diag, mask=G%mask2dT)
-      else
-         if (CS%id_T > 0) call post_data(CS%id_T, CS%tv%T, CS%diag)
-         if (CS%id_S > 0) call post_data(CS%id_S, CS%tv%S, CS%diag)
-
-         if (CS%id_tob > 0) call post_data(CS%id_tob, CS%tv%T(:,:,G%ke), CS%diag, mask=G%mask2dT)
-         if (CS%id_sob > 0) call post_data(CS%id_sob, CS%tv%S(:,:,G%ke), CS%diag, mask=G%mask2dT)
       endif
 
       if (CS%id_Tadx   > 0) call post_data(CS%id_Tadx,   CS%T_adx,   CS%diag)
@@ -1430,14 +1428,17 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
   call enable_averaging(dt*n_max,Time_local, CS%diag)
 
-  !We may need to convert surface T&S diagnostics from conservative&absolute to potential&practical 
   if(.NOT. CS%use_conT_absS) then
+    !Internal T&S variables are assumed to be potential&practical
     if (CS%id_sst > 0) call post_data(CS%id_sst, state%SST, CS%diag, mask=G%mask2dT)
     if (CS%id_sss > 0) call post_data(CS%id_sss, state%SSS, CS%diag, mask=G%mask2dT)
   else
+    !Internal T&S variables are assumed to be conservative&absolute
     if (CS%id_sstcon > 0) call post_data(CS%id_sstcon, state%SST, CS%diag, mask=G%mask2dT) 
     if (CS%id_sssabs > 0) call post_data(CS%id_sssabs, state%SSS, CS%diag, mask=G%mask2dT)
-    !Conversions
+    !Using TEOS-10 function calls convert T&S diagnostics
+    !from conservative temp to potential temp and 
+    !from absolute salinity to practical salinity
     do j=js,je ; do i=is,ie
        pracSal(i,j,1) = gsw_sp_from_sr(state%SSS(i,j))
        potTemp(i,j,1) = gsw_pt_from_ct(state%SSS(i,j),state%SST(i,j))
