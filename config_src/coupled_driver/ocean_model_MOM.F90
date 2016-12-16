@@ -488,7 +488,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 ! Translate state into Ocean.
 !  call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid, &
 !                                   Ice_ocean_boundary%p, OS%press_to_z)
-  call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid, OS%MOM_CSp%use_conT_refS)
+  call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid, OS%MOM_CSp%use_conT_absS)
 
   call callTree_leave("update_ocean_model()")
 end subroutine update_ocean_model
@@ -731,12 +731,12 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, maskmap)
 
 end subroutine initialize_ocean_public_type
 
-subroutine convert_state_to_ocean_type(state, Ocean_sfc, G, use_conT_refS, patm, press_to_z)
+subroutine convert_state_to_ocean_type(state, Ocean_sfc, G, use_conT_absS, patm, press_to_z)
   use gsw_mod_toolbox, only : gsw_sp_from_sr, gsw_pt_from_ct
   type(surface),           intent(inout) :: state
   type(ocean_public_type), target, intent(inout) :: Ocean_sfc
   type(ocean_grid_type),   intent(inout) :: G
-  logical,                 intent(in)    :: use_conT_refS
+  logical,                 intent(in)    :: use_conT_absS
   real,          optional, intent(in)    :: patm(:,:)
   real,          optional, intent(in)    :: press_to_z
 ! This subroutine translates the coupler's ocean_data_type into MOM's
@@ -765,7 +765,7 @@ subroutine convert_state_to_ocean_type(state, Ocean_sfc, G, use_conT_refS, patm,
   !from conservative T to potential T and
   !from absolute (reference) salinity to practical salinity 
   !
-  if(use_conT_refS) then
+  if(use_conT_absS) then
     do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
       Ocean_sfc%s_surf(i,j) = gsw_sp_from_sr(state%SSS(i+i0,j+j0))
       Ocean_sfc%t_surf(i,j) = gsw_pt_from_ct(state%SSS(i+i0,j+j0),state%SST(i+i0,j+j0)) + CELSIUS_KELVIN_OFFSET
@@ -831,7 +831,7 @@ subroutine ocean_model_init_sfc(OS, Ocean_sfc)
            OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%ave_ssh,&
            OS%grid, OS%GV, OS%MOM_CSp)
 
-  call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid, OS%MOM_CSp%use_conT_refS)
+  call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid, OS%MOM_CSp%use_conT_absS)
 
 end subroutine ocean_model_init_sfc
 ! </SUBROUTINE NAME="ocean_model_init_sfc">
