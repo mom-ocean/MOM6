@@ -87,12 +87,22 @@ public energetic_PBL, energetic_PBL_init, energetic_PBL_end
 public energetic_PBL_get_MLD
 
 type, public :: energetic_PBL_CS ; private
+  logical :: MSTARFIXED
   real    :: mstar           ! The ratio of the friction velocity cubed to the
-                             ! TKE input to the mixed layer, nondimensional.
+                             ! TKE available to drive entrainment, nondimensional.  
+                             ! This quantity is the vertically integrated 
+                             ! shear production minus the vertically integrated
+                             ! dissipation of TKE produced by shear.
   real    :: nstar           ! The fraction of the TKE input to the mixed layer
                              ! available to drive entrainment, nondim.
+                             ! This quantity is the vertically integrated
+                             ! buoyancy production minus the vertically integrated
+                             ! dissipation of TKE produced by buoyancy.
   real    :: TKE_decay       ! The ratio of the natural Ekman depth to the TKE
                              ! decay scale, nondimensional.
+                             ! This process is generally not included in models
+                             ! and therefore cannot be found from (for example)
+                             ! tuning against K-Epsilon.
   real    :: MKE_to_TKE_effic ! The efficiency with which mean kinetic energy
                              ! released by mechanically forced entrainment of
                              ! the mixed layer is converted to TKE, nondim.
@@ -178,8 +188,8 @@ integer :: num_msg = 0, max_msg = 2
 contains
 
 subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
-                         dSV_dT, dSV_dS, TKE_forced, dt_diag, last_call, &
-                         dT_expected, dS_expected)
+                         dSV_dT, dSV_dS, TKE_forced, Buoy_Flux, dt_diag, last_call, &
+                         dT_expected, dS_expected )
   type(ocean_grid_type),                     intent(inout) :: G
   type(verticalGrid_type),                   intent(in)    :: GV
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: h_3d
@@ -190,6 +200,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   real,                                      intent(in)    :: dt
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(out) :: Kd_int
   type(energetic_PBL_CS),                    pointer       :: CS
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)             :: Buoy_Flux
   real,                            optional, intent(in)    :: dt_diag
   logical,                         optional, intent(in)    :: last_call
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
@@ -448,6 +459,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   integer, save :: NOTCONVERGED!
   !-End BGR iteration parameters-----------------------------------------
   real :: N2_dissipation
+  real :: B_STAR
+  real :: Stab, StabL, mstar_effective
   type(cvmix_global_params_type) :: CVMIX_gravity 
   logical :: debug=.false.  ! Change this hard-coded value for debugging.
 !  The following arrays are used only for debugging purposes.
@@ -504,6 +517,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
     if (CS%Mixing_Diagnostics) then
       CS%Mixing_Length(:,:,:) = 0.0
       CS%Velocity_Scale(:,:,:) = 0.0
+      !CS%Mstar_Used(:,:) = 0.0
     endif
 !!OMP end parallel
   endif
@@ -571,36 +585,42 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                     fluxes%frac_shelf_h(i,j) * fluxes%ustar_shelf(i,j)
       endif
       if (U_Star < CS%ustar_min) U_Star = CS%ustar_min
+      ! Computing u10 based on u_star and COARE 3.5 relationships
       call ust_2_u10_coare3p5(U_STAR*sqrt(GV%Rho0/1.225),U_10)
+      ! Computing B_Star, or the Buoyancy flux over the friction velocity. 
+      B_Star = min(0.0,-buoy_Flux(i,j)/U_Star)
 
       if (CS%omega_frac >= 1.0) then ; absf(i) = 2.0*CS%omega
       else
         absf(i) = 0.25*((abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I-1,J-1))) + &
                      (abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I-1,J))))
         if (CS%omega_frac > 0.0) &
-          absf = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf**2)
+          absf(i) = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf(i)**2)
       endif
 
-      mech_TKE(i) = (dt*CS%mstar*GV%Rho0)*((U_Star**3))
-      conv_PErel(i) = 0.0
+      if (CS%mstarFixed) then
+        mech_TKE(i) = (dt*CS%mstar*GV%Rho0)*((U_Star**3))
+        conv_PErel(i) = 0.0
 
-      if (CS%TKE_diagnostics) then
-        CS%diag_TKE_wind(i,j) = CS%diag_TKE_wind(i,j) + mech_TKE(i) * IdtdR0
-        if (TKE_forced(i,j,1) <= 0.0) then
-          CS%diag_TKE_forcing(i,j) = CS%diag_TKE_forcing(i,j) + &
-                                     max(-mech_TKE(i), TKE_forced(i,j,1)) * IdtdR0
-          ! CS%diag_TKE_unbalanced_forcing(i,j) = CS%diag_TKE_unbalanced_forcing(i,j) + &
-          !     min(0.0, TKE_forced(i,j,1) + mech_TKE(i)) * IdtdR0
-        else
-          CS%diag_TKE_forcing(i,j) = CS%diag_TKE_forcing(i,j) + CS%nstar*TKE_forced(i,j,1) * IdtdR0
+        if (CS%TKE_diagnostics) then
+          CS%diag_TKE_wind(i,j) = CS%diag_TKE_wind(i,j) + mech_TKE(i) * IdtdR0
+          if (TKE_forced(i,j,1) <= 0.0) then
+            CS%diag_TKE_forcing(i,j) = CS%diag_TKE_forcing(i,j) + &
+                 max(-mech_TKE(i), TKE_forced(i,j,1)) * IdtdR0
+            ! CS%diag_TKE_unbalanced_forcing(i,j) = CS%diag_TKE_unbalanced_forcing(i,j) + &
+            !     min(0.0, TKE_forced(i,j,1) + mech_TKE(i)) * IdtdR0
+          else
+            CS%diag_TKE_forcing(i,j) = CS%diag_TKE_forcing(i,j) + CS%nstar*TKE_forced(i,j,1) * IdtdR0
+          endif
         endif
-      endif
 
-      if (TKE_forced(i,j,1) <= 0.0) then
-        mech_TKE(i) = mech_TKE(i) + TKE_forced(i,j,1)
-        if (mech_TKE(i) < 0.0) mech_TKE(i) = 0.0
-      else
-        conv_PErel(i) = conv_PErel(i) + TKE_forced(i,j,1)
+        if (TKE_forced(i,j,1) <= 0.0) then
+          mech_TKE(i) = mech_TKE(i) + TKE_forced(i,j,1)
+          if (mech_TKE(i) < 0.0) mech_TKE(i) = 0.0
+        else
+          conv_PErel(i) = conv_PErel(i) + TKE_forced(i,j,1)
+        endif
+
       endif
 
 !    endif ; enddo
@@ -636,7 +656,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
 
       ! Store the initial mechanical TKE and convectively released PE to
       ! enable multiple iterations.
-      mech_TKE_top(i) = mech_TKE(i) ; conv_PErel_top(i) = conv_PErel(i)
+      !mech_TKE_top(i) = mech_TKE(i) ; conv_PErel_top(i) = conv_PErel(i)
 
       !/The following lines are for the iteration over MLD
       !{
@@ -668,13 +688,57 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
         !CS%ML_depth2(i,j) = h(i,1)*GV%H_to_m
 
         sfc_connected(i) = .true.
-        ! Multiply mech TKE at surface by enhancement (w'/ust) cubed.
-        ! This has not been confirmed to reproduce LES Langmuir simulations,
-        ! but is consistent if we assume we are trying to capture the enhancement
-        ! of the TKE flux/ (turbulent velocity scale cubed) knowing that the
-        ! enhancement factor is that of the turbulent velocity scale.
-        mech_TKE(i) = mech_TKE_top(i)*ENHANCE_V**(3.) ; conv_PErel(i) = conv_PErel_top(i)
 
+        if (.not.CS%MstarFixed) then
+          ! Note this value of mech_TKE(i) now must be iterated over, so it is moved here
+
+          ! First solve for the TKE to PE length scale
+          !  Change the (2.0) to a runtime parameter
+          StabL = -u_star**2 / ( VonKar * ( B_STAR + (2.0) * u_star * absf(i)))
+          Stab = MLD_guess / StabL
+          ! Limit Stab to regime where 3rd order fit is reasonable 
+          Stab = max(-0.79,min(5.0,Stab))
+          Mstar_effective = 0.005007927814101 * Stab**4 + &
+                           -0.059699214537634 * Stab**3 + &
+                            0.259989170346221 * Stab**2 + &
+                            0.706210570634930 * Stab    + &
+                            0.367256544478824
+          if ((Stab).ge.0.0 .and. STAB .le.0.5)then
+             Mstar_effective=Mstar_effective*(1.+.2*((0.5-STAB)/0.5))
+          elseif ((Stab).lt.0.0 .and. STAB .gt.-5.0) then
+             Mstar_effective=Mstar_effective*(1.-.3*((5.0+STAB)/5.0))
+          endif
+          mech_TKE(i) = (dt*Mstar_effective*GV%Rho0)*((U_Star**3))
+          conv_PErel(i) = 0.0
+          print*,'---'
+          print*,Stab,Mstar_effective
+          print*,MLD_guess,-u_star**2/b_star,-2.*u_star/absf(i)
+          if (CS%TKE_diagnostics) then
+            CS%diag_TKE_wind(i,j) = CS%diag_TKE_wind(i,j) + mech_TKE(i) * IdtdR0
+            if (TKE_forced(i,j,1) <= 0.0) then
+              CS%diag_TKE_forcing(i,j) = CS%diag_TKE_forcing(i,j) + &
+                   max(-mech_TKE(i), TKE_forced(i,j,1)) * IdtdR0
+              ! CS%diag_TKE_unbalanced_forcing(i,j) = CS%diag_TKE_unbalanced_forcing(i,j) + &
+              !     min(0.0, TKE_forced(i,j,1) + mech_TKE(i)) * IdtdR0
+            else
+              CS%diag_TKE_forcing(i,j) = CS%diag_TKE_forcing(i,j) + CS%nstar*TKE_forced(i,j,1) * IdtdR0
+            endif
+          endif
+
+          if (TKE_forced(i,j,1) <= 0.0) then
+            mech_TKE(i) = mech_TKE(i) + TKE_forced(i,j,1)
+            if (mech_TKE(i) < 0.0) mech_TKE(i) = 0.0
+          else
+            conv_PErel(i) = conv_PErel(i) + TKE_forced(i,j,1)
+          endif
+        else  
+          ! Multiply mech TKE at surface by enhancement (w'/ust) cubed.
+          ! This has not been confirmed to reproduce LES Langmuir simulations,
+          ! but is consistent if we assume we are trying to capture the enhancement
+          ! of the TKE flux/ (turbulent velocity scale cubed) knowing that the
+          ! enhancement factor is that of the turbulent velocity scale.
+          mech_TKE(i) = mech_TKE_top(i)*ENHANCE_V**(3.) ; conv_PErel(i) = conv_PErel_top(i)
+        endif
 
         if (CS%TKE_diagnostics) then
           dTKE_conv = 0.0 ; dTKE_forcing = 0.0 ; dTKE_mixing = 0.0
@@ -705,7 +769,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           do K=2,nz+1
             h_rsum = h_rsum + h(i,k-1)
             MixLen_shape(K) = CS%transLay_scale + (1.0 - CS%transLay_scale) * &
-                              (max(0.0, (MLD_guess - h_rsum)*I_MLD) )**2 !BR prefer 1 or 2 for exponent?
+                              (max(0.0, (MLD_guess - h_rsum)*I_MLD) )**1.0 !BR prefer 1 or 2 for exponent?
           enddo
         endif
 
@@ -1739,6 +1803,10 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   call get_param(param_file, mod, "MSTAR", CS%mstar, &
                  "The ratio of the friction velocity cubed to the TKE \n"//&
                  "input to the mixed layer.", "units=nondim", default=1.2)
+  call get_param(param_file, mod, "MSTAR_FIXED", CS%MstarFixed, &
+                 "True to use the fixed value of mstar, false to depend \n"//&
+                 "on the Obhukov length and Ekman length.","units=nondim",&
+                 default=.true.)
   call get_param(param_file, mod, "NSTAR", CS%nstar, &
                  "The portion of the buoyant potential energy imparted by \n"//&
                  "surface fluxes that is available to drive entrainment \n"//&

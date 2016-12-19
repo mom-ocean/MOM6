@@ -207,7 +207,7 @@ end type hor_visc_CS
 contains
 
 subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, OBC)
-  type(ocean_grid_type),                     intent(in)  :: G
+  type(ocean_grid_type),                     intent(inout)  :: G
   type(verticalGrid_type),                   intent(in)  :: GV
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: v
@@ -703,7 +703,7 @@ end subroutine horizontal_viscosity
 
 subroutine hor_visc_init(Time, G, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time
-  type(ocean_grid_type),   intent(in)    :: G
+  type(ocean_grid_type),   intent(inout)    :: G
   type(param_file_type),   intent(in)    :: param_file
   type(diag_ctrl), target, intent(inout) :: diag
   type(hor_visc_CS), pointer             :: CS
