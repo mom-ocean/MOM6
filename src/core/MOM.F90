@@ -3566,15 +3566,13 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
 
   if (present(p_atm)) then ; if (ASSOCIATED(p_atm)) then
 
-    if ((ASSOCIATED(CS%tv%eqn_of_state))  .and.  (CS%calc_rho_for_sea_lev)) then
-      call calculate_density(CS%tv%T(i,j,1),CS%tv%S(i,j,1) , p_atm(i,j)/2.0 , Rho_conv, CS%tv%eqn_of_state)
-    else
-      Rho_conv=GV%Rho0
-    endif
-    IgR0 = 1.0 / (Rho_conv * GV%g_Earth)
-
-
     do j=js,je ; do i=is,ie
+      if ((ASSOCIATED(CS%tv%eqn_of_state))  .and.  (CS%calc_rho_for_sea_lev)) then
+        call calculate_density(CS%tv%T(i,j,1),CS%tv%S(i,j,1) , p_atm(i,j)/2.0 , Rho_conv, CS%tv%eqn_of_state)
+      else
+        Rho_conv=GV%Rho0
+      endif
+      IgR0 = 1.0 / (Rho_conv * GV%g_Earth)
       ssh(i,j) = ssh(i,j) + p_atm(i,j) * IgR0
     enddo ; enddo
   endif ; endif
