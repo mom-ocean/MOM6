@@ -489,6 +489,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)+1) :: eta_predia, eta_preale
   real, dimension(SZIB_(CS%G), SZJ_(CS%G)) :: umo2d ! Diagnostics
   real, dimension(SZI_(CS%G), SZJB_(CS%G)) :: vmo2d ! Diagnostics
+  real, dimension(SZIB_(CS%G), SZJ_(CS%G), SZK_(CS%G)) :: umo ! Diagnostics
+  real, dimension(SZI_(CS%G), SZJB_(CS%G), SZK_(CS%G)) :: vmo ! Diagnostics
 
   real :: tot_wt_ssh, Itot_wt_ssh, I_time_int
   real :: zos_area_mean, volo, ssh_ga
@@ -1027,6 +1029,33 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       call calculate_Z_transport(CS%uhtr, CS%vhtr, h, CS%dt_trans, G, GV, &
                                  CS%diag_to_Z_CSp)
       call cpu_clock_end(id_clock_Z_diag)
+      ! Post mass transports, including SGS
+      if (CS%id_umo_2d > 0) then
+        umo2d(:,:) = CS%uhtr(:,:,1)
+        do k = 2, nz
+          umo2d(:,:) = umo2d(:,:) + CS%uhtr(:,:,k)
+        enddo
+        umo2d(:,:) = umo2d(:,:) * ( GV%H_to_kg_m2 / CS%dt_trans )
+        call post_data(CS%id_umo_2d, umo2d, CS%diag)
+      endif
+      if (CS%id_umo > 0) then
+        ! Convert to kg/s. Modifying the array for diagnostics is allowed here since it is set to zero immediately below
+        umo(:,:,:) =  CS%uhtr(:,:,:) * ( GV%H_to_kg_m2 / CS%dt_trans )
+        call post_data(CS%id_umo, umo, CS%diag)
+      endif
+      if (CS%id_vmo_2d > 0) then
+        vmo2d(:,:) = CS%vhtr(:,:,1)
+        do k = 2, nz
+          vmo2d(:,:) = vmo2d(:,:) + CS%vhtr(:,:,k)
+        enddo
+        vmo2d(:,:) = vmo2d(:,:) * ( GV%H_to_kg_m2 / CS%dt_trans )
+        call post_data(CS%id_vmo_2d, vmo2d, CS%diag)
+      endif
+      if (CS%id_vmo > 0) then
+        ! Convert to kg/s. Modifying the array for diagnostics is allowed here since it is set to zero immediately below
+        vmo(:,:,:) =  CS%vhtr(:,:,:) * ( GV%H_to_kg_m2 / CS%dt_trans )
+        call post_data(CS%id_vmo, vmo, CS%diag)
+      endif
 
       if (CS%id_u_predia > 0) call post_data(CS%id_u_predia, u, CS%diag)
       if (CS%id_v_predia > 0) call post_data(CS%id_v_predia, v, CS%diag)
@@ -1211,32 +1240,6 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
       if (CS%id_uhtr > 0) call post_data(CS%id_uhtr, CS%uhtr, CS%diag)
       if (CS%id_vhtr > 0) call post_data(CS%id_vhtr, CS%vhtr, CS%diag)
-      if (CS%id_umo_2d > 0) then
-        umo2d(:,:) = CS%uhtr(:,:,1)
-        do k = 2, nz
-          umo2d(:,:) = umo2d(:,:) + CS%uhtr(:,:,k)
-        enddo
-        umo2d(:,:) = umo2d(:,:) * ( GV%H_to_kg_m2 / CS%dt_trans )
-        call post_data(CS%id_umo, umo2d, CS%diag)
-      endif
-      if (CS%id_umo > 0) then
-        ! Convert to kg/s. Modifying the array for diagnostics is allowed here since it is set to zero immediately below
-        CS%uhtr(:,:,:) =  CS%uhtr(:,:,:) * ( GV%H_to_kg_m2 / CS%dt_trans )
-        call post_data(CS%id_umo, CS%uhtr, CS%diag)
-      endif
-      if (CS%id_vmo_2d > 0) then
-        vmo2d(:,:) = CS%vhtr(:,:,1)
-        do k = 2, nz
-          vmo2d(:,:) = vmo2d(:,:) + CS%vhtr(:,:,k)
-        enddo
-        vmo2d(:,:) = vmo2d(:,:) * ( GV%H_to_kg_m2 / CS%dt_trans )
-        call post_data(CS%id_vmo, vmo2d, CS%diag)
-      endif
-      if (CS%id_vmo > 0) then
-        ! Convert to kg/s. Modifying the array for diagnostics is allowed here since it is set to zero immediately below
-        CS%vhtr(:,:,:) =  CS%vhtr(:,:,:) * ( GV%H_to_kg_m2 / CS%dt_trans )
-        call post_data(CS%id_vmo, CS%vhtr, CS%diag)
-      endif
       
       call post_diags_TS_tendency(G,GV,CS,dtdia)
 

@@ -42,8 +42,6 @@ use MOM_verticalGrid,     only : verticalGrid_type
 use regrid_defs,          only : PRESSURE_RECONSTRUCTION_PLM
 !use regrid_consts,       only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts,        only : coordinateUnits, coordinateMode, state_dependent
-use regrid_consts,        only : REGRIDDING_ZSTAR, REGRIDDING_RHO
-use regrid_consts,        only : REGRIDDING_HYCOM1, REGRIDDING_SLIGHT
 use regrid_edge_values,   only : edge_values_implicit_h4
 use PLM_functions,        only : PLM_reconstruction, PLM_boundary_extrapolation
 use PPM_functions,        only : PPM_reconstruction, PPM_boundary_extrapolation
