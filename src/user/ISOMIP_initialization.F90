@@ -35,6 +35,7 @@ use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
 use regrid_consts, only : REGRIDDING_RHO, REGRIDDING_SIGMA
+use regrid_consts, only : REGRIDDING_SIGMA_SHELF_ZSTAR
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -221,7 +222,7 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv )
       enddo
     enddo ; enddo
 
-  case ( REGRIDDING_ZSTAR )                       ! Initial thicknesses for z coordinates
+  case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR )                       ! Initial thicknesses for z coordinates
     do j=js,je ; do i=is,ie
       eta1D(nz+1) = -1.0*G%bathyT(i,j)
       do k=nz,1,-1
@@ -291,7 +292,7 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
 
   select case ( coordinateMode(verticalCoordinate) )
 
-    case (  REGRIDDING_RHO, REGRIDDING_ZSTAR, REGRIDDING_SIGMA )
+    case (  REGRIDDING_RHO, REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR, REGRIDDING_SIGMA )
       S_range = s_sur - s_bot
       T_range = t_sur - t_bot
       !write(*,*)'S_range,T_range',S_range,T_range
@@ -541,7 +542,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
          enddo
        enddo ; enddo
 
-     case ( REGRIDDING_ZSTAR )                       ! Initial thicknesses for z coordinates
+     case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR )                       ! Initial thicknesses for z coordinates
        do j=js,je ; do i=is,ie
          eta1D(nz+1) = -1.0*G%bathyT(i,j)
          do k=nz,1,-1
