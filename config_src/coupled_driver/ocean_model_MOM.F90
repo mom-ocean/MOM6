@@ -576,7 +576,7 @@ subroutine add_berg_flux_to_shelf(G, fluxes, use_ice_shelf, density_ice, kv_ice,
     call pass_vector(fluxes%frac_shelf_u, fluxes%frac_shelf_v, G%domain, TO_ALL, CGRID_NE)
     
     !Zero'ing out other fluxes under the tabular icebergs 
-    if (berg_area_threshold > 0.) then
+    if (berg_area_threshold >= 0.) then
       do j=jsd,jed ; do i=isd,ied
         if (fluxes%frac_shelf_h(i,j) > berg_area_threshold) then  !Only applying for ice shelf covering most of cell
             
