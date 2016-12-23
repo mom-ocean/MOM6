@@ -2052,9 +2052,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   endif
 
   call get_param(param_file, "MOM", "CALC_RHO_FOR_SEA_LEVEL", CS%calc_rho_for_sea_lev, &
-                 "If true, the locally calculated density is \n"//&
-                 "used to convert surface pressure to effective n"//&
-                 "sea level.", default=.false.)
+                 "If true, the in-situ density is used to calculate the\n"//&
+                 "effective sea level that is returned to the coupler. If false,\n"//&
+                 "the Boussinesq parameter RHO_0 is used.", default=.false.)
   call get_param(param_file, "MOM", "ENABLE_THERMODYNAMICS", CS%use_temperature, &
                  "If true, Temperature and salinity are used as state \n"//&
                  "variables.", default=.true.)
