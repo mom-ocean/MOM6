@@ -19,6 +19,7 @@ integer, parameter :: REGRIDDING_SIGMA     = 4      !< Sigma coordinates
 integer, parameter :: REGRIDDING_ARBITRARY = 5      !< Arbitrary coordinates
 integer, parameter :: REGRIDDING_HYCOM1    = 6      !< Simple HyCOM coordinates without BBL
 integer, parameter :: REGRIDDING_SLIGHT    = 7      !< Stretched coordinates in the
+integer, parameter :: REGRIDDING_SIGMA_SHELF_ZSTAR = 8   !< z* coordinates at the bottom, sigma-near the top
                                                     !! lightest water, isopycnal below
 character(len=6), parameter :: REGRIDDING_LAYER_STRING = "LAYER"   !< Layer string
 character(len=6), parameter :: REGRIDDING_ZSTAR_STRING_OLD = "Z*"  !< z* string (legacy name)
@@ -28,6 +29,7 @@ character(len=6), parameter :: REGRIDDING_SIGMA_STRING = "SIGMA"   !< Sigma stri
 character(len=6), parameter :: REGRIDDING_ARBITRARY_STRING = "ARB" !< Arbitrary coordinates
 character(len=6), parameter :: REGRIDDING_HYCOM1_STRING = "HYCOM1" !< Hycom string
 character(len=6), parameter :: REGRIDDING_SLIGHT_STRING = "SLIGHT" !< Hybrid S-rho string
+character(len=17), parameter :: REGRIDDING_SIGMA_SHELF_ZSTAR_STRING = "SIGMA_SHELF_ZSTAR" !< Hybrid z*/sigma
 character(len=6), parameter :: DEFAULT_COORDINATE_MODE = REGRIDDING_LAYER_STRING !< Default coordinate mode
 
 integer, dimension(REGRIDDING_NUM_TYPES), parameter :: vertical_coords = &
@@ -68,6 +70,7 @@ function coordinateMode(string)
     case (trim(REGRIDDING_HYCOM1_STRING)); coordinateMode = REGRIDDING_HYCOM1
     case (trim(REGRIDDING_SLIGHT_STRING)); coordinateMode = REGRIDDING_SLIGHT
     case (trim(REGRIDDING_ARBITRARY_STRING)); coordinateMode = REGRIDDING_ARBITRARY
+    case (trim(REGRIDDING_SIGMA_SHELF_ZSTAR_STRING)); coordinateMode = REGRIDDING_SIGMA_SHELF_ZSTAR
     case default ; call MOM_error(FATAL, "coordinateMode: "//&
        "Unrecognized choice of coordinate ("//trim(string)//").")
   end select
@@ -81,6 +84,7 @@ function coordinateUnitsI(coordMode)
   select case ( coordMode )
     case (REGRIDDING_LAYER); coordinateUnitsI = "kg m^-3"
     case (REGRIDDING_ZSTAR); coordinateUnitsI = "m"
+    case (REGRIDDING_SIGMA_SHELF_ZSTAR); coordinateUnitsI = "m"
     case (REGRIDDING_RHO);   coordinateUnitsI = "kg m^-3"
     case (REGRIDDING_SIGMA); coordinateUnitsI = "Non-dimensional"
     case (REGRIDDING_HYCOM1); coordinateUnitsI = "m"
@@ -114,6 +118,7 @@ logical function state_dependent_int(mode)
   select case ( mode )
     case (REGRIDDING_LAYER); state_dependent_int = .true.
     case (REGRIDDING_ZSTAR); state_dependent_int = .false.
+    case (REGRIDDING_SIGMA_SHELF_ZSTAR); state_dependent_int = .false.
     case (REGRIDDING_RHO);   state_dependent_int = .true.
     case (REGRIDDING_SIGMA); state_dependent_int = .false.
     case (REGRIDDING_HYCOM1); state_dependent_int = .true.

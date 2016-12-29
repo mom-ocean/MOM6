@@ -158,6 +158,9 @@ type, public :: ocean_state_type ; private
   logical :: use_ice_shelf    ! If true, the ice shelf model is enabled.
   logical :: icebergs_apply_rigid_boundary  ! If true, the icebergs can change ocean bd condition.
   real :: kv_iceberg          ! The viscosity of the icebergs in m2/s (for ice rigidity)
+  real :: berg_area_threshold ! Fraction of grid cell which iceberg must occupy 
+                              !so that fluxes below are set to zero. (0.5 is a
+                              !good value to use. Not applied for negative values.
   real :: latent_heat_fusion  ! Latent heat of fusion
   real :: density_iceberg     ! A typical density of icebergs in kg/m3 (for ice rigidity) 
   type(ice_shelf_CS), pointer :: Ice_shelf_CSp => NULL()
@@ -297,6 +300,10 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
                   "A typical density of icebergs.", units="kg m-3", default=917.0)
     call get_param(param_file, mod, "LATENT_HEAT_FUSION", OS%latent_heat_fusion, &
                  "The latent heat of fusion.", units="J/kg", default=hlf)
+    call get_param(param_file, mod, "BERG_AREA_THRESHOLD", OS%berg_area_threshold, &
+                 "Fraction of grid cell which iceberg must occupy, so that fluxes \n"//&
+                  "below berg are set to zero. Not applied for negative \n"//&
+                 " values.", units="non-dim", default=-1.0)
   endif
 
   OS%press_to_z = 1.0/(Rho0*G_Earth)
@@ -424,7 +431,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     endif
     if (OS%icebergs_apply_rigid_boundary)  then
       !This assumes that the iceshelf and ocean are on the same grid. I hope this is true
-      call add_berg_flux_to_shelf(OS%grid, OS%fluxes,OS%use_ice_shelf,OS%density_iceberg,OS%kv_iceberg, OS%latent_heat_fusion, OS%State, time_step)
+      call add_berg_flux_to_shelf(OS%grid, OS%fluxes,OS%use_ice_shelf,OS%density_iceberg,OS%kv_iceberg, OS%latent_heat_fusion, OS%State, time_step, OS%berg_area_threshold)
     endif
     ! Indicate that there are new unused fluxes.
     OS%fluxes%fluxes_used = .false.
@@ -438,7 +445,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     endif
     if (OS%icebergs_apply_rigid_boundary)  then
      !This assumes that the iceshelf and ocean are on the same grid. I hope this is true
-     call add_berg_flux_to_shelf(OS%grid, OS%flux_tmp, OS%use_ice_shelf,OS%density_iceberg,OS%kv_iceberg, OS%latent_heat_fusion, OS%State, time_step)
+     call add_berg_flux_to_shelf(OS%grid, OS%flux_tmp, OS%use_ice_shelf,OS%density_iceberg,OS%kv_iceberg, OS%latent_heat_fusion, OS%State, time_step, OS%berg_area_threshold)
     endif
   
     call forcing_accumulate(OS%flux_tmp, OS%fluxes, time_step, OS%grid, weight)
@@ -507,7 +514,7 @@ end subroutine update_ocean_model
 ! </DESCRIPTION>
 !
 
-subroutine add_berg_flux_to_shelf(G, fluxes, use_ice_shelf, density_ice, kv_ice, latent_heat_fusion, state, time_step)
+subroutine add_berg_flux_to_shelf(G, fluxes, use_ice_shelf, density_ice, kv_ice, latent_heat_fusion, state, time_step, berg_area_threshold)
   type(ocean_grid_type),              intent(inout)    :: G
   type(forcing),                      intent(inout) :: fluxes
   type(surface),                      intent(inout) :: state
@@ -516,6 +523,7 @@ subroutine add_berg_flux_to_shelf(G, fluxes, use_ice_shelf, density_ice, kv_ice,
   real, intent(in) :: density_ice  ! A typical density of ice, in kg m-3.
   real, intent(in) :: latent_heat_fusion   ! The latent heat of fusion, in J kg-1.
   real, intent(in) :: time_step   ! The latent heat of fusion, in J kg-1.
+  real, intent(in) :: berg_area_threshold  !Area threshold for zero'ing fluxes bellow iceberg
 ! Arguments:
 !  (in)      fluxes - A structure of surface fluxes that may be used.
 !  (in)      G - The ocean's grid structure.
@@ -569,8 +577,9 @@ subroutine add_berg_flux_to_shelf(G, fluxes, use_ice_shelf, density_ice, kv_ice,
     call pass_vector(fluxes%frac_shelf_u, fluxes%frac_shelf_v, G%domain, TO_ALL, CGRID_NE)
     
     !Zero'ing out other fluxes under the tabular icebergs 
-    do j=jsd,jed ; do i=isd,ied
-        if (fluxes%frac_shelf_h(i,j) > 0.5) then  !Only applying for ice shelf covering most of cell
+    if (berg_area_threshold >= 0.) then
+      do j=jsd,jed ; do i=isd,ied
+        if (fluxes%frac_shelf_h(i,j) > berg_area_threshold) then  !Only applying for ice shelf covering most of cell
             
           if (associated(fluxes%sw)) fluxes%sw(i,j) = 0.0
           if (associated(fluxes%lw)) fluxes%lw(i,j) = 0.0
@@ -593,7 +602,8 @@ subroutine add_berg_flux_to_shelf(G, fluxes, use_ice_shelf, density_ice, kv_ice,
           if (associated(fluxes%salt_flux)) fluxes%salt_flux(i,j) = 0.0
           if (associated(fluxes%lprec)) fluxes%lprec(i,j) = 0.0
         endif
-    enddo ; enddo
+      enddo ; enddo
+    endif
 
 end subroutine add_berg_flux_to_shelf
 

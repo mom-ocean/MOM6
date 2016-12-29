@@ -89,6 +89,7 @@ use MOM_dynamics_legacy_split, only : adjustments_dyn_legacy_split, MOM_dyn_lega
 use MOM_dyn_horgrid,           only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
 use MOM_EOS,                   only : EOS_init
 use MOM_EOS,                   only : gsw_sp_from_sr, gsw_pt_from_ct
+use MOM_EOS,                   only : calculate_density
 use MOM_error_checking,        only : check_redundant
 use MOM_grid,                  only : ocean_grid_type, set_first_direction
 use MOM_grid,                  only : MOM_grid_init, MOM_grid_end
@@ -182,6 +183,7 @@ type, public :: MOM_control_struct
   logical :: adiabatic               !< If true, then no diapycnal mass fluxes, with no calls
                                      !! to routines to calculate or apply diapycnal fluxes.
   logical :: use_temperature         !< If true, temp and saln used as state variables.
+  logical :: calc_rho_for_sea_lev   !< If true, calculate rho to convert pressure to sea level
   logical :: use_frazil              !< If true, liquid seawater freezes if temp below freezing,
                                      !! with accumulated heat deficit returned to surface ocean.
   logical :: bound_salinity          !< If true, salt is added to keep salinity above
@@ -496,6 +498,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: potTemp, pracSal !TEOS10 Diagnostics
   real, dimension(SZIB_(CS%G), SZJ_(CS%G)) :: umo2d ! Diagnostics
   real, dimension(SZI_(CS%G), SZJB_(CS%G)) :: vmo2d ! Diagnostics
+  real, dimension(SZIB_(CS%G), SZJ_(CS%G), SZK_(CS%G)) :: umo ! Diagnostics
+  real, dimension(SZI_(CS%G), SZJB_(CS%G), SZK_(CS%G)) :: vmo ! Diagnostics
 
   real :: tot_wt_ssh, Itot_wt_ssh, I_time_int
   real :: zos_area_mean, volo, ssh_ga
@@ -1034,6 +1038,33 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       call calculate_Z_transport(CS%uhtr, CS%vhtr, h, CS%dt_trans, G, GV, &
                                  CS%diag_to_Z_CSp)
       call cpu_clock_end(id_clock_Z_diag)
+      ! Post mass transports, including SGS
+      if (CS%id_umo_2d > 0) then
+        umo2d(:,:) = CS%uhtr(:,:,1)
+        do k = 2, nz
+          umo2d(:,:) = umo2d(:,:) + CS%uhtr(:,:,k)
+        enddo
+        umo2d(:,:) = umo2d(:,:) * ( GV%H_to_kg_m2 / CS%dt_trans )
+        call post_data(CS%id_umo_2d, umo2d, CS%diag)
+      endif
+      if (CS%id_umo > 0) then
+        ! Convert to kg/s. Modifying the array for diagnostics is allowed here since it is set to zero immediately below
+        umo(:,:,:) =  CS%uhtr(:,:,:) * ( GV%H_to_kg_m2 / CS%dt_trans )
+        call post_data(CS%id_umo, umo, CS%diag)
+      endif
+      if (CS%id_vmo_2d > 0) then
+        vmo2d(:,:) = CS%vhtr(:,:,1)
+        do k = 2, nz
+          vmo2d(:,:) = vmo2d(:,:) + CS%vhtr(:,:,k)
+        enddo
+        vmo2d(:,:) = vmo2d(:,:) * ( GV%H_to_kg_m2 / CS%dt_trans )
+        call post_data(CS%id_vmo_2d, vmo2d, CS%diag)
+      endif
+      if (CS%id_vmo > 0) then
+        ! Convert to kg/s. Modifying the array for diagnostics is allowed here since it is set to zero immediately below
+        vmo(:,:,:) =  CS%vhtr(:,:,:) * ( GV%H_to_kg_m2 / CS%dt_trans )
+        call post_data(CS%id_vmo, vmo, CS%diag)
+      endif
 
       if (CS%id_u_predia > 0) call post_data(CS%id_u_predia, u, CS%diag)
       if (CS%id_v_predia > 0) call post_data(CS%id_v_predia, v, CS%diag)
@@ -1236,32 +1267,6 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
       if (CS%id_uhtr > 0) call post_data(CS%id_uhtr, CS%uhtr, CS%diag)
       if (CS%id_vhtr > 0) call post_data(CS%id_vhtr, CS%vhtr, CS%diag)
-      if (CS%id_umo_2d > 0) then
-        umo2d(:,:) = CS%uhtr(:,:,1)
-        do k = 2, nz
-          umo2d(:,:) = umo2d(:,:) + CS%uhtr(:,:,k)
-        enddo
-        umo2d(:,:) = umo2d(:,:) * ( GV%H_to_kg_m2 / CS%dt_trans )
-        call post_data(CS%id_umo, umo2d, CS%diag)
-      endif
-      if (CS%id_umo > 0) then
-        ! Convert to kg/s. Modifying the array for diagnostics is allowed here since it is set to zero immediately below
-        CS%uhtr(:,:,:) =  CS%uhtr(:,:,:) * ( GV%H_to_kg_m2 / CS%dt_trans )
-        call post_data(CS%id_umo, CS%uhtr, CS%diag)
-      endif
-      if (CS%id_vmo_2d > 0) then
-        vmo2d(:,:) = CS%vhtr(:,:,1)
-        do k = 2, nz
-          vmo2d(:,:) = vmo2d(:,:) + CS%vhtr(:,:,k)
-        enddo
-        vmo2d(:,:) = vmo2d(:,:) * ( GV%H_to_kg_m2 / CS%dt_trans )
-        call post_data(CS%id_vmo, vmo2d, CS%diag)
-      endif
-      if (CS%id_vmo > 0) then
-        ! Convert to kg/s. Modifying the array for diagnostics is allowed here since it is set to zero immediately below
-        CS%vhtr(:,:,:) =  CS%vhtr(:,:,:) * ( GV%H_to_kg_m2 / CS%dt_trans )
-        call post_data(CS%id_vmo, CS%vhtr, CS%diag)
-      endif
       
       call post_diags_TS_tendency(G,GV,CS,dtdia)
 
@@ -2087,6 +2092,10 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
     CS%legacy_split = .false.
   endif
 
+  call get_param(param_file, "MOM", "CALC_RHO_FOR_SEA_LEVEL", CS%calc_rho_for_sea_lev, &
+                 "If true, the in-situ density is used to calculate the\n"//&
+                 "effective sea level that is returned to the coupler. If false,\n"//&
+                 "the Boussinesq parameter RHO_0 is used.", default=.false.)
   call get_param(param_file, "MOM", "ENABLE_THERMODYNAMICS", CS%use_temperature, &
                  "If true, Temperature and salinity are used as state \n"//&
                  "variables.", default=.true.)
@@ -3597,6 +3606,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
                                       ! determine mixed layer properties (meter)
   real :: dh                          ! thickness of a layer within mixed layer (meter)
   real :: mass                        ! mass per unit area of a layer (kg/m2)
+  real :: Rho_conv                    ! density used to convert surface pressure to effectic SSH (Pa)
 
   real :: IgR0, hu, hv
   integer :: i, j, k, is, ie, js, je, nz, numberOfErrors
@@ -3614,8 +3624,14 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
   state%sea_lev => ssh
 
   if (present(p_atm)) then ; if (ASSOCIATED(p_atm)) then
-    IgR0 = 1.0 / (GV%Rho0 * GV%g_Earth)
+
     do j=js,je ; do i=is,ie
+      if ((ASSOCIATED(CS%tv%eqn_of_state))  .and.  (CS%calc_rho_for_sea_lev)) then
+        call calculate_density(CS%tv%T(i,j,1),CS%tv%S(i,j,1) , p_atm(i,j)/2.0 , Rho_conv, CS%tv%eqn_of_state)
+      else
+        Rho_conv=GV%Rho0
+      endif
+      IgR0 = 1.0 / (Rho_conv * GV%g_Earth)
       ssh(i,j) = ssh(i,j) + p_atm(i,j) * IgR0
     enddo ; enddo
   endif ; endif
