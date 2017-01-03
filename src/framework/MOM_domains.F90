@@ -905,6 +905,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   integer :: isc,iec,jsc,jec ! The bounding indices of the computational domain.
   character(len=8) :: char_xsiz, char_ysiz, char_niglobal, char_njglobal
   character(len=40) :: nihalo_nm, njhalo_nm, layout_nm, io_layout_nm, masktable_nm
+  character(len=40) :: niproc_nm, njproc_nm
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -930,12 +931,15 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
 
   nihalo_nm = "NIHALO" ; njhalo_nm = "NJHALO"
   layout_nm = "LAYOUT" ; io_layout_nm = "IO_LAYOUT" ; masktable_nm = "MASKTABLE"
+  niproc_nm = "NIPROC" ; njproc_nm = "NJPROC"
   if (present(param_suffix)) then ; if (len(trim(adjustl(param_suffix))) > 0) then
     nihalo_nm = "NIHALO"//(trim(adjustl(param_suffix)))
     njhalo_nm = "NJHALO"//(trim(adjustl(param_suffix)))
     layout_nm = "LAYOUT"//(trim(adjustl(param_suffix)))
     io_layout_nm = "IO_LAYOUT"//(trim(adjustl(param_suffix)))
     masktable_nm = "MASKTABLE"//(trim(adjustl(param_suffix)))
+    niproc_nm = "NIPROC"//(trim(adjustl(param_suffix)))
+    njproc_nm = "NJPROC"//(trim(adjustl(param_suffix)))
   endif ; endif
 
   is_static = .false. ; if (present(static_memory)) is_static = static_memory
@@ -1086,26 +1090,26 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  "The processor layout to be used, or 0, 0 to automatically \n"//&
                  "set the layout based on the number of processors.", default=0, &
                  do_not_log=.true.)
-    call get_param(param_file, mod, "NIPROC", nip_parsed, &
+    call get_param(param_file, mod, trim(niproc_nm), nip_parsed, &
                  "The number of processors in the x-direction.", default=-1, &
                  do_not_log=.true.)
-    call get_param(param_file, mod, "NJPROC", njp_parsed, &
+    call get_param(param_file, mod, trim(njproc_nm), njp_parsed, &
                  "The number of processors in the y-direction.", default=-1, &
                  do_not_log=.true.)
     if (nip_parsed > -1) then
       if ((layout(1) > 0) .and. (layout(1) /= nip_parsed)) &
-        call MOM_error(FATAL, trim(layout_nm)//" and NIPROC set inconsistently. "//&
+        call MOM_error(FATAL, trim(layout_nm)//" and "//trim(niproc_nm)//" set inconsistently. "//&
                               "Only LAYOUT should be used.")
       layout(1) = nip_parsed
-      call MOM_mesg("NIPROC used to set "//trim(layout_nm)//" in dynamic mode.  "//&
+      call MOM_mesg(trim(niproc_nm)//" used to set "//trim(layout_nm)//" in dynamic mode.  "//&
                     "Shift to using "//trim(layout_nm)//" instead.")
     endif
     if (njp_parsed > -1) then
       if ((layout(2) > 0) .and. (layout(2) /= njp_parsed)) &
-        call MOM_error(FATAL, trim(layout_nm)//" and NJPROC set inconsistently. "//&
+        call MOM_error(FATAL, trim(layout_nm)//" and "//trim(njproc_nm)//" set inconsistently. "//&
                               "Only "//trim(layout_nm)//" should be used.")
       layout(2) = njp_parsed
-      call MOM_mesg("NJPROC used to set "//trim(layout_nm)//" in dynamic mode.  "//&
+      call MOM_mesg(trim(njproc_nm)//" used to set "//trim(layout_nm)//" in dynamic mode.  "//&
                     "Shift to using "//trim(layout_nm)//" instead.")
     endif
 
@@ -1121,11 +1125,11 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
       call MOM_error(FATAL, mesg)
     endif
   endif
-  call log_param(param_file, mod, "NIPROC", layout(1), &
+  call log_param(param_file, mod, trim(niproc_nm), layout(1), &
                  "The number of processors in the x-direction. With \n"//&
                  "STATIC_MEMORY_ this is set in "//trim(inc_nm)//" at compile time.",&
                  layoutParam=.true.)
-  call log_param(param_file, mod, "NJPROC", layout(2), &
+  call log_param(param_file, mod, trim(njproc_nm), layout(2), &
                  "The number of processors in the x-direction. With \n"//&
                  "STATIC_MEMORY_ this is set in "//trim(inc_nm)//" at compile time.",&
                  layoutParam=.true.)
@@ -1149,10 +1153,10 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
 
   !   Set up the I/O lay-out, and check that it uses an even multiple of the
   ! number of PEs in each direction.
-  io_layout(:) = (/ 0, 0 /)
+  io_layout(:) = (/ 1, 1 /)
   call get_param(param_file, mod, trim(io_layout_nm), io_layout, &
                  "The processor layout to be used, or 0,0 to automatically \n"//&
-                 "set the io_layout to be the same as the layout.", default=0, &
+                 "set the io_layout to be the same as the layout.", default=1, &
                  layoutParam=.true.)
 
   if (io_layout(1) < 0) then

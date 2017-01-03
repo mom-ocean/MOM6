@@ -15,7 +15,7 @@ use MOM_cpu_clock,         only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTI
 use MOM_diag_mediator,     only : diag_mediator_init, enable_averaging
 use MOM_diag_mediator,     only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator,     only : register_diag_field, register_static_field
-use MOM_diag_mediator,     only : set_diag_mediator_grid, diag_ctrl, diag_update_target_grids
+use MOM_diag_mediator,     only : set_diag_mediator_grid, diag_ctrl, diag_update_remap_grids
 use MOM_domains,           only : MOM_domains_init
 use MOM_domains,           only : To_South, To_West, To_All, CGRID_NE, SCALAR_PAIR
 use MOM_domains,           only : create_group_pass, do_group_pass, group_pass_type
@@ -282,10 +282,6 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   !---For group halo pass
   logical :: do_pass_Ray_uv, do_pass_kv_bbl_thick
   logical :: showCallTree
-
-  ! for diagnostics
-  real, dimension(SZIB_(G),SZJ_(G)) :: uwork2d
-  real, dimension(SZI_(G),SZJB_(G)) :: vwork2d
 
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
@@ -846,7 +842,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call cpu_clock_end(id_clock_pass)
   ! Whenever thickness changes let the diag manager know, target grids
   ! for vertical remapping may need to be regenerated.
-  call diag_update_target_grids(CS%diag)
+  call diag_update_remap_grids(CS%diag)
   if (showCallTree) call callTree_wayPoint("done with continuity (step_MOM_dyn_split_RK2)")
 
   call cpu_clock_begin(id_clock_pass)
@@ -900,29 +896,6 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   if (CS%id_vav        > 0) call post_data(CS%id_vav, v_av,                 CS%diag)
   if (CS%id_u_BT_accel > 0) call post_data(CS%id_u_BT_accel, CS%u_accel_bt, CS%diag)
   if (CS%id_v_BT_accel > 0) call post_data(CS%id_v_BT_accel, CS%v_accel_bt, CS%diag)
-  if (CS%id_umo        > 0) call post_data(CS%id_umo, uh*GV%H_to_kg_m2,      CS%diag)
-  if (CS%id_vmo        > 0) call post_data(CS%id_vmo, vh*GV%H_to_kg_m2,      CS%diag)
-
-  ! depth summed zonal mass transport
-  if (CS%id_umo_2d > 0) then
-    do j=js,je ; do I=Isq,Ieq
-      uwork2d(i,j) = 0.0
-      do k=1,nz
-        uwork2d(i,j) = uwork2d(i,j) + uh(i,j,k)*GV%H_to_kg_m2
-      enddo
-    enddo ; enddo
-    call post_data(CS%id_umo_2d, uwork2d, CS%diag)
-  endif
-  ! depth summed merid mass transport
-  if (CS%id_vmo_2d > 0) then
-    do J=Jsq,Jeq ; do i=is,ie
-      vwork2d(i,j) = 0.0
-      do k=1,nz
-        vwork2d(i,j) = vwork2d(i,j) + vh(i,j,k)*GV%H_to_kg_m2
-      enddo
-    enddo ; enddo
-    call post_data(CS%id_vmo_2d, vwork2d, CS%diag)
-  endif
 
   if (CS%debug) then
     call MOM_state_chksum("Corrector ", u, v, h, uh, vh, G, GV)
@@ -1203,23 +1176,9 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
 
   flux_units = get_flux_units(GV)
   CS%id_uh = register_diag_field('ocean_model', 'uh', diag%axesCuL, Time, &
-      'Zonal Thickness Flux', flux_units)
+      'Zonal Thickness Flux', flux_units, y_cell_method='sum', v_extensive=.true.)
   CS%id_vh = register_diag_field('ocean_model', 'vh', diag%axesCvL, Time, &
-      'Meridional Thickness Flux', flux_units)
-  CS%id_umo = register_diag_field('ocean_model', 'umo',                       &
-      diag%axesCuL, Time,'Zonal Mass Transport (including SGS param)', 'kg/s',&
-      cmor_standard_name='ocean_mass_x_transport', cmor_long_name='Ocean Mass X Transport')
-  CS%id_vmo = register_diag_field('ocean_model', 'vmo',                            &
-      diag%axesCvL, Time,'Meridional Mass Transport (including SGS param)', 'kg/s',&
-      cmor_standard_name='ocean_mass_y_transport', cmor_long_name='Ocean Mass Y Transport')
-  CS%id_umo_2d = register_diag_field('ocean_model', 'umo_2d',                              &
-      diag%axesCu1, Time,'Zonal Mass Transport (including SGS param) Vertical Sum', 'kg/s',&
-      cmor_standard_name='ocean_mass_x_transport_vertical_sum',                            &
-      cmor_long_name='Ocean Mass X Transport Vertical Sum')
-  CS%id_vmo_2d = register_diag_field('ocean_model', 'vmo_2d',                                   &
-      diag%axesCv1, Time,'Meridional Mass Transport (including SGS param) Vertical Sum', 'kg/s',&
-      cmor_standard_name='ocean_mass_y_transport_vertical_sum',                                 &
-      cmor_long_name='Ocean Mass Y Transport Vertical Sum')
+      'Meridional Thickness Flux', flux_units, x_cell_method='sum', v_extensive=.true.)
 
   CS%id_CAu = register_diag_field('ocean_model', 'CAu', diag%axesCuL, Time, &
       'Zonal Coriolis and Advective Acceleration', 'meter second-2')
