@@ -87,7 +87,6 @@ public energetic_PBL, energetic_PBL_init, energetic_PBL_end
 public energetic_PBL_get_MLD
 
 type, public :: energetic_PBL_CS ; private
-  logical :: MSTARFIXED
   real    :: mstar           ! The ratio of the friction velocity cubed to the
                              ! TKE available to drive entrainment, nondimensional.  
                              ! This quantity is the vertically integrated 
@@ -100,9 +99,6 @@ type, public :: energetic_PBL_CS ; private
                              ! dissipation of TKE produced by buoyancy.
   real    :: TKE_decay       ! The ratio of the natural Ekman depth to the TKE
                              ! decay scale, nondimensional.
-                             ! This process is generally not included in models
-                             ! and therefore cannot be found from (for example)
-                             ! tuning against K-Epsilon.
   real    :: MKE_to_TKE_effic ! The efficiency with which mean kinetic energy
                              ! released by mechanically forced entrainment of
                              ! the mixed layer is converted to TKE, nondim.
@@ -146,7 +142,15 @@ type, public :: energetic_PBL_CS ; private
                              ! applies to in subsequent revisions of this code.
                              ! "_Neg" and "_Pos" refer to which scale is applied as a 
                              ! function of negative or positive local buoyancy.
+  real    :: MSTAR_SLOPE     ! Slope of the function which relates the shear production
+                             ! to the mixing layer depth, Ekman depth, and Monin-Obukhov 
+                             ! depth.
+  real    :: MSTAR_XINT      ! Value where MSTAR function transitions from linear
+                             ! to decay toward MSTAR->0 at fully developed Ekman depth.
+  real    :: MSTAR_AT_XINT   ! Intercept value of MSTAR at value where function 
+                             ! changes to linear transition.
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
+  logical :: Use_Mstar_Fixed = .true. ! A logical to revert to a fixed m*
   logical :: TKE_diagnostics = .false.
   logical :: Use_LT_LiFunction = .false.
   logical :: orig_PE_calc = .true.
@@ -248,6 +252,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
 !                     salinity, in m3 kg-1 ppt-1.
 !  (in)      TKE_forced - The forcing requirements to homogenize the forcing
 !                 that has been applied to each layer through each layer, in J m-2.
+!  (in)      Buoy_Flux - The surface buoyancy flux. in m2/s3.
 !  (in,opt)  dt_diag - The diagnostic time step, which may be less than dt
 !                      if there are two callse to mixedlayer, in s.
 !  (in,opt)  last_call - if true, this is the last call to mixedlayer in the
@@ -459,8 +464,19 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   integer, save :: NOTCONVERGED!
   !-End BGR iteration parameters-----------------------------------------
   real :: N2_dissipation
-  real :: B_STAR
-  real :: Stab, StabL, mstar_effective
+  real :: B_STAR ! Buoyancy flux over ustar
+  real :: STAB_SCALE ! Composite of Stabilizing length scales:
+                     !  Ekman scale and Monin-Obukhov scale.
+  real :: C_MO = 1. ! Constant in STAB_SCALE for Monin-Obukhov
+  real :: C_EK = 2. ! Constant in STAB_SCALE for Ekman length
+  real :: MLD_over_STAB ! Mixing layer depth divided by STAB_SCALE
+  real :: MSTAR_N = -2. ! Exponent in hyperolic decay at negative values of MLD_over_STAB
+  real :: MSTAR_A  ! MSTAR_A and MSTAR_B are coefficients in hyperbolic decay which
+  real :: MSTAR_B  !  are computed to match the value and slope of the linear fit at the 
+                   !  value of mld_over_stab where the transition is set.
+  real :: MSTAR_MIX ! The value of mstar (Proportionality of TKE to drive mixing to ustar
+                    ! cubed) which is computed as a function of latitude, boundary layer depth,
+                    ! and the Monin-Obhukov depth.
   type(cvmix_global_params_type) :: CVMIX_gravity 
   logical :: debug=.false.  ! Change this hard-coded value for debugging.
 !  The following arrays are used only for debugging purposes.
@@ -517,7 +533,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
     if (CS%Mixing_Diagnostics) then
       CS%Mixing_Length(:,:,:) = 0.0
       CS%Velocity_Scale(:,:,:) = 0.0
-      !CS%Mstar_Used(:,:) = 0.0
+      !CS%Mstar_Used(:,:) = 0.0 ! Should add diagnostic Mstar_Used
     endif
 !!OMP end parallel
   endif
@@ -589,7 +605,9 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       call ust_2_u10_coare3p5(U_STAR*sqrt(GV%Rho0/1.225),U_10)
       ! Computing B_Star, or the Buoyancy flux over the friction velocity. 
       B_Star = min(0.0,-buoy_Flux(i,j)/U_Star)
-
+      ! Computing stability scale which correlates with TKE for mixing, where
+      ! TKE for mixing = TKE production minus TKE dissipation
+      Stab_Scale = -u_star**2 / ( VonKar * ( C_MO * B_STAR +  C_EK * u_star * absf(i)))
       if (CS%omega_frac >= 1.0) then ; absf(i) = 2.0*CS%omega
       else
         absf(i) = 0.25*((abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I-1,J-1))) + &
@@ -598,7 +616,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           absf(i) = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf(i)**2)
       endif
 
-      if (CS%mstarFixed) then
+      if (CS%Use_Mstar_Fixed) then
         mech_TKE(i) = (dt*CS%mstar*GV%Rho0)*((U_Star**3))
         conv_PErel(i) = 0.0
 
@@ -656,7 +674,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
 
       ! Store the initial mechanical TKE and convectively released PE to
       ! enable multiple iterations.
-      !mech_TKE_top(i) = mech_TKE(i) ; conv_PErel_top(i) = conv_PErel(i)
+      mech_TKE_top(i) = mech_TKE(i) ; conv_PErel_top(i) = conv_PErel(i)
 
       !/The following lines are for the iteration over MLD
       !{
@@ -673,7 +691,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
         MLD_guess=CS%ML_Depth2(i,j)
       else
         !Otherwise guess middle of water column.
-        MLD_guess = 0.5 * (min_MLD+max_MLD)
+        MLD_guess = min(abs(stab_scale),0.5 * (min_MLD+max_MLD))
       endif
 
       ! Iterate up to MAX_OBL_IT times to determine a converged EPBL depth.
@@ -689,30 +707,22 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
 
         sfc_connected(i) = .true.
 
-        if (.not.CS%MstarFixed) then
+        if (.not.CS%Use_Mstar_Fixed) then
           ! Note this value of mech_TKE(i) now must be iterated over, so it is moved here
 
           ! First solve for the TKE to PE length scale
           !  Change the (2.0) to a runtime parameter
-          StabL = -u_star**2 / ( VonKar * ( B_STAR + (2.0) * u_star * absf(i)))
-          Stab = MLD_guess / StabL
-          ! Limit Stab to regime where 3rd order fit is reasonable 
-          Stab = max(-0.79,min(5.0,Stab))
-          Mstar_effective = 0.005007927814101 * Stab**4 + &
-                           -0.059699214537634 * Stab**3 + &
-                            0.259989170346221 * Stab**2 + &
-                            0.706210570634930 * Stab    + &
-                            0.367256544478824
-          if ((Stab).ge.0.0 .and. STAB .le.0.5)then
-             Mstar_effective=Mstar_effective*(1.+.2*((0.5-STAB)/0.5))
-          elseif ((Stab).lt.0.0 .and. STAB .gt.-5.0) then
-             Mstar_effective=Mstar_effective*(1.-.3*((5.0+STAB)/5.0))
+          MLD_over_Stab = 1.0 * MLD_guess / Stab_Scale
+          MSTAR_A = CS%MSTAR_AT_XINT**(1./MSTAR_N)
+          MSTAR_B = CS%MSTAR_SLOPE / (MSTAR_N*MSTAR_A**(MSTAR_N-1.))
+          if ((MLD_over_Stab) .ge. CS%MSTAR_XINT) then
+             MSTAR_mix = CS%MSTAR_SLOPE*(MLD_over_Stab-CS%MSTAR_XINT)+CS%MSTAR_AT_XINT
+          else
+             MSTAR_mix = (MSTAR_B*(MLD_over_Stab-CS%MSTAR_XINT)+MSTAR_A)**(MSTAR_N)
           endif
-          mech_TKE(i) = (dt*Mstar_effective*GV%Rho0)*((U_Star**3))
+          !print*,MLD_guess,STAB_SCALE,MSTAR_MIX
+          mech_TKE(i) = (dt*MSTAR_mix*GV%Rho0)*((U_Star**3))
           conv_PErel(i) = 0.0
-          print*,'---'
-          print*,Stab,Mstar_effective
-          print*,MLD_guess,-u_star**2/b_star,-2.*u_star/absf(i)
           if (CS%TKE_diagnostics) then
             CS%diag_TKE_wind(i,j) = CS%diag_TKE_wind(i,j) + mech_TKE(i) * IdtdR0
             if (TKE_forced(i,j,1) <= 0.0) then
@@ -1271,47 +1281,48 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
               !1. Check if guess was too shallow
               !Adding -1 m as cushion, will help avoid
               ! non-convergence flag when nearly converged.
-            elseif (MLD_FOUND-CS%MLD_tol > MLD_guess) then
-            !elseif (MLD_FOUND > MLD_guess) then
-              !/ Guess was too shallow, set new minimum guess
-              min_MLD = MLD_guess
-              FIRST_OBL = .false. !Break OBL loop
-            !2. Check if Guess minus found MLD
-            !  is less than thickness of level (=converged)
-            !  - We could try to add a more precise
-            !    value for found MLD, but seems difficult to
-            !    to contrain beyond within a level.
-            elseif ((MLD_guess-MLD_FOUND) < max(CS%MLD_tol,h(i,k-1)*GV%H_to_m)) then
-              ! Converged. Exit iteration.
-              FIRST_OBL = .false.!Break OBL loop
-              OBL_CONVERGED = .true.!Break convergence loop
-              ! Testing Output, comment for use.
-              !print*,'Converged--------'
-              !print*,MLD_FOUND,MLD_guess
-              !/
-              if (OBL_IT_STATS) then !Compute iteration statistics
-                MAXIT = max(MAXIT,obl_it)
-                MINIT = min(MINIT,obl_it)
-                SUMIT = SUMIT+obl_it
-                NUMIT = NUMIT+1
-                print*,MAXIT,MINIT,SUMIT/NUMIT
-              endif
-              !BGR this can be where MLD is stored for next time...
-              CS%ML_Depth2(i,j) = MLD_guess
-              !/
-              !2. If not, guess was too deep
-            else
-              !Guess was too deep, set new maximum guess
-              max_MLD = MLD_guess !We know this guess was too deep
-              FIRST_OBL = .false.!Break OBL loop
-            endif
-          endif
-        enddo
+           else
+              FIRST_OBL = .false.
+           endif
+         endif
+       enddo
+       MLD_FOUND=CS%ML_DEPTH(i,j)
+       if (MLD_FOUND-CS%MLD_tol > MLD_guess) then
+         !elseif (MLD_FOUND > MLD_guess) then
+         !/ Guess was too shallow, set new minimum guess
+         min_MLD = MLD_guess
+         !2. Check if Guess minus found MLD
+         !  is less than thickness of level (=converged)
+         !  - We could try to add a more precise
+         !    value for found MLD, but seems difficult to
+         !    to contrain beyond within a level.
+      elseif ((MLD_guess-MLD_FOUND) < max(CS%MLD_tol,h(i,k-1)*GV%H_to_m)) then
+         ! Converged. Exit iteration.
+         OBL_CONVERGED = .true.!Break convergence loop
+         ! Testing Output, comment for use.
+         !print*,'Converged--------'
+         !print*,MLD_FOUND,MLD_guess
+         !/
+         if (OBL_IT_STATS) then !Compute iteration statistics
+            MAXIT = max(MAXIT,obl_it)
+            MINIT = min(MINIT,obl_it)
+            SUMIT = SUMIT+obl_it
+            NUMIT = NUMIT+1
+            print*,MAXIT,MINIT,SUMIT/NUMIT
+         endif
+         !BGR this can be where MLD is stored for next time...
+         CS%ML_Depth2(i,j) = MLD_guess
+         !/
+         !2. If not, guess was too deep
+       else
+         !Guess was too deep, set new maximum guess
+          max_MLD = MLD_guess !We know this guess was too deep
+        endif
         ! For next pass, guess average of minimum and maximum values.
-        MLD_guess = min_MLD*0.5 + max_MLD*0.5
+        MLD_guess = MLD_FOUND!min_MLD*0.5 + max_MLD*0.5
         ITresult(obl_it) = MLD_FOUND
       endif ; enddo ! Iteration loop for converged boundary layer thickness.
-
+      print*,mld_guess,CS%ml_depth(i,j)
       if (.not.OBL_CONVERGED) then
         !/Temp output, warn that EPBL didn't converge
         !/Print guess/found for every iteration step
@@ -1803,8 +1814,20 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   call get_param(param_file, mod, "MSTAR", CS%mstar, &
                  "The ratio of the friction velocity cubed to the TKE \n"//&
                  "input to the mixed layer.", "units=nondim", default=1.2)
-  call get_param(param_file, mod, "MSTAR_FIXED", CS%MstarFixed, &
-                 "True to use the fixed value of mstar, false to depend \n"//&
+  call get_param(param_file, mod, "MSTAR_SLOPE", CS%mstar_slope, &
+                 "The ratio of the friction velocity cubed to the TKE \n"//&
+                 "input to the mixed layer (used if MSTAR_FIXED=false).",&
+                 "units=nondim", default=1.2)
+  call get_param(param_file, mod, "MSTAR_XINT", CS%mstar_xint, &
+                 "The ratio of the friction velocity cubed to the TKE \n"//&
+                 "input to the mixed layer (used if MSTAR_FIXED=false).",&
+                 "units=nondim", default=1.2)
+  call get_param(param_file, mod, "MSTAR_AT_XINT", CS%mstar_at_xint, &
+                 "The ratio of the friction velocity cubed to the TKE \n"//&
+                 "input to the mixed layer (used if MSTAR_FIXED=false).",&
+                 "units=nondim", default=1.2)
+  call get_param(param_file, mod, "MSTAR_FIXED", CS%Use_Mstar_Fixed, &
+                 "True to use a fixed value of mstar, if false mstar depends \n"//&
                  "on the Obhukov length and Ekman length.","units=nondim",&
                  default=.true.)
   call get_param(param_file, mod, "NSTAR", CS%nstar, &
