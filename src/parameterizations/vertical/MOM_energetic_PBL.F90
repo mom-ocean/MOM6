@@ -1823,15 +1823,15 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   call get_param(param_file, mod, "MSTAR_SLOPE", CS%mstar_slope, &
                  "The ratio of the friction velocity cubed to the TKE \n"//&
                  "input to the mixed layer (used if MSTAR_FIXED=false).",&
-                 "units=nondim", default=1.2)
+                 "units=nondim", default=1.0)
   call get_param(param_file, mod, "MSTAR_XINT", CS%mstar_xint, &
                  "The ratio of the friction velocity cubed to the TKE \n"//&
                  "input to the mixed layer (used if MSTAR_FIXED=false).",&
-                 "units=nondim", default=1.2)
+                 "units=nondim", default=-0.25)
   call get_param(param_file, mod, "MSTAR_AT_XINT", CS%mstar_at_xint, &
                  "The ratio of the friction velocity cubed to the TKE \n"//&
                  "input to the mixed layer (used if MSTAR_FIXED=false).",&
-                 "units=nondim", default=1.2)
+                 "units=nondim", default=0.15)
   call get_param(param_file, mod, "MSTAR_FIXED", CS%Use_Mstar_Fixed, &
                  "True to use a fixed value of mstar, if false mstar depends \n"//&
                  "on the Obhukov length and Ekman length.","units=nondim",&
