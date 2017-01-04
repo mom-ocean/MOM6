@@ -1818,7 +1818,7 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   call get_param(param_file, mod, "MIX_LEN_EXPONENT", CS%MixLenExponent, &
                  "The exponent applied to the ratio of the distance to the MLD \n"//&
                  "and the MLD depth which determines the shape of the mixing length.",&
-                 "units=nondim", default=1.0)
+                 "units=nondim", default=2.0)
   call get_param(param_file, mod, "MSTAR_SLOPE", CS%mstar_slope, &
                  "The slope of the linear relationship between mstar \n"//&
                  "and the length scale ratio (used if MSTAR_FIXED=false).",&
