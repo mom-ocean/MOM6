@@ -694,7 +694,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
         MLD_guess=CS%ML_Depth2(i,j)
       else
         !Otherwise guess middle of water column (or stab_scale if smaller).
-        MLD_guess = min(abs(stab_scale),0.5 * (min_MLD+max_MLD))
+        MLD_guess = 0.5 * (min_MLD+max_MLD)
       endif
 
       ! Iterate up to MAX_OBL_IT times to determine a converged EPBL depth.
@@ -1321,7 +1321,11 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           max_MLD = MLD_guess !We know this guess was too deep
         endif
         ! For next pass, guess average of minimum and maximum values.
-        MLD_guess = MLD_FOUND!min_MLD*0.5 + max_MLD*0.5
+        if (CS%Orig_MLD_iteration) then
+          MLD_guess = min_MLD*0.5 + max_MLD*0.5
+        else
+          MLD_guess = MLD_Found
+        endif
         ITresult(obl_it) = MLD_FOUND
       endif ; enddo ! Iteration loop for converged boundary layer thickness.
       if (.not.OBL_CONVERGED) then
