@@ -158,6 +158,7 @@ type, public :: energetic_PBL_CS ; private
   logical :: Use_LT_LiFunction = .false.
   logical :: orig_PE_calc = .true.
   logical :: Use_MLD_iteration=.false. ! False to use old ePBL method.
+  logical :: Orig_MLD_iteration=.false. ! False to use old MLD value
   logical :: MLD_iteration_guess=.false. ! False to default to guessing half the
                                          ! ocean depth for the iteration.
   logical :: Mixing_Diagnostics = .false. ! Will be true when outputing mixing
@@ -453,8 +454,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                            !    e.g. M=12 for DEPTH=4000m and DZ=1m
   real, dimension(SZK_(GV)+1) :: Vstar_Used, &      ! 1D arrays used to store
                                Mixing_Length_Used   ! Vstar and Mixing_Length
-  logical :: OLD_MLD_METHOD = .false. ! Can be set to compute MLD based on depth 
-                                      ! TKE expires instead of using TKE threshold 
   !/BGR - remaining variables are related to tracking iteration statistics.
   logical :: OBL_IT_STATS=.false. ! Flag for computing OBL iteration statistics
   REAL :: ITguess(20), ITresult(20),ITmax(20),ITmin(20) ! Flag for storing guess/result
@@ -1273,7 +1272,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
         ITmax(obl_it) = max_MLD       ! Track max    }
         ITmin(obl_it) = min_MLD       ! Track min    } For debug purpose
         ITguess(obl_it) = MLD_guess ! Track guess  }
-        if (OLD_MLD_METHOD) then
+        if (CS%Orig_MLD_iteration) then
           MLD_FOUND=0.0 ; FIRST_OBL=.true.
           MLD_FOUND=CS%ML_depth2(i,J)
           do k=2,nz
@@ -1821,20 +1820,20 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
                  "and the MLD depth which determines the shape of the mixing length.",&
                  "units=nondim", default=1.0)
   call get_param(param_file, mod, "MSTAR_SLOPE", CS%mstar_slope, &
-                 "The ratio of the friction velocity cubed to the TKE \n"//&
-                 "input to the mixed layer (used if MSTAR_FIXED=false).",&
+                 "The slope of the linear relationship between mstar \n"//&
+                 "and the length scale ratio (used if MSTAR_FIXED=false).",&
                  "units=nondim", default=1.0)
   call get_param(param_file, mod, "MSTAR_XINT", CS%mstar_xint, &
-                 "The ratio of the friction velocity cubed to the TKE \n"//&
-                 "input to the mixed layer (used if MSTAR_FIXED=false).",&
+                 "The value of the length scale ratio where the mstar \n"//&
+                 "is linear above (used if MSTAR_FIXED=false).",&
                  "units=nondim", default=-0.25)
   call get_param(param_file, mod, "MSTAR_AT_XINT", CS%mstar_at_xint, &
-                 "The ratio of the friction velocity cubed to the TKE \n"//&
-                 "input to the mixed layer (used if MSTAR_FIXED=false).",&
+                 "The value of mstar at MSTAR_XINT \n"//&
+                 "(used if MSTAR_FIXED=false).",&
                  "units=nondim", default=0.15)
   call get_param(param_file, mod, "MSTAR_FIXED", CS%Use_Mstar_Fixed, &
                  "True to use a fixed value of mstar, if false mstar depends \n"//&
-                 "on the Obhukov length and Ekman length.","units=nondim",&
+                 "on the composite Obhukov length and Ekman length.","units=nondim",&
                  default=.true.)
   call get_param(param_file, mod, "NSTAR", CS%nstar, &
                  "The portion of the buoyant potential energy imparted by \n"//&
@@ -1888,6 +1887,10 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
                  "A logical that specifies whether or not to use the \n"//&
                  "distance to the bottom of the actively turblent boundary \n"//&
                  "layer to help set the EPBL length scale.", default=.false.)
+  call get_param(param_file, mod, "ORIG_MLD_ITERATION", CS%ORIG_MLD_ITERATION, &
+                 "A logical that specifies whether or not to use the \n"//&
+                 "old method for determining MLD depth in iteration, which \n"//&
+                 "is limited to resolution.", default=.true.)
   call get_param(param_file, mod, "MLD_ITERATION_GUESS", CS%MLD_ITERATION_GUESS, &
                  "A logical that specifies whether or not to use the \n"//&
                  "previous timestep MLD as a first guess in the MLD iteration.\n"//&
