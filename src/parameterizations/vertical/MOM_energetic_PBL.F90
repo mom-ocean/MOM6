@@ -608,9 +608,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       call ust_2_u10_coare3p5(U_STAR*sqrt(GV%Rho0/1.225),U_10)
       ! Computing B_Star, or the Buoyancy flux over the friction velocity.
       B_Star = min(0.0,-buoy_Flux(i,j)/U_Star)
-      ! Computing stability scale which correlates with TKE for mixing, where
-      ! TKE for mixing = TKE production minus TKE dissipation
-      Stab_Scale = -u_star**2 / ( VonKar * ( C_MO * B_STAR +  C_EK * u_star * absf(i)))
       if (CS%omega_frac >= 1.0) then ; absf(i) = 2.0*CS%omega
       else
         absf(i) = 0.25*((abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I-1,J-1))) + &
@@ -618,7 +615,10 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
         if (CS%omega_frac > 0.0) &
           absf(i) = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf(i)**2)
       endif
-
+      ! Computing stability scale which correlates with TKE for mixing, where
+      ! TKE for mixing = TKE production minus TKE dissipation
+      Stab_Scale = -u_star**2 / ( VonKar * ( C_MO * B_STAR +  C_EK * u_star * absf(i)))
+      
       if (CS%Use_Mstar_Fixed) then
         mech_TKE(i) = (dt*CS%mstar*GV%Rho0)*((U_Star**3))
         conv_PErel(i) = 0.0
@@ -1312,7 +1312,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           MLD_FOUND=CS%ML_DEPTH(i,j)
           if (MLD_FOUND-CS%MLD_tol > MLD_guess) then
             min_MLD = MLD_guess
-          elseif ((MLD_guess-MLD_FOUND) < (CS%MLD_tol)) then
+          elseif (abs(MLD_guess-MLD_FOUND) < (CS%MLD_tol)) then
             OBL_CONVERGED = .true.!Break convergence loop
             if (OBL_IT_STATS) then !Compute iteration statistics
               MAXIT = max(MAXIT,obl_it)
@@ -1327,13 +1327,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           endif
         endif
         ! For next pass, guess average of minimum and maximum values.
-        if (CS%Orig_MLD_iteration) then
-          MLD_guess = min_MLD*0.5 + max_MLD*0.5
-        else
-          !No longer use binary search, rather use the value found
-          !as the next guess in new method.
-          MLD_guess = MLD_Found
-        endif
+        MLD_guess = min_MLD*0.5 + max_MLD*0.5
         ITresult(obl_it) = MLD_FOUND
       endif ; enddo ! Iteration loop for converged boundary layer thickness.
       if (.not.OBL_CONVERGED) then
@@ -1842,7 +1836,7 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   call get_param(param_file, mod, "MSTAR_AT_XINT", CS%mstar_at_xint, &
                  "The value of mstar at MSTAR_XINT \n"//&
                  "(used if MSTAR_FIXED=false).",&
-                 "units=nondim", default=0.15)
+                 "units=nondim", default=0.13)
   call get_param(param_file, mod, "MSTAR_FIXED", CS%Use_Mstar_Fixed, &
                  "True to use a fixed value of mstar, if false mstar depends \n"//&
                  "on the composite Obhukov length and Ekman length.","units=nondim",&
