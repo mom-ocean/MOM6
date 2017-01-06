@@ -220,7 +220,7 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   CS%ntr = 0
   if (do_ideal_age) then
     CS%ntr = CS%ntr + 1 ; m = CS%ntr
-    CS%tr_desc(m) = var_desc("age", "years", "Ideal Age Tracer", caller=mod)
+    CS%tr_desc(m) = var_desc("age", "years", "Ideal Age Tracer", cmor_field_name="agessc", caller=mod)
     CS%tracer_ages(m) = .true. ; CS%sfc_growth_rate(m) = 0.0
     CS%IC_val(m) = 0.0 ; CS%young_val(m) = 0.0 ; CS%tracer_start_year(m) = 0.0
   endif
