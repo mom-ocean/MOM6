@@ -1036,7 +1036,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
   handles%id_lprec = register_diag_field('ocean_model', 'lprec', diag%axesT1, Time,       &
         'Liquid precipitation into ocean', 'kilogram/(meter^2 * second)',                 &
         standard_name='rainfall_flux',                                                    &
-        cmor_field_name='pr', cmor_units='kg m-2 s-1', cmor_standard_name='rainfall_flux',&
+        cmor_field_name='prlq', cmor_units='kg m-2 s-1', cmor_standard_name='rainfall_flux',&
         cmor_long_name='Rainfall Flux where Ice Free Ocean over Sea')
 
   handles%id_vprec = register_diag_field('ocean_model', 'vprec', diag%axesT1, Time, &
@@ -1248,7 +1248,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
 
   handles%id_lat = register_diag_field('ocean_model', 'latent', diag%axesT1, Time,                    &
         'Latent heat flux into ocean due to fusion and evaporation (negative means ocean heat loss)', &
-        'Watt meter-2', cmor_field_name='hfls', cmor_units='W m-2',                                   &
+        'Watt meter-2', cmor_field_name='hflso', cmor_units='W m-2',                                  &
         cmor_standard_name='surface_downward_latent_heat_flux',                                       &
         cmor_long_name='Surface Downward Latent Heat Flux due to Evap + Melt Snow/Ice')
 
@@ -1270,7 +1270,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
   handles%id_sens = register_diag_field('ocean_model', 'sensible', diag%axesT1, Time,&
         'Sensible heat flux into ocean', 'Watt meter-2',                             &
         standard_name='surface_downward_sensible_heat_flux',                         &
-        cmor_field_name='hfss', cmor_units='W m-2',                                  &
+        cmor_field_name='hfsso', cmor_units='W m-2',                                 &
         cmor_standard_name='surface_downward_sensible_heat_flux',                    &
         cmor_long_name='Surface Downward Sensible Heat Flux')
 
@@ -1383,7 +1383,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
       'total_lat', Time, diag,                                               &
       long_name='Area integrated surface downward latent heat flux',         &
       units='Watt',                                                          &
-      cmor_field_name='total_hfls', cmor_units='W',                          &
+      cmor_field_name='total_hflso', cmor_units='W',                         &
       cmor_standard_name='surface_downward_latent_heat_flux_area_integrated',&
       cmor_long_name=                                                        &
       'Surface Downward Latent Heat Flux Area Integrated')
@@ -1415,7 +1415,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
       'total_sens', Time, diag,                                                &
       long_name='Area integrated downward sensible heat flux',                 &
       units='Watt',                                                            &
-      cmor_field_name='total_hfss', cmor_units='W',                            &
+      cmor_field_name='total_hfsso', cmor_units='W',                           &
       cmor_standard_name='surface_downward_sensible_heat_flux_area_integrated',&
       cmor_long_name=                                                          &
       'Surface Downward Sensible Heat Flux Area Integrated')
@@ -1470,7 +1470,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
       'lat_ga', Time, diag,                                                &
       long_name='Area averaged surface downward latent heat flux',         &
       units='W m-2',                                                       &
-      cmor_field_name='ave_hfls', cmor_units='W m-2',                      &
+      cmor_field_name='ave_hflso', cmor_units='W m-2',                     &
       cmor_standard_name='surface_downward_latent_heat_flux_area_averaged',&
       cmor_long_name=                                                      &
       'Surface Downward Latent Heat Flux Area Averaged')
@@ -1479,7 +1479,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
       'sens_ga', Time, diag,                                                 &
       long_name='Area averaged downward sensible heat flux',                 &
       units='W m-2',                                                         &
-      cmor_field_name='ave_hfss', cmor_units='W m-2',                        &
+      cmor_field_name='ave_hfsso', cmor_units='W m-2',                       &
       cmor_standard_name='surface_downward_sensible_heat_flux_area_averaged',&
       cmor_long_name=                                                        &
       'Surface Downward Sensible Heat Flux Area Averaged')
