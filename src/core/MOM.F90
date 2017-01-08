@@ -88,6 +88,7 @@ use MOM_dynamics_legacy_split, only : initialize_dyn_legacy_split, end_dyn_legac
 use MOM_dynamics_legacy_split, only : adjustments_dyn_legacy_split, MOM_dyn_legacy_split_CS
 use MOM_dyn_horgrid,           only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
 use MOM_EOS,                   only : EOS_init
+use MOM_EOS,                   only : gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_EOS,                   only : calculate_density
 use MOM_error_checking,        only : check_redundant
 use MOM_grid,                  only : ocean_grid_type, set_first_direction
@@ -125,7 +126,6 @@ use MOM_vert_friction,         only : vertvisc, vertvisc_remnant
 use MOM_vert_friction,         only : vertvisc_limit_vel, vertvisc_init
 use MOM_verticalGrid,          only : verticalGrid_type, verticalGridInit, verticalGridEnd
 use MOM_verticalGrid,          only : get_thickness_units, get_flux_units, get_tr_flux_units
-
 ! Offline modules
 use MOM_offline_transport,         only : offline_transport_CS
 use MOM_offline_transport,         only : transport_by_files, next_modulo_time
@@ -192,6 +192,10 @@ type, public :: MOM_control_struct
                                      !! with nkml sublayers and nkbl buffer layer.
   logical :: diabatic_first          !< If true, apply diabatic and thermodynamic
                                      !! processes before time stepping the dynamics.
+  logical :: use_conT_absS           !< If true, , the prognostics T&S are the conservative temperature 
+                                     !! and absolute salinity. Care should be taken to convert them
+                                     !! to potential temperature and practical salinity before 
+                                     !! exchanging them with the coupler and/or reporting T&S diagnostics.
   logical :: thickness_diffuse       !< If true, diffuse interface height w/ a diffusivity KHTH.
   logical :: thickness_diffuse_first !< If true, diffuse thickness before dynamics.
   logical :: mixedlayer_restrat      !< If true, use submesoscale mixed layer restratifying scheme.
@@ -285,6 +289,8 @@ type, public :: MOM_control_struct
   integer :: id_h  = -1
   integer :: id_T  = -1
   integer :: id_S  = -1
+  integer :: id_Tcon  = -1
+  integer :: id_Sabs  = -1
 
   ! 2-d surface and bottom fields
   integer :: id_zos      = -1
@@ -302,6 +308,8 @@ type, public :: MOM_control_struct
   integer :: id_ssh_inst = -1
   integer :: id_tob      = -1
   integer :: id_sob      = -1
+  integer :: id_sstcon   = -1
+  integer :: id_sssabs   = -1
 
   ! heat and salt flux fields
   integer :: id_fraz         = -1
@@ -487,6 +495,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     h    ! h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
 
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)+1) :: eta_predia, eta_preale
+  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: potTemp, pracSal !TEOS10 Diagnostics
   real, dimension(SZIB_(CS%G), SZJ_(CS%G)) :: umo2d ! Diagnostics
   real, dimension(SZI_(CS%G), SZJB_(CS%G)) :: vmo2d ! Diagnostics
   real, dimension(SZIB_(CS%G), SZJ_(CS%G), SZK_(CS%G)) :: umo ! Diagnostics
@@ -1212,11 +1221,29 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
 
       ! post some diagnostics
-      if (CS%id_T > 0) call post_data(CS%id_T, CS%tv%T, CS%diag)
-      if (CS%id_S > 0) call post_data(CS%id_S, CS%tv%S, CS%diag)
+      if(.NOT. CS%use_conT_absS) then
+         !Internal T&S variables are assumed to be potential&practical
+         if (CS%id_T > 0) call post_data(CS%id_T, CS%tv%T, CS%diag)
+         if (CS%id_S > 0) call post_data(CS%id_S, CS%tv%S, CS%diag)
 
-      if (CS%id_tob > 0) call post_data(CS%id_tob, CS%tv%T(:,:,G%ke), CS%diag, mask=G%mask2dT)
-      if (CS%id_sob > 0) call post_data(CS%id_sob, CS%tv%S(:,:,G%ke), CS%diag, mask=G%mask2dT)
+         if (CS%id_tob > 0) call post_data(CS%id_tob, CS%tv%T(:,:,G%ke), CS%diag, mask=G%mask2dT)
+         if (CS%id_sob > 0) call post_data(CS%id_sob, CS%tv%S(:,:,G%ke), CS%diag, mask=G%mask2dT)
+      else
+         !Internal T&S variables are assumed to be conservative&absolute
+         if (CS%id_Tcon > 0) call post_data(CS%id_Tcon, CS%tv%T, CS%diag)
+         if (CS%id_Sabs > 0) call post_data(CS%id_Sabs, CS%tv%S, CS%diag)
+         !Using TEOS-10 function calls convert T&S diagnostics
+         !from conservative temp to potential temp and 
+         !from absolute salinity to practical salinity
+         do k=1,nz ; do j=js,je ; do i=is,ie
+            pracSal(i,j,k) = gsw_sp_from_sr(CS%tv%S(i,j,k))
+            potTemp(i,j,k) = gsw_pt_from_ct(CS%tv%S(i,j,k),CS%tv%T(i,j,k))
+         enddo; enddo ; enddo
+         if (CS%id_T > 0) call post_data(CS%id_T, potTemp, CS%diag)
+         if (CS%id_S > 0) call post_data(CS%id_S, pracSal, CS%diag)
+         if (CS%id_tob > 0) call post_data(CS%id_tob, potTemp(:,:,G%ke), CS%diag, mask=G%mask2dT)
+         if (CS%id_sob > 0) call post_data(CS%id_sob, pracSal(:,:,G%ke), CS%diag, mask=G%mask2dT)
+      endif
 
       if (CS%id_Tadx   > 0) call post_data(CS%id_Tadx,   CS%T_adx,   CS%diag)
       if (CS%id_Tady   > 0) call post_data(CS%id_Tady,   CS%T_ady,   CS%diag)
@@ -1406,24 +1433,38 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
   call enable_averaging(dt*n_max,Time_local, CS%diag)
 
-  if (CS%id_sst > 0) &
-    call post_data(CS%id_sst, state%SST, CS%diag, mask=G%mask2dT)
+  if(.NOT. CS%use_conT_absS) then
+    !Internal T&S variables are assumed to be potential&practical
+    if (CS%id_sst > 0) call post_data(CS%id_sst, state%SST, CS%diag, mask=G%mask2dT)
+    if (CS%id_sss > 0) call post_data(CS%id_sss, state%SSS, CS%diag, mask=G%mask2dT)
+  else
+    !Internal T&S variables are assumed to be conservative&absolute
+    if (CS%id_sstcon > 0) call post_data(CS%id_sstcon, state%SST, CS%diag, mask=G%mask2dT) 
+    if (CS%id_sssabs > 0) call post_data(CS%id_sssabs, state%SSS, CS%diag, mask=G%mask2dT)
+    !Using TEOS-10 function calls convert T&S diagnostics
+    !from conservative temp to potential temp and 
+    !from absolute salinity to practical salinity
+    do j=js,je ; do i=is,ie
+       pracSal(i,j,1) = gsw_sp_from_sr(state%SSS(i,j))
+       potTemp(i,j,1) = gsw_pt_from_ct(state%SSS(i,j),state%SST(i,j))
+    enddo ; enddo
+    if (CS%id_sst > 0) call post_data(CS%id_sst, potTemp(:,:,1), CS%diag, mask=G%mask2dT)
+    if (CS%id_sss > 0) call post_data(CS%id_sss, pracSal(:,:,1), CS%diag, mask=G%mask2dT)
+  endif
+
   if (CS%id_sst_sq > 0) then
     do j=js,je ; do i=is,ie
       CS%SST_sq(i,j) = state%SST(i,j)*state%SST(i,j)
     enddo ; enddo
     call post_data(CS%id_sst_sq, CS%SST_sq, CS%diag, mask=G%mask2dT)
   endif
-
-  if (CS%id_sss > 0) &
-    call post_data(CS%id_sss, state%SSS, CS%diag, mask=G%mask2dT)
   if (CS%id_sss_sq > 0) then
     do j=js,je ; do i=is,ie
       CS%SSS_sq(i,j) = state%SSS(i,j)*state%SSS(i,j)
     enddo ; enddo
     call post_data(CS%id_sss_sq, CS%SSS_sq, CS%diag, mask=G%mask2dT)
   endif 
-
+  
   if (CS%id_ssu > 0) &
     call post_data(CS%id_ssu, state%u, CS%diag, mask=G%mask2dCu)
   if (CS%id_ssv > 0) &
@@ -2067,6 +2108,12 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
                  "If true, apply diabatic and thermodynamic processes, \n"//&
                  "including buoyancy forcing and mass gain or loss, \n"//&
                  "before stepping the dynamics forward.", default=.false.)
+  call get_param(param_file, "MOM", "USE_CONTEMP_ABSSAL", CS%use_conT_absS, &
+                 "If true, , the prognostics T&S are the conservative temperature \n"//&
+                 "and absolute salinity. Care should be taken to convert them \n"//&
+                 "to potential temperature and practical salinity before  \n"//&
+                 "exchanging them with the coupler and/or reporting T&S diagnostics. \n"&
+                 , default=.false.)
   call get_param(param_file, "MOM", "ADIABATIC", CS%adiabatic, &
                  "There are no diapycnal mass fluxes if ADIABATIC is \n"//&
                  "true. This assumes that KD = KDML = 0.0 and that \n"//&
@@ -2916,6 +2963,15 @@ subroutine register_diags(Time, G, GV, CS, ADp)
         cmor_long_name='Square of Sea Surface Salinity ', cmor_units='ppt^2', &
         cmor_standard_name='square_of_sea_surface_salinity')
     if (CS%id_sss_sq > 0) call safe_alloc_ptr(CS%SSS_sq,isd,ied,jsd,jed)
+    CS%id_Tcon = register_diag_field('ocean_model', 'contemp', diag%axesTL, Time, &
+        'Conservative Temperature', 'Celsius')
+    CS%id_Sabs = register_diag_field('ocean_model', 'abssalt', diag%axesTL, Time, &
+        long_name='Absolute Salinity', units='g/Kg')
+    CS%id_sstcon = register_diag_field('ocean_model', 'conSST', diag%axesT1, Time,     &
+        'Sea Surface Conservative Temperature', 'Celsius', CS%missing)
+    CS%id_sssabs = register_diag_field('ocean_model', 'absSSS', diag%axesT1, Time,     &
+        'Sea Surface Absolute Salinity', 'g/Kg', CS%missing)
+
   endif
 
   if (CS%use_temperature .and. CS%use_frazil) then
