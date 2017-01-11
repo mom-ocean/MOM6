@@ -88,7 +88,9 @@ type, public :: OBC_segment_type
   real, pointer, dimension(:,:,:) :: h=>NULL()      !<The cell thickness (m) at OBC-points.
   real, pointer, dimension(:,:,:) :: unh=>NULL()    !<The grid-oriented normal layer transports (m3 s-1).
   real, pointer, dimension(:,:)   :: unhbt=>NULL()  !<The vertically summed normal layer transports (m3 s-1).
-  real, pointer, dimension(:,:)   :: unbt=>NULL()   !<The vertically-averaged normal layer transport (m s-1).
+  real, pointer, dimension(:,:)   :: unbt=>NULL()   !<The vertically-averaged normal velocity (m s-1).
+  real, pointer, dimension(:,:,:) :: tangent_vel=>NULL()    !<The layer velocity tangential to the OB segment (m s-1).
+  real, pointer, dimension(:,:)   :: tangent_vel_bt=>NULL() !<The barotropic velocity tangential to the OB segment (m s-1).
   real, pointer, dimension(:,:)   :: eta=>NULL()    !<The sea-surface elevation (m).
   type(hor_index_type) :: HI !< Horizontal index ranges
 end type OBC_segment_type
