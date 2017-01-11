@@ -332,7 +332,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
   real, dimension(SZI_(G),SZJB_(G))          :: trans_y_2d  ! depth integrated diffusive tracer y-transport diagn
   real, dimension(G%ke)                      :: dTracer     ! change in tracer concentration due to ndiffusion 
   integer :: i, j, k, ks, nk
-  real :: ppt2mks, Idt, convert
+  real :: ppt2mks, Idt, convert, old_tr
 
   nk = GV%ke
 
@@ -396,8 +396,12 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
         dTracer(k) = dTracer(k) - Coef_y(i,J-1) * vFlx(i,J-1,ks)
       enddo
       do k = 1, GV%ke
+        old_tr = Tracer(i,j,k)
         Tracer(i,j,k) = Tracer(i,j,k) + dTracer(k) * &
                         ( G%IareaT(i,j) / ( h(i,j,k) + GV%H_subroundoff ) )
+        if(Tracer(i,j,k)<0.0 .and. old_tr>0.0) then
+          call MOM_error(WARNING,"Tracer went negative during neutral diffusion")
+        endif
       enddo
 
       if(CS%id_neutral_diff_tracer_conc_tend(m)    > 0  .or.  &

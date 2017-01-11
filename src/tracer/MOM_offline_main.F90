@@ -94,13 +94,8 @@ type, public :: offline_transport_CS
     
   !> Variables that may need to be stored between calls to step_MOM
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_)       :: uhtr
-  !  2D
-  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_)              :: khdt_x
-  ! Fields at V-points
-  !  3D
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_)       :: vhtr
-  !  2D
-  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_)              :: khdt_y
+  
   ! Fields at T-point
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_) :: &
       eatr,     &  ! Amount of fluid entrained from the layer above within
@@ -541,12 +536,8 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, CS, h_pre,
                                                       ! about the vertical grid
   ! Zonal mass transports 
   real, dimension(SZIB_(CS%G),SZJ_(CS%G),SZK_(CS%G))   :: uhtr_sub
-  ! Zonal diffusive transport
-  real, dimension(SZIB_(CS%G),SZJ_(CS%G))              :: khdt_x
   ! Meridional mass transports
   real, dimension(SZI_(CS%G),SZJB_(CS%G),SZK_(CS%G))   :: vhtr_sub
-  ! Meridional diffusive transports
-  real, dimension(SZI_(CS%G),SZJB_(CS%G))              :: khdt_y
 
   real :: sum_abs_fluxes, sum_u, sum_v  ! Used to keep track of how close to convergence we are
   real :: dt_offline ! Shorthand variables from offline CS
@@ -695,7 +686,7 @@ end subroutine offline_advection_layer
 
 !> Controls the reading in 3d mass fluxes, diffusive fluxes, and other fields stored
 !! in a previous integration of the online model
-subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, khdt_y, &
+subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, &
     temp_mean, salt_mean, fluxes, do_ale_in)
 
   type(ocean_grid_type),                     intent(inout)    :: G
@@ -708,12 +699,8 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
   !  3D
   ! Zonal mass transports 
   real, dimension(SZIB_(CS%G),SZJ_(CS%G),SZK_(CS%G))   :: uhtr
-  ! Zonal diffusive transport
-  real, dimension(SZIB_(G),SZJ_(G))                    :: khdt_x
   ! Meridional mass transports
   real, dimension(SZI_(CS%G),SZJB_(CS%G),SZK_(CS%G))   :: vhtr
-  ! Meridional diffusive transports
-  real, dimension(SZI_(G),SZJB_(G))                    :: khdt_y
   
   ! Vertical diffusion related variables
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: &
@@ -738,19 +725,13 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
   h_end(:,:,:) = 0.0
   temp_mean(:,:,:) = 0.0
   salt_mean(:,:,:) = 0.0
-  khdt_x(:,:) = 0.0
-  khdt_y(:,:) = 0.0
 
   !! Time-summed fields
   ! U-grid
   call read_data(CS%sum_file, 'uhtr_sum',     uhtr,domain=G%Domain%mpp_domain, &
     timelevel=CS%ridx_sum,position=EAST)
-  call read_data(CS%sum_file, 'khdt_x_sum', khdt_x,domain=G%Domain%mpp_domain, &
-    timelevel=CS%ridx_sum,position=EAST)
   ! V-grid
   call read_data(CS%sum_file, 'vhtr_sum',     vhtr, domain=G%Domain%mpp_domain, &
-    timelevel=CS%ridx_sum,position=NORTH)
-  call read_data(CS%sum_file, 'khdt_y_sum', khdt_y, domain=G%Domain%mpp_domain, &
     timelevel=CS%ridx_sum,position=NORTH)
   ! T-grid
   call read_data(CS%sum_file, 'ea_sum',   eatr, domain=G%Domain%mpp_domain, &
@@ -839,14 +820,12 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
 
   do k=1,nz ; do j=js-1,je ; do i=is,ie
     if(G%mask2dCv(i,j)<1.0) then
-      khdt_y(i,j) = 0.0
       vhtr(i,j,k) = 0.0
     endif
   enddo; enddo ; enddo
 
   do k=1,nz ; do j=js,je ; do i=is-1,ie
     if(G%mask2dCu(i,j)<1.0) then
-      khdt_x(i,j) = 0.0
       uhtr(i,j,k) = 0.0
     endif
   enddo; enddo ; enddo
@@ -855,7 +834,6 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, 
   !! Make sure all halos have been updated
   ! Vector fields
   call pass_vector(uhtr, vhtr, G%Domain)
-  call pass_vector(khdt_x, khdt_y, G%Domain)
 
   ! Scalar fields
   call pass_var(h_end, G%Domain)
@@ -1034,8 +1012,6 @@ subroutine offline_transport_init(param_file, CS, diabatic_aux_CSp, G, GV)
   ! Allocate arrays
   ALLOC_(CS%uhtr(IsdB:IedB,jsd:jed,nz))   ; CS%uhtr(:,:,:) = 0.0
   ALLOC_(CS%vhtr(isd:ied,JsdB:JedB,nz))   ; CS%vhtr(:,:,:) = 0.0
-  ALLOC_(CS%khdt_x(IsdB:IedB,jsd:jed))    ; CS%khdt_x(:,:)         = 0.0
-  ALLOC_(CS%khdt_y(isd:ied,JsdB:JedB))    ; CS%khdt_y(:,:)         = 0.0
   ALLOC_(CS%eatr(isd:ied,jsd:jed,nz))          ; CS%eatr(:,:,:) = 0.0
   ALLOC_(CS%ebtr(isd:ied,jsd:jed,nz))          ; CS%ebtr(:,:,:) = 0.0
   ALLOC_(CS%temp_mean(isd:ied,jsd:jed,nz))     ; CS%temp_mean(:,:,:) = 0.0
