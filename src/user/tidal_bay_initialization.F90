@@ -23,8 +23,7 @@ use MOM_dyn_horgrid,    only : dyn_horgrid_type
 use MOM_error_handler,  only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser,    only : get_param, log_version, param_file_type
 use MOM_grid,           only : ocean_grid_type
-use MOM_open_boundary,  only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE
-use MOM_open_boundary,  only : open_boundary_query
+use MOM_open_boundary,  only : ocean_OBC_type, OBC_NONE
 use MOM_verticalGrid,   only : verticalGrid_type
 use MOM_time_manager,   only : time_type, set_time, time_type_to_real
 
@@ -67,7 +66,7 @@ subroutine tidal_bay_set_OBC_data(OBC, G, h, Time)
   my_area=0.0
   my_flux=0.0
   do j=jsd,jed ; do I=IsdB,IedB
-    if (OBC%OBC_mask_u(I,j)) then
+    if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
       do k=1,nz
         cff2 = h(I,j,k)*G%dyCu(I,j)
         my_area = my_area + cff2
@@ -77,13 +76,13 @@ subroutine tidal_bay_set_OBC_data(OBC, G, h, Time)
   my_flux = -tide_flow*SIN(2.0*PI*time_sec/(12.0*3600.0))
 
   do j=jsd,jed ; do I=IsdB,IedB
-    if (OBC%OBC_mask_u(I,j)) then
+    if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
       OBC%eta_outer_u(I,j) = cff
       OBC%ubt_outer(I,j) = my_flux/my_area
     endif
   enddo ; enddo
   do J=JsdB,JedB ; do i=isd,ied
-    if (OBC%OBC_mask_v(i,J)) then
+    if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
       OBC%eta_outer_v(i,J) = cff
       OBC%vbt_outer(i,J) = 0.0
     endif

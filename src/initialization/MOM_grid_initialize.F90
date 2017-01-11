@@ -180,8 +180,8 @@ subroutine grid_metrics_chksum(parent, G)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-  halo = min(ied-ie, jed-je)
-halo=1 ! AJA
+  halo = min(ied-ie, jed-je, 1)
+! halo=1 ! AJA
 
   do i=isd,ied ; do j=jsd,jed ; tempH(i,j) = G%dxT(i,j) ; enddo ; enddo
   call hchksum(tempH,trim(parent)//': dxT',G%HI, haloshift=halo)
@@ -483,7 +483,9 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
   do i=G%isg,G%ieg
     G%gridLonT(i) = tmpGlbl(2*(i-G%isg)+2,2)
   enddo
-  do I=G%IsgB,G%IegB
+  ! Note that the dynamic grid always uses symmetric memory for the global
+  ! arrays G%gridLatB and G%gridLonB.
+  do I=G%isg-1,G%ieg
     G%gridLonB(I) = tmpGlbl(2*(I-G%isg)+3,1)
   enddo
   deallocate( tmpGlbl )
@@ -498,7 +500,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
   do j=G%jsg,G%jeg
     G%gridLatT(j) = tmpGlbl(1,2*(j-G%jsg)+2)
   enddo
-  do J=G%JsgB,G%JegB
+  do J=G%jsg-1,G%jeg
     G%gridLatB(J) = tmpGlbl(1,2*(j-G%jsg)+3)
   enddo
   deallocate( tmpGlbl )
@@ -571,14 +573,15 @@ subroutine set_grid_metrics_cartesian(G, param_file)
   endif
   call log_param(param_file, mod, "explicit AXIS_UNITS", G%x_axis_units)
 
-  ! These are larger in case symmetric memory is being used.
-  do J=G%JsgB,G%JegB
+  ! Note that the dynamic grid always uses symmetric memory for the global
+  ! arrays G%gridLatB and G%gridLonB.
+  do J=G%jsg-1,G%jeg
     G%gridLatB(j) = G%south_lat + G%len_lat*REAL(J-(G%jsg-1))/REAL(njglobal)
   enddo
   do j=G%jsg,G%jeg
     G%gridLatT(j) = G%south_lat + G%len_lat*(REAL(j-G%jsg)+0.5)/REAL(njglobal)
   enddo
-  do I=G%IsgB,G%IegB
+  do I=G%isg-1,G%ieg
     G%gridLonB(i) = G%west_lon + G%len_lon*REAL(I-(G%isg-1))/REAL(niglobal)
   enddo
   do i=G%isg,G%ieg
@@ -699,7 +702,9 @@ subroutine set_grid_metrics_spherical(G, param_file)
   dLon = G%len_lon/G%Domain%niglobal
   dLat = G%len_lat/G%Domain%njglobal
 
-  do j=G%JsgB,G%JegB
+  ! Note that the dynamic grid always uses symmetric memory for the global
+  ! arrays G%gridLatB and G%gridLonB.
+  do j=G%jsg-1,G%jeg
     latitude = G%south_lat + dLat*(REAL(J-(G%jsg-1)))
     G%gridLatB(J) = MIN(MAX(latitude,-90.),90.)
   enddo
@@ -707,7 +712,7 @@ subroutine set_grid_metrics_spherical(G, param_file)
     latitude = G%south_lat + dLat*(REAL(j-G%jsg)+0.5)
     G%gridLatT(j) = MIN(MAX(latitude,-90.),90.)
   enddo
-  do i=G%IsgB,G%IegB
+  do i=G%isg-1,G%ieg
     G%gridLonB(I) = G%west_lon + dLon*(REAL(I-(G%isg-1)))
   enddo
   do i=G%isg,G%ieg
@@ -903,7 +908,9 @@ subroutine set_grid_metrics_mercator(G, param_file)
   ! These calculations no longer depend on the the order in which they
   ! are performed because they all use the same (poor) starting guess and
   ! iterate to convergence.
-  do J=G%JsgB,G%JegB
+  ! Note that the dynamic grid always uses symmetric memory for the global
+  ! arrays G%gridLatB and G%gridLonB.
+  do J=G%jsg-1,G%jeg
     jd = fnRef + (J - jRef)
     y_q = find_root(Int_dj_dy, dy_dj, GP, jd, 0.0, -1.0*PI_2, PI_2, itt2)
     G%gridLatB(J) = y_q*180.0/PI
@@ -941,7 +948,7 @@ subroutine set_grid_metrics_mercator(G, param_file)
   ! These calculations no longer depend on the the order in which they
   ! are performed because they all use the same (poor) starting guess and
   ! iterate to convergence.
-  do I=G%IsgB,G%IegB
+  do I=G%isg-1,G%ieg
     id = fnRef + (I - iRef)
     x_q = find_root(Int_di_dx, dx_di, GP, id, 0.0, -4.0*PI, 4.0*PI, itt2)
     G%gridLonB(I) = x_q*180.0/PI

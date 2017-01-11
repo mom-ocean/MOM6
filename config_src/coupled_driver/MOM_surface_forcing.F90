@@ -194,6 +194,9 @@ type, public :: ice_ocean_boundary_type
   real, pointer, dimension(:,:) :: fprec                =>NULL() ! mass flux of frozen precip (kg/m2/s)
   real, pointer, dimension(:,:) :: runoff               =>NULL() ! mass flux of liquid runoff (kg/m2/s)
   real, pointer, dimension(:,:) :: calving              =>NULL() ! mass flux of frozen runoff (kg/m2/s)
+  real, pointer, dimension(:,:) :: ustar_berg           =>NULL() ! frictional velocity beneath icebergs (m/s)
+  real, pointer, dimension(:,:) :: area_berg            =>NULL() ! area covered by icebergs(m2/m2)
+  real, pointer, dimension(:,:) :: mass_berg            =>NULL() ! mass of icebergs(kg/m2)
   real, pointer, dimension(:,:) :: runoff_hflx          =>NULL() ! heat content of liquid runoff (W/m2)
   real, pointer, dimension(:,:) :: calving_hflx         =>NULL() ! heat content of frozen runoff (W/m2)
   real, pointer, dimension(:,:) :: p                    =>NULL() ! pressure of overlying ice and atmosphere
@@ -333,6 +336,11 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
     call safe_alloc_ptr(fluxes%TKE_tidal,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%ustar_tidal,isd,ied,jsd,jed)
 
+    if (CS%allow_flux_adjustments) then
+      call safe_alloc_ptr(fluxes%heat_added,isd,ied,jsd,jed)	 
+      call safe_alloc_ptr(fluxes%salt_flux_added,isd,ied,jsd,jed)
+    endif
+
     do j=js-2,je+2 ; do i=is-2,ie+2
       fluxes%TKE_tidal(i,j)   = CS%TKE_tidal(i,j)
       fluxes%ustar_tidal(i,j) = CS%ustar_tidal(i,j)
@@ -347,6 +355,11 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
 
     fluxes%dt_buoy_accum = 0.0
   endif   ! endif for allocation and initialization
+
+  if (CS%allow_flux_adjustments) then
+   fluxes%heat_added(:,:)=0.0
+   fluxes%salt_flux_added(:,:)=0.0
+  endif
 
   ! allocation and initialization on first call to this routine
   if (CS%area_surf < 0.0) then
@@ -468,6 +481,20 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
 
     if (ASSOCIATED(IOB%calving)) &
       fluxes%frunoff(i,j) = IOB%calving(i-i0,j-j0) * G%mask2dT(i,j)
+
+    if (((ASSOCIATED(IOB%ustar_berg) .and. (.not. ASSOCIATED(fluxes%ustar_berg)))   &
+      .or. (ASSOCIATED(IOB%area_berg) .and. (.not. ASSOCIATED(fluxes%area_berg)))) &
+      .or. (ASSOCIATED(IOB%mass_berg) .and. (.not. ASSOCIATED(fluxes%mass_berg)))) &
+      call allocate_forcing_type(G, fluxes, iceberg=.true.)
+
+    if (ASSOCIATED(IOB%ustar_berg)) &
+      fluxes%ustar_berg(i,j) = IOB%ustar_berg(i-i0,j-j0) * G%mask2dT(i,j)
+
+    if (ASSOCIATED(IOB%area_berg)) &
+      fluxes%area_berg(i,j) = IOB%area_berg(i-i0,j-j0) * G%mask2dT(i,j)
+
+    if (ASSOCIATED(IOB%mass_berg)) &
+      fluxes%mass_berg(i,j) = IOB%mass_berg(i-i0,j-j0) * G%mask2dT(i,j)
 
     if (ASSOCIATED(IOB%runoff_hflx)) &
       fluxes%heat_content_lrunoff(i,j) = IOB%runoff_hflx(i-i0,j-j0) * G%mask2dT(i,j)
@@ -733,46 +760,41 @@ subroutine apply_flux_adjustments(G, CS, Time, fluxes)
   real, dimension(SZI_(G),SZJ_(G)) :: tempy_at_h ! Delta to meridional wind stress at h points (Pa)
   real, dimension(SZI_(G),SZJ_(G)) :: temp_at_h ! Fluxes at h points (W m-2 or kg m-2 s-1)
 
-  integer :: is_in, ie_in, js_in, je_in, i, j
+  integer :: isc, iec, jsc, jec, i, j
   real :: dLonDx, dLonDy, rDlon, cosA, sinA, zonal_tau, merid_tau
   logical :: overrode_x, overrode_y, overrode_h
 
-  is_in = G%isc - G%isd + 1
-  ie_in = G%iec - G%isd + 1
-  js_in = G%jsc - G%jsd + 1
-  je_in = G%jec - G%jsd + 1
+  isc = G%isc; iec = G%iec
+  jsc = G%jsc; jec = G%jec
 
   overrode_h = .false.
-  call data_override('OCN', 'hflx_adj', temp_at_h, Time, override=overrode_h, &
-                      is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+  call data_override('OCN', 'hflx_adj', temp_at_h(isc:iec,jsc:jec), Time, override=overrode_h)
  
   if (overrode_h) then 
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      fluxes%heat_added(i,j) = fluxes%heat_added(i,j) + temp_at_h(i,j)
+      fluxes%heat_added(i,j) = fluxes%heat_added(i,j) + temp_at_h(i,j)* G%mask2dT(i,j)
     enddo; enddo
   endif
  
   call pass_var(fluxes%heat_added, G%Domain)
  
   overrode_h = .false.
-  call data_override('OCN', 'sflx_adj', temp_at_h, Time, override=overrode_h, &
-                     is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+  call data_override('OCN', 'sflx_adj', temp_at_h(isc:iec,jsc:jec), Time, override=overrode_h)
  
   if (overrode_h) then 
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      fluxes%salt_flux_added(i,j) = fluxes%salt_flux_added(i,j) + temp_at_h(i,j)
+      fluxes%salt_flux_added(i,j) = fluxes%salt_flux_added(i,j) + temp_at_h(i,j)* G%mask2dT(i,j)
     enddo; enddo
   endif
 
   call pass_var(fluxes%salt_flux_added, G%Domain)
   overrode_h = .false.
 
-  call data_override('OCN', 'prcme_adj', temp_at_h, Time, override=overrode_h, &
-                     is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+  call data_override('OCN', 'prcme_adj', temp_at_h(isc:iec,jsc:jec), Time, override=overrode_h)
  
   if (overrode_h) then 
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      fluxes%vprec(i,j) = fluxes%vprec(i,j) + temp_at_h(i,j)
+      fluxes%vprec(i,j) = fluxes%vprec(i,j) + temp_at_h(i,j)* G%mask2dT(i,j)
     enddo; enddo
   endif
  
@@ -782,10 +804,8 @@ subroutine apply_flux_adjustments(G, CS, Time, fluxes)
   tempx_at_h(:,:) = 0.0 ; tempy_at_h(:,:) = 0.0
   ! Either reads data or leaves contents unchanged
   overrode_x = .false. ; overrode_y = .false.
-  call data_override('OCN', 'taux_adj', tempx_at_h, Time, override=overrode_x, &
-                     is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
-  call data_override('OCN', 'tauy_adj', tempy_at_h, Time, override=overrode_y, &
-                     is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
+  call data_override('OCN', 'taux_adj', tempx_at_h(isc:iec,jsc:jec), Time, override=overrode_x)
+  call data_override('OCN', 'tauy_adj', tempy_at_h(isc:iec,jsc:jec), Time, override=overrode_y)
 
   if (overrode_x .or. overrode_y) then
     if (.not. (overrode_x .and. overrode_y)) call MOM_error(FATAL,"apply_flux_adjustments: "//&
@@ -860,7 +880,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
 !                           applied in this model.
   real :: utide  ! The RMS tidal velocity, in m s-1.
   type(directories)  :: dirs
-  logical            :: new_sim
+  logical            :: new_sim, iceberg_flux_diags
   type(time_type)    :: Time_frc
   character(len=200) :: TideAmp_file, gust_file, salt_file, temp_file ! Input file names.
 ! This include declares and sets the variable "version".
@@ -1111,7 +1131,11 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
                  "starts to exhibit rigidity", units="kg m-2", default=1000.0)
   endif
 
-  call register_forcing_type_diags(Time, diag, CS%use_temperature, CS%handles)
+  call get_param(param_file, mod, "ALLOW_ICEBERG_FLUX_DIAGNOSTICS", iceberg_flux_diags, &
+                 "If true, makes available diagnostics of fluxes from icebergs\n"//&
+                 "as seen by MOM6.", default=.false.)
+  call register_forcing_type_diags(Time, diag, CS%use_temperature, CS%handles, &
+                                   use_berg_fluxes=iceberg_flux_diags)
 
   call get_param(param_file, mod, "ALLOW_FLUX_ADJUSTMENTS", CS%allow_flux_adjustments, &
                  "If true, allows flux adjustments to specified via the \n"//&
@@ -1197,6 +1221,12 @@ subroutine ice_ocn_bnd_type_chksum(id, timestep, iobt)
     write(outunit,100) 'iobt%runoff         ', mpp_chksum( iobt%runoff         )
     write(outunit,100) 'iobt%calving        ', mpp_chksum( iobt%calving        )
     write(outunit,100) 'iobt%p              ', mpp_chksum( iobt%p              )
+    if (ASSOCIATED(iobt%ustar_berg)) &
+      write(outunit,100) 'iobt%ustar_berg     ', mpp_chksum( iobt%ustar_berg     )
+    if (ASSOCIATED(iobt%area_berg)) &
+      write(outunit,100) 'iobt%area_berg      ', mpp_chksum( iobt%area_berg      )
+    if (ASSOCIATED(iobt%mass_berg)) &
+      write(outunit,100) 'iobt%mass_berg      ', mpp_chksum( iobt%mass_berg      )
 
 100 FORMAT("   CHECKSUM::",A20," = ",Z20)
     do n = 1, iobt%fluxes%num_bcs  !{
