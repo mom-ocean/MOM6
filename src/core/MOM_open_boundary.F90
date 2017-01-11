@@ -242,9 +242,9 @@ subroutine open_boundary_config(G, param_file, OBC)
       endif
     enddo
 
-!    if (open_boundary_query(OBC, needs_ext_seg_data=.true.) .and. .not. OBC%user_BCs_set_globally) &
-    if (open_boundary_query(OBC, needs_ext_seg_data=.true.)) &
-      call initialize_segment_data(G, OBC, param_file)
+!   if (open_boundary_query(OBC, needs_ext_seg_data=.true.) .and. .not. OBC%user_BCs_set_globally) &
+!   if (open_boundary_query(OBC, needs_ext_seg_data=.true.)) &
+!     call initialize_segment_data(G, OBC, param_file)
   endif
 
   ! Safety check
