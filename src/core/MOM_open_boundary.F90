@@ -363,7 +363,6 @@ subroutine initialize_segment_data(G, OBC, PF)
          endif
          siz2(3)=siz(3)
 
-         
          allocate(OBC_segments(n)%field(m)%buffer_src(is_obc:ie_obc,js_obc:je_obc,siz2(3)))
          OBC_segments(n)%field(m)%buffer_src(:,:,:)=0.0
          OBC_segments(n)%field(m)%fid = init_external_field(trim(filename),trim(fieldname))
@@ -395,7 +394,7 @@ subroutine initialize_segment_data(G, OBC, PF)
 end subroutine initialize_segment_data
 
 !< Define indices for segment and store in hor_index_type
-!< using global segment bounds corresponding to q-points 
+!< using global segment bounds corresponding to q-points
 subroutine setup_segment_indices(G, seg, Is_obc, Ie_obc, Js_obc, Je_obc)
   type(dyn_horgrid_type), intent(in) :: G !< grid type
   type(OBC_segment_type), intent(inout) :: seg  !< Open boundary segment
@@ -454,7 +453,7 @@ subroutine setup_segment_indices(G, seg, Is_obc, Ie_obc, Js_obc, Je_obc)
   seg%HI%jec = min( max(Jeg, G%HI%jsc), G%HI%jec)
 
 end subroutine setup_segment_indices
-  
+
 !> Parse an OBC_SEGMENT_%%% string starting with "I=" and configure placement and type of OBC accordingly
 subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
   type(ocean_OBC_type),    pointer    :: OBC !< Open boundary control structure
@@ -470,15 +469,13 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
   call parse_segment_str(G%ieg, G%jeg, segment_str, I_obc, Js_obc, Je_obc, action_str )
 
   call setup_segment_indices(G, OBC%OBC_segment_number(l_seg),I_obc,I_obc,Js_obc,Je_obc)
-     
-  OBC%OBC_segment_number(l_seg)%global_indices = (/I_obc,I_obc,Js_obc,Je_obc/)
 
+  OBC%OBC_segment_number(l_seg)%global_indices = (/I_obc,I_obc,Js_obc,Je_obc/)
 
   I_obc = I_obc - G%idg_offset ! Convert to local tile indices on this tile
   Js_obc = Js_obc - G%jdg_offset ! Convert to local tile indices on this tile
   Je_obc = Je_obc - G%jdg_offset ! Convert to local tile indices on this tile
 
-  
   this_kind = OBC_NONE
 
   ! Hack to extend segment by one point
@@ -535,7 +532,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%OBC_segment_number(l_seg)%specified = .true.
       OBC%OBC_segment_number(l_seg)%values_needed = .true.
-      OBC%update_OBC = .true.
+!     OBC%update_OBC = .true.
       OBC%specified_u_BCs_exist_globally = .true. ! This avoids deallocation
       ! Hack to undo the hack above for SIMPLE BCs
       Js_obc = Js_obc + 1 ; Je_obc = Je_obc - 1
@@ -663,7 +660,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%OBC_segment_number(l_seg)%specified = .true.
       OBC%OBC_segment_number(l_seg)%values_needed = .true.
-      OBC%update_OBC = .true.
+!     OBC%update_OBC = .true.
       OBC%specified_v_BCs_exist_globally = .true. ! This avoids deallocation
       ! Hack to undo the hack above for SIMPLE BCs
       Is_obc = Is_obc + 1 ; Ie_obc = Ie_obc - 1
@@ -1739,7 +1736,7 @@ subroutine fill_OBC_halos(G, GV, OBC, tv, h, tracer_Reg)
           tv%T(i+1,j,k) = tv%T(i,j,k) ; tv%S(i+1,j,k) = tv%S(i,j,k); h(i+1,j,k) = h(i,j,k)
         enddo
       endif
-    enddo ; enddo 
+    enddo ; enddo
 
     do j=G%jsdB+1,G%jedB ; do I=G%isdB+1,G%iedB
       if (segment%direction == OBC_DIRECTION_W .and. OBC%OBC_segment_u(I,j) /= OBC_NONE ) then
@@ -1747,7 +1744,7 @@ subroutine fill_OBC_halos(G, GV, OBC, tv, h, tracer_Reg)
           tv%T(i-1,j,k) = tv%T(i,j,k) ; tv%S(i-1,j,k) = tv%S(i,j,k); h(i-1,j,k) = h(i,j,k)
         enddo
       endif
-    enddo ; enddo 
+    enddo ; enddo
 
     do j=G%jsdB,G%jedB-1 ; do I=G%isdB+1,G%iedB
       if (segment%direction == OBC_DIRECTION_N .and. OBC%OBC_segment_v(I,j) /= OBC_NONE ) then
@@ -1755,7 +1752,7 @@ subroutine fill_OBC_halos(G, GV, OBC, tv, h, tracer_Reg)
           tv%T(i,j+1,k) = tv%T(i,j,k) ; tv%S(i,j+1,k) = tv%S(i,j,k); h(i,j+1,k) = h(i,j,k)
         enddo
       endif
-    enddo ; enddo 
+    enddo ; enddo
 
     do j=G%jsdB+1,G%jedB ; do I=G%isdB+1,G%iedB
       if (segment%direction == OBC_DIRECTION_S .and. OBC%OBC_segment_v(I,j) /= OBC_NONE ) then
@@ -1763,7 +1760,7 @@ subroutine fill_OBC_halos(G, GV, OBC, tv, h, tracer_Reg)
           tv%T(i,j-1,k) = tv%T(i,j,k) ; tv%S(i,j-1,k) = tv%S(i,j,k); h(i,j-1,k) = h(i,j,k)
         enddo
       endif
-    enddo ; enddo 
+    enddo ; enddo
 
   enddo
 
@@ -1822,12 +1819,12 @@ subroutine fill_OBC_halos(G, GV, OBC, tv, h, tracer_Reg)
 
     call pass_vector(OBC_T_u, OBC_T_v, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
     call pass_vector(OBC_S_u, OBC_S_v, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
-   
+
     call add_tracer_OBC_values("T",tracer_Reg, OBC_in_u=OBC_T_u,OBC_in_v=OBC_T_v)
     call add_tracer_OBC_values("S",tracer_Reg, OBC_in_u=OBC_S_u,OBC_in_v=OBC_S_v)
 
 
-  endif       
+  endif
 end subroutine fill_OBC_halos
 
 
@@ -1863,7 +1860,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
   nz=G%ke
 
 
-  if (.not. associated(OBC)) return 
+  if (.not. associated(OBC)) return
 
 
   do n = 1, OBC%number_of_segments
@@ -1881,7 +1878,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
 
     if (segment%direction == OBC_DIRECTION_W .or. segment%direction == OBC_DIRECTION_E) then
       nj_seg=nj_seg-1
-      js_obc=js_obc+1 
+      js_obc=js_obc+1
     else
       ni_seg=ni_seg-1
       is_obc=is_obc+1
@@ -1909,7 +1906,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
 !      else if (segment%direction == OBC_DIRECTION_W .and. OBC%OBC_segment_u(I,j) /= OBC_NONE ) then
 !        tv%T(i,j,k) = tv%T(i+1,j,k) ; tv%S(i,j,k) = tv%S(i+1,j,k); h(i,j,k) = h(i+1,j,k)
 !      endif
-!    enddo ; enddo 
+!    enddo ; enddo
 
 !    do j=jsd,jed-1 ; do I=isd,ied-1
 !      if (segment%direction == OBC_DIRECTION_N .and. OBC%OBC_segment_v(I,j) /= OBC_NONE ) then
@@ -1919,7 +1916,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
 !      else if (segment%direction == OBC_DIRECTION_S .and. OBC%OBC_segment_v(I,j) /= OBC_NONE ) then
 !        tv%T(i,j,k) = tv%T(i,j+1,k) ; tv%S(i,j,k) = tv%S(i,j+1,k); h(i,j,k) = h(i,j+1,k)
 !      endif
-!    enddo ; enddo 
+!    enddo ; enddo
 
 ! Calculate auxiliary fields at staggered locations.
 ! Segment indices are on q points:
