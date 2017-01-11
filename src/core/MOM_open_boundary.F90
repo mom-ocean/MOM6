@@ -396,41 +396,62 @@ end subroutine initialize_segment_data
 
 !< Define indices for segment and store in hor_index_type
 !< using global segment bounds corresponding to q-points 
-subroutine setup_segment_indices(G, seg, Is, Ie, Js, Je)
+subroutine setup_segment_indices(G, seg, Is_obc, Ie_obc, Js_obc, Je_obc)
   type(dyn_horgrid_type), intent(in) :: G !< grid type
   type(OBC_segment_type), intent(inout) :: seg  !< Open boundary segment
-  integer, intent(in) :: Is, Ie, Js, Je
-  integer :: IscB,IecB,JscB,JecB,i,j
+  integer, intent(in) :: Is_obc !< Q-point global i-index of start of segment
+  integer, intent(in) :: Ie_obc !< Q-point global i-index of end of segment
+  integer, intent(in) :: Js_obc !< Q-point global j-index of start of segment
+  integer, intent(in) :: Je_obc !< Q-point global j-index of end of segment
+  ! Local variables
   integer :: Isg,Ieg,Jsg,Jeg
-  integer :: isc,iec,jsc,jec
-  integer  :: i_offset, j_offset
 
   if (.not. G%Domain%symmetric) call MOM_error(FATAL, "MOM_open_boundary.F90, setup_segment_indices: "//&
                        "Need to compile in symmetric mode")
 
-
-  isc=G%isc;iec=G%iec;jsc=G%jsc;jec=G%jec
-  i_offset=G%isc-G%isd
-  j_offset=G%jsc-G%jsd
-  
-  if (Ie<Is) then
-    Isg=Ie;Ieg=Is
+  ! Isg, Ieg will be I*_obc in global space
+  if (Ie_obc<Is_obc) then
+    Isg=Ie_obc;Ieg=Is_obc
   else
-    Isg=Is;Ieg=Ie
+    Isg=Is_obc;Ieg=Ie_obc
   endif
-  if (Je<Js) then
-    Jsg=Je;Jeg=Js
+  if (Je_obc<Js_obc) then
+    Jsg=Je_obc;Jeg=Js_obc
   else
-    Jsg=Js;Jeg=Je
+    Jsg=Js_obc;Jeg=Je_obc
   endif
 
-  seg%HI%IsgB = Isg ; seg%HI%IegB = Ieg ; seg%HI%isg = Isg+1 ; seg%HI%ieg = Ieg
-  seg%HI%Isd = seg%HI%IsgB - G%idg_offset; seg%HI%Ied = seg%HI%IegB - G%idg_offset + i_offset 
-  seg%HI%Isc = seg%HI%Isd + i_offset; seg%HI%Iec = seg%HI%Ied + i_offset
+  ! Global space I*_obc but sorted
+  seg%HI%IsgB = Isg ; seg%HI%IegB = Ieg
+  seg%HI%isg = Isg+1 ; seg%HI%ieg = Ieg
+  seg%HI%JsgB = Isg ; seg%HI%JegB = Jeg
+  seg%HI%jsg = Jsg+1 ; seg%HI%jeg = Jeg
 
-  seg%HI%JsgB = Isg ; seg%HI%JegB = Jeg ; seg%HI%jsg = Jsg+1 ; seg%HI%jeg = Jeg
-  seg%HI%Jsd = seg%HI%JsgB - G%jdg_offset; seg%HI%Jed = seg%HI%JegB - G%jdg_offset + j_offset 
-  seg%HI%Jsc = seg%HI%Jsd + j_offset; seg%HI%Jec = seg%HI%Jed + j_offset
+  ! Move into local index space
+  Isg = Isg - G%idg_offset
+  Jsg = Jsg - G%jdg_offset
+
+  ! This is the i-extent of the segment on this PE.
+  ! The values are nonsence if the segment is not on this PE.
+  seg%HI%IsdB = min( max(Isg, G%HI%IsdB), G%HI%IedB)
+  seg%HI%IedB = min( max(Ieg, G%HI%IsdB), G%HI%IedB)
+  seg%HI%isd = min( max(Isg+1, G%HI%isd), G%HI%ied)
+  seg%HI%ied = min( max(Ieg, G%HI%isd), G%HI%ied)
+  seg%HI%IscB = min( max(Isg, G%HI%IscB), G%HI%IecB)
+  seg%HI%IecB = min( max(Ieg, G%HI%IscB), G%HI%IecB)
+  seg%HI%isc = min( max(Isg+1, G%HI%isc), G%HI%iec)
+  seg%HI%iec = min( max(Ieg, G%HI%isc), G%HI%iec)
+
+  ! This is the j-extent of the segment on this PE.
+  ! The values are nonsence if the segment is not on this PE.
+  seg%HI%JsdB = min( max(Jsg, G%HI%JsdB), G%HI%JedB)
+  seg%HI%JedB = min( max(Jeg, G%HI%JsdB), G%HI%JedB)
+  seg%HI%jsd = min( max(Jsg+1, G%HI%jsd), G%HI%jed)
+  seg%HI%jed = min( max(Jeg, G%HI%jsd), G%HI%jed)
+  seg%HI%JscB = min( max(Jsg, G%HI%JscB), G%HI%JecB)
+  seg%HI%JecB = min( max(Jeg, G%HI%JscB), G%HI%JecB)
+  seg%HI%jsc = min( max(Jsg+1, G%HI%jsc), G%HI%jec)
+  seg%HI%jec = min( max(Jeg, G%HI%jsc), G%HI%jec)
 
 end subroutine setup_segment_indices
   
