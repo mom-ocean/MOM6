@@ -1483,10 +1483,6 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     salt_mean, &
     h_end
     
-  ! 2D Pointers
-  real, dimension(:,:), pointer   :: &  
-    khdt_x, khdt_y
-    
   type(time_type) :: Time_end    ! End time of a segment, as a time type
   integer :: num_iter_vert
   real    :: Initer_vert
@@ -1515,8 +1511,6 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
   ebtr => CS%offline_CSp%ebtr
   temp_mean => CS%offline_CSp%temp_mean
   salt_mean => CS%offline_CSp%salt_mean
-  khdt_x => CS%offline_CSp%khdt_x
-  khdt_y => CS%offline_CSp%khdt_y
   h_end => CS%offline_CSp%h_end 
   accumulated_time => CS%offline_CSp%accumulated_time
  
@@ -1547,7 +1541,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       if(is_root_pe()) print *, "Reading in new offline fields"      
       ! Read in new transport and other fields
       call transport_by_files(G, GV, CS%offline_CSp, h_end, eatr, ebtr, uhtr, vhtr, &
-          khdt_x, khdt_y, temp_mean, salt_mean, fluxes, &
+          temp_mean, salt_mean, fluxes, &
           CS%use_ALE_algorithm)
       ! Scale fields by the number of vertical iterations between reading fields
       CS%offline_CSp%netMassIn = CS%offline_CSp%netMassIn*Initer_vert
@@ -1558,6 +1552,12 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       
       CS%tv%T(:,:,:) = temp_mean(:,:,:)
       CS%tv%S(:,:,:) = salt_mean(:,:,:)
+      
+    ! Perform offline diffusion if requested
+      if (.not. CS%offline_CSp%skip_diffusion) then
+        call tracer_hordiff(CS%h, CS%offline_CSp%dt_offline, CS%MEKE, CS%VarMix, G, GV, &
+            CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
+      endif    
     endif
     CS%offline_CSp%iter_no = CS%offline_CSp%iter_no + 1
     ! The functions related to column physics of tracers is performed separately in ALE mode 
@@ -1584,13 +1584,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       call cpu_clock_begin(id_clock_ALE)
       call ALE_offline_tracer_final( G, GV, CS%h, h_end, CS%tracer_Reg, CS%ALE_CSp)
       call cpu_clock_end(id_clock_ALE)        
+      call pass_var(CS%h,G%Domain)
       
-      ! Perform offline diffusion if requested
-      if (.not. CS%offline_CSp%skip_diffusion) then
-        call tracer_hordiff(h_end, CS%offline_CSp%dt_offline, CS%MEKE, CS%VarMix, G, GV, &
-          CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, do_online_flag=.false., read_khdt_x=khdt_x, &
-          read_khdt_y=khdt_y)
-      endif    
 
     endif
     
@@ -1606,14 +1601,13 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
           "For offline tracer mode in a non-ALE configuration, dt_offline must equal time_interval")
     endif
     call transport_by_files(G, GV, CS%offline_CSp, h_end, eatr, ebtr, uhtr, vhtr, &
-        khdt_x, khdt_y, temp_mean, salt_mean, fluxes)
+        temp_mean, salt_mean, fluxes)
     call offline_advection_layer(fluxes, Time_start, time_interval, CS%offline_CSp, &
         CS%h, eatr, ebtr, uhtr, vhtr)
     ! Perform offline diffusion if requested
     if (.not. CS%offline_CSp%skip_diffusion) then
       call tracer_hordiff(h_end, CS%offline_CSp%dt_offline, CS%MEKE, CS%VarMix, G, GV, &
-        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, do_online_flag=.false., read_khdt_x=khdt_x, &
-        read_khdt_y=khdt_y)
+        CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
     endif    
     
     CS%tv%T = temp_mean
