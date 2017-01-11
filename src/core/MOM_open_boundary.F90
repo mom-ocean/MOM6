@@ -819,10 +819,10 @@ end subroutine parse_segment_str
    if (PRESENT(debug)) dbg=debug
 
    do while (continue)
-      word1 = extract_word(segment_str,',',nfields+1,debug=dbg)
+      word1 = extract_word(segment_str,',',nfields+1)
       if (trim(word1) == '') exit
       nfields=nfields+1
-      word2 = extract_word(word1,'=',1,debug=dbg)
+      word2 = extract_word(word1,'=',1)
       flds(nfields) = trim(word2)
    enddo
 
@@ -850,12 +850,12 @@ end subroutine parse_segment_str
      endif
 
     ! Process first word which will start with the fieldname
-     word3 = extract_word(segment_str,',',m,debug=dbg)
-     word1 = extract_word(word3,':',1,debug=dbg)
+     word3 = extract_word(segment_str,',',m)
+     word1 = extract_word(word3,':',1)
 !     if (trim(word1) == '') exit
-     word2 = extract_word(word1,'=',1,debug=dbg)
+     word2 = extract_word(word1,'=',1)
      if (trim(word2) == trim(var)) then
-        method=trim(extract_word(word1,'=',2,debug=dbg))
+        method=trim(extract_word(word1,'=',2))
         lword=len_trim(method)
         if (method(lword-3:lword) == 'file') then
            ! raise an error id filename/fieldname not in argument list
