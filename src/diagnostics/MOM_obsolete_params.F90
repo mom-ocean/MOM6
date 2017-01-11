@@ -124,6 +124,7 @@ subroutine find_obsolete_params(param_file)
   call obsolete_char(param_file, "REF_COMPRESS_FILE_TEMP")
   call obsolete_char(param_file, "REF_COMPRESS_FILE_SALT")
   call obsolete_char(param_file, "REF_COMPRESS_FILE_DEPTH")
+  call obsolete_char(param_file, "DIAG_REMAP_Z_GRID_DEF", "Use NUM_DIAG_COORDS, DIAG_COORDS and DIAG_COORD_DEF_Z")
 
   call obsolete_logical(param_file, "OLD_RESTRAT_PARAM", .false.)
   call obsolete_real(param_file, "ML_RESTRAT_COEF", 0.0)
@@ -151,6 +152,7 @@ subroutine find_obsolete_params(param_file)
 
   call obsolete_real(param_file, "HMIX")
   call obsolete_real(param_file, "VSTAR_SCALE_COEF")
+  call obsolete_real(param_file, "ZSTAR_RIGID_SURFACE_THRESHOLD")
 
   test_int = -1 ; call read_param(param_file,"ML_RADIATION_CODING",test_int)
   if (test_int == 1) call MOM_ERROR(FATAL, "find_obsolete_params: "// &

@@ -1,24 +1,7 @@
+!> Provides the ocean grid type
 module MOM_grid
 
-!***********************************************************************
-!*                   GNU General Public License                        *
-!* This file is a part of MOM.                                         *
-!*                                                                     *
-!* MOM is free software; you can redistribute it and/or modify it and  *
-!* are expected to follow the terms of the GNU General Public License  *
-!* as published by the Free Software Foundation; either version 2 of   *
-!* the License, or (at your option) any later version.                 *
-!*                                                                     *
-!* MOM is distributed in the hope that it will be useful, but WITHOUT  *
-!* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY  *
-!* or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public    *
-!* License for more details.                                           *
-!*                                                                     *
-!* For the full text of the GNU General Public License,                *
-!* write to: Free Software Foundation, Inc.,                           *
-!*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
-!* or see:   http://www.gnu.org/licenses/gpl.html                      *
-!***********************************************************************
+! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_hor_index, only : hor_index_type, hor_index_init
 use MOM_domains, only : MOM_domain_type, get_domain_extent, compute_block_extent
@@ -32,124 +15,162 @@ implicit none ; private
 public MOM_grid_init, MOM_grid_end, set_derived_metrics, set_first_direction
 public isPointInCell, hor_index_type
 
+!> Ocean grid type. See mom_grid for details.
 type, public :: ocean_grid_type
-  type(MOM_domain_type), pointer :: Domain => NULL()
-  type(MOM_domain_type), pointer :: Domain_aux => NULL() ! A non-symmetric auxiliary domain type.
-  type(hor_index_type) :: HI
-  integer :: isc, iec, jsc, jec ! The range of the computational domain indices
-  integer :: isd, ied, jsd, jed ! and data domain indices at tracer cell centers.
-  integer :: isg, ieg, jsg, jeg ! The range of the global domain tracer cell indices.
-  integer :: IscB, IecB, JscB, JecB ! The range of the computational domain indices
-  integer :: IsdB, IedB, JsdB, JedB ! and data domain indices at tracer cell vertices.
-  integer :: IsgB, IegB, JsgB, JegB ! The range of the global domain vertex indices.
-  integer :: isd_global         ! The values of isd and jsd in the global
-  integer :: jsd_global         ! (decomposition invariant) index space.
-  integer :: idg_offset         ! The offset between the corresponding global
-  integer :: jdg_offset         ! and local array indices; add to local to get global.
-  integer :: ke                 ! The number of layers in the vertical.
-  logical :: symmetric          ! True if symmetric memory is used.
-  logical :: nonblocking_updates  ! If true, non-blocking halo updates are
-                                  ! allowed.  The default is .false. (for now).
-  integer :: first_direction ! An integer that indicates which direction is
-                             ! to be updated first in directionally split
-                             ! parts of the calculation.  This can be altered
-                             ! during the course of the run via calls to
-                             ! set_first_direction.
+  type(MOM_domain_type), pointer :: Domain => NULL() !< Ocean model domain
+  type(MOM_domain_type), pointer :: Domain_aux => NULL() !< A non-symmetric auxiliary domain type.
+  type(hor_index_type) :: HI !< Horizontal index ranges
+
+  integer :: isc !< The start i-index of cell centers within the computational domain
+  integer :: iec !< The end i-index of cell centers within the computational domain
+  integer :: jsc !< The start j-index of cell centers within the computational domain
+  integer :: jec !< The end j-index of cell centers within the computational domain
+
+  integer :: isd !< The start i-index of cell centers within the data domain
+  integer :: ied !< The end i-index of cell centers within the data domain
+  integer :: jsd !< The start j-index of cell centers within the data domain
+  integer :: jed !< The end j-index of cell centers within the data domain
+
+  integer :: isg !< The start i-index of cell centers within the global domain
+  integer :: ieg !< The end i-index of cell centers within the global domain
+  integer :: jsg !< The start j-index of cell centers within the global domain
+  integer :: jeg !< The end j-index of cell centers within the global domain
+
+  integer :: IscB !< The start i-index of cell vertices within the computational domain
+  integer :: IecB !< The end i-index of cell vertices within the computational domain
+  integer :: JscB !< The start j-index of cell vertices within the computational domain
+  integer :: JecB !< The end j-index of cell vertices within the computational domain
+
+  integer :: IsdB !< The start i-index of cell vertices within the data domain
+  integer :: IedB !< The end i-index of cell vertices within the data domain
+  integer :: JsdB !< The start j-index of cell vertices within the data domain
+  integer :: JedB !< The end j-index of cell vertices within the data domain
+
+  integer :: IsgB !< The start i-index of cell vertices within the global domain
+  integer :: IegB !< The end i-index of cell vertices within the global domain
+  integer :: JsgB !< The start j-index of cell vertices within the global domain
+  integer :: JegB !< The end j-index of cell vertices within the global domain
+
+  integer :: isd_global !< The value of isd in the global index space (decompoistion invariant).
+  integer :: jsd_global !< The value of isd in the global index space (decompoistion invariant).
+  integer :: idg_offset !< The offset between the corresponding global and local i-indices.
+  integer :: jdg_offset !< The offset between the corresponding global and local j-indices.
+  integer :: ke         !< The number of layers in the vertical.
+  logical :: symmetric  !< True if symmetric memory is used.
+  logical :: nonblocking_updates  !< If true, non-blocking halo updates are
+                                  !! allowed.  The default is .false. (for now).
+  integer :: first_direction !< An integer that indicates which direction is
+                             !! to be updated first in directionally split
+                             !! parts of the calculation.  This can be altered
+                             !! during the course of the run via calls to
+                             !! set_first_direction.
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    mask2dT, &   ! 0 for land points and 1 for ocean points on the h-grid. Nd.
-    geoLatT, & ! The geographic latitude at q points in degrees of latitude or m.
-    geoLonT, & ! The geographic longitude at q points in degrees of longitude or m.
-    dxT, IdxT, & ! dxT is delta x at h points, in m, and IdxT is 1/dxT in m-1.
-    dyT, IdyT, & ! dyT is delta y at h points, in m, and IdyT is 1/dyT in m-1.
-    areaT, &     ! areaT is the area of an h-cell, in m2.
-    IareaT, &    ! IareaT = 1/areaT, in m-2.
-    sin_rot, &   ! The sine and cosine of the angular rotation between the local
-    cos_rot      ! model grid's northward and the true northward directions.
+    mask2dT, &   !< 0 for land points and 1 for ocean points on the h-grid. Nd.
+    geoLatT, &   !< The geographic latitude at q points in degrees of latitude or m.
+    geoLonT, &   !< The geographic longitude at q points in degrees of longitude or m.
+    dxT, &       !< dxT is delta x at h points, in m.
+    IdxT, &      !< 1/dxT in m-1.
+    dyT, &       !< dyT is delta y at h points, in m, and IdyT is 1/dyT in m-1.
+    IdyT, &      !< dyT is delta y at h points, in m, and IdyT is 1/dyT in m-1.
+    areaT, &     !< The area of an h-cell, in m2.
+    IareaT, &    !< 1/areaT, in m-2.
+    sin_rot, &   !< The sine of the angular rotation between the local model grid's northward
+                 !! and the true northward directions.
+    cos_rot      !< The cosine of the angular rotation between the local model grid's northward
+                 !! and the true northward directions.
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
-    mask2dCu, &  ! 0 for boundary points and 1 for ocean points on the u grid.  Nondim.
-    geoLatCu, &  ! The geographic latitude at u points in degrees of latitude or m.
-    geoLonCu, &  ! The geographic longitude at u points in degrees of longitude or m.
-    dxCu, IdxCu, & ! dxCu is delta x at u points, in m, and IdxCu is 1/dxCu in m-1.
-    dyCu, IdyCu, & ! dyCu is delta y at u points, in m, and IdyCu is 1/dyCu in m-1.
-    dy_Cu, &     ! The unblocked lengths of the u-faces of the h-cell in m.
-    dy_Cu_obc, & ! The unblocked lengths of the u-faces of the h-cell in m for OBC.
-    IareaCu, &   ! The masked inverse areas of u-grid cells in m2.
-    areaCu       ! The areas of the u-grid cells in m2.
+    mask2dCu, &  !< 0 for boundary points and 1 for ocean points on the u grid.  Nondim.
+    geoLatCu, &  !< The geographic latitude at u points in degrees of latitude or m.
+    geoLonCu, &  !< The geographic longitude at u points in degrees of longitude or m.
+    dxCu, &      !< dxCu is delta x at u points, in m.
+    IdxCu, &     !< 1/dxCu in m-1.
+    dyCu, &      !< dyCu is delta y at u points, in m.
+    IdyCu, &     !< 1/dyCu in m-1.
+    dy_Cu, &     !< The unblocked lengths of the u-faces of the h-cell in m.
+    dy_Cu_obc, & !< The unblocked lengths of the u-faces of the h-cell in m for OBC.
+    IareaCu, &   !< The masked inverse areas of u-grid cells in m2.
+    areaCu       !< The areas of the u-grid cells in m2.
+  !> \todo dy_Cu_obc is not used?
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: &
-    mask2dCv, &  ! 0 for boundary points and 1 for ocean points on the v grid.  Nondim.
-    geoLatCv, &  ! The geographic latitude at v points in degrees of latitude or m.
-    geoLonCv, &  !  The geographic longitude at v points in degrees of longitude or m.
-    dxCv, IdxCv, & ! dxCv is delta x at v points, in m, and IdxCv is 1/dxCv in m-1.
-    dyCv, IdyCv, & ! dyCv is delta y at v points, in m, and IdyCv is 1/dyCv in m-1.
-    dx_Cv, &     ! The unblocked lengths of the v-faces of the h-cell in m.
-    dx_Cv_obc, & ! The unblocked lengths of the v-faces of the h-cell in m for OBC.
-    IareaCv, &   ! The masked inverse areas of v-grid cells in m2.
-    areaCv       ! The areas of the v-grid cells in m2.
+    mask2dCv, &  !< 0 for boundary points and 1 for ocean points on the v grid.  Nondim.
+    geoLatCv, &  !< The geographic latitude at v points in degrees of latitude or m.
+    geoLonCv, &  !< The geographic longitude at v points in degrees of longitude or m.
+    dxCv, &      !< dxCv is delta x at v points, in m.
+    IdxCv, &     !< 1/dxCv in m-1.
+    dyCv, &      !< dyCv is delta y at v points, in m.
+    IdyCv, &     !< 1/dyCv in m-1.
+    dx_Cv, &     !< The unblocked lengths of the v-faces of the h-cell in m.
+    dx_Cv_obc, & !< The unblocked lengths of the v-faces of the h-cell in m for OBC.
+    IareaCv, &   !< The masked inverse areas of v-grid cells in m2.
+    areaCv       !< The areas of the v-grid cells in m2.
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
-    mask2dBu, &  ! 0 for boundary points and 1 for ocean points on the q grid.  Nondim.
-    geoLatBu, &  ! The geographic latitude at q points in degrees of latitude or m.
-    geoLonBu, &  ! The geographic longitude at q points in degrees of longitude or m.
-    dxBu, IdxBu, & ! dxBu is delta x at q points, in m, and IdxBu is 1/dxBu in m-1.
-    dyBu, IdyBu, & ! dyBu is delta y at q points, in m, and IdyBu is 1/dyBu in m-1.
-    areaBu, &    ! areaBu is the area of a q-cell, in m2
-    IareaBu      ! IareaBu = 1/areaBu in m-2.
+    mask2dBu, &  !< 0 for boundary points and 1 for ocean points on the q grid.  Nondim.
+    geoLatBu, &  !< The geographic latitude at q points in degrees of latitude or m.
+    geoLonBu, &  !< The geographic longitude at q points in degrees of longitude or m.
+    dxBu, &      !< dxBu is delta x at q points, in m.
+    IdxBu, &     !< 1/dxBu in m-1.
+    dyBu, &      !< dyBu is delta y at q points, in m.
+    IdyBu, &     !< 1/dyBu in m-1.
+    areaBu, &    !< areaBu is the area of a q-cell, in m2
+    IareaBu      !< IareaBu = 1/areaBu in m-2.
 
   real, pointer, dimension(:) :: &
-    gridLatT => NULL(), gridLatB => NULL() ! The latitude of T or B points for
-                        ! the purpose of labeling the output axes.
-                        ! On many grids these are the same as geoLatT & geoLatBu.
+    gridLatT => NULL(), & !< The latitude of T points for the purpose of labeling the output axes.
+                          !! On many grids this is the same as geoLatT.
+    gridLatB => NULL()    !< The latitude of B points for the purpose of labeling the output axes.
+                          !! On many grids this is the same as geoLatBu.
   real, pointer, dimension(:) :: &
-    gridLonT => NULL(), gridLonB => NULL() ! The longitude of T or B points for
-                        ! the purpose of labeling the output axes.
-                        ! On many grids these are the same as geoLonT & geoLonBu.
+    gridLonT => NULL(), & !< The longitude of T points for the purpose of labeling the output axes.
+                          !! On many grids this is the same as geoLonT.
+    gridLonB => NULL()    !< The longitude of B points for the purpose of labeling the output axes.
+                          !! On many grids this is the same as geoLonBu.
   character(len=40) :: &
-    x_axis_units, &     !   The units that are used in labeling the coordinate
-    y_axis_units        ! axes.  Except on a Cartesian grid, these are usually
-                        ! some variant of "degrees".
+    x_axis_units, &     !< The units that are used in labeling the x coordinate axes.
+    y_axis_units        !< The units that are used in labeling the y coordinate axes.
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    bathyT        ! Ocean bottom depth at tracer points, in m.
+    bathyT        !< Ocean bottom depth at tracer points, in m.
 
-  logical :: bathymetry_at_vel  ! If true, there are separate values for the
-                  ! basin depths at velocity points.  Otherwise the effects of
-                  ! of topography are entirely determined from thickness points.
+  logical :: bathymetry_at_vel  !< If true, there are separate values for the
+                  !! basin depths at velocity points.  Otherwise the effects of
+                  !! of topography are entirely determined from thickness points.
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
-    Dblock_u, &   ! Topographic depths at u-points at which the flow is blocked
-    Dopen_u       ! (Dblock_u) and open at width dy_Cu (Dopen_u), both in m.
+    Dblock_u, &   !< Topographic depths at u-points at which the flow is blocked, in m.
+    Dopen_u       !< Topographic depths at u-points at which the flow is open at width dy_Cu, in m.
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: &
-    Dblock_v, &   ! Topographic depths at v-points at which the flow is blocked
-    Dopen_v       ! (Dblock_v) and open at width dx_Cv (Dopen_v), both in m.
+    Dblock_v, &   !< Topographic depths at v-points at which the flow is blocked, in m.
+    Dopen_v       !< Topographic depths at v-points at which the flow is open at width dx_Cv, in m.
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
-    CoriolisBu    ! The Coriolis parameter at corner points, in s-1.
+    CoriolisBu    !< The Coriolis parameter at corner points, in s-1.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    dF_dx, dF_dy  ! Derivatives of f (Coriolis parameter) at h-points, in s-1 m-1.
-  real :: g_Earth !   The gravitational acceleration in m s-2.
+    dF_dx, &      !< Derivative d/dx f (Coriolis parameter) at h-points, in s-1 m-1.
+    dF_dy         !< Derivative d/dy f (Coriolis parameter) at h-points, in s-1 m-1.
+  real :: g_Earth !< The gravitational acceleration in m s-2.
 
   ! These variables are global sums that are useful for 1-d diagnostics
-  real :: areaT_global  ! Global sum of h-cell area in m2
-  real :: IareaT_global ! Global sum of inverse h-cell area (1/areaT_global)
-                        ! in m2
+  real :: areaT_global  !< Global sum of h-cell area in m2
+  real :: IareaT_global !< Global sum of inverse h-cell area (1/areaT_global) in m2.
+
   ! These variables are for block structures.
-  integer                   :: nblocks
+  integer :: nblocks
   type(hor_index_type), pointer :: Block(:) => NULL() ! store indices for each block
 
   ! These parameters are run-time parameters that are used during some
   ! initialization routines (but not all)
-  real :: south_lat     ! The latitude (or y-coordinate) of the first v-line
-  real :: west_lon      ! The longitude (or x-coordinate) of the first u-line
-  real :: len_lat = 0.  ! The latitudinal (or y-coord) extent of physical domain
-  real :: len_lon = 0.  ! The longitudinal (or x-coord) extent of physical domain
-  real :: Rad_Earth = 6.378e6 ! The radius of the planet in meters.
-  real :: max_depth     ! The maximum depth of the ocean in meters.
+  real :: south_lat     !< The latitude (or y-coordinate) of the first v-line
+  real :: west_lon      !< The longitude (or x-coordinate) of the first u-line
+  real :: len_lat = 0.  !< The latitudinal (or y-coord) extent of physical domain
+  real :: len_lon = 0.  !< The longitudinal (or x-coord) extent of physical domain
+  real :: Rad_Earth = 6.378e6 !< The radius of the planet in meters.
+  real :: max_depth     !< The maximum depth of the ocean in meters.
 end type ocean_grid_type
 
 contains
 
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~!
 !> MOM_grid_init initializes the ocean grid array sizes and grid memory.
 subroutine MOM_grid_init(G, param_file, HI, global_indexing, bathymetry_at_vel)
   type(ocean_grid_type), intent(inout) :: G          !< The horizontal grid type
@@ -382,10 +403,12 @@ end function Adcroft_reciprocal
 
 !> Returns true if the coordinates (x,y) are within the h-cell (i,j)
 logical function isPointInCell(G, i, j, x, y)
-  type(ocean_grid_type), intent(in) :: G    !< Grid type
-  integer,               intent(in) :: i, j !< i,j indices of cell to test
-  real,                  intent(in) :: x, y !< x,y coordinates of point
-! This is a crude calculation that assume a geographic coordinate system
+  type(ocean_grid_type), intent(in) :: G !< Grid type
+  integer,               intent(in) :: i !< i index of cell to test
+  integer,               intent(in) :: j !< j index of cell to test
+  real,                  intent(in) :: x !< x coordinate of point
+  real,                  intent(in) :: y !< y coordinate of point
+  ! Local variables
   real :: xNE, xNW, xSE, xSW, yNE, yNW, ySE, ySW
   real :: p0, p1, p2, p3, l0, l1, l2, l3
   isPointInCell = .false.
@@ -393,6 +416,7 @@ logical function isPointInCell(G, i, j, x, y)
   xNW = G%geoLonBu(i-1,j  ) ; yNW = G%geoLatBu(i-1,j  )
   xSE = G%geoLonBu(i  ,j-1) ; ySE = G%geoLatBu(i  ,j-1)
   xSW = G%geoLonBu(i-1,j-1) ; ySW = G%geoLatBu(i-1,j-1)
+  ! This is a crude calculation that assume a geographic coordinate system
   if (x<min(xNE,xNW,xSE,xSW) .or. x>max(xNE,xNW,xSE,xSW) .or. &
       y<min(yNE,yNW,ySE,ySW) .or. y>max(yNE,yNW,ySE,ySW) ) then
     return ! Avoid the more complicated calculation
@@ -419,7 +443,6 @@ subroutine set_first_direction(G, y_first)
   G%first_direction = y_first
 end subroutine set_first_direction
 
-!---------------------------------------------------------------------
 !> Allocate memory used by the ocean_grid_type and related structures.
 subroutine allocate_metrics(G)
   type(ocean_grid_type), intent(inout) :: G !< The horizontal grid type
@@ -493,7 +516,6 @@ subroutine allocate_metrics(G)
 
 end subroutine allocate_metrics
 
-!---------------------------------------------------------------------
 !> Release memory used by the ocean_grid_type and related structures.
 subroutine MOM_grid_end(G)
   type(ocean_grid_type), intent(inout) :: G !< The horizontal grid type
@@ -536,5 +558,27 @@ subroutine MOM_grid_end(G)
   deallocate(G%Domain)
 
 end subroutine MOM_grid_end
+
+!> \namespace mom_grid
+!!
+!! Grid metrics and their inverses are labelled according to their staggered location on a Arakawa C (or B) grid.
+!! - Metrics centered on h- or T-points are labelled T, e.g. dxT is the distance across the cell in the x-direction.
+!! - Metrics centered on u-points are labelled Cu (C-grid u location). e.g. dyCu is the y-distance between two corners of a T-cell.
+!! - Metrics centered on v-points are labelled Cv (C-grid v location). e.g. dyCv is the y-distance between two -points.
+!! - Metrics centered on q-points are labelled Bu (B-grid u,v location). e.g. areaBu is the area centered on a q-point.
+!!
+!! \image html Grid_metrics.png "The labelling of distances (grid metrics) at various staggered location on an T-cell and around a q-point.
+!!
+!! Areas centered at T-, u-, v- and q- points are `areaT`, `areaCu`, `areaCv` and `areaBu` respectively.
+!!
+!! The reciprocal of metrics are pre-calculated and also stored in the ocean_grid_type with a I prepended to the name.
+!! For example, `1./areaT` is called `IareaT`, and `1./dyCv` is `IdyCv`.
+!!
+!! Geographic latitude and longitude (or model coordinates if not on a sphere) are stored in `geoLatT`, `geoLonT` for T-points.
+!! u-, v- and q- point coordinates are follow same pattern of replacing T with Cu, Cv and Bu respectively.
+!!
+!! Each location also has a 2D mask indicating whether the entire column is land or ocean.
+!! `mask2dT` is 1. is the column is wet or 0. is the T-cell is land.
+!! `mask2dCu` is 1. if both neighboring column are ocean, and 0. if either is land.
 
 end module MOM_grid

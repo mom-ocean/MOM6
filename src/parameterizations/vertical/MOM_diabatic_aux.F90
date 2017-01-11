@@ -71,7 +71,7 @@ use MOM_checksum_packages, only : MOM_state_chksum, MOM_state_stats
 use MOM_cpu_clock,         only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,         only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator,     only : post_data, register_diag_field, safe_alloc_ptr
-use MOM_diag_mediator,     only : diag_ctrl, time_type! , diag_update_target_grids
+use MOM_diag_mediator,     only : diag_ctrl, time_type
 use MOM_EOS,               only : calculate_density, calculate_TFreeze
 use MOM_EOS,               only : calculate_specific_vol_derivs
 use MOM_error_handler,     only : MOM_error, FATAL, WARNING, callTree_showQuery
@@ -1043,6 +1043,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
           endif
 
           ! Change in state due to forcing
+
           dThickness = max( fractionOfForcing*netMassOut(i), -h2d(i,k) )
           dTemp      = fractionOfForcing*netHeat(i)
           !   ### The 0.9999 here should become a run-time parameter?
@@ -1071,6 +1072,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
           ! Update state by the appropriate increment.
           hOld     = h2d(i,k)               ! Keep original thickness in hand
           h2d(i,k) = h2d(i,k) + dThickness  ! New thickness
+
           if (h2d(i,k) > 0.) then
             if (calculate_energetics) then
               ! Calculate the energy required to mix the newly added water over

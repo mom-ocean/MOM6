@@ -27,9 +27,6 @@ public calculateBuoyancyFlux1d, calculateBuoyancyFlux2d, forcing_accumulate
 public forcing_SinglePointPrint, mech_forcing_diags, forcing_diagnostics
 public register_forcing_type_diags, allocate_forcing_type, deallocate_forcing_type
 
-integer :: num_msg = 0
-integer :: max_msg = 2
-
 !> Structure that contains pointers to the boundary forcing
 !! used to drive the liquid ocean simulated by MOM.
 !! Data in this type is allocated in the module
@@ -109,7 +106,7 @@ type, public :: forcing
   p_surf_full   => NULL(), & !< Pressure at the top ocean interface (Pa).
                              !! if there is sea-ice, then p_surf_flux is at ice-ocean interface
   p_surf        => NULL(), & !< Pressure at the top ocean interface (Pa) as used
-                             !! to drive the ocean model. If p_surf is limited, 
+                             !! to drive the ocean model. If p_surf is limited,
                              !! p_surf may be smaller than p_surf_full,
                              !! otherwise they are the same.
   p_surf_SSH    => NULL()    !< Pressure at the top ocean interface that is used
@@ -121,6 +118,12 @@ type, public :: forcing
   real, pointer, dimension(:,:) :: &
   TKE_tidal     => NULL(), & !< tidal energy source driving mixing in bottom boundary layer (W/m^2)
   ustar_tidal   => NULL()    !< tidal contribution to bottom ustar (m/s)
+
+  ! iceberg related inputs
+  real, pointer, dimension(:,:) :: &
+  ustar_berg   => NULL(),&    !< iceberg contribution to top ustar (m/s)
+  area_berg   => NULL(),&     !< area of ocean surface covered by icebergs (m2/m2)
+  mass_berg   => NULL()     !< mass of icebergs (kg/m2)
 
   ! land ice-shelf related inputs
   real, pointer, dimension(:,:) :: &
@@ -158,6 +161,10 @@ type, public :: forcing
      !! All arrays in tr_fluxes use the coupler indexing, which has no halos.
      !! This is not a convenient convention, but imposed on MOM6 by the coupler.
 
+  ! For internal error tracking
+  integer :: num_msg = 0 !< Number of messages issues about excessive SW penetration
+  integer :: max_msg = 2 !< Maximum number of messages to issue about excessive SW penetration
+
 end type forcing
 
 !> Structure that defines the id handles for the forcing type
@@ -169,6 +176,7 @@ type, public :: forcing_diags
   integer :: id_lprec        = -1, id_fprec       = -1
   integer :: id_lrunoff      = -1, id_frunoff     = -1
   integer :: id_net_massout  = -1, id_net_massin  = -1
+  integer :: id_massout_flux = -1, id_massin_flux = -1
   integer :: id_seaice_melt  = -1
 
   ! global area integrated mass flux diagnostic handles
@@ -195,7 +203,7 @@ type, public :: forcing_diags
   integer :: id_heat_content_cond   = -1, id_heat_content_surfwater= -1
   integer :: id_heat_content_vprec  = -1, id_heat_content_massout  = -1
   integer :: id_heat_added          = -1, id_heat_content_massin   = -1
-  integer :: id_hfrainds            = -1, id_hfrunoffds            = -1 
+  integer :: id_hfrainds            = -1, id_hfrunoffds            = -1
 
 
   ! global area integrated heat flux diagnostic handles
@@ -243,6 +251,15 @@ type, public :: forcing_diags
 
   ! clock id handle
   integer :: id_clock_forcing
+
+  ! iceberg id handle
+  integer :: id_ustar_berg = -1
+  integer :: id_area_berg = -1
+  integer :: id_mass_berg = -1
+
+  !Iceberg + Ice shelf
+  integer :: id_ustar_ice_cover = -1
+  integer :: id_frac_ice_cover = -1
 
 end type forcing_diags
 
@@ -464,9 +481,9 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
 !     (fluxes%heat_content_cond(i,j)     +  fluxes%heat_content_vprec(i,j))))))
 !    endif
 
-    if (num_msg < max_msg) then
+    if (fluxes%num_msg < fluxes%max_msg) then
       if (Pen_SW_tot(i) > 1.000001*J_m2_to_H*scale*dt*fluxes%sw(i,j)) then
-        num_msg = num_msg + 1
+        fluxes%num_msg = fluxes%num_msg + 1
         write(mesg,'("Penetrating shortwave of ",1pe17.10, &
                     &" exceeds total shortwave of ",1pe17.10,&
                     &" at ",1pg11.4,"E, "1pg11.4,"N.")') &
@@ -628,7 +645,7 @@ subroutine extractFluxes2d(G, GV, fluxes, optics, nsw, dt,                      
                                                                                    !! Units of net_heat are (K * H).
   real, dimension(SZI_(G),SZJ_(G)),        intent(out) :: net_salt                 !< surface salt flux into the ocean accumulated
                                                                                    !! over a time step (ppt * H)
-  real, dimension(:,:,:),                intent(out)   :: pen_SW_bnd               !! penetrating shortwave flux, split into bands.
+  real, dimension(:,:,:),                intent(out)   :: pen_SW_bnd               !< penetrating shortwave flux, split into bands.
                                                                                    !! Units (deg K * H) & array size nsw x SZI_(G),
                                                                                    !! where nsw=number of SW bands in pen_SW_bnd.
                                                                                    !! This heat flux is not in net_heat.
@@ -863,14 +880,13 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, haloshift)
 end subroutine MOM_forcing_chksum
 
 
-!> Write out values of the fluxes arrays at the i,j location
+!> Write out values of the fluxes arrays at the i,j location. This is a debugging tool.
 subroutine forcing_SinglePointPrint(fluxes, G, i, j, mesg)
-
-  type(forcing),         intent(in) :: fluxes   !< fluxes type
-  type(ocean_grid_type), intent(in) :: G        !< grid type
-  character(len=*),      intent(in) :: mesg     !< message
-  integer,               intent(in) :: i, j     !< horizontal indices
-
+  type(forcing),         intent(in) :: fluxes !< Fluxes type
+  type(ocean_grid_type), intent(in) :: G      !< Grid type
+  character(len=*),      intent(in) :: mesg   !< Message
+  integer,               intent(in) :: i      !< i-index
+  integer,               intent(in) :: j      !< j-index
 
   write(0,'(2a)') 'MOM_forcing_type, forcing_SinglePointPrint: Called from ',mesg
   write(0,'(a,2es15.3)') 'MOM_forcing_type, forcing_SinglePointPrint: lon,lat = ',G%geoLonT(i,j),G%geoLatT(i,j)
@@ -909,9 +925,10 @@ subroutine forcing_SinglePointPrint(fluxes, G, i, j, mesg)
   call locMsg(fluxes%heat_content_cond,'heat_content_massout')
   contains
 
+  !> Format and write a message depending on associated state of array
   subroutine locMsg(array,aname)
-  real, dimension(:,:), pointer :: array
-  character(len=*)              :: aname
+  real, dimension(:,:), pointer :: array !< Array to write element from
+  character(len=*)              :: aname !< Name of array
 
   if (associated(array)) then
     write(0,'(3a,es15.3)') 'MOM_forcing_type, forcing_SinglePointPrint: ',trim(aname),' = ',array(i,j)
@@ -925,12 +942,12 @@ end subroutine forcing_SinglePointPrint
 
 
 !> Register members of the forcing type for diagnostics
-subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
+subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use_berg_fluxes)
   type(time_type),     intent(in)    :: Time            !< time type
   type(diag_ctrl),     intent(inout) :: diag            !< diagnostic control type
   logical,             intent(in)    :: use_temperature !< True if T/S are in use
   type(forcing_diags), intent(inout) :: handles         !< handles for diagnostics
-
+  logical, optional,   intent(in)    :: use_berg_fluxes !< If true, allow iceberg flux diagnostics
 
   ! Clock for forcing diagnostics
   handles%id_clock_forcing=cpu_clock_id('(Ocean forcing diagnostics)', grain=CLOCK_ROUTINE)
@@ -950,6 +967,25 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
 
   handles%id_ustar = register_diag_field('ocean_model', 'ustar', diag%axesT1, Time, &
       'Surface friction velocity = [(gustiness + tau_magnitude)/rho0]^(1/2)', 'meter second-1')
+
+  if (present(use_berg_fluxes)) then
+    if (use_berg_fluxes) then
+      handles%id_ustar_berg = register_diag_field('ocean_model', 'ustar_berg', diag%axesT1, Time, &
+          'Friction velocity below iceberg ', 'meter second-1')
+
+      handles%id_area_berg = register_diag_field('ocean_model', 'area_berg', diag%axesT1, Time, &
+          'Area of grid cell covered by iceberg ', 'm2/m2')
+
+      handles%id_mass_berg = register_diag_field('ocean_model', 'mass_berg', diag%axesT1, Time, &
+          'Mass of icebergs ', 'kg/m2')
+
+      handles%id_ustar_ice_cover = register_diag_field('ocean_model', 'ustar_ice_cover', diag%axesT1, Time, &
+          'Friction velocity below iceberg and ice shelf together', 'meter second-1')
+
+      handles%id_frac_ice_cover = register_diag_field('ocean_model', 'frac_ice_cover', diag%axesT1, Time, &
+          'Area of grid cell below iceberg and ice shelf together ', 'm2/m2')
+    endif
+  endif
 
   handles%id_psurf = register_diag_field('ocean_model', 'p_surf', diag%axesT1, Time,           &
         'Pressure at ice-ocean or atmosphere-ocean interface', 'Pascal', cmor_field_name='pso',&
@@ -1000,7 +1036,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
   handles%id_lprec = register_diag_field('ocean_model', 'lprec', diag%axesT1, Time,       &
         'Liquid precipitation into ocean', 'kilogram/(meter^2 * second)',                 &
         standard_name='rainfall_flux',                                                    &
-        cmor_field_name='pr', cmor_units='kg m-2 s-1', cmor_standard_name='rainfall_flux',&
+        cmor_field_name='prlq', cmor_units='kg m-2 s-1', cmor_standard_name='rainfall_flux',&
         cmor_long_name='Rainfall Flux where Ice Free Ocean over Sea')
 
   handles%id_vprec = register_diag_field('ocean_model', 'vprec', diag%axesT1, Time, &
@@ -1025,7 +1061,12 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
   handles%id_net_massin  = register_diag_field('ocean_model', 'net_massin', diag%axesT1, Time, &
         'Net mass entering ocean due to precip, runoff, ice melt', 'kilogram meter-2 second-1')
 
+  handles%id_massout_flux = register_diag_field('ocean_model', 'massout_flux', diag%axesT1, Time, &
+        'Net mass flux of freshwater out of the ocean (used in the boundary flux calculation)', &
+         'kilogram meter-2')
 
+  handles%id_massin_flux  = register_diag_field('ocean_model', 'massin_flux', diag%axesT1, Time, &
+        'Net mass mass flux of freshwater into the ocean (used in boundary flux calculation)', 'kilogram meter-2')
   !=========================================================================
   ! area integrated surface mass transport
 
@@ -1140,7 +1181,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
   handles%id_hfrunoffds = register_diag_field('ocean_model', 'hfrunoffds',                            &
         diag%axesT1, Time, 'Heat content (relative to 0C) of liquid+solid runoff into ocean', 'W m-2',&
         standard_name='temperature_flux_due_to_runoff_expressed_as_heat_flux_into_sea_water')
- 
+
   handles%id_heat_content_lprec = register_diag_field('ocean_model', 'heat_content_lprec',             &
         diag%axesT1,Time,'Heat content (relative to 0degC) of liquid precip entering ocean',           &
         'W/m^2')
@@ -1207,7 +1248,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
 
   handles%id_lat = register_diag_field('ocean_model', 'latent', diag%axesT1, Time,                    &
         'Latent heat flux into ocean due to fusion and evaporation (negative means ocean heat loss)', &
-        'Watt meter-2', cmor_field_name='hfls', cmor_units='W m-2',                                   &
+        'Watt meter-2', cmor_field_name='hflso', cmor_units='W m-2',                                  &
         cmor_standard_name='surface_downward_latent_heat_flux',                                       &
         cmor_long_name='Surface Downward Latent Heat Flux due to Evap + Melt Snow/Ice')
 
@@ -1229,7 +1270,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
   handles%id_sens = register_diag_field('ocean_model', 'sensible', diag%axesT1, Time,&
         'Sensible heat flux into ocean', 'Watt meter-2',                             &
         standard_name='surface_downward_sensible_heat_flux',                         &
-        cmor_field_name='hfss', cmor_units='W m-2',                                  &
+        cmor_field_name='hfsso', cmor_units='W m-2',                                 &
         cmor_standard_name='surface_downward_sensible_heat_flux',                    &
         cmor_long_name='Surface Downward Sensible Heat Flux')
 
@@ -1342,7 +1383,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
       'total_lat', Time, diag,                                               &
       long_name='Area integrated surface downward latent heat flux',         &
       units='Watt',                                                          &
-      cmor_field_name='total_hfls', cmor_units='W',                          &
+      cmor_field_name='total_hflso', cmor_units='W',                         &
       cmor_standard_name='surface_downward_latent_heat_flux_area_integrated',&
       cmor_long_name=                                                        &
       'Surface Downward Latent Heat Flux Area Integrated')
@@ -1374,7 +1415,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
       'total_sens', Time, diag,                                                &
       long_name='Area integrated downward sensible heat flux',                 &
       units='Watt',                                                            &
-      cmor_field_name='total_hfss', cmor_units='W',                            &
+      cmor_field_name='total_hfsso', cmor_units='W',                           &
       cmor_standard_name='surface_downward_sensible_heat_flux_area_integrated',&
       cmor_long_name=                                                          &
       'Surface Downward Sensible Heat Flux Area Integrated')
@@ -1429,7 +1470,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
       'lat_ga', Time, diag,                                                &
       long_name='Area averaged surface downward latent heat flux',         &
       units='W m-2',                                                       &
-      cmor_field_name='ave_hfls', cmor_units='W m-2',                      &
+      cmor_field_name='ave_hflso', cmor_units='W m-2',                     &
       cmor_standard_name='surface_downward_latent_heat_flux_area_averaged',&
       cmor_long_name=                                                      &
       'Surface Downward Latent Heat Flux Area Averaged')
@@ -1438,7 +1479,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles)
       'sens_ga', Time, diag,                                                 &
       long_name='Area averaged downward sensible heat flux',                 &
       units='W m-2',                                                         &
-      cmor_field_name='ave_hfss', cmor_units='W m-2',                        &
+      cmor_field_name='ave_hfsso', cmor_units='W m-2',                       &
       cmor_standard_name='surface_downward_sensible_heat_flux_area_averaged',&
       cmor_long_name=                                                        &
       'Surface Downward Sensible Heat Flux Area Averaged')
@@ -1622,7 +1663,7 @@ subroutine forcing_accumulate(flux_tmp, fluxes, dt, G, wt2)
       fluxes%ustar_shelf(i,j)  = flux_tmp%ustar_shelf(i,j)
     enddo ; enddo
   endif
-  
+
   if (associated(fluxes%iceshelf_melt) .and. associated(flux_tmp%iceshelf_melt)) then
     do i=isd,ied ; do j=jsd,jed
       fluxes%iceshelf_melt(i,j)  = flux_tmp%iceshelf_melt(i,j)
@@ -1684,6 +1725,16 @@ subroutine mech_forcing_diags(fluxes, dt, G, diag, handles)
       call post_data(handles%id_tauy, fluxes%tauy, diag)
     if ((handles%id_ustar > 0) .and. ASSOCIATED(fluxes%ustar)) &
       call post_data(handles%id_ustar, fluxes%ustar, diag)
+    if (handles%id_ustar_berg > 0) &
+      call post_data(handles%id_ustar_berg, fluxes%ustar_berg, diag)
+    if (handles%id_area_berg > 0) &
+      call post_data(handles%id_area_berg, fluxes%area_berg, diag)
+    if (handles%id_mass_berg > 0) &
+      call post_data(handles%id_mass_berg, fluxes%mass_berg, diag)
+    if (handles%id_frac_ice_cover > 0) &
+      call post_data(handles%id_frac_ice_cover, fluxes%frac_shelf_h, diag)
+    if (handles%id_ustar_ice_cover > 0) &
+      call post_data(handles%id_ustar_ice_cover, fluxes%ustar_shelf, diag)
 
   endif
 
@@ -1756,6 +1807,8 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
         call post_data(handles%id_total_net_massout, total_transport, diag)
       endif
     endif
+    
+    if(handles%id_massout_flux > 0) call post_data(handles%id_massout_flux,fluxes%netMassOut,diag)
 
     if(handles%id_net_massin > 0 .or. handles%id_total_net_massin > 0) then
       sum(:,:) = 0.0
@@ -1772,6 +1825,8 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
         call post_data(handles%id_total_net_massin, total_transport, diag)
       endif
     endif
+    
+    if(handles%id_massin_flux > 0) call post_data(handles%id_massin_flux,fluxes%netMassIn,diag)
 
     if ((handles%id_evap > 0) .and. ASSOCIATED(fluxes%evap)) &
       call post_data(handles%id_evap, fluxes%evap, diag)
@@ -1977,31 +2032,31 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
     endif
 
     ! for OMIP, hfrunoffds = heat content of liquid plus frozen runoff
-    if (handles%id_hfrunoffds > 0) then 
-      sum(:,:) = 0.0       
-      if(ASSOCIATED(fluxes%heat_content_lrunoff)) then 
+    if (handles%id_hfrunoffds > 0) then
+      sum(:,:) = 0.0
+      if(ASSOCIATED(fluxes%heat_content_lrunoff)) then
         sum(:,:) = sum(:,:) + fluxes%heat_content_lrunoff(:,:)
-      endif 
-      if(ASSOCIATED(fluxes%heat_content_frunoff)) then 
+      endif
+      if(ASSOCIATED(fluxes%heat_content_frunoff)) then
         sum(:,:) = sum(:,:) + fluxes%heat_content_frunoff(:,:)
-      endif 
+      endif
       call post_data(handles%id_hfrunoffds, sum, diag)
-    endif 
+    endif
 
-    ! for OMIP, hfrainds = heat content of lprec + fprec + cond 
-    if (handles%id_hfrainds > 0) then 
-      sum(:,:) = 0.0       
-      if(ASSOCIATED(fluxes%heat_content_lprec)) then 
+    ! for OMIP, hfrainds = heat content of lprec + fprec + cond
+    if (handles%id_hfrainds > 0) then
+      sum(:,:) = 0.0
+      if(ASSOCIATED(fluxes%heat_content_lprec)) then
         sum(:,:) = sum(:,:) + fluxes%heat_content_lprec(:,:)
-      endif 
-      if(ASSOCIATED(fluxes%heat_content_fprec)) then 
+      endif
+      if(ASSOCIATED(fluxes%heat_content_fprec)) then
         sum(:,:) = sum(:,:) + fluxes%heat_content_fprec(:,:)
-      endif 
-      if(ASSOCIATED(fluxes%heat_content_cond)) then 
+      endif
+      if(ASSOCIATED(fluxes%heat_content_cond)) then
         sum(:,:) = sum(:,:) + fluxes%heat_content_cond(:,:)
-      endif 
+      endif
       call post_data(handles%id_hfrainds, sum, diag)
-    endif 
+    endif
 
     if ((handles%id_LwLatSens > 0) .and. ASSOCIATED(fluxes%lw) .and. &
          ASSOCIATED(fluxes%latent) .and. ASSOCIATED(fluxes%sens)) then
@@ -2142,7 +2197,7 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
       call post_data(handles%id_netFWGlobalScl, fluxes%netFWGlobalScl, diag)
 
 
-    ! remamining boundary terms ==================================================
+    ! remaining boundary terms ==================================================
 
     if ((handles%id_psurf > 0) .and. ASSOCIATED(fluxes%p_surf))                      &
       call post_data(handles%id_psurf, fluxes%p_surf, diag)
@@ -2161,7 +2216,7 @@ end subroutine forcing_diagnostics
 
 
 !> Conditionally allocate fields within the forcing type
-subroutine allocate_forcing_type(G, fluxes, stress, ustar, water, heat, shelf, press)
+subroutine allocate_forcing_type(G, fluxes, stress, ustar, water, heat, shelf, press, iceberg)
   type(ocean_grid_type), intent(in) :: G       !< Ocean grid structure
   type(forcing),      intent(inout) :: fluxes  !< Forcing fields structure
   logical, optional,     intent(in) :: stress  !< If present and true, allocate taux, tauy
@@ -2170,6 +2225,7 @@ subroutine allocate_forcing_type(G, fluxes, stress, ustar, water, heat, shelf, p
   logical, optional,     intent(in) :: heat    !< If present and true, allocate heat fluxes
   logical, optional,     intent(in) :: shelf   !< If present and true, allocate fluxes for ice-shelf
   logical, optional,     intent(in) :: press   !< If present and true, allocate p_surf
+  logical, optional,     intent(in) :: iceberg !< If present and true, allocate fluxes for icebergs
 
   ! Local variables
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -2222,11 +2278,19 @@ subroutine allocate_forcing_type(G, fluxes, stress, ustar, water, heat, shelf, p
 
   call myAlloc(fluxes%p_surf,isd,ied,jsd,jed, press)
 
+  !These fields should only on allocated when iceberg area is being passed through the coupler.
+  call myAlloc(fluxes%ustar_berg,isd,ied,jsd,jed, iceberg)
+  call myAlloc(fluxes%area_berg,isd,ied,jsd,jed, iceberg)
+  call myAlloc(fluxes%mass_berg,isd,ied,jsd,jed, iceberg)
   contains
 
+  !> Allocates and zeroes-out array.
   subroutine myAlloc(array, is, ie, js, je, flag)
-    real, dimension(:,:), pointer :: array
-    integer,           intent(in) :: is, ie, js, je !< Bounds
+    real, dimension(:,:), pointer :: array !< Array to be allocated
+    integer,           intent(in) :: is !< Start i-index
+    integer,           intent(in) :: ie !< End i-index
+    integer,           intent(in) :: js !< Start j-index
+    integer,           intent(in) :: je !< End j-index
     logical, optional, intent(in) :: flag !< Flag to indicate to allocate
 
     if (present(flag)) then
@@ -2289,6 +2353,9 @@ subroutine deallocate_forcing_type(fluxes)
   if (associated(fluxes%rigidity_ice_u))       deallocate(fluxes%rigidity_ice_u)
   if (associated(fluxes%rigidity_ice_v))       deallocate(fluxes%rigidity_ice_v)
   if (associated(fluxes%tr_fluxes))            deallocate(fluxes%tr_fluxes)
+  if (associated(fluxes%ustar_berg))           deallocate(fluxes%ustar_berg)
+  if (associated(fluxes%area_berg))            deallocate(fluxes%area_berg)
+  if (associated(fluxes%mass_berg))            deallocate(fluxes%mass_berg)
 end subroutine deallocate_forcing_type
 
 
