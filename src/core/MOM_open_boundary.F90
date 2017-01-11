@@ -406,8 +406,8 @@ subroutine setup_segment_indices(G, seg, Is_obc, Ie_obc, Js_obc, Je_obc)
   ! Local variables
   integer :: Isg,Ieg,Jsg,Jeg
 
-  if (.not. G%Domain%symmetric) call MOM_error(FATAL, "MOM_open_boundary.F90, setup_segment_indices: "//&
-                       "Need to compile in symmetric mode")
+!  if (.not. G%Domain%symmetric) call MOM_error(FATAL, "MOM_open_boundary.F90, setup_segment_indices: "//&
+!                       "Need to compile in symmetric mode")
 
   ! Isg, Ieg will be I*_obc in global space
   if (Ie_obc<Is_obc) then
