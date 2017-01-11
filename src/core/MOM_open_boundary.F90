@@ -1101,7 +1101,7 @@ end subroutine open_boundary_impose_land_mask
 
 !> Apply radiation conditions to 3D  u,v (,h) at open boundaries
 subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
-                                     h_new, h_old, G)
+                                     h_new, h_old, G, dt)
   type(ocean_grid_type),                     intent(inout) :: G !< Ocean grid structure
   type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary control structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u_new !< New u values on open boundaries
@@ -1110,6 +1110,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v_old !< Original unadjusted v
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h_new !< New h values on open boundaries
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h_old !< Original h values
+  real,                                      intent(in)    :: dt    !< Appropriate timestep
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: grad
   real :: dhdt, dhdx, dhdy, gamma_u, gamma_h, gamma_v
@@ -1174,7 +1175,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
         else
           tau = OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%Tnudge_out
         endif
-        u_new(I,j,k) = u_new(I,j,k) + tau*(OBC%u(I,j,k) - u_old(I,j,k))
+        u_new(I,j,k) = u_new(I,j,k) + dt*tau*(OBC%u(I,j,k) - u_old(I,j,k))
       endif
     endif
 
@@ -1223,7 +1224,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
         else
           tau = OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%Tnudge_out
         endif
-        u_new(I,j,k) = u_new(I,j,k) + tau*(OBC%u(I,j,k) - u_old(I,j,k))
+        u_new(I,j,k) = u_new(I,j,k) + dt*tau*(OBC%u(I,j,k) - u_old(I,j,k))
       endif
     endif
 
@@ -1328,7 +1329,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
         else
           tau = OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%Tnudge_out
         endif
-        v_new(i,J,k) = v_new(i,J,k) + tau*(OBC%v(i,J,k) - v_old(i,J,k))
+        v_new(i,J,k) = v_new(i,J,k) + dt*tau*(OBC%v(i,J,k) - v_old(i,J,k))
       endif
     endif
 
@@ -1377,7 +1378,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
         else
           tau = OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%Tnudge_out
         endif
-        v_new(i,J,k) = v_new(i,J,k) + tau*(OBC%v(i,J,k) - v_old(i,J,k))
+        v_new(i,J,k) = v_new(i,J,k) + dt*tau*(OBC%v(i,J,k) - v_old(i,J,k))
       endif
     endif
 
