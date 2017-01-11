@@ -639,7 +639,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (associated(CS%OBC)) then
     call radiation_open_bdry_conds(CS%OBC, u_av, u_old_rad_OBC, v_av, &
-             v_old_rad_OBC, hp, h_old_rad_OBC, G)
+             v_old_rad_OBC, hp, h_old_rad_OBC, G, dt)
   endif
 
   ! h_av = (h + hp)/2
@@ -855,7 +855,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (associated(CS%OBC)) then
     call radiation_open_bdry_conds(CS%OBC, u, u_old_rad_OBC, v, &
-             v_old_rad_OBC, h, h_old_rad_OBC, G)
+             v_old_rad_OBC, h, h_old_rad_OBC, G, dt)
   endif
 
 ! h_av = (h_in + h_out)/2 . Going in to this line, h_av = h_in.
