@@ -1122,7 +1122,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
   real, parameter :: eps = 1.0e-20
 
   integer :: i, j, k, is, ie, js, je, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = OBC%ke
 
   if (.not.associated(OBC)) return
   if (.not.(OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally)) &
@@ -1473,7 +1473,7 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
     OBC_S_u => NULL(), &
     OBC_S_v => NULL()
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = OBC%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
@@ -1719,9 +1719,9 @@ subroutine fill_OBC_halos(G, GV, OBC, tv, h, tracer_Reg)
     OBC_S_u => NULL(), &
     OBC_S_v => NULL()
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = OBC%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  nz=G%ke
+  nz=OBC%ke
 
   if (.not. associated(OBC) .or. .not. associated(tv%T)) return
 
@@ -1844,19 +1844,34 @@ subroutine allocate_OBC_segment_data(OBC, segment)
   IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
   JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
 
+    print *, 'Allocate_OBC_segment_data 1', IsdB, IedB, jsd, jed, segment%on_pe
   if (.not. segment%on_pe) return
+    print *, 'Allocate_OBC_segment_data 2', IsdB, IedB, jsd, jed
 
-  if (.not. ASSOCIATED(segment%Cg)) then ! finishing allocating storage for segments
-    allocate(segment%Cg(isd:ied,jsd:jed));                    segment%Cg(:,:)=0.
-    allocate(segment%Htot(isd:ied,jsd:jed));                  segment%Htot(:,:)=0.0
-    allocate(segment%h(isd:ied,jsd:jed,OBC%ke));              segment%h(:,:,:)=0.0
-    allocate(segment%normal_vel(isd:ied,jsd:jed,OBC%ke));     segment%normal_vel(:,:,:)=0.0
-    allocate(segment%normal_trans(isd:ied,jsd:jed,OBC%ke));   segment%normal_trans(:,:,:)=0.0
-    allocate(segment%normal_vel_bt(isd:ied,jsd:jed));         segment%normal_vel_bt(:,:)=0.0
-    allocate(segment%normal_trans_bt(isd:ied,jsd:jed));       segment%normal_trans_bt(:,:)=0.0
-    allocate(segment%tangent_vel(IsdB:IedB,JsdB:JedB,OBC%ke));segment%tangent_vel(:,:,:)=0.0
-    allocate(segment%tangent_vel_bt(IsdB:IedB,JsdB:JedB));    segment%tangent_vel_bt(:,:)=0.0
-    allocate(segment%eta(isd:ied,jsd:jed));                   segment%eta(:,:)=0.0
+  if (segment%direction == OBC_DIRECTION_E .or. segment%direction == OBC_DIRECTION_W) then
+    print *, 'Allocate_OBC_segment_data EW', IsdB, IedB, jsd, jed
+    allocate(segment%Cg(IsdB:IedB,jsd:jed));                    segment%Cg(:,:)=0.
+    allocate(segment%Htot(IsdB:IedB,jsd:jed));                  segment%Htot(:,:)=0.0
+    allocate(segment%h(IsdB:IedB,jsd:jed,OBC%ke));              segment%h(:,:,:)=0.0
+    allocate(segment%normal_vel(IsdB:IedB,jsd:jed,OBC%ke));     segment%normal_vel(:,:,:)=0.0
+    allocate(segment%normal_trans(IsdB:IedB,jsd:jed,OBC%ke));   segment%normal_trans(:,:,:)=0.0
+    allocate(segment%normal_vel_bt(IsdB:IedB,jsd:jed));         segment%normal_vel_bt(:,:)=0.0
+    allocate(segment%normal_trans_bt(IsdB:IedB,jsd:jed));       segment%normal_trans_bt(:,:)=0.0
+    allocate(segment%tangent_vel(IsdB:IedB,JsdB:JedB,OBC%ke));  segment%tangent_vel(:,:,:)=0.0
+    allocate(segment%tangent_vel_bt(IsdB:IedB,JsdB:JedB));      segment%tangent_vel_bt(:,:)=0.0
+    allocate(segment%eta(IsdB:IedB,jsd:jed));                   segment%eta(:,:)=0.0
+  else
+    print *, 'Allocate_OBC_segment_data NS', isd, ied, JsdB, JedB
+    allocate(segment%Cg(isd:ied,JsdB:JedB));                    segment%Cg(:,:)=0.
+    allocate(segment%Htot(isd:ied,JsdB:JedB));                  segment%Htot(:,:)=0.0
+    allocate(segment%h(isd:ied,JsdB:JedB,OBC%ke));              segment%h(:,:,:)=0.0
+    allocate(segment%normal_vel(isd:ied,JsdB:JedB,OBC%ke));     segment%normal_vel(:,:,:)=0.0
+    allocate(segment%normal_trans(isd:ied,JsdB:JedB,OBC%ke));   segment%normal_trans(:,:,:)=0.0
+    allocate(segment%normal_vel_bt(isd:ied,JsdB:JedB));         segment%normal_vel_bt(:,:)=0.0
+    allocate(segment%normal_trans_bt(isd:ied,JsdB:JedB));       segment%normal_trans_bt(:,:)=0.0
+    allocate(segment%tangent_vel(IsdB:IedB,JsdB:JedB,OBC%ke));  segment%tangent_vel(:,:,:)=0.0
+    allocate(segment%tangent_vel_bt(IsdB:IedB,JsdB:JedB));      segment%tangent_vel_bt(:,:)=0.0
+    allocate(segment%eta(isd:ied,JsdB:JedB));                   segment%eta(:,:)=0.0
   endif
 end subroutine allocate_OBC_segment_data
 
