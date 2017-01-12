@@ -26,6 +26,7 @@ use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_open_boundary, only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE
+use MOM_open_boundary, only : OBC_segment_type
 use MOM_tracer_registry, only : tracer_registry_type, add_tracer_OBC_values
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
@@ -270,9 +271,6 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
   integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
   type(OBC_segment_type), pointer :: segment
-  integer :: ni_seg, nj_seg   ! number of src gridpoints along the segments
-  integer :: i2, j2           ! indices for referencing local domain array
-  integer :: ishift, jshift   ! offsets for staggered locations
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -297,7 +295,7 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
     return   !!! Need a better error message here
   endif
   segment => OBC%OBC_segment_number(1)
-  if (.not. segment%on_pe) cycle ! continue to next segment if not in computational domain
+  if (.not. segment%on_pe) return
 
   do k=1,nz
     rst = -1.0
@@ -332,12 +330,13 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
     ! New way
     isd = segment%HI%isd ; ied = segment%HI%ied
     JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
-    do J=JsdB,JedB ; do i=isd,ied
-      lon_im1 = 2.0*G%geoLonCv(i,J) - G%geoLonBu(I,J)
-      segment%unh(i,J,k) = tr_k * (exp(-2.0*(lon_im1 - 1000.0)/Def_Rad) -&
-                                  exp(-2.0*(G%geoLonBu(I,J) - 1000.0)/Def_Rad))
-      segment%un(i,J,k) = v_k * exp(-2.0*(G%geoLonCv(i,J) - 1000.0)/Def_Rad)
-    enddo ; enddo
+    print *, 'DOME segment indices', isd, ied, JsdB, JedB
+!   do J=JsdB,JedB ; do i=isd,ied
+!     lon_im1 = 2.0*G%geoLonCv(i,J) - G%geoLonBu(I,J)
+!     segment%normal_trans(i,J,k) = tr_k * (exp(-2.0*(lon_im1 - 1000.0)/Def_Rad) -&
+!                                 exp(-2.0*(G%geoLonBu(I,J) - 1000.0)/Def_Rad))
+!     segment%normal_vel(i,J,k) = v_k * exp(-2.0*(G%geoLonCv(i,J) - 1000.0)/Def_Rad)
+!   enddo ; enddo
   enddo
 
   !   The inflow values of temperature and salinity also need to be set here if
