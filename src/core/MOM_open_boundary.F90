@@ -90,14 +90,19 @@ type, public :: OBC_segment_type
   real, pointer, dimension(:,:)   :: unhbt=>NULL()  !<The vertically summed normal layer transports (m3 s-1).
   real, pointer, dimension(:,:)   :: unbt=>NULL()   !<The vertically-averaged normal velocity (m s-1).
   real, pointer, dimension(:,:,:) :: tangent_vel=>NULL()    !<The layer velocity tangential to the OB segment (m s-1).
+  real, pointer, dimension(:,:,:) :: tangent_trans=>NULL()    !<The layer transport tangential to the OB segment (m3 s-1).
   real, pointer, dimension(:,:)   :: tangent_vel_bt=>NULL() !<The barotropic velocity tangential to the OB segment (m s-1).
-  real, pointer, dimension(:,:)   :: eta=>NULL()    !<The sea-surface elevation (m).
+  real, pointer, dimension(:,:,:) :: normal_vel=>NULL()    !<The layer velocity normal to the OB segment (m s-1).
+  real, pointer, dimension(:,:,:) :: normal_trans=>NULL()    !<The layer transport normal to the OB segment (m3 s-1).
+  real, pointer, dimension(:,:)   :: normal_vel_bt=>NULL() !<The barotropic velocity normal to the OB segment (m s-1).
+  real, pointer, dimension(:,:)   :: eta=>NULL()    !<The sea-surface elevation along the segment (m).
   type(hor_index_type) :: HI !< Horizontal index ranges
 end type OBC_segment_type
 
 !> Open-boundary data
 type, public :: ocean_OBC_type
-  integer :: number_of_segments = 0 !< The number of open-boundary segments.
+  integer :: number_of_segments = 0                   !< The number of open-boundary segments.
+  integer :: ke = 0                                   !< The number of model layers 
   logical :: Flather_u_BCs_exist_globally = .false.   !< True if any zonal velocity points
                                                       !! in the global domain use Flather BCs.
   logical :: Flather_v_BCs_exist_globally = .false.   !< True if any meridional velocity points
@@ -205,6 +210,9 @@ subroutine open_boundary_config(G, param_file, OBC)
   call get_param(param_file, mod, "OBC_VALUES_CONFIG", config2, &
                  "A string that sets how the open boundary values are \n"//&
                  " configured: \n", default="None", do_not_log=.true.)
+  call get_param(param_file, mod, "NZ", OBC%ke, &
+                 "The number of model layers", default=0, do_not_log=.true.)
+
   if (config1 .ne. "None" .or. config2 .ne. "None") OBC%user_BCs_set_globally = .true.
 
   if (OBC%number_of_segments > 0) then

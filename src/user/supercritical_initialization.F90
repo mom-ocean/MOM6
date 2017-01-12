@@ -110,6 +110,9 @@ subroutine supercritical_set_OBC_data(OBC, G, param_file)
 
   allocate(OBC%u(G%IsdB:G%IedB,G%jsd:G%jed,G%ke)) ; OBC%u(:,:,:) = 0.0
   allocate(OBC%uh(G%IsdB:G%IedB,G%jsd:G%jed,G%ke)) ; OBC%uh(:,:,:) = 0.0
+  if (.not.associated(OBC%ubt_outer)) then
+    allocate(OBC%ubt_outer(G%IsdB:G%IedB,G%jsd:G%jed)) ; OBC%ubt_outer(:,:) = 0.0
+  endif
 
   do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
     if (OBC%OBC_segment_u(I,j)>0) then
