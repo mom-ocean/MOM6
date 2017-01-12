@@ -81,11 +81,11 @@ type, public :: OBC_segment_type
   real :: Tnudge_in         !< Inverse nudging timescale on inflow (1/s).
   real :: Tnudge_out        !< Inverse nudging timescale on outflow (1/s).
   logical :: on_pe          !< true if segment is located in the computational domain
-  integer, dimension(4)           :: global_indices ! is,ie,js,je list of global indices for segment
   real, pointer, dimension(:,:)   :: Cg=>NULL()     !<The external gravity
                                                     !<wave speed (m -s) at OBC-points.
   real, pointer, dimension(:,:)   :: Htot=>NULL()   !<The total column thickness (m) at OBC-points.
   real, pointer, dimension(:,:,:) :: h=>NULL()      !<The cell thickness (m) at OBC-points.
+  real, pointer, dimension(:,:,:) :: un=>NULL()     !<The grid-oriented normal layer velocity (m s-1).
   real, pointer, dimension(:,:,:) :: unh=>NULL()    !<The grid-oriented normal layer transports (m3 s-1).
   real, pointer, dimension(:,:)   :: unhbt=>NULL()  !<The vertically summed normal layer transports (m3 s-1).
   real, pointer, dimension(:,:)   :: unbt=>NULL()   !<The vertically-averaged normal velocity (m s-1).
@@ -390,7 +390,6 @@ subroutine initialize_segment_data(G, OBC, PF)
 
   return
 
-
 end subroutine initialize_segment_data
 
 !< Define indices for segment and store in hor_index_type
@@ -469,8 +468,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
   call parse_segment_str(G%ieg, G%jeg, segment_str, I_obc, Js_obc, Je_obc, action_str )
 
   call setup_segment_indices(G, OBC%OBC_segment_number(l_seg),I_obc,I_obc,Js_obc,Je_obc)
-
-  OBC%OBC_segment_number(l_seg)%global_indices = (/I_obc,I_obc,Js_obc,Je_obc/)
+  call allocate_OBC_segment_data(G, OBC%OBC_segment_number(l_seg))
 
   I_obc = I_obc - G%idg_offset ! Convert to local tile indices on this tile
   Js_obc = Js_obc - G%jdg_offset ! Convert to local tile indices on this tile
@@ -491,8 +489,6 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
      OBC%OBC_segment_number(l_seg)%direction = OBC_DIRECTION_W
      j=js_obc;js_obc=je_obc;je_obc=j
   endif
-
-  OBC%OBC_segment_number(l_seg)%global_indices = (/I_obc+G%idg_offset,I_obc+G%idg_offset,Js_obc+G%jdg_offset,Je_obc+G%jdg_offset/)
 
   OBC%OBC_segment_number(l_seg)%on_pe = .false.
 
@@ -532,7 +528,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%OBC_segment_number(l_seg)%specified = .true.
       OBC%OBC_segment_number(l_seg)%values_needed = .true.
-!     OBC%update_OBC = .true.
+      OBC%update_OBC = .true.
       OBC%specified_u_BCs_exist_globally = .true. ! This avoids deallocation
       ! Hack to undo the hack above for SIMPLE BCs
       Js_obc = Js_obc + 1 ; Je_obc = Je_obc - 1
@@ -598,6 +594,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
   call parse_segment_str(G%ieg, G%jeg, segment_str, J_obc, Is_obc, Ie_obc, action_str )
 
   call setup_segment_indices(G, OBC%OBC_segment_number(l_seg),Is_obc,Ie_obc,J_obc,J_obc)
+  call allocate_OBC_segment_data(G, OBC%OBC_segment_number(l_seg))
 
   J_obc = J_obc - G%jdg_offset ! Convert to local tile indices on this tile
   Is_obc = Is_obc - G%idg_offset ! Convert to local tile indices on this tile
@@ -617,8 +614,6 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
      OBC%OBC_segment_number(l_seg)%direction = OBC_DIRECTION_N
      i=is_obc;is_obc=ie_obc;ie_obc=i
   endif
-
-  OBC%OBC_segment_number(l_seg)%global_indices = (/Is_obc+G%idg_offset,Ie_obc+G%idg_offset,J_obc+G%jdg_offset,J_obc+G%jdg_offset/)
 
   OBC%OBC_segment_number(l_seg)%on_pe = .false.
 
@@ -660,7 +655,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%OBC_segment_number(l_seg)%specified = .true.
       OBC%OBC_segment_number(l_seg)%values_needed = .true.
-!     OBC%update_OBC = .true.
+      OBC%update_OBC = .true.
       OBC%specified_v_BCs_exist_globally = .true. ! This avoids deallocation
       ! Hack to undo the hack above for SIMPLE BCs
       Is_obc = Is_obc + 1 ; Ie_obc = Ie_obc - 1
@@ -1721,7 +1716,7 @@ subroutine fill_OBC_halos(G, GV, OBC, tv, h, tracer_Reg)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   nz=G%ke
 
-  if (.not.associated(tv%T)) return
+  if (.not. associated(OBC) .or. .not. associated(tv%T)) return
 
   call pass_var(tv%T,G%Domain)
   call pass_var(tv%S,G%Domain)
@@ -1828,6 +1823,38 @@ subroutine fill_OBC_halos(G, GV, OBC, tv, h, tracer_Reg)
   endif
 end subroutine fill_OBC_halos
 
+!> Allocate segment data fields
+subroutine allocate_OBC_segment_data(G, segment)
+  type(dyn_horgrid_type), intent(in)    :: G       !< Ocean grid structure
+  type(OBC_segment_type), intent(inout) :: segment !< Open boundary segment
+  ! Local variables
+  integer :: isd, ied, jsd, jed
+  integer :: IsdB, IedB, JsdB, JedB
+  character(len=40)  :: mod = "allocate_OBC_segment_data" ! This subroutine's name.
+
+  isd = segment%HI%isd ; ied = segment%HI%ied
+  jsd = segment%HI%jsd ; jed = segment%HI%jed
+  IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
+  JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
+
+  if (.not. associated(seg)) return
+
+  if (.not. segment%on_pe) return ! continue to next segment if not in computational domain
+
+    if (.not. ASSOCIATED(segment%Cg)) then ! finishing allocating storage for segments
+      allocate(segment%Cg(isd:ied,jsd:jed));                    segment%Cg(:,:)=0.
+      allocate(segment%Htot(isd:ied,jsd:jed));                  segment%Htot(:,:)=0.0
+      allocate(segment%h(isd:ied,jsd:jed,G%ke));                segment%h(:,:,:)=0.0
+      allocate(segment%un(isd:ied,jsd:jed,G%ke));               segment%un(:,:,:)=0.0
+      allocate(segment%unh(isd:ied,jsd:jed,G%ke));              segment%unh(:,:,:)=0.0
+      allocate(segment%unhbt(isd:ied,jsd:jed));                 segment%unhbt(:,:)=0.0
+      allocate(segment%unbt(isd:ied,jsd:jed));                  segment%unbt(:,:)=0.0
+      allocate(segment%tangent_vel(IsdB:IedB,JsdB:JedB,G%ke));  segment%tangent_vel(:,:,:)=0.0
+      allocate(segment%tangent_vel_bt(IsdB:IedB,JsdB:JedB));    segment%tangent_vel_bt(:,:)=0.0
+      allocate(segment%eta(isd:ied,jsd:jed));                   segment%eta(:,:)=0.0
+    endif
+  enddo
+end subroutine allocate_OBC_segment_data
 
 subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
 
@@ -1860,9 +1887,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   nz=G%ke
 
-
   if (.not. associated(OBC)) return
-
 
   do n = 1, OBC%number_of_segments
     segment => OBC%OBC_segment_number(n)
@@ -1883,20 +1908,6 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
     else
       ni_seg=ni_seg-1
       is_obc=is_obc+1
-    endif
-
-
-!    ni_seg = max(segment%Ie_obc-segment%Is_obc,1)
-!    nj_seg = max(segment%Je_obc-segment%Js_obc,1)
-
-    if (.not. ASSOCIATED(segment%Cg)) then ! finishing allocating storage for segments
-      allocate(segment%Cg(is_obc:ie_obc,js_obc:je_obc));segment%Cg(:,:)=0.
-      allocate(segment%Htot(is_obc:ie_obc,js_obc:je_obc));segment%Htot(:,:)=0.0
-      allocate(segment%h(is_obc:ie_obc,js_obc:je_obc,G%ke));segment%h(:,:,:)=0.0
-      allocate(segment%unh(is_obc:ie_obc,js_obc:je_obc,G%ke));segment%unh(:,:,:)=0.0
-      allocate(segment%unhbt(is_obc:ie_obc,js_obc:je_obc));segment%unhbt(:,:)=0.0
-      allocate(segment%unbt(is_obc:ie_obc,js_obc:je_obc));segment%unbt(:,:)=0.0
-      allocate(segment%eta(is_obc:ie_obc,js_obc:je_obc));segment%eta(:,:)=0.0
     endif
 
 !    do j=jsd,jed ; do I=isd,ied-1
@@ -2043,6 +2054,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
                 do i=is_obc,ie_obc
                    segment%unhbt(i,j) = 0.0
                    do k=1,G%ke
+                      segment%un(i,j,k) = segment%field(m)%buffer_dst(i,j,k)
                       segment%unh(i,j,k) = segment%field(m)%buffer_dst(i,j,k)*segment%h(i,j,k)
                       segment%unhbt(i,j)= segment%unhbt(i,j)+segment%unh(i,j,k)
                    enddo
