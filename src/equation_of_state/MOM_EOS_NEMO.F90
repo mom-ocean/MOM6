@@ -32,11 +32,10 @@ module MOM_EOS_NEMO
 !use gsw_mod_toolbox, only : gsw_sr_from_sp, gsw_ct_from_pt
 use gsw_mod_toolbox, only : gsw_rho_first_derivatives
 
-
 implicit none ; private
 
 public calculate_compress_nemo, calculate_density_nemo
-public calculate_density_derivs_nemo, calculate_2_densities_nemo
+public calculate_density_derivs_nemo
 public calculate_density_scalar_nemo, calculate_density_array_nemo
 
 interface calculate_density_nemo
@@ -373,73 +372,5 @@ subroutine calculate_compress_nemo(T, S, pressure, rho, drho_dp, start, npts)
     call gsw_rho_first_derivatives(zs,zt,zp, drho_dp=drho_dp(j))
  enddo
 end subroutine calculate_compress_nemo
-
-subroutine calculate_2_densities_nemo( T, S, pressure1, pressure2, rho1, rho2, start, npts)
-  real,    intent(in),  dimension(:) :: T, S
-  real,    intent(in)                :: pressure1, pressure2
-  real,    intent(out), dimension(:) :: rho1, rho2
-  integer, intent(in)                :: start, npts
-! * Arguments: T - conservative temperature in C.                      *
-! *  (in)      S - absolute salinity in g/kg.                          *
-! *  (in)      pressure1 - the first pressure in Pa.                   *
-! *  (in)      pressure2 -  the second pressure in Pa.                 *
-! *  (out)     rho1 - density at pressure1 in kg m-3.                  *
-! *  (out)     rho2 - density at pressure2 in kg m-3.                  *
-! *  (in)      start - the starting point in the arrays.               *
-! *  (in)      npts - the number of values to calculate.               *
-
-  real :: zp1, zp2, zt , zh , zs , zr0, zn , zn0, zn1, zn2, zn3
-  integer :: j
-
-  zp1 = pressure1 * Pa2db         !Convert pressure from Pascal to decibar
-  zp2 = pressure2 * Pa2db         !Convert pressure from Pascal to decibar
-
-  do j=start,start+npts-1
-   !Conversions
-    zs = S(j) !gsw_sr_from_sp(S(j))       !Convert practical salinity to absolute salinity
-    zt = T(j) !gsw_ct_from_pt(S(j),T(j))  !Convert potantial temp to conservative temp
-
-    !The following algorithm was provided by Roquet in a private communication.
-    !It is not necessarily the algorithm used in NEMO ocean!
-    zp1  = pressure1 * r1_P0  ! pressure (first converted to decibar)
-    zp2  = pressure2 * r1_P0  ! pressure (first converted to decibar)
-    zt  = zt * r1_T0                ! temperature
-    zs  = SQRT( ABS( zs + rdeltaS ) * r1_S0 )   ! square root salinity
-    !
-    zn3 = EOS013*zt   &
-       &   + EOS103*zs+EOS003
-       !
-    zn2 = (EOS022*zt   &
-       &   + EOS112*zs+EOS012)*zt   &
-       &   + (EOS202*zs+EOS102)*zs+EOS002
-       !
-    zn1 = (((EOS041*zt   &
-       &   + EOS131*zs+EOS031)*zt   &
-       &   + (EOS221*zs+EOS121)*zs+EOS021)*zt   &
-       &   + ((EOS311*zs+EOS211)*zs+EOS111)*zs+EOS011)*zt   &
-       &   + (((EOS401*zs+EOS301)*zs+EOS201)*zs+EOS101)*zs+EOS001
-       !
-    zn0 = (((((EOS060*zt   &
-       &   + EOS150*zs+EOS050)*zt   &
-       &   + (EOS240*zs+EOS140)*zs+EOS040)*zt   &
-       &   + ((EOS330*zs+EOS230)*zs+EOS130)*zs+EOS030)*zt   &
-       &   + (((EOS420*zs+EOS320)*zs+EOS220)*zs+EOS120)*zs+EOS020)*zt   &
-       &   + ((((EOS510*zs+EOS410)*zs+EOS310)*zs+EOS210)*zs+EOS110)*zs+EOS010)*zt   &
-       &   + (((((EOS600*zs+EOS500)*zs+EOS400)*zs+EOS300)*zs+EOS200)*zs+EOS100)*zs+EOS000
-       !
-    zn  = ( ( zn3 * zp1 + zn2 ) * zp1 + zn1 ) * zp1 + zn0
-    !
-    zr0 = (((((R05 * zp1+R04) * zp1+R03 ) * zp1+R02 ) * zp1+R01) * zp1+R00) * zp1
-    !
-    rho1(j) =  ( zn + zr0 ) ! density 
-    !
-    zn  = ( ( zn3 * zp2 + zn2 ) * zp2 + zn1 ) * zp2 + zn0
-    !
-    zr0 = (((((R05 * zp2+R04) * zp2+R03 ) * zp2+R02 ) * zp2+R01) * zp2+R00) * zp2
-    !
-    rho2(j) =  ( zn + zr0 ) ! density 
- enddo
-end subroutine calculate_2_densities_nemo
-
 
 end module MOM_EOS_NEMO

@@ -32,8 +32,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public calculate_compress_wright, calculate_density_wright
-public calculate_density_derivs_wright, calculate_2_densities_wright
-public calculate_specvol_derivs_wright
+public calculate_density_derivs_wright, calculate_specvol_derivs_wright
 public calculate_density_scalar_wright, calculate_density_array_wright
 public int_density_dz_wright, int_spec_vol_dp_wright
 
@@ -222,40 +221,6 @@ subroutine calculate_compress_wright(T, S, pressure, rho, drho_dp, start, npts)
     drho_dp(j) = lambda * I_denom * I_denom
   enddo
 end subroutine calculate_compress_wright
-
-subroutine calculate_2_densities_wright( T, S, pressure1, pressure2, rho1, rho2, start, npts)
-  real,    intent(in),  dimension(:) :: T, S
-  real,    intent(in)                :: pressure1, pressure2
-  real,    intent(out), dimension(:) :: rho1, rho2
-  integer, intent(in)                :: start, npts
-! * Arguments: T - potential temperature relative to the surface in C. *
-! *  (in)      S - salinity in PSU.                                    *
-! *  (in)      pressure1 - the first pressure in Pa.                   *
-! *  (in)      pressure2 -  the second pressure in Pa.                 *
-! *  (out)     rho1 - density at pressure1 in kg m-3.                  *
-! *  (out)     rho2 - density at pressure2 in kg m-3.                  *
-! *  (in)      start - the starting point in the arrays.               *
-! *  (in)      npts - the number of values to calculate.               *
-
-! *====================================================================*
-! *  This subroutine computes the in situ density of sea water (rho in *
-! *  units of kg/m^3) from salinity (sal in psu), potential temperature*
-! *  (th in deg C), and pressure in Pa.  It uses the expression from   *
-! *  Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740.                *
-! *  Coded by R. Hallberg, 7/00                                        *
-! *====================================================================*
-  real :: al0, p0, lambda
-  integer :: j
-
-  do j=start, start+npts-1
-    al0 = (a0 + a1*T(j)) + a2*S(j)
-    p0 = (b0 + b4*S(j)) + T(j) * (b1 + T(j)*((b2 + b3*T(j))) + b5*S(j))
-    lambda = (c0 +c4*S(j)) + T(j) * (c1 + T(j)*((c2 + c3*T(j))) + c5*S(j))
-
-    rho1(j) = (pressure1 + p0) / (lambda + al0*(pressure1 + p0))
-    rho2(j) = (pressure2 + p0) / (lambda + al0*(pressure2 + p0))
-  enddo
-end subroutine calculate_2_densities_wright
 
 subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, &
                                  dpa, intz_dpa, intx_dpa, inty_dpa)

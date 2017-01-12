@@ -32,8 +32,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public calculate_compress_linear, calculate_density_linear
-public calculate_density_derivs_linear, calculate_2_densities_linear
-public calculate_specvol_derivs_linear
+public calculate_density_derivs_linear, calculate_specvol_derivs_linear
 public calculate_density_scalar_linear, calculate_density_array_linear
 public int_density_dz_linear, int_spec_vol_dp_linear
 
@@ -180,36 +179,6 @@ subroutine calculate_compress_linear(T, S, pressure, rho, drho_dp, start, npts,&
     drho_dp(j) = 0.0
   enddo
 end subroutine calculate_compress_linear
-
-subroutine calculate_2_densities_linear(T, S, pressure1, pressure2, rho1, rho2,&
-                                        start, npts, Rho_T0_S0, dRho_dT, dRho_dS)
-  real,    intent(in),  dimension(:) :: T, S
-  real,    intent(in)                :: pressure1, pressure2
-  real,    intent(out), dimension(:) :: rho1, rho2
-  integer, intent(in)                :: start, npts
-  real,    intent(in)                :: Rho_T0_S0, dRho_dT, dRho_dS
-! *  This subroutine computes the densities of sea water (rho1 and     *
-! *  rho2) at two reference pressures (pressure1 and pressure2) from   *
-! *  salinity and potential temperature.                               *
-! *                                                                    *
-! * Arguments: T - potential temperature relative to the surface in C. *
-! *  (in)      S - salinity in PSU.                                    *
-! *  (in)      pressure1 - the first pressure in Pa.                   *
-! *  (in)      pressure2 -  the second pressure in Pa.                 *
-! *  (out)     rho1 - density at pressure1 in kg m-3.                  *
-! *  (out)     rho2 - density at pressure2 in kg m-3.                  *
-! *  (in)      start - the starting point in the arrays.               *
-! *  (in)      npts - the number of values to calculate.               *
-! *  (in)      Rho_T0_S0 - The density at T=0, S=0, in kg m-3.         *
-! *  (in)      dRho_dT - The derivatives of density with temperature   *
-! *  (in)      dRho_dS - and salinity, in kg m-3 C-1 and kg m-3 psu-1. *
-  integer :: j
-
-  do j=start, start+npts-1
-    rho1(j) = Rho_T0_S0 +  dRho_dT*T(j) + dRho_dS*S(j);
-    rho2(j) = Rho_T0_S0 +  dRho_dT*T(j) + dRho_dS*S(j);
-  enddo
-end subroutine calculate_2_densities_linear
 
 subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, HIO, &
                  Rho_T0_S0, dRho_dT, dRho_dS, dpa, intz_dpa, intx_dpa, inty_dpa)
