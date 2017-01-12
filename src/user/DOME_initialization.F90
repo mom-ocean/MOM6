@@ -269,6 +269,10 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
   character(len=40)  :: mod = "DOME_set_OBC_data" ! This subroutine's name.
   integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
+  type(OBC_segment_type), pointer :: segment
+  integer :: ni_seg, nj_seg   ! number of src gridpoints along the segments
+  integer :: i2, j2           ! indices for referencing local domain array
+  integer :: ishift, jshift   ! offsets for staggered locations
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -288,6 +292,13 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
   Def_Rad = sqrt(D_edge*g_prime_tot) / (1.0e-4*1000.0)
   tr_0 = (-D_edge*sqrt(D_edge*g_prime_tot)*0.5e3*Def_Rad) * GV%m_to_H
 
+  if (OBC%number_of_segments .ne. 1) then
+    print *, 'Error in DOME OBC segment setup'
+    return   !!! Need a better error message here
+  endif
+  segment => OBC%OBC_segment_number(1)
+  if (.not. segment%on_pe) cycle ! continue to next segment if not in computational domain
+
   do k=1,nz
     rst = -1.0
     if (k>1) rst = -1.0 + (real(k-1)-0.5)/real(nz-1)
@@ -305,6 +316,7 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
                                         (2.0 - Ri_trans))
     if (k == nz)  tr_k = tr_k + tr_0 * (2.0/(Ri_trans*(2.0+Ri_trans))) * &
                                        log((2.0+Ri_trans)/(2.0-Ri_trans))
+    ! Old way
     do J=JsdB,JedB ; do i=isd,ied
       if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
         ! This needs to be unneccesarily complicated without symmetric memory.
@@ -316,6 +328,15 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
       else
         OBC%vh(i,J,k) = 0.0 ; OBC%v(i,J,k) = 0.0
       endif
+    enddo ; enddo
+    ! New way
+    isd = segment%HI%isd ; ied = segment%HI%ied
+    JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
+    do J=JsdB,JedB ; do i=isd,ied
+      lon_im1 = 2.0*G%geoLonCv(i,J) - G%geoLonBu(I,J)
+      segment%unh(i,J,k) = tr_k * (exp(-2.0*(lon_im1 - 1000.0)/Def_Rad) -&
+                                  exp(-2.0*(G%geoLonBu(I,J) - 1000.0)/Def_Rad))
+      segment%un(i,J,k) = v_k * exp(-2.0*(G%geoLonCv(i,J) - 1000.0)/Def_Rad)
     enddo ; enddo
   enddo
 

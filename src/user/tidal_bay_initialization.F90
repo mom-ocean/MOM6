@@ -75,6 +75,7 @@ subroutine tidal_bay_set_OBC_data(OBC, G, h, Time)
   enddo ; enddo
   my_flux = -tide_flow*SIN(2.0*PI*time_sec/(12.0*3600.0))
 
+  ! Old way
   do j=jsd,jed ; do I=IsdB,IedB
     if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
       OBC%eta_outer_u(I,j) = cff
@@ -87,6 +88,17 @@ subroutine tidal_bay_set_OBC_data(OBC, G, h, Time)
       OBC%vbt_outer(i,J) = 0.0
     endif
   enddo ; enddo
+
+  ! New way
+  do n = 1, OBC%number_of_segments
+    segment => OBC%OBC_segment_number(n)
+
+    if (.not. segment%on_pe) cycle ! continue to next segment if not in computational domain
+
+    segment%unbt(:,:) = my_flux/my_area
+    segment%eta(:,:) = cff
+
+  enddo ! end segment loop
 
 end subroutine tidal_bay_set_OBC_data
 
