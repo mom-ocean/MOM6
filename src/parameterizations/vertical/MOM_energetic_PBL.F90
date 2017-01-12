@@ -77,7 +77,6 @@ use MOM_verticalGrid, only : verticalGrid_type
 use CVmix_kpp, only : cvmix_kpp_efactor_model
 use CVmix_kinds_and_types, only : cvmix_global_params_type
 ! use MOM_EOS, only : calculate_density, calculate_density_derivs
-! use MOM_EOS, only : calculate_2_densities
 
 implicit none ; private
 
