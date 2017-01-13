@@ -163,7 +163,7 @@ type, public :: ocean_OBC_type
                    !! velocity (or speed of characteristics), in m s-1.  The
                    !! default value is 10 m s-1.
   logical :: OBC_pe !< Is there an open boundary on this tile?
-  character(len=200) :: OBC_values_config
+  character(len=200) :: OBC_user_config
   type(remapping_CS), pointer         :: remap_CS   ! ALE remapping control structure for segments only
 end type ocean_OBC_type
 
