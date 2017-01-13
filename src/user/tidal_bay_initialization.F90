@@ -24,6 +24,7 @@ use MOM_error_handler,  only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser,    only : get_param, log_version, param_file_type
 use MOM_grid,           only : ocean_grid_type
 use MOM_open_boundary,  only : ocean_OBC_type, OBC_NONE
+use MOM_open_boundary,  only : OBC_segment_type
 use MOM_verticalGrid,   only : verticalGrid_type
 use MOM_time_manager,   only : time_type, set_time, time_type_to_real
 
@@ -49,8 +50,9 @@ subroutine tidal_bay_set_OBC_data(OBC, G, h, Time)
   real :: my_area, my_flux
   real :: PI
   character(len=40)  :: mod = "tidal_bay_set_OBC_data" ! This subroutine's name.
-  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
+  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz, n
   integer :: IsdB, IedB, JsdB, JedB
+  type(OBC_segment_type), pointer :: segment
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -75,6 +77,7 @@ subroutine tidal_bay_set_OBC_data(OBC, G, h, Time)
   enddo ; enddo
   my_flux = -tide_flow*SIN(2.0*PI*time_sec/(12.0*3600.0))
 
+  ! Old way
   do j=jsd,jed ; do I=IsdB,IedB
     if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
       OBC%eta_outer_u(I,j) = cff
@@ -87,6 +90,17 @@ subroutine tidal_bay_set_OBC_data(OBC, G, h, Time)
       OBC%vbt_outer(i,J) = 0.0
     endif
   enddo ; enddo
+
+  ! New way
+! do n = 1, OBC%number_of_segments
+!   segment => OBC%OBC_segment_number(n)
+
+!   if (.not. segment%on_pe) cycle ! continue to next segment if not in computational domain
+
+!   segment%normal_vel_bt(:,:) = my_flux/my_area
+!   segment%eta(:,:) = cff
+
+! enddo ! end segment loop
 
 end subroutine tidal_bay_set_OBC_data
 
