@@ -696,7 +696,7 @@ subroutine gradKE(u, v, h, uh, vh, KE, KEx, KEy, k, OBC, G, CS)
   real :: um, up, vm, vp         ! Temporary variables with units of m s-1.
   real :: um2, up2, vm2, vp2     ! Temporary variables with units of m2 s-2.
   real :: um2a, up2a, vm2a, vp2a ! Temporary variables with units of m4 s-2.
-  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
+  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, n
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -747,12 +747,17 @@ subroutine gradKE(u, v, h, uh, vh, KE, KEx, KEy, k, OBC, G, CS)
   enddo ; enddo
 
   if (associated(OBC)) then
-    do j=js,je ; do I=Isq,Ieq
-      if (OBC%OBC_segment_u(I,j)>0) KEx(I,j) = 0.
-    enddo ; enddo
-    do J=Jsq,Jeq ; do i=is,ie
-      if (OBC%OBC_segment_v(i,J)>0) KEy(i,J) = 0.
-    enddo ; enddo
+    do n=1,OBC%number_of_segments
+      if (OBC%OBC_segment_number(n)%is_N_or_S) then
+        do i=OBC%OBC_segment_number(n)%HI%isd,OBC%OBC_segment_number(n)%HI%ied
+          KEy(i,OBC%OBC_segment_number(n)%HI%JsdB) = 0.
+        enddo
+      elseif (OBC%OBC_segment_number(n)%is_E_or_W) then
+        do j=OBC%OBC_segment_number(n)%HI%jsd,OBC%OBC_segment_number(n)%HI%jed
+          KEx(OBC%OBC_segment_number(n)%HI%IsdB,j) = 0.
+        enddo
+      endif
+    enddo
   endif
 
 end subroutine gradKE

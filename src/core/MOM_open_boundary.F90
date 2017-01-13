@@ -216,6 +216,7 @@ subroutine open_boundary_config(G, param_file, OBC)
 
   if (OBC%number_of_segments > 0) then
     ! Allocate everything
+    ! Note the 0-segment is needed when %OBC_segment_u/v(:,:) = 0
     allocate(OBC%OBC_segment_number(0:OBC%number_of_segments))
     do l=0,OBC%number_of_segments
       OBC%OBC_segment_number(l)%Flather = .false.
