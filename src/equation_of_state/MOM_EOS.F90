@@ -3,9 +3,22 @@ module MOM_EOS
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_EOS_linear
-use MOM_EOS_Wright
-use MOM_EOS_UNESCO
+use MOM_EOS_linear, only : calculate_density_scalar_linear, calculate_density_array_linear
+use MOM_EOS_linear, only : calculate_density_derivs_linear, calculate_specvol_derivs_linear, int_density_dz_linear 
+use MOM_EOS_linear, only : calculate_compress_linear, int_spec_vol_dp_linear
+use MOM_EOS_Wright, only : calculate_density_scalar_wright, calculate_density_array_wright 
+use MOM_EOS_Wright, only : calculate_density_derivs_wright, calculate_specvol_derivs_wright, int_density_dz_wright
+use MOM_EOS_Wright, only : calculate_compress_wright, int_spec_vol_dp_wright
+use MOM_EOS_UNESCO, only : calculate_density_scalar_unesco, calculate_density_array_unesco
+use MOM_EOS_UNESCO, only : calculate_density_derivs_unesco, calculate_density_unesco
+use MOM_EOS_UNESCO, only : calculate_compress_unesco
+use MOM_EOS_NEMO,   only : calculate_density_scalar_nemo, calculate_density_array_nemo
+use MOM_EOS_NEMO,   only : calculate_density_derivs_nemo, calculate_density_nemo
+use MOM_EOS_NEMO,   only : calculate_compress_nemo
+use MOM_EOS_TEOS10, only : calculate_density_scalar_teos10, calculate_density_array_teos10
+use MOM_EOS_TEOS10, only : calculate_density_derivs_teos10, calculate_specvol_derivs_teos10
+use MOM_EOS_TEOS10, only : calculate_compress_teos10 
+use MOM_EOS_TEOS10, only : gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_TFreeze, only : calculate_TFreeze_linear, calculate_TFreeze_Millero
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg
 use MOM_file_parser, only : get_param, log_version, param_file_type
@@ -17,8 +30,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public calculate_compress, calculate_density, query_compressible
-public calculate_density_derivs, calculate_2_densities
-public calculate_specific_vol_derivs
+public calculate_density_derivs, calculate_specific_vol_derivs
 public EOS_init, EOS_end, EOS_allocate
 public EOS_use_linear
 public int_density_dz, int_specific_vol_dp
@@ -26,6 +38,8 @@ public int_density_dz_generic_plm, int_density_dz_generic_ppm
 public int_density_dz_generic_plm_analytic
 public find_depth_of_pressure_in_cell
 public calculate_TFreeze
+public convert_temp_salt_for_TEOS10
+public gsw_sp_from_sr, gsw_pt_from_ct
 
 !> Calculates density of sea water from T, S and P
 interface calculate_density
@@ -61,10 +75,14 @@ end type EOS_type
 integer, parameter :: EOS_LINEAR = 1
 integer, parameter :: EOS_UNESCO = 2
 integer, parameter :: EOS_WRIGHT = 3
+integer, parameter :: EOS_TEOS10 = 4
+integer, parameter :: EOS_NEMO   = 5
 
 character*(10), parameter :: EOS_LINEAR_STRING = "LINEAR"
 character*(10), parameter :: EOS_UNESCO_STRING = "UNESCO"
 character*(10), parameter :: EOS_WRIGHT_STRING = "WRIGHT"
+character*(10), parameter :: EOS_TEOS10_STRING = "TEOS10"
+character*(10), parameter :: EOS_NEMO_STRING   = "NEMO"
 character*(10), parameter :: EOS_DEFAULT = EOS_WRIGHT_STRING
 
 integer, parameter :: TFREEZE_LINEAR = 1
@@ -94,6 +112,10 @@ subroutine calculate_density_scalar(T, S, pressure, rho, EOS)
       call calculate_density_scalar_unesco(T, S, pressure, rho)
     case (EOS_WRIGHT)
       call calculate_density_scalar_wright(T, S, pressure, rho)
+    case (EOS_TEOS10)
+      call calculate_density_scalar_teos10(T, S, pressure, rho)
+    case (EOS_NEMO)
+      call calculate_density_scalar_nemo(T, S, pressure, rho)
     case default
       call MOM_error(FATAL, &
            "calculate_density_scalar: EOS is not valid.")
@@ -122,10 +144,15 @@ subroutine calculate_density_array(T, S, pressure, rho, start, npts, EOS)
       call calculate_density_array_unesco(T, S, pressure, rho, start, npts)
     case (EOS_WRIGHT)
       call calculate_density_array_wright(T, S, pressure, rho, start, npts)
+    case (EOS_TEOS10)
+      call calculate_density_array_teos10(T, S, pressure, rho, start, npts)
+    case (EOS_nemo)
+      call calculate_density_array_nemo  (T, S, pressure, rho, start, npts)
     case default
       call MOM_error(FATAL, &
            "calculate_density_array: EOS%form_of_EOS is not valid.")
   end select
+
 end subroutine calculate_density_array
 
 !> Calls the appropriate subroutine to calculate the freezing point for scalar inputs.
@@ -186,7 +213,7 @@ subroutine calculate_density_derivs(T, S, pressure, drho_dT, drho_dS, start, npt
   integer,            intent(in)  :: start !< Starting index within the array
   integer,            intent(in)  :: npts !< The number of values to calculate
   type(EOS_type),     pointer     :: EOS !< Equation of state structure
-
+  !!
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "calculate_density_derivs called with an unassociated EOS_type EOS.")
 
@@ -198,6 +225,10 @@ subroutine calculate_density_derivs(T, S, pressure, drho_dT, drho_dS, start, npt
       call calculate_density_derivs_unesco(T, S, pressure, drho_dT, drho_dS, start, npts)
     case (EOS_WRIGHT)
       call calculate_density_derivs_wright(T, S, pressure, drho_dT, drho_dS, start, npts)
+    case (EOS_TEOS10)
+      call calculate_density_derivs_teos10(T, S, pressure, drho_dT, drho_dS, start, npts)
+    case (EOS_NEMO)
+      call calculate_density_derivs_nemo(T, S, pressure, drho_dT, drho_dS, start, npts)
     case default
       call MOM_error(FATAL, &
            "calculate_density_derivs: EOS%form_of_EOS is not valid.")
@@ -235,6 +266,15 @@ subroutine calculate_specific_vol_derivs(T, S, pressure, dSV_dT, dSV_dS, start, 
       enddo
     case (EOS_WRIGHT)
       call calculate_specvol_derivs_wright(T, S, pressure, dSV_dT, dSV_dS, start, npts)
+    case (EOS_TEOS10)
+      call calculate_specvol_derivs_teos10(T, S, pressure, dSV_dT, dSV_dS, start, npts)
+    case (EOS_NEMO)
+      call calculate_density_nemo(T, S, pressure, rho, start, npts)
+      call calculate_density_derivs_nemo(T, S, pressure, drho_dT, drho_dS, start, npts)
+      do j=start,start+npts-1
+        dSV_dT(j) = -dRho_DT(j)/(rho(j)**2)
+        dSV_dS(j) = -dRho_DS(j)/(rho(j)**2)
+      enddo
     case default
       call MOM_error(FATAL, &
            "calculate_density_derivs: EOS%form_of_EOS is not valid.")
@@ -265,42 +305,16 @@ subroutine calculate_compress(T, S, pressure, rho, drho_dp, start, npts, EOS)
       call calculate_compress_unesco(T, S, pressure, rho, drho_dp, start, npts)
     case (EOS_WRIGHT)
       call calculate_compress_wright(T, S, pressure, rho, drho_dp, start, npts)
+    case (EOS_TEOS10)
+      call calculate_compress_teos10(T, S, pressure, rho, drho_dp, start, npts)
+    case (EOS_NEMO)
+      call calculate_compress_nemo(T, S, pressure, rho, drho_dp, start, npts)
     case default
       call MOM_error(FATAL, &
            "calculate_compress: EOS%form_of_EOS is not valid.")
   end select
 
 end subroutine calculate_compress
-
-!> Calls the appropriate subroutine to calculate density for two arrays.
-subroutine calculate_2_densities( T, S, pressure1, pressure2, rho1, rho2, start, npts, EOS)
-  real, dimension(:), intent(in)  :: T !< Potential temperature referenced to the surface (degC)
-  real, dimension(:), intent(in)  :: S !< Salinity (PSU)
-  real,               intent(in)  :: pressure1 !< Pressure (Pa)
-  real,               intent(in)  :: pressure2 !< A second pressure (Pa)
-  real, dimension(:), intent(out) :: rho1 !< Density at pressure1, in kg m-3.
-  real, dimension(:), intent(out) :: rho2 !< Density at pressure2, in kg m-3.
-  integer,            intent(in)  :: start !< Starting index within the array
-  integer,            intent(in)  :: npts !< The number of values to calculate
-  type(EOS_type),     pointer     :: EOS !< Equation of state structure
-
-  if (.not.associated(EOS)) call MOM_error(FATAL, &
-    "calculate_2_densities called with an unassociated EOS_type EOS.")
-
-  select case (EOS%form_of_EOS)
-    case (EOS_LINEAR)
-      call calculate_2_densities_linear(T, S, pressure1, pressure2, rho1, rho2, start, &
-                                        npts, EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS)
-    case (EOS_UNESCO)
-      call calculate_2_densities_unesco(T, S, pressure1, pressure2, rho1, rho2, start, npts)
-    case (EOS_WRIGHT)
-      call calculate_2_densities_wright(T, S, pressure1, pressure2, rho1, rho2, start, npts)
-    case default
-      call MOM_error(FATAL, &
-           "calculate_2_densities: EOS%form_of_EOS is not valid.")
-  end select
-
-end subroutine calculate_2_densities
 
 !> Calls the appropriate subroutine to alculate analytical and nearly-analytical
 !! integrals in pressure across layers of geopotential anomalies, which are
@@ -451,7 +465,7 @@ subroutine EOS_init(param_file, EOS)
   call get_param(param_file, mod, "EQN_OF_STATE", tmpstr, &
                  "EQN_OF_STATE determines which ocean equation of state \n"//&
                  "should be used.  Currently, the valid choices are \n"//&
-                 '"LINEAR", "UNESCO", and "WRIGHT". \n'//&
+                 '"LINEAR", "UNESCO", "WRIGHT", "NEMO" and "TEOS10". \n'//&
                  "This is only used if USE_EOS is true.", default=EOS_DEFAULT)
   select case (uppercase(tmpstr))
     case (EOS_LINEAR_STRING)
@@ -460,6 +474,10 @@ subroutine EOS_init(param_file, EOS)
       EOS%form_of_EOS = EOS_UNESCO
     case (EOS_WRIGHT_STRING)
       EOS%form_of_EOS = EOS_WRIGHT
+    case (EOS_TEOS10_STRING)
+      EOS%form_of_EOS = EOS_TEOS10
+    case (EOS_NEMO_STRING)
+      EOS%form_of_EOS = EOS_NEMO
     case default
       call MOM_error(FATAL, "interpret_eos_selection: EQN_OF_STATE "//&
                               trim(tmpstr) // "in input file is invalid.")
@@ -2090,6 +2108,45 @@ subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, &
   enddo ; enddo ; endif
 
 end subroutine int_spec_vol_dp_generic
+
+!> Convert T&S to Absolute Salinity and Conservative Temperature if using TEOS10
+subroutine convert_temp_salt_for_TEOS10(T, S, press, G, kd, mask_z, EOS)
+  use MOM_grid, only : ocean_grid_type
+  !> The horizontal index structure
+  type(ocean_grid_type),                      intent(in)  :: G
+
+  !> Potential temperature referenced to the surface (degC)
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)),  intent(inout)  :: T
+  !> Salinity (PSU)
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)),  intent(inout)  :: S
+  !> Pressure at the top of the layer in Pa.
+  real, dimension(:),                            intent(in)  :: press
+  !> Equation of state structure
+  type(EOS_type), pointer                                 :: EOS
+  !> 3d mask
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)),  intent(in)  :: mask_z 
+  integer,                                    intent(in)  :: kd
+  !
+  integer :: i,j,k
+  real :: gsw_sr_from_sp, gsw_ct_from_pt, gsw_sa_from_sp
+  real :: p
+
+  if (.not.associated(EOS)) call MOM_error(FATAL, &
+    "convert_temp_salt_to_TEOS10 called with an unassociated EOS_type EOS.")
+
+  if ((EOS%form_of_EOS .ne. EOS_TEOS10) .and. (EOS%form_of_EOS .ne. EOS_NEMO)) return
+
+  do k=1,kd ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
+    if (mask_z(i,j,k) .ge. 1.0) then
+     S(i,j,k) = gsw_sr_from_sp(S(i,j,k))
+!     p=press(k)/10000. !convert pascal to dbar
+!     S(i,j,k) = gsw_sa_from_sp(S(i,j,k),p,G%geoLonT(i,j),G%geoLatT(i,j))
+     T(i,j,k) = gsw_ct_from_pt(S(i,j,k),T(i,j,k))
+    endif
+  enddo; enddo; enddo
+end subroutine convert_temp_salt_for_TEOS10
+
+
 
 end module MOM_EOS
 
