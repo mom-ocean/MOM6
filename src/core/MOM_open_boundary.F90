@@ -117,6 +117,9 @@ type, public :: ocean_OBC_type
   logical :: user_BCs_set_globally = .false.          !< True if any OBC_CONFIG or OBC_VALUES_CONFIG
                                                       !! set for input from user directory.
   logical :: update_OBC = .false. !< Is the open boundary info going to get updated?
+  logical :: zero_vorticity = .false.                 !< If True, sets relative vorticity to zero on open boundaries.
+  logical :: freeslip_vorticity = .false.             !< If True, sets normal gradient of tangential velocity to zero
+                                                      !! in the relative vorticity on open boundaries.
   real :: g_Earth
   ! Properties of the segments used.
   type(OBC_segment_type), pointer, dimension(:) :: &
@@ -215,6 +218,16 @@ subroutine open_boundary_config(G, param_file, OBC)
   if (config1 .ne. "None" .or. config2 .ne. "None") OBC%user_BCs_set_globally = .true.
 
   if (OBC%number_of_segments > 0) then
+    call get_param(param_file, mod, "OBC_ZERO_VORTICITY", OBC%zero_vorticity, &
+                   "If true, sets relative vorticity to zero on open boundaries.", &
+                   default=.false.)
+    call get_param(param_file, mod, "OBC_FREESLIP_VORTICITY", OBC%freeslip_vorticity, &
+                   "If true, sets the normal gradient of tangential velocity to\n"// &
+                   "zero in the relative vorticity on open boundaries. This cannot\n"// &
+                   "be true if OBC_ZERO_VORTICITY is True.", default=.false.)
+    if (OBC%zero_vorticity .and. OBC%freeslip_vorticity) call MOM_error(FATAL, &
+                   "MOM_open_boundary.F90, open_boundary_config: "//&
+                   "Only one of OBC_ZERO_VORTICITY and OBC_FREESLIP_VORTICITY can be True at once.")
     ! Allocate everything
     ! Note the 0-segment is needed when %OBC_segment_u/v(:,:) = 0
     allocate(OBC%OBC_segment_number(0:OBC%number_of_segments))
