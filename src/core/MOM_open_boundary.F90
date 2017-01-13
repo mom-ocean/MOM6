@@ -120,6 +120,9 @@ type, public :: ocean_OBC_type
   logical :: zero_vorticity = .false.                 !< If True, sets relative vorticity to zero on open boundaries.
   logical :: freeslip_vorticity = .false.             !< If True, sets normal gradient of tangential velocity to zero
                                                       !! in the relative vorticity on open boundaries.
+  logical :: zero_strain = .false.                    !< If True, sets strain to zero on open boundaries.
+  logical :: freeslip_strain = .false.                !< If True, sets normal gradient of tangential velocity to zero
+                                                      !! in the strain on open boundaries.
   real :: g_Earth
   ! Properties of the segments used.
   type(OBC_segment_type), pointer, dimension(:) :: &
@@ -228,6 +231,16 @@ subroutine open_boundary_config(G, param_file, OBC)
     if (OBC%zero_vorticity .and. OBC%freeslip_vorticity) call MOM_error(FATAL, &
                    "MOM_open_boundary.F90, open_boundary_config: "//&
                    "Only one of OBC_ZERO_VORTICITY and OBC_FREESLIP_VORTICITY can be True at once.")
+    call get_param(param_file, mod, "OBC_ZERO_STRAIN", OBC%zero_strain, &
+                   "If true, sets the strain used in the stress tensor to zero on open boundaries.", &
+                   default=.false.)
+    call get_param(param_file, mod, "OBC_FREESLIP_STRAIN", OBC%freeslip_strain, &
+                   "If true, sets the normal gradient of tangential velocity to\n"// &
+                   "zero in the strain use in the stress tensor on open boundaries. This cannot\n"// &
+                   "be true if OBC_ZERO_STRAIN is True.", default=.false.)
+    if (OBC%zero_strain .and. OBC%freeslip_strain) call MOM_error(FATAL, &
+                   "MOM_open_boundary.F90, open_boundary_config: "//&
+                   "Only one of OBC_ZERO_STRAIN and OBC_FREESLIP_STRAIN can be True at once.")
     ! Allocate everything
     ! Note the 0-segment is needed when %OBC_segment_u/v(:,:) = 0
     allocate(OBC%OBC_segment_number(0:OBC%number_of_segments))

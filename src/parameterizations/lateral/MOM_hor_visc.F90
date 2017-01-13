@@ -259,6 +259,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     FrictWorkIntz ! depth integrated energy dissipated by lateral friction (W/m2)
 
   real, dimension(SZIB_(G),SZJB_(G)) :: &
+    dvdx, dudy, & ! components in the shearing strain (s-1)
     sh_xy,  &     ! horizontal shearing strain (du/dy + dv/dx) (1/sec) including metric terms
     str_xy, &     ! str_xy is the cross term in the stress tensor (H m2 s-2)
     bhstr_xy      ! A copy of str_xy that only contains the biharmonic contribution (H m2 s-2)
@@ -308,6 +309,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
 
   if (present(OBC)) then ; if (associated(OBC)) then ; if (OBC%OBC_pe) then
     apply_OBC = OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally
+    apply_OBC = .true.
   endif ; endif ; endif
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
@@ -360,18 +362,44 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                     CS%DX_dyT(i,j)*(G%IdxCv(i,J) * v(i,J,k) - &
                                     G%IdxCv(i,J-1)*v(i,J-1,k)))
     enddo ; enddo
-
+    ! Components for the shearing strain
+    do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
+      dvdx(I,J) = CS%DY_dxBu(I,J)*(v(i+1,J,k)*G%IdyCv(i+1,J) - v(i,J,k)*G%IdyCv(i,J))
+      dudy(I,J) = CS%DX_dyBu(I,J)*(u(I,j+1,k)*G%IdxCu(I,j+1) - u(I,j,k)*G%IdxCu(I,j))
+    enddo ; enddo
+    ! Adjust contributions to shearing strain on open boundaries.
+    if (apply_OBC) then ; if (OBC%zero_strain .or. OBC%freeslip_strain) then
+      do n=1,OBC%number_of_segments
+        if (OBC%OBC_segment_number(n)%is_N_or_S) then
+          J = OBC%OBC_segment_number(n)%HI%JsdB
+          do I=OBC%OBC_segment_number(n)%HI%IsdB,OBC%OBC_segment_number(n)%HI%IedB
+            if (OBC%zero_strain) then
+              dvdx(I,J) = 0.
+              dudy(I,J) = 0.
+            elseif (OBC%freeslip_strain) then
+              dudy(I,J) = 0.
+            endif
+          enddo
+        elseif (OBC%OBC_segment_number(n)%is_E_or_W) then
+          I = OBC%OBC_segment_number(n)%HI%IsdB
+          do J=OBC%OBC_segment_number(n)%HI%JsdB,OBC%OBC_segment_number(n)%HI%JedB
+            if (OBC%zero_strain) then
+              dvdx(I,J) = 0.
+              dudy(I,J) = 0.
+            elseif (OBC%freeslip_strain) then
+              dvdx(I,J) = 0.
+            endif
+          enddo
+        endif
+      enddo
+    endif ; endif
     if (CS%no_slip) then
       do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-        sh_xy(I,J) = (2.0-G%mask2dBu(I,J)) * &
-            (CS%DX_dyBu(I,J)*(u(I,j+1,k)*G%IdxCu(I,j+1) - u(I,j,k)*G%IdxCu(I,j)) + &
-             CS%DY_dxBu(I,J)*(v(i+1,J,k)*G%IdyCv(i+1,J) - v(i,J,k)*G%IdyCv(i,J)))
+        sh_xy(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx(I,J) + dudy(I,J) )
       enddo ; enddo
     else
       do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-        sh_xy(I,J) = G%mask2dBu(I,J) * &
-            (CS%DX_dyBu(I,J)*(u(I,j+1,k)*G%IdxCu(I,j+1) - u(I,j,k)*G%IdxCu(I,j)) + &
-             CS%DY_dxBu(I,J)*(v(i+1,J,k)*G%IdyCv(i+1,J) - v(i,J,k)*G%IdyCv(i,J)))
+        sh_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) + dudy(I,J) )
       enddo ; enddo
     endif
 
