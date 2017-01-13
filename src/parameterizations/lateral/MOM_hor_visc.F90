@@ -298,7 +298,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   logical :: apply_OBC = .false.
   logical :: use_MEKE_Ku
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
-  integer :: i, j, k
+  integer :: i, j, k, n
 
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -595,10 +595,18 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                                     CS%DX2q(I,J) *str_xy(I,J))) * &
                      G%IareaCu(I,j)) / (0.5*(h(i+1,j,k) + h(i,j,k)) + h_neglect)
 
-      if (apply_OBC) then ; if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
-        if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%radiation) diffu(I,j,k) = 0.0
-      endif ; endif
     enddo ; enddo
+    if (apply_OBC) then
+      ! This is not the right boundary condition
+      do n=1,OBC%number_of_segments
+        if (OBC%OBC_segment_number(n)%is_E_or_W) then
+          I = OBC%OBC_segment_number(n)%HI%IsdB
+          do j=OBC%OBC_segment_number(n)%HI%jsd,OBC%OBC_segment_number(n)%HI%jed
+            diffu(I,j,k) = 0.
+          enddo
+        endif
+      enddo
+    endif
 
 !  Evaluate 1/h y.Div(h Grad u) or the biharmonic equivalent.
     do J=Jsq,Jeq ; do i=is,ie
@@ -607,10 +615,18 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                        G%IdxCv(i,J)*(CS%DX2h(i,j) *str_xx(i,j) - &
                                     CS%DX2h(i,j+1)*str_xx(i,j+1))) * &
                      G%IareaCv(i,J)) / (0.5*(h(i,j+1,k) + h(i,j,k)) + h_neglect)
-      if (apply_OBC) then ; if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
-        if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%radiation) diffv(I,j,k) = 0.0
-      endif ; endif
     enddo ; enddo
+    if (apply_OBC) then
+      ! This is not the right boundary condition
+      do n=1,OBC%number_of_segments
+        if (OBC%OBC_segment_number(n)%is_N_or_S) then
+          J = OBC%OBC_segment_number(n)%HI%JsdB
+          do i=OBC%OBC_segment_number(n)%HI%isd,OBC%OBC_segment_number(n)%HI%ied
+            diffv(i,J,k) = 0.
+          enddo
+        endif
+      enddo
+    endif
 
     if (find_FrictWork) then ; do j=js,je ; do i=is,ie
     ! Diagnose   str_xx*d_x u - str_yy*d_y v + str_xy*(d_y u + d_x v)
