@@ -71,6 +71,8 @@ type, public :: OBC_segment_type
   logical :: values_needed  !< Whether or not external OBC fields are needed.
   logical :: legacy         !< Old code for tangential BT velocities.
   integer :: direction      !< Boundary faces one of the four directions.
+  logical :: is_N_or_S      !< True is the OB is facing North or South and exists on this PE.
+  logical :: is_E_or_W      !< True is the OB is facing East or West and exists on this PE.
   type(OBC_segment_data_type), pointer, dimension(:) :: field=>NULL()   !<  OBC data
   integer :: num_fields !< number of OBC data fields (e.g. u_normal,u_parallel and eta for Flather)
   character(len=32), pointer, dimension(:) :: field_names=>NULL() !< field names for this segment
@@ -214,6 +216,7 @@ subroutine open_boundary_config(G, param_file, OBC)
 
   if (OBC%number_of_segments > 0) then
     ! Allocate everything
+    ! Note the 0-segment is needed when %OBC_segment_u/v(:,:) = 0
     allocate(OBC%OBC_segment_number(0:OBC%number_of_segments))
     do l=0,OBC%number_of_segments
       OBC%OBC_segment_number(l)%Flather = .false.
@@ -225,6 +228,8 @@ subroutine open_boundary_config(G, param_file, OBC)
       OBC%OBC_segment_number(l)%values_needed = .false.
       OBC%OBC_segment_number(l)%legacy = .false.
       OBC%OBC_segment_number(l)%direction = OBC_NONE
+      OBC%OBC_segment_number(l)%is_N_or_S = .false.
+      OBC%OBC_segment_number(l)%is_E_or_W = .false.
       OBC%OBC_segment_number(l)%Tnudge_in = 0.0
       OBC%OBC_segment_number(l)%Tnudge_out = 0.0
     enddo
@@ -550,6 +555,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
     if (Js_obc>G%HI%JedB) return ! Segment is not on tile
 
     OBC%OBC_segment_number(l_seg)%on_pe = .true.
+    OBC%OBC_segment_number(l_seg)%is_E_or_W = .true.
 
     do j=G%HI%jsd, G%HI%jed
       if (j>Js_obc .and. j<=Je_obc) then
@@ -676,6 +682,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
     if (Is_obc>G%HI%IedB) return ! Segment is not on tile
 
     OBC%OBC_segment_number(l_seg)%on_pe = .true.
+    OBC%OBC_segment_number(l_seg)%is_N_or_S = .true.
 
 !    if (J_obc<G%HI%JsdB .or. J_obc>G%HI%JedB) return ! Boundary is not on tile
 !    if (max(Is_obc,Ie_obc)<G%HI%IsdB .or. min(Is_obc,Ie_obc)>G%HI%IedB) return ! Segment is not on tile
