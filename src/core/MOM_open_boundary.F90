@@ -207,7 +207,7 @@ subroutine open_boundary_config(G, param_file, OBC)
   call get_param(param_file, mod, "OBC_VALUES_CONFIG", config2, &
                  "A string that sets how the open boundary values are \n"//&
                  " configured: \n", default="None", do_not_log=.true.)
-  call get_param(param_file, mod, "NZ", OBC%ke, &
+  call get_param(param_file, mod, "NK", OBC%ke, &
                  "The number of model layers", default=0, do_not_log=.true.)
 
   if (config1 .ne. "None" .or. config2 .ne. "None") OBC%user_BCs_set_globally = .true.
@@ -1122,7 +1122,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
   real, parameter :: eps = 1.0e-20
 
   integer :: i, j, k, is, ie, js, je, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = OBC%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   if (.not.associated(OBC)) return
   if (.not.(OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally)) &
@@ -1473,7 +1473,7 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
     OBC_S_u => NULL(), &
     OBC_S_v => NULL()
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = OBC%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
@@ -1719,9 +1719,9 @@ subroutine fill_OBC_halos(G, GV, OBC, tv, h, tracer_Reg)
     OBC_S_u => NULL(), &
     OBC_S_v => NULL()
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = OBC%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  nz=OBC%ke
+  nz=G%ke
 
   if (.not. associated(OBC) .or. .not. associated(tv%T)) return
 
