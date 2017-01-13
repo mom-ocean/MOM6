@@ -330,7 +330,6 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
     ! New way
     isd = segment%HI%isd ; ied = segment%HI%ied
     JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
-    print *, 'DOME segment indices', isd, ied, JsdB, JedB
 !   do J=JsdB,JedB ; do i=isd,ied
 !     lon_im1 = 2.0*G%geoLonCv(i,J) - G%geoLonBu(I,J)
 !     segment%normal_trans(i,J,k) = tr_k * (exp(-2.0*(lon_im1 - 1000.0)/Def_Rad) -&
