@@ -387,7 +387,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
 !$OMP                               cdrag2,bottomFac2,MEKE_decay,barotrFac2,  &
 !$OMP                               use_drag_rate,dt,baroHu,baroHv) &
 !$OMP                       private(Kh_here,Inv_Kh_max,ldamping,advFac)
-    if (CS%MEKE_KH >= 0.0 .or. CS%MEKE_advection_factor >0.) then
+    if (CS%MEKE_KH >= 0.0 .or. CS%KhMEKE_FAC > 0.0 .or. CS%MEKE_advection_factor >0.0) then
       ! Lateral diffusion of MEKE
       Kh_here = max(0.,CS%MEKE_Kh)
 !$OMP do
