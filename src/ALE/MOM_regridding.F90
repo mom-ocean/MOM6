@@ -30,7 +30,7 @@ use regrid_consts, only : state_dependent, coordinateUnits
 use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
 use regrid_consts, only : REGRIDDING_RHO, REGRIDDING_SIGMA
-use regrid_consts, only : REGRIDDING_ARBITRARY
+use regrid_consts, only : REGRIDDING_ARBITRARY, REGRIDDING_SIGMA_SHELF_ZSTAR
 use regrid_consts, only : REGRIDDING_HYCOM1, REGRIDDING_SLIGHT
 
 use netcdf ! Used by check_grid_def()
@@ -156,9 +156,10 @@ public getCoordinateUnits, getCoordinateShortName, getStaticThickness
 public DEFAULT_COORDINATE_MODE
 
 !> Documentation for coordinate options
-character(len=320), parameter, public :: regriddingCoordinateModeDoc = &
+character(len=322), parameter, public :: regriddingCoordinateModeDoc = &
                  " LAYER - Isopycnal or stacked shallow water layers\n"//&
-                 " Z*    - stetched geopotential z*\n"//&
+                 " ZSTAR, Z* - stetched geopotential z*\n"//&
+                 " SIGMA_SHELF_ZSTAR - stetched geopotential z* ignoring shelf\n"//&
                  " SIGMA - terrain following coordinates\n"//&
                  " RHO   - continuous isopycnal\n"//&
                  " HYCOM1 - HyCOM-like hybrid coordinate\n"//&
@@ -821,11 +822,15 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_
 
     case ( REGRIDDING_ZSTAR )
       if (use_ice_shelf) then
-         call build_zstar_grid( CS, G, GV, h, dzInterface, frac_shelf_h )
+        call build_zstar_grid( CS, G, GV, h, dzInterface, frac_shelf_h )
       else
-         call build_zstar_grid( CS, G, GV, h, dzInterface )
+        call build_zstar_grid( CS, G, GV, h, dzInterface )
       endif
-         call calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
+      call calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
+
+    case ( REGRIDDING_SIGMA_SHELF_ZSTAR)
+      call build_zstar_grid( CS, G, GV, h, dzInterface )
+      call calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
 
     case ( REGRIDDING_SIGMA )
       call build_sigma_grid( CS, G, GV, h, dzInterface )
@@ -3065,7 +3070,7 @@ function uniformResolution(nk,coordMode,maxDepth,rhoLight,rhoHeavy)
   scheme = coordinateMode(coordMode)
   select case ( scheme )
 
-    case ( REGRIDDING_ZSTAR, REGRIDDING_HYCOM1, REGRIDDING_SLIGHT )
+    case ( REGRIDDING_ZSTAR, REGRIDDING_HYCOM1, REGRIDDING_SLIGHT, REGRIDDING_SIGMA_SHELF_ZSTAR )
       uniformResolution(:) = maxDepth / real(nk)
 
     case ( REGRIDDING_RHO )
@@ -3224,6 +3229,8 @@ function getCoordinateUnits( CS )
   select case ( CS%regridding_scheme )
     case ( REGRIDDING_ZSTAR, REGRIDDING_HYCOM1, REGRIDDING_SLIGHT )
       getCoordinateUnits = 'meter'
+    case ( REGRIDDING_SIGMA_SHELF_ZSTAR )
+      getCoordinateUnits = 'meter/fraction'
     case ( REGRIDDING_SIGMA )
       getCoordinateUnits = 'fraction'
     case ( REGRIDDING_RHO )
@@ -3249,6 +3256,8 @@ function getCoordinateShortName( CS )
       !getCoordinateShortName = 'z*'
       ! The following line is a temporary work around...  :(  -AJA
       getCoordinateShortName = 'pseudo-depth, -z*'
+    case ( REGRIDDING_SIGMA_SHELF_ZSTAR )
+      getCoordinateShortName = 'pseudo-depth, -z*/sigma'
     case ( REGRIDDING_SIGMA )
       getCoordinateShortName = 'sigma'
     case ( REGRIDDING_RHO )
@@ -3340,7 +3349,7 @@ function getStaticThickness( CS, SSH, depth )
   real :: z, dz
 
   select case ( CS%regridding_scheme )
-    case ( REGRIDDING_ZSTAR, REGRIDDING_HYCOM1, REGRIDDING_SLIGHT )
+    case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR, REGRIDDING_HYCOM1, REGRIDDING_SLIGHT )
       if (depth>0.) then
         z = ssh
         do k = 1, CS%nk

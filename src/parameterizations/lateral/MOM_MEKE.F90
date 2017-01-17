@@ -387,7 +387,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
 !$OMP                               cdrag2,bottomFac2,MEKE_decay,barotrFac2,  &
 !$OMP                               use_drag_rate,dt,baroHu,baroHv) &
 !$OMP                       private(Kh_here,Inv_Kh_max,ldamping,advFac)
-    if (CS%MEKE_KH >= 0.0 .or. CS%MEKE_advection_factor >0.) then
+    if (CS%MEKE_KH >= 0.0 .or. CS%KhMEKE_FAC > 0.0 .or. CS%MEKE_advection_factor >0.0) then
       ! Lateral diffusion of MEKE
       Kh_here = max(0.,CS%MEKE_Kh)
 !$OMP do
@@ -532,8 +532,18 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
     if (CS%id_GM_src>0) call post_data(CS%id_GM_src, MEKE%GM_src, CS%diag)
     if (CS%id_mom_src>0) call post_data(CS%id_mom_src, MEKE%mom_src, CS%diag)
     if (CS%id_Le>0) call post_data(CS%id_Le, LmixScale, CS%diag)
-    if (CS%id_gamma_b>0) call post_data(CS%id_gamma_b, sqrt(bottomFac2), CS%diag)
-    if (CS%id_gamma_t>0) call post_data(CS%id_gamma_t, sqrt(barotrFac2), CS%diag)
+    if (CS%id_gamma_b>0) then
+      do j=js,je ; do i=is,ie
+        bottomFac2(i,j) = sqrt(bottomFac2(i,j))
+      enddo ; enddo
+      call post_data(CS%id_gamma_b, bottomFac2, CS%diag)
+    endif
+    if (CS%id_gamma_t>0) then
+      do j=js,je ; do i=is,ie
+        barotrFac2(i,j) = sqrt(barotrFac2(i,j))
+      enddo ; enddo
+      call post_data(CS%id_gamma_t, barotrFac2, CS%diag)
+    endif
 
 ! else ! if MEKE%MEKE
 !   call MOM_error(FATAL, "MOM_MEKE: MEKE%MEKE is not associated!")
