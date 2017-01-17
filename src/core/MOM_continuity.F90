@@ -42,8 +42,8 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, &
                       uhbt_aux, vhbt_aux, u_cor_aux, v_cor_aux, BT_cont)
   type(ocean_grid_type), intent(inout)                     :: G   !< Ocean grid structure.
   type(verticalGrid_type), intent(in)                      :: GV  !< Vertical grid structure.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u   !< Zonal velocity, in m/s.
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v   !< Meridional velocity, in m/s.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u   !< Zonal velocity, in m/s.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v   !< Meridional velocity, in m/s.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: hin !< Initial layer thickness, in m or kg/m2.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h   !< Final layer thickness, in m or kg/m2.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: uh  !< Volume flux through zonal faces =
