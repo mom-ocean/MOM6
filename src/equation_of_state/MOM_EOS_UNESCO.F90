@@ -29,7 +29,7 @@ module MOM_EOS_UNESCO
 implicit none ; private
 
 public calculate_compress_UNESCO, calculate_density_UNESCO
-public calculate_density_derivs_UNESCO, calculate_2_densities_UNESCO
+public calculate_density_derivs_UNESCO
 public calculate_density_scalar_UNESCO, calculate_density_array_UNESCO
 
 interface calculate_density_UNESCO
@@ -255,59 +255,5 @@ subroutine calculate_compress_UNESCO(T, S, pressure, rho, drho_dp, start, npts)
   enddo
 end subroutine calculate_compress_UNESCO
 
-subroutine calculate_2_densities_UNESCO( T, S, pressure1, pressure2, rho1, rho2, start, npts)
-  real,    intent(in),  dimension(:) :: T, S
-  real,    intent(in)                :: pressure1, pressure2
-  real,    intent(out), dimension(:) :: rho1, rho2
-  integer, intent(in)                :: start, npts
-! *  This subroutine computes the densities of sea water (rho1 and     *
-! *  rho2) at two reference pressures (pressure1 and pressure2) from   *
-! *  salinity and potential temperature.                               *
-! *                                                                    *
-! * Arguments: T - potential temperature relative to the surface in C. *
-! *  (in)      S - salinity in PSU.                                    *
-! *  (in)      pressure1 - the first pressure in Pa.                   *
-! *  (in)      pressure2 -  the second pressure in Pa.                 *
-! *  (out)     rho1 - density at pressure1 in kg m-3.                  *
-! *  (out)     rho2 - density at pressure2 in kg m-3.                  *
-! *  (in)      start - the starting point in the arrays.               *
-! *  (in)      npts - the number of values to calculate.               *
-  real :: t_local, t2, t3, t4, t5; ! Temperature to the 1st - 5th power.
-  real :: s_local, s32, s2;     ! Salinity to the 1st, 3/2, & 2nd power.
-  real :: p1a, p2a;   ! Pressure1 (in bars) to the 1st and 2nd power.
-  real :: p1b, p2b;   ! Pressure2 (in bars) to the 1st and 2nd power.
-  real :: rho0;        ! Density at 1 bar pressure, in kg m-3.
-  real :: ksa, ksb;    ! The secant bulk modulus in bar.
-  real :: ks_0, ks_1, ks_2;
-  integer :: j
-
-  p1a = pressure1*1.0e-5; p2a = p1a*p1a;
-  p1b = pressure2*1.0e-5; p2b = p1b*p1b;
-
-  do j=start, start+npts-1
-    t_local = T(j); t2  = t_local*t_local; t3 = t_local*t2; t4 = t2*t2; t5 = t3*t2;
-    s_local = S(j); s2  = s_local*s_local; s32 = s_local*sqrt(s_local);
-
-!  Compute rho(s,theta,p=0) - (same as rho(s,t_insitu,p=0) ).
-
-    rho0 = R00 + R10*t_local + R20*t2 + R30*t3 + R40*t4 + R50*t5 + &
-           s_local*(R01 + R11*t_local + R21*t2 + R31*t3 + R41*t4) + &
-           s32*(R032 + R132*t_local + R232*t2) + R02*s2;
-
-!  Compute rho(s,theta,p), first calculating the secant bulk modulus.
-
-    ks_0 = S00 + S10*t_local + S20*t2 + S30*t3 + S40*t4 + &
-           s_local*(S01 + S11*t_local + S21*t2 + S31*t3) + s32*(S032 + S132*t_local + S232*t2);
-    ks_1 = Sp00 + Sp10*t_local + Sp20*t2 + Sp30*t3 + &
-           s_local*(Sp01 + Sp11*t_local + Sp21*t2) + Sp032*s32;
-    ks_2 = SP000 + SP010*t_local + SP020*t2 + s_local*(SP001 + SP011*t_local + SP021*t2);
-
-    ksa = ks_0 + p1a*ks_1 + p2a*ks_2;
-    ksb = ks_0 + p1b*ks_1 + p2b*ks_2;
-
-    rho1(j) = rho0*ksa / (ksa - p1a);
-    rho2(j) = rho0*ksb / (ksb - p1b);
-  enddo
-end subroutine calculate_2_densities_UNESCO
 
 end module MOM_EOS_UNESCO

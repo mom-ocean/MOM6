@@ -159,7 +159,8 @@ subroutine neutral_diffusion_diag_init(Time, G, diag, C_p, Reg, CS)
       cmor_standard_name=                                                                                              &
       'tendency_of_sea_water_potential_temperature_expressed_as_heat_content_due_to_parameterized_mesocale_diffusion', &
       cmor_long_name =                                                                                                 &
-      'Tendency of sea water potential temperature expressed as heat content due to parameterized mesocale diffusion') 
+      'Tendency of sea water potential temperature expressed as heat content due to parameterized mesocale diffusion', &
+      v_extensive=.true.)
   
       CS%id_neutral_diff_tracer_cont_tend_2d(n) = register_diag_field('ocean_model',                                                   &
       'ndiff_tracer_cont_tendency_2d_'//trim(Reg%Tr(n)%name), diag%axesT1, Time,                                                       &
@@ -194,7 +195,8 @@ subroutine neutral_diffusion_diag_init(Time, G, diag, C_p, Reg, CS)
       cmor_standard_name=                                                                                 &
       'tendency_of_sea_water_salinity_expressed_as_salt_content_due_to_parameterized_mesocale_diffusion', &
       cmor_long_name =                                                                                    &
-      'Tendency of sea water salinity expressed as salt content due to parameterized mesocale diffusion') 
+      'Tendency of sea water salinity expressed as salt content due to parameterized mesocale diffusion', &
+      v_extensive=.true.)
 
       CS%id_neutral_diff_tracer_cont_tend_2d(n) = register_diag_field('ocean_model',                                      &
       'ndiff_tracer_cont_tendency_2d_'//trim(Reg%Tr(n)%name), diag%axesT1, Time,                                          &
@@ -225,7 +227,7 @@ subroutine neutral_diffusion_diag_init(Time, G, diag, C_p, Reg, CS)
       CS%id_neutral_diff_tracer_cont_tend(n) = register_diag_field('ocean_model',&
       'ndiff_tracer_cont_tendency_'//trim(Reg%Tr(n)%name), diag%axesTL, Time,    &
       'Neutral diffusion tracer content tendency for '//trim(Reg%Tr(n)%name),    &
-      'tracer content * m-2 s-1')
+      'tracer content * m-2 s-1', v_extensive=.true.)
 
       CS%id_neutral_diff_tracer_cont_tend_2d(n) = register_diag_field('ocean_model',          &
       'ndiff_tracer_cont_tendency_2d_'//trim(Reg%Tr(n)%name), diag%axesTL, Time,              &

@@ -1135,13 +1135,13 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
 
   CS%id_masscello = register_diag_field('ocean_model', 'masscello', diag%axesTL,&
       Time, 'Mass per unit area of liquid ocean grid cell', 'kg m-2',           &
-      standard_name='sea_water_mass_per_unit_area')
+      standard_name='sea_water_mass_per_unit_area', v_extensive=.true.)
 
   CS%id_masso = register_scalar_field('ocean_model', 'masso', Time,  &
       diag, 'Mass of liquid ocean', 'kg', standard_name='sea_water_mass')
 
   CS%id_thkcello = register_diag_field('ocean_model', 'thkcello', diag%axesTL, Time, &
-      long_name = 'Cell Thickness', standard_name='cell_thickness', units='m')
+      long_name = 'Cell Thickness', standard_name='cell_thickness', units='m', v_extensive=.true.)
 
   if (((CS%id_masscello>0) .or. (CS%id_masso>0) .or. (CS%id_thkcello>0.and..not.GV%Boussinesq)) &
       .and. .not.ASSOCIATED(CS%diag_tmp3d)) then

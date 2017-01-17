@@ -65,7 +65,6 @@ use MOM_shortwave_abs, only : absorbRemainingSW, optics_type
 use MOM_variables,     only : thermo_var_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs
-use MOM_EOS, only : calculate_2_densities
 
 implicit none ; private
 
