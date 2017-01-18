@@ -113,7 +113,7 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
   if (present(mono_N2_column_fraction)) l_mono_N2_column_fraction = mono_N2_column_fraction
   l_mono_N2_depth = CS%mono_N2_depth
   if (present(mono_N2_depth)) l_mono_N2_depth = mono_N2_depth
-  calc_modal_structure = .false.
+  calc_modal_structure = l_use_ebt_mode
   if (present(modal_structure)) calc_modal_structure = .true.
 
   S => tv%S ; T => tv%T
@@ -432,7 +432,7 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
           cg1(i,j) = 0.0
           if (lam > 0.0) cg1(i,j) = 1.0 / sqrt(lam)
 
-          if (calc_modal_structure) then
+          if (present(modal_structure)) then
             if (mode_struct(1)/=0.) then ! Normalize
               mode_struct(1:kc) = mode_struct(1:kc) / mode_struct(1)
             else
@@ -442,12 +442,12 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
           endif
         else
           cg1(i,j) = 0.0
-          if (calc_modal_structure) modal_structure(i,j,:) = 0.
+          if (present(modal_structure)) modal_structure(i,j,:) = 0.
         endif
       endif ! cg1 /= 0.0
     else
       cg1(i,j) = 0.0 ! This is a land point.
-      if (calc_modal_structure) modal_structure(i,j,:) = 0.
+      if (present(modal_structure)) modal_structure(i,j,:) = 0.
     endif ; enddo ! i-loop
   enddo ! j-loop
 
