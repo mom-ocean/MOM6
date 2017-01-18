@@ -37,6 +37,7 @@ public radiation_open_bdry_conds
 public set_Flather_data
 public update_obc_segment_data
 public fill_OBC_halos
+public open_boundary_test_extern_uv
 
 integer, parameter, public :: OBC_NONE = 0, OBC_SIMPLE = 1, OBC_WALL = 2
 integer, parameter, public :: OBC_FLATHER = 3
@@ -1898,8 +1899,51 @@ subroutine allocate_OBC_segment_data(OBC, segment)
   endif
 end subroutine allocate_OBC_segment_data
 
-subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
+!> Set tangential velocities outside of open boundaries to silly values
+!! (used for checking the interior state is independent of values outside
+!! of the domain).
+subroutine open_boundary_test_extern_uv(G, OBC, u, v)
+  type(ocean_grid_type),                     intent(in)    :: G !< Ocean grid structure
+  type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary structure
+  real, dimension(SZIB_(G),SZJ_(G), SZK_(G)),intent(inout) :: u !< Zonal velocity (m/s)
+  real, dimension(SZI_(G),SZJB_(G), SZK_(G)),intent(inout) :: v !< Meridional velocity (m/s)
+  ! Local variables
+  integer :: i, j, k, n
+  real, parameter :: silly_value = 1.E40
 
+  if (.not. associated(OBC)) return
+
+  do n = 1, OBC%number_of_segments
+    do k = 1, G%ke
+      if (OBC%OBC_segment_number(n)%is_N_or_S) then
+        J = OBC%OBC_segment_number(n)%HI%JsdB
+        if (OBC%OBC_segment_number(n)%direction == OBC_DIRECTION_N) then
+          do I = OBC%OBC_segment_number(n)%HI%IsdB, OBC%OBC_segment_number(n)%HI%IedB
+            u(I,j+1,k) = silly_value
+          enddo
+        else
+          do I = OBC%OBC_segment_number(n)%HI%IsdB, OBC%OBC_segment_number(n)%HI%IedB
+            u(I,j,k) = silly_value
+          enddo
+        endif
+      elseif (OBC%OBC_segment_number(n)%is_E_or_W) then
+        I = OBC%OBC_segment_number(n)%HI%IsdB
+        if (OBC%OBC_segment_number(n)%direction == OBC_DIRECTION_E) then
+          do J = OBC%OBC_segment_number(n)%HI%JsdB, OBC%OBC_segment_number(n)%HI%JedB
+            v(i+1,J,k) = silly_value
+          enddo
+        else
+          do J = OBC%OBC_segment_number(n)%HI%JsdB, OBC%OBC_segment_number(n)%HI%JedB
+            v(i,J,k) = silly_value
+          enddo
+        endif
+      endif
+    enddo
+  enddo
+
+end subroutine open_boundary_test_extern_uv
+
+subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
   type(ocean_grid_type),                     intent(in)    :: G !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV !<  Ocean vertical grid structure
   type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary structure
