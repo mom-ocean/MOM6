@@ -617,7 +617,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       ! Computing stability scale which correlates with TKE for mixing, where
       ! TKE for mixing = TKE production minus TKE dissipation
       Stab_Scale = -u_star**2 / ( VonKar * ( C_MO * B_STAR +  C_EK * u_star * absf(i)))
-      
+
       if (CS%Use_Mstar_Fixed) then
         mech_TKE(i) = (dt*CS%mstar*GV%Rho0)*((U_Star**3))
         conv_PErel(i) = 0.0

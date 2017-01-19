@@ -672,7 +672,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
               !   vol = 0.5*L^2*(slope + a/3*(3-4L))
 
               !  Vol_err = 0.5*(L(K+1)*L(K+1))*(slope + a_3*(3.0-4.0*L(K+1))) - vol_below
-              ! Change to ... 
+              ! Change to ...
               !   if (min(Vol_below + Vol_err, vol) <= Vol_direct) then ?
               if (vol_below + Vol_err <= Vol_direct) then
                 L0 = L_direct ; Vol_0 = Vol_direct
@@ -1311,9 +1311,9 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
          if (CS%omega_frac >= 1.0) then ; absf = 2.0*CS%omega ; else
            absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
            if (CS%omega_frac > 0.0) &
-             absf = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf**2)        
+             absf = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf**2)
          endif
- 
+
          U_Star = max(CS%ustar_min, 0.5 * (fluxes%ustar(i,j) + fluxes%ustar(i,j+1)))
          Idecay_len_TKE(i) = ((absf / U_Star) * CS%TKE_decay) * H_to_m
 
@@ -1564,7 +1564,7 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
 
   call get_param(param_file, mod, "ADIABATIC", adiabatic, default=.false., &
                  do_not_log=.true.)
-  use_kappa_shear = .false. ; use_CVMix = .false. ; 
+  use_kappa_shear = .false. ; use_CVMix = .false. ;
   useKPP = .false. ; useEPBL = .false.
   if (.not.adiabatic) then
     use_kappa_shear = kappa_shear_is_used(param_file)

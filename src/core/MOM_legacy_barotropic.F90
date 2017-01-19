@@ -3759,7 +3759,7 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, C
     CS%debug_BT_HI%IedB=CS%iedw
     CS%debug_BT_HI%JsdB=CS%jsdw-1
     CS%debug_BT_HI%JedB=CS%jedw
-    
+
   endif
 
   ! IareaT, IdxCu, and IdyCv need to be allocated with wide halos.

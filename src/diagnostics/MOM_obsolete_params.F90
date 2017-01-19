@@ -70,7 +70,7 @@ subroutine find_obsolete_params(param_file)
     call MOM_ERROR(FATAL, "find_obsolete_params: "// &
          "TEMPERATURE is an obsolete run-time flag.  Use ENABLE_THERMODYNAMICS instead.")
   endif ; endif
-  
+
   test_logic = test_logic3 ; call read_param(param_file,"NONLINEAR_EOS",test_logic)
   if (test_logic .neqv. test_logic3) then
     call MOM_error(WARNING, "find_obsolete_params: "// &
@@ -224,7 +224,7 @@ subroutine obsolete_logical(param_file, varname, warning_val, hint)
            " is an obsolete run-time flag. "//trim(hint_msg))
     endif
   endif
-  
+
 end subroutine obsolete_logical
 
 !> Test for presence of obsolete STRING in parameter file.
@@ -234,10 +234,10 @@ subroutine obsolete_char(param_file, varname, hint)
   character(len=*), optional, intent(in) :: hint  !< A hint to the user about what to do.
   ! Local variables
   character(len=200) :: test_string, hint_msg
-  
+
   test_string = ''; call read_param(param_file, varname, test_string)
   hint_msg = " " ; if (present(hint)) hint_msg = hint
-  
+
   if (len_trim(test_string) > 0) call MOM_ERROR(FATAL,                 &
            "MOM_obsolete_params: "//trim(varname)//                    &
            " is an obsolete run-time flag, and should not be used. "// &
@@ -254,11 +254,11 @@ subroutine obsolete_real(param_file, varname, warning_val, hint)
   ! Local variables
   real :: test_val, warn_val
   character(len=128) :: hint_msg
-  
+
   test_val = -9e35; call read_param(param_file, varname, test_val)
   warn_val = -9e35; if (present(warning_val)) warn_val = warning_val
   hint_msg = " " ; if (present(hint)) hint_msg = hint
-  
+
   if (test_val /= -9e35) then
     if (test_val == warn_val) then
       call MOM_ERROR(WARNING, "MOM_obsolete_params: "//trim(varname)// &
@@ -280,11 +280,11 @@ subroutine obsolete_int(param_file, varname, warning_val, hint)
   ! Local variables
   integer :: test_val, warn_val
   character(len=128) :: hint_msg
-  
+
   test_val = -123456788; call read_param(param_file, varname, test_val)
   warn_val = -123456788; if (present(warning_val)) warn_val = warning_val
   hint_msg = " " ; if (present(hint)) hint_msg = hint
-  
+
   if (test_val /= -123456788) then
     if (test_val == warn_val) then
       call MOM_ERROR(WARNING, "MOM_obsolete_params: "//trim(varname)// &

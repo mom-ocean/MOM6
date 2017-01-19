@@ -33,7 +33,7 @@ type, public :: offline_transport_CS
   character(len=200) :: & !         ! Names of input files
     snap_file,  &
     sum_file
-  character(len=20)  :: redistribute_method  
+  character(len=20)  :: redistribute_method
   logical :: fields_are_offset ! True if the time-averaged fields and snapshot fields are
                                ! offset by one time level
   !> Variables controlling some of the numerical considerations of offline transport
@@ -47,7 +47,7 @@ type, public :: offline_transport_CS
   integer :: &
     id_uhtr_preadv = -1, &
     id_vhtr_preadv = -1, &
-  !> Diagnostic manager IDs for some fields that may be of interest when doing offline transport  
+  !> Diagnostic manager IDs for some fields that may be of interest when doing offline transport
     id_uhr = -1, &
     id_vhr = -1, &
     id_ear = -1, &
@@ -220,7 +220,7 @@ subroutine register_diags_offline_transport(Time, diag, CS)
   CS%id_uhr = register_diag_field('ocean_model', 'uhr', diag%axesCuL, Time, &
     'Zonal thickness fluxes remaining at end of timestep', 'kg')
   CS%id_uhr_redist = register_diag_field('ocean_model', 'uhr_redist', diag%axesCuL, Time, &
-    'Zonal thickness fluxes to be redistributed vertically', 'kg')  
+    'Zonal thickness fluxes to be redistributed vertically', 'kg')
 
   ! V-cell fields
   CS%id_vhr = register_diag_field('ocean_model', 'vhr', diag%axesCvL, Time, &
@@ -238,7 +238,7 @@ subroutine register_diags_offline_transport(Time, diag, CS)
   CS%id_eta_diff = register_diag_field('ocean_model','eta_diff', diag%axesT1, Time, &
     'Difference in total water column height from online and offline','m')
   CS%id_h_redist = register_diag_field('ocean_model','h_redist', diag%axesTL, Time, &
-    'Layer thicknesses before redistribution of mass fluxes','m')  
+    'Layer thicknesses before redistribution of mass fluxes','m')
 
 end subroutine register_diags_offline_transport
 
@@ -292,7 +292,7 @@ subroutine offline_transport_init(param_file, CS, diabatic_aux_CSp, G, GV)
     "evenly distributes flux throughout the entire water column,\n"//&
     "'upwards' which adds the maximum of the remaining flux in\n"//&
     "each layer above, and 'none' which does no redistribution", &
-    default='barotropic')  
+    default='barotropic')
   call get_param(param_file, mod, "NUM_OFF_ITER", CS%num_off_iter, &
     "Number of iterations to subdivide the offline tracer advection and diffusion" )
   call get_param(param_file, mod, "DT_OFFLINE", CS%dt_offline, &
@@ -568,7 +568,7 @@ subroutine distribute_residual_uh_barotropic(G, GV, h, uh)
       endif
     enddo
 
-    ! Update layer thicknesses at the end 
+    ! Update layer thicknesses at the end
     do k=1,nz ; do i=is-2,ie+1
       h(i,j,k) = h(i,j,k) + (uh2d(I-1,k) - uh2d(I,k))/G%areaT(i,j)
     enddo ; enddo
@@ -636,7 +636,7 @@ subroutine distribute_residual_vh_barotropic(G, GV, h, vh)
     enddo
 
 
-    ! Update layer thicknesses at the end 
+    ! Update layer thicknesses at the end
     do k=1,nz ; do j=js-2,je+1
       h(i,j,k) = h(i,j,k) + (vh2d(J-1,k) - vh2d(J,k))/G%areaT(i,j)
     enddo ; enddo
@@ -678,26 +678,26 @@ subroutine distribute_residual_uh_upwards(G, GV, h, uh)
       h2d(i,k) = max(h(i,j,k)*G%areaT(i,j)-min_h*G%areaT(i,j),min_h*G%areaT(i,j))
     enddo ; enddo
 
-    do i=is-1,ie 
+    do i=is-1,ie
       uh_sum = sum(uh2d(I,:))
       do k=1,nz
-        uh_remain = uh2d(I,k) 
+        uh_remain = uh2d(I,k)
         uh_neglect = GV%H_subroundoff*min(G%areaT(i,j),G%areaT(i+1,j))
 
         if(uh_remain<-uh_neglect) then
-          ! Set the mass flux to zero. This will be refilled in the first iteration 
+          ! Set the mass flux to zero. This will be refilled in the first iteration
           uh2d(I,k) = 0.0
 
           do k_rev=k,1,-1
             ! Calculate the lower bound of uh(I)
             hlos = max(uh2d(I+1,k_rev),0.0)
-            ! This lower bound is deliberately conservative to ensure that nothing will be left after 
+            ! This lower bound is deliberately conservative to ensure that nothing will be left after
             uh_LB = min(-0.5*h2d(i+1,k_rev), -0.5*hlos, 0.0)
               ! Calculate the maximum amount that could be added
               uh_max = uh_LB-uh2d(I,k_rev)
               ! Calculate how much will actually be added to uh(I)
               uh_add = max(uh_max,uh_remain)
-              ! Reduce the remaining flux 
+              ! Reduce the remaining flux
               uh_remain = uh_remain - uh_add
               uh2d(I,k_rev) = uh2d(I,k_rev) + uh_add
               if(uh2d(I,k_rev)==uh_LB) filled(k_rev)=.true.
@@ -705,7 +705,7 @@ subroutine distribute_residual_uh_upwards(G, GV, h, uh)
           enddo
 
         elseif (uh_remain>uh_neglect) then
-          ! Set the amount in the layer with remaining fluxes to zero. This will be reset 
+          ! Set the amount in the layer with remaining fluxes to zero. This will be reset
           ! in the first iteration of the redistribution loop
           uh2d(I,k) = 0.0
           ! Loop to distribute remaining flux in layers above
@@ -717,7 +717,7 @@ subroutine distribute_residual_uh_upwards(G, GV, h, uh)
             uh_max = uh_UB-uh2d(I,k_rev)
             ! Calculate how much will actually be added to uh(I)
             uh_add = min(uh_max,uh_remain)
-            ! Reduce the remaining flux 
+            ! Reduce the remaining flux
             uh_remain = uh_remain - uh_add
             uh2d(I,k_rev) = uh2d(I,k_rev) + uh_add
             if(uh_remain<uh_neglect) exit
@@ -736,7 +736,7 @@ subroutine distribute_residual_uh_upwards(G, GV, h, uh)
 
     enddo
 
-    ! Update layer thicknesses at the end 
+    ! Update layer thicknesses at the end
     do k=1,nz ; do i=is,ie
       h(i,j,k) = (h(i,j,k)*G%areaT(i,j) + (uh2d(I-1,k) - uh2d(I,k)))/G%areaT(i,j)
     enddo ; enddo
@@ -781,10 +781,10 @@ subroutine distribute_residual_vh_upwards(G, GV, h, vh)
     do j=js,je
       vh_sum=sum(vh2d(J,:))
       do k=1,nz
-        vh_remain = vh2d(J,k) 
+        vh_remain = vh2d(J,k)
         vh_neglect = GV%H_subroundoff*min(G%areaT(i,j),G%areaT(i,j+1))
         if(vh_remain<0.0) then
-          ! Set the amount in the layer with remaining fluxes to zero. This will be reset 
+          ! Set the amount in the layer with remaining fluxes to zero. This will be reset
           ! in the first iteration of the redistribution loop
           vh2d(J,k) = 0.0
           do k_rev=k,1,-1
@@ -795,14 +795,14 @@ subroutine distribute_residual_vh_upwards(G, GV, h, vh)
             vh_max = vh_LB-vh2d(J,k_rev)
             ! Calculate how much will actually be added to uh(I)
             vh_add = max(vh_max,vh_remain)
-            ! Reduce the remaining flux 
+            ! Reduce the remaining flux
             vh_remain = vh_remain - vh_add
             vh2d(J,k_rev) = vh2d(J,k_rev) + vh_add
             if(vh_remain>-vh_neglect) exit
 
           enddo
         elseif (vh_remain>0.0) then
-          ! Set the amount in the layer with remaining fluxes to zero. This will be reset 
+          ! Set the amount in the layer with remaining fluxes to zero. This will be reset
           ! in the first iteration of the redistribution loop
           vh2d(J,k) = 0
           ! Loop to distribute remaining flux in layers above
@@ -814,7 +814,7 @@ subroutine distribute_residual_vh_upwards(G, GV, h, vh)
             vh_max = vh_UB-vh2d(J,k_rev)
             ! Calculate how much will actually be added to uh(I)
             vh_add = min(vh_max,vh_remain)
-            ! Reduce the remaining flux 
+            ! Reduce the remaining flux
             vh_remain = vh_remain - vh_add
             vh2d(J,k_rev) = vh2d(J,k_rev) + vh_add
             if(vh_remain<vh_neglect) exit
@@ -827,11 +827,11 @@ subroutine distribute_residual_vh_upwards(G, GV, h, vh)
             call MOM_error(WARNING,"Water column cannot accommodate UH redistribution. Tracer will not be conserved")
           endif
         endif
-      enddo 
+      enddo
 
     enddo
 
-    ! Update layer thicknesses at the end 
+    ! Update layer thicknesses at the end
     do k=1,nz ; do j=js,je
       h(i,j,k) = (h(i,j,k)*G%areaT(i,j) + (vh2d(J-1,k) - vh2d(J,k)))/G%areaT(i,j)
     enddo ; enddo
@@ -841,7 +841,7 @@ subroutine distribute_residual_vh_upwards(G, GV, h, vh)
   enddo
 
 end subroutine distribute_residual_vh_upwards
-  
+
 !> \namespace mom_offline_transport
 !! \section offline_overview Offline Tracer Transport in MOM6
 !!  'Offline tracer modeling' uses physical fields (e.g. mass transports and layer thicknesses) saved
@@ -855,11 +855,11 @@ end subroutine distribute_residual_vh_upwards
 !!  frequency. For example, consider the case of a surface boundary layer with a strong diurnal cycle.
 !!  An offline simulation with a 1 day timestep, captures the net transport into or out of that layer,
 !!  but not the exact cycling. This effective aliasing may also complicate online model configurations
-!!  which strongly-eddying regions. In this case, the offline model timestep must be limited to some 
-!!  fraction of the eddy correlation timescale. Lastly, the nonlinear advection scheme which applies 
+!!  which strongly-eddying regions. In this case, the offline model timestep must be limited to some
+!!  fraction of the eddy correlation timescale. Lastly, the nonlinear advection scheme which applies
 !!  limited mass-transports over a sequence of iterations means that tracers are not transported along
 !!  exactly the same path as they are in the online model.
-!!  
+!!
 !!  This capability has currently targeted the Baltic_ALE_z test case, though some work has also been
 !!  done with the OM4 1/2 degree configuration. Work is ongoing to develop recommendations and best
 !!  practices for investigators seeking to use MOM6 for offline tracer modeling.
@@ -890,7 +890,7 @@ end subroutine distribute_residual_vh_upwards
 !!        END ITERATION
 !!        -#  Repeat steps 1 and 2
 !!        -#  Redistribute any residual mass fluxes that remain after the advection iterations
-!!            in a barotropic manner, progressively upward through the water column.  
+!!            in a barotropic manner, progressively upward through the water column.
 !!        -#  Force a remapping to the stored layer thicknesses that correspond to the snapshot of
 !!            the online model at the end of an accumulation interval
 !!        -#  Reset T/S and h to their stored snapshotted values to prevent model drift
@@ -920,6 +920,6 @@ end subroutine distribute_residual_vh_upwards
 !!                          Options are 'barotropic' which "evenly distributes flux throughout the entire water
 !!                          column,'upwards' which adds the maximum of the remaining flux in each layer above,
 !!                          and 'none' which does no redistribution"
-  
+
 end module MOM_offline_transport
 
