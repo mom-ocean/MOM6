@@ -1129,7 +1129,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
     ! SW penetrative heating uses the updated thickness from above.
 
     ! Save temperature before increment with SW heating
-    ! and initialize CS%penSWflux_diag to zero.  
+    ! and initialize CS%penSWflux_diag to zero.
     if(CS%id_penSW_diag > 0 .or. CS%id_penSWflux_diag > 0) then
       do k=1,nz ; do i=is,ie
         CS%penSW_diag(i,j,k)     = T2d(i,k)
@@ -1161,25 +1161,25 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
     enddo ; enddo
 
     ! Diagnose heating (W/m2) applied to a grid cell from SW penetration
-    ! Also diagnose the penetrative SW heat flux at base of layer.  
+    ! Also diagnose the penetrative SW heat flux at base of layer.
     if(CS%id_penSW_diag > 0 .or. CS%id_penSWflux_diag > 0) then
 
-      ! convergence of SW into a layer 
+      ! convergence of SW into a layer
       do k=1,nz ; do i=is,ie
         CS%penSW_diag(i,j,k) = (T2d(i,k)-CS%penSW_diag(i,j,k))*h(i,j,k) * Idt * tv%C_p * GV%H_to_kg_m2
       enddo ; enddo
 
-      ! Perform a cumulative sum upwards from bottom to 
-      ! diagnose penetrative SW flux at base of tracer cell. 
-      ! CS%penSWflux_diag(i,j,k=1)    is penetrative shortwave at top of ocean.  
-      ! CS%penSWflux_diag(i,j,k=kbot+1) is zero, since assume no SW penetrates rock. 
+      ! Perform a cumulative sum upwards from bottom to
+      ! diagnose penetrative SW flux at base of tracer cell.
+      ! CS%penSWflux_diag(i,j,k=1)    is penetrative shortwave at top of ocean.
+      ! CS%penSWflux_diag(i,j,k=kbot+1) is zero, since assume no SW penetrates rock.
       ! CS%penSWflux_diag = rsdo  and CS%penSW_diag = rsdoabsorb
       ! rsdoabsorb(k) = rsdo(k) - rsdo(k+1), so that rsdo(k) = rsdo(k+1) + rsdoabsorb(k)
       if(CS%id_penSWflux_diag > 0) then
         do k=nz,1,-1 ; do i=is,ie
           CS%penSWflux_diag(i,j,k) = CS%penSW_diag(i,j,k) + CS%penSWflux_diag(i,j,k+1)
         enddo ; enddo
-      endif 
+      endif
 
     endif
 

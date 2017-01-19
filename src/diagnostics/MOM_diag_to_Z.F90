@@ -124,7 +124,7 @@ function global_z_mean(var,G,CS,tracer)
   real, dimension(CS%nk_zspace)                    :: global_z_mean, scalarij, weightij
   real, dimension(CS%nk_zspace)                    :: global_temp_scalar, global_weight_scalar
   integer :: i, j, k, is, ie, js, je, nz, tracer
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; 
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ;
   nz = CS%nk_zspace
 
   ! Initialize local arrays
@@ -144,7 +144,7 @@ function global_z_mean(var,G,CS,tracer)
 
     ! If the point is flagged, set the variable itsef to zero to avoid NaNs
     if (valid_point(i,j,k) == 0.) localVar(i,j,k) = 0.
- 
+
     weight(i,j,k)  =  depth_weight(i,j,k) * ( (valid_point(i,j,k) * (G%areaT(i,j) * G%mask2dT(i,j))) )
     tmpForSumming(i,j,k) =  localVar(i,j,k) * weight(i,j,k)
   enddo ; enddo ; enddo
@@ -173,13 +173,13 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, dt, G, GV, CS)
   real,                                      intent(in)    :: dt
   type(diag_to_Z_CS),                        pointer       :: CS
 
-! This subroutine maps tracers and velocities into depth space for diagnostics. 
+! This subroutine maps tracers and velocities into depth space for diagnostics.
 
-! Arguments: 
+! Arguments:
 !  (in)  u   - zonal velocity component (m/s)
 !  (in)  v   - meridional velocity component (m/s)
 !  (in)  h   - layer thickness (meter or kg/m2)
-!  (in)  ssh_in - sea surface height (meter or kg/m2) 
+!  (in)  ssh_in - sea surface height (meter or kg/m2)
 !  (in)  dt  - time difference in sec since last call to this subroutine
 !  (in)  G   - ocean grid structure
 !  (in)  GV  - The ocean's vertical grid structure.
@@ -236,14 +236,14 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, dt, G, GV, CS)
   ! If no fields are needed, return
   if ((CS%id_u_z <= 0) .and. (CS%id_v_z <= 0) .and. (CS%num_tr_used < 1)) return
 
-  ! zonal velocity component 
+  ! zonal velocity component
   if (CS%id_u_z > 0) then
 
     do kz=1,CS%nk_zspace ; do j=js,je ; do I=Isq,Ieq
       CS%u_z(I,j,kz) = CS%missing_vel
     enddo ; enddo ; enddo
 
-    
+
     do j=js,je
       shelf_depth(:) = 0. ! initially all is open ocean
       ! Remove all massless layers.
@@ -267,8 +267,8 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, dt, G, GV, CS)
         ! no-slip BBC in the output, if anything but piecewise constant is used.
         nk_valid(I) = nk_valid(I) + 1 ; k2 = nk_valid(I)
         h_f(k2,I) = Angstrom ; u_f(k2,I) = 0.0
-        ! GM: D_pt is always slightly larger (by 1E-6 or so) than shelf_depth, so 
-        ! I consider that the ice shelf is grounded when 
+        ! GM: D_pt is always slightly larger (by 1E-6 or so) than shelf_depth, so
+        ! I consider that the ice shelf is grounded when
         ! shelf_depth(I) + 1.0E-3 > D_pt(i)
         if (ice_shelf .and. shelf_depth(I) + 1.0E-3 > D_pt(i)) nk_valid(I)=0
       endif ; enddo
@@ -277,7 +277,7 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, dt, G, GV, CS)
       do I=Isq,Ieq ; if (nk_valid(I) > 0) then
       ! Calculate the z* interface heights for tracers.
         htot = 0.0 ; do k=1,nk_valid(i) ; htot = htot + h_f(k,i) ; enddo
-        dilate = 0.0  
+        dilate = 0.0
         if (htot*GV%H_to_m > 2.0*Angstrom) then
            dilate = MAX((D_pt(i) - shelf_depth(i)),Angstrom)/htot
         endif
@@ -332,11 +332,11 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, dt, G, GV, CS)
         enddo ! kz-loop
       endif ; enddo ! I-loop and mask
     enddo ! j-loop
-    
+
     call post_data(CS%id_u_z, CS%u_z, CS%diag)
   endif
 
-  ! meridional velocity component 
+  ! meridional velocity component
   if (CS%id_v_z > 0) then
     do kz=1,CS%nk_zspace ; do J=Jsq,Jeq ; do i=is,ie
       CS%v_z(i,J,kz) = CS%missing_vel
@@ -370,9 +370,9 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, dt, G, GV, CS)
       do i=is,ie ; if (nk_valid(i) > 0) then
       ! Calculate the z* interface heights for tracers.
         htot = 0.0 ; do k=1,nk_valid(i) ; htot = htot + h_f(k,i) ; enddo
-        dilate = 0.0 
+        dilate = 0.0
         if (htot > 2.0*Angstrom) then
-           dilate = MAX((D_pt(i) - shelf_depth(i)),Angstrom)/htot 
+           dilate = MAX((D_pt(i) - shelf_depth(i)),Angstrom)/htot
         endif
         e(nk_valid(i)+1) = -D_pt(i)
         do k=nk_valid(i),1,-1 ; e(K) = e(K+1) + h_f(k,i)*dilate ; enddo
@@ -423,13 +423,13 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, dt, G, GV, CS)
           enddo ! kz-loop
       endif ; enddo ! i-loop and mask
     enddo ! J-loop
-    
+
     call post_data(CS%id_v_z, CS%v_z, CS%diag)
   endif
 
-  ! tracer concentrations 
+  ! tracer concentrations
   if (CS%num_tr_used > 0) then
-  
+
     do m=1,CS%num_tr_used ; do kz=1,CS%nk_zspace ; do j=js,je ; do i=is,ie
       CS%tr_z(m)%p(i,j,kz) = CS%missing_tr(m)
     enddo ; enddo ; enddo ; enddo
@@ -437,8 +437,8 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, dt, G, GV, CS)
     do j=js,je
       shelf_depth(:) = 0.0 ! initially all is open ocean
       ! Remove all massless layers.
-      do i=is,ie  
-        nk_valid(i) = 0 ; D_pt(i) = G%bathyT(i,j) 
+      do i=is,ie
+        nk_valid(i) = 0 ; D_pt(i) = G%bathyT(i,j)
         if (ice_shelf) then
           if (frac_shelf_h(i,j) > 0.) then ! under shelf
             shelf_depth(i) = abs(ssh(i,j))
@@ -457,9 +457,9 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, dt, G, GV, CS)
       do i=is,ie ; if (nk_valid(i) > 0) then
       ! Calculate the z* interface heights for tracers.
         htot = 0.0 ;  do k=1,nk_valid(i) ; htot = htot + h_f(k,i) ; enddo
-        dilate = 0.0 
+        dilate = 0.0
         if (htot > 2.0*Angstrom) then
-           dilate = MAX((D_pt(i) - shelf_depth(i)),Angstrom)/htot   
+           dilate = MAX((D_pt(i) - shelf_depth(i)),Angstrom)/htot
         endif
         e(nk_valid(i)+1) = -D_pt(i)
         do k=nk_valid(i),1,-1 ; e(K) = e(K+1) + h_f(k,i)*dilate ; enddo
@@ -506,7 +506,7 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, dt, G, GV, CS)
       endif ; enddo ! i-loop and mask
 
     enddo ! j-loop
-    
+
     do m=1,CS%num_tr_used
       if (CS%id_tr(m) > 0) call post_data(CS%id_tr(m), CS%tr_z(m)%p, CS%diag)
       if (CS%id_tr_xyave(m) > 0) then
@@ -530,7 +530,7 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, GV, CS)
 
 !   This subroutine maps horizontal transport into depth space for diagnostic output.
 
-! Arguments: 
+! Arguments:
 !  (in)      uh_int - time integrated zonal transport (m3 or kg)
 !  (in)      vh_int - time integrated meridional transport (m3 or kg)
 !  (in)      h      - layer thickness (meter or kg/m2)
@@ -594,7 +594,7 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, GV, CS)
     dilate(i,j) = G%bathyT(i,j) / htot(i,j)
   enddo ; enddo
 
-  ! zonal transport 
+  ! zonal transport
   if (CS%id_uh_Z > 0) then ; do j=js,je
     do I=Isq,Ieq
       kz(I) = nk_z ; z_int_above(I) = -0.5*(G%bathyT(i,j)+G%bathyT(i+1,j))
@@ -609,7 +609,7 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, GV, CS)
       z_int_above(I) = z_int_above(I) + h_rem
 
       do ! Distribute this layer's transport into the depth-levels.
-        h_above = z_int_above(I) - CS%Z_int(kz(I)) 
+        h_above = z_int_above(I) - CS%Z_int(kz(I))
         if ((kz(I) == 1) .or. (h_above <= 0.0) .or. (h_rem <= 0.0)) then
           ! The entire remaining transport is on this level.
           uh_Z(I,kz(I)) = uh_Z(I,kz(I)) + uh_rem ; exit
@@ -629,7 +629,7 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, GV, CS)
     enddo ; enddo
   enddo ; endif
 
-  ! meridional transport 
+  ! meridional transport
   if (CS%id_vh_Z > 0) then ; do J=Jsq,Jeq
     do i=is,ie
       kz(i) = nk_z ; z_int_above(i) = -0.5*(G%bathyT(i,j)+G%bathyT(i,j+1))
@@ -644,7 +644,7 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, GV, CS)
       z_int_above(i) = z_int_above(i) + h_rem
 
       do ! Distribute this layer's transport into the depth-levels.
-        h_above = z_int_above(i) - CS%Z_int(kz(i)) 
+        h_above = z_int_above(i) - CS%Z_int(kz(i))
         if ((kz(i) == 1) .or. (h_above <= 0.0) .or. (h_rem <= 0.0)) then
           ! The entire remaining transport is on this level.
           vh_Z(i,kz(i)) = vh_Z(i,kz(i)) + vh_rem ; exit
@@ -664,19 +664,19 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, GV, CS)
     enddo ; enddo
   enddo ; endif
 
-  if (CS%id_uh_Z > 0) then 
+  if (CS%id_uh_Z > 0) then
     do k=1,nk_z ; do j=js,je ; do I=Isq,Ieq
-      CS%uh_z(i,j,k) = CS%uh_z(i,j,k)*GV%H_to_kg_m2 
+      CS%uh_z(i,j,k) = CS%uh_z(i,j,k)*GV%H_to_kg_m2
     enddo ; enddo ; enddo
     call post_data(CS%id_uh_Z, CS%uh_z, CS%diag)
-  endif 
+  endif
 
   if (CS%id_vh_Z > 0) then
     do k=1,nk_z ; do j=Jsq,Jeq ; do I=is,ie
-      CS%vh_z(i,j,k) = CS%vh_z(i,j,k)*GV%H_to_kg_m2 
+      CS%vh_z(i,j,k) = CS%vh_z(i,j,k)*GV%H_to_kg_m2
     enddo ; enddo ; enddo
     call post_data(CS%id_vh_Z, CS%vh_z, CS%diag)
-  endif 
+  endif
 
 end subroutine calculate_Z_transport
 
@@ -695,7 +695,7 @@ subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z
 
 !   Note that by convention, e decreases with increasing k and Z_top > Z_bot.
 !
-! Arguments: 
+! Arguments:
 !  (in)          e        - column interface heights (meter or kg/m2)
 !  (in)      Z_top        - top of range being mapped to (meter or kg/m2)
 !  (in)      Z_bot        - bottom of range being mapped to (meter or kg/m2)
@@ -705,13 +705,13 @@ subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z
 !                           overlap with the depth range
 !  (out)     wt           - relative weights of each layer from k_top to k_bot
 !  (out)     z1, z2       - depths of the top and bottom limits of
-!                           the part of a layer that contributes to a depth level, 
+!                           the part of a layer that contributes to a depth level,
 !                           relative to the cell center and normalized by the cell
 !                           thickness (nondim).  Note that -1/2 <= z1 < z2 <= 1/2.
 
   real    :: Ih, e_c, tot_wt, I_totwt
   integer :: k
-  
+
   do k=k_start,k_max ; if (e(K+1)<Z_top) exit ; enddo
   k_top = k
   if (k>k_max) return
@@ -744,9 +744,9 @@ subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z
     I_totwt = 1.0 / tot_wt
     do k=k_top,k_bot ; wt(k) = I_totwt*wt(k) ; enddo
   endif
-  
+
 end subroutine find_overlap
-  
+
 
 subroutine find_limited_slope(val, e, slope, k)
   real, dimension(:), intent(in)  :: val
@@ -757,7 +757,7 @@ subroutine find_limited_slope(val, e, slope, k)
 !   This subroutine determines a limited slope for val to be advected with
 ! a piecewise limited scheme.
 
-! Arguments: 
+! Arguments:
 !  (in)      val   - a column of values that are being interpolated
 !  (in)      e     - column interface heights (meter or kg/m2)
 !  (in)      slope - normalized slope in the intracell distribution of val
@@ -766,7 +766,7 @@ subroutine find_limited_slope(val, e, slope, k)
   real :: d1, d2
 
   if ((val(k)-val(k-1)) * (val(k)-val(k+1)) >= 0.0) then
-    slope = 0.0 ! ; curvature = 0.0   
+    slope = 0.0 ! ; curvature = 0.0
   else
     d1 = 0.5*(e(K-1)-e(K+1)) ; d2 = 0.5*(e(K)-e(K+2))
     slope = (d1**2*(val(k+1) - val(k)) + d2**2*(val(k) - val(k-1))) * &
@@ -776,7 +776,7 @@ subroutine find_limited_slope(val, e, slope, k)
     slope = sign(1.0,slope) * min(abs(slope), &
         2.0*(max(val(k-1),val(k),val(k+1)) - val(k)), &
         2.0*(val(k) - min(val(k-1),val(k),val(k+1))))
-    ! curvature = 0.0  
+    ! curvature = 0.0
   endif
 
 end subroutine find_limited_slope
@@ -789,7 +789,7 @@ subroutine calc_Zint_diags(h, in_ptrs, ids, num_diags, G, GV, CS)
   integer,                                  intent(in) :: num_diags
   type(verticalGrid_type),                  intent(in) :: GV
   type(diag_to_Z_CS),                       pointer    :: CS
-  
+
   real, dimension(SZI_(G),SZJ_(G),max(CS%nk_zspace+1,1),max(num_diags,1)) :: &
     diag_on_Z  ! diagnostics interpolated to depth space
   real, dimension(SZI_(G),SZK_(G)+1) :: e
@@ -805,11 +805,11 @@ subroutine calc_Zint_diags(h, in_ptrs, ids, num_diags, G, GV, CS)
 
   integer :: i, j, k, k2, kz, is, ie, js, je, nk, m
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nk = G%ke
-    
+
   if (num_diags < 1) return
   if (.not.associated(CS)) call MOM_error(FATAL, &
        "calc_Zint_diags: Module must be initialized before it is used.")
-  
+
   do j=js,je
     ! Calculate the stretched z* interface depths.
     do i=is,ie ; htot(i) = 0.0 ; kL(i) = 1 ; enddo
@@ -875,7 +875,7 @@ subroutine calc_Zint_diags(h, in_ptrs, ids, num_diags, G, GV, CS)
   enddo
 
 end subroutine calc_Zint_diags
-                          
+
 subroutine register_Z_tracer(tr_ptr, name, long_name, units, Time, G, CS, standard_name,   &
      cmor_field_name, cmor_long_name, cmor_units, cmor_standard_name)
   type(ocean_grid_type),                         intent(in) :: G
@@ -892,7 +892,7 @@ subroutine register_Z_tracer(tr_ptr, name, long_name, units, Time, G, CS, standa
   character(len=*), optional,                    intent(in) :: cmor_standard_name
 
 !   This subroutine registers a tracer to be output in depth space.
-! Arguments: 
+! Arguments:
 !  (in)      tr_ptr    - tracer for translation to Z-space
 !  (in)      name      - name for the output tracer
 !  (in)      long_name - long name for the output tracer
@@ -904,7 +904,7 @@ subroutine register_Z_tracer(tr_ptr, name, long_name, units, Time, G, CS, standa
 !  (in,opt)  cmor_long_name     - cmor long name of a field
 !  (in,opt)  cmor_units         - cmor units of a field
 !  (in,opt)  cmor_standard_name - cmor standardized name associated with a field
- 
+
   character(len=256) :: posted_standard_name
   character(len=256) :: posted_cmor_units
   character(len=256) :: posted_cmor_standard_name
@@ -919,20 +919,20 @@ subroutine register_Z_tracer(tr_ptr, name, long_name, units, Time, G, CS, standa
   endif
 
   call register_Z_tracer_low(tr_ptr, name, long_name, units, trim(posted_standard_name), Time, G, CS)
- 
+
   if (present(cmor_field_name)) then
     ! Fallback values for strings set to "NULL"
     posted_cmor_units         = "not provided"   !
     posted_cmor_standard_name = "not provided"   ! values might be replaced with a CS%missing field?
     posted_cmor_long_name     = "not provided"   !
 
-    ! If attributes are present for MOM variable names, use them first for the register_diag_field 
+    ! If attributes are present for MOM variable names, use them first for the register_diag_field
     ! call for CMOR verison of the variable
     posted_cmor_units         = units
     posted_cmor_long_name     = long_name
     posted_cmor_standard_name = posted_standard_name
 
-    ! If specified in the call to register_diag_field, override attributes with the CMOR versions 
+    ! If specified in the call to register_diag_field, override attributes with the CMOR versions
     if (present(cmor_units)) posted_cmor_units                 = cmor_units
     if (present(cmor_standard_name)) posted_cmor_standard_name = cmor_standard_name
     if (present(cmor_long_name)) posted_cmor_long_name         = cmor_long_name
@@ -956,7 +956,7 @@ subroutine register_Z_tracer_low(tr_ptr, name, long_name, units, standard_name, 
 
 !   This subroutine registers a tracer to be output in depth space.
 
-! Arguments: 
+! Arguments:
 !  (in)      tr_ptr    - tracer for translation to Z-space
 !  (in)      name      - name for the output tracer
 !  (in)      long_name - long name for output tracer
@@ -1015,7 +1015,7 @@ subroutine MOM_diag_to_Z_init(Time, G, GV, param_file, diag, CS)
   type(diag_ctrl), target, intent(inout) :: diag
   type(diag_to_Z_CS),      pointer       :: CS
 
-! Arguments: 
+! Arguments:
 !  (in)      Time       - current model time
 !  (in)      G          - ocean grid structure
 !  (in)      GV - The ocean's vertical grid structure.
@@ -1057,7 +1057,7 @@ subroutine MOM_diag_to_Z_init(Time, G, GV, param_file, diag, CS)
   if (len_trim(zgrid_file) > 0) then
     call get_param(param_file, mod, "INPUTDIR", in_dir, &
                  "The directory in which input files are found.", default=".")
-    in_dir = slasher(in_dir)  
+    in_dir = slasher(in_dir)
     call get_Z_depths(trim(in_dir)//trim(zgrid_file), "zw", CS%Z_int, "zt", &
                       z_axis, zint_axis, CS%nk_zspace)
     call log_param(param_file, mod, "!INPUTDIR/Z_OUTPUT_GRID_FILE", &
@@ -1129,7 +1129,7 @@ subroutine get_Z_depths(depth_file, int_depth_name, int_depth, cell_depth_name, 
   integer :: ncid, status, intid, intvid, layid, layvid, k, ni
 
   nk_out = -1
-  
+
   status = NF90_OPEN(depth_file, NF90_NOWRITE, ncid);
   if (status /= NF90_NOERR) then
     call MOM_error(WARNING,"MOM_diag_to_Z get_Z_depths: "//&
@@ -1211,13 +1211,13 @@ subroutine get_Z_depths(depth_file, int_depth_name, int_depth, cell_depth_name, 
 
   z_axis_index = diag_axis_init(cell_depth_name, cell_depth, units, 'z',&
                                 long_name, edges = edge_index, direction=-1)
-  
+
   deallocate(cell_depth)
 
   status = nf90_close(ncid)
 
   ! Check the sign convention and change to the MOM "height" convention.
-  if (int_depth(1) < int_depth(2)) then 
+  if (int_depth(1) < int_depth(2)) then
     do k=1,nk_out+1 ; int_depth(k) = -1*int_depth(k) ; enddo
   endif
 
@@ -1252,7 +1252,7 @@ function ocean_register_diag_with_z(tr_ptr, vardesc_tr, G, Time, CS)
   integer                                                   :: ocean_register_diag_with_z
 
 !   This subroutine registers a tracer to be output in depth space.
-! Arguments: 
+! Arguments:
 !  (in)      tr_ptr     - tracer for translation to Z-space
 !  (in)      vardesc_tr - variable descriptor
 !  (in)      Time       - current model time
@@ -1322,7 +1322,7 @@ function register_Z_diag(var_desc, CS, day, missing)
   call query_vardesc(var_desc, name=var_name, units=units, longname=longname, &
                      hor_grid=hor_grid, z_grid=z_grid, caller="register_Zint_diag")
 
-  ! Use the hor_grid and z_grid components of vardesc to determine the 
+  ! Use the hor_grid and z_grid components of vardesc to determine the
   ! desired axes to register the diagnostic field for.
   select case (z_grid)
 
@@ -1378,7 +1378,7 @@ function register_Zint_diag(var_desc, CS, day)
     register_Zint_diag = -1 ; return
   endif
 
-  ! Use the hor_grid and z_grid components of vardesc to determine the 
+  ! Use the hor_grid and z_grid components of vardesc to determine the
   ! desired axes to register the diagnostic field for.
   select case (hor_grid)
     case ("h")

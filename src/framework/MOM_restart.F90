@@ -747,7 +747,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   character(len=8) :: t_grid_read
   character(len=64) :: var_name         ! A variable's name.
   real :: restart_time
-  character(len=32) :: filename_appendix = '' !fms appendix to filename for ensemble runs 
+  character(len=32) :: filename_appendix = '' !fms appendix to filename for ensemble runs
   integer :: length
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
@@ -830,7 +830,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
         restartname = restartname(1:length)  //'.'//trim(filename_appendix)
       end if
     end if
-    
+
     restartpath = trim(directory)// trim(restartname)
 
     if (num_files < 10) then
@@ -931,7 +931,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   integer :: i, missing_fields
   real    :: t1, t2
   integer :: err
-  character(len=32) :: filename_appendix = '' !fms appendix to filename for ensemble runs 
+  character(len=32) :: filename_appendix = '' !fms appendix to filename for ensemble runs
   character(len=80) :: restartname
   integer :: length
 

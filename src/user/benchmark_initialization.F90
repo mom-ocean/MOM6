@@ -135,7 +135,7 @@ subroutine benchmark_initialize_thickness(h, G, GV, param_file, eqn_of_state, P_
   thermocline_scale = 500.0
   a_exp = 0.9
 
-! This block calculates T0(k) for the purpose of diagnosing where the 
+! This block calculates T0(k) for the purpose of diagnosing where the
 ! interfaces will be found.
   do k=1,nz
     pres(k) = P_Ref ; S0(k) = 35.0
