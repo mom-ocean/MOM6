@@ -959,15 +959,47 @@ subroutine neutral_surface_flux(nk, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Fl
   real, dimension(2*nk+1),    intent(inout) :: Flx   !< Flux of tracer between pairs of neutral layers (conc H)
 
   ! Local variables
-  integer :: k_sublayer, klb, klt, krb, krt
+  integer :: k_sublayer, klb, klt, krb, krt, k
   real :: T_right_top, T_right_bottom, T_right_layer
   real :: T_left_top, T_left_bottom, T_left_layer
   real :: dT_top, dT_bottom, dT_layer, dT_ave
   real, dimension(nk+1) :: Til !< Left-column interface tracer (conc, e.g. degC)
   real, dimension(nk+1) :: Tir !< Right-column interface tracer (conc, e.g. degC)
+  real, dimension(nk) :: aL_l !< Left-column left edge value of tracer (conc, e.g. degC)
+  real, dimension(nk) :: aR_l !< Left-column right edge value of tracer (conc, e.g. degC)
+  real, dimension(nk) :: aL_r !< Right-column left edge value of tracer (conc, e.g. degC)
+  real, dimension(nk) :: aR_r !< Right-column right edge value of tracer (conc, e.g. degC)
 
   call interface_scalar(nk, hl, Tl, Til, 2)
   call interface_scalar(nk, hr, Tr, Tir, 2)
+
+  ! Setup reconstruction edge values
+  do k = 1, nk
+    aL_l(k) = Til(k)
+    aR_l(k) = Til(k+1)
+    if ( (aR_l(k) - Tl(k))*(Tl(k) - aL_l(k)) <= 0.0 ) then
+      aL_l(k) = Tl(k)
+      aR_l(k) = Tl(k)
+    elseif ( 3.0 * (aR_l(k) - aL_l(k)) * ( (Tl(k) - aL_l(k)) + (Tl(k) - aR_l(k))) &
+         > (aR_l(k) - aL_l(k))**2 ) then
+      aL_l(k) = Tl(k) + 2.0 * ( Tl(k) - aR_l(k) )
+    elseif ( 3.0 * (aR_l(k) - aL_l(k)) * ( (Tl(k) - aL_l(k)) + (Tl(k) - aR_l(k))) &
+         < -(aR_l(k) - aL_l(k))**2 ) then
+      aR_l(k) = Tl(k) + 2.0 * ( Tl(k) - aL_l(k) )
+    endif
+    aL_r(k) = Tir(k)
+    aR_r(k) = Tir(k+1)
+    if ( (aR_r(k) - Tr(k))*(Tr(k) - aL_r(k)) <= 0.0 ) then
+      aL_r(k) = Tr(k)
+      aR_r(k) = Tr(k)
+    elseif ( 3.0 * (aR_r(k) - aL_r(k)) * ( (Tr(k) - aL_r(k)) + (Tr(k) - aR_r(k))) &
+         > (aR_r(k) - aL_r(k))**2 ) then
+      aL_r(k) = Tr(k) + 2.0 * ( Tr(k) - aR_r(k) )
+    elseif ( 3.0 * (aR_r(k) - aL_r(k)) * ( (Tr(k) - aL_r(k)) + (Tr(k) - aR_r(k))) &
+         < -(aR_r(k) - aL_r(k))**2 ) then
+      aR_r(k) = Tr(k) + 2.0 * ( Tr(k) - aL_r(k) )
+    endif
+  enddo
 
   do k_sublayer = 1, 2*nk+1
     if (hEff(k_sublayer) == 0.) then
@@ -982,7 +1014,8 @@ subroutine neutral_surface_flux(nk, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Fl
 
       !T_left_layer = Tl(klt)
       T_left_layer = ppm_ave(PiL(k_sublayer), PiL(k_sublayer+1) + real(klb-klt), &
-                             Til(klt), Til(klb), Tl(klt))
+                             aL_l(klt), aR_l(klt), Tl(klt))
+                            !Til(klt), Til(klb), Tl(klt))
 
       krb = KoR(k_sublayer+1)
       T_right_bottom = ( 1. - PiR(k_sublayer+1) ) * Tir(krb) + PiR(k_sublayer+1) * Tir(krb+1)
@@ -992,17 +1025,17 @@ subroutine neutral_surface_flux(nk, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Fl
 
       !T_right_layer = Tr(krt)
       T_right_layer = ppm_ave(PiR(k_sublayer), PiR(k_sublayer+1) + real(krb-krt), &
-                             Tir(krt), Tir(krb), Tr(krt))
+                             aL_r(krt), aR_r(krt), Tr(krt))
+                            !Tir(krt), Tir(krb), Tr(krt))
 
       dT_top = T_right_top - T_left_top
       dT_bottom = T_right_bottom - T_left_bottom
       dT_ave = 0.5 * ( dT_top + dT_bottom )
       dT_layer = T_right_layer - T_left_layer
-      if (dT_top * dT_bottom < 0. .or. dT_ave * dT_layer < 0. ) then
+      if (dT_top * dT_bottom <= 0. .or. dT_ave * dT_layer <= 0. ) then
         dT_ave = 0.
       else
-       !dT_ave = sign( min( abs(dT_top), abs(dT_bottom), abs(dT_ave) ) , dT_ave )
-        dT_ave = sign( min( abs(dT_layer), abs(dT_ave) ) , dT_layer )
+        dT_ave = dT_layer
       endif
       Flx(k_sublayer) = dT_ave * hEff(k_sublayer)
     endif
