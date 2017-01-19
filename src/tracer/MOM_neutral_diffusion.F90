@@ -953,8 +953,8 @@ subroutine neutral_surface_flux(nk, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Fl
   real, dimension(nk),        intent(in)    :: Tr    !< Right-column layer tracer (conc, e.g. degC)
   real, dimension(2*nk+2),    intent(in)    :: PiL   !< Fractional position of neutral surface within layer KoL of left column
   real, dimension(2*nk+2),    intent(in)    :: PiR   !< Fractional position of neutral surface within layer KoR of right column
-  integer, dimension(2*nk+2), intent(in)    :: KoL   !< Index of first left interface below neutral surface
-  integer, dimension(2*nk+2), intent(in)    :: KoR   !< Index of first right interface below neutral surface
+  integer, dimension(2*nk+2), intent(in)    :: KoL   !< Index of first left interface above neutral surface
+  integer, dimension(2*nk+2), intent(in)    :: KoR   !< Index of first right interface above neutral surface
   real, dimension(2*nk+1),    intent(in)    :: hEff  !< Effective thickness between two neutral surfaces (Pa)
   real, dimension(2*nk+1),    intent(inout) :: Flx   !< Flux of tracer between pairs of neutral layers (conc H)
 
