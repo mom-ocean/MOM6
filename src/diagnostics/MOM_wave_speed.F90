@@ -258,7 +258,7 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
               ! Add a new layer to the column.
               kc = kc + 1
               drho_dS(kc) = drho_dS(k) ; drho_dT(kc) = drho_dT(k)
-              Tc(kc) = Tf(k,i) ; Sc(kc) = Sf(k,i) ; Hc(kc) = Hf(k,i) 
+              Tc(kc) = Tf(k,i) ; Sc(kc) = Sf(k,i) ; Hc(kc) = Hf(k,i)
             endif
           enddo
           ! At this point there are kc layers and the gprimes should be positive.
@@ -289,7 +289,7 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
             else
               ! Add a new layer to the column.
               kc = kc + 1
-              Rc(kc) = Rf(k,i) ; Hc(kc) = Hf(k,i) 
+              Rc(kc) = Rf(k,i) ; Hc(kc) = Hf(k,i)
             endif
           enddo
           ! At this point there are kc layers and the gprimes should be positive.
@@ -386,7 +386,7 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
 
               det = (Igu(k)+Igl(k)-lam)*detKm1 - (Igu(k)*Igl(k-1))*detKm2
               ddet = (Igu(k)+Igl(k)-lam)*ddetKm1 - (Igu(k)*Igl(k-1))*ddetKm2 - detKm1
-                        
+
               ! Rescale det & ddet if det is getting too large.
               if (abs(det) > rescale) then
                 det = I_rescale*det ; detKm1 = I_rescale*detKm1
@@ -523,7 +523,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
     Hf, Tf, Sf, Rf
   real, dimension(SZK_(G)) :: &
     Hc, Tc, Sc, Rc
-  real, parameter :: c1_thresh = 0.01 
+  real, parameter :: c1_thresh = 0.01
                           ! if c1 is below this value, don't bother calculating
                           ! cn values for higher modes
   real :: det, ddet       ! determinant & its derivative of eigen system
@@ -541,7 +541,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
   real,dimension(nmodes) :: &
           xbl,xbr         ! lam guesses bracketing a zero-crossing (root)
   integer :: numint       ! number of widows (intervals) in root searching range
-  integer :: nrootsfound  ! number of extra roots found (not including 1st root)                    
+  integer :: nrootsfound  ! number of extra roots found (not including 1st root)
   real :: min_h_frac
   real :: H_to_pres
   real :: H_to_m     ! Local copy of a unit conversion factor.
@@ -563,7 +563,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
   real, dimension(SZK_(G)+1) :: z_int, N2
   integer :: nsub       ! number of subintervals used for root finding
   integer, parameter :: sub_it_max = 4
-                        ! maximum number of times to subdivide interval 
+                        ! maximum number of times to subdivide interval
                         ! for root finding (# intervals = 2**sub_it_max)
   logical :: sub_rootfound ! if true, subdivision has located root
   integer :: kc, nrows
@@ -581,7 +581,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
   if (present(full_halos)) then ; if (full_halos) then
     is = G%isd ; ie = G%ied ; js = G%jsd ; je = G%jed
   endif ; endif
-    
+
   S => tv%S ; T => tv%T
   g_Rho0 = GV%g_Earth/GV%Rho0
   use_EOS = associated(tv%eqn_of_state)
@@ -720,7 +720,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
                 ! Add a new layer to the column.
                 kc = kc + 1
                 drho_dS(kc) = drho_dS(k) ; drho_dT(kc) = drho_dT(k)
-                Tc(kc) = Tf(k,i) ; Sc(kc) = Sf(k,i) ; Hc(kc) = Hf(k,i) 
+                Tc(kc) = Tf(k,i) ; Sc(kc) = Sf(k,i) ; Hc(kc) = Hf(k,i)
               endif
             enddo
             ! At this point there are kc layers and the gprimes should be positive.
@@ -751,7 +751,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
               else
                 ! Add a new layer to the column.
                 kc = kc + 1
-                Rc(kc) = Rf(k,i) ; Hc(kc) = Hf(k,i) 
+                Rc(kc) = Rf(k,i) ; Hc(kc) = Hf(k,i)
               endif
             enddo
             ! At this point there are kc layers and the gprimes should be positive.
@@ -759,7 +759,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
               gprime(k) = g_Rho0 * (Rc(k)-Rc(k-1))
             enddo
           endif  ! use_EOS
-          
+
           !-----------------NOW FIND WAVE SPEEDS---------------------------------------
           ig = i + G%idg_offset ; jg = j + G%jdg_offset
           !   Sum the contributions from all of the interfaces to give an over-estimate
@@ -769,16 +769,16 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
             z_int(1) = 0.0
             ! initialize speed2_tot
             speed2_tot = 0.0
-            ! Calculate Igu, Igl, depth, and N2 at each interior interface 
-            ! [excludes surface (K=1) and bottom (K=kc+1)] 
+            ! Calculate Igu, Igl, depth, and N2 at each interior interface
+            ! [excludes surface (K=1) and bottom (K=kc+1)]
             do K=2,kc
               Igl(K) = 1.0/(gprime(K)*Hc(k)) ; Igu(K) = 1.0/(gprime(K)*Hc(k-1))
               z_int(K) = z_int(K-1) + Hc(k-1)
-              N2(K) = gprime(K)/(0.5*(Hc(k)+Hc(k-1)))              
+              N2(K) = gprime(K)/(0.5*(Hc(k)+Hc(k-1)))
               speed2_tot = speed2_tot + gprime(K)*(Hc(k-1)+Hc(k))
             enddo
             ! Set stratification for surface and bottom (setting equal to nearest interface for now)
-            N2(1) = N2(2) ; N2(kc+1) = N2(kc) 
+            N2(1) = N2(2) ; N2(kc+1) = N2(kc)
             ! Calcualte depth at bottom
             z_int(kc+1) = z_int(kc)+Hc(kc)
             ! check that thicknesses sum to total depth
@@ -786,7 +786,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
               call MOM_error(WARNING, "wave_structure: mismatch in total depths")
               print *, "kc=", kc
               print *, "z_int(kc+1)=", z_int(kc+1)
-              print *, "htot(i)=", htot(i)              
+              print *, "htot(i)=", htot(i)
             endif
 
             ! Define the diagonals of the tridiagonal matrix
@@ -812,7 +812,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
 
             ! Under estimate the first eigen value to start with.
             lam_1 = 1.0 / speed2_tot
-            
+
             ! Find the first eigen value
             do itt=1,max_itt
               ! calculate the determinant of (A-lam_1*I)
@@ -832,10 +832,10 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
                   ! calculate 1st mode speed
                   if (lam_1 > 0.0) cn(i,j,1) = 1.0 / sqrt(lam_1)
                   exit
-                endif              
+                endif
               endif
             enddo
-            
+
             ! print resutls (for debugging only)
             !if(ig .eq. 83 .and. jg .eq. 2) then
             !  if(nmodes>1)then
@@ -851,7 +851,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
             !    !stop
             !  endif
             !endif
-            
+
             ! Find other eigen values if c1 is of significant magnitude, > cn_thresh
             nrootsfound = 0    ! number of extra roots found (not including 1st root)
             if (nmodes>1 .and. kc>=nmodes+1 .and. cn(i,j,1)>c1_thresh) then
@@ -865,7 +865,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
               lamInc = 0.5*lam_1
               ! set number of intervals within search range
               numint = nint((lamMax - lamMin)/lamInc)
-              
+
               !if(ig .eq. 144 .and. jg .eq. 5) then
               !  print *, 'Looking for other eigenvalues at', ig, jg
               !  print *, 'Wave_speed: lamMin=',         lamMin
@@ -873,11 +873,11 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
               !  print *, 'Wave_speed: lamMax=',         lamMax
               !  print *, 'Wave_speed: cnMin=',          1/sqrt(lamMax)
               !  print *, 'Wave_speed: lamInc=',         lamInc
-              !endif              
-              
+              !endif
+
               !   Find intervals containing zero-crossings (roots) of the determinant
               ! that are beyond the first root
-                            
+
               ! find det_l of first interval (det at left endpoint)
               call tridiag_det(a_diag(1:nrows),b_diag(1:nrows),c_diag(1:nrows), &
                                nrows,lamMin,det_l,ddet_l)
@@ -936,7 +936,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
                         endif ! sign change
                       enddo ! sub-loop
                       if (sub_rootfound) exit ! root has been found, exit sub_it loop
-                      !   Otherwise, function changes sign but has a local max/min in one of the 
+                      !   Otherwise, function changes sign but has a local max/min in one of the
                       ! sub intervals, try subdividing again unless sub_it_max has been reached.
                       if (sub_it == sub_it_max) then
                         call MOM_error(WARNING, "wave_speed: root not found "// &
@@ -954,7 +954,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
                           !print *, 'Wave_speed: numint=',         numint
                           !print *, 'Wave_speed: nrootsfound=',    nrootsfound
                           !stop
-                        !endif 
+                        !endif
                       endif ! sub_it == sub_it_max
                     enddo ! sub_it-loop-------------------------------------------------
                   endif ! det_l*ddet_l < 0.0
@@ -987,7 +987,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
                   ddet_l = ddet_r
                 endif
               enddo ! iint-loop
-              
+
               ! Use Newton's method to find the roots within the identified windows
               do m=1,nrootsfound ! loop over the root-containing widows (excluding 1st mode)
                 lam_n = xbl(m) ! first guess is left edge of window
@@ -1002,7 +1002,7 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
                     ! calculate nth mode speed
                     if (lam_n > 0.0) cn(i,j,m+1) = 1.0 / sqrt(lam_n)
                     exit
-                  endif ! within tol           
+                  endif ! within tol
                 enddo ! itt-loop
               enddo ! n-loop
             else
@@ -1010,14 +1010,14 @@ subroutine wave_speeds(h, tv, G, GV, nmodes, cn, CS, full_halos)
             endif ! if nmodes>1 .and. kc>nmodes .and. c1>c1_thresh
           else
             cn(i,j,:) = 0.0
-          endif ! if more than 2 layers 
+          endif ! if more than 2 layers
         endif ! if drxh_sum < 0
       else
         cn(i,j,:) = 0.0 ! This is a land point.
       endif ! if not land
       ! ----- Spot check - comment out later (BDM) ----------
       !ig = G%idg_offset + i
-      !jg = G%jdg_offset + j 
+      !jg = G%jdg_offset + j
       !if (ig .eq. 83 .and. jg .eq. 2) then
       !!  print *, "nmodes=",nmodes
       !  print *, "lam_1=",lam_1
@@ -1047,23 +1047,23 @@ subroutine tridiag_det(a,b,c,nrows,lam,det_out,ddet_out)
   real,               intent(out):: det_out !< Determinant
   real,               intent(out):: ddet_out !< Derivative of determinant w.r.t. lam
   ! Local variables
-  real, dimension(nrows) :: det ! value of recursion function 
+  real, dimension(nrows) :: det ! value of recursion function
   real, dimension(nrows) :: ddet ! value of recursion function for derivative
   real, parameter:: rescale = 1024.0**4 ! max value of determinant allowed before rescaling
   real :: I_rescale ! inverse of rescale
   integer :: n      ! row (layer interface) index
-  
+
   if (size(b) .ne. nrows) call MOM_error(WARNING, "Diagonal b must be same length as nrows.")
   if (size(a) .ne. nrows) call MOM_error(WARNING, "Diagonal a must be same length as nrows.")
   if (size(c) .ne. nrows) call MOM_error(WARNING, "Diagonal c must be same length as nrows.")
 
   I_rescale = 1.0/rescale
-  
+
   det(1) = 1.0      ; ddet(1) = 0.0
   det(2) = b(2)-lam ; ddet(2) = -1.0
   do n=3,nrows
     det(n)  = (b(n)-lam)*det(n-1)  - (a(n)*c(n-1))*det(n-2)
-    ddet(n) = (b(n)-lam)*ddet(n-1) - (a(n)*c(n-1))*ddet(n-2) - det(n-1)                        
+    ddet(n) = (b(n)-lam)*ddet(n-1) - (a(n)*c(n-1))*ddet(n-2) - det(n-1)
     ! Rescale det & ddet if det is getting too large.
     if (abs(det(n)) > rescale) then
       det(n)  = I_rescale*det(n)  ; det(n-1)  = I_rescale*det(n-1)

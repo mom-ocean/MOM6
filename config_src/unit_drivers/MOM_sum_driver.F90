@@ -97,7 +97,7 @@ program MOM_main
   call MOM_set_verbosity(verbosity)
 
   call MOM_domains_init(grid%domain, param_file)
-  
+
   call MOM_io_init(param_file)
 !  call diag_mediator_init(param_file)
   call MOM_grid_init(grid, param_file)

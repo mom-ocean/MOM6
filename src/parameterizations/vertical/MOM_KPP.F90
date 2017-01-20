@@ -757,7 +757,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       elseif (CS%SW_METHOD .eq. SW_METHOD_MXL_SW) then
          surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,int(kOBL)+1) ! We know the actual buoyancy flux into the OBL
       elseif (CS%SW_METHOD .eq. SW_METHOD_LV1_SW) then
-         surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,2) 
+         surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,2)
       endif
 
       ! If option "MatchBoth" is selected in CVMix, MOM should be capable of matching.

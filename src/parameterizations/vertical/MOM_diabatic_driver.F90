@@ -203,7 +203,7 @@ type, public :: diabatic_CS ;
   type(diag_to_Z_CS),           pointer :: diag_to_Z_CSp         => NULL()
   type(KPP_CS),                 pointer :: KPP_CSp               => NULL()
   type(diffConvection_CS),      pointer :: Conv_CSp              => NULL()
-  type(diapyc_energy_req_CS),   pointer :: diapyc_en_rec_CSp     => NULL() 
+  type(diapyc_energy_req_CS),   pointer :: diapyc_en_rec_CSp     => NULL()
 
   type(group_pass_type) :: pass_hold_eb_ea !< For group halo pass
 
@@ -936,10 +936,10 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
         ! Changes: T, S
         if (CS%tracer_tridiag) then
           call tracer_vertdiff(hold, ea, eb, dt, tv%T, G, GV)
-          call tracer_vertdiff(hold, ea, eb, dt, tv%S, G, GV) 
-        else    
+          call tracer_vertdiff(hold, ea, eb, dt, tv%S, G, GV)
+        else
           call triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, tv%T, tv%S)
-        endif  
+        endif
       endif ! massless_match_targets
       call cpu_clock_end(id_clock_tridiag)
 
@@ -1021,9 +1021,9 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       if(CS%tracer_tridiag) then
           call tracer_vertdiff(hold, ea, eb, dt, tv%T, G, GV)
           call tracer_vertdiff(hold, ea, eb, dt, tv%S, G, GV)
-      else    
+      else
         call triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, tv%T, tv%S)
-      endif  
+      endif
 
       ! diagnose temperature, salinity, heat, and salt tendencies
       if(CS%diabatic_diff_tendency_diag) then
@@ -1138,7 +1138,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
         endif ; endif
       enddo ; enddo
       do i=is,ie ; eatr(i,j,1) = ea(i,j,1) ; enddo
-        
+
     enddo
 
     if (CS%useALEalgorithm) then
@@ -1918,11 +1918,11 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
                  "entrainment at the bottom is at least sqrt(Kd_BBL_tr*dt) \n"//&
                  "over the same distance.", units="m2 s-1", default=0.)
   endif
-  
+
   call get_param(param_file, mod, "TRACER_TRIDIAG", CS%tracer_tridiag, &
                  "If true, use the passive tracer tridiagonal solver for T and S\n", &
                  default=.false.)
-                 
+
 
   ! Register all available diagnostics for this module.
   if (GV%Boussinesq) then ; thickness_units = "meter"
