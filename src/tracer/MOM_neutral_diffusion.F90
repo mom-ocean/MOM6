@@ -578,6 +578,16 @@ real function ppm_ave(xL, xR, aL, aR, aMean)
 
 end function ppm_ave
 
+!> A true signum function that returns either -abs(a), when x<0; or abs(a) when x>0; or 0 when x=0.
+real function signum(a,x)
+  real, intent(in) :: a !< The magnitude argument
+  real, intent(in) :: x !< The sign (or zero) argument
+
+  signum = sign(a,x)
+  if (x==0.) signum = 0.
+
+end function signum
+
 !> Returns PLM slopes for a column where the slopes are the difference in value across each cell.
 !! The limiting follows equation 1.8 in Colella & Woodward, 1984: JCP 54, 174-201.
 subroutine PLM_diff(nk, h, S, c_method, b_method, diff)
@@ -624,10 +634,10 @@ subroutine PLM_diff(nk, h, S, c_method, b_method, diff)
       ! Limit centered slope by twice the side differenced slopes
       diff_l = 2. * ( Sk - Skm1 )
       diff_r = 2. * ( Skp1 - Sk )
-      if (diff_l * diff_r > 0.) then
-        diff(k) = sign( min( abs(diff_l), abs(diff_c), abs(diff_r) ), diff_c )
-      else
+      if ( signum(1., diff_l) * signum(1., diff_r) <= 0. ) then
         diff(k) = 0. ! PCM for local extrema
+      else
+        diff(k) = sign( min( abs(diff_l), abs(diff_c), abs(diff_r) ), diff_c )
       endif
     else
       diff(k) = 0. ! PCM next to vanished layers
@@ -977,26 +987,22 @@ subroutine neutral_surface_flux(nk, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Fl
   do k = 1, nk
     aL_l(k) = Til(k)
     aR_l(k) = Til(k+1)
-    if ( (aR_l(k) - Tl(k))*(Tl(k) - aL_l(k)) <= 0.0 ) then
+    if ( signum(1., aR_l(k) - Tl(k))*signum(1., Tl(k) - aL_l(k)) <= 0.0 ) then
       aL_l(k) = Tl(k)
       aR_l(k) = Tl(k)
-    elseif ( 3.0 * (aR_l(k) - aL_l(k)) * ( (Tl(k) - aL_l(k)) + (Tl(k) - aR_l(k))) &
-         > (aR_l(k) - aL_l(k))**2 ) then
+    elseif ( sign(3., aR_l(k) - aL_l(k)) * ( (Tl(k) - aL_l(k)) + (Tl(k) - aR_l(k))) > abs(aR_l(k) - aL_l(k)) ) then
       aL_l(k) = Tl(k) + 2.0 * ( Tl(k) - aR_l(k) )
-    elseif ( 3.0 * (aR_l(k) - aL_l(k)) * ( (Tl(k) - aL_l(k)) + (Tl(k) - aR_l(k))) &
-         < -(aR_l(k) - aL_l(k))**2 ) then
+    elseif ( sign(3., aR_l(k) - aL_l(k)) * ( (Tl(k) - aL_l(k)) + (Tl(k) - aR_l(k))) < -abs(aR_l(k) - aL_l(k)) ) then
       aR_l(k) = Tl(k) + 2.0 * ( Tl(k) - aL_l(k) )
     endif
     aL_r(k) = Tir(k)
     aR_r(k) = Tir(k+1)
-    if ( (aR_r(k) - Tr(k))*(Tr(k) - aL_r(k)) <= 0.0 ) then
+    if ( signum(1., aR_r(k) - Tr(k))*signum(1., Tr(k) - aL_r(k)) <= 0.0 ) then
       aL_r(k) = Tr(k)
       aR_r(k) = Tr(k)
-    elseif ( 3.0 * (aR_r(k) - aL_r(k)) * ( (Tr(k) - aL_r(k)) + (Tr(k) - aR_r(k))) &
-         > (aR_r(k) - aL_r(k))**2 ) then
+    elseif ( sign(3., aR_r(k) - aL_r(k)) * ( (Tr(k) - aL_r(k)) + (Tr(k) - aR_r(k))) > abs(aR_r(k) - aL_r(k)) ) then
       aL_r(k) = Tr(k) + 2.0 * ( Tr(k) - aR_r(k) )
-    elseif ( 3.0 * (aR_r(k) - aL_r(k)) * ( (Tr(k) - aL_r(k)) + (Tr(k) - aR_r(k))) &
-         < -(aR_r(k) - aL_r(k))**2 ) then
+    elseif ( sign(3., aR_r(k) - aL_r(k)) * ( (Tr(k) - aL_r(k)) + (Tr(k) - aR_r(k))) < -abs(aR_r(k) - aL_r(k)) ) then
       aR_r(k) = Tr(k) + 2.0 * ( Tr(k) - aL_r(k) )
     endif
   enddo
@@ -1012,10 +1018,8 @@ subroutine neutral_surface_flux(nk, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Fl
       klt = KoL(k_sublayer)
       T_left_top = ( 1. - PiL(k_sublayer) ) * Til(klt) + PiL(k_sublayer) * Til(klt+1)
 
-      !T_left_layer = Tl(klt)
       T_left_layer = ppm_ave(PiL(k_sublayer), PiL(k_sublayer+1) + real(klb-klt), &
                              aL_l(klt), aR_l(klt), Tl(klt))
-                            !Til(klt), Til(klb), Tl(klt))
 
       krb = KoR(k_sublayer+1)
       T_right_bottom = ( 1. - PiR(k_sublayer+1) ) * Tir(krb) + PiR(k_sublayer+1) * Tir(krb+1)
@@ -1023,16 +1027,14 @@ subroutine neutral_surface_flux(nk, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Fl
       krt = KoR(k_sublayer)
       T_right_top = ( 1. - PiR(k_sublayer) ) * Tir(krt) + PiR(k_sublayer) * Tir(krt+1)
 
-      !T_right_layer = Tr(krt)
       T_right_layer = ppm_ave(PiR(k_sublayer), PiR(k_sublayer+1) + real(krb-krt), &
-                             aL_r(krt), aR_r(krt), Tr(krt))
-                            !Tir(krt), Tir(krb), Tr(krt))
+                              aL_r(krt), aR_r(krt), Tr(krt))
 
       dT_top = T_right_top - T_left_top
       dT_bottom = T_right_bottom - T_left_bottom
       dT_ave = 0.5 * ( dT_top + dT_bottom )
       dT_layer = T_right_layer - T_left_layer
-      if (dT_top * dT_bottom <= 0. .or. dT_ave * dT_layer <= 0. ) then
+      if (signum(1.,dT_top) * signum(1.,dT_bottom) <= 0. .or. signum(1.,dT_ave) * signum(1.,dT_layer) <= 0. ) then
         dT_ave = 0.
       else
         dT_ave = dT_layer
