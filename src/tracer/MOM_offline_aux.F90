@@ -18,6 +18,51 @@ use MOM_forcing_type,     only : forcing
 
 implicit none
 
+<<<<<<< HEAD:src/tracer/MOM_offline_aux.F90
+=======
+type, public :: offline_transport_CS
+
+  !> Variables related to reading in fields from online run
+  integer :: start_index  ! Timelevel to start
+  integer :: numtime      ! How many timelevels in the input fields
+  integer :: &            ! Index of each of the variables to be read in
+    ridx_sum = -1, &      ! Separate indices for each variabile if they are
+    ridx_snap = -1        ! setoff from each other in time
+  character(len=200) :: offlinedir  ! Directory where offline fields are stored
+  character(len=200) :: & !         ! Names of input files
+    snap_file,  &
+    sum_file
+  character(len=20)  :: redistribute_method
+  logical :: fields_are_offset ! True if the time-averaged fields and snapshot fields are
+                               ! offset by one time level
+  !> Variables controlling some of the numerical considerations of offline transport
+  integer           ::  num_off_iter
+  real              ::  dt_offline ! Timestep used for offline tracers
+  real              ::  max_off_cfl=0.5 ! Hardcoded for now, only used in non-ALE mode
+  real              ::  evap_CFL_limit, minimum_forcing_depth
+
+  !> Diagnostic manager IDs for use in the online model of additional fields necessary
+  !> for offline tracer modeling
+  integer :: &
+    id_uhtr_preadv = -1, &
+    id_vhtr_preadv = -1, &
+  !> Diagnostic manager IDs for some fields that may be of interest when doing offline transport
+    id_uhr = -1, &
+    id_vhr = -1, &
+    id_ear = -1, &
+    id_ebr = -1, &
+    id_hr = -1,  &
+    id_uhr_redist = -1, &
+    id_vhr_redist = -1, &
+    id_h_redist = -1, &
+    id_eta_diff = -1
+
+end type offline_transport_CS
+
+public offline_transport_init
+public transport_by_files
+public register_diags_offline_transport
+>>>>>>> 3b16d81cb00c11e924523ae5ca0d66790b44e303:src/tracer/MOM_offline_control.F90
 public update_h_horizontal_flux
 public update_h_vertical_flux
 public limit_mass_flux_3d
@@ -32,6 +77,270 @@ public offline_add_diurnal_sw
 
 contains
 
+<<<<<<< HEAD:src/tracer/MOM_offline_aux.F90
+=======
+!> Controls the reading in 3d mass fluxes, diffusive fluxes, and other fields stored
+!! in a previous integration of the online model
+subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, khdt_y, &
+    temp, salt, fluxes, do_ale_in)
+
+  type(ocean_grid_type),                     intent(inout)    :: G
+  type(verticalGrid_type),                   intent(inout)    :: GV
+  type(offline_transport_CS),                intent(inout)    :: CS
+  logical, optional                                           :: do_ale_in
+
+  !! Mandatory variables
+  ! Fields at U-points
+  !  3D
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G))                   :: uhtr
+  !  2D
+  real, dimension(SZIB_(G),SZJ_(G))                           :: khdt_x
+  ! Fields at V-points
+  !  3D
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G))                   :: vhtr
+  !  2D
+  real, dimension(SZI_(G),SZJB_(G))                           :: khdt_y
+  ! Fields at T-point
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
+    h_end, &
+    eatr, ebtr, &
+    temp, salt
+  type(forcing)                                               :: fluxes
+  logical                                                     :: do_ale
+  integer :: i, j, k, is, ie, js, je, nz
+
+  do_ale = .false.;
+  if (present(do_ale_in) ) do_ale = do_ale_in
+
+  is   = G%isc   ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = GV%ke
+
+
+  call callTree_enter("transport_by_files, MOM_offline_control.F90")
+
+
+  !! Time-summed fields
+  ! U-grid
+  call read_data(CS%sum_file, 'uhtr_sum',     uhtr,domain=G%Domain%mpp_domain, &
+    timelevel=CS%ridx_sum,position=EAST)
+  call read_data(CS%sum_file, 'khdt_x_sum', khdt_x,domain=G%Domain%mpp_domain, &
+    timelevel=CS%ridx_sum,position=EAST)
+  ! V-grid
+  call read_data(CS%sum_file, 'vhtr_sum',     vhtr, domain=G%Domain%mpp_domain, &
+    timelevel=CS%ridx_sum,position=NORTH)
+  call read_data(CS%sum_file, 'khdt_y_sum', khdt_y, domain=G%Domain%mpp_domain, &
+    timelevel=CS%ridx_sum,position=NORTH)
+  ! T-grid
+  call read_data(CS%sum_file, 'ea_sum',   eatr, domain=G%Domain%mpp_domain, &
+    timelevel=CS%ridx_sum,position=CENTER)
+  call read_data(CS%sum_file, 'eb_sum',   ebtr, domain=G%Domain%mpp_domain, &
+    timelevel=CS%ridx_sum,position=CENTER)
+
+  !! Time-averaged fields
+  call read_data(CS%snap_file, 'temp',   temp, domain=G%Domain%mpp_domain, &
+    timelevel=CS%ridx_sum,position=CENTER)
+  call read_data(CS%snap_file, 'salt',   salt, domain=G%Domain%mpp_domain, &
+    timelevel=CS%ridx_sum,position=CENTER)
+
+  !! Read snapshot fields (end of time interval timestamp)
+  call read_data(CS%snap_file, 'h_end', h_end, domain=G%Domain%mpp_domain, &
+    timelevel=CS%ridx_snap,position=CENTER)
+
+  ! Apply masks at T, U, and V points
+  do k=1,nz ; do j=js,je ; do i=is,ie
+    if(G%mask2dT(i,j)<1.0) then
+      h_end(i,j,k) = GV%Angstrom
+      eatr(i,j,k) = 0.0
+      ebtr(i,j,k) = 0.0
+    endif
+  enddo; enddo ; enddo
+
+  do k=1,nz ; do j=js-1,je ; do i=is,ie
+    if(G%mask2dCv(i,j)<1.0) then
+      khdt_y(i,j) = 0.0
+      vhtr(i,j,k) = 0.0
+    endif
+  enddo; enddo ; enddo
+
+  do k=1,nz ; do j=js,je ; do i=is-1,ie
+    if(G%mask2dCu(i,j)<1.0) then
+      khdt_x(i,j) = 0.0
+      uhtr(i,j,k) = 0.0
+    endif
+  enddo; enddo ; enddo
+
+  ! This block makes sure that the fluxes control structure, which may not be used in the solo_driver,
+  ! contains netMassIn and netMassOut which is necessary for the applyTracerBoundaryFluxesInOut routine
+  if (do_ale) then
+    if (.not. ASSOCIATED(fluxes%netMassOut)) then
+      ALLOCATE(fluxes%netMassOut(G%isd:G%ied,G%jsd:G%jed))
+      fluxes%netMassOut(:,:) = 0.0
+    endif
+    if (.not. ASSOCIATED(fluxes%netMassIn)) then
+      ALLOCATE(fluxes%netMassIn(G%isd:G%ied,G%jsd:G%jed))
+      fluxes%netMassIn(:,:) = 0.0
+    endif
+
+    call read_data(CS%sum_file,'massout_flux_sum',fluxes%netMassOut, domain=G%Domain%mpp_domain, &
+        timelevel=CS%ridx_snap,position=center)
+    call read_data(CS%sum_file,'massin_flux_sum', fluxes%netMassIn,  domain=G%Domain%mpp_domain, &
+        timelevel=CS%ridx_snap,position=center)
+  endif
+
+  !! Make sure all halos have been updated
+  ! Vector fields
+  call pass_vector(uhtr, vhtr, G%Domain)
+  call pass_vector(khdt_x, khdt_y, G%Domain)
+
+  ! Scalar fields
+  call pass_var(h_end, G%Domain)
+  call pass_var(eatr, G%Domain)
+  call pass_var(ebtr, G%Domain)
+  call pass_var(temp, G%Domain)
+  call pass_var(salt, G%Domain)
+
+  if (do_ale) then
+    call pass_var(fluxes%netMassOut,G%Domain)
+    call pass_var(fluxes%netMassIn,G%Domain)
+  endif
+
+  ! Update the read indices
+  CS%ridx_snap = next_modulo_time(CS%ridx_snap,CS%numtime)
+  CS%ridx_sum = next_modulo_time(CS%ridx_sum,CS%numtime)
+
+  call callTree_leave("transport_by_file")
+
+end subroutine transport_by_files
+
+!> Initialize additional diagnostics required for offline tracer transport
+subroutine register_diags_offline_transport(Time, diag, CS)
+
+  type(offline_transport_CS), pointer :: CS         !< control structure for MOM
+  type(time_type), intent(in) :: Time               !< current model time
+  type(diag_ctrl)             :: diag
+
+
+  ! U-cell fields
+  CS%id_uhr = register_diag_field('ocean_model', 'uhr', diag%axesCuL, Time, &
+    'Zonal thickness fluxes remaining at end of timestep', 'kg')
+  CS%id_uhr_redist = register_diag_field('ocean_model', 'uhr_redist', diag%axesCuL, Time, &
+    'Zonal thickness fluxes to be redistributed vertically', 'kg')
+
+  ! V-cell fields
+  CS%id_vhr = register_diag_field('ocean_model', 'vhr', diag%axesCvL, Time, &
+    'Meridional thickness fluxes remaining at end of timestep', 'kg')
+  CS%id_vhr_redist = register_diag_field('ocean_model', 'vhr_redist', diag%axesCvL, Time, &
+    'Meridional thickness to be redistributed vertically', 'kg')
+
+  ! T-cell fields
+  CS%id_hr  = register_diag_field('ocean_model', 'hdiff', diag%axesTL, Time, &
+    'Difference between the stored and calculated layer thickness', 'm')
+  CS%id_ear  = register_diag_field('ocean_model', 'ear', diag%axesTL, Time, &
+    'Remaining thickness entrained from above', 'm')
+  CS%id_ebr  = register_diag_field('ocean_model', 'ebr', diag%axesTL, Time, &
+    'Remaining thickness entrained from below', 'm')
+  CS%id_eta_diff = register_diag_field('ocean_model','eta_diff', diag%axesT1, Time, &
+    'Difference in total water column height from online and offline','m')
+  CS%id_h_redist = register_diag_field('ocean_model','h_redist', diag%axesTL, Time, &
+    'Layer thicknesses before redistribution of mass fluxes','m')
+
+end subroutine register_diags_offline_transport
+
+!> Initializes the control structure for offline transport and reads in some of the
+! run time parameters from MOM_input
+subroutine offline_transport_init(param_file, CS, diabatic_aux_CSp, G, GV)
+
+  type(param_file_type),               intent(in)     :: param_file
+  type(offline_transport_CS), pointer, intent(inout)  :: CS
+  type(diabatic_aux_CS),          pointer, intent(in) :: diabatic_aux_CSp
+  type(ocean_grid_type),               intent(in)     :: G
+  type(verticalGrid_type),             intent(in)     :: GV
+
+  character(len=40)                               :: mod = "offline_transport"
+
+  integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
+  integer :: IsdB, IedB, JsdB, JedB
+
+  is   = G%isc   ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = GV%ke
+  isd  = G%isd   ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
+  IsdB = G%IsdB  ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+
+  call callTree_enter("offline_transport_init, MOM_offline_control.F90")
+
+  if (associated(CS)) then
+    call MOM_error(WARNING, "offline_transport_init called with an associated "// &
+      "control structure.")
+    return
+  endif
+  allocate(CS)
+  call log_version(param_file,mod,version, &
+    "This module allows for tracers to be run offline")
+
+  ! Parse MOM_input for offline control
+  call get_param(param_file, mod, "OFFLINEDIR", CS%offlinedir, &
+    "Input directory where the offline fields can be found", default=" ")
+  call get_param(param_file, mod, "OFF_SUM_FILE", CS%sum_file, &
+    "Filename where the accumulated fields can be found", default = " ")
+  call get_param(param_file, mod, "OFF_SNAP_FILE", CS%snap_file, &
+    "Filename where snapshot fields can be found",default=" ")
+  call get_param(param_file, mod, "START_INDEX", CS%start_index, &
+    "Which time index to start from", default=1)
+  call get_param(param_file, mod, "NUMTIME", CS%numtime, &
+    "Number of timelevels in offline input files", default=0)
+  call get_param(param_file, mod, "FIELDS_ARE_OFFSET", CS%fields_are_offset, &
+    "True if the time-averaged fields and snapshot fields\n"//&
+    "are offset by one time level", default=.false.)
+  call get_param(param_file, mod, "REDISTRIBUTE_METHOD", CS%redistribute_method, &
+    "Redistributes any remaining horizontal fluxes throughout\n"//&
+    "the rest of water column. Options are 'barotropic' which\n"//&
+    "evenly distributes flux throughout the entire water column,\n"//&
+    "'upwards' which adds the maximum of the remaining flux in\n"//&
+    "each layer above, and 'none' which does no redistribution", &
+    default='barotropic')
+  call get_param(param_file, mod, "NUM_OFF_ITER", CS%num_off_iter, &
+    "Number of iterations to subdivide the offline tracer advection and diffusion" )
+  call get_param(param_file, mod, "DT_OFFLINE", CS%dt_offline, &
+    "Length of the offline timestep")
+
+  ! Concatenate offline directory and file names
+  CS%snap_file = trim(CS%offlinedir)//trim(CS%snap_file)
+  CS%sum_file = trim(CS%offlinedir)//trim(CS%sum_file)
+
+  ! Set the starting read index for time-averaged and snapshotted fields
+  CS%ridx_sum = CS%start_index
+  if(CS%fields_are_offset) CS%ridx_snap = next_modulo_time(CS%start_index,CS%numtime)
+  if(.not. CS%fields_are_offset) CS%ridx_snap = CS%start_index
+
+  ! Copy over parameters from other control structures
+  if(associated(diabatic_aux_CSp)) then
+    CS%evap_CFL_limit = diabatic_aux_CSp%evap_CFL_limit
+    CS%minimum_forcing_depth = diabatic_aux_CSp%minimum_forcing_depth
+  endif
+
+  call callTree_leave("offline_transport_init")
+
+end subroutine offline_transport_init
+
+!> Calculates the next timelevel to read from the input fields. This allows the 'looping'
+!! of the fields
+function next_modulo_time(inidx, numtime)
+  ! Returns the next time interval to be read
+  integer                 :: numtime              ! Number of time levels in input fields
+  integer                 :: inidx                ! The current time index
+
+  integer                 :: read_index           ! The index in the input files that corresponds
+                                                  ! to the current timestep
+
+  integer                 :: next_modulo_time
+
+  read_index = mod(inidx+1,numtime)
+  if (read_index < 0)  read_index = inidx-read_index
+  if (read_index == 0) read_index = numtime
+
+  next_modulo_time = read_index
+
+end function next_modulo_time
+
+>>>>>>> 3b16d81cb00c11e924523ae5ca0d66790b44e303:src/tracer/MOM_offline_control.F90
 !> This updates thickness based on the convergence of horizontal mass fluxes
 !! NOTE: Only used in non-ALE mode
 subroutine update_h_horizontal_flux(G, GV, uhtr, vhtr, h_pre, h_new)
@@ -270,8 +579,13 @@ subroutine distribute_residual_uh_barotropic(G, GV, h, uh)
         "barotropic redistribution")
     enddo
 
+<<<<<<< HEAD:src/tracer/MOM_offline_aux.F90
 !    ! Update layer thicknesses at the end 
     do k=1,nz ; do i=is,ie
+=======
+    ! Update layer thicknesses at the end
+    do k=1,nz ; do i=is-2,ie+1
+>>>>>>> 3b16d81cb00c11e924523ae5ca0d66790b44e303:src/tracer/MOM_offline_control.F90
       h(i,j,k) = h(i,j,k) + (uh2d(I-1,k) - uh2d(I,k))/G%areaT(i,j)
     enddo ; enddo
     do k=1,nz ; do i=is-1,ie 
@@ -346,9 +660,14 @@ subroutine distribute_residual_vh_barotropic(G, GV, h, vh)
     enddo
 
 
+<<<<<<< HEAD:src/tracer/MOM_offline_aux.F90
     ! Update layer thicknesses at the end.
     ! This may not be needed since the limits on the flux are half of the original thickness
     do k=1,nz ; do j=js,je
+=======
+    ! Update layer thicknesses at the end
+    do k=1,nz ; do j=js-2,je+1
+>>>>>>> 3b16d81cb00c11e924523ae5ca0d66790b44e303:src/tracer/MOM_offline_control.F90
       h(i,j,k) = h(i,j,k) + (vh2d(J-1,k) - vh2d(J,k))/G%areaT(i,j)
     enddo ; enddo
     do k=1,nz ; do j=js-1,je
@@ -388,14 +707,20 @@ subroutine distribute_residual_uh_upwards(G, GV, h, uh)
       h2d(i,k) = max(h(i,j,k)*G%areaT(i,j)-min_h*G%areaT(i,j),min_h*G%areaT(i,j))
     enddo ; enddo
 
+<<<<<<< HEAD:src/tracer/MOM_offline_aux.F90
     do i=is-1,ie 
+=======
+    do i=is-1,ie
+      uh_sum = sum(uh2d(I,:))
+>>>>>>> 3b16d81cb00c11e924523ae5ca0d66790b44e303:src/tracer/MOM_offline_control.F90
       do k=1,nz
-        uh_remain = uh2d(I,k) 
+        uh_remain = uh2d(I,k)
         uh_neglect = GV%H_subroundoff*min(G%areaT(i,j),G%areaT(i+1,j))
         if(uh_remain<-uh_neglect) then
-          ! Set the mass flux to zero. This will be refilled in the first iteration 
+          ! Set the mass flux to zero. This will be refilled in the first iteration
           uh2d(I,k) = 0.0
           do k_rev=k,1,-1
+<<<<<<< HEAD:src/tracer/MOM_offline_aux.F90
             ! This lower bound only allows half of the layer to be depleted
             uh_LB = -0.5*h2d(i+1,k_rev)
             ! You can either add the difference between the lower bound and the
@@ -407,16 +732,42 @@ subroutine distribute_residual_uh_upwards(G, GV, h, uh)
             uh_remain = uh_remain - uh_add
             uh2d(I,k_rev) = uh2d(I,k_rev) + uh_add
             if(uh_remain>-uh_neglect) exit
+=======
+            ! Calculate the lower bound of uh(I)
+            hlos = max(uh2d(I+1,k_rev),0.0)
+            ! This lower bound is deliberately conservative to ensure that nothing will be left after
+            uh_LB = min(-0.5*h2d(i+1,k_rev), -0.5*hlos, 0.0)
+              ! Calculate the maximum amount that could be added
+              uh_max = uh_LB-uh2d(I,k_rev)
+              ! Calculate how much will actually be added to uh(I)
+              uh_add = max(uh_max,uh_remain)
+              ! Reduce the remaining flux
+              uh_remain = uh_remain - uh_add
+              uh2d(I,k_rev) = uh2d(I,k_rev) + uh_add
+              if(uh2d(I,k_rev)==uh_LB) filled(k_rev)=.true.
+              if(uh_remain>-uh_neglect) exit
+>>>>>>> 3b16d81cb00c11e924523ae5ca0d66790b44e303:src/tracer/MOM_offline_control.F90
           enddo
         elseif (uh_remain>uh_neglect) then
-          ! Set the amount in the layer with remaining fluxes to zero. This will be reset 
+          ! Set the amount in the layer with remaining fluxes to zero. This will be reset
           ! in the first iteration of the redistribution loop
           uh2d(I,k) = 0.0
           ! Loop to distribute remaining flux in layers above
           do k_rev=k,1,-1
+<<<<<<< HEAD:src/tracer/MOM_offline_aux.F90
             ! This lower bound only allows half of the layer to be depleted
             uh_UB = 0.5*h2d(i,k_rev)
             uh_add = max(min(uh_UB-uh2d(I,k_rev), uh_remain), 0.0)
+=======
+            hlos = max(0.0,-uh2d(I-1,k_rev))
+            ! Calculate the upper bound of uh(I)
+            uh_UB = max(0.5*h2d(i,k_rev), 0.5*h2d(i,k_rev)-hlos, 0.0)
+            ! Calculate the maximum amount that could be added
+            uh_max = uh_UB-uh2d(I,k_rev)
+            ! Calculate how much will actually be added to uh(I)
+            uh_add = min(uh_max,uh_remain)
+            ! Reduce the remaining flux
+>>>>>>> 3b16d81cb00c11e924523ae5ca0d66790b44e303:src/tracer/MOM_offline_control.F90
             uh_remain = uh_remain - uh_add
             uh2d(I,k_rev) = uh2d(I,k_rev) + uh_add
             if(uh_remain<uh_neglect) exit
@@ -436,7 +787,11 @@ subroutine distribute_residual_uh_upwards(G, GV, h, uh)
 
     enddo
 
+<<<<<<< HEAD:src/tracer/MOM_offline_aux.F90
 !    ! Update layer thicknesses at the end 
+=======
+    ! Update layer thicknesses at the end
+>>>>>>> 3b16d81cb00c11e924523ae5ca0d66790b44e303:src/tracer/MOM_offline_control.F90
     do k=1,nz ; do i=is,ie
       h(i,j,k) = (h(i,j,k)*G%areaT(i,j) + (uh2d(I-1,k) - uh2d(I,k)))/G%areaT(i,j)
     enddo ; enddo
@@ -480,8 +835,9 @@ subroutine distribute_residual_vh_upwards(G, GV, h, vh)
 
     do j=js-1,je
       do k=1,nz
-        vh_remain = vh2d(J,k) 
+        vh_remain = vh2d(J,k)
         vh_neglect = GV%H_subroundoff*min(G%areaT(i,j),G%areaT(i,j+1))
+<<<<<<< HEAD:src/tracer/MOM_offline_aux.F90
         if(vh_remain<-vh_neglect) then
           ! Set the mass flux to zero. This will be refilled in the first iteration 
           vh2d(J,k) = 0.0
@@ -494,19 +850,50 @@ subroutine distribute_residual_vh_upwards(G, GV, h, vh)
             ! to magnitude. The minimum is to guard against the case where uh2d>uh_LB
             ! not quite the same potentially because of roundoff error
             vh_add = min(max(vh_LB-vh2d(J,k_rev), vh_remain),0.0)
+=======
+        if(vh_remain<0.0) then
+          ! Set the amount in the layer with remaining fluxes to zero. This will be reset
+          ! in the first iteration of the redistribution loop
+          vh2d(J,k) = 0.0
+          do k_rev=k,1,-1
+            ! Calculate the lower bound of uh(I)
+            hlos = max(vh2d(J+1,k_rev),0.0)
+            vh_LB = min(-0.5*h2d(j+1,k_rev), -0.5*h2d(j+1,k_rev)+hlos, 0.0)
+            ! Calculate the maximum amount that could be added
+            vh_max = vh_LB-vh2d(J,k_rev)
+            ! Calculate how much will actually be added to uh(I)
+            vh_add = max(vh_max,vh_remain)
+            ! Reduce the remaining flux
+>>>>>>> 3b16d81cb00c11e924523ae5ca0d66790b44e303:src/tracer/MOM_offline_control.F90
             vh_remain = vh_remain - vh_add
             vh2d(J,k_rev) = vh2d(J,k_rev) + vh_add
             if(vh_remain>-vh_neglect) exit
           enddo
+<<<<<<< HEAD:src/tracer/MOM_offline_aux.F90
         elseif (vh_remain>vh_neglect) then
           ! Set the amount in the layer with remaining fluxes to zero. This will be reset 
+=======
+        elseif (vh_remain>0.0) then
+          ! Set the amount in the layer with remaining fluxes to zero. This will be reset
+>>>>>>> 3b16d81cb00c11e924523ae5ca0d66790b44e303:src/tracer/MOM_offline_control.F90
           ! in the first iteration of the redistribution loop
           vh2d(J,k) = 0.0
           ! Loop to distribute remaining flux in layers above
           do k_rev=k,1,-1
+<<<<<<< HEAD:src/tracer/MOM_offline_aux.F90
             ! This lower bound only allows half of the layer to be depleted
             vh_UB = 0.5*h2d(j,k_rev)
             vh_add = max(min(vh_UB-vh2d(J,k_rev), vh_remain), 0.0)
+=======
+            hlos = max(-vh2d(J-1,k_rev),0.0)
+            ! Calculate the upper bound of uh(I)
+            vh_UB = max(0.5*h2d(j,k_rev), 0.5*h2d(j,k_rev)-hlos, 0.0)
+            ! Calculate the maximum amount that could be added
+            vh_max = vh_UB-vh2d(J,k_rev)
+            ! Calculate how much will actually be added to uh(I)
+            vh_add = min(vh_max,vh_remain)
+            ! Reduce the remaining flux
+>>>>>>> 3b16d81cb00c11e924523ae5ca0d66790b44e303:src/tracer/MOM_offline_control.F90
             vh_remain = vh_remain - vh_add
             vh2d(J,k_rev) = vh2d(J,k_rev) + vh_add
             if(vh_remain<vh_neglect) exit
@@ -521,11 +908,15 @@ subroutine distribute_residual_vh_upwards(G, GV, h, vh)
             call MOM_error(WARNING,"Water column cannot accommodate UH redistribution. Tracer will not be conserved")
           endif
         endif
-      enddo 
+      enddo
 
     enddo
 
+<<<<<<< HEAD:src/tracer/MOM_offline_aux.F90
 !    ! Update layer thicknesses at the end 
+=======
+    ! Update layer thicknesses at the end
+>>>>>>> 3b16d81cb00c11e924523ae5ca0d66790b44e303:src/tracer/MOM_offline_control.F90
     do k=1,nz ; do j=js,je
       h(i,j,k) = (h(i,j,k)*G%areaT(i,j) + (vh2d(J-1,k) - vh2d(J,k)))/G%areaT(i,j)
     enddo ; enddo
@@ -537,6 +928,7 @@ subroutine distribute_residual_vh_upwards(G, GV, h, vh)
 
 end subroutine distribute_residual_vh_upwards
 
+<<<<<<< HEAD:src/tracer/MOM_offline_aux.F90
 !> add_diurnal_SW adjusts the shortwave fluxes in an forcying_type variable
 !! to add a synthetic diurnal cycle. Adapted from SIS2 
 subroutine offline_add_diurnal_SW(fluxes, G, Time_start, Time_end)
@@ -588,6 +980,8 @@ subroutine offline_add_diurnal_SW(fluxes, G, Time_start, Time_end)
 
 end subroutine offline_add_diurnal_sw
 
+=======
+>>>>>>> 3b16d81cb00c11e924523ae5ca0d66790b44e303:src/tracer/MOM_offline_control.F90
 !> \namespace mom_offline_transport
 !! \section offline_overview Offline Tracer Transport in MOM6
 !!  'Offline tracer modeling' uses physical fields (e.g. mass transports and layer thicknesses) saved
@@ -601,11 +995,11 @@ end subroutine offline_add_diurnal_sw
 !!  frequency. For example, consider the case of a surface boundary layer with a strong diurnal cycle.
 !!  An offline simulation with a 1 day timestep, captures the net transport into or out of that layer,
 !!  but not the exact cycling. This effective aliasing may also complicate online model configurations
-!!  which strongly-eddying regions. In this case, the offline model timestep must be limited to some 
-!!  fraction of the eddy correlation timescale. Lastly, the nonlinear advection scheme which applies 
+!!  which strongly-eddying regions. In this case, the offline model timestep must be limited to some
+!!  fraction of the eddy correlation timescale. Lastly, the nonlinear advection scheme which applies
 !!  limited mass-transports over a sequence of iterations means that tracers are not transported along
 !!  exactly the same path as they are in the online model.
-!!  
+!!
 !!  This capability has currently targeted the Baltic_ALE_z test case, though some work has also been
 !!  done with the OM4 1/2 degree configuration. Work is ongoing to develop recommendations and best
 !!  practices for investigators seeking to use MOM6 for offline tracer modeling.
@@ -636,7 +1030,7 @@ end subroutine offline_add_diurnal_sw
 !!        END ITERATION
 !!        -#  Repeat steps 1 and 2
 !!        -#  Redistribute any residual mass fluxes that remain after the advection iterations
-!!            in a barotropic manner, progressively upward through the water column.  
+!!            in a barotropic manner, progressively upward through the water column.
 !!        -#  Force a remapping to the stored layer thicknesses that correspond to the snapshot of
 !!            the online model at the end of an accumulation interval
 !!        -#  Reset T/S and h to their stored snapshotted values to prevent model drift
@@ -667,5 +1061,9 @@ end subroutine offline_add_diurnal_sw
 !!                          column,'upwards' which adds the maximum of the remaining flux in each layer above,
 !!                          and 'none' which does no redistribution"
 
+<<<<<<< HEAD:src/tracer/MOM_offline_aux.F90
 end module MOM_offline_aux
+=======
+end module MOM_offline_transport
+>>>>>>> 3b16d81cb00c11e924523ae5ca0d66790b44e303:src/tracer/MOM_offline_control.F90
 

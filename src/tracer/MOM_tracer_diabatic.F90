@@ -213,11 +213,11 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, &
 !       flux of the tracer does not get applied again during a subsequent call to tracer_vertdif
 
   type(ocean_grid_type),                 intent(in)    :: G  !< Grid structure
-  type(verticalGrid_type),               intent(in)    :: GV        !< ocean vertical grid structure  
+  type(verticalGrid_type),               intent(in)    :: GV        !< ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: Tr  !< Tracer concentration on T-cell
-  real,                                  intent(in)    :: dt !< Time-step over which forcing is applied (s)  
+  real,                                  intent(in)    :: dt !< Time-step over which forcing is applied (s)
   type(forcing),                         intent(in) :: fluxes !< Surface fluxes container
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thickness in H units 
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thickness in H units
   real,                                       intent(in)  :: evap_CFL_limit
   real,                                       intent(in)  :: minimum_forcing_depth
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: in_flux_optional ! The total time-integrated amount of tracer!
@@ -256,13 +256,13 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, &
     do j=js,je ; do i=is,ie
       in_flux(i,j) = in_flux_optional(i,j)
     enddo; enddo
-  endif    
+  endif
   if(present(out_flux_optional)) then
-    do j=js,je ; do i=is,ie 
+    do j=js,je ; do i=is,ie
       out_flux(i,j) = out_flux_optional(i,j)
     enddo ; enddo
-  endif    
-  
+  endif
+
   Idt = 1.0/dt
   numberOfGroundings = 0
 
@@ -317,7 +317,7 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, &
 
           ! Update the forcing by the part to be consumed within the present k-layer.
           ! If fractionOfForcing = 1, then updated netMassIn, netHeat, and netSalt vanish.
-          netMassIn(i) = netMassIn(i) - dThickness          
+          netMassIn(i) = netMassIn(i) - dThickness
           dTracer = dTracer + in_flux_1d(i)
           in_flux_1d(i) = 0.0
 

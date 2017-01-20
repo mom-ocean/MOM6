@@ -92,7 +92,7 @@ subroutine calculate_density_array_teos10(T, S, pressure, rho, start, npts)
 ! *  conservative temperature (T in deg C), and pressure in Pa.        *
 ! *  It uses the functions from TEOS10 website                         *
 ! *====================================================================*
-  real :: zs,zt,zp 
+  real :: zs,zt,zp
   integer :: j
 
   do j=start,start+npts-1
@@ -119,7 +119,7 @@ subroutine calculate_density_derivs_teos10(T, S, pressure, drho_dT, drho_dS, sta
 ! *                      salinity, in kg m-3 psu-1.                    *
 ! *  (in)      start - the starting point in the arrays.               *
 ! *  (in)      npts - the number of values to calculate.               *
-  real :: zs,zt,zp 
+  real :: zs,zt,zp
   integer :: j
 
   do j=start,start+npts-1
@@ -180,7 +180,7 @@ subroutine calculate_compress_teos10(T, S, pressure, rho, drho_dp, start, npts)
 ! *  temperature (T in deg C), and pressure in Pa.  It uses the        *
 ! *  subroutines from TEOS10 website                                   *
 ! *====================================================================*
-  real :: zs,zt,zp 
+  real :: zs,zt,zp
   integer :: j
 
   do j=start,start+npts-1

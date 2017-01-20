@@ -190,9 +190,9 @@ type, public :: MOM_control_struct
                                      !! with nkml sublayers and nkbl buffer layer.
   logical :: diabatic_first          !< If true, apply diabatic and thermodynamic
                                      !! processes before time stepping the dynamics.
-  logical :: use_conT_absS           !< If true, , the prognostics T&S are the conservative temperature 
+  logical :: use_conT_absS           !< If true, , the prognostics T&S are the conservative temperature
                                      !! and absolute salinity. Care should be taken to convert them
-                                     !! to potential temperature and practical salinity before 
+                                     !! to potential temperature and practical salinity before
                                      !! exchanging them with the coupler and/or reporting T&S diagnostics.
   logical :: thickness_diffuse       !< If true, diffuse interface height w/ a diffusivity KHTH.
   logical :: thickness_diffuse_first !< If true, diffuse thickness before dynamics.
@@ -368,7 +368,7 @@ type, public :: MOM_control_struct
   ! Diagnostics for tracer horizontal transport
   integer :: id_uhtr = -1, id_umo = -1, id_umo_2d = 1
   integer :: id_vhtr = -1, id_vmo = -1, id_vmo_2d = 1
-  
+
   ! The remainder provides pointers to child module control structures.
   type(MOM_dyn_unsplit_CS),      pointer :: dyn_unsplit_CSp      => NULL()
   type(MOM_dyn_unsplit_RK2_CS),  pointer :: dyn_unsplit_RK2_CSp  => NULL()
@@ -527,7 +527,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
   use_ice_shelf = .false.
   if (associated(fluxes%frac_shelf_h)) use_ice_shelf = .true.
- 
+
   ! First determine the time step that is consistent with this call.
   ! It is anticipated that the time step will almost always coincide
   ! with dt. In addition, ntstep is determined, subject to the constraint
@@ -762,9 +762,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
           endif
           call cpu_clock_begin(id_clock_ALE)
           if (use_ice_shelf) then
-                   
+
              call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, dtdia, &
-                          fluxes%frac_shelf_h)    
+                          fluxes%frac_shelf_h)
           else
              call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, dtdia)
           endif
@@ -985,7 +985,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         call vchksum(CS%vhtr,"Post-mixedlayer_restrat vhtr", G%HI, haloshift=0)
       endif
     endif
- 
+
     ! Whenever thickness changes let the diag manager know, target grids
     ! for vertical remapping may need to be regenerated.
     call diag_update_remap_grids(CS%diag)
@@ -1238,7 +1238,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
          if (CS%id_Tcon > 0) call post_data(CS%id_Tcon, CS%tv%T, CS%diag)
          if (CS%id_Sabs > 0) call post_data(CS%id_Sabs, CS%tv%S, CS%diag)
          !Using TEOS-10 function calls convert T&S diagnostics
-         !from conservative temp to potential temp and 
+         !from conservative temp to potential temp and
          !from absolute salinity to practical salinity
          do k=1,nz ; do j=js,je ; do i=is,ie
             pracSal(i,j,k) = gsw_sp_from_sr(CS%tv%S(i,j,k))
@@ -1272,7 +1272,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       
       if (CS%id_uhtr > 0) call post_data(CS%id_uhtr, CS%uhtr, CS%diag)
       if (CS%id_vhtr > 0) call post_data(CS%id_vhtr, CS%vhtr, CS%diag)
-      
+
       call post_diags_TS_tendency(G,GV,CS,dtdia)
 
       call disable_averaging(CS%diag)
@@ -1444,10 +1444,10 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     if (CS%id_sss > 0) call post_data(CS%id_sss, state%SSS, CS%diag, mask=G%mask2dT)
   else
     !Internal T&S variables are assumed to be conservative&absolute
-    if (CS%id_sstcon > 0) call post_data(CS%id_sstcon, state%SST, CS%diag, mask=G%mask2dT) 
+    if (CS%id_sstcon > 0) call post_data(CS%id_sstcon, state%SST, CS%diag, mask=G%mask2dT)
     if (CS%id_sssabs > 0) call post_data(CS%id_sssabs, state%SSS, CS%diag, mask=G%mask2dT)
     !Using TEOS-10 function calls convert T&S diagnostics
-    !from conservative temp to potential temp and 
+    !from conservative temp to potential temp and
     !from absolute salinity to practical salinity
     do j=js,je ; do i=is,ie
        pracSal(i,j,1) = gsw_sp_from_sr(state%SSS(i,j))
@@ -1468,8 +1468,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       CS%SSS_sq(i,j) = state%SSS(i,j)*state%SSS(i,j)
     enddo ; enddo
     call post_data(CS%id_sss_sq, CS%SSS_sq, CS%diag, mask=G%mask2dT)
-  endif 
-  
+  endif
+
   if (CS%id_ssu > 0) &
     call post_data(CS%id_ssu, state%u, CS%diag, mask=G%mask2dCu)
   if (CS%id_ssv > 0) &
@@ -1503,6 +1503,7 @@ end subroutine step_MOM
 !! the work is very preliminary. Some more detail about this capability along with some of the subroutines
 !! called here can be found in tracers/MOM_offline_control.F90
 subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
+<<<<<<< HEAD
   type(forcing),    intent(inout)    :: fluxes        !< pointers to forcing fields
   type(surface),    intent(inout)    :: state         !< surface ocean state
   type(time_type),  intent(in)       :: Time_start    !< starting time of a segment, as a time type
@@ -1637,7 +1638,6 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
           CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv, do_online_flag=.false., read_khdt_x=khdt_x, &
           read_khdt_y=khdt_y)
       endif    
-
     endif
     
   else ! NON-ALE MODE...NOT WELL TESTED
@@ -1677,6 +1677,29 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
                                fluxes%p_surf_SSH)
   
   call cpu_clock_end(id_clock_tracer)
+=======
+
+    h_temp = h_end-h_pre
+
+    if (CS%offline_CSp%id_hr>0) call post_data(CS%offline_CSp%id_hr, h_temp, CS%diag)
+    if (CS%offline_CSp%id_uhr>0) call post_data(CS%offline_CSp%id_uhr, uhtr, CS%diag)
+    if (CS%offline_CSp%id_vhr>0) call post_data(CS%offline_CSp%id_vhr, vhtr, CS%diag)
+    if (CS%offline_CSp%id_ear>0) call post_data(CS%offline_CSp%id_ear, eatr, CS%diag)
+    if (CS%offline_CSp%id_ebr>0) call post_data(CS%offline_CSp%id_ebr, ebtr, CS%diag)
+
+    call cpu_clock_end(id_clock_tracer)
+
+    call disable_averaging(CS%diag)
+
+    ! Note here T/S are reset to the stored snap shot to ensure that the offline model
+    ! densities, used in the neutral diffusion code don't drift too far from the online
+    ! model
+    do i = is, ie ; do j = js, je ; do k=1,nz
+      CS%T(i,j,k) = temp_old(i,j,k)
+      CS%S(i,j,k) = salt_old(i,j,k)
+      CS%h(i,j,k) = h_end(i,j,k)
+    enddo ;  enddo; enddo
+>>>>>>> 3b16d81cb00c11e924523ae5ca0d66790b44e303
 
   call disable_averaging(CS%diag)
 
@@ -1720,7 +1743,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   real, allocatable, dimension(:,:)   :: eta ! free surface height (m) or bottom press (Pa)
   real, allocatable, dimension(:,:)   :: area_shelf_h ! area occupied by ice shelf
   real, dimension(:,:), allocatable, target  :: frac_shelf_h ! fraction of total area occupied by ice shelf
-  real, dimension(:,:), pointer :: shelf_area 
+  real, dimension(:,:), pointer :: shelf_area
   type(MOM_restart_CS),  pointer      :: restart_CSp_tmp => NULL()
 
   real    :: default_val       ! default value for a parameter
@@ -2247,7 +2270,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
 
   ! From this point, there may be pointers being set, so the final grid type
   ! that will persist throughout the run has to be used.
- 
+
   if (test_grid_copy) then
     !  Copy the data from the temporary grid to the dyn_hor_grid to CS%G.
     call create_dyn_horgrid(dG, G%HI)
@@ -2446,7 +2469,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   endif
 
 
-  
+
   ! If need a diagnostic field, then would have been allocated in register_diags.
   if (CS%use_temperature) then
     if(CS%advect_TS) then
@@ -2470,7 +2493,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   ! If running in offline tracer mode, initialize the necessary control structure and
   ! parameters
   if(present(offline_tracer_mode)) offline_tracer_mode=CS%offline_tracer_mode
-  
+
   if(CS%offline_tracer_mode) then
     call offline_transport_init(param_file, CS%offline_CSp, CS%diabatic_CSp%diabatic_aux_CSp, G, GV)
     CS%offline_CSp%debug = CS%debug
@@ -2813,7 +2836,7 @@ subroutine register_diags(Time, G, GV, CS, ADp)
     CS%id_S_predia = register_diag_field('ocean_model', 'salt_predia', diag%axesTL, Time, &
         'Salinity', 'PPT')
   endif
-  
+
   ! Diagnostics related to tracer transport
   CS%id_uhtr = register_diag_field('ocean_model', 'uhtr', diag%axesCuL, Time, &
       'Accumulated zonal thickness fluxes to advect tracers', 'kg', &
@@ -2939,7 +2962,7 @@ end subroutine register_diags_TS_tendency
 !! across regridding/remapping
 subroutine register_diags_TS_vardec(Time, HI, GV, param_file, CS)
   type(time_type),         intent(in) :: Time     !< current model time
-  type(hor_index_type),    intent(in) :: HI       !< horizontal index type 
+  type(hor_index_type),    intent(in) :: HI       !< horizontal index type
   type(verticalGrid_type), intent(in) :: GV       !< ocean vertical grid structure
   type(param_file_type),   intent(in) :: param_file !< parameter file
   type(MOM_control_struct), pointer :: CS   !< control structure for MOM
@@ -3336,7 +3359,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
 
   real :: IgR0, hu, hv
   integer :: i, j, k, is, ie, js, je, nz, numberOfErrors
-  integer :: isd, ied, jsd, jed 
+  integer :: isd, ied, jsd, jed
   integer :: iscB, iecB, jscB, jecB, isdB, iedB, jsdB, jedB
   logical :: localError
   character(240) :: msg
@@ -4069,13 +4092,13 @@ end subroutine MOM_end
 !!
 !!  Here is an example 2d heat budget (depth summed) diagnostic for MOM.
 !!
-!! * OPOTTEMPTEND_2d = T_ADVECTION_XY_2d + OPOTTEMPPMDIFF_2d + HFDS 
+!! * OPOTTEMPTEND_2d = T_ADVECTION_XY_2d + OPOTTEMPPMDIFF_2d + HFDS
 !!
 !!
 !!  Here is an example 3d salt budget diagnostic for MOM.
 !!
 !! * OSALTTEND = S_ADVECTION_XY + SH_TENDENCY_VERT_REMAP + OSALTDIFF + OSALTPMDIFF
-!!                + BOUNDARY_FORCING_SALT_TENDENCY 
+!!                + BOUNDARY_FORCING_SALT_TENDENCY
 !!
 !! * OSALTTEND                      = net tendency of salt as diagnosed in MOM.F90
 !! * S_ADVECTION_XY                 = salt convergence to cell from lateral advection
@@ -4091,11 +4114,11 @@ end subroutine MOM_end
 !! * BOUNDARY_FORCING_SALT_TENDENCY generally has 3d structure, with k > 1 contributions from
 !!   the case when layers are tiny, in which case MOM6 partitions tendencies into k > 1 layers.
 !!
-!! * SFDSI = BOUNDARY_FORCING_SALT_TENDENCY[k=\@sum] 
+!! * SFDSI = BOUNDARY_FORCING_SALT_TENDENCY[k=\@sum]
 !!
 !!  Here is an example 2d salt budget (depth summed) diagnostic for MOM.
 !!
-!! * OSALTTEND_2d = S_ADVECTION_XY_2d + OSALTPMDIFF_2d + SFDSI (+ SALT_FLUX_RESTORE) 
+!! * OSALTTEND_2d = S_ADVECTION_XY_2d + OSALTPMDIFF_2d + SFDSI (+ SALT_FLUX_RESTORE)
 !!
 !!
 !!

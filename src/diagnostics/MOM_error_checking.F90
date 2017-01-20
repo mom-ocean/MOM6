@@ -68,7 +68,7 @@ subroutine check_redundant_v3d(mesg, u_comp, v_comp, G, is, ie, js, je, &
 
   character(len=24) :: mesg_k
   integer :: k
-  
+
   do k=1,G%ke
     if (k < 10) then ; write(mesg_k,'(" Layer",i2," ")') k
     elseif (k < 100) then ; write(mesg_k,'(" Layer",i3," ")') k
@@ -135,7 +135,7 @@ subroutine check_redundant_v2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
   is_ch = Isq ; ie_ch = Ieq ; js_ch = Jsq ; je_ch = Jeq
   if (present(is)) is_ch = is ; if (present(ie)) ie_ch = ie
   if (present(js)) js_ch = js ; if (present(js)) je_ch = je
-  
+
   do i=is_ch,ie_ch ; do j=js_ch+1,je_ch
     if (u_resym(i,j) /= u_comp(i,j)) then
       write(mesg2,'(" redundant u-components",2(1pe12.4)," differ by ", &
@@ -171,7 +171,7 @@ subroutine check_redundant_s3d(mesg, array, G, is, ie, js, je, stagger)
 
   character(len=24) :: mesg_k
   integer :: k
-  
+
   do k=1,G%ke
     if (k < 10) then ; write(mesg_k,'(" Layer",i2," ")') k
     elseif (k < 100) then ; write(mesg_k,'(" Layer",i3," ")') k
@@ -226,12 +226,12 @@ subroutine check_redundant_s2d(mesg, array, G, is, ie, js, je, stagger)
   do i=isd,ied ; do j=jsd,jed
     a_resym(i,j) = a_nonsym(i,j)
   enddo ; enddo
-  call do_group_pass(pass_a_resym, G%Domain) 
+  call do_group_pass(pass_a_resym, G%Domain)
 
   is_ch = Isq ; ie_ch = Ieq ; js_ch = Jsq ; je_ch = Jeq
   if (present(is)) is_ch = is ; if (present(ie)) ie_ch = ie
   if (present(js)) js_ch = js ; if (present(js)) je_ch = je
-  
+
   do i=is_ch,ie_ch ; do j=js_ch,je_ch
     if (a_resym(i,j) /= array(i,j)) then
       write(mesg2,'(" Redundant points",2(1pe12.4)," differ by ", &
@@ -251,7 +251,7 @@ function totalStuff(HI, hThick, areaT, stuff)
   type(hor_index_type),               intent(in) :: HI     !< A horizontal index type
   real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: hThick !< The array of thicknesses to use as weights
   real, dimension(HI%isd:,HI%jsd:),   intent(in) :: areaT  !< The array of cell areas in m2
-  real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: stuff  !< The array of stuff to be summed 
+  real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: stuff  !< The array of stuff to be summed
   real                                         :: totalStuff
   integer :: i, j, k, nz
 
