@@ -65,7 +65,7 @@ subroutine USER_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
    "Unmodified user routine called - you must edit the routine to use it")
   Rlay(:) = 0.0
   g_prime(:) = 0.0
-  
+
   if (first_call) call write_user_log(param_file)
 
 end subroutine USER_set_coord
@@ -205,7 +205,7 @@ subroutine USER_set_OBC_data(OBC, tv, G, param_file, tr_Reg)
                                                   !! whether, where, and what open boundary
                                                   !! conditions are used.
   type(thermo_var_ptrs),      intent(in) :: tv    !< A structure containing pointers to any
-                                       !! available thermodynamic fields, including potential 
+                                       !! available thermodynamic fields, including potential
                                        !! temperature and salinity or mixed layer density. Absent
                                        !! fields have NULL ptrs.
   type(ocean_grid_type),      intent(in) :: G     !< The ocean's grid structure.
