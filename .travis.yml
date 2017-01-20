@@ -7,4 +7,4 @@ language: c
 # Tests to run
 script:
  - git clone https://github.com/adcroft/house_cleaning.git
- - ./house_cleaning/trailer.py src config_src
+ - ./house_cleaning/trailer.py -e TEOS10 src config_src
