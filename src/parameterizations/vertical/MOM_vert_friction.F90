@@ -130,7 +130,7 @@ contains
 !! is the <em>interfacial coupling thickness per time step</em>,
 !! encompassing background viscosity as well as contributions from
 !! enhanced mixed and bottom layer viscosities.
-!! $r_k$ is a Rayleight drag term due to channel drag. 
+!! $r_k$ is a Rayleight drag term due to channel drag.
 !! There is an additional stress term on the right-hand side
 !! if DIRECT_STRESS is true, applied to the surface layer.
 
@@ -155,7 +155,7 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, GV, CS, &
   !> Zonal bottom stress from ocean to rock in Pa
   real, optional, intent(out), dimension(SZIB_(G),SZJ_(G)) :: taux_bot
   !> Meridional bottom stress from ocean to rock in Pa
-  real, optional, intent(out), dimension(SZI_(G),SZJB_(G)) :: tauy_bot 
+  real, optional, intent(out), dimension(SZI_(G),SZJB_(G)) :: tauy_bot
 
   ! Fields from fluxes used in this subroutine:
   !   taux: Zonal wind stress in Pa.

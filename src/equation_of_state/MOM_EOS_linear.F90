@@ -32,8 +32,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public calculate_compress_linear, calculate_density_linear
-public calculate_density_derivs_linear, calculate_2_densities_linear
-public calculate_specvol_derivs_linear
+public calculate_density_derivs_linear, calculate_specvol_derivs_linear
 public calculate_density_scalar_linear, calculate_density_array_linear
 public int_density_dz_linear, int_spec_vol_dp_linear
 
@@ -181,36 +180,6 @@ subroutine calculate_compress_linear(T, S, pressure, rho, drho_dp, start, npts,&
   enddo
 end subroutine calculate_compress_linear
 
-subroutine calculate_2_densities_linear(T, S, pressure1, pressure2, rho1, rho2,&
-                                        start, npts, Rho_T0_S0, dRho_dT, dRho_dS)
-  real,    intent(in),  dimension(:) :: T, S
-  real,    intent(in)                :: pressure1, pressure2
-  real,    intent(out), dimension(:) :: rho1, rho2
-  integer, intent(in)                :: start, npts
-  real,    intent(in)                :: Rho_T0_S0, dRho_dT, dRho_dS
-! *  This subroutine computes the densities of sea water (rho1 and     *
-! *  rho2) at two reference pressures (pressure1 and pressure2) from   *
-! *  salinity and potential temperature.                               *
-! *                                                                    *
-! * Arguments: T - potential temperature relative to the surface in C. *
-! *  (in)      S - salinity in PSU.                                    *
-! *  (in)      pressure1 - the first pressure in Pa.                   *
-! *  (in)      pressure2 -  the second pressure in Pa.                 *
-! *  (out)     rho1 - density at pressure1 in kg m-3.                  *
-! *  (out)     rho2 - density at pressure2 in kg m-3.                  *
-! *  (in)      start - the starting point in the arrays.               *
-! *  (in)      npts - the number of values to calculate.               *
-! *  (in)      Rho_T0_S0 - The density at T=0, S=0, in kg m-3.         *
-! *  (in)      dRho_dT - The derivatives of density with temperature   *
-! *  (in)      dRho_dS - and salinity, in kg m-3 C-1 and kg m-3 psu-1. *
-  integer :: j
-
-  do j=start, start+npts-1
-    rho1(j) = Rho_T0_S0 +  dRho_dT*T(j) + dRho_dS*S(j);
-    rho2(j) = Rho_T0_S0 +  dRho_dT*T(j) + dRho_dS*S(j);
-  enddo
-end subroutine calculate_2_densities_linear
-
 subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, HIO, &
                  Rho_T0_S0, dRho_dT, dRho_dS, dpa, intz_dpa, intx_dpa, inty_dpa)
   type(hor_index_type), intent(in)  :: HII, HIO
@@ -230,24 +199,24 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HII, 
 ! pressure anomalies across layers, which are required for calculating the
 ! finite-volume form pressure accelerations in a Boussinesq model.
 !
-! Arguments: T - potential temperature relative to the surface in C. 
-!  (in)      S - salinity in PSU.                                    
-!  (in)      z_t - height at the top of the layer in m.           
-!  (in)      z_b - height at the top of the layer in m.           
+! Arguments: T - potential temperature relative to the surface in C.
+!  (in)      S - salinity in PSU.
+!  (in)      z_t - height at the top of the layer in m.
+!  (in)      z_b - height at the top of the layer in m.
 !  (in)      rho_ref - A mean density, in kg m-3, that is subtracted out to reduce
 !                    the magnitude of each of the integrals.
 !  (in)      rho_0_pres - A density, in kg m-3, that is used to calculate the
 !                    pressure (as p~=-z*rho_0_pres*G_e) used in the equation of
 !                    state. rho_0_pres is not used here.
-!  (in)      G_e - The Earth's gravitational acceleration, in m s-2. 
+!  (in)      G_e - The Earth's gravitational acceleration, in m s-2.
 !  (in)      G - The ocean's grid structure.
 !  (in)      Rho_T0_S0 - The density at T=0, S=0, in kg m-3.
 !  (in)      dRho_dT - The derivative of density with temperature in kg m-3 C-1.
 !  (in)      dRho_dS - The derivative of density with salinity, in kg m-3 psu-1.
-!  (out)     dpa - The change in the pressure anomaly across the layer, in Pa.                                  
+!  (out)     dpa - The change in the pressure anomaly across the layer, in Pa.
 !  (out,opt) intz_dpa - The integral through the thickness of the layer of the
 !                       pressure anomaly relative to the anomaly at the top of
-!                       the layer, in Pa m. 
+!                       the layer, in Pa m.
 !  (out,opt) intx_dpa - The integral in x of the difference between the
 !                       pressure anomaly at the top and bottom of the layer
 !                       divided by the x grid spacing, in Pa.
@@ -316,24 +285,24 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
 ! calculating the finite-volume form pressure accelerations in a non-Boussinesq
 ! model.  Specific volume is assumed to vary linearly between adjacent points.
 !
-! Arguments: T - potential temperature relative to the surface in C. 
-!  (in)      S - salinity in PSU.                                    
-!  (in)      p_t - pressure at the top of the layer in Pa.           
-!  (in)      p_b - pressure at the top of the layer in Pa.           
+! Arguments: T - potential temperature relative to the surface in C.
+!  (in)      S - salinity in PSU.
+!  (in)      p_t - pressure at the top of the layer in Pa.
+!  (in)      p_b - pressure at the top of the layer in Pa.
 !  (in)      alpha_ref - A mean specific volume that is subtracted out to reduce
 !                        the magnitude of each of the integrals, m3 kg-1.
 !                        The calculation is mathematically identical with
 !                        different values of alpha_ref, but this reduces the
-!                        effects of roundoff.       
+!                        effects of roundoff.
 !  (in)      HI - The ocean's horizontal index type.
 !  (in)      Rho_T0_S0 - The density at T=0, S=0, in kg m-3.
 !  (in)      dRho_dT - The derivative of density with temperature in kg m-3 C-1.
 !  (in)      dRho_dS - The derivative of density with salinity, in kg m-3 psu-1.
-!  (out)     dza - The change in the geopotential anomaly across the layer, 
-!                  in m2 s-2.                                  
-!  (out,opt) intp_dza - The integral in pressure through the layer of the 
+!  (out)     dza - The change in the geopotential anomaly across the layer,
+!                  in m2 s-2.
+!  (out,opt) intp_dza - The integral in pressure through the layer of the
 !                       geopotential anomaly relative to the anomaly at the
-!                       bottom of the layer, in Pa m2 s-2. 
+!                       bottom of the layer, in Pa m2 s-2.
 !  (out,opt) intx_dza - The integral in x of the difference between the
 !                       geopotential anomaly at the top and bottom of the layer
 !                       divided by the x grid spacing, in m2 s-2.

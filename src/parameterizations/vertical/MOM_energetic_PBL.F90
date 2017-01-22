@@ -77,7 +77,6 @@ use MOM_verticalGrid, only : verticalGrid_type
 use CVmix_kpp, only : cvmix_kpp_efactor_model
 use CVmix_kinds_and_types, only : cvmix_global_params_type
 ! use MOM_EOS, only : calculate_density, calculate_density_derivs
-! use MOM_EOS, only : calculate_2_densities
 
 implicit none ; private
 
@@ -618,7 +617,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       ! Computing stability scale which correlates with TKE for mixing, where
       ! TKE for mixing = TKE production minus TKE dissipation
       Stab_Scale = -u_star**2 / ( VonKar * ( C_MO * B_STAR +  C_EK * u_star * absf(i)))
-      
+
       if (CS%Use_Mstar_Fixed) then
         mech_TKE(i) = (dt*CS%mstar*GV%Rho0)*((U_Star**3))
         conv_PErel(i) = 0.0
