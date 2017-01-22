@@ -32,7 +32,7 @@ subroutine P3M_interpolation( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients )
 !------------------------------------------------------------------------------
 ! Cubic interpolation between edges.
 !
-! The edge values and slopes MUST have been estimated prior to calling 
+! The edge values and slopes MUST have been estimated prior to calling
 ! this routine.
 !
 ! It is assumed that the size of the array 'u' is equal to the number of cells
@@ -53,9 +53,9 @@ subroutine P3M_interpolation( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients )
   ! This routine could be called directly instead of having to call
   ! 'P3M_interpolation' first but we do that to provide an homogeneous
   ! interface.
-  
+
   call P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients )
-    
+
 end subroutine P3M_interpolation
 
 
@@ -72,7 +72,7 @@ subroutine P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients )
 !       (a) Build cubic curve
 !       (b) Check if cubic curve is monotonic
 !       (c) If not, monotonize cubic curve and rebuild it
-! 
+!
 ! Step (3) of the monotonization process leaves all edge values unchanged.
 !------------------------------------------------------------------------------
 
@@ -93,52 +93,52 @@ subroutine P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients )
   real      :: u1_l, u1_r   ! edge slopes
   real      :: u_l, u_c, u_r        ! left, center and right cell averages
   real      :: h_l, h_c, h_r        ! left, center and right cell widths
-  real      :: sigma_l, sigma_c, sigma_r    ! left, center and right 
-                                            ! van Leer slopes   
+  real      :: sigma_l, sigma_c, sigma_r    ! left, center and right
+                                            ! van Leer slopes
   real      :: slope        ! retained PLM slope
   real      :: eps
 
   eps = 1e-10
-  
+
   ! 1. Bound edge values (boundary cells are assumed to be local extrema)
   call bound_edge_values( N, h, u, ppoly_E )
 
   ! 2. Systematically average discontinuous edge values
   call average_discontinuous_edge_values( N, ppoly_E )
-  
+
 
   ! 3. Loop on cells and do the following
   !     (a) Build cubic curve
   !     (b) Check if cubic curve is monotonic
   !     (c) If not, monotonize cubic curve and rebuild it
   do k = 1,N
-  
+
     ! Get edge values, edge slopes and cell width
     u0_l = ppoly_E(k,1)
     u0_r = ppoly_E(k,2)
     u1_l = ppoly_S(k,1)
     u1_r = ppoly_S(k,2)
-    
+
     ! Get cell widths and cell averages (boundary cells are assumed to
     ! be local extrema for the sake of slopes)
     u_c = u(k)
     h_c = h(k)
-    
+
     if ( k .EQ. 1 ) then
       h_l = h(k)
       u_l = u(k)
     else
       h_l = h(k-1)
       u_l = u(k-1)
-    end if  
-    
+    end if
+
     if ( k .EQ. N ) then
       h_r = h(k)
       u_r = u(k)
     else
       h_r = h(k+1)
       u_r = u(k+1)
-    end if  
+    end if
 
     ! Compute limited slope
     sigma_l = 2.0 * ( u_c - u_l ) / ( h_c + h_neglect )
@@ -150,24 +150,24 @@ subroutine P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients )
     else
       slope = 0.0
     end if
-    
+
     ! If the slopes are close to zero in machine precision and in absolute
     ! value, we set the slope to zero. This prevents asymmetric representation
     ! near extrema.
     if ( abs(u1_l*h_c) .LT. eps ) then
       u1_l = 0.0
-    end if  
-    
+    end if
+
     if ( abs(u1_r*h_c) .LT. eps ) then
       u1_r = 0.0
-    end if  
+    end if
 
     ! The edge slopes are limited from above by the respective
     ! one-sided slopes
     if ( abs(u1_l) .GT. abs(sigma_l) ) then
       u1_l = sigma_l
     end if
-    
+
     if ( abs(u1_r) .GT. abs(sigma_r) ) then
       u1_r = sigma_r
     end if
@@ -178,13 +178,13 @@ subroutine P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients )
     ! Check whether cubic is monotonic
     monotonic = is_cubic_monotonic( ppoly_coefficients, k )
 
-    ! If cubic is not monotonic, monotonize it by modifiying the 
+    ! If cubic is not monotonic, monotonize it by modifiying the
     ! edge slopes, store the new edge slopes and recompute the
     ! cubic coefficients
     if ( monotonic .EQ. 0 ) then
       call monotonize_cubic( h_c, u0_l, u0_r, sigma_l, sigma_r, slope, u1_l, u1_r )
     end if
-      
+
     ! Store edge slopes
     ppoly_S(k,1) = u1_l
     ppoly_S(k,2) = u1_r
@@ -193,7 +193,7 @@ subroutine P3M_limiter( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients )
     call build_cubic_interpolant( h, k, ppoly_E, ppoly_S, ppoly_coefficients )
 
   end do ! loop on cells
-  
+
 end subroutine P3M_limiter
 
 
@@ -202,7 +202,7 @@ end subroutine P3M_limiter
 ! -----------------------------------------------------------------------------
 subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients )
 !------------------------------------------------------------------------------
-! The following explanations apply to the left boundary cell. The same 
+! The following explanations apply to the left boundary cell. The same
 ! reasoning holds for the right boundary cell.
 !
 ! A cubic needs to be built in the cell and requires four degrees of freedom,
@@ -220,7 +220,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coeffici
   real, dimension(:),   intent(in)    :: u ! cell averages (size N)
   real, dimension(:,:), intent(inout) :: ppoly_E            !Edge value of polynomial
   real, dimension(:,:), intent(inout) :: ppoly_S            !Edge slope of polynomial
-  real, dimension(:,:), intent(inout) :: ppoly_coefficients !Coefficients of polynomial 
+  real, dimension(:,:), intent(inout) :: ppoly_coefficients !Coefficients of polynomial
 
   ! Local variables
   integer       :: i0, i1
@@ -234,7 +234,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coeffici
   real          :: slope
 
   eps = 1e-10
-  
+
   ! ----- Left boundary -----
   i0 = 1
   i1 = 2
@@ -247,7 +247,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coeffici
   ! the global coordinate system
   b = ppoly_coefficients(i1,2)
   u1_r = b / h1     ! derivative evaluated at xi = 0.0, expressed w.r.t. x
-  
+
   ! Limit the right slope by the PLM limited slope
   slope = 2.0 * ( u1 - u0 ) / ( h0 + h_neglect )
   if ( abs(u1_r) .GT. abs(slope) ) then
@@ -272,7 +272,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coeffici
     u1_l = 0.0
     u1_r = 0.0
   end if
-  
+
   ! Store edge values and slope, build cubic and check monotonicity
   ppoly_E(i0,1) = u0_l
   ppoly_E(i0,2) = u0_r
@@ -282,7 +282,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coeffici
   ! Store edge values and slope, build cubic and check monotonicity
   call build_cubic_interpolant( h, i0, ppoly_E, ppoly_S, ppoly_coefficients )
   monotonic = is_cubic_monotonic( ppoly_coefficients, i0 )
-    
+
   if ( monotonic .EQ. 0 ) then
     call monotonize_cubic( h0, u0_l, u0_r, 0.0, slope, slope, u1_l, u1_r )
 
@@ -290,9 +290,9 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coeffici
     ppoly_S(i0,1) = u1_l
     ppoly_S(i0,2) = u1_r
     call build_cubic_interpolant( h, i0, ppoly_E, ppoly_S, ppoly_coefficients )
-    
+
   end if
-  
+
   ! ----- Right boundary -----
   i0 = N-1
   i1 = N
@@ -307,7 +307,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coeffici
   c = ppoly_coefficients(i0,3)
   d = ppoly_coefficients(i0,4)
   u1_l = (b + 2*c + 3*d) / ( h0 + h_neglect ) ! derivative evaluated at xi = 1.0
-  
+
   ! Limit the left slope by the PLM limited slope
   slope = 2.0 * ( u1 - u0 ) / ( h1 + h_neglect )
   if ( abs(u1_l) .GT. abs(slope) ) then
@@ -338,10 +338,10 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coeffici
   ppoly_E(i1,2) = u0_r
   ppoly_S(i1,1) = u1_l
   ppoly_S(i1,2) = u1_r
-  
+
   call build_cubic_interpolant( h, i1, ppoly_E, ppoly_S, ppoly_coefficients )
   monotonic = is_cubic_monotonic( ppoly_coefficients, i1 )
-    
+
   if ( monotonic .EQ. 0 ) then
     call monotonize_cubic( h1, u0_l, u0_r, slope, 0.0, slope, u1_l, u1_r )
 
@@ -349,7 +349,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, ppoly_E, ppoly_S, ppoly_coeffici
     ppoly_S(i1,1) = u1_l
     ppoly_S(i1,2) = u1_r
     call build_cubic_interpolant( h, i1, ppoly_E, ppoly_S, ppoly_coefficients )
-    
+
   end if
 
 end subroutine P3M_boundary_extrapolation
@@ -371,7 +371,7 @@ subroutine build_cubic_interpolant( h, k, ppoly_E, ppoly_S, ppoly_coefficients )
   integer,              intent(in)    :: k
   real, dimension(:,:), intent(in)    :: ppoly_E            !Edge value of polynomial
   real, dimension(:,:), intent(in)    :: ppoly_S            !Edge slope of polynomial
-  real, dimension(:,:), intent(inout) :: ppoly_coefficients !Coefficients of polynomial 
+  real, dimension(:,:), intent(inout) :: ppoly_coefficients !Coefficients of polynomial
 
   ! Local variables
   real          :: u0_l, u0_r       ! edge values
@@ -380,10 +380,10 @@ subroutine build_cubic_interpolant( h, k, ppoly_E, ppoly_S, ppoly_coefficients )
   real          :: a0, a1, a2, a3   ! cubic coefficients
 
   h_c = h(k)
-  
+
   u0_l = ppoly_E(k,1)
   u0_r = ppoly_E(k,2)
-  
+
   u1_l = ppoly_S(k,1) * h_c
   u1_r = ppoly_S(k,2) * h_c
 
@@ -424,16 +424,16 @@ integer function is_cubic_monotonic( ppoly_coefficients, k )
   real          :: xi_0, xi_1       ! roots of first derivative (if any !)
   real          :: rho
   real          :: eps
-  
+
   ! Define the radius of the ball around 0 and 1 in which all values are assumed
   ! to be equal to 0 or 1, respectively
   eps = 1e-14
-  
+
   a0 = ppoly_coefficients(k,1)
   a1 = ppoly_coefficients(k,2)
   a2 = ppoly_coefficients(k,3)
   a3 = ppoly_coefficients(k,4)
-  
+
   a = a1
   b = 2.0 * a2
   c = 3.0 * a3
@@ -451,8 +451,8 @@ integer function is_cubic_monotonic( ppoly_coefficients, k )
       xi_0 = - a / b
       xi_1 = - a / b
     end if
-    
-    ! If one of the roots of the first derivative lies in (0,1), 
+
+    ! If one of the roots of the first derivative lies in (0,1),
     ! the cubic is not monotonic.
     if ( ( (xi_0 .GT. eps) .AND. (xi_0 .LT. 1.0-eps) ) .OR. &
          ( (xi_1 .GT. eps) .AND. (xi_1 .LT. 1.0-eps) ) ) then
@@ -460,7 +460,7 @@ integer function is_cubic_monotonic( ppoly_coefficients, k )
     else
       monotonic = 1
     end if
-    
+
   else ! there are no real roots --> cubic is monotonic
     monotonic = 1
   end if
@@ -487,8 +487,8 @@ subroutine monotonize_cubic( h, u0_l, u0_r, sigma_l, sigma_r, slope, u1_l, u1_r 
 ! 1. The edge slopes are set to 0 if they are inconsistent with the limited
 !    PLM slope
 ! 2. We check whether we can find an inflexion point in [0,1]. At most one
-!    inflexion point may exist. 
-!    (a) If there is no inflexion point, the cubic is monotonic. 
+!    inflexion point may exist.
+!    (a) If there is no inflexion point, the cubic is monotonic.
 !    (b) If there is one inflexion point and it lies outside [0,1], the
 !        cubic is monotonic.
 !    (c) If there is one inflexion point and it lies in [0,1] and the slope
@@ -502,7 +502,7 @@ subroutine monotonize_cubic( h, u0_l, u0_r, sigma_l, sigma_r, slope, u1_l, u1_r 
 !    edge or onto the right edge.
 !
 !------------------------------------------------------------------------------
-  
+
   ! Arguments
   real, intent(in)      :: h                ! cell width
   real, intent(in)      :: u0_l, u0_r       ! edge values
@@ -518,21 +518,21 @@ subroutine monotonize_cubic( h, u0_l, u0_r, sigma_l, sigma_r, slope, u1_l, u1_r 
   real          :: a1, a2, a3
   real          :: u1_l_tmp     ! trial left edge slope
   real          :: u1_r_tmp     ! trial right edge slope
-  real          :: xi_ip        ! location of inflexion point           
+  real          :: xi_ip        ! location of inflexion point
   real          :: slope_ip     ! slope at inflexion point
-  
+
   eps = 1e-14
 
   found_ip = 0
   inflexion_l = 0
   inflexion_r = 0
 
-  ! If the edge slopes are inconsistent w.r.t. the limited PLM slope, 
+  ! If the edge slopes are inconsistent w.r.t. the limited PLM slope,
   ! set them to zero
   if ( u1_l*slope .LE. 0.0 ) then
     u1_l = 0.0
   end if
-  
+
   if ( u1_r*slope .LE. 0.0 ) then
     u1_r = 0.0
   end if
@@ -573,78 +573,78 @@ subroutine monotonize_cubic( h, u0_l, u0_r, sigma_l, sigma_r, slope, u1_l, u1_r 
       end if
     end if
   end if ! found_ip
-  
+
   ! At this point, if the cubic is not monotonic, we know where the
   ! inflexion point should lie. When the cubic is monotonic, both
   ! 'inflexion_l' and 'inflexion_r' are set to 0 and nothing is to be done.
 
   ! Move inflexion point on the left
   if ( inflexion_l .EQ. 1 ) then
-    
+
     u1_l_tmp = 1.5*(u0_r-u0_l)/h - 0.5*u1_r
     u1_r_tmp = 3.0*(u0_r-u0_l)/h - 2.0*u1_l
 
     if ( (u1_l_tmp*slope .LT. 0.0) .AND. (u1_r_tmp*slope .LT. 0.0) ) then
-      
+
       u1_l = 0.0
       u1_r = 3.0 * (u0_r - u0_l) / h
-    
+
     else if (u1_l_tmp*slope .LT. 0.0) then
-      
+
       u1_r = u1_r_tmp
       u1_l = 1.5*(u0_r - u0_l)/h - 0.5*u1_r
-      
+
     else if (u1_r_tmp*slope .LT. 0.0) then
-    
+
       u1_l = u1_l_tmp
       u1_r = 3.0*(u0_r - u0_l)/h - 2.0*u1_l
-      
+
     else
-    
+
       u1_l = u1_l_tmp
       u1_r = u1_r_tmp
-      
+
     end if
 
   end if ! end treating case with inflexion point on the left
-  
+
   ! Move inflexion point on the right
   if ( inflexion_r .EQ. 1 ) then
-    
+
     u1_l_tmp = 3.0*(u0_r-u0_l)/h - 2.0*u1_r
     u1_r_tmp = 1.5*(u0_r-u0_l)/h - 0.5*u1_l
 
     if ( (u1_l_tmp*slope .LT. 0.0) .AND. (u1_r_tmp*slope .LT. 0.0) ) then
-      
+
       u1_l = 3.0 * (u0_r - u0_l) / h
       u1_r = 0.0
-    
+
     else if (u1_l_tmp*slope .LT. 0.0) then
-      
+
       u1_r = u1_r_tmp
       u1_l = 3.0*(u0_r - u0_l)/h - 2.0*u1_r
-      
+
     else if (u1_r_tmp*slope .LT. 0.0) then
-    
+
       u1_l = u1_l_tmp
       u1_r = 1.5*(u0_r - u0_l)/h - 0.5*u1_l
-      
+
     else
-    
+
       u1_l = u1_l_tmp
       u1_r = u1_r_tmp
-      
+
     end if
 
   end if ! end treating case with inflexion point on the right
-  
+
   if ( abs(u1_l*h) .LT. eps ) then
     u1_l = 0.0
-  end if    
-  
+  end if
+
   if ( abs(u1_r*h) .LT. eps ) then
     u1_r = 0.0
-  end if    
+  end if
 
 end subroutine monotonize_cubic
 

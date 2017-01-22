@@ -273,16 +273,16 @@ subroutine buoyancy_forcing_allocate(fluxes, G, CS)
 
 !  This subroutine allocates arrays for buoyancy forcing.
 
-! Arguments: 
+! Arguments:
 !  (inout)   fluxes  = structure with pointers to forcing fields; unused have NULL ptrs
 !  (in)      G       = ocean grid structure
-!  (in)      CS      = pointer to control struct returned by previous surface_forcing_init call 
+!  (in)      CS      = pointer to control struct returned by previous surface_forcing_init call
 
   integer :: isd, ied, jsd, jed
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
 
-  ! this array is zero for all options 
+  ! this array is zero for all options
   if (associated(fluxes%p_surf)) then
     fluxes%p_surf(:,:) = 0.0
   endif
@@ -323,11 +323,11 @@ subroutine buoyancy_forcing_allocate(fluxes, G, CS)
     ! specify surface heat fluxes by setting the following (Watts/m^2)
     ! with convention that positive values for heat fluxes into the ocean.
     if (.not.associated(fluxes%sw)) then
-      allocate(fluxes%sw(isd:ied,jsd:jed))          
+      allocate(fluxes%sw(isd:ied,jsd:jed))
       fluxes%sw(:,:) = 0.0
     endif
     if (.not.associated(fluxes%lw)) then
-      allocate(fluxes%lw(isd:ied,jsd:jed)) 
+      allocate(fluxes%lw(isd:ied,jsd:jed))
       fluxes%lw(:,:) = 0.0
     endif
     if (.not.associated(fluxes%latent)) then
@@ -379,7 +379,7 @@ subroutine buoyancy_forcing_allocate(fluxes, G, CS)
       fluxes%heat_content_massout(:,:) = 0.0
     endif
 
-    ! surface restoring fields 
+    ! surface restoring fields
     if (CS%restorebuoy) then
       if (.not.associated(CS%T_Restore)) then
         allocate(CS%T_Restore(isd:ied,jsd:jed))
@@ -398,7 +398,7 @@ subroutine buoyancy_forcing_allocate(fluxes, G, CS)
   else ! CS%use_temperature false.
 
     if (.not.associated(fluxes%buoy)) then
-      allocate(fluxes%buoy(isd:ied,jsd:jed)) 
+      allocate(fluxes%buoy(isd:ied,jsd:jed))
       fluxes%buoy(:,:) = 0.0
     endif
     if (CS%restorebuoy .and. .not.associated(CS%Dens_Restore)) then
@@ -408,7 +408,7 @@ subroutine buoyancy_forcing_allocate(fluxes, G, CS)
 
   endif  ! endif for  CS%use_temperature
 
-end subroutine buoyancy_forcing_allocate 
+end subroutine buoyancy_forcing_allocate
 
 
 subroutine wind_forcing_zero(state, fluxes, day, G, CS)
@@ -418,14 +418,14 @@ subroutine wind_forcing_zero(state, fluxes, day, G, CS)
   type(ocean_grid_type),    intent(in)    :: G
   type(surface_forcing_CS), pointer       :: CS
 
-! subroutine sets the surface wind stresses to zero 
+! subroutine sets the surface wind stresses to zero
 
-! Arguments: 
+! Arguments:
 !            state        = structure describing ocean surface state
 !  (out)     fluxes       = structure with pointers to forcing fields; unused have NULL ptrs
 !  (in)      day          = time of the fluxes
 !  (in)      G            = ocean grid structure
-!  (in)      CS           = pointer to control struct returned by previous surface_forcing_init call 
+!  (in)      CS           = pointer to control struct returned by previous surface_forcing_init call
 
   real :: PI
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
@@ -473,12 +473,12 @@ subroutine wind_forcing_2gyre(state, fluxes, day, G, CS)
 
 ! This subroutine sets the surface wind stresses according to double gyre.
 
-! Arguments: 
+! Arguments:
 !            state   = structure describing ocean surface state
 !  (out)     fluxes  = structure with pointers to forcing fields; unused have NULL ptrs
 !  (in)      day     = time of the fluxes
 !  (in)      G       = ocean grid structure
-!  (in)      CS      = pointer to control struct returned by previous surface_forcing_init call 
+!  (in)      CS      = pointer to control struct returned by previous surface_forcing_init call
 
   real :: PI
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
@@ -515,14 +515,14 @@ subroutine wind_forcing_1gyre(state, fluxes, day, G, CS)
   type(ocean_grid_type),    intent(in)    :: G
   type(surface_forcing_CS), pointer       :: CS
 
-! This subroutine sets the surface wind stresses according to single gyre. 
+! This subroutine sets the surface wind stresses according to single gyre.
 
-! Arguments: 
+! Arguments:
 !            state   = structure describing ocean surface state
 !  (out)     fluxes  = structure with pointers to forcing fields; unused have NULL ptrs
 !  (in)      day     = time of the fluxes
 !  (in)      G       = ocean grid structure
-!  (in)      CS      = pointer to control struct returned by previous surface_forcing_init call 
+!  (in)      CS      = pointer to control struct returned by previous surface_forcing_init call
 
   real :: PI
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
@@ -558,14 +558,14 @@ subroutine wind_forcing_gyres(state, fluxes, day, G, CS)
   type(ocean_grid_type),    intent(in)    :: G
   type(surface_forcing_CS), pointer       :: CS
 
-! This subroutine sets the surface wind stresses according to gyres. 
+! This subroutine sets the surface wind stresses according to gyres.
 
-! Arguments: 
+! Arguments:
 !            state  = structure describing ocean surface state
 !  (out)     fluxes = structure with pointers to forcing fields; unused have NULL ptrs
 !  (in)      day    = time of the fluxes
 !  (in)      G      = ocean grid structure
-!  (in)      CS     = pointer to control struct returned by previous surface_forcing_init call 
+!  (in)      CS     = pointer to control struct returned by previous surface_forcing_init call
 
   real :: PI, y
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
@@ -723,13 +723,13 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
 !  temperature and fresh water.  It may also be modified to add
 !  surface fluxes of user provided tracers.
 !
-! Arguments: 
+! Arguments:
 !            state   = structure describing ocean surface state
 !  (out)     fluxes  = structure with pointers to forcing fields; unused have NULL ptrs
 !  (in)      day     = time of the fluxes
 !  (in)      dt      = amount of time over which the fluxes apply
 !  (in)      G       = ocean grid structure
-!  (in)      CS      = pointer to control struct returned by previous surface_forcing_init call 
+!  (in)      CS      = pointer to control struct returned by previous surface_forcing_init call
 
   real :: rhoXcp ! mean density times the heat capacity, in J m-3 K-1.
   real :: Irho0  ! inverse Boussinesq reference density, in m3 kg-1.
@@ -755,7 +755,7 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
-  ! allocate and initialize arrays 
+  ! allocate and initialize arrays
   call buoyancy_forcing_allocate(fluxes, G, CS)
 
   if (CS%use_temperature) rhoXcp = CS%Rho0 * fluxes%C_p
@@ -845,7 +845,7 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
     endif
     CS%buoy_last_lev_read = time_lev
 
-    ! mask out land points and compute heat content of water fluxes 
+    ! mask out land points and compute heat content of water fluxes
     ! assume liquid precip enters ocean at SST
     ! assume frozen precip enters ocean at 0degC
     ! assume liquid runoff enters ocean at SST
@@ -861,7 +861,7 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
       fluxes%sw(i,j)                   = fluxes%sw(i,j)               * G%mask2dT(i,j)
       fluxes%latent(i,j)               = fluxes%latent(i,j)           * G%mask2dT(i,j)
 
-      fluxes%heat_content_lrunoff(i,j) = fluxes%C_p*fluxes%lrunoff(i,j)*state%SST(i,j) 
+      fluxes%heat_content_lrunoff(i,j) = fluxes%C_p*fluxes%lrunoff(i,j)*state%SST(i,j)
       fluxes%latent_evap_diag(i,j)     = fluxes%latent_evap_diag(i,j) * G%mask2dT(i,j)
       fluxes%latent_fprec_diag(i,j)    = -fluxes%fprec(i,j)*hlf
       fluxes%latent_frunoff_diag(i,j)  = -fluxes%frunoff(i,j)*hlf
@@ -927,13 +927,13 @@ subroutine buoyancy_forcing_zero(state, fluxes, day, dt, G, CS)
 !  surface fluxes of user provided tracers.
 !  This case has zero surface buoyancy forcing.
 
-! Arguments: 
+! Arguments:
 !  (inout)   state   = structure describing ocean surface state
 !  (inout)   fluxes  = structure with pointers to forcing fields; unused have NULL ptrs
 !  (in)      day     = time of the fluxes
 !  (in)      dt      = amount of time over which the fluxes apply
 !  (in)      G       = ocean grid structure
-!  (in)      CS      = pointer to control struct returned by previous surface_forcing_init call 
+!  (in)      CS      = pointer to control struct returned by previous surface_forcing_init call
 
   integer :: i, j, is, ie, js, je
 
@@ -942,7 +942,7 @@ subroutine buoyancy_forcing_zero(state, fluxes, day, dt, G, CS)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
 
-  ! allocate and initialize arrays 
+  ! allocate and initialize arrays
   call buoyancy_forcing_allocate(fluxes, G, CS)
 
   if (CS%use_temperature) then
@@ -983,13 +983,13 @@ subroutine buoyancy_forcing_linear(state, fluxes, day, dt, G, CS)
 !  temperature and fresh water.  It may also be modified to add
 !  surface fluxes of user provided tracers.
 !
-! Arguments: 
+! Arguments:
 !  (inout)   state   = structure describing ocean surface state
 !  (inout)   fluxes  = structure with pointers to forcing fields; unused have NULL ptrs
 !  (in)      day     = time of the fluxes
 !  (in)      dt      = amount of time over which the fluxes apply
 !  (in)      G       = ocean grid structure
-!  (in)      CS      = pointer to control struct returned by previous surface_forcing_init call 
+!  (in)      CS      = pointer to control struct returned by previous surface_forcing_init call
 
   real :: y, T_restore, S_restore
   integer :: i, j, is, ie, js, je
@@ -998,7 +998,7 @@ subroutine buoyancy_forcing_linear(state, fluxes, day, dt, G, CS)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
-  ! allocate and initialize arrays 
+  ! allocate and initialize arrays
   call buoyancy_forcing_allocate(fluxes, G, CS)
 
   ! This case has no surface buoyancy forcing.
@@ -1341,7 +1341,7 @@ subroutine surface_forcing_end(CS, fluxes)
 !                     forcing fields.  Unused fields have NULL ptrs.
 
   if (present(fluxes)) call deallocate_forcing_type(fluxes)
-  
+
 !###  call controlled_forcing_end(CS%ctrl_forcing_CSp)
 
   if (associated(CS)) deallocate(CS)
