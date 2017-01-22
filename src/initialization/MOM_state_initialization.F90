@@ -452,20 +452,18 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                  "   tidal_bay - Flather with tidal forcing on eastern boundary\n"//&
                  "   supercritical - now only needed here for the allocations\n"//&
                  "   USER - user specified", default="none")
+  if (trim(config) /= "none") OBC%OBC_user_config = trim(config)
   if (open_boundary_query(OBC, apply_specified_OBC=.true.)) then
     if (trim(config) == "DOME") then
       call DOME_set_OBC_data(OBC, tv, G, GV, PF, tracer_Reg)
       OBC%update_OBC = .false.
-      OBC%OBC_user_config = trim(config)
     elseif (trim(config) == "tidal_bay") then
-      OBC%update_OBC = .true.
-      OBC%OBC_user_config = trim(config)
+    ! Shouldn't be getting here...
+    ! OBC%update_OBC = .true.
     elseif (lowercase(trim(config)) == "supercritical") then
       call supercritical_set_OBC_data(OBC, G, PF)
-      OBC%OBC_user_config = trim(config)
     elseif (trim(config) == "USER") then
       call user_set_OBC_data(OBC, tv, G, PF, tracer_Reg)
-      OBC%OBC_user_config = trim(config)
     elseif (.not. trim(config) == "none") then
       call MOM_error(FATAL, "The open boundary conditions specified by "//&
               "OBC_USER_CONFIG = "//trim(config)//" have not been fully implemented.")

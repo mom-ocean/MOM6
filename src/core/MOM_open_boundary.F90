@@ -102,6 +102,10 @@ end type OBC_segment_type
 type, public :: ocean_OBC_type
   integer :: number_of_segments = 0                   !< The number of open-boundary segments.
   integer :: ke = 0                                   !< The number of model layers
+  logical :: open_u_BCs_exist_globally = .false.      !< True if any zonal velocity points
+                                                      !! in the global domain use open BCs.
+  logical :: open_v_BCs_exist_globally = .false.      !< True if any meridional velocity points
+                                                      !! in the global domain use open BCs.
   logical :: Flather_u_BCs_exist_globally = .false.   !< True if any zonal velocity points
                                                       !! in the global domain use Flather BCs.
   logical :: Flather_v_BCs_exist_globally = .false.   !< True if any meridional velocity points
@@ -258,13 +262,13 @@ subroutine open_boundary_config(G, param_file, OBC)
   endif
 
   ! Safety check
-  if ((OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally) .and. &
+  if ((OBC%open_u_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally) .and. &
       .not.G%symmetric ) call MOM_error(FATAL, &
                  "MOM_open_boundary, open_boundary_config: "//&
                  "Symmetric memory must be used when using Flather OBCs.")
 
   if (.not.(OBC%specified_u_BCs_exist_globally .or. OBC%specified_v_BCs_exist_globally .or. &
-            OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally)) then
+            OBC%open_u_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally)) then
     ! No open boundaries have been requested
     call open_boundary_dealloc(OBC)
   endif
@@ -513,13 +517,16 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
       OBC%OBC_segment_number(l_seg)%values_needed = .true.
       OBC%update_OBC = .true.
       OBC%Flather_u_BCs_exist_globally = .true.
+      OBC%open_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'ORLANSKI') then
       OBC%OBC_segment_number(l_seg)%radiation = .true.
       OBC%Flather_u_BCs_exist_globally = .true.
+      OBC%open_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'OBLIQUE') then
       OBC%OBC_segment_number(l_seg)%radiation = .true.
       OBC%OBC_segment_number(l_seg)%oblique = .true.
       OBC%Flather_u_BCs_exist_globally = .true.
+      OBC%open_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'NUDGED') then
       OBC%OBC_segment_number(l_seg)%nudged = .true.
       OBC%OBC_segment_number(l_seg)%values_needed = .true.
@@ -529,6 +536,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
       OBC%nudged_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'GRADIENT') then
       OBC%OBC_segment_number(l_seg)%gradient = .true.
+      OBC%open_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'LEGACY') then
       this_kind = OBC_FLATHER
       OBC%OBC_segment_number(l_seg)%legacy = .true.
@@ -537,6 +545,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
       OBC%OBC_segment_number(l_seg)%gradient = .true.
       OBC%update_OBC = .true.
       OBC%Flather_u_BCs_exist_globally = .true.
+      OBC%open_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%OBC_segment_number(l_seg)%specified = .true.
       OBC%OBC_segment_number(l_seg)%values_needed = .true.
@@ -641,13 +650,16 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
       OBC%OBC_segment_number(l_seg)%values_needed = .true.
       OBC%update_OBC = .true.
       OBC%Flather_v_BCs_exist_globally = .true.
+      OBC%open_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'ORLANSKI') then
       OBC%OBC_segment_number(l_seg)%radiation = .true.
       OBC%Flather_v_BCs_exist_globally = .true.
+      OBC%open_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'OBLIQUE') then
       OBC%OBC_segment_number(l_seg)%radiation = .true.
       OBC%OBC_segment_number(l_seg)%oblique = .true.
       OBC%Flather_v_BCs_exist_globally = .true.
+      OBC%open_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'NUDGED') then
       OBC%OBC_segment_number(l_seg)%nudged = .true.
       OBC%OBC_segment_number(l_seg)%values_needed = .true.
@@ -657,6 +669,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
       OBC%nudged_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'GRADIENT') then
       OBC%OBC_segment_number(l_seg)%gradient = .true.
+      OBC%open_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'LEGACY') then
       this_kind = OBC_FLATHER
       OBC%OBC_segment_number(l_seg)%legacy = .true.
@@ -665,6 +678,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
       OBC%OBC_segment_number(l_seg)%Flather = .true.
       OBC%update_OBC = .true.
       OBC%Flather_v_BCs_exist_globally = .true.
+      OBC%open_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%OBC_segment_number(l_seg)%specified = .true.
       OBC%OBC_segment_number(l_seg)%values_needed = .true.
@@ -931,14 +945,17 @@ subroutine open_boundary_init(G, param_file, OBC)
 
 end subroutine open_boundary_init
 
-logical function open_boundary_query(OBC, apply_specified_OBC, apply_Flather_OBC, apply_nudged_OBC, needs_ext_seg_data)
+logical function open_boundary_query(OBC, apply_open_OBC, apply_specified_OBC, apply_Flather_OBC, apply_nudged_OBC, needs_ext_seg_data)
   type(ocean_OBC_type), pointer     :: OBC !< Open boundary control structure
+  logical, optional,    intent(in)  :: apply_open_OBC      !< If present, returns True if specified_*_BCs_exist_globally is true
   logical, optional,    intent(in)  :: apply_specified_OBC !< If present, returns True if specified_*_BCs_exist_globally is true
   logical, optional,    intent(in)  :: apply_Flather_OBC   !< If present, returns True if Flather_*_BCs_exist_globally is true
   logical, optional,    intent(in)  :: apply_nudged_OBC    !< If present, returns True if nudged_*_BCs_exist_globally is true
   logical, optional,    intent(in)  :: needs_ext_seg_data      !< If present, returns True if external segment data needed
   open_boundary_query = .false.
   if (.not. associated(OBC)) return
+  if (present(apply_open_OBC)) open_boundary_query = OBC%open_u_BCs_exist_globally .or. &
+                                                     OBC%open_v_BCs_exist_globally
   if (present(apply_specified_OBC)) open_boundary_query = OBC%specified_u_BCs_exist_globally .or. &
                                                           OBC%specified_v_BCs_exist_globally
   if (present(apply_Flather_OBC)) open_boundary_query = OBC%Flather_u_BCs_exist_globally .or. &
@@ -1132,7 +1149,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   if (.not.associated(OBC)) return
-  if (.not.(OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally)) &
+  if (.not.(OBC%open_u_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally)) &
     return
 
   gamma_u = OBC%gamma_uv ; gamma_v = OBC%gamma_uv ; gamma_h = OBC%gamma_h
