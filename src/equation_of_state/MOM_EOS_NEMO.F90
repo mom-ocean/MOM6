@@ -26,7 +26,7 @@ module MOM_EOS_NEMO
 !*  Roquet, F., Madec, G., McDougall, T. J., and Barker, P. M., 2015.  *
 !*  Accurate polynomial expressions for the density and specific volume*
 !*  of seawater using the TEOS-10 standard. Ocean Modelling, 90:29-43. *
-!*  These algorithms are NOT from NEMO package!!                       * 
+!*  These algorithms are NOT from NEMO package!!                       *
 !***********************************************************************
 
 !use gsw_mod_toolbox, only : gsw_sr_from_sp, gsw_ct_from_pt
@@ -176,7 +176,7 @@ end interface calculate_density_nemo
    real, parameter :: BET012 = -2.6514181169e-03
    real, parameter :: BET003 = -2.3025968587e-04
 
-   
+
 
 contains
 
@@ -223,7 +223,7 @@ subroutine calculate_density_array_nemo(T, S, pressure, rho, start, npts)
 ! *  units of kg/m^3) from absolute salinity (S in g/Kg),              *
 ! *  conservative temperature (T in deg C), and pressure in Pa.        *
 ! *====================================================================*
-  real :: zp,zt , zh , zs , zr0, zn , zn0, zn1, zn2, zn3 
+  real :: zp,zt , zh , zs , zr0, zn , zn0, zn1, zn2, zn3
   integer :: j
 
   do j=start,start+npts-1
@@ -234,7 +234,7 @@ subroutine calculate_density_array_nemo(T, S, pressure, rho, start, npts)
 
     !The following algorithm was provided by Roquet in a private communication.
     !It is not necessarily the algorithm used in NEMO ocean!
-    zp  = zp * r1_P0 !pressure 
+    zp  = zp * r1_P0 !pressure
     zt  = zt * r1_T0 !temperature
     zs  = SQRT( ABS( zs + rdeltaS ) * r1_S0 )   ! square root salinity
     !
@@ -263,7 +263,7 @@ subroutine calculate_density_array_nemo(T, S, pressure, rho, start, npts)
     !
     zr0 = (((((R05 * zp+R04) * zp+R03 ) * zp+R02 ) * zp+R01) * zp+R00) * zp
     !
-    rho(j) =  ( zn + zr0 ) ! density 
+    rho(j) =  ( zn + zr0 ) ! density
 
  enddo
 end subroutine calculate_density_array_nemo
@@ -315,10 +315,10 @@ subroutine calculate_density_derivs_nemo(T, S, pressure, drho_dT, drho_dS, start
        !
     zn  = ( ( zn3 * zp + zn2 ) * zp + zn1 ) * zp + zn0
     !
-    drho_dT(j) = -zn 
+    drho_dT(j) = -zn
     !
     ! beta
-    ! 
+    !
     zn3 = BET003
     !
     zn2 = BET012*zt + BET102*zs+BET002
@@ -337,7 +337,7 @@ subroutine calculate_density_derivs_nemo(T, S, pressure, drho_dT, drho_dS, start
        !
     zn  = ( ( zn3 * zp + zn2 ) * zp + zn1 ) * zp + zn0
     !
-    drho_dS(j) = zn / zs 
+    drho_dS(j) = zn / zs
   enddo
 
 end subroutine calculate_density_derivs_nemo
@@ -356,7 +356,7 @@ subroutine calculate_compress_nemo(T, S, pressure, rho, drho_dp, start, npts)
 ! *  (in)      start - the starting point in the arrays.               *
 ! *  (in)      npts - the number of values to calculate.               *
 ! *====================================================================*
-  real ::  zs,zt,zp 
+  real ::  zs,zt,zp
   integer :: j
 
   call calculate_density_array_nemo(T, S, pressure, rho, start, npts)

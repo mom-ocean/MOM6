@@ -45,7 +45,7 @@ subroutine bound_edge_values( N, h, u, edge_values )
 ! In this routine, we loop on all cells to bound their left and right
 ! edge values by the cell averages. That is, the left edge value must lie
 ! between the left cell average and the central cell average. A similar
-! reasoning applies to the right edge values. 
+! reasoning applies to the right edge values.
 !
 ! Both boundary edge values are set equal to the boundary cell averages.
 ! Any extrapolation scheme is applied after this routine has been called.
@@ -56,7 +56,7 @@ subroutine bound_edge_values( N, h, u, edge_values )
   integer,              intent(in)    :: N ! Number of cells
   real, dimension(:),   intent(in)    :: h ! cell widths (size N)
   real, dimension(:),   intent(in)    :: u ! cell averages (size N)
-  real, dimension(:,:), intent(inout) :: edge_values      
+  real, dimension(:,:), intent(inout) :: edge_values
 
   ! Local variables
   integer       :: k            ! loop index
@@ -64,18 +64,18 @@ subroutine bound_edge_values( N, h, u, edge_values )
   real          :: h_l, h_c, h_r
   real          :: u_l, u_c, u_r
   real          :: u0_l, u0_r
-  real          :: sigma_l, sigma_c, sigma_r    ! left, center and right 
-                                                ! van Leer slopes   
+  real          :: sigma_l, sigma_c, sigma_r    ! left, center and right
+                                                ! van Leer slopes
   real          :: slope                ! retained PLM slope
 
 
   ! Loop on cells to bound edge value
   do k = 1,N
-    
+
     ! For the sake of bounding boundary edge values, the left neighbor
     ! of the left boundary cell is assumed to be the same as the left
     ! boundary cell and the right neighbor of the right boundary cell
-    ! is assumed to be the same as the right boundary cell. This 
+    ! is assumed to be the same as the right boundary cell. This
     ! effectively makes boundary cells look like extrema.
     if ( k .EQ. 1 ) then
       k0 = 1
@@ -95,7 +95,7 @@ subroutine bound_edge_values( N, h, u, edge_values )
     h_l = h(k0)
     h_c = h(k1)
     h_r = h(k2)
-    
+
     u_l = u(k0)
     u_c = u(k1)
     u_r = u(k2)
@@ -106,23 +106,23 @@ subroutine bound_edge_values( N, h, u, edge_values )
     sigma_l = 2.0 * ( u_c - u_l ) / ( h_c + 1.E-30 )
     sigma_c = 2.0 * ( u_r - u_l ) / ( h_l + 2.0*h_c + h_r + 1.E-30 )
     sigma_r = 2.0 * ( u_r - u_c ) / ( h_c + 1.E-30 )
-    
+
     if ( (sigma_l * sigma_r) .GT. 0.0 ) then
       slope = sign( min(abs(sigma_l),abs(sigma_c),abs(sigma_r)), sigma_c )
     else
       slope = 0.0
     end if
-    
+
     ! The limiter must be used in the local coordinate system to each cell.
     ! Hence, we must multiply the slope by h1. The multiplication by 0.5 is
-    ! simply a way to make it useable in the limiter (cfr White and Adcroft 
+    ! simply a way to make it useable in the limiter (cfr White and Adcroft
     ! JCP 2008 Eqs 19 and 20)
     slope = slope * h_c * 0.5
-    
+
     if ( (u_l-u0_l)*(u0_l-u_c) .LT. 0.0 ) then
       u0_l = u_c - sign( min( abs(slope), abs(u0_l-u_c) ), slope )
     end if
-    
+
     if ( (u_r-u0_r)*(u0_r-u_c) .LT. 0.0 ) then
       u0_r = u_c + sign( min( abs(slope), abs(u0_r-u_c) ), slope )
     end if
@@ -148,10 +148,10 @@ subroutine average_discontinuous_edge_values( N, edge_values )
 ! For each interior edge, check whether the edge values are discontinuous.
 ! If so, compute the average and replace the edge values by the average.!
 ! ------------------------------------------------------------------------------
-  
+
   ! Arguments
   integer,              intent(in)    :: N ! Number of cells
-  real, dimension(:,:), intent(inout) :: edge_values      
+  real, dimension(:,:), intent(inout) :: edge_values
 
   ! Local variables
   integer       :: k            ! loop index
@@ -161,7 +161,7 @@ subroutine average_discontinuous_edge_values( N, edge_values )
 
   ! Loop on interior edges
   do k = 1,N-1
-  
+
     ! Edge value on the left of the edge
     u0_minus = edge_values(k,2)
 
@@ -173,7 +173,7 @@ subroutine average_discontinuous_edge_values( N, edge_values )
       edge_values(k,2) = u0_avg
       edge_values(k+1,1) = u0_avg
     end if
-    
+
   end do ! end loop on interior edges
 
 end subroutine average_discontinuous_edge_values
@@ -187,11 +187,11 @@ subroutine check_discontinuous_edge_values( N, u, edge_values )
 ! For each interior edge, check whether the edge values are discontinuous.
 ! If so and if they are not monotonic, replace each edge value by their average.
 ! ------------------------------------------------------------------------------
-  
+
   ! Arguments
   integer,              intent(in)    :: N ! Number of cells
   real, dimension(:),   intent(in)    :: u ! cell averages (size N)
-  real, dimension(:,:), intent(inout) :: edge_values      
+  real, dimension(:,:), intent(inout) :: edge_values
 
   ! Local variables
   integer       :: k            ! loop index
@@ -203,7 +203,7 @@ subroutine check_discontinuous_edge_values( N, u, edge_values )
 
   ! Loop on interior cells
   do k = 1,N-1
-  
+
     ! Edge value on the left of the edge
     u0_minus = edge_values(k,2)
 
@@ -222,7 +222,7 @@ subroutine check_discontinuous_edge_values( N, u, edge_values )
       edge_values(k,2) = u0_avg
       edge_values(k+1,1) = u0_avg
     end if
-    
+
   end do ! end loop on interior edges
 
 end subroutine check_discontinuous_edge_values
@@ -238,10 +238,10 @@ subroutine edge_values_explicit_h2( N, h, u, edge_values )
 ! at the location of the middle edge. An interpolant spanning cells
 ! k-1 and k is evaluated at edge k-1/2. The estimate for each edge is unique.
 !
-!       k-1     k   
+!       k-1     k
 ! ..--o------o------o--..
 !          k-1/2
-! 
+!
 ! Boundary edge values are set to be equal to the boundary cell averages.
 ! ------------------------------------------------------------------------------
 
@@ -249,16 +249,16 @@ subroutine edge_values_explicit_h2( N, h, u, edge_values )
   integer,              intent(in)    :: N ! Number of cells
   real, dimension(:),   intent(in)    :: h ! cell widths (size N)
   real, dimension(:),   intent(in)    :: u ! cell averages (size N)
-  real, dimension(:,:), intent(inout) :: edge_values      
+  real, dimension(:,:), intent(inout) :: edge_values
 
   ! Local variables
   integer   :: k        ! loop index
   real      :: h0, h1   ! cell widths
   real      :: u0, u1   ! cell averages
-  
+
   ! Loop on interior cells
   do k = 2,N
-  
+
     h0 = h(k-1)
     h1 = h(k)
 
@@ -274,12 +274,12 @@ subroutine edge_values_explicit_h2( N, h, u, edge_values )
     ! Compute left edge value
     edge_values(k,1) = ( u0*h1 + u1*h0 ) / ( h0 + h1 )
 
-    ! Left edge value of the current cell is equal to right edge 
+    ! Left edge value of the current cell is equal to right edge
     ! value of left cell
     edge_values(k-1,2) = edge_values(k,1)
-  
+
   end do ! end loop on interior cells
-  
+
   ! Boundary edge values are simply equal to the boundary cell averages
   edge_values(1,1) = u(1)
   edge_values(N,2) = u(N)
@@ -293,18 +293,18 @@ end subroutine edge_values_explicit_h2
 subroutine edge_values_explicit_h4( N, h, u, edge_values )
 ! -----------------------------------------------------------------------------
 ! Compute edge values based on fourth-order explicit estimates.
-! These estimates are based on a cubic interpolant spanning four cells 
-! and evaluated at the location of the middle edge. An interpolant spanning 
-! cells i-2, i-1, i and i+1 is evaluated at edge i-1/2. The estimate for 
+! These estimates are based on a cubic interpolant spanning four cells
+! and evaluated at the location of the middle edge. An interpolant spanning
+! cells i-2, i-1, i and i+1 is evaluated at edge i-1/2. The estimate for
 ! each edge is unique.
 !
 !       i-2    i-1     i     i+1
 ! ..--o------o------o------o------o--..
 !                 i-1/2
-! 
-! The first two edge values are estimated by evaluating the first available 
-! cubic interpolant, i.e., the interpolant spanning cells 1, 2, 3 and 4. 
-! Similarly, the last two edge values are estimated by evaluating the last 
+!
+! The first two edge values are estimated by evaluating the first available
+! cubic interpolant, i.e., the interpolant spanning cells 1, 2, 3 and 4.
+! Similarly, the last two edge values are estimated by evaluating the last
 ! available interpolant.
 !
 ! For this fourth-order scheme, at least four cells must exist.
@@ -314,21 +314,21 @@ subroutine edge_values_explicit_h4( N, h, u, edge_values )
   integer,              intent(in)    :: N ! Number of cells
   real, dimension(:),   intent(in)    :: h ! cell widths (size N)
   real, dimension(:),   intent(in)    :: u ! cell averages (size N)
-  real, dimension(:,:), intent(inout) :: edge_values      
+  real, dimension(:,:), intent(inout) :: edge_values
 
   ! Local variables
   integer               :: i, j
   real                  :: u0, u1, u2, u3
   real                  :: h0, h1, h2, h3
   real                  :: f1, f2, f3       ! auxiliary variables
-  real                  :: e                ! edge value    
+  real                  :: e                ! edge value
   real, dimension(5)    :: x                ! used to compute edge
   real, dimension(4,4)  :: A                ! values near the boundaries
   real, dimension(4)    :: B, C
-  
+
   ! Loop on interior cells
   do i = 3,N-1
-    
+
     h0 = h(i-2)
     h1 = h(i-1)
     h2 = h(i)
@@ -342,7 +342,7 @@ subroutine edge_values_explicit_h4( N, h, u, edge_values )
       h2 = max( hMinFrac*f1, h(i) )
       h3 = max( hMinFrac*f1, h(i+1) )
     endif
-    
+
     u0 = u(i-2)
     u1 = u(i-1)
     u2 = u(i)
@@ -351,21 +351,21 @@ subroutine edge_values_explicit_h4( N, h, u, edge_values )
     f1 = (h0+h1) * (h2+h3) / (h1+h2)
     f2 = u1 * h2 + u2 * h1
     f3 = 1.0 / (h0+h1+h2) + 1.0 / (h1+h2+h3)
-    
+
     e = f1 * f2 * f3
 
     f1 = h2 * (h2+h3) / ( (h0+h1+h2)*(h0+h1) )
     f2 = u1*(h0+2.0*h1) - u0*h1
 
     e = e + f1*f2
-    
+
     f1 = h1 * (h0+h1) / ( (h1+h2+h3)*(h2+h3) )
     f2 = u2*(2.0*h2+h3) - u3*h2
-    
+
     e = e + f1*f2
-    
+
     e = e / ( h0 + h1 + h2 + h3)
-    
+
     edge_values(i,1) = e
     edge_values(i-1,2) = e
 
@@ -389,20 +389,20 @@ subroutine edge_values_explicit_h4( N, h, u, edge_values )
   end do
 
   do i = 1,4
-    
+
     do j = 1,4
       A(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / real(j)
     end do
-    
+
     B(i) = u(i) * max(f1, h(i) )
-    
-  end do    
+
+  end do
 
   call solve_linear_system( A, B, C, 4 )
 
   ! First edge value
   edge_values(1,1) = evaluation_polynomial( C, 4, x(1) )
-  
+
   ! Second edge value
   edge_values(1,2) = evaluation_polynomial( C, 4, x(2) )
   edge_values(2,1) = edge_values(1,2)
@@ -427,24 +427,24 @@ subroutine edge_values_explicit_h4( N, h, u, edge_values )
   end do
 
   do i = 1,4
-    
+
     do j = 1,4
       A(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / real(j)
     end do
-    
+
     B(i) = u(N-4+i) * max(f1,  h(N-4+i) )
-    
-  end do    
+
+  end do
 
   call solve_linear_system( A, B, C, 4 )
-  
+
   ! Last edge value
   edge_values(N,2) = evaluation_polynomial( C, 4, x(5) )
-  
+
   ! Second to last edge value
   edge_values(N,1) = evaluation_polynomial( C, 4, x(4) )
   edge_values(N-1,2) = edge_values(N,1)
-  
+
 #ifdef __DO_SAFETY_CHECKS__
   if (edge_values(N,1) /= edge_values(N,1) .or. edge_values(N,2) /= edge_values(N,2)) then
     write(0,*) 'NaN in explicit_edge_h4 at k=',N
@@ -455,7 +455,7 @@ subroutine edge_values_explicit_h4( N, h, u, edge_values )
       end do
       write(0,*) A(i,:)
       B(i) = u(N-4+i) * ( h(N-4+i) )
-    end do    
+    end do
     write(0,*) 'B=',B
     write(0,*) 'C=',C
     write(0,*) 'h(:N)=',h(N-3:N)
@@ -474,9 +474,9 @@ subroutine edge_values_implicit_h4( N, h, u, edge_values )
 ! -----------------------------------------------------------------------------
 ! Compute edge values based on fourth-order implicit estimates.
 !
-! Fourth-order implicit estimates of edge values are based on a two-cell 
-! stencil. A tridiagonal system is set up and is based on expressing the 
-! edge values in terms of neighboring cell averages. The generic 
+! Fourth-order implicit estimates of edge values are based on a two-cell
+! stencil. A tridiagonal system is set up and is based on expressing the
+! edge values in terms of neighboring cell averages. The generic
 ! relationship is
 !
 ! \alpha u_{i-1/2} + u_{i+1/2} + \beta u_{i+3/2} = a \bar{u}_i + b \bar{u}_{i+1}
@@ -487,11 +487,11 @@ subroutine edge_values_implicit_h4( N, h, u, edge_values )
 !   ..--o------o------o--..
 !     i-1/2  i+1/2  i+3/2
 !
-! In this routine, the coefficients \alpha, \beta, a and b are computed, 
-! the tridiagonal system is built, boundary conditions are prescribed and 
-! the system is solved to yield edge-value estimates. 
-! 
-! There are N+1 unknowns and we are able to write N-1 equations. The 
+! In this routine, the coefficients \alpha, \beta, a and b are computed,
+! the tridiagonal system is built, boundary conditions are prescribed and
+! the system is solved to yield edge-value estimates.
+!
+! There are N+1 unknowns and we are able to write N-1 equations. The
 ! boundary conditions close the system.
 ! -----------------------------------------------------------------------------
 
@@ -499,7 +499,7 @@ subroutine edge_values_implicit_h4( N, h, u, edge_values )
   integer,              intent(in)     :: N ! Number of cells
   real, dimension(:),   intent(in)     :: h ! cell widths (size N)
   real, dimension(:),   intent(in)     :: u ! cell averages (size N)
-  real, dimension(:,:), intent(inout)  :: edge_values      
+  real, dimension(:,:), intent(inout)  :: edge_values
 
   ! Local variables
   integer               :: i, j                 ! loop indexes
@@ -542,13 +542,13 @@ subroutine edge_values_implicit_h4( N, h, u, edge_values )
     beta = h0_2 / d2
     a = 2.0 * h1_2 * ( h1_2 + 2.0 * h0_2 + 3.0 * h0h1 ) / d4
     b = 2.0 * h0_2 * ( h0_2 + 2.0 * h1_2 + 3.0 * h0h1 ) / d4
-    
+
     tri_l(i+1) = alpha
     tri_d(i+1) = 1.0
     tri_u(i+1) = beta
-    
+
     tri_b(i+1) = a * u(i) + b * u(i+1)
-    
+
   end do ! end loop on cells
 
   ! Boundary conditions: left boundary
@@ -559,21 +559,21 @@ subroutine edge_values_implicit_h4( N, h, u, edge_values )
   end do
 
   do i = 1,4
-    
+
     do j = 1,4
       Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
     end do
-    
+
     Bsys(i) = u(i) * max( h0, h(i) )
-    
-  end do    
+
+  end do
 
   call solve_linear_system( Asys, Bsys, Csys, 4 )
-  
+
   tri_d(1) = 1.0
   tri_u(1) = 0.0
   tri_b(1) = evaluation_polynomial( Csys, 4, x(1) )        ! first edge value
-  
+
   ! Boundary conditions: right boundary
   h0 = max( hNegligible, hMinFrac*sum(h(N-3:N)) )
   x(1) = 0.0
@@ -582,17 +582,17 @@ subroutine edge_values_implicit_h4( N, h, u, edge_values )
   end do
 
   do i = 1,4
-    
+
     do j = 1,4
       Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
     end do
-    
+
     Bsys(i) = u(N-4+i) * max( h0, h(N-4+i) )
-    
-  end do    
+
+  end do
 
   call solve_linear_system( Asys, Bsys, Csys, 4 )
-  
+
   tri_l(N+1) = 0.0
   tri_d(N+1) = 1.0
   tri_b(N+1) = evaluation_polynomial( Csys, 4, x(5) )      ! last edge value
@@ -615,13 +615,13 @@ end subroutine edge_values_implicit_h4
 !------------------------------------------------------------------------------
 subroutine edge_values_implicit_h6( N, h, u, edge_values )
 ! -----------------------------------------------------------------------------
-! Sixth-order implicit estimates of edge values are based on a four-cell, 
-! three-edge stencil. A tridiagonal system is set up and is based on 
-! expressing the edge values in terms of neighboring cell averages. 
-! 
+! Sixth-order implicit estimates of edge values are based on a four-cell,
+! three-edge stencil. A tridiagonal system is set up and is based on
+! expressing the edge values in terms of neighboring cell averages.
+!
 ! The generic relationship is
 !
-! \alpha u_{i-1/2} + u_{i+1/2} + \beta u_{i+3/2} = 
+! \alpha u_{i-1/2} + u_{i+1/2} + \beta u_{i+3/2} =
 ! a \bar{u}_{i-1} + b \bar{u}_i + c \bar{u}_{i+1} + d \bar{u}_{i+2}
 !
 ! and the stencil looks like this
@@ -630,9 +630,9 @@ subroutine edge_values_implicit_h6( N, h, u, edge_values )
 !   ..--o------o------o------o------o--..
 !            i-1/2  i+1/2  i+3/2
 !
-! In this routine, the coefficients \alpha, \beta, a, b, c and d are 
-! computed, the tridiagonal system is built, boundary conditions are 
-! prescribed and the system is solved to yield edge-value estimates. 
+! In this routine, the coefficients \alpha, \beta, a, b, c and d are
+! computed, the tridiagonal system is built, boundary conditions are
+! prescribed and the system is solved to yield edge-value estimates.
 !
 ! Note that the centered stencil only applies to edges 3 to N-1 (edges are
 ! numbered 1 to n+1), which yields N-3 equations for N+1 unknowns. Two other
@@ -651,12 +651,12 @@ subroutine edge_values_implicit_h6( N, h, u, edge_values )
   integer,              intent(in)     :: N ! Number of cells
   real, dimension(:),   intent(in)     :: h ! cell widths (size N)
   real, dimension(:),   intent(in)     :: u ! cell averages (size N)
-  real, dimension(:,:), intent(inout)  :: edge_values      
+  real, dimension(:,:), intent(inout)  :: edge_values
 
   ! Local variables
   integer               :: i, j, k              ! loop indexes
   real                  :: h0, h1, h2, h3       ! cell widths
-  real                  :: g, g_2, g_3          ! the following are 
+  real                  :: g, g_2, g_3          ! the following are
   real                  :: g_4, g_5, g_6        ! auxiliary variables
   real                  :: d2, d3, d4, d5, d6   ! to set up the systems
   real                  :: n2, n3, n4, n5, n6   ! used to compute the
@@ -701,17 +701,17 @@ subroutine edge_values_implicit_h6( N, h, u, edge_values )
 
     ! Auxiliary calculations
     h1_2 = h1 * h1
-    h1_3 = h1_2 * h1 
+    h1_3 = h1_2 * h1
     h1_4 = h1_2 * h1_2
     h1_5 = h1_3 * h1_2
     h1_6 = h1_3 * h1_3
-    
+
     h2_2 = h2 * h2
     h2_3 = h2_2 * h2
     h2_4 = h2_2 * h2_2
     h2_5 = h2_3 * h2_2
     h2_6 = h2_3 * h2_3
-    
+
     g   = h0 + h1
     g_2 = g * g
     g_3 = g * g_2
@@ -724,14 +724,14 @@ subroutine edge_values_implicit_h6( N, h, u, edge_values )
     d4 = ( h1_4 - g_4 ) / h0
     d5 = ( h1_5 - g_5 ) / h0
     d6 = ( h1_6 - g_6 ) / h0
-    
+
     g   = h2 + h3
     g_2 = g * g
     g_3 = g * g_2
     g_4 = g_2 * g_2
     g_5 = g_4 * g
     g_6 = g_3 * g_3
-    
+
     n2 = ( g_2 - h2_2 ) / h3
     n3 = ( g_3 - h2_3 ) / h3
     n4 = ( g_4 - h2_4 ) / h3
@@ -745,44 +745,44 @@ subroutine edge_values_implicit_h6( N, h, u, edge_values )
     Asys(1,4) = -1.0
     Asys(1,5) = -1.0
     Asys(1,6) = -1.0
-    
+
     Asys(2,1) = - h1
     Asys(2,2) = h2
     Asys(2,3) = -0.5 * d2
     Asys(2,4) = 0.5 * h1
     Asys(2,5) = -0.5 * h2
     Asys(2,6) = -0.5 * n2
-    
+
     Asys(3,1) = 0.5 * h1_2
     Asys(3,2) = 0.5 * h2_2
     Asys(3,3) = d3 / 6.0
     Asys(3,4) = - h1_2 / 6.0
     Asys(3,5) = - h2_2 / 6.0
     Asys(3,6) = - n3 / 6.0
-    
+
     Asys(4,1) = - h1_3 / 6.0
     Asys(4,2) = h2_3 / 6.0
     Asys(4,3) = - d4 / 24.0
     Asys(4,4) = h1_3 / 24.0
     Asys(4,5) = - h2_3 / 24.0
     Asys(4,6) = - n4 / 24.0
-    
+
     Asys(5,1) = h1_4 / 24.0
     Asys(5,2) = h2_4 / 24.0
     Asys(5,3) = d5 / 120.0
     Asys(5,4) = - h1_4 / 120.0
     Asys(5,5) = - h2_4 / 120.0
     Asys(5,6) = - n5 / 120.0
-    
+
     Asys(6,1) = - h1_5 / 120.0
     Asys(6,2) = h2_5 / 120.0
     Asys(6,3) = - d6 / 720.0
     Asys(6,4) = h1_5 / 720.0
     Asys(6,5) = - h2_5 / 720.0
     Asys(6,6) = - n6 / 720.0
-    
+
     Bsys(:) = (/ -1.0, 0.0, 0.0, 0.0, 0.0, 0.0 /)
-  
+
     call solve_linear_system( Asys, Bsys, Csys, 6 )
 
     alpha = Csys(1)
@@ -796,11 +796,11 @@ subroutine edge_values_implicit_h6( N, h, u, edge_values )
     tri_d(k+1) = 1.0
     tri_u(k+1) = beta
     tri_b(k+1) = a * u(k-1) + b * u(k) + c * u(k+1) + d * u(k+2)
-    
+
   end do ! end loop on cells
-  
+
   ! Use a right-biased stencil for the second row
-  
+
   ! Cell widths
   h0 = h(1)
   h1 = h(2)
@@ -847,20 +847,20 @@ subroutine edge_values_implicit_h6( N, h, u, edge_values )
   d4 = ( h1_4 - g_4 ) / h0
   d5 = ( h1_5 - g_5 ) / h0
   d6 = ( h1_6 - g_6 ) / h0
-    
+
   g   = h2 + h3
   g_2 = g * g
   g_3 = g * g_2
   g_4 = g_2 * g_2
   g_5 = g_4 * g
   g_6 = g_3 * g_3
-    
+
   n2 = ( g_2 - h2_2 ) / h3
   n3 = ( g_3 - h2_3 ) / h3
   n4 = ( g_4 - h2_4 ) / h3
   n5 = ( g_5 - h2_5 ) / h3
   n6 = ( g_6 - h2_6 ) / h3
-    
+
   ! Compute matrix entries
   Asys(1,1) = 1.0
   Asys(1,2) = 1.0
@@ -868,42 +868,42 @@ subroutine edge_values_implicit_h6( N, h, u, edge_values )
   Asys(1,4) = -1.0
   Asys(1,5) = -1.0
   Asys(1,6) = -1.0
-    
+
   Asys(2,1) = - h0ph1
   Asys(2,2) = 0.0
   Asys(2,3) = -0.5 * d2
   Asys(2,4) = 0.5 * h1
   Asys(2,5) = -0.5 * h2
   Asys(2,6) = -0.5 * n2
-    
+
   Asys(3,1) = 0.5 * h0ph1_2
   Asys(3,2) = 0.0
   Asys(3,3) = d3 / 6.0
   Asys(3,4) = - h1_2 / 6.0
   Asys(3,5) = - h2_2 / 6.0
   Asys(3,6) = - n3 / 6.0
-    
+
   Asys(4,1) = - h0ph1_3 / 6.0
   Asys(4,2) = 0.0
   Asys(4,3) = - d4 / 24.0
   Asys(4,4) = h1_3 / 24.0
   Asys(4,5) = - h2_3 / 24.0
   Asys(4,6) = - n4 / 24.0
-    
+
   Asys(5,1) = h0ph1_4 / 24.0
   Asys(5,2) = 0.0
   Asys(5,3) = d5 / 120.0
   Asys(5,4) = - h1_4 / 120.0
   Asys(5,5) = - h2_4 / 120.0
   Asys(5,6) = - n5 / 120.0
-    
+
   Asys(6,1) = - h0ph1_5 / 120.0
   Asys(6,2) = 0.0
   Asys(6,3) = - d6 / 720.0
   Asys(6,4) = h1_5 / 720.0
   Asys(6,5) = - h2_5 / 720.0
   Asys(6,6) = - n6 / 720.0
-    
+
   Bsys(:) = (/ -1.0, h1, -0.5*h1_2, h1_3/6.0, -h1_4/24.0, h1_5/120.0 /)
 
   call solve_linear_system( Asys, Bsys, Csys, 6 )
@@ -919,7 +919,7 @@ subroutine edge_values_implicit_h6( N, h, u, edge_values )
   tri_d(2) = 1.0
   tri_u(2) = beta
   tri_b(2) = a * u(1) + b * u(2) + c * u(3) + d * u(4)
-  
+
   ! Boundary conditions: left boundary
   g = max( hNegligible, hMinFrac*sum(h(1:6)) )
   x(1) = 0.0
@@ -928,24 +928,24 @@ subroutine edge_values_implicit_h6( N, h, u, edge_values )
   end do
 
   do i = 1,6
-    
+
     do j = 1,6
       Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
     end do
-    
+
     Bsys(i) = u(i) * max( g, h(i) )
-    
-  end do    
+
+  end do
 
   call solve_linear_system( Asys, Bsys, Csys, 6 )
-  
+
   tri_l(1) = 0.0
   tri_d(1) = 1.0
   tri_u(1) = 0.0
   tri_b(1) = evaluation_polynomial( Csys, 6, x(1) )        ! first edge value
-  
+
   ! Use a left-biased stencil for the second to last row
-  
+
   ! Cell widths
   h0 = h(N-3)
   h1 = h(N-2)
@@ -967,13 +967,13 @@ subroutine edge_values_implicit_h6( N, h, u, edge_values )
   h1_4 = h1_2 * h1_2
   h1_5 = h1_3 * h1_2
   h1_6 = h1_3 * h1_3
-    
+
   h2_2 = h2 * h2
   h2_3 = h2_2 * h2
   h2_4 = h2_2 * h2_2
   h2_5 = h2_3 * h2_2
   h2_6 = h2_3 * h2_3
-    
+
   g   = h0 + h1
   g_2 = g * g
   g_3 = g * g_2
@@ -992,14 +992,14 @@ subroutine edge_values_implicit_h6( N, h, u, edge_values )
   d4 = ( h1_4 - g_4 ) / h0
   d5 = ( h1_5 - g_5 ) / h0
   d6 = ( h1_6 - g_6 ) / h0
-    
+
   g   = h2 + h3
   g_2 = g * g
   g_3 = g * g_2
   g_4 = g_2 * g_2
   g_5 = g_4 * g
   g_6 = g_3 * g_3
-    
+
   n2 = ( g_2 - h2_2 ) / h3
   n3 = ( g_3 - h2_3 ) / h3
   n4 = ( g_4 - h2_4 ) / h3
@@ -1013,35 +1013,35 @@ subroutine edge_values_implicit_h6( N, h, u, edge_values )
   Asys(1,4) = -1.0
   Asys(1,5) = -1.0
   Asys(1,6) = -1.0
-    
+
   Asys(2,1) =   0.0
   Asys(2,2) = h2ph3
   Asys(2,3) =   -0.5 * d2
   Asys(2,4) =   0.5 * h1
   Asys(2,5) =   -0.5 * h2
   Asys(2,6) =   -0.5 * n2
-    
+
   Asys(3,1) =   0.0
   Asys(3,2) = 0.5 * h2ph3_2
   Asys(3,3) =   d3 / 6.0
   Asys(3,4) =   - h1_2 / 6.0
   Asys(3,5) =   - h2_2 / 6.0
   Asys(3,6) =   - n3 / 6.0
-    
+
   Asys(4,1) =   0.0
   Asys(4,2) = h2ph3_3 / 6.0
   Asys(4,3) =   - d4 / 24.0
   Asys(4,4) =   h1_3 / 24.0
   Asys(4,5) =   - h2_3 / 24.0
   Asys(4,6) =   - n4 / 24.0
-    
+
   Asys(5,1) =   0.0
   Asys(5,2) = h2ph3_4 / 24.0
   Asys(5,3) =   d5 / 120.0
   Asys(5,4) =   - h1_4 / 120.0
   Asys(5,5) =   - h2_4 / 120.0
   Asys(5,6) =   - n5 / 120.0
-    
+
   Asys(6,1) =   0.0
   Asys(6,2) = h2ph3_5 / 120.0
   Asys(6,3) =   - d6 / 720.0
@@ -1073,22 +1073,22 @@ subroutine edge_values_implicit_h6( N, h, u, edge_values )
   end do
 
   do i = 1,6
-    
+
     do j = 1,6
       Asys(i,j) = ( (x(i+1)**j) - (x(i)**j) ) / j
     end do
-    
+
     Bsys(i) = u(N-6+i) * max( g, h(N-6+i) )
-    
-  end do    
+
+  end do
 
   call solve_linear_system( Asys, Bsys, Csys, 6 )
-  
+
   tri_l(N+1) = 0.0
   tri_d(N+1) = 1.0
   tri_u(N+1) = 0.0
   tri_b(N+1) = evaluation_polynomial( Csys, 6, x(7) )      ! last edge value
-  
+
   ! Solve tridiagonal system and assign edge values
   call solve_tridiagonal_system( tri_l, tri_d, tri_u, tri_b, tri_x, N+1 )
 

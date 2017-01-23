@@ -261,7 +261,7 @@ subroutine distribute_residual_uh_barotropic(G, GV, h, uh)
         do k=1,nz
           uh2d(I,k) = 0.0
         enddo
-      endif      
+      endif
       ! Calculate and check that column integrated transports match the original to
       ! within the tolerance limit
       uh_neglect = nz*GV%Angstrom*min(G%areaT(i,j),G%areaT(i+1,j))
@@ -270,11 +270,11 @@ subroutine distribute_residual_uh_barotropic(G, GV, h, uh)
         "barotropic redistribution")
     enddo
 
-!    ! Update layer thicknesses at the end 
+    ! Update layer thicknesses at the end
     do k=1,nz ; do i=is,ie
       h(i,j,k) = h(i,j,k) + (uh2d(I-1,k) - uh2d(I,k))/G%areaT(i,j)
     enddo ; enddo
-    do k=1,nz ; do i=is-1,ie 
+    do k=1,nz ; do i=is-1,ie
       uh(I,j,k) = uh2d(I,k)
     enddo ; enddo
   enddo
@@ -318,7 +318,7 @@ subroutine distribute_residual_vh_barotropic(G, GV, h, vh)
       endif
     enddo; enddo;
 
-    
+
     ! Distribute flux. Note min/max is intended to make sure that the mass transport
     ! does not deplete a cell. If this limit is hit for some reason, tracer will
     ! not be conserved
@@ -342,9 +342,8 @@ subroutine distribute_residual_vh_barotropic(G, GV, h, vh)
       if( abs(sum(vh2d(J,:))-vh2d_sum(J)) > vh_neglect) &
           call MOM_error(WARNING,"Column integral of vh does not match after "//&
           "barotropic redistribution")
-      
-    enddo
 
+    enddo
 
     ! Update layer thicknesses at the end.
     ! This may not be needed since the limits on the flux are half of the original thickness
@@ -388,12 +387,12 @@ subroutine distribute_residual_uh_upwards(G, GV, h, uh)
       h2d(i,k) = max(h(i,j,k)*G%areaT(i,j)-min_h*G%areaT(i,j),min_h*G%areaT(i,j))
     enddo ; enddo
 
-    do i=is-1,ie 
+    do i=is-1,ie
       do k=1,nz
-        uh_remain = uh2d(I,k) 
+        uh_remain = uh2d(I,k)
         uh_neglect = GV%H_subroundoff*min(G%areaT(i,j),G%areaT(i+1,j))
         if(uh_remain<-uh_neglect) then
-          ! Set the mass flux to zero. This will be refilled in the first iteration 
+          ! Set the mass flux to zero. This will be refilled in the first iteration
           uh2d(I,k) = 0.0
           do k_rev=k,1,-1
             ! This lower bound only allows half of the layer to be depleted
@@ -409,7 +408,7 @@ subroutine distribute_residual_uh_upwards(G, GV, h, uh)
             if(uh_remain>-uh_neglect) exit
           enddo
         elseif (uh_remain>uh_neglect) then
-          ! Set the amount in the layer with remaining fluxes to zero. This will be reset 
+          ! Set the amount in the layer with remaining fluxes to zero. This will be reset
           ! in the first iteration of the redistribution loop
           uh2d(I,k) = 0.0
           ! Loop to distribute remaining flux in layers above
@@ -436,7 +435,7 @@ subroutine distribute_residual_uh_upwards(G, GV, h, uh)
 
     enddo
 
-!    ! Update layer thicknesses at the end 
+    ! Update layer thicknesses at the end
     do k=1,nz ; do i=is,ie
       h(i,j,k) = (h(i,j,k)*G%areaT(i,j) + (uh2d(I-1,k) - uh2d(I,k)))/G%areaT(i,j)
     enddo ; enddo
@@ -444,7 +443,7 @@ subroutine distribute_residual_uh_upwards(G, GV, h, uh)
       uh(I,j,k) = uh2d(I,k)
     enddo ; enddo
   enddo
-  
+
 end subroutine distribute_residual_uh_upwards
 
 !> In the case where offline advection has failed to converge, redistribute the u-flux
@@ -480,10 +479,10 @@ subroutine distribute_residual_vh_upwards(G, GV, h, vh)
 
     do j=js-1,je
       do k=1,nz
-        vh_remain = vh2d(J,k) 
+        vh_remain = vh2d(J,k)
         vh_neglect = GV%H_subroundoff*min(G%areaT(i,j),G%areaT(i,j+1))
         if(vh_remain<-vh_neglect) then
-          ! Set the mass flux to zero. This will be refilled in the first iteration 
+          ! Set the mass flux to zero. This will be refilled in the first iteration
           vh2d(J,k) = 0.0
           do k_rev=k,1,-1
             ! This lower bound only allows half of the layer to be depleted
@@ -499,7 +498,7 @@ subroutine distribute_residual_vh_upwards(G, GV, h, vh)
             if(vh_remain>-vh_neglect) exit
           enddo
         elseif (vh_remain>vh_neglect) then
-          ! Set the amount in the layer with remaining fluxes to zero. This will be reset 
+          ! Set the amount in the layer with remaining fluxes to zero. This will be reset
           ! in the first iteration of the redistribution loop
           vh2d(J,k) = 0.0
           ! Loop to distribute remaining flux in layers above
@@ -521,11 +520,11 @@ subroutine distribute_residual_vh_upwards(G, GV, h, vh)
             call MOM_error(WARNING,"Water column cannot accommodate UH redistribution. Tracer will not be conserved")
           endif
         endif
-      enddo 
+      enddo
 
     enddo
 
-!    ! Update layer thicknesses at the end 
+    ! Update layer thicknesses at the end
     do k=1,nz ; do j=js,je
       h(i,j,k) = (h(i,j,k)*G%areaT(i,j) + (vh2d(J-1,k) - vh2d(J,k)))/G%areaT(i,j)
     enddo ; enddo
@@ -533,12 +532,12 @@ subroutine distribute_residual_vh_upwards(G, GV, h, vh)
       vh(i,J,k) = vh2d(J,k)
     enddo ; enddo
   enddo
-  
+
 
 end subroutine distribute_residual_vh_upwards
 
 !> add_diurnal_SW adjusts the shortwave fluxes in an forcying_type variable
-!! to add a synthetic diurnal cycle. Adapted from SIS2 
+!! to add a synthetic diurnal cycle. Adapted from SIS2
 subroutine offline_add_diurnal_SW(fluxes, G, Time_start, Time_end)
   type(forcing),                 intent(inout) :: fluxes !< The type with atmospheric fluxes to be adjusted.
   type(ocean_grid_type),         intent(in)    :: G   !< The sea-ice lateral grid type.
@@ -569,7 +568,7 @@ subroutine offline_add_diurnal_SW(fluxes, G, Time_start, Time_end)
 !    Per Rick Hemler:
 !      Call diurnal_solar with dtime=dt_here to get cosz averaged over dt_here.
 !      Call daily_mean_solar to get cosz averaged over a day.  Then
-!      diurnal_factor = cosz_dt_ice*fracday_dt_ice*rrsun_dt_ice / 
+!      diurnal_factor = cosz_dt_ice*fracday_dt_ice*rrsun_dt_ice /
 !                       cosz_day*fracday_day*rrsun_day
 
     call diurnal_solar(G%geoLatT(i,j)*rad, G%geoLonT(i,j)*rad, Time_start, cosz=cosz_dt, &
@@ -587,85 +586,6 @@ subroutine offline_add_diurnal_SW(fluxes, G, Time_start, Time_end)
   enddo ; enddo
 
 end subroutine offline_add_diurnal_sw
-
-!> \namespace mom_offline_transport
-!! \section offline_overview Offline Tracer Transport in MOM6
-!!  'Offline tracer modeling' uses physical fields (e.g. mass transports and layer thicknesses) saved
-!!  from a previous integration of the physical model to transport passive tracers. These fields are
-!!  accumulated or averaged over a period of time (in this test case, 1 day) and used to integrate
-!!  portions of the MOM6 code base that handle the 3d advection and diffusion of passive tracers.
-!!
-!!  The distribution of tracers in the ocean modeled offline should not be expected to match an online
-!!  simulation. Accumulating transports over more than one online model timestep implicitly assumes
-!!  homogeneity over that time period and essentially aliases over processes that occur with higher
-!!  frequency. For example, consider the case of a surface boundary layer with a strong diurnal cycle.
-!!  An offline simulation with a 1 day timestep, captures the net transport into or out of that layer,
-!!  but not the exact cycling. This effective aliasing may also complicate online model configurations
-!!  which strongly-eddying regions. In this case, the offline model timestep must be limited to some 
-!!  fraction of the eddy correlation timescale. Lastly, the nonlinear advection scheme which applies 
-!!  limited mass-transports over a sequence of iterations means that tracers are not transported along
-!!  exactly the same path as they are in the online model.
-!!  
-!!  This capability has currently targeted the Baltic_ALE_z test case, though some work has also been
-!!  done with the OM4 1/2 degree configuration. Work is ongoing to develop recommendations and best
-!!  practices for investigators seeking to use MOM6 for offline tracer modeling.
-!!
-!!  \section offline_technical Implementation of offline routine in MOM6
-!!
-!!  The subroutine step_tracers that coordinates this can be found in MOM.F90 and is only called
-!!  using the solo ocean driver. This is to avoid issues with coupling to other climate components
-!!  that may be relying on fluxes from the ocean to be coupled more often than the offline time step.
-!!  Other routines related to offline tracer modeling can be found in tracers/MOM_offline_control.F90
-!!
-!!  As can also be seen in the comments for the step_tracers subroutine, an offline time step
-!!  comprises the following steps:
-!!        -#  Using the layer thicknesses and tracer concentrations from the previous timestep,
-!!            half of the accumulated vertical mixing (eatr and ebtr) is applied in the call to
-!!            tracer_column_fns.
-!!            For tracers whose source/sink terms need dt, this value is set to 1/2 dt_offline
-!!        -#  Half of the accumulated surface freshwater fluxes are applied
-!!        START ITERATION
-!!        -#  Accumulated mass fluxes are used to do horizontal transport. The number of iterations
-!!            used in advect_tracer is limited to 2 (e.g x->y->x->y). The remaining mass fluxes are
-!!            stored for later use and resulting layer thicknesses fed into the next step
-!!        -#  Tracers and the h-grid are regridded and remapped in a call to ALE. This allows for
-!!            layers which might 'vanish' because of horizontal mass transport to be 'reinflated'
-!!            and essentially allows for the vertical transport of tracers
-!!        -#  Check that transport is done if the remaining mass fluxes equals 0 or if the max
-!!            number of iterations has been reached
-!!        END ITERATION
-!!        -#  Repeat steps 1 and 2
-!!        -#  Redistribute any residual mass fluxes that remain after the advection iterations
-!!            in a barotropic manner, progressively upward through the water column.  
-!!        -#  Force a remapping to the stored layer thicknesses that correspond to the snapshot of
-!!            the online model at the end of an accumulation interval
-!!        -#  Reset T/S and h to their stored snapshotted values to prevent model drift
-!!
-!!  \section  offline_evaluation Evaluating the utility of an offline tracer model
-!!  How well an offline tracer model can be used as an alternative to integrating tracers online
-!!  with the prognostic model must be evaluated for each application. This efficacy may be related
-!!  to the native coordinate of the online model, to the length of the offline timestep, and to the
-!!  behavior of the tracer itself.
-!!
-!!  A framework for formally regression testing the offline capability still needs to be developed.
-!!  However, as a simple way of testing whether the offline model is nominally behaving as expected,
-!!  the total inventory of the advection test tracers (tr1, tr2, etc.) should be conserved between
-!!  time steps except for the last 4 decimal places. As a general guideline, an offline timestep of
-!!  5 days or less.
-!!
-!!  \section offline_parameters Runtime parameters for offline tracers
-!!    - OFFLINEDIR:    Input directory where the offline fields can be found
-!!    - OFF_SUM_FILE:  Filename where the accumulated fields can be found (e.g. horizontal mass transports)
-!!    - OFF_SNAP_FILE: Filename where snapshot fields can be found (e.g. end of timestep layer thickness)
-!!    - START_INDEX:   Which timelevel of the input files to read first
-!!    - NUMTIME:       How many timelevels to read before 'looping' back to 1
-!!    - FIELDS_ARE_OFFSET: True if the time-averaged fields and snapshot fields are offset by one
-!!                        time level, probably not needed
-!!    -NUM_OFF_ITER:  Maximum number of iterations to do for the nonlinear advection scheme
-!!    -REDISTRIBUTE_METHOD: Redistributes any remaining horizontal fluxes throughout the rest of water column.
-!!                          Options are 'barotropic' which "evenly distributes flux throughout the entire water
-!!                          column,'upwards' which adds the maximum of the remaining flux in each layer above,
-!!                          and 'none' which does no redistribution"
 
 end module MOM_offline_aux
 

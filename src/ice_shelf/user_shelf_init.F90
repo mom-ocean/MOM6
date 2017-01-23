@@ -173,12 +173,12 @@ subroutine USER_init_ice_thickness(h_shelf, area_shelf_h, hmask, G, param_file)
   type(ocean_grid_type),            intent(in)  :: G
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: area_shelf_h, hmask, h_shelf
   type(param_file_type),            intent(in)  :: param_file
-  
+
   ! This subroutine initializes the ice shelf thickness.  Currently it does so
   ! calling USER_initialize_shelf_mass, but this can be revised as needed.
   real, dimension(SZI_(G),SZJ_(G)) :: mass_shelf
   type(user_ice_shelf_CS), pointer :: CS => NULL()
-  
+
   call USER_initialize_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, CS, param_file, .true.)
 
 end subroutine USER_init_ice_thickness
@@ -207,17 +207,17 @@ subroutine USER_update_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, C
   c1 = 0.0 ; if (CS%shelf_slope_scale > 0.0) c1 = 1.0 / CS%shelf_slope_scale
 
 
-  do j=G%jsd,G%jed ; 
+  do j=G%jsd,G%jed ;
 
    if (((j+G%jdg_offset) .le. G%domain%njglobal+G%domain%njhalo) .AND. &
        ((j+G%jdg_offset) .ge. G%domain%njhalo+1)) then
 
     do i=G%isc,G%iec
-  
+
 !    if (((i+G%idg_offset) <= G%domain%niglobal+G%domain%nihalo) .AND. &
 !           ((i+G%idg_offset) >= G%domain%nihalo+1)) then
 
-    if ((j.ge.G%jsc) .and. (j.le.G%jec)) then 
+    if ((j.ge.G%jsc) .and. (j.le.G%jec)) then
 
       if (new_sim) then ; if (G%geoLonCu(i-1,j) >= edge_pos) then
         ! Everything past the edge is open ocean.
@@ -234,7 +234,7 @@ subroutine USER_update_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, C
           area_shelf_h(i,j) = G%areaT(i,j)
           hmask (i,j) = 1.0
         endif
-      
+
         if (G%geoLonT(i,j) > slope_pos) then
           h_shelf (i,j) = CS%min_draft
           mass_shelf(i,j) = CS%Rho_ocean * CS%min_draft
@@ -253,7 +253,7 @@ subroutine USER_update_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, C
       hmask(i-1,j) = 3.0
     endif
 
-  enddo ; endif ; enddo  
+  enddo ; endif ; enddo
 
 end subroutine USER_update_shelf_mass
 

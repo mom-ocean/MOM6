@@ -181,7 +181,7 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_sum_output" ! This module's name.
   character(len=200) :: energyfile  ! The name of the energy file.
-  character(len=32) :: filename_appendix = '' !fms appendix to filename for ensemble runs 
+  character(len=32) :: filename_appendix = '' !fms appendix to filename for ensemble runs
 
   if (associated(CS)) then
     call MOM_error(WARNING, "MOM_sum_output_init called with associated control structure.")
@@ -1137,7 +1137,7 @@ subroutine depth_list_setup(G, CS)
 
 end subroutine depth_list_setup
 
-!>  create_depth_list makes an ordered list of depths, along with the cross 
+!>  create_depth_list makes an ordered list of depths, along with the cross
 !! sectional areas at each depth and the volume of fluid deeper than each depth.
 subroutine create_depth_list(G, CS)
   type(ocean_grid_type), intent(in) :: G  !< The ocean's grid structure
@@ -1151,7 +1151,7 @@ subroutine create_depth_list(G, CS)
     indx2     !< The position of an element in the original unsorted list.
   real    :: Dnow  !< The depth now being considered for sorting, in m.
   real    :: Dprev !< The most recent depth that was considered, in m.
-  real    :: vol   !< The running sum of open volume below a deptn, in m3. 
+  real    :: vol   !< The running sum of open volume below a deptn, in m3.
   real    :: area  !< The open area at the current depth, in m2.
   real    :: D_list_prev !< The most recent depth added to the list, in m.
   logical :: add_to_list !< This depth should be included as an entry on the list.

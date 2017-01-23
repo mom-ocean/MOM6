@@ -23,7 +23,7 @@ module BFB_surface_forcing
 !*                                                                     *
 !*  Rewritten by Robert Hallberg, June 2009                            *
 !*                                                                     *
-!*  This file contains subroutines for specifying surface buoyancy     * 
+!*  This file contains subroutines for specifying surface buoyancy     *
 !*  forcing for the buoyancy-forced basin (BFB) case.                  *
 !*  BFB_buoyancy_forcing is used to restore the surface buoayncy to    *
 !*  a linear meridional ramp of temperature. The extent of the ramp    *
@@ -70,14 +70,14 @@ type, public :: BFB_surface_forcing_CS ; private
                              ! forcing ramp
   real :: SST_n              ! SST at the northern edge of the linear
                              ! forcing ramp
-  real :: lfrslat              ! Southern latitude where the linear forcing ramp 
+  real :: lfrslat              ! Southern latitude where the linear forcing ramp
                              ! begins
-  real :: lfrnlat              ! Northern latitude where the linear forcing ramp 
+  real :: lfrnlat              ! Northern latitude where the linear forcing ramp
                              ! ends
   real :: drho_dt            ! Rate of change of density with temperature.
                              ! Note that temperature is being used as a dummy
-                             ! variable here. All temperatures are converted 
-                             ! into density. 
+                             ! variable here. All temperatures are converted
+                             ! into density.
 
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
@@ -102,7 +102,7 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, CS)
 !  can be simply set to zero.  The net fresh water flux should probably be
 !  set in fluxes%evap and fluxes%lprec, with any salinity restoring
 !  appearing in fluxes%vprec, and the other water flux components
-!  (fprec, lrunoff and frunoff) left as arrays full of zeros. 
+!  (fprec, lrunoff and frunoff) left as arrays full of zeros.
 !  Evap is usually negative and precip is usually positive.  All heat fluxes
 !  are in W m-2 and positive for heat going into the ocean.  All fresh water
 !  fluxes are in kg m-2 s-1 and positive for water moving into the ocean.
@@ -130,7 +130,7 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, CS)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
- 
+
   !   When modifying the code, comment out this error message.  It is here
   ! so that the original (unmodified) version is not accidentally used.
   ! call MOM_error(FATAL, "User_buoyancy_surface_forcing: " // &
@@ -199,7 +199,7 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, CS)
         Salin_restore = 0.0
 
         fluxes%heat_added(i,j) = (G%mask2dT(i,j) * (rhoXcp * CS%Flux_const)) * &
-            (Temp_restore - state%SST(i,j)) 
+            (Temp_restore - state%SST(i,j))
         fluxes%vprec(i,j) = - (G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)) * &
             ((Salin_restore - state%SSS(i,j)) / &
              (0.5 * (Salin_restore + state%SSS(i,j))))
@@ -232,7 +232,7 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, CS)
       enddo ; enddo
     endif
   endif                                             ! end RESTOREBUOY
- 
+
 end subroutine BFB_buoyancy_forcing
 
 subroutine alloc_if_needed(ptr, isd, ied, jsd, jed)
