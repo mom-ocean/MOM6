@@ -196,6 +196,7 @@ type, public :: forcing_diags
   integer :: id_net_heat_coupler    = -1, id_net_heat_surface      = -1
   integer :: id_sens                = -1, id_LwLatSens             = -1
   integer :: id_sw                  = -1, id_lw                    = -1
+  integer :: id_sw_vis              = -1, id_sw_nir                = -1
   integer :: id_lat_evap            = -1, id_lat_frunoff           = -1
   integer :: id_lat                 = -1, id_lat_fprec             = -1
   integer :: id_heat_content_lrunoff= -1, id_heat_content_frunoff  = -1
@@ -1235,6 +1236,12 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
         cmor_field_name='rsntds', cmor_units='W m-2',                          &
         cmor_standard_name='net_downward_shortwave_flux_at_sea_water_surface', &
         cmor_long_name='Net Downward Shortwave Radiation at Sea Water Surface')
+  handles%id_sw_vis = register_diag_field('ocean_model', 'sw_vis', diag%axesT1, Time,     &
+        'Shortwave radiation direct and diffuse flux into the ocean in the visible band', &
+        'Watt/m^2')
+  handles%id_sw_nir = register_diag_field('ocean_model', 'sw_nir', diag%axesT1, Time,     &
+        'Shortwave radiation direct and diffuse flux into the ocean in the near-infrared band', &
+        'Watt/m^2')
 
   handles%id_LwLatSens = register_diag_field('ocean_model', 'LwLatSens', diag%axesT1, Time, &
         'Combined longwave, latent, and sensible heating at ocean surface', 'Watt/m^2')
@@ -2080,6 +2087,14 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
 
     if ((handles%id_sw > 0) .and. ASSOCIATED(fluxes%sw)) then
       call post_data(handles%id_sw, fluxes%sw, diag)
+    endif
+    if ((handles%id_sw_vis > 0) .and. ASSOCIATED(fluxes%sw_vis_dir) .and. &
+        ASSOCIATED(fluxes%sw_vis_dif)) then
+      call post_data(handles%id_sw_vis, fluxes%sw_vis_dir+fluxes%sw_vis_dif, diag)
+    endif
+    if ((handles%id_sw_nir > 0) .and. ASSOCIATED(fluxes%sw_nir_dir) .and. &
+        ASSOCIATED(fluxes%sw_nir_dif)) then
+      call post_data(handles%id_sw_nir, fluxes%sw_nir_dir+fluxes%sw_nir_dif, diag)
     endif
     if ((handles%id_total_sw > 0) .and. ASSOCIATED(fluxes%sw)) then
       total_transport = global_area_integral(fluxes%sw,G)

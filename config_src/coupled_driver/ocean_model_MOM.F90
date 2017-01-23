@@ -36,6 +36,7 @@ module ocean_model_mod
 
 use MOM, only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
 use MOM, only : calculate_surface_state, finish_MOM_initialization
+use MOM, only : step_tracers
 use MOM_constants, only : CELSIUS_KELVIN_OFFSET, hlf
 use MOM_diag_mediator, only : diag_ctrl, enable_averaging, disable_averaging
 use MOM_diag_mediator, only : diag_mediator_close_registration, diag_mediator_end
@@ -223,6 +224,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   character(len=48)  :: stagger
   integer :: secs, days
   type(param_file_type) :: param_file
+  logical :: offline_tracer_mode
 
   call callTree_enter("ocean_model_init(), ocean_model_MOM.F90")
   if (associated(OS)) then
@@ -237,7 +239,8 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
 
   OS%state%tr_fields => Ocean_sfc%fields
   OS%Time = Time_in
-  call initialize_MOM(OS%Time, param_file, OS%dirs, OS%MOM_CSp, Time_in)
+  call initialize_MOM(OS%Time, param_file, OS%dirs, OS%MOM_CSp, Time_in, &
+      offline_tracer_mode=offline_tracer_mode)
   OS%grid => OS%MOM_CSp%G ; OS%GV => OS%MOM_CSp%GV
   OS%C_p = OS%MOM_CSp%tv%C_p
   OS%fluxes%C_p = OS%MOM_CSp%tv%C_p
@@ -402,7 +405,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 
   if (time_start_update /= OS%Time) then
     call MOM_error(WARNING, "update_ocean_model: internal clock does not "//&
-                             "with time_start_update argument.")
+                            "agree with time_start_update argument.")
   endif
   if (.not.associated(OS)) then
     call MOM_error(FATAL, "update_ocean_model called with an unassociated "// &
@@ -465,7 +468,11 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   call disable_averaging(OS%MOM_CSp%diag)
   Master_time = OS%Time ; Time1 = OS%Time
 
-  call step_MOM(OS%fluxes, OS%state, Time1, time_step, OS%MOM_CSp)
+  if(OS%MOM_Csp%offline_tracer_mode) then
+    call step_tracers(OS%fluxes, OS%state, Time1, time_step, OS%MOM_CSp)
+  else
+    call step_MOM(OS%fluxes, OS%state, Time1, time_step, OS%MOM_CSp)
+  endif
 
   OS%Time = Master_time + Ocean_coupling_time_step
   OS%nstep = OS%nstep + 1

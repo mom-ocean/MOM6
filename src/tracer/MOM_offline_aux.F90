@@ -1,26 +1,25 @@
 !> Contains routines related to offline transport of tracers
-module MOM_offline_transport
+module MOM_offline_aux
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use data_override_mod,    only : data_override_init, data_override
-use MOM_time_manager,     only : time_type
+use MOM_time_manager,     only : time_type, operator(-)
 use MOM_domains,          only : pass_var, pass_vector, To_All
 use MOM_error_handler,    only : callTree_enter, callTree_leave, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_grid,             only : ocean_grid_type
 use MOM_verticalGrid,     only : verticalGrid_type
-use MOM_io,               only : read_data
 use MOM_file_parser,      only : get_param, log_version, param_file_type
-use MOM_diag_mediator,    only : diag_ctrl, register_diag_field
-use mpp_domains_mod,      only : CENTER, CORNER, NORTH, EAST
+use astronomy_mod,        only : orbital_time, diurnal_solar, daily_mean_solar
 use MOM_variables,        only : vertvisc_type
 use MOM_forcing_type,     only : forcing
 use MOM_shortwave_abs,    only : optics_type
 use MOM_diag_mediator,    only : post_data
 use MOM_forcing_type,     only : forcing
-use MOM_diabatic_aux,     only : diabatic_aux_CS
 
 implicit none
 
+<<<<<<< HEAD:src/tracer/MOM_offline_aux.F90
+=======
 type, public :: offline_transport_CS
 
   !> Variables related to reading in fields from online run
@@ -63,6 +62,7 @@ end type offline_transport_CS
 public offline_transport_init
 public transport_by_files
 public register_diags_offline_transport
+>>>>>>> 3b16d81cb00c11e924523ae5ca0d66790b44e303:src/tracer/MOM_offline_control.F90
 public update_h_horizontal_flux
 public update_h_vertical_flux
 public limit_mass_flux_3d
@@ -70,12 +70,15 @@ public distribute_residual_uh_barotropic
 public distribute_residual_vh_barotropic
 public distribute_residual_uh_upwards
 public distribute_residual_vh_upwards
+public offline_add_diurnal_sw
 
 #include "MOM_memory.h"
 #include "version_variable.h"
 
 contains
 
+<<<<<<< HEAD:src/tracer/MOM_offline_aux.F90
+=======
 !> Controls the reading in 3d mass fluxes, diffusive fluxes, and other fields stored
 !! in a previous integration of the online model
 subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, khdt_x, khdt_y, &
@@ -337,6 +340,7 @@ function next_modulo_time(inidx, numtime)
 
 end function next_modulo_time
 
+>>>>>>> 3b16d81cb00c11e924523ae5ca0d66790b44e303:src/tracer/MOM_offline_control.F90
 !> This updates thickness based on the convergence of horizontal mass fluxes
 !! NOTE: Only used in non-ALE mode
 subroutine update_h_horizontal_flux(G, GV, uhtr, vhtr, h_pre, h_new)
@@ -517,7 +521,7 @@ end subroutine limit_mass_flux_3d
 subroutine distribute_residual_uh_barotropic(G, GV, h, uh)
   type(ocean_grid_type),    pointer                           :: G
   type(verticalGrid_type),  pointer                           :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout)    :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout)    :: h
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: uh
 
   real, dimension(SZIB_(G),SZK_(G))   :: uh2d
@@ -526,6 +530,7 @@ subroutine distribute_residual_uh_barotropic(G, GV, h, uh)
   real, dimension(SZI_(G))            :: h2d_sum
 
   integer :: i, j, k, m, is, ie, js, je, nz
+  real :: uh_neglect
 
   ! Set index-related variables for fields on T-grid
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
@@ -565,16 +570,26 @@ subroutine distribute_residual_uh_barotropic(G, GV, h, uh)
         do k=1,nz
           uh2d(I,k) = 0.0
         enddo
-      endif
+      endif      
+      ! Calculate and check that column integrated transports match the original to
+      ! within the tolerance limit
+      uh_neglect = nz*GV%Angstrom*min(G%areaT(i,j),G%areaT(i+1,j))
+      if( abs(sum(uh2d(I,:))-uh2d_sum(I)) > uh_neglect) &
+        call MOM_error(WARNING,"Column integral of uh does not match after "//&
+        "barotropic redistribution")
     enddo
 
+<<<<<<< HEAD:src/tracer/MOM_offline_aux.F90
+!    ! Update layer thicknesses at the end 
+    do k=1,nz ; do i=is,ie
+=======
     ! Update layer thicknesses at the end
     do k=1,nz ; do i=is-2,ie+1
+>>>>>>> 3b16d81cb00c11e924523ae5ca0d66790b44e303:src/tracer/MOM_offline_control.F90
       h(i,j,k) = h(i,j,k) + (uh2d(I-1,k) - uh2d(I,k))/G%areaT(i,j)
     enddo ; enddo
-    do k=1,nz ; do i=is-1,ie
+    do k=1,nz ; do i=is-1,ie 
       uh(I,j,k) = uh2d(I,k)
-      uh2d_sum(I) = uh2d_sum(I)-uh2d(I,k)
     enddo ; enddo
   enddo
 
@@ -584,7 +599,7 @@ end subroutine distribute_residual_uh_barotropic
 subroutine distribute_residual_vh_barotropic(G, GV, h, vh)
   type(ocean_grid_type),    pointer                           :: G
   type(verticalGrid_type),  pointer                           :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout)    :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout)    :: h
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout)    :: vh
 
   real, dimension(SZJB_(G),SZK_(G))   :: vh2d
@@ -593,6 +608,7 @@ subroutine distribute_residual_vh_barotropic(G, GV, h, vh)
   real, dimension(SZJ_(G))            :: h2d_sum
 
   integer :: i, j, k, m, is, ie, js, je, nz
+  real :: vh_neglect
 
   ! Set index-related variables for fields on T-grid
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
@@ -616,9 +632,10 @@ subroutine distribute_residual_vh_barotropic(G, GV, h, vh)
       endif
     enddo; enddo;
 
-
+    
     ! Distribute flux. Note min/max is intended to make sure that the mass transport
-    ! does not deplete a cell
+    ! does not deplete a cell. If this limit is hit for some reason, tracer will
+    ! not be conserved
     do j=js-1,je
       if( vh2d_sum(J)>0.0 ) then
         do k=1,nz
@@ -633,11 +650,24 @@ subroutine distribute_residual_vh_barotropic(G, GV, h, vh)
           vh2d(J,k) = 0.0
         enddo
       endif
+      ! Calculate and check that column integrated transports match the original to
+      ! within the tolerance limit
+      vh_neglect = nz*GV%Angstrom*min(G%areaT(i,j),G%areaT(i,j+1))
+      if( abs(sum(vh2d(J,:))-vh2d_sum(J)) > vh_neglect) &
+          call MOM_error(WARNING,"Column integral of vh does not match after "//&
+          "barotropic redistribution")
+      
     enddo
 
 
+<<<<<<< HEAD:src/tracer/MOM_offline_aux.F90
+    ! Update layer thicknesses at the end.
+    ! This may not be needed since the limits on the flux are half of the original thickness
+    do k=1,nz ; do j=js,je
+=======
     ! Update layer thicknesses at the end
     do k=1,nz ; do j=js-2,je+1
+>>>>>>> 3b16d81cb00c11e924523ae5ca0d66790b44e303:src/tracer/MOM_offline_control.F90
       h(i,j,k) = h(i,j,k) + (vh2d(J-1,k) - vh2d(J,k))/G%areaT(i,j)
     enddo ; enddo
     do k=1,nz ; do j=js-1,je
@@ -652,14 +682,13 @@ end subroutine distribute_residual_vh_barotropic
 subroutine distribute_residual_uh_upwards(G, GV, h, uh)
   type(ocean_grid_type),    pointer                           :: G
   type(verticalGrid_type),  pointer                           :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout)     :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout)    :: h
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: uh
 
   real, dimension(SZIB_(G),SZK_(G))   :: uh2d
   real, dimension(SZI_(G),SZK_(G))    :: h2d
-  logical, dimension(SZK_(G))            :: filled
 
-  real  :: uh_neglect, uh_remain, uh_LB, uh_UB, uh_add, uh_max, uh_sum
+  real  :: uh_neglect, uh_remain, uh_LB, uh_UB, uh_add
   real  :: hup, hdown, hlos, min_h
   integer :: i, j, k, m, is, ie, js, je, nz, k_rev
 
@@ -668,7 +697,7 @@ subroutine distribute_residual_uh_upwards(G, GV, h, uh)
 
   min_h = 0.1*GV%Angstrom
 
-  do j=js,je
+  do j=js-1,je
     ! Copy over uh and cell volume to working arrays
     do k=1,nz ; do i=is-1,ie
       uh2d(I,k) = uh(I,j,k)
@@ -678,17 +707,32 @@ subroutine distribute_residual_uh_upwards(G, GV, h, uh)
       h2d(i,k) = max(h(i,j,k)*G%areaT(i,j)-min_h*G%areaT(i,j),min_h*G%areaT(i,j))
     enddo ; enddo
 
+<<<<<<< HEAD:src/tracer/MOM_offline_aux.F90
+    do i=is-1,ie 
+=======
     do i=is-1,ie
       uh_sum = sum(uh2d(I,:))
+>>>>>>> 3b16d81cb00c11e924523ae5ca0d66790b44e303:src/tracer/MOM_offline_control.F90
       do k=1,nz
         uh_remain = uh2d(I,k)
         uh_neglect = GV%H_subroundoff*min(G%areaT(i,j),G%areaT(i+1,j))
-
         if(uh_remain<-uh_neglect) then
           ! Set the mass flux to zero. This will be refilled in the first iteration
           uh2d(I,k) = 0.0
-
           do k_rev=k,1,-1
+<<<<<<< HEAD:src/tracer/MOM_offline_aux.F90
+            ! This lower bound only allows half of the layer to be depleted
+            uh_LB = -0.5*h2d(i+1,k_rev)
+            ! You can either add the difference between the lower bound and the
+            ! current uh, or the remaining mass transport to be distributed.
+            ! The max is there because it represents the minimum of these two with respect
+            ! to magnitude. The minimum is to guard against the case where uh2d>uh_LB
+            ! not quite the same potentially because of roundoff error
+            uh_add = min(max(uh_LB-uh2d(I,k_rev), uh_remain),0.0)
+            uh_remain = uh_remain - uh_add
+            uh2d(I,k_rev) = uh2d(I,k_rev) + uh_add
+            if(uh_remain>-uh_neglect) exit
+=======
             ! Calculate the lower bound of uh(I)
             hlos = max(uh2d(I+1,k_rev),0.0)
             ! This lower bound is deliberately conservative to ensure that nothing will be left after
@@ -702,14 +746,19 @@ subroutine distribute_residual_uh_upwards(G, GV, h, uh)
               uh2d(I,k_rev) = uh2d(I,k_rev) + uh_add
               if(uh2d(I,k_rev)==uh_LB) filled(k_rev)=.true.
               if(uh_remain>-uh_neglect) exit
+>>>>>>> 3b16d81cb00c11e924523ae5ca0d66790b44e303:src/tracer/MOM_offline_control.F90
           enddo
-
         elseif (uh_remain>uh_neglect) then
           ! Set the amount in the layer with remaining fluxes to zero. This will be reset
           ! in the first iteration of the redistribution loop
           uh2d(I,k) = 0.0
           ! Loop to distribute remaining flux in layers above
           do k_rev=k,1,-1
+<<<<<<< HEAD:src/tracer/MOM_offline_aux.F90
+            ! This lower bound only allows half of the layer to be depleted
+            uh_UB = 0.5*h2d(i,k_rev)
+            uh_add = max(min(uh_UB-uh2d(I,k_rev), uh_remain), 0.0)
+=======
             hlos = max(0.0,-uh2d(I-1,k_rev))
             ! Calculate the upper bound of uh(I)
             uh_UB = max(0.5*h2d(i,k_rev), 0.5*h2d(i,k_rev)-hlos, 0.0)
@@ -718,11 +767,13 @@ subroutine distribute_residual_uh_upwards(G, GV, h, uh)
             ! Calculate how much will actually be added to uh(I)
             uh_add = min(uh_max,uh_remain)
             ! Reduce the remaining flux
+>>>>>>> 3b16d81cb00c11e924523ae5ca0d66790b44e303:src/tracer/MOM_offline_control.F90
             uh_remain = uh_remain - uh_add
             uh2d(I,k_rev) = uh2d(I,k_rev) + uh_add
             if(uh_remain<uh_neglect) exit
           enddo
-          ! Check to see if there's any mass flux left. If so, put it in the layer beneath, unless we've bottomed out
+          ! Check to see if there's any mass flux left. If so, put it in the layer beneath,
+          ! unless we've bottomed out
         endif
         if(abs(uh_remain)>uh_neglect) then
           if(k<nz) then
@@ -736,7 +787,11 @@ subroutine distribute_residual_uh_upwards(G, GV, h, uh)
 
     enddo
 
+<<<<<<< HEAD:src/tracer/MOM_offline_aux.F90
+!    ! Update layer thicknesses at the end 
+=======
     ! Update layer thicknesses at the end
+>>>>>>> 3b16d81cb00c11e924523ae5ca0d66790b44e303:src/tracer/MOM_offline_control.F90
     do k=1,nz ; do i=is,ie
       h(i,j,k) = (h(i,j,k)*G%areaT(i,j) + (uh2d(I-1,k) - uh2d(I,k)))/G%areaT(i,j)
     enddo ; enddo
@@ -744,7 +799,7 @@ subroutine distribute_residual_uh_upwards(G, GV, h, uh)
       uh(I,j,k) = uh2d(I,k)
     enddo ; enddo
   enddo
-
+  
 end subroutine distribute_residual_uh_upwards
 
 !> In the case where offline advection has failed to converge, redistribute the u-flux
@@ -769,7 +824,7 @@ subroutine distribute_residual_vh_upwards(G, GV, h, vh)
 
   min_h = 0.1*GV%Angstrom
 
-  do i=is,ie
+  do i=is-1,ie
     ! Copy over uh and cell volume to working arrays
     do k=1,nz ; do j=js-1,je
       vh2d(J,k) = vh(i,J,k)
@@ -778,11 +833,24 @@ subroutine distribute_residual_vh_upwards(G, GV, h, vh)
       h2d(j,k) = (h(i,j,k)-min_h)*G%areaT(i,j)
     enddo ; enddo
 
-    do j=js,je
-      vh_sum=sum(vh2d(J,:))
+    do j=js-1,je
       do k=1,nz
         vh_remain = vh2d(J,k)
         vh_neglect = GV%H_subroundoff*min(G%areaT(i,j),G%areaT(i,j+1))
+<<<<<<< HEAD:src/tracer/MOM_offline_aux.F90
+        if(vh_remain<-vh_neglect) then
+          ! Set the mass flux to zero. This will be refilled in the first iteration 
+          vh2d(J,k) = 0.0
+          do k_rev=k,1,-1
+            ! This lower bound only allows half of the layer to be depleted
+            vh_LB = -0.5*h2d(j+1,k_rev)
+            ! You can either add the difference between the lower bound and the
+            ! current uh, or the remaining mass transport to be distributed.
+            ! The max is there because it represents the minimum of these two with respect
+            ! to magnitude. The minimum is to guard against the case where uh2d>uh_LB
+            ! not quite the same potentially because of roundoff error
+            vh_add = min(max(vh_LB-vh2d(J,k_rev), vh_remain),0.0)
+=======
         if(vh_remain<0.0) then
           ! Set the amount in the layer with remaining fluxes to zero. This will be reset
           ! in the first iteration of the redistribution loop
@@ -796,17 +864,27 @@ subroutine distribute_residual_vh_upwards(G, GV, h, vh)
             ! Calculate how much will actually be added to uh(I)
             vh_add = max(vh_max,vh_remain)
             ! Reduce the remaining flux
+>>>>>>> 3b16d81cb00c11e924523ae5ca0d66790b44e303:src/tracer/MOM_offline_control.F90
             vh_remain = vh_remain - vh_add
             vh2d(J,k_rev) = vh2d(J,k_rev) + vh_add
             if(vh_remain>-vh_neglect) exit
-
           enddo
+<<<<<<< HEAD:src/tracer/MOM_offline_aux.F90
+        elseif (vh_remain>vh_neglect) then
+          ! Set the amount in the layer with remaining fluxes to zero. This will be reset 
+=======
         elseif (vh_remain>0.0) then
           ! Set the amount in the layer with remaining fluxes to zero. This will be reset
+>>>>>>> 3b16d81cb00c11e924523ae5ca0d66790b44e303:src/tracer/MOM_offline_control.F90
           ! in the first iteration of the redistribution loop
-          vh2d(J,k) = 0
+          vh2d(J,k) = 0.0
           ! Loop to distribute remaining flux in layers above
           do k_rev=k,1,-1
+<<<<<<< HEAD:src/tracer/MOM_offline_aux.F90
+            ! This lower bound only allows half of the layer to be depleted
+            vh_UB = 0.5*h2d(j,k_rev)
+            vh_add = max(min(vh_UB-vh2d(J,k_rev), vh_remain), 0.0)
+=======
             hlos = max(-vh2d(J-1,k_rev),0.0)
             ! Calculate the upper bound of uh(I)
             vh_UB = max(0.5*h2d(j,k_rev), 0.5*h2d(j,k_rev)-hlos, 0.0)
@@ -815,10 +893,13 @@ subroutine distribute_residual_vh_upwards(G, GV, h, vh)
             ! Calculate how much will actually be added to uh(I)
             vh_add = min(vh_max,vh_remain)
             ! Reduce the remaining flux
+>>>>>>> 3b16d81cb00c11e924523ae5ca0d66790b44e303:src/tracer/MOM_offline_control.F90
             vh_remain = vh_remain - vh_add
             vh2d(J,k_rev) = vh2d(J,k_rev) + vh_add
             if(vh_remain<vh_neglect) exit
           enddo
+          ! Check to see if there's any mass flux left. If so, put it in the layer beneath,
+          ! unless we've bottomed out
         endif
         if(abs(vh_remain)>vh_neglect) then
           if(k<nz) then
@@ -831,7 +912,11 @@ subroutine distribute_residual_vh_upwards(G, GV, h, vh)
 
     enddo
 
+<<<<<<< HEAD:src/tracer/MOM_offline_aux.F90
+!    ! Update layer thicknesses at the end 
+=======
     ! Update layer thicknesses at the end
+>>>>>>> 3b16d81cb00c11e924523ae5ca0d66790b44e303:src/tracer/MOM_offline_control.F90
     do k=1,nz ; do j=js,je
       h(i,j,k) = (h(i,j,k)*G%areaT(i,j) + (vh2d(J-1,k) - vh2d(J,k)))/G%areaT(i,j)
     enddo ; enddo
@@ -839,9 +924,64 @@ subroutine distribute_residual_vh_upwards(G, GV, h, vh)
       vh(i,J,k) = vh2d(J,k)
     enddo ; enddo
   enddo
+  
 
 end subroutine distribute_residual_vh_upwards
 
+<<<<<<< HEAD:src/tracer/MOM_offline_aux.F90
+!> add_diurnal_SW adjusts the shortwave fluxes in an forcying_type variable
+!! to add a synthetic diurnal cycle. Adapted from SIS2 
+subroutine offline_add_diurnal_SW(fluxes, G, Time_start, Time_end)
+  type(forcing),                 intent(inout) :: fluxes !< The type with atmospheric fluxes to be adjusted.
+  type(ocean_grid_type),         intent(in)    :: G   !< The sea-ice lateral grid type.
+  type(time_type),               intent(in)    :: Time_start !< The start time for this step.
+  type(time_type),               intent(in)    :: Time_end   !< The ending time for this step.
+
+  real :: diurnal_factor, time_since_ae, rad
+  real :: fracday_dt, fracday_day
+  real :: cosz_day, cosz_dt, rrsun_day, rrsun_dt
+  type(time_type) :: dt_here
+
+  integer :: i, j, k, i2, j2, isc, iec, jsc, jec, i_off, j_off
+
+  isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec
+  i_off = LBOUND(fluxes%sens,1) - G%isc ; j_off = LBOUND(fluxes%sens,2) - G%jsc
+
+  !   Orbital_time extracts the time of year relative to the northern
+  ! hemisphere autumnal equinox from a time_type variable.
+  time_since_ae = orbital_time(Time_start)
+  dt_here = Time_end - Time_start
+  rad = acos(-1.)/180.
+
+!$OMP parallel do default(none) shared(isc,iec,jsc,jec,G,rad,Time_start,dt_here,time_since_ae, &
+!$OMP                                  ncat,fluxes,i_off,j_off) &
+!$OMP                          private(i,j,i2,j2,k,cosz_dt,fracday_dt,rrsun_dt, &
+!$OMP                                  fracday_day,cosz_day,rrsun_day,diurnal_factor)
+  do j=jsc,jec ; do i=isc,iec
+!    Per Rick Hemler:
+!      Call diurnal_solar with dtime=dt_here to get cosz averaged over dt_here.
+!      Call daily_mean_solar to get cosz averaged over a day.  Then
+!      diurnal_factor = cosz_dt_ice*fracday_dt_ice*rrsun_dt_ice / 
+!                       cosz_day*fracday_day*rrsun_day
+
+    call diurnal_solar(G%geoLatT(i,j)*rad, G%geoLonT(i,j)*rad, Time_start, cosz=cosz_dt, &
+                       fracday=fracday_dt, rrsun=rrsun_dt, dt_time=dt_here)
+    call daily_mean_solar (G%geoLatT(i,j)*rad, time_since_ae, cosz_day, fracday_day, rrsun_day)
+    diurnal_factor = cosz_dt*fracday_dt*rrsun_dt / &
+                     max(1e-30, cosz_day*fracday_day*rrsun_day)
+
+    i2 = i+i_off ; j2 = j+j_off
+    fluxes%sw(i2,j2) = fluxes%sw(i2,j2) * diurnal_factor
+    fluxes%sw_vis_dir(i2,j2) = fluxes%sw_vis_dir(i2,j2) * diurnal_factor
+    fluxes%sw_vis_dif(i2,j2) = fluxes%sw_vis_dif(i2,j2) * diurnal_factor
+    fluxes%sw_nir_dir(i2,j2) = fluxes%sw_nir_dir(i2,j2) * diurnal_factor
+    fluxes%sw_nir_dif(i2,j2) = fluxes%sw_nir_dif(i2,j2) * diurnal_factor
+  enddo ; enddo
+
+end subroutine offline_add_diurnal_sw
+
+=======
+>>>>>>> 3b16d81cb00c11e924523ae5ca0d66790b44e303:src/tracer/MOM_offline_control.F90
 !> \namespace mom_offline_transport
 !! \section offline_overview Offline Tracer Transport in MOM6
 !!  'Offline tracer modeling' uses physical fields (e.g. mass transports and layer thicknesses) saved
@@ -921,5 +1061,9 @@ end subroutine distribute_residual_vh_upwards
 !!                          column,'upwards' which adds the maximum of the remaining flux in each layer above,
 !!                          and 'none' which does no redistribution"
 
+<<<<<<< HEAD:src/tracer/MOM_offline_aux.F90
+end module MOM_offline_aux
+=======
 end module MOM_offline_transport
+>>>>>>> 3b16d81cb00c11e924523ae5ca0d66790b44e303:src/tracer/MOM_offline_control.F90
 
