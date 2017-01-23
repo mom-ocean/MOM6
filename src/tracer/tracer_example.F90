@@ -583,7 +583,7 @@ subroutine USER_tracer_surface_state(state, h, G, CS)
 !                 register_USER_tracer.
   integer :: i, j, m, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  
+
   if (.not.associated(CS)) return
 
   if (CS%coupled_tracers) then

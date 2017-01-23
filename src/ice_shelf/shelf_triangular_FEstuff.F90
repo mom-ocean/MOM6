@@ -18,7 +18,7 @@ type, public :: ice_shelf_CS ; private
   real, pointer, dimension(:,:) :: &
     mass_shelf => NULL(), &   ! The mass per unit area of the ice shelf or sheet, in kg m-2.
     area_shelf_h => NULL(), & ! The area per cell covered by the ice shelf, in m2.
- 
+
     t_flux => NULL(), &   ! The UPWARD sensible ocean heat flux at the ocean-ice
                     ! interface, in W m-2.
     salt_flux => NULL(), & ! The downward salt flux at the ocean-ice interface, in kg m-2 s-1.
@@ -36,7 +36,7 @@ type, public :: ice_shelf_CS ; private
           ! on q-points (B grid)
     v_shelf => NULL(), & ! the meridional velocity of the ice shelf/sheet... m/s ??
           ! on q-points (B grid)
-    h_shelf => NULL(), & ! the thickness of the shelf in m... redundant with mass 
+    h_shelf => NULL(), & ! the thickness of the shelf in m... redundant with mass
           ! but may make code more readable
     hmask => NULL(),&    ! used to indicate ice-covered cells, as well as partially-covered
           ! 1: fully covered, solve for velocity here
@@ -51,20 +51,20 @@ type, public :: ice_shelf_CS ; private
     u_face_mask => NULL(), v_face_mask => NULL(), &
    ! masks for velocity boundary conditions - on *C GRID* - this is because the FEM solution
    !      cares about FACES THAT GET INTEGRATED OVER, not vertices
-   ! Will represent boundary conditions on computational boundary (or permanent boundary 
+   ! Will represent boundary conditions on computational boundary (or permanent boundary
    !      between fast-moving and near-stagnant ice
    ! FOR NOW: 1=interior bdry, 0=no-flow boundary, 2=stress bdry condition, 3=inhomogeneous dirichlet boundary
     umask => NULL(), vmask => NULL(), &
-   ! masks on the actual degrees of freedom (B grid) - 
+   ! masks on the actual degrees of freedom (B grid) -
    !   1=normal node, 3=inhomogeneous boundary node, 0 - no flow node (will also get ice-free nodes)
     ice_visc_bilinear => NULL(), &
     ice_visc_lower_tri => NULL(), &
     ice_visc_upper_tri => NULL(), &
     thickness_boundary_values => NULL(), &
     u_boundary_values => NULL(), &
-    v_boundary_values => NULL(), & 
-    
-    
+    v_boundary_values => NULL(), &
+
+
     taub_beta_eff_bilinear => NULL(), & ! nonlinear part of "linearized" basal stress - exact form depends on basal law exponent
                 ! and/or whether flow is "hybridized" a la Goldberg 2011
     taub_beta_eff_lower_tri => NULL(), &
@@ -95,9 +95,9 @@ type, public :: ice_shelf_CS ; private
 
 !!!! PHYSICAL AND NUMERICAL PARAMETERS FOR ICE DYNAMICS !!!!!!
 
-  real :: time_step    ! this is the shortest timestep that the ice shelf sees, and 
+  real :: time_step    ! this is the shortest timestep that the ice shelf sees, and
             ! is equal to the forcing timestep (it is passed in when the shelf
-            ! is initialized - so need to reorganize MOM driver. 
+            ! is initialized - so need to reorganize MOM driver.
             ! it will be the prognistic timestep ... maybe.
 
 !!! all need to be initialized
@@ -115,17 +115,17 @@ type, public :: ice_shelf_CS ; private
   real :: input_thickness
 
   real :: len_lat ! this really should be a Grid or Domain field
-  
+
 
   real :: velocity_update_time_step ! the time to update the velocity through the nonlinear
                     ! elliptic equation. i think this should be done no more often than
                     ! ~ once a day (maybe longer) because it will depend on ocean values
-                    ! that are averaged over this time interval, and the solve will begin 
+                    ! that are averaged over this time interval, and the solve will begin
                     ! to lose meaning if it is done too frequently
   integer :: velocity_update_sub_counter ! there is no outer loop for the velocity solve; the counter will have to be stored
   integer :: velocity_update_counter ! the "outer" timestep number
   integer :: nstep_velocity        ! ~ (velocity_update_time_step / time_step)
-  
+
   real :: cg_tolerance, nonlinear_tolerance
   integer :: cg_max_iterations
   integer :: nonlin_solve_err_mode  ! 1: exit vel solve based on nonlin residual
@@ -182,7 +182,7 @@ subroutine matrix_diagonal_triangle (CS, u_diagonal, v_diagonal)
 !     isym=0
 !   endif
 
-  
+
   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
 
   umask => CS%umask ; vmask => CS%vmask ; hmask => CS%hmask
@@ -196,23 +196,23 @@ subroutine matrix_diagonal_triangle (CS, u_diagonal, v_diagonal)
 
     if (umask (i,j-1) .eq. 1) then ! this (bot right) is a degree of freedom node
 
-      ux = 1./dxh ; uy = 0./dyh 
+      ux = 1./dxh ; uy = 0./dyh
       vx = 0. ; vy = 0.
 
       u_diagonal (i,j-1) = u_diagonal (i,j-1) + &
           .5 * dxdyh * nu_lower (i,j) * ((4*ux+2*vy) * (1./dxh) + (uy+vy) * (0./dyh))
 
       u_diagonal (i,j-1) = u_diagonal (i,j-1) + &
-          beta_lower(i,j) * dxdyh * 1./24 
+          beta_lower(i,j) * dxdyh * 1./24
 
-      ux = 0. ; uy = 0. 
+      ux = 0. ; uy = 0.
       vx = 1./dxh ; vy = 0./dyh
 
       v_diagonal (i,j-1) = v_diagonal (i,j-1) + &
           .5 * dxdyh * nu_lower (i,j) * ((uy+vx) * (1./dxh) + (4*vy+2*ux) * (0./dyh))
 
       v_diagonal (i,j-1) = v_diagonal (i,j-1) + &
-          beta_lower(i,j) * dxdyh * 1./24 
+          beta_lower(i,j) * dxdyh * 1./24
 
       ux = 0./dxh ; uy = -1./dyh
       vx = 0. ; vy = 0.
@@ -221,7 +221,7 @@ subroutine matrix_diagonal_triangle (CS, u_diagonal, v_diagonal)
           .5 * dxdyh * nu_upper (i,j) * ((4*ux+2*vy) * (0./dxh) + (uy+vy) * (-1./dyh))
 
       u_diagonal (i,j-1) = u_diagonal (i,j-1) + &
-          beta_upper(i,j) * dxdyh * 1./24 
+          beta_upper(i,j) * dxdyh * 1./24
 
       vx = 0./dxh ; vy = -1./dyh
       ux = 0. ; uy = 0.
@@ -230,29 +230,29 @@ subroutine matrix_diagonal_triangle (CS, u_diagonal, v_diagonal)
           .5 * dxdyh * nu_upper (i,j) * ((uy+vx) * (0./dxh) + (4*vy+2*ux) * (-1./dyh))
 
       v_diagonal (i,j-1) = v_diagonal (i,j-1) + &
-          beta_upper(i,j) * dxdyh * 1./24 
+          beta_upper(i,j) * dxdyh * 1./24
 
     endif
 
     if (umask (i-1,j) .eq. 1) then ! this (top left) is a degree of freedom node
 
-      ux = 0./dxh ; uy = 1./dyh 
+      ux = 0./dxh ; uy = 1./dyh
       vx = 0. ; vy = 0.
 
       u_diagonal (i-1,j) = u_diagonal (i-1,j) + &
           .5 * dxdyh * nu_lower (i,j) * ((4*ux+2*vy) * (0./dxh) + (uy+vy) * (1./dyh))
 
       u_diagonal (i,j-1) = u_diagonal (i,j-1) + &
-          beta_lower(i,j) * dxdyh * 1./24 
+          beta_lower(i,j) * dxdyh * 1./24
 
-      ux = 0. ; uy = 0. 
+      ux = 0. ; uy = 0.
       vx = 0./dxh ; vy = 1./dyh
 
       v_diagonal (i-1,j) = v_diagonal (i-1,j) + &
           .5 * dxdyh * nu_lower (i,j) * ((uy+vx) * (0./dxh) + (4*vy+2*ux) * (1./dyh))
 
       v_diagonal (i,j-1) = v_diagonal (i,j-1) + &
-          beta_lower(i,j) * dxdyh * 1./24 
+          beta_lower(i,j) * dxdyh * 1./24
 
       ux = -1./dxh ; uy = 0./dyh
       vx = 0. ; vy = 0.
@@ -261,7 +261,7 @@ subroutine matrix_diagonal_triangle (CS, u_diagonal, v_diagonal)
           .5 * dxdyh * nu_upper (i,j) * ((4*ux+2*vy) * (-1./dxh) + (uy+vy) * (0./dyh))
 
       u_diagonal (i,j-1) = u_diagonal (i,j-1) + &
-          beta_upper(i,j) * dxdyh * 1./24 
+          beta_upper(i,j) * dxdyh * 1./24
 
       vx = -1./dxh ; vy = 0./dyh
       ux = 0. ; uy = 0.
@@ -270,29 +270,29 @@ subroutine matrix_diagonal_triangle (CS, u_diagonal, v_diagonal)
           .5 * dxdyh * nu_upper (i,j) * ((uy+vx) * (-1./dxh) + (4*vy+2*ux) * (0./dyh))
 
       v_diagonal (i,j-1) = v_diagonal (i,j-1) + &
-          beta_upper(i,j) * dxdyh * 1./24 
+          beta_upper(i,j) * dxdyh * 1./24
 
     endif
 
     if (umask (i-1,j-1) .eq. 1) then ! this (bot left) is a degree of freedom node
 
-      ux = -1./dxh ; uy = -1./dyh 
+      ux = -1./dxh ; uy = -1./dyh
       vx = 0. ; vy = 0.
 
       u_diagonal (i-1,j-1) = u_diagonal (i-1,j-1) + &
           .5 * dxdyh * nu_upper (i,j) * ((4*ux+2*vy) * (-1./dxh) + (uy+vy) * (-1./dyh))
 
       u_diagonal (i-1,j-1) = u_diagonal (i-1,j-1) + &
-          beta_lower(i,j) * dxdyh * 1./24 
+          beta_lower(i,j) * dxdyh * 1./24
 
-      vx = -1./dxh ; vy = -1./dyh 
+      vx = -1./dxh ; vy = -1./dyh
       ux = 0. ; uy = 0.
 
       v_diagonal (i-1,j-1) = v_diagonal (i-1,j-1) + &
           .5 * dxdyh * nu_upper (i,j) * ((uy+vx) * (-1./dxh) + (4*vy+2*ux) * (-1./dyh))
 
       v_diagonal (i-1,j-1) = v_diagonal (i-1,j-1) + &
-          beta_lower(i,j) * dxdyh * 1./24 
+          beta_lower(i,j) * dxdyh * 1./24
     endif
 
     if (umask (i,j) .eq. 1) then ! this (top right) is a degree of freedom node
@@ -307,13 +307,13 @@ subroutine matrix_diagonal_triangle (CS, u_diagonal, v_diagonal)
           beta_upper(i,j) * dxdyh * 1./24
 
       vx = 1./ dxh ; vy = 1./dyh
-      ux = 0. ; uy = 0. 
+      ux = 0. ; uy = 0.
 
       v_diagonal (i,j) = v_diagonal (i,j) + &
           .5 * dxdyh * nu_upper (i,j) * ((uy+vx) * (1./dxh) + (4*vy+2*ux) * (1./dyh))
 
       v_diagonal (i,j) = v_diagonal (i,j) + &
-          beta_upper(i,j) * dxdyh * 1./24 
+          beta_upper(i,j) * dxdyh * 1./24
 
     endif
   endif ; enddo ; enddo
@@ -345,10 +345,10 @@ end subroutine matrix_diagonal_triangle
 !~ !    isym=0
 !~ !   endif
 
-  
+
 
   !~ isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
-  
+
   !~ u_boundary_values => CS%u_boundary_values
   !~ v_boundary_values => CS%v_boundary_values
   !~ umask => CS%umask ; vmask => CS%vmask ; hmask => CS%hmask
@@ -359,8 +359,8 @@ end subroutine matrix_diagonal_triangle
 
   !~ do i=isc-1,iec+1 ; do j=jsc-1,jec+1 ; if (hmask(i,j) .eq. 1) then
 
-    !~ if ((umask(i-1,j-1) .eq. 3) .OR. (umask(i,j-1) .eq. 3) .OR. (umask(i-1,j) .eq. 3)) then 
-    
+    !~ if ((umask(i-1,j-1) .eq. 3) .OR. (umask(i,j-1) .eq. 3) .OR. (umask(i-1,j) .eq. 3)) then
+
       !~ dxh = G%dxh(i,j)
       !~ dyh = G%dyh(i,j)
       !~ dxdyh = G%dxdyh(i,j)
@@ -423,8 +423,8 @@ end subroutine matrix_diagonal_triangle
 
     !~ endif
 
-    !~ if ((umask(i,j) .eq. 3) .OR. (umask(i,j-1) .eq. 3) .OR. (umask(i-1,j) .eq. 3)) then 
-    
+    !~ if ((umask(i,j) .eq. 3) .OR. (umask(i,j-1) .eq. 3) .OR. (umask(i-1,j) .eq. 3)) then
+
       !~ dxh = G%dxh(i,j)
       !~ dyh = G%dyh(i,j)
       !~ dxdyh = G%dxdyh(i,j)
@@ -444,12 +444,12 @@ end subroutine matrix_diagonal_triangle
 
           !~ u_boundary_contr (i,j-1) = u_boundary_contr (i,j-1) + &
               !~ beta_upper(i,j) * dxdyh * 1./24 * (u_boundary_values(i,j) + &
-                                      !~ u_boundary_values(i-1,j) +  & 
+                                      !~ u_boundary_values(i-1,j) +  &
                                 !~ u_boundary_values(i,j-1))
 
           !~ v_boundary_contr (i,j-1) = v_boundary_contr (i,j-1) + &
               !~ beta_upper(i,j) * dxdyh * 1./24 * (u_boundary_values(i,j) + &
-                                      !~ u_boundary_values(i-1,j) +  & 
+                                      !~ u_boundary_values(i-1,j) +  &
                                 !~ u_boundary_values(i,j-1))
       !~ endif
 
@@ -463,12 +463,12 @@ end subroutine matrix_diagonal_triangle
 
         !~ u_boundary_contr (i,j-1) = u_boundary_contr (i,j-1) + &
             !~ beta_upper(i,j) * dxdyh * 1./24 * (u_boundary_values(i,j) + &
-                                    !~ u_boundary_values(i-1,j) +  & 
+                                    !~ u_boundary_values(i-1,j) +  &
                               !~ u_boundary_values(i,j-1))
 
         !~ v_boundary_contr (i,j-1) = v_boundary_contr (i,j-1) + &
             !~ beta_upper(i,j) * dxdyh * 1./24 * (u_boundary_values(i,j) + &
-                                    !~ u_boundary_values(i-1,j) +  & 
+                                    !~ u_boundary_values(i-1,j) +  &
                               !~ u_boundary_values(i,j-1))
       !~ endif
 
@@ -482,12 +482,12 @@ end subroutine matrix_diagonal_triangle
 
         !~ u_boundary_contr (i,j) = u_boundary_contr (i,j) + &
             !~ beta_upper(i,j) * dxdyh * 1./24 * (u_boundary_values(i,j) + &
-                                    !~ u_boundary_values(i-1,j) +  & 
+                                    !~ u_boundary_values(i-1,j) +  &
                               !~ u_boundary_values(i,j-1))
 
         !~ v_boundary_contr (i,j) = v_boundary_contr (i,j) + &
             !~ beta_upper(i,j) * dxdyh * 1./24 * (u_boundary_values(i,j) + &
-                                    !~ u_boundary_values(i-1,j) +  & 
+                                    !~ u_boundary_values(i-1,j) +  &
                               !~ u_boundary_values(i,j-1))
       !~ endif
 
@@ -501,15 +501,15 @@ end subroutine matrix_diagonal_triangle
   !~ type(ice_shelf_CS),         pointer   :: CS
   !~ real, dimension(:,:), intent(inout)    :: u, v
 
-!~ ! update DEPTH_INTEGRATED viscosity, based on horizontal strain rates - this is for triangle FEM solve so there is 
+!~ ! update DEPTH_INTEGRATED viscosity, based on horizontal strain rates - this is for triangle FEM solve so there is
 !~ ! an "upper" and "lower" triangular viscosity
 
 !~ ! also this subroutine updates the nonlinear part of the basal traction
 
 !~ ! this may be subject to change later... to make it "hybrid"
 
-  !~ real, pointer, dimension (:,:)    :: nu_lower , & 
-                         !~ nu_upper, &  
+  !~ real, pointer, dimension (:,:)    :: nu_lower , &
+                         !~ nu_upper, &
                        !~ beta_eff_lower, &
                        !~ beta_eff_upper
   !~ real, pointer, dimension (:,:)    :: H,    &! thickness
@@ -538,8 +538,8 @@ end subroutine matrix_diagonal_triangle
   !~ beta_eff_upper => CS%taub_beta_eff_upper_tri
   !~ beta_eff_lower => CS%taub_beta_eff_lower_tri
 
-  !~ C_basal_friction = CS%C_basal_friction ; n_basal_friction = CS%n_basal_friction 
-  
+  !~ C_basal_friction = CS%C_basal_friction ; n_basal_friction = CS%n_basal_friction
+
   !~ do i=isd,ied
     !~ do j=jsd,jed
 
@@ -556,7 +556,7 @@ end subroutine matrix_diagonal_triangle
         !~ nu_lower(i,j) = A**(-1/n) * (ux**2+vy**2+ux*vy.25*(uy+vx)**2+eps_min**2) ** ((1-n)/(2*n)) * H(i,j)
         !~ umid = 1./3 * (u(i-1,j-1)+u(i-1,j)+u(i,j-1))
         !~ vmid = 1./3 * (v(i-1,j-1)+v(i-1,j)+v(i,j-1))
-        !~ unorm = sqrt (umid**2+vmid**2+(eps_min*dxh)**2) ; beta_eff_lower (i,j) = C_basal_friction * unorm ** (n_basal_friction-1) 
+        !~ unorm = sqrt (umid**2+vmid**2+(eps_min*dxh)**2) ; beta_eff_lower (i,j) = C_basal_friction * unorm ** (n_basal_friction-1)
 
         !~ ux = (u(i,j)-u(i-1,j)) / dxh
         !~ vx = (v(i,j)-v(i-1,j)) / dxh
@@ -598,14 +598,14 @@ end subroutine matrix_diagonal_triangle
 
   !~ do i=is,ie
     !~ do j=js,je
-      
+
       !~ if (hmask(i,j) .eq. 1) then ! this cell's vertices contain degrees of freedom
-    
+
         !~ ux = (u(i,j-1)-u(i-1,j-1))/dxh(i,j)
         !~ vx = (v(i,j-1)-v(i-1,j-1))/dxh(i,j)
         !~ uy = (u(i-1,j)-u(i-1,j-1))/dyh(i,j)
         !~ vy = (v(i-1,j)-v(i-1,j-1))/dyh(i,j)
- 
+
         !~ if (umask(i,j-1) .eq. 1) then ! this (bot right) is a degree of freedom node
 
           !~ uret(i,j-1) = uret(i,j-1) + &
