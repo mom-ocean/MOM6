@@ -37,6 +37,7 @@ public radiation_open_bdry_conds
 public set_Flather_data
 public update_obc_segment_data
 public fill_OBC_halos
+public open_boundary_test_extern_uv
 
 integer, parameter, public :: OBC_NONE = 0, OBC_SIMPLE = 1, OBC_WALL = 2
 integer, parameter, public :: OBC_FLATHER = 3
@@ -121,6 +122,14 @@ type, public :: ocean_OBC_type
   logical :: user_BCs_set_globally = .false.          !< True if any OBC_CONFIG or OBC_VALUES_CONFIG
                                                       !! set for input from user directory.
   logical :: update_OBC = .false. !< Is the open boundary info going to get updated?
+  logical :: zero_vorticity = .false.                 !< If True, sets relative vorticity to zero on open boundaries.
+  logical :: freeslip_vorticity = .false.             !< If True, sets normal gradient of tangential velocity to zero
+                                                      !! in the relative vorticity on open boundaries.
+  logical :: zero_strain = .false.                    !< If True, sets strain to zero on open boundaries.
+  logical :: freeslip_strain = .false.                !< If True, sets normal gradient of tangential velocity to zero
+                                                      !! in the strain on open boundaries.
+  logical :: zero_biharmonic = .false.                !< If True, zeros the Laplacian of flow on open boundaries for
+                                                      !! use in the biharmonic viscosity term.
   real :: g_Earth
   ! Properties of the segments used.
   type(OBC_segment_type), pointer, dimension(:) :: &
@@ -219,6 +228,29 @@ subroutine open_boundary_config(G, param_file, OBC)
   if (config1 .ne. "None" .or. config2 .ne. "None") OBC%user_BCs_set_globally = .true.
 
   if (OBC%number_of_segments > 0) then
+    call get_param(param_file, mod, "OBC_ZERO_VORTICITY", OBC%zero_vorticity, &
+                   "If true, sets relative vorticity to zero on open boundaries.", &
+                   default=.false.)
+    call get_param(param_file, mod, "OBC_FREESLIP_VORTICITY", OBC%freeslip_vorticity, &
+                   "If true, sets the normal gradient of tangential velocity to\n"// &
+                   "zero in the relative vorticity on open boundaries. This cannot\n"// &
+                   "be true if OBC_ZERO_VORTICITY is True.", default=.false.)
+    if (OBC%zero_vorticity .and. OBC%freeslip_vorticity) call MOM_error(FATAL, &
+                   "MOM_open_boundary.F90, open_boundary_config: "//&
+                   "Only one of OBC_ZERO_VORTICITY and OBC_FREESLIP_VORTICITY can be True at once.")
+    call get_param(param_file, mod, "OBC_ZERO_STRAIN", OBC%zero_strain, &
+                   "If true, sets the strain used in the stress tensor to zero on open boundaries.", &
+                   default=.false.)
+    call get_param(param_file, mod, "OBC_FREESLIP_STRAIN", OBC%freeslip_strain, &
+                   "If true, sets the normal gradient of tangential velocity to\n"// &
+                   "zero in the strain use in the stress tensor on open boundaries. This cannot\n"// &
+                   "be true if OBC_ZERO_STRAIN is True.", default=.false.)
+    if (OBC%zero_strain .and. OBC%freeslip_strain) call MOM_error(FATAL, &
+                   "MOM_open_boundary.F90, open_boundary_config: "//&
+                   "Only one of OBC_ZERO_STRAIN and OBC_FREESLIP_STRAIN can be True at once.")
+    call get_param(param_file, mod, "OBC_ZERO_BIHARMONIC", OBC%zero_biharmonic, &
+                   "If true, zeros the Laplacian of flow on open boundaries in the biharmonic\n"//&
+                   "viscosity term.", default=.false.)
     ! Allocate everything
     ! Note the 0-segment is needed when %OBC_segment_u/v(:,:) = 0
     allocate(OBC%OBC_segment_number(0:OBC%number_of_segments))
@@ -1899,8 +1931,51 @@ subroutine allocate_OBC_segment_data(OBC, segment)
   endif
 end subroutine allocate_OBC_segment_data
 
-subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
+!> Set tangential velocities outside of open boundaries to silly values
+!! (used for checking the interior state is independent of values outside
+!! of the domain).
+subroutine open_boundary_test_extern_uv(G, OBC, u, v)
+  type(ocean_grid_type),                     intent(in)    :: G !< Ocean grid structure
+  type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary structure
+  real, dimension(SZIB_(G),SZJ_(G), SZK_(G)),intent(inout) :: u !< Zonal velocity (m/s)
+  real, dimension(SZI_(G),SZJB_(G), SZK_(G)),intent(inout) :: v !< Meridional velocity (m/s)
+  ! Local variables
+  integer :: i, j, k, n
+  real, parameter :: silly_value = 1.E40
 
+  if (.not. associated(OBC)) return
+
+  do n = 1, OBC%number_of_segments
+    do k = 1, G%ke
+      if (OBC%OBC_segment_number(n)%is_N_or_S) then
+        J = OBC%OBC_segment_number(n)%HI%JsdB
+        if (OBC%OBC_segment_number(n)%direction == OBC_DIRECTION_N) then
+          do I = OBC%OBC_segment_number(n)%HI%IsdB, OBC%OBC_segment_number(n)%HI%IedB
+            u(I,j+1,k) = silly_value
+          enddo
+        else
+          do I = OBC%OBC_segment_number(n)%HI%IsdB, OBC%OBC_segment_number(n)%HI%IedB
+            u(I,j,k) = silly_value
+          enddo
+        endif
+      elseif (OBC%OBC_segment_number(n)%is_E_or_W) then
+        I = OBC%OBC_segment_number(n)%HI%IsdB
+        if (OBC%OBC_segment_number(n)%direction == OBC_DIRECTION_E) then
+          do J = OBC%OBC_segment_number(n)%HI%JsdB, OBC%OBC_segment_number(n)%HI%JedB
+            v(i+1,J,k) = silly_value
+          enddo
+        else
+          do J = OBC%OBC_segment_number(n)%HI%JsdB, OBC%OBC_segment_number(n)%HI%JedB
+            v(i,J,k) = silly_value
+          enddo
+        endif
+      endif
+    enddo
+  enddo
+
+end subroutine open_boundary_test_extern_uv
+
+subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
   type(ocean_grid_type),                     intent(in)    :: G !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV !<  Ocean vertical grid structure
   type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary structure
