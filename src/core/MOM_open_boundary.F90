@@ -591,41 +591,18 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
     endif
 
     if (I_obc<G%HI%IsdB .or. I_obc>G%HI%IedB) return ! Boundary is not on tile
-!    if (max(Js_obc,Je_obc)<G%HI%JsdB .or. min(Js_obc,Je_obc)>G%HI%JedB) return ! Segment is not on tile
     if (Js_obc<G%HI%JsdB .and. Je_obc<G%HI%JsdB) return ! Segment is not on tile
     if (Js_obc>G%HI%JedB) return ! Segment is not on tile
-
-    OBC%OBC_segment_number(l_seg)%on_pe = .true.
-    OBC%OBC_segment_number(l_seg)%is_E_or_W = .true.
-
-    do j=G%HI%jsd, G%HI%jed
-      if (j>Js_obc .and. j<=Je_obc) then
-
-        OBC%OBC_segment_u(I_obc,j) = l_seg
-        if (OBC%OBC_segment_number(l_seg)%direction == OBC_DIRECTION_E) then ! East is outward
-          if (this_kind == OBC_FLATHER) then
-            ! Set v points outside segment
-            if (OBC%OBC_segment_v(i_obc+1,J) == OBC_NONE) then
-              OBC%OBC_segment_v(i_obc+1,J) = l_seg
-            endif
-            if (OBC%OBC_segment_v(i_obc+1,J-1) == OBC_NONE) then
-              OBC%OBC_segment_v(i_obc+1,J-1) = l_seg
-            endif
-          endif
-        else ! West is outward
-          if (this_kind == OBC_FLATHER) then
-            ! Set v points outside segment
-            if (OBC%OBC_segment_v(i_obc,J) == OBC_NONE) then
-              OBC%OBC_segment_v(i_obc,J) = l_seg
-            endif
-            if (OBC%OBC_segment_v(i_obc,J-1) == OBC_NONE) then
-              OBC%OBC_segment_v(i_obc,J-1) = l_seg
-            endif
-          endif
-        endif
-      endif
-    enddo
   enddo ! a_loop
+
+  OBC%OBC_segment_number(l_seg)%on_pe = .true.
+  OBC%OBC_segment_number(l_seg)%is_E_or_W = .true.
+
+  do j=G%HI%jsd, G%HI%jed
+    if (j>Js_obc .and. j<=Je_obc) then
+      OBC%OBC_segment_u(I_obc,j) = l_seg
+    endif
+  enddo
   OBC%OBC_segment_number(l_seg)%Is_obc = I_obc
   OBC%OBC_segment_number(l_seg)%Ie_obc = I_obc
   OBC%OBC_segment_number(l_seg)%Js_obc = Js_obc
@@ -726,40 +703,16 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
     if (J_obc<G%HI%JsdB .or. J_obc>G%HI%JedB) return ! Boundary is not on tile
     if (Is_obc<G%HI%IsdB .and. Ie_obc<G%HI%IsdB) return ! Segment is not on tile
     if (Is_obc>G%HI%IedB) return ! Segment is not on tile
-
-    OBC%OBC_segment_number(l_seg)%on_pe = .true.
-    OBC%OBC_segment_number(l_seg)%is_N_or_S = .true.
-
-!    if (J_obc<G%HI%JsdB .or. J_obc>G%HI%JedB) return ! Boundary is not on tile
-!    if (max(Is_obc,Ie_obc)<G%HI%IsdB .or. min(Is_obc,Ie_obc)>G%HI%IedB) return ! Segment is not on tile
-
-    do i=G%HI%isd, G%HI%ied
-      if (i>Is_obc .and. i<=Ie_obc) then
-        OBC%OBC_segment_v(i,J_obc) = l_seg
-        if (OBC%OBC_segment_number(l_seg)%direction == OBC_DIRECTION_N) then ! North is outward
-          if (this_kind == OBC_FLATHER) then
-            ! Set u points outside segment
-            if (OBC%OBC_segment_u(I,j_obc+1) == OBC_NONE) then
-              OBC%OBC_segment_u(I,j_obc+1) = l_seg
-            endif
-            if (OBC%OBC_segment_u(I-1,j_obc+1) == OBC_NONE) then
-              OBC%OBC_segment_u(I-1,j_obc+1) = l_seg
-            endif
-          endif
-        else ! South is outward
-          if (this_kind == OBC_FLATHER) then
-            ! Set u points outside segment
-            if (OBC%OBC_segment_u(I,j_obc) == OBC_NONE) then
-              OBC%OBC_segment_u(I,j_obc) = l_seg
-            endif
-            if (OBC%OBC_segment_u(I-1,j_obc) == OBC_NONE) then
-              OBC%OBC_segment_u(I-1,j_obc) = l_seg
-            endif
-          endif
-        endif
-      endif
-    enddo
   enddo ! a_loop
+
+  OBC%OBC_segment_number(l_seg)%on_pe = .true.
+  OBC%OBC_segment_number(l_seg)%is_N_or_S = .true.
+
+  do i=G%HI%isd, G%HI%ied
+    if (i>Is_obc .and. i<=Ie_obc) then
+      OBC%OBC_segment_v(i,J_obc) = l_seg
+    endif
+  enddo
   OBC%OBC_segment_number(l_seg)%Is_obc = Is_obc
   OBC%OBC_segment_number(l_seg)%Ie_obc = Ie_obc
   OBC%OBC_segment_number(l_seg)%Js_obc = J_obc
@@ -1238,7 +1191,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
     endif
 
     if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W) then
-      if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%radiation) then
+      if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%legacy) then
         dhdt = u_old(I+1,j,k)-u_new(I+1,j,k) !old-new
         dhdx = u_new(I+1,j,k)-u_new(I+2,j,k) !in new time backward sasha for I+1
         rx_new = 0.0

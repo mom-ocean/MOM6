@@ -333,7 +333,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
   real :: dx_E, dx_W ! Effective x-grid spacings to the east and west, in m.
   integer :: i, j, k, ish, ieh, jsh, jeh, nz
   logical :: do_aux, local_specified_BC, use_visc_rem, set_BT_cont, any_simple_OBC
-  logical :: local_Flather_OBC, is_simple, is_tangential
+  logical :: local_Flather_OBC, is_simple
 
   do_aux = (present(uhbt_aux) .and. present(u_cor_aux))
   use_visc_rem = present(visc_rem_u)
@@ -371,7 +371,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
 !$OMP                                  uh,dt,G,GV,CS,local_specified_BC,OBC,uhbt,do_aux,set_BT_cont,    &
 !$OMP                                  CFL_dt,I_dt,u_cor,uhbt_aux,u_cor_aux,BT_cont, local_Flather_OBC) &
 !$OMP                          private(do_I,duhdu,du,du_max_CFL,du_min_CFL,uh_tot_0,duhdu_tot_0, &
-!$OMP                                  is_simple, is_tangential, &
+!$OMP                                  is_simple, &
 !$OMP                                  visc_rem_max, I_vrm, du_lim, dx_E, dx_W, any_simple_OBC ) &
 !$OMP      firstprivate(visc_rem)
   do j=jsh,jeh
@@ -479,12 +479,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
         if (local_specified_BC .or. local_Flather_OBC) then ; do I=ish-1,ieh
           ! Avoid reconciling barotropic/baroclinic transports if transport is specified
           is_simple = OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%specified
-          ! This is a tangential condition and is needed for unknown reasons and
-          ! probably implies that we made a calculation elsewhere that we should not have.
-          is_tangential = OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%Flather .and. &
-                    ((OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_N) .or. &
-                     (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_S))
-          do_I(I) = .not.(OBC%OBC_segment_u(I,j) /= OBC_NONE .and. (is_simple .or. is_tangential))
+          do_I(I) = .not.(OBC%OBC_segment_u(I,j) /= OBC_NONE .and. is_simple)
           any_simple_OBC = any_simple_OBC .or. is_simple
         enddo ; else ; do I=ish-1,ieh
           do_I(I) = .true.
@@ -1084,7 +1079,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
   real :: dy_N, dy_S ! Effective y-grid spacings to the north and south, in m.
   integer :: i, j, k, ish, ieh, jsh, jeh, nz
   logical :: do_aux, local_specified_BC, use_visc_rem, set_BT_cont, any_simple_OBC
-  logical :: local_Flather_OBC, is_simple, is_tangential
+  logical :: local_Flather_OBC, is_simple
 
   do_aux = (present(vhbt_aux) .and. present(v_cor_aux))
   use_visc_rem = present(visc_rem_v)
@@ -1124,7 +1119,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
 !$OMP                                  v_cor_aux,BT_cont, local_Flather_OBC )           &
 !$OMP                          private(do_I,dvhdv,dv,dv_max_CFL,dv_min_CFL,vh_tot_0,    &
 !$OMP                                  dvhdv_tot_0,visc_rem_max,I_vrm,dv_lim,dy_N,      &
-!$OMP                                  is_simple, is_tangential, &
+!$OMP                                  is_simple, &
 !$OMP                                  dy_S,any_simple_OBC ) &
 !$OMP                     firstprivate(visc_rem)
   do J=jsh-1,jeh
@@ -1228,12 +1223,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
         if (local_specified_BC .or. local_Flather_OBC) then ; do i=ish,ieh
           ! Avoid reconciling barotropic/baroclinic transports if transport is specified
           is_simple = OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%specified
-          ! This is a tangential condition and is needed for unknown reasons and
-          ! probably implies that we made a calculation elsewhere that we should not have.
-          is_tangential = OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%Flather .and. &
-                     ((OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_E) .or. &
-                      (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_W))
-          do_I(i) = .not.(OBC%OBC_segment_v(i,J) /= OBC_NONE .and. (is_simple .or. is_tangential))
+          do_I(i) = .not.(OBC%OBC_segment_v(i,J) /= OBC_NONE .and. is_simple)
           any_simple_OBC = any_simple_OBC .or. is_simple
         enddo ; else ; do i=ish,ieh
           do_I(i) = .true.
