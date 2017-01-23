@@ -846,7 +846,7 @@ subroutine chksum1d(array, mesg, start_i, end_i, compare_PEs)
   elseif (is_root_pe()) then
     if (sum1 /= nPEs*sum_bc) &
       write(0, '(A40," bitcounts do not match across PEs: ",I12,1X,I12)') &
-            mesg, sum1, nPEs*sum_bc 
+            mesg, sum1, nPEs*sum_bc
     do i=1,nPEs ; if (sum /= sum_here(i)) then
       write(0, '(A40," PE ",i4," sum mismatches root_PE: ",3(ES22.13,1X))') &
             mesg, i, sum_here(i), sum, sum_here(i)-sum

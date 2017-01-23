@@ -179,7 +179,7 @@ subroutine USER_buoyancy_forcing(state, fluxes, day, dt, G, CS)
 !  can be simply set to zero.  The net fresh water flux should probably be
 !  set in fluxes%evap and fluxes%lprec, with any salinity restoring
 !  appearing in fluxes%vprec, and the other water flux components
-!  (fprec, lrunoff and frunoff) left as arrays full of zeros. 
+!  (fprec, lrunoff and frunoff) left as arrays full of zeros.
 !  Evap is usually negative and precip is usually positive.  All heat fluxes
 !  are in W m-2 and positive for heat going into the ocean.  All fresh water
 !  fluxes are in kg m-2 s-1 and positive for water moving into the ocean.
@@ -277,7 +277,7 @@ subroutine USER_buoyancy_forcing(state, fluxes, day, dt, G, CS)
         Salin_restore = 0.0
 
         fluxes%heat_added(i,j) = (G%mask2dT(i,j) * (rhoXcp * CS%Flux_const)) * &
-            (Temp_restore - state%SST(i,j)) 
+            (Temp_restore - state%SST(i,j))
         fluxes%vprec(i,j) = - (G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)) * &
             ((Salin_restore - state%SSS(i,j)) / &
              (0.5 * (Salin_restore + state%SSS(i,j))))

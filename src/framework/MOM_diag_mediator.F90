@@ -946,7 +946,7 @@ subroutine post_xy_average(diag_cs, diag, field)
                                          diag%axes%is_layer, diag%v_extensive, &
                                          diag_cs%missing_value, field, averaged_field)
   else
-    nz = size(field, 3) 
+    nz = size(field, 3)
     coord = diag%axes%vertical_coordinate_number
     remap_nz = diag_cs%diag_remap_cs(coord)%nz
 

@@ -4,9 +4,9 @@ module MOM_EOS
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_EOS_linear, only : calculate_density_scalar_linear, calculate_density_array_linear
-use MOM_EOS_linear, only : calculate_density_derivs_linear, calculate_specvol_derivs_linear, int_density_dz_linear 
+use MOM_EOS_linear, only : calculate_density_derivs_linear, calculate_specvol_derivs_linear, int_density_dz_linear
 use MOM_EOS_linear, only : calculate_compress_linear, int_spec_vol_dp_linear
-use MOM_EOS_Wright, only : calculate_density_scalar_wright, calculate_density_array_wright 
+use MOM_EOS_Wright, only : calculate_density_scalar_wright, calculate_density_array_wright
 use MOM_EOS_Wright, only : calculate_density_derivs_wright, calculate_specvol_derivs_wright, int_density_dz_wright
 use MOM_EOS_Wright, only : calculate_compress_wright, int_spec_vol_dp_wright
 use MOM_EOS_UNESCO, only : calculate_density_scalar_unesco, calculate_density_array_unesco
@@ -17,7 +17,7 @@ use MOM_EOS_NEMO,   only : calculate_density_derivs_nemo, calculate_density_nemo
 use MOM_EOS_NEMO,   only : calculate_compress_nemo
 use MOM_EOS_TEOS10, only : calculate_density_scalar_teos10, calculate_density_array_teos10
 use MOM_EOS_TEOS10, only : calculate_density_derivs_teos10, calculate_specvol_derivs_teos10
-use MOM_EOS_TEOS10, only : calculate_compress_teos10 
+use MOM_EOS_TEOS10, only : calculate_compress_teos10
 use MOM_EOS_TEOS10, only : gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_TFreeze, only : calculate_TFreeze_linear, calculate_TFreeze_Millero
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg
@@ -600,7 +600,7 @@ subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO,
 ! latter being -z*rho_0*G_e).  These two uses could be separated if need be.
 !
 ! Arguments: T - potential temperature relative to the surface in C.
-!  (in)      S - salinity in PSU.    
+!  (in)      S - salinity in PSU.
 !  (in)      z_t - height at the top of the layer in m.
 !  (in)      z_b - height at the top of the layer in m.
 !  (in)      rho_ref - A mean density, in kg m-3, that is subtracted out to reduce
@@ -612,7 +612,7 @@ subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO,
 !  (in)      G - The ocean's grid structure.
 !  (in)      EOS - type that selects the eqn of state.
 !  (out)     dpa - The change in the pressure anomaly across the layer,
-!                  in Pa.  
+!                  in Pa.
 !  (out,opt) intz_dpa - The integral through the thickness of the layer of the
 !                       pressure anomaly relative to the anomaly at the top of
 !                       the layer, in Pa m.
@@ -949,7 +949,7 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
 ! Arguments: T - potential temperature relative to the surface in C
 !                (the 't' and 'b' subscripts refer to the values at
 !                 the top and the bottom of each layer)
-!  (in)      S - salinity in PSU.    
+!  (in)      S - salinity in PSU.
 !                (the 't' and 'b' subscripts refer to the values at
 !                 the top and the bottom of each layer)
 !  (in)      z_t - height at the top of the layer in m.
@@ -963,7 +963,7 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
 !  (in)      G - The ocean's grid structure.
 !  (in)      form_of_eos - integer that selects the eqn of state.
 !  (out)     dpa - The change in the pressure anomaly across the layer,
-!                  in Pa.  
+!                  in Pa.
 !  (out,opt) intz_dpa - The integral through the thickness of the layer of the
 !                       pressure anomaly relative to the anomaly at the top of
 !                       the layer, in Pa m.
@@ -1321,7 +1321,7 @@ end function frac_dp_at_pos
 subroutine int_density_dz_generic_ppm (T, T_t, T_b, S, S_t, S_b, &
                                        z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, &
                                        EOS, dpa, intz_dpa, intx_dpa, inty_dpa)
-  
+
   type(hor_index_type), intent(in)  :: HII, HIO
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
                         intent(in)  :: T, T_t, T_b, S, S_t, S_b, z_t, z_b
@@ -1349,7 +1349,7 @@ subroutine int_density_dz_generic_ppm (T, T_t, T_b, S, S_t, S_b, &
 ! Arguments: T - potential temperature relative to the surface in C
 !                (the 't' and 'b' subscripts refer to the values at
 !                 the top and the bottom of each layer)
-!  (in)      S - salinity in PSU.    
+!  (in)      S - salinity in PSU.
 !                (the 't' and 'b' subscripts refer to the values at
 !                 the top and the bottom of each layer)
 !  (in)      z_t - height at the top of the layer in m.
@@ -1363,7 +1363,7 @@ subroutine int_density_dz_generic_ppm (T, T_t, T_b, S, S_t, S_b, &
 !  (in)      G - The ocean's grid structure.
 !  (in)      form_of_eos - integer that selects the eqn of state.
 !  (out)     dpa - The change in the pressure anomaly across the layer,
-!                  in Pa.  
+!                  in Pa.
 !  (out,opt) intz_dpa - The integral through the thickness of the layer of the
 !                       pressure anomaly relative to the anomaly at the top of
 !                       the layer, in Pa m.
@@ -1573,7 +1573,7 @@ end subroutine int_density_dz_generic_ppm
 ! ==========================================================================
 subroutine int_density_dz_generic_plm_analytic (T_t, T_b, S_t, S_b, z_t, &
             z_b, rho_ref, rho_0, G_e, HI, EOS, dpa, intz_dpa, intx_dpa, inty_dpa)
-  
+
   type(hor_index_type), intent(in)  :: HI
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: T_t, T_b, S_t, S_b, z_t, z_b
@@ -1601,7 +1601,7 @@ subroutine int_density_dz_generic_plm_analytic (T_t, T_b, S_t, S_b, z_t, &
 ! Arguments: T - potential temperature relative to the surface in C
 !                (the 't' and 'b' subscripts refer to the values at
 !                 the top and the bottom of each layer)
-!  (in)      S - salinity in PSU.    
+!  (in)      S - salinity in PSU.
 !                (the 't' and 'b' subscripts refer to the values at
 !                 the top and the bottom of each layer)
 !  (in)      z_t - height at the top of the layer in m.
@@ -1615,7 +1615,7 @@ subroutine int_density_dz_generic_plm_analytic (T_t, T_b, S_t, S_b, z_t, &
 !  (in)      HI - The ocean's horizontal index structure.
 !  (in)      form_of_eos - integer that selects the eqn of state.
 !  (out)     dpa - The change in the pressure anomaly across the layer,
-!                  in Pa.  
+!                  in Pa.
 !  (out,opt) intz_dpa - The integral through the thickness of the layer of the
 !                       pressure anomaly relative to the anomaly at the top of
 !                       the layer, in Pa m.
@@ -2007,7 +2007,7 @@ subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, &
 ! series for log(1-eps/1+eps) that assumes that |eps| < 0.34.
 !
 ! Arguments: T - potential temperature relative to the surface in C.
-!  (in)      S - salinity in PSU.    
+!  (in)      S - salinity in PSU.
 !  (in)      p_t - pressure at the top of the layer in Pa.
 !  (in)      p_b - pressure at the top of the layer in Pa.
 !  (in)      alpha_ref - A mean specific volume that is subtracted out to reduce
@@ -2018,7 +2018,7 @@ subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, &
 !  (in)      HI - The ocean's horizontal index structure.
 !  (in)      EOS - type that selects the eqn of state.
 !  (out)     dza - The change in the geopotential anomaly across the layer,
-!                  in m2 s-2.  
+!                  in m2 s-2.
 !  (out,opt) intp_dza - The integral in pressure through the layer of the
 !                       geopotential anomaly relative to the anomaly at the
 !                       bottom of the layer, in Pa m2 s-2.
@@ -2124,7 +2124,7 @@ subroutine convert_temp_salt_for_TEOS10(T, S, press, G, kd, mask_z, EOS)
   !> Equation of state structure
   type(EOS_type), pointer                                 :: EOS
   !> 3d mask
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)),  intent(in)  :: mask_z 
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)),  intent(in)  :: mask_z
   integer,                                    intent(in)  :: kd
   !
   integer :: i,j,k

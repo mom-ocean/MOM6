@@ -48,14 +48,14 @@ use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
 use MOM_io, only : write_field, slasher
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
 use MOM_tracer_registry, only : tracer_registry_type, add_tracer_OBC_values
-use MOM_variables, only : thermo_var_ptrs 
+use MOM_variables, only : thermo_var_ptrs
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use MOM_verticalGrid, only : verticalGrid_type
 implicit none ; private
 
 #include <MOM_memory.h>
 
-public BFB_set_coord 
+public BFB_set_coord
 public BFB_initialize_sponges_southonly
 
 logical :: first_call = .true.
@@ -98,14 +98,14 @@ subroutine BFB_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
     !Rlay(:) = 0.0
     !g_prime(:) = 0.0
   end do
- 
+
   if (first_call) call write_BFB_log(param_file)
 
 end subroutine BFB_set_coord
 
 subroutine BFB_initialize_sponges_southonly(G, use_temperature, tv, param_file, CSp, h)
 ! This subroutine sets up the sponges for the southern bouundary of the domain. Maximum damping occurs within 2 degrees lat of the
-! boundary. The damping linearly decreases northward over the next 2 degrees. 
+! boundary. The damping linearly decreases northward over the next 2 degrees.
   type(ocean_grid_type), intent(in)                   :: G
   logical,               intent(in)                   :: use_temperature
   type(thermo_var_ptrs), intent(in)                   :: tv
@@ -138,11 +138,11 @@ subroutine BFB_initialize_sponges_southonly(G, use_temperature, tv, param_file, 
 !   Set up sponges for DOME configuration
   call get_param(param_file, mod, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0)
-  
+
   call get_param(param_file, mod, "SOUTHLAT", slat, &
                  "The southern latitude of the domain.", units="degrees")
   call get_param(param_file, mod, "LENLAT", lenlat, &
-                 "The latitudinal length of the domain.", units="degrees") 
+                 "The latitudinal length of the domain.", units="degrees")
   call get_param(param_file, mod, "WESTLON", wlon, &
                  "The western longitude of the domain.", units="degrees", default=0.0)
   call get_param(param_file, mod, "LENLON", lenlon, &
