@@ -561,7 +561,7 @@ subroutine offline_add_diurnal_SW(fluxes, G, Time_start, Time_end)
   rad = acos(-1.)/180.
 
 !$OMP parallel do default(none) shared(isc,iec,jsc,jec,G,rad,Time_start,dt_here,time_since_ae, &
-!$OMP                                  ncat,fluxes,i_off,j_off) &
+!$OMP                                  fluxes,i_off,j_off) &
 !$OMP                          private(i,j,i2,j2,k,cosz_dt,fracday_dt,rrsun_dt, &
 !$OMP                                  fracday_day,cosz_day,rrsun_day,diurnal_factor)
   do j=jsc,jec ; do i=isc,iec
