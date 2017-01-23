@@ -295,7 +295,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
     call cpu_clock_begin(id_clock_sync)
     call max_across_PEs(max_CFL)
     call cpu_clock_end(id_clock_sync)
-    num_itts = max(1,ceiling(max_CFL))
+    num_itts = max(1,2*ceiling(max_CFL))
     I_numitts = 1.0 ; if (num_itts > 1) I_numitts = 1.0 / (real(num_itts))
     if(CS%id_CFL > 0) call post_data(CS%id_CFL, CFL, CS%diag, mask=G%mask2dT)
   else
