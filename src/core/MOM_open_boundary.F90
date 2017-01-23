@@ -1174,7 +1174,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
     endif
 
     if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W) then
-      if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%radiation) then
+      if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%legacy) then
         dhdt = u_old(I+1,j,k)-u_new(I+1,j,k) !old-new
         dhdx = u_new(I+1,j,k)-u_new(I+2,j,k) !in new time backward sasha for I+1
         rx_new = 0.0
