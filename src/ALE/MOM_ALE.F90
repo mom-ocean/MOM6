@@ -753,7 +753,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, dxInt
 !$OMP do
     do j = G%jsc,G%jec
       do I = G%iscB,G%iecB
-        if (G%mask2dCu(i,j)>0.) then
+        if (G%mask2dCu(I,j)>0.) then
           ! Build the start and final grids
           h1(:) = 0.5 * ( h_old(i,j,:) + h_old(i+1,j,:) )
           if (CS_ALE%remap_uv_using_old_alg) then

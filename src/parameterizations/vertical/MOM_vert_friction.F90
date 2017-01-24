@@ -1222,8 +1222,8 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, GV, CS)
       endif
 
       do I=Isq,Ieq ; if (dowrite(I,j)) then
-         u_old(i,j,:) = u(i,j,:)
-      endif; enddo
+        u_old(I,j,:) = u(I,j,:)
+      endif ; enddo
 
       if (trunc_any) then ; if (CS%CFL_based_trunc) then
         do k=1,nz ; do I=Isq,Ieq

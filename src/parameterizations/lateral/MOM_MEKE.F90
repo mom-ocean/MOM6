@@ -213,6 +213,8 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
 !$OMP do
       do J=js-1,je ; do i=is,ie
         drag_vel_v(i,J) = 0.0
+        ! ### THERE IS A BUG HERE THIS NEEDS TO BE:
+!       if ((G%mask2dCv(i,J) > 0.0) .and. (visc%bbl_thick_v(i,J) > 0.0)) &
         if ((G%mask2dCu(i,J) > 0.0) .and. (visc%bbl_thick_v(i,J) > 0.0)) &
           drag_vel_v(i,J) = visc%kv_bbl_v(i,J) / visc%bbl_thick_v(i,J)
       enddo ; enddo

@@ -159,44 +159,44 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
 !$OMP                               int_slope_v,khth_use_ebt_struct)
 !$OMP do
   do j=js,je; do I=is-1,ie
-    Khth_Loc_u(i,j) = CS%Khth
+    Khth_Loc_u(I,j) = CS%Khth
   enddo ; enddo
 
   if (use_VarMix) then
 !$OMP do
     do j=js,je ; do I=is-1,ie
-      Khth_Loc_u(i,j) = Khth_Loc_u(i,j) + CS%KHTH_Slope_Cff*VarMix%L2u(I,j)*VarMix%SN_u(I,j)
+      Khth_Loc_u(I,j) = Khth_Loc_u(I,j) + CS%KHTH_Slope_Cff*VarMix%L2u(I,j)*VarMix%SN_u(I,j)
     enddo ; enddo
   endif
 
   if (MEKE_not_null) then ; if (associated(MEKE%Kh)) then
 !$OMP do
     do j=js,je ; do I=is-1,ie
-      Khth_Loc_u(i,j) = Khth_Loc_u(i,j) + MEKE%KhTh_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i+1,j))
+      Khth_Loc_u(I,j) = Khth_Loc_u(I,j) + MEKE%KhTh_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i+1,j))
     enddo ; enddo
   endif ; endif
 
   if (Resoln_scaled) then
 !$OMP do
     do j=js,je; do I=is-1,ie
-      Khth_Loc_u(i,j) = Khth_Loc_u(i,j) * VarMix%Res_fn_u(i,j)
+      Khth_Loc_u(I,j) = Khth_Loc_u(I,j) * VarMix%Res_fn_u(I,j)
     enddo ; enddo
   endif
 
   if (CS%Khth_Max > 0) then
 !$OMP do
     do j=js,je; do I=is-1,ie
-      Khth_Loc_u(i,j) = max(CS%Khth_min, min(Khth_Loc_u(i,j),CS%Khth_Max))
+      Khth_Loc_u(I,j) = max(CS%Khth_min, min(Khth_Loc_u(I,j),CS%Khth_Max))
     enddo ; enddo
   else
 !$OMP do
     do j=js,je; do I=is-1,ie
-      Khth_Loc_u(i,j) = max(CS%Khth_min, Khth_Loc_u(i,j))
+      Khth_Loc_u(I,j) = max(CS%Khth_min, Khth_Loc_u(I,j))
     enddo ; enddo
   endif
 !$OMP do
   do j=js,je; do I=is-1,ie
-    KH_u(I,j,1) = min(KH_u_CFL(I,j), Khth_Loc_u(i,j))
+    KH_u(I,j,1) = min(KH_u_CFL(I,j), Khth_Loc_u(I,j))
   enddo ; enddo
 
   if (khth_use_ebt_struct) then
@@ -360,20 +360,20 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
         ! thicknesses across u and v faces, converted to 0/1 mask;
         ! layer average of the interface diffusivities KH_u and KH_v
         do j=js,je ; do I=is-1,ie
-          hu(i,j)       = 2.0*h(i,j,k)*h(i+1,j,k)/(h(i,j,k)+h(i+1,j,k)+h_neglect)
-          if(hu(i,j) /= 0.0) hu(i,j) = 1.0
-          KH_u_lay(i,j) = 0.5*(KH_u(i,j,k)+KH_u(i,j,k+1))
+          hu(I,j)       = 2.0*h(i,j,k)*h(i+1,j,k)/(h(i,j,k)+h(i+1,j,k)+h_neglect)
+          if(hu(I,j) /= 0.0) hu(I,j) = 1.0
+          KH_u_lay(I,j) = 0.5*(KH_u(I,j,k)+KH_u(I,j,k+1))
         enddo ; enddo
         do J=js-1,je ; do i=is,ie
-          hv(i,j)       = 2.0*h(i,j,k)*h(i,j+1,k)/(h(i,j,k)+h(i,j+1,k)+h_neglect)
-          if(hv(i,j) /= 0.0) hv(i,j) = 1.0
-          KH_v_lay(i,j) = 0.5*(KH_v(i,j,k)+KH_v(i,j,k+1))
+          hv(i,J)       = 2.0*h(i,j,k)*h(i,j+1,k)/(h(i,j,k)+h(i,j+1,k)+h_neglect)
+          if(hv(i,J) /= 0.0) hv(i,J) = 1.0
+          KH_v_lay(i,J) = 0.5*(KH_v(i,J,k)+KH_v(i,J,k+1))
         enddo ; enddo
         ! diagnose diffusivity at T-point
         do j=js,je ; do i=is,ie
-          KH_t(i,j,k) = ((hu(i-1,j)*KH_u_lay(i-1,j)+hu(i,j)*KH_u_lay(i,j))  &
-                        +(hv(i,j-1)*KH_v_lay(i,j-1)+hv(i,j)*KH_v_lay(i,j))) &
-                       / (hu(i-1,j)+hu(i,j)+hv(i,j-1)+hv(i,j)+h_neglect)
+          KH_t(i,j,k) = ((hu(I-1,j)*KH_u_lay(i-1,j)+hu(I,j)*KH_u_lay(I,j))  &
+                        +(hv(i,J-1)*KH_v_lay(i,J-1)+hv(i,J)*KH_v_lay(i,J))) &
+                       / (hu(I-1,j)+hu(I,j)+hv(i,J-1)+hv(i,J)+h_neglect)
         enddo ; enddo
       enddo
       if(CS%id_KH_t  > 0) call post_data(CS%id_KH_t,  KH_t,        CS%diag)

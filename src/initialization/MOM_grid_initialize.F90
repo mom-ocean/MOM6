@@ -442,7 +442,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
                  (tmpT(i2-1,j2) + tmpT(i2,j2-1))
   enddo ; enddo
   do J=G%JsdB,G%JedB ; do I=G%IsdB,G%IedB ; i2 = 2*i ; j2 = 2*j
-    areaBu(i,j) = (tmpT(i2,j2) + tmpT(i2+1,j2+1)) + &
+    areaBu(I,J) = (tmpT(i2,j2) + tmpT(i2+1,j2+1)) + &
                   (tmpT(i2,j2+1) + tmpT(i2+1,j2))
   enddo ; enddo
 
@@ -972,13 +972,13 @@ subroutine set_grid_metrics_mercator(G, param_file)
   enddo
 
   do J=JsdB,JedB ; do I=IsdB,IedB
-    G%geoLonBu(i,j) = xq(i,j)*180.0/PI
-    G%geoLatBu(i,j) = yq(i,j)*180.0/PI
-    G%dxBu(i,j) = ds_di(xq(i,j), yq(i,j), GP)
-    G%dyBu(i,j) = ds_dj(xq(i,j), yq(i,j), GP)
+    G%geoLonBu(I,J) = xq(I,J)*180.0/PI
+    G%geoLatBu(I,J) = yq(I,J)*180.0/PI
+    G%dxBu(I,J) = ds_di(xq(I,J), yq(I,J), GP)
+    G%dyBu(I,J) = ds_dj(xq(I,J), yq(I,J), GP)
 
-    G%areaBu(i,j) = G%dxBu(i,j) * G%dyBu(i,j)
-    G%IareaBu(i,j) = 1.0 / G%areaBu(i,j)
+    G%areaBu(I,J) = G%dxBu(I,J) * G%dyBu(I,J)
+    G%IareaBu(I,J) = 1.0 / G%areaBu(I,J)
   enddo ; enddo
 
   do j=jsd,jed ; do i=isd,ied
@@ -992,17 +992,17 @@ subroutine set_grid_metrics_mercator(G, param_file)
   enddo ; enddo
 
   do j=jsd,jed ; do I=IsdB,IedB
-    G%geoLonCu(i,j) = xu(i,j)*180.0/PI
-    G%geoLatCu(i,j) = yu(i,j)*180.0/PI
-    G%dxCu(i,j) = ds_di(xu(i,j), yu(i,j), GP)
-    G%dyCu(i,j) = ds_dj(xu(i,j), yu(i,j), GP)
+    G%geoLonCu(I,j) = xu(I,j)*180.0/PI
+    G%geoLatCu(I,j) = yu(I,j)*180.0/PI
+    G%dxCu(I,j) = ds_di(xu(I,j), yu(I,j), GP)
+    G%dyCu(I,j) = ds_dj(xu(I,j), yu(I,j), GP)
   enddo ; enddo
 
   do J=JsdB,JedB ; do i=isd,ied
-    G%geoLonCv(i,j) = xv(i,j)*180.0/PI
-    G%geoLatCv(i,j) = yv(i,j)*180.0/PI
-    G%dxCv(i,j) = ds_di(xv(i,j), yv(i,j), GP)
-    G%dyCv(i,j) = ds_dj(xv(i,j), yv(i,j), GP)
+    G%geoLonCv(i,J) = xv(i,J)*180.0/PI
+    G%geoLatCv(i,J) = yv(i,J)*180.0/PI
+    G%dxCv(i,J) = ds_di(xv(i,J), yv(i,J), GP)
+    G%dyCv(i,J) = ds_dj(xv(i,J), yv(i,J), GP)
   enddo ; enddo
 
   if (.not.simple_area) then
