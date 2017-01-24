@@ -397,8 +397,8 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
       elseif (uhr(I,j,k) < 0.0) then
         hup = hprev(i+1,j,k) - G%areaT(i+1,j)*min_h
         hlos = MAX(0.0,uhr(I+1,j,k))
-        if (((hup + uhr(I,j,k) - hlos) < 0.0) .and. &
-            ((0.5*hup + uhr(I,j,k)) < 0.0)) then !### Add parentheses.
+        if ((((hup - hlos) + uhr(I,j,k)) < 0.0) .and. &
+            ((0.5*hup + uhr(I,j,k)) < 0.0)) then
           uhh(I) = MIN(-0.5*hup,-hup+hlos,0.0)
           domore_u(j,k) = .true.
         else
@@ -409,8 +409,8 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
       else
         hup = hprev(i,j,k) - G%areaT(i,j)*min_h
         hlos = MAX(0.0,-uhr(I-1,j,k))
-        if (((hup - uhr(I,j,k) - hlos) < 0.0) .and. &
-            ((0.5*hup - uhr(I,j,k)) < 0.0)) then !### Add parentheses.
+        if ((((hup - hlos) - uhr(I,j,k)) < 0.0) .and. &
+            ((0.5*hup - uhr(I,j,k)) < 0.0)) then
           uhh(I) = MAX(0.5*hup,hup-hlos,0.0)
           domore_u(j,k) = .true.
         else
