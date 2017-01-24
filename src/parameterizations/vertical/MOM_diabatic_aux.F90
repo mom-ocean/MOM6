@@ -652,20 +652,20 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, ea, eb)
 !$OMP                          private(s,Idenom,a_w,a_e,a_s,a_n,b_denom_1,b1,d1,c1)
   do j=js,je
     do i=is,ie
-      s = G%areaCu(i-1,j)+G%areaCu(i,j)
+      s = G%areaCu(I-1,j)+G%areaCu(I,j)
       if (s>0.0) then
         Idenom = sqrt(0.5*G%IareaT(i,j)/s)
-        a_w(i) = G%areaCu(i-1,j)*Idenom
-        a_e(i) = G%areaCu(i,j)*Idenom
+        a_w(i) = G%areaCu(I-1,j)*Idenom
+        a_e(i) = G%areaCu(I,j)*Idenom
       else
         a_w(i) = 0.0 ; a_e(i) = 0.0
       endif
 
-      s = G%areaCv(i,j-1)+G%areaCv(i,j)
+      s = G%areaCv(i,J-1)+G%areaCv(i,J)
       if (s>0.0) then
         Idenom = sqrt(0.5*G%IareaT(i,j)/s)
-        a_s(i) = G%areaCv(i,j-1)*Idenom
-        a_n(i) = G%areaCv(i,j)*Idenom
+        a_s(i) = G%areaCv(i,J-1)*Idenom
+        a_n(i) = G%areaCv(i,J)*Idenom
       else
         a_s(i) = 0.0 ; a_n(i) = 0.0
       endif
@@ -676,17 +676,17 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, ea, eb)
         b_denom_1 = h(i,j,1) + h_neglect
         b1(i) = 1.0 / (b_denom_1 + eb(i,j,1))
         d1(i) = b_denom_1 * b1(i)
-        u_h(i,j,1) = (h(i,j,1)*b1(i)) * (a_e(i)*u(i,j,1) + a_w(i)*u(i-1,j,1))
-        v_h(i,j,1) = (h(i,j,1)*b1(i)) * (a_n(i)*v(i,j,1) + a_s(i)*v(i,j-1,1))
+        u_h(i,j,1) = (h(i,j,1)*b1(i)) * (a_e(i)*u(I,j,1) + a_w(i)*u(I-1,j,1))
+        v_h(i,j,1) = (h(i,j,1)*b1(i)) * (a_n(i)*v(i,J,1) + a_s(i)*v(i,J-1,1))
       enddo
       do k=2,nz ; do i=is,ie
         c1(i,k) = eb(i,j,k-1) * b1(i)
         b_denom_1 = h(i,j,k) + d1(i)*ea(i,j,k) + h_neglect
         b1(i) = 1.0 / (b_denom_1 + eb(i,j,k))
         d1(i) = b_denom_1 * b1(i)
-        u_h(i,j,k) = (h(i,j,k) * (a_e(i)*u(i,j,k) + a_w(i)*u(i-1,j,k)) + &
+        u_h(i,j,k) = (h(i,j,k) * (a_e(i)*u(I,j,k) + a_w(i)*u(I-1,j,k)) + &
                       ea(i,j,k)*u_h(i,j,k-1))*b1(i)
-        v_h(i,j,k) = (h(i,j,k) * (a_n(i)*v(i,j,k) + a_s(i)*v(i,j-1,k)) + &
+        v_h(i,j,k) = (h(i,j,k) * (a_n(i)*v(i,J,k) + a_s(i)*v(i,J-1,k)) + &
                       ea(i,j,k)*v_h(i,j,k-1))*b1(i)
       enddo ; enddo
       do k=nz-1,1,-1 ; do i=is,ie
@@ -695,8 +695,8 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, ea, eb)
       enddo ; enddo
     else
       do k=1,nz ; do i=is,ie
-        u_h(i,j,k) = a_e(i)*u(i,j,k) + a_w(i)*u(i-1,j,k)
-        v_h(i,j,k) = a_n(i)*v(i,j,k) + a_s(i)*v(i,j-1,k)
+        u_h(i,j,k) = a_e(i)*u(I,j,k) + a_w(i)*u(I-1,j,k)
+        v_h(i,j,k) = a_n(i)*v(i,J,k) + a_s(i)*v(i,J-1,k)
       enddo ; enddo
     endif
   enddo

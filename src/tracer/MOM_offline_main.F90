@@ -818,15 +818,15 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, &
 
   enddo; enddo ; enddo
 
-  do k=1,nz ; do j=js-1,je ; do i=is,ie
-    if(G%mask2dCv(i,j)<1.0) then
-      vhtr(i,j,k) = 0.0
+  do k=1,nz ; do J=js-1,je ; do i=is,ie
+    if(G%mask2dCv(i,J)<1.0) then
+      vhtr(i,J,k) = 0.0
     endif
   enddo; enddo ; enddo
 
-  do k=1,nz ; do j=js,je ; do i=is-1,ie
-    if(G%mask2dCu(i,j)<1.0) then
-      uhtr(i,j,k) = 0.0
+  do k=1,nz ; do j=js,je ; do I=is-1,ie
+    if(G%mask2dCu(I,j)<1.0) then
+      uhtr(I,j,k) = 0.0
     endif
   enddo; enddo ; enddo
 

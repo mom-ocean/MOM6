@@ -463,10 +463,10 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
     enddo ; enddo
     do j=js,je ; do i=is,ie
       !### Add parentheses.
-      normalize = 1.0 / (G%mask2dCu(i-1,j)+G%mask2dCu(i,j) + &
-                  G%mask2dCv(i,j-1)+G%mask2dCv(i,j) + GV%H_subroundoff)
-      Kh_h(i,j) = normalize*G%mask2dT(i,j)*(Kh_u(i-1,j)+Kh_u(i,j) + &
-                                            Kh_v(i,j-1)+Kh_v(i,j))
+      normalize = 1.0 / (G%mask2dCu(I-1,j)+G%mask2dCu(I,j) + &
+                  G%mask2dCv(i,J-1)+G%mask2dCv(i,J) + GV%H_subroundoff)
+      Kh_h(i,j) = normalize*G%mask2dT(i,j)*(Kh_u(I-1,j)+Kh_u(I,j) + &
+                                            Kh_v(i,J-1)+Kh_v(i,J))
     enddo ; enddo
     call post_data(CS%id_KhTr_h, Kh_h, CS%diag, mask=G%mask2dT)
   endif

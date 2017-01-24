@@ -503,8 +503,8 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
         I_L2_bdry(K) = (dist_from_top(K) + dist_from_bot)**2 / &
                          (dist_from_top(K) * dist_from_bot)**2
       enddo
-      f2 = 0.25*((G%CoriolisBu(i,j)**2 + G%CoriolisBu(i-1,j-1)**2) + &
-                 (G%CoriolisBu(i,j-1)**2 + G%CoriolisBu(i-1,j)**2))
+      f2 = 0.25*((G%CoriolisBu(I,j)**2 + G%CoriolisBu(I-1,J-1)**2) + &
+                 (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
 
       ! Calculate thermodynamic coefficients and an initial estimate of N2.
       if (use_temperature) then
