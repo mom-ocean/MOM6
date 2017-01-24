@@ -284,7 +284,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
 ! uh = u[n-1]*h[n-1/2]
 ! hp = h[n-1/2] + dt/2 div . uh
   call cpu_clock_begin(id_clock_continuity)
-  ! This is a duplicate caclulation of the last continuity from the previous step
+  ! This is a duplicate calculation of the last continuity from the previous step
   ! and could/should be optimized out. -AJA
   call continuity(u_in, v_in, h_in, hp, uh, vh, dt_pred, G, GV, CS%continuity_CSp, &
                   OBC=CS%OBC)
@@ -328,12 +328,12 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
 ! up+[n-1/2] = u[n-1] + dt_pred * (PFu + CAu)
   call cpu_clock_begin(id_clock_mom_update)
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-    up(i,j,k) = G%mask2dCu(i,j) * (u_in(i,j,k) + dt_pred * &
-                   ((CS%PFu(i,j,k) + CS%CAu(i,j,k)) + CS%diffu(I,j,k)))
+    up(I,j,k) = G%mask2dCu(I,j) * (u_in(I,j,k) + dt_pred * &
+                   ((CS%PFu(I,j,k) + CS%CAu(I,j,k)) + CS%diffu(I,j,k)))
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-    vp(i,j,k) = G%mask2dCv(i,j) * (v_in(i,j,k) + dt_pred * &
-                   ((CS%PFv(i,j,k) + CS%CAv(i,j,k)) + CS%diffv(i,J,k)))
+    vp(i,J,k) = G%mask2dCv(i,J) * (v_in(i,J,k) + dt_pred * &
+                   ((CS%PFv(i,J,k) + CS%CAv(i,J,k)) + CS%diffv(i,J,k)))
   enddo ; enddo ; enddo
   call cpu_clock_end(id_clock_mom_update)
 
@@ -405,16 +405,16 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
 ! up* = u[n] + (1+gamma) * dt * ( PFu + CAu )  Extrapolated for damping
 ! u*[n+1] = u[n] + dt * ( PFu + CAu )
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-    up(i,j,k) = G%mask2dCu(i,j) * (u_in(i,j,k) + dt * (1.+CS%begw) * &
-            ((CS%PFu(i,j,k) + CS%CAu(i,j,k)) + CS%diffu(I,j,k)))
-    u_in(i,j,k) = G%mask2dCu(i,j) * (u_in(i,j,k) + dt * &
-            ((CS%PFu(i,j,k) + CS%CAu(i,j,k)) + CS%diffu(I,j,k)))
+    up(I,j,k) = G%mask2dCu(I,j) * (u_in(I,j,k) + dt * (1.+CS%begw) * &
+            ((CS%PFu(I,j,k) + CS%CAu(I,j,k)) + CS%diffu(I,j,k)))
+    u_in(I,j,k) = G%mask2dCu(I,j) * (u_in(I,j,k) + dt * &
+            ((CS%PFu(I,j,k) + CS%CAu(I,j,k)) + CS%diffu(I,j,k)))
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-    vp(i,j,k) = G%mask2dCv(i,j) * (v_in(i,j,k) + dt * (1.+CS%begw) * &
-            ((CS%PFv(i,j,k) + CS%CAv(i,j,k)) + CS%diffv(i,J,k)))
-    v_in(i,j,k) = G%mask2dCv(i,j) * (v_in(i,j,k) + dt * &
-            ((CS%PFv(i,j,k) + CS%CAv(i,j,k)) + CS%diffv(i,J,k)))
+    vp(i,J,k) = G%mask2dCv(i,J) * (v_in(i,J,k) + dt * (1.+CS%begw) * &
+            ((CS%PFv(i,J,k) + CS%CAv(i,J,k)) + CS%diffv(i,J,k)))
+    v_in(i,J,k) = G%mask2dCv(i,J) * (v_in(i,J,k) + dt * &
+            ((CS%PFv(i,J,k) + CS%CAv(i,J,k)) + CS%diffv(i,J,k)))
   enddo ; enddo ; enddo
 
 ! up[n] <- up* + dt d/dz visc d/dz up
@@ -446,10 +446,10 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
 ! Accumulate mass flux for tracer transport
   do k=1,nz
     do j=js-2,je+2 ; do I=Isq-2,Ieq+2
-      uhtr(i,j,k) = uhtr(i,j,k) + dt*uh(i,j,k)
+      uhtr(I,j,k) = uhtr(I,j,k) + dt*uh(I,j,k)
     enddo ; enddo
     do J=Jsq-2,Jeq+2 ; do i=is-2,ie+2
-      vhtr(i,j,k) = vhtr(i,j,k) + dt*vh(i,j,k)
+      vhtr(i,J,k) = vhtr(i,J,k) + dt*vh(i,J,k)
     enddo ; enddo
   enddo
 

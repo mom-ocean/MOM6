@@ -1929,8 +1929,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 !GOMP parallel do default(none) shared(is,ie,js,je,ubt_sum_prev,ubt_sum,uhbt_sum_prev,&
 !GOMP                                  uhbt_sum,ubt_wtd_prev,ubt_wtd,BT_OBC)
         do j=js,je ; do I=is-1,ie
-          if (OBC%OBC_segment_u(i,J) /= OBC_NONE) then
-            ubt_sum(i,J)=ubt_sum_prev(i,J); uhbt_sum(i,J)=uhbt_sum_prev(i,J) ; ubt_wtd(i,J)=ubt_wtd_prev(i,J)
+          if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
+            ubt_sum(I,j)=ubt_sum_prev(I,j); uhbt_sum(I,j)=uhbt_sum_prev(I,j) ; ubt_wtd(I,j)=ubt_wtd_prev(I,j)
           endif
         enddo ; enddo
       endif
@@ -2883,6 +2883,10 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default)
 !  (in)      CS - The control structure returned by a previous call to
 !                 barotropic_init.
 !  (in,opt)  h_u, h_v - The specified thicknesses at u- and v- points, in m or kg m-2.
+!  (in,opt)  may_use_default - An optional logical argument to indicate that the
+!                 default velocity point thickesses may be used for this particular
+!                 calculation, even though the setting of CS%hvel_scheme would
+!                 usually require that h_u and h_v be passed in.
 
 ! All of these variables are in the same units as h - usually m or kg m-2.
   real :: hatutot(SZIB_(G))    ! The sum of the layer thicknesses
@@ -2937,13 +2941,13 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default)
 
   do j=js-1,je+1
     if (present(h_u)) then
-      do I=is-2,ie+1 ; hatutot(I) = h_u(i,j,1) ; enddo
+      do I=is-2,ie+1 ; hatutot(I) = h_u(I,j,1) ; enddo
       do k=2,nz ; do I=is-2,ie+1
-        hatutot(I) = hatutot(I) + h_u(i,j,k)
+        hatutot(I) = hatutot(I) + h_u(I,j,k)
       enddo ; enddo
       do I=is-2,ie+1 ; Ihatutot(I) = G%mask2dCu(I,j) / (hatutot(I) + h_neglect) ; enddo
       do k=1,nz ; do I=is-2,ie+1
-        CS%frhatu(I,j,k) = h_u(i,j,k) * Ihatutot(I)
+        CS%frhatu(I,j,k) = h_u(I,j,k) * Ihatutot(I)
       enddo ; enddo
     else
       if (CS%hvel_scheme == ARITHMETIC) then
@@ -3000,13 +3004,13 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default)
 !$OMP                          private(hatvtot,Ihatvtot,e_v,D_shallow_v,h_arith,h_harm,wt_arith)
   do J=js-2,je+1
     if (present(h_v)) then
-      do i=is-1,ie+1 ; hatvtot(i) = h_v(i,j,1) ; enddo
+      do i=is-1,ie+1 ; hatvtot(i) = h_v(i,J,1) ; enddo
       do k=2,nz ; do i=is-1,ie+1
-        hatvtot(i) = hatvtot(i) + h_v(i,j,k)
+        hatvtot(i) = hatvtot(i) + h_v(i,J,k)
       enddo ; enddo
       do i=is-1,ie+1 ; Ihatvtot(i) = G%mask2dCv(i,J) / (hatvtot(i) + h_neglect) ; enddo
       do k=1,nz ; do i=is-1,ie+1
-        CS%frhatv(i,J,k) = h_v(i,j,k) * Ihatvtot(i)
+        CS%frhatv(i,J,k) = h_v(i,J,k) * Ihatvtot(i)
       enddo ; enddo
     else
       if (CS%hvel_scheme == ARITHMETIC) then
@@ -4309,12 +4313,12 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
   if (.NOT.query_initialized(CS%ubtav,"ubtav",restart_CS) .or. &
       .NOT.query_initialized(CS%vbtav,"vbtav",restart_CS)) then
     call btcalc(h, G, GV, CS, may_use_default=.true.)
-    do j=js-1,je+1 ; do i=is-1,ie+1
-      CS%ubtav(I,j) = 0.0 ; CS%vbtav(i,J) = 0.0
-    enddo ; enddo
-    do k=1,nz ; do j=js-1,je+1 ; do i=is-1,ie+1
-      CS%ubtav(I,j) = CS%ubtav(I,j) + CS%frhatu(i,J,k) * u(i,J,k)
-      CS%vbtav(I,j) = CS%vbtav(I,j) + CS%frhatv(i,J,k) * v(i,J,k)
+    CS%ubtav(:,:) = 0.0 ; CS%vbtav(:,:) = 0.0
+    do k=1,nz ; do j=js,je ; do I=is-1,ie
+      CS%ubtav(I,j) = CS%ubtav(I,j) + CS%frhatu(I,j,k) * u(I,j,k)
+    enddo ; enddo ; enddo
+    do k=1,nz ; do J=js-1,je ; do i=is,ie
+      CS%vbtav(i,J) = CS%vbtav(i,J) + CS%frhatv(i,J,k) * v(i,J,k)
     enddo ; enddo ; enddo
   endif
 
@@ -4329,7 +4333,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
   ! The following is only valid with the Boussinesq approximation.
 ! if (GV%Boussinesq) then
     do j=js,je ; do I=is-1,ie
-      if (G%mask2dCu(i,j)>0.) then
+      if (G%mask2dCu(I,j)>0.) then
         CS%IDatu(I,j) = G%mask2dCu(I,j) * 2.0 / (G%bathyT(i+1,j) + G%bathyT(i,j))
       else ! Both neighboring H points are masked out so IDatu(I,j) is meaningless
         CS%IDatu(I,j) = 0.
@@ -4344,10 +4348,10 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
     enddo ; enddo
 ! else
 !   do j=js,je ; do I=is-1,ie
-!     CS%IDatu(I,j) = G%mask2dCu(i,j) * 2.0 / (GV%Rho0*(G%bathyT(i+1,j) + G%bathyT(i,j)))
+!     CS%IDatu(I,j) = G%mask2dCu(I,j) * 2.0 / (GV%Rho0*(G%bathyT(i+1,j) + G%bathyT(i,j)))
 !   enddo ; enddo
 !   do J=js-1,je ; do i=is,ie
-!     CS%IDatv(i,J) = G%mask2dCv(i,j) * 2.0 / (GV%Rho0*(G%bathyT(i,j+1) + G%bathyT(i,j)))
+!     CS%IDatv(i,J) = G%mask2dCv(i,J) * 2.0 / (GV%Rho0*(G%bathyT(i,j+1) + G%bathyT(i,j)))
 !   enddo ; enddo
 ! endif
 
