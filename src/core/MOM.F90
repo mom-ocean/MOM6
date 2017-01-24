@@ -3379,10 +3379,10 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
       nullify(state%SST) ; nullify(state%SSS)
     endif
     if (.not.associated(state%u)) then
-       allocate(state%u(isdB:iedB,jsd:jed)) ; state%u(:,:) = 0.0
+       allocate(state%u(IsdB:IedB,jsd:jed)) ; state%u(:,:) = 0.0
     endif
     if (.not.associated(state%v)) then
-       allocate(state%v(isd:ied,jsdB:jedB)) ; state%v(:,:) = 0.0
+       allocate(state%v(isd:ied,JsdB:JedB)) ; state%v(:,:) = 0.0
     endif
 
     if (.not.associated(state%Hml)) allocate(state%Hml(isd:ied,jsd:jed))
@@ -3455,7 +3455,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
         do i=is,ie
           if (depth(i) < GV%H_subroundoff*GV%H_to_m) &
               depth(i) = GV%H_subroundoff*GV%H_to_m
-          state%v(i,j) = state%v(i,j) / depth(i)
+          state%v(i,J) = state%v(i,J) / depth(i)
         enddo
       enddo ! end of j loop
 
@@ -3595,20 +3595,20 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
                 'SSH=',state%sea_lev(i,j),               &
                 'SST=',state%SST(i,j),                   &
                 'SSS=',state%SSS(i,j),                   &
-                'U-=',state%u(i-1,j),                    &
-                'U+=',state%u(i,j),                      &
-                'V-=',state%v(i,j-1),                    &
-                'V+=',state%v(i,j)
+                'U-=',state%u(I-1,j),                    &
+                'U+=',state%u(I,j),                      &
+                'V-=',state%v(i,J-1),                    &
+                'V+=',state%v(i,J)
             else
               write(msg(1:240),'(2(a,i4,x),2(a,f8.3,x),6(a,es11.4))') &
                 'Extreme surface state detected: i=',i,'j=',j, &
                 'x=',G%geoLonT(i,j),'y=',G%geoLatT(i,j), &
                 'D=',G%bathyT(i,j),                      &
                 'SSH=',state%sea_lev(i,j),               &
-                'U-=',state%u(i-1,j),                    &
-                'U+=',state%u(i,j),                      &
-                'V-=',state%v(i,j-1),                    &
-                'V+=',state%v(i,j)
+                'U-=',state%u(I-1,j),                    &
+                'U+=',state%u(I,j),                      &
+                'V-=',state%v(i,J-1),                    &
+                'V+=',state%v(i,J)
             endif
             call MOM_error(WARNING, trim(msg), all_print=.true.)
           elseif (numberOfErrors==9) then ! Indicate once that there are more errors

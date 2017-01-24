@@ -2652,13 +2652,13 @@ subroutine legacy_btcalc(h, G, GV, CS, h_u, h_v, may_use_default)
 !$OMP                          private(hatutot,Ihatutot,e_u,D_shallow_u,h_arith,h_harm,wt_arith)
   do j=js-1,je+1
     if (present(h_u)) then
-      do I=is-2,ie+1 ; hatutot(I) = h_u(i,j,1) ; enddo
+      do I=is-2,ie+1 ; hatutot(I) = h_u(I,j,1) ; enddo
       do k=2,nz ; do I=is-2,ie+1
-        hatutot(I) = hatutot(I) + h_u(i,j,k)
+        hatutot(I) = hatutot(I) + h_u(I,j,k)
       enddo ; enddo
       do I=is-2,ie+1 ; Ihatutot(I) = 1.0 / (hatutot(I) + h_neglect) ; enddo
       do k=1,nz ; do I=is-2,ie+1
-        CS%frhatu(I,j,k) = h_u(i,j,k) * Ihatutot(I)
+        CS%frhatu(I,j,k) = h_u(I,j,k) * Ihatutot(I)
       enddo ; enddo
     else
       if (CS%hvel_scheme == ARITHMETIC) then
@@ -2715,13 +2715,13 @@ subroutine legacy_btcalc(h, G, GV, CS, h_u, h_v, may_use_default)
 !$OMP                          private(hatvtot,Ihatvtot,e_v,D_shallow_v,h_arith,h_harm,wt_arith)
   do J=js-2,je+1
     if (present(h_v)) then
-      do i=is-1,ie+1 ; hatvtot(i) = h_v(i,j,1) ; enddo
+      do i=is-1,ie+1 ; hatvtot(i) = h_v(i,J,1) ; enddo
       do k=2,nz ; do i=is-1,ie+1
-        hatvtot(i) = hatvtot(i) + h_v(i,j,k)
+        hatvtot(i) = hatvtot(i) + h_v(i,J,k)
       enddo ; enddo
       do i=is-1,ie+1 ; Ihatvtot(i) = 1.0 / (hatvtot(i) + h_neglect) ; enddo
       do k=1,nz ; do i=is-1,ie+1
-        CS%frhatv(i,J,k) = h_v(i,j,k) * Ihatvtot(i)
+        CS%frhatv(i,J,k) = h_v(i,J,k) * Ihatvtot(i)
       enddo ; enddo
     else
       if (CS%hvel_scheme == ARITHMETIC) then
@@ -3917,7 +3917,7 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, C
       CS%ubtav(I,j) = 0.0 ; CS%vbtav(i,J) = 0.0
     enddo ; enddo
     do k=1,nz ; do j=js-1,je+1 ; do i=is-1,ie+1
-      CS%ubtav(I,j) = CS%ubtav(I,j) + CS%frhatu(i,J,k) * u(i,J,k)
+      CS%ubtav(I,j) = CS%ubtav(I,j) + CS%frhatu(I,j,k) * u(I,j,k)
       CS%vbtav(I,j) = CS%vbtav(I,j) + CS%frhatv(i,J,k) * v(i,J,k)
     enddo ; enddo ; enddo
   endif
@@ -3933,17 +3933,17 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, C
   ! The following is only valid with the Boussinesq approximation.
 ! if (GV%Boussinesq) then
     do j=js,je ; do I=is-1,ie
-      CS%IDatu(I,j) = G%mask2dCu(i,j) * 2.0 / (G%bathyT(i+1,j) + G%bathyT(i,j))
+      CS%IDatu(I,j) = G%mask2dCu(I,j) * 2.0 / (G%bathyT(i+1,j) + G%bathyT(i,j))
     enddo ; enddo
     do J=js-1,je ; do i=is,ie
-      CS%IDatv(i,J) = G%mask2dCv(i,j) * 2.0 / (G%bathyT(i,j+1) + G%bathyT(i,j))
+      CS%IDatv(i,J) = G%mask2dCv(i,J) * 2.0 / (G%bathyT(i,j+1) + G%bathyT(i,j))
     enddo ; enddo
 ! else
 !   do j=js,je ; do I=is-1,ie
-!     CS%IDatu(I,j) = G%mask2dCu(i,j) * 2.0 / (GV%Rho0*(G%bathyT(i+1,j) + G%bathyT(i,j)))
+!     CS%IDatu(I,j) = G%mask2dCu(I,j) * 2.0 / (GV%Rho0*(G%bathyT(i+1,j) + G%bathyT(i,j)))
 !   enddo ; enddo
 !   do J=js-1,je ; do i=is,ie
-!     CS%IDatv(i,J) = G%mask2dCv(i,j) * 2.0 / (GV%Rho0*(G%bathyT(i,j+1) + G%bathyT(i,j)))
+!     CS%IDatv(i,J) = G%mask2dCv(i,J) * 2.0 / (GV%Rho0*(G%bathyT(i,j+1) + G%bathyT(i,j)))
 !   enddo ; enddo
 ! endif
 

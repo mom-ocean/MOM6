@@ -294,10 +294,10 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
       h_av(i,j,k) = (h(i,j,k) + hp(i,j,k)) * 0.5
     enddo ; enddo
     do j=js,je ; do I=Isq,Ieq
-      u(i,j,k) = u(i,j,k) + dt * CS%diffu(i,j,k) * G%mask2dCu(i,j)
+      u(I,j,k) = u(I,j,k) + dt * CS%diffu(I,j,k) * G%mask2dCu(I,j)
     enddo ; enddo
     do J=Jsq,Jeq ; do i=is,ie
-      v(i,j,k) = v(i,j,k) + dt * CS%diffv(i,j,k) * G%mask2dCv(i,j)
+      v(i,J,k) = v(i,J,k) + dt * CS%diffv(i,J,k) * G%mask2dCv(i,J)
     enddo ; enddo
     do j=js-2,je+2 ; do I=Isq-2,Ieq+2
       uhtr(i,j,k) = uhtr(i,j,k) + 0.5*dt*uh(i,j,k)
@@ -333,12 +333,12 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
 ! up = u + dt_pred * (PFu + CAu)
   call cpu_clock_begin(id_clock_mom_update)
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-    up(i,j,k) = G%mask2dCu(i,j) * (u(i,j,k) + dt_pred * &
-                               (CS%PFu(i,j,k) + CS%CAu(i,j,k)))
+    up(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + dt_pred * &
+                               (CS%PFu(I,j,k) + CS%CAu(I,j,k)))
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-    vp(i,j,k) = G%mask2dCv(i,j) * (v(i,j,k) + dt_pred * &
-                               (CS%PFv(i,j,k) + CS%CAv(i,j,k)))
+    vp(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + dt_pred * &
+                               (CS%PFv(i,J,k) + CS%CAv(i,J,k)))
   enddo ; enddo ; enddo
   call cpu_clock_end(id_clock_mom_update)
 
@@ -420,12 +420,12 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
 ! upp = u + dt/2 * ( PFu + CAu )
   call cpu_clock_begin(id_clock_mom_update)
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-    upp(i,j,k) = G%mask2dCu(i,j) * (u(i,j,k) + dt * 0.5 * &
-            (CS%PFu(i,j,k) + CS%CAu(i,j,k)))
+    upp(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + dt * 0.5 * &
+            (CS%PFu(I,j,k) + CS%CAu(I,j,k)))
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-    vpp(i,j,k) = G%mask2dCv(i,j) * (v(i,j,k) + dt * 0.5 * &
-            (CS%PFv(i,j,k) + CS%CAv(i,j,k)))
+    vpp(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + dt * 0.5 * &
+            (CS%PFv(i,J,k) + CS%CAv(i,J,k)))
   enddo ; enddo ; enddo
   call cpu_clock_end(id_clock_mom_update)
 
@@ -497,12 +497,12 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
 
 ! u = u + dt * ( PFu + CAu )
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-    u(i,j,k) = G%mask2dCu(i,j) * (u(i,j,k) + dt * &
-            (CS%PFu(i,j,k) + CS%CAu(i,j,k)))
+    u(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + dt * &
+            (CS%PFu(I,j,k) + CS%CAu(I,j,k)))
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-    v(i,j,k) = G%mask2dCv(i,j) * (v(i,j,k) + dt * &
-            (CS%PFv(i,j,k) + CS%CAv(i,j,k)))
+    v(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + dt * &
+            (CS%PFv(i,J,k) + CS%CAv(i,J,k)))
   enddo ; enddo ; enddo
 
 ! u <- u + dt d/dz visc d/dz u
