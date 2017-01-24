@@ -462,17 +462,16 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
       Kh_v(i,J) = G%mask2dCv(i,J)*Kh_v(i,J)
     enddo ; enddo
     do j=js,je ; do i=is,ie
-      !### Add parentheses.
-      normalize = 1.0 / (G%mask2dCu(I-1,j)+G%mask2dCu(I,j) + &
-                  G%mask2dCv(i,J-1)+G%mask2dCv(i,J) + GV%H_subroundoff)
-      Kh_h(i,j) = normalize*G%mask2dT(i,j)*(Kh_u(I-1,j)+Kh_u(I,j) + &
-                                            Kh_v(i,J-1)+Kh_v(i,J))
+      normalize = 1.0 / ((G%mask2dCu(I-1,j)+G%mask2dCu(I,j)) + &
+                  (G%mask2dCv(i,J-1)+G%mask2dCv(i,J)) + GV%H_subroundoff)
+      Kh_h(i,j) = normalize*G%mask2dT(i,j)*((Kh_u(I-1,j)+Kh_u(I,j)) + &
+                                            (Kh_v(i,J-1)+Kh_v(i,J)))
     enddo ; enddo
     call post_data(CS%id_KhTr_h, Kh_h, CS%diag, mask=G%mask2dT)
   endif
 
 
-  if( CS%debug ) then
+  if (CS%debug) then
     call uchksum(khdt_x,"After tracer diffusion khdt_x", G%HI, haloshift=2)
     call vchksum(khdt_y,"After tracer diffusion khdt_y", G%HI, haloshift=2)
     call uchksum(Coef_x,"After tracer diffusion Coef_x", G%HI, haloshift=2)
