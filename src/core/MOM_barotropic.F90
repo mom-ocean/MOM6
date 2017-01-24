@@ -2672,10 +2672,10 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
           if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) then
             ! Similar to Cx, but without eta term in Cg_u
             cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j)           ! CFL
-            eta(i+1,j) = 1.0/(1 + cfl) * (eta(i+1,j) + cfl*eta(i,j))
+            eta(i+1,j) = 1.0/(1 + cfl) * (eta(i,j) + cfl*eta(i-1,j))
           elseif (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W) then
             cfl = dtbt*BT_OBC%Cg_u(I,j)*G%IdxCu(I,j)               ! CFL
-            eta(i,j) = 1.0/(1 + cfl) * (eta(i,j) + cfl*eta(i+1,j))
+            eta(i,j) = 1.0/(1 + cfl) * (eta(i+1,j) + cfl*eta(i+2,j))
           endif
         endif
       endif
@@ -2710,10 +2710,10 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
           if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N) then
             ! Similar to Cy, but without eta term in Cg_v
             cfl = dtbt*BT_OBC%Cg_v(i,J)*G%IdyCv(i,J)               ! CFL
-            eta(i,j+1) = 1.0/(1 + cfl) * (eta(i,j+1) + cfl*eta(i,j))
+            eta(i,j+1) = 1.0/(1 + cfl) * (eta(i,j) + cfl*eta(i,j-1))
           elseif (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_S) then
             cfl = dtbt*BT_OBC%Cg_v(i,J)*G%IdyCv(i,J)               ! CFL
-            eta(i,j) = 1.0/(1 + cfl) * (eta(i,j) + cfl*eta(i,j+1))
+            eta(i,j) = 1.0/(1 + cfl) * (eta(i,j+1) + cfl*eta(i,j+2))
           endif
         endif
       endif
