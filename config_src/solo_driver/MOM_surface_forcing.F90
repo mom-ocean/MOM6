@@ -1777,9 +1777,9 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
                  "toward some specified surface state with a rate \n"//&
                  "given by FLUXCONST.", default= .false.)
   call get_param(param_file, mod, "LATENT_HEAT_FUSION", CS%latent_heat_fusion, &
-                 "The latent heat of fusion.", units="J/kg", default=real(hlf))
+                 "The latent heat of fusion.", units="J/kg", default=hlf)
   call get_param(param_file, mod, "LATENT_HEAT_VAPORIZATION", CS%latent_heat_vapor, &
-                 "The latent heat of fusion.", units="J/kg", default=real(hlv))
+                 "The latent heat of fusion.", units="J/kg", default=hlv)
   if (CS%restorebuoy) then
     call get_param(param_file, mod, "FLUXCONST", CS%Flux_const, &
                  "The constant that relates the restoring surface fluxes \n"//&

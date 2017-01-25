@@ -103,6 +103,10 @@ end type OBC_segment_type
 type, public :: ocean_OBC_type
   integer :: number_of_segments = 0                   !< The number of open-boundary segments.
   integer :: ke = 0                                   !< The number of model layers
+  logical :: open_u_BCs_exist_globally = .false.      !< True if any zonal velocity points
+                                                      !! in the global domain use open BCs.
+  logical :: open_v_BCs_exist_globally = .false.      !< True if any meridional velocity points
+                                                      !! in the global domain use open BCs.
   logical :: Flather_u_BCs_exist_globally = .false.   !< True if any zonal velocity points
                                                       !! in the global domain use Flather BCs.
   logical :: Flather_v_BCs_exist_globally = .false.   !< True if any meridional velocity points
@@ -172,7 +176,7 @@ type, public :: ocean_OBC_type
                    !! velocity (or speed of characteristics), in m s-1.  The
                    !! default value is 10 m s-1.
   logical :: OBC_pe !< Is there an open boundary on this tile?
-  character(len=200) :: OBC_values_config
+  character(len=200) :: OBC_user_config
   type(remapping_CS), pointer         :: remap_CS   ! ALE remapping control structure for segments only
 end type ocean_OBC_type
 
@@ -218,7 +222,7 @@ subroutine open_boundary_config(G, param_file, OBC)
   call get_param(param_file, mod, "OBC_VALUES_CONFIG", config2, &
                  "A string that sets how the open boundary values are \n"//&
                  " configured: \n", default="None", do_not_log=.true.)
-  call get_param(param_file, mod, "NZ", OBC%ke, &
+  call get_param(param_file, mod, "NK", OBC%ke, &
                  "The number of model layers", default=0, do_not_log=.true.)
 
   if (config1 .ne. "None" .or. config2 .ne. "None") OBC%user_BCs_set_globally = .true.
@@ -290,13 +294,13 @@ subroutine open_boundary_config(G, param_file, OBC)
   endif
 
   ! Safety check
-  if ((OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally) .and. &
+  if ((OBC%open_u_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally) .and. &
       .not.G%symmetric ) call MOM_error(FATAL, &
                  "MOM_open_boundary, open_boundary_config: "//&
                  "Symmetric memory must be used when using Flather OBCs.")
 
   if (.not.(OBC%specified_u_BCs_exist_globally .or. OBC%specified_v_BCs_exist_globally .or. &
-            OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally)) then
+            OBC%open_u_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally)) then
     ! No open boundaries have been requested
     call open_boundary_dealloc(OBC)
   endif
@@ -545,13 +549,16 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
       OBC%OBC_segment_number(l_seg)%values_needed = .true.
       OBC%update_OBC = .true.
       OBC%Flather_u_BCs_exist_globally = .true.
+      OBC%open_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'ORLANSKI') then
       OBC%OBC_segment_number(l_seg)%radiation = .true.
       OBC%Flather_u_BCs_exist_globally = .true.
+      OBC%open_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'OBLIQUE') then
       OBC%OBC_segment_number(l_seg)%radiation = .true.
       OBC%OBC_segment_number(l_seg)%oblique = .true.
       OBC%Flather_u_BCs_exist_globally = .true.
+      OBC%open_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'NUDGED') then
       OBC%OBC_segment_number(l_seg)%nudged = .true.
       OBC%OBC_segment_number(l_seg)%values_needed = .true.
@@ -561,6 +568,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
       OBC%nudged_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'GRADIENT') then
       OBC%OBC_segment_number(l_seg)%gradient = .true.
+      OBC%open_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'LEGACY') then
       this_kind = OBC_FLATHER
       OBC%OBC_segment_number(l_seg)%legacy = .true.
@@ -569,6 +577,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
       OBC%OBC_segment_number(l_seg)%gradient = .true.
       OBC%update_OBC = .true.
       OBC%Flather_u_BCs_exist_globally = .true.
+      OBC%open_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%OBC_segment_number(l_seg)%specified = .true.
       OBC%OBC_segment_number(l_seg)%values_needed = .true.
@@ -650,13 +659,16 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
       OBC%OBC_segment_number(l_seg)%values_needed = .true.
       OBC%update_OBC = .true.
       OBC%Flather_v_BCs_exist_globally = .true.
+      OBC%open_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'ORLANSKI') then
       OBC%OBC_segment_number(l_seg)%radiation = .true.
       OBC%Flather_v_BCs_exist_globally = .true.
+      OBC%open_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'OBLIQUE') then
       OBC%OBC_segment_number(l_seg)%radiation = .true.
       OBC%OBC_segment_number(l_seg)%oblique = .true.
       OBC%Flather_v_BCs_exist_globally = .true.
+      OBC%open_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'NUDGED') then
       OBC%OBC_segment_number(l_seg)%nudged = .true.
       OBC%OBC_segment_number(l_seg)%values_needed = .true.
@@ -666,6 +678,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
       OBC%nudged_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'GRADIENT') then
       OBC%OBC_segment_number(l_seg)%gradient = .true.
+      OBC%open_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'LEGACY') then
       this_kind = OBC_FLATHER
       OBC%OBC_segment_number(l_seg)%legacy = .true.
@@ -674,6 +687,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
       OBC%OBC_segment_number(l_seg)%Flather = .true.
       OBC%update_OBC = .true.
       OBC%Flather_v_BCs_exist_globally = .true.
+      OBC%open_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%OBC_segment_number(l_seg)%specified = .true.
       OBC%OBC_segment_number(l_seg)%values_needed = .true.
@@ -916,14 +930,17 @@ subroutine open_boundary_init(G, param_file, OBC)
 
 end subroutine open_boundary_init
 
-logical function open_boundary_query(OBC, apply_specified_OBC, apply_Flather_OBC, apply_nudged_OBC, needs_ext_seg_data)
+logical function open_boundary_query(OBC, apply_open_OBC, apply_specified_OBC, apply_Flather_OBC, apply_nudged_OBC, needs_ext_seg_data)
   type(ocean_OBC_type), pointer     :: OBC !< Open boundary control structure
+  logical, optional,    intent(in)  :: apply_open_OBC      !< If present, returns True if specified_*_BCs_exist_globally is true
   logical, optional,    intent(in)  :: apply_specified_OBC !< If present, returns True if specified_*_BCs_exist_globally is true
   logical, optional,    intent(in)  :: apply_Flather_OBC   !< If present, returns True if Flather_*_BCs_exist_globally is true
   logical, optional,    intent(in)  :: apply_nudged_OBC    !< If present, returns True if nudged_*_BCs_exist_globally is true
   logical, optional,    intent(in)  :: needs_ext_seg_data      !< If present, returns True if external segment data needed
   open_boundary_query = .false.
   if (.not. associated(OBC)) return
+  if (present(apply_open_OBC)) open_boundary_query = OBC%open_u_BCs_exist_globally .or. &
+                                                     OBC%open_v_BCs_exist_globally
   if (present(apply_specified_OBC)) open_boundary_query = OBC%specified_u_BCs_exist_globally .or. &
                                                           OBC%specified_v_BCs_exist_globally
   if (present(apply_Flather_OBC)) open_boundary_query = OBC%Flather_u_BCs_exist_globally .or. &
@@ -1106,24 +1123,23 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h_old !< Original h values
   real,                                      intent(in)    :: dt    !< Appropriate timestep
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G)) :: grad    
+  real, dimension(SZI_(G),SZJ_(G)) :: grad
   real :: dhdt, dhdx, dhdy, gamma_u, gamma_h, gamma_v
   real :: cff, Cx, Cy, tau
   real :: rx_max, ry_max ! coefficients for radiation
   real :: rx_new, rx_avg ! coefficients for radiation
-  real :: ry_new, ry_avg ! coefficients for radiation  
+  real :: ry_new, ry_avg ! coefficients for radiation
   real, parameter :: eps = 1.0e-20
   type(OBC_segment_type), pointer :: segment
   integer :: i, j, k, is, ie, js, je, nz, n
-  logical :: test_seg_loop  
+  logical :: test_seg_loop
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  
   if (.not.associated(OBC)) return
 
   test_seg_loop=.true.
-  
-  if (.not.(OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally)) &
+
+  if (.not.(OBC%open_u_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally)) &
     return
 
   gamma_u = OBC%gamma_uv ; gamma_v = OBC%gamma_uv ; gamma_h = OBC%gamma_h
@@ -1135,7 +1151,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
      if (.not. segment%on_pe) cycle
      if (segment%direction == OBC_DIRECTION_E) then
        I=segment%HI%IscB
-       do k=1,nz ;  do j=segment%HI%jsc,segment%HI%jec 
+       do k=1,nz ;  do j=segment%HI%jsc,segment%HI%jec
        if (segment%legacy) then
          dhdt = u_old(I-1,j,k)-u_new(I-1,j,k) !old-new
          dhdx = u_new(I-1,j,k)-u_new(I-2,j,k) !in new time backward sasha for I-1
@@ -1146,7 +1162,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
          u_new(I,j,k) = (u_old(I,j,k) + rx_avg*u_new(I-1,j,k)) / (1.0+rx_avg)
        elseif (segment%radiation) then
          grad(I,J) = u_old(I,min(j+1,segment%HI%jec),k) - u_old(I,j,k) ! no outside data
-                         ! This sets the shear to zero at the outermost q-point          
+                         ! This sets the shear to zero at the outermost q-point
          grad(I,J-1) = u_old(I,j,k) - u_old(I,max(j-1,segment%HI%jsc),k)
          grad(I-1,J) = u_old(I-1,min(j+1,segment%HI%jec),k) - u_old(I-1,j,k)
          grad(I-1,J-1) = u_old(I-1,j,k) - u_old(I-1,max(j-1,segment%HI%jsc),k)
@@ -1161,7 +1177,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
          endif
          Cx=min(dhdt/dhdx,rx_max) ! default to normal radiation
          Cy = 0
-         cff = max(dhdx*dhdx, eps)        
+         cff = max(dhdx*dhdx, eps)
          if (segment%oblique) then
            cff = max(dhdx*dhdx + dhdy*dhdy, eps)
            if (dhdy==0.) dhdy=eps ! avoid segv
@@ -1183,7 +1199,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
 
      if (segment%direction == OBC_DIRECTION_W) then
        I=segment%HI%IscB
-       do k=1,nz ;  do j=segment%HI%jsc,segment%HI%jec 
+       do k=1,nz ;  do j=segment%HI%jsc,segment%HI%jec
        if (segment%legacy) then
          dhdt = u_old(I+1,j,k)-u_new(I+1,j,k) !old-new
          dhdx = u_new(I+1,j,k)-u_new(I+2,j,k) !in new time forward sasha for I+1
@@ -1209,7 +1225,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
          endif
          Cx = min(dhdt/dhdx,rx_max) ! default to normal flow only
          Cy = 0.
-         cff = max(dhdx*dhdx, eps)        
+         cff = max(dhdx*dhdx, eps)
          if (segment%oblique) then
            cff = max(dhdx*dhdx + dhdy*dhdy, eps)
            if (dhdy==0.) dhdy=eps ! avoid segv
@@ -1226,12 +1242,12 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
          endif
          u_new(I,j,k) = u_new(I,j,k) + dt*tau*(OBC%u(I,j,k) - u_old(I,j,k))
       endif
-      enddo; enddo      
+      enddo; enddo
      endif
 
      if (segment%direction == OBC_DIRECTION_N) then
        J=segment%HI%JscB
-       do k=1,nz ;  do i=segment%HI%isc,segment%HI%iec      
+       do k=1,nz ;  do i=segment%HI%isc,segment%HI%iec
        if (segment%legacy) then
          dhdt = v_old(i,J-1,k)-v_new(i,J-1,k) !old-new
          dhdy = v_new(i,J-1,k)-v_new(i,J-2,k) !in new time backward sasha for J-1
@@ -1242,7 +1258,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
          v_new(i,J,k) = (v_old(i,J,k) + ry_avg*v_new(i,J-1,k)) / (1.0+ry_avg)
        elseif (segment%radiation) then
          grad(I,J) = v_old(min(i+1,segment%HI%iec),J,k) - v_old(i,J,k) ! no outside data
-                         ! This sets the shear to zero at the outermost q-point          
+                         ! This sets the shear to zero at the outermost q-point
          grad(I,J-1) = v_old(min(i+1,segment%HI%iec),J-1,k) - v_old(i,j-1,k)
          grad(I-1,J) = v_old(i,J,k) - v_old(max(i-1,segment%HI%isc),J,k)
          grad(I-1,J-1) = v_old(i,J-1,k) - v_old(max(i-1,segment%HI%isc),J-1,k)
@@ -1257,7 +1273,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
          endif
          Cy = min(dhdt/dhdy,rx_max) ! default to normal flow only
          Cx = 0
-         cff = max(dhdy*dhdy, eps)        
+         cff = max(dhdy*dhdy, eps)
          if (segment%oblique) then
            cff = max(dhdx*dhdx + dhdy*dhdy, eps)
            if (dhdx==0.) dhdx=eps ! avoid segv
@@ -1280,7 +1296,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
 
      if (segment%direction == OBC_DIRECTION_S) then
        J=segment%HI%JscB
-       do k=1,nz ;  do i=segment%HI%isc,segment%HI%iec      
+       do k=1,nz ;  do i=segment%HI%isc,segment%HI%iec
        if (segment%legacy) then
          dhdt = v_old(i,J+1,k)-v_new(i,J+1,k) !old-new
          dhdy = v_new(i,J+1,k)-v_new(i,J+2,k) !in new time backward sasha for J-1
@@ -1291,7 +1307,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
          v_new(i,J,k) = (v_old(i,J,k) + ry_avg*v_new(i,J+1,k)) / (1.0+ry_avg)
        elseif (segment%radiation) then
          grad(I,J) = v_old(min(i+1,segment%HI%iec),J,k) - v_old(i,J,k) ! no outside data
-                         ! This sets the shear to zero at the outermost q-point          
+                         ! This sets the shear to zero at the outermost q-point
          grad(I,J+1) = v_old(min(i+1,segment%HI%iec),J+1,k) - v_old(i,j+1,k)
          grad(I-1,J) = v_old(i,J,k) - v_old(max(i-1,segment%HI%isc),J,k)
          grad(I-1,J+1) = v_old(i,J+1,k) - v_old(max(i-1,segment%HI%isc),J+1,k)
@@ -1306,7 +1322,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
          endif
          Cy = min(dhdt/dhdy,rx_max) ! default to normal flow only
          Cx = 0
-         cff = max(dhdy*dhdy, eps)        
+         cff = max(dhdy*dhdy, eps)
          if (segment%oblique) then
            cff = max(dhdx*dhdx + dhdy*dhdy, eps)
            if (dhdx==0.) dhdx=eps ! avoid segv
@@ -1328,12 +1344,12 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
   enddo
 
   else
-  
+
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  
+
   do k=1,nz ;  do j=js,je ; do I=is-1,ie ; if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
-     
+
     if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) then
       if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%legacy) then
         dhdt = u_old(I-1,j,k)-u_new(I-1,j,k) !old-new
@@ -1366,14 +1382,14 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
         endif
         Cx = dhdt*dhdx
         Cy = 0
-        cff = max(dhdx*dhdx, eps)        
+        cff = max(dhdx*dhdx, eps)
         if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%oblique) then
            cff = max(dhdx*dhdx + dhdy*dhdy, eps)
            if (dhdx==0.) dhdx=eps ! avoid segv
            Cy = min(cff,max(dhdt*dhdy,-cff))
         endif
         u_new(I,j,k) = ((cff*u_old(I,j,k) + Cx*u_new(I-1,j,k)) - &
-          (max(Cy,0.0)*grad(I,J-1)  - min(Cy,0.0)*grad(I,J))) / (cff + Cx)
+          (max(Cy,0.0)*grad(I,J-1) - min(Cy,0.0)*grad(I,J))) / (cff + Cx)
       endif
       if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%radiation .and. &
           OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%nudged) then
@@ -2051,19 +2067,34 @@ subroutine allocate_OBC_segment_data(OBC, segment)
   IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
   JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
 
+    print *, 'Allocate_OBC_segment_data 1', IsdB, IedB, jsd, jed, segment%on_pe
   if (.not. segment%on_pe) return
+    print *, 'Allocate_OBC_segment_data 2', IsdB, IedB, jsd, jed
 
-  if (.not. ASSOCIATED(segment%Cg)) then ! finishing allocating storage for segments
-    allocate(segment%Cg(isd:ied,jsd:jed));                    segment%Cg(:,:)=0.
-    allocate(segment%Htot(isd:ied,jsd:jed));                  segment%Htot(:,:)=0.0
-    allocate(segment%h(isd:ied,jsd:jed,OBC%ke));              segment%h(:,:,:)=0.0
-    allocate(segment%normal_vel(isd:ied,jsd:jed,OBC%ke));     segment%normal_vel(:,:,:)=0.0
-    allocate(segment%normal_trans(isd:ied,jsd:jed,OBC%ke));   segment%normal_trans(:,:,:)=0.0
-    allocate(segment%normal_vel_bt(isd:ied,jsd:jed));         segment%normal_vel_bt(:,:)=0.0
-    allocate(segment%normal_trans_bt(isd:ied,jsd:jed));       segment%normal_trans_bt(:,:)=0.0
-    allocate(segment%tangent_vel(IsdB:IedB,JsdB:JedB,OBC%ke));segment%tangent_vel(:,:,:)=0.0
-    allocate(segment%tangent_vel_bt(IsdB:IedB,JsdB:JedB));    segment%tangent_vel_bt(:,:)=0.0
-    allocate(segment%eta(isd:ied,jsd:jed));                   segment%eta(:,:)=0.0
+  if (segment%direction == OBC_DIRECTION_E .or. segment%direction == OBC_DIRECTION_W) then
+    print *, 'Allocate_OBC_segment_data EW', IsdB, IedB, jsd, jed
+    allocate(segment%Cg(IsdB:IedB,jsd:jed));                    segment%Cg(:,:)=0.
+    allocate(segment%Htot(IsdB:IedB,jsd:jed));                  segment%Htot(:,:)=0.0
+    allocate(segment%h(IsdB:IedB,jsd:jed,OBC%ke));              segment%h(:,:,:)=0.0
+    allocate(segment%normal_vel(IsdB:IedB,jsd:jed,OBC%ke));     segment%normal_vel(:,:,:)=0.0
+    allocate(segment%normal_trans(IsdB:IedB,jsd:jed,OBC%ke));   segment%normal_trans(:,:,:)=0.0
+    allocate(segment%normal_vel_bt(IsdB:IedB,jsd:jed));         segment%normal_vel_bt(:,:)=0.0
+    allocate(segment%normal_trans_bt(IsdB:IedB,jsd:jed));       segment%normal_trans_bt(:,:)=0.0
+    allocate(segment%tangent_vel(IsdB:IedB,JsdB:JedB,OBC%ke));  segment%tangent_vel(:,:,:)=0.0
+    allocate(segment%tangent_vel_bt(IsdB:IedB,JsdB:JedB));      segment%tangent_vel_bt(:,:)=0.0
+    allocate(segment%eta(IsdB:IedB,jsd:jed));                   segment%eta(:,:)=0.0
+  else
+    print *, 'Allocate_OBC_segment_data NS', isd, ied, JsdB, JedB
+    allocate(segment%Cg(isd:ied,JsdB:JedB));                    segment%Cg(:,:)=0.
+    allocate(segment%Htot(isd:ied,JsdB:JedB));                  segment%Htot(:,:)=0.0
+    allocate(segment%h(isd:ied,JsdB:JedB,OBC%ke));              segment%h(:,:,:)=0.0
+    allocate(segment%normal_vel(isd:ied,JsdB:JedB,OBC%ke));     segment%normal_vel(:,:,:)=0.0
+    allocate(segment%normal_trans(isd:ied,JsdB:JedB,OBC%ke));   segment%normal_trans(:,:,:)=0.0
+    allocate(segment%normal_vel_bt(isd:ied,JsdB:JedB));         segment%normal_vel_bt(:,:)=0.0
+    allocate(segment%normal_trans_bt(isd:ied,JsdB:JedB));       segment%normal_trans_bt(:,:)=0.0
+    allocate(segment%tangent_vel(IsdB:IedB,JsdB:JedB,OBC%ke));  segment%tangent_vel(:,:,:)=0.0
+    allocate(segment%tangent_vel_bt(IsdB:IedB,JsdB:JedB));      segment%tangent_vel_bt(:,:)=0.0
+    allocate(segment%eta(isd:ied,JsdB:JedB));                   segment%eta(:,:)=0.0
   endif
 end subroutine allocate_OBC_segment_data
 
@@ -2091,7 +2122,7 @@ subroutine open_boundary_test_extern_uv(G, OBC, u, v)
           enddo
         else
           do I = OBC%OBC_segment_number(n)%HI%IsdB, OBC%OBC_segment_number(n)%HI%IedB
-            u(I,j-1,k) = silly_value
+            u(I,j,k) = silly_value
           enddo
         endif
       elseif (OBC%OBC_segment_number(n)%is_E_or_W) then
@@ -2102,7 +2133,7 @@ subroutine open_boundary_test_extern_uv(G, OBC, u, v)
           enddo
         else
           do J = OBC%OBC_segment_number(n)%HI%JsdB, OBC%OBC_segment_number(n)%HI%JedB
-            v(i-1,J,k) = silly_value
+            v(i,J,k) = silly_value
           enddo
         endif
       endif
