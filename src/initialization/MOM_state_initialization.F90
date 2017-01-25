@@ -31,7 +31,7 @@ use MOM_sponge, only : set_up_sponge_field, set_up_sponge_ML_density
 use MOM_sponge, only : initialize_sponge, sponge_CS
 use MOM_ALE_sponge, only : set_up_ALE_sponge_field, initialize_ALE_sponge
 use MOM_ALE_sponge, only : ALE_sponge_CS
-use MOM_string_functions, only : uppercase
+use MOM_string_functions, only : uppercase, lowercase
 use MOM_time_manager, only : time_type, set_time
 use MOM_tracer_registry, only : add_tracer_OBC_values, tracer_registry_type
 use MOM_variables, only : thermo_var_ptrs
@@ -445,16 +445,28 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   call open_boundary_init(G, PF, OBC)
 
   ! This is the legacy approach to turning on open boundaries
-  call get_param(PF, mod, "OBC_CONFIG", config, default="none", do_not_log=.true.)
+  call get_param(PF, mod, "OBC_USER_CONFIG", config, &
+                 "A string that sets how the user code is invoked to set open\n"//&
+                 " boundary data: \n"//&
+                 "   DOME - specified inflow on northern boundary\n"//&
+                 "   tidal_bay - Flather with tidal forcing on eastern boundary\n"//&
+                 "   supercritical - now only needed here for the allocations\n"//&
+                 "   USER - user specified", default="none")
+  if (trim(config) /= "none") OBC%OBC_user_config = trim(config)
   if (open_boundary_query(OBC, apply_specified_OBC=.true.)) then
     if (trim(config) == "DOME") then
       call DOME_set_OBC_data(OBC, tv, G, GV, PF, tracer_Reg)
       OBC%update_OBC = .false.
+    elseif (trim(config) == "tidal_bay") then
+    ! Shouldn't be getting here...
+    ! OBC%update_OBC = .true.
+    elseif (lowercase(trim(config)) == "supercritical") then
+      call supercritical_set_OBC_data(OBC, G, PF)
     elseif (trim(config) == "USER") then
       call user_set_OBC_data(OBC, tv, G, PF, tracer_Reg)
     elseif (.not. trim(config) == "none") then
       call MOM_error(FATAL, "The open boundary conditions specified by "//&
-              "OBC_CONFIG = "//trim(config)//" have not been fully implemented.")
+              "OBC_USER_CONFIG = "//trim(config)//" have not been fully implemented.")
     endif
   endif
   if (open_boundary_query(OBC, apply_Flather_OBC=.true.)) then
@@ -464,13 +476,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
 !   call set_3D_OBC_data(OBC, tv, h, G, PF, tracer_Reg)
 ! endif
   ! Still need a way to specify the boundary values
-  call get_param(PF, mod, "OBC_VALUES_CONFIG", config, default="none", do_not_log=.true.)
-  if (trim(config) == "tidal_bay") then
-    OBC%update_OBC = .true.
-    OBC%OBC_values_config = "tidal_bay"
-  elseif (trim(config) == "supercritical") then
-    call supercritical_set_OBC_data(OBC, G, PF)
-  endif
   if (debug.and.associated(OBC)) then
     call hchksum(G%mask2dT, 'MOM_initialize_state: mask2dT ', G%HI)
     call uchksum(G%mask2dCu, 'MOM_initialize_state: mask2dCu ', G%HI)

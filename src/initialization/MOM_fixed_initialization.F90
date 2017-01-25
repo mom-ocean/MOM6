@@ -82,20 +82,6 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
 
 ! Determine the position of any open boundaries
   call open_boundary_config(G, PF, OBC)
-  if (open_boundary_query(OBC, apply_specified_OBC=.true.)) then
-    call get_param(PF, mod, "OBC_CONFIG", config, &
-                 "A string that sets how the open boundary conditions are \n"//&
-                 " configured: \n", default="none")
-    select case ( trim(config) )
-      case ("none")
-      case ("DOME") ! Avoid FATAL when using segments
-      case ("tidal_bay") ; !Using segments now
-      case ("USER") ! Avoid FATAL when using segments
-      case default ; call MOM_error(FATAL, "MOM_initialize_fixed: "// &
-                       "The open boundary positions specified by OBC_CONFIG="//&
-                       trim(config)//" have not been fully implemented.")
-    end select
-  endif
 
   ! Make bathymetry consistent with open boundaries
   call open_boundary_impose_normal_slope(OBC, G, G%bathyT)
