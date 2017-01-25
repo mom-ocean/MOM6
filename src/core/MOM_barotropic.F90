@@ -2414,8 +2414,8 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%Flather) then
           cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j)           ! CFL
           u_inlet = cfl*ubt_old(I+1,j) + (1.0-cfl)*ubt_old(I,j)  ! Valid for cfl<1
-        !  h_in = 2.0*cfl*eta(i+1,j) + (1.0-2.0*cfl)*eta(i,j)    ! external
-          h_in = eta(i+1,j) + (0.5-cfl)*(eta(i+1,j)-eta(i+2,j))  ! internal
+!         h_in = 2.0*cfl*eta(i+1,j) + (1.0-2.0*cfl)*eta(i,j)     ! external
+          h_in = eta(i+1,j) + (0.5-cfl)*(eta(i+1,j)-eta(i+2,j))  ! external
 
           H_u = BT_OBC%H_u(I,j)
           vel_prev = ubt(I,j)
@@ -2647,7 +2647,8 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
   if ((OBC%Flather_u_BCs_exist_globally) .and. apply_u_OBCS) then
     do j=js,je ; do I=is-1,ie ; if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
       if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%Flather) then
-        if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%legacy) then
+! Flather is on for legacy. Dont turn it off when explicitly set without legacy turned on
+!        if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%legacy) then
           if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) then
             cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j)           ! CFL
             u_inlet = cfl*ubt(I-1,j) + (1.0-cfl)*ubt(I,j)          ! Valid for cfl <1
@@ -2667,17 +2668,17 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
             eta(i,j) = 2.0 * 0.5*((BT_OBC%eta_outer_u(I,j)+h_in) + &
                 (H_u/BT_OBC%Cg_u(I,j))*(BT_OBC%ubt_outer(I,j)-u_inlet)) - eta(i+1,j)
           endif
-        else
-          ! Chapman implicit from ROMS
-          if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) then
-            ! Similar to Cx, but without eta term in Cg_u
-            cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j)           ! CFL
-            eta(i+1,j) = 1.0/(1 + cfl) * (eta(i,j) + cfl*eta(i-1,j))
-          elseif (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W) then
-            cfl = dtbt*BT_OBC%Cg_u(I,j)*G%IdxCu(I,j)               ! CFL
-            eta(i,j) = 1.0/(1 + cfl) * (eta(i+1,j) + cfl*eta(i+2,j))
-          endif
-        endif
+!       else
+!         ! Chapman implicit from ROMS
+!         if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) then
+!           ! Similar to Cx, but without eta term in Cg_u
+!           cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j)           ! CFL
+!           eta(i+1,j) = 1.0/(1 + cfl) * (eta(i,j) + cfl*eta(i-1,j))
+!         elseif (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W) then
+!           cfl = dtbt*BT_OBC%Cg_u(I,j)*G%IdxCu(I,j)               ! CFL
+!           eta(i,j) = 1.0/(1 + cfl) * (eta(i+1,j) + cfl*eta(i+2,j))
+!         endif
+!       endif
       elseif (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%gradient) then
         if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) then
           eta(i+1,j) = eta(i,j)
@@ -2691,7 +2692,7 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
   if ((OBC%Flather_v_BCs_exist_globally) .and. apply_v_OBCs) then
     do J=js-1,je ; do i=is,ie ; if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
       if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%Flather) then
-        if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%legacy) then
+!        if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%legacy) then
           if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N) then
             cfl = dtbt*BT_OBC%Cg_v(i,J)*G%IdyCv(i,J)               ! CFL
             v_inlet = cfl*vbt(i,J-1) + (1.0-cfl)*vbt(i,J)          ! Valid for cfl <1
@@ -2711,17 +2712,17 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
             eta(i,j) = 2.0 * 0.5*((BT_OBC%eta_outer_v(i,J)+h_in) + &
                 (H_v/BT_OBC%Cg_v(i,J))*(BT_OBC%vbt_outer(i,J)-v_inlet)) - eta(i,j+1)
           endif
-        else
-          ! Chapman implicit from ROMS
-          if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N) then
-            ! Similar to Cy, but without eta term in Cg_v
-            cfl = dtbt*BT_OBC%Cg_v(i,J)*G%IdyCv(i,J)               ! CFL
-            eta(i,j+1) = 1.0/(1 + cfl) * (eta(i,j) + cfl*eta(i,j-1))
-          elseif (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_S) then
-            cfl = dtbt*BT_OBC%Cg_v(i,J)*G%IdyCv(i,J)               ! CFL
-            eta(i,j) = 1.0/(1 + cfl) * (eta(i,j+1) + cfl*eta(i,j+2))
-          endif
-        endif
+!       else
+!         ! Chapman implicit from ROMS
+!         if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N) then
+!           ! Similar to Cy, but without eta term in Cg_v
+!           cfl = dtbt*BT_OBC%Cg_v(i,J)*G%IdyCv(i,J)               ! CFL
+!           eta(i,j+1) = 1.0/(1 + cfl) * (eta(i,j) + cfl*eta(i,j-1))
+!         elseif (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_S) then
+!           cfl = dtbt*BT_OBC%Cg_v(i,J)*G%IdyCv(i,J)               ! CFL
+!           eta(i,j) = 1.0/(1 + cfl) * (eta(i,j+1) + cfl*eta(i,j+2))
+!         endif
+!       endif
       elseif (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%gradient) then
         if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N) then
           eta(i,j+1) = eta(i,j)
