@@ -1106,7 +1106,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h_old !< Original h values
   real,                                      intent(in)    :: dt    !< Appropriate timestep
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G)) :: grad
+  real, dimension(SZI_(G),SZJ_(G)) :: grad    
   real :: dhdt, dhdx, dhdy, gamma_u, gamma_h, gamma_v
   real :: cff, Cx, Cy, tau
   real :: rx_max, ry_max ! coefficients for radiation
@@ -1121,7 +1121,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
   
   if (.not.associated(OBC)) return
 
-  test_seg_loop=.false.
+  test_seg_loop=.true.
   
   if (.not.(OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally)) &
     return
@@ -1140,7 +1140,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
          dhdt = u_old(I-1,j,k)-u_new(I-1,j,k) !old-new
          dhdx = u_new(I-1,j,k)-u_new(I-2,j,k) !in new time backward sasha for I-1
          rx_new = 0.0
-         if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max)
+         if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max) ! outward phase speed
          rx_avg = (1.0-gamma_u)*OBC%rx_old_u(I,j,k) + gamma_u*rx_new
          OBC%rx_old_u(I,j,k) = rx_avg
          u_new(I,j,k) = (u_old(I,j,k) + rx_avg*u_new(I-1,j,k)) / (1.0+rx_avg)
@@ -1158,12 +1158,12 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
          else
            dhdy = grad(I-1,J)
          endif
-         Cx = dhdt*dhdx ! default to normal flow only
+         Cx=min(dhdt/dhdx,rx_max) ! default to normal radiation
          Cy = 0
          cff = max(dhdx*dhdx, eps)        
          if (segment%oblique) then
            cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-           Cy = min(cff,max(dhdt*dhdy,-cff))
+           Cy = min(cff,max(dhdt/dhdy,-cff))
          endif
          u_new(I,j,k) = ((cff*u_old(I,j,k) + Cx*u_new(I-1,j,k)) - &
           (max(Cy,0.0)*grad(I,J-1) - min(Cy,0.0)*grad(I,J))) / (cff + Cx)
@@ -1177,7 +1177,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
          u_new(I,j,k) = u_new(I,j,k) + dt*tau*(OBC%u(I,j,k) - u_old(I,j,k))
        endif
        enddo; enddo
-     endif
+    endif
 
      if (segment%direction == OBC_DIRECTION_W) then
        I=segment%HI%IscB
@@ -1204,12 +1204,12 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
          else
            dhdy = grad(I+1,J)
          endif
-         Cx = dhdt*dhdx ! default to normal flow only
-         Cy = 0
+         Cx = min(dhdt/dhdx,rx_max) ! default to normal flow only
+         Cy = 0.
          cff = max(dhdx*dhdx, eps)        
          if (segment%oblique) then
            cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-           Cy = min(cff,max(dhdt*dhdy,-cff))
+           Cy = min(cff,max(dhdt/dhdy,-cff))
          endif
          u_new(I,j,k) = ((cff*u_old(I,j,k) + Cx*u_new(I+1,j,k)) - &
           (max(Cy,0.0)*grad(I,J-1) - min(Cy,0.0)*grad(I,J))) / (cff + Cx)
@@ -1242,20 +1242,20 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
          grad(I,J-1) = v_old(min(i+1,segment%HI%iec),J-1,k) - v_old(i,j-1,k)
          grad(I-1,J) = v_old(i,J,k) - v_old(max(i-1,segment%HI%isc),J,k)
          grad(I-1,J-1) = v_old(i,J-1,k) - v_old(max(i-1,segment%HI%isc),J-1,k)
-         dhdt = v_old(i,J-1,k)-u_new(i,J-1,k) !old-new
-         dhdy = v_new(i,J-1,k)-v_new(i,J-1,k) !in new time backward sasha for J-1
-         if (dhdt*dhdy <= 0.0) dhdt = 0.0
+         dhdt = v_old(i,J-1,k)-v_new(i,J-1,k) !old-new
+         dhdy = v_new(i,J-1,k)-v_new(i,J-2,k) !in new time backward sasha for J-1
+         if (dhdt*dhdy < 0.0) dhdt = 0.0
          if (dhdt*(grad(I,J-1) + grad(I-1,J-1)) > 0.0) then
            dhdx = grad(I+1,J-1)
          else
            dhdx = grad(I,J-1)
          endif
-         Cy = dhdy*dhdy ! default to normal flow only
+         Cy = min(dhdt/dhdy,rx_max) ! default to normal flow only
          Cx = 0
          cff = max(dhdy*dhdy, eps)        
          if (segment%oblique) then
            cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-           Cx = min(cff,max(dhdt*dhdx,-cff))
+           Cx = min(cff,max(dhdt/dhdx,-cff))
          endif
          v_new(i,J,k) = ((cff*v_old(i,J,k) + Cy*v_new(i,J-1,k)) - &
           (max(Cx,0.0)*grad(I+1,J) - min(Cx,0.0)*grad(I,J))) / (cff + Cy)
@@ -1289,20 +1289,20 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
          grad(I,J+1) = v_old(min(i+1,segment%HI%iec),J+1,k) - v_old(i,j+1,k)
          grad(I-1,J) = v_old(i,J,k) - v_old(max(i-1,segment%HI%isc),J,k)
          grad(I-1,J+1) = v_old(i,J+1,k) - v_old(max(i-1,segment%HI%isc),J+1,k)
-         dhdt = v_old(i,J+1,k)-u_new(i,J+1,k) !old-new
-         dhdy = v_new(i,J+1,k)-v_new(i,J+1,k) !in new time backward sasha for J-1
+         dhdt = v_old(i,J+1,k)-v_new(i,J+1,k) !old-new
+         dhdy = v_new(i,J+1,k)-v_new(i,J+2,k) !in new time backward sasha for J-1
          if (dhdt*dhdy <= 0.0) dhdt = 0.0
          if (dhdt*(grad(I,J+1) + grad(I-1,J+1)) > 0.0) then
            dhdx = grad(I+1,J+1)
          else
            dhdx = grad(I,J+1)
          endif
-         Cy = dhdy*dhdy ! default to normal flow only
+         Cy = min(dhdt/dhdy,rx_max) ! default to normal flow only
          Cx = 0
          cff = max(dhdy*dhdy, eps)        
          if (segment%oblique) then
            cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-           Cx = min(cff,max(dhdt*dhdx,-cff))
+           Cx = min(cff,max(dhdt/dhdx,-cff))
          endif
          v_new(i,J,k) = ((cff*v_old(i,J,k) + Cy*v_new(i,J+1,k)) - &
           (max(Cx,0.0)*grad(I+1,J) - min(Cx,0.0)*grad(I,J))) / (cff + Cy)
@@ -1634,6 +1634,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
     endif
   endif ; enddo ; enddo ; enddo
 endif
+
 
   call cpu_clock_begin(id_clock_pass)
   call pass_vector(u_new, v_new, G%Domain)
@@ -2081,7 +2082,7 @@ subroutine open_boundary_test_extern_uv(G, OBC, u, v)
           enddo
         else
           do I = OBC%OBC_segment_number(n)%HI%IsdB, OBC%OBC_segment_number(n)%HI%IedB
-            u(I,j,k) = silly_value
+            u(I,j-1,k) = silly_value
           enddo
         endif
       elseif (OBC%OBC_segment_number(n)%is_E_or_W) then
@@ -2092,7 +2093,7 @@ subroutine open_boundary_test_extern_uv(G, OBC, u, v)
           enddo
         else
           do J = OBC%OBC_segment_number(n)%HI%JsdB, OBC%OBC_segment_number(n)%HI%JedB
-            v(i,J,k) = silly_value
+            v(i-1,J,k) = silly_value
           enddo
         endif
       endif
