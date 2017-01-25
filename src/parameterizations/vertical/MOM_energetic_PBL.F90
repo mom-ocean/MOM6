@@ -1746,7 +1746,7 @@ end subroutine energetic_PBL_get_MLD
 !> Computes wind speed from ustar_air based on COARE 3.5 Cd relationship
 subroutine ust_2_u10_coare3p5(USTair,U10,GV)
   real, intent(in)  :: USTair
-  type(verticalGrid_type), intent(in) :: GV  
+  type(verticalGrid_type), intent(in) :: GV
   real, intent(out) :: U10
   real, parameter :: vonkar = 0.4
   real, parameter :: nu=1e-6
@@ -1807,7 +1807,7 @@ subroutine get_LA_windsea(ustar, hbl, GV, LA)
        ! boundary layer depth (m)
        hbl
   type(verticalGrid_type), intent(in) :: GV
-  real, intent(out) :: LA 
+  real, intent(out) :: LA
 ! Local variables
   ! parameters
   real, parameter :: &
@@ -1823,7 +1823,7 @@ subroutine get_LA_windsea(ustar, hbl, GV, LA)
   real :: us, hm0, fm, fp, vstokes, kphil, kstar
   real :: z0, z0i, r1, r2, r3, r4, tmp, us_sl, lasl_sqr_i
   real :: pi, u10
-  pi = 4.0*atan(1.0) 
+  pi = 4.0*atan(1.0)
   ! Computing u10 based on u_star and COARE 3.5 relationships
   call ust_2_u10_coare3p5(ustar*sqrt(GV%Rho0/1.225),U10,GV)
   if (u10 .gt. 0.0 .and. ustar .gt. 0.0) then
