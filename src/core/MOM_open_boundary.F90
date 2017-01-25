@@ -1153,6 +1153,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
          dhdt = u_old(I-1,j,k)-u_new(I-1,j,k) !old-new
          dhdx = u_new(I-1,j,k)-u_new(I-2,j,k) !in new time backward sasha for I-1
          if (dhdt*dhdx < 0.0) dhdt = 0.0
+         if (dhdx == 0.0) dhdx=eps ! avoid segv
          if (dhdt*(grad(I-1,J) + grad(I-1,J-1)) > 0.0) then
            dhdy = grad(I-1,J-1)
          else
@@ -1163,6 +1164,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
          cff = max(dhdx*dhdx, eps)        
          if (segment%oblique) then
            cff = max(dhdx*dhdx + dhdy*dhdy, eps)
+           if (dhdy==0.) dhdy=eps ! avoid segv
            Cy = min(cff,max(dhdt/dhdy,-cff))
          endif
          u_new(I,j,k) = ((cff*u_old(I,j,k) + Cx*u_new(I-1,j,k)) - &
@@ -1199,6 +1201,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
          dhdt = u_old(I+1,j,k)-u_new(I+1,j,k) !old-new
          dhdx = u_new(I+1,j,k)-u_new(I+2,j,k) !in new time forward sasha for I+1
          if (dhdt*dhdx < 0.0) dhdt = 0.0
+         if (dhdx == 0.0) dhdx=eps ! avoid segv
          if (dhdt*(grad(I+1,J) + grad(I+1,J-1)) > 0.0) then
            dhdy = grad(I+1,J-1)
          else
@@ -1209,6 +1212,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
          cff = max(dhdx*dhdx, eps)        
          if (segment%oblique) then
            cff = max(dhdx*dhdx + dhdy*dhdy, eps)
+           if (dhdy==0.) dhdy=eps ! avoid segv
            Cy = min(cff,max(dhdt/dhdy,-cff))
          endif
          u_new(I,j,k) = ((cff*u_old(I,j,k) + Cx*u_new(I+1,j,k)) - &
@@ -1245,6 +1249,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
          dhdt = v_old(i,J-1,k)-v_new(i,J-1,k) !old-new
          dhdy = v_new(i,J-1,k)-v_new(i,J-2,k) !in new time backward sasha for J-1
          if (dhdt*dhdy < 0.0) dhdt = 0.0
+         if (dhdy == 0.0) dhdy=eps ! avoid segv
          if (dhdt*(grad(I,J-1) + grad(I-1,J-1)) > 0.0) then
            dhdx = grad(I+1,J-1)
          else
@@ -1255,6 +1260,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
          cff = max(dhdy*dhdy, eps)        
          if (segment%oblique) then
            cff = max(dhdx*dhdx + dhdy*dhdy, eps)
+           if (dhdx==0.) dhdx=eps ! avoid segv
            Cx = min(cff,max(dhdt/dhdx,-cff))
          endif
          v_new(i,J,k) = ((cff*v_old(i,J,k) + Cy*v_new(i,J-1,k)) - &
@@ -1292,6 +1298,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
          dhdt = v_old(i,J+1,k)-v_new(i,J+1,k) !old-new
          dhdy = v_new(i,J+1,k)-v_new(i,J+2,k) !in new time backward sasha for J-1
          if (dhdt*dhdy <= 0.0) dhdt = 0.0
+         if (dhdy == 0.0) dhdy=eps ! avoid segv
          if (dhdt*(grad(I,J+1) + grad(I-1,J+1)) > 0.0) then
            dhdx = grad(I+1,J+1)
          else
@@ -1302,6 +1309,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
          cff = max(dhdy*dhdy, eps)        
          if (segment%oblique) then
            cff = max(dhdx*dhdx + dhdy*dhdy, eps)
+           if (dhdx==0.) dhdx=eps ! avoid segv
            Cx = min(cff,max(dhdt/dhdx,-cff))
          endif
          v_new(i,J,k) = ((cff*v_old(i,J,k) + Cy*v_new(i,J+1,k)) - &
@@ -1361,6 +1369,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
         cff = max(dhdx*dhdx, eps)        
         if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%oblique) then
            cff = max(dhdx*dhdx + dhdy*dhdy, eps)
+           if (dhdx==0.) dhdx=eps ! avoid segv
            Cy = min(cff,max(dhdt*dhdy,-cff))
         endif
         u_new(I,j,k) = ((cff*u_old(I,j,k) + Cx*u_new(I-1,j,k)) - &
