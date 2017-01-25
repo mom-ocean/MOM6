@@ -469,7 +469,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
               "OBC_USER_CONFIG = "//trim(config)//" have not been fully implemented.")
     endif
   endif
-  if (open_boundary_query(OBC, apply_Flather_OBC=.true.)) then
+  if (open_boundary_query(OBC, apply_open_OBC=.true.)) then
     call set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
   endif
 ! if (open_boundary_query(OBC, apply_nudged_OBC=.true.)) then

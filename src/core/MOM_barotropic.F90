@@ -2678,6 +2678,12 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
             eta(i,j) = 1.0/(1 + cfl) * (eta(i+1,j) + cfl*eta(i+2,j))
           endif
         endif
+      elseif (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%gradient) then
+        if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) then
+          eta(i+1,j) = eta(i,j)
+        elseif (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W) then
+          eta(i,j) = eta(i+1,j)
+        endif
       endif
     endif ; enddo ; enddo
   endif
@@ -2715,6 +2721,12 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
             cfl = dtbt*BT_OBC%Cg_v(i,J)*G%IdyCv(i,J)               ! CFL
             eta(i,j) = 1.0/(1 + cfl) * (eta(i,j+1) + cfl*eta(i,j+2))
           endif
+        endif
+      elseif (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%gradient) then
+        if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N) then
+          eta(i,j+1) = eta(i,j)
+        elseif (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_S) then
+          eta(i,j) = eta(i,j+1)
         endif
       endif
     endif ; enddo ; enddo

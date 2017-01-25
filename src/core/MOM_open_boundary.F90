@@ -1508,38 +1508,40 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
     call log_param(PF, mod, "INPUTDIR/OBC_FILE", filename)
   endif
 
-  if (.not.associated(OBC%vbt_outer)) then
-    allocate(OBC%vbt_outer(isd:ied,JsdB:JedB)) ; OBC%vbt_outer(:,:) = 0.0
-  endif
+  if (open_boundary_query(OBC, apply_Flather_OBC=.true.)) then
+    if (.not.associated(OBC%vbt_outer)) then
+      allocate(OBC%vbt_outer(isd:ied,JsdB:JedB)) ; OBC%vbt_outer(:,:) = 0.0
+    endif
 
-  if (.not.associated(OBC%ubt_outer)) then
-    allocate(OBC%ubt_outer(IsdB:IedB,jsd:jed)) ; OBC%ubt_outer(:,:) = 0.0
-  endif
+    if (.not.associated(OBC%ubt_outer)) then
+      allocate(OBC%ubt_outer(IsdB:IedB,jsd:jed)) ; OBC%ubt_outer(:,:) = 0.0
+    endif
 
-  if (.not.associated(OBC%eta_outer_u)) then
-    allocate(OBC%eta_outer_u(IsdB:IedB,jsd:jed)) ; OBC%eta_outer_u(:,:) = 0.0
-  endif
+    if (.not.associated(OBC%eta_outer_u)) then
+      allocate(OBC%eta_outer_u(IsdB:IedB,jsd:jed)) ; OBC%eta_outer_u(:,:) = 0.0
+    endif
 
-  if (.not.associated(OBC%eta_outer_v)) then
-    allocate(OBC%eta_outer_v(isd:ied,JsdB:JedB)) ; OBC%eta_outer_v(:,:) = 0.0
-  endif
+    if (.not.associated(OBC%eta_outer_v)) then
+      allocate(OBC%eta_outer_v(isd:ied,JsdB:JedB)) ; OBC%eta_outer_v(:,:) = 0.0
+    endif
 
-  if (read_OBC_uv) then
-    call read_data(filename, 'ubt', OBC%ubt_outer, &
-                   domain=G%Domain%mpp_domain, position=EAST_FACE)
-    call read_data(filename, 'vbt', OBC%vbt_outer, &
-                   domain=G%Domain%mpp_domain, position=NORTH_FACE)
-  endif
+    if (read_OBC_uv) then
+      call read_data(filename, 'ubt', OBC%ubt_outer, &
+                     domain=G%Domain%mpp_domain, position=EAST_FACE)
+      call read_data(filename, 'vbt', OBC%vbt_outer, &
+                     domain=G%Domain%mpp_domain, position=NORTH_FACE)
+    endif
 
-  if (read_OBC_eta) then
-    call read_data(filename, 'eta_outer_u', OBC%eta_outer_u, &
-                   domain=G%Domain%mpp_domain, position=EAST_FACE)
-    call read_data(filename, 'eta_outer_v', OBC%eta_outer_v, &
-                   domain=G%Domain%mpp_domain, position=NORTH_FACE)
-  endif
+    if (read_OBC_eta) then
+      call read_data(filename, 'eta_outer_u', OBC%eta_outer_u, &
+                     domain=G%Domain%mpp_domain, position=EAST_FACE)
+      call read_data(filename, 'eta_outer_v', OBC%eta_outer_v, &
+                     domain=G%Domain%mpp_domain, position=NORTH_FACE)
+    endif
 
-  call pass_vector(OBC%eta_outer_u,OBC%eta_outer_v,G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
-  call pass_vector(OBC%ubt_outer,OBC%vbt_outer,G%Domain)
+    call pass_vector(OBC%eta_outer_u,OBC%eta_outer_v,G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
+    call pass_vector(OBC%ubt_outer,OBC%vbt_outer,G%Domain)
+  endif
 
   ! Define radiation coefficients r[xy]_old_[uvh] as needed.  For now, there are
   ! no radiation conditions applied to the thicknesses, since the thicknesses
