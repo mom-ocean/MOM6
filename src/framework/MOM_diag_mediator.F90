@@ -61,9 +61,7 @@ use diag_manager_mod, only : DIAG_FIELD_NOT_FOUND
 implicit none ; private
 
 #define __DO_SAFETY_CHECKS__
-#define RANGE_I(a) lbound(a, 1),ubound(a, 1)
-#define RANGE_J(a) lbound(a, 2),ubound(a, 2)
-#define RANGE_K(a) lbound(a, 3),ubound(a, 3)
+#define IMPLIES(A, B) ((.not. (A)) .or. (B))
 
 public set_axes_info, post_data, register_diag_field, time_type
 public post_data_1d_k
@@ -931,24 +929,43 @@ subroutine post_xy_average(diag_cs, diag, field)
   real,    target,   intent(in) :: field(:,:,:) !< Diagnostic field
   type(diag_ctrl),   intent(in) :: diag_cs !< Diagnostics mediator control structure
   ! Local variable
-  integer :: nk, i, j, k
   real, dimension(size(field,3)) :: averaged_field
   logical :: staggered_in_x, staggered_in_y, used
+  integer :: nz, remap_nz, coord
 
-  if (.not.diag%axes%is_h_point) then
-    call MOM_error(FATAL, 'post_xy_average: Horizontally averaged diagnostic not implemented yet.')
+  if (.not. diag_cs%ave_enabled) then
+    return
   endif
 
   staggered_in_x = diag%axes%is_u_point .or. diag%axes%is_q_point
   staggered_in_y = diag%axes%is_v_point .or. diag%axes%is_q_point
-  if (diag_cs%ave_enabled) then
-    call horizontally_average_diag_field(diag_cs%diag_remap_cs(diag%axes%vertical_coordinate_number), &
-                                         diag_cs%G, staggered_in_x, staggered_in_y, &
+
+  if (diag%axes%is_native) then
+    call horizontally_average_diag_field(diag_cs%G, diag_cs%h, &
+                                         staggered_in_x, staggered_in_y, &
                                          diag%axes%is_layer, diag%v_extensive, &
                                          diag_cs%missing_value, field, averaged_field)
-    used = send_data(diag%fms_xyave_diag_id, averaged_field, diag_cs%time_end, weight=diag_cs%time_int)
+  else
+    nz = size(field, 3)
+    coord = diag%axes%vertical_coordinate_number
+    remap_nz = diag_cs%diag_remap_cs(coord)%nz
+
+    call assert(diag_cs%diag_remap_cs(coord)%initialized, &
+                'post_xy_average: remap_cs not initialized.')
+
+    call assert(IMPLIES(diag%axes%is_layer, nz == remap_nz), &
+              'post_xy_average: layer field dimension mismatch.')
+    call assert(IMPLIES(.not. diag%axes%is_layer, nz == remap_nz+1), &
+              'post_xy_average: interface field dimension mismatch.')
+
+    call horizontally_average_diag_field(diag_cs%G, diag_cs%diag_remap_cs(coord)%h, &
+                                         staggered_in_x, staggered_in_y, &
+                                         diag%axes%is_layer, diag%v_extensive, &
+                                         diag_cs%missing_value, field, averaged_field)
   endif
 
+  used = send_data(diag%fms_xyave_diag_id, averaged_field, diag_cs%time_end, &
+                   weight=diag_cs%time_int)
 end subroutine post_xy_average
 
 subroutine enable_averaging(time_int_in, time_end_in, diag_cs)

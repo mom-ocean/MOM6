@@ -38,7 +38,7 @@ use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : setVerticalGridAxes, verticalGrid_type
 use MOM_ALE, only : pressure_gradient_plm
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
-use MOM_EOS, only : int_specific_vol_dp
+use MOM_EOS, only : int_specific_vol_dp, convert_temp_salt_for_TEOS10
 use user_initialization, only : user_initialize_thickness, user_initialize_velocity
 use user_initialization, only : user_init_temperature_salinity
 use user_initialization, only : user_set_OBC_data
@@ -532,7 +532,7 @@ subroutine initialize_thickness_from_file(h, G, GV, param_file, file_has_thickne
 
     call read_data(filename,"eta",eta(:,:,:),domain=G%Domain%mpp_domain)
 
-    if (correct_thickness) then 
+    if (correct_thickness) then
       call adjustEtaToFitBathymetry(G, GV, eta, h)
     else
       do k=nz,1,-1 ; do j=js,je ; do i=is,ie
@@ -819,7 +819,7 @@ subroutine depress_surface(h, G, GV, param_file, tv)
 
   ! Convert thicknesses to interface heights.
   call find_eta(h, tv, GV%g_Earth, G, GV, eta)
-  
+
   do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
 !    if (eta_sfc(i,j) < eta(i,j,nz+1)) then
       ! Issue a warning?
@@ -1351,13 +1351,13 @@ subroutine initialize_temp_salt_linear(T, S, G, param_file)
   ! reference surface layer salinity and temperature and a specified range.
   ! Note that the linear distribution is set up with respect to the layer
   ! number, not the physical position).
-  integer :: k;                             
+  integer :: k;
   real  :: delta_S, delta_T
   real  :: S_top, T_top ! Reference salinity and temerature within surface layer
   real  :: S_range, T_range ! Range of salinities and temperatures over the vertical
   real  :: delta
   character(len=40)  :: mod = "initialize_temp_salt_linear" ! This subroutine's name.
-  
+
   call callTree_enter(trim(mod)//"(), MOM_state_initialization.F90")
   call get_param(param_file, mod, "T_TOP", T_top, &
                  "Initial temperature of the top surface.", &
@@ -1371,27 +1371,27 @@ subroutine initialize_temp_salt_linear(T, S, G, param_file)
   call get_param(param_file, mod, "S_RANGE", S_range, &
                  "Initial salinity difference (top-bottom).", &
                  units="PSU", fail_if_missing=.true.)
-  
+
 ! ! Prescribe salinity
 ! delta_S = S_range / ( G%ke - 1.0 );
 ! S(:,:,1) = S_top;
 ! do k = 2,G%ke
 !   S(:,:,k) = S(:,:,k-1) + delta_S;
-! end do  
+! end do
   do k = 1,G%ke
     S(:,:,k) = S_top - S_range*((real(k)-0.5)/real(G%ke))
     T(:,:,k) = T_top - T_range*((real(k)-0.5)/real(G%ke))
-  end do  
-  
+  end do
+
 ! ! Prescribe temperature
 ! delta_T = T_range / ( G%ke - 1.0 );
 ! T(:,:,1) = T_top;
 ! do k = 2,G%ke
 !   T(:,:,k) = T(:,:,k-1) + delta_T;
-! end do  
+! end do
 ! delta = 1;
 ! T(:,:,G%ke/2 - (delta-1):G%ke/2 + delta) = 1.0;
-  
+
   call callTree_leave(trim(mod)//'()')
 end subroutine initialize_temp_salt_linear
 ! -----------------------------------------------------------------------------
@@ -1562,7 +1562,7 @@ subroutine compute_global_grid_integrals(G)
     G%areaT_global = G%areaT_global + ( G%areaT(i,j) * G%mask2dT(i,j) )
   enddo ; enddo
   call sum_across_PEs( G%areaT_global )
-  G%IareaT_global = 1. / G%areaT_global 
+  G%IareaT_global = 1. / G%areaT_global
 end subroutine compute_global_grid_integrals
 
 ! -----------------------------------------------------------------------------
@@ -1593,7 +1593,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
 ! This subroutine was written by M. Harrison, with input from R. Hallberg.
 ! and A. Adcroft.
 !
-! Arguments: 
+! Arguments:
 !  (out)     h  - Layer thickness, in m.
 !  (out)     tv - A structure containing pointers to any available
 !                 thermodynamic fields, including potential temperature and
@@ -1605,7 +1605,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
 !  (in)      dirs    - A structure containing several relevant directory paths.
 
   type(ocean_grid_type),                 intent(inout) :: G
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)   :: h    
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)   :: h
   type(thermo_var_ptrs),                 intent(inout) :: tv
   type(verticalGrid_type),               intent(in)    :: GV
   type(param_file_type),                 intent(in)    :: PF
@@ -1637,7 +1637,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
   real, dimension(:,:), pointer :: shelf_area
   real    :: min_depth
   real    :: dilate
-  real    :: missing_value_temp, missing_value_salt    
+  real    :: missing_value_temp, missing_value_salt
   logical :: new_sim
   logical :: correct_thickness
   character(len=40) :: potemp_var, salin_var
@@ -1663,7 +1663,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
   ! Local variables for ALE remapping
   real, dimension(:), allocatable :: hTarget
   real, dimension(:,:), allocatable :: area_shelf_h
-  real, dimension(:,:), allocatable, target  :: frac_shelf_h  
+  real, dimension(:,:), allocatable, target  :: frac_shelf_h
   real, dimension(:,:,:), allocatable :: tmpT1dIn, tmpS1dIn, h1, tmp_mask_in
   real :: zTopOfCell, zBottomOfCell
   type(regridding_CS) :: regridCS ! Regridding parameters and work arrays
@@ -1695,7 +1695,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
        (LEN_TRIM(dirs%input_filename) == 1)) new_sim = .true.
 
   inputdir = "." ;  call get_param(PF, mod, "INPUTDIR", inputdir)
-  inputdir = slasher(inputdir)    
+  inputdir = slasher(inputdir)
 
   eos => tv%eqn_of_state
 
@@ -1706,7 +1706,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
   call get_param(PF, mod, "MINIMUM_DEPTH", min_depth, default=0.0)
 
   call get_param(PF, mod, "NKML",nkml,default=0)
-  call get_param(PF, mod, "NKBL",nkbl,default=0)    
+  call get_param(PF, mod, "NKBL",nkbl,default=0)
 
   call get_param(PF, mod, "TEMP_SALT_Z_INIT_FILE",filename, &
                  "The name of the z-space input file used to initialize \n"//&
@@ -1754,7 +1754,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
 !   The first record will be read if there are multiple time levels.
 !   The observation grid MUST tile the model grid. If the model grid extends
 !   to the North/South Pole past the limits of the input data, they are extrapolated using the average
-!   value at the northernmost/southernmost latitude.      
+!   value at the northernmost/southernmost latitude.
 
 
   call horiz_interp_and_extrap_tracer(filename, potemp_var,1.0,1, &
@@ -1770,6 +1770,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
   allocate(frac_shelf_h(isd:ied,jsd:jed))
 
   press(:)=tv%p_ref
+
+  !Convert T&S to Absolute Salinity and Conservative Temperature if using TEOS10 or NEMO
+  call convert_temp_salt_for_TEOS10(temp_z,salt_z, press, G, kd, mask_z, eos)
 
   do k=1, kd
     do j=js,je
@@ -1799,7 +1802,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
      call read_data(filename,trim(area_varname),area_shelf_h,domain=G%Domain%mpp_domain)
 
      ! initialize frac_shelf_h with zeros (open water everywhere)
-     frac_shelf_h(:,:) = 0.0 
+     frac_shelf_h(:,:) = 0.0
      ! compute fractional ice shelf coverage of h
      do j=jsd,jed ; do i=isd,ied
          if (G%areaT(i,j) > 0.0) &
@@ -1810,7 +1813,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
 
   endif
 
-! Done with horizontal interpolation.    
+! Done with horizontal interpolation.
 ! Now remap to model coordinates
   if (useALEremapping) then
     call cpu_clock_begin(id_clock_ALE)
@@ -1834,7 +1837,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
             tmpT1dIn(i,j,k) = temp_z(i,j,k)
             tmpS1dIn(i,j,k) = salt_z(i,j,k)
           elseif (k>1) then
-            zBottomOfCell = -G%bathyT(i,j) 
+            zBottomOfCell = -G%bathyT(i,j)
             tmpT1dIn(i,j,k) = tmpT1dIn(i,j,k-1)
             tmpS1dIn(i,j,k) = tmpS1dIn(i,j,k-1)
           else ! This next block should only ever be reached over land

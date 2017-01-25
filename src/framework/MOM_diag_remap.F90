@@ -1,7 +1,7 @@
 !> This module is used for runtime remapping of diagnostics to z star, sigma and
 !! rho vertical coordinates. It defines the diag_remap_ctrl type which
 !! represents a remapping of diagnostics to a particular vertical coordinate.
-!! The module is It is used by the diag mediator module in the following way:
+!! The module is used by the diag mediator module in the following way:
 !! 1) _init() is called to initialise a diag_remap_ctrl instance.
 !! 2) _configure_axes() is called to read the configuration file and set up the
 !!    vertical coordinate / axes definitions.
@@ -511,11 +511,11 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
 end subroutine vertically_interpolate_diag_field
 
 !> Horizontally average field
-subroutine horizontally_average_diag_field(remap_cs, G, staggered_in_x, staggered_in_y, &
+subroutine horizontally_average_diag_field(G, h, staggered_in_x, staggered_in_y, &
                                            is_layer, is_extensive, &
                                            missing_value, field, averaged_field)
-  type(diag_remap_ctrl),  intent(in) :: remap_cs !< Diagnostic coodinate control structure
   type(ocean_grid_type),  intent(in) :: G !< Ocean grid structure
+  real, dimension(:,:,:), intent(in) :: h !< The current thicknesses
   logical,                intent(in) :: staggered_in_x !< True if the x-axis location is at u or q points
   logical,                intent(in) :: staggered_in_y !< True if the y-axis location is at v or q points
   logical,                intent(in) :: is_layer !< True if the z-axis location is at h points
@@ -524,27 +524,16 @@ subroutine horizontally_average_diag_field(remap_cs, G, staggered_in_x, staggere
   real, dimension(:,:,:), intent(in) :: field !<  The diagnostic field to be remapped
   real, dimension(:),  intent(inout) :: averaged_field !< Field argument horizontally averaged
   ! Local variables
-  real, dimension(remap_cs%nz+1) :: vol_sum, stuff_sum ! nz+1 is needed for interface averages
+  real, dimension(size(field, 3)) :: vol_sum, stuff_sum ! nz+1 is needed for interface averages
   real :: v1, v2, total_volume, total_stuff, val
-  integer :: i, j, k
+  integer :: i, j, k, nz
 
-  call assert(remap_cs%initialized, 'horizontally_average_diag_field: remap_cs not initialized.')
-  if (is_layer) then
-    call assert(size(field, 3) == remap_cs%nz, &
-              'horizontally_average_diag_field: Field vertical dimension does not match diag remap type.')
-    call assert(size(averaged_field, 1) == remap_cs%nz, &
-              'horizontally_average_diag_field: Averaged field dimension does not match diag remap type.')
-  else
-    call assert(size(field, 3) == remap_cs%nz+1, &
-              'horizontally_average_diag_field: Field vertical dimension does not match diag remap type.')
-    call assert(size(averaged_field, 1) == remap_cs%nz+1, &
-              'horizontally_average_diag_field: Averaged field dimension does not match diag remap type.')
-  endif
+  nz = size(field, 3)
 
   if (staggered_in_x .and. .not. staggered_in_y) then
     if (is_layer) then
       ! U-points
-      do k=1,remap_cs%nz
+      do k=1,nz
         vol_sum(k) = 0.
         stuff_sum(k) = 0.
         if (is_extensive) then
@@ -556,15 +545,15 @@ subroutine horizontally_average_diag_field(remap_cs, G, staggered_in_x, staggere
           enddo ; enddo
         else ! Intensive
           do j=G%jsc, G%jec ; do i=G%isc, G%iec
-            v1 = G%areaCu(I,j) * 0.5 * ( remap_cs%h(i,j,k) + remap_cs%h(i+1,j,k) )
-            v2 = G%areaCu(I-1,j) * 0.5 * ( remap_cs%h(i,j,k) + remap_cs%h(i-1,j,k) )
+            v1 = G%areaCu(I,j) * 0.5 * ( h(i,j,k) + h(i+1,j,k) )
+            v2 = G%areaCu(I-1,j) * 0.5 * ( h(i,j,k) + h(i-1,j,k) )
             vol_sum(k) = vol_sum(k) + 0.5 * ( v1 + v2 ) * G%mask2dT(i,j)
             stuff_sum(k) = stuff_sum(k) + 0.5 * ( v1 * field(I,j,k) + v2 * field(I-1,j,k) ) * G%mask2dT(i,j)
           enddo ; enddo
         endif
       enddo
     else ! Interface
-      do k=1,remap_cs%nz+1
+      do k=1,nz
         vol_sum(k) = 0.
         stuff_sum(k) = 0.
         do j=G%jsc, G%jec ; do i=G%isc, G%iec
@@ -578,7 +567,7 @@ subroutine horizontally_average_diag_field(remap_cs, G, staggered_in_x, staggere
   elseif (staggered_in_y .and. .not. staggered_in_x) then
     if (is_layer) then
       ! V-points
-      do k=1,remap_cs%nz
+      do k=1,nz
         vol_sum(k) = 0.
         stuff_sum(k) = 0.
         if (is_extensive) then
@@ -590,15 +579,15 @@ subroutine horizontally_average_diag_field(remap_cs, G, staggered_in_x, staggere
           enddo ; enddo
         else ! Intensive
           do j=G%jsc, G%jec ; do i=G%isc, G%iec
-            v1 = G%areaCv(i,J) * 0.5 * ( remap_cs%h(i,j,k) + remap_cs%h(i,j+1,k) )
-            v2 = G%areaCv(i,J-1) * 0.5 * ( remap_cs%h(i,j,k) + remap_cs%h(i,j-1,k) )
+            v1 = G%areaCv(i,J) * 0.5 * ( h(i,j,k) + h(i,j+1,k) )
+            v2 = G%areaCv(i,J-1) * 0.5 * ( h(i,j,k) + h(i,j-1,k) )
             vol_sum(k) = vol_sum(k) + 0.5 * ( v1 + v2 ) * G%mask2dT(i,j)
             stuff_sum(k) = stuff_sum(k) + 0.5 * ( v1 * field(i,J,k) + v2 * field(i,J-1,k) ) * G%mask2dT(i,j)
           enddo ; enddo
         endif
       enddo
     else ! Interface
-      do k=1,remap_cs%nz+1
+      do k=1,nz
         vol_sum(k) = 0.
         stuff_sum(k) = 0.
         do j=G%jsc, G%jec ; do i=G%isc, G%iec
@@ -612,12 +601,12 @@ subroutine horizontally_average_diag_field(remap_cs, G, staggered_in_x, staggere
   elseif ((.not. staggered_in_x) .and. (.not. staggered_in_y)) then
     if (is_layer) then
       ! H-points
-      do k=1,remap_cs%nz
+      do k=1,nz
         vol_sum(k) = 0.
         stuff_sum(k) = 0.
         if (is_extensive) then
           do j=G%jsc, G%jec ; do i=G%isc, G%iec
-            if (G%mask2dT(i,j)>0. .and. remap_cs%h(i,j,k)>0.) then
+            if (G%mask2dT(i,j)>0. .and. h(i,j,k)>0.) then
               v1 = G%areaT(i,j)
               vol_sum(k) = vol_sum(k) + v1
               stuff_sum(k) = stuff_sum(k) + v1 * field(i,j,k)
@@ -625,8 +614,8 @@ subroutine horizontally_average_diag_field(remap_cs, G, staggered_in_x, staggere
           enddo ; enddo
         else ! Intensive
           do j=G%jsc, G%jec ; do i=G%isc, G%iec
-            if (G%mask2dT(i,j)>0. .and. remap_cs%h(i,j,k)>0.) then
-              v1 = G%areaT(i,j) * remap_cs%h(i,j,k)
+            if (G%mask2dT(i,j)>0. .and. h(i,j,k)>0.) then
+              v1 = G%areaT(i,j) * h(i,j,k)
               vol_sum(k) = vol_sum(k) + v1
               stuff_sum(k) = stuff_sum(k) + v1 * field(i,j,k)
             endif
@@ -634,7 +623,7 @@ subroutine horizontally_average_diag_field(remap_cs, G, staggered_in_x, staggere
         endif
       enddo
     else ! Interface
-      do k=1,remap_cs%nz+1
+      do k=1,nz
         vol_sum(k) = 0.
         stuff_sum(k) = 0.
         do j=G%jsc, G%jec ; do i=G%isc, G%iec
@@ -651,10 +640,10 @@ subroutine horizontally_average_diag_field(remap_cs, G, staggered_in_x, staggere
     call assert(.false., 'horizontally_average_diag_field: Q point averaging is not coded yet.')
   endif
 
-  call sum_across_PEs(vol_sum, remap_cs%nz)
-  call sum_across_PEs(stuff_sum, remap_cs%nz)
+  call sum_across_PEs(vol_sum, nz)
+  call sum_across_PEs(stuff_sum, nz)
 
-  do k=1,remap_cs%nz
+  do k=1,nz
     if (vol_sum(k)>0.) then
       averaged_field(k) = stuff_sum(k) / vol_sum(k)
     else

@@ -984,8 +984,8 @@ end subroutine VarMix_init
 !! \f]
 !!
 !! \todo Check this reference to Bob on/off paper.
-!! The resolution function used in scaling diffusivities (Hallberg, 2010) is 
-!! 
+!! The resolution function used in scaling diffusivities (Hallberg, 2010) is
+!!
 !! \f[
 !! r(\Delta,L_d) = \frac{1}{1+(\alpha R)^p}
 !! \f]
@@ -1020,7 +1020,7 @@ end subroutine VarMix_init
 !!
 !! Visbeck, Marshall, Haine and Spall, 1997: Specification of Eddy Transfer Coefficients in Coarse-Resolution
 !! Ocean Circulation Models. J. Phys. Oceanogr. http://dx.doi.org/10.1175/1520-0485(1997)027%3C0381:SOETCI%3E2.0.CO;2
-!! 
+!!
 !! | Symbol                | Module parameter |
 !! | ------                | --------------- |
 !! | -                     | <code>USE_VARIABLE_MIXING</code> |

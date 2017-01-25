@@ -241,7 +241,7 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
   if (trim(config) .ne. "DOME") then
     call limit_topography(D, G, PF, max_depth)
   endif
-  
+
 end subroutine MOM_initialize_topography
 
 end module MOM_fixed_initialization

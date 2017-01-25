@@ -191,7 +191,7 @@ subroutine MESO_buoyancy_forcing(state, fluxes, day, dt, G, CS)
 !  can be simply set to zero.  The net fresh water flux should probably be
 !  set in fluxes%evap and fluxes%lprec, with any salinity restoring
 !  appearing in fluxes%vprec, and the other water flux components
-!  (fprec, lrunoff and frunoff) left as arrays full of zeros. 
+!  (fprec, lrunoff and frunoff) left as arrays full of zeros.
 !  Evap is usually negative and precip is usually positive.  All heat fluxes
 !  are in W m-2 and positive for heat going into the ocean.  All fresh water
 !  fluxes are in kg m-2 s-1 and positive for water moving into the ocean.

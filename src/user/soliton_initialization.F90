@@ -25,7 +25,7 @@ implicit none ; private
 character(len=40) :: mod = "soliton_initialization" !< This module's name.
 
 public soliton_initialize_thickness
-public soliton_initialize_velocity 
+public soliton_initialize_velocity
 
 contains
 
@@ -72,7 +72,7 @@ subroutine soliton_initialize_velocity(u, v, h, G)
   real    :: x, y, x0, y0
   real    :: val1, val2, val3, val4
   integer :: i, j, k, is, ie, js, je, nz
-  
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   x0 = 2.0*G%len_lon/3.0
@@ -82,7 +82,7 @@ subroutine soliton_initialize_velocity(u, v, h, G)
 
   v(:,:,:) = 0.0
   u(:,:,:) = 0.0
-  
+
   do j = G%jsc,G%jec ; do I = G%isc-1,G%iec+1
     do k = 1, nz
       x = 0.5*(G%geoLonT(i+1,j)+G%geoLonT(i,j))-x0

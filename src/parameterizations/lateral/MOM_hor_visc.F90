@@ -133,7 +133,7 @@ type, public :: hor_visc_CS ; private
   logical :: bound_Coriolis  ! If true & SMAGORINSKY_AH is used, the biharmonic
                              ! viscosity is modified to include a term that
                              ! scales quadratically with the velocity shears.
-  logical :: use_Kh_bg_2d    ! Read 2d background viscosity from a file. 
+  logical :: use_Kh_bg_2d    ! Read 2d background viscosity from a file.
   real    :: Kh_bg_min       ! The minimum value allowed for Laplacian horizontal
                              ! viscosity. The default is 0.0
 
@@ -528,7 +528,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
         endif
         ! Place a floor on the viscosity, if desired.
         Kh = MAX(Kh,CS%Kh_bg_min)
-        
+
         if (CS%better_bound_Kh) then
           if (Kh >= hrat_min*CS%Kh_Max_xy(I,J)) then
             visc_bound_rem = 0.0
@@ -1020,7 +1020,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
       CS%Kh_bg_xx(i,j) = MAX(Kh, Kh_vel_scale * sqrt(grid_sp_h2))
 
       if (CS%use_Kh_bg_2d) CS%Kh_bg_xx(i,j) = MAX(CS%Kh_bg_2d(i,j), CS%Kh_bg_xx(i,j))
-         
+
       if (CS%bound_Kh .and. .not.CS%better_bound_Kh) then
         CS%Kh_Max_xx(i,j) = Kh_Limit * grid_sp_h2
         CS%Kh_bg_xx(i,j) = MIN(CS%Kh_bg_xx(i,j), CS%Kh_Max_xx(i,j))
@@ -1033,7 +1033,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
       CS%Kh_bg_xy(I,J) = MAX(Kh, Kh_vel_scale * sqrt(grid_sp_q2))
 
       if (CS%use_Kh_bg_2d) CS%Kh_bg_xy(i,j) = MAX(CS%Kh_bg_2d(i,j), CS%Kh_bg_xy(i,j))
-         
+
       if (CS%bound_Kh .and. .not.CS%better_bound_Kh) then
         CS%Kh_Max_xy(I,J) = Kh_Limit * grid_sp_q2
         CS%Kh_bg_xy(I,J) = MIN(CS%Kh_bg_xy(I,J), CS%Kh_Max_xy(I,J))

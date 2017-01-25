@@ -30,7 +30,7 @@ use regrid_consts, only : state_dependent, coordinateUnits
 use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
 use regrid_consts, only : REGRIDDING_RHO, REGRIDDING_SIGMA
-use regrid_consts, only : REGRIDDING_ARBITRARY
+use regrid_consts, only : REGRIDDING_ARBITRARY, REGRIDDING_SIGMA_SHELF_ZSTAR
 use regrid_consts, only : REGRIDDING_HYCOM1, REGRIDDING_SLIGHT
 
 use netcdf ! Used by check_grid_def()
@@ -116,7 +116,7 @@ type, public :: regridding_CS
   !> Fraction (between 0 and 1) of compressibility to add to potential density
   !! profiles when interpolating for target grid positions. (nondim)
   real :: compressibility_fraction = 0.
-  
+
   !> If true, detect regions with much weaker stratification in the coordinate
   !! than based on in-situ density, and use a stretched coordinate there.
   logical :: fix_haloclines = .false.
@@ -131,7 +131,7 @@ type, public :: regridding_CS
   !> If true, each interface is given a maximum depth based on a rescaling of
   !! the indexing of coordinateResolution.
   logical :: set_maximum_depths = .false.
-  
+
   !> A scaling factor (> 1) of the rate at which the coordinateResolution list
   !! is traversed to set the minimum depth of interfaces.
   real :: max_depth_index_scale = 2.0
@@ -156,9 +156,10 @@ public getCoordinateUnits, getCoordinateShortName, getStaticThickness
 public DEFAULT_COORDINATE_MODE
 
 !> Documentation for coordinate options
-character(len=320), parameter, public :: regriddingCoordinateModeDoc = &
+character(len=322), parameter, public :: regriddingCoordinateModeDoc = &
                  " LAYER - Isopycnal or stacked shallow water layers\n"//&
-                 " Z*    - stetched geopotential z*\n"//&
+                 " ZSTAR, Z* - stetched geopotential z*\n"//&
+                 " SIGMA_SHELF_ZSTAR - stetched geopotential z* ignoring shelf\n"//&
                  " SIGMA - terrain following coordinates\n"//&
                  " RHO   - continuous isopycnal\n"//&
                  " HYCOM1 - HyCOM-like hybrid coordinate\n"//&
@@ -545,7 +546,7 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mod, coord_mode,
                  "where the reference pressure systematically underestimates\n"//&
                  "the stratification and use this in the definition of the\n"//&
                  "interior with the SLight coordinate.", default=.false.)
-                 
+
     call set_regrid_params(CS, dz_min_surface=dz_fixed_sfc, &
                 nz_fixed_surface=nz_fixed_sfc, Rho_ML_avg_depth=Rho_avg_depth, &
                 nlay_ML_to_interior=nlay_sfc_int, fix_haloclines=fix_haloclines)
@@ -807,7 +808,7 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_
   type(thermo_var_ptrs),                      intent(inout) :: tv     !< Thermodynamical variables (T, S, ...)
   real, dimension(SZI_(G),SZJ_(G), SZK_(GV)), intent(inout) :: h_new  !< New 3D grid consistent with target coordinate
   real, dimension(SZI_(G),SZJ_(G), SZK_(GV)+1), intent(inout) :: dzInterface !< The change in position of each interface
-  real, dimension(:,:),                   optional, pointer :: frac_shelf_h !< Fractional ice shelf coverage 
+  real, dimension(:,:),                   optional, pointer :: frac_shelf_h !< Fractional ice shelf coverage
   ! Local variables
   real :: trickGnuCompiler
   logical :: use_ice_shelf
@@ -816,16 +817,20 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_
   if (present(frac_shelf_h)) then
     if (associated(frac_shelf_h)) use_ice_shelf = .true.
   endif
- 
+
   select case ( CS%regridding_scheme )
 
     case ( REGRIDDING_ZSTAR )
       if (use_ice_shelf) then
-         call build_zstar_grid( CS, G, GV, h, dzInterface, frac_shelf_h )
+        call build_zstar_grid( CS, G, GV, h, dzInterface, frac_shelf_h )
       else
-         call build_zstar_grid( CS, G, GV, h, dzInterface )
+        call build_zstar_grid( CS, G, GV, h, dzInterface )
       endif
-         call calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
+      call calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
+
+    case ( REGRIDDING_SIGMA_SHELF_ZSTAR)
+      call build_zstar_grid( CS, G, GV, h, dzInterface )
+      call calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
 
     case ( REGRIDDING_SIGMA )
       call build_sigma_grid( CS, G, GV, h, dzInterface )
@@ -1005,7 +1010,7 @@ subroutine filtered_grid_motion( CS, nk, z_old, z_new, dz_g )
     enddo
     ! ddz_g_s(:) = 0.0 ; ddz_g_d(:) = 0.0
   endif
-  
+
   zs = CS%depth_of_time_filter_shallow
   zd = CS%depth_of_time_filter_deep
   wtd = 1.0 - CS%old_grid_weight
@@ -1021,7 +1026,7 @@ subroutine filtered_grid_motion( CS, nk, z_old, z_new, dz_g )
     ! zr1 is positive and increases with depth, and dz_tgt is positive downward.
     dz_tgt = sgn*(z_new(k) - z_old(k))
     zr1 = sgn*(z_old(k) - z_old(1))
-    
+
     !   First, handle the two simple and common cases that do not pass through
     ! the adjustment rate transition zone.
     if ((zr1 > zd) .and. (zr1 + wtd * dz_tgt > zd)) then
@@ -1032,7 +1037,7 @@ subroutine filtered_grid_motion( CS, nk, z_old, z_new, dz_g )
       ! Find the new value by inverting the equation
       !   integral(0 to dz_new) Iwt(z) dz = dz_tgt
       ! This is trivial where Iwt is a constant, and agrees with the two limits above.
-      
+
       ! Take test values at the transition points to figure out which segment
       ! the new value will be found in.
       if (zr1 >= zd) then
@@ -1047,7 +1052,7 @@ subroutine filtered_grid_motion( CS, nk, z_old, z_new, dz_g )
         Int_zs = (zs - zr1) * (0.5*Iwtd * ((zr1 - zs)) + (zd - 0.5*(zr1+zs))) * Idzwt
         ! It has been verified that  Int_zs = Int_zd - dInt_zs_zd to within roundoff.
       endif
-      
+
       if (dz_tgt >= Int_zd) then ! The new location is in the deep, slow region.
         dz_g(k) = sgn * ((zd-zr1) + wtd*(dz_tgt - Int_zd))
       elseif (dz_tgt <= Int_zs) then ! The new location is in the shallow region.
@@ -1071,7 +1076,7 @@ subroutine filtered_grid_motion( CS, nk, z_old, z_new, dz_g )
 !         ddz_g_s(k) = sgn * (dz0 + 2.0*F0*dzwt / (Bq + sqrt(Bq**2 + 4.0*Aq*F0*dzwt) )) - dz_g(k)
 !         dz0 = zd-zr1 ; z0 = zd ; F0 = dz_tgt - Int_zd ; Bq = (dzwt + 2.0*Aq*(z0-zs))
 !         ddz_g_d(k) = sgn * (dz0 + 2.0*F0*dzwt / (Bq + sqrt(Bq**2 + 4.0*Aq*F0*dzwt) )) - dz_g(k)
-!         
+!
 !         if (abs(ddz_g_s(k)) > 1e-12*(abs(dz_g(k)) + abs(dz_g(k)+ddz_g_s(k)))) &
 !           call MOM_error(WARNING, "filtered_grid_motion: Expect z_output to be tangled (sc).")
 !         if (abs(ddz_g_d(k) - ddz_g_s(k)) > 1e-12*(abs(dz_g(k)+ddz_g_d(k)) + abs(dz_g(k)+ddz_g_s(k)))) &
@@ -1277,7 +1282,7 @@ subroutine build_sigma_grid( CS, G, GV, h, dzInterface )
 
   ! Local variables
   integer :: i, j, k
-  integer :: nz 
+  integer :: nz
   real    :: nominalDepth, totalThickness, dh
   real, dimension(SZK_(GV)+1) :: zOld, zNew
 
@@ -1374,7 +1379,7 @@ subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
   type(ocean_grid_type),                        intent(in)    :: G  !< Ocean grid structure
   type(verticalGrid_type),                      intent(in)    :: GV !< Ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    intent(in)    :: h  !< Layer thicknesses, in H
-  type(thermo_var_ptrs),                        intent(in)    :: tv !< Thermodynamics structure 
+  type(thermo_var_ptrs),                        intent(in)    :: tv !< Thermodynamics structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(GV)+1), intent(inout) :: dzInterface !< The change in interface depth in H
   type(remapping_CS),                           intent(in)    :: remapCS !< The remapping control structure
   type(regridding_CS),                          intent(in)    :: CS !< Regridding control structure
@@ -1986,7 +1991,7 @@ subroutine build_slight_column(CS, remapCS, eqn_of_state, H_to_Pa, m_to_H, H_sub
       endif
 
       T_int(1) = T_f(1) ; S_int(1) = S_f(1)
-      do K=2,nz 
+      do K=2,nz
         T_int(K) = 0.5*(T_f(k-1) + T_f(k)) ; S_int(K) = 0.5*(S_f(k-1) + S_f(k))
         p_IS(K) = z_col(K) * H_to_Pa
         p_R(K) = CS%ref_pressure + CS%compressibility_fraction * ( p_IS(K) - CS%ref_pressure )
@@ -3065,7 +3070,7 @@ function uniformResolution(nk,coordMode,maxDepth,rhoLight,rhoHeavy)
   scheme = coordinateMode(coordMode)
   select case ( scheme )
 
-    case ( REGRIDDING_ZSTAR, REGRIDDING_HYCOM1, REGRIDDING_SLIGHT )
+    case ( REGRIDDING_ZSTAR, REGRIDDING_HYCOM1, REGRIDDING_SLIGHT, REGRIDDING_SIGMA_SHELF_ZSTAR )
       uniformResolution(:) = maxDepth / real(nk)
 
     case ( REGRIDDING_RHO )
@@ -3224,6 +3229,8 @@ function getCoordinateUnits( CS )
   select case ( CS%regridding_scheme )
     case ( REGRIDDING_ZSTAR, REGRIDDING_HYCOM1, REGRIDDING_SLIGHT )
       getCoordinateUnits = 'meter'
+    case ( REGRIDDING_SIGMA_SHELF_ZSTAR )
+      getCoordinateUnits = 'meter/fraction'
     case ( REGRIDDING_SIGMA )
       getCoordinateUnits = 'fraction'
     case ( REGRIDDING_RHO )
@@ -3249,6 +3256,8 @@ function getCoordinateShortName( CS )
       !getCoordinateShortName = 'z*'
       ! The following line is a temporary work around...  :(  -AJA
       getCoordinateShortName = 'pseudo-depth, -z*'
+    case ( REGRIDDING_SIGMA_SHELF_ZSTAR )
+      getCoordinateShortName = 'pseudo-depth, -z*/sigma'
     case ( REGRIDDING_SIGMA )
       getCoordinateShortName = 'sigma'
     case ( REGRIDDING_RHO )
@@ -3340,7 +3349,7 @@ function getStaticThickness( CS, SSH, depth )
   real :: z, dz
 
   select case ( CS%regridding_scheme )
-    case ( REGRIDDING_ZSTAR, REGRIDDING_HYCOM1, REGRIDDING_SLIGHT )
+    case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR, REGRIDDING_HYCOM1, REGRIDDING_SLIGHT )
       if (depth>0.) then
         z = ssh
         do k = 1, CS%nk

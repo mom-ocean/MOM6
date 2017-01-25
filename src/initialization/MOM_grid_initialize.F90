@@ -191,19 +191,19 @@ subroutine grid_metrics_chksum(parent, G)
 
   do i=isd,ied ; do J=JsdB,JedB ; tempN(i,J) = G%dxCv(i,J) ; enddo ; enddo
   call vchksum(tempN,trim(parent)//': dxCv',G%HI, haloshift=halo)
- 
+
   do I=IsdB,IedB ; do J=JsdB,JedB ; tempQ(I,J) = G%dxBu(I,J) ; enddo ; enddo
   call qchksum(tempQ,trim(parent)//': dxBu',G%HI, haloshift=halo)
- 
+
   do i=isd,ied ; do j=jsd,jed ; tempH(i,j) = G%dyT(i,j) ; enddo ; enddo
   call hchksum(tempH,trim(parent)//': dyT',G%HI, haloshift=halo)
- 
+
   do I=IsdB,IedB ; do j=jsd,jed ; tempE(I,j) = G%dyCu(I,j) ; enddo ; enddo
   call uchksum(tempE,trim(parent)//': dyCu',G%HI, haloshift=halo)
- 
+
   do i=isd,ied ; do J=JsdB,JedB ; tempN(i,J) = G%dyCv(i,J) ; enddo ; enddo
   call vchksum(tempN,trim(parent)//': dyCv',G%HI, haloshift=halo)
- 
+
   do I=IsdB,IedB ; do J=JsdB,JedB ; tempQ(I,J) = G%dyBu(I,J) ; enddo ; enddo
   call qchksum(tempQ,trim(parent)//': dyBu',G%HI, haloshift=halo)
 
@@ -212,34 +212,34 @@ subroutine grid_metrics_chksum(parent, G)
 
   do I=IsdB,IedB ; do j=jsd,jed ; tempE(I,j) = G%IdxCu(I,j) ; enddo ; enddo
   call uchksum(tempE,trim(parent)//': IdxCu',G%HI, haloshift=halo)
- 
+
   do i=isd,ied ; do J=JsdB,JedB ; tempN(i,J) = G%IdxCv(i,J) ; enddo ; enddo
   call vchksum(tempN,trim(parent)//': IdxCv',G%HI, haloshift=halo)
- 
+
   do I=IsdB,IedB ; do J=JsdB,JedB ; tempQ(I,J) = G%IdxBu(I,J) ; enddo ; enddo
   call qchksum(tempQ,trim(parent)//': IdxBu',G%HI, haloshift=halo)
 
   do i=isd,ied ; do j=jsd,jed ; tempH(i,j) = G%IdyT(i,j) ; enddo ; enddo
   call hchksum(tempH,trim(parent)//': IdyT',G%HI, haloshift=halo)
- 
+
   do I=IsdB,IedB ; do j=jsd,jed ; tempE(I,j) = G%IdyCu(I,j) ; enddo ; enddo
   call uchksum(tempE,trim(parent)//': IdyCu',G%HI, haloshift=halo)
- 
+
   do i=isd,ied ; do J=JsdB,JedB ; tempN(i,J) = G%IdyCv(i,J) ; enddo ; enddo
   call vchksum(tempN,trim(parent)//': IdyCv',G%HI, haloshift=halo)
- 
+
   do I=IsdB,IedB ; do J=JsdB,JedB ; tempQ(I,J) = G%IdyBu(I,J) ; enddo ; enddo
   call qchksum(tempQ,trim(parent)//': IdyBu',G%HI, haloshift=halo)
 
   do i=isd,ied ; do j=jsd,jed ; tempH(i,j) = G%areaT(i,j) ; enddo ; enddo
   call hchksum(tempH,trim(parent)//': areaT',G%HI, haloshift=halo)
- 
+
   do I=IsdB,IedB ; do J=JsdB,JedB ; tempQ(I,J) = G%areaBu(I,J) ; enddo ; enddo
   call qchksum(tempQ,trim(parent)//': areaBu',G%HI, haloshift=halo)
- 
+
   do i=isd,ied ; do j=jsd,jed ; tempH(i,j) = G%IareaT(i,j) ; enddo ; enddo
   call hchksum(tempH,trim(parent)//': IareaT',G%HI, haloshift=halo)
- 
+
   do I=IsdB,IedB ; do J=JsdB,JedB ; tempQ(I,J) = G%IareaBu(I,J) ; enddo ; enddo
   call qchksum(tempQ,trim(parent)//': IareaBu',G%HI, haloshift=halo)
 
@@ -274,7 +274,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
   type(dyn_horgrid_type), intent(inout) :: G           !< The dynamic horizontal grid type
   type(param_file_type), intent(in)     :: param_file  !< Parameter file structure
 !   This subroutine sets the grid metrics from a mosaic file.
-!  
+!
 ! Arguments:
 !  (inout)   G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
@@ -304,7 +304,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
   integer :: npei,npej
   integer, dimension(:), allocatable :: exni,exnj
   integer        :: start(4), nread(4)
- 
+
   call callTree_enter("set_grid_metrics_from_mosaic(), MOM_grid_initialize.F90")
 
   call get_param(param_file, mod, "GRID_FILE", grid_file, &
@@ -483,7 +483,9 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
   do i=G%isg,G%ieg
     G%gridLonT(i) = tmpGlbl(2*(i-G%isg)+2,2)
   enddo
-  do I=G%IsgB,G%IegB
+  ! Note that the dynamic grid always uses symmetric memory for the global
+  ! arrays G%gridLatB and G%gridLonB.
+  do I=G%isg-1,G%ieg
     G%gridLonB(I) = tmpGlbl(2*(I-G%isg)+3,1)
   enddo
   deallocate( tmpGlbl )
@@ -498,7 +500,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
   do j=G%jsg,G%jeg
     G%gridLatT(j) = tmpGlbl(1,2*(j-G%jsg)+2)
   enddo
-  do J=G%JsgB,G%JegB
+  do J=G%jsg-1,G%jeg
     G%gridLatB(J) = tmpGlbl(1,2*(j-G%jsg)+3)
   enddo
   deallocate( tmpGlbl )
@@ -540,7 +542,7 @@ subroutine set_grid_metrics_cartesian(G, param_file)
   I1off = G%idg_offset ; J1off = G%jdg_offset
 
   call callTree_enter("set_grid_metrics_cartesian(), MOM_grid_initialize.F90")
- 
+
   PI = 4.0*atan(1.0) ;
 
   call get_param(param_file, mod, "AXIS_UNITS", units_temp, &
@@ -571,14 +573,15 @@ subroutine set_grid_metrics_cartesian(G, param_file)
   endif
   call log_param(param_file, mod, "explicit AXIS_UNITS", G%x_axis_units)
 
-  ! These are larger in case symmetric memory is being used.
-  do J=G%JsgB,G%JegB
+  ! Note that the dynamic grid always uses symmetric memory for the global
+  ! arrays G%gridLatB and G%gridLonB.
+  do J=G%jsg-1,G%jeg
     G%gridLatB(j) = G%south_lat + G%len_lat*REAL(J-(G%jsg-1))/REAL(njglobal)
   enddo
   do j=G%jsg,G%jeg
     G%gridLatT(j) = G%south_lat + G%len_lat*(REAL(j-G%jsg)+0.5)/REAL(njglobal)
   enddo
-  do I=G%IsgB,G%IegB
+  do I=G%isg-1,G%ieg
     G%gridLonB(i) = G%west_lon + G%len_lon*REAL(I-(G%isg-1))/REAL(niglobal)
   enddo
   do i=G%isg,G%ieg
@@ -676,11 +679,11 @@ subroutine set_grid_metrics_spherical(G, param_file)
   i_offset = G%idg_offset ; j_offset = G%jdg_offset
 
   call callTree_enter("set_grid_metrics_spherical(), MOM_grid_initialize.F90")
- 
+
 !    Calculate the values of the metric terms that might be used
 !  and save them in arrays.
   PI = 4.0*atan(1.0); PI_180 = atan(1.0)/45.
- 
+
   call get_param(param_file, mod, "SOUTHLAT", G%south_lat, &
                  "The southern latitude of the domain.", units="degrees", &
                  fail_if_missing=.true.)
@@ -699,7 +702,9 @@ subroutine set_grid_metrics_spherical(G, param_file)
   dLon = G%len_lon/G%Domain%niglobal
   dLat = G%len_lat/G%Domain%njglobal
 
-  do j=G%JsgB,G%JegB
+  ! Note that the dynamic grid always uses symmetric memory for the global
+  ! arrays G%gridLatB and G%gridLonB.
+  do j=G%jsg-1,G%jeg
     latitude = G%south_lat + dLat*(REAL(J-(G%jsg-1)))
     G%gridLatB(J) = MIN(MAX(latitude,-90.),90.)
   enddo
@@ -707,7 +712,7 @@ subroutine set_grid_metrics_spherical(G, param_file)
     latitude = G%south_lat + dLat*(REAL(j-G%jsg)+0.5)
     G%gridLatT(j) = MIN(MAX(latitude,-90.),90.)
   enddo
-  do i=G%IsgB,G%IegB
+  do i=G%isg-1,G%ieg
     G%gridLonB(I) = G%west_lon + dLon*(REAL(I-(G%isg-1)))
   enddo
   do i=G%isg,G%ieg
@@ -839,7 +844,7 @@ subroutine set_grid_metrics_mercator(G, param_file)
   GP%njglobal = G%Domain%njglobal
 
   call callTree_enter("set_grid_metrics_mercator(), MOM_grid_initialize.F90")
- 
+
 !    Calculate the values of the metric terms that might be used
 !  and save them in arrays.
   PI = 4.0*atan(1.0) ; PI_2 = 0.5*PI
@@ -903,7 +908,9 @@ subroutine set_grid_metrics_mercator(G, param_file)
   ! These calculations no longer depend on the the order in which they
   ! are performed because they all use the same (poor) starting guess and
   ! iterate to convergence.
-  do J=G%JsgB,G%JegB
+  ! Note that the dynamic grid always uses symmetric memory for the global
+  ! arrays G%gridLatB and G%gridLonB.
+  do J=G%jsg-1,G%jeg
     jd = fnRef + (J - jRef)
     y_q = find_root(Int_dj_dy, dy_dj, GP, jd, 0.0, -1.0*PI_2, PI_2, itt2)
     G%gridLatB(J) = y_q*180.0/PI
@@ -941,7 +948,7 @@ subroutine set_grid_metrics_mercator(G, param_file)
   ! These calculations no longer depend on the the order in which they
   ! are performed because they all use the same (poor) starting guess and
   ! iterate to convergence.
-  do I=G%IsgB,G%IegB
+  do I=G%isg-1,G%ieg
     id = fnRef + (I - iRef)
     x_q = find_root(Int_di_dx, dx_di, GP, id, 0.0, -4.0*PI, 4.0*PI, itt2)
     G%gridLonB(I) = x_q*180.0/PI
