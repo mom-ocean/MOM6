@@ -1678,7 +1678,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
         ioff = 0; joff = 1
       endif
 
-      if (apply_u_OBCs) then  ! save the old value of vbt and vhbt
+      if (apply_u_OBCs) then  ! save the old value of ubt and uhbt
 !GOMP parallel do default(none) shared(isv,iev,jsv,jev,ioff,joff,ubt_prev,ubt,uhbt_prev,  &
 !GOMP                                  uhbt,ubt_sum_prev,ubt_sum,uhbt_sum_prev, &
 !GOMP                                  uhbt_sum,ubt_wtd_prev,ubt_wtd)
@@ -2409,6 +2409,10 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
                Cy = min(cff, max(dhdt*dhdy, -cff))
           ubt(I,j) = ((cff*ubt_old(I,j) + Cx*ubt(I-1,j)) - &
               (max(Cy,0.0)*grad(I,J-1) - min(Cy,0.0)*grad(I,J))) / (cff + Cx)
+          vel_trans = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
+        elseif (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%gradient) then
+          ubt(I,j) = ubt(I-1,j)
+          vel_trans = ubt(I,j)
         endif
       elseif (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W) then
         if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%Flather) then
@@ -2443,6 +2447,10 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
                Cy = min(cff,max(dhdt*dhdy,-cff))
           ubt(I,j) = ((cff*ubt_old(I,j) + Cx*ubt(I+1,j)) - &
               (max(Cy,0.0)*grad(I,J-1) - min(Cy,0.0)*grad(I,J))) / (cff + Cx)
+          vel_trans = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
+        elseif (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%gradient) then
+          ubt(I,j) = ubt(I+1,j)
+          vel_trans = ubt(I,j)
         endif
 !!!!! elseif (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_N) then
 !!!!!   if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%legacy) then
@@ -2525,6 +2533,10 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
                Cx = min(cff,max(dhdt*dhdx,-cff))
           vbt(i,J) = ((cff*vbt_old(i,J) + Cy*vbt(i,J-1)) - &
             (max(Cx,0.0)*grad(I-1,J) - min(Cx,0.0)*grad(I,J))) / (cff + Cy)
+          vel_trans = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
+        elseif (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%gradient) then
+          vbt(i,J) = vbt(i,J-1)
+          vel_trans = vbt(i,J)
         endif
       elseif (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_S) then
         if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%Flather) then
@@ -2559,6 +2571,10 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
                Cx = min(cff,max(dhdt*dhdx,-cff))
           vbt(i,J) = ((cff*vbt_old(i,J) + Cy*vbt(i,J+1)) - &
             (max(Cx,0.0)*grad(I-1,J) - min(Cx,0.0)*grad(I,J))) / (cff + Cy)
+          vel_trans = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
+        elseif (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%gradient) then
+          vbt(i,J) = vbt(i,J+1)
+          vel_trans = vbt(i,J)
         endif
 !!!!! elseif (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_E) then
 !!!!!   if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%legacy) then
@@ -2644,7 +2660,7 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
   integer :: i, j, is, ie, js, je
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
 
-  if ((OBC%Flather_u_BCs_exist_globally) .and. apply_u_OBCS) then
+  if ((OBC%open_u_BCs_exist_globally) .and. apply_u_OBCS) then
     do j=js,je ; do I=is-1,ie ; if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
       if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%Flather) then
 ! Flather is on for legacy. Dont turn it off when explicitly set without legacy turned on
@@ -2689,7 +2705,7 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
     endif ; enddo ; enddo
   endif
 
-  if ((OBC%Flather_v_BCs_exist_globally) .and. apply_v_OBCs) then
+  if ((OBC%open_v_BCs_exist_globally) .and. apply_v_OBCs) then
     do J=js-1,je ; do i=is,ie ; if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
       if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%Flather) then
 !        if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%legacy) then
