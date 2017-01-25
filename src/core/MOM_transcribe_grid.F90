@@ -128,8 +128,9 @@ subroutine copy_dyngrid_to_MOM_grid(dG, oG)
   ! The more complicated logic here avoids segmentation faults if one grid uses
   ! global symmetric memory while the other does not.  Because a northeast grid
   ! convention is being used, the upper bounds for each array correspond.
-  Ido2 = dG%IegB-oG%IegB ; Igst = max(oG%IsgB, dG%IsgB-Ido2)
-  Jdo2 = dG%JegB-oG%JegB ; Jgst = max(oG%JsgB, dG%JsgB-Jdo2)
+  !   Note that the dynamic grid always uses symmetric memory.
+  Ido2 = dG%IegB-oG%IegB ; Igst = max(oG%IsgB, (dG%isg-1)-Ido2)
+  Jdo2 = dG%JegB-oG%JegB ; Jgst = max(oG%JsgB, (dG%jsg-1)-Jdo2)
   do I=Igst,oG%IegB ; oG%gridLonB(I) = dG%gridLonB(I+Ido2) ; enddo
   do J=Jgst,oG%JegB ; oG%gridLatB(J) = dG%gridLatB(J+Jdo2) ; enddo
 
@@ -138,7 +139,7 @@ subroutine copy_dyngrid_to_MOM_grid(dG, oG)
   oG%areaT_global = dG%areaT_global ; oG%IareaT_global = dG%IareaT_global
   oG%south_lat = dG%south_lat ; oG%west_lon  = dG%west_lon
   oG%len_lat = dG%len_lat ; oG%len_lon = dG%len_lon
-  oG%Rad_Earth = dG%Rad_Earth ; oG%max_depth = dG%max_depth 
+  oG%Rad_Earth = dG%Rad_Earth ; oG%max_depth = dG%max_depth
 
 ! Update the halos in case the dynamic grid has smaller halos than the ocean grid.
   call pass_var(oG%areaT, oG%Domain)
@@ -270,16 +271,13 @@ subroutine copy_MOM_grid_to_dyngrid(oG, dG)
 
   dG%gridLonT(dG%isg:dG%ieg) = oG%gridLonT(oG%isg:oG%ieg)
   dG%gridLatT(dG%jsg:dG%jeg) = oG%gridLatT(oG%jsg:oG%jeg)
-  ! These two might not be right with symmetric memory, however hopefully
-  ! a compiler would catch mismatched array sizes. ###REVISIT THIS?
-  dG%gridLonB(dG%IsgB:dG%IegB) = oG%gridLonB(oG%IsgB:oG%IegB)
-  dG%gridLatB(dG%JsgB:dG%JegB) = oG%gridLatB(oG%JsgB:oG%JegB)
 
   ! The more complicated logic here avoids segmentation faults if one grid uses
   ! global symmetric memory while the other does not.  Because a northeast grid
   ! convention is being used, the upper bounds for each array correspond.
-  Ido2 = oG%IegB-dG%IegB ; Igst = max(dG%IsgB, oG%IsgB-Ido2)
-  Jdo2 = oG%JegB-dG%JegB ; Jgst = max(dG%JsgB, oG%JsgB-Jdo2)
+  !   Note that the dynamic grid always uses symmetric memory.
+  Ido2 = oG%IegB-dG%IegB ; Igst = max(dG%isg-1, oG%IsgB-Ido2)
+  Jdo2 = oG%JegB-dG%JegB ; Jgst = max(dG%jsg-1, oG%JsgB-Jdo2)
   do I=Igst,dG%IegB ; dG%gridLonB(I) = oG%gridLonB(I+Ido2) ; enddo
   do J=Jgst,dG%JegB ; dG%gridLatB(J) = oG%gridLatB(J+Jdo2) ; enddo
 

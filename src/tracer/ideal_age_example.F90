@@ -220,7 +220,7 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   CS%ntr = 0
   if (do_ideal_age) then
     CS%ntr = CS%ntr + 1 ; m = CS%ntr
-    CS%tr_desc(m) = var_desc("age", "years", "Ideal Age Tracer", caller=mod)
+    CS%tr_desc(m) = var_desc("age", "years", "Ideal Age Tracer", cmor_field_name="agessc", caller=mod)
     CS%tracer_ages(m) = .true. ; CS%sfc_growth_rate(m) = 0.0
     CS%IC_val(m) = 0.0 ; CS%young_val(m) = 0.0 ; CS%tracer_start_year(m) = 0.0
   endif
@@ -460,7 +460,7 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
     do m=1,CS%ntr
       do k=1,nz ;do j=js,je ; do i=is,ie
         h_work(i,j,k) = h_old(i,j,k)
-      enddo ; enddo ; enddo;    
+      enddo ; enddo ; enddo;
       call applyTracerBoundaryFluxesInOut(G, GV, CS%tr(:,:,:,m) , dt, fluxes, h_work, &
           evap_CFL_limit, minimum_forcing_depth)
       call tracer_vertdiff(h_work, ea, eb, dt, CS%tr(:,:,:,m), G, GV)
@@ -601,7 +601,7 @@ subroutine ideal_age_tracer_surface_state(state, h, G, CS)
 !                 register_ideal_age_tracer.
   integer :: i, j, m, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  
+
   if (.not.associated(CS)) return
 
   if (CS%coupled_tracers) then

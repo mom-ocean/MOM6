@@ -151,7 +151,7 @@ type, public :: OCMIP2_CFC_CS ; private
   integer, dimension(NTR) :: id_tr_adx = -1, id_tr_ady = -1
   integer, dimension(NTR) :: id_tr_dfx = -1, id_tr_dfy = -1
 
-  ! The following vardesc types contain a package of metadata about each tracer. 
+  ! The following vardesc types contain a package of metadata about each tracer.
   type(vardesc) :: CFC11_desc, CFC12_desc
 end type OCMIP2_CFC_CS
 
@@ -483,7 +483,7 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, GV, h, diag, OBC, CS, &
   enddo
 
 end subroutine initialize_OCMIP2_CFC
-  
+
 subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, CS)
   type(ocean_grid_type),                    intent(in)  :: G
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h
@@ -571,7 +571,7 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not.associated(CS)) return
-  
+
   CFC11 => CS%CFC11 ; CFC12 => CS%CFC12
 
   ! These two calls unpack the fluxes from the input arrays.
@@ -587,14 +587,14 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
   if (present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
     do k=1,nz ;do j=js,je ; do i=is,ie
       h_work(i,j,k) = h_old(i,j,k)
-    enddo ; enddo ; enddo;    
+    enddo ; enddo ; enddo;
     call applyTracerBoundaryFluxesInOut(G, GV, CFC11, dt, fluxes, h_work, &
         evap_CFL_limit, minimum_forcing_depth)
     call tracer_vertdiff(h_work, ea, eb, dt, CFC11, G, GV, sfc_flux=CFC11_flux)
-    
+
     do k=1,nz ;do j=js,je ; do i=is,ie
       h_work(i,j,k) = h_old(i,j,k)
-    enddo ; enddo ; enddo;    
+    enddo ; enddo ; enddo;
     call applyTracerBoundaryFluxesInOut(G, GV, CFC12, dt, fluxes, h_work, &
         evap_CFL_limit, minimum_forcing_depth)
     call tracer_vertdiff(h_work, ea, eb, dt, CFC12, G, GV, sfc_flux=CFC12_flux)
@@ -735,7 +735,7 @@ subroutine OCMIP2_CFC_surface_state(state, h, G, CS)
     alpha_12 = exp(CS%d1_12 + CS%d2_12/ta + CS%d3_12*log(ta) + CS%d4_12*ta**2 +&
                    sal * ((CS%e3_12 * ta + CS%e2_12) * ta + CS%e1_12)) * &
                1.0e-09 * G%mask2dT(i,j)
-    !   Calculate Schmidt numbers using coefficients given by 
+    !   Calculate Schmidt numbers using coefficients given by
     ! Zheng et al (1998), JGR vol 103, C1.
     sc_11 = CS%a1_11 + SST * (CS%a2_11 + SST * (CS%a3_11 + SST * CS%a4_11)) * &
             G%mask2dT(i,j)
@@ -750,7 +750,7 @@ subroutine OCMIP2_CFC_surface_state(state, h, G, CS)
     CFC12_alpha(i,j) = alpha_12 * sc_no_term
     CFC12_Csurf(i,j) = CS%CFC12(i,j,1) * sc_no_term
   enddo ; enddo
-  
+
   !   These calls load these values into the appropriate arrays in the
   ! coupler-type structure.
   call set_coupler_values(CFC11_alpha, state%tr_fields, CS%ind_cfc_11_flux, &

@@ -625,7 +625,7 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
     if (optics%nbands.ne.1) then
       call MOM_error(FATAL, "set_opacity: "// &
          "Cannot use a single_exp opacity scheme with nbands!=1.")
-    endif 
+    endif
   endif
   if (.not.ASSOCIATED(optics%min_wavelength_band)) &
     allocate(optics%min_wavelength_band(optics%nbands))

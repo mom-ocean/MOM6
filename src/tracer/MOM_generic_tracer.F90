@@ -355,7 +355,7 @@ contains
       if (.not.restart .or. (CS%tracers_may_reinit .and. &
           .not.query_initialized(tr_ptr, g_tracer_name, CS%restart_CSp))) then
 
-       if(g_tracer%requires_src_info ) then 
+       if(g_tracer%requires_src_info ) then
          call MOM_error(NOTE,"initialize_MOM_generic_tracer: "//&
                              "initializing generic tracer "//trim(g_tracer_name)//&
                              " using MOM_initialize_tracer_from_Z ")
@@ -376,7 +376,7 @@ contains
             endif
          enddo; enddo ; enddo
 
-         !jgj: Reset CASED to 0 below K=1 
+         !jgj: Reset CASED to 0 below K=1
          if(trim(g_tracer_name) .eq. 'cased') then
             do k=2,nk ; do j=jsc,jec ; do i=isc,iec
                if(tr_ptr(i,j,k) .ne. CS%tracer_land_val) then
@@ -385,7 +385,7 @@ contains
             enddo; enddo ; enddo
          endif
 
-       else !Do it old way if the tracer is not registered to start from a specific source file.  
+       else !Do it old way if the tracer is not registered to start from a specific source file.
             !This path should be deprecated if all generic tracers are required to start from specified sources.
         if (len_trim(CS%IC_file) > 0) then
         !  Read the tracer concentrations from a netcdf file.
@@ -403,7 +403,7 @@ contains
                             "initialized generic tracer "//trim(g_tracer_name)//&
                             " using Generic Tracer File on Z: "//CS%IC_file)
           else
-            ! native grid 
+            ! native grid
             call MOM_error(NOTE,"initialize_MOM_generic_tracer: "//&
                   "Using Generic Tracer IC file on native grid "//trim(CS%IC_file)//&
                   " for tracer "//trim(g_tracer_name))
@@ -440,7 +440,7 @@ contains
                              GV%ke,1,CS%diag%axesTL%handles,grid_tmask,grid_kmt,day)
 
     ! Register generic tracer modules diagnostics
-    
+
 #ifdef _USE_MOM6_DIAG
     call g_tracer_set_csdiag(CS%diag)
 #endif
@@ -575,7 +575,7 @@ contains
     !
     !Extract the tracer surface fields from coupler and update tracer fields from sources
     !
-    !call generic_tracer_coupler_get(fluxes%tr_fluxes) 
+    !call generic_tracer_coupler_get(fluxes%tr_fluxes)
     !Niki: This is moved out to ocean_model_MOM.F90 because if dt_therm>dt_cpld we need to average
     !      the fluxes without coming into this subroutine.
     !      MOM5 has to modified to conform.
@@ -627,9 +627,9 @@ contains
     enddo; enddo ; enddo
 
 
-    do j=jsc,jec ; do i=isc,iec 
+    do j=jsc,jec ; do i=isc,iec
        surface_field(i,j) = tv%S(i,j,1)
-    enddo ; enddo 
+    enddo ; enddo
     sosga = global_area_mean(surface_field, G)
 
     !
@@ -919,7 +919,7 @@ contains
 !         "No tracer in the list.")
 !    call g_tracer_send_diag(CS%g_tracer_list, get_diag_time_end(CS%diag), tau=1)
     !Niki: The problem with calling diagnostic outputs here is that this subroutine is called every dt_cpld
-    !      hence if dt_therm > dt_cpld we get output (and contribution to the mean) at times that tracers 
+    !      hence if dt_therm > dt_cpld we get output (and contribution to the mean) at times that tracers
     !      had not been updated.
     !      Moving this to the end of column physics subrotuine fixes this issue.
 

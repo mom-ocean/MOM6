@@ -725,7 +725,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
                                      h_new, h_old, G)
   type(ocean_grid_type),                     intent(inout) :: G !< Ocean grid structure
   type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary control structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u_new !< New u values on open boundaries 
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u_new !< New u values on open boundaries
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u_old !< Original unadjusted u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v_new !< New v values on open boundaries
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v_old !< Original unadjusted v
