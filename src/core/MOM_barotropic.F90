@@ -2646,8 +2646,9 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
 
   if ((OBC%Flather_u_BCs_exist_globally) .and. apply_u_OBCS) then
     do j=js,je ; do I=is-1,ie ; if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
-      if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%Flather) then
-        if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%legacy) then
+       if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%Flather) then
+! Flather is on for legacy. Dont turn it off when explicitly set without legacy turned on          
+!        if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%legacy) then
           if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) then
             cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j)           ! CFL
             u_inlet = cfl*ubt(I-1,j) + (1.0-cfl)*ubt(I,j)          ! Valid for cfl <1
@@ -2679,14 +2680,14 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
             eta(i,j) = 1.0/(1 + cfl) * (eta(i,j) + cfl*eta(i+1,j))
           endif
         endif
-      endif
+!      endif
     endif ; enddo ; enddo
   endif
 
   if ((OBC%Flather_v_BCs_exist_globally) .and. apply_v_OBCs) then
     do J=js-1,je ; do i=is,ie ; if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
       if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%Flather) then
-        if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%legacy) then
+!        if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%legacy) then
           if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N) then
             cfl = dtbt*BT_OBC%Cg_v(i,J)*G%IdyCv(i,J)               ! CFL
             v_inlet = cfl*vbt(i,J-1) + (1.0-cfl)*vbt(i,J)          ! Valid for cfl <1
@@ -2718,7 +2719,7 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
             eta(i,j) = 1.0/(1 + cfl) * (eta(i,j) + cfl*eta(i,j+1))
           endif
         endif
-      endif
+!      endif
     endif ; enddo ; enddo
   endif
 
