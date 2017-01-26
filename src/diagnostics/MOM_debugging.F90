@@ -1,4 +1,4 @@
-module MOM_error_checking
+module MOM_debugging
 
 !***********************************************************************
 !*                   GNU General Public License                        *
@@ -20,24 +20,21 @@ module MOM_error_checking
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
 !***********************************************************************
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, August 2006                                    *
-!*                                                                     *
-!*    This file contains various subroutines that are useful for       *
-!*  catching certain types of errors.                                  *
-!*                                                                     *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~!
+!   This module contains subroutines that perform various error checking and   !
+! debugging functions for MOM6.  This routine is similar to it counterpart in  !  
+! the SIS2 code, except for the use of the ocean_grid_type and by keeping them !
+! separate we retain the ability to set up MOM6 and SIS2 debugging separately. !
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~!
 
-use MOM_domains, only : create_group_pass, do_group_pass, group_pass_type
 use MOM_checksums, only : hchksum, Bchksum, uchksum, vchksum, qchksum
+use MOM_checksums, only : is_NaN, chksum, MOM_checksums_init
 use MOM_coms, only : PE_here, root_PE, num_PEs, sum_across_PEs
 use MOM_coms, only : min_across_PEs, max_across_PEs, reproducing_sum
 use MOM_domains, only : pass_vector, pass_var, pe_here
 use MOM_domains, only : BGRID_NE, AGRID, To_All, Scalar_Pair
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
-use MOM_file_parser, only : log_version, param_file_type
+use MOM_file_parser, only : log_version, param_file_type, get_param
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
 
@@ -47,6 +44,9 @@ public :: check_redundant_C, check_redundant_B, check_redundant_T
 public :: check_redundant
 public :: vec_chksum, vec_chksum_C, vec_chksum_B, vec_chksum_A
 public :: totalStuff, totalTandS
+
+! These interfaces come from MOM_checksums.
+public :: hchksum, Bchksum, uchksum, vchksum, qchksum, is_NaN, chksum
 
 interface check_redundant
   module procedure check_redundant_vC3d, check_redundant_vC2d
@@ -690,4 +690,4 @@ subroutine totalTandS(HI, hThick, areaT, temperature, salinity, mesg)
 
 end subroutine totalTandS
 
-end module MOM_error_checking
+end module MOM_debugging
