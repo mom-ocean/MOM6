@@ -1186,7 +1186,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
          u_new(I,j,k) = ((cff*u_old(I,j,k) + Cx*u_new(I-1,j,k)) - &
           (max(Cy,0.0)*grad(I,J-1) - min(Cy,0.0)*grad(I,J))) / (cff + Cx)
        endif
-       if (segment%radiation .and. segment%nudged) then
+       if ((segment%radiation .or. segment%legacy) .and. segment%nudged) then
          if (dhdt*dhdx < 0.0) then
            tau = segment%Tnudge_in
          else
@@ -1234,7 +1234,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
          u_new(I,j,k) = ((cff*u_old(I,j,k) + Cx*u_new(I+1,j,k)) - &
           (max(Cy,0.0)*grad(I,J-1) - min(Cy,0.0)*grad(I,J))) / (cff + Cx)
        endif
-       if (segment%radiation .and. segment%nudged) then
+       if ((segment%radiation .or. segment%legacy) .and. segment%nudged) then
          if (dhdt*dhdx < 0.0) then
            tau = segment%Tnudge_in
          else
@@ -1282,7 +1282,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
          v_new(i,J,k) = ((cff*v_old(i,J,k) + Cy*v_new(i,J-1,k)) - &
           (max(Cx,0.0)*grad(I+1,J) - min(Cx,0.0)*grad(I,J))) / (cff + Cy)
        endif
-       if (segment%radiation .and. segment%nudged) then
+       if ((segment%radiation .or. segment%legacy) .and. segment%nudged) then
          if (dhdt*dhdy < 0.0) then
            tau = segment%Tnudge_in
          else
@@ -1331,7 +1331,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
          v_new(i,J,k) = ((cff*v_old(i,J,k) + Cy*v_new(i,J+1,k)) - &
           (max(Cx,0.0)*grad(I+1,J) - min(Cx,0.0)*grad(I,J))) / (cff + Cy)
        endif
-       if (segment%radiation .and. segment%nudged) then
+       if ((segment%radiation .or. segment%legacy) .and. segment%nudged) then
          if (dhdt*dhdy < 0.0) then
            tau = segment%Tnudge_in
          else
@@ -1768,6 +1768,12 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
   if (OBC%Flather_v_BCs_exist_globally) then
     allocate(OBC%ry_old_v(isd:ied,JsdB:JedB,nz)) ; OBC%ry_old_v(:,:,:) = 0.0
  !   allocate(OBC%ry_old_h(isd:ied,Jsd:Jed,nz))   ; OBC%ry_old_h(:,:,:) = 0.0
+  endif
+  if (OBC%nudged_u_BCs_exist_globally) then
+    allocate(OBC%u(IsdB:IedB,jsd:jed,nz)) ; OBC%u(:,:,:) = 0.0
+  endif
+  if (OBC%nudged_v_BCs_exist_globally) then
+    allocate(OBC%v(isd:ied,JsdB:JedB,nz)) ; OBC%v(:,:,:) = 0.0
   endif
 
   if (associated(tv%T)) then

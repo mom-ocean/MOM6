@@ -82,6 +82,9 @@ subroutine tidal_bay_set_OBC_data(OBC, G, h, Time)
     if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
       OBC%eta_outer_u(I,j) = cff
       OBC%ubt_outer(I,j) = my_flux/my_area
+      do k=1,nz
+        OBC%u(I,j,k) = my_flux/my_area
+      enddo
     endif
   enddo ; enddo
   do J=JsdB,JedB ; do i=isd,ied
