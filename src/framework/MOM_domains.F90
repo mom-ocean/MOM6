@@ -890,8 +890,8 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   integer, dimension(2) :: io_layout = (/ 0, 0 /)
   integer, dimension(4) :: global_indices
 !$ integer :: ocean_nthreads       ! Number of Openmp threads
-!$ integer :: get_cpu_affinity, base_cpu
-!$ integer :: omp_get_thread_num
+!$ integer :: get_cpu_affinity, base_cpu, omp_get_thread_num, omp_cores_per_node, adder
+!$ logical :: ocean_omp_hyper_thread
   integer :: nihalo_dflt, njhalo_dflt
   integer :: pe, proc_used
   integer :: X_FLAGS, Y_FLAGS
@@ -971,13 +971,29 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  default=.false.)
 
 #ifndef NOT_SET_AFFINITY
-!$    call get_param(param_file, mod, "OCEAN_OMP_THREADS", ocean_nthreads, &
-!$               "The number of OpenMP threads that MOM6 will use.", &
-!$               default = 1, layoutParam=.true.)
-!$    call omp_set_num_threads(ocean_nthreads)
-!$    base_cpu = get_cpu_affinity()
-!$OMP PARALLEL
-!$    call set_cpu_affinity( base_cpu + omp_get_thread_num() )
+!$ call get_param(param_file, mdl, "OCEAN_OMP_THREADS", ocean_nthreads, &
+!$            "The number of OpenMP threads that MOM6 will use.", &
+!$            default = 1, layoutParam=.true.)
+!$ call get_param(param_file, mdl, "OCEAN_OMP_HYPER_THREAD", ocean_omp_hyper_thread, &
+!$            "If True, use hyper-threading.", default = .false., layoutParam=.true.)
+!$ if (ocean_omp_hyper_thread) then
+!$   call get_param(param_file, mdl, "OMP_CORES_PER_NODE", omp_cores_per_node, &
+!$            "Number of cores per node needed for hyper-threading.", &
+!$            fail_if_missing=.true., layoutParam=.true.)
+!$ endif
+!$ call omp_set_num_threads(ocean_nthreads)
+!$OMP PARALLEL private(adder)
+!$ base_cpu = get_cpu_affinity()
+!$ if (ocean_omp_hyper_thread) then
+!$   if (mod(omp_get_thread_num(),2) == 0) then
+!$     adder = omp_get_thread_num()/2
+!$   else
+!$     adder = omp_cores_per_node + omp_get_thread_num()/2
+!$   endif
+!$ else
+!$   adder = omp_get_thread_num()
+!$ endif
+!$ call set_cpu_affinity(base_cpu + adder)
 !$OMP END PARALLEL
 #endif
 
