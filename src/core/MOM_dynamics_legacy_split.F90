@@ -102,7 +102,7 @@ use MOM_legacy_barotropic, only : legacy_set_dtbt, legacy_barotropic_CS
 use MOM_continuity, only : continuity, continuity_init, continuity_CS
 use MOM_CoriolisAdv, only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
 use MOM_diabatic_driver, only : diabatic, diabatic_driver_init, diabatic_CS
-use MOM_error_checking, only : check_redundant
+use MOM_debugging, only : check_redundant
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
 use MOM_hor_visc, only : horizontal_viscosity, hor_visc_init, hor_visc_CS
