@@ -370,9 +370,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     ! Adjust contributions to shearing strain on open boundaries.
     if (apply_OBC) then ; if (OBC%zero_strain .or. OBC%freeslip_strain) then
       do n=1,OBC%number_of_segments
-        if (OBC%OBC_segment_number(n)%is_N_or_S) then
-          J = OBC%OBC_segment_number(n)%HI%JsdB
-          do I=OBC%OBC_segment_number(n)%HI%IsdB,OBC%OBC_segment_number(n)%HI%IedB
+        if (OBC%segment(n)%is_N_or_S) then
+          J = OBC%segment(n)%HI%JsdB
+          do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
             if (OBC%zero_strain) then
               dvdx(I,J) = 0.
               dudy(I,J) = 0.
@@ -380,9 +380,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
               dudy(I,J) = 0.
             endif
           enddo
-        elseif (OBC%OBC_segment_number(n)%is_E_or_W) then
-          I = OBC%OBC_segment_number(n)%HI%IsdB
-          do J=OBC%OBC_segment_number(n)%HI%JsdB,OBC%OBC_segment_number(n)%HI%JedB
+        elseif (OBC%segment(n)%is_E_or_W) then
+          I = OBC%segment(n)%HI%IsdB
+          do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
             if (OBC%zero_strain) then
               dvdx(I,J) = 0.
               dudy(I,J) = 0.
@@ -415,14 +415,14 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       enddo ; enddo
       if (apply_OBC .and. OBC%zero_biharmonic) then
         do n=1,OBC%number_of_segments
-          if (OBC%OBC_segment_number(n)%is_N_or_S) then
-            J = OBC%OBC_segment_number(n)%HI%JsdB
-            do I=OBC%OBC_segment_number(n)%HI%isd,OBC%OBC_segment_number(n)%HI%ied
+          if (OBC%segment(n)%is_N_or_S) then
+            J = OBC%segment(n)%HI%JsdB
+            do I=OBC%segment(n)%HI%isd,OBC%segment(n)%HI%ied
               v0(i,J) = 0.
             enddo
-          elseif (OBC%OBC_segment_number(n)%is_E_or_W) then
-            I = OBC%OBC_segment_number(n)%HI%IsdB
-            do j=OBC%OBC_segment_number(n)%HI%jsd,OBC%OBC_segment_number(n)%HI%jed
+          elseif (OBC%segment(n)%is_E_or_W) then
+            I = OBC%segment(n)%HI%IsdB
+            do j=OBC%segment(n)%HI%jsd,OBC%segment(n)%HI%jed
               u0(I,j) = 0.
             enddo
           endif
@@ -521,9 +521,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       ! Adjust contributions to shearing strain on open boundaries.
       if (apply_OBC) then ; if (OBC%zero_strain .or. OBC%freeslip_strain) then
         do n=1,OBC%number_of_segments
-          if (OBC%OBC_segment_number(n)%is_N_or_S) then
-            J = OBC%OBC_segment_number(n)%HI%JsdB
-            do I=OBC%OBC_segment_number(n)%HI%IsdB,OBC%OBC_segment_number(n)%HI%IedB
+          if (OBC%segment(n)%is_N_or_S) then
+            J = OBC%segment(n)%HI%JsdB
+            do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
               if (OBC%zero_strain) then
                 dvdx(I,J) = 0.
                 dudy(I,J) = 0.
@@ -531,9 +531,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                 dudy(I,J) = 0.
               endif
             enddo
-          elseif (OBC%OBC_segment_number(n)%is_E_or_W) then
-            I = OBC%OBC_segment_number(n)%HI%IsdB
-            do J=OBC%OBC_segment_number(n)%HI%JsdB,OBC%OBC_segment_number(n)%HI%JedB
+          elseif (OBC%segment(n)%is_E_or_W) then
+            I = OBC%segment(n)%HI%IsdB
+            do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
               if (OBC%zero_strain) then
                 dvdx(I,J) = 0.
                 dudy(I,J) = 0.
@@ -672,9 +672,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       ! This is not the right boundary condition. If all the masking of tendencies are done
       ! correctly later then eliminating this block should not change answers.
       do n=1,OBC%number_of_segments
-        if (OBC%OBC_segment_number(n)%is_E_or_W) then
-          I = OBC%OBC_segment_number(n)%HI%IsdB
-          do j=OBC%OBC_segment_number(n)%HI%jsd,OBC%OBC_segment_number(n)%HI%jed
+        if (OBC%segment(n)%is_E_or_W) then
+          I = OBC%segment(n)%HI%IsdB
+          do j=OBC%segment(n)%HI%jsd,OBC%segment(n)%HI%jed
             diffu(I,j,k) = 0.
           enddo
         endif
@@ -693,9 +693,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       ! This is not the right boundary condition. If all the masking of tendencies are done
       ! correctly later then eliminating this block should not change answers.
       do n=1,OBC%number_of_segments
-        if (OBC%OBC_segment_number(n)%is_N_or_S) then
-          J = OBC%OBC_segment_number(n)%HI%JsdB
-          do i=OBC%OBC_segment_number(n)%HI%isd,OBC%OBC_segment_number(n)%HI%ied
+        if (OBC%segment(n)%is_N_or_S) then
+          J = OBC%segment(n)%HI%JsdB
+          do i=OBC%segment(n)%HI%isd,OBC%segment(n)%HI%ied
             diffv(i,J,k) = 0.
           enddo
         endif
