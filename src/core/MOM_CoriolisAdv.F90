@@ -246,9 +246,9 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
     ! Adjust circulation components to relative vorticity on open boundaries.
     if (associated(OBC)) then ; if (OBC%zero_vorticity .or. OBC%freeslip_vorticity) then
       do n=1,OBC%number_of_segments
-        if (OBC%OBC_segment_number(n)%is_N_or_S) then
-          J = OBC%OBC_segment_number(n)%HI%JsdB
-          do I=OBC%OBC_segment_number(n)%HI%IsdB,OBC%OBC_segment_number(n)%HI%IedB
+        if (OBC%segment(n)%is_N_or_S) then
+          J = OBC%segment(n)%HI%JsdB
+          do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
             if (OBC%zero_vorticity) then
               dvdx(I,J) = 0.
               dudy(I,J) = 0.
@@ -256,9 +256,9 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
               dudy(I,J) = 0.
             endif
           enddo
-        elseif (OBC%OBC_segment_number(n)%is_E_or_W) then
-          I = OBC%OBC_segment_number(n)%HI%IsdB
-          do J=OBC%OBC_segment_number(n)%HI%JsdB,OBC%OBC_segment_number(n)%HI%JedB
+        elseif (OBC%segment(n)%is_E_or_W) then
+          I = OBC%segment(n)%HI%IsdB
+          do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
             if (OBC%zero_vorticity) then
               dvdx(I,J) = 0.
               dudy(I,J) = 0.
@@ -776,13 +776,13 @@ subroutine gradKE(u, v, h, uh, vh, KE, KEx, KEy, k, OBC, G, CS)
 
   if (associated(OBC)) then
     do n=1,OBC%number_of_segments
-      if (OBC%OBC_segment_number(n)%is_N_or_S) then
-        do i=OBC%OBC_segment_number(n)%HI%isd,OBC%OBC_segment_number(n)%HI%ied
-          KEy(i,OBC%OBC_segment_number(n)%HI%JsdB) = 0.
+      if (OBC%segment(n)%is_N_or_S) then
+        do i=OBC%segment(n)%HI%isd,OBC%segment(n)%HI%ied
+          KEy(i,OBC%segment(n)%HI%JsdB) = 0.
         enddo
-      elseif (OBC%OBC_segment_number(n)%is_E_or_W) then
-        do j=OBC%OBC_segment_number(n)%HI%jsd,OBC%OBC_segment_number(n)%HI%jed
-          KEx(OBC%OBC_segment_number(n)%HI%IsdB,j) = 0.
+      elseif (OBC%segment(n)%is_E_or_W) then
+        do j=OBC%segment(n)%HI%jsd,OBC%segment(n)%HI%jed
+          KEx(OBC%segment(n)%HI%IsdB,j) = 0.
         enddo
       endif
     enddo

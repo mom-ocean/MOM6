@@ -498,9 +498,9 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
 
     if (associated(OBC)) then ; if (OBC%OBC_pe) then ; if (OBC%specified_u_BCs_exist_globally) then
       do n=1,OBC%number_of_segments
-        if (OBC%OBC_segment_number(n)%is_E_or_W) then
-          if (j >= OBC%OBC_segment_number(n)%HI%jsd .and. j<= OBC%OBC_segment_number(n)%HI%jed) then
-            I = OBC%OBC_segment_number(n)%HI%IsdB
+        if (OBC%segment(n)%is_E_or_W) then
+          if (j >= OBC%segment(n)%HI%jsd .and. j<= OBC%segment(n)%HI%jed) then
+            I = OBC%segment(n)%HI%IsdB
             ! Tracer fluxes are set to prescribed values only for inflows from masked areas.
             if ((uhr(I,j,k) > 0.0) .and. (G%mask2dT(i,j) < 0.5) .or. &
                 (uhr(I,j,k) < 0.0) .and. (G%mask2dT(i+1,j) < 0.5)) then
@@ -757,9 +757,9 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
 
     if (associated(OBC)) then ; if (OBC%OBC_pe) then ; if (OBC%specified_v_BCs_exist_globally) then
       do n=1,OBC%number_of_segments
-        if (OBC%OBC_segment_number(n)%is_N_or_S) then
-          if (J >= OBC%OBC_segment_number(n)%HI%JsdB .and. J<= OBC%OBC_segment_number(n)%HI%JedB) then
-            i = OBC%OBC_segment_number(n)%HI%isd
+        if (OBC%segment(n)%is_N_or_S) then
+          if (J >= OBC%segment(n)%HI%JsdB .and. J<= OBC%segment(n)%HI%JedB) then
+            i = OBC%segment(n)%HI%isd
             ! Tracer fluxes are set to prescribed values only for inflows from masked areas.
             if ((vhr(i,J,k) > 0.0) .and. (G%mask2dT(i,j) < 0.5) .or. &
                 (vhr(i,J,k) < 0.0) .and. (G%mask2dT(i,j+1) < 0.5)) then

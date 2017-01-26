@@ -390,15 +390,15 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, GV, CS, &
   ! Here the velocities associated with open boundary conditions are applied.
   if (associated(OBC)) then
     do n=1,OBC%number_of_segments
-      if (OBC%OBC_segment_number(n)%specified) then
-        if (OBC%OBC_segment_number(n)%is_N_or_S) then
-          J = OBC%OBC_segment_number(n)%HI%JsdB
-          do k=1,nz ; do i=OBC%OBC_segment_number(n)%HI%isd,OBC%OBC_segment_number(n)%HI%ied
+      if (OBC%segment(n)%specified) then
+        if (OBC%segment(n)%is_N_or_S) then
+          J = OBC%segment(n)%HI%JsdB
+          do k=1,nz ; do i=OBC%segment(n)%HI%isd,OBC%segment(n)%HI%ied
             v(i,J,k) = OBC%v(i,J,k)
           enddo ; enddo
-        elseif (OBC%OBC_segment_number(n)%is_E_or_W) then
-          I = OBC%OBC_segment_number(n)%HI%IsdB
-          do k=1,nz ; do j=OBC%OBC_segment_number(n)%HI%jsd,OBC%OBC_segment_number(n)%HI%jed
+        elseif (OBC%segment(n)%is_E_or_W) then
+          I = OBC%segment(n)%HI%IsdB
+          do k=1,nz ; do j=OBC%segment(n)%HI%jsd,OBC%segment(n)%HI%jed
             u(I,j,k) = OBC%u(I,j,k)
           enddo ; enddo
         endif
