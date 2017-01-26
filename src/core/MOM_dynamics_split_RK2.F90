@@ -639,7 +639,13 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (associated(CS%OBC)) then
     call radiation_open_bdry_conds(CS%OBC, u_av, u_old_rad_OBC, v_av, &
-             v_old_rad_OBC, hp, h_old_rad_OBC, G, dt)
+         v_old_rad_OBC, hp, h_old_rad_OBC, G, dt)
+    call cpu_clock_begin(id_clock_pass)
+    call do_group_pass(CS%pass_hp_uv, G%Domain)
+    if (G%nonblocking_updates) then
+      call start_group_pass(CS%pass_av_uvh, G%Domain)
+    endif
+    call cpu_clock_end(id_clock_pass)
   endif
 
   ! h_av = (h + hp)/2
