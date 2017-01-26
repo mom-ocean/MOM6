@@ -2660,7 +2660,7 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
   integer :: i, j, is, ie, js, je
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
 
-  if ((OBC%open_u_BCs_exist_globally) .and. apply_u_OBCS) then
+  if (OBC%open_u_BCs_exist_globally .and. apply_u_OBCS) then
     do j=js,je ; do I=is-1,ie ; if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
       if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%Flather) then
 ! Flather is on for legacy. Dont turn it off when explicitly set without legacy turned on
@@ -2705,7 +2705,7 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
     endif ; enddo ; enddo
   endif
 
-  if ((OBC%open_v_BCs_exist_globally) .and. apply_v_OBCs) then
+  if (OBC%open_v_BCs_exist_globally .and. apply_v_OBCs) then
     do J=js-1,je ; do i=is,ie ; if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
       if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%Flather) then
 !        if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%legacy) then
