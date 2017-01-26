@@ -418,7 +418,7 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt, frac_shelf_h)
 
   ! Override old grid with new one. The new grid 'h_new' is built in
   ! one of the 'build_...' routines above.
-!$OPP parallel do default(none) shared(isc,iec,jsc,jec,nk,h,h_new,CS)
+!$OMP parallel do default(none) shared(isc,iec,jsc,jec,nk,h,h_new,CS)
   do k = 1,nk
     do j = jsc-1,jec+1 ; do i = isc-1,iec+1
       h(i,j,k) = h_new(i,j,k)
@@ -475,7 +475,7 @@ subroutine ALE_main_offline( G, GV, h, tv, Reg, CS, dt)
 
   ! Override old grid with new one. The new grid 'h_new' is built in
   ! one of the 'build_...' routines above.
-!$OPP parallel do default(none) shared(isc,iec,jsc,jec,nk,h,h_new,CS)
+!$OMP parallel do default(none) shared(isc,iec,jsc,jec,nk,h,h_new,CS)
   do k = 1,nk
     do j = jsc-1,jec+1 ; do i = isc-1,iec+1
       h(i,j,k) = h_new(i,j,k)
@@ -523,7 +523,7 @@ subroutine ALE_offline_tracer_final( G, GV, h, h_target, Reg, CS)
 
   ! Override old grid with new one. The new grid 'h_new' is built in
   ! one of the 'build_...' routines above.
-!$OPP parallel do default(none) shared(isc,iec,jsc,jec,nk,h,h_target,CS)
+!$OMP parallel do default(none) shared(isc,iec,jsc,jec,nk,h,h_target,CS)
   do k = 1,nk
     do j = jsc-1,jec+1 ; do i = isc-1,iec+1
       h(i,j,k) = h_target(i,j,k)
@@ -593,7 +593,7 @@ subroutine ALE_build_grid( G, GV, regridCS, remapCS, h, tv, debug, frac_shelf_h 
 
   ! Override old grid with new one. The new grid 'h_new' is built in
   ! one of the 'build_...' routines above.
-!$OPP parallel do default(none) shared(G,h,h_new)
+!$OMP parallel do default(none) shared(G,h,h_new)
   do j = G%jsc,G%jec ; do i = G%isc,G%iec
     if (G%mask2dT(i,j)>0.) h(i,j,:) = h_new(i,j,:)
   enddo ; enddo
@@ -653,12 +653,12 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, dxInt
   endif
 
   ! Remap tracer
-!$OPP parallel default(none) shared(G,GV,h_old,h_new,dxInterface,CS_remapping,nz,Reg,u,v,ntr,show_call_tree, &
-!$OPP                               dt,h2,CS_ALE,work_conc,work_cont,work_2d,Idt,ppt2mks) &
-!$OPP                       private(h1,dx,u_column)
+!$OMP parallel default(none) shared(G,GV,h_old,h_new,dxInterface,CS_remapping,nz,Reg,u,v,ntr,show_call_tree, &
+!$OMP                               dt,CS_ALE,work_conc,work_cont,work_2d,Idt,ppt2mks) &
+!$OMP                       private(h1,h2,dx,u_column)
   if (ntr>0) then
     if (show_call_tree) call callTree_waypoint("remapping tracers (remap_all_state_vars)")
-!$OPP do
+!$OMP do
     do m=1,ntr ! For each tracer 
 
       do j = G%jsc,G%jec
@@ -750,7 +750,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, dxInt
 
   ! Remap u velocity component
   if ( present(u) ) then
-!$OPP do
+!$OMP do
     do j = G%jsc,G%jec
       do I = G%iscB,G%iecB
         if (G%mask2dCu(i,j)>0.) then
@@ -775,7 +775,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, dxInt
 
   ! Remap v velocity component
   if ( present(v) ) then
-!$OPP do
+!$OMP do
     do J = G%jscB,G%jecB
       do i = G%isc,G%iec
         if (G%mask2dCv(i,j)>0.) then
@@ -795,7 +795,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, dxInt
       enddo
     enddo
   endif
-!$OPP end parallel
+!$OMP end parallel
 
   if (show_call_tree) call callTree_waypoint("v remapped (remap_all_state_vars)")
   if (show_call_tree) call callTree_leave("remap_all_state_vars()")
@@ -831,10 +831,10 @@ subroutine ALE_remap_scalar(CS, G, GV, nk_src, h_src, s_src, h_dst, s_dst, all_c
   if (present(old_remap)) use_remapping_core_w = old_remap
   n_points = nk_src
 
-!$OPP parallel default(none) shared(CS,G,GV,h_src,s_src,h_dst,s_dst &
-!$OPP                               ,ignore_vanished_layers, use_remapping_core_w, nk_src,dx ) &
-!$OPP                        firstprivate(n_points)
-!$OPP do
+!$OMP parallel default(none) shared(CS,G,GV,h_src,s_src,h_dst,s_dst &
+!$OMP                               ,ignore_vanished_layers, use_remapping_core_w, nk_src ) &
+!$OMP                        firstprivate(n_points,dx)
+!$OMP do
   do j = G%jsc,G%jec
     do i = G%isc,G%iec
       if (G%mask2dT(i,j)>0.) then
@@ -856,7 +856,7 @@ subroutine ALE_remap_scalar(CS, G, GV, nk_src, h_src, s_src, h_dst, s_dst, all_c
       endif
     enddo
   enddo
-!$OPP end parallel
+!$OMP end parallel
 
 end subroutine ALE_remap_scalar
 
@@ -888,8 +888,8 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h )
   ! the module level.
 
   ! Determine reconstruction within each column
-!$OPP parallel do default(none) shared(G,GV,h,tv,CS,S_t,S_b,T_t,T_b)                  &
-!$OPP                          private(hTmp,ppoly_linear_E,ppoly_linear_coefficients,tmp)
+!$OMP parallel do default(none) shared(G,GV,h,tv,CS,S_t,S_b,T_t,T_b)                  &
+!$OMP                          private(hTmp,ppoly_linear_E,ppoly_linear_coefficients,tmp)
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
       ! Build current grid
@@ -956,8 +956,8 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h )
   ! the module level.
 
   ! Determine reconstruction within each column
-!$OPP parallel do default(none) shared(G,GV,h,tv,CS,S_t,S_b,T_t,T_b) &
-!$OPP                          private(hTmp,tmp,ppoly_parab_E,ppoly_parab_coefficients)
+!$OMP parallel do default(none) shared(G,GV,h,tv,CS,S_t,S_b,T_t,T_b) &
+!$OMP                          private(hTmp,tmp,ppoly_parab_E,ppoly_parab_coefficients)
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
 
