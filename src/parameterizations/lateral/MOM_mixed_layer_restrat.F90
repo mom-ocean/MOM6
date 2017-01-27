@@ -234,7 +234,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV,
 !$OMP                               nz,MLD,uDml_diag,vDml_diag)                        &
 !$OMP                       private(Rho0,h_vel,u_star,absf,mom_mixrate,timescale,      &
 !$OMP                               a,IhTot,zIHbelowVel,hAtVel,zIHaboveVel)            &
-!$OMP                  firstprivate(uDml,vDml)
+!$OMP                       firstprivate(uDml,vDml)
 !$OMP do
   do j=js-1,je+1
     do i=is-1,ie+1
@@ -483,7 +483,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, GV, CS)
 !$OMP                               uDml_diag,vDml_diag,nkml)                          &
 !$OMP                       private(Rho0,h_vel,u_star,absf,mom_mixrate,timescale,      &
 !$OMP                               I2htot,z_topx2,hx2,a)                              &
-!$OMP                  firstprivate(uDml,vDml)    
+!$OMP                       firstprivate(uDml,vDml)    
 !$OMP do
   do j=js-1,je+1
     do i=is-1,ie+1
