@@ -890,7 +890,8 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   integer, dimension(2) :: io_layout = (/ 0, 0 /)
   integer, dimension(4) :: global_indices
 !$ integer :: ocean_nthreads       ! Number of Openmp threads
-!$ integer :: get_cpu_affinity, base_cpu, omp_get_thread_num, omp_cores_per_node, adder
+!$ integer :: get_cpu_affinity, omp_get_thread_num, omp_get_num_threads
+!$ integer :: omp_cores_per_node, adder, base_cpu
 !$ logical :: ocean_omp_hyper_thread
   integer :: nihalo_dflt, njhalo_dflt
   integer :: pe, proc_used
@@ -994,6 +995,8 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
 !$   adder = omp_get_thread_num()
 !$ endif
 !$ call set_cpu_affinity(base_cpu + adder)
+!!$     write(6,*) " ocean  ", omp_get_num_threads(), get_cpu_affinity(), adder, omp_get_thread_num()
+!!$     call flush(6)
 !$OMP END PARALLEL
 #endif
 
