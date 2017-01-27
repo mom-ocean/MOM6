@@ -659,7 +659,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, dxInt
   if (ntr>0) then
     if (show_call_tree) call callTree_waypoint("remapping tracers (remap_all_state_vars)")
 !$OMP do
-    do m=1,ntr ! For each tracer 
+    do m=1,ntr ! For each tracer
 
       do j = G%jsc,G%jec
         do i = G%isc,G%iec
