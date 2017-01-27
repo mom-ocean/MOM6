@@ -432,9 +432,9 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
   S2max = CS%Visbeck_S_max**2
 
 !$OMP parallel default(none) shared(is,ie,js,je,CS,nz,e,G,GV,h, &
-!$OMP                               H_u,H_v,S2_u,S2_v,slope_x,slope_y,   &
+!$OMP                               S2_u,S2_v,slope_x,slope_y,   &
 !$OMP                               SN_u_local,SN_v_local,N2_u,N2_v, S2max)   &
-!$OMP                       private(E_x,E_y,S2,Hdn,Hup,H_geom,N2, &
+!$OMP                       private(E_x,E_y,S2,H_u,H_v,Hdn,Hup,H_geom,N2, &
 !$OMP                       wNE, wSE, wSW, wNW)
 !$OMP do
   do j=js-1,je+1 ; do i=is-1,ie+1

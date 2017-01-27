@@ -22,7 +22,7 @@ module MOM_debugging
 
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~!
 !   This module contains subroutines that perform various error checking and   !
-! debugging functions for MOM6.  This routine is similar to it counterpart in  !  
+! debugging functions for MOM6.  This routine is similar to it counterpart in  !
 ! the SIS2 code, except for the use of the ocean_grid_type and by keeping them !
 ! separate we retain the ability to set up MOM6 and SIS2 debugging separately. !
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~!
