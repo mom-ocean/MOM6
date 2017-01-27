@@ -40,10 +40,9 @@ use MOM_hor_index, only : hor_index_type
 
 implicit none ; private
 
-public :: check_redundant_C, check_redundant_B, check_redundant_T
-public :: check_redundant
+public :: check_redundant_C, check_redundant_B, check_redundant_T, check_redundant
 public :: vec_chksum, vec_chksum_C, vec_chksum_B, vec_chksum_A
-public :: totalStuff, totalTandS
+public :: MOM_debugging_init, totalStuff, totalTandS
 
 ! These interfaces come from MOM_checksums.
 public :: hchksum, Bchksum, uchksum, vchksum, qchksum, is_NaN, chksum
@@ -78,10 +77,35 @@ end interface vec_chksum_A
 
 integer :: max_redundant_prints = 100
 integer :: redundant_prints(3) = 0
+logical :: debug = .false.
+logical :: debug_chksums = .true.
+logical :: debug_redundant = .true.
 
 contains
 
 ! =====================================================================
+
+!> MOM_debugging_init initializes the MOM_debugging module, and sets
+!! the parameterts that control which checks are active for MOM6.
+subroutine MOM_debugging_init(param_file)
+  type(param_file_type),   intent(in)    :: param_file
+! This include declares and sets the variable "version".
+#include "version_variable.h"
+  character(len=40)  :: mod = "MOM_debugging" ! This module's name.
+
+  call log_version(param_file, mod, version)
+  call get_param(param_file, mod, "DEBUG", debug, &
+                 "If true, write out verbose debugging data.", default=.false.)
+  call get_param(param_file, mod, "DEBUG_CHKSUMS", debug_chksums, &
+                 "If true, checksums are performed on arrays in the \n"//&
+                 "various vec_chksum routines.", default=debug)
+  call get_param(param_file, mod, "DEBUG_REDUNDANT", debug_redundant, &
+                 "If true, debug redundant data points during calls to \n"//&
+                 "the various vec_chksum routines.", default=debug)
+
+  call MOM_checksums_init(param_file)
+
+end subroutine MOM_debugging_init
 
 subroutine check_redundant_vC3d(mesg, u_comp, v_comp, G, is, ie, js, je, &
                                 direction)
@@ -302,12 +326,12 @@ end subroutine  check_redundant_vB3d
 
 subroutine check_redundant_vB2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
                                 direction)
-  character(len=*),                 intent(in)    :: mesg
+  character(len=*),                intent(in)    :: mesg
   type(ocean_grid_type),            intent(inout) :: G
   real, dimension(G%IsdB:,G%JsdB:), intent(in)   :: u_comp
   real, dimension(G%IsdB:,G%JsdB:), intent(in)   :: v_comp
-  integer,                optional, intent(in)    :: is, ie, js, je
-  integer,                optional, intent(in)    :: direction
+  integer,               optional, intent(in)    :: is, ie, js, je
+  integer,               optional, intent(in)    :: direction
 ! Arguments: u_comp - The u-component of the vector being checked.
 !  (in)      v_comp - The v-component of the vector being checked.
 !  (in)      mesg - A message indicating what is being checked.
@@ -541,86 +565,170 @@ end subroutine  check_redundant_vT2d
 ! =====================================================================
 
 ! This function does a checksum and redundant point check on a 3d C-grid vector.
-subroutine chksum_vec_C3d(mesg, u_comp, v_comp, G, haloshift)
+subroutine chksum_vec_C3d(mesg, u_comp, v_comp, G, halos, scalars)
   character(len=*),                  intent(in)    :: mesg   !< An identifying message
   type(ocean_grid_type),             intent(inout) :: G      !< The ocean's grid structure
   real, dimension(G%IsdB:,G%jsd:,:), intent(in)    :: u_comp !< The u-component of the vector
   real, dimension(G%isd:,G%JsdB:,:), intent(in)    :: v_comp !< The v-component of the vector
-  integer,                 optional, intent(in)    :: haloshift !< The width of halos to check (default 0)
+  integer,                 optional, intent(in)    :: halos  !< The width of halos to check (default 0)
+  logical,                 optional, intent(in)    :: scalars !< If true this is a pair of
+                                                              !! scalars that are being checked.
 
-  call uchksum(u_comp, mesg, G%HI, haloshift)
-  call vchksum(v_comp, mesg, G%HI, haloshift)
-  call check_redundant_C(mesg, u_comp, v_comp, G)
+  logical :: are_scalars
+  are_scalars = .false. ; if (present(scalars)) are_scalars = scalars
+
+  if (debug_chksums) then
+    call uchksum(u_comp, mesg//"(u)", G%HI, halos)
+    call vchksum(v_comp, mesg//"(v)", G%HI, halos)
+  endif
+  if (debug_redundant) then
+    if (are_scalars) then
+      call check_redundant_C(mesg, u_comp, v_comp, G, direction=To_All+Scalar_Pair)
+    else
+      call check_redundant_C(mesg, u_comp, v_comp, G)
+    endif
+  endif
+
 end subroutine chksum_vec_C3d
 
 ! This function does a checksum and redundant point check on a 2d C-grid vector.
-subroutine chksum_vec_C2d(mesg, u_comp, v_comp, G, haloshift)
+subroutine chksum_vec_C2d(mesg, u_comp, v_comp, G, halos, scalars)
   character(len=*),                intent(in)    :: mesg   !< An identifying message
   type(ocean_grid_type),           intent(inout) :: G      !< The ocean's grid structure
   real, dimension(G%IsdB:,G%jsd:), intent(in)    :: u_comp !< The u-component of the vector
   real, dimension(G%isd:,G%JsdB:), intent(in)    :: v_comp !< The v-component of the vector
-  integer,               optional, intent(in)    :: haloshift !< The width of halos to check (default 0)
+  integer,               optional, intent(in)    :: halos  !< The width of halos to check (default 0)
+  logical,               optional, intent(in)    :: scalars !< If true this is a pair of
+                                                            !! scalars that are being checked.
 
-  call uchksum(u_comp, mesg, G%HI, haloshift)
-  call vchksum(v_comp, mesg, G%HI, haloshift)
-  call check_redundant_C(mesg, u_comp, v_comp, G)
+  logical :: are_scalars
+  are_scalars = .false. ; if (present(scalars)) are_scalars = scalars
+
+  if (debug_chksums) then
+    call uchksum(u_comp, mesg//"(u)", G%HI, halos)
+    call vchksum(v_comp, mesg//"(v)", G%HI, halos)
+  endif
+  if (debug_redundant) then
+    if (are_scalars) then
+      call check_redundant_C(mesg, u_comp, v_comp, G, direction=To_All+Scalar_Pair)
+    else
+      call check_redundant_C(mesg, u_comp, v_comp, G)
+    endif
+  endif
+
 end subroutine chksum_vec_C2d
 
 ! This function does a checksum and redundant point check on a 3d B-grid vector.
-subroutine chksum_vec_B3d(mesg, u_comp, v_comp, G, haloshift)
+subroutine chksum_vec_B3d(mesg, u_comp, v_comp, G, halos, scalars)
   character(len=*),                   intent(in)    :: mesg   !< An identifying message
   type(ocean_grid_type),              intent(inout) :: G      !< The ocean's grid structure
   real, dimension(G%IsdB:,G%JsdB:,:), intent(in)    :: u_comp !< The u-component of the vector
   real, dimension(G%IsdB:,G%JsdB:,:), intent(in)    :: v_comp !< The v-component of the vector
-  integer,                  optional, intent(in)    :: haloshift !< The width of halos to check (default 0)
+  integer,                  optional, intent(in)    :: halos  !< The width of halos to check (default 0)
+  logical,                  optional, intent(in)    :: scalars !< If true this is a pair of
+                                                               !! scalars that are being checked.
 
-  call Bchksum(u_comp, mesg, G%HI, haloshift)
-  call Bchksum(v_comp, mesg, G%HI, haloshift)
-  call check_redundant_B(mesg, u_comp, v_comp, G)
+  logical :: are_scalars
+  are_scalars = .false. ; if (present(scalars)) are_scalars = scalars
+
+  if (debug_chksums) then
+    call Bchksum(u_comp, mesg//"(u)", G%HI, halos)
+    call Bchksum(v_comp, mesg//"(v)", G%HI, halos)
+  endif
+  if (debug_redundant) then
+    if (are_scalars) then
+      call check_redundant_B(mesg, u_comp, v_comp, G, direction=To_All+Scalar_Pair)
+    else
+      call check_redundant_B(mesg, u_comp, v_comp, G)
+    endif
+  endif
+
 end subroutine chksum_vec_B3d
 
-
 ! This function does a checksum and redundant point check on a 2d B-grid vector.
-subroutine chksum_vec_B2d(mesg, u_comp, v_comp, G, haloshift, symmetric)
+subroutine chksum_vec_B2d(mesg, u_comp, v_comp, G, halos, scalars, symmetric)
   character(len=*),                 intent(in)    :: mesg   !< An identifying message
   type(ocean_grid_type),            intent(inout) :: G      !< The ocean's grid structure
   real, dimension(G%IsdB:,G%JsdB:), intent(in)    :: u_comp !< The u-component of the vector
   real, dimension(G%IsdB:,G%JsdB:), intent(in)    :: v_comp !< The v-component of the vector
-  integer,                optional, intent(in)    :: haloshift !< The width of halos to check (default 0)
+  integer,                optional, intent(in)    :: halos  !< The width of halos to check (default 0)
+  logical,                optional, intent(in)    :: scalars !< If true this is a pair of
+                                                             !! scalars that are being checked.
   logical,                optional, intent(in)    :: symmetric !< If true, do the checksums on the
                                                                !! full symmetric computational domain.
 
-  call Bchksum(u_comp, mesg, G%HI, haloshift, symmetric=symmetric)
-  call Bchksum(v_comp, mesg, G%HI, haloshift, symmetric=symmetric)
-  call check_redundant_B(mesg, u_comp, v_comp, G)
+  logical :: are_scalars
+  are_scalars = .false. ; if (present(scalars)) are_scalars = scalars
+
+  if (debug_chksums) then
+    call Bchksum(u_comp, mesg//"(u)", G%HI, halos, symmetric=symmetric)
+    call Bchksum(v_comp, mesg//"(v)", G%HI, halos, symmetric=symmetric)
+  endif
+  if (debug_redundant) then
+    if (are_scalars) then
+      call check_redundant_B(mesg, u_comp, v_comp, G, direction=To_All+Scalar_Pair)
+    else
+      call check_redundant_B(mesg, u_comp, v_comp, G)
+    endif
+  endif
+
 end subroutine chksum_vec_B2d
 
 ! This function does a checksum and redundant point check on a 3d C-grid vector.
-subroutine chksum_vec_A3d(mesg, u_comp, v_comp, G, haloshift)
+subroutine chksum_vec_A3d(mesg, u_comp, v_comp, G, halos, scalars)
   character(len=*),                 intent(in)    :: mesg   !< An identifying message
   type(ocean_grid_type),            intent(inout) :: G      !< The ocean's grid structure
   real, dimension(G%isd:,G%jsd:,:), intent(in)    :: u_comp !< The u-component of the vector
   real, dimension(G%isd:,G%jsd:,:), intent(in)    :: v_comp !< The v-component of the vector
-  integer,                optional, intent(in)    :: haloshift !< The width of halos to check (default 0)
+  integer,                optional, intent(in)    :: halos  !< The width of halos to check (default 0)
+  logical,                optional, intent(in)    :: scalars !< If true this is a pair of
+                                                             !! scalars that are being checked.
 
-  call hchksum(u_comp, mesg, G%HI, haloshift)
-  call hchksum(v_comp, mesg, G%HI, haloshift)
-  call check_redundant_T(mesg, u_comp, v_comp, G)
+  logical :: are_scalars
+  are_scalars = .false. ; if (present(scalars)) are_scalars = scalars
+
+  if (debug_chksums) then
+    call hchksum(u_comp, mesg//"(u)", G%HI, halos)
+    call hchksum(v_comp, mesg//"(v)", G%HI, halos)
+  endif
+  if (debug_redundant) then
+    if (are_scalars) then
+      call check_redundant_T(mesg, u_comp, v_comp, G, direction=To_All+Scalar_Pair)
+    else
+      call check_redundant_T(mesg, u_comp, v_comp, G)
+    endif
+  endif
+
 end subroutine chksum_vec_A3d
 
 
 ! This function does a checksum and redundant point check on a 2d C-grid vector.
-subroutine chksum_vec_A2d(mesg, u_comp, v_comp, G, haloshift)
+subroutine chksum_vec_A2d(mesg, u_comp, v_comp, G, halos, scalars)
   character(len=*),               intent(in)    :: mesg   !< An identifying message
   type(ocean_grid_type),          intent(inout) :: G      !< The ocean's grid structure
   real, dimension(G%isd:,G%jsd:), intent(in)    :: u_comp !< The u-component of the vector
   real, dimension(G%isd:,G%jsd:), intent(in)    :: v_comp !< The v-component of the vector
-  integer,              optional, intent(in)    :: haloshift !< The width of halos to check (default 0)
+  integer,              optional, intent(in)    :: halos  !< The width of halos to check (default 0)
+  logical,              optional, intent(in)    :: scalars !< If true this is a pair of
+                                                           !! scalars that are being checked.
 
-  call hchksum(u_comp, mesg, G%HI, haloshift)
-  call hchksum(v_comp, mesg, G%HI, haloshift)
-  call check_redundant_T(mesg, u_comp, v_comp, G)
+  logical :: are_scalars
+  are_scalars = .false. ; if (present(scalars)) are_scalars = scalars
+
+  if (debug_chksums) then
+    call hchksum(u_comp, mesg//"(u)", G%HI, halos)
+    call hchksum(v_comp, mesg//"(v)", G%HI, halos)
+  endif
+  if (debug_redundant) then
+    if (are_scalars) then
+      call check_redundant_T(mesg, u_comp, v_comp, G, direction=To_All+Scalar_Pair)
+    else
+      call check_redundant_T(mesg, u_comp, v_comp, G)
+    endif
+  endif
+
 end subroutine chksum_vec_A2d
+
 
 ! =====================================================================
 
