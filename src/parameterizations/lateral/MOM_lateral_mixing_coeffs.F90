@@ -182,10 +182,10 @@ subroutine calc_resoln_function(h, tv, G, GV, CS)
   !   Do this calculation on the extent used in MOM_hor_visc.F90, and
   ! MOM_tracer.F90 so that no halo update is needed.
 
-!$OPP parallel default(none) shared(is,ie,js,je,Ieq,Jeq,CS) &
-!$OPP                       private(dx_term,cg1_q,power_2,cg1_u,cg1_v)
+!$OMP parallel default(none) shared(is,ie,js,je,Ieq,Jeq,CS) &
+!$OMP                       private(dx_term,cg1_q,power_2,cg1_u,cg1_v)
   if (CS%Res_fn_power_visc >= 100) then
-!$OPP do
+!$OMP do
     do j=js-1,je+1 ; do i=is-1,ie+1
       dx_term = CS%f2_dx2_h(i,j) + CS%cg1(i,j)*CS%beta_dx2_h(i,j)
       if ((CS%Res_coef_visc * CS%cg1(i,j))**2 > dx_term) then
@@ -194,7 +194,7 @@ subroutine calc_resoln_function(h, tv, G, GV, CS)
         CS%Res_fn_h(i,j) = 1.0
       endif
     enddo ; enddo
-!$OPP do
+!$OMP do
     do J=js-1,Jeq ; do I=is-1,Ieq
       cg1_q = 0.25 * ((CS%cg1(i,j) + CS%cg1(i+1,j+1)) + &
                       (CS%cg1(i+1,j) + CS%cg1(i,j+1)))
@@ -206,12 +206,12 @@ subroutine calc_resoln_function(h, tv, G, GV, CS)
       endif
     enddo ; enddo
   elseif (CS%Res_fn_power_visc == 2) then
-!$OPP do
+!$OMP do
     do j=js-1,je+1 ; do i=is-1,ie+1
       dx_term = CS%f2_dx2_h(i,j) + CS%cg1(i,j)*CS%beta_dx2_h(i,j)
       CS%Res_fn_h(i,j) = dx_term / (dx_term + (CS%Res_coef_visc * CS%cg1(i,j))**2)
     enddo ; enddo
-!$OPP do
+!$OMP do
     do J=js-1,Jeq ; do I=is-1,Ieq
       cg1_q = 0.25 * ((CS%cg1(i,j) + CS%cg1(i+1,j+1)) + &
                       (CS%cg1(i+1,j) + CS%cg1(i,j+1)))
@@ -220,13 +220,13 @@ subroutine calc_resoln_function(h, tv, G, GV, CS)
     enddo ; enddo
   elseif (mod(CS%Res_fn_power_visc, 2) == 0) then
     power_2 = CS%Res_fn_power_visc / 2
-!$OPP do
+!$OMP do
     do j=js-1,je+1 ; do i=is-1,ie+1
       dx_term = (CS%f2_dx2_h(i,j) + CS%cg1(i,j)*CS%beta_dx2_h(i,j))**power_2
       CS%Res_fn_h(i,j) = dx_term / &
           (dx_term + (CS%Res_coef_visc * CS%cg1(i,j))**CS%Res_fn_power_visc)
     enddo ; enddo
-!$OPP do
+!$OMP do
     do J=js-1,Jeq ; do I=is-1,Ieq
       cg1_q = 0.25 * ((CS%cg1(i,j) + CS%cg1(i+1,j+1)) + &
                       (CS%cg1(i+1,j) + CS%cg1(i,j+1)))
@@ -235,14 +235,14 @@ subroutine calc_resoln_function(h, tv, G, GV, CS)
           (dx_term + (CS%Res_coef_visc * cg1_q)**CS%Res_fn_power_visc)
     enddo ; enddo
   else
-!$OPP do
+!$OMP do
     do j=js-1,je+1 ; do i=is-1,ie+1
       dx_term = (sqrt(CS%f2_dx2_h(i,j) + &
                       CS%cg1(i,j)*CS%beta_dx2_h(i,j)))**CS%Res_fn_power_visc
       CS%Res_fn_h(i,j) = dx_term / &
          (dx_term + (CS%Res_coef_visc * CS%cg1(i,j))**CS%Res_fn_power_visc)
     enddo ; enddo
-!$OPP do
+!$OMP do
     do J=js-1,Jeq ; do I=is-1,Ieq
       cg1_q = 0.25 * ((CS%cg1(i,j) + CS%cg1(i+1,j+1)) + &
                       (CS%cg1(i+1,j) + CS%cg1(i,j+1)))
@@ -262,7 +262,7 @@ subroutine calc_resoln_function(h, tv, G, GV, CS)
     enddo ; enddo
   else ! .not.CS%interpolate_Res_fn
     if (CS%Res_fn_power_khth >= 100) then
-!$OPP do
+!$OMP do
       do j=js,je ; do I=is-1,Ieq
         cg1_u = 0.5 * (CS%cg1(i,j) + CS%cg1(i+1,j))
         dx_term = CS%f2_dx2_u(I,j) + cg1_u * CS%beta_dx2_u(I,j)
@@ -272,7 +272,7 @@ subroutine calc_resoln_function(h, tv, G, GV, CS)
           CS%Res_fn_u(I,j) = 1.0
         endif
       enddo ; enddo
-!$OPP do
+!$OMP do
       do J=js-1,Jeq ; do i=is,ie
         cg1_v = 0.5 * (CS%cg1(i,j) + CS%cg1(i,j+1))
         dx_term = CS%f2_dx2_v(i,J) + cg1_v * CS%beta_dx2_v(i,J)
@@ -283,13 +283,13 @@ subroutine calc_resoln_function(h, tv, G, GV, CS)
         endif
       enddo ; enddo
     elseif (CS%Res_fn_power_khth == 2) then
-!$OPP do
+!$OMP do
       do j=js,je ; do I=is-1,Ieq
         cg1_u = 0.5 * (CS%cg1(i,j) + CS%cg1(i+1,j))
         dx_term = CS%f2_dx2_u(I,j) + cg1_u * CS%beta_dx2_u(I,j)
         CS%Res_fn_u(I,j) = dx_term / (dx_term + (CS%Res_coef_khth * cg1_u)**2)
       enddo ; enddo
-!$OPP do
+!$OMP do
       do J=js-1,Jeq ; do i=is,ie
         cg1_v = 0.5 * (CS%cg1(i,j) + CS%cg1(i,j+1))
         dx_term = CS%f2_dx2_v(i,J) + cg1_v * CS%beta_dx2_v(i,J)
@@ -297,14 +297,14 @@ subroutine calc_resoln_function(h, tv, G, GV, CS)
       enddo ; enddo
     elseif (mod(CS%Res_fn_power_khth, 2) == 0) then
       power_2 = CS%Res_fn_power_khth / 2
-!$OPP do
+!$OMP do
       do j=js,je ; do I=is-1,Ieq
         cg1_u = 0.5 * (CS%cg1(i,j) + CS%cg1(i+1,j))
         dx_term = (CS%f2_dx2_u(I,j) + cg1_u * CS%beta_dx2_u(I,j))**power_2
         CS%Res_fn_u(I,j) = dx_term / &
             (dx_term + (CS%Res_coef_khth * cg1_u)**CS%Res_fn_power_khth)
       enddo ; enddo
-!$OPP do
+!$OMP do
       do J=js-1,Jeq ; do i=is,ie
         cg1_v = 0.5 * (CS%cg1(i,j) + CS%cg1(i,j+1))
         dx_term = (CS%f2_dx2_v(i,J) + cg1_v * CS%beta_dx2_v(i,J))**power_2
@@ -312,7 +312,7 @@ subroutine calc_resoln_function(h, tv, G, GV, CS)
             (dx_term + (CS%Res_coef_khth * cg1_v)**CS%Res_fn_power_khth)
       enddo ; enddo
     else
-!$OPP do
+!$OMP do
       do j=js,je ; do I=is-1,Ieq
         cg1_u = 0.5 * (CS%cg1(i,j) + CS%cg1(i+1,j))
         dx_term = (sqrt(CS%f2_dx2_u(I,j) + &
@@ -320,7 +320,7 @@ subroutine calc_resoln_function(h, tv, G, GV, CS)
         CS%Res_fn_u(I,j) = dx_term / &
             (dx_term + (CS%Res_coef_khth * cg1_u)**CS%Res_fn_power_khth)
       enddo ; enddo
-!$OPP do
+!$OMP do
       do J=js-1,Jeq ; do i=is,ie
         cg1_v = 0.5 * (CS%cg1(i,j) + CS%cg1(i,j+1))
         dx_term = (sqrt(CS%f2_dx2_v(i,J) + &
@@ -333,12 +333,12 @@ subroutine calc_resoln_function(h, tv, G, GV, CS)
 
   ! Calculate and store the ratio between deformation radius and grid-spacing
   ! at h-points (non-dimensional).
-!$OPP do
+!$OMP do
   do j=js-1,je+1 ; do i=is-1,ie+1
     CS%Rd_dx_h(i,j) = CS%cg1(i,j) / &
           (sqrt(CS%f2_dx2_h(i,j) + CS%cg1(i,j)*CS%beta_dx2_h(i,j)))
   enddo ; enddo
-!$OPP end parallel
+!$OMP end parallel
 
   if (query_averaging_enabled(CS%diag)) then
     if (CS%id_Res_fn > 0) call post_data(CS%id_Res_fn, CS%Res_fn_h, CS%diag)
@@ -431,12 +431,12 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
 
   S2max = CS%Visbeck_S_max**2
 
-!$OPP parallel default(none) shared(is,ie,js,je,CS,nz,e,G,GV,h, &
-!$OPP                               H_u,H_v,S2_u,S2_v,slope_x,slope_y,   &
-!$OPP                               SN_u_local,SN_v_local,N2_u,N2_v, S2max)   &
-!$OPP                       private(E_x,E_y,S2,Hdn,Hup,H_geom,N2, &
-!$OPP                       wNE, wSE, wSW, wNW)
-!$OPP do
+!$OMP parallel default(none) shared(is,ie,js,je,CS,nz,e,G,GV,h, &
+!$OMP                               S2_u,S2_v,slope_x,slope_y,   &
+!$OMP                               SN_u_local,SN_v_local,N2_u,N2_v, S2max)   &
+!$OMP                       private(E_x,E_y,S2,H_u,H_v,Hdn,Hup,H_geom,N2, &
+!$OMP                       wNE, wSE, wSW, wNW)
+!$OMP do
   do j=js-1,je+1 ; do i=is-1,ie+1
     CS%SN_u(i,j) = 0.0
     CS%SN_v(i,j) = 0.0
@@ -448,17 +448,17 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
   ! and midlatitude deformation radii, using calc_resoln_function as a template.
 
   ! Set the length scale at u-points.
-!$OPP do
+!$OMP do
   do j=js,je ; do I=is-1,ie
     CS%L2u(I,j) = CS%Visbeck_L_scale**2
   enddo ; enddo
   ! Set length scale at v-points
-!$OPP do
+!$OMP do
   do J=js-1,je ; do i=is,ie
     CS%L2v(i,J) = CS%Visbeck_L_scale**2
   enddo ; enddo
 
-!$OPP do
+!$OMP do
   do j = js,je
     do I=is-1,ie
       CS%SN_u(I,j) = 0. ; H_u(I) = 0. ; S2_u(I,j) = 0.
@@ -493,7 +493,7 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
     enddo
   enddo
 
-!$OPP do
+!$OMP do
   do J = js-1,je
     do i=is,ie
       CS%SN_v(i,J) = 0. ; H_v(i) = 0. ; S2_v(i,J) = 0.
@@ -528,7 +528,7 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
     enddo
   enddo
 
-!$OPP end parallel
+!$OMP end parallel
 
 ! Offer diagnostic fields for averaging.
   if (query_averaging_enabled(CS%diag)) then
@@ -579,10 +579,10 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
   h_neglect = GV%H_subroundoff
   H_cutoff = real(2*nz) * (GV%Angstrom + h_neglect)
 
-!$OPP parallel default(none) shared(is,ie,js,je,CS,nz,e,G,GV,h,H_cutoff,h_neglect, &
-!$OPP                               one_meter,SN_u_local,SN_v_local,calculate_slopes)   &
-!$OPP                       private(E_x,E_y,S2,Hdn,Hup,H_geom,N2)
-!$OPP do
+!$OMP parallel default(none) shared(is,ie,js,je,CS,nz,e,G,GV,h,H_cutoff,h_neglect, &
+!$OMP                               one_meter,SN_u_local,SN_v_local,calculate_slopes)   &
+!$OMP                       private(E_x,E_y,S2,Hdn,Hup,H_geom,N2)
+!$OMP do
   do j=js-1,je+1 ; do i=is-1,ie+1
     CS%SN_u(i,j) = 0.0
     CS%SN_v(i,j) = 0.0
@@ -593,16 +593,16 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
   ! and midlatitude deformation radii, using calc_resoln_function as a template.
 
   ! Set the length scale at u-points.
-!$OPP do
+!$OMP do
   do j=js,je ; do I=is-1,ie
     CS%L2u(I,j) = CS%Visbeck_L_scale**2
   enddo ; enddo
   ! Set length scale at v-points
-!$OPP do
+!$OMP do
   do J=js-1,je ; do i=is,ie
     CS%L2v(i,J) = CS%Visbeck_L_scale**2
   enddo ; enddo
-!$OPP do
+!$OMP do
   do k=nz,CS%VarMix_Ktop,-1
 
     if (calculate_slopes) then
@@ -653,7 +653,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
     enddo ; enddo
 
   enddo ! k
-!$OPP do
+!$OMP do
   do j = js,je;
     do k=nz,CS%VarMix_Ktop,-1 ; do I=is-1,ie
       CS%SN_u(I,j) = CS%SN_u(I,j) + SN_u_local(I,j,k)
@@ -669,7 +669,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
       endif
     enddo
   enddo
-!$OPP do
+!$OMP do
   do J=js-1,je
     do k=nz,CS%VarMix_Ktop,-1 ; do I=is,ie
       CS%SN_v(i,J) = CS%SN_v(i,J) + SN_v_local(i,J,k)
@@ -684,7 +684,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
       endif
     enddo
   enddo
-!$OPP end parallel
+!$OMP end parallel
 
 end subroutine calc_slope_functions_using_just_e
 

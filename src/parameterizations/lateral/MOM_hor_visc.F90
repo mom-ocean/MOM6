@@ -331,14 +331,14 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   ! Toggle whether to use a Laplacian viscosity derived from MEKE
   use_MEKE_Ku = associated(MEKE%Ku)
 
-!$OPP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,CS,G,GV,u,v,is,js,ie,je,h,  &
-!$OPP                                  rescale_Kh,VarMix,h_neglect,h_neglect3,        &
-!$OPP                                  Kh_h,Ah_h,Kh_q,Ah_q,diffu,apply_OBC,OBC,diffv, &
-!$OPP                                  find_FrictWork,FrictWork,use_MEKE_Ku,MEKE)     &
-!$OPP                          private(u0, v0, sh_xx, str_xx, visc_bound_rem,         &
-!$OPP                                  sh_xy, str_xy, Ah, Kh, AhSm, KhSm,             &
-!$OPP                                  bhstr_xx, bhstr_xy,FatH,RoScl, hu, hv,         &
-!$OPP                                  Shear_mag, huq, hvq, hq, Kh_scale, hrat_min)
+!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,CS,G,GV,u,v,is,js,ie,je,h,  &
+!$OMP                                  rescale_Kh,VarMix,h_neglect,h_neglect3,        &
+!$OMP                                  Kh_h,Ah_h,Kh_q,Ah_q,diffu,apply_OBC,OBC,diffv, &
+!$OMP                                  find_FrictWork,FrictWork,use_MEKE_Ku,MEKE)     &
+!$OMP                          private(u0, v0, sh_xx, str_xx, visc_bound_rem,         &
+!$OMP                                  sh_xy, str_xy, Ah, Kh, AhSm, KhSm,             &
+!$OMP                                  bhstr_xx, bhstr_xy,FatH,RoScl, hu, hv,         &
+!$OMP                                  Shear_mag, huq, hvq, hq, Kh_scale, hrat_min)
   do k=1,nz
 
 !    This code uses boundary conditions that are consistent with
