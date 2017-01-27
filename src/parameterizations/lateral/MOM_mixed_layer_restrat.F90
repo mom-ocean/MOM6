@@ -8,7 +8,7 @@ module MOM_mixed_layer_restrat
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_checksums,     only : hchksum
+use MOM_debugging,     only : hchksum
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_diag_mediator, only : diag_update_remap_grids

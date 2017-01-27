@@ -21,7 +21,7 @@ module MOM_variables
 !***********************************************************************
 
 use MOM_domains, only : MOM_domain_type, get_domain_extent, group_pass_type
-use MOM_checksums, only : hchksum, qchksum, uchksum, vchksum
+use MOM_debugging, only : hchksum
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : vardesc

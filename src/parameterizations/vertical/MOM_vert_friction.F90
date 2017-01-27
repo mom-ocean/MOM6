@@ -5,7 +5,7 @@ module MOM_vert_friction
 
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl
-use MOM_checksums, only : uchksum, vchksum, hchksum
+use MOM_debugging, only : uchksum, vchksum, hchksum
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
@@ -1222,8 +1222,8 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, GV, CS)
       endif
 
       do I=Isq,Ieq ; if (dowrite(I,j)) then
-         u_old(i,j,:) = u(i,j,:)
-      endif; enddo
+        u_old(I,j,:) = u(I,j,:)
+      endif ; enddo
 
       if (trunc_any) then ; if (CS%CFL_based_trunc) then
         do k=1,nz ; do I=Isq,Ieq

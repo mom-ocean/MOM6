@@ -3,7 +3,7 @@ module MOM_coord_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_checksums, only : chksum
+use MOM_debugging, only : chksum
 use MOM_EOS, only : calculate_density, EOS_type
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint

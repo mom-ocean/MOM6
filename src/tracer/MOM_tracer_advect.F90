@@ -10,13 +10,12 @@ use MOM_diag_mediator,   only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator,   only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_domains,         only : sum_across_PEs, max_across_PEs
 use MOM_domains,         only : create_group_pass, do_group_pass, group_pass_type, pass_var
-use MOM_checksums,       only : hchksum
 use MOM_error_handler,   only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser,     only : get_param, log_version, param_file_type
 use MOM_grid,            only : ocean_grid_type
 use MOM_open_boundary,   only : ocean_OBC_type, OBC_NONE, OBC_DIRECTION_E
 use MOM_open_boundary,   only : OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
-use MOM_tracer_registry, only : tracer_registry_type, tracer_type, MOM_tracer_chksum
+use MOM_tracer_registry, only : tracer_registry_type, tracer_type
 use MOM_verticalGrid,    only : verticalGrid_type
 implicit none ; private
 
@@ -397,8 +396,8 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
       elseif (uhr(I,j,k) < 0.0) then
         hup = hprev(i+1,j,k) - G%areaT(i+1,j)*min_h
         hlos = MAX(0.0,uhr(I+1,j,k))
-        if (((hup + uhr(I,j,k) - hlos) < 0.0) .and. &
-            ((0.5*hup + uhr(I,j,k)) < 0.0)) then !### Add parentheses.
+        if ((((hup - hlos) + uhr(I,j,k)) < 0.0) .and. &
+            ((0.5*hup + uhr(I,j,k)) < 0.0)) then
           uhh(I) = MIN(-0.5*hup,-hup+hlos,0.0)
           domore_u(j,k) = .true.
         else
@@ -409,8 +408,8 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
       else
         hup = hprev(i,j,k) - G%areaT(i,j)*min_h
         hlos = MAX(0.0,-uhr(I-1,j,k))
-        if (((hup - uhr(I,j,k) - hlos) < 0.0) .and. &
-            ((0.5*hup - uhr(I,j,k)) < 0.0)) then !### Add parentheses.
+        if ((((hup - hlos) - uhr(I,j,k)) < 0.0) .and. &
+            ((0.5*hup - uhr(I,j,k)) < 0.0)) then
           uhh(I) = MAX(0.5*hup,hup-hlos,0.0)
           domore_u(j,k) = .true.
         else
