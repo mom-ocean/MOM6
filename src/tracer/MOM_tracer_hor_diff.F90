@@ -10,7 +10,7 @@ use MOM_diag_mediator,         only : register_diag_field, safe_alloc_ptr, time_
 use MOM_domains,               only : sum_across_PEs, max_across_PEs
 use MOM_domains,               only : create_group_pass, do_group_pass, group_pass_type
 use MOM_domains,               only : pass_vector
-use MOM_checksums,             only : hchksum, uchksum, vchksum
+use MOM_debugging,             only : hchksum, uchksum, vchksum
 use MOM_EOS,                   only : calculate_density
 use MOM_error_handler,         only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_error_handler,         only : MOM_set_verbosity, callTree_showQuery

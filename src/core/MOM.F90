@@ -23,7 +23,7 @@ use MOM_variables, only : surface
 use MOM_variables, only: thermo_var_ptrs
 
 ! Infrastructure modules
-use MOM_checksums,            only : MOM_checksums_init, hchksum, uchksum, vchksum
+use MOM_debugging,            only : MOM_debugging_init, hchksum, uchksum, vchksum
 use MOM_checksum_packages,    only : MOM_thermo_chksum, MOM_state_chksum, MOM_accel_chksum
 use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,            only : CLOCK_COMPONENT, CLOCK_SUBCOMPONENT
@@ -2065,7 +2065,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
 #endif
   call callTree_waypoint("domains initialized (initialize_MOM)")
 
-  call MOM_checksums_init(param_file)
+  call MOM_debugging_init(param_file)
   call diag_mediator_infrastructure_init()
   call MOM_io_init(param_file)
 

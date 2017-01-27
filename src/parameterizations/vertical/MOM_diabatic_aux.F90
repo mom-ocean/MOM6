@@ -66,25 +66,21 @@ module MOM_diabatic_aux
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_checksums,         only : hchksum, uchksum, vchksum
-use MOM_checksum_packages, only : MOM_state_chksum, MOM_state_stats
-use MOM_cpu_clock,         only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
-use MOM_cpu_clock,         only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_diag_mediator,     only : post_data, register_diag_field, safe_alloc_ptr
-use MOM_diag_mediator,     only : diag_ctrl, time_type
-use MOM_EOS,               only : calculate_density, calculate_TFreeze
-use MOM_EOS,               only : calculate_specific_vol_derivs
-use MOM_error_handler,     only : MOM_error, FATAL, WARNING, callTree_showQuery
-use MOM_error_handler,     only : callTree_enter, callTree_leave, callTree_waypoint
-use MOM_file_parser,       only : get_param, log_version, param_file_type
-use MOM_forcing_type,      only : forcing, MOM_forcing_chksum
-use MOM_forcing_type,      only : extractFluxes1d, forcing_SinglePointPrint
-use MOM_grid,              only : ocean_grid_type
-use MOM_io,                only : vardesc
-use MOM_shortwave_abs,     only : absorbRemainingSW, optics_type
-use MOM_variables,         only : thermo_var_ptrs, vertvisc_type! , accel_diag_ptrs
-use MOM_verticalGrid,      only : verticalGrid_type
-! use MOM_variables,         only : cont_diag_ptrs, MOM_thermovar_chksum, p3d
+use MOM_cpu_clock,     only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
+use MOM_cpu_clock,     only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
+use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
+use MOM_diag_mediator, only : diag_ctrl, time_type
+use MOM_EOS,           only : calculate_density, calculate_TFreeze
+use MOM_EOS,           only : calculate_specific_vol_derivs
+use MOM_error_handler, only : MOM_error, FATAL, WARNING, callTree_showQuery
+use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
+use MOM_file_parser,   only : get_param, log_version, param_file_type
+use MOM_forcing_type,  only : forcing, extractFluxes1d, forcing_SinglePointPrint
+use MOM_grid,          only : ocean_grid_type
+use MOM_io,            only : vardesc
+use MOM_shortwave_abs, only : absorbRemainingSW, optics_type
+use MOM_variables,     only : thermo_var_ptrs, vertvisc_type! , accel_diag_ptrs
+use MOM_verticalGrid,  only : verticalGrid_type
 
 implicit none ; private
 
