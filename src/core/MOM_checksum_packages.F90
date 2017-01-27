@@ -23,7 +23,7 @@ module MOM_checksum_packages
 !   This module provdes a several routines that do check-sums of groups
 ! of variables in the various dynamic solver routines.
 
-use MOM_checksums, only : hchksum, uchksum, vchksum
+use MOM_debugging, only : hchksum, uchksum, vchksum
 use MOM_domains, only : sum_across_PEs, min_across_PEs, max_across_PEs
 use MOM_error_handler, only : MOM_mesg, is_root_pe
 use MOM_grid, only : ocean_grid_type

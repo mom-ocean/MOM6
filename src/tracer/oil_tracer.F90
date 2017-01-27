@@ -323,10 +323,10 @@ subroutine initialize_oil_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   do j=G%jsdB+1,G%jed ; do i=G%isdB+1,G%ied
     ! This test for i,j index is specific to a lat/lon (non-rotated grid).
     ! and needs to be generalized to work properly on the tri-polar grid.
-    if (CS%oil_source_longitude<G%geoLonBu(i,j) .and. &
-        CS%oil_source_longitude>=G%geoLonBu(i-1,j) .and. &
-        CS%oil_source_latitude<G%geoLatBu(i,j) .and. &
-        CS%oil_source_latitude>=G%geoLatBu(i,j-1) ) then
+    if (CS%oil_source_longitude<G%geoLonBu(I,J) .and. &
+        CS%oil_source_longitude>=G%geoLonBu(I-1,J) .and. &
+        CS%oil_source_latitude<G%geoLatBu(I,J) .and. &
+        CS%oil_source_latitude>=G%geoLatBu(I,J-1) ) then
       CS%oil_source_i=i
       CS%oil_source_j=j
     endif
