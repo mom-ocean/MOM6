@@ -44,7 +44,7 @@ module MOM_wave_structure
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_checksums,     only : isnan => is_NaN
+use MOM_debugging,     only : isnan => is_NaN
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_EOS,           only : calculate_density_derivs
