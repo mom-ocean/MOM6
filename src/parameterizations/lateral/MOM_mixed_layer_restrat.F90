@@ -228,13 +228,14 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV,
   dz_neglect = GV%H_subroundoff*GV%H_to_m
 
   p0(:) = 0.0
-!$OPP parallel default(none) shared(is,ie,js,je,G,GV,htot,Rml_av,tv,p0,h,h_avail,         &
-!$OPP                               h_neglect,g_Rho0,I4dt,CS,uhml,uhtr,dt,vhml,vhtr,   &
-!$OPP                               utimescale_diag,vtimescale_diag,fluxes,dz_neglect, &
-!$OPP                               nz,MLD,uDml_diag,vDml_diag)                        &
-!$OPP                       private(Rho0,h_vel,u_star,absf,mom_mixrate,timescale,uDml, &
-!$OPP                               a,vDml,IhTot,zIHbelowVel,hAtVel,zIHaboveVel)
-!$OPP do
+!$OMP parallel default(none) shared(is,ie,js,je,G,GV,htot,Rml_av,tv,p0,h,h_avail,         &
+!$OMP                               h_neglect,g_Rho0,I4dt,CS,uhml,uhtr,dt,vhml,vhtr,   &
+!$OMP                               utimescale_diag,vtimescale_diag,fluxes,dz_neglect, &
+!$OMP                               nz,MLD,uDml_diag,vDml_diag)                        &
+!$OMP                       private(Rho0,h_vel,u_star,absf,mom_mixrate,timescale,      &
+!$OMP                               a,IhTot,zIHbelowVel,hAtVel,zIHaboveVel)            &
+!$OMP                  firstprivate(uDml,vDml)
+!$OMP do
   do j=js-1,je+1
     do i=is-1,ie+1
       htot(i,j) = 0.0 ; Rml_av(i,j) = 0.0
@@ -267,7 +268,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV,
 !   2. Add exponential tail to streamfunction?
 
 !   U - Component
-!$OPP do
+!$OMP do
   do j=js,je ; do I=is-1,ie
     h_vel = 0.5*((htot(i,j) + htot(i+1,j)) + h_neglect) * GV%H_to_m
 
@@ -316,7 +317,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV,
   enddo ; enddo
 
 !  V- component
-!$OPP do
+!$OMP do
   do J=js-1,je ; do i=is,ie
     h_vel = 0.5*((htot(i,j) + htot(i,j+1)) + h_neglect) * GV%H_to_m
 
@@ -362,12 +363,12 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV,
     vDml_diag(i,J) = vDml(i)
   enddo ; enddo
 
-!$OPP do
+!$OMP do
   do j=js,je ; do k=1,nz ; do i=is,ie
     h(i,j,k) = h(i,j,k) - dt*G%IareaT(i,j) * &
         ((uhml(I,j,k) - uhml(I-1,j,k)) + (vhml(i,J,k) - vhml(i,J-1,k)))
   enddo ; enddo ; enddo
-!$OPP end parallel
+!$OMP end parallel
 
   ! Whenever thickness changes let the diag manager know, target grids
   ! for vertical remapping may need to be regenerated.
@@ -476,13 +477,14 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, GV, CS)
   ! Fix this later for nkml >= 3.
 
   p0(:) = 0.0
-!$OPP parallel default(none) shared(is,ie,js,je,G,GV,htot,Rml_av,tv,p0,h,h_avail,         &
-!$OPP                               h_neglect,g_Rho0,I4dt,CS,uhml,uhtr,dt,vhml,vhtr,   &
-!$OPP                               utimescale_diag,vtimescale_diag,fluxes,dz_neglect, &
-!$OPP                               uDml_diag,vDml_diag,nkml)                          &
-!$OPP                       private(Rho0,h_vel,u_star,absf,mom_mixrate,timescale,uDml, &
-!$OPP                               I2htot,z_topx2,hx2,a,vDml)
-!$OPP do
+!$OMP parallel default(none) shared(is,ie,js,je,G,GV,htot,Rml_av,tv,p0,h,h_avail,      &
+!$OMP                               h_neglect,g_Rho0,I4dt,CS,uhml,uhtr,dt,vhml,vhtr,   &
+!$OMP                               utimescale_diag,vtimescale_diag,fluxes,dz_neglect, &
+!$OMP                               uDml_diag,vDml_diag,nkml)                          &
+!$OMP                       private(Rho0,h_vel,u_star,absf,mom_mixrate,timescale,      &
+!$OMP                               I2htot,z_topx2,hx2,a)                              &
+!$OMP                  firstprivate(uDml,vDml)    
+!$OMP do
   do j=js-1,je+1
     do i=is-1,ie+1
       htot(i,j) = 0.0 ; Rml_av(i,j) = 0.0
@@ -506,7 +508,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, GV, CS)
 !   2. Add exponential tail to streamfunction?
 
 !   U - Component
-!$OPP do
+!$OMP do
   do j=js,je
     do i=is,ie ; utimescale_diag(i,j) = 0.0 ; enddo
     do i=is,ie ; vtimescale_diag(i,j) = 0.0 ; enddo
@@ -557,7 +559,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, GV, CS)
   enddo
 
 !  V- component
-!$OPP do
+!$OMP do
   do J=js-1,je ; do i=is,ie
     h_vel = 0.5*(htot(i,j) + htot(i,j+1)) * GV%H_to_m
 
@@ -603,12 +605,12 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, GV, CS)
     vDml_diag(is:ie,j) = vDml(is:ie)
   enddo
 
-!$OPP do
+!$OMP do
   do j=js,je ; do k=1,nkml ; do i=is,ie
     h(i,j,k) = h(i,j,k) - dt*G%IareaT(i,j) * &
         ((uhml(I,j,k) - uhml(I-1,j,k)) + (vhml(i,J,k) - vhml(i,J-1,k)))
   enddo ; enddo ; enddo
-!$OPP end parallel
+!$OMP end parallel
 
   ! Whenever thickness changes let the diag manager know, target grids
   ! for vertical remapping may need to be regenerated.
