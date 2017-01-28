@@ -525,7 +525,6 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
   call parse_segment_str(G%ieg, G%jeg, segment_str, I_obc, Js_obc, Je_obc, action_str )
 
   call setup_segment_indices(G, OBC%segment(l_seg),I_obc,I_obc,Js_obc,Je_obc)
-  call allocate_OBC_segment_data(OBC, OBC%segment(l_seg))
 
   I_obc = I_obc - G%idg_offset ! Convert to local tile indices on this tile
   Js_obc = Js_obc - G%jdg_offset ! Convert to local tile indices on this tile
@@ -616,6 +615,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
   OBC%segment(l_seg)%Ie_obc = I_obc
   OBC%segment(l_seg)%Js_obc = Js_obc
   OBC%segment(l_seg)%Je_obc = Je_obc
+  call allocate_OBC_segment_data(OBC, OBC%segment(l_seg))
 
 end subroutine setup_u_point_obc
 
@@ -634,7 +634,6 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
   call parse_segment_str(G%ieg, G%jeg, segment_str, J_obc, Is_obc, Ie_obc, action_str )
 
   call setup_segment_indices(G, OBC%segment(l_seg),Is_obc,Ie_obc,J_obc,J_obc)
-  call allocate_OBC_segment_data(OBC, OBC%segment(l_seg))
 
   J_obc = J_obc - G%jdg_offset ! Convert to local tile indices on this tile
   Is_obc = Is_obc - G%idg_offset ! Convert to local tile indices on this tile
@@ -657,8 +656,6 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
 
   OBC%segment(l_seg)%on_pe = .false.
 
-!  if (Ie_obc>Is_obc) OBC%segment(l_seg)%direction = OBC_DIRECTION_S
-!  if (Ie_obc<Is_obc) OBC%segment(l_seg)%direction = OBC_DIRECTION_N
   do a_loop = 1,5
     if (len_trim(action_str(a_loop)) == 0) then
       cycle
@@ -726,6 +723,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
   OBC%segment(l_seg)%Ie_obc = Ie_obc
   OBC%segment(l_seg)%Js_obc = J_obc
   OBC%segment(l_seg)%Je_obc = J_obc
+  call allocate_OBC_segment_data(OBC, OBC%segment(l_seg))
 
 end subroutine setup_v_point_obc
 
@@ -1799,12 +1797,9 @@ subroutine allocate_OBC_segment_data(OBC, segment)
   IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
   JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
 
-    print *, 'Allocate_OBC_segment_data 1', IsdB, IedB, jsd, jed, segment%on_pe
   if (.not. segment%on_pe) return
-    print *, 'Allocate_OBC_segment_data 2', IsdB, IedB, jsd, jed
 
   if (segment%is_E_or_W) then
-    print *, 'Allocate_OBC_segment_data EW', IsdB, IedB, jsd, jed
     allocate(segment%Cg(IsdB:IedB,jsd:jed));                    segment%Cg(:,:)=0.
     allocate(segment%Htot(IsdB:IedB,jsd:jed));                  segment%Htot(:,:)=0.0
     allocate(segment%h(IsdB:IedB,jsd:jed,OBC%ke));              segment%h(:,:,:)=0.0
@@ -1816,7 +1811,6 @@ subroutine allocate_OBC_segment_data(OBC, segment)
     allocate(segment%tangent_vel_bt(IsdB:IedB,JsdB:JedB));      segment%tangent_vel_bt(:,:)=0.0
     allocate(segment%eta(IsdB:IedB,jsd:jed));                   segment%eta(:,:)=0.0
   else
-    print *, 'Allocate_OBC_segment_data NS', isd, ied, JsdB, JedB
     allocate(segment%Cg(isd:ied,JsdB:JedB));                    segment%Cg(:,:)=0.
     allocate(segment%Htot(isd:ied,JsdB:JedB));                  segment%Htot(:,:)=0.0
     allocate(segment%h(isd:ied,JsdB:JedB,OBC%ke));              segment%h(:,:,:)=0.0
