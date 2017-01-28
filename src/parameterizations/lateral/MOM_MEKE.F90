@@ -1205,7 +1205,7 @@ end subroutine MEKE_end
 !! mixing length scale to form a diffusivity.
 !! The primary use of a MEKE derived diffusivity is for use in thickness
 !! diffusion (module mom_thickness_diffuse) and optionally in along
-!! isopycnal mixing of tracers (module mom_tracer_hor_diff). 
+!! isopycnal mixing of tracers (module mom_tracer_hor_diff).
 !! The original form used (enabled with MEKE_OLD_LSCALE=True):
 !!
 !! \f[  \kappa_M = \gamma_\kappa \sqrt{ \gamma_t^2 U_e^2 A_\Delta } \f]
