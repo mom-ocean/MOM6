@@ -1132,7 +1132,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h_old !< Original h values
   real,                                      intent(in)    :: dt    !< Appropriate timestep
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G)) :: grad
+  real, dimension(SZIB_(G),SZJB_(G)) :: grad
   real :: dhdt, dhdx, dhdy, gamma_u, gamma_h, gamma_v
   real :: cff, Cx, Cy, tau
   real :: rx_max, ry_max ! coefficients for radiation
@@ -1156,199 +1156,239 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
      if (.not. segment%on_pe) cycle
      if (segment%direction == OBC_DIRECTION_E) then
        I=segment%HI%IscB
-       do k=1,nz ;  do j=segment%HI%jsc,segment%HI%jec
-         if (segment%legacy) then
-           dhdt = u_old(I-1,j,k)-u_new(I-1,j,k) !old-new
-           dhdx = u_new(I-1,j,k)-u_new(I-2,j,k) !in new time backward sasha for I-1
-           rx_new = 0.0
-           if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max) ! outward phase speed
-           rx_avg = (1.0-gamma_u)*OBC%rx_old_u(I,j,k) + gamma_u*rx_new
-           OBC%rx_old_u(I,j,k) = rx_avg
-           u_new(I,j,k) = (u_old(I,j,k) + rx_avg*u_new(I-1,j,k)) / (1.0+rx_avg)
-         elseif (segment%radiation) then
-           grad(I,J) = u_old(I,min(j+1,segment%HI%jec),k) - u_old(I,j,k) ! no outside data
-                         ! This sets the shear to zero at the outermost q-point
-           grad(I,J-1) = u_old(I,j,k) - u_old(I,max(j-1,segment%HI%jsc),k)
-           grad(I-1,J) = u_old(I-1,min(j+1,segment%HI%jec),k) - u_old(I-1,j,k)
-           grad(I-1,J-1) = u_old(I-1,j,k) - u_old(I-1,max(j-1,segment%HI%jsc),k)
-           dhdt = u_old(I-1,j,k)-u_new(I-1,j,k) !old-new
-           dhdx = u_new(I-1,j,k)-u_new(I-2,j,k) !in new time backward sasha for I-1
-           if (dhdt*dhdx < 0.0) dhdt = 0.0
-           if (dhdx == 0.0) dhdx=eps ! avoid segv
-           if (dhdt*(grad(I-1,J) + grad(I-1,J-1)) > 0.0) then
-             dhdy = grad(I-1,J-1)
-           else
-             dhdy = grad(I-1,J)
+       do k=1,nz
+         if (segment%radiation) call vorticity_at_q_points(G,segment,u_old,v_old,k,grad)
+         do j=segment%HI%jsc,segment%HI%jec
+           if (segment%legacy) then
+             dhdt = u_old(I-1,j,k)-u_new(I-1,j,k) !old-new
+             dhdx = u_new(I-1,j,k)-u_new(I-2,j,k) !in new time backward sasha for I-1
+             rx_new = 0.0
+             if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max) ! outward phase speed
+             rx_avg = (1.0-gamma_u)*OBC%rx_old_u(I,j,k) + gamma_u*rx_new
+             OBC%rx_old_u(I,j,k) = rx_avg
+             u_new(I,j,k) = (u_old(I,j,k) + rx_avg*u_new(I-1,j,k)) / (1.0+rx_avg)
+           elseif (segment%radiation) then
+             dhdt = u_old(I-1,j,k)-u_new(I-1,j,k) !old-new
+             dhdx = u_new(I-1,j,k)-u_new(I-2,j,k) !in new time backward sasha for I-1
+             if (dhdt*dhdx < 0.0) dhdt = 0.0
+             if (dhdx == 0.0) dhdx=eps ! avoid segv
+             if (dhdt*(grad(I-1,J) + grad(I-1,J-1)) > 0.0) then
+               dhdy = grad(I-1,J-1)
+             else
+               dhdy = grad(I-1,J)
+             endif
+             Cx=min(dhdt/dhdx,rx_max) ! default to normal radiation
+             Cy = 0
+             cff = max(dhdx*dhdx, eps)
+             if (segment%oblique) then
+               cff = max(dhdx*dhdx + dhdy*dhdy, eps)
+               if (dhdy==0.) dhdy=eps ! avoid segv
+               Cy = min(cff,max(dhdt/dhdy,-cff))
+             endif
+             u_new(I,j,k) = ((cff*u_old(I,j,k) + Cx*u_new(I-1,j,k)) - &
+                (max(Cy,0.0)*grad(I,J-1) - min(Cy,0.0)*grad(I,J))) / (cff + Cx)
            endif
-           Cx=min(dhdt/dhdx,rx_max) ! default to normal radiation
-           Cy = 0
-           cff = max(dhdx*dhdx, eps)
-           if (segment%oblique) then
-             cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-             if (dhdy==0.) dhdy=eps ! avoid segv
-             Cy = min(cff,max(dhdt/dhdy,-cff))
+           if ((segment%radiation .or. segment%legacy) .and. segment%nudged) then
+             if (dhdt*dhdx < 0.0) then
+               tau = segment%Tnudge_in
+             else
+               tau = segment%Tnudge_out
+             endif
+             u_new(I,j,k) = u_new(I,j,k) + dt*tau*(OBC%u(I,j,k) - u_old(I,j,k))
            endif
-           u_new(I,j,k) = ((cff*u_old(I,j,k) + Cx*u_new(I-1,j,k)) - &
-            (max(Cy,0.0)*grad(I,J-1) - min(Cy,0.0)*grad(I,J))) / (cff + Cx)
-         endif
-         if ((segment%radiation .or. segment%legacy) .and. segment%nudged) then
-           if (dhdt*dhdx < 0.0) then
-             tau = segment%Tnudge_in
-           else
-             tau = segment%Tnudge_out
-           endif
-           u_new(I,j,k) = u_new(I,j,k) + dt*tau*(OBC%u(I,j,k) - u_old(I,j,k))
-         endif
-       enddo; enddo
+         enddo
+       enddo
      endif
 
      if (segment%direction == OBC_DIRECTION_W) then
        I=segment%HI%IscB
-       do k=1,nz ;  do j=segment%HI%jsc,segment%HI%jec
-         if (segment%legacy) then
-           dhdt = u_old(I+1,j,k)-u_new(I+1,j,k) !old-new
-           dhdx = u_new(I+1,j,k)-u_new(I+2,j,k) !in new time forward sasha for I+1
-           rx_new = 0.0
-           if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max)
-           rx_avg = (1.0-gamma_u)*OBC%rx_old_u(I,j,k) + gamma_u*rx_new
-           OBC%rx_old_u(I,j,k) = rx_avg
-           u_new(I,j,k) = (u_old(I,j,k) + rx_avg*u_new(I+1,j,k)) / (1.0+rx_avg)
-         elseif (segment%radiation) then
-           grad(I,J) = u_old(I,min(j+1,segment%HI%jec),k) - u_old(I,j,k) ! no outside data
-                           ! This sets the shear to zero at the outermost q-point
-           grad(I,J-1) = u_old(I,j,k) - u_old(I,max(j-1,segment%HI%jsc),k)
-           grad(I+1,J) = u_old(I+1,min(j+1,segment%HI%jec),k) - u_old(I+1,j,k)
-           grad(I+1,J-1) = u_old(I+1,j,k) - u_old(I+1,max(j-1,segment%HI%jsc),k)
-           dhdt = u_old(I+1,j,k)-u_new(I+1,j,k) !old-new
-           dhdx = u_new(I+1,j,k)-u_new(I+2,j,k) !in new time forward sasha for I+1
-           if (dhdt*dhdx < 0.0) dhdt = 0.0
-           if (dhdx == 0.0) dhdx=eps ! avoid segv
-           if (dhdt*(grad(I+1,J) + grad(I+1,J-1)) > 0.0) then
-             dhdy = grad(I+1,J-1)
-           else
-             dhdy = grad(I+1,J)
+       do k=1,nz
+         if (segment%radiation) call vorticity_at_q_points(G,segment,u_old,v_old,k,grad)
+         do j=segment%HI%jsc,segment%HI%jec
+           if (segment%legacy) then
+             dhdt = u_old(I+1,j,k)-u_new(I+1,j,k) !old-new
+             dhdx = u_new(I+1,j,k)-u_new(I+2,j,k) !in new time forward sasha for I+1
+             rx_new = 0.0
+             if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max)
+             rx_avg = (1.0-gamma_u)*OBC%rx_old_u(I,j,k) + gamma_u*rx_new
+             OBC%rx_old_u(I,j,k) = rx_avg
+             u_new(I,j,k) = (u_old(I,j,k) + rx_avg*u_new(I+1,j,k)) / (1.0+rx_avg)
+           elseif (segment%radiation) then
+             dhdt = u_old(I+1,j,k)-u_new(I+1,j,k) !old-new
+             dhdx = u_new(I+1,j,k)-u_new(I+2,j,k) !in new time forward sasha for I+1
+             if (dhdt*dhdx < 0.0) dhdt = 0.0
+             if (dhdx == 0.0) dhdx=eps ! avoid segv
+             if (dhdt*(grad(I+1,J) + grad(I+1,J-1)) > 0.0) then
+               dhdy = grad(I+1,J-1)
+             else
+               dhdy = grad(I+1,J)
+             endif
+             Cx = min(dhdt/dhdx,rx_max) ! default to normal flow only
+             Cy = 0.
+             cff = max(dhdx*dhdx, eps)
+             if (segment%oblique) then
+               cff = max(dhdx*dhdx + dhdy*dhdy, eps)
+               if (dhdy==0.) dhdy=eps ! avoid segv
+               Cy = min(cff,max(dhdt/dhdy,-cff))
+             endif
+             u_new(I,j,k) = ((cff*u_old(I,j,k) + Cx*u_new(I+1,j,k)) - &
+                (max(Cy,0.0)*grad(I,J-1) - min(Cy,0.0)*grad(I,J))) / (cff + Cx)
            endif
-           Cx = min(dhdt/dhdx,rx_max) ! default to normal flow only
-           Cy = 0.
-           cff = max(dhdx*dhdx, eps)
-           if (segment%oblique) then
-             cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-             if (dhdy==0.) dhdy=eps ! avoid segv
-             Cy = min(cff,max(dhdt/dhdy,-cff))
-           endif
-           u_new(I,j,k) = ((cff*u_old(I,j,k) + Cx*u_new(I+1,j,k)) - &
-            (max(Cy,0.0)*grad(I,J-1) - min(Cy,0.0)*grad(I,J))) / (cff + Cx)
-         endif
-         if ((segment%radiation .or. segment%legacy) .and. segment%nudged) then
-           if (dhdt*dhdx < 0.0) then
-             tau = segment%Tnudge_in
-           else
-             tau = segment%Tnudge_out
-           endif
-           u_new(I,j,k) = u_new(I,j,k) + dt*tau*(OBC%u(I,j,k) - u_old(I,j,k))
-        endif
-      enddo; enddo
+           if ((segment%radiation .or. segment%legacy) .and. segment%nudged) then
+             if (dhdt*dhdx < 0.0) then
+               tau = segment%Tnudge_in
+             else
+               tau = segment%Tnudge_out
+             endif
+             u_new(I,j,k) = u_new(I,j,k) + dt*tau*(OBC%u(I,j,k) - u_old(I,j,k))
+          endif
+        enddo
+      enddo
      endif
 
      if (segment%direction == OBC_DIRECTION_N) then
        J=segment%HI%JscB
-       do k=1,nz ;  do i=segment%HI%isc,segment%HI%iec
-         if (segment%legacy) then
-           dhdt = v_old(i,J-1,k)-v_new(i,J-1,k) !old-new
-           dhdy = v_new(i,J-1,k)-v_new(i,J-2,k) !in new time backward sasha for J-1
-           ry_new = 0.0
-           if (dhdt*dhdy > 0.0) ry_new = min( (dhdt/dhdy), ry_max)
-           ry_avg = (1.0-gamma_v)*OBC%ry_old_v(I,j,k) + gamma_v*ry_new
-           OBC%ry_old_v(i,J,k) = ry_avg
-           v_new(i,J,k) = (v_old(i,J,k) + ry_avg*v_new(i,J-1,k)) / (1.0+ry_avg)
-         elseif (segment%radiation) then
-           grad(I,J) = v_old(min(i+1,segment%HI%iec),J,k) - v_old(i,J,k) ! no outside data
-                           ! This sets the shear to zero at the outermost q-point
-           grad(I,J-1) = v_old(min(i+1,segment%HI%iec),J-1,k) - v_old(i,j-1,k)
-           grad(I-1,J) = v_old(i,J,k) - v_old(max(i-1,segment%HI%isc),J,k)
-           grad(I-1,J-1) = v_old(i,J-1,k) - v_old(max(i-1,segment%HI%isc),J-1,k)
-           dhdt = v_old(i,J-1,k)-v_new(i,J-1,k) !old-new
-           dhdy = v_new(i,J-1,k)-v_new(i,J-2,k) !in new time backward sasha for J-1
-           if (dhdt*dhdy < 0.0) dhdt = 0.0
-           if (dhdy == 0.0) dhdy=eps ! avoid segv
-           if (dhdt*(grad(I,J-1) + grad(I-1,J-1)) > 0.0) then
-             dhdx = grad(I-1,J-1)
-           else
-             dhdx = grad(I,J-1)
+       do k=1,nz
+         if (segment%radiation) call vorticity_at_q_points(G,segment,u_old,v_old,k,grad)
+         do i=segment%HI%isc,segment%HI%iec
+           if (segment%legacy) then
+             dhdt = v_old(i,J-1,k)-v_new(i,J-1,k) !old-new
+             dhdy = v_new(i,J-1,k)-v_new(i,J-2,k) !in new time backward sasha for J-1
+             ry_new = 0.0
+             if (dhdt*dhdy > 0.0) ry_new = min( (dhdt/dhdy), ry_max)
+             ry_avg = (1.0-gamma_v)*OBC%ry_old_v(I,j,k) + gamma_v*ry_new
+             OBC%ry_old_v(i,J,k) = ry_avg
+             v_new(i,J,k) = (v_old(i,J,k) + ry_avg*v_new(i,J-1,k)) / (1.0+ry_avg)
+           elseif (segment%radiation) then
+             dhdt = v_old(i,J-1,k)-v_new(i,J-1,k) !old-new
+             dhdy = v_new(i,J-1,k)-v_new(i,J-2,k) !in new time backward sasha for J-1
+             if (dhdt*dhdy < 0.0) dhdt = 0.0
+             if (dhdy == 0.0) dhdy=eps ! avoid segv
+             if (dhdt*(grad(I,J-1) + grad(I-1,J-1)) > 0.0) then
+               dhdx = grad(I-1,J-1)
+             else
+               dhdx = grad(I,J-1)
+             endif
+             Cy = min(dhdt/dhdy,rx_max) ! default to normal flow only
+             Cx = 0
+             cff = max(dhdy*dhdy, eps)
+             if (segment%oblique) then
+               cff = max(dhdx*dhdx + dhdy*dhdy, eps)
+               if (dhdx==0.) dhdx=eps ! avoid segv
+               Cx = min(cff,max(dhdt/dhdx,-cff))
+             endif
+             v_new(i,J,k) = ((cff*v_old(i,J,k) + Cy*v_new(i,J-1,k)) - &
+                (max(Cx,0.0)*grad(I-1,J) - min(Cx,0.0)*grad(I,J))) / (cff + Cy)
            endif
-           Cy = min(dhdt/dhdy,rx_max) ! default to normal flow only
-           Cx = 0
-           cff = max(dhdy*dhdy, eps)
-           if (segment%oblique) then
-             cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-             if (dhdx==0.) dhdx=eps ! avoid segv
-             Cx = min(cff,max(dhdt/dhdx,-cff))
+           if ((segment%radiation .or. segment%legacy) .and. segment%nudged) then
+             if (dhdt*dhdy < 0.0) then
+               tau = segment%Tnudge_in
+             else
+               tau = segment%Tnudge_out
+             endif
+             v_new(i,J,k) = v_new(i,J,k) + dt*tau*(OBC%v(i,J,k) - v_old(i,J,k))
            endif
-           v_new(i,J,k) = ((cff*v_old(i,J,k) + Cy*v_new(i,J-1,k)) - &
-              (max(Cx,0.0)*grad(I-1,J) - min(Cx,0.0)*grad(I,J))) / (cff + Cy)
-         endif
-         if ((segment%radiation .or. segment%legacy) .and. segment%nudged) then
-           if (dhdt*dhdy < 0.0) then
-             tau = segment%Tnudge_in
-           else
-             tau = segment%Tnudge_out
-           endif
-           v_new(i,J,k) = v_new(i,J,k) + dt*tau*(OBC%v(i,J,k) - v_old(i,J,k))
-         endif
-       enddo; enddo
+         enddo
+       enddo
      endif
 
 
      if (segment%direction == OBC_DIRECTION_S) then
        J=segment%HI%JscB
-       do k=1,nz ;  do i=segment%HI%isc,segment%HI%iec
-         if (segment%legacy) then
-           dhdt = v_old(i,J+1,k)-v_new(i,J+1,k) !old-new
-           dhdy = v_new(i,J+1,k)-v_new(i,J+2,k) !in new time backward sasha for J-1
-           ry_new = 0.0
-           if (dhdt*dhdy > 0.0) ry_new = min( (dhdt/dhdy), ry_max)
-           ry_avg = (1.0-gamma_v)*OBC%ry_old_v(I,j,k) + gamma_v*ry_new
-           OBC%ry_old_v(i,J,k) = ry_avg
-           v_new(i,J,k) = (v_old(i,J,k) + ry_avg*v_new(i,J+1,k)) / (1.0+ry_avg)
-         elseif (segment%radiation) then
-           grad(I,J) = v_old(min(i+1,segment%HI%iec),J,k) - v_old(i,J,k) ! no outside data
-                           ! This sets the shear to zero at the outermost q-point
-           grad(I,J+1) = v_old(min(i+1,segment%HI%iec),J+1,k) - v_old(i,j+1,k)
-           grad(I-1,J) = v_old(i,J,k) - v_old(max(i-1,segment%HI%isc),J,k)
-           grad(I-1,J+1) = v_old(i,J+1,k) - v_old(max(i-1,segment%HI%isc),J+1,k)
-           dhdt = v_old(i,J+1,k)-v_new(i,J+1,k) !old-new
-           dhdy = v_new(i,J+1,k)-v_new(i,J+2,k) !in new time backward sasha for J-1
-           if (dhdt*dhdy <= 0.0) dhdt = 0.0
-           if (dhdy == 0.0) dhdy=eps ! avoid segv
-           if (dhdt*(grad(I,J+1) + grad(I-1,J+1)) > 0.0) then
-             dhdx = grad(I-1,J+1)
-           else
-             dhdx = grad(I,J+1)
+       do k=1,nz
+         if (segment%radiation) call vorticity_at_q_points(G,segment,u_old,v_old,k,grad)
+         do i=segment%HI%isc,segment%HI%iec
+           if (segment%legacy) then
+             dhdt = v_old(i,J+1,k)-v_new(i,J+1,k) !old-new
+             dhdy = v_new(i,J+1,k)-v_new(i,J+2,k) !in new time backward sasha for J-1
+             ry_new = 0.0
+             if (dhdt*dhdy > 0.0) ry_new = min( (dhdt/dhdy), ry_max)
+             ry_avg = (1.0-gamma_v)*OBC%ry_old_v(I,j,k) + gamma_v*ry_new
+             OBC%ry_old_v(i,J,k) = ry_avg
+             v_new(i,J,k) = (v_old(i,J,k) + ry_avg*v_new(i,J+1,k)) / (1.0+ry_avg)
+           elseif (segment%radiation) then
+             dhdt = v_old(i,J+1,k)-v_new(i,J+1,k) !old-new
+             dhdy = v_new(i,J+1,k)-v_new(i,J+2,k) !in new time backward sasha for J-1
+             if (dhdt*dhdy <= 0.0) dhdt = 0.0
+             if (dhdy == 0.0) dhdy=eps ! avoid segv
+             if (dhdt*(grad(I,J+1) + grad(I-1,J+1)) > 0.0) then
+               dhdx = grad(I-1,J+1)
+             else
+               dhdx = grad(I,J+1)
+             endif
+             Cy = min(dhdt/dhdy,rx_max) ! default to normal flow only
+             Cx = 0
+             cff = max(dhdy*dhdy, eps)
+             if (segment%oblique) then
+               cff = max(dhdx*dhdx + dhdy*dhdy, eps)
+               if (dhdx==0.) dhdx=eps ! avoid segv
+               Cx = min(cff,max(dhdt/dhdx,-cff))
+             endif
+             v_new(i,J,k) = ((cff*v_old(i,J,k) + Cy*v_new(i,J+1,k)) - &
+                (max(Cx,0.0)*grad(I-1,J) - min(Cx,0.0)*grad(I,J))) / (cff + Cy)
            endif
-           Cy = min(dhdt/dhdy,rx_max) ! default to normal flow only
-           Cx = 0
-           cff = max(dhdy*dhdy, eps)
-           if (segment%oblique) then
-             cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-             if (dhdx==0.) dhdx=eps ! avoid segv
-             Cx = min(cff,max(dhdt/dhdx,-cff))
-           endif
-           v_new(i,J,k) = ((cff*v_old(i,J,k) + Cy*v_new(i,J+1,k)) - &
-            (max(Cx,0.0)*grad(I-1,J) - min(Cx,0.0)*grad(I,J))) / (cff + Cy)
-         endif
-         if ((segment%radiation .or. segment%legacy) .and. segment%nudged) then
-           if (dhdt*dhdy < 0.0) then
-             tau = segment%Tnudge_in
-           else
-             tau = segment%Tnudge_out
-           endif
-           v_new(i,J,k) = v_new(i,J,k) + dt*tau*(OBC%v(i,J,k) - v_old(i,J,k))
-        endif
-      enddo; enddo
-    end if
+           if ((segment%radiation .or. segment%legacy) .and. segment%nudged) then
+             if (dhdt*dhdy < 0.0) then
+               tau = segment%Tnudge_in
+             else
+               tau = segment%Tnudge_out
+             endif
+             v_new(i,J,k) = v_new(i,J,k) + dt*tau*(OBC%v(i,J,k) - v_old(i,J,k))
+          endif
+        enddo
+      enddo
+    endif
   enddo
 
 end subroutine radiation_open_bdry_conds
+
+
+!< Calculate the vorticity at the boundary q-points due to the
+!< flow normal to the given segment boundary for model layer-k.
+subroutine vorticity_at_q_points(G,segment,uvel,vvel,k,grad)
+  type(ocean_grid_type), intent(in) :: G !< Ocean grid structure
+  type(OBC_segment_type), pointer :: segment !< OBC segment structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uvel !< zonal velocity
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vvel !< meridional velocity
+  integer, intent(in)                                      :: k !< model level to choose
+  real, dimension(SZIB_(G),SZJB_(G)), intent(inout)    :: grad !< normal flow vorticity at Q-points
+
+  integer :: i, j
+
+  grad(:,:) = 0.0
+
+  if (segment%is_E_or_W) then
+    if (segment%direction == OBC_DIRECTION_E) then
+      I=segment%HI%iscB
+      do J=segment%HI%jscB,segment%HI%jecB
+        grad(I,J) = uvel(I,j+1,k)-uvel(I,j,k)
+        grad(I-1,J) = uvel(I-1,j+1,k)-uvel(I-1,j,k)
+      enddo
+    else
+      I=segment%HI%iscB
+      do J=segment%HI%jscB,segment%HI%jecB
+        grad(I,J) = uvel(I,j+1,k)-uvel(I,j,k)
+        grad(I+1,J) = uvel(I+1,j+1,k)-uvel(I+1,j,k)
+      enddo
+    endif
+  else if (segment%is_N_or_S) then
+    if (segment%direction == OBC_DIRECTION_N) then
+      J=segment%HI%jscB
+      do I=segment%HI%iscB,segment%HI%iecB
+        grad(I,J) = vvel(i+1,J,k)-vvel(i,J,k)
+        grad(I,J-1) = vvel(i+1,J-1,k)-vvel(i,J-1,k)
+      enddo
+    else
+      J=segment%HI%jscB
+      do I=segment%HI%isc-1,segment%HI%iec
+        grad(I,J) = vvel(i+1,J,k)-vvel(i,J,k)
+        grad(I,J+1) = vvel(i+1,J+1,k)-vvel(i,J+1,k)
+      enddo
+    endif
+  endif
+
+end subroutine vorticity_at_q_points
+
 
 !> Sets the initial definitions of the characteristic open boundary conditions.
 !! \author Mehmet Ilicak
