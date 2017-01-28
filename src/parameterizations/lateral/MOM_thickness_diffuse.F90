@@ -1633,16 +1633,16 @@ end subroutine thickness_diffuse_end
 !! Thickness diffusion is implemented via along-layer mass fluxes
 !!
 !! \f[
-!! h^\dagger \leftarrow h^n - \nabla \cdot ( \vec{vh}^* )
+!! h^\dagger \leftarrow h^n - \nabla \cdot ( \vec{uh}^* )
 !! \f]
 !!
 !! where the mass fluxes are cast as the difference in stream-functions proportional to the isoneutral slope
 !!
 !! \f[
-!! \vec{vh}^* = \delta_k \vec{\psi} = \delta_k \left( \frac{g\kappa_h}{\rho_o} \frac{\nabla \rho}{N^2} \right)
+!! \vec{uh}^* = \delta_k \vec{\psi} = \delta_k \left( \frac{g\kappa_h}{\rho_o} \frac{\nabla \rho}{N^2} \right)
 !! \f]
 !!
-!! \todo Check signs of stream function in documentation.
+!! \todo Check signs of GM stream function in documentation.
 !!
 !! Thickness diffusivities are calculated independently at u- and v-points using the following expression
 !!
@@ -1663,7 +1663,10 @@ end subroutine thickness_diffuse_end
 !! \kappa_h \leftarrow \min{\left( \kappa_{max}, \kappa_{cfl}, \max{\left( \kappa_{min}, \kappa_h \right)} \right)} f(c_g,z)
 !! \f]
 !!
-!! where \f$f(c_g,z)\f$ is a vertical structure function which can be set to look like the equivalent barotropic modal structure with
+!! where \f$f(c_g,z)\f$ is a vertical structure function.
+!! \f$f(c_g,z)\f$ is calculated in module mom_lateral_mixing_coeffs.
+!! If <code>KHTH_USE_EBT_STRUCT=True</code> then \f$f(c_g,z)\f$ is set to look like the equivalent barotropic modal velocity structure.
+!! Otherwise \f$f(c_g,z)=1\f$ and the diffusivity is independent of depth.
 !!
 !! In order to calculate meaningful slopes in vanished layers, temporary copies of the thermodynamic variables
 !! are passed through a vertical smoother, function vert_fill_ts():
@@ -1684,7 +1687,6 @@ end subroutine thickness_diffuse_end
 !! | -                     | <code>KHTH_MAX_CFL</code> |
 !! | \f$ \kappa_{smth} \f$ | <code>KD_SMOOTH</code> |
 !! | \f$ \alpha_{M} \f$    | <code>MEKE_KHTH_FAC</code> (from mom_meke module) |
-!! | -                     | <code>KHTH_USE_EBT_STRUCT</code> |
-
+!! | -                     | <code>KHTH_USE_EBT_STRUCT</code> (from mom_lateral_mixing_coeffs module) |
 
 end module MOM_thickness_diffuse
