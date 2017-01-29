@@ -154,7 +154,7 @@ A list of string tuples, separated by commas, with each tuple in the form of MOD
 `PARAMETER_SUFFIX` is the string appended to "DiAG_COORD_DEF_", and other paramaters, used to control the generation of the named coordinate.
 `COORDINATE_NAME` is a name understood by the MOM6 regridding module. Valid examples are "ZSTAR", "SIGMA", "RHO", etc.
 
-By default, `NUM_DIAG_COORDS=1` and `DIAG_COORDS="z Z ZSTAR", meaning the module "ocean_model_z" provides diagnostics in "z*" coordinates and uses the parameter `DIAG_COORD_DEF_Z`.
+By default, `NUM_DIAG_COORDS=1` and `DIAG_COORDS="z Z ZSTAR"`, meaning the module "ocean_model_z" provides diagnostics in "z*" coordinates and uses the parameter `DIAG_COORD_DEF_Z`.
 
 For example, multiple z*-coordinates could be used for diagnostics with
 ```
@@ -194,8 +194,8 @@ It can take the following values:
 - UNIFORM:N,D : Uniform distribution of `N` levels with thickness `D`.
 - FILE:filename,varname : Reads vector of coordinate thicknesses from field "varname" from file "filename".
 - FILE:filename,interfaces=varname : Reads vector of coordinate positions from field "varname" from file "filename".
-- WOA09 : Z-levels that correspond to the World Ocean Atlas, 2009, standard levels down and including the maximum depth of the model.
-- WOA09:N : The first `N` levels of the Wordl Ocean Atlas, 2009, standard levels.
+- WOA09 : Z-levels that correspond to the World Ocean Atlas, 2009, standard levels down to and including the maximum depth of the model.
+- WOA09:N : The first `N` levels of the World Ocean Atlas, 2009, standard levels.
 
 
 

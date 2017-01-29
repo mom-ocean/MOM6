@@ -46,7 +46,7 @@ use MOM_cpu_clock,           only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROU
 use MOM_diag_mediator,       only : diag_ctrl, time_type
 use MOM_diag_mediator,       only : safe_alloc_ptr, post_data, register_diag_field
 use MOM_diag_to_Z,           only : diag_to_Z_CS, register_Zint_diag, calc_Zint_diags
-use MOM_checksums,           only : hchksum, uchksum, vchksum
+use MOM_debugging,           only : hchksum, uchksum, vchksum
 use MOM_EOS,                 only : calculate_density, calculate_density_derivs
 use MOM_error_handler,       only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_error_handler,       only : callTree_showQuery
@@ -1538,10 +1538,10 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
 
       ! TKE_Ray has been initialized to 0 above.
       if (Rayleigh_drag) TKE_Ray = 0.5*CS%BBL_effic * G%IareaT(i,j) * &
-            ((G%areaCu(i-1,j) * visc%Ray_u(i-1,j,k) * u(i-1,j,k)**2 + &
-              G%areaCu(i,j)   * visc%Ray_u(i,j,k)   * u(i,j,k)**2) + &
-             (G%areaCv(i,j-1) * visc%Ray_v(i,j-1,k) * v(i,j-1,k)**2 + &
-              G%areaCv(i,j)   * visc%Ray_v(i,j,k)   * v(i,j,k)**2))
+            ((G%areaCu(I-1,j) * visc%Ray_u(I-1,j,k) * u(I-1,j,k)**2 + &
+              G%areaCu(I,j)   * visc%Ray_u(I,j,k)   * u(I,j,k)**2) + &
+             (G%areaCv(i,J-1) * visc%Ray_v(i,J-1,k) * v(i,J-1,k)**2 + &
+              G%areaCv(i,J)   * visc%Ray_v(i,J,k)   * v(i,J,k)**2))
 
       if (TKE_to_layer + TKE_Ray > 0.0) then
         if (CS%BBL_mixing_as_max) then
@@ -1710,10 +1710,10 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
 
       ! Add in additional energy input from bottom-drag against slopes (sides)
       if (Rayleigh_drag) TKE_remaining = TKE_remaining + 0.5*CS%BBL_effic * G%IareaT(i,j) * &
-            ((G%areaCu(i-1,j) * visc%Ray_u(i-1,j,k) * u(i-1,j,k)**2 + &
-              G%areaCu(i,j)   * visc%Ray_u(i,j,k)   * u(i,j,k)**2) + &
-             (G%areaCv(i,j-1) * visc%Ray_v(i,j-1,k) * v(i,j-1,k)**2 + &
-              G%areaCv(i,j)   * visc%Ray_v(i,j,k)   * v(i,j,k)**2))
+            ((G%areaCu(I-1,j) * visc%Ray_u(I-1,j,k) * u(I-1,j,k)**2 + &
+              G%areaCu(I,j)   * visc%Ray_u(I,j,k)   * u(I,j,k)**2) + &
+             (G%areaCv(i,J-1) * visc%Ray_v(i,J-1,k) * v(i,J-1,k)**2 + &
+              G%areaCv(i,J)   * visc%Ray_v(i,J,k)   * v(i,J,k)**2))
 
       ! Exponentially decay TKE across the thickness of the layer.
       ! This is energy loss in addition to work done as mixing, apparently to Joule heating.
