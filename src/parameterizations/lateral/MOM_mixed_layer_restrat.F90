@@ -8,7 +8,7 @@ module MOM_mixed_layer_restrat
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_checksums,     only : hchksum
+use MOM_debugging,     only : hchksum
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_diag_mediator, only : diag_update_remap_grids
@@ -232,8 +232,9 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV,
 !$OMP                               h_neglect,g_Rho0,I4dt,CS,uhml,uhtr,dt,vhml,vhtr,   &
 !$OMP                               utimescale_diag,vtimescale_diag,fluxes,dz_neglect, &
 !$OMP                               nz,MLD,uDml_diag,vDml_diag)                        &
-!$OMP                       private(Rho0,h_vel,u_star,absf,mom_mixrate,timescale,uDml, &
-!$OMP                               a,vDml,IhTot,zIHbelowVel,hAtVel,zIHaboveVel)
+!$OMP                       private(Rho0,h_vel,u_star,absf,mom_mixrate,timescale,      &
+!$OMP                               a,IhTot,zIHbelowVel,hAtVel,zIHaboveVel)            &
+!$OMP                       firstprivate(uDml,vDml)
 !$OMP do
   do j=js-1,je+1
     do i=is-1,ie+1
@@ -476,12 +477,13 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, GV, CS)
   ! Fix this later for nkml >= 3.
 
   p0(:) = 0.0
-!$OMP parallel default(none) shared(is,ie,js,je,G,GV,htot,Rml_av,tv,p0,h,h_avail,         &
+!$OMP parallel default(none) shared(is,ie,js,je,G,GV,htot,Rml_av,tv,p0,h,h_avail,      &
 !$OMP                               h_neglect,g_Rho0,I4dt,CS,uhml,uhtr,dt,vhml,vhtr,   &
 !$OMP                               utimescale_diag,vtimescale_diag,fluxes,dz_neglect, &
 !$OMP                               uDml_diag,vDml_diag,nkml)                          &
-!$OMP                       private(Rho0,h_vel,u_star,absf,mom_mixrate,timescale,uDml, &
-!$OMP                               I2htot,z_topx2,hx2,a,vDml)
+!$OMP                       private(Rho0,h_vel,u_star,absf,mom_mixrate,timescale,      &
+!$OMP                               I2htot,z_topx2,hx2,a)                              &
+!$OMP                       firstprivate(uDml,vDml)
 !$OMP do
   do j=js-1,je+1
     do i=is-1,ie+1

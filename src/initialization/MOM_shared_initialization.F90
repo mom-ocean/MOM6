@@ -583,8 +583,8 @@ subroutine reset_face_lengths_named(G, param_file, name)
       if ((abs(G%geoLatCu(I,j)-12.5) < dy_2) .and. (abs(G%geoLonCu(I,j)-43.0) < dx_2)) &
         G%dy_Cu(I,j) = G%mask2dCu(I,j)*10000.0   ! Red Sea
 
-      if ((abs(G%geoLatCu(i,j)-40.5) < dy_2) .and. (abs(G%geoLonCu(i,j)-26.0) < dx_2)) &
-        G%dy_Cu(i,j) = G%mask2dCu(i,j)*5000.0   ! Dardanelles
+      if ((abs(G%geoLatCu(I,j)-40.5) < dy_2) .and. (abs(G%geoLonCu(I,j)-26.0) < dx_2)) &
+        G%dy_Cu(I,j) = G%mask2dCu(I,j)*5000.0   ! Dardanelles
 
       if ((abs(G%geoLatCu(I,j)-41.5) < dy_2) .and. (abs(G%geoLonCu(I,j)+220.0) < dx_2)) &
         G%dy_Cu(I,j) = G%mask2dCu(I,j)*35000.0   ! Tsugaru strait at 140.0e

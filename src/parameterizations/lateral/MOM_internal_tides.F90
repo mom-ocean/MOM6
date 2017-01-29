@@ -42,7 +42,7 @@ module MOM_internal_tides
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_checksums,     only : isnan => is_NaN
+use MOM_debugging,     only : is_NaN
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_axis_init
 use MOM_diag_mediator, only : register_diag_field, diag_ctrl, safe_alloc_ptr
 use MOM_diag_mediator, only : axes_grp, define_axes_group
@@ -2430,7 +2430,7 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
                  domain=G%domain%mpp_domain, timelevel=1)
   ! replace NANs with null value
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    if(isnan(CS%refl_angle(i,j))) CS%refl_angle(i,j) = CS%nullangle
+    if(is_NaN(CS%refl_angle(i,j))) CS%refl_angle(i,j) = CS%nullangle
   enddo ; enddo
   call pass_var(CS%refl_angle,G%domain)
 
