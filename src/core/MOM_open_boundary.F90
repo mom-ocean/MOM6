@@ -1168,13 +1168,13 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
            elseif (segment%radiation) then
              dhdt = u_old(I-1,j,k)-u_new(I-1,j,k) !old-new
              dhdx = u_new(I-1,j,k)-u_new(I-2,j,k) !in new time backward sasha for I-1
-             if (dhdt*dhdx < 0.0) dhdt = 0.0
-             if (dhdx == 0.0) dhdx=eps ! avoid segv
              if (dhdt*(grad(I-1,J) + grad(I-1,J-1)) > 0.0) then
                dhdy = grad(I-1,J-1)
              else
                dhdy = grad(I-1,J)
              endif
+             if (dhdt*dhdx < 0.0) dhdt = 0.0
+             if (dhdx == 0.0) dhdx=eps ! avoid segv
              Cx=min(dhdt/dhdx,rx_max) ! default to normal radiation
              Cy = 0
              cff = max(dhdx*dhdx, eps)
@@ -1214,13 +1214,13 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
            elseif (segment%radiation) then
              dhdt = u_old(I+1,j,k)-u_new(I+1,j,k) !old-new
              dhdx = u_new(I+1,j,k)-u_new(I+2,j,k) !in new time forward sasha for I+1
-             if (dhdt*dhdx < 0.0) dhdt = 0.0
-             if (dhdx == 0.0) dhdx=eps ! avoid segv
              if (dhdt*(grad(I+1,J) + grad(I+1,J-1)) > 0.0) then
                dhdy = grad(I+1,J-1)
              else
                dhdy = grad(I+1,J)
              endif
+             if (dhdt*dhdx < 0.0) dhdt = 0.0
+             if (dhdx == 0.0) dhdx=eps ! avoid segv
              Cx = min(dhdt/dhdx,rx_max) ! default to normal flow only
              Cy = 0.
              cff = max(dhdx*dhdx, eps)
@@ -1260,13 +1260,13 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
            elseif (segment%radiation) then
              dhdt = v_old(i,J-1,k)-v_new(i,J-1,k) !old-new
              dhdy = v_new(i,J-1,k)-v_new(i,J-2,k) !in new time backward sasha for J-1
-             if (dhdt*dhdy < 0.0) dhdt = 0.0
-             if (dhdy == 0.0) dhdy=eps ! avoid segv
              if (dhdt*(grad(I,J-1) + grad(I-1,J-1)) > 0.0) then
                dhdx = grad(I-1,J-1)
              else
                dhdx = grad(I,J-1)
              endif
+             if (dhdt*dhdy < 0.0) dhdt = 0.0
+             if (dhdy == 0.0) dhdy=eps ! avoid segv
              Cy = min(dhdt/dhdy,rx_max) ! default to normal flow only
              Cx = 0
              cff = max(dhdy*dhdy, eps)
@@ -1307,13 +1307,13 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
            elseif (segment%radiation) then
              dhdt = v_old(i,J+1,k)-v_new(i,J+1,k) !old-new
              dhdy = v_new(i,J+1,k)-v_new(i,J+2,k) !in new time backward sasha for J-1
-             if (dhdt*dhdy <= 0.0) dhdt = 0.0
-             if (dhdy == 0.0) dhdy=eps ! avoid segv
              if (dhdt*(grad(I,J+1) + grad(I-1,J+1)) > 0.0) then
                dhdx = grad(I-1,J+1)
              else
                dhdx = grad(I,J+1)
              endif
+             if (dhdt*dhdy <= 0.0) dhdt = 0.0
+             if (dhdy == 0.0) dhdy=eps ! avoid segv
              Cy = min(dhdt/dhdy,rx_max) ! default to normal flow only
              Cx = 0
              cff = max(dhdy*dhdy, eps)
