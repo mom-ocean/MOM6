@@ -149,6 +149,8 @@ type, public :: energetic_PBL_CS ; private
                              ! to decay toward MSTAR->0 at fully developed Ekman depth.
   real    :: MSTAR_AT_XINT   ! Intercept value of MSTAR at value where function
                              ! changes to linear transition.
+  real    :: LT_ENHANCE_COEF ! Coefficient in fit for Langmuir Enhancment
+  real    :: LT_ENHANCE_EXP  ! Exponent in fit for Langmuir Enhancement
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
   integer :: LT_Enhance_Form = 0 ! Option for Langmuir enhancement function
   logical :: Use_Mstar_Fixed = .true. ! A logical to revert to a fixed m*
@@ -705,7 +707,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
             ENHANCE_V = (1+(1.4*LA)**(-2)+(5.4*LA)**(-4))**(1.5)
           elseif (CS%LT_Enhance_Form==2) then
             !New Mix_LT/Mix_ST scaling
-            ENHANCE_V = (1.+(0.74*LA)**-1.5)
+            ENHANCE_V = (1.+CS%LT_ENHANCE_COEF*LA**CS%LT_ENHANCE_EXP)
           endif
         endif
         CS%ML_depth(i,j) = h(i,1)*GV%H_to_m
@@ -2037,8 +2039,14 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
                  " *Requires USE_LA_LI2016 to be set to True. \n"//&
                  "Options: 0 - no LT enhancement \n"//&
                  "         1 - Van Roekel et al. 2014/Li et al., 2016  \n"//&
-                 "         2 - New LES net mixing based derivation",&
+                 "         2 - New LES net mixing based derivation (requires coefficients)",&
                  units="nondim", default=0)
+   call get_param(param_file, mod, "LT_ENHANCE_COEF", CS%LT_ENHANCE_COEF, &
+                 "Coefficient for Langmuir enhancement if LT_ENHANCE = 2",&
+                 units="nondim", default=1.57)
+   call get_param(param_file, mod, "LT_ENHANCE_EXP", CS%LT_ENHANCE_EXP, &
+                 "Exponent for Langmuir enhancement if LT_ENHANCE = 2",&
+                 units="nondim", default=-1.5)
    if (CS%LT_ENHANCE_FORM.gt.0 .and. (.not.CS%USE_LA_Windsea)) then
       call MOM_error(FATAL, "If flag USE_LA_LI2016 is false, then "//&
                  " LT_ENHANCE must be 0.")
