@@ -1155,7 +1155,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
      if (segment%direction == OBC_DIRECTION_E) then
        I=segment%HI%IscB
        do k=1,nz
-         if (segment%radiation) call vorticity_at_q_points(G,segment,u_old,v_old,k,grad)
+         if (segment%radiation) call gradients_at_q_points(G,segment,u_old,v_old,k,grad)
          do j=segment%HI%jsc,segment%HI%jec
            if (segment%legacy) then
              dhdt = u_old(I-1,j,k)-u_new(I-1,j,k) !old-new
@@ -1201,7 +1201,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
      if (segment%direction == OBC_DIRECTION_W) then
        I=segment%HI%IscB
        do k=1,nz
-         if (segment%radiation) call vorticity_at_q_points(G,segment,u_old,v_old,k,grad)
+         if (segment%radiation) call gradients_at_q_points(G,segment,u_old,v_old,k,grad)
          do j=segment%HI%jsc,segment%HI%jec
            if (segment%legacy) then
              dhdt = u_old(I+1,j,k)-u_new(I+1,j,k) !old-new
@@ -1247,7 +1247,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
      if (segment%direction == OBC_DIRECTION_N) then
        J=segment%HI%JscB
        do k=1,nz
-         if (segment%radiation) call vorticity_at_q_points(G,segment,u_old,v_old,k,grad)
+         if (segment%radiation) call gradients_at_q_points(G,segment,u_old,v_old,k,grad)
          do i=segment%HI%isc,segment%HI%iec
            if (segment%legacy) then
              dhdt = v_old(i,J-1,k)-v_new(i,J-1,k) !old-new
@@ -1294,7 +1294,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
      if (segment%direction == OBC_DIRECTION_S) then
        J=segment%HI%JscB
        do k=1,nz
-         if (segment%radiation) call vorticity_at_q_points(G,segment,u_old,v_old,k,grad)
+         if (segment%radiation) call gradients_at_q_points(G,segment,u_old,v_old,k,grad)
          do i=segment%HI%isc,segment%HI%iec
            if (segment%legacy) then
              dhdt = v_old(i,J+1,k)-v_new(i,J+1,k) !old-new
@@ -1341,15 +1341,15 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
 end subroutine radiation_open_bdry_conds
 
 
-!< Calculate the vorticity at the boundary q-points due to the
+!< Calculate the velocity gradients at the boundary q-points due to the
 !< flow normal to the given segment boundary for model layer-k.
-subroutine vorticity_at_q_points(G,segment,uvel,vvel,k,grad)
+subroutine gradients_at_q_points(G,segment,uvel,vvel,k,grad)
   type(ocean_grid_type), intent(in) :: G !< Ocean grid structure
   type(OBC_segment_type), pointer :: segment !< OBC segment structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uvel !< zonal velocity
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vvel !< meridional velocity
   integer, intent(in)                                      :: k !< model level to choose
-  real, dimension(SZIB_(G),SZJB_(G)), intent(inout)    :: grad !< normal flow vorticity at Q-points
+  real, dimension(SZIB_(G),SZJB_(G)), intent(inout)        :: grad !< normal flow gradients at Q-points
 
   integer :: i, j
 
@@ -1385,7 +1385,7 @@ subroutine vorticity_at_q_points(G,segment,uvel,vvel,k,grad)
     endif
   endif
 
-end subroutine vorticity_at_q_points
+end subroutine gradients_at_q_points
 
 
 !> Sets the initial definitions of the characteristic open boundary conditions.
