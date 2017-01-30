@@ -2046,7 +2046,7 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
                  units="nondim", default=1.57)
    call get_param(param_file, mod, "LT_ENHANCE_EXP", CS%LT_ENHANCE_EXP, &
                  "Exponent for Langmuir enhancement if LT_ENHANCE = 2",&
-                 units="nondim", default=1.5)
+                 units="nondim", default=-1.5)
    if (CS%LT_ENHANCE_FORM.gt.0 .and. (.not.CS%USE_LA_Windsea)) then
       call MOM_error(FATAL, "If flag USE_LA_LI2016 is false, then "//&
                  " LT_ENHANCE must be 0.")
