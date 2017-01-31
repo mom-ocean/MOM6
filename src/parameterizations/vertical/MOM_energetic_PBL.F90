@@ -599,7 +599,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
 
 
       U_Star = fluxes%ustar(i,j)
-      U_Star_Mean = sqrt(sqrt(fluxes%taux(i,j)**2+fluxes%tauy(i,j)**2)/GV%rho0) 
+      U_Star_Mean = sqrt(sqrt(fluxes%taux(i,j)**2+fluxes%tauy(i,j)**2)/GV%rho0)
       if (associated(fluxes%ustar_shelf) .and. associated(fluxes%frac_shelf_h)) then
         if (fluxes%frac_shelf_h(i,j) > 0.0) &
           U_Star = (1.0 - fluxes%frac_shelf_h(i,j)) * U_star + &
