@@ -432,9 +432,9 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
   S2max = CS%Visbeck_S_max**2
 
 !$OMP parallel default(none) shared(is,ie,js,je,CS,nz,e,G,GV,h, &
-!$OMP                               H_u,H_v,S2_u,S2_v,slope_x,slope_y,   &
+!$OMP                               S2_u,S2_v,slope_x,slope_y,   &
 !$OMP                               SN_u_local,SN_v_local,N2_u,N2_v, S2max)   &
-!$OMP                       private(E_x,E_y,S2,Hdn,Hup,H_geom,N2, &
+!$OMP                       private(E_x,E_y,S2,H_u,H_v,Hdn,Hup,H_geom,N2, &
 !$OMP                       wNE, wSE, wSW, wNW)
 !$OMP do
   do j=js-1,je+1 ; do i=is-1,ie+1
@@ -990,6 +990,9 @@ end subroutine VarMix_init
 !! r(\Delta,L_d) = \frac{1}{1+(\alpha R)^p}
 !! \f]
 !!
+!! The resolution function can be applied independently to thickness diffusion (module mom_thickness_diffuse), tracer diffusion (mom_tracer_hordiff)
+!! lateral viscosity (mom_hor_visc).
+!!
 !! Robert Hallberg, 2013: Using a resolution function to regulate parameterizations of oceanic mesoscale eddy effects.
 !! Ocean Modelling, 71, pp 92-103.  http://dx.doi.org/10.1016/j.ocemod.2013.08.007
 !!
@@ -1024,10 +1027,20 @@ end subroutine VarMix_init
 !! | Symbol                | Module parameter |
 !! | ------                | --------------- |
 !! | -                     | <code>USE_VARIABLE_MIXING</code> |
-!! | \f$ \alpha_s \f$      | <code>KHTH_SLOPE_CFF</code> (for thickness diffusivity)|
-!! | \f$ \alpha_s \f$      | <code>KHTR_SLOPE_CFF</code> (for tracer diffusivity)|
+!! | \f$ \alpha_s \f$      | <code>KHTH_SLOPE_CFF</code> (for mom_thickness_diffuse module)|
+!! | \f$ \alpha_s \f$      | <code>KHTR_SLOPE_CFF</code> (for mom_tracer_hordiff module)|
 !! | \f$ L_{s} \f$         | <code>VISBECK_L_SCALE</code> |
 !! | \f$ S_{max} \f$       | <code>VISBECK_MAX_SLOPE</code> |
 !!
+!!
+!! \section section_vertical_structure_khth Vertical structure function for KhTh
+!!
+!! The thickness diffusivity can be prescribed a vertical distribution with the shape of the equivalent barotropic velocity mode.
+!! The structure function is stored in the control structure for thie module (varmix_cs) but is calculated use subroutines in
+!! mom_wave_speed.
+!!
+!! | Symbol                | Module parameter |
+!! | ------                | --------------- |
+!! | -                     | <code>KHTH_USE_EBT_STRUCT</code> |
 
 end module MOM_lateral_mixing_coeffs

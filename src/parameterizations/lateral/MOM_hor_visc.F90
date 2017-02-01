@@ -370,9 +370,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     ! Adjust contributions to shearing strain on open boundaries.
     if (apply_OBC) then ; if (OBC%zero_strain .or. OBC%freeslip_strain) then
       do n=1,OBC%number_of_segments
-        if (OBC%OBC_segment_number(n)%is_N_or_S) then
-          J = OBC%OBC_segment_number(n)%HI%JsdB
-          do I=OBC%OBC_segment_number(n)%HI%IsdB,OBC%OBC_segment_number(n)%HI%IedB
+        if (OBC%segment(n)%is_N_or_S) then
+          J = OBC%segment(n)%HI%JsdB
+          do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
             if (OBC%zero_strain) then
               dvdx(I,J) = 0.
               dudy(I,J) = 0.
@@ -380,9 +380,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
               dudy(I,J) = 0.
             endif
           enddo
-        elseif (OBC%OBC_segment_number(n)%is_E_or_W) then
-          I = OBC%OBC_segment_number(n)%HI%IsdB
-          do J=OBC%OBC_segment_number(n)%HI%JsdB,OBC%OBC_segment_number(n)%HI%JedB
+        elseif (OBC%segment(n)%is_E_or_W) then
+          I = OBC%segment(n)%HI%IsdB
+          do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
             if (OBC%zero_strain) then
               dvdx(I,J) = 0.
               dudy(I,J) = 0.
@@ -415,14 +415,14 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       enddo ; enddo
       if (apply_OBC .and. OBC%zero_biharmonic) then
         do n=1,OBC%number_of_segments
-          if (OBC%OBC_segment_number(n)%is_N_or_S) then
-            J = OBC%OBC_segment_number(n)%HI%JsdB
-            do I=OBC%OBC_segment_number(n)%HI%isd,OBC%OBC_segment_number(n)%HI%ied
+          if (OBC%segment(n)%is_N_or_S) then
+            J = OBC%segment(n)%HI%JsdB
+            do I=OBC%segment(n)%HI%isd,OBC%segment(n)%HI%ied
               v0(i,J) = 0.
             enddo
-          elseif (OBC%OBC_segment_number(n)%is_E_or_W) then
-            I = OBC%OBC_segment_number(n)%HI%IsdB
-            do j=OBC%OBC_segment_number(n)%HI%jsd,OBC%OBC_segment_number(n)%HI%jed
+          elseif (OBC%segment(n)%is_E_or_W) then
+            I = OBC%segment(n)%HI%IsdB
+            do j=OBC%segment(n)%HI%jsd,OBC%segment(n)%HI%jed
               u0(I,j) = 0.
             enddo
           endif
@@ -521,9 +521,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       ! Adjust contributions to shearing strain on open boundaries.
       if (apply_OBC) then ; if (OBC%zero_strain .or. OBC%freeslip_strain) then
         do n=1,OBC%number_of_segments
-          if (OBC%OBC_segment_number(n)%is_N_or_S) then
-            J = OBC%OBC_segment_number(n)%HI%JsdB
-            do I=OBC%OBC_segment_number(n)%HI%IsdB,OBC%OBC_segment_number(n)%HI%IedB
+          if (OBC%segment(n)%is_N_or_S) then
+            J = OBC%segment(n)%HI%JsdB
+            do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
               if (OBC%zero_strain) then
                 dvdx(I,J) = 0.
                 dudy(I,J) = 0.
@@ -531,9 +531,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                 dudy(I,J) = 0.
               endif
             enddo
-          elseif (OBC%OBC_segment_number(n)%is_E_or_W) then
-            I = OBC%OBC_segment_number(n)%HI%IsdB
-            do J=OBC%OBC_segment_number(n)%HI%JsdB,OBC%OBC_segment_number(n)%HI%JedB
+          elseif (OBC%segment(n)%is_E_or_W) then
+            I = OBC%segment(n)%HI%IsdB
+            do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
               if (OBC%zero_strain) then
                 dvdx(I,J) = 0.
                 dudy(I,J) = 0.
@@ -672,9 +672,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       ! This is not the right boundary condition. If all the masking of tendencies are done
       ! correctly later then eliminating this block should not change answers.
       do n=1,OBC%number_of_segments
-        if (OBC%OBC_segment_number(n)%is_E_or_W) then
-          I = OBC%OBC_segment_number(n)%HI%IsdB
-          do j=OBC%OBC_segment_number(n)%HI%jsd,OBC%OBC_segment_number(n)%HI%jed
+        if (OBC%segment(n)%is_E_or_W) then
+          I = OBC%segment(n)%HI%IsdB
+          do j=OBC%segment(n)%HI%jsd,OBC%segment(n)%HI%jed
             diffu(I,j,k) = 0.
           enddo
         endif
@@ -693,9 +693,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       ! This is not the right boundary condition. If all the masking of tendencies are done
       ! correctly later then eliminating this block should not change answers.
       do n=1,OBC%number_of_segments
-        if (OBC%OBC_segment_number(n)%is_N_or_S) then
-          J = OBC%OBC_segment_number(n)%HI%JsdB
-          do i=OBC%OBC_segment_number(n)%HI%isd,OBC%OBC_segment_number(n)%HI%ied
+        if (OBC%segment(n)%is_N_or_S) then
+          J = OBC%segment(n)%HI%JsdB
+          do i=OBC%segment(n)%HI%isd,OBC%segment(n)%HI%ied
             diffv(i,J,k) = 0.
           enddo
         endif
@@ -705,20 +705,20 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     if (find_FrictWork) then ; do j=js,je ; do i=is,ie
     ! Diagnose   str_xx*d_x u - str_yy*d_y v + str_xy*(d_y u + d_x v)
       FrictWork(i,j,k) = GV%H_to_kg_m2 * ( &
-              (str_xx(i,j)*(u(i,j,k)-u(i-1,j,k))*G%IdxT(i,j)     &
-              -str_xx(i,j)*(v(i,j,k)-v(i,j-1,k))*G%IdyT(i,j))    &
-       +0.25*((str_xy(i,j)*(                                     &
-                   (u(i,j+1,k)-u(i,j,k))*G%IdyBu(i,j)            &
-                  +(v(i+1,j,k)-v(i,j,k))*G%IdxBu(i,j) )          &
-              +str_xy(i-1,j-1)*(                                 &
-                   (u(i-1,j,k)-u(i-1,j-1,k))*G%IdyBu(i-1,j-1)    &
-                  +(v(i,j-1,k)-v(i-1,j-1,k))*G%IdxBu(i-1,j-1) )) &
-             +(str_xy(i-1,j)*(                                   &
-                   (u(i-1,j+1,k)-u(i-1,j,k))*G%IdyBu(i-1,j)      &
-                  +(v(i,j,k)-v(i-1,j,k))*G%IdxBu(i-1,j) )        &
-              +str_xy(i,j-1)*(                                   &
-                   (u(i,j,k)-u(i,j-1,k))*G%IdyBu(i,j-1)          &
-                  +(v(i+1,j-1,k)-v(i,j-1,k))*G%IdxBu(i,j-1) )) ) )
+              (str_xx(i,j)*(u(I,j,k)-u(I-1,j,k))*G%IdxT(i,j)     &
+              -str_xx(i,j)*(v(i,J,k)-v(i,J-1,k))*G%IdyT(i,j))    &
+       +0.25*((str_xy(I,J)*(                                     &
+                   (u(I,j+1,k)-u(I,j,k))*G%IdyBu(I,J)            &
+                  +(v(i+1,J,k)-v(i,J,k))*G%IdxBu(I,J) )          &
+              +str_xy(I-1,J-1)*(                                 &
+                   (u(I-1,j,k)-u(I-1,j-1,k))*G%IdyBu(I-1,J-1)    &
+                  +(v(i,J-1,k)-v(i-1,J-1,k))*G%IdxBu(I-1,J-1) )) &
+             +(str_xy(I-1,J)*(                                   &
+                   (u(I-1,j+1,k)-u(I-1,j,k))*G%IdyBu(I-1,J)      &
+                  +(v(i,J,k)-v(i-1,J,k))*G%IdxBu(I-1,J) )        &
+              +str_xy(I,J-1)*(                                   &
+                   (u(I,j,k)-u(I,j-1,k))*G%IdyBu(I,J-1)          &
+                  +(v(i+1,J-1,k)-v(i,J-1,k))*G%IdxBu(I,J-1) )) ) )
     enddo ; enddo ; endif
 
     ! Make a similar calculation as for FrictWork above but accumulating into
@@ -744,20 +744,20 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
           ! RoScl = 1 - g(Ro)
           RoScl = Shear_mag / ( FatH + Shear_mag ) ! = 1 - f^n/(f^n+c*D^n)
           MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + GV%H_to_kg_m2 * (                   &
-                ((str_xx(i,j)-RoScl*bhstr_xx(i,j))*(u(i,j,k)-u(i-1,j,k))*G%IdxT(i,j)  &
-                -(str_xx(i,j)-RoScl*bhstr_xx(i,j))*(v(i,j,k)-v(i,j-1,k))*G%IdyT(i,j)) &
-         +0.25*(((str_xy(i,j)-RoScl*bhstr_xy(i,j))*(                                  &
-                     (u(i,j+1,k)-u(i,j,k))*G%IdyBu(i,j)                               &
-                    +(v(i+1,j,k)-v(i,j,k))*G%IdxBu(i,j) )                             &
-                +(str_xy(i-1,j-1)-RoScl*bhstr_xy(i-1,j-1))*(                          &
-                     (u(i-1,j,k)-u(i-1,j-1,k))*G%IdyBu(i-1,j-1)                       &
-                    +(v(i,j-1,k)-v(i-1,j-1,k))*G%IdxBu(i-1,j-1) ))                    &
-               +((str_xy(i-1,j)-RoScl*bhstr_xy(i-1,j))*(                              &
-                     (u(i-1,j+1,k)-u(i-1,j,k))*G%IdyBu(i-1,j)                         &
-                    +(v(i,j,k)-v(i-1,j,k))*G%IdxBu(i-1,j) )                           &
-                +(str_xy(i,j-1)-RoScl*bhstr_xy(i,j-1))*(                              &
-                     (u(i,j,k)-u(i,j-1,k))*G%IdyBu(i,j-1)                             &
-                    +(v(i+1,j-1,k)-v(i,j-1,k))*G%IdxBu(i,j-1) )) ) )
+                ((str_xx(i,j)-RoScl*bhstr_xx(i,j))*(u(I,j,k)-u(I-1,j,k))*G%IdxT(i,j)  &
+                -(str_xx(i,j)-RoScl*bhstr_xx(i,j))*(v(i,J,k)-v(i,J-1,k))*G%IdyT(i,j)) &
+         +0.25*(((str_xy(I,J)-RoScl*bhstr_xy(I,J))*(                                  &
+                     (u(I,j+1,k)-u(I,j,k))*G%IdyBu(I,J)                               &
+                    +(v(i+1,J,k)-v(i,J,k))*G%IdxBu(I,J) )                             &
+                +(str_xy(I-1,J-1)-RoScl*bhstr_xy(I-1,J-1))*(                          &
+                     (u(I-1,j,k)-u(I-1,j-1,k))*G%IdyBu(I-1,J-1)                       &
+                    +(v(i,J-1,k)-v(i-1,J-1,k))*G%IdxBu(I-1,J-1) ))                    &
+               +((str_xy(I-1,J)-RoScl*bhstr_xy(I-1,J))*(                              &
+                     (u(I-1,j+1,k)-u(I-1,j,k))*G%IdyBu(I-1,J)                         &
+                    +(v(i,J,k)-v(i-1,J,k))*G%IdxBu(I-1,J) )                           &
+                +(str_xy(I,J-1)-RoScl*bhstr_xy(I,J-1))*(                              &
+                     (u(I,j,k)-u(I,j-1,k))*G%IdyBu(I,J-1)                             &
+                    +(v(i+1,J-1,k)-v(i,J-1,k))*G%IdxBu(I,J-1) )) ) )
         enddo ; enddo
       else
         do j=js,je ; do i=is,ie
@@ -1076,8 +1076,8 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
         (G%dy_Cu(I-1,j) < G%dyCu(I-1,j) * CS%reduction_xx(i,j))) &
       CS%reduction_xx(i,j) = G%dy_Cu(I-1,j) / G%dyCu(I-1,j)
     if ((G%dx_Cv(i,J) > 0.0) .and. (G%dx_Cv(i,J) < G%dxCv(i,J)) .and. &
-        (G%dx_Cv(i,j) < G%dxCv(i,j) * CS%reduction_xx(i,j))) &
-      CS%reduction_xx(i,j) = G%dx_Cv(i,j) / G%dxCv(i,j)
+        (G%dx_Cv(i,J) < G%dxCv(i,J) * CS%reduction_xx(i,j))) &
+      CS%reduction_xx(i,j) = G%dx_Cv(i,J) / G%dxCv(i,J)
     if ((G%dx_Cv(i,J-1) > 0.0) .and. (G%dx_Cv(i,J-1) < G%dxCv(i,J-1)) .and. &
         (G%dx_Cv(i,J-1) < G%dxCv(i,J-1) * CS%reduction_xx(i,j))) &
       CS%reduction_xx(i,j) = G%dx_Cv(i,J-1) / G%dxCv(i,J-1)
@@ -1122,7 +1122,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
 
       CS%Kh_bg_xy(I,J) = MAX(Kh, Kh_vel_scale * sqrt(grid_sp_q2))
 
-      if (CS%use_Kh_bg_2d) CS%Kh_bg_xy(i,j) = MAX(CS%Kh_bg_2d(i,j), CS%Kh_bg_xy(i,j))
+      if (CS%use_Kh_bg_2d) CS%Kh_bg_xy(I,J) = MAX(CS%Kh_bg_2d(i,j), CS%Kh_bg_xy(I,J))
 
       if (CS%bound_Kh .and. .not.CS%better_bound_Kh) then
         CS%Kh_Max_xy(I,J) = Kh_Limit * grid_sp_q2
@@ -1213,7 +1213,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   if (CS%biharmonic .and. CS%better_bound_Ah) then
     Idt = 1.0 / dt
     do j=js-1,Jeq+1 ; do I=Isq-1,Ieq+1
-      u0u(I,j) = CS%IDXDY2u(I,j)*(CS%DY2h(i+1,j)*CS%DY_dxT(i+1,j)*(G%IdyCu(i+1,j) + G%IdyCu(i,j))   + &
+      u0u(I,j) = CS%IDXDY2u(I,j)*(CS%DY2h(i+1,j)*CS%DY_dxT(i+1,j)*(G%IdyCu(I+1,j) + G%IdyCu(I,j))   + &
                                   CS%DY2h(i,j) * CS%DY_dxT(i,j) * (G%IdyCu(I,j) + G%IdyCu(I-1,j)) ) + &
                  CS%IDX2dyCu(I,j)*(CS%DX2q(I,J) * CS%DX_dyBu(I,J) * (G%IdxCu(I,j+1) + G%IdxCu(I,j)) + &
                                   CS%DX2q(I,J-1)*CS%DX_dyBu(I,J-1)*(G%IdxCu(I,j) + G%IdxCu(I,j-1)) )
